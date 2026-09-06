@@ -6,9 +6,7 @@ use std::collections::HashSet;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use chico_forests::{ChicoGrove, ForestIndex};
-use chico_sbs_trees_playground::forest_stream::{
-	ForestPresenterState, ForestStreamLod, FOREST_CAMERA_SPEED,
-};
+use chico_forests::{ForestPresenterState, ForestStreamLod, FOREST_CAMERA_SPEED};
 use lod::gen::{Id, Version};
 use lod::lod_ref::LodRef;
 use lod::presentation::RegionPresenter;

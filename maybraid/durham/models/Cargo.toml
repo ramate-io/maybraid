@@ -24,6 +24,8 @@ marazion-watersheds = { workspace = true }
 comproc = { workspace = true }
 noise = { workspace = true }
 log = { workspace = true }
+terrain-chunk-ref = { workspace = true }
+visual-geometry-core = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }

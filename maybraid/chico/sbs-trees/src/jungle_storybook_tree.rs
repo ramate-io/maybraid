@@ -9,8 +9,6 @@
 //! scale). Emission folds sticks and cheap balls into collections; frond growth stays separate.
 
 mod canopy;
-#[allow(dead_code)]
-pub mod render_item_plugin;
 
 use bevy::prelude::*;
 use chico_sbs_geometry::{BallStickChain, JungleStorybookTreeSbs, StorybookTreeChain};

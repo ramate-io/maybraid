@@ -12,16 +12,12 @@
 //! separate nodes.
 
 mod foliage;
-#[allow(dead_code)]
-pub mod render_item_plugin;
-#[allow(dead_code)]
-mod stick;
 
 use std::collections::BTreeMap;
 
 use bevy::prelude::*;
-use chico_ball_components::frond::{align_frond_direction, FrondCrownShape};
 use chico_sbs_geometry::render::mix_seed::mix_seed_below_fraction;
+use chico_sbs_geometry::{align_frond_direction, FrondCrownShape};
 use chico_sbs_geometry::{
 	liams_stalk_tip_from_chain, sample_max_horizontal_radius_by_azimuth_height, AzimuthHeightBands,
 	BallStickChain, FriendsConiferChain, FriendsConiferSbs,
@@ -75,6 +71,12 @@ impl std::ops::Deref for TemperateConiferGeometry {
 	}
 }
 
+impl From<FriendsConiferSbs> for TemperateConiferGeometry {
+	fn from(inner: FriendsConiferSbs) -> Self {
+		Self { inner }
+	}
+}
+
 /// Authoring / CLI parameters for Temperate Conifer.
 #[derive(Component, Clone, Args, Debug)]
 #[command(rename_all = "kebab-case")]
@@ -82,7 +84,7 @@ pub struct TemperateConiferParams {
 	#[command(flatten, next_help_heading = "Geometry")]
 	pub geometry: TemperateConiferGeometry,
 
-	/// Uniform world scale applied to each joint [`FrondCrown`](chico_ball_components::frond::FrondCrown).
+	/// Uniform world scale applied to each joint [`FrondCrownShape`].
 	#[arg(long, default_value_t = 1.0, help_heading = "Foliage")]
 	pub frond_world_scale: f32,
 

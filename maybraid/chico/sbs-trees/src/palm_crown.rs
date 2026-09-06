@@ -6,16 +6,9 @@
 //! (same unit as structural LOD). Low / UltraLow emit a shared five-chord star
 //! ([`PalmCrownParams::unit_low_star`]) — not layered / cheap balls. Probe and
 //! collection nodes bake at build so produce / grove emit do not walk the crown AABB.
-//!
-//! Legacy stacked [`FrondCrown`](chico_ball_components::FrondCrown) mesh spawn remains in
-//! [`spawn`] for date / Waialea / bush trees still on RenderItem.
-
-pub mod spawn;
-
-pub use spawn::spawn_stacked_frond_crowns;
 
 use bevy::prelude::*;
-use chico_ball_components::frond::FrondCrownShape;
+use chico_sbs_geometry::FrondCrownShape;
 use chico_vegetation_components::{
 	FoliageNode, FrondCollection, FrondRun, Layers, Placement, StickNode, StructuralLod,
 	VegetationComponents,
@@ -25,8 +18,8 @@ use lod::gen::LodSceneLevel;
 
 use crate::palm_tree::{low_star_collection_nodes, LOW_STAR_FROND_COUNT};
 
-/// Per-ring seed salt (shared with [`spawn::FROND_RING_SEED_SALT`]).
-pub use spawn::FROND_RING_SEED_SALT;
+/// Per-ring seed salt mixed into foliage noise (Date, Waialea, Palm Bush, PalmCrown).
+pub const FROND_RING_SEED_SALT: i32 = 17;
 
 /// High when `distance / crown_radius ≤` this (rachis / full frond topology).
 const PALM_CROWN_STRUCTURAL_HIGH_FACTOR: f32 = 36.0;

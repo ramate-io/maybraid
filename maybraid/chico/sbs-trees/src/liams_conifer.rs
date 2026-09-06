@@ -10,12 +10,6 @@
 //! share one archetypal mesh (world size goes on placement scale). Emission
 //! folds sticks and cheap balls into collections.
 
-pub mod render_item_plugin;
-#[allow(dead_code)]
-pub mod stick;
-#[allow(dead_code)]
-mod tuft;
-
 use bevy::prelude::*;
 use chico_sbs_geometry::{BallStickChain, LiamsConiferChain, LiamsConiferSbs};
 use chico_vegetation_components::{

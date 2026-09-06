@@ -20,7 +20,12 @@ mod index;
 mod kind;
 mod layer;
 pub mod layerings;
+mod plugin;
+mod present;
 mod recipe;
+mod stick_physics;
+mod stream;
+mod view;
 
 pub use assemble::{
 	assemble, assemble_isolated, grow_tile, presenting_recipes, AssembledForest, ForestGroveTile,
@@ -52,4 +57,13 @@ pub use kind::{
 	WeightedGrove, TUFT_DROP_MIN_HEIGHT_M,
 };
 pub use layer::{select_layers, throw_layer};
+pub use plugin::{register_vegetation_view, ForestPlugin, VegetationViewPlugin};
+pub use present::{FlatForestPresenter, ForestPresenterState};
 pub use recipe::ForestGroveRecipe;
+pub use stream::{
+	parse_layering_kind, register_forest_lod, stream_radii_m, ForestStreamLod, ForestStreamSpec,
+	DEFAULT_FOREST_NOISE, DEFAULT_FOREST_STREAM_RADIUS, FOREST_CAMERA_SPEED,
+};
+pub use view::{
+	VegetationBullseye, VegetationCull, VegetationLodRefreshPlugin, VegetationSpotlight,
+};

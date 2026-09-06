@@ -1,13 +1,7 @@
-//! Stacked [`FrondCrown`] rings at the trunk tip (RFC palm crown).
+//! Stacked [`FrondCrownShape`] rings at the trunk tip (RFC palm crown).
 
-use bevy::prelude::*;
-use chico_ball_components::frond::FrondCrownShape;
 use chico_sbs_geometry::anchors::date_palm::DEFAULT_STALK_HEIGHT;
-use chico_sbs_geometry::{BallStickChain, DatePalmChain, DatePalmSbs};
-use procedural_common::NoiseParams;
-use render_item::CascadeChunk;
-
-use crate::palm_crown::spawn_stacked_frond_crowns;
+use chico_sbs_geometry::{DatePalmSbs, FrondCrownShape};
 
 /// Rachis width in world units before crown uniform scale.
 const FROND_WIDTH_FRACTION_OF_HEIGHT: f32 = 0.070;
@@ -56,33 +50,6 @@ pub fn frond_shape_for_ring(
 		emission_lift_radians: emission_lift,
 		seed: foliage_seed.wrapping_add(ring as i32),
 	}
-}
-
-#[allow(dead_code)]
-pub fn spawn_crown_rings<LeafM, LeafS>(
-	geometry: &DatePalmSbs,
-	chain: &BallStickChain<DatePalmChain>,
-	commands: &mut Commands,
-	cascade_chunk: &CascadeChunk,
-	parent: Entity,
-	foliage_noise: &NoiseParams,
-	leaf_material: LeafS,
-) -> Vec<Entity>
-where
-	LeafM: Material + Send + Sync + 'static,
-	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Send + Sync + 'static,
-{
-	spawn_stacked_frond_crowns::<LeafM, LeafS>(
-		geometry.crown.ring_count,
-		|ring| geometry.crown_ring_position(chain, ring),
-		|ring, seed| frond_shape_for_ring(geometry, ring, seed),
-		geometry.frond_world_scale,
-		foliage_noise.seed,
-		leaf_material,
-		commands,
-		cascade_chunk,
-		parent,
-	)
 }
 
 #[cfg(test)]

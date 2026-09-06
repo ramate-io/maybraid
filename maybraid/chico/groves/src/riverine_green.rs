@@ -3,8 +3,7 @@
 //! [#307](https://github.com/ramate-io/maybraid/issues/307)).
 //!
 //! Moderate-density Common High Bush punctuation along riparian edges. Each placement is a
-//! single [`HighBushShoots`](../../tree-components/src/high_bush_shoots/assembly.rs) bush with
-//! dual stick and canopy palettes.
+//! single High Bush Shoots plant with dual stick and canopy palettes.
 
 use std::ops::RangeInclusive;
 

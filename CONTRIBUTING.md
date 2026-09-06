@@ -281,7 +281,7 @@ Canonical example: [`maybraid/chico/groves/src/orchard.rs`](maybraid/chico/grove
 1. **Compose with `nest_flattened_plant_chunk`**, not the unused nested-host helpers in [`placed_host.rs`](maybraid/chico/groves/src/grove/placed_host.rs). Those wrap [`ComponentsOnly`](maybraid/chico/vegetation-components/src/lib.rs)`<PlacedVegetation<T>>` and spawn nested [`FoliageNode`](maybraid/chico/vegetation-components/src/foliage/node.rs) / [`StickNode`](maybraid/chico/vegetation-components/src/sticks/node.rs) LOD hosts. Flattened hosts wrap `FlattenedComponentsOnly<PlacedVegetation<T>>` and emit posed kits only.
 2. **Share the plant type with `Arc<T>`** when `T` is large (Storybook trees). Orchard stores `Arc<StorybookTree>` so begin/drain does not clone geometry per chunk. Register **that** wrapper in the playground:
    `avian_host!(app, FlattenedComponentsOnly<PlacedVegetation<Arc<YourTree>>>);`
-   in [`vegetation_lod.rs`](maybraid/chico/sbs-trees-playground/src/vegetation_lod.rs). Isolated `/show` trees use the same family.
+   in [`view.rs`](maybraid/chico/forests/src/view.rs). Isolated leftover plant hosts use the same family.
 3. **Lazy `SceneChunk` for the plant list.** Build one `SceneChunk::lazy(n, n, …)` that yields `nest_flattened_plant_chunk` per plant (see Orchard `nest_plant_chunks`). Begin must not box every `scene_with_level` up front.
 4. **Leave Low / UltraLow as canopy proxies** (`canopy_proxy_site`, `ULTRA_LOW_CANOPY_BIN_METERS`). Flattening is for the High/Medium plant hosts.
 5. **Charge kit weight.** Flattened kits use [`FLATTENED_KIT_CHUNK_WEIGHT`](maybraid/chico/vegetation-components/src/lib.rs) so drain does not admit a full SceneRef / `WorldAssetRoot` wave in one frame.

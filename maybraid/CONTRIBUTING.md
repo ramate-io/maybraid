@@ -14,7 +14,7 @@ While the assets associated with these layers should continue to sit behind this
 
 The term "model" and suffix `-models` is used to refer to a layer that defining the base behavior of a game object. Typically, this means taking a lower-order asset, such as tree from [`chico-sbs-trees`](./chico/sbs-trees/), and integrating it with standard game systems such as LOD, generation, and physics. Accordingly, models should typically define plugins that idempotently make available the needed systems for base behaviors.
 
-**Plugin shape:** define one idempotent plugin **per model** (e.g. `TerrainPlugin` beside the terrain types), then compose those plugins at the **crate root** (e.g. `DurhamTerrainModelsPlugin` that only registers each model plugin). Apps should add the crate-root plugin once rather than wiring individual model plugins ad hoc—unless they intentionally need a subset.
+**Plugin shape:** define one idempotent resource plugin **per model** (e.g. `TerrainResourcesPlugin` beside the terrain types), then compose those plugins at the **crate root** (e.g. `DurhamTerrainModelsPlugin` that only registers each model plugin). World-facing fill / shaders live on [`TerrainPlugin`](durham/models/src/terrain/host.rs). Apps should add the crate-root or host plugin once rather than wiring individual model plugins ad hoc—unless they intentionally need a subset.
 
 Particularly bespoke systems, like player damage, movement, and inventory, are not necessarily considered parts of models until the underlying API is generalized. Before that point, they are expected to be implemented as separate systems acting on the types that the models define.
 
@@ -47,7 +47,13 @@ Learnings from migrating ball-stick trees (Sope’s Banyan, Penmarch / Kamakura 
 - **Foliage kits:** `cheap_ball` for dense banded samples; `layered_ball` for proxies / fuller near masses. High can still band (not emit every terminal) to cut near-duplicates.
 - **Fronds:** authored \(Y \in [0,1]\), \(X \in [-0.1,0.1]\), \(Z\) negligible. Prefer [`FoliageGeometry::FrondCollection`](./chico/vegetation-components/src/foliage/geometry.rs) (polyline-partition style: many leaf kits, **one** [`FoliageNode`](./chico/vegetation-components/src/foliage/node.rs) / [`FoliageLodProbe`](./chico/vegetation-components/src/foliage/probe.rs)). Authored connectivity is [`FrondRun`](./chico/vegetation-components/src/foliage/collection/frond.rs) (base→tip chain); LOD thinning drops/collapses **runs**, never mid-chain segments. Presentation is [`CollectionPresent`](./chico/vegetation-components/src/foliage/present.rs) on the node: `Merge` (default, one `MultiSceneMerge`) or `Instance` (posed kits, same host). Bands: `distance / max_AABB_extent` with `FROND_COLLECTION_{HIGH,MEDIUM,LOW}_FACTOR` in that file — High = all runs, Medium ≈ half runs (full chains), Low ≈ quarter (collapse to chords), UltraLow = one marker.
 
-Preview with `chico-sbs-trees-playground` `/show <tree>` while walking LOD bands.
+Preview isolated plants by restoring [`chico-sbs-trees-playground`](PLAYGROUNDS.md#retired) if that `/show` catalog is needed. Streamed forest on Durham lives in [`maybraid-world-playground`](world/playground/).
+
+## Playgrounds
+
+Iterate a **single layer** in a `*-playground` crate next to that layer. Compose Durham + forest + urbanization + character in [`world`](world/) (`cargo run -p maybraid-world-playground`). Do not add a second assembled-world binary.
+
+Retiring a playground: [PLAYGROUNDS.md](PLAYGROUNDS.md) (record last commit and what it did under Retired, then delete).
 
 ## Rust Style
 

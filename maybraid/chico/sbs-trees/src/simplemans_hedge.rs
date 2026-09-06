@@ -10,9 +10,6 @@
 //! variant index. Emission folds cheap-ball splays into one collection; layered
 //! cores stay separate.
 
-#[allow(dead_code)]
-pub mod render_item_plugin;
-
 use bevy::prelude::*;
 use chico_vegetation_components::{
 	chico_leaf_material_ref, FoliageNode, Layers, Placement, StickNode, StructuralLod,

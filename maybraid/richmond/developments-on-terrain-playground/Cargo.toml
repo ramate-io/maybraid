@@ -18,7 +18,6 @@ avian3d = { workspace = true }
 bevy = { workspace = true }
 chico-forests = { workspace = true }
 chico-groves = { workspace = true }
-chico-sbs-trees-playground = { path = "../../chico/sbs-trees-playground" }
 chico-vegetation-on-terrain-playground = { workspace = true }
 clap = { workspace = true }
 durham-terrain = { workspace = true }

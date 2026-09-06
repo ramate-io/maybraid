@@ -24,7 +24,7 @@ use bevy::prelude::*;
 use camera::{
 	camera_controller, refocus_camera_on_layout, release_modifiers_on_focus_change, setup_camera,
 };
-use chico_sbs_trees_playground::forest_stream::register_forest_lod;
+use chico_forests::register_forest_lod;
 use chico_vegetation_on_terrain_playground::register_bump_out_lod;
 use commands::{
 	RequestDevelopmentFocus, RequestLikelihood, RequestMeshStats, RequestRebuild, RequestSeed,

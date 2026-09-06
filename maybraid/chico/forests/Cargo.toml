@@ -10,12 +10,19 @@ publish = { workspace = true }
 rust-version = { workspace = true }
 
 [dependencies]
+avian3d = { workspace = true }
 bevy = { workspace = true }
 bevy_math = { workspace = true }
-procedural-common = { workspace = true }
-gimme-gen = { workspace = true }
 chico-groves = { workspace = true, features = ["render"] }
+chico-sbs-trees = { workspace = true }
+chico-vegetation-components = { workspace = true }
+chico-vegetation-shaders = { workspace = true }
+gimme-gen = { workspace = true }
 lod = { workspace = true }
+lod-avian = { workspace = true }
+lod-lazy-refs = { workspace = true }
+procedural-common = { workspace = true }
+scene-ref = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }

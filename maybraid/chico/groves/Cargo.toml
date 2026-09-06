@@ -15,9 +15,7 @@ procedural-common = { workspace = true }
 gimme-gen = { workspace = true }
 log = { workspace = true }
 chico-sbs-geometry = { workspace = true }
-chico-tree-components = { workspace = true }
 bevy = { workspace = true, optional = true }
-chico-ball-components = { workspace = true, optional = true }
 chico-sbs-trees = { workspace = true, optional = true }
 chico-vegetation-components = { workspace = true, optional = true }
 chico-vegetation-shaders = { workspace = true, optional = true }
@@ -29,7 +27,6 @@ material-ref = { workspace = true, optional = true }
 default = []
 render = [
 	"dep:bevy",
-	"dep:chico-ball-components",
 	"dep:chico-sbs-trees",
 	"dep:chico-vegetation-components",
 	"dep:chico-vegetation-shaders",

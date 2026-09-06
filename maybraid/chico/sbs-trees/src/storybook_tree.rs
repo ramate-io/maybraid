@@ -13,7 +13,6 @@
 //! (inset to 70% of canopy radius).
 
 pub(crate) mod canopy;
-pub mod render_item_plugin;
 
 use bevy::prelude::*;
 use chico_sbs_geometry::{BallStickChain, StorybookTreeChain, StorybookTreeSbs};
