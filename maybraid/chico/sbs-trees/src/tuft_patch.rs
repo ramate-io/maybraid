@@ -11,7 +11,7 @@
 //! matters (e.g. grove authorship).
 
 use bevy::prelude::*;
-use chico_ball_components::tuft::BladeTuftShape;
+use chico_sbs_geometry::BladeTuftShape;
 use chico_vegetation_components::{
 	FoliageNode, FrondCollection, FrondRun, Layers, Placement, StickNode, VegetationComponents,
 };

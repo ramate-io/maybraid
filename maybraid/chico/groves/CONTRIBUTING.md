@@ -50,7 +50,7 @@ Woody High and Medium both nest plant hosts; Low swaps the tile to canopy proxie
 
 ## Playground host
 
-Register **the flattened wrapper** in [`vegetation_lod.rs`](../sbs-trees-playground/src/vegetation_lod.rs):
+Register **the flattened wrapper** in [`view.rs`](../forests/src/view.rs):
 
 ```rust
 avian_host!(app, FlattenedComponentsOnly<PlacedVegetation<Arc<YourTree>>>);

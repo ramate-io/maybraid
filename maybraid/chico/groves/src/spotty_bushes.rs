@@ -3,8 +3,7 @@
 //! [#321](https://github.com/ramate-io/maybraid/issues/321)).
 //!
 //! Isolated Common High Bush forms for open and transitional terrain. Each placement is a
-//! [`HighBushShoots`](../../tree-components/src/high_bush_shoots/assembly.rs) bush with dual stick
-//! and canopy palettes.
+//! High Bush Shoots plant with dual stick and canopy palettes.
 
 use std::ops::RangeInclusive;
 

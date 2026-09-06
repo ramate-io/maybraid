@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 use chico_forests::LayeringKind;
-use chico_sbs_trees_playground::forest_stream::{
+use chico_forests::{
 	parse_layering_kind, ForestStreamSpec, DEFAULT_FOREST_NOISE, DEFAULT_FOREST_STREAM_RADIUS,
 };
 use clap::{Parser, Subcommand, ValueEnum};

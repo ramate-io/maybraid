@@ -8,24 +8,19 @@ Workspace crates under **`maybraid/chico/`** implement [RFC-183: Chico Vegetatio
 | --- | --- | --- |
 | [`lib/`](lib/) | **`chico`** | Convenience re-exports (`chico-sdf`, `chico-sbs-trees`). |
 | [`sdf/`](sdf/) | **`chico-sdf`** | Chico-facing SDF helpers; depends on shared [`sdf-common`](../sdf/common). |
-| [`sbs-geometry/`](sbs-geometry/) | **`chico-sbs-geometry`** | Pure geometry for stalk / ball-stick (no SDF yet). |
-| [`stick-components/`](stick-components/) | **`chico-stick-components`** | Stick and stalk primitives ([§3.1.1](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-183-chico-vegetation/03-01-stalk-and-ball-stick-trees/01-stick-and-stalk-components/README.md)). |
-| [`ball-components/`](ball-components/) | **`chico-ball-components`** | Ball and plane canopy primitives ([§3.1.2](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-183-chico-vegetation/03-01-stalk-and-ball-stick-trees/02-ball-components/README.md)). |
-| [`tree-components/`](tree-components/) | **`chico-tree-components`** | Tree-level composition components ([chains / constructions](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-183-chico-vegetation#31-stalk-and-ball-stick-trees)). |
+| [`sbs-geometry/`](sbs-geometry/) | **`chico-sbs-geometry`** | Stalk / ball-stick geometry plus tuft, frond, and bush shape IR. |
 | [`vegetation-components/`](vegetation-components/) | **`chico-vegetation-components`** | Domain IR (`StickNode` / `FoliageNode`) + `VegetationComponents` / `LodScene` (Richmond-style). |
-| [`sbs-trees/`](sbs-trees/) | **`chico-sbs-trees`** | Integrates the above for **stalk and ball-stick trees** ([§3.1](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-183-chico-vegetation#31-stalk-and-ball-stick-trees)). Tracks [#186](https://github.com/ramate-io/maybraid/issues/186). |
+| [`sbs-trees/`](sbs-trees/) | **`chico-sbs-trees`** | VegetationComponents plants for **stalk and ball-stick trees** ([§3.1](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-183-chico-vegetation#31-stalk-and-ball-stick-trees)). Tracks [#186](https://github.com/ramate-io/maybraid/issues/186). |
 
 ## Dependency direction
 
 ```text
 sdf-common
-    └── chico-sdf ──┬── chico-ball-components
-                    ├── chico-stick-components
-                    └── chico-tree-components
+    └── chico-sdf
 
-chico-sbs-geometry   (leaf for now)
+chico-sbs-geometry   (shape IR + chain / anchors / SBS)
 
-chico-sbs-trees ──► chico-sdf, chico-*-components, chico-sbs-geometry
+chico-sbs-trees ──► chico-sdf, chico-sbs-geometry, chico-vegetation-components
 
 chico (lib) ──► chico-sdf, chico-sbs-trees
 ```

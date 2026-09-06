@@ -1,11 +1,11 @@
-//! Joint [`FrondCrown`] sprays aligned to branch direction ([RFC §3.1.7.15](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-183-chico-vegetation/03-01-stalk-and-ball-stick-trees/07-well-known-tree-constructions/15-temperate-conifer/README.md), [#238](https://github.com/ramate-io/maybraid/issues/238)).
+//! Joint [`FrondCrownShape`] sprays aligned to branch direction ([RFC §3.1.7.15](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-183-chico-vegetation/03-01-stalk-and-ball-stick-trees/07-well-known-tree-constructions/15-temperate-conifer/README.md), [#238](https://github.com/ramate-io/maybraid/issues/238)).
 
 use bevy::prelude::*;
-use chico_ball_components::frond::{align_frond_direction, FrondCrown, FrondCrownShape};
-use chico_sbs_geometry::render::mix_seed::{mix_seed_below_fraction, node_mix_seed};
-use chico_sbs_geometry::{BallStickChain, BallStickNode, FriendsConiferChain, FriendsConiferSbs};
+use chico_sbs_geometry::render::mix_seed::node_mix_seed;
+use chico_sbs_geometry::{
+	BallStickChain, BallStickNode, FriendsConiferChain, FriendsConiferSbs, FrondCrownShape,
+};
 use procedural_common::UnitRange;
-use render_item::CascadeChunk;
 
 const FROND_WIDTH_FRACTION_OF_HEIGHT: f32 = 0.010;
 const FROND_DROOP: f32 = 0.24;
@@ -81,60 +81,6 @@ pub fn frond_shape_for_joint(
 		emission_lift_radians: 0.0,
 		seed,
 	}
-}
-
-/// Spawn fronds at every ball-stick joint (RFC allocates all joints).
-#[allow(dead_code)]
-pub fn spawn_joint_fronds<LeafM, LeafS>(
-	geometry: &FriendsConiferSbs,
-	frond_world_scale: f32,
-	chain: &BallStickChain<FriendsConiferChain>,
-	commands: &mut Commands,
-	cascade_chunk: &CascadeChunk,
-	parent: Entity,
-	fronds_per_joint: &UnitRange,
-	length_fraction: &UnitRange,
-	frond_spawn_fraction: f32,
-	leaf_material: LeafS,
-) -> Vec<Entity>
-where
-	LeafM: Material + Send + Sync + 'static,
-	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Send + Sync + 'static,
-{
-	let mut out = Vec::new();
-	let uniform_scale = frond_world_scale;
-
-	for (node_idx, node, _h) in chain.nodes_with_hysteresis_enumerated() {
-		if !mix_seed_below_fraction(node_idx, node.position, frond_spawn_fraction) {
-			continue;
-		}
-
-		let branch_dir = branch_direction(chain, node_idx, node);
-		let shape = frond_shape_for_joint(
-			geometry,
-			frond_world_scale,
-			node_idx,
-			node,
-			fronds_per_joint,
-			length_fraction,
-		);
-		let crown = FrondCrown::from_shape(shape, leaf_material.clone());
-
-		let local_transform = Transform {
-			translation: node.position,
-			rotation: align_frond_direction(branch_dir),
-			scale: Vec3::splat(uniform_scale),
-		};
-
-		out.extend(crown.spawn_render_items_under(
-			commands,
-			cascade_chunk,
-			local_transform,
-			Some(parent),
-		));
-	}
-
-	out
 }
 
 #[cfg(test)]

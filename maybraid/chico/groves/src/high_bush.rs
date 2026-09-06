@@ -3,8 +3,7 @@
 //! [#312](https://github.com/ramate-io/maybraid/issues/312)).
 //!
 //! Common High Bush forms at 1.0–2.5 m: substantial shrub masses that shape sightlines and
-//! local movement. Each placement is a [`HighBushShoots`](../../tree-components/src/high_bush_shoots/assembly.rs)
-//! bush with dual stick and canopy palettes.
+//! local movement. Each placement is a High Bush Shoots plant with dual stick and canopy palettes.
 
 use std::ops::RangeInclusive;
 

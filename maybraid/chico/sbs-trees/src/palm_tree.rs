@@ -1,7 +1,7 @@
 //! Shared VegetationComponents emission for palm trunks and frond crowns.
 
 use bevy::prelude::*;
-use chico_ball_components::frond::FrondCrownShape;
+use chico_sbs_geometry::FrondCrownShape;
 use chico_sbs_geometry::{BallStickChain, Hysteresis};
 use chico_vegetation_components::{
 	chico_stick_material_ref, FoliageNode, FrondCollection, FrondRun, Placement, StickGeometry,

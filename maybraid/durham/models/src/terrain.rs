@@ -4,6 +4,7 @@ pub mod base_noise;
 pub mod cell;
 pub mod collider;
 pub mod config;
+pub mod host;
 pub mod index;
 pub mod jersey;
 pub mod jersey_modulation;
@@ -49,6 +50,10 @@ pub use cell::{
 };
 pub use collider::{TerrainFrictionConfig, TerrainTrimeshCollider, TERRAIN_FRICTION};
 pub use config::TerrainConfig;
+pub use host::{
+	Durham, TerrainCoverage, TerrainPlugin, TerrainPresentPending, TerrainPresentationDirty,
+	WorldBaseTerrain, WORLD_FINE_HALF_EXTENT_CELLS, WORLD_OUTER_2X_ROWS, WORLD_OUTER_4X_ROWS,
+};
 pub use index::{AvianTerrainIndex, TerrainCellId, TerrainEntryStore};
 pub use jersey::{
 	CanyonHighPassControllerCell, CanyonHighPassControllerLayout, CanyonHighPassStampCell,
@@ -84,7 +89,7 @@ pub use marazion::{
 	MarazionPocketWatersLowPass as MarazionLakeStampCell, PocketLowPassCell as PocketCell,
 	PrePocketLowPassCell as PrePocketCell, PrePocketLowPassLayout as PrePocketLayout,
 };
-pub use plugin::{register_terrain_plugin, TerrainPlugin};
+pub use plugin::{register_terrain_plugin, TerrainResourcesPlugin};
 pub use presentation::{
 	PresentedTerrainScene, TerrainMeshLodBand, TerrainPresentationAssets, TerrainPresenterState,
 	TerrainRegionPresenter, TerrainStoreView,

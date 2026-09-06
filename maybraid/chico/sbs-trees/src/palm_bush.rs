@@ -15,12 +15,9 @@
 //! mirrors detail crown counts without rewriting height-fraction frond shaping.
 
 mod crown;
-pub mod render_item_plugin;
-#[allow(dead_code)]
-mod tuft;
 
 use bevy::prelude::*;
-use chico_ball_components::frond::FrondCrownShape;
+use chico_sbs_geometry::FrondCrownShape;
 use chico_sbs_geometry::PalmBushSbs;
 use chico_vegetation_components::{
 	FoliageNode, Layers, StickNode, StructuralLod, VegetationComponents,

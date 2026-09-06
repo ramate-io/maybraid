@@ -14,23 +14,23 @@ use avian3d::schedule::PhysicsSchedulePlugin;
 use bevy::prelude::*;
 
 /// Registers Avian (if needed) and resources for the terrain model.
-pub struct TerrainPlugin;
+pub struct TerrainResourcesPlugin;
 
-impl Default for TerrainPlugin {
+impl Default for TerrainResourcesPlugin {
 	fn default() -> Self {
 		Self
 	}
 }
 
-/// Idempotent registration of [`TerrainPlugin`].
+/// Idempotent registration of [`TerrainResourcesPlugin`].
 pub fn register_terrain_plugin(app: &mut App) {
-	if app.is_plugin_added::<TerrainPlugin>() {
+	if app.is_plugin_added::<TerrainResourcesPlugin>() {
 		return;
 	}
-	app.add_plugins(TerrainPlugin);
+	app.add_plugins(TerrainResourcesPlugin);
 }
 
-impl Plugin for TerrainPlugin {
+impl Plugin for TerrainResourcesPlugin {
 	fn build(&self, app: &mut App) {
 		if !app.is_plugin_added::<PhysicsSchedulePlugin>() {
 			app.add_plugins(PhysicsPlugins::default());

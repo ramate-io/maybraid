@@ -1,7 +1,6 @@
 //! [`BuildWithNoise`] for [`LeewardTemperateConifer`].
 
 use chico_sbs_geometry::FriendsConiferSbs;
-use chico_sbs_trees::temperate_conifer::TemperateConiferGeometry;
 use procedural_common::UsizeRange;
 use procedural_common::{BuildWithNoise, NoiseConfig, NoiseParams, UnitRange};
 
@@ -14,7 +13,7 @@ fn sample_f32(config: &NoiseConfig, range: UnitRange, salt: f32) -> f32 {
 }
 
 pub struct TemperateConiferSamples {
-	pub geometry: TemperateConiferGeometry,
+	pub geometry: FriendsConiferSbs,
 	pub fronds_per_joint: UnitRange,
 	pub frond_length_fraction: UnitRange,
 	pub frond_spawn_fraction: f32,
@@ -42,7 +41,7 @@ impl BuildWithNoise<TemperateConiferSamples> for LeewardTemperateConifer {
 		let frond_len_hi = 0.045 + canopy_density * 0.030;
 
 		TemperateConiferSamples {
-			geometry: TemperateConiferGeometry { inner },
+			geometry: inner,
 			fronds_per_joint: UnitRange::new(1.0, fronds_hi),
 			frond_length_fraction: UnitRange::new(frond_len_lo, frond_len_hi),
 			frond_spawn_fraction,

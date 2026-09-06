@@ -1,6 +1,6 @@
 //! [`BuildWithNoise`] for [`TallGrassClump`].
 
-use chico_ball_components::tuft::BladeTuftShape;
+use chico_sbs_geometry::BladeTuftShape;
 use procedural_common::{BuildWithNoise, NoiseConfig, NoiseParams, UnitRange};
 
 use crate::tall_grass::TallGrassClump;
