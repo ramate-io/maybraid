@@ -50,6 +50,7 @@ pub use crozon_character_motion::{
 	apply_terrain_pitch, draw_terrain_pitch_probes, motion_policy, sync_motion_markers,
 	AnimateBones, AnimateEffects, ApplyTerrainPitch, CharacterMotionPlugin, CharacterMotionSystems,
 	DrawTerrainPitchProbes, MotionPolicy, SuspendAnimation, SuspendTerrainPitch,
+	TerrainPitchUsesVisualYaw, KILL_TERRAIN_PITCH_POSE,
 };
 pub use crozon_rigs::{BoneRotation, BoneScale, ResolvedRigPose, RigPoseLayer};
 pub use hosts::CharacterHostsPlugin;

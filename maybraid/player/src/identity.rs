@@ -1,6 +1,8 @@
 //! Synthesized targets other systems query. Item users write the aim/use slots.
 
+use bevy::ecs::query::Has;
 use bevy::prelude::*;
+use crozon_characters::{ApplyTerrainPitch, TerrainPitchUsesVisualYaw};
 
 #[derive(Component)]
 pub struct Player;
@@ -60,6 +62,27 @@ pub enum PlayerYawOwner {
 	#[default]
 	Wish,
 	Look,
+}
+
+/// Look-owned pitched visuals skip stored `yaw_facing` so mouse look is not gated.
+pub(crate) fn sync_terrain_pitch_visual_yaw(
+	mut commands: Commands,
+	owners: Query<
+		(Entity, &PlayerYawOwner, Has<TerrainPitchUsesVisualYaw>),
+		With<ApplyTerrainPitch>,
+	>,
+) {
+	for (entity, owner, uses_visual) in &owners {
+		match *owner {
+			PlayerYawOwner::Look if !uses_visual => {
+				commands.entity(entity).insert(TerrainPitchUsesVisualYaw);
+			}
+			PlayerYawOwner::Wish if uses_visual => {
+				commands.entity(entity).remove::<TerrainPitchUsesVisualYaw>();
+			}
+			_ => {}
+		}
+	}
 }
 
 /// Active extra driver (held gun, melee, …). Camera/pose overlays key off this.

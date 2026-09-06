@@ -6,25 +6,31 @@
 //! sampled slope, without max-lifting the rear into the air.
 //!
 //! Front/hind rays follow [`TerrainPitch::sagittal`] (live shoulder–hip) when
-//! that axis is set, otherwise Bevy mesh `+Z`. Yaw still comes from the visual
-//! so locomotion keeps facing. Probe noise is held behind a deadband; the
-//! displayed pitch, roll, and support Y exponentially follow the accepted
-//! target and stay rate-capped.
+//! that axis is set, otherwise Bevy mesh `+Z`. Wheelbase is the first rest
+//! measure, not the pitched chord. Capsule children sample from the parent
+//! origin so support Y cannot lift the next ray. Locomotion yaw is stored on
+//! [`TerrainPitch`] unless the visual has [`TerrainPitchUsesVisualYaw`]. Pitch and
+//! roll follow every sample (exponential + rate cap). Support Y still uses a
+//! centimetre deadband.
 
+use bevy::ecs::query::Has;
 use bevy::prelude::*;
 use ground::ElevationProbe;
 
-use crate::markers::{ApplyTerrainPitch, SuspendTerrainPitch};
+use crate::markers::{ApplyTerrainPitch, SuspendTerrainPitch, TerrainPitchUsesVisualYaw};
 use crate::pitch::{
-	facing_with_support_tilt, observed_pitch, observed_roll, pitched_half_run, sample_facing,
-	smooth_toward, support_offset, xz_dir, TerrainPitch, TerrainPitchProbe, MAX_TILT,
-	MIN_SUPPORT_CHANGE, MIN_TILT_CHANGE, SUPPORT_RATE, TILT_RATE,
+	adopt_yaw, facing_with_support_tilt, observed_pitch, observed_roll, pitched_half_run,
+	sample_facing, smooth_toward, support_offset, xz_dir, TerrainPitch, TerrainPitchProbe,
+	MAX_TILT, MIN_SUPPORT_CHANGE, SUPPORT_RATE, TILT_RATE,
 };
 
 /// Start the ray this far above the body so it clears the capsule.
 pub const PROBE_LIFT: f32 = 2.0;
 /// Extra downward reach after the uphill clearance, for downhill samples.
 pub const PROBE_MAX_DISTANCE: f32 = 6.0;
+/// Diagnostic: write yaw-only rotation and zero support Y. Gizmos still sample.
+/// Off: real tilt. On: clip-vs-pitch check.
+pub const KILL_TERRAIN_PITCH_POSE: bool = false;
 
 /// Draw last-frame front/hind hits. Playgrounds leave this on; set `false` to hide.
 #[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
@@ -59,6 +65,15 @@ pub fn is_local_visual_child(local_translation: Vec3) -> bool {
 	Vec2::new(local_translation.x, local_translation.z).length_squared() < 4.0
 }
 
+/// Ray start: capsule world pose for a local visual child, else the visual.
+pub fn probe_origin(visual_world: Vec3, parent_world: Option<Vec3>, local_child: bool) -> Vec3 {
+	if local_child {
+		parent_world.unwrap_or(visual_world)
+	} else {
+		visual_world
+	}
+}
+
 fn ancestor_exclude(
 	start: Option<Entity>,
 	child_of: &Query<&ChildOf>,
@@ -81,32 +96,48 @@ fn ancestor_exclude(
 /// Tilt visuals that carry both [`TerrainPitch`] and host [`ApplyTerrainPitch`].
 ///
 /// `P` is typically [`ground_avian::AvianElevationProbe`]. Register after
-/// physics / locomotion. Sample from the visual's world pose. Exclude every
-/// ancestor so a cell/group root is never treated as the capsule.
+/// physics / locomotion. Sample from the capsule parent when the visual is a
+/// near-origin child; world-placed hosts still use the visual pose. Exclude
+/// every ancestor so a cell/group root is never treated as the capsule.
 pub fn apply_terrain_pitch<P>(
 	time: Res<Time>,
 	mut probe: P,
 	mut visuals: Query<
-		(Entity, &mut Transform, &GlobalTransform, &mut TerrainPitch),
+		(
+			Entity,
+			&mut Transform,
+			&GlobalTransform,
+			&mut TerrainPitch,
+			Has<TerrainPitchUsesVisualYaw>,
+		),
 		With<ApplyTerrainPitch>,
 	>,
 	child_of: Query<&ChildOf>,
+	parents: Query<&GlobalTransform, Without<ApplyTerrainPitch>>,
 	suspended: Query<(), With<SuspendTerrainPitch>>,
 ) where
 	P: ElevationProbe,
 {
 	let dt = time.delta_secs();
-	for (entity, mut visual, global, mut pitch) in &mut visuals {
-		let Some(visual_facing) = visual_plus_z(&visual) else {
+	for (entity, mut visual, global, mut pitch, uses_visual_yaw) in &mut visuals {
+		let Some(observed_yaw) = visual_plus_z(&visual) else {
 			continue;
 		};
-		let ray_facing = sample_facing(pitch.sagittal, visual_facing);
-		let right = Vec3::new(visual_facing.z, 0.0, -visual_facing.x);
+		let yaw_facing =
+			if uses_visual_yaw { observed_yaw } else { adopt_yaw(pitch.yaw_facing, observed_yaw) };
+		pitch.yaw_facing = yaw_facing;
+		let ray_facing = sample_facing(pitch.sagittal, yaw_facing);
+		let right = Vec3::new(yaw_facing.z, 0.0, -yaw_facing.x);
 
-		let origin = global.translation();
 		let (exclude, suspend) = ancestor_exclude(Some(entity), &child_of, &suspended);
 		let offset_local_y =
 			child_of.get(entity).is_ok() && is_local_visual_child(visual.translation);
+		let parent_world = child_of
+			.get(entity)
+			.ok()
+			.and_then(|child| parents.get(child.parent()).ok())
+			.map(GlobalTransform::translation);
+		let origin = probe_origin(global.translation(), parent_world, offset_local_y);
 
 		let from_y = probe_from_y(origin.y, pitch.half_span);
 		let max_distance = probe_distance(pitch.half_span);
@@ -153,7 +184,7 @@ pub fn apply_terrain_pitch<P>(
 			&mut pitch.accepted_pitch,
 			target_pitch,
 			dt,
-			MIN_TILT_CHANGE,
+			0.0,
 			TILT_RATE,
 			suspend,
 		);
@@ -162,7 +193,7 @@ pub fn apply_terrain_pitch<P>(
 			&mut pitch.accepted_roll,
 			target_roll,
 			dt,
-			MIN_TILT_CHANGE,
+			0.0,
 			TILT_RATE,
 			suspend,
 		);
@@ -172,10 +203,23 @@ pub fn apply_terrain_pitch<P>(
 			hind,
 			front_hit,
 			hind_hit,
-			visual_facing,
+			visual_facing: yaw_facing,
 			sample_facing: ray_facing,
 		};
-		visual.rotation = facing_with_support_tilt(visual_facing, ray_facing, pitch.pitch, pitch.roll);
+		if KILL_TERRAIN_PITCH_POSE {
+			pitch.pitch = 0.0;
+			pitch.roll = 0.0;
+			pitch.support = 0.0;
+			pitch.accepted_pitch = 0.0;
+			pitch.accepted_roll = 0.0;
+			pitch.accepted_support = 0.0;
+			visual.rotation = facing_with_support_tilt(yaw_facing, ray_facing, 0.0, 0.0);
+			if offset_local_y {
+				visual.translation.y = 0.0;
+			}
+			continue;
+		}
+		visual.rotation = facing_with_support_tilt(yaw_facing, ray_facing, pitch.pitch, pitch.roll);
 		if offset_local_y {
 			pitch.support = smooth_toward(
 				pitch.support,
@@ -215,11 +259,7 @@ pub fn draw_terrain_pitch_probes(
 			origin + probe.sample_facing * span,
 			Color::srgb(1.0, 0.9, 0.15),
 		);
-		gizmos.line(
-			origin,
-			origin + probe.visual_facing * span,
-			Color::srgb(0.25, 0.75, 1.0),
-		);
+		gizmos.line(origin, origin + probe.visual_facing * span, Color::srgb(0.25, 0.75, 1.0));
 		draw_probe(&mut gizmos, probe.front, probe.front_hit, Color::srgb(0.25, 0.95, 0.35));
 		draw_probe(&mut gizmos, probe.hind, probe.hind_hit, Color::srgb(0.95, 0.5, 0.12));
 		gizmos.sphere(Isometry3d::from_translation(origin), 0.08, Color::srgb(1.0, 1.0, 1.0));
@@ -270,5 +310,14 @@ mod tests {
 		assert!(is_local_visual_child(Vec3::ZERO));
 		assert!(is_local_visual_child(Vec3::new(0.1, 0.0, -0.2)));
 		assert!(!is_local_visual_child(Vec3::new(40.0, 12.0, -8.0)));
+	}
+
+	#[test]
+	fn capsule_child_probes_from_parent_world_host_from_visual() {
+		let visual = Vec3::new(10.0, 3.0, -4.0);
+		let parent = Vec3::new(10.0, 1.5, -4.0);
+		assert_eq!(probe_origin(visual, Some(parent), true), parent);
+		assert_eq!(probe_origin(visual, Some(parent), false), visual);
+		assert_eq!(probe_origin(visual, None, true), visual);
 	}
 }

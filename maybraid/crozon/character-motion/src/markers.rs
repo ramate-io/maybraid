@@ -21,6 +21,13 @@ pub struct SuspendAnimation;
 #[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ApplyTerrainPitch;
 
+/// Take this frame's visual heading instead of stored `yaw_facing`.
+///
+/// Stamp on look-owned player visuals so mouse look is not held behind
+/// [`crate::pitch::YAW_ADOPT`]. NPCs keep stored yaw.
+#[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct TerrainPitchUsesVisualYaw;
+
 /// When present on the physics body (parent of the visual), pitch blends to 0.
 ///
 /// Playgrounds copy jump-in-flight onto this marker.

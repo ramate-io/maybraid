@@ -13,7 +13,8 @@ pub enum CharacterMotionSystems {
 	/// Sync host markers from the shown LOD band, then prepare + tick + apply clips.
 	Anim,
 	/// `apply_terrain_pitch::<P>` — add this system yourself with a probe.
-	/// Sample from the visual `GlobalTransform`; exclude / suspend via ancestors.
+	/// Sample from the capsule parent when the visual is a local child;
+	/// exclude / suspend via ancestors.
 	Elevation,
 }
 

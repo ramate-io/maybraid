@@ -6,8 +6,10 @@
 //! (stand upright); set [`TerrainPitch::roll_weight`] to bank. The capsule
 //! stays upright and owns world Y. Quadruped rays follow the live shoulder–hip
 //! axis when girdles exist, not Bevy `+Z`, so a long body still measures the
-//! slope it is standing on. Sample the **pitched** footprint so the visual
-//! chord matches that slope without max-lifting the rear into the air.
+//! slope it is standing on. Rest wheelbase locks on the first good measure so a
+//! pitched chord cannot shrink the next `atan`. Sample the **pitched** footprint
+//! so the visual chord matches that slope without max-lifting the rear into the
+//! air.
 
 use bevy::prelude::*;
 
@@ -54,14 +56,19 @@ pub struct TerrainPitch {
 	pub roll: f32,
 	/// Smoothed local Y for a capsule child. Ignored for world-placed hosts.
 	pub support: f32,
-	/// Last probe target that passed the tilt deadband.
+	/// Last probe target the displayed pitch is following.
 	pub accepted_pitch: f32,
-	/// Last probe target that passed the tilt deadband.
+	/// Last probe target the displayed roll is following.
 	pub accepted_roll: f32,
 	/// Last probe target that passed the support deadband.
 	pub accepted_support: f32,
 	/// Unit XZ hind→front from live girdles. [`Vec3::ZERO`] until measured.
 	pub sagittal: Vec3,
+	/// Ground-plane yaw used to rebuild tilt. Look-owned visuals replace this
+	/// every frame; others keep it until [`YAW_ADOPT`].
+	pub yaw_facing: Vec3,
+	/// Rest wheelbase is frozen after the first good girdle measure.
+	pub support_locked: bool,
 	pub probe: TerrainPitchProbe,
 	pub girdles: TerrainPitchGirdles,
 }
@@ -80,12 +87,17 @@ impl TerrainPitch {
 			accepted_roll: 0.0,
 			accepted_support: 0.0,
 			sagittal: Vec3::ZERO,
+			yaw_facing: Vec3::ZERO,
+			support_locked: false,
 			probe: TerrainPitchProbe::default(),
 			girdles: TerrainPitchGirdles::default(),
 		}
 	}
 
-	/// Store live girdle world points and set [`Self::sagittal`] when the XZ run is long enough.
+	/// Store live girdle world points for gizmos. Rest [`Self::half_span`] /
+	/// [`Self::half_width`] lock on the first long enough shoulder–hip run so a
+	/// pitched chord cannot shrink the next sample. [`Self::sagittal`] stays live
+	/// so yaw can turn the probe axis.
 	pub fn record_girdles(
 		&mut self,
 		shoulder_l: Option<Vec3>,
@@ -97,32 +109,24 @@ impl TerrainPitch {
 		let hind = girdle_midpoint([hip_l, hip_r].into_iter().flatten());
 		let left = girdle_midpoint([shoulder_l, hip_l].into_iter().flatten());
 		let right = girdle_midpoint([shoulder_r, hip_r].into_iter().flatten());
-		let sagittal_ok = match (front, hind) {
-			(Some(f), Some(h)) => {
-				if let Some(axis) = sagittal_axis(f, h) {
-					self.sagittal = axis;
-					true
-				} else {
-					false
+		let mut sagittal_ok = false;
+		if let (Some(f), Some(h)) = (front, hind) {
+			if let Some(axis) = sagittal_axis(f, h) {
+				sagittal_ok = true;
+				self.sagittal = axis;
+				if !self.support_locked {
+					if let Some(span) = measured_support_half(front, hind) {
+						self.half_span = span;
+					}
+					if let Some(width) = measured_support_half(left, right) {
+						self.half_width = width;
+					}
+					self.support_locked = true;
 				}
 			}
-			_ => false,
-		};
-		if let Some(span) = measured_support_half(front, hind) {
-			self.half_span = span;
 		}
-		if let Some(width) = measured_support_half(left, right) {
-			self.half_width = width;
-		}
-		self.girdles = TerrainPitchGirdles {
-			shoulder_l,
-			shoulder_r,
-			hip_l,
-			hip_r,
-			front,
-			hind,
-			sagittal_ok,
-		};
+		self.girdles =
+			TerrainPitchGirdles { shoulder_l, shoulder_r, hip_l, hip_r, front, hind, sagittal_ok };
 	}
 }
 
@@ -131,13 +135,17 @@ pub const MAX_TILT: f32 = 80.0_f32.to_radians();
 /// Max rad/s toward the accepted tilt. Large snaps still take several frames.
 pub const TILT_RATE: f32 = 3.0;
 /// Exponential follow rate (1/s) so sub-rate-cap noise is low-passed, not copied.
-pub const TILT_SMOOTH: f32 = 10.0;
-/// Ignore new pitch/roll samples closer than this to the accepted target.
-pub const MIN_TILT_CHANGE: f32 = 2.5_f32.to_radians();
+pub const TILT_SMOOTH: f32 = 4.0;
+/// Historical tilt deadband. Apply pitch/roll uses `min_change` 0; tests still
+/// exercise [`accept_target`] with this gate.
+pub const MIN_TILT_CHANGE: f32 = 8.0_f32.to_radians();
 /// Max m/s toward the accepted support offset.
-pub const SUPPORT_RATE: f32 = 2.0;
+pub const SUPPORT_RATE: f32 = 0.8;
 /// Ignore new support samples closer than this to the accepted offset.
-pub const MIN_SUPPORT_CHANGE: f32 = 0.04;
+pub const MIN_SUPPORT_CHANGE: f32 = 0.12;
+/// Adopt a new visual heading only when locomotion clearly turned (flatten noise
+/// from a pitched quat stays well below this; `face_wish` writes above ~3°).
+pub const YAW_ADOPT: f32 = 0.06;
 
 const HUMANOID_HALF_SPAN: f32 = 0.22;
 const QUADRUPED_HALF_SPAN: f32 = 1.2;
@@ -248,6 +256,18 @@ pub fn sample_facing(sagittal: Vec3, visual_facing: Vec3) -> Vec3 {
 	xz_unit(sagittal).unwrap_or(visual_facing)
 }
 
+/// Keep `stored` yaw unless `observed` is a real turn (or `stored` is unset).
+pub fn adopt_yaw(stored: Vec3, observed: Vec3) -> Vec3 {
+	if stored.length_squared() < 1e-6 {
+		return observed;
+	}
+	if stored.angle_between(observed) >= YAW_ADOPT {
+		observed
+	} else {
+		stored
+	}
+}
+
 fn slope_angle(high_side: f32, low_side: f32, half_run: f32) -> f32 {
 	let run = (2.0 * half_run).max(1e-3);
 	((high_side - low_side) / run).atan().clamp(-MAX_TILT, MAX_TILT)
@@ -298,11 +318,7 @@ pub fn smooth_toward(
 	rate: f32,
 	force: bool,
 ) -> f32 {
-	*accepted = if force {
-		observed
-	} else {
-		accept_target(*accepted, observed, min_change)
-	};
+	*accepted = if force { observed } else { accept_target(*accepted, observed, min_change) };
 	follow_target(current, *accepted, dt, rate)
 }
 
@@ -483,6 +499,24 @@ mod tests {
 	}
 
 	#[test]
+	fn adopt_yaw_keeps_stored_for_flatten_noise_and_takes_a_real_turn() {
+		let stored = Vec3::Z;
+		let noise = Quat::from_rotation_y(YAW_ADOPT * 0.4) * stored;
+		assert_eq!(adopt_yaw(stored, noise), stored);
+		let turned = Vec3::X;
+		assert_eq!(adopt_yaw(stored, turned), turned);
+		assert_eq!(adopt_yaw(Vec3::ZERO, stored), stored);
+	}
+
+	#[test]
+	fn pitched_visual_flatten_stays_under_yaw_adopt() {
+		let yaw = Vec3::Z;
+		let q = facing_with_support_tilt(yaw, yaw, -0.6, 0.0);
+		let flat = xz_dir(q * Vec3::Z).expect("pitched +Z still has XZ");
+		assert!(yaw.angle_between(flat) < YAW_ADOPT);
+	}
+
+	#[test]
 	fn record_girdles_accepts_a_long_xz_wheelbase() {
 		let mut pitch = TerrainPitch::new(RigSkeletonKind::Quadruped, 1.2, 0.45);
 		pitch.record_girdles(
@@ -494,6 +528,7 @@ mod tests {
 		assert!(pitch.girdles.sagittal_ok);
 		assert!((pitch.half_span - 1.0).abs() < 1e-5);
 		assert!((pitch.sagittal - Vec3::Z).length() < 1e-5);
+		assert!(pitch.support_locked);
 	}
 
 	#[test]
@@ -505,7 +540,29 @@ mod tests {
 		assert!(pitch.girdles.front.is_some());
 		assert!(!pitch.girdles.sagittal_ok);
 		assert_eq!(pitch.sagittal, Vec3::ZERO);
+		assert!(!pitch.support_locked);
 		assert!((pitch.half_span - 1.2).abs() < 1e-5);
+	}
+
+	#[test]
+	fn record_girdles_locks_span_but_keeps_live_axis_and_gizmos() {
+		let mut pitch = TerrainPitch::new(RigSkeletonKind::Quadruped, 1.2, 0.45);
+		pitch.record_girdles(
+			Some(Vec3::new(0.0, 1.0, 2.0)),
+			Some(Vec3::new(0.0, 1.0, 2.0)),
+			Some(Vec3::new(0.0, 1.0, 0.0)),
+			Some(Vec3::new(0.0, 1.0, 0.0)),
+		);
+		pitch.record_girdles(
+			Some(Vec3::new(4.0, 1.0, 0.0)),
+			Some(Vec3::new(4.0, 1.0, 0.0)),
+			Some(Vec3::new(0.0, 1.0, 0.0)),
+			Some(Vec3::new(0.0, 1.0, 0.0)),
+		);
+		assert!(pitch.support_locked);
+		assert!((pitch.half_span - 1.0).abs() < 1e-5);
+		assert!((pitch.sagittal - Vec3::X).length() < 1e-5);
+		assert_eq!(pitch.girdles.front, Some(Vec3::new(4.0, 1.0, 0.0)));
 	}
 
 	#[test]
@@ -530,29 +587,23 @@ mod tests {
 	}
 
 	#[test]
+	fn smooth_toward_with_zero_deadband_retargets_every_sample() {
+		let dt = 1.0 / 60.0;
+		let mut accepted = 0.0;
+		let out = smooth_toward(0.0, &mut accepted, 0.01, dt, 0.0, TILT_RATE, false);
+		assert_eq!(accepted, 0.01);
+		assert!(out > 0.0);
+		assert!(out < 0.01);
+	}
+
+	#[test]
 	fn smooth_toward_forces_zero_below_the_deadband() {
 		let dt = 1.0 / 60.0;
 		let mut accepted = 0.02;
-		let held = smooth_toward(
-			0.02,
-			&mut accepted,
-			0.0,
-			dt,
-			MIN_TILT_CHANGE,
-			TILT_RATE,
-			false,
-		);
+		let held = smooth_toward(0.02, &mut accepted, 0.0, dt, MIN_TILT_CHANGE, TILT_RATE, false);
 		assert_eq!(accepted, 0.02);
 		assert!((held - 0.02).abs() < 1e-6);
-		let out = smooth_toward(
-			0.02,
-			&mut accepted,
-			0.0,
-			dt,
-			MIN_TILT_CHANGE,
-			TILT_RATE,
-			true,
-		);
+		let out = smooth_toward(0.02, &mut accepted, 0.0, dt, MIN_TILT_CHANGE, TILT_RATE, true);
 		assert_eq!(accepted, 0.0);
 		assert!(out < 0.02);
 	}

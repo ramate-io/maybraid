@@ -82,7 +82,7 @@ No clip sampling. No rays.
 | `prepare_anim_mailbox` | `Anim` | Typed rig + `AnimMailbox` once the bone map is ready |
 | `tick_anim_mailbox` | `Anim` | Advance time on every body mailbox |
 | `apply_anim_mailbox` | `Anim` | Sample/write only `With<AnimateBones\|AnimateEffects>` |
-| `apply_terrain_pitch<P>` | `Elevation` | **Not registered here** — app adds with a concrete probe; filters `With<ApplyTerrainPitch>`; rays from the visual world pose |
+| `apply_terrain_pitch<P>` | `Elevation` | **Not registered here** — app adds with a concrete probe; filters `With<ApplyTerrainPitch>`; capsule children ray from the parent origin |
 | `draw_terrain_pitch_probes` | `PostUpdate` | Sample gizmos when [`DrawTerrainPitchProbes`](src/elevation.rs) is true (default) |
 
 Order `CharacterMotionSystems::Anim` after `CharacterHostSystems::Pose`.
@@ -97,6 +97,12 @@ Order elevation after physics / locomotion.
 | `prepare_character_terrain_pitch` | Measure girdles, insert `TerrainPitch` |
 | `sync_suspend_terrain_pitch` | `Jumping` → `SuspendTerrainPitch` on the body |
 | `apply_terrain_pitch::<AvianElevationProbe>` | Probe colliders, write visual rotation |
+
+### In `player`
+
+| System | Does |
+|---|---|
+| `sync_terrain_pitch_visual_yaw` | `PlayerYawOwner::Look` → `TerrainPitchUsesVisualYaw` on the pitched visual |
 
 ## How to implement behaviors
 
@@ -114,9 +120,11 @@ the shared table `sync_motion_markers` applies. To add a capability, extend
 ### Stand on colliders (not a heightfield)
 
 Implement `ground::ElevationProbe` (or use `AvianElevationProbe`). Wrap the
-generic apply loop in a concrete system. Rays start at the visual's
-`GlobalTransform` so a host parented to an identity cell/group root still
-samples the slope under the mesh. `AvianElevationProbe` masks
+generic apply loop in a concrete system. Capsule children sample from the
+parent origin so support Y cannot lift the next ray; world-placed hosts still
+use the visual `GlobalTransform`. Rest wheelbase locks on the first good
+girdle measure; live shoulder–hip only steers the sample axis and gizmos.
+`AvianElevationProbe` masks
 `PhysicsInteractionLayer::Fixed`, walks past near-start / canopy hits, and
 keeps the lowest standable collider so grove Host AABBs and tree sticks do
 not steal the terrain trimesh. Side rays run only when
@@ -124,9 +132,15 @@ not steal the terrain trimesh. Side rays run only when
 shoulder–hip axis (`TerrainPitch.sagittal`); gizmos: lime/orange ray hits, yellow sample axis, cyan
 mesh `+Z`, magenta bone dots, teal/gold girdle midpoints (magenta chord). A pink
 ring on the origin means girdles were found but the XZ run was too short.
-Insert `DrawTerrainPitchProbes(false)` to hide. Applied pitch, roll, and
-support Y follow an accepted probe target with a deadband, exponential
-smoothing, and a rate cap so trimesh noise does not jitter the mesh.
+Insert `DrawTerrainPitchProbes(false)` to hide. NPCs store locomotion yaw on
+`TerrainPitch` and only replace it when the visual heading turns past
+`YAW_ADOPT`, so apply does not rebuild yaw from a pitched `forward`. Look-owned
+player visuals stamp `TerrainPitchUsesVisualYaw` (`PlayerYawOwner::Look`) and
+take this frame's flattened heading so mouse look is not held behind that gate.
+`KILL_TERRAIN_PITCH_POSE` slams tilt to zero for clip-vs-pitch checks (off).
+Pitch and roll follow every probe sample with exponential smoothing and a rate
+cap. Support Y still has a centimetre deadband so vertical probe noise does not
+bob the mesh.
 
 ### Jump / airborne
 

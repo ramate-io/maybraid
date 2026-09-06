@@ -8,12 +8,12 @@ use crozon_character_motion::{BoneMap, CharacterRig, CharacterRigRole, RigSkelet
 use crate::member::{CharacterMembers, CharacterRoot};
 
 pub use crozon_character_motion::pitch::{
-	default_half_span, default_half_width, facing_with_support_tilt, facing_with_tilt,
+	adopt_yaw, default_half_span, default_half_width, facing_with_support_tilt, facing_with_tilt,
 	girdle_midpoint, half_span_from_girdles, half_width_from_sides, measured_support_half,
 	observed_pitch, observed_roll, pitch_weight, pitched_half_run, roll_weight, sagittal_axis,
 	sample_facing, smooth_toward, step_toward, support_offset, TerrainPitch, MAX_TILT,
 	MIN_SUPPORT_CHANGE, MIN_TILT_CHANGE, QUADRUPED_FRONT, QUADRUPED_HIND, QUADRUPED_LEFT,
-	QUADRUPED_RIGHT, SUPPORT_RATE, TILT_RATE, TILT_SMOOTH,
+	QUADRUPED_RIGHT, SUPPORT_RATE, TILT_RATE, TILT_SMOOTH, YAW_ADOPT,
 };
 
 /// Insert [`TerrainPitch`] on character roots that opted in with [`ApplyTerrainPitch`],
