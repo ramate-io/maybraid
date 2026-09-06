@@ -51,9 +51,8 @@ use richmond_development_models::{
 use richmond_urbanization::UrbanizationKind;
 use std::f32::consts::PI;
 use urbanization_stream::{
-	generate_urbanization_padded_terrain, present_urbanization_hosts,
-	present_urbanization_padded_terrain, sync_raw_terrain_replacements,
-	UrbanizationPaddedTerrainState,
+	generate_urbanization_padded_terrain, present_urbanization_padded_terrain,
+	sync_raw_terrain_replacements, UrbanizationPaddedTerrainState,
 };
 
 const DEFAULT_TERRAIN_RADIUS: i32 = 2;
@@ -219,7 +218,6 @@ impl Plugin for DevelopmentsOnTerrainPlugin {
 			(
 				sync_urbanization_pin,
 				stream_urbanization.before(LodGenerateSystems::Produce),
-				present_urbanization_hosts.after(LodGenerateSystems::Drain),
 				generate_urbanization_padded_terrain,
 				present_urbanization_padded_terrain,
 				sync_raw_terrain_replacements,

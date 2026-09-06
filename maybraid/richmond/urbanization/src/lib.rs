@@ -7,8 +7,9 @@
 //! Richmond `DevelopmentKind` at the development-models boundary. World
 //! bullseyes use [`DEVELOPMENT_PRESENT_RADIUS_M`] /
 //! [`DEVELOPMENT_GENERATE_RADIUS_M`] (1 km / 3 km), mirroring forest grove rings.
-//! [`UrbanizationGenerationPlugin`] is select-only generate; present / pads /
-//! hosts stay off that plugin.
+//! [`UrbanizationGenerationPlugin`] is select-only generate;
+//! [`UrbanizationPresentationPlugin`] arms present keep. Host spawn lives on
+//! development-models; pad bake stays off both plugins.
 
 mod extent;
 mod generation;
@@ -29,12 +30,13 @@ pub use guillotine::{guillotine_partition, UrbanizationGuillotineParams};
 pub use hopscotch::{select as hopscotch_select, HopscotchNode};
 pub use index::UrbanizationIndex;
 pub use kind::{UrbanDevelopmentKind, UrbanizationKind, UrbanizationRecipe, WeightedDevelopment};
-pub use plugin::UrbanizationGenerationPlugin;
+pub use plugin::{UrbanizationGenerationPlugin, UrbanizationPresentationPlugin};
 pub use richmond::{
 	richmond_hopscotch, select_cell, select_cell_as, select_kind, DevelopmentLeaf,
 	SelectedUrbanization, DEFAULT_HOP_BUDGET,
 };
 pub use stream::{
-	install_urbanization_generate_stream, parse_urbanization_kind, stream_radii_m,
-	UrbanizationStreamSpec, DEFAULT_URBANIZATION_NOISE, DEFAULT_URBANIZATION_STREAM_RADIUS,
+	install_urbanization_generate_stream, install_urbanization_present_stream,
+	parse_urbanization_kind, stream_radii_m, UrbanizationStreamSpec, DEFAULT_URBANIZATION_NOISE,
+	DEFAULT_URBANIZATION_STREAM_RADIUS,
 };

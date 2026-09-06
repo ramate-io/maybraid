@@ -4,59 +4,58 @@
 //! bullseye. Host spawn / cull runs in Update so it can own
 //! [`DevelopmentIndex`] without conflicting with the urbanization LOD drain.
 
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::HashSet;
 
 use bevy::ecs::system::SystemParam;
-use bevy::log::info_span;
 use bevy::prelude::*;
 use durham_terrain::shaders::DurhamTerrainShader;
 use durham_terrain_models::PresentedTerrainScene;
 use lod::gen::{
 	GeneratingSpatialIndex, GenerationScheme, Id, LodGenerateKeepRegion, LodGenerateQueue,
-	LodGenerateRegion, OriginalId, SpatialIndex, Version,
+	LodGenerateRegion, OriginalId, SpatialIndex,
 };
 use lod::lod_ref::LodRef;
 use lod::presentation::{LodPresentKeepRegion, LodPresentRegion, RegionPresenter};
-use lod::{LodGenerateBudget, LodPresentRegionPlugin, LodSceneRefreshRegionPlugin, LodViewer};
+use lod::{LodGenerateBudget, LodSceneRefreshRegionPlugin, LodViewer};
 use lod_avian::AvianLodSceneRefreshPlugin;
 use richmond_development_models::{
-	BuiltDevelopment, DevelopmentCell, DevelopmentEntryStore, DevelopmentHosts, DevelopmentIndex,
-	PaddedStoreView, PaddedTerrainPresenter, PresentedPaddedTerrainScene, TerrainWithPads,
+	DevelopmentEntryStore, DevelopmentIndex, PaddedStoreView, PaddedTerrainPresenter,
+	PresentedPaddedTerrainScene, TerrainWithPads, UrbanizationHostPlugin,
+	UrbanizationPresenterState,
 };
 use richmond_urbanization::{
-	SelectedUrbanization, UrbanDevelopmentKind, UrbanizationExtent, UrbanizationGenerateBullseye,
+	SelectedUrbanization, UrbanizationExtent, UrbanizationGenerateBullseye,
 	UrbanizationGenerationPlugin, UrbanizationIndex, UrbanizationKind, UrbanizationLodChan,
-	UrbanizationPresentBullseye, DEVELOPMENT_GENERATE_RADIUS_M, DEVELOPMENT_PRESENT_RADIUS_M,
+	UrbanizationPresentBullseye, UrbanizationPresentationPlugin, DEVELOPMENT_GENERATE_RADIUS_M,
+	DEVELOPMENT_PRESENT_RADIUS_M,
 };
 
+pub use richmond_development_models::UrbanizationHostBudget;
 pub use richmond_urbanization::{
 	parse_urbanization_kind, stream_radii_m, UrbanizationStreamSpec, DEFAULT_URBANIZATION_NOISE,
 	DEFAULT_URBANIZATION_STREAM_RADIUS,
 };
 
-use crate::hosts::DevelopmentHostRoot;
-
 /// Generate + present-keep plugins for [`SelectedUrbanization`].
 ///
-/// Generate comes from [`UrbanizationGenerationPlugin`]. This also registers
-/// present-keep and padded-terrain scene refresh used by the playground.
+/// Generate / present plugins are `plugins_only` so [`stream_urbanization`] owns
+/// bullseye enablement. Hosts come from [`UrbanizationHostPlugin`]. This also
+/// registers padded-terrain scene refresh used by the playground.
 pub fn register_urbanization_lod(app: &mut App) {
 	#[derive(Debug, Clone, Copy, Default)]
 	struct PaddedTerrainRefresh;
 
 	if !app.is_plugin_added::<UrbanizationGenerationPlugin>() {
-		app.add_plugins(UrbanizationGenerationPlugin);
+		app.add_plugins(UrbanizationGenerationPlugin::plugins_only());
 	}
-	app.init_resource::<UrbanizationPresenterState>()
-		.init_resource::<UrbanizationPresentBullseye>()
-		.init_resource::<UrbanizationHostBudget>()
-		.init_resource::<UrbanizationPaddedTerrainBudget>()
+	if !app.is_plugin_added::<UrbanizationPresentationPlugin>() {
+		app.add_plugins(UrbanizationPresentationPlugin::plugins_only());
+	}
+	if !app.is_plugin_added::<UrbanizationHostPlugin>() {
+		app.add_plugins(UrbanizationHostPlugin);
+	}
+	app.init_resource::<UrbanizationPaddedTerrainBudget>()
 		.insert_resource(LodGenerateBudget { ids_per_frame: 8 })
-		.add_plugins(LodPresentRegionPlugin::<
-			UrbanizationPresentBullseye,
-			With<LodViewer>,
-			UrbanizationLodChan,
-		>::default())
 		.add_plugins(LodSceneRefreshRegionPlugin::<
 			UrbanizationPresentBullseye,
 			With<LodViewer>,
@@ -67,18 +66,6 @@ pub fn register_urbanization_lod(app: &mut App) {
 			PaddedTerrainRefresh,
 			With<LodViewer>,
 		>::default());
-}
-
-/// Cap host spawn to this many unpresented urbanization cells per frame.
-#[derive(Resource, Clone, Copy, Debug)]
-pub struct UrbanizationHostBudget {
-	pub cells_per_frame: usize,
-}
-
-impl Default for UrbanizationHostBudget {
-	fn default() -> Self {
-		Self { cells_per_frame: 1 }
-	}
 }
 
 /// Cap pad bake to this many [`TerrainWithPads`] ids per frame.
@@ -93,130 +80,10 @@ impl Default for UrbanizationPaddedTerrainBudget {
 	}
 }
 
-#[derive(Resource, Default)]
-pub struct UrbanizationPresenterState {
-	presented: HashMap<Id, PresentedUrbanization>,
-	pending_despawn: VecDeque<Vec<Entity>>,
-}
-
 /// Padded terrain ids replacing raw Durham presentation roots this frame.
 #[derive(Resource, Default)]
 pub struct UrbanizationPaddedTerrainState {
 	wanted: HashSet<Id>,
-}
-
-struct PresentedUrbanization {
-	version: Version,
-	entities: Vec<Entity>,
-}
-
-impl UrbanizationPresenterState {
-	pub fn clear(&mut self, commands: &mut Commands) {
-		for presented in self.presented.values() {
-			for entity in &presented.entities {
-				commands.entity(*entity).despawn();
-			}
-		}
-		self.presented.clear();
-		for entities in self.pending_despawn.drain(..) {
-			for entity in entities {
-				commands.entity(entity).despawn();
-			}
-		}
-	}
-
-	fn retire(&mut self, id: Id) -> Option<PresentedUrbanization> {
-		self.presented.remove(&id)
-	}
-
-	pub fn presented_version(&self, id: Id) -> Option<Version> {
-		self.presented.get(&id).map(|entry| entry.version)
-	}
-
-	pub fn presented_ids(&self) -> Vec<Id> {
-		self.presented.keys().copied().collect()
-	}
-
-	pub fn remove_stale(&mut self, commands: &mut Commands, wanted: &HashSet<Id>) {
-		let stale: Vec<Id> =
-			self.presented.keys().copied().filter(|id| !wanted.contains(id)).collect();
-		for id in stale {
-			if let Some(entry) = self.presented.remove(&id) {
-				self.pending_despawn.push_back(entry.entities);
-			}
-		}
-		while let Some(entities) = self.pending_despawn.pop_front() {
-			for entity in entities {
-				commands.entity(entity).despawn();
-			}
-		}
-	}
-
-	/// Generate leaf developments and spawn hosts for one urbanization cell.
-	pub fn present_urbanization(
-		&mut self,
-		commands: &mut Commands,
-		development: &mut DevelopmentIndex,
-		id: Id,
-		version: Version,
-		selected: &SelectedUrbanization,
-		lod_ref: &LodRef,
-	) -> Vec<Entity> {
-		if let Some(previous) = self.retire(id) {
-			self.pending_despawn.push_back(previous.entities);
-		}
-
-		let mut entities = Vec::new();
-		for leaf in &selected.leaves {
-			if leaf.kind == UrbanDevelopmentKind::Empty {
-				continue;
-			}
-			let leaf_id = leaf.id();
-			{
-				let _span = info_span!("richmond_development_generation").entered();
-				if GeneratingSpatialIndex::<DevelopmentCell>::get_or_generate(
-					development,
-					leaf_id,
-					lod_ref,
-				)
-				.is_none()
-				{
-					continue;
-				}
-				if GeneratingSpatialIndex::<BuiltDevelopment>::get_or_generate(
-					development,
-					leaf_id,
-					lod_ref,
-				)
-				.is_none()
-				{
-					continue;
-				}
-			}
-			let Some(built) = SpatialIndex::<BuiltDevelopment>::get(development, leaf_id) else {
-				continue;
-			};
-			{
-				let _span = info_span!("richmond_host_spawn").entered();
-				entities.extend(spawn_tagged_hosts(commands, built));
-			}
-		}
-
-		self.presented
-			.insert(id, PresentedUrbanization { version, entities: entities.clone() });
-		entities
-	}
-}
-
-fn spawn_tagged_hosts(commands: &mut Commands, development: &impl DevelopmentHosts) -> Vec<Entity> {
-	let mut spawned = Vec::new();
-	for host in development.hosts() {
-		for entity in host.spawn(commands) {
-			commands.entity(entity).insert(DevelopmentHostRoot);
-			spawned.push(entity);
-		}
-	}
-	spawned
 }
 
 /// Keep / queue / bullseye resources the stream system drives.
@@ -295,72 +162,6 @@ pub fn stream_urbanization(
 ) {
 	let cam = camera.single().ok().map(|t| t.translation);
 	lod.apply_spec(&mut commands, config.urbanization.as_ref(), cam, &mut last_key);
-}
-
-/// Expand presented urbanization cells into BuiltDevelopment hosts and cull stale ones.
-pub fn present_urbanization_hosts(
-	mut commands: Commands,
-	config: Res<crate::PlaygroundConfig>,
-	keep: Res<LodPresentKeepRegion<UrbanizationLodChan>>,
-	budget: Res<UrbanizationHostBudget>,
-	mut development: DevelopmentIndex,
-	mut state: ResMut<UrbanizationPresenterState>,
-) {
-	if config.urbanization.is_none() {
-		return;
-	}
-	let Some(region) = keep.region else {
-		return;
-	};
-
-	let noise = development.config().urbanization_noise();
-	development.urbanization.noise = noise;
-	if let Some(spec) = config.urbanization.as_ref() {
-		development.urbanization.kind = spec.kind;
-	}
-
-	let identity = Transform::IDENTITY;
-	let lod_ref = LodRef {
-		entity: Entity::PLACEHOLDER,
-		previous_transform: &identity,
-		current_transform: &identity,
-		bounds: &region,
-	};
-
-	let tracked: Vec<(Id, Version)> =
-		SpatialIndex::<SelectedUrbanization>::tracked_ids_for(&*development.urbanization, region)
-			.into_iter()
-			.filter_map(|tracked| {
-				let id = tracked.0;
-				let version =
-					SpatialIndex::<SelectedUrbanization>::version(&*development.urbanization, id)?;
-				Some((id, version))
-			})
-			.collect();
-
-	let wanted: HashSet<Id> = tracked.iter().map(|(id, _)| *id).collect();
-	let mut remaining = budget.cells_per_frame;
-	for (id, version) in tracked {
-		if state.presented_version(id) == Some(version) {
-			continue;
-		}
-		if remaining == 0 {
-			continue;
-		}
-		let Some(selected) = development.urbanization.get(id).cloned() else {
-			continue;
-		};
-		state.present_urbanization(
-			&mut commands,
-			&mut development,
-			id,
-			version,
-			&selected,
-			&lod_ref,
-		);
-		remaining -= 1;
-	}
-	state.remove_stale(&mut commands, &wanted);
 }
 
 /// Bake a bounded number of padded Durham cells after hosts have written pads.

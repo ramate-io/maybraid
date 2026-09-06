@@ -1,5 +1,5 @@
 //! Assembled world model: Durham terrain, streamed forest, urbanization
-//! generate, sky dome.
+//! generate and budgeted hosts, sky dome.
 //!
 //! Character mode is the default. Forest grove fill is 1 km present / 3 km
 //! selection generate. Canopy bump-outs occupy the 1–5 km present keep and
@@ -10,7 +10,8 @@
 //! Plugin list: `WorldMaterialRefPlugin`, `VisualGeometryCorePlugin`,
 //! `TerrainPlugin<Durham>`, character via `VegetationHostPlugin`, groves +
 //! bump-outs via `VegetationPlugin<OnTerrain<DurhamHeight>>`,
-//! `UrbanizationGenerationPlugin` (select-only hopscotch; no pads or hosts).
+//! `UrbanizationGenerationPlugin` + `UrbanizationPresentationPlugin` +
+//! `UrbanizationHostPlugin` (hopscotch + budgeted hosts; no pads).
 
 mod camera;
 pub mod commands;
@@ -42,9 +43,8 @@ use lod_first_load::{FirstLoadActivity, FirstLoadPermit, FirstLoadPlugin};
 use maybraid_character_controller::{CharacterControlSystems, CharacterControllerPlugin};
 use maybraid_input::{VirtualPadConfig, VirtualPadPlugin};
 use maybraid_sky::SkyDomePlugin;
-use richmond_urbanization::{
-	install_urbanization_generate_stream, UrbanizationGenerationPlugin, UrbanizationStreamSpec,
-};
+use richmond_development_models::UrbanizationHostPlugin;
+use richmond_urbanization::{UrbanizationGenerationPlugin, UrbanizationPresentationPlugin};
 use visual_geometry_core::VisualGeometryCorePlugin;
 
 /// Steepest walkable slope. Cliffs (~80°+) stay well above this and never count as floor.
@@ -62,7 +62,7 @@ const WORLD_BULLSEYE_OUTER_M: f32 = 2_000.0;
 const WORLD_LATTICE_EXCLUDE_M: f32 = 2_000.0;
 const WORLD_LATTICE_OUTER_M: f32 = 8_000.0;
 
-/// Assembled world: Durham terrain, streamed forest, urbanization generate, sky dome, character.
+/// Assembled world: Durham terrain, streamed forest, urbanization hosts, sky dome, character.
 ///
 /// Playground chrome (command drawer, FPS HUD, pad dump) is on by default.
 /// The game executable uses [`WorldPlugin::game`].
@@ -102,9 +102,10 @@ impl Plugin for WorldPlugin {
 			.add_plugins(CharacterControllerPlugin)
 			.add_plugins(VegetationHostPlugin)
 			.add_plugins(VegetationPlugin::<OnTerrain<DurhamHeight>>::default())
-			.add_plugins(UrbanizationGenerationPlugin);
-		install_urbanization_generate_stream(app, UrbanizationStreamSpec::default());
-		app.insert_resource(PadMovementEnabled(false))
+			.add_plugins(UrbanizationGenerationPlugin::default())
+			.add_plugins(UrbanizationPresentationPlugin::default())
+			.add_plugins(UrbanizationHostPlugin)
+			.insert_resource(PadMovementEnabled(false))
 			.insert_resource(CharacterCameraFollowEnabled(false))
 			.init_resource::<WorldGameplayEnabled>()
 			.init_resource::<WorldSceneryVisible>()

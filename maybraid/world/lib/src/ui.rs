@@ -3,7 +3,7 @@ use game_commands::ui::{GameCommandStatusText, GameCommandUiConfig};
 
 pub fn ui_config() -> GameCommandUiConfig {
 	GameCommandUiConfig {
-		title: "World — character on Durham + forest + urbanization generate + sky — / for commands — Y or F1 drawer"
+		title: "World — character on Durham + forest + urbanization hosts + sky — / for commands — Y or F1 drawer"
 			.into(),
 		empty_console_text: "Console: `mode free`, `set-character`, `stats mesh`, `help`".into(),
 		root_background: Color::srgba(0.08, 0.16, 0.22, 0.82),
@@ -22,5 +22,5 @@ pub(crate) fn sync_command_status_text(
 	}
 	*seeded = true;
 	status.0 =
-		"world  character  forest hopscotch  urbanization generate  grove 1 km  bump-outs 1–5 km  sky 350–1200 m".into();
+		"world  character  forest hopscotch  urbanization hosts 1/frame  grove 1 km  bump-outs 1–5 km  sky 350–1200 m".into();
 }

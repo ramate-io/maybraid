@@ -1,15 +1,17 @@
-//! Stamp urbanization noise / kind and enable the generate bullseye.
+//! Stamp urbanization noise / kind and enable generate / present bullseyes.
 //!
-//! Keep is armed by generate produce from the lattice disk. Do not emit a
-//! full-ring [`lod::LodGenerateRegion`] on install. Present stays disabled
-//! until an urbanization present plugin enables it
-//! ([#720](https://github.com/ramate-io/maybraid/issues/720) step 3).
+//! Keep is armed by produce from the lattice disk. Do not emit a full-ring
+//! [`lod::LodGenerateRegion`] / [`lod::LodPresentRegion`] on install.
+//! [`UrbanizationGenerationPlugin`](crate::UrbanizationGenerationPlugin) /
+//! [`UrbanizationPresentationPlugin`](crate::UrbanizationPresentationPlugin)
+//! call these when constructed with a spec. Pass `spec: None` (`plugins_only`)
+//! for hosts that enable bullseyes later (playground `stream_urbanization`).
 
 use bevy::prelude::*;
 use procedural_common::NoiseParams;
 
 use crate::{
-	UrbanizationGenerateBullseye, UrbanizationIndex, UrbanizationKind,
+	UrbanizationGenerateBullseye, UrbanizationIndex, UrbanizationKind, UrbanizationPresentBullseye,
 	DEFAULT_URBANIZATION_EXTENT_XZ, DEVELOPMENT_GENERATE_RADIUS_M, DEVELOPMENT_PRESENT_RADIUS_M,
 };
 
@@ -69,7 +71,6 @@ pub fn stream_radii_m(stream_radius: u32) -> (f32, f32) {
 
 /// Stamp [`UrbanizationIndex`] noise / kind and enable the generate bullseye.
 ///
-/// Call after [`crate::UrbanizationGenerationPlugin`] so the bullseye exists.
 /// Does not write a generate region impulse; produce arms keep from the current
 /// lattice disk. Does not enable present.
 pub fn install_urbanization_generate_stream(app: &mut App, spec: UrbanizationStreamSpec) {
@@ -83,6 +84,17 @@ pub fn install_urbanization_generate_stream(app: &mut App, spec: UrbanizationStr
 		let mut generate = app.world_mut().resource_mut::<UrbanizationGenerateBullseye>();
 		generate.radius_m = generate_m;
 		generate.enabled = true;
+	}
+	app.insert_resource(spec);
+}
+
+/// Enable the present bullseye. Does not write a present region impulse.
+pub fn install_urbanization_present_stream(app: &mut App, spec: UrbanizationStreamSpec) {
+	let (present_m, _generate_m) = stream_radii_m(spec.stream_radius);
+	{
+		let mut present = app.world_mut().resource_mut::<UrbanizationPresentBullseye>();
+		present.radius_m = present_m;
+		present.enabled = true;
 	}
 	app.insert_resource(spec);
 }
@@ -136,12 +148,22 @@ mod tests {
 		let mut app = App::new();
 		app.init_resource::<UrbanizationIndex>()
 			.init_resource::<UrbanizationGenerateBullseye>()
-			.init_resource::<crate::UrbanizationPresentBullseye>();
+			.init_resource::<UrbanizationPresentBullseye>();
 		install_urbanization_generate_stream(&mut app, UrbanizationStreamSpec::default());
 		let generate = app.world().resource::<UrbanizationGenerateBullseye>();
 		assert!(generate.enabled);
 		assert!((generate.radius_m - DEVELOPMENT_GENERATE_RADIUS_M).abs() < 1e-3);
-		let present = app.world().resource::<crate::UrbanizationPresentBullseye>();
+		let present = app.world().resource::<UrbanizationPresentBullseye>();
 		assert!(!present.enabled);
+	}
+
+	#[test]
+	fn install_present_enables_one_kilometre_ring() {
+		let mut app = App::new();
+		app.init_resource::<UrbanizationPresentBullseye>();
+		install_urbanization_present_stream(&mut app, UrbanizationStreamSpec::default());
+		let present = app.world().resource::<UrbanizationPresentBullseye>();
+		assert!(present.enabled);
+		assert!((present.radius_m - DEVELOPMENT_PRESENT_RADIUS_M).abs() < 1e-3);
 	}
 }

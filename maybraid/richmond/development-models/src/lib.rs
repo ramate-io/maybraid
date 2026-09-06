@@ -33,6 +33,7 @@ pub mod ring_fort;
 pub mod scatter;
 pub mod shepherds;
 mod shepherds_fit;
+mod urbanization_host;
 pub mod village;
 
 pub use archetype_generation::PlacedDevelopment;
@@ -53,7 +54,7 @@ pub use development::{
 	ShepherdsVillageCell,
 };
 pub use finish::{DevelopmentFinish, DevelopmentFinishRole};
-pub use host::{DevelopmentHost, DevelopmentHosts};
+pub use host::{DevelopmentHost, DevelopmentHostRoot, DevelopmentHosts};
 pub use hydro::{
 	composed_height_at, composed_height_upper_on_rect, hydro_overlaps_xz, terrain_hydro_overlaps,
 };
@@ -72,3 +73,7 @@ pub use presentation::{PaddedTerrainPresenter, PaddedTerrainPresenterState};
 pub use ring_fort::RingFortDevelopment;
 pub use scatter::{bounds_intersect, ScatterCandidate, ScatterChoice, ScatterPlan, ScatterRecipe};
 pub use shepherds::{ShepherdsCommuneDevelopment, ShepherdsVillageDevelopment};
+pub use urbanization_host::{
+	present_urbanization_hosts, UrbanizationHostBudget, UrbanizationHostPlugin,
+	UrbanizationPresenterState,
+};
