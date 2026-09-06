@@ -5,6 +5,7 @@ use chico_vegetation_on_terrain_playground::{
 	Player as VegetationPlayer, PlayerVisual as VegetationPlayerVisual, PlaygroundMode,
 };
 use crozon_characters::CharacterRoot;
+use damage::Health;
 use firearm_user::{spawn_held_firearm, spawn_reticle, FirearmUser};
 use player::{
 	CameraFollow, Player as MaybraidPlayer, PlayerCameraAim, PlayerLook,
@@ -42,6 +43,7 @@ pub(crate) fn arm_world_player(
 			PlayerLook::default(),
 			PlayerCameraAim::default(),
 			PlayerYawOwner::Wish,
+			Health::default(),
 		));
 		if *mode == PlaygroundMode::Character && gameplay.0 {
 			player_commands.insert(CameraFollow);

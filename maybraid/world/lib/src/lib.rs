@@ -34,6 +34,7 @@ use chico_vegetation_on_terrain_playground::{
 	PlayerControlSystems, PlaygroundConfig as VegetationPlaygroundConfig, PlaygroundDiag,
 	PlaygroundMode, PlaygroundTimingPlugin, RequestSetCharacter, VegetationOnTerrainPlugin,
 };
+use combat_hud::CombatHudPlugin;
 use crozon_characters::CharacterMotionSystems;
 use durham_terrain_models::TerrainFrictionConfig;
 use game_commands::command::{GameCommandPlugin, TextEntryFocus};
@@ -62,6 +63,8 @@ const WORLD_BULLSEYE_OUTER_M: f32 = 2_000.0;
 /// Cull annulus starts beyond the present ring.
 const WORLD_LATTICE_EXCLUDE_M: f32 = 2_000.0;
 const WORLD_LATTICE_OUTER_M: f32 = 8_000.0;
+const WORLD_COMBAT_HUD: CombatHudPlugin =
+	CombatHudPlugin { health_bars: false, hit_markers: true, directional_damage: true };
 
 /// Assembled world: Durham terrain, streamed forest, urbanization, sky dome, character.
 ///
@@ -107,6 +110,7 @@ impl Plugin for WorldPlugin {
 			.add_plugins(CharacterControllerPlugin)
 			.add_plugins(PlayerPresentationPlugin)
 			.add_plugins(PlayerCameraPlugin)
+			.add_plugins(WORLD_COMBAT_HUD)
 			.add_plugins(VegetationOnTerrainPlugin {
 				config: VegetationPlaygroundConfig::world_defaults(),
 				commands: false,
@@ -210,5 +214,12 @@ mod tests {
 	fn world_input_debug_overlay_is_opt_in() {
 		assert!(!WorldPlugin::default().input_debug_enabled);
 		assert!(!WorldPlugin::game().input_debug_enabled);
+	}
+
+	#[test]
+	fn world_only_enables_combat_feedback_without_health_bars() {
+		assert!(!WORLD_COMBAT_HUD.health_bars);
+		assert!(WORLD_COMBAT_HUD.hit_markers);
+		assert!(WORLD_COMBAT_HUD.directional_damage);
 	}
 }
