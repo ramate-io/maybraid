@@ -8,6 +8,7 @@
 
 mod camera;
 pub mod commands;
+mod contact;
 mod control;
 mod intelligence;
 mod material_lib;
@@ -26,7 +27,7 @@ pub use material_lib::{WorldMaterialLib, WorldMaterialRefPlugin};
 pub use mobs::WorldMobsPlugin;
 pub use poi::{WorldPoiDiscoveryBudget, WorldPoiPlugin, WorldPoiSystems};
 
-use avian3d::prelude::{CoefficientCombine, Friction};
+use avian3d::prelude::{CoefficientCombine, Friction, PhysicsPlugins, PhysicsSchedulePlugin};
 use bevy::prelude::*;
 use chico_vegetation_on_terrain_playground::{
 	CharacterCameraFollowEnabled, CharacterLocomotion, CharacterSpecies, PadMovementEnabled,
@@ -45,9 +46,9 @@ use richmond_developments_on_terrain_playground::{
 	DevelopmentsOnTerrainPlugin, PlaygroundConfig as DevelopmentsPlaygroundConfig,
 };
 
-/// Steepest walkable slope. Cliffs (~80°+) stay well above this and never count as floor.
+/// Steepest slope the controlled character can drive uphill.
 const WORLD_MAX_SLOPE_ANGLE: f32 = 70.0_f32.to_radians();
-/// Static grip sits above `tan(70°)` ≈ 2.75 so walkable slopes do not ice-skate.
+/// Static grip for mobs and props; controlled-player contacts disable friction.
 const WORLD_TERRAIN_FRICTION: Friction = Friction {
 	dynamic_coefficient: 2.55,
 	static_coefficient: 2.95,
@@ -84,6 +85,11 @@ impl WorldPlugin {
 
 impl Plugin for WorldPlugin {
 	fn build(&self, app: &mut App) {
+		if !app.is_plugin_added::<PhysicsSchedulePlugin>() {
+			app.add_plugins(
+				PhysicsPlugins::default().with_collision_hooks::<contact::WorldCollisionHooks>(),
+			);
+		}
 		app.insert_resource(PlaygroundMode::Character)
 			.insert_resource(PlaygroundDiag { fps: self.debug_chrome })
 			.insert_resource(CameraPov::default())
