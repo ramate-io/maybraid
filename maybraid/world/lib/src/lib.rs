@@ -4,7 +4,7 @@
 //! selection generate. Canopy bump-outs occupy the 1–5 km present keep and
 //! clone Durham fine-cell mesh handles. Vegetation LOD bullseye / lattice
 //! cover the grove fill ring. Urbanization hopscotch streams at the same
-//! 1 km / 3 km rings without re-registering Durham (vegetation owns terrain).
+//! 1 km / 3 km rings without re-registering Durham (`TerrainPlugin` owns terrain).
 
 mod camera;
 pub mod commands;
@@ -36,7 +36,7 @@ use chico_vegetation_on_terrain_playground::{
 };
 use combat_hud::CombatHudPlugin;
 use crozon_characters::{CharacterMotionSystems, DrawTerrainPitchProbes};
-use durham_terrain_models::TerrainFrictionConfig;
+use durham_terrain_models::{Durham, TerrainFrictionConfig, TerrainPlugin};
 use game_commands::command::{GameCommandPlugin, TextEntryFocus};
 use game_commands::ui::GameCommandDrawerConfig;
 use lod::{Bullseye, OpenLattice};
@@ -105,6 +105,7 @@ impl Plugin for WorldPlugin {
 			.insert_resource(TerrainFrictionConfig(WORLD_TERRAIN_FRICTION))
 			.insert_resource(WORLD_TERRAIN_PITCH_GIZMOS)
 			.add_plugins(WorldMaterialRefPlugin)
+			.add_plugins(TerrainPlugin::<Durham>::playable_world())
 			.add_plugins(VirtualPadPlugin::new(VirtualPadConfig {
 				debug_overlay: self.input_debug_enabled,
 				..default()
@@ -120,8 +121,9 @@ impl Plugin for WorldPlugin {
 				register_bump_out_lod: false,
 				register_camera: false,
 				register_terrain_pitch: false,
+				own_terrain: false,
 			})
-			// Urbanization stream only — vegetation already owns Durham / TerrainEntryStore.
+			// Urbanization stream only — `TerrainPlugin` already owns Durham / TerrainEntryStore.
 			.add_plugins(DevelopmentsOnTerrainPlugin {
 				config: DevelopmentsPlaygroundConfig::world_defaults(),
 				commands: false,

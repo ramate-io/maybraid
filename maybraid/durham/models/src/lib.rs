@@ -1,6 +1,6 @@
 //! Durham terrain models: LOD generation, Avian spatial index, SDF meshing.
 //!
-//! Each model owns an idempotent plugin (e.g. [`terrain::TerrainPlugin`]). The
+//! Each model owns an idempotent plugin (e.g. [`terrain::TerrainResourcesPlugin`]). The
 //! crate-root [`DurhamTerrainModelsPlugin`] composes those model plugins.
 
 pub mod terrain;
@@ -10,19 +10,21 @@ pub use terrain::render::cascade_chunk_for_cell;
 pub use terrain::{
 	origin_cell_ids_for_layout, register_terrain_plugin, AvianTerrainIndex, BaseTerrainNoise,
 	CanyonHighPassControllerLayout, CanyonLowPassControllerLayout, CanyonStampCell,
-	ComposedTerrain, JerseyControllerLayouts, JerseyStampConfigs, MacroCellLayout,
+	ComposedTerrain, Durham, JerseyControllerLayouts, JerseyStampConfigs, MacroCellLayout,
 	MarazionBandPass, MarazionLeafBounds, MarazionLeafKind, MarazionWatershedConfigs,
 	MassifHighPassControllerLayout, MassifLowPassControllerLayout, MassifStampCell, OuterCellRing,
 	PlateauControllerLayout, PlateauHighPassControllerLayout, PlateauLowPassControllerLayout,
 	PlateauStampCell, PocketWaterHighPassControllerLayout, PocketWaterLowPassControllerLayout,
 	PocketWaterStampCell, PrePocketHighPassLayout, PrePocketLowPassLayout, PreWatershedTerrain,
 	PresentedTerrainScene, RollingHighPassControllerLayout, RollingLowPassControllerLayout,
-	RollingStampCell, Terrain, TerrainCellId, TerrainCellLayout, TerrainConfig, TerrainEntryStore,
-	TerrainFrictionConfig, TerrainMeshBuilder, TerrainMeshLodBand, TerrainPlugin,
-	TerrainPresentationAssets, TerrainPresenterState, TerrainRegionPresenter, TerrainRenderItem,
+	RollingStampCell, Terrain, TerrainCellId, TerrainCellLayout, TerrainConfig, TerrainCoverage,
+	TerrainEntryStore, TerrainFrictionConfig, TerrainMeshBuilder, TerrainMeshLodBand,
+	TerrainPlugin, TerrainPresentPending, TerrainPresentationAssets, TerrainPresentationDirty,
+	TerrainPresenterState, TerrainRegionPresenter, TerrainRenderItem, TerrainResourcesPlugin,
 	TerrainSdf, TerrainStoreView, TerrainTrimeshCollider, ValleyHighPassControllerLayout,
-	ValleyLowPassControllerLayout, ValleyStampCell, MACRO_CELL_SIZE, TERRAIN_CELL_SIZE,
-	TERRAIN_FRICTION,
+	ValleyLowPassControllerLayout, ValleyStampCell, WorldBaseTerrain, MACRO_CELL_SIZE,
+	TERRAIN_CELL_SIZE, TERRAIN_FRICTION, WORLD_FINE_HALF_EXTENT_CELLS, WORLD_OUTER_2X_ROWS,
+	WORLD_OUTER_4X_ROWS,
 };
 pub use water::{
 	register_water_plugin, ComposedWater, Water, WaterPlugin, WaterPresentationAssets,

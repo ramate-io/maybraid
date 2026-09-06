@@ -1,19 +1,11 @@
 //! Stick segment → [`StickNode`] emission (with structural LOD phase filters).
-//!
-//! Also retains the legacy [`StickRenderRule`] for RenderItem spawning (unused under
-//! VegetationComponents).
-
-use std::marker::PhantomData;
 
 use bevy::prelude::*;
-use chico_sbs_geometry::render::stick::StickRenderRule;
 use chico_sbs_geometry::{
 	sample_max_horizontal_radius_by_azimuth_height, AzimuthHeightBands, BallStickSegment,
 	HonuBanyanChain, HonuBanyanPhase,
 };
-use chico_stick_components::chico_stick::ChicoStick;
 use chico_vegetation_components::{StickGeometry, StickNode};
-use procedural_common::NoiseParams;
 
 /// Medium sticks: ~30% denser than prior 6×2 outer samples.
 pub(crate) const MEDIUM_STICK_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(8, 2);
@@ -141,42 +133,4 @@ pub(crate) fn keep_stick_on_low(role: StickLodRole, descender_index: &mut usize)
 	let keep = *descender_index % LOW_DESCENDER_KEEP_EVERY == 0;
 	*descender_index += 1;
 	keep
-}
-
-// --- Legacy RenderItem stick rule (kept for grove / playground RenderItem path) ---
-
-#[allow(dead_code)]
-#[derive(Clone)]
-pub(crate) struct HonuBanyanStickRule<StickM, StickS>
-where
-	StickM: Material,
-	StickS: Clone + Into<MeshMaterial3d<StickM>>,
-{
-	pub surface_noise: NoiseParams,
-	pub stick_material: StickS,
-	pub(crate) __marker: PhantomData<fn() -> StickM>,
-}
-
-#[allow(dead_code)]
-impl<StickM, StickS> StickRenderRule<ChicoStick<StickM, StickS>, HonuBanyanChain>
-	for HonuBanyanStickRule<StickM, StickS>
-where
-	StickM: Material + Send + Sync + 'static,
-	StickS: Clone + Into<MeshMaterial3d<StickM>> + Default + Send + Sync + 'static,
-{
-	fn stick_render_item_for(
-		&self,
-		segment: &BallStickSegment<'_>,
-		_parent_hysteresis: &HonuBanyanChain,
-		_child_hysteresis: &HonuBanyanChain,
-	) -> Option<ChicoStick<StickM, StickS>> {
-		let seed = self.surface_noise.seed
-			+ segment.start.position.length() as i32
-			+ segment.end.position.length() as i32;
-
-		let mut stick =
-			self.surface_noise.with_seed(seed).build_scalar::<ChicoStick<StickM, StickS>>();
-		stick.material = self.stick_material.clone();
-		Some(stick)
-	}
 }

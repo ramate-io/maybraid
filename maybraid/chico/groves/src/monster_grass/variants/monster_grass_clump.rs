@@ -3,7 +3,7 @@
 //! Blade width is **length-proportional** (`length * width_factor`), so monster blades stay
 //! grass-thin at 2–6 m heights.
 
-use chico_ball_components::tuft::BladeTuftShape;
+use chico_sbs_geometry::BladeTuftShape;
 use procedural_common::{BuildWithNoise, NoiseConfig, NoiseParams, UnitRange};
 
 use crate::monster_grass::MonsterGrassClump;

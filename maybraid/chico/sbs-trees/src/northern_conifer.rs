@@ -13,7 +13,6 @@
 //! proxies stay separate nodes.
 
 pub(crate) mod canopy;
-pub mod render_item_plugin;
 pub(crate) mod stick;
 
 use bevy::prelude::*;

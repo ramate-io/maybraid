@@ -2061,23 +2061,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "buildings"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "bevy",
- "chrono",
- "chunk",
- "log",
- "noise",
- "rayon",
- "render-item",
- "sdf",
- "serde",
- "thiserror 1.0.69",
-]
-
-[[package]]
 name = "bumpalo"
 version = "3.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2225,18 +2208,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "chico-ball-components"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "bevy",
- "chico-sdf",
- "clap",
- "procedural-common",
- "render-item",
-]
-
-[[package]]
 name = "chico-bumpout"
 version = "0.0.1"
 dependencies = [
@@ -2270,12 +2241,19 @@ name = "chico-forests"
 version = "0.0.1"
 dependencies = [
  "anyhow",
+ "avian3d",
  "bevy",
  "bevy_math",
  "chico-groves",
+ "chico-sbs-trees",
+ "chico-vegetation-components",
+ "chico-vegetation-shaders",
  "gimme-gen",
  "lod",
+ "lod-avian",
+ "lod-lazy-refs",
  "procedural-common",
+ "scene-ref",
 ]
 
 [[package]]
@@ -2285,10 +2263,8 @@ dependencies = [
  "anyhow",
  "bevy",
  "bevy_math",
- "chico-ball-components",
  "chico-sbs-geometry",
  "chico-sbs-trees",
- "chico-tree-components",
  "chico-vegetation-components",
  "chico-vegetation-shaders",
  "clap",
@@ -2318,48 +2294,13 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "bevy",
- "chico-ball-components",
  "chico-sbs-geometry",
  "chico-sdf",
- "chico-stick-components",
- "chico-tree-components",
  "chico-vegetation-components",
  "clap",
  "lod",
  "log",
  "procedural-common",
- "render-item",
-]
-
-[[package]]
-name = "chico-sbs-trees-playground"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "avian3d",
- "bevy",
- "chico-ball-components",
- "chico-forests",
- "chico-groves",
- "chico-sbs-geometry",
- "chico-sbs-trees",
- "chico-sdf",
- "chico-stick-components",
- "chico-tree-components",
- "chico-vegetation-components",
- "chico-vegetation-shaders",
- "chunk",
- "clap",
- "game-commands",
- "lod",
- "lod-avian",
- "lod-lazy-refs",
- "log",
- "material-ref",
- "procedural-common",
- "render-item",
- "scene-ref",
- "sdf",
 ]
 
 [[package]]
@@ -2367,32 +2308,6 @@ name = "chico-sdf"
 version = "0.0.1"
 dependencies = [
  "sdf-common",
-]
-
-[[package]]
-name = "chico-stick-components"
-version = "0.0.1"
-dependencies = [
- "bevy",
- "chico-sdf",
- "log",
- "procedural-common",
- "render-item",
- "sdf-common",
-]
-
-[[package]]
-name = "chico-tree-components"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "bevy",
- "chico-ball-components",
- "chico-sbs-geometry",
- "chico-stick-components",
- "clap",
- "procedural-common",
- "render-item",
 ]
 
 [[package]]
@@ -2417,7 +2332,6 @@ dependencies = [
  "chico-bumpout",
  "chico-forests",
  "chico-groves",
- "chico-sbs-trees-playground",
  "chico-vegetation-components",
  "chico-vegetation-shaders",
  "clap",
@@ -2602,16 +2516,8 @@ name = "comproc"
 version = "0.0.1"
 dependencies = [
  "anyhow",
- "bevy",
- "chrono",
- "chunk",
- "log",
+ "bevy_math",
  "noise",
- "rayon",
- "render-item",
- "sdf",
- "serde",
- "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -3216,6 +3122,8 @@ dependencies = [
  "procedural-common",
  "render-item",
  "sdf",
+ "terrain-chunk-ref",
+ "visual-geometry-core",
 ]
 
 [[package]]
@@ -3288,23 +3196,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
-]
-
-[[package]]
-name = "engine"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "bevy",
- "bytemuck",
- "chrono",
- "log",
- "noise",
- "rayon",
- "sdf",
- "serde",
- "terrain",
- "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -4280,23 +4171,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "intelligence"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "bevy",
- "chrono",
- "chunk",
- "log",
- "noise",
- "rayon",
- "render-item",
- "sdf",
- "serde",
- "thiserror 1.0.69",
-]
-
-[[package]]
 name = "inventory"
 version = "0.3.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5135,28 +5009,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "729eb334247daa1803e0a094d0a5c55711b85571179f5ec6e53eccfdf7008958"
 
 [[package]]
-name = "naturescapes-demo"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "bevy",
- "bytemuck",
- "chrono",
- "chunk",
- "durham-terrain",
- "engine",
- "log",
- "noise",
- "rayon",
- "render-item",
- "sdf",
- "serde",
- "terrain",
- "thiserror 1.0.69",
- "vegetation-sdf",
-]
-
-[[package]]
 name = "ndk"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5706,28 +5558,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "objects-playground"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "bevy",
- "buildings",
- "bytemuck",
- "chrono",
- "chunk",
- "engine",
- "log",
- "noise",
- "rayon",
- "render-item",
- "sdf",
- "serde",
- "terrain",
- "thiserror 1.0.69",
- "vegetation-sdf",
-]
-
-[[package]]
 name = "obvhs"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5935,14 +5765,6 @@ name = "paste"
 version = "1.0.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
-
-[[package]]
-name = "pathfinding-playground"
-version = "0.0.1"
-dependencies = [
- "bevy",
- "intelligence",
-]
 
 [[package]]
 name = "percent-encoding"
@@ -6624,7 +6446,6 @@ dependencies = [
  "bevy",
  "chico-forests",
  "chico-groves",
- "chico-sbs-trees-playground",
  "chico-vegetation-on-terrain-playground",
  "clap",
  "durham-terrain",
@@ -6972,45 +6793,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d66dc143e6b11c1eddc06d5c423cfc97062865baf299914ab64caa38182078fe"
 
 [[package]]
-name = "skill-map"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "bevy",
- "chrono",
- "comproc",
- "log",
- "noise",
- "rayon",
- "serde",
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "skill-map-playground"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "bevy",
- "buildings",
- "bytemuck",
- "chrono",
- "chunk",
- "comproc",
- "engine",
- "log",
- "noise",
- "rayon",
- "render-item",
- "sdf",
- "serde",
- "skill-map",
- "terrain",
- "thiserror 1.0.69",
- "vegetation-sdf",
-]
-
-[[package]]
 name = "skrifa"
 version = "0.42.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7254,24 +7036,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "terrain"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "bevy",
- "chrono",
- "chunk",
- "comproc",
- "log",
- "noise",
- "rayon",
- "render-item",
- "sdf",
- "serde",
- "thiserror 1.0.69",
-]
-
-[[package]]
 name = "terrain-chunk-ref"
 version = "0.0.1"
 dependencies = [
@@ -7280,25 +7044,6 @@ dependencies = [
  "chunk",
  "lod-cascade",
  "render-item",
-]
-
-[[package]]
-name = "terrain-playground"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "bevy",
- "bytemuck",
- "chrono",
- "engine",
- "log",
- "noise",
- "rayon",
- "sdf",
- "serde",
- "terrain",
- "thiserror 1.0.69",
- "vegetation-sdf",
 ]
 
 [[package]]
@@ -7711,29 +7456,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f1bddf1187be692e79c5ffeab891132dfb0f236ed36a43c7ed39f1165ee20191"
 
 [[package]]
-name = "vegetation-sdf"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "bevy",
- "chrono",
- "chunk",
- "comproc",
- "log",
- "noise",
- "rayon",
- "render-item",
- "sdf",
- "serde",
- "terrain",
- "thiserror 1.0.69",
-]
-
-[[package]]
 name = "version_check"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
+
+[[package]]
+name = "visual-geometry-core"
+version = "0.0.1"
+dependencies = [
+ "bevy",
+ "lod-lazy-refs",
+ "render-item",
+ "scene-ref",
+ "terrain-chunk-ref",
+]
 
 [[package]]
 name = "voracious_radix_sort"

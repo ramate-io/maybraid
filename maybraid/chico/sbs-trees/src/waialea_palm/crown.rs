@@ -1,13 +1,7 @@
-//! Stacked [`FrondCrown`] rings above the trunk tip (RFC Waialea crown).
+//! Stacked [`FrondCrownShape`] rings above the trunk tip (RFC Waialea crown).
 
-use bevy::prelude::*;
-use chico_ball_components::frond::FrondCrownShape;
 use chico_sbs_geometry::anchors::waialea_palm::DEFAULT_STALK_HEIGHT;
-use chico_sbs_geometry::{BallStickChain, WaialeaPalmChain, WaialeaPalmSbs};
-use procedural_common::NoiseParams;
-use render_item::CascadeChunk;
-
-use crate::palm_crown::spawn_stacked_frond_crowns;
+use chico_sbs_geometry::{FrondCrownShape, WaialeaPalmSbs};
 
 /// Lower-ring frond length as a fraction of `H` (RFC `0.25`).
 const FROND_LENGTH_FRACTION_LO: f32 = 0.25;
@@ -52,33 +46,6 @@ pub fn frond_shape_for_ring(
 		emission_lift_radians: emission_lift,
 		seed: foliage_seed.wrapping_add(ring as i32),
 	}
-}
-
-#[allow(dead_code)]
-pub fn spawn_crown_rings<LeafM, LeafS>(
-	geometry: &WaialeaPalmSbs,
-	chain: &BallStickChain<WaialeaPalmChain>,
-	commands: &mut Commands,
-	cascade_chunk: &CascadeChunk,
-	parent: Entity,
-	foliage_noise: &NoiseParams,
-	leaf_material: LeafS,
-) -> Vec<Entity>
-where
-	LeafM: Material + Send + Sync + 'static,
-	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Send + Sync + 'static,
-{
-	spawn_stacked_frond_crowns::<LeafM, LeafS>(
-		geometry.crown.ring_count,
-		|ring| geometry.crown_ring_position(chain, ring),
-		|ring, seed| frond_shape_for_ring(geometry, ring, seed),
-		geometry.frond_world_scale,
-		foliage_noise.seed,
-		leaf_material,
-		commands,
-		cascade_chunk,
-		parent,
-	)
 }
 
 #[cfg(test)]

@@ -25,6 +25,7 @@ members = [
   "maybraid/scene-ref",
   "maybraid/material-ref",
   "maybraid/terrain-chunk-ref",
+  "maybraid/visual-geometry-core",
 
   "maybraid/durham/lib",
   "maybraid/durham/shaders",
@@ -64,11 +65,11 @@ members = [
   "maybraid/crozon/playground",
 
   "maybraid/procedural/common",
+  "maybraid/procedural/comproc",
 
   "maybraid/chico/lib",
   "maybraid/chico/shaders",
   "maybraid/chico/sbs-trees",
-  "maybraid/chico/sbs-trees-playground",
   "maybraid/chico/bumpout",
   "maybraid/chico/bumpout-playground",
   "maybraid/chico/vegetation-on-terrain-playground",
@@ -118,32 +119,12 @@ members = [
   "maybraid/intelligence/poi-playground",
   "maybraid/intelligence/routing-playground",
   "maybraid/chico/sdf",
-  "maybraid/chico/ball-components",
-  "maybraid/chico/stick-components",
-  "maybraid/chico/tree-components",
   "maybraid/chico/vegetation-components",
   "maybraid/chico/sbs-geometry",
   "maybraid/chico/groves",
   "maybraid/chico/forests",
   "maybraid/gimme/core",
   "maybraid/gimme/gen",
-
-  # legacy still being refactored out: engine
-  "engine",
-
-  # playgrounds
-  "playgrounds/terrain",
-  "playgrounds/objects",
-  "playgrounds/skill-map",
-  "playgrounds/pathfinding",
-
-  # legacy still being refactored out: procedures
-  "procedures/terrain",
-  "procedures/vegetation",
-  "procedures/buildings",
-  "procedures/comproc",
-  "procedures/skill-map",
-  "procedures/intelligence",
 
   # general utilities
   ## sdf
@@ -152,9 +133,6 @@ members = [
   "util/game-commands",
   "util/camera-controls",
   "util/render-item",
-
-  # demos
-  "demos/naturescapes"
 
 ]
 
@@ -250,12 +228,7 @@ camera-controls = { path = "util/camera-controls" }
 bevy-character-ui-menu-renderer = { path = "maybraid/crozon/bevy-character-ui-menu-renderer" }
 character-ui-menu = { path = "maybraid/crozon/character-ui-menu" }
 
-terrain = { path = "procedures/terrain" }
-vegetation-sdf = { path = "procedures/vegetation" }
-buildings = { path = "procedures/buildings" }
-engine = { path = "engine" }
-comproc = { "path" = "procedures/comproc" }
-skill-map = {"path" = "procedures/skill-map" }
+comproc = { path = "maybraid/procedural/comproc" }
 
 durham-terrain = { path = "maybraid/durham/lib" }
 durham-terrain-shaders = { path = "maybraid/durham/shaders" }
@@ -282,6 +255,7 @@ maybraid-menu-controller = { path = "maybraid/controllers/menu" }
 maybraid-character-controller = { path = "maybraid/controllers/character" }
 
 scene-ref = { path = "maybraid/scene-ref" }
+visual-geometry-core = { path = "maybraid/visual-geometry-core" }
 material-ref = { path = "maybraid/material-ref" }
 terrain-chunk-ref = { path = "maybraid/terrain-chunk-ref" }
 
@@ -319,9 +293,6 @@ chico = { path = "maybraid/chico/lib" }
 chico-bumpout = { path = "maybraid/chico/bumpout" }
 chico-sbs-trees = { path = "maybraid/chico/sbs-trees" }
 chico-sdf = { path = "maybraid/chico/sdf" }
-chico-ball-components = { path = "maybraid/chico/ball-components" }
-chico-stick-components = { path = "maybraid/chico/stick-components" }
-chico-tree-components = { path = "maybraid/chico/tree-components" }
 chico-vegetation-components = { path = "maybraid/chico/vegetation-components" }
 chico-sbs-geometry = { path = "maybraid/chico/sbs-geometry" }
 chico-groves = { path = "maybraid/chico/groves" }

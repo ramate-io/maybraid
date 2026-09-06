@@ -1,7 +1,12 @@
 //! Stalk and ball-stick geometry for Chico vegetation.
+pub mod frond;
+pub mod high_bush;
+mod jitter;
+pub mod jungle_growth;
 pub mod lod_sample;
 pub mod palm_crown;
 pub mod projection;
+pub mod tuft;
 pub mod vec3_args;
 pub use lod_sample::{
 	sample_max_horizontal_radius_by_azimuth_height, AzimuthHeightBands, AzimuthHeightSample,
@@ -92,6 +97,16 @@ pub use anchors::vase_tree::{
 };
 pub use anchors::waialea_palm::{WaialeaPalmAnchors, WaialeaPalmProtoAnchors};
 pub use anchors::{Anchors, AnchorsToChain};
+pub use frond::{
+	align_frond_direction, crown_directions, length_scale, spine_at, FrondConfig, FrondCrownShape,
+	FrondRachisSegment,
+};
+pub use high_bush::{
+	should_allocate_foliage, HighBushFoliageStyle, HighBushShootsShape,
+	COMMON_HIGH_BUSH_LEAF_RADIUS_FRACTION, COMMON_HIGH_BUSH_RADIAL_STRENGTH,
+	COMMON_HIGH_BUSH_SHOOT_COUNT, COMMON_HIGH_BUSH_VERTICAL_BIAS,
+};
+pub use jungle_growth::JungleGrowthShape;
 pub use palm_crown::{ring_mix_u, ring_spacing_world, vertical_bias_mix};
 pub use projection::{logarithmic_rounding_projection, vase_profile, vase_projection_length};
 pub use sbs::braid_oak_tree::BraidOakTreeSbs;
@@ -109,6 +124,7 @@ pub use sbs::sopes_banyan::SopesBanyanSbs;
 pub use sbs::storybook_tree::StorybookTreeSbs;
 pub use sbs::vase_tree::VaseTreeSbs;
 pub use sbs::waialea_palm::WaialeaPalmSbs;
+pub use tuft::{BladeFrondSegment, BladeStrand, BladeTuftShape, SpearTuftShape};
 
 #[cfg(feature = "render")]
 pub mod render;

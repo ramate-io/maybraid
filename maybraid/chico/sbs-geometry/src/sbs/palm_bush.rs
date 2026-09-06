@@ -47,7 +47,7 @@ pub struct PalmBushSbs {
 	pub scale: PalmBushScale,
 	#[cfg_attr(feature = "clap", command(flatten, next_help_heading = "Crown"))]
 	pub crown: PalmBushCrownParams,
-	/// Uniform world scale for each [`FrondCrown`](chico_ball_components::frond::FrondCrown) ring.
+	/// Uniform world scale for each [`FrondCrownShape`](crate::FrondCrownShape) ring.
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 1.0))]
 	pub frond_world_scale: f32,
 	/// World scale for the optional concealment tuft at the crown origin (RFC `0.04 * H`).

@@ -1,21 +1,20 @@
-//! Crook-cylinder stick helpers for Braid Oak VegetationComponents + legacy RenderItem rule.
+//! Crook-cylinder stick helpers for Braid Oak VegetationComponents.
 //!
 //! High and Medium share the same crook trunk polylines. High crooks banded outer branches;
 //! Medium draws those branches as straight sticks. Low is stalk-only (straight).
 
-use std::marker::PhantomData;
+use std::f32::consts::PI;
 
 use bevy::prelude::*;
-use chico_sbs_geometry::render::stick::StickRenderRule;
 use chico_sbs_geometry::{
 	horizontal_radius_from_y_axis, sample_max_horizontal_radius_by_azimuth_height,
 	AzimuthHeightBands, BallStickChain, BallStickSegment, StorybookTreeChain, StorybookTreePhase,
 };
-use chico_stick_components::chico_crook_stick::ChicoCrookStick;
+use chico_sdf::CrookCylinder;
 use chico_vegetation_components::{StickGeometry, StickNode};
 use procedural_common::{NoiseConfig, NoiseParams};
 
-/// Base crook strength on the stalk (maps to ~`0.10` SDF radius via [`ChicoCrookStick`]).
+/// Base crook strength on the stalk (maps to ~`0.10` SDF radius via the crook cylinder).
 const STALK_BEND_STRENGTH: f32 = 10.0;
 /// Branch base strength at the lowest ring; rises with [`StorybookTreeChain::ring_u`].
 const BRANCH_BEND_STRENGTH_BASE: f32 = 14.0;
@@ -23,8 +22,14 @@ const BRANCH_BEND_STRENGTH_RING_GAIN: f32 = 10.0;
 /// Multiplier on signed stick-surface noise sample.
 const BEND_STRENGTH_NOISE_GAIN: f32 = 0.40;
 const MIN_BEND_STRENGTH: f32 = 4.0;
-/// Unit-stick target base radius used by [`ChicoCrookStick`] XZ scale (`0.5 / sdf_base_radius`).
+/// Unit-stick target base radius used by crook XZ scale (`0.5 / sdf_base_radius`).
 const UNIT_TARGET_BASE_RADIUS: f32 = 0.5;
+const UNIT_TARGET_TOP_RADIUS: f32 = 0.42;
+const SDF_BEND_X: f32 = 0.12;
+const SDF_BEND_Z: f32 = 0.08;
+const MIN_CROOK_BEND_STRENGTH: f32 = 1e-4;
+const MIN_BOUNDS_MARGIN: f32 = 0.06;
+const PHASE_Z_KEY_ROTATE: u32 = 7;
 /// Samples along the crook centerline for High stick polylines (`t = 0..=1`).
 /// Three samples → two stick segments (enough crook read up close, fewer sticks).
 const CROOK_POLYLINE_SAMPLES: usize = 3;
@@ -100,9 +105,7 @@ pub(crate) fn crook_polyline_stick_nodes(
 	let radius_end = segment.end.radius;
 
 	let strength = bend_strength(segment, parent, stick_surface_noise);
-	let key = segment_key(segment);
-	let crook = ChicoCrookStick::new(strength, key, MeshMaterial3d::<StandardMaterial>::default());
-	let cyl = crook.crook_cylinder();
+	let cyl = crook_cylinder(strength, segment_key(segment));
 	let xz_scale = UNIT_TARGET_BASE_RADIUS / cyl.base_radius.max(1e-6);
 	let s = Vec3::new(radius * xz_scale, length, radius * xz_scale);
 
@@ -207,39 +210,25 @@ pub(crate) fn stick_nodes_medium_crook_trunk(
 	nodes
 }
 
-// --- Legacy RenderItem stick rule ---
-
-#[allow(dead_code)]
-#[derive(Clone)]
-pub(crate) struct BraidOakTreeStickRule<StickM, StickS>
-where
-	StickM: Material,
-	StickS: Clone + Into<MeshMaterial3d<StickM>>,
-{
-	pub stick_surface_noise: NoiseParams,
-	pub stick_material: StickS,
-	pub(crate) __marker: PhantomData<fn() -> StickM>,
-}
-
-#[allow(dead_code)]
-impl<StickM, StickS> StickRenderRule<ChicoCrookStick<StickM, StickS>, StorybookTreeChain>
-	for BraidOakTreeStickRule<StickM, StickS>
-where
-	StickM: Material + Send + Sync + 'static,
-	StickS: Clone + Into<MeshMaterial3d<StickM>> + Send + Sync + 'static + Default,
-{
-	fn stick_render_item_for(
-		&self,
-		segment: &BallStickSegment<'_>,
-		parent_hysteresis: &StorybookTreeChain,
-		_child_hysteresis: &StorybookTreeChain,
-	) -> Option<ChicoCrookStick<StickM, StickS>> {
-		Some(ChicoCrookStick::new(
-			bend_strength(segment, parent_hysteresis, self.stick_surface_noise),
-			segment_key(segment),
-			self.stick_material.clone(),
-		))
-	}
+fn crook_cylinder(bend_strength: f32, segment_key: u32) -> CrookCylinder {
+	let strength = bend_strength.max(MIN_CROOK_BEND_STRENGTH);
+	let base_r = 1.0 / strength;
+	let top_r = base_r * (UNIT_TARGET_TOP_RADIUS / UNIT_TARGET_BASE_RADIUS);
+	let phase_x = if segment_key & 1 == 0 { 0.0 } else { PI };
+	let phase_z = if segment_key.rotate_left(PHASE_Z_KEY_ROTATE) & 1 == 0 { 0.0 } else { PI };
+	let mut cyl = CrookCylinder {
+		base_radius: base_r,
+		top_radius: top_r,
+		y_min: 0.0,
+		height: 1.0,
+		bounds_margin: 0.0,
+		bend_x: SDF_BEND_X,
+		bend_z: SDF_BEND_Z,
+		phase_x,
+		phase_z,
+	};
+	cyl.bounds_margin = cyl.chunk_mu_xz_pad().max(MIN_BOUNDS_MARGIN);
+	cyl
 }
 
 #[cfg(test)]

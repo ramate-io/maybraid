@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use bevy::prelude::*;
-use chico_ball_components::tuft::{BladeTuftShape, SpearTuftShape};
+use chico_sbs_geometry::{BladeTuftShape, SpearTuftShape};
 use chico_sbs_trees::TuftPatch;
 use chico_vegetation_components::{
 	chico_frond_material_ref, scene_children, FoliageNode, FrondCollection, FrondRun, Layers,

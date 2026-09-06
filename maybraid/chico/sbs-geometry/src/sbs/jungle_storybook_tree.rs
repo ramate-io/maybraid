@@ -45,7 +45,7 @@ pub const JUNGLE_MAX_PROJECTION_FRACTION: f32 = 0.58;
 /// Wider branch fan-out than storybook (`26°` default).
 pub const JUNGLE_ANGLE_TOLERANCE_DEGREES: f32 = 33.0;
 
-/// World leaf radius for inner-ball / outer-splay canopy (not [`JungleGrowth`](../../tree-components) clusters).
+/// World leaf radius for inner-ball / outer-splay canopy (not jungle-growth clusters).
 pub const JUNGLE_LEAF_RADIUS_FRACTION: f32 = 0.15;
 
 /// Flattens [`StorybookTreeSbs`] with the constants above.
