@@ -65,7 +65,14 @@ impl Default for Epiphant {
 
 impl CharacterComponents for Epiphant {
 	fn locomotion_capsule(&self) -> LocomotionCapsule {
-		LocomotionCapsule::QUADRUPED
+		LocomotionCapsule::quadruped_for_limb_length(
+			EpiphantPose {
+				gender: self.gender,
+				build: self.build,
+				sliders: self.sliders.clamped(),
+			}
+			.rest_limb_scale(),
+		)
 	}
 
 	fn rig_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<RigNode> {

@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 use combat_targeting::{CombatContact, CombatTargeting};
-use crozon_characters::CharacterRoot;
+use crozon_characters::{CharacterHeading, CharacterRoot};
 use firearm_user::FirearmUser;
 use firearms::{muzzle_world, BoneMap, FirearmMembers, RigRoot, WeaponFired, WeaponTrigger};
 use movement_intelligence::{MovementBody, MovementIntelligence};
@@ -257,12 +257,12 @@ pub(crate) fn orient_firearm_combatants(
 	time: Res<Time>,
 	combatants: Query<(&PlayerLook, &FirearmIntelligence, &CombatTargeting)>,
 	mut visuals: Query<
-		(&ChildOf, &mut Transform, Option<&mut PlayerYawOwner>),
+		(&ChildOf, &mut Transform, &mut CharacterHeading, Option<&mut PlayerYawOwner>),
 		With<CharacterRoot>,
 	>,
 ) {
 	let amount = (time.delta_secs() * 5.0).clamp(0.0, 1.0);
-	for (child_of, mut visual, yaw_owner) in &mut visuals {
+	for (child_of, mut visual, mut heading, yaw_owner) in &mut visuals {
 		let Ok((look, _, targeting)) = combatants.get(child_of.parent()) else {
 			continue;
 		};
@@ -276,9 +276,8 @@ pub(crate) fn orient_firearm_combatants(
 			*yaw_owner = PlayerYawOwner::Look;
 		}
 		let forward = Quat::from_axis_angle(Vec3::Y, look.yaw) * -Vec3::Z;
-		let mut target = *visual;
-		target.look_to(-forward, Vec3::Y);
-		visual.rotation = visual.rotation.slerp(target.rotation, amount);
+		let current = heading.resolve(&visual);
+		heading.set(&mut visual, current.slerp(forward, amount));
 	}
 }
 

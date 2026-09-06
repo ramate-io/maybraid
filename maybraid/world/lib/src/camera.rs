@@ -18,8 +18,8 @@ use chico_vegetation_on_terrain_playground::{
 	CameraController, Player, PlayerVisual, PlaygroundMode,
 };
 use crozon_characters::{
-	find_member_rig, BoneMap, CharacterMembers, CharacterPartSlot, CharacterRig, CharacterRigRole,
-	CharacterRoot, PartNode,
+	find_member_rig, BoneMap, CharacterHeading, CharacterMembers, CharacterPartSlot, CharacterRig,
+	CharacterRigRole, CharacterRoot, PartNode,
 };
 use lod_avian::PhysicsInteractionLayer;
 
@@ -113,7 +113,7 @@ pub(crate) fn turn_body_with_look(
 	pov: Res<CameraPov>,
 	mut cameras: Query<&mut CameraController, With<Camera3d>>,
 	mut visuals: Query<
-		&mut Transform,
+		(&mut Transform, &mut CharacterHeading),
 		(With<PlayerVisual>, With<CharacterRoot>, Without<Camera3d>),
 	>,
 ) {
@@ -123,19 +123,19 @@ pub(crate) fn turn_body_with_look(
 	let Ok(mut controller) = cameras.single_mut() else {
 		return;
 	};
-	let Ok(mut visual) = visuals.single_mut() else {
+	let Ok((mut visual, mut heading)) = visuals.single_mut() else {
 		return;
 	};
 
-	let body = body_yaw(&visual);
+	let body = body_yaw(&mut heading, &visual);
 	let target = follow_body_yaw(controller.yaw, body, MAX_LOOK_YAW);
 	let step = wrap_to_pi(target - body);
 	let max_step = BODY_TURN_RATE * time.delta_secs();
 	let applied = step.abs().min(max_step).copysign(step);
 	if applied.abs() > 1e-5 {
-		set_body_yaw(&mut visual, body + applied);
+		set_body_yaw(&mut heading, &mut visual, body + applied);
 	}
-	controller.yaw = clamp_look_yaw(controller.yaw, body_yaw(&visual), MAX_LOOK_YAW);
+	controller.yaw = clamp_look_yaw(controller.yaw, body_yaw(&mut heading, &visual), MAX_LOOK_YAW);
 }
 
 /// Hide face meshes in first person; leave body / neck / clothing.
@@ -224,13 +224,13 @@ pub(crate) fn yaw_from_xz_forward(dir: Vec3) -> f32 {
 	(-dir.x).atan2(-dir.z)
 }
 
-fn body_yaw(visual: &Transform) -> f32 {
-	yaw_from_xz_forward(-*visual.forward())
+fn body_yaw(heading: &mut CharacterHeading, visual: &Transform) -> f32 {
+	yaw_from_xz_forward(heading.resolve(visual))
 }
 
-fn set_body_yaw(visual: &mut Transform, yaw: f32) {
+fn set_body_yaw(heading: &mut CharacterHeading, visual: &mut Transform, yaw: f32) {
 	let forward = Quat::from_axis_angle(Vec3::Y, yaw) * -Vec3::Z;
-	visual.look_to(-forward, Vec3::Y);
+	heading.set(visual, forward);
 }
 
 pub(crate) fn follow_body_yaw(look_yaw: f32, body_yaw: f32, max_delta: f32) -> f32 {

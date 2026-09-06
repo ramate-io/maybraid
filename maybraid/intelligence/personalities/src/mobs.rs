@@ -9,11 +9,11 @@ use damage::Health;
 use firearm_intelligence::FirearmEngagement;
 use lod_avian::PhysicsInteractionLayer;
 use mob_intelligence::{
-	spawn_mob, MobAffiliations, MobIdAlloc, MobInstall, MobMemberBody, MobMemberNeeded, MobSlot,
-	RosterMember,
+	MobAffiliations, MobIdAlloc, MobInstall, MobMemberBody, MobMemberNeeded, MobSlot, RosterMember,
+	spawn_mob,
 };
 use npc_intelligence::{NpcBody, Personality};
-use player::{spawn_npc, LocomotionCapsule, PlayerLook, CAPSULE_LENGTH, CAPSULE_RADIUS};
+use player::{CAPSULE_LENGTH, CAPSULE_RADIUS, LocomotionCapsule, PlayerLook, spawn_npc};
 use poi_intelligence::{PoiInterest, PoiInterests, PoiKind};
 use spotting_intelligence::{InterestLayers, SpotBounds, SpotSubject};
 use std::f32::consts::TAU;

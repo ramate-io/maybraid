@@ -34,7 +34,7 @@ pub use materials::{
 	CHICO_FROND_MATERIAL, CHICO_LEAF_MATERIAL, CHICO_STICK_MATERIAL,
 };
 pub use placed::Placement;
-pub use placed_vegetation::PlacedVegetation;
+pub use placed_vegetation::{PlacedVegetation, VegetationInstance};
 pub use procedural::{
 	VegetationProceduralAssets, VegetationProceduralPlugin, FROND_KIT_HALF_X, STICK_KIT_HALF,
 };
@@ -481,10 +481,14 @@ where
 	let host = FlattenedComponentsOnly(vegetation);
 	let level = host.scene_lod_level(lod_ref);
 	let bounds = host.scene_bounds();
+	let anchor = (bounds.min + bounds.max) * 0.5;
+	let radius = ((bounds.max.x - bounds.min.x).max(bounds.max.z - bounds.min.z) * 0.5).max(0.05);
+	let instance = VegetationInstance::new(anchor.into(), radius);
 	let host_for_template = host.clone();
 	(
 		lod_host_scene_pending(level, bounds),
 		bsn! {
+			template_value(instance)
 			template(move |_ctx| Ok(host_for_template.clone()))
 		},
 	)

@@ -46,6 +46,10 @@ impl Hars {
 			sliders: config.sliders,
 		}
 	}
+
+	fn body_pose(&self) -> HarsPose {
+		HarsPose { gender: self.gender, build: self.build, sliders: self.sliders.clamped() }
+	}
 }
 
 impl Default for Hars {
@@ -56,12 +60,11 @@ impl Default for Hars {
 
 impl CharacterComponents for Hars {
 	fn locomotion_capsule(&self) -> LocomotionCapsule {
-		LocomotionCapsule::QUADRUPED
+		LocomotionCapsule::quadruped_for_limb_length(self.body_pose().rest_limb_scale())
 	}
 
 	fn rig_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<RigNode> {
-		let pose =
-			HarsPose { gender: self.gender, build: self.build, sliders: self.sliders.clamped() };
+		let pose = self.body_pose();
 		Layers::from_free(vec![
 			humanoid::quadruped_body_rig(pose.resolve()),
 			humanoid::triple_join_neck_rig(

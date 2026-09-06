@@ -10,6 +10,8 @@ use crozon_rigs::{BoneScale, ResolvedRigPose, RigPoseLayer};
 const TORSO_THICKNESS: f32 = 1.35;
 const LEG_THICKNESS: f32 = 1.2;
 const LIMB_LENGTH: f32 = 0.95;
+/// Extra front/hind length the Lanky build stacks on the species baseline.
+const LANKY_LIMB_SCALE: f32 = 1.05;
 
 /// Resolved proportional intent for Epiphant's quadruped rig.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -30,6 +32,18 @@ impl EpiphantPose {
 			.with_layer(self.gender_layer())
 			.with_layer(self.build_layer())
 			.with_layer(self.slider_layer())
+	}
+
+	/// Rest-pose support height relative to the stock quadruped hull (`1.0`).
+	pub fn rest_limb_scale(self) -> f32 {
+		let sliders = self.sliders.clamped();
+		crate::species::common::quadruped_rest_limb_scale(
+			LIMB_LENGTH,
+			sliders.arm_length,
+			sliders.leg_length,
+			LANKY_LIMB_SCALE,
+			self.build,
+		)
 	}
 
 	fn species_baseline(self) -> RigPoseLayer {
@@ -80,8 +94,8 @@ impl EpiphantPose {
 				layer = EpiphantSliders::apply_chest_thickness(layer, 1.05);
 			}
 			BuildPreset::Lanky => {
-				layer = EpiphantSliders::apply_leg_length(layer, 1.05);
-				layer = EpiphantSliders::apply_arm_length(layer, 1.05);
+				layer = EpiphantSliders::apply_leg_length(layer, LANKY_LIMB_SCALE);
+				layer = EpiphantSliders::apply_arm_length(layer, LANKY_LIMB_SCALE);
 			}
 			BuildPreset::Average => {}
 		}

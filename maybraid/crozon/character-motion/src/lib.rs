@@ -21,14 +21,18 @@ pub use clip::{
 	AnimClip, AnimId, AnimRef, AnimRefRoot, JabParams, JumpParams, TuckParams, TuckedFlipParams,
 	TwoFootedTuckedFlipParams,
 };
-pub use elevation::apply_terrain_pitch;
+pub use elevation::{
+	apply_terrain_pitch, draw_terrain_pitch_probes, is_local_visual_child, probe_origin,
+	DrawTerrainPitchProbes,
+};
 pub use mailbox::{
 	apply_anim_mailbox, prepare_anim_mailbox, tick_anim_mailbox, AnimBone, AnimMailbox,
+	AnimProgress,
 };
 pub use markers::{
 	AnimateBones, AnimateEffects, ApplyTerrainPitch, SuspendAnimation, SuspendTerrainPitch,
 };
-pub use pitch::TerrainPitch;
+pub use pitch::{CharacterHeading, TerrainPitch};
 pub use plugin::{CharacterMotionPlugin, CharacterMotionSystems};
 pub use policy::{motion_policy, MotionPolicy};
 pub use rig::{

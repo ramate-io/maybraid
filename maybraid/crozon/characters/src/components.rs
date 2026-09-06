@@ -15,7 +15,7 @@ use crate::assets::AssetNormalization;
 use crate::layer::Layers;
 use crate::member::CharacterRoot;
 use crate::nodes::{PartNode, RigNode};
-use crozon_character_motion::motion_policy;
+use crozon_character_motion::{motion_policy, CharacterHeading};
 use rigs::AssemblyRoot;
 
 use crate::scene_children::{maybe_component, scene_children};
@@ -38,6 +38,29 @@ impl LocomotionCapsule {
 
 	pub fn scaled(self, scale: f32) -> Self {
 		Self { radius: self.radius * scale.max(0.0), length: self.length * scale.max(0.0) }
+	}
+
+	/// Stretch the cylinder so the capsule bottom sits at `-half_height`.
+	pub fn with_half_height(self, half_height: f32) -> Self {
+		let half = half_height.max(self.radius);
+		Self { radius: self.radius, length: (half - self.radius) * 2.0 }
+	}
+
+	/// Rest-pose feet below the visual/capsule origin.
+	///
+	/// Thigh + shin at rest (`crozon_rigs::quadruped::LegSegmentLengths`), times
+	/// the species / slider / lanky length product.
+	pub fn quadruped_feet_below_origin(limb_scale: f32) -> f32 {
+		let legs = crozon_rigs::quadruped::LegSegmentLengths::default();
+		(legs.upper + legs.lower) * limb_scale.max(0.0)
+	}
+
+	/// Standing quadruped hull whose bottom matches rest-pose foot depth.
+	///
+	/// `limb_scale` is the product of species baseline, slider, and lanky length
+	/// layers (`1.0` = stock thigh+shin).
+	pub fn quadruped_for_limb_length(limb_scale: f32) -> Self {
+		Self::QUADRUPED.with_half_height(Self::quadruped_feet_below_origin(limb_scale))
 	}
 
 	pub fn half_height(self) -> f32 {
@@ -70,7 +93,8 @@ pub trait CharacterComponents {
 		Layers::new()
 	}
 
-	/// Physics hull baked from the rest / species baseline, not the posed mesh.
+	/// Physics hull baked from rest-pose proportions (species / slider / lanky
+	/// limb length), not the animated mesh.
 	fn locomotion_capsule(&self) -> LocomotionCapsule {
 		LocomotionCapsule::HUMANOID
 	}
@@ -287,6 +311,7 @@ impl<T: CharacterComponents + Send + Sync + 'static> LodScene for ComponentsOnly
 				template_value(host)
 				AssemblyRoot
 				CharacterRoot
+				CharacterHeading::default()
 				Visibility::default()
 			},
 			maybe_component(policy.apply_terrain_pitch()),
@@ -365,5 +390,16 @@ mod tests {
 		let hull = LocomotionCapsule::HUMANOID.scaled(0.30);
 		assert!((hull.radius - 0.12).abs() < 1e-5);
 		assert!((hull.length - 0.30).abs() < 1e-5);
+	}
+
+	#[test]
+	fn quadruped_limb_hull_matches_rest_pose_foot_depth() {
+		let hull = LocomotionCapsule::quadruped_for_limb_length(1.35);
+		assert!((hull.radius - LocomotionCapsule::QUADRUPED.radius).abs() < 1e-5);
+		assert!((hull.half_height() - 1.35).abs() < 1e-5);
+		assert!(
+			(hull.half_height() - LocomotionCapsule::quadruped_feet_below_origin(1.35)).abs()
+				< 1e-5
+		);
 	}
 }

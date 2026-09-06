@@ -6,6 +6,11 @@ use crate::{
 };
 use crozon_rigs::{BoneScale, ResolvedRigPose, RigPoseLayer};
 
+/// Low-slung stature relative to the stock quadruped.
+const LIMB_LENGTH: f32 = 0.8;
+/// Extra front/hind length the Lanky build stacks on the species baseline.
+const LANKY_LIMB_SCALE: f32 = 1.05;
+
 /// Resolved proportional intent for Croconot's low-slung quadruped rig.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CroconotPose {
@@ -27,6 +32,18 @@ impl CroconotPose {
 			.with_layer(self.slider_layer())
 	}
 
+	/// Rest-pose support height relative to the stock quadruped hull (`1.0`).
+	pub fn rest_limb_scale(self) -> f32 {
+		let sliders = self.sliders.clamped();
+		crate::species::common::quadruped_rest_limb_scale(
+			LIMB_LENGTH,
+			sliders.arm_length,
+			sliders.leg_length,
+			LANKY_LIMB_SCALE,
+			self.build,
+		)
+	}
+
 	fn species_baseline(self) -> RigPoseLayer {
 		let mut layer = RigPoseLayer::new("croconot species baseline")
 			.with_scale(BoneScale::uniform("chest_thickness", 0.8))
@@ -37,8 +54,8 @@ impl CroconotPose {
 		layer = CroconotSliders::apply_shoulder_width(layer, 0.6);
 		layer = CroconotSliders::apply_chest_width(layer, 0.6);
 		layer = CroconotSliders::apply_hip_width(layer, 0.9);
-		layer = CroconotSliders::apply_arm_length(layer, 0.8);
-		CroconotSliders::apply_leg_length(layer, 0.8)
+		layer = CroconotSliders::apply_arm_length(layer, LIMB_LENGTH);
+		CroconotSliders::apply_leg_length(layer, LIMB_LENGTH)
 	}
 
 	fn gender_layer(self) -> RigPoseLayer {
@@ -78,8 +95,8 @@ impl CroconotPose {
 				layer = CroconotSliders::apply_chest_thickness(layer, 1.05);
 			}
 			BuildPreset::Lanky => {
-				layer = CroconotSliders::apply_leg_length(layer, 1.05);
-				layer = CroconotSliders::apply_arm_length(layer, 1.05);
+				layer = CroconotSliders::apply_leg_length(layer, LANKY_LIMB_SCALE);
+				layer = CroconotSliders::apply_arm_length(layer, LANKY_LIMB_SCALE);
 			}
 			BuildPreset::Average => {}
 		}

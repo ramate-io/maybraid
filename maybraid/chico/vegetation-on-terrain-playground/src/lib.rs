@@ -15,7 +15,10 @@ mod pitch;
 pub mod player;
 mod ui;
 
-pub use bump_out::DurhamCanopyBumpOutPresenter;
+pub use bump_out::{
+	bump_out_from_cell, bump_out_noise, fine_terrain_for, register_bump_out_lod, terrain_chunk_ref,
+	CanopyBumpOutPresenterState, DurhamCanopyBumpOutPresenter, WorldTerrainBuilder,
+};
 pub use camera::CameraController;
 pub use character::{CharacterSpecies, PlayerVisual, RequestSetCharacter};
 pub use chico_sbs_trees_playground::forest_stream::ForestStreamSpec;
@@ -23,9 +26,10 @@ pub use commands::{GroveKind, PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use diagnostics::{PlaygroundDiag, PlaygroundTimingPlugin, RequestFpsToggle};
 pub use forest::DurhamForestPresenter;
 pub use game_commands::command::PendingStartupCommand;
+pub use groves::{DurhamGroveSample, StoredDurhamTerrain};
 pub use material_lib::{VegetationOnTerrainMaterialLib, VegetationOnTerrainMaterialRefPlugin};
 pub use player::{
-	CharacterCameraFollowEnabled, CharacterLocomotion, MoveWish, MovementAction,
+	CharacterCameraFollowEnabled, CharacterLocomotion, Jumping, MoveWish, MovementAction,
 	PadMovementEnabled, Player, PlayerCapsule, PlayerControlSystems, PlayerPlugin, PlaygroundMode,
 };
 
@@ -33,7 +37,7 @@ use avian3d::prelude::LinearVelocity;
 use bevy::camera::visibility::VisibilitySystems;
 use bevy::math::{IVec2, UVec2};
 use bevy::prelude::*;
-use bump_out::{register_bump_out_lod, stream_canopy_bump_outs};
+use bump_out::stream_canopy_bump_outs;
 use camera::{
 	camera_controller, refocus_camera_on_elevation, release_modifiers_on_focus_change,
 	setup_camera, surface_or_hold,
@@ -202,11 +206,24 @@ pub struct VegetationOnTerrainPlugin {
 	pub config: PlaygroundConfig,
 	/// When false, the caller owns the command drawer / CLI.
 	pub commands: bool,
+	/// Register the plain Durham-backed forest presenter.
+	pub register_forest_lod: bool,
+	/// Register the plain Durham-backed canopy bump-out presenter.
+	pub register_bump_out_lod: bool,
+	/// Register Avian terrain pitch apply + player jump suspend.
+	/// World sets this false and owns pitch for NPCs as well as the player.
+	pub register_terrain_pitch: bool,
 }
 
 impl Default for VegetationOnTerrainPlugin {
 	fn default() -> Self {
-		Self { config: PlaygroundConfig::default(), commands: true }
+		Self {
+			config: PlaygroundConfig::default(),
+			commands: true,
+			register_forest_lod: true,
+			register_bump_out_lod: true,
+			register_terrain_pitch: true,
+		}
 	}
 }
 
@@ -246,8 +263,12 @@ impl Plugin for VegetationOnTerrainPlugin {
 		if !app.is_plugin_added::<VegetationOnTerrainMaterialRefPlugin>() {
 			app.add_plugins(VegetationOnTerrainMaterialRefPlugin);
 		}
-		register_forest_lod::<DurhamForestPresenter>(app);
-		register_bump_out_lod::<DurhamCanopyBumpOutPresenter>(app);
+		if self.register_forest_lod {
+			register_forest_lod::<DurhamForestPresenter>(app);
+		}
+		if self.register_bump_out_lod {
+			register_bump_out_lod::<DurhamCanopyBumpOutPresenter>(app);
+		}
 		if !app.is_plugin_added::<VirtualPadPlugin>() {
 			app.add_plugins(VirtualPadPlugin::default());
 		}
@@ -295,11 +316,6 @@ impl Plugin for VegetationOnTerrainPlugin {
 					drive_player_locomotion
 						.after(PlayerControlSystems)
 						.before(CharacterMotionSystems::Anim),
-					sync_suspend_terrain_pitch.after(PlayerControlSystems),
-					apply_avian_terrain_pitch
-						.in_set(CharacterMotionSystems::Elevation)
-						.after(drive_player_locomotion)
-						.after(sync_suspend_terrain_pitch),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 				),
 			);
@@ -328,6 +344,13 @@ impl Plugin for VegetationOnTerrainPlugin {
 					drive_player_locomotion
 						.after(PlayerControlSystems)
 						.before(CharacterMotionSystems::Anim),
+				),
+			);
+		}
+		if self.register_terrain_pitch {
+			app.add_systems(
+				Update,
+				(
 					sync_suspend_terrain_pitch.after(PlayerControlSystems),
 					apply_avian_terrain_pitch
 						.in_set(CharacterMotionSystems::Elevation)

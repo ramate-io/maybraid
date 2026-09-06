@@ -5,13 +5,14 @@ use chico_groves::{
 	AlpineParams, AridConiferSaplingParams, BraidGrassParams, BushScrubParams,
 	ChristmasTaigaParams, CommonTuftsParams, ConiferMassivesParams, ConiferSaplingParams,
 	DateGroveParams, DrylandParams, ForlornSavannaParams, GoettingenFollowParams, GroveExtent,
-	GroveWorldSample, HighBushParams, JerrysChaparralParams, JungleLowerMassivesParams,
-	JungleMassivesParams, LeewardParams, LevantineScrubParams, LowBushParams, MonsterGrassParams,
-	OrchardParams, PalmShadeParams, RiparianGeneralParams, RiparianMixParams, RiverineGreenParams,
-	RollingOaksParams, ShamanhomeParams, SpottyBushesParams, StorytellersParams,
-	StrangeOasisParams, TallGrassParams, TemperateLowerMassivesParams, TemperateMassivesParams,
-	TradeWindsParams, TropicalThicketParams, TropicalTuftsParams, TropicalUndergrowthParams,
-	UnendingJungleParams, VineyardParams, WanderingAcaciaParams, WildGrassParams,
+	GroveTerrain, GroveWorldSample, HighBushParams, JerrysChaparralParams,
+	JungleLowerMassivesParams, JungleMassivesParams, LeewardParams, LevantineScrubParams,
+	LowBushParams, MonsterGrassParams, OrchardParams, PalmShadeParams, RiparianGeneralParams,
+	RiparianMixParams, RiverineGreenParams, RollingOaksParams, ShamanhomeParams,
+	SpottyBushesParams, StorytellersParams, StrangeOasisParams, TallGrassParams,
+	TemperateLowerMassivesParams, TemperateMassivesParams, TradeWindsParams, TropicalThicketParams,
+	TropicalTuftsParams, TropicalUndergrowthParams, UnendingJungleParams, VineyardParams,
+	WanderingAcaciaParams, WildGrassParams,
 };
 use chico_vegetation_components::{spawn_lod_scene_host, vegetation_bounds, VegetationComponents};
 use durham_terrain_models::{BaseTerrainNoise, TerrainCellLayout, TerrainEntryStore};
@@ -23,13 +24,14 @@ use crate::PlaygroundConfig;
 #[derive(Component)]
 pub struct GroveRoot;
 
-pub struct DurhamGroveSample<'a> {
+/// Stored Durham height field used by [`DurhamGroveSample`].
+pub struct StoredDurhamTerrain<'a> {
 	store: &'a TerrainEntryStore,
 	layout: &'a TerrainCellLayout,
 	fallback: &'a BaseTerrainNoise,
 }
 
-impl<'a> DurhamGroveSample<'a> {
+impl<'a> StoredDurhamTerrain<'a> {
 	pub fn new(
 		store: &'a TerrainEntryStore,
 		layout: &'a TerrainCellLayout,
@@ -39,15 +41,42 @@ impl<'a> DurhamGroveSample<'a> {
 	}
 }
 
-impl GroveWorldSample for DurhamGroveSample<'_> {
+impl GroveTerrain for StoredDurhamTerrain<'_> {
 	fn height_at(&self, position: Vec3) -> f32 {
 		self.store
 			.composed_height_at(self.layout, position.x, position.z)
 			.unwrap_or_else(|| self.fallback.height_at(position.x, position.z))
 	}
+}
 
-	fn steepness_at(&self, _position: Vec3) -> f32 {
-		0.0
+/// Grove sample generic over any terrain height field.
+pub struct DurhamGroveSample<T> {
+	terrain: T,
+}
+
+impl<T: GroveTerrain> DurhamGroveSample<T> {
+	pub fn from_terrain(terrain: T) -> Self {
+		Self { terrain }
+	}
+}
+
+impl<'a> DurhamGroveSample<StoredDurhamTerrain<'a>> {
+	pub fn new(
+		store: &'a TerrainEntryStore,
+		layout: &'a TerrainCellLayout,
+		fallback: &'a BaseTerrainNoise,
+	) -> Self {
+		Self::from_terrain(StoredDurhamTerrain::new(store, layout, fallback))
+	}
+}
+
+impl<T: GroveTerrain> GroveWorldSample for DurhamGroveSample<T> {
+	fn height_at(&self, position: Vec3) -> f32 {
+		self.terrain.height_at(position)
+	}
+
+	fn steepness_at(&self, position: Vec3) -> f32 {
+		self.terrain.steepness_at(position)
 	}
 }
 
@@ -236,5 +265,32 @@ fn spawn_kind(
 		GroveKind::DateGrove => {
 			spawn_host(commands, &DateGroveParams::default().with_extent(extent).build_on(world))
 		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use anyhow::Result;
+
+	struct TestTerrain;
+
+	impl GroveTerrain for TestTerrain {
+		fn height_at(&self, position: Vec3) -> f32 {
+			position.x - position.z + 4.0
+		}
+
+		fn steepness_at(&self, position: Vec3) -> f32 {
+			position.x + position.z
+		}
+	}
+
+	#[test]
+	fn generic_durham_sample_delegates_terrain_sampling() -> Result<()> {
+		let sample = DurhamGroveSample::from_terrain(TestTerrain);
+		let position = Vec3::new(6.0, 123.0, 2.0);
+		assert!((sample.height_at(position) - 8.0).abs() < 1e-5);
+		assert!((sample.steepness_at(position) - 8.0).abs() < 1e-5);
+		Ok(())
 	}
 }

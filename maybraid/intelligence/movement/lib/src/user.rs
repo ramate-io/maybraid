@@ -475,4 +475,12 @@ mod tests {
 		assert!((wish.length() - 1.0).abs() < 1e-4, "{wish}");
 		Ok(())
 	}
+
+	#[test]
+	fn transit_wish_stays_horizontal_at_a_raised_waypoint() -> anyhow::Result<()> {
+		let target = MovementLocation::new(Vec3::new(4.0, 3.0, 0.0), 0.1);
+		let wish = transit_wish(target, None, Vec3::ZERO, Vec3::ZERO, 0.55);
+		assert!(wish.x > 0.0 && wish.y.abs() < 1e-6, "{wish}");
+		Ok(())
+	}
 }

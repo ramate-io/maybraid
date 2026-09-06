@@ -12,6 +12,7 @@ members = [
   "maybraid/richmond/buildings-playground",
   "maybraid/richmond/developments",
   "maybraid/richmond/development-models",
+  "maybraid/richmond/urbanization",
   "maybraid/richmond/developments-on-terrain-playground",
 
   "maybraid/menu/components",
@@ -78,6 +79,10 @@ members = [
   "maybraid/input",
   "maybraid/player",
   "maybraid/player-camera",
+  "maybraid/mobs/characters",
+  "maybraid/mobs/mobs",
+  "maybraid/mobs/groups",
+  "maybraid/mobs/on-terrain-playground",
   "maybraid/movement-realization",
   "maybraid/projectiles",
   "maybraid/damage",
@@ -265,6 +270,7 @@ richmond-buildings = { path = "maybraid/richmond/buildings" }
 richmond-buildings-playground = { path = "maybraid/richmond/buildings-playground" }
 richmond-developments = { path = "maybraid/richmond/developments" }
 richmond-development-models = { path = "maybraid/richmond/development-models" }
+richmond-urbanization = { path = "maybraid/richmond/urbanization" }
 richmond-developments-on-terrain-playground = { path = "maybraid/richmond/developments-on-terrain-playground" }
 
 menu-components = { path = "maybraid/menu/components" }
@@ -353,6 +359,10 @@ threat-intelligence-damage = { path = "maybraid/intelligence/threat/damage" }
 threat-management-intelligence = { path = "maybraid/intelligence/threat-management" }
 npc-intelligence = { path = "maybraid/intelligence/npc" }
 mob-intelligence = { path = "maybraid/intelligence/mob" }
+mob-characters = { path = "maybraid/mobs/characters" }
+maybraid-mobs = { path = "maybraid/mobs/mobs" }
+mob-groups = { path = "maybraid/mobs/groups" }
+mob-on-terrain-playground = { path = "maybraid/mobs/on-terrain-playground" }
 personalities-playground = { path = "maybraid/intelligence/personalities" }
 mob-brain-playground = { path = "maybraid/intelligence/mob-brain" }
 poi-playground = { path = "maybraid/intelligence/poi-playground" }

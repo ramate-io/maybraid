@@ -3,7 +3,9 @@
 use bevy::ecs::query::QueryFilter;
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value};
-use crozon_characters::{character_bounds, CharacterComponents, CharacterRoot, ComponentsOnly};
+use crozon_characters::{
+	character_bounds, CharacterComponents, CharacterHeading, CharacterRoot, ComponentsOnly,
+};
 use lod::gen::LodScene;
 use lod::lod_ref::LodRef;
 
@@ -151,9 +153,13 @@ fn spawn_character_visual<
 			},
 		))
 		.id();
-	commands
-		.entity(visual)
-		.insert((ChildOf(body), PlayerYawOwner::Wish, Name::new(name), extra));
+	commands.entity(visual).insert((
+		ChildOf(body),
+		CharacterHeading::from_rotation(facing),
+		PlayerYawOwner::Wish,
+		Name::new(name),
+		extra,
+	));
 	visual
 }
 

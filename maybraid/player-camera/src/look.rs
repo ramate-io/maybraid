@@ -2,6 +2,7 @@
 
 use crate::FollowCamera;
 use bevy::prelude::*;
+use crozon_characters::CharacterHeading;
 use maybraid_character_controller::CharacterIntent;
 use player::{CameraFollow, PlayerLook, PlayerVisual, PlayerYawOwner};
 use std::f32::consts::{FRAC_PI_2, PI};
@@ -107,7 +108,10 @@ fn set_yaw_owner(owners: &mut Query<&mut PlayerYawOwner>, entity: Entity, owner:
 pub(crate) fn turn_body_with_look(
 	time: Res<Time>,
 	mut cameras: Query<(&mut CameraController, &FollowCamera), With<Camera3d>>,
-	mut visuals: Query<(Entity, &mut Transform), (With<PlayerVisual>, Without<Camera3d>)>,
+	mut visuals: Query<
+		(Entity, &mut Transform, &mut CharacterHeading),
+		(With<PlayerVisual>, Without<Camera3d>),
+	>,
 	owners: Query<&PlayerYawOwner>,
 ) {
 	let Ok((mut controller, follow)) = cameras.single_mut() else {
@@ -116,31 +120,32 @@ pub(crate) fn turn_body_with_look(
 	if controller.pov != CameraPov::FirstPerson {
 		return;
 	}
-	let Ok((entity, mut visual)) = visuals.single_mut() else {
+	let Ok((entity, mut visual, mut heading)) = visuals.single_mut() else {
 		return;
 	};
 	if owners.get(entity).ok().copied().unwrap_or(PlayerYawOwner::Look) != PlayerYawOwner::Look {
 		return;
 	}
 
-	let body = body_yaw(&visual);
+	let body = body_yaw(&mut heading, &visual);
 	let target = follow_body_yaw(controller.yaw, body, follow.max_look_yaw);
 	let step = wrap_to_pi(target - body);
 	let max_step = follow.body_turn_rate * time.delta_secs();
 	let applied = step.abs().min(max_step).copysign(step);
 	if applied.abs() > 1e-5 {
-		set_body_yaw(&mut visual, body + applied);
+		set_body_yaw(&mut heading, &mut visual, body + applied);
 	}
-	controller.yaw = clamp_look_yaw(controller.yaw, body_yaw(&visual), follow.max_look_yaw);
+	controller.yaw =
+		clamp_look_yaw(controller.yaw, body_yaw(&mut heading, &visual), follow.max_look_yaw);
 }
 
-fn body_yaw(visual: &Transform) -> f32 {
-	camera_yaw_of_forward(-*visual.forward())
+fn body_yaw(heading: &mut CharacterHeading, visual: &Transform) -> f32 {
+	camera_yaw_of_forward(heading.resolve(visual))
 }
 
-fn set_body_yaw(visual: &mut Transform, yaw: f32) {
+fn set_body_yaw(heading: &mut CharacterHeading, visual: &mut Transform, yaw: f32) {
 	let forward = Quat::from_axis_angle(Vec3::Y, yaw) * -Vec3::Z;
-	visual.look_to(-forward, Vec3::Y);
+	heading.set(visual, forward);
 }
 
 fn camera_yaw_of_forward(dir: Vec3) -> f32 {

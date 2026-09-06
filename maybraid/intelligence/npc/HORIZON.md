@@ -46,8 +46,8 @@ Always on the mob host:
 
 High fulfill: for each roster slot, spawn the body and
 `Personality::install(...)`. High cull: write pose/health back onto the roster
-and despawn the NPC. `TetherMemory` already survives uninstall; the roster is
-the same idea for members.
+and despawn the NPC; that is not a death respawn. `TetherMemory` already
+survives uninstall; the roster is the same idea for members.
 
 If the mob brain reads `Query<&Transform, With<Npc>>`, culling breaks Occupy
 and Roam.

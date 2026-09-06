@@ -3,6 +3,23 @@
 pub mod assets;
 pub mod nodes;
 
+use crate::presets::BuildPreset;
+
+/// Rest-pose quadruped support height relative to [`crate::LocomotionCapsule::QUADRUPED`].
+///
+/// Length layers multiply: species baseline × max(front, hind) slider × lanky
+/// (or `1.0` when the build is not Lanky).
+pub fn quadruped_rest_limb_scale(
+	species_limb: f32,
+	arm_length: f32,
+	leg_length: f32,
+	lanky_scale: f32,
+	build: BuildPreset,
+) -> f32 {
+	let lanky = if build == BuildPreset::Lanky { lanky_scale } else { 1.0 };
+	species_limb * arm_length.max(leg_length) * lanky
+}
+
 pub use assets::{
 	BodyMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh, BODY_DRAGLOON, BODY_FULL,
 	BODY_GUMBUS, BODY_RIG, BODY_RUMBLER, BODY_SHARK, BODY_SPRITE_FISH, BODY_STANDARD, BODY_WHALE,
@@ -13,3 +30,25 @@ pub use assets::{
 	NECK_BASIC, NECK_TRIPLE_JOIN, NOSE_BALLOON, NOSE_BROAD, NOSE_LOAF, NOSE_STANDARD,
 	PRONOGRADE_HEAD_RIG, QUADRUPED_RIG, TAIL_CAT, TAIL_LERODON, TAIL_LERODON_QUADRUPED,
 };
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn rest_limb_scale_multiplies_species_slider_and_lanky() {
+		assert!(
+			(quadruped_rest_limb_scale(1.35, 1.0, 1.0, 1.05, BuildPreset::Average) - 1.35).abs()
+				< 1e-5
+		);
+		assert!(
+			(quadruped_rest_limb_scale(1.35, 1.0, 1.2, 1.05, BuildPreset::Average) - 1.35 * 1.2)
+				.abs() < 1e-5
+		);
+		assert!(
+			(quadruped_rest_limb_scale(1.35, 1.1, 1.0, 1.05, BuildPreset::Lanky)
+				- 1.35 * 1.1 * 1.05)
+				.abs() < 1e-5
+		);
+	}
+}

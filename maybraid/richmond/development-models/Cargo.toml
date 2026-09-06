@@ -25,6 +25,7 @@ richmond-building-components = { workspace = true }
 richmond-building-shaders = { workspace = true }
 richmond-buildings = { workspace = true }
 richmond-developments = { workspace = true }
+richmond-urbanization = { workspace = true }
 material-ref = { workspace = true }
 scene-ref = { workspace = true }
 

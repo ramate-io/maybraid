@@ -86,8 +86,8 @@ pub use marazion::{
 };
 pub use plugin::{register_terrain_plugin, TerrainPlugin};
 pub use presentation::{
-	TerrainMeshLodBand, TerrainPresentationAssets, TerrainPresenterState, TerrainRegionPresenter,
-	TerrainStoreView,
+	PresentedTerrainScene, TerrainMeshLodBand, TerrainPresentationAssets, TerrainPresenterState,
+	TerrainRegionPresenter, TerrainStoreView,
 };
 pub use render::TerrainRenderItem;
 pub use sdf::{ComposedTerrain, ElevationModulation, TerrainSdf};

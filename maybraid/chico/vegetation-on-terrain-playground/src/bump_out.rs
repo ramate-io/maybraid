@@ -31,16 +31,18 @@ use lod::{
 };
 use lod_cascade::Chunk;
 use procedural_common::NoiseParams;
-use terrain_chunk_ref::TerrainChunkRef;
+use render_item::mesh::IdentifiedMesh;
+use render_item::NormalizeChunk;
+use terrain_chunk_ref::{TerrainChunkKey, TerrainChunkRef};
 
 use crate::ForestStreamSpec;
 use crate::PlaygroundConfig;
 
-pub(crate) type WorldTerrainBuilder = TerrainMeshBuilder;
+pub type WorldTerrainBuilder = TerrainMeshBuilder;
 
 /// Presenter bookkeeping for spawned bump-out entities.
 #[derive(Resource, Default)]
-pub(crate) struct CanopyBumpOutPresenterState {
+pub struct CanopyBumpOutPresenterState {
 	presented: HashMap<Id, PresentedBumpOut>,
 }
 
@@ -48,36 +50,48 @@ struct PresentedBumpOut {
 	version: Version,
 	entity: Entity,
 	hidden: bool,
+	terrain_key: TerrainChunkKey,
 }
 
 impl CanopyBumpOutPresenterState {
-	fn clear(&mut self, commands: &mut Commands) {
+	pub fn clear(&mut self, commands: &mut Commands) {
 		for presented in self.presented.values() {
 			commands.entity(presented.entity).despawn();
 		}
 		self.presented.clear();
 	}
 
-	fn presented_version(&self, id: Id) -> Option<Version> {
+	pub fn presented_version(&self, id: Id) -> Option<Version> {
 		self.presented.get(&id).map(|entry| entry.version)
 	}
 
-	fn hide(&mut self, commands: &mut Commands, id: Id) {
+	pub fn presented_version_for_terrain(
+		&self,
+		id: Id,
+		terrain_key: &TerrainChunkKey,
+	) -> Option<Version> {
+		self.presented
+			.get(&id)
+			.filter(|entry| &entry.terrain_key == terrain_key)
+			.map(|entry| entry.version)
+	}
+
+	pub fn hide(&mut self, commands: &mut Commands, id: Id) {
 		if let Some(entry) = self.presented.get_mut(&id) {
 			entry.hidden = true;
 			commands.entity(entry.entity).insert(Visibility::Hidden);
 		}
 	}
 
-	fn is_hidden(&self, id: Id) -> bool {
+	pub fn is_hidden(&self, id: Id) -> bool {
 		self.presented.get(&id).is_some_and(|entry| entry.hidden)
 	}
 
-	fn presented_ids(&self) -> Vec<Id> {
+	pub fn presented_ids(&self) -> Vec<Id> {
 		self.presented.keys().copied().collect()
 	}
 
-	fn remove_stale(&mut self, commands: &mut Commands, wanted: &HashSet<Id>) {
+	pub fn remove_stale(&mut self, commands: &mut Commands, wanted: &HashSet<Id>) {
 		let stale: Vec<Id> =
 			self.presented.keys().copied().filter(|id| !wanted.contains(id)).collect();
 		for id in stale {
@@ -87,19 +101,23 @@ impl CanopyBumpOutPresenterState {
 		}
 	}
 
-	fn present<T: Send + Sync + 'static>(
+	pub fn present<T>(
 		&mut self,
 		commands: &mut Commands,
 		id: Id,
 		version: Version,
 		bump_out: BumpOut,
 		terrain_ref: TerrainChunkRef<T>,
-	) {
+	) where
+		T: IdentifiedMesh + NormalizeChunk + Send + Sync + 'static,
+	{
 		if let Some(previous) = self.presented.remove(&id) {
 			commands.entity(previous.entity).despawn();
 		}
+		let terrain_key = terrain_ref.key().clone();
 		let entity = bump_out.spawn(commands, terrain_ref);
-		self.presented.insert(id, PresentedBumpOut { version, entity, hidden: false });
+		self.presented
+			.insert(id, PresentedBumpOut { version, entity, hidden: false, terrain_key });
 	}
 }
 
@@ -258,7 +276,7 @@ pub fn stream_canopy_bump_outs(
 	lod.apply_spec(&mut commands, config.forest.as_ref(), cam, &mut last_key);
 }
 
-fn fine_terrain_for<'a>(view: &'a TerrainStoreView<'a>, bounds: Aabb3d) -> Option<&'a Terrain> {
+pub fn fine_terrain_for<'a>(view: &'a TerrainStoreView<'a>, bounds: Aabb3d) -> Option<&'a Terrain> {
 	let mut best: Option<(f32, &'a Terrain)> = None;
 	for TrackedId(id) in view.tracked_ids_for(bounds) {
 		let Some(terrain) = view.get(id) else {
@@ -282,7 +300,7 @@ fn fine_terrain_for<'a>(view: &'a TerrainStoreView<'a>, bounds: Aabb3d) -> Optio
 	best.map(|(_, terrain)| terrain)
 }
 
-fn bump_out_from_cell(cell: &CanopyBumpOut, noise: NoiseParams) -> Option<BumpOut> {
+pub fn bump_out_from_cell(cell: &CanopyBumpOut, noise: NoiseParams) -> Option<BumpOut> {
 	let samples = cell.samples;
 	let neighborhood = BumpOutNeighborhood::new(
 		samples.map(|sample| sample.density),
@@ -303,7 +321,7 @@ fn bump_out_from_cell(cell: &CanopyBumpOut, noise: NoiseParams) -> Option<BumpOu
 	)
 }
 
-fn bump_out_noise(forest: &NoiseParams) -> NoiseParams {
+pub fn bump_out_noise(forest: &NoiseParams) -> NoiseParams {
 	NoiseParams {
 		seed: forest.seed.wrapping_add(307),
 		frequency: 0.045,
@@ -313,7 +331,7 @@ fn bump_out_noise(forest: &NoiseParams) -> NoiseParams {
 	}
 }
 
-fn terrain_chunk_ref(terrain: &Terrain) -> TerrainChunkRef<WorldTerrainBuilder> {
+pub fn terrain_chunk_ref(terrain: &Terrain) -> TerrainChunkRef<WorldTerrainBuilder> {
 	let cascade = cascade_chunk_for_cell(terrain.cell, terrain.res_2);
 	let extent = cascade.extent.unwrap_or(Vec3::splat(cascade.size));
 	let chunk = Chunk::from_min_max(cascade.origin, cascade.origin + extent, None);

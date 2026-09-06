@@ -33,6 +33,7 @@ mob-intelligence = { workspace = true }
 npc-intelligence = { workspace = true }
 player = { workspace = true }
 poi-intelligence = { workspace = true }
+routing-intelligence = { workspace = true }
 spotting-intelligence = { workspace = true }
 tether-intelligence = { workspace = true }
 threat-intelligence = { workspace = true }

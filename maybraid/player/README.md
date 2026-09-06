@@ -10,7 +10,15 @@ does not know about firearms or melee. Item-user crates write the
 slots; `player-camera` and overlay systems read them. [`Npc`](src/identity.rs)
 reuses the capsule, [`PlayerLook`](src/identity.rs), and locomotion clips
 without pad input, `CameraFollow`, or `PlayerVisual` (so first-person face hide
-stays on the followed body).
+stays on the followed body). Insert [`CharacterLocomotion`](src/body.rs) before
+[`PlayerPlugin`] to cap the walkable slope (default ~81°; Durham uses ~70°).
+Grounded wish accel follows this frame's walkable contact plane so hillside
+heading is along the slope, not world XZ into the mesh. Last plane is only a
+[`Grounded`](src/body.rs) snap when the caster missed. Off the ground, gravity
+owns Y (XZ heading only). A jump is takeoff (impulse delayed) → air → land
+recovery; only air is XZ-only. Pad [`CharacterIntent`](../controllers/character/src/intent.rs)
+and NPC drive both write [`MoveWish`](src/body.rs) / [`JumpWish`](src/body.rs);
+Body applies those for every capsule.
 
 ```text
 CharacterIntent ─► wish / jump          (this crate)

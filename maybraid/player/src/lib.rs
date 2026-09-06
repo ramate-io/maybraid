@@ -11,8 +11,10 @@ use crozon_characters::CharacterMotionSystems;
 use maybraid_character_controller::CharacterControlSystems;
 
 pub use body::{
-	apply_locomotion_capsule, CharacterController, Grounded, JumpWish, Jumping, MoveWish,
-	MovementAction, PlayerControlSystems,
+	apply_character_controller, apply_character_mobility, apply_locomotion_capsule,
+	ground_plane_for_wish, tick_jump, walkable_contact_normal, wish_on_ground, CharacterController,
+	CharacterLocomotion, Grounded, JumpPhase, JumpWish, Jumping, MoveWish, PlayerControlSystems,
+	WalkableGround,
 };
 pub use identity::{
 	CameraFollow, Npc, Player, PlayerCameraAim, PlayerCameraPose, PlayerCapsule, PlayerLook,
@@ -45,7 +47,7 @@ pub struct PlayerPlugin;
 
 impl Plugin for PlayerPlugin {
 	fn build(&self, app: &mut App) {
-		app.add_message::<MovementAction>()
+		app.init_resource::<CharacterLocomotion>()
 			.configure_sets(
 				Update,
 				(
@@ -63,14 +65,15 @@ impl Plugin for PlayerPlugin {
 				Update,
 				(
 					body::update_grounded,
-					body::apply_character_movement,
 					body::apply_wish_movement,
 					body::apply_wish_jump,
+					body::advance_jump_phases,
 					body::apply_movement_damping,
 				)
 					.chain()
 					.in_set(PlayerSystems::Body),
 			)
+			.add_systems(PostUpdate, body::sync_character_locomotion)
 			.add_systems(
 				Update,
 				(locomotion::face_wish_yaw, drive_player_locomotion)

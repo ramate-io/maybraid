@@ -18,7 +18,7 @@ use richmond_building_components::panels::{PanelNode, PanelStyle};
 use richmond_building_components::partitions::{PartitionNode, PartitionStyle};
 use richmond_building_components::roofs::RoofNode;
 use richmond_building_components::stairs::StairNode;
-use richmond_building_components::{BuildingComponents, Layers};
+use richmond_building_components::{BuildingComponents, BuildingStructuralLodProbe, Layers};
 
 use crate::connecting::{ConnectingStairwell, StairwellKind, WellAabb, WellSide};
 use crate::fit::{aabb_xz_extent, Confines, FillableRegions, Fit, FitError};
@@ -418,6 +418,13 @@ impl BuildingComponents for SingleHighrise {
 
 	fn label_nodes_for_level(&self, level: LodSceneLevel) -> Layers<LabelNode> {
 		self.tower.label_nodes_for_level(level)
+	}
+
+	fn structural_lod(&self) -> Option<BuildingStructuralLodProbe> {
+		Some(BuildingStructuralLodProbe::from_aabb3d_xz(
+			Vec3::from(self.bounds.min),
+			Vec3::from(self.bounds.max),
+		))
 	}
 }
 

@@ -19,6 +19,8 @@ pub const HEAD_SOCKET_PITCH: f32 = -NECK_PITCH;
 
 /// Elevated limb length relative to the stock quadruped / caole baselines.
 const LIMB_LENGTH: f32 = 1.35;
+/// Extra front/hind length the Lanky build stacks on the species baseline.
+const LANKY_LIMB_SCALE: f32 = 1.05;
 /// Rumbler torso mass (same bones as caole rumbler).
 const TORSO_THICKNESS: f32 = 1.35;
 const RUMBLER_BACK_RIDGE_LENGTH: f32 = 1.45;
@@ -49,6 +51,18 @@ impl HarsPose {
 			.with_layer(self.gender_layer())
 			.with_layer(self.build_layer())
 			.with_layer(self.slider_layer())
+	}
+
+	/// Rest-pose support height relative to the stock quadruped hull (`1.0`).
+	pub fn rest_limb_scale(self) -> f32 {
+		let sliders = self.sliders.clamped();
+		crate::species::common::quadruped_rest_limb_scale(
+			LIMB_LENGTH,
+			sliders.arm_length,
+			sliders.leg_length,
+			LANKY_LIMB_SCALE,
+			self.build,
+		)
 	}
 
 	/// Neck OwnRig: counter-pitch the tip `head_socket`.
@@ -113,8 +127,8 @@ impl HarsPose {
 				layer = HarsSliders::apply_chest_thickness(layer, 1.05);
 			}
 			BuildPreset::Lanky => {
-				layer = HarsSliders::apply_leg_length(layer, 1.05);
-				layer = HarsSliders::apply_arm_length(layer, 1.05);
+				layer = HarsSliders::apply_leg_length(layer, LANKY_LIMB_SCALE);
+				layer = HarsSliders::apply_arm_length(layer, LANKY_LIMB_SCALE);
 			}
 			BuildPreset::Average => {}
 		}

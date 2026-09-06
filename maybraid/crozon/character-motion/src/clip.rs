@@ -7,10 +7,10 @@ use bevy::prelude::*;
 use crozon_rigs::rigs::humanoid_v0::HumanoidV0Rig;
 use crozon_rigs::Side;
 use malo_animations::animations::{
-	DorsoventralUndulation, FixedTuck, Flapping, FlipDirection, Gallop, LateralUndulation, Leap,
-	QuadrupedRun, Run, Soaring, TuckProfile, TuckedFlip, TwoFootedJump, Walk, DEFAULT_BACKSWING,
-	DEFAULT_GRAVITY, DEFAULT_JAB_TARGET, DEFAULT_JUMP_HEIGHT, DEFAULT_LANDING_SQUAT_SPEED,
-	DEFAULT_PRE_SQUAT_SPEED,
+	air_duration, DorsoventralUndulation, FixedTuck, Flapping, FlipDirection, Gallop,
+	LateralUndulation, Leap, QuadrupedRun, Run, Soaring, TuckProfile, TuckedFlip, TwoFootedJump,
+	Walk, AIR_END, DEFAULT_BACKSWING, DEFAULT_GRAVITY, DEFAULT_JAB_TARGET, DEFAULT_JUMP_HEIGHT,
+	DEFAULT_LANDING_SQUAT_SPEED, DEFAULT_PRE_SQUAT_SPEED, DEFAULT_SPRING_DURATION, TAKEOFF_END,
 };
 
 const RUN_CYCLE_SPEED: f32 = 1.4;
@@ -95,6 +95,24 @@ impl JumpParams {
 			.with_jump_height(self.jump_height)
 			.with_pre_squat_speed(self.pre_squat_speed)
 			.with_landing_squat_speed(self.landing_squat_speed)
+	}
+
+	/// Seconds into the two-footed jump sampler for a 0..1 takeoff/air/land phase.
+	pub fn elapsed_from_phase(self, progress: f32) -> f32 {
+		let progress = progress.clamp(0.0, 1.0);
+		let squat = 1.0 / self.pre_squat_speed.max(1e-3);
+		let takeoff = squat + DEFAULT_SPRING_DURATION;
+		let air = (air_duration(self.gravity, self.jump_height) - DEFAULT_SPRING_DURATION).max(0.05);
+		let land = 2.0 / self.landing_squat_speed.max(1e-3);
+		if progress < TAKEOFF_END {
+			(progress / TAKEOFF_END) * takeoff
+		} else if progress < AIR_END {
+			let u = (progress - TAKEOFF_END) / (AIR_END - TAKEOFF_END);
+			takeoff + u * air
+		} else {
+			let u = (progress - AIR_END) / (1.0 - AIR_END).max(1e-4);
+			takeoff + air + u * land
+		}
 	}
 }
 
@@ -312,5 +330,16 @@ mod tests {
 		assert_eq!(AnimClip::leap().id(), AnimId::Leap);
 		assert_eq!(AnimClip::leap().default_speed(), LEAP_CYCLE_SPEED);
 		assert_ne!(AnimClip::leap().id(), AnimClip::jump().id());
+	}
+
+	#[test]
+	fn jump_elapsed_follows_leap_phase_windows() {
+		let params = JumpParams::default();
+		let takeoff = params.elapsed_from_phase(TAKEOFF_END);
+		let air = params.elapsed_from_phase(AIR_END);
+		let end = params.elapsed_from_phase(1.0);
+		assert!(takeoff > 0.0);
+		assert!(air > takeoff);
+		assert!(end > air);
 	}
 }

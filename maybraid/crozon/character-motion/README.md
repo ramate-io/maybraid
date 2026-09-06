@@ -33,9 +33,10 @@ sync_motion_markers
   → insert/remove AnimateBones / AnimateEffects on body host
   → insert/remove ApplyTerrainPitch on character root
 
-tick_anim_mailbox          # every body: advance clip time
+tick_anim_mailbox          # every body: advance clip time, or [`AnimProgress`]
 apply_anim_mailbox         # With<AnimateBones|AnimateEffects>: sample + write
-apply_terrain_pitch        # With<ApplyTerrainPitch>: Avian rays → visual rotation
+apply_terrain_pitch        # With<ApplyTerrainPitch>: Avian rays along girdle axis → visual rotation + support offset
+draw_terrain_pitch_probes  # PostUpdate gizmos: lime front, orange hind, yellow sample axis, cyan mesh +Z
 ```
 
 UltraLow: sync strips markers → far hosts still tick time, but bone writes and
@@ -81,7 +82,8 @@ No clip sampling. No rays.
 | `prepare_anim_mailbox` | `Anim` | Typed rig + `AnimMailbox` once the bone map is ready |
 | `tick_anim_mailbox` | `Anim` | Advance time on every body mailbox |
 | `apply_anim_mailbox` | `Anim` | Sample/write only `With<AnimateBones\|AnimateEffects>` |
-| `apply_terrain_pitch<P>` | `Elevation` | **Not registered here** — app adds with a concrete probe; filters `With<ApplyTerrainPitch>` |
+| `apply_terrain_pitch<P>` | `Elevation` | **Not registered here** — app adds with a concrete probe; filters `With<ApplyTerrainPitch>`; capsule children ray from the parent origin |
+| `draw_terrain_pitch_probes` | `PostUpdate` | Sample gizmos when [`DrawTerrainPitchProbes`](src/elevation.rs) is true (default) |
 
 Order `CharacterMotionSystems::Anim` after `CharacterHostSystems::Pose`.
 Order elevation after physics / locomotion.
@@ -91,7 +93,7 @@ Order elevation after physics / locomotion.
 | System | Does |
 |---|---|
 | Player physics / `ShapeCaster` | Capsule ground, jump |
-| `drive_player_locomotion` | Wish → `AnimRefRoot` clip |
+| `drive_player_locomotion` | Wish → explicit `CharacterHeading` + `AnimRefRoot` clip |
 | `prepare_character_terrain_pitch` | Measure girdles, insert `TerrainPitch` |
 | `sync_suspend_terrain_pitch` | `Jumping` → `SuspendTerrainPitch` on the body |
 | `apply_terrain_pitch::<AvianElevationProbe>` | Probe colliders, write visual rotation |
@@ -112,12 +114,32 @@ the shared table `sync_motion_markers` applies. To add a capability, extend
 ### Stand on colliders (not a heightfield)
 
 Implement `ground::ElevationProbe` (or use `AvianElevationProbe`). Wrap the
-generic apply loop in a concrete system. Side rays run only when
-`TerrainPitch.roll_weight > 0`.
+generic apply loop in a concrete system. Capsule children sample from the
+parent origin so support Y cannot lift the next ray; world-placed hosts still
+use the visual `GlobalTransform`. Rest wheelbase locks on the first good
+girdle measure; live shoulder–hip only steers the sample axis and gizmos.
+`AvianElevationProbe` masks
+`PhysicsInteractionLayer::Fixed`, walks past near-start / canopy hits, and
+keeps the lowest standable collider so grove Host AABBs and tree sticks do
+not steal the terrain trimesh. Side rays run only when
+`TerrainPitch.roll_weight > 0`. Quadruped front/hind rays follow the live
+shoulder–hip axis (`TerrainPitch.sagittal`); gizmos: lime/orange ray hits, yellow sample axis, cyan
+explicit heading, magenta bone dots, teal/gold girdle midpoints (magenta chord). A pink
+ring on the origin means girdles were found but the XZ run was too short.
+Insert `DrawTerrainPitchProbes(false)` to hide. Locomotion, look, and combat
+write `CharacterHeading`; terrain pitch reads that source instead of recovering
+yaw from the tilted transform it wrote last frame. Pitch, roll, and support Y
+continuously follow valid probe targets with exponential smoothing and a rate
+cap. If center, coarse, or final support rays miss, apply holds the last pose
+instead of substituting capsule Y as terrain height.
 
 ### Jump / airborne
 
-Insert `SuspendTerrainPitch` on the **physics parent** of the visual.
+Insert `SuspendTerrainPitch` on the visual or any ancestor (typically the
+physics capsule). Pitch apply targets zero tilt and support offset while that
+marker is on the ancestor chain. Local Y `support_offset` is applied only when
+the visual is a near-origin child of a body, not when local translation is
+world-sized under a group root.
 
 ## What this crate is not
 

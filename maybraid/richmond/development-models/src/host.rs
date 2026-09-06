@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use bevy::prelude::{
-	bsn, template_value, Commands, CommandsSceneExt, Entity, Transform, Visibility,
+	bsn, template_value, Commands, CommandsSceneExt, Component, Entity, Transform, Visibility,
 };
 use lod::gen::LodScene;
 use lod::lod_host_scene_pending;
@@ -46,9 +46,18 @@ pub enum DevelopmentHost {
 	SkybridgeHall(Arc<Skybridge>, Transform),
 }
 
+/// Presented building area suitable for bounded, local semantic discovery.
+///
+/// This marker deliberately carries no intelligence types. World composition
+/// decides which local POI taxonomy to apply.
+#[derive(Component, Clone, Copy, Debug, Default, PartialEq)]
+pub struct InteriorArea {
+	pub arrival_radius: f32,
+}
+
 impl DevelopmentHost {
 	pub fn spawn(&self, commands: &mut Commands) -> Vec<Entity> {
-		match self {
+		let entities = match self {
 			Self::LesHallesStorey(building, transform) => spawn(commands, building, *transform),
 			Self::LesHallesStairwell(building, transform) => {
 				spawn(commands, building.as_ref(), *transform)
@@ -82,7 +91,13 @@ impl DevelopmentHost {
 				spawn_wizards_tower(commands, building, *transform)
 			}
 			Self::SkybridgeHall(building, transform) => spawn(commands, building, *transform),
+		};
+		if matches!(self, Self::LesHallesStorey(_, _)) {
+			for entity in &entities {
+				commands.entity(*entity).insert(InteriorArea { arrival_radius: 8.0 });
+			}
 		}
+		entities
 	}
 }
 

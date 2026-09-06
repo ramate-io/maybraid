@@ -41,29 +41,49 @@ impl MobAffiliations {
 	}
 }
 
-/// When a live member disappears, the roster can ask the app to spawn again.
+/// Where a replacement plant is stamped.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum MobRespawnAt {
+	/// Host XZ, last recorded feet height. Pack default.
+	#[default]
+	Host,
+	LastPose,
+}
+
+/// When a member dies, the roster can ask the app to spawn a new plant.
+///
+/// Missing this component means [`Self::never`]. High cull must not use this
+/// path: it clears the live pointer and waits for fulfill.
 #[derive(Component, Clone, Copy, Debug, PartialEq)]
 pub struct MobRespawn {
 	pub delay_secs: f32,
-	/// `None` is unlimited. `Some(0)` never respawns.
-	pub max_lives: Option<u32>,
+	/// Replacements after the original plant. `None` is unlimited. `Some(0)` never.
+	pub max_replacements: Option<u32>,
+	pub at: MobRespawnAt,
+	/// Readable corpse before despawn. Zero still drains on the next `Last`.
+	pub corpse_secs: f32,
 }
 
 impl Default for MobRespawn {
 	fn default() -> Self {
-		Self { delay_secs: 8.0, max_lives: None }
+		Self { delay_secs: 8.0, max_replacements: None, at: MobRespawnAt::Host, corpse_secs: 0.35 }
 	}
 }
 
 impl MobRespawn {
 	pub fn never() -> Self {
-		Self { delay_secs: 0.0, max_lives: Some(0) }
+		Self {
+			delay_secs: 0.0,
+			max_replacements: Some(0),
+			at: MobRespawnAt::Host,
+			corpse_secs: 0.35,
+		}
 	}
 
-	pub fn allows(&self, lives_used: u32) -> bool {
-		match self.max_lives {
+	pub fn allows(self, replacements_used: u32) -> bool {
+		match self.max_replacements {
 			Some(0) => false,
-			Some(max) => lives_used < max,
+			Some(max) => replacements_used < max,
 			None => true,
 		}
 	}
@@ -91,10 +111,11 @@ pub struct RosterMember {
 	pub spotting_range: Option<f32>,
 	pub engagement: Option<FirearmEngagement>,
 	pub threat_override: Option<ThreatManagementIntelligence>,
+	pub interests: PoiInterests,
 	pub pose: Vec3,
 	pub health: Health,
 	pub entity: Option<Entity>,
-	pub lives_used: u32,
+	pub replacements_used: u32,
 	pub respawn_at: Option<f32>,
 	pub spawn_requested: bool,
 }
@@ -109,10 +130,11 @@ impl RosterMember {
 			spotting_range: None,
 			engagement: None,
 			threat_override: None,
+			interests: PoiInterests::default(),
 			pose,
 			health: Health::default(),
 			entity: None,
-			lives_used: 0,
+			replacements_used: 0,
 			respawn_at: None,
 			spawn_requested: false,
 		}
@@ -146,6 +168,11 @@ impl RosterMember {
 		self
 	}
 
+	pub fn with_interests(mut self, interests: PoiInterests) -> Self {
+		self.interests = interests;
+		self
+	}
+
 	pub fn npc_install(
 		&self,
 		host: Entity,
@@ -158,7 +185,7 @@ impl RosterMember {
 			body,
 			health: self.health,
 			tether: Some(host),
-			poi_interests: interests,
+			poi_interests: self.interests.combined(&interests),
 			engagement: self.engagement.clone(),
 			threat_override: self.threat_override,
 			discovery_radius: self.discovery_radius,

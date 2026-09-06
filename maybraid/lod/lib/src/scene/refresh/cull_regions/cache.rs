@@ -5,6 +5,7 @@ use std::marker::PhantomData;
 use bevy::ecs::query::QueryFilter;
 use bevy::ecs::system::{StaticSystemParam, SystemParam};
 use bevy::math::bounding::Aabb3d;
+use bevy::platform::collections::HashSet;
 use bevy::prelude::*;
 
 use crate::lod_ref::{
@@ -32,12 +33,15 @@ pub struct LodSceneCullAabb {
 pub struct LodCullProduceCache {
 	pub snapshots: Vec<LodNodeSnapshot>,
 	pub region_hits: Vec<(Aabb3d, Vec<Entity>)>,
+	/// Deduplicated union consumed by the erased producer.
+	pub hit_entities: HashSet<Entity>,
 }
 
 impl LodCullProduceCache {
 	fn clear(&mut self) {
 		self.snapshots.clear();
 		self.region_hits.clear();
+		self.hit_entities.clear();
 	}
 
 	fn has_region(&self, region: Aabb3d) -> bool {
@@ -71,6 +75,7 @@ pub fn fill_lod_cull_produce_cache<I, F>(
 			continue;
 		}
 		let hits: Vec<Entity> = index.hosts_in_region(msg.region).collect();
+		cache.hit_entities.extend(hits.iter().copied());
 		cache.region_hits.push((msg.region, hits));
 	}
 }

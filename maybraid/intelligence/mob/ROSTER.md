@@ -22,40 +22,61 @@ Do not:
 - bake a fixed parent depth
 - rebind on every lod refresh
 - send a `WantsParentRelationship` message as the membership graph
+- `impl LodScene` on a per-member [`RosterRef`](src/roster_ref.rs) (one host per
+  mob; slots are plant recipes, not groves)
 
 `ChildOf` remains scaffolding: host → level-roots bag → `LodLevelRoot(High)` →
-plants. HORIZON already forbids `Query<&Transform, With<Npc>>` off that tree;
-cull would break Occupy.
+**stubs**. HORIZON already forbids `Query<&Transform, With<Npc>>` off that tree;
+cull would break Occupy. Capsules are **not** transform children of the host:
+`MobTravel` lerps the host `Transform`, and a parented capsule would slide with
+no `MoveWish`.
 
 ## Wish in, live `Entity` out
 
 This is the SceneRef shape: a path is not an entity yet; fulfill writes the
-handle cache. A High plant's wish is a **slot**, optionally a stable [`MobId`](src/host.rs).
-The roster's `entity: Option<Entity>` is the resolved cache.
+handle cache. A High stub's wish is a [`RosterRef`](src/roster_ref.rs) (Arc'd
+character recipe + slot + local offset). The live body is spawned unparented;
+the roster's `entity: Option<Entity>` is the resolved cache. [`RosterBinding`](src/roster_ref.rs)
+on the stub points at that body for cull.
 
 ```text
 LodScene High BSN (pure)
-  body + MobSlot(n) [+ MobId]
-  no host Entity
+  RosterRef { recipe: Arc<T>, slot, offset }
+  no host Entity, no CharacterSceneRecipe, no capsule
 
 drain_chunk_lod_fulfill
   spawn_scene → ChildOf(High root)
   host Entity is known here, but stays out of the recipe
 
+fulfill (after drain)
+  world pose = host GlobalTransform × offset
+  spawn recipe at that pose (unparented)
+  stamp MobSlot + MobId on the body
+  RosterBinding { body, host, slot } on the stub
+
 MobSystems::Bind  (Added / missing MemberOf)
-  resolve host
+  resolve host by MobId
   MemberOf { mob, slot }
-  roster[slot].entity = Some(plant)
+  roster[slot].entity = Some(body)
   Personality::install(..., tether: host) if mixer missing
   copy MobAffiliations + PoiInterests
 
 High cull
+  drain despawns the High root (stubs)
   write pose / health onto the roster
-  despawn the plant
+  despawn the body only if it still has matching MemberOf
   roster[slot].entity = None
+  do **not** schedule [`MobMemberNeeded`](src/roster.rs)
+
+Death
+  `Downed` → replacement clock + `DespawnAfter`
+  writeback clears the pointer
+  after delay, [`MobMemberNeeded`](src/roster.rs) at the host (full HP)
+  replacement bodies are unparented and have no stub; leaving High
+  despawns remaining MemberOf
 ```
 
-Fulfill and cull are the only times the live link changes. Refresh must not
+Fulfill, cull, and death are the times the live link changes. Refresh must not
 rebind. Trickle spawn is the chunk budget; `LodLazyPending` is not required for
 the link.
 
@@ -63,13 +84,13 @@ the link.
 
 1. **Id bind (always works).** The plant carries `MobSlot` + `MobId`. Bind looks
    up the host with that id. Use this when the body is **not** a child of the
-   host (playground today; characters that must sit under a High root for cull
-   but are not gameplay children).
+   host (High fulfill and death replacements).
 2. **Ancestor bind (LodScene drain).** The plant carries `MobSlot` only. Bind
    walks `ChildOf` to the nearest ancestor [`Mob`](src/host.rs). Walk to `Mob`,
    **not** `LodSceneHost` — a character host on the NPC would win first.
 
-Prefer an explicit `MobId` when both are present.
+Prefer an explicit `MobId` when both are present. Production High plants always
+stamp `MobId` so bind does not walk the stub tree.
 
 Playground `Commands` that already hold `host: Entity` may stamp `MemberOf` in
 the same batch. That path never needed LodScene context. The bind system exists
@@ -79,14 +100,17 @@ so serialized High content can stay as dumb as every other grove plant.
 
 The mob brain runs off the roster: spec, last pose, health, cheap summaries.
 Occupying, relocating the tether, and pack antagonism cannot require live NPC
-queries. Respawn is a [`MobMemberNeeded`](src/roster.rs) message; the app spawns
-the body and stamps the wish again.
+queries. Death respawn is a [`MobMemberNeeded`](src/roster.rs) message after the
+corpse despawns; the app spawns the body and stamps the wish again. High cull
+is the other vacancy: clear the pointer and wait for fulfill.
 
 Journeying / `MobTravel` move the **host** (the tether). Members follow through
-tether intelligence, not by parenting.
+tether intelligence, not by parenting. The host `Transform` still moves so
+brains, journeying, and the local leash AABB stay on the host pose.
 
 ## Character trickle
 
-NPCs can appear one-per-frame under the fulfill budget. Bind is incremental:
-each new `MobSlot` without `MemberOf` is one plant. No extra relationship sync
-and no parent-wish dirty flag.
+NPCs can appear one-per-frame under the fulfill budget. Each High chunk is one
+[`RosterRef`](src/roster_ref.rs) stub; the app spawns the unparented body from
+that recipe. Bind is incremental: each new `MobSlot` without `MemberOf` is one
+plant. No extra relationship sync and no parent-wish dirty flag.

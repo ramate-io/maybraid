@@ -140,7 +140,7 @@ where
 			GeneratingSpatialIndex::<Terrain>::get_one_or_generate(spatial_index, id, lod_ref)?;
 		// Lattice resolution comes from the terrain cell — not a water-only knob.
 		let res_2 = terrain.res_2;
-		let terrain_sdf = terrain.sdf.terrain.clone();
+		let terrain_sdf = terrain.sdf.terrain().clone();
 		let fills: Vec<_> = terrain
 			.marazion_fills
 			.iter()
