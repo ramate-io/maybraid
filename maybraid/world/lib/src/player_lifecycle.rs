@@ -28,18 +28,23 @@ use threat_intelligence::{Affiliations, ThreatSubject};
 use crate::weapon::WorldPlayerAppearanceRequested;
 use crate::{WorldGameplayEnabled, WorldPlayerLoadout};
 
-const PLAYER_RESPAWN_FALLBACK: NearbyFallback = NearbyFallback::new(8.0, 16.0);
-
-/// World-player downed duration and nearby POI search extent.
-#[derive(Resource, Clone, Copy, Debug, PartialEq)]
+/// World-player downed duration, nearby POI scan, and replacement interests.
+#[derive(Resource, Clone, Debug, PartialEq)]
 pub struct WorldPlayerRespawnConfig {
 	pub delay_secs: f32,
 	pub poi_radius: f32,
+	pub fallback: NearbyFallback,
+	pub interests: PoiInterests,
 }
 
 impl Default for WorldPlayerRespawnConfig {
 	fn default() -> Self {
-		Self { delay_secs: 4.0, poi_radius: DEFAULT_NEARBY_RADIUS }
+		Self {
+			delay_secs: 4.0,
+			poi_radius: DEFAULT_NEARBY_RADIUS,
+			fallback: NearbyFallback::new(8.0, 16.0),
+			interests: default_player_respawn_interests(),
+		}
 	}
 }
 
@@ -215,14 +220,13 @@ fn respawn_world_player(
 	let death_at = pending.death_at;
 	let seed = pending.seed;
 
-	let interests = player_respawn_interests();
 	let placed = registry.place_nearby(
 		death_at,
 		config.poi_radius,
-		&interests,
+		&config.interests,
 		state.last_poi,
 		seed,
-		PLAYER_RESPAWN_FALLBACK,
+		config.fallback,
 	);
 	let mut surface_point = placed.position;
 	let terrain_y = surface.surface_height(surface_point.xz());
@@ -260,7 +264,7 @@ fn death_glaze_color(alpha: f32) -> Color {
 	Color::srgba(0.2, 0.005, 0.025, alpha)
 }
 
-fn player_respawn_interests() -> PoiInterests {
+fn default_player_respawn_interests() -> PoiInterests {
 	PoiInterests::new([
 		PoiInterest::new(LOCAL_POI, 1.25),
 		PoiInterest::new(URBAN_POI, 1.5),
@@ -285,25 +289,25 @@ mod tests {
 	#[test]
 	fn fallback_respawn_moves_away_from_the_death_point() {
 		let death = Vec3::new(10.0, 4.0, -5.0);
+		let config = WorldPlayerRespawnConfig::default();
 		let placed = poi_intelligence::place_nearby(
 			None,
 			death,
-			DEFAULT_NEARBY_RADIUS,
+			config.poi_radius,
 			None,
 			None,
 			42,
-			PLAYER_RESPAWN_FALLBACK,
+			config.fallback,
 		);
 		let distance = (placed.position - death).xz().length();
-		assert!((PLAYER_RESPAWN_FALLBACK.min_radius..=PLAYER_RESPAWN_FALLBACK.max_radius)
-			.contains(&distance));
+		assert!((config.fallback.min_radius..=config.fallback.max_radius).contains(&distance));
 		assert_eq!(placed.position.y, death.y);
 		assert!(placed.poi.is_none());
 	}
 
 	#[test]
 	fn player_respawn_prefers_urban_pois() {
-		let interests = player_respawn_interests();
+		let interests = WorldPlayerRespawnConfig::default().interests;
 		assert_eq!(interests.weight(URBAN_POI), Some(1.5));
 		assert_eq!(interests.weight(LOCAL_POI), Some(1.25));
 		assert!(interests.contains(VEGETATION_POI));
@@ -314,6 +318,7 @@ mod tests {
 		let config = WorldPlayerRespawnConfig::default();
 		assert_eq!(config.delay_secs, 4.0);
 		assert_eq!(config.poi_radius, DEFAULT_NEARBY_RADIUS);
+		assert_eq!(config.fallback, NearbyFallback::new(8.0, 16.0));
 	}
 
 	#[test]

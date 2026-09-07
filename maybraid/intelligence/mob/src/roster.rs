@@ -4,7 +4,7 @@ use bevy::prelude::*;
 use damage::Health;
 use firearm_intelligence::FirearmEngagement;
 use npc_intelligence::{NpcBody, NpcInstall, Personality};
-use poi_intelligence::{PoiId, PoiInterests};
+use poi_intelligence::{NearbyFallback, PoiId, PoiInterests, DEFAULT_NEARBY_RADIUS};
 use threat_intelligence::{Affiliations, ThreatId};
 use threat_management_intelligence::ThreatManagementIntelligence;
 
@@ -64,11 +64,22 @@ pub struct MobRespawn {
 	pub at: MobRespawnAt,
 	/// Readable corpse before despawn. Zero still drains on the next `Last`.
 	pub corpse_secs: f32,
+	/// Nearby POI scan used when [`Self::at`] is [`MobRespawnAt::Poi`].
+	pub poi_radius: f32,
+	/// Host-relative ring when no nearby POI is available.
+	pub fallback: NearbyFallback,
 }
 
 impl Default for MobRespawn {
 	fn default() -> Self {
-		Self { delay_secs: 8.0, max_replacements: None, at: MobRespawnAt::Poi, corpse_secs: 4.0 }
+		Self {
+			delay_secs: 8.0,
+			max_replacements: None,
+			at: MobRespawnAt::Poi,
+			corpse_secs: 4.0,
+			poi_radius: DEFAULT_NEARBY_RADIUS,
+			fallback: NearbyFallback::new(4.0, 12.0),
+		}
 	}
 }
 
@@ -79,6 +90,7 @@ impl MobRespawn {
 			max_replacements: Some(0),
 			at: MobRespawnAt::Host,
 			corpse_secs: 4.0,
+			..Self::default()
 		}
 	}
 

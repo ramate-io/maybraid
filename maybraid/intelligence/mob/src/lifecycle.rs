@@ -2,17 +2,13 @@
 
 use bevy::prelude::*;
 use damage::{DespawnAfter, Downed, Health};
-use poi_intelligence::{
-	mix_seed, place_nearby, NearbyFallback, PoiId, PoiInterests, PoiRegistry, DEFAULT_NEARBY_RADIUS,
-};
+use poi_intelligence::{mix_seed, place_nearby, PoiId, PoiInterests, PoiRegistry};
 
 use crate::host::{Mob, MobId};
 use crate::member::MemberOf;
 use crate::roster::{
 	MobInterests, MobMemberNeeded, MobRespawn, MobRespawnAt, MobRoster, RosterMember,
 };
-
-const HOST_FALLBACK: NearbyFallback = NearbyFallback::new(4.0, 12.0);
 
 type DownedMember<'a> =
 	(Entity, &'a MemberOf, &'a Transform, &'a GlobalTransform, Has<ChildOf>, Option<&'a Health>);
@@ -124,7 +120,7 @@ pub(crate) fn respawn_mob_members(
 			}
 			member.spawn_requested = true;
 			member.health.current = member.health.max;
-			let (pose, poi) = policy.at.placement(
+			let (pose, poi) = policy.placement(
 				transform.translation,
 				member.pose,
 				*id,
@@ -150,7 +146,7 @@ pub(crate) fn spawn_pose(at: MobRespawnAt, host: Vec3, last: Vec3) -> Vec3 {
 	}
 }
 
-impl MobRespawnAt {
+impl MobRespawn {
 	#[allow(clippy::too_many_arguments)]
 	fn placement(
 		self,
@@ -163,19 +159,12 @@ impl MobRespawnAt {
 		registry: Option<&PoiRegistry>,
 		interests: Option<&PoiInterests>,
 	) -> (Vec3, Option<PoiId>) {
-		if self != Self::Poi {
-			return (spawn_pose(self, host, last), None);
+		if self.at != MobRespawnAt::Poi {
+			return (spawn_pose(self.at, host, last), None);
 		}
 		let seed = respawn_seed(mob, slot, generation);
-		let placed = place_nearby(
-			registry,
-			host,
-			DEFAULT_NEARBY_RADIUS,
-			interests,
-			previous,
-			seed,
-			HOST_FALLBACK,
-		);
+		let placed =
+			place_nearby(registry, host, self.poi_radius, interests, previous, seed, self.fallback);
 		(with_member_height(placed.position, host, last, placed.poi.is_some()), placed.poi)
 	}
 }
@@ -206,7 +195,7 @@ fn schedule_respawn(member: &mut RosterMember, policy: MobRespawn, now: f32) {
 #[cfg(test)]
 mod tests {
 	use anyhow::Result;
-	use poi_intelligence::{Poi, PoiInterest, PoiKind};
+	use poi_intelligence::{NearbyFallback, Poi, PoiInterest, PoiKind, DEFAULT_NEARBY_RADIUS};
 
 	use super::*;
 
@@ -248,15 +237,14 @@ mod tests {
 
 	#[test]
 	fn poi_respawn_fallback_varies_around_the_host() {
-		let first = MobRespawnAt::Poi
-			.placement(Vec3::ZERO, Vec3::Y, MobId(3), 0, 1, None, None, None)
-			.0;
-		let second = MobRespawnAt::Poi
-			.placement(Vec3::ZERO, Vec3::Y, MobId(3), 0, 2, None, None, None)
-			.0;
+		let policy = MobRespawn::default();
+		let first = policy.placement(Vec3::ZERO, Vec3::Y, MobId(3), 0, 1, None, None, None).0;
+		let second = policy.placement(Vec3::ZERO, Vec3::Y, MobId(3), 0, 2, None, None, None).0;
 		assert_ne!(first, second);
-		assert!((4.0..=12.0).contains(&first.xz().length()));
-		assert!((4.0..=12.0).contains(&second.xz().length()));
+		assert!((policy.fallback.min_radius..=policy.fallback.max_radius)
+			.contains(&first.xz().length()));
+		assert!((policy.fallback.min_radius..=policy.fallback.max_radius)
+			.contains(&second.xz().length()));
 	}
 
 	#[test]
@@ -264,5 +252,7 @@ mod tests {
 		let policy = MobRespawn::default();
 		assert_eq!(policy.corpse_secs, 4.0);
 		assert_eq!(policy.at, MobRespawnAt::Poi);
+		assert_eq!(policy.poi_radius, DEFAULT_NEARBY_RADIUS);
+		assert_eq!(policy.fallback, NearbyFallback::new(4.0, 12.0));
 	}
 }
