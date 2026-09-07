@@ -22,6 +22,7 @@ pub use game_commands::command::PendingStartupCommand;
 use bevy::prelude::*;
 use bevy::time::common_conditions::on_timer;
 use buildings_lod::FiringRangeBuildingsLodPlugin;
+use combat_hud::CombatHudPlugin;
 use crozon_character_items::ItemRng;
 use crozon_character_ragdoll::{CharacterRagdollPlugin, CharacterRagdollSettings};
 use crozon_characters::CharacterHostsPlugin;
@@ -80,6 +81,7 @@ impl Plugin for FiringRangePlugin {
 			.add_plugins(PlayerPlugin)
 			.add_plugins(PlayerCameraPlugin)
 			.add_plugins(FirearmUserPlugin)
+			.add_plugins(CombatHudPlugin::default())
 			.add_plugins(CharacterRagdollPlugin)
 			.add_plugins(FiringRangeDiagnosticsPlugin)
 			.add_plugins(FiringRangeBuildingsLodPlugin)
@@ -132,7 +134,6 @@ impl Plugin for FiringRangePlugin {
 				FirearmIntelligenceSystems::Fire.run_if(on_timer(Duration::from_millis(33))),
 			)
 			.init_resource::<LesHallesSpawn>()
-			.init_resource::<hud::DamageTicks>()
 			.init_resource::<damage::CombatRespawn>()
 			.init_resource::<engagement::NpcEngagement>()
 			.init_resource::<RangeSession>()
@@ -146,7 +147,7 @@ impl Plugin for FiringRangePlugin {
 					setup_lighting,
 					range::setup_range,
 					spawn_reticle_system,
-					hud::spawn_combat_hud,
+					hud::spawn_firing_range_hud,
 				)
 					.chain(),
 			)
@@ -182,23 +183,15 @@ impl Plugin for FiringRangePlugin {
 					les_halles::draw_circulation_gizmos,
 					apply_parent_confines.after(LodRefreshSystems::Cull),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
-					hud::ensure_world_health_bars,
-					hud::sync_health_hud,
+					hud::sync_combat_hud_opponent_total
+						.before(combat_hud::CombatHudSystems::Health),
+					hud::sync_evasion_hud_status.before(combat_hud::CombatHudSystems::Health),
 					hud::sync_gun_stats,
-					hud::sync_world_health_bars,
-					hud::update_combat_popups,
-					hud::update_damage_indicators,
 				),
 			)
 			.add_systems(
 				PostUpdate,
-				(
-					hud::ingest_damage_indicators,
-					hud::ingest_combat_popups,
-					damage::queue_downed_respawns,
-				)
-					.chain()
-					.after(::damage::DamageSystems::Down),
+				damage::queue_downed_respawns.after(::damage::DamageSystems::Down),
 			)
 			.add_systems(
 				PostUpdate,

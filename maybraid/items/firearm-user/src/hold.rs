@@ -1,6 +1,7 @@
 //! After walk/run, aim both arms at the held firearm's hand landmarks.
 
 use bevy::prelude::*;
+use bevy::transform::helper::TransformHelper;
 use crozon_characters::{
 	AnimBone, AnimMailbox, AnimateBones, BoneMap, CharacterMembers, CharacterRoot, SuspendAnimation,
 };
@@ -20,30 +21,31 @@ pub struct HoldingArms;
 /// Point the trigger hand at `trigger_point` and the support hand at the grip socket.
 pub fn sync_hands_to_firearm(
 	users: Query<&FirearmUser>,
-	visuals: Query<
-		(&GlobalTransform, &CharacterMembers, &ChildOf),
-		(With<CharacterRoot>, Without<AnimBone>),
-	>,
-	guns: Query<
-		(&FirearmMembers, &Transform, &GlobalTransform),
-		(With<HeldFirearm>, With<FirearmRoot>, Without<AnimBone>),
-	>,
+	visuals: Query<(Entity, &CharacterMembers, &ChildOf), (With<CharacterRoot>, Without<AnimBone>)>,
+	guns: Query<&FirearmMembers, (With<HeldFirearm>, With<FirearmRoot>, Without<AnimBone>)>,
 	gun_maps: Query<&BoneMap, Without<HoldingArms>>,
-	globals: Query<&GlobalTransform>,
 	mut rigs: Query<
 		(&mut HumanoidV0Rig, &BoneMap, &AnimMailbox),
 		(With<HoldingArms>, With<AnimateBones>, Without<SuspendAnimation>),
 	>,
-	mut bones: Query<(&AnimBone, &mut Transform), (Without<AnimMailbox>, Without<CharacterRoot>)>,
+	mut transforms: ParamSet<(
+		TransformHelper,
+		Query<(&AnimBone, &mut Transform), (Without<AnimMailbox>, Without<CharacterRoot>)>,
+	)>,
 ) {
 	for (visual, members, child_of) in &visuals {
 		let Ok(user) = users.get(child_of.parent()) else {
 			continue;
 		};
-		let body_rot = visual.rotation();
 		let settings = user.settings;
-		let trigger = gun_landmark(user.held, &guns, &gun_maps, &globals, "trigger_point");
-		let grip = gun_landmark(user.held, &guns, &gun_maps, &globals, settings.grip_socket);
+		let current = transforms.p0();
+		let body_rot = current.compute_global_transform(visual).ok().map(|t| t.rotation());
+		let trigger = gun_landmark(user.held, &guns, &gun_maps, &current, "trigger_point");
+		let grip = gun_landmark(user.held, &guns, &gun_maps, &current, settings.grip_socket);
+		drop(current);
+		let Some(body_rot) = body_rot else {
+			continue;
+		};
 		let (Some(trigger), Some(grip)) = (trigger, grip) else {
 			continue;
 		};
@@ -55,21 +57,21 @@ pub fn sync_hands_to_firearm(
 			if mailbox.output.is_empty() {
 				continue;
 			}
+			let current = transforms.p0();
+			let right_target =
+				target_from(body_rot, bone_world(map, &current, "humerus.R"), trigger);
+			let left_target = target_from(body_rot, bone_world(map, &current, "humerus.L"), grip);
+			drop(current);
+			let mut bones = transforms.p1();
 			rig.pose.clone_from(&mailbox.output);
 			pose_firing_torso(&mut rig, settings.firing_torso_yaw);
 			reset_arm_to_rest(&mut rig, map, &bones, Side::Right);
 			reset_arm_to_rest(&mut rig, map, &bones, Side::Left);
-			let right = arm_reach(
-				&rig,
-				Side::Right,
-				target_from(body_rot, bone_world(map, &globals, "humerus.R"), trigger),
-				settings.right_pole,
-				1.0,
-			);
+			let right = arm_reach(&rig, Side::Right, right_target, settings.right_pole, 1.0);
 			let left = arm_reach(
 				&rig,
 				Side::Left,
-				target_from(body_rot, bone_world(map, &globals, "humerus.L"), grip),
+				left_target,
 				settings.left_pole,
 				settings.left_reach_stretch,
 			);
@@ -92,29 +94,27 @@ pub fn sync_hands_to_firearm(
 
 fn gun_landmark(
 	held: Entity,
-	guns: &Query<
-		(&FirearmMembers, &Transform, &GlobalTransform),
-		(With<HeldFirearm>, With<FirearmRoot>, Without<AnimBone>),
-	>,
+	guns: &Query<&FirearmMembers, (With<HeldFirearm>, With<FirearmRoot>, Without<AnimBone>)>,
 	maps: &Query<&BoneMap, Without<HoldingArms>>,
-	globals: &Query<&GlobalTransform>,
+	transforms: &TransformHelper,
 	name: &str,
 ) -> Option<Vec3> {
-	let (members, current_root, previous_root) = guns.get(held).ok()?;
-	let previous_landmark = named_translation(members.iter(), maps, globals, name)?;
-	let landmark_local = previous_root.affine().inverse().transform_point3(previous_landmark);
-	Some(current_root.compute_affine().transform_point3(landmark_local))
+	let members = guns.get(held).ok()?;
+	named_translation(members.iter(), maps, transforms, name)
 }
 
-fn bone_world(map: &BoneMap, globals: &Query<&GlobalTransform>, name: &str) -> Option<Vec3> {
+fn bone_world(map: &BoneMap, transforms: &TransformHelper, name: &str) -> Option<Vec3> {
 	let entity = *map.by_name.get(name)?;
-	globals.get(entity).ok().map(|global| global.translation())
+	transforms
+		.compute_global_transform(entity)
+		.ok()
+		.map(|global| global.translation())
 }
 
 fn named_translation(
 	members: impl Iterator<Item = Entity>,
 	maps: &Query<&BoneMap, Without<HoldingArms>>,
-	globals: &Query<&GlobalTransform>,
+	transforms: &TransformHelper,
 	name: &str,
 ) -> Option<Vec3> {
 	for member in members {
@@ -124,7 +124,7 @@ fn named_translation(
 		let Some(&entity) = map.by_name.get(name) else {
 			continue;
 		};
-		if let Ok(global) = globals.get(entity) {
+		if let Ok(global) = transforms.compute_global_transform(entity) {
 			return Some(global.translation());
 		}
 	}

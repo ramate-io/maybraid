@@ -1,15 +1,20 @@
 //! Cameras, clear color, preview look, and world pause — derived from [`GameFlow`].
 //!
-//! Home / Characters / loading use the world `Camera3d` with preview-only
-//! [`RenderLayers`] and [`IsDefaultUiCamera`]. World scenery stays on the
-//! default layer so menu transitions do not churn LOD hosts or physics
-//! colliders. There is no competing `Camera2d`: that highest-order camera
-//! would own UI even while inactive.
+//! Home / Characters use the world `Camera3d` as [`IsDefaultUiCamera`] with
+//! preview-only [`RenderLayers`], matching [PR #729](https://github.com/ramate-io/maybraid/pull/729).
+//! Isolation is camera layers, not `Visibility` on LOD / trimesh hosts.
+//!
+//! Async load-in follows [`efa73ad`](https://github.com/ramate-io/maybraid/commit/efa73adf):
+//! a `Camera2d` exists only during [`GameFlow::LoadingWorld`]. A persistent
+//! second camera would steal UI. Terrain streaming stays off on menu shells.
 
 use bevy::camera::visibility::RenderLayers;
+use bevy::camera::ClearColorConfig;
 use bevy::prelude::*;
 use crozon_character_playground::CameraController as PreviewCameraController;
-use maybraid_world::WorldGameplayEnabled;
+use maybraid_world::{
+	PlayerPhysicsEnabled, TerrainStreamingEnabled, WorldGameplayEnabled, WorldSceneryVisible,
+};
 use menu_components::MENU_CLEAR;
 use menu_playground::{CharacterPreviewLight, CharacterPreviewRoot};
 use menu_screens::{
@@ -25,6 +30,27 @@ const PREVIEW_EYE: Vec3 = Vec3::new(0.0, 1.6, 3.5);
 const PREVIEW_LOOK: Vec3 = Vec3::new(0.0, 1.0, 0.0);
 const WORLD_RENDER_LAYER: usize = 0;
 const PREVIEW_RENDER_LAYER: usize = 1;
+
+#[derive(Component)]
+pub(crate) struct LoadingBackdropCamera;
+
+pub(crate) fn spawn_loading_backdrop(mut commands: Commands) {
+	commands.spawn((
+		Camera2d,
+		LoadingBackdropCamera,
+		IsDefaultUiCamera,
+		Camera { order: 1, clear_color: ClearColorConfig::Custom(MENU_CLEAR), ..default() },
+	));
+}
+
+pub(crate) fn despawn_loading_backdrop(
+	mut commands: Commands,
+	cameras: Query<Entity, With<LoadingBackdropCamera>>,
+) {
+	for entity in &cameras {
+		commands.entity(entity).despawn();
+	}
+}
 
 pub(crate) fn enter_home(mut commands: Commands) {
 	request_show_home(&mut commands);
@@ -59,27 +85,45 @@ pub(crate) fn apply_shell_look(
 	flow: Res<State<GameFlow>>,
 	pause: Option<Res<State<WorldPause>>>,
 	mut clear: ResMut<ClearColor>,
-	mut world_cameras: Query<(Entity, &mut Camera), With<Camera3d>>,
+	mut world_cameras: Query<
+		(Entity, &mut Camera),
+		(With<Camera3d>, Without<LoadingBackdropCamera>),
+	>,
+	mut loading_cameras: Query<&mut Camera, (With<LoadingBackdropCamera>, Without<Camera3d>)>,
 	mut gameplay: ResMut<WorldGameplayEnabled>,
+	mut physics: ResMut<PlayerPhysicsEnabled>,
+	mut streaming: ResMut<TerrainStreamingEnabled>,
+	mut scenery: ResMut<WorldSceneryVisible>,
 ) {
 	let flow = *flow.get();
+	let loading = flow == GameFlow::LoadingWorld;
 	let menu = matches!(flow, GameFlow::Home | GameFlow::Characters | GameFlow::LoadingWorld);
 	clear.0 = if menu { MENU_CLEAR } else { WORLD_SKY };
 	let layers = camera_render_layers(flow);
 	for (entity, mut camera) in &mut world_cameras {
-		camera.is_active = true;
-		commands.entity(entity).insert((layers.clone(), IsDefaultUiCamera));
+		camera.is_active = !loading;
+		commands.entity(entity).insert(layers.clone());
+		if loading {
+			commands.entity(entity).remove::<IsDefaultUiCamera>();
+		} else {
+			commands.entity(entity).insert(IsDefaultUiCamera);
+		}
 	}
-	gameplay.0 =
+	for mut camera in &mut loading_cameras {
+		camera.is_active = loading;
+	}
+	streaming.0 = matches!(flow, GameFlow::LoadingWorld | GameFlow::World);
+	scenery.0 = flow == GameFlow::World;
+	let playing =
 		flow == GameFlow::World && pause.is_some_and(|pause| *pause.get() == WorldPause::Playing);
+	gameplay.0 = playing;
+	physics.0 = playing;
 }
 
 fn camera_render_layers(flow: GameFlow) -> RenderLayers {
 	match flow {
-		GameFlow::Home | GameFlow::Characters | GameFlow::LoadingWorld => {
-			RenderLayers::layer(PREVIEW_RENDER_LAYER)
-		}
-		GameFlow::World => RenderLayers::layer(WORLD_RENDER_LAYER),
+		GameFlow::Home | GameFlow::Characters => RenderLayers::layer(PREVIEW_RENDER_LAYER),
+		GameFlow::LoadingWorld | GameFlow::World => RenderLayers::layer(WORLD_RENDER_LAYER),
 	}
 }
 
@@ -137,17 +181,19 @@ mod tests {
 	fn menu_camera_sees_preview_only() {
 		let preview = RenderLayers::layer(PREVIEW_RENDER_LAYER);
 		let world = RenderLayers::layer(WORLD_RENDER_LAYER);
-		for flow in [GameFlow::Home, GameFlow::Characters, GameFlow::LoadingWorld] {
+		for flow in [GameFlow::Home, GameFlow::Characters] {
 			assert!(camera_render_layers(flow).intersects(&preview));
 			assert!(!camera_render_layers(flow).intersects(&world));
 		}
 	}
 
 	#[test]
-	fn world_camera_sees_default_layer_only() {
+	fn loading_and_world_cameras_see_default_layer() {
 		let preview = RenderLayers::layer(PREVIEW_RENDER_LAYER);
 		let world = RenderLayers::layer(WORLD_RENDER_LAYER);
-		assert!(camera_render_layers(GameFlow::World).intersects(&world));
-		assert!(!camera_render_layers(GameFlow::World).intersects(&preview));
+		for flow in [GameFlow::LoadingWorld, GameFlow::World] {
+			assert!(camera_render_layers(flow).intersects(&world));
+			assert!(!camera_render_layers(flow).intersects(&preview));
+		}
 	}
 }

@@ -40,9 +40,10 @@ pub fn prepare_character_terrain_pitch(
 			record_quadruped_girdles(&mut pitch, kind, bones, &globals);
 		}
 		let mut entity_commands = commands.entity(entity);
-		entity_commands.insert(pitch);
+		// Preview / LOD refresh can despawn the host before this buffer applies.
+		entity_commands.try_insert(pitch);
 		if heading.is_none() {
-			entity_commands.insert(CharacterHeading::from_rotation(transform.rotation));
+			entity_commands.try_insert(CharacterHeading::from_rotation(transform.rotation));
 		}
 	}
 

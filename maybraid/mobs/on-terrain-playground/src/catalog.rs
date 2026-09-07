@@ -41,16 +41,10 @@ pub struct CastPlacement {
 	pub offset: Vec2,
 }
 
-const HERD_PLACEMENT: [CastPlacement; 1] = [CastPlacement {
-	kind: MobKind::Herd,
-	species: None,
-	offset: Vec2::new(-40.0, -20.0),
-}];
-const PACK_PLACEMENT: [CastPlacement; 1] = [CastPlacement {
-	kind: MobKind::Pack,
-	species: None,
-	offset: Vec2::new(36.0, -16.0),
-}];
+const HERD_PLACEMENT: [CastPlacement; 1] =
+	[CastPlacement { kind: MobKind::Herd, species: None, offset: Vec2::new(-40.0, -20.0) }];
+const PACK_PLACEMENT: [CastPlacement; 1] =
+	[CastPlacement { kind: MobKind::Pack, species: None, offset: Vec2::new(36.0, -16.0) }];
 const BOTH_PLACEMENTS: [CastPlacement; 2] = [
 	CastPlacement { kind: MobKind::Herd, species: None, offset: Vec2::new(-40.0, -20.0) },
 	CastPlacement { kind: MobKind::Pack, species: None, offset: Vec2::new(48.0, 24.0) },
@@ -197,8 +191,11 @@ mod tests {
 
 	#[test]
 	fn both_places_a_herd_and_a_pack() {
-		let kinds: Vec<_> =
-			PlaygroundCast::Both.placements().iter().map(|placement| placement.kind).collect();
+		let kinds: Vec<_> = PlaygroundCast::Both
+			.placements()
+			.iter()
+			.map(|placement| placement.kind)
+			.collect();
 		assert_eq!(kinds, vec![MobKind::Herd, MobKind::Pack]);
 	}
 
@@ -227,10 +224,7 @@ mod tests {
 			.iter()
 			.map(|placement| placement.species)
 			.collect();
-		assert_eq!(
-			species,
-			vec![Some(CharacterSpecies::Hars), Some(CharacterSpecies::Ylter)]
-		);
+		assert_eq!(species, vec![Some(CharacterSpecies::Hars), Some(CharacterSpecies::Ylter)]);
 	}
 
 	#[test]

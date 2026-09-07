@@ -188,13 +188,7 @@ impl ForestPresenterState {
 	) -> Vec<Entity> {
 		self.growing.insert(
 			id,
-			GrowingGrove {
-				version,
-				layer,
-				task: None,
-				ready: tiles.into(),
-				entities: Vec::new(),
-			},
+			GrowingGrove { version, layer, task: None, ready: tiles.into(), entities: Vec::new() },
 		);
 		self.spawn_ready_hosts(commands, id, lod_ref)
 	}
@@ -218,10 +212,8 @@ impl ForestPresenterState {
 		pending.entities.extend(spawned.iter().copied());
 		if pending.task.is_none() && pending.ready.is_empty() {
 			let complete = self.growing.remove(&id).expect("pending grove");
-			self.presented.insert(
-				id,
-				PresentedGrove { version, entities: complete.entities, hidden: false },
-			);
+			self.presented
+				.insert(id, PresentedGrove { version, entities: complete.entities, hidden: false });
 		}
 		spawned
 	}

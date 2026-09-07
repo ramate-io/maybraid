@@ -9,7 +9,7 @@ pub mod water;
 pub use terrain::render::cascade_chunk_for_cell;
 pub use terrain::{
 	origin_cell_ids_for_layout, register_terrain_plugin, terrain_collider_covers_xz,
-	AvianTerrainIndex, BaseTerrainNoise, CanyonHighPassControllerLayout,
+	terrain_streaming_enabled, AvianTerrainIndex, BaseTerrainNoise, CanyonHighPassControllerLayout,
 	CanyonLowPassControllerLayout, CanyonStampCell, CascadeChunk, ComposedTerrain, Durham,
 	JerseyControllerLayouts, JerseyStampConfigs, MacroCellLayout, MarazionBandPass,
 	MarazionLeafBounds, MarazionLeafKind, MarazionWatershedConfigs, MassifHighPassControllerLayout,
@@ -23,10 +23,10 @@ pub use terrain::{
 	TerrainHeightSnapshot, TerrainMeshBuilder, TerrainMeshLodBand, TerrainPlugin,
 	TerrainPresentPending, TerrainPresentationAssets, TerrainPresentationDirty,
 	TerrainPresenterState, TerrainRegionPresenter, TerrainRenderItem, TerrainResourcesPlugin,
-	TerrainSdf, TerrainStoreView, TerrainTrimeshCollider, ValleyHighPassControllerLayout,
-	ValleyLowPassControllerLayout, ValleyStampCell, WorldBaseTerrain, MACRO_CELL_SIZE,
-	TERRAIN_CELL_SIZE, TERRAIN_FRICTION, WORLD_FINE_HALF_EXTENT_CELLS, WORLD_OUTER_2X_ROWS,
-	WORLD_OUTER_4X_ROWS,
+	TerrainSdf, TerrainStoreView, TerrainStreamingEnabled, TerrainTrimeshCollider,
+	ValleyHighPassControllerLayout, ValleyLowPassControllerLayout, ValleyStampCell,
+	WorldBaseTerrain, MACRO_CELL_SIZE, TERRAIN_CELL_SIZE, TERRAIN_FRICTION,
+	WORLD_FINE_HALF_EXTENT_CELLS, WORLD_OUTER_2X_ROWS, WORLD_OUTER_4X_ROWS,
 };
 pub use water::{
 	register_water_plugin, ComposedWater, Water, WaterPlugin, WaterPresentationAssets,

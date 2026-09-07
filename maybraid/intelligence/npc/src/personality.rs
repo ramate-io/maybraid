@@ -306,19 +306,22 @@ impl PersonalitySpec {
 			threat,
 			combat: Some(CombatPersonality {
 				firearm: FirearmIntelligenceSettings {
-					accuracy: 0.84,
-					motion_tracking: 0.75,
-					counter_recoil: 0.7,
-					trigger_happiness: 0.35,
-					headshots: 0.55,
+					accuracy: 0.92,
+					tracking_rate: 9.0,
+					motion_tracking: 0.9,
+					counter_recoil: 0.85,
+					alignment_grace: 0.2,
+					trigger_happiness: 0.8,
+					headshots: 0.25,
 					wall_firing: 0.0,
-					vision: 6,
-					focus: 0.75,
+					vision: 10,
+					focus: 0.85,
+					fire_spotting_freshness: 0.35,
 					..FirearmIntelligenceSettings::default()
 				},
 				movement: FirearmMovementIntelligenceSettings {
-					range: (14.0, 1.0),
-					cover: 0.85,
+					range: (12.0, 1.0),
+					cover: 0.6,
 					flee: (3.0, 10.0),
 					..FirearmMovementIntelligenceSettings::default()
 				},

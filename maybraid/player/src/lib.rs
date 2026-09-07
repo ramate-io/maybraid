@@ -43,21 +43,40 @@ pub enum PlayerPoseSystems {
 	Overlay,
 }
 
+/// Locomotion-independent item presentation schedule.
+///
+/// Applications with their own capsule controller can install this without
+/// adding [`PlayerPlugin`].
+pub struct PlayerPresentationPlugin;
+
+impl Plugin for PlayerPresentationPlugin {
+	fn build(&self, app: &mut App) {
+		app.configure_sets(
+			Update,
+			(
+				PlayerPoseSystems::Item.after(CharacterMotionSystems::Elevation),
+				PlayerPoseSystems::Overlay.after(PlayerPoseSystems::Item),
+			),
+		);
+	}
+}
+
 pub struct PlayerPlugin;
 
 impl Plugin for PlayerPlugin {
 	fn build(&self, app: &mut App) {
+		if !app.is_plugin_added::<PlayerPresentationPlugin>() {
+			app.add_plugins(PlayerPresentationPlugin);
+		}
 		app.init_resource::<CharacterLocomotion>()
 			.configure_sets(
 				Update,
 				(
 					PlayerSystems::Intent.after(CharacterControlSystems),
 					PlayerSystems::Body.after(PlayerSystems::Intent).in_set(PlayerControlSystems),
-					PlayerPoseSystems::Item.after(PlayerSystems::Body),
 					PlayerSystems::Locomotion
-						.after(PlayerPoseSystems::Item)
+						.after(PlayerSystems::Body)
 						.before(CharacterMotionSystems::Anim),
-					PlayerPoseSystems::Overlay.after(CharacterMotionSystems::Anim),
 				),
 			)
 			.add_systems(Update, intent::apply_move_intents.in_set(PlayerSystems::Intent))
@@ -79,5 +98,42 @@ impl Plugin for PlayerPlugin {
 				(locomotion::face_wish_yaw, drive_player_locomotion)
 					.in_set(PlayerSystems::Locomotion),
 			);
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[derive(Resource, Default)]
+	struct PresentationOrder(Vec<&'static str>);
+
+	fn note_elevation(mut order: ResMut<PresentationOrder>) {
+		order.0.push("elevation");
+	}
+
+	fn note_item(mut order: ResMut<PresentationOrder>) {
+		order.0.push("item");
+	}
+
+	fn note_overlay(mut order: ResMut<PresentationOrder>) {
+		order.0.push("overlay");
+	}
+
+	#[test]
+	fn presentation_runs_after_elevation_in_order() {
+		let mut app = App::new();
+		app.init_resource::<PresentationOrder>()
+			.add_plugins(PlayerPresentationPlugin)
+			.add_systems(
+				Update,
+				(
+					note_elevation.in_set(CharacterMotionSystems::Elevation),
+					note_item.in_set(PlayerPoseSystems::Item),
+					note_overlay.in_set(PlayerPoseSystems::Overlay),
+				),
+			);
+		app.update();
+		assert_eq!(app.world().resource::<PresentationOrder>().0, ["elevation", "item", "overlay"]);
 	}
 }

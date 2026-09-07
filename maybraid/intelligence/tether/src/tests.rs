@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use movement_intelligence::MovementObjective;
 
 use crate::memory::TetherMemory;
-use crate::objective::{StalkRadii, TetherObjective, ring_point};
+use crate::objective::{ring_point, StalkRadii, TetherObjective};
 use crate::user::{TetherAction, TetherIntelligenceUser};
 
 fn subject() -> Entity {

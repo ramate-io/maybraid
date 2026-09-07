@@ -6,7 +6,7 @@ mod look;
 use bevy::prelude::*;
 use bevy::window::WindowFocused;
 use maybraid_character_controller::CharacterControlSystems;
-use player::{PlayerPoseSystems, PlayerSystems};
+use player::{PlayerPlugin, PlayerPoseSystems, PlayerSystems};
 use std::f32::consts::FRAC_PI_2;
 
 pub use follow::{sync_camera_fov, sync_first_person_head_visibility};
@@ -75,7 +75,7 @@ impl Plugin for PlayerCameraPlugin {
 				PlayerCameraSystems::Body
 					.after(PlayerCameraSystems::Look)
 					.before(PlayerPoseSystems::Item),
-				PlayerCameraSystems::Aim.after(PlayerPoseSystems::Item),
+				PlayerCameraSystems::Aim.after(PlayerPoseSystems::Overlay),
 				PlayerCameraSystems::Follow.after(PlayerCameraSystems::Aim),
 				PlayerCameraSystems::Apply.after(PlayerCameraSystems::Follow),
 			),
@@ -99,31 +99,42 @@ impl Plugin for PlayerCameraPlugin {
 				.in_set(PlayerCameraSystems::Apply),
 		)
 		.add_systems(Update, release_modifiers_on_focus_change);
+		if app.is_plugin_added::<PlayerPlugin>() {
+			app.configure_sets(Update, PlayerCameraSystems::Body.before(PlayerSystems::Locomotion));
+		}
 	}
 }
 
-pub fn spawn_follow_camera(commands: &mut Commands) {
+pub fn spawn_follow_camera(commands: &mut Commands) -> Entity {
 	let follow = FollowCamera::default();
 	let yaw = -FRAC_PI_2;
 	let pitch = -0.12;
-	commands.spawn((
-		Camera3d::default(),
-		lod::LodViewer,
-		follow,
-		Transform::from_translation(Vec3::new(
-			-follow.distance,
-			follow.height + follow.look_height,
-			0.0,
+	commands
+		.spawn((
+			Camera3d::default(),
+			lod::LodViewer,
+			follow,
+			Transform::from_translation(Vec3::new(
+				-follow.distance,
+				follow.height + follow.look_height,
+				0.0,
+			))
+			.looking_at(Vec3::Y * follow.look_height, Vec3::Y),
+			Projection::Perspective(PerspectiveProjection {
+				fov: follow.third_person_fov,
+				near: follow.near,
+				far: follow.far,
+				..default()
+			}),
+			CameraController {
+				yaw,
+				pitch,
+				pov: CameraPov::ThirdPerson,
+				focus: 0.0,
+				focus_blend: 0.0,
+			},
 		))
-		.looking_at(Vec3::Y * follow.look_height, Vec3::Y),
-		Projection::Perspective(PerspectiveProjection {
-			fov: follow.third_person_fov,
-			near: follow.near,
-			far: follow.far,
-			..default()
-		}),
-		CameraController { yaw, pitch, pov: CameraPov::ThirdPerson, focus: 0.0, focus_blend: 0.0 },
-	));
+		.id()
 }
 
 fn release_modifiers_on_focus_change(
@@ -144,5 +155,34 @@ fn release_modifiers_on_focus_change(
 		KeyCode::AltRight,
 	] {
 		keyboard.release(key);
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use crozon_characters::CharacterMotionSystems;
+	use maybraid_character_controller::CharacterIntent;
+
+	#[test]
+	fn presentation_only_camera_allows_world_body_after_animation() {
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins)
+			.init_resource::<ButtonInput<KeyCode>>()
+			.init_resource::<ButtonInput<MouseButton>>()
+			.add_message::<CharacterIntent>()
+			.add_message::<WindowFocused>()
+			.add_plugins(player::PlayerPresentationPlugin)
+			.add_plugins(PlayerCameraPlugin)
+			.configure_sets(
+				Update,
+				(
+					CharacterMotionSystems::Elevation.after(CharacterMotionSystems::Anim),
+					PlayerCameraSystems::Body
+						.after(CharacterMotionSystems::Anim)
+						.before(CharacterMotionSystems::Elevation),
+				),
+			);
+		app.update();
 	}
 }

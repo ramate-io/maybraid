@@ -78,6 +78,7 @@ members = [
   "maybraid/world/playground",
   "maybraid/game",
   "maybraid/input",
+  "maybraid/combat-hud",
   "maybraid/player",
   "maybraid/player-camera",
   "maybraid/mobs/characters",
@@ -302,6 +303,7 @@ maybraid-sky = { path = "maybraid/sky/lib" }
 maybraid-world = { path = "maybraid/world/lib" }
 maybraid = { path = "maybraid/game" }
 maybraid-input = { path = "maybraid/input" }
+combat-hud = { path = "maybraid/combat-hud" }
 player = { path = "maybraid/player" }
 player-camera = { path = "maybraid/player-camera" }
 movement-realization = { path = "maybraid/movement-realization" }

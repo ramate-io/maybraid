@@ -9,7 +9,10 @@ use bevy::prelude::*;
 use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
 use maybraid_input::MenuNavPad;
 use maybraid_menu_controller::MenuControllerPlugin;
-use maybraid_world::{PlayerPhysicsEnabled, WorldGameplayEnabled, WorldPlugin, WorldSurfaceReady};
+use maybraid_world::{
+	PlayerPhysicsEnabled, TerrainStreamingEnabled, WorldGameplayEnabled, WorldPlugin,
+	WorldSceneryVisible, WorldSurfaceReady,
+};
 use menu_components::{consume_screen_back, ActiveOverlayKey, ScreenBackPressed, MENU_CLEAR};
 use menu_playground::{
 	CharacterPreviewPlugin, CharacterScreen, CharacterScreenPlugin, CharacterSessionPlugin,
@@ -22,9 +25,9 @@ use menu_screens::{
 use std::path::{Path, PathBuf};
 
 use crate::shell::{
-	apply_shell_look, attach_preview_camera, detach_preview_camera, enter_characters, enter_home,
-	enter_loading_world, enter_world, enter_world_menu, exit_world_menu,
-	stamp_preview_render_layers,
+	apply_shell_look, attach_preview_camera, despawn_loading_backdrop, detach_preview_camera,
+	enter_characters, enter_home, enter_loading_world, enter_world, enter_world_menu,
+	exit_world_menu, spawn_loading_backdrop, stamp_preview_render_layers,
 };
 
 /// Crate-local asset directory (`maybraid/game/assets`).
@@ -39,6 +42,8 @@ impl Plugin for GamePlugin {
 		app.add_plugins(WorldPlugin::game())
 			.insert_resource(WorldGameplayEnabled(false))
 			.insert_resource(PlayerPhysicsEnabled(false))
+			.insert_resource(TerrainStreamingEnabled(false))
+			.insert_resource(WorldSceneryVisible(false))
 			.insert_resource(ClearColor(MENU_CLEAR))
 			.init_state::<GameFlow>()
 			.add_sub_state::<WorldPause>()
@@ -61,12 +66,20 @@ impl Plugin for GamePlugin {
 				(enter_characters, apply_shell_look, attach_preview_camera),
 			)
 			.add_systems(OnExit(GameFlow::Characters), detach_preview_camera)
-			.add_systems(OnEnter(GameFlow::LoadingWorld), (enter_loading_world, apply_shell_look))
+			.add_systems(
+				OnEnter(GameFlow::LoadingWorld),
+				(
+					enter_loading_world,
+					spawn_loading_backdrop,
+					apply_shell_look,
+					detach_preview_camera,
+				),
+			)
+			.add_systems(OnExit(GameFlow::LoadingWorld), despawn_loading_backdrop)
 			.add_systems(
 				OnEnter(GameFlow::World),
-				(enter_world, apply_shell_look, detach_preview_camera, enable_player_physics),
+				(enter_world, apply_shell_look, detach_preview_camera),
 			)
-			.add_systems(OnExit(GameFlow::World), disable_player_physics)
 			.add_systems(OnEnter(WorldPause::Playing), apply_shell_look)
 			.add_systems(OnEnter(WorldPause::Menu), (enter_world_menu, apply_shell_look))
 			.add_systems(OnExit(WorldPause::Menu), exit_world_menu)
@@ -85,14 +98,6 @@ impl Plugin for GamePlugin {
 				),
 			);
 	}
-}
-
-fn enable_player_physics(mut physics: ResMut<PlayerPhysicsEnabled>) {
-	physics.0 = true;
-}
-
-fn disable_player_physics(mut physics: ResMut<PlayerPhysicsEnabled>) {
-	physics.0 = false;
 }
 
 fn finish_world_loading(ready: Res<WorldSurfaceReady>, mut flow: ResMut<NextState<GameFlow>>) {
@@ -156,7 +161,7 @@ fn character_back(
 	spin: Query<(), With<SpinRevealScreen>>,
 	gallery: Query<(), With<GalleryScreen>>,
 ) {
-	if !consume_screen_back(&nav, overlay.0.is_some(), &mut backs) {
+	if !consume_screen_back(nav.as_ref(), overlay.0.is_some(), &mut backs) {
 		return;
 	}
 	if !character.is_empty() {

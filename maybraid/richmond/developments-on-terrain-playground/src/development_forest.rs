@@ -4,9 +4,9 @@ use std::collections::HashSet;
 
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
+use chico_forests::ForestPresenterState;
 use chico_forests::{ChicoGrove, ForestIndex};
 use chico_groves::{GroveHeightModulation, ModulatedGroveSample};
-use chico_forests::ForestPresenterState;
 use chico_vegetation_on_terrain_playground::{
 	DurhamGroveSample, OwnedDurhamTerrain, WorldBaseTerrain,
 };

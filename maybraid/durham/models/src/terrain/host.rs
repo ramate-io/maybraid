@@ -53,6 +53,23 @@ pub struct WorldBaseTerrain(pub BaseTerrainNoise);
 #[derive(Resource)]
 pub struct TerrainPresentationDirty(pub bool);
 
+/// Whether terrain fill and dependent vegetation streams may advance.
+///
+/// Playgrounds default this on. The game shell keeps it off on Home / Characters
+/// so the menu does not eagerly build the world.
+#[derive(Resource, Clone, Copy, Debug)]
+pub struct TerrainStreamingEnabled(pub bool);
+
+impl Default for TerrainStreamingEnabled {
+	fn default() -> Self {
+		Self(true)
+	}
+}
+
+pub fn terrain_streaming_enabled(enabled: Res<TerrainStreamingEnabled>) -> bool {
+	enabled.0
+}
+
 /// When true, fill meshes have generated and present is still owed.
 #[derive(Resource, Default)]
 pub struct TerrainPresentPending(pub bool);
@@ -171,8 +188,15 @@ impl Plugin for TerrainPlugin<Durham> {
 		.insert_resource(TerrainFillParams { coverage, terrain_radius })
 		.insert_resource(TerrainPresentationDirty(true))
 		.init_resource::<TerrainPresentPending>()
+		.init_resource::<TerrainStreamingEnabled>()
 		.add_systems(Startup, setup_presentation_assets)
-		.add_systems(Update, (generate_cells, present_cells.after(generate_cells)));
+		.add_systems(
+			Update,
+			(
+				generate_cells.run_if(terrain_streaming_enabled),
+				present_cells.after(generate_cells).run_if(terrain_streaming_enabled),
+			),
+		);
 	}
 }
 

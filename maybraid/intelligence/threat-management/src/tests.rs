@@ -21,14 +21,16 @@ fn ffa_affiliations(id: ThreatId) -> Affiliations {
 }
 
 fn known_threat(entity: Entity, position: Vec3) -> ThreatKnowledge {
+	known_threat_from(entity, position, ThreatSource::LOCAL_SCAN)
+}
+
+fn known_threat_from(entity: Entity, position: Vec3, source: ThreatSource) -> ThreatKnowledge {
 	let id = ThreatId(entity.to_bits());
 	let record =
 		ThreatRecord { id, entity, position, salience: 1.0, affiliations: ffa_affiliations(id) };
 	let recipient = ffa_affiliations(ThreatId(1));
 	let mut knowledge = ThreatKnowledge::default();
-	assert!(knowledge
-		.observe(&record, &recipient, ThreatSource::LOCAL_SCAN, 1.0, 0.0, 0.2)
-		.is_some());
+	assert!(knowledge.observe(&record, &recipient, source, 1.0, 0.0, 0.2).is_some());
 	knowledge
 }
 
@@ -152,6 +154,56 @@ fn select_grants_enemyship_and_tactic_markers() -> anyhow::Result<()> {
 				.is_some_and(|assailant| assailant.has_source(AssailantSource::ENEMYSHIP))
 	}));
 	Ok(())
+}
+
+#[test]
+fn received_damage_forces_an_available_reaction() {
+	let mut app = App::new();
+	app.add_plugins((MinimalPlugins, ThreatManagementPlugin));
+	let attacker = app.world_mut().spawn_empty().id();
+	let management = ThreatManagementIntelligence {
+		ignore: ThreatManagementElement::new(10.0, 0.0),
+		evade: ThreatManagementElement::new(0.0, 0.1),
+		..default()
+	};
+	let victim = app
+		.world_mut()
+		.spawn((
+			GlobalTransform::default(),
+			known_threat_from(attacker, Vec3::X * 100.0, ThreatSource::RECEIVED_DAMAGE),
+			management,
+			EvasionIntelligenceUser::default(),
+		))
+		.id();
+	let combat_management = ThreatManagementIntelligence {
+		ignore: ThreatManagementElement::new(10.0, 0.0),
+		combat: ThreatManagementElement::new(0.0, 0.1),
+		..default()
+	};
+	let combatant = app
+		.world_mut()
+		.spawn((
+			GlobalTransform::default(),
+			known_threat_from(attacker, Vec3::X * 100.0, ThreatSource::RECEIVED_DAMAGE),
+			combat_management,
+			CombatTargeting::default(),
+		))
+		.id();
+
+	app.update();
+
+	assert_eq!(
+		app.world()
+			.get::<ThreatManagementIntelligence>(victim)
+			.map(|management| management.tactic),
+		Some(ThreatTactic::Evade)
+	);
+	assert_eq!(
+		app.world()
+			.get::<ThreatManagementIntelligence>(combatant)
+			.map(|management| management.tactic),
+		Some(ThreatTactic::Combat)
+	);
 }
 
 #[test]
