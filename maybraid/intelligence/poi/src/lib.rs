@@ -7,9 +7,11 @@
 
 mod discovery;
 mod goal;
+mod hash;
 mod kind;
 mod knowledge;
 mod marker;
+mod place;
 mod plugin;
 mod policy;
 mod registry;
@@ -21,9 +23,11 @@ pub use goal::{
 	begin_poi_goal, complete_poi_goals, drive_poi_goals, refresh_poi_goals, PoiGoal,
 	PoiGoalCompleted, PoiGoalState, PoiGoalStatus,
 };
+pub use hash::mix as mix_seed;
 pub use kind::{PoiId, PoiKind};
 pub use knowledge::{KnownPoi, PoiIntelligenceUser, PoiKnowledge, PoiObservation};
 pub use marker::{GlobalPoi, LocalPoi, Poi, MAX_POI_ARRIVAL_RADIUS};
+pub use place::{place_nearby, NearbyFallback, NearbyPlace, DEFAULT_NEARBY_RADIUS};
 pub use plugin::{PoiIntelligencePlugin, PoiSystems};
 pub use policy::{PoiInterest, PoiInterests, PoiLearningPolicy, PoiVisitPolicy};
 pub use registry::{PoiRecord, PoiRegistry};

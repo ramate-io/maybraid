@@ -453,14 +453,19 @@ fn apply_mode_commands(
 	}
 
 	for entity in &character {
+		// `/mode character` is a mode switch. Reset to the layout-center spawn only when
+		// entering from free camera. Visual attach must not reuse this as a teleport.
+		let reset_to_layout_spawn = *mode != PlaygroundMode::Character;
 		*mode = PlaygroundMode::Character;
 		ui::write_status(&mut status, "mode character — WASD move, mouse look, Space jump");
-		if let Ok((player, mut transform, mut velocity)) = players.single_mut() {
-			let center = layout.region_center_xz();
-			if let Some(elevation) = store.composed_height_at(&layout, center.x, center.z) {
-				respawn_player_on_layout(&layout, elevation, &mut transform, &mut velocity);
+		if reset_to_layout_spawn {
+			if let Ok((player, mut transform, mut velocity)) = players.single_mut() {
+				let center = layout.region_center_xz();
+				if let Some(elevation) = store.composed_height_at(&layout, center.x, center.z) {
+					respawn_player_on_layout(&layout, elevation, &mut transform, &mut velocity);
+				}
+				commands.entity(player).insert(AwaitingTerrainSurface);
 			}
-			commands.entity(player).insert(AwaitingTerrainSurface);
 		}
 		commands.entity(entity).despawn();
 	}
@@ -514,11 +519,126 @@ fn sync_pad_gameplay(
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use avian3d::prelude::GravityScale;
+	use bevy::ecs::system::RunSystemOnce;
+	use durham_terrain_models::{BaseTerrainNoise, TerrainConfig};
+	use player::AwaitingTerrainSurface;
 
 	#[test]
 	fn world_defaults_keep_grove_fill_at_one_kilometre() {
 		let spec = PlaygroundConfig::world_defaults().forest.expect("forest on");
 		assert_eq!(spec.stream_radius, 1);
 		assert_eq!(stream_radii_m(1), (1_000.0, 3_000.0));
+	}
+
+	#[test]
+	fn appearance_attach_in_character_mode_does_not_await_layout_center() -> anyhow::Result<()> {
+		let pose = Vec3::new(1_000.0, 14.0, -80.0);
+		let (mut world, player) = mode_world(PlaygroundMode::Character, pose);
+
+		world
+			.run_system_once(emit_attach_mode_request)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		world
+			.run_system_once(apply_mode_commands)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		world
+			.run_system_once(snap_player_to_composed_surface)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+
+		assert_eq!(world.get::<Transform>(player).map(|transform| transform.translation), Some(pose));
+		assert!(world.get::<AwaitingTerrainSurface>(player).is_none());
+		assert_eq!(world.query::<&RequestModeCharacter>().iter(&world).count(), 0);
+		Ok(())
+	}
+
+	#[test]
+	fn replacement_a_kilometre_from_center_stays_after_attach_update() {
+		let pose = Vec3::new(1_000.0, 16.0, 0.0);
+		let mut app = App::new();
+		app.insert_resource(PlaygroundMode::Character)
+			.insert_resource(TerrainCellLayout::default())
+			.insert_resource(TerrainEntryStore::default())
+			.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(
+				&TerrainConfig::new(42),
+			)))
+			.add_systems(
+				Update,
+				(
+					emit_attach_mode_request,
+					apply_mode_commands.after(emit_attach_mode_request),
+					snap_player_to_composed_surface.after(apply_mode_commands),
+				),
+			);
+		let player = app
+			.world_mut()
+			.spawn((
+				Player,
+				Transform::from_translation(pose),
+				LinearVelocity(Vec3::ZERO),
+				GravityScale(0.0),
+			))
+			.id();
+		app.update();
+
+		assert_eq!(
+			app.world().get::<Transform>(player).map(|transform| transform.translation),
+			Some(pose)
+		);
+		assert!(app.world().get::<AwaitingTerrainSurface>(player).is_none());
+	}
+
+	#[test]
+	fn mode_character_from_free_camera_resets_to_the_layout_spawn() -> anyhow::Result<()> {
+		let pose = Vec3::new(640.0, 9.0, 120.0);
+		let (mut world, player) = mode_world(PlaygroundMode::Free, pose);
+		world.spawn(RequestModeCharacter);
+
+		world
+			.run_system_once(apply_mode_commands)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+
+		assert_eq!(*world.resource::<PlaygroundMode>(), PlaygroundMode::Character);
+		assert!(world.get::<AwaitingTerrainSurface>(player).is_some());
+		assert_eq!(world.query::<&RequestModeCharacter>().iter(&world).count(), 0);
+		Ok(())
+	}
+
+	#[test]
+	fn mode_character_while_already_placed_leaves_the_body() -> anyhow::Result<()> {
+		let pose = Vec3::new(1_200.0, 11.0, 40.0);
+		let (mut world, player) = mode_world(PlaygroundMode::Character, pose);
+		world.spawn(RequestModeCharacter);
+
+		world
+			.run_system_once(apply_mode_commands)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+
+		assert_eq!(world.get::<Transform>(player).map(|transform| transform.translation), Some(pose));
+		assert!(world.get::<AwaitingTerrainSurface>(player).is_none());
+		Ok(())
+	}
+
+	fn emit_attach_mode_request(mut commands: Commands, mode: Res<PlaygroundMode>) {
+		character::request_character_mode_if_needed(&mut commands, *mode);
+	}
+
+	fn mode_world(mode: PlaygroundMode, translation: Vec3) -> (World, Entity) {
+		let mut world = World::new();
+		world.insert_resource(mode);
+		world.insert_resource(TerrainCellLayout::default());
+		world.insert_resource(TerrainEntryStore::default());
+		world.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(&TerrainConfig::new(
+			42,
+		))));
+		let player = world
+			.spawn((
+				Player,
+				Transform::from_translation(translation),
+				LinearVelocity(Vec3::ZERO),
+				GravityScale(0.0),
+			))
+			.id();
+		(world, player)
 	}
 }

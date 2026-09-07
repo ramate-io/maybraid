@@ -17,7 +17,10 @@ use firearm_user::FirearmUser;
 use firearms::WeaponTrigger;
 use mob_characters::{LOCAL_POI, URBAN_POI, VEGETATION_POI};
 use player::{CameraFollow, Player as MaybraidPlayer, PlayerUse};
-use poi_intelligence::{PoiId, PoiInterest, PoiInterests, PoiRecord, PoiRegistry, PoiSystems};
+use poi_intelligence::{
+	mix_seed, NearbyFallback, PoiId, PoiInterest, PoiInterests, PoiRegistry, PoiSystems,
+	DEFAULT_NEARBY_RADIUS,
+};
 use richmond_development_models::DevelopmentEntryStore;
 use spotting_intelligence::SpotSubject;
 use threat_intelligence::{Affiliations, ThreatSubject};
@@ -25,19 +28,23 @@ use threat_intelligence::{Affiliations, ThreatSubject};
 use crate::weapon::WorldPlayerAppearanceRequested;
 use crate::{WorldGameplayEnabled, WorldPlayerLoadout};
 
-const PLAYER_RESPAWN_FALLBACK_MIN_RADIUS: f32 = 8.0;
-const PLAYER_RESPAWN_FALLBACK_MAX_RADIUS: f32 = 16.0;
-
-/// World-player downed duration and nearby POI search extent.
-#[derive(Resource, Clone, Copy, Debug, PartialEq)]
+/// World-player downed duration, nearby POI scan, and replacement interests.
+#[derive(Resource, Clone, Debug, PartialEq)]
 pub struct WorldPlayerRespawnConfig {
 	pub delay_secs: f32,
 	pub poi_radius: f32,
+	pub fallback: NearbyFallback,
+	pub interests: PoiInterests,
 }
 
 impl Default for WorldPlayerRespawnConfig {
 	fn default() -> Self {
-		Self { delay_secs: 4.0, poi_radius: 160.0 }
+		Self {
+			delay_secs: 4.0,
+			poi_radius: DEFAULT_NEARBY_RADIUS,
+			fallback: NearbyFallback::new(8.0, 16.0),
+			interests: default_player_respawn_interests(),
+		}
 	}
 }
 
@@ -213,18 +220,21 @@ fn respawn_world_player(
 	let death_at = pending.death_at;
 	let seed = pending.seed;
 
-	let interests = player_respawn_interests();
-	let poi = registry.choose_nearby(death_at, config.poi_radius, &interests, state.last_poi, seed);
-	let mut surface_point = poi.map_or_else(
-		|| fallback_player_surface(death_at, seed),
-		|poi| player_surface_at_poi(poi, seed),
+	let placed = registry.place_nearby(
+		death_at,
+		config.poi_radius,
+		&config.interests,
+		state.last_poi,
+		seed,
+		config.fallback,
 	);
+	let mut surface_point = placed.position;
 	let terrain_y = surface.surface_height(surface_point.xz());
 	if terrain_y.is_finite() {
 		surface_point.y = terrain_y;
 	}
 	let position = player_position_above_surface(surface_point);
-	state.last_poi = poi.map(|poi| poi.id);
+	state.last_poi = placed.poi;
 	state.pending = None;
 
 	let player = spawn_player_body(
@@ -254,7 +264,7 @@ fn death_glaze_color(alpha: f32) -> Color {
 	Color::srgba(0.2, 0.005, 0.025, alpha)
 }
 
-fn player_respawn_interests() -> PoiInterests {
+fn default_player_respawn_interests() -> PoiInterests {
 	PoiInterests::new([
 		PoiInterest::new(LOCAL_POI, 1.25),
 		PoiInterest::new(URBAN_POI, 1.5),
@@ -262,40 +272,13 @@ fn player_respawn_interests() -> PoiInterests {
 	])
 }
 
-fn player_surface_at_poi(poi: PoiRecord, seed: u64) -> Vec3 {
-	let radius = poi.arrival_radius.clamp(2.0, 12.0);
-	let distance = unit_f32(mixed(seed ^ 0x736f_6d65_706c_6179)).sqrt() * radius;
-	let angle = unit_f32(mixed(seed ^ 0x6572_5f72_6573_7061)) * std::f32::consts::TAU;
-	poi.position + Vec3::new(angle.cos() * distance, 0.0, angle.sin() * distance)
-}
-
-fn fallback_player_surface(death_at: Vec3, seed: u64) -> Vec3 {
-	let t = unit_f32(seed);
-	let distance = PLAYER_RESPAWN_FALLBACK_MIN_RADIUS
-		+ t * (PLAYER_RESPAWN_FALLBACK_MAX_RADIUS - PLAYER_RESPAWN_FALLBACK_MIN_RADIUS);
-	let angle = unit_f32(mixed(seed ^ 0x776f_726c_6470_6c79)) * std::f32::consts::TAU;
-	death_at + Vec3::new(angle.cos() * distance, 0.0, angle.sin() * distance)
-}
-
 fn respawn_seed(generation: u64, death_at: Vec3) -> u64 {
-	mixed(
+	mix_seed(
 		generation
 			^ u64::from(death_at.x.to_bits()).rotate_left(11)
 			^ u64::from(death_at.y.to_bits()).rotate_left(29)
 			^ u64::from(death_at.z.to_bits()).rotate_left(47),
 	)
-}
-
-fn mixed(mut value: u64) -> u64 {
-	value ^= value >> 30;
-	value = value.wrapping_mul(0xbf58_476d_1ce4_e5b9);
-	value ^= value >> 27;
-	value = value.wrapping_mul(0x94d0_49bb_1331_11eb);
-	value ^ (value >> 31)
-}
-
-fn unit_f32(value: u64) -> f32 {
-	((value >> 40) as f32) / ((1_u32 << 24) as f32)
 }
 
 #[cfg(test)]
@@ -306,16 +289,25 @@ mod tests {
 	#[test]
 	fn fallback_respawn_moves_away_from_the_death_point() {
 		let death = Vec3::new(10.0, 4.0, -5.0);
-		let respawn = fallback_player_surface(death, 42);
-		let distance = (respawn - death).xz().length();
-		assert!((PLAYER_RESPAWN_FALLBACK_MIN_RADIUS..=PLAYER_RESPAWN_FALLBACK_MAX_RADIUS)
-			.contains(&distance));
-		assert_eq!(respawn.y, death.y);
+		let config = WorldPlayerRespawnConfig::default();
+		let placed = poi_intelligence::place_nearby(
+			None,
+			death,
+			config.poi_radius,
+			None,
+			None,
+			42,
+			config.fallback,
+		);
+		let distance = (placed.position - death).xz().length();
+		assert!((config.fallback.min_radius..=config.fallback.max_radius).contains(&distance));
+		assert_eq!(placed.position.y, death.y);
+		assert!(placed.poi.is_none());
 	}
 
 	#[test]
 	fn player_respawn_prefers_urban_pois() {
-		let interests = player_respawn_interests();
+		let interests = WorldPlayerRespawnConfig::default().interests;
 		assert_eq!(interests.weight(URBAN_POI), Some(1.5));
 		assert_eq!(interests.weight(LOCAL_POI), Some(1.25));
 		assert!(interests.contains(VEGETATION_POI));
@@ -325,7 +317,8 @@ mod tests {
 	fn default_respawn_waits_four_seconds_and_scans_nearby() {
 		let config = WorldPlayerRespawnConfig::default();
 		assert_eq!(config.delay_secs, 4.0);
-		assert_eq!(config.poi_radius, 160.0);
+		assert_eq!(config.poi_radius, DEFAULT_NEARBY_RADIUS);
+		assert_eq!(config.fallback, NearbyFallback::new(8.0, 16.0));
 	}
 
 	#[test]
