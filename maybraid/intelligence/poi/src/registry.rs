@@ -166,6 +166,55 @@ impl PoiRegistry {
 			.collect()
 	}
 
+	/// Deterministically choose a weighted local/global POI near `center`.
+	///
+	/// Interest, salience, and proximity all contribute. `previous` is excluded
+	/// when another candidate exists so repeated placements circulate.
+	pub fn choose_nearby(
+		&self,
+		center: Vec3,
+		radius: f32,
+		interests: &PoiInterests,
+		previous: Option<PoiId>,
+		seed: u64,
+	) -> Option<PoiRecord> {
+		if interests.is_empty() || !center.is_finite() || !radius.is_finite() {
+			return None;
+		}
+		let radius = radius.clamp(0.0, MAX_LOCAL_QUERY_RADIUS);
+		let mut candidates = self.local_matching(center, radius, interests);
+		for candidate in self.global_matching(interests) {
+			if center.distance(candidate.position) <= radius + candidate.arrival_radius
+				&& !candidates.iter().any(|known| known.id == candidate.id)
+			{
+				candidates.push(candidate);
+			}
+		}
+		candidates.sort_by_key(|candidate| candidate.id);
+		if candidates.len() > 1 {
+			candidates.retain(|candidate| Some(candidate.id) != previous);
+		}
+		let weight = |candidate: PoiRecord| {
+			let interest = interests.weight(candidate.kind).unwrap_or(0.0);
+			let proximity = 1.0 / (1.0 + center.distance(candidate.position) / radius.max(1.0));
+			interest * candidate.salience.max(0.1) * proximity
+		};
+		let total: f32 = candidates.iter().copied().map(weight).sum();
+		if total <= 0.0 {
+			return None;
+		}
+		let mut draw = unit_f32(seed) * total;
+		let mut fallback = None;
+		for candidate in candidates {
+			fallback = Some(candidate);
+			draw -= weight(candidate);
+			if draw <= 0.0 {
+				return Some(candidate);
+			}
+		}
+		fallback
+	}
+
 	pub fn matching_in_xz_tile(
 		&self,
 		tile: IVec2,
@@ -222,4 +271,8 @@ impl PoiRegistry {
 
 fn xz_tile(position: Vec3, tile_size: f32) -> IVec2 {
 	(position.xz() / tile_size).floor().as_ivec2()
+}
+
+fn unit_f32(value: u64) -> f32 {
+	((value >> 40) as f32) / ((1_u32 << 24) as f32)
 }

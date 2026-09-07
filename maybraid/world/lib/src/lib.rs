@@ -14,6 +14,7 @@ mod intelligence;
 mod material_lib;
 mod mobs;
 mod pitch;
+mod player_lifecycle;
 mod poi;
 mod ui;
 mod weapon;
@@ -27,7 +28,9 @@ pub use intelligence::WorldIntelligencePlugin;
 pub use material_lib::{WorldMaterialLib, WorldMaterialRefPlugin};
 pub use mobs::WorldMobsPlugin;
 pub use player_camera::CameraPov;
+pub use player_lifecycle::{WorldPlayerLifecyclePlugin, WorldPlayerRespawnConfig};
 pub use poi::{WorldPoiDiscoveryBudget, WorldPoiPlugin, WorldPoiSystems};
+pub use weapon::WorldPlayerLoadout;
 
 use avian3d::prelude::{CoefficientCombine, Friction, PhysicsPlugins, PhysicsSchedulePlugin};
 use bevy::prelude::*;
@@ -37,6 +40,7 @@ use chico_vegetation_on_terrain_playground::{
 	PlaygroundMode, PlaygroundTimingPlugin, RequestSetCharacter, VegetationOnTerrainPlugin,
 };
 use combat_hud::CombatHudPlugin;
+use crozon_character_ragdoll::{CharacterRagdollPlugin, CharacterRagdollTargets};
 use crozon_characters::{CharacterMotionSystems, DrawTerrainPitchProbes};
 use durham_terrain_models::{Durham, TerrainFrictionConfig, TerrainPlugin};
 use game_commands::command::{GameCommandPlugin, TextEntryFocus};
@@ -47,6 +51,7 @@ use maybraid_input::{VirtualPadConfig, VirtualPadPlugin};
 use maybraid_sky::SkyDomePlugin;
 use player::PlayerPresentationPlugin;
 use player_camera::{PlayerCameraPlugin, PlayerCameraSystems};
+use richmond_building_physics::BuildingWalkColliderPlugin;
 use richmond_developments_on_terrain_playground::{
 	DevelopmentsOnTerrainPlugin, PlaygroundConfig as DevelopmentsPlaygroundConfig,
 };
@@ -125,16 +130,26 @@ impl Plugin for WorldPlugin {
 				register_terrain_pitch: false,
 				own_terrain: false,
 			})
+			.insert_resource(CharacterRagdollTargets {
+				players: true,
+				npcs: false,
+				unmarked: false,
+			})
+			.add_plugins(CharacterRagdollPlugin)
 			// Urbanization stream only — `TerrainPlugin` already owns Durham / TerrainEntryStore.
 			.add_plugins(DevelopmentsOnTerrainPlugin {
 				config: DevelopmentsPlaygroundConfig::world_defaults(),
 				commands: false,
 				own_terrain: false,
 				register_development_forest_lod: true,
-			})
-			.add_plugins(WorldMobsPlugin)
+			});
+		if !app.is_plugin_added::<BuildingWalkColliderPlugin>() {
+			app.add_plugins(BuildingWalkColliderPlugin);
+		}
+		app.add_plugins(WorldMobsPlugin)
 			.add_plugins(WorldIntelligencePlugin)
 			.add_plugins(WorldPoiPlugin)
+			.add_plugins(WorldPlayerLifecyclePlugin)
 			.insert_resource(PadMovementEnabled(false))
 			.insert_resource(CharacterCameraFollowEnabled(false))
 			.init_resource::<WorldGameplayEnabled>()

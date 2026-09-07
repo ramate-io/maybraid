@@ -1,9 +1,14 @@
 //! Cuboids from panel / floor / partition placement, triangle prisms, and stair ramps.
+//!
+//! Spawn queues [`BuildingWalkShapes`] on the host. [`attach_building_walk_colliders`]
+//! then stamps **one** Fixed compound child after [`lod::LodSceneHost`] exists, so
+//! `spawn_scene` / LOD cull are not racing hundreds of RigidBody children.
 
 use avian3d::prelude::{Collider, Friction, RigidBody};
 use bevy::prelude::*;
 use bevy_math::Vec3;
 use lod::gen::LodSceneLevel;
+use lod::LodSceneHost;
 use lod_avian::PhysicsInteractionLayer;
 use richmond_building_components::floors::FloorGeometry;
 use richmond_building_components::panels::{
@@ -16,44 +21,68 @@ use richmond_building_components::{BuildingComponents, FloorNode, PanelNode, Par
 
 use crate::BuildingFrictionConfig;
 
-/// Marks a Fixed collider spawned from building IR (not a LOD Host volume).
+/// Marks the single Fixed compound spawned from building IR (not a LOD Host volume).
 #[derive(Component, Debug, Clone, Copy, Default)]
 pub struct BuildingWalkCollider;
+
+/// Queued High-LOD walk shapes; consumed when the host's LOD scene is live.
+#[derive(Component, Clone, Debug)]
+pub struct BuildingWalkShapes {
+	pub shapes: Vec<(Vec3, Quat, Collider)>,
+	pub friction: Friction,
+}
+
+#[derive(Component, Debug, Clone, Copy, Default)]
+pub(crate) struct BuildingWalkColliderAttached;
 
 /// Panel GLBs: \(X \in [0, 1]\), \(Y \in [-0.2, 0.2]\), \(Z \in [-1, 0]\) (eave at \(Z = 0\)).
 const KIT_MIN: Vec3 = PANEL_KIT_MIN;
 const KIT_MAX: Vec3 = PANEL_KIT_MAX;
 
-/// Stamp walk colliders as children of `parent` from High-LOD domain nodes.
+/// Queue walk colliders on `parent` from High-LOD domain nodes.
 pub fn spawn_building_walk_colliders(
 	commands: &mut Commands,
 	parent: Entity,
 	building: &impl BuildingComponents,
 	friction: Friction,
 ) {
-	let level = LodSceneLevel::High;
-	for node in building.panel_nodes_for_level(level).flatten() {
-		if let Some(hull) = panel_collider(&node) {
-			spawn_hull(commands, parent, hull.translation, hull.rotation, hull.points, friction);
-		}
+	let shapes = walk_shapes(building);
+	if shapes.is_empty() {
+		return;
 	}
-	for node in building.floor_nodes_for_level(level).flatten() {
-		if let Some(pose) = floor_cuboid(&node) {
-			spawn_cuboid(commands, parent, pose, friction);
+	commands.entity(parent).insert(BuildingWalkShapes { shapes, friction });
+}
+
+/// Stamp one compound child once [`LodSceneHost`] is on the parent.
+pub(crate) fn attach_building_walk_colliders(
+	mut commands: Commands,
+	pending: Query<
+		(Entity, &BuildingWalkShapes),
+		(With<LodSceneHost>, Without<BuildingWalkColliderAttached>),
+	>,
+) {
+	for (entity, spec) in &pending {
+		let Ok(mut host) = commands.get_entity(entity) else {
+			continue;
+		};
+		let shapes = spec.shapes.clone();
+		let friction = spec.friction;
+		host.insert(BuildingWalkColliderAttached);
+		host.remove::<BuildingWalkShapes>();
+		if shapes.is_empty() {
+			continue;
 		}
-		for (translation, rotation, points) in node.triangle_walk_hulls() {
-			spawn_hull(commands, parent, translation, rotation, points, friction);
-		}
-	}
-	for node in building.partition_nodes_for_level(level).flatten() {
-		if let Some(pose) = partition_cuboid(&node) {
-			spawn_cuboid(commands, parent, pose, friction);
-		}
-	}
-	for node in building.stair_nodes_for_level(level).flatten() {
-		for (translation, rotation, size) in node.walk_ramps() {
-			spawn_cuboid(commands, parent, CuboidPose { translation, rotation, size }, friction);
-		}
+		commands.spawn((
+			Name::new("building-walk-collider"),
+			BuildingWalkCollider,
+			ChildOf(entity),
+			Transform::IDENTITY,
+			Visibility::Hidden,
+			RigidBody::Static,
+			Collider::compound(shapes),
+			PhysicsInteractionLayer::fixed_layers(),
+			friction,
+		));
 	}
 }
 
@@ -81,69 +110,65 @@ struct WalkHull {
 	points: Vec<Vec3>,
 }
 
-fn spawn_cuboid(commands: &mut Commands, parent: Entity, pose: CuboidPose, friction: Friction) {
-	let size = pose.size.max(Vec3::splat(0.05));
-	spawn_fixed(
-		commands,
-		parent,
-		pose.translation,
-		pose.rotation,
-		Collider::cuboid(size.x, size.y, size.z),
-		friction,
-	);
+fn walk_shapes(building: &impl BuildingComponents) -> Vec<(Vec3, Quat, Collider)> {
+	let level = LodSceneLevel::High;
+	let mut shapes = Vec::new();
+	for node in building.panel_nodes_for_level(level).flatten() {
+		if let Some(hull) = panel_collider(&node) {
+			if let Some(shape) = hull_shape(hull) {
+				shapes.push(shape);
+			}
+		}
+	}
+	for node in building.floor_nodes_for_level(level).flatten() {
+		if let Some(pose) = floor_cuboid(&node) {
+			shapes.push(cuboid_shape(pose));
+		}
+		for (translation, rotation, points) in node.triangle_walk_hulls() {
+			if let Some(shape) = hull_shape(WalkHull { translation, rotation, points }) {
+				shapes.push(shape);
+			}
+		}
+	}
+	for node in building.partition_nodes_for_level(level).flatten() {
+		if let Some(pose) = partition_cuboid(&node) {
+			shapes.push(cuboid_shape(pose));
+		}
+	}
+	for node in building.stair_nodes_for_level(level).flatten() {
+		for (translation, rotation, size) in node.walk_ramps() {
+			shapes.push(cuboid_shape(CuboidPose { translation, rotation, size }));
+		}
+	}
+	shapes
 }
 
-fn spawn_hull(
-	commands: &mut Commands,
-	parent: Entity,
-	translation: Vec3,
-	rotation: Quat,
-	points: Vec<Vec3>,
-	friction: Friction,
-) {
-	if let Some(collider) = Collider::convex_hull(points.clone()) {
-		spawn_fixed(commands, parent, translation, rotation, collider, friction);
-		return;
+fn cuboid_shape(pose: CuboidPose) -> (Vec3, Quat, Collider) {
+	let size = pose.size.max(Vec3::splat(0.05));
+	(pose.translation, pose.rotation, Collider::cuboid(size.x, size.y, size.z))
+}
+
+fn hull_shape(hull: WalkHull) -> Option<(Vec3, Quat, Collider)> {
+	if let Some(collider) = Collider::convex_hull(hull.points.clone()) {
+		return Some((hull.translation, hull.rotation, collider));
 	}
 	// Thin / large kits can fail convex hull; keep an AABB so floors still collide.
 	let mut min = Vec3::splat(f32::MAX);
 	let mut max = Vec3::splat(f32::MIN);
-	for p in &points {
+	for p in &hull.points {
 		min = min.min(*p);
 		max = max.max(*p);
 	}
 	if !min.is_finite() || !max.is_finite() {
-		return;
+		return None;
 	}
 	let size = (max - min).max(Vec3::splat(0.05));
 	let center = (min + max) * 0.5;
-	spawn_cuboid(
-		commands,
-		parent,
-		CuboidPose { translation: translation + rotation * center, rotation, size },
-		friction,
-	);
-}
-
-fn spawn_fixed(
-	commands: &mut Commands,
-	parent: Entity,
-	translation: Vec3,
-	rotation: Quat,
-	collider: Collider,
-	friction: Friction,
-) {
-	commands.spawn((
-		Name::new("building-walk-collider"),
-		BuildingWalkCollider,
-		ChildOf(parent),
-		Transform::from_translation(translation).with_rotation(rotation),
-		Visibility::Hidden,
-		RigidBody::Static,
-		collider,
-		PhysicsInteractionLayer::fixed_layers(),
-		friction,
-	));
+	Some(cuboid_shape(CuboidPose {
+		translation: hull.translation + hull.rotation * center,
+		rotation: hull.rotation,
+		size,
+	}))
 }
 
 fn oriented_kit_cuboid(placement: Placement, kit_min: Vec3, kit_max: Vec3) -> CuboidPose {
@@ -261,5 +286,26 @@ mod tests {
 		assert!(hull.points.iter().any(|p| (Vec2::new(p.x, p.z) - tri.c).length() < 1e-4));
 		assert!(Collider::convex_hull(hull.points).is_some());
 		Ok(())
+	}
+
+	#[test]
+	fn attach_spawns_one_compound_after_lod_host_exists() {
+		use crate::BUILDING_FRICTION;
+		let mut app = App::new();
+		app.add_systems(Update, attach_building_walk_colliders);
+		let host = app
+			.world_mut()
+			.spawn((
+				LodSceneHost,
+				BuildingWalkShapes {
+					shapes: vec![(Vec3::ZERO, Quat::IDENTITY, Collider::cuboid(1.0, 1.0, 1.0))],
+					friction: BUILDING_FRICTION,
+				},
+			))
+			.id();
+		app.update();
+		let world = app.world_mut();
+		assert_eq!(world.query::<&BuildingWalkCollider>().iter(world).count(), 1);
+		assert!(world.get::<BuildingWalkShapes>(host).is_none());
 	}
 }

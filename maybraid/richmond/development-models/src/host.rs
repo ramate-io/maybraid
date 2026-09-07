@@ -11,6 +11,7 @@ use lod::lod_ref::LodRef;
 use richmond_building_components::{
 	building_bounds, spawn_building_components, BuildingComponents,
 };
+use richmond_building_physics::{spawn_building_walk_colliders, BUILDING_FRICTION};
 use richmond_buildings::wizards_tower::WizardsTower;
 use richmond_buildings::{
 	ConnectingStairwell, MixedUseLesHallesStorey, PitchedRoof, RectangularPitchedRoofComplex,
@@ -280,6 +281,7 @@ fn spawn_wizards_tower(
 		))
 		.id();
 	commands.entity(entity).insert(building.as_ref().clone());
+	stamp_walk_colliders(commands, building.as_ref(), &[entity]);
 	vec![entity]
 }
 
@@ -288,7 +290,19 @@ where
 	T: BuildingComponents + Clone + Send + Sync + 'static,
 {
 	let bounds = building_bounds(building);
-	spawn_building_components(commands, building, transform, bounds)
+	let entities = spawn_building_components(commands, building, transform, bounds);
+	stamp_walk_colliders(commands, building, &entities);
+	entities
+}
+
+fn stamp_walk_colliders(
+	commands: &mut Commands,
+	building: &impl BuildingComponents,
+	entities: &[Entity],
+) {
+	for entity in entities {
+		spawn_building_walk_colliders(commands, *entity, building, BUILDING_FRICTION);
+	}
 }
 
 #[cfg(test)]
@@ -370,6 +384,38 @@ mod tests {
 				.count(),
 			2
 		);
+		Ok(())
+	}
+
+	#[test]
+	fn les_halles_storey_stamps_fixed_walk_colliders() -> anyhow::Result<()> {
+		use bevy::prelude::World;
+		use richmond_building_physics::BuildingWalkShapes;
+		use richmond_developments::MixedUseLesHallesDevelopment;
+
+		let bounds =
+			Aabb3d::from_min_max(Vec3::new(-18.0, 0.0, -18.0), Vec3::new(18.0, 10.0, 18.0));
+		let confines = Confines::from_bounds(bounds);
+		let (dev, _) = MixedUseLesHallesDevelopment::fit_to_confines(
+			&confines,
+			NoiseParams { seed: 1337, ..NoiseParams::default() },
+		)?;
+		let storey = dev
+			.tower
+			.floors
+			.first()
+			.ok_or_else(|| anyhow::anyhow!("expected a Les Halles storey"))?;
+
+		let mut world = World::new();
+		let parent = world.spawn_empty().id();
+		super::stamp_walk_colliders(&mut world.commands(), storey, &[parent]);
+		world.flush();
+
+		let n = world
+			.get::<BuildingWalkShapes>(parent)
+			.map(|spec| spec.shapes.len())
+			.unwrap_or(0);
+		assert!(n > 0, "Les Halles storey should queue Fixed walk shapes, got {n}");
 		Ok(())
 	}
 }
