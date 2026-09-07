@@ -2,10 +2,9 @@
 
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
-use durham_terrain_models::water::PresentedWaterScene;
 use durham_terrain_models::{
-	spawn_terrain_collider_host, stream_banded_draws, TerrainColliderCell, TerrainColliderEpoch,
-	TerrainColliderHost, TerrainColliderOverlay, TerrainEntryStore,
+	spawn_terrain_collider_host, TerrainColliderCell, TerrainColliderEpoch, TerrainColliderHost,
+	TerrainColliderOverlay,
 };
 use lod::gen::{Id, LodScene, LodSceneLevel, RegionPresenter, Version};
 use lod::lod_ref::LodRef;
@@ -42,7 +41,6 @@ impl PaddedTerrainPresenterState {
 pub struct PaddedTerrainPresenter<'w, 's> {
 	commands: Commands<'w, 's>,
 	state: ResMut<'w, PaddedTerrainPresenterState>,
-	terrain_store: Res<'w, TerrainEntryStore>,
 }
 
 impl PaddedTerrainPresenter<'_, '_> {
@@ -102,13 +100,6 @@ impl PaddedTerrainPresenter<'_, '_> {
 				.spawn_scene(value.scene_with_lod(lod_ref))
 				.insert(PresentedPaddedTerrainScene(*id))
 				.id();
-			if stream_banded_draws(value, level) {
-				if let Some(water) = self.terrain_store.water(*id) {
-					self.commands
-						.spawn_scene(water.scene_with_lod(lod_ref))
-						.insert((PresentedWaterScene(*id), bevy::prelude::ChildOf(entity)));
-				}
-			}
 			self.state.presented.insert(*id, PresentedEntry { version, entity, level });
 		}
 
@@ -131,13 +122,6 @@ impl<'a> RegionPresenter<TerrainWithPads, PaddedStoreView<'a>> for PaddedTerrain
 			.spawn_scene(value.scene_with_lod(lod_ref))
 			.insert(PresentedPaddedTerrainScene(id))
 			.id();
-		if stream_banded_draws(value, level) {
-			if let Some(water) = self.terrain_store.water(id) {
-				self.commands
-					.spawn_scene(water.scene_with_lod(lod_ref))
-					.insert((PresentedWaterScene(id), ChildOf(entity)));
-			}
-		}
 		self.state.presented.insert(id, PresentedEntry { version, entity, level });
 	}
 

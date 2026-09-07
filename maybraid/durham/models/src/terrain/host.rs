@@ -4,7 +4,8 @@
 //! viewer. Near cells use `res_2 = 5` and own collision; far and background are
 //! render-only at `res_2 = 4` and `3`. Generation admits a bounded number of
 //! missing origin ids per frame. Playable visuals come from the padded
-//! urbanization presenter; this plugin only presents raw Durham on FinePatch.
+//! urbanization presenter; this plugin presents raw Durham on FinePatch and
+//! banded water on streamed rings.
 
 use std::marker::PhantomData;
 
@@ -32,7 +33,9 @@ use crate::terrain::presentation::{
 	TerrainBackground, TerrainFar, TerrainMeshLodBand, TerrainNear, TerrainPresentationAssets,
 	TerrainRegionPresenter, TerrainStoreView, TerrainStreamPresenterState,
 };
-use crate::water::{ComposedWater, Water, WaterPresentationAssets};
+use crate::water::{
+	ComposedWater, Water, WaterPresentationAssets, WaterRegionPresenter, WaterStoreView,
+};
 use crate::{DurhamTerrainModelsPlugin, Terrain, TerrainMeshBuilder};
 
 /// Composed Durham SDF / CpuShot terrain model.
@@ -376,16 +379,13 @@ fn generate_cells(
 
 fn present_cells(
 	mut terrain_presenter: TerrainRegionPresenter,
+	mut water_presenter: WaterRegionPresenter,
 	store: Res<crate::terrain::index::TerrainEntryStore>,
 	layout: Res<TerrainCellLayout>,
 	mut pending: ResMut<TerrainPresentPending>,
 	lod_viewers: Query<&GlobalTransform, With<LodViewer>>,
 	cameras: Query<&GlobalTransform, With<Camera3d>>,
 ) {
-	if !pending.0 {
-		return;
-	}
-
 	let region = layout.presentation_region();
 	let viewer = viewer_xz(&lod_viewers, &cameras)
 		.map(|xz| Transform::from_translation(xz))
@@ -396,21 +396,24 @@ fn present_cells(
 		current_transform: &viewer,
 		bounds: &region,
 	};
-	if !layout.is_streamed() {
-		let terrain_view = TerrainStoreView::new(&store, &layout);
-		RegionPresenter::<Terrain, _>::present(
-			&mut terrain_presenter,
-			&terrain_view,
-			region,
-			&lod_ref,
-		);
-		let wanted: HashSet<Id> = terrain_view
-			.tracked_ids_for(region)
-			.into_iter()
-			.map(|tracked| tracked.0)
-			.collect();
-		terrain_presenter.remove_stale(&wanted);
+	if layout.is_streamed() {
+		let water_view = WaterStoreView::new(&store, &layout);
+		water_presenter.present_banded(&water_view, region, &lod_ref);
+		pending.0 = false;
+		return;
 	}
+	if !pending.0 {
+		return;
+	}
+
+	let terrain_view = TerrainStoreView::new(&store, &layout);
+	RegionPresenter::<Terrain, _>::present(&mut terrain_presenter, &terrain_view, region, &lod_ref);
+	let wanted: HashSet<Id> = terrain_view
+		.tracked_ids_for(region)
+		.into_iter()
+		.map(|tracked| tracked.0)
+		.collect();
+	terrain_presenter.remove_stale(&wanted);
 	pending.0 = false;
 }
 

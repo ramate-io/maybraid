@@ -21,16 +21,20 @@ pub mod composed;
 pub mod plugin;
 pub mod presentation;
 
-use crate::terrain::cell::{original_ids_for_origin_cells, TerrainCellLayout};
+use crate::terrain::cell::{original_ids_for_origin_cells, TerrainCellLayout, TerrainCellRing};
 use crate::terrain::render::cascade_chunk_for_cell;
 use crate::terrain::sdf::TerrainSdf;
+use crate::terrain::stream_lod::{stream_banded_level, stream_banded_scene, StreamBandedLod};
 use crate::terrain::Terrain;
 use bevy::ecs::template::template;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value, Scene};
 use durham_terrain::shaders::RefractionWater;
-use lod::gen::{GeneratingSpatialIndex, GenerationScheme, Id, LodScene, OriginalId};
+use lod::gen::{
+	GeneratingSpatialIndex, GenerationScheme, Id, LodScene, LodSceneLevel, LodSceneStatus,
+	OriginalId,
+};
 use lod::lod_ref::LodRef;
 use marazion_watersheds::WaterFill;
 use render_item::mesh::handle::Cached;
@@ -57,6 +61,8 @@ pub struct Water {
 	pub material: Handle<RefractionWater>,
 	/// Cascade `res_2` copied from the sibling [`Terrain`] cell (shared lattice).
 	pub res_2: u8,
+	/// Moving stream band copied from the source Durham cell.
+	pub stream_ring: Option<TerrainCellRing>,
 }
 
 impl Water {
@@ -68,6 +74,10 @@ impl Water {
 	/// Union of stamp fills against this collector's composed heightfield.
 	pub fn water_distance_at(&self, p: Vec3) -> f32 {
 		self.sdf.distance(p)
+	}
+
+	fn center(&self) -> Vec3 {
+		(Vec3::from(self.cell.min) + Vec3::from(self.cell.max)) * 0.5
 	}
 
 	/// Visual scene for one cell: **same** cascade chunk as [`Terrain::scene`], then
@@ -86,17 +96,33 @@ impl Water {
 	}
 }
 
-impl LodScene for Water {
-	fn scene_lod_status(&self, _lod_ref: &LodRef) -> lod::gen::LodSceneStatus {
-		lod::gen::LodSceneStatus::Unchanged
+impl StreamBandedLod for Water {
+	fn stream_ring(&self) -> Option<TerrainCellRing> {
+		self.stream_ring
 	}
 
-	fn scene_with_level(
-		&self,
-		_lod_ref: &LodRef,
-		_level: lod::gen::LodSceneLevel,
-	) -> impl Scene + 'static {
-		self.scene()
+	fn stream_center(&self) -> Vec3 {
+		self.center()
+	}
+}
+
+impl LodScene for Water {
+	fn scene_lod_level(&self, lod_ref: &LodRef) -> LodSceneLevel {
+		stream_banded_level(self, lod_ref.current_transform)
+	}
+
+	fn scene_lod_status(&self, lod_ref: &LodRef) -> LodSceneStatus {
+		let previous = stream_banded_level(self, lod_ref.previous_transform);
+		let current = stream_banded_level(self, lod_ref.current_transform);
+		if previous == current {
+			LodSceneStatus::Unchanged
+		} else {
+			LodSceneStatus::Changed(current)
+		}
+	}
+
+	fn scene_with_level(&self, _lod_ref: &LodRef, level: LodSceneLevel) -> impl Scene + 'static {
+		stream_banded_scene(self, level, || self.scene())
 	}
 }
 
@@ -140,6 +166,7 @@ where
 			GeneratingSpatialIndex::<Terrain>::get_one_or_generate(spatial_index, id, lod_ref)?;
 		// Lattice resolution comes from the terrain cell — not a water-only knob.
 		let res_2 = terrain.res_2;
+		let stream_ring = terrain.stream_ring;
 		let terrain_sdf = terrain.sdf.terrain().clone();
 		let fills: Vec<_> = terrain
 			.marazion_fills
@@ -164,10 +191,66 @@ where
 				sdf,
 				material: assets.material.clone(),
 				res_2,
+				stream_ring,
 			},
 			bounds,
 		))
 	}
 
 	fn descendants_with_lod(_id: Id, _spatial_index: &mut S, _lod_ref: &LodRef) {}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use crate::terrain::cell::TERRAIN_CELL_SIZE;
+	use crate::terrain::stream_lod::{stream_banded_draws, stream_banded_level};
+
+	fn far_ring() -> TerrainCellRing {
+		TerrainCellRing {
+			cell_size: 2.0 * TERRAIN_CELL_SIZE,
+			res_2: 4,
+			anchor_step: 4.0 * TERRAIN_CELL_SIZE,
+			high_inner_radius: 8.0 * TERRAIN_CELL_SIZE,
+			high_outer_radius: 16.0 * TERRAIN_CELL_SIZE,
+			cull_margin: 8.0 * TERRAIN_CELL_SIZE,
+		}
+	}
+
+	fn water_at(center: Vec3, ring: TerrainCellRing) -> Water {
+		let half = ring.cell_size * 0.5;
+		let cell = Aabb3d::from_min_max(
+			Vec3::new(center.x - half, -1.0, center.z - half),
+			Vec3::new(center.x + half, 1.0, center.z + half),
+		);
+		let terrain = TerrainSdf::new(1, 20.0);
+		Water {
+			cell,
+			sdf: ComposedWater::compose(terrain.clone(), Vec::new()),
+			terrain,
+			fills: Vec::new(),
+			material: Handle::default(),
+			res_2: ring.res_2,
+			stream_ring: Some(ring),
+		}
+	}
+
+	#[test]
+	fn far_water_underfoot_is_empty_high() {
+		let water = water_at(Vec3::ZERO, far_ring());
+		let viewer = Transform::IDENTITY;
+		let level = stream_banded_level(&water, &viewer);
+		assert_eq!(level, LodSceneLevel::High);
+		assert!(!stream_banded_draws(&water, level));
+	}
+
+	#[test]
+	fn far_water_in_ring_is_drawn_medium() {
+		let ring = far_ring();
+		let water = water_at(Vec3::new(ring.high_inner_radius + 80.0, 0.0, 0.0), ring);
+		let viewer = Transform::IDENTITY;
+		let level = stream_banded_level(&water, &viewer);
+		assert_eq!(level, LodSceneLevel::Medium);
+		assert!(stream_banded_draws(&water, level));
+	}
 }
