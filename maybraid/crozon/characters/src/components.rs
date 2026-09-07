@@ -1,14 +1,15 @@
 //! Domain IR + structural [`lod::LodScene`] host for characters.
 
 use bevy::math::bounding::Aabb3d;
-use bevy::math::Vec3;
-use bevy::prelude::{Component, Visibility};
+use bevy::math::{Quat, Vec3};
+use bevy::prelude::{Component, Transform, Visibility};
 use bevy::scene::prelude::{bsn, template_value, Scene};
 use crozon_character_items::{ClothingHost, ClothingMaterial, ClothingMesh, ItemColor};
 use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
 use lod::SceneChunk;
 use material_ref::MaterialRef;
+use std::f32::consts::FRAC_PI_2;
 
 use crate::assembly::CharacterPartSlot;
 use crate::assets::AssetNormalization;
@@ -23,27 +24,86 @@ use crate::socket::{RigId, SkinRef};
 
 /// Rest-pose locomotion hull. Matches Avian `Collider::capsule(radius, length)`:
 /// `length` is the cylinder; total height is `length + 2 * radius`.
+///
+/// [`Self::pronograde`] marks a horizontal body (quadrupeds). The motor still
+/// uses this vertical capsule; live hit-tests use [`Self::hit_capsule`].
 #[derive(Component, Clone, Copy, Debug, PartialEq)]
 pub struct LocomotionCapsule {
 	pub radius: f32,
 	pub length: f32,
+	pub pronograde: bool,
+}
+
+/// Query-only horizontal hull for a pronograde body. Avian capsules are Y-up;
+/// [`Self::local_transform`] lays this along mesh `+Z` (nose) / `-Z` (tail).
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
+pub struct HitCapsule {
+	pub radius: f32,
+	pub length: f32,
+	/// Parent-local Z of the capsule center (negative shifts the hull aft).
+	pub along: f32,
+}
+
+impl HitCapsule {
+	/// Rest wheelbase half from [`crozon_character_motion::pitch`] (`QUADRUPED_HALF_SPAN`).
+	pub const REST_HALF_SPAN: f32 = 1.2;
+	/// Extra aft coverage past the hind girdle, at [`LocomotionCapsule::QUADRUPED`] size.
+	pub const REST_TAIL: f32 = 0.85;
+
+	pub fn for_quadruped(hull: LocomotionCapsule) -> Self {
+		let stock = LocomotionCapsule::QUADRUPED.radius;
+		let scale = if stock <= 0.0 { 1.0 } else { (hull.radius / stock).max(0.0) };
+		let tail = Self::REST_TAIL * scale;
+		let extent = 2.0 * Self::REST_HALF_SPAN * scale + tail;
+		Self {
+			radius: hull.radius,
+			length: (extent - 2.0 * hull.radius).max(0.0),
+			along: -tail * 0.5,
+		}
+	}
+
+	pub fn local_transform(self) -> Transform {
+		Transform {
+			translation: Vec3::new(0.0, 0.0, self.along),
+			rotation: Quat::from_rotation_x(FRAC_PI_2),
+			scale: Vec3::ONE,
+		}
+	}
+
+	/// Parent-local Z of the aft tip (hind + tail).
+	pub fn aft_extent(self) -> f32 {
+		self.along - (self.length * 0.5 + self.radius)
+	}
 }
 
 impl LocomotionCapsule {
 	/// Standing ~1.8 m humanoid (Braidman and other unscaled bipeds).
-	pub const HUMANOID: Self = Self { radius: 0.4, length: 1.0 };
+	pub const HUMANOID: Self = Self { radius: 0.4, length: 1.0, pronograde: false };
 	/// Low vertical stand-in for a quadruped (not a horizontal body hull).
-	pub const QUADRUPED: Self = Self { radius: 0.35, length: 0.4 };
+	pub const QUADRUPED: Self = Self { radius: 0.35, length: 0.4, pronograde: true };
 	const GROUND_CLEARANCE: f32 = 0.15;
 
 	pub fn scaled(self, scale: f32) -> Self {
-		Self { radius: self.radius * scale.max(0.0), length: self.length * scale.max(0.0) }
+		Self {
+			radius: self.radius * scale.max(0.0),
+			length: self.length * scale.max(0.0),
+			pronograde: self.pronograde,
+		}
 	}
 
 	/// Stretch the cylinder so the capsule bottom sits at `-half_height`.
 	pub fn with_half_height(self, half_height: f32) -> Self {
 		let half = half_height.max(self.radius);
-		Self { radius: self.radius, length: (half - self.radius) * 2.0 }
+		Self {
+			radius: self.radius,
+			length: (half - self.radius) * 2.0,
+			pronograde: self.pronograde,
+		}
+	}
+
+	/// Horizontal hit hull when this is a quadruped motor stand-in.
+	pub fn hit_capsule(self) -> Option<HitCapsule> {
+		self.pronograde.then(|| HitCapsule::for_quadruped(self))
 	}
 
 	/// Rest-pose feet below the visual/capsule origin.
@@ -374,12 +434,15 @@ pub fn character_bounds(_character: &impl CharacterComponents) -> Aabb3d {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use anyhow::{anyhow, Result};
 
 	#[test]
 	fn humanoid_hull_matches_the_legacy_capsule() {
 		let hull = LocomotionCapsule::HUMANOID;
 		assert!((hull.radius - 0.4).abs() < 1e-5);
 		assert!((hull.length - 1.0).abs() < 1e-5);
+		assert!(!hull.pronograde);
+		assert!(hull.hit_capsule().is_none());
 		assert!((hull.half_height() - 0.9).abs() < 1e-5);
 		assert!((hull.spawn_height() - 1.05).abs() < 1e-5);
 		assert!((hull.headshot_min_local_y() - 0.7).abs() < 1e-5);
@@ -390,16 +453,48 @@ mod tests {
 		let hull = LocomotionCapsule::HUMANOID.scaled(0.30);
 		assert!((hull.radius - 0.12).abs() < 1e-5);
 		assert!((hull.length - 0.30).abs() < 1e-5);
+		assert!(!hull.pronograde);
+		assert!(hull.hit_capsule().is_none());
 	}
 
 	#[test]
 	fn quadruped_limb_hull_matches_rest_pose_foot_depth() {
 		let hull = LocomotionCapsule::quadruped_for_limb_length(1.35);
 		assert!((hull.radius - LocomotionCapsule::QUADRUPED.radius).abs() < 1e-5);
+		assert!(hull.pronograde);
 		assert!((hull.half_height() - 1.35).abs() < 1e-5);
 		assert!(
 			(hull.half_height() - LocomotionCapsule::quadruped_feet_below_origin(1.35)).abs()
 				< 1e-5
 		);
+	}
+
+	#[test]
+	fn quadruped_hit_capsule_covers_hind_and_tail() -> Result<()> {
+		let stock = LocomotionCapsule::QUADRUPED
+			.hit_capsule()
+			.ok_or_else(|| anyhow!("quadruped motor hull is pronograde"))?;
+		assert!((stock.along + HitCapsule::REST_TAIL * 0.5).abs() < 1e-5);
+		assert!(
+			(stock.aft_extent() + HitCapsule::REST_HALF_SPAN + HitCapsule::REST_TAIL).abs() < 1e-5
+		);
+		assert!(stock.aft_extent() < -HitCapsule::REST_HALF_SPAN);
+
+		let claber = LocomotionCapsule::QUADRUPED
+			.scaled(1.6)
+			.hit_capsule()
+			.ok_or_else(|| anyhow!("scaled quadruped stays pronograde"))?;
+		assert!((claber.radius - 0.35 * 1.6).abs() < 1e-5);
+		assert!(
+			(claber.aft_extent() + (HitCapsule::REST_HALF_SPAN + HitCapsule::REST_TAIL) * 1.6)
+				.abs() < 1e-5
+		);
+
+		let tall = LocomotionCapsule::quadruped_for_limb_length(1.35)
+			.hit_capsule()
+			.ok_or_else(|| anyhow!("limb-length hull stays pronograde"))?;
+		assert!((tall.radius - LocomotionCapsule::QUADRUPED.radius).abs() < 1e-5);
+		assert!((tall.aft_extent() - stock.aft_extent()).abs() < 1e-5);
+		Ok(())
 	}
 }

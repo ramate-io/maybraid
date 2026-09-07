@@ -17,5 +17,8 @@ lod = { workspace = true }
 lod-avian = { workspace = true }
 maybraid-character-controller = { workspace = true }
 
+[dev-dependencies]
+anyhow = { workspace = true }
+
 [lints]
 workspace = true
