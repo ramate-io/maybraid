@@ -2,12 +2,14 @@
 //!
 //! Forest plants are [`FlattenedComponentsOnly`] hosts — kit GLBs spawn as posed
 //! content with no nested [`StickNode`] LOD hosts. A type-erased producer is
-//! stamped when each source component is added, then one shared change-driven
-//! drain creates a bounded compound collider per host.
+//! stamped when each source component is added, then one shared drain creates a
+//! bounded compound collider per host.
 //!
-//! Only structural **High** plants get colliders (the walk-into ring). Medium /
-//! Low / UltraLow drop them so the far present ring does not pay contacts.
-//! Leftover nested [`StickNode`] hosts still get the same High-only treatment.
+//! Compounds live on the [`LodSceneHost`], not a High level root, so band flicker
+//! does not rebuild them and Hidden warm-hold roots do not keep live physics.
+//! The first **High** realization stamps the compound; later Medium / Low /
+//! UltraLow leaves it in place until the host itself is culled. Leftover nested
+//! [`StickNode`] hosts use the same High-first attach.
 
 use std::collections::{HashSet, VecDeque};
 
@@ -25,7 +27,7 @@ pub const MIN_STICK_COLLIDER_RADIUS_M: f32 = 2.0 * 0.0254;
 /// Hard fan-out bound within one plant compound.
 pub const MAX_STICK_COLLIDER_SHAPES: usize = 64;
 
-/// How many changed High-band hosts may build compounds in one frame.
+/// How many pending High-band hosts may build compounds in one frame.
 #[derive(Resource, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct StickPhysicsBudget {
 	pub hosts_per_frame: u32,
@@ -46,11 +48,9 @@ struct StickPhysicsProducer(ProduceColliderPoses);
 #[derive(Component)]
 pub(crate) struct StickPhysicsCompound;
 
-/// Last band we spawned a compound for.
+/// This host already has a stick compound (persists across LOD bands).
 #[derive(Component, Clone, Copy)]
-pub(crate) struct StickPhysicsAttached {
-	level: LodSceneLevel,
-}
+pub(crate) struct StickPhysicsAttached;
 
 #[derive(Resource, Default)]
 struct StickPhysicsQueue {
@@ -124,26 +124,20 @@ fn wants_playable_colliders(level: LodSceneLevel) -> bool {
 }
 
 fn sync_stick_colliders(world: &mut World) {
-	let changed: Vec<_> = {
-		let mut hosts = world
-			.query_filtered::<(Entity, &LodSceneLevel, Option<&StickPhysicsAttached>), (
-				With<LodSceneHost>,
-				With<StickPhysicsProducer>,
-				Or<(Added<StickPhysicsProducer>, Changed<LodSceneLevel>)>,
-			)>();
+	let pending: Vec<_> = {
+		let mut hosts = world.query_filtered::<(Entity, &LodSceneLevel), (
+			With<LodSceneHost>,
+			With<StickPhysicsProducer>,
+			Without<StickPhysicsAttached>,
+		)>();
 		hosts
 			.iter(world)
-			.map(|(entity, level, attached)| (entity, *level, attached.copied()))
+			.filter(|(_, level)| wants_playable_colliders(**level))
+			.map(|(entity, _)| entity)
 			.collect()
 	};
-
-	for (entity, level, attached) in changed {
-		if wants_playable_colliders(level) {
-			world.resource_mut::<StickPhysicsQueue>().enqueue(entity);
-		} else if attached.is_some() {
-			despawn_compound(world, entity);
-			world.entity_mut(entity).remove::<StickPhysicsAttached>();
-		}
+	for entity in pending {
+		world.resource_mut::<StickPhysicsQueue>().enqueue(entity);
 	}
 
 	let limit = world.resource::<StickPhysicsBudget>().hosts_per_frame;
@@ -151,17 +145,16 @@ fn sync_stick_colliders(world: &mut World) {
 		let Some(entity) = world.resource_mut::<StickPhysicsQueue>().pop_front() else {
 			break;
 		};
+		if world.get::<LodSceneHost>(entity).is_none() {
+			continue;
+		}
 		let Some(level) = world.get::<LodSceneLevel>(entity).copied() else {
 			continue;
 		};
 		if !wants_playable_colliders(level) {
 			continue;
 		}
-		let already_current = world
-			.get::<StickPhysicsAttached>(entity)
-			.is_some_and(|attached| attached.level == level)
-			&& has_compound(world, entity);
-		if already_current {
+		if world.get::<StickPhysicsAttached>(entity).is_some() && has_compound(world, entity) {
 			continue;
 		}
 		let Some(producer) = world.get::<StickPhysicsProducer>(entity).copied() else {
@@ -187,7 +180,7 @@ fn sync_stick_colliders(world: &mut World) {
 			Collider::compound(shapes),
 			PhysicsInteractionLayer::fixed_layers(),
 		));
-		world.entity_mut(entity).insert(StickPhysicsAttached { level });
+		world.entity_mut(entity).insert(StickPhysicsAttached);
 	}
 }
 
@@ -352,5 +345,46 @@ mod tests {
 			Placement::IDENTITY,
 		);
 		assert_eq!(collider_poses(&node, LodSceneLevel::High).len(), MAX_STICK_COLLIDER_SHAPES);
+	}
+
+	fn playable_trunk() -> StickNode {
+		StickNode::collection(
+			StickCollection::new([StickMember {
+				geometry: StickGeometry::Trunk,
+				placement: Placement::IDENTITY.with_scale(Vec3::new(0.4, 4.0, 0.4)),
+			}])
+			.bake_bounds_from_members(),
+			Placement::IDENTITY,
+		)
+	}
+
+	#[test]
+	fn high_compound_attaches_after_lod_host_arrives() {
+		let mut app = App::new();
+		app.add_plugins(StickPhysicsPlugin);
+		let host = app.world_mut().spawn((playable_trunk(), LodSceneLevel::High)).id();
+		app.update();
+		assert!(!has_compound(app.world(), host));
+
+		app.world_mut().entity_mut(host).insert(LodSceneHost);
+		app.update();
+		assert!(has_compound(app.world(), host));
+	}
+
+	#[test]
+	fn compound_stays_on_the_host_after_leaving_high() {
+		let mut app = App::new();
+		app.add_plugins(StickPhysicsPlugin);
+		let host = app
+			.world_mut()
+			.spawn((playable_trunk(), LodSceneHost, LodSceneLevel::High))
+			.id();
+		app.update();
+		assert!(has_compound(app.world(), host));
+
+		*app.world_mut().get_mut::<LodSceneLevel>(host).expect("level") = LodSceneLevel::Medium;
+		app.update();
+		assert!(has_compound(app.world(), host));
+		assert!(app.world().get::<StickPhysicsAttached>(host).is_some());
 	}
 }
