@@ -1,7 +1,7 @@
 //! Maybraid firearm recipes: kit assembly over [`firearms_components`].
 //!
 //! [`FirearmKit`] is the character-recipe analogue: a required body plus optional
-//! barrel / trigger-box / grip / stock, socketed onto the matching bones.
+//! barrel / trigger-box / grip / stock / sight, socketed onto the matching bones.
 //! [`FirearmConcept`] is a named preset of that kit.
 
 pub mod cadence;
@@ -24,7 +24,10 @@ pub use firearms_components::{
 	SocketRefApplied, SocketRefRoot, RECEIVER_LANDMARKS,
 };
 pub use kit::FirearmKit;
-pub use parts::{BarrelMesh, BodyMesh, GripMesh, KitBone, StockMesh, TriggerBoxMesh};
+pub use parts::{
+	fov_at_zoom, BarrelMesh, BodyMesh, GripMesh, KitBone, SightMesh, StockMesh, TriggerBoxMesh,
+	IRON_SIGHT_FOV,
+};
 pub use plugin::FirearmHostsPlugin;
 pub use pose::{aim_plus_x, BoneFit, FirearmPose};
 pub use projectiles::{

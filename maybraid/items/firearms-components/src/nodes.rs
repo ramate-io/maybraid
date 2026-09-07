@@ -17,7 +17,8 @@ use rigs::{
 /// Semantic slot for a firearm mesh or armature.
 ///
 /// Kit meshes author in bone space (GLB +Y = socket bone length). Hand
-/// landmarks (`grip_point`, `trigger_point`) are not slots.
+/// landmarks (`grip_point`, `trigger_point`) are not slots. Sights are a slot
+/// on `sight_camera_socket`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Component)]
 pub enum FirearmPartSlot {
 	#[default]
@@ -27,6 +28,8 @@ pub enum FirearmPartSlot {
 	TriggerBox,
 	Grip,
 	Stock,
+	/// Optic on [`RECEIVER_LANDMARKS`] `sight_camera_socket` (attachment, not a length bone).
+	Sight,
 	/// Baked one-mesh concept (skips kit assembly).
 	Concept,
 }
@@ -40,6 +43,7 @@ impl FirearmPartSlot {
 			Self::TriggerBox => Some("trigger_box"),
 			Self::Grip => Some("grip"),
 			Self::Stock => Some("stock"),
+			Self::Sight => Some("sight_camera_socket"),
 			Self::Concept => None,
 		}
 	}
@@ -96,6 +100,13 @@ impl PartNode {
 
 	pub fn stock(label: &'static str, path: impl Into<String>) -> Self {
 		Self::glb(FirearmPartSlot::Stock, label, path)
+	}
+
+	pub fn sight(label: &'static str, path: impl Into<String>, scale: f32) -> Self {
+		Self::glb(FirearmPartSlot::Sight, label, path).socketed(
+			SocketRef::bone("sight_camera_socket")
+				.with_local(Transform::from_scale(Vec3::splat(scale))),
+		)
 	}
 
 	pub fn concept(label: &'static str, path: impl Into<String>) -> Self {
@@ -170,8 +181,9 @@ pub const RECEIVER_LANDMARKS: &[&str] = &[
 /// Authoring IR for a firearm receiver armature — also the fine-phase host.
 ///
 /// Kit parts socket onto `body` / `barrel` / `trigger_box` / `grip` / `stock`.
-/// Hands bind to `grip_point` / `trigger_point`; first-person focus uses
-/// `sight_camera_socket`. None of these landmarks sockets kit meshes.
+/// Sights socket onto `sight_camera_socket` (camera landmark, not a length bone).
+/// Hands bind to `grip_point` / `trigger_point`; first-person focus uses the
+/// same camera socket.
 #[derive(Debug, Clone, PartialEq, Component)]
 pub struct RigNode {
 	pub label: &'static str,

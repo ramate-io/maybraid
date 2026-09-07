@@ -5,8 +5,8 @@
 
 use crate::{
 	names::mix, BoltMaterial, FireMode, FirearmBarrel, FirearmGrip, FirearmMaterial, FirearmMesh,
-	FirearmScales, FirearmSpec, FirearmStats, FirearmStock, FirearmTriggerBox, ItemColor, ItemRng,
-	ProjectileKind, SlotLook, SlotScale,
+	FirearmScales, FirearmSight, FirearmSpec, FirearmStats, FirearmStock, FirearmTriggerBox,
+	ItemColor, ItemRng, ProjectileKind, SlotLook, SlotScale, IRON_SIGHT_FOV,
 };
 
 const FIREARM_SEED: u64 = 0xF1A4_A11A_0002_C0DE;
@@ -158,6 +158,10 @@ impl FirearmBuff for FirearmSpec {
 		if !matches!(self.kit.stock, FirearmStock::None) {
 			self.looks.stock.contribute(priors);
 		}
+		self.kit.sight.contribute(priors);
+		if !matches!(self.kit.sight, FirearmSight::None) {
+			self.looks.sight.contribute(priors);
+		}
 		self.scales.contribute(priors);
 		self.bolt.contribute(priors);
 	}
@@ -301,6 +305,23 @@ impl FirearmBuff for FirearmStock {
 	fn contribute(&self, _priors: &mut FirearmPriors) {}
 }
 
+impl FirearmBuff for FirearmSight {
+	fn contribute(&self, priors: &mut FirearmPriors) {
+		match self {
+			Self::None => {}
+			Self::Holorand => {
+				priors.range.add_mean(20.0);
+				priors.weight.add_mean(0.4);
+			}
+			Self::Leskop => {
+				priors.range.add_mean(80.0);
+				priors.rpm.add_mean(-30.0);
+				priors.weight.add_mean(1.2);
+			}
+		}
+	}
+}
+
 impl FirearmBuff for FirearmScales {
 	fn contribute(&self, priors: &mut FirearmPriors) {
 		for (is_barrel, scale) in self.slots() {
@@ -420,13 +441,15 @@ fn realize(rng: &mut ItemRng, spec: &FirearmSpec) -> FirearmStats {
 	let mut priors = FirearmPriors::new();
 	spec.contribute(&mut priors);
 
-	if sample_weighted(rng, priors.bins.laser, priors.bins.rate_of_fire) {
-		return realize_laser(rng, priors);
-	}
-
-	let bolt = sample_weighted(rng, priors.bins.bolt, priors.bins.bullet);
-	let fire_kind = sample_fire_kind(rng, &priors.bins);
-	realize_ballistic(rng, priors, bolt, fire_kind)
+	let mut stats = if sample_weighted(rng, priors.bins.laser, priors.bins.rate_of_fire) {
+		realize_laser(rng, priors)
+	} else {
+		let bolt = sample_weighted(rng, priors.bins.bolt, priors.bins.bullet);
+		let fire_kind = sample_fire_kind(rng, &priors.bins);
+		realize_ballistic(rng, priors, bolt, fire_kind)
+	};
+	stats.sight_fov = spec.kit.sight.sample_ads_fov(rng);
+	stats
 }
 
 enum FireKind {
@@ -461,6 +484,7 @@ fn realize_laser(rng: &mut ItemRng, priors: FirearmPriors) -> FirearmStats {
 		recoil: 0.0,
 		damage: sample_u16(rng, dpc, 8, 40),
 		weight: sample_u16(rng, weight, 4, 40),
+		sight_fov: IRON_SIGHT_FOV,
 	}
 }
 
@@ -523,6 +547,7 @@ fn realize_ballistic(
 		recoil: sample_f32(rng, recoil, RECOIL_MIN, RECOIL_MAX),
 		damage: sample_u16(rng, dpc_base, dpc_min as u16, dpc_max as u16),
 		weight: sample_u16(rng, weight, 4, 40),
+		sight_fov: IRON_SIGHT_FOV,
 	}
 }
 
@@ -670,5 +695,30 @@ mod tests {
 	fn base_laser_family_probability_is_one_twelfth() {
 		let probability = FAMILY_LASER / (FAMILY_LASER + FAMILY_RATE_OF_FIRE);
 		assert!((probability - 1.0 / 12.0).abs() < f32::EPSILON);
+	}
+
+	#[test]
+	fn concept_guns_keep_iron_sight_fov() {
+		for mesh in FirearmMesh::VALUES {
+			let stats = generate_firearm_stats(&FirearmSpec::from_mesh(*mesh));
+			assert!((stats.sight_fov - IRON_SIGHT_FOV).abs() < 1e-5, "{mesh:?}");
+		}
+	}
+
+	#[test]
+	fn holorand_and_leskop_sample_within_zoom_fov() {
+		let mut holorand = FirearmSpec::from_mesh(FirearmMesh::Bullpup);
+		holorand.kit.sight = FirearmSight::Holorand;
+		let mut leskop = holorand;
+		leskop.kit.sight = FirearmSight::Leskop;
+		let holorand_stats = generate_firearm_stats(&holorand);
+		let leskop_stats = generate_firearm_stats(&leskop);
+		let (h_wide, h_tight) = FirearmSight::Holorand.ads_fov_range();
+		let (l_wide, l_tight) = FirearmSight::Leskop.ads_fov_range();
+		assert!(holorand_stats.sight_fov <= h_wide + 1e-4);
+		assert!(holorand_stats.sight_fov >= h_tight - 1e-4);
+		assert!(leskop_stats.sight_fov <= l_wide + 1e-4);
+		assert!(leskop_stats.sight_fov >= l_tight - 1e-4);
+		assert!(leskop_stats.sight_fov <= holorand_stats.sight_fov + 1e-4);
 	}
 }

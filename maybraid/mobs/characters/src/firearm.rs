@@ -1,12 +1,12 @@
 //! Inventory firearm realization shared by generated mob characters.
 
 use crozon_character_items::{
-	FirearmBarrel, FirearmGrip, FirearmKitSpec, FirearmMesh, FirearmSpec, FirearmStock,
-	FirearmTriggerBox, SlotLook,
+	FirearmBarrel, FirearmGrip, FirearmKitSpec, FirearmMesh, FirearmSight, FirearmSpec,
+	FirearmStock, FirearmTriggerBox, SlotLook,
 };
 use firearms::{
 	BarrelMesh, BodyMesh, FirearmComponents, FirearmKit, GripMesh, Layers, PartNode, RigNode,
-	StockMesh, TriggerBoxMesh,
+	SightMesh, StockMesh, TriggerBoxMesh,
 };
 use lod::gen::LodSceneLevel;
 use material_ref::MaterialRef;
@@ -67,6 +67,11 @@ fn kit_from_spec(spec: FirearmKitSpec) -> FirearmKit {
 		stock: match spec.stock {
 			FirearmStock::None => StockMesh::None,
 		},
+		sight: match spec.sight {
+			FirearmSight::None => SightMesh::None,
+			FirearmSight::Holorand => SightMesh::Holorand,
+			FirearmSight::Leskop => SightMesh::Leskop,
+		},
 	}
 }
 
@@ -93,5 +98,9 @@ impl FirearmComponents for GeneratedFirearm {
 
 	fn stock_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PartNode> {
 		Self::paint(self.kit.stock_nodes_for_level(level), self.spec.looks.stock)
+	}
+
+	fn sight_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PartNode> {
+		Self::paint(self.kit.sight_nodes_for_level(level), self.spec.looks.sight)
 	}
 }

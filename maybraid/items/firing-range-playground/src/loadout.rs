@@ -2,11 +2,11 @@
 
 use crozon_character_items::{
 	random_starter_clothing, realize_firearm_stats, CharacterSheet, FirearmBarrel, FirearmGrip,
-	FirearmKitSpec, FirearmMesh, FirearmSpec, FirearmStats, FirearmStock, FirearmTriggerBox,
-	Inventory, InventoryItem, ItemRng, STARTER_CLOTHING_COUNT,
+	FirearmKitSpec, FirearmMesh, FirearmSight, FirearmSpec, FirearmStats, FirearmStock,
+	FirearmTriggerBox, Inventory, InventoryItem, ItemRng, STARTER_CLOTHING_COUNT,
 };
 use crozon_characters::species::braidman::BraidmanConfig;
-use firearms::{BarrelMesh, BodyMesh, FirearmKit, GripMesh, StockMesh, TriggerBoxMesh};
+use firearms::{BarrelMesh, BodyMesh, FirearmKit, GripMesh, SightMesh, StockMesh, TriggerBoxMesh};
 
 /// Clothing recipe plus the combat kit assembled from a rolled firearm spec.
 #[derive(Clone, Debug)]
@@ -60,6 +60,7 @@ fn kit_from_parts(kit: FirearmKitSpec) -> FirearmKit {
 		trigger_box: trigger_box_mesh(kit.trigger_box),
 		grip: grip_mesh(kit.grip),
 		stock: stock_mesh(kit.stock),
+		sight: sight_mesh(kit.sight),
 	}
 }
 
@@ -103,6 +104,14 @@ fn stock_mesh(mesh: FirearmStock) -> StockMesh {
 	}
 }
 
+fn sight_mesh(mesh: FirearmSight) -> SightMesh {
+	match mesh {
+		FirearmSight::None => SightMesh::None,
+		FirearmSight::Holorand => SightMesh::Holorand,
+		FirearmSight::Leskop => SightMesh::Leskop,
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -123,6 +132,14 @@ mod tests {
 		assert_eq!(kit.body, BodyMesh::Bullpup);
 		assert_eq!(kit.barrel, BarrelMesh::Bullpup);
 		assert_eq!(kit.grip, GripMesh::BumpHandle);
+	}
+
+	#[test]
+	fn kit_mapping_preserves_holorand_sight() {
+		let mut spec = FirearmSpec::from_mesh(FirearmMesh::Bullpup);
+		spec.kit.sight = FirearmSight::Holorand;
+		let kit = kit_from_spec(spec);
+		assert_eq!(kit.sight, SightMesh::Holorand);
 	}
 
 	#[test]

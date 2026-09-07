@@ -33,6 +33,8 @@ pub struct PlayerLook {
 pub struct PlayerCameraAim {
 	pub pose: Option<PlayerCameraPose>,
 	pub focus: f32,
+	/// ADS vertical FOV from the held optic. `None` keeps the follow-camera iron-sight FOV.
+	pub sight_fov: Option<f32>,
 }
 
 #[derive(Clone, Copy, Debug)]

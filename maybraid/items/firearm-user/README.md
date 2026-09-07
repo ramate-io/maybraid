@@ -19,8 +19,8 @@ Writes player handoff slots ([`PlayerUse`](../../player/src/identity.rs),
 rotation when applying that pitch to the firearm's +Z bore.
 [`live_weapon_from_stats`](src/weapon.rs) bakes catalog
 [`FirearmStats`](../../crozon/character-items/src/stats.rs) into the held
-[`Weapon`](../firearms/src/projectiles.rs), payload, cadence, and recoil
-strength. Each shot noisily kicks yaw and pitch inside a range scaled by that
+[`Weapon`](../firearms/src/projectiles.rs), payload, cadence, recoil
+strength, and ADS FOV. Each shot noisily kicks yaw and pitch inside a range scaled by that
 strength; the direction is hashed from the weapon identity and shot index so
 the same gun repeats the same pattern. Each kick lerps along that path over
 80 ms instead of snapping. Followed-player kicks land on

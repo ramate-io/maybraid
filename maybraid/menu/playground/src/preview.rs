@@ -7,8 +7,8 @@ use bevy::scene::prelude::bsn;
 use bevy::window::PrimaryWindow;
 use character_ui_menu::{CameraFocus, FocusRig};
 use crozon_character_items::{
-	ClothingHost, ClothingMesh, FirearmBarrel, FirearmGrip, FirearmSpec, FirearmTriggerBox,
-	InventoryItem, ItemColor, SlotLook,
+	ClothingHost, ClothingMesh, FirearmBarrel, FirearmGrip, FirearmSight, FirearmSpec,
+	FirearmTriggerBox, InventoryItem, ItemColor, SlotLook,
 };
 use crozon_character_persist::SaveRoot;
 use crozon_character_playground::CameraController;
@@ -362,6 +362,23 @@ impl FirearmComponents for FirearmPreview {
 				"grip",
 				vec![FirearmPartNode::grip("bump-handle", guns::BUMP_HANDLE.as_str())
 					.with_material(Self::look_material(self.spec.looks.grip))],
+			),
+		}
+	}
+
+	fn sight_nodes_for_level(&self, _level: LodSceneLevel) -> FirearmLayers<FirearmPartNode> {
+		let material = Self::look_material(self.spec.looks.sight);
+		match self.spec.kit.sight {
+			FirearmSight::None => FirearmLayers::new(),
+			FirearmSight::Holorand => FirearmLayers::from_labeled(
+				"sight",
+				vec![FirearmPartNode::sight("holorand", guns::HOLORAND_SIGHT.as_str(), 0.10)
+					.with_material(material)],
+			),
+			FirearmSight::Leskop => FirearmLayers::from_labeled(
+				"sight",
+				vec![FirearmPartNode::sight("leskop", guns::LESKOP_SIGHT.as_str(), 0.16)
+					.with_material(material)],
 			),
 		}
 	}

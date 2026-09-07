@@ -1,7 +1,8 @@
 //! Firearm catalog for inventory items.
 //!
 //! Combat kits live in the `firearms` crate. This crate stores the bag identity:
-//! body plus optional slots, per-slot length/thickness, surface look, and bolt look.
+//! body plus optional slots, per-slot length/thickness, surface look, bolt look,
+//! and optic FOV.
 
 use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
@@ -82,6 +83,7 @@ impl FirearmMesh {
 				grip: FirearmGrip::BumpHandle,
 				trigger_box: FirearmTriggerBox::None,
 				stock: FirearmStock::None,
+				sight: FirearmSight::None,
 			},
 			Self::Reltor => FirearmKitSpec {
 				body: Self::Reltor,
@@ -89,6 +91,7 @@ impl FirearmMesh {
 				grip: FirearmGrip::None,
 				trigger_box: FirearmTriggerBox::Reltor,
 				stock: FirearmStock::None,
+				sight: FirearmSight::None,
 			},
 			body => FirearmKitSpec {
 				body,
@@ -96,6 +99,7 @@ impl FirearmMesh {
 				grip: FirearmGrip::None,
 				trigger_box: FirearmTriggerBox::None,
 				stock: FirearmStock::None,
+				sight: FirearmSight::None,
 			},
 		}
 	}
@@ -207,6 +211,69 @@ impl FirearmStock {
 	}
 }
 
+/// ADS vertical FOV with no optic (50°). Matches the follow-camera iron-sight default.
+pub const IRON_SIGHT_FOV: f32 = 50.0_f32.to_radians();
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "kebab-case")]
+pub enum FirearmSight {
+	#[default]
+	None,
+	Holorand,
+	Leskop,
+}
+
+impl FirearmSight {
+	pub const VALUES: &'static [Self] = &[Self::None, Self::Holorand, Self::Leskop];
+
+	pub const fn label(self) -> &'static str {
+		match self {
+			Self::None => "none",
+			Self::Holorand => "holorand",
+			Self::Leskop => "leskop",
+		}
+	}
+
+	pub const fn path(self) -> Option<&'static str> {
+		match self {
+			Self::None => None,
+			Self::Holorand => Some("items/guns/sights/holorand.glb"),
+			Self::Leskop => Some("items/guns/sights/leskop.glb"),
+		}
+	}
+
+	/// Magnification relative to [`IRON_SIGHT_FOV`]. Iron sights are 1×.
+	pub const fn zoom_min(self) -> f32 {
+		match self {
+			Self::None => 1.0,
+			Self::Holorand => 1.0,
+			Self::Leskop => 3.0,
+		}
+	}
+
+	pub const fn zoom_max(self) -> f32 {
+		match self {
+			Self::None => 1.0,
+			Self::Holorand => 3.0,
+			Self::Leskop => 5.0,
+		}
+	}
+
+	pub fn fov_at_zoom(zoom: f32) -> f32 {
+		2.0 * ((IRON_SIGHT_FOV * 0.5).tan() / zoom.max(1e-4)).atan()
+	}
+
+	pub fn ads_fov_range(self) -> (f32, f32) {
+		(Self::fov_at_zoom(self.zoom_min()), Self::fov_at_zoom(self.zoom_max()))
+	}
+
+	pub fn sample_ads_fov(self, rng: &mut ItemRng) -> f32 {
+		let min = self.zoom_min();
+		let max = self.zoom_max();
+		Self::fov_at_zoom(min + rng.unit() * (max - min))
+	}
+}
+
 /// Assembled kit identity. Body is required; other slots may be empty.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -216,6 +283,8 @@ pub struct FirearmKitSpec {
 	pub grip: FirearmGrip,
 	pub trigger_box: FirearmTriggerBox,
 	pub stock: FirearmStock,
+	#[serde(default)]
+	pub sight: FirearmSight,
 }
 
 impl FirearmKitSpec {
@@ -404,7 +473,7 @@ impl Default for SlotLook {
 	}
 }
 
-/// Per-slot looks in Body → Barrel → Grip → Trigger box → Stock order.
+/// Per-slot looks in Body → Barrel → Grip → Trigger box → Stock → Sight order.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct FirearmLooks {
@@ -413,12 +482,14 @@ pub struct FirearmLooks {
 	pub grip: SlotLook,
 	pub trigger_box: SlotLook,
 	pub stock: SlotLook,
+	#[serde(default)]
+	pub sight: SlotLook,
 }
 
 impl FirearmLooks {
 	pub const fn uniform(material: FirearmMaterial, color: ItemColor) -> Self {
 		let look = SlotLook::new(material, color);
-		Self { body: look, barrel: look, grip: look, trigger_box: look, stock: look }
+		Self { body: look, barrel: look, grip: look, trigger_box: look, stock: look, sight: look }
 	}
 
 	pub fn roll(rng: &mut ItemRng) -> Self {
@@ -428,6 +499,7 @@ impl FirearmLooks {
 			grip: SlotLook::roll(rng),
 			trigger_box: SlotLook::roll(rng),
 			stock: SlotLook::roll(rng),
+			sight: SlotLook::roll(rng),
 		}
 	}
 }
@@ -469,6 +541,7 @@ impl FirearmSpec {
 					.choose(FirearmTriggerBox::VALUES)
 					.unwrap_or(&FirearmTriggerBox::None),
 				stock: FirearmStock::None,
+				sight: *rng.choose(FirearmSight::VALUES).unwrap_or(&FirearmSight::None),
 			},
 			scales: FirearmScales::roll(rng),
 			looks: FirearmLooks::roll(rng),
@@ -478,17 +551,19 @@ impl FirearmSpec {
 
 	pub fn identity_label(self) -> String {
 		format!(
-			"body={} barrel={} grip={} trigger-box={} stock={} looks={}/{}/{}/{}/{} bolt={} scales={}:{}/{}:{}/{}:{}/{}:{}/{}:{}",
+			"body={} barrel={} grip={} trigger-box={} stock={} sight={} looks={}/{}/{}/{}/{}/{} bolt={} scales={}:{}/{}:{}/{}:{}/{}:{}/{}:{}",
 			self.kit.body.label(),
 			self.kit.barrel.label(),
 			self.kit.grip.label(),
 			self.kit.trigger_box.label(),
 			self.kit.stock.label(),
+			self.kit.sight.label(),
 			look_label(self.looks.body),
 			look_label(self.looks.barrel),
 			look_label(self.looks.grip),
 			look_label(self.looks.trigger_box),
 			look_label(self.looks.stock),
+			look_label(self.looks.sight),
 			self.bolt.label(),
 			self.scales.body.length_milli,
 			self.scales.body.thickness_milli,
@@ -524,6 +599,8 @@ mod tests {
 		assert_eq!(FirearmMesh::Snailer.label(), "snailer");
 		assert_eq!(FirearmBarrel::Laznard.label(), "laznard");
 		assert_eq!(FirearmGrip::BumpHandle.label(), "bump-handle");
+		assert_eq!(FirearmSight::Holorand.label(), "holorand");
+		assert_eq!(FirearmSight::Leskop.label(), "leskop");
 	}
 
 	#[test]
@@ -558,5 +635,42 @@ mod tests {
 			let looks = item.firearm_spec().unwrap().looks;
 			looks.body != looks.barrel || looks.body != looks.grip
 		}));
+	}
+
+	#[test]
+	fn iron_sights_keep_current_ads_fov() {
+		let (min, max) = FirearmSight::None.ads_fov_range();
+		assert!((min - IRON_SIGHT_FOV).abs() < 1e-5);
+		assert!((max - IRON_SIGHT_FOV).abs() < 1e-5);
+	}
+
+	#[test]
+	fn holorand_fov_spans_iron_to_three_times() {
+		let (wide, tight) = FirearmSight::Holorand.ads_fov_range();
+		assert!((wide - IRON_SIGHT_FOV).abs() < 1e-5);
+		assert!((tight - FirearmSight::fov_at_zoom(3.0)).abs() < 1e-5);
+		assert!(tight < wide);
+	}
+
+	#[test]
+	fn leskop_fov_spans_three_to_five_times() {
+		let (wide, tight) = FirearmSight::Leskop.ads_fov_range();
+		assert!((wide - FirearmSight::fov_at_zoom(3.0)).abs() < 1e-5);
+		assert!((tight - FirearmSight::fov_at_zoom(5.0)).abs() < 1e-5);
+		assert!(tight < wide);
+	}
+
+	#[test]
+	fn gallery_rolls_include_sights() {
+		let items = crate::random_gallery_firearms(&mut ItemRng::from_seed(21), 80);
+		assert!(items
+			.iter()
+			.any(|item| item.firearm_spec().unwrap().kit.sight == FirearmSight::Holorand));
+		assert!(items
+			.iter()
+			.any(|item| item.firearm_spec().unwrap().kit.sight == FirearmSight::Leskop));
+		assert!(items
+			.iter()
+			.any(|item| item.firearm_spec().unwrap().kit.sight == FirearmSight::None));
 	}
 }

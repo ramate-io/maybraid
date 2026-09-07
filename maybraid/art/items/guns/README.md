@@ -13,14 +13,15 @@ Each folder is one replaceable mesh. Trigger boxes used to be modeled into the b
 | [`trigger_boxes/`](trigger_boxes/) | `trigger_box` | Fire-control box (trigger, guard, related housing) |
 | [`grips/`](grips/) | `grip` | Pistol grip / handle |
 | [`stocks/`](stocks/) | `stock` | Stock |
+| [`sights/`](sights/) | `sight_camera_socket` | Optic (attachment on the camera landmark) |
 | [`concepts/`](concepts/) | (none) | Baked one-mesh kits; skip assembly |
 | [`rigs/`](rigs/) | — | Shared receiver armature |
 
 Empty directories are placeholders (`stocks/`), not missing exports.
 
-Runtime kits always have a body. Barrel, trigger box, grip, and stock are optional (`none` in the playground `kit` command).
+Runtime kits always have a body. Barrel, trigger box, grip, stock, and sight are optional (`none` in the playground `kit` command). Sights are authored on a 1 m cube and rest-scaled onto `sight_camera_socket`; they do not lengthen a kit bone.
 
-Trigger-box meshes: `keelripe_box`, `paddle_box`, `reltor_box`. The grip catalog is `bump_handle`. Keelripe is a trigger box, not a body.
+Trigger-box meshes: `keelripe_box`, `paddle_box`, `reltor_box`. The grip catalog is `bump_handle`. Sight meshes: `holorand` (1–3× ADS), `leskop` (3–5× ADS). Keelripe is a trigger box, not a body.
 
 ## Receiver armature
 

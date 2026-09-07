@@ -7,11 +7,12 @@ use firearms::{FirearmMembers, FirearmRoot};
 use player::{PlayerCameraAim, PlayerCameraPose, PlayerLook};
 
 use crate::pose::HeldFirearm;
+use crate::weapon::LiveWeapon;
 use crate::FirearmUser;
 
 pub(crate) fn write_sight_aim(
 	mut users: Query<(&FirearmUser, &PlayerLook, &mut PlayerCameraAim)>,
-	guns: Query<&FirearmMembers, (With<HeldFirearm>, With<FirearmRoot>)>,
+	guns: Query<(&FirearmMembers, Option<&LiveWeapon>), (With<HeldFirearm>, With<FirearmRoot>)>,
 	maps: Query<&BoneMap>,
 	transforms: TransformHelper,
 ) {
@@ -19,9 +20,12 @@ pub(crate) fn write_sight_aim(
 		if !look.first_person {
 			aim.pose = None;
 			aim.focus = 0.0;
+			aim.sight_fov = None;
 			continue;
 		}
 		aim.focus = look.focus;
+		aim.sight_fov =
+			guns.get(user.held).ok().and_then(|(_, live)| live.map(|live| live.sight_fov));
 		aim.pose = sight_camera_pose(
 			user.held,
 			user.settings.sight_camera_back,
@@ -35,11 +39,11 @@ pub(crate) fn write_sight_aim(
 fn sight_camera_pose(
 	held: Entity,
 	sight_camera_back: f32,
-	guns: &Query<&FirearmMembers, (With<HeldFirearm>, With<FirearmRoot>)>,
+	guns: &Query<(&FirearmMembers, Option<&LiveWeapon>), (With<HeldFirearm>, With<FirearmRoot>)>,
 	maps: &Query<&BoneMap>,
 	transforms: &TransformHelper,
 ) -> Option<PlayerCameraPose> {
-	let members = guns.get(held).ok()?;
+	let (members, _) = guns.get(held).ok()?;
 	let socket = member_landmark_global(members.iter(), maps, transforms, "sight_camera_socket")?;
 	Some(sight_camera_pose_from_socket(socket, sight_camera_back))
 }

@@ -61,6 +61,10 @@ impl FirearmComponents for RolledFirearm {
 	fn stock_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PartNode> {
 		paint(self.kit.stock_nodes_for_level(level), self.spec.looks.stock)
 	}
+
+	fn sight_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PartNode> {
+		paint(self.kit.sight_nodes_for_level(level), self.spec.looks.sight)
+	}
 }
 
 #[cfg(test)]

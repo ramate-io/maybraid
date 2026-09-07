@@ -5,13 +5,16 @@
 //! old saves without a stats blob can recover a deterministic roll. Menus
 //! display them and [`CharacterSheet`] compiles worn clothing plus queued
 //! weapon weight. Firearm-user bakes [`FirearmStats`] into a live weapon
-//! (`Weapon`, cadence, payload, recoil); clothing `health` / `damage` feed
+//! (`Weapon`, cadence, payload, recoil, ADS FOV); clothing `health` / `damage` feed
 //! max HP and outgoing DPC.
 
 use serde::{Deserialize, Serialize};
 use std::hash::{Hash, Hasher};
 
-use crate::{ClothingMaterial, ClothingMesh, FirearmSpec, Inventory, InventoryItem, ItemColor};
+use crate::{
+	ClothingMaterial, ClothingMesh, FirearmSpec, Inventory, InventoryItem, ItemColor,
+	IRON_SIGHT_FOV,
+};
 
 const BASE_HEALTH: i16 = 100;
 const BASE_RUNNING: i16 = 100;
@@ -153,6 +156,13 @@ pub struct FirearmStats {
 	pub recoil: f32,
 	pub damage: u16,
 	pub weight: u16,
+	/// ADS vertical FOV in radians. Iron sights keep [`IRON_SIGHT_FOV`].
+	#[serde(default = "default_sight_fov")]
+	pub sight_fov: f32,
+}
+
+fn default_sight_fov() -> f32 {
+	IRON_SIGHT_FOV
 }
 
 impl PartialEq for FirearmStats {
@@ -165,6 +175,7 @@ impl PartialEq for FirearmStats {
 			&& self.recoil.to_bits() == other.recoil.to_bits()
 			&& self.damage == other.damage
 			&& self.weight == other.weight
+			&& self.sight_fov.to_bits() == other.sight_fov.to_bits()
 	}
 }
 
@@ -180,6 +191,7 @@ impl Hash for FirearmStats {
 		self.recoil.to_bits().hash(state);
 		self.damage.hash(state);
 		self.weight.hash(state);
+		self.sight_fov.to_bits().hash(state);
 	}
 }
 
@@ -226,6 +238,7 @@ impl FirearmStats {
 		}
 		rows.push((String::from("DPC"), self.damage.to_string()));
 		rows.push((String::from("Weight"), self.weight.to_string()));
+		rows.push((String::from("Sight FOV"), format!("{:.0}°", self.sight_fov.to_degrees())));
 		rows
 	}
 

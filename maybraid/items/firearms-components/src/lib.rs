@@ -63,6 +63,10 @@ pub trait FirearmComponents {
 	fn stock_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<PartNode> {
 		Layers::new()
 	}
+
+	fn sight_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<PartNode> {
+		Layers::new()
+	}
 }
 
 impl<T: FirearmComponents + ?Sized> FirearmComponents for &T {
@@ -88,6 +92,10 @@ impl<T: FirearmComponents + ?Sized> FirearmComponents for &T {
 
 	fn stock_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PartNode> {
 		(**self).stock_nodes_for_level(level)
+	}
+
+	fn sight_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PartNode> {
+		(**self).sight_nodes_for_level(level)
 	}
 }
 
@@ -152,6 +160,10 @@ impl<T: FirearmComponents + Send + Sync + 'static> FirearmComponents for Compone
 
 	fn stock_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PartNode> {
 		self.0.stock_nodes_for_level(level)
+	}
+
+	fn sight_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PartNode> {
+		self.0.sight_nodes_for_level(level)
 	}
 }
 
@@ -220,6 +232,9 @@ pub fn firearm_scene_chunks(
 	for node in firearm.stock_nodes_for_level(level).flatten() {
 		chunks.push(SceneChunk::weighted(1, node.host(lod_ref)));
 	}
+	for node in firearm.sight_nodes_for_level(level).flatten() {
+		chunks.push(SceneChunk::weighted(1, node.host(lod_ref)));
+	}
 	if chunks.is_empty() {
 		SceneChunk::primitive(scene_children(Vec::new()))
 	} else {
@@ -249,6 +264,9 @@ pub fn append_component_scenes(
 		children.push(Box::new(node.host(lod_ref)));
 	}
 	for node in firearm.stock_nodes_for_level(level).flatten() {
+		children.push(Box::new(node.host(lod_ref)));
+	}
+	for node in firearm.sight_nodes_for_level(level).flatten() {
 		children.push(Box::new(node.host(lod_ref)));
 	}
 }

@@ -33,6 +33,7 @@ pub struct FollowCamera {
 	pub focus_blend_speed: f32,
 	pub third_person_fov: f32,
 	pub first_person_fov: f32,
+	/// ADS FOV with iron sights. Held optics override this through the player aim slot.
 	pub sight_fov: f32,
 	pub max_look_yaw: f32,
 	pub body_turn_rate: f32,
