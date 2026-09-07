@@ -28,6 +28,7 @@ use crate::socket::{RigId, SkinRef};
 ///
 /// [`Self::pronograde`] marks a horizontal body (quadrupeds). The motor still
 /// uses this vertical capsule; live hit-tests use [`Self::hit_capsule`].
+/// Oversized orthograde heads add a query-only [`Self::head_capsule`].
 #[derive(Component, Clone, Copy, Debug, PartialEq)]
 pub struct LocomotionCapsule {
 	pub radius: f32,
@@ -35,6 +36,8 @@ pub struct LocomotionCapsule {
 	pub pronograde: bool,
 	/// Rest half-width of the query hull (pronograde). Ignored by the motor.
 	pub girdle: f32,
+	/// Orthograde head-socket scale (`1.0` = stock). Ignored by the motor.
+	pub head: f32,
 }
 
 /// Query-only horizontal hull for a pronograde body. Avian capsules are Y-up;
@@ -119,12 +122,58 @@ impl HitCapsule {
 	}
 }
 
+/// Query-only vertical hull for an oversized orthograde head.
+///
+/// Radius follows the head-rig `base_y(0.26)` normalization times socket scale.
+/// Center sits above the motor top so the crown is hittable without stretching
+/// the locomotion capsule.
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
+pub struct HeadCapsule {
+	pub radius: f32,
+	pub length: f32,
+	/// Parent-local Y of the capsule center.
+	pub above: f32,
+}
+
+impl HeadCapsule {
+	/// Half-height of the stock orthograde head (`AssetNormalization::base_y`).
+	pub const REST_HALF: f32 = 0.26;
+
+	pub fn for_hull(hull: LocomotionCapsule) -> Option<Self> {
+		let scale = hull.head;
+		if scale <= 1.0 + 1e-4 {
+			return None;
+		}
+		let radius = Self::REST_HALF * scale;
+		Some(Self {
+			radius,
+			length: 0.0,
+			above: hull.half_height() + Self::REST_HALF * (scale - 1.0),
+		})
+	}
+
+	pub fn local_transform(self) -> Transform {
+		Transform::from_translation(Vec3::new(0.0, self.above, 0.0))
+	}
+
+	/// Parent-local Y of the top of the head volume.
+	pub fn crown_y(self) -> f32 {
+		self.above + self.length * 0.5 + self.radius
+	}
+}
+
 impl LocomotionCapsule {
 	/// Standing ~1.8 m humanoid (Braidman and other unscaled bipeds).
-	pub const HUMANOID: Self = Self { radius: 0.4, length: 1.0, pronograde: false, girdle: 0.0 };
+	pub const HUMANOID: Self =
+		Self { radius: 0.4, length: 1.0, pronograde: false, girdle: 0.0, head: 1.0 };
 	/// Low vertical stand-in for a quadruped (not a horizontal body hull).
-	pub const QUADRUPED: Self =
-		Self { radius: 0.35, length: 0.4, pronograde: true, girdle: HitCapsule::REST_HALF_WIDTH };
+	pub const QUADRUPED: Self = Self {
+		radius: 0.35,
+		length: 0.4,
+		pronograde: true,
+		girdle: HitCapsule::REST_HALF_WIDTH,
+		head: 1.0,
+	};
 	const GROUND_CLEARANCE: f32 = 0.15;
 
 	pub fn scaled(self, scale: f32) -> Self {
@@ -133,6 +182,7 @@ impl LocomotionCapsule {
 			length: self.length * scale.max(0.0),
 			pronograde: self.pronograde,
 			girdle: self.girdle * scale.max(0.0),
+			head: self.head,
 		}
 	}
 
@@ -144,6 +194,7 @@ impl LocomotionCapsule {
 			length: (half - self.radius) * 2.0,
 			pronograde: self.pronograde,
 			girdle: self.girdle,
+			head: self.head,
 		}
 	}
 
@@ -197,18 +248,33 @@ impl LocomotionCapsule {
 		}
 		let radius = Self::HUMANOID.radius * width;
 		let half = (Self::HUMANOID.half_height() * height).max(radius);
-		Self { radius, length: (half - radius) * 2.0, pronograde: false, girdle: 0.0 }
+		Self {
+			radius,
+			length: (half - radius) * 2.0,
+			pronograde: false,
+			girdle: 0.0,
+			head: head_scale.max(0.0),
+		}
 	}
 
 	/// Extra height for an oversized head socket (whelps / Spibmom).
 	pub fn with_head_scale(self, head_scale: f32) -> Self {
 		let extra = (head_scale - 1.0).max(0.0) * Self::HUMANOID_HEAD_WEIGHT;
-		self.with_half_height(self.half_height() * (1.0 + extra))
+		self.with_half_height(self.half_height() * (1.0 + extra)).with_head(head_scale)
+	}
+
+	pub fn with_head(self, head: f32) -> Self {
+		Self { head: head.max(0.0), ..self }
 	}
 
 	/// Horizontal hit hull when this is a quadruped motor stand-in.
 	pub fn hit_capsule(self) -> Option<HitCapsule> {
 		self.pronograde.then(|| HitCapsule::for_quadruped(self))
+	}
+
+	/// Vertical hit hull when the head socket is larger than stock.
+	pub fn head_capsule(self) -> Option<HeadCapsule> {
+		HeadCapsule::for_hull(self)
 	}
 
 	/// Rest-pose feet below the visual/capsule origin.
@@ -635,7 +701,7 @@ mod tests {
 	}
 
 	#[test]
-	fn humanoid_from_pose_grows_with_legs_shoulders_and_head() {
+	fn humanoid_from_pose_grows_with_legs_shoulders_and_head() -> Result<()> {
 		use crozon_rigs::{BoneScale, ResolvedRigPose, RigPoseLayer};
 
 		let stock = LocomotionCapsule::humanoid_from_pose(&ResolvedRigPose::new(), 1.0);
@@ -661,8 +727,15 @@ mod tests {
 		let headed = LocomotionCapsule::humanoid_from_pose(&ResolvedRigPose::new(), 2.0);
 		assert!(headed.half_height() > LocomotionCapsule::HUMANOID.half_height());
 		assert!(headed.hit_capsule().is_none());
+		let head = headed
+			.head_capsule()
+			.ok_or_else(|| anyhow!("oversized socket should get a head volume"))?;
+		assert!(head.crown_y() > headed.half_height() + HeadCapsule::REST_HALF);
 
 		let whelp = LocomotionCapsule::HUMANOID.scaled(0.30).with_head_scale(1.85);
 		assert!(whelp.half_height() > LocomotionCapsule::HUMANOID.scaled(0.30).half_height());
+		assert!(whelp.head_capsule().is_some());
+		assert!(LocomotionCapsule::HUMANOID.head_capsule().is_none());
+		Ok(())
 	}
 }

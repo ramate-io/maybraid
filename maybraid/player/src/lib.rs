@@ -18,7 +18,7 @@ pub use body::{
 	CharacterLocomotion, Grounded, JumpPhase, JumpWish, Jumping, MoveWish, PlayerControlSystems,
 	WalkableGround,
 };
-pub use crozon_characters::HitCapsule;
+pub use crozon_characters::{HeadCapsule, HitCapsule};
 pub use hit::HitVolume;
 pub use identity::{
 	CameraFollow, Npc, Player, PlayerCameraAim, PlayerCameraPose, PlayerCapsule, PlayerLook,

@@ -28,9 +28,11 @@ on the capsule stays zero. Pronograde recipes keep that vertical motor
 hull and add a query-only horizontal [`HitCapsule`](../crozon/characters/src/components.rs)
 child (`Sensor`, Animated layer) so projectiles can hit the body and tail.
 Hit radius follows rest-pose shoulder / hip / torso bone scales, not the motor
-radius. Bipeds keep a single vertical capsule sized from rest-pose legs, spine,
-neck, head socket, and shoulders. The child follows visual yaw; `Health` stays
-on the body.
+radius. Bipeds keep a single vertical motor capsule sized from rest-pose legs,
+spine, neck, and shoulders. Oversized heads (Spibmom, cartoon whelps) add a
+query-only [`HeadCapsule`](../crozon/characters/src/components.rs) sphere above
+the motor top so the crown is hittable. The child follows visual yaw; `Health`
+stays on the body.
 
 ```text
 CharacterIntent ─► wish / jump          (this crate)

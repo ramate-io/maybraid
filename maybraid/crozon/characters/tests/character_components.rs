@@ -19,8 +19,8 @@ use crozon_characters::{
 		topple::{Topple, ToppleConfig},
 		ylter::{Yilter, YilterConfig},
 	},
-	BuildPreset, CharacterComponents, CharacterPartSlot, CharacterRecipe, Clothed, HitCapsule,
-	Layer, LocomotionCapsule, PartNode, RigId,
+	BuildPreset, CharacterComponents, CharacterPartSlot, CharacterRecipe, Clothed, HeadCapsule,
+	HitCapsule, Layer, LocomotionCapsule, PartNode, RigId,
 };
 use lod::gen::LodSceneLevel;
 use scene_ref::MirrorAxis;
@@ -161,7 +161,7 @@ fn ylter_and_croconot_hulls_follow_species_limb_length() {
 }
 
 #[test]
-fn biped_hull_follows_legs_shoulders_and_head() {
+fn biped_hull_follows_legs_shoulders_and_head() -> Result<()> {
 	let average = Braidman::from_config(&BraidmanConfig::default_preview());
 	let mut long = BraidmanConfig::default_preview();
 	long.sliders.leg_length = 1.2;
@@ -175,6 +175,12 @@ fn biped_hull_follows_legs_shoulders_and_head() {
 	let spibmom = Spibmom::from_config(&SpibmomConfig::default_preview());
 	assert!(spibmom.locomotion_capsule().half_height() > LocomotionCapsule::HUMANOID.half_height());
 	assert!(spibmom.locomotion_capsule().hit_capsule().is_none());
+	let head = spibmom
+		.locomotion_capsule()
+		.head_capsule()
+		.ok_or_else(|| anyhow!("Spibmom 2× head should get a head volume"))?;
+	assert!(head.crown_y() > spibmom.locomotion_capsule().half_height() + HeadCapsule::REST_HALF);
+	Ok(())
 }
 
 #[test]
