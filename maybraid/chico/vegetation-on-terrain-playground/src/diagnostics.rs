@@ -98,14 +98,16 @@ impl Plugin for PlaygroundTimingPlugin {
 pub fn toggle_fps_logging(
 	mut commands: Commands,
 	mut diag: ResMut<PlaygroundDiag>,
-	mut status: ResMut<game_commands::ui::GameCommandStatusText>,
+	mut status: Option<ResMut<game_commands::ui::GameCommandStatusText>>,
 	requests: Query<Entity, With<RequestFpsToggle>>,
 ) {
 	for entity in &requests {
 		diag.fps = !diag.fps;
-		status.0 =
-			if diag.fps { "[veg.timing] fps on".into() } else { "[veg.timing] fps off".into() };
-		info!("{}", status.0);
+		let line = if diag.fps { "[veg.timing] fps on" } else { "[veg.timing] fps off" };
+		if let Some(status) = status.as_mut() {
+			status.0 = line.into();
+		}
+		info!("{line}");
 		commands.entity(entity).despawn();
 	}
 }

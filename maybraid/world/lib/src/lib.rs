@@ -77,24 +77,26 @@ const WORLD_TERRAIN_PITCH_GIZMOS: DrawTerrainPitchProbes = DrawTerrainPitchProbe
 /// Assembled world: Durham terrain, streamed forest, urbanization, sky dome, character.
 ///
 /// Playground chrome (command drawer and FPS HUD) is on by default.
-/// The game executable uses [`WorldPlugin::game`].
+/// The game executable uses [`WorldPlugin::game`] (FPS HUD, no console).
 pub struct WorldPlugin {
-	/// `/` console and FPS HUD.
+	/// `/` console, debug gizmos, and FPS HUD.
 	pub debug_chrome: bool,
+	/// FPS log + on-screen HUD ([`PlaygroundTimingPlugin`]).
+	pub fps_diag: bool,
 	/// Upper-left virtual-pad / command-intent dump.
 	pub input_debug_enabled: bool,
 }
 
 impl Default for WorldPlugin {
 	fn default() -> Self {
-		Self { debug_chrome: true, input_debug_enabled: false }
+		Self { debug_chrome: true, fps_diag: true, input_debug_enabled: false }
 	}
 }
 
 impl WorldPlugin {
-	/// World systems without playground overlays.
+	/// World systems without playground overlays. FPS HUD stays on.
 	pub fn game() -> Self {
-		Self { debug_chrome: false, input_debug_enabled: false }
+		Self { debug_chrome: false, fps_diag: true, input_debug_enabled: false }
 	}
 }
 
@@ -106,7 +108,7 @@ impl Plugin for WorldPlugin {
 			);
 		}
 		app.insert_resource(PlaygroundMode::Character)
-			.insert_resource(PlaygroundDiag { fps: self.debug_chrome })
+			.insert_resource(PlaygroundDiag { fps: self.fps_diag || self.debug_chrome })
 			.insert_resource(CharacterLocomotion { max_slope_angle: WORLD_MAX_SLOPE_ANGLE })
 			.insert_resource(player::CharacterLocomotion { max_slope_angle: WORLD_MAX_SLOPE_ANGLE })
 			.insert_resource(TerrainFrictionConfig(WORLD_TERRAIN_FRICTION))
@@ -162,8 +164,11 @@ impl Plugin for WorldPlugin {
 				tile_size: 500.0,
 			})
 			.add_plugins(SkyDomePlugin::default());
+		if self.fps_diag || self.debug_chrome {
+			app.add_plugins(PlaygroundTimingPlugin);
+		}
 		if self.debug_chrome {
-			app.add_plugins(PlaygroundTimingPlugin).add_plugins(
+			app.add_plugins(
 				GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config())
 					.with_drawer_config(GameCommandDrawerConfig {
 						open_at_start: false,
@@ -242,6 +247,13 @@ mod tests {
 	fn world_input_debug_overlay_is_opt_in() {
 		assert!(!WorldPlugin::default().input_debug_enabled);
 		assert!(!WorldPlugin::game().input_debug_enabled);
+	}
+
+	#[test]
+	fn game_world_keeps_fps_diag_without_debug_chrome() {
+		let game = WorldPlugin::game();
+		assert!(game.fps_diag);
+		assert!(!game.debug_chrome);
 	}
 
 	#[test]
