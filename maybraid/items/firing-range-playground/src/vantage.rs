@@ -212,7 +212,7 @@ mod tests {
 	fn live_combatant_gets_one_character_subject() -> Result<(), bevy::ecs::system::RunSystemError>
 	{
 		let mut world = World::new();
-		let entity = world.spawn((Npc, LocomotionCapsule { radius: 0.4, length: 1.0 })).id();
+		let entity = world.spawn((Npc, LocomotionCapsule::HUMANOID)).id();
 		world.run_system_once(sync_combat_spot_subjects)?;
 		let subject = world.get::<SpotSubject>(entity);
 		assert!(subject.is_some_and(|subject| {
@@ -227,9 +227,7 @@ mod tests {
 	fn civilian_subject_is_not_a_combat_character() -> Result<(), bevy::ecs::system::RunSystemError>
 	{
 		let mut world = World::new();
-		let entity = world
-			.spawn((Npc, Civilian, LocomotionCapsule { radius: 0.4, length: 1.0 }))
-			.id();
+		let entity = world.spawn((Npc, Civilian, LocomotionCapsule::HUMANOID)).id();
 		world.run_system_once(sync_combat_spot_subjects)?;
 		let subject = world.get::<SpotSubject>(entity);
 		assert!(subject.is_some_and(|subject| {

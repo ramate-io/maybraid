@@ -24,7 +24,11 @@ Body applies those for every capsule. Overlapping [`Npc`](src/identity.rs)
 capsules get a kinematic XZ [`SoftBump`](src/separation.rs) on `MoveWish`
 before realization so pack-mates start steering apart before capsule contacts
 shove them. Animated movers contact Fixed geometry and each other; restitution
-on the capsule stays zero.
+on the capsule stays zero. Pronograde recipes keep that vertical motor
+hull and add a query-only horizontal [`HitCapsule`](../crozon/characters/src/components.rs)
+child (`Sensor`, Animated layer) so projectiles can hit the body and tail.
+Hit radius follows rest-pose shoulder / hip / torso bone scales, not the motor
+radius. The child follows visual yaw; `Health` stays on the body.
 
 ```text
 CharacterIntent ─► wish / jump          (this crate)

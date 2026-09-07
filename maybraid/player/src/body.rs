@@ -195,6 +195,7 @@ pub fn apply_locomotion_capsule(commands: &mut Commands, body: Entity, hull: Loc
 			.with_max_distance(GROUND_CAST_DISTANCE)
 			.with_query_filter(SpatialQueryFilter::from_mask(PhysicsInteractionLayer::Fixed)),
 	));
+	crate::hit::apply_hit_capsule(commands, body, hull);
 }
 
 /// Stamp the dynamic character controller onto an existing scene plant.

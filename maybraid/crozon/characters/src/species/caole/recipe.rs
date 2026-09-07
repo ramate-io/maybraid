@@ -58,15 +58,14 @@ impl Default for Caole {
 
 impl CharacterComponents for Caole {
 	fn locomotion_capsule(&self) -> LocomotionCapsule {
-		LocomotionCapsule::quadruped_for_limb_length(
-			CaolePose {
-				body: self.body,
-				gender: self.gender,
-				build: self.build,
-				sliders: self.sliders.clamped(),
-			}
-			.rest_limb_scale(),
-		)
+		let pose = CaolePose {
+			body: self.body,
+			gender: self.gender,
+			build: self.build,
+			sliders: self.sliders.clamped(),
+		};
+		LocomotionCapsule::quadruped_for_limb_length(pose.rest_limb_scale())
+			.with_pose_girdle(&pose.resolve())
 	}
 
 	fn rig_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<RigNode> {

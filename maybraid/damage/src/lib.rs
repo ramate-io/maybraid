@@ -52,6 +52,22 @@ impl Health {
 		self.current <= 0.0
 	}
 
+	/// Live hit-tests can land on a query-only child collider. One parent hop.
+	pub fn entity_or_parent(
+		entity: Entity,
+		parent: Option<Entity>,
+		self_has_health: bool,
+		parent_has_health: bool,
+	) -> Entity {
+		if self_has_health {
+			entity
+		} else if parent_has_health {
+			parent.unwrap_or(entity)
+		} else {
+			entity
+		}
+	}
+
 	pub fn fraction(self) -> f32 {
 		if self.max <= 0.0 {
 			0.0
@@ -188,5 +204,15 @@ mod tests {
 		assert!(!band.contains(&target, Vec3::new(2.0, 1.5, 0.0)));
 		assert!((band.scale(&target, Vec3::new(2.0, 1.75, 0.0), 25.0) - 31.25).abs() < 1e-4);
 		assert!((band.scale(&target, Vec3::new(2.0, 1.5, 0.0), 25.0) - 25.0).abs() < 1e-4);
+	}
+
+	#[test]
+	fn health_remounts_child_onto_parent() {
+		let body = Entity::from_bits(1);
+		let child = Entity::from_bits(2);
+		assert_eq!(Health::entity_or_parent(child, Some(body), false, true), body);
+		assert_eq!(Health::entity_or_parent(body, None, true, false), body);
+		assert_eq!(Health::entity_or_parent(child, Some(body), true, true), child);
+		assert_eq!(Health::entity_or_parent(child, Some(body), false, false), child);
 	}
 }
