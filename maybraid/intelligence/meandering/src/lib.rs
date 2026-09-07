@@ -142,6 +142,7 @@ pub fn select_meandering_goals(
 			now,
 			meandering.linger_secs,
 			state.as_deref_mut(),
+			meandering.selection_salt,
 		);
 	}
 }
@@ -181,8 +182,13 @@ fn not_already_there(at: Vec3, candidates: Vec<KnownPoi>) -> Vec<KnownPoi> {
 
 #[cfg(test)]
 mod tests {
+	use bevy::ecs::system::RunSystemOnce;
+
 	use super::*;
-	use poi_intelligence::{PoiId, PoiInterests, PoiKind};
+	use poi_intelligence::{
+		PoiId, PoiIntelligenceUser, PoiInterests, PoiKind, PoiKnowledge, PoiObservation,
+		PoiVisitState,
+	};
 
 	#[test]
 	fn score_prefers_nearer_equal_pois() -> anyhow::Result<()> {
@@ -248,21 +254,77 @@ mod tests {
 		let near = known(4, 20.0);
 		let other = known(7, 20.0);
 		let policy = PoiVisitPolicy::default();
-		let first = choose_poi(
-			&mut PoiVisitState::default(),
-			policy,
-			&[near, other],
-			0.0,
-			|poi| meandering_score(poi, Vec3::ZERO, 200.0, &interests, MeanderingIntelligenceUser::salt_for_slot(0)),
-		);
-		let second = choose_poi(
-			&mut PoiVisitState::default(),
-			policy,
-			&[near, other],
-			0.0,
-			|poi| meandering_score(poi, Vec3::ZERO, 200.0, &interests, MeanderingIntelligenceUser::salt_for_slot(1)),
-		);
+		let first = choose_poi(&mut PoiVisitState::default(), policy, &[near, other], 0.0, |poi| {
+			meandering_score(
+				poi,
+				Vec3::ZERO,
+				200.0,
+				&interests,
+				MeanderingIntelligenceUser::salt_for_slot(0),
+			)
+		});
+		let second =
+			choose_poi(&mut PoiVisitState::default(), policy, &[near, other], 0.0, |poi| {
+				meandering_score(
+					poi,
+					Vec3::ZERO,
+					200.0,
+					&interests,
+					MeanderingIntelligenceUser::salt_for_slot(1),
+				)
+			});
 		assert_ne!(first, second);
+		Ok(())
+	}
+
+	#[test]
+	fn different_salts_write_different_live_points() -> anyhow::Result<()> {
+		let kind = PoiKind::new("test/place");
+		let interests = PoiInterests::one(kind);
+		let knowledge = || {
+			let mut knowledge = PoiKnowledge::default();
+			let mut observation =
+				PoiObservation::external(Entity::PLACEHOLDER, PoiId(4), kind, Vec3::X * 40.0);
+			observation.arrival_radius = 8.0;
+			knowledge.observe(observation, 0.0);
+			knowledge
+		};
+		let mut world = World::new();
+		world.init_resource::<Time>();
+		let a = world
+			.spawn((
+				GlobalTransform::IDENTITY,
+				MeanderingIntelligenceUser {
+					selection_salt: MeanderingIntelligenceUser::salt_for_slot(0),
+					linger_secs: 1.0,
+					..MeanderingIntelligenceUser::new(200.0)
+				},
+				PoiIntelligenceUser::new(interests.clone()),
+				knowledge(),
+				PoiVisitState::default(),
+			))
+			.id();
+		let b = world
+			.spawn((
+				GlobalTransform::IDENTITY,
+				MeanderingIntelligenceUser {
+					selection_salt: MeanderingIntelligenceUser::salt_for_slot(1),
+					linger_secs: 1.0,
+					..MeanderingIntelligenceUser::new(200.0)
+				},
+				PoiIntelligenceUser::new(interests),
+				knowledge(),
+				PoiVisitState::default(),
+			))
+			.id();
+		assert!(world.run_system_once(select_meandering_goals).is_ok());
+		let point_a = world.get::<PoiGoal>(a).map(|goal| goal.location.point);
+		let point_b = world.get::<PoiGoal>(b).map(|goal| goal.location.point);
+		assert!(point_a.is_some() && point_b.is_some());
+		if let (Some(point_a), Some(point_b)) = (point_a, point_b) {
+			assert_ne!(point_a.xz(), point_b.xz());
+			assert_ne!(point_a.xz(), (Vec3::X * 40.0).xz());
+		}
 		Ok(())
 	}
 }

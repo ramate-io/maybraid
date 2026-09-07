@@ -469,6 +469,46 @@ fn lock_retargets_member_tethers_to_the_destination() {
 }
 
 #[test]
+fn lock_gives_each_slot_a_distinct_standoff() -> anyhow::Result<()> {
+	let mut world = World::new();
+	world.init_resource::<Time>();
+	let host = spawn_host(
+		&mut world,
+		MobId(30),
+		vec![
+			RosterMember::new(Personality::Grazer, Vec3::ZERO).with_armed(false),
+			RosterMember::new(Personality::Grazer, Vec3::X).with_armed(false),
+			RosterMember::new(Personality::Grazer, Vec3::Z).with_armed(false),
+		],
+	);
+	let dest = world.spawn((Transform::from_xyz(20.0, 0.0, 0.0), Tether)).id();
+	let plants = [
+		world.spawn((Transform::default(), MobSlot(0), MobId(30))).id(),
+		world.spawn((Transform::default(), MobSlot(1), MobId(30))).id(),
+		world.spawn((Transform::default(), MobSlot(2), MobId(30))).id(),
+	];
+	assert!(world.run_system_once(bind_mob_members).is_ok());
+	world.flush();
+	world
+		.entity_mut(host)
+		.insert(MobTetherLock { subject: dest, generation: 1, until: 8.0 });
+	assert!(world.run_system_once(apply_mob_tether_subjects).is_ok());
+	let radii: Vec<f32> = plants
+		.into_iter()
+		.filter_map(|plant| {
+			world
+				.get::<TetherIntelligenceUser>(plant)
+				.and_then(|user| match user.objective {
+					TetherObjective::Tether(subject, radius) if subject == dest => Some(radius),
+					_ => None,
+				})
+		})
+		.collect();
+	assert_eq!(radii, vec![6.0, 8.0, 10.0]);
+	Ok(())
+}
+
+#[test]
 fn expired_lock_restores_the_host_subject() {
 	let mut world = World::new();
 	world.init_resource::<Time>();

@@ -2,11 +2,25 @@ use bevy::prelude::*;
 use movement_intelligence::MovementObjective;
 
 use crate::memory::TetherMemory;
-use crate::objective::{StalkRadii, TetherObjective, ring_point};
+use crate::objective::{ring_point, StalkRadii, TetherObjective};
 use crate::user::{TetherAction, TetherIntelligenceUser};
 
 fn subject() -> Entity {
 	Entity::from_bits(7)
+}
+
+#[test]
+fn lock_standoff_cycles_slot_radii() -> anyhow::Result<()> {
+	assert_eq!(TetherObjective::lock_standoff(0), 6.0);
+	assert_eq!(TetherObjective::lock_standoff(1), 8.0);
+	assert_eq!(TetherObjective::lock_standoff(2), 10.0);
+	assert_eq!(TetherObjective::lock_standoff(3), 6.0);
+	let idle = TetherObjective::Tether(subject(), 24.0);
+	assert!(matches!(
+		idle.with_lock_standoff(1),
+		TetherObjective::Tether(_, radius) if (radius - 8.0).abs() < 1e-5
+	));
+	Ok(())
 }
 
 #[test]

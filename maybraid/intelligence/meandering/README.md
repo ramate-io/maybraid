@@ -1,7 +1,9 @@
 # Meandering intelligence
 
 `MeanderingIntelligenceUser` chooses a retained POI inside a nearby radius and
-creates a `PoiGoal`. `linger_secs` is copied onto that goal so the mover stays
+creates a `PoiGoal`. `selection_salt` is also the live destination salt: pack
+slots walk to different points on the arrival disk, not the shared pin.
+`linger_secs` is copied onto that goal so the mover stays
 at the destination after first arrival; leaving the disk resets the clock.
 Selection favors relevant, salient, confident, nearby destinations while
 `PoiVisitPolicy` controls novelty or an explicit cycle. Candidates the mover

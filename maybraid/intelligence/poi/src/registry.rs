@@ -5,6 +5,7 @@ use bevy::prelude::*;
 use gimme_core::{BaseScale, HashMapStore, Level, SpatialId, SpatialIndexError, TypedIndex};
 
 use crate::hash::unit_f32;
+use crate::place::ArrivalDisk;
 use crate::{
 	NearbyChoice, NearbyQuery, Poi, PoiId, PoiInterests, PoiKind, PoiObservation, PoiSource,
 	MAX_POI_ARRIVAL_RADIUS,
@@ -27,6 +28,10 @@ pub struct PoiRecord {
 }
 
 impl PoiRecord {
+	pub fn arrival_disk(self) -> ArrivalDisk {
+		ArrivalDisk::new(self.position, self.arrival_radius)
+	}
+
 	pub fn observation(self, user: Entity, source: PoiSource) -> PoiObservation {
 		PoiObservation {
 			user,

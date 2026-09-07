@@ -3,9 +3,9 @@
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use meandering_intelligence::MeanderingIntelligenceUser;
-use npc_intelligence::NpcIntelligence;
+use npc_intelligence::{NpcIntelligence, Personality};
 use poi_intelligence::PoiIntelligenceUser;
-use tether_intelligence::TetherIntelligenceUser;
+use tether_intelligence::{TetherIntelligenceUser, TetherObjective};
 use threat_intelligence::{ThreatId, ThreatSubject};
 
 use crate::host::{Mob, MobId};
@@ -90,7 +90,14 @@ pub(crate) fn bind_mob_members(
 		if !has_mixer {
 			personality.install(&mut commands, plant, install);
 		} else {
-			retarget_member_tether(host, plant, &mut bind.mixers, &mut bind.tethers);
+			MemberTetherRetarget {
+				subject: host,
+				plant,
+				slot: slot.0,
+				locked: false,
+				personality: Some(personality),
+			}
+			.apply(&mut bind.mixers, &mut bind.tethers);
 			if let Ok(mut learner) = bind.learners.get_mut(plant) {
 				learner.interests = member.interests.clone();
 			}
@@ -142,21 +149,60 @@ pub(crate) fn propagate_mob_membership(
 	}
 }
 
-pub(crate) fn retarget_member_tether(
-	subject: Entity,
-	plant: Entity,
-	mixers: &mut Query<&mut NpcIntelligence>,
-	tethers: &mut Query<&mut TetherIntelligenceUser>,
-) {
-	if let Ok(mut mixer) = mixers.get_mut(plant) {
-		if let Some(idle) = mixer.idle_tether.as_mut() {
-			*idle = idle.with_subject(subject);
+#[derive(Clone, Copy)]
+pub(crate) struct MemberTetherRetarget {
+	pub subject: Entity,
+	pub plant: Entity,
+	pub slot: u16,
+	pub locked: bool,
+	pub personality: Option<Personality>,
+}
+
+impl MemberTetherRetarget {
+	pub(crate) fn apply(
+		self,
+		mixers: &mut Query<&mut NpcIntelligence>,
+		tethers: &mut Query<&mut TetherIntelligenceUser>,
+	) {
+		let idle = self.idle_objective();
+		let engaged = self.engaged_objective();
+		if let Ok(mut mixer) = mixers.get_mut(self.plant) {
+			if let Some(objective) = idle {
+				mixer.idle_tether = Some(objective);
+			} else if let Some(current) = mixer.idle_tether.as_mut() {
+				*current = self.adjust(*current);
+			}
+			if let Some(objective) = engaged {
+				mixer.engaged_tether = Some(objective);
+			} else if let Some(current) = mixer.engaged_tether.as_mut() {
+				*current = self.adjust(*current);
+			}
 		}
-		if let Some(engaged) = mixer.engaged_tether.as_mut() {
-			*engaged = engaged.with_subject(subject);
+		if let Ok(mut tether) = tethers.get_mut(self.plant) {
+			tether.objective = idle.unwrap_or_else(|| self.adjust(tether.objective));
 		}
 	}
-	if let Ok(mut tether) = tethers.get_mut(plant) {
-		tether.objective = tether.objective.with_subject(subject);
+
+	fn idle_objective(self) -> Option<TetherObjective> {
+		self.personality
+			.map(|personality| self.adjust(personality.spec().tether.objective(self.subject)))
+	}
+
+	fn engaged_objective(self) -> Option<TetherObjective> {
+		self.personality.and_then(|personality| {
+			personality
+				.spec()
+				.engaged_tether_radius
+				.map(|radius| self.adjust(TetherObjective::Tether(self.subject, radius)))
+		})
+	}
+
+	fn adjust(self, objective: TetherObjective) -> TetherObjective {
+		let retargeted = objective.with_subject(self.subject);
+		if self.locked {
+			retargeted.with_lock_standoff(self.slot)
+		} else {
+			retargeted
+		}
 	}
 }

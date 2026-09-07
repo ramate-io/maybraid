@@ -8,7 +8,9 @@ Shared point-of-interest discovery and retained knowledge.
 - `PoiKnowledge` unions source ownership, retains old findings, and accepts directed
   `PoiObservation` messages from any other discovery system.
 - `PoiGoal` hands a selected destination to routing when available, otherwise directly
-  to movement. `linger_secs` keeps the goal active after first arrival; leaving the
+  to movement. `destination_salt` offsets that walk point on the arrival disk so
+  pack-mates who share a `PoiId` do not all aim at the pin (`0` keeps the center).
+  `linger_secs` keeps the goal active after first arrival; leaving the
   disk resets that clock. `PoiGoalState` preserves generation-tagged completion
   state and `PoiGoalCompleted` notifies one-shot consumers once linger finishes.
 

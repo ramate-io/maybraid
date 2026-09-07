@@ -2,9 +2,10 @@ use bevy::ecs::system::RunSystemOnce;
 use bevy::prelude::*;
 
 use crate::{
-	choose_poi, drive_poi_goals, GlobalPoi, KnownPoi, LocalPoi, Poi, PoiGoal, PoiGoalState,
-	PoiGoalStatus, PoiId, PoiInterest, PoiInterests, PoiKind, PoiKnowledge, PoiLearningPolicy,
-	PoiObservation, PoiRegistry, PoiSource, PoiVisitPolicy, PoiVisitState, DEFAULT_NEARBY_RADIUS,
+	choose_poi, drive_poi_goals, refresh_poi_goals, GlobalPoi, KnownPoi, LocalPoi, Poi, PoiGoal,
+	PoiGoalState, PoiGoalStatus, PoiId, PoiInterest, PoiInterests, PoiKind, PoiKnowledge,
+	PoiLearningPolicy, PoiObservation, PoiRegistry, PoiSource, PoiVisitPolicy, PoiVisitState,
+	AGENT_SEPARATION, DEFAULT_NEARBY_RADIUS,
 };
 use movement_intelligence::MovementIntelligence;
 use routing_intelligence::{RoutingIntelligenceUser, RoutingSettings};
@@ -243,5 +244,62 @@ fn drive_sets_a_route_without_movement_intelligence() -> anyhow::Result<()> {
 	let routing = world.get::<RoutingIntelligenceUser>(user).expect("routing");
 	assert_eq!(routing.destination, Some(Vec3::X * 40.0));
 	assert!(world.get::<MovementIntelligence>(user).is_none());
+	Ok(())
+}
+
+#[test]
+fn from_known_salt_offsets_the_pin() -> anyhow::Result<()> {
+	let known = KnownPoi {
+		id: PoiId(11),
+		entity: None,
+		kind: CAMP,
+		position: Vec3::new(10.0, 3.0, 0.0),
+		arrival_radius: 8.0,
+		salience: 1.0,
+		confidence: 1.0,
+		sources: PoiSource::LOCAL_SCAN,
+		first_observed_at: 0.0,
+		last_observed_at: 0.0,
+	};
+	let pin = PoiGoal::from_known(1, known, 0.0, 0.0, 0);
+	assert_eq!(pin.location.point, known.position);
+	let slotted = PoiGoal::from_known(1, known, 0.0, 0.0, 7);
+	assert_ne!(slotted.location.point.xz(), known.position.xz());
+	assert!((slotted.location.radius - AGENT_SEPARATION).abs() < 1e-5);
+	assert_eq!(slotted.destination_salt, 7);
+	Ok(())
+}
+
+#[test]
+fn refresh_reapplies_destination_salt() -> anyhow::Result<()> {
+	let mut world = World::new();
+	let mut registry = PoiRegistry::default();
+	let marker = Entity::from_bits(11);
+	registry.upsert(
+		marker,
+		Poi::new(PoiId(11), CAMP).with_arrival_radius(8.0),
+		Vec3::ZERO,
+		true,
+		false,
+	)?;
+	world.insert_resource(registry);
+	let known = KnownPoi {
+		id: PoiId(11),
+		entity: Some(marker),
+		kind: CAMP,
+		position: Vec3::ZERO,
+		arrival_radius: 8.0,
+		salience: 1.0,
+		confidence: 1.0,
+		sources: PoiSource::LOCAL_SCAN,
+		first_observed_at: 0.0,
+		last_observed_at: 0.0,
+	};
+	let user = world.spawn(PoiGoal::from_known(1, known, 0.0, 0.0, 7)).id();
+	let first = world.get::<PoiGoal>(user).map(|goal| goal.location);
+	assert!(world.run_system_once(refresh_poi_goals).is_ok());
+	let after = world.get::<PoiGoal>(user).map(|goal| goal.location);
+	assert_eq!(first, after);
+	assert!(first.is_some_and(|location| location.point.xz() != Vec2::ZERO));
 	Ok(())
 }

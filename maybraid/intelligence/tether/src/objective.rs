@@ -56,6 +56,18 @@ impl TetherObjective {
 		}
 	}
 
+	/// Locked-pack standoffs so mates do not share one ring around the subject.
+	pub const LOCK_STANDOFFS: [f32; 3] = [6.0, 8.0, 10.0];
+
+	pub fn lock_standoff(slot: u16) -> f32 {
+		Self::LOCK_STANDOFFS[usize::from(slot) % Self::LOCK_STANDOFFS.len()]
+	}
+
+	/// Sit on the slot ring around the current subject.
+	pub fn with_lock_standoff(self, slot: u16) -> Self {
+		Self::Tether(self.subject(), Self::lock_standoff(slot))
+	}
+
 	/// Horizontal work left before the objective is geometrically met.
 	pub fn remaining(self, from: Vec3, subject: Vec3) -> f32 {
 		let dist = xz(from, subject);

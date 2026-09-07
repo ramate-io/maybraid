@@ -3,9 +3,10 @@
 use std::f32::consts::TAU;
 
 use bevy::prelude::*;
+use movement_intelligence::MovementLocation;
 
 use crate::hash::{mix, unit_f32};
-use crate::{NearbyFallback, NearbyQuery, PoiId, PoiInterests, PoiRecord, PoiRegistry};
+use crate::{NearbyFallback, NearbyQuery, PoiId, PoiInterests, PoiRegistry};
 
 const ARRIVAL_DISK_MIN: f32 = 2.0;
 const ARRIVAL_DISK_MAX: f32 = 12.0;
@@ -15,6 +16,36 @@ const RING_ANGLE_SALT: u64 = 0x776f_726c_6470_6c79;
 
 /// Horizontal distance kept between pack-mates on plant and replace.
 pub const AGENT_SEPARATION: f32 = 2.0;
+
+/// Arrival disk around a POI pin. Salt `0` keeps the center; any other salt
+/// picks a live walk target on the disk.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ArrivalDisk {
+	pub center: Vec3,
+	pub radius: f32,
+}
+
+impl ArrivalDisk {
+	pub fn new(center: Vec3, radius: f32) -> Self {
+		Self { center, radius }
+	}
+
+	/// Uniform XZ point in the clamped arrival disk. Height stays on `center`.
+	pub fn offset(self, salt: u64) -> Vec3 {
+		let radius = self.radius.clamp(ARRIVAL_DISK_MIN, ARRIVAL_DISK_MAX);
+		let distance = unit_f32(mix(salt ^ DISK_DISTANCE_SALT)).sqrt() * radius;
+		self.center + polar_xz(distance, mix(salt ^ DISK_ANGLE_SALT))
+	}
+
+	/// Walk target for a live `PoiGoal`. Salt `0` is the pin (hosts / journey).
+	pub fn slotted(self, salt: u64) -> MovementLocation {
+		if salt == 0 {
+			MovementLocation::new(self.center, self.radius.max(0.0))
+		} else {
+			MovementLocation::new(self.offset(salt), AGENT_SEPARATION)
+		}
+	}
+}
 
 /// Horizontal pose from [`place_nearby`]. `position.y` is the POI or center height.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -57,7 +88,10 @@ pub fn place_nearby_among(
 		registry.choose_in(center, query, interests, excluded, seed)
 	});
 	let placed = match poi {
-		Some(poi) => NearbyPlace { position: offset_in_arrival_disk(poi, seed), poi: Some(poi.id) },
+		Some(poi) => NearbyPlace {
+			position: ArrivalDisk::new(poi.position, poi.arrival_radius).offset(seed),
+			poi: Some(poi.id),
+		},
 		None => {
 			NearbyPlace { position: offset_in_fallback_ring(center, seed, fallback), poi: None }
 		}
@@ -67,13 +101,7 @@ pub fn place_nearby_among(
 
 impl NearbyPlace {
 	/// Orbit `center` until XZ is at least `min_separation` from every occupant.
-	pub fn clear_of(
-		self,
-		center: Vec3,
-		occupied: &[Vec3],
-		min_separation: f32,
-		seed: u64,
-	) -> Self {
+	pub fn clear_of(self, center: Vec3, occupied: &[Vec3], min_separation: f32, seed: u64) -> Self {
 		if occupied.is_empty() || min_separation <= 0.0 {
 			return self;
 		}
@@ -91,12 +119,16 @@ impl NearbyPlace {
 	}
 
 	fn separated(position: Vec3, occupied: &[Vec3], min_separation: f32) -> bool {
-		occupied.iter().all(|other| (position.xz() - other.xz()).length() >= min_separation - 1e-4)
+		occupied
+			.iter()
+			.all(|other| (position.xz() - other.xz()).length() >= min_separation - 1e-4)
 	}
 
 	fn push_off_nearest(self, occupied: &[Vec3], min_separation: f32, seed: u64) -> Self {
 		let Some(other) = occupied.iter().copied().min_by(|a, b| {
-			(self.position.xz() - a.xz()).length().total_cmp(&(self.position.xz() - b.xz()).length())
+			(self.position.xz() - a.xz())
+				.length()
+				.total_cmp(&(self.position.xz() - b.xz()).length())
 		}) else {
 			return self;
 		};
@@ -155,12 +187,6 @@ impl PoiRegistry {
 			min_separation,
 		)
 	}
-}
-
-fn offset_in_arrival_disk(poi: PoiRecord, seed: u64) -> Vec3 {
-	let radius = poi.arrival_radius.clamp(ARRIVAL_DISK_MIN, ARRIVAL_DISK_MAX);
-	let distance = unit_f32(mix(seed ^ DISK_DISTANCE_SALT)).sqrt() * radius;
-	poi.position + polar_xz(distance, mix(seed ^ DISK_ANGLE_SALT))
 }
 
 fn offset_in_fallback_ring(center: Vec3, seed: u64, fallback: NearbyFallback) -> Vec3 {
@@ -392,5 +418,22 @@ mod tests {
 		);
 		assert_eq!(placed.poi, Some(PoiId(13)));
 		Ok(())
+	}
+
+	#[test]
+	fn slotted_salts_split_the_arrival_disk() {
+		let disk = ArrivalDisk::new(Vec3::new(10.0, 4.0, -2.0), 8.0);
+		let pin = disk.slotted(0);
+		assert_eq!(pin.point, disk.center);
+		assert!((pin.radius - 8.0).abs() < 1e-5);
+		let first = disk.slotted(1);
+		let again = disk.slotted(1);
+		let other = disk.slotted(2);
+		assert_eq!(first, again);
+		assert_ne!(first.point.xz(), other.point.xz());
+		assert_ne!(first.point.xz(), disk.center.xz());
+		assert!((first.point.xz() - disk.center.xz()).length() <= 8.0 + 1e-4);
+		assert!((first.radius - AGENT_SEPARATION).abs() < 1e-5);
+		assert_eq!(first.point.y, disk.center.y);
 	}
 }
