@@ -198,6 +198,15 @@ impl TerrainEntryStore {
 		self.terrain.get(&id).map(|entry| &entry.value)
 	}
 
+	/// Origin ids already stored in `region` (GET; does not admit missing cells).
+	pub fn terrain_ids_overlapping(&self, region: Aabb3d) -> Vec<Id> {
+		self.terrain
+			.iter()
+			.filter(|(_, entry)| region.intersects(&entry.bounds))
+			.map(|(id, _)| *id)
+			.collect()
+	}
+
 	pub fn water(&self, id: Id) -> Option<&Water> {
 		self.water.get(&id).map(|entry| &entry.value)
 	}
