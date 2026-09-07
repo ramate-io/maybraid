@@ -49,6 +49,7 @@ use maybraid_input::{VirtualPadConfig, VirtualPadPlugin};
 use maybraid_sky::SkyDomePlugin;
 use player::PlayerPresentationPlugin;
 use player_camera::{PlayerCameraPlugin, PlayerCameraSystems};
+use richmond_building_physics::BuildingWalkColliderPlugin;
 use richmond_developments_on_terrain_playground::{
 	DevelopmentsOnTerrainPlugin, PlaygroundConfig as DevelopmentsPlaygroundConfig,
 };
@@ -139,8 +140,11 @@ impl Plugin for WorldPlugin {
 				commands: false,
 				own_terrain: false,
 				register_development_forest_lod: true,
-			})
-			.add_plugins(WorldMobsPlugin)
+			});
+		if !app.is_plugin_added::<BuildingWalkColliderPlugin>() {
+			app.add_plugins(BuildingWalkColliderPlugin);
+		}
+		app.add_plugins(WorldMobsPlugin)
 			.add_plugins(WorldIntelligencePlugin)
 			.add_plugins(WorldPoiPlugin)
 			.add_plugins(WorldPlayerLifecyclePlugin)

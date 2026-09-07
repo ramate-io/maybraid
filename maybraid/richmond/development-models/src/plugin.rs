@@ -6,6 +6,7 @@ use lod_lazy_refs::LodLazyRefsPlugin;
 use richmond_building_components::{
 	apply_parent_confines, FurnitureWireframePlugin, LabelWireframePlugin,
 };
+use richmond_building_physics::BuildingWalkColliderPlugin;
 use richmond_building_shaders::{RichmondBuildingShadersPlugin, RichmondUrbanMaterialRefPlugin};
 use richmond_buildings::wizards_tower::TowerSilhouettePlugin;
 use scene_ref::SceneRefPlugin;
@@ -17,7 +18,7 @@ use crate::config::DevelopmentConfig;
 use crate::index::DevelopmentEntryStore;
 use crate::presentation::PaddedTerrainPresenterState;
 
-/// Registers SceneRef, urban MaterialRef, placeholder wireframes, and building LOD.
+/// Registers SceneRef, urban MaterialRef, placeholder wireframes, building LOD, and walk colliders.
 #[derive(Default)]
 pub struct RichmondDevelopmentModelsPlugin;
 
@@ -51,6 +52,9 @@ impl Plugin for RichmondDevelopmentModelsPlugin {
 		}
 		if !app.is_plugin_added::<TowerSilhouettePlugin>() {
 			app.add_plugins(TowerSilhouettePlugin);
+		}
+		if !app.is_plugin_added::<BuildingWalkColliderPlugin>() {
+			app.add_plugins(BuildingWalkColliderPlugin);
 		}
 		register_developments_buildings_lod_plugin(app);
 

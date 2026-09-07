@@ -10,7 +10,7 @@ mod colliders;
 use avian3d::prelude::{CoefficientCombine, Friction};
 use bevy::prelude::*;
 
-pub use colliders::{spawn_building_walk_colliders, BuildingWalkCollider};
+pub use colliders::{spawn_building_walk_colliders, BuildingWalkCollider, BuildingWalkShapes};
 
 /// Dirt / stone grip. [`CoefficientCombine::Max`] beats the character controller's
 /// `Friction::ZERO` + `Min`.
@@ -30,12 +30,12 @@ impl Default for BuildingFrictionConfig {
 	}
 }
 
-/// Registers [`BuildingFrictionConfig`]. Colliders are stamped at spawn via
-/// [`spawn_building_walk_colliders`].
+/// Registers [`BuildingFrictionConfig`] and attaches one Fixed compound per host.
 pub struct BuildingWalkColliderPlugin;
 
 impl Plugin for BuildingWalkColliderPlugin {
 	fn build(&self, app: &mut App) {
-		app.init_resource::<BuildingFrictionConfig>();
+		app.init_resource::<BuildingFrictionConfig>()
+			.add_systems(Update, colliders::attach_building_walk_colliders);
 	}
 }

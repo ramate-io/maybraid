@@ -6,9 +6,9 @@
 //! Cell discovery defaults to [`richmond_urbanization`] guillotine leaves;
 //! set [`DevelopmentConfig::use_urbanization`] to `false` for the dense 300 m
 //! lattice. The crate plugin also installs SceneRef, urban surface MaterialRef,
-//! placeholder wireframes, and the Richmond building LOD stack so playgrounds
-//! present [`TerrainWithPads`] and building GLBs without assembling those
-//! plugins themselves.
+//! placeholder wireframes, the Richmond building LOD stack, and Fixed-layer walk
+//! colliders so playgrounds present [`TerrainWithPads`] and building GLBs without
+//! assembling those plugins themselves.
 
 mod archetype_generation;
 pub mod artifact;
