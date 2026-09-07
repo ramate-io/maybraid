@@ -10,6 +10,20 @@ fn subject() -> Entity {
 }
 
 #[test]
+fn lock_standoff_cycles_slot_radii() -> anyhow::Result<()> {
+	assert_eq!(TetherObjective::lock_standoff(0), 6.0);
+	assert_eq!(TetherObjective::lock_standoff(1), 8.0);
+	assert_eq!(TetherObjective::lock_standoff(2), 10.0);
+	assert_eq!(TetherObjective::lock_standoff(3), 6.0);
+	let idle = TetherObjective::Tether(subject(), 24.0);
+	assert!(matches!(
+		idle.with_lock_standoff(1),
+		TetherObjective::Tether(_, radius) if (radius - 8.0).abs() < 1e-5
+	));
+	Ok(())
+}
+
+#[test]
 fn stalk_radii_clamp_to_a_valid_annulus() -> anyhow::Result<()> {
 	let radii = StalkRadii::new(-2.0, -4.0);
 	assert_eq!(radii.without(), 0.0);

@@ -6,8 +6,9 @@ use npc_intelligence::NpcIntelligence;
 use poi_intelligence::PoiGoal;
 use tether_intelligence::TetherIntelligenceUser;
 
-use crate::bind::retarget_member_tether;
+use crate::bind::MemberTetherRetarget;
 use crate::member::MemberOf;
+use crate::roster::MobRoster;
 use crate::Mob;
 
 type ArrivalHost<'a> = (
@@ -100,11 +101,24 @@ pub(crate) fn forget_mob_tether_lock_when_leaving(
 pub(crate) fn apply_mob_tether_subjects(
 	locks: Query<&MobTetherLock, With<Mob>>,
 	members: Query<(Entity, &MemberOf)>,
+	rosters: Query<&MobRoster, With<Mob>>,
 	mut mixers: Query<&mut NpcIntelligence>,
 	mut tethers: Query<&mut TetherIntelligenceUser>,
 ) {
 	for (plant, membership) in &members {
-		let subject = locks.get(membership.mob).map(|lock| lock.subject).unwrap_or(membership.mob);
-		retarget_member_tether(subject, plant, &mut mixers, &mut tethers);
+		let locked = locks.get(membership.mob).ok();
+		let subject = locked.map(|lock| lock.subject).unwrap_or(membership.mob);
+		let personality = rosters
+			.get(membership.mob)
+			.ok()
+			.and_then(|roster| roster.get(membership.slot).map(|member| member.personality));
+		MemberTetherRetarget {
+			subject,
+			plant,
+			slot: membership.slot,
+			locked: locked.is_some(),
+			personality,
+		}
+		.apply(&mut mixers, &mut tethers);
 	}
 }

@@ -114,6 +114,8 @@ pub struct NpcInstall {
 	pub armed: bool,
 	/// Unused by the mixer. Pack lock/release is the mob-level stickiness.
 	pub keep_tether_in_combat: Option<bool>,
+	/// Breaks identical meander scores across pack slots. Zero leaves ranking as-is.
+	pub selection_salt: u64,
 }
 
 impl Default for NpcInstall {
@@ -130,6 +132,7 @@ impl Default for NpcInstall {
 			spotting_range: None,
 			armed: true,
 			keep_tether_in_combat: None,
+			selection_salt: 0,
 		}
 	}
 }
@@ -405,6 +408,7 @@ impl PersonalitySpec {
 		let mut meandering = MeanderingIntelligenceUser::new(self.meander_radius);
 		meandering.visit_policy = self.visit_policy;
 		meandering.linger_secs = self.linger_secs.max(0.0);
+		meandering.selection_salt = install.selection_salt;
 
 		commands.entity(entity).insert((
 			npc,

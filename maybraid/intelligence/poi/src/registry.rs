@@ -5,6 +5,7 @@ use bevy::prelude::*;
 use gimme_core::{BaseScale, HashMapStore, Level, SpatialId, SpatialIndexError, TypedIndex};
 
 use crate::hash::unit_f32;
+use crate::place::ArrivalDisk;
 use crate::{
 	NearbyChoice, NearbyQuery, Poi, PoiId, PoiInterests, PoiKind, PoiObservation, PoiSource,
 	MAX_POI_ARRIVAL_RADIUS,
@@ -27,6 +28,10 @@ pub struct PoiRecord {
 }
 
 impl PoiRecord {
+	pub fn arrival_disk(self) -> ArrivalDisk {
+		ArrivalDisk::new(self.position, self.arrival_radius)
+	}
+
 	pub fn observation(self, user: Entity, source: PoiSource) -> PoiObservation {
 		PoiObservation {
 			user,
@@ -176,24 +181,24 @@ impl PoiRegistry {
 		center: Vec3,
 		radius: f32,
 		interests: &PoiInterests,
-		previous: Option<PoiId>,
+		excluded: &[PoiId],
 		seed: u64,
 	) -> Option<PoiRecord> {
-		self.choose_in(center, NearbyQuery::weighted(radius), interests, previous, seed)
+		self.choose_in(center, NearbyQuery::weighted(radius), interests, excluded, seed)
 	}
 
 	/// Choose a local/global POI inside [`NearbyQuery`].
 	///
-	/// Candidates closer than `min_radius` on XZ are dropped. `previous` is
-	/// excluded when another candidate exists. [`NearbyChoice::Weighted`] uses
-	/// interest, salience, and proximity; [`NearbyChoice::Nearest`] takes the
-	/// closest remaining XZ pose.
+	/// Candidates closer than `min_radius` on XZ are dropped. `excluded` IDs
+	/// are dropped while another candidate remains. [`NearbyChoice::Weighted`]
+	/// uses interest, salience, and proximity; [`NearbyChoice::Nearest`] takes
+	/// the closest remaining XZ pose.
 	pub fn choose_in(
 		&self,
 		center: Vec3,
 		query: NearbyQuery,
 		interests: &PoiInterests,
-		previous: Option<PoiId>,
+		excluded: &[PoiId],
 		seed: u64,
 	) -> Option<PoiRecord> {
 		if interests.is_empty() || !center.is_finite() || !query.radius.is_finite() {
@@ -211,9 +216,7 @@ impl PoiRegistry {
 		}
 		candidates.retain(|candidate| xz_distance(center, candidate.position) >= min_radius);
 		candidates.sort_by_key(|candidate| candidate.id);
-		if candidates.len() > 1 {
-			candidates.retain(|candidate| Some(candidate.id) != previous);
-		}
+		Self::drop_excluded(&mut candidates, excluded);
 		match query.choice {
 			NearbyChoice::Nearest => candidates.into_iter().min_by(|a, b| {
 				xz_distance(center, a.position)
@@ -267,6 +270,15 @@ impl PoiRegistry {
 
 	pub fn is_empty(&self) -> bool {
 		self.records.is_empty()
+	}
+
+	fn drop_excluded(candidates: &mut Vec<PoiRecord>, excluded: &[PoiId]) {
+		for id in excluded {
+			if candidates.len() <= 1 {
+				return;
+			}
+			candidates.retain(|candidate| candidate.id != *id);
+		}
 	}
 
 	fn remove_id(&mut self, id: PoiId) -> Option<PoiRecord> {

@@ -9,6 +9,9 @@ pub struct NearbyFallback {
 }
 
 impl NearbyFallback {
+	/// Host-relative ring when no nearby POI is available.
+	pub const HOST: Self = Self::new(20.0, 80.0);
+
 	pub const fn new(min_radius: f32, max_radius: f32) -> Self {
 		Self { min_radius, max_radius }
 	}

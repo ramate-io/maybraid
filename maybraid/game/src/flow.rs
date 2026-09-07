@@ -1,7 +1,7 @@
 //! Title / characters / world routing for the Maybraid executable.
 
 use bevy::prelude::*;
-use menu_screens::HomeMenuChoice;
+use menu_screens::{HomeMenuChoice, InGameMenuChoice};
 
 /// Which shell the executable is showing. World gameplay is only live in
 /// [`Self::World`] while [`WorldPause`] is [`WorldPause::Playing`].
@@ -43,6 +43,26 @@ impl HomeRoute {
 	}
 }
 
+/// What the executable does with an in-game pause-row pick.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PauseMenuRoute {
+	Leave,
+	Settings,
+	Stay,
+}
+
+impl PauseMenuRoute {
+	pub fn from_choice(choice: InGameMenuChoice) -> Self {
+		match choice {
+			InGameMenuChoice::Leave => Self::Leave,
+			InGameMenuChoice::Settings => Self::Settings,
+			InGameMenuChoice::Character | InGameMenuChoice::Records | InGameMenuChoice::Help => {
+				Self::Stay
+			}
+		}
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -71,5 +91,18 @@ mod tests {
 			HomeRoute::Unimplemented
 		);
 		assert_eq!(HomeRoute::from_choice(HomeMenuChoice::Settings), HomeRoute::Unimplemented);
+	}
+
+	#[test]
+	fn pause_settings_opens_settings() {
+		assert_eq!(
+			PauseMenuRoute::from_choice(InGameMenuChoice::Settings),
+			PauseMenuRoute::Settings
+		);
+	}
+
+	#[test]
+	fn pause_leave_returns_home() {
+		assert_eq!(PauseMenuRoute::from_choice(InGameMenuChoice::Leave), PauseMenuRoute::Leave);
 	}
 }

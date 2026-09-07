@@ -4,6 +4,7 @@ mod body;
 mod identity;
 mod intent;
 mod locomotion;
+mod separation;
 mod spawn;
 
 use bevy::prelude::*;
@@ -21,6 +22,7 @@ pub use identity::{
 	PlayerUse, PlayerVisual, PlayerYawOwner,
 };
 pub use locomotion::drive_player_locomotion;
+pub use separation::{SoftBump, NPC_SEPARATION};
 pub use spawn::{
 	capsule_spawn_height, needs_npc_visual, needs_player_visual, spawn_npc, spawn_npc_visual,
 	spawn_npc_with_hidden_capsule, spawn_npc_with_hull, spawn_player, spawn_player_visual,
@@ -83,6 +85,7 @@ impl Plugin for PlayerPlugin {
 			.add_systems(
 				Update,
 				(
+					separation::apply_npc_soft_bump,
 					body::update_grounded,
 					body::apply_wish_movement,
 					body::apply_wish_jump,

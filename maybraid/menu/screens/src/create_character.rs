@@ -1,11 +1,11 @@
 //! Create-a-character flow: starter garments and firearms, then the body editor.
 
 use bevy::prelude::*;
-use crozon_character_items::{random_starter_loadout, InventoryItem, ItemRng};
+use crozon_character_items::{InventoryItem, ItemRng, random_starter_loadout};
 use crozon_character_persist::CharacterId;
 
 use crate::spin_reveal::{
-	request_show_spin_reveal, SpinRevealFinished, SpinRevealScreenPlugin, SpinRevealSystems,
+	SpinRevealFinished, SpinRevealScreenPlugin, SpinRevealSystems, request_show_spin_reveal,
 };
 
 /// Queue the create-a-character flow (starter reveal, then the body HUD).

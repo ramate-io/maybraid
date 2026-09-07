@@ -14,7 +14,7 @@
 //! | [`PhysicsInteractionLayer::Host`] | Scene-host volumes | none (query-only) |
 //! | [`PhysicsInteractionLayer::Projectile`] | Blaster bolts / bullets | none (query-only; sweeps query Fixed) |
 //! | [`PhysicsInteractionLayer::Fixed`] | Terrain / buildings | [`Animated`](PhysicsInteractionLayer::Animated) |
-//! | [`PhysicsInteractionLayer::Animated`] | Characters / movers | [`Fixed`](PhysicsInteractionLayer::Fixed) |
+//! | [`PhysicsInteractionLayer::Animated`] | Characters / movers | [`Fixed`](PhysicsInteractionLayer::Fixed) + [`Animated`](PhysicsInteractionLayer::Animated) |
 
 use avian3d::prelude::{Collider, CollisionLayers, LayerMask, PhysicsLayer, SpatialQueryFilter};
 use bevy::math::bounding::Aabb3d;
@@ -75,9 +75,11 @@ impl PhysicsInteractionLayer {
 		CollisionLayers::new(Self::Fixed, Self::Animated)
 	}
 
-	/// Animated movers: member of [`Animated`](Self::Animated), contacts [`Fixed`](Self::Fixed) only.
+	/// Animated movers: member of [`Animated`](Self::Animated), contacts
+	/// [`Fixed`](Self::Fixed) and other [`Animated`](Self::Animated) capsules.
+	/// Capsule restitution stays zero so this is a shove, not a bounce.
 	pub fn animated_layers() -> CollisionLayers {
-		CollisionLayers::new(Self::Animated, Self::Fixed)
+		CollisionLayers::new(Self::Animated, [Self::Fixed, Self::Animated])
 	}
 
 	/// Spatial-query mask that includes only this layer.
@@ -185,6 +187,12 @@ mod tests {
 		let animated = PhysicsInteractionLayer::animated_layers();
 		assert!(fixed.interacts_with(animated));
 		assert!(animated.interacts_with(fixed));
+	}
+
+	#[test]
+	fn animated_contacts_animated() {
+		let animated = PhysicsInteractionLayer::animated_layers();
+		assert!(animated.interacts_with(animated));
 	}
 
 	#[test]

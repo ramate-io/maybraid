@@ -3,15 +3,15 @@
 mod flow;
 mod shell;
 
-pub use flow::{GameFlow, HomeRoute, WorldPause};
+pub use flow::{GameFlow, HomeRoute, PauseMenuRoute, WorldPause};
 
 use bevy::prelude::*;
 use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
 use maybraid_input::MenuNavPad;
 use maybraid_menu_controller::MenuControllerPlugin;
 use maybraid_world::{
-	PlayerPhysicsEnabled, TerrainStreamingEnabled, WorldGameplayEnabled, WorldPlayerLoadout,
-	WorldPlugin, WorldSceneryVisible, WorldSurfaceReady,
+	PlayerPhysicsEnabled, TerrainStreamingEnabled, WorldGameplayEnabled, WorldMobHudEnabled,
+	WorldPlayerLoadout, WorldPlugin, WorldSceneryVisible, WorldSurfaceReady,
 };
 use menu_components::{consume_screen_back, ActiveOverlayKey, ScreenBackPressed, MENU_CLEAR};
 use menu_playground::{
@@ -19,9 +19,10 @@ use menu_playground::{
 	CharacterSessionPlugin,
 };
 use menu_screens::{
-	cancel_pending_create, request_show_gallery, CreateCharacterPlugin, GalleryScreen, GameMode,
-	HomeMenuChoice, HomeScreenPlugin, InGameMenuChoice, InGameScreenPlugin, LoadingScreenPlugin,
-	SpinRevealScreen,
+	cancel_pending_create, request_show_gallery, request_show_in_game,
+	request_show_in_game_settings, CreateCharacterPlugin, GalleryScreen, GameMode, HomeMenuChoice,
+	HomeScreenPlugin, InGameMenuChoice, InGameScreenPlugin, InGameSettings, InGameSettingsScreen,
+	LoadingScreenPlugin, SpinRevealScreen,
 };
 use std::path::{Path, PathBuf};
 
@@ -93,6 +94,8 @@ impl Plugin for GamePlugin {
 					finish_world_loading.run_if(in_state(GameFlow::LoadingWorld)),
 					route_home_choice.run_if(in_state(GameFlow::Home)),
 					route_in_game_choice.run_if(in_state(WorldPause::Menu)),
+					sync_world_mob_hud,
+					pause_menu_back.run_if(in_state(WorldPause::Menu)),
 					character_back.run_if(in_state(GameFlow::Characters)),
 					toggle_world_pause
 						.after(CharacterControlSystems)
@@ -158,10 +161,38 @@ fn route_home_choice(
 fn route_in_game_choice(
 	mut choices: MessageReader<InGameMenuChoice>,
 	mut flow: ResMut<NextState<GameFlow>>,
+	mut commands: Commands,
 ) {
-	if choices.read().any(|choice| *choice == InGameMenuChoice::Leave) {
-		flow.set(GameFlow::Home);
+	let Some(choice) = choices.read().last().copied() else {
+		return;
+	};
+	match PauseMenuRoute::from_choice(choice) {
+		PauseMenuRoute::Leave => flow.set(GameFlow::Home),
+		PauseMenuRoute::Settings => request_show_in_game_settings(&mut commands),
+		PauseMenuRoute::Stay => {}
 	}
+}
+
+fn sync_world_mob_hud(settings: Res<InGameSettings>, mut hud: ResMut<WorldMobHudEnabled>) {
+	if hud.0 != settings.mob_hud {
+		hud.0 = settings.mob_hud;
+	}
+}
+
+fn pause_menu_back(
+	mut commands: Commands,
+	nav: Res<MenuNavPad>,
+	overlay: Res<ActiveOverlayKey>,
+	mut backs: MessageReader<ScreenBackPressed>,
+	settings: Query<(), With<InGameSettingsScreen>>,
+) {
+	if settings.is_empty() {
+		return;
+	}
+	if !consume_screen_back(nav.as_ref(), overlay.0.is_some(), &mut backs) {
+		return;
+	}
+	request_show_in_game(&mut commands);
 }
 
 fn toggle_world_pause(

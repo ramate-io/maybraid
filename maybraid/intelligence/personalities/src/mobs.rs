@@ -296,8 +296,7 @@ pub fn spawn_mobs(
 			.copied()
 			.enumerate()
 			.map(|(index, spec)| {
-				let offset =
-					member_offset(index, recipe.members.len(), (recipe.leash * 0.45).max(2.5));
+				let offset = member_offset(index, recipe.members.len(), recipe.leash.max(2.5));
 				let at =
 					Vec3::new(recipe.at.x + offset.x, hull.spawn_height(), recipe.at.y + offset.y);
 				roster_member(spec, at)
@@ -327,7 +326,7 @@ fn members_poses(recipe: MobRecipe) -> Vec<(u16, MemberSpec, Vec3)> {
 		.copied()
 		.enumerate()
 		.map(|(index, spec)| {
-			let offset = member_offset(index, recipe.members.len(), (recipe.leash * 0.45).max(2.5));
+			let offset = member_offset(index, recipe.members.len(), recipe.leash.max(2.5));
 			let at = Vec3::new(recipe.at.x + offset.x, hull.spawn_height(), recipe.at.y + offset.y);
 			(index as u16, spec, at)
 		})

@@ -136,7 +136,7 @@ fn force_species(scene: &mut MobScene, species: CharacterSpecies) {
 		scene.mob.roster.members.push(first.clone());
 	}
 	let count = scene.mob.roster.members.len();
-	let radius = (scene.mob.intelligence.leash * 0.45).max(1.5);
+	let radius = scene.mob.intelligence.leash.max(1.5);
 	for (slot, member) in scene.mob.roster.members.iter_mut().enumerate() {
 		let y = member.character.locomotion_capsule().spawn_height();
 		let fraction = (slot as f32 + 0.5) / count.max(1) as f32;

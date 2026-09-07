@@ -8,6 +8,8 @@ use mob_characters::{
 	FromMobNumber, MobCharacter,
 };
 
+use poi_intelligence::{NearbyPlace, AGENT_SEPARATION};
+
 use crate::MobKind;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -43,10 +45,18 @@ impl MobRosterRecipe {
 			let build = build_for(member_num, lane);
 			let character =
 				MobCharacter { num: member_num, build, species, inventory, brains }.scene_recipe();
-			let radius = (leash * 0.45).max(1.5);
-			let offset =
-				disk_offset(slot, count, radius, character.locomotion_capsule().spawn_height());
-			members.push(MobMemberRecipe { character: Arc::new(character), offset });
+			let radius = leash.max(1.5);
+			let height = character.locomotion_capsule().spawn_height();
+			let preferred = disk_offset(slot, count, radius, height);
+			let occupied: Vec<Vec3> =
+				members.iter().map(|member: &MobMemberRecipe| member.offset).collect();
+			let offset = NearbyPlace { position: preferred, poi: None }
+				.clear_of(Vec3::ZERO, &occupied, AGENT_SEPARATION, (slot as u64).wrapping_add(1))
+				.position;
+			members.push(MobMemberRecipe {
+				character: Arc::new(character),
+				offset: Vec3::new(offset.x, height, offset.z),
+			});
 		}
 		Self { members }
 	}
@@ -188,6 +198,30 @@ mod tests {
 			let (min, max) = kind.count_range();
 			assert!((min..=max).contains(&roster.members.len()));
 		}
+	}
+
+	#[test]
+	fn sunflower_offsets_keep_agent_separation() {
+		let roster = MobRosterRecipe::from_kind(MobKind::Guard, 3.25, 12.0);
+		for (index, member) in roster.members.iter().enumerate() {
+			for other in roster.members.iter().skip(index + 1) {
+				let gap = (member.offset.xz() - other.offset.xz()).length();
+				assert!(gap >= AGENT_SEPARATION - 1e-3);
+			}
+		}
+	}
+
+	#[test]
+	fn sunflower_uses_the_full_leash() {
+		let leash = 24.0;
+		let roster = MobRosterRecipe::from_kind(MobKind::Herd, 3.25, leash);
+		let farthest = roster
+			.members
+			.iter()
+			.map(|member| member.offset.xz().length())
+			.fold(0.0_f32, f32::max);
+		assert!(farthest > leash * 0.45, "{farthest}");
+		assert!(farthest <= leash + 1e-3, "{farthest}");
 	}
 
 	#[test]

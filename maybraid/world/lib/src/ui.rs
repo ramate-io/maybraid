@@ -24,6 +24,22 @@ pub fn ui_config() -> GameCommandUiConfig {
 	}
 }
 
+/// Edge-clamped host pins plus colored poles. Off in the game until Settings.
+#[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct WorldMobHudEnabled(pub bool);
+
+impl Default for WorldMobHudEnabled {
+	fn default() -> Self {
+		Self(false)
+	}
+}
+
+impl WorldMobHudEnabled {
+	pub fn from_debug_chrome(debug_chrome: bool) -> Self {
+		Self(debug_chrome)
+	}
+}
+
 #[derive(Component)]
 pub(crate) struct MobDebugHud;
 
@@ -45,18 +61,40 @@ struct MobDebugPinBundle {
 	visibility: Visibility,
 }
 
+impl MobDebugHud {
+	fn spawn(commands: &mut Commands) {
+		commands.spawn((
+			Name::new("mob-debug-hud"),
+			Self,
+			Node {
+				position_type: PositionType::Absolute,
+				width: Val::Percent(100.0),
+				height: Val::Percent(100.0),
+				..default()
+			},
+			Pickable::IGNORE,
+		));
+	}
+}
+
 pub(crate) fn spawn_mob_debug_hud(mut commands: Commands) {
-	commands.spawn((
-		Name::new("mob-debug-hud"),
-		MobDebugHud,
-		Node {
-			position_type: PositionType::Absolute,
-			width: Val::Percent(100.0),
-			height: Val::Percent(100.0),
-			..default()
-		},
-		Pickable::IGNORE,
-	));
+	MobDebugHud::spawn(&mut commands);
+}
+
+pub(crate) fn sync_mob_debug_hud_presence(
+	mut commands: Commands,
+	enabled: Res<WorldMobHudEnabled>,
+	hud: Query<Entity, With<MobDebugHud>>,
+) {
+	if enabled.0 {
+		if hud.is_empty() {
+			MobDebugHud::spawn(&mut commands);
+		}
+		return;
+	}
+	for entity in &hud {
+		commands.entity(entity).despawn();
+	}
 }
 
 pub(crate) fn sync_command_status_text(
@@ -450,6 +488,13 @@ mod tests {
 		assert_ne!(hide, combat);
 		assert_ne!(evade, combat);
 		assert_ne!(combat, ignore);
+	}
+
+	#[test]
+	fn debug_chrome_turns_the_mob_hud_on() {
+		assert!(WorldMobHudEnabled::from_debug_chrome(true).0);
+		assert!(!WorldMobHudEnabled::from_debug_chrome(false).0);
+		assert!(!WorldMobHudEnabled::default().0);
 	}
 
 	#[test]

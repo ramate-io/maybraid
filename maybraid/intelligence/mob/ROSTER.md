@@ -59,7 +59,10 @@ MobSystems::Bind  (Added / missing MemberOf)
   MemberOf { mob, slot }
   roster[slot].entity = Some(body)
   Personality::install(..., tether: host) if mixer missing
-  copy MobAffiliations + PoiInterests
+  copy MobAffiliations; member POI interests stay role-split (not combined
+  with the host pack table). Meander scores and live `PoiGoal` points take a
+  per-slot salt. A host `MobTetherLock` also gives each slot a 6 / 8 / 10 m
+  standoff around the shared subject.
 
 High cull
   drain despawns the High root (stubs)

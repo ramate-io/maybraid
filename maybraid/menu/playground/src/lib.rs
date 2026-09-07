@@ -34,9 +34,11 @@ use maybraid_input::{MenuNavPad, VirtualPadPlugin};
 use maybraid_menu_controller::MenuControllerPlugin;
 use menu_components::{consume_screen_back, ActiveOverlayKey, ScreenBackPressed};
 use menu_screens::{
-	cancel_pending_create, request_show_gallery, request_show_home, CreateCharacterPlugin,
-	GalleryChoice, GalleryScreen, HomeMenuChoice, HomeScreen, HomeScreenPlugin, InGameMenuChoice,
-	InGameScreenPlugin, LoadingScreenPlugin, LoadingScreenSystems, SpinRevealScreen,
+	cancel_pending_create, request_show_gallery, request_show_home, request_show_in_game,
+	request_show_in_game_settings, CreateCharacterPlugin, GalleryChoice, GalleryScreen,
+	HomeMenuChoice, HomeScreen, HomeScreenPlugin, InGameMenuChoice, InGameScreenPlugin,
+	InGameSettingsChoice, InGameSettingsScreen, LoadingScreenPlugin, LoadingScreenSystems,
+	SpinRevealScreen,
 };
 
 pub struct MenuPlaygroundPlugin;
@@ -79,6 +81,7 @@ impl Plugin for MenuPlaygroundPlugin {
 				camera::camera_controller.run_if(character_screen_closed),
 				echo_home_choice,
 				echo_in_game_choice,
+				echo_in_game_settings_choice,
 				echo_character_menu,
 				echo_gallery_choice,
 				editor_back,
@@ -123,9 +126,22 @@ fn echo_home_choice(
 fn echo_in_game_choice(
 	mut choices: MessageReader<InGameMenuChoice>,
 	mut console: ResMut<CommandConsoleOutput>,
+	mut commands: Commands,
 ) {
 	for choice in choices.read() {
 		console.0 = format!("in-game: {}", choice.label());
+		if *choice == InGameMenuChoice::Settings {
+			request_show_in_game_settings(&mut commands);
+		}
+	}
+}
+
+fn echo_in_game_settings_choice(
+	mut choices: MessageReader<InGameSettingsChoice>,
+	mut console: ResMut<CommandConsoleOutput>,
+) {
+	for choice in choices.read() {
+		console.0 = format!("in-game settings: {}", choice.label());
 	}
 }
 
@@ -167,8 +183,13 @@ fn editor_back(
 	spin: Query<(), With<SpinRevealScreen>>,
 	gallery: Query<(), With<GalleryScreen>>,
 	weapons: Query<(), With<WeaponGalleryScreen>>,
+	settings: Query<(), With<InGameSettingsScreen>>,
 ) {
 	if !consume_screen_back(&nav, overlay.0.is_some(), &mut backs) {
+		return;
+	}
+	if !settings.is_empty() {
+		request_show_in_game(&mut commands);
 		return;
 	}
 	if !character.is_empty() {

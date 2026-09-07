@@ -54,6 +54,8 @@ pub struct PoiGoal {
 	/// Seconds to remain inside [`Self::location`] after first arrival before
 	/// the goal completes. Zero finishes on the first containing sample.
 	pub linger_secs: f32,
+	/// Slot-derived salt for the live walk point. Zero keeps the POI pin.
+	pub destination_salt: u64,
 	arrived_at: Option<f32>,
 }
 
@@ -76,6 +78,27 @@ impl PoiGoal {
 			location: MovementLocation::new(position, arrival_radius.max(0.0)),
 			selected_at,
 			linger_secs: linger_secs.max(0.0),
+			destination_salt: 0,
+			arrived_at: None,
+		}
+	}
+
+	pub fn from_known(
+		generation: u64,
+		known: KnownPoi,
+		now: f32,
+		linger_secs: f32,
+		destination_salt: u64,
+	) -> Self {
+		Self {
+			generation,
+			target: known.id,
+			poi_entity: known.entity,
+			kind: known.kind,
+			location: known.arrival_disk().slotted(destination_salt),
+			selected_at: now,
+			linger_secs: linger_secs.max(0.0),
+			destination_salt,
 			arrived_at: None,
 		}
 	}
@@ -116,7 +139,7 @@ pub fn refresh_poi_goals(registry: Res<PoiRegistry>, mut goals: Query<&mut PoiGo
 		let Some(record) = registry.get(goal.target) else {
 			continue;
 		};
-		let next = MovementLocation::new(record.position, record.arrival_radius);
+		let next = record.arrival_disk().slotted(goal.destination_salt);
 		let poi_entity = Some(record.entity);
 		if goal.kind != record.kind || goal.location != next || goal.poi_entity != poi_entity {
 			goal.kind = record.kind;
@@ -134,6 +157,7 @@ pub fn begin_poi_goal(
 	now: f32,
 	linger_secs: f32,
 	state: Option<&mut PoiGoalState>,
+	destination_salt: u64,
 ) {
 	let generation = if let Some(state) = state {
 		state.begin(known.id)
@@ -141,15 +165,12 @@ pub fn begin_poi_goal(
 		commands.entity(user).insert(PoiGoalState::new(known.id));
 		1
 	};
-	commands.entity(user).insert(PoiGoal::new(
+	commands.entity(user).insert(PoiGoal::from_known(
 		generation,
-		known.id,
-		known.entity,
-		known.kind,
-		known.position,
-		known.arrival_radius,
+		known,
 		now,
 		linger_secs,
+		destination_salt,
 	));
 }
 
