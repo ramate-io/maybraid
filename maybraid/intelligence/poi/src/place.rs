@@ -8,8 +8,6 @@ use movement_intelligence::MovementLocation;
 use crate::hash::{mix, unit_f32};
 use crate::{NearbyFallback, NearbyQuery, PoiId, PoiInterests, PoiRegistry};
 
-const ARRIVAL_DISK_MIN: f32 = 2.0;
-const ARRIVAL_DISK_MAX: f32 = 12.0;
 const DISK_DISTANCE_SALT: u64 = 0x736f_6d65_706c_6179;
 const DISK_ANGLE_SALT: u64 = 0x6572_5f72_6573_7061;
 const RING_ANGLE_SALT: u64 = 0x776f_726c_6470_6c79;
@@ -26,13 +24,23 @@ pub struct ArrivalDisk {
 }
 
 impl ArrivalDisk {
+	/// Smallest plant / live offset around a pin (authored radii below this expand).
+	pub const PLANT_MIN: f32 = 20.0;
+	/// Largest plant / live offset around a pin.
+	pub const PLANT_MAX: f32 = 80.0;
+
 	pub fn new(center: Vec3, radius: f32) -> Self {
 		Self { center, radius }
 	}
 
-	/// Uniform XZ point in the clamped arrival disk. Height stays on `center`.
+	/// Disk used to plant or walk relative to the pin. Floors tiny POIs.
+	pub fn plant_radius(self) -> f32 {
+		self.radius.clamp(Self::PLANT_MIN, Self::PLANT_MAX)
+	}
+
+	/// Uniform XZ point in the plant disk. Height stays on `center`.
 	pub fn offset(self, salt: u64) -> Vec3 {
-		let radius = self.radius.clamp(ARRIVAL_DISK_MIN, ARRIVAL_DISK_MAX);
+		let radius = self.plant_radius();
 		let distance = unit_f32(mix(salt ^ DISK_DISTANCE_SALT)).sqrt() * radius;
 		self.center + polar_xz(distance, mix(salt ^ DISK_ANGLE_SALT))
 	}
@@ -260,7 +268,7 @@ mod tests {
 			NearbyFallback::new(8.0, 16.0),
 		);
 		assert_eq!(placed.poi, Some(PoiId(11)));
-		assert!((placed.position.xz() - Vec2::X * 20.0).length() <= 8.0 + 1e-4);
+		assert!((placed.position.xz() - Vec2::X * 20.0).length() <= ArrivalDisk::PLANT_MIN + 1e-4);
 		assert_eq!(placed.position.y, 0.0);
 		Ok(())
 	}
@@ -432,8 +440,21 @@ mod tests {
 		assert_eq!(first, again);
 		assert_ne!(first.point.xz(), other.point.xz());
 		assert_ne!(first.point.xz(), disk.center.xz());
-		assert!((first.point.xz() - disk.center.xz()).length() <= 8.0 + 1e-4);
+		assert!((first.point.xz() - disk.center.xz()).length() <= disk.plant_radius() + 1e-4);
 		assert!((first.radius - AGENT_SEPARATION).abs() < 1e-5);
 		assert_eq!(first.point.y, disk.center.y);
+	}
+
+	#[test]
+	fn plant_radius_floors_tiny_pois_and_caps_huge_ones() {
+		assert!(
+			(ArrivalDisk::new(Vec3::ZERO, 8.0).plant_radius() - ArrivalDisk::PLANT_MIN).abs()
+				< 1e-5
+		);
+		assert!((ArrivalDisk::new(Vec3::ZERO, 40.0).plant_radius() - 40.0).abs() < 1e-5);
+		assert!(
+			(ArrivalDisk::new(Vec3::ZERO, 200.0).plant_radius() - ArrivalDisk::PLANT_MAX).abs()
+				< 1e-5
+		);
 	}
 }

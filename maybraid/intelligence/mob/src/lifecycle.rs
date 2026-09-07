@@ -250,13 +250,8 @@ mod tests {
 	fn poi_respawn_avoids_immediately_repeating_a_destination() -> Result<()> {
 		let registry = registry_with_two_camps()?;
 		let interests = PoiInterests::new([PoiInterest::new(CAMP, 1.0)]);
-		let selected = registry.choose_nearby(
-			Vec3::ZERO,
-			DEFAULT_NEARBY_RADIUS,
-			&interests,
-			&[PoiId(11)],
-			42,
-		);
+		let selected =
+			registry.choose_nearby(Vec3::ZERO, DEFAULT_NEARBY_RADIUS, &interests, &[PoiId(11)], 42);
 		assert_eq!(selected.map(|poi| poi.id), Some(PoiId(12)));
 		Ok(())
 	}
@@ -280,7 +275,7 @@ mod tests {
 		assert_eq!(policy.at, MobRespawnAt::Poi);
 		assert_eq!(policy.poi_radius, DEFAULT_NEARBY_RADIUS);
 		assert_eq!(policy.min_radius, 0.0);
-		assert_eq!(policy.fallback, NearbyFallback::new(4.0, 12.0));
+		assert_eq!(policy.fallback, NearbyFallback::HOST);
 		assert_eq!(policy.slot_stagger_secs, crate::roster::RESPAWN_SLOT_STAGGER_SECS);
 		assert!((policy.delay_for_slot(3) - (8.0 + 1.2)).abs() < 1e-4);
 	}
@@ -289,8 +284,9 @@ mod tests {
 	fn death_replace_keeps_siblings_apart_on_an_empty_registry() {
 		let policy = MobRespawn::default();
 		let first = policy.placement(Vec3::ZERO, Vec3::Y, MobId(3), 0, 1, &[], &[], None, None).0;
-		let second =
-			policy.placement(Vec3::ZERO, Vec3::Y, MobId(3), 1, 1, &[], &[first], None, None).0;
+		let second = policy
+			.placement(Vec3::ZERO, Vec3::Y, MobId(3), 1, 1, &[], &[first], None, None)
+			.0;
 		assert!((first.xz() - second.xz()).length() >= AGENT_SEPARATION - 1e-3);
 	}
 }

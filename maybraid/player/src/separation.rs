@@ -19,7 +19,7 @@ const PARALLEL_ALIGN: f32 = 0.85;
 /// Kinematic XZ split between overlapping NPC capsules.
 ///
 /// Added to [`MoveWish`] after drive and before realization so pack-mates
-/// steer apart without character–character contacts.
+/// start steering apart; capsule contacts still shove if they close.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SoftBump {
 	pub min_separation: f32,

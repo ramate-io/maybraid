@@ -22,8 +22,9 @@ recovery; only air is XZ-only. Pad [`CharacterIntent`](../controllers/character/
 and NPC drive both write [`MoveWish`](src/body.rs) / [`JumpWish`](src/body.rs);
 Body applies those for every capsule. Overlapping [`Npc`](src/identity.rs)
 capsules get a kinematic XZ [`SoftBump`](src/separation.rs) on `MoveWish`
-before realization so pack-mates steer apart without character–character
-contacts.
+before realization so pack-mates start steering apart before capsule contacts
+shove them. Animated movers contact Fixed geometry and each other; restitution
+on the capsule stays zero.
 
 ```text
 CharacterIntent ─► wish / jump          (this crate)

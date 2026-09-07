@@ -90,7 +90,7 @@ impl Default for MobRespawn {
 			corpse_secs: 4.0,
 			poi_radius: DEFAULT_NEARBY_RADIUS,
 			min_radius: 0.0,
-			fallback: NearbyFallback::new(4.0, 12.0),
+			fallback: NearbyFallback::HOST,
 			slot_stagger_secs: RESPAWN_SLOT_STAGGER_SECS,
 		}
 	}
