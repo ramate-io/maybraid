@@ -160,6 +160,52 @@ impl LocomotionCapsule {
 		}
 	}
 
+	const HUMANOID_LEG_BONES: &'static [&'static str] = &["femur.L", "femur.R", "shin.L", "shin.R"];
+	const HUMANOID_SPINE_BONES: &'static [&'static str] = &["lumbar", "chest"];
+	const HUMANOID_NECK_BONES: &'static [&'static str] = &["lower_neck", "upper_neck", "neck"];
+	const HUMANOID_WIDTH_BONES: &'static [&'static str] =
+		&["shoulder.L", "shoulder.R", "pelvis.L", "pelvis.R"];
+	const HUMANOID_LEG_WEIGHT: f32 = 0.50;
+	const HUMANOID_SPINE_WEIGHT: f32 = 0.28;
+	const HUMANOID_NECK_WEIGHT: f32 = 0.10;
+	/// Share of standing height treated as the head (socket scale above 1.0).
+	pub const HUMANOID_HEAD_WEIGHT: f32 = 0.12;
+
+	fn max_bone_length(pose: &ResolvedRigPose, bones: &[&str]) -> f32 {
+		bones.iter().map(|bone| pose.scale_for_bone(bone).y).fold(0.0, f32::max)
+	}
+
+	/// Weighted rest-pose stature: legs, spine, neck, plus head-socket scale.
+	pub fn humanoid_height_scale(pose: &ResolvedRigPose, head_scale: f32) -> f32 {
+		Self::HUMANOID_LEG_WEIGHT * Self::max_bone_length(pose, Self::HUMANOID_LEG_BONES)
+			+ Self::HUMANOID_SPINE_WEIGHT * Self::max_bone_length(pose, Self::HUMANOID_SPINE_BONES)
+			+ Self::HUMANOID_NECK_WEIGHT * Self::max_bone_length(pose, Self::HUMANOID_NECK_BONES)
+			+ Self::HUMANOID_HEAD_WEIGHT * head_scale.max(0.0)
+	}
+
+	/// Rest-pose half-width scale from shoulder / pelvis length.
+	pub fn humanoid_width_scale(pose: &ResolvedRigPose) -> f32 {
+		Self::max_bone_length(pose, Self::HUMANOID_WIDTH_BONES)
+	}
+
+	/// Standing hull from composed humanoid bone scales. One vertical capsule.
+	pub fn humanoid_from_pose(pose: &ResolvedRigPose, head_scale: f32) -> Self {
+		let width = Self::humanoid_width_scale(pose);
+		let height = Self::humanoid_height_scale(pose, head_scale);
+		if (width - 1.0).abs() < 1e-5 && (height - 1.0).abs() < 1e-5 {
+			return Self::HUMANOID;
+		}
+		let radius = Self::HUMANOID.radius * width;
+		let half = (Self::HUMANOID.half_height() * height).max(radius);
+		Self { radius, length: (half - radius) * 2.0, pronograde: false, girdle: 0.0 }
+	}
+
+	/// Extra height for an oversized head socket (whelps / Spibmom).
+	pub fn with_head_scale(self, head_scale: f32) -> Self {
+		let extra = (head_scale - 1.0).max(0.0) * Self::HUMANOID_HEAD_WEIGHT;
+		self.with_half_height(self.half_height() * (1.0 + extra))
+	}
+
 	/// Horizontal hit hull when this is a quadruped motor stand-in.
 	pub fn hit_capsule(self) -> Option<HitCapsule> {
 		self.pronograde.then(|| HitCapsule::for_quadruped(self))
@@ -586,5 +632,37 @@ mod tests {
 				.with_scale(BoneScale::uniform("lateral_shoulder_protrusion.L", 1.1)),
 		);
 		assert!((HitCapsule::girdle_scale(&fleshed) - 1.2 * 1.1).abs() < 1e-5);
+	}
+
+	#[test]
+	fn humanoid_from_pose_grows_with_legs_shoulders_and_head() {
+		use crozon_rigs::{BoneScale, ResolvedRigPose, RigPoseLayer};
+
+		let stock = LocomotionCapsule::humanoid_from_pose(&ResolvedRigPose::new(), 1.0);
+		assert_eq!(stock, LocomotionCapsule::HUMANOID);
+
+		let tall = ResolvedRigPose::new().with_layer(
+			RigPoseLayer::new("legs")
+				.with_scale(BoneScale::length("femur.L", 1.2))
+				.with_scale(BoneScale::length("femur.R", 1.2)),
+		);
+		let tall = LocomotionCapsule::humanoid_from_pose(&tall, 1.0);
+		assert!(tall.half_height() > LocomotionCapsule::HUMANOID.half_height());
+		assert!((tall.radius - LocomotionCapsule::HUMANOID.radius).abs() < 1e-5);
+
+		let wide = ResolvedRigPose::new().with_layer(
+			RigPoseLayer::new("shoulders")
+				.with_scale(BoneScale::length("shoulder.L", 2.0))
+				.with_scale(BoneScale::length("shoulder.R", 2.0)),
+		);
+		let wide = LocomotionCapsule::humanoid_from_pose(&wide, 1.0);
+		assert!((wide.radius - LocomotionCapsule::HUMANOID.radius * 2.0).abs() < 1e-5);
+
+		let headed = LocomotionCapsule::humanoid_from_pose(&ResolvedRigPose::new(), 2.0);
+		assert!(headed.half_height() > LocomotionCapsule::HUMANOID.half_height());
+		assert!(headed.hit_capsule().is_none());
+
+		let whelp = LocomotionCapsule::HUMANOID.scaled(0.30).with_head_scale(1.85);
+		assert!(whelp.half_height() > LocomotionCapsule::HUMANOID.scaled(0.30).half_height());
 	}
 }

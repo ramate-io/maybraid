@@ -54,7 +54,9 @@ impl Default for Tapp {
 
 impl CharacterComponents for Tapp {
 	fn locomotion_capsule(&self) -> LocomotionCapsule {
-		LocomotionCapsule::HUMANOID.scaled(TAPP_OVERALL_SCALE)
+		LocomotionCapsule::HUMANOID
+			.scaled(TAPP_OVERALL_SCALE)
+			.with_head_scale(HEAD_RIG_SOCKET_SCALE)
 	}
 
 	fn rig_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<RigNode> {

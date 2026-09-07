@@ -13,7 +13,7 @@ use super::{
 use crate::{
 	assembly::CharacterPartSlot,
 	assets::AssetNormalization,
-	components::CharacterComponents,
+	components::{CharacterComponents, LocomotionCapsule},
 	layer::Layers,
 	nodes::{PartNode, RigNode},
 	species::common::{nodes as humanoid, EyeMesh, HairMesh, EAR_ROUND},
@@ -60,6 +60,10 @@ fn spibmom_ear_right_local() -> Transform {
 }
 
 impl CharacterComponents for Spibmom {
+	fn locomotion_capsule(&self) -> LocomotionCapsule {
+		LocomotionCapsule::humanoid_from_pose(&SpibmomPose.resolve(), HEAD_RIG_SOCKET_SCALE)
+	}
+
 	fn rig_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<RigNode> {
 		Layers::from_free(vec![
 			humanoid::humanoid_body_rig(SpibmomPose.resolve()),

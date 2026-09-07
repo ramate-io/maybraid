@@ -13,7 +13,7 @@ use super::{
 use crate::{
 	assembly::CharacterPartSlot,
 	assets::AssetNormalization,
-	components::CharacterComponents,
+	components::{CharacterComponents, LocomotionCapsule},
 	layer::Layers,
 	nodes::{PartNode, RigNode},
 	species::common::{nodes as humanoid, EyeMesh, HairMesh},
@@ -50,6 +50,10 @@ impl Default for Lidder {
 }
 
 impl CharacterComponents for Lidder {
+	fn locomotion_capsule(&self) -> LocomotionCapsule {
+		LocomotionCapsule::humanoid_from_pose(&LidderPose.resolve(), 1.0)
+	}
+
 	fn rig_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<RigNode> {
 		Layers::from_free(vec![
 			humanoid::humanoid_body_rig(LidderPose.resolve()),
