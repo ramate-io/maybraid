@@ -26,7 +26,9 @@ use lod::gen::LodScene;
 use lod::lod_ref::LodRef;
 
 use crate::commands::RequestModeCharacter;
-use crate::player::{Grounded, Jumping, MoveWish, Player, PlayerCapsule, WalkableGround};
+use crate::player::{
+	Grounded, Jumping, MoveWish, Player, PlayerCapsule, PlaygroundMode, WalkableGround,
+};
 use avian3d::prelude::LinearVelocity;
 
 const WALK_SPEED: f32 = 1.0;
@@ -119,6 +121,7 @@ pub struct RequestSetCharacterAppearance {
 
 pub(crate) fn apply_set_character(
 	mut commands: Commands,
+	mode: Res<PlaygroundMode>,
 	mut status: Option<ResMut<GameCommandStatusText>>,
 	species_requests: Query<(Entity, &RequestSetCharacter)>,
 	appearance_requests: Query<(Entity, &RequestSetCharacterAppearance)>,
@@ -149,7 +152,7 @@ pub(crate) fn apply_set_character(
 		for spawned in spawn_species(&mut commands, request.species, Transform::IDENTITY) {
 			commands.entity(spawned).insert((ChildOf(player), PlayerVisual));
 		}
-		commands.spawn(RequestModeCharacter);
+		request_character_mode_if_needed(&mut commands, *mode);
 		crate::ui::write_status(
 			&mut status,
 			format!(
@@ -172,7 +175,7 @@ pub(crate) fn apply_set_character(
 		for spawned in spawn_appearance(&mut commands, &request.appearance, Transform::IDENTITY) {
 			commands.entity(spawned).insert((ChildOf(player), PlayerVisual));
 		}
-		commands.spawn(RequestModeCharacter);
+		request_character_mode_if_needed(&mut commands, *mode);
 		crate::ui::write_status(
 			&mut status,
 			format!(
@@ -182,6 +185,18 @@ pub(crate) fn apply_set_character(
 		);
 		commands.entity(entity).despawn();
 	}
+}
+
+/// `/set-character` from free camera still enters character mode. World respawn
+/// already runs in [`PlaygroundMode::Character`] and must not emit a layout-center reset.
+pub(crate) fn request_character_mode_if_needed(commands: &mut Commands, mode: PlaygroundMode) {
+	if should_request_character_mode(mode) {
+		commands.spawn(RequestModeCharacter);
+	}
+}
+
+fn should_request_character_mode(mode: PlaygroundMode) -> bool {
+	mode != PlaygroundMode::Character
 }
 
 /// Walk / run / jump on the body mailbox from player speed and grounded state.
@@ -385,6 +400,7 @@ fn spawn_appearance(
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use bevy::ecs::system::RunSystemOnce;
 
 	#[test]
 	fn grounded_locomotion_uses_surface_speed() {
@@ -411,5 +427,50 @@ mod tests {
 		);
 		assert_eq!(run.id(), AnimId::Run);
 		assert_eq!(walk.id(), AnimId::Walk);
+	}
+
+	#[test]
+	fn character_mode_set_character_does_not_request_a_mode_reset() {
+		assert!(!should_request_character_mode(PlaygroundMode::Character));
+		assert!(should_request_character_mode(PlaygroundMode::Free));
+	}
+
+	#[test]
+	fn apply_set_character_in_character_mode_does_not_emit_mode_reset() -> anyhow::Result<()> {
+		let pose = Vec3::new(1_000.0, 12.0, -250.0);
+		let (mut world, player) = character_attach_world(PlaygroundMode::Character, pose);
+
+		world
+			.run_system_once(emit_attach_mode_request)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+
+		assert_eq!(world.get::<Transform>(player).map(|transform| transform.translation), Some(pose));
+		assert_eq!(world.query::<&RequestModeCharacter>().iter(&world).count(), 0);
+		Ok(())
+	}
+
+	#[test]
+	fn apply_set_character_from_free_camera_enters_character_mode() -> anyhow::Result<()> {
+		let pose = Vec3::new(40.0, 8.0, 12.0);
+		let (mut world, player) = character_attach_world(PlaygroundMode::Free, pose);
+
+		world
+			.run_system_once(emit_attach_mode_request)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+
+		assert_eq!(world.get::<Transform>(player).map(|transform| transform.translation), Some(pose));
+		assert_eq!(world.query::<&RequestModeCharacter>().iter(&world).count(), 1);
+		Ok(())
+	}
+
+	fn emit_attach_mode_request(mut commands: Commands, mode: Res<PlaygroundMode>) {
+		request_character_mode_if_needed(&mut commands, *mode);
+	}
+
+	fn character_attach_world(mode: PlaygroundMode, translation: Vec3) -> (World, Entity) {
+		let mut world = World::new();
+		world.insert_resource(mode);
+		let player = world.spawn((Player, Transform::from_translation(translation))).id();
+		(world, player)
 	}
 }
