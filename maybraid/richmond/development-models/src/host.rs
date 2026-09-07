@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use bevy::prelude::{
-	bsn, template_value, Commands, CommandsSceneExt, Component, Entity, Transform, Visibility,
+	bsn, template_value, Commands, CommandsSceneExt, Entity, Transform, Visibility,
 };
 use lod::gen::LodScene;
 use lod::lod_host_scene_pending;
@@ -23,6 +23,7 @@ use richmond_developments::{
 };
 
 use crate::cell::yaw_about_xz;
+use crate::place::{DiscoverablePlace, DiscoverablePlaceLabel};
 use crate::{
 	BuiltDevelopment, LesHallesDevelopment, RingFortDevelopment, ShepherdsCommuneDevelopment,
 	ShepherdsVillageDevelopment,
@@ -47,16 +48,75 @@ pub enum DevelopmentHost {
 	SkybridgeHall(Arc<Skybridge>, Transform),
 }
 
-/// Presented building area suitable for bounded, local semantic discovery.
-///
-/// This marker deliberately carries no intelligence types. World composition
-/// decides which local POI taxonomy to apply.
-#[derive(Component, Clone, Copy, Debug, Default, PartialEq)]
-pub struct InteriorArea {
-	pub arrival_radius: f32,
-}
-
 impl DevelopmentHost {
+	/// Always-on place pin for this host. Roofs and circulation are omitted.
+	pub fn discoverable_place(&self) -> Option<DiscoverablePlace> {
+		Some(match self {
+			Self::LesHallesStorey(_, _) => DiscoverablePlace::host(
+				DiscoverablePlaceLabel::Storey,
+				8.0,
+				DiscoverablePlaceLabel::Storey.default_salience(),
+			),
+			Self::ShepherdsHouse(building, _) => DiscoverablePlace::host(
+				DiscoverablePlaceLabel::House,
+				arrival_from_building(&**building),
+				DiscoverablePlaceLabel::House.default_salience(),
+			),
+			Self::ShepherdsHut(building, _) => DiscoverablePlace::host(
+				DiscoverablePlaceLabel::Hut,
+				arrival_from_building(&**building),
+				DiscoverablePlaceLabel::Hut.default_salience(),
+			),
+			Self::OldCityMarketTerrace(building, _) => DiscoverablePlace::host(
+				DiscoverablePlaceLabel::Market,
+				arrival_from_building(&**building),
+				DiscoverablePlaceLabel::Market.default_salience(),
+			),
+			Self::RingFortCircularTower(building, _) => DiscoverablePlace::host(
+				DiscoverablePlaceLabel::Tower,
+				arrival_from_building(&**building),
+				DiscoverablePlaceLabel::Tower.default_salience(),
+			),
+			Self::RingFortTrazaloidTower(building, _) => DiscoverablePlace::host(
+				DiscoverablePlaceLabel::Tower,
+				arrival_from_building(&**building),
+				DiscoverablePlaceLabel::Tower.default_salience(),
+			),
+			Self::RingFortGalleryTerrace(building, _) => DiscoverablePlace::host(
+				DiscoverablePlaceLabel::Storey,
+				arrival_from_building(building.as_ref()),
+				DiscoverablePlaceLabel::Storey.default_salience(),
+			),
+			Self::SingleHighrise(building, _) => DiscoverablePlace::host(
+				DiscoverablePlaceLabel::Highrise,
+				arrival_from_building(&**building),
+				DiscoverablePlaceLabel::Highrise.default_salience(),
+			),
+			Self::TempleSanctum(building, _) => DiscoverablePlace::host(
+				DiscoverablePlaceLabel::Sanctum,
+				arrival_from_building(&**building),
+				DiscoverablePlaceLabel::Sanctum.default_salience(),
+			),
+			Self::WizardsTower(building, _) => {
+				let bounds = building.scene_bounds();
+				DiscoverablePlace::host(
+					DiscoverablePlaceLabel::Tower,
+					arrival_from_bounds(bounds),
+					DiscoverablePlaceLabel::Tower.default_salience(),
+				)
+			}
+			Self::SkybridgeHall(building, _) => DiscoverablePlace::host(
+				DiscoverablePlaceLabel::Skybridge,
+				arrival_from_building(&**building),
+				DiscoverablePlaceLabel::Skybridge.default_salience(),
+			),
+			Self::LesHallesStairwell(_, _)
+			| Self::LesHallesRoof(_, _)
+			| Self::RingFortGalleryColonnade(_, _)
+			| Self::RingFortGalleryRoof(_, _) => return None,
+		})
+	}
+
 	pub fn spawn(&self, commands: &mut Commands) -> Vec<Entity> {
 		let entities = match self {
 			Self::LesHallesStorey(building, transform) => spawn(commands, building, *transform),
@@ -93,13 +153,22 @@ impl DevelopmentHost {
 			}
 			Self::SkybridgeHall(building, transform) => spawn(commands, building, *transform),
 		};
-		if matches!(self, Self::LesHallesStorey(_, _)) {
+		if let Some(place) = self.discoverable_place() {
 			for entity in &entities {
-				commands.entity(*entity).insert(InteriorArea { arrival_radius: 8.0 });
+				commands.entity(*entity).insert(place);
 			}
 		}
 		entities
 	}
+}
+
+fn arrival_from_building(building: &impl BuildingComponents) -> f32 {
+	arrival_from_bounds(building_bounds(building))
+}
+
+fn arrival_from_bounds(bounds: bevy::math::bounding::Aabb3d) -> f32 {
+	let xz = (bounds.max.x - bounds.min.x).max(bounds.max.z - bounds.min.z);
+	(xz * 0.35).clamp(6.0, 24.0)
 }
 
 pub trait DevelopmentHosts {
@@ -315,6 +384,7 @@ mod tests {
 
 	use super::{DevelopmentHost, DevelopmentHosts};
 	use crate::archetype_generation::{ArchetypeGenerator, PlacedDevelopment};
+	use crate::place::DiscoverablePlaceLabel;
 	use crate::BuiltDevelopment;
 
 	#[test]
@@ -338,6 +408,11 @@ mod tests {
 		let hosts = development.hosts();
 		assert_eq!(hosts.len(), 1);
 		assert!(matches!(hosts[0], DevelopmentHost::SingleHighrise(..)));
+		let place = hosts[0]
+			.discoverable_place()
+			.ok_or_else(|| anyhow::anyhow!("highrise should emit a place"))?;
+		assert_eq!(place.label, DiscoverablePlaceLabel::Highrise);
+		assert!(place.persistent);
 		Ok(())
 	}
 
@@ -362,6 +437,15 @@ mod tests {
 			host,
 			DevelopmentHost::ShepherdsHouse(..) | DevelopmentHost::ShepherdsHut(..)
 		)));
+		assert!(hosts.iter().all(|host| {
+			host.discoverable_place().is_some_and(|place| {
+				place.persistent
+					&& matches!(
+						place.label,
+						DiscoverablePlaceLabel::House | DiscoverablePlaceLabel::Hut
+					)
+			})
+		}));
 
 		let bazaar_confines = Confines::from_bounds(Aabb3d::from_min_max(
 			Vec3::new(50.0, 10.0, 50.0),
@@ -384,6 +468,42 @@ mod tests {
 				.count(),
 			2
 		);
+		assert!(hosts.iter().any(|host| {
+			host.discoverable_place()
+				.is_some_and(|place| place.label == DiscoverablePlaceLabel::Skybridge)
+		}));
+		Ok(())
+	}
+
+	#[test]
+	fn house_and_market_hosts_emit_persistent_places() -> anyhow::Result<()> {
+		use bevy::prelude::Transform;
+		use richmond_developments::{OldCityMarketTerrace, ShepherdsHouse};
+
+		let house_confines =
+			Confines::from_bounds(Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(16.0, 8.0, 16.0)));
+		let (house, _) = ShepherdsHouse::fit_to_confines(
+			&house_confines,
+			NoiseParams { seed: 7, ..NoiseParams::default() },
+		)?;
+		let house_host =
+			DevelopmentHost::ShepherdsHouse(std::sync::Arc::new(house), Transform::IDENTITY);
+		let house_place = house_host
+			.discoverable_place()
+			.ok_or_else(|| anyhow::anyhow!("house should emit a place"))?;
+		assert_eq!(house_place.label, DiscoverablePlaceLabel::House);
+		assert!(house_place.persistent);
+
+		let terrace = OldCityMarketTerrace::new(Vec2::ZERO, Vec2::splat(24.0), 0.0);
+		let market_host = DevelopmentHost::OldCityMarketTerrace(
+			std::sync::Arc::new(terrace),
+			Transform::IDENTITY,
+		);
+		let market_place = market_host
+			.discoverable_place()
+			.ok_or_else(|| anyhow::anyhow!("market terrace should emit a place"))?;
+		assert_eq!(market_place.label, DiscoverablePlaceLabel::Market);
+		assert!(market_place.persistent);
 		Ok(())
 	}
 
