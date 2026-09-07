@@ -3,7 +3,10 @@
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use durham_terrain_models::water::PresentedWaterScene;
-use durham_terrain_models::{stream_banded_draws, TerrainEntryStore};
+use durham_terrain_models::{
+	spawn_terrain_collider_host, stream_banded_draws, TerrainColliderCell, TerrainColliderEpoch,
+	TerrainColliderHost, TerrainColliderOverlay, TerrainEntryStore,
+};
 use lod::gen::{Id, LodScene, LodSceneLevel, RegionPresenter, Version};
 use lod::lod_ref::LodRef;
 use std::collections::HashMap;
@@ -144,5 +147,56 @@ impl<'a> RegionPresenter<TerrainWithPads, PaddedStoreView<'a>> for PaddedTerrain
 
 	fn remove_stale(&mut self, wanted: &HashSet<Id>) {
 		PaddedTerrainPresenter::remove_stale(self, wanted);
+	}
+}
+
+/// Seed Near-ring (or FinePatch) colliders from [`TerrainWithPads`].
+///
+/// Raw Durham hosts for the same origin id are despawned so physics matches
+/// the drawn pad mesh.
+pub fn sync_padded_terrain_colliders(
+	mut commands: Commands,
+	epoch: Res<TerrainColliderEpoch>,
+	store: Res<crate::index::DevelopmentEntryStore>,
+	hosts: Query<
+		(Entity, &TerrainColliderCell, Has<TerrainColliderOverlay>),
+		With<TerrainColliderHost>,
+	>,
+) {
+	let seeds = store.padded_collision_seeds();
+	let wanted: HashSet<(Id, Version)> =
+		seeds.iter().map(|(id, version, _)| (*id, *version)).collect();
+	let wanted_ids: HashSet<Id> = wanted.iter().map(|(id, _)| *id).collect();
+
+	for (entity, cell, overlay) in &hosts {
+		if overlay {
+			if !wanted.contains(&(cell.id, cell.version)) || cell.epoch != epoch.0 {
+				commands.entity(entity).despawn();
+			}
+		} else if wanted_ids.contains(&cell.id) {
+			commands.entity(entity).despawn();
+		}
+	}
+
+	let occupied: HashSet<Id> = hosts
+		.iter()
+		.filter(|(_, cell, overlay)| {
+			*overlay && wanted.contains(&(cell.id, cell.version)) && cell.epoch == epoch.0
+		})
+		.map(|(_, cell, _)| cell.id)
+		.collect();
+
+	for (id, version, pad) in seeds {
+		if occupied.contains(&id) {
+			continue;
+		}
+		spawn_terrain_collider_host(
+			&mut commands,
+			id,
+			version,
+			epoch.0,
+			pad.collider_scene(),
+			true,
+		);
 	}
 }

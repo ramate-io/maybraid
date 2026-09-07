@@ -9,7 +9,8 @@ use durham_terrain::shaders::DurhamTerrainShader;
 use durham_terrain_models::terrain::ElevationModulation;
 use durham_terrain_models::{
 	cascade_chunk_for_cell, stream_banded_level, stream_banded_scene, ComposedTerrain,
-	StreamBandedLod, Terrain, TerrainCellRing, TerrainMeshBuilder, TerrainSdf,
+	StreamBandedLod, Terrain, TerrainCellRing, TerrainColliderMeshSource, TerrainMeshBuilder,
+	TerrainSdf,
 };
 use lod::gen::{Id, LodScene, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
@@ -64,6 +65,25 @@ impl TerrainWithPads {
 
 	pub fn scene(&self) -> impl Scene + 'static {
 		self.mesh_scene()
+	}
+
+	/// Collider-host bake path. Visual LOD uses [`LodScene::scene_with_level`].
+	pub fn collider_scene(&self) -> impl Scene + 'static {
+		let chunk = cascade_chunk_for_cell(self.cell, self.res_2);
+		let transform = Transform::from_translation(chunk.origin);
+		let builder = self.mesh_builder();
+		let material = self.material.clone();
+		bsn! {
+			template_value(transform)
+			template_value(chunk)
+			template(move |_ctx| Ok(Cached::new(builder.clone())))
+			MeshMaterial3d::<DurhamTerrainShader>({material.clone()})
+			TerrainColliderMeshSource
+		}
+	}
+
+	pub fn seeds_collision(&self) -> bool {
+		self.stream_ring.map(|ring| ring.seeds_collision()).unwrap_or(true)
 	}
 
 	fn center(&self) -> Vec3 {

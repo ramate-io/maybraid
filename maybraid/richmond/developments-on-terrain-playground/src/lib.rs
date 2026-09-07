@@ -33,9 +33,10 @@ use commands::{
 use durham_terrain::shaders::{DurhamTerrainShader, DurhamTerrainShaderPlugin, RefractionWater};
 use durham_terrain_models::{
 	AvianTerrainIndex, BaseTerrainNoise, ComposedWater, DurhamTerrainModelsPlugin,
-	JerseyStampConfigs, MarazionWatershedConfigs, Terrain, TerrainCellLayout, TerrainConfig,
-	TerrainEntryStore, TerrainMeshBuilder, TerrainMeshLodBand, TerrainPresentationAssets, Water,
-	WaterPresentationAssets, WaterRegionPresenter, WaterStoreView,
+	JerseyStampConfigs, MarazionWatershedConfigs, Terrain, TerrainCellLayout,
+	TerrainColliderSystems, TerrainConfig, TerrainEntryStore, TerrainMeshBuilder,
+	TerrainMeshLodBand, TerrainPresentationAssets, Water, WaterPresentationAssets,
+	WaterRegionPresenter, WaterStoreView,
 };
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use game_commands::ui::{GameCommandDrawerConfig, GameCommandStatusText};
@@ -45,9 +46,9 @@ use lod::lod_ref::LodRef;
 use lod::{LodGenerateSystems, LodPresentSystems};
 use render_item::mesh::handle::EnforceCachingPlugin;
 use richmond_development_models::{
-	BuiltDevelopment, BuiltDevelopmentStoreView, DevelopmentCell, DevelopmentConfig,
-	DevelopmentEntryStore, DevelopmentIndex, PaddedStoreView, PaddedTerrainPresenter,
-	RichmondDevelopmentModelsPlugin, TerrainWithPads,
+	sync_padded_terrain_colliders, BuiltDevelopment, BuiltDevelopmentStoreView, DevelopmentCell,
+	DevelopmentConfig, DevelopmentEntryStore, DevelopmentIndex, PaddedStoreView,
+	PaddedTerrainPresenter, RichmondDevelopmentModelsPlugin, TerrainWithPads,
 };
 use richmond_urbanization::UrbanizationKind;
 use std::f32::consts::PI;
@@ -237,7 +238,12 @@ impl Plugin for DevelopmentsOnTerrainPlugin {
 				sync_raw_terrain_replacements,
 			)
 				.chain()
-				.before(LodPresentSystems::Produce),
+				.before(LodPresentSystems::Produce)
+				.before(TerrainColliderSystems::SyncOverlays),
+		)
+		.add_systems(
+			Update,
+			sync_padded_terrain_colliders.in_set(TerrainColliderSystems::SyncOverlays),
 		);
 	}
 }

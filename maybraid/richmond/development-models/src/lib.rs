@@ -68,7 +68,9 @@ pub use pad::{
 };
 pub use padded::{PresentedPaddedTerrainScene, TerrainWithPads};
 pub use plugin::{register_richmond_development_models_plugin, RichmondDevelopmentModelsPlugin};
-pub use presentation::{PaddedTerrainPresenter, PaddedTerrainPresenterState};
+pub use presentation::{
+	sync_padded_terrain_colliders, PaddedTerrainPresenter, PaddedTerrainPresenterState,
+};
 pub use ring_fort::RingFortDevelopment;
 pub use scatter::{bounds_intersect, ScatterCandidate, ScatterChoice, ScatterPlan, ScatterRecipe};
 pub use shepherds::{ShepherdsCommuneDevelopment, ShepherdsVillageDevelopment};

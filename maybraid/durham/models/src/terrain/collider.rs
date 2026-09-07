@@ -5,10 +5,11 @@
 //! contact-manifold indexes when a contacted trimesh is rebuilt or removed.
 //!
 //! Collision is keyed by terrain origin [`Id`] on a persistent
-//! [`TerrainColliderHost`] that presentation does not own. Raw Durham
-//! [`TerrainColliderMeshSource`] scenes seed a copied [`Collider`] child; the
-//! mesh source may then despawn. Visual `RegionPresenter` roots may churn
-//! without touching physics. Padded overlays must not replace this trimesh.
+//! [`TerrainColliderHost`] that presentation does not own. [`TerrainColliderMeshSource`]
+//! scenes seed a copied [`Collider`] child; the mesh source may then despawn.
+//! Visual `RegionPresenter` roots may churn without touching physics.
+//! [`TerrainColliderOverlay`] hosts (padded terrain) replace the raw Durham
+//! seed for the same origin id.
 //!
 //! Constructed trimeshes use [`PhysicsInteractionLayer::Fixed`] so they contact
 //! Animated movers only — not other Fixed geometry or LOD Host volumes.
@@ -51,13 +52,27 @@ impl Default for TerrainFrictionConfig {
 #[derive(Resource, Default, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TerrainColliderEpoch(pub u64);
 
+/// Hosts run: overlay replace, then raw sync, then trimesh bake.
+#[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum TerrainColliderSystems {
+	SyncOverlays,
+	SyncHosts,
+	QueueMeshes,
+}
+
 /// Persistent terrain host that owns collision independently from visual meshes.
 #[derive(Component, Debug, Clone, Copy, Default)]
 pub struct TerrainColliderHost;
 
+/// Marks a [`TerrainColliderHost`] seeded from an overlay model (padded terrain).
+///
+/// Raw Durham sync will not despawn or duplicate these hosts.
+#[derive(Component, Debug, Clone, Copy, Default)]
+pub struct TerrainColliderOverlay;
+
 /// Origin cell and store version this physics host was seeded from.
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct TerrainColliderCell {
+pub struct TerrainColliderCell {
 	pub id: Id,
 	pub version: Version,
 	pub epoch: u64,
@@ -90,6 +105,41 @@ fn terrain_seeds_collision(terrain: &crate::terrain::Terrain, layout: &TerrainCe
 		.unwrap_or(true)
 }
 
+/// Spawn a hidden collider-host and seed it with `scene` (`TerrainColliderMeshSource`).
+pub fn spawn_terrain_collider_host(
+	commands: &mut Commands,
+	id: Id,
+	version: Version,
+	epoch: u64,
+	scene: impl bevy::scene::prelude::Scene + 'static,
+	overlay: bool,
+) -> Entity {
+	let host = if overlay {
+		commands
+			.spawn((
+				Name::new("Terrain collider"),
+				TerrainColliderHost,
+				TerrainColliderOverlay,
+				TerrainColliderCell { id, version, epoch },
+				Transform::IDENTITY,
+				Visibility::Hidden,
+			))
+			.id()
+	} else {
+		commands
+			.spawn((
+				Name::new("Terrain collider"),
+				TerrainColliderHost,
+				TerrainColliderCell { id, version, epoch },
+				Transform::IDENTITY,
+				Visibility::Hidden,
+			))
+			.id()
+	};
+	commands.spawn_scene(scene).insert(ChildOf(host));
+	host
+}
+
 /// Spawn or refresh physics hosts from stored Durham cells. Visual presenters
 /// are not consulted and must not despawn these entities.
 pub(crate) fn sync_terrain_collider_hosts(
@@ -97,27 +147,39 @@ pub(crate) fn sync_terrain_collider_hosts(
 	epoch: Res<TerrainColliderEpoch>,
 	store: Res<TerrainEntryStore>,
 	layout: Res<TerrainCellLayout>,
-	hosts: Query<(Entity, &TerrainColliderCell), With<TerrainColliderHost>>,
+	hosts: Query<
+		(Entity, &TerrainColliderCell, Has<TerrainColliderOverlay>),
+		With<TerrainColliderHost>,
+	>,
 ) {
 	let region = layout.presentation_region();
+	let overlay_ids: HashSet<Id> = hosts
+		.iter()
+		.filter(|(_, _, overlay)| *overlay)
+		.map(|(_, cell, _)| cell.id)
+		.collect();
 	let wanted: HashSet<(Id, Version)> = store
 		.terrain
 		.iter()
-		.filter(|(_, entry)| {
-			region.intersects(&entry.bounds)
+		.filter(|(id, entry)| {
+			!overlay_ids.contains(id)
+				&& region.intersects(&entry.bounds)
 				&& terrain_seeds_collision(&entry.value, layout.as_ref())
 		})
 		.map(|(id, entry)| (*id, entry.version))
 		.collect();
 
-	for (entity, cell) in &hosts {
+	for (entity, cell, overlay) in &hosts {
+		if overlay {
+			continue;
+		}
 		let current = wanted.contains(&(cell.id, cell.version)) && cell.epoch == epoch.0;
 		if !current {
 			commands.entity(entity).despawn();
 		}
 	}
 
-	let occupied: HashSet<Id> = hosts.iter().map(|(_, cell)| cell.id).collect();
+	let occupied: HashSet<Id> = hosts.iter().map(|(_, cell, _)| cell.id).collect();
 	for (id, version) in wanted {
 		if occupied.contains(&id) {
 			continue;
@@ -125,16 +187,14 @@ pub(crate) fn sync_terrain_collider_hosts(
 		let Some(entry) = store.terrain.get(&id) else {
 			continue;
 		};
-		let host = commands
-			.spawn((
-				Name::new("Terrain collider"),
-				TerrainColliderHost,
-				TerrainColliderCell { id, version, epoch: epoch.0 },
-				Transform::IDENTITY,
-				Visibility::Hidden,
-			))
-			.id();
-		commands.spawn_scene(entry.value.scene()).insert(ChildOf(host));
+		spawn_terrain_collider_host(
+			&mut commands,
+			id,
+			version,
+			epoch.0,
+			entry.value.scene(),
+			false,
+		);
 	}
 }
 
@@ -281,5 +341,28 @@ mod tests {
 	#[test]
 	fn recycled_store_version_is_not_current_across_epochs() {
 		assert_ne!(TerrainColliderEpoch(0), TerrainColliderEpoch(1));
+	}
+
+	#[test]
+	fn overlay_host_is_not_despawned_by_raw_sync() {
+		let mut app = App::new();
+		app.insert_resource(TerrainEntryStore::default())
+			.insert_resource(TerrainCellLayout::default())
+			.insert_resource(TerrainColliderEpoch::default())
+			.add_systems(Update, sync_terrain_collider_hosts);
+
+		let id = Id::from_cell(bevy::math::bounding::Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE));
+		let overlay = app
+			.world_mut()
+			.spawn((
+				TerrainColliderHost,
+				TerrainColliderOverlay,
+				TerrainColliderCell { id, version: Version(1), epoch: 0 },
+			))
+			.id();
+
+		app.update();
+
+		assert!(app.world().get_entity(overlay).is_ok());
 	}
 }

@@ -6,7 +6,6 @@
 
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use avian3d::prelude::ColliderDisabled;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use durham_terrain_models::{PresentedTerrainScene, TerrainCellLayout};
@@ -519,13 +518,12 @@ pub fn present_urbanization_padded_terrain(
 		.collect();
 }
 
-/// Hide raw Durham roots while their padded replacements are active, and
-/// disable every raw trimesh collider in those scene hierarchies.
+/// Hide raw Durham visual roots while their padded replacements are active.
+/// Collision is owned by [`durham_terrain_models::TerrainColliderHost`], not these roots.
 pub fn sync_raw_terrain_replacements(
 	mut commands: Commands,
 	state: Res<UrbanizationPaddedTerrainState>,
 	raw_roots: Query<(Entity, &PresentedTerrainScene)>,
-	children: Query<&Children>,
 ) {
 	for (root, presented) in &raw_roots {
 		let replaced = state.wanted.contains(&presented.0);
@@ -534,13 +532,6 @@ pub fn sync_raw_terrain_replacements(
 		} else {
 			Visibility::Inherited
 		});
-		for entity in std::iter::once(root).chain(children.iter_descendants(root)) {
-			if replaced {
-				commands.entity(entity).insert(ColliderDisabled);
-			} else {
-				commands.entity(entity).remove::<ColliderDisabled>();
-			}
-		}
 	}
 }
 

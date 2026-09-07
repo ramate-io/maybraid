@@ -3,7 +3,7 @@
 use crate::terrain::cell::TerrainCellLayout;
 use crate::terrain::collider::{
 	queue_terrain_trimesh_colliders, sync_terrain_collider_hosts, TerrainColliderEpoch,
-	TerrainFrictionConfig,
+	TerrainColliderSystems, TerrainFrictionConfig,
 };
 use crate::terrain::index::TerrainEntryStore;
 use crate::terrain::jersey::{JerseyControllerLayouts, JerseyStampConfigs};
@@ -56,11 +56,20 @@ impl Plugin for TerrainResourcesPlugin {
 			.init_resource::<TerrainStreamPresenterState<TerrainBackground>>()
 			.init_resource::<TerrainFrictionConfig>()
 			.init_resource::<TerrainColliderEpoch>()
+			.configure_sets(
+				Update,
+				(
+					TerrainColliderSystems::SyncOverlays,
+					TerrainColliderSystems::SyncHosts,
+					TerrainColliderSystems::QueueMeshes,
+				)
+					.chain(),
+			)
 			.add_systems(
 				Update,
 				(
-					sync_terrain_collider_hosts,
-					queue_terrain_trimesh_colliders.after(sync_terrain_collider_hosts),
+					sync_terrain_collider_hosts.in_set(TerrainColliderSystems::SyncHosts),
+					queue_terrain_trimesh_colliders.in_set(TerrainColliderSystems::QueueMeshes),
 				),
 			);
 	}

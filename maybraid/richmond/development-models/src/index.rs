@@ -194,6 +194,19 @@ impl DevelopmentEntryStore {
 		self.padded.get(&id).map(|e| &e.value)
 	}
 
+	pub fn padded_version(&self, id: Id) -> Option<Version> {
+		self.padded.get(&id).map(|e| e.version)
+	}
+
+	/// Padded cells that should seed a persistent Near (or FinePatch) collider.
+	pub fn padded_collision_seeds(&self) -> Vec<(Id, Version, &TerrainWithPads)> {
+		self.padded
+			.iter()
+			.filter(|(_, entry)| entry.value.seeds_collision())
+			.map(|(id, entry)| (*id, entry.version, &entry.value))
+			.collect()
+	}
+
 	/// Finest padded terrain cell with the greatest XZ overlap with `region`.
 	pub fn padded_terrain_for(&self, region: Aabb3d) -> Option<&TerrainWithPads> {
 		let mut best: Option<(f32, f32, &TerrainWithPads)> = None;
