@@ -71,11 +71,11 @@ pub struct OuterCellRing {
 
 /// One moving terrain-presentation stream on a globally aligned cell grid.
 ///
-/// The High mesh occupies `high_inner_radius..=high_outer_radius` around the
-/// current stream anchor. Cells remain generated for [`Self::cull_margin`]
-/// beyond both edges so High roots and near colliders can stay warm. Medium is
-/// that empty retain band (including the inner hole for far / background);
-/// Low is cull. This stream only draws High.
+/// High is the innermost category around the stream anchor. Near
+/// (`high_inner_radius == 0`) draws High. Far / background use High as an
+/// empty hole inside `high_inner_radius` and draw Medium on
+/// `high_inner_radius..=high_outer_radius`. Cells stay generated for
+/// [`Self::cull_margin`] past both edges. Low is empty retain or cull.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TerrainCellRing {
 	/// Edge length of cells in this stream.
@@ -84,36 +84,64 @@ pub struct TerrainCellRing {
 	pub res_2: u8,
 	/// World-space lattice used to quantize the shared moving anchor.
 	pub anchor_step: f32,
-	/// Inner edge of the visible High annulus (`0` for the near stream).
+	/// Inner edge of the drawn ring (`0` for the near disk).
 	pub high_inner_radius: f32,
-	/// Outer edge of the visible High annulus.
+	/// Outer edge of the drawn ring (or near disk).
 	pub high_outer_radius: f32,
-	/// Empty retention band outside both High edges.
+	/// Empty retention band outside both ring edges.
 	pub cull_margin: f32,
 }
 
 impl TerrainCellRing {
-	/// High / empty LOD band for a cell center relative to `anchor`.
-	pub fn level_for(self, cell_center: Vec3, anchor: Vec3) -> LodSceneLevel {
+	/// Chebyshev XZ radius of `cell_center` from the aligned stream anchor.
+	pub fn radius_from(self, cell_center: Vec3, anchor: Vec3) -> f32 {
 		let anchor = self.aligned_anchor(anchor);
 		let delta = cell_center - anchor;
-		let radius = delta.x.abs().max(delta.z.abs());
-		if radius >= self.high_inner_radius && radius <= self.high_outer_radius {
-			LodSceneLevel::High
-		} else {
-			let retained_inner = (self.high_inner_radius - self.cull_margin).max(0.0);
-			let retained_outer = self.high_outer_radius + self.cull_margin;
-			if radius >= retained_inner && radius <= retained_outer {
+		delta.x.abs().max(delta.z.abs())
+	}
+
+	/// High is the hole (or near disk). Medium is the far / background ring.
+	pub fn level_for(self, cell_center: Vec3, anchor: Vec3) -> LodSceneLevel {
+		let radius = self.radius_from(cell_center, anchor);
+		if self.draws_high() {
+			if radius <= self.high_outer_radius {
+				LodSceneLevel::High
+			} else if radius <= self.high_outer_radius + self.cull_margin {
 				LodSceneLevel::Medium
 			} else {
 				LodSceneLevel::Low
 			}
+		} else if radius < self.high_inner_radius {
+			LodSceneLevel::High
+		} else if radius <= self.high_outer_radius {
+			LodSceneLevel::Medium
+		} else if radius <= self.high_outer_radius + self.cull_margin {
+			LodSceneLevel::Low
+		} else {
+			LodSceneLevel::Low
 		}
 	}
 
-	/// True when the cell stays in generate / collider keep (High or empty retain).
+	/// True when this stream's visible category is High (no inner hole).
+	pub fn draws_high(self) -> bool {
+		self.high_inner_radius <= 0.0
+	}
+
+	/// Visible band: High on the near disk, Medium on far / background rings.
+	pub fn draws_level(self, level: LodSceneLevel) -> bool {
+		if self.draws_high() {
+			level == LodSceneLevel::High
+		} else {
+			level == LodSceneLevel::Medium
+		}
+	}
+
+	/// True when the cell stays in generate / collider keep.
 	pub fn retains_cell_center(self, cell_center: Vec3, anchor: Vec3) -> bool {
-		self.level_for(cell_center, anchor) != LodSceneLevel::Low
+		let radius = self.radius_from(cell_center, anchor);
+		let inner_keep = (self.high_inner_radius - self.cull_margin).max(0.0);
+		let outer_keep = self.high_outer_radius + self.cull_margin;
+		radius >= inner_keep && radius <= outer_keep
 	}
 
 	/// True when this is the near (collision) stream.
@@ -592,17 +620,20 @@ mod tests {
 	}
 
 	#[test]
-	fn far_cells_inside_near_are_empty_medium() {
+	fn far_cells_inside_near_are_empty_high() {
 		let layout = streamed_layout();
 		let far = layout.stream_rings[1];
-		assert_eq!(far.level_for(Vec3::ZERO, Vec3::ZERO), LodSceneLevel::Low);
+		assert!(!far.draws_high());
+		assert!(far.draws_level(LodSceneLevel::Medium));
+		assert!(!far.draws_level(LodSceneLevel::High));
+		assert_eq!(far.level_for(Vec3::ZERO, Vec3::ZERO), LodSceneLevel::High);
 		assert_eq!(
 			far.level_for(Vec3::X * 7.0 * TERRAIN_CELL_SIZE, Vec3::ZERO),
-			LodSceneLevel::Medium
+			LodSceneLevel::High
 		);
 		assert_eq!(
 			far.level_for(Vec3::X * 12.0 * TERRAIN_CELL_SIZE, Vec3::ZERO),
-			LodSceneLevel::High
+			LodSceneLevel::Medium
 		);
 	}
 

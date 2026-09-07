@@ -1,9 +1,10 @@
 //! World-facing streamed terrain: models, shaders, mesh caches, and fill present.
 //!
-//! Playable coverage is three High-only scale streams (160 / 320 / 640 m) that
-//! follow the viewer. Near cells use `res_2 = 5` and own collision; far and
-//! background are render-only at `res_2 = 4` and `3`. Generation admits a bounded
-//! number of missing origin ids per frame. Presentation is GET-only.
+//! Playable coverage is three scale streams (160 / 320 / 640 m) that follow the
+//! viewer. Near cells use `res_2 = 5` and own collision; far and background are
+//! render-only at `res_2 = 4` and `3`. Generation admits a bounded number of
+//! missing origin ids per frame. Playable visuals come from the padded
+//! urbanization presenter; this plugin only presents raw Durham on FinePatch.
 
 use std::marker::PhantomData;
 
@@ -28,8 +29,7 @@ use crate::terrain::collider::{sync_terrain_collider_hosts, TerrainColliderEpoch
 use crate::terrain::config::TerrainConfig;
 use crate::terrain::index::AvianTerrainIndex;
 use crate::terrain::presentation::{
-	TerrainBackground, TerrainBackgroundRegionPresenter, TerrainFar, TerrainFarRegionPresenter,
-	TerrainMeshLodBand, TerrainNear, TerrainNearRegionPresenter, TerrainPresentationAssets,
+	TerrainBackground, TerrainFar, TerrainMeshLodBand, TerrainNear, TerrainPresentationAssets,
 	TerrainRegionPresenter, TerrainStoreView, TerrainStreamPresenterState,
 };
 use crate::water::{ComposedWater, Water, WaterPresentationAssets};
@@ -376,9 +376,6 @@ fn generate_cells(
 
 fn present_cells(
 	mut terrain_presenter: TerrainRegionPresenter,
-	mut near_presenter: TerrainNearRegionPresenter,
-	mut far_presenter: TerrainFarRegionPresenter,
-	mut background_presenter: TerrainBackgroundRegionPresenter,
 	store: Res<crate::terrain::index::TerrainEntryStore>,
 	layout: Res<TerrainCellLayout>,
 	mut pending: ResMut<TerrainPresentPending>,
@@ -399,11 +396,7 @@ fn present_cells(
 		current_transform: &viewer,
 		bounds: &region,
 	};
-	if layout.is_streamed() {
-		near_presenter.present(&store, &layout, region, &lod_ref);
-		far_presenter.present(&store, &layout, region, &lod_ref);
-		background_presenter.present(&store, &layout, region, &lod_ref);
-	} else {
+	if !layout.is_streamed() {
 		let terrain_view = TerrainStoreView::new(&store, &layout);
 		RegionPresenter::<Terrain, _>::present(
 			&mut terrain_presenter,
@@ -450,16 +443,19 @@ mod tests {
 	}
 
 	#[test]
-	fn world_far_interior_is_empty_medium() {
+	fn world_far_interior_is_empty_high() {
 		let layout = world_cell_layout();
 		let far = layout.stream_rings[1];
-		assert_eq!(far.level_for(Vec3::ZERO, Vec3::ZERO), lod::LodSceneLevel::Medium);
+		assert!(!far.draws_high());
+		assert!(far.draws_level(lod::LodSceneLevel::Medium));
+		assert_eq!(far.level_for(Vec3::ZERO, Vec3::ZERO), lod::LodSceneLevel::High);
 		assert_eq!(
 			far.level_for(Vec3::X * 12.0 * TERRAIN_CELL_SIZE, Vec3::ZERO),
-			lod::LodSceneLevel::High
+			lod::LodSceneLevel::Medium
 		);
 		let background = layout.stream_rings[2];
-		assert_eq!(background.level_for(Vec3::ZERO, Vec3::ZERO), lod::LodSceneLevel::Low);
+		assert_eq!(background.level_for(Vec3::ZERO, Vec3::ZERO), lod::LodSceneLevel::High);
+		assert!(background.draws_level(lod::LodSceneLevel::Medium));
 	}
 
 	#[test]

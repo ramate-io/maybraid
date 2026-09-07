@@ -417,6 +417,7 @@ mod tests {
 						res_2: 3,
 						wall_faces: WallFaces::NONE,
 						pad_count: 0,
+						stream_ring: None,
 					},
 					bounds,
 					version: Version(1),

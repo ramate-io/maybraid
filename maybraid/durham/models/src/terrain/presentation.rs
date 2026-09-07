@@ -432,7 +432,7 @@ impl<M: TerrainStreamMarker> TerrainStreamRegionPresenter<'_, '_, M> {
 			self.commands
 				.spawn_scene(entry.value.scene_with_lod(lod_ref))
 				.insert(ChildOf(host));
-			if level == LodSceneLevel::High {
+			if crate::terrain::stream_lod::stream_banded_draws(&entry.value, level) {
 				if let Some(water) = self.store.water(*id) {
 					self.commands
 						.spawn_scene(water.scene_with_lod(lod_ref))

@@ -99,6 +99,7 @@ mod tests {
 			res_2: 5,
 			wall_faces: WallFaces::ALL,
 			pad_count: 0,
+			stream_ring: None,
 		};
 		let terrain_ref = DevelopmentCanopyBumpOutPresenter::padded_terrain_ref(&terrain);
 

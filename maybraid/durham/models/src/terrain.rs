@@ -13,6 +13,7 @@ pub mod plugin;
 pub mod presentation;
 pub mod render;
 pub mod sdf;
+pub mod stream_lod;
 
 use crate::terrain::cell::original_ids_for_origin_cells;
 use crate::terrain::jersey::{
@@ -105,6 +106,9 @@ pub use presentation::{
 };
 pub use render::TerrainRenderItem;
 pub use sdf::{ComposedTerrain, ElevationModulation, TerrainSdf};
+pub use stream_lod::{
+	stream_banded_draws, stream_banded_level, stream_banded_scene, StreamBandedLod,
+};
 
 /// CpuShot wrapper stored on [`Terrain`] and used by Durham fill + overlay presenters.
 pub type TerrainMeshBuilder = CpuShotBuilder<Arc<ComposedTerrain>>;
@@ -195,40 +199,38 @@ impl Terrain {
 		(Vec3::from(self.cell.min) + Vec3::from(self.cell.max)) * 0.5
 	}
 
-	fn level_for(&self, viewer: &Transform) -> LodSceneLevel {
-		if let Some(ring) = self.stream_ring {
-			return ring.level_for(self.center(), viewer.translation);
-		}
-		LodSceneLevel::High
-	}
-
-	/// High is the mesh for this scale. Streamed Medium / Low are empty so Far
-	/// and Background cells can occupy the Near disk as a hole, not a second draw.
-	fn level_scene(&self, level: LodSceneLevel) -> Box<dyn Scene> {
-		if self.stream_ring.is_some() && level != LodSceneLevel::High {
-			return Box::new(());
-		}
+	fn mesh_scene(&self) -> impl Scene + 'static {
 		let chunk = cascade_chunk_for_cell(self.cell, self.res_2);
 		let transform = Transform::from_translation(chunk.origin);
 		let builder = self.mesh_builder();
 		let material = self.material.clone();
-		Box::new(bsn! {
+		bsn! {
 			template_value(transform)
 			template_value(chunk)
 			template(move |_ctx| Ok(Cached::new(builder.clone())))
 			MeshMaterial3d::<DurhamTerrainShader>({material.clone()})
-		})
+		}
+	}
+}
+
+impl crate::terrain::stream_lod::StreamBandedLod for Terrain {
+	fn stream_ring(&self) -> Option<TerrainCellRing> {
+		self.stream_ring
+	}
+
+	fn stream_center(&self) -> Vec3 {
+		self.center()
 	}
 }
 
 impl LodScene for Terrain {
 	fn scene_lod_level(&self, lod_ref: &LodRef) -> LodSceneLevel {
-		self.level_for(lod_ref.current_transform)
+		stream_banded_level(self, lod_ref.current_transform)
 	}
 
 	fn scene_lod_status(&self, lod_ref: &LodRef) -> LodSceneStatus {
-		let previous = self.level_for(lod_ref.previous_transform);
-		let current = self.level_for(lod_ref.current_transform);
+		let previous = stream_banded_level(self, lod_ref.previous_transform);
+		let current = stream_banded_level(self, lod_ref.current_transform);
 		if previous == current {
 			LodSceneStatus::Unchanged
 		} else {
@@ -237,7 +239,7 @@ impl LodScene for Terrain {
 	}
 
 	fn scene_with_level(&self, _lod_ref: &LodRef, level: LodSceneLevel) -> impl Scene + 'static {
-		self.level_scene(level)
+		stream_banded_scene(self, level, || self.mesh_scene())
 	}
 }
 

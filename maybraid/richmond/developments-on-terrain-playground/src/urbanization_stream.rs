@@ -9,13 +9,13 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use avian3d::prelude::ColliderDisabled;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
-use durham_terrain_models::PresentedTerrainScene;
+use durham_terrain_models::{PresentedTerrainScene, TerrainCellLayout};
 use lod::gen::{
 	GeneratingSpatialIndex, Id, LodGenerateBudget, LodGenerateKeepRegion, LodGenerateQueue,
 	LodGenerateRegion, SpatialIndex, Version,
 };
 use lod::lod_ref::LodRef;
-use lod::presentation::{LodPresentKeepRegion, LodPresentRegion, RegionPresenter};
+use lod::presentation::{LodPresentKeepRegion, LodPresentRegion};
 use lod::{LodGeneratePlugin, LodGenerateRegionPlugin, LodPresentRegionPlugin, LodViewer};
 use procedural_common::NoiseParams;
 use richmond_development_models::{
@@ -395,17 +395,29 @@ pub fn present_urbanization_hosts(
 	state.remove_stale(&mut commands, &wanted);
 }
 
+fn pad_visual_region(
+	layout: &TerrainCellLayout,
+	urban_keep: Option<bevy::math::bounding::Aabb3d>,
+) -> Option<bevy::math::bounding::Aabb3d> {
+	if layout.is_streamed() {
+		Some(layout.presentation_region())
+	} else {
+		urban_keep
+	}
+}
+
 /// Generate padded Durham cells after the urbanization presenter has
 /// materialized all development pads in the present keep.
 pub fn generate_urbanization_padded_terrain(
 	config: Res<crate::PlaygroundConfig>,
 	keep: Res<LodPresentKeepRegion<UrbanizationLodChan>>,
+	layout: Res<TerrainCellLayout>,
 	mut development: DevelopmentIndex,
 ) {
 	if config.urbanization.is_none() {
 		return;
 	}
-	let Some(region) = keep.region else {
+	let Some(region) = pad_visual_region(&layout, keep.region) else {
 		return;
 	};
 	development.store.invalidate_dirty_padded();
@@ -427,29 +439,41 @@ pub fn generate_urbanization_padded_terrain(
 pub fn present_urbanization_padded_terrain(
 	config: Res<crate::PlaygroundConfig>,
 	keep: Res<LodPresentKeepRegion<UrbanizationLodChan>>,
+	layout: Res<TerrainCellLayout>,
 	store: Res<DevelopmentEntryStore>,
 	mut presenter: PaddedTerrainPresenter,
 	mut state: ResMut<UrbanizationPaddedTerrainState>,
+	lod_viewers: Query<&GlobalTransform, With<LodViewer>>,
+	cameras: Query<&GlobalTransform, With<Camera3d>>,
 ) {
 	state.wanted.clear();
-	let Some(region) = keep.region.filter(|_| config.urbanization.is_some()) else {
+	let Some(region) =
+		pad_visual_region(&layout, keep.region).filter(|_| config.urbanization.is_some())
+	else {
 		presenter.remove_stale(&state.wanted);
 		return;
 	};
-	let identity = Transform::IDENTITY;
+	let viewer = lod_viewers
+		.iter()
+		.next()
+		.or_else(|| cameras.iter().next())
+		.map(|tf| {
+			let t = tf.translation();
+			Transform::from_translation(Vec3::new(t.x, 0.0, t.z))
+		})
+		.unwrap_or(Transform::IDENTITY);
 	let lod_ref = LodRef {
 		entity: Entity::PLACEHOLDER,
-		previous_transform: &identity,
-		current_transform: &identity,
+		previous_transform: &viewer,
+		current_transform: &viewer,
 		bounds: &region,
 	};
 	let view = PaddedStoreView::new(&store);
-	RegionPresenter::<TerrainWithPads, _>::present(&mut presenter, &view, region, &lod_ref);
+	presenter.present_banded(&view, region, &lod_ref);
 	state.wanted = SpatialIndex::<TerrainWithPads>::tracked_ids_for(&view, region)
 		.into_iter()
 		.map(|tracked| tracked.0)
 		.collect();
-	presenter.remove_stale(&state.wanted);
 }
 
 /// Hide raw Durham roots while their padded replacements are active, and
