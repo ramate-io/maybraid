@@ -15,7 +15,7 @@ use procedural_common::{NoiseConfig, NoiseParams};
 use richmond_building_components::panels::PanelStyle;
 use richmond_building_components::{
 	BuildingComponents, BuildingStructuralLodProbe, DoorNode, FloorNode, FurnitureNode, JointNode,
-	LabelNode, Layers, PanelNode, PartitionNode, RoofNode, StairNode,
+	LabelNode, Layers, MassingVolume, PanelNode, PartitionNode, RoofNode, StairNode,
 };
 use richmond_buildings::{
 	Confines, ConnectingStairwell, EndCap, FillableRegions, Fit, FitError, IFloor,
@@ -454,18 +454,23 @@ impl BuildingComponents for ShepherdsHouse {
 	}
 
 	fn structural_lod(&self) -> Option<BuildingStructuralLodProbe> {
-		let rects = self.footprint_rects();
-		if rects.is_empty() {
-			return Some(BuildingStructuralLodProbe::from_aabb3d_xz(
-				Vec3::from(self.bounds.min),
-				Vec3::from(self.bounds.max),
-			));
+		let y0 = self.bounds.min.y;
+		let wall_h = (self.storeys.len() as f32 * HOUSE_STOREY_HEIGHT).max(HOUSE_STOREY_HEIGHT);
+		let wall = self.finish.as_ref().map(|f| f.wall.clone());
+		let roof = self.finish.as_ref().map(|f| f.roof.clone());
+		let mut volumes: Vec<_> = self
+			.footprint_rects()
+			.into_iter()
+			.map(|xz| MassingVolume::cuboid(xz, y0, wall_h).with_material_opt(wall.clone()))
+			.collect();
+		if let Some(probe) = self.roof.structural_lod() {
+			volumes.extend(probe.volumes.into_iter().map(|v| v.with_material_opt(roof.clone())));
 		}
-		Some(
-			BuildingStructuralLodProbe::new(rects)
-				.with_y0(self.bounds.min.y)
-				.with_height((self.bounds.max.y - self.bounds.min.y).max(1.0)),
-		)
+		if volumes.is_empty() {
+			None
+		} else {
+			Some(BuildingStructuralLodProbe::from_volumes(volumes))
+		}
 	}
 }
 
@@ -522,10 +527,20 @@ impl BuildingComponents for ShepherdsHut {
 	}
 
 	fn structural_lod(&self) -> Option<BuildingStructuralLodProbe> {
-		Some(BuildingStructuralLodProbe::from_aabb3d_xz(
-			Vec3::from(self.bounds.min),
-			Vec3::from(self.bounds.max),
-		))
+		let wall = self.finish.as_ref().map(|f| f.wall.clone());
+		let roof = self.finish.as_ref().map(|f| f.roof.clone());
+		let mut volumes = self.shell.structural_lod().map(|p| p.volumes).unwrap_or_default();
+		for volume in &mut volumes {
+			volume.material = wall.clone();
+		}
+		if let Some(probe) = self.roof.structural_lod() {
+			volumes.extend(probe.volumes.into_iter().map(|v| v.with_material_opt(roof.clone())));
+		}
+		if volumes.is_empty() {
+			None
+		} else {
+			Some(BuildingStructuralLodProbe::from_volumes(volumes))
+		}
 	}
 }
 

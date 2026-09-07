@@ -9,7 +9,9 @@ use procedural_common::NoiseParams;
 use richmond_building_components::joints::JointNode;
 use richmond_building_components::labels::LabelNode;
 use richmond_building_components::panels::PanelNode;
-use richmond_building_components::{BuildingComponents, BuildingStructuralLodProbe, Layers};
+use richmond_building_components::{
+	BuildingComponents, BuildingStructuralLodProbe, Layers, MassingVolume,
+};
 
 use crate::fit::{Confines, FillRegion, FillableRegions, Fit, FitError, SpaceKind};
 use crate::usage_areas::boundary_openings::inject_shared_boundary_from;
@@ -130,17 +132,19 @@ impl BuildingComponents for IApartmentFullStorey {
 	}
 
 	fn structural_lod(&self) -> Option<BuildingStructuralLodProbe> {
-		let mut probe: Option<BuildingStructuralLodProbe> = None;
-		for block in &self.blocks {
-			let Some(block_probe) = block.structural_lod() else {
-				continue;
-			};
-			probe = Some(match probe {
-				Some(acc) => acc.merge(block_probe),
-				None => block_probe,
-			});
+		let y0 = self.floor_plan.center_xz.y;
+		let height = self.floor_plan.storey_height;
+		let volumes: Vec<_> = self
+			.floor_plan
+			.primary_rects
+			.iter()
+			.map(|rect| MassingVolume::cuboid(rect.to_aabb2(), y0, height))
+			.collect();
+		if volumes.is_empty() {
+			None
+		} else {
+			Some(BuildingStructuralLodProbe::from_volumes(volumes))
 		}
-		probe
 	}
 }
 
@@ -187,7 +191,7 @@ mod tests {
 	fn structural_probe_high_within_perimeter_cutoff() {
 		let storey = storey_seed(0);
 		let probe = storey.structural_lod().expect("composed LivableApartments footprints");
-		assert!(!probe.footprints.is_empty());
+		assert!(!probe.footprints().is_empty());
 		assert_eq!(probe.high_outside_meters, STRUCTURAL_HIGH_OUTSIDE_METERS);
 
 		let inside = Transform::from_xyz(0.0, 1.5, 0.0);

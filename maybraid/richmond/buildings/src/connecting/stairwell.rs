@@ -241,10 +241,17 @@ impl BuildingComponents for ConnectingStairwell {
 	}
 
 	fn structural_lod(&self) -> Option<BuildingStructuralLodProbe> {
-		Some(BuildingStructuralLodProbe::from_aabb3d_xz(
+		let mut probe = BuildingStructuralLodProbe::from_aabb3d_xz(
 			bevy_math::Vec3::from(self.well.bounds.min),
 			bevy_math::Vec3::from(self.well.bounds.max),
-		))
+		);
+		for volume in &mut probe.volumes {
+			volume.accessory = true;
+			if let Some(material) = &self.surface_material {
+				volume.material = Some(material.clone());
+			}
+		}
+		Some(probe)
 	}
 }
 

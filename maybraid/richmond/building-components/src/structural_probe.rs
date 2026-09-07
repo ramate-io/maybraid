@@ -2,7 +2,7 @@
 //!
 //! Distinct from mesh-resolution probes ([`crate::panels::PanelLodProbe`], …):
 //! this selects which *layers* of authored IR a composite building emits
-//! (e.g. internal walls on High only).
+//! (e.g. internal walls on High only) and holds far-band [`MassingVolume`]s.
 //!
 //! Footprints are authored in the host's **local** XZ. Fine-phase updates map the
 //! viewer into that local frame via [`GlobalTransform`] so gallery offsets work.
@@ -14,58 +14,58 @@ use lod::gen::{LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
 use lod::lod_scene_host::LodSceneHost;
 
+use crate::massing::{is_ultralow_massing, MassingVolume};
+
 /// High while the viewer is at most this many meters outside the XZ perimeter.
 pub const STRUCTURAL_HIGH_OUTSIDE_METERS: f32 = 80.0;
 
 /// Medium (exterior kits) while the viewer is at most this many meters outside.
 pub const STRUCTURAL_MEDIUM_OUTSIDE_METERS: f32 = 220.0;
 
-/// Low (per-footprint massing boxes) while the viewer is at most this many meters outside.
-/// Beyond this is UltraLow (one union box).
+/// Low (authored massing volumes) while the viewer is at most this many meters outside.
 pub const STRUCTURAL_LOW_OUTSIDE_METERS: f32 = 520.0;
 
 /// Viewer distance band for whole-building structural thinning.
 ///
-/// Footprints are axis-aligned XZ rectangles (`Aabb2d` with \(y\) = world \(z\))
-/// in the **host local** frame. Distance is planar meters outside the nearest
-/// footprint (0 inside).
+/// Volumes are in the **host local** frame. Distance is planar meters outside
+/// the nearest volume footprint (0 inside).
 #[derive(Debug, Clone, PartialEq, Component)]
 pub struct BuildingStructuralLodProbe {
-	pub footprints: Vec<Aabb2d>,
+	pub volumes: Vec<MassingVolume>,
 	pub high_outside_meters: f32,
 	pub medium_outside_meters: f32,
 	pub low_outside_meters: f32,
-	/// Local-space floor of the massing volume.
-	pub y0: f32,
-	/// Massing height in meters (fallback 1 when only XZ footprints were authored).
-	pub height: f32,
 }
 
 impl Default for BuildingStructuralLodProbe {
 	fn default() -> Self {
 		Self {
-			footprints: Vec::new(),
+			volumes: Vec::new(),
 			high_outside_meters: STRUCTURAL_HIGH_OUTSIDE_METERS,
 			medium_outside_meters: STRUCTURAL_MEDIUM_OUTSIDE_METERS,
 			low_outside_meters: STRUCTURAL_LOW_OUTSIDE_METERS,
-			y0: 0.0,
-			height: 1.0,
 		}
 	}
 }
 
 impl BuildingStructuralLodProbe {
 	pub fn new(footprints: impl IntoIterator<Item = Aabb2d>) -> Self {
-		Self { footprints: footprints.into_iter().collect(), ..Self::default() }
+		Self::from_volumes(footprints.into_iter().map(|xz| MassingVolume::cuboid(xz, 0.0, 1.0)))
+	}
+
+	pub fn from_volumes(volumes: impl IntoIterator<Item = MassingVolume>) -> Self {
+		Self { volumes: volumes.into_iter().collect(), ..Self::default() }
 	}
 
 	pub fn from_aabb3d_xz(min: Vec3, max: Vec3) -> Self {
-		Self {
-			footprints: vec![Aabb2d { min: Vec2::new(min.x, min.z), max: Vec2::new(max.x, max.z) }],
-			y0: min.y.min(max.y),
-			height: (max.y - min.y).abs().max(1e-3),
-			..Self::default()
-		}
+		let xz = Aabb2d { min: Vec2::new(min.x, min.z), max: Vec2::new(max.x, max.z) };
+		let y0 = min.y.min(max.y);
+		let height = (max.y - min.y).abs().max(1e-3);
+		Self::from_volumes([MassingVolume::cuboid(xz, y0, height)])
+	}
+
+	pub fn footprints(&self) -> Vec<Aabb2d> {
+		self.volumes.iter().map(MassingVolume::aabb_xz).collect()
 	}
 
 	pub fn with_high_outside_meters(mut self, meters: f32) -> Self {
@@ -84,12 +84,17 @@ impl BuildingStructuralLodProbe {
 	}
 
 	pub fn with_height(mut self, height: f32) -> Self {
-		self.height = height.max(1e-3);
+		let height = height.max(1e-3);
+		for volume in &mut self.volumes {
+			volume.height = height;
+		}
 		self
 	}
 
 	pub fn with_y0(mut self, y0: f32) -> Self {
-		self.y0 = y0;
+		for volume in &mut self.volumes {
+			volume.y0 = y0;
+		}
 		self
 	}
 
@@ -101,21 +106,18 @@ impl BuildingStructuralLodProbe {
 		(high, medium, low)
 	}
 
-	/// Append another probe's footprints (keep the tighter cutoffs; union vertical span).
+	/// Append another probe's volumes (keep the tighter cutoffs).
 	pub fn merge(mut self, other: Self) -> Self {
-		self.footprints.extend(other.footprints);
+		self.volumes.extend(other.volumes);
 		self.high_outside_meters = self.high_outside_meters.min(other.high_outside_meters);
 		self.medium_outside_meters = self.medium_outside_meters.min(other.medium_outside_meters);
 		self.low_outside_meters = self.low_outside_meters.min(other.low_outside_meters);
-		let top = (self.y0 + self.height).max(other.y0 + other.height);
-		self.y0 = self.y0.min(other.y0);
-		self.height = (top - self.y0).max(1e-3);
 		self
 	}
 
-	/// Meters outside the nearest footprint in local XZ (0 when inside any).
+	/// Meters outside the nearest volume in local XZ (0 when inside any).
 	pub fn distance_outside_local(&self, viewer_local: Vec3) -> f32 {
-		distance_outside_footprints(viewer_local, &self.footprints)
+		distance_outside_footprints(viewer_local, &self.footprints())
 	}
 
 	/// [`distance_outside_local`] treating `viewer.translation` as already local.
@@ -162,30 +164,41 @@ impl BuildingStructuralLodProbe {
 		}
 	}
 
-	/// Coarse local AABB covering all XZ footprints.
+	/// Coarse local AABB covering all volumes.
 	pub fn footprint_aabb(&self) -> Aabb3d {
 		let Some(xz) = self.footprint_xz() else {
-			return Aabb3d::from_min_max(
-				Vec3::new(0.0, self.y0, 0.0),
-				Vec3::new(1.0, self.y0 + self.height.max(1.0), 1.0),
-			);
+			return Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE);
 		};
+		let mut y0 = f32::INFINITY;
+		let mut y1 = f32::NEG_INFINITY;
+		for volume in &self.volumes {
+			y0 = y0.min(volume.y0);
+			y1 = y1.max(volume.y0 + volume.height);
+			if let Some(roof) = &volume.roof {
+				y1 = y1.max(volume.y0 + volume.height + roof.rise);
+			}
+		}
+		if !y0.is_finite() {
+			y0 = 0.0;
+			y1 = 1.0;
+		}
 		Aabb3d::from_min_max(
-			Vec3::new(xz.min.x, self.y0, xz.min.y),
-			Vec3::new(xz.max.x, self.y0 + self.height.max(1e-3), xz.max.y),
+			Vec3::new(xz.min.x, y0, xz.min.y),
+			Vec3::new(xz.max.x, y1.max(y0 + 1e-3), xz.max.y),
 		)
 	}
 
 	/// Union of authored XZ footprints (`Aabb2d.y` = world \(z\)).
 	pub fn footprint_xz(&self) -> Option<Aabb2d> {
-		if self.footprints.is_empty() {
+		if self.volumes.is_empty() {
 			return None;
 		}
 		let mut min_x = f32::INFINITY;
 		let mut max_x = f32::NEG_INFINITY;
 		let mut min_z = f32::INFINITY;
 		let mut max_z = f32::NEG_INFINITY;
-		for rect in &self.footprints {
+		for volume in &self.volumes {
+			let rect = volume.aabb_xz();
 			min_x = min_x.min(rect.min.x);
 			max_x = max_x.max(rect.max.x);
 			min_z = min_z.min(rect.min.y);
@@ -194,14 +207,10 @@ impl BuildingStructuralLodProbe {
 		Some(Aabb2d { min: Vec2::new(min_x, min_z), max: Vec2::new(max_x, max_z) })
 	}
 
-	/// Footprints drawn at Low (each rect) vs UltraLow (union).
-	pub fn massing_footprints(&self, level: LodSceneLevel) -> Vec<Aabb2d> {
-		match level {
-			LodSceneLevel::UltraLow | LodSceneLevel::Distance(_) | LodSceneLevel::Resolution(_) => {
-				self.footprint_xz().into_iter().collect()
-			}
-			_ => self.footprints.clone(),
-		}
+	/// Volumes drawn at `level` (UltraLow keeps structural primitives, drops roofs).
+	pub fn massing_volumes(&self, level: LodSceneLevel) -> Vec<MassingVolume> {
+		let ultralow = is_ultralow_massing(level);
+		self.volumes.iter().flat_map(|volume| volume.drawn_at(ultralow)).collect()
 	}
 }
 
@@ -264,6 +273,7 @@ pub fn update_building_structural_host_levels(
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::massing::MassingKind;
 
 	#[test]
 	fn inside_footprint_is_high() {
@@ -304,26 +314,29 @@ mod tests {
 		let ultra = Transform::from_xyz(5.0 + 81.0, 1.5, 0.0);
 		assert_eq!(probe.level_for(&low), LodSceneLevel::Low);
 		assert_eq!(probe.level_for(&ultra), LodSceneLevel::UltraLow);
-		assert_eq!(probe.massing_footprints(LodSceneLevel::Low).len(), 1);
-		assert_eq!(probe.massing_footprints(LodSceneLevel::UltraLow).len(), 1);
+		assert_eq!(probe.massing_volumes(LodSceneLevel::Low).len(), 1);
+		assert_eq!(probe.massing_volumes(LodSceneLevel::UltraLow).len(), 1);
 	}
 
 	#[test]
-	fn ultralow_massing_unions_footprints() {
-		let a = BuildingStructuralLodProbe::from_aabb3d_xz(
-			Vec3::new(-10.0, 0.0, -2.0),
-			Vec3::new(-6.0, 3.0, 2.0),
+	fn ultralow_keeps_each_structural_volume() {
+		let a = MassingVolume::cuboid(
+			Aabb2d { min: Vec2::new(-10.0, -2.0), max: Vec2::new(-6.0, 2.0) },
+			0.0,
+			3.0,
 		);
-		let b = BuildingStructuralLodProbe::from_aabb3d_xz(
-			Vec3::new(6.0, 0.0, -2.0),
-			Vec3::new(10.0, 3.0, 2.0),
+		let b = MassingVolume::cylinder(Vec2::new(8.0, 0.0), 2.0, 0.0, 8.0);
+		let roof = MassingVolume::roof_pitch(
+			Aabb2d { min: Vec2::new(-10.0, -2.0), max: Vec2::new(-6.0, 2.0) },
+			3.0,
+			1.5,
+			true,
 		);
-		let probe = a.merge(b);
-		assert_eq!(probe.massing_footprints(LodSceneLevel::Low).len(), 2);
-		let union = probe.massing_footprints(LodSceneLevel::UltraLow);
-		assert_eq!(union.len(), 1);
-		assert!((union[0].min.x + 10.0).abs() < 1e-4);
-		assert!((union[0].max.x - 10.0).abs() < 1e-4);
+		let probe = BuildingStructuralLodProbe::from_volumes([a, b, roof]);
+		assert_eq!(probe.massing_volumes(LodSceneLevel::Low).len(), 3);
+		let ultra = probe.massing_volumes(LodSceneLevel::UltraLow);
+		assert_eq!(ultra.len(), 2);
+		assert!(ultra.iter().all(|v| !matches!(v.kind, MassingKind::RoofPitch { .. })));
 	}
 
 	#[test]
@@ -348,12 +361,9 @@ mod tests {
 			Vec3::new(5.0, 3.0, 5.0),
 		)
 		.with_high_outside_meters(20.0);
-		// Building placed 200 m away; local footprint still [-5,5].
 		let host = GlobalTransform::from_translation(Vec3::new(200.0, 0.0, 0.0));
-		// World point just outside the *placed* building → High.
 		let near_world = Vec3::new(200.0 + 5.0 + 10.0, 1.5, 0.0);
 		assert_eq!(probe.level_for_world(near_world, &host), LodSceneLevel::High);
-		// Same offset from origin (no host transform) would look far from local footprint.
 		assert_eq!(
 			probe.level_for(&Transform::from_translation(near_world)),
 			LodSceneLevel::Medium

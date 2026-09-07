@@ -64,10 +64,16 @@ impl BuildingComponents for Skybridge {
 	}
 
 	fn structural_lod(&self) -> Option<BuildingStructuralLodProbe> {
-		Some(BuildingStructuralLodProbe::from_aabb3d_xz(
+		let mut probe = BuildingStructuralLodProbe::from_aabb3d_xz(
 			bevy_math::Vec3::from(self.bounds.min),
 			bevy_math::Vec3::from(self.bounds.max),
-		))
+		);
+		if let Some(material) = &self.material {
+			for volume in &mut probe.volumes {
+				volume.material = Some(material.clone());
+			}
+		}
+		Some(probe)
 	}
 }
 

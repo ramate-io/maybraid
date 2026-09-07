@@ -28,7 +28,9 @@ use bevy_math::{Vec2, Vec3};
 use lod::gen::LodSceneLevel;
 use richmond_building_components::joints::JointNode;
 use richmond_building_components::panels::{PanelNode, PanelStyle};
-use richmond_building_components::{BuildingComponents, Layers};
+use richmond_building_components::{
+	ring_strip_xz, BuildingComponents, BuildingStructuralLodProbe, Layers, MassingVolume,
+};
 
 use crate::openings::{MappedOpenings, Openings};
 use crate::paneling::clipped_rectangular_strip::ClippedRectangularStrip;
@@ -249,6 +251,16 @@ impl BuildingComponents for RectRingFloor {
 			out.extend(w.joint_nodes_for_level(level));
 		}
 		out
+	}
+
+	fn structural_lod(&self) -> Option<BuildingStructuralLodProbe> {
+		let p = self.params();
+		let center = Vec2::new(p.center_xz.x, p.center_xz.z);
+		Some(BuildingStructuralLodProbe::from_volumes(
+			ring_strip_xz(center, p.outer, p.inner)
+				.into_iter()
+				.map(|xz| MassingVolume::cuboid(xz, p.center_xz.y, p.storey_height)),
+		))
 	}
 }
 

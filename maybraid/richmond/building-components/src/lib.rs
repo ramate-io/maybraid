@@ -33,8 +33,8 @@ pub use layer::{Layer, Layers};
 pub use lod_band::{placement_bounds, warm_mesh_lod_culls, warm_mesh_lod_culls_at_depth};
 pub use lod_host_helper::LodHostHelper;
 pub use massing::{
-	is_massing_level, massing_box_scene, massing_box_transform, massing_scene,
-	MassingSilhouettePlugin,
+	is_massing_level, massing_box_scene, massing_box_transform, massing_scene, ring_strip_xz,
+	MassingKind, MassingRoof, MassingSilhouettePlugin, MassingVolume,
 };
 pub use panels::{
 	dihedral_kink, fitted_tile_count, to_centered_rect_placement, triangle_normal,
@@ -124,7 +124,7 @@ pub trait BuildingComponents {
 
 	/// When set, [`ComponentsOnly`] bands High / Medium / Low / UltraLow via this probe.
 	///
-	/// Low and UltraLow replace nested kit hosts with primitive massing boxes.
+	/// Low and UltraLow replace nested kit hosts with the probe's [`MassingVolume`]s.
 	fn structural_lod(&self) -> Option<BuildingStructuralLodProbe> {
 		None
 	}

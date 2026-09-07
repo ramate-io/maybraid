@@ -321,20 +321,46 @@ impl BuildingComponents for TempleSanctum {
 	}
 
 	fn structural_lod(&self) -> Option<BuildingStructuralLodProbe> {
-		let bounds = self.bounds();
-		let height = (bounds.max.y - bounds.min.y).max(1.0);
-		let footprints = self.components().footprints.clone();
-		if footprints.is_empty() {
-			return Some(BuildingStructuralLodProbe::from_aabb3d_xz(
-				Vec3::from(bounds.min),
-				Vec3::from(bounds.max),
-			));
+		let components = self.components();
+		let wall = components.wall_material.clone();
+		let ornament = components.ornament_material.clone().or_else(|| wall.clone());
+		let mut volumes = Vec::new();
+		if let Some(podium) = &components.podium {
+			if let Some(probe) = podium.structural_lod() {
+				volumes
+					.extend(probe.volumes.into_iter().map(|v| v.with_material_opt(wall.clone())));
+			}
 		}
-		Some(
-			BuildingStructuralLodProbe::new(footprints)
-				.with_y0(bounds.min.y)
-				.with_height(height),
-		)
+		for keep in &components.keeps {
+			match keep {
+				crate::RingFortKeep::Circular(keep) => {
+					if let Some(probe) = keep.shell.structural_lod() {
+						volumes.extend(
+							probe.volumes.into_iter().map(|v| v.with_material_opt(wall.clone())),
+						);
+					}
+				}
+				crate::RingFortKeep::Trazaloid(keep) => {
+					if let Some(probe) = keep.shell.structural_lod() {
+						volumes.extend(
+							probe.volumes.into_iter().map(|v| v.with_material_opt(wall.clone())),
+						);
+					}
+				}
+			}
+		}
+		for shell in &components.ornaments {
+			if let Some(probe) = shell.structural_lod() {
+				volumes.extend(
+					probe.volumes.into_iter().map(|v| v.with_material_opt(ornament.clone())),
+				);
+			}
+		}
+		if volumes.is_empty() {
+			None
+		} else {
+			Some(BuildingStructuralLodProbe::from_volumes(volumes))
+		}
 	}
 }
 
