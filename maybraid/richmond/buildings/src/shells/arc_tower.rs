@@ -1,11 +1,13 @@
 //! Stacked circular storey shells ([`ArcFloor`]) with developer-chosen openings and slabs.
 
 use bevy_math::bounding::Aabb3d;
-use bevy_math::Vec3;
+use bevy_math::{Vec2, Vec3};
 use lod::gen::LodSceneLevel;
 use richmond_building_components::floors::FloorNode;
 use richmond_building_components::partitions::{PartitionNode, PartitionStyle};
-use richmond_building_components::{BuildingComponents, Layers};
+use richmond_building_components::{
+	BuildingComponents, BuildingStructuralLodProbe, Layers, MassingVolume,
+};
 
 use crate::openings::{MappedOpening, Opening, OpeningId, OpeningLabel, Openings};
 use crate::shells::arc_floor::{ArcFloor, ArcFloorParams, ArcFloorSlab};
@@ -146,6 +148,16 @@ impl BuildingComponents for ArcTower {
 			out.extend(storey.floor_nodes_for_level(level));
 		}
 		out
+	}
+
+	fn structural_lod(&self) -> Option<BuildingStructuralLodProbe> {
+		let p = self.params();
+		Some(BuildingStructuralLodProbe::from_volumes([MassingVolume::cylinder(
+			Vec2::new(p.center_xz.x, p.center_xz.z),
+			p.radius,
+			p.center_xz.y,
+			p.storey_height * p.floor_count as f32,
+		)]))
 	}
 }
 

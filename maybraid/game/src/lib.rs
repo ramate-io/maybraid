@@ -9,23 +9,27 @@ use bevy::prelude::*;
 use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
 use maybraid_input::MenuNavPad;
 use maybraid_menu_controller::MenuControllerPlugin;
-use maybraid_world::{WorldGameplayEnabled, WorldMobHudEnabled, WorldPlayerLoadout, WorldPlugin};
-use menu_components::{ActiveOverlayKey, MENU_CLEAR, ScreenBackPressed, consume_screen_back};
+use maybraid_world::{
+	PlayerPhysicsEnabled, TerrainStreamingEnabled, WorldGameplayEnabled, WorldMobHudEnabled,
+	WorldPlayerLoadout, WorldPlugin, WorldSceneryVisible, WorldSurfaceReady,
+};
+use menu_components::{consume_screen_back, ActiveOverlayKey, ScreenBackPressed, MENU_CLEAR};
 use menu_playground::{
 	ActiveCharacter, CharacterPreviewPlugin, CharacterScreen, CharacterScreenPlugin,
 	CharacterSessionPlugin,
 };
 use menu_screens::{
-	CreateCharacterPlugin, GalleryScreen, GameMode, HomeMenuChoice, HomeScreenPlugin,
-	InGameMenuChoice, InGameScreenPlugin, InGameSettings, InGameSettingsScreen, SpinRevealScreen,
 	cancel_pending_create, request_show_gallery, request_show_in_game,
-	request_show_in_game_settings,
+	request_show_in_game_settings, CreateCharacterPlugin, GalleryScreen, GameMode, HomeMenuChoice,
+	HomeScreenPlugin, InGameMenuChoice, InGameScreenPlugin, InGameSettings, InGameSettingsScreen,
+	LoadingScreenPlugin, SpinRevealScreen,
 };
 use std::path::{Path, PathBuf};
 
 use crate::shell::{
-	apply_shell_look, attach_preview_camera, detach_preview_camera, enter_characters, enter_home,
-	enter_world, enter_world_menu, exit_world_menu, stamp_preview_render_layers,
+	apply_shell_look, attach_preview_camera, despawn_loading_backdrop, detach_preview_camera,
+	enter_characters, enter_home, enter_loading_world, enter_world, enter_world_menu,
+	exit_world_menu, spawn_loading_backdrop, stamp_preview_render_layers,
 };
 
 /// Crate-local asset directory (`maybraid/game/assets`).
@@ -39,12 +43,16 @@ impl Plugin for GamePlugin {
 	fn build(&self, app: &mut App) {
 		app.add_plugins(WorldPlugin::game())
 			.insert_resource(WorldGameplayEnabled(false))
+			.insert_resource(PlayerPhysicsEnabled(false))
+			.insert_resource(TerrainStreamingEnabled(false))
+			.insert_resource(WorldSceneryVisible(false))
 			.insert_resource(ClearColor(MENU_CLEAR))
 			.init_state::<GameFlow>()
 			.add_sub_state::<WorldPause>()
 			.add_plugins((
 				HomeScreenPlugin,
 				InGameScreenPlugin,
+				LoadingScreenPlugin,
 				CreateCharacterPlugin,
 				CharacterSessionPlugin,
 				CharacterScreenPlugin,
@@ -61,6 +69,16 @@ impl Plugin for GamePlugin {
 			)
 			.add_systems(OnExit(GameFlow::Characters), detach_preview_camera)
 			.add_systems(
+				OnEnter(GameFlow::LoadingWorld),
+				(
+					enter_loading_world,
+					spawn_loading_backdrop,
+					apply_shell_look,
+					detach_preview_camera,
+				),
+			)
+			.add_systems(OnExit(GameFlow::LoadingWorld), despawn_loading_backdrop)
+			.add_systems(
 				OnEnter(GameFlow::World),
 				(load_active_player_loadout, enter_world, apply_shell_look, detach_preview_camera)
 					.chain(),
@@ -73,6 +91,7 @@ impl Plugin for GamePlugin {
 				Update,
 				(
 					stamp_preview_render_layers,
+					finish_world_loading.run_if(in_state(GameFlow::LoadingWorld)),
 					route_home_choice.run_if(in_state(GameFlow::Home)),
 					route_in_game_choice.run_if(in_state(WorldPause::Menu)),
 					sync_world_mob_hud,
@@ -83,6 +102,12 @@ impl Plugin for GamePlugin {
 						.run_if(in_state(GameFlow::World)),
 				),
 			);
+	}
+}
+
+fn finish_world_loading(ready: Res<WorldSurfaceReady>, mut flow: ResMut<NextState<GameFlow>>) {
+	if ready.0 {
+		flow.set(GameFlow::World);
 	}
 }
 
@@ -126,7 +151,7 @@ fn route_home_choice(
 	match HomeRoute::from_choice(choice) {
 		HomeRoute::World { label } => {
 			mode.label = String::from(label);
-			flow.set(GameFlow::World);
+			flow.set(GameFlow::LoadingWorld);
 		}
 		HomeRoute::Characters => flow.set(GameFlow::Characters),
 		HomeRoute::Unimplemented => {}
@@ -202,7 +227,6 @@ fn character_back(
 		return;
 	}
 	if !character.is_empty() {
-		// Back discards unsaved HUD edits. Persist only happens from Save.
 		request_show_gallery(&mut commands);
 		return;
 	}

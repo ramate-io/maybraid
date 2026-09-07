@@ -13,11 +13,14 @@ mod slabs;
 #[cfg(test)]
 mod tests;
 
+use bevy_math::bounding::Aabb2d;
 use bevy_math::{Vec2, Vec3};
 use lod::gen::LodSceneLevel;
 use richmond_building_components::joints::JointNode;
 use richmond_building_components::panels::{PanelNode, PanelStyle};
-use richmond_building_components::{BuildingComponents, Layers};
+use richmond_building_components::{
+	BuildingComponents, BuildingStructuralLodProbe, Layers, MassingVolume,
+};
 
 use crate::openings::{MappedOpenings, Openings};
 use crate::paneling::fitted_rectangle::{ClippedFittedRectangle, FittedRectangle};
@@ -222,5 +225,19 @@ impl BuildingComponents for RectFloor {
 
 	fn joint_nodes_for_level(&self, level: LodSceneLevel) -> Layers<JointNode> {
 		self.walls.joint_nodes_for_level(level)
+	}
+
+	fn structural_lod(&self) -> Option<BuildingStructuralLodProbe> {
+		let p = self.params();
+		let half = p.footprint * 0.5;
+		let xz = Aabb2d {
+			min: Vec2::new(p.center_xz.x - half.x, p.center_xz.z - half.y),
+			max: Vec2::new(p.center_xz.x + half.x, p.center_xz.z + half.y),
+		};
+		Some(BuildingStructuralLodProbe::from_volumes([MassingVolume::cuboid(
+			xz,
+			p.center_xz.y,
+			p.storey_height,
+		)]))
 	}
 }

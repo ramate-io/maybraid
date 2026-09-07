@@ -6,7 +6,8 @@ use richmond_building_components::floors::FloorGeometry;
 use richmond_building_components::panels::PanelStyle;
 use richmond_building_components::partitions::PartitionStyle;
 use richmond_building_components::{
-	BuildingComponents, FloorNode, JointNode, Layers, PanelNode, PartitionNode, Placement,
+	BuildingComponents, BuildingStructuralLodProbe, FloorNode, JointNode, Layers, MassingVolume,
+	PanelNode, PartitionNode, Placement,
 };
 use richmond_buildings::{
 	ArcFloor, ArcFloorSlab, ArcTower, ArcTowerParams, ConnectingStairwell, OpeningId, OpeningLabel,
@@ -73,6 +74,16 @@ impl BuildingComponents for CircularTower {
 
 	fn floor_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FloorNode> {
 		self.tower.floor_nodes_for_level(level)
+	}
+
+	fn structural_lod(&self) -> Option<BuildingStructuralLodProbe> {
+		let mut probe = self.tower.structural_lod()?;
+		if let Some(material) = &self.wall_material {
+			for volume in &mut probe.volumes {
+				volume.material = Some(material.clone());
+			}
+		}
+		Some(probe)
 	}
 }
 
@@ -144,6 +155,23 @@ impl BuildingComponents for TrazaloidTower {
 			}
 		}
 		out
+	}
+
+	fn structural_lod(&self) -> Option<BuildingStructuralLodProbe> {
+		let first = self.storeys.first()?;
+		let last = self.storeys.last()?;
+		let foot = first.params();
+		let ridge = last.params();
+		let top =
+			ridge.origin.y + ridge.lower_height + ridge.band_vertical_offset + ridge.upper_height;
+		let height = (top - foot.origin.y).max(1.0);
+		Some(BuildingStructuralLodProbe::from_volumes([MassingVolume::trazaloid(
+			foot.origin,
+			foot.footprint,
+			ridge.ridge,
+			height,
+		)
+		.with_material_opt(self.wall_material.clone())]))
 	}
 }
 

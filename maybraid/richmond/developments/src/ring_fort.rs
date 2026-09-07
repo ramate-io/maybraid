@@ -13,7 +13,9 @@ use lod::gen::LodSceneLevel;
 use material_ref::MaterialRef;
 use procedural_common::{NoiseConfig, NoiseParams};
 use richmond_building_components::panels::PanelStyle;
-use richmond_building_components::{BuildingComponents, JointNode, Layers, PanelNode};
+use richmond_building_components::{
+	BuildingComponents, BuildingStructuralLodProbe, JointNode, Layers, PanelNode,
+};
 use richmond_buildings::{
 	Confines, ConnectingStairwell, EndCap, FillableRegions, Fit, FitError, FittedRectangle,
 	LesHallesFloorPlan, Opening, OpeningId, OpeningLabel, Openings, Overhang, PanelPillar,
@@ -113,6 +115,16 @@ impl BuildingComponents for GalleryTerrace {
 
 	fn joint_nodes_for_level(&self, level: LodSceneLevel) -> Layers<JointNode> {
 		self.deck.joint_nodes_for_level(level)
+	}
+
+	fn structural_lod(&self) -> Option<BuildingStructuralLodProbe> {
+		let mut probe = self.deck.structural_lod()?;
+		if let Some(material) = &self.wall_material {
+			for volume in &mut probe.volumes {
+				volume.material = Some(material.clone());
+			}
+		}
+		Some(probe)
 	}
 }
 
