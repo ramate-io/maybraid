@@ -7,11 +7,11 @@ use bevy::prelude::*;
 use chico_forests::ChicoGroveHost;
 use chico_vegetation_components::VegetationInstance;
 use lod::LodScene;
-use mob_characters::{LOCAL_POI, URBAN_POI, VEGETATION_POI};
+use mob_characters::{LOCAL_POI, SALOON_POI, URBAN_POI, VEGETATION_POI};
 use poi_intelligence::{
-	GlobalPoi, LocalPoi, Poi, PoiId, PoiIntelligencePlugin, PoiRegistry, PoiSystems,
+	GlobalPoi, LocalPoi, Poi, PoiId, PoiIntelligencePlugin, PoiKind, PoiRegistry, PoiSystems,
 };
-use richmond_development_models::InteriorArea;
+use richmond_development_models::{DiscoverablePlace, DiscoverablePlaceLabel};
 use richmond_developments_on_terrain_playground::UrbanSetting;
 
 const LOCAL_VEGETATION_TILE: f32 = 48.0;
@@ -25,11 +25,16 @@ const INTERIOR_POI_SALT: u64 = 0x696e_7465_7269_6f72;
 pub struct WorldPoiDiscoveryBudget {
 	pub scene_candidates_per_frame: usize,
 	pub vegetation_candidates_per_frame: usize,
+	pub local_places_per_building: usize,
 }
 
 impl Default for WorldPoiDiscoveryBudget {
 	fn default() -> Self {
-		Self { scene_candidates_per_frame: 16, vegetation_candidates_per_frame: 24 }
+		Self {
+			scene_candidates_per_frame: 16,
+			vegetation_candidates_per_frame: 24,
+			local_places_per_building: 6,
+		}
 	}
 }
 
@@ -59,6 +64,7 @@ struct WorldPoiDiscoveryState {
 	pending_vegetation_tiles: HashSet<IVec2>,
 	vegetation_tiles: HashMap<IVec2, Entity>,
 	vegetation_replacements: HashMap<IVec2, Entity>,
+	high_places_by_host: HashMap<Entity, HashSet<Entity>>,
 }
 
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -88,7 +94,7 @@ impl Plugin for WorldPoiPlugin {
 					collect_vegetation_instances,
 					queue_global_groves,
 					queue_global_urban_settings,
-					queue_local_interiors,
+					queue_local_places,
 				)
 					.in_set(WorldPoiSystems::Collect),
 			)
@@ -126,6 +132,7 @@ fn collect_vegetation_instances(
 	}
 }
 
+/// Grove-host pin. Always-on: proxy UltraLow trees never spawn `VegetationInstance`.
 fn queue_global_groves(
 	groves: Query<(Entity, &ChicoGroveHost, &GlobalTransform), Added<ChicoGroveHost>>,
 	mut state: ResMut<WorldPoiDiscoveryState>,
@@ -165,19 +172,83 @@ fn queue_global_urban_settings(
 	}
 }
 
-fn queue_local_interiors(
-	areas: Query<(Entity, &InteriorArea, &GlobalTransform), Added<InteriorArea>>,
+fn queue_local_places(
+	areas: Query<(Entity, &DiscoverablePlace, &GlobalTransform), Added<DiscoverablePlace>>,
+	parents: Query<&ChildOf>,
+	places: Query<&DiscoverablePlace>,
+	entities: Query<Entity>,
+	budget: Res<WorldPoiDiscoveryBudget>,
 	mut state: ResMut<WorldPoiDiscoveryState>,
 ) {
-	for (entity, area, transform) in &areas {
-		state.pending_pois.push_back(PendingPoi {
-			target: PendingPoiTarget::Entity(entity),
-			poi: Poi::new(spatial_poi_id(INTERIOR_POI_SALT, transform.translation()), LOCAL_POI)
-				.with_arrival_radius(area.arrival_radius)
-				.with_salience(1.1),
-			tier: PendingPoiTier::Local,
-		});
+	prune_high_places(&mut state, &entities);
+	for (entity, place, transform) in &areas {
+		if !place.persistent {
+			let Some(host) = persistent_host(entity, &parents, &places) else {
+				queue_place(&mut state, entity, place, transform.translation());
+				continue;
+			};
+			let admitted = state.high_places_by_host.entry(host).or_default();
+			if !admitted.contains(&entity) && admitted.len() >= budget.local_places_per_building {
+				continue;
+			}
+			admitted.insert(entity);
+		}
+		queue_place(&mut state, entity, place, transform.translation());
 	}
+}
+
+fn queue_place(
+	state: &mut WorldPoiDiscoveryState,
+	entity: Entity,
+	place: &DiscoverablePlace,
+	translation: Vec3,
+) {
+	let kind = place_kind(place.label);
+	let salience = place.salience.unwrap_or(place.label.default_salience());
+	state.pending_pois.push_back(PendingPoi {
+		target: PendingPoiTarget::Entity(entity),
+		poi: Poi::new(spatial_poi_id(INTERIOR_POI_SALT ^ place.label.salt(), translation), kind)
+			.with_arrival_radius(place.arrival_radius)
+			.with_salience(salience),
+		tier: PendingPoiTier::Local,
+	});
+}
+
+fn place_kind(label: DiscoverablePlaceLabel) -> PoiKind {
+	match label {
+		DiscoverablePlaceLabel::Stall
+		| DiscoverablePlaceLabel::Lounge
+		| DiscoverablePlaceLabel::Market => SALOON_POI,
+		_ => LOCAL_POI,
+	}
+}
+
+fn persistent_host(
+	entity: Entity,
+	parents: &Query<&ChildOf>,
+	places: &Query<&DiscoverablePlace>,
+) -> Option<Entity> {
+	if places.get(entity).is_ok_and(|place| place.persistent) {
+		return Some(entity);
+	}
+	let mut current = entity;
+	for _ in 0..8 {
+		let parent = parents.get(current).ok()?.parent();
+		if places.get(parent).is_ok_and(|place| place.persistent) {
+			return Some(parent);
+		}
+		current = parent;
+	}
+	None
+}
+
+fn prune_high_places(state: &mut WorldPoiDiscoveryState, entities: &Query<Entity>) {
+	for admitted in state.high_places_by_host.values_mut() {
+		admitted.retain(|entity| entities.contains(*entity));
+	}
+	state
+		.high_places_by_host
+		.retain(|host, admitted| entities.contains(*host) && !admitted.is_empty());
 }
 
 fn promote_pending_pois(
@@ -333,6 +404,87 @@ mod tests {
 	fn semantic_salts_keep_equal_positions_distinct() {
 		let at = Vec3::new(10.0, 2.0, 30.0);
 		assert_ne!(spatial_poi_id(VEGETATION_POI_SALT, at), spatial_poi_id(GROVE_POI_SALT, at));
+		assert_ne!(
+			spatial_poi_id(INTERIOR_POI_SALT ^ DiscoverablePlaceLabel::House.salt(), at),
+			spatial_poi_id(INTERIOR_POI_SALT ^ DiscoverablePlaceLabel::Lounge.salt(), at)
+		);
+	}
+
+	#[test]
+	fn lounge_stall_and_market_map_to_saloon() {
+		assert_eq!(place_kind(DiscoverablePlaceLabel::Lounge), SALOON_POI);
+		assert_eq!(place_kind(DiscoverablePlaceLabel::Stall), SALOON_POI);
+		assert_eq!(place_kind(DiscoverablePlaceLabel::Market), SALOON_POI);
+		assert_eq!(place_kind(DiscoverablePlaceLabel::House), LOCAL_POI);
+		assert_eq!(place_kind(DiscoverablePlaceLabel::Storey), LOCAL_POI);
+		assert_eq!(place_kind(DiscoverablePlaceLabel::Bedroom), LOCAL_POI);
+	}
+
+	#[test]
+	fn high_rooms_are_capped_per_building_host() {
+		let mut app = App::new();
+		app.init_resource::<WorldPoiDiscoveryBudget>()
+			.init_resource::<WorldPoiDiscoveryState>()
+			.init_resource::<PoiRegistry>()
+			.add_systems(Update, (queue_local_places, promote_pending_pois).chain());
+		app.world_mut()
+			.resource_mut::<WorldPoiDiscoveryBudget>()
+			.local_places_per_building = 2;
+		app.world_mut()
+			.resource_mut::<WorldPoiDiscoveryBudget>()
+			.scene_candidates_per_frame = 16;
+
+		let host = app
+			.world_mut()
+			.spawn((
+				DiscoverablePlace::host(DiscoverablePlaceLabel::House, 8.0, 1.1),
+				Transform::from_xyz(0.0, 0.0, 0.0),
+				GlobalTransform::from_xyz(0.0, 0.0, 0.0),
+			))
+			.id();
+		let rooms: Vec<_> = (0..4)
+			.map(|index| {
+				app.world_mut()
+					.spawn((
+						DiscoverablePlace::high(DiscoverablePlaceLabel::Bedroom, 3.0, 1.0),
+						Transform::from_xyz(index as f32 * 4.0, 0.0, 0.0),
+						GlobalTransform::from_xyz(index as f32 * 4.0, 0.0, 0.0),
+						ChildOf(host),
+					))
+					.id()
+			})
+			.collect();
+
+		app.update();
+
+		assert!(app.world().get::<Poi>(host).is_some());
+		assert_eq!(app.world().get::<Poi>(host).map(|poi| poi.kind), Some(LOCAL_POI));
+		let promoted_rooms =
+			rooms.iter().filter(|entity| app.world().get::<Poi>(**entity).is_some()).count();
+		assert_eq!(promoted_rooms, 2);
+	}
+
+	#[test]
+	fn market_host_promotes_a_saloon_place() {
+		let mut app = App::new();
+		app.init_resource::<WorldPoiDiscoveryBudget>()
+			.init_resource::<WorldPoiDiscoveryState>()
+			.init_resource::<PoiRegistry>()
+			.add_systems(Update, (queue_local_places, promote_pending_pois).chain());
+		let market = app
+			.world_mut()
+			.spawn((
+				DiscoverablePlace::host(DiscoverablePlaceLabel::Market, 12.0, 1.25),
+				Transform::from_xyz(20.0, 1.0, -8.0),
+				GlobalTransform::from_xyz(20.0, 1.0, -8.0),
+			))
+			.id();
+
+		app.update();
+
+		let poi = app.world().get::<Poi>(market).copied();
+		assert_eq!(poi.map(|poi| poi.kind), Some(SALOON_POI));
+		assert!(app.world().get::<LocalPoi>(market).is_some());
 	}
 
 	#[test]

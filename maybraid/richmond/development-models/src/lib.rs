@@ -27,6 +27,7 @@ pub mod les_halles;
 pub mod market;
 pub mod pad;
 pub mod padded;
+pub mod place;
 pub mod plugin;
 pub mod presentation;
 pub mod ring_fort;
@@ -53,7 +54,7 @@ pub use development::{
 	ShepherdsVillageCell,
 };
 pub use finish::{DevelopmentFinish, DevelopmentFinishRole};
-pub use host::{DevelopmentHost, DevelopmentHosts, InteriorArea};
+pub use host::{DevelopmentHost, DevelopmentHosts};
 pub use hydro::{
 	composed_height_at, composed_height_upper_on_rect, hydro_overlaps_xz, terrain_hydro_overlaps,
 };
@@ -67,6 +68,7 @@ pub use pad::{
 	PlacedBuildingPad,
 };
 pub use padded::{PresentedPaddedTerrainScene, TerrainWithPads};
+pub use place::{DiscoverablePlace, DiscoverablePlaceLabel, InteriorArea};
 pub use plugin::{register_richmond_development_models_plugin, RichmondDevelopmentModelsPlugin};
 pub use presentation::{
 	sync_padded_terrain_colliders, PaddedTerrainPresenter, PaddedTerrainPresenterState,
