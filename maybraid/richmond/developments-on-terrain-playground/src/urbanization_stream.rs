@@ -6,16 +6,15 @@
 
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use avian3d::prelude::ColliderDisabled;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
-use durham_terrain_models::PresentedTerrainScene;
+use durham_terrain_models::{PresentedTerrainScene, TerrainCellLayout};
 use lod::gen::{
 	GeneratingSpatialIndex, Id, LodGenerateBudget, LodGenerateKeepRegion, LodGenerateQueue,
-	LodGenerateRegion, SpatialIndex, Version,
+	LodGenerateRegion, MaterializeStatus, SpatialIndex, StorageStatus, Version,
 };
 use lod::lod_ref::LodRef;
-use lod::presentation::{LodPresentKeepRegion, LodPresentRegion, RegionPresenter};
+use lod::presentation::{LodPresentKeepRegion, LodPresentRegion};
 use lod::{LodGeneratePlugin, LodGenerateRegionPlugin, LodPresentRegionPlugin, LodViewer};
 use procedural_common::NoiseParams;
 use richmond_development_models::{
@@ -178,71 +177,38 @@ impl UrbanizationPresenterState {
 		}
 	}
 
-	/// Generate leaf developments and spawn hosts for one urbanization cell.
-	pub fn present_urbanization(
+	/// Spawn hosts for one filled leaf that already has [`BuiltDevelopment`].
+	pub fn present_leaf(
 		&mut self,
 		commands: &mut Commands,
-		development: &mut DevelopmentIndex,
-		id: Id,
+		leaf_id: Id,
 		version: Version,
-		selected: &SelectedUrbanization,
-		lod_ref: &LodRef,
-	) -> Vec<Entity> {
-		if let Some(previous) = self.retire(id) {
+		cell: &DevelopmentCell,
+		built: &BuiltDevelopment,
+		leaf_bounds: bevy::math::bounding::Aabb3d,
+	) {
+		if self.presented_version(leaf_id) == Some(version) {
+			return;
+		}
+		if let Some(previous) = self.retire(leaf_id) {
 			self.pending_despawn.push_back(previous.entities);
 		}
 
-		let mut entities = Vec::new();
-		for leaf in &selected.leaves {
-			if leaf.kind == UrbanDevelopmentKind::Empty {
-				continue;
-			}
-			let leaf_id = leaf.id();
-			if GeneratingSpatialIndex::<DevelopmentCell>::get_or_generate(
-				development,
-				leaf_id,
-				lod_ref,
-			)
-			.is_none()
-			{
-				continue;
-			}
-			if GeneratingSpatialIndex::<BuiltDevelopment>::get_or_generate(
-				development,
-				leaf_id,
-				lod_ref,
-			)
-			.is_none()
-			{
-				continue;
-			}
-			let Some(cell) = SpatialIndex::<DevelopmentCell>::get(development, leaf_id) else {
-				continue;
-			};
-			let Some(built) = SpatialIndex::<BuiltDevelopment>::get(development, leaf_id) else {
-				continue;
-			};
-			let center = (leaf.bounds.min + leaf.bounds.max) * 0.5;
-			let elevation = cell.pads().next().map(|pad| pad.height).unwrap_or(center.y);
-			let arrival_radius = ((leaf.bounds.max.x - leaf.bounds.min.x)
-				.min(leaf.bounds.max.z - leaf.bounds.min.z)
-				* 0.25)
-				.clamp(8.0, 128.0);
-			entities.push(
-				commands
-					.spawn((
-						Name::new("urban-setting"),
-						UrbanSetting { id: leaf_id, arrival_radius },
-						Transform::from_xyz(center.x, elevation, center.z),
-					))
-					.id(),
-			);
-			entities.extend(spawn_tagged_hosts(commands, built));
-		}
-
-		self.presented
-			.insert(id, PresentedUrbanization { version, entities: entities.clone() });
-		entities
+		let center = (leaf_bounds.min + leaf_bounds.max) * 0.5;
+		let elevation = cell.pads().next().map(|pad| pad.height).unwrap_or(center.y);
+		let arrival_radius = ((leaf_bounds.max.x - leaf_bounds.min.x)
+			.min(leaf_bounds.max.z - leaf_bounds.min.z)
+			* 0.25)
+			.clamp(8.0, 128.0);
+		let mut entities = vec![commands
+			.spawn((
+				Name::new("urban-setting"),
+				UrbanSetting { id: leaf_id, arrival_radius },
+				Transform::from_xyz(center.x, elevation, center.z),
+			))
+			.id()];
+		entities.extend(spawn_tagged_hosts(commands, built));
+		self.presented.insert(leaf_id, PresentedUrbanization { version, entities });
 	}
 }
 
@@ -335,13 +301,13 @@ pub fn stream_urbanization(
 	lod.apply_spec(&mut commands, config.urbanization.as_ref(), cam, &mut last_key);
 }
 
-/// Expand presented urbanization cells into BuiltDevelopment hosts and cull stale ones.
-pub fn present_urbanization_hosts(
-	mut commands: Commands,
+/// Bounded leaf generate on the 1 km urbanization keep. Height GET miss
+/// leaves the leaf `NotTracked` so the next frame retries.
+pub fn generate_urbanization_developments(
 	config: Res<crate::PlaygroundConfig>,
 	keep: Res<LodPresentKeepRegion<UrbanizationLodChan>>,
 	mut development: DevelopmentIndex,
-	mut state: ResMut<UrbanizationPresenterState>,
+	budget: Res<LodGenerateBudget>,
 ) {
 	if config.urbanization.is_none() {
 		return;
@@ -364,48 +330,134 @@ pub fn present_urbanization_hosts(
 		bounds: &region,
 	};
 
-	let tracked: Vec<(Id, Version)> =
+	let mut created = 0usize;
+	let cap = budget.ids_per_frame.max(1) as usize;
+	let urbanization_ids: Vec<Id> =
 		SpatialIndex::<SelectedUrbanization>::tracked_ids_for(&*development.urbanization, region)
 			.into_iter()
-			.filter_map(|tracked| {
-				let id = tracked.0;
-				let version =
-					SpatialIndex::<SelectedUrbanization>::version(&*development.urbanization, id)?;
-				Some((id, version))
-			})
+			.map(|tracked| tracked.0)
 			.collect();
-
-	let wanted: HashSet<Id> = tracked.iter().map(|(id, _)| *id).collect();
-	for (id, version) in tracked {
-		if state.presented_version(id) == Some(version) {
-			continue;
+	for id in urbanization_ids {
+		if created >= cap {
+			break;
 		}
 		let Some(selected) = development.urbanization.get(id).cloned() else {
 			continue;
 		};
-		state.present_urbanization(
-			&mut commands,
-			&mut development,
-			id,
-			version,
-			&selected,
-			&lod_ref,
-		);
+		for leaf in &selected.leaves {
+			if created >= cap {
+				break;
+			}
+			if leaf.kind == UrbanDevelopmentKind::Empty {
+				continue;
+			}
+			let leaf_id = leaf.id();
+			if SpatialIndex::<DevelopmentCell>::storage_status(&development, leaf_id)
+				== StorageStatus::NotTracked
+			{
+				if GeneratingSpatialIndex::<DevelopmentCell>::get_or_generate(
+					&mut development,
+					leaf_id,
+					&lod_ref,
+				)
+				.is_none()
+				{
+					continue;
+				}
+			}
+			let Some(cell) = SpatialIndex::<DevelopmentCell>::get(&development, leaf_id) else {
+				continue;
+			};
+			if !cell.is_filled() {
+				continue;
+			}
+			if SpatialIndex::<BuiltDevelopment>::storage_status(&development, leaf_id)
+				!= StorageStatus::NotTracked
+			{
+				continue;
+			}
+			if GeneratingSpatialIndex::<BuiltDevelopment>::get_or_generate(
+				&mut development,
+				leaf_id,
+				&lod_ref,
+			) == Some(MaterializeStatus::Created)
+			{
+				created += 1;
+			}
+		}
 	}
-	state.remove_stale(&mut commands, &wanted);
 }
 
-/// Generate padded Durham cells after the urbanization presenter has
-/// materialized all development pads in the present keep.
-pub fn generate_urbanization_padded_terrain(
+/// GET-only host spawn for leaves that already have [`BuiltDevelopment`].
+pub fn present_urbanization_hosts(
+	mut commands: Commands,
 	config: Res<crate::PlaygroundConfig>,
 	keep: Res<LodPresentKeepRegion<UrbanizationLodChan>>,
-	mut development: DevelopmentIndex,
+	development: DevelopmentIndex,
+	mut state: ResMut<UrbanizationPresenterState>,
 ) {
 	if config.urbanization.is_none() {
 		return;
 	}
 	let Some(region) = keep.region else {
+		return;
+	};
+
+	let urbanization_ids: Vec<Id> =
+		SpatialIndex::<SelectedUrbanization>::tracked_ids_for(&*development.urbanization, region)
+			.into_iter()
+			.map(|tracked| tracked.0)
+			.collect();
+
+	let mut wanted = HashSet::new();
+	for id in urbanization_ids {
+		let Some(selected) = development.urbanization.get(id) else {
+			continue;
+		};
+		for leaf in &selected.leaves {
+			if leaf.kind == UrbanDevelopmentKind::Empty {
+				continue;
+			}
+			let leaf_id = leaf.id();
+			let Some(cell) = SpatialIndex::<DevelopmentCell>::get(&development, leaf_id) else {
+				continue;
+			};
+			let Some(built) = SpatialIndex::<BuiltDevelopment>::get(&development, leaf_id) else {
+				continue;
+			};
+			let Some(version) = SpatialIndex::<BuiltDevelopment>::version(&development, leaf_id)
+			else {
+				continue;
+			};
+			state.present_leaf(&mut commands, leaf_id, version, cell, built, leaf.bounds);
+			wanted.insert(leaf_id);
+		}
+	}
+	state.remove_stale(&mut commands, &wanted);
+}
+
+fn pad_visual_region(
+	layout: &TerrainCellLayout,
+	urban_keep: Option<bevy::math::bounding::Aabb3d>,
+) -> Option<bevy::math::bounding::Aabb3d> {
+	if layout.is_streamed() {
+		Some(layout.presentation_region())
+	} else {
+		urban_keep
+	}
+}
+
+/// Compose pads only for Durham cells that are already stored.
+pub fn generate_urbanization_padded_terrain(
+	config: Res<crate::PlaygroundConfig>,
+	keep: Res<LodPresentKeepRegion<UrbanizationLodChan>>,
+	layout: Res<TerrainCellLayout>,
+	mut development: DevelopmentIndex,
+) {
+	if config.urbanization.is_none() {
+		return;
+	}
+	let Some(region) = pad_visual_region(&layout, keep.region) else {
 		return;
 	};
 	development.store.invalidate_dirty_padded();
@@ -416,49 +468,62 @@ pub fn generate_urbanization_padded_terrain(
 		current_transform: &identity,
 		bounds: &region,
 	};
-	let _ = GeneratingSpatialIndex::<TerrainWithPads>::get_or_generate_region(
-		&mut development,
-		region,
-		&lod_ref,
-	);
+	for id in development.terrain_store().terrain_ids_overlapping(region) {
+		let _ = GeneratingSpatialIndex::<TerrainWithPads>::get_or_generate(
+			&mut development,
+			id,
+			&lod_ref,
+		);
+	}
 }
 
 /// Present padded replacements for the urbanization keep and cull stale cells.
 pub fn present_urbanization_padded_terrain(
 	config: Res<crate::PlaygroundConfig>,
 	keep: Res<LodPresentKeepRegion<UrbanizationLodChan>>,
+	layout: Res<TerrainCellLayout>,
 	store: Res<DevelopmentEntryStore>,
 	mut presenter: PaddedTerrainPresenter,
 	mut state: ResMut<UrbanizationPaddedTerrainState>,
+	lod_viewers: Query<&GlobalTransform, With<LodViewer>>,
+	cameras: Query<&GlobalTransform, With<Camera3d>>,
 ) {
 	state.wanted.clear();
-	let Some(region) = keep.region.filter(|_| config.urbanization.is_some()) else {
+	let Some(region) =
+		pad_visual_region(&layout, keep.region).filter(|_| config.urbanization.is_some())
+	else {
 		presenter.remove_stale(&state.wanted);
 		return;
 	};
-	let identity = Transform::IDENTITY;
+	let viewer = lod_viewers
+		.iter()
+		.next()
+		.or_else(|| cameras.iter().next())
+		.map(|tf| {
+			let t = tf.translation();
+			Transform::from_translation(Vec3::new(t.x, 0.0, t.z))
+		})
+		.unwrap_or(Transform::IDENTITY);
 	let lod_ref = LodRef {
 		entity: Entity::PLACEHOLDER,
-		previous_transform: &identity,
-		current_transform: &identity,
+		previous_transform: &viewer,
+		current_transform: &viewer,
 		bounds: &region,
 	};
 	let view = PaddedStoreView::new(&store);
-	RegionPresenter::<TerrainWithPads, _>::present(&mut presenter, &view, region, &lod_ref);
+	presenter.present_banded(&view, region, &lod_ref);
 	state.wanted = SpatialIndex::<TerrainWithPads>::tracked_ids_for(&view, region)
 		.into_iter()
 		.map(|tracked| tracked.0)
 		.collect();
-	presenter.remove_stale(&state.wanted);
 }
 
-/// Hide raw Durham roots while their padded replacements are active, and
-/// disable every raw trimesh collider in those scene hierarchies.
+/// Hide raw Durham visual roots while their padded replacements are active.
+/// Collision is owned by [`durham_terrain_models::TerrainColliderHost`], not these roots.
 pub fn sync_raw_terrain_replacements(
 	mut commands: Commands,
 	state: Res<UrbanizationPaddedTerrainState>,
 	raw_roots: Query<(Entity, &PresentedTerrainScene)>,
-	children: Query<&Children>,
 ) {
 	for (root, presented) in &raw_roots {
 		let replaced = state.wanted.contains(&presented.0);
@@ -467,13 +532,6 @@ pub fn sync_raw_terrain_replacements(
 		} else {
 			Visibility::Inherited
 		});
-		for entity in std::iter::once(root).chain(children.iter_descendants(root)) {
-			if replaced {
-				commands.entity(entity).insert(ColliderDisabled);
-			} else {
-				commands.entity(entity).remove::<ColliderDisabled>();
-			}
-		}
 	}
 }
 

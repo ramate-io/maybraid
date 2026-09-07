@@ -5,6 +5,7 @@ use lod::LodRefreshSystems;
 use lod_lazy_refs::LodLazyRefsPlugin;
 use richmond_building_components::{
 	apply_parent_confines, FurnitureWireframePlugin, LabelNode, LabelWireframePlugin,
+	MassingSilhouettePlugin,
 };
 use richmond_building_physics::BuildingWalkColliderPlugin;
 use richmond_building_shaders::{RichmondBuildingShadersPlugin, RichmondUrbanMaterialRefPlugin};
@@ -53,6 +54,9 @@ impl Plugin for RichmondDevelopmentModelsPlugin {
 		}
 		if !app.is_plugin_added::<TowerSilhouettePlugin>() {
 			app.add_plugins(TowerSilhouettePlugin);
+		}
+		if !app.is_plugin_added::<MassingSilhouettePlugin>() {
+			app.add_plugins(MassingSilhouettePlugin);
 		}
 		if !app.is_plugin_added::<BuildingWalkColliderPlugin>() {
 			app.add_plugins(BuildingWalkColliderPlugin);

@@ -26,7 +26,7 @@ use preview::{
 	present_preview_lod, CachedPreview,
 };
 use richmond_building_components::{
-	apply_parent_confines, FurnitureWireframePlugin, LabelWireframePlugin,
+	apply_parent_confines, FurnitureWireframePlugin, LabelWireframePlugin, MassingSilhouettePlugin,
 };
 use richmond_buildings::wizards_tower::TowerSilhouettePlugin;
 use scene_ref::SceneRefPlugin;
@@ -42,6 +42,7 @@ impl Plugin for RichmondBuildingsPlaygroundPlugin {
 				FurnitureWireframePlugin,
 				LabelWireframePlugin,
 				TowerSilhouettePlugin,
+				MassingSilhouettePlugin,
 				BuildingsLodRefreshPlugin,
 				GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()),
 			));

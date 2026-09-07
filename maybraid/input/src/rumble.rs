@@ -44,18 +44,18 @@ pub(crate) fn fan_out_pad_rumble(
 ) {
 	for pulse in pulses.read() {
 		if pulse.is_silent() {
-			warn!("pad_rumble: skipped silent pulse");
+			debug!("pad_rumble: skipped silent pulse");
 			continue;
 		}
 		let n = pads.iter().count();
 		if n == 0 {
-			warn!(
+			debug!(
 				"pad_rumble: fan_out had pulse ({:?} weak={:.2} strong={:.2}) but 0 Gamepad entities",
 				pulse.duration, pulse.intensity.weak_motor, pulse.intensity.strong_motor
 			);
 			continue;
 		}
-		info!(
+		debug!(
 			"pad_rumble: fan_out pads={n} duration={:?} weak={:.2} strong={:.2}",
 			pulse.duration, pulse.intensity.weak_motor, pulse.intensity.strong_motor
 		);

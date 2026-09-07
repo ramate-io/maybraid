@@ -102,7 +102,8 @@ impl JumpParams {
 		let progress = progress.clamp(0.0, 1.0);
 		let squat = 1.0 / self.pre_squat_speed.max(1e-3);
 		let takeoff = squat + DEFAULT_SPRING_DURATION;
-		let air = (air_duration(self.gravity, self.jump_height) - DEFAULT_SPRING_DURATION).max(0.05);
+		let air =
+			(air_duration(self.gravity, self.jump_height) - DEFAULT_SPRING_DURATION).max(0.05);
 		let land = 2.0 / self.landing_squat_speed.max(1e-3);
 		if progress < TAKEOFF_END {
 			(progress / TAKEOFF_END) * takeoff
