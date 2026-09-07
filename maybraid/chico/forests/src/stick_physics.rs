@@ -3,7 +3,7 @@
 //! Forest plants are [`FlattenedComponentsOnly`] hosts — kit GLBs spawn as posed
 //! content with no nested [`StickNode`] LOD hosts. A type-erased producer is
 //! stamped when each source component is added, then one shared drain creates a
-//! bounded compound collider per host.
+//! compound collider per host (every gated stick, no shape cap).
 //!
 //! Compounds live on the [`LodSceneHost`], not a High level root, so band flicker
 //! does not rebuild them and Hidden warm-hold roots do not keep live physics.
@@ -25,8 +25,6 @@ use lod_avian::PhysicsInteractionLayer;
 
 /// Two inches. Gate and floor use world-space girth after plant [`Placement`] scale.
 pub const MIN_STICK_COLLIDER_RADIUS_M: f32 = 2.0 * 0.0254;
-/// Hard fan-out bound within one plant compound.
-pub const MAX_STICK_COLLIDER_SHAPES: usize = 64;
 
 /// How many pending High/Medium hosts may build compounds in one frame.
 #[derive(Resource, Debug, Clone, Copy, PartialEq, Eq)]
@@ -105,7 +103,6 @@ where
 				.into_iter()
 				.flat_map(|vegetation| vegetation.stick_nodes_for_level(level).flatten())
 				.flat_map(|node| collider_poses(&node, level))
-				.take(MAX_STICK_COLLIDER_SHAPES)
 				.collect()
 		}));
 	}
@@ -223,12 +220,12 @@ fn should_collide_member(is_trunk: bool, placement: Placement) -> bool {
 fn collider_poses(node: &StickNode, level: LodSceneLevel) -> Vec<(Transform, f32, f32)> {
 	if let Some(collection) = &node.collection {
 		let members = collection.members_for_level(level);
-		let mut ranked: Vec<_> = members
+		let mut poses: Vec<_> = members
 			.iter()
-			.filter_map(|member| ranked_member_pose(node.placement, member))
+			.filter_map(|member| gated_member_pose(node.placement, member))
 			.collect();
-		if ranked.is_empty() {
-			ranked = members
+		if poses.is_empty() {
+			poses = members
 				.iter()
 				.max_by(|a, b| {
 					world_radius(node.placement, a)
@@ -236,16 +233,12 @@ fn collider_poses(node: &StickNode, level: LodSceneLevel) -> Vec<(Transform, f32
 						.unwrap_or(std::cmp::Ordering::Equal)
 				})
 				.and_then(|member| {
-					let placed = world_member_placement(node.placement, member);
-					capsule_from_placement(placed)
-						.map(|pose| (member.is_trunk(), authored_radius(placed), pose))
+					capsule_from_placement(world_member_placement(node.placement, member))
 				})
 				.into_iter()
 				.collect();
 		}
-		ranked.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| b.1.total_cmp(&a.1)));
-		ranked.truncate(MAX_STICK_COLLIDER_SHAPES);
-		return ranked.into_iter().map(|(_, _, pose)| pose).collect();
+		return poses;
 	}
 	capsule_from_placement(node.placement).into_iter().collect()
 }
@@ -258,16 +251,12 @@ fn world_radius(parent: Placement, member: &StickMember) -> f32 {
 	authored_radius(world_member_placement(parent, member))
 }
 
-fn ranked_member_pose(
-	parent: Placement,
-	member: &StickMember,
-) -> Option<(bool, f32, (Transform, f32, f32))> {
+fn gated_member_pose(parent: Placement, member: &StickMember) -> Option<(Transform, f32, f32)> {
 	let placed = world_member_placement(parent, member);
 	if !should_collide_member(member.is_trunk(), placed) {
 		return None;
 	}
-	let radius = authored_radius(placed);
-	capsule_from_placement(placed).map(|pose| (member.is_trunk(), radius, pose))
+	capsule_from_placement(placed)
 }
 
 fn capsule_from_placement(placement: Placement) -> Option<(Transform, f32, f32)> {
@@ -340,8 +329,9 @@ mod tests {
 	}
 
 	#[test]
-	fn collection_compound_has_bounded_shape_count() {
-		let members = (0..(MAX_STICK_COLLIDER_SHAPES + 20))
+	fn collection_keeps_every_gated_member() {
+		let count = 84;
+		let members = (0..count)
 			.map(|index| StickMember {
 				geometry: StickGeometry::Segment,
 				placement: Placement::new(Vec3::new(index as f32, 0.0, 0.0), 0.0)
@@ -352,7 +342,7 @@ mod tests {
 			StickCollection::new(members).bake_bounds_from_members(),
 			Placement::IDENTITY,
 		);
-		assert_eq!(collider_poses(&node, LodSceneLevel::High).len(), MAX_STICK_COLLIDER_SHAPES);
+		assert_eq!(collider_poses(&node, LodSceneLevel::High).len(), count);
 	}
 
 	fn playable_trunk() -> StickNode {
