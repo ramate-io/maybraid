@@ -59,6 +59,7 @@ impl CharacterBrains {
 			]),
 			Self::Guard => PoiInterests::new([
 				PoiInterest::new(URBAN_POI, 1.25),
+				PoiInterest::new(LOCAL_POI, 0.9),
 				PoiInterest::new(CHARACTER_POI, 0.7),
 			]),
 			Self::Civilian => PoiInterests::one(LOCAL_POI),
@@ -69,6 +70,8 @@ impl CharacterBrains {
 			]),
 			Self::Brawler => PoiInterests::new([
 				PoiInterest::new(SALOON_POI, 1.5),
+				PoiInterest::new(URBAN_POI, 0.7),
+				PoiInterest::new(LOCAL_POI, 0.55),
 				PoiInterest::new(CHARACTER_POI, 1.0),
 			]),
 		}
@@ -86,5 +89,21 @@ impl CharacterBrains {
 impl FromMobNumber for CharacterBrains {
 	fn from_num(num: f32) -> Self {
 		Self::VALUES[index(num, 0xB2A1_65E5, Self::VALUES.len())]
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn guard_and_brawler_keep_local_urban_fallbacks() {
+		let guard = CharacterBrains::Guard.interests();
+		assert_eq!(guard.weight(URBAN_POI), Some(1.25));
+		assert_eq!(guard.weight(LOCAL_POI), Some(0.9));
+		let brawler = CharacterBrains::Brawler.interests();
+		assert_eq!(brawler.weight(SALOON_POI), Some(1.5));
+		assert_eq!(brawler.weight(URBAN_POI), Some(0.7));
+		assert_eq!(brawler.weight(LOCAL_POI), Some(0.55));
 	}
 }

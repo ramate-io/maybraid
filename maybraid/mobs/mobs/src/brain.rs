@@ -83,6 +83,7 @@ fn interests(kind: MobKind) -> PoiInterests {
 		]),
 		MobKind::Guard => PoiInterests::new([
 			PoiInterest::new(URBAN_POI, 1.4),
+			PoiInterest::new(LOCAL_POI, 0.95),
 			PoiInterest::new(CHARACTER_POI, 0.6),
 		]),
 		MobKind::Pleb => {
@@ -95,6 +96,8 @@ fn interests(kind: MobKind) -> PoiInterests {
 		]),
 		MobKind::Brawler => PoiInterests::new([
 			PoiInterest::new(SALOON_POI, 1.6),
+			PoiInterest::new(URBAN_POI, 0.75),
+			PoiInterest::new(LOCAL_POI, 0.6),
 			PoiInterest::new(CHARACTER_POI, 1.0),
 		]),
 	}
@@ -175,5 +178,16 @@ mod tests {
 		let brawler = MobBrain::for_kind(MobKind::Brawler).affiliations.for_member(ThreatId(2));
 		assert!(player.threat_weight(&brawler, 0.0) >= 1.0);
 		assert!(brawler.threat_weight(&player, 0.0) >= 1.0);
+	}
+
+	#[test]
+	fn guard_and_brawler_brains_fall_back_to_local_and_urban_places() {
+		let guard = MobBrain::for_kind(MobKind::Guard).interests;
+		assert_eq!(guard.weight(URBAN_POI), Some(1.4));
+		assert_eq!(guard.weight(LOCAL_POI), Some(0.95));
+		let brawler = MobBrain::for_kind(MobKind::Brawler).interests;
+		assert_eq!(brawler.weight(SALOON_POI), Some(1.6));
+		assert_eq!(brawler.weight(URBAN_POI), Some(0.75));
+		assert_eq!(brawler.weight(LOCAL_POI), Some(0.6));
 	}
 }
