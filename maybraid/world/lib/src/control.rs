@@ -9,6 +9,7 @@ use durham_terrain_models::{
 use game_commands::command::{CommandConsoleOutput, TextEntryFocus};
 use maybraid_character_controller::CharacterIntent;
 use maybraid_sky::SkyDome;
+use player::MotorTraction;
 use player_camera::CameraController;
 
 /// When `false`, world movement / POV intents are ignored (menus, pause overlay).
@@ -145,6 +146,16 @@ pub(crate) fn sync_world_scenery(
 		} else if !visible.0 && has_fog {
 			commands.entity(entity).remove::<DistanceFog>();
 		}
+	}
+}
+
+/// Vegetation capsule already has `ActiveCollisionHooks`; pair it with the shared motor marker.
+pub(crate) fn stamp_vegetation_motor_traction(
+	mut commands: Commands,
+	players: Query<Entity, (With<Player>, Without<MotorTraction>)>,
+) {
+	for entity in &players {
+		commands.entity(entity).insert(player::motor_traction_bundle());
 	}
 }
 

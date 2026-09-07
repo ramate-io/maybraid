@@ -1,6 +1,7 @@
 //! Capsule player, visual, and handoff slots for camera / pose drivers.
 
 mod body;
+mod contact;
 mod hit;
 mod identity;
 mod intent;
@@ -17,6 +18,9 @@ pub use body::{
 	ground_plane_for_wish, tick_jump, walkable_contact_normal, wish_on_ground, CharacterController,
 	CharacterLocomotion, Grounded, JumpPhase, JumpWish, Jumping, MoveWish, PlayerControlSystems,
 	WalkableGround,
+};
+pub use contact::{
+	motor_traction_bundle, register_motor_traction_physics, MotorTraction, MotorTractionHooks,
 };
 pub use crozon_characters::HitCapsule;
 pub use hit::HitVolume;

@@ -24,7 +24,9 @@ the muzzle, and holds the trigger after the first on-target acquire;
 Projectile sweeps include both fixed geometry and animated character capsules.
 Collider size comes from the character recipe
 [`LocomotionCapsule`](../../crozon/characters/src/components.rs) (Braidman is
-the 0.4 / 1.0 humanoid hull). Each character starts with 100 health and takes 25 damage per bolt contact
+the 0.4 / 1.0 humanoid hull). Walk uses the shared player
+[`MotorTraction`](../../player/src/contact.rs) contact hooks so Les Halles
+floors keep grip for props without dragging the capsule. Each character starts with 100 health and takes 25 damage per bolt contact
 in `duel`. `free-for-all` bakes the rolled firearm's DPC, speed, range,
 penetration, cadence, and recoil (plus clothing HP / outgoing damage) into the
 live weapon. Health is shown on a persistent top HUD and as a bar above each

@@ -9,6 +9,8 @@ use std::f32::consts::PI;
 
 pub(crate) const MOVE_ACCEL: f32 = 40.0;
 pub(crate) const MOVE_DAMPING: f32 = 0.92;
+/// Grounded idle brake toward rest along the walk plane (matches vegetation).
+pub(crate) const MOVE_BRAKE: f32 = 50.0;
 pub(crate) const JUMP_IMPULSE: f32 = 8.0;
 pub(crate) const MAX_SLOPE_ANGLE: f32 = PI * 0.45;
 pub(crate) const GROUND_CAST_DISTANCE: f32 = 0.45;
@@ -16,7 +18,8 @@ const GROUND_SNAP_SPEED: f32 = 1.5;
 
 /// Walkable grounded slope for FFA / NPC capsules. Insert before [`crate::PlayerPlugin`]
 /// to override the default (~81°). World / Durham playgrounds use ~70° so cliffs
-/// never count as floor; static terrain friction should exceed `tan(this)`.
+/// never count as floor. Uncontrolled bodies need static floor friction above
+/// `tan(this)`; motor capsules idle-brake to rest instead.
 #[derive(Resource, Clone, Copy, Debug, PartialEq)]
 pub struct CharacterLocomotion {
 	/// Hits steeper than this (radians from up) are not grounded.
@@ -219,6 +222,7 @@ pub fn apply_character_controller(commands: &mut Commands, body: Entity, hull: L
 		Restitution::ZERO.with_combine_rule(CoefficientCombine::Min),
 		GravityScale(1.25),
 	));
+	commands.entity(body).insert(crate::contact::motor_traction_bundle());
 	apply_locomotion_capsule(commands, body, hull);
 }
 
@@ -418,14 +422,18 @@ pub(crate) fn apply_wish_movement(
 	for (wish, hits, max_slope, walkable, accel, gravity_scale, mut velocity, grounded, jumping) in
 		&mut controllers
 	{
-		if wish.0.length_squared() < 1e-6 {
-			continue;
-		}
 		let contact = walkable_ground_normal(hits, max_slope);
 		let airborne = jumping.is_some_and(Jumping::airborne);
 		let ground =
 			ground_plane_for_wish(contact, walkable.map(|plane| plane.normal), grounded, airborne);
-		accelerate_wish(&mut velocity, wish.0, accel.0, dt, ground, gravity * gravity_scale.0);
+		let gravity = gravity * gravity_scale.0;
+		if wish.0.length_squared() < 1e-6 {
+			if jumping.is_none() {
+				brake_to_rest(&mut velocity, MOVE_BRAKE, dt, ground, gravity);
+			}
+			continue;
+		}
+		accelerate_wish(&mut velocity, wish.0, accel.0, dt, ground, gravity);
 	}
 }
 
@@ -465,6 +473,7 @@ pub(crate) fn advance_jump_phases(
 pub(crate) fn apply_movement_damping(
 	mut query: Query<
 		(
+			&MoveWish,
 			&MovementDampingFactor,
 			&ShapeHits,
 			Option<&MaxSlopeAngle>,
@@ -476,13 +485,49 @@ pub(crate) fn apply_movement_damping(
 		With<CharacterController>,
 	>,
 ) {
-	for (damping, hits, max_slope, walkable, grounded, jumping, mut velocity) in &mut query {
+	for (wish, damping, hits, max_slope, walkable, grounded, jumping, mut velocity) in &mut query {
 		let contact = walkable_ground_normal(hits, max_slope);
 		let airborne = jumping.is_some_and(Jumping::airborne);
 		let ground =
 			ground_plane_for_wish(contact, walkable.map(|plane| plane.normal), grounded, airborne);
+		if wish.0.length_squared() < 1e-6 && ground.is_some() {
+			continue;
+		}
 		damp_movement(&mut velocity, damping.0, ground);
 	}
+}
+
+fn move_toward(current: Vec3, target: Vec3, max_delta: f32) -> Vec3 {
+	let delta = target - current;
+	if delta.length_squared() <= max_delta * max_delta {
+		target
+	} else {
+		current + delta.normalize_or_zero() * max_delta
+	}
+}
+
+/// Pull ground-plane velocity to rest. Extra rate cancels tangent gravity so
+/// a frictionless motor still holds on walkable slopes.
+fn brake_to_rest(
+	velocity: &mut LinearVelocity,
+	brake: f32,
+	dt: f32,
+	ground_normal: Option<Vec3>,
+	gravity: Vec3,
+) {
+	if let Some(normal) = ground_normal.map(Vec3::normalize_or_zero) {
+		if normal.length_squared() > 1e-8 {
+			let tangent = **velocity - normal * velocity.dot(normal);
+			let g_tangent = gravity - normal * gravity.dot(normal);
+			let next = move_toward(tangent, Vec3::ZERO, (brake + g_tangent.length()) * dt);
+			**velocity = next + normal * velocity.dot(normal);
+			return;
+		}
+	}
+	let horizontal = Vec3::new(velocity.x, 0.0, velocity.z);
+	let next = move_toward(horizontal, Vec3::ZERO, brake * dt);
+	velocity.x = next.x;
+	velocity.z = next.z;
 }
 
 /// Damp locomotion without tipping slope-tangent velocity into or away from
@@ -660,5 +705,24 @@ mod tests {
 		assert!(downhill.dot(normal).abs() < 1e-5, "{downhill:?}");
 		assert!(uphill.y > 0.0);
 		assert!(downhill.y < 0.0);
+	}
+
+	#[test]
+	fn idle_brake_holds_on_a_steep_walkable_slope() {
+		let gravity = Vec3::NEG_Y * 9.81 * 1.25;
+		let slope = 70.0_f32.to_radians();
+		let normal = Vec3::new(-slope.sin(), slope.cos(), 0.0);
+		let g_tangent = gravity - normal * gravity.dot(normal);
+		let dt = 1.0 / 60.0;
+		let mut velocity = LinearVelocity(Vec3::ZERO);
+		for _ in 0..120 {
+			velocity.0 += g_tangent * dt;
+			brake_to_rest(&mut velocity, MOVE_BRAKE, dt, Some(normal), gravity);
+		}
+		let tangent = velocity.0 - normal * velocity.0.dot(normal);
+		assert!(
+			tangent.length() < 0.05,
+			"idle motor must cancel slope slide, leftover {tangent:?}"
+		);
 	}
 }
