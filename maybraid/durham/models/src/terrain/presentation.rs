@@ -3,7 +3,7 @@
 //! Generation and presentation stay separate: present reads the entry store and
 //! spawns each cell's [`lod::gen::LodScene`] via [`Commands::spawn_scene`].
 
-use crate::terrain::cell::{universal_bounds, TerrainCellLayout};
+use crate::terrain::cell::{expand_aabb_xz, universal_bounds, TerrainCellLayout};
 use crate::terrain::config::TerrainConfig;
 use crate::terrain::index::TerrainEntryStore;
 use crate::terrain::Terrain;
@@ -86,54 +86,82 @@ impl TerrainPresentationAssets {
 		false
 	}
 
-	fn wall_faces_for_fine_cell(&self, ix: i32, iz: i32) -> WallFaces {
+	fn wall_faces_for_fine_cell(&self, ix: i32, iz: i32, layout: &TerrainCellLayout) -> WallFaces {
 		if !self.outer_add_walls || self.lod_bands.is_empty() {
 			return WallFaces::NONE;
 		}
-		let my_r = ix.abs().max(iz.abs());
+		let my_r = layout.fine_cell_radius(ix, iz);
 		let mine = self.res_2_for_radius(my_r);
 		WallFaces {
-			neg_x: self.wall_toward_neighbor(my_r, mine, (ix - 1).abs().max(iz.abs())),
-			pos_x: self.wall_toward_neighbor(my_r, mine, (ix + 1).abs().max(iz.abs())),
-			neg_z: self.wall_toward_neighbor(my_r, mine, ix.abs().max((iz - 1).abs())),
-			pos_z: self.wall_toward_neighbor(my_r, mine, ix.abs().max((iz + 1).abs())),
+			neg_x: self.wall_toward_neighbor(my_r, mine, layout.fine_cell_radius(ix - 1, iz)),
+			pos_x: self.wall_toward_neighbor(my_r, mine, layout.fine_cell_radius(ix + 1, iz)),
+			neg_z: self.wall_toward_neighbor(my_r, mine, layout.fine_cell_radius(ix, iz - 1)),
+			pos_z: self.wall_toward_neighbor(my_r, mine, layout.fine_cell_radius(ix, iz + 1)),
 		}
 	}
 
-	fn wall_faces_for_macro_cell(&self, bounds: Aabb3d) -> WallFaces {
+	fn macro_inner_footprints(layout: &TerrainCellLayout) -> Vec<Aabb3d> {
+		let mut inners = vec![layout.fine_request_region()];
+		let mut covered = layout.fine_request_region();
+		for (i, outer) in layout.outer_rings.iter().enumerate() {
+			if outer.rows <= 0 {
+				continue;
+			}
+			covered = expand_aabb_xz(covered, outer.rows as f32 * outer.cell_size.max(1e-3));
+			if i + 1 < layout.outer_rings.len() {
+				inners.push(covered);
+			}
+		}
+		inners
+	}
+
+	fn wall_faces_for_macro_cell(&self, bounds: Aabb3d, layout: &TerrainCellLayout) -> WallFaces {
 		if !self.outer_add_walls {
 			return WallFaces::NONE;
 		}
-		if self.macro_seam_half_extents.is_empty() {
+		let inners = Self::macro_inner_footprints(layout);
+		if inners.is_empty() {
 			return WallFaces::ALL;
 		}
 		let min = Vec3::from(bounds.min);
 		let max = Vec3::from(bounds.max);
 		let eps = 1.0;
 		let mut faces = WallFaces::NONE;
-		for &half in &self.macro_seam_half_extents {
-			faces.neg_x |= (min.x - half).abs() < eps;
-			faces.pos_x |= (max.x - (-half)).abs() < eps;
-			faces.neg_z |= (min.z - half).abs() < eps;
-			faces.pos_z |= (max.z - (-half)).abs() < eps;
+		for inner in inners {
+			let inner_min = Vec3::from(inner.min);
+			let inner_max = Vec3::from(inner.max);
+			faces.neg_x |= (min.x - inner_max.x).abs() < eps || (min.x - inner_min.x).abs() < eps;
+			faces.pos_x |= (max.x - inner_min.x).abs() < eps || (max.x - inner_max.x).abs() < eps;
+			faces.neg_z |= (min.z - inner_max.z).abs() < eps || (min.z - inner_min.z).abs() < eps;
+			faces.pos_z |= (max.z - inner_min.z).abs() < eps || (max.z - inner_max.z).abs() < eps;
 		}
 		faces
 	}
 
 	/// `(res_2, wall_faces)` for a terrain origin cell AABB.
-	pub fn mesh_params_for_cell(&self, bounds: Aabb3d) -> (u8, WallFaces) {
+	///
+	/// Fine-grid LOD radius is Chebyshev distance from the current layout window
+	/// center, so newly admitted cells use the sliding stream's bands.
+	pub fn mesh_params_for_cell(
+		&self,
+		bounds: Aabb3d,
+		layout: &TerrainCellLayout,
+	) -> (u8, WallFaces) {
 		let min = Vec3::from(bounds.min);
 		let max = Vec3::from(bounds.max);
 		let cell_size = (max.x - min.x).max(1e-3);
 		if let Some(macro_min) = self.macro_cell_min_size {
 			if cell_size + 1e-3 >= macro_min {
-				return (self.macro_res_2.unwrap_or(3), self.wall_faces_for_macro_cell(bounds));
+				return (
+					self.macro_res_2.unwrap_or(3),
+					self.wall_faces_for_macro_cell(bounds, layout),
+				);
 			}
 		}
 		let ix = (min.x / cell_size).floor() as i32;
 		let iz = (min.z / cell_size).floor() as i32;
-		let radius = ix.abs().max(iz.abs());
-		(self.res_2_for_radius(radius), self.wall_faces_for_fine_cell(ix, iz))
+		let radius = layout.fine_cell_radius(ix, iz);
+		(self.res_2_for_radius(radius), self.wall_faces_for_fine_cell(ix, iz, layout))
 	}
 }
 

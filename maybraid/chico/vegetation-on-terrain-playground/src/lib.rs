@@ -490,13 +490,13 @@ fn spawn_groves(
 	}
 
 	if config.forest.is_some() {
-		info!("forest stream on; tiled groves cleared");
+		debug!("forest stream on; tiled groves cleared");
 		dirty.0 = false;
 		return;
 	}
 
 	let n = spawn_tiled_groves(&mut commands, &config, &store, &layout, &base.0);
-	info!(
+	debug!(
 		"spawned {} grove hosts ({} {}m tiles, r={})",
 		n,
 		config.grove.label(),

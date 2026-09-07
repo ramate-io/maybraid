@@ -142,6 +142,38 @@ impl TerrainCellLayout {
 		Vec3::new((min.x + max.x) * 0.5, 0.0, (min.z + max.z) * 0.5)
 	}
 
+	/// Fine-grid cell containing `xz` (Y ignored).
+	pub fn fine_cell_containing_xz(&self, xz: Vec3) -> IVec2 {
+		let size = self.cell_size.max(1e-3);
+		IVec2::new((xz.x / size).floor() as i32, (xz.z / size).floor() as i32)
+	}
+
+	/// Fine-grid origin so the window stays centered on the cell that contains `xz`.
+	pub fn origin_centered_on_xz(&self, xz: Vec3) -> IVec2 {
+		let cell = self.fine_cell_containing_xz(xz);
+		let half_x = self.extents.x as i32 / 2;
+		let half_z = self.extents.y as i32 / 2;
+		IVec2::new(cell.x - half_x, cell.y - half_z)
+	}
+
+	/// Recenter the fine-grid origin on `xz`. Returns whether [`Self::origin`] changed.
+	pub fn recenter_on_xz(&mut self, xz: Vec3) -> bool {
+		let origin = self.origin_centered_on_xz(xz);
+		if origin == self.origin {
+			false
+		} else {
+			self.origin = origin;
+			true
+		}
+	}
+
+	/// Chebyshev radius of fine-grid cell `(ix, iz)` from the window's center cell.
+	pub fn fine_cell_radius(&self, ix: i32, iz: i32) -> i32 {
+		let cx = self.origin.x + self.extents.x as i32 / 2;
+		let cz = self.origin.y + self.extents.y as i32 / 2;
+		(ix - cx).abs().max((iz - cz).abs())
+	}
+
 	/// Macro-cell edge length, preserving the default `MACRO / TERRAIN` ratio.
 	pub fn macro_cell_size(&self) -> f32 {
 		self.cell_size * (MACRO_CELL_SIZE / TERRAIN_CELL_SIZE)
@@ -364,6 +396,21 @@ mod tests {
 		assert_eq!(count_edge(&ids, 2.0 * fine), 144);
 		assert_eq!(count_edge(&ids, 4.0 * fine), 44);
 		assert_eq!(ids.len(), 32 * 32 + 144 + 44);
+	}
+
+	#[test]
+	fn recenter_slides_fine_origin_without_changing_extent() {
+		let mut layout = world_like_layout();
+		let size = layout.cell_size;
+		assert!(layout.recenter_on_xz(Vec3::new(10.0 * size, 0.0, 0.0)));
+		assert_eq!(layout.origin, IVec2::new(-6, -16));
+		assert_eq!(layout.extents, UVec2::new(32, 32));
+		assert_eq!(layout.fine_cell_radius(10, 0), 0);
+		assert_eq!(layout.fine_cell_radius(12, 0), 2);
+		assert!(!layout.recenter_on_xz(Vec3::new(10.0 * size, 0.0, 0.0)));
+		let ids = origin_cell_ids_for_layout(&layout, layout.request_region());
+		assert_eq!(count_edge(&ids, TERRAIN_CELL_SIZE), 32 * 32);
+		assert!(ids.len() > 32 * 32);
 	}
 
 	#[test]

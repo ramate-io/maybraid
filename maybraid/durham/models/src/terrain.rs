@@ -35,7 +35,7 @@ use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value, Scene};
 use durham_terrain::shaders::DurhamTerrainShader;
 use jersey_terrain_stamps::JerseyModulation;
-use lod::gen::{GeneratingSpatialIndex, GenerationScheme, Id, LodScene, OriginalId};
+use lod::gen::{GeneratingSpatialIndex, GenerationScheme, Id, LodScene, OriginalId, SpatialIndex};
 use lod::lod_ref::LodRef;
 use marazion_watersheds::WaterFill;
 use render_item::mesh::handle::Cached;
@@ -511,9 +511,16 @@ where
 			spatial_index,
 			Id::Universal,
 			lod_ref,
-		)?;
+		)?
+		.clone();
 		let material = assets.material.clone();
-		let (res_2, wall_faces) = assets.mesh_params_for_cell(bounds);
+		let layout = <S as SpatialIndex<crate::terrain::cell::TerrainCellLayout>>::get(
+			spatial_index,
+			Id::Universal,
+		)
+		.cloned()
+		.unwrap_or_default();
+		let (res_2, wall_faces) = assets.mesh_params_for_cell(bounds, &layout);
 
 		Some((
 			Self {

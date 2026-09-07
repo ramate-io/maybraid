@@ -111,17 +111,17 @@ pub(crate) fn pulse_combat_rumble(
 
 	if laser {
 		if fire {
-			info!("pad_rumble: laser pulse");
+			debug!("pad_rumble: laser pulse");
 			rumble.write(laser_rumble());
 		}
 		return;
 	}
 	if fire {
-		info!("pad_rumble: fire speed={speed:.0} damage={payload:.1}");
+		debug!("pad_rumble: fire speed={speed:.0} damage={payload:.1}");
 		rumble.write(fire_rumble(speed, payload));
 	}
 	if hit {
-		info!("pad_rumble: hit speed={speed:.0} damage={hit_damage:.1}");
+		debug!("pad_rumble: hit speed={speed:.0} damage={hit_damage:.1}");
 		rumble.write(hit_rumble(speed, hit_damage));
 	}
 }

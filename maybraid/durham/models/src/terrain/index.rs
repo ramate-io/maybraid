@@ -1,7 +1,9 @@
 //! System-local multi-type spatial index for Durham terrain generation.
 
 use crate::terrain::base_noise::BaseTerrainNoise;
-use crate::terrain::cell::{cell_bounds, BootstrapTerrainCellLayout, TerrainCellLayout};
+use crate::terrain::cell::{
+	cell_bounds, universal_bounds, BootstrapTerrainCellLayout, TerrainCellLayout,
+};
 use crate::terrain::jersey::{
 	BootstrapCanyonHighPassControllerLayout, BootstrapCanyonLowPassControllerLayout,
 	BootstrapJerseyStampConfigs, BootstrapMassifHighPassControllerLayout,
@@ -393,6 +395,25 @@ impl<'w, 's> AvianTerrainIndex<'w, 's> {
 
 	pub fn set_layout(&mut self, layout: TerrainCellLayout) {
 		*self.layout = layout;
+	}
+
+	/// Keep the Universal stored layout in sync with the Bevy resource.
+	///
+	/// Origin ids come from the stored [`TerrainCellLayout`], not the resource, so
+	/// a sliding window must re-insert when origin changes.
+	pub fn publish_layout_if_changed(&mut self, lod_ref: &LodRef) {
+		let layout = self.layout.clone();
+		let stale = <Self as SpatialIndex<TerrainCellLayout>>::get(self, Id::Universal)
+			.is_none_or(|stored| stored != &layout);
+		if stale {
+			<Self as SpatialIndex<TerrainCellLayout>>::insert(
+				self,
+				Id::Universal,
+				layout,
+				universal_bounds(),
+				lod_ref,
+			);
+		}
 	}
 
 	pub fn layout(&self) -> &TerrainCellLayout {

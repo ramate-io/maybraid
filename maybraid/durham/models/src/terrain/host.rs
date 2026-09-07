@@ -1,24 +1,29 @@
 //! World-facing streamed terrain: models, shaders, mesh caches, and fill present.
 //!
 //! Playable coverage keeps the 16-cell fine disk plus the existing 2×/4× macro
-//! rings. This plugin does not change semantic generation; it hosts the same
-//! patch `get_or_generate_region` fill the vegetation crate used to own.
+//! rings, recentered on the viewer. Generation admits a bounded number of missing
+//! origin ids per frame and completes each hierarchy synchronously. Presentation
+//! is GET-only and does not wipe persistent colliders.
 
 use std::marker::PhantomData;
 
 use bevy::math::{IVec2, UVec2};
 use bevy::prelude::*;
 use durham_terrain::shaders::{DurhamTerrainShader, DurhamTerrainShaderPlugin, RefractionWater};
-use lod::gen::GeneratingSpatialIndex;
+use lod::gen::{GeneratingSpatialIndex, Id, OriginalId, SpatialIndex, StorageStatus};
 use lod::lod_ref::LodRef;
 use lod::presentation::RegionPresenter;
+use lod::LodViewer;
 use render_item::mesh::handle::MeshFulfillBudget;
+use std::collections::HashSet;
 use visual_geometry_core::{
 	install_enforced_mesh_cache, share_terrain_chunk_refs, VisualGeometryCorePlugin,
 };
 
 use crate::terrain::base_noise::BaseTerrainNoise;
-use crate::terrain::cell::{OuterCellRing, TerrainCellLayout, TERRAIN_CELL_SIZE};
+use crate::terrain::cell::{
+	origin_cell_ids_for_layout, OuterCellRing, TerrainCellLayout, TERRAIN_CELL_SIZE,
+};
 use crate::terrain::collider::{sync_terrain_collider_hosts, TerrainColliderEpoch};
 use crate::terrain::config::TerrainConfig;
 use crate::terrain::index::AvianTerrainIndex;
@@ -37,6 +42,8 @@ pub const WORLD_FINE_HALF_EXTENT_CELLS: i32 = 16;
 pub const WORLD_OUTER_2X_ROWS: i32 = 2;
 /// 4× macro ring past the 2× ring.
 pub const WORLD_OUTER_4X_ROWS: i32 = 1;
+/// Sync Durham DAGs admitted per frame, nearest missing origin ids first.
+const TERRAIN_ADMIT_PER_FRAME: usize = 4;
 
 /// Fine-only patch vs playable world extents (fine grid + macro rings).
 #[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -50,7 +57,7 @@ pub enum TerrainCoverage {
 #[derive(Resource)]
 pub struct WorldBaseTerrain(pub BaseTerrainNoise);
 
-/// When true, fill should `get_or_generate_region` for the current layout.
+/// When true, fill should clear and rebuild (playground radius / seed commands).
 #[derive(Resource)]
 pub struct TerrainPresentationDirty(pub bool);
 
@@ -241,19 +248,53 @@ fn setup_presentation_assets(
 	});
 }
 
+fn viewer_xz(
+	lod_viewers: &Query<&GlobalTransform, With<LodViewer>>,
+	cameras: &Query<&GlobalTransform, With<Camera3d>>,
+) -> Option<Vec3> {
+	lod_viewers.iter().next().or_else(|| cameras.iter().next()).map(|tf| {
+		let t = tf.translation();
+		Vec3::new(t.x, 0.0, t.z)
+	})
+}
+
+fn origin_xz_distance_sq(id: Id, viewer: Vec3) -> f32 {
+	let Some(bounds) = id.origin_cell_bounds() else {
+		return f32::MAX;
+	};
+	let min = Vec3::from(bounds.min);
+	let max = Vec3::from(bounds.max);
+	let dx = (min.x + max.x) * 0.5 - viewer.x;
+	let dz = (min.z + max.z) * 0.5 - viewer.z;
+	dx * dx + dz * dz
+}
+
 fn generate_cells(
 	mut index: AvianTerrainIndex,
 	mut dirty: ResMut<TerrainPresentationDirty>,
 	mut pending: ResMut<TerrainPresentPending>,
 	mut world_base: ResMut<WorldBaseTerrain>,
 	mut epoch: ResMut<TerrainColliderEpoch>,
+	mut mesh_budget: ResMut<MeshFulfillBudget<TerrainMeshBuilder>>,
+	lod_viewers: Query<&GlobalTransform, With<LodViewer>>,
+	cameras: Query<&GlobalTransform, With<Camera3d>>,
 ) {
-	if !dirty.0 {
-		return;
+	if dirty.0 {
+		index.clear();
+		epoch.0 = epoch.0.wrapping_add(1);
+		dirty.0 = false;
+		pending.0 = true;
 	}
 
-	index.clear();
-	epoch.0 = epoch.0.wrapping_add(1);
+	let viewer = viewer_xz(&lod_viewers, &cameras);
+	if let Some(xz) = viewer {
+		mesh_budget.prefer_xz = Some(xz);
+		let mut layout = index.layout().clone();
+		if layout.recenter_on_xz(xz) {
+			index.set_layout(layout);
+			pending.0 = true;
+		}
+	}
 
 	let layout = index.layout().clone();
 	let region = layout.request_region();
@@ -264,20 +305,39 @@ fn generate_cells(
 		current_transform: &identity,
 		bounds: &region,
 	};
+	index.publish_layout_if_changed(&lod_ref);
 
-	let _span = bevy::log::info_span!("durham_terrain_generate").entered();
-	let terrains =
-		GeneratingSpatialIndex::<Terrain>::get_or_generate_region(&mut index, region, &lod_ref);
-	let waters =
-		GeneratingSpatialIndex::<Water>::get_or_generate_region(&mut index, region, &lod_ref);
-	info!("generated terrain_cells={} water_cells={}", terrains.len(), waters.len());
+	let prefer = viewer.unwrap_or_else(|| layout.region_center_xz());
+	let mut missing: Vec<Id> = origin_cell_ids_for_layout(&layout, region)
+		.into_iter()
+		.map(|OriginalId(id)| id)
+		.filter(|id| {
+			<AvianTerrainIndex as SpatialIndex<Terrain>>::storage_status(&index, *id)
+				== StorageStatus::NotTracked
+		})
+		.collect();
+	missing.sort_by(|a, b| {
+		origin_xz_distance_sq(*a, prefer)
+			.partial_cmp(&origin_xz_distance_sq(*b, prefer))
+			.unwrap_or(std::cmp::Ordering::Equal)
+	});
+
+	let _span = bevy::log::debug_span!("durham_terrain_generate").entered();
+	let mut created = 0usize;
+	for id in missing.into_iter().take(TERRAIN_ADMIT_PER_FRAME) {
+		if GeneratingSpatialIndex::<Terrain>::get_or_generate(&mut index, id, &lod_ref).is_some() {
+			created += 1;
+		}
+		let _ = GeneratingSpatialIndex::<Water>::get_or_generate(&mut index, id, &lod_ref);
+	}
+	if created > 0 {
+		debug!("admitted terrain_cells={created}");
+		pending.0 = true;
+	}
 
 	if let Some(base) = index.base_noise() {
 		world_base.0 = base.clone();
 	}
-
-	dirty.0 = false;
-	pending.0 = true;
 }
 
 fn present_cells(
@@ -290,8 +350,6 @@ fn present_cells(
 		return;
 	}
 
-	terrain_presenter.clear_presented();
-
 	let region = layout.presentation_region();
 	let identity = Transform::IDENTITY;
 	let lod_ref = LodRef {
@@ -302,6 +360,12 @@ fn present_cells(
 	};
 	let terrain_view = TerrainStoreView::new(&store, &layout);
 	RegionPresenter::<Terrain, _>::present(&mut terrain_presenter, &terrain_view, region, &lod_ref);
+	let wanted: HashSet<Id> = terrain_view
+		.tracked_ids_for(region)
+		.into_iter()
+		.map(|tracked| tracked.0)
+		.collect();
+	terrain_presenter.remove_stale(&wanted);
 	pending.0 = false;
 }
 
@@ -319,6 +383,17 @@ mod tests {
 	#[test]
 	fn world_origin_cells_stay_on_fine_disk_plus_macro_rings() {
 		let layout = world_cell_layout();
+		let ids = origin_cell_ids_for_layout(&layout, layout.request_region());
+		assert_eq!(ids.len(), 32 * 32 + 144 + 44);
+	}
+
+	#[test]
+	fn world_layout_recenters_with_the_viewer() {
+		let mut layout = world_cell_layout();
+		let size = TERRAIN_CELL_SIZE;
+		assert!(layout.recenter_on_xz(Vec3::X * 20.0 * size));
+		assert_eq!(layout.origin, IVec2::new(4, -WORLD_FINE_HALF_EXTENT_CELLS));
+		assert_eq!(layout.extents.x, (2 * WORLD_FINE_HALF_EXTENT_CELLS) as u32);
 		let ids = origin_cell_ids_for_layout(&layout, layout.request_region());
 		assert_eq!(ids.len(), 32 * 32 + 144 + 44);
 	}
