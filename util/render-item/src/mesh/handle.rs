@@ -13,6 +13,7 @@ use chunk::cascade::CascadeChunk;
 use futures::FutureExt;
 use std::collections::{HashMap, VecDeque};
 use std::marker::PhantomData;
+use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, Component)]
 pub struct MeshHandle<T: MeshBuilder + IdentifiedMesh + Clone> {
@@ -170,6 +171,11 @@ pub fn enforce_caching<
 }
 
 /// Per-builder limits for cache reads and CPU mesh builds.
+///
+/// `starts_per_frame` / `max_in_flight` cap async CpuShot work. Enqueue and
+/// poll still run on Update: [`Self::enqueue_per_frame`] and
+/// [`Self::apply_per_frame`] (plus [`Self::main_thread_budget`]) keep those
+/// loops from walking or inserting the whole unmatched set in one frame.
 #[derive(Resource)]
 pub struct MeshFulfillBudget<T> {
 	pub starts_per_frame: usize,
@@ -177,12 +183,35 @@ pub struct MeshFulfillBudget<T> {
 	pub max_queued: usize,
 	/// When set, chunks covering this XZ are queued ahead of the rest.
 	pub prefer_xz: Option<Vec3>,
+	/// Unqueued dispatches to classify and look up this frame.
+	pub enqueue_per_frame: usize,
+	/// Handle-cache hits that may spawn a mesh child this frame.
+	pub enqueue_spawns_per_frame: usize,
+	/// Completed meshes to insert into [`Assets<Mesh>`] this frame.
+	pub apply_per_frame: usize,
+	/// Wall-time cap for enqueue lookups and poll applies (after the first).
+	pub main_thread_budget: Duration,
 	_marker: PhantomData<fn() -> T>,
 }
 
+const DEFAULT_ENQUEUE_PER_FRAME: usize = 32;
+const DEFAULT_ENQUEUE_SPAWNS_PER_FRAME: usize = 8;
+const DEFAULT_APPLY_PER_FRAME: usize = 2;
+const DEFAULT_MAIN_THREAD_BUDGET: Duration = Duration::from_millis(2);
+
 impl<T> MeshFulfillBudget<T> {
 	pub fn new(starts_per_frame: usize, max_in_flight: usize, max_queued: usize) -> Self {
-		Self { starts_per_frame, max_in_flight, max_queued, prefer_xz: None, _marker: PhantomData }
+		Self {
+			starts_per_frame,
+			max_in_flight,
+			max_queued,
+			prefer_xz: None,
+			enqueue_per_frame: DEFAULT_ENQUEUE_PER_FRAME,
+			enqueue_spawns_per_frame: DEFAULT_ENQUEUE_SPAWNS_PER_FRAME,
+			apply_per_frame: DEFAULT_APPLY_PER_FRAME,
+			main_thread_budget: DEFAULT_MAIN_THREAD_BUDGET,
+			_marker: PhantomData,
+		}
 	}
 
 	pub fn with_prefer_xz(mut self, point: Vec3) -> Self {
@@ -258,6 +287,40 @@ fn fulfill_mesh_now<T: MeshBuilder + IdentifiedMesh + Clone + Send + Sync + 'sta
 	MeshFulfillResult { work, mesh }
 }
 
+/// Keep viewer-column items first, then enough others to fill `consider`.
+fn take_preferred_batch<T>(
+	items: impl IntoIterator<Item = (bool, T)>,
+	consider: usize,
+	look_for_preferred: bool,
+) -> Vec<(bool, T)> {
+	if consider == 0 {
+		return Vec::new();
+	}
+	let mut preferred = Vec::new();
+	let mut rest = Vec::new();
+	for (is_pref, item) in items {
+		if is_pref {
+			if preferred.len() < consider {
+				preferred.push((true, item));
+			}
+		} else if preferred.len() + rest.len() < consider {
+			rest.push((false, item));
+		}
+		if preferred.len() >= consider {
+			break;
+		}
+		if !look_for_preferred && rest.len() >= consider {
+			break;
+		}
+	}
+	if preferred.len() >= consider {
+		preferred
+	} else {
+		preferred.extend(rest);
+		preferred
+	}
+}
+
 fn enqueue_mesh_fulfillment<
 	T: MeshBuilder + IdentifiedMesh + Clone + Send + Sync + 'static,
 	M: Material,
@@ -271,20 +334,31 @@ fn enqueue_mesh_fulfillment<
 	>,
 ) {
 	let prefer = budget.prefer_xz;
-	let mut pending: Vec<_> = query
-		.iter()
-		.map(|(entity, dispatch, chunk, material)| {
+	let pending = take_preferred_batch(
+		query.iter().map(|(entity, dispatch, chunk, material)| {
 			let preferred = prefer.is_some_and(|point| chunk.column_contains_point(point));
-			(preferred, entity, dispatch, chunk, material)
-		})
-		.collect();
-	pending.sort_by_key(|(preferred, _, _, _, _)| !*preferred);
+			(preferred, (entity, dispatch, chunk, material))
+		}),
+		budget.enqueue_per_frame,
+		prefer.is_some(),
+	);
 
-	for (preferred, entity, dispatch, chunk, material) in pending {
+	let started = Instant::now();
+	let mut looked = 0usize;
+	let mut spawns = 0usize;
+	for (preferred, (entity, dispatch, chunk, material)) in pending {
+		if looked > 0 && started.elapsed() >= budget.main_thread_budget {
+			break;
+		}
+		looked += 1;
 		let normalized = dispatch.fetcher().normalize_chunk(chunk);
 		if let Some(handle) = dispatch.fetcher().fetch_cached_mesh_handle(&normalized) {
+			if spawns >= budget.enqueue_spawns_per_frame {
+				break;
+			}
 			spawn_mesh_child(&mut commands, entity, handle, material);
 			commands.entity(entity).insert(MeshFulfillmentQueued);
+			spawns += 1;
 			continue;
 		}
 
@@ -298,7 +372,7 @@ fn enqueue_mesh_fulfillment<
 			continue;
 		}
 		if queue.queued.len() >= budget.max_queued {
-			continue;
+			break;
 		}
 
 		queue.waiters.insert(key.clone(), vec![entity]);
@@ -363,27 +437,36 @@ fn poll_mesh_fulfillment<
 	M: Material,
 >(
 	mut commands: Commands,
+	budget: Res<MeshFulfillBudget<T>>,
 	mut meshes: ResMut<Assets<Mesh>>,
 	mut queue: ResMut<MeshFulfillQueue<T>>,
 	materials: Query<&MeshMaterial3d<M>>,
 ) {
-	let mut ready: Vec<_> = queue
-		.completed
-		.drain(..)
-		.map(|result| (result.work.key.clone(), result))
+	let finished: Vec<_> = queue
+		.in_flight
+		.iter_mut()
+		.filter_map(|(key, task)| (&mut *task).now_or_never().map(|result| (key.clone(), result)))
 		.collect();
-	ready.extend(
-		queue.in_flight.iter_mut().filter_map(|(key, task)| {
-			(&mut *task).now_or_never().map(|result| (key.clone(), result))
-		}),
-	);
-
-	for (key, result) in ready {
+	for (key, result) in finished {
 		queue.in_flight.remove(&key);
-		let waiters = queue.waiters.remove(&key).unwrap_or_default();
+		queue.completed.push(result);
+	}
+
+	let pending = std::mem::take(&mut queue.completed);
+	let started = Instant::now();
+	let mut applied = 0usize;
+	for result in pending {
 		let Some(mesh) = result.mesh else {
+			queue.waiters.remove(&result.work.key);
 			continue;
 		};
+		if applied >= budget.apply_per_frame
+			|| (applied > 0 && started.elapsed() >= budget.main_thread_budget)
+		{
+			queue.completed.push(MeshFulfillResult { work: result.work, mesh: Some(mesh) });
+			continue;
+		}
+		let waiters = queue.waiters.remove(&result.work.key).unwrap_or_default();
 		let handle = meshes.add(mesh);
 		result.work.fetcher.cache_mesh_handle(handle.clone(), &result.work.chunk);
 		for entity in waiters {
@@ -392,6 +475,7 @@ fn poll_mesh_fulfillment<
 			};
 			spawn_mesh_child(&mut commands, entity, handle.clone(), material);
 		}
+		applied += 1;
 	}
 }
 
@@ -435,6 +519,10 @@ mod tests {
 		assert_eq!(budget.starts_per_frame, 2);
 		assert_eq!(budget.max_in_flight, 4);
 		assert_eq!(budget.max_queued, 64);
+		assert_eq!(budget.enqueue_per_frame, 32);
+		assert_eq!(budget.enqueue_spawns_per_frame, 8);
+		assert_eq!(budget.apply_per_frame, 2);
+		assert_eq!(budget.main_thread_budget, Duration::from_millis(2));
 		assert!(budget.prefer_xz.is_none());
 	}
 
@@ -442,5 +530,36 @@ mod tests {
 	fn prefer_xz_is_optional() {
 		let budget = MeshFulfillBudget::<()>::new(8, 16, 256).with_prefer_xz(Vec3::ZERO);
 		assert_eq!(budget.prefer_xz, Some(Vec3::ZERO));
+	}
+
+	#[test]
+	fn preferred_batch_stops_at_consider() {
+		let items = (0..8).map(|i| (i % 2 == 0, i));
+		let batch = take_preferred_batch(items, 3, true);
+		assert_eq!(batch, vec![(true, 0), (true, 2), (true, 4)]);
+	}
+
+	#[test]
+	fn preferred_batch_fills_with_rest_when_short() {
+		let items = [(false, 1), (true, 2), (false, 3), (false, 4)];
+		let batch = take_preferred_batch(items, 3, true);
+		assert_eq!(batch, vec![(true, 2), (false, 1), (false, 3)]);
+	}
+
+	#[test]
+	fn preferred_batch_zero_consider_is_empty() {
+		assert!(take_preferred_batch([(true, 1)], 0, true).is_empty());
+	}
+
+	#[test]
+	fn unprioritized_batch_does_not_scan_past_consider() {
+		let mut seen = 0usize;
+		let items = (0..64).map(|i| {
+			seen += 1;
+			(false, i)
+		});
+		let batch = take_preferred_batch(items, 4, false);
+		assert_eq!(batch.len(), 4);
+		assert_eq!(seen, 4);
 	}
 }
