@@ -63,7 +63,7 @@ macro_rules! avian_host {
 	}};
 }
 
-/// Flattened plant hosts also get High-band stick capsules (no nested [`StickNode`] hosts).
+/// Flattened plant hosts also get High-IR stick capsules at High/Medium (no nested [`StickNode`] hosts).
 macro_rules! flattened_plant_host {
 	($app:expr, $ty:ty) => {{
 		avian_host!($app, FlattenedPlant<$ty>);
