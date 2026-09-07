@@ -13,13 +13,15 @@ use std::collections::{HashSet, VecDeque};
 
 use avian3d::prelude::{Collider, RigidBody};
 use bevy::prelude::*;
-use chico_vegetation_components::{Placement, StickNode, VegetationComponents, STICK_KIT_HALF};
+use chico_vegetation_components::{
+	Placement, StickMember, StickNode, VegetationComponents, STICK_KIT_HALF,
+};
 use lod::LodSceneHost;
 use lod::LodSceneLevel;
 use lod_avian::PhysicsInteractionLayer;
 
-/// One inch. Collider girth is `max(authored radius, this)` for sticks we emit.
-pub const MIN_STICK_COLLIDER_RADIUS_M: f32 = 1.0 * 0.01;
+/// Two inches. Gate and floor use world-space girth after plant [`Placement`] scale.
+pub const MIN_STICK_COLLIDER_RADIUS_M: f32 = 2.0 * 0.0254;
 /// Hard fan-out bound within one plant compound.
 pub const MAX_STICK_COLLIDER_SHAPES: usize = 64;
 
@@ -212,7 +214,7 @@ fn authored_radius(placement: Placement) -> f32 {
 	(placement.scale.x.abs() * STICK_KIT_HALF).max(placement.scale.z.abs() * STICK_KIT_HALF)
 }
 
-/// Trunks always; branches at least one inch too. Thinner High twigs stay visual-only.
+/// Trunks always; branches at least two inches in world space. Thinner High twigs stay visual-only.
 fn should_collide_member(is_trunk: bool, placement: Placement) -> bool {
 	is_trunk || authored_radius(placement) + 1e-5 >= MIN_STICK_COLLIDER_RADIUS_M
 }
@@ -222,24 +224,20 @@ fn collider_poses(node: &StickNode, level: LodSceneLevel) -> Vec<(Transform, f32
 		let members = collection.members_for_level(level);
 		let mut ranked: Vec<_> = members
 			.iter()
-			.filter(|member| should_collide_member(member.is_trunk(), member.placement))
-			.filter_map(|member| {
-				let placed = node.placement.compose_child(member.placement);
-				capsule_from_placement(placed)
-					.map(|pose| (member.is_trunk(), authored_radius(member.placement), pose))
-			})
+			.filter_map(|member| ranked_member_pose(node.placement, member))
 			.collect();
 		if ranked.is_empty() {
 			ranked = members
 				.iter()
 				.max_by(|a, b| {
-					authored_radius(a.placement)
-						.partial_cmp(&authored_radius(b.placement))
+					world_radius(node.placement, a)
+						.partial_cmp(&world_radius(node.placement, b))
 						.unwrap_or(std::cmp::Ordering::Equal)
 				})
 				.and_then(|member| {
-					capsule_from_placement(node.placement.compose_child(member.placement))
-						.map(|pose| (member.is_trunk(), authored_radius(member.placement), pose))
+					let placed = world_member_placement(node.placement, member);
+					capsule_from_placement(placed)
+						.map(|pose| (member.is_trunk(), authored_radius(placed), pose))
 				})
 				.into_iter()
 				.collect();
@@ -249,6 +247,26 @@ fn collider_poses(node: &StickNode, level: LodSceneLevel) -> Vec<(Transform, f32
 		return ranked.into_iter().map(|(_, _, pose)| pose).collect();
 	}
 	capsule_from_placement(node.placement).into_iter().collect()
+}
+
+fn world_member_placement(parent: Placement, member: &StickMember) -> Placement {
+	parent.compose_child(member.placement)
+}
+
+fn world_radius(parent: Placement, member: &StickMember) -> f32 {
+	authored_radius(world_member_placement(parent, member))
+}
+
+fn ranked_member_pose(
+	parent: Placement,
+	member: &StickMember,
+) -> Option<(bool, f32, (Transform, f32, f32))> {
+	let placed = world_member_placement(parent, member);
+	if !should_collide_member(member.is_trunk(), placed) {
+		return None;
+	}
+	let radius = authored_radius(placed);
+	capsule_from_placement(placed).map(|pose| (member.is_trunk(), radius, pose))
 }
 
 fn capsule_from_placement(placement: Placement) -> Option<(Transform, f32, f32)> {
@@ -291,6 +309,28 @@ mod tests {
 	}
 
 	#[test]
+	fn collection_keeps_scaled_limbs_that_are_thin_in_unit_space() {
+		let trunk = StickMember {
+			geometry: StickGeometry::Trunk,
+			placement: Placement::IDENTITY.with_scale(Vec3::new(0.4, 4.0, 0.4)),
+		};
+		let limb = StickMember {
+			geometry: StickGeometry::Segment,
+			placement: Placement::new(Vec3::new(1.0, 2.0, 0.0), 0.0)
+				.with_scale(Vec3::new(0.04, 1.0, 0.04)),
+		};
+		let node = StickNode::collection(
+			StickCollection::new([trunk, limb]).bake_bounds_from_members(),
+			Placement::IDENTITY.with_scale(Vec3::splat(30.0)),
+		);
+		let poses = collider_poses(&node, LodSceneLevel::High);
+		assert_eq!(poses.len(), 2);
+		let expected = 0.04 * STICK_KIT_HALF * 30.0;
+		let limb_radius = poses.iter().map(|(_, radius, _)| *radius).fold(f32::INFINITY, f32::min);
+		assert!((limb_radius - expected).abs() < 1e-4);
+	}
+
+	#[test]
 	fn only_high_band_wants_playable_colliders() {
 		assert!(wants_playable_colliders(LodSceneLevel::High));
 		assert!(!wants_playable_colliders(LodSceneLevel::Medium));
@@ -304,7 +344,7 @@ mod tests {
 			.map(|index| StickMember {
 				geometry: StickGeometry::Segment,
 				placement: Placement::new(Vec3::new(index as f32, 0.0, 0.0), 0.0)
-					.with_scale(Vec3::new(0.2, 2.0, 0.2)),
+					.with_scale(Vec3::new(0.3, 2.0, 0.3)),
 			})
 			.collect::<Vec<_>>();
 		let node = StickNode::collection(
