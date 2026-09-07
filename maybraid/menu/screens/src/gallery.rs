@@ -1,19 +1,19 @@
 //! Character gallery: pick a saved character or start a new one.
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{bsn, Scene};
-use crozon_character_model_user::{list_summaries, CharacterSummary};
-use crozon_character_persist::{load_active, CharacterId, SaveRoot};
+use bevy::scene::prelude::{Scene, bsn};
+use crozon_character_model_user::{CharacterSummary, list_summaries};
+use crozon_character_persist::{CharacterId, SaveRoot, load_active};
 use maybraid_menu_controller::MenuController;
 use menu_components::info::description::TextMenuDescription;
 use menu_components::single_select::republish_menu_activate;
 use menu_components::{
-	screen_back_scene, screen_edit_scene, TextCursorColumn, TextCursorRow, TextMenuPlugin,
+	TextCursorColumn, TextCursorRow, TextMenuPlugin, screen_back_scene, screen_edit_scene,
 };
 
+use crate::MenuScreen;
 use crate::input::add_menu_input;
 use crate::show::take_menu_show_request;
-use crate::MenuScreen;
 
 /// Queue a gallery spawn (despawns any existing menu screen first).
 #[derive(Component, Debug, Clone, Copy)]
@@ -100,7 +100,7 @@ fn gallery_scene(
 
 #[cfg(test)]
 mod tests {
-	use super::{gallery_selected_index, GalleryChoice};
+	use super::{GalleryChoice, gallery_selected_index};
 	use crozon_character_model_user::CharacterSummary;
 	use crozon_character_persist::CharacterId;
 

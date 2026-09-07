@@ -21,6 +21,7 @@ mod weapon;
 
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use control::WorldGameplayEnabled;
+pub use ui::WorldMobHudEnabled;
 pub use game_commands::command::PendingStartupCommand;
 pub use intelligence::WorldIntelligencePlugin;
 pub use material_lib::{WorldMaterialLib, WorldMaterialRefPlugin};
@@ -151,6 +152,7 @@ impl Plugin for WorldPlugin {
 			.insert_resource(PadMovementEnabled(false))
 			.insert_resource(CharacterCameraFollowEnabled(false))
 			.init_resource::<WorldGameplayEnabled>()
+			.insert_resource(WorldMobHudEnabled::from_debug_chrome(self.debug_chrome))
 			.insert_resource(Bullseye { inner: 50.0, outer: WORLD_BULLSEYE_OUTER_M })
 			.insert_resource(OpenLattice {
 				exclude_extent: WORLD_LATTICE_EXCLUDE_M,
@@ -193,6 +195,15 @@ impl Plugin for WorldPlugin {
 					.after(pitch::sync_suspend_terrain_pitch),
 			),
 		);
+		app.add_systems(
+			Update,
+			(
+				ui::sync_mob_debug_hud_presence,
+				ui::sync_mob_debug_pins.run_if(resource_equals(WorldMobHudEnabled(true))),
+				ui::draw_mob_debug_gizmos.run_if(resource_equals(WorldMobHudEnabled(true))),
+				ui::draw_npc_behavior_gizmos.run_if(resource_equals(WorldMobHudEnabled(true))),
+			),
+		);
 		if self.debug_chrome {
 			app.add_systems(Startup, ui::spawn_mob_debug_hud).add_systems(
 				Update,
@@ -201,9 +212,6 @@ impl Plugin for WorldPlugin {
 						.after(CharacterControlSystems)
 						.before(game_commands::ui::update_debug_ui),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
-					ui::sync_mob_debug_pins,
-					ui::draw_mob_debug_gizmos,
-					ui::draw_npc_behavior_gizmos,
 				),
 			);
 		}
@@ -246,5 +254,11 @@ mod tests {
 	#[test]
 	fn world_disables_terrain_pitch_gizmos() {
 		assert!(!WORLD_TERRAIN_PITCH_GIZMOS.0);
+	}
+
+	#[test]
+	fn game_world_starts_with_mob_hud_off() {
+		assert!(!WorldMobHudEnabled::from_debug_chrome(WorldPlugin::game().debug_chrome).0);
+		assert!(WorldMobHudEnabled::from_debug_chrome(WorldPlugin::default().debug_chrome).0);
 	}
 }

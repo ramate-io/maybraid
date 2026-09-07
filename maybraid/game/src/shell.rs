@@ -11,8 +11,7 @@ use maybraid_world::WorldGameplayEnabled;
 use menu_components::MENU_CLEAR;
 use menu_playground::{CharacterPreviewLight, CharacterPreviewRoot};
 use menu_screens::{
-	despawn_menu_screens, request_show_gallery, request_show_home, request_show_in_game,
-	InGameScreen, MenuScreen,
+	MenuScreen, despawn_menu_screens, request_show_gallery, request_show_home, request_show_in_game,
 };
 
 use crate::flow::{GameFlow, WorldPause};
@@ -40,7 +39,7 @@ pub(crate) fn enter_world_menu(mut commands: Commands) {
 	request_show_in_game(&mut commands);
 }
 
-pub(crate) fn exit_world_menu(mut commands: Commands, overlay: Query<Entity, With<InGameScreen>>) {
+pub(crate) fn exit_world_menu(mut commands: Commands, overlay: Query<Entity, With<MenuScreen>>) {
 	despawn_menu_screens(&mut commands, overlay);
 }
 
@@ -118,7 +117,7 @@ pub(crate) fn stamp_preview_render_layers(
 mod tests {
 	use bevy::camera::visibility::RenderLayers;
 
-	use super::{camera_render_layers, PREVIEW_RENDER_LAYER, WORLD_RENDER_LAYER};
+	use super::{PREVIEW_RENDER_LAYER, WORLD_RENDER_LAYER, camera_render_layers};
 	use crate::flow::GameFlow;
 
 	#[test]

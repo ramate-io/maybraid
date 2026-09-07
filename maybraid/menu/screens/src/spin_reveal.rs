@@ -1,20 +1,20 @@
 //! Spin-and-reveal screen for starter clothing and weapons.
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{bsn, template_value, Scene};
+use bevy::scene::prelude::{Scene, bsn, template_value};
 use bevy::text::{FontSourceTemplate, LineBreak};
 use crozon_character_items::{InventoryItem, InventorySlot};
 use maybraid_menu_controller::MenuController;
 use menu_components::{
-	republish_menu_activate, screen_back_scene, ButtonWithSubtext, SpinningIcon, TextMenuPlugin,
-	BARLOW_SEMIBOLD, LOADING_ICON_SIZE, MENU_CLEAR, PANEL_BLOCK_FONT_SIZE, PANEL_LABEL_FONT_SIZE,
-	SPIN_REVEAL_SECS, SPIN_REVEAL_TILE_HEIGHT, SPIN_REVEAL_TILE_WIDTH, TEXT_YELLOW,
-	TEXT_YELLOW_FAINT,
+	BARLOW_SEMIBOLD, ButtonWithSubtext, LOADING_ICON_SIZE, MENU_CLEAR, PANEL_BLOCK_FONT_SIZE,
+	PANEL_LABEL_FONT_SIZE, SPIN_REVEAL_SECS, SPIN_REVEAL_TILE_HEIGHT, SPIN_REVEAL_TILE_WIDTH,
+	SpinningIcon, TEXT_YELLOW, TEXT_YELLOW_FAINT, TextMenuPlugin, republish_menu_activate,
+	screen_back_scene,
 };
 
+use crate::MenuScreen;
 use crate::input::add_menu_input;
 use crate::show::take_menu_show_request;
-use crate::MenuScreen;
 
 /// Queue a spin-and-reveal spawn. Pair with [`SpinRevealItems`].
 #[derive(Component, Debug, Clone, Copy)]
