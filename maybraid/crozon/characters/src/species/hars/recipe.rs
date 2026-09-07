@@ -60,7 +60,9 @@ impl Default for Hars {
 
 impl CharacterComponents for Hars {
 	fn locomotion_capsule(&self) -> LocomotionCapsule {
-		LocomotionCapsule::quadruped_for_limb_length(self.body_pose().rest_limb_scale())
+		let pose = self.body_pose();
+		LocomotionCapsule::quadruped_for_limb_length(pose.rest_limb_scale())
+			.with_pose_girdle(&pose.resolve())
 	}
 
 	fn rig_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<RigNode> {

@@ -27,7 +27,8 @@ shove them. Animated movers contact Fixed geometry and each other; restitution
 on the capsule stays zero. Pronograde recipes keep that vertical motor
 hull and add a query-only horizontal [`HitCapsule`](../crozon/characters/src/components.rs)
 child (`Sensor`, Animated layer) so projectiles can hit the body and tail.
-The child follows visual yaw; `Health` stays on the body.
+Hit radius follows rest-pose shoulder / hip / torso bone scales, not the motor
+radius. The child follows visual yaw; `Health` stays on the body.
 
 ```text
 CharacterIntent ─► wish / jump          (this crate)

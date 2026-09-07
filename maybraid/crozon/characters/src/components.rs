@@ -17,6 +17,7 @@ use crate::layer::Layers;
 use crate::member::CharacterRoot;
 use crate::nodes::{PartNode, RigNode};
 use crozon_character_motion::{motion_policy, CharacterHeading};
+use crozon_rigs::ResolvedRigPose;
 use rigs::AssemblyRoot;
 
 use crate::scene_children::{maybe_component, scene_children};
@@ -32,6 +33,8 @@ pub struct LocomotionCapsule {
 	pub radius: f32,
 	pub length: f32,
 	pub pronograde: bool,
+	/// Rest half-width of the query hull (pronograde). Ignored by the motor.
+	pub girdle: f32,
 }
 
 /// Query-only horizontal hull for a pronograde body. Avian capsules are Y-up;
@@ -47,19 +50,59 @@ pub struct HitCapsule {
 impl HitCapsule {
 	/// Rest wheelbase half from [`crozon_character_motion::pitch`] (`QUADRUPED_HALF_SPAN`).
 	pub const REST_HALF_SPAN: f32 = 1.2;
+	/// Rest stance half from pitch (`QUADRUPED_HALF_WIDTH`).
+	pub const REST_HALF_WIDTH: f32 = 0.45;
 	/// Extra aft coverage past the hind girdle, at [`LocomotionCapsule::QUADRUPED`] size.
 	pub const REST_TAIL: f32 = 0.85;
+
+	const GIRDLE_BONES: &'static [&'static str] = &["shoulder.L", "shoulder.R", "hip.L", "hip.R"];
+	const FLESH_BONES: &'static [&'static str] = &[
+		"lateral_shoulder_protrusion.L",
+		"lateral_shoulder_protrusion.R",
+		"lateral_hip_protrusion.L",
+		"lateral_hip_protrusion.R",
+		"later_hip_protrusion.R",
+	];
+	const TORSO_BONES: &'static [&'static str] = &[
+		"chest_thickness",
+		"anterior_mid_back",
+		"posterior_mid_back",
+		"waist.L",
+		"waist.R",
+		"lower_chest_width.L",
+		"lower_chest_width.R",
+	];
 
 	pub fn for_quadruped(hull: LocomotionCapsule) -> Self {
 		let stock = LocomotionCapsule::QUADRUPED.radius;
 		let scale = if stock <= 0.0 { 1.0 } else { (hull.radius / stock).max(0.0) };
 		let tail = Self::REST_TAIL * scale;
 		let extent = 2.0 * Self::REST_HALF_SPAN * scale + tail;
-		Self {
-			radius: hull.radius,
-			length: (extent - 2.0 * hull.radius).max(0.0),
-			along: -tail * 0.5,
-		}
+		let radius = if hull.girdle > 1e-4 { hull.girdle } else { Self::REST_HALF_WIDTH * scale };
+		Self { radius, length: (extent - 2.0 * radius).max(0.0), along: -tail * 0.5 }
+	}
+
+	/// Composed rest-pose span: max girdle length, then torso mass, times flesh.
+	pub fn girdle_scale(pose: &ResolvedRigPose) -> f32 {
+		let span = Self::max_length(pose, Self::GIRDLE_BONES);
+		let flesh = Self::max_extent(pose, Self::FLESH_BONES).max(1.0);
+		let torso = Self::max_extent(pose, Self::TORSO_BONES).max(1.0);
+		span.max(torso) * flesh
+	}
+
+	pub fn half_width_from(pose: &ResolvedRigPose) -> f32 {
+		Self::REST_HALF_WIDTH * Self::girdle_scale(pose)
+	}
+
+	fn max_length(pose: &ResolvedRigPose, bones: &[&str]) -> f32 {
+		bones.iter().map(|bone| pose.scale_for_bone(bone).y).fold(0.0, f32::max)
+	}
+
+	fn max_extent(pose: &ResolvedRigPose, bones: &[&str]) -> f32 {
+		bones
+			.iter()
+			.map(|bone| pose.scale_for_bone(bone).max_element())
+			.fold(0.0, f32::max)
 	}
 
 	pub fn local_transform(self) -> Transform {
@@ -78,9 +121,10 @@ impl HitCapsule {
 
 impl LocomotionCapsule {
 	/// Standing ~1.8 m humanoid (Braidman and other unscaled bipeds).
-	pub const HUMANOID: Self = Self { radius: 0.4, length: 1.0, pronograde: false };
+	pub const HUMANOID: Self = Self { radius: 0.4, length: 1.0, pronograde: false, girdle: 0.0 };
 	/// Low vertical stand-in for a quadruped (not a horizontal body hull).
-	pub const QUADRUPED: Self = Self { radius: 0.35, length: 0.4, pronograde: true };
+	pub const QUADRUPED: Self =
+		Self { radius: 0.35, length: 0.4, pronograde: true, girdle: HitCapsule::REST_HALF_WIDTH };
 	const GROUND_CLEARANCE: f32 = 0.15;
 
 	pub fn scaled(self, scale: f32) -> Self {
@@ -88,6 +132,7 @@ impl LocomotionCapsule {
 			radius: self.radius * scale.max(0.0),
 			length: self.length * scale.max(0.0),
 			pronograde: self.pronograde,
+			girdle: self.girdle * scale.max(0.0),
 		}
 	}
 
@@ -98,6 +143,20 @@ impl LocomotionCapsule {
 			radius: self.radius,
 			length: (half - self.radius) * 2.0,
 			pronograde: self.pronograde,
+			girdle: self.girdle,
+		}
+	}
+
+	pub fn with_girdle(self, girdle: f32) -> Self {
+		Self { girdle: girdle.max(0.0), ..self }
+	}
+
+	/// Rest-pose half-width from composed shoulder / hip / torso bone scales.
+	pub fn with_pose_girdle(self, pose: &ResolvedRigPose) -> Self {
+		if self.pronograde {
+			self.with_girdle(HitCapsule::half_width_from(pose))
+		} else {
+			self
 		}
 	}
 
@@ -461,6 +520,7 @@ mod tests {
 	fn quadruped_limb_hull_matches_rest_pose_foot_depth() {
 		let hull = LocomotionCapsule::quadruped_for_limb_length(1.35);
 		assert!((hull.radius - LocomotionCapsule::QUADRUPED.radius).abs() < 1e-5);
+		assert!((hull.girdle - HitCapsule::REST_HALF_WIDTH).abs() < 1e-5);
 		assert!(hull.pronograde);
 		assert!((hull.half_height() - 1.35).abs() < 1e-5);
 		assert!(
@@ -474,6 +534,7 @@ mod tests {
 		let stock = LocomotionCapsule::QUADRUPED
 			.hit_capsule()
 			.ok_or_else(|| anyhow!("quadruped motor hull is pronograde"))?;
+		assert!((stock.radius - HitCapsule::REST_HALF_WIDTH).abs() < 1e-5);
 		assert!((stock.along + HitCapsule::REST_TAIL * 0.5).abs() < 1e-5);
 		assert!(
 			(stock.aft_extent() + HitCapsule::REST_HALF_SPAN + HitCapsule::REST_TAIL).abs() < 1e-5
@@ -484,7 +545,7 @@ mod tests {
 			.scaled(1.6)
 			.hit_capsule()
 			.ok_or_else(|| anyhow!("scaled quadruped stays pronograde"))?;
-		assert!((claber.radius - 0.35 * 1.6).abs() < 1e-5);
+		assert!((claber.radius - HitCapsule::REST_HALF_WIDTH * 1.6).abs() < 1e-5);
 		assert!(
 			(claber.aft_extent() + (HitCapsule::REST_HALF_SPAN + HitCapsule::REST_TAIL) * 1.6)
 				.abs() < 1e-5
@@ -493,8 +554,37 @@ mod tests {
 		let tall = LocomotionCapsule::quadruped_for_limb_length(1.35)
 			.hit_capsule()
 			.ok_or_else(|| anyhow!("limb-length hull stays pronograde"))?;
-		assert!((tall.radius - LocomotionCapsule::QUADRUPED.radius).abs() < 1e-5);
+		assert!((tall.radius - HitCapsule::REST_HALF_WIDTH).abs() < 1e-5);
 		assert!((tall.aft_extent() - stock.aft_extent()).abs() < 1e-5);
 		Ok(())
+	}
+
+	#[test]
+	fn hit_girdle_follows_composed_bone_scales() {
+		use crozon_rigs::{BoneScale, ResolvedRigPose, RigPoseLayer};
+
+		let wide = ResolvedRigPose::new().with_layer(
+			RigPoseLayer::new("wide hips")
+				.with_scale(BoneScale::length("hip.L", 1.4))
+				.with_scale(BoneScale::length("hip.R", 1.4)),
+		);
+		assert!((HitCapsule::girdle_scale(&wide) - 1.4).abs() < 1e-5);
+		let hull = LocomotionCapsule::QUADRUPED.with_pose_girdle(&wide);
+		assert!((hull.girdle - HitCapsule::REST_HALF_WIDTH * 1.4).abs() < 1e-5);
+		assert!((hull.radius - LocomotionCapsule::QUADRUPED.radius).abs() < 1e-5);
+
+		let barrel = ResolvedRigPose::new().with_layer(
+			RigPoseLayer::new("torso")
+				.with_scale(BoneScale::thickness("anterior_mid_back", 1.35))
+				.with_scale(BoneScale::length("hip.L", 1.1)),
+		);
+		assert!((HitCapsule::girdle_scale(&barrel) - 1.35).abs() < 1e-5);
+
+		let fleshed = ResolvedRigPose::new().with_layer(
+			RigPoseLayer::new("flesh")
+				.with_scale(BoneScale::length("shoulder.L", 1.2))
+				.with_scale(BoneScale::uniform("lateral_shoulder_protrusion.L", 1.1)),
+		);
+		assert!((HitCapsule::girdle_scale(&fleshed) - 1.2 * 1.1).abs() < 1e-5);
 	}
 }

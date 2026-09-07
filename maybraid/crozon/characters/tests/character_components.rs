@@ -1,5 +1,6 @@
 //! CharacterComponents / Clothed composition tests.
 
+use anyhow::{anyhow, Result};
 use crozon_character_items::{ClothingMaterial, ClothingMesh};
 use crozon_characters::{
 	species::{
@@ -17,8 +18,8 @@ use crozon_characters::{
 		topple::{Topple, ToppleConfig},
 		ylter::{Yilter, YilterConfig},
 	},
-	BuildPreset, CharacterComponents, CharacterPartSlot, CharacterRecipe, Clothed, Layer,
-	LocomotionCapsule, PartNode, RigId,
+	BuildPreset, CharacterComponents, CharacterPartSlot, CharacterRecipe, Clothed, HitCapsule,
+	Layer, LocomotionCapsule, PartNode, RigId,
 };
 use lod::gen::LodSceneLevel;
 use scene_ref::MirrorAxis;
@@ -36,6 +37,12 @@ fn assert_right_features_reflected(parts: &[crozon_characters::PartNode]) {
 		.expect("right eye");
 	assert_eq!(right_eye.scene.mirror, Some(MirrorAxis::X));
 	assert!(right_eye.scene.reflect_instance);
+}
+
+fn assert_same_motor(hull: LocomotionCapsule, expected: LocomotionCapsule) {
+	assert!((hull.radius - expected.radius).abs() < 1e-5);
+	assert!((hull.length - expected.length).abs() < 1e-5);
+	assert_eq!(hull.pronograde, expected.pronograde);
 }
 
 fn assert_ear_socket_locals(parts: &[crozon_characters::PartNode]) {
@@ -99,7 +106,11 @@ fn whelp_and_quadruped_hulls_differ_from_humanoid() {
 	let topple = Topple::from_config(&ToppleConfig::default_preview());
 	assert_eq!(topple.locomotion_capsule(), LocomotionCapsule::HUMANOID.scaled(0.30));
 	let brenal = Brenal::from_config(&BrenalConfig::default_preview());
-	assert_eq!(brenal.locomotion_capsule(), LocomotionCapsule::quadruped_for_limb_length(1.0));
+	assert_same_motor(
+		brenal.locomotion_capsule(),
+		LocomotionCapsule::quadruped_for_limb_length(1.0),
+	);
+	assert!(brenal.locomotion_capsule().girdle > 0.0);
 	assert_ne!(topple.locomotion_capsule(), LocomotionCapsule::HUMANOID);
 	assert_ne!(brenal.locomotion_capsule(), LocomotionCapsule::HUMANOID);
 }
@@ -107,26 +118,55 @@ fn whelp_and_quadruped_hulls_differ_from_humanoid() {
 #[test]
 fn hars_hull_follows_rest_limb_length() {
 	let hars = Hars::from_config(&HarsConfig::default_preview());
-	assert_eq!(hars.locomotion_capsule(), LocomotionCapsule::quadruped_for_limb_length(1.35));
+	assert_same_motor(
+		hars.locomotion_capsule(),
+		LocomotionCapsule::quadruped_for_limb_length(1.35),
+	);
 
 	let lanky = Hars::from_config(&HarsConfig::default_preview().with_build(BuildPreset::Lanky));
-	assert_eq!(
+	assert_same_motor(
 		lanky.locomotion_capsule(),
-		LocomotionCapsule::quadruped_for_limb_length(1.35 * 1.05)
+		LocomotionCapsule::quadruped_for_limb_length(1.35 * 1.05),
 	);
 
 	let mut long_legs = HarsConfig::default_preview();
 	long_legs.sliders.leg_length = 1.2;
 	let long = Hars::from_config(&long_legs);
-	assert_eq!(long.locomotion_capsule(), LocomotionCapsule::quadruped_for_limb_length(1.35 * 1.2));
+	assert_same_motor(
+		long.locomotion_capsule(),
+		LocomotionCapsule::quadruped_for_limb_length(1.35 * 1.2),
+	);
 }
 
 #[test]
 fn ylter_and_croconot_hulls_follow_species_limb_length() {
 	let ylter = Yilter::from_config(&YilterConfig::default_preview());
-	assert_eq!(ylter.locomotion_capsule(), LocomotionCapsule::quadruped_for_limb_length(1.4 * 1.1));
+	assert_same_motor(
+		ylter.locomotion_capsule(),
+		LocomotionCapsule::quadruped_for_limb_length(1.4 * 1.1),
+	);
 	let croconot = Croconot::from_config(&CroconotConfig::default_preview());
-	assert_eq!(croconot.locomotion_capsule(), LocomotionCapsule::quadruped_for_limb_length(0.8));
+	assert_same_motor(
+		croconot.locomotion_capsule(),
+		LocomotionCapsule::quadruped_for_limb_length(0.8),
+	);
+}
+
+#[test]
+fn quadruped_hit_girdle_follows_rest_pose_bones() -> Result<()> {
+	let average = Hars::from_config(&HarsConfig::default_preview());
+	let mut wide = HarsConfig::default_preview();
+	wide.build = BuildPreset::Stocky;
+	wide.sliders.hip_width = 1.4;
+	let wide = Hars::from_config(&wide);
+	assert!(wide.locomotion_capsule().girdle > average.locomotion_capsule().girdle);
+	assert!(average.locomotion_capsule().girdle > HitCapsule::REST_HALF_WIDTH);
+	let hit = wide
+		.locomotion_capsule()
+		.hit_capsule()
+		.ok_or_else(|| anyhow!("pronograde Hars should stamp a hit hull"))?;
+	assert!((hit.radius - wide.locomotion_capsule().girdle).abs() < 1e-5);
+	Ok(())
 }
 
 #[test]
