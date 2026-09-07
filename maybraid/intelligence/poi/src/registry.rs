@@ -4,6 +4,7 @@ use bevy::math::{bounding::Aabb3d, DVec3};
 use bevy::prelude::*;
 use gimme_core::{BaseScale, HashMapStore, Level, SpatialId, SpatialIndexError, TypedIndex};
 
+use crate::hash::unit_f32;
 use crate::{Poi, PoiId, PoiInterests, PoiKind, PoiObservation, PoiSource, MAX_POI_ARRIVAL_RADIUS};
 
 const LOCAL_BASE_SCALE: f64 = 64.0;
@@ -271,8 +272,4 @@ impl PoiRegistry {
 
 fn xz_tile(position: Vec3, tile_size: f32) -> IVec2 {
 	(position.xz() / tile_size).floor().as_ivec2()
-}
-
-fn unit_f32(value: u64) -> f32 {
-	((value >> 40) as f32) / ((1_u32 << 24) as f32)
 }

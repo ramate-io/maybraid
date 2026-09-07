@@ -4,7 +4,7 @@ use bevy::prelude::*;
 use crate::{
 	choose_poi, drive_poi_goals, GlobalPoi, KnownPoi, LocalPoi, Poi, PoiGoal, PoiGoalState,
 	PoiGoalStatus, PoiId, PoiInterest, PoiInterests, PoiKind, PoiKnowledge, PoiLearningPolicy,
-	PoiObservation, PoiRegistry, PoiSource, PoiVisitPolicy, PoiVisitState,
+	PoiObservation, PoiRegistry, PoiSource, PoiVisitPolicy, PoiVisitState, DEFAULT_NEARBY_RADIUS,
 };
 use movement_intelligence::MovementIntelligence;
 use routing_intelligence::{RoutingIntelligenceUser, RoutingSettings};
@@ -57,7 +57,8 @@ fn weighted_nearby_choice_avoids_the_previous_poi() -> anyhow::Result<()> {
 	registry.upsert(far, Poi::new(PoiId(3), CAMP), Vec3::X * 400.0, false, true)?;
 	let interests = PoiInterests::one(CAMP);
 
-	let selected = registry.choose_nearby(Vec3::ZERO, 160.0, &interests, Some(PoiId(1)), 42);
+	let selected =
+		registry.choose_nearby(Vec3::ZERO, DEFAULT_NEARBY_RADIUS, &interests, Some(PoiId(1)), 42);
 
 	assert_eq!(selected.map(|record| record.id), Some(PoiId(2)));
 	Ok(())

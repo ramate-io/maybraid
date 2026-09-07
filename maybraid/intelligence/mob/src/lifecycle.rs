@@ -2,7 +2,9 @@
 
 use bevy::prelude::*;
 use damage::{DespawnAfter, Downed, Health};
-use poi_intelligence::{PoiId, PoiInterests, PoiRecord, PoiRegistry};
+use poi_intelligence::{
+	mix_seed, place_nearby, NearbyFallback, PoiId, PoiInterests, PoiRegistry, DEFAULT_NEARBY_RADIUS,
+};
 
 use crate::host::{Mob, MobId};
 use crate::member::MemberOf;
@@ -10,7 +12,7 @@ use crate::roster::{
 	MobInterests, MobMemberNeeded, MobRespawn, MobRespawnAt, MobRoster, RosterMember,
 };
 
-const RESPAWN_POI_RADIUS: f32 = 160.0;
+const HOST_FALLBACK: NearbyFallback = NearbyFallback::new(4.0, 12.0);
 
 type DownedMember<'a> =
 	(Entity, &'a MemberOf, &'a Transform, &'a GlobalTransform, Has<ChildOf>, Option<&'a Health>);
@@ -165,45 +167,29 @@ impl MobRespawnAt {
 			return (spawn_pose(self, host, last), None);
 		}
 		let seed = respawn_seed(mob, slot, generation);
-		let selected = registry.zip(interests).and_then(|(registry, interests)| {
-			registry.choose_nearby(host, RESPAWN_POI_RADIUS, interests, previous, seed)
-		});
-		if let Some(poi) = selected {
-			return (pose_at_poi(poi, host, last, seed), Some(poi.id));
-		}
-		(varied_host_pose(host, last, seed), None)
+		let placed = place_nearby(
+			registry,
+			host,
+			DEFAULT_NEARBY_RADIUS,
+			interests,
+			previous,
+			seed,
+			HOST_FALLBACK,
+		);
+		(with_member_height(placed.position, host, last, placed.poi.is_some()), placed.poi)
 	}
 }
 
-fn pose_at_poi(poi: PoiRecord, host: Vec3, last: Vec3, seed: u64) -> Vec3 {
-	let radius = poi.arrival_radius.clamp(2.0, 12.0);
-	let distance = unit_f32(mixed(seed ^ 0x736f_6d65_7073_6575)).sqrt() * radius;
-	let angle = unit_f32(mixed(seed ^ 0x646f_7261_6e64_6f6d)) * std::f32::consts::TAU;
-	let body_height = (last.y - host.y).clamp(0.75, 3.0);
-	poi.position + Vec3::new(angle.cos() * distance, body_height, angle.sin() * distance)
-}
-
-fn varied_host_pose(host: Vec3, last: Vec3, seed: u64) -> Vec3 {
-	let distance = 4.0 + unit_f32(seed) * 8.0;
-	let angle = unit_f32(mixed(seed ^ 0x6c79_6765_6e65_7261)) * std::f32::consts::TAU;
+fn with_member_height(placed: Vec3, host: Vec3, last: Vec3, at_poi: bool) -> Vec3 {
+	if at_poi {
+		return placed + Vec3::Y * (last.y - host.y).clamp(0.75, 3.0);
+	}
 	let y = if last.y.abs() > 1e-3 { last.y } else { host.y };
-	Vec3::new(host.x + angle.cos() * distance, y, host.z + angle.sin() * distance)
+	Vec3::new(placed.x, y, placed.z)
 }
 
 fn respawn_seed(mob: MobId, slot: u16, generation: u32) -> u64 {
-	mixed(mob.0 ^ u64::from(slot).rotate_left(21) ^ u64::from(generation).rotate_left(43))
-}
-
-fn mixed(mut value: u64) -> u64 {
-	value ^= value >> 30;
-	value = value.wrapping_mul(0xbf58_476d_1ce4_e5b9);
-	value ^= value >> 27;
-	value = value.wrapping_mul(0x94d0_49bb_1331_11eb);
-	value ^ (value >> 31)
-}
-
-fn unit_f32(value: u64) -> f32 {
-	((value >> 40) as f32) / ((1_u32 << 24) as f32)
+	mix_seed(mob.0 ^ u64::from(slot).rotate_left(21) ^ u64::from(generation).rotate_left(43))
 }
 
 fn schedule_respawn(member: &mut RosterMember, policy: MobRespawn, now: f32) {
@@ -249,8 +235,13 @@ mod tests {
 	fn poi_respawn_avoids_immediately_repeating_a_destination() -> Result<()> {
 		let registry = registry_with_two_camps()?;
 		let interests = PoiInterests::new([PoiInterest::new(CAMP, 1.0)]);
-		let selected =
-			registry.choose_nearby(Vec3::ZERO, RESPAWN_POI_RADIUS, &interests, Some(PoiId(11)), 42);
+		let selected = registry.choose_nearby(
+			Vec3::ZERO,
+			DEFAULT_NEARBY_RADIUS,
+			&interests,
+			Some(PoiId(11)),
+			42,
+		);
 		assert_eq!(selected.map(|poi| poi.id), Some(PoiId(12)));
 		Ok(())
 	}
