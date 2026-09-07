@@ -19,6 +19,7 @@ use visual_geometry_core::{
 
 use crate::terrain::base_noise::BaseTerrainNoise;
 use crate::terrain::cell::{OuterCellRing, TerrainCellLayout, TERRAIN_CELL_SIZE};
+use crate::terrain::collider::{sync_terrain_collider_hosts, TerrainColliderEpoch};
 use crate::terrain::config::TerrainConfig;
 use crate::terrain::index::AvianTerrainIndex;
 use crate::terrain::presentation::{
@@ -193,7 +194,9 @@ impl Plugin for TerrainPlugin<Durham> {
 		.add_systems(
 			Update,
 			(
-				generate_cells.run_if(terrain_streaming_enabled),
+				generate_cells
+					.run_if(terrain_streaming_enabled)
+					.before(sync_terrain_collider_hosts),
 				present_cells.after(generate_cells).run_if(terrain_streaming_enabled),
 			),
 		);
@@ -243,12 +246,14 @@ fn generate_cells(
 	mut dirty: ResMut<TerrainPresentationDirty>,
 	mut pending: ResMut<TerrainPresentPending>,
 	mut world_base: ResMut<WorldBaseTerrain>,
+	mut epoch: ResMut<TerrainColliderEpoch>,
 ) {
 	if !dirty.0 {
 		return;
 	}
 
 	index.clear();
+	epoch.0 = epoch.0.wrapping_add(1);
 
 	let layout = index.layout().clone();
 	let region = layout.request_region();

@@ -6,7 +6,7 @@
 use crate::terrain::cell::{universal_bounds, TerrainCellLayout};
 use crate::terrain::config::TerrainConfig;
 use crate::terrain::index::TerrainEntryStore;
-use crate::terrain::{Terrain, TerrainColliderHost};
+use crate::terrain::Terrain;
 use crate::water::PresentedWaterScene;
 use bevy::ecs::system::SystemParam;
 use bevy::math::bounding::{Aabb3d, IntersectsVolume};
@@ -259,11 +259,12 @@ impl<'a, 'w, 's> RegionPresenter<Terrain, TerrainStoreView<'a>> for TerrainRegio
 		if let Some(previous) = self.state.presented.remove(&id) {
 			self.commands.entity(previous.entity).despawn();
 		}
+		// Visual root only. Raw Durham colliders live on `TerrainColliderHost`,
+		// keyed by origin id, so this despawn cannot punch a physics hole.
 		let host = self
 			.commands
 			.spawn((
 				Name::new("Terrain cell"),
-				TerrainColliderHost,
 				PresentedTerrainScene(id),
 				Transform::IDENTITY,
 				Visibility::default(),

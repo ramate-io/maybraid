@@ -1,7 +1,10 @@
 //! Idempotent plugin for the Durham terrain model.
 
 use crate::terrain::cell::TerrainCellLayout;
-use crate::terrain::collider::{queue_terrain_trimesh_colliders, TerrainFrictionConfig};
+use crate::terrain::collider::{
+	queue_terrain_trimesh_colliders, sync_terrain_collider_hosts, TerrainColliderEpoch,
+	TerrainFrictionConfig,
+};
 use crate::terrain::index::TerrainEntryStore;
 use crate::terrain::jersey::{JerseyControllerLayouts, JerseyStampConfigs};
 use crate::terrain::marazion::{
@@ -47,6 +50,13 @@ impl Plugin for TerrainResourcesPlugin {
 			.insert_resource(pre_pocket_high)
 			.init_resource::<TerrainPresenterState>()
 			.init_resource::<TerrainFrictionConfig>()
-			.add_systems(Update, queue_terrain_trimesh_colliders);
+			.init_resource::<TerrainColliderEpoch>()
+			.add_systems(
+				Update,
+				(
+					sync_terrain_collider_hosts,
+					queue_terrain_trimesh_colliders.after(sync_terrain_collider_hosts),
+				),
+			);
 	}
 }

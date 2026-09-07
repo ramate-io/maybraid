@@ -328,6 +328,9 @@ fn queue_fallen_player_respawn(
 	};
 	let at = transform.translation;
 	if !terrain_collider_covers_xz(at, terrain_colliders.iter()) {
+		gravity.0 = 0.0;
+		**velocity = Vec3::ZERO;
+		commands.entity(entity).insert(AwaitingTerrainSurface);
 		return;
 	}
 	let surface = store
