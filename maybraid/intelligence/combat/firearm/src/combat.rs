@@ -1,10 +1,14 @@
 //! Firearm combat brain: who to shoot, how to aim, when to fire.
 
+use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use combat_targeting::{CombatContact, CombatTargeting};
 use crozon_characters::{CharacterHeading, CharacterRoot};
 use firearm_user::FirearmUser;
-use firearms::{muzzle_world, BoneMap, FirearmMembers, RigRoot, WeaponFired, WeaponTrigger};
+use firearms::{
+	muzzle_world, BoneMap, Cadence, FireControl, FirearmMembers, ProjectileLoad, RigRoot, Weapon,
+	WeaponFired, WeaponTrigger,
+};
 use movement_intelligence::{MovementBody, MovementIntelligence};
 use player::{PlayerLook, PlayerYawOwner};
 use spotting_intelligence::{SpotBounds, SpotSubject};
@@ -40,6 +44,12 @@ type FirearmFireControl<'w, 's> = Query<
 		Option<&'static FirearmEngagement>,
 	),
 >;
+
+#[derive(SystemParam)]
+pub(crate) struct FirearmTriggerControl<'w, 's> {
+	weapons: Query<'w, 's, (&'static Weapon, Option<&'static FireControl>)>,
+	triggers: Query<'w, 's, &'static mut WeaponTrigger>,
+}
 
 /// How a firearm combatant aims and stays on a target.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -290,24 +300,29 @@ pub(crate) fn fire_at_spotted_targets(
 	maps: Query<&BoneMap, With<RigRoot>>,
 	globals: Query<&GlobalTransform>,
 	subjects: Query<&SpotSubject>,
-	mut triggers: Query<&mut WeaponTrigger>,
+	mut weapon_control: FirearmTriggerControl,
 ) {
 	let now = time.elapsed_secs();
 	for (entity, mut brain, user, targeting, firearm_targeting, engagement) in &mut combatants {
 		let target = engaged_target(targeting).copied();
 		let Some(target) = target else {
 			brain.on_target = false;
-			set_trigger(user, false, &mut triggers);
+			set_trigger(user, false, &mut weapon_control.triggers);
 			continue;
 		};
 		if !allows_fire(engagement, target.subject) {
 			brain.on_target = false;
-			set_trigger(user, false, &mut triggers);
+			set_trigger(user, false, &mut weapon_control.triggers);
+			continue;
+		};
+		let Ok((weapon, control)) = weapon_control.weapons.get(user.held) else {
+			brain.on_target = false;
+			set_trigger(user, false, &mut weapon_control.triggers);
 			continue;
 		};
 		let Some(global) = gun_landmark(user.held, "barrel", &guns, &maps, &globals) else {
 			brain.on_target = false;
-			set_trigger(user, false, &mut triggers);
+			set_trigger(user, false, &mut weapon_control.triggers);
 			continue;
 		};
 		let (muzzle, bore) = muzzle_world(global);
@@ -317,12 +332,12 @@ pub(crate) fn fire_at_spotted_targets(
 			firearm_targeting.select(target.subject, brain.aiming_head, allow_blocked)
 		else {
 			brain.on_target = false;
-			set_trigger(user, false, &mut triggers);
+			set_trigger(user, false, &mut weapon_control.triggers);
 			continue;
 		};
 		if !fresh || trajectory.distance <= 1e-4 {
 			brain.on_target = false;
-			set_trigger(user, false, &mut triggers);
+			set_trigger(user, false, &mut weapon_control.triggers);
 			continue;
 		}
 		let delta = trajectory.aim_point - muzzle;
@@ -337,8 +352,10 @@ pub(crate) fn fire_at_spotted_targets(
 		if aligned {
 			brain.last_aligned_at = now;
 		}
-		let within_alignment_grace = brain.on_target
-			&& now - brain.last_aligned_at <= brain.settings.alignment_grace.max(0.0);
+		let alignment_grace =
+			effective_alignment_grace(brain.settings.alignment_grace, weapon, control);
+		let within_alignment_grace =
+			brain.on_target && now - brain.last_aligned_at <= alignment_grace;
 		if !hold_trigger(
 			aligned,
 			within_alignment_grace,
@@ -346,14 +363,20 @@ pub(crate) fn fire_at_spotted_targets(
 			brain.settings.trigger_happiness,
 		) {
 			brain.on_target = false;
-			set_trigger(user, false, &mut triggers);
+			set_trigger(user, false, &mut weapon_control.triggers);
 			continue;
 		}
 		if !brain.on_target {
 			brain.on_target = true;
 			brain.next_trigger_at = now + acquire_delay(brain.settings.trigger_happiness);
 		}
-		set_trigger(user, now >= brain.next_trigger_at, &mut triggers);
+		set_cadenced_trigger(
+			user,
+			weapon,
+			control,
+			now >= brain.next_trigger_at,
+			&mut weapon_control.triggers,
+		);
 	}
 }
 
@@ -405,6 +428,51 @@ fn set_trigger(user: &FirearmUser, fire: bool, triggers: &mut Query<&mut WeaponT
 	if let Ok(mut trigger) = triggers.get_mut(user.held) {
 		trigger.0 = fire;
 	}
+}
+
+fn set_cadenced_trigger(
+	user: &FirearmUser,
+	weapon: &Weapon,
+	control: Option<&FireControl>,
+	acquired: bool,
+	triggers: &mut Query<&mut WeaponTrigger>,
+) {
+	let Ok(mut trigger) = triggers.get_mut(user.held) else {
+		return;
+	};
+	trigger.0 = acquired && next_trigger_level(weapon, control, trigger.0);
+}
+
+fn next_trigger_level(
+	weapon: &Weapon,
+	control: Option<&FireControl>,
+	currently_held: bool,
+) -> bool {
+	if matches!(weapon.load, ProjectileLoad::Laser(_)) {
+		return true;
+	}
+	match control.map(|control| control.cadence).unwrap_or(Cadence::Auto) {
+		Cadence::Auto | Cadence::Gated => true,
+		Cadence::Semi => !currently_held,
+		Cadence::Burst => control.is_some_and(|control| control.burst_left > 0),
+	}
+}
+
+fn effective_alignment_grace(
+	configured: f32,
+	weapon: &Weapon,
+	control: Option<&FireControl>,
+) -> f32 {
+	let cadence_floor = if matches!(weapon.load, ProjectileLoad::Laser(_)) {
+		0.25
+	} else {
+		match control.map(|control| control.cadence).unwrap_or(Cadence::Auto) {
+			Cadence::Auto | Cadence::Gated => 0.2,
+			Cadence::Burst => 0.12,
+			Cadence::Semi => 0.0,
+		}
+	};
+	configured.max(cadence_floor).max(0.0)
 }
 
 fn acquire_delay(happiness: f32) -> f32 {
@@ -632,6 +700,33 @@ mod tests {
 		assert!(!hold_trigger(false, false, true, 0.9));
 		assert!(!hold_trigger(true, true, false, 0.9));
 		assert!(!hold_trigger(true, true, true, 0.0));
+	}
+
+	#[test]
+	fn sustained_weapons_keep_the_trigger_held() {
+		let laser = Weapon::laser();
+		let ballistic = Weapon::bullet();
+		let automatic = FireControl::auto();
+		let gated = FireControl::gated();
+		assert!(next_trigger_level(&laser, Some(&automatic), true));
+		assert!(next_trigger_level(&ballistic, Some(&automatic), true));
+		assert!(next_trigger_level(&ballistic, Some(&gated), true));
+		assert!(effective_alignment_grace(0.08, &laser, Some(&automatic)) >= 0.25);
+		assert!(effective_alignment_grace(0.08, &ballistic, Some(&automatic)) >= 0.2);
+	}
+
+	#[test]
+	fn discrete_weapons_release_between_sequences() {
+		let weapon = Weapon::bullet();
+		let semi = FireControl::semi();
+		assert!(next_trigger_level(&weapon, Some(&semi), false));
+		assert!(!next_trigger_level(&weapon, Some(&semi), true));
+
+		let mut burst = FireControl::burst(2);
+		assert!(next_trigger_level(&weapon, Some(&burst), true));
+		burst.note_shot();
+		burst.note_shot();
+		assert!(!next_trigger_level(&weapon, Some(&burst), true));
 	}
 
 	#[test]

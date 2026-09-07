@@ -23,6 +23,7 @@ threat-intelligence = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
+npc-intelligence = { workspace = true }
 
 [lints]
 workspace = true

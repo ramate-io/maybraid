@@ -2,8 +2,10 @@
 
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
+use bevy::transform::helper::TransformHelper;
 use crozon_characters::{
-	BoneMap, CharacterMembers, CharacterRig, CharacterRigRole, CharacterRoot, RigSkeletonKind,
+	BoneMap, CharacterHeading, CharacterMembers, CharacterRig, CharacterRigRole, CharacterRoot,
+	RigSkeletonKind,
 };
 use firearms::{
 	firearm_bounds, spawn_firearm_components, FireOnTrigger, FirearmConcept, FirearmMembers,
@@ -15,7 +17,7 @@ use crate::hold::HoldingArms;
 use crate::weapon::{LiveWeapon, RecoilPattern};
 use crate::{FirearmUser, FirearmUserSettings};
 
-#[derive(Component)]
+#[derive(Component, Clone, Copy, Debug)]
 pub struct HeldFirearm {
 	pub scale: f32,
 }
@@ -153,28 +155,41 @@ fn right_shoulder_anchor(
 
 pub fn pose_held_firearm(
 	users: Query<(&FirearmUser, &PlayerLook)>,
-	visuals: Query<
-		(&Transform, &CharacterMembers, &ChildOf),
+	mut visuals: Query<
+		(&Transform, &mut CharacterHeading, &CharacterMembers, &ChildOf),
 		(With<CharacterRoot>, Without<HeldFirearm>, Without<crozon_characters::AnimBone>),
 	>,
 	maps: Query<&BoneMap, Without<HeldFirearm>>,
-	globals: Query<&GlobalTransform, Without<HeldFirearm>>,
-	mut guns: Query<
-		(&FirearmMembers, &HeldFirearm, &GlobalTransform, &mut Transform),
-		(With<FirearmRoot>, Without<CharacterRoot>),
+	gun_members: Query<
+		(&FirearmMembers, &HeldFirearm),
+		(With<FirearmRoot>, With<HeldFirearm>, Without<CharacterRoot>),
 	>,
+	mut transforms: ParamSet<(
+		TransformHelper,
+		Query<&mut Transform, (With<FirearmRoot>, With<HeldFirearm>, Without<CharacterRoot>)>,
+	)>,
 ) {
-	for (visual, members, child_of) in &visuals {
+	for (visual, mut heading, members, child_of) in &mut visuals {
 		let Ok((user, look)) = users.get(child_of.parent()) else {
 			continue;
 		};
-		let Some((right_origin, right_length)) = arm_measure(members, &maps, &globals, "R") else {
+		let Ok((gun_members, held)) = gun_members.get(user.held) else {
 			continue;
 		};
-		let Some((left_origin, _left_length)) = arm_measure(members, &maps, &globals, "L") else {
+		let current = transforms.p0();
+		let Some((right_origin, right_length)) = arm_measure(members, &maps, &current, "R") else {
 			continue;
 		};
-		let facing = visual.rotation * Vec3::Z;
+		let Some((left_origin, _left_length)) = arm_measure(members, &maps, &current, "L") else {
+			continue;
+		};
+		let Some(stock_local) =
+			firearm_landmark_local(user.held, gun_members, &maps, &current, "stock")
+		else {
+			continue;
+		};
+		drop(current);
+		let facing = heading.resolve(visual);
 		let look_dir = Quat::from_axis_angle(Vec3::Y, look.yaw) * -Vec3::Z;
 		let rotation = gun_aim_rotation_for(
 			facing,
@@ -183,17 +198,13 @@ pub fn pose_held_firearm(
 			look.first_person,
 			user.settings.aim_yaw_limit,
 		);
-		let Ok((gun_members, held, previous_root, mut transform)) = guns.get_mut(user.held) else {
-			continue;
-		};
-		let Some(stock_local) =
-			firearm_landmark_local(gun_members, previous_root, &maps, &globals, "stock")
-		else {
-			continue;
-		};
 		let anchor =
 			right_shoulder_anchor(left_origin, right_origin, facing, right_length, &user.settings);
 		let translation = held.root_translation_for(anchor, rotation, stock_local);
+		let mut guns = transforms.p1();
+		let Ok(mut transform) = guns.get_mut(user.held) else {
+			continue;
+		};
 		*transform = Transform { translation, rotation, scale: Vec3::splat(held.scale) };
 	}
 }
@@ -201,38 +212,39 @@ pub fn pose_held_firearm(
 fn arm_measure(
 	members: &CharacterMembers,
 	maps: &Query<&BoneMap, Without<HeldFirearm>>,
-	globals: &Query<&GlobalTransform, Without<HeldFirearm>>,
+	transforms: &TransformHelper,
 	suffix: &str,
 ) -> Option<(Vec3, f32)> {
-	let humerus = named_translation(members, maps, globals, &format!("humerus.{suffix}"))?;
-	let forearm = named_translation(members, maps, globals, &format!("forearm.{suffix}"))?;
+	let humerus = named_translation(members, maps, transforms, &format!("humerus.{suffix}"))?;
+	let forearm = named_translation(members, maps, transforms, &format!("forearm.{suffix}"))?;
 	Some((humerus, humerus.distance(forearm) * 2.0))
 }
 
 fn firearm_landmark_local(
+	root: Entity,
 	members: &FirearmMembers,
-	root: &GlobalTransform,
 	maps: &Query<&BoneMap, Without<HeldFirearm>>,
-	globals: &Query<&GlobalTransform, Without<HeldFirearm>>,
+	transforms: &TransformHelper,
 	name: &str,
 ) -> Option<Vec3> {
-	let world = named_translation_from(members.iter(), maps, globals, name)?;
+	let root = transforms.compute_global_transform(root).ok()?;
+	let world = named_translation_from(members.iter(), maps, transforms, name)?;
 	Some(root.affine().inverse().transform_point3(world))
 }
 
 fn named_translation(
 	members: &CharacterMembers,
 	maps: &Query<&BoneMap, Without<HeldFirearm>>,
-	globals: &Query<&GlobalTransform, Without<HeldFirearm>>,
+	transforms: &TransformHelper,
 	name: &str,
 ) -> Option<Vec3> {
-	named_translation_from(members.iter(), maps, globals, name)
+	named_translation_from(members.iter(), maps, transforms, name)
 }
 
 fn named_translation_from(
 	members: impl Iterator<Item = Entity>,
 	maps: &Query<&BoneMap, Without<HeldFirearm>>,
-	globals: &Query<&GlobalTransform, Without<HeldFirearm>>,
+	transforms: &TransformHelper,
 	name: &str,
 ) -> Option<Vec3> {
 	for member in members {
@@ -242,7 +254,7 @@ fn named_translation_from(
 		let Some(&entity) = map.by_name.get(name) else {
 			continue;
 		};
-		if let Ok(global) = globals.get(entity) {
+		if let Ok(global) = transforms.compute_global_transform(entity) {
 			return Some(global.translation());
 		}
 	}
@@ -275,6 +287,18 @@ mod tests {
 		let look = Vec3::X;
 		let q = gun_aim_rotation_for(Vec3::Z, look, 0.0, true, settings().aim_yaw_limit);
 		assert!((q * Vec3::Z - look).length() < 1e-4, "bore {}", q * Vec3::Z);
+	}
+
+	#[test]
+	fn terrain_tilt_does_not_replace_explicit_heading() {
+		let visual = Transform::from_rotation(
+			Quat::from_rotation_y(0.8) * Quat::from_rotation_x(-0.55) * Quat::from_rotation_z(0.35),
+		);
+		let mut heading = CharacterHeading(Vec3::X);
+		let facing = heading.resolve(&visual);
+		let q = gun_aim_rotation_for(facing, Vec3::X, 0.0, false, settings().aim_yaw_limit);
+		assert!((facing - Vec3::X).length() < 1e-5);
+		assert!((q * Vec3::Z - Vec3::X).length() < 1e-4);
 	}
 
 	#[test]

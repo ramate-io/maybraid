@@ -1,6 +1,7 @@
 //! Default follow + optional [`PlayerCameraAim`] blend.
 
 use bevy::prelude::*;
+use bevy::transform::helper::TransformHelper;
 use crozon_characters::{
 	hide_socketed_parts, BoneMap, CharacterMembers, CharacterPartSlot, PartNode,
 };
@@ -12,17 +13,26 @@ use crate::FollowCamera;
 pub(crate) fn follow_character_camera(
 	time: Res<Time>,
 	players: Query<
-		(&Transform, &PlayerCameraAim, &PlayerLook),
+		(Entity, &PlayerCameraAim, &PlayerLook),
 		(With<CameraFollow>, Without<Camera3d>),
 	>,
 	visuals: Query<&CharacterMembers, With<PlayerVisual>>,
 	maps: Query<&BoneMap>,
-	globals: Query<&GlobalTransform, Without<Camera3d>>,
-	mut cameras: Query<(&mut Transform, &mut CameraController, &FollowCamera), With<Camera3d>>,
+	mut transforms: ParamSet<(
+		TransformHelper,
+		Query<(&mut Transform, &mut CameraController, &FollowCamera), With<Camera3d>>,
+	)>,
 ) {
 	let Ok((player, aim, look)) = players.single() else {
 		return;
 	};
+	let current = transforms.p0();
+	let Ok(player) = current.compute_global_transform(player) else {
+		return;
+	};
+	let head = head_camera_translation(&visuals, &maps, &current);
+	drop(current);
+	let mut cameras = transforms.p1();
 	let Ok((mut camera_transform, mut controller, follow)) = cameras.single_mut() else {
 		return;
 	};
@@ -32,13 +42,19 @@ pub(crate) fn follow_character_camera(
 	let look_rotation = yaw * pitch;
 
 	let focus_target = if look.first_person { aim.focus.max(controller.focus) } else { 0.0 };
-	let blend_step = 1.0 - (-follow.focus_blend_speed * time.delta_secs()).exp();
-	controller.focus_blend += (focus_target - controller.focus_blend) * blend_step;
+	controller.focus_blend = focus_blend_toward(
+		controller.focus_blend,
+		focus_target,
+		follow.focus_blend_speed,
+		time.delta_secs(),
+	);
 
 	let mut pose = match controller.pov {
-		CameraPov::ThirdPerson => third_person_pose(player, yaw, look_rotation, follow),
+		CameraPov::ThirdPerson => {
+			third_person_pose(player.translation(), yaw, look_rotation, follow)
+		}
 		CameraPov::FirstPerson => {
-			first_person_pose(player, look_rotation, follow, &visuals, &maps, &globals)
+			first_person_pose(player.translation(), head, look_rotation, follow)
 		}
 	};
 	if controller.pov == CameraPov::FirstPerson {
@@ -50,29 +66,25 @@ pub(crate) fn follow_character_camera(
 }
 
 fn third_person_pose(
-	player: &Transform,
+	player: Vec3,
 	yaw: Quat,
 	look_rotation: Quat,
 	follow: &FollowCamera,
 ) -> PlayerCameraPose {
 	let offset = look_rotation * Vec3::new(0.0, 0.0, follow.distance) + Vec3::Y * follow.height;
-	let target =
-		player.translation + Vec3::Y * follow.look_height + yaw * Vec3::X * follow.shoulder_offset;
+	let target = player + Vec3::Y * follow.look_height + yaw * Vec3::X * follow.shoulder_offset;
 	let mut pose = Transform::from_translation(target + offset);
 	pose.look_at(target, Vec3::Y);
 	PlayerCameraPose { translation: pose.translation, rotation: pose.rotation }
 }
 
 fn first_person_pose(
-	player: &Transform,
+	player: Vec3,
+	head: Option<Vec3>,
 	look_rotation: Quat,
 	follow: &FollowCamera,
-	visuals: &Query<&CharacterMembers, With<PlayerVisual>>,
-	maps: &Query<&BoneMap>,
-	globals: &Query<&GlobalTransform, Without<Camera3d>>,
 ) -> PlayerCameraPose {
-	let head_translation = head_camera_translation(visuals, maps, globals)
-		.unwrap_or(player.translation + Vec3::Y * (follow.height + follow.look_height));
+	let head_translation = head.unwrap_or(player + Vec3::Y * (follow.height + follow.look_height));
 	PlayerCameraPose {
 		translation: head_translation + look_rotation * -Vec3::Z * follow.eye_forward,
 		rotation: look_rotation,
@@ -80,8 +92,12 @@ fn first_person_pose(
 }
 
 pub fn sync_camera_fov(
+	followers: Query<(), With<CameraFollow>>,
 	mut cameras: Query<(&CameraController, &FollowCamera, &mut Projection), With<Camera3d>>,
 ) {
+	if followers.is_empty() {
+		return;
+	}
 	let Ok((controller, follow, mut projection)) = cameras.single_mut() else {
 		return;
 	};
@@ -100,7 +116,13 @@ fn vertical_fov(pov: CameraPov, focus_blend: f32, follow: &FollowCamera) -> f32 
 	}
 }
 
+fn focus_blend_toward(current: f32, target: f32, speed: f32, dt: f32) -> f32 {
+	let step = 1.0 - (-speed * dt.max(0.0)).exp();
+	current + (target - current) * step
+}
+
 pub fn sync_first_person_head_visibility(
+	followers: Query<(), With<CameraFollow>>,
 	cameras: Query<&CameraController, With<Camera3d>>,
 	visuals: Query<&CharacterMembers, With<PlayerVisual>>,
 	parts: Query<&PartNode>,
@@ -109,7 +131,7 @@ pub fn sync_first_person_head_visibility(
 	let Ok(controller) = cameras.single() else {
 		return;
 	};
-	let hidden = controller.pov == CameraPov::FirstPerson;
+	let hidden = !followers.is_empty() && controller.pov == CameraPov::FirstPerson;
 	for members in &visuals {
 		hide_socketed_parts(
 			members,
@@ -124,18 +146,18 @@ pub fn sync_first_person_head_visibility(
 fn head_camera_translation(
 	visuals: &Query<&CharacterMembers, With<PlayerVisual>>,
 	maps: &Query<&BoneMap>,
-	globals: &Query<&GlobalTransform, Without<Camera3d>>,
+	transforms: &TransformHelper,
 ) -> Option<Vec3> {
 	let members = visuals.single().ok()?;
-	let left = member_landmark_translation(members.iter(), maps, globals, "eye_socket.L")?;
-	let right = member_landmark_translation(members.iter(), maps, globals, "eye_socket.R")?;
+	let left = member_landmark_translation(members.iter(), maps, transforms, "eye_socket.L")?;
+	let right = member_landmark_translation(members.iter(), maps, transforms, "eye_socket.R")?;
 	Some((left + right) * 0.5)
 }
 
 fn member_landmark_translation(
 	members: impl Iterator<Item = Entity>,
 	maps: &Query<&BoneMap>,
-	globals: &Query<&GlobalTransform, Without<Camera3d>>,
+	transforms: &TransformHelper,
 	name: &str,
 ) -> Option<Vec3> {
 	for member in members {
@@ -145,7 +167,7 @@ fn member_landmark_translation(
 		let Some(&entity) = map.by_name.get(name) else {
 			continue;
 		};
-		if let Ok(global) = globals.get(entity) {
+		if let Ok(global) = transforms.compute_global_transform(entity) {
 			return Some(global.translation());
 		}
 	}
@@ -172,5 +194,16 @@ mod tests {
 		assert!(
 			(vertical_fov(CameraPov::FirstPerson, 1.0, &follow) - follow.sight_fov).abs() < 1e-5
 		);
+		let midpoint = vertical_fov(CameraPov::FirstPerson, 0.5, &follow);
+		assert!((midpoint - (follow.first_person_fov + follow.sight_fov) * 0.5).abs() < 1e-5);
+	}
+
+	#[test]
+	fn focus_blend_moves_smoothly_to_and_from_sight() {
+		let speed = FollowCamera::default().focus_blend_speed;
+		let focused = focus_blend_toward(0.0, 1.0, speed, 1.0 / 60.0);
+		assert!(focused > 0.0 && focused < 1.0);
+		let released = focus_blend_toward(focused, 0.0, speed, 1.0 / 60.0);
+		assert!(released >= 0.0 && released < focused);
 	}
 }

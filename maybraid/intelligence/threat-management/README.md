@@ -24,6 +24,9 @@ score(mode) = by_health * remaining_hp + by_distance * proximity
 
 `proximity` is `1 / (1 + nearest_known_xz / horizon)` from knowledge, or `0`
 when the set is empty. Empty knowledge always forces Ignore, even if committed.
+Retained received-damage or received-fire knowledge excludes Ignore while a
+Combat or Evade actuator is available; the profile scores still choose the
+reaction and govern later switching between those tactics.
 
 Commitment `(new, old)` is the required ratio to leave the current tactic
 while threats remain. `(1.0, 0.0)` never leaves Combat or Evade. Leaving

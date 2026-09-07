@@ -17,7 +17,7 @@ use crate::session::{Civilian, RangeSession, FLEE_OUT_RANGE};
 pub(crate) const RESPAWN_SECS: f32 = 2.0;
 pub(crate) const HEADSHOT_MULTIPLIER: f32 = 1.25;
 
-pub(crate) use ::damage::{DamageApplied, HeadshotBand, Health, DEFAULT_MAX_HEALTH as MAX_HEALTH};
+pub(crate) use ::damage::{HeadshotBand, Health};
 
 /// Top half of the upper capsule hemisphere.
 pub(crate) fn headshot_band() -> HeadshotBand {
