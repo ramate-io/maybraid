@@ -1,11 +1,11 @@
 //! Frame timing diagnostics for the vegetation-on-terrain playground.
 //!
 //! Toggle with env `CHICO_VEG_TERRAIN_DIAG` (comma-separated):
-//! - `fps` — throttled `[veg.timing]` FPS / frame_ms plus an on-screen HUD
+//! - `fps` — throttled `[veg.timing]` FPS / frame_ms; playgrounds also show a HUD
 //! - `off` — disable (default when unset)
 //!
-//! The world playground inserts [`PlaygroundDiag`] `{ fps: true }` before this
-//! plugin so the HUD stays on without the env flag.
+//! The game shell inserts [`PlaygroundDiag`] `{ fps: true, hud: false }` so the
+//! log stays on without the overlay.
 //!
 //! Examples:
 //! ```text
@@ -25,6 +25,8 @@ const LOG_INTERVAL: Duration = Duration::from_secs(1);
 #[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PlaygroundDiag {
 	pub fps: bool,
+	/// On-screen FPS overlay. The game shell leaves this off.
+	pub hud: bool,
 }
 
 impl Default for PlaygroundDiag {
@@ -38,7 +40,7 @@ impl PlaygroundDiag {
 		let raw = std::env::var(ENV_DIAG).unwrap_or_default();
 		let raw = raw.trim();
 		if raw.is_empty() {
-			return Self { fps: false };
+			return Self { fps: false, hud: false };
 		}
 		let mut fps = false;
 		let mut off = false;
@@ -56,9 +58,9 @@ impl PlaygroundDiag {
 			}
 		}
 		if off {
-			return Self { fps: false };
+			return Self { fps: false, hud: false };
 		}
-		Self { fps }
+		Self { fps, hud: fps }
 	}
 
 	pub fn summary(self) -> String {
@@ -112,7 +114,10 @@ pub fn toggle_fps_logging(
 	}
 }
 
-fn spawn_frame_hud(mut commands: Commands) {
+fn spawn_frame_hud(mut commands: Commands, diag: Res<PlaygroundDiag>) {
+	if !diag.hud {
+		return;
+	}
 	commands
 		.spawn((
 			Node {
@@ -145,7 +150,7 @@ fn update_frame_hud(
 	let Ok(mut visibility) = root.single_mut() else {
 		return;
 	};
-	if !diag.fps {
+	if !diag.fps || !diag.hud {
 		*visibility = Visibility::Hidden;
 		return;
 	}
@@ -196,7 +201,7 @@ mod tests {
 
 	#[test]
 	fn summary_names_fps_flag() {
-		assert!(PlaygroundDiag { fps: true }.summary().contains("fps"));
-		assert!(PlaygroundDiag { fps: false }.summary().contains("off"));
+		assert!(PlaygroundDiag { fps: true, hud: true }.summary().contains("fps"));
+		assert!(PlaygroundDiag { fps: false, hud: false }.summary().contains("off"));
 	}
 }

@@ -51,8 +51,9 @@ const WORLD_TERRAIN_NEAR_RADIUS_M: f32 = 8.0 * TERRAIN_CELL_SIZE;
 const WORLD_TERRAIN_FAR_RADIUS_M: f32 = 16.0 * TERRAIN_CELL_SIZE;
 /// Background High outer radius (640 m cells).
 const WORLD_TERRAIN_BACKGROUND_RADIUS_M: f32 = 24.0 * TERRAIN_CELL_SIZE;
-/// Empty retain / generate keep outside each High annulus.
-const WORLD_TERRAIN_CULL_MARGIN_M: f32 = WORLD_TERRAIN_NEAR_RADIUS_M;
+/// Generate keep matches the drawn band. Extra margin used to fill the Far
+/// hole and Near overflow; we never evict, so that was wasted DAG + store.
+const WORLD_TERRAIN_CULL_MARGIN_M: f32 = 0.0;
 /// Snap stream anchors to the 640 m lattice.
 const WORLD_TERRAIN_PRESENT_STEP_M: f32 = 4.0 * TERRAIN_CELL_SIZE;
 /// Sync Durham DAGs admitted per frame, nearest missing origin ids first.
@@ -331,6 +332,7 @@ fn generate_cells(
 	mut world_base: ResMut<WorldBaseTerrain>,
 	mut epoch: ResMut<TerrainColliderEpoch>,
 	mut mesh_budget: ResMut<MeshFulfillBudget<TerrainMeshBuilder>>,
+	mut window_filled: Local<bool>,
 	lod_viewers: Query<&GlobalTransform, With<LodViewer>>,
 	cameras: Query<&GlobalTransform, With<Camera3d>>,
 ) {
@@ -339,6 +341,7 @@ fn generate_cells(
 		epoch.0 = epoch.0.wrapping_add(1);
 		dirty.0 = false;
 		pending.0 = true;
+		*window_filled = false;
 	}
 
 	let viewer = viewer_xz(&lod_viewers, &cameras);
@@ -348,6 +351,7 @@ fn generate_cells(
 		if layout.recenter_on_xz(xz) {
 			index.set_layout(layout);
 			pending.0 = true;
+			*window_filled = false;
 		}
 	}
 
@@ -362,6 +366,13 @@ fn generate_cells(
 	};
 	index.publish_layout_if_changed(&lod_ref);
 
+	if *window_filled {
+		if let Some(base) = index.base_noise() {
+			world_base.0 = base.clone();
+		}
+		return;
+	}
+
 	let prefer = viewer.unwrap_or_else(|| layout.region_center_xz());
 	let mut missing: Vec<Id> = origin_cell_ids_for_layout(&layout, region)
 		.into_iter()
@@ -371,6 +382,13 @@ fn generate_cells(
 				== StorageStatus::NotTracked
 		})
 		.collect();
+	if missing.is_empty() {
+		*window_filled = true;
+		if let Some(base) = index.base_noise() {
+			world_base.0 = base.clone();
+		}
+		return;
+	}
 	missing.sort_by(|a, b| {
 		origin_xz_distance_sq(*a, prefer)
 			.partial_cmp(&origin_xz_distance_sq(*b, prefer))
@@ -493,6 +511,23 @@ mod tests {
 	fn world_stream_keep_stays_inside_seven_km() {
 		let outer = WORLD_TERRAIN_BACKGROUND_RADIUS_M + WORLD_TERRAIN_CULL_MARGIN_M;
 		assert!(outer < 7_000.0, "playable keep half-extent {outer}");
+	}
+
+	#[test]
+	fn playable_generate_keep_matches_drawn_bands() {
+		let layout = world_cell_layout();
+		for ring in &layout.stream_rings {
+			assert_eq!(ring.cull_margin, 0.0);
+		}
+		let far = layout.stream_rings[1];
+		assert!(!far.retains_cell_center(Vec3::ZERO, Vec3::ZERO));
+		assert!(far.retains_cell_center(Vec3::X * 12.0 * TERRAIN_CELL_SIZE, Vec3::ZERO));
+		let near = layout.stream_rings[0];
+		assert!(near.retains_cell_center(Vec3::ZERO, Vec3::ZERO));
+		assert!(!near.retains_cell_center(
+			Vec3::X * (WORLD_TERRAIN_NEAR_RADIUS_M + TERRAIN_CELL_SIZE),
+			Vec3::ZERO
+		));
 	}
 
 	#[test]

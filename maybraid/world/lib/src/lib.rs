@@ -77,11 +77,11 @@ const WORLD_TERRAIN_PITCH_GIZMOS: DrawTerrainPitchProbes = DrawTerrainPitchProbe
 /// Assembled world: Durham terrain, streamed forest, urbanization, sky dome, character.
 ///
 /// Playground chrome (command drawer and FPS HUD) is on by default.
-/// The game executable uses [`WorldPlugin::game`] (FPS HUD, no console).
+/// The game executable uses [`WorldPlugin::game`] (FPS log, no HUD or console).
 pub struct WorldPlugin {
 	/// `/` console, debug gizmos, and FPS HUD.
 	pub debug_chrome: bool,
-	/// FPS log + on-screen HUD ([`PlaygroundTimingPlugin`]).
+	/// Throttled `[veg.timing]` FPS log ([`PlaygroundTimingPlugin`]).
 	pub fps_diag: bool,
 	/// Upper-left virtual-pad / command-intent dump.
 	pub input_debug_enabled: bool,
@@ -94,7 +94,7 @@ impl Default for WorldPlugin {
 }
 
 impl WorldPlugin {
-	/// World systems without playground overlays. FPS HUD stays on.
+	/// World systems without playground overlays. FPS log stays on.
 	pub fn game() -> Self {
 		Self { debug_chrome: false, fps_diag: true, input_debug_enabled: false }
 	}
@@ -108,7 +108,10 @@ impl Plugin for WorldPlugin {
 			);
 		}
 		app.insert_resource(PlaygroundMode::Character)
-			.insert_resource(PlaygroundDiag { fps: self.fps_diag || self.debug_chrome })
+			.insert_resource(PlaygroundDiag {
+				fps: self.fps_diag || self.debug_chrome,
+				hud: self.debug_chrome,
+			})
 			.insert_resource(CharacterLocomotion { max_slope_angle: WORLD_MAX_SLOPE_ANGLE })
 			.insert_resource(player::CharacterLocomotion { max_slope_angle: WORLD_MAX_SLOPE_ANGLE })
 			.insert_resource(TerrainFrictionConfig(WORLD_TERRAIN_FRICTION))
@@ -250,7 +253,7 @@ mod tests {
 	}
 
 	#[test]
-	fn game_world_keeps_fps_diag_without_debug_chrome() {
+	fn game_world_keeps_fps_log_without_hud() {
 		let game = WorldPlugin::game();
 		assert!(game.fps_diag);
 		assert!(!game.debug_chrome);
