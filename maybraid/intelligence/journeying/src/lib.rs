@@ -156,6 +156,7 @@ pub fn select_journeying_goals(
 			now,
 			journeying.linger_secs,
 			state.as_deref_mut(),
+			0,
 		);
 	}
 }

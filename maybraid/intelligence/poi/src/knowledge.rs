@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 
 use bevy::prelude::*;
 
+use crate::place::ArrivalDisk;
 use crate::{PoiId, PoiInterests, PoiKind, PoiLearningPolicy, PoiSource, MAX_POI_ARRIVAL_RADIUS};
 
 /// Latest remembered snapshot of one POI.
@@ -17,6 +18,12 @@ pub struct KnownPoi {
 	pub sources: PoiSource,
 	pub first_observed_at: f32,
 	pub last_observed_at: f32,
+}
+
+impl KnownPoi {
+	pub fn arrival_disk(self) -> ArrivalDisk {
+		ArrivalDisk::new(self.position, self.arrival_radius)
+	}
 }
 
 /// An inbox item produced by a non-POI discovery system.

@@ -25,10 +25,14 @@ use lod::{
 };
 use lod_avian::AvianLodSceneRefreshPlugin;
 use maybraid_mobs::{MobLodRefreshMode, MobScene, MobSceneSystems};
-use mob_groups::{GroupKind, MobEnvironmentSample, MobGroup, MobGroupsPlugin, MobWorldSample};
+use mob_groups::{
+	GroupKind, MobEnvironmentSample, MobGroup, MobGroupsPlugin, MobPlantHost, MobWorldHosts,
+	MobWorldSample,
+};
 use procedural_common::NoiseParams;
-use richmond_development_models::DevelopmentEntryStore;
-use richmond_urbanization::{UrbanizationIndex, UrbanizationKind};
+use richmond_development_models::{DevelopmentEntryStore, DiscoverablePlace};
+use richmond_developments_on_terrain_playground::UrbanSetting;
+use richmond_urbanization::{UrbanizationExtent, UrbanizationIndex, UrbanizationKind};
 
 const MOB_CELL_EXTENT: f32 = 400.0;
 const MOB_GENERATE_RADIUS: f32 = 3_000.0;
@@ -133,6 +137,7 @@ struct WorldMobIndex {
 	urbanization_noise: NoiseParams,
 	urbanization_kind: Option<UrbanizationKind>,
 	models_ready: bool,
+	plant_hosts: Vec<MobPlantHost>,
 }
 
 impl WorldMobIndex {
@@ -207,6 +212,20 @@ impl MobWorldSample for WorldMobIndex {
 			UrbanizationKind::ModernCity => 1.0,
 		};
 		MobEnvironmentSample { elevation: Some(0.0), urbanization, vegetation }
+	}
+}
+
+impl MobWorldHosts for WorldMobIndex {
+	fn plant_hosts(&self, origin: Vec2, extent: f32) -> Vec<MobPlantHost> {
+		let half = extent * 0.5;
+		self.plant_hosts
+			.iter()
+			.copied()
+			.filter(|host| {
+				(host.xz.x - origin.x).abs() <= half + host.arrival_radius
+					&& (host.xz.y - origin.y).abs() <= half + host.arrival_radius
+			})
+			.collect()
 	}
 }
 
@@ -526,6 +545,59 @@ fn sync_world_mob_models(
 	}
 }
 
+fn sync_world_mob_plant_hosts(
+	generate_keep: Res<LodGenerateKeepRegion<MobLodChan>>,
+	mut urbanization: ResMut<UrbanizationIndex>,
+	developments: Res<DevelopmentEntryStore>,
+	settings: Query<(&UrbanSetting, &GlobalTransform)>,
+	places: Query<(&DiscoverablePlace, &GlobalTransform)>,
+	mut mobs: ResMut<WorldMobIndex>,
+) {
+	if !mobs.models_ready {
+		return;
+	}
+	let region = generate_keep.region.unwrap_or(xz_radius_aabb(Vec3::ZERO, MOB_GENERATE_RADIUS));
+	for extent in UrbanizationExtent::cells_overlapping(region) {
+		urbanization.ensure_selected(extent, mobs.urbanization_noise);
+	}
+	let mut hosts = Vec::new();
+	for leaf in urbanization.filled_leaves_overlapping(region) {
+		hosts.push(MobPlantHost {
+			xz: Vec2::new(
+				(leaf.bounds.min.x + leaf.bounds.max.x) * 0.5,
+				(leaf.bounds.min.z + leaf.bounds.max.z) * 0.5,
+			),
+			arrival_radius: urban_leaf_arrival_radius(leaf.bounds),
+		});
+	}
+	for cell in developments.filled_cells_overlapping(region) {
+		hosts.push(MobPlantHost {
+			xz: Vec2::new(
+				(cell.cell.min.x + cell.cell.max.x) * 0.5,
+				(cell.cell.min.z + cell.cell.max.z) * 0.5,
+			),
+			arrival_radius: urban_leaf_arrival_radius(cell.cell),
+		});
+	}
+	for (setting, transform) in &settings {
+		hosts.push(MobPlantHost {
+			xz: transform.translation().xz(),
+			arrival_radius: setting.arrival_radius,
+		});
+	}
+	for (place, transform) in &places {
+		hosts.push(MobPlantHost {
+			xz: transform.translation().xz(),
+			arrival_radius: place.arrival_radius,
+		});
+	}
+	mobs.plant_hosts = hosts;
+}
+
+fn urban_leaf_arrival_radius(bounds: Aabb3d) -> f32 {
+	((bounds.max.x - bounds.min.x).min(bounds.max.z - bounds.min.z) * 0.25).clamp(8.0, 128.0)
+}
+
 fn stream_world_mobs(
 	camera: Query<&Transform, With<Camera3d>>,
 	mut stream: WorldMobStream,
@@ -650,7 +722,8 @@ impl Plugin for WorldMobsPlugin {
 			.configure_sets(Update, LodPresentSystems::Produce.after(LodGenerateSystems::Drain))
 			.add_systems(
 				Update,
-				sync_world_mob_models
+				(sync_world_mob_models, sync_world_mob_plant_hosts)
+					.chain()
 					.after(LodGenerateSystems::Produce)
 					.before(LodGenerateSystems::Drain),
 			)
@@ -709,5 +782,41 @@ mod tests {
 			.ok_or_else(|| anyhow::anyhow!("origin mob cell did not generate"))?;
 		assert!(!cell.groups.is_empty());
 		Ok(())
+	}
+
+	#[test]
+	fn frontier_hosts_keep_urban_families_inside_the_arrival_disk() {
+		let index = WorldMobIndex {
+			models_ready: true,
+			urbanization_kind: Some(UrbanizationKind::Frontier),
+			plant_hosts: vec![MobPlantHost { xz: Vec2::new(20.0, -8.0), arrival_radius: 6.0 }],
+			..default()
+		};
+		let origin = Vec2::ZERO;
+		let group = MobGroup::generate(GroupKind::Frontier, 11, origin, &index);
+		let planted: Vec<_> = group
+			.mobs
+			.iter()
+			.filter(|mob| {
+				matches!(
+					mob.scene.mob.kind,
+					maybraid_mobs::MobKind::Guard
+						| maybraid_mobs::MobKind::Brawler
+						| maybraid_mobs::MobKind::Pleb
+				)
+			})
+			.collect();
+		assert!(!planted.is_empty());
+		for mob in planted {
+			let xz = Vec2::new(mob.transform.translation.x, mob.transform.translation.z);
+			assert!(xz.distance(Vec2::new(20.0, -8.0)) <= 6.0 + 1e-4);
+			assert_eq!(mob.transform.translation.y, 0.0);
+		}
+	}
+
+	#[test]
+	fn urban_leaf_arrival_matches_setting_formula() {
+		let bounds = Aabb3d::from_min_max(Vec3::new(-40.0, 0.0, -20.0), Vec3::new(40.0, 1.0, 20.0));
+		assert_eq!(urban_leaf_arrival_radius(bounds), 10.0);
 	}
 }

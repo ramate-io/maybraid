@@ -6,6 +6,7 @@ use bevy::prelude::*;
 use lod::{LodChunkCullSystems, LodSceneLevel};
 use mob_characters::CharacterSceneRecipe;
 use mob_intelligence::{ancestor_mob, MemberOf, Mob, MobId, MobSlot, RosterBinding, RosterRef};
+use poi_intelligence::{NearbyPlace, AGENT_SEPARATION};
 
 use crate::plugin::MobSceneSystems;
 
@@ -36,7 +37,9 @@ fn fulfill_roster_refs(
 	child_of: Query<&ChildOf>,
 	mobs: Query<(), With<Mob>>,
 	hosts: Query<(Entity, &MobId, &Transform, Option<&GlobalTransform>), With<Mob>>,
+	live: Query<(&MemberOf, &Transform)>,
 ) {
+	let mut placed: Vec<(Entity, Vec3)> = Vec::new();
 	for (stub, roster) in &stubs {
 		let Some(host) = ancestor_mob(stub, &child_of, &mobs) else {
 			continue;
@@ -44,12 +47,28 @@ fn fulfill_roster_refs(
 		let Ok((host, id, transform, global)) = hosts.get(host) else {
 			continue;
 		};
-		let at = global
+		let preferred = global
 			.map(|global| global.transform_point(roster.offset))
 			.unwrap_or_else(|| transform.transform_point(roster.offset));
+		let occupied: Vec<Vec3> = live
+			.iter()
+			.filter(|(member, _)| member.mob == host)
+			.map(|(_, transform)| transform.translation)
+			.chain(placed.iter().filter(|(placed_host, _)| *placed_host == host).map(|(_, at)| *at))
+			.collect();
+		let cleared = NearbyPlace { position: preferred, poi: None }
+			.clear_of(
+				transform.translation,
+				&occupied,
+				AGENT_SEPARATION,
+				u64::from(roster.slot).wrapping_add(1),
+			)
+			.position;
+		let at = Vec3::new(cleared.x, preferred.y, cleared.z);
 		let body = roster.recipe.spawn(&mut commands, Transform::from_translation(at));
 		commands.entity(body).insert((MobSlot(roster.slot), *id));
 		commands.entity(stub).insert(RosterBinding { body, host, slot: roster.slot });
+		placed.push((host, at));
 	}
 }
 

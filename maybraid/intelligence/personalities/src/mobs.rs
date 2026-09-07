@@ -9,11 +9,11 @@ use damage::Health;
 use firearm_intelligence::FirearmEngagement;
 use lod_avian::PhysicsInteractionLayer;
 use mob_intelligence::{
-	MobAffiliations, MobIdAlloc, MobInstall, MobMemberBody, MobMemberNeeded, MobSlot, RosterMember,
-	spawn_mob,
+	spawn_mob, MobAffiliations, MobIdAlloc, MobInstall, MobMemberBody, MobMemberNeeded, MobSlot,
+	RosterMember,
 };
 use npc_intelligence::{NpcBody, Personality};
-use player::{CAPSULE_LENGTH, CAPSULE_RADIUS, LocomotionCapsule, PlayerLook, spawn_npc};
+use player::{spawn_npc, LocomotionCapsule, PlayerLook, CAPSULE_LENGTH, CAPSULE_RADIUS};
 use poi_intelligence::{PoiInterest, PoiInterests, PoiKind};
 use spotting_intelligence::{InterestLayers, SpotBounds, SpotSubject};
 use std::f32::consts::TAU;
@@ -296,8 +296,7 @@ pub fn spawn_mobs(
 			.copied()
 			.enumerate()
 			.map(|(index, spec)| {
-				let offset =
-					member_offset(index, recipe.members.len(), (recipe.leash * 0.45).max(2.5));
+				let offset = member_offset(index, recipe.members.len(), recipe.leash.max(2.5));
 				let at =
 					Vec3::new(recipe.at.x + offset.x, hull.spawn_height(), recipe.at.y + offset.y);
 				roster_member(spec, at)
@@ -327,7 +326,7 @@ fn members_poses(recipe: MobRecipe) -> Vec<(u16, MemberSpec, Vec3)> {
 		.copied()
 		.enumerate()
 		.map(|(index, spec)| {
-			let offset = member_offset(index, recipe.members.len(), (recipe.leash * 0.45).max(2.5));
+			let offset = member_offset(index, recipe.members.len(), recipe.leash.max(2.5));
 			let at = Vec3::new(recipe.at.x + offset.x, hull.spawn_height(), recipe.at.y + offset.y);
 			(index as u16, spec, at)
 		})

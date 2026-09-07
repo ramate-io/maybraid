@@ -7,6 +7,11 @@ use npc_intelligence::{NpcBody, NpcInstall, Personality};
 use poi_intelligence::{
 	NearbyChoice, NearbyFallback, NearbyQuery, PoiId, PoiInterests, DEFAULT_NEARBY_RADIUS,
 };
+
+/// How many recent replace destinations a slot remembers for [`choose_in`].
+pub const RECENT_POI_LIMIT: usize = 3;
+/// Extra delay between slots so a wipe does not re-roll every member in one frame.
+pub const RESPAWN_SLOT_STAGGER_SECS: f32 = 0.4;
 use threat_intelligence::{Affiliations, ThreatId};
 use threat_management_intelligence::ThreatManagementIntelligence;
 
@@ -72,6 +77,8 @@ pub struct MobRespawn {
 	pub min_radius: f32,
 	/// Host-relative ring when no nearby POI is available.
 	pub fallback: NearbyFallback,
+	/// Extra seconds per roster slot added to [`Self::delay_secs`].
+	pub slot_stagger_secs: f32,
 }
 
 impl Default for MobRespawn {
@@ -83,7 +90,8 @@ impl Default for MobRespawn {
 			corpse_secs: 4.0,
 			poi_radius: DEFAULT_NEARBY_RADIUS,
 			min_radius: 0.0,
-			fallback: NearbyFallback::new(4.0, 12.0),
+			fallback: NearbyFallback::HOST,
+			slot_stagger_secs: RESPAWN_SLOT_STAGGER_SECS,
 		}
 	}
 }
@@ -146,6 +154,7 @@ pub struct RosterMember {
 	pub respawn_at: Option<f32>,
 	pub spawn_requested: bool,
 	pub last_respawn_poi: Option<PoiId>,
+	pub recent_respawn_pois: Vec<PoiId>,
 }
 
 impl RosterMember {
@@ -166,7 +175,24 @@ impl RosterMember {
 			respawn_at: None,
 			spawn_requested: false,
 			last_respawn_poi: None,
+			recent_respawn_pois: Vec::new(),
 		}
+	}
+
+	pub fn remember_respawn_poi(&mut self, poi: Option<PoiId>) {
+		self.last_respawn_poi = poi;
+		let Some(id) = poi else {
+			return;
+		};
+		self.recent_respawn_pois.retain(|known| *known != id);
+		self.recent_respawn_pois.push(id);
+		if self.recent_respawn_pois.len() > RECENT_POI_LIMIT {
+			self.recent_respawn_pois.remove(0);
+		}
+	}
+
+	pub fn excluded_pois(&self) -> &[PoiId] {
+		&self.recent_respawn_pois
 	}
 
 	pub fn with_armed(mut self, armed: bool) -> Self {
@@ -202,25 +228,20 @@ impl RosterMember {
 		self
 	}
 
-	pub fn npc_install(
-		&self,
-		host: Entity,
-		at: Vec3,
-		body: NpcBody,
-		interests: PoiInterests,
-	) -> NpcInstall {
+	pub fn npc_install(&self, host: Entity, at: Vec3, body: NpcBody) -> NpcInstall {
 		NpcInstall {
 			at,
 			body,
 			health: self.health,
 			tether: Some(host),
-			poi_interests: self.interests.combined(&interests),
+			poi_interests: self.interests.clone(),
 			engagement: self.engagement.clone(),
 			threat_override: self.threat_override,
 			discovery_radius: self.discovery_radius,
 			spotting_range: self.spotting_range,
 			armed: self.armed,
 			keep_tether_in_combat: self.keep_tether_in_combat,
+			selection_salt: 0,
 		}
 	}
 }
@@ -261,5 +282,16 @@ impl MobRoster {
 			.iter_mut()
 			.enumerate()
 			.map(|(index, member)| (index as u16, member))
+	}
+
+	/// Live or just-requested sibling poses, skipping `except`.
+	pub fn occupied_poses(&self, except: Option<u16>) -> Vec<Vec3> {
+		self.iter()
+			.filter(|(slot, member)| {
+				except.is_none_or(|skip| *slot != skip)
+					&& (member.entity.is_some() || member.spawn_requested)
+			})
+			.map(|(_, member)| member.pose)
+			.collect()
 	}
 }

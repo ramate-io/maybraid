@@ -20,7 +20,11 @@ horizontal pace in either direction. Last plane is only a
 owns Y (XZ heading only). A jump is takeoff (impulse delayed) → air → land
 recovery; only air is XZ-only. Pad [`CharacterIntent`](../controllers/character/src/intent.rs)
 and NPC drive both write [`MoveWish`](src/body.rs) / [`JumpWish`](src/body.rs);
-Body applies those for every capsule.
+Body applies those for every capsule. Overlapping [`Npc`](src/identity.rs)
+capsules get a kinematic XZ [`SoftBump`](src/separation.rs) on `MoveWish`
+before realization so pack-mates start steering apart before capsule contacts
+shove them. Animated movers contact Fixed geometry and each other; restitution
+on the capsule stays zero.
 
 ```text
 CharacterIntent ─► wish / jump          (this crate)

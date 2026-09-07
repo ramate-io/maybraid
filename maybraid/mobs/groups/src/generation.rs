@@ -5,6 +5,8 @@ use maybraid_mobs::{MobKind, MobScene};
 use mob_characters::FromMobNumber;
 
 pub const DEFAULT_GROUP_EXTENT: f32 = 400.0;
+/// Same agent disk as High fulfill / death replace ([#738](https://github.com/ramate-io/maybraid/issues/738)).
+const MEMBER_SEPARATION: f32 = 2.0;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct MobEnvironmentSample {
@@ -13,9 +15,21 @@ pub struct MobEnvironmentSample {
 	pub vegetation: f32,
 }
 
+/// Type-erased plant anchor. World supplies building / urban-leaf disks.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct MobPlantHost {
+	pub xz: Vec2,
+	pub arrival_radius: f32,
+}
+
 /// Runtime adapter seam for Richmond development and Chico vegetation models.
 pub trait MobWorldSample {
 	fn sample_mobs(&self, xz: Vec2) -> MobEnvironmentSample;
+}
+
+/// Second generate-time seam: where urban families sit, not which family.
+pub trait MobWorldHosts {
+	fn plant_hosts(&self, origin: Vec2, extent: f32) -> Vec<MobPlantHost>;
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
@@ -64,24 +78,42 @@ pub struct MobGroup {
 }
 
 impl MobGroup {
-	pub fn generate(kind: GroupKind, seed: u64, origin: Vec2, world: &impl MobWorldSample) -> Self {
+	pub fn generate(
+		kind: GroupKind,
+		seed: u64,
+		origin: Vec2,
+		world: &(impl MobWorldSample + MobWorldHosts),
+	) -> Self {
 		let mut rng = GroupRng::new(seed);
 		let (min, max) = kind.count_range();
 		let wanted = rng.in_range(min, max);
+		let hosts = world.plant_hosts(origin, DEFAULT_GROUP_EXTENT);
 		let mut mobs = Vec::with_capacity(wanted);
 		let mut probes = 0;
 		while mobs.len() < wanted && probes < wanted.saturating_mul(16) {
 			probes += 1;
-			let xz = origin
+			let mut xz = origin
 				+ Vec2::new(
 					(rng.unit() - 0.5) * DEFAULT_GROUP_EXTENT,
 					(rng.unit() - 0.5) * DEFAULT_GROUP_EXTENT,
 				);
-			let environment = world.sample_mobs(xz);
-			let Some(elevation) = environment.elevation else {
+			let mut environment = world.sample_mobs(xz);
+			let Some(mut elevation) = environment.elevation else {
 				continue;
 			};
 			let mob_kind = choose_mob(kind, environment, &mut rng);
+			if plants_on_urban_host(kind, mob_kind) {
+				if let Some(host) = pick_host(&hosts, &mut rng) {
+					xz = jitter_on_host(host, &mut rng);
+					environment = world.sample_mobs(xz);
+					elevation = environment.elevation.unwrap_or(elevation);
+				}
+			}
+			if mobs.iter().any(|placed: &PlacedMob| {
+				placed.transform.translation.xz().distance(xz) < MEMBER_SEPARATION
+			}) {
+				continue;
+			}
 			let num = rng.unit() * 1_000_000.0 + mobs.len() as f32;
 			mobs.push(PlacedMob {
 				scene: MobScene::of_kind(mob_kind, num),
@@ -147,6 +179,24 @@ fn choose_mob(group: GroupKind, sample: MobEnvironmentSample, rng: &mut GroupRng
 	weights.last().map(|(kind, _)| *kind).unwrap_or(MobKind::Rambles)
 }
 
+fn plants_on_urban_host(group: GroupKind, kind: MobKind) -> bool {
+	matches!(group, GroupKind::Frontier | GroupKind::Warfront | GroupKind::Dystopian)
+		&& matches!(kind, MobKind::Guard | MobKind::Brawler | MobKind::Pleb)
+}
+
+fn pick_host<'a>(hosts: &'a [MobPlantHost], rng: &mut GroupRng) -> Option<&'a MobPlantHost> {
+	if hosts.is_empty() {
+		return None;
+	}
+	Some(&hosts[rng.next() as usize % hosts.len()])
+}
+
+fn jitter_on_host(host: &MobPlantHost, rng: &mut GroupRng) -> Vec2 {
+	let angle = rng.unit() * std::f32::consts::TAU;
+	let radius = host.arrival_radius.max(0.0) * rng.unit().sqrt();
+	host.xz + Vec2::from_angle(angle) * radius
+}
+
 #[derive(Clone, Copy, Debug)]
 struct GroupRng(u64);
 
@@ -188,6 +238,37 @@ mod tests {
 		}
 	}
 
+	impl MobWorldHosts for FlatWorld {
+		fn plant_hosts(&self, _origin: Vec2, _extent: f32) -> Vec<MobPlantHost> {
+			Vec::new()
+		}
+	}
+
+	struct HostedWorld {
+		sample: MobEnvironmentSample,
+		hosts: Vec<MobPlantHost>,
+	}
+
+	impl MobWorldSample for HostedWorld {
+		fn sample_mobs(&self, _xz: Vec2) -> MobEnvironmentSample {
+			self.sample
+		}
+	}
+
+	impl MobWorldHosts for HostedWorld {
+		fn plant_hosts(&self, origin: Vec2, extent: f32) -> Vec<MobPlantHost> {
+			let half = extent * 0.5;
+			self.hosts
+				.iter()
+				.copied()
+				.filter(|host| {
+					(host.xz.x - origin.x).abs() <= half + host.arrival_radius
+						&& (host.xz.y - origin.y).abs() <= half + host.arrival_radius
+				})
+				.collect()
+		}
+	}
+
 	#[test]
 	fn generation_respects_group_count_ranges() {
 		let world = FlatWorld(MobEnvironmentSample {
@@ -221,5 +302,49 @@ mod tests {
 			mob.scene.mob.kind,
 			MobKind::Pleb | MobKind::Herd | MobKind::Rambles
 		)));
+	}
+
+	#[test]
+	fn frontier_urban_families_plant_on_supplied_hosts() {
+		let host = MobPlantHost { xz: Vec2::new(40.0, -12.0), arrival_radius: 8.0 };
+		let world = HostedWorld {
+			sample: MobEnvironmentSample {
+				elevation: Some(0.0),
+				urbanization: 1.0,
+				vegetation: 0.0,
+			},
+			hosts: vec![host],
+		};
+		let group = MobGroup::generate(GroupKind::Frontier, 7, Vec2::ZERO, &world);
+		let planted: Vec<_> = group
+			.mobs
+			.iter()
+			.filter(|mob| {
+				matches!(mob.scene.mob.kind, MobKind::Guard | MobKind::Brawler | MobKind::Pleb)
+			})
+			.collect();
+		assert!(!planted.is_empty());
+		for mob in planted {
+			let xz = Vec2::new(mob.transform.translation.x, mob.transform.translation.z);
+			assert!(xz.distance(host.xz) <= host.arrival_radius + 1e-4);
+			assert_eq!(mob.transform.translation.y, 0.0);
+		}
+	}
+
+	#[test]
+	fn empty_hosts_keep_wild_families_off_the_anchor_list() {
+		let world = HostedWorld {
+			sample: MobEnvironmentSample {
+				elevation: Some(0.0),
+				urbanization: 0.0,
+				vegetation: 1.0,
+			},
+			hosts: Vec::new(),
+		};
+		let group = MobGroup::generate(GroupKind::Wild, 3, Vec2::ZERO, &world);
+		assert!(!group.mobs.is_empty());
+		assert!(group.mobs.iter().all(|mob| {
+			!matches!(mob.scene.mob.kind, MobKind::Guard | MobKind::Brawler | MobKind::Pleb)
+		}));
 	}
 }
