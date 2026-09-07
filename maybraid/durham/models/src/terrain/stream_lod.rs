@@ -1,9 +1,9 @@
 //! Shared stream-band LOD: High is the inner hole, Medium is the drawn ring.
 //!
 //! Near (`high_inner_radius == 0`) has no hole, so High is the mesh. Far and
-//! background use High as an empty inner disk and Medium as the visible
-//! annulus. Types implement [`StreamBandedLod`] so presenters can swap models
-//! without forking the band policy.
+//! background use High as an inner-disk hole and Medium as the visible
+//! annulus. Presenters filter wanted ids with [`stream_banded_draws`]; they
+//! must not encode “don’t draw” as an empty scene.
 
 use crate::terrain::cell::TerrainCellRing;
 use bevy::math::Vec3;
@@ -34,6 +34,9 @@ pub fn stream_banded_draws(item: &impl StreamBandedLod, level: LodSceneLevel) ->
 }
 
 /// Mesh when the band draws at `level`, otherwise an empty scene.
+///
+/// Prefer [`stream_banded_draws`] on the presenter's wanted set. This helper
+/// remains for leftover FinePatch `LodScene` impls that still branch here.
 pub fn stream_banded_scene<S: Scene + 'static>(
 	item: &impl StreamBandedLod,
 	level: LodSceneLevel,

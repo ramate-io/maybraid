@@ -3,10 +3,10 @@
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use durham_terrain_models::{
-	spawn_terrain_collider_host, TerrainColliderCell, TerrainColliderEpoch, TerrainColliderHost,
-	TerrainColliderOverlay,
+	spawn_terrain_collider_host, stream_banded_draws, PresentedWaterScene, TerrainColliderCell,
+	TerrainColliderEpoch, TerrainColliderHost, TerrainColliderOverlay, TerrainEntryStore, Water,
 };
-use lod::gen::{Id, LodScene, LodSceneLevel, RegionPresenter, Version};
+use lod::gen::{Id, LodScene, LodSceneLevel, RegionPresenter, SpatialIndex, Version};
 use lod::lod_ref::LodRef;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -17,6 +17,7 @@ use crate::padded::{PresentedPaddedTerrainScene, TerrainWithPads};
 #[derive(Debug, Clone, Copy)]
 struct PresentedEntry {
 	version: Version,
+	water_version: Option<Version>,
 	entity: Entity,
 	level: LodSceneLevel,
 }
@@ -41,6 +42,7 @@ impl PaddedTerrainPresenterState {
 pub struct PaddedTerrainPresenter<'w, 's> {
 	commands: Commands<'w, 's>,
 	state: ResMut<'w, PaddedTerrainPresenterState>,
+	terrain_store: Res<'w, TerrainEntryStore>,
 }
 
 impl PaddedTerrainPresenter<'_, '_> {
@@ -62,18 +64,40 @@ impl PaddedTerrainPresenter<'_, '_> {
 		}
 	}
 
-	/// Present keep-region pads. Banding is [`StreamBandedLod`] on each cell.
+	fn spawn_host(&mut self, id: Id, value: &TerrainWithPads, water: Option<&Water>) -> Entity {
+		let host = self
+			.commands
+			.spawn((
+				Name::new("Padded terrain cell"),
+				PresentedPaddedTerrainScene(id),
+				Transform::IDENTITY,
+				Visibility::default(),
+			))
+			.id();
+		self.commands.spawn_scene(value.mesh_scene()).insert(ChildOf(host));
+		if let Some(water) = water {
+			self.commands
+				.spawn_scene(water.scene())
+				.insert((PresentedWaterScene(id), ChildOf(host)));
+		}
+		host
+	}
+
+	/// Present keep-region pads that the stream band draws. Hole / cull ids
+	/// stay out of the wanted set instead of spawning empty scenes.
 	pub fn present_banded(
 		&mut self,
 		view: &PaddedStoreView<'_>,
 		region: bevy::math::bounding::Aabb3d,
 		lod_ref: &LodRef,
 	) {
-		use lod::gen::SpatialIndex;
-
 		let wanted: HashSet<Id> = SpatialIndex::<TerrainWithPads>::tracked_ids_for(view, region)
 			.into_iter()
-			.map(|tracked| tracked.0)
+			.filter_map(|tracked| {
+				let value = SpatialIndex::<TerrainWithPads>::get(view, tracked.0)?;
+				let level = value.scene_lod_level(lod_ref);
+				stream_banded_draws(value, level).then_some(tracked.0)
+			})
 			.collect();
 
 		for id in &wanted {
@@ -84,23 +108,22 @@ impl PaddedTerrainPresenter<'_, '_> {
 				continue;
 			};
 			let level = value.scene_lod_level(lod_ref);
-			if self
-				.state
-				.presented
-				.get(id)
-				.is_some_and(|shown| shown.version == version && shown.level == level)
-			{
+			let water_version = self.terrain_store.water_version(*id);
+			if self.state.presented.get(id).is_some_and(|shown| {
+				shown.version == version
+					&& shown.level == level
+					&& shown.water_version == water_version
+			}) {
 				continue;
 			}
 			if let Some(previous) = self.state.presented.remove(id) {
 				self.commands.entity(previous.entity).despawn();
 			}
-			let entity = self
-				.commands
-				.spawn_scene(value.scene_with_lod(lod_ref))
-				.insert(PresentedPaddedTerrainScene(*id))
-				.id();
-			self.state.presented.insert(*id, PresentedEntry { version, entity, level });
+			let water = self.terrain_store.water(*id).cloned();
+			let entity = self.spawn_host(*id, value, water.as_ref());
+			self.state
+				.presented
+				.insert(*id, PresentedEntry { version, water_version, entity, level });
 		}
 
 		self.remove_stale(&wanted);
@@ -117,12 +140,11 @@ impl<'a> RegionPresenter<TerrainWithPads, PaddedStoreView<'a>> for PaddedTerrain
 			self.commands.entity(previous.entity).despawn();
 		}
 		let level = value.scene_lod_level(lod_ref);
-		let entity = self
-			.commands
-			.spawn_scene(value.scene_with_lod(lod_ref))
-			.insert(PresentedPaddedTerrainScene(id))
-			.id();
-		self.state.presented.insert(id, PresentedEntry { version, entity, level });
+		// FinePatch own-terrain presents water via [`WaterRegionPresenter`].
+		let entity = self.spawn_host(id, value, None);
+		self.state
+			.presented
+			.insert(id, PresentedEntry { version, water_version: None, entity, level });
 	}
 
 	fn presented_ids(&self) -> Vec<Id> {

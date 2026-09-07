@@ -59,8 +59,8 @@ pub use collider::{
 };
 pub use config::TerrainConfig;
 pub use host::{
-	terrain_streaming_enabled, Durham, TerrainCoverage, TerrainPlugin, TerrainPresentPending,
-	TerrainPresentationDirty, TerrainStreamingEnabled, WorldBaseTerrain,
+	terrain_streaming_enabled, Durham, TerrainCoverage, TerrainPlugin, TerrainPresentEnabled,
+	TerrainPresentPending, TerrainPresentationDirty, TerrainStreamingEnabled, WorldBaseTerrain,
 	WORLD_FINE_HALF_EXTENT_CELLS, WORLD_OUTER_2X_ROWS, WORLD_OUTER_4X_ROWS,
 };
 pub use index::{AvianTerrainIndex, TerrainCellId, TerrainEntryStore, TerrainHeightSnapshot};

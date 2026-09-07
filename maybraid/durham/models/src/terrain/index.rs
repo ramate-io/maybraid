@@ -211,6 +211,10 @@ impl TerrainEntryStore {
 		self.water.get(&id).map(|entry| &entry.value)
 	}
 
+	pub fn water_version(&self, id: Id) -> Option<Version> {
+		self.water.get(&id).map(|entry| entry.version)
+	}
+
 	pub fn height_snapshot(&self) -> TerrainHeightSnapshot {
 		TerrainHeightSnapshot {
 			terrain: Arc::new(

@@ -3,9 +3,9 @@
 //! Playable coverage is three scale streams (160 / 320 / 640 m) that follow the
 //! viewer. Near cells use `res_2 = 5` and own collision; far and background are
 //! render-only at `res_2 = 4` and `3`. Generation admits a bounded number of
-//! missing origin ids per frame. Playable visuals come from the padded
-//! urbanization presenter; this plugin presents raw Durham on FinePatch and
-//! banded water on streamed rings.
+//! missing origin ids per frame. Playable visuals come from the urbanized
+//! presenter. This plugin generates Durham on every coverage; raw present is
+//! FinePatch-only (`present: true`).
 
 use std::marker::PhantomData;
 
@@ -33,9 +33,7 @@ use crate::terrain::presentation::{
 	TerrainBackground, TerrainFar, TerrainMeshLodBand, TerrainNear, TerrainPresentationAssets,
 	TerrainRegionPresenter, TerrainStoreView, TerrainStreamPresenterState,
 };
-use crate::water::{
-	ComposedWater, Water, WaterPresentationAssets, WaterRegionPresenter, WaterStoreView,
-};
+use crate::water::{ComposedWater, Water, WaterPresentationAssets};
 use crate::{DurhamTerrainModelsPlugin, Terrain, TerrainMeshBuilder};
 
 /// Composed Durham SDF / CpuShot terrain model.
@@ -75,6 +73,17 @@ pub struct WorldBaseTerrain(pub BaseTerrainNoise);
 /// When true, fill should clear and rebuild (playground radius / seed commands).
 #[derive(Resource)]
 pub struct TerrainPresentationDirty(pub bool);
+
+/// When false, Durham generate runs but this plugin does not present raw
+/// terrain or seed raw [`crate::terrain::Terrain::scene`] colliders.
+#[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TerrainPresentEnabled(pub bool);
+
+impl Default for TerrainPresentEnabled {
+	fn default() -> Self {
+		Self(true)
+	}
+}
 
 /// Whether terrain fill and dependent vegetation streams may advance.
 ///
@@ -171,6 +180,9 @@ pub struct TerrainPlugin<M> {
 	pub seed: u32,
 	pub coverage: TerrainCoverage,
 	pub terrain_radius: i32,
+	/// Raw Durham present + raw collider seed. Playable world leaves this off
+	/// so urbanized terrain is the only presented model.
+	pub present: bool,
 }
 
 impl TerrainPlugin<Durham> {
@@ -180,6 +192,7 @@ impl TerrainPlugin<Durham> {
 			seed: 42,
 			coverage: TerrainCoverage::FinePatch,
 			terrain_radius: terrain_radius.max(1),
+			present: true,
 		}
 	}
 
@@ -189,6 +202,7 @@ impl TerrainPlugin<Durham> {
 			seed: 42,
 			coverage: TerrainCoverage::PlayableWorld,
 			terrain_radius: WORLD_FINE_HALF_EXTENT_CELLS,
+			present: false,
 		}
 	}
 }
@@ -230,6 +244,7 @@ impl Plugin for TerrainPlugin<Durham> {
 		.insert_resource(layout)
 		.insert_resource(TerrainFillParams { coverage, terrain_radius })
 		.insert_resource(TerrainPresentationDirty(true))
+		.insert_resource(TerrainPresentEnabled(self.present))
 		.init_resource::<TerrainPresentPending>()
 		.init_resource::<TerrainStreamingEnabled>()
 		.init_resource::<TerrainStreamPresenterState<TerrainNear>>()
@@ -238,13 +253,16 @@ impl Plugin for TerrainPlugin<Durham> {
 		.add_systems(Startup, setup_presentation_assets)
 		.add_systems(
 			Update,
-			(
-				generate_cells
-					.run_if(terrain_streaming_enabled)
-					.before(sync_terrain_collider_hosts),
-				present_cells.after(generate_cells).run_if(terrain_streaming_enabled),
-			),
+			generate_cells
+				.run_if(terrain_streaming_enabled)
+				.before(sync_terrain_collider_hosts),
 		);
+		if self.present {
+			app.add_systems(
+				Update,
+				present_cells.after(generate_cells).run_if(terrain_streaming_enabled),
+			);
+		}
 	}
 }
 
@@ -379,13 +397,16 @@ fn generate_cells(
 
 fn present_cells(
 	mut terrain_presenter: TerrainRegionPresenter,
-	mut water_presenter: WaterRegionPresenter,
 	store: Res<crate::terrain::index::TerrainEntryStore>,
 	layout: Res<TerrainCellLayout>,
 	mut pending: ResMut<TerrainPresentPending>,
 	lod_viewers: Query<&GlobalTransform, With<LodViewer>>,
 	cameras: Query<&GlobalTransform, With<Camera3d>>,
 ) {
+	if !pending.0 {
+		return;
+	}
+
 	let region = layout.presentation_region();
 	let viewer = viewer_xz(&lod_viewers, &cameras)
 		.map(|xz| Transform::from_translation(xz))
@@ -396,16 +417,6 @@ fn present_cells(
 		current_transform: &viewer,
 		bounds: &region,
 	};
-	if layout.is_streamed() {
-		let water_view = WaterStoreView::new(&store, &layout);
-		water_presenter.present_banded(&water_view, region, &lod_ref);
-		pending.0 = false;
-		return;
-	}
-	if !pending.0 {
-		return;
-	}
-
 	let terrain_view = TerrainStoreView::new(&store, &layout);
 	RegionPresenter::<Terrain, _>::present(&mut terrain_presenter, &terrain_view, region, &lod_ref);
 	let wanted: HashSet<Id> = terrain_view
@@ -482,5 +493,11 @@ mod tests {
 	fn world_stream_keep_stays_inside_seven_km() {
 		let outer = WORLD_TERRAIN_BACKGROUND_RADIUS_M + WORLD_TERRAIN_CULL_MARGIN_M;
 		assert!(outer < 7_000.0, "playable keep half-extent {outer}");
+	}
+
+	#[test]
+	fn playable_world_disables_raw_presentation() {
+		assert!(!TerrainPlugin::<Durham>::playable_world().present);
+		assert!(TerrainPlugin::<Durham>::fine_patch(2).present);
 	}
 }

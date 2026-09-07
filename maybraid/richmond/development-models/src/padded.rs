@@ -8,9 +8,8 @@ use bevy::scene::prelude::{bsn, template_value, Scene};
 use durham_terrain::shaders::DurhamTerrainShader;
 use durham_terrain_models::terrain::ElevationModulation;
 use durham_terrain_models::{
-	cascade_chunk_for_cell, stream_banded_level, stream_banded_scene, ComposedTerrain,
-	StreamBandedLod, Terrain, TerrainCellRing, TerrainColliderMeshSource, TerrainMeshBuilder,
-	TerrainSdf,
+	cascade_chunk_for_cell, stream_banded_level, ComposedTerrain, StreamBandedLod, Terrain,
+	TerrainCellRing, TerrainColliderMeshSource, TerrainMeshBuilder, TerrainSdf,
 };
 use lod::gen::{Id, LodScene, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
@@ -90,7 +89,7 @@ impl TerrainWithPads {
 		(Vec3::from(self.cell.min) + Vec3::from(self.cell.max)) * 0.5
 	}
 
-	fn mesh_scene(&self) -> impl Scene + 'static {
+	pub fn mesh_scene(&self) -> impl Scene + 'static {
 		let chunk = cascade_chunk_for_cell(self.cell, self.res_2);
 		let transform = Transform::from_translation(chunk.origin);
 		let builder = self.mesh_builder();
@@ -129,8 +128,8 @@ impl LodScene for TerrainWithPads {
 		}
 	}
 
-	fn scene_with_level(&self, _lod_ref: &LodRef, level: LodSceneLevel) -> impl Scene + 'static {
-		stream_banded_scene(self, level, || self.mesh_scene())
+	fn scene_with_level(&self, _lod_ref: &LodRef, _level: LodSceneLevel) -> impl Scene + 'static {
+		self.mesh_scene()
 	}
 }
 

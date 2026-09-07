@@ -24,7 +24,7 @@ pub mod presentation;
 use crate::terrain::cell::{original_ids_for_origin_cells, TerrainCellLayout, TerrainCellRing};
 use crate::terrain::render::cascade_chunk_for_cell;
 use crate::terrain::sdf::TerrainSdf;
-use crate::terrain::stream_lod::{stream_banded_level, stream_banded_scene, StreamBandedLod};
+use crate::terrain::stream_lod::{stream_banded_level, StreamBandedLod};
 use crate::terrain::Terrain;
 use bevy::ecs::template::template;
 use bevy::math::bounding::Aabb3d;
@@ -121,8 +121,8 @@ impl LodScene for Water {
 		}
 	}
 
-	fn scene_with_level(&self, _lod_ref: &LodRef, level: LodSceneLevel) -> impl Scene + 'static {
-		stream_banded_scene(self, level, || self.scene())
+	fn scene_with_level(&self, _lod_ref: &LodRef, _level: LodSceneLevel) -> impl Scene + 'static {
+		self.scene()
 	}
 }
 

@@ -15,6 +15,7 @@
 //! Animated movers only — not other Fixed geometry or LOD Host volumes.
 
 use crate::terrain::cell::TerrainCellLayout;
+use crate::terrain::host::TerrainPresentEnabled;
 use crate::terrain::index::TerrainEntryStore;
 use avian3d::prelude::{CoefficientCombine, Collider, Friction, RigidBody};
 use bevy::math::bounding::IntersectsVolume;
@@ -147,27 +148,35 @@ pub(crate) fn sync_terrain_collider_hosts(
 	epoch: Res<TerrainColliderEpoch>,
 	store: Res<TerrainEntryStore>,
 	layout: Res<TerrainCellLayout>,
+	present: Option<Res<TerrainPresentEnabled>>,
 	hosts: Query<
 		(Entity, &TerrainColliderCell, Has<TerrainColliderOverlay>),
 		With<TerrainColliderHost>,
 	>,
 ) {
+	let present = present.map(|flag| flag.0).unwrap_or(true);
 	let region = layout.presentation_region();
 	let overlay_ids: HashSet<Id> = hosts
 		.iter()
 		.filter(|(_, _, overlay)| *overlay)
 		.map(|(_, cell, _)| cell.id)
 		.collect();
-	let wanted: HashSet<(Id, Version)> = store
-		.terrain
-		.iter()
-		.filter(|(id, entry)| {
-			!overlay_ids.contains(id)
-				&& region.intersects(&entry.bounds)
-				&& terrain_seeds_collision(&entry.value, layout.as_ref())
-		})
-		.map(|(id, entry)| (*id, entry.version))
-		.collect();
+	// Playable world presents urbanized terrain only; raw `Terrain::scene`
+	// must not seed a first collider mesh that the overlay later rebakes.
+	let wanted: HashSet<(Id, Version)> = if present {
+		store
+			.terrain
+			.iter()
+			.filter(|(id, entry)| {
+				!overlay_ids.contains(id)
+					&& region.intersects(&entry.bounds)
+					&& terrain_seeds_collision(&entry.value, layout.as_ref())
+			})
+			.map(|(id, entry)| (*id, entry.version))
+			.collect()
+	} else {
+		HashSet::new()
+	};
 
 	for (entity, cell, overlay) in &hosts {
 		if overlay {
