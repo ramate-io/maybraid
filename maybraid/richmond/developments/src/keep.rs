@@ -6,7 +6,8 @@ use richmond_building_components::floors::FloorGeometry;
 use richmond_building_components::panels::PanelStyle;
 use richmond_building_components::partitions::PartitionStyle;
 use richmond_building_components::{
-	BuildingComponents, FloorNode, JointNode, Layers, PanelNode, PartitionNode, Placement,
+	BuildingComponents, BuildingStructuralLodProbe, FloorNode, JointNode, Layers, PanelNode,
+	PartitionNode, Placement,
 };
 use richmond_buildings::{
 	ArcFloor, ArcFloorSlab, ArcTower, ArcTowerParams, ConnectingStairwell, OpeningId, OpeningLabel,
@@ -73,6 +74,17 @@ impl BuildingComponents for CircularTower {
 
 	fn floor_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FloorNode> {
 		self.tower.floor_nodes_for_level(level)
+	}
+
+	fn structural_lod(&self) -> Option<BuildingStructuralLodProbe> {
+		let params = self.tower.params();
+		let c = params.center_xz;
+		let r = params.radius;
+		let height = params.storey_height * params.floor_count as f32;
+		Some(BuildingStructuralLodProbe::from_aabb3d_xz(
+			Vec3::new(c.x - r, c.y, c.z - r),
+			Vec3::new(c.x + r, c.y + height.max(1.0), c.z + r),
+		))
 	}
 }
 
@@ -144,6 +156,28 @@ impl BuildingComponents for TrazaloidTower {
 			}
 		}
 		out
+	}
+
+	fn structural_lod(&self) -> Option<BuildingStructuralLodProbe> {
+		let first = self.storeys.first()?;
+		let params = first.params();
+		let half = params.footprint * 0.5;
+		let top = self
+			.storeys
+			.last()
+			.map(|storey| {
+				let p = storey.params();
+				p.origin.y + p.lower_height + p.band_vertical_offset + p.upper_height
+			})
+			.unwrap_or(params.origin.y + 1.0);
+		Some(BuildingStructuralLodProbe::from_aabb3d_xz(
+			Vec3::new(params.origin.x - half.x, params.origin.y, params.origin.z - half.y),
+			Vec3::new(
+				params.origin.x + half.x,
+				top.max(params.origin.y + 1.0),
+				params.origin.z + half.y,
+			),
+		))
 	}
 }
 

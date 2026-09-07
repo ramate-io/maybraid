@@ -454,10 +454,18 @@ impl BuildingComponents for ShepherdsHouse {
 	}
 
 	fn structural_lod(&self) -> Option<BuildingStructuralLodProbe> {
-		self.storeys
-			.iter()
-			.filter_map(BuildingComponents::structural_lod)
-			.reduce(|a, b| a.merge(b))
+		let rects = self.footprint_rects();
+		if rects.is_empty() {
+			return Some(BuildingStructuralLodProbe::from_aabb3d_xz(
+				Vec3::from(self.bounds.min),
+				Vec3::from(self.bounds.max),
+			));
+		}
+		Some(
+			BuildingStructuralLodProbe::new(rects)
+				.with_y0(self.bounds.min.y)
+				.with_height((self.bounds.max.y - self.bounds.min.y).max(1.0)),
+		)
 	}
 }
 
@@ -511,6 +519,13 @@ impl BuildingComponents for ShepherdsHut {
 
 	fn label_nodes_for_level(&self, level: LodSceneLevel) -> Layers<LabelNode> {
 		hut_layers!(self, level, label_nodes_for_level)
+	}
+
+	fn structural_lod(&self) -> Option<BuildingStructuralLodProbe> {
+		Some(BuildingStructuralLodProbe::from_aabb3d_xz(
+			Vec3::from(self.bounds.min),
+			Vec3::from(self.bounds.max),
+		))
 	}
 }
 

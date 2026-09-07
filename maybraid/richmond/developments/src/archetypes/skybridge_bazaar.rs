@@ -4,7 +4,9 @@ use lod::gen::LodSceneLevel;
 use material_ref::MaterialRef;
 use richmond_building_components::joints::JointNode;
 use richmond_building_components::panels::PanelNode;
-use richmond_building_components::{building_bounds, BuildingComponents, Layers};
+use richmond_building_components::{
+	building_bounds, BuildingComponents, BuildingStructuralLodProbe, Layers,
+};
 use richmond_buildings::{CardinalFace, ConnectingHall, MappedOpening};
 
 use crate::{BuildingFootprint, PlacedBuilding, ShepherdsVillageBuilding, SingleHighrise};
@@ -59,6 +61,13 @@ impl BuildingComponents for Skybridge {
 
 	fn joint_nodes_for_level(&self, level: LodSceneLevel) -> Layers<JointNode> {
 		self.hall.joint_nodes_for_level(level)
+	}
+
+	fn structural_lod(&self) -> Option<BuildingStructuralLodProbe> {
+		Some(BuildingStructuralLodProbe::from_aabb3d_xz(
+			bevy_math::Vec3::from(self.bounds.min),
+			bevy_math::Vec3::from(self.bounds.max),
+		))
 	}
 }
 

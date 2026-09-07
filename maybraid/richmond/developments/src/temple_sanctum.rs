@@ -6,7 +6,8 @@ use lod::gen::LodSceneLevel;
 use material_ref::MaterialRef;
 use procedural_common::NoiseParams;
 use richmond_building_components::{
-	BuildingComponents, FloorNode, JointNode, Layers, PanelNode, PartitionNode, StairNode,
+	BuildingComponents, BuildingStructuralLodProbe, FloorNode, JointNode, Layers, PanelNode,
+	PartitionNode, StairNode,
 };
 use richmond_buildings::{
 	Confines, FillableRegions, Fit, FitError, Openings, RectFloor, RectFloorParams, RectFloorSlab,
@@ -317,6 +318,23 @@ impl BuildingComponents for TempleSanctum {
 			out.extend(ornament.joint_nodes_for_level(level));
 		}
 		out
+	}
+
+	fn structural_lod(&self) -> Option<BuildingStructuralLodProbe> {
+		let bounds = self.bounds();
+		let height = (bounds.max.y - bounds.min.y).max(1.0);
+		let footprints = self.components().footprints.clone();
+		if footprints.is_empty() {
+			return Some(BuildingStructuralLodProbe::from_aabb3d_xz(
+				Vec3::from(bounds.min),
+				Vec3::from(bounds.max),
+			));
+		}
+		Some(
+			BuildingStructuralLodProbe::new(footprints)
+				.with_y0(bounds.min.y)
+				.with_height(height),
+		)
 	}
 }
 

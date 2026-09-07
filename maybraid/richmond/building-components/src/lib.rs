@@ -12,6 +12,7 @@ pub mod labels;
 pub mod layer;
 pub mod lod_band;
 pub mod lod_host_helper;
+pub mod massing;
 pub mod panels;
 pub mod parent_confines;
 pub mod partitions;
@@ -31,6 +32,10 @@ pub use labels::{LabelGeometry, LabelNode, LabelStyle, LabelWireframePlugin};
 pub use layer::{Layer, Layers};
 pub use lod_band::{placement_bounds, warm_mesh_lod_culls, warm_mesh_lod_culls_at_depth};
 pub use lod_host_helper::LodHostHelper;
+pub use massing::{
+	is_massing_level, massing_box_scene, massing_box_transform, massing_scene,
+	MassingSilhouettePlugin,
+};
 pub use panels::{
 	dihedral_kink, fitted_tile_count, to_centered_rect_placement, triangle_normal,
 	update_panel_host_levels, with_wall_standup_pitch, PanelGeometry, PanelKitCaps, PanelLodBand,
@@ -60,7 +65,8 @@ pub use stairs::StairNode;
 pub use structural_probe::{
 	distance_outside_aabb2d_xz, distance_outside_footprints,
 	update_building_structural_host_levels, BuildingStructuralLodProbe,
-	STRUCTURAL_HIGH_OUTSIDE_METERS,
+	STRUCTURAL_HIGH_OUTSIDE_METERS, STRUCTURAL_LOW_OUTSIDE_METERS,
+	STRUCTURAL_MEDIUM_OUTSIDE_METERS,
 };
 
 use bevy::math::bounding::Aabb3d;
@@ -68,7 +74,7 @@ use bevy::math::Vec3;
 use bevy::prelude::{Commands, CommandsSceneExt, Component, Entity, Transform, Visibility};
 use bevy::scene::prelude::{bsn, template_value};
 use bevy::scene::{ResolveContext, ResolvedScene, Scene};
-use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
+use lod::gen::{cull_named_from_factor, LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
 use lod::{lod_host_scene_pending, SceneChunk};
 use std::sync::Arc;
@@ -116,7 +122,9 @@ pub trait BuildingComponents {
 		Layers::new()
 	}
 
-	/// When set, [`ComponentsOnly`] bands High/Medium via this probe (pending host + chunks).
+	/// When set, [`ComponentsOnly`] bands High / Medium / Low / UltraLow via this probe.
+	///
+	/// Low and UltraLow replace nested kit hosts with primitive massing boxes.
 	fn structural_lod(&self) -> Option<BuildingStructuralLodProbe> {
 		None
 	}
@@ -301,10 +309,19 @@ impl<T: BuildingComponents + Send + Sync + 'static> LodScene for ComponentsOnly<
 		}
 	}
 
-	fn scene_lod_culls(&self, _lod_ref: &LodRef, _current: LodSceneLevel) -> LodSceneCulls {
-		// Structural band content differs; prefer keeping the inactive root until GC policy
-		// is tuned per building. Fine-phase mesh hosts cull via warm_mesh_lod_culls.
-		LodSceneCulls::None
+	fn scene_lod_culls(&self, lod_ref: &LodRef, current: LodSceneLevel) -> LodSceneCulls {
+		let Some(probe) = self.0.structural_lod() else {
+			return LodSceneCulls::None;
+		};
+		let d = probe.distance_outside(lod_ref.current_transform);
+		let (high, medium, low) = probe.band_meters();
+		// Kit roots are heavy: drop Medium as soon as Low massing is current.
+		// High/Medium keep the adjacent band warm for walking in and out.
+		let adjacent_depth = match current {
+			LodSceneLevel::Low | LodSceneLevel::UltraLow => Some(0.0),
+			_ => None,
+		};
+		cull_named_from_factor(d, high, medium, low, adjacent_depth).with_customs()
 	}
 
 	fn scene_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> impl Scene + 'static {
@@ -335,6 +352,9 @@ pub fn building_scene_chunks(
 	lod_ref: &LodRef,
 	level: LodSceneLevel,
 ) -> SceneChunk {
+	if is_massing_level(level) && building.structural_lod().is_some() {
+		return SceneChunk::primitive(massing_scene(building, level));
+	}
 	let mut chunks = Vec::new();
 	for node in building.panel_nodes_for_level(level).flatten() {
 		chunks.push(SceneChunk::weighted(1, node.host(lod_ref)));
@@ -421,9 +441,12 @@ pub fn component_only_scene(
 	lod_ref: &LodRef,
 	level: LodSceneLevel,
 ) -> impl Scene + 'static {
+	if is_massing_level(level) && building.structural_lod().is_some() {
+		return Box::new(massing_scene(building, level)) as Box<dyn Scene>;
+	}
 	let mut children: Vec<Box<dyn Scene>> = Vec::new();
 	append_component_scenes(building, lod_ref, level, &mut children);
-	scene_children(children)
+	Box::new(scene_children(children)) as Box<dyn Scene>
 }
 
 /// Spawn a [`ComponentsOnly`] building host; chunk fulfill streams the first level.

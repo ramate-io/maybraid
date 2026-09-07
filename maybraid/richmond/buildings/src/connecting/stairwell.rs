@@ -25,7 +25,7 @@ use richmond_building_components::floors::FloorNode;
 use richmond_building_components::joints::JointNode;
 use richmond_building_components::panels::{PanelNode, PanelStyle};
 use richmond_building_components::stairs::StairNode;
-use richmond_building_components::{BuildingComponents, Layers};
+use richmond_building_components::{BuildingComponents, BuildingStructuralLodProbe, Layers};
 
 use crate::paneling::panel_complex::PanelComplexJointPolicy;
 use crate::paneling::quad_panel::QuadPanel;
@@ -238,6 +238,13 @@ impl BuildingComponents for ConnectingStairwell {
 
 	fn stair_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<StairNode> {
 		Layers::from_free(self.stairs.clone())
+	}
+
+	fn structural_lod(&self) -> Option<BuildingStructuralLodProbe> {
+		Some(BuildingStructuralLodProbe::from_aabb3d_xz(
+			bevy_math::Vec3::from(self.well.bounds.min),
+			bevy_math::Vec3::from(self.well.bounds.max),
+		))
 	}
 }
 
