@@ -22,7 +22,9 @@ pub use bump_out::{
 	CanopyBumpOutPresenterState, DurhamCanopyBumpOutPresenter, WorldTerrainBuilder,
 };
 pub use camera::CameraController;
-pub use character::{CharacterSpecies, PlayerVisual, RequestSetCharacter};
+pub use character::{
+	CharacterSpecies, PlayerVisual, RequestSetCharacter, RequestSetCharacterAppearance,
+};
 pub use chico_forests::ForestStreamSpec;
 pub use commands::{GroveKind, PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use diagnostics::{PlaygroundDiag, PlaygroundTimingPlugin, RequestFpsToggle};
@@ -32,8 +34,9 @@ pub use game_commands::command::PendingStartupCommand;
 pub use groves::{DurhamGroveSample, StoredDurhamTerrain};
 pub use material_lib::{VegetationOnTerrainMaterialLib, VegetationOnTerrainMaterialRefPlugin};
 pub use player::{
-	CharacterCameraFollowEnabled, CharacterLocomotion, Jumping, MoveWish, MovementAction,
-	PadMovementEnabled, Player, PlayerCapsule, PlayerControlSystems, PlayerPlugin, PlaygroundMode,
+	player_position_above_surface, spawn_player_body, CharacterCameraFollowEnabled,
+	CharacterLocomotion, Jumping, MoveWish, MovementAction, PadMovementEnabled, Player,
+	PlayerCapsule, PlayerControlSystems, PlayerPlugin, PlaygroundMode,
 };
 
 use avian3d::prelude::LinearVelocity;

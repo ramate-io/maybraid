@@ -166,60 +166,13 @@ impl MobRespawnAt {
 		}
 		let seed = respawn_seed(mob, slot, generation);
 		let selected = registry.zip(interests).and_then(|(registry, interests)| {
-			select_respawn_poi(registry, interests, host, previous, seed)
+			registry.choose_nearby(host, RESPAWN_POI_RADIUS, interests, previous, seed)
 		});
 		if let Some(poi) = selected {
 			return (pose_at_poi(poi, host, last, seed), Some(poi.id));
 		}
 		(varied_host_pose(host, last, seed), None)
 	}
-}
-
-fn select_respawn_poi(
-	registry: &PoiRegistry,
-	interests: &PoiInterests,
-	host: Vec3,
-	previous: Option<PoiId>,
-	seed: u64,
-) -> Option<PoiRecord> {
-	if interests.is_empty() {
-		return None;
-	}
-	let mut candidates = registry.local_matching(host, RESPAWN_POI_RADIUS, interests);
-	for candidate in registry.global_matching(interests) {
-		if host.distance(candidate.position) <= RESPAWN_POI_RADIUS + candidate.arrival_radius
-			&& !candidates.iter().any(|known| known.id == candidate.id)
-		{
-			candidates.push(candidate);
-		}
-	}
-	candidates.sort_by_key(|candidate| candidate.id);
-	if candidates.len() > 1 {
-		candidates.retain(|candidate| Some(candidate.id) != previous);
-	}
-	let total: f32 = candidates
-		.iter()
-		.map(|candidate| respawn_poi_weight(*candidate, interests, host))
-		.sum();
-	if total <= 0.0 {
-		return None;
-	}
-	let mut draw = unit_f32(seed) * total;
-	let mut fallback = None;
-	for candidate in candidates {
-		fallback = Some(candidate);
-		draw -= respawn_poi_weight(candidate, interests, host);
-		if draw <= 0.0 {
-			return Some(candidate);
-		}
-	}
-	fallback
-}
-
-fn respawn_poi_weight(candidate: PoiRecord, interests: &PoiInterests, host: Vec3) -> f32 {
-	let interest = interests.weight(candidate.kind).unwrap_or(0.0);
-	let proximity = 1.0 / (1.0 + host.distance(candidate.position) / RESPAWN_POI_RADIUS);
-	interest * candidate.salience.max(0.1) * proximity
 }
 
 fn pose_at_poi(poi: PoiRecord, host: Vec3, last: Vec3, seed: u64) -> Vec3 {
@@ -296,7 +249,8 @@ mod tests {
 	fn poi_respawn_avoids_immediately_repeating_a_destination() -> Result<()> {
 		let registry = registry_with_two_camps()?;
 		let interests = PoiInterests::new([PoiInterest::new(CAMP, 1.0)]);
-		let selected = select_respawn_poi(&registry, &interests, Vec3::ZERO, Some(PoiId(11)), 42);
+		let selected =
+			registry.choose_nearby(Vec3::ZERO, RESPAWN_POI_RADIUS, &interests, Some(PoiId(11)), 42);
 		assert_eq!(selected.map(|poi| poi.id), Some(PoiId(12)));
 		Ok(())
 	}
