@@ -7,9 +7,10 @@
 //!
 //! Compounds live on the [`LodSceneHost`], not a High level root, so band flicker
 //! does not rebuild them and Hidden warm-hold roots do not keep live physics.
-//! The first **High** realization stamps the compound; later Medium / Low /
-//! UltraLow leaves it in place until the host itself is culled. Leftover nested
-//! [`StickNode`] hosts use the same High-first attach.
+//! The first **High or Medium** realization stamps High-IR capsules (grove
+//! High/Medium both nest plants). Hosts with no collideable sticks still take
+//! [`StickPhysicsAttached`] so empty tuft / frond plants do not starve the drain.
+//! Later Low / UltraLow leaves the compound in place until the host is culled.
 
 use std::collections::{HashSet, VecDeque};
 
@@ -27,7 +28,7 @@ pub const MIN_STICK_COLLIDER_RADIUS_M: f32 = 2.0 * 0.0254;
 /// Hard fan-out bound within one plant compound.
 pub const MAX_STICK_COLLIDER_SHAPES: usize = 64;
 
-/// How many pending High-band hosts may build compounds in one frame.
+/// How many pending High/Medium hosts may build compounds in one frame.
 #[derive(Resource, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct StickPhysicsBudget {
 	pub hosts_per_frame: u32,
@@ -48,7 +49,9 @@ struct StickPhysicsProducer(ProduceColliderPoses);
 #[derive(Component)]
 pub(crate) struct StickPhysicsCompound;
 
-/// This host already has a stick compound (persists across LOD bands).
+/// This host was considered for a stick compound (empty or stamped).
+///
+/// Persists across LOD bands so we do not rebuild or re-queue.
 #[derive(Component, Clone, Copy)]
 pub(crate) struct StickPhysicsAttached;
 
@@ -120,7 +123,7 @@ fn attach_stick_node_producer(insert: On<Insert, StickNode>, mut commands: Comma
 }
 
 fn wants_playable_colliders(level: LodSceneLevel) -> bool {
-	matches!(level, LodSceneLevel::High)
+	matches!(level, LodSceneLevel::High | LodSceneLevel::Medium)
 }
 
 fn sync_stick_colliders(world: &mut World) {
@@ -145,7 +148,7 @@ fn sync_stick_colliders(world: &mut World) {
 		let Some(entity) = world.resource_mut::<StickPhysicsQueue>().pop_front() else {
 			break;
 		};
-		if world.get::<LodSceneHost>(entity).is_none() {
+		if world.get_entity(entity).is_err() || world.get::<LodSceneHost>(entity).is_none() {
 			continue;
 		}
 		let Some(level) = world.get::<LodSceneLevel>(entity).copied() else {
@@ -160,9 +163,14 @@ fn sync_stick_colliders(world: &mut World) {
 		let Some(producer) = world.get::<StickPhysicsProducer>(entity).copied() else {
 			continue;
 		};
-		let poses = (producer.0)(world, entity, level);
+		// High stick IR even when the host is still Medium — same capsules as High visuals.
+		let poses = (producer.0)(world, entity, LodSceneLevel::High);
 		despawn_compound(world, entity);
+		if world.get_entity(entity).is_err() {
+			continue;
+		}
 		if poses.is_empty() {
+			world.entity_mut(entity).insert(StickPhysicsAttached);
 			continue;
 		}
 		let shapes = poses
@@ -324,9 +332,9 @@ mod tests {
 	}
 
 	#[test]
-	fn only_high_band_wants_playable_colliders() {
+	fn high_and_medium_want_playable_colliders() {
 		assert!(wants_playable_colliders(LodSceneLevel::High));
-		assert!(!wants_playable_colliders(LodSceneLevel::Medium));
+		assert!(wants_playable_colliders(LodSceneLevel::Medium));
 		assert!(!wants_playable_colliders(LodSceneLevel::Low));
 		assert!(!wants_playable_colliders(LodSceneLevel::UltraLow));
 	}
@@ -358,6 +366,10 @@ mod tests {
 		)
 	}
 
+	fn empty_sticks() -> StickNode {
+		StickNode::collection(StickCollection::new([]), Placement::IDENTITY)
+	}
+
 	#[test]
 	fn high_compound_attaches_after_lod_host_arrives() {
 		let mut app = App::new();
@@ -372,7 +384,19 @@ mod tests {
 	}
 
 	#[test]
-	fn compound_stays_on_the_host_after_leaving_high() {
+	fn medium_host_stamps_high_ir_compound() {
+		let mut app = App::new();
+		app.add_plugins(StickPhysicsPlugin);
+		let host = app
+			.world_mut()
+			.spawn((playable_trunk(), LodSceneHost, LodSceneLevel::Medium))
+			.id();
+		app.update();
+		assert!(has_compound(app.world(), host));
+	}
+
+	#[test]
+	fn compound_stays_on_the_host_after_leaving_playable_bands() {
 		let mut app = App::new();
 		app.add_plugins(StickPhysicsPlugin);
 		let host = app
@@ -382,9 +406,30 @@ mod tests {
 		app.update();
 		assert!(has_compound(app.world(), host));
 
-		*app.world_mut().get_mut::<LodSceneLevel>(host).expect("level") = LodSceneLevel::Medium;
+		*app.world_mut().get_mut::<LodSceneLevel>(host).expect("level") = LodSceneLevel::Low;
 		app.update();
 		assert!(has_compound(app.world(), host));
 		assert!(app.world().get::<StickPhysicsAttached>(host).is_some());
+	}
+
+	#[test]
+	fn empty_hosts_do_not_starve_later_playable_hosts() {
+		let mut app = App::new();
+		app.add_plugins(StickPhysicsPlugin);
+		app.insert_resource(StickPhysicsBudget { hosts_per_frame: 1 });
+		for _ in 0..3 {
+			app.world_mut().spawn((empty_sticks(), LodSceneHost, LodSceneLevel::High));
+		}
+		app.update();
+		app.update();
+		app.update();
+
+		let tree = app
+			.world_mut()
+			.spawn((playable_trunk(), LodSceneHost, LodSceneLevel::High))
+			.id();
+		app.update();
+		assert!(has_compound(app.world(), tree));
+		assert!(app.world().get::<StickPhysicsAttached>(tree).is_some());
 	}
 }
