@@ -179,7 +179,11 @@ fn biped_hull_follows_legs_shoulders_and_head() -> Result<()> {
 		.locomotion_capsule()
 		.head_capsule()
 		.ok_or_else(|| anyhow!("Spibmom 2× head should get a head volume"))?;
-	assert!(head.crown_y() > spibmom.locomotion_capsule().half_height() + HeadCapsule::REST_HALF);
+	assert!((head.radius - HeadCapsule::REST_HALF).abs() < 1e-5);
+	assert!(head.length > HeadCapsule::REST_HALF * 2.0);
+	assert!(
+		head.crown_y() > spibmom.locomotion_capsule().half_height() + HeadCapsule::REST_HALF * 2.0
+	);
 	Ok(())
 }
 

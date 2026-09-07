@@ -83,14 +83,18 @@ downed spotting/targeting users and subjects. It keeps the reusable intelligence
 plugins cadence-neutral. `duel`
 restores the 1v1 bullpup pad fight
 (100 HP / 25 DPC). `test-dummy` (`dummy`) spawns the player with that same
-bullpup and a stationary unarmed braidman at the NPC pad pose — no combat AI,
+bullpup and a stationary unarmed dummy at the NPC pad pose — no combat AI,
 no return fire — so projectile contacts can be checked in isolation.
+`--species spibmom` plants the 2× meerkat head. Dummy mode draws the motor
+capsule (amber), the query-only head capsule (cyan, Y-stretched), and the
+headshot plane (blue) so a miss on the crown is visible.
 
 ```bash
 cargo run -p firing-range-playground
 cargo run -p firing-range-playground -- free-for-all --npcs 8
 cargo run -p firing-range-playground -- affa --combatants 4 --civilians 6
 cargo run -p firing-range-playground -- test-dummy
+cargo run -p firing-range-playground -- test-dummy --species spibmom
 ```
 
-WASD / left stick move, mouse / right stick look, Space / A jump, click / RT fire. R3 toggles first person; right mouse / LT focuses from the head camera onto the firearm sight. `/` then `pause` / `resume` / `free-for-all` / `affa` / `duel` / `test-dummy`.
+WASD / left stick move, mouse / right stick look, Space / A jump, click / RT fire. R3 toggles first person; right mouse / LT focuses from the head camera onto the firearm sight. `/` then `pause` / `resume` / `free-for-all` / `affa` / `duel` / `test-dummy --species spibmom`.

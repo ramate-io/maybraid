@@ -10,8 +10,8 @@
 //! query-only [`HitCapsule`](crate::HitCapsule) (horizontal, along mesh `+Z`);
 //! hit girth is rest-pose shoulder / hip / torso bone scale. Biped recipes keep
 //! one vertical motor capsule sized from rest-pose legs / spine / neck / shoulders.
-//! Oversized heads add a query-only [`HeadCapsule`](crate::HeadCapsule) above that
-//! hull. The motor stays on the vertical capsule. Per-frame clips and terrain pitch live in
+//! Oversized heads add a query-only [`HeadCapsule`](crate::HeadCapsule) that
+//! stretches on Y above that hull. The motor stays on the vertical capsule. Per-frame clips and terrain pitch live in
 //! [`crozon_character_motion`]; this crate stamps **initial** host markers from
 //! [`lod::LodScene::host`] / spawn. Motion sync keeps those markers aligned with
 //! the shown LOD band.

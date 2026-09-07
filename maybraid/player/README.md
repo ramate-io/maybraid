@@ -30,8 +30,9 @@ child (`Sensor`, Animated layer) so projectiles can hit the body and tail.
 Hit radius follows rest-pose shoulder / hip / torso bone scales, not the motor
 radius. Bipeds keep a single vertical motor capsule sized from rest-pose legs,
 spine, neck, and shoulders. Oversized heads (Spibmom, cartoon whelps) add a
-query-only [`HeadCapsule`](../crozon/characters/src/components.rs) sphere above
-the motor top so the crown is hittable. The child follows visual yaw; `Health`
+query-only [`HeadCapsule`](../crozon/characters/src/components.rs) that
+stretches on Y (ears / crown) without fattening XZ. The child follows visual
+yaw; `Health`
 stays on the body.
 
 ```text

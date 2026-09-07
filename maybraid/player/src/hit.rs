@@ -106,11 +106,7 @@ pub(crate) fn maintain_hit_volumes(
 }
 
 fn head_collider(head: HeadCapsule) -> Collider {
-	if head.length > 1e-4 {
-		Collider::capsule(head.radius, head.length)
-	} else {
-		Collider::sphere(head.radius)
-	}
+	Collider::capsule(head.radius, head.length.max(0.0))
 }
 
 fn despawn_kind(
