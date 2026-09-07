@@ -97,15 +97,15 @@ mod tests {
 	}
 
 	#[test]
-	fn holorand_sockets_on_the_camera_landmark() {
+	fn holorand_sockets_on_the_sight_landmark() {
 		let kit = FirearmKit { sight: SightMesh::Holorand, ..FirearmKit::body(BodyMesh::Bullpup) };
 		let sights = kit.sight_nodes_for_level(LodSceneLevel::High).flatten();
 		assert_eq!(sights[0].slot, FirearmPartSlot::Sight);
 		assert_eq!(
 			sights[0].socket,
-			Some(SocketRef::bone("sight_camera_socket").with_local(
-				bevy::prelude::Transform::from_scale(bevy::prelude::Vec3::splat(0.10)),
-			))
+			Some(SocketRef::bone("sight_socket").with_local(bevy::prelude::Transform::from_scale(
+				bevy::prelude::Vec3::splat(0.10)
+			)))
 		);
 		assert_eq!(sights[0].scene.path, guns::HOLORAND_SIGHT.as_str());
 	}

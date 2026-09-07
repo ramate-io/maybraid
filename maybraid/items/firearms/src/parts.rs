@@ -164,7 +164,7 @@ impl StockMesh {
 /// ADS vertical FOV with no optic (50°). Matches the follow-camera iron-sight default.
 pub const IRON_SIGHT_FOV: f32 = 50.0_f32.to_radians();
 
-/// Uniform rest scale for a 1 m authored sight cube on `sight_camera_socket`.
+/// Uniform rest scale for a 1 m authored sight cube on `sight_socket`.
 const HOLORAND_REST_SCALE: f32 = 0.10;
 const LESKOP_REST_SCALE: f32 = 0.16;
 
