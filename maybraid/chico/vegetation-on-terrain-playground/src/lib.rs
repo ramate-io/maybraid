@@ -18,8 +18,10 @@ pub mod player;
 mod ui;
 
 pub use bump_out::{
-	bump_out_from_cell, bump_out_noise, fine_terrain_for, register_bump_out_lod, terrain_chunk_ref,
-	CanopyBumpOutPresenterState, DurhamCanopyBumpOutPresenter, WorldTerrainBuilder,
+	bump_out_from_cell, bump_out_noise, fine_terrain_for, medium_terrain_for,
+	register_bump_out_lod, terrain_chunk_ref, CanopyBumpOutPresenterState,
+	DurhamCanopyBumpOutPresenter, DurhamMediumCanopyBumpOutPresenter,
+	MediumCanopyBumpOutPresenterState, WorldTerrainBuilder,
 };
 pub use camera::CameraController;
 pub use character::{
@@ -245,7 +247,9 @@ impl Plugin for VegetationOnTerrainPlugin {
 			register_forest_lod::<DurhamForestPresenter>(app);
 		}
 		if self.register_bump_out_lod {
-			register_bump_out_lod::<DurhamCanopyBumpOutPresenter>(app);
+			register_bump_out_lod::<DurhamCanopyBumpOutPresenter, DurhamMediumCanopyBumpOutPresenter>(
+				app,
+			);
 		}
 		if !app.is_plugin_added::<VegetationHostPlugin>() {
 			app.add_plugins(VegetationHostPlugin { register_camera: self.register_camera });

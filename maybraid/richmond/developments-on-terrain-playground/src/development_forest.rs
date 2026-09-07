@@ -108,7 +108,7 @@ mod tests {
 			PadParams::default(),
 		);
 		let base = FlatTerrainSample { elevation: 3.0, steepness: 0.0 };
-		let modulation = DevelopmentPadModulation(&pad);
+		let modulation = DevelopmentPadModulation(pad);
 		let sample = ModulatedGroveSample::new(base, &modulation);
 
 		assert!((sample.height_at(Vec3::ZERO) - 12.0).abs() < 1e-5);
