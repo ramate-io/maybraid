@@ -2,8 +2,9 @@
 //!
 //! Near (`high_inner_radius == 0`) has no hole, so High is the mesh. Far and
 //! background use High as an inner-disk hole and Medium as the visible
-//! annulus. Presenters filter wanted ids with [`stream_banded_draws`]; they
-//! must not encode “don’t draw” as an empty scene.
+//! annulus. Playable rings inset that hole so Medium overlaps the next-finer
+//! High rim (snap + half-tile). Presenters filter wanted ids with
+//! [`stream_banded_draws`]; they must not encode “don’t draw” as an empty scene.
 
 use crate::terrain::cell::TerrainCellRing;
 use bevy::math::Vec3;

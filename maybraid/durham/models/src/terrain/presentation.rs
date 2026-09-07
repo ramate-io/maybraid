@@ -151,16 +151,19 @@ impl TerrainPresentationAssets {
 		if !self.outer_add_walls {
 			return WallFaces::NONE;
 		}
+		// Inner holes and Near/Far rims sit under the next-finer stream (draw
+		// overlap). Only the outermost Background skirt faces empty space.
+		if !layout.is_outermost_stream_ring(ring) {
+			return WallFaces::NONE;
+		}
 		let center = layout.region_center_xz();
 		let min = Vec3::from(bounds.min);
 		let max = Vec3::from(bounds.max);
 		let cx = (min.x + max.x) * 0.5;
 		let cz = (min.z + max.z) * 0.5;
 		let radius = (cx - center.x).abs().max((cz - center.z).abs());
-		let on_inner = ring.high_inner_radius > 0.0
-			&& (radius - ring.high_inner_radius).abs() < ring.cell_size;
 		let on_outer = (radius - ring.high_outer_radius).abs() < ring.cell_size;
-		if on_inner || on_outer {
+		if on_outer {
 			WallFaces::ALL
 		} else {
 			WallFaces::NONE

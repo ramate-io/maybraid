@@ -74,7 +74,8 @@ pub struct OuterCellRing {
 /// High is the innermost category around the stream anchor. Near
 /// (`high_inner_radius == 0`) draws High. Far / background use High as an
 /// empty hole inside `high_inner_radius` and draw Medium on
-/// `high_inner_radius..=high_outer_radius`. Cells stay generated for
+/// `high_inner_radius..=high_outer_radius`. Playable Far / Background inset
+/// that hole so Medium overlaps the next-finer rim. Cells stay generated for
 /// [`Self::cull_margin`] past both edges. Low is empty retain or cull.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TerrainCellRing {
@@ -259,6 +260,13 @@ impl TerrainCellLayout {
 			.iter()
 			.copied()
 			.find(|ring| (ring.cell_size - cell_size).abs() < 1e-3)
+	}
+
+	/// True when no other stream draws past `ring`'s outer radius.
+	pub fn is_outermost_stream_ring(&self, ring: TerrainCellRing) -> bool {
+		self.stream_rings
+			.iter()
+			.all(|other| other.high_outer_radius <= ring.high_outer_radius + 1e-3)
 	}
 
 	pub fn is_streamed(&self) -> bool {

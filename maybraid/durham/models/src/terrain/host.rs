@@ -2,7 +2,8 @@
 //!
 //! Playable coverage is three scale streams (160 / 320 / 640 m) that follow the
 //! viewer. Near cells use `res_2 = 5` and own collision; far and background are
-//! render-only at `res_2 = 4` and `3`. Generation admits a bounded number of
+//! render-only at `res_2 = 4` and `3`. Far / Background holes inset so Medium
+//! overlaps the next-finer High rim. Generation admits a bounded number of
 //! missing origin ids per frame. Playable visuals come from the urbanized
 //! presenter. This plugin generates Durham on every coverage; raw present is
 //! FinePatch-only (`present: true`).
@@ -51,8 +52,13 @@ const WORLD_TERRAIN_NEAR_RADIUS_M: f32 = 8.0 * TERRAIN_CELL_SIZE;
 const WORLD_TERRAIN_FAR_RADIUS_M: f32 = 16.0 * TERRAIN_CELL_SIZE;
 /// Background High outer radius (640 m cells).
 const WORLD_TERRAIN_BACKGROUND_RADIUS_M: f32 = 24.0 * TERRAIN_CELL_SIZE;
-/// Generate keep matches the drawn band. Extra margin used to fill the Far
-/// hole and Near overflow; we never evict, so that was wasted DAG + store.
+/// Far Medium starts this far inside the Near High disk (one Far cell).
+/// Covers 640 m anchor snap plus half a 320 m tile so the hole is never empty.
+const WORLD_TERRAIN_FAR_HOLE_INSET_M: f32 = 2.0 * TERRAIN_CELL_SIZE;
+/// Background Medium starts this far inside the Far ring (one Background cell).
+const WORLD_TERRAIN_BACKGROUND_HOLE_INSET_M: f32 = 4.0 * TERRAIN_CELL_SIZE;
+/// Generate keep matches the drawn band. Do not use this as a draw overlap —
+/// Near overflow is classified Medium and Near only draws High.
 const WORLD_TERRAIN_CULL_MARGIN_M: f32 = 0.0;
 /// Snap stream anchors to the 640 m lattice.
 const WORLD_TERRAIN_PRESENT_STEP_M: f32 = 4.0 * TERRAIN_CELL_SIZE;
@@ -145,7 +151,7 @@ fn world_cell_layout() -> TerrainCellLayout {
 			cell_size: 2.0 * TERRAIN_CELL_SIZE,
 			res_2: 4,
 			anchor_step: WORLD_TERRAIN_PRESENT_STEP_M,
-			high_inner_radius: WORLD_TERRAIN_NEAR_RADIUS_M,
+			high_inner_radius: WORLD_TERRAIN_NEAR_RADIUS_M - WORLD_TERRAIN_FAR_HOLE_INSET_M,
 			high_outer_radius: WORLD_TERRAIN_FAR_RADIUS_M,
 			cull_margin: WORLD_TERRAIN_CULL_MARGIN_M,
 		},
@@ -153,7 +159,7 @@ fn world_cell_layout() -> TerrainCellLayout {
 			cell_size: 4.0 * TERRAIN_CELL_SIZE,
 			res_2: 3,
 			anchor_step: WORLD_TERRAIN_PRESENT_STEP_M,
-			high_inner_radius: WORLD_TERRAIN_FAR_RADIUS_M,
+			high_inner_radius: WORLD_TERRAIN_FAR_RADIUS_M - WORLD_TERRAIN_BACKGROUND_HOLE_INSET_M,
 			high_outer_radius: WORLD_TERRAIN_BACKGROUND_RADIUS_M,
 			cull_margin: WORLD_TERRAIN_CULL_MARGIN_M,
 		},
@@ -482,11 +488,23 @@ mod tests {
 		assert!(far.draws_level(lod::LodSceneLevel::Medium));
 		assert_eq!(far.level_for(Vec3::ZERO, Vec3::ZERO), lod::LodSceneLevel::High);
 		assert_eq!(
+			far.level_for(Vec3::X * 5.0 * TERRAIN_CELL_SIZE, Vec3::ZERO),
+			lod::LodSceneLevel::High
+		);
+		assert_eq!(
+			far.level_for(Vec3::X * 7.0 * TERRAIN_CELL_SIZE, Vec3::ZERO),
+			lod::LodSceneLevel::Medium
+		);
+		assert_eq!(
 			far.level_for(Vec3::X * 12.0 * TERRAIN_CELL_SIZE, Vec3::ZERO),
 			lod::LodSceneLevel::Medium
 		);
 		let background = layout.stream_rings[2];
 		assert_eq!(background.level_for(Vec3::ZERO, Vec3::ZERO), lod::LodSceneLevel::High);
+		assert_eq!(
+			background.level_for(Vec3::X * 13.0 * TERRAIN_CELL_SIZE, Vec3::ZERO),
+			lod::LodSceneLevel::Medium
+		);
 		assert!(background.draws_level(lod::LodSceneLevel::Medium));
 	}
 
@@ -520,14 +538,33 @@ mod tests {
 			assert_eq!(ring.cull_margin, 0.0);
 		}
 		let far = layout.stream_rings[1];
+		assert_eq!(
+			far.high_inner_radius,
+			WORLD_TERRAIN_NEAR_RADIUS_M - WORLD_TERRAIN_FAR_HOLE_INSET_M
+		);
 		assert!(!far.retains_cell_center(Vec3::ZERO, Vec3::ZERO));
+		assert!(!far.retains_cell_center(Vec3::X * 5.0 * TERRAIN_CELL_SIZE, Vec3::ZERO));
+		assert!(far.retains_cell_center(Vec3::X * 7.0 * TERRAIN_CELL_SIZE, Vec3::ZERO));
 		assert!(far.retains_cell_center(Vec3::X * 12.0 * TERRAIN_CELL_SIZE, Vec3::ZERO));
+		let background = layout.stream_rings[2];
+		assert_eq!(
+			background.high_inner_radius,
+			WORLD_TERRAIN_FAR_RADIUS_M - WORLD_TERRAIN_BACKGROUND_HOLE_INSET_M
+		);
 		let near = layout.stream_rings[0];
 		assert!(near.retains_cell_center(Vec3::ZERO, Vec3::ZERO));
 		assert!(!near.retains_cell_center(
 			Vec3::X * (WORLD_TERRAIN_NEAR_RADIUS_M + TERRAIN_CELL_SIZE),
 			Vec3::ZERO
 		));
+	}
+
+	#[test]
+	fn only_background_stream_emits_outer_skirts() {
+		let layout = world_cell_layout();
+		assert!(!layout.is_outermost_stream_ring(layout.stream_rings[0]));
+		assert!(!layout.is_outermost_stream_ring(layout.stream_rings[1]));
+		assert!(layout.is_outermost_stream_ring(layout.stream_rings[2]));
 	}
 
 	#[test]
