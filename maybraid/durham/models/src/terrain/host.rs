@@ -450,6 +450,19 @@ mod tests {
 	}
 
 	#[test]
+	fn world_far_interior_is_empty_medium() {
+		let layout = world_cell_layout();
+		let far = layout.stream_rings[1];
+		assert_eq!(far.level_for(Vec3::ZERO, Vec3::ZERO), lod::LodSceneLevel::Medium);
+		assert_eq!(
+			far.level_for(Vec3::X * 12.0 * TERRAIN_CELL_SIZE, Vec3::ZERO),
+			lod::LodSceneLevel::High
+		);
+		let background = layout.stream_rings[2];
+		assert_eq!(background.level_for(Vec3::ZERO, Vec3::ZERO), lod::LodSceneLevel::Low);
+	}
+
+	#[test]
 	fn world_stream_boundaries_align_all_three_grids() {
 		assert_eq!(WORLD_TERRAIN_NEAR_RADIUS_M % (2.0 * TERRAIN_CELL_SIZE), 0.0);
 		assert_eq!(WORLD_TERRAIN_FAR_RADIUS_M % (4.0 * TERRAIN_CELL_SIZE), 0.0);

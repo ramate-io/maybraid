@@ -35,7 +35,10 @@ use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value, Scene};
 use durham_terrain::shaders::DurhamTerrainShader;
 use jersey_terrain_stamps::JerseyModulation;
-use lod::gen::{GeneratingSpatialIndex, GenerationScheme, Id, LodScene, OriginalId, SpatialIndex};
+use lod::gen::{
+	GeneratingSpatialIndex, GenerationScheme, Id, LodScene, LodSceneLevel, LodSceneStatus,
+	OriginalId, SpatialIndex,
+};
 use lod::lod_ref::LodRef;
 use marazion_watersheds::WaterFill;
 use render_item::mesh::handle::Cached;
@@ -150,6 +153,8 @@ pub struct Terrain {
 	pub sdf: Arc<ComposedTerrain>,
 	pub material: Handle<DurhamTerrainShader>,
 	pub res_2: u8,
+	/// Moving presentation band for streamed near / far / background terrain.
+	pub stream_ring: Option<TerrainCellRing>,
 	/// Per-face CpuShot edge height walls (LOD seam skirts).
 	pub wall_faces: WallFaces,
 }
@@ -172,7 +177,7 @@ impl Terrain {
 	}
 
 	pub fn scene(&self) -> impl Scene + 'static {
-		// Shared origin-cell lattice with [`crate::water::Water::scene`].
+		// Collider-host bake path. Visual LOD uses [`LodScene::scene_with_level`].
 		let chunk = cascade_chunk_for_cell(self.cell, self.res_2);
 		let transform = Transform::from_translation(chunk.origin);
 		let builder = self.mesh_builder();
@@ -185,19 +190,54 @@ impl Terrain {
 			TerrainColliderMeshSource
 		}
 	}
+
+	fn center(&self) -> Vec3 {
+		(Vec3::from(self.cell.min) + Vec3::from(self.cell.max)) * 0.5
+	}
+
+	fn level_for(&self, viewer: &Transform) -> LodSceneLevel {
+		if let Some(ring) = self.stream_ring {
+			return ring.level_for(self.center(), viewer.translation);
+		}
+		LodSceneLevel::High
+	}
+
+	/// High is the mesh for this scale. Streamed Medium / Low are empty so Far
+	/// and Background cells can occupy the Near disk as a hole, not a second draw.
+	fn level_scene(&self, level: LodSceneLevel) -> Box<dyn Scene> {
+		if self.stream_ring.is_some() && level != LodSceneLevel::High {
+			return Box::new(());
+		}
+		let chunk = cascade_chunk_for_cell(self.cell, self.res_2);
+		let transform = Transform::from_translation(chunk.origin);
+		let builder = self.mesh_builder();
+		let material = self.material.clone();
+		Box::new(bsn! {
+			template_value(transform)
+			template_value(chunk)
+			template(move |_ctx| Ok(Cached::new(builder.clone())))
+			MeshMaterial3d::<DurhamTerrainShader>({material.clone()})
+		})
+	}
 }
 
 impl LodScene for Terrain {
-	fn scene_lod_status(&self, _lod_ref: &LodRef) -> lod::gen::LodSceneStatus {
-		lod::gen::LodSceneStatus::Unchanged
+	fn scene_lod_level(&self, lod_ref: &LodRef) -> LodSceneLevel {
+		self.level_for(lod_ref.current_transform)
 	}
 
-	fn scene_with_level(
-		&self,
-		_lod_ref: &LodRef,
-		_level: lod::gen::LodSceneLevel,
-	) -> impl Scene + 'static {
-		self.scene()
+	fn scene_lod_status(&self, lod_ref: &LodRef) -> LodSceneStatus {
+		let previous = self.level_for(lod_ref.previous_transform);
+		let current = self.level_for(lod_ref.current_transform);
+		if previous == current {
+			LodSceneStatus::Unchanged
+		} else {
+			LodSceneStatus::Changed(current)
+		}
+	}
+
+	fn scene_with_level(&self, _lod_ref: &LodRef, level: LodSceneLevel) -> impl Scene + 'static {
+		self.level_scene(level)
 	}
 }
 
@@ -523,6 +563,8 @@ where
 		.cloned()
 		.unwrap_or_default();
 		let (res_2, wall_faces) = assets.mesh_params_for_cell(bounds, &layout);
+		let cell_size = (Vec3::from(bounds.max) - Vec3::from(bounds.min)).x;
+		let stream_ring = layout.stream_ring_for_cell_size(cell_size);
 
 		Some((
 			Self {
@@ -535,6 +577,7 @@ where
 				sdf,
 				material,
 				res_2,
+				stream_ring,
 				wall_faces,
 			},
 			bounds,

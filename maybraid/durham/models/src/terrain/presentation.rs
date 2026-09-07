@@ -232,6 +232,7 @@ pub struct TerrainPresenterState {
 struct PresentedEntry {
 	version: Version,
 	entity: Entity,
+	level: LodSceneLevel,
 }
 
 /// Marks a spawned terrain scene root as belonging to a presented id.
@@ -380,7 +381,8 @@ impl<M: TerrainStreamMarker> TerrainStreamRegionPresenter<'_, '_, M> {
 		(size - M::CELL_SIZE_MULTIPLE * TERRAIN_CELL_SIZE).abs() < 1e-3
 	}
 
-	/// Present this scale's High cells and retire hosts outside that band.
+	/// Present this scale's keep-region cells. The annulus hole is LodScene
+	/// banding (High = mesh, Medium / Low = empty), not a presenter High filter.
 	pub fn present(
 		&mut self,
 		store: &TerrainEntryStore,
@@ -388,24 +390,16 @@ impl<M: TerrainStreamMarker> TerrainStreamRegionPresenter<'_, '_, M> {
 		region: Aabb3d,
 		lod_ref: &LodRef,
 	) {
-		let Some(ring) =
-			layout.stream_ring_for_cell_size(M::CELL_SIZE_MULTIPLE * TERRAIN_CELL_SIZE)
-		else {
+		if layout
+			.stream_ring_for_cell_size(M::CELL_SIZE_MULTIPLE * TERRAIN_CELL_SIZE)
+			.is_none()
+		{
 			return;
 		};
-		let anchor = layout.region_center_xz();
 		let wanted: HashSet<Id> = store
 			.terrain
 			.iter()
-			.filter(|(_, entry)| {
-				if !region.intersects(&entry.bounds) || !Self::matches(&entry.value) {
-					return false;
-				}
-				let min = Vec3::from(entry.value.cell.min);
-				let max = Vec3::from(entry.value.cell.max);
-				let center = (min + max) * 0.5;
-				ring.level_for(center, anchor) == LodSceneLevel::High
-			})
+			.filter(|(_, entry)| region.intersects(&entry.bounds) && Self::matches(&entry.value))
 			.map(|(id, _)| *id)
 			.collect();
 
@@ -413,7 +407,13 @@ impl<M: TerrainStreamMarker> TerrainStreamRegionPresenter<'_, '_, M> {
 			let Some(entry) = store.terrain.get(id) else {
 				continue;
 			};
-			if self.state.presented.get(id).is_some_and(|shown| shown.version == entry.version) {
+			let level = entry.value.scene_lod_level(lod_ref);
+			if self
+				.state
+				.presented
+				.get(id)
+				.is_some_and(|shown| shown.version == entry.version && shown.level == level)
+			{
 				continue;
 			}
 			if let Some(previous) = self.state.presented.remove(id) {
@@ -432,14 +432,16 @@ impl<M: TerrainStreamMarker> TerrainStreamRegionPresenter<'_, '_, M> {
 			self.commands
 				.spawn_scene(entry.value.scene_with_lod(lod_ref))
 				.insert(ChildOf(host));
-			if let Some(water) = self.store.water(*id) {
-				self.commands
-					.spawn_scene(water.scene_with_lod(lod_ref))
-					.insert((PresentedWaterScene(*id), ChildOf(host)));
+			if level == LodSceneLevel::High {
+				if let Some(water) = self.store.water(*id) {
+					self.commands
+						.spawn_scene(water.scene_with_lod(lod_ref))
+						.insert((PresentedWaterScene(*id), ChildOf(host)));
+				}
 			}
 			self.state
 				.presented
-				.insert(*id, PresentedEntry { version: entry.version, entity: host });
+				.insert(*id, PresentedEntry { version: entry.version, entity: host, level });
 		}
 
 		let stale: Vec<(Id, Entity)> = self
@@ -486,7 +488,9 @@ impl<'a, 'w, 's> RegionPresenter<Terrain, TerrainStoreView<'a>> for TerrainRegio
 				.spawn_scene(water.scene_with_lod(lod_ref))
 				.insert((PresentedWaterScene(id), ChildOf(host)));
 		}
-		self.state.presented.insert(id, PresentedEntry { version, entity: host });
+		self.state
+			.presented
+			.insert(id, PresentedEntry { version, entity: host, level: LodSceneLevel::High });
 	}
 
 	fn presented_ids(&self) -> Vec<Id> {

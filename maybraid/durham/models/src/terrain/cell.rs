@@ -73,8 +73,9 @@ pub struct OuterCellRing {
 ///
 /// The High mesh occupies `high_inner_radius..=high_outer_radius` around the
 /// current stream anchor. Cells remain generated for [`Self::cull_margin`]
-/// beyond both edges so High roots and near colliders can stay warm. Medium / Low
-/// categories are empty: this stream only draws High.
+/// beyond both edges so High roots and near colliders can stay warm. Medium is
+/// that empty retain band (including the inner hole for far / background);
+/// Low is cull. This stream only draws High.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TerrainCellRing {
 	/// Edge length of cells in this stream.
@@ -588,6 +589,21 @@ mod tests {
 		assert_eq!(layout.stream_rings[0].res_2, 5);
 		assert_eq!(layout.stream_rings[1].res_2, 4);
 		assert_eq!(layout.stream_rings[2].res_2, 3);
+	}
+
+	#[test]
+	fn far_cells_inside_near_are_empty_medium() {
+		let layout = streamed_layout();
+		let far = layout.stream_rings[1];
+		assert_eq!(far.level_for(Vec3::ZERO, Vec3::ZERO), LodSceneLevel::Low);
+		assert_eq!(
+			far.level_for(Vec3::X * 7.0 * TERRAIN_CELL_SIZE, Vec3::ZERO),
+			LodSceneLevel::Medium
+		);
+		assert_eq!(
+			far.level_for(Vec3::X * 12.0 * TERRAIN_CELL_SIZE, Vec3::ZERO),
+			LodSceneLevel::High
+		);
 	}
 
 	#[test]
