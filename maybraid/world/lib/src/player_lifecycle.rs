@@ -18,8 +18,8 @@ use firearms::WeaponTrigger;
 use mob_characters::{LOCAL_POI, URBAN_POI, VEGETATION_POI};
 use player::{CameraFollow, Player as MaybraidPlayer, PlayerUse};
 use poi_intelligence::{
-	mix_seed, NearbyFallback, PoiId, PoiInterest, PoiInterests, PoiRegistry, PoiSystems,
-	DEFAULT_NEARBY_RADIUS,
+	mix_seed, NearbyFallback, NearbyQuery, PoiId, PoiInterest, PoiInterests, PoiRegistry,
+	PoiSystems, DEFAULT_NEARBY_RADIUS,
 };
 use richmond_development_models::DevelopmentEntryStore;
 use spotting_intelligence::SpotSubject;
@@ -42,9 +42,16 @@ impl Default for WorldPlayerRespawnConfig {
 		Self {
 			delay_secs: 4.0,
 			poi_radius: DEFAULT_NEARBY_RADIUS,
-			fallback: NearbyFallback::new(8.0, 16.0),
+			fallback: NearbyFallback::new(60.0, 100.0),
 			interests: default_player_respawn_interests(),
 		}
+	}
+}
+
+impl WorldPlayerRespawnConfig {
+	/// Nearest POI outside the fallback ring's inner radius.
+	pub fn nearby_query(&self) -> NearbyQuery {
+		NearbyQuery::nearest_beyond(self.poi_radius, self.fallback.min_radius)
 	}
 }
 
@@ -222,7 +229,7 @@ fn respawn_world_player(
 
 	let placed = registry.place_nearby(
 		death_at,
-		config.poi_radius,
+		config.nearby_query(),
 		&config.interests,
 		state.last_poi,
 		seed,
@@ -293,7 +300,7 @@ mod tests {
 		let placed = poi_intelligence::place_nearby(
 			None,
 			death,
-			config.poi_radius,
+			config.nearby_query(),
 			None,
 			None,
 			42,
@@ -318,7 +325,8 @@ mod tests {
 		let config = WorldPlayerRespawnConfig::default();
 		assert_eq!(config.delay_secs, 4.0);
 		assert_eq!(config.poi_radius, DEFAULT_NEARBY_RADIUS);
-		assert_eq!(config.fallback, NearbyFallback::new(8.0, 16.0));
+		assert_eq!(config.fallback, NearbyFallback::new(60.0, 100.0));
+		assert_eq!(config.nearby_query().min_radius, config.fallback.min_radius);
 	}
 
 	#[test]

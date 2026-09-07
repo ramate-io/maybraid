@@ -163,8 +163,15 @@ impl MobRespawn {
 			return (spawn_pose(self.at, host, last), None);
 		}
 		let seed = respawn_seed(mob, slot, generation);
-		let placed =
-			place_nearby(registry, host, self.poi_radius, interests, previous, seed, self.fallback);
+		let placed = place_nearby(
+			registry,
+			host,
+			self.nearby_query(),
+			interests,
+			previous,
+			seed,
+			self.fallback,
+		);
 		(with_member_height(placed.position, host, last, placed.poi.is_some()), placed.poi)
 	}
 }
@@ -253,6 +260,7 @@ mod tests {
 		assert_eq!(policy.corpse_secs, 4.0);
 		assert_eq!(policy.at, MobRespawnAt::Poi);
 		assert_eq!(policy.poi_radius, DEFAULT_NEARBY_RADIUS);
+		assert_eq!(policy.min_radius, 0.0);
 		assert_eq!(policy.fallback, NearbyFallback::new(4.0, 12.0));
 	}
 }
