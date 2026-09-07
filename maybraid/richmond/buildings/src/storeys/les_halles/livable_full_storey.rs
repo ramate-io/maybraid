@@ -6,8 +6,6 @@
 //! Deeper galleries come from [`LesHallesParameterized::sample_livable`]. Prefer
 //! larger footprints than commercial demos (playground default `72,4,54`).
 
-use bevy_math::bounding::Aabb2d;
-use bevy_math::Vec2;
 use lod::gen::LodSceneLevel;
 use procedural_common::NoiseParams;
 use richmond_building_components::furniture::FurnitureNode;
@@ -87,15 +85,7 @@ impl BuildingComponents for LesHallesLivableFullStorey {
 	}
 
 	fn structural_lod(&self) -> Option<BuildingStructuralLodProbe> {
-		// Whole-storey outer footprint in local space; fine-phase maps the viewer
-		// through the host GlobalTransform so gallery offsets stay independent.
-		let half = self.floor_plan.outer * 0.5;
-		let c = self.floor_plan.center_xz;
-		let storey_xz = Aabb2d {
-			min: Vec2::new(c.x - half.x, c.z - half.y),
-			max: Vec2::new(c.x + half.x, c.z + half.y),
-		};
-		Some(BuildingStructuralLodProbe::new([storey_xz]))
+		Some(self.floor_plan.structural_probe(None))
 	}
 }
 

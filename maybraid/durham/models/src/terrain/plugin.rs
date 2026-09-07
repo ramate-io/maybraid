@@ -1,14 +1,20 @@
 //! Idempotent plugin for the Durham terrain model.
 
 use crate::terrain::cell::TerrainCellLayout;
-use crate::terrain::collider::{queue_terrain_trimesh_colliders, TerrainFrictionConfig};
+use crate::terrain::collider::{
+	queue_terrain_trimesh_colliders, sync_terrain_collider_hosts, TerrainColliderEpoch,
+	TerrainColliderSystems, TerrainFrictionConfig,
+};
+use crate::terrain::host::TerrainPresentEnabled;
 use crate::terrain::index::TerrainEntryStore;
 use crate::terrain::jersey::{JerseyControllerLayouts, JerseyStampConfigs};
 use crate::terrain::marazion::{
 	bootstrap_pre_pocket_high_pass_layout, bootstrap_pre_pocket_low_pass_layout,
 	MarazionWatershedConfigs,
 };
-use crate::terrain::presentation::TerrainPresenterState;
+use crate::terrain::presentation::{
+	TerrainBackground, TerrainFar, TerrainNear, TerrainPresenterState, TerrainStreamPresenterState,
+};
 use avian3d::prelude::PhysicsPlugins;
 use avian3d::schedule::PhysicsSchedulePlugin;
 use bevy::prelude::*;
@@ -39,6 +45,7 @@ impl Plugin for TerrainResourcesPlugin {
 		let pre_pocket_low = bootstrap_pre_pocket_low_pass_layout(&marazion);
 		let pre_pocket_high = bootstrap_pre_pocket_high_pass_layout(&marazion);
 		app.init_resource::<TerrainEntryStore>()
+			.init_resource::<TerrainPresentEnabled>()
 			.init_resource::<TerrainCellLayout>()
 			.init_resource::<JerseyStampConfigs>()
 			.init_resource::<JerseyControllerLayouts>()
@@ -46,7 +53,26 @@ impl Plugin for TerrainResourcesPlugin {
 			.insert_resource(pre_pocket_low)
 			.insert_resource(pre_pocket_high)
 			.init_resource::<TerrainPresenterState>()
+			.init_resource::<TerrainStreamPresenterState<TerrainNear>>()
+			.init_resource::<TerrainStreamPresenterState<TerrainFar>>()
+			.init_resource::<TerrainStreamPresenterState<TerrainBackground>>()
 			.init_resource::<TerrainFrictionConfig>()
-			.add_systems(Update, queue_terrain_trimesh_colliders);
+			.init_resource::<TerrainColliderEpoch>()
+			.configure_sets(
+				Update,
+				(
+					TerrainColliderSystems::SyncOverlays,
+					TerrainColliderSystems::SyncHosts,
+					TerrainColliderSystems::QueueMeshes,
+				)
+					.chain(),
+			)
+			.add_systems(
+				Update,
+				(
+					sync_terrain_collider_hosts.in_set(TerrainColliderSystems::SyncHosts),
+					queue_terrain_trimesh_colliders.in_set(TerrainColliderSystems::QueueMeshes),
+				),
+			);
 	}
 }

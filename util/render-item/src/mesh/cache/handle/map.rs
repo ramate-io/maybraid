@@ -4,6 +4,7 @@ use chunk::cascade::CascadeChunk;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::hash::{Hash, Hasher};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::sync::RwLock;
 
@@ -48,14 +49,37 @@ impl<T: IdentifiedMesh> ChunkMeshKey<T> {
 	}
 }
 
-#[derive(Debug, Clone)]
+struct HandleMapInner<T: IdentifiedMesh> {
+	cache: RwLock<HashMap<ChunkMeshKey<T>, Handle<Mesh>>>,
+	generation: AtomicU64,
+}
+
+/// Shared [`Handle<Mesh>`] mailbox. [`Self::generation`] ticks on each insert so
+/// overlay waiters can skip lookups while the map is quiet.
+#[derive(Clone)]
 pub struct HandleMap<T: IdentifiedMesh> {
-	cache: Arc<RwLock<HashMap<ChunkMeshKey<T>, Handle<Mesh>>>>,
+	inner: Arc<HandleMapInner<T>>,
+}
+
+impl<T: IdentifiedMesh> std::fmt::Debug for HandleMap<T> {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_struct("HandleMap").field("generation", &self.generation()).finish()
+	}
 }
 
 impl<T: IdentifiedMesh> HandleMap<T> {
 	pub fn new() -> Self {
-		Self { cache: Arc::new(RwLock::new(HashMap::new())) }
+		Self {
+			inner: Arc::new(HandleMapInner {
+				cache: RwLock::new(HashMap::new()),
+				generation: AtomicU64::new(0),
+			}),
+		}
+	}
+
+	/// Monotonic mailbox version. Overlay fulfill uses this to skip waiter walks.
+	pub fn generation(&self) -> u64 {
+		self.inner.generation.load(Ordering::Acquire)
 	}
 
 	pub fn get(&self, chunk: &CascadeChunk, mesh_builder: &T) -> Option<Handle<Mesh>> {
@@ -64,14 +88,15 @@ impl<T: IdentifiedMesh> HandleMap<T> {
 
 	/// Look up a mesh whose identity has already been computed by the caller.
 	pub fn get_by_id(&self, chunk: &CascadeChunk, mesh_id: MeshId) -> Option<Handle<Mesh>> {
-		let cache = self.cache.read().unwrap();
+		let cache = self.inner.cache.read().unwrap();
 		cache.get(&ChunkMeshKey::new(chunk.clone(), mesh_id)).cloned()
 	}
 
 	pub fn insert(&self, chunk: &CascadeChunk, mesh_builder: &T, mesh: Handle<Mesh>) {
-		let mut cache = self.cache.write().unwrap();
+		let mut cache = self.inner.cache.write().unwrap();
 		let key = ChunkMeshKey::new(chunk.clone(), mesh_builder.id());
 		cache.insert(key, mesh);
+		self.inner.generation.fetch_add(1, Ordering::Release);
 	}
 }
 

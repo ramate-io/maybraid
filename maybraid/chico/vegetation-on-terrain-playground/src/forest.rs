@@ -12,7 +12,7 @@ use lod::lod_ref::LodRef;
 use lod::presentation::RegionPresenter;
 
 use crate::camera::CameraController;
-use crate::groves::DurhamGroveSample;
+use crate::groves::{DurhamGroveSample, OwnedDurhamTerrain};
 use crate::{PlaygroundConfig, WorldBaseTerrain};
 use durham_terrain_models::{TerrainCellLayout, TerrainEntryStore};
 
@@ -34,9 +34,13 @@ impl RegionPresenter<ChicoGrove, ForestIndex> for DurhamForestPresenter<'_, '_> 
 	}
 
 	fn handle(&mut self, id: Id, version: Version, grove: &ChicoGrove, lod_ref: &LodRef) {
-		let world = DurhamGroveSample::new(&self.store, &self.layout, &self.base.0);
+		let world = DurhamGroveSample::from_terrain(OwnedDurhamTerrain::from_store(
+			&self.store,
+			&self.layout,
+			&self.base.0,
+		));
 		self.state
-			.present_with_world(&mut self.commands, id, version, grove, lod_ref, &world);
+			.present_with_world(&mut self.commands, id, version, grove, lod_ref, world);
 	}
 
 	fn hide(&mut self, id: Id) {

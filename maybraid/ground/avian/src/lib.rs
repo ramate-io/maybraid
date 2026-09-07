@@ -49,9 +49,7 @@ impl ElevationProbe for AvianElevationProbe<'_, '_> {
 		let mut best: Option<GroundHit> = None;
 		for _ in 0..MAX_COLUMN_HITS {
 			let filter = fixed_filter(skipped.iter().copied());
-			let Some(hit) = self
-				.spatial
-				.cast_ray(origin, Dir3::NEG_Y, max_distance, true, &filter)
+			let Some(hit) = self.spatial.cast_ray(origin, Dir3::NEG_Y, max_distance, true, &filter)
 			else {
 				break;
 			};
@@ -84,10 +82,7 @@ mod tests {
 
 	#[test]
 	fn column_keeps_the_lowest_hit_past_canopy() {
-		assert_eq!(
-			select_column_distance(&[0.4, 2.8, 9.1], MIN_GROUND_DROP),
-			Some(9.1)
-		);
+		assert_eq!(select_column_distance(&[0.4, 2.8, 9.1], MIN_GROUND_DROP), Some(9.1));
 	}
 
 	#[test]

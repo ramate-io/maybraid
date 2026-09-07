@@ -19,8 +19,8 @@ use player::{
 };
 use std::f32::consts::PI;
 
-use crate::WorldBaseTerrain;
 use crate::camera::CameraController;
+use crate::WorldBaseTerrain;
 
 pub(crate) const CAPSULE_RADIUS: f32 = 0.4;
 pub(crate) const CAPSULE_LENGTH: f32 = 1.0;
@@ -261,9 +261,10 @@ pub(crate) fn terrain_collider_ready(
 	children: &Query<&Children>,
 	colliders: &Query<(), With<Collider>>,
 ) -> bool {
-	roots
-		.iter()
-		.any(|root| children.iter_descendants(root).any(|child| colliders.contains(child)))
+	roots.iter().any(|root| {
+		colliders.contains(root)
+			|| children.iter_descendants(root).any(|child| colliders.contains(child))
+	})
 }
 
 /// Reposition the player after terrain layout regeneration.
@@ -419,12 +420,8 @@ fn apply_wish_movement(
 		}
 		let contact = walkable_contact_normal(hits, max_slope.map(|angle| angle.0));
 		let airborne = jumping.is_some_and(Jumping::airborne);
-		let ground = ground_plane_for_wish(
-			contact,
-			walkable.map(|plane| plane.normal),
-			grounded,
-			airborne,
-		);
+		let ground =
+			ground_plane_for_wish(contact, walkable.map(|plane| plane.normal), grounded, airborne);
 		accelerate_wish(&mut velocity, wish.0, accel.0, dt, ground);
 	}
 }

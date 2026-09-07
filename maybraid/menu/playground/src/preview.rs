@@ -17,9 +17,9 @@ use crozon_character_ui_menus::{
 	MenuEvent, BODY_FOCUS,
 };
 use crozon_characters::{
-	add_character_components_host, character_bounds, AnimRef, AnimRefRoot, BoneMap,
-	CharacterComponents, CharacterHostSystems, CharacterMembers, CharacterRecipe, CharacterRig,
-	CharacterRigRole, ClothingLayer, ComponentsOnly, Layers, MaterialRef, PartNode,
+	add_character_components_host, character_bounds, AnimRef, AnimRefRoot, ApplyTerrainPitch,
+	BoneMap, CharacterComponents, CharacterHostSystems, CharacterMembers, CharacterRecipe,
+	CharacterRig, CharacterRigRole, ClothingLayer, ComponentsOnly, Layers, MaterialRef, PartNode,
 };
 use firearms_components::assets::guns;
 use firearms_components::{
@@ -465,7 +465,10 @@ where
 			},
 		))
 		.id();
-	commands.entity(entity).insert(CharacterPreviewRoot);
+	commands
+		.entity(entity)
+		.insert(CharacterPreviewRoot)
+		.remove::<ApplyTerrainPitch>();
 }
 
 fn stamp_preview_animation(

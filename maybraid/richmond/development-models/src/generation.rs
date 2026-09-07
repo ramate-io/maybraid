@@ -2,7 +2,7 @@
 
 use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec3;
-use durham_terrain_models::origin_cell_ids_for_layout;
+use durham_terrain_models::{origin_cell_ids_for_layout, TerrainCellLayout, TerrainEntryStore};
 use lod::gen::{GeneratingSpatialIndex, GenerationScheme, Id, OriginalId, SpatialIndex};
 use lod::lod_ref::LodRef;
 use procedural_common::NoiseParams;
@@ -110,14 +110,16 @@ fn build_development_for_kind(
 		(cell.min.z + cell.max.z) * 0.5,
 	);
 
+	if kind != DevelopmentKind::Empty {
+		// GET miss: Terrain is NotTracked. Do not insert Empty — that is an
+		// authored outcome, not a deferred generate.
+		site_height(spatial_index.terrain_store(), &layout, center.x, center.z)?;
+	}
+
 	let development = match kind {
 		DevelopmentKind::Empty => DevelopmentCell::empty(cell),
 		DevelopmentKind::LesHalles => {
-			let Some(height) =
-				composed_height_at(spatial_index.terrain_store(), &layout, center.x, center.z)
-			else {
-				return Some((DevelopmentCell::empty(cell), cell));
-			};
+			let height = site_height(spatial_index.terrain_store(), &layout, center.x, center.z)?;
 			let filled = DevelopmentCell::with_les_halles(cell, height, &config);
 			let overlaps_hydro = filled.pad_complex().is_some_and(|pad| {
 				terrain_hydro_overlaps(spatial_index.terrain_store(), &layout, cell, pad.bounds)
@@ -156,11 +158,7 @@ fn build_development_for_kind(
 			}
 		}
 		DevelopmentKind::RingFort => {
-			let Some(height) =
-				composed_height_at(spatial_index.terrain_store(), &layout, center.x, center.z)
-			else {
-				return Some((DevelopmentCell::empty(cell), cell));
-			};
+			let height = site_height(spatial_index.terrain_store(), &layout, center.x, center.z)?;
 			let filled = DevelopmentCell::with_ring_fort(cell, height, &config);
 			let overlaps_hydro = filled.pad_complex().is_some_and(|pad| {
 				terrain_hydro_overlaps(spatial_index.terrain_store(), &layout, cell, pad.bounds)
@@ -176,11 +174,7 @@ fn build_development_for_kind(
 		| DevelopmentKind::SuburbanHomes
 		| DevelopmentKind::WizardsTower
 		| DevelopmentKind::SkybridgeBazaar) => {
-			let Some(height) =
-				composed_height_at(spatial_index.terrain_store(), &layout, center.x, center.z)
-			else {
-				return Some((DevelopmentCell::empty(cell), cell));
-			};
+			let height = site_height(spatial_index.terrain_store(), &layout, center.x, center.z)?;
 			let filled = DevelopmentCell::with_archetype(cell, height, kind, &config);
 			let overlaps_hydro = filled.pad_complex().is_some_and(|pad| {
 				terrain_hydro_overlaps(spatial_index.terrain_store(), &layout, cell, pad.bounds)
@@ -193,6 +187,15 @@ fn build_development_for_kind(
 		}
 	};
 	Some((development, cell))
+}
+
+fn site_height(
+	store: &TerrainEntryStore,
+	layout: &TerrainCellLayout,
+	x: f32,
+	z: f32,
+) -> Option<f32> {
+	composed_height_at(store, layout, x, z)
 }
 
 impl<'w> GenerationScheme<DevelopmentIndex<'w>> for TerrainWithPads {
@@ -404,5 +407,17 @@ impl<'w> GenerationScheme<DevelopmentIndex<'w>> for BuiltDevelopment {
 	}
 
 	fn descendants_with_lod(_id: Id, _spatial_index: &mut DevelopmentIndex<'w>, _lod_ref: &LodRef) {
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn missing_terrain_is_not_an_authored_empty_cell() {
+		let store = TerrainEntryStore::default();
+		let layout = TerrainCellLayout::default();
+		assert!(site_height(&store, &layout, 0.0, 0.0).is_none());
 	}
 }

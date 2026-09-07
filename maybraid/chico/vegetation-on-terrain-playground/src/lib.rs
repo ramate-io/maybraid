@@ -18,8 +18,10 @@ pub mod player;
 mod ui;
 
 pub use bump_out::{
-	bump_out_from_cell, bump_out_noise, fine_terrain_for, register_bump_out_lod, terrain_chunk_ref,
-	CanopyBumpOutPresenterState, DurhamCanopyBumpOutPresenter, WorldTerrainBuilder,
+	bump_out_from_cell, bump_out_noise, fine_terrain_for, medium_terrain_for,
+	register_bump_out_lod, terrain_chunk_ref, CanopyBumpOutPresenterState,
+	DurhamCanopyBumpOutPresenter, DurhamMediumCanopyBumpOutPresenter,
+	MediumCanopyBumpOutPresenterState, WorldTerrainBuilder,
 };
 pub use camera::CameraController;
 pub use character::{
@@ -31,12 +33,12 @@ pub use diagnostics::{PlaygroundDiag, PlaygroundTimingPlugin, RequestFpsToggle};
 pub use durham_terrain_models::{TerrainCoverage, WorldBaseTerrain, WORLD_FINE_HALF_EXTENT_CELLS};
 pub use forest::DurhamForestPresenter;
 pub use game_commands::command::PendingStartupCommand;
-pub use groves::{DurhamGroveSample, StoredDurhamTerrain};
+pub use groves::{DurhamGroveSample, OwnedDurhamTerrain, StoredDurhamTerrain};
 pub use material_lib::{VegetationOnTerrainMaterialLib, VegetationOnTerrainMaterialRefPlugin};
 pub use player::{
 	player_position_above_surface, spawn_player_body, CharacterCameraFollowEnabled,
 	CharacterLocomotion, Jumping, MoveWish, MovementAction, PadMovementEnabled, Player,
-	PlayerCapsule, PlayerControlSystems, PlayerPlugin, PlaygroundMode,
+	PlayerCapsule, PlayerControlSystems, PlayerPhysicsEnabled, PlayerPlugin, PlaygroundMode,
 };
 
 use avian3d::prelude::LinearVelocity;
@@ -59,8 +61,9 @@ use commands::{
 };
 use crozon_characters::{CharacterHostsPlugin, CharacterMotionSystems};
 use durham_terrain_models::{
-	Durham, TerrainCellLayout, TerrainEntryStore, TerrainMeshLodBand, TerrainPlugin,
-	TerrainPresentPending, TerrainPresentationAssets, TerrainPresentationDirty, TERRAIN_CELL_SIZE,
+	terrain_streaming_enabled, Durham, TerrainCellLayout, TerrainEntryStore, TerrainMeshLodBand,
+	TerrainPlugin, TerrainPresentPending, TerrainPresentationAssets, TerrainPresentationDirty,
+	TerrainStreamingEnabled, TERRAIN_CELL_SIZE,
 };
 use forest::stream_durham_forest;
 use game_commands::command::{
@@ -244,28 +247,33 @@ impl Plugin for VegetationOnTerrainPlugin {
 			register_forest_lod::<DurhamForestPresenter>(app);
 		}
 		if self.register_bump_out_lod {
-			register_bump_out_lod::<DurhamCanopyBumpOutPresenter>(app);
+			register_bump_out_lod::<DurhamCanopyBumpOutPresenter, DurhamMediumCanopyBumpOutPresenter>(
+				app,
+			);
 		}
 		if !app.is_plugin_added::<VegetationHostPlugin>() {
 			app.add_plugins(VegetationHostPlugin { register_camera: self.register_camera });
 		}
 		app.insert_resource(playground.clone())
 			.insert_resource(GrovesDirty(true))
+			.init_resource::<TerrainStreamingEnabled>()
 			.add_systems(PostUpdate, apply_mesh_stats.after(VisibilitySystems::CheckVisibility));
 		if self.commands {
 			app.add_systems(
 				Update,
 				(
 					apply_commands.after(capture_command_line_input::<PlaygroundCommand>),
-					spawn_groves.after(apply_commands),
+					spawn_groves.after(apply_commands).run_if(terrain_streaming_enabled),
 					stream_durham_forest
 						.after(apply_commands)
 						.before(LodGenerateSystems::Produce)
-						.before(LodPresentSystems::Produce),
+						.before(LodPresentSystems::Produce)
+						.run_if(terrain_streaming_enabled),
 					stream_canopy_bump_outs
 						.after(stream_durham_forest)
 						.before(LodGenerateSystems::Produce)
-						.before(LodPresentSystems::Produce),
+						.before(LodPresentSystems::Produce)
+						.run_if(terrain_streaming_enabled),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 				),
 			);
@@ -273,14 +281,16 @@ impl Plugin for VegetationOnTerrainPlugin {
 			app.add_systems(
 				Update,
 				(
-					spawn_groves,
+					spawn_groves.run_if(terrain_streaming_enabled),
 					stream_durham_forest
 						.before(LodGenerateSystems::Produce)
-						.before(LodPresentSystems::Produce),
+						.before(LodPresentSystems::Produce)
+						.run_if(terrain_streaming_enabled),
 					stream_canopy_bump_outs
 						.after(stream_durham_forest)
 						.before(LodGenerateSystems::Produce)
-						.before(LodPresentSystems::Produce),
+						.before(LodPresentSystems::Produce)
+						.run_if(terrain_streaming_enabled),
 				),
 			);
 		}
@@ -491,13 +501,13 @@ fn spawn_groves(
 	}
 
 	if config.forest.is_some() {
-		info!("forest stream on; tiled groves cleared");
+		debug!("forest stream on; tiled groves cleared");
 		dirty.0 = false;
 		return;
 	}
 
 	let n = spawn_tiled_groves(&mut commands, &config, &store, &layout, &base.0);
-	info!(
+	debug!(
 		"spawned {} grove hosts ({} {}m tiles, r={})",
 		n,
 		config.grove.label(),
@@ -557,6 +567,7 @@ mod tests {
 		let pose = Vec3::new(1_000.0, 16.0, 0.0);
 		let mut app = App::new();
 		app.insert_resource(PlaygroundMode::Character)
+			.insert_resource(PlayerPhysicsEnabled::default())
 			.insert_resource(TerrainCellLayout::default())
 			.insert_resource(TerrainEntryStore::default())
 			.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(
@@ -626,6 +637,7 @@ mod tests {
 	fn mode_world(mode: PlaygroundMode, translation: Vec3) -> (World, Entity) {
 		let mut world = World::new();
 		world.insert_resource(mode);
+		world.insert_resource(PlayerPhysicsEnabled::default());
 		world.insert_resource(TerrainCellLayout::default());
 		world.insert_resource(TerrainEntryStore::default());
 		world.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(&TerrainConfig::new(

@@ -19,8 +19,10 @@ mod poi;
 mod ui;
 mod weapon;
 
+pub use chico_vegetation_on_terrain_playground::PlayerPhysicsEnabled;
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
-pub use control::WorldGameplayEnabled;
+pub use control::{WorldGameplayEnabled, WorldSceneryVisible, WorldSurfaceReady};
+pub use durham_terrain_models::{terrain_streaming_enabled, TerrainStreamingEnabled};
 pub use ui::WorldMobHudEnabled;
 pub use game_commands::command::PendingStartupCommand;
 pub use intelligence::WorldIntelligencePlugin;
@@ -76,24 +78,26 @@ const WORLD_TERRAIN_PITCH_GIZMOS: DrawTerrainPitchProbes = DrawTerrainPitchProbe
 /// Assembled world: Durham terrain, streamed forest, urbanization, sky dome, character.
 ///
 /// Playground chrome (command drawer and FPS HUD) is on by default.
-/// The game executable uses [`WorldPlugin::game`].
+/// The game executable uses [`WorldPlugin::game`] (FPS log, no HUD or console).
 pub struct WorldPlugin {
-	/// `/` console and FPS HUD.
+	/// `/` console, debug gizmos, and FPS HUD.
 	pub debug_chrome: bool,
+	/// Throttled `[veg.timing]` FPS log ([`PlaygroundTimingPlugin`]).
+	pub fps_diag: bool,
 	/// Upper-left virtual-pad / command-intent dump.
 	pub input_debug_enabled: bool,
 }
 
 impl Default for WorldPlugin {
 	fn default() -> Self {
-		Self { debug_chrome: true, input_debug_enabled: false }
+		Self { debug_chrome: true, fps_diag: true, input_debug_enabled: false }
 	}
 }
 
 impl WorldPlugin {
-	/// World systems without playground overlays.
+	/// World systems without playground overlays. FPS log stays on.
 	pub fn game() -> Self {
-		Self { debug_chrome: false, input_debug_enabled: false }
+		Self { debug_chrome: false, fps_diag: true, input_debug_enabled: false }
 	}
 }
 
@@ -105,7 +109,10 @@ impl Plugin for WorldPlugin {
 			);
 		}
 		app.insert_resource(PlaygroundMode::Character)
-			.insert_resource(PlaygroundDiag { fps: self.debug_chrome })
+			.insert_resource(PlaygroundDiag {
+				fps: self.fps_diag || self.debug_chrome,
+				hud: self.debug_chrome,
+			})
 			.insert_resource(CharacterLocomotion { max_slope_angle: WORLD_MAX_SLOPE_ANGLE })
 			.insert_resource(player::CharacterLocomotion { max_slope_angle: WORLD_MAX_SLOPE_ANGLE })
 			.insert_resource(TerrainFrictionConfig(WORLD_TERRAIN_FRICTION))
@@ -152,6 +159,8 @@ impl Plugin for WorldPlugin {
 			.insert_resource(PadMovementEnabled(false))
 			.insert_resource(CharacterCameraFollowEnabled(false))
 			.init_resource::<WorldGameplayEnabled>()
+			.init_resource::<WorldSurfaceReady>()
+			.init_resource::<WorldSceneryVisible>()
 			.insert_resource(WorldMobHudEnabled::from_debug_chrome(self.debug_chrome))
 			.insert_resource(Bullseye { inner: 50.0, outer: WORLD_BULLSEYE_OUTER_M })
 			.insert_resource(OpenLattice {
@@ -160,8 +169,11 @@ impl Plugin for WorldPlugin {
 				tile_size: 500.0,
 			})
 			.add_plugins(SkyDomePlugin::default());
+		if self.fps_diag || self.debug_chrome {
+			app.add_plugins(PlaygroundTimingPlugin);
+		}
 		if self.debug_chrome {
-			app.add_plugins(PlaygroundTimingPlugin).add_plugins(
+			app.add_plugins(
 				GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config())
 					.with_drawer_config(GameCommandDrawerConfig {
 						open_at_start: false,
@@ -174,9 +186,13 @@ impl Plugin for WorldPlugin {
 		}
 		app.add_systems(PostStartup, spawn_default_braidman).add_systems(
 			Update,
-			control::apply_intents_to_movement
-				.after(CharacterControlSystems)
-				.before(PlayerControlSystems),
+			(
+				control::update_world_surface_ready,
+				control::sync_world_scenery,
+				control::apply_intents_to_movement
+					.after(CharacterControlSystems)
+					.before(PlayerControlSystems),
+			),
 		);
 		camera::configure(app);
 		weapon::configure(app);
@@ -242,6 +258,13 @@ mod tests {
 	fn world_input_debug_overlay_is_opt_in() {
 		assert!(!WorldPlugin::default().input_debug_enabled);
 		assert!(!WorldPlugin::game().input_debug_enabled);
+	}
+
+	#[test]
+	fn game_world_keeps_fps_log_without_hud() {
+		let game = WorldPlugin::game();
+		assert!(game.fps_diag);
+		assert!(!game.debug_chrome);
 	}
 
 	#[test]

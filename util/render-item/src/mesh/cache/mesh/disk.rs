@@ -107,21 +107,52 @@ impl<T: Clone + IdentifiedMesh> DiskMeshCache<T> {
 	pub fn save_mesh(&self, identified_mesh: &T, mesh: &Mesh, cascade_chunk: &CascadeChunk) {
 		let cache_path = self.path_for_cascade_chunk_mesh(identified_mesh, cascade_chunk);
 		let mesh = mesh.clone();
+		let cache_dir = self.cache_dir.clone();
+		let max_cached_meshes = self.max_cached_meshes;
+		let type_name = std::any::type_name::<T>();
 
 		// Serialization, compression, and filesystem writes can be several
 		// milliseconds for terrain meshes. Keep them off the Update schedule.
 		if let Some(pool) = bevy::tasks::IoTaskPool::try_get() {
 			pool.spawn(async move {
-				Self::write_mesh(cache_path, mesh);
+				Self::write_mesh(cache_path, mesh, cache_dir, max_cached_meshes, type_name);
 			})
 			.detach();
 		} else {
-			// Unit tests and other App-less callers do not initialize Bevy's pools.
-			Self::write_mesh(cache_path, mesh);
+			Self::write_mesh(
+				cache_path,
+				mesh,
+				self.cache_dir.clone(),
+				self.max_cached_meshes,
+				type_name,
+			);
 		}
 	}
 
-	fn write_mesh(cache_path: PathBuf, mesh: Mesh) {
+	/// Save inline on an I/O worker. Callers own the concurrency bound.
+	pub(crate) fn save_mesh_blocking(
+		&self,
+		identified_mesh: &T,
+		mesh: &Mesh,
+		cascade_chunk: &CascadeChunk,
+	) {
+		let cache_path = self.path_for_cascade_chunk_mesh(identified_mesh, cascade_chunk);
+		Self::write_mesh(
+			cache_path,
+			mesh.clone(),
+			self.cache_dir.clone(),
+			self.max_cached_meshes,
+			std::any::type_name::<T>(),
+		);
+	}
+
+	fn write_mesh(
+		cache_path: PathBuf,
+		mesh: Mesh,
+		cache_dir: PathBuf,
+		max_cached_meshes: usize,
+		type_name: &'static str,
+	) {
 		if let Some(parent) = cache_path.parent() {
 			if let Err(err) = fs::create_dir_all(parent) {
 				log::warn!("Failed to create mesh cache directory {:?}: {}", parent, err);
@@ -140,7 +171,9 @@ impl<T: Clone + IdentifiedMesh> DiskMeshCache<T> {
 
 		if let Err(err) = fs::write(&cache_path, compressed) {
 			log::warn!("Failed to write mesh cache {:?}: {}", cache_path, err);
+			return;
 		}
+		Self::evict_oldest_in(cache_dir, max_cached_meshes, type_name);
 	}
 
 	pub fn load_mesh(&self, identified_mesh: &T, cascade_chunk: &CascadeChunk) -> Option<Mesh> {
@@ -157,7 +190,15 @@ impl<T: Clone + IdentifiedMesh> DiskMeshCache<T> {
 	}
 
 	pub fn evict_oldest_cached_meshes(&self) {
-		let cache_root = self.cache_dir.join(std::any::type_name::<T>());
+		Self::evict_oldest_in(
+			self.cache_dir.clone(),
+			self.max_cached_meshes,
+			std::any::type_name::<T>(),
+		);
+	}
+
+	fn evict_oldest_in(cache_dir: PathBuf, max_cached_meshes: usize, type_name: &'static str) {
+		let cache_root = cache_dir.join(env!("CARGO_PKG_VERSION")).join(type_name);
 		let entries = match fs::read_dir(&cache_root) {
 			Ok(e) => e,
 			Err(_) => return,
@@ -172,14 +213,14 @@ impl<T: Clone + IdentifiedMesh> DiskMeshCache<T> {
 			})
 			.collect();
 
-		if files.len() <= self.max_cached_meshes {
+		if files.len() <= max_cached_meshes {
 			return;
 		}
 
 		// Oldest first
 		files.sort_by_key(|(_, time)| *time);
 
-		let to_remove = files.len().saturating_sub(self.max_cached_meshes);
+		let to_remove = files.len().saturating_sub(max_cached_meshes);
 		for (path, _) in files.into_iter().take(to_remove) {
 			let _ = fs::remove_file(&path);
 		}

@@ -18,7 +18,9 @@ use richmond_building_components::panels::{PanelNode, PanelStyle};
 use richmond_building_components::partitions::{PartitionNode, PartitionStyle};
 use richmond_building_components::roofs::RoofNode;
 use richmond_building_components::stairs::StairNode;
-use richmond_building_components::{BuildingComponents, BuildingStructuralLodProbe, Layers};
+use richmond_building_components::{
+	BuildingComponents, BuildingStructuralLodProbe, Layers, MassingVolume,
+};
 
 use crate::connecting::{ConnectingStairwell, StairwellKind, WellAabb, WellSide};
 use crate::fit::{aabb_xz_extent, Confines, FillableRegions, Fit, FitError};
@@ -421,10 +423,40 @@ impl BuildingComponents for SingleHighrise {
 	}
 
 	fn structural_lod(&self) -> Option<BuildingStructuralLodProbe> {
-		Some(BuildingStructuralLodProbe::from_aabb3d_xz(
-			Vec3::from(self.bounds.min),
-			Vec3::from(self.bounds.max),
-		))
+		let y0 = self.bounds.min.y;
+		let height = (self.bounds.max.y - self.bounds.min.y).max(1.0);
+		let wall = self.wall_material.clone();
+		if let SingleHighriseFloorPlan::IFrame { .. } = &self.tower.floor_plan {
+			if let Some(SingleHighriseStorey::IFrame(storey)) = self.tower.storeys.first() {
+				let volumes: Vec<_> = storey
+					.floor_plan
+					.primary_rects
+					.iter()
+					.map(|rect| {
+						MassingVolume::cuboid(rect.to_aabb2(), y0, height)
+							.with_material_opt(wall.clone())
+					})
+					.collect();
+				if !volumes.is_empty() {
+					return Some(BuildingStructuralLodProbe::from_volumes(volumes));
+				}
+			}
+		}
+		let volume = match &self.tower.floor_plan {
+			SingleHighriseFloorPlan::Circular { center_xz, radius, .. } => {
+				MassingVolume::cylinder(*center_xz, *radius, y0, height)
+			}
+			SingleHighriseFloorPlan::Rectangular { center_xz, footprint }
+			| SingleHighriseFloorPlan::IFrame { center_xz, footprint, .. } => {
+				let half = *footprint * 0.5;
+				MassingVolume::cuboid(
+					Aabb2d { min: *center_xz - half, max: *center_xz + half },
+					y0,
+					height,
+				)
+			}
+		};
+		Some(BuildingStructuralLodProbe::from_volumes([volume.with_material_opt(wall)]))
 	}
 }
 

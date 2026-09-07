@@ -49,7 +49,7 @@ pub enum Mode {
 pub enum Stats {
 	/// Mesh triangle counts plus foliage / stick / structural LOD probe hosts.
 	Mesh,
-	/// Toggle the FPS HUD and `[veg.timing]` log.
+	/// Toggle the `[veg.timing]` FPS log (and HUD when debug chrome is on).
 	Fps,
 }
 

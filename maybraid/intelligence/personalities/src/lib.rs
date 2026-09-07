@@ -19,7 +19,7 @@ use hiding_intelligence::{HidingPlugin, HidingSystems};
 use maybraid_character_controller::CharacterControllerPlugin;
 use meandering_intelligence::MeanderingIntelligencePlugin;
 use mob_intelligence::{MemberOf, Mob, MobIdAlloc, MobIntelligencePlugin};
-use mobs::{PublicPresence, clamp_to_pad, spawn_mobs, spawn_needed_members, spawn_presence};
+use mobs::{clamp_to_pad, spawn_mobs, spawn_needed_members, spawn_presence, PublicPresence};
 use movement_intelligence::{
 	CandidateBudget, MovementIntelligenceLimits, MovementIntelligencePlugin,
 };
@@ -28,7 +28,7 @@ use movement_realization::MovementRealizationPlugin;
 use npc_intelligence::NpcIntelligencePlugin;
 use player::{LocomotionCapsule, Npc, PlayerPlugin};
 use poi_intelligence::{PoiIntelligencePlugin, PoiSystems};
-use scene::{PAD_EXTENT, setup_cover, setup_ground, setup_lighting, setup_pois};
+use scene::{setup_cover, setup_ground, setup_lighting, setup_pois, PAD_EXTENT};
 use spotting_intelligence::SpottingSystems;
 use tether_intelligence::TetherPlugin;
 use threat_intelligence::ThreatIntelligencePlugin;
@@ -37,7 +37,7 @@ use threat_management_intelligence::{
 };
 
 pub use camera::CameraController;
-pub use mobs::{MobKind, MobRecipe, member_count, recipes};
+pub use mobs::{member_count, recipes, MobKind, MobRecipe};
 pub use scene::{HIGH_RING, PAD_SIDE, SPOTTING_RING};
 
 #[derive(Component)]

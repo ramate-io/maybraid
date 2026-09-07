@@ -2,14 +2,15 @@
 
 use crate::terrain::cell::{universal_bounds, TerrainCellLayout};
 use crate::terrain::index::TerrainEntryStore;
+use crate::terrain::stream_lod::stream_banded_draws;
 use crate::water::Water;
 use bevy::ecs::system::SystemParam;
 use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::prelude::*;
 use durham_terrain::shaders::RefractionWater;
 use lod::gen::{
-	GenerationScheme, Id, LodScene, OriginalId, RegionPresenter, SpatialIndex, StorageStatus,
-	TrackedId, Version,
+	GenerationScheme, Id, LodScene, LodSceneLevel, OriginalId, RegionPresenter, SpatialIndex,
+	StorageStatus, TrackedId, Version,
 };
 use lod::lod_ref::LodRef;
 use std::collections::{HashMap, HashSet};
@@ -58,6 +59,7 @@ pub struct WaterPresenterState {
 struct PresentedEntry {
 	version: Version,
 	entity: Entity,
+	level: LodSceneLevel,
 }
 
 /// Marks a spawned water scene root as belonging to a presented id.
@@ -131,6 +133,62 @@ impl<'w, 's> WaterRegionPresenter<'w, 's> {
 	pub fn clear_presented(&mut self) {
 		self.state.clear(&mut self.commands);
 	}
+
+	/// Present keep-region water. Banding matches the sibling terrain ring.
+	pub fn present_banded(&mut self, view: &WaterStoreView<'_>, region: Aabb3d, lod_ref: &LodRef) {
+		let wanted: HashSet<Id> = SpatialIndex::<Water>::tracked_ids_for(view, region)
+			.into_iter()
+			.filter_map(|TrackedId(id)| {
+				let value = SpatialIndex::<Water>::get(view, id)?;
+				let level = value.scene_lod_level(lod_ref);
+				stream_banded_draws(value, level).then_some(id)
+			})
+			.collect();
+
+		for id in &wanted {
+			let Some(value) = SpatialIndex::<Water>::get(view, *id) else {
+				continue;
+			};
+			let Some(version) = SpatialIndex::<Water>::version(view, *id) else {
+				continue;
+			};
+			let level = value.scene_lod_level(lod_ref);
+			if self
+				.state
+				.presented
+				.get(id)
+				.is_some_and(|shown| shown.version == version && shown.level == level)
+			{
+				continue;
+			}
+			if let Some(previous) = self.state.presented.remove(id) {
+				self.commands.entity(previous.entity).despawn();
+			}
+			let entity = self
+				.commands
+				.spawn_scene(value.scene_with_lod(lod_ref))
+				.insert(PresentedWaterScene(*id))
+				.id();
+			self.state.presented.insert(*id, PresentedEntry { version, entity, level });
+		}
+
+		self.remove_stale(&wanted);
+	}
+
+	pub fn remove_stale(&mut self, wanted: &HashSet<Id>) {
+		let stale: Vec<(Id, Entity)> = self
+			.state
+			.presented
+			.iter()
+			.filter(|(id, _)| !wanted.contains(id))
+			.map(|(id, entry)| (*id, entry.entity))
+			.collect();
+
+		for (id, entity) in stale {
+			self.commands.entity(entity).despawn();
+			self.state.presented.remove(&id);
+		}
+	}
 }
 
 impl<'a, 'w, 's> RegionPresenter<Water, WaterStoreView<'a>> for WaterRegionPresenter<'w, 's> {
@@ -147,7 +205,9 @@ impl<'a, 'w, 's> RegionPresenter<Water, WaterStoreView<'a>> for WaterRegionPrese
 			.spawn_scene(value.scene_with_lod(lod_ref))
 			.insert(PresentedWaterScene(id))
 			.id();
-		self.state.presented.insert(id, PresentedEntry { version, entity });
+		self.state
+			.presented
+			.insert(id, PresentedEntry { version, entity, level: value.scene_lod_level(lod_ref) });
 	}
 
 	fn presented_ids(&self) -> Vec<Id> {
@@ -155,17 +215,6 @@ impl<'a, 'w, 's> RegionPresenter<Water, WaterStoreView<'a>> for WaterRegionPrese
 	}
 
 	fn remove_stale(&mut self, wanted: &HashSet<Id>) {
-		let stale: Vec<(Id, Entity)> = self
-			.state
-			.presented
-			.iter()
-			.filter(|(id, _)| !wanted.contains(id))
-			.map(|(id, entry)| (*id, entry.entity))
-			.collect();
-
-		for (id, entity) in stale {
-			self.commands.entity(entity).despawn();
-			self.state.presented.remove(&id);
-		}
+		WaterRegionPresenter::remove_stale(self, wanted);
 	}
 }

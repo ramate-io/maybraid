@@ -268,9 +268,10 @@ pub(crate) fn terrain_collider_ready(
 	children: &Query<&Children>,
 	colliders: &Query<(), With<Collider>>,
 ) -> bool {
-	roots
-		.iter()
-		.any(|root| children.iter_descendants(root).any(|child| colliders.contains(child)))
+	roots.iter().any(|root| {
+		colliders.contains(root)
+			|| children.iter_descendants(root).any(|child| colliders.contains(child))
+	})
 }
 
 /// Reposition the player after terrain layout regeneration.
