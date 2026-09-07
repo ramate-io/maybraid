@@ -567,6 +567,7 @@ mod tests {
 		let pose = Vec3::new(1_000.0, 16.0, 0.0);
 		let mut app = App::new();
 		app.insert_resource(PlaygroundMode::Character)
+			.insert_resource(PlayerPhysicsEnabled::default())
 			.insert_resource(TerrainCellLayout::default())
 			.insert_resource(TerrainEntryStore::default())
 			.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(
@@ -636,6 +637,7 @@ mod tests {
 	fn mode_world(mode: PlaygroundMode, translation: Vec3) -> (World, Entity) {
 		let mut world = World::new();
 		world.insert_resource(mode);
+		world.insert_resource(PlayerPhysicsEnabled::default());
 		world.insert_resource(TerrainCellLayout::default());
 		world.insert_resource(TerrainEntryStore::default());
 		world.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(&TerrainConfig::new(
