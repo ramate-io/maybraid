@@ -5,7 +5,10 @@ use bevy::prelude::*;
 use gimme_core::{BaseScale, HashMapStore, Level, SpatialId, SpatialIndexError, TypedIndex};
 
 use crate::hash::unit_f32;
-use crate::{Poi, PoiId, PoiInterests, PoiKind, PoiObservation, PoiSource, MAX_POI_ARRIVAL_RADIUS};
+use crate::{
+	NearbyChoice, NearbyQuery, Poi, PoiId, PoiInterests, PoiKind, PoiObservation, PoiSource,
+	MAX_POI_ARRIVAL_RADIUS,
+};
 
 const LOCAL_BASE_SCALE: f64 = 64.0;
 const MAX_LOCAL_QUERY_RADIUS: f32 = 1_000.0;
@@ -167,10 +170,7 @@ impl PoiRegistry {
 			.collect()
 	}
 
-	/// Deterministically choose a weighted local/global POI near `center`.
-	///
-	/// Interest, salience, and proximity all contribute. `previous` is excluded
-	/// when another candidate exists so repeated placements circulate.
+	/// Weighted nearby choice with no inner hole. See [`Self::choose_in`].
 	pub fn choose_nearby(
 		&self,
 		center: Vec3,
@@ -179,10 +179,28 @@ impl PoiRegistry {
 		previous: Option<PoiId>,
 		seed: u64,
 	) -> Option<PoiRecord> {
-		if interests.is_empty() || !center.is_finite() || !radius.is_finite() {
+		self.choose_in(center, NearbyQuery::weighted(radius), interests, previous, seed)
+	}
+
+	/// Choose a local/global POI inside [`NearbyQuery`].
+	///
+	/// Candidates closer than `min_radius` on XZ are dropped. `previous` is
+	/// excluded when another candidate exists. [`NearbyChoice::Weighted`] uses
+	/// interest, salience, and proximity; [`NearbyChoice::Nearest`] takes the
+	/// closest remaining XZ pose.
+	pub fn choose_in(
+		&self,
+		center: Vec3,
+		query: NearbyQuery,
+		interests: &PoiInterests,
+		previous: Option<PoiId>,
+		seed: u64,
+	) -> Option<PoiRecord> {
+		if interests.is_empty() || !center.is_finite() || !query.radius.is_finite() {
 			return None;
 		}
-		let radius = radius.clamp(0.0, MAX_LOCAL_QUERY_RADIUS);
+		let radius = query.radius.clamp(0.0, MAX_LOCAL_QUERY_RADIUS);
+		let min_radius = query.min_radius.max(0.0);
 		let mut candidates = self.local_matching(center, radius, interests);
 		for candidate in self.global_matching(interests) {
 			if center.distance(candidate.position) <= radius + candidate.arrival_radius
@@ -191,29 +209,19 @@ impl PoiRegistry {
 				candidates.push(candidate);
 			}
 		}
+		candidates.retain(|candidate| xz_distance(center, candidate.position) >= min_radius);
 		candidates.sort_by_key(|candidate| candidate.id);
 		if candidates.len() > 1 {
 			candidates.retain(|candidate| Some(candidate.id) != previous);
 		}
-		let weight = |candidate: PoiRecord| {
-			let interest = interests.weight(candidate.kind).unwrap_or(0.0);
-			let proximity = 1.0 / (1.0 + center.distance(candidate.position) / radius.max(1.0));
-			interest * candidate.salience.max(0.1) * proximity
-		};
-		let total: f32 = candidates.iter().copied().map(weight).sum();
-		if total <= 0.0 {
-			return None;
+		match query.choice {
+			NearbyChoice::Nearest => candidates.into_iter().min_by(|a, b| {
+				xz_distance(center, a.position)
+					.total_cmp(&xz_distance(center, b.position))
+					.then_with(|| a.id.cmp(&b.id))
+			}),
+			NearbyChoice::Weighted => choose_weighted(center, radius, interests, candidates, seed),
 		}
-		let mut draw = unit_f32(seed) * total;
-		let mut fallback = None;
-		for candidate in candidates {
-			fallback = Some(candidate);
-			draw -= weight(candidate);
-			if draw <= 0.0 {
-				return Some(candidate);
-			}
-		}
-		fallback
 	}
 
 	pub fn matching_in_xz_tile(
@@ -268,6 +276,38 @@ impl PoiRegistry {
 		self.by_entity.remove(&record.entity);
 		Some(record)
 	}
+}
+
+fn choose_weighted(
+	center: Vec3,
+	radius: f32,
+	interests: &PoiInterests,
+	candidates: Vec<PoiRecord>,
+	seed: u64,
+) -> Option<PoiRecord> {
+	let weight = |candidate: PoiRecord| {
+		let interest = interests.weight(candidate.kind).unwrap_or(0.0);
+		let proximity = 1.0 / (1.0 + center.distance(candidate.position) / radius.max(1.0));
+		interest * candidate.salience.max(0.1) * proximity
+	};
+	let total: f32 = candidates.iter().copied().map(weight).sum();
+	if total <= 0.0 {
+		return None;
+	}
+	let mut draw = unit_f32(seed) * total;
+	let mut fallback = None;
+	for candidate in candidates {
+		fallback = Some(candidate);
+		draw -= weight(candidate);
+		if draw <= 0.0 {
+			return Some(candidate);
+		}
+	}
+	fallback
+}
+
+fn xz_distance(a: Vec3, b: Vec3) -> f32 {
+	(a.xz() - b.xz()).length()
 }
 
 fn xz_tile(position: Vec3, tile_size: f32) -> IVec2 {

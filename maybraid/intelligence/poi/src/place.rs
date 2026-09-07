@@ -5,29 +5,13 @@ use std::f32::consts::TAU;
 use bevy::prelude::*;
 
 use crate::hash::{mix, unit_f32};
-use crate::{PoiId, PoiInterests, PoiRecord, PoiRegistry};
-
-/// Default scan used by mob and world-player death replacement.
-pub const DEFAULT_NEARBY_RADIUS: f32 = 160.0;
+use crate::{NearbyFallback, NearbyQuery, PoiId, PoiInterests, PoiRecord, PoiRegistry};
 
 const ARRIVAL_DISK_MIN: f32 = 2.0;
 const ARRIVAL_DISK_MAX: f32 = 12.0;
 const DISK_DISTANCE_SALT: u64 = 0x736f_6d65_706c_6179;
 const DISK_ANGLE_SALT: u64 = 0x6572_5f72_6573_7061;
 const RING_ANGLE_SALT: u64 = 0x776f_726c_6470_6c79;
-
-/// Horizontal ring around `center` when no nearby POI is available.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct NearbyFallback {
-	pub min_radius: f32,
-	pub max_radius: f32,
-}
-
-impl NearbyFallback {
-	pub const fn new(min_radius: f32, max_radius: f32) -> Self {
-		Self { min_radius, max_radius }
-	}
-}
 
 /// Horizontal pose from [`place_nearby`]. `position.y` is the POI or center height.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -44,14 +28,14 @@ pub struct NearbyPlace {
 pub fn place_nearby(
 	registry: Option<&PoiRegistry>,
 	center: Vec3,
-	query_radius: f32,
+	query: NearbyQuery,
 	interests: Option<&PoiInterests>,
 	previous: Option<PoiId>,
 	seed: u64,
 	fallback: NearbyFallback,
 ) -> NearbyPlace {
 	let poi = registry.zip(interests).and_then(|(registry, interests)| {
-		registry.choose_nearby(center, query_radius, interests, previous, seed)
+		registry.choose_in(center, query, interests, previous, seed)
 	});
 	match poi {
 		Some(poi) => NearbyPlace { position: offset_in_arrival_disk(poi, seed), poi: Some(poi.id) },
@@ -66,13 +50,13 @@ impl PoiRegistry {
 	pub fn place_nearby(
 		&self,
 		center: Vec3,
-		query_radius: f32,
+		query: NearbyQuery,
 		interests: &PoiInterests,
 		previous: Option<PoiId>,
 		seed: u64,
 		fallback: NearbyFallback,
 	) -> NearbyPlace {
-		place_nearby(Some(self), center, query_radius, Some(interests), previous, seed, fallback)
+		place_nearby(Some(self), center, query, Some(interests), previous, seed, fallback)
 	}
 }
 
@@ -97,7 +81,7 @@ fn polar_xz(distance: f32, angle_seed: u64) -> Vec3 {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::{Poi, PoiInterest, PoiKind};
+	use crate::{Poi, PoiInterest, PoiKind, DEFAULT_NEARBY_RADIUS};
 
 	const CAMP: PoiKind = PoiKind::new("test/place-camp");
 
@@ -107,7 +91,7 @@ mod tests {
 		let placed = place_nearby(
 			None,
 			center,
-			DEFAULT_NEARBY_RADIUS,
+			NearbyQuery::weighted(DEFAULT_NEARBY_RADIUS),
 			None,
 			None,
 			42,
@@ -124,7 +108,7 @@ mod tests {
 		let placed = place_nearby(
 			None,
 			Vec3::ZERO,
-			DEFAULT_NEARBY_RADIUS,
+			NearbyQuery::weighted(DEFAULT_NEARBY_RADIUS),
 			None,
 			None,
 			42,
@@ -146,7 +130,7 @@ mod tests {
 		let interests = PoiInterests::new([PoiInterest::new(CAMP, 1.0)]);
 		let placed = registry.place_nearby(
 			Vec3::ZERO,
-			DEFAULT_NEARBY_RADIUS,
+			NearbyQuery::weighted(DEFAULT_NEARBY_RADIUS),
 			&interests,
 			None,
 			42,
@@ -178,13 +162,74 @@ mod tests {
 		let interests = PoiInterests::new([PoiInterest::new(CAMP, 1.0)]);
 		let placed = registry.place_nearby(
 			Vec3::ZERO,
-			DEFAULT_NEARBY_RADIUS,
+			NearbyQuery::weighted(DEFAULT_NEARBY_RADIUS),
 			&interests,
 			Some(PoiId(11)),
 			42,
 			NearbyFallback::new(4.0, 12.0),
 		);
 		assert_eq!(placed.poi, Some(PoiId(12)));
+		Ok(())
+	}
+
+	#[test]
+	fn nearest_beyond_min_skips_the_death_site() -> anyhow::Result<()> {
+		let mut registry = PoiRegistry::default();
+		registry.upsert(
+			Entity::from_bits(11),
+			Poi::new(PoiId(11), CAMP).with_arrival_radius(8.0),
+			Vec3::X * 20.0,
+			true,
+			false,
+		)?;
+		registry.upsert(
+			Entity::from_bits(12),
+			Poi::new(PoiId(12), CAMP).with_arrival_radius(8.0),
+			Vec3::X * 80.0,
+			true,
+			false,
+		)?;
+		registry.upsert(
+			Entity::from_bits(13),
+			Poi::new(PoiId(13), CAMP).with_arrival_radius(8.0),
+			Vec3::X * 120.0,
+			true,
+			false,
+		)?;
+		let interests = PoiInterests::new([PoiInterest::new(CAMP, 1.0)]);
+		let placed = registry.place_nearby(
+			Vec3::ZERO,
+			NearbyQuery::nearest_beyond(DEFAULT_NEARBY_RADIUS, 60.0),
+			&interests,
+			None,
+			42,
+			NearbyFallback::new(60.0, 100.0),
+		);
+		assert_eq!(placed.poi, Some(PoiId(12)));
+		Ok(())
+	}
+
+	#[test]
+	fn nearest_beyond_min_falls_back_when_every_poi_is_too_close() -> anyhow::Result<()> {
+		let mut registry = PoiRegistry::default();
+		registry.upsert(
+			Entity::from_bits(11),
+			Poi::new(PoiId(11), CAMP).with_arrival_radius(8.0),
+			Vec3::X * 20.0,
+			true,
+			false,
+		)?;
+		let interests = PoiInterests::new([PoiInterest::new(CAMP, 1.0)]);
+		let placed = registry.place_nearby(
+			Vec3::ZERO,
+			NearbyQuery::nearest_beyond(DEFAULT_NEARBY_RADIUS, 60.0),
+			&interests,
+			None,
+			42,
+			NearbyFallback::new(60.0, 100.0),
+		);
+		assert!(placed.poi.is_none());
+		assert!((60.0 - 1e-4..=100.0 + 1e-4).contains(&placed.position.xz().length()));
 		Ok(())
 	}
 }
