@@ -58,7 +58,7 @@ fn weighted_nearby_choice_avoids_the_previous_poi() -> anyhow::Result<()> {
 	let interests = PoiInterests::one(CAMP);
 
 	let selected =
-		registry.choose_nearby(Vec3::ZERO, DEFAULT_NEARBY_RADIUS, &interests, Some(PoiId(1)), 42);
+		registry.choose_nearby(Vec3::ZERO, DEFAULT_NEARBY_RADIUS, &interests, &[PoiId(1)], 42);
 
 	assert_eq!(selected.map(|record| record.id), Some(PoiId(2)));
 	Ok(())

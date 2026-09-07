@@ -5,6 +5,8 @@ use maybraid_mobs::{MobKind, MobScene};
 use mob_characters::FromMobNumber;
 
 pub const DEFAULT_GROUP_EXTENT: f32 = 400.0;
+/// Same agent disk as High fulfill / death replace ([#738](https://github.com/ramate-io/maybraid/issues/738)).
+const MEMBER_SEPARATION: f32 = 2.0;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct MobEnvironmentSample {
@@ -106,6 +108,11 @@ impl MobGroup {
 					environment = world.sample_mobs(xz);
 					elevation = environment.elevation.unwrap_or(elevation);
 				}
+			}
+			if mobs.iter().any(|placed: &PlacedMob| {
+				placed.transform.translation.xz().distance(xz) < MEMBER_SEPARATION
+			}) {
+				continue;
 			}
 			let num = rng.unit() * 1_000_000.0 + mobs.len() as f32;
 			mobs.push(PlacedMob {

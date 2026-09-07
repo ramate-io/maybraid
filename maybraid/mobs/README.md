@@ -33,7 +33,10 @@ Groups may put multiple mobs over the same area. We typically use large `400m` c
 - [`groups`](groups) provides `MobGroup`, the five group families, and the
   `MobWorldSample` / `MobWorldHosts` adapter seams. Family still comes from the
   environment sample; Guard / Brawler / Pleb hosts in Frontier, Warfront, and
-  Dystopian groups plant on supplied urban-leaf / building disks. `MaybraidWorld` selects sparse 400 m mob cells
+  Dystopian groups plant on supplied urban-leaf / building disks. Pack members
+  keep a ~2 m occupancy disk on High fulfill and death replace, remember the
+  last few replace POIs, and meander with a per-slot score salt so they do not
+  stack on one pin. `MaybraidWorld` selects sparse 400 m mob cells
   from the live Richmond/Chico model configuration, generates them in a 3 km
   ring, and presents cell → group → `MobScene` hosts in a 1 km ring. Spawn
   elevation is resolved against composed Durham terrain and Richmond pads at

@@ -1,7 +1,8 @@
-//! Bind High plants to a roster slot and copy pack tables onto the member.
+//! Bind High plants to a roster slot and copy pack affiliations onto the member.
 
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
+use meandering_intelligence::MeanderingIntelligenceUser;
 use npc_intelligence::NpcIntelligence;
 use poi_intelligence::PoiIntelligenceUser;
 use tether_intelligence::TetherIntelligenceUser;
@@ -30,11 +31,11 @@ pub(crate) struct BindWorld<'w, 's> {
 	hosts: Query<'w, 's, (Entity, &'static MobId), With<Mob>>,
 	mobs: Query<'w, 's, (), With<Mob>>,
 	rosters: Query<'w, 's, &'static mut MobRoster>,
-	interests: Query<'w, 's, &'static MobInterests, With<Mob>>,
 	affiliations: Query<'w, 's, &'static MobAffiliations, With<Mob>>,
 	mixers: Query<'w, 's, &'static mut NpcIntelligence>,
 	tethers: Query<'w, 's, &'static mut TetherIntelligenceUser>,
 	learners: Query<'w, 's, &'static mut PoiIntelligenceUser>,
+	meanderers: Query<'w, 's, &'static mut MeanderingIntelligenceUser>,
 }
 
 pub(crate) fn bind_mob_members(
@@ -80,15 +81,8 @@ pub(crate) fn bind_mob_members(
 		member.pose = at;
 		member.respawn_at = None;
 		member.spawn_requested = false;
-		let install = member.npc_install(
-			host,
-			at,
-			body.map(|body| body.0).unwrap_or_default(),
-			bind.interests
-				.get(host)
-				.map(|interests| interests.0.clone())
-				.unwrap_or_default(),
-		);
+		let mut install = member.npc_install(host, at, body.map(|body| body.0).unwrap_or_default());
+		install.selection_salt = MeanderingIntelligenceUser::salt_for_slot(slot.0);
 		let personality = member.personality;
 		claimed.push((host, slot.0));
 
@@ -98,9 +92,10 @@ pub(crate) fn bind_mob_members(
 		} else {
 			retarget_member_tether(host, plant, &mut bind.mixers, &mut bind.tethers);
 			if let Ok(mut learner) = bind.learners.get_mut(plant) {
-				if let Ok(host_interests) = bind.interests.get(host) {
-					learner.interests = member.interests.combined(&host_interests.0);
-				}
+				learner.interests = member.interests.clone();
+			}
+			if let Ok(mut meandering) = bind.meanderers.get_mut(plant) {
+				meandering.selection_salt = install.selection_salt;
 			}
 		}
 		if let Ok(pack) = bind.affiliations.get(host) {
@@ -129,7 +124,7 @@ pub(crate) fn propagate_mob_membership(
 				.insert((ThreatSubject::new(id), affiliations.for_member(id)));
 		}
 	}
-	for (host, interests) in &changed_interests {
+	for (host, _interests) in &changed_interests {
 		let Ok(roster) = rosters.get(host) else {
 			continue;
 		};
@@ -141,7 +136,7 @@ pub(crate) fn propagate_mob_membership(
 				continue;
 			};
 			if let Ok(mut learner) = learners.get_mut(plant) {
-				learner.interests = member.interests.combined(&interests.0);
+				learner.interests = member.interests.clone();
 			}
 		}
 	}

@@ -45,6 +45,16 @@ impl PoiInterests {
 		self.0.is_empty()
 	}
 
+	/// Set `kind` to `weight`, appending if the table did not already list it.
+	pub fn with_weight(mut self, kind: PoiKind, weight: f32) -> Self {
+		if let Some(existing) = self.0.iter_mut().find(|existing| existing.kind == kind) {
+			existing.weight = weight.max(0.0);
+		} else {
+			self.0.push(PoiInterest::new(kind, weight));
+		}
+		self
+	}
+
 	/// Add another ordered interest table, summing duplicate kind weights.
 	pub fn combined(&self, other: &Self) -> Self {
 		let mut combined = self.0.clone();
@@ -124,5 +134,12 @@ mod tests {
 		let combined = personal.combined(&mob);
 		assert_eq!(combined.weight(camp), Some(1.5));
 		assert_eq!(combined.weight(forage), Some(1.0));
+	}
+
+	#[test]
+	fn with_weight_replaces_an_existing_kind() {
+		let camp = PoiKind::new("test/camp");
+		let interests = PoiInterests::one(camp).with_weight(camp, 0.4);
+		assert_eq!(interests.weight(camp), Some(0.4));
 	}
 }

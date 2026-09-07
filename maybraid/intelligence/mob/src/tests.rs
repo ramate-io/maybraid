@@ -89,7 +89,7 @@ fn bind_by_mob_id_stamps_membership_and_installs() {
 	assert!(world.get::<ThreatSubject>(plant).is_some());
 	let learner = world.get::<PoiIntelligenceUser>(plant).expect("POI learner");
 	assert!(learner.interests.contains(personal));
-	assert!(learner.interests.contains(PoiKind::new("mob/camp")));
+	assert!(!learner.interests.contains(PoiKind::new("mob/camp")));
 }
 
 #[test]

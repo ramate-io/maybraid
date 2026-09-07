@@ -140,7 +140,8 @@ fn install_mob_scenes(
 			.roster
 			.members
 			.iter()
-			.map(|member| {
+			.enumerate()
+			.map(|(slot, member)| {
 				let recipe = &member.character;
 				let mut roster = RosterMember::new(
 					recipe.brains.personality(recipe.armed()),
@@ -148,7 +149,7 @@ fn install_mob_scenes(
 				)
 				.with_armed(recipe.armed())
 				.with_keep_tether_in_combat(Some(recipe.brains.keep_tether_in_combat()))
-				.with_interests(recipe.brains.interests());
+				.with_interests(recipe.brains.interests_for_slot(slot));
 				roster.health = Health::from_max(f32::from(recipe.sheet().health));
 				roster
 			})

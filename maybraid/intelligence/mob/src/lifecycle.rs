@@ -2,7 +2,9 @@
 
 use bevy::prelude::*;
 use damage::{DespawnAfter, Downed, Health};
-use poi_intelligence::{mix_seed, place_nearby, PoiId, PoiInterests, PoiRegistry};
+use poi_intelligence::{
+	mix_seed, place_nearby_among, PoiId, PoiInterests, PoiRegistry, AGENT_SEPARATION,
+};
 
 use crate::host::{Mob, MobId};
 use crate::member::MemberOf;
@@ -49,7 +51,7 @@ pub(crate) fn queue_downed_member_deaths(
 		if let Some(health) = health {
 			member.health = *health;
 		}
-		schedule_respawn(member, policy, now);
+		schedule_respawn(member, membership.slot, policy, now);
 		commands.entity(entity).try_insert(DespawnAfter::seconds(policy.corpse_secs));
 	}
 }
@@ -108,29 +110,39 @@ pub(crate) fn respawn_mob_members(
 	let now = time.elapsed_secs();
 	for (host, id, transform, mut roster, respawn, interests) in &mut rosters {
 		let policy = policy(respawn);
-		for (slot, member) in roster.iter_mut() {
-			if member.entity.is_some() || member.spawn_requested {
-				continue;
-			}
-			let Some(at) = member.respawn_at else {
+		let ready: Vec<u16> = roster
+			.iter()
+			.filter(|(_, member)| {
+				member.entity.is_none()
+					&& !member.spawn_requested
+					&& member.respawn_at.is_some_and(|at| now >= at)
+			})
+			.map(|(slot, _)| slot)
+			.collect();
+		let mut occupied = roster.occupied_poses(None);
+		for slot in ready {
+			let Some(member) = roster.get_mut(slot) else {
 				continue;
 			};
-			if now < at {
-				continue;
-			}
 			member.spawn_requested = true;
 			member.health.current = member.health.max;
+			let excluded = member.excluded_pois().to_vec();
+			let last = member.pose;
+			let used = member.replacements_used;
 			let (pose, poi) = policy.placement(
 				transform.translation,
-				member.pose,
+				last,
 				*id,
 				slot,
-				member.replacements_used,
-				member.last_respawn_poi,
+				used,
+				&excluded,
+				&occupied,
 				registry.as_deref(),
 				interests.map(|interests| &interests.0),
 			);
-			member.last_respawn_poi = poi;
+			member.remember_respawn_poi(poi);
+			member.pose = pose;
+			occupied.push(pose);
 			needed.write(MobMemberNeeded { mob: host, id: *id, slot, pose });
 		}
 	}
@@ -155,7 +167,8 @@ impl MobRespawn {
 		mob: MobId,
 		slot: u16,
 		generation: u32,
-		previous: Option<PoiId>,
+		excluded: &[PoiId],
+		occupied: &[Vec3],
 		registry: Option<&PoiRegistry>,
 		interests: Option<&PoiInterests>,
 	) -> (Vec3, Option<PoiId>) {
@@ -163,16 +176,22 @@ impl MobRespawn {
 			return (spawn_pose(self.at, host, last), None);
 		}
 		let seed = respawn_seed(mob, slot, generation);
-		let placed = place_nearby(
+		let placed = place_nearby_among(
 			registry,
 			host,
 			self.nearby_query(),
 			interests,
-			previous,
+			excluded,
 			seed,
 			self.fallback,
+			occupied,
+			AGENT_SEPARATION,
 		);
 		(with_member_height(placed.position, host, last, placed.poi.is_some()), placed.poi)
+	}
+
+	pub fn delay_for_slot(self, slot: u16) -> f32 {
+		self.delay_secs.max(0.0) + f32::from(slot) * self.slot_stagger_secs.max(0.0)
 	}
 }
 
@@ -188,7 +207,7 @@ fn respawn_seed(mob: MobId, slot: u16, generation: u32) -> u64 {
 	mix_seed(mob.0 ^ u64::from(slot).rotate_left(21) ^ u64::from(generation).rotate_left(43))
 }
 
-fn schedule_respawn(member: &mut RosterMember, policy: MobRespawn, now: f32) {
+fn schedule_respawn(member: &mut RosterMember, slot: u16, policy: MobRespawn, now: f32) {
 	if member.respawn_at.is_some() || member.spawn_requested {
 		return;
 	}
@@ -196,7 +215,7 @@ fn schedule_respawn(member: &mut RosterMember, policy: MobRespawn, now: f32) {
 		return;
 	}
 	member.replacements_used = member.replacements_used.saturating_add(1);
-	member.respawn_at = Some(now + policy.delay_secs.max(0.0));
+	member.respawn_at = Some(now + policy.delay_for_slot(slot));
 }
 
 #[cfg(test)]
@@ -235,7 +254,7 @@ mod tests {
 			Vec3::ZERO,
 			DEFAULT_NEARBY_RADIUS,
 			&interests,
-			Some(PoiId(11)),
+			&[PoiId(11)],
 			42,
 		);
 		assert_eq!(selected.map(|poi| poi.id), Some(PoiId(12)));
@@ -245,8 +264,8 @@ mod tests {
 	#[test]
 	fn poi_respawn_fallback_varies_around_the_host() {
 		let policy = MobRespawn::default();
-		let first = policy.placement(Vec3::ZERO, Vec3::Y, MobId(3), 0, 1, None, None, None).0;
-		let second = policy.placement(Vec3::ZERO, Vec3::Y, MobId(3), 0, 2, None, None, None).0;
+		let first = policy.placement(Vec3::ZERO, Vec3::Y, MobId(3), 0, 1, &[], &[], None, None).0;
+		let second = policy.placement(Vec3::ZERO, Vec3::Y, MobId(3), 0, 2, &[], &[], None, None).0;
 		assert_ne!(first, second);
 		assert!((policy.fallback.min_radius..=policy.fallback.max_radius)
 			.contains(&first.xz().length()));
@@ -262,5 +281,16 @@ mod tests {
 		assert_eq!(policy.poi_radius, DEFAULT_NEARBY_RADIUS);
 		assert_eq!(policy.min_radius, 0.0);
 		assert_eq!(policy.fallback, NearbyFallback::new(4.0, 12.0));
+		assert_eq!(policy.slot_stagger_secs, crate::roster::RESPAWN_SLOT_STAGGER_SECS);
+		assert!((policy.delay_for_slot(3) - (8.0 + 1.2)).abs() < 1e-4);
+	}
+
+	#[test]
+	fn death_replace_keeps_siblings_apart_on_an_empty_registry() {
+		let policy = MobRespawn::default();
+		let first = policy.placement(Vec3::ZERO, Vec3::Y, MobId(3), 0, 1, &[], &[], None, None).0;
+		let second =
+			policy.placement(Vec3::ZERO, Vec3::Y, MobId(3), 1, 1, &[], &[first], None, None).0;
+		assert!((first.xz() - second.xz()).length() >= AGENT_SEPARATION - 1e-3);
 	}
 }

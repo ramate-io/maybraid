@@ -47,7 +47,12 @@ impl CharacterBrains {
 	}
 
 	pub fn interests(self) -> PoiInterests {
-		match self {
+		self.interests_for_slot(0)
+	}
+
+	/// Role-split table so even/odd guards and brawlers do not share one URBAN max.
+	pub fn interests_for_slot(self, slot: usize) -> PoiInterests {
+		let interests = match self {
 			Self::Grazinger => PoiInterests::one(VEGETATION_POI),
 			Self::PackHunter => PoiInterests::new([
 				PoiInterest::new(CHARACTER_POI, 1.5),
@@ -74,6 +79,11 @@ impl CharacterBrains {
 				PoiInterest::new(LOCAL_POI, 0.55),
 				PoiInterest::new(CHARACTER_POI, 1.0),
 			]),
+		};
+		match (self, slot % 2) {
+			(Self::Guard, 1) => interests.with_weight(LOCAL_POI, 1.3).with_weight(URBAN_POI, 0.7),
+			(Self::Brawler, 1) => interests.with_weight(SALOON_POI, 1.55).with_weight(URBAN_POI, 0.4),
+			_ => interests,
 		}
 	}
 
@@ -105,5 +115,7 @@ mod tests {
 		assert_eq!(brawler.weight(SALOON_POI), Some(1.5));
 		assert_eq!(brawler.weight(URBAN_POI), Some(0.7));
 		assert_eq!(brawler.weight(LOCAL_POI), Some(0.55));
+		let local_guard = CharacterBrains::Guard.interests_for_slot(1);
+		assert!(local_guard.weight(LOCAL_POI).unwrap_or(0.0) > local_guard.weight(URBAN_POI).unwrap_or(0.0));
 	}
 }
