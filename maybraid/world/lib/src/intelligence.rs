@@ -20,13 +20,19 @@ use movement_intelligence_avian::AvianMovementSurface;
 use movement_realization::MovementRealizationPlugin;
 use player::LocomotionCapsule;
 use poi_intelligence::PoiSystems;
-use routing_intelligence::RoutingPlugin;
+use routing_intelligence::{RoutingPlugin, RoutingSystems};
 use spotting_intelligence::{InterestLayers, SpotBounds, SpotSubject, SpottingSystems};
+use tether_intelligence::TetherSystems;
 use threat_intelligence::{
 	Affiliations, ThreatId, ThreatIntelligencePlugin, ThreatSubject, ThreatSystems,
 };
 use threat_intelligence_damage::ThreatIntelligenceDamagePlugin;
 use threat_management_intelligence::ThreatManagementPlugin;
+
+const WORLD_MOVEMENT_LIMITS: MovementIntelligenceLimits = MovementIntelligenceLimits {
+	max_budget: CandidateBudget { max_candidates: 8, max_steps: 3, horizon: 28.0 },
+	max_replans_per_frame: 4,
+};
 
 type WorldPlayers<'w, 's> = Query<
 	'w,
@@ -44,9 +50,7 @@ pub struct WorldIntelligencePlugin;
 
 impl Plugin for WorldIntelligencePlugin {
 	fn build(&self, app: &mut App) {
-		app.insert_resource(MovementIntelligenceLimits {
-			max_budget: CandidateBudget { max_candidates: 8, max_steps: 3, horizon: 28.0 },
-		});
+		app.insert_resource(WORLD_MOVEMENT_LIMITS);
 		if !app.is_plugin_added::<FirearmWeaponsPlugin>() {
 			app.add_plugins(FirearmWeaponsPlugin);
 		}
@@ -115,6 +119,13 @@ impl Plugin for WorldIntelligencePlugin {
 			)
 			.configure_sets(Update, PoiSystems::Select.run_if(on_timer(Duration::from_millis(200))))
 			.configure_sets(
+				Update,
+				(
+					TetherSystems::Write.run_if(on_timer(Duration::from_millis(250))),
+					RoutingSystems::Plan.run_if(on_timer(Duration::from_millis(250))),
+				),
+			)
+			.configure_sets(
 				PostUpdate,
 				FirearmIntelligenceSystems::ValidateAim.run_if(on_timer(Duration::from_millis(33))),
 			)
@@ -157,6 +168,15 @@ mod tests {
 	use damage::DamageApplied;
 	use maybraid_mobs::{MobBrain, MobKind, FFA_GROUP, PLAYER_GROUP};
 	use threat_intelligence::{ThreatIntelligenceUser, ThreatKnowledge};
+
+	#[test]
+	fn world_replans_drain_instead_of_resolving_every_marker() {
+		assert_eq!(WORLD_MOVEMENT_LIMITS.max_replans_per_frame, 4);
+		assert!(
+			WORLD_MOVEMENT_LIMITS.max_replans_per_frame
+				< MovementIntelligenceLimits::default().max_replans_per_frame
+		);
+	}
 
 	#[test]
 	fn world_player_is_registered_for_spotting_and_threats() {

@@ -33,14 +33,21 @@ impl CandidateBudget {
 }
 
 /// Frame-cost ceiling for every mover. Characters pick their own budget at or below this.
+///
+/// [`Self::max_replans_per_frame`] is a drain: leftover [`crate::ReplanMovement`]
+/// markers stay for later frames. Do not timer the replan set — that clumps work.
 #[derive(Resource, Clone, Copy, Debug, PartialEq)]
 pub struct MovementIntelligenceLimits {
 	pub max_budget: CandidateBudget,
+	pub max_replans_per_frame: usize,
 }
 
 impl Default for MovementIntelligenceLimits {
 	fn default() -> Self {
-		Self { max_budget: CandidateBudget { max_candidates: 32, max_steps: 4, horizon: 40.0 } }
+		Self {
+			max_budget: CandidateBudget { max_candidates: 32, max_steps: 4, horizon: 40.0 },
+			max_replans_per_frame: 8,
+		}
 	}
 }
 
@@ -87,6 +94,14 @@ mod tests {
 		assert_eq!(clamped.max_candidates, 32);
 		assert_eq!(clamped.max_steps, 4);
 		assert!((clamped.horizon - 40.0).abs() < 1e-4);
+		Ok(())
+	}
+
+	#[test]
+	fn default_limits_drain_replans_instead_of_taking_everyone() -> anyhow::Result<()> {
+		let limits = MovementIntelligenceLimits::default();
+		anyhow::ensure!(limits.max_replans_per_frame > 0);
+		anyhow::ensure!(limits.max_replans_per_frame < usize::MAX);
 		Ok(())
 	}
 }

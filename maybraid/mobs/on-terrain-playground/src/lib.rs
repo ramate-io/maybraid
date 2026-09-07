@@ -158,6 +158,7 @@ impl Plugin for MobOnTerrainPlaygroundPlugin {
 			.add_plugins(MobScenesPlugin)
 			.insert_resource(MovementIntelligenceLimits {
 				max_budget: CandidateBudget { max_candidates: 8, max_steps: 3, horizon: 28.0 },
+				..default()
 			})
 			.insert_resource(ClearColor(Color::hsla(201.0, 0.69, 0.62, 1.0)))
 			.insert_resource(config.clone())

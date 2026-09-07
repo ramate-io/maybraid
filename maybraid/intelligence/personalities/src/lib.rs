@@ -56,6 +56,7 @@ impl Plugin for PersonalitiesPlaygroundPlugin {
 		app.insert_resource(ClearColor(Color::srgb(0.03, 0.04, 0.055)))
 			.insert_resource(MovementIntelligenceLimits {
 				max_budget: CandidateBudget { max_candidates: 8, max_steps: 3, horizon: 28.0 },
+				..default()
 			})
 			.add_plugins(CharacterControllerPlugin)
 			.add_plugins(PlayerPlugin)

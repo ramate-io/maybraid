@@ -11,4 +11,6 @@ while grounded; this crate does not own physics. Higher-order systems write
 [`ReplanMovement`](src/user.rs) to rebuild the plan.
 
 Per-character [`MovementAbility`](src/ability.rs) owns covering (budget, vantage standoffs).
-[`MovementIntelligenceLimits`](src/surface.rs) caps that budget for the app.
+[`MovementIntelligenceLimits`](src/surface.rs) caps that budget for the app and
+drains at most `max_replans_per_frame` markers per `Update`. Leftover
+[`ReplanMovement`](src/user.rs) stays queued; do not timer the replan set.

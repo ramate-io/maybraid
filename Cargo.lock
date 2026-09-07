@@ -4734,6 +4734,7 @@ dependencies = [
  "richmond-urbanization",
  "routing-intelligence",
  "spotting-intelligence",
+ "tether-intelligence",
  "threat-intelligence",
  "threat-intelligence-damage",
  "threat-management-intelligence",

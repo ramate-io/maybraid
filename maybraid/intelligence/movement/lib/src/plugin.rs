@@ -61,7 +61,12 @@ pub fn replan_movement<S, I, A>(
 	A: MovementSheet + Send + Sync + 'static,
 {
 	let mut surface = surface.into_inner();
+	let mut remaining = limits.max_replans_per_frame;
 	for (entity, transform, mut brain) in &mut movers {
+		if remaining == 0 {
+			break;
+		}
+		remaining -= 1;
 		let from = MovementLocation::new(transform.translation, brain.ability.agent_radius());
 		let exclude = [entity];
 		let budget = brain.ability.candidate_budget().clamp_to(limits.max_budget);
@@ -104,5 +109,72 @@ pub fn drive_movement<I, A>(
 				commands.entity(entity).insert(ReplanMovement);
 			}
 		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use bevy::ecs::system::SystemParam;
+
+	use crate::objective::MovementObjective;
+	use crate::surface::CandidateBudget;
+	use crate::{MovementAbility, MovementStep};
+
+	use super::*;
+
+	#[derive(Resource, Default)]
+	struct ReplanCalls(usize);
+
+	#[derive(SystemParam)]
+	struct CountingSurface<'w> {
+		calls: ResMut<'w, ReplanCalls>,
+	}
+
+	impl<I, A> MovementIntelligenceSurface<I, A> for CountingSurface<'_> {
+		fn recommend_candidates(
+			&mut self,
+			_from: MovementLocation,
+			_exclude: &[Entity],
+			_ability: &A,
+			_objective: MovementObjective,
+			_budget: CandidateBudget,
+		) -> Vec<crate::MovementCandidate<I>> {
+			self.calls.0 += 1;
+			Vec::new()
+		}
+	}
+
+	fn spawn_pending(world: &mut World, count: usize) {
+		let goal = MovementObjective::Reach(MovementLocation::new(Vec3::X * 4.0, 0.5));
+		for index in 0..count {
+			world.spawn((
+				Transform::from_xyz(index as f32, 0.0, 0.0),
+				MovementIntelligence::<MovementStep, MovementAbility>::new(goal),
+				ReplanMovement,
+			));
+		}
+	}
+
+	fn pending_replans(world: &mut World) -> usize {
+		world.query::<&ReplanMovement>().iter(world).count()
+	}
+
+	#[test]
+	fn replan_drains_a_frame_budget_and_leaves_the_rest() -> anyhow::Result<()> {
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins)
+			.insert_resource(MovementIntelligenceLimits { max_replans_per_frame: 2, ..default() })
+			.init_resource::<ReplanCalls>()
+			.add_systems(Update, replan_movement::<CountingSurface, MovementStep, MovementAbility>);
+		spawn_pending(app.world_mut(), 5);
+
+		app.update();
+		anyhow::ensure!(app.world().resource::<ReplanCalls>().0 == 2);
+		anyhow::ensure!(pending_replans(app.world_mut()) == 3);
+
+		app.update();
+		anyhow::ensure!(app.world().resource::<ReplanCalls>().0 == 4);
+		anyhow::ensure!(pending_replans(app.world_mut()) == 1);
+		Ok(())
 	}
 }

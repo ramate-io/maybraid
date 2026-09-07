@@ -55,6 +55,7 @@ richmond-developments-on-terrain-playground = { workspace = true }
 richmond-urbanization = { workspace = true }
 routing-intelligence = { workspace = true }
 spotting-intelligence = { workspace = true }
+tether-intelligence = { workspace = true }
 threat-intelligence = { workspace = true }
 threat-intelligence-damage = { workspace = true }
 threat-management-intelligence = { workspace = true }
