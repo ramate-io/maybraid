@@ -5,6 +5,7 @@ use bevy::math::{IVec2, UVec2, Vec3};
 use bevy::prelude::*;
 use lod::gen::{GeneratingSpatialIndex, GenerationScheme, Id, OriginalId, SpatialIndex};
 use lod::lod_ref::LodRef;
+use lod::LodSceneLevel;
 
 /// Naturescapes cascade `min_size`.
 pub const NATURESCAPES_MIN_SIZE: f32 = 20.0;
@@ -68,6 +69,63 @@ pub struct OuterCellRing {
 	pub rows: i32,
 }
 
+/// One moving terrain-presentation stream on a globally aligned cell grid.
+///
+/// The High mesh occupies `high_inner_radius..=high_outer_radius` around the
+/// current stream anchor. Cells remain generated for [`Self::cull_margin`]
+/// beyond both edges so High roots and near colliders can stay warm. Medium / Low
+/// categories are empty: this stream only draws High.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TerrainCellRing {
+	/// Edge length of cells in this stream.
+	pub cell_size: f32,
+	/// Cascade mesh resolution for this stream (`2^res_2` samples per axis).
+	pub res_2: u8,
+	/// World-space lattice used to quantize the shared moving anchor.
+	pub anchor_step: f32,
+	/// Inner edge of the visible High annulus (`0` for the near stream).
+	pub high_inner_radius: f32,
+	/// Outer edge of the visible High annulus.
+	pub high_outer_radius: f32,
+	/// Empty retention band outside both High edges.
+	pub cull_margin: f32,
+}
+
+impl TerrainCellRing {
+	/// High / empty LOD band for a cell center relative to `anchor`.
+	pub fn level_for(self, cell_center: Vec3, anchor: Vec3) -> LodSceneLevel {
+		let anchor = self.aligned_anchor(anchor);
+		let delta = cell_center - anchor;
+		let radius = delta.x.abs().max(delta.z.abs());
+		if radius >= self.high_inner_radius && radius <= self.high_outer_radius {
+			LodSceneLevel::High
+		} else {
+			let retained_inner = (self.high_inner_radius - self.cull_margin).max(0.0);
+			let retained_outer = self.high_outer_radius + self.cull_margin;
+			if radius >= retained_inner && radius <= retained_outer {
+				LodSceneLevel::Medium
+			} else {
+				LodSceneLevel::Low
+			}
+		}
+	}
+
+	/// True when the cell stays in generate / collider keep (High or empty retain).
+	pub fn retains_cell_center(self, cell_center: Vec3, anchor: Vec3) -> bool {
+		self.level_for(cell_center, anchor) != LodSceneLevel::Low
+	}
+
+	/// True when this is the near (collision) stream.
+	pub fn seeds_collision(self) -> bool {
+		self.high_inner_radius <= 0.0
+	}
+
+	pub fn aligned_anchor(self, anchor: Vec3) -> Vec3 {
+		let step = self.anchor_step.max(1e-3);
+		Vec3::new((anchor.x / step).round() * step, 0.0, (anchor.z / step).round() * step)
+	}
+}
+
 /// Layout for tiling terrain origin cells in the XZ plane.
 ///
 /// Materialized once under [`Id::Universal`] via [`GenerationScheme`].
@@ -83,6 +141,11 @@ pub struct TerrainCellLayout {
 	pub extents: UVec2,
 	/// Optional nested macro rings (increasing cell size), outside the fine grid.
 	pub outer_rings: Vec<OuterCellRing>,
+	/// Optional moving near / far / background streams.
+	///
+	/// When non-empty, origin-cell production uses these annuli instead of the
+	/// bounded fine footprint and [`Self::outer_rings`].
+	pub stream_rings: Vec<TerrainCellRing>,
 }
 
 impl Default for TerrainCellLayout {
@@ -93,6 +156,7 @@ impl Default for TerrainCellLayout {
 			origin: TERRAIN_CELL_ORIGIN,
 			extents: UVec2::new(TERRAIN_CELL_EXTENTS_XZ, TERRAIN_CELL_EXTENTS_XZ),
 			outer_rings: Vec::new(),
+			stream_rings: Vec::new(),
 		}
 	}
 }
@@ -113,6 +177,19 @@ impl TerrainCellLayout {
 
 	/// Full request AABB including nested [`Self::outer_rings`] padding.
 	pub fn request_region(&self) -> Aabb3d {
+		if let Some(radius) = self
+			.stream_rings
+			.iter()
+			.map(|ring| ring.high_outer_radius + ring.cull_margin)
+			.max_by(f32::total_cmp)
+		{
+			let center = self.fine_region_center_xz();
+			let vy = self.vertical_half_extent.max(radius);
+			return Aabb3d::from_min_max(
+				Vec3::new(center.x - radius, -vy, center.z - radius),
+				Vec3::new(center.x + radius, vy, center.z + radius),
+			);
+		}
 		let mut region = self.fine_request_region();
 		for outer in &self.outer_rings {
 			if outer.rows > 0 {
@@ -134,12 +211,29 @@ impl TerrainCellLayout {
 		)
 	}
 
-	/// World-space center of the request region on XZ (Y = 0).
+	/// World-space center of the fine grid on XZ (Y = 0). Stream annuli use this
+	/// as their moving origin; [`Self::request_region`] may be larger.
 	pub fn region_center_xz(&self) -> Vec3 {
-		let region = self.request_region();
+		self.fine_region_center_xz()
+	}
+
+	fn fine_region_center_xz(&self) -> Vec3 {
+		let region = self.fine_request_region();
 		let min = Vec3::from(region.min);
 		let max = Vec3::from(region.max);
 		Vec3::new((min.x + max.x) * 0.5, 0.0, (min.z + max.z) * 0.5)
+	}
+
+	/// Moving stream policy matching a cell edge length.
+	pub fn stream_ring_for_cell_size(&self, cell_size: f32) -> Option<TerrainCellRing> {
+		self.stream_rings
+			.iter()
+			.copied()
+			.find(|ring| (ring.cell_size - cell_size).abs() < 1e-3)
+	}
+
+	pub fn is_streamed(&self) -> bool {
+		!self.stream_rings.is_empty()
 	}
 
 	/// Fine-grid cell containing `xz` (Y ignored).
@@ -296,7 +390,34 @@ pub fn expand_aabb_xz_y(region: Aabb3d, pad_xz: f32, pad_y: f32) -> Aabb3d {
 /// not from the padded request AABB. Each [`TerrainCellLayout::outer_rings`]
 /// entry then tiles only its own expanded frame (not the remaining pad), so
 /// 2× cells do not fill the 4× ring and 160 m cells do not fill either ring.
+///
+/// When [`TerrainCellLayout::stream_rings`] is set, each annulus emits only its
+/// own cell size inside its retain band.
 pub fn origin_cell_ids_for_layout(layout: &TerrainCellLayout, region: Aabb3d) -> Vec<OriginalId> {
+	if !layout.stream_rings.is_empty() {
+		let min = Vec3::from(region.min);
+		let max = Vec3::from(region.max);
+		let anchor = Vec3::new((min.x + max.x) * 0.5, 0.0, (min.z + max.z) * 0.5);
+		let mut ids = std::collections::HashSet::new();
+		for ring in &layout.stream_rings {
+			let outer = ring.high_outer_radius + ring.cull_margin;
+			let bounds = Aabb3d::from_min_max(
+				Vec3::new(anchor.x - outer, region.min.y, anchor.z - outer),
+				Vec3::new(anchor.x + outer, region.max.y, anchor.z + outer),
+			);
+			for (ix, iz) in cell_coords_for_region(bounds, ring.cell_size) {
+				let cell = cell_bounds(ix, iz, ring.cell_size, layout.vertical_half_extent);
+				let center = (Vec3::from(cell.min) + Vec3::from(cell.max)) * 0.5;
+				if region.intersects(&cell) && ring.retains_cell_center(center, anchor) {
+					ids.insert(OriginalId(Id::from_cell(cell)));
+				}
+			}
+		}
+		let mut ids: Vec<_> = ids.into_iter().collect();
+		ids.sort_by(|a, b| a.0.cmp(&b.0));
+		return ids;
+	}
+
 	let fine = layout.fine_request_region();
 	let mut ids: Vec<OriginalId> = cell_coords_for_region(fine, layout.cell_size)
 		.filter_map(|(ix, iz)| {
@@ -411,6 +532,62 @@ mod tests {
 		let ids = origin_cell_ids_for_layout(&layout, layout.request_region());
 		assert_eq!(count_edge(&ids, TERRAIN_CELL_SIZE), 32 * 32);
 		assert!(ids.len() > 32 * 32);
+	}
+
+	fn streamed_layout() -> TerrainCellLayout {
+		let mut layout = TerrainCellLayout::default();
+		layout.stream_rings = vec![
+			TerrainCellRing {
+				cell_size: TERRAIN_CELL_SIZE,
+				res_2: 5,
+				anchor_step: 4.0 * TERRAIN_CELL_SIZE,
+				high_inner_radius: 0.0,
+				high_outer_radius: 8.0 * TERRAIN_CELL_SIZE,
+				cull_margin: 2.0 * TERRAIN_CELL_SIZE,
+			},
+			TerrainCellRing {
+				cell_size: 2.0 * TERRAIN_CELL_SIZE,
+				res_2: 4,
+				anchor_step: 4.0 * TERRAIN_CELL_SIZE,
+				high_inner_radius: 8.0 * TERRAIN_CELL_SIZE,
+				high_outer_radius: 16.0 * TERRAIN_CELL_SIZE,
+				cull_margin: 2.0 * TERRAIN_CELL_SIZE,
+			},
+			TerrainCellRing {
+				cell_size: 4.0 * TERRAIN_CELL_SIZE,
+				res_2: 3,
+				anchor_step: 4.0 * TERRAIN_CELL_SIZE,
+				high_inner_radius: 16.0 * TERRAIN_CELL_SIZE,
+				high_outer_radius: 24.0 * TERRAIN_CELL_SIZE,
+				cull_margin: 8.0 * TERRAIN_CELL_SIZE,
+			},
+		];
+		layout
+	}
+
+	#[test]
+	fn streamed_rings_emit_one_cell_size_per_annulus() {
+		let layout = streamed_layout();
+		let ids = origin_cell_ids_for_layout(&layout, layout.request_region());
+		let fine = TERRAIN_CELL_SIZE;
+		assert!(count_edge(&ids, fine) > 0);
+		assert!(count_edge(&ids, 2.0 * fine) > 0);
+		assert!(count_edge(&ids, 4.0 * fine) > 0);
+		assert_eq!(
+			count_edge(&ids, fine) + count_edge(&ids, 2.0 * fine) + count_edge(&ids, 4.0 * fine),
+			ids.len()
+		);
+	}
+
+	#[test]
+	fn streamed_near_high_is_collision_scale() {
+		let layout = streamed_layout();
+		assert!(layout.stream_rings[0].seeds_collision());
+		assert!(!layout.stream_rings[1].seeds_collision());
+		assert!(!layout.stream_rings[2].seeds_collision());
+		assert_eq!(layout.stream_rings[0].res_2, 5);
+		assert_eq!(layout.stream_rings[1].res_2, 4);
+		assert_eq!(layout.stream_rings[2].res_2, 3);
 	}
 
 	#[test]

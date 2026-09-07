@@ -44,8 +44,8 @@ use std::sync::Arc;
 
 pub use base_noise::BaseTerrainNoise;
 pub use cell::{
-	origin_cell_ids_for_layout, MacroCellLayout, OuterCellRing, TerrainCellLayout, MACRO_CELL_SIZE,
-	TERRAIN_CELL_SIZE,
+	origin_cell_ids_for_layout, MacroCellLayout, OuterCellRing, TerrainCellLayout, TerrainCellRing,
+	MACRO_CELL_SIZE, TERRAIN_CELL_SIZE,
 };
 pub use chunk::cascade::CascadeChunk;
 pub use collider::{
@@ -95,8 +95,10 @@ pub use marazion::{
 };
 pub use plugin::{register_terrain_plugin, TerrainResourcesPlugin};
 pub use presentation::{
-	PresentedTerrainScene, TerrainMeshLodBand, TerrainPresentationAssets, TerrainPresenterState,
-	TerrainRegionPresenter, TerrainStoreView,
+	PresentedTerrainScene, TerrainBackground, TerrainBackgroundRegionPresenter, TerrainFar,
+	TerrainFarRegionPresenter, TerrainMeshLodBand, TerrainNear, TerrainNearRegionPresenter,
+	TerrainPresentationAssets, TerrainPresenterState, TerrainRegionPresenter, TerrainStoreView,
+	TerrainStreamMarker, TerrainStreamPresenterState, TerrainStreamRegionPresenter,
 };
 pub use render::TerrainRenderItem;
 pub use sdf::{ComposedTerrain, ElevationModulation, TerrainSdf};

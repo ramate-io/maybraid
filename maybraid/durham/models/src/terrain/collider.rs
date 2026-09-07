@@ -82,6 +82,14 @@ pub fn terrain_collider_covers_xz<'a>(
 #[derive(Component, Debug, Clone, Copy, Default)]
 pub(crate) struct TerrainColliderReady;
 
+fn terrain_seeds_collision(terrain: &crate::terrain::Terrain, layout: &TerrainCellLayout) -> bool {
+	let size = (Vec3::from(terrain.cell.max) - Vec3::from(terrain.cell.min)).x;
+	layout
+		.stream_ring_for_cell_size(size)
+		.map(|ring| ring.seeds_collision())
+		.unwrap_or(true)
+}
+
 /// Spawn or refresh physics hosts from stored Durham cells. Visual presenters
 /// are not consulted and must not despawn these entities.
 pub(crate) fn sync_terrain_collider_hosts(
@@ -95,7 +103,10 @@ pub(crate) fn sync_terrain_collider_hosts(
 	let wanted: HashSet<(Id, Version)> = store
 		.terrain
 		.iter()
-		.filter(|(_, entry)| region.intersects(&entry.bounds))
+		.filter(|(_, entry)| {
+			region.intersects(&entry.bounds)
+				&& terrain_seeds_collision(&entry.value, layout.as_ref())
+		})
 		.map(|(id, entry)| (*id, entry.version))
 		.collect();
 

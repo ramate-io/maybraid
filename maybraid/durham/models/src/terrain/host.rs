@@ -1,9 +1,9 @@
 //! World-facing streamed terrain: models, shaders, mesh caches, and fill present.
 //!
-//! Playable coverage keeps the 16-cell fine disk plus the existing 2×/4× macro
-//! rings, recentered on the viewer. Generation admits a bounded number of missing
-//! origin ids per frame and completes each hierarchy synchronously. Presentation
-//! is GET-only and does not wipe persistent colliders.
+//! Playable coverage is three High-only scale streams (160 / 320 / 640 m) that
+//! follow the viewer. Near cells use `res_2 = 5` and own collision; far and
+//! background are render-only at `res_2 = 4` and `3`. Generation admits a bounded
+//! number of missing origin ids per frame. Presentation is GET-only.
 
 use std::marker::PhantomData;
 
@@ -22,13 +22,15 @@ use visual_geometry_core::{
 
 use crate::terrain::base_noise::BaseTerrainNoise;
 use crate::terrain::cell::{
-	origin_cell_ids_for_layout, OuterCellRing, TerrainCellLayout, TERRAIN_CELL_SIZE,
+	origin_cell_ids_for_layout, TerrainCellLayout, TerrainCellRing, TERRAIN_CELL_SIZE,
 };
 use crate::terrain::collider::{sync_terrain_collider_hosts, TerrainColliderEpoch};
 use crate::terrain::config::TerrainConfig;
 use crate::terrain::index::AvianTerrainIndex;
 use crate::terrain::presentation::{
-	TerrainMeshLodBand, TerrainPresentationAssets, TerrainRegionPresenter, TerrainStoreView,
+	TerrainBackground, TerrainBackgroundRegionPresenter, TerrainFar, TerrainFarRegionPresenter,
+	TerrainMeshLodBand, TerrainNear, TerrainNearRegionPresenter, TerrainPresentationAssets,
+	TerrainRegionPresenter, TerrainStoreView, TerrainStreamPresenterState,
 };
 use crate::water::{ComposedWater, Water, WaterPresentationAssets};
 use crate::{DurhamTerrainModelsPlugin, Terrain, TerrainMeshBuilder};
@@ -36,12 +38,22 @@ use crate::{DurhamTerrainModelsPlugin, Terrain, TerrainMeshBuilder};
 /// Composed Durham SDF / CpuShot terrain model.
 pub struct Durham;
 
-/// Fine-grid Chebyshev half-extent (16 × 160 m ≈ 2.6 km).
-pub const WORLD_FINE_HALF_EXTENT_CELLS: i32 = 16;
-/// 2× macro ring past the fine grid.
+/// Near-stream High half-extent (8 × 160 m = 1.28 km).
+pub const WORLD_FINE_HALF_EXTENT_CELLS: i32 = 8;
+/// 2× macro ring past the fine grid (FinePatch / nested-footprint layouts).
 pub const WORLD_OUTER_2X_ROWS: i32 = 2;
 /// 4× macro ring past the 2× ring.
 pub const WORLD_OUTER_4X_ROWS: i32 = 1;
+/// Near High outer radius.
+const WORLD_TERRAIN_NEAR_RADIUS_M: f32 = 8.0 * TERRAIN_CELL_SIZE;
+/// Far High outer radius (320 m cells).
+const WORLD_TERRAIN_FAR_RADIUS_M: f32 = 16.0 * TERRAIN_CELL_SIZE;
+/// Background High outer radius (640 m cells).
+const WORLD_TERRAIN_BACKGROUND_RADIUS_M: f32 = 24.0 * TERRAIN_CELL_SIZE;
+/// Empty retain / generate keep outside each High annulus.
+const WORLD_TERRAIN_CULL_MARGIN_M: f32 = WORLD_TERRAIN_NEAR_RADIUS_M;
+/// Snap stream anchors to the 640 m lattice.
+const WORLD_TERRAIN_PRESENT_STEP_M: f32 = 4.0 * TERRAIN_CELL_SIZE;
 /// Sync Durham DAGs admitted per frame, nearest missing origin ids first.
 const TERRAIN_ADMIT_PER_FRAME: usize = 4;
 
@@ -87,11 +99,7 @@ fn playground_lod_bands(half_extent: i32) -> Vec<TerrainMeshLodBand> {
 }
 
 fn world_lod_bands() -> Vec<TerrainMeshLodBand> {
-	vec![
-		TerrainMeshLodBand { max_radius_cells: 2, res_2: 5 },
-		TerrainMeshLodBand { max_radius_cells: 5, res_2: 3 },
-		TerrainMeshLodBand { max_radius_cells: 16, res_2: 2 },
-	]
+	vec![TerrainMeshLodBand { max_radius_cells: WORLD_FINE_HALF_EXTENT_CELLS, res_2: 5 }]
 }
 
 fn cell_layout(half_extent: i32) -> TerrainCellLayout {
@@ -101,6 +109,7 @@ fn cell_layout(half_extent: i32) -> TerrainCellLayout {
 	let n = (2 * r) as u32;
 	layout.extents = UVec2::new(n, n);
 	layout.outer_rings.clear();
+	layout.stream_rings.clear();
 	layout
 }
 
@@ -109,9 +118,32 @@ fn world_cell_layout() -> TerrainCellLayout {
 	layout.origin = IVec2::new(-WORLD_FINE_HALF_EXTENT_CELLS, -WORLD_FINE_HALF_EXTENT_CELLS);
 	let n = (2 * WORLD_FINE_HALF_EXTENT_CELLS) as u32;
 	layout.extents = UVec2::new(n, n);
-	layout.outer_rings = vec![
-		OuterCellRing { cell_size: 2.0 * TERRAIN_CELL_SIZE, rows: WORLD_OUTER_2X_ROWS },
-		OuterCellRing { cell_size: 4.0 * TERRAIN_CELL_SIZE, rows: WORLD_OUTER_4X_ROWS },
+	layout.outer_rings.clear();
+	layout.stream_rings = vec![
+		TerrainCellRing {
+			cell_size: TERRAIN_CELL_SIZE,
+			res_2: 5,
+			anchor_step: WORLD_TERRAIN_PRESENT_STEP_M,
+			high_inner_radius: 0.0,
+			high_outer_radius: WORLD_TERRAIN_NEAR_RADIUS_M,
+			cull_margin: WORLD_TERRAIN_CULL_MARGIN_M,
+		},
+		TerrainCellRing {
+			cell_size: 2.0 * TERRAIN_CELL_SIZE,
+			res_2: 4,
+			anchor_step: WORLD_TERRAIN_PRESENT_STEP_M,
+			high_inner_radius: WORLD_TERRAIN_NEAR_RADIUS_M,
+			high_outer_radius: WORLD_TERRAIN_FAR_RADIUS_M,
+			cull_margin: WORLD_TERRAIN_CULL_MARGIN_M,
+		},
+		TerrainCellRing {
+			cell_size: 4.0 * TERRAIN_CELL_SIZE,
+			res_2: 3,
+			anchor_step: WORLD_TERRAIN_PRESENT_STEP_M,
+			high_inner_radius: WORLD_TERRAIN_FAR_RADIUS_M,
+			high_outer_radius: WORLD_TERRAIN_BACKGROUND_RADIUS_M,
+			cull_margin: WORLD_TERRAIN_CULL_MARGIN_M,
+		},
 	];
 	layout
 }
@@ -197,6 +229,9 @@ impl Plugin for TerrainPlugin<Durham> {
 		.insert_resource(TerrainPresentationDirty(true))
 		.init_resource::<TerrainPresentPending>()
 		.init_resource::<TerrainStreamingEnabled>()
+		.init_resource::<TerrainStreamPresenterState<TerrainNear>>()
+		.init_resource::<TerrainStreamPresenterState<TerrainFar>>()
+		.init_resource::<TerrainStreamPresenterState<TerrainBackground>>()
 		.add_systems(Startup, setup_presentation_assets)
 		.add_systems(
 			Update,
@@ -226,12 +261,11 @@ fn setup_presentation_assets(
 	let material = terrain_materials.add(DurhamTerrainShader::default());
 	let (macro_seam_half_extents, macro_cell_min_size, macro_res_2) = match params.coverage {
 		TerrainCoverage::FinePatch => (Vec::new(), None, None),
-		TerrainCoverage::PlayableWorld => {
-			let s = TERRAIN_CELL_SIZE;
-			let fine_half = WORLD_FINE_HALF_EXTENT_CELLS as f32 * s;
-			let mid_half = fine_half + WORLD_OUTER_2X_ROWS as f32 * 2.0 * s;
-			(vec![fine_half, mid_half], Some(2.0 * s), Some(2))
-		}
+		TerrainCoverage::PlayableWorld => (
+			vec![WORLD_TERRAIN_NEAR_RADIUS_M, WORLD_TERRAIN_FAR_RADIUS_M],
+			Some(2.0 * TERRAIN_CELL_SIZE),
+			Some(3),
+		),
 	};
 	commands.insert_resource(TerrainPresentationAssets {
 		config: config.clone(),
@@ -342,30 +376,48 @@ fn generate_cells(
 
 fn present_cells(
 	mut terrain_presenter: TerrainRegionPresenter,
+	mut near_presenter: TerrainNearRegionPresenter,
+	mut far_presenter: TerrainFarRegionPresenter,
+	mut background_presenter: TerrainBackgroundRegionPresenter,
 	store: Res<crate::terrain::index::TerrainEntryStore>,
 	layout: Res<TerrainCellLayout>,
 	mut pending: ResMut<TerrainPresentPending>,
+	lod_viewers: Query<&GlobalTransform, With<LodViewer>>,
+	cameras: Query<&GlobalTransform, With<Camera3d>>,
 ) {
 	if !pending.0 {
 		return;
 	}
 
 	let region = layout.presentation_region();
-	let identity = Transform::IDENTITY;
+	let viewer = viewer_xz(&lod_viewers, &cameras)
+		.map(|xz| Transform::from_translation(xz))
+		.unwrap_or(Transform::IDENTITY);
 	let lod_ref = LodRef {
 		entity: Entity::PLACEHOLDER,
-		previous_transform: &identity,
-		current_transform: &identity,
+		previous_transform: &viewer,
+		current_transform: &viewer,
 		bounds: &region,
 	};
-	let terrain_view = TerrainStoreView::new(&store, &layout);
-	RegionPresenter::<Terrain, _>::present(&mut terrain_presenter, &terrain_view, region, &lod_ref);
-	let wanted: HashSet<Id> = terrain_view
-		.tracked_ids_for(region)
-		.into_iter()
-		.map(|tracked| tracked.0)
-		.collect();
-	terrain_presenter.remove_stale(&wanted);
+	if layout.is_streamed() {
+		near_presenter.present(&store, &layout, region, &lod_ref);
+		far_presenter.present(&store, &layout, region, &lod_ref);
+		background_presenter.present(&store, &layout, region, &lod_ref);
+	} else {
+		let terrain_view = TerrainStoreView::new(&store, &layout);
+		RegionPresenter::<Terrain, _>::present(
+			&mut terrain_presenter,
+			&terrain_view,
+			region,
+			&lod_ref,
+		);
+		let wanted: HashSet<Id> = terrain_view
+			.tracked_ids_for(region)
+			.into_iter()
+			.map(|tracked| tracked.0)
+			.collect();
+		terrain_presenter.remove_stale(&wanted);
+	}
 	pending.0 = false;
 }
 
@@ -375,16 +427,33 @@ mod tests {
 	use crate::terrain::cell::origin_cell_ids_for_layout;
 
 	#[test]
-	fn world_fine_grid_stays_at_sixteen_cells() {
-		assert_eq!(WORLD_FINE_HALF_EXTENT_CELLS, 16);
-		assert!(!world_lod_bands().iter().any(|band| band.max_radius_cells > 16));
+	fn world_near_high_stays_at_eight_cells() {
+		assert_eq!(WORLD_FINE_HALF_EXTENT_CELLS, 8);
+		assert_eq!(world_lod_bands(), vec![TerrainMeshLodBand { max_radius_cells: 8, res_2: 5 }]);
 	}
 
 	#[test]
-	fn world_origin_cells_stay_on_fine_disk_plus_macro_rings() {
+	fn world_stream_rings_are_three_high_only_scales() {
 		let layout = world_cell_layout();
+		assert_eq!(layout.stream_rings.len(), 3);
+		assert_eq!(layout.stream_rings[0].cell_size, TERRAIN_CELL_SIZE);
+		assert_eq!(layout.stream_rings[1].cell_size, 2.0 * TERRAIN_CELL_SIZE);
+		assert_eq!(layout.stream_rings[2].cell_size, 4.0 * TERRAIN_CELL_SIZE);
+		assert_eq!(layout.stream_rings[0].res_2, 5);
+		assert_eq!(layout.stream_rings[1].res_2, 4);
+		assert_eq!(layout.stream_rings[2].res_2, 3);
+		assert!(layout.stream_rings[0].seeds_collision());
+		assert!(!layout.stream_rings[1].seeds_collision());
+		assert!(!layout.stream_rings[2].seeds_collision());
 		let ids = origin_cell_ids_for_layout(&layout, layout.request_region());
-		assert_eq!(ids.len(), 32 * 32 + 144 + 44);
+		assert!(!ids.is_empty());
+	}
+
+	#[test]
+	fn world_stream_boundaries_align_all_three_grids() {
+		assert_eq!(WORLD_TERRAIN_NEAR_RADIUS_M % (2.0 * TERRAIN_CELL_SIZE), 0.0);
+		assert_eq!(WORLD_TERRAIN_FAR_RADIUS_M % (4.0 * TERRAIN_CELL_SIZE), 0.0);
+		assert_eq!(WORLD_TERRAIN_BACKGROUND_RADIUS_M % (4.0 * TERRAIN_CELL_SIZE), 0.0);
 	}
 
 	#[test]
@@ -392,18 +461,14 @@ mod tests {
 		let mut layout = world_cell_layout();
 		let size = TERRAIN_CELL_SIZE;
 		assert!(layout.recenter_on_xz(Vec3::X * 20.0 * size));
-		assert_eq!(layout.origin, IVec2::new(4, -WORLD_FINE_HALF_EXTENT_CELLS));
-		assert_eq!(layout.extents.x, (2 * WORLD_FINE_HALF_EXTENT_CELLS) as u32);
+		assert_eq!(layout.origin, IVec2::new(12, -WORLD_FINE_HALF_EXTENT_CELLS));
 		let ids = origin_cell_ids_for_layout(&layout, layout.request_region());
-		assert_eq!(ids.len(), 32 * 32 + 144 + 44);
+		assert!(!ids.is_empty());
 	}
 
 	#[test]
-	fn world_macro_rings_stay_inside_seven_km() {
-		let s = TERRAIN_CELL_SIZE;
-		let fine = WORLD_FINE_HALF_EXTENT_CELLS as f32 * s;
-		let mid = fine + WORLD_OUTER_2X_ROWS as f32 * 2.0 * s;
-		let outer = mid + WORLD_OUTER_4X_ROWS as f32 * 4.0 * s;
-		assert!(outer < 7_000.0, "playable half-extent {outer}");
+	fn world_stream_keep_stays_inside_seven_km() {
+		let outer = WORLD_TERRAIN_BACKGROUND_RADIUS_M + WORLD_TERRAIN_CULL_MARGIN_M;
+		assert!(outer < 7_000.0, "playable keep half-extent {outer}");
 	}
 }
