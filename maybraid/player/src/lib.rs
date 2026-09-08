@@ -97,7 +97,6 @@ impl Plugin for PlayerPlugin {
 					body::apply_wish_movement,
 					body::apply_wish_jump,
 					body::advance_jump_phases,
-					body::apply_movement_damping,
 				)
 					.chain()
 					.in_set(PlayerSystems::Body),
