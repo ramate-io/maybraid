@@ -54,8 +54,8 @@ pub use generation::{
 };
 pub use ground_cover::{
 	blend_ground_cover_neighborhood, ground_cover_cell_index, ground_cover_cells_in_near_disk,
-	ground_cover_in_near_disk, GroundCoverBumpOut, GroundCoverKind, GroundCoverSample,
-	GroundCoverStyle, GROUND_COVER_ANCHOR_STEP_M, GROUND_COVER_FAR_OVERLAP_M,
+	ground_cover_in_near_disk, ground_cover_sample_on_bounds, GroundCoverBumpOut, GroundCoverKind,
+	GroundCoverSample, GroundCoverStyle, GROUND_COVER_ANCHOR_STEP_M, GROUND_COVER_FAR_OVERLAP_M,
 	GROUND_COVER_RADIUS_M,
 };
 pub use grove::{grove_from_id, grove_id, ChicoGrove};

@@ -222,6 +222,10 @@ pub fn ground_cover_from_cell(cell: &GroundCoverBumpOut, forest: &NoiseParams) -
 				.with_fragment_height(
 					style.fragment_height_frequency,
 					style.fragment_height_amplitude,
+				)
+				.with_boundary_rough(
+					BumpOutStyle::GROUND_COVER_BOUNDARY_ROUGH_M,
+					(cell.bounds.max.x - cell.bounds.min.x).max(1.0),
 				),
 		),
 	)

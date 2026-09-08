@@ -448,7 +448,11 @@ pub fn bump_out_from_cell(cell: &CanopyBumpOut, noise: NoiseParams) -> Option<Bu
 		BumpOut::from_neighborhood(neighborhood, cell.center_palette(), noise).with_style(
 			BumpOutStyle::new(0.065, 0.88, 0.18)
 				.with_cheese(0.88, 1.0)
-				.with_fragment_height(4.5, 0.85),
+				.with_fragment_height(4.5, 0.85)
+				.with_boundary_rough(
+					BumpOutStyle::CANOPY_BOUNDARY_ROUGH_M,
+					(cell.bounds.max.x - cell.bounds.min.x).max(1.0),
+				),
 		),
 	)
 }

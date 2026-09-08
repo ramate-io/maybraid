@@ -156,6 +156,10 @@ pub struct BumpOutStyle {
 	pub fragment_height_frequency: f32,
 	/// Apparent fragment-scale height amplitude in world units.
 	pub fragment_height_amplitude: f32,
+	/// World-space XZ warp at the tile rim (metres). 0 keeps the cloned mesh.
+	pub boundary_rough_m: f32,
+	/// Lattice used to find the rim (160 m High / cover, 320 m Medium).
+	pub boundary_cell_m: f32,
 }
 
 impl BumpOutStyle {
@@ -168,8 +172,13 @@ impl BumpOutStyle {
 			cheese_scale: 1.0,
 			fragment_height_frequency: 3.5,
 			fragment_height_amplitude: 0.18,
+			boundary_rough_m: 0.0,
+			boundary_cell_m: 160.0,
 		}
 	}
+
+	pub const CANOPY_BOUNDARY_ROUGH_M: f32 = 20.0;
+	pub const GROUND_COVER_BOUNDARY_ROUGH_M: f32 = 3.0;
 
 	pub const fn with_cheese(mut self, amount: f32, scale: f32) -> Self {
 		self.cheese_amount = amount;
@@ -183,7 +192,13 @@ impl BumpOutStyle {
 		self
 	}
 
-	pub const fn as_values(self) -> [f32; 7] {
+	pub const fn with_boundary_rough(mut self, rough_m: f32, cell_m: f32) -> Self {
+		self.boundary_rough_m = rough_m.max(0.0);
+		self.boundary_cell_m = cell_m.max(1.0);
+		self
+	}
+
+	pub const fn as_values(self) -> [f32; 9] {
 		[
 			self.coverage_softness,
 			self.roughness,
@@ -192,6 +207,8 @@ impl BumpOutStyle {
 			self.cheese_scale,
 			self.fragment_height_frequency,
 			self.fragment_height_amplitude,
+			self.boundary_rough_m,
+			self.boundary_cell_m,
 		]
 	}
 
@@ -216,6 +233,8 @@ impl BumpOutStyle {
 				.get(6)
 				.copied()
 				.unwrap_or(defaults.fragment_height_amplitude),
+			boundary_rough_m: values.get(7).copied().unwrap_or(defaults.boundary_rough_m),
+			boundary_cell_m: values.get(8).copied().unwrap_or(defaults.boundary_cell_m),
 		}
 	}
 }

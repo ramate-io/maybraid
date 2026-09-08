@@ -336,7 +336,8 @@ pub fn blend_ground_cover_neighborhood(
 	samples
 }
 
-fn ground_cover_sample_on_bounds(index: &ForestIndex, bounds: Aabb3d) -> GroundCoverSample {
+/// Floor-color sample for one terrain cell from the forest flip (select-only).
+pub fn ground_cover_sample_on_bounds(index: &ForestIndex, bounds: Aabb3d) -> GroundCoverSample {
 	let center = Vec3::from((bounds.min + bounds.max) * 0.5);
 	let (forest_ix, forest_iz) = ForestExtent::cell_index_containing(center);
 	let grove = index

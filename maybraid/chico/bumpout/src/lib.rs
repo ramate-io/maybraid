@@ -6,7 +6,7 @@
 //! and fragment dropout in the shader.
 //!
 //! GPU uniforms are a shared raster/scalar pad. This shader reads density / bite / height
-//! on channels 0–4 and style on scalars 0–6.
+//! on channels 0–4 and style on scalars 0–8 (including boundary roughing).
 
 mod bump_out;
 mod material;
