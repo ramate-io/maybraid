@@ -8,7 +8,7 @@ use bevy::prelude::*;
 use super::{pose::BraidmanPose, sliders::BraidmanSliders, BraidmanColors, BraidmanConfig};
 use crate::{
 	assembly::CharacterPartSlot,
-	components::CharacterComponents,
+	components::{CharacterComponents, LocomotionCapsule},
 	layer::Layers,
 	nodes::{PartNode, RigNode},
 	presets::{BuildPreset, GenderPreset},
@@ -62,6 +62,15 @@ impl Default for Braidman {
 }
 
 impl CharacterComponents for Braidman {
+	fn locomotion_capsule(&self) -> LocomotionCapsule {
+		let pose = BraidmanPose {
+			gender: self.gender,
+			build: self.build,
+			sliders: self.sliders.clamped(),
+		};
+		LocomotionCapsule::humanoid_from_pose(&pose.resolve(), 1.0)
+	}
+
 	fn rig_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<RigNode> {
 		let pose = BraidmanPose {
 			gender: self.gender,

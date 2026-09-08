@@ -6,7 +6,7 @@ use firearms::WeaponsArmed;
 use game_commands::command::{CommandScript, GameCommand};
 
 use crate::session::{
-	RangeSession, DEFAULT_AFFA_CIVILIANS, DEFAULT_AFFA_COMBATANTS, DEFAULT_FFA_NPCS,
+	DummySpecies, RangeSession, DEFAULT_AFFA_CIVILIANS, DEFAULT_AFFA_COMBATANTS, DEFAULT_FFA_NPCS,
 };
 
 pub const PLAYGROUND_CLI_NAME: &str = "firing-range";
@@ -36,7 +36,7 @@ pub enum PlaygroundCommand {
 	Duel,
 	/// Stationary dummy with no gun. Fire at it to check projectile collisions.
 	#[command(visible_alias = "dummy")]
-	TestDummy,
+	TestDummy(TestDummyArgs),
 }
 
 #[derive(Clone, Args, Debug, Default, PartialEq, Eq)]
@@ -62,6 +62,14 @@ pub struct AssaultFreeForAllArgs {
 	/// Optional loadout RNG seed. Omit for entropy.
 	#[arg(long)]
 	pub seed: Option<u64>,
+}
+
+#[derive(Clone, Args, Debug, Default, PartialEq, Eq)]
+#[command(rename_all = "kebab-case")]
+pub struct TestDummyArgs {
+	/// Dummy species. `spibmom` plants the 2× meerkat head so headshots can be checked.
+	#[arg(long, value_enum, default_value_t = DummySpecies::Braidman)]
+	pub species: DummySpecies,
 }
 
 impl PlaygroundCommand {
@@ -119,11 +127,12 @@ impl PlaygroundCommand {
 				});
 				*console = "duel".into();
 			}
-			Self::TestDummy => {
+			Self::TestDummy(args) => {
+				let species = args.species;
 				commands.queue(move |world: &mut World| {
-					world.resource_mut::<RangeSession>().enter_test_dummy();
+					world.resource_mut::<RangeSession>().enter_test_dummy(species);
 				});
-				*console = "test-dummy".into();
+				*console = format!("test-dummy species={}", species.label());
 			}
 		}
 	}
@@ -186,9 +195,21 @@ mod tests {
 	#[test]
 	fn parses_test_dummy() -> Result<(), String> {
 		let command = <PlaygroundCommand as GameCommand>::parse_line("test-dummy")?;
-		assert!(matches!(command, PlaygroundCommand::TestDummy));
+		assert!(matches!(
+			command,
+			PlaygroundCommand::TestDummy(TestDummyArgs { species: DummySpecies::Braidman })
+		));
 		let alias = <PlaygroundCommand as GameCommand>::parse_line("dummy")?;
-		assert!(matches!(alias, PlaygroundCommand::TestDummy));
+		assert!(matches!(
+			alias,
+			PlaygroundCommand::TestDummy(TestDummyArgs { species: DummySpecies::Braidman })
+		));
+		let spibmom =
+			<PlaygroundCommand as GameCommand>::parse_line("test-dummy --species spibmom")?;
+		assert!(matches!(
+			spibmom,
+			PlaygroundCommand::TestDummy(TestDummyArgs { species: DummySpecies::Spibmom })
+		));
 		Ok(())
 	}
 }

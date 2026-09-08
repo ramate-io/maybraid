@@ -13,7 +13,7 @@ use super::{
 use crate::{
 	assembly::CharacterPartSlot,
 	assets::AssetNormalization,
-	components::CharacterComponents,
+	components::{CharacterComponents, LocomotionCapsule},
 	layer::Layers,
 	nodes::{PartNode, RigNode},
 	species::common::{nodes as humanoid, EyeMesh, HairMesh, EAR_FLANK},
@@ -64,6 +64,10 @@ fn wumbus_ear_right_local() -> Transform {
 }
 
 impl CharacterComponents for Wumbus {
+	fn locomotion_capsule(&self) -> LocomotionCapsule {
+		LocomotionCapsule::humanoid_from_pose(&WumbusPose.resolve(), 1.0)
+	}
+
 	fn rig_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<RigNode> {
 		Layers::from_free(vec![
 			humanoid::humanoid_body_rig(WumbusPose.resolve()),

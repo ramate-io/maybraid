@@ -1,17 +1,24 @@
-//! Query-only quadruped hit hull. The motor stays on the vertical body capsule.
+//! Query-only hit hulls. The motor stays on the vertical body capsule.
 
 use std::collections::HashMap;
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
-use crozon_characters::{CharacterRoot, HitCapsule, LocomotionCapsule};
+use crozon_characters::{CharacterRoot, HeadCapsule, HitCapsule, LocomotionCapsule};
 use lod_avian::PhysicsInteractionLayer;
 
 pub const HIT_VOLUME_NAME: &str = "hit-capsule";
+pub const HEAD_VOLUME_NAME: &str = "head-capsule";
 
 /// Marker on the query-only child collider.
 #[derive(Component, Clone, Copy, Debug)]
 pub struct HitVolume;
+
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub(crate) enum HitVolumeKind {
+	Body,
+	Head,
+}
 
 #[derive(Component, Clone, Copy, Debug)]
 pub(crate) struct HitVolumeOf(pub Entity);
@@ -25,60 +32,128 @@ pub(crate) fn apply_hit_capsule(commands: &mut Commands, body: Entity, hull: Loc
 			commands.entity(body).remove::<HitCapsule>();
 		}
 	}
+	match hull.head_capsule() {
+		Some(head) => {
+			commands.entity(body).insert(head);
+		}
+		None => {
+			commands.entity(body).remove::<HeadCapsule>();
+		}
+	}
 }
 
-/// Spawn or refresh one sensor child per [`HitCapsule`]. Idempotent.
+/// Spawn or refresh one sensor child per query hull. Idempotent.
 pub(crate) fn maintain_hit_volumes(
-	hulls: Query<(Entity, &HitCapsule)>,
-	changed: Query<(Entity, &HitCapsule), Changed<HitCapsule>>,
-	volumes: Query<(Entity, &HitVolumeOf)>,
-	mut removed: RemovedComponents<HitCapsule>,
+	bodies: Query<
+		(Entity, Option<&HitCapsule>, Option<&HeadCapsule>),
+		Or<(With<HitCapsule>, With<HeadCapsule>)>,
+	>,
+	changed_hit: Query<Entity, Changed<HitCapsule>>,
+	changed_head: Query<Entity, Changed<HeadCapsule>>,
+	volumes: Query<(Entity, &HitVolumeOf, &HitVolumeKind)>,
+	mut removed_hit: RemovedComponents<HitCapsule>,
+	mut removed_head: RemovedComponents<HeadCapsule>,
 	mut commands: Commands,
 ) {
-	let mut by_body: HashMap<Entity, Vec<Entity>> = HashMap::new();
-	for (volume, of) in &volumes {
-		by_body.entry(of.0).or_default().push(volume);
+	let mut by_key: HashMap<(Entity, HitVolumeKind), Vec<Entity>> = HashMap::new();
+	for (volume, of, kind) in &volumes {
+		by_key.entry((of.0, *kind)).or_default().push(volume);
 	}
 
-	for body in removed.read() {
-		if let Some(existing) = by_body.remove(&body) {
-			for volume in existing {
-				commands.entity(volume).despawn();
-			}
+	for body in removed_hit.read() {
+		despawn_kind(&mut by_key, body, HitVolumeKind::Body, &mut commands);
+	}
+	for body in removed_head.read() {
+		despawn_kind(&mut by_key, body, HitVolumeKind::Head, &mut commands);
+	}
+
+	for (body, hit, head) in &bodies {
+		if let Some(hit) = hit {
+			maintain_one(
+				&mut by_key,
+				body,
+				HitVolumeKind::Body,
+				HIT_VOLUME_NAME,
+				hit.local_transform(),
+				Collider::capsule(hit.radius, hit.length),
+				changed_hit.get(body).is_ok(),
+				&mut commands,
+			);
+		} else {
+			despawn_kind(&mut by_key, body, HitVolumeKind::Body, &mut commands);
+		}
+		if let Some(head) = head {
+			maintain_one(
+				&mut by_key,
+				body,
+				HitVolumeKind::Head,
+				HEAD_VOLUME_NAME,
+				head.local_transform(),
+				head_collider(*head),
+				changed_head.get(body).is_ok(),
+				&mut commands,
+			);
+		} else {
+			despawn_kind(&mut by_key, body, HitVolumeKind::Head, &mut commands);
 		}
 	}
 
-	for (body, hit) in &hulls {
-		let existing = by_body.remove(&body).unwrap_or_default();
-		match existing.split_first() {
-			Some((&volume, extras)) => {
-				for extra in extras {
-					commands.entity(*extra).despawn();
-				}
-				if changed.get(body).is_ok() {
-					commands
-						.entity(volume)
-						.insert((Collider::capsule(hit.radius, hit.length), hit.local_transform()));
-				}
-			}
-			None => {
-				commands.spawn((
-					Name::new(HIT_VOLUME_NAME),
-					HitVolume,
-					HitVolumeOf(body),
-					ChildOf(body),
-					hit.local_transform(),
-					Collider::capsule(hit.radius, hit.length),
-					Sensor,
-					PhysicsInteractionLayer::animated_layers(),
-				));
-			}
-		}
-	}
-
-	for extras in by_body.into_values() {
+	for extras in by_key.into_values() {
 		for volume in extras {
 			commands.entity(volume).despawn();
+		}
+	}
+}
+
+fn head_collider(head: HeadCapsule) -> Collider {
+	Collider::capsule(head.radius, head.length.max(0.0))
+}
+
+fn despawn_kind(
+	by_key: &mut HashMap<(Entity, HitVolumeKind), Vec<Entity>>,
+	body: Entity,
+	kind: HitVolumeKind,
+	commands: &mut Commands,
+) {
+	if let Some(existing) = by_key.remove(&(body, kind)) {
+		for volume in existing {
+			commands.entity(volume).despawn();
+		}
+	}
+}
+
+fn maintain_one(
+	by_key: &mut HashMap<(Entity, HitVolumeKind), Vec<Entity>>,
+	body: Entity,
+	kind: HitVolumeKind,
+	name: &'static str,
+	transform: Transform,
+	collider: Collider,
+	changed: bool,
+	commands: &mut Commands,
+) {
+	let existing = by_key.remove(&(body, kind)).unwrap_or_default();
+	match existing.split_first() {
+		Some((&volume, extras)) => {
+			for extra in extras {
+				commands.entity(*extra).despawn();
+			}
+			if changed {
+				commands.entity(volume).insert((collider, transform));
+			}
+		}
+		None => {
+			commands.spawn((
+				Name::new(name),
+				HitVolume,
+				kind,
+				HitVolumeOf(body),
+				ChildOf(body),
+				transform,
+				collider,
+				Sensor,
+				PhysicsInteractionLayer::animated_layers(),
+			));
 		}
 	}
 }
@@ -86,18 +161,27 @@ pub(crate) fn maintain_hit_volumes(
 /// Body rotation is locked; facing lives on the visual. Follow that yaw.
 pub(crate) fn align_hit_volumes(
 	visuals: Query<(&Transform, &ChildOf), With<CharacterRoot>>,
-	hulls: Query<&HitCapsule>,
-	mut volumes: Query<(&HitVolumeOf, &mut Transform), Without<CharacterRoot>>,
+	hulls: Query<
+		(Option<&HitCapsule>, Option<&HeadCapsule>),
+		Or<(With<HitCapsule>, With<HeadCapsule>)>,
+	>,
+	mut volumes: Query<(&HitVolumeOf, &HitVolumeKind, &mut Transform), Without<CharacterRoot>>,
 ) {
 	let mut facing: HashMap<Entity, Quat> = HashMap::new();
 	for (transform, child) in &visuals {
 		facing.entry(child.parent()).or_insert(transform.rotation);
 	}
-	for (of, mut transform) in &mut volumes {
-		let Ok(hit) = hulls.get(of.0) else {
+	for (of, kind, mut transform) in &mut volumes {
+		let Ok((hit, head)) = hulls.get(of.0) else {
 			continue;
 		};
-		let rest = hit.local_transform();
+		let rest = match kind {
+			HitVolumeKind::Body => hit.map(|hit| hit.local_transform()),
+			HitVolumeKind::Head => head.map(|head| head.local_transform()),
+		};
+		let Some(rest) = rest else {
+			continue;
+		};
 		let yaw = facing.get(&of.0).copied().unwrap_or(Quat::IDENTITY);
 		transform.rotation = yaw * rest.rotation;
 		transform.translation = yaw * rest.translation;
@@ -114,6 +198,11 @@ mod tests {
 	fn volume_count(world: &mut World, body: Entity) -> usize {
 		let mut volumes = world.query::<(&HitVolume, &ChildOf, &Sensor)>();
 		volumes.iter(world).filter(|(_, child, _)| child.parent() == body).count()
+	}
+
+	fn kind_count(world: &mut World, body: Entity, kind: HitVolumeKind) -> usize {
+		let mut volumes = world.query::<(&HitVolume, &HitVolumeOf, &HitVolumeKind)>();
+		volumes.iter(world).filter(|(_, of, k)| of.0 == body && **k == kind).count()
 	}
 
 	#[test]
@@ -151,8 +240,38 @@ mod tests {
 		if app.world().get::<HitCapsule>(body).is_some() {
 			return Err(anyhow!("humanoid must not carry a hit hull"));
 		}
+		if app.world().get::<HeadCapsule>(body).is_some() {
+			return Err(anyhow!("stock humanoid must not carry a head hull"));
+		}
 		if volume_count(app.world_mut(), body) != 0 {
 			return Err(anyhow!("humanoid must not spawn a hit-capsule child"));
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn oversized_head_gets_one_head_sensor_child() -> Result<()> {
+		let mut app = App::new();
+		app.add_systems(Update, maintain_hit_volumes);
+		let body = app.world_mut().spawn(Transform::IDENTITY).id();
+		app.world_mut()
+			.run_system_once(move |mut commands: Commands| {
+				apply_character_controller(
+					&mut commands,
+					body,
+					LocomotionCapsule::HUMANOID.with_head_scale(2.0),
+				);
+			})
+			.map_err(|err| anyhow!("{err}"))?;
+		app.update();
+		if app.world().get::<HeadCapsule>(body).is_none() {
+			return Err(anyhow!("oversized head should keep HeadCapsule on the body"));
+		}
+		if kind_count(app.world_mut(), body, HitVolumeKind::Head) != 1 {
+			return Err(anyhow!("oversized head should stamp one head-capsule child"));
+		}
+		if kind_count(app.world_mut(), body, HitVolumeKind::Body) != 0 {
+			return Err(anyhow!("biped must not spawn a pronograde hit-capsule"));
 		}
 		Ok(())
 	}

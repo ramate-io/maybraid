@@ -54,7 +54,9 @@ impl Default for Kappler {
 
 impl CharacterComponents for Kappler {
 	fn locomotion_capsule(&self) -> LocomotionCapsule {
-		LocomotionCapsule::HUMANOID.scaled(KAPPLER_OVERALL_SCALE)
+		LocomotionCapsule::HUMANOID
+			.scaled(KAPPLER_OVERALL_SCALE)
+			.with_head_scale(HEAD_RIG_SOCKET_SCALE)
 	}
 
 	fn rig_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<RigNode> {

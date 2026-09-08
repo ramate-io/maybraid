@@ -4,7 +4,7 @@ use anyhow::{anyhow, Result};
 use crozon_character_items::{ClothingMaterial, ClothingMesh};
 use crozon_characters::{
 	species::{
-		braidman::{Braidman, BraidmanConfig},
+		braidman::{pose::BraidmanPose, Braidman, BraidmanConfig},
 		brenal::{Brenal, BrenalConfig},
 		brodler::{Brodler, BrodlerConfig},
 		caole::{Caole, CaoleConfig},
@@ -15,11 +15,12 @@ use crozon_characters::{
 		epiphant::{Epiphant, EpiphantConfig},
 		hars::{Hars, HarsConfig},
 		sonyak::{Sonyak, SonyakConfig},
+		spibmom::{Spibmom, SpibmomConfig},
 		topple::{Topple, ToppleConfig},
 		ylter::{Yilter, YilterConfig},
 	},
-	BuildPreset, CharacterComponents, CharacterPartSlot, CharacterRecipe, Clothed, HitCapsule,
-	Layer, LocomotionCapsule, PartNode, RigId,
+	BuildPreset, CharacterComponents, CharacterPartSlot, CharacterRecipe, Clothed, HeadCapsule,
+	HitCapsule, Layer, LocomotionCapsule, PartNode, RigId,
 };
 use lod::gen::LodSceneLevel;
 use scene_ref::MirrorAxis;
@@ -95,16 +96,23 @@ fn clothed_braidman_adds_clothing_layer() {
 
 #[test]
 fn braidman_uses_the_humanoid_hull() {
-	let braidman = Braidman::from_config(&BraidmanConfig::default_preview());
-	assert_eq!(braidman.locomotion_capsule(), LocomotionCapsule::HUMANOID);
-	let clothed = BraidmanConfig::default_preview().clothed();
-	assert_eq!(clothed.locomotion_capsule(), LocomotionCapsule::HUMANOID);
+	let config = BraidmanConfig::default_preview();
+	let expected =
+		LocomotionCapsule::humanoid_from_pose(&BraidmanPose::from_config(&config).resolve(), 1.0);
+	let braidman = Braidman::from_config(&config);
+	assert_eq!(braidman.locomotion_capsule(), expected);
+	assert!(braidman.locomotion_capsule().hit_capsule().is_none());
+	let clothed = config.clothed();
+	assert_eq!(clothed.locomotion_capsule(), expected);
 }
 
 #[test]
 fn whelp_and_quadruped_hulls_differ_from_humanoid() {
 	let topple = Topple::from_config(&ToppleConfig::default_preview());
-	assert_eq!(topple.locomotion_capsule(), LocomotionCapsule::HUMANOID.scaled(0.30));
+	assert_eq!(
+		topple.locomotion_capsule(),
+		LocomotionCapsule::HUMANOID.scaled(0.30).with_head_scale(1.85)
+	);
 	let brenal = Brenal::from_config(&BrenalConfig::default_preview());
 	assert_same_motor(
 		brenal.locomotion_capsule(),
@@ -150,6 +158,33 @@ fn ylter_and_croconot_hulls_follow_species_limb_length() {
 		croconot.locomotion_capsule(),
 		LocomotionCapsule::quadruped_for_limb_length(0.8),
 	);
+}
+
+#[test]
+fn biped_hull_follows_legs_shoulders_and_head() -> Result<()> {
+	let average = Braidman::from_config(&BraidmanConfig::default_preview());
+	let mut long = BraidmanConfig::default_preview();
+	long.sliders.leg_length = 1.2;
+	let long = Braidman::from_config(&long);
+	assert!(long.locomotion_capsule().half_height() > average.locomotion_capsule().half_height());
+
+	let brodler = Brodler::from_config(&BrodlerConfig::default_preview());
+	assert!(brodler.locomotion_capsule().radius > LocomotionCapsule::HUMANOID.radius);
+	assert!(brodler.locomotion_capsule().hit_capsule().is_none());
+
+	let spibmom = Spibmom::from_config(&SpibmomConfig::default_preview());
+	assert!(spibmom.locomotion_capsule().half_height() > LocomotionCapsule::HUMANOID.half_height());
+	assert!(spibmom.locomotion_capsule().hit_capsule().is_none());
+	let head = spibmom
+		.locomotion_capsule()
+		.head_capsule()
+		.ok_or_else(|| anyhow!("Spibmom 2× head should get a head volume"))?;
+	assert!((head.radius - HeadCapsule::REST_HALF).abs() < 1e-5);
+	assert!(head.length > HeadCapsule::REST_HALF * 2.0);
+	assert!(
+		head.crown_y() > spibmom.locomotion_capsule().half_height() + HeadCapsule::REST_HALF * 2.0
+	);
+	Ok(())
 }
 
 #[test]

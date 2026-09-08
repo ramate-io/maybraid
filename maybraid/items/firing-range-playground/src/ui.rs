@@ -13,10 +13,10 @@ pub(crate) fn ui_config() -> GameCommandUiConfig {
 		title: "Firing range - WASD move - mouse look - R3 POV - RMB / LT focus - click / RT fire"
 			.into(),
 		empty_console_text:
-			"Console: `pause`, `resume`, `free-for-all`, `duel`, `test-dummy`, `help`".into(),
+			"Console: `pause`, `resume`, `free-for-all`, `duel`, `test-dummy --species spibmom`, `help`".into(),
 		root_background: Color::srgba(0.08, 0.09, 0.12, 0.86),
-		controls_hint: "help — pause — resume — free-for-all — duel — test-dummy — Enter — history"
-			.into(),
+		controls_hint:
+			"help — pause — resume — free-for-all — duel — test-dummy — Enter — history".into(),
 	}
 }
 
@@ -48,10 +48,10 @@ pub(crate) fn sync_command_status_text(
 		"waiting for player shot"
 	};
 	let mode = match session.mode {
-		RangeMode::Duel => "duel",
-		RangeMode::FreeForAll => "ffa",
-		RangeMode::AssaultFreeForAll => "affa",
-		RangeMode::TestDummy => "dummy",
+		RangeMode::Duel => "duel".into(),
+		RangeMode::FreeForAll => "ffa".into(),
+		RangeMode::AssaultFreeForAll => "affa".into(),
+		RangeMode::TestDummy => format!("dummy/{}", session.dummy_species.label()),
 	};
 	status.0 =
 		format!("{mode} | {fire} | {response} | health: player {player_health} · npc {npc_health}");

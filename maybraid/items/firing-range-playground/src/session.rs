@@ -3,7 +3,8 @@
 use bevy::prelude::*;
 use crozon_character_items::{FirearmSpec, FirearmStats, ItemRng};
 use crozon_characters::{
-	species::braidman::BraidmanConfig, CharacterRecipe, CharacterRoot, LocomotionCapsule,
+	species::{braidman::BraidmanConfig, spibmom::SpibmomConfig},
+	CharacterRecipe, CharacterRoot, LocomotionCapsule,
 };
 use firearm_intelligence::FirearmEngagement;
 use firearm_user::{
@@ -40,6 +41,30 @@ const FFA_UPPER_RING_MIN: f32 = 10.0;
 const FFA_UPPER_RING_MAX: f32 = 15.0;
 const COMBAT_SPOTTING_RANGE: f32 = 80.0;
 
+#[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq, clap::ValueEnum)]
+#[value(rename_all = "kebab-case")]
+pub enum DummySpecies {
+	#[default]
+	Braidman,
+	Spibmom,
+}
+
+impl DummySpecies {
+	pub fn hull(self) -> LocomotionCapsule {
+		match self {
+			Self::Braidman => BraidmanConfig::default_preview().locomotion_capsule(),
+			Self::Spibmom => SpibmomConfig::default_preview().locomotion_capsule(),
+		}
+	}
+
+	pub fn label(self) -> &'static str {
+		match self {
+			Self::Braidman => "braidman",
+			Self::Spibmom => "spibmom",
+		}
+	}
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) enum RangeMode {
 	#[default]
@@ -55,12 +80,20 @@ pub(crate) struct RangeSession {
 	pub npc_count: u16,
 	pub civilian_count: u16,
 	pub seed: Option<u64>,
+	pub dummy_species: DummySpecies,
 	pub epoch: u32,
 }
 
 impl Default for RangeSession {
 	fn default() -> Self {
-		Self { mode: RangeMode::Duel, npc_count: 1, civilian_count: 0, seed: None, epoch: 0 }
+		Self {
+			mode: RangeMode::Duel,
+			npc_count: 1,
+			civilian_count: 0,
+			seed: None,
+			dummy_species: DummySpecies::Braidman,
+			epoch: 0,
+		}
 	}
 }
 
@@ -93,10 +126,11 @@ impl RangeSession {
 		self.epoch = self.epoch.wrapping_add(1);
 	}
 
-	pub fn enter_test_dummy(&mut self) {
+	pub fn enter_test_dummy(&mut self, species: DummySpecies) {
 		self.mode = RangeMode::TestDummy;
 		self.npc_count = 1;
 		self.civilian_count = 0;
+		self.dummy_species = species;
 		self.epoch = self.epoch.wrapping_add(1);
 	}
 
@@ -204,7 +238,13 @@ pub(crate) fn apply_session(
 		}
 		RangeMode::TestDummy => {
 			crate::spawn_player_at(&mut commands, &spawn, &mut meshes, &mut materials);
-			crate::spawn_dummy_at(&mut commands, &spawn, &mut meshes, &mut materials);
+			crate::spawn_dummy_at(
+				&mut commands,
+				&spawn,
+				session.dummy_species,
+				&mut meshes,
+				&mut materials,
+			);
 		}
 	}
 }
@@ -439,20 +479,31 @@ pub(crate) fn spawn_held_system(mut commands: Commands, bodies: UnarmedBodies) {
 
 pub(crate) fn spawn_npc_character(
 	mut commands: Commands,
-	npcs: Query<(Entity, Option<&CombatantKit>), With<Npc>>,
+	npcs: Query<(Entity, Option<&CombatantKit>, Option<&DummySpecies>), With<Npc>>,
 	visuals: Query<&ChildOf, With<CharacterRoot>>,
 ) {
-	for (npc, kit) in &npcs {
+	for (npc, kit, dummy) in &npcs {
 		if visuals.iter().any(|child| child.parent() == npc) {
 			continue;
 		}
-		let appearance = kit
-			.map(|kit| kit.appearance.clone())
-			.unwrap_or_else(BraidmanConfig::default_preview);
-		let clothed = CharacterRecipe::clothed(&appearance);
-		let hull = appearance.locomotion_capsule();
-		spawn_npc_visual(&mut commands, npc, clothed, Quat::from_rotation_y(FRAC_PI_2));
-		commands.entity(npc).insert(headshot_band_for(hull));
+		let facing = Quat::from_rotation_y(FRAC_PI_2);
+		match dummy.copied().unwrap_or_default() {
+			DummySpecies::Spibmom => {
+				let config = SpibmomConfig::default_preview();
+				let hull = config.locomotion_capsule();
+				spawn_npc_visual(&mut commands, npc, config.clothed(), facing);
+				commands.entity(npc).insert(headshot_band_for(hull));
+			}
+			DummySpecies::Braidman => {
+				let appearance = kit
+					.map(|kit| kit.appearance.clone())
+					.unwrap_or_else(BraidmanConfig::default_preview);
+				let clothed = CharacterRecipe::clothed(&appearance);
+				let hull = appearance.locomotion_capsule();
+				spawn_npc_visual(&mut commands, npc, clothed, facing);
+				commands.entity(npc).insert(headshot_band_for(hull));
+			}
+		}
 	}
 }
 
@@ -554,8 +605,9 @@ mod tests {
 	#[test]
 	fn test_dummy_mode_is_a_single_inert_target() {
 		let mut session = RangeSession::default();
-		session.enter_test_dummy();
+		session.enter_test_dummy(DummySpecies::Spibmom);
 		assert!(session.is_test_dummy());
+		assert_eq!(session.dummy_species, DummySpecies::Spibmom);
 		assert_eq!(session.npc_count, 1);
 		assert_ne!(session.mode, RangeMode::Duel);
 	}
