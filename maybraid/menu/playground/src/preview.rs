@@ -20,7 +20,8 @@ use crozon_characters::{
 };
 use firearm_user::GeneratedFirearm;
 use firearms_components::{
-	add_firearm_components_host, firearm_bounds, spawn_firearm_components, FirearmComponentsPlugin,
+	add_firearm_components_host, firearm_bounds, firearm_preview_camera, spawn_firearm_components,
+	FirearmComponentsPlugin, FirearmRoot,
 };
 use lod::gen::LodScene;
 use lod::gen::LodSceneLevel;
@@ -413,6 +414,7 @@ fn apply_preview_camera_focus(
 	home: Query<(), With<HomeScreen>>,
 	gallery: Query<(), With<GalleryScreen>>,
 	weapons: Query<(), With<WeaponGalleryScreen>>,
+	firearm_previews: Query<(), (With<CharacterPreviewRoot>, With<FirearmRoot>)>,
 	roots: Query<&CharacterMembers, With<CharacterPreviewRoot>>,
 	rigs: Query<(Entity, &CharacterRig, &BoneMap, &GlobalTransform)>,
 	transforms: Query<&GlobalTransform>,
@@ -427,7 +429,15 @@ fn apply_preview_camera_focus(
 		return;
 	};
 	camera.viewport = None;
-	let target = if let Some(resolved) = pending.resolved {
+	let target = if !firearm_previews.is_empty() {
+		let fov = match projection {
+			Projection::Perspective(perspective) => perspective.fov,
+			_ => 0.8,
+		};
+		let (camera, look_at) = firearm_preview_camera(fov);
+		pending.look_at = Some(look_at);
+		Transform::from_translation(camera).looking_at(look_at, Vec3::Y)
+	} else if let Some(resolved) = pending.resolved {
 		resolved
 	} else if let Some((resolved, look_at)) =
 		resolve_focus_transform(focus, &roots, &rigs, &transforms)

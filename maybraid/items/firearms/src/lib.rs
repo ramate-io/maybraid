@@ -17,11 +17,11 @@ pub use ::projectiles::{BoltSpec, BulletSpec, Flight, PenetrationCost, Projectil
 pub use cadence::{Cadence, FireControl, WeaponFired, WeaponRecoil};
 pub use concepts::FirearmConcept;
 pub use firearms_components::{
-	add_firearm_components_host, firearm_bounds, spawn_firearm_components, ActiveRigPose,
-	AssetPath, BindPose, BoneMap, BoneScale, ComponentsOnly, FirearmComponents,
-	FirearmComponentsPlugin, FirearmHostSystems, FirearmMembers, FirearmPartSlot, FirearmRoot,
-	Layer, Layers, MemberOf, PartNode, ResolvedRigPose, RigNode, RigPoseLayer, RigRoot, SocketRef,
-	SocketRefApplied, SocketRefRoot, RECEIVER_LANDMARKS,
+	add_firearm_components_host, assembled_firearm_bounds, firearm_bounds, firearm_preview_camera,
+	spawn_firearm_components, ActiveRigPose, AssetPath, BindPose, BoneMap, BoneScale,
+	ComponentsOnly, FirearmComponents, FirearmComponentsPlugin, FirearmHostSystems, FirearmMembers,
+	FirearmPartSlot, FirearmRoot, Layer, Layers, MemberOf, PartNode, ResolvedRigPose, RigNode,
+	RigPoseLayer, RigRoot, SocketRef, SocketRefApplied, SocketRefRoot, RECEIVER_LANDMARKS,
 };
 pub use kit::FirearmKit;
 pub use parts::{

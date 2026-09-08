@@ -283,7 +283,41 @@ pub fn component_only_scene(
 
 /// Approximate AABB for a handheld firearm (bands are identical for now).
 pub fn firearm_bounds(_firearm: &impl FirearmComponents) -> Aabb3d {
+	assembled_firearm_bounds()
+}
+
+/// Envelope used for LOD, hold scale, and menu inspect framing.
+pub fn assembled_firearm_bounds() -> Aabb3d {
 	Aabb3d::from_min_max(Vec3::new(-0.5, -0.5, -2.2), Vec3::new(0.5, 1.4, 0.5))
+}
+
+/// 3/4 inspect camera: side of the bore (+Z), distance from FOV × AABB sphere.
+///
+/// A close front-3/4 sits on the muzzle of a bind-pose barrel. Yaw from +Z toward
+/// +X so length reads across the frame; distance fits the kit envelope in `fov`.
+pub fn firearm_preview_camera(vertical_fov: f32) -> (Vec3, Vec3) {
+	firearm_preview_camera_for(assembled_firearm_bounds(), vertical_fov)
+}
+
+const PREVIEW_YAW_FROM_BORE: f32 = 1.2;
+const PREVIEW_PITCH: f32 = 0.28;
+const PREVIEW_PADDING: f32 = 1.2;
+
+fn firearm_preview_camera_for(bounds: Aabb3d, vertical_fov: f32) -> (Vec3, Vec3) {
+	let look_at = (Vec3::from(bounds.min) + Vec3::from(bounds.max)) * 0.5;
+	let mut radius = 0.0_f32;
+	for x in [bounds.min.x, bounds.max.x] {
+		for y in [bounds.min.y, bounds.max.y] {
+			for z in [bounds.min.z, bounds.max.z] {
+				radius = radius.max(look_at.distance(Vec3::new(x, y, z)));
+			}
+		}
+	}
+	let dist = PREVIEW_PADDING * radius.max(0.1) / (vertical_fov.max(1e-3) * 0.5).tan();
+	let yaw = PREVIEW_YAW_FROM_BORE;
+	let pitch = PREVIEW_PITCH;
+	let dir = Vec3::new(yaw.sin() * pitch.cos(), pitch.sin(), yaw.cos() * pitch.cos()).normalize();
+	(look_at + dir * dist, look_at)
 }
 
 /// Spawn a [`ComponentsOnly`] firearm host; chunk fulfill streams the first level.
@@ -317,4 +351,31 @@ where
 		.id();
 	commands.entity(entity).insert((host, AssemblyRoot, FirearmRoot));
 	vec![entity]
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	const DEFAULT_FOV: f32 = 0.8;
+
+	#[test]
+	fn inspect_camera_is_beside_the_bore_not_on_the_muzzle() {
+		let (camera, look_at) = firearm_preview_camera(DEFAULT_FOV);
+		let bounds = assembled_firearm_bounds();
+		let offset = camera - look_at;
+		let muzzle = Vec3::new(0.0, 0.0, bounds.max.z);
+		assert!(offset.length() > 4.0, "dist {}", offset.length());
+		assert!(offset.x > offset.z.abs(), "side 3/4 {offset}");
+		assert!(camera.distance(muzzle) > 3.5, "muzzle dist {}", camera.distance(muzzle));
+		let center = (Vec3::from(bounds.min) + Vec3::from(bounds.max)) * 0.5;
+		assert!((look_at - center).length() < 1e-4);
+	}
+
+	#[test]
+	fn tighter_fov_pulls_the_camera_back() {
+		let (wide, _) = firearm_preview_camera(1.0);
+		let (tight, look_at) = firearm_preview_camera(0.5);
+		assert!(tight.distance(look_at) > wide.distance(look_at));
+	}
 }
