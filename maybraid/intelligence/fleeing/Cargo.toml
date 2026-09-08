@@ -12,6 +12,7 @@ rust-version = { workspace = true }
 [dependencies]
 bevy = { workspace = true }
 evasion-intelligence = { workspace = true }
+intelligence-lod = { workspace = true }
 movement-intelligence = { workspace = true }
 
 [dev-dependencies]

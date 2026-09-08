@@ -17,6 +17,7 @@ crozon-characters = { workspace = true }
 damage = { workspace = true }
 firearm-user = { workspace = true }
 firearms = { workspace = true }
+intelligence-lod = { workspace = true }
 lod-avian = { workspace = true }
 movement-intelligence = { workspace = true }
 player = { workspace = true }

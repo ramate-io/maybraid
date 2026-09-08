@@ -2,6 +2,7 @@
 
 use bevy::ecs::entity::Entity;
 use bevy::prelude::*;
+use intelligence_lod::IntelligenceBand;
 
 use crate::candidate::MovementCandidate;
 use crate::location::MovementLocation;
@@ -64,6 +65,21 @@ impl CandidateBudget {
 				} else {
 					self
 				}
+			}
+		}
+	}
+
+	/// Viewer-axis clamp stacked on [`Self::lod_for`]. Near keeps the query.
+	pub fn clamp_viewer(self, band: IntelligenceBand) -> Self {
+		match band {
+			IntelligenceBand::Near => self,
+			IntelligenceBand::Mid => Self {
+				max_candidates: self.max_candidates.min(3),
+				max_steps: self.max_steps.min(2),
+				horizon: self.horizon,
+			},
+			IntelligenceBand::Far => {
+				Self { max_candidates: 1, max_steps: 1, horizon: self.horizon }
 			}
 		}
 	}
@@ -235,6 +251,28 @@ mod tests {
 		anyhow::ensure!(far_budget.max_steps == 1);
 		anyhow::ensure!(near_budget.max_candidates == 8);
 		anyhow::ensure!(near_budget.max_steps == 3);
+		Ok(())
+	}
+
+	#[test]
+	fn clamp_viewer_shrinks_mid_and_far_on_top_of_covering_lod() -> anyhow::Result<()> {
+		use intelligence_lod::IntelligenceBand;
+
+		let full = CandidateBudget { max_candidates: 8, max_steps: 3, horizon: 40.0 };
+		let covering = MovementObjective::VantageOn {
+			location: MovementLocation::new(Vec3::X * 4.0, 1.0),
+			hide_weight: 1.0,
+			sightline_weight: 1.0,
+		};
+		let near_covering = full.lod_for(Vec3::ZERO, covering);
+		anyhow::ensure!(near_covering.max_candidates == 8);
+		let mid = near_covering.clamp_viewer(IntelligenceBand::Mid);
+		anyhow::ensure!(mid.max_candidates == 3);
+		anyhow::ensure!(mid.max_steps == 2);
+		let far = near_covering.clamp_viewer(IntelligenceBand::Far);
+		anyhow::ensure!(far.max_candidates == 1);
+		anyhow::ensure!(far.max_steps == 1);
+		anyhow::ensure!(near_covering.clamp_viewer(IntelligenceBand::Near) == near_covering);
 		Ok(())
 	}
 
