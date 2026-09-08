@@ -22,7 +22,9 @@ use movement_realization::MovementRealizationPlugin;
 use player::LocomotionCapsule;
 use poi_intelligence::PoiSystems;
 use routing_intelligence::{RoutingPlugin, RoutingSystems};
-use spotting_intelligence::{InterestLayers, SpotBounds, SpotSubject, SpottingSystems};
+use spotting_intelligence::{
+	InterestLayers, SpotBounds, SpotSubject, SpottingObserveLimits, SpottingSystems,
+};
 use tether_intelligence::TetherSystems;
 use threat_intelligence::{
 	Affiliations, ThreatId, ThreatIntelligencePlugin, ThreatSubject, ThreatSystems,
@@ -33,6 +35,9 @@ use threat_management_intelligence::{
 };
 
 const INTELLIGENCE_LOD_REFRESH_INTERVAL: Duration = Duration::from_millis(250);
+
+const WORLD_SPOTTING_LIMITS: SpottingObserveLimits =
+	SpottingObserveLimits { max_observers_per_tick: 8 };
 
 const WORLD_MOVEMENT_LIMITS: MovementIntelligenceLimits = MovementIntelligenceLimits {
 	max_budget: CandidateBudget { max_candidates: 8, max_steps: 3, horizon: 28.0 },
@@ -57,6 +62,7 @@ pub struct WorldIntelligencePlugin;
 impl Plugin for WorldIntelligencePlugin {
 	fn build(&self, app: &mut App) {
 		app.insert_resource(WORLD_MOVEMENT_LIMITS)
+			.insert_resource(WORLD_SPOTTING_LIMITS)
 			.init_resource::<IntelligencePriority>();
 		if !app.is_plugin_added::<FirearmWeaponsPlugin>() {
 			app.add_plugins(FirearmWeaponsPlugin);
@@ -205,7 +211,7 @@ fn sync_world_player_threat_actor(mut commands: Commands, players: WorldPlayers)
 mod tests {
 	use super::*;
 	use damage::DamageApplied;
-	use maybraid_mobs::{FFA_GROUP, MobBrain, MobKind, PLAYER_GROUP};
+	use maybraid_mobs::{MobBrain, MobKind, FFA_GROUP, PLAYER_GROUP};
 	use threat_intelligence::{ThreatIntelligenceUser, ThreatKnowledge};
 
 	#[test]
@@ -275,6 +281,7 @@ mod tests {
 	fn world_replans_drain_instead_of_resolving_every_marker() {
 		assert_eq!(WORLD_MOVEMENT_LIMITS.max_replans_per_frame, 4);
 		assert_eq!(WORLD_MOVEMENT_LIMITS.max_walk_probes_per_frame, 8);
+		assert_eq!(WORLD_SPOTTING_LIMITS.max_observers_per_tick, 8);
 		assert!(
 			WORLD_MOVEMENT_LIMITS.max_replans_per_frame
 				< MovementIntelligenceLimits::default().max_replans_per_frame
@@ -325,11 +332,10 @@ mod tests {
 		app.update();
 
 		let player_id = ThreatId(player.to_bits());
-		assert!(
-			app.world()
-				.get::<ThreatKnowledge>(mob)
-				.is_some_and(|knowledge| { knowledge.get(player_id).is_some() })
-		);
+		assert!(app
+			.world()
+			.get::<ThreatKnowledge>(mob)
+			.is_some_and(|knowledge| { knowledge.get(player_id).is_some() }));
 	}
 
 	#[test]
@@ -349,11 +355,10 @@ mod tests {
 			))
 			.id();
 		app.update();
-		assert!(
-			app.world()
-				.get::<ThreatKnowledge>(victim)
-				.is_some_and(ThreatKnowledge::is_empty)
-		);
+		assert!(app
+			.world()
+			.get::<ThreatKnowledge>(victim)
+			.is_some_and(ThreatKnowledge::is_empty));
 
 		app.world_mut().write_message(DamageApplied {
 			target: victim,
@@ -366,11 +371,10 @@ mod tests {
 		app.update();
 
 		let player_id = ThreatId(player.to_bits());
-		assert!(
-			app.world()
-				.get::<ThreatKnowledge>(victim)
-				.is_some_and(|knowledge| { knowledge.get(player_id).is_some() })
-		);
+		assert!(app
+			.world()
+			.get::<ThreatKnowledge>(victim)
+			.is_some_and(|knowledge| { knowledge.get(player_id).is_some() }));
 	}
 
 	fn threat_app() -> App {
