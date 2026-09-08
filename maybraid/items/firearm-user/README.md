@@ -17,6 +17,14 @@ Writes player handoff slots ([`PlayerUse`](../../player/src/identity.rs),
 [`WeaponTrigger`](../firearms/src/projectiles.rs)) and poses the kit + arm IK.
 `PlayerLook` follows the camera's −Z convention; the pose reverses the local X
 rotation when applying that pitch to the firearm's +Z bore.
+
+Rolled inventory kits share [`GeneratedFirearm`](src/kit.rs) (world, range,
+mobs, and the character-menu inspect). That type paints catalog looks onto
+[`FirearmKit`](../firearms/src/kit.rs) so sight rest-scale / `sight_socket`
+stay the same as a held gun. Inspect does not rest-fit kit bones: that left
+`sight_arm` at bind while shrinking the hull, so the 1 m optic cube floated
+off the receiver.
+
 [`live_weapon_from_stats`](src/weapon.rs) bakes catalog
 [`FirearmStats`](../../crozon/character-items/src/stats.rs) into the held
 [`Weapon`](../firearms/src/projectiles.rs), payload, cadence, recoil

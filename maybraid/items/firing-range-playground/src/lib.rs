@@ -13,7 +13,6 @@ mod les_halles;
 mod loadout;
 mod range;
 mod session;
-mod spec_kit;
 mod ui;
 mod vantage;
 
@@ -76,7 +75,7 @@ impl Plugin for FiringRangePlugin {
 			..default()
 		})
 		.add_plugins(FirearmHostsPlugin);
-		add_firearm_components_host::<spec_kit::RolledFirearm>(app);
+		add_firearm_components_host::<firearm_user::GeneratedFirearm>(app);
 		app.add_plugins(FirearmWeaponsPlugin)
 			.add_plugins(CharacterHostsPlugin)
 			.add_plugins(CharacterControllerPlugin)

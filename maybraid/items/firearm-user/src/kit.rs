@@ -1,4 +1,4 @@
-//! Inventory firearm realization shared by generated mob characters.
+//! Catalog [`FirearmSpec`] → assembled [`FirearmKit`], with slot looks painted on.
 
 use crozon_character_items::{
 	FirearmBarrel, FirearmGrip, FirearmKitSpec, FirearmMesh, FirearmSight, FirearmSpec,
@@ -11,6 +11,11 @@ use firearms::{
 use lod::gen::LodSceneLevel;
 use material_ref::MaterialRef;
 
+/// Painted inventory kit used by the world, range, mobs, and character-menu inspect.
+///
+/// Socket rest scales (including the 1 m sight cube) come from [`FirearmKit`]; this
+/// wrapper only stamps catalog materials. Pose stays bind, matching held kits — the
+/// world then applies a uniform [`crate::HeldFirearm`] root scale.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct GeneratedFirearm {
 	pub spec: FirearmSpec,
@@ -19,7 +24,7 @@ pub struct GeneratedFirearm {
 
 impl GeneratedFirearm {
 	pub fn from_spec(spec: FirearmSpec) -> Self {
-		Self { spec, kit: kit_from_spec(spec.kit) }
+		Self { spec, kit: kit_from_spec(spec) }
 	}
 
 	fn look_material(look: SlotLook) -> MaterialRef {
@@ -40,34 +45,39 @@ impl GeneratedFirearm {
 	}
 }
 
-fn kit_from_spec(spec: FirearmKitSpec) -> FirearmKit {
+/// Map a rolled catalog spec onto the combat [`FirearmKit`].
+pub fn kit_from_spec(spec: FirearmSpec) -> FirearmKit {
+	kit_from_parts(spec.kit)
+}
+
+fn kit_from_parts(kit: FirearmKitSpec) -> FirearmKit {
 	FirearmKit {
-		body: match spec.body {
+		body: match kit.body {
 			FirearmMesh::Bullpup => BodyMesh::Bullpup,
 			FirearmMesh::Silopup => BodyMesh::Silopup,
 			FirearmMesh::Reltor => BodyMesh::Reltor,
 			FirearmMesh::Samsonist => BodyMesh::Samsonist,
 			FirearmMesh::Snailer => BodyMesh::Snailer,
 		},
-		barrel: match spec.barrel {
+		barrel: match kit.barrel {
 			FirearmBarrel::None => BarrelMesh::None,
 			FirearmBarrel::Bullpup => BarrelMesh::Bullpup,
 			FirearmBarrel::Laznard => BarrelMesh::Laznard,
 		},
-		trigger_box: match spec.trigger_box {
+		trigger_box: match kit.trigger_box {
 			FirearmTriggerBox::None => TriggerBoxMesh::None,
 			FirearmTriggerBox::Keelripe => TriggerBoxMesh::Keelripe,
 			FirearmTriggerBox::Paddle => TriggerBoxMesh::Paddle,
 			FirearmTriggerBox::Reltor => TriggerBoxMesh::Reltor,
 		},
-		grip: match spec.grip {
+		grip: match kit.grip {
 			FirearmGrip::None => GripMesh::None,
 			FirearmGrip::BumpHandle => GripMesh::BumpHandle,
 		},
-		stock: match spec.stock {
+		stock: match kit.stock {
 			FirearmStock::None => StockMesh::None,
 		},
-		sight: match spec.sight {
+		sight: match kit.sight {
 			FirearmSight::None => SightMesh::None,
 			FirearmSight::Holorand => SightMesh::Holorand,
 			FirearmSight::Leskop => SightMesh::Leskop,
@@ -102,5 +112,59 @@ impl FirearmComponents for GeneratedFirearm {
 
 	fn sight_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PartNode> {
 		Self::paint(self.kit.sight_nodes_for_level(level), self.spec.looks.sight)
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use crozon_character_items::{FirearmMaterial, FirearmMesh, ItemColor};
+	use firearms::SocketRef;
+
+	#[test]
+	fn kit_mapping_preserves_bullpup_concept_slots() {
+		let kit = kit_from_spec(FirearmSpec::from_mesh(FirearmMesh::Bullpup));
+		assert_eq!(kit.body, BodyMesh::Bullpup);
+		assert_eq!(kit.barrel, BarrelMesh::Bullpup);
+		assert_eq!(kit.grip, GripMesh::BumpHandle);
+	}
+
+	#[test]
+	fn kit_mapping_preserves_holorand_sight() {
+		let mut spec = FirearmSpec::from_mesh(FirearmMesh::Bullpup);
+		spec.kit.sight = FirearmSight::Holorand;
+		let kit = kit_from_spec(spec);
+		assert_eq!(kit.sight, SightMesh::Holorand);
+	}
+
+	#[test]
+	fn kit_mapping_preserves_reltor_trigger_box() {
+		let kit = kit_from_spec(FirearmSpec::from_mesh(FirearmMesh::Reltor));
+		assert_eq!(kit.body, BodyMesh::Reltor);
+		assert_eq!(kit.trigger_box, TriggerBoxMesh::Reltor);
+	}
+
+	#[test]
+	fn paints_the_body_look_onto_the_kit_node() {
+		let mut spec = FirearmSpec::from_mesh(FirearmMesh::Bullpup);
+		spec.looks.body = SlotLook::new(FirearmMaterial::LavaVeins, ItemColor::Red);
+		let rolled = GeneratedFirearm::from_spec(spec);
+		let nodes = rolled.body_nodes_for_level(LodSceneLevel::High).flatten();
+		assert_eq!(nodes.len(), 1);
+		assert_eq!(nodes[0].material, GeneratedFirearm::look_material(spec.looks.body));
+	}
+
+	#[test]
+	fn holorand_keeps_the_kit_sight_socket_and_rest_scale() {
+		let mut spec = FirearmSpec::from_mesh(FirearmMesh::Bullpup);
+		spec.kit.sight = FirearmSight::Holorand;
+		let rolled = GeneratedFirearm::from_spec(spec);
+		let sights = rolled.sight_nodes_for_level(LodSceneLevel::High).flatten();
+		assert_eq!(
+			sights[0].socket,
+			Some(SocketRef::bone("sight_socket").with_local(bevy::prelude::Transform::from_scale(
+				bevy::prelude::Vec3::splat(SightMesh::Holorand.rest_scale())
+			)))
+		);
 	}
 }

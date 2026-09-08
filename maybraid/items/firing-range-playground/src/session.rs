@@ -8,7 +8,8 @@ use crozon_characters::{
 };
 use firearm_intelligence::FirearmEngagement;
 use firearm_user::{
-	live_weapon_from_stats, spawn_held_kit, FirearmUser, FirearmUserSettings, LiveWeapon,
+	live_weapon_from_stats, spawn_held_kit, FirearmUser, FirearmUserSettings, GeneratedFirearm,
+	LiveWeapon,
 };
 use firearms::FirearmConcept;
 use npc_intelligence::{NpcBody, NpcInstall, Personality};
@@ -23,7 +24,6 @@ use crate::damage::{headshot_band_for, CombatRespawn, Health};
 use crate::engagement::NpcEngagement;
 use crate::les_halles::LesHallesSpawn;
 use crate::loadout::{roll_combatant, CombatantLoadout};
-use crate::spec_kit::RolledFirearm;
 
 pub(crate) const DEFAULT_FFA_NPCS: u16 = 6;
 pub(crate) const DEFAULT_AFFA_COMBATANTS: u16 = 4;
@@ -470,7 +470,13 @@ pub(crate) fn spawn_held_system(mut commands: Commands, bodies: UnarmedBodies) {
 		}
 		let live = kit.map(|kit| kit.live).unwrap_or_default();
 		if let Some(kit) = kit {
-			spawn_held_kit(&mut commands, body, settings, RolledFirearm::from_spec(kit.spec), live);
+			spawn_held_kit(
+				&mut commands,
+				body,
+				settings,
+				GeneratedFirearm::from_spec(kit.spec),
+				live,
+			);
 		} else {
 			spawn_held_kit(&mut commands, body, settings, FirearmConcept::Bullpup.kit(), live);
 		}

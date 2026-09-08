@@ -2,7 +2,6 @@
 
 mod brain;
 mod build;
-mod firearm;
 mod inventory;
 mod number;
 mod scene;
@@ -17,7 +16,7 @@ use player::PlayerPlugin;
 
 pub use brain::{CharacterBrains, CHARACTER_POI, LOCAL_POI, SALOON_POI, URBAN_POI, VEGETATION_POI};
 pub use build::CharacterBuild;
-pub use firearm::GeneratedFirearm;
+pub use firearm_user::GeneratedFirearm;
 pub use inventory::CharacterInventory;
 pub use number::FromMobNumber;
 pub use scene::{CharacterSceneRecipe, CharacterSceneSystems, CharacterStats, MobCharacter};

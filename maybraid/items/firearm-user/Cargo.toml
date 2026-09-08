@@ -17,7 +17,9 @@ crozon-characters = { workspace = true }
 crozon-rigs = { workspace = true }
 damage = { workspace = true }
 firearms = { workspace = true }
+lod = { workspace = true }
 lod-avian = { workspace = true }
+material-ref = { workspace = true }
 maybraid-character-controller = { workspace = true }
 maybraid-input = { workspace = true }
 player = { workspace = true }

@@ -3,6 +3,7 @@
 mod aim;
 mod fire;
 mod hold;
+mod kit;
 mod pose;
 mod reticle;
 mod rumble;
@@ -11,13 +12,14 @@ mod weapon;
 use bevy::prelude::*;
 use crozon_characters::CharacterMotionSystems;
 use damage::DamageSystems;
-use firearms::FirearmWeaponSystems;
+use firearms::{add_firearm_components_host, FirearmWeaponSystems};
 use maybraid_input::PadRumbleSystems;
 use player::{PlayerPoseSystems, PlayerSystems};
 use player_camera::PlayerCameraSystems;
 use std::f32::consts::FRAC_PI_2;
 
 pub use hold::{sync_hands_to_firearm, HoldingArms};
+pub use kit::{kit_from_spec, GeneratedFirearm};
 pub use pose::{
 	pose_held_firearm, spawn_held_firearm, spawn_held_firearm_with, spawn_held_kit,
 	stamp_holding_arms, HeldFirearm,
@@ -103,6 +105,7 @@ impl Plugin for FirearmUserPlugin {
 		if !app.is_plugin_added::<damage::DamagePlugin>() {
 			app.add_plugins(damage::DamagePlugin);
 		}
+		add_firearm_components_host::<kit::GeneratedFirearm>(app);
 		app.add_message::<maybraid_input::PadRumble>()
 			.add_systems(Update, fire::apply_fire_intents.in_set(PlayerSystems::Intent))
 			.add_systems(
