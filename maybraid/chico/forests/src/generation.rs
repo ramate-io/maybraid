@@ -1,5 +1,6 @@
 //! [`GenerationScheme`] for [`ChicoForest`] (dependency), [`ChicoGrove`] (origins),
-//! and [`CanopyBumpOut`](crate::CanopyBumpOut) (160 m canopy-proxy origins).
+//! [`CanopyBumpOut`](crate::CanopyBumpOut) (160 m canopy-proxy origins), and
+//! [`GroundCoverBumpOut`](crate::GroundCoverBumpOut) (Near High floor color).
 
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
@@ -12,6 +13,10 @@ use crate::bump_out::{
 	blend_selection_neighborhood, bump_out_cell_bounds, bump_out_cells_overlapping,
 	bump_out_in_inner_hole, medium_bump_out_in_band, CanopyBumpOut, MediumCanopyBumpOut,
 	BUMP_OUT_CELL_XZ, BUMP_OUT_OUTER_RADIUS_M, MEDIUM_BUMP_OUT_CELL_XZ,
+};
+use crate::ground_cover::{
+	blend_ground_cover_neighborhood, ground_cover_in_near_disk, GroundCoverBumpOut,
+	GROUND_COVER_RADIUS_M,
 };
 use crate::grove::{grove_from_id, grove_id};
 use crate::index::ForestIndex;
@@ -197,6 +202,43 @@ impl GenerationScheme<ForestIndex> for MediumCanopyBumpOut {
 	}
 }
 
+impl GenerationScheme<ForestIndex> for GroundCoverBumpOut {
+	fn original_ids_for(_spatial_index: &mut ForestIndex, region: Aabb3d) -> Vec<OriginalId> {
+		bump_out_cells_overlapping(region)
+			.filter_map(|(ix, iz)| {
+				let bounds = bump_out_cell_bounds(ix, iz);
+				if !ground_cover_in_near_disk(bounds, region) {
+					return None;
+				}
+				Some(OriginalId(lod::gen::Id::from_cell(bounds)))
+			})
+			.collect()
+	}
+
+	fn build_with_id(
+		spatial_index: &mut ForestIndex,
+		id: lod::gen::Id,
+		_lod_ref: &LodRef,
+	) -> Option<(Self, Aabb3d)> {
+		let bounds = id.origin_cell_bounds()?;
+		let size = (bounds.max.x - bounds.min.x).max(1e-3);
+		if (size - BUMP_OUT_CELL_XZ).abs() > 1e-2 {
+			return None;
+		}
+		let neighborhood = Aabb3d::from_min_max(
+			Vec3::new(bounds.min.x - size, bounds.min.y, bounds.min.z - size),
+			Vec3::new(bounds.max.x + size, bounds.max.y, bounds.max.z + size),
+		);
+		ensure_forests_for_bounds(spatial_index, neighborhood);
+		let samples = blend_ground_cover_neighborhood(spatial_index, bounds);
+		let cell = Self { bounds, samples };
+		if !cell.has_density() {
+			return None;
+		}
+		Some((cell, bounds))
+	}
+}
+
 fn ensure_forest_ring(index: &mut ForestIndex, forest: ForestExtent) {
 	index.ensure_forest_selected(forest);
 	let (ix, iz) = ForestExtent::cell_index_containing(forest.center());
@@ -330,6 +372,10 @@ pub struct BumpOutLodChan;
 #[derive(Debug, Clone, Copy, Default)]
 pub struct MediumBumpOutLodChan;
 
+/// Channel marker for Near High ground-cover generate / present messages.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct GroundCoverLodChan;
+
 fn bump_out_cell_index(position: Vec3) -> (i32, i32) {
 	let s = BUMP_OUT_CELL_XZ;
 	((position.x / s).floor() as i32, (position.z / s).floor() as i32)
@@ -379,6 +425,66 @@ impl Default for BumpOutPresentBullseye {
 }
 
 impl LodRefreshRegions for BumpOutPresentBullseye {
+	fn lod_refresh_regions(&self, lod_ref: &LodRef) -> LodRefreshRegionsStatus {
+		if !self.enabled {
+			return LodRefreshRegionsStatus::Unchanged;
+		}
+		let previous = bump_out_cell_index(lod_ref.previous_transform.translation);
+		let current = bump_out_cell_index(lod_ref.current_transform.translation);
+		if current == previous {
+			return LodRefreshRegionsStatus::Unchanged;
+		}
+		LodRefreshRegionsStatus::Changed(ForestExtent::xz_radius_aabb(
+			lod_ref.current_transform.translation,
+			self.radius_m,
+		))
+	}
+}
+
+/// Ground-cover generate bullseye: Near High disk; no inner hole.
+#[derive(Resource, Debug, Clone, Copy, PartialEq)]
+pub struct GroundCoverGenerateBullseye {
+	pub radius_m: f32,
+	pub enabled: bool,
+}
+
+impl Default for GroundCoverGenerateBullseye {
+	fn default() -> Self {
+		Self { radius_m: GROUND_COVER_RADIUS_M, enabled: false }
+	}
+}
+
+impl LodRefreshRegions for GroundCoverGenerateBullseye {
+	fn lod_refresh_regions(&self, lod_ref: &LodRef) -> LodRefreshRegionsStatus {
+		if !self.enabled {
+			return LodRefreshRegionsStatus::Unchanged;
+		}
+		let previous = bump_out_cell_index(lod_ref.previous_transform.translation);
+		let current = bump_out_cell_index(lod_ref.current_transform.translation);
+		if current == previous {
+			return LodRefreshRegionsStatus::Unchanged;
+		}
+		LodRefreshRegionsStatus::Changed(ForestExtent::xz_radius_aabb(
+			lod_ref.current_transform.translation,
+			self.radius_m,
+		))
+	}
+}
+
+/// Ground-cover present bullseye: Near High keep; inner hole stays 0.
+#[derive(Resource, Debug, Clone, Copy, PartialEq)]
+pub struct GroundCoverPresentBullseye {
+	pub radius_m: f32,
+	pub enabled: bool,
+}
+
+impl Default for GroundCoverPresentBullseye {
+	fn default() -> Self {
+		Self { radius_m: GROUND_COVER_RADIUS_M, enabled: false }
+	}
+}
+
+impl LodRefreshRegions for GroundCoverPresentBullseye {
 	fn lod_refresh_regions(&self, lod_ref: &LodRef) -> LodRefreshRegionsStatus {
 		if !self.enabled {
 			return LodRefreshRegionsStatus::Unchanged;
@@ -646,6 +752,66 @@ mod tests {
 			assert!((bounds.max.x - bounds.min.x - MEDIUM_BUMP_OUT_CELL_XZ).abs() < 1e-2);
 			assert!(medium_bump_out_in_band(bounds, region));
 		}
+		Ok(())
+	}
+
+	#[test]
+	fn ground_cover_original_ids_include_the_origin_cell() -> Result<()> {
+		let region = ForestExtent::xz_radius_aabb(Vec3::ZERO, GROUND_COVER_RADIUS_M);
+		let ids = GroundCoverBumpOut::original_ids_for(&mut ForestIndex::default(), region);
+		assert!(!ids.is_empty());
+		let origin = lod::gen::Id::from_cell(bump_out_cell_bounds(0, 0));
+		assert!(ids.iter().any(|OriginalId(id)| *id == origin));
+		for OriginalId(id) in ids {
+			let bounds = id.origin_cell_bounds().ok_or_else(|| anyhow::anyhow!("cell"))?;
+			assert!(ground_cover_in_near_disk(bounds, region));
+			assert!((bounds.max.x - bounds.min.x - BUMP_OUT_CELL_XZ).abs() < 1e-2);
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn ground_cover_build_is_select_only_and_centimetre_scale() -> Result<()> {
+		let mut index = ForestIndex::default();
+		index.layering = Some(crate::LayeringKind::LushJungle);
+		let bounds = bump_out_cell_bounds(0, 0);
+		let id = lod::gen::Id::from_cell(bounds);
+		let (identity, lod_bounds) = test_lod_ref(bounds);
+		let lod_ref = LodRef {
+			entity: bevy::prelude::Entity::PLACEHOLDER,
+			previous_transform: &identity,
+			current_transform: &identity,
+			bounds: &lod_bounds,
+		};
+		assert!(GeneratingSpatialIndex::<GroundCoverBumpOut>::get_or_generate(
+			&mut index, id, &lod_ref
+		)
+		.is_some());
+		let cell = lod::gen::SpatialIndex::<GroundCoverBumpOut>::get(&index, id)
+			.ok_or_else(|| anyhow::anyhow!("ground cover"))?;
+		assert!(cell.has_density());
+		for sample in cell.samples {
+			assert!(sample.height_m.abs() < 0.5, "floor color must stay centimetre-scale");
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn ground_cover_skips_barren_empty_cells() -> Result<()> {
+		let mut index = ForestIndex::default();
+		index.layering = Some(crate::LayeringKind::SunsBarren);
+		let bounds = bump_out_cell_bounds(2, 3);
+		let id = lod::gen::Id::from_cell(bounds);
+		let (identity, lod_bounds) = test_lod_ref(bounds);
+		let lod_ref = LodRef {
+			entity: bevy::prelude::Entity::PLACEHOLDER,
+			previous_transform: &identity,
+			current_transform: &identity,
+			bounds: &lod_bounds,
+		};
+		let _ =
+			GeneratingSpatialIndex::<GroundCoverBumpOut>::get_or_generate(&mut index, id, &lod_ref);
+		assert!(lod::gen::SpatialIndex::<GroundCoverBumpOut>::get(&index, id).is_none());
 		Ok(())
 	}
 }

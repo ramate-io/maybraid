@@ -13,6 +13,7 @@ mod chico;
 mod extent;
 mod forest;
 mod generation;
+mod ground_cover;
 mod grove;
 pub(crate) mod hopscotch;
 mod host;
@@ -47,8 +48,15 @@ pub use extent::{ForestExtent, DEFAULT_FOREST_EXTENT_XZ, DEFAULT_FOREST_GROVE_TI
 pub use forest::{neighbor_layers, ChicoForest};
 pub use generation::{
 	BumpOutGenerateBullseye, BumpOutLodChan, BumpOutPresentBullseye, ForestGenerateBullseye,
-	ForestLodChan, ForestPresentBullseye, ForestPresentLattice, MediumBumpOutLodChan,
-	GROVE_GENERATE_RADIUS_M, GROVE_PRESENT_RADIUS_M,
+	ForestLodChan, ForestPresentBullseye, ForestPresentLattice, GroundCoverGenerateBullseye,
+	GroundCoverLodChan, GroundCoverPresentBullseye, MediumBumpOutLodChan, GROVE_GENERATE_RADIUS_M,
+	GROVE_PRESENT_RADIUS_M,
+};
+pub use ground_cover::{
+	blend_ground_cover_neighborhood, ground_cover_cell_index, ground_cover_cells_in_near_disk,
+	ground_cover_in_near_disk, kind_from_layering, GroundCoverBumpOut, GroundCoverKind,
+	GroundCoverSample, GroundCoverStyle, GROUND_COVER_ANCHOR_STEP_M, GROUND_COVER_FAR_OVERLAP_M,
+	GROUND_COVER_RADIUS_M,
 };
 pub use grove::{grove_from_id, grove_id, ChicoGrove};
 pub use hopscotch::{select as hopscotch_select, HopscotchNode};

@@ -1,5 +1,6 @@
 //! Spatial index of selected [`ChicoForest`] cells, generated [`ChicoGrove`]s,
-//! and [`CanopyBumpOut`](crate::CanopyBumpOut) terrain cells.
+//! [`CanopyBumpOut`](crate::CanopyBumpOut) terrain cells, and
+//! [`GroundCoverBumpOut`](crate::GroundCoverBumpOut) Near-disk overlays.
 
 use std::collections::{HashMap, HashSet};
 
@@ -14,12 +15,13 @@ use crate::bump_out::{
 	bump_out_cells_overlapping, bump_out_in_inner_hole, medium_bump_out_in_band, CanopyBumpOut,
 	MediumCanopyBumpOut, BUMP_OUT_CELL_XZ,
 };
+use crate::ground_cover::{ground_cover_in_near_disk, GroundCoverBumpOut};
 use crate::{
 	select_cell, ChicoForest, ChicoGrove, ForestExtent, LayeringKind, NeighborLayers,
 	SelectedLayers,
 };
 
-/// Storage for generated forest cells, grove tiles, and canopy bump-out cells.
+/// Storage for generated forest cells, grove tiles, canopy bump-outs, and ground cover.
 /// Generation and presentation read this; neither plugin owns the other.
 #[derive(Resource, Clone)]
 pub struct ForestIndex {
@@ -30,6 +32,8 @@ pub struct ForestIndex {
 	bump_outs: HashMap<Id, BumpOutEntry>,
 	bump_out_cells: HashMap<(i32, i32), Id>,
 	medium_bump_outs: HashMap<Id, MediumBumpOutEntry>,
+	ground_covers: HashMap<Id, GroundCoverEntry>,
+	ground_cover_cells: HashMap<(i32, i32), Id>,
 	pub noise: NoiseParams,
 	pub layering: Option<LayeringKind>,
 }
@@ -62,6 +66,13 @@ struct MediumBumpOutEntry {
 	version: Version,
 }
 
+#[derive(Clone)]
+struct GroundCoverEntry {
+	value: GroundCoverBumpOut,
+	bounds: Aabb3d,
+	version: Version,
+}
+
 impl Default for ForestIndex {
 	fn default() -> Self {
 		Self {
@@ -72,6 +83,8 @@ impl Default for ForestIndex {
 			bump_outs: HashMap::new(),
 			bump_out_cells: HashMap::new(),
 			medium_bump_outs: HashMap::new(),
+			ground_covers: HashMap::new(),
+			ground_cover_cells: HashMap::new(),
 			noise: NoiseParams::default(),
 			layering: None,
 		}
@@ -86,6 +99,8 @@ impl ForestIndex {
 		self.bump_outs.clear();
 		self.bump_out_cells.clear();
 		self.medium_bump_outs.clear();
+		self.ground_covers.clear();
+		self.ground_cover_cells.clear();
 		self.next_version = 0;
 	}
 
@@ -160,6 +175,14 @@ impl ForestIndex {
 
 	fn unindex_bump_out(&mut self, bounds: Aabb3d) {
 		self.bump_out_cells.remove(&Self::bump_out_grid_cell(bounds));
+	}
+
+	fn index_ground_cover(&mut self, id: Id, bounds: Aabb3d) {
+		self.ground_cover_cells.insert(Self::bump_out_grid_cell(bounds), id);
+	}
+
+	fn unindex_ground_cover(&mut self, bounds: Aabb3d) {
+		self.ground_cover_cells.remove(&Self::bump_out_grid_cell(bounds));
 	}
 }
 
@@ -352,6 +375,60 @@ impl SpatialIndex<MediumCanopyBumpOut> for ForestIndex {
 	fn insert(&mut self, id: Id, value: MediumCanopyBumpOut, bounds: Aabb3d, _lod_ref: &LodRef) {
 		let version = self.next_version();
 		self.medium_bump_outs.insert(id, MediumBumpOutEntry { value, bounds, version });
+	}
+}
+
+impl SpatialIndex<GroundCoverBumpOut> for ForestIndex {
+	fn tracked_ids_for(&self, region: Aabb3d) -> Vec<TrackedId> {
+		let mut tracked = Vec::new();
+		for (ix, iz) in bump_out_cells_overlapping(region) {
+			let Some(&id) = self.ground_cover_cells.get(&(ix, iz)) else {
+				continue;
+			};
+			let Some(entry) = self.ground_covers.get(&id) else {
+				continue;
+			};
+			if !ground_cover_in_near_disk(entry.bounds, region) {
+				continue;
+			}
+			if region.min.x < entry.bounds.max.x
+				&& region.max.x > entry.bounds.min.x
+				&& region.min.z < entry.bounds.max.z
+				&& region.max.z > entry.bounds.min.z
+			{
+				tracked.push(TrackedId(id));
+			}
+		}
+		tracked
+	}
+
+	fn storage_status(&self, id: Id) -> StorageStatus {
+		if self.ground_covers.contains_key(&id) {
+			StorageStatus::TrackedWithin
+		} else {
+			StorageStatus::NotTracked
+		}
+	}
+
+	fn get(&self, id: Id) -> Option<&GroundCoverBumpOut> {
+		self.ground_covers.get(&id).map(|entry| &entry.value)
+	}
+
+	fn get_bounds(&self, id: Id) -> Option<Aabb3d> {
+		self.ground_covers.get(&id).map(|entry| entry.bounds)
+	}
+
+	fn version(&self, id: Id) -> Option<Version> {
+		self.ground_covers.get(&id).map(|entry| entry.version)
+	}
+
+	fn insert(&mut self, id: Id, t: GroundCoverBumpOut, bounds: Aabb3d, _lod_ref: &LodRef) {
+		let version = self.next_version();
+		if let Some(previous_bounds) = self.ground_covers.get(&id).map(|previous| previous.bounds) {
+			self.unindex_ground_cover(previous_bounds);
+		}
+		self.ground_covers.insert(id, GroundCoverEntry { value: t, bounds, version });
+		self.index_ground_cover(id, bounds);
 	}
 }
 

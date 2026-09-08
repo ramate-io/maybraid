@@ -11,7 +11,8 @@ pub mod urbanization_stream;
 pub use camera::CameraController;
 pub use commands::{DevelopmentFocus, PlaygroundCommand, PlaygroundStartup, PLAYGROUND_CLI_NAME};
 pub use development_bump_out::{
-	DevelopmentCanopyBumpOutPresenter, DevelopmentMediumCanopyBumpOutPresenter,
+	DevelopmentCanopyBumpOutPresenter, DevelopmentGroundCoverBumpOutPresenter,
+	DevelopmentMediumCanopyBumpOutPresenter,
 };
 pub use development_forest::DevelopmentForestPresenter;
 pub use game_commands::command::PendingStartupCommand;
@@ -27,7 +28,7 @@ use camera::{
 	camera_controller, refocus_camera_on_layout, release_modifiers_on_focus_change, setup_camera,
 };
 use chico_forests::register_forest_lod;
-use chico_vegetation_on_terrain_playground::register_bump_out_lod;
+use chico_vegetation_on_terrain_playground::{register_bump_out_lod, register_ground_cover_lod};
 use commands::{
 	RequestDevelopmentFocus, RequestLikelihood, RequestMeshStats, RequestRebuild, RequestSeed,
 	RequestTerrainRadius,
@@ -182,6 +183,7 @@ impl Plugin for DevelopmentsOnTerrainPlugin {
 				DevelopmentCanopyBumpOutPresenter,
 				DevelopmentMediumCanopyBumpOutPresenter,
 			>(app);
+			register_ground_cover_lod::<DevelopmentGroundCoverBumpOutPresenter>(app);
 		}
 
 		if self.commands {

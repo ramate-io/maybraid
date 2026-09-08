@@ -49,6 +49,21 @@ pub enum ForestGroveKind {
 	WildGrass,
 }
 
+impl ForestGroveKind {
+	/// Blade / tuft-patch groves (High kits, not nested woody plants).
+	pub fn is_tuft(self) -> bool {
+		matches!(
+			self,
+			Self::BraidGrass
+				| Self::CommonTufts
+				| Self::MonsterGrass
+				| Self::TallGrass
+				| Self::TropicalTufts
+				| Self::WildGrass
+		)
+	}
+}
+
 /// Well-known forest layering ([RFC-183 §3.5.4]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum LayeringKind {
@@ -250,6 +265,24 @@ impl LayeringKind {
 		let key = name.trim().to_ascii_lowercase();
 		Self::ALL.iter().copied().find(|kind| kind.as_kebab() == key)
 	}
+
+	/// Open grass / farm mosaics that should paint as multi-cell fields.
+	pub fn prefers_field_cover(self) -> bool {
+		matches!(
+			self,
+			Self::Meadowland
+				| Self::FruitPlains
+				| Self::AgTown
+				| Self::UpperPark
+				| Self::SteppeDown
+				| Self::OldSteppe
+		)
+	}
+
+	/// Desert / barren mosaics that should skip floor-color overlays.
+	pub fn prefers_empty_cover(self) -> bool {
+		matches!(self, Self::SunsBarren | Self::OwlsDesert | Self::OldNevada)
+	}
 }
 
 impl ForestLayering {
@@ -294,6 +327,16 @@ mod tests {
 		let layers = LayeringKind::LushJungle.layering().typical_layers();
 		assert_eq!(layers.upper_canopy, Some(ForestGroveKind::TradeWinds));
 		assert!(layers.tufts.is_some());
+		Ok(())
+	}
+
+	#[test]
+	fn tuft_and_cover_layering_hints() -> Result<()> {
+		assert!(ForestGroveKind::WildGrass.is_tuft());
+		assert!(!ForestGroveKind::RollingOaks.is_tuft());
+		assert!(LayeringKind::Meadowland.prefers_field_cover());
+		assert!(LayeringKind::SunsBarren.prefers_empty_cover());
+		assert!(!LayeringKind::LushJungle.prefers_empty_cover());
 		Ok(())
 	}
 

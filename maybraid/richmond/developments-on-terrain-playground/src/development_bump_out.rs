@@ -5,10 +5,13 @@ use std::collections::HashSet;
 use bevy::ecs::system::SystemParam;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
-use chico_forests::{CanopyBumpOut, ForestIndex, MediumCanopyBumpOut, MEDIUM_BUMP_OUT_CELL_XZ};
+use chico_forests::{
+	CanopyBumpOut, ForestIndex, GroundCoverBumpOut, MediumCanopyBumpOut, MEDIUM_BUMP_OUT_CELL_XZ,
+};
 use chico_vegetation_on_terrain_playground::{
-	bump_out_from_cell, bump_out_noise, fine_terrain_for, medium_terrain_for, terrain_chunk_ref,
-	CanopyBumpOutPresenterState, MediumCanopyBumpOutPresenterState, WorldTerrainBuilder,
+	bump_out_from_cell, bump_out_noise, fine_terrain_for, ground_cover_from_cell,
+	medium_terrain_for, terrain_chunk_ref, CanopyBumpOutPresenterState,
+	GroundCoverBumpOutPresenterState, MediumCanopyBumpOutPresenterState, WorldTerrainBuilder,
 };
 use durham_terrain_models::{cascade_chunk_for_cell, TerrainStoreView};
 use lod::gen::{Id, SpatialIndex, Version};
@@ -120,6 +123,64 @@ impl RegionPresenter<MediumCanopyBumpOut, ForestIndex>
 			return;
 		};
 		let Some(terrain_ref) = self.terrain_ref_for(cell.0.bounds) else {
+			return;
+		};
+		self.state.present(&mut self.commands, id, version, bump_out, terrain_ref);
+	}
+
+	fn hide(&mut self, id: Id) {
+		self.state.hide(&mut self.commands, id);
+	}
+
+	fn is_hidden(&self, id: Id) -> bool {
+		self.state.is_hidden(id)
+	}
+
+	fn presented_ids(&self) -> Vec<Id> {
+		self.state.presented_ids()
+	}
+
+	fn remove_stale(&mut self, wanted: &HashSet<Id>) {
+		self.state.remove_stale(&mut self.commands, wanted);
+	}
+}
+
+/// Presents Near High floor-color overlays on the padded mesh when that
+/// replacement is active, falling back to the matching raw Durham cell.
+#[derive(SystemParam)]
+pub struct DevelopmentGroundCoverBumpOutPresenter<'w, 's> {
+	commands: Commands<'w, 's>,
+	state: ResMut<'w, GroundCoverBumpOutPresenterState>,
+	development: DevelopmentIndex<'w>,
+	forest: Res<'w, ForestIndex>,
+}
+
+impl DevelopmentGroundCoverBumpOutPresenter<'_, '_> {
+	fn terrain_ref_for(&self, bounds: Aabb3d) -> Option<TerrainChunkRef<WorldTerrainBuilder>> {
+		if let Some(terrain) = self.development.store.padded_terrain_for(bounds) {
+			return Some(DevelopmentCanopyBumpOutPresenter::padded_terrain_ref(terrain));
+		}
+
+		let view =
+			TerrainStoreView::new(self.development.terrain_store(), self.development.layout());
+		fine_terrain_for(&view, bounds).map(terrain_chunk_ref)
+	}
+}
+
+impl RegionPresenter<GroundCoverBumpOut, ForestIndex>
+	for DevelopmentGroundCoverBumpOutPresenter<'_, '_>
+{
+	fn presented_version(&self, id: Id) -> Option<Version> {
+		let cell = SpatialIndex::<GroundCoverBumpOut>::get(&*self.forest, id)?;
+		let terrain_ref = self.terrain_ref_for(cell.bounds)?;
+		self.state.presented_version_for_terrain(id, terrain_ref.key())
+	}
+
+	fn handle(&mut self, id: Id, version: Version, cell: &GroundCoverBumpOut, _lod_ref: &LodRef) {
+		let Some(bump_out) = ground_cover_from_cell(cell, &self.forest.noise) else {
+			return;
+		};
+		let Some(terrain_ref) = self.terrain_ref_for(cell.bounds) else {
 			return;
 		};
 		self.state.present(&mut self.commands, id, version, bump_out, terrain_ref);
