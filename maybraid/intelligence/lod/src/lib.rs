@@ -32,6 +32,24 @@ impl IntelligenceBand {
 			Self::Far
 		}
 	}
+
+	/// Stretch discovery / scan intervals for Mid and Far.
+	pub fn interval_scale(self) -> f32 {
+		match self {
+			Self::Near => 1.0,
+			Self::Mid => 2.0,
+			Self::Far => 4.0,
+		}
+	}
+
+	/// Shrink per-tick candidate / sample counts. Far keeps one.
+	pub fn scale_count(self, n: usize) -> usize {
+		match self {
+			Self::Near => n,
+			Self::Mid => n.max(1) / 2,
+			Self::Far => 1,
+		}
+	}
 }
 
 /// Per-plant work LOD. Insert once; the world pulse writes `band` / `skips`.
@@ -108,6 +126,17 @@ mod tests {
 		assert_eq!(IntelligenceBand::from_viewer(120.0, false), IntelligenceBand::Mid);
 		assert_eq!(IntelligenceBand::from_viewer(300.0, false), IntelligenceBand::Far);
 		assert_eq!(IntelligenceBand::from_viewer(300.0, true), IntelligenceBand::Near);
+	}
+
+	#[test]
+	fn interval_and_count_scale_with_band() {
+		assert_eq!(IntelligenceBand::Near.interval_scale(), 1.0);
+		assert_eq!(IntelligenceBand::Mid.interval_scale(), 2.0);
+		assert_eq!(IntelligenceBand::Far.interval_scale(), 4.0);
+		assert_eq!(IntelligenceBand::Near.scale_count(8), 8);
+		assert_eq!(IntelligenceBand::Mid.scale_count(8), 4);
+		assert_eq!(IntelligenceBand::Far.scale_count(8), 1);
+		assert_eq!(IntelligenceBand::Mid.scale_count(1), 0);
 	}
 
 	#[test]
