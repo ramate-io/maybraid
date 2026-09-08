@@ -19,7 +19,7 @@ pub fn ui_config() -> GameCommandUiConfig {
 		empty_console_text: "Console: `mode free`, `set-character`, `stats mesh`, `help`".into(),
 		root_background: Color::srgba(0.08, 0.16, 0.22, 0.82),
 		controls_hint:
-			"L-stick move — R-stick look — L3 sprint — R3 POV — A jump — LT focus — RT use — RT+X power — / commands"
+			"L-stick move — R-stick look — L3 sprint — R3 POV — A jump — LT optic — LB irons — RT use — RT+X power — / commands"
 				.into(),
 	}
 }

@@ -6,3 +6,4 @@ resolved here so consumers do not re-read the pad.
 
 `RightTrigger` + `X` is `PowerUseItem` and suppresses `StartInteraction`.
 L3 hold is sprint (press / release), R3 click swaps first / third person.
+LT is optic `Focus`; left bumper is iron `Ads`.

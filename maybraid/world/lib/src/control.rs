@@ -108,6 +108,7 @@ pub(crate) fn echo_character_intents(
 			CharacterIntent::Move(value) => format!("move=({:.2},{:.2})", value.x, value.y),
 			CharacterIntent::Look(value) => format!("look=({:.2},{:.2})", value.x, value.y),
 			CharacterIntent::Focus(value) => format!("focus={value:.2}"),
+			CharacterIntent::Ads(value) => format!("ads={value:.2}"),
 			CharacterIntent::UseItem(value) => format!("use={value:.2}"),
 			other => other.label().to_string(),
 		});

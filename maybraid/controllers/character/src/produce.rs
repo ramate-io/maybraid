@@ -28,6 +28,9 @@ pub fn collect(pad: &VirtualPad, trigger_threshold: f32) -> Vec<CharacterIntent>
 	if pad.trigger_focus > ANALOG_EPS {
 		out.push(CharacterIntent::Focus(pad.trigger_focus));
 	}
+	if pad.pressed(PadButton::BumperFocus) {
+		out.push(CharacterIntent::Ads(1.0));
+	}
 	if pad.trigger_fire > ANALOG_EPS {
 		out.push(CharacterIntent::UseItem(pad.trigger_fire));
 	}
@@ -167,6 +170,16 @@ mod tests {
 		pad.max_triggers(0.4, 0.0);
 		finish(&mut pad);
 		assert_eq!(collect(&pad, 0.5), vec![CharacterIntent::Focus(0.4)]);
+		Ok(())
+	}
+
+	#[test]
+	fn left_bumper_is_iron_ads() -> anyhow::Result<()> {
+		let mut pad = VirtualPad::default();
+		pad.begin_frame();
+		pad.hold_digital(PadButton::BumperFocus);
+		finish(&mut pad);
+		assert_eq!(collect(&pad, 0.5), vec![CharacterIntent::Ads(1.0)]);
 		Ok(())
 	}
 }

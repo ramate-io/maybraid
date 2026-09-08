@@ -95,4 +95,4 @@ cargo run -p firing-range-playground -- affa --combatants 4 --civilians 6
 cargo run -p firing-range-playground -- test-dummy
 ```
 
-WASD / left stick move, mouse / right stick look, Space / A jump, click / RT fire. R3 toggles first person; right mouse / LT focuses from the head camera onto the firearm sight. `/` then `pause` / `resume` / `free-for-all` / `affa` / `duel` / `test-dummy`.
+WASD / left stick move, mouse / right stick look, Space / A jump, click / RT fire. R3 toggles first person; right mouse / LT focuses through the optic FOV; middle mouse / left bumper / C ADS with iron FOV. `/` then `pause` / `resume` / `free-for-all` / `affa` / `duel` / `test-dummy`.

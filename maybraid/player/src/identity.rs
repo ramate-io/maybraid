@@ -25,6 +25,7 @@ pub struct PlayerLook {
 	pub yaw: f32,
 	pub pitch: f32,
 	pub first_person: bool,
+	/// ADS pose blend (optic or iron). Optic zoom is camera `focus`, not this.
 	pub focus: f32,
 }
 
