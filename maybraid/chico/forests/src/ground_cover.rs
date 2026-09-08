@@ -2,18 +2,18 @@
 //!
 //! [`GroundCoverBumpOut`] is a sibling of [`crate::CanopyBumpOut`], not a second
 //! LOD on it. Origins are the same 160 m cells; present keep is the Near High
-//! disk (inner hole = 0) so moss / trails / fields sit underfoot. Heights are
-//! centimetres — never the canopy-metre tables.
+//! disk (inner hole = 0) so moss / fields sit underfoot. Heights are
+//! centimetres — never the canopy-metre tables. Identity comes from the forest
+//! cell's ground-cover flip, not from canopy or tuft selection.
 
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::{Color, Vec3};
 use lod::gen::Id;
 
 use crate::bump_out::{
-	blend_selection_on_bounds, bump_out_cell_bounds, bump_out_cells_overlapping,
-	bump_out_chebyshev_xz, BumpOutSelectionSample, BUMP_OUT_CELL_XZ,
+	bump_out_cell_bounds, bump_out_cells_overlapping, bump_out_chebyshev_xz, BUMP_OUT_CELL_XZ,
 };
-use crate::{ForestGroveKind, ForestIndex, LayeringKind};
+use crate::{ForestExtent, ForestIndex, GroundCoverGroveKind};
 
 /// Near High half-extent (8 × 160 m). Same Chebyshev family as playable Near terrain.
 pub const GROUND_COVER_RADIUS_M: f32 = 8.0 * BUMP_OUT_CELL_XZ;
@@ -24,7 +24,10 @@ pub const GROUND_COVER_FAR_OVERLAP_M: f32 = 2.0 * BUMP_OUT_CELL_XZ;
 /// Snap shared with Near / Far terrain streams (640 m).
 pub const GROUND_COVER_ANCHOR_STEP_M: f32 = 4.0 * BUMP_OUT_CELL_XZ;
 
-/// Floor-color recipe. Same shader as canopy; centimetre displace + paint.
+/// Floor-color recipe class. Same shader as canopy; centimetre displace + paint.
+///
+/// [`GameTrail`] stays for a later corridor mask. Forest throw maps onto moss
+/// or field only.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum GroundCoverKind {
 	MossyBumps,
@@ -35,6 +38,7 @@ pub enum GroundCoverKind {
 /// One blended floor-color sample (empty when the cell should not paint).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct GroundCoverSample {
+	pub grove: Option<GroundCoverGroveKind>,
 	pub kind: Option<GroundCoverKind>,
 	pub density: f32,
 	pub bite_size: f32,
@@ -47,6 +51,7 @@ pub struct GroundCoverSample {
 impl GroundCoverSample {
 	pub fn empty() -> Self {
 		Self {
+			grove: None,
 			kind: None,
 			density: 0.0,
 			bite_size: 1.0,
@@ -57,10 +62,25 @@ impl GroundCoverSample {
 		}
 	}
 
+	pub fn from_grove(grove: GroundCoverGroveKind, variation: f32) -> Self {
+		let t = variation.clamp(0.0, 1.0);
+		Self {
+			grove: Some(grove),
+			kind: Some(grove.overlay_kind()),
+			density: grove.density(),
+			bite_size: grove.bite_size(),
+			bite_size_deviation: grove.bite_size_deviation(),
+			height_m: grove.height_m(t),
+			height_deviation_m: grove.height_deviation_m(),
+			palette: grove.palette(),
+		}
+	}
+
 	pub fn from_kind(kind: GroundCoverKind, variation: f32) -> Self {
 		let t = variation.clamp(0.0, 1.0);
 		match kind {
 			GroundCoverKind::MossyBumps => Self {
+				grove: None,
 				kind: Some(kind),
 				density: 0.82,
 				bite_size: 2.4,
@@ -70,6 +90,7 @@ impl GroundCoverSample {
 				palette: moss_palette(),
 			},
 			GroundCoverKind::GameTrail => Self {
+				grove: None,
 				kind: Some(kind),
 				density: 0.28,
 				bite_size: 3.2,
@@ -79,6 +100,7 @@ impl GroundCoverSample {
 				palette: trail_palette(),
 			},
 			GroundCoverKind::Field => Self {
+				grove: None,
 				kind: Some(kind),
 				density: 0.90,
 				bite_size: 14.0,
@@ -89,10 +111,85 @@ impl GroundCoverSample {
 			},
 		}
 	}
+}
 
-	pub fn with_density(mut self, density: f32) -> Self {
-		self.density = density.clamp(0.0, 1.0);
-		self
+impl GroundCoverGroveKind {
+	/// Shader style class for this grove. Trails are not a forest throw.
+	pub fn overlay_kind(self) -> GroundCoverKind {
+		match self {
+			Self::HuelgoatPitch | Self::FloorScrub | Self::FleckingBed | Self::JimsCollage => {
+				GroundCoverKind::MossyBumps
+			}
+			Self::Allbed | Self::GrassyMounds => GroundCoverKind::Field,
+		}
+	}
+
+	pub fn density(self) -> f32 {
+		match self {
+			Self::HuelgoatPitch => 0.82,
+			Self::FloorScrub => 0.78,
+			Self::FleckingBed => 0.68,
+			Self::JimsCollage => 0.74,
+			Self::Allbed => 0.90,
+			Self::GrassyMounds => 0.88,
+		}
+	}
+
+	pub fn bite_size(self) -> f32 {
+		match self {
+			Self::HuelgoatPitch | Self::FloorScrub | Self::FleckingBed | Self::JimsCollage => 2.4,
+			Self::Allbed | Self::GrassyMounds => 14.0,
+		}
+	}
+
+	pub fn bite_size_deviation(self) -> f32 {
+		match self {
+			Self::HuelgoatPitch | Self::FloorScrub => 0.35,
+			Self::FleckingBed | Self::JimsCollage => 0.28,
+			Self::Allbed => 0.18,
+			Self::GrassyMounds => 0.22,
+		}
+	}
+
+	pub fn height_m(self, variation: f32) -> f32 {
+		let t = variation.clamp(0.0, 1.0);
+		match self {
+			Self::HuelgoatPitch => 0.04 + 0.14 * t,
+			Self::FloorScrub => 0.03 + 0.10 * t,
+			Self::FleckingBed => 0.02 + 0.08 * t,
+			Self::JimsCollage => 0.03 + 0.11 * t,
+			Self::Allbed => 0.02 + 0.06 * t,
+			Self::GrassyMounds => 0.04 + 0.08 * t,
+		}
+	}
+
+	pub fn height_deviation_m(self) -> f32 {
+		match self {
+			Self::HuelgoatPitch => 0.06,
+			Self::FloorScrub | Self::JimsCollage => 0.05,
+			Self::FleckingBed => 0.04,
+			Self::Allbed => 0.03,
+			Self::GrassyMounds => 0.04,
+		}
+	}
+
+	pub fn palette(self) -> [Color; 3] {
+		match self {
+			Self::HuelgoatPitch => moss_palette(),
+			Self::FloorScrub => {
+				[rgb(0.12, 0.20, 0.08), rgb(0.22, 0.30, 0.10), rgb(0.34, 0.38, 0.14)]
+			}
+			Self::FleckingBed => {
+				[rgb(0.08, 0.22, 0.08), rgb(0.16, 0.34, 0.12), rgb(0.28, 0.40, 0.14)]
+			}
+			Self::JimsCollage => {
+				[rgb(0.10, 0.18, 0.08), rgb(0.20, 0.30, 0.10), rgb(0.32, 0.42, 0.16)]
+			}
+			Self::Allbed => field_palette(),
+			Self::GrassyMounds => {
+				[rgb(0.18, 0.36, 0.10), rgb(0.32, 0.50, 0.14), rgb(0.52, 0.58, 0.20)]
+			}
+		}
 	}
 }
 
@@ -116,8 +213,37 @@ impl GroundCoverBumpOut {
 		self.samples[4].kind
 	}
 
+	pub fn center_grove(&self) -> Option<GroundCoverGroveKind> {
+		self.samples[4].grove
+	}
+
 	pub fn center_palette(&self) -> [Color; 3] {
 		self.samples[4].palette
+	}
+
+	/// Density-weighted mix of the 3×3 palettes so identity seams do not snap.
+	pub fn blended_palette(&self) -> [Color; 3] {
+		let mut acc = [[0.0f32; 3]; 3];
+		let mut weight = 0.0f32;
+		for sample in &self.samples {
+			let density = sample.density;
+			if density <= 0.001 {
+				continue;
+			}
+			weight += density;
+			for (i, color) in sample.palette.iter().enumerate() {
+				let srgba = color.to_srgba();
+				acc[i][0] += srgba.red * density;
+				acc[i][1] += srgba.green * density;
+				acc[i][2] += srgba.blue * density;
+			}
+		}
+		if weight <= 0.001 {
+			return self.center_palette();
+		}
+		acc.map(|channel| {
+			Color::srgb(channel[0] / weight, channel[1] / weight, channel[2] / weight)
+		})
 	}
 }
 
@@ -206,85 +332,32 @@ pub fn blend_ground_cover_neighborhood(
 				ground_cover_sample_on_bounds(index, Aabb3d::from_min_max(min, max));
 		}
 	}
+	soften_identity_changes(&mut samples);
 	samples
 }
 
 fn ground_cover_sample_on_bounds(index: &ForestIndex, bounds: Aabb3d) -> GroundCoverSample {
-	let selection = blend_selection_on_bounds(index, bounds);
 	let center = Vec3::from((bounds.min + bounds.max) * 0.5);
-	let (forest_ix, forest_iz) = crate::ForestExtent::cell_index_containing(center);
-	let layering = index
-		.selected_layers_for(crate::ForestExtent::from_cell_index(forest_ix, forest_iz))
-		.layering;
-	let (ix, iz) = ground_cover_cell_index(bounds);
-	let seed = index.noise.seed as u32;
-	let Some(kind) = pick_ground_cover_kind(selection, layering, ix, iz, seed) else {
+	let (forest_ix, forest_iz) = ForestExtent::cell_index_containing(center);
+	let grove = index
+		.selected_layers_for(ForestExtent::from_cell_index(forest_ix, forest_iz))
+		.ground_cover;
+	let Some(grove) = grove else {
 		return GroundCoverSample::empty();
 	};
-	let variation = cell_hash01(ix, iz, seed.wrapping_add(19));
-	let mut sample = GroundCoverSample::from_kind(kind, variation);
-	if kind == GroundCoverKind::GameTrail {
-		sample = sample.with_density(0.18 + 0.22 * trail_weight(ix, iz, seed));
-	}
-	sample
+	let (ix, iz) = ground_cover_cell_index(bounds);
+	let variation = cell_hash01(ix, iz, index.noise.seed as u32);
+	GroundCoverSample::from_grove(grove, variation)
 }
 
-fn pick_ground_cover_kind(
-	selection: BumpOutSelectionSample,
-	layering: LayeringKind,
-	ix: i32,
-	iz: i32,
-	seed: u32,
-) -> Option<GroundCoverKind> {
-	if layering.prefers_empty_cover() {
-		return None;
+fn soften_identity_changes(samples: &mut [GroundCoverSample; 9]) {
+	let center = samples[4].grove;
+	for (index, sample) in samples.iter_mut().enumerate() {
+		if index == 4 || sample.grove == center {
+			continue;
+		}
+		sample.density *= 0.55;
 	}
-	if trail_weight(ix, iz, seed) > 0.55 {
-		return Some(GroundCoverKind::GameTrail);
-	}
-	if selection.kind.is_none() && selection.density <= 0.001 {
-		return None;
-	}
-	if layering.prefers_field_cover() || field_cell(selection, ix, iz, seed) {
-		return Some(GroundCoverKind::Field);
-	}
-	Some(GroundCoverKind::MossyBumps)
-}
-
-fn field_cell(selection: BumpOutSelectionSample, ix: i32, iz: i32, seed: u32) -> bool {
-	if selection.kind.is_some_and(ForestGroveKind::is_tuft) {
-		return true;
-	}
-	if meadow_like_kind(selection.kind) {
-		return true;
-	}
-	// 5×5 correlation so fields span many 160 m cells without a hard square.
-	let block = cell_hash01(ix.div_euclid(5), iz.div_euclid(5), seed.wrapping_add(41));
-	block > 0.62 && selection.density > 0.04
-}
-
-fn meadow_like_kind(kind: Option<ForestGroveKind>) -> bool {
-	kind.is_some_and(|kind| {
-		kind.is_tuft()
-			|| matches!(
-				kind,
-				ForestGroveKind::BraidGrass | ForestGroveKind::Vineyard | ForestGroveKind::Orchard
-			)
-	})
-}
-
-/// Sparse 1-D hash ridges through the 160 m lattice (v1 trails; not jersey paths).
-fn trail_weight(ix: i32, iz: i32, seed: u32) -> f32 {
-	let ns = ridge_distance(ix, iz, seed, 11);
-	let ew = ridge_distance(iz, ix, seed.wrapping_add(91), 13);
-	(1.0 - ns.min(ew)).clamp(0.0, 1.0)
-}
-
-fn ridge_distance(along: i32, across: i32, seed: u32, period: i32) -> f32 {
-	let band = along.div_euclid(period);
-	let wander = (cell_hash01(band, 0, seed) * 6.0 - 3.0).round() as i32;
-	let center = band * 2 + wander;
-	((across - center).abs() as f32 / 1.35).min(1.0)
 }
 
 fn cell_hash01(ix: i32, iz: i32, salt: u32) -> f32 {
@@ -317,46 +390,30 @@ pub fn ground_cover_cells_in_near_disk(region: Aabb3d) -> impl Iterator<Item = (
 		.filter(move |(ix, iz)| ground_cover_in_near_disk(bump_out_cell_bounds(*ix, *iz), region))
 }
 
-/// Layering hint used when a presenter / test pins a forest cell.
-pub fn kind_from_layering(
-	layering: LayeringKind,
-	ix: i32,
-	iz: i32,
-	seed: u32,
-) -> Option<GroundCoverKind> {
-	if layering.prefers_empty_cover() {
-		return None;
-	}
-	if trail_weight(ix, iz, seed) > 0.55 {
-		return Some(GroundCoverKind::GameTrail);
-	}
-	if layering.prefers_field_cover() {
-		return Some(GroundCoverKind::Field);
-	}
-	Some(GroundCoverKind::MossyBumps)
-}
-
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::{ForestIndex, LayeringKind};
 	use anyhow::Result;
 
 	#[test]
 	fn recipes_use_centimetre_heights() -> Result<()> {
-		let moss = GroundCoverSample::from_kind(GroundCoverKind::MossyBumps, 0.5);
+		let moss = GroundCoverSample::from_grove(GroundCoverGroveKind::HuelgoatPitch, 0.5);
 		assert!(moss.height_m > 0.03 && moss.height_m < 0.20);
 		assert!(moss.height_deviation_m < 0.10);
 		assert!(moss.density > 0.7);
+		assert_eq!(moss.kind, Some(GroundCoverKind::MossyBumps));
 
 		let trail = GroundCoverSample::from_kind(GroundCoverKind::GameTrail, 0.5);
 		assert!(trail.height_m <= 0.0);
 		assert!(trail.height_m >= -0.03);
 		assert!(trail.density < 0.4);
 
-		let field = GroundCoverSample::from_kind(GroundCoverKind::Field, 0.5);
+		let field = GroundCoverSample::from_grove(GroundCoverGroveKind::Allbed, 0.5);
 		assert!(field.height_m > 0.01 && field.height_m < 0.09);
 		assert!(field.bite_size > 8.0);
 		assert!(field.density > 0.8);
+		assert_eq!(field.kind, Some(GroundCoverKind::Field));
 		Ok(())
 	}
 
@@ -364,58 +421,68 @@ mod tests {
 	fn empty_sample_has_no_density() -> Result<()> {
 		let empty = GroundCoverSample::empty();
 		assert!(empty.kind.is_none());
+		assert!(empty.grove.is_none());
 		assert!(empty.density <= 0.001);
 		Ok(())
 	}
 
 	#[test]
-	fn barren_layering_skips_cover() -> Result<()> {
-		assert!(kind_from_layering(LayeringKind::SunsBarren, 0, 0, 1).is_none());
-		assert!(kind_from_layering(LayeringKind::OwlsDesert, 3, 4, 1).is_none());
+	fn barren_typical_cover_skips() -> Result<()> {
+		assert!(LayeringKind::SunsBarren.layering().typical_layers().ground_cover.is_none());
+		assert!(LayeringKind::OwlsDesert.layering().typical_layers().ground_cover.is_none());
 		Ok(())
 	}
 
 	#[test]
-	fn meadow_layering_picks_field() -> Result<()> {
-		let mut found_field = false;
-		for iz in 0..24 {
-			for ix in 0..24 {
-				if kind_from_layering(LayeringKind::Meadowland, ix, iz, 7)
-					== Some(GroundCoverKind::Field)
-				{
-					found_field = true;
-				}
-			}
-		}
-		assert!(found_field);
+	fn meadowland_typical_cover_is_huelgoat_pitch() -> Result<()> {
+		assert_eq!(
+			LayeringKind::Meadowland.layering().typical_layers().ground_cover,
+			Some(GroundCoverGroveKind::HuelgoatPitch)
+		);
 		Ok(())
 	}
 
 	#[test]
-	fn forest_layering_picks_moss_off_trail() -> Result<()> {
-		let mut found_moss = false;
-		for iz in 0..24 {
-			for ix in 0..24 {
-				if kind_from_layering(LayeringKind::LushJungle, ix, iz, 3)
-					== Some(GroundCoverKind::MossyBumps)
-				{
-					found_moss = true;
-				}
-			}
-		}
-		assert!(found_moss);
+	fn mi_robles_typical_cover_is_allbed() -> Result<()> {
+		assert_eq!(
+			LayeringKind::MiRobles.layering().typical_layers().ground_cover,
+			Some(GroundCoverGroveKind::Allbed)
+		);
 		Ok(())
 	}
 
 	#[test]
-	fn trail_ridge_marks_a_corridor() -> Result<()> {
-		let seed = 11;
-		let on_path: Vec<(i32, i32)> = (-16..16)
-			.flat_map(|ix| (-16..16).map(move |iz| (ix, iz)))
-			.filter(|(ix, iz)| trail_weight(*ix, *iz, seed) > 0.55)
-			.collect();
-		assert!(!on_path.is_empty(), "expected at least one trail cell");
-		assert!(on_path.len() < 16 * 16 / 3, "trail should stay a thin corridor");
+	fn pinned_forest_neighborhood_shares_one_identity() -> Result<()> {
+		let mut index = ForestIndex::default();
+		index.layering = Some(LayeringKind::MiRobles);
+		let samples = blend_ground_cover_neighborhood(&index, bump_out_cell_bounds(0, 0));
+		assert!(samples.iter().all(|sample| sample.grove == Some(GroundCoverGroveKind::Allbed)));
+		assert!(samples.iter().all(|sample| sample.kind == Some(GroundCoverKind::Field)));
+		Ok(())
+	}
+
+	#[test]
+	fn identity_change_softens_neighbor_density() -> Result<()> {
+		let mut samples = [GroundCoverSample::from_grove(GroundCoverGroveKind::Allbed, 0.5); 9];
+		samples[5] = GroundCoverSample::from_grove(GroundCoverGroveKind::HuelgoatPitch, 0.5);
+		let before = samples[5].density;
+		soften_identity_changes(&mut samples);
+		assert!((samples[4].density - GroundCoverGroveKind::Allbed.density()).abs() < 1e-4);
+		assert!((samples[5].density - before * 0.55).abs() < 1e-4);
+		Ok(())
+	}
+
+	#[test]
+	fn blended_palette_mixes_neighbor_stops() -> Result<()> {
+		let mut samples = [GroundCoverSample::from_grove(GroundCoverGroveKind::Allbed, 0.5); 9];
+		samples[0] = GroundCoverSample::from_grove(GroundCoverGroveKind::HuelgoatPitch, 0.5);
+		let cell = GroundCoverBumpOut { bounds: bump_out_cell_bounds(0, 0), samples };
+		let mixed = cell.blended_palette();
+		let field = GroundCoverGroveKind::Allbed.palette()[1].to_srgba();
+		let moss = GroundCoverGroveKind::HuelgoatPitch.palette()[1].to_srgba();
+		let mid = mixed[1].to_srgba();
+		assert!(mid.green < field.green || mid.red < field.red);
+		assert!(mid.green > moss.green || mid.red > moss.red);
 		Ok(())
 	}
 
@@ -435,14 +502,6 @@ mod tests {
 		assert!(field.cheese_amount < 0.35);
 		assert!(field.noise_frequency < moss.noise_frequency);
 		assert!(moss.cheese_amount > 0.8);
-		Ok(())
-	}
-
-	#[test]
-	fn tuft_kind_is_classified() -> Result<()> {
-		assert!(ForestGroveKind::WildGrass.is_tuft());
-		assert!(ForestGroveKind::CommonTufts.is_tuft());
-		assert!(!ForestGroveKind::RollingOaks.is_tuft());
 		Ok(())
 	}
 }

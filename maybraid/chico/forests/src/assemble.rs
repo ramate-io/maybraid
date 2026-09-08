@@ -346,6 +346,7 @@ mod tests {
 		let cell = ForestExtent::new(Vec3::ZERO, Vec3::new(100.0, 1.0, 100.0));
 		let layers = SelectedLayers {
 			layering: LayeringKind::SunsBarren,
+			ground_cover: None,
 			tufts: None,
 			understory: None,
 			lower_canopy: None,
@@ -363,6 +364,7 @@ mod tests {
 		let forest = ForestExtent::new(Vec3::ZERO, Vec3::new(100.0, 1.0, 100.0));
 		let layers = SelectedLayers {
 			layering: LayeringKind::AgTown,
+			ground_cover: None,
 			tufts: None,
 			understory: None,
 			lower_canopy: None,
@@ -371,6 +373,7 @@ mod tests {
 		let neighbors = NeighborLayers {
 			east: Some(SelectedLayers {
 				layering: LayeringKind::MiRobles,
+				ground_cover: None,
 				tufts: None,
 				understory: None,
 				lower_canopy: None,
@@ -408,6 +411,7 @@ mod tests {
 		let neighbors = NeighborLayers {
 			east: Some(SelectedLayers {
 				layering: LayeringKind::MiRobles,
+				ground_cover: None,
 				tufts: None,
 				understory: None,
 				lower_canopy: None,
@@ -447,6 +451,7 @@ mod tests {
 		let neighbors = NeighborLayers {
 			east: Some(SelectedLayers {
 				layering: LayeringKind::MiRobles,
+				ground_cover: None,
 				tufts: None,
 				understory: None,
 				lower_canopy: None,
@@ -473,6 +478,7 @@ mod tests {
 		let forest = ForestExtent::new(Vec3::ZERO, Vec3::new(100.0, 1.0, 100.0));
 		let layers = SelectedLayers {
 			layering: LayeringKind::SunsBarren,
+			ground_cover: None,
 			tufts: None,
 			understory: None,
 			lower_canopy: None,
@@ -481,6 +487,7 @@ mod tests {
 		let neighbors = NeighborLayers {
 			west: Some(SelectedLayers {
 				layering: LayeringKind::AgTown,
+				ground_cover: None,
 				tufts: None,
 				understory: None,
 				lower_canopy: None,

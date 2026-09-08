@@ -797,6 +797,30 @@ mod tests {
 	}
 
 	#[test]
+	fn ground_cover_pinned_mi_robles_is_allbed() -> Result<()> {
+		let mut index = ForestIndex::default();
+		index.layering = Some(crate::LayeringKind::MiRobles);
+		let bounds = bump_out_cell_bounds(0, 0);
+		let id = lod::gen::Id::from_cell(bounds);
+		let (identity, lod_bounds) = test_lod_ref(bounds);
+		let lod_ref = LodRef {
+			entity: bevy::prelude::Entity::PLACEHOLDER,
+			previous_transform: &identity,
+			current_transform: &identity,
+			bounds: &lod_bounds,
+		};
+		assert!(GeneratingSpatialIndex::<GroundCoverBumpOut>::get_or_generate(
+			&mut index, id, &lod_ref
+		)
+		.is_some());
+		let cell = lod::gen::SpatialIndex::<GroundCoverBumpOut>::get(&index, id)
+			.ok_or_else(|| anyhow::anyhow!("ground cover"))?;
+		assert_eq!(cell.center_grove(), Some(crate::GroundCoverGroveKind::Allbed));
+		assert_eq!(cell.center_kind(), Some(crate::GroundCoverKind::Field));
+		Ok(())
+	}
+
+	#[test]
 	fn ground_cover_skips_barren_empty_cells() -> Result<()> {
 		let mut index = ForestIndex::default();
 		index.layering = Some(crate::LayeringKind::SunsBarren);

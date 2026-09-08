@@ -213,7 +213,7 @@ pub fn ground_cover_from_cell(cell: &GroundCoverBumpOut, forest: &NoiseParams) -
 	Some(
 		BumpOut::from_neighborhood(
 			neighborhood,
-			cell.center_palette(),
+			cell.blended_palette(),
 			ground_cover_noise(kind, forest),
 		)
 		.with_style(

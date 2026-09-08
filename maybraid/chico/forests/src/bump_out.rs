@@ -529,6 +529,7 @@ mod tests {
 	fn highest_kind_prefers_upper_canopy() -> Result<()> {
 		let layers = SelectedLayers {
 			layering: LayeringKind::Meadowland,
+			ground_cover: None,
 			tufts: Some(ForestGroveKind::WildGrass),
 			understory: Some(ForestGroveKind::LowBush),
 			lower_canopy: None,
@@ -542,6 +543,7 @@ mod tests {
 	fn highest_kind_falls_back_to_tufts() -> Result<()> {
 		let layers = SelectedLayers {
 			layering: LayeringKind::Meadowland,
+			ground_cover: None,
 			tufts: Some(ForestGroveKind::CommonTufts),
 			understory: None,
 			lower_canopy: None,
@@ -582,6 +584,7 @@ mod tests {
 	fn empty_cell_borrows_occupied_neighbors() -> Result<()> {
 		let empty = SelectedLayers {
 			layering: LayeringKind::SunsBarren,
+			ground_cover: None,
 			tufts: None,
 			understory: None,
 			lower_canopy: None,
@@ -589,6 +592,7 @@ mod tests {
 		};
 		let oak = SelectedLayers {
 			layering: LayeringKind::MiRobles,
+			ground_cover: None,
 			tufts: None,
 			understory: None,
 			lower_canopy: None,
@@ -604,6 +608,7 @@ mod tests {
 	fn empty_stays_empty_when_neighbors_are_empty() -> Result<()> {
 		let empty = SelectedLayers {
 			layering: LayeringKind::SunsBarren,
+			ground_cover: None,
 			tufts: None,
 			understory: None,
 			lower_canopy: None,
@@ -619,6 +624,7 @@ mod tests {
 	fn occupied_cell_does_not_blend_empty_neighbors() -> Result<()> {
 		let empty = SelectedLayers {
 			layering: LayeringKind::SunsBarren,
+			ground_cover: None,
 			tufts: None,
 			understory: None,
 			lower_canopy: None,
@@ -626,6 +632,7 @@ mod tests {
 		};
 		let oak = SelectedLayers {
 			layering: LayeringKind::MiRobles,
+			ground_cover: None,
 			tufts: None,
 			understory: None,
 			lower_canopy: None,
