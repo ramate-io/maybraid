@@ -2,11 +2,13 @@ use bevy::ecs::system::RunSystemOnce;
 use bevy::prelude::*;
 
 use crate::{
-	choose_poi, drive_poi_goals, refresh_poi_goals, GlobalPoi, KnownPoi, LocalPoi, Poi, PoiGoal,
-	PoiGoalState, PoiGoalStatus, PoiId, PoiInterest, PoiInterests, PoiKind, PoiKnowledge,
-	PoiLearningPolicy, PoiObservation, PoiRegistry, PoiSource, PoiVisitPolicy, PoiVisitState,
-	AGENT_SEPARATION, DEFAULT_NEARBY_RADIUS,
+	choose_poi, drive_poi_goals, refresh_poi_goals, GlobalPoi, KnownPoi, LocalPoi, Poi,
+	PoiDiscoverLimits, PoiGoal, PoiGoalState, PoiGoalStatus, PoiId, PoiIntelligencePlugin,
+	PoiIntelligenceUser, PoiInterest, PoiInterests, PoiKind, PoiKnowledge, PoiLearningPolicy,
+	PoiObservation, PoiRegistry, PoiSource, PoiVisitPolicy, PoiVisitState, AGENT_SEPARATION,
+	DEFAULT_NEARBY_RADIUS,
 };
+use intelligence_lod::{IntelligenceBand, IntelligenceLod, IntelligencePriority};
 use movement_intelligence::MovementIntelligence;
 use routing_intelligence::{RoutingIntelligenceUser, RoutingSettings};
 
@@ -301,5 +303,179 @@ fn refresh_reapplies_destination_salt() -> anyhow::Result<()> {
 	let after = world.get::<PoiGoal>(user).map(|goal| goal.location);
 	assert_eq!(first, after);
 	assert!(first.is_some_and(|location| location.point.xz() != Vec2::ZERO));
+	Ok(())
+}
+
+fn discover_app() -> App {
+	let mut app = App::new();
+	app.add_plugins((MinimalPlugins, TransformPlugin, PoiIntelligencePlugin));
+	app.finish();
+	app
+}
+
+fn camp_learner() -> PoiIntelligenceUser {
+	PoiIntelligenceUser::new(PoiInterests::one(CAMP)).with_policy(PoiLearningPolicy {
+		candidates_per_scan: 4,
+		learning_rate_per_second: 8.0,
+		retention_secs: 1.0,
+		..default()
+	})
+}
+
+fn index_poi(app: &mut App, id: u64, at: Vec3, local: bool, global: bool) -> anyhow::Result<PoiId> {
+	let marker = app.world_mut().spawn_empty().id();
+	let poi_id = PoiId(id);
+	app.world_mut().resource_mut::<PoiRegistry>().upsert(
+		marker,
+		Poi::new(poi_id, CAMP),
+		at,
+		local,
+		global,
+	)?;
+	Ok(poi_id)
+}
+
+fn spawn_learner(
+	app: &mut App,
+	user: PoiIntelligenceUser,
+	knowledge: PoiKnowledge,
+	lod: IntelligenceLod,
+) -> Entity {
+	app.world_mut().spawn((GlobalTransform::default(), user, knowledge, lod)).id()
+}
+
+#[test]
+fn far_skips_local_scan_unless_near_takes_the_drain() -> anyhow::Result<()> {
+	let mut app = discover_app();
+	app.insert_resource(PoiDiscoverLimits { max_scans_per_tick: 1 });
+	let local = index_poi(&mut app, 1, Vec3::X * 10.0, true, false)?;
+	let far = spawn_learner(
+		&mut app,
+		camp_learner(),
+		PoiKnowledge::default(),
+		IntelligenceLod { band: IntelligenceBand::Far, skips: 0 },
+	);
+	let near = spawn_learner(
+		&mut app,
+		camp_learner(),
+		PoiKnowledge::default(),
+		IntelligenceLod::missing(),
+	);
+	app.world_mut().resource_mut::<IntelligencePriority>().rank.insert(near, 0);
+	app.world_mut().resource_mut::<IntelligencePriority>().rank.insert(far, 1);
+
+	app.update();
+
+	anyhow::ensure!(app
+		.world()
+		.get::<PoiKnowledge>(near)
+		.is_some_and(|knowledge| knowledge.get(local).is_some()));
+	anyhow::ensure!(app
+		.world()
+		.get::<PoiKnowledge>(far)
+		.is_some_and(|knowledge| knowledge.get(local).is_none()));
+	anyhow::ensure!(app
+		.world()
+		.get::<PoiIntelligenceUser>(far)
+		.is_some_and(|user| user.next_local_scan_at == 0.0));
+	Ok(())
+}
+
+#[test]
+fn far_local_scan_still_runs_at_fairness_cap() -> anyhow::Result<()> {
+	let mut app = discover_app();
+	app.insert_resource(PoiDiscoverLimits { max_scans_per_tick: 1 });
+	let local = index_poi(&mut app, 1, Vec3::X * 10.0, true, false)?;
+	let far = spawn_learner(
+		&mut app,
+		camp_learner(),
+		PoiKnowledge::default(),
+		IntelligenceLod { band: IntelligenceBand::Far, skips: IntelligenceLod::FAIRNESS_CAP },
+	);
+
+	app.update();
+
+	anyhow::ensure!(app
+		.world()
+		.get::<PoiKnowledge>(far)
+		.is_some_and(|knowledge| knowledge.get(local).is_some()));
+	anyhow::ensure!(app.world().get::<IntelligenceLod>(far).is_some_and(|lod| lod.skips == 0));
+	Ok(())
+}
+
+#[test]
+fn far_skip_does_not_reset_skips() -> anyhow::Result<()> {
+	let mut app = discover_app();
+	let far = spawn_learner(
+		&mut app,
+		camp_learner(),
+		PoiKnowledge::default(),
+		IntelligenceLod { band: IntelligenceBand::Far, skips: 3 },
+	);
+
+	app.update();
+
+	anyhow::ensure!(app.world().get::<IntelligenceLod>(far).is_some_and(|lod| lod.skips == 3));
+	anyhow::ensure!(app
+		.world()
+		.get::<PoiIntelligenceUser>(far)
+		.is_some_and(|user| user.next_local_scan_at == 0.0));
+	Ok(())
+}
+
+#[test]
+fn maintain_still_runs_on_far_we_do_not_scan() -> anyhow::Result<()> {
+	let mut app = discover_app();
+	app.insert_resource(PoiDiscoverLimits { max_scans_per_tick: 1 });
+	let stale = PoiId(9);
+	let mut far_knowledge = PoiKnowledge::default();
+	far_knowledge
+		.observe(observation(Entity::from_bits(1), stale.0, PoiSource::LOCAL_SCAN, -4.0), -4.0);
+	let far = spawn_learner(
+		&mut app,
+		camp_learner(),
+		far_knowledge,
+		IntelligenceLod { band: IntelligenceBand::Far, skips: 0 },
+	);
+	let near = spawn_learner(
+		&mut app,
+		camp_learner(),
+		PoiKnowledge::default(),
+		IntelligenceLod::missing(),
+	);
+	app.world_mut().resource_mut::<IntelligencePriority>().rank.insert(near, 0);
+	app.world_mut().resource_mut::<IntelligencePriority>().rank.insert(far, 1);
+
+	app.update();
+
+	anyhow::ensure!(app
+		.world()
+		.get::<PoiKnowledge>(far)
+		.is_some_and(|knowledge| knowledge.get(stale).is_none()));
+	Ok(())
+}
+
+#[test]
+fn far_does_not_run_global_scan_even_when_fair() -> anyhow::Result<()> {
+	let mut app = discover_app();
+	let local = index_poi(&mut app, 1, Vec3::X * 10.0, true, false)?;
+	let global = index_poi(&mut app, 2, Vec3::X * 1_000.0, false, true)?;
+	let far = spawn_learner(
+		&mut app,
+		camp_learner(),
+		PoiKnowledge::default(),
+		IntelligenceLod { band: IntelligenceBand::Far, skips: IntelligenceLod::FAIRNESS_CAP },
+	);
+
+	app.update();
+
+	anyhow::ensure!(app
+		.world()
+		.get::<PoiKnowledge>(far)
+		.is_some_and(|knowledge| knowledge.get(local).is_some()));
+	anyhow::ensure!(app
+		.world()
+		.get::<PoiKnowledge>(far)
+		.is_some_and(|knowledge| knowledge.get(global).is_none()));
 	Ok(())
 }

@@ -1,8 +1,9 @@
 use bevy::prelude::*;
+use intelligence_lod::{due_by_rank, IntelligenceBand, IntelligenceLod, IntelligencePriority};
 
 use crate::{
-	GlobalPoi, LocalPoi, Poi, PoiIntelligenceUser, PoiKnowledge, PoiObservation, PoiRecord,
-	PoiRegistry, PoiSource,
+	GlobalPoi, LocalPoi, Poi, PoiDiscoverLimits, PoiIntelligenceUser, PoiKnowledge, PoiObservation,
+	PoiRecord, PoiRegistry, PoiSource,
 };
 
 type PoiEntity<'a> = (Entity, &'a Poi, &'a GlobalTransform, Has<LocalPoi>, Has<GlobalPoi>);
@@ -77,21 +78,64 @@ pub fn ingest_poi_observations(
 	}
 }
 
-/// Performs budgeted local and sparse-global scans, then maintains retained memory.
+/// Accrue / maintain everyone, then drain due scans in shared viewer order.
+///
+/// Far skips local and global scans unless a fairness reserve is due. Global
+/// stays Mid / Near only. `skips` reset when a scan body actually ran.
 pub fn discover_pois(
 	time: Res<Time>,
 	registry: Res<PoiRegistry>,
-	mut users: Query<(Entity, &GlobalTransform, &mut PoiIntelligenceUser, &mut PoiKnowledge)>,
+	priority: Res<IntelligencePriority>,
+	limits: Res<PoiDiscoverLimits>,
+	mut users: Query<(
+		Entity,
+		&GlobalTransform,
+		&mut PoiIntelligenceUser,
+		&mut PoiKnowledge,
+		Option<&mut IntelligenceLod>,
+	)>,
 ) {
 	let now = time.elapsed_secs();
 	let delta = time.delta_secs();
-	for (entity, transform, mut user, mut knowledge) in &mut users {
+	for (_, _, mut user, mut knowledge, _) in &mut users {
 		user.accrue_learning(delta);
-		let position = transform.translation();
+		knowledge.maintain(now, user.policy);
+	}
 
+	let mut due: Vec<Entity> = users
+		.iter_mut()
+		.filter_map(|(entity, _, user, _, _)| {
+			(now >= user.next_local_scan_at || now >= user.next_global_scan_at).then_some(entity)
+		})
+		.collect();
+	due_by_rank(&mut due, &priority);
+	let fair = due.iter().copied().find(|entity| {
+		users.get_mut(*entity).is_ok_and(|(_, _, _, _, lod)| {
+			lod.as_deref().is_some_and(|lod| {
+				lod.band != IntelligenceBand::Near && lod.skips >= IntelligenceLod::FAIRNESS_CAP
+			})
+		})
+	});
+
+	let mut remaining = limits.max_scans_per_tick;
+	for entity in due {
+		if remaining == 0 {
+			break;
+		}
+		let Ok((_, transform, mut user, mut knowledge, mut lod)) = users.get_mut(entity) else {
+			continue;
+		};
+		let band = IntelligenceLod::band_or_near(lod.as_deref());
+		if band == IntelligenceBand::Far && Some(entity) != fair {
+			continue;
+		}
+		remaining -= 1;
+		let position = transform.translation();
+		let n = band.scale_count(user.policy.candidates_per_scan);
 		if now >= user.next_local_scan_at {
-			user.next_local_scan_at =
-				now + staggered_interval(user.policy.local_scan_interval, entity, 0);
+			user.next_local_scan_at = now
+				+ staggered_interval(user.policy.local_scan_interval, entity, 0)
+					* band.interval_scale();
 			let records =
 				registry.local_matching(position, user.policy.local_radius, &user.interests);
 			let cursor = user.local_cursor;
@@ -101,15 +145,16 @@ pub fn discover_pois(
 				PoiSource::LOCAL_SCAN,
 				now,
 				cursor,
+				n,
 				&mut user,
 				&mut knowledge,
 			);
-			user.local_cursor = user.local_cursor.wrapping_add(user.policy.candidates_per_scan);
+			user.local_cursor = user.local_cursor.wrapping_add(n);
 		}
-
-		if now >= user.next_global_scan_at {
-			user.next_global_scan_at =
-				now + staggered_interval(user.policy.global_scan_interval, entity, 1);
+		if now >= user.next_global_scan_at && band != IntelligenceBand::Far {
+			user.next_global_scan_at = now
+				+ staggered_interval(user.policy.global_scan_interval, entity, 1)
+					* band.interval_scale();
 			let records = registry.global_matching(&user.interests);
 			let cursor = user.global_cursor;
 			learn_records(
@@ -118,13 +163,15 @@ pub fn discover_pois(
 				PoiSource::GLOBAL_SCAN,
 				now,
 				cursor,
+				n,
 				&mut user,
 				&mut knowledge,
 			);
-			user.global_cursor = user.global_cursor.wrapping_add(user.policy.candidates_per_scan);
+			user.global_cursor = user.global_cursor.wrapping_add(n);
 		}
-
-		knowledge.maintain(now, user.policy);
+		if let Some(lod) = lod.as_deref_mut() {
+			lod.skips = 0;
+		}
 	}
 }
 
@@ -140,13 +187,14 @@ fn learn_records(
 	source: PoiSource,
 	now: f32,
 	cursor: usize,
+	budget: usize,
 	user: &mut PoiIntelligenceUser,
 	knowledge: &mut PoiKnowledge,
 ) {
 	if records.is_empty() {
 		return;
 	}
-	let budget = user.policy.candidates_per_scan.min(records.len());
+	let budget = budget.min(records.len());
 	for offset in 0..budget {
 		let record = records[(cursor + offset) % records.len()];
 		if knowledge.get(record.id).is_none() && !user.try_take_learning_credit() {
