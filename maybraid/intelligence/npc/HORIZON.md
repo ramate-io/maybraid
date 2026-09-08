@@ -14,7 +14,7 @@ Group lattice (no LodScene)
 Mob host = LodSceneHost + mob brain (always)
   roster, shared tether, affiliations, GlobalPoi
   Medium/Low: no NPC brains
-  High (~200 m): personality bundles / refs
+  High (~400 m): personality bundles / refs
            ↓
 NPC mixer + personality (only while High is shown)
 ```
@@ -54,7 +54,7 @@ and Roam.
 
 ## Bands
 
-- **High (~200 m), cull hard.** Spotting/threat interaction is ~80 m; 200 m is
+- **High (~400 m), cull hard.** Spotting/threat interaction is ~80 m; 400 m is
   seeing the pack before it thinks. This is the only band that should run
   spotting, threat discovery, firearm, evasion, meander, and the NPC mixer.
 - **Medium.** Optional impostors, or empty. Do not put half-intelligence here.

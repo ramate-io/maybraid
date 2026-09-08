@@ -25,7 +25,9 @@ pub use location::MovementLocation;
 pub use objective::MovementObjective;
 pub use plugin::MovementIntelligencePlugin;
 pub use step::{MovementDrive, MovementStep};
-pub use surface::{CandidateBudget, MovementIntelligenceLimits, MovementIntelligenceSurface};
+pub use surface::{
+	CandidateBudget, MovementIntelligenceLimits, MovementIntelligenceSurface, WalkProbeBudget,
+};
 pub use user::{
 	MovementDriveResult, MovementIntelligence, MovementIntelligenceSettings, ReplanMovement,
 };

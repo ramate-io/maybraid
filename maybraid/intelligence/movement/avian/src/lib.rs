@@ -9,7 +9,7 @@ use bevy::prelude::*;
 
 use movement_intelligence::{
 	CandidateBudget, MovementCandidate, MovementIntelligenceSurface, MovementLocation,
-	MovementObjective, MovementSheet, MovementStep,
+	MovementObjective, MovementSheet, MovementStep, WalkProbeBudget,
 };
 
 pub use path::{AvianColliderPath, AvianPathHints};
@@ -40,7 +40,26 @@ where
 		objective: MovementObjective,
 		budget: CandidateBudget,
 	) -> Vec<MovementCandidate<I>> {
-		self.collider_paths(from, exclude, ability, objective, budget)
+		self.recommend_candidates_budgeted(
+			from,
+			exclude,
+			ability,
+			objective,
+			budget,
+			&mut WalkProbeBudget::unlimited(),
+		)
+	}
+
+	fn recommend_candidates_budgeted(
+		&mut self,
+		from: MovementLocation,
+		exclude: &[Entity],
+		ability: &A,
+		objective: MovementObjective,
+		budget: CandidateBudget,
+		probes: &mut WalkProbeBudget,
+	) -> Vec<MovementCandidate<I>> {
+		self.collider_paths(from, exclude, ability, objective, budget, probes)
 			.into_iter()
 			.map(MovementCandidate::from)
 			.collect()

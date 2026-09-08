@@ -10,7 +10,7 @@ use crate::ability::MovementSheet;
 use crate::configure_movement_intelligence_sets;
 use crate::location::MovementLocation;
 use crate::step::MovementDrive;
-use crate::surface::{MovementIntelligenceLimits, MovementIntelligenceSurface};
+use crate::surface::{MovementIntelligenceLimits, MovementIntelligenceSurface, WalkProbeBudget};
 use crate::user::{MovementDriveResult, MovementIntelligence, ReplanMovement};
 use crate::MovementIntelligenceSystems;
 
@@ -62,17 +62,31 @@ pub fn replan_movement<S, I, A>(
 {
 	let mut surface = surface.into_inner();
 	let mut remaining = limits.max_replans_per_frame;
+	let mut probes = WalkProbeBudget::new(limits.max_walk_probes_per_frame);
 	for (entity, transform, mut brain) in &mut movers {
-		if remaining == 0 {
+		if remaining == 0 || probes.is_exhausted() {
 			break;
 		}
 		remaining -= 1;
 		let from = MovementLocation::new(transform.translation, brain.ability.agent_radius());
 		let exclude = [entity];
-		let budget = brain.ability.candidate_budget().clamp_to(limits.max_budget);
 		let objective = brain.objective;
-		let candidates =
-			surface.recommend_candidates(from, &exclude, &brain.ability, objective, budget);
+		let budget = brain
+			.ability
+			.candidate_budget()
+			.clamp_to(limits.max_budget)
+			.lod_for(transform.translation, objective);
+		let candidates = surface.recommend_candidates_budgeted(
+			from,
+			&exclude,
+			&brain.ability,
+			objective,
+			budget,
+			&mut probes,
+		);
+		if probes.is_starved() && candidates.is_empty() {
+			continue;
+		}
 		if let Some(candidate) = brain.pick_best_candidate(candidates) {
 			brain.adopt_plan(candidate.steps);
 		} else {
@@ -142,6 +156,23 @@ mod tests {
 			self.calls.0 += 1;
 			Vec::new()
 		}
+
+		fn recommend_candidates_budgeted(
+			&mut self,
+			from: MovementLocation,
+			exclude: &[Entity],
+			ability: &A,
+			objective: MovementObjective,
+			budget: CandidateBudget,
+			probes: &mut WalkProbeBudget,
+		) -> Vec<crate::MovementCandidate<I>> {
+			for _ in 0..budget.max_candidates.max(1) {
+				if !probes.take() {
+					break;
+				}
+			}
+			self.recommend_candidates(from, exclude, ability, objective, budget)
+		}
 	}
 
 	fn spawn_pending(world: &mut World, count: usize) {
@@ -174,6 +205,53 @@ mod tests {
 
 		app.update();
 		anyhow::ensure!(app.world().resource::<ReplanCalls>().0 == 4);
+		anyhow::ensure!(pending_replans(app.world_mut()) == 1);
+		Ok(())
+	}
+
+	#[test]
+	fn walk_probe_cap_stops_starting_new_replans() -> anyhow::Result<()> {
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins)
+			.insert_resource(MovementIntelligenceLimits {
+				max_replans_per_frame: 8,
+				max_walk_probes_per_frame: 2,
+				..default()
+			})
+			.init_resource::<ReplanCalls>()
+			.add_systems(Update, replan_movement::<CountingSurface, MovementStep, MovementAbility>);
+		spawn_pending(app.world_mut(), 5);
+
+		app.update();
+		anyhow::ensure!(app.world().resource::<ReplanCalls>().0 == 2);
+		anyhow::ensure!(pending_replans(app.world_mut()) == 3);
+		Ok(())
+	}
+
+	#[test]
+	fn starved_vantage_keeps_the_marker() -> anyhow::Result<()> {
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins)
+			.insert_resource(MovementIntelligenceLimits {
+				max_replans_per_frame: 8,
+				max_walk_probes_per_frame: 3,
+				..default()
+			})
+			.init_resource::<ReplanCalls>()
+			.add_systems(Update, replan_movement::<CountingSurface, MovementStep, MovementAbility>);
+		let goal = MovementObjective::VantageOn {
+			location: MovementLocation::new(Vec3::X * 4.0, 1.0),
+			hide_weight: 1.0,
+			sightline_weight: 1.0,
+		};
+		app.world_mut().spawn((
+			Transform::default(),
+			MovementIntelligence::<MovementStep, MovementAbility>::new(goal),
+			ReplanMovement,
+		));
+
+		app.update();
+		anyhow::ensure!(app.world().resource::<ReplanCalls>().0 == 1);
 		anyhow::ensure!(pending_replans(app.world_mut()) == 1);
 		Ok(())
 	}

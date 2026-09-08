@@ -22,6 +22,11 @@ impl Default for CandidateBudget {
 }
 
 impl CandidateBudget {
+	/// Nearby covering work (vantage / flee) keeps the full fan.
+	pub const NEAR_M: f32 = 12.0;
+	/// Beyond this, covering queries snap instead of fanning.
+	pub const FAR_M: f32 = 28.0;
+
 	/// Per-query cap: character preference, never above `max`.
 	pub fn clamp_to(self, max: Self) -> Self {
 		Self {
@@ -30,16 +35,92 @@ impl CandidateBudget {
 			horizon: self.horizon.min(max.horizon),
 		}
 	}
+
+	/// Objective- and distance-scale a clamped budget.
+	///
+	/// `Reach` is a routing hop / POI snap: one candidate, no detours.
+	/// `VantageOn` / `FleeFrom` keep the fan nearby and collapse when far.
+	pub fn lod_for(self, from: Vec3, objective: MovementObjective) -> Self {
+		let goal = objective.location().point;
+		let dist = Vec2::new(from.x - goal.x, from.z - goal.z).length();
+		match objective {
+			MovementObjective::Reach(_) => {
+				Self { max_candidates: 1, max_steps: 1, horizon: self.horizon }
+			}
+			MovementObjective::EdgeOf(_) => Self {
+				max_candidates: self.max_candidates.min(4),
+				max_steps: 1,
+				horizon: self.horizon,
+			},
+			MovementObjective::FleeFrom(_) | MovementObjective::VantageOn { .. } => {
+				if dist >= Self::FAR_M {
+					Self { max_candidates: 1, max_steps: 1, horizon: self.horizon }
+				} else if dist >= Self::NEAR_M {
+					Self {
+						max_candidates: self.max_candidates.min(3),
+						max_steps: self.max_steps.min(2),
+						horizon: self.horizon,
+					}
+				} else {
+					self
+				}
+			}
+		}
+	}
+}
+
+/// Remaining walk attempts for one `Update`. Surfaces call [`Self::take`] per
+/// `probe_walk`; leftover [`crate::ReplanMovement`] stays if a query starves.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct WalkProbeBudget {
+	remaining: usize,
+	starved: bool,
+}
+
+impl WalkProbeBudget {
+	pub fn new(remaining: usize) -> Self {
+		Self { remaining, starved: false }
+	}
+
+	pub fn unlimited() -> Self {
+		Self { remaining: usize::MAX, starved: false }
+	}
+
+	pub fn remaining(self) -> usize {
+		self.remaining
+	}
+
+	pub fn is_exhausted(self) -> bool {
+		self.remaining == 0
+	}
+
+	pub fn is_starved(self) -> bool {
+		self.starved
+	}
+
+	/// Spend one walk probe. Returns `false` and marks starved when empty.
+	pub fn take(&mut self) -> bool {
+		if self.remaining == 0 {
+			self.starved = true;
+			return false;
+		}
+		if self.remaining != usize::MAX {
+			self.remaining -= 1;
+		}
+		true
+	}
 }
 
 /// Frame-cost ceiling for every mover. Characters pick their own budget at or below this.
 ///
-/// [`Self::max_replans_per_frame`] is a drain: leftover [`crate::ReplanMovement`]
-/// markers stay for later frames. Do not timer the replan set — that clumps work.
+/// [`Self::max_replans_per_frame`] caps how many markers start. [`Self::max_walk_probes_per_frame`]
+/// caps Avian walk attempts so one `VantageOn` cannot burn the drain. Leftover
+/// [`crate::ReplanMovement`] stays for later frames. Do not timer the replan set.
 #[derive(Resource, Clone, Copy, Debug, PartialEq)]
 pub struct MovementIntelligenceLimits {
 	pub max_budget: CandidateBudget,
 	pub max_replans_per_frame: usize,
+	pub max_walk_probes_per_frame: usize,
 }
 
 impl Default for MovementIntelligenceLimits {
@@ -47,6 +128,7 @@ impl Default for MovementIntelligenceLimits {
 		Self {
 			max_budget: CandidateBudget { max_candidates: 32, max_steps: 4, horizon: 40.0 },
 			max_replans_per_frame: 8,
+			max_walk_probes_per_frame: 16,
 		}
 	}
 }
@@ -61,6 +143,22 @@ pub trait MovementIntelligenceSurface<I, A> {
 		objective: MovementObjective,
 		budget: CandidateBudget,
 	) -> Vec<MovementCandidate<I>>;
+
+	/// Same as [`Self::recommend_candidates`], spending [`WalkProbeBudget`].
+	///
+	/// Default ignores the probe cap. Avian counts one take per walk attempt.
+	fn recommend_candidates_budgeted(
+		&mut self,
+		from: MovementLocation,
+		exclude: &[Entity],
+		ability: &A,
+		objective: MovementObjective,
+		budget: CandidateBudget,
+		probes: &mut WalkProbeBudget,
+	) -> Vec<MovementCandidate<I>> {
+		let _ = probes;
+		self.recommend_candidates(from, exclude, ability, objective, budget)
+	}
 
 	/// Cheapest candidate by [`MovementCandidate::surface_cost`]. Character scoring may ignore this.
 	fn recommend_path(
@@ -102,6 +200,50 @@ mod tests {
 		let limits = MovementIntelligenceLimits::default();
 		anyhow::ensure!(limits.max_replans_per_frame > 0);
 		anyhow::ensure!(limits.max_replans_per_frame < usize::MAX);
+		anyhow::ensure!(limits.max_walk_probes_per_frame >= limits.max_replans_per_frame);
+		Ok(())
+	}
+
+	#[test]
+	fn reach_lod_is_one_snap() -> anyhow::Result<()> {
+		let full = CandidateBudget { max_candidates: 8, max_steps: 3, horizon: 28.0 };
+		let reach = full.lod_for(
+			Vec3::ZERO,
+			MovementObjective::Reach(MovementLocation::new(Vec3::X * 20.0, 1.0)),
+		);
+		anyhow::ensure!(reach.max_candidates == 1);
+		anyhow::ensure!(reach.max_steps == 1);
+		Ok(())
+	}
+
+	#[test]
+	fn covering_lod_collapses_when_far() -> anyhow::Result<()> {
+		let full = CandidateBudget { max_candidates: 8, max_steps: 3, horizon: 40.0 };
+		let far = MovementObjective::VantageOn {
+			location: MovementLocation::new(Vec3::X * 40.0, 1.0),
+			hide_weight: 1.0,
+			sightline_weight: 1.0,
+		};
+		let near = MovementObjective::VantageOn {
+			location: MovementLocation::new(Vec3::X * 4.0, 1.0),
+			hide_weight: 1.0,
+			sightline_weight: 1.0,
+		};
+		let far_budget = full.lod_for(Vec3::ZERO, far);
+		let near_budget = full.lod_for(Vec3::ZERO, near);
+		anyhow::ensure!(far_budget.max_candidates == 1);
+		anyhow::ensure!(far_budget.max_steps == 1);
+		anyhow::ensure!(near_budget.max_candidates == 8);
+		anyhow::ensure!(near_budget.max_steps == 3);
+		Ok(())
+	}
+
+	#[test]
+	fn walk_probe_budget_starves_instead_of_wrapping() -> anyhow::Result<()> {
+		let mut probes = WalkProbeBudget::new(1);
+		anyhow::ensure!(probes.take());
+		anyhow::ensure!(!probes.take());
+		anyhow::ensure!(probes.is_starved());
 		Ok(())
 	}
 }

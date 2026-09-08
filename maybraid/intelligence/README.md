@@ -8,7 +8,7 @@ Higher-order brains write objectives; lower-order crates field them.
 - [`movement-intelligence-avian`](movement/avian) — collider-backed surface over Avian `Fixed` geometry.
 - [`movement-intelligence-richmond`](movement/richmond) — composes the Avian surface with Les Halles storey / stairwell IR.
 
-A higher-order system writes the objective and inserts [`ReplanMovement`](movement/lib/src/user.rs) when it wants a new plan. [`MovementIntelligenceLimits`](movement/lib/src/surface.rs) caps per-query sampling and how many of those markers resolve in one frame. Budget and vantage *sampling* live on [`MovementAbility`](movement/lib/src/ability.rs). Hide / sightline *policy* belongs on the writer (firearm movement, etc.).
+A higher-order system writes the objective and inserts [`ReplanMovement`](movement/lib/src/user.rs) when it wants a new plan. [`MovementIntelligenceLimits`](movement/lib/src/surface.rs) caps per-query sampling, how many markers start, and how many walk probes run in one frame. `Reach` is a single ground snap; covering queries LOD by distance. Budget and vantage *sampling* live on [`MovementAbility`](movement/lib/src/ability.rs). Hide / sightline *policy* belongs on the writer (firearm movement, etc.).
 
 Walk colliders for Richmond IR live in [`richmond-building-physics`](../richmond/building-physics).
 

@@ -7,7 +7,9 @@ use avian3d::prelude::{SpatialQuery, SpatialQueryFilter};
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use lod_avian::PhysicsInteractionLayer;
-use movement_intelligence::{CandidateBudget, MovementLocation, MovementObjective, MovementSheet};
+use movement_intelligence::{
+	CandidateBudget, MovementLocation, MovementObjective, MovementSheet, WalkProbeBudget,
+};
 use std::f32::consts::TAU;
 
 use crate::path::{AvianColliderPath, AvianPathHints};
@@ -37,6 +39,7 @@ impl AvianMovementSurface<'_, '_> {
 		ability: &A,
 		objective: MovementObjective,
 		budget: CandidateBudget,
+		probes: &mut WalkProbeBudget,
 	) -> Vec<AvianColliderPath> {
 		let filter = Self::filter(exclude);
 		let mut ranked = self.rank_standpoints(from, ability, objective, budget, &filter);
@@ -52,6 +55,9 @@ impl AvianMovementSurface<'_, '_> {
 		let mut paths = Vec::new();
 		for sample in ranked {
 			if paths.len() >= budget.max_candidates {
+				break;
+			}
+			if !probes.take() {
 				break;
 			}
 			let Some((waypoints, fall)) = self.probe_walk(
@@ -119,13 +125,17 @@ impl AvianMovementSurface<'_, '_> {
 		let azimuths = ability.vantage_azimuths();
 		match objective {
 			MovementObjective::Reach(_) => {
-				let mut samples =
-					vec![location.with_y(y).with_radius(location.radius.max(arrival))];
+				let goal = location.with_y(y).with_radius(location.radius.max(arrival));
+				if budget.max_candidates <= 1 {
+					return vec![goal];
+				}
+				let extra = budget.max_candidates.saturating_sub(1) as u32;
+				let mut samples = vec![goal];
 				samples.extend(MovementLocation::ring_around(
 					location.point,
 					y,
 					(location.radius * 0.65).max(0.4),
-					azimuths,
+					azimuths.min(extra.max(1)),
 					arrival,
 				));
 				samples
@@ -184,7 +194,7 @@ impl AvianMovementSurface<'_, '_> {
 		arrival: f32,
 		budget: CandidateBudget,
 	) -> Vec<MovementLocation> {
-		let azimuths = ability.vantage_azimuths();
+		let azimuths = ability.vantage_azimuths().min(budget.max_candidates.max(1) as u32);
 		let mut samples = Vec::new();
 		for radius in ability.vantage_standoffs() {
 			if *radius > budget.horizon {

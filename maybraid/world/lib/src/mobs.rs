@@ -39,7 +39,7 @@ const MOB_GENERATE_RADIUS: f32 = 3_000.0;
 const MOB_PRESENT_RADIUS: f32 = 1_000.0;
 const MOB_WORLD_SEED: u64 = 42;
 const MOB_CELL_OCCUPANCY_PERCENT: u64 = 35;
-const MOB_HIGH_LOD_REFRESH_RADIUS: f32 = 250.0;
+const MOB_HIGH_LOD_REFRESH_RADIUS: f32 = 450.0;
 const MOB_HIGH_LOD_REFRESH_INTERVAL: Duration = Duration::from_millis(250);
 const MOB_HIGH_LOD_RECONCILE_INTERVAL: Duration = Duration::from_secs(1);
 

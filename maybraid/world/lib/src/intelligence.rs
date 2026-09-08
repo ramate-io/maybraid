@@ -32,6 +32,7 @@ use threat_management_intelligence::ThreatManagementPlugin;
 const WORLD_MOVEMENT_LIMITS: MovementIntelligenceLimits = MovementIntelligenceLimits {
 	max_budget: CandidateBudget { max_candidates: 8, max_steps: 3, horizon: 28.0 },
 	max_replans_per_frame: 4,
+	max_walk_probes_per_frame: 8,
 };
 
 type WorldPlayers<'w, 's> = Query<
@@ -172,6 +173,7 @@ mod tests {
 	#[test]
 	fn world_replans_drain_instead_of_resolving_every_marker() {
 		assert_eq!(WORLD_MOVEMENT_LIMITS.max_replans_per_frame, 4);
+		assert_eq!(WORLD_MOVEMENT_LIMITS.max_walk_probes_per_frame, 8);
 		assert!(
 			WORLD_MOVEMENT_LIMITS.max_replans_per_frame
 				< MovementIntelligenceLimits::default().max_replans_per_frame

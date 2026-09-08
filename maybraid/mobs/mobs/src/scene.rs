@@ -13,7 +13,7 @@ use mob_characters::FromMobNumber;
 use crate::roster_ref::MemberRosterRef;
 use crate::{MobBrain, MobKind, MobMemberRecipe, MobRosterRecipe};
 
-pub const DEFAULT_MOB_HIGH_RADIUS: f32 = 200.0;
+pub const DEFAULT_MOB_HIGH_RADIUS: f32 = 400.0;
 
 #[derive(Clone, Debug)]
 pub struct Mob<Roster = MobRosterRecipe, Intelligence = MobBrain> {

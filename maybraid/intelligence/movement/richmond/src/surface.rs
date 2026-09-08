@@ -5,6 +5,7 @@ use bevy::prelude::*;
 use movement_intelligence::{
 	CandidateBudget, MovementBody, MovementCandidate, MovementCandidateHints,
 	MovementIntelligenceSurface, MovementLocation, MovementObjective, MovementSheet, MovementStep,
+	WalkProbeBudget,
 };
 use movement_intelligence_avian::{AvianColliderPath, AvianMovementSurface, AvianPathHints};
 
@@ -234,7 +235,14 @@ where
 			let floor_y = self.storey(from_id).map(|storey| storey.floor_y).unwrap_or(from.point.y);
 			return self
 				.avian
-				.collider_paths(from, exclude, ability, objective, budget)
+				.collider_paths(
+					from,
+					exclude,
+					ability,
+					objective,
+					budget,
+					&mut WalkProbeBudget::unlimited(),
+				)
 				.into_iter()
 				.map(|mut path| {
 					penalize_storey_drop(&mut path, from.point, ability, floor_y);
@@ -293,8 +301,14 @@ where
 			max_steps: budget.max_steps,
 			horizon: budget.horizon,
 		};
-		let mut upper =
-			self.avian.collider_paths(upper_from, exclude, ability, objective, upper_budget);
+		let mut upper = self.avian.collider_paths(
+			upper_from,
+			exclude,
+			ability,
+			objective,
+			upper_budget,
+			&mut WalkProbeBudget::unlimited(),
+		);
 		let upper_floor_y =
 			self.storey(to_id).map(|storey| storey.floor_y).unwrap_or(cursor_walk.y);
 		for path in &mut upper {
@@ -375,6 +389,7 @@ fn mouth_prefixes<A: MovementSheet>(
 		ability,
 		MovementObjective::Reach(approach),
 		mouth_budget,
+		&mut WalkProbeBudget::unlimited(),
 	);
 	if paths.is_empty() {
 		return vec![(
