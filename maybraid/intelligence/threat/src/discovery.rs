@@ -1,12 +1,16 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use bevy::prelude::*;
+use intelligence_lod::{due_by_rank, IntelligenceBand, IntelligenceLod, IntelligencePriority};
 use spotting_intelligence::{SpottingHintSource, SpottingUser};
 
 use crate::{
-	Affiliations, ThreatIntelligenceUser, ThreatKnowledge, ThreatObservation, ThreatRegistry,
-	ThreatSource, ThreatSubject,
+	Affiliations, ThreatDiscoverLimits, ThreatIntelligenceUser, ThreatKnowledge, ThreatObservation,
+	ThreatRegistry, ThreatSource, ThreatSubject,
 };
+
+/// Far movers only re-index when they leave this XZ cell.
+pub const THREAT_INDEX_CELL: f32 = 8.0;
 
 type ThreatEntity<'a> = (Entity, &'a ThreatSubject, &'a Affiliations, &'a GlobalTransform);
 type ChangedThreatEntity = Or<(
@@ -15,37 +19,49 @@ type ChangedThreatEntity = Or<(
 	Changed<Affiliations>,
 	Changed<GlobalTransform>,
 )>;
-type ThreatRecipients<'w, 's> = Query<
-	'w,
-	's,
-	(
-		Entity,
-		&'static ThreatSubject,
-		&'static GlobalTransform,
-		Ref<'static, Affiliations>,
-		&'static mut ThreatIntelligenceUser,
-		&'static mut ThreatKnowledge,
-	),
->;
+
+fn threat_index_cell(at: Vec3) -> IVec2 {
+	IVec2::new((at.x / THREAT_INDEX_CELL).floor() as i32, (at.z / THREAT_INDEX_CELL).floor() as i32)
+}
 
 /// Mirrors live semantic threat subjects into the local Gimme index.
+///
+/// Do not drop `Changed<GlobalTransform>`. Far upserts are quantized to
+/// [`THREAT_INDEX_CELL`]; affiliation / identity changes still index immediately.
 pub fn sync_threat_registry(
-	changed: Query<ThreatEntity<'_>, ChangedThreatEntity>,
+	changed: Query<
+		(Entity, Ref<ThreatSubject>, Ref<Affiliations>, &GlobalTransform, Option<&IntelligenceLod>),
+		ChangedThreatEntity,
+	>,
 	current: Query<ThreatEntity<'_>>,
 	mut removed_subjects: RemovedComponents<ThreatSubject>,
 	mut removed_affiliations: RemovedComponents<Affiliations>,
+	mut last_cell: Local<HashMap<Entity, IVec2>>,
 	mut registry: ResMut<ThreatRegistry>,
 ) {
-	for (entity, subject, affiliations, transform) in &changed {
-		upsert(&mut registry, entity, *subject, affiliations, transform.translation());
+	for (entity, subject, affiliations, transform, lod) in &changed {
+		let at = transform.translation();
+		let cell = threat_index_cell(at);
+		let identity_changed = subject.is_changed() || affiliations.is_changed();
+		if IntelligenceLod::band_or_near(lod) == IntelligenceBand::Far
+			&& last_cell.get(&entity) == Some(&cell)
+			&& !identity_changed
+		{
+			continue;
+		}
+		last_cell.insert(entity, cell);
+		upsert(&mut registry, entity, *subject, &affiliations, at);
 	}
 	let mut removed: Vec<_> = removed_subjects.read().chain(removed_affiliations.read()).collect();
 	removed.sort();
 	removed.dedup();
 	for entity in removed {
 		if let Ok((entity, subject, affiliations, transform)) = current.get(entity) {
-			upsert(&mut registry, entity, *subject, affiliations, transform.translation());
+			let at = transform.translation();
+			last_cell.insert(entity, threat_index_cell(at));
+			upsert(&mut registry, entity, *subject, affiliations, at);
 		} else {
+			last_cell.remove(&entity);
 			registry.remove_entity(entity);
 		}
 	}
@@ -93,27 +109,70 @@ pub fn ingest_threat_observations(
 	}
 }
 
-/// Periodically discovers nearby hostile affiliations and maintains retained knowledge.
+/// Accrue / maintain everyone, then drain due local scans in shared viewer order.
+///
+/// Far skips the scan body unless a fairness reserve is due. Leftover
+/// `next_scan_at` stays due. `skips` reset when a scan actually ran.
 pub fn discover_threats(
 	time: Res<Time>,
 	registry: Res<ThreatRegistry>,
-	mut recipients: ThreatRecipients,
+	priority: Res<IntelligencePriority>,
+	limits: Res<ThreatDiscoverLimits>,
+	mut recipients: Query<(
+		Entity,
+		&ThreatSubject,
+		&GlobalTransform,
+		Ref<Affiliations>,
+		&mut ThreatIntelligenceUser,
+		&mut ThreatKnowledge,
+		Option<&mut IntelligenceLod>,
+	)>,
 ) {
 	let now = time.elapsed_secs();
-	for (entity, identity, transform, affiliations, mut user, mut knowledge) in &mut recipients {
+	for (_, _, _, affiliations, mut user, mut knowledge, _) in &mut recipients {
 		knowledge.reconcile_registry(&registry);
 		knowledge.maintain(&affiliations, user.policy, now);
 		if affiliations.is_changed() {
 			user.next_scan_at = 0.0;
 		}
-		if now < user.next_scan_at {
+	}
+
+	let mut due: Vec<Entity> = recipients
+		.iter_mut()
+		.filter_map(|(entity, _, _, _, user, _, _)| (now >= user.next_scan_at).then_some(entity))
+		.collect();
+	due_by_rank(&mut due, &priority);
+	let fair = due.iter().copied().find(|entity| {
+		recipients.get_mut(*entity).is_ok_and(|(_, _, _, _, _, _, lod)| {
+			lod.as_deref().is_some_and(|lod| {
+				lod.band != IntelligenceBand::Near && lod.skips >= IntelligenceLod::FAIRNESS_CAP
+			})
+		})
+	});
+
+	let mut remaining = limits.max_scans_per_tick;
+	for entity in due {
+		if remaining == 0 {
+			break;
+		}
+		let Ok((entity, identity, transform, affiliations, mut user, mut knowledge, mut lod)) =
+			recipients.get_mut(entity)
+		else {
+			continue;
+		};
+		let band = IntelligenceLod::band_or_near(lod.as_deref());
+		if band == IntelligenceBand::Far && Some(entity) != fair {
 			continue;
 		}
+		remaining -= 1;
 		let candidates = registry.local(transform.translation(), user.policy.radius);
 		let count = candidates.len();
-		let budget = user.policy.candidates_per_scan.min(count);
-		for offset in 0..budget {
+		let budget = band.scale_count(user.policy.candidates_per_scan).min(count);
+		let mut observed = 0;
+		let mut offset = 0;
+		while observed < budget && offset < count {
 			let record = &candidates[(user.sample_cursor + offset) % count];
+			offset += 1;
 			if record.entity == entity || record.id == identity.id {
 				continue;
 			}
@@ -125,15 +184,18 @@ pub fn discover_threats(
 				now,
 				user.policy.threat_threshold,
 			);
+			observed += 1;
 		}
-		user.sample_cursor = user.sample_cursor.wrapping_add(budget.max(1));
+		user.sample_cursor = user.sample_cursor.wrapping_add(offset.max(1));
 		let interval = if knowledge.len() >= user.policy.desired_threats {
 			user.policy.retained_scan_interval_secs
 		} else {
 			user.policy.scan_interval_secs
 		};
-		user.next_scan_at = now + staggered_interval(interval, entity);
-		knowledge.maintain(&affiliations, user.policy, now);
+		user.next_scan_at = now + staggered_interval(interval, entity) * band.interval_scale();
+		if let Some(lod) = lod.as_deref_mut() {
+			lod.skips = 0;
+		}
 	}
 }
 

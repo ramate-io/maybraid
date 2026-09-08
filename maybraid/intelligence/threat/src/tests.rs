@@ -3,10 +3,11 @@ use bevy::prelude::*;
 use spotting_intelligence::SpottingUser;
 
 use crate::{
-	AffiliationStrength, Affiliations, ThreatDiscoveryPolicy, ThreatGroupId, ThreatId,
-	ThreatIntelligencePlugin, ThreatIntelligenceUser, ThreatKnowledge, ThreatRecord,
+	AffiliationStrength, Affiliations, ThreatDiscoverLimits, ThreatDiscoveryPolicy, ThreatGroupId,
+	ThreatId, ThreatIntelligencePlugin, ThreatIntelligenceUser, ThreatKnowledge, ThreatRecord,
 	ThreatRegistry, ThreatSource, ThreatSubject,
 };
+use intelligence_lod::{IntelligenceBand, IntelligenceLod, IntelligencePriority};
 
 const FFA: ThreatGroupId = ThreatGroupId::group(1);
 
@@ -200,5 +201,254 @@ fn exported_threat_hint_is_removed_with_knowledge() -> Result<(), bevy::ecs::sys
 	assert!(world
 		.get::<SpottingUser>(user)
 		.is_some_and(|spotting| !spotting.hints.contains_key(&threat)));
+	Ok(())
+}
+
+fn discover_app() -> App {
+	let mut app = App::new();
+	app.add_plugins((MinimalPlugins, TransformPlugin, ThreatIntelligencePlugin));
+	app.finish();
+	app
+}
+
+fn spawn_ffa_observer(
+	app: &mut App,
+	id: ThreatId,
+	lod: IntelligenceLod,
+	knowledge: ThreatKnowledge,
+) -> Entity {
+	app.world_mut()
+		.spawn((
+			ThreatSubject::new(id),
+			ffa_affiliations(id),
+			ThreatIntelligenceUser::default(),
+			knowledge,
+			GlobalTransform::default(),
+			lod,
+		))
+		.id()
+}
+
+fn spawn_ffa_subject(app: &mut App, id: ThreatId, at: Vec3, lod: IntelligenceLod) -> Entity {
+	app.world_mut()
+		.spawn((
+			ThreatSubject::new(id),
+			ffa_affiliations(id),
+			GlobalTransform::from_translation(at),
+			lod,
+		))
+		.id()
+}
+
+#[test]
+fn far_skips_scan_unless_near_takes_the_drain() -> anyhow::Result<()> {
+	let mut app = discover_app();
+	app.insert_resource(ThreatDiscoverLimits { max_scans_per_tick: 1 });
+	let other_id = ThreatId(3);
+	spawn_ffa_subject(&mut app, other_id, Vec3::X, IntelligenceLod::missing());
+	let far = spawn_ffa_observer(
+		&mut app,
+		ThreatId(1),
+		IntelligenceLod { band: IntelligenceBand::Far, skips: 0 },
+		ThreatKnowledge::default(),
+	);
+	let near = spawn_ffa_observer(
+		&mut app,
+		ThreatId(2),
+		IntelligenceLod::missing(),
+		ThreatKnowledge::default(),
+	);
+	app.world_mut().resource_mut::<IntelligencePriority>().rank.insert(near, 0);
+	app.world_mut().resource_mut::<IntelligencePriority>().rank.insert(far, 1);
+
+	app.update();
+
+	anyhow::ensure!(app
+		.world()
+		.get::<ThreatKnowledge>(near)
+		.is_some_and(|knowledge| knowledge.get(other_id).is_some()));
+	anyhow::ensure!(app
+		.world()
+		.get::<ThreatKnowledge>(far)
+		.is_some_and(|knowledge| knowledge.get(other_id).is_none()));
+	anyhow::ensure!(app
+		.world()
+		.get::<ThreatIntelligenceUser>(far)
+		.is_some_and(|user| user.next_scan_at == 0.0));
+	Ok(())
+}
+
+#[test]
+fn far_scan_still_runs_at_fairness_cap() -> anyhow::Result<()> {
+	let mut app = discover_app();
+	app.insert_resource(ThreatDiscoverLimits { max_scans_per_tick: 1 });
+	let other_id = ThreatId(3);
+	spawn_ffa_subject(&mut app, other_id, Vec3::X, IntelligenceLod::missing());
+	let far = spawn_ffa_observer(
+		&mut app,
+		ThreatId(1),
+		IntelligenceLod { band: IntelligenceBand::Far, skips: IntelligenceLod::FAIRNESS_CAP },
+		ThreatKnowledge::default(),
+	);
+
+	app.update();
+
+	anyhow::ensure!(app
+		.world()
+		.get::<ThreatKnowledge>(far)
+		.is_some_and(|knowledge| knowledge.get(other_id).is_some()));
+	anyhow::ensure!(app.world().get::<IntelligenceLod>(far).is_some_and(|lod| lod.skips == 0));
+	Ok(())
+}
+
+#[test]
+fn far_skip_does_not_reset_skips() -> anyhow::Result<()> {
+	let mut app = discover_app();
+	let far = spawn_ffa_observer(
+		&mut app,
+		ThreatId(1),
+		IntelligenceLod { band: IntelligenceBand::Far, skips: 3 },
+		ThreatKnowledge::default(),
+	);
+
+	app.update();
+
+	anyhow::ensure!(app.world().get::<IntelligenceLod>(far).is_some_and(|lod| lod.skips == 3));
+	anyhow::ensure!(app
+		.world()
+		.get::<ThreatIntelligenceUser>(far)
+		.is_some_and(|user| user.next_scan_at == 0.0));
+	Ok(())
+}
+
+#[test]
+fn maintain_still_runs_on_far_we_do_not_scan() -> anyhow::Result<()> {
+	let mut app = discover_app();
+	app.insert_resource(ThreatDiscoverLimits { max_scans_per_tick: 1 });
+	let stale_id = ThreatId(9);
+	let stale_entity = app.world_mut().spawn_empty().id();
+	let record = ThreatRecord {
+		id: stale_id,
+		entity: stale_entity,
+		position: Vec3::X,
+		salience: 1.0,
+		affiliations: ffa_affiliations(stale_id),
+	};
+	let mut far_knowledge = ThreatKnowledge::default();
+	far_knowledge.observe(
+		&record,
+		&ffa_affiliations(ThreatId(1)),
+		ThreatSource::LOCAL_SCAN,
+		1.0,
+		-30.0,
+		0.2,
+	);
+	let far = spawn_ffa_observer(
+		&mut app,
+		ThreatId(1),
+		IntelligenceLod { band: IntelligenceBand::Far, skips: 0 },
+		far_knowledge,
+	);
+	let near = spawn_ffa_observer(
+		&mut app,
+		ThreatId(2),
+		IntelligenceLod::missing(),
+		ThreatKnowledge::default(),
+	);
+	app.world_mut().resource_mut::<IntelligencePriority>().rank.insert(near, 0);
+	app.world_mut().resource_mut::<IntelligencePriority>().rank.insert(far, 1);
+
+	app.update();
+
+	anyhow::ensure!(app
+		.world()
+		.get::<ThreatKnowledge>(far)
+		.is_some_and(|knowledge| knowledge.get(stale_id).is_none()));
+	Ok(())
+}
+
+#[test]
+fn far_same_cell_move_does_not_reindex() -> anyhow::Result<()> {
+	let mut app = discover_app();
+	let id = ThreatId(4);
+	let subject = spawn_ffa_subject(
+		&mut app,
+		id,
+		Vec3::new(1.0, 0.0, 1.0),
+		IntelligenceLod { band: IntelligenceBand::Far, skips: 0 },
+	);
+	app.update();
+	let first = app
+		.world()
+		.resource::<ThreatRegistry>()
+		.get(id)
+		.map(|record| record.position)
+		.ok_or_else(|| anyhow::anyhow!("far subject was not indexed"))?;
+
+	app.world_mut()
+		.entity_mut(subject)
+		.insert(GlobalTransform::from_translation(Vec3::new(2.0, 0.0, 2.0)));
+	app.update();
+
+	let after = app
+		.world()
+		.resource::<ThreatRegistry>()
+		.get(id)
+		.map(|record| record.position)
+		.ok_or_else(|| anyhow::anyhow!("far subject left the registry"))?;
+	anyhow::ensure!(after == first);
+	Ok(())
+}
+
+#[test]
+fn far_cell_change_reindexes() -> anyhow::Result<()> {
+	let mut app = discover_app();
+	let id = ThreatId(4);
+	let subject = spawn_ffa_subject(
+		&mut app,
+		id,
+		Vec3::new(1.0, 0.0, 1.0),
+		IntelligenceLod { band: IntelligenceBand::Far, skips: 0 },
+	);
+	app.update();
+
+	app.world_mut()
+		.entity_mut(subject)
+		.insert(GlobalTransform::from_translation(Vec3::new(12.0, 0.0, 1.0)));
+	app.update();
+
+	let after = app
+		.world()
+		.resource::<ThreatRegistry>()
+		.get(id)
+		.map(|record| record.position)
+		.ok_or_else(|| anyhow::anyhow!("far subject left the registry"))?;
+	anyhow::ensure!((after - Vec3::new(12.0, 0.0, 1.0)).length() < 1e-4);
+	Ok(())
+}
+
+#[test]
+fn far_affiliation_change_still_reindexes_in_the_same_cell() -> anyhow::Result<()> {
+	let mut app = discover_app();
+	let id = ThreatId(4);
+	let subject = spawn_ffa_subject(
+		&mut app,
+		id,
+		Vec3::new(1.0, 0.0, 1.0),
+		IntelligenceLod { band: IntelligenceBand::Far, skips: 0 },
+	);
+	app.update();
+
+	let next = guard_affiliations(id);
+	app.world_mut().entity_mut(subject).insert(next.clone());
+	app.update();
+
+	let indexed = app
+		.world()
+		.resource::<ThreatRegistry>()
+		.get(id)
+		.map(|record| record.affiliations.clone())
+		.ok_or_else(|| anyhow::anyhow!("far subject left the registry"))?;
+	anyhow::ensure!(indexed == next);
 	Ok(())
 }

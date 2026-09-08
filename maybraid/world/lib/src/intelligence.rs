@@ -27,7 +27,8 @@ use spotting_intelligence::{
 };
 use tether_intelligence::TetherSystems;
 use threat_intelligence::{
-	Affiliations, ThreatId, ThreatIntelligencePlugin, ThreatSubject, ThreatSystems,
+	Affiliations, ThreatDiscoverLimits, ThreatId, ThreatIntelligencePlugin, ThreatSubject,
+	ThreatSystems,
 };
 use threat_intelligence_damage::ThreatIntelligenceDamagePlugin;
 use threat_management_intelligence::{
@@ -38,6 +39,8 @@ const INTELLIGENCE_LOD_REFRESH_INTERVAL: Duration = Duration::from_millis(250);
 
 const WORLD_SPOTTING_LIMITS: SpottingObserveLimits =
 	SpottingObserveLimits { max_observers_per_tick: 8 };
+
+const WORLD_THREAT_LIMITS: ThreatDiscoverLimits = ThreatDiscoverLimits { max_scans_per_tick: 8 };
 
 const WORLD_MOVEMENT_LIMITS: MovementIntelligenceLimits = MovementIntelligenceLimits {
 	max_budget: CandidateBudget { max_candidates: 8, max_steps: 3, horizon: 28.0 },
@@ -63,6 +66,7 @@ impl Plugin for WorldIntelligencePlugin {
 	fn build(&self, app: &mut App) {
 		app.insert_resource(WORLD_MOVEMENT_LIMITS)
 			.insert_resource(WORLD_SPOTTING_LIMITS)
+			.insert_resource(WORLD_THREAT_LIMITS)
 			.init_resource::<IntelligencePriority>();
 		if !app.is_plugin_added::<FirearmWeaponsPlugin>() {
 			app.add_plugins(FirearmWeaponsPlugin);
@@ -282,6 +286,7 @@ mod tests {
 		assert_eq!(WORLD_MOVEMENT_LIMITS.max_replans_per_frame, 4);
 		assert_eq!(WORLD_MOVEMENT_LIMITS.max_walk_probes_per_frame, 8);
 		assert_eq!(WORLD_SPOTTING_LIMITS.max_observers_per_tick, 8);
+		assert_eq!(WORLD_THREAT_LIMITS.max_scans_per_tick, 8);
 		assert!(
 			WORLD_MOVEMENT_LIMITS.max_replans_per_frame
 				< MovementIntelligenceLimits::default().max_replans_per_frame
