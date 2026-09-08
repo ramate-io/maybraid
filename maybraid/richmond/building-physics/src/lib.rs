@@ -12,8 +12,9 @@ use bevy::prelude::*;
 
 pub use colliders::{spawn_building_walk_colliders, BuildingWalkCollider, BuildingWalkShapes};
 
-/// Dirt / stone grip. [`CoefficientCombine::Max`] beats the character controller's
-/// `Friction::ZERO` + `Min`.
+/// Dirt / stone grip. [`CoefficientCombine::Max`] beats the capsule's
+/// `Friction::ZERO` + `Min`. Motor-driven capsules zero contact friction
+/// separately; this material still holds ragdolls and props.
 pub const BUILDING_FRICTION: Friction = Friction {
 	dynamic_coefficient: 0.75,
 	static_coefficient: 0.95,

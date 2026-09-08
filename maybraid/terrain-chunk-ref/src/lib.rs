@@ -5,6 +5,7 @@
 //! [`Handle<Mesh>`] while keeping independent materials and transforms.
 
 use std::marker::PhantomData;
+use std::time::{Duration, Instant};
 
 use bevy::prelude::*;
 use chunk::cascade::CascadeChunk;
@@ -152,15 +153,32 @@ where
 	}
 }
 
-/// Caps first-time mesh resolutions per frame. Cache hits do not consume this budget.
+/// Last mailbox generation at which this ref looked up and missed.
+#[derive(Component, Debug, Clone, PartialEq, Eq)]
+pub struct TerrainChunkRefSeen {
+	pub generation: u64,
+	pub key: TerrainChunkKey,
+}
+
+/// Caps overlay applies and (optional) first-time builds per frame.
+///
+/// Cache hits consume [`Self::apply_per_frame`] and
+/// [`Self::main_thread_budget`]. Misses that already saw the current
+/// [`HandleMap`] generation skip the hashmap walk.
 #[derive(Resource, Debug, Clone, Copy)]
 pub struct TerrainChunkRefBudget {
 	pub new_meshes_per_frame: u32,
+	pub apply_per_frame: u32,
+	pub main_thread_budget: Duration,
 }
 
 impl Default for TerrainChunkRefBudget {
 	fn default() -> Self {
-		Self { new_meshes_per_frame: u32::MAX }
+		Self {
+			new_meshes_per_frame: u32::MAX,
+			apply_per_frame: 16,
+			main_thread_budget: Duration::from_millis(2),
+		}
 	}
 }
 
@@ -171,6 +189,7 @@ type TerrainChunkRefQueryItem<'a, T> = (
 	Option<&'a TerrainChunkRefResolved>,
 	Option<&'a TerrainChunkRefEmpty>,
 	Option<&'a Mesh3d>,
+	Option<&'a TerrainChunkRefSeen>,
 );
 type TerrainChunkRefQueryFilter<T> = Or<(
 	Changed<TerrainChunkRef<T>>,
@@ -188,8 +207,18 @@ pub fn fulfill_terrain_chunk_refs<T>(
 	T: MeshBuilder + IdentifiedMesh + Clone + Send + Sync + 'static,
 {
 	let mut remaining = budget.new_meshes_per_frame;
+	let mut applied = 0u32;
+	let started = Instant::now();
+	let generation = cache.handles().generation();
 
-	for (entity, terrain_ref, resolved, empty, mesh) in &query {
+	for (entity, terrain_ref, resolved, empty, mesh, seen) in &query {
+		if applied > 0 && started.elapsed() >= budget.main_thread_budget {
+			break;
+		}
+		if applied >= budget.apply_per_frame {
+			break;
+		}
+
 		let key = terrain_ref.key();
 		if mesh.is_some() && resolved.is_some_and(|resolved| &resolved.0 == key) {
 			continue;
@@ -197,14 +226,21 @@ pub fn fulfill_terrain_chunk_refs<T>(
 		if empty.is_some_and(|empty| &empty.0 == key) {
 			continue;
 		}
+		if seen.is_some_and(|seen| seen.generation == generation && seen.key == *key) {
+			continue;
+		}
 
 		if let Some(handle) = cache.cached_handle(terrain_ref) {
 			commands
 				.entity(entity)
-				.remove::<TerrainChunkRefEmpty>()
+				.remove::<(TerrainChunkRefEmpty, TerrainChunkRefSeen)>()
 				.insert((Mesh3d(handle), TerrainChunkRefResolved(key.clone())));
+			applied += 1;
 			continue;
 		}
+		commands
+			.entity(entity)
+			.insert(TerrainChunkRefSeen { generation, key: key.clone() });
 		if !cache.build_on_miss || remaining == 0 {
 			continue;
 		}
@@ -216,8 +252,9 @@ pub fn fulfill_terrain_chunk_refs<T>(
 		if let Some(handle) = fetcher.fetch_mesh(&mut meshes, &terrain_ref.cascade_chunk()) {
 			commands
 				.entity(entity)
-				.remove::<TerrainChunkRefEmpty>()
+				.remove::<(TerrainChunkRefEmpty, TerrainChunkRefSeen)>()
 				.insert((Mesh3d(handle), TerrainChunkRefResolved(key.clone())));
+			applied += 1;
 		} else {
 			commands
 				.entity(entity)
@@ -385,6 +422,43 @@ mod tests {
 		let mesh = Handle::default();
 		a.insert(&chunk, &model, mesh.clone());
 		assert!(handles.get(&chunk, &model).is_some());
+	}
+
+	#[test]
+	fn apply_budget_spreads_cache_hits() -> anyhow::Result<()> {
+		let handles = HandleMap::<CountingTerrain>::new();
+		let model = CountingTerrain {
+			builds: Arc::new(AtomicUsize::new(0)),
+			ids: Arc::new(AtomicUsize::new(0)),
+		};
+		let chunk = Chunk::cube(Vec3::splat(-1.0), 2.0, None);
+		let terrain_ref = TerrainChunkRef::new(model.clone(), chunk, 2);
+		handles.insert(&terrain_ref.cascade_chunk(), &model, Handle::default());
+
+		let mut app = App::new();
+		app.add_plugins((MinimalPlugins, AssetPlugin::default())).init_asset::<Mesh>();
+		app.insert_resource(
+			TerrainChunkRefCache::<CountingTerrain>::new()
+				.with_handles(handles)
+				.without_build_on_miss(),
+		)
+		.insert_resource(TerrainChunkRefBudget {
+			new_meshes_per_frame: 0,
+			apply_per_frame: 1,
+			main_thread_budget: Duration::from_secs(1),
+		})
+		.add_plugins(TerrainChunkRefPlugin::<CountingTerrain>::default());
+
+		let a = app.world_mut().spawn(terrain_ref.clone()).id();
+		let b = app.world_mut().spawn(terrain_ref).id();
+		app.update();
+		let first = app.world().get::<Mesh3d>(a).is_some();
+		let second = app.world().get::<Mesh3d>(b).is_some();
+		assert_ne!(first, second, "one apply slot should stamp exactly one ref");
+		app.update();
+		assert!(app.world().get::<Mesh3d>(a).is_some());
+		assert!(app.world().get::<Mesh3d>(b).is_some());
+		Ok(())
 	}
 
 	#[test]

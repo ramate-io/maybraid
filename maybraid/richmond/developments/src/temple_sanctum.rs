@@ -6,7 +6,8 @@ use lod::gen::LodSceneLevel;
 use material_ref::MaterialRef;
 use procedural_common::NoiseParams;
 use richmond_building_components::{
-	BuildingComponents, FloorNode, JointNode, Layers, PanelNode, PartitionNode, StairNode,
+	BuildingComponents, BuildingStructuralLodProbe, FloorNode, JointNode, Layers, PanelNode,
+	PartitionNode, StairNode,
 };
 use richmond_buildings::{
 	Confines, FillableRegions, Fit, FitError, Openings, RectFloor, RectFloorParams, RectFloorSlab,
@@ -317,6 +318,49 @@ impl BuildingComponents for TempleSanctum {
 			out.extend(ornament.joint_nodes_for_level(level));
 		}
 		out
+	}
+
+	fn structural_lod(&self) -> Option<BuildingStructuralLodProbe> {
+		let components = self.components();
+		let wall = components.wall_material.clone();
+		let ornament = components.ornament_material.clone().or_else(|| wall.clone());
+		let mut volumes = Vec::new();
+		if let Some(podium) = &components.podium {
+			if let Some(probe) = podium.structural_lod() {
+				volumes
+					.extend(probe.volumes.into_iter().map(|v| v.with_material_opt(wall.clone())));
+			}
+		}
+		for keep in &components.keeps {
+			match keep {
+				crate::RingFortKeep::Circular(keep) => {
+					if let Some(probe) = keep.shell.structural_lod() {
+						volumes.extend(
+							probe.volumes.into_iter().map(|v| v.with_material_opt(wall.clone())),
+						);
+					}
+				}
+				crate::RingFortKeep::Trazaloid(keep) => {
+					if let Some(probe) = keep.shell.structural_lod() {
+						volumes.extend(
+							probe.volumes.into_iter().map(|v| v.with_material_opt(wall.clone())),
+						);
+					}
+				}
+			}
+		}
+		for shell in &components.ornaments {
+			if let Some(probe) = shell.structural_lod() {
+				volumes.extend(
+					probe.volumes.into_iter().map(|v| v.with_material_opt(ornament.clone())),
+				);
+			}
+		}
+		if volumes.is_empty() {
+			None
+		} else {
+			Some(BuildingStructuralLodProbe::from_volumes(volumes))
+		}
 	}
 }
 

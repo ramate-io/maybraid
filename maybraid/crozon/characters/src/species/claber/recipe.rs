@@ -62,7 +62,9 @@ impl Default for Claber {
 impl CharacterComponents for Claber {
 	fn locomotion_capsule(&self) -> LocomotionCapsule {
 		// ~2× croconot midback span on a still-low limb length.
-		LocomotionCapsule::QUADRUPED.scaled(1.6)
+		let pose =
+			ClaberPose { gender: self.gender, build: self.build, sliders: self.sliders.clamped() };
+		LocomotionCapsule::QUADRUPED.scaled(1.6).with_pose_girdle(&pose.resolve())
 	}
 
 	fn rig_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<RigNode> {

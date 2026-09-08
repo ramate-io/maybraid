@@ -366,7 +366,7 @@ fn warn_atomic_overrun(stage: &'static str, elapsed: Duration, maximum: Duration
 	if maximum.is_zero() || elapsed <= maximum {
 		return;
 	}
-	warn!(
+	debug!(
 		stage,
 		elapsed_us = elapsed.as_micros(),
 		max_us = maximum.as_micros(),

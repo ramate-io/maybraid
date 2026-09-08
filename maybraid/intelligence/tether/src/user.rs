@@ -163,5 +163,9 @@ pub fn install_tether(commands: &mut Commands, entity: Entity, user: TetherIntel
 }
 
 fn sticky_satisfied(was: bool, remaining: f32, added_radius: f32) -> bool {
-	if remaining <= 0.0 { true } else { was && remaining <= added_radius }
+	if remaining <= 0.0 {
+		true
+	} else {
+		was && remaining <= added_radius
+	}
 }

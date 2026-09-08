@@ -8,7 +8,6 @@
 
 mod camera;
 pub mod commands;
-mod contact;
 mod control;
 mod intelligence;
 mod material_lib;
@@ -19,9 +18,10 @@ mod poi;
 mod ui;
 mod weapon;
 
+pub use chico_vegetation_on_terrain_playground::PlayerPhysicsEnabled;
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
-pub use control::WorldGameplayEnabled;
-pub use ui::WorldMobHudEnabled;
+pub use control::{WorldGameplayEnabled, WorldSceneryVisible, WorldSurfaceReady};
+pub use durham_terrain_models::{terrain_streaming_enabled, TerrainStreamingEnabled};
 pub use game_commands::command::PendingStartupCommand;
 pub use intelligence::WorldIntelligencePlugin;
 pub use material_lib::{WorldMaterialLib, WorldMaterialRefPlugin};
@@ -29,9 +29,10 @@ pub use mobs::WorldMobsPlugin;
 pub use player_camera::CameraPov;
 pub use player_lifecycle::{WorldPlayerLifecyclePlugin, WorldPlayerRespawnConfig};
 pub use poi::{WorldPoiDiscoveryBudget, WorldPoiPlugin, WorldPoiSystems};
+pub use ui::WorldMobHudEnabled;
 pub use weapon::WorldPlayerLoadout;
 
-use avian3d::prelude::{CoefficientCombine, Friction, PhysicsPlugins, PhysicsSchedulePlugin};
+use avian3d::prelude::{CoefficientCombine, Friction};
 use bevy::prelude::*;
 use chico_vegetation_on_terrain_playground::{
 	CharacterCameraFollowEnabled, CharacterLocomotion, CharacterSpecies, PadMovementEnabled,
@@ -48,7 +49,7 @@ use lod::{Bullseye, OpenLattice};
 use maybraid_character_controller::{CharacterControlSystems, CharacterControllerPlugin};
 use maybraid_input::{VirtualPadConfig, VirtualPadPlugin};
 use maybraid_sky::SkyDomePlugin;
-use player::PlayerPresentationPlugin;
+use player::{register_motor_traction_physics, PlayerPresentationPlugin};
 use player_camera::{PlayerCameraPlugin, PlayerCameraSystems};
 use richmond_building_physics::BuildingWalkColliderPlugin;
 use richmond_developments_on_terrain_playground::{
@@ -57,7 +58,8 @@ use richmond_developments_on_terrain_playground::{
 
 /// Steepest slope the controlled character can drive uphill.
 const WORLD_MAX_SLOPE_ANGLE: f32 = 70.0_f32.to_radians();
-/// Static grip for mobs and props; controlled-player contacts disable friction.
+/// Static grip for mobs and props. Motor-driven capsules zero contact friction
+/// through [`player::MotorTractionHooks`].
 const WORLD_TERRAIN_FRICTION: Friction = Friction {
 	dynamic_coefficient: 2.55,
 	static_coefficient: 2.95,
@@ -76,36 +78,37 @@ const WORLD_TERRAIN_PITCH_GIZMOS: DrawTerrainPitchProbes = DrawTerrainPitchProbe
 /// Assembled world: Durham terrain, streamed forest, urbanization, sky dome, character.
 ///
 /// Playground chrome (command drawer and FPS HUD) is on by default.
-/// The game executable uses [`WorldPlugin::game`].
+/// The game executable uses [`WorldPlugin::game`] (FPS log, no HUD or console).
 pub struct WorldPlugin {
-	/// `/` console and FPS HUD.
+	/// `/` console, debug gizmos, and FPS HUD.
 	pub debug_chrome: bool,
+	/// Throttled `[veg.timing]` FPS log ([`PlaygroundTimingPlugin`]).
+	pub fps_diag: bool,
 	/// Upper-left virtual-pad / command-intent dump.
 	pub input_debug_enabled: bool,
 }
 
 impl Default for WorldPlugin {
 	fn default() -> Self {
-		Self { debug_chrome: true, input_debug_enabled: false }
+		Self { debug_chrome: true, fps_diag: true, input_debug_enabled: false }
 	}
 }
 
 impl WorldPlugin {
-	/// World systems without playground overlays.
+	/// World systems without playground overlays. FPS log stays on.
 	pub fn game() -> Self {
-		Self { debug_chrome: false, input_debug_enabled: false }
+		Self { debug_chrome: false, fps_diag: true, input_debug_enabled: false }
 	}
 }
 
 impl Plugin for WorldPlugin {
 	fn build(&self, app: &mut App) {
-		if !app.is_plugin_added::<PhysicsSchedulePlugin>() {
-			app.add_plugins(
-				PhysicsPlugins::default().with_collision_hooks::<contact::WorldCollisionHooks>(),
-			);
-		}
+		register_motor_traction_physics(app);
 		app.insert_resource(PlaygroundMode::Character)
-			.insert_resource(PlaygroundDiag { fps: self.debug_chrome })
+			.insert_resource(PlaygroundDiag {
+				fps: self.fps_diag || self.debug_chrome,
+				hud: self.debug_chrome,
+			})
 			.insert_resource(CharacterLocomotion { max_slope_angle: WORLD_MAX_SLOPE_ANGLE })
 			.insert_resource(player::CharacterLocomotion { max_slope_angle: WORLD_MAX_SLOPE_ANGLE })
 			.insert_resource(TerrainFrictionConfig(WORLD_TERRAIN_FRICTION))
@@ -152,6 +155,8 @@ impl Plugin for WorldPlugin {
 			.insert_resource(PadMovementEnabled(false))
 			.insert_resource(CharacterCameraFollowEnabled(false))
 			.init_resource::<WorldGameplayEnabled>()
+			.init_resource::<WorldSurfaceReady>()
+			.init_resource::<WorldSceneryVisible>()
 			.insert_resource(WorldMobHudEnabled::from_debug_chrome(self.debug_chrome))
 			.insert_resource(Bullseye { inner: 50.0, outer: WORLD_BULLSEYE_OUTER_M })
 			.insert_resource(OpenLattice {
@@ -160,8 +165,11 @@ impl Plugin for WorldPlugin {
 				tile_size: 500.0,
 			})
 			.add_plugins(SkyDomePlugin::default());
+		if self.fps_diag || self.debug_chrome {
+			app.add_plugins(PlaygroundTimingPlugin);
+		}
 		if self.debug_chrome {
-			app.add_plugins(PlaygroundTimingPlugin).add_plugins(
+			app.add_plugins(
 				GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config())
 					.with_drawer_config(GameCommandDrawerConfig {
 						open_at_start: false,
@@ -172,12 +180,18 @@ impl Plugin for WorldPlugin {
 		} else {
 			app.init_resource::<TextEntryFocus>();
 		}
-		app.add_systems(PostStartup, spawn_default_braidman).add_systems(
-			Update,
-			control::apply_intents_to_movement
-				.after(CharacterControlSystems)
-				.before(PlayerControlSystems),
-		);
+		app.add_systems(PostStartup, spawn_default_braidman)
+			.add_systems(PreUpdate, control::stamp_vegetation_motor_traction)
+			.add_systems(
+				Update,
+				(
+					control::update_world_surface_ready,
+					control::sync_world_scenery,
+					control::apply_intents_to_movement
+						.after(CharacterControlSystems)
+						.before(PlayerControlSystems),
+				),
+			);
 		camera::configure(app);
 		weapon::configure(app);
 		app.configure_sets(
@@ -242,6 +256,13 @@ mod tests {
 	fn world_input_debug_overlay_is_opt_in() {
 		assert!(!WorldPlugin::default().input_debug_enabled);
 		assert!(!WorldPlugin::game().input_debug_enabled);
+	}
+
+	#[test]
+	fn game_world_keeps_fps_log_without_hud() {
+		let game = WorldPlugin::game();
+		assert!(game.fps_diag);
+		assert!(!game.debug_chrome);
 	}
 
 	#[test]

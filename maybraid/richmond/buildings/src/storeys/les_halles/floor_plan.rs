@@ -3,10 +3,13 @@
 use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::{Vec2, Vec3};
 use lod::gen::LodSceneLevel;
+use material_ref::MaterialRef;
 use procedural_common::{NoiseConfig, NoiseParams};
 use richmond_building_components::joints::JointNode;
 use richmond_building_components::panels::{PanelNode, PanelStyle};
-use richmond_building_components::{BuildingComponents, Layers};
+use richmond_building_components::{
+	ring_strip_xz, BuildingComponents, BuildingStructuralLodProbe, Layers, MassingVolume,
+};
 
 use crate::fit::{
 	aabb_near_plane, aabb_xz_center, aabb_xz_overlap_area, Confines, FillRegion, FillableRegions,
@@ -172,6 +175,22 @@ impl LesHallesFloorPlan {
 	/// Exterior aperture catalog — see [`crate::openings::generate_windows`].
 	pub fn generate_windows(cfg: &NoiseConfig, center: Vec3) -> Vec<LesHallesStallDoor> {
 		gen_windows(cfg, center)
+	}
+
+	/// Four gallery strips (outer minus courtyard), each this storey's height.
+	pub fn massing_volumes(&self, material: Option<MaterialRef>) -> Vec<MassingVolume> {
+		let center = Vec2::new(self.center_xz.x, self.center_xz.z);
+		ring_strip_xz(center, self.outer, self.courtyard)
+			.into_iter()
+			.map(|xz| {
+				MassingVolume::cuboid(xz, self.center_xz.y, self.storey_height)
+					.with_material_opt(material.clone())
+			})
+			.collect()
+	}
+
+	pub fn structural_probe(&self, material: Option<MaterialRef>) -> BuildingStructuralLodProbe {
+		BuildingStructuralLodProbe::from_volumes(self.massing_volumes(material))
 	}
 
 	/// Deterministic structure from already-sampled parameters (towering path).

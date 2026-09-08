@@ -13,6 +13,7 @@ pub mod plugin;
 pub mod presentation;
 pub mod render;
 pub mod sdf;
+pub mod stream_lod;
 
 use crate::terrain::cell::original_ids_for_origin_cells;
 use crate::terrain::jersey::{
@@ -29,14 +30,16 @@ use crate::terrain::marazion::{
 	WatershedAproningCell, WatershedCarvingCell, WatershedRimmingCell,
 };
 use crate::terrain::render::cascade_chunk_for_cell;
-use avian3d::prelude::RigidBody;
 use bevy::ecs::template::template;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value, Scene};
 use durham_terrain::shaders::DurhamTerrainShader;
 use jersey_terrain_stamps::JerseyModulation;
-use lod::gen::{GeneratingSpatialIndex, GenerationScheme, Id, LodScene, OriginalId};
+use lod::gen::{
+	GeneratingSpatialIndex, GenerationScheme, Id, LodScene, LodSceneLevel, LodSceneStatus,
+	OriginalId, SpatialIndex,
+};
 use lod::lod_ref::LodRef;
 use marazion_watersheds::WaterFill;
 use render_item::mesh::handle::Cached;
@@ -45,16 +48,22 @@ use std::sync::Arc;
 
 pub use base_noise::BaseTerrainNoise;
 pub use cell::{
-	origin_cell_ids_for_layout, MacroCellLayout, OuterCellRing, TerrainCellLayout, MACRO_CELL_SIZE,
-	TERRAIN_CELL_SIZE,
+	origin_cell_ids_for_layout, MacroCellLayout, OuterCellRing, TerrainCellLayout, TerrainCellRing,
+	MACRO_CELL_SIZE, TERRAIN_CELL_SIZE,
 };
-pub use collider::{TerrainFrictionConfig, TerrainTrimeshCollider, TERRAIN_FRICTION};
+pub use chunk::cascade::CascadeChunk;
+pub use collider::{
+	spawn_terrain_collider_host, terrain_collider_covers_xz, TerrainColliderCell,
+	TerrainColliderEpoch, TerrainColliderHost, TerrainColliderMeshSource, TerrainColliderOverlay,
+	TerrainColliderSystems, TerrainFrictionConfig, TerrainTrimeshCollider, TERRAIN_FRICTION,
+};
 pub use config::TerrainConfig;
 pub use host::{
-	Durham, TerrainCoverage, TerrainPlugin, TerrainPresentPending, TerrainPresentationDirty,
-	WorldBaseTerrain, WORLD_FINE_HALF_EXTENT_CELLS, WORLD_OUTER_2X_ROWS, WORLD_OUTER_4X_ROWS,
+	terrain_streaming_enabled, Durham, TerrainCoverage, TerrainPlugin, TerrainPresentEnabled,
+	TerrainPresentPending, TerrainPresentationDirty, TerrainStreamingEnabled, WorldBaseTerrain,
+	WORLD_FINE_HALF_EXTENT_CELLS, WORLD_OUTER_2X_ROWS, WORLD_OUTER_4X_ROWS,
 };
-pub use index::{AvianTerrainIndex, TerrainCellId, TerrainEntryStore};
+pub use index::{AvianTerrainIndex, TerrainCellId, TerrainEntryStore, TerrainHeightSnapshot};
 pub use jersey::{
 	CanyonHighPassControllerCell, CanyonHighPassControllerLayout, CanyonHighPassStampCell,
 	CanyonLowPassControllerCell, CanyonLowPassControllerLayout, CanyonLowPassStampCell,
@@ -91,11 +100,16 @@ pub use marazion::{
 };
 pub use plugin::{register_terrain_plugin, TerrainResourcesPlugin};
 pub use presentation::{
-	PresentedTerrainScene, TerrainMeshLodBand, TerrainPresentationAssets, TerrainPresenterState,
-	TerrainRegionPresenter, TerrainStoreView,
+	PresentedTerrainScene, TerrainBackground, TerrainBackgroundRegionPresenter, TerrainFar,
+	TerrainFarRegionPresenter, TerrainMeshLodBand, TerrainNear, TerrainNearRegionPresenter,
+	TerrainPresentationAssets, TerrainPresenterState, TerrainRegionPresenter, TerrainStoreView,
+	TerrainStreamMarker, TerrainStreamPresenterState, TerrainStreamRegionPresenter,
 };
 pub use render::TerrainRenderItem;
 pub use sdf::{ComposedTerrain, ElevationModulation, TerrainSdf};
+pub use stream_lod::{
+	stream_banded_draws, stream_banded_level, stream_banded_scene, StreamBandedLod,
+};
 
 /// CpuShot wrapper stored on [`Terrain`] and used by Durham fill + overlay presenters.
 pub type TerrainMeshBuilder = CpuShotBuilder<Arc<ComposedTerrain>>;
@@ -144,6 +158,8 @@ pub struct Terrain {
 	pub sdf: Arc<ComposedTerrain>,
 	pub material: Handle<DurhamTerrainShader>,
 	pub res_2: u8,
+	/// Moving presentation band for streamed near / far / background terrain.
+	pub stream_ring: Option<TerrainCellRing>,
 	/// Per-face CpuShot edge height walls (LOD seam skirts).
 	pub wall_faces: WallFaces,
 }
@@ -166,7 +182,7 @@ impl Terrain {
 	}
 
 	pub fn scene(&self) -> impl Scene + 'static {
-		// Shared origin-cell lattice with [`crate::water::Water::scene`].
+		// Collider-host bake path. Visual LOD uses [`LodScene::scene_with_level`].
 		let chunk = cascade_chunk_for_cell(self.cell, self.res_2);
 		let transform = Transform::from_translation(chunk.origin);
 		let builder = self.mesh_builder();
@@ -176,23 +192,55 @@ impl Terrain {
 			template_value(chunk)
 			template(move |_ctx| Ok(Cached::new(builder.clone())))
 			MeshMaterial3d::<DurhamTerrainShader>({material.clone()})
-			template(move |_ctx| Ok(RigidBody::Static))
-			TerrainTrimeshCollider
+			TerrainColliderMeshSource
+		}
+	}
+
+	fn center(&self) -> Vec3 {
+		(Vec3::from(self.cell.min) + Vec3::from(self.cell.max)) * 0.5
+	}
+
+	fn mesh_scene(&self) -> impl Scene + 'static {
+		let chunk = cascade_chunk_for_cell(self.cell, self.res_2);
+		let transform = Transform::from_translation(chunk.origin);
+		let builder = self.mesh_builder();
+		let material = self.material.clone();
+		bsn! {
+			template_value(transform)
+			template_value(chunk)
+			template(move |_ctx| Ok(Cached::new(builder.clone())))
+			MeshMaterial3d::<DurhamTerrainShader>({material.clone()})
 		}
 	}
 }
 
-impl LodScene for Terrain {
-	fn scene_lod_status(&self, _lod_ref: &LodRef) -> lod::gen::LodSceneStatus {
-		lod::gen::LodSceneStatus::Unchanged
+impl crate::terrain::stream_lod::StreamBandedLod for Terrain {
+	fn stream_ring(&self) -> Option<TerrainCellRing> {
+		self.stream_ring
 	}
 
-	fn scene_with_level(
-		&self,
-		_lod_ref: &LodRef,
-		_level: lod::gen::LodSceneLevel,
-	) -> impl Scene + 'static {
-		self.scene()
+	fn stream_center(&self) -> Vec3 {
+		self.center()
+	}
+}
+
+impl LodScene for Terrain {
+	fn scene_lod_level(&self, lod_ref: &LodRef) -> LodSceneLevel {
+		stream_banded_level(self, lod_ref.current_transform)
+	}
+
+	fn scene_lod_status(&self, lod_ref: &LodRef) -> LodSceneStatus {
+		let previous = stream_banded_level(self, lod_ref.previous_transform);
+		let current = stream_banded_level(self, lod_ref.current_transform);
+		if previous == current {
+			LodSceneStatus::Unchanged
+		} else {
+			LodSceneStatus::Changed(current)
+		}
+	}
+
+	fn scene_with_level(&self, _lod_ref: &LodRef, level: LodSceneLevel) -> impl Scene + 'static {
+		stream_banded_scene(self, level, || self.mesh_scene())
 	}
 }
 
@@ -508,9 +556,18 @@ where
 			spatial_index,
 			Id::Universal,
 			lod_ref,
-		)?;
+		)?
+		.clone();
 		let material = assets.material.clone();
-		let (res_2, wall_faces) = assets.mesh_params_for_cell(bounds);
+		let layout = <S as SpatialIndex<crate::terrain::cell::TerrainCellLayout>>::get(
+			spatial_index,
+			Id::Universal,
+		)
+		.cloned()
+		.unwrap_or_default();
+		let (res_2, wall_faces) = assets.mesh_params_for_cell(bounds, &layout);
+		let cell_size = (Vec3::from(bounds.max) - Vec3::from(bounds.min)).x;
+		let stream_ring = layout.stream_ring_for_cell_size(cell_size);
 
 		Some((
 			Self {
@@ -523,6 +580,7 @@ where
 				sdf,
 				material,
 				res_2,
+				stream_ring,
 				wall_faces,
 			},
 			bounds,

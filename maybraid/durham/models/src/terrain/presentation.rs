@@ -3,10 +3,13 @@
 //! Generation and presentation stay separate: present reads the entry store and
 //! spawns each cell's [`lod::gen::LodScene`] via [`Commands::spawn_scene`].
 
-use crate::terrain::cell::{universal_bounds, TerrainCellLayout};
+use crate::terrain::cell::{
+	expand_aabb_xz, universal_bounds, TerrainCellLayout, TERRAIN_CELL_SIZE,
+};
 use crate::terrain::config::TerrainConfig;
 use crate::terrain::index::TerrainEntryStore;
 use crate::terrain::Terrain;
+use crate::water::PresentedWaterScene;
 use bevy::ecs::system::SystemParam;
 use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::prelude::*;
@@ -16,8 +19,10 @@ use lod::gen::{
 	TrackedId, Version,
 };
 use lod::lod_ref::LodRef;
+use lod::LodSceneLevel;
 use render_item::sdf::cpu_shot::WallFaces;
 use std::collections::{HashMap, HashSet};
+use std::marker::PhantomData;
 
 /// One concentric mesh-LOD band on the fine (base-sized) cell grid.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -85,54 +90,113 @@ impl TerrainPresentationAssets {
 		false
 	}
 
-	fn wall_faces_for_fine_cell(&self, ix: i32, iz: i32) -> WallFaces {
+	fn wall_faces_for_fine_cell(&self, ix: i32, iz: i32, layout: &TerrainCellLayout) -> WallFaces {
 		if !self.outer_add_walls || self.lod_bands.is_empty() {
 			return WallFaces::NONE;
 		}
-		let my_r = ix.abs().max(iz.abs());
+		let my_r = layout.fine_cell_radius(ix, iz);
 		let mine = self.res_2_for_radius(my_r);
 		WallFaces {
-			neg_x: self.wall_toward_neighbor(my_r, mine, (ix - 1).abs().max(iz.abs())),
-			pos_x: self.wall_toward_neighbor(my_r, mine, (ix + 1).abs().max(iz.abs())),
-			neg_z: self.wall_toward_neighbor(my_r, mine, ix.abs().max((iz - 1).abs())),
-			pos_z: self.wall_toward_neighbor(my_r, mine, ix.abs().max((iz + 1).abs())),
+			neg_x: self.wall_toward_neighbor(my_r, mine, layout.fine_cell_radius(ix - 1, iz)),
+			pos_x: self.wall_toward_neighbor(my_r, mine, layout.fine_cell_radius(ix + 1, iz)),
+			neg_z: self.wall_toward_neighbor(my_r, mine, layout.fine_cell_radius(ix, iz - 1)),
+			pos_z: self.wall_toward_neighbor(my_r, mine, layout.fine_cell_radius(ix, iz + 1)),
 		}
 	}
 
-	fn wall_faces_for_macro_cell(&self, bounds: Aabb3d) -> WallFaces {
+	fn macro_inner_footprints(layout: &TerrainCellLayout) -> Vec<Aabb3d> {
+		let mut inners = vec![layout.fine_request_region()];
+		let mut covered = layout.fine_request_region();
+		for (i, outer) in layout.outer_rings.iter().enumerate() {
+			if outer.rows <= 0 {
+				continue;
+			}
+			covered = expand_aabb_xz(covered, outer.rows as f32 * outer.cell_size.max(1e-3));
+			if i + 1 < layout.outer_rings.len() {
+				inners.push(covered);
+			}
+		}
+		inners
+	}
+
+	fn wall_faces_for_macro_cell(&self, bounds: Aabb3d, layout: &TerrainCellLayout) -> WallFaces {
 		if !self.outer_add_walls {
 			return WallFaces::NONE;
 		}
-		if self.macro_seam_half_extents.is_empty() {
+		let inners = Self::macro_inner_footprints(layout);
+		if inners.is_empty() {
 			return WallFaces::ALL;
 		}
 		let min = Vec3::from(bounds.min);
 		let max = Vec3::from(bounds.max);
 		let eps = 1.0;
 		let mut faces = WallFaces::NONE;
-		for &half in &self.macro_seam_half_extents {
-			faces.neg_x |= (min.x - half).abs() < eps;
-			faces.pos_x |= (max.x - (-half)).abs() < eps;
-			faces.neg_z |= (min.z - half).abs() < eps;
-			faces.pos_z |= (max.z - (-half)).abs() < eps;
+		for inner in inners {
+			let inner_min = Vec3::from(inner.min);
+			let inner_max = Vec3::from(inner.max);
+			faces.neg_x |= (min.x - inner_max.x).abs() < eps || (min.x - inner_min.x).abs() < eps;
+			faces.pos_x |= (max.x - inner_min.x).abs() < eps || (max.x - inner_max.x).abs() < eps;
+			faces.neg_z |= (min.z - inner_max.z).abs() < eps || (min.z - inner_min.z).abs() < eps;
+			faces.pos_z |= (max.z - inner_min.z).abs() < eps || (max.z - inner_max.z).abs() < eps;
 		}
 		faces
 	}
 
+	fn wall_faces_for_stream_cell(
+		&self,
+		bounds: Aabb3d,
+		layout: &TerrainCellLayout,
+		ring: crate::terrain::cell::TerrainCellRing,
+	) -> WallFaces {
+		if !self.outer_add_walls {
+			return WallFaces::NONE;
+		}
+		// Inner holes and Near/Far rims sit under the next-finer stream (draw
+		// overlap). Only the outermost Background skirt faces empty space.
+		if !layout.is_outermost_stream_ring(ring) {
+			return WallFaces::NONE;
+		}
+		let center = layout.region_center_xz();
+		let min = Vec3::from(bounds.min);
+		let max = Vec3::from(bounds.max);
+		let cx = (min.x + max.x) * 0.5;
+		let cz = (min.z + max.z) * 0.5;
+		let radius = (cx - center.x).abs().max((cz - center.z).abs());
+		let on_outer = (radius - ring.high_outer_radius).abs() < ring.cell_size;
+		if on_outer {
+			WallFaces::ALL
+		} else {
+			WallFaces::NONE
+		}
+	}
+
 	/// `(res_2, wall_faces)` for a terrain origin cell AABB.
-	pub fn mesh_params_for_cell(&self, bounds: Aabb3d) -> (u8, WallFaces) {
+	///
+	/// Fine-grid LOD radius is Chebyshev distance from the current layout window
+	/// center, so newly admitted cells use the sliding stream's bands.
+	pub fn mesh_params_for_cell(
+		&self,
+		bounds: Aabb3d,
+		layout: &TerrainCellLayout,
+	) -> (u8, WallFaces) {
 		let min = Vec3::from(bounds.min);
 		let max = Vec3::from(bounds.max);
 		let cell_size = (max.x - min.x).max(1e-3);
+		if let Some(ring) = layout.stream_ring_for_cell_size(cell_size) {
+			return (ring.res_2, self.wall_faces_for_stream_cell(bounds, layout, ring));
+		}
 		if let Some(macro_min) = self.macro_cell_min_size {
 			if cell_size + 1e-3 >= macro_min {
-				return (self.macro_res_2.unwrap_or(3), self.wall_faces_for_macro_cell(bounds));
+				return (
+					self.macro_res_2.unwrap_or(3),
+					self.wall_faces_for_macro_cell(bounds, layout),
+				);
 			}
 		}
 		let ix = (min.x / cell_size).floor() as i32;
 		let iz = (min.z / cell_size).floor() as i32;
-		let radius = ix.abs().max(iz.abs());
-		(self.res_2_for_radius(radius), self.wall_faces_for_fine_cell(ix, iz))
+		let radius = layout.fine_cell_radius(ix, iz);
+		(self.res_2_for_radius(radius), self.wall_faces_for_fine_cell(ix, iz, layout))
 	}
 }
 
@@ -171,11 +235,63 @@ pub struct TerrainPresenterState {
 struct PresentedEntry {
 	version: Version,
 	entity: Entity,
+	level: LodSceneLevel,
 }
 
 /// Marks a spawned terrain scene root as belonging to a presented id.
 #[derive(Component, Debug, Clone, Copy)]
 pub struct PresentedTerrainScene(pub Id);
+
+/// Near-stream terrain host (160 m High cells; collision scale).
+#[derive(Component, Debug, Clone, Copy, Default)]
+pub struct TerrainNear;
+
+/// Far-stream terrain host (320 m render-only cells).
+#[derive(Component, Debug, Clone, Copy, Default)]
+pub struct TerrainFar;
+
+/// Background-stream terrain host (640 m render-only cells).
+#[derive(Component, Debug, Clone, Copy, Default)]
+pub struct TerrainBackground;
+
+/// Marker policy for one moving terrain scale presenter.
+pub trait TerrainStreamMarker: Component + Default + Send + Sync + 'static {
+	const CELL_SIZE_MULTIPLE: f32;
+}
+
+impl TerrainStreamMarker for TerrainNear {
+	const CELL_SIZE_MULTIPLE: f32 = 1.0;
+}
+
+impl TerrainStreamMarker for TerrainFar {
+	const CELL_SIZE_MULTIPLE: f32 = 2.0;
+}
+
+impl TerrainStreamMarker for TerrainBackground {
+	const CELL_SIZE_MULTIPLE: f32 = 4.0;
+}
+
+/// Independent runtime bookkeeping for one moving terrain scale.
+#[derive(Resource)]
+pub struct TerrainStreamPresenterState<M: TerrainStreamMarker> {
+	presented: HashMap<Id, PresentedEntry>,
+	_marker: PhantomData<M>,
+}
+
+impl<M: TerrainStreamMarker> Default for TerrainStreamPresenterState<M> {
+	fn default() -> Self {
+		Self { presented: HashMap::new(), _marker: PhantomData }
+	}
+}
+
+impl<M: TerrainStreamMarker> TerrainStreamPresenterState<M> {
+	fn clear(&mut self, commands: &mut Commands) {
+		for entry in self.presented.values() {
+			commands.entity(entry.entity).despawn();
+		}
+		self.presented.clear();
+	}
+}
 
 impl TerrainPresenterState {
 	pub fn clear(&mut self, commands: &mut Commands) {
@@ -240,9 +356,110 @@ impl SpatialIndex<Terrain> for TerrainStoreView<'_> {
 pub struct TerrainRegionPresenter<'w, 's> {
 	commands: Commands<'w, 's>,
 	state: ResMut<'w, TerrainPresenterState>,
+	store: Res<'w, TerrainEntryStore>,
 }
 
 impl<'w, 's> TerrainRegionPresenter<'w, 's> {
+	pub fn clear_presented(&mut self) {
+		self.state.clear(&mut self.commands);
+	}
+}
+
+/// Scale-filtered presenter used by moving near / far / background streams.
+#[derive(SystemParam)]
+pub struct TerrainStreamRegionPresenter<'w, 's, M: TerrainStreamMarker> {
+	commands: Commands<'w, 's>,
+	state: ResMut<'w, TerrainStreamPresenterState<M>>,
+	store: Res<'w, TerrainEntryStore>,
+}
+
+pub type TerrainNearRegionPresenter<'w, 's> = TerrainStreamRegionPresenter<'w, 's, TerrainNear>;
+pub type TerrainFarRegionPresenter<'w, 's> = TerrainStreamRegionPresenter<'w, 's, TerrainFar>;
+pub type TerrainBackgroundRegionPresenter<'w, 's> =
+	TerrainStreamRegionPresenter<'w, 's, TerrainBackground>;
+
+impl<M: TerrainStreamMarker> TerrainStreamRegionPresenter<'_, '_, M> {
+	fn matches(value: &Terrain) -> bool {
+		let size = Vec3::from(value.cell.max - value.cell.min).x;
+		(size - M::CELL_SIZE_MULTIPLE * TERRAIN_CELL_SIZE).abs() < 1e-3
+	}
+
+	/// Present this scale's keep-region cells. The annulus hole is LodScene
+	/// banding (High = mesh, Medium / Low = empty), not a presenter High filter.
+	pub fn present(
+		&mut self,
+		store: &TerrainEntryStore,
+		layout: &TerrainCellLayout,
+		region: Aabb3d,
+		lod_ref: &LodRef,
+	) {
+		if layout
+			.stream_ring_for_cell_size(M::CELL_SIZE_MULTIPLE * TERRAIN_CELL_SIZE)
+			.is_none()
+		{
+			return;
+		};
+		let wanted: HashSet<Id> = store
+			.terrain
+			.iter()
+			.filter(|(_, entry)| region.intersects(&entry.bounds) && Self::matches(&entry.value))
+			.map(|(id, _)| *id)
+			.collect();
+
+		for id in &wanted {
+			let Some(entry) = store.terrain.get(id) else {
+				continue;
+			};
+			let level = entry.value.scene_lod_level(lod_ref);
+			if self
+				.state
+				.presented
+				.get(id)
+				.is_some_and(|shown| shown.version == entry.version && shown.level == level)
+			{
+				continue;
+			}
+			if let Some(previous) = self.state.presented.remove(id) {
+				self.commands.entity(previous.entity).despawn();
+			}
+			let host = self
+				.commands
+				.spawn((
+					Name::new("Terrain cell"),
+					PresentedTerrainScene(*id),
+					M::default(),
+					Transform::IDENTITY,
+					Visibility::default(),
+				))
+				.id();
+			self.commands
+				.spawn_scene(entry.value.scene_with_lod(lod_ref))
+				.insert(ChildOf(host));
+			if crate::terrain::stream_lod::stream_banded_draws(&entry.value, level) {
+				if let Some(water) = self.store.water(*id) {
+					self.commands
+						.spawn_scene(water.scene_with_lod(lod_ref))
+						.insert((PresentedWaterScene(*id), ChildOf(host)));
+				}
+			}
+			self.state
+				.presented
+				.insert(*id, PresentedEntry { version: entry.version, entity: host, level });
+		}
+
+		let stale: Vec<(Id, Entity)> = self
+			.state
+			.presented
+			.iter()
+			.filter(|(id, _)| !wanted.contains(id))
+			.map(|(id, entry)| (*id, entry.entity))
+			.collect();
+		for (id, entity) in stale {
+			self.commands.entity(entity).despawn();
+			self.state.presented.remove(&id);
+		}
+	}
+
 	pub fn clear_presented(&mut self) {
 		self.state.clear(&mut self.commands);
 	}
@@ -257,12 +474,26 @@ impl<'a, 'w, 's> RegionPresenter<Terrain, TerrainStoreView<'a>> for TerrainRegio
 		if let Some(previous) = self.state.presented.remove(&id) {
 			self.commands.entity(previous.entity).despawn();
 		}
-		let entity = self
+		// Visual root only. Raw Durham colliders live on `TerrainColliderHost`,
+		// keyed by origin id, so this despawn cannot punch a physics hole.
+		let host = self
 			.commands
-			.spawn_scene(value.scene_with_lod(lod_ref))
-			.insert(PresentedTerrainScene(id))
+			.spawn((
+				Name::new("Terrain cell"),
+				PresentedTerrainScene(id),
+				Transform::IDENTITY,
+				Visibility::default(),
+			))
 			.id();
-		self.state.presented.insert(id, PresentedEntry { version, entity });
+		self.commands.spawn_scene(value.scene_with_lod(lod_ref)).insert(ChildOf(host));
+		if let Some(water) = self.store.water(id) {
+			self.commands
+				.spawn_scene(water.scene_with_lod(lod_ref))
+				.insert((PresentedWaterScene(id), ChildOf(host)));
+		}
+		self.state
+			.presented
+			.insert(id, PresentedEntry { version, entity: host, level: LodSceneLevel::High });
 	}
 
 	fn presented_ids(&self) -> Vec<Id> {

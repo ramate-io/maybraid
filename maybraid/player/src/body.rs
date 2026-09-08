@@ -7,8 +7,11 @@ use crozon_characters::LocomotionCapsule;
 use lod_avian::PhysicsInteractionLayer;
 use std::f32::consts::PI;
 
+pub(crate) const MOVE_SPEED: f32 = 7.0;
 pub(crate) const MOVE_ACCEL: f32 = 40.0;
-pub(crate) const MOVE_DAMPING: f32 = 0.92;
+/// Grounded idle brake toward rest along the walk plane (matches vegetation).
+pub(crate) const MOVE_BRAKE: f32 = 50.0;
+const AIR_CONTROL: f32 = 0.25;
 pub(crate) const JUMP_IMPULSE: f32 = 8.0;
 pub(crate) const MAX_SLOPE_ANGLE: f32 = PI * 0.45;
 pub(crate) const GROUND_CAST_DISTANCE: f32 = 0.45;
@@ -16,7 +19,8 @@ const GROUND_SNAP_SPEED: f32 = 1.5;
 
 /// Walkable grounded slope for FFA / NPC capsules. Insert before [`crate::PlayerPlugin`]
 /// to override the default (~81°). World / Durham playgrounds use ~70° so cliffs
-/// never count as floor; static terrain friction should exceed `tan(this)`.
+/// never count as floor. Uncontrolled bodies need static floor friction above
+/// `tan(this)`; motor capsules idle-brake to rest instead.
 #[derive(Resource, Clone, Copy, Debug, PartialEq)]
 pub struct CharacterLocomotion {
 	/// Hits steeper than this (radians from up) are not grounded.
@@ -176,9 +180,6 @@ pub struct Grounded;
 pub(crate) struct MovementAcceleration(pub f32);
 
 #[derive(Component)]
-pub(crate) struct MovementDampingFactor(pub f32);
-
-#[derive(Component)]
 pub(crate) struct JumpImpulse(pub f32);
 
 #[derive(Component)]
@@ -195,6 +196,7 @@ pub fn apply_locomotion_capsule(commands: &mut Commands, body: Entity, hull: Loc
 			.with_max_distance(GROUND_CAST_DISTANCE)
 			.with_query_filter(SpatialQueryFilter::from_mask(PhysicsInteractionLayer::Fixed)),
 	));
+	crate::hit::apply_hit_capsule(commands, body, hull);
 }
 
 /// Stamp the dynamic character controller onto an existing scene plant.
@@ -209,7 +211,6 @@ pub fn apply_character_controller(commands: &mut Commands, body: Entity, hull: L
 		PhysicsInteractionLayer::animated_layers(),
 		LockedAxes::ROTATION_LOCKED,
 		MovementAcceleration(MOVE_ACCEL),
-		MovementDampingFactor(MOVE_DAMPING),
 		JumpImpulse(JUMP_IMPULSE),
 		MaxSlopeAngle(MAX_SLOPE_ANGLE),
 		MoveWish::default(),
@@ -218,6 +219,7 @@ pub fn apply_character_controller(commands: &mut Commands, body: Entity, hull: L
 		Restitution::ZERO.with_combine_rule(CoefficientCombine::Min),
 		GravityScale(1.25),
 	));
+	commands.entity(body).insert(crate::contact::motor_traction_bundle());
 	apply_locomotion_capsule(commands, body, hull);
 }
 
@@ -324,7 +326,7 @@ fn walkable_ground_normal(hits: &ShapeHits, max_slope: Option<&MaxSlopeAngle>) -
 	walkable_contact_normal(hits, max_slope.map(|angle| angle.0))
 }
 
-/// Contact plane used to turn a wish into capsule accel.
+/// Contact plane used to turn a wish into capsule drive.
 ///
 /// Airborne jump (and true air) are XZ only (gravity owns Y). Takeoff and land
 /// stay on the walkable plane. A walkable hit this frame is the plane. Last
@@ -370,33 +372,48 @@ pub fn wish_on_ground(wish: Vec3, ground_normal: Option<Vec3>) -> Vec3 {
 	Vec3::ZERO
 }
 
-/// Accelerate along the ground plane when a walkable normal is known; else XZ only.
-fn accelerate_wish(
+fn move_toward(current: Vec3, target: Vec3, max_delta: f32) -> Vec3 {
+	let delta = target - current;
+	if delta.length_squared() <= max_delta * max_delta {
+		target
+	} else {
+		current + delta.normalize_or_zero() * max_delta
+	}
+}
+
+/// Target-speed drive along the walk plane. Same loop as the vegetation capsule.
+fn control_ground_velocity(
 	velocity: &mut LinearVelocity,
 	wish: Vec3,
 	accel: f32,
 	dt: f32,
-	ground_normal: Option<Vec3>,
-	gravity: Vec3,
+	ground_normal: Vec3,
 ) {
-	let drive = wish_on_ground(wish, ground_normal);
-	if drive.length_squared() < 1e-8 {
+	let normal = ground_normal.normalize_or_zero();
+	if normal.length_squared() < 1e-8 {
+		control_air_velocity(velocity, wish, accel, dt);
 		return;
 	}
-	if ground_normal.is_some() {
-		let horizontal = Vec2::new(drive.x, drive.z).length().max(0.25);
-		let slope_accel = (accel / horizontal - gravity.dot(drive)).max(0.0);
-		**velocity += drive * slope_accel * dt;
-	} else {
-		velocity.x += drive.x * accel * dt;
-		velocity.z += drive.z * accel * dt;
+	let tangent = **velocity - normal * velocity.dot(normal);
+	let target = wish_on_ground(wish, Some(normal)) * MOVE_SPEED;
+	let rate = if target.length_squared() > 1e-8 { accel } else { MOVE_BRAKE };
+	**velocity = move_toward(tangent, target, rate * dt);
+}
+
+fn control_air_velocity(velocity: &mut LinearVelocity, wish: Vec3, accel: f32, dt: f32) {
+	let wish = Vec3::new(wish.x, 0.0, wish.z).normalize_or_zero();
+	if wish.length_squared() < 1e-8 {
+		return;
 	}
+	let horizontal = Vec3::new(velocity.x, 0.0, velocity.z);
+	let next = move_toward(horizontal, wish * MOVE_SPEED, accel * AIR_CONTROL * dt);
+	velocity.x = next.x;
+	velocity.z = next.z;
 }
 
 /// Apply [`MoveWish`] for every capsule. Pad intent and NPC drive both write it.
 pub(crate) fn apply_wish_movement(
 	time: Res<Time>,
-	gravity: Option<Res<Gravity>>,
 	mut controllers: Query<
 		(
 			&MoveWish,
@@ -404,7 +421,6 @@ pub(crate) fn apply_wish_movement(
 			Option<&MaxSlopeAngle>,
 			Option<&WalkableGround>,
 			&MovementAcceleration,
-			&GravityScale,
 			&mut LinearVelocity,
 			Has<Grounded>,
 			Option<&Jumping>,
@@ -413,18 +429,18 @@ pub(crate) fn apply_wish_movement(
 	>,
 ) {
 	let dt = time.delta_secs();
-	let gravity = gravity.map(|gravity| gravity.0).unwrap_or(Vec3::ZERO);
-	for (wish, hits, max_slope, walkable, accel, gravity_scale, mut velocity, grounded, jumping) in
+	for (wish, hits, max_slope, walkable, accel, mut velocity, grounded, jumping) in
 		&mut controllers
 	{
-		if wish.0.length_squared() < 1e-6 {
-			continue;
-		}
 		let contact = walkable_ground_normal(hits, max_slope);
 		let airborne = jumping.is_some_and(Jumping::airborne);
 		let ground =
 			ground_plane_for_wish(contact, walkable.map(|plane| plane.normal), grounded, airborne);
-		accelerate_wish(&mut velocity, wish.0, accel.0, dt, ground, gravity * gravity_scale.0);
+		if let Some(normal) = ground {
+			control_ground_velocity(&mut velocity, wish.0, accel.0, dt, normal);
+		} else {
+			control_air_velocity(&mut velocity, wish.0, accel.0, dt);
+		}
 	}
 }
 
@@ -461,43 +477,6 @@ pub(crate) fn advance_jump_phases(
 	}
 }
 
-pub(crate) fn apply_movement_damping(
-	mut query: Query<
-		(
-			&MovementDampingFactor,
-			&ShapeHits,
-			Option<&MaxSlopeAngle>,
-			Option<&WalkableGround>,
-			Has<Grounded>,
-			Option<&Jumping>,
-			&mut LinearVelocity,
-		),
-		With<CharacterController>,
-	>,
-) {
-	for (damping, hits, max_slope, walkable, grounded, jumping, mut velocity) in &mut query {
-		let contact = walkable_ground_normal(hits, max_slope);
-		let airborne = jumping.is_some_and(Jumping::airborne);
-		let ground =
-			ground_plane_for_wish(contact, walkable.map(|plane| plane.normal), grounded, airborne);
-		damp_movement(&mut velocity, damping.0, ground);
-	}
-}
-
-/// Damp locomotion without tipping slope-tangent velocity into or away from
-/// the ground. Airborne motion keeps vertical velocity under gravity.
-fn damp_movement(velocity: &mut LinearVelocity, damping: f32, ground_normal: Option<Vec3>) {
-	if let Some(normal) = ground_normal.map(Vec3::normalize_or_zero) {
-		if normal.length_squared() > 1e-8 {
-			let tangent = **velocity - normal * velocity.dot(normal);
-			**velocity = tangent * damping;
-			return;
-		}
-	}
-	velocity.x *= damping;
-	velocity.z *= damping;
-}
-
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -513,27 +492,26 @@ mod tests {
 		let slope = 70.0_f32.to_radians();
 		// Hill rises in +X, so the normal tilts downhill (−X).
 		let normal = Vec3::new(-slope.sin(), slope.cos(), 0.0);
-		accelerate_wish(&mut velocity, Vec3::X, 40.0, 1.0, Some(normal), Vec3::ZERO);
-		assert!(velocity.y > 1.0, "grounded drive must add uphill Y, got {}", velocity.y);
+		control_ground_velocity(&mut velocity, Vec3::X, MOVE_ACCEL, 1.0, normal);
+		assert!(velocity.y > 0.0, "grounded drive must add uphill Y, got {}", velocity.y);
 		assert!(velocity.x > 0.0);
+		let tangent = velocity.0 - normal * velocity.0.dot(normal);
+		assert!((tangent.length() - MOVE_SPEED).abs() < 1e-4, "{tangent:?}");
 	}
 
 	#[test]
-	fn slope_drive_preserves_horizontal_pace_against_gravity() {
-		let gravity = Vec3::NEG_Y * 9.81 * 1.25;
+	fn slope_drive_matches_target_speed_uphill_and_downhill() {
 		let slope = 60.0_f32.to_radians();
 		let normal = Vec3::new(-slope.sin(), slope.cos(), 0.0);
-		let tangent_gravity = gravity - normal * gravity.dot(normal);
 		let mut uphill = LinearVelocity(Vec3::ZERO);
 		let mut downhill = LinearVelocity(Vec3::ZERO);
 
-		accelerate_wish(&mut uphill, Vec3::X, 40.0, 1.0, Some(normal), gravity);
-		accelerate_wish(&mut downhill, Vec3::NEG_X, 40.0, 1.0, Some(normal), gravity);
-		uphill.0 += tangent_gravity;
-		downhill.0 += tangent_gravity;
+		control_ground_velocity(&mut uphill, Vec3::X, MOVE_ACCEL, 1.0, normal);
+		control_ground_velocity(&mut downhill, Vec3::NEG_X, MOVE_ACCEL, 1.0, normal);
 
-		assert!((uphill.x - 40.0).abs() < 1e-4, "{uphill:?}");
-		assert!((downhill.x + 40.0).abs() < 1e-4, "{downhill:?}");
+		assert!((uphill.length() - MOVE_SPEED).abs() < 1e-4, "{uphill:?}");
+		assert!((downhill.length() - MOVE_SPEED).abs() < 1e-4, "{downhill:?}");
+		assert!((uphill.x + downhill.x).abs() < 1e-4, "{uphill:?} vs {downhill:?}");
 	}
 
 	#[test]
@@ -541,17 +519,11 @@ mod tests {
 		let mut velocity = LinearVelocity(Vec3::ZERO);
 		let slope = 45.0_f32.to_radians();
 		let normal = Vec3::new(-slope.sin(), slope.cos(), 0.0);
-		accelerate_wish(
-			&mut velocity,
-			Vec3::new(1.0, 1.0, 0.0),
-			40.0,
-			1.0,
-			Some(normal),
-			Vec3::ZERO,
-		);
-		assert!(velocity.y > 1.0, "XZ heading on the plane must add uphill Y, got {}", velocity.y);
-		assert!((velocity.x - 40.0).abs() < 1e-4, "{velocity:?}");
-		assert!((velocity.y - 40.0).abs() < 1e-4, "{velocity:?}");
+		control_ground_velocity(&mut velocity, Vec3::new(1.0, 1.0, 0.0), MOVE_ACCEL, 1.0, normal);
+		assert!(velocity.y > 0.0, "XZ heading on the plane must add uphill Y, got {}", velocity.y);
+		let tangent = velocity.0 - normal * velocity.0.dot(normal);
+		assert!((tangent.length() - MOVE_SPEED).abs() < 1e-4, "{tangent:?}");
+		assert!(velocity.0.dot(normal).abs() < 1e-4, "{velocity:?}");
 	}
 
 	#[test]
@@ -618,16 +590,9 @@ mod tests {
 	#[test]
 	fn airborne_wish_stays_xz() {
 		let mut velocity = LinearVelocity(Vec3::new(0.0, -5.0, 0.0));
-		accelerate_wish(
-			&mut velocity,
-			Vec3::new(1.0, 4.0, 0.0),
-			40.0,
-			1.0,
-			None,
-			Vec3::NEG_Y * 9.81,
-		);
+		control_air_velocity(&mut velocity, Vec3::new(1.0, 4.0, 0.0), MOVE_ACCEL, 1.0);
 		assert!((velocity.y + 5.0).abs() < 1e-4);
-		assert!(velocity.x > 0.0);
+		assert!((velocity.x - MOVE_SPEED).abs() < 1e-4, "{velocity:?}");
 	}
 
 	#[test]
@@ -644,20 +609,51 @@ mod tests {
 	}
 
 	#[test]
-	fn slope_damping_is_symmetric_uphill_and_downhill() {
+	fn slope_drive_is_symmetric_uphill_and_downhill() {
 		let slope = 45.0_f32.to_radians();
 		let normal = Vec3::new(-slope.sin(), slope.cos(), 0.0);
-		let uphill = wish_on_ground(Vec3::X, Some(normal)) * 10.0;
-		let mut uphill = LinearVelocity(uphill);
-		let mut downhill = LinearVelocity(-uphill.0);
-
-		damp_movement(&mut uphill, 0.92, Some(normal));
-		damp_movement(&mut downhill, 0.92, Some(normal));
+		let mut uphill = LinearVelocity(Vec3::ZERO);
+		let mut downhill = LinearVelocity(Vec3::ZERO);
+		control_ground_velocity(&mut uphill, Vec3::X, MOVE_ACCEL, 1.0, normal);
+		control_ground_velocity(&mut downhill, Vec3::NEG_X, MOVE_ACCEL, 1.0, normal);
 
 		assert!((uphill.length() - downhill.length()).abs() < 1e-5);
 		assert!(uphill.dot(normal).abs() < 1e-5, "{uphill:?}");
 		assert!(downhill.dot(normal).abs() < 1e-5, "{downhill:?}");
 		assert!(uphill.y > 0.0);
 		assert!(downhill.y < 0.0);
+	}
+
+	#[test]
+	fn idle_brake_holds_on_a_steep_walkable_slope() {
+		let gravity = Vec3::NEG_Y * 9.81 * 1.25;
+		let slope = 70.0_f32.to_radians();
+		let normal = Vec3::new(-slope.sin(), slope.cos(), 0.0);
+		let g_tangent = gravity - normal * gravity.dot(normal);
+		let dt = 1.0 / 60.0;
+		let mut velocity = LinearVelocity(Vec3::ZERO);
+		for _ in 0..120 {
+			velocity.0 += g_tangent * dt;
+			control_ground_velocity(&mut velocity, Vec3::ZERO, MOVE_ACCEL, dt, normal);
+		}
+		let tangent = velocity.0 - normal * velocity.0.dot(normal);
+		assert!(
+			tangent.length() < 0.05,
+			"idle motor must cancel slope slide, leftover {tangent:?}"
+		);
+	}
+
+	#[test]
+	fn ground_speed_does_not_depend_on_frame_rate() {
+		let mut slow = LinearVelocity(Vec3::ZERO);
+		let mut fast = LinearVelocity(Vec3::ZERO);
+		for _ in 0..60 {
+			control_ground_velocity(&mut slow, Vec3::X, MOVE_ACCEL, 1.0 / 60.0, Vec3::Y);
+		}
+		for _ in 0..240 {
+			control_ground_velocity(&mut fast, Vec3::X, MOVE_ACCEL, 1.0 / 240.0, Vec3::Y);
+		}
+		assert!((slow.x - MOVE_SPEED).abs() < 1e-3, "{slow:?}");
+		assert!((fast.x - MOVE_SPEED).abs() < 1e-3, "{fast:?}");
 	}
 }

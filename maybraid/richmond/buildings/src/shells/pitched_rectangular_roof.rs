@@ -16,12 +16,15 @@ mod openings;
 #[cfg(test)]
 mod tests;
 
+use bevy_math::bounding::Aabb2d;
 use bevy_math::{Vec2, Vec3};
 use lod::gen::LodSceneLevel;
 use material_ref::MaterialRef;
 use richmond_building_components::joints::JointNode;
 use richmond_building_components::panels::{PanelNode, PanelStyle};
-use richmond_building_components::{BuildingComponents, Layers};
+use richmond_building_components::{
+	BuildingComponents, BuildingStructuralLodProbe, Layers, MassingVolume,
+};
 
 use crate::openings::{MappedOpenings, Openings};
 use crate::paneling::clipped_ruled_strip::ClippedRuledStrip;
@@ -288,5 +291,36 @@ impl BuildingComponents for PitchedRoof {
 			}
 		}
 		out
+	}
+
+	fn structural_lod(&self) -> Option<BuildingStructuralLodProbe> {
+		let mut min = Vec3::splat(f32::INFINITY);
+		let mut max = Vec3::splat(f32::NEG_INFINITY);
+		for half in &self.params.halves {
+			for p in [
+				half.ridge_line.0,
+				half.ridge_line.1,
+				half.eave_line.0,
+				half.eave_line.1,
+				half.wall_line.0,
+				half.wall_line.1,
+			] {
+				min = min.min(p);
+				max = max.max(p);
+			}
+		}
+		if !min.x.is_finite() {
+			return None;
+		}
+		let ridge = self.params.halves[0].ridge_line;
+		let along_x = (ridge.1.x - ridge.0.x).abs() >= (ridge.1.z - ridge.0.z).abs();
+		let xz = Aabb2d { min: Vec2::new(min.x, min.z), max: Vec2::new(max.x, max.z) };
+		Some(BuildingStructuralLodProbe::from_volumes([MassingVolume::roof_pitch(
+			xz,
+			min.y,
+			(max.y - min.y).max(0.3),
+			along_x,
+		)
+		.with_material_opt(self.surface_material.clone())]))
 	}
 }

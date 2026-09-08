@@ -2,7 +2,11 @@
 
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
-use lod::gen::{Id, LodScene, RegionPresenter, Version};
+use durham_terrain_models::{
+	spawn_terrain_collider_host, stream_banded_draws, PresentedWaterScene, TerrainColliderCell,
+	TerrainColliderEpoch, TerrainColliderHost, TerrainColliderOverlay, TerrainEntryStore, Water,
+};
+use lod::gen::{Id, LodScene, LodSceneLevel, RegionPresenter, SpatialIndex, Version};
 use lod::lod_ref::LodRef;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -13,7 +17,9 @@ use crate::padded::{PresentedPaddedTerrainScene, TerrainWithPads};
 #[derive(Debug, Clone, Copy)]
 struct PresentedEntry {
 	version: Version,
+	water_version: Option<Version>,
 	entity: Entity,
+	level: LodSceneLevel,
 }
 
 /// Runtime presentation bookkeeping for [`TerrainWithPads`].
@@ -36,11 +42,91 @@ impl PaddedTerrainPresenterState {
 pub struct PaddedTerrainPresenter<'w, 's> {
 	commands: Commands<'w, 's>,
 	state: ResMut<'w, PaddedTerrainPresenterState>,
+	terrain_store: Res<'w, TerrainEntryStore>,
 }
 
 impl PaddedTerrainPresenter<'_, '_> {
 	pub fn clear_presented(&mut self) {
 		self.state.clear(&mut self.commands);
+	}
+
+	pub fn remove_stale(&mut self, wanted: &HashSet<Id>) {
+		let stale: Vec<(Id, Entity)> = self
+			.state
+			.presented
+			.iter()
+			.filter(|(id, _)| !wanted.contains(id))
+			.map(|(id, entry)| (*id, entry.entity))
+			.collect();
+		for (id, entity) in stale {
+			self.commands.entity(entity).despawn();
+			self.state.presented.remove(&id);
+		}
+	}
+
+	fn spawn_host(&mut self, id: Id, value: &TerrainWithPads, water: Option<&Water>) -> Entity {
+		let host = self
+			.commands
+			.spawn((
+				Name::new("Padded terrain cell"),
+				PresentedPaddedTerrainScene(id),
+				Transform::IDENTITY,
+				Visibility::default(),
+			))
+			.id();
+		self.commands.spawn_scene(value.mesh_scene()).insert(ChildOf(host));
+		if let Some(water) = water {
+			self.commands
+				.spawn_scene(water.scene())
+				.insert((PresentedWaterScene(id), ChildOf(host)));
+		}
+		host
+	}
+
+	/// Present keep-region pads that the stream band draws. Hole / cull ids
+	/// stay out of the wanted set instead of spawning empty scenes.
+	pub fn present_banded(
+		&mut self,
+		view: &PaddedStoreView<'_>,
+		region: bevy::math::bounding::Aabb3d,
+		lod_ref: &LodRef,
+	) {
+		let wanted: HashSet<Id> = SpatialIndex::<TerrainWithPads>::tracked_ids_for(view, region)
+			.into_iter()
+			.filter_map(|tracked| {
+				let value = SpatialIndex::<TerrainWithPads>::get(view, tracked.0)?;
+				let level = value.scene_lod_level(lod_ref);
+				stream_banded_draws(value, level).then_some(tracked.0)
+			})
+			.collect();
+
+		for id in &wanted {
+			let Some(value) = SpatialIndex::<TerrainWithPads>::get(view, *id) else {
+				continue;
+			};
+			let Some(version) = SpatialIndex::<TerrainWithPads>::version(view, *id) else {
+				continue;
+			};
+			let level = value.scene_lod_level(lod_ref);
+			let water_version = self.terrain_store.water_version(*id);
+			if self.state.presented.get(id).is_some_and(|shown| {
+				shown.version == version
+					&& shown.level == level
+					&& shown.water_version == water_version
+			}) {
+				continue;
+			}
+			if let Some(previous) = self.state.presented.remove(id) {
+				self.commands.entity(previous.entity).despawn();
+			}
+			let water = self.terrain_store.water(*id).cloned();
+			let entity = self.spawn_host(*id, value, water.as_ref());
+			self.state
+				.presented
+				.insert(*id, PresentedEntry { version, water_version, entity, level });
+		}
+
+		self.remove_stale(&wanted);
 	}
 }
 
@@ -53,12 +139,12 @@ impl<'a> RegionPresenter<TerrainWithPads, PaddedStoreView<'a>> for PaddedTerrain
 		if let Some(previous) = self.state.presented.remove(&id) {
 			self.commands.entity(previous.entity).despawn();
 		}
-		let entity = self
-			.commands
-			.spawn_scene(value.scene_with_lod(lod_ref))
-			.insert(PresentedPaddedTerrainScene(id))
-			.id();
-		self.state.presented.insert(id, PresentedEntry { version, entity });
+		let level = value.scene_lod_level(lod_ref);
+		// FinePatch own-terrain presents water via [`WaterRegionPresenter`].
+		let entity = self.spawn_host(id, value, None);
+		self.state
+			.presented
+			.insert(id, PresentedEntry { version, water_version: None, entity, level });
 	}
 
 	fn presented_ids(&self) -> Vec<Id> {
@@ -66,17 +152,57 @@ impl<'a> RegionPresenter<TerrainWithPads, PaddedStoreView<'a>> for PaddedTerrain
 	}
 
 	fn remove_stale(&mut self, wanted: &HashSet<Id>) {
-		let stale: Vec<(Id, Entity)> = self
-			.state
-			.presented
-			.iter()
-			.filter(|(id, _)| !wanted.contains(id))
-			.map(|(id, entry)| (*id, entry.entity))
-			.collect();
+		PaddedTerrainPresenter::remove_stale(self, wanted);
+	}
+}
 
-		for (id, entity) in stale {
-			self.commands.entity(entity).despawn();
-			self.state.presented.remove(&id);
+/// Seed Near-ring (or FinePatch) colliders from [`TerrainWithPads`].
+///
+/// Raw Durham hosts for the same origin id are despawned so physics matches
+/// the drawn pad mesh.
+pub fn sync_padded_terrain_colliders(
+	mut commands: Commands,
+	epoch: Res<TerrainColliderEpoch>,
+	store: Res<crate::index::DevelopmentEntryStore>,
+	hosts: Query<
+		(Entity, &TerrainColliderCell, Has<TerrainColliderOverlay>),
+		With<TerrainColliderHost>,
+	>,
+) {
+	let seeds = store.padded_collision_seeds();
+	let wanted: HashSet<(Id, Version)> =
+		seeds.iter().map(|(id, version, _)| (*id, *version)).collect();
+	let wanted_ids: HashSet<Id> = wanted.iter().map(|(id, _)| *id).collect();
+
+	for (entity, cell, overlay) in &hosts {
+		if overlay {
+			if !wanted.contains(&(cell.id, cell.version)) || cell.epoch != epoch.0 {
+				commands.entity(entity).despawn();
+			}
+		} else if wanted_ids.contains(&cell.id) {
+			commands.entity(entity).despawn();
 		}
+	}
+
+	let occupied: HashSet<Id> = hosts
+		.iter()
+		.filter(|(_, cell, overlay)| {
+			*overlay && wanted.contains(&(cell.id, cell.version)) && cell.epoch == epoch.0
+		})
+		.map(|(_, cell, _)| cell.id)
+		.collect();
+
+	for (id, version, pad) in seeds {
+		if occupied.contains(&id) {
+			continue;
+		}
+		spawn_terrain_collider_host(
+			&mut commands,
+			id,
+			version,
+			epoch.0,
+			pad.collider_scene(),
+			true,
+		);
 	}
 }

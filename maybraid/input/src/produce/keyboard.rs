@@ -57,6 +57,9 @@ pub fn produce_keyboard(
 	if keyboard.pressed(KeyCode::Tab) {
 		pad.hold_digital(PadButton::Select);
 	}
+	if keyboard.pressed(KeyCode::KeyC) {
+		pad.hold_digital(PadButton::BumperFocus);
+	}
 
 	pad.keys = keyboard.clone();
 	for event in key_reader.read() {
