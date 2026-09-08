@@ -12,3 +12,5 @@ trigger_arm
     trigger_point
 sight_arm
   sight_camera_socket
+  sight_boom
+    sight_socket

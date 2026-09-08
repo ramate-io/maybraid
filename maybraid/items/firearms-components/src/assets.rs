@@ -30,7 +30,7 @@ impl std::fmt::Display for AssetPath {
 	}
 }
 
-/// Firearm GLBs under `items/guns/{rigs,bodies,barrels,trigger_boxes,grips,stocks,concepts}/`.
+/// Firearm GLBs under `items/guns/{rigs,bodies,barrels,trigger_boxes,grips,stocks,sights,concepts}/`.
 pub mod guns {
 	use super::AssetPath;
 
@@ -50,6 +50,8 @@ pub mod guns {
 	pub const SILOPUP_FULL_CONCEPT: AssetPath =
 		AssetPath::new("items/guns/concepts/silopup_full_concept.glb");
 	pub const SNAILER_BODY: AssetPath = AssetPath::new("items/guns/bodies/snailer_body.glb");
+	pub const HOLORAND_SIGHT: AssetPath = AssetPath::new("items/guns/sights/holorand.glb");
+	pub const LESKOP_SIGHT: AssetPath = AssetPath::new("items/guns/sights/leskop.glb");
 }
 
 /// Melee GLBs under `items/melee/{blades,guards,handles}/` (until a melee crate exists).

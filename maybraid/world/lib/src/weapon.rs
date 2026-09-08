@@ -11,9 +11,8 @@ use crozon_inventory_user::{spawn_bag, InventoryUser};
 use damage::Health;
 use firearm_user::{
 	live_weapon_from_stats, spawn_held_firearm, spawn_held_kit, spawn_reticle, FirearmUser,
-	FirearmUserSettings,
+	FirearmUserSettings, GeneratedFirearm,
 };
-use mob_characters::GeneratedFirearm;
 use player::{
 	apply_character_mobility, CameraFollow, Player as MaybraidPlayer, PlayerCameraAim, PlayerLook,
 	PlayerUse, PlayerVisual as MaybraidPlayerVisual, PlayerYawOwner,

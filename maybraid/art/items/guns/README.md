@@ -13,14 +13,15 @@ Each folder is one replaceable mesh. Trigger boxes used to be modeled into the b
 | [`trigger_boxes/`](trigger_boxes/) | `trigger_box` | Fire-control box (trigger, guard, related housing) |
 | [`grips/`](grips/) | `grip` | Pistol grip / handle |
 | [`stocks/`](stocks/) | `stock` | Stock |
+| [`sights/`](sights/) | `sight_socket` | Optic (attachment on the sight landmark) |
 | [`concepts/`](concepts/) | (none) | Baked one-mesh kits; skip assembly |
 | [`rigs/`](rigs/) | — | Shared receiver armature |
 
 Empty directories are placeholders (`stocks/`), not missing exports.
 
-Runtime kits always have a body. Barrel, trigger box, grip, and stock are optional (`none` in the playground `kit` command).
+Runtime kits always have a body. Barrel, trigger box, grip, stock, and sight are optional (`none` in the playground `kit` command). Sights are authored on a 1 m cube and rest-scaled onto `sight_socket`; they do not lengthen a kit bone. First-person focus stays on `sight_camera_socket`.
 
-Trigger-box meshes: `keelripe_box`, `paddle_box`, `reltor_box`. The grip catalog is `bump_handle`. Keelripe is a trigger box, not a body.
+Trigger-box meshes: `keelripe_box`, `paddle_box`, `reltor_box`. The grip catalog is `bump_handle`. Sight meshes: `holorand` (1–3× ADS), `leskop` (3–5× ADS). Keelripe is a trigger box, not a body.
 
 ## Receiver armature
 
@@ -37,6 +38,10 @@ trigger_box
 trigger_arm
   trigger_ledge
     trigger_point
+sight_arm
+  sight_camera_socket
+  sight_boom
+    sight_socket
 ```
 
 `body`, `stock`, and `trigger_box` are sibling roots. `barrel` / `grip` / `grip_arm` hang off `body`. That keeps stock and trigger-box length independent of receiver length.
@@ -48,8 +53,10 @@ trigger_arm
 | `body`, `barrel`, `trigger_box`, `grip`, `stock` | Length | Socket the matching kit GLB here |
 | `grip_arm` → `grip_point` | Hand chain | Support / grip hand target |
 | `trigger_arm` → `trigger_ledge` → `trigger_point` | Hand chain | Trigger hand target |
+| `sight_arm` → `sight_boom` → `sight_socket` | Attachment | Optic mesh |
+| `sight_arm` → `sight_camera_socket` | Camera | First-person focus |
 
-Do not socket kit meshes onto `_point` / `_arm` / `_ledge` bones. Those exist so a character hand can follow a named landmark without riding the kit part's length scale.
+Do not socket kit meshes onto `_point` / `_arm` / `_ledge` bones, or onto `sight_camera_socket`. Those exist so a hand or camera can follow a named landmark without riding the kit part. The optic GLB goes on `sight_socket`.
 
 ## Author along the bone
 
@@ -71,7 +78,7 @@ A runtime remap from “item space” onto bone Y would duplicate `BoneScale::le
 
 Character `head_socket` bones are **attachments**: they place a child, they are not a length of the parent. Perpendicular socket bones on a barrel or stock would attach the mesh, but scaling the chain bone would not scale the part. Kit length lives on the bone the mesh is parented to.
 
-Hand landmarks (`grip_point`, `trigger_point`) **are** that attachment pattern. They are for hands, not for kit GLBs.
+Hand landmarks (`grip_point`, `trigger_point`) **are** that attachment pattern. They are for hands, not for kit GLBs. `sight_socket` is the same pattern for optics; `sight_camera_socket` is the first-person camera landmark.
 
 ## Lengthening a chain
 

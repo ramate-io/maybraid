@@ -82,7 +82,9 @@ impl CharacterBrains {
 		};
 		match (self, slot % 2) {
 			(Self::Guard, 1) => interests.with_weight(LOCAL_POI, 1.3).with_weight(URBAN_POI, 0.7),
-			(Self::Brawler, 1) => interests.with_weight(SALOON_POI, 1.55).with_weight(URBAN_POI, 0.4),
+			(Self::Brawler, 1) => {
+				interests.with_weight(SALOON_POI, 1.55).with_weight(URBAN_POI, 0.4)
+			}
 			_ => interests,
 		}
 	}
@@ -116,6 +118,9 @@ mod tests {
 		assert_eq!(brawler.weight(URBAN_POI), Some(0.7));
 		assert_eq!(brawler.weight(LOCAL_POI), Some(0.55));
 		let local_guard = CharacterBrains::Guard.interests_for_slot(1);
-		assert!(local_guard.weight(LOCAL_POI).unwrap_or(0.0) > local_guard.weight(URBAN_POI).unwrap_or(0.0));
+		assert!(
+			local_guard.weight(LOCAL_POI).unwrap_or(0.0)
+				> local_guard.weight(URBAN_POI).unwrap_or(0.0)
+		);
 	}
 }

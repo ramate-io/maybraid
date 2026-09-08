@@ -2,7 +2,9 @@
 
 Firearm recipes assembled from [`firearms-components`](../firearms-components/).
 
-A [`FirearmKit`](src/kit.rs) is a required [`BodyMesh`](src/parts.rs) plus optional barrel / trigger-box / grip / stock. Named [`FirearmConcept`](src/concepts.rs) values are presets of that kit. Mix parts with `kit --trigger-box paddle --grip bump-handle`. Scale kit bones with `scale barrel --length 1.5 --thickness 0.8`.
+A [`FirearmKit`](src/kit.rs) is a required [`BodyMesh`](src/parts.rs) plus optional barrel / trigger-box / grip / stock / sight. Named [`FirearmConcept`](src/concepts.rs) values are presets of that kit. Mix parts with `kit --trigger-box paddle --grip bump-handle --sight holorand`. Scale kit bones with `scale barrel --length 1.5 --thickness 0.8`.
+
+Iron sights keep the current ADS FOV. [`SightMesh::Holorand`](src/parts.rs) rolls 1–3× of that FOV; [`SightMesh::Leskop`](src/parts.rs) rolls 3–5×. Magnification is stored as vertical FOV (`fov' = 2 atan(tan(fov/2) / zoom)`). Sights socket onto `sight_socket` at a rest scale of the 1 m authored cube. First-person focus stays on `sight_camera_socket`.
 
 [`FirearmWeaponsPlugin`](src/projectiles.rs) fires emissive shots from the receiver `barrel` bone. Put a [`Weapon`](src/projectiles.rs) on the [`FirearmRoot`](src/lib.rs). Auto-fire is the default; add [`FireOnTrigger`](src/projectiles.rs) to require [`WeaponTrigger`](src/projectiles.rs) (written per gun by [`firearm-user`](../firearm-user/)):
 

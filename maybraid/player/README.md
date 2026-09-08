@@ -12,10 +12,18 @@ reuses the capsule, [`PlayerLook`](src/identity.rs), and locomotion clips
 without pad input, `CameraFollow`, or `PlayerVisual` (so first-person face hide
 stays on the followed body). Insert [`CharacterLocomotion`](src/body.rs) before
 [`PlayerPlugin`] to cap the walkable slope (default ~81°; Durham uses ~70°).
-Grounded wish accel follows this frame's walkable contact plane so hillside
-heading is along the slope, not world XZ into the mesh. The motor compensates
-for tangent gravity and slope projection so walkable grades retain the requested
-horizontal pace in either direction. Last plane is only a
+Grounded wish follows this frame's walkable contact plane so hillside
+heading is along the slope, not world XZ into the mesh. Walk is the same
+target-speed motor as the vegetation capsule: 7 m/s along the plane at 40 m/s²
+accel (50 m/s² idle brake), with 0.25× air control. Speed is framed in `dt`,
+not a per-frame multiply. Idle grounded motion brakes to rest along that
+plane so walkable grades do not slide when solver friction is zero.
+[`MotorTraction`](src/contact.rs) plus Avian
+[`MotorTractionHooks`](src/contact.rs) own that policy: floor materials keep
+high grip for props and ragdolls; motor contacts only block penetration.
+Apps must register physics through
+[`register_motor_traction_physics`](src/contact.rs) before any other Avian
+plugin. Last plane is only a
 [`Grounded`](src/body.rs) snap when the caster missed. Off the ground, gravity
 owns Y (XZ heading only). A jump is takeoff (impulse delayed) → air → land
 recovery; only air is XZ-only. Pad [`CharacterIntent`](../controllers/character/src/intent.rs)

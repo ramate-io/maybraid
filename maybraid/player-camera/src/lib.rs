@@ -33,6 +33,8 @@ pub struct FollowCamera {
 	pub focus_blend_speed: f32,
 	pub third_person_fov: f32,
 	pub first_person_fov: f32,
+	/// ADS FOV with iron sights. Held optics override this on LT / right-mouse
+	/// focus. Left-bumper ADS keeps this base FOV.
 	pub sight_fov: f32,
 	pub max_look_yaw: f32,
 	pub body_turn_rate: f32,
@@ -131,6 +133,7 @@ pub fn spawn_follow_camera(commands: &mut Commands) -> Entity {
 				pitch,
 				pov: CameraPov::ThirdPerson,
 				focus: 0.0,
+				ads: 0.0,
 				focus_blend: 0.0,
 			},
 		))

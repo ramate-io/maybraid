@@ -25,8 +25,9 @@ pub use clothing_material::{ClothingMaterial, ClothingMaterialChoice};
 pub use clothing_roll::{generate_clothing_stats, ClothingBuff, ClothingPriors};
 pub use firearm::{
 	FirearmBarrel, FirearmGrip, FirearmKitSpec, FirearmLooks, FirearmMesh, FirearmScales,
-	FirearmSpec, FirearmStock, FirearmTriggerBox, SlotLook, SlotRest, SlotScale, LENGTH_MILLI_MAX,
-	LENGTH_MILLI_MIN, SCALE_MILLI_UNIT, THICKNESS_MILLI_MAX, THICKNESS_MILLI_MIN,
+	FirearmSight, FirearmSpec, FirearmStock, FirearmTriggerBox, SlotLook, SlotRest, SlotScale,
+	IRON_SIGHT_FOV, LENGTH_MILLI_MAX, LENGTH_MILLI_MIN, SCALE_MILLI_UNIT, THICKNESS_MILLI_MAX,
+	THICKNESS_MILLI_MIN,
 };
 pub use firearm_material::{BoltMaterial, FirearmMaterial};
 pub use firearm_roll::{

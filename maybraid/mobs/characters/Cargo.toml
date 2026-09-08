@@ -18,7 +18,6 @@ damage = { workspace = true }
 firearm-user = { workspace = true }
 firearms = { workspace = true }
 lod = { workspace = true }
-material-ref = { workspace = true }
 mob-intelligence = { workspace = true }
 npc-intelligence = { workspace = true }
 player = { workspace = true }

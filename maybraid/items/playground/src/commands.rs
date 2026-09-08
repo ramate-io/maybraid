@@ -3,8 +3,8 @@
 use bevy::prelude::*;
 use clap::{Args, Parser};
 use firearms::{
-	BarrelMesh, BodyMesh, FirearmConcept, FirearmKit, FirearmPose, GripMesh, KitBone, StockMesh,
-	TriggerBoxMesh,
+	BarrelMesh, BodyMesh, FirearmConcept, FirearmKit, FirearmPose, GripMesh, KitBone, SightMesh,
+	StockMesh, TriggerBoxMesh,
 };
 use game_commands::command::{CommandScript, GameCommand};
 
@@ -48,6 +48,8 @@ pub struct KitArgs {
 	pub grip: Option<GripMesh>,
 	#[arg(long, value_enum)]
 	pub stock: Option<StockMesh>,
+	#[arg(long, value_enum)]
+	pub sight: Option<SightMesh>,
 }
 
 impl KitArgs {
@@ -67,6 +69,9 @@ impl KitArgs {
 		if let Some(stock) = self.stock {
 			kit.stock = stock;
 		}
+		if let Some(sight) = self.sight {
+			kit.sight = sight;
+		}
 	}
 
 	fn summary(&self) -> String {
@@ -85,6 +90,9 @@ impl KitArgs {
 		}
 		if let Some(stock) = self.stock {
 			parts.push(format!("--stock {}", stock.label()));
+		}
+		if let Some(sight) = self.sight {
+			parts.push(format!("--sight {}", sight.label()));
 		}
 		if parts.is_empty() {
 			"kit (unchanged)".into()
@@ -195,7 +203,7 @@ mod tests {
 	#[test]
 	fn parses_kit_slot_flags() -> Result<(), String> {
 		let command = <PlaygroundCommand as GameCommand>::parse_line(
-			"kit --body silopup --barrel laznard --grip none --trigger-box paddle",
+			"kit --body silopup --barrel laznard --grip none --trigger-box paddle --sight holorand",
 		)?;
 		let PlaygroundCommand::Kit(args) = command else {
 			return Err("expected kit".into());
@@ -204,6 +212,7 @@ mod tests {
 		assert_eq!(args.barrel, Some(BarrelMesh::Laznard));
 		assert_eq!(args.grip, Some(GripMesh::None));
 		assert_eq!(args.trigger_box, Some(TriggerBoxMesh::Paddle));
+		assert_eq!(args.sight, Some(SightMesh::Holorand));
 		assert!(args.stock.is_none());
 		Ok(())
 	}

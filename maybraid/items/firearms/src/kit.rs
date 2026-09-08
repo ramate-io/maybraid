@@ -4,11 +4,11 @@ use firearms_components::assets::guns;
 use firearms_components::{FirearmComponents, Layers, PartNode, RigNode};
 use lod::gen::LodSceneLevel;
 
-use crate::parts::{BarrelMesh, BodyMesh, GripMesh, StockMesh, TriggerBoxMesh};
+use crate::parts::{BarrelMesh, BodyMesh, GripMesh, SightMesh, StockMesh, TriggerBoxMesh};
 
 /// Assembled firearm: receiver + body, and whatever other slots are filled.
 ///
-/// Barrel, trigger box, grip, and stock may be [`None`](BarrelMesh::None). Body
+/// Barrel, trigger box, grip, stock, and sight may be [`None`](BarrelMesh::None). Body
 /// is always present.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, bevy::prelude::Component)]
 pub struct FirearmKit {
@@ -17,6 +17,7 @@ pub struct FirearmKit {
 	pub trigger_box: TriggerBoxMesh,
 	pub grip: GripMesh,
 	pub stock: StockMesh,
+	pub sight: SightMesh,
 }
 
 impl FirearmKit {
@@ -26,12 +27,13 @@ impl FirearmKit {
 
 	pub fn label(self) -> String {
 		format!(
-			"body={} barrel={} trigger-box={} grip={} stock={}",
+			"body={} barrel={} trigger-box={} grip={} stock={} sight={}",
 			self.body.label(),
 			self.barrel.label(),
 			self.trigger_box.label(),
 			self.grip.label(),
 			self.stock.label(),
+			self.sight.label(),
 		)
 	}
 }
@@ -71,6 +73,10 @@ impl FirearmComponents for FirearmKit {
 	fn stock_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<PartNode> {
 		optional_layer("stock", self.stock.node())
 	}
+
+	fn sight_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<PartNode> {
+		optional_layer("sight", self.sight.node())
+	}
 }
 
 #[cfg(test)]
@@ -87,6 +93,21 @@ mod tests {
 		assert!(kit.trigger_box_nodes_for_level(LodSceneLevel::High).is_empty());
 		assert!(kit.grip_nodes_for_level(LodSceneLevel::High).is_empty());
 		assert!(kit.stock_nodes_for_level(LodSceneLevel::High).is_empty());
+		assert!(kit.sight_nodes_for_level(LodSceneLevel::High).is_empty());
+	}
+
+	#[test]
+	fn holorand_sockets_on_the_sight_landmark() {
+		let kit = FirearmKit { sight: SightMesh::Holorand, ..FirearmKit::body(BodyMesh::Bullpup) };
+		let sights = kit.sight_nodes_for_level(LodSceneLevel::High).flatten();
+		assert_eq!(sights[0].slot, FirearmPartSlot::Sight);
+		assert_eq!(
+			sights[0].socket,
+			Some(SocketRef::bone("sight_socket").with_local(bevy::prelude::Transform::from_scale(
+				bevy::prelude::Vec3::splat(0.10)
+			)))
+		);
+		assert_eq!(sights[0].scene.path, guns::HOLORAND_SIGHT.as_str());
 	}
 
 	#[test]

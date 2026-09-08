@@ -3,7 +3,7 @@
 use lod::gen::LodSceneLevel;
 
 use crate::kit::FirearmKit;
-use crate::parts::{BarrelMesh, BodyMesh, GripMesh, StockMesh, TriggerBoxMesh};
+use crate::parts::{BarrelMesh, BodyMesh, GripMesh, SightMesh, StockMesh, TriggerBoxMesh};
 use firearms_components::assets::guns;
 use firearms_components::{FirearmComponents, Layers, PartNode, RigNode};
 
@@ -55,6 +55,7 @@ impl FirearmConcept {
 				trigger_box: TriggerBoxMesh::None,
 				grip: GripMesh::BumpHandle,
 				stock: StockMesh::None,
+				sight: SightMesh::None,
 			},
 			Self::Reltor => FirearmKit {
 				body: BodyMesh::Reltor,
@@ -111,6 +112,10 @@ impl FirearmComponents for FirearmConcept {
 	fn stock_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PartNode> {
 		self.kit().stock_nodes_for_level(level)
 	}
+
+	fn sight_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PartNode> {
+		self.kit().sight_nodes_for_level(level)
+	}
 }
 
 #[cfg(test)]
@@ -138,6 +143,7 @@ mod tests {
 		assert_eq!(grips[0].socket, Some(SocketRef::bone("grip")));
 		assert!(gun.trigger_box_nodes_for_level(LodSceneLevel::High).is_empty());
 		assert!(gun.stock_nodes_for_level(LodSceneLevel::High).is_empty());
+		assert!(gun.sight_nodes_for_level(LodSceneLevel::High).is_empty());
 	}
 
 	#[test]
@@ -169,6 +175,7 @@ mod tests {
 			assert!(gun.trigger_box_nodes_for_level(LodSceneLevel::High).is_empty());
 			assert!(gun.grip_nodes_for_level(LodSceneLevel::High).is_empty());
 			assert!(gun.stock_nodes_for_level(LodSceneLevel::High).is_empty());
+			assert!(gun.sight_nodes_for_level(LodSceneLevel::High).is_empty());
 		}
 	}
 }
