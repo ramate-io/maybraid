@@ -1,13 +1,12 @@
 //! Buildings LOD refresh for the firing-range Les Halles stack.
 
-use avian3d::prelude::PhysicsPlugins;
-use avian3d::schedule::PhysicsSchedulePlugin;
 use bevy::prelude::*;
 use lod::{
 	Bullseye, LodChunkFulfillBudget, LodCullRegionCursor, LodRefreshCorePlugin,
 	LodSceneCullRegionPlugin, LodSceneRefreshRegionPlugin, OpenLattice, Spotlight,
 };
 use lod_avian::{AvianLodSceneCullPlugin, AvianLodSceneRefreshPlugin};
+use player::register_motor_traction_physics;
 use richmond_building_components::{
 	ComponentsOnly, DoorNode, FloorNode, FurnitureNode, JointNode, LabelNode, PanelNode,
 	PartitionNode, RoofNode, StairNode,
@@ -41,9 +40,7 @@ pub struct FiringRangeBuildingsLodPlugin;
 
 impl Plugin for FiringRangeBuildingsLodPlugin {
 	fn build(&self, app: &mut App) {
-		if !app.is_plugin_added::<PhysicsSchedulePlugin>() {
-			app.add_plugins(PhysicsPlugins::default());
-		}
+		register_motor_traction_physics(app);
 		if !app.is_plugin_added::<LodRefreshCorePlugin>() {
 			app.add_plugins(LodRefreshCorePlugin);
 		}

@@ -8,7 +8,6 @@
 
 mod camera;
 pub mod commands;
-mod contact;
 mod control;
 mod intelligence;
 mod material_lib;
@@ -23,7 +22,6 @@ pub use chico_vegetation_on_terrain_playground::PlayerPhysicsEnabled;
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use control::{WorldGameplayEnabled, WorldSceneryVisible, WorldSurfaceReady};
 pub use durham_terrain_models::{terrain_streaming_enabled, TerrainStreamingEnabled};
-pub use ui::WorldMobHudEnabled;
 pub use game_commands::command::PendingStartupCommand;
 pub use intelligence::WorldIntelligencePlugin;
 pub use material_lib::{WorldMaterialLib, WorldMaterialRefPlugin};
@@ -31,9 +29,10 @@ pub use mobs::WorldMobsPlugin;
 pub use player_camera::CameraPov;
 pub use player_lifecycle::{WorldPlayerLifecyclePlugin, WorldPlayerRespawnConfig};
 pub use poi::{WorldPoiDiscoveryBudget, WorldPoiPlugin, WorldPoiSystems};
+pub use ui::WorldMobHudEnabled;
 pub use weapon::WorldPlayerLoadout;
 
-use avian3d::prelude::{CoefficientCombine, Friction, PhysicsPlugins, PhysicsSchedulePlugin};
+use avian3d::prelude::{CoefficientCombine, Friction};
 use bevy::prelude::*;
 use chico_vegetation_on_terrain_playground::{
 	CharacterCameraFollowEnabled, CharacterLocomotion, CharacterSpecies, PadMovementEnabled,
@@ -50,7 +49,7 @@ use lod::{Bullseye, OpenLattice};
 use maybraid_character_controller::{CharacterControlSystems, CharacterControllerPlugin};
 use maybraid_input::{VirtualPadConfig, VirtualPadPlugin};
 use maybraid_sky::SkyDomePlugin;
-use player::PlayerPresentationPlugin;
+use player::{register_motor_traction_physics, PlayerPresentationPlugin};
 use player_camera::{PlayerCameraPlugin, PlayerCameraSystems};
 use richmond_building_physics::BuildingWalkColliderPlugin;
 use richmond_developments_on_terrain_playground::{
@@ -59,7 +58,8 @@ use richmond_developments_on_terrain_playground::{
 
 /// Steepest slope the controlled character can drive uphill.
 const WORLD_MAX_SLOPE_ANGLE: f32 = 70.0_f32.to_radians();
-/// Static grip for mobs and props; controlled-player contacts disable friction.
+/// Static grip for mobs and props. Motor-driven capsules zero contact friction
+/// through [`player::MotorTractionHooks`].
 const WORLD_TERRAIN_FRICTION: Friction = Friction {
 	dynamic_coefficient: 2.55,
 	static_coefficient: 2.95,
@@ -103,11 +103,7 @@ impl WorldPlugin {
 
 impl Plugin for WorldPlugin {
 	fn build(&self, app: &mut App) {
-		if !app.is_plugin_added::<PhysicsSchedulePlugin>() {
-			app.add_plugins(
-				PhysicsPlugins::default().with_collision_hooks::<contact::WorldCollisionHooks>(),
-			);
-		}
+		register_motor_traction_physics(app);
 		app.insert_resource(PlaygroundMode::Character)
 			.insert_resource(PlaygroundDiag {
 				fps: self.fps_diag || self.debug_chrome,
@@ -184,16 +180,18 @@ impl Plugin for WorldPlugin {
 		} else {
 			app.init_resource::<TextEntryFocus>();
 		}
-		app.add_systems(PostStartup, spawn_default_braidman).add_systems(
-			Update,
-			(
-				control::update_world_surface_ready,
-				control::sync_world_scenery,
-				control::apply_intents_to_movement
-					.after(CharacterControlSystems)
-					.before(PlayerControlSystems),
-			),
-		);
+		app.add_systems(PostStartup, spawn_default_braidman)
+			.add_systems(PreUpdate, control::stamp_vegetation_motor_traction)
+			.add_systems(
+				Update,
+				(
+					control::update_world_surface_ready,
+					control::sync_world_scenery,
+					control::apply_intents_to_movement
+						.after(CharacterControlSystems)
+						.before(PlayerControlSystems),
+				),
+			);
 		camera::configure(app);
 		weapon::configure(app);
 		app.configure_sets(

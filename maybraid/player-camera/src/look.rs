@@ -28,7 +28,10 @@ pub struct CameraController {
 	pub yaw: f32,
 	pub pitch: f32,
 	pub pov: CameraPov,
+	/// Optic ADS (LT / right mouse). Drives magnified sight FOV when > 0.
 	pub focus: f32,
+	/// Iron ADS (LB / middle mouse). Pose only; FOV stays [`crate::FollowCamera::sight_fov`].
+	pub ads: f32,
 	pub focus_blend: f32,
 }
 
@@ -38,6 +41,7 @@ pub(crate) fn apply_look_intents(
 	mut cameras: Query<(&mut CameraController, &FollowCamera), With<Camera3d>>,
 ) {
 	let mut focus = f32::from(mouse.pressed(MouseButton::Right));
+	let mut ads = f32::from(mouse.pressed(MouseButton::Middle));
 	let mut swap_pov = false;
 	for intent in intents.read() {
 		match *intent {
@@ -49,12 +53,14 @@ pub(crate) fn apply_look_intents(
 				}
 			}
 			CharacterIntent::Focus(value) => focus = focus.max(value),
+			CharacterIntent::Ads(value) => ads = ads.max(value),
 			CharacterIntent::SwapPov => swap_pov = true,
 			_ => {}
 		}
 	}
 	if let Ok((mut controller, _)) = cameras.single_mut() {
 		controller.focus = focus.clamp(0.0, 1.0);
+		controller.ads = ads.clamp(0.0, 1.0);
 		if swap_pov {
 			controller.pov.toggle();
 		}
@@ -72,7 +78,7 @@ pub(crate) fn sync_player_look(
 		look.yaw = controller.yaw;
 		look.pitch = controller.pitch;
 		look.first_person = controller.pov == CameraPov::FirstPerson;
-		look.focus = controller.focus;
+		look.focus = controller.focus.max(controller.ads);
 	}
 }
 
