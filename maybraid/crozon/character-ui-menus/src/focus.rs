@@ -23,10 +23,10 @@ pub fn spin_reveal_focus(kind: ClothingKind) -> CameraFocus {
 
 /// World-space framing for an assembled firearm kit at the origin.
 ///
-/// Menu inspect prefers FOV × kit-AABB distance from a side 3/4 so the barrel
-/// stays in frame. These offsets are the fallback if that path misses.
+/// Menu inspect prefers FOV × kit-AABB distance from a side 3/4 aimed at the
+/// receiver so the barrel stays in frame and the kit sits in the pane.
 pub fn spin_reveal_firearm_focus() -> CameraFocus {
-	CameraFocus::new(FocusRig::Body, "root", Vec3::new(3.6, 1.6, 0.8), Vec3::new(0.0, 0.45, -0.85))
+	CameraFocus::new(FocusRig::Body, "root", Vec3::new(-3.6, 1.6, 0.8), Vec3::new(0.0, 0.2, 0.0))
 }
 
 pub const HEAD_ROOT_FOCUS: CameraFocus =

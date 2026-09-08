@@ -21,7 +21,7 @@ Art and armature conventions live in [`maybraid/art/items/guns/README.md`](../..
 
 Until a kit piece exists for a slot, that method returns empty. **Body is required** at the recipe layer ([`FirearmKit`](../firearms/src/kit.rs)); barrel, trigger box, grip, stock, and sight may be `none`. Trigger boxes used to be joined with bodies; they are a separate slot so the hull and fire-control box swap independently. Sights sit on the camera landmark rather than a length bone.
 
-Armature indexing and pose live in [`rigs`](../../rigs/). The shared receiver is [`firearm_rig.glb`](../../assets/items/guns/rigs/firearm_rig.glb). Menu inspect frames the kit with [`firearm_preview_camera`](src/lib.rs) (FOV × envelope sphere, side 3/4).
+Armature indexing and pose live in [`rigs`](../../rigs/). The shared receiver is [`firearm_rig.glb`](../../assets/items/guns/rigs/firearm_rig.glb). Menu inspect frames the kit with [`firearm_preview_camera`](src/lib.rs) (FOV × envelope sphere, side 3/4 aimed at the receiver).
 
 ## Bone space, not `AlongBone`
 

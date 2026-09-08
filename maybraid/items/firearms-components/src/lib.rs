@@ -293,18 +293,19 @@ pub fn assembled_firearm_bounds() -> Aabb3d {
 
 /// 3/4 inspect camera: side of the bore (+Z), distance from FOV × AABB sphere.
 ///
-/// A close front-3/4 sits on the muzzle of a bind-pose barrel. Yaw from +Z toward
-/// +X so length reads across the frame; distance fits the kit envelope in `fov`.
+/// Look at the receiver (origin), not the stock-heavy AABB center, so the kit
+/// sits in the middle of the pane. Yaw is from +Z toward −X so the muzzle
+/// reads toward screen-right. Distance still fits the envelope in `fov`.
 pub fn firearm_preview_camera(vertical_fov: f32) -> (Vec3, Vec3) {
 	firearm_preview_camera_for(assembled_firearm_bounds(), vertical_fov)
 }
 
-const PREVIEW_YAW_FROM_BORE: f32 = 1.2;
+const PREVIEW_YAW_FROM_BORE: f32 = -1.2;
 const PREVIEW_PITCH: f32 = 0.28;
 const PREVIEW_PADDING: f32 = 1.2;
 
 fn firearm_preview_camera_for(bounds: Aabb3d, vertical_fov: f32) -> (Vec3, Vec3) {
-	let look_at = (Vec3::from(bounds.min) + Vec3::from(bounds.max)) * 0.5;
+	let look_at = Vec3::new(0.0, 0.2, 0.0);
 	let mut radius = 0.0_f32;
 	for x in [bounds.min.x, bounds.max.x] {
 		for y in [bounds.min.y, bounds.max.y] {
@@ -366,10 +367,9 @@ mod tests {
 		let offset = camera - look_at;
 		let muzzle = Vec3::new(0.0, 0.0, bounds.max.z);
 		assert!(offset.length() > 4.0, "dist {}", offset.length());
-		assert!(offset.x > offset.z.abs(), "side 3/4 {offset}");
+		assert!(offset.x < 0.0 && offset.x.abs() > offset.z.abs(), "side 3/4 {offset}");
 		assert!(camera.distance(muzzle) > 3.5, "muzzle dist {}", camera.distance(muzzle));
-		let center = (Vec3::from(bounds.min) + Vec3::from(bounds.max)) * 0.5;
-		assert!((look_at - center).length() < 1e-4);
+		assert!(look_at.x.abs() < 1e-4 && look_at.z.abs() < 1e-4, "receiver {look_at}");
 	}
 
 	#[test]
