@@ -9,7 +9,7 @@ use super::{pose::TuberwaberPose, sliders::TuberwaberSliders, TuberwaberColors, 
 use crate::{
 	assembly::CharacterPartSlot,
 	assets::AssetNormalization,
-	components::CharacterComponents,
+	components::{CharacterComponents, LocomotionCapsule},
 	layer::Layers,
 	nodes::{PartNode, RigNode},
 	presets::{BuildPreset, GenderPreset},
@@ -70,6 +70,15 @@ fn tuberwaber_eye_right_local() -> Transform {
 }
 
 impl CharacterComponents for Tuberwaber {
+	fn locomotion_capsule(&self) -> LocomotionCapsule {
+		let pose = TuberwaberPose {
+			gender: self.gender,
+			build: self.build,
+			sliders: self.sliders.clamped(),
+		};
+		LocomotionCapsule::humanoid_from_pose(&pose.resolve(), 1.0)
+	}
+
 	fn rig_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<RigNode> {
 		let pose = TuberwaberPose {
 			gender: self.gender,

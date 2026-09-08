@@ -99,6 +99,10 @@ impl<T: MeshFetcher> MeshDispatch<T> {
 	pub fn new(fetcher: T) -> Self {
 		Self { fetcher }
 	}
+
+	pub fn fetcher(&self) -> &T {
+		&self.fetcher
+	}
 }
 
 /// Fetches meshes and spawns them into the world.

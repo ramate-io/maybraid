@@ -18,6 +18,7 @@ log = { workspace = true }
 rayon = { workspace = true }
 lz4_flex = { workspace = true }
 bincode = { workspace = true }
+futures = { workspace = true }
 
 # Bevy core dependencies
 bevy = { workspace = true, features = ["serialize"] }

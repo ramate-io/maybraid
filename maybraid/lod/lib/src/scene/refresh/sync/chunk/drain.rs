@@ -11,7 +11,7 @@
 //!
 //! `pull_primitive` + `World::spawn_scene` is one timed quantum. Stop **before**
 //! the next pull when elapsed ≥ [`LodChunkFulfillBudget::spawn_time_per_frame`].
-//! Warn if a quantum exceeds [`LodChunkFulfillBudget::max_atomic_spawn_cost`].
+//! Record if a quantum exceeds [`LodChunkFulfillBudget::max_atomic_spawn_cost`].
 
 use std::time::{Duration, Instant};
 
@@ -258,7 +258,7 @@ fn drain_one(
 		let quantum = quantum_start.elapsed();
 		let over = budget.max_atomic_spawn_cost.is_zero() || quantum > budget.max_atomic_spawn_cost;
 		if over {
-			warn!(
+			debug!(
 				host = ?host,
 				level = ?level,
 				elapsed_us = quantum.as_micros(),

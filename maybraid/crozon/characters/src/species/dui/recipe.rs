@@ -13,7 +13,7 @@ use super::{
 use crate::{
 	assembly::CharacterPartSlot,
 	assets::AssetNormalization,
-	components::CharacterComponents,
+	components::{CharacterComponents, LocomotionCapsule},
 	layer::Layers,
 	nodes::{PartNode, RigNode},
 	species::common::{nodes as humanoid, HairMesh},
@@ -48,6 +48,10 @@ fn dui_eye_local() -> Transform {
 }
 
 impl CharacterComponents for Dui {
+	fn locomotion_capsule(&self) -> LocomotionCapsule {
+		LocomotionCapsule::humanoid_from_pose(&DuiPose.resolve(), 1.0)
+	}
+
 	fn rig_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<RigNode> {
 		Layers::from_free(vec![
 			humanoid::humanoid_body_rig(DuiPose.resolve()),

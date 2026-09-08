@@ -10,7 +10,9 @@ pub mod urbanization_stream;
 
 pub use camera::CameraController;
 pub use commands::{DevelopmentFocus, PlaygroundCommand, PlaygroundStartup, PLAYGROUND_CLI_NAME};
-pub use development_bump_out::DevelopmentCanopyBumpOutPresenter;
+pub use development_bump_out::{
+	DevelopmentCanopyBumpOutPresenter, DevelopmentMediumCanopyBumpOutPresenter,
+};
 pub use development_forest::DevelopmentForestPresenter;
 pub use game_commands::command::PendingStartupCommand;
 pub use urbanization_stream::{
@@ -33,9 +35,10 @@ use commands::{
 use durham_terrain::shaders::{DurhamTerrainShader, DurhamTerrainShaderPlugin, RefractionWater};
 use durham_terrain_models::{
 	AvianTerrainIndex, BaseTerrainNoise, ComposedWater, DurhamTerrainModelsPlugin,
-	JerseyStampConfigs, MarazionWatershedConfigs, Terrain, TerrainCellLayout, TerrainConfig,
-	TerrainEntryStore, TerrainMeshBuilder, TerrainMeshLodBand, TerrainPresentationAssets, Water,
-	WaterPresentationAssets, WaterRegionPresenter, WaterStoreView,
+	JerseyStampConfigs, MarazionWatershedConfigs, Terrain, TerrainCellLayout,
+	TerrainColliderSystems, TerrainConfig, TerrainEntryStore, TerrainMeshBuilder,
+	TerrainMeshLodBand, TerrainPresentationAssets, Water, WaterPresentationAssets,
+	WaterRegionPresenter, WaterStoreView,
 };
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use game_commands::ui::{GameCommandDrawerConfig, GameCommandStatusText};
@@ -45,15 +48,15 @@ use lod::lod_ref::LodRef;
 use lod::{LodGenerateSystems, LodPresentSystems};
 use render_item::mesh::handle::EnforceCachingPlugin;
 use richmond_development_models::{
-	BuiltDevelopment, BuiltDevelopmentStoreView, DevelopmentCell, DevelopmentConfig,
-	DevelopmentEntryStore, DevelopmentIndex, PaddedStoreView, PaddedTerrainPresenter,
-	RichmondDevelopmentModelsPlugin, TerrainWithPads,
+	sync_padded_terrain_colliders, BuiltDevelopment, BuiltDevelopmentStoreView, DevelopmentCell,
+	DevelopmentConfig, DevelopmentEntryStore, DevelopmentIndex, PaddedStoreView,
+	PaddedTerrainPresenter, RichmondDevelopmentModelsPlugin, TerrainWithPads,
 };
 use richmond_urbanization::UrbanizationKind;
 use std::f32::consts::PI;
 use urbanization_stream::{
-	generate_urbanization_padded_terrain, present_urbanization_hosts,
-	present_urbanization_padded_terrain, sync_raw_terrain_replacements,
+	generate_urbanization_developments, generate_urbanization_padded_terrain,
+	present_urbanization_hosts, present_urbanization_padded_terrain, sync_raw_terrain_replacements,
 	UrbanizationPaddedTerrainState,
 };
 
@@ -175,7 +178,10 @@ impl Plugin for DevelopmentsOnTerrainPlugin {
 		register_urbanization_lod(app);
 		if self.register_development_forest_lod {
 			register_forest_lod::<DevelopmentForestPresenter>(app);
-			register_bump_out_lod::<DevelopmentCanopyBumpOutPresenter>(app);
+			register_bump_out_lod::<
+				DevelopmentCanopyBumpOutPresenter,
+				DevelopmentMediumCanopyBumpOutPresenter,
+			>(app);
 		}
 
 		if self.commands {
@@ -230,13 +236,19 @@ impl Plugin for DevelopmentsOnTerrainPlugin {
 			(
 				sync_urbanization_pin,
 				stream_urbanization.before(LodGenerateSystems::Produce),
-				present_urbanization_hosts.after(LodGenerateSystems::Drain),
+				generate_urbanization_developments.after(LodGenerateSystems::Drain),
 				generate_urbanization_padded_terrain,
+				present_urbanization_hosts,
 				present_urbanization_padded_terrain,
 				sync_raw_terrain_replacements,
 			)
 				.chain()
-				.before(LodPresentSystems::Produce),
+				.before(LodPresentSystems::Produce)
+				.before(TerrainColliderSystems::SyncOverlays),
+		)
+		.add_systems(
+			Update,
+			sync_padded_terrain_colliders.in_set(TerrainColliderSystems::SyncOverlays),
 		);
 	}
 }

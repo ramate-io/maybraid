@@ -7,7 +7,7 @@ use bevy::prelude::*;
 
 use super::{assets::HornMesh, pose::BrodlerPose, BrodlerColors, BrodlerConfig, BrodlerHeadMesh};
 use crate::{
-	components::CharacterComponents,
+	components::{CharacterComponents, LocomotionCapsule},
 	layer::Layers,
 	nodes::{PartNode, RigNode},
 	species::common::{
@@ -54,6 +54,10 @@ impl Default for Brodler {
 }
 
 impl CharacterComponents for Brodler {
+	fn locomotion_capsule(&self) -> LocomotionCapsule {
+		LocomotionCapsule::humanoid_from_pose(&BrodlerPose.resolve(), 1.0)
+	}
+
 	fn rig_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<RigNode> {
 		Layers::from_free(vec![
 			humanoid::humanoid_body_rig(BrodlerPose.resolve()),

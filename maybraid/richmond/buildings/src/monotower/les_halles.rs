@@ -5,8 +5,8 @@
 //! Stairs and roof are deferred to the tower consumer — shafts remain
 //! [`SpaceKind::InternalSpace`] residuals.
 
-use bevy_math::bounding::{Aabb2d, Aabb3d};
-use bevy_math::{Vec2, Vec3};
+use bevy_math::bounding::Aabb3d;
+use bevy_math::Vec3;
 use lod::gen::LodSceneLevel;
 use material_ref::MaterialRef;
 use procedural_common::{NoiseConfig, NoiseParams};
@@ -136,13 +136,7 @@ impl BuildingComponents for MixedUseLesHallesStorey {
 	}
 
 	fn structural_lod(&self) -> Option<BuildingStructuralLodProbe> {
-		let plan = self.floor_plan();
-		let half = plan.outer * 0.5;
-		let center = plan.center_xz;
-		Some(BuildingStructuralLodProbe::new([Aabb2d {
-			min: Vec2::new(center.x - half.x, center.z - half.y),
-			max: Vec2::new(center.x + half.x, center.z + half.y),
-		}]))
+		Some(self.floor_plan().structural_probe(self.wall_material().cloned()))
 	}
 }
 

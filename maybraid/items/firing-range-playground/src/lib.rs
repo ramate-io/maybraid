@@ -7,6 +7,7 @@ pub mod commands;
 mod damage;
 mod diagnostics;
 mod engagement;
+mod hit_debug;
 mod hud;
 mod les_halles;
 mod loadout;
@@ -47,8 +48,8 @@ use movement_intelligence_richmond::RichmondAvianMovementSurface;
 use movement_realization::MovementRealizationPlugin;
 use npc_intelligence::NpcIntelligencePlugin;
 use player::{
-	spawn_npc_with_hidden_capsule, spawn_player_with_hidden_capsule, Npc, Player, PlayerLook,
-	PlayerPlugin,
+	spawn_npc_with_hidden_capsule, spawn_npc_with_hull, spawn_player_with_hidden_capsule, Npc,
+	Player, PlayerLook, PlayerPlugin,
 };
 use player_camera::{spawn_follow_camera, PlayerCameraPlugin};
 use richmond_building_components::{
@@ -181,6 +182,7 @@ impl Plugin for FiringRangePlugin {
 						.after(ThreatSystems::Discover)
 						.before(SpottingSystems::Observe),
 					les_halles::draw_circulation_gizmos,
+					hit_debug::draw_dummy_hit_volumes,
 					apply_parent_confines.after(LodRefreshSystems::Cull),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 					hud::sync_combat_hud_opponent_total
@@ -265,23 +267,28 @@ pub(crate) fn spawn_npc_at(
 	session::install_npc_combat(commands, npc, spawn.npc, None, None);
 }
 
+fn dummy_translation(spawn: &LesHallesSpawn, hull: player::LocomotionCapsule) -> Vec3 {
+	let mut at = spawn.npc;
+	at.y += hull.spawn_height() - player::LocomotionCapsule::HUMANOID.spawn_height();
+	at
+}
+
 pub(crate) fn spawn_dummy_at(
 	commands: &mut Commands,
 	spawn: &LesHallesSpawn,
-	meshes: &mut Assets<Mesh>,
-	materials: &mut Assets<StandardMaterial>,
+	species: session::DummySpecies,
+	_meshes: &mut Assets<Mesh>,
+	_materials: &mut Assets<StandardMaterial>,
 ) {
-	let dummy = spawn_npc_with_hidden_capsule(
-		commands,
-		spawn.npc,
-		PlayerLook { yaw: spawn.look_yaw, ..default() },
-		meshes,
-		materials,
-	);
+	let hull = species.hull();
+	let at = dummy_translation(spawn, hull);
+	let dummy =
+		spawn_npc_with_hull(commands, at, PlayerLook { yaw: spawn.look_yaw, ..default() }, hull);
 	commands.entity(dummy).insert((
 		damage::Health::default(),
-		damage::headshot_band(),
+		damage::headshot_band_for(hull),
 		session::TestDummy,
+		species,
 	));
 }
 
@@ -348,7 +355,13 @@ fn respawn_combatants(
 				spawn_npc_at(&mut commands, &spawn, &mut meshes, &mut materials);
 			}
 			RangeMode::TestDummy => {
-				spawn_dummy_at(&mut commands, &spawn, &mut meshes, &mut materials);
+				spawn_dummy_at(
+					&mut commands,
+					&spawn,
+					session.dummy_species,
+					&mut meshes,
+					&mut materials,
+				);
 			}
 		}
 	}

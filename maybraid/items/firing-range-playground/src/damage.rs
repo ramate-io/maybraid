@@ -203,6 +203,7 @@ mod tests {
 				npc_count: 4,
 				civilian_count: 6,
 				seed: None,
+				dummy_species: crate::session::DummySpecies::Braidman,
 				epoch: 1,
 			})
 			.add_systems(Update, queue_flee_out_respawns);
@@ -232,6 +233,7 @@ mod tests {
 				npc_count: 4,
 				civilian_count: 6,
 				seed: None,
+				dummy_species: crate::session::DummySpecies::Braidman,
 				epoch: 1,
 			})
 			.add_systems(Update, queue_flee_out_respawns);

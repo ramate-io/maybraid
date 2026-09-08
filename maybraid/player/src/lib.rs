@@ -1,6 +1,7 @@
 //! Capsule player, visual, and handoff slots for camera / pose drivers.
 
 mod body;
+mod hit;
 mod identity;
 mod intent;
 mod locomotion;
@@ -17,6 +18,8 @@ pub use body::{
 	CharacterLocomotion, Grounded, JumpPhase, JumpWish, Jumping, MoveWish, PlayerControlSystems,
 	WalkableGround,
 };
+pub use crozon_characters::{HeadCapsule, HitCapsule};
+pub use hit::HitVolume;
 pub use identity::{
 	CameraFollow, Npc, Player, PlayerCameraAim, PlayerCameraPose, PlayerCapsule, PlayerLook,
 	PlayerUse, PlayerVisual, PlayerYawOwner,
@@ -95,10 +98,19 @@ impl Plugin for PlayerPlugin {
 					.chain()
 					.in_set(PlayerSystems::Body),
 			)
-			.add_systems(PostUpdate, body::sync_character_locomotion)
+			.add_systems(
+				PostUpdate,
+				(
+					body::sync_character_locomotion,
+					hit::maintain_hit_volumes,
+					hit::align_hit_volumes,
+				)
+					.chain(),
+			)
 			.add_systems(
 				Update,
-				(locomotion::face_wish_yaw, drive_player_locomotion)
+				(locomotion::face_wish_yaw, drive_player_locomotion, hit::align_hit_volumes)
+					.chain()
 					.in_set(PlayerSystems::Locomotion),
 			);
 	}

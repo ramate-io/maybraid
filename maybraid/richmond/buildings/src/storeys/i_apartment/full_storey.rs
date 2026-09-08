@@ -9,7 +9,9 @@ use procedural_common::NoiseParams;
 use richmond_building_components::joints::JointNode;
 use richmond_building_components::labels::LabelNode;
 use richmond_building_components::panels::PanelNode;
-use richmond_building_components::{BuildingComponents, BuildingStructuralLodProbe, Layers};
+use richmond_building_components::{
+	BuildingComponents, BuildingStructuralLodProbe, Layers, MassingVolume,
+};
 
 use crate::fit::{Confines, FillRegion, FillableRegions, Fit, FitError, SpaceKind};
 use crate::usage_areas::boundary_openings::inject_shared_boundary_from;
@@ -130,17 +132,19 @@ impl BuildingComponents for IApartmentFullStorey {
 	}
 
 	fn structural_lod(&self) -> Option<BuildingStructuralLodProbe> {
-		let mut probe: Option<BuildingStructuralLodProbe> = None;
-		for block in &self.blocks {
-			let Some(block_probe) = block.structural_lod() else {
-				continue;
-			};
-			probe = Some(match probe {
-				Some(acc) => acc.merge(block_probe),
-				None => block_probe,
-			});
+		let y0 = self.floor_plan.center_xz.y;
+		let height = self.floor_plan.storey_height;
+		let volumes: Vec<_> = self
+			.floor_plan
+			.primary_rects
+			.iter()
+			.map(|rect| MassingVolume::cuboid(rect.to_aabb2(), y0, height))
+			.collect();
+		if volumes.is_empty() {
+			None
+		} else {
+			Some(BuildingStructuralLodProbe::from_volumes(volumes))
 		}
-		probe
 	}
 }
 
@@ -154,7 +158,10 @@ mod tests {
 	use bevy::prelude::Transform;
 	use bevy_math::bounding::Aabb3d;
 	use bevy_math::Vec3;
-	use richmond_building_components::STRUCTURAL_HIGH_OUTSIDE_METERS;
+	use richmond_building_components::{
+		STRUCTURAL_HIGH_OUTSIDE_METERS, STRUCTURAL_LOW_OUTSIDE_METERS,
+		STRUCTURAL_MEDIUM_OUTSIDE_METERS,
+	};
 
 	fn storey_seed(seed: i32) -> IApartmentFullStorey {
 		let bounds = Aabb3d::from_min_max(Vec3::new(-22.0, 0.0, -18.0), Vec3::new(22.0, 3.5, 18.0));
@@ -184,16 +191,22 @@ mod tests {
 	fn structural_probe_high_within_perimeter_cutoff() {
 		let storey = storey_seed(0);
 		let probe = storey.structural_lod().expect("composed LivableApartments footprints");
-		assert!(!probe.footprints.is_empty());
+		assert!(!probe.footprints().is_empty());
 		assert_eq!(probe.high_outside_meters, STRUCTURAL_HIGH_OUTSIDE_METERS);
 
 		let inside = Transform::from_xyz(0.0, 1.5, 0.0);
 		assert_eq!(probe.level_for(&inside), LodSceneLevel::High);
 
-		// Far beyond every composed footprint → Medium (no interior walls).
+		// Just past High → Medium (exterior kits, no interior walls).
+		let mid = Transform::from_xyz(STRUCTURAL_HIGH_OUTSIDE_METERS + 40.0, 1.5, 0.0);
+		assert!(probe.distance_outside(&mid) > STRUCTURAL_HIGH_OUTSIDE_METERS);
+		assert!(probe.distance_outside(&mid) <= STRUCTURAL_MEDIUM_OUTSIDE_METERS);
+		assert_eq!(probe.level_for(&mid), LodSceneLevel::Medium);
+
+		// Far beyond Low → UltraLow massing.
 		let far = Transform::from_xyz(500.0, 1.5, 500.0);
-		assert!(probe.distance_outside(&far) > STRUCTURAL_HIGH_OUTSIDE_METERS);
-		assert_eq!(probe.level_for(&far), LodSceneLevel::Medium);
+		assert!(probe.distance_outside(&far) > STRUCTURAL_LOW_OUTSIDE_METERS);
+		assert_eq!(probe.level_for(&far), LodSceneLevel::UltraLow);
 
 		let high_n = storey.panel_nodes_for_level(LodSceneLevel::High).len();
 		let mid_n = storey.panel_nodes_for_level(LodSceneLevel::Medium).len();

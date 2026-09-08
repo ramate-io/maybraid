@@ -15,13 +15,15 @@ mod valleys;
 #[cfg(test)]
 mod tests;
 
-use bevy_math::bounding::Aabb3d;
-use bevy_math::Vec3;
+use bevy_math::bounding::{Aabb2d, Aabb3d};
+use bevy_math::{Vec2, Vec3};
 use lod::gen::LodSceneLevel;
 use material_ref::MaterialRef;
 use richmond_building_components::joints::JointNode;
 use richmond_building_components::panels::{PanelNode, PanelStyle};
-use richmond_building_components::{BuildingComponents, Layers};
+use richmond_building_components::{
+	BuildingComponents, BuildingStructuralLodProbe, Layers, MassingVolume,
+};
 
 use crate::openings::{MappedOpenings, OpeningLabel, Openings};
 use crate::paneling::panel_complex::DEFAULT_PANEL_THICKNESS;
@@ -393,6 +395,34 @@ impl BuildingComponents for RectangularPitchedRoofComplex {
 			out.extend(roof.joint_nodes_for_level(level));
 		}
 		out
+	}
+
+	fn structural_lod(&self) -> Option<BuildingStructuralLodProbe> {
+		let material = self.roofs.first().and_then(|roof| roof.surface_material().cloned());
+		let volumes: Vec<_> = self
+			.params()
+			.volumes
+			.iter()
+			.map(|aabb| {
+				let xz = Aabb2d {
+					min: Vec2::new(aabb.min.x, aabb.min.z),
+					max: Vec2::new(aabb.max.x, aabb.max.z),
+				};
+				let along_x = (aabb.max.x - aabb.min.x) >= (aabb.max.z - aabb.min.z);
+				MassingVolume::roof_pitch(
+					xz,
+					aabb.min.y,
+					(aabb.max.y - aabb.min.y).max(0.3),
+					along_x,
+				)
+				.with_material_opt(material.clone())
+			})
+			.collect();
+		if volumes.is_empty() {
+			None
+		} else {
+			Some(BuildingStructuralLodProbe::from_volumes(volumes))
+		}
 	}
 }
 

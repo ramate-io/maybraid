@@ -1,7 +1,9 @@
 //! System-local multi-type spatial index for Durham terrain generation.
 
 use crate::terrain::base_noise::BaseTerrainNoise;
-use crate::terrain::cell::{cell_bounds, BootstrapTerrainCellLayout, TerrainCellLayout};
+use crate::terrain::cell::{
+	cell_bounds, universal_bounds, BootstrapTerrainCellLayout, TerrainCellLayout,
+};
 use crate::terrain::jersey::{
 	BootstrapCanyonHighPassControllerLayout, BootstrapCanyonLowPassControllerLayout,
 	BootstrapJerseyStampConfigs, BootstrapMassifHighPassControllerLayout,
@@ -42,6 +44,7 @@ use bevy::prelude::*;
 use lod::gen::{Id, SpatialIndex, StorageStatus, TrackedId, Version};
 use lod::lod_ref::LodRef;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 /// Marks a bookkeeping entity as a tracked terrain cell.
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -127,6 +130,52 @@ pub struct TerrainEntryStore {
 	entity_to_id: HashMap<Entity, Id>,
 }
 
+/// Cheap owned view of composed height fields for background consumers.
+#[derive(Clone, Default)]
+pub struct TerrainHeightSnapshot {
+	terrain: Arc<HashMap<Id, Arc<crate::terrain::ComposedTerrain>>>,
+}
+
+impl TerrainHeightSnapshot {
+	pub fn composed_height_at(&self, layout: &TerrainCellLayout, x: f32, z: f32) -> Option<f32> {
+		let size = layout.cell_size.max(1e-3);
+		let cell = cell_bounds(
+			(x / size).floor() as i32,
+			(z / size).floor() as i32,
+			size,
+			layout.vertical_half_extent,
+		);
+		if let Some(sdf) = self.terrain.get(&Id::from_cell(cell)) {
+			return Some(sdf.terrain().height_at_with_all_modulations(x, z));
+		}
+		for outer in &layout.outer_rings {
+			let size = outer.cell_size.max(1e-3);
+			let cell = cell_bounds(
+				(x / size).floor() as i32,
+				(z / size).floor() as i32,
+				size,
+				layout.vertical_half_extent,
+			);
+			if let Some(sdf) = self.terrain.get(&Id::from_cell(cell)) {
+				return Some(sdf.terrain().height_at_with_all_modulations(x, z));
+			}
+		}
+		for ring in &layout.stream_rings {
+			let size = ring.cell_size.max(1e-3);
+			let cell = cell_bounds(
+				(x / size).floor() as i32,
+				(z / size).floor() as i32,
+				size,
+				layout.vertical_half_extent,
+			);
+			if let Some(sdf) = self.terrain.get(&Id::from_cell(cell)) {
+				return Some(sdf.terrain().height_at_with_all_modulations(x, z));
+			}
+		}
+		None
+	}
+}
+
 impl TerrainEntryStore {
 	fn next_version(&mut self) -> Version {
 		self.next_version += 1;
@@ -149,6 +198,34 @@ impl TerrainEntryStore {
 		self.terrain.get(&id).map(|entry| &entry.value)
 	}
 
+	/// Origin ids already stored in `region` (GET; does not admit missing cells).
+	pub fn terrain_ids_overlapping(&self, region: Aabb3d) -> Vec<Id> {
+		self.terrain
+			.iter()
+			.filter(|(_, entry)| region.intersects(&entry.bounds))
+			.map(|(id, _)| *id)
+			.collect()
+	}
+
+	pub fn water(&self, id: Id) -> Option<&Water> {
+		self.water.get(&id).map(|entry| &entry.value)
+	}
+
+	pub fn water_version(&self, id: Id) -> Option<Version> {
+		self.water.get(&id).map(|entry| entry.version)
+	}
+
+	pub fn height_snapshot(&self) -> TerrainHeightSnapshot {
+		TerrainHeightSnapshot {
+			terrain: Arc::new(
+				self.terrain
+					.iter()
+					.map(|(id, entry)| (*id, Arc::clone(&entry.value.sdf)))
+					.collect(),
+			),
+		}
+	}
+
 	/// Composed terrain height (jersey + Marazion) at `(x, z)`, if that cell is stored.
 	pub fn composed_height_at(&self, layout: &TerrainCellLayout, x: f32, z: f32) -> Option<f32> {
 		let size = layout.cell_size.max(1e-3);
@@ -161,6 +238,16 @@ impl TerrainEntryStore {
 		}
 		for outer in &layout.outer_rings {
 			let g = outer.cell_size.max(1e-3);
+			let oix = (x / g).floor() as i32;
+			let oiz = (z / g).floor() as i32;
+			let ocell = cell_bounds(oix, oiz, g, layout.vertical_half_extent);
+			let oid = Id::from_cell(ocell);
+			if let Some(entry) = self.terrain.get(&oid) {
+				return Some(entry.value.sdf.terrain().height_at_with_all_modulations(x, z));
+			}
+		}
+		for ring in &layout.stream_rings {
+			let g = ring.cell_size.max(1e-3);
 			let oix = (x / g).floor() as i32;
 			let oiz = (z / g).floor() as i32;
 			let ocell = cell_bounds(oix, oiz, g, layout.vertical_half_extent);
@@ -343,6 +430,25 @@ impl<'w, 's> AvianTerrainIndex<'w, 's> {
 
 	pub fn set_layout(&mut self, layout: TerrainCellLayout) {
 		*self.layout = layout;
+	}
+
+	/// Keep the Universal stored layout in sync with the Bevy resource.
+	///
+	/// Origin ids come from the stored [`TerrainCellLayout`], not the resource, so
+	/// a sliding window must re-insert when origin changes.
+	pub fn publish_layout_if_changed(&mut self, lod_ref: &LodRef) {
+		let layout = self.layout.clone();
+		let stale = <Self as SpatialIndex<TerrainCellLayout>>::get(self, Id::Universal)
+			.is_none_or(|stored| stored != &layout);
+		if stale {
+			<Self as SpatialIndex<TerrainCellLayout>>::insert(
+				self,
+				Id::Universal,
+				layout,
+				universal_bounds(),
+				lod_ref,
+			);
+		}
 	}
 
 	pub fn layout(&self) -> &TerrainCellLayout {

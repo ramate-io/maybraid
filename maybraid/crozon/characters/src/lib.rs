@@ -6,7 +6,12 @@
 //! Live pose, animation, and paint are ECS mutation (`MemberOf` + `*Ref` +
 //! `Changed`), not LOD refresh. Recipes also expose a rest-pose
 //! [`LocomotionCapsule`](crate::LocomotionCapsule) for locomotion colliders;
-//! physics crates stamp Avian from that hull. Per-frame clips and terrain pitch live in
+//! physics crates stamp Avian from that hull. Pronograde recipes also expose a
+//! query-only [`HitCapsule`](crate::HitCapsule) (horizontal, along mesh `+Z`);
+//! hit girth is rest-pose shoulder / hip / torso bone scale. Biped recipes keep
+//! one vertical motor capsule sized from rest-pose legs / spine / neck / shoulders.
+//! Oversized heads add a query-only [`HeadCapsule`](crate::HeadCapsule) that
+//! stretches on Y above that hull. The motor stays on the vertical capsule. Per-frame clips and terrain pitch live in
 //! [`crozon_character_motion`]; this crate stamps **initial** host markers from
 //! [`lod::LodScene::host`] / spawn. Motion sync keeps those markers aligned with
 //! the shown LOD band.
@@ -43,7 +48,7 @@ pub use assembly::CharacterPartSlot;
 pub use assets::{AssetFacing, AssetNormalization, AssetPath, AuthoredAnchor};
 pub use components::{
 	character_bounds, clothing_layers, CharacterComponents, CharacterRecipe, Clothed,
-	ClothingLayer, ComponentsOnly, LocomotionCapsule,
+	ClothingLayer, ComponentsOnly, HeadCapsule, HitCapsule, LocomotionCapsule,
 };
 pub use concepts::ConceptAnimation;
 pub use crozon_character_motion::{

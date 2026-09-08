@@ -21,7 +21,9 @@ use lod::gen::LodSceneLevel;
 use richmond_building_components::joints::geometry::JointPost;
 use richmond_building_components::joints::JointNode;
 use richmond_building_components::panels::{PanelNode, PanelStyle};
-use richmond_building_components::{BuildingComponents, Layers};
+use richmond_building_components::{
+	BuildingComponents, BuildingStructuralLodProbe, Layers, MassingVolume,
+};
 
 use crate::openings::{MappedOpenings, Openings};
 use crate::paneling::clipped_ruled_strip::ClippedRuledStrip;
@@ -327,5 +329,16 @@ impl BuildingComponents for Trazaloid {
 			}
 		}
 		out
+	}
+
+	fn structural_lod(&self) -> Option<BuildingStructuralLodProbe> {
+		let p = self.params();
+		let height = p.lower_height + p.band_vertical_offset + p.upper_height;
+		Some(BuildingStructuralLodProbe::from_volumes([MassingVolume::trazaloid(
+			p.origin,
+			p.footprint,
+			p.ridge,
+			height,
+		)]))
 	}
 }
