@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 
-use intelligence_lod::IntelligencePriority;
+use intelligence_lod::{IntelligenceFocus, IntelligenceLookFrame, IntelligencePriority};
 
 use crate::elevation::{draw_terrain_pitch_probes, DrawTerrainPitchProbes};
 use crate::mailbox::{
@@ -33,6 +33,8 @@ impl Plugin for CharacterMotionPlugin {
 	fn build(&self, app: &mut App) {
 		app.init_resource::<DrawTerrainPitchProbes>()
 			.init_resource::<IntelligencePriority>()
+			.init_resource::<IntelligenceLookFrame>()
+			.init_resource::<IntelligenceFocus>()
 			.init_resource::<MailboxApplyLimits>()
 			.init_resource::<MailboxApplySet>()
 			.configure_sets(
