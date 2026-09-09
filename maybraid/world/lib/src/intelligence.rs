@@ -11,7 +11,11 @@ use firearm_user::FirearmUserPlugin;
 use firearms::{FirearmWeaponSystems, FirearmWeaponsPlugin};
 use fleeing_intelligence::{FleeingPlugin, FleeingSystems};
 use hiding_intelligence::{HidingPlugin, HidingSystems};
-use intelligence_lod::{IntelligenceBand, IntelligenceLod, IntelligencePriority};
+use intelligence_lod::{
+	look_promotes, IntelligenceBand, IntelligenceFocus, IntelligenceFocusSample, IntelligenceLod,
+	IntelligenceLook, IntelligencePriority, LOOK_FOV_INSET, LOOK_M,
+};
+use lod::LodViewer;
 use maybraid_mobs::player_affiliations;
 use meandering_intelligence::MeanderingIntelligencePlugin;
 use movement_intelligence::{
@@ -20,6 +24,7 @@ use movement_intelligence::{
 use movement_intelligence_avian::AvianMovementSurface;
 use movement_realization::MovementRealizationPlugin;
 use player::LocomotionCapsule;
+use player::PlayerCameraAim;
 use poi_intelligence::{PoiDiscoverLimits, PoiSystems};
 use routing_intelligence::{RoutingPlugin, RoutingSystems};
 use spotting_intelligence::{
@@ -70,7 +75,8 @@ impl Plugin for WorldIntelligencePlugin {
 			.insert_resource(WORLD_SPOTTING_LIMITS)
 			.insert_resource(WORLD_POI_LIMITS)
 			.insert_resource(WORLD_THREAT_LIMITS)
-			.init_resource::<IntelligencePriority>();
+			.init_resource::<IntelligencePriority>()
+			.init_resource::<IntelligenceFocus>();
 		if !app.is_plugin_added::<FirearmWeaponsPlugin>() {
 			app.add_plugins(FirearmWeaponsPlugin);
 		}
@@ -147,7 +153,9 @@ impl Plugin for WorldIntelligencePlugin {
 			)
 			.add_systems(
 				Update,
-				bake_intelligence_lod.run_if(on_timer(INTELLIGENCE_LOD_REFRESH_INTERVAL)),
+				(sync_intelligence_focus, bake_intelligence_lod)
+					.chain()
+					.run_if(on_timer(INTELLIGENCE_LOD_REFRESH_INTERVAL)),
 			)
 			.configure_sets(
 				PostUpdate,
@@ -164,8 +172,34 @@ impl Plugin for WorldIntelligencePlugin {
 	}
 }
 
+/// Copy ADS / bore poses into the focus mailbox. Firearm control stays out of the bake.
+fn sync_intelligence_focus(mut focus: ResMut<IntelligenceFocus>, aims: Query<&PlayerCameraAim>) {
+	focus.clear();
+	for aim in &aims {
+		if aim.focus <= 1e-4 {
+			continue;
+		}
+		let Some(pose) = aim.pose else {
+			continue;
+		};
+		let dir = (pose.rotation * Vec3::NEG_Z).normalize_or_zero();
+		if dir == Vec3::ZERO {
+			continue;
+		}
+		let fov = aim.sight_fov.unwrap_or(50_f32.to_radians());
+		focus.push(IntelligenceFocusSample {
+			origin: pose.translation,
+			dir,
+			max_range: LOOK_M,
+			half_angle: fov * 0.5 * LOOK_FOV_INSET,
+		});
+	}
+}
+
 fn bake_intelligence_lod(
 	player: Query<&GlobalTransform, With<VegetationPlayer>>,
+	cameras: Query<(&GlobalTransform, &Projection), With<LodViewer>>,
+	focus: Res<IntelligenceFocus>,
 	mut plants: Query<(
 		Entity,
 		&GlobalTransform,
@@ -177,11 +211,20 @@ fn bake_intelligence_lod(
 	let Ok(player) = player.single() else {
 		return;
 	};
+	let look = cameras.iter().find_map(|(transform, projection)| {
+		let Projection::Perspective(perspective) = projection else {
+			return None;
+		};
+		Some(IntelligenceLook::from_perspective(transform, perspective))
+	});
 	let player_xz = player.translation().xz();
 	let mut rows: Vec<(Entity, IntelligenceLod)> = Vec::new();
 	for (entity, transform, mut lod, management) in &mut plants {
-		let dist = transform.translation().xz().distance(player_xz);
-		lod.band = IntelligenceBand::from_viewer(dist, management.tactic != ThreatTactic::Ignore);
+		let at = transform.translation();
+		let dist = at.xz().distance(player_xz);
+		let look = look_promotes(dist, at, look, &focus);
+		lod.band =
+			IntelligenceBand::from_viewer(dist, management.tactic != ThreatTactic::Ignore, look);
 		lod.skips = lod.skips.saturating_add(1);
 		rows.push((entity, *lod));
 	}
@@ -221,12 +264,31 @@ mod tests {
 	use maybraid_mobs::{MobBrain, MobKind, FFA_GROUP, PLAYER_GROUP};
 	use threat_intelligence::{ThreatIntelligenceUser, ThreatKnowledge};
 
-	#[test]
-	fn bake_orders_near_before_far_and_promotes_high_skips() {
+	fn bake_app() -> App {
 		let mut app = App::new();
 		app.add_plugins(MinimalPlugins)
 			.init_resource::<IntelligencePriority>()
+			.init_resource::<IntelligenceFocus>()
 			.add_systems(Update, bake_intelligence_lod);
+		app
+	}
+
+	fn spawn_look_camera(app: &mut App, looking_at: Vec3, fov_y: f32) {
+		let transform = Transform::from_translation(Vec3::Y * 1.6).looking_at(looking_at, Vec3::Y);
+		app.world_mut().spawn((
+			LodViewer,
+			Projection::Perspective(PerspectiveProjection {
+				fov: fov_y,
+				aspect_ratio: 16.0 / 9.0,
+				..default()
+			}),
+			GlobalTransform::from(transform),
+		));
+	}
+
+	#[test]
+	fn bake_orders_near_before_far_and_promotes_high_skips() {
+		let mut app = bake_app();
 		app.world_mut()
 			.spawn((VegetationPlayer, Transform::default(), GlobalTransform::default()));
 		let near = spawn_lod_plant(&mut app, Vec3::X * 40.0, ThreatTactic::Ignore, 0);
@@ -265,6 +327,51 @@ mod tests {
 		assert!(rank[&mid] < rank[&far_waiting]);
 		assert!(rank[&far_waiting] < rank[&far_fresh]);
 		assert!(rank[&combat] < rank[&mid]);
+	}
+
+	#[test]
+	fn bake_look_promotes_mid_on_axis_and_not_off_axis() {
+		let mut app = bake_app();
+		app.world_mut()
+			.spawn((VegetationPlayer, Transform::default(), GlobalTransform::default()));
+		spawn_look_camera(&mut app, Vec3::new(120.0, 1.6, 0.0), 75_f32.to_radians());
+		let ahead = spawn_lod_plant(&mut app, Vec3::X * 120.0, ThreatTactic::Ignore, 0);
+		let side = spawn_lod_plant(&mut app, Vec3::new(110.0, 0.0, 90.0), ThreatTactic::Ignore, 0);
+
+		app.update();
+
+		assert_eq!(
+			app.world().get::<IntelligenceLod>(ahead).map(|lod| lod.band),
+			Some(IntelligenceBand::Near)
+		);
+		assert_eq!(
+			app.world().get::<IntelligenceLod>(side).map(|lod| lod.band),
+			Some(IntelligenceBand::Mid)
+		);
+	}
+
+	#[test]
+	fn bake_focus_sample_promotes_without_camera() {
+		let mut app = bake_app();
+		app.world_mut()
+			.spawn((VegetationPlayer, Transform::default(), GlobalTransform::default()));
+		let at = Vec3::new(80.0, 0.0, 80.0);
+		app.world_mut()
+			.resource_mut::<IntelligenceFocus>()
+			.push(IntelligenceFocusSample {
+				origin: Vec3::Y,
+				dir: (at - Vec3::Y).normalize(),
+				max_range: LOOK_M,
+				half_angle: 8_f32.to_radians(),
+			});
+		let side = spawn_lod_plant(&mut app, at, ThreatTactic::Ignore, 0);
+
+		app.update();
+
+		assert_eq!(
+			app.world().get::<IntelligenceLod>(side).map(|lod| lod.band),
+			Some(IntelligenceBand::Near)
+		);
 	}
 
 	#[test]

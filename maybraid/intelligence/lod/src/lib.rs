@@ -1,11 +1,19 @@
 //! Viewer-axis work LOD among plants that already exist.
 //!
 //! World bakes [`IntelligenceLod`] and [`IntelligencePriority`]. Personality
-//! crates only read. Missing lod is [`IntelligenceBand::Near`].
+//! crates only read. Missing lod is [`IntelligenceBand::Near`]. Look / aim
+//! promotion uses [`IntelligenceLook`] plus the [`IntelligenceFocus`] mailbox.
+
+mod focus;
 
 use std::collections::HashMap;
 
 use bevy::prelude::*;
+
+pub use focus::{
+	look_promotes, IntelligenceFocus, IntelligenceFocusSample, IntelligenceLook, LOOK_FOV_INSET,
+	LOOK_M,
+};
 
 /// Viewer-axis work band. Near work is spent first.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -22,9 +30,11 @@ impl IntelligenceBand {
 	/// Ignore plants between [`Self::NEAR_M`] and this are Mid.
 	pub const MID_M: f32 = 200.0;
 
-	/// Distance + tactic cut used by the world bake pulse.
-	pub fn from_viewer(dist: f32, combat_or_evade: bool) -> Self {
-		if combat_or_evade || dist < Self::NEAR_M {
+	/// Distance + tactic + look cut used by the world bake pulse.
+	///
+	/// `look` is inset-FOV / focus-mailbox. It only promotes inside [`LOOK_M`].
+	pub fn from_viewer(dist: f32, combat_or_evade: bool, look: bool) -> Self {
+		if combat_or_evade || dist < Self::NEAR_M || (look && dist < LOOK_M) {
 			Self::Near
 		} else if dist < Self::MID_M {
 			Self::Mid
@@ -122,10 +132,12 @@ mod tests {
 
 	#[test]
 	fn viewer_cuts_and_combat_are_near() {
-		assert_eq!(IntelligenceBand::from_viewer(40.0, false), IntelligenceBand::Near);
-		assert_eq!(IntelligenceBand::from_viewer(120.0, false), IntelligenceBand::Mid);
-		assert_eq!(IntelligenceBand::from_viewer(300.0, false), IntelligenceBand::Far);
-		assert_eq!(IntelligenceBand::from_viewer(300.0, true), IntelligenceBand::Near);
+		assert_eq!(IntelligenceBand::from_viewer(40.0, false, false), IntelligenceBand::Near);
+		assert_eq!(IntelligenceBand::from_viewer(120.0, false, false), IntelligenceBand::Mid);
+		assert_eq!(IntelligenceBand::from_viewer(300.0, false, false), IntelligenceBand::Far);
+		assert_eq!(IntelligenceBand::from_viewer(300.0, true, false), IntelligenceBand::Near);
+		assert_eq!(IntelligenceBand::from_viewer(120.0, false, true), IntelligenceBand::Near);
+		assert_eq!(IntelligenceBand::from_viewer(300.0, false, true), IntelligenceBand::Far);
 	}
 
 	#[test]
