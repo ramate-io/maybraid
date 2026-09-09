@@ -116,9 +116,7 @@ pub fn produce_lod_refresh_regions<P, F, M>(
 	};
 
 	writer.write(LodSceneRefreshRegion::<M>::new(region));
-	// Shared produce union (slice A). Do not also write an untyped message bus —
-	// extra writers (mob High pulse) used that to widen every Host query.
-	sink.push(region);
+	sink.push::<M>(region);
 }
 
 /// Produce [`LodSceneRefreshRegion<M>`] from `F`-filtered [`LodNode`]s via strategy `P`.

@@ -66,8 +66,11 @@ const WORLD_TERRAIN_FRICTION: Friction = Friction {
 	combine_rule: CoefficientCombine::Max,
 };
 
-/// ±1 km so produce covers the 1 km grove present ring.
-const WORLD_BULLSEYE_OUTER_M: f32 = 2_000.0;
+/// Shared produce cube edge ([#792](https://github.com/ramate-io/maybraid/issues/792) B).
+/// ±100 m. Walk frames still union the mob High region (±450 m) until
+/// [#795](https://github.com/ramate-io/maybraid/issues/795). Generate / present
+/// keep are unchanged (3 km / 1 km).
+const WORLD_BULLSEYE_OUTER_M: f32 = 200.0;
 /// Cull annulus starts beyond the present ring.
 const WORLD_LATTICE_EXCLUDE_M: f32 = 2_000.0;
 const WORLD_LATTICE_OUTER_M: f32 = 8_000.0;

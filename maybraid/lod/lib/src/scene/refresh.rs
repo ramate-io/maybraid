@@ -3,7 +3,7 @@
 //! Submodules:
 //! - [`regions`] — strategy `P` + nodes `F` → [`LodSceneRefreshRegion<M>`]
 //! - [`cull_regions`] — rotating cull lattice → untyped AABB cache → erased enqueue
-//! - [`levels`] — untyped region AABB → shared host-hit cache → one erased level pass
+//! - [`levels`] — per-`M` region AABBs → keyed host-hit cache → one erased level pass
 //! - [`entities`] — one untyped fold: max level → write [`crate::LodSceneLevel`]
 //! - [`sync`] — root sync, chunk fulfill, cull
 //!
@@ -12,7 +12,7 @@
 //! - [`LodSceneRefreshRegionPlugin<P, F, M>`] — region production
 //! - [`LodSceneCullRegionPlugin<P, F, M>`] — cull region production
 //! - [`LodSceneRefreshLevelsFillPlugin<I>`] — once: snapshots + host hits
-//! - [`LodSceneRefreshLevelsPlugin<T>`] — register `T` with the shared emitter
+//! - [`LodSceneRefreshLevelsPlugin<T, M>`] — register `T` on channel `M`
 //! - [`LodSceneRefreshSyncPlugin<T, F>`] — chunk fulfill + optional full-scan cull
 //! - [`LodSceneCullProduceFillPlugin<I, F>`] — once: cull snapshots + host hits
 //! - [`LodSceneRegionCullPlugin<I, M, T, F>`] — producer registration over shared enqueue
@@ -53,8 +53,9 @@ pub use entities::{
 };
 pub use levels::{
 	fill_lod_produce_cache, produce_lod_refresh_levels, produce_lod_refresh_levels_erased,
-	LodLevelProducer, LodProduceCache, LodProduceDriver, LodProduceRegionSink,
-	LodSceneRefreshLevel, LodSceneRefreshLevelsFillPlugin, LodSceneRefreshLevelsPlugin,
+	LodLevelProducer, LodProduceCache, LodProduceCaches, LodProduceChannel, LodProduceDriver,
+	LodProduceRegionSink, LodRefreshChannel, LodRefreshChannels, LodSceneRefreshLevel,
+	LodSceneRefreshLevelsFillPlugin, LodSceneRefreshLevelsPlugin,
 };
 pub use regions::{
 	produce_lod_refresh_regions, Bullseye, LodRefreshRegions, LodRefreshRegionsError,
@@ -96,7 +97,7 @@ pub enum LodRefreshSystems {
 /// Order inside [`LodRefreshSystems::ProduceLevels`]: fill the shared cache, then emit.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
 pub enum LodLevelProduceSystems {
-	/// Snapshots + untyped host hits ([`fill_lod_produce_cache`]).
+	/// Snapshots + per-channel host hits ([`fill_lod_produce_cache`]).
 	FillCache,
 	/// Shared hit-driven level emission.
 	Emit,
@@ -139,7 +140,7 @@ impl Plugin for LodRefreshCorePlugin {
 		if !app.is_plugin_added::<LodNodePlugin>() {
 			app.add_plugins(LodNodePlugin);
 		}
-		app.init_resource::<LodProduceCache>()
+		app.init_resource::<LodProduceCaches>()
 			.init_resource::<LodProduceRegionSink>()
 			.init_resource::<LodCullProduceCache>()
 			.add_message::<LodSceneCullAabb>()
@@ -161,9 +162,9 @@ impl Plugin for LodRefreshCorePlugin {
 /// Fill + shared typed-callback emit + chunk sync. `I` is an untyped
 /// [`LodSceneHostIndex`].
 ///
-/// Channel `M` is kept so existing `AvianLodSceneRefreshPlugin<T, M, F>` adds
-/// stay valid; each `T` registers a callback while produce runs once. Add
-/// [`LodSceneRefreshRegionPlugin`] separately for region production.
+/// Channel `M` keys produce fill ([#795](https://github.com/ramate-io/maybraid/issues/795)).
+/// Each `T` stamps [`LodRefreshChannel<M>`]; emit walks that channel's hits.
+/// Add [`LodSceneRefreshRegionPlugin`] separately for region production.
 /// Use [`Self::without_full_scan_cull`] with [`LodSceneRegionCullPlugin`] for
 /// lattice-scoped cull enqueue.
 pub struct LodSceneRefreshPlugin<T, M, I, F = With<LodViewer>>
@@ -214,8 +215,8 @@ where
 		if !app.is_plugin_added::<LodSceneRefreshLevelsFillPlugin<I>>() {
 			app.add_plugins(LodSceneRefreshLevelsFillPlugin::<I>::default());
 		}
-		if !app.is_plugin_added::<LodSceneRefreshLevelsPlugin<T>>() {
-			app.add_plugins(LodSceneRefreshLevelsPlugin::<T>::default());
+		if !app.is_plugin_added::<LodSceneRefreshLevelsPlugin<T, M>>() {
+			app.add_plugins(LodSceneRefreshLevelsPlugin::<T, M>::default());
 		}
 		if !app.is_plugin_added::<LodSceneRefreshSyncPlugin<T, F>>() {
 			if self.full_scan_cull {

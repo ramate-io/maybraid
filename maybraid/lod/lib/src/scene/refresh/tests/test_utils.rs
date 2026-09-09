@@ -32,6 +32,18 @@ pub struct BullChan;
 #[derive(Debug, Clone, Copy, Default)]
 pub struct CullChan;
 
+/// Isolation channel: vegetation-sized cube.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct VegChan;
+
+/// Isolation channel: urbanization-sized cube.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct UrbChan;
+
+/// Isolation channel: mob High cube.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct MobChan;
+
 /// Test host: bands on viewer distance from the origin.
 #[derive(Component, Clone, Default)]
 pub struct Probe;
@@ -55,6 +67,33 @@ impl LodScene for Probe {
 
 	fn scene_with_level(&self, _: &LodRef, _: LodSceneLevel) -> impl Scene + 'static {}
 }
+
+/// Isolation host that jumps to High when visited.
+#[derive(Component, Clone, Default)]
+pub struct VegHost;
+
+/// Isolation host on the urbanization channel.
+#[derive(Component, Clone, Default)]
+pub struct UrbHost;
+
+macro_rules! mark_lod_scene {
+	($ty:ty) => {
+		impl LodScene for $ty {
+			fn scene_lod_level(&self, _: &LodRef) -> LodSceneLevel {
+				LodSceneLevel::High
+			}
+
+			fn scene_lod_culls(&self, _: &LodRef, _: LodSceneLevel) -> LodSceneCulls {
+				cull_offset_bands_from_factor(0.0, 25.0, 80.0, 200.0)
+			}
+
+			fn scene_with_level(&self, _: &LodRef, _: LodSceneLevel) -> impl Scene + 'static {}
+		}
+	};
+}
+
+mark_lod_scene!(VegHost);
+mark_lod_scene!(UrbHost);
 
 /// Untyped scan of every [`LodSceneHost`] volume (produce-cache fill).
 #[derive(SystemParam)]
@@ -129,6 +168,29 @@ pub fn spawn_host(world: &mut World, at: Vec3, level: LodSceneLevel) -> Entity {
 		.id()
 }
 
+pub fn spawn_veg_host(world: &mut World, at: Vec3, level: LodSceneLevel) -> Entity {
+	world
+		.spawn((LodSceneHost, VegHost, level, unit_bounds(), Transform::from_translation(at)))
+		.id()
+}
+
+pub fn spawn_urb_host(world: &mut World, at: Vec3, level: LodSceneLevel) -> Entity {
+	world
+		.spawn((LodSceneHost, UrbHost, level, unit_bounds(), Transform::from_translation(at)))
+		.id()
+}
+
+/// Two host types, two channels, scan fill. Tests write [`crate::LodProduceRegionSink`] directly.
+pub fn app_channel_isolation() -> App {
+	let mut app = App::new();
+	app.add_plugins(MinimalPlugins)
+		.add_plugins(LodRefreshCorePlugin)
+		.add_plugins(LodSceneRefreshLevelsFillPlugin::<ScanHostIndex>::default())
+		.add_plugins(LodSceneRefreshLevelsPlugin::<VegHost, VegChan>::default())
+		.add_plugins(LodSceneRefreshLevelsPlugin::<UrbHost, UrbChan>::default());
+	app
+}
+
 pub fn move_viewer(app: &mut App, viewer: Entity, at: Vec3) {
 	app.world_mut().entity_mut(viewer).insert(Transform::from_translation(at));
 }
@@ -178,7 +240,7 @@ pub fn app_spotlight_levels() -> App {
 		.insert_resource(Spotlight::new(200.0))
 		.add_plugins(LodSceneRefreshRegionPlugin::<Spotlight, With<LodViewer>, SpotChan>::default())
 		.add_plugins(LodSceneRefreshLevelsFillPlugin::<ScanHostIndex>::default())
-		.add_plugins(LodSceneRefreshLevelsPlugin::<Probe>::default())
+		.add_plugins(LodSceneRefreshLevelsPlugin::<Probe, SpotChan>::default())
 		.init_resource::<NewRegions<SpotChan>>()
 		.add_systems(Update, capture_regions::<SpotChan>.after(LodRefreshSystems::ProduceRegions));
 	app
@@ -193,7 +255,8 @@ pub fn app_dual_channel_levels() -> App {
 		.add_plugins(LodSceneRefreshRegionPlugin::<Spotlight, With<LodViewer>, SpotChan>::default())
 		.add_plugins(LodSceneRefreshRegionPlugin::<Bullseye, With<LodViewer>, BullChan>::default())
 		.add_plugins(LodSceneRefreshLevelsFillPlugin::<ScanHostIndex>::default())
-		.add_plugins(LodSceneRefreshLevelsPlugin::<Probe>::default())
+		.add_plugins(LodSceneRefreshLevelsPlugin::<Probe, SpotChan>::default())
+		.add_plugins(LodSceneRefreshLevelsPlugin::<Probe, BullChan>::default())
 		.init_resource::<NewRegions<SpotChan>>()
 		.init_resource::<NewRegions<BullChan>>()
 		.add_systems(

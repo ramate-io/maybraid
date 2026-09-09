@@ -637,13 +637,13 @@ fn fit_world_mob_hosts_to_surface(
 fn pulse_world_mob_high_lod(
 	nodes: Query<&LodNodePose, (With<LodNode>, With<LodViewer>)>,
 	mut refresh: MessageWriter<LodSceneRefreshRegion<MobHighLodChan>>,
+	mut sink: ResMut<lod::LodProduceRegionSink>,
 ) {
 	let regions = nodes.iter().map(|pose| MobHighLodRegion::region_at(pose.current.translation));
 	let union = regions.reduce(|a, b| Aabb3d::from_min_max(a.min.min(b.min), a.max.max(b.max)));
 	if let Some(region) = union {
-		// Typed channel only. Do not push [`lod::LodProduceRegionSink`] — that
-		// union is shared produce ([#792](https://github.com/ramate-io/maybraid/issues/792) A).
 		refresh.write(LodSceneRefreshRegion::new(region));
+		sink.push::<MobHighLodChan>(region);
 	}
 }
 
