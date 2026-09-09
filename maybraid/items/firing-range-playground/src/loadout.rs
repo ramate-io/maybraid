@@ -1,12 +1,12 @@
 //! Roll a generated clothing + firearm identity for a firing-range combatant.
 
 use crozon_character_items::{
-	random_starter_clothing, realize_firearm_stats, CharacterSheet, FirearmBarrel, FirearmGrip,
-	FirearmKitSpec, FirearmMesh, FirearmSpec, FirearmStats, FirearmStock, FirearmTriggerBox,
-	Inventory, InventoryItem, ItemRng, STARTER_CLOTHING_COUNT,
+	random_starter_clothing, realize_firearm_stats, CharacterSheet, FirearmMesh, FirearmSpec,
+	FirearmStats, Inventory, InventoryItem, ItemRng, STARTER_CLOTHING_COUNT,
 };
 use crozon_characters::species::braidman::BraidmanConfig;
-use firearms::{BarrelMesh, BodyMesh, FirearmKit, GripMesh, StockMesh, TriggerBoxMesh};
+use firearm_user::kit_from_spec;
+use firearms::FirearmKit;
 
 /// Clothing recipe plus the combat kit assembled from a rolled firearm spec.
 #[derive(Clone, Debug)]
@@ -49,64 +49,11 @@ fn appearance_from_inventory(inventory: &Inventory) -> BraidmanConfig {
 	config
 }
 
-pub(crate) fn kit_from_spec(spec: FirearmSpec) -> FirearmKit {
-	kit_from_parts(spec.kit)
-}
-
-fn kit_from_parts(kit: FirearmKitSpec) -> FirearmKit {
-	FirearmKit {
-		body: body_mesh(kit.body),
-		barrel: barrel_mesh(kit.barrel),
-		trigger_box: trigger_box_mesh(kit.trigger_box),
-		grip: grip_mesh(kit.grip),
-		stock: stock_mesh(kit.stock),
-	}
-}
-
-fn body_mesh(mesh: FirearmMesh) -> BodyMesh {
-	match mesh {
-		FirearmMesh::Bullpup => BodyMesh::Bullpup,
-		FirearmMesh::Silopup => BodyMesh::Silopup,
-		FirearmMesh::Reltor => BodyMesh::Reltor,
-		FirearmMesh::Samsonist => BodyMesh::Samsonist,
-		FirearmMesh::Snailer => BodyMesh::Snailer,
-	}
-}
-
-fn barrel_mesh(mesh: FirearmBarrel) -> BarrelMesh {
-	match mesh {
-		FirearmBarrel::None => BarrelMesh::None,
-		FirearmBarrel::Bullpup => BarrelMesh::Bullpup,
-		FirearmBarrel::Laznard => BarrelMesh::Laznard,
-	}
-}
-
-fn grip_mesh(mesh: FirearmGrip) -> GripMesh {
-	match mesh {
-		FirearmGrip::None => GripMesh::None,
-		FirearmGrip::BumpHandle => GripMesh::BumpHandle,
-	}
-}
-
-fn trigger_box_mesh(mesh: FirearmTriggerBox) -> TriggerBoxMesh {
-	match mesh {
-		FirearmTriggerBox::None => TriggerBoxMesh::None,
-		FirearmTriggerBox::Keelripe => TriggerBoxMesh::Keelripe,
-		FirearmTriggerBox::Paddle => TriggerBoxMesh::Paddle,
-		FirearmTriggerBox::Reltor => TriggerBoxMesh::Reltor,
-	}
-}
-
-fn stock_mesh(mesh: FirearmStock) -> StockMesh {
-	match mesh {
-		FirearmStock::None => StockMesh::None,
-	}
-}
-
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crozon_character_items::{ItemColor, ProjectileKind};
+	use crozon_character_items::{FirearmSight, ItemColor, ProjectileKind};
+	use firearms::{BarrelMesh, BodyMesh, GripMesh, SightMesh, TriggerBoxMesh};
 	use std::collections::BTreeSet;
 
 	#[test]
@@ -123,6 +70,14 @@ mod tests {
 		assert_eq!(kit.body, BodyMesh::Bullpup);
 		assert_eq!(kit.barrel, BarrelMesh::Bullpup);
 		assert_eq!(kit.grip, GripMesh::BumpHandle);
+	}
+
+	#[test]
+	fn kit_mapping_preserves_holorand_sight() {
+		let mut spec = FirearmSpec::from_mesh(FirearmMesh::Bullpup);
+		spec.kit.sight = FirearmSight::Holorand;
+		let kit = kit_from_spec(spec);
+		assert_eq!(kit.sight, SightMesh::Holorand);
 	}
 
 	#[test]

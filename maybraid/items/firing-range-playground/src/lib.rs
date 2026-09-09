@@ -13,7 +13,6 @@ mod les_halles;
 mod loadout;
 mod range;
 mod session;
-mod spec_kit;
 mod ui;
 mod vantage;
 
@@ -48,8 +47,8 @@ use movement_intelligence_richmond::RichmondAvianMovementSurface;
 use movement_realization::MovementRealizationPlugin;
 use npc_intelligence::NpcIntelligencePlugin;
 use player::{
-	spawn_npc_with_hidden_capsule, spawn_npc_with_hull, spawn_player_with_hidden_capsule, Npc,
-	Player, PlayerLook, PlayerPlugin,
+	register_motor_traction_physics, spawn_npc_with_hidden_capsule, spawn_npc_with_hull,
+	spawn_player_with_hidden_capsule, Npc, Player, PlayerLook, PlayerPlugin,
 };
 use player_camera::{spawn_follow_camera, PlayerCameraPlugin};
 use richmond_building_components::{
@@ -66,6 +65,7 @@ pub struct FiringRangePlugin;
 
 impl Plugin for FiringRangePlugin {
 	fn build(&self, app: &mut App) {
+		register_motor_traction_physics(app);
 		app.insert_resource(MovementIntelligenceLimits {
 			max_budget: CandidateBudget { max_candidates: 12, max_steps: 3, horizon: 32.0 },
 			..default()
@@ -76,7 +76,7 @@ impl Plugin for FiringRangePlugin {
 			..default()
 		})
 		.add_plugins(FirearmHostsPlugin);
-		add_firearm_components_host::<spec_kit::RolledFirearm>(app);
+		add_firearm_components_host::<firearm_user::GeneratedFirearm>(app);
 		app.add_plugins(FirearmWeaponsPlugin)
 			.add_plugins(CharacterHostsPlugin)
 			.add_plugins(CharacterControllerPlugin)

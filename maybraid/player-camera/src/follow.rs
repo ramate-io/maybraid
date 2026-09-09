@@ -41,7 +41,8 @@ pub(crate) fn follow_character_camera(
 	let pitch = Quat::from_axis_angle(Vec3::X, controller.pitch);
 	let look_rotation = yaw * pitch;
 
-	let focus_target = if look.first_person { aim.focus.max(controller.focus) } else { 0.0 };
+	let focus_target =
+		if look.first_person { aim.focus.max(controller.focus).max(controller.ads) } else { 0.0 };
 	controller.focus_blend = focus_blend_toward(
 		controller.focus_blend,
 		focus_target,
@@ -92,7 +93,7 @@ fn first_person_pose(
 }
 
 pub fn sync_camera_fov(
-	followers: Query<(), With<CameraFollow>>,
+	followers: Query<&PlayerCameraAim, With<CameraFollow>>,
 	mut cameras: Query<(&CameraController, &FollowCamera, &mut Projection), With<Camera3d>>,
 ) {
 	if followers.is_empty() {
@@ -104,14 +105,24 @@ pub fn sync_camera_fov(
 	let Projection::Perspective(perspective) = projection.as_mut() else {
 		return;
 	};
-	perspective.fov = vertical_fov(controller.pov, controller.focus_blend, follow);
+	let sight_fov = followers.single().ok().and_then(|aim| aim.sight_fov);
+	let optic_zoom = controller.focus > 1e-4;
+	perspective.fov =
+		vertical_fov(controller.pov, controller.focus_blend, follow, sight_fov, optic_zoom);
 }
 
-fn vertical_fov(pov: CameraPov, focus_blend: f32, follow: &FollowCamera) -> f32 {
+fn vertical_fov(
+	pov: CameraPov,
+	focus_blend: f32,
+	follow: &FollowCamera,
+	sight_fov: Option<f32>,
+	optic_zoom: bool,
+) -> f32 {
+	let ads_fov = if optic_zoom { sight_fov.unwrap_or(follow.sight_fov) } else { follow.sight_fov };
 	match pov {
 		CameraPov::ThirdPerson => follow.third_person_fov,
 		CameraPov::FirstPerson => {
-			follow.first_person_fov + (follow.sight_fov - follow.first_person_fov) * focus_blend
+			follow.first_person_fov + (ads_fov - follow.first_person_fov) * focus_blend
 		}
 	}
 }
@@ -188,14 +199,36 @@ mod tests {
 	fn first_person_hipfire_is_wider_than_orbit() {
 		let follow = FollowCamera::default();
 		assert!(
-			vertical_fov(CameraPov::FirstPerson, 0.0, &follow)
-				> vertical_fov(CameraPov::ThirdPerson, 0.0, &follow)
+			vertical_fov(CameraPov::FirstPerson, 0.0, &follow, None, false)
+				> vertical_fov(CameraPov::ThirdPerson, 0.0, &follow, None, false)
 		);
 		assert!(
-			(vertical_fov(CameraPov::FirstPerson, 1.0, &follow) - follow.sight_fov).abs() < 1e-5
+			(vertical_fov(CameraPov::FirstPerson, 1.0, &follow, None, false) - follow.sight_fov)
+				.abs() < 1e-5
 		);
-		let midpoint = vertical_fov(CameraPov::FirstPerson, 0.5, &follow);
+		let midpoint = vertical_fov(CameraPov::FirstPerson, 0.5, &follow, None, true);
 		assert!((midpoint - (follow.first_person_fov + follow.sight_fov) * 0.5).abs() < 1e-5);
+	}
+
+	#[test]
+	fn held_optic_overrides_iron_sight_fov() {
+		let follow = FollowCamera::default();
+		let optic = 18.0_f32.to_radians();
+		assert!(
+			(vertical_fov(CameraPov::FirstPerson, 1.0, &follow, Some(optic), true) - optic).abs()
+				< 1e-5
+		);
+	}
+
+	#[test]
+	fn iron_ads_keeps_base_fov_when_an_optic_is_held() {
+		let follow = FollowCamera::default();
+		let optic = 18.0_f32.to_radians();
+		assert!(
+			(vertical_fov(CameraPov::FirstPerson, 1.0, &follow, Some(optic), false)
+				- follow.sight_fov)
+				.abs() < 1e-5
+		);
 	}
 
 	#[test]

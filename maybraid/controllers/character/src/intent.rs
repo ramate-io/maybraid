@@ -8,6 +8,8 @@ pub enum CharacterIntent {
 	Move(Vec2),
 	Look(Vec2),
 	Focus(f32),
+	/// Cheek-weld ADS with iron-sight FOV. Left bumper / middle mouse.
+	Ads(f32),
 	UseItem(f32),
 	StartSprint,
 	StopSprint,
@@ -27,6 +29,7 @@ impl CharacterIntent {
 			Self::Move(_) => "move",
 			Self::Look(_) => "look",
 			Self::Focus(_) => "focus",
+			Self::Ads(_) => "ads",
 			Self::UseItem(_) => "use-item",
 			Self::StartSprint => "start-sprint",
 			Self::StopSprint => "stop-sprint",

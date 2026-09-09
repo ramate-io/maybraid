@@ -3,9 +3,9 @@
 use bevy::prelude::*;
 use crozon_character_items::{
 	BoltMaterial, ClothingMaterial, ClothingMesh, ClothingStats, FirearmBarrel, FirearmGrip,
-	FirearmKitSpec, FirearmLooks, FirearmMaterial, FirearmMesh, FirearmScales, FirearmSpec,
-	FirearmStats, FirearmStock, FirearmTriggerBox, Inventory, InventoryItem, InventorySlot,
-	ItemColor, WORN_CLOTHING_LIMIT,
+	FirearmKitSpec, FirearmLooks, FirearmMaterial, FirearmMesh, FirearmScales, FirearmSight,
+	FirearmSpec, FirearmStats, FirearmStock, FirearmTriggerBox, Inventory, InventoryItem,
+	InventorySlot, ItemColor, WORN_CLOTHING_LIMIT,
 };
 use crozon_character_persist::{CharacterId, PersistError, SaveRoot};
 use serde::{Deserialize, Serialize};
@@ -108,11 +108,19 @@ struct FirearmKitFile {
 	grip: FirearmGrip,
 	trigger_box: FirearmTriggerBox,
 	stock: FirearmStock,
+	#[serde(default)]
+	sight: FirearmSight,
 }
 
 impl FirearmKitFile {
 	fn from_spec(kit: FirearmKitSpec) -> Self {
-		Self { barrel: kit.barrel, grip: kit.grip, trigger_box: kit.trigger_box, stock: kit.stock }
+		Self {
+			barrel: kit.barrel,
+			grip: kit.grip,
+			trigger_box: kit.trigger_box,
+			stock: kit.stock,
+			sight: kit.sight,
+		}
 	}
 
 	fn into_spec(self, body: FirearmMesh) -> FirearmKitSpec {
@@ -122,6 +130,7 @@ impl FirearmKitFile {
 			grip: self.grip,
 			trigger_box: self.trigger_box,
 			stock: self.stock,
+			sight: self.sight,
 		}
 	}
 }

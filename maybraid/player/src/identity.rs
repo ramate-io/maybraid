@@ -25,6 +25,7 @@ pub struct PlayerLook {
 	pub yaw: f32,
 	pub pitch: f32,
 	pub first_person: bool,
+	/// ADS pose blend (optic or iron). Optic zoom is camera `focus`, not this.
 	pub focus: f32,
 }
 
@@ -33,6 +34,8 @@ pub struct PlayerLook {
 pub struct PlayerCameraAim {
 	pub pose: Option<PlayerCameraPose>,
 	pub focus: f32,
+	/// ADS vertical FOV from the held optic. `None` keeps the follow-camera iron-sight FOV.
+	pub sight_fov: Option<f32>,
 }
 
 #[derive(Clone, Copy, Debug)]

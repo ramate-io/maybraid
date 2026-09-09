@@ -223,6 +223,7 @@ mod tests {
 					pitch: 0.0,
 					pov: CameraPov::ThirdPerson,
 					focus: 0.0,
+					ads: 0.0,
 					focus_blend: 0.0,
 				},
 			))

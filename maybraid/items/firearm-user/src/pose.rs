@@ -71,6 +71,7 @@ where
 			live.fire,
 			live.recoil,
 			RecoilPattern::from_seed(live.recoil_seed),
+			live,
 			FireOnTrigger,
 			WeaponTrigger(false),
 			ProjectileSource(user),

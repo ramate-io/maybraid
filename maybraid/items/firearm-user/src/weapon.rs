@@ -5,6 +5,7 @@ use crozon_character_items::{FireMode, FirearmMesh, FirearmSpec, FirearmStats, P
 use damage::{HitPayload, DEFAULT_HIT};
 use firearms::{
 	BoltSpec, BulletSpec, FireControl, LaserSpec, ProjectileLoad, Weapon, WeaponRecoil,
+	IRON_SIGHT_FOV,
 };
 use std::hash::{Hash, Hasher};
 
@@ -15,7 +16,7 @@ pub const RECOIL_PITCH_PER_UNIT: f32 = 0.02;
 const DEFAULT_CATALOG_RECOIL: f32 = 1.9;
 
 /// Components stamped on a held [`firearms::FirearmRoot`] at spawn.
-#[derive(Clone, Copy, Debug)]
+#[derive(Component, Clone, Copy, Debug)]
 pub struct LiveWeapon {
 	pub weapon: Weapon,
 	pub payload: HitPayload,
@@ -24,6 +25,8 @@ pub struct LiveWeapon {
 	/// Stable noise seed for [`RecoilPattern`]. Hashed from catalog stats, or
 	/// from [`FirearmSpec`] via [`Self::with_weapon_identity`].
 	pub recoil_seed: u64,
+	/// ADS vertical FOV from the rolled optic.
+	pub sight_fov: f32,
 }
 
 impl Default for LiveWeapon {
@@ -34,6 +37,7 @@ impl Default for LiveWeapon {
 			fire: FireControl::auto(),
 			recoil: WeaponRecoil(DEFAULT_CATALOG_RECOIL * RECOIL_PITCH_PER_UNIT),
 			recoil_seed: weapon_noise_seed(&FirearmSpec::from_mesh(FirearmMesh::Bullpup)),
+			sight_fov: IRON_SIGHT_FOV,
 		}
 	}
 }
@@ -79,6 +83,7 @@ pub fn live_weapon_from_stats(stats: FirearmStats, outgoing_damage_bonus: i16) -
 		fire,
 		recoil: WeaponRecoil(stats.recoil * RECOIL_PITCH_PER_UNIT),
 		recoil_seed: weapon_noise_seed(&stats),
+		sight_fov: stats.sight_fov,
 	}
 }
 
@@ -152,6 +157,7 @@ mod tests {
 			recoil: 4.0,
 			damage: 25,
 			weight: 10,
+			sight_fov: IRON_SIGHT_FOV,
 		}
 	}
 
@@ -209,6 +215,7 @@ mod tests {
 			recoil: 0.0,
 			damage: 18,
 			weight: 8,
+			sight_fov: IRON_SIGHT_FOV,
 		};
 		let live = live_weapon_from_stats(stats, 0);
 		let ProjectileLoad::Laser(spec) = live.weapon.load else {
@@ -241,5 +248,13 @@ mod tests {
 		let from_spec = from_stats.with_weapon_identity(&spec);
 		assert_ne!(from_stats.recoil_seed, from_spec.recoil_seed);
 		assert_eq!(from_spec.recoil_seed, weapon_noise_seed(&spec));
+	}
+
+	#[test]
+	fn optic_fov_is_copied_onto_the_live_weapon() {
+		let mut stats = bolt_auto();
+		stats.sight_fov = 18.0_f32.to_radians();
+		let live = live_weapon_from_stats(stats, 0);
+		assert!((live.sight_fov - stats.sight_fov).abs() < 1e-5);
 	}
 }
