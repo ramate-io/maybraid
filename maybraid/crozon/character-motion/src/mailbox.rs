@@ -19,7 +19,10 @@ use crozon_rigs::{
 };
 use intelligence_lod::{IntelligenceLod, IntelligencePriority};
 use malo_animations::{
-	animations::{Idle, Jab, QuadrupedLeap, QuadrupedRun, Tuck, TwoFootedTuckedFlip, UprightLeap},
+	animations::{
+		Idle, Jab, QuadrupedIdle, QuadrupedLeap, QuadrupedRun, Tuck, TwoFootedTuckedFlip,
+		UprightLeap,
+	},
 	Animation, Effects,
 };
 
@@ -579,6 +582,9 @@ fn sample_quadruped(
 			write_bones,
 			write_effects,
 		),
+		AnimClip::Still => {
+			sample_split(&QuadrupedIdle::default(), rig, progress, write_bones, write_effects)
+		}
 		_ => Effects::default(),
 	}
 }
@@ -690,6 +696,18 @@ mod tests {
 		assert!(left.swing.abs() < 0.1);
 		let humerus = rig.pose.get(&RigName::from("humerus.L")).expect("humerus");
 		assert!(humerus.flex.abs() > 1.0);
+	}
+
+	#[test]
+	fn still_samples_idle_on_quadruped() {
+		let mut rig = QuadrupedV0Rig::imported();
+		let effects =
+			sample_quadruped(AnimClip::Still, &mut rig, QuadrupedIdle::graze_peak(), true, true);
+		assert!(effects.r#move.is_none());
+		let neck = rig.pose.get(&RigName::from("neck")).expect("neck");
+		assert!(neck.swing < -0.5);
+		let lumbar = rig.pose.get(&RigName::from("lumbar")).expect("lumbar");
+		assert!(lumbar.flex > 0.1);
 	}
 
 	#[test]

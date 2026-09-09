@@ -40,7 +40,11 @@ pub fn apply_spine<R: QuadrupedRig>(rig: &mut R, back_ridge_swing: f32, lumbar_f
 }
 
 pub fn apply_neck<R: QuadrupedRig>(rig: &mut R, neck_swing: f32) {
+	apply_neck_posed(rig, neck_swing, 0.0);
+}
+
+pub fn apply_neck_posed<R: QuadrupedRig>(rig: &mut R, neck_swing: f32, neck_flex: f32) {
 	let mut neck = rig.neck_pose();
-	neck.neck = rig.articulate_on_rig(neck.neck, neck_swing, 0.0);
+	neck.neck = rig.articulate_on_rig(neck.neck, neck_swing, neck_flex);
 	rig.pose_neck(neck);
 }
