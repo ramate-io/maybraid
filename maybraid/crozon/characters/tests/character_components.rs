@@ -17,6 +17,7 @@ use crozon_characters::{
 		sonyak::{Sonyak, SonyakConfig},
 		spibmom::{Spibmom, SpibmomConfig},
 		topple::{Topple, ToppleConfig},
+		wumbus::{Wumbus, WumbusConfig},
 		ylter::{Yilter, YilterConfig},
 	},
 	BuildPreset, CharacterComponents, CharacterPartSlot, CharacterRecipe, Clothed, HeadCapsule,
@@ -127,6 +128,28 @@ fn custom_and_quadruped_faces_use_face_recipes() {
 	);
 	assert_eq!(
 		name_of(&caole_parts, CharacterPartSlot::Mouth),
+		MaterialId::named(RECIPE_FACE_MOUTH)
+	);
+
+	let wumbus = Wumbus::from_config(&WumbusConfig::default_preview());
+	let wumbus_parts = wumbus.part_nodes_for_level(LodSceneLevel::High).flatten();
+	assert_eq!(
+		name_of(&wumbus_parts, CharacterPartSlot::EyeLeft),
+		MaterialId::named(RECIPE_FACE_EYE)
+	);
+	assert_eq!(
+		name_of(&wumbus_parts, CharacterPartSlot::Mouth),
+		MaterialId::named(RECIPE_FACE_MOUTH)
+	);
+
+	let hars = Hars::from_config(&HarsConfig::default_preview());
+	let hars_parts = hars.part_nodes_for_level(LodSceneLevel::High).flatten();
+	assert_eq!(
+		name_of(&hars_parts, CharacterPartSlot::EyeLeft),
+		MaterialId::named(RECIPE_FACE_EYE)
+	);
+	assert_eq!(
+		name_of(&hars_parts, CharacterPartSlot::Mouth),
 		MaterialId::named(RECIPE_FACE_MOUTH)
 	);
 }

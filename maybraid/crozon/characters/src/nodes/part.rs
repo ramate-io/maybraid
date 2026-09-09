@@ -3,9 +3,7 @@
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::{Component, Transform, Vec3};
 use bevy::scene::prelude::{bsn, template_value, Scene};
-use crozon_character_shaders::{
-	eye_palette, mouth_palette, RECIPE_FACE_EYE, RECIPE_FACE_MOUTH,
-};
+use crozon_character_shaders::{eye_palette, mouth_palette, RECIPE_FACE_EYE, RECIPE_FACE_MOUTH};
 use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
 use lod::SceneChunk;

@@ -6,7 +6,8 @@
 
 use bevy::prelude::*;
 use crozon_character_shaders::{
-	DEFAULT_MOUTH_OPEN_RATE, PUPIL_SHAPE_ROUND, PUPIL_SHAPE_SLIT, RECIPE_FACE_EYE, RECIPE_FACE_MOUTH,
+	DEFAULT_MOUTH_OPEN_RATE, PUPIL_SHAPE_ROUND, PUPIL_SHAPE_SLIT, RECIPE_FACE_EYE,
+	RECIPE_FACE_MOUTH,
 };
 use material_ref::MaterialRef;
 use scene_ref::MirrorAxis;
