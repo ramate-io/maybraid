@@ -39,8 +39,31 @@ pub fn apply_spine<R: QuadrupedRig>(rig: &mut R, back_ridge_swing: f32, lumbar_f
 	rig.pose_spine(spine);
 }
 
+/// Roll the neck about its length (+Y). Flex and pitch stay at rest.
 pub fn apply_neck<R: QuadrupedRig>(rig: &mut R, neck_swing: f32) {
+	apply_neck_axes(rig, neck_swing, 0.0, 0.0);
+}
+
+/// Pose the neck on all three local axes.
+///
+/// Bind bones use [`crozon_rigs::RiggedAxis::DEFAULT`]: local **+Y is along the
+/// bone**. That maps the sampler knobs as:
+///
+/// - `swing` — roll around the neck (Y)
+/// - `flex` — side-to-side (Z)
+/// - `twist` — up / down pitch (X)
+pub fn apply_neck_axes<R: QuadrupedRig>(
+	rig: &mut R,
+	neck_swing: f32,
+	neck_flex: f32,
+	neck_twist: f32,
+) {
 	let mut neck = rig.neck_pose();
-	neck.neck = rig.articulate_on_rig(neck.neck, neck_swing, 0.0);
+	neck.neck = rig.articulate_on_rig_twisted(neck.neck, neck_swing, neck_flex, neck_twist);
 	rig.pose_neck(neck);
+}
+
+/// Roll and side-to-side only. Prefer [`apply_neck_axes`] when the head should nod.
+pub fn apply_neck_posed<R: QuadrupedRig>(rig: &mut R, neck_swing: f32, neck_flex: f32) {
+	apply_neck_axes(rig, neck_swing, neck_flex, 0.0);
 }

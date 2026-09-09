@@ -17,6 +17,7 @@ use crozon_characters::{
 		sonyak::{Sonyak, SonyakConfig},
 		spibmom::{Spibmom, SpibmomConfig},
 		topple::{Topple, ToppleConfig},
+		wumbus::{Wumbus, WumbusConfig},
 		ylter::{Yilter, YilterConfig},
 	},
 	BuildPreset, CharacterComponents, CharacterPartSlot, CharacterRecipe, Clothed, HeadCapsule,
@@ -79,6 +80,78 @@ fn braidman_emits_rigs_and_parts_at_every_band() {
 	let ultra = braidman.part_nodes_for_level(LodSceneLevel::UltraLow);
 	assert_eq!(high_parts.len(), ultra.len());
 	assert!(high_parts.len() >= 8);
+}
+
+#[test]
+fn braidman_eyes_and_mouth_use_face_recipes() {
+	use crozon_character_shaders::{RECIPE_FACE_EYE, RECIPE_FACE_MOUTH};
+	use material_ref::MaterialId;
+
+	let braidman = Braidman::from_config(&BraidmanConfig::default_preview());
+	let parts = braidman.part_nodes_for_level(LodSceneLevel::High).flatten();
+	let name = |slot| {
+		parts
+			.iter()
+			.find(|p| p.slot == slot)
+			.map(|p| p.material.name.clone())
+			.expect("part")
+	};
+	assert_eq!(name(CharacterPartSlot::EyeLeft), MaterialId::named(RECIPE_FACE_EYE));
+	assert_eq!(name(CharacterPartSlot::EyeRight), MaterialId::named(RECIPE_FACE_EYE));
+	assert_eq!(name(CharacterPartSlot::Mouth), MaterialId::named(RECIPE_FACE_MOUTH));
+	assert!(!matches!(name(CharacterPartSlot::HeadMesh), MaterialId::Name(_)));
+}
+
+#[test]
+fn custom_and_quadruped_faces_use_face_recipes() {
+	use crozon_character_shaders::{RECIPE_FACE_EYE, RECIPE_FACE_MOUTH};
+	use material_ref::MaterialId;
+
+	let name_of = |parts: &[PartNode], slot| {
+		parts
+			.iter()
+			.find(|p| p.slot == slot)
+			.map(|p| p.material.name.clone())
+			.expect("part")
+	};
+
+	let dui = crozon_characters::species::dui::Dui::from_config(&DuiConfig::default_preview());
+	let dui_parts = dui.part_nodes_for_level(LodSceneLevel::High).flatten();
+	assert_eq!(name_of(&dui_parts, CharacterPartSlot::EyeLeft), MaterialId::named(RECIPE_FACE_EYE));
+	assert_eq!(name_of(&dui_parts, CharacterPartSlot::Mouth), MaterialId::named(RECIPE_FACE_MOUTH));
+
+	let caole = Caole::from_config(&CaoleConfig::default_preview());
+	let caole_parts = caole.part_nodes_for_level(LodSceneLevel::High).flatten();
+	assert_eq!(
+		name_of(&caole_parts, CharacterPartSlot::EyeLeft),
+		MaterialId::named(RECIPE_FACE_EYE)
+	);
+	assert_eq!(
+		name_of(&caole_parts, CharacterPartSlot::Mouth),
+		MaterialId::named(RECIPE_FACE_MOUTH)
+	);
+
+	let wumbus = Wumbus::from_config(&WumbusConfig::default_preview());
+	let wumbus_parts = wumbus.part_nodes_for_level(LodSceneLevel::High).flatten();
+	assert_eq!(
+		name_of(&wumbus_parts, CharacterPartSlot::EyeLeft),
+		MaterialId::named(RECIPE_FACE_EYE)
+	);
+	assert_eq!(
+		name_of(&wumbus_parts, CharacterPartSlot::Mouth),
+		MaterialId::named(RECIPE_FACE_MOUTH)
+	);
+
+	let hars = Hars::from_config(&HarsConfig::default_preview());
+	let hars_parts = hars.part_nodes_for_level(LodSceneLevel::High).flatten();
+	assert_eq!(
+		name_of(&hars_parts, CharacterPartSlot::EyeLeft),
+		MaterialId::named(RECIPE_FACE_EYE)
+	);
+	assert_eq!(
+		name_of(&hars_parts, CharacterPartSlot::Mouth),
+		MaterialId::named(RECIPE_FACE_MOUTH)
+	);
 }
 
 #[test]

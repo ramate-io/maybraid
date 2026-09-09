@@ -35,7 +35,12 @@ pub struct QuadrupedRunPose<Rig> {
 	pub knee_contracted: f32,
 	pub knee_extended: f32,
 	pub spine_swing: f32,
+	/// Neck roll (swing / Y, around the bone).
 	pub neck_swing: f32,
+	/// Neck side-to-side (flex / Z).
+	pub neck_bow: f32,
+	/// Neck up / down (twist / X).
+	pub neck_pitch: f32,
 	_rig: PhantomData<Rig>,
 }
 
@@ -51,7 +56,9 @@ impl<Rig> Default for QuadrupedRunPose<Rig> {
 			knee_contracted: 2.0,
 			knee_extended: 0.3,
 			spine_swing: 0.08,
-			neck_swing: 0.04,
+			neck_swing: 0.05,
+			neck_bow: 0.08,
+			neck_pitch: 0.07,
 			_rig: PhantomData,
 		}
 	}
@@ -75,6 +82,8 @@ impl<Rig> QuadrupedRunPose<Rig> {
 			hip_swing: template.hip_swing * run.rotation,
 			spine_swing: template.spine_swing * run.rotation,
 			neck_swing: template.neck_swing * run.rotation,
+			neck_bow: template.neck_bow * run.rotation,
+			neck_pitch: template.neck_pitch * run.rotation,
 			knee_extended: template.knee_extended,
 			knee_neutral: template.knee_extended + knee_neutral_delta * stride_scale,
 			knee_contracted: template.knee_extended

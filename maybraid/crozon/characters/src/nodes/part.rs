@@ -3,6 +3,7 @@
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::{Component, Transform, Vec3};
 use bevy::scene::prelude::{bsn, template_value, Scene};
+use crozon_character_shaders::{eye_palette, mouth_palette, RECIPE_FACE_EYE, RECIPE_FACE_MOUTH};
 use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
 use lod::SceneChunk;
@@ -113,9 +114,45 @@ impl PartNode {
 		self
 	}
 
-	/// Solid preview / PBR tint via [`MaterialRef`] palette[0].
+	/// Tint via [`MaterialRef`] palette[0]. Eye and mouth slots claim the face
+	/// recipes so bipeds and quadrupeds share the same shader after stamping.
+	///
+	/// Existing scalars (pupil shape) are kept. Other parts keep their recipe.
 	pub fn with_base_color(self, color: bevy::prelude::Color) -> Self {
-		self.with_material(MaterialRef::default_material().with_palette([color]))
+		let material = match self.slot {
+			CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => {
+				let scalars: Vec<f32> = self.material.scalar_values().to_vec();
+				let mut material =
+					MaterialRef::named(RECIPE_FACE_EYE).with_palette(eye_palette(color));
+				if !scalars.is_empty() {
+					material = material.with_scalars(scalars);
+				}
+				material
+			}
+			CharacterPartSlot::Mouth => {
+				let scalars: Vec<f32> = self.material.scalar_values().to_vec();
+				let mut material =
+					MaterialRef::named(RECIPE_FACE_MOUTH).with_palette(mouth_palette(color));
+				if !scalars.is_empty() {
+					material = material.with_scalars(scalars);
+				}
+				material
+			}
+			_ => self.material.clone().with_palette([color]),
+		};
+		self.with_material(material)
+	}
+
+	/// `0` round, `1` slit. Stored in `face_eye` scalars[0].
+	pub fn with_pupil_shape(self, shape: f32) -> Self {
+		let material = self.material.clone().with_scalars([shape]);
+		self.with_material(material)
+	}
+
+	/// Open-rate multiplier for `face_mouth` scalars[0]. Higher parts more often.
+	pub fn with_mouth_open_rate(self, rate: f32) -> Self {
+		let material = self.material.clone().with_scalars([rate]);
+		self.with_material(material)
 	}
 
 	pub fn mirrored(mut self, axis: MirrorAxis) -> Self {
@@ -182,5 +219,67 @@ impl LodScene for PartNode {
 			maybe_component(socket),
 			maybe_component(skin),
 		)
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use bevy::prelude::Color;
+	use crozon_character_shaders::EYE_PALETTE_PUPIL;
+	use material_ref::MaterialId;
+
+	use super::*;
+
+	#[test]
+	fn with_base_color_keeps_the_recipe_name() {
+		let iris = Color::srgb(0.1, 0.2, 0.3);
+		let part = PartNode::glb(
+			CharacterPartSlot::EyeLeft,
+			"eye",
+			"characters/eyes/humanoid_eye_left.glb",
+			AssetNormalization::IDENTITY,
+		)
+		.with_material(MaterialRef::named("face_eye"))
+		.with_base_color(iris);
+		assert_eq!(part.material.name, MaterialId::named("face_eye"));
+		assert_eq!(part.material.palette.len(), 6);
+		assert_eq!(part.material.palette[0], iris);
+		assert_ne!(part.material.palette[EYE_PALETTE_PUPIL], iris);
+	}
+
+	#[test]
+	fn with_base_color_claims_face_eye_from_slot() {
+		use crozon_character_shaders::PUPIL_SHAPE_SLIT;
+		let iris = Color::srgb(0.1, 0.2, 0.3);
+		let part = PartNode::glb(
+			CharacterPartSlot::EyeLeft,
+			"eye",
+			"characters/eyes/humanoid_eye_left.glb",
+			AssetNormalization::IDENTITY,
+		)
+		.with_pupil_shape(PUPIL_SHAPE_SLIT)
+		.with_base_color(iris);
+		assert_eq!(part.material.name, MaterialId::named("face_eye"));
+		assert_eq!(part.material.scalar_values(), &[PUPIL_SHAPE_SLIT]);
+	}
+
+	#[test]
+	fn with_base_color_packs_mouth_detail() {
+		use crozon_character_shaders::MOUTH_PALETTE_CREASE;
+		let lip = Color::srgb(0.7, 0.3, 0.28);
+		let part = PartNode::glb(
+			CharacterPartSlot::Mouth,
+			"mouth",
+			"characters/mouths/common_mouth.glb",
+			AssetNormalization::IDENTITY,
+		)
+		.with_material(MaterialRef::named("face_mouth"))
+		.with_mouth_open_rate(3.0)
+		.with_base_color(lip);
+		assert_eq!(part.material.name, MaterialId::named("face_mouth"));
+		assert_eq!(part.material.palette.len(), 5);
+		assert_eq!(part.material.palette[0], lip);
+		assert_ne!(part.material.palette[MOUTH_PALETTE_CREASE], lip);
+		assert_eq!(part.material.scalar_values(), &[3.0]);
 	}
 }

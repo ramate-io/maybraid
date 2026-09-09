@@ -22,7 +22,12 @@ pub struct QuadrupedGallop<Rig> {
 	pub front_bound_pitch: f32,
 	/// Cycle fraction between the hind-pair and front-pair strikes.
 	pub phase_separation: f32,
+	/// Neck roll follow of the bound (swing / Y, around the bone).
 	pub neck_follow: f32,
+	/// Neck side-to-side follow of the bound (flex / Z).
+	pub neck_bow: f32,
+	/// Neck up / down follow of the bound (twist / X). Head tucks on gather.
+	pub neck_pitch: f32,
 	_rig: PhantomData<Rig>,
 }
 
@@ -40,7 +45,9 @@ impl<Rig> Default for QuadrupedGallop<Rig> {
 			hind_bound_pitch: 0.12,
 			front_bound_pitch: 0.10,
 			phase_separation: 0.22,
-			neck_follow: 0.5,
+			neck_follow: 0.55,
+			neck_bow: 0.9,
+			neck_pitch: 0.75,
 			_rig: PhantomData,
 		}
 	}
@@ -71,6 +78,8 @@ impl<Rig> QuadrupedGallop<Rig> {
 				+ knee_neutral_delta * stride_scale
 				+ knee_contracted_delta * stride_scale,
 			neck_follow: template.neck_follow,
+			neck_bow: template.neck_bow,
+			neck_pitch: template.neck_pitch,
 			_rig: PhantomData,
 		}
 	}

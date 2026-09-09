@@ -57,6 +57,7 @@ pub use crozon_character_motion::{
 	CharacterMotionPlugin, CharacterMotionSystems, DrawTerrainPitchProbes, MotionPolicy,
 	SuspendAnimation, SuspendTerrainPitch,
 };
+pub use crozon_character_shaders::CrozonCharacterShadersPlugin;
 pub use crozon_rigs::{BoneRotation, BoneScale, ResolvedRigPose, RigPoseLayer};
 pub use hosts::CharacterHostsPlugin;
 pub use layer::{Layer, Layers};

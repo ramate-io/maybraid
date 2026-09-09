@@ -15,6 +15,33 @@ pub fn apply_root<R: HumanoidRig>(rig: &mut R, root_swing: f32) {
 	rig.pose_spine(spine);
 }
 
+pub fn apply_neck<R: HumanoidRig>(
+	rig: &mut R,
+	lower_swing: f32,
+	lower_flex: f32,
+	upper_swing: f32,
+	upper_flex: f32,
+) {
+	apply_neck_twisted(rig, lower_swing, lower_flex, 0.0, upper_swing, upper_flex, 0.0);
+}
+
+pub fn apply_neck_twisted<R: HumanoidRig>(
+	rig: &mut R,
+	lower_swing: f32,
+	lower_flex: f32,
+	lower_twist: f32,
+	upper_swing: f32,
+	upper_flex: f32,
+	upper_twist: f32,
+) {
+	let mut neck = rig.neck_pose();
+	neck.lower_neck =
+		rig.articulate_on_rig_twisted(neck.lower_neck, lower_swing, lower_flex, lower_twist);
+	neck.upper_neck =
+		rig.articulate_on_rig_twisted(neck.upper_neck, upper_swing, upper_flex, upper_twist);
+	rig.pose_neck(neck);
+}
+
 pub fn apply_arm<R: HumanoidRig>(
 	rig: &mut R,
 	side: Side,

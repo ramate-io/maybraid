@@ -46,7 +46,7 @@ impl From<ConceptAnimation> for AnimRef {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crozon_character_motion::clip::LEAP_CYCLE_SPEED;
+	use crozon_character_motion::clip::{IDLE_CYCLE_SPEED, LEAP_CYCLE_SPEED};
 
 	#[test]
 	fn concept_animation_maps_to_anim_ref() {
@@ -54,6 +54,14 @@ mod tests {
 		assert_eq!(walk.clip.id(), AnimId::Walk);
 		assert_eq!(walk.clip, AnimClip::walk());
 		assert_eq!(walk.speed, AnimId::Walk.default_speed());
+	}
+
+	#[test]
+	fn still_maps_to_the_rest_clip() {
+		let still = AnimRef::from(ConceptAnimation::Still);
+		assert_eq!(still.clip.id(), AnimId::Still);
+		assert_eq!(still.clip, AnimClip::still());
+		assert_eq!(still.speed, IDLE_CYCLE_SPEED);
 	}
 
 	#[test]

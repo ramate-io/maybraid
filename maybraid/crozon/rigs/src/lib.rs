@@ -76,11 +76,12 @@ impl Side {
 /// The local axes a rigged bone uses for procedural articulation.
 ///
 /// These are expressed in the same local space as the bone's `Transform.rotation`.
-/// Animation code supplies semantic `swing` and `flex` magnitudes; the rig decides
-/// which concrete local axes those magnitudes use.
+/// Animation code supplies `swing` / `flex` / `twist` magnitudes; the rig
+/// decides which concrete local axes those use.
 ///
-/// `twist_axis` is included for completeness, even though current animations only use
-/// swing and flex.
+/// Local +Y is along the bone ([`articulation::BONE_LENGTH_AXIS`]). On
+/// [`Self::DEFAULT`] that means **swing** is roll about the length, **flex**
+/// is side-to-side, and **twist** is up / down.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct RiggedAxis {
 	pub swing_axis: Vec3,

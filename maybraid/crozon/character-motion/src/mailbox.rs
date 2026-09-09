@@ -22,7 +22,10 @@ use intelligence_lod::{
 	look_applies, IntelligenceFocus, IntelligenceLod, IntelligenceLookFrame, IntelligencePriority,
 };
 use malo_animations::{
-	animations::{Jab, QuadrupedLeap, QuadrupedRun, Tuck, TwoFootedTuckedFlip, UprightLeap},
+	animations::{
+		Idle, Jab, QuadrupedIdle, QuadrupedLeap, QuadrupedRun, Tuck, TwoFootedTuckedFlip,
+		UprightLeap,
+	},
 	Animation, Effects,
 };
 
@@ -367,7 +370,7 @@ pub fn apply_anim_mailbox(
 				character_rig.skeleton,
 				requested,
 				&rest,
-				mailbox.clip_progress,
+				clip_progress(requested, mailbox.clip_progress, entity),
 				write_bones,
 				write_effects,
 				humanoid,
@@ -399,6 +402,13 @@ pub fn apply_anim_mailbox(
 			continue;
 		}
 		write_pose(&mailbox.output, bone_map, &bones, &mut bone_tfs);
+	}
+}
+
+fn clip_progress(clip: AnimClip, clip_progress: f32, entity: Entity) -> f32 {
+	match clip {
+		AnimClip::Still => clip_progress + Idle::phase_from_entity_bits(entity.to_bits()),
+		_ => clip_progress,
 	}
 }
 
@@ -529,7 +539,9 @@ fn sample_humanoid(
 	write_effects: bool,
 ) -> Effects {
 	match clip {
-		AnimClip::Still => Effects::default(),
+		AnimClip::Still => {
+			sample_split(&Idle::default(), rig, progress, write_bones, write_effects)
+		}
 		AnimClip::Walk(walk) => sample_split(&walk, rig, progress, write_bones, write_effects),
 		AnimClip::Run(run) => sample_split(&run, rig, progress, write_bones, write_effects),
 		AnimClip::Jump(params) => {
@@ -605,6 +617,9 @@ fn sample_quadruped(
 			write_bones,
 			write_effects,
 		),
+		AnimClip::Still => {
+			sample_split(&QuadrupedIdle::default(), rig, progress, write_bones, write_effects)
+		}
 		_ => Effects::default(),
 	}
 }
@@ -716,6 +731,44 @@ mod tests {
 		assert!(only.contains(&top));
 		assert!(only.contains(&leftover));
 		assert_eq!(world.get::<AnimMailbox>(leftover).unwrap().apply_skips, 0);
+	}
+
+	#[test]
+	fn still_samples_idle_on_humanoid() {
+		let mut rig = HumanoidV0Rig::imported();
+		for bone in ["shoulder.L", "shoulder.R", "humerus.L", "forearm.L", "lower_neck", "pelvis.L"]
+		{
+			rig.pose.insert(BonePose::new(RigName::from(bone), Transform::IDENTITY));
+		}
+
+		let effects = sample_humanoid(AnimClip::Still, &mut rig, 0.25, true, true);
+		assert!(effects.r#move.is_none());
+		let left = rig.pose.get(&RigName::from("shoulder.L")).expect("left");
+		assert!(left.swing.abs() > 0.0);
+		assert!(left.swing.abs() < 0.1);
+		let humerus = rig.pose.get(&RigName::from("humerus.L")).expect("humerus");
+		assert!(humerus.flex.abs() > 1.0);
+	}
+
+	#[test]
+	fn still_samples_idle_on_quadruped() {
+		let mut rig = QuadrupedV0Rig::imported();
+		let effects =
+			sample_quadruped(AnimClip::Still, &mut rig, QuadrupedIdle::graze_peak(), true, true);
+		assert!(effects.r#move.is_none());
+		let neck = rig.pose.get(&RigName::from("neck")).expect("neck");
+		assert!(neck.flex < -0.5);
+		assert!(neck.twist < -0.3);
+		let lumbar = rig.pose.get(&RigName::from("lumbar")).expect("lumbar");
+		assert!(lumbar.flex > 0.1);
+	}
+
+	#[test]
+	fn still_progress_offsets_by_entity_bits() {
+		let a = Entity::from_bits(1);
+		let b = Entity::from_bits(2);
+		assert_ne!(clip_progress(AnimClip::Still, 0.0, a), clip_progress(AnimClip::Still, 0.0, b));
+		assert_eq!(clip_progress(AnimClip::walk(), 0.3, a), 0.3);
 	}
 
 	#[test]

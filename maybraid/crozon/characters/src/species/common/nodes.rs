@@ -5,6 +5,11 @@
 //! `scale.x = -1` on the socket local.
 
 use bevy::prelude::*;
+use crozon_character_shaders::{
+	DEFAULT_MOUTH_OPEN_RATE, PUPIL_SHAPE_ROUND, PUPIL_SHAPE_SLIT, RECIPE_FACE_EYE,
+	RECIPE_FACE_MOUTH,
+};
+use material_ref::MaterialRef;
 use scene_ref::MirrorAxis;
 
 use crate::{
@@ -155,6 +160,8 @@ pub fn eye_left(eye: EyeMesh) -> PartNode {
 		"eye_socket.L",
 		eye_socket_local(),
 	)
+	.with_material(MaterialRef::named(RECIPE_FACE_EYE))
+	.with_pupil_shape(eye_pupil_shape(eye))
 }
 
 pub fn eye_right(eye: EyeMesh) -> PartNode {
@@ -166,6 +173,15 @@ pub fn eye_right(eye: EyeMesh) -> PartNode {
 		"eye_socket.R",
 		eye_socket_local(),
 	)
+	.with_material(MaterialRef::named(RECIPE_FACE_EYE))
+	.with_pupil_shape(eye_pupil_shape(eye))
+}
+
+fn eye_pupil_shape(eye: EyeMesh) -> f32 {
+	match eye {
+		EyeMesh::Falcon => PUPIL_SHAPE_SLIT,
+		EyeMesh::Standard => PUPIL_SHAPE_ROUND,
+	}
 }
 
 pub fn nose(nose: NoseMesh) -> PartNode {
@@ -188,6 +204,8 @@ pub fn mouth(mouth: MouthMesh) -> PartNode {
 		"mouth_socket",
 		mouth_socket_local(),
 	)
+	.with_material(MaterialRef::named(RECIPE_FACE_MOUTH))
+	.with_mouth_open_rate(DEFAULT_MOUTH_OPEN_RATE)
 }
 
 pub fn ear_left(ear: EarMesh) -> PartNode {

@@ -140,12 +140,15 @@ impl HumanoidV0Rig {
 		let left_leg = self.leg(Side::Left);
 		let right_leg = self.leg(Side::Right);
 		let spine = self.spine();
+		let neck = self.neck();
 
 		vec![
 			spine.root.name,
 			spine.lumbar.name,
 			spine.midback.name,
 			spine.upper_back.name,
+			neck.lower_neck.name,
+			neck.upper_neck.name,
 			left_arm.shoulder.name,
 			right_arm.shoulder.name,
 			left_arm.humerus.name,
@@ -220,6 +223,8 @@ const HUMANOID_V0_PARENT: &[(&str, &str)] = &[
 	("upper_back", "midback"),
 	("shoulder.L", "upper_back"),
 	("shoulder.R", "upper_back"),
+	("lower_neck", "upper_back"),
+	("upper_neck", "lower_neck"),
 	("humerus.L", "shoulder.L"),
 	("humerus.R", "shoulder.R"),
 	("forearm.L", "humerus.L"),
