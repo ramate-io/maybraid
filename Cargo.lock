@@ -2312,6 +2312,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "chico-terrain-detail"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "bevy_math",
+ "lod",
+ "material-ref",
+ "procedural-common",
+ "scene-ref",
+]
+
+[[package]]
 name = "chico-vegetation-components"
 version = "0.0.1"
 dependencies = [
@@ -2333,6 +2346,7 @@ dependencies = [
  "chico-bumpout",
  "chico-forests",
  "chico-groves",
+ "chico-terrain-detail",
  "chico-vegetation-components",
  "chico-vegetation-shaders",
  "clap",

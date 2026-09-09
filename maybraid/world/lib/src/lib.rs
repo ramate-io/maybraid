@@ -1,4 +1,5 @@
-//! Assembled world model: Durham terrain, streamed forest, urbanization, sky dome.
+//! Assembled world model: Durham terrain, streamed forest, rock formations,
+//! urbanization, sky dome.
 //!
 //! Character mode is the default. Forest grove fill is 1 km present / 3 km
 //! selection generate. Canopy bump-outs occupy the 1–5 km present keep and
@@ -127,6 +128,7 @@ impl Plugin for WorldPlugin {
 				config: VegetationPlaygroundConfig::world_defaults(),
 				commands: false,
 				register_forest_lod: false,
+				register_terrain_detail_lod: true,
 				register_bump_out_lod: false,
 				register_camera: false,
 				register_terrain_pitch: false,
