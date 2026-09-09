@@ -22,7 +22,7 @@ pub use id::{ThreatGroupId, ThreatId};
 pub use knowledge::{
 	KnownThreat, ThreatDiscoveryPolicy, ThreatIntelligenceUser, ThreatKnowledge, ThreatObservation,
 };
-pub use plugin::{ThreatIntelligencePlugin, ThreatSystems};
+pub use plugin::{ThreatDiscoverLimits, ThreatIntelligencePlugin, ThreatSystems};
 pub use registry::{ThreatRecord, ThreatRegistry};
 pub use source::ThreatSource;
 pub use subject::ThreatSubject;

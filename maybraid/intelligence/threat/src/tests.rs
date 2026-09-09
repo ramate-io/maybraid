@@ -1,10 +1,11 @@
 use bevy::ecs::system::RunSystemOnce;
 use bevy::prelude::*;
+use intelligence_lod::{IntelligenceBand, IntelligenceLod, IntelligencePriority};
 use spotting_intelligence::SpottingUser;
 
 use crate::{
-	AffiliationStrength, Affiliations, ThreatDiscoveryPolicy, ThreatGroupId, ThreatId,
-	ThreatIntelligencePlugin, ThreatIntelligenceUser, ThreatKnowledge, ThreatRecord,
+	AffiliationStrength, Affiliations, ThreatDiscoverLimits, ThreatDiscoveryPolicy, ThreatGroupId,
+	ThreatId, ThreatIntelligencePlugin, ThreatIntelligenceUser, ThreatKnowledge, ThreatRecord,
 	ThreatRegistry, ThreatSource, ThreatSubject,
 };
 
@@ -200,5 +201,318 @@ fn exported_threat_hint_is_removed_with_knowledge() -> Result<(), bevy::ecs::sys
 	assert!(world
 		.get::<SpottingUser>(user)
 		.is_some_and(|spotting| !spotting.hints.contains_key(&threat)));
+	Ok(())
+}
+
+fn discover_app() -> App {
+	let mut app = App::new();
+	app.add_plugins((MinimalPlugins, ThreatIntelligencePlugin));
+	app
+}
+
+fn short_retention_user() -> ThreatIntelligenceUser {
+	ThreatIntelligenceUser::new(ThreatDiscoveryPolicy { retention_secs: 1.0, ..default() })
+}
+
+fn spawn_observer(
+	app: &mut App,
+	id: ThreatId,
+	user: ThreatIntelligenceUser,
+	lod: IntelligenceLod,
+) -> Entity {
+	app.world_mut()
+		.spawn((
+			ThreatSubject::new(id),
+			ffa_affiliations(id),
+			user,
+			ThreatKnowledge::default(),
+			GlobalTransform::default(),
+			lod,
+		))
+		.id()
+}
+
+fn spawn_subject(app: &mut App, id: ThreatId, at: Vec3, lod: Option<IntelligenceLod>) -> Entity {
+	let mut entity = app.world_mut().spawn((
+		ThreatSubject::new(id),
+		ffa_affiliations(id),
+		GlobalTransform::from_translation(at),
+	));
+	if let Some(lod) = lod {
+		entity.insert(lod);
+	}
+	entity.id()
+}
+
+#[test]
+fn far_skips_scan_unless_near_takes_the_drain() -> anyhow::Result<()> {
+	let mut app = discover_app();
+	app.insert_resource(ThreatDiscoverLimits { max_scans_per_tick: 1 });
+	let other_id = ThreatId(2);
+	spawn_subject(&mut app, other_id, Vec3::X, None);
+	let far = spawn_observer(
+		&mut app,
+		ThreatId(1),
+		ThreatIntelligenceUser::default(),
+		IntelligenceLod { band: IntelligenceBand::Far, skips: 0 },
+	);
+	let near = spawn_observer(
+		&mut app,
+		ThreatId(3),
+		ThreatIntelligenceUser::default(),
+		IntelligenceLod::missing(),
+	);
+	app.world_mut().resource_mut::<IntelligencePriority>().rank.insert(near, 0);
+	app.world_mut().resource_mut::<IntelligencePriority>().rank.insert(far, 1);
+
+	app.update();
+
+	anyhow::ensure!(app
+		.world()
+		.get::<ThreatKnowledge>(near)
+		.is_some_and(|knowledge| knowledge.get(other_id).is_some()));
+	anyhow::ensure!(app
+		.world()
+		.get::<ThreatKnowledge>(far)
+		.is_some_and(|knowledge| knowledge.get(other_id).is_none()));
+	anyhow::ensure!(app
+		.world()
+		.get::<ThreatIntelligenceUser>(far)
+		.is_some_and(|user| user.next_scan_at == 0.0));
+	Ok(())
+}
+
+#[test]
+fn far_scan_still_runs_at_fairness_cap() -> anyhow::Result<()> {
+	let mut app = discover_app();
+	app.insert_resource(ThreatDiscoverLimits { max_scans_per_tick: 1 });
+	let other_id = ThreatId(2);
+	spawn_subject(&mut app, other_id, Vec3::X, None);
+	let far = spawn_observer(
+		&mut app,
+		ThreatId(1),
+		ThreatIntelligenceUser::default(),
+		IntelligenceLod { band: IntelligenceBand::Far, skips: IntelligenceLod::FAIRNESS_CAP },
+	);
+
+	app.update();
+
+	anyhow::ensure!(app
+		.world()
+		.get::<ThreatKnowledge>(far)
+		.is_some_and(|knowledge| knowledge.get(other_id).is_some()));
+	anyhow::ensure!(app.world().get::<IntelligenceLod>(far).is_some_and(|lod| lod.skips == 0));
+	Ok(())
+}
+
+#[test]
+fn far_skip_does_not_reset_skips() -> anyhow::Result<()> {
+	let mut app = discover_app();
+	let far = spawn_observer(
+		&mut app,
+		ThreatId(1),
+		ThreatIntelligenceUser::default(),
+		IntelligenceLod { band: IntelligenceBand::Far, skips: 3 },
+	);
+
+	app.update();
+
+	anyhow::ensure!(app.world().get::<IntelligenceLod>(far).is_some_and(|lod| lod.skips == 3));
+	anyhow::ensure!(app
+		.world()
+		.get::<ThreatIntelligenceUser>(far)
+		.is_some_and(|user| user.next_scan_at == 0.0));
+	Ok(())
+}
+
+#[test]
+fn maintain_still_runs_on_far_we_do_not_scan() -> anyhow::Result<()> {
+	let mut app = discover_app();
+	app.insert_resource(ThreatDiscoverLimits { max_scans_per_tick: 1 });
+	let stale_id = ThreatId(9);
+	let stale_entity = app.world_mut().spawn_empty().id();
+	let mut far_knowledge = ThreatKnowledge::default();
+	far_knowledge.observe(
+		&ThreatRecord {
+			id: stale_id,
+			entity: stale_entity,
+			position: Vec3::X,
+			salience: 1.0,
+			affiliations: ffa_affiliations(stale_id),
+		},
+		&ffa_affiliations(ThreatId(1)),
+		ThreatSource::LOCAL_SCAN,
+		1.0,
+		-4.0,
+		0.2,
+	);
+	let far = app
+		.world_mut()
+		.spawn((
+			ThreatSubject::new(ThreatId(1)),
+			ffa_affiliations(ThreatId(1)),
+			short_retention_user(),
+			far_knowledge,
+			GlobalTransform::default(),
+			IntelligenceLod { band: IntelligenceBand::Far, skips: 0 },
+		))
+		.id();
+	let near = spawn_observer(
+		&mut app,
+		ThreatId(3),
+		ThreatIntelligenceUser::default(),
+		IntelligenceLod::missing(),
+	);
+	app.world_mut().resource_mut::<IntelligencePriority>().rank.insert(near, 0);
+	app.world_mut().resource_mut::<IntelligencePriority>().rank.insert(far, 1);
+
+	app.update();
+
+	anyhow::ensure!(app
+		.world()
+		.get::<ThreatKnowledge>(far)
+		.is_some_and(|knowledge| knowledge.get(stale_id).is_none()));
+	Ok(())
+}
+
+#[test]
+fn forget_does_not_run_every_frame_on_unscanned_far() -> anyhow::Result<()> {
+	let mut app = discover_app();
+	app.insert_resource(ThreatDiscoverLimits { max_scans_per_tick: 1 });
+	let far = spawn_observer(
+		&mut app,
+		ThreatId(1),
+		short_retention_user(),
+		IntelligenceLod { band: IntelligenceBand::Far, skips: 0 },
+	);
+	let near = spawn_observer(
+		&mut app,
+		ThreatId(3),
+		ThreatIntelligenceUser::default(),
+		IntelligenceLod::missing(),
+	);
+	app.world_mut().resource_mut::<IntelligencePriority>().rank.insert(near, 0);
+	app.world_mut().resource_mut::<IntelligencePriority>().rank.insert(far, 1);
+	app.update();
+
+	let stale_id = ThreatId(11);
+	let stale_entity = app.world_mut().spawn_empty().id();
+	app.world_mut().get_mut::<ThreatKnowledge>(far).expect("far knowledge").observe(
+		&ThreatRecord {
+			id: stale_id,
+			entity: stale_entity,
+			position: Vec3::X,
+			salience: 1.0,
+			affiliations: ffa_affiliations(stale_id),
+		},
+		&ffa_affiliations(ThreatId(1)),
+		ThreatSource::LOCAL_SCAN,
+		1.0,
+		-4.0,
+		0.2,
+	);
+	app.update();
+	anyhow::ensure!(app
+		.world()
+		.get::<ThreatKnowledge>(far)
+		.is_some_and(|knowledge| knowledge.get(stale_id).is_some()));
+
+	app.world_mut()
+		.get_mut::<ThreatIntelligenceUser>(far)
+		.expect("far user")
+		.next_forget_at = 0.0;
+	app.update();
+	anyhow::ensure!(app
+		.world()
+		.get::<ThreatKnowledge>(far)
+		.is_some_and(|knowledge| knowledge.get(stale_id).is_none()));
+	Ok(())
+}
+
+#[test]
+fn far_translation_under_quantum_does_not_reindex() -> anyhow::Result<()> {
+	let mut app = discover_app();
+	let subject = spawn_subject(
+		&mut app,
+		ThreatId(1),
+		Vec3::ZERO,
+		Some(IntelligenceLod { band: IntelligenceBand::Far, skips: 0 }),
+	);
+	app.update();
+	let first = app
+		.world()
+		.resource::<ThreatRegistry>()
+		.get_entity(subject)
+		.map(|record| record.position);
+	anyhow::ensure!(first == Some(Vec3::ZERO));
+
+	*app.world_mut().get_mut::<GlobalTransform>(subject).expect("subject transform") =
+		GlobalTransform::from_translation(Vec3::X * 8.0);
+	app.update();
+	let held = app
+		.world()
+		.resource::<ThreatRegistry>()
+		.get_entity(subject)
+		.map(|record| record.position);
+	anyhow::ensure!(held == Some(Vec3::ZERO));
+
+	*app.world_mut().get_mut::<GlobalTransform>(subject).expect("subject transform") =
+		GlobalTransform::from_translation(Vec3::X * 20.0);
+	app.update();
+	let moved = app
+		.world()
+		.resource::<ThreatRegistry>()
+		.get_entity(subject)
+		.map(|record| record.position);
+	anyhow::ensure!(moved == Some(Vec3::X * 20.0));
+	Ok(())
+}
+
+#[test]
+fn identity_change_reindexes_even_under_move_quantum() -> anyhow::Result<()> {
+	let mut app = discover_app();
+	let subject = spawn_subject(
+		&mut app,
+		ThreatId(1),
+		Vec3::ZERO,
+		Some(IntelligenceLod { band: IntelligenceBand::Far, skips: 0 }),
+	);
+	app.update();
+
+	*app.world_mut().get_mut::<GlobalTransform>(subject).expect("subject transform") =
+		GlobalTransform::from_translation(Vec3::X);
+	app.world_mut().get_mut::<ThreatSubject>(subject).expect("subject").salience = 4.0;
+	app.update();
+
+	let record = app.world().resource::<ThreatRegistry>().get_entity(subject);
+	anyhow::ensure!(record.is_some_and(|record| {
+		record.position == Vec3::X && (record.salience - 4.0).abs() < 1e-5
+	}));
+	Ok(())
+}
+
+#[test]
+fn missing_lod_uses_near_move_quantum() -> anyhow::Result<()> {
+	let mut app = discover_app();
+	let subject = spawn_subject(&mut app, ThreatId(1), Vec3::ZERO, None);
+	app.update();
+
+	*app.world_mut().get_mut::<GlobalTransform>(subject).expect("subject transform") =
+		GlobalTransform::from_translation(Vec3::X * 0.5);
+	app.update();
+	anyhow::ensure!(app
+		.world()
+		.resource::<ThreatRegistry>()
+		.get_entity(subject)
+		.is_some_and(|record| record.position == Vec3::ZERO));
+
+	*app.world_mut().get_mut::<GlobalTransform>(subject).expect("subject transform") =
+		GlobalTransform::from_translation(Vec3::X * 2.0);
+	app.update();
+	anyhow::ensure!(app
+		.world()
+		.resource::<ThreatRegistry>()
+		.get_entity(subject)
+		.is_some_and(|record| record.position == Vec3::X * 2.0));
 	Ok(())
 }

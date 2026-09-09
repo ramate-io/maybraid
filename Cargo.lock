@@ -2836,6 +2836,7 @@ dependencies = [
  "bevy",
  "crozon-rigs",
  "ground",
+ "intelligence-lod",
  "lod",
  "malo-animations",
  "rigs",
@@ -5999,6 +6000,7 @@ dependencies = [
  "anyhow",
  "bevy",
  "gimme-core",
+ "intelligence-lod",
  "movement-intelligence",
  "routing-intelligence",
 ]
@@ -7181,6 +7183,7 @@ dependencies = [
  "anyhow",
  "bevy",
  "gimme-core",
+ "intelligence-lod",
  "spotting-intelligence",
 ]
 

@@ -68,10 +68,9 @@ pub fn missing_landmark_bones<'a>(map: &BoneMap, landmarks: &'a [&'a str]) -> Ve
 /// Rebuild a rig's [`BoneMap`] from named descendants, stopping at nested
 /// [`AssemblyHost`]s (nested rigs and parts).
 ///
-/// Walks only when the map is empty, landmarks are still missing, or
-/// [`Children`] / [`Name`] changed under that rig. High fulfill can add named
-/// bones after the first walk; missing landmarks stay dirty so a later system
-/// in the same `Update` still sees a ready map once children exist.
+/// Walks only when [`Children`] / [`Name`] changed under that rig. Incomplete
+/// landmarks are not a perpetual dirty — High fulfill adds named bones as
+/// children, which already marks the owning root.
 pub fn build_bone_maps(
 	mut maps: Query<&mut BoneMap, With<RigRoot>>,
 	roots: Query<(Entity, &Children, &RigRoot), With<BoneMap>>,
@@ -83,14 +82,6 @@ pub fn build_bone_maps(
 	changed_names: Query<Entity, Changed<Name>>,
 ) {
 	let mut dirty = HashSet::new();
-	for (entity, _, root) in &roots {
-		let Ok(map) = maps.get(entity) else {
-			continue;
-		};
-		if map.by_name.is_empty() || !bone_map_ready(&map, root.landmarks) {
-			dirty.insert(entity);
-		}
-	}
 	for entity in changed_children.iter().chain(changed_names.iter()) {
 		if let Some(rig) = owning_rig_root(entity, &child_of, &roots, &hosts) {
 			dirty.insert(rig);
@@ -224,6 +215,19 @@ mod tests {
 		spawn_named_child(app.world_mut(), rig, "pelvis");
 		app.update();
 		assert!(bone_map_ready(map_of(app.world(), rig), LANDMARKS));
+
+		insert_sentinel(app.world_mut(), rig);
+		app.update();
+		assert!(has_sentinel(app.world(), rig));
+	}
+
+	#[test]
+	fn unready_map_is_not_rebuilt_while_the_tree_is_quiet() {
+		let mut app = app();
+		let rig = spawn_rig(app.world_mut(), LANDMARKS);
+		spawn_named_child(app.world_mut(), rig, "Scene");
+		app.update();
+		assert!(!bone_map_ready(map_of(app.world(), rig), LANDMARKS));
 
 		insert_sentinel(app.world_mut(), rig);
 		app.update();

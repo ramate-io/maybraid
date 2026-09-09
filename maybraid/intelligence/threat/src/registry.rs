@@ -93,6 +93,10 @@ impl ThreatRegistry {
 		self.records.get(&id)
 	}
 
+	pub fn get_entity(&self, entity: Entity) -> Option<&ThreatRecord> {
+		self.by_entity.get(&entity).and_then(|id| self.records.get(id))
+	}
+
 	pub fn local(&self, center: Vec3, radius: f32) -> Vec<ThreatRecord> {
 		if !center.is_finite() || !radius.is_finite() {
 			return Vec::new();

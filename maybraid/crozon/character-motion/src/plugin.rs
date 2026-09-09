@@ -2,8 +2,13 @@
 
 use bevy::prelude::*;
 
+use intelligence_lod::IntelligencePriority;
+
 use crate::elevation::{draw_terrain_pitch_probes, DrawTerrainPitchProbes};
-use crate::mailbox::{apply_anim_mailbox, prepare_anim_mailbox, tick_anim_mailbox};
+use crate::mailbox::{
+	apply_anim_mailbox, prepare_anim_mailbox, select_mailbox_applies, tick_anim_mailbox,
+	MailboxApplyLimits, MailboxApplySet,
+};
 use crate::sync::sync_motion_markers;
 
 /// Per-frame articulation sets. Recipes schedule structural pose **before**
@@ -27,6 +32,9 @@ pub struct CharacterMotionPlugin;
 impl Plugin for CharacterMotionPlugin {
 	fn build(&self, app: &mut App) {
 		app.init_resource::<DrawTerrainPitchProbes>()
+			.init_resource::<IntelligencePriority>()
+			.init_resource::<MailboxApplyLimits>()
+			.init_resource::<MailboxApplySet>()
 			.configure_sets(
 				Update,
 				CharacterMotionSystems::Elevation.after(CharacterMotionSystems::Anim),
@@ -36,7 +44,8 @@ impl Plugin for CharacterMotionPlugin {
 				(
 					sync_motion_markers,
 					prepare_anim_mailbox.after(sync_motion_markers),
-					tick_anim_mailbox.after(prepare_anim_mailbox),
+					select_mailbox_applies.after(prepare_anim_mailbox),
+					tick_anim_mailbox.after(select_mailbox_applies),
 					apply_anim_mailbox.after(tick_anim_mailbox),
 				)
 					.in_set(CharacterMotionSystems::Anim),

@@ -191,12 +191,18 @@ impl ThreatKnowledge {
 pub struct ThreatIntelligenceUser {
 	pub policy: ThreatDiscoveryPolicy,
 	pub(crate) next_scan_at: f32,
+	pub(crate) next_forget_at: f32,
 	pub(crate) sample_cursor: usize,
 }
 
 impl Default for ThreatIntelligenceUser {
 	fn default() -> Self {
-		Self { policy: ThreatDiscoveryPolicy::default(), next_scan_at: 0.0, sample_cursor: 0 }
+		Self {
+			policy: ThreatDiscoveryPolicy::default(),
+			next_scan_at: 0.0,
+			next_forget_at: 0.0,
+			sample_cursor: 0,
+		}
 	}
 }
 

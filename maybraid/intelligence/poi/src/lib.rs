@@ -30,7 +30,7 @@ pub use knowledge::{KnownPoi, PoiIntelligenceUser, PoiKnowledge, PoiObservation}
 pub use marker::{GlobalPoi, LocalPoi, Poi, MAX_POI_ARRIVAL_RADIUS};
 pub use nearby::{NearbyChoice, NearbyFallback, NearbyQuery, DEFAULT_NEARBY_RADIUS};
 pub use place::{place_nearby, place_nearby_among, ArrivalDisk, NearbyPlace, AGENT_SEPARATION};
-pub use plugin::{PoiIntelligencePlugin, PoiSystems};
+pub use plugin::{PoiDiscoverLimits, PoiIntelligencePlugin, PoiSystems};
 pub use policy::{PoiInterest, PoiInterests, PoiLearningPolicy, PoiVisitPolicy};
 pub use registry::{PoiRecord, PoiRegistry};
 pub use source::PoiSource;
