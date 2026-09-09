@@ -117,8 +117,8 @@ impl PartNode {
 	/// Tint via [`MaterialRef`] palette[0]. Keeps the existing recipe name
 	/// so face / clothing parts stay on their shader after color stamping.
 	///
-	/// `face_eye` also packs pupil / sclera / highlight / limbus so the shader
-	/// can paint iris detail from the same stamp.
+	/// `face_eye` also packs pupil / sclera / highlight / limbus / lid so the
+	/// shader can paint iris detail and a rest lid from the same stamp.
 	pub fn with_base_color(self, color: bevy::prelude::Color) -> Self {
 		let material = if self.material.name == MaterialId::named(RECIPE_FACE_EYE) {
 			self.material.clone().with_palette(eye_palette(color))
@@ -215,7 +215,7 @@ mod tests {
 		.with_material(MaterialRef::named("face_eye"))
 		.with_base_color(iris);
 		assert_eq!(part.material.name, MaterialId::named("face_eye"));
-		assert_eq!(part.material.palette.len(), 5);
+		assert_eq!(part.material.palette.len(), 6);
 		assert_eq!(part.material.palette[0], iris);
 		assert_ne!(part.material.palette[EYE_PALETTE_PUPIL], iris);
 	}

@@ -1,7 +1,7 @@
-//! Face [`Material`] — blink squash, painted iris / pupil, and millimetre mouth idle.
+//! Face [`Material`] — painted iris / lid wrap blink, and millimetre mouth idle.
 //!
 //! Phase is `globals.time` + instance seed. No mailbox. No blendshapes.
-//! `face_eye` palette: iris, pupil, sclera, catchlight, limbus.
+//! `face_eye` palette: iris, pupil, sclera, catchlight, limbus, lid.
 
 use bevy::{
 	asset::embedded_asset,
@@ -25,19 +25,20 @@ pub const RECIPE_FACE_MOUTH: &str = "face_mouth";
 pub const KIND_EYE: u32 = 0;
 pub const KIND_MOUTH: u32 = 1;
 
-/// `face_eye` palette: iris, pupil, sclera, catchlight, limbus.
+/// `face_eye` palette: iris, pupil, sclera, catchlight, limbus, lid.
 pub const EYE_PALETTE_IRIS: usize = 0;
 pub const EYE_PALETTE_PUPIL: usize = 1;
 pub const EYE_PALETTE_SCLERA: usize = 2;
 pub const EYE_PALETTE_HIGHLIGHT: usize = 3;
 pub const EYE_PALETTE_LIMBUS: usize = 4;
-const EYE_PALETTE_DETAIL_SLOTS: usize = 5;
+pub const EYE_PALETTE_LID: usize = 5;
+const EYE_PALETTE_DETAIL_SLOTS: usize = 6;
 
 const SCALAR_VEC4S: usize = MATERIAL_SCALAR_FLOATS / 4;
 const DEFAULT_EYE_COLOR: Vec4 = Vec4::new(0.22, 0.16, 0.12, 1.0);
 const DEFAULT_MOUTH_COLOR: Vec4 = Vec4::new(0.62, 0.32, 0.30, 1.0);
 
-/// Species eye color as iris, plus derived pupil / sclera / highlight / limbus.
+/// Species eye color as iris, plus derived pupil / sclera / highlight / limbus / lid.
 pub fn eye_palette(iris: Color) -> [Color; EYE_PALETTE_DETAIL_SLOTS] {
 	let mut colors = derived_eye_palette(linear_vec4(iris))
 		.map(|color| Color::linear_rgba(color.x, color.y, color.z, color.w));
@@ -58,6 +59,8 @@ fn derived_eye_palette(iris: Vec4) -> [Vec4; EYE_PALETTE_DETAIL_SLOTS] {
 		(Vec3::new(0.93, 0.91, 0.88) + rgb * 0.045).extend(1.0),
 		Vec4::new(0.98, 0.99, 0.97, 1.0),
 		(rgb * Vec3::new(0.38, 0.32, 0.28)).extend(1.0),
+		// Warm skin, not an iris stain — lids should not pick up eye color.
+		Vec4::new(0.72, 0.52, 0.44, 1.0),
 	]
 }
 
@@ -294,6 +297,17 @@ fn smoothstep(t: f32) -> f32 {
 	t * t * (3.0 - 2.0 * t)
 }
 
+/// `0` = globe, `1` = lid. Almond aperture; blink grows lids toward the midline.
+pub fn lid_wrap(xy: Vec2, blink: f32) -> f32 {
+	let blink = blink.clamp(0.0, 1.0);
+	let taper = (1.0 - (xy.x / 0.52).powi(2)).max(0.0).sqrt();
+	let upper_edge = (0.15 * (1.0 - blink) - 0.06 * blink) * taper;
+	let lower_edge = (0.30 * (1.0 - blink) - 0.06 * blink) * taper;
+	let upper = smoothstep((xy.y - upper_edge) / 0.04);
+	let lower = smoothstep((-xy.y - lower_edge) / 0.04);
+	upper.max(lower)
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -309,6 +323,11 @@ mod tests {
 		let iris = eye.params.colors[EYE_PALETTE_IRIS];
 		assert!(pupil.x + pupil.y + pupil.z < (iris.x + iris.y + iris.z) * 0.2);
 		assert!(eye.params.colors[EYE_PALETTE_SCLERA].x > 0.85);
+		assert!(eye.params.colors[EYE_PALETTE_LID].x > 0.5);
+		assert!(
+			(eye.params.colors[EYE_PALETTE_LID].x - eye.params.colors[EYE_PALETTE_IRIS].x).abs()
+				> 0.2
+		);
 
 		let explicit_pupil = FaceShaderMaterial::from_material_ref(
 			&MaterialRef::named(RECIPE_FACE_EYE)
@@ -379,5 +398,12 @@ mod tests {
 		assert!(light > 10, "expected mixed light blinks, light={light}");
 		assert!(full > 0, "expected occasional full blinks");
 		assert!(full < light, "full blinks should be the minority");
+	}
+
+	#[test]
+	fn lid_wrap_hoods_rest_and_covers_on_full_blink() {
+		assert!(lid_wrap(Vec2::new(0.0, 0.0), 0.0) < 0.1, "pupil stays open at rest");
+		assert!(lid_wrap(Vec2::new(0.0, 0.42), 0.0) > 0.9, "upper sclera is lid at rest");
+		assert!(lid_wrap(Vec2::new(0.0, 0.0), 1.0) > 0.9, "full blink covers the globe");
 	}
 }

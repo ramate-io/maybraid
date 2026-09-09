@@ -1,5 +1,5 @@
 //---------------------------------------------------------
-// Crozon face: designed blink squash + millimetre mouth idle.
+// Crozon face: painted lid wrap + millimetre mouth idle.
 // Kind: 0 eye, 1 mouth. Phase = globals.time + instance seed.
 //---------------------------------------------------------
 
@@ -117,6 +117,16 @@ fn disk_mask(r: f32, radius: f32, feather: f32) -> f32 {
     return saturate((radius - r) / max(feather, 1e-4));
 }
 
+/// `0` = globe, `1` = lid. Almond aperture; blink grows lids toward the midline.
+fn lid_wrap(xy: vec2<f32>, blink: f32) -> f32 {
+    let taper = sqrt(saturate(1.0 - (xy.x / 0.52) * (xy.x / 0.52)));
+    let upper_edge = (0.15 * (1.0 - blink) - 0.06 * blink) * taper;
+    let lower_edge = (0.30 * (1.0 - blink) - 0.06 * blink) * taper;
+    let upper = face_smoothstep((xy.y - upper_edge) / 0.04);
+    let lower = face_smoothstep((-xy.y - lower_edge) / 0.04);
+    return max(upper, lower);
+}
+
 /// Authored eyes face +Z; iris is an XY disk around the origin (~0.55 radius).
 fn eye_look(local_pos: vec3<f32>, blink: f32) -> vec3<f32> {
     let iris = material.colors[0].xyz;
@@ -124,6 +134,7 @@ fn eye_look(local_pos: vec3<f32>, blink: f32) -> vec3<f32> {
     let sclera = material.colors[2].xyz;
     let highlight = material.colors[3].xyz;
     let limbus = material.colors[4].xyz;
+    let lid = material.colors[5].xyz;
 
     let q = local_pos.xy;
     let r = length(q);
@@ -136,10 +147,14 @@ fn eye_look(local_pos: vec3<f32>, blink: f32) -> vec3<f32> {
     tint = mix(tint, iris_col, disk_mask(r, 0.36, 0.03));
     tint = mix(tint, pupil, disk_mask(r, 0.14, 0.02));
 
+    let lid_m = lid_wrap(q, blink);
+    let crease = lid_m * (1.0 - lid_m) * 2.0;
+    let lid_col = mix(lid, lid * vec3<f32>(0.72, 0.62, 0.58), crease);
+    let open = 1.0 - lid_m;
     let catch_a = disk_mask(length(q - vec2<f32>(-0.07, 0.09)), 0.055, 0.02);
     let catch_b = disk_mask(length(q - vec2<f32>(0.06, -0.04)), 0.024, 0.012);
-    tint = mix(tint, highlight, (catch_a * 0.85 + catch_b * 0.45) * (1.0 - blink));
-    tint = mix(tint, tint * vec3<f32>(0.35, 0.28, 0.26), blink);
+    tint = mix(tint, highlight, (catch_a * 0.85 + catch_b * 0.45) * open);
+    tint = mix(tint, lid_col, lid_m);
     return tint;
 }
 
@@ -186,20 +201,14 @@ fn vertex(vertex_no_morph: Vertex) -> FaceVertexOutput {
 
     let mesh_world_from_local = mesh_functions::get_world_from_local(vertex_no_morph.instance_index);
     let seed = face_seed(vertex_no_morph.instance_index, mesh_world_from_local);
-    let local = vertex.position;
     var blink = 0.0;
     if material.kind == KIND_EYE {
         blink = blink_envelope(globals.time, seed);
-        let y_scale = mix(1.0, 0.08, blink);
-        vertex.position.y *= y_scale;
-#ifdef VERTEX_NORMALS
-        vertex.normal.y *= mix(1.0, 4.0, blink);
-#endif
     } else {
         vertex.position += mouth_idle(globals.time, seed, vertex.position);
     }
     out.blink = blink;
-    out.local_pos = local;
+    out.local_pos = vertex.position;
 
 #ifdef SKINNED
     var world_from_local = skinning::skin_model(
@@ -260,9 +269,10 @@ fn fragment(
 
     if material.kind == KIND_EYE {
         tint = eye_look(mesh.local_pos, mesh.blink);
-        let iris_m = disk_mask(length(mesh.local_pos.xy), 0.36, 0.03);
+        let lid_m = lid_wrap(mesh.local_pos.xy, mesh.blink);
+        let iris_m = disk_mask(length(mesh.local_pos.xy), 0.36, 0.03) * (1.0 - lid_m);
         roughness = mix(0.42, 0.16, iris_m);
-        roughness = mix(roughness, 0.55, mesh.blink);
+        roughness = mix(roughness, 0.72, lid_m);
         metallic = mix(0.04, 0.12, iris_m);
     } else {
         roughness = 0.72;
