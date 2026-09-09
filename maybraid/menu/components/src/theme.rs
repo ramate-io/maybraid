@@ -31,6 +31,15 @@ pub const TEXT_YELLOW_HOVER: Color = Color::srgb(0.82, 0.68, 0.12);
 /// Description strip: same yellow, lower alpha. Read-only stats use this too.
 pub const TEXT_YELLOW_FAINT: Color = Color::srgba(1.0, 0.86, 0.22, 0.42);
 
+/// Focused locked-row yellow: still dampened, a bit stronger than idle faint.
+pub const TEXT_YELLOW_FAINT_FOCUS: Color = Color::srgba(1.0, 0.86, 0.22, 0.68);
+
+/// Lime-adjacent violet for “Coming Soon” objective badges.
+pub const TEXT_PURPLE: Color = Color::srgb(0.72, 0.48, 0.92);
+
+/// Muted amber for “Needs Character.” badges (full alpha so it reads on a dampened row).
+pub const TEXT_AMBER: Color = Color::srgb(0.90, 0.68, 0.32);
+
 /// Positive modifier (`+6`).
 pub const TEXT_LIME: Color = Color::srgb(0.55, 0.92, 0.38);
 
@@ -39,6 +48,10 @@ pub const TEXT_SALMON: Color = Color::srgb(0.95, 0.45, 0.42);
 
 /// Derived formula (pace equation).
 pub const TEXT_LIGHT_BLUE: Color = Color::srgb(0.62, 0.86, 1.0);
+
+/// Badge beside a text-cursor title. Smaller than [`ITEM_FONT_SIZE`], larger
+/// than the description face so it still reads on the row.
+pub const OBJECTIVE_MARKER_FONT_SIZE: f32 = 32.0;
 
 /// Description line under the menu column.
 pub const DESCRIPTION_FONT_SIZE: f32 = 22.0;

@@ -7,13 +7,15 @@ use bevy::text::{FontSourceTemplate, Justify};
 use crate::icons::maybraid::AnimatedIcon;
 
 use super::text_menu::{
-	TextColumnAlign, TextColumnAnchor, TextMenu, TextMenuHeader, TextMenuItem, TextMenuItemLabel,
+	MenuItemLocked, TextColumnAlign, TextColumnAnchor, TextMenu, TextMenuHeader, TextMenuItem,
+	TextMenuItemLabel,
 };
 use crate::controls::section::CursorRow;
 use crate::info::description::TextMenuDescription;
 use crate::theme::{
 	BARLOW_SEMIBOLD, CORNER_BOTTOM, CORNER_INSET, CURSOR_ICON_GAP, CURSOR_ICON_SIZE,
-	DESCRIPTION_FONT_SIZE, ITEM_FONT_SIZE, TEXT_YELLOW, TEXT_YELLOW_FAINT,
+	DESCRIPTION_FONT_SIZE, ITEM_FONT_SIZE, OBJECTIVE_MARKER_FONT_SIZE, TEXT_AMBER, TEXT_LIME,
+	TEXT_PURPLE, TEXT_YELLOW, TEXT_YELLOW_FAINT, TEXT_YELLOW_FAINT_FOCUS,
 };
 use maybraid_input::{MenuNav, MenuNavPad};
 
@@ -25,21 +27,72 @@ pub struct TextCursorMenu;
 #[derive(Component, Debug, Default, Clone, Copy)]
 pub struct TextCursorSlot;
 
+/// Onboarding / availability badge copy and color. Screens set a kind rather
+/// than free-stringing the three strings.
+#[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum MenuObjectiveKind {
+	#[default]
+	ComingSoon,
+	StartHere,
+	NeedsCharacter,
+}
+
+impl MenuObjectiveKind {
+	pub fn label(self) -> &'static str {
+		match self {
+			Self::ComingSoon => "Coming Soon",
+			Self::StartHere => "Start Here",
+			Self::NeedsCharacter => "Needs Character.",
+		}
+	}
+
+	pub fn color(self) -> Color {
+		match self {
+			Self::ComingSoon => TEXT_PURPLE,
+			Self::StartHere => TEXT_LIME,
+			Self::NeedsCharacter => TEXT_AMBER,
+		}
+	}
+
+	pub fn marker(self) -> MenuObjectiveMarker {
+		MenuObjectiveMarker { label: String::from(self.label()), color: self.color() }
+	}
+}
+
+/// Badge beside a text-cursor title. Lives on the pickable row, not in subtext.
+#[derive(Component, Debug, Clone, Default, PartialEq)]
+pub struct MenuObjectiveMarker {
+	pub label: String,
+	pub color: Color,
+}
+
 /// One labeled action, optionally with a caption under the title.
 pub struct TextCursorRow<E> {
 	pub label: String,
 	pub subtext: Option<String>,
 	pub action: E,
+	pub objective: Option<MenuObjectiveKind>,
+	pub locked: bool,
 }
 
 impl<E> TextCursorRow<E> {
 	pub fn new(label: impl Into<String>, action: E) -> Self {
-		Self { label: label.into(), subtext: None, action }
+		Self { label: label.into(), subtext: None, action, objective: None, locked: false }
 	}
 
 	pub fn with_subtext(mut self, subtext: impl Into<String>) -> Self {
 		let subtext = subtext.into();
 		self.subtext = (!subtext.is_empty()).then_some(subtext);
+		self
+	}
+
+	pub fn with_objective(mut self, kind: MenuObjectiveKind) -> Self {
+		self.objective = Some(kind);
+		self
+	}
+
+	pub fn locked(mut self) -> Self {
+		self.locked = true;
 		self
 	}
 }
@@ -133,12 +186,12 @@ impl<E: Component + Copy + Default + Unpin + Send + Sync + 'static> TextCursorCo
 			children.push(Box::new(TextMenuHeader::new(header).scene()));
 		}
 		for (index, row) in self.items.into_iter().enumerate() {
-			children.push(Box::new(cursor_row_scene(
-				TextMenuItem::yellow(index),
-				row,
-				self.align,
-				selected,
-			)));
+			let item = if row.locked {
+				TextMenuItem::faint_yellow(index)
+			} else {
+				TextMenuItem::yellow(index)
+			};
+			children.push(Box::new(cursor_row_scene(item, row, self.align, selected)));
 		}
 		if let Some(description) = self.description {
 			children.push(Box::new(TextMenuDescription::under_column(description)));
@@ -181,13 +234,15 @@ impl<E: Component + Copy + Default + Unpin + Send + Sync + 'static> ButtonWithSu
 
 	pub fn scene(self) -> impl Scene + 'static {
 		let children: Vec<Box<dyn Scene>> = vec![
-			Box::new(cursor_item_scene(
+			cursor_item_scene(
 				TextMenuItem::yellow(0),
 				self.label,
 				self.action,
 				TextColumnAlign::Start,
 				0,
-			)),
+				false,
+				None,
+			),
 			Box::new(subtext_caption_scene(self.subtext)),
 		];
 		let node = self.anchor.node(TextColumnAlign::Start);
@@ -212,8 +267,8 @@ pub struct ScreenBackPressed;
 /// on the main list cannot fire it.
 pub fn screen_back_scene() -> impl Scene + 'static {
 	let children: Vec<Box<dyn Scene>> = vec![
-		Box::new(cursor_slot_scene(Visibility::Hidden, TextColumnAlign::Start)),
-		Box::new(cursor_label_scene(String::from("Back"), TextColumnAlign::Start)),
+		Box::new(cursor_slot_scene(Visibility::Hidden, TextColumnAlign::Start, TEXT_YELLOW)),
+		Box::new(cursor_label_scene(String::from("Back"), TextColumnAlign::Start, TEXT_YELLOW)),
 	];
 	bsn! {
 		Button
@@ -265,8 +320,8 @@ pub struct ScreenEditPressed;
 
 pub fn screen_edit_scene() -> impl Scene + 'static {
 	let children: Vec<Box<dyn Scene>> = vec![
-		Box::new(cursor_slot_scene(Visibility::Hidden, TextColumnAlign::Start)),
-		Box::new(cursor_label_scene(String::from("Edit"), TextColumnAlign::Start)),
+		Box::new(cursor_slot_scene(Visibility::Hidden, TextColumnAlign::Start, TEXT_YELLOW)),
+		Box::new(cursor_label_scene(String::from("Edit"), TextColumnAlign::Start, TEXT_YELLOW)),
 	];
 	bsn! {
 		Button
@@ -305,8 +360,15 @@ fn cursor_row_scene<E>(
 where
 	E: Component + Copy + Default + Unpin + Send + Sync + 'static,
 {
-	let mut children: Vec<Box<dyn Scene>> =
-		vec![Box::new(cursor_item_scene(item, row.label, row.action, align, selected))];
+	let mut children: Vec<Box<dyn Scene>> = vec![cursor_item_scene(
+		item,
+		row.label,
+		row.action,
+		align,
+		selected,
+		row.locked,
+		row.objective,
+	)];
 	if let Some(subtext) = row.subtext {
 		children.push(Box::new(subtext_caption_scene(subtext)));
 	}
@@ -346,40 +408,86 @@ fn cursor_item_scene<E>(
 	action: E,
 	align: TextColumnAlign,
 	selected: usize,
-) -> impl Scene + 'static
+	locked: bool,
+	objective: Option<MenuObjectiveKind>,
+) -> Box<dyn Scene>
 where
 	E: Component + Copy + Default + Unpin + Send + Sync + 'static,
 {
 	let visibility =
 		if item.index == selected { Visibility::Inherited } else { Visibility::Hidden };
-	let children: Vec<Box<dyn Scene>> = vec![
-		Box::new(cursor_slot_scene(visibility, align)),
-		Box::new(cursor_label_scene(label, align)),
+	let icon_color = if locked { TEXT_YELLOW_FAINT_FOCUS } else { TEXT_YELLOW };
+	let mut children: Vec<Box<dyn Scene>> = vec![
+		Box::new(cursor_slot_scene(visibility, align, icon_color)),
+		Box::new(cursor_label_scene(label, align, item.idle)),
 	];
+	if let Some(kind) = objective {
+		children.push(Box::new(objective_marker_scene(kind)));
+	}
 	let column_gap = match align {
 		TextColumnAlign::Start => Val::Px(CURSOR_ICON_GAP),
 		TextColumnAlign::Center => Val::Px(0.0),
 	};
 	let justify_content = align.justify_content();
-	bsn! {
-		Button
-		template_value(item)
-		template_value(action)
-		Node {
-			padding: UiRect::axes(px(0.0), px(2.0)),
-			flex_direction: FlexDirection::Row,
-			justify_content: justify_content,
-			align_items: AlignItems::Center,
-			column_gap: column_gap,
-		}
-		BackgroundColor(Color::NONE)
-		Children [ {children} ]
+	if locked {
+		Box::new(bsn! {
+			Button
+			template_value(item)
+			template_value(action)
+			MenuItemLocked
+			Node {
+				padding: UiRect::axes(px(0.0), px(2.0)),
+				flex_direction: FlexDirection::Row,
+				justify_content: justify_content,
+				align_items: AlignItems::Center,
+				column_gap: column_gap,
+			}
+			BackgroundColor(Color::NONE)
+			Children [ {children} ]
+		})
+	} else {
+		Box::new(bsn! {
+			Button
+			template_value(item)
+			template_value(action)
+			Node {
+				padding: UiRect::axes(px(0.0), px(2.0)),
+				flex_direction: FlexDirection::Row,
+				justify_content: justify_content,
+				align_items: AlignItems::Center,
+				column_gap: column_gap,
+			}
+			BackgroundColor(Color::NONE)
+			Children [ {children} ]
+		})
 	}
 }
 
-fn cursor_slot_scene(visibility: Visibility, align: TextColumnAlign) -> impl Scene {
+fn objective_marker_scene(kind: MenuObjectiveKind) -> impl Scene + 'static {
+	let marker = kind.marker();
+	let label = marker.label.clone();
+	let color = marker.color;
+	bsn! {
+		template_value(kind)
+		template_value(marker)
+		template_value(Text::new(label))
+		TextFont {
+			font: FontSourceTemplate::Handle(BARLOW_SEMIBOLD),
+			font_size: px(OBJECTIVE_MARKER_FONT_SIZE),
+		}
+		TextColor(color)
+		TextLayout::new(Justify::Left, bevy::text::LineBreak::NoWrap)
+		Pickable::IGNORE
+	}
+}
+
+fn cursor_slot_scene(
+	visibility: Visibility,
+	align: TextColumnAlign,
+	icon_color: Color,
+) -> impl Scene {
 	let children: Vec<Box<dyn Scene>> = vec![Box::new(
-		AnimatedIcon::maybraid_scene_with_visibility(CURSOR_ICON_SIZE, TEXT_YELLOW, visibility),
+		AnimatedIcon::maybraid_scene_with_visibility(CURSOR_ICON_SIZE, icon_color, visibility),
 	)];
 	let node = match align {
 		TextColumnAlign::Start => Node {
@@ -408,7 +516,7 @@ fn cursor_slot_scene(visibility: Visibility, align: TextColumnAlign) -> impl Sce
 	}
 }
 
-fn cursor_label_scene(label: String, align: TextColumnAlign) -> impl Scene {
+fn cursor_label_scene(label: String, align: TextColumnAlign, color: Color) -> impl Scene {
 	let text_justify = align.text_justify();
 	bsn! {
 		template_value(Text::new(label))
@@ -416,7 +524,7 @@ fn cursor_label_scene(label: String, align: TextColumnAlign) -> impl Scene {
 			font: FontSourceTemplate::Handle(BARLOW_SEMIBOLD),
 			font_size: px(ITEM_FONT_SIZE),
 		}
-		TextColor(TEXT_YELLOW)
+		TextColor(color)
 		TextLayout::new(text_justify, bevy::text::LineBreak::NoWrap)
 		TextMenuItemLabel
 		Pickable::IGNORE
@@ -467,5 +575,48 @@ fn text_cursor_menu<'a>(
 			return Some(menu);
 		}
 		entity = child_of.get(entity).ok()?.parent();
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::{MenuObjectiveKind, TextCursorRow};
+	use crate::theme::{OBJECTIVE_MARKER_FONT_SIZE, TEXT_AMBER, TEXT_LIME, TEXT_PURPLE};
+	use crate::ITEM_FONT_SIZE;
+
+	#[derive(Clone, Copy)]
+	enum RowAction {
+		Go,
+	}
+
+	#[test]
+	fn objective_kind_copy_and_color() {
+		assert_eq!(MenuObjectiveKind::ComingSoon.label(), "Coming Soon");
+		assert_eq!(MenuObjectiveKind::StartHere.label(), "Start Here");
+		assert_eq!(MenuObjectiveKind::NeedsCharacter.label(), "Needs Character.");
+		assert_eq!(MenuObjectiveKind::ComingSoon.color(), TEXT_PURPLE);
+		assert_eq!(MenuObjectiveKind::StartHere.color(), TEXT_LIME);
+		assert_eq!(MenuObjectiveKind::NeedsCharacter.color(), TEXT_AMBER);
+	}
+
+	#[test]
+	fn marker_is_beside_the_title_not_subtext() {
+		let row = TextCursorRow::new("Reliquary", RowAction::Go)
+			.with_objective(MenuObjectiveKind::ComingSoon)
+			.locked();
+		assert_eq!(row.objective, Some(MenuObjectiveKind::ComingSoon));
+		assert!(row.locked);
+		assert!(row.subtext.is_none());
+		assert!(OBJECTIVE_MARKER_FONT_SIZE < ITEM_FONT_SIZE);
+	}
+
+	#[test]
+	fn subtext_stays_independent_of_the_objective() {
+		let row = TextCursorRow::new("Jeff", RowAction::Go)
+			.with_subtext("Braidman")
+			.with_objective(MenuObjectiveKind::StartHere);
+		assert_eq!(row.subtext.as_deref(), Some("Braidman"));
+		assert_eq!(row.objective, Some(MenuObjectiveKind::StartHere));
+		assert!(!row.locked);
 	}
 }
