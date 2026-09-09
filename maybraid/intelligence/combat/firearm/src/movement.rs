@@ -2,6 +2,7 @@
 
 use bevy::prelude::*;
 use combat_targeting::CombatTargeting;
+use intelligence_lod::{IntelligenceBand, IntelligenceLod};
 use movement_intelligence::{
 	MovementIntelligence, MovementLocation, MovementObjective, ReplanMovement,
 };
@@ -84,11 +85,12 @@ pub(crate) fn write_firearm_movement_objectives(
 		&CombatTargeting,
 		&mut FirearmMovementIntelligence,
 		&mut MovementIntelligence,
+		Option<&IntelligenceLod>,
 	)>,
 	mut commands: Commands,
 ) {
 	let now = time.elapsed_secs();
-	for (entity, transform, combat, targeting, mut brain, mut movement) in &mut combatants {
+	for (entity, transform, combat, targeting, mut brain, mut movement, lod) in &mut combatants {
 		let Some(target) = targeting.best_contact() else {
 			if brain.driving {
 				brain.driving = false;
@@ -101,12 +103,12 @@ pub(crate) fn write_firearm_movement_objectives(
 			}
 			continue;
 		};
+		let fresh = target.is_fresh(now, combat.settings.fire_spotting_freshness);
+		if IntelligenceLod::band_or_near(lod) == IntelligenceBand::Far && !fresh {
+			continue;
+		}
 		brain.driving = true;
-		let next = brain.compose_sight(
-			transform.translation,
-			target.position,
-			target.is_fresh(now, combat.settings.fire_spotting_freshness),
-		);
+		let next = brain.compose_sight(transform.translation, target.position, fresh);
 		if !should_replan(movement.objective, next) {
 			continue;
 		}
@@ -194,5 +196,101 @@ mod tests {
 		assert!(hunt.sightline_weight() > seen.sightline_weight());
 		assert!(hunt.hide_weight() < seen.hide_weight());
 		assert!(should_replan(seen, hunt));
+	}
+
+	fn combat_contact(subject: Entity, spotted_at: f32) -> combat_targeting::CombatContact {
+		combat_targeting::CombatContact {
+			subject,
+			position: Vec3::X * 6.0,
+			movement_vector: Vec3::ZERO,
+			visible_point: Vec3::X * 6.0,
+			visible_head: None,
+			last_spotted_at: spotted_at,
+		}
+	}
+
+	fn targeting_with(contact: combat_targeting::CombatContact) -> CombatTargeting {
+		let mut targeting = CombatTargeting::default();
+		targeting.upsert_contact(contact);
+		targeting.rebalance(0.0);
+		targeting
+	}
+
+	fn firearm_writer_app() -> App {
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins)
+			.add_systems(Update, write_firearm_movement_objectives);
+		app
+	}
+
+	#[test]
+	fn far_stale_contact_does_not_enqueue_covering() {
+		let mut app = firearm_writer_app();
+		let target = Entity::from_bits(7);
+		let combatant = app
+			.world_mut()
+			.spawn((
+				Transform::default(),
+				FirearmIntelligence::new(),
+				targeting_with(combat_contact(target, -1.0)),
+				FirearmMovementIntelligence::new(),
+				MovementIntelligence::new(MovementObjective::Reach(MovementLocation::new(
+					Vec3::ZERO,
+					0.4,
+				))),
+				IntelligenceLod { band: IntelligenceBand::Far, skips: 0 },
+			))
+			.id();
+
+		app.update();
+		assert!(app.world().get::<ReplanMovement>(combatant).is_none());
+		assert!(
+			!app.world()
+				.get::<MovementIntelligence>(combatant)
+				.is_some_and(|movement| movement.objective.is_vantage_on())
+		);
+	}
+
+	#[test]
+	fn near_stale_and_far_fresh_still_enqueue_covering() {
+		let mut app = firearm_writer_app();
+		let target = Entity::from_bits(7);
+		let near = app
+			.world_mut()
+			.spawn((
+				Transform::default(),
+				FirearmIntelligence::new(),
+				targeting_with(combat_contact(target, -1.0)),
+				FirearmMovementIntelligence::new(),
+				MovementIntelligence::new(MovementObjective::Reach(MovementLocation::new(
+					Vec3::ZERO,
+					0.4,
+				))),
+				IntelligenceLod::missing(),
+			))
+			.id();
+		let far_fresh = app
+			.world_mut()
+			.spawn((
+				Transform::from_xyz(1.0, 0.0, 0.0),
+				FirearmIntelligence::new(),
+				targeting_with(combat_contact(target, 0.0)),
+				FirearmMovementIntelligence::new(),
+				MovementIntelligence::new(MovementObjective::Reach(MovementLocation::new(
+					Vec3::ZERO,
+					0.4,
+				))),
+				IntelligenceLod { band: IntelligenceBand::Far, skips: 0 },
+			))
+			.id();
+
+		app.update();
+		assert!(app.world().get::<ReplanMovement>(near).is_some());
+		assert!(app.world().get::<ReplanMovement>(far_fresh).is_some());
+		assert!(
+			app.world()
+				.get::<MovementIntelligence>(near)
+				.is_some_and(|movement| movement.objective.is_vantage_on())
+		);
 	}
 }

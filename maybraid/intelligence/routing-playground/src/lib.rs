@@ -140,6 +140,7 @@ impl Plugin for RoutingPlaygroundPlugin {
 			.add_plugins(MovementRealizationPlugin)
 			.insert_resource(MovementIntelligenceLimits {
 				max_budget: CandidateBudget { max_candidates: 12, max_steps: 3, horizon: 28.0 },
+				..default()
 			})
 			.insert_resource(ClearColor(Color::hsla(201.0, 0.69, 0.62, 1.0)))
 			.insert_resource(config.clone())

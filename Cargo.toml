@@ -94,6 +94,7 @@ members = [
   "maybraid/items/playground",
   "maybraid/items/firing-range-playground",
 
+  "maybraid/intelligence/lod",
   "maybraid/intelligence/movement/lib",
   "maybraid/intelligence/movement/avian",
   "maybraid/intelligence/movement/richmond",
@@ -312,6 +313,7 @@ damage = { path = "maybraid/damage" }
 firearms-components = { path = "maybraid/items/firearms-components" }
 firearms = { path = "maybraid/items/firearms" }
 firearm-user = { path = "maybraid/items/firearm-user" }
+intelligence-lod = { path = "maybraid/intelligence/lod" }
 movement-intelligence = { path = "maybraid/intelligence/movement/lib" }
 movement-intelligence-avian = { path = "maybraid/intelligence/movement/avian" }
 movement-intelligence-richmond = { path = "maybraid/intelligence/movement/richmond" }

@@ -29,3 +29,15 @@ pub use user::{SpottingHint, SpottingHintSource, SpottingSettings, SpottingUser}
 pub enum SpottingSystems {
 	Observe,
 }
+
+/// How many due observers may start discovery on one Observe tick.
+#[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SpottingObserveLimits {
+	pub max_observers_per_tick: usize,
+}
+
+impl Default for SpottingObserveLimits {
+	fn default() -> Self {
+		Self { max_observers_per_tick: 8 }
+	}
+}

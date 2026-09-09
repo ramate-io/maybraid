@@ -189,6 +189,10 @@ pub struct BindPose {
 #[derive(Component)]
 pub struct PoseApplied;
 
+/// Force the next [`maintain_bind_pose`] pass (spawn reset / explicit dirty).
+#[derive(Component, Clone, Copy, Default)]
+pub struct BindPoseDirty;
+
 /// Skip rotation writes on this bone (clip mailbox owns the joint).
 #[derive(Component, Clone, Copy, Default)]
 pub struct PoseSkipRotation;
@@ -208,13 +212,21 @@ pub fn bind_pose_ready(bind: &BindPose, map: &BoneMap, landmarks: &[&str]) -> bo
 /// Capture bind TRS, then apply [`ActiveRigPose`] layers onto named bones.
 ///
 /// Skips rotation on [`PoseSkipRotation`] so a clip mailbox can own those joints.
-/// GLTF spawn can reset bone transforms, so apps typically run this in Update
-/// and again in PostUpdate before propagate.
+/// Settled rigs leave this query until the pose, map, or [`BindPoseDirty`] changes.
+/// PostUpdate uses the same filter so a quiet herd is not walked twice.
 pub fn maintain_bind_pose(
 	mut commands: Commands,
 	mut rig_roots: Query<
 		(Entity, &BoneMap, &ActiveRigPose, &mut BindPose, &RigRoot, Has<PoseApplied>),
-		With<RigRoot>,
+		(
+			With<RigRoot>,
+			Or<(
+				Changed<ActiveRigPose>,
+				Changed<BoneMap>,
+				Without<PoseApplied>,
+				With<BindPoseDirty>,
+			)>,
+		),
 	>,
 	mut transforms: Query<&mut Transform>,
 	skip_rotation: Query<(), With<PoseSkipRotation>>,
@@ -269,12 +281,14 @@ pub fn maintain_bind_pose(
 		if !pose_applied && bind_pose_ready(&bind, bone_map, rig.landmarks) {
 			commands.entity(entity).try_insert(PoseApplied);
 		}
+		commands.entity(entity).try_remove::<BindPoseDirty>();
 	}
 }
 
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::bone_map::RigKey;
 
 	#[test]
 	fn scale_for_bone_multiplies_layers() {
@@ -283,5 +297,52 @@ mod tests {
 			.with_layer(RigPoseLayer::new("b").with_scale(BoneScale::uniform("root", 0.5)));
 		assert_eq!(pose.scale_for_bone("root"), Vec3::ONE);
 		assert_eq!(pose.scale_for_bone("other"), Vec3::ONE);
+	}
+
+	fn pose_app() -> App {
+		let mut app = App::new();
+		app.add_systems(Update, maintain_bind_pose);
+		app
+	}
+
+	fn spawn_scaled_rig(world: &mut World, scale: f32) -> (Entity, Entity) {
+		let bone = world.spawn((Name::new("root"), Transform::from_scale(Vec3::ONE))).id();
+		let rig = world
+			.spawn((
+				RigRoot::new(RigKey::named("body")).with_landmarks(&["root"]),
+				BoneMap { by_name: HashMap::from([("root".into(), bone)]) },
+				ActiveRigPose {
+					pose: ResolvedRigPose::new().with_layer(
+						RigPoseLayer::new("size").with_scale(BoneScale::uniform("root", scale)),
+					),
+				},
+				BindPose::default(),
+			))
+			.id();
+		(rig, bone)
+	}
+
+	#[test]
+	fn first_apply_writes_layers_and_settled_frames_do_not_rewrite() {
+		let mut app = pose_app();
+		let (rig, bone) = spawn_scaled_rig(app.world_mut(), 2.0);
+		app.update();
+		assert!(app.world().get::<PoseApplied>(rig).is_some());
+		assert_eq!(app.world().get::<Transform>(bone).unwrap().scale, Vec3::splat(2.0));
+
+		app.world_mut().get_mut::<Transform>(bone).unwrap().scale = Vec3::splat(9.0);
+		app.update();
+		assert_eq!(app.world().get::<Transform>(bone).unwrap().scale, Vec3::splat(9.0));
+	}
+
+	#[test]
+	fn changing_active_pose_reapplies() {
+		let mut app = pose_app();
+		let (rig, bone) = spawn_scaled_rig(app.world_mut(), 2.0);
+		app.update();
+		app.world_mut().get_mut::<ActiveRigPose>(rig).unwrap().pose = ResolvedRigPose::new()
+			.with_layer(RigPoseLayer::new("size").with_scale(BoneScale::uniform("root", 3.0)));
+		app.update();
+		assert_eq!(app.world().get::<Transform>(bone).unwrap().scale, Vec3::splat(3.0));
 	}
 }

@@ -2,6 +2,7 @@
 
 use bevy::prelude::*;
 use evasion_intelligence::{EvasionIntelligenceUser, EvasionSystems};
+use intelligence_lod::{IntelligenceBand, IntelligenceLod};
 use movement_intelligence::{
 	MovementIntelligence, MovementIntelligenceSystems, MovementLocation, MovementObjective,
 	ReplanMovement,
@@ -64,16 +65,19 @@ impl Plugin for FleeingPlugin {
 }
 
 pub fn write_flee_objectives(
+	time: Res<Time>,
 	mut users: Query<(
 		Entity,
 		&Transform,
 		&EvasionIntelligenceUser,
 		&mut FleeingUser,
 		&mut MovementIntelligence,
+		Option<&IntelligenceLod>,
 	)>,
 	mut commands: Commands,
 ) {
-	for (entity, transform, evasion, mut fleeing, mut movement) in &mut users {
+	let now = time.elapsed_secs();
+	for (entity, transform, evasion, mut fleeing, mut movement, lod) in &mut users {
 		if !evasion.signal.is_flee() {
 			let was_driving = fleeing.driving;
 			fleeing.driving = false;
@@ -89,6 +93,11 @@ pub fn write_flee_objectives(
 			}
 			continue;
 		};
+		if IntelligenceLod::band_or_near(lod) == IntelligenceBand::Far
+			&& !contact.is_fresh(now, evasion.settings.memory_secs)
+		{
+			continue;
+		}
 		let next = fleeing.objective(contact.position);
 		fleeing.driving = true;
 		if !should_replan(movement.objective, next) {
@@ -125,7 +134,27 @@ fn should_replan(current: MovementObjective, next: MovementObjective) -> bool {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use evasion_intelligence::{AssailantContact, AssailantSource};
+	use evasion_intelligence::{
+		AssailantContact, AssailantSource, EvasionActuator, EvasionSignal, RankedAssailant,
+	};
+	use intelligence_lod::{IntelligenceBand, IntelligenceLod};
+
+	fn flee_user(threat: Entity, last_known_at: f32) -> EvasionIntelligenceUser {
+		let mut evasion = EvasionIntelligenceUser::default();
+		evasion.memory.insert(
+			threat,
+			AssailantContact {
+				subject: threat,
+				position: Vec3::X * 3.0,
+				movement_vector: Vec3::ZERO,
+				last_known_at,
+			},
+		);
+		evasion.include(threat, AssailantSource::SPOTTING);
+		evasion.ranked.push(RankedAssailant { entity: threat, weight: 1.0 });
+		evasion.signal = EvasionSignal { actuator: EvasionActuator::Flee, threat: Some(threat) };
+		evasion
+	}
 
 	#[test]
 	fn flee_writes_a_disk_around_the_threat_snapshot() -> anyhow::Result<()> {
@@ -150,5 +179,63 @@ mod tests {
 			last_known_at: 0.0,
 		};
 		Ok(())
+	}
+
+	#[test]
+	fn far_stale_flee_does_not_enqueue_covering() {
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins).add_systems(Update, write_flee_objectives);
+		let threat = Entity::from_bits(3);
+		let entity = app
+			.world_mut()
+			.spawn((
+				Transform::default(),
+				flee_user(threat, -10.0),
+				FleeingUser::default(),
+				MovementIntelligence::new(MovementObjective::Reach(MovementLocation::new(
+					Vec3::ZERO,
+					0.4,
+				))),
+				IntelligenceLod { band: IntelligenceBand::Far, skips: 0 },
+			))
+			.id();
+
+		app.update();
+		assert!(app.world().get::<ReplanMovement>(entity).is_none());
+		assert!(
+			!app.world().get::<MovementIntelligence>(entity).is_some_and(|movement| matches!(
+				movement.objective,
+				MovementObjective::FleeFrom(_)
+			))
+		);
+	}
+
+	#[test]
+	fn near_flee_still_enqueues_covering() {
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins).add_systems(Update, write_flee_objectives);
+		let threat = Entity::from_bits(3);
+		let entity = app
+			.world_mut()
+			.spawn((
+				Transform::default(),
+				flee_user(threat, 0.0),
+				FleeingUser::default(),
+				MovementIntelligence::new(MovementObjective::Reach(MovementLocation::new(
+					Vec3::ZERO,
+					0.4,
+				))),
+				IntelligenceLod::missing(),
+			))
+			.id();
+
+		app.update();
+		assert!(app.world().get::<ReplanMovement>(entity).is_some());
+		assert!(
+			app.world().get::<MovementIntelligence>(entity).is_some_and(|movement| matches!(
+				movement.objective,
+				MovementObjective::FleeFrom(_)
+			))
+		);
 	}
 }

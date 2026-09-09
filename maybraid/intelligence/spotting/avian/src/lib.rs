@@ -5,7 +5,8 @@ mod los;
 mod observe;
 
 use bevy::prelude::*;
-use spotting_intelligence::SpottingSystems;
+use intelligence_lod::IntelligencePriority;
+use spotting_intelligence::{SpottingObserveLimits, SpottingSystems};
 
 pub use los::{clear_segment, RAY_ORIGIN_SKIP};
 pub use observe::observe_spotting;
@@ -15,6 +16,8 @@ pub struct SpottingAvianPlugin;
 
 impl Plugin for SpottingAvianPlugin {
 	fn build(&self, app: &mut App) {
-		app.add_systems(Update, observe_spotting.in_set(SpottingSystems::Observe));
+		app.init_resource::<IntelligencePriority>()
+			.init_resource::<SpottingObserveLimits>()
+			.add_systems(Update, observe_spotting.in_set(SpottingSystems::Observe));
 	}
 }

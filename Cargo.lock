@@ -2836,6 +2836,7 @@ dependencies = [
  "bevy",
  "crozon-rigs",
  "ground",
+ "intelligence-lod",
  "lod",
  "malo-animations",
  "rigs",
@@ -3312,6 +3313,7 @@ dependencies = [
  "damage",
  "firearm-user",
  "firearms",
+ "intelligence-lod",
  "lod-avian",
  "movement-intelligence",
  "player",
@@ -3436,6 +3438,7 @@ dependencies = [
  "anyhow",
  "bevy",
  "evasion-intelligence",
+ "intelligence-lod",
  "movement-intelligence",
 ]
 
@@ -4003,6 +4006,7 @@ dependencies = [
  "avian3d",
  "bevy",
  "evasion-intelligence",
+ "intelligence-lod",
  "lod-avian",
  "movement-intelligence",
  "spotting-intelligence",
@@ -4209,6 +4213,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e05c02b5e89bff3b946cedeca278abc628fe811e604f027c45a8aa3cf793d0eb"
 dependencies = [
  "libc",
+]
+
+[[package]]
+name = "intelligence-lod"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
 ]
 
 [[package]]
@@ -4712,6 +4724,7 @@ dependencies = [
  "game-commands",
  "ground-avian",
  "hiding-intelligence",
+ "intelligence-lod",
  "lod",
  "lod-avian",
  "log",
@@ -4736,6 +4749,7 @@ dependencies = [
  "richmond-urbanization",
  "routing-intelligence",
  "spotting-intelligence",
+ "tether-intelligence",
  "threat-intelligence",
  "threat-intelligence-damage",
  "threat-management-intelligence",
@@ -4874,6 +4888,7 @@ dependencies = [
  "damage",
  "firearm-user",
  "firearms",
+ "intelligence-lod",
  "lod",
  "mob-intelligence",
  "npc-intelligence",
@@ -4961,6 +4976,7 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "bevy",
+ "intelligence-lod",
  "player",
 ]
 
@@ -5985,6 +6001,7 @@ dependencies = [
  "anyhow",
  "bevy",
  "gimme-core",
+ "intelligence-lod",
  "movement-intelligence",
  "routing-intelligence",
 ]
@@ -6959,6 +6976,7 @@ dependencies = [
  "anyhow",
  "avian3d",
  "bevy",
+ "intelligence-lod",
  "lod-avian",
  "spotting-intelligence",
 ]
@@ -7166,6 +7184,7 @@ dependencies = [
  "anyhow",
  "bevy",
  "gimme-core",
+ "intelligence-lod",
  "spotting-intelligence",
 ]
 

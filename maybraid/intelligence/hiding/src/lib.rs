@@ -5,6 +5,7 @@ mod candidate;
 use avian3d::prelude::{SpatialQuery, SpatialQueryFilter};
 use bevy::prelude::*;
 use evasion_intelligence::{EvasionIntelligenceUser, EvasionSystems};
+use intelligence_lod::{IntelligenceBand, IntelligenceLod};
 use lod_avian::PhysicsInteractionLayer;
 use movement_intelligence::{
 	MovementIntelligence, MovementIntelligenceSystems, MovementLocation, MovementObjective,
@@ -13,7 +14,7 @@ use movement_intelligence::{
 use spotting_intelligence::SpotSubject;
 use spotting_intelligence_avian::clear_segment;
 
-pub use candidate::{occupancy_at, pick_hide, HideCandidate, HideOccupant};
+pub use candidate::{HideCandidate, HideOccupant, occupancy_at, pick_hide};
 
 const REFRESH_DISTANCE: f32 = 0.8;
 
@@ -92,6 +93,7 @@ impl Plugin for HidingPlugin {
 }
 
 pub fn write_hide_objectives(
+	time: Res<Time>,
 	spatial: SpatialQuery,
 	mut users: Query<(
 		Entity,
@@ -99,6 +101,7 @@ pub fn write_hide_objectives(
 		&EvasionIntelligenceUser,
 		&mut HidingUser,
 		&mut MovementIntelligence,
+		Option<&IntelligenceLod>,
 	)>,
 	subjects: Query<(Entity, &Transform, Option<&HideClaim>), With<SpotSubject>>,
 	mut commands: Commands,
@@ -115,7 +118,8 @@ pub fn write_hide_objectives(
 		.collect();
 	let filter = SpatialQueryFilter::from_mask(PhysicsInteractionLayer::Fixed);
 
-	for (entity, transform, evasion, mut hiding, mut movement) in &mut users {
+	let now = time.elapsed_secs();
+	for (entity, transform, evasion, mut hiding, mut movement, lod) in &mut users {
 		if !evasion.signal.is_hide() {
 			let was_driving = hiding.driving;
 			hiding.driving = false;
@@ -133,6 +137,11 @@ pub fn write_hide_objectives(
 			}
 			continue;
 		};
+		if IntelligenceLod::band_or_near(lod) == IntelligenceBand::Far
+			&& !contact.is_fresh(now, evasion.settings.memory_secs)
+		{
+			continue;
+		}
 		let from = transform.translation;
 		let threat = contact.position;
 		let samples = hiding.samples(from);
@@ -186,6 +195,24 @@ fn should_replan(current: MovementObjective, next: MovementObjective) -> bool {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use evasion_intelligence::{AssailantContact, EvasionActuator, EvasionSignal, RankedAssailant};
+	use intelligence_lod::{IntelligenceBand, IntelligenceLod};
+
+	fn hide_user(threat: Entity, last_known_at: f32) -> EvasionIntelligenceUser {
+		let mut evasion = EvasionIntelligenceUser::default();
+		evasion.memory.insert(
+			threat,
+			AssailantContact {
+				subject: threat,
+				position: Vec3::X * 12.0,
+				movement_vector: Vec3::ZERO,
+				last_known_at,
+			},
+		);
+		evasion.ranked.push(RankedAssailant { entity: threat, weight: 1.0 });
+		evasion.signal = EvasionSignal { actuator: EvasionActuator::Hide, threat: Some(threat) };
+		evasion
+	}
 
 	#[test]
 	fn samples_stay_inside_the_horizon() -> anyhow::Result<()> {
@@ -199,5 +226,67 @@ mod tests {
 		assert_eq!(samples.len(), 4);
 		assert!(samples.iter().all(|point| point.length() <= 6.0 + 1e-3));
 		Ok(())
+	}
+
+	#[test]
+	fn far_stale_hide_does_not_enqueue_covering() {
+		let mut app = App::new();
+		app.add_plugins((
+			MinimalPlugins,
+			TransformPlugin,
+			avian3d::prelude::PhysicsPlugins::default(),
+			bevy::asset::AssetPlugin::default(),
+			bevy::mesh::MeshPlugin,
+		))
+		.add_systems(Update, write_hide_objectives);
+		let threat = Entity::from_bits(4);
+		let entity = app
+			.world_mut()
+			.spawn((
+				Transform::default(),
+				hide_user(threat, -10.0),
+				HidingUser::default(),
+				MovementIntelligence::new(MovementObjective::Reach(MovementLocation::new(
+					Vec3::ZERO,
+					0.4,
+				))),
+				IntelligenceLod { band: IntelligenceBand::Far, skips: 0 },
+			))
+			.id();
+
+		app.update();
+		assert!(app.world().get::<ReplanMovement>(entity).is_none());
+		assert!(app.world().get::<HideClaim>(entity).is_none());
+	}
+
+	#[test]
+	fn near_hide_still_enqueues_covering() {
+		let mut app = App::new();
+		app.add_plugins((
+			MinimalPlugins,
+			TransformPlugin,
+			avian3d::prelude::PhysicsPlugins::default(),
+			bevy::asset::AssetPlugin::default(),
+			bevy::mesh::MeshPlugin,
+		))
+		.add_systems(Update, write_hide_objectives);
+		let threat = Entity::from_bits(4);
+		let entity = app
+			.world_mut()
+			.spawn((
+				Transform::default(),
+				hide_user(threat, 0.0),
+				HidingUser::default(),
+				MovementIntelligence::new(MovementObjective::Reach(MovementLocation::new(
+					Vec3::ZERO,
+					0.4,
+				))),
+				IntelligenceLod::missing(),
+			))
+			.id();
+
+		app.update();
+		assert!(app.world().get::<ReplanMovement>(entity).is_some());
+		assert!(app.world().get::<HideClaim>(entity).is_some());
 	}
 }

@@ -3,7 +3,7 @@ use bevy::text::FontSize;
 use damage::Downed;
 use evasion_intelligence::{EvasionActuator, EvasionIntelligenceUser};
 use game_commands::ui::{GameCommandStatusText, GameCommandUiConfig};
-use maybraid_mobs::{MobKind, MobScene};
+use maybraid_mobs::{MobKind, MobScene, DEFAULT_MOB_HIGH_RADIUS};
 use player::Npc;
 use threat_management_intelligence::{ThreatManagementIntelligence, ThreatTactic};
 
@@ -117,7 +117,7 @@ pub(crate) fn sync_command_status_text(
 	status.0 = format!(
 		"world  character  forest hopscotch  urbanization hopscotch  grove 1 km  bump-outs 1–5 km\n\
 		 mobs {presented} presented   nearest {nearest_line}\n\
-		 HUD pins = 8 nearest (edge-clamped)   colored pole = host   plants only inside 200 m\n\
+		 HUD pins = 8 nearest (edge-clamped)   colored pole = host   plants only inside {DEFAULT_MOB_HIGH_RADIUS:.0} m\n\
 		 NPC behavior: gray circle = ignore   amber arrow = flee   blue square = hide   red cross = combat"
 	);
 }

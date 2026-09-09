@@ -17,6 +17,7 @@ crozon-inventory-user = { workspace = true }
 damage = { workspace = true }
 firearm-user = { workspace = true }
 firearms = { workspace = true }
+intelligence-lod = { workspace = true }
 lod = { workspace = true }
 mob-intelligence = { workspace = true }
 npc-intelligence = { workspace = true }

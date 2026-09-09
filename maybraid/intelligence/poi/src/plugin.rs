@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use intelligence_lod::IntelligencePriority;
 use movement_intelligence::MovementIntelligenceSystems;
 use routing_intelligence::RoutingSystems;
 
@@ -6,6 +7,18 @@ use crate::{
 	complete_poi_goals, discover_pois, drive_poi_goals, ingest_poi_observations, refresh_poi_goals,
 	sync_poi_registry, PoiGoalCompleted, PoiObservation, PoiRegistry,
 };
+
+/// How many due learners may run a local / global scan on one Discover tick.
+#[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PoiDiscoverLimits {
+	pub max_scans_per_tick: usize,
+}
+
+impl Default for PoiDiscoverLimits {
+	fn default() -> Self {
+		Self { max_scans_per_tick: 8 }
+	}
+}
 
 /// Shared ordering points for discovery and higher-order POI users.
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -26,6 +39,8 @@ pub struct PoiIntelligencePlugin;
 impl Plugin for PoiIntelligencePlugin {
 	fn build(&self, app: &mut App) {
 		app.init_resource::<PoiRegistry>()
+			.init_resource::<IntelligencePriority>()
+			.init_resource::<PoiDiscoverLimits>()
 			.add_message::<PoiObservation>()
 			.add_message::<PoiGoalCompleted>()
 			.configure_sets(

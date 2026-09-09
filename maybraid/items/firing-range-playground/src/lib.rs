@@ -68,6 +68,7 @@ impl Plugin for FiringRangePlugin {
 		register_motor_traction_physics(app);
 		app.insert_resource(MovementIntelligenceLimits {
 			max_budget: CandidateBudget { max_candidates: 12, max_steps: 3, horizon: 32.0 },
+			..default()
 		})
 		.insert_resource(CharacterRagdollSettings {
 			corpse_lifetime_secs: 5.0,
