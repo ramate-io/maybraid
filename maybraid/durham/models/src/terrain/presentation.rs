@@ -1,7 +1,8 @@
 //! Basic [`RegionPresenter`] for terrain cells.
 //!
 //! Generation and presentation stay separate: present reads the entry store and
-//! spawns each cell's [`lod::gen::LodScene`] via [`Commands::spawn_scene`].
+//! spawns a posed fill entity ([`Terrain::spawn_fill`]). [`Mesh3d`] and the
+//! Near trimesh land on that same entity.
 
 use crate::terrain::cell::{
 	expand_aabb_xz, universal_bounds, TerrainCellLayout, TERRAIN_CELL_SIZE,
@@ -9,7 +10,7 @@ use crate::terrain::cell::{
 use crate::terrain::config::TerrainConfig;
 use crate::terrain::index::TerrainEntryStore;
 use crate::terrain::Terrain;
-use crate::water::PresentedWaterScene;
+use crate::water::{PresentedWaterScene, Water};
 use bevy::ecs::system::SystemParam;
 use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::prelude::*;
@@ -236,6 +237,7 @@ pub struct TerrainPresenterState {
 struct PresentedEntry {
 	version: Version,
 	entity: Entity,
+	water: Option<Entity>,
 	level: LodSceneLevel,
 }
 
@@ -243,13 +245,8 @@ struct PresentedEntry {
 #[derive(Component, Debug, Clone, Copy)]
 pub struct PresentedTerrainScene(pub Id);
 
-/// Visual cell root that owns the CpuShot world pose.
-///
-/// Fill meshes stay local (chunk-minimum verts). Parenting the BSN child with
-/// [`ChildOf`] can replace that child's `Transform` with identity, which piles
-/// the tile at the origin while the collider host keeps the real pose. This
-/// host is spawned with [`Terrain::chunk_pose`] and restamped from a descendant
-/// [`CascadeChunk`].
+/// Posed fill root. CpuShot verts are local; [`Transform`] is the cascade origin.
+/// Near cells also carry [`crate::terrain::TerrainColliderMeshSource`] on this entity.
 #[derive(Component, Debug, Clone, Copy, Default)]
 pub struct TerrainVisualHost;
 
@@ -280,6 +277,20 @@ impl TerrainStreamMarker for TerrainFar {
 
 impl TerrainStreamMarker for TerrainBackground {
 	const CELL_SIZE_MULTIPLE: f32 = 4.0;
+}
+
+fn fill_visibility(draw: bool) -> Visibility {
+	if draw {
+		Visibility::Inherited
+	} else {
+		Visibility::Hidden
+	}
+}
+
+fn attach_water(commands: &mut Commands, id: Id, parent: Entity, water: &Water) -> Entity {
+	let entity = water.spawn_fill(commands, Transform::IDENTITY);
+	commands.entity(entity).insert((PresentedWaterScene(id), ChildOf(parent)));
+	entity
 }
 
 /// Independent runtime bookkeeping for one moving terrain scale.
@@ -414,6 +425,11 @@ impl<M: TerrainStreamMarker> TerrainStreamRegionPresenter<'_, '_, M> {
 			.terrain
 			.iter()
 			.filter(|(_, entry)| region.intersects(&entry.bounds) && Self::matches(&entry.value))
+			.filter(|(_, entry)| {
+				let level = entry.value.scene_lod_level(lod_ref);
+				crate::terrain::stream_lod::stream_banded_draws(&entry.value, level)
+					|| entry.value.seeds_collision()
+			})
 			.map(|(id, _)| *id)
 			.collect();
 
@@ -422,41 +438,41 @@ impl<M: TerrainStreamMarker> TerrainStreamRegionPresenter<'_, '_, M> {
 				continue;
 			};
 			let level = entry.value.scene_lod_level(lod_ref);
-			if self
-				.state
-				.presented
-				.get(id)
-				.is_some_and(|shown| shown.version == entry.version && shown.level == level)
-			{
-				continue;
+			let draw = crate::terrain::stream_lod::stream_banded_draws(&entry.value, level);
+			let water = draw.then(|| self.store.water(*id)).flatten();
+			if let Some(shown) = self.state.presented.get_mut(id) {
+				if shown.version == entry.version {
+					if shown.level != level {
+						self.commands.entity(shown.entity).insert(fill_visibility(draw));
+						if let Some(previous_water) = shown.water.take() {
+							self.commands.entity(previous_water).despawn();
+						}
+						shown.water =
+							water.map(|w| attach_water(&mut self.commands, *id, shown.entity, w));
+						shown.level = level;
+					}
+					continue;
+				}
 			}
 			if let Some(previous) = self.state.presented.remove(id) {
 				self.commands.entity(previous.entity).despawn();
 			}
-			let host = self
-				.commands
-				.spawn((
-					Name::new("Terrain cell"),
-					PresentedTerrainScene(*id),
-					TerrainVisualHost,
-					M::default(),
-					entry.value.chunk_pose(),
-					Visibility::default(),
-				))
-				.id();
-			self.commands
-				.spawn_scene(entry.value.scene_with_lod(lod_ref))
-				.insert(ChildOf(host));
-			if crate::terrain::stream_lod::stream_banded_draws(&entry.value, level) {
-				if let Some(water) = self.store.water(*id) {
-					self.commands
-						.spawn_scene(water.local_scene())
-						.insert((PresentedWaterScene(*id), ChildOf(host)));
-				}
-			}
-			self.state
-				.presented
-				.insert(*id, PresentedEntry { version: entry.version, entity: host, level });
+			let entity = entry.value.spawn_fill(
+				&mut self.commands,
+				fill_visibility(draw),
+				entry.value.seeds_collision(),
+			);
+			self.commands.entity(entity).insert((
+				Name::new("Terrain cell"),
+				PresentedTerrainScene(*id),
+				TerrainVisualHost,
+				M::default(),
+			));
+			let water_entity = water.map(|w| attach_water(&mut self.commands, *id, entity, w));
+			self.state.presented.insert(
+				*id,
+				PresentedEntry { version: entry.version, entity, water: water_entity, level },
+			);
 		}
 
 		let stale: Vec<(Id, Entity)> = self
@@ -482,31 +498,20 @@ impl<'a, 'w, 's> RegionPresenter<Terrain, TerrainStoreView<'a>> for TerrainRegio
 		self.state.presented.get(&id).map(|e| e.version)
 	}
 
-	fn handle(&mut self, id: Id, version: Version, value: &Terrain, lod_ref: &LodRef) {
+	fn handle(&mut self, id: Id, version: Version, value: &Terrain, _lod_ref: &LodRef) {
 		if let Some(previous) = self.state.presented.remove(&id) {
 			self.commands.entity(previous.entity).despawn();
 		}
-		// Visual root only. Raw Durham colliders live on `TerrainColliderHost`,
-		// keyed by origin id, so this despawn cannot punch a physics hole.
-		let host = self
-			.commands
-			.spawn((
-				Name::new("Terrain cell"),
-				PresentedTerrainScene(id),
-				TerrainVisualHost,
-				value.chunk_pose(),
-				Visibility::default(),
-			))
-			.id();
-		self.commands.spawn_scene(value.scene_with_lod(lod_ref)).insert(ChildOf(host));
-		if let Some(water) = self.store.water(id) {
-			self.commands
-				.spawn_scene(water.local_scene())
-				.insert((PresentedWaterScene(id), ChildOf(host)));
-		}
+		let entity = value.spawn_fill(&mut self.commands, Visibility::Inherited, true);
+		self.commands.entity(entity).insert((
+			Name::new("Terrain cell"),
+			PresentedTerrainScene(id),
+			TerrainVisualHost,
+		));
+		let water = self.store.water(id).map(|w| attach_water(&mut self.commands, id, entity, w));
 		self.state
 			.presented
-			.insert(id, PresentedEntry { version, entity: host, level: LodSceneLevel::High });
+			.insert(id, PresentedEntry { version, entity, water, level: LodSceneLevel::High });
 	}
 
 	fn presented_ids(&self) -> Vec<Id> {
@@ -529,21 +534,13 @@ impl<'a, 'w, 's> RegionPresenter<Terrain, TerrainStoreView<'a>> for TerrainRegio
 	}
 }
 
-/// Keep visual hosts on the cascade origin after a child `Transform` wipe.
+/// Keep fill pose on the cascade origin if something wipes [`Transform`].
 pub fn sync_visual_terrain_host_pose(
-	mut hosts: Query<(Entity, &mut Transform), With<TerrainVisualHost>>,
-	children: Query<&Children>,
-	chunks: Query<&CascadeChunk>,
+	mut hosts: Query<(&CascadeChunk, &mut Transform), With<TerrainVisualHost>>,
 ) {
-	for (host, mut transform) in &mut hosts {
-		let Some(origin) = children
-			.iter_descendants(host)
-			.find_map(|entity| chunks.get(entity).ok().map(|chunk| chunk.origin))
-		else {
-			continue;
-		};
-		if transform.translation != origin {
-			transform.translation = origin;
+	for (chunk, mut transform) in &mut hosts {
+		if transform.translation != chunk.origin {
+			transform.translation = chunk.origin;
 		}
 	}
 }
@@ -554,7 +551,7 @@ mod tests {
 	use anyhow::Result;
 
 	#[test]
-	fn visual_host_restamps_identity_from_descendant_chunk() -> Result<()> {
+	fn visual_host_restamps_identity_from_its_chunk() -> Result<()> {
 		let mut app = App::new();
 		app.add_systems(Update, sync_visual_terrain_host_pose);
 
@@ -564,13 +561,10 @@ mod tests {
 			.spawn((
 				TerrainVisualHost,
 				PresentedTerrainScene(Id::from_cell(Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE))),
+				CascadeChunk { origin, size: 160.0, ..CascadeChunk::unit_chunk() },
 				Transform::IDENTITY,
 			))
 			.id();
-		app.world_mut().spawn((
-			CascadeChunk { origin, size: 160.0, ..CascadeChunk::unit_chunk() },
-			ChildOf(host),
-		));
 
 		app.update();
 

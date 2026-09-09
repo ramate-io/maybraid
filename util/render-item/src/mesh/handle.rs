@@ -266,11 +266,9 @@ fn spawn_mesh_child<M: Material>(
 	commands: &mut Commands,
 	parent_entity: Entity,
 	mesh: Handle<Mesh>,
-	material: &MeshMaterial3d<M>,
+	_material: &MeshMaterial3d<M>,
 ) {
-	commands.entity(parent_entity).with_children(|parent| {
-		parent.spawn((Mesh3d(mesh), MeshMaterial3d(material.0.clone()), Transform::default()));
-	});
+	commands.entity(parent_entity).insert(Mesh3d(mesh));
 }
 
 fn fulfill_mesh_now<T: MeshBuilder + IdentifiedMesh + Clone + Send + Sync + 'static>(

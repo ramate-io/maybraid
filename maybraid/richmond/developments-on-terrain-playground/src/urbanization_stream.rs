@@ -519,7 +519,7 @@ pub fn present_urbanization_padded_terrain(
 }
 
 /// Hide raw Durham visual roots while their padded replacements are active.
-/// Collision is owned by [`durham_terrain_models::TerrainColliderHost`], not these roots.
+/// Collision lives on the padded fill scene itself.
 pub fn sync_raw_terrain_replacements(
 	mut commands: Commands,
 	state: Res<UrbanizationPaddedTerrainState>,

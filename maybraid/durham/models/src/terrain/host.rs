@@ -27,7 +27,7 @@ use crate::terrain::base_noise::BaseTerrainNoise;
 use crate::terrain::cell::{
 	origin_cell_ids_for_layout, TerrainCellLayout, TerrainCellRing, TERRAIN_CELL_SIZE,
 };
-use crate::terrain::collider::{sync_terrain_collider_hosts, TerrainColliderEpoch};
+use crate::terrain::collider::{TerrainColliderEpoch, TerrainColliderSystems};
 use crate::terrain::config::TerrainConfig;
 use crate::terrain::index::AvianTerrainIndex;
 use crate::terrain::presentation::{
@@ -262,12 +262,15 @@ impl Plugin for TerrainPlugin<Durham> {
 			Update,
 			generate_cells
 				.run_if(terrain_streaming_enabled)
-				.before(sync_terrain_collider_hosts),
+				.before(TerrainColliderSystems::QueueMeshes),
 		);
 		if self.present {
 			app.add_systems(
 				Update,
-				present_cells.after(generate_cells).run_if(terrain_streaming_enabled),
+				present_cells
+					.after(generate_cells)
+					.before(TerrainColliderSystems::QueueMeshes)
+					.run_if(terrain_streaming_enabled),
 			);
 		}
 	}
