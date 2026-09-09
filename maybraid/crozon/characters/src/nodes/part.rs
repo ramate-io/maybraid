@@ -132,7 +132,13 @@ impl PartNode {
 				material
 			}
 			CharacterPartSlot::Mouth => {
-				MaterialRef::named(RECIPE_FACE_MOUTH).with_palette(mouth_palette(color))
+				let scalars: Vec<f32> = self.material.scalar_values().to_vec();
+				let mut material =
+					MaterialRef::named(RECIPE_FACE_MOUTH).with_palette(mouth_palette(color));
+				if !scalars.is_empty() {
+					material = material.with_scalars(scalars);
+				}
+				material
 			}
 			_ => self.material.clone().with_palette([color]),
 		};
@@ -142,6 +148,12 @@ impl PartNode {
 	/// `0` round, `1` slit. Stored in `face_eye` scalars[0].
 	pub fn with_pupil_shape(self, shape: f32) -> Self {
 		let material = self.material.clone().with_scalars([shape]);
+		self.with_material(material)
+	}
+
+	/// Open-rate multiplier for `face_mouth` scalars[0]. Higher parts more often.
+	pub fn with_mouth_open_rate(self, rate: f32) -> Self {
+		let material = self.material.clone().with_scalars([rate]);
 		self.with_material(material)
 	}
 
@@ -264,10 +276,12 @@ mod tests {
 			AssetNormalization::IDENTITY,
 		)
 		.with_material(MaterialRef::named("face_mouth"))
+		.with_mouth_open_rate(3.0)
 		.with_base_color(lip);
 		assert_eq!(part.material.name, MaterialId::named("face_mouth"));
 		assert_eq!(part.material.palette.len(), 5);
 		assert_eq!(part.material.palette[0], lip);
 		assert_ne!(part.material.palette[MOUTH_PALETTE_CREASE], lip);
+		assert_eq!(part.material.scalar_values(), &[3.0]);
 	}
 }

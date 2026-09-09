@@ -5,7 +5,9 @@
 //! `scale.x = -1` on the socket local.
 
 use bevy::prelude::*;
-use crozon_character_shaders::{PUPIL_SHAPE_ROUND, PUPIL_SHAPE_SLIT, RECIPE_FACE_EYE, RECIPE_FACE_MOUTH};
+use crozon_character_shaders::{
+	DEFAULT_MOUTH_OPEN_RATE, PUPIL_SHAPE_ROUND, PUPIL_SHAPE_SLIT, RECIPE_FACE_EYE, RECIPE_FACE_MOUTH,
+};
 use material_ref::MaterialRef;
 use scene_ref::MirrorAxis;
 
@@ -202,6 +204,7 @@ pub fn mouth(mouth: MouthMesh) -> PartNode {
 		mouth_socket_local(),
 	)
 	.with_material(MaterialRef::named(RECIPE_FACE_MOUTH))
+	.with_mouth_open_rate(DEFAULT_MOUTH_OPEN_RATE)
 }
 
 pub fn ear_left(ear: EarMesh) -> PartNode {

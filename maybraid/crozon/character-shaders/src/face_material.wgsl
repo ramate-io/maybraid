@@ -168,10 +168,14 @@ fn mouth_deform(local_pos: vec3<f32>, open: f32) -> vec3<f32> {
     return vec3<f32>(0.0, side * split - lower, open * 0.05 * taper);
 }
 
-/// Stable rest crease; occasional slow part. Not raw 4D noise.
+/// Stable rest crease; occasional part. Rate from scalars[0].x (0 = default 2.2).
 fn mouth_open_envelope(time: f32, seed: f32) -> f32 {
+    var rate = material.scalars[0].x;
+    if rate < 1e-4 {
+        rate = 2.2;
+    }
     let rest = 0.08;
-    let period = 8.5 + seed * 3.0;
+    let period = (8.5 + seed * 3.0) / rate;
     let phase_time = time + seed * 11.0;
     let t = fract(phase_time / period);
     let cycle = floor(phase_time / period);

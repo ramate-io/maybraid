@@ -4,6 +4,7 @@
 //! `face_eye` palette: iris primary, pupil, sclera, iris secondary, lid, catchlight.
 //! `face_eye` scalars[0]: pupil shape (`0` round, `1` slit).
 //! `face_mouth` palette: lip, crease, interior, highlight, teeth.
+//! `face_mouth` scalars[0]: open rate (higher = more frequent parts).
 
 use bevy::{
 	asset::embedded_asset,
@@ -48,6 +49,10 @@ pub const MOUTH_PALETTE_INTERIOR: usize = 2;
 pub const MOUTH_PALETTE_HIGHLIGHT: usize = 3;
 pub const MOUTH_PALETTE_TEETH: usize = 4;
 const MOUTH_PALETTE_DETAIL_SLOTS: usize = 5;
+
+/// `scalars[0].x` — open-rate multiplier. `0` in the ref means default.
+pub const MOUTH_SCALAR_OPEN_RATE: usize = 0;
+pub const DEFAULT_MOUTH_OPEN_RATE: f32 = 2.2;
 
 const SCALAR_VEC4S: usize = MATERIAL_SCALAR_FLOATS / 4;
 const DEFAULT_EYE_COLOR: Vec4 = Vec4::new(0.22, 0.16, 0.12, 1.0);
@@ -209,13 +214,32 @@ impl FaceMaterialUniform {
 				material_ref.noise.seed as f32,
 				material_ref.noise.octaves as f32,
 			),
-			scalars,
+			scalars: packed_face_scalars(kind, scalars),
 			rasters,
 			kind: kind.as_u32(),
 			flags: 0,
 			_pad: UVec2::ZERO,
 		}
 	}
+}
+
+fn packed_face_scalars(kind: FaceShaderKind, mut scalars: [Vec4; SCALAR_VEC4S]) -> [Vec4; SCALAR_VEC4S] {
+	if kind == FaceShaderKind::Mouth && scalars[0][MOUTH_SCALAR_OPEN_RATE] <= 1e-4 {
+		scalars[0][MOUTH_SCALAR_OPEN_RATE] = DEFAULT_MOUTH_OPEN_RATE;
+	}
+	scalars
+}
+
+pub fn mouth_open_rate(raw: f32) -> f32 {
+	if raw > 1e-4 {
+		raw
+	} else {
+		DEFAULT_MOUTH_OPEN_RATE
+	}
+}
+
+fn mouth_open_period(seed: f32, rate: f32) -> f32 {
+	(8.5 + seed * 3.0) / mouth_open_rate(rate)
 }
 
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
@@ -362,11 +386,15 @@ pub fn mouth_deform(local: Vec3, open: f32) -> Vec3 {
 	Vec3::new(0.0, side * split - lower, open * 0.05 * taper)
 }
 
-/// Stable rest crease; occasional slow part. Not raw 4D noise.
+/// Stable rest crease; occasional part. `rate` scales how often it opens.
 pub fn mouth_open_envelope(time: f32, seed: f32) -> f32 {
+	mouth_open_envelope_at(time, seed, DEFAULT_MOUTH_OPEN_RATE)
+}
+
+pub fn mouth_open_envelope_at(time: f32, seed: f32, rate: f32) -> f32 {
 	let seed = seed.rem_euclid(1.0);
 	let rest = 0.08;
-	let period = 8.5 + seed * 3.0;
+	let period = mouth_open_period(seed, rate);
 	let phase_time = time + seed * 11.0;
 	let t = phase_time.rem_euclid(period) / period.max(1e-4);
 	let cycle = (phase_time / period.max(1e-4)).floor();
@@ -428,6 +456,14 @@ mod tests {
 		assert!(crease.x + crease.y + crease.z < lip.x + lip.y + lip.z);
 		assert!(mouth.params.colors[MOUTH_PALETTE_INTERIOR].x < 0.3);
 		assert!(mouth.params.colors[MOUTH_PALETTE_TEETH].x > 0.8);
+		assert!(
+			(mouth.params.scalars[0][MOUTH_SCALAR_OPEN_RATE] - DEFAULT_MOUTH_OPEN_RATE).abs() < 1e-5
+		);
+
+		let frequent = FaceShaderMaterial::from_material_ref(
+			&MaterialRef::named(RECIPE_FACE_MOUTH).with_scalars([3.5]),
+		);
+		assert!((frequent.params.scalars[0][MOUTH_SCALAR_OPEN_RATE] - 3.5).abs() < 1e-5);
 	}
 
 	#[test]
@@ -526,13 +562,17 @@ mod tests {
 				parted += 1;
 			}
 		}
-		assert!(parted < samples / 3, "mouth should rest more than it parts, parted={parted}");
+		assert!(parted < samples / 2, "mouth should rest more than it parts, parted={parted}");
 		let seed = 0.2;
-		let period = 8.5 + seed * 3.0;
+		let period = mouth_open_period(seed, DEFAULT_MOUTH_OPEN_RATE);
 		let rest = (0.7_f32 * period - seed * 11.0).rem_euclid(period);
 		assert!(
 			(mouth_open_envelope(rest, seed) - 0.08).abs() < 1e-4,
 			"rest should be a still crease, not a breath sine"
+		);
+		assert!(
+			mouth_open_period(seed, DEFAULT_MOUTH_OPEN_RATE) < mouth_open_period(seed, 1.0),
+			"default rate should cycle faster than rate 1"
 		);
 	}
 }
