@@ -688,6 +688,8 @@ mod tests {
 		let left = rig.pose.get(&RigName::from("shoulder.L")).expect("left");
 		assert!(left.swing.abs() > 0.0);
 		assert!(left.swing.abs() < 0.1);
+		let humerus = rig.pose.get(&RigName::from("humerus.L")).expect("humerus");
+		assert!(humerus.flex.abs() > 1.0);
 	}
 
 	#[test]

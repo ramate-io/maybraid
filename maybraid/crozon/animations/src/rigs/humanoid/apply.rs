@@ -22,9 +22,23 @@ pub fn apply_neck<R: HumanoidRig>(
 	upper_swing: f32,
 	upper_flex: f32,
 ) {
+	apply_neck_twisted(rig, lower_swing, lower_flex, 0.0, upper_swing, upper_flex, 0.0);
+}
+
+pub fn apply_neck_twisted<R: HumanoidRig>(
+	rig: &mut R,
+	lower_swing: f32,
+	lower_flex: f32,
+	lower_twist: f32,
+	upper_swing: f32,
+	upper_flex: f32,
+	upper_twist: f32,
+) {
 	let mut neck = rig.neck_pose();
-	neck.lower_neck = rig.articulate_on_rig(neck.lower_neck, lower_swing, lower_flex);
-	neck.upper_neck = rig.articulate_on_rig(neck.upper_neck, upper_swing, upper_flex);
+	neck.lower_neck =
+		rig.articulate_on_rig_twisted(neck.lower_neck, lower_swing, lower_flex, lower_twist);
+	neck.upper_neck =
+		rig.articulate_on_rig_twisted(neck.upper_neck, upper_swing, upper_flex, upper_twist);
 	rig.pose_neck(neck);
 }
 
