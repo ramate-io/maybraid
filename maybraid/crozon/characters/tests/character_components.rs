@@ -82,6 +82,26 @@ fn braidman_emits_rigs_and_parts_at_every_band() {
 }
 
 #[test]
+fn braidman_eyes_and_mouth_use_face_recipes() {
+	use crozon_character_shaders::{RECIPE_FACE_EYE, RECIPE_FACE_MOUTH};
+	use material_ref::MaterialId;
+
+	let braidman = Braidman::from_config(&BraidmanConfig::default_preview());
+	let parts = braidman.part_nodes_for_level(LodSceneLevel::High).flatten();
+	let name = |slot| {
+		parts
+			.iter()
+			.find(|p| p.slot == slot)
+			.map(|p| p.material.name.clone())
+			.expect("part")
+	};
+	assert_eq!(name(CharacterPartSlot::EyeLeft), MaterialId::named(RECIPE_FACE_EYE));
+	assert_eq!(name(CharacterPartSlot::EyeRight), MaterialId::named(RECIPE_FACE_EYE));
+	assert_eq!(name(CharacterPartSlot::Mouth), MaterialId::named(RECIPE_FACE_MOUTH));
+	assert!(!matches!(name(CharacterPartSlot::HeadMesh), MaterialId::Name(_)));
+}
+
+#[test]
 fn clothed_braidman_adds_clothing_layer() {
 	let mut config = BraidmanConfig::default_preview();
 	config.clothing.push(ClothingMesh::Tunic);

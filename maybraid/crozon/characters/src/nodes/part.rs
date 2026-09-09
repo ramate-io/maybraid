@@ -113,9 +113,11 @@ impl PartNode {
 		self
 	}
 
-	/// Solid preview / PBR tint via [`MaterialRef`] palette[0].
+	/// Tint via [`MaterialRef`] palette[0]. Keeps the existing recipe name
+	/// so face / clothing parts stay on their shader after color stamping.
 	pub fn with_base_color(self, color: bevy::prelude::Color) -> Self {
-		self.with_material(MaterialRef::default_material().with_palette([color]))
+		let material = self.material.clone().with_palette([color]);
+		self.with_material(material)
 	}
 
 	pub fn mirrored(mut self, axis: MirrorAxis) -> Self {
@@ -182,5 +184,27 @@ impl LodScene for PartNode {
 			maybe_component(socket),
 			maybe_component(skin),
 		)
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use bevy::prelude::Color;
+	use material_ref::MaterialId;
+
+	use super::*;
+
+	#[test]
+	fn with_base_color_keeps_the_recipe_name() {
+		let part = PartNode::glb(
+			CharacterPartSlot::EyeLeft,
+			"eye",
+			"characters/eyes/humanoid_eye_left.glb",
+			AssetNormalization::IDENTITY,
+		)
+		.with_material(MaterialRef::named("face_eye"))
+		.with_base_color(Color::srgb(0.1, 0.2, 0.3));
+		assert_eq!(part.material.name, MaterialId::named("face_eye"));
+		assert_eq!(part.material.palette.len(), 1);
 	}
 }

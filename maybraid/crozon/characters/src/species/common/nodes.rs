@@ -5,6 +5,8 @@
 //! `scale.x = -1` on the socket local.
 
 use bevy::prelude::*;
+use crozon_character_shaders::{RECIPE_FACE_EYE, RECIPE_FACE_MOUTH};
+use material_ref::MaterialRef;
 use scene_ref::MirrorAxis;
 
 use crate::{
@@ -155,6 +157,7 @@ pub fn eye_left(eye: EyeMesh) -> PartNode {
 		"eye_socket.L",
 		eye_socket_local(),
 	)
+	.with_material(MaterialRef::named(RECIPE_FACE_EYE))
 }
 
 pub fn eye_right(eye: EyeMesh) -> PartNode {
@@ -166,6 +169,7 @@ pub fn eye_right(eye: EyeMesh) -> PartNode {
 		"eye_socket.R",
 		eye_socket_local(),
 	)
+	.with_material(MaterialRef::named(RECIPE_FACE_EYE))
 }
 
 pub fn nose(nose: NoseMesh) -> PartNode {
@@ -188,6 +192,7 @@ pub fn mouth(mouth: MouthMesh) -> PartNode {
 		"mouth_socket",
 		mouth_socket_local(),
 	)
+	.with_material(MaterialRef::named(RECIPE_FACE_MOUTH))
 }
 
 pub fn ear_left(ear: EarMesh) -> PartNode {
