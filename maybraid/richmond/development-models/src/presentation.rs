@@ -4,7 +4,8 @@ use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use durham_terrain_models::{
 	spawn_terrain_collider_host, stream_banded_draws, PresentedWaterScene, TerrainColliderCell,
-	TerrainColliderEpoch, TerrainColliderHost, TerrainColliderOverlay, TerrainEntryStore, Water,
+	TerrainColliderEpoch, TerrainColliderHost, TerrainColliderOverlay, TerrainEntryStore,
+	TerrainVisualHost, Water,
 };
 use lod::gen::{Id, LodScene, LodSceneLevel, RegionPresenter, SpatialIndex, Version};
 use lod::lod_ref::LodRef;
@@ -70,14 +71,15 @@ impl PaddedTerrainPresenter<'_, '_> {
 			.spawn((
 				Name::new("Padded terrain cell"),
 				PresentedPaddedTerrainScene(id),
-				Transform::IDENTITY,
+				TerrainVisualHost,
+				value.chunk_pose(),
 				Visibility::default(),
 			))
 			.id();
 		self.commands.spawn_scene(value.mesh_scene()).insert(ChildOf(host));
 		if let Some(water) = water {
 			self.commands
-				.spawn_scene(water.scene())
+				.spawn_scene(water.local_scene())
 				.insert((PresentedWaterScene(id), ChildOf(host)));
 		}
 		host

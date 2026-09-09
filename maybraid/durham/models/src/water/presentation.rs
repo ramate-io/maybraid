@@ -7,6 +7,7 @@ use crate::water::Water;
 use bevy::ecs::system::SystemParam;
 use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::prelude::*;
+use chunk::cascade::CascadeChunk;
 use durham_terrain::shaders::RefractionWater;
 use lod::gen::{
 	GenerationScheme, Id, LodScene, LodSceneLevel, OriginalId, RegionPresenter, SpatialIndex,
@@ -216,5 +217,79 @@ impl<'a, 'w, 's> RegionPresenter<Water, WaterStoreView<'a>> for WaterRegionPrese
 
 	fn remove_stale(&mut self, wanted: &HashSet<Id>) {
 		WaterRegionPresenter::remove_stale(self, wanted);
+	}
+}
+
+/// FinePatch water is an unparented scene root. Restore its cascade origin if
+/// the BSN `Transform` is wiped. Parented water stays identity under a posed
+/// [`crate::terrain::presentation::TerrainVisualHost`].
+pub fn sync_unparented_water_pose(
+	mut roots: Query<
+		(&CascadeChunk, &mut Transform),
+		(With<PresentedWaterScene>, Without<ChildOf>),
+	>,
+) {
+	for (chunk, mut transform) in &mut roots {
+		if transform.translation != chunk.origin {
+			transform.translation = chunk.origin;
+		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use anyhow::Result;
+
+	#[test]
+	fn unparented_water_restamps_identity_from_chunk() -> Result<()> {
+		let mut app = App::new();
+		app.add_systems(Update, sync_unparented_water_pose);
+
+		let origin = Vec3::new(80.0, -8.0, 40.0);
+		let entity = app
+			.world_mut()
+			.spawn((
+				PresentedWaterScene(Id::from_cell(Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE))),
+				CascadeChunk { origin, size: 160.0, ..CascadeChunk::unit_chunk() },
+				Transform::IDENTITY,
+			))
+			.id();
+
+		app.update();
+
+		let transform = app
+			.world()
+			.get::<Transform>(entity)
+			.copied()
+			.ok_or_else(|| anyhow::anyhow!("water root lost Transform"))?;
+		assert_eq!(transform.translation, origin);
+		Ok(())
+	}
+
+	#[test]
+	fn parented_water_keeps_identity() -> Result<()> {
+		let mut app = App::new();
+		app.add_systems(Update, sync_unparented_water_pose);
+
+		let host = app.world_mut().spawn(Transform::from_xyz(80.0, -8.0, 40.0)).id();
+		let water = app
+			.world_mut()
+			.spawn((
+				PresentedWaterScene(Id::from_cell(Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE))),
+				CascadeChunk {
+					origin: Vec3::new(80.0, -8.0, 40.0),
+					size: 160.0,
+					..CascadeChunk::unit_chunk()
+				},
+				Transform::IDENTITY,
+				ChildOf(host),
+			))
+			.id();
+
+		app.update();
+
+		assert_eq!(app.world().get::<Transform>(water).copied(), Some(Transform::IDENTITY));
+		Ok(())
 	}
 }

@@ -202,12 +202,10 @@ mod tests {
 
 		app.update();
 		assert!(app.world().get::<ReplanMovement>(entity).is_none());
-		assert!(
-			!app.world().get::<MovementIntelligence>(entity).is_some_and(|movement| matches!(
-				movement.objective,
-				MovementObjective::FleeFrom(_)
-			))
-		);
+		assert!(!app
+			.world()
+			.get::<MovementIntelligence>(entity)
+			.is_some_and(|movement| matches!(movement.objective, MovementObjective::FleeFrom(_))));
 	}
 
 	#[test]
@@ -231,11 +229,9 @@ mod tests {
 
 		app.update();
 		assert!(app.world().get::<ReplanMovement>(entity).is_some());
-		assert!(
-			app.world().get::<MovementIntelligence>(entity).is_some_and(|movement| matches!(
-				movement.objective,
-				MovementObjective::FleeFrom(_)
-			))
-		);
+		assert!(app
+			.world()
+			.get::<MovementIntelligence>(entity)
+			.is_some_and(|movement| matches!(movement.objective, MovementObjective::FleeFrom(_))));
 	}
 }

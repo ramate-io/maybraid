@@ -6,12 +6,12 @@ use bevy::prelude::*;
 use crozon_character_items::{CharacterSheet, Inventory, InventoryItem};
 use crozon_inventory_user::spawn_bag;
 use damage::Health;
-use firearm_user::{FirearmUserSettings, live_weapon_from_stats, spawn_held_kit};
+use firearm_user::{live_weapon_from_stats, spawn_held_kit, FirearmUserSettings};
 use intelligence_lod::IntelligenceLod;
 use mob_intelligence::{MobMemberBody, MobSlot, MobSystems};
 use npc_intelligence::{NpcBody, NpcInstall};
 use player::{
-	Npc, PlayerLook, PlayerYawOwner, apply_character_controller, apply_character_mobility,
+	apply_character_controller, apply_character_mobility, Npc, PlayerLook, PlayerYawOwner,
 };
 use routing_intelligence::{RoutingIntelligenceUser, RoutingSettings};
 use spotting_intelligence::{InterestLayers, SpotBounds, SpotSubject};

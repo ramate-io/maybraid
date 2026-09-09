@@ -13,7 +13,8 @@ use crate::terrain::marazion::{
 	MarazionWatershedConfigs,
 };
 use crate::terrain::presentation::{
-	TerrainBackground, TerrainFar, TerrainNear, TerrainPresenterState, TerrainStreamPresenterState,
+	sync_visual_terrain_host_pose, TerrainBackground, TerrainFar, TerrainNear,
+	TerrainPresenterState, TerrainStreamPresenterState,
 };
 use avian3d::prelude::PhysicsPlugins;
 use avian3d::schedule::PhysicsSchedulePlugin;
@@ -73,6 +74,10 @@ impl Plugin for TerrainResourcesPlugin {
 					sync_terrain_collider_hosts.in_set(TerrainColliderSystems::SyncHosts),
 					queue_terrain_trimesh_colliders.in_set(TerrainColliderSystems::QueueMeshes),
 				),
+			)
+			.add_systems(
+				PostUpdate,
+				sync_visual_terrain_host_pose.before(TransformSystems::Propagate),
 			);
 	}
 }

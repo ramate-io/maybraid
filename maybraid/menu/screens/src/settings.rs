@@ -1,14 +1,14 @@
 //! In-game settings: pause-menu overlay for debug and user toggles.
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{Scene, bsn};
+use bevy::scene::prelude::{bsn, Scene};
 use maybraid_menu_controller::MenuController;
-use menu_components::info::description::{TextMenuDescription, set_description_for_menu};
+use menu_components::info::description::{set_description_for_menu, TextMenuDescription};
 use menu_components::single_select::republish_menu_activate;
 use menu_components::single_select::text_cursor::TextCursorColumn;
 use menu_components::{
-	BrandModeLine, BrandModeTitle, MenuFocus, TextColumnAlign, TextColumnAnchor, TextCursorRow,
-	TextMenuPlugin, screen_back_scene, set_brand_mode_title,
+	screen_back_scene, set_brand_mode_title, BrandModeLine, BrandModeTitle, MenuFocus,
+	TextColumnAlign, TextColumnAnchor, TextCursorRow, TextMenuPlugin,
 };
 
 use crate::input::add_menu_input;
@@ -37,7 +37,11 @@ impl Default for InGameSettings {
 
 impl InGameSettings {
 	pub fn mob_hud_state_label(self) -> &'static str {
-		if self.mob_hud { "On" } else { "Off" }
+		if self.mob_hud {
+			"On"
+		} else {
+			"Off"
+		}
 	}
 }
 

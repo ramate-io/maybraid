@@ -43,8 +43,8 @@ use sdf::Sdf;
 pub use composed::ComposedWater;
 pub use plugin::{register_water_plugin, WaterPlugin};
 pub use presentation::{
-	BootstrapWaterPresentationAssets, PresentedWaterScene, WaterPresentationAssets,
-	WaterPresenterState, WaterRegionPresenter, WaterStoreView,
+	sync_unparented_water_pose, BootstrapWaterPresentationAssets, PresentedWaterScene,
+	WaterPresentationAssets, WaterPresenterState, WaterRegionPresenter, WaterStoreView,
 };
 
 /// Cell-level water collector: same origin cell as [`Terrain`], composed fills + mesh.
@@ -80,11 +80,23 @@ impl Water {
 		(Vec3::from(self.cell.min) + Vec3::from(self.cell.max)) * 0.5
 	}
 
-	/// Visual scene for one cell: **same** cascade chunk as [`Terrain::scene`], then
-	/// cached [`ComposedWater`] mesh dispatch.
+	/// World pose for CpuShot verts, which are local to the cascade origin.
+	pub fn chunk_pose(&self) -> Transform {
+		Transform::from_translation(cascade_chunk_for_cell(self.cell, self.res_2).origin)
+	}
+
+	/// Unparented visual (FinePatch [`crate::water::WaterRegionPresenter`]).
 	pub fn scene(&self) -> impl Scene + 'static {
+		self.mesh_scene(self.chunk_pose())
+	}
+
+	/// Child of a posed terrain host — identity so the host pose is not doubled.
+	pub fn local_scene(&self) -> impl Scene + 'static {
+		self.mesh_scene(Transform::IDENTITY)
+	}
+
+	fn mesh_scene(&self, transform: Transform) -> impl Scene + 'static {
 		let chunk = cascade_chunk_for_cell(self.cell, self.res_2);
-		let transform = Transform::from_translation(chunk.origin);
 		let sdf = self.sdf.clone();
 		let material = self.material.clone();
 		bsn! {

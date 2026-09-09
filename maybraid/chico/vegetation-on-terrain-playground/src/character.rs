@@ -444,7 +444,10 @@ mod tests {
 			.run_system_once(emit_attach_mode_request)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 
-		assert_eq!(world.get::<Transform>(player).map(|transform| transform.translation), Some(pose));
+		assert_eq!(
+			world.get::<Transform>(player).map(|transform| transform.translation),
+			Some(pose)
+		);
 		assert_eq!(world.query::<&RequestModeCharacter>().iter(&world).count(), 0);
 		Ok(())
 	}
@@ -458,7 +461,10 @@ mod tests {
 			.run_system_once(emit_attach_mode_request)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 
-		assert_eq!(world.get::<Transform>(player).map(|transform| transform.translation), Some(pose));
+		assert_eq!(
+			world.get::<Transform>(player).map(|transform| transform.translation),
+			Some(pose)
+		);
 		assert_eq!(world.query::<&RequestModeCharacter>().iter(&world).count(), 1);
 		Ok(())
 	}

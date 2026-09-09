@@ -13,6 +13,7 @@ use crate::water::PresentedWaterScene;
 use bevy::ecs::system::SystemParam;
 use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::prelude::*;
+use chunk::cascade::CascadeChunk;
 use durham_terrain::shaders::DurhamTerrainShader;
 use lod::gen::{
 	GenerationScheme, Id, LodScene, OriginalId, RegionPresenter, SpatialIndex, StorageStatus,
@@ -242,6 +243,16 @@ struct PresentedEntry {
 #[derive(Component, Debug, Clone, Copy)]
 pub struct PresentedTerrainScene(pub Id);
 
+/// Visual cell root that owns the CpuShot world pose.
+///
+/// Fill meshes stay local (chunk-minimum verts). Parenting the BSN child with
+/// [`ChildOf`] can replace that child's `Transform` with identity, which piles
+/// the tile at the origin while the collider host keeps the real pose. This
+/// host is spawned with [`Terrain::chunk_pose`] and restamped from a descendant
+/// [`CascadeChunk`].
+#[derive(Component, Debug, Clone, Copy, Default)]
+pub struct TerrainVisualHost;
+
 /// Near-stream terrain host (160 m High cells; collision scale).
 #[derive(Component, Debug, Clone, Copy, Default)]
 pub struct TerrainNear;
@@ -427,8 +438,9 @@ impl<M: TerrainStreamMarker> TerrainStreamRegionPresenter<'_, '_, M> {
 				.spawn((
 					Name::new("Terrain cell"),
 					PresentedTerrainScene(*id),
+					TerrainVisualHost,
 					M::default(),
-					Transform::IDENTITY,
+					entry.value.chunk_pose(),
 					Visibility::default(),
 				))
 				.id();
@@ -438,7 +450,7 @@ impl<M: TerrainStreamMarker> TerrainStreamRegionPresenter<'_, '_, M> {
 			if crate::terrain::stream_lod::stream_banded_draws(&entry.value, level) {
 				if let Some(water) = self.store.water(*id) {
 					self.commands
-						.spawn_scene(water.scene_with_lod(lod_ref))
+						.spawn_scene(water.local_scene())
 						.insert((PresentedWaterScene(*id), ChildOf(host)));
 				}
 			}
@@ -481,14 +493,15 @@ impl<'a, 'w, 's> RegionPresenter<Terrain, TerrainStoreView<'a>> for TerrainRegio
 			.spawn((
 				Name::new("Terrain cell"),
 				PresentedTerrainScene(id),
-				Transform::IDENTITY,
+				TerrainVisualHost,
+				value.chunk_pose(),
 				Visibility::default(),
 			))
 			.id();
 		self.commands.spawn_scene(value.scene_with_lod(lod_ref)).insert(ChildOf(host));
 		if let Some(water) = self.store.water(id) {
 			self.commands
-				.spawn_scene(water.scene_with_lod(lod_ref))
+				.spawn_scene(water.local_scene())
 				.insert((PresentedWaterScene(id), ChildOf(host)));
 		}
 		self.state
@@ -513,5 +526,61 @@ impl<'a, 'w, 's> RegionPresenter<Terrain, TerrainStoreView<'a>> for TerrainRegio
 			self.commands.entity(entity).despawn();
 			self.state.presented.remove(&id);
 		}
+	}
+}
+
+/// Keep visual hosts on the cascade origin after a child `Transform` wipe.
+pub fn sync_visual_terrain_host_pose(
+	mut hosts: Query<(Entity, &mut Transform), With<TerrainVisualHost>>,
+	children: Query<&Children>,
+	chunks: Query<&CascadeChunk>,
+) {
+	for (host, mut transform) in &mut hosts {
+		let Some(origin) = children
+			.iter_descendants(host)
+			.find_map(|entity| chunks.get(entity).ok().map(|chunk| chunk.origin))
+		else {
+			continue;
+		};
+		if transform.translation != origin {
+			transform.translation = origin;
+		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use anyhow::Result;
+
+	#[test]
+	fn visual_host_restamps_identity_from_descendant_chunk() -> Result<()> {
+		let mut app = App::new();
+		app.add_systems(Update, sync_visual_terrain_host_pose);
+
+		let origin = Vec3::new(160.0, -40.0, -320.0);
+		let host = app
+			.world_mut()
+			.spawn((
+				TerrainVisualHost,
+				PresentedTerrainScene(Id::from_cell(Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE))),
+				Transform::IDENTITY,
+			))
+			.id();
+		app.world_mut().spawn((
+			CascadeChunk { origin, size: 160.0, ..CascadeChunk::unit_chunk() },
+			ChildOf(host),
+		));
+
+		app.update();
+
+		let transform = app
+			.world()
+			.get::<Transform>(host)
+			.copied()
+			.ok_or_else(|| anyhow::anyhow!("visual host lost Transform"))?;
+		assert_eq!(transform.translation, origin);
+		assert_ne!(transform, Transform::IDENTITY);
+		Ok(())
 	}
 }
