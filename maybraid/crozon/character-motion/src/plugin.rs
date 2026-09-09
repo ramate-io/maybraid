@@ -6,9 +6,8 @@ use intelligence_lod::IntelligencePriority;
 
 use crate::elevation::{draw_terrain_pitch_probes, DrawTerrainPitchProbes};
 use crate::mailbox::{
-	apply_anim_mailbox, begin_mailbox_apply_clock, end_mailbox_apply_clock, prepare_anim_mailbox,
-	select_mailbox_applies, tick_anim_mailbox, MailboxApplyLimits, MailboxApplySet,
-	MailboxApplyStats,
+	apply_anim_mailbox, prepare_anim_mailbox, select_mailbox_applies, tick_anim_mailbox,
+	MailboxApplyLimits, MailboxApplySet,
 };
 use crate::sync::sync_motion_markers;
 
@@ -36,7 +35,6 @@ impl Plugin for CharacterMotionPlugin {
 			.init_resource::<IntelligencePriority>()
 			.init_resource::<MailboxApplyLimits>()
 			.init_resource::<MailboxApplySet>()
-			.init_resource::<MailboxApplyStats>()
 			.configure_sets(
 				Update,
 				CharacterMotionSystems::Elevation.after(CharacterMotionSystems::Anim),
@@ -47,10 +45,8 @@ impl Plugin for CharacterMotionPlugin {
 					sync_motion_markers,
 					prepare_anim_mailbox.after(sync_motion_markers),
 					select_mailbox_applies.after(prepare_anim_mailbox),
-					begin_mailbox_apply_clock.after(select_mailbox_applies),
-					tick_anim_mailbox.after(begin_mailbox_apply_clock),
+					tick_anim_mailbox.after(select_mailbox_applies),
 					apply_anim_mailbox.after(tick_anim_mailbox),
-					end_mailbox_apply_clock.after(apply_anim_mailbox),
 				)
 					.in_set(CharacterMotionSystems::Anim),
 			)
