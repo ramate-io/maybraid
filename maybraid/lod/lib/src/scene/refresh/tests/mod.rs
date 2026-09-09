@@ -12,14 +12,15 @@ use crate::scene::host::LodLevelSpawnRequest;
 use crate::scene::level::LodSceneLevel;
 use crate::scene::refresh::{
 	LodChunkFulfillBudget, LodCullRegionCursor, LodHostBounds, LodLevelRootPending,
-	LodSceneCullAabb, LodSceneRefreshChunkPlugin, LodSceneRefreshLevel,
+	LodProduceRegionSink, LodSceneCullAabb, LodSceneRefreshChunkPlugin, LodSceneRefreshLevel,
+	LodSceneRefreshLevelsFillPlugin,
 };
 
 use test_utils::{
 	app_bullseye_regions, app_core, app_cull_enqueue, app_dual_channel_levels, app_entities_only,
 	app_open_lattice, app_spotlight_levels, app_spotlight_regions, host_level, move_viewer, pose,
 	spawn_host, spawn_host_with_roots, spawn_nested_pair, spawn_viewer, BullChan, CullChan,
-	NewCullRegions, NewRegions, Probe, SpotChan,
+	NewCullRegions, NewRegions, Probe, ScanHostIndex, SpotChan,
 };
 
 #[test]
@@ -109,6 +110,11 @@ fn spotlight_writes_level_for_host_in_region() -> anyhow::Result<()> {
 	move_viewer(&mut app, viewer, Vec3::new(10.0, 0.0, 0.0));
 	app.update();
 	assert_eq!(host_level(&app, host), LodSceneLevel::High);
+	assert!(
+		app.world().resource::<LodProduceRegionSink>().is_empty(),
+		"single fill must consume the produce sink"
+	);
+	assert!(app.is_plugin_added::<LodSceneRefreshLevelsFillPlugin<ScanHostIndex>>());
 	Ok(())
 }
 

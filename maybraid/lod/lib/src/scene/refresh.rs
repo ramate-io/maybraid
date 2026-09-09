@@ -11,7 +11,7 @@
 //! - [`LodRefreshCorePlugin`] — sets, node track, untyped level fold, root sync (once)
 //! - [`LodSceneRefreshRegionPlugin<P, F, M>`] — region production
 //! - [`LodSceneCullRegionPlugin<P, F, M>`] — cull region production
-//! - [`LodSceneRefreshLevelsFillPlugin<I, F>`] — once: snapshots + host hits
+//! - [`LodSceneRefreshLevelsFillPlugin<I>`] — once: snapshots + host hits
 //! - [`LodSceneRefreshLevelsPlugin<T>`] — register `T` with the shared emitter
 //! - [`LodSceneRefreshSyncPlugin<T, F>`] — chunk fulfill + optional full-scan cull
 //! - [`LodSceneCullProduceFillPlugin<I, F>`] — once: cull snapshots + host hits
@@ -53,8 +53,8 @@ pub use entities::{
 };
 pub use levels::{
 	fill_lod_produce_cache, produce_lod_refresh_levels, produce_lod_refresh_levels_erased,
-	LodLevelProducer, LodProduceCache, LodSceneRefreshAabb, LodSceneRefreshLevel,
-	LodSceneRefreshLevelsFillPlugin, LodSceneRefreshLevelsPlugin,
+	LodLevelProducer, LodProduceCache, LodProduceDriver, LodProduceRegionSink,
+	LodSceneRefreshLevel, LodSceneRefreshLevelsFillPlugin, LodSceneRefreshLevelsPlugin,
 };
 pub use regions::{
 	produce_lod_refresh_regions, Bullseye, LodRefreshRegions, LodRefreshRegionsError,
@@ -140,8 +140,8 @@ impl Plugin for LodRefreshCorePlugin {
 			app.add_plugins(LodNodePlugin);
 		}
 		app.init_resource::<LodProduceCache>()
+			.init_resource::<LodProduceRegionSink>()
 			.init_resource::<LodCullProduceCache>()
-			.add_message::<LodSceneRefreshAabb>()
 			.add_message::<LodSceneCullAabb>()
 			.add_message::<LodSceneRefreshLevel>()
 			.add_systems(
@@ -211,8 +211,8 @@ where
 {
 	fn build(&self, app: &mut App) {
 		ensure_refresh_core(app);
-		if !app.is_plugin_added::<LodSceneRefreshLevelsFillPlugin<I, F>>() {
-			app.add_plugins(LodSceneRefreshLevelsFillPlugin::<I, F>::default());
+		if !app.is_plugin_added::<LodSceneRefreshLevelsFillPlugin<I>>() {
+			app.add_plugins(LodSceneRefreshLevelsFillPlugin::<I>::default());
 		}
 		if !app.is_plugin_added::<LodSceneRefreshLevelsPlugin<T>>() {
 			app.add_plugins(LodSceneRefreshLevelsPlugin::<T>::default());

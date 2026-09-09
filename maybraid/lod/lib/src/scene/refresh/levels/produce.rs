@@ -2,7 +2,6 @@
 
 use std::marker::PhantomData;
 
-use bevy::ecs::query::QueryFilter;
 use bevy::ecs::system::{StaticSystemParam, SystemParam};
 use bevy::math::bounding::Aabb3d;
 use bevy::platform::collections::HashSet;
@@ -112,14 +111,33 @@ where
 	}
 }
 
-/// Untyped refresh AABB (union of every [`LodSceneRefreshRegion<M>`] channel).
+/// This-frame refresh AABBs from [`crate::produce_lod_refresh_regions`].
 ///
-/// Region production writes this beside the typed channel message. One fill
-/// system reads it so produce is once per host type, not once per channel.
-#[derive(Message, Debug, Clone, Copy)]
-pub struct LodSceneRefreshAabb {
-	pub region: Aabb3d,
+/// Slice A ([#792](https://github.com/ramate-io/maybraid/issues/792)): one sink,
+/// one fill, one union. Typed [`crate::LodSceneRefreshRegion<M>`] still exists
+/// for later per-channel caches ([#795](https://github.com/ramate-io/maybraid/issues/795)).
+/// Do not write this from timers or generate/present pulses.
+#[derive(Resource, Debug, Default)]
+pub struct LodProduceRegionSink {
+	regions: Vec<Aabb3d>,
 }
+
+impl LodProduceRegionSink {
+	pub fn push(&mut self, region: Aabb3d) {
+		self.regions.push(region);
+	}
+
+	fn take(&mut self) -> Vec<Aabb3d> {
+		std::mem::take(&mut self.regions)
+	}
+
+	pub fn is_empty(&self) -> bool {
+		self.regions.is_empty()
+	}
+}
+
+/// Camera or [`LodViewer`] drivers. One fill query — not one plugin per `F`.
+pub type LodProduceDriver = Or<(With<Camera>, With<LodViewer>)>;
 
 /// This-frame driver snapshots + deduplicated host hits.
 ///
@@ -167,17 +185,17 @@ fn contains_region(outer: Aabb3d, inner: Aabb3d) -> bool {
 }
 
 /// Collect driver refs and untyped host hits once per frame.
-pub fn fill_lod_produce_cache<I, F>(
-	mut regions: MessageReader<LodSceneRefreshAabb>,
+pub fn fill_lod_produce_cache<I>(
+	mut sink: ResMut<LodProduceRegionSink>,
 	index: StaticSystemParam<I>,
-	nodes: Query<(Entity, &LodNodePose, Option<&LodNodeBounds>), (With<LodNode>, F)>,
+	nodes: Query<(Entity, &LodNodePose, Option<&LodNodeBounds>), (With<LodNode>, LodProduceDriver)>,
 	mut cache: ResMut<LodProduceCache>,
 ) where
 	I: SystemParam + 'static,
 	for<'w, 's> I::Item<'w, 's>: LodSceneHostIndex,
-	F: QueryFilter + 'static,
 {
 	cache.clear();
+	let regions = sink.take();
 	if regions.is_empty() {
 		return;
 	}
@@ -187,9 +205,9 @@ pub fn fill_lod_produce_cache<I, F>(
 	}
 
 	let mut index = index.into_inner();
-	for msg in regions.read() {
-		if !cache.has_region(msg.region) {
-			cache.regions.push(msg.region);
+	for region in regions {
+		if !cache.has_region(region) {
+			cache.regions.push(region);
 		}
 	}
 	cache.remove_contained_regions();
@@ -303,36 +321,33 @@ fn host_shows_level_root_world(world: &World, host: Entity, level: LodSceneLevel
 	})
 }
 
-/// Fill [`LodProduceCache`] from untyped region AABBs via host index `I`.
-pub struct LodSceneRefreshLevelsFillPlugin<I, F = With<LodViewer>>
+/// Fill [`LodProduceCache`] once via host index `I` (camera + [`LodViewer`] drivers).
+pub struct LodSceneRefreshLevelsFillPlugin<I>
 where
 	I: SystemParam + 'static,
-	F: QueryFilter + 'static,
 {
-	_marker: PhantomData<fn() -> (I, F)>,
+	_marker: PhantomData<fn() -> I>,
 }
 
-impl<I, F> Default for LodSceneRefreshLevelsFillPlugin<I, F>
+impl<I> Default for LodSceneRefreshLevelsFillPlugin<I>
 where
 	I: SystemParam + 'static,
-	F: QueryFilter + 'static,
 {
 	fn default() -> Self {
 		Self { _marker: PhantomData }
 	}
 }
 
-impl<I, F> Plugin for LodSceneRefreshLevelsFillPlugin<I, F>
+impl<I> Plugin for LodSceneRefreshLevelsFillPlugin<I>
 where
 	I: SystemParam + 'static,
-	F: QueryFilter + 'static,
 	for<'w, 's> I::Item<'w, 's>: LodSceneHostIndex,
 {
 	fn build(&self, app: &mut App) {
 		ensure_refresh_core(app);
 		app.add_systems(
 			Update,
-			fill_lod_produce_cache::<I, F>.in_set(LodLevelProduceSystems::FillCache),
+			fill_lod_produce_cache::<I>.in_set(LodLevelProduceSystems::FillCache),
 		);
 	}
 }
