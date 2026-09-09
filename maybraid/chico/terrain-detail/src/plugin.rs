@@ -10,9 +10,11 @@ use lod::{
 	LodGeneratePlugin, LodGenerateRegionPlugin, LodGenerateSystems, LodPresentCullPlugin,
 	LodPresentPlugin, LodPresentRegionPlugin, LodPresentSystems, LodViewer,
 };
+use material_ref::StandardMaterialRefPlugin;
+use scene_ref::SceneRefPlugin;
 
 use crate::{
-	init_rock_mesh_cache, TerrainDetailGenerateBullseye, TerrainDetailIndex, TerrainDetailLodChan,
+	TerrainDetailGenerateBullseye, TerrainDetailIndex, TerrainDetailLodChan,
 	TerrainDetailPresentBullseye, TerrainDetailPresenterState, TerrainOutcropping,
 };
 
@@ -22,6 +24,12 @@ where
 	Pr: SystemParam + 'static,
 	for<'w, 's> Pr::Item<'w, 's>: RegionPresenter<TerrainOutcropping, TerrainDetailIndex>,
 {
+	if !app.is_plugin_added::<SceneRefPlugin>() {
+		app.add_plugins(SceneRefPlugin);
+	}
+	if !app.is_plugin_added::<StandardMaterialRefPlugin>() {
+		app.add_plugins(StandardMaterialRefPlugin);
+	}
 	app.init_resource::<TerrainDetailIndex>()
 		.init_resource::<TerrainDetailPresenterState>()
 		.init_resource::<TerrainDetailGenerateBullseye>()
@@ -56,12 +64,9 @@ where
 			TerrainDetailLodChan,
 		>::default())
 		.configure_sets(Update, LodPresentSystems::Produce.after(LodGenerateSystems::Drain));
-	if !app.world().contains_resource::<crate::RockMeshCache>() {
-		app.add_systems(Startup, init_rock_mesh_cache);
-	}
 }
 
-/// Shaders-free mesh cache + optional presenter type.
+/// Scene / material fulfill plus optional presenter type.
 pub struct TerrainDetailPlugin<Pr> {
 	_marker: PhantomData<fn() -> Pr>,
 }

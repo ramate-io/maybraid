@@ -16,7 +16,7 @@ use crate::{
 /// Count hashed into this inclusive range ("or so" ~20).
 const CLUSTER_COUNT: std::ops::RangeInclusive<u32> = 16..=24;
 
-/// One placed unit rock. Scale is world metres (unit mesh is 1 m tall).
+/// One placed unit rock. Scale is world metres (authored GLB is 1 m tall).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct RockPlacement {
 	pub component: RockComponent,

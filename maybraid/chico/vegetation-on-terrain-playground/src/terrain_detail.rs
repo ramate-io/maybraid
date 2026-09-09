@@ -5,7 +5,7 @@ use std::collections::HashSet;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use chico_terrain_detail::{
-	spawn_rock, OutcroppingExtent, OutcroppingKind, RockComponent, RockMeshCache, RockPlacement,
+	spawn_rock, OutcroppingExtent, OutcroppingKind, RockComponent, RockPlacement,
 	TerrainDetailIndex, TerrainDetailPresenterState, TerrainDetailStreamLod,
 	TerrainDetailStreamSpec, TerrainDetailWorldSample, TerrainOutcropping,
 };
@@ -36,7 +36,6 @@ where
 pub struct DurhamTerrainDetailPresenter<'w, 's> {
 	commands: Commands<'w, 's>,
 	state: ResMut<'w, TerrainDetailPresenterState>,
-	cache: Res<'w, RockMeshCache>,
 	store: Res<'w, TerrainEntryStore>,
 	layout: Res<'w, TerrainCellLayout>,
 	base: Res<'w, WorldBaseTerrain>,
@@ -61,14 +60,7 @@ impl RegionPresenter<TerrainOutcropping, TerrainDetailIndex>
 			&self.layout,
 			&self.base.0,
 		));
-		self.state.present_with_world(
-			&mut self.commands,
-			&self.cache,
-			id,
-			version,
-			outcropping,
-			world,
-		);
+		self.state.present_with_world(&mut self.commands, id, version, outcropping, world);
 	}
 
 	fn hide(&mut self, id: Id) {
@@ -113,7 +105,6 @@ pub fn stream_terrain_detail(
 pub fn spawn_show_pins(
 	commands: &mut Commands,
 	config: &PlaygroundConfig,
-	cache: &RockMeshCache,
 	store: &TerrainEntryStore,
 	layout: &TerrainCellLayout,
 	fallback: &durham_terrain_models::BaseTerrainNoise,
@@ -123,17 +114,16 @@ pub fn spawn_show_pins(
 	};
 	let world = DurhamGroveSample::new(store, layout, fallback);
 	if let Some(component) = kind.component() {
-		return spawn_component_pins(commands, cache, config, component, &world);
+		return spawn_component_pins(commands, config, component, &world);
 	}
 	if let Some(outcropping) = kind.outcropping() {
-		return spawn_outcropping_pins(commands, cache, config, outcropping, &world);
+		return spawn_outcropping_pins(commands, config, outcropping, &world);
 	}
 	0
 }
 
 fn spawn_component_pins(
 	commands: &mut Commands,
-	cache: &RockMeshCache,
 	config: &PlaygroundConfig,
 	component: RockComponent,
 	world: &impl TerrainDetailWorldSample,
@@ -147,7 +137,6 @@ fn spawn_component_pins(
 			let height = world.height_at(Vec3::new(xz.x, 0.0, xz.y));
 			let entity = spawn_rock(
 				commands,
-				cache,
 				RockPlacement {
 					component,
 					translation: Vec3::new(xz.x, height - scale * 0.2, xz.y),
@@ -164,7 +153,6 @@ fn spawn_component_pins(
 
 fn spawn_outcropping_pins(
 	commands: &mut Commands,
-	cache: &RockMeshCache,
 	config: &PlaygroundConfig,
 	kind: OutcroppingKind,
 	world: &impl TerrainDetailWorldSample,
@@ -176,7 +164,7 @@ fn spawn_outcropping_pins(
 		for iz in -radius..=radius {
 			let extent = OutcroppingExtent::from_cell_index(ix, iz);
 			for placement in kind.populate(extent, noise, world) {
-				let entity = spawn_rock(commands, cache, placement);
+				let entity = spawn_rock(commands, placement);
 				commands.entity(entity).insert(TerrainDetailRoot);
 				count += 1;
 			}

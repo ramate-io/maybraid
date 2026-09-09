@@ -578,7 +578,6 @@ fn spawn_groves(
 	store: Res<TerrainEntryStore>,
 	layout: Res<TerrainCellLayout>,
 	base: Res<WorldBaseTerrain>,
-	cache: Option<Res<chico_terrain_detail::RockMeshCache>>,
 	mut dirty: ResMut<GrovesDirty>,
 	pending: Res<TerrainPresentPending>,
 	terrain_dirty: Res<TerrainPresentationDirty>,
@@ -597,17 +596,7 @@ fn spawn_groves(
 	}
 
 	if config.show.is_some() {
-		let Some(cache) = cache.as_ref() else {
-			return;
-		};
-		let n = terrain_detail::spawn_show_pins(
-			&mut commands,
-			&config,
-			cache,
-			&store,
-			&layout,
-			&base.0,
-		);
+		let n = terrain_detail::spawn_show_pins(&mut commands, &config, &store, &layout, &base.0);
 		debug!("spawned {n} terrain-detail show pins");
 		dirty.0 = false;
 		return;

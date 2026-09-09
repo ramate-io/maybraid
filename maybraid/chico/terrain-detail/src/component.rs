@@ -1,7 +1,9 @@
-//! Unit rock meshes. Authored shapes live in `maybraid/art/terrain_detail/`;
-//! v1 builds Bevy unit meshes and scales them at spawn ([RFC-170 §3.1.4]).
+//! Unit rock kits. Authored shapes live in `maybraid/art/terrain_detail/` and
+//! present as [`SceneRef`] + [`MaterialRef`] ([RFC-170 §3.1.4]).
 
-use bevy::prelude::*;
+use bevy::prelude::Color;
+use material_ref::MaterialRef;
+use scene_ref::SceneRef;
 
 /// Authored GLB paths relative to the Bevy asset root (`maybraid/assets`).
 ///
@@ -12,12 +14,20 @@ pub mod assets {
 	pub const SHARP_ROCK_GLB: &str = "terrain_detail/sharp_rock.glb";
 }
 
+/// Named recipe resolved by the host [`material_ref::MaterialLib`] (Standard fallback).
+pub const CHICO_ROCK_MATERIAL: &str = "rock";
+
+/// Stone albedo for the Standard fallback (not the vegetation bump-out shader).
+pub fn rock_material_ref() -> MaterialRef {
+	MaterialRef::named(CHICO_ROCK_MATERIAL).with_palette([Color::srgb(0.42, 0.40, 0.36)])
+}
+
 /// Deterministic unit component. Scale is applied at spawn, not in the mesh.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum RockComponent {
-	/// Icosphere boulder (`rounded_rock.blend`).
+	/// Boulder (`rounded_rock.blend`).
 	RoundRock,
-	/// Icosphere plus a bottom flange so the rock can sit / sink (`rock_knob.blend`).
+	/// Sit / sink knob (`rock_knob.blend`).
 	RockKnob,
 	/// Pointy crag piece (`sharp_rock.blend`).
 	SharpRock,
@@ -47,47 +57,12 @@ impl RockComponent {
 		}
 	}
 
-	/// Unit mesh with the sit plane at y = 0. Scale at spawn for world metres.
-	pub fn unit_mesh(self) -> Mesh {
-		match self {
-			Self::RoundRock => round_rock_mesh(),
-			Self::RockKnob => rock_knob_mesh(),
-			Self::SharpRock => sharp_rock_mesh(),
-		}
+	pub fn scene_ref(self) -> SceneRef {
+		SceneRef::glb(self.glb_path())
 	}
-}
 
-fn unit_icosphere(radius: f32) -> Mesh {
-	Sphere::new(radius)
-		.mesh()
-		.ico(2)
-		.unwrap_or_else(|_| Mesh::from(Sphere::new(radius)))
-}
-
-fn round_rock_mesh() -> Mesh {
-	// Radius 0.5, lifted so the sit plane is the south pole.
-	unit_icosphere(0.5).translated_by(Vec3::new(0.0, 0.5, 0.0))
-}
-
-fn rock_knob_mesh() -> Mesh {
-	let mut body = unit_icosphere(0.42).translated_by(Vec3::new(0.0, 0.52, 0.0));
-	let flange = Mesh::from(Cylinder::new(0.55, 0.16)).translated_by(Vec3::new(0.0, 0.08, 0.0));
-	let _ = body.merge(&flange);
-	body
-}
-
-fn sharp_rock_mesh() -> Mesh {
-	// Cone sits on its base; tip points +Y.
-	Mesh::from(Cone::new(0.32, 1.0)).translated_by(Vec3::new(0.0, 0.5, 0.0))
-}
-
-/// Shared rock albedo for v1 (`StandardMaterial`; not the vegetation bump-out shader).
-pub fn rock_material() -> StandardMaterial {
-	StandardMaterial {
-		base_color: Color::srgb(0.42, 0.40, 0.36),
-		perceptual_roughness: 0.92,
-		metallic: 0.02,
-		..Default::default()
+	pub fn material_ref(self) -> MaterialRef {
+		rock_material_ref()
 	}
 }
 
@@ -106,12 +81,10 @@ mod tests {
 	}
 
 	#[test]
-	fn unit_meshes_have_triangles() -> Result<()> {
-		for kind in RockComponent::ALL {
-			let mesh = kind.unit_mesh();
-			let verts = mesh.count_vertices();
-			assert!(verts > 8, "{:?} too few verts: {verts}", kind);
-		}
+	fn scene_refs_point_at_authored_glbs() -> Result<()> {
+		assert_eq!(RockComponent::RoundRock.scene_ref(), SceneRef::glb(assets::ROUNDED_ROCK_GLB));
+		assert_eq!(RockComponent::RockKnob.scene_ref(), SceneRef::glb(assets::ROCK_KNOB_GLB));
+		assert_eq!(RockComponent::SharpRock.scene_ref(), SceneRef::glb(assets::SHARP_ROCK_GLB));
 		Ok(())
 	}
 
@@ -120,6 +93,13 @@ mod tests {
 		assert_eq!(RockComponent::RoundRock.glb_path(), "terrain_detail/rounded_rock.glb");
 		assert_eq!(RockComponent::RockKnob.glb_path(), "terrain_detail/rock_knob.glb");
 		assert_eq!(RockComponent::SharpRock.glb_path(), "terrain_detail/sharp_rock.glb");
+		Ok(())
+	}
+
+	#[test]
+	fn material_ref_is_named_rock() -> Result<()> {
+		assert_eq!(rock_material_ref().name, material_ref::MaterialId::named(CHICO_ROCK_MATERIAL));
+		assert_eq!(RockComponent::RoundRock.material_ref(), rock_material_ref());
 		Ok(())
 	}
 }

@@ -7,65 +7,18 @@ use bevy::prelude::*;
 use lod::gen::{Id, Version};
 use lod::lod_ref::LodRef;
 use lod::presentation::RegionPresenter;
+use material_ref::{MaterialRefRoot, PropagateToDescendants};
+use scene_ref::SceneRefRoot;
 
-use crate::{
-	RockComponent, RockPlacement, TerrainDetailIndex, TerrainDetailWorldSample, TerrainOutcropping,
-};
+use crate::{RockPlacement, TerrainDetailIndex, TerrainDetailWorldSample, TerrainOutcropping};
 
-/// Shared unit meshes and rock material. Initialized by the plugin.
-#[derive(Resource, Clone)]
-pub struct RockMeshCache {
-	pub round: Handle<Mesh>,
-	pub knob: Handle<Mesh>,
-	pub sharp: Handle<Mesh>,
-	pub material: Handle<StandardMaterial>,
-}
-
-/// Insert [`RockMeshCache`] once assets exist (DefaultPlugins / playground).
-pub fn init_rock_mesh_cache(
-	mut commands: Commands,
-	mut meshes: ResMut<Assets<Mesh>>,
-	mut materials: ResMut<Assets<StandardMaterial>>,
-	existing: Option<Res<RockMeshCache>>,
-) {
-	if existing.is_some() {
-		return;
-	}
-	commands.insert_resource(RockMeshCache::from_assets(&mut meshes, &mut materials));
-}
-
-impl RockMeshCache {
-	pub fn from_assets(
-		meshes: &mut Assets<Mesh>,
-		materials: &mut Assets<StandardMaterial>,
-	) -> Self {
-		Self {
-			round: meshes.add(RockComponent::RoundRock.unit_mesh()),
-			knob: meshes.add(RockComponent::RockKnob.unit_mesh()),
-			sharp: meshes.add(RockComponent::SharpRock.unit_mesh()),
-			material: materials.add(crate::rock_material()),
-		}
-	}
-
-	pub fn mesh(&self, component: RockComponent) -> Handle<Mesh> {
-		match component {
-			RockComponent::RoundRock => self.round.clone(),
-			RockComponent::RockKnob => self.knob.clone(),
-			RockComponent::SharpRock => self.sharp.clone(),
-		}
-	}
-}
-
-/// Spawn one scaled unit rock. No collider in v1.
-pub fn spawn_rock(
-	commands: &mut Commands,
-	cache: &RockMeshCache,
-	placement: RockPlacement,
-) -> Entity {
+/// Spawn one scaled authored rock (`SceneRef` + `MaterialRef`). No collider in v1.
+pub fn spawn_rock(commands: &mut Commands, placement: RockPlacement) -> Entity {
 	commands
 		.spawn((
-			Mesh3d(cache.mesh(placement.component)),
-			MeshMaterial3d(cache.material.clone()),
+			SceneRefRoot(placement.component.scene_ref()),
+			MaterialRefRoot(placement.component.material_ref()),
+			PropagateToDescendants,
 			placement.transform(),
 			Visibility::default(),
 		))
@@ -130,7 +83,6 @@ impl TerrainDetailPresenterState {
 	pub fn present_with_world<W>(
 		&mut self,
 		commands: &mut Commands,
-		cache: &RockMeshCache,
 		id: Id,
 		version: Version,
 		outcropping: &TerrainOutcropping,
@@ -150,11 +102,8 @@ impl TerrainDetailPresenterState {
 		let Some(placements) = outcropping.placements_ready_to_present(&world) else {
 			return Vec::new();
 		};
-		let entities: Vec<Entity> = placements
-			.iter()
-			.copied()
-			.map(|placement| spawn_rock(commands, cache, placement))
-			.collect();
+		let entities: Vec<Entity> =
+			placements.iter().copied().map(|placement| spawn_rock(commands, placement)).collect();
 		self.presented.insert(
 			id,
 			PresentedOutcropping { version, entities: entities.clone(), hidden: false },
@@ -168,7 +117,6 @@ impl TerrainDetailPresenterState {
 pub struct FlatTerrainDetailPresenter<'w, 's> {
 	commands: Commands<'w, 's>,
 	state: ResMut<'w, TerrainDetailPresenterState>,
-	cache: Res<'w, RockMeshCache>,
 }
 
 impl RegionPresenter<TerrainOutcropping, TerrainDetailIndex>
@@ -187,7 +135,6 @@ impl RegionPresenter<TerrainOutcropping, TerrainDetailIndex>
 	) {
 		self.state.present_with_world(
 			&mut self.commands,
-			&self.cache,
 			id,
 			version,
 			outcropping,
