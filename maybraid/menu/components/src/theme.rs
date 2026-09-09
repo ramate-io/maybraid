@@ -62,6 +62,9 @@ pub const OBJECTIVE_MARKER_BORDER: f32 = 1.5;
 /// Corner radius on an objective tag.
 pub const OBJECTIVE_MARKER_RADIUS: f32 = 8.0;
 
+/// Optical drop so the chip sits on the title’s ink, not the top of its line box.
+pub const OBJECTIVE_MARKER_OFFSET_Y: f32 = 3.0;
+
 /// Description line under the menu column.
 pub const DESCRIPTION_FONT_SIZE: f32 = 22.0;
 

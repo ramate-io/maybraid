@@ -15,8 +15,9 @@ use crate::info::description::TextMenuDescription;
 use crate::theme::{
 	BARLOW_SEMIBOLD, CORNER_BOTTOM, CORNER_INSET, CURSOR_ICON_GAP, CURSOR_ICON_SIZE,
 	DESCRIPTION_FONT_SIZE, ITEM_FONT_SIZE, OBJECTIVE_MARKER_BORDER, OBJECTIVE_MARKER_FONT_SIZE,
-	OBJECTIVE_MARKER_PAD_X, OBJECTIVE_MARKER_PAD_Y, OBJECTIVE_MARKER_RADIUS, TEXT_LIME,
-	TEXT_PURPLE, TEXT_SALMON, TEXT_YELLOW, TEXT_YELLOW_FAINT, TEXT_YELLOW_FAINT_FOCUS,
+	OBJECTIVE_MARKER_OFFSET_Y, OBJECTIVE_MARKER_PAD_X, OBJECTIVE_MARKER_PAD_Y,
+	OBJECTIVE_MARKER_RADIUS, TEXT_LIME, TEXT_PURPLE, TEXT_SALMON, TEXT_YELLOW, TEXT_YELLOW_FAINT,
+	TEXT_YELLOW_FAINT_FOCUS,
 };
 use maybraid_input::{MenuNav, MenuNavPad};
 
@@ -486,6 +487,7 @@ fn objective_marker_scene(kind: MenuObjectiveKind) -> impl Scene + 'static {
 			padding: UiRect::axes(px(OBJECTIVE_MARKER_PAD_X), px(OBJECTIVE_MARKER_PAD_Y)),
 			border: UiRect::all(px(OBJECTIVE_MARKER_BORDER)),
 			border_radius: BorderRadius::all(px(OBJECTIVE_MARKER_RADIUS)),
+			margin: UiRect::top(px(OBJECTIVE_MARKER_OFFSET_Y)),
 			justify_content: JustifyContent::Center,
 			align_items: AlignItems::Center,
 			flex_shrink: 0.0,
