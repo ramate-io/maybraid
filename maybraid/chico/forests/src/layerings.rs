@@ -1,7 +1,11 @@
-//! Well-known forest layerings ([RFC-183 §3.5.4]). Ground cover is omitted.
-//! Missing groves (Conifer Lower Massives) are dropped, not aliased.
+//! Well-known forest layerings ([RFC-183 §3.5.4]). Ground-cover flip matches
+//! the RFC tables; flop waits. Missing groves (Conifer Lower Massives) are
+//! dropped, not aliased.
 
-use super::{ForestGroveKind, ForestLayering, LayeringKind, WeightedGrove};
+use super::{
+	ForestGroveKind, ForestLayering, GroundCoverGroveKind, LayeringKind, WeightedCover,
+	WeightedGrove,
+};
 
 const fn w(kind: Option<ForestGroveKind>, weight: f32) -> WeightedGrove {
 	WeightedGrove { kind, weight }
@@ -15,10 +19,24 @@ const fn none(weight: f32) -> WeightedGrove {
 	w(None, weight)
 }
 
+const fn cover(kind: GroundCoverGroveKind, weight: f32) -> WeightedCover {
+	WeightedCover { kind: Some(kind), weight }
+}
+
+const fn no_cover(weight: f32) -> WeightedCover {
+	WeightedCover { kind: None, weight }
+}
+
 /// Lush Jungle ([RFC-183 §3.5.4.1]).
 pub fn lush_jungle() -> ForestLayering {
 	ForestLayering {
 		kind: LayeringKind::LushJungle,
+		ground_cover: vec![
+			no_cover(1.0),
+			cover(GroundCoverGroveKind::HuelgoatPitch, 1.0),
+			cover(GroundCoverGroveKind::FleckingBed, 1.0),
+			cover(GroundCoverGroveKind::Allbed, 2.0),
+		],
 		tufts: vec![
 			none(2.0),
 			grove(ForestGroveKind::TallGrass, 1.0),
@@ -54,6 +72,12 @@ pub fn lush_jungle() -> ForestLayering {
 pub fn riparian() -> ForestLayering {
 	ForestLayering {
 		kind: LayeringKind::Riparian,
+		ground_cover: vec![
+			no_cover(1.0),
+			cover(GroundCoverGroveKind::HuelgoatPitch, 1.0),
+			cover(GroundCoverGroveKind::FleckingBed, 1.0),
+			cover(GroundCoverGroveKind::Allbed, 1.5),
+		],
 		tufts: vec![
 			none(1.5),
 			grove(ForestGroveKind::TallGrass, 1.0),
@@ -87,6 +111,12 @@ pub fn riparian() -> ForestLayering {
 pub fn taiga() -> ForestLayering {
 	ForestLayering {
 		kind: LayeringKind::Taiga,
+		ground_cover: vec![
+			no_cover(1.5),
+			cover(GroundCoverGroveKind::HuelgoatPitch, 1.0),
+			cover(GroundCoverGroveKind::Allbed, 1.0),
+			cover(GroundCoverGroveKind::FloorScrub, 0.5),
+		],
 		tufts: vec![
 			none(2.0),
 			grove(ForestGroveKind::CommonTufts, 1.0),
@@ -118,6 +148,12 @@ pub fn taiga() -> ForestLayering {
 pub fn liams_summer() -> ForestLayering {
 	ForestLayering {
 		kind: LayeringKind::LiamsSummer,
+		ground_cover: vec![
+			no_cover(4.0),
+			cover(GroundCoverGroveKind::Allbed, 1.0),
+			cover(GroundCoverGroveKind::FleckingBed, 1.0),
+			cover(GroundCoverGroveKind::GrassyMounds, 0.75),
+		],
 		tufts: vec![
 			none(1.0),
 			grove(ForestGroveKind::WildGrass, 1.5),
@@ -149,6 +185,7 @@ pub fn liams_summer() -> ForestLayering {
 pub fn owls_desert() -> ForestLayering {
 	ForestLayering {
 		kind: LayeringKind::OwlsDesert,
+		ground_cover: vec![no_cover(16.0), cover(GroundCoverGroveKind::FloorScrub, 1.0)],
 		tufts: vec![
 			none(16.0),
 			grove(ForestGroveKind::BushScrub, 1.0),
@@ -179,6 +216,11 @@ pub fn owls_desert() -> ForestLayering {
 pub fn mi_robles() -> ForestLayering {
 	ForestLayering {
 		kind: LayeringKind::MiRobles,
+		ground_cover: vec![
+			no_cover(1.0),
+			cover(GroundCoverGroveKind::Allbed, 3.0),
+			cover(GroundCoverGroveKind::GrassyMounds, 0.5),
+		],
 		tufts: vec![
 			none(3.0),
 			grove(ForestGroveKind::CommonTufts, 0.75),
@@ -199,6 +241,11 @@ pub fn mi_robles() -> ForestLayering {
 pub fn seceda() -> ForestLayering {
 	ForestLayering {
 		kind: LayeringKind::Seceda,
+		ground_cover: vec![
+			no_cover(1.0),
+			cover(GroundCoverGroveKind::Allbed, 3.0),
+			cover(GroundCoverGroveKind::HuelgoatPitch, 0.75),
+		],
 		tufts: vec![
 			none(2.5),
 			grove(ForestGroveKind::CommonTufts, 1.0),
@@ -224,6 +271,11 @@ pub fn seceda() -> ForestLayering {
 pub fn kumulipo() -> ForestLayering {
 	ForestLayering {
 		kind: LayeringKind::Kumulipo,
+		ground_cover: vec![
+			no_cover(1.5),
+			cover(GroundCoverGroveKind::Allbed, 1.0),
+			cover(GroundCoverGroveKind::HuelgoatPitch, 0.75),
+		],
 		tufts: vec![
 			none(5.0),
 			grove(ForestGroveKind::TropicalTufts, 1.0),
@@ -251,6 +303,11 @@ pub fn kumulipo() -> ForestLayering {
 pub fn waiguo() -> ForestLayering {
 	ForestLayering {
 		kind: LayeringKind::Waiguo,
+		ground_cover: vec![
+			no_cover(2.0),
+			cover(GroundCoverGroveKind::Allbed, 1.0),
+			cover(GroundCoverGroveKind::FleckingBed, 0.75),
+		],
 		tufts: vec![
 			none(2.0),
 			grove(ForestGroveKind::CommonTufts, 1.0),
@@ -276,6 +333,11 @@ pub fn waiguo() -> ForestLayering {
 pub fn ag_town() -> ForestLayering {
 	ForestLayering {
 		kind: LayeringKind::AgTown,
+		ground_cover: vec![
+			no_cover(6.0),
+			cover(GroundCoverGroveKind::Allbed, 0.75),
+			cover(GroundCoverGroveKind::FleckingBed, 0.5),
+		],
 		tufts: vec![none(8.0), grove(ForestGroveKind::CommonTufts, 0.5)],
 		understory: vec![
 			none(8.0),
@@ -296,6 +358,7 @@ pub fn ag_town() -> ForestLayering {
 pub fn suns_barren() -> ForestLayering {
 	ForestLayering {
 		kind: LayeringKind::SunsBarren,
+		ground_cover: vec![no_cover(64.0), cover(GroundCoverGroveKind::GrassyMounds, 0.75)],
 		tufts: vec![none(64.0), grove(ForestGroveKind::CommonTufts, 0.25)],
 		understory: vec![none(12.0)],
 		lower_canopy: vec![none(12.0)],
@@ -307,6 +370,11 @@ pub fn suns_barren() -> ForestLayering {
 pub fn temperate_holy() -> ForestLayering {
 	ForestLayering {
 		kind: LayeringKind::TemperateHoly,
+		ground_cover: vec![
+			no_cover(5.0),
+			cover(GroundCoverGroveKind::HuelgoatPitch, 0.75),
+			cover(GroundCoverGroveKind::Allbed, 0.5),
+		],
 		tufts: vec![none(8.0), grove(ForestGroveKind::CommonTufts, 0.25)],
 		understory: vec![none(8.0), grove(ForestGroveKind::LowBush, 0.25)],
 		lower_canopy: vec![none(1.0), grove(ForestGroveKind::TemperateLowerMassives, 2.0)],
@@ -322,6 +390,11 @@ pub fn temperate_holy() -> ForestLayering {
 pub fn old_steppe() -> ForestLayering {
 	ForestLayering {
 		kind: LayeringKind::OldSteppe,
+		ground_cover: vec![
+			no_cover(1.0),
+			cover(GroundCoverGroveKind::Allbed, 2.0),
+			cover(GroundCoverGroveKind::GrassyMounds, 2.0),
+		],
 		tufts: vec![
 			none(4.0),
 			grove(ForestGroveKind::TallGrass, 0.75),
@@ -337,6 +410,11 @@ pub fn old_steppe() -> ForestLayering {
 pub fn trap_thicket() -> ForestLayering {
 	ForestLayering {
 		kind: LayeringKind::TrapThicket,
+		ground_cover: vec![
+			no_cover(1.5),
+			cover(GroundCoverGroveKind::Allbed, 1.5),
+			cover(GroundCoverGroveKind::HuelgoatPitch, 0.75),
+		],
 		tufts: vec![
 			none(2.0),
 			grove(ForestGroveKind::TropicalTufts, 1.0),
@@ -362,6 +440,11 @@ pub fn trap_thicket() -> ForestLayering {
 pub fn bush() -> ForestLayering {
 	ForestLayering {
 		kind: LayeringKind::Bush,
+		ground_cover: vec![
+			no_cover(2.0),
+			cover(GroundCoverGroveKind::FloorScrub, 1.0),
+			cover(GroundCoverGroveKind::Allbed, 0.75),
+		],
 		tufts: vec![
 			none(2.0),
 			grove(ForestGroveKind::BushScrub, 1.0),
@@ -388,6 +471,11 @@ pub fn bush() -> ForestLayering {
 pub fn old_nevada() -> ForestLayering {
 	ForestLayering {
 		kind: LayeringKind::OldNevada,
+		ground_cover: vec![
+			no_cover(1.5),
+			cover(GroundCoverGroveKind::GrassyMounds, 2.0),
+			cover(GroundCoverGroveKind::FloorScrub, 0.75),
+		],
 		tufts: vec![
 			none(5.0),
 			grove(ForestGroveKind::BushScrub, 0.5),
@@ -403,6 +491,11 @@ pub fn old_nevada() -> ForestLayering {
 pub fn storybook() -> ForestLayering {
 	ForestLayering {
 		kind: LayeringKind::Storybook,
+		ground_cover: vec![
+			no_cover(1.0),
+			cover(GroundCoverGroveKind::HuelgoatPitch, 2.0),
+			cover(GroundCoverGroveKind::FleckingBed, 0.75),
+		],
 		tufts: vec![
 			none(2.0),
 			grove(ForestGroveKind::WildGrass, 1.0),
@@ -433,6 +526,11 @@ pub fn storybook() -> ForestLayering {
 pub fn meadowland() -> ForestLayering {
 	ForestLayering {
 		kind: LayeringKind::Meadowland,
+		ground_cover: vec![
+			no_cover(1.0),
+			cover(GroundCoverGroveKind::HuelgoatPitch, 2.0),
+			cover(GroundCoverGroveKind::Allbed, 0.75),
+		],
 		tufts: vec![
 			none(3.0),
 			grove(ForestGroveKind::WildGrass, 1.0),
@@ -454,6 +552,11 @@ pub fn meadowland() -> ForestLayering {
 pub fn fruit_plains() -> ForestLayering {
 	ForestLayering {
 		kind: LayeringKind::FruitPlains,
+		ground_cover: vec![
+			no_cover(1.0),
+			cover(GroundCoverGroveKind::HuelgoatPitch, 2.0),
+			cover(GroundCoverGroveKind::Allbed, 2.0),
+		],
 		tufts: vec![
 			none(4.0),
 			grove(ForestGroveKind::CommonTufts, 0.75),
@@ -479,6 +582,11 @@ pub fn fruit_plains() -> ForestLayering {
 pub fn damas_edge() -> ForestLayering {
 	ForestLayering {
 		kind: LayeringKind::DamasEdge,
+		ground_cover: vec![
+			no_cover(4.0),
+			cover(GroundCoverGroveKind::FloorScrub, 1.0),
+			cover(GroundCoverGroveKind::Allbed, 0.5),
+		],
 		tufts: vec![
 			none(5.0),
 			grove(ForestGroveKind::BushScrub, 0.75),
@@ -508,6 +616,11 @@ pub fn damas_edge() -> ForestLayering {
 pub fn open_tropics() -> ForestLayering {
 	ForestLayering {
 		kind: LayeringKind::OpenTropics,
+		ground_cover: vec![
+			no_cover(1.5),
+			cover(GroundCoverGroveKind::HuelgoatPitch, 2.0),
+			cover(GroundCoverGroveKind::Allbed, 0.5),
+		],
 		tufts: vec![
 			none(4.0),
 			grove(ForestGroveKind::TropicalTufts, 0.75),
@@ -523,6 +636,7 @@ pub fn open_tropics() -> ForestLayering {
 pub fn west_maui() -> ForestLayering {
 	ForestLayering {
 		kind: LayeringKind::WestMaui,
+		ground_cover: vec![no_cover(1.0), cover(GroundCoverGroveKind::FloorScrub, 2.0)],
 		tufts: vec![
 			none(1.0),
 			grove(ForestGroveKind::WildGrass, 2.0),
@@ -539,6 +653,11 @@ pub fn west_maui() -> ForestLayering {
 pub fn upper_park() -> ForestLayering {
 	ForestLayering {
 		kind: LayeringKind::UpperPark,
+		ground_cover: vec![
+			no_cover(1.0),
+			cover(GroundCoverGroveKind::FloorScrub, 2.0),
+			cover(GroundCoverGroveKind::Allbed, 0.5),
+		],
 		tufts: vec![
 			none(1.0),
 			grove(ForestGroveKind::WildGrass, 2.0),
@@ -559,6 +678,11 @@ pub fn upper_park() -> ForestLayering {
 pub fn steppe_down() -> ForestLayering {
 	ForestLayering {
 		kind: LayeringKind::SteppeDown,
+		ground_cover: vec![
+			no_cover(1.0),
+			cover(GroundCoverGroveKind::FloorScrub, 2.0),
+			cover(GroundCoverGroveKind::Allbed, 0.5),
+		],
 		tufts: vec![
 			none(1.0),
 			grove(ForestGroveKind::WildGrass, 2.0),

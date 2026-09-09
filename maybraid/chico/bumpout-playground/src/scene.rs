@@ -140,7 +140,8 @@ impl PresenterLayer {
 			.with_style(
 				BumpOutStyle::new(0.055, 0.96, 0.42)
 					.with_cheese(0.72, 1.35)
-					.with_fragment_height(5.0, 0.14),
+					.with_fragment_height(5.0, 0.14)
+					.with_boundary_rough(BumpOutStyle::GROUND_COVER_BOUNDARY_ROUGH_M, 160.0),
 			),
 			Self::CanopyProxy => BumpOut::from_neighborhood(
 				self.neighborhood(tile),
@@ -154,7 +155,8 @@ impl PresenterLayer {
 			.with_style(
 				BumpOutStyle::new(0.065, 0.88, 0.18)
 					.with_cheese(0.88, 1.0)
-					.with_fragment_height(4.5, 0.85),
+					.with_fragment_height(4.5, 0.85)
+					.with_boundary_rough(BumpOutStyle::CANOPY_BOUNDARY_ROUGH_M, 160.0),
 			),
 			Self::Terrain => unreachable!("terrain does not use a bump-out material"),
 		}

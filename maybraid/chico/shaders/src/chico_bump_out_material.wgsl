@@ -148,6 +148,30 @@ fn vertex(vertex: Vertex) -> BumpOutVertexOutput {
     );
     out.world_position.y += average_height
         + (displacement_noise - 0.5) * 2.0 * height_deviation;
+
+    // World-space rim warp so adjacent tiles agree on the shared edge.
+    let rough_m = bump.scalars[1].w;
+    let cell_m = max(bump.scalars[2].x, 1.0);
+    if (rough_m > 0.001) {
+        let fx = fract(out.world_position.x / cell_m);
+        let fz = fract(out.world_position.z / cell_m);
+        let edge_m = min(min(fx, 1.0 - fx), min(fz, 1.0 - fz)) * cell_m;
+        let weight = 1.0 - saturate(edge_m / max(rough_m, 1.0));
+        let n0 = fbm_2d_3(
+            out.world_position.xz * bump.noise.x * 0.55,
+            bump.noise.z + 311.0,
+        );
+        let n1 = fbm_2d_3(
+            out.world_position.xz * bump.noise.x * 0.55 + vec2<f32>(19.0, 7.0),
+            bump.noise.z + 419.0,
+        );
+        var dir = vec2<f32>(n0 - 0.5, n1 - 0.5);
+        let dir_len = max(length(dir), 1e-4);
+        dir = dir / dir_len;
+        out.world_position.x += dir.x * rough_m * weight;
+        out.world_position.z += dir.y * rough_m * weight;
+    }
+
     out.position = position_world_to_clip(out.world_position.xyz);
 
 #ifdef VERTEX_NORMALS

@@ -13,8 +13,9 @@ use bevy::prelude::{Color, Vec2, Vec3};
 use chico_groves::GroveExtent;
 use lod::gen::Id;
 
+use crate::ground_cover::ground_cover_sample_on_bounds;
 use crate::{
-	ForestExtent, ForestGroveKind, ForestIndex, ForestLayer, SelectedLayers,
+	ForestExtent, ForestGroveKind, ForestIndex, ForestLayer, GroundCoverSample, SelectedLayers,
 	DEFAULT_FOREST_GROVE_TILE_XZ,
 };
 
@@ -87,6 +88,28 @@ impl BumpOutSelectionSample {
 			height_m: kind.bump_out_height_m(),
 			height_deviation_m: kind.bump_out_height_deviation_m(),
 			palette: kind.bump_out_palette(),
+		}
+	}
+
+	/// Union coverage with a floor throw. Height / bite / palette stay canopy
+	/// when the canopy sample has density; otherwise the cover recipe is used.
+	pub fn with_max_density_cover(self, cover: GroundCoverSample) -> Self {
+		if cover.density <= 0.001 {
+			return self;
+		}
+		if self.density > 0.001 {
+			let mut merged = self;
+			merged.density = self.density.max(cover.density);
+			return merged;
+		}
+		Self {
+			kind: None,
+			density: cover.density,
+			bite_size: cover.bite_size,
+			bite_size_deviation: cover.bite_size_deviation,
+			height_m: cover.height_m,
+			height_deviation_m: cover.height_deviation_m,
+			palette: cover.palette,
 		}
 	}
 }
@@ -487,6 +510,7 @@ pub fn blend_selection_on_bounds(index: &ForestIndex, bounds: Aabb3d) -> BumpOut
 		height_deviation_m: (height_deviation_m / weight_sum).max(0.0),
 		palette,
 	}
+	.with_max_density_cover(ground_cover_sample_on_bounds(index, bounds))
 }
 
 /// 3×3 terrain-cell neighborhood centered on `bounds`, each sample blended from 100 m tiles.
@@ -522,13 +546,14 @@ fn xz_overlap_area(a: Aabb3d, b: Aabb3d) -> f32 {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::{LayeringKind, SelectedLayers};
+	use crate::{GroundCoverGroveKind, GroundCoverSample, LayeringKind, SelectedLayers};
 	use anyhow::Result;
 
 	#[test]
 	fn highest_kind_prefers_upper_canopy() -> Result<()> {
 		let layers = SelectedLayers {
 			layering: LayeringKind::Meadowland,
+			ground_cover: None,
 			tufts: Some(ForestGroveKind::WildGrass),
 			understory: Some(ForestGroveKind::LowBush),
 			lower_canopy: None,
@@ -542,6 +567,7 @@ mod tests {
 	fn highest_kind_falls_back_to_tufts() -> Result<()> {
 		let layers = SelectedLayers {
 			layering: LayeringKind::Meadowland,
+			ground_cover: None,
 			tufts: Some(ForestGroveKind::CommonTufts),
 			understory: None,
 			lower_canopy: None,
@@ -582,6 +608,7 @@ mod tests {
 	fn empty_cell_borrows_occupied_neighbors() -> Result<()> {
 		let empty = SelectedLayers {
 			layering: LayeringKind::SunsBarren,
+			ground_cover: None,
 			tufts: None,
 			understory: None,
 			lower_canopy: None,
@@ -589,6 +616,7 @@ mod tests {
 		};
 		let oak = SelectedLayers {
 			layering: LayeringKind::MiRobles,
+			ground_cover: None,
 			tufts: None,
 			understory: None,
 			lower_canopy: None,
@@ -604,6 +632,7 @@ mod tests {
 	fn empty_stays_empty_when_neighbors_are_empty() -> Result<()> {
 		let empty = SelectedLayers {
 			layering: LayeringKind::SunsBarren,
+			ground_cover: None,
 			tufts: None,
 			understory: None,
 			lower_canopy: None,
@@ -619,6 +648,7 @@ mod tests {
 	fn occupied_cell_does_not_blend_empty_neighbors() -> Result<()> {
 		let empty = SelectedLayers {
 			layering: LayeringKind::SunsBarren,
+			ground_cover: None,
 			tufts: None,
 			understory: None,
 			lower_canopy: None,
@@ -626,6 +656,7 @@ mod tests {
 		};
 		let oak = SelectedLayers {
 			layering: LayeringKind::MiRobles,
+			ground_cover: None,
 			tufts: None,
 			understory: None,
 			lower_canopy: None,
@@ -634,6 +665,38 @@ mod tests {
 		let sample = sample_with_neighbors(oak, [empty, empty, empty, empty]);
 		assert_eq!(sample.kind, Some(ForestGroveKind::RollingOaks));
 		assert!((sample.density - ForestGroveKind::RollingOaks.bump_out_density()).abs() < 1e-4);
+		Ok(())
+	}
+
+	#[test]
+	fn empty_canopy_uses_cover_recipe() -> Result<()> {
+		let cover = GroundCoverSample::from_grove(GroundCoverGroveKind::Allbed, 0.5);
+		let merged = BumpOutSelectionSample::empty().with_max_density_cover(cover);
+		assert!((merged.density - cover.density).abs() < 1e-4);
+		assert!((merged.height_m - cover.height_m).abs() < 1e-4);
+		assert!(merged.kind.is_none());
+		Ok(())
+	}
+
+	#[test]
+	fn occupied_canopy_keeps_height_and_maxes_density() -> Result<()> {
+		let oak = BumpOutSelectionSample::from_kind(ForestGroveKind::RollingOaks);
+		let cover = GroundCoverSample::from_grove(GroundCoverGroveKind::Allbed, 0.5);
+		let merged = oak.with_max_density_cover(cover);
+		assert_eq!(merged.kind, Some(ForestGroveKind::RollingOaks));
+		assert!((merged.height_m - oak.height_m).abs() < 1e-4);
+		assert!((merged.density - oak.density.max(cover.density)).abs() < 1e-4);
+		Ok(())
+	}
+
+	#[test]
+	fn pinned_mi_robles_canopy_keeps_oak_height() -> Result<()> {
+		let mut index = ForestIndex::default();
+		index.layering = Some(LayeringKind::MiRobles);
+		let sample = blend_selection_on_bounds(&index, bump_out_cell_bounds(0, 0));
+		assert_eq!(sample.kind, Some(ForestGroveKind::RollingOaks));
+		assert!(sample.density + 1e-4 >= GroundCoverGroveKind::Allbed.density());
+		assert!((sample.height_m - ForestGroveKind::RollingOaks.bump_out_height_m()).abs() < 1e-3);
 		Ok(())
 	}
 

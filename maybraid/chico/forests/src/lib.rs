@@ -2,8 +2,8 @@
 //!
 //! A forest cell is 1600 m. Hopscotch picks a well-known layering. Each layer
 //! Bucket-Throws a grove or `None`. Generate queries [`ChicoGrove`] (100 m ×
-//! layer); [`ChicoForest`] is select-only. Ground cover is omitted. Missing
-//! groves (Conifer Lower Massives) are dropped, not aliased.
+//! layer); [`ChicoForest`] is select-only. Ground cover is a flip-only overlay
+//! throw, not a grown kit. Missing groves (Conifer Lower Massives) are dropped, not aliased.
 //! `ForestGroveBiases` stay default — forests do not bias construction seeds.
 
 mod assemble;
@@ -13,6 +13,7 @@ mod chico;
 mod extent;
 mod forest;
 mod generation;
+mod ground_cover;
 mod grove;
 pub(crate) mod hopscotch;
 mod host;
@@ -47,18 +48,25 @@ pub use extent::{ForestExtent, DEFAULT_FOREST_EXTENT_XZ, DEFAULT_FOREST_GROVE_TI
 pub use forest::{neighbor_layers, ChicoForest};
 pub use generation::{
 	BumpOutGenerateBullseye, BumpOutLodChan, BumpOutPresentBullseye, ForestGenerateBullseye,
-	ForestLodChan, ForestPresentBullseye, ForestPresentLattice, MediumBumpOutLodChan,
-	GROVE_GENERATE_RADIUS_M, GROVE_PRESENT_RADIUS_M,
+	ForestLodChan, ForestPresentBullseye, ForestPresentLattice, GroundCoverGenerateBullseye,
+	GroundCoverLodChan, GroundCoverPresentBullseye, MediumBumpOutLodChan, GROVE_GENERATE_RADIUS_M,
+	GROVE_PRESENT_RADIUS_M,
+};
+pub use ground_cover::{
+	blend_ground_cover_neighborhood, ground_cover_cell_index, ground_cover_cells_in_near_disk,
+	ground_cover_in_near_disk, ground_cover_sample_on_bounds, GroundCoverBumpOut, GroundCoverKind,
+	GroundCoverSample, GroundCoverStyle, GROUND_COVER_ANCHOR_STEP_M, GROUND_COVER_FAR_OVERLAP_M,
+	GROUND_COVER_RADIUS_M,
 };
 pub use grove::{grove_from_id, grove_id, ChicoGrove};
 pub use hopscotch::{select as hopscotch_select, HopscotchNode};
 pub use host::ChicoGroveHost;
 pub use index::{forest_world_sample, ForestIndex};
 pub use kind::{
-	ForestGroveKind, ForestLayer, ForestLayering, LayerDropOut, LayeringKind, SelectedLayers,
-	WeightedGrove, TUFT_DROP_MIN_HEIGHT_M,
+	ForestGroveKind, ForestLayer, ForestLayering, GroundCoverGroveKind, LayerDropOut, LayeringKind,
+	SelectedLayers, WeightedCover, WeightedGrove, TUFT_DROP_MIN_HEIGHT_M,
 };
-pub use layer::{select_layers, throw_layer};
+pub use layer::{select_layers, throw_cover, throw_layer};
 pub use plugin::{register_vegetation_view, ForestPlugin, VegetationViewPlugin};
 pub use present::{FlatForestPresenter, ForestPresenterState};
 pub use recipe::ForestGroveRecipe;

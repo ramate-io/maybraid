@@ -135,4 +135,19 @@ mod tests {
 		assert_eq!(uniform.scalars[0], Vec4::new(0.07, 0.8, 0.3, 0.65));
 		assert_eq!(uniform.scalars[1], Vec4::new(1.4, 5.0, 0.75, 0.0));
 	}
+
+	#[test]
+	fn boundary_rough_packs_into_style_scalars() {
+		let neighborhood = BumpOutNeighborhood::uniform(0.5, 12.0, 0.2, 4.0, 1.0);
+		let material_ref = neighborhood.material_ref(
+			[Color::srgb(0.1, 0.5, 0.2)],
+			NoiseParams::from_scalar(17.0, 0.2, 1.5, 2),
+		);
+		let material_ref = BumpOutStyle::new(0.07, 0.8, 0.3)
+			.with_boundary_rough(20.0, 320.0)
+			.apply_to(material_ref);
+		let uniform = BumpOutUniform::from_material_ref(&material_ref);
+		assert!((uniform.scalars[1].w - 20.0).abs() < 1e-4);
+		assert!((uniform.scalars[2].x - 320.0).abs() < 1e-4);
+	}
 }

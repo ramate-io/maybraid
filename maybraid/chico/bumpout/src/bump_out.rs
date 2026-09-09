@@ -66,8 +66,9 @@ impl BumpOut {
 
 	pub fn aabb<T>(&self, terrain_ref: &TerrainChunkRef<T>) -> Aabb {
 		let extent = terrain_ref.chunk().extent();
-		let local_min = Vec3::new(0.0, self.min_vertical_displacement.min(0.0), 0.0);
-		let local_max = extent + Vec3::new(0.0, self.max_vertical_displacement.max(0.0), 0.0);
+		let rough = self.style().boundary_rough_m;
+		let local_min = Vec3::new(-rough, self.min_vertical_displacement.min(0.0), -rough);
+		let local_max = extent + Vec3::new(rough, self.max_vertical_displacement.max(0.0), rough);
 		Aabb {
 			center: Vec3A::from((local_min + local_max) * 0.5),
 			half_extents: Vec3A::from((local_max - local_min) * 0.5),

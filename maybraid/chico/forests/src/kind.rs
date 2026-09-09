@@ -1,7 +1,8 @@
 //! Grove and layering identities that exist in `chico-groves`.
 //!
-//! Ground-cover groves and Conifer Lower Massives are not listed — they are not
-//! implemented and must not be aliased onto another grove.
+//! Ground-cover groves are **select-only** overlay identities ([RFC-183 §3.4.3]).
+//! They are not grown as kits and must not be aliased onto [`ForestGroveKind`].
+//! Conifer Lower Massives is missing — drop that bucket; do not alias it.
 
 /// Existing well-known grove a forest layer may select.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -49,6 +50,32 @@ pub enum ForestGroveKind {
 	WildGrass,
 }
 
+impl ForestGroveKind {
+	/// Blade / tuft-patch groves (High kits, not nested woody plants).
+	pub fn is_tuft(self) -> bool {
+		matches!(
+			self,
+			Self::BraidGrass
+				| Self::CommonTufts
+				| Self::MonsterGrass
+				| Self::TallGrass
+				| Self::TropicalTufts
+				| Self::WildGrass
+		)
+	}
+}
+
+/// Well-known ground-cover grove ([RFC-183 §3.4.3]). Overlay identity only.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum GroundCoverGroveKind {
+	HuelgoatPitch,
+	FleckingBed,
+	JimsCollage,
+	FloorScrub,
+	GrassyMounds,
+	Allbed,
+}
+
 /// Well-known forest layering ([RFC-183 §3.5.4]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum LayeringKind {
@@ -85,10 +112,18 @@ pub struct WeightedGrove {
 	pub weight: f32,
 }
 
-/// Four forest layers (no ground cover). Each is a Bucket Throw including `None`.
+/// Flip-only ground-cover bucket ([RFC-183 §3.5.3.1]). Flop waits.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct WeightedCover {
+	pub kind: Option<GroundCoverGroveKind>,
+	pub weight: f32,
+}
+
+/// Four kit layers plus a select-only ground-cover flip. Each is a Bucket Throw including `None`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ForestLayering {
 	pub kind: LayeringKind,
+	pub ground_cover: Vec<WeightedCover>,
 	pub tufts: Vec<WeightedGrove>,
 	pub understory: Vec<WeightedGrove>,
 	pub lower_canopy: Vec<WeightedGrove>,
@@ -99,6 +134,7 @@ pub struct ForestLayering {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SelectedLayers {
 	pub layering: LayeringKind,
+	pub ground_cover: Option<GroundCoverGroveKind>,
 	pub tufts: Option<ForestGroveKind>,
 	pub understory: Option<ForestGroveKind>,
 	pub lower_canopy: Option<ForestGroveKind>,
@@ -253,10 +289,12 @@ impl LayeringKind {
 }
 
 impl ForestLayering {
-	/// Highest-weight non-`None` grove on each layer (review / pinned cells).
+	/// Highest-weight grove on each kit layer (non-`None` only). Ground cover
+	/// includes `None`, so a barren flip stays empty on pinned cells.
 	pub fn typical_layers(&self) -> SelectedLayers {
 		SelectedLayers {
 			layering: self.kind,
+			ground_cover: typical_cover(&self.ground_cover),
 			tufts: typical_grove(&self.tufts),
 			understory: typical_grove(&self.understory),
 			lower_canopy: typical_grove(&self.lower_canopy),
@@ -271,6 +309,13 @@ fn typical_grove(buckets: &[WeightedGrove]) -> Option<ForestGroveKind> {
 		.filter_map(|bucket| Some((bucket.kind?, bucket.weight)))
 		.max_by(|a, b| a.1.total_cmp(&b.1))
 		.map(|(kind, _)| kind)
+}
+
+fn typical_cover(buckets: &[WeightedCover]) -> Option<GroundCoverGroveKind> {
+	buckets
+		.iter()
+		.max_by(|a, b| a.weight.total_cmp(&b.weight))
+		.and_then(|bucket| bucket.kind)
 }
 
 #[cfg(test)]
@@ -293,7 +338,25 @@ mod tests {
 	fn typical_lush_jungle_keeps_canopy() -> Result<()> {
 		let layers = LayeringKind::LushJungle.layering().typical_layers();
 		assert_eq!(layers.upper_canopy, Some(ForestGroveKind::TradeWinds));
+		assert_eq!(layers.ground_cover, Some(GroundCoverGroveKind::Allbed));
 		assert!(layers.tufts.is_some());
+		Ok(())
+	}
+
+	#[test]
+	fn typical_cover_follows_rfc_flip() -> Result<()> {
+		assert_eq!(
+			LayeringKind::MiRobles.layering().typical_layers().ground_cover,
+			Some(GroundCoverGroveKind::Allbed)
+		);
+		assert_eq!(
+			LayeringKind::Meadowland.layering().typical_layers().ground_cover,
+			Some(GroundCoverGroveKind::HuelgoatPitch)
+		);
+		assert!(LayeringKind::SunsBarren.layering().typical_layers().ground_cover.is_none());
+		assert!(LayeringKind::OwlsDesert.layering().typical_layers().ground_cover.is_none());
+		assert!(ForestGroveKind::WildGrass.is_tuft());
+		assert!(!ForestGroveKind::RollingOaks.is_tuft());
 		Ok(())
 	}
 

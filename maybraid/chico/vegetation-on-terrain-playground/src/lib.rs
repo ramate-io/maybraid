@@ -11,6 +11,7 @@ pub mod character;
 pub mod commands;
 pub mod diagnostics;
 mod forest;
+mod ground_cover;
 mod groves;
 mod material_lib;
 mod pitch;
@@ -19,7 +20,7 @@ mod ui;
 
 pub use bump_out::{
 	bump_out_from_cell, bump_out_noise, fine_terrain_for, medium_terrain_for,
-	register_bump_out_lod, terrain_chunk_ref, CanopyBumpOutPresenterState,
+	register_bump_out_lod, terrain_chunk_ref, BumpOutPresenterState, CanopyBumpOutPresenterState,
 	DurhamCanopyBumpOutPresenter, DurhamMediumCanopyBumpOutPresenter,
 	MediumCanopyBumpOutPresenterState, WorldTerrainBuilder,
 };
@@ -33,6 +34,10 @@ pub use diagnostics::{PlaygroundDiag, PlaygroundTimingPlugin, RequestFpsToggle};
 pub use durham_terrain_models::{TerrainCoverage, WorldBaseTerrain, WORLD_FINE_HALF_EXTENT_CELLS};
 pub use forest::DurhamForestPresenter;
 pub use game_commands::command::PendingStartupCommand;
+pub use ground_cover::{
+	ground_cover_from_cell, register_ground_cover_lod, DurhamGroundCoverBumpOutPresenter,
+	GroundCoverBumpOutPresenterState,
+};
 pub use groves::{DurhamGroveSample, OwnedDurhamTerrain, StoredDurhamTerrain};
 pub use material_lib::{VegetationOnTerrainMaterialLib, VegetationOnTerrainMaterialRefPlugin};
 pub use player::{
@@ -70,6 +75,7 @@ use game_commands::command::{
 	capture_command_line_input, GameCommandPlugin, TextEntryBlocked, TextEntryFocus,
 };
 use game_commands::ui::{GameCommandDrawerConfig, GameCommandStatusText};
+use ground_cover::stream_ground_cover_bump_outs;
 use groves::{spawn_tiled_groves, GroveRoot};
 use lod::{LodGenerateSystems, LodPresentSystems, LodSceneHost};
 use maybraid_input::{PadGameplayEnabled, VirtualPadPlugin, VirtualPadSystems};
@@ -250,6 +256,7 @@ impl Plugin for VegetationOnTerrainPlugin {
 			register_bump_out_lod::<DurhamCanopyBumpOutPresenter, DurhamMediumCanopyBumpOutPresenter>(
 				app,
 			);
+			register_ground_cover_lod::<DurhamGroundCoverBumpOutPresenter>(app);
 		}
 		if !app.is_plugin_added::<VegetationHostPlugin>() {
 			app.add_plugins(VegetationHostPlugin { register_camera: self.register_camera });
@@ -274,6 +281,11 @@ impl Plugin for VegetationOnTerrainPlugin {
 						.before(LodGenerateSystems::Produce)
 						.before(LodPresentSystems::Produce)
 						.run_if(terrain_streaming_enabled),
+					stream_ground_cover_bump_outs
+						.after(stream_canopy_bump_outs)
+						.before(LodGenerateSystems::Produce)
+						.before(LodPresentSystems::Produce)
+						.run_if(terrain_streaming_enabled),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 				),
 			);
@@ -288,6 +300,11 @@ impl Plugin for VegetationOnTerrainPlugin {
 						.run_if(terrain_streaming_enabled),
 					stream_canopy_bump_outs
 						.after(stream_durham_forest)
+						.before(LodGenerateSystems::Produce)
+						.before(LodPresentSystems::Produce)
+						.run_if(terrain_streaming_enabled),
+					stream_ground_cover_bump_outs
+						.after(stream_canopy_bump_outs)
 						.before(LodGenerateSystems::Produce)
 						.before(LodPresentSystems::Produce)
 						.run_if(terrain_streaming_enabled),
@@ -556,7 +573,10 @@ mod tests {
 			.run_system_once(snap_player_to_composed_surface)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 
-		assert_eq!(world.get::<Transform>(player).map(|transform| transform.translation), Some(pose));
+		assert_eq!(
+			world.get::<Transform>(player).map(|transform| transform.translation),
+			Some(pose)
+		);
 		assert!(world.get::<AwaitingTerrainSurface>(player).is_none());
 		assert_eq!(world.query::<&RequestModeCharacter>().iter(&world).count(), 0);
 		Ok(())
@@ -570,9 +590,9 @@ mod tests {
 			.insert_resource(PlayerPhysicsEnabled::default())
 			.insert_resource(TerrainCellLayout::default())
 			.insert_resource(TerrainEntryStore::default())
-			.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(
-				&TerrainConfig::new(42),
-			)))
+			.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(&TerrainConfig::new(
+				42,
+			))))
 			.add_systems(
 				Update,
 				(
@@ -625,7 +645,10 @@ mod tests {
 			.run_system_once(apply_mode_commands)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 
-		assert_eq!(world.get::<Transform>(player).map(|transform| transform.translation), Some(pose));
+		assert_eq!(
+			world.get::<Transform>(player).map(|transform| transform.translation),
+			Some(pose)
+		);
 		assert!(world.get::<AwaitingTerrainSurface>(player).is_none());
 		Ok(())
 	}
@@ -640,9 +663,9 @@ mod tests {
 		world.insert_resource(PlayerPhysicsEnabled::default());
 		world.insert_resource(TerrainCellLayout::default());
 		world.insert_resource(TerrainEntryStore::default());
-		world.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(&TerrainConfig::new(
-			42,
-		))));
+		world.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(
+			&TerrainConfig::new(42),
+		)));
 		let player = world
 			.spawn((
 				Player,

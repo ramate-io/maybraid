@@ -38,7 +38,7 @@ const DEFAULT_STYLE: [f32; 7] = [0.04, 0.92, 0.25, 0.75, 1.0, 3.5, 0.18];
 
 /// Packed, fixed-layout GPU representation of one material reference.
 ///
-/// Channel meaning is a shader contract. Bump-out uses rasters 0–4 and scalars 0–6.
+/// Channel meaning is a shader contract. Bump-out uses rasters 0–4 and scalars 0–8.
 #[derive(Clone, Copy, Debug, ShaderType)]
 pub struct BumpOutUniform {
 	pub colors: [Vec4; MATERIAL_PALETTE_SLOTS],
