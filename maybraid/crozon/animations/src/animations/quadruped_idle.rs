@@ -4,22 +4,32 @@
 //! sequence is a designed 1D envelope on a longer period; it starts and ends
 //! at rest so a period wrap is quiet. A small unwrapped sway keeps rest from
 //! looking frozen.
+//!
+//! Neck knobs follow [`crate::rigs::quadruped::apply::apply_neck_axes`]: local
+//! +Y is along the bone, so **flex** is side-to-side, **twist** is up / down,
+//! and **swing** is roll.
 
 use crate::animations::smoothstep;
 
 const DEFAULT_GRAZE_NECK: f32 = 0.68;
+const DEFAULT_GRAZE_PITCH: f32 = 0.45;
 const DEFAULT_LOOK_NECK: f32 = 0.28;
+const DEFAULT_LOOK_PITCH: f32 = 0.22;
 const DEFAULT_SHAKE: f32 = 0.10;
 const DEFAULT_LUMBAR: f32 = 0.15;
 const DEFAULT_SWAY: f32 = 0.018;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct QuadrupedIdle {
-	/// Neck flex while the muzzle is down (radians). Bow, not yaw.
+	/// Side-to-side while the muzzle is down (flex / Z, radians).
 	pub graze_neck: f32,
-	/// Neck flex while looking up (radians). Opposite sign from graze.
+	/// Up / down while the muzzle is down (twist / X, radians).
+	pub graze_pitch: f32,
+	/// Side-to-side while looking up (flex / Z, radians).
 	pub look_neck: f32,
-	/// Neck swing during the shake burst (radians).
+	/// Up / down while looking up (twist / X, radians).
+	pub look_pitch: f32,
+	/// Roll during the shake burst (swing / Y, around the bone, radians).
 	pub shake: f32,
 	/// Lumbar gather while grazing (radians).
 	pub lumbar: f32,
@@ -31,7 +41,9 @@ impl Default for QuadrupedIdle {
 	fn default() -> Self {
 		Self {
 			graze_neck: DEFAULT_GRAZE_NECK,
+			graze_pitch: DEFAULT_GRAZE_PITCH,
 			look_neck: DEFAULT_LOOK_NECK,
+			look_pitch: DEFAULT_LOOK_PITCH,
 			shake: DEFAULT_SHAKE,
 			lumbar: DEFAULT_LUMBAR,
 			sway: DEFAULT_SWAY,
@@ -127,6 +139,7 @@ mod tests {
 	fn default_graze_is_deeper_than_the_look() {
 		let idle = QuadrupedIdle::default();
 		assert!(idle.graze_neck > idle.look_neck);
+		assert!(idle.graze_pitch > idle.look_pitch);
 		assert!(idle.look_neck > idle.shake);
 		assert!(idle.sway < idle.shake);
 	}

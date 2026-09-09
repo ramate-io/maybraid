@@ -706,6 +706,7 @@ mod tests {
 		assert!(effects.r#move.is_none());
 		let neck = rig.pose.get(&RigName::from("neck")).expect("neck");
 		assert!(neck.flex < -0.5);
+		assert!(neck.twist < -0.3);
 		let lumbar = rig.pose.get(&RigName::from("lumbar")).expect("lumbar");
 		assert!(lumbar.flex > 0.1);
 	}

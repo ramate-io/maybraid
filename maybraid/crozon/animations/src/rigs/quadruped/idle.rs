@@ -4,7 +4,7 @@ use crozon_rigs::{quadruped::QuadrupedRig, Side};
 
 use crate::animations::{Idle, QuadrupedIdle};
 use crate::rigs::quadruped::apply::{
-	apply_front_leg, apply_hind_leg, apply_neck_posed, apply_spine,
+	apply_front_leg, apply_hind_leg, apply_neck_axes, apply_spine,
 };
 use crate::Animation;
 
@@ -18,13 +18,17 @@ impl<R: QuadrupedRig> Animation<R> for QuadrupedIdle {
 		let glance = Idle::look_wave(progress, QuadrupedIdle::GLANCE_FREQ, 0.21);
 		let rattle = (TAU * (progress * QuadrupedIdle::SHAKE_FREQ)).sin();
 
+		// Flex = side-to-side, twist = up/down, swing = roll about +Y (along the bone).
 		let neck_flex = -self.graze_neck * graze
 			+ self.look_neck * look
-			+ self.graze_neck * 0.06 * bob * graze
+			+ self.look_neck * 0.55 * glance * (look + graze * 0.35)
 			+ self.sway * 0.35 * sway;
-		let neck_swing =
-			self.look_neck * 0.55 * glance * (look + graze * 0.35) + self.shake * rattle * shake;
-		apply_neck_posed(rig, neck_swing, neck_flex);
+		let neck_twist = -self.graze_pitch * graze
+			+ self.look_pitch * look
+			+ self.graze_pitch * 0.06 * bob * graze
+			+ self.sway * 0.35 * sway;
+		let neck_swing = self.shake * rattle * shake;
+		apply_neck_axes(rig, neck_swing, neck_flex, neck_twist);
 
 		let lumbar = self.lumbar * graze - self.lumbar * 0.35 * look + self.sway * sway;
 		apply_spine(rig, lumbar * 0.35, lumbar);
@@ -60,6 +64,10 @@ mod tests {
 		rig.pose().get(&Name::from("neck")).expect("neck").flex
 	}
 
+	fn neck_twist(rig: &QuadrupedV0Rig) -> f32 {
+		rig.pose().get(&Name::from("neck")).expect("neck").twist
+	}
+
 	fn lumbar(rig: &QuadrupedV0Rig) -> f32 {
 		rig.pose().get(&Name::from("lumbar")).expect("lumbar").flex
 	}
@@ -69,8 +77,8 @@ mod tests {
 		let mut rig = QuadrupedV0Rig::imported();
 		QuadrupedIdle::default().apply(&mut rig, QuadrupedIdle::graze_peak());
 
-		assert!(neck_flex(&rig) < -0.5);
-		assert!(neck_flex(&rig).abs() > neck_swing(&rig).abs() * 2.0);
+		assert!(neck_flex(&rig) < -0.5, "graze should keep the side-to-side");
+		assert!(neck_twist(&rig) < -0.3, "graze should also nod down");
 		assert!(lumbar(&rig) > 0.1);
 	}
 
@@ -81,8 +89,8 @@ mod tests {
 		QuadrupedIdle::default().apply(&mut graze, QuadrupedIdle::graze_peak());
 		QuadrupedIdle::default().apply(&mut look, QuadrupedIdle::look_peak());
 
-		assert!(neck_flex(&look) > 0.15);
-		assert!(neck_flex(&look) > neck_flex(&graze) + 0.6);
+		assert!(neck_twist(&look) > 0.12);
+		assert!(neck_twist(&look) > neck_twist(&graze) + 0.4);
 		assert!(lumbar(&look) < lumbar(&graze));
 	}
 
@@ -104,8 +112,10 @@ mod tests {
 
 		assert!(neck_swing(&rest).abs() < 0.02);
 		assert!(neck_flex(&rest).abs() < 0.02);
+		assert!(neck_twist(&rest).abs() < 0.02);
 		assert!(neck_swing(&wrap).abs() < 0.03);
-		assert!(neck_flex(&wrap).abs() < 0.02);
+		assert!(neck_flex(&wrap).abs() < 0.03);
+		assert!(neck_twist(&wrap).abs() < 0.03);
 	}
 
 	#[test]
@@ -118,6 +128,7 @@ mod tests {
 
 		assert!((neck_swing(&before) - neck_swing(&after)).abs() < 0.05);
 		assert!((neck_flex(&before) - neck_flex(&after)).abs() < 0.05);
+		assert!((neck_twist(&before) - neck_twist(&after)).abs() < 0.05);
 	}
 
 	#[test]
@@ -128,6 +139,6 @@ mod tests {
 		idle.apply(&mut a, QuadrupedIdle::graze_peak());
 		idle.apply(&mut b, QuadrupedIdle::graze_peak() + Idle::phase_from_entity_bits(7));
 
-		assert_ne!(neck_flex(&a), neck_flex(&b));
+		assert_ne!(neck_twist(&a), neck_twist(&b));
 	}
 }

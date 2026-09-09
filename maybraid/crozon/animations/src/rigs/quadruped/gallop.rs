@@ -3,7 +3,7 @@ use std::f32::consts::PI;
 use crozon_rigs::{quadruped::QuadrupedRig, Side};
 
 use crate::animations::{Gallop, QuadrupedGallop};
-use crate::rigs::quadruped::apply::{apply_neck_posed, apply_spine};
+use crate::rigs::quadruped::apply::{apply_neck_axes, apply_spine};
 use crate::rigs::quadruped::gait::{
 	apply_front_leg_stride, apply_hind_leg_stride, KneeTuning, LegStrideTuning,
 };
@@ -54,7 +54,12 @@ impl<R: QuadrupedRig> Animation<R> for QuadrupedGallop<R> {
 
 		let spine_flex = bound_spine_flex(bound_u, self.hind_bound_pitch, self.front_bound_pitch);
 		apply_spine(rig, spine_flex * 0.35, spine_flex);
-		apply_neck_posed(rig, -spine_flex * self.neck_follow, -spine_flex * self.neck_bow);
+		apply_neck_axes(
+			rig,
+			-spine_flex * self.neck_follow,
+			-spine_flex * self.neck_bow,
+			-spine_flex * self.neck_pitch,
+		);
 	}
 }
 
@@ -281,9 +286,10 @@ mod tests {
 
 		let gather_neck = gathered.pose().get(&gathered.neck().neck.name).expect("gather neck");
 		let extend_neck = extended.pose().get(&extended.neck().neck.name).expect("extend neck");
-		assert!(gather_neck.flex < -0.05, "gathered bound should bow the neck");
-		assert!(gather_neck.swing.abs() > 0.03, "gathered bound should rotate the neck");
-		assert!(extend_neck.flex > gather_neck.flex, "extended bound should lift the bow");
+		assert!(gather_neck.flex < -0.05, "gathered bound should keep side-to-side");
+		assert!(gather_neck.swing.abs() > 0.03, "gathered bound should roll the neck");
+		assert!(gather_neck.twist < -0.04, "gathered bound should nod down");
+		assert!(extend_neck.twist > gather_neck.twist, "extended bound should lift the nod");
 	}
 
 	#[test]
