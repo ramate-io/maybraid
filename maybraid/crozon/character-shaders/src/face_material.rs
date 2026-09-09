@@ -338,18 +338,28 @@ pub fn lid_wrap(xy: Vec2, blink: f32) -> f32 {
 	upper.max(lower)
 }
 
-/// `0` = lip flesh, `1` = opening. Thin rest crease; `open` widens it.
+/// `0` = lip flesh, `1` = opening. Rest crease; `open` widens it.
 pub fn lip_opening(xy: Vec2, open: f32) -> f32 {
 	let open = open.clamp(0.0, 1.0);
 	let taper = (1.0 - (xy.x / 0.88).powi(2)).max(0.0).sqrt();
-	let half = (0.014 + open * 0.11) * taper;
-	smoothstep((half - xy.y.abs()) / 0.02)
+	let half = (0.028 + open * 0.22) * taper;
+	smoothstep((half - xy.y.abs()) / 0.03)
 }
 
-/// Mostly a resting crease; occasional designed part. Not raw 4D noise.
+/// Split the lips away from the midline. Corners stay pinched.
+pub fn mouth_deform(local: Vec3, open: f32) -> Vec3 {
+	let open = open.clamp(0.0, 1.0);
+	let taper = (1.0 - (local.x / 0.88).powi(2)).max(0.0).sqrt();
+	let split = open * 0.20 * taper;
+	let side = local.y.signum();
+	let lower = (-local.y).clamp(0.0, 1.0) * open * 0.06 * taper;
+	Vec3::new(0.0, side * split - lower, open * 0.05 * taper)
+}
+
+/// Resting crease plus a designed part. Not raw 4D noise.
 pub fn mouth_open_envelope(time: f32, seed: f32) -> f32 {
 	let seed = seed.rem_euclid(1.0);
-	let breath = 0.06 + 0.05 * (time * 0.7 + seed * 3.1).sin();
+	let breath = 0.12 + 0.08 * (time * 0.7 + seed * 3.1).sin();
 	let period = 5.8 + seed * 2.4;
 	let phase_time = time + seed * 11.0;
 	let t = phase_time.rem_euclid(period) / period.max(1e-4);
@@ -357,11 +367,11 @@ pub fn mouth_open_envelope(time: f32, seed: f32) -> f32 {
 	let pulse = blink_pulse(t, 0.0, 0.05, 0.12, 0.14);
 	let h = hash11(cycle * 2.1 + seed * 6.3);
 	let depth = if h < 0.72 {
-		0.22
+		0.40
 	} else if h < 0.92 {
-		0.42
+		0.65
 	} else {
-		0.7
+		0.95
 	};
 	(breath + pulse * depth).clamp(0.0, 1.0)
 }
@@ -475,8 +485,20 @@ mod tests {
 	#[test]
 	fn lip_opening_is_a_thin_rest_crease() {
 		assert!(lip_opening(Vec2::new(0.0, 0.0), 0.0) > 0.5, "midline is the crease");
-		assert!(lip_opening(Vec2::new(0.0, 0.28), 0.0) < 0.1, "lip body stays flesh");
-		assert!(lip_opening(Vec2::new(0.0, 0.0), 1.0) > 0.9, "open widens the midline");
+		assert!(lip_opening(Vec2::new(0.0, 0.32), 0.0) < 0.1, "lip body stays flesh");
+		assert!(lip_opening(Vec2::new(0.0, 0.12), 1.0) > 0.9, "open widens the shade");
+	}
+
+	#[test]
+	fn mouth_deform_splits_lips_and_pinches_corners() {
+		let open = mouth_deform(Vec3::new(0.0, 0.3, 0.0), 1.0);
+		let shut = mouth_deform(Vec3::new(0.0, 0.3, 0.0), 0.0);
+		let lower = mouth_deform(Vec3::new(0.0, -0.3, 0.0), 1.0);
+		let corner = mouth_deform(Vec3::new(0.85, 0.3, 0.0), 1.0);
+		assert!(open.y > 0.1, "upper lip lifts");
+		assert!(lower.y < -0.1, "lower lip drops");
+		assert!(shut.length() < 1e-4, "rest does not move the mesh");
+		assert!(corner.y.abs() < open.y * 0.5, "corners stay pinched");
 	}
 
 	#[test]

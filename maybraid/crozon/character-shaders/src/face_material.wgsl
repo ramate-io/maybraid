@@ -159,35 +159,44 @@ fn eye_look(local_pos: vec3<f32>, blink: f32) -> vec3<f32> {
 }
 
 fn mouth_idle(time: f32, seed: f32, local_pos: vec3<f32>) -> vec3<f32> {
-    let idle = sin(time * 0.9 + seed * 5.0) * 0.0025
-        + sin(time * 0.31 + seed * 3.2) * 0.0012;
+    let idle = sin(time * 0.9 + seed * 5.0) * 0.006
+        + sin(time * 0.31 + seed * 3.2) * 0.003;
     let lip = saturate(-local_pos.y * 6.0 + 0.15);
     return vec3<f32>(0.0, -idle * (0.35 + 0.65 * lip), 0.0);
 }
 
-/// Mostly a resting crease; occasional designed part. Not raw 4D noise.
+/// Split the lips away from the midline. Corners stay pinched.
+fn mouth_deform(local_pos: vec3<f32>, open: f32) -> vec3<f32> {
+    let taper = sqrt(saturate(1.0 - (local_pos.x / 0.88) * (local_pos.x / 0.88)));
+    let split = open * 0.20 * taper;
+    let side = sign(local_pos.y);
+    let lower = saturate(-local_pos.y) * open * 0.06 * taper;
+    return vec3<f32>(0.0, side * split - lower, open * 0.05 * taper);
+}
+
+/// Resting crease plus a designed part. Not raw 4D noise.
 fn mouth_open_envelope(time: f32, seed: f32) -> f32 {
-    let breath = 0.06 + 0.05 * sin(time * 0.7 + seed * 3.1);
+    let breath = 0.12 + 0.08 * sin(time * 0.7 + seed * 3.1);
     let period = 5.8 + seed * 2.4;
     let phase_time = time + seed * 11.0;
     let t = fract(phase_time / period);
     let cycle = floor(phase_time / period);
     let pulse = blink_pulse(t, 0.0, 0.05, 0.12, 0.14);
     let h = hash11(cycle * 2.1 + seed * 6.3);
-    var depth = 0.22;
+    var depth = 0.40;
     if h >= 0.72 && h < 0.92 {
-        depth = 0.42;
+        depth = 0.65;
     } else if h >= 0.92 {
-        depth = 0.7;
+        depth = 0.95;
     }
     return saturate(breath + pulse * depth);
 }
 
-/// `0` = lip flesh, `1` = opening. Thin rest crease; `open` widens it.
+/// `0` = lip flesh, `1` = opening. Rest crease; `open` widens it.
 fn lip_opening(xy: vec2<f32>, open: f32) -> f32 {
     let taper = sqrt(saturate(1.0 - (xy.x / 0.88) * (xy.x / 0.88)));
-    let half = (0.014 + open * 0.11) * taper;
-    return face_smoothstep((half - abs(xy.y)) / 0.02);
+    let half = (0.028 + open * 0.22) * taper;
+    return face_smoothstep((half - abs(xy.y)) / 0.03);
 }
 
 /// Authored mouth is a wide XY lip slab (~±1 x, ±0.52 y).
@@ -200,9 +209,9 @@ fn mouth_look(local_pos: vec3<f32>, open: f32) -> vec3<f32> {
 
     let q = local_pos.xy;
     let opening = lip_opening(q, open);
-    let half = (0.014 + open * 0.11) * sqrt(saturate(1.0 - (q.x / 0.88) * (q.x / 0.88)));
-    let teeth_m = opening * face_smoothstep((0.32 * half - abs(q.y)) / 0.012)
-        * saturate(1.0 - abs(q.x) / 0.55) * saturate((open - 0.18) / 0.2);
+    let half = (0.028 + open * 0.22) * sqrt(saturate(1.0 - (q.x / 0.88) * (q.x / 0.88)));
+    let teeth_m = opening * face_smoothstep((0.38 * half - abs(q.y)) / 0.014)
+        * saturate(1.0 - abs(q.x) / 0.55) * saturate((open - 0.12) / 0.18);
     let corner = saturate((abs(q.x) - 0.52) / 0.28);
     let gloss = exp(-((q.x - 0.06) * (q.x - 0.06) / 0.07 + (q.y + 0.16) * (q.y + 0.16) / 0.035))
         * saturate(-q.y * 3.0) * (1.0 - opening);
@@ -210,7 +219,7 @@ fn mouth_look(local_pos: vec3<f32>, open: f32) -> vec3<f32> {
     var tint = mix(lip, lip * vec3<f32>(0.78, 0.62, 0.58), corner);
     tint = mix(tint, highlight, gloss * 0.55);
     tint = mix(tint, crease, opening);
-    tint = mix(tint, interior, opening * saturate(open * 1.4));
+    tint = mix(tint, interior, opening * saturate(0.35 + open * 1.1));
     tint = mix(tint, teeth, teeth_m);
     return tint;
 }
@@ -254,12 +263,15 @@ fn vertex(vertex_no_morph: Vertex) -> FaceVertexOutput {
     var amount = 0.0;
     if material.kind == KIND_EYE {
         amount = blink_envelope(globals.time, seed);
+        out.local_pos = vertex.position;
     } else {
-        vertex.position += mouth_idle(globals.time, seed, vertex.position);
+        let local = vertex.position;
         amount = mouth_open_envelope(globals.time, seed);
+        vertex.position += mouth_deform(local, amount);
+        vertex.position += mouth_idle(globals.time, seed, local);
+        out.local_pos = local;
     }
     out.blink = amount;
-    out.local_pos = vertex.position;
 
 #ifdef SKINNED
     var world_from_local = skinning::skin_model(

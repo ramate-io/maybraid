@@ -12,7 +12,8 @@ pub use clothing_material::{
 	KIND_WIZARDS_VEINS,
 };
 pub use face_material::{
-	blink_envelope, eye_palette, lid_wrap, lip_opening, mouth_open_envelope, mouth_palette,
+	blink_envelope, eye_palette, lid_wrap, lip_opening, mouth_deform, mouth_open_envelope,
+	mouth_palette,
 	FaceMaterialUniform, FaceShaderKind, FaceShaderMaterial, FaceShaderMaterialPlugin,
 	EYE_PALETTE_HIGHLIGHT, EYE_PALETTE_IRIS, EYE_PALETTE_LID, EYE_PALETTE_LIMBUS, EYE_PALETTE_PUPIL,
 	EYE_PALETTE_SCLERA, KIND_EYE, KIND_MOUTH, MOUTH_PALETTE_CREASE, MOUTH_PALETTE_HIGHLIGHT,
