@@ -1,6 +1,7 @@
-//! Face [`Material`] — blink squash and a few millimetres of mouth idle.
+//! Face [`Material`] — blink squash, painted iris / pupil, and millimetre mouth idle.
 //!
 //! Phase is `globals.time` + instance seed. No mailbox. No blendshapes.
+//! `face_eye` palette: iris, pupil, sclera, catchlight, limbus.
 
 use bevy::{
 	asset::embedded_asset,
@@ -24,9 +25,41 @@ pub const RECIPE_FACE_MOUTH: &str = "face_mouth";
 pub const KIND_EYE: u32 = 0;
 pub const KIND_MOUTH: u32 = 1;
 
+/// `face_eye` palette: iris, pupil, sclera, catchlight, limbus.
+pub const EYE_PALETTE_IRIS: usize = 0;
+pub const EYE_PALETTE_PUPIL: usize = 1;
+pub const EYE_PALETTE_SCLERA: usize = 2;
+pub const EYE_PALETTE_HIGHLIGHT: usize = 3;
+pub const EYE_PALETTE_LIMBUS: usize = 4;
+const EYE_PALETTE_DETAIL_SLOTS: usize = 5;
+
 const SCALAR_VEC4S: usize = MATERIAL_SCALAR_FLOATS / 4;
 const DEFAULT_EYE_COLOR: Vec4 = Vec4::new(0.22, 0.16, 0.12, 1.0);
 const DEFAULT_MOUTH_COLOR: Vec4 = Vec4::new(0.62, 0.32, 0.30, 1.0);
+
+/// Species eye color as iris, plus derived pupil / sclera / highlight / limbus.
+pub fn eye_palette(iris: Color) -> [Color; EYE_PALETTE_DETAIL_SLOTS] {
+	let mut colors = derived_eye_palette(linear_vec4(iris))
+		.map(|color| Color::linear_rgba(color.x, color.y, color.z, color.w));
+	colors[EYE_PALETTE_IRIS] = iris;
+	colors
+}
+
+fn linear_vec4(color: Color) -> Vec4 {
+	let linear = LinearRgba::from(color);
+	Vec4::new(linear.red, linear.green, linear.blue, linear.alpha)
+}
+
+fn derived_eye_palette(iris: Vec4) -> [Vec4; EYE_PALETTE_DETAIL_SLOTS] {
+	let rgb = iris.truncate();
+	[
+		iris,
+		(rgb * Vec3::new(0.07, 0.05, 0.04)).extend(1.0),
+		(Vec3::new(0.93, 0.91, 0.88) + rgb * 0.045).extend(1.0),
+		Vec4::new(0.98, 0.99, 0.97, 1.0),
+		(rgb * Vec3::new(0.38, 0.32, 0.28)).extend(1.0),
+	]
+}
 
 /// Registers embedded **`face_material.wgsl`** and [`MaterialPlugin`].
 pub struct FaceShaderMaterialPlugin;
@@ -89,15 +122,23 @@ impl FaceMaterialUniform {
 		};
 
 		let mut colors = [Vec4::ZERO; MATERIAL_PALETTE_SLOTS];
-		if material_ref.palette.is_empty() {
+		let provided = if material_ref.palette.is_empty() {
 			colors[0] = fallback;
+			1
 		} else {
 			for (slot, color) in colors.iter_mut().zip(&material_ref.palette) {
-				let linear = LinearRgba::from(*color);
-				*slot = Vec4::new(linear.red, linear.green, linear.blue, linear.alpha);
+				*slot = linear_vec4(*color);
 			}
+			material_ref.palette.len()
+		};
+		if kind == FaceShaderKind::Eye {
+			let derived = derived_eye_palette(colors[EYE_PALETTE_IRIS]);
+			for (slot, color) in colors.iter_mut().take(EYE_PALETTE_DETAIL_SLOTS).zip(derived).skip(provided) {
+				*slot = color;
+			}
+		} else {
 			let first = colors[0];
-			for color in colors.iter_mut().skip(material_ref.palette.len()) {
+			for color in colors.iter_mut().skip(provided) {
 				*color = first;
 			}
 		}
@@ -188,13 +229,24 @@ impl Material for FaceShaderMaterial {
 	}
 }
 
-/// `0` = open, `1` = closed. Fast close, slower open, long hold, occasional double.
+/// `0` = open, `1` = closed. Fast close, slower open, occasional double.
 ///
+/// Peak depth varies per cycle so most blinks are slighter than a full slit.
 /// `seed` is `[0, 1)`. Must stay a designed 1D envelope — not raw 4D noise.
 pub fn blink_envelope(time: f32, seed: f32) -> f32 {
 	let seed = seed.rem_euclid(1.0);
-	let period = 3.4 + seed * 1.8;
-	let t = (time + seed * 17.0).rem_euclid(period) / period.max(1e-4);
+	let period = blink_period(seed);
+	let phase_time = time + seed * 17.0;
+	let t = phase_time.rem_euclid(period) / period.max(1e-4);
+	let cycle = (phase_time / period.max(1e-4)).floor();
+	blink_shape(t, seed) * blink_depth(cycle, seed)
+}
+
+fn blink_period(seed: f32) -> f32 {
+	3.4 + seed * 1.8
+}
+
+fn blink_shape(t: f32, seed: f32) -> f32 {
 	let close = 0.016;
 	let hold = 0.008;
 	let open = 0.048;
@@ -205,6 +257,22 @@ pub fn blink_envelope(time: f32, seed: f32) -> f32 {
 	} else {
 		first
 	}
+}
+
+fn blink_depth(cycle: f32, seed: f32) -> f32 {
+	let h = hash11(cycle * 1.73 + seed * 9.1 + 2.4);
+	if h < 0.58 {
+		0.24 + h * 0.38
+	} else if h < 0.86 {
+		0.52 + (h - 0.58)
+	} else {
+		1.0
+	}
+}
+
+fn hash11(n: f32) -> f32 {
+	let x = (n * 0.1031).fract();
+	(x * (x + 33.33)).fract()
 }
 
 fn blink_pulse(t: f32, start: f32, close: f32, hold: f32, open: f32) -> f32 {
@@ -236,7 +304,17 @@ mod tests {
 			&MaterialRef::named(RECIPE_FACE_EYE).with_palette([Color::srgb(0.0, 1.0, 0.0)]),
 		);
 		assert_eq!(eye.params.kind, KIND_EYE);
-		assert!((eye.params.colors[0].y - 1.0).abs() < 1e-5);
+		assert!((eye.params.colors[EYE_PALETTE_IRIS].y - 1.0).abs() < 1e-5);
+		let pupil = eye.params.colors[EYE_PALETTE_PUPIL];
+		let iris = eye.params.colors[EYE_PALETTE_IRIS];
+		assert!(pupil.x + pupil.y + pupil.z < (iris.x + iris.y + iris.z) * 0.2);
+		assert!(eye.params.colors[EYE_PALETTE_SCLERA].x > 0.85);
+
+		let explicit_pupil = FaceShaderMaterial::from_material_ref(
+			&MaterialRef::named(RECIPE_FACE_EYE)
+				.with_palette([Color::srgb(0.0, 1.0, 0.0), Color::srgb(1.0, 0.0, 0.0)]),
+		);
+		assert!((explicit_pupil.params.colors[EYE_PALETTE_PUPIL].x - 1.0).abs() < 1e-5);
 
 		let mouth = FaceShaderMaterial::from_material_ref(&MaterialRef::named(RECIPE_FACE_MOUTH));
 		assert_eq!(mouth.params.kind, KIND_MOUTH);
@@ -270,19 +348,36 @@ mod tests {
 	#[test]
 	fn blink_closes_faster_than_it_opens() {
 		let seed = 0.1;
-		let period = 3.4 + seed * 1.8;
-		assert!(blink_envelope(time_at_phase(period, seed, 0.008), seed) > 0.2);
-		assert!(blink_envelope(time_at_phase(period, seed, 0.016 + 0.008 + 0.04), seed) < 0.85);
+		let period = blink_period(seed);
+		assert!(blink_shape(0.008, seed) > 0.2);
+		assert!(blink_shape(0.016 + 0.008 + 0.04, seed) < 0.85);
+		assert!(blink_envelope(time_at_phase(period, seed, 0.2), seed) == 0.0);
 	}
 
 	#[test]
 	fn blink_double_only_for_high_seeds() {
 		let quiet = 0.1;
-		let quiet_period = 3.4 + quiet * 1.8;
-		assert_eq!(blink_envelope(time_at_phase(quiet_period, quiet, 0.2), quiet), 0.0);
+		assert_eq!(blink_shape(0.2, quiet), 0.0);
 		let seed = 0.8;
-		let period = 3.4 + seed * 1.8;
 		let second = 0.016 + 0.008 + 0.048 + 0.018 + 0.008;
-		assert!(blink_envelope(time_at_phase(period, seed, second), seed) > 0.5);
+		assert!(blink_shape(second, seed) > 0.5);
+	}
+
+	#[test]
+	fn blink_mixes_light_and_full_closes() {
+		let mut light = 0;
+		let mut full = 0;
+		for i in 0..40 {
+			let depth = blink_depth(i as f32, 0.3);
+			if depth < 0.5 {
+				light += 1;
+			}
+			if depth > 0.95 {
+				full += 1;
+			}
+		}
+		assert!(light > 10, "expected mixed light blinks, light={light}");
+		assert!(full > 0, "expected occasional full blinks");
+		assert!(full < light, "full blinks should be the minority");
 	}
 }

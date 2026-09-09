@@ -79,19 +79,68 @@ fn blink_pulse(t: f32, start: f32, close: f32, hold: f32, open: f32) -> f32 {
     return 1.0 - face_smoothstep((u - close - hold) / open);
 }
 
+fn hash11(n: f32) -> f32 {
+    let x = fract(n * 0.1031);
+    return fract(x * (x + 33.33));
+}
+
+fn blink_depth(cycle: f32, seed: f32) -> f32 {
+    let h = hash11(cycle * 1.73 + seed * 9.1 + 2.4);
+    if h < 0.58 {
+        return 0.24 + h * 0.38;
+    }
+    if h < 0.86 {
+        return 0.52 + (h - 0.58);
+    }
+    return 1.0;
+}
+
 /// Designed 1D envelope. Do not replace with raw 4D noise.
+/// Peak depth varies per cycle so most blinks are slighter than a full slit.
 fn blink_envelope(time: f32, seed: f32) -> f32 {
     let period = 3.4 + seed * 1.8;
-    let t = fract((time + seed * 17.0) / period);
+    let phase_time = time + seed * 17.0;
+    let t = fract(phase_time / period);
+    let cycle = floor(phase_time / period);
     let close = 0.016;
     let hold = 0.008;
     let open = 0.048;
-    let first = blink_pulse(t, 0.0, close, hold, open);
+    var shape = blink_pulse(t, 0.0, close, hold, open);
     if seed > 0.62 {
         let second_start = close + hold + open + 0.018;
-        return max(first, blink_pulse(t, second_start, close, hold, open));
+        shape = max(shape, blink_pulse(t, second_start, close, hold, open));
     }
-    return first;
+    return shape * blink_depth(cycle, seed);
+}
+
+fn disk_mask(r: f32, radius: f32, feather: f32) -> f32 {
+    return saturate((radius - r) / max(feather, 1e-4));
+}
+
+/// Authored eyes face +Z; iris is an XY disk around the origin (~0.55 radius).
+fn eye_look(local_pos: vec3<f32>, blink: f32) -> vec3<f32> {
+    let iris = material.colors[0].xyz;
+    let pupil = material.colors[1].xyz;
+    let sclera = material.colors[2].xyz;
+    let highlight = material.colors[3].xyz;
+    let limbus = material.colors[4].xyz;
+
+    let q = local_pos.xy;
+    let r = length(q);
+    let ang = atan2(q.y, q.x);
+    let spokes = 0.88 + 0.12 * sin(ang * 11.0 + r * 18.0);
+    let radial = saturate((0.36 - r) / 0.22);
+    let iris_col = mix(limbus, iris, radial) * spokes;
+
+    var tint = sclera;
+    tint = mix(tint, iris_col, disk_mask(r, 0.36, 0.03));
+    tint = mix(tint, pupil, disk_mask(r, 0.14, 0.02));
+
+    let catch_a = disk_mask(length(q - vec2<f32>(-0.07, 0.09)), 0.055, 0.02);
+    let catch_b = disk_mask(length(q - vec2<f32>(0.06, -0.04)), 0.024, 0.012);
+    tint = mix(tint, highlight, (catch_a * 0.85 + catch_b * 0.45) * (1.0 - blink));
+    tint = mix(tint, tint * vec3<f32>(0.35, 0.28, 0.26), blink);
+    return tint;
 }
 
 fn mouth_idle(time: f32, seed: f32, local_pos: vec3<f32>) -> vec3<f32> {
@@ -137,6 +186,7 @@ fn vertex(vertex_no_morph: Vertex) -> FaceVertexOutput {
 
     let mesh_world_from_local = mesh_functions::get_world_from_local(vertex_no_morph.instance_index);
     let seed = face_seed(vertex_no_morph.instance_index, mesh_world_from_local);
+    let local = vertex.position;
     var blink = 0.0;
     if material.kind == KIND_EYE {
         blink = blink_envelope(globals.time, seed);
@@ -149,6 +199,7 @@ fn vertex(vertex_no_morph: Vertex) -> FaceVertexOutput {
         vertex.position += mouth_idle(globals.time, seed, vertex.position);
     }
     out.blink = blink;
+    out.local_pos = local;
 
 #ifdef SKINNED
     var world_from_local = skinning::skin_model(
@@ -171,7 +222,6 @@ fn vertex(vertex_no_morph: Vertex) -> FaceVertexOutput {
 #endif
 #endif
 
-    out.local_pos = vertex.position;
     out.world_position = mesh_functions::mesh_position_local_to_world(
         world_from_local,
         vec4<f32>(vertex.position, 1.0),
@@ -209,10 +259,11 @@ fn fragment(
     var tint = base;
 
     if material.kind == KIND_EYE {
-        roughness = mix(0.22, 0.55, mesh.blink);
-        metallic = 0.08;
-        // Closed lid reads darker than the sclera squash alone.
-        tint = mix(base, base * vec3<f32>(0.35, 0.28, 0.26), mesh.blink);
+        tint = eye_look(mesh.local_pos, mesh.blink);
+        let iris_m = disk_mask(length(mesh.local_pos.xy), 0.36, 0.03);
+        roughness = mix(0.42, 0.16, iris_m);
+        roughness = mix(roughness, 0.55, mesh.blink);
+        metallic = mix(0.04, 0.12, iris_m);
     } else {
         roughness = 0.72;
     }

@@ -12,8 +12,9 @@ pub use clothing_material::{
 	KIND_WIZARDS_VEINS,
 };
 pub use face_material::{
-	blink_envelope, FaceMaterialUniform, FaceShaderKind, FaceShaderMaterial,
-	FaceShaderMaterialPlugin, KIND_EYE, KIND_MOUTH, RECIPE_FACE_EYE, RECIPE_FACE_MOUTH,
+	blink_envelope, eye_palette, FaceMaterialUniform, FaceShaderKind, FaceShaderMaterial,
+	FaceShaderMaterialPlugin, EYE_PALETTE_HIGHLIGHT, EYE_PALETTE_IRIS, EYE_PALETTE_LIMBUS,
+	EYE_PALETTE_PUPIL, EYE_PALETTE_SCLERA, KIND_EYE, KIND_MOUTH, RECIPE_FACE_EYE, RECIPE_FACE_MOUTH,
 };
 
 /// Registers clothing and face materials used by Crozon [`material_ref::MaterialLib`]s.

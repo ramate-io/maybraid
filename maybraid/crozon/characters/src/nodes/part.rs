@@ -3,10 +3,11 @@
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::{Component, Transform, Vec3};
 use bevy::scene::prelude::{bsn, template_value, Scene};
+use crozon_character_shaders::{eye_palette, RECIPE_FACE_EYE};
 use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
 use lod::SceneChunk;
-use material_ref::{MaterialRef, MaterialRefRoot, PropagateToDescendants};
+use material_ref::{MaterialId, MaterialRef, MaterialRefRoot, PropagateToDescendants};
 use scene_ref::{MirrorAxis, SceneRef};
 
 use crate::assembly::CharacterPartSlot;
@@ -115,8 +116,15 @@ impl PartNode {
 
 	/// Tint via [`MaterialRef`] palette[0]. Keeps the existing recipe name
 	/// so face / clothing parts stay on their shader after color stamping.
+	///
+	/// `face_eye` also packs pupil / sclera / highlight / limbus so the shader
+	/// can paint iris detail from the same stamp.
 	pub fn with_base_color(self, color: bevy::prelude::Color) -> Self {
-		let material = self.material.clone().with_palette([color]);
+		let material = if self.material.name == MaterialId::named(RECIPE_FACE_EYE) {
+			self.material.clone().with_palette(eye_palette(color))
+		} else {
+			self.material.clone().with_palette([color])
+		};
 		self.with_material(material)
 	}
 
@@ -190,12 +198,14 @@ impl LodScene for PartNode {
 #[cfg(test)]
 mod tests {
 	use bevy::prelude::Color;
+	use crozon_character_shaders::EYE_PALETTE_PUPIL;
 	use material_ref::MaterialId;
 
 	use super::*;
 
 	#[test]
 	fn with_base_color_keeps_the_recipe_name() {
+		let iris = Color::srgb(0.1, 0.2, 0.3);
 		let part = PartNode::glb(
 			CharacterPartSlot::EyeLeft,
 			"eye",
@@ -203,8 +213,10 @@ mod tests {
 			AssetNormalization::IDENTITY,
 		)
 		.with_material(MaterialRef::named("face_eye"))
-		.with_base_color(Color::srgb(0.1, 0.2, 0.3));
+		.with_base_color(iris);
 		assert_eq!(part.material.name, MaterialId::named("face_eye"));
-		assert_eq!(part.material.palette.len(), 1);
+		assert_eq!(part.material.palette.len(), 5);
+		assert_eq!(part.material.palette[0], iris);
+		assert_ne!(part.material.palette[EYE_PALETTE_PUPIL], iris);
 	}
 }
