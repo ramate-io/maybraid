@@ -1,17 +1,30 @@
 //! Look / aim samples the world bake ORs into Near.
 //!
-//! The camera cone is not a scene `LodRef`. Writers push [`IntelligenceFocusSample`]s
-//! (firearm bore, lock point) without the bake knowing about firearm control.
+//! Hip FOV is magnification 1: look range stays [`crate::IntelligenceBand::NEAR_M`].
+//! Zoom narrows FOV; range is `NEAR_M * mag` inside the inset frustum.
 
 use bevy::prelude::*;
+
+use crate::IntelligenceBand;
 
 /// Inset on each half-FOV so first-person 75° does not take the whole wedge.
 pub const LOOK_FOV_INSET: f32 = 0.6;
 
-/// Max XZ range for look / aim promotion. Combat may still go farther.
-pub const LOOK_M: f32 = 150.0;
+/// Optical magnification of `current_fov` versus the hip / base FOV. Never below 1.
+pub fn fov_magnification(base_fov: f32, current_fov: f32) -> f32 {
+	let base = (base_fov.max(1e-3) * 0.5).tan();
+	let current = (current_fov.max(1e-3) * 0.5).tan();
+	(base / current).max(1.0)
+}
+
+/// Near radius under the current zoom. Hip (`mag == 1`) is [`IntelligenceBand::NEAR_M`].
+pub fn look_near_m(base_fov: f32, current_fov: f32) -> f32 {
+	IntelligenceBand::NEAR_M * fov_magnification(base_fov, current_fov)
+}
 
 /// Elliptical view cone from a perspective camera, already inset.
+///
+/// [`Self::near_m`] is hip Near scaled by FOV magnification.
 #[derive(Clone, Copy, Debug)]
 pub struct IntelligenceLook {
 	pub origin: Vec3,
@@ -20,20 +33,23 @@ pub struct IntelligenceLook {
 	pub up: Vec3,
 	pub half_fov_x: f32,
 	pub half_fov_y: f32,
+	pub near_m: f32,
 }
 
 impl IntelligenceLook {
-	/// Live [`Projection`] FOV and aspect, then [`LOOK_FOV_INSET`].
+	/// Live FOV versus `base_fov` (hip for the current POV), then [`LOOK_FOV_INSET`].
 	pub fn from_perspective(
 		transform: &GlobalTransform,
 		perspective: &PerspectiveProjection,
+		base_fov: f32,
 	) -> Self {
-		Self::from_perspective_inset(transform, perspective, LOOK_FOV_INSET)
+		Self::from_perspective_inset(transform, perspective, base_fov, LOOK_FOV_INSET)
 	}
 
 	pub fn from_perspective_inset(
 		transform: &GlobalTransform,
 		perspective: &PerspectiveProjection,
+		base_fov: f32,
 		inset: f32,
 	) -> Self {
 		let inset = inset.clamp(0.05, 1.0);
@@ -47,13 +63,14 @@ impl IntelligenceLook {
 			up: transform.up().as_vec3(),
 			half_fov_x: half_x,
 			half_fov_y: half_y,
+			near_m: look_near_m(base_fov, perspective.fov),
 		}
 	}
 
 	pub fn contains(self, point: Vec3) -> bool {
 		let to = point - self.origin;
 		let dist = to.length();
-		if !dist.is_finite() || dist < 1e-3 {
+		if !dist.is_finite() || dist < 1e-3 || dist > self.near_m {
 			return false;
 		}
 		let dir = to / dist;
@@ -115,46 +132,56 @@ impl IntelligenceFocus {
 	}
 }
 
-/// True when the plant is in the inset camera cone or a focus sample, and inside
-/// [`LOOK_M`].
+/// True when the plant is in the inset camera cone or a focus sample.
 pub fn look_promotes(
-	dist_xz: f32,
 	point: Vec3,
 	look: Option<IntelligenceLook>,
 	focus: &IntelligenceFocus,
 ) -> bool {
-	dist_xz < LOOK_M && (look.is_some_and(|look| look.contains(point)) || focus.contains(point))
+	look.is_some_and(|look| look.contains(point)) || focus.contains(point)
 }
 
 #[cfg(test)]
 mod tests {
 	use super::*;
 
-	fn looking_x(fov_y: f32, aspect: f32) -> IntelligenceLook {
+	fn looking_x(current_fov: f32, base_fov: f32) -> IntelligenceLook {
 		let tf =
 			Transform::from_translation(Vec3::Y).looking_at(Vec3::new(20.0, 1.0, 0.0), Vec3::Y);
 		IntelligenceLook::from_perspective(
 			&GlobalTransform::from(tf),
-			&PerspectiveProjection { fov: fov_y, aspect_ratio: aspect, ..default() },
+			&PerspectiveProjection { fov: current_fov, aspect_ratio: 16.0 / 9.0, ..default() },
+			base_fov,
 		)
 	}
 
 	#[test]
-	fn on_axis_mid_is_inside_inset_cone() {
-		let look = looking_x(45_f32.to_radians(), 16.0 / 9.0);
-		assert!(look.contains(Vec3::new(120.0, 1.0, 0.0)));
+	fn hip_zoom_does_not_extend_near() {
+		let look = looking_x(75_f32.to_radians(), 75_f32.to_radians());
+		assert!((look.near_m - IntelligenceBand::NEAR_M).abs() < 1e-3);
+		assert!(!look.contains(Vec3::new(120.0, 1.0, 0.0)));
+		assert!(look.contains(Vec3::new(40.0, 1.0, 0.0)));
+	}
+
+	#[test]
+	fn five_x_extends_near_inside_the_frustum() {
+		let base = 75_f32.to_radians();
+		let current = 15_f32.to_radians();
+		let look = looking_x(current, base);
+		assert!(look.near_m > 180.0);
+		assert!(look.contains(Vec3::new(180.0, 1.0, 0.0)));
+		assert!(!look.contains(Vec3::new(180.0, 1.0, 80.0)));
 	}
 
 	#[test]
 	fn corner_of_wide_fov_is_outside_inset() {
-		let look = looking_x(75_f32.to_radians(), 16.0 / 9.0);
-		// 45° off-axis: inside a raw 75°×aspect wedge, outside 0.6 inset.
-		assert!(!look.contains(Vec3::new(120.0, 1.0, 120.0)));
+		let look = looking_x(75_f32.to_radians(), 75_f32.to_radians());
+		assert!(!look.contains(Vec3::new(40.0, 1.0, 40.0)));
 	}
 
 	#[test]
 	fn behind_camera_is_outside() {
-		let look = looking_x(75_f32.to_radians(), 16.0 / 9.0);
+		let look = looking_x(75_f32.to_radians(), 75_f32.to_radians());
 		assert!(!look.contains(Vec3::new(-40.0, 1.0, 0.0)));
 	}
 
@@ -163,7 +190,7 @@ mod tests {
 		let sample = IntelligenceFocusSample {
 			origin: Vec3::Y,
 			dir: Vec3::X,
-			max_range: LOOK_M,
+			max_range: 400.0,
 			half_angle: 5_f32.to_radians(),
 		};
 		assert!(sample.contains(Vec3::new(80.0, 1.0, 0.0)));
@@ -171,10 +198,9 @@ mod tests {
 	}
 
 	#[test]
-	fn look_promotes_respects_range() {
-		let look = looking_x(45_f32.to_radians(), 16.0 / 9.0);
-		let focus = IntelligenceFocus::default();
-		assert!(look_promotes(120.0, Vec3::new(120.0, 1.0, 0.0), Some(look), &focus));
-		assert!(!look_promotes(180.0, Vec3::new(180.0, 1.0, 0.0), Some(look), &focus));
+	fn magnification_is_at_least_one() {
+		assert!((fov_magnification(75_f32.to_radians(), 75_f32.to_radians()) - 1.0).abs() < 1e-4);
+		assert!(fov_magnification(75_f32.to_radians(), 90_f32.to_radians()) >= 1.0);
+		assert!(fov_magnification(75_f32.to_radians(), 15_f32.to_radians()) > 5.0);
 	}
 }

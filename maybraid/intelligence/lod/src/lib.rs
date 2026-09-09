@@ -2,7 +2,8 @@
 //!
 //! World bakes [`IntelligenceLod`] and [`IntelligencePriority`]. Personality
 //! crates only read. Missing lod is [`IntelligenceBand::Near`]. Look / aim
-//! promotion uses [`IntelligenceLook`] plus the [`IntelligenceFocus`] mailbox.
+//! promotion uses FOV magnification inside [`IntelligenceLook`] plus the
+//! [`IntelligenceFocus`] mailbox.
 
 mod focus;
 
@@ -11,8 +12,8 @@ use std::collections::HashMap;
 use bevy::prelude::*;
 
 pub use focus::{
-	look_promotes, IntelligenceFocus, IntelligenceFocusSample, IntelligenceLook, LOOK_FOV_INSET,
-	LOOK_M,
+	fov_magnification, look_near_m, look_promotes, IntelligenceFocus, IntelligenceFocusSample,
+	IntelligenceLook, LOOK_FOV_INSET,
 };
 
 /// Viewer-axis work band. Near work is spent first.
@@ -32,9 +33,9 @@ impl IntelligenceBand {
 
 	/// Distance + tactic + look cut used by the world bake pulse.
 	///
-	/// `look` is inset-FOV / focus-mailbox. It only promotes inside [`LOOK_M`].
+	/// `look` is inset-FOV / focus-mailbox inside `NEAR_M * fov_magnification`.
 	pub fn from_viewer(dist: f32, combat_or_evade: bool, look: bool) -> Self {
-		if combat_or_evade || dist < Self::NEAR_M || (look && dist < LOOK_M) {
+		if combat_or_evade || dist < Self::NEAR_M || look {
 			Self::Near
 		} else if dist < Self::MID_M {
 			Self::Mid
@@ -137,7 +138,7 @@ mod tests {
 		assert_eq!(IntelligenceBand::from_viewer(300.0, false, false), IntelligenceBand::Far);
 		assert_eq!(IntelligenceBand::from_viewer(300.0, true, false), IntelligenceBand::Near);
 		assert_eq!(IntelligenceBand::from_viewer(120.0, false, true), IntelligenceBand::Near);
-		assert_eq!(IntelligenceBand::from_viewer(300.0, false, true), IntelligenceBand::Far);
+		assert_eq!(IntelligenceBand::from_viewer(300.0, false, true), IntelligenceBand::Near);
 	}
 
 	#[test]

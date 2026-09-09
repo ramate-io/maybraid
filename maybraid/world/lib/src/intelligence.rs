@@ -12,8 +12,8 @@ use firearms::{FirearmWeaponSystems, FirearmWeaponsPlugin};
 use fleeing_intelligence::{FleeingPlugin, FleeingSystems};
 use hiding_intelligence::{HidingPlugin, HidingSystems};
 use intelligence_lod::{
-	look_promotes, IntelligenceBand, IntelligenceFocus, IntelligenceFocusSample, IntelligenceLod,
-	IntelligenceLook, IntelligencePriority, LOOK_FOV_INSET, LOOK_M,
+	look_near_m, look_promotes, IntelligenceBand, IntelligenceFocus, IntelligenceFocusSample,
+	IntelligenceLod, IntelligenceLook, IntelligencePriority, LOOK_FOV_INSET,
 };
 use lod::LodViewer;
 use maybraid_mobs::player_affiliations;
@@ -25,6 +25,7 @@ use movement_intelligence_avian::AvianMovementSurface;
 use movement_realization::MovementRealizationPlugin;
 use player::LocomotionCapsule;
 use player::PlayerCameraAim;
+use player_camera::{CameraController, CameraPov, FollowCamera};
 use poi_intelligence::{PoiDiscoverLimits, PoiSystems};
 use routing_intelligence::{RoutingPlugin, RoutingSystems};
 use spotting_intelligence::{
@@ -173,8 +174,25 @@ impl Plugin for WorldIntelligencePlugin {
 }
 
 /// Copy ADS / bore poses into the focus mailbox. Firearm control stays out of the bake.
-fn sync_intelligence_focus(mut focus: ResMut<IntelligenceFocus>, aims: Query<&PlayerCameraAim>) {
+fn hip_fov(follow: &FollowCamera, controller: &CameraController) -> f32 {
+	match controller.pov {
+		CameraPov::ThirdPerson => follow.third_person_fov,
+		CameraPov::FirstPerson => follow.first_person_fov,
+	}
+}
+
+fn sync_intelligence_focus(
+	mut focus: ResMut<IntelligenceFocus>,
+	aims: Query<&PlayerCameraAim>,
+	cameras: Query<(&Projection, &FollowCamera, &CameraController), With<LodViewer>>,
+) {
 	focus.clear();
+	let look_near = cameras.iter().find_map(|(projection, follow, controller)| {
+		let Projection::Perspective(perspective) = projection else {
+			return None;
+		};
+		Some(look_near_m(hip_fov(follow, controller), perspective.fov))
+	});
 	for aim in &aims {
 		if aim.focus <= 1e-4 {
 			continue;
@@ -190,7 +208,7 @@ fn sync_intelligence_focus(mut focus: ResMut<IntelligenceFocus>, aims: Query<&Pl
 		focus.push(IntelligenceFocusSample {
 			origin: pose.translation,
 			dir,
-			max_range: LOOK_M,
+			max_range: look_near.unwrap_or(IntelligenceBand::NEAR_M),
 			half_angle: fov * 0.5 * LOOK_FOV_INSET,
 		});
 	}
@@ -198,7 +216,10 @@ fn sync_intelligence_focus(mut focus: ResMut<IntelligenceFocus>, aims: Query<&Pl
 
 fn bake_intelligence_lod(
 	player: Query<&GlobalTransform, With<VegetationPlayer>>,
-	cameras: Query<(&GlobalTransform, &Projection), With<LodViewer>>,
+	cameras: Query<
+		(&GlobalTransform, &Projection, &FollowCamera, &CameraController),
+		With<LodViewer>,
+	>,
 	focus: Res<IntelligenceFocus>,
 	mut plants: Query<(
 		Entity,
@@ -211,18 +232,22 @@ fn bake_intelligence_lod(
 	let Ok(player) = player.single() else {
 		return;
 	};
-	let look = cameras.iter().find_map(|(transform, projection)| {
+	let look = cameras.iter().find_map(|(transform, projection, follow, controller)| {
 		let Projection::Perspective(perspective) = projection else {
 			return None;
 		};
-		Some(IntelligenceLook::from_perspective(transform, perspective))
+		Some(IntelligenceLook::from_perspective(
+			transform,
+			perspective,
+			hip_fov(follow, controller),
+		))
 	});
 	let player_xz = player.translation().xz();
 	let mut rows: Vec<(Entity, IntelligenceLod)> = Vec::new();
 	for (entity, transform, mut lod, management) in &mut plants {
 		let at = transform.translation();
 		let dist = at.xz().distance(player_xz);
-		let look = look_promotes(dist, at, look, &focus);
+		let look = look_promotes(at, look, &focus);
 		lod.band =
 			IntelligenceBand::from_viewer(dist, management.tactic != ThreatTactic::Ignore, look);
 		lod.skips = lod.skips.saturating_add(1);
@@ -273,12 +298,21 @@ mod tests {
 		app
 	}
 
-	fn spawn_look_camera(app: &mut App, looking_at: Vec3, fov_y: f32) {
+	fn spawn_look_camera(app: &mut App, looking_at: Vec3, current_fov: f32, base_fov: f32) {
 		let transform = Transform::from_translation(Vec3::Y * 1.6).looking_at(looking_at, Vec3::Y);
 		app.world_mut().spawn((
 			LodViewer,
+			FollowCamera { first_person_fov: base_fov, third_person_fov: base_fov, ..default() },
+			CameraController {
+				yaw: 0.0,
+				pitch: 0.0,
+				pov: CameraPov::FirstPerson,
+				focus: 0.0,
+				ads: 0.0,
+				focus_blend: 0.0,
+			},
 			Projection::Perspective(PerspectiveProjection {
-				fov: fov_y,
+				fov: current_fov,
 				aspect_ratio: 16.0 / 9.0,
 				..default()
 			}),
@@ -330,13 +364,35 @@ mod tests {
 	}
 
 	#[test]
-	fn bake_look_promotes_mid_on_axis_and_not_off_axis() {
+	fn bake_hip_look_does_not_extend_near() {
 		let mut app = bake_app();
 		app.world_mut()
 			.spawn((VegetationPlayer, Transform::default(), GlobalTransform::default()));
-		spawn_look_camera(&mut app, Vec3::new(120.0, 1.6, 0.0), 75_f32.to_radians());
+		let hip = 75_f32.to_radians();
+		spawn_look_camera(&mut app, Vec3::new(120.0, 1.6, 0.0), hip, hip);
 		let ahead = spawn_lod_plant(&mut app, Vec3::X * 120.0, ThreatTactic::Ignore, 0);
-		let side = spawn_lod_plant(&mut app, Vec3::new(110.0, 0.0, 90.0), ThreatTactic::Ignore, 0);
+
+		app.update();
+
+		assert_eq!(
+			app.world().get::<IntelligenceLod>(ahead).map(|lod| lod.band),
+			Some(IntelligenceBand::Mid)
+		);
+	}
+
+	#[test]
+	fn bake_zoom_promotes_on_axis_mid_and_not_off_axis() {
+		let mut app = bake_app();
+		app.world_mut()
+			.spawn((VegetationPlayer, Transform::default(), GlobalTransform::default()));
+		spawn_look_camera(
+			&mut app,
+			Vec3::new(180.0, 1.6, 0.0),
+			15_f32.to_radians(),
+			75_f32.to_radians(),
+		);
+		let ahead = spawn_lod_plant(&mut app, Vec3::X * 180.0, ThreatTactic::Ignore, 0);
+		let side = spawn_lod_plant(&mut app, Vec3::new(180.0, 0.0, 80.0), ThreatTactic::Ignore, 0);
 
 		app.update();
 
@@ -361,7 +417,7 @@ mod tests {
 			.push(IntelligenceFocusSample {
 				origin: Vec3::Y,
 				dir: (at - Vec3::Y).normalize(),
-				max_range: LOOK_M,
+				max_range: f32::MAX,
 				half_angle: 8_f32.to_radians(),
 			});
 		let side = spawn_lod_plant(&mut app, at, ThreatTactic::Ignore, 0);
