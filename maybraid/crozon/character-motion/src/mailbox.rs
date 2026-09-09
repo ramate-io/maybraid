@@ -705,7 +705,7 @@ mod tests {
 			sample_quadruped(AnimClip::Still, &mut rig, QuadrupedIdle::graze_peak(), true, true);
 		assert!(effects.r#move.is_none());
 		let neck = rig.pose.get(&RigName::from("neck")).expect("neck");
-		assert!(neck.swing < -0.5);
+		assert!(neck.flex < -0.5);
 		let lumbar = rig.pose.get(&RigName::from("lumbar")).expect("lumbar");
 		assert!(lumbar.flex > 0.1);
 	}

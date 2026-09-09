@@ -18,11 +18,12 @@ impl<R: QuadrupedRig> Animation<R> for QuadrupedIdle {
 		let glance = Idle::look_wave(progress, QuadrupedIdle::GLANCE_FREQ, 0.21);
 		let rattle = (TAU * (progress * QuadrupedIdle::SHAKE_FREQ)).sin();
 
-		let neck_swing = -self.graze_neck * graze
+		let neck_flex = -self.graze_neck * graze
 			+ self.look_neck * look
 			+ self.graze_neck * 0.06 * bob * graze
 			+ self.sway * 0.35 * sway;
-		let neck_flex = self.look_neck * 0.28 * glance * look + self.shake * rattle * shake;
+		let neck_swing =
+			self.look_neck * 0.55 * glance * (look + graze * 0.35) + self.shake * rattle * shake;
 		apply_neck_posed(rig, neck_swing, neck_flex);
 
 		let lumbar = self.lumbar * graze - self.lumbar * 0.35 * look + self.sway * sway;
@@ -64,11 +65,12 @@ mod tests {
 	}
 
 	#[test]
-	fn graze_drops_the_neck_and_gathers_the_spine() {
+	fn graze_bows_the_neck_and_gathers_the_spine() {
 		let mut rig = QuadrupedV0Rig::imported();
 		QuadrupedIdle::default().apply(&mut rig, QuadrupedIdle::graze_peak());
 
-		assert!(neck_swing(&rig) < -0.5);
+		assert!(neck_flex(&rig) < -0.5);
+		assert!(neck_flex(&rig).abs() > neck_swing(&rig).abs() * 2.0);
 		assert!(lumbar(&rig) > 0.1);
 	}
 
@@ -79,20 +81,18 @@ mod tests {
 		QuadrupedIdle::default().apply(&mut graze, QuadrupedIdle::graze_peak());
 		QuadrupedIdle::default().apply(&mut look, QuadrupedIdle::look_peak());
 
-		assert!(neck_swing(&look) > 0.15);
-		assert!(neck_swing(&look) > neck_swing(&graze) + 0.6);
+		assert!(neck_flex(&look) > 0.15);
+		assert!(neck_flex(&look) > neck_flex(&graze) + 0.6);
 		assert!(lumbar(&look) < lumbar(&graze));
 	}
 
 	#[test]
-	fn shake_rattles_the_neck_after_the_look() {
-		let mut look = QuadrupedV0Rig::imported();
+	fn shake_rotates_the_neck_after_the_look() {
 		let mut shake = QuadrupedV0Rig::imported();
-		QuadrupedIdle::default().apply(&mut look, QuadrupedIdle::look_peak());
 		QuadrupedIdle::default().apply(&mut shake, QuadrupedIdle::shake_peak());
 
-		assert!(neck_flex(&shake).abs() > 0.04);
-		assert!(neck_flex(&look).abs() < neck_flex(&shake).abs());
+		assert!(neck_swing(&shake).abs() > 0.03);
+		assert!(QuadrupedIdle::shake_weight(QuadrupedIdle::shake_peak()) > 0.9);
 	}
 
 	#[test]
@@ -128,6 +128,6 @@ mod tests {
 		idle.apply(&mut a, QuadrupedIdle::graze_peak());
 		idle.apply(&mut b, QuadrupedIdle::graze_peak() + Idle::phase_from_entity_bits(7));
 
-		assert_ne!(neck_swing(&a), neck_swing(&b));
+		assert_ne!(neck_flex(&a), neck_flex(&b));
 	}
 }

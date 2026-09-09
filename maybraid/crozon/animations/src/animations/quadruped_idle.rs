@@ -15,11 +15,11 @@ const DEFAULT_SWAY: f32 = 0.018;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct QuadrupedIdle {
-	/// Neck swing while the head is down (radians). Negative is graze.
+	/// Neck flex while the muzzle is down (radians). Bow, not yaw.
 	pub graze_neck: f32,
-	/// Neck swing while looking up (radians). Opposite sign from graze.
+	/// Neck flex while looking up (radians). Opposite sign from graze.
 	pub look_neck: f32,
-	/// Lateral neck flex during the shake burst (radians).
+	/// Neck swing during the shake burst (radians).
 	pub shake: f32,
 	/// Lumbar gather while grazing (radians).
 	pub lumbar: f32,

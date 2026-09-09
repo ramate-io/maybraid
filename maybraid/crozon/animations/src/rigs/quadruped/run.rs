@@ -1,7 +1,7 @@
 use crozon_rigs::{quadruped::QuadrupedRig, Side};
 
 use crate::animations::{QuadrupedRun, QuadrupedRunPose};
-use crate::rigs::quadruped::apply::{apply_neck, apply_spine};
+use crate::rigs::quadruped::apply::{apply_neck_posed, apply_spine};
 use crate::rigs::quadruped::gait::{
 	apply_front_leg_at_strike, apply_hind_leg_at_strike, thigh_swing, KneeTuning, LegStrideTuning,
 };
@@ -25,8 +25,13 @@ impl<R: QuadrupedRig> Animation<R> for QuadrupedRunPose<R> {
 		apply_hind_leg_at_strike(rig, Side::Left, cycle, 0.75, tuning);
 
 		let spine_swing = thigh_swing(cycle) * self.spine_swing;
+		let spine = self.spine_swing.max(1e-4);
 		apply_spine(rig, spine_swing, -spine_swing * 0.5);
-		apply_neck(rig, -spine_swing * self.neck_swing / self.spine_swing.max(1e-4));
+		apply_neck_posed(
+			rig,
+			-spine_swing * self.neck_swing / spine,
+			-spine_swing * self.neck_bow / spine,
+		);
 	}
 }
 
@@ -88,6 +93,17 @@ mod tests {
 		let thigh =
 			rig.pose().get(&rig.front_leg(Side::Left).thigh.name).expect("front thigh pose");
 		assert!(thigh.swing.abs() > 0.0);
+	}
+
+	#[test]
+	fn quadruped_run_bows_and_rotates_the_neck() {
+		let mut rig = QuadrupedV0Rig::imported();
+		QuadrupedRunPose::<QuadrupedV0Rig>::default().apply(&mut rig, 0.0);
+
+		let neck = rig.pose().get(&rig.neck().neck.name).expect("neck");
+		assert!(neck.swing.abs() > 0.02);
+		assert!(neck.flex.abs() > 0.03);
+		assert!(neck.flex.abs() > neck.swing.abs());
 	}
 
 	#[test]
