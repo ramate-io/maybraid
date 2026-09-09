@@ -13,14 +13,15 @@ use lod::{LodLevelRoot, LodLevelRoots, LodSceneHost, LodSceneLevel};
 use crate::clip::AnimRefRoot;
 use crate::markers::{AnimateBones, AnimateEffects, ApplyTerrainPitch};
 use crate::pitch::TerrainPitch;
+use crate::plant::plant_lod;
 use crate::policy::{clamp_intelligence, motion_policy};
 use crate::rig::{CharacterRig, CharacterRigRole};
 use crate::shown::shown_level_root;
 
 /// Insert/remove host motion markers from the shown band (else desired / High).
 ///
-/// Mid / Far plants drop bones and effects so [`crate::apply_anim_mailbox`]
-/// skips them. Missing lod is Near — a local player keeps the mailbox.
+/// Mid / Far plants drop bones, effects, and pitch. Missing lod is Near —
+/// a local player keeps the mailbox and terrain pitch.
 pub fn sync_motion_markers(
 	mut commands: Commands,
 	bodies: Query<
@@ -89,26 +90,6 @@ fn motion_level(
 		}
 	}
 	desired.get(host).copied().unwrap_or(LodSceneLevel::High)
-}
-
-/// Plant [`IntelligenceLod`], walking toward the root. Band is on the plant, not
-/// the nested body. Missing = Near.
-fn plant_lod<'a>(
-	start: Entity,
-	child_of: &Query<&ChildOf>,
-	lods: &'a Query<&IntelligenceLod>,
-) -> Option<&'a IntelligenceLod> {
-	let mut current = Some(start);
-	for _ in 0..32 {
-		let Some(entity) = current else {
-			break;
-		};
-		if let Ok(lod) = lods.get(entity) {
-			return Some(lod);
-		}
-		current = child_of.get(entity).ok().map(ChildOf::parent);
-	}
-	None
 }
 
 fn set_marker<M: Component + Default>(
@@ -180,5 +161,23 @@ mod tests {
 		run_sync(&mut world);
 		assert!(world.get::<AnimateBones>(body).is_some());
 		assert!(world.get::<AnimateEffects>(body).is_some());
+	}
+
+	#[test]
+	fn missing_lod_keeps_pitch() {
+		let mut world = World::new();
+		let plant = world.spawn_empty().id();
+		let host = world.spawn((ApplyTerrainPitch, ChildOf(plant))).id();
+		run_sync(&mut world);
+		assert!(world.get::<ApplyTerrainPitch>(host).is_some());
+	}
+
+	#[test]
+	fn far_plant_drops_pitch() {
+		let mut world = World::new();
+		let plant = world.spawn(IntelligenceLod { band: IntelligenceBand::Far, skips: 0 }).id();
+		let host = world.spawn((ApplyTerrainPitch, ChildOf(plant))).id();
+		run_sync(&mut world);
+		assert!(world.get::<ApplyTerrainPitch>(host).is_none());
 	}
 }

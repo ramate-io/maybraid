@@ -19,8 +19,8 @@ pub use member::{
 };
 pub use plugin::{RigPlugin, RigSystems};
 pub use pose::{
-	bind_pose_ready, maintain_bind_pose, ActiveRigPose, BindPose, BoneRotation, BoneScale,
-	BoneTranslation, PoseApplied, PoseSkipRotation, ResolvedRigPose, RigPoseLayer,
+	bind_pose_ready, maintain_bind_pose, ActiveRigPose, BindPose, BindPoseDirty, BoneRotation,
+	BoneScale, BoneTranslation, PoseApplied, PoseSkipRotation, ResolvedRigPose, RigPoseLayer,
 };
 pub use socket::{
 	fulfill_socket_ref_roots, invalidate_changed_socket_ref_roots, resolve_socket_parent,

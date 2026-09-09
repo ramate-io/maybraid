@@ -78,10 +78,12 @@ pub fn ingest_poi_observations(
 	}
 }
 
-/// Accrue / maintain everyone, then drain due scans in shared viewer order.
+/// Accrue everyone, forget on a staggered clock, then drain due scans.
 ///
-/// Far skips local and global scans unless a fairness reserve is due. Global
-/// stays Mid / Near only. `skips` reset when a scan body actually ran.
+/// Forget is not every learner every frame — retention is hundreds of seconds.
+/// A scan still forgets for free. Far skips local and global scans unless a
+/// fairness reserve is due. Global stays Mid / Near only. `skips` reset when a
+/// scan body actually ran.
 pub fn discover_pois(
 	time: Res<Time>,
 	registry: Res<PoiRegistry>,
@@ -97,9 +99,9 @@ pub fn discover_pois(
 ) {
 	let now = time.elapsed_secs();
 	let delta = time.delta_secs();
-	for (_, _, mut user, mut knowledge, _) in &mut users {
+	for (entity, _, mut user, mut knowledge, _) in &mut users {
 		user.accrue_learning(delta);
-		knowledge.maintain(now, user.policy);
+		forget_if_due(entity, now, &mut user, &mut knowledge);
 	}
 
 	let mut due: Vec<Entity> = users
@@ -132,6 +134,8 @@ pub fn discover_pois(
 		remaining -= 1;
 		let position = transform.translation();
 		let n = band.scale_count(user.policy.candidates_per_scan);
+		knowledge.maintain(now, user.policy);
+		user.next_forget_at = now + staggered_interval(FORGET_INTERVAL, entity, 2);
 		if now >= user.next_local_scan_at {
 			user.next_local_scan_at = now
 				+ staggered_interval(user.policy.local_scan_interval, entity, 0)
@@ -173,6 +177,21 @@ pub fn discover_pois(
 			lod.skips = 0;
 		}
 	}
+}
+
+const FORGET_INTERVAL: f32 = 2.0;
+
+fn forget_if_due(
+	entity: Entity,
+	now: f32,
+	user: &mut PoiIntelligenceUser,
+	knowledge: &mut PoiKnowledge,
+) {
+	if now < user.next_forget_at {
+		return;
+	}
+	knowledge.maintain(now, user.policy);
+	user.next_forget_at = now + staggered_interval(FORGET_INTERVAL, entity, 2);
 }
 
 fn staggered_interval(interval: f32, entity: Entity, salt: u64) -> f32 {

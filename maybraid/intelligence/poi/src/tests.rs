@@ -456,6 +456,49 @@ fn maintain_still_runs_on_far_we_do_not_scan() -> anyhow::Result<()> {
 }
 
 #[test]
+fn forget_does_not_run_every_frame_on_unscanned_far() -> anyhow::Result<()> {
+	let mut app = discover_app();
+	app.insert_resource(PoiDiscoverLimits { max_scans_per_tick: 1 });
+	let far = spawn_learner(
+		&mut app,
+		camp_learner(),
+		PoiKnowledge::default(),
+		IntelligenceLod { band: IntelligenceBand::Far, skips: 0 },
+	);
+	let near = spawn_learner(
+		&mut app,
+		camp_learner(),
+		PoiKnowledge::default(),
+		IntelligenceLod::missing(),
+	);
+	app.world_mut().resource_mut::<IntelligencePriority>().rank.insert(near, 0);
+	app.world_mut().resource_mut::<IntelligencePriority>().rank.insert(far, 1);
+	app.update();
+
+	let stale = PoiId(11);
+	app.world_mut()
+		.get_mut::<PoiKnowledge>(far)
+		.expect("far knowledge")
+		.observe(observation(far, stale.0, PoiSource::LOCAL_SCAN, -4.0), -4.0);
+	app.update();
+	anyhow::ensure!(app
+		.world()
+		.get::<PoiKnowledge>(far)
+		.is_some_and(|knowledge| knowledge.get(stale).is_some()));
+
+	app.world_mut()
+		.get_mut::<PoiIntelligenceUser>(far)
+		.expect("far user")
+		.next_forget_at = 0.0;
+	app.update();
+	anyhow::ensure!(app
+		.world()
+		.get::<PoiKnowledge>(far)
+		.is_some_and(|knowledge| knowledge.get(stale).is_none()));
+	Ok(())
+}
+
+#[test]
 fn far_does_not_run_global_scan_even_when_fair() -> anyhow::Result<()> {
 	let mut app = discover_app();
 	let local = index_poi(&mut app, 1, Vec3::X * 10.0, true, false)?;

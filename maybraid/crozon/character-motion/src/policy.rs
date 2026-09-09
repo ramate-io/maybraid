@@ -58,7 +58,8 @@ pub fn motion_policy(level: LodSceneLevel) -> MotionPolicy {
 	}
 }
 
-/// Drop mailbox work on Mid / Far plants. Missing lod is Near (local player).
+/// Drop mailbox and pitch work on Mid / Far plants. Missing lod is Near
+/// (local player).
 ///
 /// Character `LodScene` stays High — this is not a scene cull. Effects go with
 /// bones so [`crate::apply_anim_mailbox`] does not keep the expensive path.
@@ -66,6 +67,7 @@ pub fn clamp_intelligence(mut policy: MotionPolicy, lod: Option<&IntelligenceLod
 	if IntelligenceLod::band_or_near(lod) != IntelligenceBand::Near {
 		policy.bones = false;
 		policy.effects = false;
+		policy.pitch = false;
 	}
 	policy
 }
@@ -109,13 +111,13 @@ mod tests {
 	}
 
 	#[test]
-	fn mid_and_far_drop_mailbox_keep_pitch() {
+	fn mid_and_far_drop_mailbox_and_pitch() {
 		let high = motion_policy(LodSceneLevel::High);
 		let mid = IntelligenceLod { band: IntelligenceBand::Mid, skips: 0 };
 		let far = IntelligenceLod { band: IntelligenceBand::Far, skips: 0 };
 		let mid_p = clamp_intelligence(high, Some(&mid));
 		let far_p = clamp_intelligence(high, Some(&far));
-		assert!(!mid_p.bones && !mid_p.effects && mid_p.pitch);
-		assert!(!far_p.bones && !far_p.effects && far_p.pitch);
+		assert!(!mid_p.bones && !mid_p.effects && !mid_p.pitch);
+		assert!(!far_p.bones && !far_p.effects && !far_p.pitch);
 	}
 }

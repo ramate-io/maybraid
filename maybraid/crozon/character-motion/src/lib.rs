@@ -12,6 +12,7 @@ pub mod elevation;
 pub mod mailbox;
 pub mod markers;
 pub mod pitch;
+pub mod plant;
 pub mod plugin;
 pub mod policy;
 pub mod rig;
@@ -27,8 +28,8 @@ pub use elevation::{
 	DrawTerrainPitchProbes,
 };
 pub use mailbox::{
-	apply_anim_mailbox, prepare_anim_mailbox, tick_anim_mailbox, AnimBone, AnimMailbox,
-	AnimProgress,
+	apply_anim_mailbox, prepare_anim_mailbox, select_mailbox_applies, tick_anim_mailbox, AnimBone,
+	AnimMailbox, AnimProgress, MailboxApplyLimits, MailboxApplySet,
 };
 pub use markers::{
 	AnimateBones, AnimateEffects, ApplyTerrainPitch, SuspendAnimation, SuspendTerrainPitch,
