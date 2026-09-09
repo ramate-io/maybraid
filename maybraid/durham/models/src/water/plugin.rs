@@ -1,6 +1,6 @@
 //! Idempotent plugin for the Durham water model.
 
-use crate::water::presentation::WaterPresenterState;
+use crate::water::presentation::{sync_unparented_water_pose, WaterPresenterState};
 use bevy::prelude::*;
 
 /// Registers resources for the water model.
@@ -22,6 +22,9 @@ pub fn register_water_plugin(app: &mut App) {
 
 impl Plugin for WaterPlugin {
 	fn build(&self, app: &mut App) {
-		app.init_resource::<WaterPresenterState>();
+		app.init_resource::<WaterPresenterState>().add_systems(
+			PostUpdate,
+			sync_unparented_water_pose.before(TransformSystems::Propagate),
+		);
 	}
 }

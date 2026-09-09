@@ -29,8 +29,8 @@ pub use terrain::{
 	TerrainPresenterState, TerrainRegionPresenter, TerrainRenderItem, TerrainResourcesPlugin,
 	TerrainSdf, TerrainStoreView, TerrainStreamMarker, TerrainStreamPresenterState,
 	TerrainStreamRegionPresenter, TerrainStreamingEnabled, TerrainTrimeshCollider,
-	ValleyHighPassControllerLayout, ValleyLowPassControllerLayout, ValleyStampCell,
-	WorldBaseTerrain, MACRO_CELL_SIZE, TERRAIN_CELL_SIZE, TERRAIN_FRICTION,
+	TerrainVisualHost, ValleyHighPassControllerLayout, ValleyLowPassControllerLayout,
+	ValleyStampCell, WorldBaseTerrain, MACRO_CELL_SIZE, TERRAIN_CELL_SIZE, TERRAIN_FRICTION,
 	WORLD_FINE_HALF_EXTENT_CELLS, WORLD_OUTER_2X_ROWS, WORLD_OUTER_4X_ROWS,
 };
 pub use water::{

@@ -100,10 +100,11 @@ pub use marazion::{
 };
 pub use plugin::{register_terrain_plugin, TerrainResourcesPlugin};
 pub use presentation::{
-	PresentedTerrainScene, TerrainBackground, TerrainBackgroundRegionPresenter, TerrainFar,
-	TerrainFarRegionPresenter, TerrainMeshLodBand, TerrainNear, TerrainNearRegionPresenter,
-	TerrainPresentationAssets, TerrainPresenterState, TerrainRegionPresenter, TerrainStoreView,
-	TerrainStreamMarker, TerrainStreamPresenterState, TerrainStreamRegionPresenter,
+	sync_visual_terrain_host_pose, PresentedTerrainScene, TerrainBackground,
+	TerrainBackgroundRegionPresenter, TerrainFar, TerrainFarRegionPresenter, TerrainMeshLodBand,
+	TerrainNear, TerrainNearRegionPresenter, TerrainPresentationAssets, TerrainPresenterState,
+	TerrainRegionPresenter, TerrainStoreView, TerrainStreamMarker, TerrainStreamPresenterState,
+	TerrainStreamRegionPresenter, TerrainVisualHost,
 };
 pub use render::TerrainRenderItem;
 pub use sdf::{ComposedTerrain, ElevationModulation, TerrainSdf};
@@ -181,10 +182,16 @@ impl Terrain {
 		CpuShotBuilder::new(Arc::clone(&self.sdf)).with_wall_faces(self.wall_faces)
 	}
 
+	/// World pose for CpuShot verts, which are local to the cascade origin.
+	pub fn chunk_pose(&self) -> Transform {
+		Transform::from_translation(cascade_chunk_for_cell(self.cell, self.res_2).origin)
+	}
+
 	pub fn scene(&self) -> impl Scene + 'static {
 		// Collider-host bake path. Visual LOD uses [`LodScene::scene_with_level`].
+		// Pose stays on this child: the collider host is identity.
 		let chunk = cascade_chunk_for_cell(self.cell, self.res_2);
-		let transform = Transform::from_translation(chunk.origin);
+		let transform = self.chunk_pose();
 		let builder = self.mesh_builder();
 		let material = self.material.clone();
 		bsn! {
@@ -200,9 +207,15 @@ impl Terrain {
 		(Vec3::from(self.cell.min) + Vec3::from(self.cell.max)) * 0.5
 	}
 
+	/// Visual fill under a posed [`crate::terrain::presentation::TerrainVisualHost`].
+	///
+	/// Identity here is deliberate: parenting via [`ChildOf`] can replace a
+	/// scene-root `Transform` with the required-component default. The host
+	/// carries [`Self::chunk_pose`] so a wiped child cannot pile the tile at
+	/// the world origin.
 	fn mesh_scene(&self) -> impl Scene + 'static {
 		let chunk = cascade_chunk_for_cell(self.cell, self.res_2);
-		let transform = Transform::from_translation(chunk.origin);
+		let transform = Transform::IDENTITY;
 		let builder = self.mesh_builder();
 		let material = self.material.clone();
 		bsn! {

@@ -22,7 +22,7 @@ use player::PlayerSystems;
 pub use ability::{Covering, MovementAbility, MovementBody, MovementSheet, VantageStandoffs};
 pub use candidate::{MovementCandidate, MovementCandidateHints};
 pub use intelligence_lod::{
-	IntelligenceBand, IntelligenceLod, IntelligencePriority, due_by_rank, reserve_fairness,
+	due_by_rank, reserve_fairness, IntelligenceBand, IntelligenceLod, IntelligencePriority,
 };
 pub use location::MovementLocation;
 pub use objective::MovementObjective;

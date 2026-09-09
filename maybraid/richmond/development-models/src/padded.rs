@@ -62,14 +62,20 @@ impl TerrainWithPads {
 		CpuShotBuilder::new(Arc::clone(&self.sdf)).with_wall_faces(self.wall_faces)
 	}
 
+	/// World pose for CpuShot verts, which are local to the cascade origin.
+	pub fn chunk_pose(&self) -> Transform {
+		Transform::from_translation(cascade_chunk_for_cell(self.cell, self.res_2).origin)
+	}
+
 	pub fn scene(&self) -> impl Scene + 'static {
 		self.mesh_scene()
 	}
 
 	/// Collider-host bake path. Visual LOD uses [`LodScene::scene_with_level`].
+	/// Pose stays on this child: the collider host is identity.
 	pub fn collider_scene(&self) -> impl Scene + 'static {
 		let chunk = cascade_chunk_for_cell(self.cell, self.res_2);
-		let transform = Transform::from_translation(chunk.origin);
+		let transform = self.chunk_pose();
 		let builder = self.mesh_builder();
 		let material = self.material.clone();
 		bsn! {
@@ -89,9 +95,11 @@ impl TerrainWithPads {
 		(Vec3::from(self.cell.min) + Vec3::from(self.cell.max)) * 0.5
 	}
 
+	/// Visual fill under a posed host. Identity so [`ChildOf`] cannot drop the
+	/// world pose — the host carries [`Self::chunk_pose`].
 	pub fn mesh_scene(&self) -> impl Scene + 'static {
 		let chunk = cascade_chunk_for_cell(self.cell, self.res_2);
-		let transform = Transform::from_translation(chunk.origin);
+		let transform = Transform::IDENTITY;
 		let builder = self.mesh_builder();
 		let material = self.material.clone();
 		bsn! {
@@ -199,5 +207,13 @@ mod tests {
 		let viewer = Transform::IDENTITY;
 		assert_eq!(stream_banded_level(&pad, &viewer), LodSceneLevel::High);
 		assert!(stream_banded_draws(&pad, LodSceneLevel::High));
+	}
+
+	#[test]
+	fn chunk_pose_is_cascade_origin() {
+		let pad = pad_at(Vec3::new(160.0, 0.0, -320.0), far_ring());
+		let chunk = cascade_chunk_for_cell(pad.cell, pad.res_2);
+		assert_eq!(pad.chunk_pose(), Transform::from_translation(chunk.origin));
+		assert_ne!(pad.chunk_pose(), Transform::IDENTITY);
 	}
 }

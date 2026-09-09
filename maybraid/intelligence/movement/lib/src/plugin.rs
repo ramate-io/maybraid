@@ -6,15 +6,15 @@ use bevy::ecs::system::{StaticSystemParam, SystemParam};
 use bevy::prelude::*;
 use player::MoveWish;
 
-use intelligence_lod::{IntelligenceBand, IntelligenceLod, IntelligencePriority, due_by_rank};
+use intelligence_lod::{due_by_rank, IntelligenceBand, IntelligenceLod, IntelligencePriority};
 
-use crate::MovementIntelligenceSystems;
 use crate::ability::MovementSheet;
 use crate::configure_movement_intelligence_sets;
 use crate::location::MovementLocation;
 use crate::step::MovementDrive;
 use crate::surface::{MovementIntelligenceLimits, MovementIntelligenceSurface, WalkProbeBudget};
 use crate::user::{MovementDriveResult, MovementIntelligence, ReplanMovement};
+use crate::MovementIntelligenceSystems;
 
 /// Registers replan + drive for surface `S` and interaction / ability types `I`, `A`.
 pub struct MovementIntelligencePlugin<S, I = crate::MovementStep, A = crate::MovementAbility>

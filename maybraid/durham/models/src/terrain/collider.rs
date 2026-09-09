@@ -209,27 +209,29 @@ pub(crate) fn sync_terrain_collider_hosts(
 
 /// Builds one direct trimesh under each persistent [`TerrainColliderHost`].
 ///
-/// The mesh source has the same host-local transform as the collider. Its
-/// `Mesh3d` child is generated asynchronously with an identity transform.
-/// After the trimesh is copied into Avian, the mesh source is despawned so
-/// visual LOD can own drawing.
+/// Pose comes from [`CascadeChunk::origin`], not the mesh-source `Transform`.
+/// CpuShot verts are local; an identity source (ChildOf required-component
+/// default) must not bake a collider at the world origin. The `Mesh3d` child
+/// is generated asynchronously with an identity transform. After the trimesh
+/// is copied into Avian, the mesh source is despawned so visual LOD can own
+/// drawing.
 pub(crate) fn queue_terrain_trimesh_colliders(
 	mut commands: Commands,
 	friction: Res<TerrainFrictionConfig>,
 	meshes: Res<Assets<Mesh>>,
 	hosts: Query<Entity, (With<TerrainColliderHost>, Without<TerrainColliderReady>)>,
 	children: Query<&Children>,
-	sources: Query<(Entity, &Transform, &CascadeChunk), With<TerrainColliderMeshSource>>,
+	sources: Query<(Entity, &CascadeChunk), With<TerrainColliderMeshSource>>,
 	mesh_entities: Query<&Mesh3d>,
 ) {
 	for host in &hosts {
-		let Some((source_entity, source_transform, chunk, mesh)) =
+		let Some((source_entity, chunk, mesh)) =
 			children.iter_descendants(host).find_map(|candidate| {
-				let (entity, transform, chunk) = sources.get(candidate).ok()?;
+				let (entity, chunk) = sources.get(candidate).ok()?;
 				let mesh = children
 					.iter_descendants(candidate)
 					.find_map(|descendant| mesh_entities.get(descendant).ok())?;
-				Some((entity, transform, chunk, mesh))
+				Some((entity, chunk, mesh))
 			})
 		else {
 			continue;
@@ -240,11 +242,12 @@ pub(crate) fn queue_terrain_trimesh_colliders(
 		let Some(collider) = Collider::trimesh_from_mesh(mesh) else {
 			continue;
 		};
+		let pose = Transform::from_translation(chunk.origin);
 		commands.spawn((
 			Name::new("Stable terrain collider"),
 			TerrainTrimeshCollider,
 			ChildOf(host),
-			*source_transform,
+			pose,
 			chunk.clone(),
 			RigidBody::Static,
 			collider,
@@ -300,13 +303,13 @@ mod tests {
 		let mesh = app.world_mut().resource_mut::<Assets<Mesh>>().add(mesh);
 
 		let host = app.world_mut().spawn((TerrainColliderHost, Transform::default())).id();
-		let source_transform = Transform::from_xyz(2.0, 3.0, 4.0);
+		let origin = Vec3::new(2.0, 3.0, 4.0);
 		let source = app
 			.world_mut()
 			.spawn((
 				TerrainColliderMeshSource,
-				source_transform,
-				CascadeChunk::default(),
+				Transform::IDENTITY,
+				CascadeChunk { origin, ..CascadeChunk::default() },
 				ChildOf(host),
 			))
 			.id();
@@ -320,7 +323,7 @@ mod tests {
 		let stable: Vec<_> = colliders.iter(app.world()).collect();
 		assert_eq!(stable.len(), 1);
 		assert_eq!(stable[0].0.parent(), host);
-		assert_eq!(*stable[0].1, source_transform);
+		assert_eq!(*stable[0].1, Transform::from_translation(origin));
 		assert!(app.world().get_entity(source).is_err());
 
 		app.update();
