@@ -2836,6 +2836,7 @@ dependencies = [
  "bevy",
  "crozon-rigs",
  "ground",
+ "intelligence-lod",
  "lod",
  "malo-animations",
  "rigs",

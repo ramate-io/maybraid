@@ -3,6 +3,7 @@
 //!
 //! [`motion_policy`] is the default linear ramp, not a registry of regimes.
 
+use intelligence_lod::{IntelligenceBand, IntelligenceLod};
 use lod::LodSceneLevel;
 
 use crate::markers::{AnimateBones, AnimateEffects, ApplyTerrainPitch};
@@ -57,9 +58,22 @@ pub fn motion_policy(level: LodSceneLevel) -> MotionPolicy {
 	}
 }
 
+/// Drop mailbox work on Mid / Far plants. Missing lod is Near (local player).
+///
+/// Character `LodScene` stays High — this is not a scene cull. Effects go with
+/// bones so [`crate::apply_anim_mailbox`] does not keep the expensive path.
+pub fn clamp_intelligence(mut policy: MotionPolicy, lod: Option<&IntelligenceLod>) -> MotionPolicy {
+	if IntelligenceLod::band_or_near(lod) != IntelligenceBand::Near {
+		policy.bones = false;
+		policy.effects = false;
+	}
+	policy
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use intelligence_lod::{IntelligenceBand, IntelligenceLod};
 
 	#[test]
 	fn high_has_all_markers() {
@@ -85,5 +99,23 @@ mod tests {
 	fn ultra_low_is_silent() {
 		let p = motion_policy(LodSceneLevel::UltraLow);
 		assert_eq!(p, MotionPolicy::NONE);
+	}
+
+	#[test]
+	fn missing_and_near_keep_high_mailbox() {
+		let high = motion_policy(LodSceneLevel::High);
+		assert_eq!(clamp_intelligence(high, None), MotionPolicy::HIGH);
+		assert_eq!(clamp_intelligence(high, Some(&IntelligenceLod::missing())), MotionPolicy::HIGH);
+	}
+
+	#[test]
+	fn mid_and_far_drop_mailbox_keep_pitch() {
+		let high = motion_policy(LodSceneLevel::High);
+		let mid = IntelligenceLod { band: IntelligenceBand::Mid, skips: 0 };
+		let far = IntelligenceLod { band: IntelligenceBand::Far, skips: 0 };
+		let mid_p = clamp_intelligence(high, Some(&mid));
+		let far_p = clamp_intelligence(high, Some(&far));
+		assert!(!mid_p.bones && !mid_p.effects && mid_p.pitch);
+		assert!(!far_p.bones && !far_p.effects && far_p.pitch);
 	}
 }

@@ -1,8 +1,9 @@
 //! Per-frame character articulation: clips, mailbox, terrain pitch.
 //!
 //! Recipes (`crozon-characters`) stamp host identity. This crate syncs host
-//! motion markers from the shown LOD band and realizes clips / pitch. See
-//! [README.md](../README.md).
+//! motion markers from the shown LOD band, clamps mailbox work from plant
+//! [`intelligence_lod::IntelligenceLod`] (missing = Near), and realizes clips /
+//! pitch. See [README.md](../README.md).
 //!
 //! This crate does **not** implement [`lod::LodScene`] or species recipes.
 
@@ -34,7 +35,7 @@ pub use markers::{
 };
 pub use pitch::{CharacterHeading, TerrainPitch};
 pub use plugin::{CharacterMotionPlugin, CharacterMotionSystems};
-pub use policy::{motion_policy, MotionPolicy};
+pub use policy::{clamp_intelligence, motion_policy, MotionPolicy};
 pub use rig::{
 	bone_map_ready, missing_landmark_bones, BoneMap, CharacterRig, CharacterRigRole,
 	RigSkeletonKind,
