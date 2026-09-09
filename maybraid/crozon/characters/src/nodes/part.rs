@@ -3,11 +3,13 @@
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::{Component, Transform, Vec3};
 use bevy::scene::prelude::{bsn, template_value, Scene};
-use crozon_character_shaders::{eye_palette, mouth_palette, RECIPE_FACE_EYE, RECIPE_FACE_MOUTH};
+use crozon_character_shaders::{
+	eye_palette, mouth_palette, RECIPE_FACE_EYE, RECIPE_FACE_MOUTH,
+};
 use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
 use lod::SceneChunk;
-use material_ref::{MaterialId, MaterialRef, MaterialRefRoot, PropagateToDescendants};
+use material_ref::{MaterialRef, MaterialRefRoot, PropagateToDescendants};
 use scene_ref::{MirrorAxis, SceneRef};
 
 use crate::assembly::CharacterPartSlot;
@@ -114,19 +116,32 @@ impl PartNode {
 		self
 	}
 
-	/// Tint via [`MaterialRef`] palette[0]. Keeps the existing recipe name
-	/// so face / clothing parts stay on their shader after color stamping.
+	/// Tint via [`MaterialRef`] palette[0]. Eye and mouth slots claim the face
+	/// recipes so bipeds and quadrupeds share the same shader after stamping.
 	///
-	/// `face_eye` / `face_mouth` also pack derived detail slots so the shader
-	/// can paint lids or a lip crease from the same stamp.
+	/// Existing scalars (pupil shape) are kept. Other parts keep their recipe.
 	pub fn with_base_color(self, color: bevy::prelude::Color) -> Self {
-		let material = if self.material.name == MaterialId::named(RECIPE_FACE_EYE) {
-			self.material.clone().with_palette(eye_palette(color))
-		} else if self.material.name == MaterialId::named(RECIPE_FACE_MOUTH) {
-			self.material.clone().with_palette(mouth_palette(color))
-		} else {
-			self.material.clone().with_palette([color])
+		let material = match self.slot {
+			CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => {
+				let scalars: Vec<f32> = self.material.scalar_values().to_vec();
+				let mut material =
+					MaterialRef::named(RECIPE_FACE_EYE).with_palette(eye_palette(color));
+				if !scalars.is_empty() {
+					material = material.with_scalars(scalars);
+				}
+				material
+			}
+			CharacterPartSlot::Mouth => {
+				MaterialRef::named(RECIPE_FACE_MOUTH).with_palette(mouth_palette(color))
+			}
+			_ => self.material.clone().with_palette([color]),
 		};
+		self.with_material(material)
+	}
+
+	/// `0` round, `1` slit. Stored in `face_eye` scalars[0].
+	pub fn with_pupil_shape(self, shape: f32) -> Self {
+		let material = self.material.clone().with_scalars([shape]);
 		self.with_material(material)
 	}
 
@@ -220,6 +235,22 @@ mod tests {
 		assert_eq!(part.material.palette.len(), 6);
 		assert_eq!(part.material.palette[0], iris);
 		assert_ne!(part.material.palette[EYE_PALETTE_PUPIL], iris);
+	}
+
+	#[test]
+	fn with_base_color_claims_face_eye_from_slot() {
+		use crozon_character_shaders::PUPIL_SHAPE_SLIT;
+		let iris = Color::srgb(0.1, 0.2, 0.3);
+		let part = PartNode::glb(
+			CharacterPartSlot::EyeLeft,
+			"eye",
+			"characters/eyes/humanoid_eye_left.glb",
+			AssetNormalization::IDENTITY,
+		)
+		.with_pupil_shape(PUPIL_SHAPE_SLIT)
+		.with_base_color(iris);
+		assert_eq!(part.material.name, MaterialId::named("face_eye"));
+		assert_eq!(part.material.scalar_values(), &[PUPIL_SHAPE_SLIT]);
 	}
 
 	#[test]

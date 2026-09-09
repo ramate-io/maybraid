@@ -1,7 +1,8 @@
 //! Face [`Material`] — painted iris / lid wrap, painted lips / idle open.
 //!
 //! Phase is `globals.time` + instance seed. No mailbox. No blendshapes.
-//! `face_eye` palette: iris, pupil, sclera, catchlight, limbus, lid.
+//! `face_eye` palette: iris primary, pupil, sclera, iris secondary, lid, catchlight.
+//! `face_eye` scalars[0]: pupil shape (`0` round, `1` slit).
 //! `face_mouth` palette: lip, crease, interior, highlight, teeth.
 
 use bevy::{
@@ -26,14 +27,19 @@ pub const RECIPE_FACE_MOUTH: &str = "face_mouth";
 pub const KIND_EYE: u32 = 0;
 pub const KIND_MOUTH: u32 = 1;
 
-/// `face_eye` palette: iris, pupil, sclera, catchlight, limbus, lid.
+/// `face_eye` palette: iris primary, pupil, sclera, iris secondary, lid, catchlight.
 pub const EYE_PALETTE_IRIS: usize = 0;
 pub const EYE_PALETTE_PUPIL: usize = 1;
 pub const EYE_PALETTE_SCLERA: usize = 2;
-pub const EYE_PALETTE_HIGHLIGHT: usize = 3;
-pub const EYE_PALETTE_LIMBUS: usize = 4;
-pub const EYE_PALETTE_LID: usize = 5;
+pub const EYE_PALETTE_IRIS_SECONDARY: usize = 3;
+pub const EYE_PALETTE_LID: usize = 4;
+pub const EYE_PALETTE_HIGHLIGHT: usize = 5;
 const EYE_PALETTE_DETAIL_SLOTS: usize = 6;
+
+/// `scalars[0].x` — `0` round, `1` vertical slit.
+pub const EYE_SCALAR_PUPIL_SHAPE: usize = 0;
+pub const PUPIL_SHAPE_ROUND: f32 = 0.0;
+pub const PUPIL_SHAPE_SLIT: f32 = 1.0;
 
 /// `face_mouth` palette: lip, crease, interior, highlight, teeth.
 pub const MOUTH_PALETTE_LIP: usize = 0;
@@ -47,7 +53,7 @@ const SCALAR_VEC4S: usize = MATERIAL_SCALAR_FLOATS / 4;
 const DEFAULT_EYE_COLOR: Vec4 = Vec4::new(0.22, 0.16, 0.12, 1.0);
 const DEFAULT_MOUTH_COLOR: Vec4 = Vec4::new(0.62, 0.32, 0.30, 1.0);
 
-/// Species eye color as iris, plus derived pupil / sclera / highlight / limbus / lid.
+/// Species eye color as iris primary, plus derived pupil / sclera / secondary / lid / catchlight.
 pub fn eye_palette(iris: Color) -> [Color; EYE_PALETTE_DETAIL_SLOTS] {
 	let mut colors = derived_eye_palette(linear_vec4(iris))
 		.map(|color| Color::linear_rgba(color.x, color.y, color.z, color.w));
@@ -74,10 +80,10 @@ fn derived_eye_palette(iris: Vec4) -> [Vec4; EYE_PALETTE_DETAIL_SLOTS] {
 		iris,
 		(rgb * Vec3::new(0.07, 0.05, 0.04)).extend(1.0),
 		(Vec3::new(0.93, 0.91, 0.88) + rgb * 0.045).extend(1.0),
-		Vec4::new(0.98, 0.99, 0.97, 1.0),
-		(rgb * Vec3::new(0.38, 0.32, 0.28)).extend(1.0),
+		(rgb * Vec3::new(0.42, 0.38, 0.72)).extend(1.0),
 		// Warm skin, not an iris stain — lids should not pick up eye color.
 		Vec4::new(0.72, 0.52, 0.44, 1.0),
+		Vec4::new(0.98, 0.99, 0.97, 1.0),
 	]
 }
 
@@ -393,15 +399,25 @@ mod tests {
 		assert!(eye.params.colors[EYE_PALETTE_SCLERA].x > 0.85);
 		assert!(eye.params.colors[EYE_PALETTE_LID].x > 0.5);
 		assert!(
+			(eye.params.colors[EYE_PALETTE_IRIS_SECONDARY].y - iris.y).abs() > 0.1,
+			"iris secondary should differ from primary"
+		);
+		assert!((eye.params.scalars[0][EYE_SCALAR_PUPIL_SHAPE] - PUPIL_SHAPE_ROUND).abs() < 1e-5);
+		assert!(
 			(eye.params.colors[EYE_PALETTE_LID].x - eye.params.colors[EYE_PALETTE_IRIS].x).abs()
 				> 0.2
 		);
 
 		let explicit_pupil = FaceShaderMaterial::from_material_ref(
 			&MaterialRef::named(RECIPE_FACE_EYE)
-				.with_palette([Color::srgb(0.0, 1.0, 0.0), Color::srgb(1.0, 0.0, 0.0)]),
+				.with_palette([Color::srgb(0.0, 1.0, 0.0), Color::srgb(1.0, 0.0, 0.0)])
+				.with_scalars([PUPIL_SHAPE_SLIT]),
 		);
 		assert!((explicit_pupil.params.colors[EYE_PALETTE_PUPIL].x - 1.0).abs() < 1e-5);
+		assert!(
+			(explicit_pupil.params.scalars[0][EYE_SCALAR_PUPIL_SHAPE] - PUPIL_SHAPE_SLIT).abs()
+				< 1e-5
+		);
 
 		let mouth = FaceShaderMaterial::from_material_ref(
 			&MaterialRef::named(RECIPE_FACE_MOUTH).with_palette([Color::srgb(1.0, 0.4, 0.35)]),

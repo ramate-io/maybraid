@@ -121,25 +121,32 @@ fn lid_wrap(xy: vec2<f32>, blink: f32) -> f32 {
     return max(upper, lower);
 }
 
+fn pupil_mask(q: vec2<f32>, shape: f32) -> f32 {
+    let round_m = disk_mask(length(q), 0.14, 0.02);
+    let slit_m = disk_mask(length(vec2<f32>(q.x / 0.05, q.y / 0.18)), 1.0, 0.12);
+    return mix(round_m, slit_m, saturate(shape));
+}
+
 /// Authored eyes face +Z; iris is an XY disk around the origin (~0.55 radius).
 fn eye_look(local_pos: vec3<f32>, blink: f32) -> vec3<f32> {
     let iris = material.colors[0].xyz;
     let pupil = material.colors[1].xyz;
     let sclera = material.colors[2].xyz;
-    let highlight = material.colors[3].xyz;
-    let limbus = material.colors[4].xyz;
-    let lid = material.colors[5].xyz;
+    let iris_secondary = material.colors[3].xyz;
+    let lid = material.colors[4].xyz;
+    let highlight = material.colors[5].xyz;
+    let shape = material.scalars[0].x;
 
     let q = local_pos.xy;
     let r = length(q);
     let ang = atan2(q.y, q.x);
     let spokes = 0.88 + 0.12 * sin(ang * 11.0 + r * 18.0);
     let radial = saturate((0.36 - r) / 0.22);
-    let iris_col = mix(limbus, iris, radial) * spokes;
+    let iris_col = mix(iris_secondary, iris, radial) * spokes;
 
     var tint = sclera;
     tint = mix(tint, iris_col, disk_mask(r, 0.36, 0.03));
-    tint = mix(tint, pupil, disk_mask(r, 0.14, 0.02));
+    tint = mix(tint, pupil, pupil_mask(q, shape));
 
     let lid_m = lid_wrap(q, blink);
     let crease = lid_m * (1.0 - lid_m) * 2.0;
