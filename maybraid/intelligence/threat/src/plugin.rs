@@ -1,10 +1,23 @@
 use bevy::prelude::*;
+use intelligence_lod::IntelligencePriority;
 use spotting_intelligence::SpottingSystems;
 
 use crate::{
 	discover_threats, export_threat_spotting_hints, ingest_threat_observations,
 	sync_threat_registry, ThreatObservation, ThreatRegistry,
 };
+
+/// How many due recipients may run a local scan on one Discover tick.
+#[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ThreatDiscoverLimits {
+	pub max_scans_per_tick: usize,
+}
+
+impl Default for ThreatDiscoverLimits {
+	fn default() -> Self {
+		Self { max_scans_per_tick: 8 }
+	}
+}
 
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ThreatSystems {
@@ -21,6 +34,8 @@ pub struct ThreatIntelligencePlugin;
 impl Plugin for ThreatIntelligencePlugin {
 	fn build(&self, app: &mut App) {
 		app.init_resource::<ThreatRegistry>()
+			.init_resource::<IntelligencePriority>()
+			.init_resource::<ThreatDiscoverLimits>()
 			.add_message::<ThreatObservation>()
 			.configure_sets(
 				Update,

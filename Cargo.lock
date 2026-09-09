@@ -7183,6 +7183,7 @@ dependencies = [
  "anyhow",
  "bevy",
  "gimme-core",
+ "intelligence-lod",
  "spotting-intelligence",
 ]
 
