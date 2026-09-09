@@ -2,6 +2,7 @@ pub mod apply;
 pub mod fall;
 pub mod fixed_tuck;
 pub mod flapping;
+pub mod idle;
 pub mod jab;
 pub mod land;
 pub mod leap;

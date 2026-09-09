@@ -15,6 +15,8 @@ use malo_animations::animations::{
 
 const RUN_CYCLE_SPEED: f32 = 1.4;
 const WALK_CYCLE_SPEED: f32 = 0.9;
+/// Slow rest cycle so a crowd idle is a sway, not a march.
+pub const IDLE_CYCLE_SPEED: f32 = 0.2;
 const GALLOP_CYCLE_SPEED: f32 = 0.35;
 const QUADRUPED_RUN_CYCLE_SPEED: f32 = 0.5;
 const TUCK_CYCLE_SPEED: f32 = 0.6;
@@ -49,7 +51,7 @@ pub enum AnimId {
 impl AnimId {
 	pub const fn default_speed(self) -> f32 {
 		match self {
-			Self::Still => 1.0,
+			Self::Still => IDLE_CYCLE_SPEED,
 			Self::Walk => WALK_CYCLE_SPEED,
 			Self::Run => RUN_CYCLE_SPEED,
 			Self::QuadrupedRun => QUADRUPED_RUN_CYCLE_SPEED,
@@ -331,6 +333,14 @@ mod tests {
 		assert_eq!(AnimClip::leap().id(), AnimId::Leap);
 		assert_eq!(AnimClip::leap().default_speed(), LEAP_CYCLE_SPEED);
 		assert_ne!(AnimClip::leap().id(), AnimClip::jump().id());
+	}
+
+	#[test]
+	fn still_keeps_the_rest_identity() {
+		assert_eq!(AnimClip::still().id(), AnimId::Still);
+		assert_eq!(AnimClip::still().default_speed(), IDLE_CYCLE_SPEED);
+		assert!(IDLE_CYCLE_SPEED < WALK_CYCLE_SPEED);
+		assert_ne!(AnimClip::still().id(), AnimClip::walk().id());
 	}
 
 	#[test]
