@@ -14,8 +14,9 @@ use crate::controls::section::CursorRow;
 use crate::info::description::TextMenuDescription;
 use crate::theme::{
 	BARLOW_SEMIBOLD, CORNER_BOTTOM, CORNER_INSET, CURSOR_ICON_GAP, CURSOR_ICON_SIZE,
-	DESCRIPTION_FONT_SIZE, ITEM_FONT_SIZE, OBJECTIVE_MARKER_FONT_SIZE, TEXT_AMBER, TEXT_LIME,
-	TEXT_PURPLE, TEXT_YELLOW, TEXT_YELLOW_FAINT, TEXT_YELLOW_FAINT_FOCUS,
+	DESCRIPTION_FONT_SIZE, ITEM_FONT_SIZE, OBJECTIVE_MARKER_BORDER, OBJECTIVE_MARKER_FONT_SIZE,
+	OBJECTIVE_MARKER_PAD_X, OBJECTIVE_MARKER_PAD_Y, OBJECTIVE_MARKER_RADIUS, TEXT_LIME,
+	TEXT_PURPLE, TEXT_SALMON, TEXT_YELLOW, TEXT_YELLOW_FAINT, TEXT_YELLOW_FAINT_FOCUS,
 };
 use maybraid_input::{MenuNav, MenuNavPad};
 
@@ -50,7 +51,7 @@ impl MenuObjectiveKind {
 		match self {
 			Self::ComingSoon => TEXT_PURPLE,
 			Self::StartHere => TEXT_LIME,
-			Self::NeedsCharacter => TEXT_AMBER,
+			Self::NeedsCharacter => TEXT_SALMON,
 		}
 	}
 
@@ -467,17 +468,32 @@ fn objective_marker_scene(kind: MenuObjectiveKind) -> impl Scene + 'static {
 	let marker = kind.marker();
 	let label = marker.label.clone();
 	let color = marker.color;
-	bsn! {
-		template_value(kind)
-		template_value(marker)
+	let fill = color.with_alpha(0.14);
+	let children: Vec<Box<dyn Scene>> = vec![Box::new(bsn! {
 		template_value(Text::new(label))
 		TextFont {
 			font: FontSourceTemplate::Handle(BARLOW_SEMIBOLD),
 			font_size: px(OBJECTIVE_MARKER_FONT_SIZE),
 		}
 		TextColor(color)
-		TextLayout::new(Justify::Left, bevy::text::LineBreak::NoWrap)
+		TextLayout::new(Justify::Center, bevy::text::LineBreak::NoWrap)
 		Pickable::IGNORE
+	})];
+	bsn! {
+		template_value(kind)
+		template_value(marker)
+		Node {
+			padding: UiRect::axes(px(OBJECTIVE_MARKER_PAD_X), px(OBJECTIVE_MARKER_PAD_Y)),
+			border: UiRect::all(px(OBJECTIVE_MARKER_BORDER)),
+			border_radius: BorderRadius::all(px(OBJECTIVE_MARKER_RADIUS)),
+			justify_content: JustifyContent::Center,
+			align_items: AlignItems::Center,
+			flex_shrink: 0.0,
+		}
+		BorderColor::all(color)
+		BackgroundColor(fill)
+		Pickable::IGNORE
+		Children [ {children} ]
 	}
 }
 
@@ -581,7 +597,7 @@ fn text_cursor_menu<'a>(
 #[cfg(test)]
 mod tests {
 	use super::{MenuObjectiveKind, TextCursorRow};
-	use crate::theme::{OBJECTIVE_MARKER_FONT_SIZE, TEXT_AMBER, TEXT_LIME, TEXT_PURPLE};
+	use crate::theme::{OBJECTIVE_MARKER_FONT_SIZE, TEXT_LIME, TEXT_PURPLE, TEXT_SALMON};
 	use crate::ITEM_FONT_SIZE;
 
 	#[derive(Clone, Copy)]
@@ -596,7 +612,7 @@ mod tests {
 		assert_eq!(MenuObjectiveKind::NeedsCharacter.label(), "Needs Character.");
 		assert_eq!(MenuObjectiveKind::ComingSoon.color(), TEXT_PURPLE);
 		assert_eq!(MenuObjectiveKind::StartHere.color(), TEXT_LIME);
-		assert_eq!(MenuObjectiveKind::NeedsCharacter.color(), TEXT_AMBER);
+		assert_eq!(MenuObjectiveKind::NeedsCharacter.color(), TEXT_SALMON);
 	}
 
 	#[test]
