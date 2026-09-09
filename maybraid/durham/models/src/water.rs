@@ -90,9 +90,23 @@ impl Water {
 		self.mesh_scene(self.chunk_pose())
 	}
 
-	/// Child of a posed terrain host — identity so the host pose is not doubled.
+	/// Child of a posed terrain cell — identity so the cell pose is not doubled.
 	pub fn local_scene(&self) -> impl Scene + 'static {
 		self.mesh_scene(Transform::IDENTITY)
+	}
+
+	/// Water mesh on its own entity (`transform` is host-local when parented).
+	pub fn spawn_fill(&self, commands: &mut Commands, transform: Transform) -> Entity {
+		let chunk = cascade_chunk_for_cell(self.cell, self.res_2);
+		commands
+			.spawn((
+				transform,
+				chunk,
+				Cached::new(self.sdf.clone()),
+				MeshMaterial3d(self.material.clone()),
+				Visibility::default(),
+			))
+			.id()
 	}
 
 	fn mesh_scene(&self, transform: Transform) -> impl Scene + 'static {

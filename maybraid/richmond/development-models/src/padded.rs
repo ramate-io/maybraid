@@ -67,24 +67,32 @@ impl TerrainWithPads {
 		Transform::from_translation(cascade_chunk_for_cell(self.cell, self.res_2).origin)
 	}
 
-	pub fn scene(&self) -> impl Scene + 'static {
-		self.mesh_scene()
+	/// Posed fill entity. [`Mesh3d`] (and the trimesh, when [`Self::seeds_collision`])
+	/// land on this same entity after Cached fulfill.
+	pub fn spawn_fill(
+		&self,
+		commands: &mut Commands,
+		visibility: Visibility,
+		collide: bool,
+	) -> Entity {
+		let chunk = cascade_chunk_for_cell(self.cell, self.res_2);
+		let entity = commands
+			.spawn((
+				self.chunk_pose(),
+				chunk,
+				Cached::new(self.mesh_builder()),
+				MeshMaterial3d(self.material.clone()),
+				visibility,
+			))
+			.id();
+		if collide {
+			commands.entity(entity).insert(TerrainColliderMeshSource);
+		}
+		entity
 	}
 
-	/// Collider-host bake path. Visual LOD uses [`LodScene::scene_with_level`].
-	/// Pose stays on this child: the collider host is identity.
-	pub fn collider_scene(&self) -> impl Scene + 'static {
-		let chunk = cascade_chunk_for_cell(self.cell, self.res_2);
-		let transform = self.chunk_pose();
-		let builder = self.mesh_builder();
-		let material = self.material.clone();
-		bsn! {
-			template_value(transform)
-			template_value(chunk)
-			template(move |_ctx| Ok(Cached::new(builder.clone())))
-			MeshMaterial3d::<DurhamTerrainShader>({material.clone()})
-			TerrainColliderMeshSource
-		}
+	pub fn scene(&self) -> impl Scene + 'static {
+		self.mesh_scene()
 	}
 
 	pub fn seeds_collision(&self) -> bool {
@@ -95,11 +103,10 @@ impl TerrainWithPads {
 		(Vec3::from(self.cell.min) + Vec3::from(self.cell.max)) * 0.5
 	}
 
-	/// Visual fill under a posed host. Identity so [`ChildOf`] cannot drop the
-	/// world pose — the host carries [`Self::chunk_pose`].
+	/// Visual fill. Pose is the cascade origin; [`Mesh3d`] fulfills onto this root.
 	pub fn mesh_scene(&self) -> impl Scene + 'static {
 		let chunk = cascade_chunk_for_cell(self.cell, self.res_2);
-		let transform = Transform::IDENTITY;
+		let transform = self.chunk_pose();
 		let builder = self.mesh_builder();
 		let material = self.material.clone();
 		bsn! {

@@ -3,9 +3,7 @@
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use durham_terrain_models::{
-	spawn_terrain_collider_host, stream_banded_draws, PresentedWaterScene, TerrainColliderCell,
-	TerrainColliderEpoch, TerrainColliderHost, TerrainColliderOverlay, TerrainEntryStore,
-	TerrainVisualHost, Water,
+	stream_banded_draws, PresentedWaterScene, TerrainEntryStore, TerrainVisualHost, Water,
 };
 use lod::gen::{Id, LodScene, LodSceneLevel, RegionPresenter, SpatialIndex, Version};
 use lod::lod_ref::LodRef;
@@ -20,6 +18,7 @@ struct PresentedEntry {
 	version: Version,
 	water_version: Option<Version>,
 	entity: Entity,
+	water: Option<Entity>,
 	level: LodSceneLevel,
 }
 
@@ -65,28 +64,44 @@ impl PaddedTerrainPresenter<'_, '_> {
 		}
 	}
 
-	fn spawn_host(&mut self, id: Id, value: &TerrainWithPads, water: Option<&Water>) -> Entity {
-		let host = self
-			.commands
-			.spawn((
-				Name::new("Padded terrain cell"),
-				PresentedPaddedTerrainScene(id),
-				TerrainVisualHost,
-				value.chunk_pose(),
-				Visibility::default(),
-			))
-			.id();
-		self.commands.spawn_scene(value.mesh_scene()).insert(ChildOf(host));
-		if let Some(water) = water {
-			self.commands
-				.spawn_scene(water.local_scene())
-				.insert((PresentedWaterScene(id), ChildOf(host)));
-		}
-		host
+	fn attach_water(&mut self, id: Id, parent: Entity, water: &Water) -> Entity {
+		let entity = water.spawn_fill(&mut self.commands, Transform::IDENTITY);
+		self.commands.entity(entity).insert((PresentedWaterScene(id), ChildOf(parent)));
+		entity
 	}
 
-	/// Present keep-region pads that the stream band draws. Hole / cull ids
-	/// stay out of the wanted set instead of spawning empty scenes.
+	fn replace_water(
+		&mut self,
+		id: Id,
+		parent: Entity,
+		previous: Option<Entity>,
+		water: Option<&Water>,
+	) -> Option<Entity> {
+		if let Some(previous) = previous {
+			self.commands.entity(previous).despawn();
+		}
+		water.map(|water| self.attach_water(id, parent, water))
+	}
+
+	fn spawn_cell(
+		&mut self,
+		id: Id,
+		value: &TerrainWithPads,
+		draw: bool,
+		water: Option<&Water>,
+	) -> (Entity, Option<Entity>) {
+		let visibility = if draw { Visibility::Inherited } else { Visibility::Hidden };
+		let entity = value.spawn_fill(&mut self.commands, visibility, value.seeds_collision());
+		self.commands.entity(entity).insert((
+			Name::new("Padded terrain cell"),
+			PresentedPaddedTerrainScene(id),
+			TerrainVisualHost,
+		));
+		let water_entity = water.filter(|_| draw).map(|w| self.attach_water(id, entity, w));
+		(entity, water_entity)
+	}
+
+	/// Present keep-region pads that draw or seed Near collision.
 	pub fn present_banded(
 		&mut self,
 		view: &PaddedStoreView<'_>,
@@ -98,7 +113,7 @@ impl PaddedTerrainPresenter<'_, '_> {
 			.filter_map(|tracked| {
 				let value = SpatialIndex::<TerrainWithPads>::get(view, tracked.0)?;
 				let level = value.scene_lod_level(lod_ref);
-				stream_banded_draws(value, level).then_some(tracked.0)
+				(stream_banded_draws(value, level) || value.seeds_collision()).then_some(tracked.0)
 			})
 			.collect();
 
@@ -110,22 +125,45 @@ impl PaddedTerrainPresenter<'_, '_> {
 				continue;
 			};
 			let level = value.scene_lod_level(lod_ref);
+			let draw = stream_banded_draws(value, level);
 			let water_version = self.terrain_store.water_version(*id);
-			if self.state.presented.get(id).is_some_and(|shown| {
-				shown.version == version
-					&& shown.level == level
-					&& shown.water_version == water_version
-			}) {
-				continue;
+			let water = draw.then(|| self.terrain_store.water(*id).cloned()).flatten();
+			if let Some(shown) = self.state.presented.get(id).copied() {
+				if shown.version == version {
+					if shown.level != level {
+						self.commands.entity(shown.entity).insert(if draw {
+							Visibility::Inherited
+						} else {
+							Visibility::Hidden
+						});
+						let water_entity =
+							self.replace_water(*id, shown.entity, shown.water, water.as_ref());
+						if let Some(shown) = self.state.presented.get_mut(id) {
+							shown.level = level;
+							shown.water_version = water_version;
+							shown.water = water_entity;
+						}
+						continue;
+					}
+					if shown.water_version != water_version {
+						let water_entity =
+							self.replace_water(*id, shown.entity, shown.water, water.as_ref());
+						if let Some(shown) = self.state.presented.get_mut(id) {
+							shown.water_version = water_version;
+							shown.water = water_entity;
+						}
+					}
+					continue;
+				}
 			}
 			if let Some(previous) = self.state.presented.remove(id) {
 				self.commands.entity(previous.entity).despawn();
 			}
-			let water = self.terrain_store.water(*id).cloned();
-			let entity = self.spawn_host(*id, value, water.as_ref());
-			self.state
-				.presented
-				.insert(*id, PresentedEntry { version, water_version, entity, level });
+			let (entity, water_entity) = self.spawn_cell(*id, value, draw, water.as_ref());
+			self.state.presented.insert(
+				*id,
+				PresentedEntry { version, water_version, entity, water: water_entity, level },
+			);
 		}
 
 		self.remove_stale(&wanted);
@@ -142,11 +180,11 @@ impl<'a> RegionPresenter<TerrainWithPads, PaddedStoreView<'a>> for PaddedTerrain
 			self.commands.entity(previous.entity).despawn();
 		}
 		let level = value.scene_lod_level(lod_ref);
-		// FinePatch own-terrain presents water via [`WaterRegionPresenter`].
-		let entity = self.spawn_host(id, value, None);
+		// FinePatch own-terrain presents water via [`durham_terrain_models::WaterRegionPresenter`].
+		let (entity, water) = self.spawn_cell(id, value, true, None);
 		self.state
 			.presented
-			.insert(id, PresentedEntry { version, water_version: None, entity, level });
+			.insert(id, PresentedEntry { version, water_version: None, entity, water, level });
 	}
 
 	fn presented_ids(&self) -> Vec<Id> {
@@ -155,56 +193,5 @@ impl<'a> RegionPresenter<TerrainWithPads, PaddedStoreView<'a>> for PaddedTerrain
 
 	fn remove_stale(&mut self, wanted: &HashSet<Id>) {
 		PaddedTerrainPresenter::remove_stale(self, wanted);
-	}
-}
-
-/// Seed Near-ring (or FinePatch) colliders from [`TerrainWithPads`].
-///
-/// Raw Durham hosts for the same origin id are despawned so physics matches
-/// the drawn pad mesh.
-pub fn sync_padded_terrain_colliders(
-	mut commands: Commands,
-	epoch: Res<TerrainColliderEpoch>,
-	store: Res<crate::index::DevelopmentEntryStore>,
-	hosts: Query<
-		(Entity, &TerrainColliderCell, Has<TerrainColliderOverlay>),
-		With<TerrainColliderHost>,
-	>,
-) {
-	let seeds = store.padded_collision_seeds();
-	let wanted: HashSet<(Id, Version)> =
-		seeds.iter().map(|(id, version, _)| (*id, *version)).collect();
-	let wanted_ids: HashSet<Id> = wanted.iter().map(|(id, _)| *id).collect();
-
-	for (entity, cell, overlay) in &hosts {
-		if overlay {
-			if !wanted.contains(&(cell.id, cell.version)) || cell.epoch != epoch.0 {
-				commands.entity(entity).despawn();
-			}
-		} else if wanted_ids.contains(&cell.id) {
-			commands.entity(entity).despawn();
-		}
-	}
-
-	let occupied: HashSet<Id> = hosts
-		.iter()
-		.filter(|(_, cell, overlay)| {
-			*overlay && wanted.contains(&(cell.id, cell.version)) && cell.epoch == epoch.0
-		})
-		.map(|(_, cell, _)| cell.id)
-		.collect();
-
-	for (id, version, pad) in seeds {
-		if occupied.contains(&id) {
-			continue;
-		}
-		spawn_terrain_collider_host(
-			&mut commands,
-			id,
-			version,
-			epoch.0,
-			pad.collider_scene(),
-			true,
-		);
 	}
 }

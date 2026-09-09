@@ -48,9 +48,9 @@ use lod::lod_ref::LodRef;
 use lod::{LodGenerateSystems, LodPresentSystems};
 use render_item::mesh::handle::EnforceCachingPlugin;
 use richmond_development_models::{
-	sync_padded_terrain_colliders, BuiltDevelopment, BuiltDevelopmentStoreView, DevelopmentCell,
-	DevelopmentConfig, DevelopmentEntryStore, DevelopmentIndex, PaddedStoreView,
-	PaddedTerrainPresenter, RichmondDevelopmentModelsPlugin, TerrainWithPads,
+	BuiltDevelopment, BuiltDevelopmentStoreView, DevelopmentCell, DevelopmentConfig,
+	DevelopmentEntryStore, DevelopmentIndex, PaddedStoreView, PaddedTerrainPresenter,
+	RichmondDevelopmentModelsPlugin, TerrainWithPads,
 };
 use richmond_urbanization::UrbanizationKind;
 use std::f32::consts::PI;
@@ -244,11 +244,7 @@ impl Plugin for DevelopmentsOnTerrainPlugin {
 			)
 				.chain()
 				.before(LodPresentSystems::Produce)
-				.before(TerrainColliderSystems::SyncOverlays),
-		)
-		.add_systems(
-			Update,
-			sync_padded_terrain_colliders.in_set(TerrainColliderSystems::SyncOverlays),
+				.before(TerrainColliderSystems::QueueMeshes),
 		);
 	}
 }
