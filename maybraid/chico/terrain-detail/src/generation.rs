@@ -215,12 +215,20 @@ mod tests {
 	}
 
 	#[test]
-	fn empty_formation_emits_no_outcropping_origins() -> Result<()> {
+	fn empty_formation_emits_sparse_mix_origins() -> Result<()> {
 		let mut index = TerrainDetailIndex::default();
 		index.formation = Some(FormationKind::Empty);
 		let region = FormationExtent::from_cell_index(0, 0).aabb();
 		let ids = TerrainOutcropping::original_ids_for(&mut index, region);
-		assert!(ids.is_empty());
+		assert!(!ids.is_empty());
+		assert!(ids.len() < 100, "Empty must leave some 40 m cells vacant");
+		for OriginalId(id) in &ids {
+			let extent = OutcroppingExtent::from_id(*id).ok_or_else(|| anyhow::anyhow!("id"))?;
+			assert_eq!(
+				FormationKind::Empty.throw_outcropping(extent, index.noise),
+				Some(OutcroppingKind::SparseMix)
+			);
+		}
 		assert!(SpatialIndex::<TerrainDetail>::get(
 			&index,
 			FormationExtent::from_cell_index(0, 0).id()
@@ -230,7 +238,7 @@ mod tests {
 	}
 
 	#[test]
-	fn boulder_field_origins_are_sparse_patches() -> Result<()> {
+	fn boulder_field_origins_are_sparse_or_patches() -> Result<()> {
 		let mut index = TerrainDetailIndex::default();
 		index.formation = Some(FormationKind::BoulderField);
 		let formation = FormationExtent::from_cell_index(0, 0);
@@ -239,21 +247,24 @@ mod tests {
 		assert!(ids.len() < 100, "pinned BoulderField must not fill every 40 m cell");
 		for OriginalId(id) in &ids {
 			let extent = OutcroppingExtent::from_id(*id).ok_or_else(|| anyhow::anyhow!("id"))?;
-			assert_eq!(
-				FormationKind::BoulderField.throw_outcropping(extent, index.noise),
-				Some(OutcroppingKind::BoulderPatch)
+			let kind = FormationKind::BoulderField.throw_outcropping(extent, index.noise);
+			assert!(
+				kind == Some(OutcroppingKind::BoulderPatch)
+					|| kind == Some(OutcroppingKind::SparseMix),
+				"unexpected {kind:?}"
 			);
 		}
 		Ok(())
 	}
 
 	#[test]
-	fn crag_complex_origins_are_mostly_empty() -> Result<()> {
+	fn crag_complex_origins_leave_gaps() -> Result<()> {
 		let mut index = TerrainDetailIndex::default();
 		index.formation = Some(FormationKind::CragComplex);
 		let formation = FormationExtent::from_cell_index(0, 0);
 		let ids = TerrainOutcropping::original_ids_for(&mut index, formation.aabb());
-		assert!(ids.len() < 50, "crag veins should leave most 40 m cells empty");
+		assert!(!ids.is_empty());
+		assert!(ids.len() < 100, "crag veins should leave some 40 m cells empty");
 		Ok(())
 	}
 
@@ -277,7 +288,10 @@ mod tests {
 		.is_some());
 		let outcropping = SpatialIndex::<TerrainOutcropping>::get(&index, id)
 			.ok_or_else(|| anyhow::anyhow!("outcropping"))?;
-		assert_eq!(outcropping.kind, OutcroppingKind::BoulderPatch);
+		assert!(
+			outcropping.kind == OutcroppingKind::BoulderPatch
+				|| outcropping.kind == OutcroppingKind::SparseMix
+		);
 		assert!(outcropping.grown_placements().is_none());
 		assert!(SpatialIndex::<TerrainDetail>::get(&index, formation.id()).is_some());
 		Ok(())

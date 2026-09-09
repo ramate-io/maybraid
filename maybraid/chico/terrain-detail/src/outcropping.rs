@@ -15,6 +15,8 @@ use crate::{
 
 /// Count hashed into this inclusive range ("or so" ~20).
 const CLUSTER_COUNT: std::ops::RangeInclusive<u32> = 16..=24;
+/// A few mixed rocks so Empty / background cells still read as terrain.
+const SPARSE_COUNT: std::ops::RangeInclusive<u32> = 2..=5;
 
 /// One placed unit rock. Scale is world metres (authored GLB is 1 m tall).
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -46,10 +48,13 @@ pub enum OutcroppingKind {
 	Crag,
 	/// One rock, any component.
 	Loner,
+	/// A few mixed components scattered through the cell.
+	SparseMix,
 }
 
 impl OutcroppingKind {
-	pub const ALL: [Self; 4] = [Self::RockPile, Self::BoulderPatch, Self::Crag, Self::Loner];
+	pub const ALL: [Self; 5] =
+		[Self::RockPile, Self::BoulderPatch, Self::Crag, Self::Loner, Self::SparseMix];
 
 	pub fn as_kebab(self) -> &'static str {
 		match self {
@@ -57,6 +62,7 @@ impl OutcroppingKind {
 			Self::BoulderPatch => "boulder-patch",
 			Self::Crag => "crag",
 			Self::Loner => "loner",
+			Self::SparseMix => "sparse-mix",
 		}
 	}
 
@@ -66,7 +72,7 @@ impl OutcroppingKind {
 	}
 
 	/// Deterministic placements for this cell. Count hashes in [`CLUSTER_COUNT`]
-	/// except [`Self::Loner`] (always one).
+	/// except [`Self::Loner`] (always one) and [`Self::SparseMix`] ([`SPARSE_COUNT`]).
 	pub fn populate(
 		self,
 		extent: OutcroppingExtent,
@@ -79,6 +85,7 @@ impl OutcroppingKind {
 			Self::BoulderPatch => populate_patch(extent, &hash, world),
 			Self::Crag => populate_crag(extent, &hash, world),
 			Self::Loner => populate_loner(extent, &hash, world),
+			Self::SparseMix => populate_sparse_mix(extent, &hash, world),
 		}
 	}
 }
@@ -137,11 +144,15 @@ fn cell_hash(extent: OutcroppingExtent, noise: NoiseParams) -> SeededHash {
 	SeededHash::new(mixed)
 }
 
-fn hashed_count(hash: &SeededHash, salt: u32) -> u32 {
-	let lo = *CLUSTER_COUNT.start();
-	let hi = *CLUSTER_COUNT.end();
+fn hashed_count_in(hash: &SeededHash, salt: u32, range: std::ops::RangeInclusive<u32>) -> u32 {
+	let lo = *range.start();
+	let hi = *range.end();
 	let span = hi.saturating_sub(lo);
 	lo + ((hash.unit(salt) * (span as f32 + 1.0 - 1e-6)) as u32).min(span)
+}
+
+fn hashed_count(hash: &SeededHash, salt: u32) -> u32 {
+	hashed_count_in(hash, salt, CLUSTER_COUNT)
 }
 
 fn sit(xz: Vec2, scale: f32, embed_frac: f32, world: &impl TerrainDetailWorldSample) -> Vec3 {
@@ -276,14 +287,7 @@ fn populate_loner(
 ) -> Vec<RockPlacement> {
 	let center = Vec2::new(extent.center().x, extent.center().z);
 	let xz = center + polar_offset(hash, 9, 6.0);
-	let pick = hash.unit(11);
-	let component = if pick < 0.40 {
-		RockComponent::RoundRock
-	} else if pick < 0.75 {
-		RockComponent::RockKnob
-	} else {
-		RockComponent::SharpRock
-	};
+	let component = mixed_component(hash, 11);
 	let scale = 2.5 + hash.unit(12) * 5.5;
 	vec![RockPlacement {
 		component,
@@ -291,6 +295,39 @@ fn populate_loner(
 		yaw: hash.unit(13) * TAU,
 		scale,
 	}]
+}
+
+fn mixed_component(hash: &SeededHash, salt: u32) -> RockComponent {
+	let pick = hash.unit(salt);
+	if pick < 0.40 {
+		RockComponent::RoundRock
+	} else if pick < 0.75 {
+		RockComponent::RockKnob
+	} else {
+		RockComponent::SharpRock
+	}
+}
+
+fn populate_sparse_mix(
+	extent: OutcroppingExtent,
+	hash: &SeededHash,
+	world: &impl TerrainDetailWorldSample,
+) -> Vec<RockPlacement> {
+	let count = hashed_count_in(hash, 3, SPARSE_COUNT);
+	let center = Vec2::new(extent.center().x, extent.center().z);
+	(0..count)
+		.map(|i| {
+			let salt = 300 + i * 5;
+			let xz = center + polar_offset(hash, salt, 18.0);
+			let scale = 2.0 + hash.unit(salt.wrapping_add(2)) * 3.5;
+			RockPlacement {
+				component: mixed_component(hash, salt.wrapping_add(3)),
+				translation: sit(xz, scale, 0.22, world),
+				yaw: hash.unit(salt.wrapping_add(4)) * TAU,
+				scale,
+			}
+		})
+		.collect()
 }
 
 #[cfg(test)]
@@ -332,6 +369,18 @@ mod tests {
 			&FlatTerrainDetailSample::default(),
 		);
 		assert_eq!(rocks.len(), 1);
+		Ok(())
+	}
+
+	#[test]
+	fn sparse_mix_is_a_few_mixed_rocks() -> Result<()> {
+		let rocks = OutcroppingKind::SparseMix.populate(
+			extent(),
+			NoiseParams::default(),
+			&FlatTerrainDetailSample::default(),
+		);
+		let n = rocks.len() as u32;
+		assert!(SPARSE_COUNT.contains(&n), "sparse mix count {n}");
 		Ok(())
 	}
 

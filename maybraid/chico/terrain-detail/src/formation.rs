@@ -1,7 +1,8 @@
 //! Formation identity — the forest-layer analog.
 //!
 //! Even 25% four-way throw at the 400 m tile center, then a 40 m
-//! outcropping-or-`None` throw inside the winning formation.
+//! outcropping-or-`None` throw inside the winning formation. Every formation
+//! can throw [`OutcroppingKind::SparseMix`] so the landscape is never rockless.
 
 use bevy_math::Vec3;
 use procedural_common::{BucketThrow, NoiseConfig, NoiseParams};
@@ -13,7 +14,7 @@ const SAMPLE_ORIGIN: Vec3 = Vec3::new(10_007.0, 0.0, 10_009.0);
 const FORMATION_LANE: Vec3 = Vec3::new(61.0, 0.0, 0.0);
 const OUTCROP_LANE: Vec3 = Vec3::new(67.0, 0.0, 0.0);
 
-/// 400 m hopscotch identity. `Empty` is real — neighbors need a stable skip.
+/// 400 m hopscotch identity. `Empty` is real — a sparse tile, not a void.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum FormationKind {
 	BoulderField,
@@ -74,16 +75,25 @@ impl FormationKind {
 
 	fn outcropping_buckets(self) -> Vec<(Option<OutcroppingKind>, f32)> {
 		match self {
-			Self::BoulderField => vec![(None, 60.0), (Some(OutcroppingKind::BoulderPatch), 40.0)],
-			Self::CragComplex => vec![(None, 70.0), (Some(OutcroppingKind::Crag), 30.0)],
-			Self::MixedRocks => vec![
-				(None, 70.0),
-				(Some(OutcroppingKind::Loner), 8.0),
-				(Some(OutcroppingKind::RockPile), 8.0),
-				(Some(OutcroppingKind::BoulderPatch), 7.0),
-				(Some(OutcroppingKind::Crag), 7.0),
+			Self::BoulderField => vec![
+				(Some(OutcroppingKind::SparseMix), 40.0),
+				(None, 30.0),
+				(Some(OutcroppingKind::BoulderPatch), 30.0),
 			],
-			Self::Empty => vec![(None, 100.0)],
+			Self::CragComplex => vec![
+				(Some(OutcroppingKind::SparseMix), 30.0),
+				(None, 30.0),
+				(Some(OutcroppingKind::Crag), 40.0),
+			],
+			Self::MixedRocks => vec![
+				(Some(OutcroppingKind::SparseMix), 40.0),
+				(None, 40.0),
+				(Some(OutcroppingKind::Loner), 5.0),
+				(Some(OutcroppingKind::RockPile), 5.0),
+				(Some(OutcroppingKind::BoulderPatch), 5.0),
+				(Some(OutcroppingKind::Crag), 5.0),
+			],
+			Self::Empty => vec![(Some(OutcroppingKind::SparseMix), 50.0), (None, 50.0)],
 		}
 	}
 }
@@ -117,19 +127,33 @@ mod tests {
 	}
 
 	#[test]
-	fn empty_never_throws_an_outcropping() -> Result<()> {
-		let noise = NoiseParams::default();
-		for iz in -2..3 {
-			for ix in -2..3 {
-				let cell = OutcroppingExtent::from_cell_index(ix, iz);
-				assert!(FormationKind::Empty.throw_outcropping(cell, noise).is_none());
+	fn empty_throws_sparse_mix_or_none() -> Result<()> {
+		let noise = NoiseParams {
+			seed: 3,
+			frequency: 0.02,
+			amplitude: 1.0,
+			octaves: 1,
+			..Default::default()
+		};
+		let mut saw_sparse = false;
+		let mut saw_none = false;
+		for iz in 0..12 {
+			for ix in 0..12 {
+				match FormationKind::Empty
+					.throw_outcropping(OutcroppingExtent::from_cell_index(ix, iz), noise)
+				{
+					None => saw_none = true,
+					Some(OutcroppingKind::SparseMix) => saw_sparse = true,
+					Some(other) => anyhow::bail!("unexpected {other:?}"),
+				}
 			}
 		}
+		assert!(saw_sparse && saw_none);
 		Ok(())
 	}
 
 	#[test]
-	fn boulder_field_only_throws_patch_or_none() -> Result<()> {
+	fn boulder_field_throws_sparse_mix_patch_or_none() -> Result<()> {
 		let noise = NoiseParams {
 			seed: 4,
 			frequency: 0.02,
@@ -138,6 +162,7 @@ mod tests {
 			..Default::default()
 		};
 		let mut saw_patch = false;
+		let mut saw_sparse = false;
 		let mut saw_none = false;
 		for iz in 0..12 {
 			for ix in 0..12 {
@@ -146,11 +171,12 @@ mod tests {
 				{
 					None => saw_none = true,
 					Some(OutcroppingKind::BoulderPatch) => saw_patch = true,
+					Some(OutcroppingKind::SparseMix) => saw_sparse = true,
 					Some(other) => anyhow::bail!("unexpected {other:?}"),
 				}
 			}
 		}
-		assert!(saw_patch && saw_none);
+		assert!(saw_patch && saw_sparse && saw_none);
 		Ok(())
 	}
 
@@ -190,15 +216,21 @@ mod tests {
 			octaves: 1,
 			..Default::default()
 		};
-		for iz in 0..8 {
-			for ix in 0..8 {
-				if let Some(kind) = FormationKind::CragComplex
+		let mut saw_crag = false;
+		let mut saw_sparse = false;
+		for iz in 0..12 {
+			for ix in 0..12 {
+				match FormationKind::CragComplex
 					.throw_outcropping(OutcroppingExtent::from_cell_index(ix, iz), noise)
 				{
-					assert_eq!(kind, OutcroppingKind::Crag);
+					None => {}
+					Some(OutcroppingKind::Crag) => saw_crag = true,
+					Some(OutcroppingKind::SparseMix) => saw_sparse = true,
+					Some(other) => anyhow::bail!("unexpected {other:?}"),
 				}
 			}
 		}
+		assert!(saw_crag && saw_sparse);
 		Ok(())
 	}
 }

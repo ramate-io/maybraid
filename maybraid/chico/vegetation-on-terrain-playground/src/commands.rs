@@ -122,6 +122,7 @@ pub enum ShowKind {
 	BoulderPatch,
 	Crag,
 	Loner,
+	SparseMix,
 	BoulderField,
 	CragComplex,
 	MixedRocks,
@@ -138,6 +139,7 @@ impl ShowKind {
 			Self::BoulderPatch => OutcroppingKind::BoulderPatch.as_kebab(),
 			Self::Crag => OutcroppingKind::Crag.as_kebab(),
 			Self::Loner => OutcroppingKind::Loner.as_kebab(),
+			Self::SparseMix => OutcroppingKind::SparseMix.as_kebab(),
 			Self::BoulderField => FormationKind::BoulderField.as_kebab(),
 			Self::CragComplex => FormationKind::CragComplex.as_kebab(),
 			Self::MixedRocks => FormationKind::MixedRocks.as_kebab(),
@@ -160,6 +162,7 @@ impl ShowKind {
 			Self::BoulderPatch => Some(OutcroppingKind::BoulderPatch),
 			Self::Crag => Some(OutcroppingKind::Crag),
 			Self::Loner => Some(OutcroppingKind::Loner),
+			Self::SparseMix => Some(OutcroppingKind::SparseMix),
 			_ => None,
 		}
 	}
@@ -407,6 +410,8 @@ mod tests {
 	fn parse_show_and_terrain_detail() {
 		let pile = PlaygroundCommand::parse_line("show rock-pile").unwrap();
 		assert!(matches!(pile, PlaygroundCommand::Show { kind: ShowKind::RockPile }));
+		let sparse = PlaygroundCommand::parse_line("show sparse-mix").unwrap();
+		assert!(matches!(sparse, PlaygroundCommand::Show { kind: ShowKind::SparseMix }));
 		let field = PlaygroundCommand::parse_line("show boulder-field").unwrap();
 		assert!(matches!(field, PlaygroundCommand::Show { kind: ShowKind::BoulderField }));
 		let stream = PlaygroundCommand::parse_line("terrain-detail empty").unwrap();
