@@ -356,15 +356,15 @@ pub fn mouth_deform(local: Vec3, open: f32) -> Vec3 {
 	Vec3::new(0.0, side * split - lower, open * 0.05 * taper)
 }
 
-/// Resting crease plus a designed part. Not raw 4D noise.
+/// Stable rest crease; occasional slow part. Not raw 4D noise.
 pub fn mouth_open_envelope(time: f32, seed: f32) -> f32 {
 	let seed = seed.rem_euclid(1.0);
-	let breath = 0.12 + 0.08 * (time * 0.7 + seed * 3.1).sin();
-	let period = 5.8 + seed * 2.4;
+	let rest = 0.08;
+	let period = 8.5 + seed * 3.0;
 	let phase_time = time + seed * 11.0;
 	let t = phase_time.rem_euclid(period) / period.max(1e-4);
 	let cycle = (phase_time / period.max(1e-4)).floor();
-	let pulse = blink_pulse(t, 0.0, 0.05, 0.12, 0.14);
+	let pulse = blink_pulse(t, 0.0, 0.08, 0.10, 0.16);
 	let h = hash11(cycle * 2.1 + seed * 6.3);
 	let depth = if h < 0.72 {
 		0.40
@@ -373,7 +373,7 @@ pub fn mouth_open_envelope(time: f32, seed: f32) -> f32 {
 	} else {
 		0.95
 	};
-	(breath + pulse * depth).clamp(0.0, 1.0)
+	(rest + pulse * depth).clamp(0.0, 1.0)
 }
 
 #[cfg(test)]
@@ -511,5 +511,12 @@ mod tests {
 			}
 		}
 		assert!(parted < samples / 3, "mouth should rest more than it parts, parted={parted}");
+		let seed = 0.2;
+		let period = 8.5 + seed * 3.0;
+		let rest = (0.7_f32 * period - seed * 11.0).rem_euclid(period);
+		assert!(
+			(mouth_open_envelope(rest, seed) - 0.08).abs() < 1e-4,
+			"rest should be a still crease, not a breath sine"
+		);
 	}
 }

@@ -158,13 +158,6 @@ fn eye_look(local_pos: vec3<f32>, blink: f32) -> vec3<f32> {
     return tint;
 }
 
-fn mouth_idle(time: f32, seed: f32, local_pos: vec3<f32>) -> vec3<f32> {
-    let idle = sin(time * 0.9 + seed * 5.0) * 0.006
-        + sin(time * 0.31 + seed * 3.2) * 0.003;
-    let lip = saturate(-local_pos.y * 6.0 + 0.15);
-    return vec3<f32>(0.0, -idle * (0.35 + 0.65 * lip), 0.0);
-}
-
 /// Split the lips away from the midline. Corners stay pinched.
 fn mouth_deform(local_pos: vec3<f32>, open: f32) -> vec3<f32> {
     let taper = sqrt(saturate(1.0 - (local_pos.x / 0.88) * (local_pos.x / 0.88)));
@@ -174,14 +167,14 @@ fn mouth_deform(local_pos: vec3<f32>, open: f32) -> vec3<f32> {
     return vec3<f32>(0.0, side * split - lower, open * 0.05 * taper);
 }
 
-/// Resting crease plus a designed part. Not raw 4D noise.
+/// Stable rest crease; occasional slow part. Not raw 4D noise.
 fn mouth_open_envelope(time: f32, seed: f32) -> f32 {
-    let breath = 0.12 + 0.08 * sin(time * 0.7 + seed * 3.1);
-    let period = 5.8 + seed * 2.4;
+    let rest = 0.08;
+    let period = 8.5 + seed * 3.0;
     let phase_time = time + seed * 11.0;
     let t = fract(phase_time / period);
     let cycle = floor(phase_time / period);
-    let pulse = blink_pulse(t, 0.0, 0.05, 0.12, 0.14);
+    let pulse = blink_pulse(t, 0.0, 0.08, 0.10, 0.16);
     let h = hash11(cycle * 2.1 + seed * 6.3);
     var depth = 0.40;
     if h >= 0.72 && h < 0.92 {
@@ -189,7 +182,7 @@ fn mouth_open_envelope(time: f32, seed: f32) -> f32 {
     } else if h >= 0.92 {
         depth = 0.95;
     }
-    return saturate(breath + pulse * depth);
+    return saturate(rest + pulse * depth);
 }
 
 /// `0` = lip flesh, `1` = opening. Rest crease; `open` widens it.
@@ -268,7 +261,6 @@ fn vertex(vertex_no_morph: Vertex) -> FaceVertexOutput {
         let local = vertex.position;
         amount = mouth_open_envelope(globals.time, seed);
         vertex.position += mouth_deform(local, amount);
-        vertex.position += mouth_idle(globals.time, seed, local);
         out.local_pos = local;
     }
     out.blink = amount;
