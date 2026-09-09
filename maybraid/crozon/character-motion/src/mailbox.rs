@@ -2,8 +2,9 @@
 //!
 //! [`tick_anim_mailbox`] advances clip time for every body host. [`apply_anim_mailbox`]
 //! samples and writes only hosts with [`AnimateBones`] and/or [`AnimateEffects`].
-//! [`select_mailbox_applies`] rank-fills a count budget among Near bodies; leftovers
-//! hold the last pose.
+//! [`select_mailbox_applies`] rank-fills a count budget among on-screen Near bodies;
+//! off-screen Near holds the last pose. No published look means every Near body
+//! competes (tests / playgrounds).
 
 use std::collections::HashSet;
 
@@ -17,7 +18,9 @@ use crozon_rigs::{
 	},
 	BonePose, Name as RigName, RigPose,
 };
-use intelligence_lod::{IntelligenceLod, IntelligencePriority};
+use intelligence_lod::{
+	look_applies, IntelligenceFocus, IntelligenceLod, IntelligenceLookFrame, IntelligencePriority,
+};
 use malo_animations::{
 	animations::{Jab, QuadrupedLeap, QuadrupedRun, Tuck, TwoFootedTuckedFlip, UprightLeap},
 	Animation, Effects,
@@ -164,11 +167,14 @@ pub fn prepare_anim_mailbox(
 	}
 }
 
-/// Rank Near bodies, fill a count budget from the top, hold last pose on leftovers.
+/// Rank on-screen Near bodies, fill a count budget from the top, hold last pose
+/// off-screen and on leftovers. Fairness only among in-cone leftovers.
 pub fn select_mailbox_applies(
 	mut set: ResMut<MailboxApplySet>,
 	limits: Res<MailboxApplyLimits>,
 	priority: Res<IntelligencePriority>,
+	look_frame: Res<IntelligenceLookFrame>,
+	focus: Res<IntelligenceFocus>,
 	mut hosts: Query<
 		(Entity, &mut AnimMailbox, &CharacterRig),
 		(
@@ -180,10 +186,12 @@ pub fn select_mailbox_applies(
 	>,
 	child_of: Query<&ChildOf>,
 	lods: Query<&IntelligenceLod>,
+	transforms: Query<&GlobalTransform>,
 ) {
 	struct Candidate {
 		entity: Entity,
 		always: bool,
+		in_cone: bool,
 		rank: u32,
 		skips: u8,
 	}
@@ -194,9 +202,11 @@ pub fn select_mailbox_applies(
 			continue;
 		}
 		let plant = plant_lod_entity(entity, &child_of, &lods);
+		let always = plant.is_none();
 		candidates.push(Candidate {
 			entity,
-			always: plant.is_none(),
+			always,
+			in_cone: always || in_apply_cone(plant, &look_frame, &focus, &transforms),
 			rank: plant.map(|plant| priority.rank_of(plant)).unwrap_or(0),
 			skips: mailbox.apply_skips,
 		});
@@ -209,7 +219,7 @@ pub fn select_mailbox_applies(
 		selected.insert(candidate.entity);
 	}
 	let mut filled = 0;
-	for candidate in candidates.iter().filter(|candidate| !candidate.always) {
+	for candidate in candidates.iter().filter(|candidate| !candidate.always && candidate.in_cone) {
 		if filled >= limits.max_applies {
 			break;
 		}
@@ -217,22 +227,47 @@ pub fn select_mailbox_applies(
 		filled += 1;
 	}
 	if let Some(fair) = candidates.iter().find(|candidate| {
-		!selected.contains(&candidate.entity) && candidate.skips >= limits.fairness_cap
+		candidate.in_cone
+			&& !selected.contains(&candidate.entity)
+			&& candidate.skips >= limits.fairness_cap
 	}) {
 		selected.insert(fair.entity);
 	}
 
+	let in_cone: HashSet<Entity> = candidates
+		.iter()
+		.filter(|candidate| candidate.in_cone)
+		.map(|candidate| candidate.entity)
+		.collect();
 	for (entity, mut mailbox, character_rig) in &mut hosts {
 		if character_rig.role != CharacterRigRole::Body {
 			continue;
 		}
 		if selected.contains(&entity) {
 			mailbox.apply_skips = 0;
-		} else {
+		} else if in_cone.contains(&entity) {
 			mailbox.apply_skips = mailbox.apply_skips.saturating_add(1);
 		}
 	}
 	set.only = Some(selected);
+}
+
+fn in_apply_cone(
+	plant: Option<Entity>,
+	look_frame: &IntelligenceLookFrame,
+	focus: &IntelligenceFocus,
+	transforms: &Query<&GlobalTransform>,
+) -> bool {
+	if look_frame.look.is_none() && focus.samples.is_empty() {
+		return true;
+	}
+	let Some(plant) = plant else {
+		return true;
+	};
+	let Ok(transform) = transforms.get(plant) else {
+		return true;
+	};
+	look_applies(transform.translation(), look_frame.look, focus)
 }
 
 /// Advance clip / blend time for body mailboxes still owned by animation.
@@ -602,7 +637,24 @@ mod tests {
 		world.init_resource::<MailboxApplySet>();
 		world.init_resource::<MailboxApplyLimits>();
 		world.init_resource::<IntelligencePriority>();
+		world.init_resource::<IntelligenceLookFrame>();
+		world.init_resource::<IntelligenceFocus>();
 		world.run_system_once(select_mailbox_applies).expect("select_mailbox_applies");
+	}
+
+	fn looking_x_apply() -> intelligence_lod::IntelligenceLook {
+		let tf =
+			Transform::from_translation(Vec3::Y).looking_at(Vec3::new(20.0, 1.0, 0.0), Vec3::Y);
+		intelligence_lod::IntelligenceLook::from_perspective_inset(
+			&GlobalTransform::from(tf),
+			&PerspectiveProjection {
+				fov: 75_f32.to_radians(),
+				aspect_ratio: 16.0 / 9.0,
+				..default()
+			},
+			75_f32.to_radians(),
+			intelligence_lod::LOOK_APPLY_FOV_INSET,
+		)
 	}
 
 	fn near_body(world: &mut World, parent: Entity) -> Entity {
@@ -693,5 +745,71 @@ mod tests {
 				assert!(!only.contains(body), "rank {rank} should hold pose");
 			}
 		}
+	}
+
+	#[test]
+	fn in_cone_near_applies_before_off_cone() {
+		let mut world = World::new();
+		world.insert_resource(MailboxApplyLimits {
+			max_applies: 1,
+			fairness_cap: IntelligenceLod::FAIRNESS_CAP,
+		});
+		world.insert_resource(IntelligenceLookFrame { look: Some(looking_x_apply()) });
+		let ahead_plant = world
+			.spawn((
+				IntelligenceLod::missing(),
+				GlobalTransform::from_translation(Vec3::new(40.0, 1.0, 0.0)),
+			))
+			.id();
+		let behind_plant = world
+			.spawn((
+				IntelligenceLod::missing(),
+				GlobalTransform::from_translation(Vec3::new(-40.0, 1.0, 0.0)),
+			))
+			.id();
+		let ahead = near_body(&mut world, ahead_plant);
+		let behind = near_body(&mut world, behind_plant);
+		world.init_resource::<IntelligencePriority>();
+		world.resource_mut::<IntelligencePriority>().rank.insert(behind_plant, 0);
+		world.resource_mut::<IntelligencePriority>().rank.insert(ahead_plant, 1);
+
+		run_select(&mut world);
+
+		let only = world.resource::<MailboxApplySet>().only.clone().expect("restricted set");
+		assert!(only.contains(&ahead));
+		assert!(!only.contains(&behind));
+		assert_eq!(world.get::<AnimMailbox>(behind).unwrap().apply_skips, 0);
+	}
+
+	#[test]
+	fn off_cone_does_not_steal_fairness() {
+		let mut world = World::new();
+		world.insert_resource(MailboxApplyLimits { max_applies: 1, fairness_cap: 2 });
+		world.insert_resource(IntelligenceLookFrame { look: Some(looking_x_apply()) });
+		let ahead_plant = world
+			.spawn((
+				IntelligenceLod::missing(),
+				GlobalTransform::from_translation(Vec3::new(40.0, 1.0, 0.0)),
+			))
+			.id();
+		let behind_plant = world
+			.spawn((
+				IntelligenceLod::missing(),
+				GlobalTransform::from_translation(Vec3::new(-40.0, 1.0, 0.0)),
+			))
+			.id();
+		let ahead = near_body(&mut world, ahead_plant);
+		let behind = near_body(&mut world, behind_plant);
+		world.get_mut::<AnimMailbox>(behind).unwrap().apply_skips = 8;
+		world.init_resource::<IntelligencePriority>();
+		world.resource_mut::<IntelligencePriority>().rank.insert(ahead_plant, 0);
+		world.resource_mut::<IntelligencePriority>().rank.insert(behind_plant, 1);
+
+		run_select(&mut world);
+
+		let only = world.resource::<MailboxApplySet>().only.clone().expect("restricted set");
+		assert!(only.contains(&ahead));
+		assert!(!only.contains(&behind));
+		assert_eq!(world.get::<AnimMailbox>(behind).unwrap().apply_skips, 8);
 	}
 }
