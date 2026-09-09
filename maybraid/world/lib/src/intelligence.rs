@@ -5,6 +5,7 @@ use std::time::Duration;
 use bevy::prelude::*;
 use bevy::time::common_conditions::on_timer;
 use chico_vegetation_on_terrain_playground::Player as VegetationPlayer;
+use crozon_characters::CharacterMotionSystems;
 use evasion_intelligence::{EvasionPlugin, EvasionSystems};
 use firearm_intelligence::{FirearmIntelligencePlugin, FirearmIntelligenceSystems};
 use firearm_user::FirearmUserPlugin;
@@ -13,7 +14,8 @@ use fleeing_intelligence::{FleeingPlugin, FleeingSystems};
 use hiding_intelligence::{HidingPlugin, HidingSystems};
 use intelligence_lod::{
 	look_near_m, look_promotes, IntelligenceBand, IntelligenceFocus, IntelligenceFocusSample,
-	IntelligenceLod, IntelligenceLook, IntelligencePriority, LOOK_FOV_INSET,
+	IntelligenceLod, IntelligenceLook, IntelligenceLookFrame, IntelligencePriority,
+	LOOK_APPLY_FOV_INSET, LOOK_FOV_INSET,
 };
 use lod::LodViewer;
 use maybraid_mobs::player_affiliations;
@@ -77,7 +79,8 @@ impl Plugin for WorldIntelligencePlugin {
 			.insert_resource(WORLD_POI_LIMITS)
 			.insert_resource(WORLD_THREAT_LIMITS)
 			.init_resource::<IntelligencePriority>()
-			.init_resource::<IntelligenceFocus>();
+			.init_resource::<IntelligenceFocus>()
+			.init_resource::<IntelligenceLookFrame>();
 		if !app.is_plugin_added::<FirearmWeaponsPlugin>() {
 			app.add_plugins(FirearmWeaponsPlugin);
 		}
@@ -154,8 +157,14 @@ impl Plugin for WorldIntelligencePlugin {
 			)
 			.add_systems(
 				Update,
-				(sync_intelligence_focus, bake_intelligence_lod)
+				(publish_intelligence_look, sync_intelligence_focus)
 					.chain()
+					.before(CharacterMotionSystems::Anim),
+			)
+			.add_systems(
+				Update,
+				bake_intelligence_lod
+					.after(sync_intelligence_focus)
 					.run_if(on_timer(INTELLIGENCE_LOD_REFRESH_INTERVAL)),
 			)
 			.configure_sets(
@@ -179,6 +188,26 @@ fn hip_fov(follow: &FollowCamera, controller: &CameraController) -> f32 {
 		CameraPov::ThirdPerson => follow.third_person_fov,
 		CameraPov::FirstPerson => follow.first_person_fov,
 	}
+}
+
+fn publish_intelligence_look(
+	mut frame: ResMut<IntelligenceLookFrame>,
+	cameras: Query<
+		(&GlobalTransform, &Projection, &FollowCamera, &CameraController),
+		With<LodViewer>,
+	>,
+) {
+	frame.look = cameras.iter().find_map(|(transform, projection, follow, controller)| {
+		let Projection::Perspective(perspective) = projection else {
+			return None;
+		};
+		Some(IntelligenceLook::from_perspective_inset(
+			transform,
+			perspective,
+			hip_fov(follow, controller),
+			LOOK_APPLY_FOV_INSET,
+		))
+	});
 }
 
 fn sync_intelligence_focus(
@@ -404,6 +433,19 @@ mod tests {
 			app.world().get::<IntelligenceLod>(side).map(|lod| lod.band),
 			Some(IntelligenceBand::Mid)
 		);
+	}
+
+	#[test]
+	fn publish_look_uses_apply_inset() {
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins)
+			.init_resource::<IntelligenceLookFrame>()
+			.add_systems(Update, publish_intelligence_look);
+		let hip = 75_f32.to_radians();
+		spawn_look_camera(&mut app, Vec3::new(40.0, 1.6, 0.0), hip, hip);
+		app.update();
+		let look = app.world().resource::<IntelligenceLookFrame>().look.expect("look");
+		assert!(look.in_frustum(Vec3::new(40.0, 1.6, 40.0)));
 	}
 
 	#[test]

@@ -2,6 +2,7 @@
 //!
 //! Hip FOV is magnification 1: look range stays [`crate::IntelligenceBand::NEAR_M`].
 //! Zoom narrows FOV; range is `NEAR_M * mag` inside the inset frustum.
+//! Mailbox apply uses a wider inset and [`IntelligenceLook::in_frustum`].
 
 use bevy::prelude::*;
 
@@ -9,6 +10,9 @@ use crate::IntelligenceBand;
 
 /// Inset on each half-FOV so first-person 75° does not take the whole wedge.
 pub const LOOK_FOV_INSET: f32 = 0.6;
+
+/// Wider than [`LOOK_FOV_INSET`]: mailbox apply should cover the visible frame.
+pub const LOOK_APPLY_FOV_INSET: f32 = 0.85;
 
 /// Optical magnification of `current_fov` versus the hip / base FOV. Never below 1.
 pub fn fov_magnification(base_fov: f32, current_fov: f32) -> f32 {
@@ -67,10 +71,11 @@ impl IntelligenceLook {
 		}
 	}
 
-	pub fn contains(self, point: Vec3) -> bool {
+	/// Angular cone only. Combat Near past [`Self::near_m`] still counts if on-screen.
+	pub fn in_frustum(self, point: Vec3) -> bool {
 		let to = point - self.origin;
 		let dist = to.length();
-		if !dist.is_finite() || dist < 1e-3 || dist > self.near_m {
+		if !dist.is_finite() || dist < 1e-3 {
 			return false;
 		}
 		let dir = to / dist;
@@ -82,6 +87,19 @@ impl IntelligenceLook {
 		let y = dir.dot(self.up);
 		x.abs() <= z * self.half_fov_x.tan() && y.abs() <= z * self.half_fov_y.tan()
 	}
+
+	pub fn contains(self, point: Vec3) -> bool {
+		let dist = (point - self.origin).length();
+		dist.is_finite() && dist <= self.near_m && self.in_frustum(point)
+	}
+}
+
+/// Live apply-time cone. World republishes every Update from `LodViewer`.
+///
+/// `None` means no viewer this frame; mailbox rank-fills every Near body.
+#[derive(Resource, Clone, Debug, Default)]
+pub struct IntelligenceLookFrame {
+	pub look: Option<IntelligenceLook>,
 }
 
 /// One aim / lock ray. Circular cone. Firearm and other writers push these.
@@ -139,6 +157,17 @@ pub fn look_promotes(
 	focus: &IntelligenceFocus,
 ) -> bool {
 	look.is_some_and(|look| look.contains(point)) || focus.contains(point)
+}
+
+/// True when mailbox apply should treat this plant as on-screen.
+///
+/// Uses [`IntelligenceLook::in_frustum`] (no `near_m` cap) plus focus samples.
+pub fn look_applies(
+	point: Vec3,
+	look: Option<IntelligenceLook>,
+	focus: &IntelligenceFocus,
+) -> bool {
+	look.is_some_and(|look| look.in_frustum(point)) || focus.contains(point)
 }
 
 #[cfg(test)]
@@ -202,5 +231,39 @@ mod tests {
 		assert!((fov_magnification(75_f32.to_radians(), 75_f32.to_radians()) - 1.0).abs() < 1e-4);
 		assert!(fov_magnification(75_f32.to_radians(), 90_f32.to_radians()) >= 1.0);
 		assert!(fov_magnification(75_f32.to_radians(), 15_f32.to_radians()) > 5.0);
+	}
+
+	#[test]
+	fn apply_inset_covers_a_promote_miss() {
+		let tf =
+			Transform::from_translation(Vec3::Y).looking_at(Vec3::new(20.0, 1.0, 0.0), Vec3::Y);
+		let perspective = PerspectiveProjection {
+			fov: 75_f32.to_radians(),
+			aspect_ratio: 16.0 / 9.0,
+			..default()
+		};
+		let promote = IntelligenceLook::from_perspective(
+			&GlobalTransform::from(tf),
+			&perspective,
+			75_f32.to_radians(),
+		);
+		let apply = IntelligenceLook::from_perspective_inset(
+			&GlobalTransform::from(tf),
+			&perspective,
+			75_f32.to_radians(),
+			LOOK_APPLY_FOV_INSET,
+		);
+		let edge = Vec3::new(40.0, 1.0, 40.0);
+		assert!(!promote.contains(edge));
+		assert!(apply.in_frustum(edge));
+	}
+
+	#[test]
+	fn frustum_keeps_distant_on_axis_combat() {
+		let look = looking_x(75_f32.to_radians(), 75_f32.to_radians());
+		let far = Vec3::new(300.0, 1.0, 0.0);
+		assert!(!look.contains(far));
+		assert!(look.in_frustum(far));
+		assert!(look_applies(far, Some(look), &IntelligenceFocus::default()));
 	}
 }

@@ -3,7 +3,8 @@
 //! World bakes [`IntelligenceLod`] and [`IntelligencePriority`]. Personality
 //! crates only read. Missing lod is [`IntelligenceBand::Near`]. Look / aim
 //! promotion uses FOV magnification inside [`IntelligenceLook`] plus the
-//! [`IntelligenceFocus`] mailbox.
+//! [`IntelligenceFocus`] mailbox. Mailbox apply reads [`IntelligenceLookFrame`]
+//! every Update (wider inset, no `near_m` cap).
 
 mod focus;
 
@@ -12,8 +13,9 @@ use std::collections::HashMap;
 use bevy::prelude::*;
 
 pub use focus::{
-	fov_magnification, look_near_m, look_promotes, IntelligenceFocus, IntelligenceFocusSample,
-	IntelligenceLook, LOOK_FOV_INSET,
+	fov_magnification, look_applies, look_near_m, look_promotes, IntelligenceFocus,
+	IntelligenceFocusSample, IntelligenceLook, IntelligenceLookFrame, LOOK_APPLY_FOV_INSET,
+	LOOK_FOV_INSET,
 };
 
 /// Viewer-axis work band. Near work is spent first.
