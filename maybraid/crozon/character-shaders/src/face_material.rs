@@ -1,7 +1,8 @@
-//! Face [`Material`] — painted iris / lid wrap blink, and millimetre mouth idle.
+//! Face [`Material`] — painted iris / lid wrap, painted lips / idle open.
 //!
 //! Phase is `globals.time` + instance seed. No mailbox. No blendshapes.
 //! `face_eye` palette: iris, pupil, sclera, catchlight, limbus, lid.
+//! `face_mouth` palette: lip, crease, interior, highlight, teeth.
 
 use bevy::{
 	asset::embedded_asset,
@@ -34,6 +35,14 @@ pub const EYE_PALETTE_LIMBUS: usize = 4;
 pub const EYE_PALETTE_LID: usize = 5;
 const EYE_PALETTE_DETAIL_SLOTS: usize = 6;
 
+/// `face_mouth` palette: lip, crease, interior, highlight, teeth.
+pub const MOUTH_PALETTE_LIP: usize = 0;
+pub const MOUTH_PALETTE_CREASE: usize = 1;
+pub const MOUTH_PALETTE_INTERIOR: usize = 2;
+pub const MOUTH_PALETTE_HIGHLIGHT: usize = 3;
+pub const MOUTH_PALETTE_TEETH: usize = 4;
+const MOUTH_PALETTE_DETAIL_SLOTS: usize = 5;
+
 const SCALAR_VEC4S: usize = MATERIAL_SCALAR_FLOATS / 4;
 const DEFAULT_EYE_COLOR: Vec4 = Vec4::new(0.22, 0.16, 0.12, 1.0);
 const DEFAULT_MOUTH_COLOR: Vec4 = Vec4::new(0.62, 0.32, 0.30, 1.0);
@@ -43,6 +52,14 @@ pub fn eye_palette(iris: Color) -> [Color; EYE_PALETTE_DETAIL_SLOTS] {
 	let mut colors = derived_eye_palette(linear_vec4(iris))
 		.map(|color| Color::linear_rgba(color.x, color.y, color.z, color.w));
 	colors[EYE_PALETTE_IRIS] = iris;
+	colors
+}
+
+/// Species mouth color as lip, plus derived crease / interior / highlight / teeth.
+pub fn mouth_palette(lip: Color) -> [Color; MOUTH_PALETTE_DETAIL_SLOTS] {
+	let mut colors = derived_mouth_palette(linear_vec4(lip))
+		.map(|color| Color::linear_rgba(color.x, color.y, color.z, color.w));
+	colors[MOUTH_PALETTE_LIP] = lip;
 	colors
 }
 
@@ -61,6 +78,17 @@ fn derived_eye_palette(iris: Vec4) -> [Vec4; EYE_PALETTE_DETAIL_SLOTS] {
 		(rgb * Vec3::new(0.38, 0.32, 0.28)).extend(1.0),
 		// Warm skin, not an iris stain — lids should not pick up eye color.
 		Vec4::new(0.72, 0.52, 0.44, 1.0),
+	]
+}
+
+fn derived_mouth_palette(lip: Vec4) -> [Vec4; MOUTH_PALETTE_DETAIL_SLOTS] {
+	let rgb = lip.truncate();
+	[
+		lip,
+		(rgb * Vec3::new(0.42, 0.28, 0.26)).extend(1.0),
+		Vec4::new(0.18, 0.05, 0.05, 1.0),
+		(rgb * Vec3::new(1.15, 0.95, 0.88)).min(Vec3::ONE).extend(1.0),
+		Vec4::new(0.92, 0.88, 0.82, 1.0),
 	]
 }
 
@@ -140,9 +168,11 @@ impl FaceMaterialUniform {
 				*slot = color;
 			}
 		} else {
-			let first = colors[0];
-			for color in colors.iter_mut().skip(provided) {
-				*color = first;
+			let derived = derived_mouth_palette(colors[MOUTH_PALETTE_LIP]);
+			for (slot, color) in
+				colors.iter_mut().take(MOUTH_PALETTE_DETAIL_SLOTS).zip(derived).skip(provided)
+			{
+				*slot = color;
 			}
 		}
 
@@ -308,6 +338,34 @@ pub fn lid_wrap(xy: Vec2, blink: f32) -> f32 {
 	upper.max(lower)
 }
 
+/// `0` = lip flesh, `1` = opening. Thin rest crease; `open` widens it.
+pub fn lip_opening(xy: Vec2, open: f32) -> f32 {
+	let open = open.clamp(0.0, 1.0);
+	let taper = (1.0 - (xy.x / 0.88).powi(2)).max(0.0).sqrt();
+	let half = (0.014 + open * 0.11) * taper;
+	smoothstep((half - xy.y.abs()) / 0.02)
+}
+
+/// Mostly a resting crease; occasional designed part. Not raw 4D noise.
+pub fn mouth_open_envelope(time: f32, seed: f32) -> f32 {
+	let seed = seed.rem_euclid(1.0);
+	let breath = 0.06 + 0.05 * (time * 0.7 + seed * 3.1).sin();
+	let period = 5.8 + seed * 2.4;
+	let phase_time = time + seed * 11.0;
+	let t = phase_time.rem_euclid(period) / period.max(1e-4);
+	let cycle = (phase_time / period.max(1e-4)).floor();
+	let pulse = blink_pulse(t, 0.0, 0.05, 0.12, 0.14);
+	let h = hash11(cycle * 2.1 + seed * 6.3);
+	let depth = if h < 0.72 {
+		0.22
+	} else if h < 0.92 {
+		0.42
+	} else {
+		0.7
+	};
+	(breath + pulse * depth).clamp(0.0, 1.0)
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -335,8 +393,15 @@ mod tests {
 		);
 		assert!((explicit_pupil.params.colors[EYE_PALETTE_PUPIL].x - 1.0).abs() < 1e-5);
 
-		let mouth = FaceShaderMaterial::from_material_ref(&MaterialRef::named(RECIPE_FACE_MOUTH));
+		let mouth = FaceShaderMaterial::from_material_ref(
+			&MaterialRef::named(RECIPE_FACE_MOUTH).with_palette([Color::srgb(1.0, 0.4, 0.35)]),
+		);
 		assert_eq!(mouth.params.kind, KIND_MOUTH);
+		let lip = mouth.params.colors[MOUTH_PALETTE_LIP];
+		let crease = mouth.params.colors[MOUTH_PALETTE_CREASE];
+		assert!(crease.x + crease.y + crease.z < lip.x + lip.y + lip.z);
+		assert!(mouth.params.colors[MOUTH_PALETTE_INTERIOR].x < 0.3);
+		assert!(mouth.params.colors[MOUTH_PALETTE_TEETH].x > 0.8);
 	}
 
 	#[test]
@@ -405,5 +470,24 @@ mod tests {
 		assert!(lid_wrap(Vec2::new(0.0, 0.0), 0.0) < 0.1, "pupil stays open at rest");
 		assert!(lid_wrap(Vec2::new(0.0, 0.42), 0.0) > 0.9, "upper sclera is lid at rest");
 		assert!(lid_wrap(Vec2::new(0.0, 0.0), 1.0) > 0.9, "full blink covers the globe");
+	}
+
+	#[test]
+	fn lip_opening_is_a_thin_rest_crease() {
+		assert!(lip_opening(Vec2::new(0.0, 0.0), 0.0) > 0.5, "midline is the crease");
+		assert!(lip_opening(Vec2::new(0.0, 0.28), 0.0) < 0.1, "lip body stays flesh");
+		assert!(lip_opening(Vec2::new(0.0, 0.0), 1.0) > 0.9, "open widens the midline");
+	}
+
+	#[test]
+	fn mouth_open_stays_mostly_resting() {
+		let mut parted = 0;
+		let samples = 200;
+		for i in 0..samples {
+			if mouth_open_envelope(i as f32 * 0.05, 0.2) > 0.35 {
+				parted += 1;
+			}
+		}
+		assert!(parted < samples / 3, "mouth should rest more than it parts, parted={parted}");
 	}
 }

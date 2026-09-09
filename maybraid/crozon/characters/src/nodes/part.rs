@@ -3,7 +3,7 @@
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::{Component, Transform, Vec3};
 use bevy::scene::prelude::{bsn, template_value, Scene};
-use crozon_character_shaders::{eye_palette, RECIPE_FACE_EYE};
+use crozon_character_shaders::{eye_palette, mouth_palette, RECIPE_FACE_EYE, RECIPE_FACE_MOUTH};
 use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
 use lod::SceneChunk;
@@ -117,11 +117,13 @@ impl PartNode {
 	/// Tint via [`MaterialRef`] palette[0]. Keeps the existing recipe name
 	/// so face / clothing parts stay on their shader after color stamping.
 	///
-	/// `face_eye` also packs pupil / sclera / highlight / limbus / lid so the
-	/// shader can paint iris detail and a rest lid from the same stamp.
+	/// `face_eye` / `face_mouth` also pack derived detail slots so the shader
+	/// can paint lids or a lip crease from the same stamp.
 	pub fn with_base_color(self, color: bevy::prelude::Color) -> Self {
 		let material = if self.material.name == MaterialId::named(RECIPE_FACE_EYE) {
 			self.material.clone().with_palette(eye_palette(color))
+		} else if self.material.name == MaterialId::named(RECIPE_FACE_MOUTH) {
+			self.material.clone().with_palette(mouth_palette(color))
 		} else {
 			self.material.clone().with_palette([color])
 		};
@@ -218,5 +220,23 @@ mod tests {
 		assert_eq!(part.material.palette.len(), 6);
 		assert_eq!(part.material.palette[0], iris);
 		assert_ne!(part.material.palette[EYE_PALETTE_PUPIL], iris);
+	}
+
+	#[test]
+	fn with_base_color_packs_mouth_detail() {
+		use crozon_character_shaders::MOUTH_PALETTE_CREASE;
+		let lip = Color::srgb(0.7, 0.3, 0.28);
+		let part = PartNode::glb(
+			CharacterPartSlot::Mouth,
+			"mouth",
+			"characters/mouths/common_mouth.glb",
+			AssetNormalization::IDENTITY,
+		)
+		.with_material(MaterialRef::named("face_mouth"))
+		.with_base_color(lip);
+		assert_eq!(part.material.name, MaterialId::named("face_mouth"));
+		assert_eq!(part.material.palette.len(), 5);
+		assert_eq!(part.material.palette[0], lip);
+		assert_ne!(part.material.palette[MOUTH_PALETTE_CREASE], lip);
 	}
 }
