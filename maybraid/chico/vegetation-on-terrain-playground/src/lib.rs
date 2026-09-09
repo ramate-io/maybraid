@@ -15,6 +15,7 @@ mod groves;
 mod material_lib;
 mod pitch;
 pub mod player;
+mod terrain_detail;
 mod ui;
 
 pub use bump_out::{
@@ -28,7 +29,7 @@ pub use character::{
 	CharacterSpecies, PlayerVisual, RequestSetCharacter, RequestSetCharacterAppearance,
 };
 pub use chico_forests::ForestStreamSpec;
-pub use commands::{GroveKind, PlaygroundCommand, PLAYGROUND_CLI_NAME};
+pub use commands::{GroveKind, PlaygroundCommand, ShowKind, PLAYGROUND_CLI_NAME};
 pub use diagnostics::{PlaygroundDiag, PlaygroundTimingPlugin, RequestFpsToggle};
 pub use durham_terrain_models::{TerrainCoverage, WorldBaseTerrain, WORLD_FINE_HALF_EXTENT_CELLS};
 pub use forest::DurhamForestPresenter;
@@ -40,6 +41,7 @@ pub use player::{
 	CharacterLocomotion, Jumping, MoveWish, MovementAction, PadMovementEnabled, Player,
 	PlayerCapsule, PlayerControlSystems, PlayerPhysicsEnabled, PlayerPlugin, PlaygroundMode,
 };
+pub use terrain_detail::DurhamTerrainDetailPresenter;
 
 use avian3d::prelude::LinearVelocity;
 use bevy::camera::visibility::VisibilitySystems;
@@ -54,10 +56,12 @@ use character::{apply_set_character, drive_player_locomotion};
 use chico_bumpout::ChicoBumpOutPlugin;
 use chico_forests::{register_forest_lod, register_vegetation_view, stream_radii_m};
 use chico_groves::DEFAULT_GROVE_EXTENT_XZ;
+use chico_terrain_detail::{register_terrain_detail_lod, TerrainDetailStreamSpec};
 use chico_vegetation_components::{FoliageLodProbe, StickLodProbe};
 use commands::{
 	RequestForest, RequestGrove, RequestGroveExtent, RequestMeshStats, RequestModeCharacter,
-	RequestModeFree, RequestRebuild, RequestTerrainRadius, RequestTileRadius,
+	RequestModeFree, RequestRebuild, RequestShow, RequestTerrainDetail, RequestTerrainRadius,
+	RequestTileRadius,
 };
 use crozon_characters::{CharacterHostsPlugin, CharacterMotionSystems};
 use durham_terrain_models::{
@@ -75,6 +79,7 @@ use lod::{LodGenerateSystems, LodPresentSystems, LodSceneHost};
 use maybraid_input::{PadGameplayEnabled, VirtualPadPlugin, VirtualPadSystems};
 use pitch::{apply_avian_terrain_pitch, sync_suspend_terrain_pitch};
 use player::{respawn_player_on_layout, snap_player_to_composed_surface, AwaitingTerrainSurface};
+use terrain_detail::stream_terrain_detail;
 
 const DEFAULT_TERRAIN_RADIUS: i32 = 2;
 const DEFAULT_TILE_RADIUS: i32 = 1;
@@ -105,6 +110,10 @@ pub struct PlaygroundConfig {
 	pub tile_radius: i32,
 	/// `Some` streams the forest and skips tiled groves.
 	pub forest: Option<ForestStreamSpec>,
+	/// `Some` streams 400 m rock formations (independent of `/forest`).
+	pub terrain_detail: Option<TerrainDetailStreamSpec>,
+	/// Isolated `/show` pin (component or outcropping). Formations use [`Self::terrain_detail`].
+	pub show: Option<commands::ShowKind>,
 	pub coverage: TerrainCoverage,
 }
 
@@ -116,13 +125,15 @@ impl Default for PlaygroundConfig {
 			grove_extent_xz: DEFAULT_GROVE_EXTENT_XZ,
 			tile_radius: DEFAULT_TILE_RADIUS,
 			forest: None,
+			terrain_detail: None,
+			show: None,
 			coverage: TerrainCoverage::FinePatch,
 		}
 	}
 }
 
 impl PlaygroundConfig {
-	/// Terrain + forest at playable present / generate extents.
+	/// Terrain + forest + rock formations at playable present / generate extents.
 	pub fn world_defaults() -> Self {
 		Self {
 			grove: commands::GroveKind::MonsterGrass,
@@ -130,6 +141,8 @@ impl PlaygroundConfig {
 			grove_extent_xz: DEFAULT_GROVE_EXTENT_XZ,
 			tile_radius: DEFAULT_TILE_RADIUS,
 			forest: Some(ForestStreamSpec { stream_radius: 1, ..ForestStreamSpec::default() }),
+			terrain_detail: Some(TerrainDetailStreamSpec::default()),
+			show: None,
 			coverage: TerrainCoverage::PlayableWorld,
 		}
 	}
@@ -190,6 +203,8 @@ pub struct VegetationOnTerrainPlugin {
 	pub commands: bool,
 	/// Register the plain Durham-backed forest presenter.
 	pub register_forest_lod: bool,
+	/// Register the Durham-backed rock formation presenter.
+	pub register_terrain_detail_lod: bool,
 	/// Register the plain Durham-backed canopy bump-out presenter.
 	pub register_bump_out_lod: bool,
 	/// Spawn and drive the playground fly/follow camera.
@@ -208,6 +223,7 @@ impl Default for VegetationOnTerrainPlugin {
 			config: PlaygroundConfig::default(),
 			commands: true,
 			register_forest_lod: true,
+			register_terrain_detail_lod: true,
 			register_bump_out_lod: true,
 			register_camera: true,
 			register_terrain_pitch: true,
@@ -245,6 +261,9 @@ impl Plugin for VegetationOnTerrainPlugin {
 		}
 		if self.register_forest_lod {
 			register_forest_lod::<DurhamForestPresenter>(app);
+		}
+		if self.register_terrain_detail_lod {
+			register_terrain_detail_lod::<terrain_detail::DurhamTerrainDetailPresenter>(app);
 		}
 		if self.register_bump_out_lod {
 			register_bump_out_lod::<DurhamCanopyBumpOutPresenter, DurhamMediumCanopyBumpOutPresenter>(
@@ -293,6 +312,26 @@ impl Plugin for VegetationOnTerrainPlugin {
 						.run_if(terrain_streaming_enabled),
 				),
 			);
+		}
+		if self.register_terrain_detail_lod {
+			if self.commands {
+				app.add_systems(
+					Update,
+					stream_terrain_detail
+						.after(apply_commands)
+						.before(LodGenerateSystems::Produce)
+						.before(LodPresentSystems::Produce)
+						.run_if(terrain_streaming_enabled),
+				);
+			} else {
+				app.add_systems(
+					Update,
+					stream_terrain_detail
+						.before(LodGenerateSystems::Produce)
+						.before(LodPresentSystems::Produce)
+						.run_if(terrain_streaming_enabled),
+				);
+			}
 		}
 		if self.register_terrain_pitch {
 			app.add_systems(
@@ -372,6 +411,8 @@ fn apply_commands(
 	mut groves_dirty: ResMut<GrovesDirty>,
 	mut status: Option<ResMut<GameCommandStatusText>>,
 	grove: Query<(Entity, &RequestGrove)>,
+	show: Query<(Entity, &RequestShow)>,
+	terrain_detail: Query<(Entity, &RequestTerrainDetail)>,
 	forest: Query<(Entity, &RequestForest)>,
 	terrain_radius: Query<(Entity, &RequestTerrainRadius)>,
 	grove_extent: Query<(Entity, &RequestGroveExtent)>,
@@ -381,13 +422,63 @@ fn apply_commands(
 	for (entity, request) in &grove {
 		playground.grove = request.0;
 		playground.forest = None;
+		playground.show = None;
 		groves_dirty.0 = true;
 		ui::write_status(&mut status, format!("grove {}", request.0.label()));
+		commands.entity(entity).despawn();
+	}
+	for (entity, request) in &show {
+		if let Some(spec) = terrain_detail::formation_spec_from_show(request.0) {
+			playground.show = None;
+			playground.terrain_detail = Some(spec);
+			if playground.coverage == TerrainCoverage::FinePatch {
+				let (_, generate_m) = chico_terrain_detail::stream_radii_m(spec.stream_radius);
+				let needed = terrain_cells_for_generate_m(generate_m).max(1);
+				if playground.terrain_radius < needed {
+					playground.terrain_radius = needed;
+					*layout = cell_layout(needed);
+					terrain_assets.lod_bands = playground_lod_bands(needed);
+					terrain_assets.fine_grid_max_radius = Some(needed);
+					terrain_dirty.0 = true;
+				}
+			}
+			ui::write_status(&mut status, format!("show {} (formation stream)", request.0.label()));
+		} else {
+			playground.show = Some(request.0);
+			playground.terrain_detail = None;
+			playground.forest = None;
+			ui::write_status(&mut status, format!("show {}", request.0.label()));
+		}
+		groves_dirty.0 = true;
+		commands.entity(entity).despawn();
+	}
+	for (entity, request) in &terrain_detail {
+		let spec = request.0;
+		playground.terrain_detail = Some(spec);
+		playground.show = None;
+		if playground.coverage == TerrainCoverage::FinePatch {
+			let (_, generate_m) = chico_terrain_detail::stream_radii_m(spec.stream_radius);
+			let needed = terrain_cells_for_generate_m(generate_m).max(1);
+			if playground.terrain_radius < needed {
+				playground.terrain_radius = needed;
+				*layout = cell_layout(needed);
+				terrain_assets.lod_bands = playground_lod_bands(needed);
+				terrain_assets.fine_grid_max_radius = Some(needed);
+				terrain_dirty.0 = true;
+			}
+		}
+		groves_dirty.0 = true;
+		let formation = spec.formation.map(|k| k.as_kebab()).unwrap_or("throw");
+		ui::write_status(
+			&mut status,
+			format!("terrain-detail {formation} r={}", spec.stream_radius),
+		);
 		commands.entity(entity).despawn();
 	}
 	for (entity, request) in &forest {
 		let spec = request.0;
 		playground.forest = Some(spec);
+		playground.show = None;
 		if playground.coverage == TerrainCoverage::FinePatch {
 			let (_, generate_m) = stream_radii_m(spec.stream_radius);
 			let needed = terrain_cells_for_generate_m(generate_m).max(1);
@@ -487,10 +578,12 @@ fn spawn_groves(
 	store: Res<TerrainEntryStore>,
 	layout: Res<TerrainCellLayout>,
 	base: Res<WorldBaseTerrain>,
+	cache: Option<Res<chico_terrain_detail::RockMeshCache>>,
 	mut dirty: ResMut<GrovesDirty>,
 	pending: Res<TerrainPresentPending>,
 	terrain_dirty: Res<TerrainPresentationDirty>,
 	roots: Query<Entity, With<GroveRoot>>,
+	rock_roots: Query<Entity, With<terrain_detail::TerrainDetailRoot>>,
 ) {
 	if !dirty.0 || pending.0 || terrain_dirty.0 {
 		return;
@@ -498,6 +591,26 @@ fn spawn_groves(
 
 	for entity in &roots {
 		commands.entity(entity).despawn();
+	}
+	for entity in &rock_roots {
+		commands.entity(entity).despawn();
+	}
+
+	if config.show.is_some() {
+		let Some(cache) = cache.as_ref() else {
+			return;
+		};
+		let n = terrain_detail::spawn_show_pins(
+			&mut commands,
+			&config,
+			cache,
+			&store,
+			&layout,
+			&base.0,
+		);
+		debug!("spawned {n} terrain-detail show pins");
+		dirty.0 = false;
+		return;
 	}
 
 	if config.forest.is_some() {
@@ -542,6 +655,13 @@ mod tests {
 	}
 
 	#[test]
+	fn world_defaults_arm_the_terrain_detail_throw() {
+		let spec = PlaygroundConfig::world_defaults().terrain_detail.expect("terrain-detail on");
+		assert!(spec.formation.is_none());
+		assert_eq!(spec.stream_radius, chico_terrain_detail::DEFAULT_TERRAIN_DETAIL_STREAM_RADIUS);
+	}
+
+	#[test]
 	fn appearance_attach_in_character_mode_does_not_await_layout_center() -> anyhow::Result<()> {
 		let pose = Vec3::new(1_000.0, 14.0, -80.0);
 		let (mut world, player) = mode_world(PlaygroundMode::Character, pose);
@@ -556,7 +676,10 @@ mod tests {
 			.run_system_once(snap_player_to_composed_surface)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 
-		assert_eq!(world.get::<Transform>(player).map(|transform| transform.translation), Some(pose));
+		assert_eq!(
+			world.get::<Transform>(player).map(|transform| transform.translation),
+			Some(pose)
+		);
 		assert!(world.get::<AwaitingTerrainSurface>(player).is_none());
 		assert_eq!(world.query::<&RequestModeCharacter>().iter(&world).count(), 0);
 		Ok(())
@@ -570,9 +693,9 @@ mod tests {
 			.insert_resource(PlayerPhysicsEnabled::default())
 			.insert_resource(TerrainCellLayout::default())
 			.insert_resource(TerrainEntryStore::default())
-			.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(
-				&TerrainConfig::new(42),
-			)))
+			.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(&TerrainConfig::new(
+				42,
+			))))
 			.add_systems(
 				Update,
 				(
@@ -625,7 +748,10 @@ mod tests {
 			.run_system_once(apply_mode_commands)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 
-		assert_eq!(world.get::<Transform>(player).map(|transform| transform.translation), Some(pose));
+		assert_eq!(
+			world.get::<Transform>(player).map(|transform| transform.translation),
+			Some(pose)
+		);
 		assert!(world.get::<AwaitingTerrainSurface>(player).is_none());
 		Ok(())
 	}
@@ -640,9 +766,9 @@ mod tests {
 		world.insert_resource(PlayerPhysicsEnabled::default());
 		world.insert_resource(TerrainCellLayout::default());
 		world.insert_resource(TerrainEntryStore::default());
-		world.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(&TerrainConfig::new(
-			42,
-		))));
+		world.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(
+			&TerrainConfig::new(42),
+		)));
 		let player = world
 			.spawn((
 				Player,

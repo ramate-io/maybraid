@@ -15,6 +15,7 @@ durham-terrain = { workspace = true }
 durham-terrain-models = { workspace = true }
 chico-groves = { workspace = true, features = ["render"] }
 chico-forests = { workspace = true }
+chico-terrain-detail = { workspace = true }
 chico-vegetation-components = { workspace = true }
 chico-bumpout = { workspace = true }
 chico-vegetation-shaders = { workspace = true }

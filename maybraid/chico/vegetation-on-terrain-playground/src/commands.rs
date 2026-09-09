@@ -5,6 +5,10 @@ use chico_forests::LayeringKind;
 use chico_forests::{
 	parse_layering_kind, ForestStreamSpec, DEFAULT_FOREST_NOISE, DEFAULT_FOREST_STREAM_RADIUS,
 };
+use chico_terrain_detail::{
+	parse_formation_kind, FormationKind, OutcroppingKind, RockComponent, TerrainDetailStreamSpec,
+	DEFAULT_TERRAIN_DETAIL_NOISE, DEFAULT_TERRAIN_DETAIL_STREAM_RADIUS,
+};
 use clap::{Parser, Subcommand, ValueEnum};
 use game_commands::command::{CommandScript, GameCommand};
 use procedural_common::{noise_params_from_scalar_str, NoiseParams};
@@ -107,6 +111,70 @@ impl GroveKind {
 	}
 }
 
+/// Isolated `/show` pin or a formation name that arms the 400 m stream.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
+#[value(rename_all = "kebab-case")]
+pub enum ShowKind {
+	RoundRock,
+	RockKnob,
+	SharpRock,
+	RockPile,
+	BoulderPatch,
+	Crag,
+	Loner,
+	BoulderField,
+	CragComplex,
+	MixedRocks,
+	Empty,
+}
+
+impl ShowKind {
+	pub fn label(self) -> &'static str {
+		match self {
+			Self::RoundRock => RockComponent::RoundRock.as_kebab(),
+			Self::RockKnob => RockComponent::RockKnob.as_kebab(),
+			Self::SharpRock => RockComponent::SharpRock.as_kebab(),
+			Self::RockPile => OutcroppingKind::RockPile.as_kebab(),
+			Self::BoulderPatch => OutcroppingKind::BoulderPatch.as_kebab(),
+			Self::Crag => OutcroppingKind::Crag.as_kebab(),
+			Self::Loner => OutcroppingKind::Loner.as_kebab(),
+			Self::BoulderField => FormationKind::BoulderField.as_kebab(),
+			Self::CragComplex => FormationKind::CragComplex.as_kebab(),
+			Self::MixedRocks => FormationKind::MixedRocks.as_kebab(),
+			Self::Empty => FormationKind::Empty.as_kebab(),
+		}
+	}
+
+	pub fn component(self) -> Option<RockComponent> {
+		match self {
+			Self::RoundRock => Some(RockComponent::RoundRock),
+			Self::RockKnob => Some(RockComponent::RockKnob),
+			Self::SharpRock => Some(RockComponent::SharpRock),
+			_ => None,
+		}
+	}
+
+	pub fn outcropping(self) -> Option<OutcroppingKind> {
+		match self {
+			Self::RockPile => Some(OutcroppingKind::RockPile),
+			Self::BoulderPatch => Some(OutcroppingKind::BoulderPatch),
+			Self::Crag => Some(OutcroppingKind::Crag),
+			Self::Loner => Some(OutcroppingKind::Loner),
+			_ => None,
+		}
+	}
+
+	pub fn formation(self) -> Option<FormationKind> {
+		match self {
+			Self::BoulderField => Some(FormationKind::BoulderField),
+			Self::CragComplex => Some(FormationKind::CragComplex),
+			Self::MixedRocks => Some(FormationKind::MixedRocks),
+			Self::Empty => Some(FormationKind::Empty),
+			_ => None,
+		}
+	}
+}
+
 #[derive(Clone, Parser, Component)]
 #[command(
 	name = "chico-vegetation-on-terrain",
@@ -121,6 +189,25 @@ pub enum PlaygroundCommand {
 	/// One grove type across the tiled footprint (disables `/forest`).
 	Grove {
 		kind: GroveKind,
+	},
+	/// Isolated rock pin (`round-rock`, `rock-pile`, …) or a pinned 400 m formation.
+	Show {
+		kind: ShowKind,
+	},
+	/// Stream 400 m formations on Durham height (independent of `/forest`).
+	TerrainDetail {
+		/// Pin a formation (`boulder-field`, `crag-complex`, …). Omit for the 25% throw.
+		#[arg(value_parser = parse_formation_kind, value_name = "FORMATION")]
+		formation: Option<FormationKind>,
+		#[arg(
+			long,
+			default_value = DEFAULT_TERRAIN_DETAIL_NOISE,
+			value_parser = noise_params_from_scalar_str,
+			value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES[,TYPE]"
+		)]
+		noise: NoiseParams,
+		#[arg(long, default_value_t = DEFAULT_TERRAIN_DETAIL_STREAM_RADIUS)]
+		stream_radius: u32,
 	},
 	/// Stream the unified Chico forest on Durham height (disables tiled groves).
 	Forest {
@@ -185,6 +272,12 @@ pub enum Stats {
 pub struct RequestGrove(pub GroveKind);
 
 #[derive(Component, Debug, Clone, Copy)]
+pub struct RequestShow(pub ShowKind);
+
+#[derive(Component, Debug, Clone, Copy)]
+pub struct RequestTerrainDetail(pub TerrainDetailStreamSpec);
+
+#[derive(Component, Debug, Clone, Copy)]
 pub struct RequestForest(pub ForestStreamSpec);
 
 #[derive(Component, Debug, Clone, Copy)]
@@ -224,6 +317,18 @@ impl PlaygroundCommand {
 			PlaygroundCommand::Grove { kind } => {
 				commands.spawn(RequestGrove(kind));
 				*console = format!("grove {}: pending", kind.label());
+			}
+			PlaygroundCommand::Show { kind } => {
+				commands.spawn(RequestShow(kind));
+				*console = format!("show {}: pending", kind.label());
+			}
+			PlaygroundCommand::TerrainDetail { formation, noise, stream_radius } => {
+				commands.spawn(RequestTerrainDetail(TerrainDetailStreamSpec {
+					noise,
+					stream_radius,
+					formation,
+				}));
+				*console = "terrain-detail: pending".into();
 			}
 			PlaygroundCommand::Forest { layering, noise, stream_radius } => {
 				commands.spawn(RequestForest(ForestStreamSpec { noise, stream_radius, layering }));
@@ -297,6 +402,19 @@ impl GameCommand for PlaygroundCommand {
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	#[test]
+	fn parse_show_and_terrain_detail() {
+		let pile = PlaygroundCommand::parse_line("show rock-pile").unwrap();
+		assert!(matches!(pile, PlaygroundCommand::Show { kind: ShowKind::RockPile }));
+		let field = PlaygroundCommand::parse_line("show boulder-field").unwrap();
+		assert!(matches!(field, PlaygroundCommand::Show { kind: ShowKind::BoulderField }));
+		let stream = PlaygroundCommand::parse_line("terrain-detail empty").unwrap();
+		assert!(matches!(
+			stream,
+			PlaygroundCommand::TerrainDetail { formation: Some(FormationKind::Empty), .. }
+		));
+	}
 
 	#[test]
 	fn parse_grove_and_radii() {
