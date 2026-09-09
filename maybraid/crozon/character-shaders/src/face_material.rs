@@ -276,16 +276,16 @@ pub fn blink_envelope(time: f32, seed: f32) -> f32 {
 }
 
 fn blink_period(seed: f32) -> f32 {
-	3.4 + seed * 1.8
+	4.2 + seed * 2.0
 }
 
 fn blink_shape(t: f32, seed: f32) -> f32 {
-	let close = 0.016;
-	let hold = 0.008;
-	let open = 0.048;
+	let close = 0.045;
+	let hold = 0.020;
+	let open = 0.10;
 	let first = blink_pulse(t, 0.0, close, hold, open);
 	if seed > 0.62 {
-		let second_start = close + hold + open + 0.018;
+		let second_start = close + hold + open + 0.025;
 		first.max(blink_pulse(t, second_start, close, hold, open))
 	} else {
 		first
@@ -432,7 +432,7 @@ mod tests {
 				closed += 1;
 			}
 		}
-		assert!(closed < samples / 6, "blink should be a short pulse, closed={closed}");
+		assert!(closed < samples / 5, "blink should be a short pulse, closed={closed}");
 	}
 
 	fn time_at_phase(period: f32, seed: f32, phase: f32) -> f32 {
@@ -443,17 +443,17 @@ mod tests {
 	fn blink_closes_faster_than_it_opens() {
 		let seed = 0.1;
 		let period = blink_period(seed);
-		assert!(blink_shape(0.008, seed) > 0.2);
-		assert!(blink_shape(0.016 + 0.008 + 0.04, seed) < 0.85);
-		assert!(blink_envelope(time_at_phase(period, seed, 0.2), seed) == 0.0);
+		assert!(blink_shape(0.022, seed) > 0.2);
+		assert!(blink_shape(0.045 + 0.020 + 0.08, seed) < 0.85);
+		assert!(blink_envelope(time_at_phase(period, seed, 0.35), seed) == 0.0);
 	}
 
 	#[test]
 	fn blink_double_only_for_high_seeds() {
 		let quiet = 0.1;
-		assert_eq!(blink_shape(0.2, quiet), 0.0);
+		assert_eq!(blink_shape(0.35, quiet), 0.0);
 		let seed = 0.8;
-		let second = 0.016 + 0.008 + 0.048 + 0.018 + 0.008;
+		let second = 0.045 + 0.020 + 0.10 + 0.025 + 0.045 + 0.010;
 		assert!(blink_shape(second, seed) > 0.5);
 	}
 

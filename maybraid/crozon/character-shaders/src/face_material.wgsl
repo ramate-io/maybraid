@@ -49,15 +49,14 @@ struct FaceVertexOutput {
     @location(9) blink: f32,
 }
 
-fn hash13(p: vec3<f32>) -> f32 {
-    let p3 = fract(p * vec3<f32>(0.1031, 0.1030, 0.0973));
-    let d = dot(p3, p3.yzx + vec3<f32>(33.33));
-    return fract((p3.x + p3.y) * p3.z + d);
+fn hash11(n: f32) -> f32 {
+    let x = fract(n * 0.1031);
+    return fract(x * (x + 33.33));
 }
 
-fn face_seed(instance_index: u32, world_from_local: mat4x4<f32>) -> f32 {
-    let origin = world_from_local[3].xyz;
-    return hash13(vec3<f32>(f32(instance_index) * 0.13, origin.x * 4.1, origin.z * 3.7));
+/// Instance-stable. Do not hash world origin — idle / locomotion would retune the phase every frame.
+fn face_seed(instance_index: u32) -> f32 {
+    return hash11(f32(instance_index) * 0.618 + 0.17 + material.noise.z * 0.03);
 }
 
 fn face_smoothstep(t: f32) -> f32 {
@@ -79,11 +78,6 @@ fn blink_pulse(t: f32, start: f32, close: f32, hold: f32, open: f32) -> f32 {
     return 1.0 - face_smoothstep((u - close - hold) / open);
 }
 
-fn hash11(n: f32) -> f32 {
-    let x = fract(n * 0.1031);
-    return fract(x * (x + 33.33));
-}
-
 fn blink_depth(cycle: f32, seed: f32) -> f32 {
     let h = hash11(cycle * 1.73 + seed * 9.1 + 2.4);
     if h < 0.58 {
@@ -98,16 +92,16 @@ fn blink_depth(cycle: f32, seed: f32) -> f32 {
 /// Designed 1D envelope. Do not replace with raw 4D noise.
 /// Peak depth varies per cycle so most blinks are slighter than a full slit.
 fn blink_envelope(time: f32, seed: f32) -> f32 {
-    let period = 3.4 + seed * 1.8;
+    let period = 4.2 + seed * 2.0;
     let phase_time = time + seed * 17.0;
     let t = fract(phase_time / period);
     let cycle = floor(phase_time / period);
-    let close = 0.016;
-    let hold = 0.008;
-    let open = 0.048;
+    let close = 0.045;
+    let hold = 0.020;
+    let open = 0.10;
     var shape = blink_pulse(t, 0.0, close, hold, open);
     if seed > 0.62 {
-        let second_start = close + hold + open + 0.018;
+        let second_start = close + hold + open + 0.025;
         shape = max(shape, blink_pulse(t, second_start, close, hold, open));
     }
     return shape * blink_depth(cycle, seed);
@@ -252,7 +246,7 @@ fn vertex(vertex_no_morph: Vertex) -> FaceVertexOutput {
 #endif
 
     let mesh_world_from_local = mesh_functions::get_world_from_local(vertex_no_morph.instance_index);
-    let seed = face_seed(vertex_no_morph.instance_index, mesh_world_from_local);
+    let seed = face_seed(vertex_no_morph.instance_index);
     var amount = 0.0;
     if material.kind == KIND_EYE {
         amount = blink_envelope(globals.time, seed);
