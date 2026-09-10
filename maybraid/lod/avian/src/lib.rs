@@ -1,8 +1,9 @@
 //! Avian physics layers for Maybraid LOD / terrain / motion.
 //!
-//! Scene-host refresh and cull live in [`lod-gimme`](lod_gimme). This crate
-//! re-exports those plugins as [`AvianLodSceneRefreshPlugin`] /
-//! [`AvianLodSceneCullPlugin`] so existing `avian_host!` wiring keeps compiling.
+//! Scene-host refresh and cull live in [`lod-gimme`](lod_gimme). Call sites use
+//! `gimme_host!` (`GimmeLodSceneRefreshPlugin` / `GimmeLodSceneCullPlugin`).
+//! This crate still re-exports those plugins as [`AvianLodSceneRefreshPlugin`] /
+//! [`AvianLodSceneCullPlugin`] for the unused `avian_host!` wrappers.
 //!
 //! Generate and present id lookup stays on typed [`lod::gen::SpatialIndex`]
 //! resources.

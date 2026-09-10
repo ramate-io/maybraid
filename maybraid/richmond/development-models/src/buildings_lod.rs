@@ -1,4 +1,4 @@
-//! Avian LOD refresh for Richmond development hosts.
+//! Gimme LOD refresh for Richmond development hosts.
 
 use avian3d::prelude::PhysicsPlugins;
 use avian3d::schedule::PhysicsSchedulePlugin;
@@ -7,7 +7,7 @@ use lod::{
 	Bullseye, LodChunkFulfillBudget, LodCullRegionCursor, LodRefreshCorePlugin,
 	LodSceneCullRegionPlugin, LodSceneRefreshRegionPlugin, OpenLattice, Spotlight,
 };
-use lod_avian::{AvianLodSceneCullPlugin, AvianLodSceneRefreshPlugin};
+use lod_gimme::{GimmeLodSceneCullPlugin, GimmeLodSceneRefreshPlugin};
 use richmond_building_components::{
 	ComponentsOnly, DoorNode, FloorNode, FurnitureNode, JointNode, LabelNode, PanelNode,
 	PartitionNode, RoofNode, StairNode,
@@ -36,11 +36,22 @@ pub type BuildingsSpotlight = BuildingsRefresh;
 #[derive(Debug, Clone, Copy, Default)]
 pub struct BuildingsCull;
 
+/// Historical Avian-named wrapper. Prefer `gimme_host!`.
+#[allow(unused_macros)]
 macro_rules! avian_host {
 	($app:expr, $ty:ty) => {{
 		$app.add_plugins((
-								AvianLodSceneRefreshPlugin::<$ty, BuildingsRefresh, With<Camera>>::without_full_scan_cull(),
-								AvianLodSceneCullPlugin::<$ty, BuildingsCull, With<Camera>>::default(),
+								lod_avian::AvianLodSceneRefreshPlugin::<$ty, BuildingsRefresh, With<Camera>>::without_full_scan_cull(),
+								lod_avian::AvianLodSceneCullPlugin::<$ty, BuildingsCull, With<Camera>>::default(),
+							));
+	}};
+}
+
+macro_rules! gimme_host {
+	($app:expr, $ty:ty) => {{
+		$app.add_plugins((
+								GimmeLodSceneRefreshPlugin::<$ty, BuildingsRefresh, With<Camera>>::without_full_scan_cull(),
+								GimmeLodSceneCullPlugin::<$ty, BuildingsCull, With<Camera>>::default(),
 							));
 	}};
 }
@@ -92,28 +103,28 @@ impl Plugin for DevelopmentsBuildingsLodPlugin {
 				LodSceneCullRegionPlugin::<OpenLattice, With<Camera>, BuildingsCull>::default(),
 			));
 
-		avian_host!(app, PanelNode);
-		avian_host!(app, PartitionNode);
-		avian_host!(app, RoofNode);
-		avian_host!(app, FloorNode);
-		avian_host!(app, StairNode);
-		avian_host!(app, DoorNode);
-		avian_host!(app, JointNode);
-		avian_host!(app, FurnitureNode);
-		avian_host!(app, LabelNode);
-		avian_host!(app, ComponentsOnly<Arc<MixedUseLesHallesStorey>>);
-		avian_host!(app, ComponentsOnly<ConnectingStairwell>);
-		avian_host!(app, ComponentsOnly<PitchedRoof>);
-		avian_host!(app, ComponentsOnly<Arc<ShepherdsHouse>>);
-		avian_host!(app, ComponentsOnly<Arc<ShepherdsHut>>);
-		avian_host!(app, ComponentsOnly<Arc<CircularTower>>);
-		avian_host!(app, ComponentsOnly<Arc<TrazaloidTower>>);
-		avian_host!(app, ComponentsOnly<GalleryTerrace>);
-		avian_host!(app, ComponentsOnly<GalleryColonnade>);
-		avian_host!(app, ComponentsOnly<RectangularPitchedRoofComplex>);
-		avian_host!(app, ComponentsOnly<Arc<SingleHighrise>>);
-		avian_host!(app, ComponentsOnly<Arc<TempleSanctum>>);
-		avian_host!(app, WizardsTower);
-		avian_host!(app, ComponentsOnly<Arc<SkybridgeHall>>);
+		gimme_host!(app, PanelNode);
+		gimme_host!(app, PartitionNode);
+		gimme_host!(app, RoofNode);
+		gimme_host!(app, FloorNode);
+		gimme_host!(app, StairNode);
+		gimme_host!(app, DoorNode);
+		gimme_host!(app, JointNode);
+		gimme_host!(app, FurnitureNode);
+		gimme_host!(app, LabelNode);
+		gimme_host!(app, ComponentsOnly<Arc<MixedUseLesHallesStorey>>);
+		gimme_host!(app, ComponentsOnly<ConnectingStairwell>);
+		gimme_host!(app, ComponentsOnly<PitchedRoof>);
+		gimme_host!(app, ComponentsOnly<Arc<ShepherdsHouse>>);
+		gimme_host!(app, ComponentsOnly<Arc<ShepherdsHut>>);
+		gimme_host!(app, ComponentsOnly<Arc<CircularTower>>);
+		gimme_host!(app, ComponentsOnly<Arc<TrazaloidTower>>);
+		gimme_host!(app, ComponentsOnly<GalleryTerrace>);
+		gimme_host!(app, ComponentsOnly<GalleryColonnade>);
+		gimme_host!(app, ComponentsOnly<RectangularPitchedRoofComplex>);
+		gimme_host!(app, ComponentsOnly<Arc<SingleHighrise>>);
+		gimme_host!(app, ComponentsOnly<Arc<TempleSanctum>>);
+		gimme_host!(app, WizardsTower);
+		gimme_host!(app, ComponentsOnly<Arc<SkybridgeHall>>);
 	}
 }

@@ -16,7 +16,9 @@ Related: [#800](https://github.com/ramate-io/maybraid/issues/800),
 | [#803](https://github.com/ramate-io/maybraid/issues/803) | Flattened character visuals | Fewer nested visual hosts on the player |
 | [#802](https://github.com/ramate-io/maybraid/issues/802) | `GimmeLodSceneHostIndex` for refresh / cull | Host cuboids left the Avian broadphase. Produce fill no longer climbs with collider count. |
 
-Crate layout after the split: [`lod`](lod/lib/) is the engine-agnostic runtime, [`lod-gimme`](lod/gimme/) owns the host index and refresh/cull plugins, [`lod-avian`](lod/avian/) keeps physics layers and re-exports those plugins as `AvianLodScene*`.
+Crate layout after the split: [`lod`](lod/lib/) is the engine-agnostic runtime, [`lod-gimme`](lod/gimme/) owns the host index and refresh/cull plugins, [`lod-avian`](lod/avian/) keeps physics layers. Call sites use `gimme_host!`; unused `avian_host!` wrappers remain.
+
+Capture `pre-alpha-custom-spatial-index-migration.tracy` (crate split, 4:05, 11 295 frames, ~46 FPS) shows **no regression** vs `pre-alpha-custom-spatial-index.tracy` (~44 FPS, `Update` 11.7 ms): `Update` **11.0 ms** mean, produce fills 1.34+1.74 ms, cull fill 1.03 ms, `reindex_moved_hosts` 0.18 ms. Fill systems name `lod_gimme::host::GimmeLodSceneHostIndex`.
 
 Generate and present **ids** already live on typed [`SpatialIndex`](lod/lib/src/gen/spatial_index.rs)
 resources (`ForestIndex`, urbanization, terrain, …). They were never the

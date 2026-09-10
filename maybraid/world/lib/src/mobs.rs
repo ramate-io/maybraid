@@ -23,7 +23,7 @@ use lod::{
 	LodPresentSystems, LodRefreshDomain, LodRefreshSystems, LodSceneRefreshAabb,
 	LodSceneRefreshRegion, LodSceneRefreshRegionPlugin, LodViewer,
 };
-use lod_avian::AvianLodSceneRefreshPlugin;
+use lod_gimme::GimmeLodSceneRefreshPlugin;
 use maybraid_mobs::{MobLodRefreshMode, MobScene, MobSceneSystems};
 use mob_groups::{
 	GroupKind, MobEnvironmentSample, MobGroup, MobGroupsPlugin, MobPlantHost, MobWorldHosts,
@@ -714,7 +714,7 @@ impl Plugin for WorldMobsPlugin {
 				MobHighLodChan,
 			>::default())
 			.add_plugins(
-				AvianLodSceneRefreshPlugin::<
+				GimmeLodSceneRefreshPlugin::<
 					MobScene,
 					MobHighLodChan,
 					With<LodViewer>,

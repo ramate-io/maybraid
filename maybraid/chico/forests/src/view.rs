@@ -31,7 +31,7 @@ use lod::{
 	Bullseye, LodChunkFulfillBudget, LodCullRegionCursor, LodRefreshCorePlugin,
 	LodSceneCullRegionPlugin, LodSceneRefreshRegionPlugin, OpenLattice, Spotlight,
 };
-use lod_avian::{AvianLodSceneCullPlugin, AvianLodSceneRefreshPlugin};
+use lod_gimme::{GimmeLodSceneCullPlugin, GimmeLodSceneRefreshPlugin};
 use lod_lazy_refs::LodLazyRefsPlugin;
 use scene_ref::SceneRefAdmitBudget;
 
@@ -54,12 +54,23 @@ pub struct VegetationCull;
 /// Isolated `/show` plant and grove-nested plant host.
 type FlattenedPlant<T> = FlattenedComponentsOnly<PlacedVegetation<std::sync::Arc<T>>>;
 
-/// Register Avian refresh + cull for one LOD host type (fine-phase or structural).
+/// Historical Avian-named wrapper. Prefer `gimme_host!`.
+#[allow(unused_macros)]
 macro_rules! avian_host {
 	($app:expr, $ty:ty) => {{
 		$app.add_plugins((
-							AvianLodSceneRefreshPlugin::<$ty, VegetationRefresh, With<Camera>>::without_full_scan_cull(),
-							AvianLodSceneCullPlugin::<$ty, VegetationCull, With<Camera>>::default(),
+							lod_avian::AvianLodSceneRefreshPlugin::<$ty, VegetationRefresh, With<Camera>>::without_full_scan_cull(),
+							lod_avian::AvianLodSceneCullPlugin::<$ty, VegetationCull, With<Camera>>::default(),
+						));
+	}};
+}
+
+/// Register Gimme refresh + cull for one LOD host type (fine-phase or structural).
+macro_rules! gimme_host {
+	($app:expr, $ty:ty) => {{
+		$app.add_plugins((
+							GimmeLodSceneRefreshPlugin::<$ty, VegetationRefresh, With<Camera>>::without_full_scan_cull(),
+							GimmeLodSceneCullPlugin::<$ty, VegetationCull, With<Camera>>::default(),
 						));
 	}};
 }
@@ -67,7 +78,7 @@ macro_rules! avian_host {
 /// Flattened plant hosts also get High-IR stick capsules at High/Medium (no nested [`StickNode`] hosts).
 macro_rules! flattened_plant_host {
 	($app:expr, $ty:ty) => {{
-		avian_host!($app, FlattenedPlant<$ty>);
+		gimme_host!($app, FlattenedPlant<$ty>);
 		register_vegetation_stick_colliders::<FlattenedPlant<$ty>>($app);
 	}};
 }
@@ -127,56 +138,56 @@ impl Plugin for VegetationLodRefreshPlugin {
 		));
 
 		// Fine-phase domain hosts nested under grove LodScene roots.
-		avian_host!(app, FoliageNode);
-		avian_host!(app, StickNode);
+		gimme_host!(app, FoliageNode);
+		gimme_host!(app, StickNode);
 
 		// Forest / world present: one host wrapping ForestGroveTile ([#652](https://github.com/ramate-io/maybraid/issues/652)).
-		avian_host!(app, ChicoGroveHost);
+		gimme_host!(app, ChicoGroveHost);
 
 		// Tuft grove roots (LodScene).
-		avian_host!(app, MonsterGrass);
-		avian_host!(app, BraidGrass);
-		avian_host!(app, TropicalTufts);
-		avian_host!(app, CommonTufts);
-		avian_host!(app, TallGrass);
-		avian_host!(app, WildGrass);
+		gimme_host!(app, MonsterGrass);
+		gimme_host!(app, BraidGrass);
+		gimme_host!(app, TropicalTufts);
+		gimme_host!(app, CommonTufts);
+		gimme_host!(app, TallGrass);
+		gimme_host!(app, WildGrass);
 
 		// Woody grove roots (LodScene).
-		avian_host!(app, BushScrub);
-		avian_host!(app, TropicalUndergrowth);
-		avian_host!(app, LevantineScrub);
-		avian_host!(app, StrangeOasis);
-		avian_host!(app, TropicalThicket);
-		avian_host!(app, RollingOaks);
-		avian_host!(app, Orchard);
-		avian_host!(app, RiparianGeneral);
-		avian_host!(app, ForlornSavanna);
-		avian_host!(app, GoettingenFollow);
-		avian_host!(app, Vineyard);
-		avian_host!(app, Dryland);
-		avian_host!(app, Leeward);
-		avian_host!(app, TemperateLowerMassives);
-		avian_host!(app, TemperateMassives);
-		avian_host!(app, Storytellers);
-		avian_host!(app, WanderingAcacia);
-		avian_host!(app, TradeWinds);
-		avian_host!(app, HighBush);
-		avian_host!(app, SpottyBushes);
-		avian_host!(app, RiverineGreen);
-		avian_host!(app, LowBush);
-		avian_host!(app, JungleMassives);
-		avian_host!(app, JungleLowerMassives);
-		avian_host!(app, UnendingJungle);
-		avian_host!(app, JerrysChaparral);
-		avian_host!(app, RiparianMix);
-		avian_host!(app, Alpine);
-		avian_host!(app, ChristmasTaiga);
-		avian_host!(app, ConiferSapling);
-		avian_host!(app, AridConiferSapling);
-		avian_host!(app, ConiferMassives);
-		avian_host!(app, PalmShade);
-		avian_host!(app, Shamanhome);
-		avian_host!(app, DateGrove);
+		gimme_host!(app, BushScrub);
+		gimme_host!(app, TropicalUndergrowth);
+		gimme_host!(app, LevantineScrub);
+		gimme_host!(app, StrangeOasis);
+		gimme_host!(app, TropicalThicket);
+		gimme_host!(app, RollingOaks);
+		gimme_host!(app, Orchard);
+		gimme_host!(app, RiparianGeneral);
+		gimme_host!(app, ForlornSavanna);
+		gimme_host!(app, GoettingenFollow);
+		gimme_host!(app, Vineyard);
+		gimme_host!(app, Dryland);
+		gimme_host!(app, Leeward);
+		gimme_host!(app, TemperateLowerMassives);
+		gimme_host!(app, TemperateMassives);
+		gimme_host!(app, Storytellers);
+		gimme_host!(app, WanderingAcacia);
+		gimme_host!(app, TradeWinds);
+		gimme_host!(app, HighBush);
+		gimme_host!(app, SpottyBushes);
+		gimme_host!(app, RiverineGreen);
+		gimme_host!(app, LowBush);
+		gimme_host!(app, JungleMassives);
+		gimme_host!(app, JungleLowerMassives);
+		gimme_host!(app, UnendingJungle);
+		gimme_host!(app, JerrysChaparral);
+		gimme_host!(app, RiparianMix);
+		gimme_host!(app, Alpine);
+		gimme_host!(app, ChristmasTaiga);
+		gimme_host!(app, ConiferSapling);
+		gimme_host!(app, AridConiferSapling);
+		gimme_host!(app, ConiferMassives);
+		gimme_host!(app, PalmShade);
+		gimme_host!(app, Shamanhome);
+		gimme_host!(app, DateGrove);
 
 		// Isolated /show plants and grove-nested plants.
 		flattened_plant_host!(app, StorybookTree);
