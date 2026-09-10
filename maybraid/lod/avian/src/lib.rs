@@ -1,13 +1,13 @@
-//! Avian-backed region indexes for LOD generate / present, plus Gimme scene-host lookup.
+//! Gimme scene-host lookup plus Avian physics layers.
 //!
-//! Generate and present volumes stay on Avian query layers
-//! ([`AvianLodGenerateBoundsMarshaller`], [`AvianLodPresentBoundsMarshaller`]).
-//! Scene-host refresh and cull use [`lod::GimmeLodSceneHostIndex`] so Host colliders
-//! are not part of the physics broadphase.
+//! Scene-host refresh and cull use [`lod::GimmeLodSceneHostIndex`] so Host
+//! colliders are not part of the physics broadphase.
+//! [`PatchSceneBounds`] stamps [`GimmeLodHostMarshaller`] volumes, not Avian
+//! cuboids.
 //!
-//! Generated and presented volumes use [`PhysicsInteractionLayer::Generate`] and
-//! [`PhysicsInteractionLayer::Present`]. Those are query-only and do not enter
-//! narrowphase against terrain / buildings ([`layers`]).
+//! Generate and present id lookup stays on typed [`lod::gen::SpatialIndex`]
+//! resources. This crate no longer stamps query-only Generate / Present
+//! colliders.
 
 mod layers;
 
@@ -26,15 +26,11 @@ use lod::{
 	LodSceneHostIndex, LodSceneRefreshPlugin, LodSceneRegionIndex, LodViewer, PatchSceneBounds,
 };
 
-/// [`LodSceneBoundsMarshaller`] for generated-id volumes ([`PhysicsInteractionLayer::Generate`]).
-#[derive(Debug, Clone, Copy, Default)]
-pub struct AvianLodGenerateBoundsMarshaller;
-
-/// [`LodSceneBoundsMarshaller`] for presented-id volumes ([`PhysicsInteractionLayer::Present`]).
-#[derive(Debug, Clone, Copy, Default)]
-pub struct AvianLodPresentBoundsMarshaller;
-
 /// [`LodSceneBoundsMarshaller`] for scene-host volumes ([`PhysicsInteractionLayer::Host`]).
+///
+/// Refresh plugins do not install this marshaller; they use
+/// [`GimmeLodHostMarshaller`]. Kept so an Avian host query remains possible
+/// without reintroducing Generate / Present volumes.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct AvianLodSceneBoundsMarshaller;
 
@@ -55,34 +51,10 @@ fn region_hits(
 	)
 }
 
-/// Untyped Avian lookup of generated-id volumes.
-#[derive(SystemParam)]
-pub struct AvianLodGenerateIndex<'w, 's> {
-	spatial: SpatialQuery<'w, 's>,
-}
-
-impl AvianLodGenerateIndex<'_, '_> {
-	pub fn entities_in_region(&self, region: Aabb3d) -> Vec<Entity> {
-		region_hits(&self.spatial, region, PhysicsInteractionLayer::Generate)
-	}
-}
-
-/// Untyped Avian lookup of presented-id volumes.
-#[derive(SystemParam)]
-pub struct AvianLodPresentIndex<'w, 's> {
-	spatial: SpatialQuery<'w, 's>,
-}
-
-impl AvianLodPresentIndex<'_, '_> {
-	pub fn entities_in_region(&self, region: Aabb3d) -> Vec<Entity> {
-		region_hits(&self.spatial, region, PhysicsInteractionLayer::Present)
-	}
-}
-
-/// Untyped Avian host lookup for the shared produce cache.
+/// Untyped Avian host lookup.
 ///
-/// Hits are already restricted to [`PhysicsInteractionLayer::Host`], so this
-/// does not scan generate / present / terrain / mover colliders.
+/// Hits are already restricted to [`PhysicsInteractionLayer::Host`]. Refresh
+/// and cull plugins use [`GimmeLodSceneHostIndex`] instead.
 #[derive(SystemParam)]
 pub struct AvianLodSceneHostIndex<'w, 's> {
 	spatial: SpatialQuery<'w, 's>,
