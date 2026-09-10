@@ -78,6 +78,19 @@ pub trait VegetationComponents {
 	fn playable_stick_nodes_for_level(&self, level: LodSceneLevel) -> Layers<StickNode> {
 		self.stick_nodes_for_level(level)
 	}
+
+	/// Playable sticks grouped for Avian compounds (one group → one static child).
+	///
+	/// Isolated `/show` plants stay a single group. Woody groves return one
+	/// group per plant so broadphase sees tree-sized AABBs, not a 100 m tile.
+	fn playable_stick_groups_for_level(&self, level: LodSceneLevel) -> Vec<Layers<StickNode>> {
+		let nodes = self.playable_stick_nodes_for_level(level);
+		if nodes.is_empty() {
+			Vec::new()
+		} else {
+			vec![nodes]
+		}
+	}
 }
 
 impl<T: VegetationComponents + ?Sized> VegetationComponents for &T {
@@ -96,6 +109,10 @@ impl<T: VegetationComponents + ?Sized> VegetationComponents for &T {
 	fn playable_stick_nodes_for_level(&self, level: LodSceneLevel) -> Layers<StickNode> {
 		(**self).playable_stick_nodes_for_level(level)
 	}
+
+	fn playable_stick_groups_for_level(&self, level: LodSceneLevel) -> Vec<Layers<StickNode>> {
+		(**self).playable_stick_groups_for_level(level)
+	}
 }
 
 impl<T: VegetationComponents + Send + Sync + 'static> VegetationComponents for std::sync::Arc<T> {
@@ -113,6 +130,10 @@ impl<T: VegetationComponents + Send + Sync + 'static> VegetationComponents for s
 
 	fn playable_stick_nodes_for_level(&self, level: LodSceneLevel) -> Layers<StickNode> {
 		(**self).playable_stick_nodes_for_level(level)
+	}
+
+	fn playable_stick_groups_for_level(&self, level: LodSceneLevel) -> Vec<Layers<StickNode>> {
+		(**self).playable_stick_groups_for_level(level)
 	}
 }
 
@@ -155,6 +176,10 @@ impl<T: VegetationComponents + Send + Sync + 'static> VegetationComponents for C
 
 	fn playable_stick_nodes_for_level(&self, level: LodSceneLevel) -> Layers<StickNode> {
 		self.0.playable_stick_nodes_for_level(level)
+	}
+
+	fn playable_stick_groups_for_level(&self, level: LodSceneLevel) -> Vec<Layers<StickNode>> {
+		self.0.playable_stick_groups_for_level(level)
 	}
 }
 
@@ -258,6 +283,10 @@ impl<T: VegetationComponents + Send + Sync + 'static> VegetationComponents
 
 	fn playable_stick_nodes_for_level(&self, level: LodSceneLevel) -> Layers<StickNode> {
 		self.0.playable_stick_nodes_for_level(level)
+	}
+
+	fn playable_stick_groups_for_level(&self, level: LodSceneLevel) -> Vec<Layers<StickNode>> {
+		self.0.playable_stick_groups_for_level(level)
 	}
 }
 

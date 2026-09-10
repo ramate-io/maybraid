@@ -196,6 +196,18 @@ macro_rules! impl_woody_grove_lod {
 				)
 			}
 
+			fn playable_stick_groups_for_level(
+				&self,
+				level: ::lod::LodSceneLevel,
+			) -> Vec<chico_vegetation_components::Layers<chico_vegetation_components::StickNode>> {
+				$crate::grove::woody_playable_stick_groups(
+					($lod).nest_plant_level(level).is_some(),
+					$crate::impl_woody_grove_lod!(@trunks $lod, level, $trunks, self),
+					&self.plants,
+					level,
+				)
+			}
+
 			fn foliage_nodes_for_level(
 				&self,
 				level: ::lod::LodSceneLevel,

@@ -561,26 +561,49 @@ where
 	.stick_nodes_for_level(level)
 }
 
-/// Plant slot that can contribute High-IR sticks to the grove host compound.
+/// Plant slot that can contribute High-IR sticks to a per-plant grove compound.
 pub trait GrovePlantStickSource {
 	fn grove_plant_stick_nodes(&self, level: LodSceneLevel) -> Layers<StickNode>;
 }
 
-/// Merge proxy trunks with per-plant High-IR sticks while the tile nests kits.
+/// One playable-stick group per plant (plus a non-empty proxy trunk group).
+///
+/// Each group becomes one static Avian compound under the grove host — not a
+/// Host, not an `LodScene`. Kits and produce stay on the tile.
+pub fn woody_playable_stick_groups<P: GrovePlantStickSource>(
+	nests_plants: bool,
+	proxy: Layers<StickNode>,
+	plants: &[P],
+	level: LodSceneLevel,
+) -> Vec<Layers<StickNode>> {
+	if !nests_plants {
+		return if proxy.is_empty() { Vec::new() } else { vec![proxy] };
+	}
+	let mut groups = Vec::with_capacity(plants.len() + 1);
+	if !proxy.is_empty() {
+		groups.push(proxy);
+	}
+	for plant in plants {
+		let nodes = plant.grove_plant_stick_nodes(level);
+		if !nodes.is_empty() {
+			groups.push(nodes);
+		}
+	}
+	groups
+}
+
+/// Merge of [`woody_playable_stick_groups`] for callers that still want a flat list.
 pub fn woody_playable_stick_nodes<P: GrovePlantStickSource>(
 	nests_plants: bool,
 	proxy: Layers<StickNode>,
 	plants: &[P],
 	level: LodSceneLevel,
 ) -> Layers<StickNode> {
-	if !nests_plants {
-		return proxy;
+	let mut merged = Layers::new();
+	for group in woody_playable_stick_groups(nests_plants, proxy, plants, level) {
+		merged.extend(group);
 	}
-	let mut layers = proxy;
-	for plant in plants {
-		layers.extend(plant.grove_plant_stick_nodes(level));
-	}
-	layers
+	merged
 }
 
 pub fn grove_lod_level(band: StructuralLod, lod_ref: &LodRef) -> LodSceneLevel {

@@ -72,7 +72,7 @@ macro_rules! flattened_plant_host {
 	}};
 }
 
-/// Grove `LodScene` plus playable stick compound on the same host.
+/// Grove `LodScene` plus per-plant playable stick compounds on the same host.
 macro_rules! woody_grove_host {
 	($app:expr, $ty:ty) => {{
 		avian_host!($app, $ty);

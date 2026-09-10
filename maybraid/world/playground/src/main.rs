@@ -2,7 +2,9 @@ use std::path::{Path, PathBuf};
 
 use bevy::prelude::*;
 use maybraid_input::PadHidPlugins;
-use maybraid_world::{PendingStartupCommand, PlaygroundCommand, WorldPlugin};
+use maybraid_world::{
+	default_window_present_mode, PendingStartupCommand, PlaygroundCommand, WorldPlugin,
+};
 
 fn assets_root() -> PathBuf {
 	Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets")
@@ -22,6 +24,7 @@ fn main() {
 					primary_window: Some(Window {
 						title: "Maybraid World".into(),
 						resolution: (1280, 720).into(),
+						present_mode: default_window_present_mode(),
 						..default()
 					}),
 					..default()

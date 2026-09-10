@@ -7,6 +7,8 @@ use chico_vegetation_on_terrain_playground::commands::{
 use chico_vegetation_on_terrain_playground::{
 	CharacterSpecies, RequestFpsToggle, RequestSetCharacter,
 };
+
+use crate::RequestVsyncToggle;
 use clap::{Parser, Subcommand};
 use game_commands::command::{CommandScript, GameCommand};
 
@@ -51,6 +53,8 @@ pub enum Stats {
 	Mesh,
 	/// Toggle the `[veg.timing]` FPS log (and HUD when debug chrome is on).
 	Fps,
+	/// Toggle vsync (`AutoVsync` ↔ `Immediate`). Also `F8` / `MAYBRAID_VSYNC=off`.
+	Vsync,
 }
 
 impl PlaygroundCommand {
@@ -106,6 +110,10 @@ impl Stats {
 				commands.spawn(RequestFpsToggle);
 				*console = "stats fps: toggling".into();
 			}
+			Stats::Vsync => {
+				commands.spawn(RequestVsyncToggle);
+				*console = "stats vsync: toggling".into();
+			}
 		}
 	}
 }
@@ -126,6 +134,12 @@ mod tests {
 	fn parse_stats_mesh() {
 		let cmd = PlaygroundCommand::parse_line("stats mesh").unwrap();
 		assert!(matches!(cmd, PlaygroundCommand::Stats(Stats::Mesh)));
+	}
+
+	#[test]
+	fn parse_stats_vsync() {
+		let cmd = PlaygroundCommand::parse_line("stats vsync").unwrap();
+		assert!(matches!(cmd, PlaygroundCommand::Stats(Stats::Vsync)));
 	}
 
 	#[test]

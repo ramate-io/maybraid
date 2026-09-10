@@ -3,16 +3,17 @@
 //! Isolated `/show` plants are [`FlattenedComponentsOnly`] hosts. Live forest
 //! High/Medium emit posed kits under [`crate::ChicoGroveHost`] (no per-tree
 //! hosts). A type-erased producer is stamped when each source component is
-//! added, then one shared drain creates a compound collider per host (every
-//! gated stick, no shape cap). Grove hosts collect High-IR sticks from every
-//! nested plant.
+//! added, then one shared drain creates **one static compound per plant group**
+//! as ordinary children (`fixed_layers()`, not Host, not `LodScene`). Isolated
+//! plants stay one group. Grove hosts keep kits and produce on the tile; Avian
+//! broadphase sees tree-sized AABBs instead of one 100 m compound.
 //!
 //! Compounds live on the [`LodSceneHost`], not a High level root, so band flicker
 //! does not rebuild them and Hidden warm-hold roots do not keep live physics.
 //! The first **High or Medium** realization stamps High-IR capsules (grove
 //! High/Medium both nest plant kits). Hosts with no collideable sticks still take
 //! [`StickPhysicsAttached`] so empty tuft / frond plants do not starve the drain.
-//! Later Low / UltraLow leaves the compound in place until the host is culled.
+//! Later Low / UltraLow leaves the compounds in place until the host is culled.
 
 use std::collections::{HashSet, VecDeque};
 
@@ -40,11 +41,11 @@ impl Default for StickPhysicsBudget {
 	}
 }
 
-type ProduceColliderPoses = fn(&World, Entity, LodSceneLevel) -> Vec<(Transform, f32, f32)>;
+type ProduceColliderGroups = fn(&World, Entity, LodSceneLevel) -> Vec<Vec<(Transform, f32, f32)>>;
 
 /// Type-erased source callback; all vegetation types share one runtime drain.
 #[derive(Component, Clone, Copy)]
-struct StickPhysicsProducer(ProduceColliderPoses);
+struct StickPhysicsProducer(ProduceColliderGroups);
 
 #[derive(Component)]
 pub(crate) struct StickPhysicsCompound;
@@ -102,10 +103,21 @@ where
 		entity.insert(StickPhysicsProducer(|world, entity, level| {
 			world
 				.get::<T>(entity)
-				.into_iter()
-				.flat_map(|vegetation| vegetation.playable_stick_nodes_for_level(level).flatten())
-				.flat_map(|node| collider_poses(&node, level))
-				.collect()
+				.map(|vegetation| {
+					vegetation
+						.playable_stick_groups_for_level(level)
+						.into_iter()
+						.filter_map(|group| {
+							let poses: Vec<_> = group
+								.flatten()
+								.into_iter()
+								.flat_map(|node| collider_poses(&node, level))
+								.collect();
+							(!poses.is_empty()).then_some(poses)
+						})
+						.collect()
+				})
+				.unwrap_or_default()
 		}));
 	}
 }
@@ -115,7 +127,14 @@ fn attach_stick_node_producer(insert: On<Insert, StickNode>, mut commands: Comma
 		entity.insert(StickPhysicsProducer(|world, entity, level| {
 			world
 				.get::<StickNode>(entity)
-				.map(|node| collider_poses(node, level))
+				.map(|node| {
+					let poses = collider_poses(node, level);
+					if poses.is_empty() {
+						Vec::new()
+					} else {
+						vec![poses]
+					}
+				})
 				.unwrap_or_default()
 		}));
 	}
@@ -163,30 +182,35 @@ fn sync_stick_colliders(world: &mut World) {
 			continue;
 		};
 		// High stick IR even when the host is still Medium — same capsules as High visuals.
-		let poses = (producer.0)(world, entity, LodSceneLevel::High);
-		despawn_compound(world, entity);
+		let groups = (producer.0)(world, entity, LodSceneLevel::High);
+		despawn_compounds(world, entity);
 		if world.get_entity(entity).is_err() {
 			continue;
 		}
-		if poses.is_empty() {
+		if groups.is_empty() {
 			world.entity_mut(entity).insert(StickPhysicsAttached);
 			continue;
 		}
-		let shapes = poses
-			.into_iter()
-			.map(|(transform, radius, cylinder)| {
-				(transform.translation, transform.rotation, Collider::capsule(radius, cylinder))
-			})
-			.collect();
-		world.spawn((
-			StickPhysicsCompound,
-			ChildOf(entity),
-			Transform::IDENTITY,
-			Visibility::Hidden,
-			RigidBody::Static,
-			Collider::compound(shapes),
-			PhysicsInteractionLayer::fixed_layers(),
-		));
+		for poses in groups {
+			if poses.is_empty() {
+				continue;
+			}
+			let shapes = poses
+				.into_iter()
+				.map(|(transform, radius, cylinder)| {
+					(transform.translation, transform.rotation, Collider::capsule(radius, cylinder))
+				})
+				.collect();
+			world.spawn((
+				StickPhysicsCompound,
+				ChildOf(entity),
+				Transform::IDENTITY,
+				Visibility::Hidden,
+				RigidBody::Static,
+				Collider::compound(shapes),
+				PhysicsInteractionLayer::fixed_layers(),
+			));
+		}
 		world.entity_mut(entity).insert(StickPhysicsAttached);
 	}
 }
@@ -197,7 +221,17 @@ fn has_compound(world: &World, entity: Entity) -> bool {
 	})
 }
 
-fn despawn_compound(world: &mut World, entity: Entity) {
+#[cfg(test)]
+fn compound_count(world: &World, entity: Entity) -> usize {
+	world.get::<Children>(entity).map_or(0, |children| {
+		children
+			.iter()
+			.filter(|child| world.get::<StickPhysicsCompound>(*child).is_some())
+			.count()
+	})
+}
+
+fn despawn_compounds(world: &mut World, entity: Entity) {
 	let Some(children) = world.get::<Children>(entity) else {
 		return;
 	};
@@ -423,5 +457,27 @@ mod tests {
 		app.update();
 		assert!(has_compound(app.world(), tree));
 		assert!(app.world().get::<StickPhysicsAttached>(tree).is_some());
+	}
+
+	#[test]
+	fn one_compound_per_producer_group() {
+		let mut app = App::new();
+		app.add_plugins(StickPhysicsPlugin);
+		let host = app
+			.world_mut()
+			.spawn((
+				StickPhysicsProducer(|_, _, level| {
+					vec![
+						collider_poses(&playable_trunk(), level),
+						collider_poses(&playable_trunk(), level),
+					]
+				}),
+				LodSceneHost,
+				LodSceneLevel::High,
+			))
+			.id();
+		app.update();
+		assert_eq!(compound_count(app.world(), host), 2);
+		assert!(app.world().get::<StickPhysicsAttached>(host).is_some());
 	}
 }

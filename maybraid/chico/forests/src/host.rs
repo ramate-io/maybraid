@@ -128,6 +128,10 @@ impl VegetationComponents for ChicoGroveHost {
 		self.tile.playable_stick_nodes_for_level(level)
 	}
 
+	fn playable_stick_groups_for_level(&self, level: LodSceneLevel) -> Vec<Layers<StickNode>> {
+		self.tile.playable_stick_groups_for_level(level)
+	}
+
 	fn structural_lod(&self) -> Option<StructuralLod> {
 		self.tile.structural_lod()
 	}

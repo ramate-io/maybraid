@@ -204,6 +204,10 @@ impl ForestGroveTile {
 		match_forest_grove_tile!(self, g => g.playable_stick_nodes_for_level(level))
 	}
 
+	pub fn playable_stick_groups_for_level(&self, level: LodSceneLevel) -> Vec<Layers<StickNode>> {
+		match_forest_grove_tile!(self, g => g.playable_stick_groups_for_level(level))
+	}
+
 	pub fn structural_lod(&self) -> Option<StructuralLod> {
 		match_forest_grove_tile!(self, g => g.structural_lod())
 	}
