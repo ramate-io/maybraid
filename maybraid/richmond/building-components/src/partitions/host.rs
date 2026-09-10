@@ -12,7 +12,7 @@
 use bevy::prelude::Transform;
 use bevy::scene::prelude::Scene;
 use lod::gen::LodSceneLevel;
-use scene_ref::MirrorAxis;
+use scene_ref::{MirrorAxis, SceneRef};
 
 use crate::lod_host_helper::LodHostHelper;
 use crate::partitions::mesh_set::{PartitionMeshSet, PartitionMeshTier};
@@ -25,6 +25,15 @@ pub fn mesh_tier_for_level(level: LodSceneLevel) -> PartitionMeshTier {
 		LodSceneLevel::Low | LodSceneLevel::UltraLow => PartitionMeshTier::Low,
 		LodSceneLevel::Distance(_) | LodSceneLevel::Resolution(_) => PartitionMeshTier::Mid,
 	}
+}
+
+/// Kit [`SceneRef`] for `level`, with optional axis mirroring.
+pub(crate) fn mesh_scene_ref(
+	meshes: PartitionMeshSet,
+	level: LodSceneLevel,
+	mirror: Option<MirrorAxis>,
+) -> SceneRef {
+	meshes.for_tier(mesh_tier_for_level(level)).scene_ref().with_mirror(mirror)
 }
 
 /// One SceneRef under a transform (for `scene_with_level`).
@@ -43,6 +52,5 @@ pub fn posed_mirrored_mesh_tier(
 	level: LodSceneLevel,
 	mirror: Option<MirrorAxis>,
 ) -> impl Scene + 'static {
-	let asset = meshes.for_tier(mesh_tier_for_level(level));
-	LodHostHelper::posed_scene_ref_tier(Some(asset.scene_ref().with_mirror(mirror)), transform)
+	LodHostHelper::posed_scene_ref_tier(Some(mesh_scene_ref(meshes, level, mirror)), transform)
 }

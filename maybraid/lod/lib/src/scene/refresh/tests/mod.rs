@@ -11,10 +11,11 @@ use crate::lod_ref::{LodNode, LodNodePose};
 use crate::scene::host::LodLevelSpawnRequest;
 use crate::scene::level::LodSceneLevel;
 use crate::scene::refresh::{
-	LodChunkFulfillBudget, LodCullRegionCursor, LodHostBounds, LodLevelRootPending,
-	LodProduceCache, LodRefreshDomain, LodRefreshMembership, LodSceneCullAabb, LodSceneRefreshAabb,
-	LodSceneRefreshChunkPlugin, LodSceneRefreshLevel, LodSceneRefreshLevelsFillPlugin,
-	LodSceneRefreshPlugin, LodViewer,
+	LodChunkFulfillBudget, LodCullProduceCache, LodCullRegionCursor, LodHostBounds,
+	LodLevelRootPending, LodProduceCache, LodRefreshDomain, LodRefreshMembership, LodSceneCullAabb,
+	LodSceneCullProduceFillPlugin, LodSceneRefreshAabb, LodSceneRefreshChunkPlugin,
+	LodSceneRefreshLevel, LodSceneRefreshLevelsFillPlugin, LodSceneRefreshPlugin,
+	LodSceneRegionCullPlugin, LodViewer,
 };
 
 use test_utils::{
@@ -244,6 +245,37 @@ fn camera_and_viewer_refresh_plugins_share_one_produce_fill() -> anyhow::Result<
 		app.world().resource::<LodProduceCache>().snapshots.len(),
 		2,
 		"one fill must snapshot every LodNode, not a Camera- or LodViewer-only subset"
+	);
+	Ok(())
+}
+
+#[test]
+fn camera_and_viewer_cull_plugins_share_one_cull_fill() -> anyhow::Result<()> {
+	#[derive(Component)]
+	struct CameraLike;
+
+	let mut app = App::new();
+	app.add_plugins(MinimalPlugins)
+		.add_plugins(
+			LodSceneRegionCullPlugin::<ScanHostIndex, CullChan, Probe, With<LodViewer>>::default(),
+		)
+		.add_plugins(
+			LodSceneRegionCullPlugin::<ScanHostIndex, SpotChan, Probe, With<CameraLike>>::default(),
+		);
+	assert!(
+		app.is_plugin_added::<LodSceneCullProduceFillPlugin<ScanHostIndex>>(),
+		"cull fill is once per host index, not once per node filter"
+	);
+
+	app.world_mut().spawn((LodNode, Transform::from_xyz(8.0, 0.0, 0.0)));
+	spawn_viewer(app.world_mut(), Vec3::ZERO);
+	app.world_mut().write_message(world_cull_aabb());
+	app.update();
+
+	assert_eq!(
+		app.world().resource::<LodCullProduceCache>().snapshots.len(),
+		2,
+		"one cull fill must snapshot every LodNode, not a Camera- or LodViewer-only subset"
 	);
 	Ok(())
 }

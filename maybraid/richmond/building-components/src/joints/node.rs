@@ -10,6 +10,7 @@ use lod::SceneChunk;
 use crate::joints::geometry::JointGeometry;
 use crate::joints::rough_stonework::JointLod;
 use crate::joints::style::JointStyle;
+use crate::kit_merge::KitPart;
 use crate::lod_band::{placement_bounds, warm_mesh_lod_culls};
 use crate::placed::Placement;
 use crate::scene_children::pose;
@@ -29,6 +30,18 @@ impl JointNode {
 
 	pub fn rough_stone(geometry: JointGeometry, placement: Placement) -> Self {
 		Self::new(JointStyle::RoughStonework, geometry, placement)
+	}
+
+	pub(crate) fn kit_parts(&self, level: LodSceneLevel) -> Vec<KitPart> {
+		let Some(asset) = JointLod::asset_for_level(level) else {
+			return Vec::new();
+		};
+		vec![KitPart {
+			scene: asset.scene_ref(),
+			transform: pose(self.placement),
+			material: None,
+			confines: crate::parent_confines::ParentConfines::External,
+		}]
 	}
 
 	pub fn rough_stone_post(placement: Placement) -> Self {
@@ -56,9 +69,9 @@ impl LodScene for JointNode {
 	}
 
 	fn scene_with_level(&self, _lod_ref: &LodRef, level: LodSceneLevel) -> impl Scene + 'static {
-		let _ = self.style;
-		let _ = self.geometry;
-		JointLod::posed_tier(pose(self.placement), level)
+		crate::scene_children::scene_children(crate::kit_merge::scenes_from_kit_parts(
+			self.kit_parts(level),
+		))
 	}
 
 	fn scene_chunks_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> SceneChunk {

@@ -120,6 +120,21 @@ impl LodScene for RoofLodProbe {
 	}
 }
 
+/// Kit [`SceneRef`] for one [`LodSceneLevel`] (no host scaffolding).
+pub(crate) fn roof_kit_scene_ref(
+	high: SceneRef,
+	mid: SceneRef,
+	low: SceneRef,
+	level: LodSceneLevel,
+) -> SceneRef {
+	match level {
+		LodSceneLevel::High => high,
+		LodSceneLevel::Medium => mid,
+		LodSceneLevel::Low | LodSceneLevel::UltraLow => low,
+		LodSceneLevel::Distance(_) | LodSceneLevel::Resolution(_) => mid,
+	}
+}
+
 /// Posed roof kit content for one [`LodSceneLevel`] (no host scaffolding).
 pub fn roof_scene_ref_for_level(
 	high: SceneRef,
@@ -127,13 +142,7 @@ pub fn roof_scene_ref_for_level(
 	low: SceneRef,
 	level: LodSceneLevel,
 ) -> impl Scene + 'static {
-	let scene = match level {
-		LodSceneLevel::High => high,
-		LodSceneLevel::Medium => mid,
-		LodSceneLevel::Low | LodSceneLevel::UltraLow => low,
-		LodSceneLevel::Distance(_) | LodSceneLevel::Resolution(_) => mid,
-	};
-	scene.scene()
+	roof_kit_scene_ref(high, mid, low, level).scene()
 }
 
 /// Update roof host levels from the [`lod::LodViewer`] pose.

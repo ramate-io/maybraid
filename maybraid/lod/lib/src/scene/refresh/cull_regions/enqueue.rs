@@ -197,7 +197,8 @@ fn lod_scene_host_or_ancestor_hidden_world(world: &World, entity: Entity) -> boo
 /// Register `T` for the shared erased enqueue from [`LodCullProduceCache`].
 ///
 /// Channel `M` stays so existing `GimmeLodSceneCullPlugin<T, M, F>` adds remain
-/// valid; the spatial query is registered once per (`I`, `F`).
+/// valid; the spatial query is registered once per index `I` (every [`crate::LodNode`]).
+/// `F` is accepted so dual Camera / LodViewer plugin adds stay valid; fill does not filter on it.
 pub struct LodSceneRegionCullPlugin<I, M, T, F = With<LodViewer>>
 where
 	I: SystemParam + 'static,
@@ -239,8 +240,8 @@ where
 		if !app.is_plugin_added::<LodSceneRefreshLevelsPlugin<T>>() {
 			app.add_plugins(LodSceneRefreshLevelsPlugin::<T>::default());
 		}
-		if !app.is_plugin_added::<LodSceneCullProduceFillPlugin<I, F>>() {
-			app.add_plugins(LodSceneCullProduceFillPlugin::<I, F>::default());
+		if !app.is_plugin_added::<LodSceneCullProduceFillPlugin<I>>() {
+			app.add_plugins(LodSceneCullProduceFillPlugin::<I>::default());
 		}
 		app.add_message::<LodSceneCullRegion<M>>();
 	}

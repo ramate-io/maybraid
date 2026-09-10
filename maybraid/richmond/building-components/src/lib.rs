@@ -8,6 +8,7 @@ pub mod doors;
 pub mod floors;
 pub mod furniture;
 pub mod joints;
+pub(crate) mod kit_merge;
 pub mod labels;
 pub mod layer;
 pub mod lod_band;
@@ -78,6 +79,8 @@ use lod::gen::{cull_named_from_factor, LodScene, LodSceneCulls, LodSceneLevel, L
 use lod::lod_ref::LodRef;
 use lod::{lod_host_scene_pending, SceneChunk};
 use std::sync::Arc;
+
+use crate::kit_merge::{scenes_from_kit_parts, KitPart};
 
 /// Domain IR exposed by a building (or building part) for structural composition.
 ///
@@ -376,6 +379,49 @@ impl FlattenedKit {
 			Self::Label(node) => Box::new(node.scene_with_level(lod_ref, level)),
 		}
 	}
+
+	fn collect_into(
+		self,
+		lod_ref: &LodRef,
+		level: LodSceneLevel,
+		parts: &mut Vec<KitPart>,
+		unique_scenes: &mut Vec<Box<dyn Scene>>,
+		unique_kits: &mut Vec<FlattenedKit>,
+	) {
+		match self {
+			Self::Panel(node) => parts.extend(node.kit_parts(level)),
+			Self::Partition(node) => parts.extend(node.kit_parts(level)),
+			Self::Floor(node) => {
+				if matches!(node.style, crate::floors::FloorStyle::Wood) {
+					unique_kits.push(Self::Floor(node));
+				} else {
+					node.collect_flattened(lod_ref, level, parts, unique_scenes);
+				}
+			}
+			Self::Roof(node) => parts.extend(node.kit_parts(level)),
+			Self::Joint(node) => parts.extend(node.kit_parts(level)),
+			Self::Stair(node) => unique_kits.push(Self::Stair(node)),
+			Self::Door(node) => unique_kits.push(Self::Door(node)),
+			Self::Furniture(node) => unique_kits.push(Self::Furniture(node)),
+			Self::Label(node) => unique_kits.push(Self::Label(node)),
+		}
+	}
+}
+
+fn collect_flattened_emits(
+	building: &impl BuildingComponents,
+	lod_ref: &LodRef,
+	level: LodSceneLevel,
+) -> (Vec<Box<dyn Scene>>, Vec<FlattenedKit>) {
+	let mut parts = Vec::new();
+	let mut unique_scenes = Vec::new();
+	let mut unique_kits = Vec::new();
+	for kit in flattened_kits(building, level) {
+		kit.collect_into(lod_ref, level, &mut parts, &mut unique_scenes, &mut unique_kits);
+	}
+	let mut scenes = scenes_from_kit_parts(parts);
+	scenes.extend(unique_scenes);
+	(scenes, unique_kits)
 }
 
 fn flattened_kits(building: &impl BuildingComponents, level: LodSceneLevel) -> Vec<FlattenedKit> {
@@ -452,8 +498,10 @@ fn flattened_kits(building: &impl BuildingComponents, level: LodSceneLevel) -> V
 
 /// Weighted chunks for one structural level: posed kits, no nested domain hosts.
 ///
-/// Kits are produced lazily so begin does not box every `scene_with_level` up front.
-/// Each kit costs [`FLATTENED_KIT_CHUNK_WEIGHT`].
+/// Same-kit panels / partitions / floors / roofs / joints bake into one
+/// [`scene_ref::MultiSceneMerge`] per (mesh, material, confines). Unique fixtures
+/// stay separate. Kits are produced lazily so begin does not box every scene up
+/// front. Each emitted mesh costs [`FLATTENED_KIT_CHUNK_WEIGHT`].
 pub fn building_scene_chunks(
 	building: &impl BuildingComponents,
 	lod_ref: &LodRef,
@@ -462,8 +510,8 @@ pub fn building_scene_chunks(
 	if is_massing_level(level) && building.structural_lod().is_some() {
 		return SceneChunk::primitive(massing_scene(building, level));
 	}
-	let kits = flattened_kits(building, level);
-	let n = kits.len();
+	let (merged, unique_kits) = collect_flattened_emits(building, lod_ref, level);
+	let n = merged.len() + unique_kits.len();
 	if n == 0 {
 		return SceneChunk::primitive(scene_children(Vec::new()));
 	}
@@ -473,16 +521,16 @@ pub fn building_scene_chunks(
 	let bounds = *lod_ref.bounds;
 	let entity = lod_ref.entity;
 	let kit_w = FLATTENED_KIT_CHUNK_WEIGHT;
-	let mut index = 0usize;
+	let mut merged = merged.into_iter();
+	let mut unique_kits = unique_kits.into_iter();
 	SceneChunk::lazy(n as u32 * kit_w, n, move || {
-		if index >= kits.len() {
-			return None;
+		if let Some(scene) = merged.next() {
+			return Some(SceneChunk::weighted(kit_w, scene));
 		}
+		let kit = unique_kits.next()?;
 		let kit_lod =
 			LodRef { entity, previous_transform: &prev, current_transform: &curr, bounds: &bounds };
-		let scene = kits[index].scene(&kit_lod, level);
-		index += 1;
-		Some(SceneChunk::weighted(kit_w, scene))
+		Some(SceneChunk::weighted(kit_w, kit.scene(&kit_lod, level)))
 	})
 }
 
@@ -519,8 +567,12 @@ pub fn append_flattened_component_scenes(
 	level: LodSceneLevel,
 	children: &mut Vec<Box<dyn Scene>>,
 ) {
-	for kit in flattened_kits(building, level) {
+	let (mut scenes, unique_kits) = collect_flattened_emits(building, lod_ref, level);
+	for kit in unique_kits {
 		children.push(kit.scene(lod_ref, level));
+	}
+	for scene in scenes.drain(..) {
+		children.push(scene);
 	}
 }
 
@@ -736,5 +788,65 @@ mod flatten_tests {
 			building_scene_chunks(&building, &lod_ref(&tf, &bounds), LodSceneLevel::Medium);
 		assert_eq!(chunks.total_primitives(), 1);
 		assert_eq!(chunks.total_weight(), FLATTENED_KIT_CHUNK_WEIGHT);
+	}
+
+	struct TwoWalls {
+		a: PanelNode,
+		b: PanelNode,
+	}
+
+	impl BuildingComponents for TwoWalls {
+		fn panel_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<PanelNode> {
+			Layers::from_free(vec![self.a.clone(), self.b.clone()])
+		}
+	}
+
+	#[test]
+	fn same_style_panels_merge_into_one_chunk() {
+		let building = TwoWalls {
+			a: PanelNode::rough_stone(PanelGeometry::rectangle(), Placement::IDENTITY),
+			b: PanelNode::rough_stone(PanelGeometry::rectangle(), Placement::new(Vec3::X, 0.0)),
+		};
+		let tf = Transform::IDENTITY;
+		let bounds = Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE);
+		let chunks = building_scene_chunks(&building, &lod_ref(&tf, &bounds), LodSceneLevel::High);
+		assert_eq!(chunks.total_primitives(), 1);
+		assert_eq!(chunks.total_weight(), FLATTENED_KIT_CHUNK_WEIGHT);
+	}
+
+	#[test]
+	fn distinct_panel_styles_stay_separate() {
+		let building = TwoWalls {
+			a: PanelNode::rough_stone(PanelGeometry::rectangle(), Placement::IDENTITY),
+			b: PanelNode::shepherds_thatch(PanelGeometry::rectangle(), Placement::IDENTITY),
+		};
+		let tf = Transform::IDENTITY;
+		let bounds = Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE);
+		let chunks = building_scene_chunks(&building, &lod_ref(&tf, &bounds), LodSceneLevel::High);
+		assert_eq!(chunks.total_primitives(), 2);
+	}
+
+	struct TwoPartitions {
+		a: PartitionNode,
+		b: PartitionNode,
+	}
+
+	impl BuildingComponents for TwoPartitions {
+		fn partition_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<PartitionNode> {
+			Layers::from_free(vec![self.a.clone(), self.b.clone()])
+		}
+	}
+
+	#[test]
+	fn internal_and_external_partitions_do_not_merge() {
+		let building = TwoPartitions {
+			a: PartitionNode::rough_stone(PartitionGeometry::linear(), Placement::IDENTITY),
+			b: PartitionNode::rough_stone(PartitionGeometry::linear(), Placement::IDENTITY)
+				.with_confines(ParentConfines::internal(Vec3::ZERO, 4.0)),
+		};
+		let tf = Transform::IDENTITY;
+		let bounds = Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE);
+		let chunks = building_scene_chunks(&building, &lod_ref(&tf, &bounds), LodSceneLevel::High);
+		assert_eq!(chunks.total_primitives(), 2);
 	}
 }

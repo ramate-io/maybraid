@@ -16,7 +16,9 @@ Related: [#800](https://github.com/ramate-io/maybraid/issues/800),
 | [#803](https://github.com/ramate-io/maybraid/issues/803) | Flattened character visuals | Fewer nested visual hosts on the player |
 | [#802](https://github.com/ramate-io/maybraid/issues/802) | `GimmeLodSceneHostIndex` for refresh / cull | Host cuboids left the Avian broadphase. Produce fill no longer climbs with collider count. |
 | Shared produce fill | One `fill_lod_produce_cache` per host index; snapshots every `LodNode` | Vegetation `With<Camera>` and mob `With<LodViewer>` no longer each walk the index. Tracy should show **one** produce fill. Expected `Update` win ~1–1.5 ms vs the dual-fill captures. |
-| Flatten building kits | `ComponentsOnly` High/Medium posed kits, not nested panel hosts | Urban host/`Mesh3d` count should drop toward the plant flatten. Re-measure produce, visibility, `write_binned`. |
+| Flatten building kits | `ComponentsOnly` High/Medium posed kits, not nested panel hosts | Urban host count dropped. `write_binned` still saw per-tile `Mesh3d`s. |
+| Shared cull fill | One `fill_lod_cull_produce_cache` per host index; snapshots every `LodNode` | Same dual-`F` footgun as produce. Gameplay captures already showed **one** Camera specialization (~1.9 ms); sharing keeps a second `LodViewer` walk from appearing. |
+| Merge shared kits | Same GLB + material + [`ParentConfines`](richmond/building-components/src/parent_confines.rs) → one [`MultiSceneMerge`](scene-ref/src/multi_merge.rs) | `write_binned` / visibility / PostUpdate scale with merged surfaces, not per-panel instances. Distinct kits stay separate. |
 
 Crate layout after the split: [`lod`](lod/lib/) is the engine-agnostic runtime, [`lod-gimme`](lod/gimme/) owns the host index and refresh/cull plugins, [`lod-avian`](lod/avian/) keeps physics layers. Call sites use `gimme_host!`; unused `avian_host!` wrappers remain.
 
@@ -53,8 +55,15 @@ once spawned.
 
 `fill_lod_produce_cache` is **once per host index**. Region production still uses
 `With<Camera>` (vegetation) vs `With<LodViewer>` (mobs); fill snapshots every
-`LodNode` so those filters cannot instantiate two `cache.clear()` walks. Cull
-fill is a **separate** cache — folding produce does not automatically fold cull.
+`LodNode` so those filters cannot instantiate two `cache.clear()` walks.
+`fill_lod_cull_produce_cache` is the same: once per index, every node. The
+gameplay-window ~1.9 ms was already a **single** Camera walk (vegetation and
+buildings share that filter); sharing does not cut that remaining query. Kit
+merge is the `write_binned` lever.
+
+Gameplay window (`rough_gameplay.csv`, ~270 frames after flatten + shared produce):
+`Update` **7.4 ms**, produce **0.41 ms**, cull fill **1.94 ms**,
+`write_binned` Opaque3d **1.98 ms**.
 
 ## Next work (this order)
 
@@ -75,20 +84,27 @@ as an unused Avian Host query path. Refresh plugins do not install them.
 ### 2. One shared produce fill
 
 **Status: done in this crate pass.** Re-measure with Tracy: one
-`fill_lod_produce_cache` zone, not Camera + LodViewer. Leave
-`fill_lod_cull_produce_cache` until a capture shows it is still the next lever.
+`fill_lod_produce_cache` zone, not Camera + LodViewer.
 
 ### 3. Flatten High / Medium building kits
 
 **Status: done in this crate pass.** [`building_scene_chunks`](richmond/building-components/src/lib.rs) drains posed kits (weight 4, lazy) instead of a nested [`LodScene`](lod/lib/src/scene/lod_scene.rs) host per panel / partition / floor / …. Wizard’s Tower emit paths use the same flattened append. Fine-phase `PanelNode` plugins stay registered for leftover nested hosts.
 
-Re-measure with Tracy: urban produce hits, visibility, and `write_binned` should drop with host/`Mesh3d` count. Low / UltraLow massing is unchanged.
+### 4. Shared cull fill
 
-### 4. Broader fewer-host work
+**Status: done in this crate pass.** [`fill_lod_cull_produce_cache`](lod/lib/src/scene/refresh/cull_regions/cache.rs) is once per host index and snapshots every [`LodNode`](lod/lib/src/lod_ref/node.rs). Region production still filters drivers. Re-measure: one cull-fill zone (no Camera vs LodViewer pair).
 
-Same campaign after buildings stop being a special case: leftover nested
+### 5. Merge shared wall (and similar) kits
+
+**Status: done in this crate pass.** Flattened High/Medium emit groups identical kit GLBs (same [`SceneRef`](scene-ref/src/scene_ref.rs), material, and [`ParentConfines`](richmond/building-components/src/parent_confines.rs)) into one [`MultiSceneMerge`](scene-ref/src/multi_merge.rs). Singles stay posed `SceneRef`. Stairs / doors / furniture / labels stay unique. Internal vs external confines do not share a mesh.
+
+Re-measure with Tracy: `write_binned` Opaque3d, `visibility_propagate`, PostUpdate. Expect fewer visible `Mesh3d`s on urban towers, not a smaller host-index cull query.
+
+### 6. Broader fewer-host work
+
+Same campaign after this recapture: leftover nested
 `FoliageNode` / `StickNode` hosts, grove vs plant, Hidden warm roots that still
-refresh. Keep shrinking what `fill_lod_produce_cache` and visibility walk.
+refresh. Keep shrinking what `fill_lod_cull_produce_cache` and visibility walk.
 
 ## Not next (and why)
 
@@ -101,7 +117,15 @@ refresh. Keep shrinking what `fill_lod_produce_cache` and visibility walk.
   `GlobalTransform`), not rebuild. Near-field physics is the lever, not a
   recipe cache.
 - **Attacking instances by making unique merged patches.** That explodes GPU
-  memory. Share first (quantize), then fold cardinality.
+  memory. Share first (quantize), then fold cardinality. This pass merges
+  **shared** kit instances only.
+- **Tighter `build_bone_maps` clamp.** It already rebuilds only when `Children` /
+  `Name` change under that [`RigRoot`](rigs/src/bone_map.rs). The gameplay 0.92 ms
+  is character-rig fulfill, not a leftover every-frame walk. A clamp would hide
+  spawn hitch, not the steady budget.
+- **`chico_grove_growth` in the mean FPS budget.** That zone is async
+  `ChicoGrove::ensure_grown` (cap 4 tasks) plus one host spawn per present
+  quantum — present hitch when tiles finish growing, not the 7.4 ms Update.
 
 ## How to re-measure
 
@@ -110,5 +134,5 @@ Prefer Tracy over hitch loggers.
 1. `tracy-capture` a several-minute flight that includes urban.
 2. Whole-capture CSV for maxes / load-in.
 3. A late-window export (as `rough_frames.csv`) for the steady budget.
-4. Compare `Update`, produce fill (**one** zone), cull fill, `write_binned` Opaque3d, and
+4. Compare `Update`, produce fill (**one** zone), cull fill (**one** zone), `write_binned` Opaque3d, and
    `reindex_moved_hosts`.
