@@ -16,6 +16,7 @@ mod pitch;
 mod player_lifecycle;
 mod poi;
 mod ui;
+mod vsync;
 mod weapon;
 
 pub use chico_vegetation_on_terrain_playground::PlayerPhysicsEnabled;
@@ -30,6 +31,7 @@ pub use player_camera::CameraPov;
 pub use player_lifecycle::{WorldPlayerLifecyclePlugin, WorldPlayerRespawnConfig};
 pub use poi::{WorldPoiDiscoveryBudget, WorldPoiPlugin, WorldPoiSystems};
 pub use ui::WorldMobHudEnabled;
+pub use vsync::{default_window_present_mode, RequestVsyncToggle, VSYNC_TOGGLE_KEY};
 pub use weapon::WorldPlayerLoadout;
 
 use avian3d::prelude::{CoefficientCombine, Friction};
@@ -79,6 +81,7 @@ const WORLD_TERRAIN_PITCH_GIZMOS: DrawTerrainPitchProbes = DrawTerrainPitchProbe
 ///
 /// Playground chrome (command drawer and FPS HUD) is on by default.
 /// The game executable uses [`WorldPlugin::game`] (FPS log, no HUD or console).
+/// `F8` / `/stats vsync` / `MAYBRAID_VSYNC=off` toggles vsync for Tracy flights.
 pub struct WorldPlugin {
 	/// `/` console, debug gizmos, and FPS HUD.
 	pub debug_chrome: bool,
@@ -180,7 +183,9 @@ impl Plugin for WorldPlugin {
 		} else {
 			app.init_resource::<TextEntryFocus>();
 		}
-		app.add_systems(PostStartup, spawn_default_braidman)
+		app.add_systems(Startup, vsync::apply_startup_vsync)
+			.add_systems(Update, vsync::toggle_vsync)
+			.add_systems(PostStartup, spawn_default_braidman)
 			.add_systems(PreUpdate, control::stamp_vegetation_motor_traction)
 			.add_systems(
 				Update,
