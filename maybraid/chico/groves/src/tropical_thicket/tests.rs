@@ -232,7 +232,7 @@ fn high_nests_one_plant_host_chunk_per_plant() -> Result<()> {
 	assert_eq!(parts.len(), 1, "expected one lazy plant producer");
 	assert!(
 		grove.foliage_nodes_for_level(LodSceneLevel::High).flatten().is_empty(),
-		"High foliage stays on nested plant hosts, not the grove"
+		"High foliage stays on nested plant kits, not the grove"
 	);
 	Ok(())
 }

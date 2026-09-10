@@ -27,9 +27,9 @@ fn is_frond_geometry(geometry: &FoliageGeometry) -> bool {
 /// Tree (or plant part) posed in parent space with grove palette materials.
 ///
 /// Placement is baked into emitted nodes and [`structural_lod`] so banding uses
-/// parent-local positions (camera [`LodRef`](lod::LodRef) is world-space). Nest as
-/// [`crate::FlattenedComponentsOnly`]`<PlacedVegetation<T>>` under a grove or isolated
-/// `/show` host.
+/// parent-local positions (camera [`LodRef`](lod::LodRef) is world-space). Isolated
+/// `/show` nests [`crate::FlattenedComponentsOnly`]`<PlacedVegetation<T>>`. Live
+/// groves emit posed kits under the grove host.
 #[derive(Debug, Clone, PartialEq, Component)]
 pub struct PlacedVegetation<T: Send + Sync + 'static> {
 	pub vegetation: T,

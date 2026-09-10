@@ -136,7 +136,7 @@ impl BushScrub {
 		self.plants.is_empty()
 	}
 
-	fn nest_plant_chunks(&self, lod_ref: &LodRef) -> Vec<SceneChunk> {
+	fn nest_plant_chunks(&self, lod_ref: &LodRef, level: lod::LodSceneLevel) -> Vec<SceneChunk> {
 		if self.plants.is_empty() {
 			return Vec::new();
 		}
@@ -167,6 +167,7 @@ impl BushScrub {
 					&plant.ball_material,
 					&plant.frond_material,
 					&plant_lod,
+					level,
 				),
 				BushScrubKind::Bush(t) => nest_flattened_plant_chunk(
 					Arc::clone(t),
@@ -175,6 +176,7 @@ impl BushScrub {
 					&plant.ball_material,
 					&plant.frond_material,
 					&plant_lod,
+					level,
 				),
 			})
 		})]
@@ -275,6 +277,8 @@ fn grow_plant(
 		}
 	}
 }
+
+crate::impl_grove_plant_sticks!(BushScrubPlant, BushScrubKind, Tuft, Bush);
 
 crate::impl_woody_grove_lod!(BushScrub, WOODY_LOD);
 

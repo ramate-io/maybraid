@@ -19,9 +19,9 @@ use super::vc_compose::{
 /// Tile canopy policy. High / Medium / Low numbers stay on [`WoodyGroveLod`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WoodyCanopyPolicy {
-	/// High/Medium nest plants. Low = one ball per site. UltraLow bins.
+	/// High/Medium nest plant kits. Low = one ball per site. UltraLow bins.
 	Ordinary,
-	/// High/Medium/Low nest plants (palm Low star). UltraLow bins.
+	/// High/Medium/Low nest plant kits (palm Low star). UltraLow bins.
 	KeepLowPlants,
 	/// Like [`Ordinary`] but UltraLow does not bin (sparse groves).
 	SkipUltraLowBins,
@@ -179,14 +179,26 @@ macro_rules! impl_woody_grove_lod {
 		impl chico_vegetation_components::VegetationComponents for $Grove {
 			fn stick_nodes_for_level(
 				&self,
-				level: lod::gen::LodSceneLevel,
+				level: ::lod::LodSceneLevel,
 			) -> chico_vegetation_components::Layers<chico_vegetation_components::StickNode> {
 				$crate::impl_woody_grove_lod!(@trunks $lod, level, $trunks, self)
 			}
 
+			fn playable_stick_nodes_for_level(
+				&self,
+				level: ::lod::LodSceneLevel,
+			) -> chico_vegetation_components::Layers<chico_vegetation_components::StickNode> {
+				$crate::grove::woody_playable_stick_nodes(
+					($lod).nest_plant_level(level).is_some(),
+					$crate::impl_woody_grove_lod!(@trunks $lod, level, $trunks, self),
+					&self.plants,
+					level,
+				)
+			}
+
 			fn foliage_nodes_for_level(
 				&self,
-				level: lod::gen::LodSceneLevel,
+				level: ::lod::LodSceneLevel,
 			) -> chico_vegetation_components::Layers<chico_vegetation_components::FoliageNode> {
 				$crate::impl_woody_grove_lod!(@low $lod, level, $low, self)
 			}
@@ -222,7 +234,7 @@ macro_rules! impl_woody_grove_lod {
 			fn scene_with_level(
 				&self,
 				lod_ref: &lod::lod_ref::LodRef,
-				level: lod::gen::LodSceneLevel,
+				level: ::lod::LodSceneLevel,
 			) -> impl bevy::scene::prelude::Scene + 'static {
 				($lod).scene_with_level(self, lod_ref, level)
 			}
@@ -230,9 +242,9 @@ macro_rules! impl_woody_grove_lod {
 			fn scene_chunks_with_level(
 				&self,
 				lod_ref: &lod::lod_ref::LodRef,
-				level: lod::gen::LodSceneLevel,
+				level: ::lod::LodSceneLevel,
 			) -> lod::SceneChunk {
-				($lod).scene_chunks(level, lod_ref, self.nest_plant_chunks(lod_ref), self)
+				($lod).scene_chunks(level, lod_ref, self.nest_plant_chunks(lod_ref, level), self)
 			}
 
 			fn scene_bounds(&self) -> bevy::math::bounding::Aabb3d {
@@ -264,6 +276,47 @@ macro_rules! impl_woody_grove_lod {
 	};
 	(@low $lod:expr, $level:ident, low_nodes, $this:ident) => {
 		($lod).foliage_nodes($level, &$this.canopy_sites(), $this.foliage_low_nodes())
+	};
+}
+
+/// High-IR sticks from a uniform `tree` / `bush` field or a `kind` enum of `Arc` units.
+#[macro_export]
+macro_rules! impl_grove_plant_sticks {
+	($Plant:ty, $field:ident) => {
+		impl $crate::grove::GrovePlantStickSource for $Plant {
+			fn grove_plant_stick_nodes(
+				&self,
+				level: ::lod::LodSceneLevel,
+			) -> chico_vegetation_components::Layers<chico_vegetation_components::StickNode> {
+				$crate::grove::placed_plant_stick_nodes(
+					std::sync::Arc::clone(&self.$field),
+					self.placement,
+					&self.stick_material,
+					&self.ball_material,
+					&self.frond_material,
+					level,
+				)
+			}
+		}
+	};
+	($Plant:ty, $Kind:ident, $($Variant:ident),+ $(,)?) => {
+		impl $crate::grove::GrovePlantStickSource for $Plant {
+			fn grove_plant_stick_nodes(
+				&self,
+				level: ::lod::LodSceneLevel,
+			) -> chico_vegetation_components::Layers<chico_vegetation_components::StickNode> {
+				match &self.kind {
+					$( $Kind::$Variant(unit) => $crate::grove::placed_plant_stick_nodes(
+						std::sync::Arc::clone(unit),
+						self.placement,
+						&self.stick_material,
+						&self.ball_material,
+						&self.frond_material,
+						level,
+					), )+
+				}
+			}
+		}
 	};
 }
 

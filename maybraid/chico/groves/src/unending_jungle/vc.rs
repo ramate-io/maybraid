@@ -118,7 +118,7 @@ impl UnendingJungle {
 		Self { plants, structural_center, footprint_radius, extent: *extent }
 	}
 
-	fn nest_plant_chunks(&self, lod_ref: &LodRef) -> Vec<SceneChunk> {
+	fn nest_plant_chunks(&self, lod_ref: &LodRef, level: lod::LodSceneLevel) -> Vec<SceneChunk> {
 		if self.plants.is_empty() {
 			return Vec::new();
 		}
@@ -149,6 +149,7 @@ impl UnendingJungle {
 					&plant.ball_material,
 					&plant.frond_material,
 					&plant_lod,
+					level,
 				),
 				UnendingJungleKind::Sope(t) => nest_flattened_plant_chunk(
 					Arc::clone(t),
@@ -157,6 +158,7 @@ impl UnendingJungle {
 					&plant.ball_material,
 					&plant.frond_material,
 					&plant_lod,
+					level,
 				),
 				UnendingJungleKind::Storybook(t) => nest_flattened_plant_chunk(
 					Arc::clone(t),
@@ -165,6 +167,7 @@ impl UnendingJungle {
 					&plant.ball_material,
 					&plant.frond_material,
 					&plant_lod,
+					level,
 				),
 				UnendingJungleKind::JungleStorybook(t) => nest_flattened_plant_chunk(
 					Arc::clone(t),
@@ -173,6 +176,7 @@ impl UnendingJungle {
 					&plant.ball_material,
 					&plant.frond_material,
 					&plant_lod,
+					level,
 				),
 				UnendingJungleKind::Torch(t) => nest_flattened_plant_chunk(
 					Arc::clone(t),
@@ -181,6 +185,7 @@ impl UnendingJungle {
 					&plant.ball_material,
 					&plant.frond_material,
 					&plant_lod,
+					level,
 				),
 				UnendingJungleKind::Rory(t) => nest_flattened_plant_chunk(
 					Arc::clone(t),
@@ -189,6 +194,7 @@ impl UnendingJungle {
 					&plant.ball_material,
 					&plant.frond_material,
 					&plant_lod,
+					level,
 				),
 				UnendingJungleKind::Waialea(t) => nest_flattened_plant_chunk(
 					Arc::clone(t),
@@ -197,6 +203,7 @@ impl UnendingJungle {
 					&plant.ball_material,
 					&plant.frond_material,
 					&plant_lod,
+					level,
 				),
 			})
 		})]
@@ -389,6 +396,8 @@ fn grow_plant(
 		frond_material,
 	}
 }
+
+crate::impl_grove_plant_sticks!(UnendingJunglePlant, UnendingJungleKind, Honu, Sope, Storybook, JungleStorybook, Torch, Rory, Waialea);
 
 crate::impl_woody_grove_lod!(UnendingJungle, WOODY_LOD, trunks, low_nodes);
 

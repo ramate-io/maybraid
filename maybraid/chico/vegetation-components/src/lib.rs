@@ -70,6 +70,14 @@ pub trait VegetationComponents {
 	fn structural_lod(&self) -> Option<StructuralLod> {
 		None
 	}
+
+	/// High-IR sticks for playable capsules. Defaults to [`Self::stick_nodes_for_level`].
+	///
+	/// Grove hosts override this so High/Medium plant trunks live on the tile
+	/// while [`Self::stick_nodes_for_level`] stays empty (kits come from chunks).
+	fn playable_stick_nodes_for_level(&self, level: LodSceneLevel) -> Layers<StickNode> {
+		self.stick_nodes_for_level(level)
+	}
 }
 
 impl<T: VegetationComponents + ?Sized> VegetationComponents for &T {
@@ -84,6 +92,10 @@ impl<T: VegetationComponents + ?Sized> VegetationComponents for &T {
 	fn structural_lod(&self) -> Option<StructuralLod> {
 		(**self).structural_lod()
 	}
+
+	fn playable_stick_nodes_for_level(&self, level: LodSceneLevel) -> Layers<StickNode> {
+		(**self).playable_stick_nodes_for_level(level)
+	}
 }
 
 impl<T: VegetationComponents + Send + Sync + 'static> VegetationComponents for std::sync::Arc<T> {
@@ -97,6 +109,10 @@ impl<T: VegetationComponents + Send + Sync + 'static> VegetationComponents for s
 
 	fn structural_lod(&self) -> Option<StructuralLod> {
 		(**self).structural_lod()
+	}
+
+	fn playable_stick_nodes_for_level(&self, level: LodSceneLevel) -> Layers<StickNode> {
+		(**self).playable_stick_nodes_for_level(level)
 	}
 }
 
@@ -135,6 +151,10 @@ impl<T: VegetationComponents + Send + Sync + 'static> VegetationComponents for C
 
 	fn structural_lod(&self) -> Option<StructuralLod> {
 		self.0.structural_lod()
+	}
+
+	fn playable_stick_nodes_for_level(&self, level: LodSceneLevel) -> Layers<StickNode> {
+		self.0.playable_stick_nodes_for_level(level)
 	}
 }
 
@@ -194,7 +214,8 @@ impl<T: VegetationComponents + Send + Sync + 'static> LodScene for ComponentsOnl
 /// Same as [`ComponentsOnly`], but kit nodes spawn as posed content (no nested
 /// [`FoliageNode`] / [`StickNode`] LOD hosts).
 ///
-/// One Avian volume per plant. Unmerged kits keep instance [`Transform`]s;
+/// Isolated `/show` plants keep one Avian volume. Grove High/Medium emit kits
+/// under the grove host instead. Unmerged kits keep instance [`Transform`]s;
 /// merged collections pack kit-local into vertex color so leaf breakup and
 /// frond sway still work after [`scene_ref::MultiSceneMerge`].
 #[derive(Debug, Clone, PartialEq, Component)]
@@ -233,6 +254,10 @@ impl<T: VegetationComponents + Send + Sync + 'static> VegetationComponents
 
 	fn structural_lod(&self) -> Option<StructuralLod> {
 		self.0.structural_lod()
+	}
+
+	fn playable_stick_nodes_for_level(&self, level: LodSceneLevel) -> Layers<StickNode> {
+		self.0.playable_stick_nodes_for_level(level)
 	}
 }
 
@@ -529,7 +554,8 @@ where
 
 /// Spawn a [`FlattenedComponentsOnly`]`<`[`PlacedVegetation`]`<`[`std::sync::Arc`]`<T>>>` host.
 ///
-/// Isolated `/show` / `/render` plants use this family so they share grove plant hosts.
+/// Isolated `/show` / `/render` plants use this family. Live groves emit kits
+/// under the grove host instead of nesting these.
 pub fn spawn_flattened_placed_vegetation<T>(
 	commands: &mut Commands,
 	vegetation: &T,
@@ -545,7 +571,7 @@ where
 	spawn_lod_scene_host(commands, &host, transform, bounds)
 }
 
-/// Spawn a typed [`LodScene`] host (grove roots that nest flattened plant hosts).
+/// Spawn a typed [`LodScene`] host (grove roots that emit flattened plant kits).
 ///
 /// Isolated `/show` uses a throwaway identity viewer (grove at the origin).
 /// Forest present must use [`spawn_lod_scene_host_with_lod_ref`] so the first

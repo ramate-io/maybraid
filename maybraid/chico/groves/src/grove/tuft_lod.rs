@@ -17,7 +17,7 @@ macro_rules! impl_tuft_grove_lod {
 			fn tuft_scene_chunks(
 				&self,
 				lod_ref: &lod::lod_ref::LodRef,
-				level: lod::gen::LodSceneLevel,
+				level: LodSceneLevel,
 			) -> lod::SceneChunk {
 				match level {
 					lod::gen::LodSceneLevel::High | lod::gen::LodSceneLevel::Medium => {
@@ -67,7 +67,7 @@ macro_rules! impl_tuft_grove_lod_emit {
 			fn scene_with_level(
 				&self,
 				lod_ref: &lod::lod_ref::LodRef,
-				level: lod::gen::LodSceneLevel,
+				level: LodSceneLevel,
 			) -> impl bevy::scene::prelude::Scene + 'static {
 				chico_vegetation_components::flattened_component_scene(self, lod_ref, level)
 			}
@@ -75,7 +75,7 @@ macro_rules! impl_tuft_grove_lod_emit {
 			fn scene_chunks_with_level(
 				&self,
 				lod_ref: &lod::lod_ref::LodRef,
-				level: lod::gen::LodSceneLevel,
+				level: LodSceneLevel,
 			) -> lod::SceneChunk {
 				self.tuft_scene_chunks(lod_ref, level)
 			}

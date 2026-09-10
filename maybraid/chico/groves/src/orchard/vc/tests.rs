@@ -20,6 +20,10 @@ fn high_medium_nest_one_flattened_host_per_tree() -> Result<()> {
 		grove.plants.len(),
 		"orchard trees",
 	)?;
+	anyhow::ensure!(
+		!grove.playable_stick_nodes_for_level(LodSceneLevel::High).is_empty(),
+		"orchard High should collect plant sticks on the grove host"
+	);
 
 	let camera = Transform::from_translation(Vec3::new(40.0, 2.0, 40.0));
 	let bounds = Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE);

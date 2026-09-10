@@ -100,7 +100,7 @@ impl Dryland {
 		Self { plants, structural_center, footprint_radius, extent: *extent }
 	}
 
-	fn nest_plant_chunks(&self, lod_ref: &LodRef) -> Vec<SceneChunk> {
+	fn nest_plant_chunks(&self, lod_ref: &LodRef, level: lod::LodSceneLevel) -> Vec<SceneChunk> {
 		if self.plants.is_empty() {
 			return Vec::new();
 		}
@@ -131,6 +131,7 @@ impl Dryland {
 					&plant.ball_material,
 					&plant.frond_material,
 					&plant_lod,
+					level,
 				),
 				DrylandKind::Vase(t) => nest_flattened_plant_chunk(
 					Arc::clone(t),
@@ -139,6 +140,7 @@ impl Dryland {
 					&plant.ball_material,
 					&plant.frond_material,
 					&plant_lod,
+					level,
 				),
 			})
 		})]
@@ -194,6 +196,8 @@ fn grow_plant(
 		frond_material,
 	}
 }
+
+crate::impl_grove_plant_sticks!(DrylandPlant, DrylandKind, Liams, Vase);
 
 crate::impl_woody_grove_lod!(Dryland, WOODY_LOD);
 

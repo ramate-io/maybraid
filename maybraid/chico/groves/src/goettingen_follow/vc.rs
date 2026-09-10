@@ -99,7 +99,7 @@ impl GoettingenFollow {
 		Self { plants, structural_center, footprint_radius, extent: *extent }
 	}
 
-	fn nest_plant_chunks(&self, lod_ref: &LodRef) -> Vec<SceneChunk> {
+	fn nest_plant_chunks(&self, lod_ref: &LodRef, level: lod::LodSceneLevel) -> Vec<SceneChunk> {
 		if self.plants.is_empty() {
 			return Vec::new();
 		}
@@ -130,6 +130,7 @@ impl GoettingenFollow {
 					&plant.ball_material,
 					&plant.frond_material,
 					&plant_lod,
+					level,
 				),
 				GoettingenFollowKind::Storybook(t) => nest_flattened_plant_chunk(
 					Arc::clone(t),
@@ -138,6 +139,7 @@ impl GoettingenFollow {
 					&plant.ball_material,
 					&plant.frond_material,
 					&plant_lod,
+					level,
 				),
 			})
 		})]
@@ -201,6 +203,8 @@ fn grow_plant(
 		}
 	}
 }
+
+crate::impl_grove_plant_sticks!(GoettingenFollowPlant, GoettingenFollowKind, Oak, Storybook);
 
 crate::impl_woody_grove_lod!(GoettingenFollow, WOODY_LOD);
 

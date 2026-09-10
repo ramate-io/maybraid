@@ -1,14 +1,16 @@
 //! Playable stick / trunk capsules for character physics.
 //!
-//! Forest plants are [`FlattenedComponentsOnly`] hosts — kit GLBs spawn as posed
-//! content with no nested [`StickNode`] LOD hosts. A type-erased producer is
-//! stamped when each source component is added, then one shared drain creates a
-//! compound collider per host (every gated stick, no shape cap).
+//! Isolated `/show` plants are [`FlattenedComponentsOnly`] hosts. Live forest
+//! High/Medium emit posed kits under [`crate::ChicoGroveHost`] (no per-tree
+//! hosts). A type-erased producer is stamped when each source component is
+//! added, then one shared drain creates a compound collider per host (every
+//! gated stick, no shape cap). Grove hosts collect High-IR sticks from every
+//! nested plant.
 //!
 //! Compounds live on the [`LodSceneHost`], not a High level root, so band flicker
 //! does not rebuild them and Hidden warm-hold roots do not keep live physics.
 //! The first **High or Medium** realization stamps High-IR capsules (grove
-//! High/Medium both nest plants). Hosts with no collideable sticks still take
+//! High/Medium both nest plant kits). Hosts with no collideable sticks still take
 //! [`StickPhysicsAttached`] so empty tuft / frond plants do not starve the drain.
 //! Later Low / UltraLow leaves the compound in place until the host is culled.
 
@@ -101,7 +103,7 @@ where
 			world
 				.get::<T>(entity)
 				.into_iter()
-				.flat_map(|vegetation| vegetation.stick_nodes_for_level(level).flatten())
+				.flat_map(|vegetation| vegetation.playable_stick_nodes_for_level(level).flatten())
 				.flat_map(|node| collider_poses(&node, level))
 				.collect()
 		}));

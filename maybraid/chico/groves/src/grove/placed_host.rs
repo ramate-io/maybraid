@@ -1,6 +1,8 @@
 //! Unused nested-host path: [`chico_vegetation_components::ComponentsOnly`]`<`[`PlacedVegetation`]`<T>>`.
 //!
-//! Live groves compose with [`super::vc_compose::nest_flattened_plant_host`]. These
+//! Live groves compose with [`super::vc_compose::nest_flattened_plant_chunk`] (kits
+//! under the grove host). Isolated `/show` still uses
+//! [`super::vc_compose::nest_flattened_plant_host`]. These
 //! helpers are extracted so they are not the documented compose surface.
 #![allow(dead_code)]
 
