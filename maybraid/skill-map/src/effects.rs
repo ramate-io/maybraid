@@ -1,6 +1,5 @@
 //! Fireball flights and the Dumbwave forget-pulse.
 
-use bevy_hanabi::prelude::ParticleEffect;
 use combat_targeting::CombatTargeting;
 use damage::HitPayload;
 use evasion_intelligence::EvasionIntelligenceUser;
@@ -61,7 +60,6 @@ pub fn dispatch_fireballs(
 	mut fire: ResMut<Assets<FireballMaterial>>,
 	mut visuals: ResMut<ProjectileVisualCache>,
 	effects: Option<Res<FireballEffects>>,
-	time: Res<Time>,
 	enabled: Res<SkillMapEnabled>,
 	mut events: MessageReader<SkillMapEvent>,
 	users: Query<
@@ -104,15 +102,7 @@ pub fn dispatch_fireballs(
 			FIREBALL_GRAVITY,
 		);
 		let seed = equip.and_then(|equip| equip.spec).map(|spec| spec.seed).unwrap_or(0);
-		dress_fireball(
-			&mut commands,
-			&mut meshes,
-			&mut fire,
-			effects.as_deref(),
-			projectile,
-			seed,
-			time.elapsed_secs(),
-		);
+		dress_fireball(&mut commands, &mut meshes, &mut fire, effects.as_deref(), projectile, seed);
 		commands.entity(projectile).insert((
 			ProjectileSource(player),
 			HitPayload { amount: FIREBALL_DAMAGE },
@@ -128,31 +118,16 @@ fn dress_fireball(
 	effects: Option<&FireballEffects>,
 	projectile: Entity,
 	seed: u32,
-	time_offset: f32,
 ) {
 	let mesh = effects
 		.map(|effects| effects.mesh.clone())
 		.unwrap_or_else(|| meshes.add(crate::fireball_material::fireball_visual_mesh()));
 	commands.entity(projectile).insert((
 		Mesh3d(mesh),
-		MeshMaterial3d(materials.add(FireballMaterial::new(
-			seed,
-			1.0,
-			FIREBALL_SPEED,
-			time_offset,
-		))),
+		MeshMaterial3d(materials.add(FireballMaterial::new(seed, 1.0, FIREBALL_SPEED, 0.0))),
 	));
 	commands.entity(projectile).remove::<MeshMaterial3d<StandardMaterial>>();
-	if let Some(effects) = effects {
-		commands.entity(projectile).with_children(|parent| {
-			parent.spawn((
-				Name::new("fireball-embers"),
-				ParticleEffect::new(effects.embers.clone()),
-				Transform::default(),
-				Visibility::default(),
-			));
-		});
-	}
+	// Hanabi stays off until the magenta capsule is visible.
 }
 
 type DumbwaveManagers<'w, 's> = Query<
@@ -338,6 +313,7 @@ mod tests {
 		let equip = SkillMapEquip::from_spec(Some(SkillMapSpec::new(SkillMapKind::Fireball, 77)));
 		let seed = equip.spec.map(|spec| spec.seed).unwrap_or(0);
 		let material = FireballMaterial::new(seed, 1.0, FIREBALL_SPEED, 0.0);
-		assert_eq!(material.params.seed, 77.0);
+		assert_eq!(material.base_color.x, 1.0);
+		assert_eq!(seed, 77);
 	}
 }

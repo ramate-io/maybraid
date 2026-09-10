@@ -15,6 +15,7 @@ use crate::fireball_material::fireball_visual_mesh;
 #[derive(Resource, Clone)]
 pub struct FireballEffects {
 	pub mesh: Handle<Mesh>,
+	#[allow(dead_code)]
 	pub embers: Handle<EffectAsset>,
 }
 

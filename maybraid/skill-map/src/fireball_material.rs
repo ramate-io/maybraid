@@ -1,85 +1,44 @@
-//! Unlit fireball [`Material`]: vertex aft-bleed, discarded ragged rim.
+//! Fireball [`Material`]. Default vertex + fire fill; tail / discard / embers next.
 
 use bevy::{
 	asset::embedded_asset,
 	light::NotShadowCaster,
-	mesh::MeshVertexBufferLayoutRef,
-	pbr::{MaterialPipeline, MaterialPipelineKey},
 	prelude::*,
 	reflect::TypePath,
-	render::render_resource::{
-		AsBindGroup, RenderPipelineDescriptor, ShaderType, SpecializedMeshPipelineError,
-	},
+	render::render_resource::AsBindGroup,
 	shader::ShaderRef,
 };
 
-use crate::effects::FIREBALL_SPEED;
-
 /// Visual capsule is a bit larger than the hit sphere so discard can chew the rim.
 pub const FIREBALL_VISUAL_RADIUS: f32 = 1.18;
-/// Extra shaft along object Y. Vertex code pulls the rear along `-Y`.
+/// Extra shaft along object Y. Vertex code will pull the rear along `-Y`.
 pub const FIREBALL_VISUAL_LENGTH: f32 = 2.2;
 /// How far the rear hemisphere is pulled aft, in meters, at reference speed.
+#[allow(dead_code)]
 pub const FIREBALL_TAIL: f32 = 1.8;
 
-#[derive(Clone, Copy, Debug, ShaderType)]
-pub struct FireballUniform {
-	pub seed: f32,
-	pub intensity: f32,
-	pub speed: f32,
-	pub time_offset: f32,
-	pub radius: f32,
-	pub tail: f32,
-	pub _pad: Vec2,
-}
-
-impl Default for FireballUniform {
-	fn default() -> Self {
-		Self {
-			seed: 0.0,
-			intensity: 1.0,
-			speed: FIREBALL_SPEED,
-			time_offset: 0.0,
-			radius: FIREBALL_VISUAL_RADIUS,
-			tail: FIREBALL_TAIL,
-			_pad: Vec2::ZERO,
-		}
-	}
-}
+/// Linear mid-flame. The fragment mixes a hotter core from the view-facing term.
+const FIRE_FILL: Vec4 = Vec4::new(1.0, 0.28, 0.05, 1.0);
 
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
 pub struct FireballMaterial {
 	#[uniform(0)]
-	pub params: FireballUniform,
+	pub base_color: Vec4,
 }
 
 impl FireballMaterial {
-	pub fn new(seed: u32, intensity: f32, speed: f32, time_offset: f32) -> Self {
-		Self {
-			params: FireballUniform {
-				seed: seed as f32,
-				intensity,
-				speed,
-				time_offset,
-				radius: FIREBALL_VISUAL_RADIUS,
-				tail: FIREBALL_TAIL,
-				_pad: Vec2::ZERO,
-			},
-		}
+	pub fn new(_seed: u32, intensity: f32, _speed: f32, _time_offset: f32) -> Self {
+		Self { base_color: FIRE_FILL * intensity.max(0.0) }
 	}
 }
 
 impl Default for FireballMaterial {
 	fn default() -> Self {
-		Self { params: FireballUniform::default() }
+		Self { base_color: FIRE_FILL }
 	}
 }
 
 impl Material for FireballMaterial {
-	fn vertex_shader() -> ShaderRef {
-		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "fireball_material.wgsl").into()
-	}
-
 	fn fragment_shader() -> ShaderRef {
 		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "fireball_material.wgsl").into()
 	}
@@ -96,14 +55,8 @@ impl Material for FireballMaterial {
 		false
 	}
 
-	fn specialize(
-		_pipeline: &MaterialPipeline,
-		descriptor: &mut RenderPipelineDescriptor,
-		_layout: &MeshVertexBufferLayoutRef,
-		_key: MaterialPipelineKey<Self>,
-	) -> Result<(), SpecializedMeshPipelineError> {
-		descriptor.primitive.cull_mode = None;
-		Ok(())
+	fn enable_shadows() -> bool {
+		false
 	}
 }
 
@@ -126,7 +79,7 @@ fn disable_fireball_shadow_casters(
 	}
 }
 
-/// Subdivided capsule so the aft pull has verts to stretch.
+/// Subdivided capsule so a later aft pull has verts to stretch.
 pub fn fireball_visual_mesh() -> Mesh {
 	Capsule3d::new(FIREBALL_VISUAL_RADIUS, FIREBALL_VISUAL_LENGTH)
 		.mesh()
@@ -141,11 +94,11 @@ mod tests {
 	use super::*;
 
 	#[test]
-	fn uniform_carries_seed_and_tail() {
+	fn uniform_is_a_solid_fill() {
 		let material = FireballMaterial::new(0xA11A_5EED_u32, 1.0, 30.0, 0.25);
-		assert_eq!(material.params.seed, 0xA11A_5EED_u32 as f32);
-		assert!(material.params.tail > 1.0);
-		assert_eq!(material.params.radius, FIREBALL_VISUAL_RADIUS);
+		assert_eq!(material.base_color, FIRE_FILL);
+		assert!(FIREBALL_TAIL > 1.0);
+		assert_eq!(FIREBALL_VISUAL_RADIUS, 1.18);
 	}
 
 	#[test]
