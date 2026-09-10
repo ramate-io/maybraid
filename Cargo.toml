@@ -76,6 +76,7 @@ members = [
   "maybraid/sky/lib",
   "maybraid/world/lib",
   "maybraid/world/playground",
+  "maybraid/skill-map",
   "maybraid/game",
   "maybraid/input",
   "maybraid/combat-hud",
@@ -302,6 +303,7 @@ chico-vegetation-shaders = { path = "maybraid/chico/shaders" }
 chico-vegetation-on-terrain-playground = { path = "maybraid/chico/vegetation-on-terrain-playground" }
 maybraid-sky = { path = "maybraid/sky/lib" }
 maybraid-world = { path = "maybraid/world/lib" }
+maybraid-skill-map = { path = "maybraid/skill-map" }
 maybraid = { path = "maybraid/game" }
 maybraid-input = { path = "maybraid/input" }
 combat-hud = { path = "maybraid/combat-hud" }

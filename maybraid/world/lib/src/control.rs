@@ -8,6 +8,7 @@ use durham_terrain_models::{
 };
 use game_commands::command::{CommandConsoleOutput, TextEntryFocus};
 use maybraid_character_controller::CharacterIntent;
+use maybraid_skill_map::SkillMapEnabled;
 use maybraid_sky::SkyDome;
 use player::MotorTraction;
 use player_camera::CameraController;
@@ -45,6 +46,17 @@ pub(crate) fn update_world_surface_ready(
 	let center = layout.region_center_xz();
 	ready.0 = terrain_collider_covers_xz(center, colliders.iter())
 		&& store.composed_height_at(&layout, center.x, center.z).is_some();
+}
+
+pub(crate) fn sync_skill_map_enabled(
+	gameplay: Res<WorldGameplayEnabled>,
+	text_focus: Res<TextEntryFocus>,
+	mut enabled: ResMut<SkillMapEnabled>,
+) {
+	let next = gameplay.0 && !text_focus.0;
+	if enabled.0 != next {
+		enabled.0 = next;
+	}
 }
 
 pub(crate) fn apply_intents_to_movement(
@@ -109,6 +121,7 @@ pub(crate) fn echo_character_intents(
 			CharacterIntent::Look(value) => format!("look=({:.2},{:.2})", value.x, value.y),
 			CharacterIntent::Focus(value) => format!("focus={value:.2}"),
 			CharacterIntent::Ads(value) => format!("ads={value:.2}"),
+			CharacterIntent::SkillMap => "skill-map".into(),
 			CharacterIntent::UseItem(value) => format!("use={value:.2}"),
 			other => other.label().to_string(),
 		});
@@ -176,5 +189,12 @@ mod tests {
 		};
 		assert!(!terrain_collider_covers_xz(spawn, [&distant]));
 		assert!(terrain_collider_covers_xz(spawn, [&local]));
+	}
+
+	#[test]
+	fn skill_map_follows_gameplay_and_text_focus() {
+		assert!(WorldGameplayEnabled(true).0 && !TextEntryFocus(false).0);
+		assert!(!(WorldGameplayEnabled(false).0 && !TextEntryFocus(false).0));
+		assert!(!(WorldGameplayEnabled(true).0 && !TextEntryFocus(true).0));
 	}
 }

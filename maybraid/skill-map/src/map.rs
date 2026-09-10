@@ -1,0 +1,99 @@
+//! Authored Fireball / Dumbwave maps and the render-layer range from the POC.
+
+use bevy::camera::visibility::RenderLayers;
+use bevy::prelude::*;
+
+/// User-facing map id. `0` is Fireball, `1` is Dumbwave.
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct SkillMapId(pub u32);
+
+/// World effect a power tile claims.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum SkillKind {
+	Fireball,
+	Dumbwave,
+}
+
+impl SkillKind {
+	pub fn label(self) -> &'static str {
+		match self {
+			Self::Fireball => "Fireball",
+			Self::Dumbwave => "Dumbwave",
+		}
+	}
+
+	pub fn tile_color(self) -> Color {
+		match self {
+			Self::Fireball => Color::srgb(0.82, 0.18, 0.78),
+			Self::Dumbwave => Color::srgb(0.22, 0.78, 0.86),
+		}
+	}
+}
+
+/// First Bevy render layer reserved for skill maps (POC used 24..34).
+pub const SKILL_MAP_LAYER_BASE: usize = 24;
+
+pub fn render_layer(id: SkillMapId) -> RenderLayers {
+	RenderLayers::layer(SKILL_MAP_LAYER_BASE + id.0 as usize)
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct AuthoredMap {
+	pub id: SkillMapId,
+	pub kind: SkillKind,
+	pub seed: u32,
+	pub frequency: f64,
+	pub label: &'static str,
+}
+
+pub fn authored_maps() -> [AuthoredMap; 2] {
+	[
+		AuthoredMap {
+			id: SkillMapId(0),
+			kind: SkillKind::Fireball,
+			seed: 0,
+			frequency: 0.08,
+			label: "Fireball",
+		},
+		AuthoredMap {
+			id: SkillMapId(1),
+			kind: SkillKind::Dumbwave,
+			seed: 7,
+			frequency: 0.11,
+			label: "Dumbwave",
+		},
+	]
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct MapExtents {
+	pub min: Vec2,
+	pub max: Vec2,
+	pub steps: u32,
+}
+
+impl Default for MapExtents {
+	fn default() -> Self {
+		Self { min: Vec2::splat(-128.0), max: Vec2::splat(128.0), steps: 16 }
+	}
+}
+
+impl MapExtents {
+	pub fn tile_size(self) -> Vec2 {
+		Vec2::new(
+			(self.max.x - self.min.x) / self.steps as f32,
+			(self.max.y - self.min.y) / self.steps as f32,
+		)
+	}
+
+	pub fn tile_center(self, x: u32, y: u32) -> Vec2 {
+		let size = self.tile_size();
+		self.min + size * Vec2::new(x as f32 + 0.5, y as f32 + 0.5)
+	}
+}
+
+/// Grid cells that always spawn a power tile so the opening walk finds one.
+pub fn pinned_power_cells(steps: u32) -> [(u32, u32); 3] {
+	let mid = steps / 2;
+	[(mid + 2, mid), (mid.saturating_sub(2), mid + 2), (mid + 1, mid.saturating_sub(3))]
+}

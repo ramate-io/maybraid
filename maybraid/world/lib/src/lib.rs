@@ -53,6 +53,7 @@ use game_commands::ui::GameCommandDrawerConfig;
 use lod::{Bullseye, OpenLattice};
 use maybraid_character_controller::{CharacterControlSystems, CharacterControllerPlugin};
 use maybraid_input::{VirtualPadConfig, VirtualPadPlugin};
+use maybraid_skill_map::{SkillMapPlugin, SkillMapSystems};
 use maybraid_sky::SkyDomePlugin;
 use player::{register_motor_traction_physics, PlayerPresentationPlugin};
 use player_camera::{PlayerCameraPlugin, PlayerCameraSystems};
@@ -137,11 +138,7 @@ impl Plugin for WorldPlugin {
 				register_terrain_pitch: false,
 				own_terrain: false,
 			})
-			.insert_resource(CharacterRagdollTargets {
-				players: true,
-				npcs: true,
-				unmarked: false,
-			})
+			.insert_resource(CharacterRagdollTargets { players: true, npcs: true, unmarked: false })
 			.add_plugins(CharacterRagdollPlugin)
 			// Urbanization stream only — `TerrainPlugin` already owns Durham / TerrainEntryStore.
 			.add_plugins(DevelopmentsOnTerrainPlugin {
@@ -155,6 +152,8 @@ impl Plugin for WorldPlugin {
 		}
 		app.add_plugins(WorldMobsPlugin)
 			.add_plugins(WorldIntelligencePlugin)
+			.add_plugins(SkillMapPlugin)
+			.insert_resource(maybraid_skill_map::SkillMapEnabled(false))
 			.add_plugins(WorldPoiPlugin)
 			.add_plugins(WorldPlayerLifecyclePlugin)
 			.add_plugins(WorldStashPlugin)
@@ -193,6 +192,7 @@ impl Plugin for WorldPlugin {
 				(
 					control::update_world_surface_ready,
 					control::sync_world_scenery,
+					control::sync_skill_map_enabled.before(SkillMapSystems::Spawn),
 					control::apply_intents_to_movement
 						.after(CharacterControlSystems)
 						.before(PlayerControlSystems),
@@ -287,5 +287,10 @@ mod tests {
 	fn game_world_starts_with_mob_hud_off() {
 		assert!(!WorldMobHudEnabled::from_debug_chrome(WorldPlugin::game().debug_chrome).0);
 		assert!(WorldMobHudEnabled::from_debug_chrome(WorldPlugin::default().debug_chrome).0);
+	}
+
+	#[test]
+	fn world_starts_with_skill_maps_gated() {
+		assert!(!maybraid_skill_map::SkillMapEnabled(false).0);
 	}
 }

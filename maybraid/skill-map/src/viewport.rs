@@ -1,0 +1,276 @@
+//! Corner viewports, map cameras, and the debraid overlay.
+
+use bevy::asset::RenderAssetUsages;
+use bevy::camera::{ClearColorConfig, RenderTarget};
+use bevy::prelude::*;
+use bevy::render::render_resource::{TextureDimension, TextureFormat, TextureUsages};
+use bevy::text::FontSize;
+use bevy::ui::widget::ViewportNode;
+
+use crate::cursor::SkillMapCursor;
+use crate::map::{authored_maps, render_layer, AuthoredMap, SkillMapId};
+use crate::tiles::spawn_map_tiles;
+use crate::user::{SkillMapHeld, SkillMapMember, SkillMapSession, SkillMapUser};
+use crate::SkillMapEnabled;
+
+const VIEWPORT_PX: f32 = 176.0;
+const VIEWPORT_GAP: f32 = 12.0;
+const VIEWPORT_INSET: f32 = 16.0;
+const LIVE_BORDER: Color = Color::srgb(1.0, 0.48, 0.08);
+const IDLE_BORDER: Color = Color::srgba(1.0, 0.86, 0.22, 0.42);
+const LABEL_YELLOW: Color = Color::srgb(1.0, 0.86, 0.22);
+
+#[derive(Component)]
+pub struct SkillMapViewport;
+
+#[derive(Component)]
+pub struct SkillMapViewportCamera;
+
+#[derive(Component)]
+pub struct SkillMapLabel;
+
+#[derive(Component)]
+pub struct Debraid {
+	pub remaining: f32,
+}
+
+#[derive(Component)]
+pub(crate) struct DebraidOverlay;
+
+/// Fill an empty [`SkillMapSession`] once render assets exist.
+pub fn present_skill_maps(
+	mut commands: Commands,
+	mut images: ResMut<Assets<Image>>,
+	users: Query<(Entity, &SkillMapUser)>,
+	mut sessions: Query<&mut SkillMapSession>,
+) {
+	for (user, mapping) in &users {
+		let Ok(mut session) = sessions.get_mut(mapping.maps) else {
+			continue;
+		};
+		if !session.cameras.is_empty() {
+			continue;
+		}
+		for (index, spec) in authored_maps().iter().enumerate() {
+			spawn_one_map(
+				&mut commands,
+				&mut images,
+				user,
+				mapping.maps,
+				&mut session,
+				*spec,
+				index,
+			);
+		}
+	}
+}
+
+fn spawn_one_map(
+	commands: &mut Commands,
+	images: &mut Assets<Image>,
+	user: Entity,
+	session: Entity,
+	viewports: &mut SkillMapSession,
+	spec: AuthoredMap,
+	stack_index: usize,
+) {
+	let layer = render_layer(spec.id);
+	let member = SkillMapMember { user, session };
+	let mut image = Image::new_uninit(
+		default(),
+		TextureDimension::D2,
+		TextureFormat::Bgra8UnormSrgb,
+		RenderAssetUsages::all(),
+	);
+	image.texture_descriptor.usage =
+		TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST | TextureUsages::RENDER_ATTACHMENT;
+	let image_handle = images.add(image);
+
+	let camera = commands
+		.spawn((
+			Name::new(format!("skill-map-camera-{}", spec.label)),
+			Camera2d,
+			Camera {
+				order: -2 - stack_index as isize,
+				clear_color: ClearColorConfig::Custom(Color::srgb(0.08, 0.07, 0.06)),
+				..default()
+			},
+			RenderTarget::Image(image_handle.into()),
+			Projection::Orthographic(OrthographicProjection::default_2d()),
+			Transform::from_xyz(0.0, 0.0, 1.0),
+			SkillMapViewportCamera,
+			spec.id,
+			member,
+			layer.clone(),
+		))
+		.id();
+
+	let bottom = VIEWPORT_INSET + stack_index as f32 * (VIEWPORT_PX + VIEWPORT_GAP);
+	let node = commands
+		.spawn((
+			Name::new(format!("skill-map-viewport-{}", spec.label)),
+			SkillMapViewport,
+			spec.id,
+			member,
+			Node {
+				position_type: PositionType::Absolute,
+				bottom: Val::Px(bottom),
+				right: Val::Px(VIEWPORT_INSET),
+				width: Val::Px(VIEWPORT_PX),
+				height: Val::Px(VIEWPORT_PX),
+				border: UiRect::all(Val::Px(3.0)),
+				padding: UiRect::all(Val::Px(6.0)),
+				flex_direction: FlexDirection::Column,
+				justify_content: JustifyContent::FlexStart,
+				align_items: AlignItems::FlexStart,
+				..default()
+			},
+			BorderColor::all(IDLE_BORDER),
+			BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.12)),
+			ViewportNode::new(camera),
+			Visibility::Hidden,
+			Pickable::IGNORE,
+		))
+		.with_children(|parent| {
+			parent.spawn((
+				SkillMapLabel,
+				Text::new(spec.label),
+				TextFont { font_size: FontSize::Px(16.0), ..default() },
+				TextColor(LABEL_YELLOW),
+				Pickable::IGNORE,
+			));
+		})
+		.id();
+
+	commands.spawn((
+		Name::new(format!("skill-map-cursor-{}", spec.label)),
+		SkillMapCursor,
+		spec.id,
+		member,
+		Sprite { custom_size: Some(Vec2::splat(10.0)), color: Color::WHITE, ..default() },
+		Transform::from_xyz(0.0, 0.0, 1.0),
+		layer,
+	));
+
+	spawn_map_tiles(commands, spec, member);
+	viewports.cameras.insert(spec.id, camera);
+	viewports.nodes.insert(spec.id, node);
+}
+
+pub fn sync_viewport_chrome(
+	enabled: Res<SkillMapEnabled>,
+	users: Query<(&SkillMapUser, &SkillMapHeld)>,
+	mut nodes: Query<
+		(&SkillMapMember, &mut Visibility, &mut BorderColor, &mut BackgroundColor),
+		With<SkillMapViewport>,
+	>,
+) {
+	for (member, mut visibility, mut border, mut background) in &mut nodes {
+		if !enabled.0 {
+			*visibility = Visibility::Hidden;
+			continue;
+		}
+		*visibility = Visibility::Inherited;
+		let held = users.iter().any(|(user, held)| user.maps == member.session && held.0);
+		if held {
+			*border = BorderColor::all(LIVE_BORDER);
+			background.0 = Color::srgba(0.0, 0.0, 0.0, 0.0);
+		} else {
+			*border = BorderColor::all(IDLE_BORDER);
+			background.0 = Color::srgba(0.06, 0.05, 0.04, 0.45);
+		}
+	}
+}
+
+type TrackedCameras<'w, 's> = Query<
+	'w,
+	's,
+	(&'static SkillMapId, &'static SkillMapMember, &'static Transform),
+	(With<SkillMapViewportCamera>, Without<SkillMapCursor>, Changed<Transform>),
+>;
+
+type TrackedCursors<'w, 's> = Query<
+	'w,
+	's,
+	(&'static SkillMapId, &'static SkillMapMember, &'static mut Transform),
+	(With<SkillMapCursor>, Without<SkillMapViewportCamera>),
+>;
+
+pub fn track_cursors(cameras: TrackedCameras, mut cursors: TrackedCursors) {
+	for (map, camera_member, camera) in &cameras {
+		for (cursor_map, cursor_member, mut cursor) in &mut cursors {
+			if cursor_map.0 == map.0 && cursor_member.session == camera_member.session {
+				cursor.translation.x = camera.translation.x;
+				cursor.translation.y = camera.translation.y;
+			}
+		}
+	}
+}
+
+pub fn spawn_debraid(
+	commands: &mut Commands,
+	session: &SkillMapSession,
+	id: SkillMapId,
+	secs: f32,
+) {
+	let Some(node) = session.nodes.get(&id).copied() else {
+		return;
+	};
+	commands.entity(node).with_children(|parent| {
+		parent
+			.spawn((
+				DebraidOverlay,
+				Debraid { remaining: secs },
+				id,
+				Node {
+					position_type: PositionType::Absolute,
+					left: Val::Px(0.0),
+					right: Val::Px(0.0),
+					top: Val::Px(0.0),
+					bottom: Val::Px(0.0),
+					justify_content: JustifyContent::Center,
+					align_items: AlignItems::Center,
+					..default()
+				},
+				BackgroundColor(Color::srgba(0.85, 0.08, 0.06, 0.55)),
+				Pickable::IGNORE,
+			))
+			.with_children(|overlay| {
+				overlay.spawn((
+					Text::new("DEBRAID"),
+					TextFont { font_size: FontSize::Px(22.0), ..default() },
+					TextColor(Color::WHITE),
+					Pickable::IGNORE,
+				));
+			});
+	});
+}
+
+pub fn tick_debraid(
+	time: Res<Time>,
+	mut commands: Commands,
+	mut overlays: Query<(Entity, &mut Debraid), With<DebraidOverlay>>,
+) {
+	let dt = time.delta_secs();
+	for (entity, mut debraid) in &mut overlays {
+		debraid.remaining -= dt;
+		if debraid.remaining <= 0.0 {
+			commands.entity(entity).despawn();
+		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use crate::SkillMapEnabled;
+
+	#[test]
+	fn chrome_and_track_queries_are_disjoint() {
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins)
+			.init_resource::<SkillMapEnabled>()
+			.add_systems(Update, (sync_viewport_chrome, track_cursors, tick_debraid));
+		app.update();
+	}
+}

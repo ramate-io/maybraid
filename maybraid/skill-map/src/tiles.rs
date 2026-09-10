@@ -1,0 +1,252 @@
+//! Noise-dispatched land / water / power tiles and 2D AABB claims.
+
+use bevy::camera::visibility::RenderLayers;
+use bevy::math::bounding::{Aabb2d, IntersectsVolume};
+use bevy::prelude::*;
+use noise::{Fbm, MultiFractal, NoiseFn, OpenSimplex};
+
+use crate::cursor::SkillMapCursor;
+use crate::map::{
+	pinned_power_cells, render_layer, AuthoredMap, MapExtents, SkillKind, SkillMapId,
+};
+use crate::user::{SkillMapHeld, SkillMapMember, SkillMapSession, SkillMapSteerLock, SkillMapUser};
+use crate::viewport::{spawn_debraid, SkillMapViewportCamera};
+use crate::{SkillMapEnabled, SkillMapEvent};
+
+const LAND: Color = Color::srgb(0.46, 0.30, 0.14);
+const WATER: Color = Color::srgb(0.12, 0.28, 0.72);
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TileKind {
+	Water,
+	Land,
+	Power(SkillKind),
+}
+
+/// POC thresholds: water below −0.1, power above a rarer high band, else land.
+pub fn classify_noise(value: f32, kind: SkillKind) -> TileKind {
+	if value < -0.1 {
+		TileKind::Water
+	} else if value > 0.35 {
+		TileKind::Power(kind)
+	} else {
+		TileKind::Land
+	}
+}
+
+#[derive(Component, Clone, Copy, Debug)]
+pub struct SkillMapTile {
+	pub map: SkillMapId,
+	pub kind: TileKind,
+}
+
+#[derive(Component)]
+pub struct IgnoreRightCollisions;
+
+#[derive(Component)]
+pub struct RestoreSpentTiles {
+	pub session: Entity,
+	pub map: SkillMapId,
+}
+
+#[derive(Component)]
+pub(crate) struct TileOverlap {
+	tile: Entity,
+}
+
+pub fn spawn_map_tiles(commands: &mut Commands, spec: AuthoredMap, member: SkillMapMember) {
+	let extents = MapExtents::default();
+	let size = extents.tile_size();
+	let layer = render_layer(spec.id);
+	let noise = Fbm::<OpenSimplex>::new(spec.seed).set_frequency(spec.frequency);
+	let pins = pinned_power_cells(extents.steps);
+	let mid = extents.steps / 2;
+
+	for x in 0..extents.steps {
+		for y in 0..extents.steps {
+			let center = extents.tile_center(x, y);
+			let raw = noise.get([center.x as f64, center.y as f64]) as f32;
+			let kind = if x == mid && y == mid {
+				TileKind::Land
+			} else if pins.contains(&(x, y)) {
+				TileKind::Power(spec.kind)
+			} else {
+				classify_noise(raw, spec.kind)
+			};
+			spawn_tile(commands, spec.id, kind, center, size, layer.clone(), member);
+		}
+	}
+}
+
+fn spawn_tile(
+	commands: &mut Commands,
+	map: SkillMapId,
+	kind: TileKind,
+	center: Vec2,
+	size: Vec2,
+	layer: RenderLayers,
+	member: SkillMapMember,
+) {
+	let color = match kind {
+		TileKind::Water => WATER,
+		TileKind::Land => LAND,
+		TileKind::Power(skill) => skill.tile_color(),
+	};
+	if matches!(kind, TileKind::Power(_)) {
+		spawn_tile(commands, map, TileKind::Land, center, size, layer.clone(), member);
+	}
+	let z = if matches!(kind, TileKind::Power(_)) { 0.2 } else { 0.0 };
+	commands.spawn((
+		Name::new("skill-map-tile"),
+		SkillMapTile { map, kind },
+		member,
+		Sprite { custom_size: Some(size), color, ..default() },
+		Transform::from_xyz(center.x, center.y, z),
+		layer,
+	));
+}
+
+type CursorRow<'a> =
+	(Entity, &'a SkillMapId, &'a SkillMapMember, &'a Transform, Option<&'a TileOverlap>);
+
+type MapCameras<'w, 's> = Query<
+	'w,
+	's,
+	(&'static SkillMapId, &'static SkillMapMember, &'static mut Transform),
+	(With<SkillMapViewportCamera>, Without<SkillMapCursor>, Without<SkillMapTile>),
+>;
+
+#[allow(clippy::too_many_arguments)]
+pub fn collide_tiles(
+	mut commands: Commands,
+	enabled: Res<SkillMapEnabled>,
+	mut users: Query<(Entity, &SkillMapUser, &SkillMapHeld, &mut SkillMapSteerLock)>,
+	mut sessions: Query<&mut SkillMapSession>,
+	cursors: Query<
+		CursorRow<'_>,
+		(With<SkillMapCursor>, Without<SkillMapViewportCamera>, Without<SkillMapTile>),
+	>,
+	tiles: Query<
+		(Entity, &SkillMapTile, &SkillMapMember, &Transform, &Sprite),
+		(Without<IgnoreRightCollisions>, Without<SkillMapViewportCamera>, Without<SkillMapCursor>),
+	>,
+	mut events: MessageWriter<SkillMapEvent>,
+	mut cameras: MapCameras,
+) {
+	if !enabled.0 {
+		return;
+	}
+
+	for (cursor_entity, cursor_map, cursor_member, cursor_transform, overlap) in &cursors {
+		let Some((user_entity, settings)) = users.iter().find_map(|(entity, user, held, lock)| {
+			(entity == cursor_member.user && held.0 && !lock.locked())
+				.then_some((entity, user.settings))
+		}) else {
+			continue;
+		};
+
+		let cursor_bounds = Aabb2d::new(cursor_transform.translation.xy(), Vec2::splat(5.0));
+		let mut hit: Option<(Entity, SkillMapTile)> = None;
+		for (tile_entity, tile, tile_member, tile_transform, sprite) in &tiles {
+			if tile.map != *cursor_map || tile_member.session != cursor_member.session {
+				continue;
+			}
+			if matches!(tile.kind, TileKind::Land) {
+				continue;
+			}
+			let half = sprite.custom_size.unwrap_or(Vec2::splat(16.0)) * 0.5;
+			let tile_bounds = Aabb2d::new(tile_transform.translation.xy(), half);
+			if cursor_bounds.intersects(&tile_bounds) {
+				hit = Some((tile_entity, *tile));
+				break;
+			}
+		}
+
+		match hit {
+			None => {
+				if overlap.is_some() {
+					commands.entity(cursor_entity).remove::<TileOverlap>();
+				}
+			}
+			Some((tile_entity, tile)) => {
+				if overlap.is_some_and(|current| current.tile == tile_entity) {
+					continue;
+				}
+				commands.entity(cursor_entity).insert(TileOverlap { tile: tile_entity });
+				match tile.kind {
+					TileKind::Water => {
+						if let Ok((_, _, _, mut lock)) = users.get_mut(user_entity) {
+							lock.arm(settings.water_lock_secs);
+						}
+						for (map, member, mut camera) in &mut cameras {
+							if *map == tile.map && member.session == cursor_member.session {
+								camera.translation.x = 0.0;
+								camera.translation.y = 0.0;
+							}
+						}
+						commands.spawn(RestoreSpentTiles {
+							session: cursor_member.session,
+							map: tile.map,
+						});
+						if let Ok(session) = sessions.get_mut(cursor_member.session) {
+							spawn_debraid(
+								&mut commands,
+								&session,
+								tile.map,
+								settings.water_lock_secs,
+							);
+						}
+						events.write(SkillMapEvent::Fail { user: user_entity, map: tile.map });
+					}
+					TileKind::Power(kind) => {
+						commands
+							.entity(tile_entity)
+							.insert((Visibility::Hidden, IgnoreRightCollisions));
+						events.write(SkillMapEvent::Claim { user: user_entity, kind });
+					}
+					TileKind::Land => {}
+				}
+			}
+		}
+	}
+}
+
+pub fn restore_spent_tiles(
+	mut commands: Commands,
+	requests: Query<(Entity, &RestoreSpentTiles), Added<RestoreSpentTiles>>,
+	spent: Query<(Entity, &SkillMapTile, &SkillMapMember), With<IgnoreRightCollisions>>,
+) {
+	for (request, restore) in &requests {
+		for (entity, tile, member) in &spent {
+			if tile.map == restore.map && member.session == restore.session {
+				commands
+					.entity(entity)
+					.insert(Visibility::Visible)
+					.remove::<IgnoreRightCollisions>();
+			}
+		}
+		commands.entity(request).despawn();
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn noise_bands_match_the_poc_water_cut() {
+		assert_eq!(classify_noise(-0.2, SkillKind::Fireball), TileKind::Water);
+		assert_eq!(classify_noise(0.0, SkillKind::Fireball), TileKind::Land);
+		assert_eq!(classify_noise(0.4, SkillKind::Dumbwave), TileKind::Power(SkillKind::Dumbwave));
+	}
+
+	#[test]
+	fn collide_queries_are_disjoint() {
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins)
+			.init_resource::<SkillMapEnabled>()
+			.add_message::<SkillMapEvent>()
+			.add_systems(Update, collide_tiles);
+		app.update();
+	}
+}

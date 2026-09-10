@@ -435,8 +435,7 @@ fn despawn_displayed_items(commands: &mut Commands, displayed: &[Entity]) {
 	}
 }
 
-type DownedNpcLoot<'a> =
-	(Entity, &'a Downed, Option<&'a InventoryUser>, Option<&'a FirearmUser>);
+type DownedNpcLoot<'a> = (Entity, &'a Downed, Option<&'a InventoryUser>, Option<&'a FirearmUser>);
 
 fn detach_downed_npc_loot(
 	settings: Res<WorldStashSettings>,
@@ -447,10 +446,9 @@ fn detach_downed_npc_loot(
 ) {
 	let assets = assets.as_deref();
 	for (body, downed, user, firearm) in &downed {
-		let loot = user.and_then(|user| bags.get_mut(user.bag).ok()).map_or_else(
-			Inventory::default,
-			|mut bag| bag.take_all(),
-		);
+		let loot = user
+			.and_then(|user| bags.get_mut(user.bag).ok())
+			.map_or_else(Inventory::default, |mut bag| bag.take_all());
 		if let Some(user) = user {
 			commands.entity(user.bag).try_despawn();
 			commands.entity(body).remove::<InventoryUser>();
@@ -526,8 +524,13 @@ fn nearest_stash_in_radius<'a>(
 		.filter_map(|(entity, transform, user, policy)| {
 			let translation = transform.translation;
 			let distance = xz_distance(translation, origin);
-			(distance <= policy.claim_radius)
-				.then_some((distance, entity, user.bag, *policy, translation))
+			(distance <= policy.claim_radius).then_some((
+				distance,
+				entity,
+				user.bag,
+				*policy,
+				translation,
+			))
 		})
 		.min_by(|a, b| a.0.total_cmp(&b.0))
 		.map(|(_, entity, bag, policy, translation)| (entity, bag, policy, translation))
@@ -595,9 +598,9 @@ fn sync_stash_interact_prompt(
 	stashes: Query<(Entity, &Transform, &InventoryUser, &StashPolicy), With<WorldStash>>,
 	mut prompt: Query<&mut Visibility, With<StashInteractPrompt>>,
 ) {
-	let in_range = players
-		.iter()
-		.any(|transform| nearest_stash_in_radius(player_origin(transform), stashes.iter()).is_some());
+	let in_range = players.iter().any(|transform| {
+		nearest_stash_in_radius(player_origin(transform), stashes.iter()).is_some()
+	});
 	for mut visibility in &mut prompt {
 		*visibility = if in_range { Visibility::Visible } else { Visibility::Hidden };
 	}
@@ -611,9 +614,8 @@ fn nearest_claim_point<'a>(
 	let listed: Vec<_> = stashes.into_iter().collect();
 	let anchors: Vec<_> = anchors.into_iter().collect();
 	players.into_iter().find_map(|transform| {
-		nearest_stash_in_radius(player_origin(transform), listed.iter().copied()).map(
-			|(stash, _, _, at)| halo_world_point(at, stash, anchors.iter().copied()),
-		)
+		nearest_stash_in_radius(player_origin(transform), listed.iter().copied())
+			.map(|(stash, _, _, at)| halo_world_point(at, stash, anchors.iter().copied()))
 	})
 }
 
@@ -1091,11 +1093,7 @@ mod tests {
 			bag.clone(),
 		));
 		let player_bag = world.spawn(bag).id();
-		world.spawn((
-			VegetationPlayer,
-			Transform::IDENTITY,
-			InventoryUser::carrying(player_bag),
-		));
+		world.spawn((VegetationPlayer, Transform::IDENTITY, InventoryUser::carrying(player_bag)));
 
 		write_intent(&mut world, CharacterIntent::Inventory)?;
 		world
@@ -1281,11 +1279,7 @@ mod tests {
 		world.init_resource::<Messages<CharacterIntent>>();
 		world.init_resource::<Time>();
 		let player_bag = world.spawn(Inventory::default()).id();
-		world.spawn((
-			VegetationPlayer,
-			Transform::IDENTITY,
-			InventoryUser::carrying(player_bag),
-		));
+		world.spawn((VegetationPlayer, Transform::IDENTITY, InventoryUser::carrying(player_bag)));
 		let near = world
 			.run_system_once(spawn_stash_system(
 				Transform::from_xyz(1.0, 0.0, 0.0),

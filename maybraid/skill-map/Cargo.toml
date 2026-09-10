@@ -1,0 +1,27 @@
+[package]
+name = "maybraid-skill-map"
+version = { workspace = true }
+edition  = { workspace = true }
+license  = { workspace = true }
+authors = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
+publish = { workspace = true }
+rust-version = { workspace = true }
+
+[dependencies]
+bevy = { workspace = true }
+combat-targeting = { workspace = true }
+damage = { workspace = true }
+evasion-intelligence = { workspace = true }
+maybraid-character-controller = { workspace = true }
+noise = { workspace = true }
+player = { workspace = true }
+projectiles = { workspace = true }
+threat-management-intelligence = { workspace = true }
+
+[dev-dependencies]
+anyhow = { workspace = true }
+
+[lints]
+workspace = true

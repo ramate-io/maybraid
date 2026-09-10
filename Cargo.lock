@@ -4692,6 +4692,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "maybraid-skill-map"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "combat-targeting",
+ "damage",
+ "evasion-intelligence",
+ "maybraid-character-controller",
+ "noise",
+ "player",
+ "projectiles",
+ "threat-management-intelligence",
+]
+
+[[package]]
 name = "maybraid-sky"
 version = "0.0.1"
 dependencies = [
@@ -4732,6 +4748,7 @@ dependencies = [
  "maybraid-character-controller",
  "maybraid-input",
  "maybraid-mobs",
+ "maybraid-skill-map",
  "maybraid-sky",
  "meandering-intelligence",
  "mob-characters",

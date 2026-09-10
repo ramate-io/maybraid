@@ -37,6 +37,7 @@ lod-avian = { workspace = true }
 material-ref = { workspace = true }
 maybraid-character-controller = { workspace = true }
 maybraid-input = { workspace = true }
+maybraid-skill-map = { workspace = true }
 maybraid-sky = { workspace = true }
 maybraid-mobs = { workspace = true }
 player = { workspace = true }

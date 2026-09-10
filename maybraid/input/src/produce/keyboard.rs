@@ -60,6 +60,10 @@ pub fn produce_keyboard(
 	if keyboard.pressed(KeyCode::KeyC) {
 		pad.hold_digital(PadButton::BumperFocus);
 	}
+	// V is RB. Hold C+V for the skill map; it does not steal sprint (L3) or E/X interact.
+	if keyboard.pressed(KeyCode::KeyV) {
+		pad.hold_digital(PadButton::BumperFire);
+	}
 	if keyboard.pressed(KeyCode::KeyE) || keyboard.pressed(KeyCode::KeyX) {
 		pad.hold_digital(PadButton::X);
 	}
@@ -120,5 +124,16 @@ mod tests {
 			}
 			assert!(pad.digital_held(PadButton::X));
 		}
+	}
+
+	#[test]
+	fn v_holds_right_bumper() {
+		let mut pad = VirtualPad::default();
+		let mut keyboard = ButtonInput::<KeyCode>::default();
+		keyboard.press(KeyCode::KeyV);
+		if keyboard.pressed(KeyCode::KeyV) {
+			pad.hold_digital(PadButton::BumperFire);
+		}
+		assert!(pad.digital_held(PadButton::BumperFire));
 	}
 }

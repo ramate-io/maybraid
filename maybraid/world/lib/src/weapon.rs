@@ -8,12 +8,13 @@ use chico_vegetation_on_terrain_playground::{
 use crozon_character_items::{CharacterSheet, Inventory, InventoryItem};
 use crozon_characters::{CharacterAppearance, CharacterRoot};
 use crozon_inventory_user::{spawn_bag, InventoryUser};
-use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
 use damage::Health;
 use firearm_user::{
 	live_weapon_from_stats, spawn_held_firearm, spawn_held_kit, spawn_reticle, FirearmUser,
 	FirearmUserSettings, FirearmUserSystems, GeneratedFirearm, WeaponSwap,
 };
+use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
+use maybraid_skill_map::spawn_skill_maps;
 use player::{
 	apply_character_mobility, CameraFollow, Player as MaybraidPlayer, PlayerCameraAim, PlayerLook,
 	PlayerUse, PlayerVisual as MaybraidPlayerVisual, PlayerYawOwner,
@@ -56,6 +57,7 @@ type WorldPlayerEquipment<'a> = (
 	Entity,
 	Option<&'a FirearmUser>,
 	Option<&'a InventoryUser>,
+	Option<&'a maybraid_skill_map::SkillMapUser>,
 	Option<&'a AppliedWorldPlayerLoadout>,
 	Has<WorldPlayerAppearanceRequested>,
 );
@@ -78,7 +80,9 @@ fn arm_world_player(
 	if !gameplay.0 {
 		return;
 	}
-	for (player, firearm_user, inventory_user, applied, appearance_requested) in &players {
+	for (player, firearm_user, inventory_user, skill_map_user, applied, appearance_requested) in
+		&players
+	{
 		let Some((visual, _, presented)) =
 			visuals.iter().find(|(_, child, _)| child.parent() == player)
 		else {
@@ -86,6 +90,9 @@ fn arm_world_player(
 		};
 		if !presented {
 			commands.entity(visual).insert((MaybraidPlayerVisual, PlayerYawOwner::Wish));
+		}
+		if skill_map_user.is_none() {
+			spawn_skill_maps(&mut commands, player);
 		}
 		if loadout.is_none() && applied.is_none() && firearm_user.is_some() {
 			continue;
@@ -307,6 +314,7 @@ mod tests {
 
 		assert_eq!(world.query::<&RequestSetCharacterAppearance>().iter(&world).count(), 0);
 		assert!(world.get::<WorldPlayerAppearanceRequested>(player).is_none());
+		assert!(world.get::<maybraid_skill_map::SkillMapUser>(player).is_some());
 		Ok(())
 	}
 
@@ -336,11 +344,7 @@ mod tests {
 		let bag = world.spawn(inventory).id();
 		let held = world.spawn_empty().id();
 		let player = world
-			.spawn((
-				VegetationPlayer,
-				InventoryUser::carrying(bag),
-				FirearmUser::holding(held),
-			))
+			.spawn((VegetationPlayer, InventoryUser::carrying(bag), FirearmUser::holding(held)))
 			.id();
 		world
 			.run_system_once(|mut writer: MessageWriter<CharacterIntent>| {
