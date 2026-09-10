@@ -8,11 +8,9 @@ use bevy::math::bounding::Aabb3d;
 use bevy::math::{DVec3, Vec3};
 use bevy::prelude::*;
 use gimme_core::SpatialIndex;
-
-use crate::scene::bounds_patch::LodSceneBoundsMarshaller;
-use crate::scene::host::LodSceneHost;
-use crate::scene::refresh::{LodHostBounds, LodRefreshSystems};
-use crate::scene::region_index::LodSceneHostIndex;
+use lod::{
+	LodHostBounds, LodRefreshSystems, LodSceneBoundsMarshaller, LodSceneHost, LodSceneHostIndex,
+};
 
 /// 64 m XZ cells; a tall Y slab so ground hosts stay in one vertical cell.
 const HOST_BASE_SCALE: DVec3 = DVec3::new(64.0, 4_096.0, 64.0);

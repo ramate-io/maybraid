@@ -4497,7 +4497,6 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "bevy",
- "gimme-core",
  "lod-cascade",
  "lod-cascade-system",
  "thiserror 1.0.69",
@@ -4510,6 +4509,7 @@ dependencies = [
  "avian3d",
  "bevy",
  "lod",
+ "lod-gimme",
 ]
 
 [[package]]
@@ -4526,6 +4526,15 @@ dependencies = [
  "anyhow",
  "bevy",
  "lod-cascade",
+]
+
+[[package]]
+name = "lod-gimme"
+version = "0.0.1"
+dependencies = [
+ "bevy",
+ "gimme-core",
+ "lod",
 ]
 
 [[package]]

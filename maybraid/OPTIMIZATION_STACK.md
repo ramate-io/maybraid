@@ -16,6 +16,8 @@ Related: [#800](https://github.com/ramate-io/maybraid/issues/800),
 | [#803](https://github.com/ramate-io/maybraid/issues/803) | Flattened character visuals | Fewer nested visual hosts on the player |
 | [#802](https://github.com/ramate-io/maybraid/issues/802) | `GimmeLodSceneHostIndex` for refresh / cull | Host cuboids left the Avian broadphase. Produce fill no longer climbs with collider count. |
 
+Crate layout after the split: [`lod`](lod/lib/) is the engine-agnostic runtime, [`lod-gimme`](lod/gimme/) owns the host index and refresh/cull plugins, [`lod-avian`](lod/avian/) keeps physics layers and re-exports those plugins as `AvianLodScene*`.
+
 Generate and present **ids** already live on typed [`SpatialIndex`](lod/lib/src/gen/spatial_index.rs)
 resources (`ForestIndex`, urbanization, terrain, …). They were never the
 Host-query death spiral. The unused Avian Generate / Present volume API is
@@ -57,8 +59,8 @@ automatically fold cull.
 
 [`lod-avian`](lod/avian/) no longer exposes `AvianLodGenerateIndex`,
 `AvianLodPresentIndex`, or Generate / Present marshallers and physics layers.
-`PatchSceneBounds` already stamped [`GimmeLodHostMarshaller`](lod/lib/src/scene/gimme.rs)
-only; those Avian volumes were not live dummy colliders. This does **not**
+`PatchSceneBounds` stamps [`GimmeLodHostMarshaller`](lod/gimme/src/host.rs)
+from [`lod-gimme`](lod/gimme/); those Avian volumes were not live dummy colliders. This does **not**
 move the ~10 ms `Update`. It removes the footgun of putting Host-shaped
 cuboids back onto generate / present.
 

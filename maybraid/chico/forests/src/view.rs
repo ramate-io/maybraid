@@ -79,7 +79,7 @@ macro_rules! flattened_plant_host {
 ///    [`LodScene::scene_bounds`](lod::LodScene::scene_bounds)
 /// 3. Gimme region index → level messages for structural and child component hosts
 /// 4. Entity refresh (max fold) + chunk sync
-/// 5. [`OpenLattice`] cull regions → Avian index → budgeted root teardown
+/// 5. [`OpenLattice`] cull regions → Gimme index → budgeted root teardown
 pub struct VegetationLodRefreshPlugin;
 
 impl Plugin for VegetationLodRefreshPlugin {

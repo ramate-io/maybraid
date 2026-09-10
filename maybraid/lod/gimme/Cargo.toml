@@ -1,5 +1,5 @@
 [package]
-name = "lod"
+name = "lod-gimme"
 version = { workspace = true }
 edition  = { workspace = true }
 license  = { workspace = true }
@@ -9,17 +9,10 @@ homepage = { workspace = true }
 publish = { workspace = true }
 rust-version = { workspace = true }
 
-[features]
-default = []
-
 [dependencies]
-lod-cascade = { workspace = true }
-lod-cascade-system = { workspace = true }
 bevy = { workspace = true }
-thiserror = { workspace = true }
-
-[dev-dependencies]
-anyhow = { workspace = true }
+gimme-core = { workspace = true }
+lod = { workspace = true }
 
 [lints]
 workspace = true
