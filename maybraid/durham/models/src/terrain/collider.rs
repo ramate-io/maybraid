@@ -1,29 +1,16 @@
 //! Terrain presentation collider wiring.
 //!
-//! Visual mesh children are spawned asynchronously and replaced as LOD changes.
-//! Terrain collision must not follow that lifetime: Avian can retain stale
-//! contact-manifold indexes when a contacted trimesh is rebuilt or removed.
-//!
-//! Collision is keyed by terrain origin [`Id`] on a persistent
-//! [`TerrainColliderHost`] that presentation does not own. [`TerrainColliderMeshSource`]
-//! scenes seed a copied [`Collider`] child; the mesh source may then despawn.
-//! Visual `RegionPresenter` roots may churn without touching physics.
-//! [`TerrainColliderOverlay`] hosts (padded terrain) replace the raw Durham
-//! seed for the same origin id.
+//! Near (and FinePatch) fill scenes mark [`TerrainColliderMeshSource`]. After
+//! Cached fulfill puts [`Mesh3d`] on that same entity, this module cooks an
+//! Avian trimesh onto it. Far / background cells omit the marker.
 //!
 //! Constructed trimeshes use [`PhysicsInteractionLayer::Fixed`] so they contact
 //! Animated movers only — not other Fixed geometry or LOD Host volumes.
 
-use crate::terrain::cell::TerrainCellLayout;
-use crate::terrain::host::TerrainPresentEnabled;
-use crate::terrain::index::TerrainEntryStore;
 use avian3d::prelude::{CoefficientCombine, Collider, Friction, RigidBody};
-use bevy::math::bounding::IntersectsVolume;
 use bevy::prelude::*;
 use chunk::cascade::CascadeChunk;
-use lod::gen::{Id, Version};
 use lod_avian::PhysicsInteractionLayer;
-use std::collections::HashSet;
 
 /// Dirt / grass grip. [`CoefficientCombine::Max`] beats the character controller's
 /// `Friction::ZERO` + `Min` (Avian dynamic-character default), otherwise the
@@ -53,7 +40,7 @@ impl Default for TerrainFrictionConfig {
 #[derive(Resource, Default, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TerrainColliderEpoch(pub u64);
 
-/// Hosts run: overlay replace, then raw sync, then trimesh bake.
+/// Presenters run before [`Self::QueueMeshes`] so a new fill can bake the same frame.
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum TerrainColliderSystems {
 	SyncOverlays,
@@ -61,29 +48,11 @@ pub enum TerrainColliderSystems {
 	QueueMeshes,
 }
 
-/// Persistent terrain host that owns collision independently from visual meshes.
-#[derive(Component, Debug, Clone, Copy, Default)]
-pub struct TerrainColliderHost;
-
-/// Marks a [`TerrainColliderHost`] seeded from an overlay model (padded terrain).
-///
-/// Raw Durham sync will not despawn or duplicate these hosts.
-#[derive(Component, Debug, Clone, Copy, Default)]
-pub struct TerrainColliderOverlay;
-
-/// Origin cell and store version this physics host was seeded from.
-#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
-pub struct TerrainColliderCell {
-	pub id: Id,
-	pub version: Version,
-	pub epoch: u64,
-}
-
-/// Raw Durham mesh whose generated asset can seed stable collision.
+/// Fill scene that should receive a trimesh once [`Mesh3d`] is fulfilled.
 #[derive(Component, Debug, Clone, Copy, Default)]
 pub struct TerrainColliderMeshSource;
 
-/// Direct, stable terrain collider spawned outside the visual LOD roots.
+/// Cooked Avian trimesh on a Near / FinePatch fill scene.
 #[derive(Component, Debug, Clone, Copy, Default)]
 pub struct TerrainTrimeshCollider;
 
@@ -98,163 +67,31 @@ pub fn terrain_collider_covers_xz<'a>(
 #[derive(Component, Debug, Clone, Copy, Default)]
 pub(crate) struct TerrainColliderReady;
 
-fn terrain_seeds_collision(terrain: &crate::terrain::Terrain, layout: &TerrainCellLayout) -> bool {
-	let size = (Vec3::from(terrain.cell.max) - Vec3::from(terrain.cell.min)).x;
-	layout
-		.stream_ring_for_cell_size(size)
-		.map(|ring| ring.seeds_collision())
-		.unwrap_or(true)
-}
-
-/// Spawn a hidden collider-host and seed it with `scene` (`TerrainColliderMeshSource`).
-pub fn spawn_terrain_collider_host(
-	commands: &mut Commands,
-	id: Id,
-	version: Version,
-	epoch: u64,
-	scene: impl bevy::scene::prelude::Scene + 'static,
-	overlay: bool,
-) -> Entity {
-	let host = if overlay {
-		commands
-			.spawn((
-				Name::new("Terrain collider"),
-				TerrainColliderHost,
-				TerrainColliderOverlay,
-				TerrainColliderCell { id, version, epoch },
-				Transform::IDENTITY,
-				Visibility::Hidden,
-			))
-			.id()
-	} else {
-		commands
-			.spawn((
-				Name::new("Terrain collider"),
-				TerrainColliderHost,
-				TerrainColliderCell { id, version, epoch },
-				Transform::IDENTITY,
-				Visibility::Hidden,
-			))
-			.id()
-	};
-	commands.spawn_scene(scene).insert(ChildOf(host));
-	host
-}
-
-/// Spawn or refresh physics hosts from stored Durham cells. Visual presenters
-/// are not consulted and must not despawn these entities.
-pub(crate) fn sync_terrain_collider_hosts(
-	mut commands: Commands,
-	epoch: Res<TerrainColliderEpoch>,
-	store: Res<TerrainEntryStore>,
-	layout: Res<TerrainCellLayout>,
-	present: Option<Res<TerrainPresentEnabled>>,
-	hosts: Query<
-		(Entity, &TerrainColliderCell, Has<TerrainColliderOverlay>),
-		With<TerrainColliderHost>,
-	>,
-) {
-	let present = present.map(|flag| flag.0).unwrap_or(true);
-	let region = layout.presentation_region();
-	let overlay_ids: HashSet<Id> = hosts
-		.iter()
-		.filter(|(_, _, overlay)| *overlay)
-		.map(|(_, cell, _)| cell.id)
-		.collect();
-	// Playable world presents urbanized terrain only; raw `Terrain::scene`
-	// must not seed a first collider mesh that the overlay later rebakes.
-	let wanted: HashSet<(Id, Version)> = if present {
-		store
-			.terrain
-			.iter()
-			.filter(|(id, entry)| {
-				!overlay_ids.contains(id)
-					&& region.intersects(&entry.bounds)
-					&& terrain_seeds_collision(&entry.value, layout.as_ref())
-			})
-			.map(|(id, entry)| (*id, entry.version))
-			.collect()
-	} else {
-		HashSet::new()
-	};
-
-	for (entity, cell, overlay) in &hosts {
-		if overlay {
-			continue;
-		}
-		let current = wanted.contains(&(cell.id, cell.version)) && cell.epoch == epoch.0;
-		if !current {
-			commands.entity(entity).despawn();
-		}
-	}
-
-	let occupied: HashSet<Id> = hosts.iter().map(|(_, cell, _)| cell.id).collect();
-	for (id, version) in wanted {
-		if occupied.contains(&id) {
-			continue;
-		}
-		let Some(entry) = store.terrain.get(&id) else {
-			continue;
-		};
-		spawn_terrain_collider_host(
-			&mut commands,
-			id,
-			version,
-			epoch.0,
-			entry.value.scene(),
-			false,
-		);
-	}
-}
-
-/// Builds one direct trimesh under each persistent [`TerrainColliderHost`].
-///
-/// The mesh source has the same host-local transform as the collider. Its
-/// `Mesh3d` child is generated asynchronously with an identity transform.
-/// After the trimesh is copied into Avian, the mesh source is despawned so
-/// visual LOD can own drawing.
+/// Cooks a trimesh onto each fill that asked for collision and now has [`Mesh3d`].
 pub(crate) fn queue_terrain_trimesh_colliders(
 	mut commands: Commands,
 	friction: Res<TerrainFrictionConfig>,
 	meshes: Res<Assets<Mesh>>,
-	hosts: Query<Entity, (With<TerrainColliderHost>, Without<TerrainColliderReady>)>,
-	children: Query<&Children>,
-	sources: Query<(Entity, &Transform, &CascadeChunk), With<TerrainColliderMeshSource>>,
-	mesh_entities: Query<&Mesh3d>,
+	sources: Query<
+		(Entity, &Mesh3d),
+		(With<TerrainColliderMeshSource>, Without<TerrainColliderReady>),
+	>,
 ) {
-	for host in &hosts {
-		let Some((source_entity, source_transform, chunk, mesh)) =
-			children.iter_descendants(host).find_map(|candidate| {
-				let (entity, transform, chunk) = sources.get(candidate).ok()?;
-				let mesh = children
-					.iter_descendants(candidate)
-					.find_map(|descendant| mesh_entities.get(descendant).ok())?;
-				Some((entity, transform, chunk, mesh))
-			})
-		else {
-			continue;
-		};
+	for (entity, mesh) in &sources {
 		let Some(mesh) = meshes.get(&mesh.0) else {
 			continue;
 		};
 		let Some(collider) = Collider::trimesh_from_mesh(mesh) else {
 			continue;
 		};
-		commands.spawn((
-			Name::new("Stable terrain collider"),
+		commands.entity(entity).insert((
 			TerrainTrimeshCollider,
-			ChildOf(host),
-			*source_transform,
-			chunk.clone(),
+			TerrainColliderReady,
 			RigidBody::Static,
 			collider,
 			PhysicsInteractionLayer::fixed_layers(),
 			friction.0,
 		));
-		commands.entity(source_entity).despawn();
-		if let Ok(mut entity) = commands.get_entity(host) {
-			entity.insert(TerrainColliderReady);
-		}
 	}
 }
 
@@ -282,7 +119,7 @@ mod tests {
 	}
 
 	#[test]
-	fn collider_survives_visual_source_despawn() {
+	fn trimesh_bakes_onto_the_fill_scene() {
 		let mut app = App::new();
 		app.insert_resource(Assets::<Mesh>::default())
 			.insert_resource(TerrainFrictionConfig::default())
@@ -299,79 +136,39 @@ mod tests {
 		mesh.insert_indices(bevy::mesh::Indices::U32(vec![0, 1, 2]));
 		let mesh = app.world_mut().resource_mut::<Assets<Mesh>>().add(mesh);
 
-		let host = app.world_mut().spawn((TerrainColliderHost, Transform::default())).id();
-		let source_transform = Transform::from_xyz(2.0, 3.0, 4.0);
-		let source = app
+		let pose = Transform::from_xyz(2.0, 3.0, 4.0);
+		let scene = app
 			.world_mut()
-			.spawn((
-				TerrainColliderMeshSource,
-				source_transform,
-				CascadeChunk::default(),
-				ChildOf(host),
-			))
+			.spawn((TerrainColliderMeshSource, Mesh3d(mesh), pose, CascadeChunk::default()))
 			.id();
-		app.world_mut().spawn((Mesh3d(mesh), Transform::default(), ChildOf(source)));
 
 		app.update();
 
-		let mut colliders = app
-			.world_mut()
-			.query_filtered::<(&ChildOf, &Transform), With<TerrainTrimeshCollider>>();
-		let stable: Vec<_> = colliders.iter(app.world()).collect();
-		assert_eq!(stable.len(), 1);
-		assert_eq!(stable[0].0.parent(), host);
-		assert_eq!(*stable[0].1, source_transform);
-		assert!(app.world().get_entity(source).is_err());
+		assert!(app.world().get::<TerrainTrimeshCollider>(scene).is_some());
+		assert!(app.world().get::<Collider>(scene).is_some());
+		assert_eq!(app.world().get::<Transform>(scene).copied(), Some(pose));
 
 		app.update();
-
-		let mut colliders =
-			app.world_mut().query_filtered::<Entity, With<TerrainTrimeshCollider>>();
-		assert_eq!(colliders.iter(app.world()).count(), 1);
-		assert!(app.world().get_entity(host).is_ok());
+		assert!(app.world().get::<TerrainTrimeshCollider>(scene).is_some());
 	}
 
 	#[test]
-	fn visual_root_despawn_leaves_collider_host() {
+	fn despawn_of_the_fill_scene_removes_its_collider() {
 		let mut app = App::new();
-		let host = app.world_mut().spawn((TerrainColliderHost, Transform::default())).id();
-		app.world_mut()
-			.spawn((TerrainTrimeshCollider, CascadeChunk::unit_chunk(), ChildOf(host)));
-		let visual = app.world_mut().spawn(Name::new("Terrain cell")).id();
+		let scene = app
+			.world_mut()
+			.spawn((TerrainTrimeshCollider, TerrainColliderMeshSource, CascadeChunk::unit_chunk()))
+			.id();
 
-		app.world_mut().entity_mut(visual).despawn();
+		app.world_mut().entity_mut(scene).despawn();
 
-		assert!(app.world().get_entity(host).is_ok());
 		let mut colliders =
 			app.world_mut().query_filtered::<Entity, With<TerrainTrimeshCollider>>();
-		assert_eq!(colliders.iter(app.world()).count(), 1);
+		assert_eq!(colliders.iter(app.world()).count(), 0);
 	}
 
 	#[test]
 	fn recycled_store_version_is_not_current_across_epochs() {
 		assert_ne!(TerrainColliderEpoch(0), TerrainColliderEpoch(1));
-	}
-
-	#[test]
-	fn overlay_host_is_not_despawned_by_raw_sync() {
-		let mut app = App::new();
-		app.insert_resource(TerrainEntryStore::default())
-			.insert_resource(TerrainCellLayout::default())
-			.insert_resource(TerrainColliderEpoch::default())
-			.add_systems(Update, sync_terrain_collider_hosts);
-
-		let id = Id::from_cell(bevy::math::bounding::Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE));
-		let overlay = app
-			.world_mut()
-			.spawn((
-				TerrainColliderHost,
-				TerrainColliderOverlay,
-				TerrainColliderCell { id, version: Version(1), epoch: 0 },
-			))
-			.id();
-
-		app.update();
-
-		assert!(app.world().get_entity(overlay).is_ok());
 	}
 }

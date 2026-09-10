@@ -2,7 +2,9 @@
 //!
 //! [`TerrainChunkRef`] separates the identity of terrain geometry from any one presenter. Terrain,
 //! ground-cover, and canopy entities can carry the same reference and receive the same
-//! [`Handle<Mesh>`] while keeping independent materials and transforms.
+//! [`Handle<Mesh>`] while keeping independent materials. Fulfill stamps [`Mesh3d`] and the
+//! chunk-minimum [`Transform`] — CpuShot vertices are local, so an identity pose piles the
+//! mesh at the world origin.
 
 use std::marker::PhantomData;
 use std::time::{Duration, Instant};
@@ -197,6 +199,19 @@ type TerrainChunkRefQueryFilter<T> = Or<(
 	(With<TerrainChunkRefResolved>, Without<Mesh3d>),
 )>;
 
+/// Heal a wiped overlay pose. CpuShot verts are local to the chunk minimum.
+pub fn sync_terrain_chunk_ref_poses<T>(mut query: Query<(&TerrainChunkRef<T>, &mut Transform)>)
+where
+	T: Send + Sync + 'static,
+{
+	for (terrain_ref, mut transform) in &mut query {
+		let pose = terrain_ref.transform();
+		if *transform != pose {
+			*transform = pose;
+		}
+	}
+}
+
 pub fn fulfill_terrain_chunk_refs<T>(
 	mut commands: Commands,
 	mut meshes: ResMut<Assets<Mesh>>,
@@ -231,10 +246,7 @@ pub fn fulfill_terrain_chunk_refs<T>(
 		}
 
 		if let Some(handle) = cache.cached_handle(terrain_ref) {
-			commands
-				.entity(entity)
-				.remove::<(TerrainChunkRefEmpty, TerrainChunkRefSeen)>()
-				.insert((Mesh3d(handle), TerrainChunkRefResolved(key.clone())));
+			apply_resolved_mesh(&mut commands, entity, terrain_ref, handle);
 			applied += 1;
 			continue;
 		}
@@ -250,10 +262,7 @@ pub fn fulfill_terrain_chunk_refs<T>(
 			.with_handle_cache(cache.handles.clone())
 			.with_mesh_cache(cache.disk.clone());
 		if let Some(handle) = fetcher.fetch_mesh(&mut meshes, &terrain_ref.cascade_chunk()) {
-			commands
-				.entity(entity)
-				.remove::<(TerrainChunkRefEmpty, TerrainChunkRefSeen)>()
-				.insert((Mesh3d(handle), TerrainChunkRefResolved(key.clone())));
+			apply_resolved_mesh(&mut commands, entity, terrain_ref, handle);
 			applied += 1;
 		} else {
 			commands
@@ -262,6 +271,26 @@ pub fn fulfill_terrain_chunk_refs<T>(
 				.insert(TerrainChunkRefEmpty(key.clone()));
 		}
 	}
+}
+
+/// CpuShot verts are local to the chunk minimum. Insert pose with [`Mesh3d`] so
+/// Bevy required-component defaults cannot leave an identity transform.
+fn apply_resolved_mesh<T>(
+	commands: &mut Commands,
+	entity: Entity,
+	terrain_ref: &TerrainChunkRef<T>,
+	handle: Handle<Mesh>,
+) where
+	T: IdentifiedMesh + NormalizeChunk,
+{
+	commands
+		.entity(entity)
+		.remove::<(TerrainChunkRefEmpty, TerrainChunkRefSeen)>()
+		.insert((
+			Mesh3d(handle),
+			TerrainChunkRefResolved(terrain_ref.key().clone()),
+			terrain_ref.transform(),
+		));
 }
 
 /// Installs shared handle caches and lazy fulfillment for one terrain model type.
@@ -282,7 +311,10 @@ where
 	fn build(&self, app: &mut App) {
 		app.init_resource::<TerrainChunkRefCache<T>>()
 			.init_resource::<TerrainChunkRefBudget>()
-			.add_systems(Update, fulfill_terrain_chunk_refs::<T>);
+			.add_systems(
+				Update,
+				(fulfill_terrain_chunk_refs::<T>, sync_terrain_chunk_ref_poses::<T>).chain(),
+			);
 	}
 }
 
@@ -343,9 +375,62 @@ mod tests {
 
 		assert_eq!(builds.load(Ordering::Relaxed), 1);
 		assert_eq!(a_mesh.0, b_mesh.0);
+		let placed = Transform::from_translation(Vec3::splat(-1.0));
+		assert_eq!(app.world().get::<Transform>(a).copied(), Some(placed));
+		assert_eq!(app.world().get::<Transform>(b).copied(), Some(placed));
 		let ids_after_fulfill = ids.load(Ordering::Relaxed);
 		app.update();
 		assert_eq!(ids.load(Ordering::Relaxed), ids_after_fulfill);
+		Ok(())
+	}
+
+	#[test]
+	fn fulfill_overwrites_identity_with_chunk_minimum() -> anyhow::Result<()> {
+		let model = CountingTerrain {
+			builds: Arc::new(AtomicUsize::new(0)),
+			ids: Arc::new(AtomicUsize::new(0)),
+		};
+		let min = Vec3::new(160.0, -40.0, -320.0);
+		let terrain_ref = TerrainChunkRef::new(model, Chunk::cube(min, 160.0, None), 4);
+		let expected = terrain_ref.transform();
+
+		let mut app = App::new();
+		app.add_plugins((MinimalPlugins, AssetPlugin::default()))
+			.init_asset::<Mesh>()
+			.add_plugins(TerrainChunkRefPlugin::<CountingTerrain>::default());
+
+		let entity = app.world_mut().spawn((terrain_ref, Transform::IDENTITY)).id();
+		app.update();
+
+		assert!(app.world().get::<Mesh3d>(entity).is_some());
+		assert_eq!(app.world().get::<Transform>(entity).copied(), Some(expected));
+		assert_ne!(expected, Transform::IDENTITY);
+		Ok(())
+	}
+
+	#[test]
+	fn sync_restores_wiped_overlay_pose() -> anyhow::Result<()> {
+		let model = CountingTerrain {
+			builds: Arc::new(AtomicUsize::new(0)),
+			ids: Arc::new(AtomicUsize::new(0)),
+		};
+		let min = Vec3::new(160.0, -40.0, -320.0);
+		let terrain_ref = TerrainChunkRef::new(model, Chunk::cube(min, 160.0, None), 4);
+		let expected = terrain_ref.transform();
+
+		let mut app = App::new();
+		app.add_plugins((MinimalPlugins, AssetPlugin::default()))
+			.init_asset::<Mesh>()
+			.add_plugins(TerrainChunkRefPlugin::<CountingTerrain>::default());
+
+		let entity = app.world_mut().spawn(terrain_ref).id();
+		app.update();
+		*app.world_mut()
+			.get_mut::<Transform>(entity)
+			.ok_or_else(|| anyhow::anyhow!("fulfilled ref lost Transform"))? = Transform::IDENTITY;
+		app.update();
+
+		assert_eq!(app.world().get::<Transform>(entity).copied(), Some(expected));
 		Ok(())
 	}
 
@@ -495,6 +580,7 @@ mod tests {
 			.ok_or_else(|| anyhow::anyhow!("fill handle was not copied"))?;
 		assert_eq!(resolved.0, mesh);
 		assert_eq!(model.builds.load(Ordering::Relaxed), 0);
+		assert_eq!(app.world().get::<Transform>(entity).copied(), Some(terrain_ref.transform()));
 		Ok(())
 	}
 }

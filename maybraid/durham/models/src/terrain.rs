@@ -53,8 +53,7 @@ pub use cell::{
 };
 pub use chunk::cascade::CascadeChunk;
 pub use collider::{
-	spawn_terrain_collider_host, terrain_collider_covers_xz, TerrainColliderCell,
-	TerrainColliderEpoch, TerrainColliderHost, TerrainColliderMeshSource, TerrainColliderOverlay,
+	terrain_collider_covers_xz, TerrainColliderEpoch, TerrainColliderMeshSource,
 	TerrainColliderSystems, TerrainFrictionConfig, TerrainTrimeshCollider, TERRAIN_FRICTION,
 };
 pub use config::TerrainConfig;
@@ -100,10 +99,11 @@ pub use marazion::{
 };
 pub use plugin::{register_terrain_plugin, TerrainResourcesPlugin};
 pub use presentation::{
-	PresentedTerrainScene, TerrainBackground, TerrainBackgroundRegionPresenter, TerrainFar,
-	TerrainFarRegionPresenter, TerrainMeshLodBand, TerrainNear, TerrainNearRegionPresenter,
-	TerrainPresentationAssets, TerrainPresenterState, TerrainRegionPresenter, TerrainStoreView,
-	TerrainStreamMarker, TerrainStreamPresenterState, TerrainStreamRegionPresenter,
+	sync_visual_terrain_host_pose, PresentedTerrainScene, TerrainBackground,
+	TerrainBackgroundRegionPresenter, TerrainFar, TerrainFarRegionPresenter, TerrainMeshLodBand,
+	TerrainNear, TerrainNearRegionPresenter, TerrainPresentationAssets, TerrainPresenterState,
+	TerrainRegionPresenter, TerrainStoreView, TerrainStreamMarker, TerrainStreamPresenterState,
+	TerrainStreamRegionPresenter, TerrainVisualHost,
 };
 pub use render::TerrainRenderItem;
 pub use sdf::{ComposedTerrain, ElevationModulation, TerrainSdf};
@@ -181,10 +181,43 @@ impl Terrain {
 		CpuShotBuilder::new(Arc::clone(&self.sdf)).with_wall_faces(self.wall_faces)
 	}
 
-	pub fn scene(&self) -> impl Scene + 'static {
-		// Collider-host bake path. Visual LOD uses [`LodScene::scene_with_level`].
+	/// World pose for CpuShot verts, which are local to the cascade origin.
+	pub fn chunk_pose(&self) -> Transform {
+		Transform::from_translation(cascade_chunk_for_cell(self.cell, self.res_2).origin)
+	}
+
+	/// Near-ring (or unbanded FinePatch) cells carry a trimesh on this scene.
+	pub fn seeds_collision(&self) -> bool {
+		self.stream_ring.map(|ring| ring.seeds_collision()).unwrap_or(true)
+	}
+
+	/// Posed fill entity. [`Mesh3d`] (and the trimesh, when [`Self::seeds_collision`])
+	/// land on this same entity after Cached fulfill.
+	pub fn spawn_fill(
+		&self,
+		commands: &mut Commands,
+		visibility: Visibility,
+		collide: bool,
+	) -> Entity {
 		let chunk = cascade_chunk_for_cell(self.cell, self.res_2);
-		let transform = Transform::from_translation(chunk.origin);
+		let entity = commands
+			.spawn((
+				self.chunk_pose(),
+				chunk,
+				Cached::new(self.mesh_builder()),
+				MeshMaterial3d(self.material.clone()),
+				visibility,
+			))
+			.id();
+		if collide {
+			commands.entity(entity).insert(TerrainColliderMeshSource);
+		}
+		entity
+	}
+
+	pub fn scene(&self) -> impl Scene + 'static {
+		let chunk = cascade_chunk_for_cell(self.cell, self.res_2);
+		let transform = self.chunk_pose();
 		let builder = self.mesh_builder();
 		let material = self.material.clone();
 		bsn! {
@@ -202,7 +235,7 @@ impl Terrain {
 
 	fn mesh_scene(&self) -> impl Scene + 'static {
 		let chunk = cascade_chunk_for_cell(self.cell, self.res_2);
-		let transform = Transform::from_translation(chunk.origin);
+		let transform = self.chunk_pose();
 		let builder = self.mesh_builder();
 		let material = self.material.clone();
 		bsn! {

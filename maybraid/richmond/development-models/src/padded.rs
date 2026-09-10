@@ -62,23 +62,37 @@ impl TerrainWithPads {
 		CpuShotBuilder::new(Arc::clone(&self.sdf)).with_wall_faces(self.wall_faces)
 	}
 
-	pub fn scene(&self) -> impl Scene + 'static {
-		self.mesh_scene()
+	/// World pose for CpuShot verts, which are local to the cascade origin.
+	pub fn chunk_pose(&self) -> Transform {
+		Transform::from_translation(cascade_chunk_for_cell(self.cell, self.res_2).origin)
 	}
 
-	/// Collider-host bake path. Visual LOD uses [`LodScene::scene_with_level`].
-	pub fn collider_scene(&self) -> impl Scene + 'static {
+	/// Posed fill entity. [`Mesh3d`] (and the trimesh, when [`Self::seeds_collision`])
+	/// land on this same entity after Cached fulfill.
+	pub fn spawn_fill(
+		&self,
+		commands: &mut Commands,
+		visibility: Visibility,
+		collide: bool,
+	) -> Entity {
 		let chunk = cascade_chunk_for_cell(self.cell, self.res_2);
-		let transform = Transform::from_translation(chunk.origin);
-		let builder = self.mesh_builder();
-		let material = self.material.clone();
-		bsn! {
-			template_value(transform)
-			template_value(chunk)
-			template(move |_ctx| Ok(Cached::new(builder.clone())))
-			MeshMaterial3d::<DurhamTerrainShader>({material.clone()})
-			TerrainColliderMeshSource
+		let entity = commands
+			.spawn((
+				self.chunk_pose(),
+				chunk,
+				Cached::new(self.mesh_builder()),
+				MeshMaterial3d(self.material.clone()),
+				visibility,
+			))
+			.id();
+		if collide {
+			commands.entity(entity).insert(TerrainColliderMeshSource);
 		}
+		entity
+	}
+
+	pub fn scene(&self) -> impl Scene + 'static {
+		self.mesh_scene()
 	}
 
 	pub fn seeds_collision(&self) -> bool {
@@ -89,9 +103,10 @@ impl TerrainWithPads {
 		(Vec3::from(self.cell.min) + Vec3::from(self.cell.max)) * 0.5
 	}
 
+	/// Visual fill. Pose is the cascade origin; [`Mesh3d`] fulfills onto this root.
 	pub fn mesh_scene(&self) -> impl Scene + 'static {
 		let chunk = cascade_chunk_for_cell(self.cell, self.res_2);
-		let transform = Transform::from_translation(chunk.origin);
+		let transform = self.chunk_pose();
 		let builder = self.mesh_builder();
 		let material = self.material.clone();
 		bsn! {
@@ -199,5 +214,13 @@ mod tests {
 		let viewer = Transform::IDENTITY;
 		assert_eq!(stream_banded_level(&pad, &viewer), LodSceneLevel::High);
 		assert!(stream_banded_draws(&pad, LodSceneLevel::High));
+	}
+
+	#[test]
+	fn chunk_pose_is_cascade_origin() {
+		let pad = pad_at(Vec3::new(160.0, 0.0, -320.0), far_ring());
+		let chunk = cascade_chunk_for_cell(pad.cell, pad.res_2);
+		assert_eq!(pad.chunk_pose(), Transform::from_translation(chunk.origin));
+		assert_ne!(pad.chunk_pose(), Transform::IDENTITY);
 	}
 }

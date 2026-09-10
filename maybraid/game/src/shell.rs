@@ -174,7 +174,7 @@ pub(crate) fn stamp_preview_render_layers(
 mod tests {
 	use bevy::camera::visibility::RenderLayers;
 
-	use super::{PREVIEW_RENDER_LAYER, WORLD_RENDER_LAYER, camera_render_layers};
+	use super::{camera_render_layers, PREVIEW_RENDER_LAYER, WORLD_RENDER_LAYER};
 	use crate::flow::GameFlow;
 
 	#[test]

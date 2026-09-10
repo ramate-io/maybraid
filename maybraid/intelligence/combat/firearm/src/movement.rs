@@ -244,11 +244,10 @@ mod tests {
 
 		app.update();
 		assert!(app.world().get::<ReplanMovement>(combatant).is_none());
-		assert!(
-			!app.world()
-				.get::<MovementIntelligence>(combatant)
-				.is_some_and(|movement| movement.objective.is_vantage_on())
-		);
+		assert!(!app
+			.world()
+			.get::<MovementIntelligence>(combatant)
+			.is_some_and(|movement| movement.objective.is_vantage_on()));
 	}
 
 	#[test]
@@ -287,10 +286,9 @@ mod tests {
 		app.update();
 		assert!(app.world().get::<ReplanMovement>(near).is_some());
 		assert!(app.world().get::<ReplanMovement>(far_fresh).is_some());
-		assert!(
-			app.world()
-				.get::<MovementIntelligence>(near)
-				.is_some_and(|movement| movement.objective.is_vantage_on())
-		);
+		assert!(app
+			.world()
+			.get::<MovementIntelligence>(near)
+			.is_some_and(|movement| movement.objective.is_vantage_on()));
 	}
 }

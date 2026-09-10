@@ -1,7 +1,7 @@
 //! Session mode shown as `Maybraid - <mode>` on the in-game menu.
 
 use bevy::prelude::*;
-use menu_components::{BRAND_NAME, BrandModeLine};
+use menu_components::{BrandModeLine, BRAND_NAME};
 
 /// Current game mode. The in-game menu reads this for the upper-left title.
 #[derive(Resource, Clone, Debug, PartialEq, Eq)]

@@ -14,7 +14,7 @@ use movement_intelligence::{
 use spotting_intelligence::SpotSubject;
 use spotting_intelligence_avian::clear_segment;
 
-pub use candidate::{HideCandidate, HideOccupant, occupancy_at, pick_hide};
+pub use candidate::{occupancy_at, pick_hide, HideCandidate, HideOccupant};
 
 const REFRESH_DISTANCE: f32 = 0.8;
 

@@ -556,7 +556,10 @@ mod tests {
 			.run_system_once(snap_player_to_composed_surface)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 
-		assert_eq!(world.get::<Transform>(player).map(|transform| transform.translation), Some(pose));
+		assert_eq!(
+			world.get::<Transform>(player).map(|transform| transform.translation),
+			Some(pose)
+		);
 		assert!(world.get::<AwaitingTerrainSurface>(player).is_none());
 		assert_eq!(world.query::<&RequestModeCharacter>().iter(&world).count(), 0);
 		Ok(())
@@ -570,9 +573,9 @@ mod tests {
 			.insert_resource(PlayerPhysicsEnabled::default())
 			.insert_resource(TerrainCellLayout::default())
 			.insert_resource(TerrainEntryStore::default())
-			.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(
-				&TerrainConfig::new(42),
-			)))
+			.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(&TerrainConfig::new(
+				42,
+			))))
 			.add_systems(
 				Update,
 				(
@@ -625,7 +628,10 @@ mod tests {
 			.run_system_once(apply_mode_commands)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 
-		assert_eq!(world.get::<Transform>(player).map(|transform| transform.translation), Some(pose));
+		assert_eq!(
+			world.get::<Transform>(player).map(|transform| transform.translation),
+			Some(pose)
+		);
 		assert!(world.get::<AwaitingTerrainSurface>(player).is_none());
 		Ok(())
 	}
@@ -640,9 +646,9 @@ mod tests {
 		world.insert_resource(PlayerPhysicsEnabled::default());
 		world.insert_resource(TerrainCellLayout::default());
 		world.insert_resource(TerrainEntryStore::default());
-		world.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(&TerrainConfig::new(
-			42,
-		))));
+		world.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(
+			&TerrainConfig::new(42),
+		)));
 		let player = world
 			.spawn((
 				Player,

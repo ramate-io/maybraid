@@ -2,12 +2,12 @@
 
 use bevy::prelude::*;
 
-use crate::MovementSheet;
 use crate::candidate::{MovementCandidate, MovementCandidateHints};
 use crate::location::MovementLocation;
 use crate::objective::MovementObjective;
 use crate::step::MovementStep;
 use crate::surface::{CandidateBudget, MovementIntelligenceSurface};
+use crate::MovementSheet;
 
 /// Straight-line `MoveTo` the objective location. No colliders.
 pub struct StraightLineSurface;
