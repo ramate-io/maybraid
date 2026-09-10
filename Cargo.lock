@@ -4696,12 +4696,14 @@ name = "maybraid-skill-map"
 version = "0.0.1"
 dependencies = [
  "anyhow",
+ "avian3d",
  "bevy",
  "bevy_hanabi",
  "combat-targeting",
  "crozon-character-items",
  "damage",
  "evasion-intelligence",
+ "lod-avian",
  "maybraid-character-controller",
  "noise",
  "player",

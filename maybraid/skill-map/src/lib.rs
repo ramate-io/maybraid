@@ -9,6 +9,7 @@ mod cursor;
 mod effects;
 mod fireball_embers;
 mod fireball_material;
+mod fireball_trail;
 mod map;
 mod tiles;
 mod user;
@@ -107,6 +108,16 @@ impl Plugin for SkillMapPlugin {
 				)
 					.chain()
 					.in_set(SkillMapSystems::Dispatch),
+			)
+			.add_systems(
+				PostUpdate,
+				(
+					fireball_trail::drop_fireball_beads,
+					fireball_trail::tick_fireball_beads,
+					fireball_trail::contact_fireball_beads,
+				)
+					.chain()
+					.after(TransformSystems::Propagate),
 			);
 	}
 }

@@ -9,12 +9,13 @@ use bevy_hanabi::prelude::{
 };
 use bevy_hanabi::Gradient;
 
-use crate::fireball_material::fireball_visual_mesh;
+use crate::fireball_material::{fireball_visual_mesh, FireballMaterial};
 
-/// Compiled fireball mesh + ember trail.
+/// Shared mesh + material for the head and every leave-behind bead.
 #[derive(Resource, Clone)]
 pub struct FireballEffects {
 	pub mesh: Handle<Mesh>,
+	pub material: Handle<FireballMaterial>,
 	#[allow(dead_code)]
 	pub embers: Handle<EffectAsset>,
 }
@@ -22,11 +23,13 @@ pub struct FireballEffects {
 pub fn setup_fireball_effects(
 	mut commands: Commands,
 	mut meshes: ResMut<Assets<Mesh>>,
+	mut materials: ResMut<Assets<FireballMaterial>>,
 	mut effects: ResMut<Assets<EffectAsset>>,
 ) {
 	let mesh = meshes.add(fireball_visual_mesh());
+	let material = materials.add(FireballMaterial::new(1.0));
 	let embers = effects.add(ember_effect());
-	commands.insert_resource(FireballEffects { mesh, embers });
+	commands.insert_resource(FireballEffects { mesh, material, embers });
 }
 
 fn ember_effect() -> EffectAsset {

@@ -1,6 +1,5 @@
-//! Fireball [`Material`]. Flight uniforms (`origin`, launch, gravity) are
-//! per-shot. A later MaterialRef port should cache the *shader* and marshal
-//! this pad per instance — not allocate a handle per unique origin.
+//! Shared fireball [`Material`]. One handle for the head and every bead;
+//! pose and scale stay on [`Transform`].
 
 use bevy::{
 	asset::embedded_asset,
@@ -11,71 +10,28 @@ use bevy::{
 	shader::ShaderRef,
 };
 
-use crate::effects::{FIREBALL_MAX_AGE, FIREBALL_SPEED};
-
-/// Visual capsule is a bit larger than the hit sphere so discard can chew the rim.
+/// Visual capsule is a bit larger than the hit sphere so the short tail can pull.
 pub const FIREBALL_VISUAL_RADIUS: f32 = 1.18;
-/// Fraction of distance traveled that the tail unfolds. Leaves a gap at the caster.
-pub const FIREBALL_TAIL_TRACE: f32 = 0.92;
-/// Cylinder length so rest-pose aft ≈ `speed * max_age * TRACE`. Keep in sync with the shader.
-pub const FIREBALL_VISUAL_LENGTH: f32 =
-	FIREBALL_SPEED * FIREBALL_MAX_AGE * FIREBALL_TAIL_TRACE - FIREBALL_VISUAL_RADIUS;
-/// Unfolded nub at spawn, in meters. Keep in sync with `TAIL_START` in the shader.
-#[allow(dead_code)]
-pub const FIREBALL_TAIL_START: f32 = 0.45;
+/// Short aft shaft. The bead train, not this mesh, traces the flight.
+pub const FIREBALL_VISUAL_LENGTH: f32 = 0.9;
 
-/// Linear mid-flame. The fragment mixes a hotter core from the view-facing term.
 const FIRE_FILL: Vec4 = Vec4::new(1.0, 0.28, 0.05, 1.0);
 
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
 pub struct FireballMaterial {
 	#[uniform(0)]
 	pub base_color: Vec4,
-	/// `x` seed, `y` speed, `z` spawn time, `w` max age.
-	#[uniform(1)]
-	pub displace: Vec4,
-	/// World muzzle.
-	#[uniform(2)]
-	pub origin: Vec4,
-	/// Launch velocity (`direction * speed`).
-	#[uniform(3)]
-	pub launch: Vec4,
-	/// World gravity on this flight (`Gravity * GravityScale`).
-	#[uniform(4)]
-	pub gravity: Vec4,
 }
 
 impl FireballMaterial {
-	pub fn new(
-		seed: u32,
-		intensity: f32,
-		speed: f32,
-		spawn_time: f32,
-		origin: Vec3,
-		velocity: Vec3,
-		gravity: Vec3,
-	) -> Self {
-		Self {
-			base_color: FIRE_FILL * intensity.max(0.0),
-			displace: Vec4::new(seed as f32, speed, spawn_time, FIREBALL_MAX_AGE),
-			origin: origin.extend(0.0),
-			launch: velocity.extend(0.0),
-			gravity: gravity.extend(0.0),
-		}
+	pub fn new(intensity: f32) -> Self {
+		Self { base_color: FIRE_FILL * intensity.max(0.0) }
 	}
 }
 
 impl Default for FireballMaterial {
 	fn default() -> Self {
-		Self::new(
-			0,
-			1.0,
-			FIREBALL_SPEED,
-			0.0,
-			Vec3::ZERO,
-			Vec3::NEG_Z * FIREBALL_SPEED,
-			Vec3::NEG_Y * 9.81,
-		)
+		Self::new(1.0)
 	}
 }
 
@@ -124,13 +80,13 @@ fn disable_fireball_shadow_casters(
 	}
 }
 
-/// Long capsule with the ball at the origin and the shaft along `-Y`.
+/// Short capsule with the ball at the origin and a small shaft along `-Y`.
 pub fn fireball_visual_mesh() -> Mesh {
 	Capsule3d::new(FIREBALL_VISUAL_RADIUS, FIREBALL_VISUAL_LENGTH)
 		.mesh()
-		.latitudes(14)
-		.longitudes(22)
-		.rings(72)
+		.latitudes(12)
+		.longitudes(20)
+		.rings(6)
 		.build()
 		.translated_by(Vec3::new(0.0, -FIREBALL_VISUAL_LENGTH * 0.5, 0.0))
 }
@@ -139,36 +95,14 @@ pub fn fireball_visual_mesh() -> Mesh {
 mod tests {
 	use super::*;
 
-	fn tail_length_at(age: f32, speed: f32) -> f32 {
-		(age * speed * FIREBALL_TAIL_TRACE).max(FIREBALL_TAIL_START)
-	}
-
 	#[test]
-	fn uniform_carries_fill_and_lifetime() {
-		let origin = Vec3::new(3.0, 1.5, -8.0);
-		let velocity = Vec3::new(0.0, 4.0, -30.0);
-		let gravity = Vec3::NEG_Y * 9.81;
-		let material =
-			FireballMaterial::new(0xA11A_5EED_u32, 1.0, 30.0, 0.25, origin, velocity, gravity);
-		assert_eq!(material.origin.truncate(), origin);
-		assert_eq!(material.launch.truncate(), velocity);
-		assert!((material.gravity.y + 9.81).abs() < 1e-4);
-		let later = origin + velocity * 1.0 + 0.5 * gravity;
-		assert!(later.y < origin.y + velocity.y);
+	fn shared_fill_is_flame() {
+		let material = FireballMaterial::new(1.0);
 		assert_eq!(material.base_color, FIRE_FILL);
-		assert_eq!(material.displace.x, 0xA11A_5EED_u32 as f32);
-		assert_eq!(material.displace.w, FIREBALL_MAX_AGE);
-		assert!(tail_length_at(0.0, FIREBALL_SPEED) < tail_length_at(1.0, FIREBALL_SPEED));
-		assert!(
-			(tail_length_at(FIREBALL_MAX_AGE, FIREBALL_SPEED)
-				- FIREBALL_SPEED * FIREBALL_MAX_AGE * FIREBALL_TAIL_TRACE)
-				.abs() < 1e-3
-		);
-		assert!((FIREBALL_VISUAL_LENGTH - 136.82).abs() < 0.02);
 	}
 
 	#[test]
-	fn visual_mesh_hangs_aft_from_the_ball() {
+	fn visual_mesh_is_a_short_aft_shaft() {
 		let mesh = fireball_visual_mesh();
 		let Some(bevy::mesh::VertexAttributeValues::Float32x3(positions)) =
 			mesh.attribute(Mesh::ATTRIBUTE_POSITION)
@@ -177,8 +111,9 @@ mod tests {
 		};
 		let min_y = positions.iter().map(|p| p[1]).fold(f32::MAX, f32::min);
 		let max_y = positions.iter().map(|p| p[1]).fold(f32::MIN, f32::max);
-		assert!(mesh.count_vertices() > 64);
+		assert!(mesh.count_vertices() > 32);
 		assert!(max_y < FIREBALL_VISUAL_RADIUS + 0.05);
-		assert!(min_y < -(FIREBALL_VISUAL_LENGTH + FIREBALL_VISUAL_RADIUS) + 0.25);
+		assert!(min_y > -(FIREBALL_VISUAL_LENGTH + FIREBALL_VISUAL_RADIUS) - 0.05);
+		assert!(min_y < -FIREBALL_VISUAL_LENGTH * 0.5);
 	}
 }
