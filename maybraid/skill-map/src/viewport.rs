@@ -15,6 +15,8 @@ use crate::user::{SkillMapEquip, SkillMapHeld, SkillMapMember, SkillMapSession, 
 use crate::SkillMapEnabled;
 
 const VIEWPORT_PX: f32 = 228.0;
+/// `WindowSize` area is viewport pixels times this. 1.0 showed almost the whole 256 map.
+const MAP_CAMERA_SCALE: f32 = 0.4;
 const VIEWPORT_GAP: f32 = 12.0;
 const VIEWPORT_INSET: f32 = 16.0;
 const LIVE_BORDER: Color = Color::srgb(1.0, 0.48, 0.08);
@@ -111,6 +113,8 @@ fn spawn_one_map(
 		TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST | TextureUsages::RENDER_ATTACHMENT;
 	let image_handle = images.add(image);
 
+	let mut projection = OrthographicProjection::default_2d();
+	projection.scale = MAP_CAMERA_SCALE;
 	let camera = commands
 		.spawn((
 			Name::new(format!("skill-map-camera-{}", spec.label)),
@@ -121,7 +125,7 @@ fn spawn_one_map(
 				..default()
 			},
 			RenderTarget::Image(image_handle.into()),
-			Projection::Orthographic(OrthographicProjection::default_2d()),
+			Projection::Orthographic(projection),
 			Transform::from_xyz(0.0, 0.0, 1.0),
 			SkillMapViewportCamera,
 			spec.id,

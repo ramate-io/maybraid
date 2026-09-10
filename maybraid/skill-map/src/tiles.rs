@@ -102,8 +102,7 @@ fn spawn_tile(
 		spawn_tile(commands, map, TileKind::Land, center, size, layer.clone(), member, assets);
 	}
 	let z = if matches!(kind, TileKind::Power(_)) { 0.2 } else { 0.0 };
-	// Visual overlap hides wobble seams. AABB stays `size` so claims do not grow.
-	let visual = Vec3::new(1.18, 1.18, 1.0);
+	// Unit scale so neighboring edges share a world position and the sway field welds.
 	commands.spawn((
 		Name::new("skill-map-tile"),
 		SkillMapTile { map, kind },
@@ -111,7 +110,7 @@ fn spawn_tile(
 		member,
 		Mesh2d(assets.mesh.clone()),
 		MeshMaterial2d(assets.material(kind)),
-		Transform::from_xyz(center.x, center.y, z).with_scale(visual),
+		Transform::from_xyz(center.x, center.y, z),
 		layer,
 	));
 }

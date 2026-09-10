@@ -18,7 +18,7 @@ pub const TILE_KIND_WATER: f32 = 1.0;
 pub const TILE_KIND_FIRE: f32 = 2.0;
 pub const TILE_KIND_WAVE: f32 = 3.0;
 pub const TILE_KIND_CURSOR: f32 = 4.0;
-const TILE_DIVISIONS: u32 = 8;
+const TILE_DIVISIONS: u32 = 12;
 
 #[derive(Clone, Copy, Debug, ShaderType)]
 pub struct TileParams {
@@ -163,8 +163,8 @@ mod tests {
 
 	#[test]
 	fn subdivided_quad_has_more_than_a_sprite() {
-		let mesh = subdivided_quad(16.0, 16.0, 8);
-		assert_eq!(mesh.count_vertices(), 81);
+		let mesh = subdivided_quad(16.0, 16.0, 12);
+		assert_eq!(mesh.count_vertices(), 169);
 	}
 
 	#[test]
