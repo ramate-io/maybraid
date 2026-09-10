@@ -60,7 +60,7 @@ pub fn produce_keyboard(
 	if keyboard.pressed(KeyCode::KeyC) {
 		pad.hold_digital(PadButton::BumperFocus);
 	}
-	// V is RB. Hold C+V for the skill map; it does not steal sprint (L3) or E/X interact.
+	// V is RB. Skill maps read stick flicks, not a C+V chord.
 	if keyboard.pressed(KeyCode::KeyV) {
 		pad.hold_digital(PadButton::BumperFire);
 	}

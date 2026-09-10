@@ -1,10 +1,12 @@
-//! Discover skill maps: a 2D paradimension a [`SkillMapUser`] steers while both
-//! bumpers are down. Walks claim authored tiles that dispatch world effects.
+//! Discover skill maps: a 2D paradimension a [`SkillMapUser`] steers with stick
+//! flicks. Either stick; a hold is not a flick. Walks claim authored tiles that
+//! dispatch world effects.
 //!
 //! Stamp [`SkillMapUser`] on the live character (same install as
 //! [`firearm_user::FirearmUser`]). Pause / text-entry should clear
 //! [`SkillMapEnabled`].
 
+mod controller;
 mod cursor;
 mod effects;
 mod fireball_embers;
@@ -24,6 +26,7 @@ use maybraid_character_controller::CharacterControlSystems;
 use projectiles::ProjectilesPlugin;
 use threat_management_intelligence::ThreatManagementSystems;
 
+pub use controller::{SkillMapController, SkillMapFlick};
 pub use effects::{
 	forget_chance, FIREBALL_COLOR, FIREBALL_GRAVITY, FIREBALL_RADIUS, FIREBALL_SPEED,
 };
@@ -74,7 +77,9 @@ impl Plugin for SkillMapPlugin {
 			.add_plugins(SkillMapTileMaterialPlugin)
 			.add_systems(Startup, fireball_embers::setup_fireball_effects)
 			.init_resource::<SkillMapEnabled>()
+			.init_resource::<controller::SkillMapController>()
 			.add_message::<SkillMapEvent>()
+			.add_message::<controller::SkillMapFlick>()
 			.configure_sets(
 				Update,
 				(
@@ -90,9 +95,11 @@ impl Plugin for SkillMapPlugin {
 			.add_systems(
 				Update,
 				(
-					cursor::apply_skill_map_intents,
+					controller::detect_skill_map_flicks,
+					cursor::sync_skill_map_held,
 					cursor::tick_steer_lock,
-					cursor::steer_cursors,
+					cursor::apply_flicks,
+					cursor::tick_flick_beads,
 					viewport::sync_viewport_chrome,
 					viewport::track_cursors,
 					viewport::tick_debraid,

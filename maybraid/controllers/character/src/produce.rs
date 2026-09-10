@@ -28,9 +28,7 @@ pub fn collect(pad: &VirtualPad, trigger_threshold: f32) -> Vec<CharacterIntent>
 	if pad.trigger_focus > ANALOG_EPS {
 		out.push(CharacterIntent::Focus(pad.trigger_focus));
 	}
-	if pad.pressed(PadButton::BumperFocus) && pad.pressed(PadButton::BumperFire) {
-		out.push(CharacterIntent::SkillMap);
-	} else if pad.pressed(PadButton::BumperFocus) {
+	if pad.pressed(PadButton::BumperFocus) {
 		out.push(CharacterIntent::Ads(1.0));
 	}
 	if pad.trigger_fire > ANALOG_EPS {
@@ -193,13 +191,13 @@ mod tests {
 	}
 
 	#[test]
-	fn both_bumpers_open_the_skill_map_instead_of_ads() -> anyhow::Result<()> {
+	fn both_bumpers_do_not_open_the_skill_map() -> anyhow::Result<()> {
 		let mut pad = VirtualPad::default();
 		pad.begin_frame();
 		pad.hold_digital(PadButton::BumperFocus);
 		pad.hold_digital(PadButton::BumperFire);
 		finish(&mut pad);
-		assert_eq!(collect(&pad, 0.5), vec![CharacterIntent::SkillMap]);
+		assert_eq!(collect(&pad, 0.5), vec![CharacterIntent::Ads(1.0)]);
 		Ok(())
 	}
 

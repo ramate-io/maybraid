@@ -10,7 +10,7 @@ pub enum CharacterIntent {
 	Focus(f32),
 	/// Cheek-weld ADS with iron-sight FOV. Left bumper / middle mouse.
 	Ads(f32),
-	/// Both bumpers (Xbox LB+RB) or keyboard **C+V**. Opens Discover skill maps.
+	/// Unused hold chord. Discover maps now read stick flicks, not bumpers.
 	SkillMap,
 	UseItem(f32),
 	StartSprint,

@@ -86,6 +86,7 @@ impl Material2d for SkillMapTileMaterial {
 pub struct SkillMapTileAssets {
 	pub mesh: Handle<Mesh>,
 	pub cursor_mesh: Handle<Mesh>,
+	pub bead_mesh: Handle<Mesh>,
 	pub land_fire: Handle<SkillMapTileMaterial>,
 	pub land_wave: Handle<SkillMapTileMaterial>,
 	pub water: Handle<SkillMapTileMaterial>,
@@ -125,9 +126,11 @@ fn setup_tile_assets(
 ) {
 	let mesh = meshes.add(subdivided_quad(16.0, 16.0, TILE_DIVISIONS));
 	let cursor_mesh = meshes.add(Circle::new(4.6).mesh().resolution(28).build());
+	let bead_mesh = meshes.add(Circle::new(1.6).mesh().resolution(20).build());
 	commands.insert_resource(SkillMapTileAssets {
 		mesh,
 		cursor_mesh,
+		bead_mesh,
 		land_fire: materials.add(SkillMapTileMaterial::land(SkillKind::Fireball)),
 		land_wave: materials.add(SkillMapTileMaterial::land(SkillKind::Dumbwave)),
 		water: materials.add(SkillMapTileMaterial::for_kind(TileKind::Water, 2)),

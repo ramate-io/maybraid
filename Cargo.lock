@@ -4705,6 +4705,7 @@ dependencies = [
  "evasion-intelligence",
  "lod-avian",
  "maybraid-character-controller",
+ "maybraid-input",
  "noise",
  "player",
  "projectiles",
