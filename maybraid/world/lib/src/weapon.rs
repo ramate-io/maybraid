@@ -12,7 +12,7 @@ use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
 use damage::Health;
 use firearm_user::{
 	live_weapon_from_stats, spawn_held_firearm, spawn_held_kit, spawn_reticle, FirearmUser,
-	FirearmUserSettings, GeneratedFirearm,
+	FirearmUserSettings, FirearmUserSystems, GeneratedFirearm, WeaponSwap,
 };
 use player::{
 	apply_character_mobility, CameraFollow, Player as MaybraidPlayer, PlayerCameraAim, PlayerLook,
@@ -164,24 +164,51 @@ fn hold_primary_weapon(commands: &mut Commands, player: Entity, inventory: &Inve
 	);
 }
 
-/// Y cycles the queued guns and puts the new primary in hand.
-fn swap_active_weapon(
+/// Start the holster motion; the kit changes at the dip.
+fn begin_weapon_swap(
 	mut intents: MessageReader<CharacterIntent>,
 	gameplay: Res<WorldGameplayEnabled>,
 	mut commands: Commands,
-	mut loadout: Option<ResMut<WorldPlayerLoadout>>,
-	assets: Option<Res<AssetServer>>,
-	players: Query<(Entity, &InventoryUser, Option<&FirearmUser>), With<VegetationPlayer>>,
-	mut bags: Query<&mut Inventory>,
+	players: Query<(Entity, &InventoryUser, Has<WeaponSwap>), With<VegetationPlayer>>,
+	bags: Query<&Inventory>,
 ) {
 	if !gameplay.0 || !intents.read().any(|intent| matches!(intent, CharacterIntent::SwapActive)) {
 		return;
 	}
-	for (player, user, firearm) in &players {
+	for (player, user, swapping) in &players {
+		if swapping {
+			continue;
+		}
+		let Ok(bag) = bags.get(user.bag) else {
+			continue;
+		};
+		if bag.weapons.len() < 2 {
+			continue;
+		}
+		commands.entity(player).insert(WeaponSwap::start());
+	}
+}
+
+/// Replace the held kit once the old gun has dipped out of the way.
+fn commit_weapon_swap(
+	mut commands: Commands,
+	mut loadout: Option<ResMut<WorldPlayerLoadout>>,
+	assets: Option<Res<AssetServer>>,
+	mut players: Query<
+		(Entity, &InventoryUser, Option<&FirearmUser>, &mut WeaponSwap),
+		With<VegetationPlayer>,
+	>,
+	mut bags: Query<&mut Inventory>,
+) {
+	for (player, user, firearm, mut swap) in &mut players {
+		if !swap.ready_to_swap() {
+			continue;
+		}
 		let Ok(mut bag) = bags.get_mut(user.bag) else {
 			continue;
 		};
 		if !bag.swap_active() {
+			swap.mark_swapped();
 			continue;
 		}
 		let snapshot = bag.clone();
@@ -196,6 +223,7 @@ fn swap_active_weapon(
 		if assets.is_some() {
 			hold_primary_weapon(&mut commands, player, &snapshot);
 		}
+		swap.mark_swapped();
 	}
 }
 
@@ -212,7 +240,8 @@ pub(crate) fn configure(app: &mut App) {
 		Update,
 		(
 			arm_world_player,
-			swap_active_weapon
+			(begin_weapon_swap, commit_weapon_swap.after(FirearmUserSystems::Swap))
+				.chain()
 				.after(CharacterControlSystems)
 				.run_if(resource_equals(WorldGameplayEnabled(true))),
 		),
@@ -281,24 +310,66 @@ mod tests {
 		Ok(())
 	}
 
-	#[test]
-	fn y_swaps_the_queued_primary() -> anyhow::Result<()> {
-		use crozon_inventory_user::InventoryUser;
-		use firearm_user::FirearmUser;
-		use maybraid_character_controller::CharacterIntent;
-
-		use crate::weapon::swap_active_weapon;
-
-		let inventory = Inventory {
+	fn two_gun_bag() -> Inventory {
+		Inventory {
 			items: vec![
 				InventoryItem::firearm(FirearmMesh::Bullpup),
 				InventoryItem::firearm(FirearmMesh::Reltor),
 			],
 			clothing: Vec::new(),
 			weapons: vec![0, 1],
-		};
+		}
+	}
+
+	#[test]
+	fn y_starts_a_swap_without_changing_the_kit() -> anyhow::Result<()> {
+		use crozon_inventory_user::InventoryUser;
+		use firearm_user::{FirearmUser, WeaponSwap};
+		use maybraid_character_controller::CharacterIntent;
+
+		use crate::weapon::begin_weapon_swap;
+
+		let inventory = two_gun_bag();
 		let mut world = World::new();
 		world.init_resource::<Messages<CharacterIntent>>();
+		world.insert_resource(WorldGameplayEnabled(true));
+		let bag = world.spawn(inventory).id();
+		let held = world.spawn_empty().id();
+		let player = world
+			.spawn((
+				VegetationPlayer,
+				InventoryUser::carrying(bag),
+				FirearmUser::holding(held),
+			))
+			.id();
+		world
+			.run_system_once(|mut writer: MessageWriter<CharacterIntent>| {
+				writer.write(CharacterIntent::SwapActive);
+			})
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		world
+			.run_system_once(begin_weapon_swap)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+
+		assert!(world.get::<WeaponSwap>(player).is_some());
+		let bag = world.get::<Inventory>(bag).ok_or_else(|| anyhow::anyhow!("bag"))?;
+		assert_eq!(
+			bag.primary_weapon().and_then(InventoryItem::firearm_mesh),
+			Some(FirearmMesh::Bullpup)
+		);
+		assert!(world.entities().contains(held));
+		Ok(())
+	}
+
+	#[test]
+	fn y_swaps_the_queued_primary() -> anyhow::Result<()> {
+		use crozon_inventory_user::InventoryUser;
+		use firearm_user::{FirearmUser, WeaponSwap, WEAPON_SWAP_SECS};
+
+		use crate::weapon::commit_weapon_swap;
+
+		let inventory = two_gun_bag();
+		let mut world = World::new();
 		world.insert_resource(WorldGameplayEnabled(true));
 		world.insert_resource(WorldPlayerLoadout::new(
 			"active",
@@ -311,14 +382,14 @@ mod tests {
 			VegetationPlayer,
 			InventoryUser::carrying(bag),
 			FirearmUser::holding(held),
+			WeaponSwap {
+				elapsed: WEAPON_SWAP_SECS * 0.5,
+				duration: WEAPON_SWAP_SECS,
+				swapped: false,
+			},
 		));
 		world
-			.run_system_once(|mut writer: MessageWriter<CharacterIntent>| {
-				writer.write(CharacterIntent::SwapActive);
-			})
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		world
-			.run_system_once(swap_active_weapon)
+			.run_system_once(commit_weapon_swap)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 
 		let bag = world.get::<Inventory>(bag).ok_or_else(|| anyhow::anyhow!("bag"))?;

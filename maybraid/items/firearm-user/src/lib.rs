@@ -7,6 +7,7 @@ mod kit;
 mod pose;
 mod reticle;
 mod rumble;
+mod swap;
 mod weapon;
 
 use bevy::prelude::*;
@@ -25,11 +26,14 @@ pub use pose::{
 	spawn_held_kit, stamp_holding_arms, HeldFirearm,
 };
 pub use reticle::{spawn_reticle, Reticle};
+pub use swap::{WeaponSwap, WEAPON_SWAP_SECS};
 pub use weapon::{live_weapon_from_stats, LiveWeapon, RECOIL_PITCH_PER_UNIT};
 
 /// Firearm-user schedule points other combat systems can order against.
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum FirearmUserSystems {
+	/// Advance the holster / raise window.
+	Swap,
 	/// Travel the queued recoil path into look / camera.
 	Recoil,
 }
@@ -108,10 +112,14 @@ impl Plugin for FirearmUserPlugin {
 		add_firearm_components_host::<kit::GeneratedFirearm>(app);
 		app.add_message::<maybraid_input::PadRumble>()
 			.add_systems(Update, fire::apply_fire_intents.in_set(PlayerSystems::Intent))
+			.add_systems(Update, swap::advance_weapon_swap.in_set(FirearmUserSystems::Swap))
 			.add_systems(
 				Update,
-				(pose::stamp_holding_arms, pose::pose_held_firearm).in_set(PlayerPoseSystems::Item),
+				(pose::stamp_holding_arms, pose::pose_held_firearm, swap::apply_weapon_swap_pose)
+					.chain()
+					.in_set(PlayerPoseSystems::Item),
 			)
+			.add_systems(Update, swap::clear_finished_weapon_swaps.after(swap::advance_weapon_swap))
 			.add_systems(Update, aim::write_sight_aim.in_set(PlayerCameraSystems::Aim))
 			.add_systems(
 				Update,
