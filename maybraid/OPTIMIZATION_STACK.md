@@ -135,7 +135,12 @@ Ready off-band, cull-inflight, and present-hide trees now stamp recursive
 `Disabled` (Bevy does not cascade `Disabled` to children unless asked). Pending
 fulfill roots stay Hidden-only so streamed children still enter
 `visibility_propagate`. Produce fill and Gimme `reindex_moved_hosts` do **not**
-use `Allow<Disabled>` — Disabled nested hosts drop out of those queries.
+use `Allow<Disabled>`. Gimme intentionally retains an existing host AABB while
+the host is Disabled (warm index, no reveal-time reindex); refresh gates any
+such stale spatial hit before producing work.
+Raw Durham roots replaced by padded urban terrain also update `Visibility` only
+when their replacement state changes, rather than dirtying
+`Changed<Visibility>` every frame.
 
 Do **not** unique-merge city walls. Do **not** widen High vegetation bands to
 cut vis (more entities on-screen). Development-pad `exclusion_zones` still
