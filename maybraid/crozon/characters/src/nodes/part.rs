@@ -1,7 +1,7 @@
 //! Fine-phase mesh / feature [`lod::LodScene`] host.
 
 use bevy::math::bounding::Aabb3d;
-use bevy::prelude::{Component, Transform, Vec3};
+use bevy::prelude::{Component, Transform, Vec3, Visibility};
 use bevy::scene::prelude::{bsn, template_value, Scene};
 use crozon_character_shaders::{eye_palette, mouth_palette, RECIPE_FACE_EYE, RECIPE_FACE_MOUTH};
 use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
@@ -169,6 +169,33 @@ impl PartNode {
 	pub fn authored_transform(&self) -> Transform {
 		self.normalization.transform().mul_transform(self.feature)
 	}
+
+	/// Typed part member without [`lod::LodSceneHost`] scaffolding.
+	pub fn assembly_contents(&self) -> impl Scene + 'static {
+		let node = self.clone();
+		let transform = node.authored_transform();
+		let part = CharacterPart { slot: node.slot };
+		let material = MaterialRefRoot(node.material.clone());
+		let socket = node.socket.map(SocketRefRoot);
+		let skin = node.skin.map(SkinRefRoot);
+		(
+			bsn! {
+				template_value(node)
+				template_value(transform)
+				template_value(part)
+				template_value(material)
+				PropagateToDescendants
+				AssemblyHost
+			},
+			maybe_component(socket),
+			maybe_component(skin),
+		)
+	}
+
+	/// [`Self::assembly_contents`] plus the GLB [`SceneRef`] on the same entity.
+	pub fn assembly_scene(&self) -> impl Scene + 'static {
+		(self.assembly_contents(), self.scene.clone().scene(), bsn! { Visibility::Hidden })
+	}
 }
 
 impl LodScene for PartNode {
@@ -201,24 +228,7 @@ impl LodScene for PartNode {
 		Self: Component + Clone + Default + Unpin + Sized,
 	{
 		let _ = lod_ref;
-		let node = self.clone();
-		let transform = node.authored_transform();
-		let part = CharacterPart { slot: node.slot };
-		let material = MaterialRefRoot(node.material.clone());
-		let socket = node.socket.map(SocketRefRoot);
-		let skin = node.skin.map(SkinRefRoot);
-		(
-			bsn! {
-				template_value(node)
-				template_value(transform)
-				template_value(part)
-				template_value(material)
-				PropagateToDescendants
-				AssemblyHost
-			},
-			maybe_component(socket),
-			maybe_component(skin),
-		)
+		self.assembly_contents()
 	}
 }
 

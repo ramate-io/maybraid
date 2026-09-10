@@ -16,7 +16,7 @@ crozon-rigs
 
 crozon-character-motion   # this crate
         ↑
-crozon-characters         # recipes; host() stamps initial markers
+crozon-characters         # recipes; host() / fixed spawn stamps initial markers
         ↑
 playgrounds
 ```
@@ -29,7 +29,7 @@ WASD / Space
   → drive_player_locomotion writes AnimRefRoot on the body host
 
 sync_motion_markers
-  → shown LodLevelRoot (else desired / High) → motion_policy
+  → shown LodLevelRoot (else desired / High; fixed assemblies have no host) → motion_policy
   → insert/remove AnimateBones / AnimateEffects on body host
   → insert/remove ApplyTerrainPitch on character root
 

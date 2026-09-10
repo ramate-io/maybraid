@@ -5937,7 +5937,6 @@ dependencies = [
  "avian3d",
  "bevy",
  "crozon-characters",
- "lod",
  "lod-avian",
  "maybraid-character-controller",
 ]

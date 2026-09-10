@@ -44,7 +44,12 @@ map, socket/skin fulfill, and pose. The mailbox and terrain pitch live in
 shown LOD band and filter the expensive systems. Do not
 grow a post-spawn prepare pass that copies materials or poses.
 
-The playground spawn path is LodScene ([`CharacterRecipe::clothed`](src/components.rs)).
+Runtime world, mob, and player visuals spawn a **fixed assembly**
+([`spawn_fixed_character_visual`](src/fixed.rs)) — ordinary [`CharacterRoot`](src/member.rs)
+/ rig / part entities without query-only [`LodSceneHost`](../../lod/lib/src/scene/lod_scene.rs)s.
+[`MobScene`](../../mobs/mobs/src/scene.rs) remains the only LOD gate for mob members.
+Concepts and menu previews still spawn LodScene ([`CharacterRecipe::clothed`](src/components.rs)
+via [`ComponentsOnly`](src/components.rs) [`LodScene::host`](../../lod/lib/src/scene/lod_scene.rs)).
 [`CharacterComponents`](src/components.rs) is the only character recipe.
 Part colors live on [`PartNode::material`](src/nodes/part.rs) (`*Colors::color_for_slot`
 and [`ClothingLayer`](src/components.rs) stamp palette[0]). Live playground tint

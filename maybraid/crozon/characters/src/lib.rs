@@ -4,7 +4,10 @@
 //! [`lod::LodScene`] hosts ([`ComponentsOnly`], [`RigNode`], [`PartNode`]), with
 //! sockets and skinning as deferred refs parallel to [`scene_ref::SceneRef`].
 //! Live pose, animation, and paint are ECS mutation (`MemberOf` + `*Ref` +
-//! `Changed`), not LOD refresh. Recipes also expose a rest-pose
+//! `Changed`), not LOD refresh. Runtime world/mob visuals spawn a **fixed
+//! assembly** ([`fixed`]) — ordinary [`CharacterRoot`] / rig / part entities
+//! without query-only [`lod::LodSceneHost`]s. Playground previews still use
+//! [`ComponentsOnly`] [`lod::LodScene::host`]. Recipes also expose a rest-pose
 //! [`LocomotionCapsule`](crate::LocomotionCapsule) for locomotion colliders;
 //! physics crates stamp Avian from that hull. Pronograde recipes also expose a
 //! query-only [`HitCapsule`](crate::HitCapsule) (horizontal, along mesh `+Z`);
@@ -22,6 +25,7 @@ pub mod assembly;
 pub mod assets;
 pub mod components;
 pub mod concepts;
+pub mod fixed;
 pub mod hosts;
 pub mod layer;
 pub mod material_lib;
@@ -59,6 +63,11 @@ pub use crozon_character_motion::{
 };
 pub use crozon_character_shaders::CrozonCharacterShadersPlugin;
 pub use crozon_rigs::{BoneRotation, BoneScale, ResolvedRigPose, RigPoseLayer};
+pub use fixed::{
+	drain_character_assembly, fixed_character_assembly_chunks, spawn_fixed_character_assembly,
+	spawn_fixed_character_visual, CharacterAssemblyBudget, CharacterAssemblyDiagnostics,
+	PendingCharacterAssembly, FIXED_ASSEMBLY_CHUNK_WEIGHT,
+};
 pub use hosts::CharacterHostsPlugin;
 pub use layer::{Layer, Layers};
 pub use material_ref::{MaterialRef, MaterialRefRoot, PropagateToDescendants};
