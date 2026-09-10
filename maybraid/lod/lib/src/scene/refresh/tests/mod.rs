@@ -12,7 +12,8 @@ use crate::scene::host::LodLevelSpawnRequest;
 use crate::scene::level::LodSceneLevel;
 use crate::scene::refresh::{
 	LodChunkFulfillBudget, LodCullRegionCursor, LodHostBounds, LodLevelRootPending,
-	LodSceneCullAabb, LodSceneRefreshChunkPlugin, LodSceneRefreshLevel,
+	LodRefreshDomain, LodRefreshMembership, LodSceneCullAabb, LodSceneRefreshAabb,
+	LodSceneRefreshChunkPlugin, LodSceneRefreshLevel,
 };
 
 use test_utils::{
@@ -175,6 +176,35 @@ fn dual_channel_small_move_is_spotlight_only() -> anyhow::Result<()> {
 	assert_eq!(app.world().resource::<NewRegions<SpotChan>>().regions.len(), 1);
 	assert!(app.world().resource::<NewRegions<BullChan>>().regions.is_empty());
 	assert_eq!(host_level(&app, host), LodSceneLevel::High);
+	Ok(())
+}
+
+#[test]
+fn stamped_hosts_only_follow_their_domain_aabb() -> anyhow::Result<()> {
+	let mut app = app_spotlight_levels();
+	spawn_viewer(app.world_mut(), Vec3::ZERO);
+	let vegetation = spawn_host(app.world_mut(), Vec3::ZERO, LodSceneLevel::UltraLow);
+	let mob = spawn_host(app.world_mut(), Vec3::ZERO, LodSceneLevel::UltraLow);
+	app.world_mut()
+		.entity_mut(vegetation)
+		.insert(LodRefreshMembership(LodRefreshDomain::of::<SpotChan>()));
+	app.world_mut()
+		.entity_mut(mob)
+		.insert(LodRefreshMembership(LodRefreshDomain::of::<BullChan>()));
+	app.update();
+
+	let region = Aabb3d::from_min_max(Vec3::splat(-50.0), Vec3::splat(50.0));
+	app.world_mut()
+		.write_message(LodSceneRefreshAabb { region, domain: LodRefreshDomain::of::<BullChan>() });
+	app.update();
+	assert_eq!(host_level(&app, vegetation), LodSceneLevel::UltraLow);
+	assert_eq!(host_level(&app, mob), LodSceneLevel::High);
+
+	app.world_mut()
+		.write_message(LodSceneRefreshAabb { region, domain: LodRefreshDomain::of::<SpotChan>() });
+	app.update();
+	assert_eq!(host_level(&app, vegetation), LodSceneLevel::High);
+	assert_eq!(host_level(&app, mob), LodSceneLevel::High);
 	Ok(())
 }
 

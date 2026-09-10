@@ -89,6 +89,7 @@ fn motion_level(
 			return key.0;
 		}
 	}
+	// Fixed assemblies have no LodSceneHost; default visual High, then clamp via IntelligenceLod.
 	desired.get(host).copied().unwrap_or(LodSceneLevel::High)
 }
 

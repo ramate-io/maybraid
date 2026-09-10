@@ -61,11 +61,12 @@ pub use kind::{
 pub use layer::{select_layers, throw_layer};
 pub use plugin::{register_vegetation_view, ForestPlugin, VegetationViewPlugin};
 pub use present::{FlatForestPresenter, ForestPresenterState};
-pub use recipe::ForestGroveRecipe;
+pub use recipe::{ForestGroveRecipe, WORLD_FOREST_TREE_VARIANTS};
 pub use stream::{
 	parse_layering_kind, register_forest_lod, stream_radii_m, ForestStreamLod, ForestStreamSpec,
 	DEFAULT_FOREST_NOISE, DEFAULT_FOREST_STREAM_RADIUS, FOREST_CAMERA_SPEED,
 };
 pub use view::{
-	VegetationBullseye, VegetationCull, VegetationLodRefreshPlugin, VegetationSpotlight,
+	VegetationBullseye, VegetationCull, VegetationLodRefreshPlugin, VegetationRefresh,
+	VegetationSpotlight,
 };

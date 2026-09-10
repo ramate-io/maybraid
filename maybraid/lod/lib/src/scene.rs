@@ -58,11 +58,12 @@ pub use refresh::{
 	LodCullProduceCache, LodCullRegionCursor, LodCullRegions, LodCullRegionsStatus, LodHostBounds,
 	LodHostHasCullableRoots, LodLevelProduceSystems, LodLevelProducer, LodNestedRefreshAllowed,
 	LodNestedRefreshBlocked, LodNestedRefreshSyncBudget, LodProduceCache, LodRefreshCorePlugin,
-	LodRefreshProductionPlugin, LodRefreshRegions, LodRefreshRegionsError, LodRefreshRegionsStatus,
-	LodRefreshSystems, LodSceneCullAabb, LodSceneCullProduceFillPlugin, LodSceneCullRegion,
-	LodSceneCullRegionPlugin, LodSceneRefreshAabb, LodSceneRefreshEntitiesPlugin,
-	LodSceneRefreshLevel, LodSceneRefreshLevelsFillPlugin, LodSceneRefreshLevelsPlugin,
-	LodSceneRefreshPlugin, LodSceneRefreshRegion, LodSceneRefreshRegionPlugin,
-	LodSceneRegionCullPlugin, LodViewer, OpenLattice, Spotlight,
+	LodRefreshDomain, LodRefreshMembership, LodRefreshProductionPlugin, LodRefreshRegions,
+	LodRefreshRegionsError, LodRefreshRegionsStatus, LodRefreshSystems, LodSceneCullAabb,
+	LodSceneCullProduceFillPlugin, LodSceneCullRegion, LodSceneCullRegionPlugin,
+	LodSceneRefreshAabb, LodSceneRefreshEntitiesPlugin, LodSceneRefreshLevel,
+	LodSceneRefreshLevelsFillPlugin, LodSceneRefreshLevelsPlugin, LodSceneRefreshPlugin,
+	LodSceneRefreshRegion, LodSceneRefreshRegionPlugin, LodSceneRegionCullPlugin, LodViewer,
+	OpenLattice, Spotlight,
 };
 pub use region_index::{LodSceneHostIndex, LodSceneRegionIndex};

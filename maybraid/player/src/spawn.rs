@@ -2,12 +2,9 @@
 
 use bevy::ecs::query::QueryFilter;
 use bevy::prelude::*;
-use bevy::scene::prelude::{bsn, template_value};
 use crozon_characters::{
-	character_bounds, CharacterComponents, CharacterHeading, CharacterRoot, ComponentsOnly,
+	spawn_fixed_character_visual, CharacterComponents, CharacterHeading, CharacterRoot,
 };
-use lod::gen::LodScene;
-use lod::lod_ref::LodRef;
 
 use crate::body::{apply_locomotion_capsule, spawn_character_controller};
 use crate::identity::{
@@ -102,9 +99,7 @@ pub fn spawn_capsule_mesh_with_hull(
 	));
 }
 
-pub fn spawn_player_visual<
-	C: CharacterComponents + Clone + Default + Unpin + Send + Sync + 'static,
->(
+pub fn spawn_player_visual<C: CharacterComponents + Send + Sync + 'static>(
 	commands: &mut Commands,
 	player: Entity,
 	recipe: C,
@@ -113,9 +108,7 @@ pub fn spawn_player_visual<
 	spawn_character_visual(commands, player, recipe, facing, "player-visual", PlayerVisual)
 }
 
-pub fn spawn_npc_visual<
-	C: CharacterComponents + Clone + Default + Unpin + Send + Sync + 'static,
->(
+pub fn spawn_npc_visual<C: CharacterComponents + Send + Sync + 'static>(
 	commands: &mut Commands,
 	npc: Entity,
 	recipe: C,
@@ -124,9 +117,7 @@ pub fn spawn_npc_visual<
 	spawn_character_visual(commands, npc, recipe, facing, "npc-visual", ())
 }
 
-fn spawn_character_visual<
-	C: CharacterComponents + Clone + Default + Unpin + Send + Sync + 'static,
->(
+fn spawn_character_visual<C: CharacterComponents + Send + Sync + 'static>(
 	commands: &mut Commands,
 	body: Entity,
 	recipe: C,
@@ -134,30 +125,12 @@ fn spawn_character_visual<
 	name: &'static str,
 	extra: impl Bundle,
 ) -> Entity {
-	let host = ComponentsOnly(recipe);
-	let hull = host.locomotion_capsule();
+	let hull = recipe.locomotion_capsule();
 	apply_locomotion_capsule(commands, body, hull);
-	let bounds = character_bounds(&host.0);
-	let identity = Transform::IDENTITY;
-	let lod_ref = LodRef {
-		entity: Entity::PLACEHOLDER,
-		previous_transform: &identity,
-		current_transform: &identity,
-		bounds: &bounds,
-	};
-	let visual = commands
-		.spawn_scene((
-			host.host(&lod_ref),
-			bsn! {
-				template_value(Transform::from_rotation(facing))
-			},
-		))
-		.id();
+	let visual = spawn_fixed_character_visual(commands, body, recipe, facing, name);
 	commands.entity(visual).insert((
-		ChildOf(body),
 		CharacterHeading::from_rotation(facing),
 		PlayerYawOwner::Wish,
-		Name::new(name),
 		extra,
 	));
 	visual

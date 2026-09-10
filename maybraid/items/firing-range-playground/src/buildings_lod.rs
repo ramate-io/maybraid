@@ -5,7 +5,7 @@ use lod::{
 	Bullseye, LodChunkFulfillBudget, LodCullRegionCursor, LodRefreshCorePlugin,
 	LodSceneCullRegionPlugin, LodSceneRefreshRegionPlugin, OpenLattice, Spotlight,
 };
-use lod_avian::{AvianLodSceneCullPlugin, AvianLodSceneRefreshPlugin};
+use lod_gimme::{GimmeLodSceneCullPlugin, GimmeLodSceneRefreshPlugin};
 use player::register_motor_traction_physics;
 use richmond_building_components::{
 	ComponentsOnly, DoorNode, FloorNode, FurnitureNode, JointNode, LabelNode, PanelNode,
@@ -13,25 +13,37 @@ use richmond_building_components::{
 };
 use richmond_buildings::{ConnectingStairwell, MixedUseLesHallesStorey, PitchedRoof};
 
-/// Channel marker for bullseye [`lod::LodSceneRefreshRegion`] messages.
+/// Shared produce domain for bullseye and spotlight building refresh.
 #[derive(Debug, Clone, Copy, Default)]
-pub struct BuildingsBullseye;
+pub struct BuildingsRefresh;
+
+/// Channel marker for bullseye [`lod::LodSceneRefreshRegion`] messages.
+pub type BuildingsBullseye = BuildingsRefresh;
 
 /// Channel marker for spotlight [`lod::LodSceneRefreshRegion`] messages.
-#[derive(Debug, Clone, Copy, Default)]
-pub struct BuildingsSpotlight;
+pub type BuildingsSpotlight = BuildingsRefresh;
 
 /// Channel marker for OpenLattice [`lod::LodSceneCullRegion`] messages.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct BuildingsCull;
 
+/// Historical Avian-named wrapper. Prefer `gimme_host!`.
+#[allow(unused_macros)]
 macro_rules! avian_host {
 	($app:expr, $ty:ty) => {{
 		$app.add_plugins((
-						AvianLodSceneRefreshPlugin::<$ty, BuildingsBullseye, With<Camera>>::without_full_scan_cull(),
-						AvianLodSceneRefreshPlugin::<$ty, BuildingsSpotlight, With<Camera>>::without_full_scan_cull(),
-						AvianLodSceneCullPlugin::<$ty, BuildingsCull, With<Camera>>::default(),
-					));
+								lod_avian::AvianLodSceneRefreshPlugin::<$ty, BuildingsRefresh, With<Camera>>::without_full_scan_cull(),
+								lod_avian::AvianLodSceneCullPlugin::<$ty, BuildingsCull, With<Camera>>::default(),
+							));
+	}};
+}
+
+macro_rules! gimme_host {
+	($app:expr, $ty:ty) => {{
+		$app.add_plugins((
+								GimmeLodSceneRefreshPlugin::<$ty, BuildingsRefresh, With<Camera>>::without_full_scan_cull(),
+								GimmeLodSceneCullPlugin::<$ty, BuildingsCull, With<Camera>>::default(),
+							));
 	}};
 }
 
@@ -71,17 +83,17 @@ impl Plugin for FiringRangeBuildingsLodPlugin {
 				LodSceneCullRegionPlugin::<OpenLattice, With<Camera>, BuildingsCull>::default(),
 			));
 
-		avian_host!(app, PanelNode);
-		avian_host!(app, PartitionNode);
-		avian_host!(app, RoofNode);
-		avian_host!(app, FloorNode);
-		avian_host!(app, StairNode);
-		avian_host!(app, DoorNode);
-		avian_host!(app, JointNode);
-		avian_host!(app, FurnitureNode);
-		avian_host!(app, LabelNode);
-		avian_host!(app, ComponentsOnly<MixedUseLesHallesStorey>);
-		avian_host!(app, ComponentsOnly<ConnectingStairwell>);
-		avian_host!(app, ComponentsOnly<PitchedRoof>);
+		gimme_host!(app, PanelNode);
+		gimme_host!(app, PartitionNode);
+		gimme_host!(app, RoofNode);
+		gimme_host!(app, FloorNode);
+		gimme_host!(app, StairNode);
+		gimme_host!(app, DoorNode);
+		gimme_host!(app, JointNode);
+		gimme_host!(app, FurnitureNode);
+		gimme_host!(app, LabelNode);
+		gimme_host!(app, ComponentsOnly<MixedUseLesHallesStorey>);
+		gimme_host!(app, ComponentsOnly<ConnectingStairwell>);
+		gimme_host!(app, ComponentsOnly<PitchedRoof>);
 	}
 }

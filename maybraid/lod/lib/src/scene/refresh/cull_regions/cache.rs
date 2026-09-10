@@ -20,7 +20,7 @@ use super::super::viewer::LodViewer;
 /// Untyped cull AABB (union of every [`super::LodSceneCullRegion<M>`] channel).
 ///
 /// Region production writes this beside the typed channel message. One fill
-/// system reads it so the Avian query is once per unique region, not once per `T`.
+/// system reads it so the host-index query is once per unique region, not once per `T`.
 #[derive(Message, Debug, Clone, Copy)]
 pub struct LodSceneCullAabb {
 	pub region: Aabb3d,

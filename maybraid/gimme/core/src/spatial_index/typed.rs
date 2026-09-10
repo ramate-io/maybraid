@@ -4,7 +4,7 @@ use bevy_math::bounding::Aabb3d;
 use bevy_math::DVec3;
 
 use crate::error::SpatialIndexError;
-use crate::spatial_index::grid::{BaseScale, Level};
+use crate::spatial_index::grid::Level;
 use crate::spatial_index::index::SpatialIndex;
 use crate::spatial_index::store::{SpatialId, SpatialStore};
 use crate::TypedSpatialIndex;
@@ -73,9 +73,7 @@ where
 	S: SpatialStore<T>,
 {
 	fn read_one(&self, region: &Aabb3d) -> Result<Option<&T>, SpatialIndexError> {
-		let base = BaseScale::new(self.grid.base_scale())?;
-		let levels: Vec<_> = base.levels_for_bounds(region).collect();
-		for (id, bounds) in self.grid.query_iter(*region, levels) {
+		for (id, bounds) in self.grid.query_iter(*region, 0..=self.grid.max_level()) {
 			if bounds == *region {
 				return Ok(self.store.get(id));
 			}

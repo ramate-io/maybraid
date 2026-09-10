@@ -13,7 +13,9 @@ use mob_characters::FromMobNumber;
 use crate::roster_ref::MemberRosterRef;
 use crate::{MobBrain, MobKind, MobMemberRecipe, MobRosterRecipe};
 
-pub const DEFAULT_MOB_HIGH_RADIUS: f32 = 400.0;
+/// Semantic High band radius (metres) for streamed world mobs.
+/// Playgrounds override with [`MobScene::with_high_radius`].
+pub const DEFAULT_MOB_HIGH_RADIUS: f32 = 200.0;
 
 #[derive(Clone, Debug)]
 pub struct Mob<Roster = MobRosterRecipe, Intelligence = MobBrain> {
@@ -226,6 +228,12 @@ mod tests {
 				.scene_lod_culls(lod_ref, LodSceneLevel::UltraLow)
 				.should_cull(LodSceneLevel::High));
 		});
+	}
+
+	#[test]
+	fn default_high_radius_is_two_hundred_metres() {
+		assert_eq!(DEFAULT_MOB_HIGH_RADIUS, 200.0);
+		assert_eq!(MobScene::default().high_radius, DEFAULT_MOB_HIGH_RADIUS);
 	}
 
 	#[test]

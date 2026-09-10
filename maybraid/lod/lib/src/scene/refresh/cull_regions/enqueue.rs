@@ -196,7 +196,7 @@ fn lod_scene_host_or_ancestor_hidden_world(world: &World, entity: Entity) -> boo
 
 /// Register `T` for the shared erased enqueue from [`LodCullProduceCache`].
 ///
-/// Channel `M` stays so existing `AvianLodSceneCullPlugin<T, M, F>` adds remain
+/// Channel `M` stays so existing `GimmeLodSceneCullPlugin<T, M, F>` adds remain
 /// valid; the spatial query is registered once per (`I`, `F`).
 pub struct LodSceneRegionCullPlugin<I, M, T, F = With<LodViewer>>
 where

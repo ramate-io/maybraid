@@ -23,9 +23,10 @@ use crate::species::{
 };
 use crate::{Clothed, PartNode, RigNode};
 
-/// Scene-ref, material-ref, LOD refresh, and every clothed species host.
+/// Scene-ref, material-ref, LOD refresh, fixed-assembly drain, and every clothed species host.
 ///
-/// Playgrounds that spawn [`crate::ComponentsOnly`] via [`lod::LodScene::host`] add this once.
+/// World/mob/player runtime spawn uses [`crate::spawn_fixed_character_visual`].
+/// Playgrounds that still spawn [`crate::ComponentsOnly`] via [`lod::LodScene::host`] add this once.
 pub struct CharacterHostsPlugin;
 
 impl Plugin for CharacterHostsPlugin {
