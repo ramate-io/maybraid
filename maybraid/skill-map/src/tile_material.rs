@@ -18,6 +18,7 @@ pub const TILE_KIND_WATER: f32 = 1.0;
 pub const TILE_KIND_FIRE: f32 = 2.0;
 pub const TILE_KIND_WAVE: f32 = 3.0;
 pub const TILE_KIND_CURSOR: f32 = 4.0;
+pub const TILE_KIND_LAND_WAVE: f32 = 5.0;
 const TILE_DIVISIONS: u32 = 12;
 
 #[derive(Clone, Copy, Debug, ShaderType)]
@@ -36,16 +37,20 @@ pub struct SkillMapTileMaterial {
 impl SkillMapTileMaterial {
 	pub fn for_kind(kind: TileKind, seed: u32) -> Self {
 		let (tint, code) = match kind {
-			TileKind::Land => (Vec4::new(1.0, 0.96, 0.9, 1.0), TILE_KIND_LAND),
-			TileKind::Water => (Vec4::new(1.0, 1.0, 1.05, 1.0), TILE_KIND_WATER),
-			TileKind::Power(SkillKind::Fireball) => {
-				(Vec4::new(1.05, 0.95, 0.88, 1.0), TILE_KIND_FIRE)
-			}
-			TileKind::Power(SkillKind::Dumbwave) => {
-				(Vec4::new(0.95, 1.02, 1.08, 1.0), TILE_KIND_WAVE)
-			}
+			TileKind::Land => (Vec4::ONE, TILE_KIND_LAND),
+			TileKind::Water => (Vec4::ONE, TILE_KIND_WATER),
+			TileKind::Power(SkillKind::Fireball) => (Vec4::ONE, TILE_KIND_FIRE),
+			TileKind::Power(SkillKind::Dumbwave) => (Vec4::ONE, TILE_KIND_WAVE),
 		};
 		Self { params: TileParams { tint, style: Vec4::new(code, 1.0, seed as f32, 0.0) } }
+	}
+
+	pub fn land(map: SkillKind) -> Self {
+		let code = match map {
+			SkillKind::Fireball => TILE_KIND_LAND,
+			SkillKind::Dumbwave => TILE_KIND_LAND_WAVE,
+		};
+		Self { params: TileParams { tint: Vec4::ONE, style: Vec4::new(code, 1.0, 1.0, 0.0) } }
 	}
 
 	pub fn cursor() -> Self {
@@ -68,7 +73,11 @@ impl Material2d for SkillMapTileMaterial {
 	}
 
 	fn alpha_mode(&self) -> AlphaMode2d {
-		AlphaMode2d::Opaque
+		if (self.params.style.x - TILE_KIND_WATER).abs() < 0.1 {
+			AlphaMode2d::Blend
+		} else {
+			AlphaMode2d::Opaque
+		}
 	}
 }
 
@@ -77,7 +86,8 @@ impl Material2d for SkillMapTileMaterial {
 pub struct SkillMapTileAssets {
 	pub mesh: Handle<Mesh>,
 	pub cursor_mesh: Handle<Mesh>,
-	pub land: Handle<SkillMapTileMaterial>,
+	pub land_fire: Handle<SkillMapTileMaterial>,
+	pub land_wave: Handle<SkillMapTileMaterial>,
 	pub water: Handle<SkillMapTileMaterial>,
 	pub fireball: Handle<SkillMapTileMaterial>,
 	pub dumbwave: Handle<SkillMapTileMaterial>,
@@ -85,9 +95,12 @@ pub struct SkillMapTileAssets {
 }
 
 impl SkillMapTileAssets {
-	pub fn material(&self, kind: TileKind) -> Handle<SkillMapTileMaterial> {
+	pub fn material(&self, kind: TileKind, map: SkillKind) -> Handle<SkillMapTileMaterial> {
 		match kind {
-			TileKind::Land => self.land.clone(),
+			TileKind::Land => match map {
+				SkillKind::Fireball => self.land_fire.clone(),
+				SkillKind::Dumbwave => self.land_wave.clone(),
+			},
 			TileKind::Water => self.water.clone(),
 			TileKind::Power(SkillKind::Fireball) => self.fireball.clone(),
 			TileKind::Power(SkillKind::Dumbwave) => self.dumbwave.clone(),
@@ -115,7 +128,8 @@ fn setup_tile_assets(
 	commands.insert_resource(SkillMapTileAssets {
 		mesh,
 		cursor_mesh,
-		land: materials.add(SkillMapTileMaterial::for_kind(TileKind::Land, 1)),
+		land_fire: materials.add(SkillMapTileMaterial::land(SkillKind::Fireball)),
+		land_wave: materials.add(SkillMapTileMaterial::land(SkillKind::Dumbwave)),
 		water: materials.add(SkillMapTileMaterial::for_kind(TileKind::Water, 2)),
 		fireball: materials
 			.add(SkillMapTileMaterial::for_kind(TileKind::Power(SkillKind::Fireball), 3)),
@@ -174,5 +188,10 @@ mod tests {
 		assert_eq!(fire.params.style.x, TILE_KIND_FIRE);
 		assert_eq!(wave.params.style.x, TILE_KIND_WAVE);
 		assert_eq!(SkillMapTileMaterial::cursor().params.style.x, TILE_KIND_CURSOR);
+		assert_eq!(SkillMapTileMaterial::land(SkillKind::Fireball).params.style.x, TILE_KIND_LAND);
+		assert_eq!(
+			SkillMapTileMaterial::land(SkillKind::Dumbwave).params.style.x,
+			TILE_KIND_LAND_WAVE
+		);
 	}
 }

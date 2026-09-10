@@ -1,6 +1,6 @@
 //---------------------------------------------------------
-// Skill-map tiles: subdivided quads, world-space noise, thematic marks.
-// Kind: 0 land, 1 water, 2 fireball, 3 dumbwave.
+// Skill-map tiles: world-space shade, sway, blobby water.
+// Kind: 0 fire land, 1 water, 2 fire mark, 3 wave mark, 4 cursor, 5 wave land.
 //---------------------------------------------------------
 
 #import bevy_sprite::{
@@ -23,6 +23,8 @@ const KIND_LAND: f32 = 0.0;
 const KIND_WATER: f32 = 1.0;
 const KIND_FIRE: f32 = 2.0;
 const KIND_WAVE: f32 = 3.0;
+const KIND_CURSOR: f32 = 4.0;
+const KIND_LAND_WAVE: f32 = 5.0;
 
 fn hash12(p: vec2<f32>) -> f32 {
     let p3 = fract(vec3<f32>(p.x, p.y, p.x) * vec3<f32>(0.1031, 0.1030, 0.0973));
@@ -56,11 +58,24 @@ fn tile_sway(world: vec2<f32>, t: f32) -> vec2<f32> {
     let phase = dot(world, vec2<f32>(0.07, 0.11));
     let gust = sin(t * 0.65 + phase) * sin(t * 0.23 + phase * 1.7);
     let flutter = sin(t * 1.35 + world.x * 0.22 + world.y * 0.18);
-    var offset = vec2<f32>(n - 0.5, n2 - 0.5) * 3.2;
-    offset += vec2<f32>(n3 - 0.5, 0.5 - n) * 1.1;
-    offset += vec2<f32>(0.92, 0.38) * (gust * 0.7);
-    offset += vec2<f32>(flutter, -flutter * 0.65) * 0.35;
+    var offset = vec2<f32>(n - 0.5, n2 - 0.5) * 6.4;
+    offset += vec2<f32>(n3 - 0.5, 0.5 - n) * 2.4;
+    offset += vec2<f32>(0.92, 0.38) * (gust * 1.15);
+    offset += vec2<f32>(flutter, -flutter * 0.65) * 0.7;
     return offset;
+}
+
+fn water_pinch(origin: vec2<f32>, world: vec2<f32>, uv: vec2<f32>) -> vec2<f32> {
+    let dx = world.x - origin.x;
+    let dy = world.y - origin.y;
+    let corner = saturate(length(uv - vec2<f32>(0.5, 0.5)) * 2.0);
+    let n = fbm(origin * 0.083);
+    let n2 = fbm(origin * 0.14 + vec2<f32>(4.2, 1.1));
+    let shrink = (0.26 + 0.22 * n) * corner;
+    return vec2<f32>(
+        origin.x + dx * (1.0 - shrink + (n2 - 0.5) * 0.18),
+        origin.y + dy * (1.0 - shrink - (n2 - 0.5) * 0.16),
+    );
 }
 
 struct Vertex {
@@ -96,13 +111,23 @@ fn vertex(vertex: Vertex) -> VertexOutput {
     );
     let kind = tile_kind();
     let t = globals.time;
-    if kind > 3.5 {
-        let origin = world_from_local[3].xy;
+    let origin = world_from_local[3].xy;
+    if kind > 3.5 && kind < 4.5 {
         let pulse = 0.5 + 0.5 * sin(t * 5.2);
         let scale = 1.0 + (pulse - 0.5) * 0.08;
         world_pos.x = origin.x + (world_pos.x - origin.x) * scale;
         world_pos.y = origin.y + (world_pos.y - origin.y) * scale;
     } else {
+#ifdef VERTEX_UVS
+        let uv = vertex.uv;
+#else
+        let uv = vec2<f32>(0.5, 0.5);
+#endif
+        if kind > 0.5 && kind < 1.5 {
+            let pinched = water_pinch(origin, world_pos.xy, uv);
+            world_pos.x = pinched.x;
+            world_pos.y = pinched.y;
+        }
         let sway = tile_sway(world_pos.xy, t);
         world_pos.x += sway.x;
         world_pos.y += sway.y;
@@ -128,16 +153,33 @@ fn vertex(vertex: Vertex) -> VertexOutput {
     return out;
 }
 
-fn shade_land(world: vec2<f32>) -> vec3<f32> {
-    let n = fbm(world * 0.053);
-    let n2 = value_noise(world * 0.119);
-    let n3 = fbm(world * 0.203 + vec2<f32>(8.2, 1.7));
-    let dirt = vec3<f32>(0.38, 0.24, 0.13);
-    let dry = vec3<f32>(0.58, 0.42, 0.24);
-    let moss = vec3<f32>(0.22, 0.28, 0.14);
-    var color = mix(dirt, dry, n);
-    color = mix(color, moss, smoothstep(0.58, 0.84, n2) * 0.4);
-    color *= 0.88 + n3 * 0.28;
+fn shade_glimmer(world: vec2<f32>) -> vec3<f32> {
+    let t = globals.time;
+    let n = fbm(world * 0.041);
+    let n2 = fbm(world * 0.11 + vec2<f32>(t * 0.05, -t * 0.04));
+    let void_c = vec3<f32>(0.055, 0.03, 0.045);
+    let coal = vec3<f32>(0.14, 0.045, 0.03);
+    let ember = vec3<f32>(0.42, 0.11, 0.04);
+    var color = mix(void_c, coal, n);
+    color = mix(color, ember, smoothstep(0.62, 0.92, n2) * 0.45);
+    let cell = floor(world * 0.31 + vec2<f32>(t * 0.08, t * 0.05));
+    let spark = hash12(cell);
+    let twinkle = smoothstep(0.91, 0.997, spark)
+        * (0.45 + 0.55 * sin(t * 7.2 + spark * 28.0));
+    color += vec3<f32>(1.0, 0.72, 0.32) * twinkle;
+    let haze = 0.5 + 0.5 * sin(world.x * 0.07 + world.y * 0.09 + t * 0.85 + n * 4.0);
+    color += vec3<f32>(0.55, 0.16, 0.04) * smoothstep(0.78, 1.0, haze) * 0.12;
+    return color;
+}
+
+fn shade_mist(world: vec2<f32>) -> vec3<f32> {
+    let t = globals.time;
+    let n = fbm(world * 0.045 + vec2<f32>(t * 0.03, 0.0));
+    let dusk = vec3<f32>(0.06, 0.08, 0.12);
+    let bloom = vec3<f32>(0.16, 0.28, 0.34);
+    var color = mix(dusk, bloom, n);
+    let spark = hash12(floor(world * 0.27 + vec2<f32>(-t * 0.04, t * 0.06)));
+    color += vec3<f32>(0.55, 0.85, 0.95) * smoothstep(0.93, 0.998, spark) * 0.65;
     return color;
 }
 
@@ -146,16 +188,26 @@ fn shade_water(world: vec2<f32>) -> vec3<f32> {
     let n = fbm(world * 0.047 + vec2<f32>(t * 0.11, -t * 0.08));
     let n2 = fbm(world * 0.13 + vec2<f32>(-t * 0.07, t * 0.09));
     let band = 0.5 + 0.5 * sin(world.x * 0.19 + world.y * 0.14 + t * 1.15 + n * 3.4);
-    let deep = vec3<f32>(0.05, 0.12, 0.28);
-    let shallow = vec3<f32>(0.14, 0.38, 0.58);
-    let foam = vec3<f32>(0.62, 0.82, 0.88);
-    var color = mix(deep, shallow, n);
-    color = mix(color, foam, smoothstep(0.76, 0.94, band) * 0.4 * n2);
+    let deep = vec3<f32>(0.04, 0.1, 0.26);
+    let sheen = vec3<f32>(0.22, 0.48, 0.72);
+    let ink = vec3<f32>(0.08, 0.2, 0.42);
+    var color = mix(deep, ink, n);
+    color = mix(color, sheen, smoothstep(0.7, 0.94, band) * 0.55 * n2);
     return color;
 }
 
+fn water_blob(uv: vec2<f32>, world: vec2<f32>) -> f32 {
+    let q = uv - vec2<f32>(0.5, 0.5);
+    let r = length(q);
+    let ang = atan2(q.y, q.x);
+    let n = fbm(world * 0.09);
+    let n2 = fbm(world * 0.21 + vec2<f32>(2.4, 9.1));
+    let radius = 0.32 + 0.11 * sin(ang * 3.0 + n * 6.2) + 0.08 * sin(ang * 5.0 - n2 * 5.0) + 0.06 * n2;
+    return 1.0 - smoothstep(radius * 0.68, radius, r);
+}
+
 fn shade_fire(uv: vec2<f32>, world: vec2<f32>) -> vec3<f32> {
-    var color = shade_land(world);
+    var color = shade_glimmer(world);
     let q = uv - vec2<f32>(0.5, 0.5);
     let t = globals.time + tile_seed() * 0.02;
     let warp = fbm(world * 0.17 + vec2<f32>(t * 0.4, -t * 0.3));
@@ -172,7 +224,7 @@ fn shade_fire(uv: vec2<f32>, world: vec2<f32>) -> vec3<f32> {
 }
 
 fn shade_wave(uv: vec2<f32>, world: vec2<f32>) -> vec3<f32> {
-    var color = shade_land(world) * vec3<f32>(0.72, 0.8, 0.9);
+    var color = shade_mist(world);
     let q = uv - vec2<f32>(0.5, 0.5);
     let t = globals.time * 1.4 + tile_seed() * 0.03;
     let r = length(q);
@@ -199,16 +251,20 @@ fn shade_cursor(uv: vec2<f32>) -> vec3<f32> {
 fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     let kind = tile_kind();
     let world = in.world_position.xy;
-    var color = shade_land(world);
+    var color = shade_glimmer(world);
+    var alpha = 1.0;
     if kind > 0.5 && kind < 1.5 {
         color = shade_water(world);
+        alpha = water_blob(in.uv, world);
     } else if kind > 1.5 && kind < 2.5 {
         color = shade_fire(in.uv, world);
     } else if kind > 2.5 && kind < 3.5 {
         color = shade_wave(in.uv, world);
-    } else if kind > 3.5 {
+    } else if kind > 3.5 && kind < 4.5 {
         color = shade_cursor(in.uv);
+    } else if kind > 4.5 {
+        color = shade_mist(world);
     }
     color *= material.tint.xyz * material.style.y;
-    return vec4<f32>(color, 1.0);
+    return vec4<f32>(color, alpha);
 }

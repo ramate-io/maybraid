@@ -82,7 +82,17 @@ pub fn spawn_map_tiles(
 			} else {
 				classify_noise(raw, spec.kind)
 			};
-			spawn_tile(commands, spec.id, kind, center, size, layer.clone(), member, assets);
+			spawn_tile(
+				commands,
+				spec.id,
+				spec.kind,
+				kind,
+				center,
+				size,
+				layer.clone(),
+				member,
+				assets,
+			);
 		}
 	}
 }
@@ -90,6 +100,7 @@ pub fn spawn_map_tiles(
 fn spawn_tile(
 	commands: &mut Commands,
 	map: SkillMapId,
+	map_kind: SkillKind,
 	kind: TileKind,
 	center: Vec2,
 	size: Vec2,
@@ -97,19 +108,32 @@ fn spawn_tile(
 	member: SkillMapMember,
 	assets: &SkillMapTileAssets,
 ) {
-	// Claim hides only the mark; keep a land body so the grid does not punch a hole.
-	if matches!(kind, TileKind::Power(_)) {
-		spawn_tile(commands, map, TileKind::Land, center, size, layer.clone(), member, assets);
+	// Water and marks sit on land so a blob or a claim does not punch a hole.
+	if matches!(kind, TileKind::Power(_) | TileKind::Water) {
+		spawn_tile(
+			commands,
+			map,
+			map_kind,
+			TileKind::Land,
+			center,
+			size,
+			layer.clone(),
+			member,
+			assets,
+		);
 	}
-	let z = if matches!(kind, TileKind::Power(_)) { 0.2 } else { 0.0 };
-	// Unit scale so neighboring edges share a world position and the sway field welds.
+	let z = match kind {
+		TileKind::Power(_) => 0.2,
+		TileKind::Water => 0.1,
+		TileKind::Land => 0.0,
+	};
 	commands.spawn((
 		Name::new("skill-map-tile"),
 		SkillMapTile { map, kind },
 		TileBounds { half: size * 0.5 },
 		member,
 		Mesh2d(assets.mesh.clone()),
-		MeshMaterial2d(assets.material(kind)),
+		MeshMaterial2d(assets.material(kind, map_kind)),
 		Transform::from_xyz(center.x, center.y, z),
 		layer,
 	));
