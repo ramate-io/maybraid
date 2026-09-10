@@ -7,7 +7,7 @@
 use character_ui_menu::{
 	AssetChoice, AssetOption, AssetSingleSelect, CameraFocus, GridCatalogChoice, ItemRow,
 	MenuComponent, MenuNode, MultiSelect, PreviewColor, SelectGroup, SingleSelect, StatCard,
-	StatLine, SwatchChoice, SwatchSingleSelect,
+	StatLine, SwatchChoice, SwatchSingleSelect, ThumbnailCamera,
 };
 use crozon_character_items::{
 	CharacterSheet, ClothingColor, ClothingMaterial, ClothingMaterialChoice, ClothingMesh,
@@ -259,6 +259,27 @@ pub(crate) fn weapons_catalog(inventory: &Inventory) -> MenuNode<MenuEvent> {
 	)
 }
 
+pub(crate) fn skills_catalog(inventory: &Inventory) -> MenuNode<MenuEvent> {
+	MenuNode::grid_catalog(
+		InventorySlot::Skills.label(),
+		InventorySlot::Skills.capacity(),
+		inventory.items.iter().enumerate().filter_map(|(index, item)| {
+			item.skill_map_spec()?;
+			let rank = inventory.rank(index);
+			Some(GridCatalogChoice {
+				label: item.name(),
+				detail: item.catalog_detail(),
+				path: item.path(),
+				thumbnail_camera: ThumbnailCamera::DEFAULT,
+				preview: PreviewColor::WHITE,
+				selected: rank.is_some(),
+				rank,
+				event: MenuEvent::ToggleInventory(index),
+			})
+		}),
+	)
+}
+
 pub(crate) fn loadout_section(inventory: &Inventory) -> MenuNode<MenuEvent> {
 	let total = inventory.character_sheet();
 	let buffs = CharacterSheet::modifiers_from_inventory(inventory);
@@ -303,6 +324,19 @@ pub(crate) fn loadout_section(inventory: &Inventory) -> MenuNode<MenuEvent> {
 				.stat_rows()
 				.into_iter()
 				.map(|(label, value)| StatLine::unsigned(label, value))
+				.collect(),
+		});
+	}
+	for &index in &inventory.skills {
+		let Some(item) = inventory.items.get(index) else {
+			continue;
+		};
+		cards.push(StatCard {
+			title: item.name(),
+			rows: item
+				.stat_rows()
+				.into_iter()
+				.map(|(label, value)| StatLine::from_display(label, value))
 				.collect(),
 		});
 	}

@@ -504,8 +504,12 @@ mod tests {
 		let gun = InventoryItem::firearm(FirearmMesh::Bullpup);
 		let clothing_stats = clothing.clothing_stats().unwrap();
 		let gun_stats = gun.firearm_stats().unwrap();
-		let inventory =
-			Inventory { items: vec![clothing, gun], clothing: vec![0], weapons: vec![1] };
+		let inventory = Inventory {
+			items: vec![clothing, gun],
+			clothing: vec![0],
+			weapons: vec![1],
+			skills: Vec::new(),
+		};
 		let sheet = CharacterSheet::from_inventory(&inventory);
 		assert_eq!(sheet.health, BASE_HEALTH + clothing_stats.health);
 		assert_eq!(sheet.weight, clothing_stats.weight + gun_stats.weight);

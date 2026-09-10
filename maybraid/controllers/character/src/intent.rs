@@ -21,6 +21,9 @@ pub enum CharacterIntent {
 	StartInteraction,
 	/// Cycle the weapon queue (pad **Y** / keyboard **Y**).
 	SwapActive,
+	/// Cycle the equipped skill-map queue. D-Pad left/right, or **[** / **]**.
+	/// Negative steps backward; non-negative advances.
+	CycleSkillMap(i8),
 	InGameMenu,
 	Inventory,
 	PowerUseItem,
@@ -42,6 +45,7 @@ impl CharacterIntent {
 			Self::ExitInteraction => "exit-interaction",
 			Self::StartInteraction => "start-interaction",
 			Self::SwapActive => "swap-active",
+			Self::CycleSkillMap(_) => "cycle-skill-map",
 			Self::InGameMenu => "in-game-menu",
 			Self::Inventory => "inventory",
 			Self::PowerUseItem => "power-use-item",

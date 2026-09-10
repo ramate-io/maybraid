@@ -20,10 +20,10 @@ use threat_management_intelligence::ThreatManagementSystems;
 pub use effects::{
 	forget_chance, FIREBALL_COLOR, FIREBALL_GRAVITY, FIREBALL_RADIUS, FIREBALL_SPEED,
 };
-pub use map::{authored_maps, SkillKind, SkillMapId};
+pub use map::{authored_map, authored_map_from_spec, authored_maps, SkillKind, SkillMapId};
 pub use tiles::{classify_noise, TileKind};
 pub use user::{
-	spawn_skill_maps, spawn_skill_maps_with, MappedBy, SkillMapHeld, SkillMapMember,
+	spawn_skill_maps, spawn_skill_maps_with, MappedBy, SkillMapEquip, SkillMapHeld, SkillMapMember,
 	SkillMapSession, SkillMapSteerLock, SkillMapUser, SkillMapUserSettings,
 };
 pub use viewport::{Debraid, SkillMapViewport};
@@ -119,5 +119,8 @@ mod tests {
 		assert_eq!(maps.len(), 2);
 		assert_eq!(maps[0].kind, SkillKind::Fireball);
 		assert_eq!(maps[1].kind, SkillKind::Dumbwave);
+		let seeded = authored_map(SkillKind::Fireball, 99);
+		assert_eq!(seeded.seed, 99);
+		assert_eq!(seeded.id, SkillMapId(0));
 	}
 }

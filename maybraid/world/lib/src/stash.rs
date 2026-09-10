@@ -259,7 +259,7 @@ fn attach_stash_visuals(
 	inventory: &Inventory,
 	assets: Option<&AssetServer>,
 ) {
-	let displayed = inventory.clothing.len() + inventory.weapons.len();
+	let displayed = inventory.clothing.len() + inventory.weapons.len() + inventory.skills.len();
 	let mut pile = 0usize;
 	for &index in &inventory.clothing {
 		let Some(item) = inventory.items.get(index) else {
@@ -289,6 +289,20 @@ fn attach_stash_visuals(
 		);
 		pile += 1;
 	}
+	for &index in &inventory.skills {
+		let Some(item) = inventory.items.get(index) else {
+			continue;
+		};
+		spawn_displayed_item(
+			commands,
+			host,
+			item,
+			StashDisplayedItem { slot: InventorySlot::Skills },
+			display_offset(pile, displayed),
+			assets,
+		);
+		pile += 1;
+	}
 }
 
 /// One item sits on the host; several fan out so they do not stack.
@@ -307,7 +321,7 @@ fn pile_offset(index: usize) -> Transform {
 
 fn visual_halo_local(item: &InventoryItem, slot: InventorySlot, transform: Transform) -> Vec3 {
 	match slot {
-		InventorySlot::Clothing => transform.translation,
+		InventorySlot::Clothing | InventorySlot::Skills => transform.translation,
 		InventorySlot::Weapons => item.firearm_spec().map_or(transform.translation, |spec| {
 			let kit = GeneratedFirearm::from_spec(spec);
 			let bounds = firearm_bounds(&kit);
@@ -336,7 +350,27 @@ fn spawn_displayed_item(
 		InventorySlot::Weapons => {
 			spawn_displayed_weapon(commands, host, item, displayed, transform, assets);
 		}
+		InventorySlot::Skills => {
+			spawn_displayed_skill_map(commands, host, item, displayed, transform);
+		}
 	}
+}
+
+fn spawn_displayed_skill_map(
+	commands: &mut Commands,
+	host: Entity,
+	item: &InventoryItem,
+	displayed: StashDisplayedItem,
+	transform: Transform,
+) {
+	commands.spawn((
+		Name::new(format!("stash-{}", item.label())),
+		displayed,
+		StashHaloAnchor(visual_halo_local(item, displayed.slot, transform)),
+		transform,
+		Visibility::default(),
+		ChildOf(host),
+	));
 }
 
 fn spawn_displayed_clothing(
@@ -732,6 +766,7 @@ mod tests {
 			],
 			clothing: vec![0],
 			weapons: vec![1],
+			skills: Vec::new(),
 		}
 	}
 
@@ -1173,6 +1208,7 @@ mod tests {
 					items: vec![InventoryItem::firearm(FirearmMesh::Bullpup)],
 					clothing: Vec::new(),
 					weapons: vec![0],
+					skills: Vec::new(),
 				},
 				StashPolicy::default(),
 			))
@@ -1250,6 +1286,7 @@ mod tests {
 			)],
 			clothing: vec![0],
 			weapons: Vec::new(),
+			skills: Vec::new(),
 		}
 	}
 

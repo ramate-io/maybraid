@@ -533,6 +533,38 @@ fn create_menu_weapons_is_ranked_grid_catalog() -> anyhow::Result<()> {
 }
 
 #[test]
+fn create_menu_skill_maps_is_ranked_grid_catalog() -> anyhow::Result<()> {
+	use crozon_character_items::{
+		InventoryItem, SkillMapKind, SkillMapSpec, SKILL_MAP_QUEUE_LIMIT,
+	};
+
+	let items = vec![
+		InventoryItem::skill_map(SkillMapSpec::new(SkillMapKind::Fireball, 1)),
+		InventoryItem::skill_map(SkillMapSpec::new(SkillMapKind::Dumbwave, 2)),
+	];
+	let expected_name = items[0].name();
+	let mut menu = CharacterMenu::for_create(items);
+	let nodes = menu.menu_nodes();
+	let skills = nodes.iter().find_map(|node| match node {
+		MenuNode::Section { label: "Skill Maps", children } => children.first(),
+		_ => None,
+	});
+	let Some(MenuNode::GridCatalog { max_selected, choices, .. }) = skills else {
+		anyhow::bail!("expected a top-level Skill Maps GridCatalog");
+	};
+	assert_eq!(*max_selected, SKILL_MAP_QUEUE_LIMIT);
+	assert_eq!(choices.len(), 2);
+	assert_eq!(choices[0].rank, Some(1));
+	assert_eq!(choices[1].rank, Some(2));
+	assert_eq!(choices[0].label, expected_name);
+	assert!(menu.overlay_editable("Skill Maps"));
+	assert!(menu.apply(MenuEvent::ToggleInventory(0)));
+	let inventory = menu.inventory.as_ref().expect("create inventory");
+	assert_eq!(inventory.skills, vec![1]);
+	Ok(())
+}
+
+#[test]
 fn create_menu_loadout_compiles_character_sheet() -> anyhow::Result<()> {
 	use crozon_character_items::{
 		ClothingMaterial, ClothingMesh, FirearmMesh, InventoryItem, ItemColor,

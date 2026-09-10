@@ -8,9 +8,9 @@ use bevy::text::FontSize;
 use bevy::ui::widget::ViewportNode;
 
 use crate::cursor::SkillMapCursor;
-use crate::map::{authored_maps, render_layer, AuthoredMap, SkillMapId};
+use crate::map::{authored_map_from_spec, render_layer, AuthoredMap, SkillMapId};
 use crate::tiles::spawn_map_tiles;
-use crate::user::{SkillMapHeld, SkillMapMember, SkillMapSession, SkillMapUser};
+use crate::user::{SkillMapEquip, SkillMapHeld, SkillMapMember, SkillMapSession, SkillMapUser};
 use crate::SkillMapEnabled;
 
 const VIEWPORT_PX: f32 = 176.0;
@@ -37,32 +37,53 @@ pub struct Debraid {
 #[derive(Component)]
 pub(crate) struct DebraidOverlay;
 
-/// Fill an empty [`SkillMapSession`] once render assets exist.
+/// Present the equipped map. Rebuild when [`SkillMapEquip`] changes.
 pub fn present_skill_maps(
 	mut commands: Commands,
 	mut images: ResMut<Assets<Image>>,
-	users: Query<(Entity, &SkillMapUser)>,
+	users: Query<(Entity, &SkillMapUser, &SkillMapEquip)>,
 	mut sessions: Query<&mut SkillMapSession>,
+	members: Query<(Entity, &SkillMapMember)>,
 ) {
-	for (user, mapping) in &users {
+	for (user, mapping, equip) in &users {
 		let Ok(mut session) = sessions.get_mut(mapping.maps) else {
 			continue;
 		};
-		if !session.cameras.is_empty() {
+		if session.presented == equip.spec && (equip.spec.is_none() || !session.cameras.is_empty())
+		{
 			continue;
 		}
-		for (index, spec) in authored_maps().iter().enumerate() {
-			spawn_one_map(
-				&mut commands,
-				&mut images,
-				user,
-				mapping.maps,
-				&mut session,
-				*spec,
-				index,
-			);
+		clear_presented(&mut commands, mapping.maps, &mut session, &members);
+		session.presented = equip.spec;
+		let Some(spec) = equip.spec else {
+			continue;
+		};
+		spawn_one_map(
+			&mut commands,
+			&mut images,
+			user,
+			mapping.maps,
+			&mut session,
+			authored_map_from_spec(spec),
+			0,
+		);
+	}
+}
+
+fn clear_presented(
+	commands: &mut Commands,
+	session: Entity,
+	viewports: &mut SkillMapSession,
+	members: &Query<(Entity, &SkillMapMember)>,
+) {
+	for (entity, member) in members {
+		if member.session == session {
+			commands.entity(entity).try_despawn();
 		}
 	}
+	viewports.cameras.clear();
+	viewports.nodes.clear();
+	viewports.presented = None;
 }
 
 fn spawn_one_map(
@@ -134,7 +155,7 @@ fn spawn_one_map(
 		.with_children(|parent| {
 			parent.spawn((
 				SkillMapLabel,
-				Text::new(spec.label),
+				Text::new(format!("{} {:04X}", spec.label, spec.seed as u16)),
 				TextFont { font_size: FontSize::Px(16.0), ..default() },
 				TextColor(LABEL_YELLOW),
 				Pickable::IGNORE,

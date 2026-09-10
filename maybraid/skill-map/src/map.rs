@@ -2,6 +2,7 @@
 
 use bevy::camera::visibility::RenderLayers;
 use bevy::prelude::*;
+use crozon_character_items::{SkillMapKind, SkillMapSpec};
 
 /// User-facing map id. `0` is Fireball, `1` is Dumbwave.
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -19,6 +20,13 @@ impl SkillKind {
 		match self {
 			Self::Fireball => "Fireball",
 			Self::Dumbwave => "Dumbwave",
+		}
+	}
+
+	pub fn from_item(kind: SkillMapKind) -> Self {
+		match kind {
+			SkillMapKind::Fireball => Self::Fireball,
+			SkillMapKind::Dumbwave => Self::Dumbwave,
 		}
 	}
 
@@ -46,23 +54,26 @@ pub struct AuthoredMap {
 	pub label: &'static str,
 }
 
+pub fn authored_map(kind: SkillKind, seed: u32) -> AuthoredMap {
+	AuthoredMap {
+		id: SkillMapId(0),
+		kind,
+		seed,
+		frequency: match kind {
+			SkillKind::Fireball => 0.08,
+			SkillKind::Dumbwave => 0.11,
+		},
+		label: kind.label(),
+	}
+}
+
+pub fn authored_map_from_spec(spec: SkillMapSpec) -> AuthoredMap {
+	authored_map(SkillKind::from_item(spec.kind), spec.seed)
+}
+
+/// Catalog of kinds. Live play presents one equipped spec, not this pair.
 pub fn authored_maps() -> [AuthoredMap; 2] {
-	[
-		AuthoredMap {
-			id: SkillMapId(0),
-			kind: SkillKind::Fireball,
-			seed: 0,
-			frequency: 0.08,
-			label: "Fireball",
-		},
-		AuthoredMap {
-			id: SkillMapId(1),
-			kind: SkillKind::Dumbwave,
-			seed: 7,
-			frequency: 0.11,
-			label: "Dumbwave",
-		},
-	]
+	[authored_map(SkillKind::Fireball, 0), authored_map(SkillKind::Dumbwave, 7)]
 }
 
 #[derive(Clone, Copy, Debug)]

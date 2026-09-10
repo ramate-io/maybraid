@@ -4698,6 +4698,7 @@ dependencies = [
  "anyhow",
  "bevy",
  "combat-targeting",
+ "crozon-character-items",
  "damage",
  "evasion-intelligence",
  "maybraid-character-controller",

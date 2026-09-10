@@ -1,8 +1,21 @@
 //! Capsule install for Discover skill maps, following [`firearm_user::FirearmUser`].
 
 use bevy::prelude::*;
+use crozon_character_items::SkillMapSpec;
 
 use crate::cursor::{CURSOR_SPEED, WATER_LOCK_SECS};
+
+/// Which map the session should present. Index 0 of the bag queue.
+#[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct SkillMapEquip {
+	pub spec: Option<SkillMapSpec>,
+}
+
+impl SkillMapEquip {
+	pub fn from_spec(spec: Option<SkillMapSpec>) -> Self {
+		Self { spec }
+	}
+}
 
 /// Capsule using Discover skill maps.
 ///
@@ -53,6 +66,7 @@ impl MappedBy {
 pub struct SkillMapSession {
 	pub cameras: std::collections::HashMap<crate::SkillMapId, Entity>,
 	pub nodes: std::collections::HashMap<crate::SkillMapId, Entity>,
+	pub presented: Option<SkillMapSpec>,
 }
 
 /// Entity that belongs to a [`SkillMapSession`].
@@ -100,6 +114,7 @@ pub fn spawn_skill_maps_with(
 		.id();
 	commands.entity(user).insert((
 		SkillMapUser { maps, settings },
+		SkillMapEquip::default(),
 		SkillMapSteerLock::default(),
 		SkillMapHeld(false),
 	));
@@ -128,7 +143,9 @@ mod tests {
 	use bevy::ecs::system::RunSystemOnce;
 	use bevy::prelude::*;
 
-	use super::{despawn_orphaned_skill_maps, spawn_skill_maps, SkillMapSession, SkillMapUser};
+	use super::{
+		despawn_orphaned_skill_maps, spawn_skill_maps, SkillMapEquip, SkillMapSession, SkillMapUser,
+	};
 
 	#[test]
 	fn spawn_stamps_the_user_and_session() {
@@ -141,6 +158,7 @@ mod tests {
 		let stamped = world.get::<SkillMapUser>(user).expect("user");
 		assert_eq!(stamped.maps, maps);
 		assert!(world.get::<SkillMapSession>(maps).is_some());
+		assert_eq!(world.get::<SkillMapEquip>(user).copied(), Some(SkillMapEquip::default()));
 	}
 
 	#[test]

@@ -12,6 +12,7 @@ rust-version = { workspace = true }
 [dependencies]
 bevy = { workspace = true }
 combat-targeting = { workspace = true }
+crozon-character-items = { workspace = true }
 damage = { workspace = true }
 evasion-intelligence = { workspace = true }
 maybraid-character-controller = { workspace = true }
