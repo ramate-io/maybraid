@@ -47,6 +47,6 @@ pub use text::{
 	spawn_header_line, spawn_hud_plain, spawn_hud_text, spawn_panel_title,
 };
 pub use tile::{
-	spawn_asset_tile, spawn_grid_catalog_tile, spawn_tile_grid, sync_hover_tiles, HoverTile,
-	SlotRank,
+	spawn_asset_tile, spawn_grid_catalog_tile, spawn_tile_grid, sync_hover_tiles, sync_tile_wrap,
+	HoverTile, SlotRank,
 };
