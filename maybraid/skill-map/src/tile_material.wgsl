@@ -35,7 +35,7 @@ fn hash12(p: vec2<f32>) -> f32 {
 fn value_noise(p: vec2<f32>) -> f32 {
     let i = floor(p);
     let f0 = fract(p);
-    let f = f0 * f0 * (3.0 - 2.0 * f0);
+    let f = f0 * f0 * f0 * (f0 * (f0 * 6.0 - 15.0) + 10.0);
     let a = hash12(i);
     let b = hash12(i + vec2<f32>(1.0, 0.0));
     let c = hash12(i + vec2<f32>(0.0, 1.0));
@@ -44,7 +44,10 @@ fn value_noise(p: vec2<f32>) -> f32 {
 }
 
 fn fbm(p: vec2<f32>) -> f32 {
-    return value_noise(p) * 0.55 + value_noise(p * 2.13) * 0.3 + value_noise(p * 4.27) * 0.15;
+    return value_noise(p) * 0.5
+        + value_noise(p * 1.87) * 0.28
+        + value_noise(p * 3.41) * 0.15
+        + value_noise(p * 6.13) * 0.07;
 }
 
 fn tile_kind() -> f32 { return material.style.x; }
@@ -71,10 +74,10 @@ fn water_pinch(origin: vec2<f32>, world: vec2<f32>, uv: vec2<f32>) -> vec2<f32> 
     let corner = saturate(length(uv - vec2<f32>(0.5, 0.5)) * 2.0);
     let n = fbm(origin * 0.083);
     let n2 = fbm(origin * 0.14 + vec2<f32>(4.2, 1.1));
-    let shrink = (0.26 + 0.22 * n) * corner;
+    let shrink = (0.12 + 0.1 * n) * corner;
     return vec2<f32>(
-        origin.x + dx * (1.0 - shrink + (n2 - 0.5) * 0.18),
-        origin.y + dy * (1.0 - shrink - (n2 - 0.5) * 0.16),
+        origin.x + dx * (1.0 - shrink + (n2 - 0.5) * 0.1),
+        origin.y + dy * (1.0 - shrink - (n2 - 0.5) * 0.08),
     );
 }
 
@@ -155,31 +158,28 @@ fn vertex(vertex: Vertex) -> VertexOutput {
 
 fn shade_glimmer(world: vec2<f32>) -> vec3<f32> {
     let t = globals.time;
-    let n = fbm(world * 0.041);
-    let n2 = fbm(world * 0.11 + vec2<f32>(t * 0.05, -t * 0.04));
+    let n = fbm(world * 0.024);
+    let n2 = fbm(world * 0.048 + vec2<f32>(t * 0.03, -t * 0.025));
     let void_c = vec3<f32>(0.055, 0.03, 0.045);
     let coal = vec3<f32>(0.14, 0.045, 0.03);
-    let ember = vec3<f32>(0.42, 0.11, 0.04);
+    let ember = vec3<f32>(0.38, 0.1, 0.04);
     var color = mix(void_c, coal, n);
-    color = mix(color, ember, smoothstep(0.62, 0.92, n2) * 0.45);
-    let cell = floor(world * 0.31 + vec2<f32>(t * 0.08, t * 0.05));
-    let spark = hash12(cell);
-    let twinkle = smoothstep(0.91, 0.997, spark)
-        * (0.45 + 0.55 * sin(t * 7.2 + spark * 28.0));
-    color += vec3<f32>(1.0, 0.72, 0.32) * twinkle;
-    let haze = 0.5 + 0.5 * sin(world.x * 0.07 + world.y * 0.09 + t * 0.85 + n * 4.0);
-    color += vec3<f32>(0.55, 0.16, 0.04) * smoothstep(0.78, 1.0, haze) * 0.12;
+    color = mix(color, ember, smoothstep(0.55, 0.9, n2) * 0.4);
+    let glint = pow(saturate(n2), 10.0) * (0.45 + 0.55 * sin(t * 1.6 + n * 5.0));
+    color += vec3<f32>(1.0, 0.74, 0.38) * glint * 0.35;
+    let haze = 0.5 + 0.5 * sin(world.x * 0.05 + world.y * 0.07 + t * 0.7 + n * 3.2);
+    color += vec3<f32>(0.5, 0.14, 0.04) * smoothstep(0.8, 1.0, haze) * 0.1;
     return color;
 }
 
 fn shade_mist(world: vec2<f32>) -> vec3<f32> {
     let t = globals.time;
-    let n = fbm(world * 0.045 + vec2<f32>(t * 0.03, 0.0));
+    let n = fbm(world * 0.026 + vec2<f32>(t * 0.02, 0.0));
     let dusk = vec3<f32>(0.06, 0.08, 0.12);
     let bloom = vec3<f32>(0.16, 0.28, 0.34);
     var color = mix(dusk, bloom, n);
-    let spark = hash12(floor(world * 0.27 + vec2<f32>(-t * 0.04, t * 0.06)));
-    color += vec3<f32>(0.55, 0.85, 0.95) * smoothstep(0.93, 0.998, spark) * 0.65;
+    let glint = pow(saturate(fbm(world * 0.05 + vec2<f32>(-t * 0.02, t * 0.03))), 9.0);
+    color += vec3<f32>(0.55, 0.85, 0.95) * glint * 0.28;
     return color;
 }
 
@@ -200,10 +200,11 @@ fn water_blob(uv: vec2<f32>, world: vec2<f32>) -> f32 {
     let q = uv - vec2<f32>(0.5, 0.5);
     let r = length(q);
     let ang = atan2(q.y, q.x);
-    let n = fbm(world * 0.09);
-    let n2 = fbm(world * 0.21 + vec2<f32>(2.4, 9.1));
-    let radius = 0.32 + 0.11 * sin(ang * 3.0 + n * 6.2) + 0.08 * sin(ang * 5.0 - n2 * 5.0) + 0.06 * n2;
-    return 1.0 - smoothstep(radius * 0.68, radius, r);
+    let n = fbm(world * 0.07);
+    let n2 = fbm(world * 0.13 + vec2<f32>(2.4, 9.1));
+    let radius = 0.4 + 0.07 * sin(ang * 3.0 + n * 5.0) + 0.045 * sin(ang * 5.0 - n2 * 4.0);
+    let edge = max(fwidth(r), 0.012);
+    return 1.0 - smoothstep(radius - edge * 2.4, radius + edge * 0.8, r);
 }
 
 fn shade_fire(uv: vec2<f32>, world: vec2<f32>) -> vec3<f32> {
