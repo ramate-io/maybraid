@@ -111,6 +111,8 @@ pub fn dispatch_fireballs(
 			projectile,
 			seed,
 			time.elapsed_secs(),
+			muzzle,
+			direction,
 		);
 		commands.entity(projectile).insert((
 			ProjectileSource(player),
@@ -128,6 +130,8 @@ fn dress_fireball(
 	projectile: Entity,
 	seed: u32,
 	time_offset: f32,
+	origin: Vec3,
+	direction: Vec3,
 ) {
 	let mesh = effects
 		.map(|effects| effects.mesh.clone())
@@ -139,6 +143,9 @@ fn dress_fireball(
 			1.0,
 			FIREBALL_SPEED,
 			time_offset,
+			origin,
+			direction * FIREBALL_SPEED,
+			Vec3::NEG_Y * 9.81 * FIREBALL_GRAVITY,
 		))),
 	));
 	commands.entity(projectile).remove::<MeshMaterial3d<StandardMaterial>>();
@@ -327,7 +334,15 @@ mod tests {
 
 		let equip = SkillMapEquip::from_spec(Some(SkillMapSpec::new(SkillMapKind::Fireball, 77)));
 		let seed = equip.spec.map(|spec| spec.seed).unwrap_or(0);
-		let material = FireballMaterial::new(seed, 1.0, FIREBALL_SPEED, 0.0);
+		let material = FireballMaterial::new(
+			seed,
+			1.0,
+			FIREBALL_SPEED,
+			0.0,
+			Vec3::ZERO,
+			Vec3::NEG_Z * FIREBALL_SPEED,
+			Vec3::NEG_Y * 9.81,
+		);
 		assert_eq!(material.base_color.x, 1.0);
 		assert_eq!(material.displace.x, 77.0);
 		assert_eq!(seed, 77);
