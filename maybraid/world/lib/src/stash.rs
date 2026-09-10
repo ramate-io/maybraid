@@ -109,6 +109,13 @@ pub struct StashDisplayedItem {
 #[derive(Component)]
 struct StashInteractPrompt;
 
+/// Ground ring around the nearest claimable stash.
+#[derive(Component)]
+struct StashClaimHalo;
+
+const HALO_INNER: f32 = 0.28;
+const HALO_OUTER: f32 = 0.46;
+
 /// Bind-pose garment so stash clothing keeps recipe + palette.
 #[derive(Clone, PartialEq)]
 struct StashClothingPreview {
@@ -150,6 +157,9 @@ impl Plugin for WorldStashPlugin {
 						.after(CharacterControlSystems)
 						.run_if(resource_equals(WorldGameplayEnabled(true))),
 					sync_stash_interact_prompt
+						.after(CharacterControlSystems)
+						.run_if(resource_equals(WorldGameplayEnabled(true))),
+					sync_stash_claim_halo
 						.after(CharacterControlSystems)
 						.run_if(resource_equals(WorldGameplayEnabled(true))),
 				),
@@ -396,7 +406,8 @@ fn despawn_displayed_items(commands: &mut Commands, displayed: &[Entity]) {
 	}
 }
 
-type DownedNpcLoot<'a> = (Entity, &'a Downed, &'a InventoryUser, Option<&'a FirearmUser>);
+type DownedNpcLoot<'a> =
+	(Entity, &'a Downed, Option<&'a InventoryUser>, Option<&'a FirearmUser>);
 
 fn detach_downed_npc_loot(
 	settings: Res<WorldStashSettings>,
@@ -407,12 +418,14 @@ fn detach_downed_npc_loot(
 ) {
 	let assets = assets.as_deref();
 	for (body, downed, user, firearm) in &downed {
-		let loot = match bags.get_mut(user.bag) {
-			Ok(mut bag) => bag.take_all(),
-			Err(_) => Inventory::default(),
-		};
-		commands.entity(user.bag).try_despawn();
-		commands.entity(body).remove::<InventoryUser>();
+		let loot = user.and_then(|user| bags.get_mut(user.bag).ok()).map_or_else(
+			Inventory::default,
+			|mut bag| bag.take_all(),
+		);
+		if let Some(user) = user {
+			commands.entity(user.bag).try_despawn();
+			commands.entity(body).remove::<InventoryUser>();
+		}
 		if let Some(firearm) = firearm {
 			commands.entity(firearm.held).try_despawn();
 			commands.entity(body).remove::<(FirearmUser, PlayerUse)>();
@@ -445,7 +458,8 @@ fn claim_nearby_stashes(
 	}
 	for (player, player_transform, player_user) in &players {
 		let origin = player_origin(player_transform);
-		let Some((stash, stash_bag, policy)) = nearest_stash_in_radius(origin, &stashes) else {
+		let Some((stash, stash_bag, policy, _)) = nearest_stash_in_radius(origin, stashes.iter())
+		else {
 			continue;
 		};
 		let Ok(mut source) = bags.get_mut(stash_bag) else {
@@ -474,18 +488,20 @@ fn claim_nearby_stashes(
 	}
 }
 
-fn nearest_stash_in_radius(
+fn nearest_stash_in_radius<'a>(
 	origin: Vec3,
-	stashes: &Query<(Entity, &Transform, &InventoryUser, &StashPolicy), With<WorldStash>>,
-) -> Option<(Entity, Entity, StashPolicy)> {
+	stashes: impl IntoIterator<Item = (Entity, &'a Transform, &'a InventoryUser, &'a StashPolicy)>,
+) -> Option<(Entity, Entity, StashPolicy, Vec3)> {
 	stashes
-		.iter()
+		.into_iter()
 		.filter_map(|(entity, transform, user, policy)| {
-			let distance = xz_distance(transform.translation, origin);
-			(distance <= policy.claim_radius).then_some((distance, entity, user.bag, *policy))
+			let translation = transform.translation;
+			let distance = xz_distance(translation, origin);
+			(distance <= policy.claim_radius)
+				.then_some((distance, entity, user.bag, *policy, translation))
 		})
 		.min_by(|a, b| a.0.total_cmp(&b.0))
-		.map(|(_, entity, bag, policy)| (entity, bag, policy))
+		.map(|(_, entity, bag, policy, translation)| (entity, bag, policy, translation))
 }
 
 type DroppingPlayer<'a> = (Entity, &'a Transform, &'a InventoryUser, Option<&'a FirearmUser>);
@@ -552,10 +568,85 @@ fn sync_stash_interact_prompt(
 ) {
 	let in_range = players
 		.iter()
-		.any(|transform| nearest_stash_in_radius(player_origin(transform), &stashes).is_some());
+		.any(|transform| nearest_stash_in_radius(player_origin(transform), stashes.iter()).is_some());
 	for mut visibility in &mut prompt {
 		*visibility = if in_range { Visibility::Visible } else { Visibility::Hidden };
 	}
+}
+
+fn nearest_claim_point<'a>(
+	players: impl IntoIterator<Item = &'a Transform>,
+	stashes: impl IntoIterator<Item = (Entity, &'a Transform, &'a InventoryUser, &'a StashPolicy)>,
+) -> Option<Vec3> {
+	let listed: Vec<_> = stashes.into_iter().collect();
+	players.into_iter().find_map(|transform| {
+		nearest_stash_in_radius(player_origin(transform), listed.iter().copied())
+			.map(|(_, _, _, at)| at)
+	})
+}
+
+fn sync_stash_claim_halo(
+	mut commands: Commands,
+	time: Res<Time>,
+	mut meshes: Option<ResMut<Assets<Mesh>>>,
+	mut materials: Option<ResMut<Assets<StandardMaterial>>>,
+	players: Query<&Transform, (With<VegetationPlayer>, Without<StashClaimHalo>)>,
+	stashes: Query<
+		(Entity, &Transform, &InventoryUser, &StashPolicy),
+		(With<WorldStash>, Without<StashClaimHalo>),
+	>,
+	mut halo: Query<
+		(&mut Transform, &mut Visibility),
+		(With<StashClaimHalo>, Without<WorldStash>, Without<VegetationPlayer>),
+	>,
+) {
+	let target = nearest_claim_point(players.iter(), stashes.iter());
+	if halo.is_empty() {
+		let Some(meshes) = meshes.as_mut() else {
+			return;
+		};
+		let Some(materials) = materials.as_mut() else {
+			return;
+		};
+		spawn_stash_claim_halo(&mut commands, meshes, materials);
+		return;
+	}
+	let pulse = 1.0 + 0.07 * (time.elapsed_secs() * 5.0).sin();
+	for (mut transform, mut visibility) in &mut halo {
+		match target {
+			Some(origin) => {
+				*visibility = Visibility::Visible;
+				*transform = Transform {
+					translation: origin + Vec3::Y * 0.08,
+					rotation: Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2),
+					scale: Vec3::splat(pulse),
+				};
+			}
+			None => *visibility = Visibility::Hidden,
+		}
+	}
+}
+
+fn spawn_stash_claim_halo(
+	commands: &mut Commands,
+	meshes: &mut Assets<Mesh>,
+	materials: &mut Assets<StandardMaterial>,
+) {
+	commands.spawn((
+		Name::new("stash-claim-halo"),
+		StashClaimHalo,
+		Mesh3d(meshes.add(Annulus::new(HALO_INNER, HALO_OUTER))),
+		MeshMaterial3d(materials.add(StandardMaterial {
+			base_color: Color::srgba(0.98, 0.86, 0.32, 0.88),
+			emissive: LinearRgba::new(1.4, 1.05, 0.28, 1.0),
+			alpha_mode: AlphaMode::Blend,
+			unlit: true,
+			cull_mode: None,
+			..default()
+		})),
+		Transform::from_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
+		Visibility::Hidden,
+	));
 }
 
 #[cfg(test)]
@@ -1098,6 +1189,64 @@ mod tests {
 			.single(&world)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		assert_eq!(*hidden, Visibility::Hidden);
+		Ok(())
+	}
+
+	#[test]
+	fn claim_halo_marks_the_nearest_stash() -> anyhow::Result<()> {
+		let (mut world, _, near) = claim_setup(Vec3::ZERO, Vec3::new(1.0, 0.0, 0.0))?;
+		world.init_resource::<Time>();
+		world
+			.run_system_once(spawn_stash_system(
+				Transform::from_xyz(3.0, 0.0, 0.0),
+				mixed_bag(),
+				StashPolicy::default(),
+			))
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		world.spawn((StashClaimHalo, Transform::IDENTITY, Visibility::Hidden));
+		world
+			.run_system_once(sync_stash_claim_halo)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let (transform, visibility) = world
+			.query_filtered::<(&Transform, &Visibility), With<StashClaimHalo>>()
+			.single(&world)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert_eq!(*visibility, Visibility::Visible);
+		let near_at = world
+			.get::<Transform>(near)
+			.ok_or_else(|| anyhow::anyhow!("near pose"))?
+			.translation;
+		assert!((transform.translation.xz() - near_at.xz()).length() < 1e-3);
+
+		world.entity_mut(near).insert(Transform::from_xyz(40.0, 0.0, 0.0));
+		world
+			.run_system_once(sync_stash_claim_halo)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let far = world
+			.query_filtered::<&Transform, With<StashClaimHalo>>()
+			.single(&world)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?
+			.translation;
+		assert!((far.xz() - Vec2::new(3.0, 0.0)).length() < 1e-3);
+		Ok(())
+	}
+
+	#[test]
+	fn downed_without_inventory_despawns_the_held_kit() -> anyhow::Result<()> {
+		let mut world = World::new();
+		world.init_resource::<WorldStashSettings>();
+		let gun = world.spawn(Name::new("held-kit")).id();
+		world.spawn((
+			FirearmUser::holding(gun),
+			Downed { source: None, point: Vec3::ZERO, at: 0.0 },
+		));
+
+		world
+			.run_system_once(detach_downed_npc_loot)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+
+		assert!(!world.entities().contains(gun));
+		assert_eq!(world.query::<&WorldStash>().iter(&world).count(), 0);
 		Ok(())
 	}
 }

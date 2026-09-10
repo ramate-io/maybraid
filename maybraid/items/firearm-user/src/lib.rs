@@ -139,6 +139,45 @@ impl Plugin for FirearmUserPlugin {
 				fire::advance_weapon_recoil
 					.in_set(PlayerCameraSystems::Body)
 					.in_set(FirearmUserSystems::Recoil),
-			);
+			)
+			.add_systems(Update, despawn_orphaned_held_firearms);
+	}
+}
+
+/// Held kits are world-posed, not parented. When the user is culled or
+/// despawned without going through a drop path, [`HeldBy`] leaves and the gun
+/// would otherwise float.
+fn despawn_orphaned_held_firearms(
+	mut commands: Commands,
+	guns: Query<Entity, (With<HeldFirearm>, Without<HeldBy>)>,
+) {
+	for entity in &guns {
+		commands.entity(entity).try_despawn();
+	}
+}
+
+#[cfg(test)]
+mod orphan_tests {
+	use bevy::ecs::system::RunSystemOnce;
+	use bevy::prelude::*;
+
+	use super::{despawn_orphaned_held_firearms, FirearmUser, HeldFirearm};
+
+	#[test]
+	fn orphaned_held_kit_despawns_when_the_user_is_gone() {
+		let mut world = World::new();
+		let gun = world.spawn(HeldFirearm { scale: 1.0 }).id();
+		world.run_system_once(despawn_orphaned_held_firearms).expect("orphan");
+		assert!(!world.entities().contains(gun));
+	}
+
+	#[test]
+	fn held_kit_stays_while_linked() {
+		let mut world = World::new();
+		let gun = world.spawn(HeldFirearm { scale: 1.0 }).id();
+		world.spawn(FirearmUser::holding(gun));
+		world.flush();
+		world.run_system_once(despawn_orphaned_held_firearms).expect("linked");
+		assert!(world.entities().contains(gun));
 	}
 }

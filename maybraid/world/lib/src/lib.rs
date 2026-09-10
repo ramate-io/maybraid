@@ -139,7 +139,7 @@ impl Plugin for WorldPlugin {
 			})
 			.insert_resource(CharacterRagdollTargets {
 				players: true,
-				npcs: false,
+				npcs: true,
 				unmarked: false,
 			})
 			.add_plugins(CharacterRagdollPlugin)
