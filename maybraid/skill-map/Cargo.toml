@@ -11,6 +11,7 @@ rust-version = { workspace = true }
 
 [dependencies]
 bevy = { workspace = true }
+bevy_hanabi = { workspace = true }
 combat-targeting = { workspace = true }
 crozon-character-items = { workspace = true }
 damage = { workspace = true }

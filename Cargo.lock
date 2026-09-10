@@ -4697,6 +4697,7 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "bevy",
+ "bevy_hanabi",
  "combat-targeting",
  "crozon-character-items",
  "damage",

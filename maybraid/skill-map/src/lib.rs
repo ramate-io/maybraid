@@ -7,12 +7,15 @@
 
 mod cursor;
 mod effects;
+mod fireball_embers;
+mod fireball_material;
 mod map;
 mod tiles;
 mod user;
 mod viewport;
 
 use bevy::prelude::*;
+use fireball_material::FireballMaterialPlugin;
 use maybraid_character_controller::CharacterControlSystems;
 use projectiles::ProjectilesPlugin;
 use threat_management_intelligence::ThreatManagementSystems;
@@ -60,7 +63,12 @@ impl Plugin for SkillMapPlugin {
 		if !app.is_plugin_added::<ProjectilesPlugin>() {
 			app.add_plugins(ProjectilesPlugin);
 		}
-		app.init_resource::<SkillMapEnabled>()
+		if !app.is_plugin_added::<bevy_hanabi::HanabiPlugin>() {
+			app.add_plugins(bevy_hanabi::HanabiPlugin);
+		}
+		app.add_plugins(FireballMaterialPlugin)
+			.add_systems(Startup, fireball_embers::setup_fireball_effects)
+			.init_resource::<SkillMapEnabled>()
 			.add_message::<SkillMapEvent>()
 			.configure_sets(
 				Update,

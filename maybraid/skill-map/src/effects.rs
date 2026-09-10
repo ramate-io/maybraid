@@ -1,5 +1,6 @@
 //! Fireball flights and the Dumbwave forget-pulse.
 
+use bevy_hanabi::prelude::ParticleEffect;
 use combat_targeting::CombatTargeting;
 use damage::HitPayload;
 use evasion_intelligence::EvasionIntelligenceUser;
@@ -11,7 +12,9 @@ use threat_management_intelligence::{
 
 use bevy::prelude::*;
 
-use crate::user::SkillMapUser;
+use crate::fireball_embers::FireballEffects;
+use crate::fireball_material::FireballMaterial;
+use crate::user::{SkillMapEquip, SkillMapUser};
 use crate::{SkillKind, SkillMapEnabled, SkillMapEvent};
 
 pub const FIREBALL_LENGTH: f32 = 0.12;
@@ -54,11 +57,17 @@ pub fn look_forward(look: PlayerLook) -> Vec3 {
 pub fn dispatch_fireballs(
 	mut commands: Commands,
 	mut meshes: ResMut<Assets<Mesh>>,
-	mut materials: ResMut<Assets<StandardMaterial>>,
+	mut lit: ResMut<Assets<StandardMaterial>>,
+	mut fire: ResMut<Assets<FireballMaterial>>,
 	mut visuals: ResMut<ProjectileVisualCache>,
+	effects: Option<Res<FireballEffects>>,
+	time: Res<Time>,
 	enabled: Res<SkillMapEnabled>,
 	mut events: MessageReader<SkillMapEvent>,
-	users: Query<(Entity, &GlobalTransform, Option<&PlayerLook>), With<SkillMapUser>>,
+	users: Query<
+		(Entity, &GlobalTransform, Option<&PlayerLook>, Option<&SkillMapEquip>),
+		With<SkillMapUser>,
+	>,
 ) {
 	if !enabled.0 {
 		for _ in events.read() {}
@@ -68,7 +77,7 @@ pub fn dispatch_fireballs(
 		let SkillMapEvent::Claim { user, kind: SkillKind::Fireball } = *event else {
 			continue;
 		};
-		let Ok((player, transform, look)) = users.get(user) else {
+		let Ok((player, transform, look, equip)) = users.get(user) else {
 			continue;
 		};
 		let direction = look
@@ -81,7 +90,7 @@ pub fn dispatch_fireballs(
 		let projectile = spawn_flight(
 			&mut commands,
 			&mut meshes,
-			&mut materials,
+			&mut lit,
 			&mut visuals,
 			muzzle,
 			direction,
@@ -94,11 +103,55 @@ pub fn dispatch_fireballs(
 			FIREBALL_COLOR,
 			FIREBALL_GRAVITY,
 		);
+		let seed = equip.and_then(|equip| equip.spec).map(|spec| spec.seed).unwrap_or(0);
+		dress_fireball(
+			&mut commands,
+			&mut meshes,
+			&mut fire,
+			effects.as_deref(),
+			projectile,
+			seed,
+			time.elapsed_secs(),
+		);
 		commands.entity(projectile).insert((
 			ProjectileSource(player),
 			HitPayload { amount: FIREBALL_DAMAGE },
 			Name::new("skill-fireball"),
 		));
+	}
+}
+
+fn dress_fireball(
+	commands: &mut Commands,
+	meshes: &mut Assets<Mesh>,
+	materials: &mut Assets<FireballMaterial>,
+	effects: Option<&FireballEffects>,
+	projectile: Entity,
+	seed: u32,
+	time_offset: f32,
+) {
+	let mesh = effects
+		.map(|effects| effects.mesh.clone())
+		.unwrap_or_else(|| meshes.add(crate::fireball_material::fireball_visual_mesh()));
+	commands.entity(projectile).insert((
+		Mesh3d(mesh),
+		MeshMaterial3d(materials.add(FireballMaterial::new(
+			seed,
+			1.0,
+			FIREBALL_SPEED,
+			time_offset,
+		))),
+	));
+	commands.entity(projectile).remove::<MeshMaterial3d<StandardMaterial>>();
+	if let Some(effects) = effects {
+		commands.entity(projectile).with_children(|parent| {
+			parent.spawn((
+				Name::new("fireball-embers"),
+				ParticleEffect::new(effects.embers.clone()),
+				Transform::default(),
+				Visibility::default(),
+			));
+		});
 	}
 }
 
@@ -273,5 +326,18 @@ mod tests {
 		let look = PlayerLook { yaw: 0.0, pitch: 0.0, ..default() };
 		let forward = look_forward(look);
 		assert!((forward - Vec3::NEG_Z).length() < 1e-5);
+	}
+
+	#[test]
+	fn fireball_material_uses_the_map_seed() {
+		use crozon_character_items::{SkillMapKind, SkillMapSpec};
+
+		use crate::fireball_material::FireballMaterial;
+		use crate::user::SkillMapEquip;
+
+		let equip = SkillMapEquip::from_spec(Some(SkillMapSpec::new(SkillMapKind::Fireball, 77)));
+		let seed = equip.spec.map(|spec| spec.seed).unwrap_or(0);
+		let material = FireballMaterial::new(seed, 1.0, FIREBALL_SPEED, 0.0);
+		assert_eq!(material.params.seed, 77.0);
 	}
 }
