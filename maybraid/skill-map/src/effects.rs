@@ -98,7 +98,14 @@ pub fn dispatch_fireballs(
 			FIREBALL_COLOR,
 			FIREBALL_GRAVITY,
 		);
-		dress_fireball(&mut commands, &mut meshes, &mut fire, effects.as_deref(), projectile, muzzle);
+		dress_fireball(
+			&mut commands,
+			&mut meshes,
+			&mut fire,
+			effects.as_deref(),
+			projectile,
+			muzzle,
+		);
 		commands.entity(projectile).insert((
 			ProjectileSource(player),
 			HitPayload { amount: FIREBALL_DAMAGE },

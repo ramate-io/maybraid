@@ -9,11 +9,12 @@ use bevy::ui::widget::ViewportNode;
 
 use crate::cursor::SkillMapCursor;
 use crate::map::{authored_map_from_spec, render_layer, AuthoredMap, SkillMapId};
+use crate::tile_material::SkillMapTileAssets;
 use crate::tiles::spawn_map_tiles;
 use crate::user::{SkillMapEquip, SkillMapHeld, SkillMapMember, SkillMapSession, SkillMapUser};
 use crate::SkillMapEnabled;
 
-const VIEWPORT_PX: f32 = 176.0;
+const VIEWPORT_PX: f32 = 228.0;
 const VIEWPORT_GAP: f32 = 12.0;
 const VIEWPORT_INSET: f32 = 16.0;
 const LIVE_BORDER: Color = Color::srgb(1.0, 0.48, 0.08);
@@ -41,6 +42,7 @@ pub(crate) struct DebraidOverlay;
 pub fn present_skill_maps(
 	mut commands: Commands,
 	mut images: ResMut<Assets<Image>>,
+	tiles: Res<SkillMapTileAssets>,
 	users: Query<(Entity, &SkillMapUser, &SkillMapEquip)>,
 	mut sessions: Query<&mut SkillMapSession>,
 	members: Query<(Entity, &SkillMapMember)>,
@@ -61,6 +63,7 @@ pub fn present_skill_maps(
 		spawn_one_map(
 			&mut commands,
 			&mut images,
+			&tiles,
 			user,
 			mapping.maps,
 			&mut session,
@@ -89,6 +92,7 @@ fn clear_presented(
 fn spawn_one_map(
 	commands: &mut Commands,
 	images: &mut Assets<Image>,
+	tiles: &SkillMapTileAssets,
 	user: Entity,
 	session: Entity,
 	viewports: &mut SkillMapSession,
@@ -113,7 +117,7 @@ fn spawn_one_map(
 			Camera2d,
 			Camera {
 				order: -2 - stack_index as isize,
-				clear_color: ClearColorConfig::Custom(Color::srgb(0.08, 0.07, 0.06)),
+				clear_color: ClearColorConfig::Custom(Color::srgb(0.11, 0.09, 0.07)),
 				..default()
 			},
 			RenderTarget::Image(image_handle.into()),
@@ -139,8 +143,9 @@ fn spawn_one_map(
 				right: Val::Px(VIEWPORT_INSET),
 				width: Val::Px(VIEWPORT_PX),
 				height: Val::Px(VIEWPORT_PX),
-				border: UiRect::all(Val::Px(3.0)),
-				padding: UiRect::all(Val::Px(6.0)),
+				border: UiRect::all(Val::Px(2.0)),
+				padding: UiRect::all(Val::Px(8.0)),
+				border_radius: BorderRadius::all(Val::Px(14.0)),
 				flex_direction: FlexDirection::Column,
 				justify_content: JustifyContent::FlexStart,
 				align_items: AlignItems::FlexStart,
@@ -168,12 +173,13 @@ fn spawn_one_map(
 		SkillMapCursor,
 		spec.id,
 		member,
-		Sprite { custom_size: Some(Vec2::splat(10.0)), color: Color::WHITE, ..default() },
+		Mesh2d(tiles.cursor_mesh.clone()),
+		MeshMaterial2d(tiles.cursor.clone()),
 		Transform::from_xyz(0.0, 0.0, 1.0),
 		layer,
 	));
 
-	spawn_map_tiles(commands, spec, member);
+	spawn_map_tiles(commands, spec, member, tiles);
 	viewports.cameras.insert(spec.id, camera);
 	viewports.nodes.insert(spec.id, node);
 }

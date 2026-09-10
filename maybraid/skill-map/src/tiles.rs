@@ -9,12 +9,16 @@ use crate::cursor::SkillMapCursor;
 use crate::map::{
 	pinned_power_cells, render_layer, AuthoredMap, MapExtents, SkillKind, SkillMapId,
 };
+use crate::tile_material::SkillMapTileAssets;
 use crate::user::{SkillMapHeld, SkillMapMember, SkillMapSession, SkillMapSteerLock, SkillMapUser};
 use crate::viewport::{spawn_debraid, SkillMapViewportCamera};
 use crate::{SkillMapEnabled, SkillMapEvent};
 
-const LAND: Color = Color::srgb(0.46, 0.30, 0.14);
-const WATER: Color = Color::srgb(0.12, 0.28, 0.72);
+/// Half-extents for the cheap AABB claim test. Independent of the render mesh.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct TileBounds {
+	pub half: Vec2,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TileKind {
@@ -54,7 +58,12 @@ pub(crate) struct TileOverlap {
 	tile: Entity,
 }
 
-pub fn spawn_map_tiles(commands: &mut Commands, spec: AuthoredMap, member: SkillMapMember) {
+pub fn spawn_map_tiles(
+	commands: &mut Commands,
+	spec: AuthoredMap,
+	member: SkillMapMember,
+	assets: &SkillMapTileAssets,
+) {
 	let extents = MapExtents::default();
 	let size = extents.tile_size();
 	let layer = render_layer(spec.id);
@@ -73,7 +82,7 @@ pub fn spawn_map_tiles(commands: &mut Commands, spec: AuthoredMap, member: Skill
 			} else {
 				classify_noise(raw, spec.kind)
 			};
-			spawn_tile(commands, spec.id, kind, center, size, layer.clone(), member);
+			spawn_tile(commands, spec.id, kind, center, size, layer.clone(), member, assets);
 		}
 	}
 }
@@ -86,22 +95,23 @@ fn spawn_tile(
 	size: Vec2,
 	layer: RenderLayers,
 	member: SkillMapMember,
+	assets: &SkillMapTileAssets,
 ) {
-	let color = match kind {
-		TileKind::Water => WATER,
-		TileKind::Land => LAND,
-		TileKind::Power(skill) => skill.tile_color(),
-	};
+	// Claim hides only the mark; keep a land body so the grid does not punch a hole.
 	if matches!(kind, TileKind::Power(_)) {
-		spawn_tile(commands, map, TileKind::Land, center, size, layer.clone(), member);
+		spawn_tile(commands, map, TileKind::Land, center, size, layer.clone(), member, assets);
 	}
 	let z = if matches!(kind, TileKind::Power(_)) { 0.2 } else { 0.0 };
+	// Visual overlap hides wobble seams. AABB stays `size` so claims do not grow.
+	let visual = Vec3::new(1.18, 1.18, 1.0);
 	commands.spawn((
 		Name::new("skill-map-tile"),
 		SkillMapTile { map, kind },
+		TileBounds { half: size * 0.5 },
 		member,
-		Sprite { custom_size: Some(size), color, ..default() },
-		Transform::from_xyz(center.x, center.y, z),
+		Mesh2d(assets.mesh.clone()),
+		MeshMaterial2d(assets.material(kind)),
+		Transform::from_xyz(center.x, center.y, z).with_scale(visual),
 		layer,
 	));
 }
@@ -127,7 +137,7 @@ pub fn collide_tiles(
 		(With<SkillMapCursor>, Without<SkillMapViewportCamera>, Without<SkillMapTile>),
 	>,
 	tiles: Query<
-		(Entity, &SkillMapTile, &SkillMapMember, &Transform, &Sprite),
+		(Entity, &SkillMapTile, &SkillMapMember, &Transform, &TileBounds),
 		(Without<IgnoreRightCollisions>, Without<SkillMapViewportCamera>, Without<SkillMapCursor>),
 	>,
 	mut events: MessageWriter<SkillMapEvent>,
@@ -147,15 +157,14 @@ pub fn collide_tiles(
 
 		let cursor_bounds = Aabb2d::new(cursor_transform.translation.xy(), Vec2::splat(5.0));
 		let mut hit: Option<(Entity, SkillMapTile)> = None;
-		for (tile_entity, tile, tile_member, tile_transform, sprite) in &tiles {
+		for (tile_entity, tile, tile_member, tile_transform, bounds) in &tiles {
 			if tile.map != *cursor_map || tile_member.session != cursor_member.session {
 				continue;
 			}
 			if matches!(tile.kind, TileKind::Land) {
 				continue;
 			}
-			let half = sprite.custom_size.unwrap_or(Vec2::splat(16.0)) * 0.5;
-			let tile_bounds = Aabb2d::new(tile_transform.translation.xy(), half);
+			let tile_bounds = Aabb2d::new(tile_transform.translation.xy(), bounds.half);
 			if cursor_bounds.intersects(&tile_bounds) {
 				hit = Some((tile_entity, *tile));
 				break;

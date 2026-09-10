@@ -11,12 +11,15 @@ mod fireball_embers;
 mod fireball_material;
 mod fireball_trail;
 mod map;
+mod tile_material;
 mod tiles;
 mod user;
 mod viewport;
 
 use bevy::prelude::*;
 use fireball_material::FireballMaterialPlugin;
+use tile_material::SkillMapTileMaterialPlugin;
+
 use maybraid_character_controller::CharacterControlSystems;
 use projectiles::ProjectilesPlugin;
 use threat_management_intelligence::ThreatManagementSystems;
@@ -68,6 +71,7 @@ impl Plugin for SkillMapPlugin {
 			app.add_plugins(bevy_hanabi::HanabiPlugin);
 		}
 		app.add_plugins(FireballMaterialPlugin)
+			.add_plugins(SkillMapTileMaterialPlugin)
 			.add_systems(Startup, fireball_embers::setup_fireball_effects)
 			.init_resource::<SkillMapEnabled>()
 			.add_message::<SkillMapEvent>()

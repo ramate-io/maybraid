@@ -60,12 +60,7 @@ fn spawn_bead(
 	let scale = BEAD_START_SCALE;
 	commands.spawn((
 		Name::new("fireball-bead"),
-		FireballBead {
-			age: 0.0,
-			max_age: BEAD_LIFE,
-			start_scale: scale,
-			contacted: Vec::new(),
-		},
+		FireballBead { age: 0.0, max_age: BEAD_LIFE, start_scale: scale, contacted: Vec::new() },
 		Mesh3d(effects.mesh.clone()),
 		MeshMaterial3d(effects.material.clone()),
 		Transform { scale: Vec3::splat(scale), ..transform },

@@ -2,12 +2,8 @@
 //! pose and scale stay on [`Transform`].
 
 use bevy::{
-	asset::embedded_asset,
-	light::NotShadowCaster,
-	prelude::*,
-	reflect::TypePath,
-	render::render_resource::AsBindGroup,
-	shader::ShaderRef,
+	asset::embedded_asset, light::NotShadowCaster, prelude::*, reflect::TypePath,
+	render::render_resource::AsBindGroup, shader::ShaderRef,
 };
 
 /// Visual capsule is a bit larger than the hit sphere so the short tail can pull.
