@@ -1,11 +1,11 @@
 //! Produce [`LodSceneRefreshLevel`] from region impulses and a spatial index.
 
+use std::any::TypeId;
 use std::marker::PhantomData;
 
-use bevy::ecs::query::QueryFilter;
 use bevy::ecs::system::{StaticSystemParam, SystemParam};
 use bevy::math::bounding::Aabb3d;
-use bevy::platform::collections::HashSet;
+use bevy::platform::collections::{HashMap, HashSet};
 use bevy::prelude::*;
 
 use crate::lod_ref::{
@@ -112,47 +112,132 @@ where
 	}
 }
 
-/// Untyped refresh AABB (union of every [`LodSceneRefreshRegion<M>`] channel).
-///
-/// Region production writes this beside the typed channel message. One fill
-/// system reads it so produce is once per host type, not once per channel.
-#[derive(Message, Debug, Clone, Copy)]
-pub struct LodSceneRefreshAabb {
-	pub region: Aabb3d,
+/// Typed channel membership. Dual bullseye + spotlight adds stamp two of these.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct LodRefreshChannel<M: Send + Sync + 'static> {
+	_marker: PhantomData<fn() -> M>,
 }
 
-/// This-frame driver snapshots + deduplicated host hits.
-///
-/// Filled once by [`fill_lod_produce_cache`], then consumed once by the erased
-/// producer.
-#[derive(Resource, Debug, Default)]
-pub struct LodProduceCache {
-	pub snapshots: Vec<LodNodeSnapshot>,
-	pub hit_entities: HashSet<Entity>,
-	regions: Vec<Aabb3d>,
+impl<M: Send + Sync + 'static> Default for LodRefreshChannel<M> {
+	fn default() -> Self {
+		Self { _marker: PhantomData }
+	}
 }
 
-impl LodProduceCache {
-	fn clear(&mut self) {
-		self.snapshots.clear();
-		self.hit_entities.clear();
-		self.regions.clear();
+/// `TypeId<M>` bag so fill can filter Avian hits without a system per channel.
+#[derive(Component, Debug, Clone, Default)]
+pub struct LodRefreshChannels {
+	ids: HashSet<TypeId>,
+}
+
+impl LodRefreshChannels {
+	pub fn contains(&self, id: TypeId) -> bool {
+		self.ids.contains(&id)
 	}
 
+	pub fn insert(&mut self, id: TypeId) {
+		self.ids.insert(id);
+	}
+}
+
+fn attach_lod_refresh_channel<T, M>(add: On<Add, T>, mut commands: Commands)
+where
+	T: Component + SemanticLodScene + 'static,
+	M: Send + Sync + 'static,
+{
+	if TypeId::of::<M>() == TypeId::of::<()>() {
+		return;
+	}
+	let entity = add.entity;
+	let id = TypeId::of::<M>();
+	commands.queue(move |world: &mut World| {
+		let Ok(mut entity_mut) = world.get_entity_mut(entity) else {
+			return;
+		};
+		entity_mut.insert(LodRefreshChannel::<M>::default());
+		let mut bag = entity_mut.get::<LodRefreshChannels>().cloned().unwrap_or_default();
+		bag.insert(id);
+		entity_mut.insert(bag);
+	});
+}
+
+/// This-frame refresh AABBs keyed by `TypeId<M>`.
+///
+/// Slice C ([#795](https://github.com/ramate-io/maybraid/issues/795)): writers
+/// push their own channel. Fill does not union vegetation with mob High.
+#[derive(Resource, Debug, Default)]
+pub struct LodProduceRegionSink {
+	channels: HashMap<TypeId, Vec<Aabb3d>>,
+}
+
+impl LodProduceRegionSink {
+	pub fn push<M: Send + Sync + 'static>(&mut self, region: Aabb3d) {
+		self.channels.entry(TypeId::of::<M>()).or_default().push(region);
+	}
+
+	fn take(&mut self) -> HashMap<TypeId, Vec<Aabb3d>> {
+		std::mem::take(&mut self.channels)
+	}
+
+	pub fn is_empty(&self) -> bool {
+		self.channels.values().all(Vec::is_empty)
+	}
+}
+
+/// Camera or [`LodViewer`] drivers. One fill query — not one plugin per `F`.
+pub type LodProduceDriver = Or<(With<Camera>, With<LodViewer>)>;
+
+/// Per-channel regions + host hits after contained-region drop and membership filter.
+#[derive(Debug, Default, Clone)]
+pub struct LodProduceChannel {
+	pub regions: Vec<Aabb3d>,
+	pub hit_entities: HashSet<Entity>,
+}
+
+impl LodProduceChannel {
 	fn has_region(&self, region: Aabb3d) -> bool {
 		self.regions.contains(&region)
 	}
 
 	fn remove_contained_regions(&mut self) {
-		self.regions.sort_by(|a, b| region_volume(*b).total_cmp(&region_volume(*a)));
-		let mut index = 0;
-		while index < self.regions.len() {
-			let region = self.regions[index];
-			if self.regions[..index].iter().any(|outer| contains_region(*outer, region)) {
-				self.regions.remove(index);
-			} else {
-				index += 1;
-			}
+		remove_contained_regions(&mut self.regions);
+	}
+}
+
+/// This-frame driver snapshots + per-`M` host hits.
+///
+/// Filled once by [`fill_lod_produce_cache`], then consumed once by the erased
+/// producer.
+#[derive(Resource, Debug, Default)]
+pub struct LodProduceCaches {
+	pub snapshots: Vec<LodNodeSnapshot>,
+	pub channels: HashMap<TypeId, LodProduceChannel>,
+}
+
+/// Compatibility alias for [`LodProduceCaches`].
+pub type LodProduceCache = LodProduceCaches;
+
+impl LodProduceCaches {
+	fn clear(&mut self) {
+		self.snapshots.clear();
+		self.channels.clear();
+	}
+
+	fn is_empty(&self) -> bool {
+		self.snapshots.is_empty()
+			|| self.channels.values().all(|channel| channel.hit_entities.is_empty())
+	}
+}
+
+fn remove_contained_regions(regions: &mut Vec<Aabb3d>) {
+	regions.sort_by(|a, b| region_volume(*b).total_cmp(&region_volume(*a)));
+	let mut index = 0;
+	while index < regions.len() {
+		let region = regions[index];
+		if regions[..index].iter().any(|outer| contains_region(*outer, region)) {
+			regions.remove(index);
+		} else {
+			index += 1;
 		}
 	}
 }
@@ -166,19 +251,20 @@ fn contains_region(outer: Aabb3d, inner: Aabb3d) -> bool {
 	outer.min.cmple(inner.min).all() && outer.max.cmpge(inner.max).all()
 }
 
-/// Collect driver refs and untyped host hits once per frame.
-pub fn fill_lod_produce_cache<I, F>(
-	mut regions: MessageReader<LodSceneRefreshAabb>,
+/// Collect driver refs and per-channel host hits once per frame.
+pub fn fill_lod_produce_cache<I>(
+	mut sink: ResMut<LodProduceRegionSink>,
 	index: StaticSystemParam<I>,
-	nodes: Query<(Entity, &LodNodePose, Option<&LodNodeBounds>), (With<LodNode>, F)>,
-	mut cache: ResMut<LodProduceCache>,
+	nodes: Query<(Entity, &LodNodePose, Option<&LodNodeBounds>), (With<LodNode>, LodProduceDriver)>,
+	membership: Query<&LodRefreshChannels>,
+	mut cache: ResMut<LodProduceCaches>,
 ) where
 	I: SystemParam + 'static,
 	for<'w, 's> I::Item<'w, 's>: LodSceneHostIndex,
-	F: QueryFilter + 'static,
 {
 	cache.clear();
-	if regions.is_empty() {
+	let batches = sink.take();
+	if batches.is_empty() {
 		return;
 	}
 	cache.snapshots = collect_node_snapshots(&nodes);
@@ -187,21 +273,31 @@ pub fn fill_lod_produce_cache<I, F>(
 	}
 
 	let mut index = index.into_inner();
-	for msg in regions.read() {
-		if !cache.has_region(msg.region) {
-			cache.regions.push(msg.region);
+	for (type_id, regions) in batches {
+		let mut channel = LodProduceChannel::default();
+		for region in regions {
+			if !channel.has_region(region) {
+				channel.regions.push(region);
+			}
 		}
-	}
-	cache.remove_contained_regions();
-	for region_index in 0..cache.regions.len() {
-		let region = cache.regions[region_index];
-		cache.hit_entities.extend(index.hosts_in_region(region));
+		channel.remove_contained_regions();
+		for region_index in 0..channel.regions.len() {
+			let region = channel.regions[region_index];
+			for entity in index.hosts_in_region(region) {
+				if membership.get(entity).is_ok_and(|bag| bag.contains(type_id)) {
+					channel.hit_entities.insert(entity);
+				}
+			}
+		}
+		if !channel.regions.is_empty() {
+			cache.channels.insert(type_id, channel);
+		}
 	}
 }
 
 /// Emit [`LodSceneRefreshLevel`] for hosts `T` overlapping this frame's regions.
 pub fn produce_lod_refresh_levels<T>(
-	cache: Res<LodProduceCache>,
+	cache: Res<LodProduceCaches>,
 	hosts: Query<&T, With<LodSceneHost>>,
 	mut levels: MessageWriter<LodSceneRefreshLevel>,
 	child_of: Query<&ChildOf>,
@@ -213,48 +309,52 @@ pub fn produce_lod_refresh_levels<T>(
 ) where
 	T: Component + SemanticLodScene + 'static,
 {
-	if cache.hit_entities.is_empty() || cache.snapshots.is_empty() {
+	if cache.is_empty() {
 		return;
 	}
 	let refs = lod_refs_from_snapshots(&cache.snapshots);
-	for &entity in &cache.hit_entities {
-		let Ok(scene) = hosts.get(entity) else {
-			continue;
-		};
-		if !nested_host_parent_allows_refresh(
-			entity,
-			&child_of,
-			&host_levels,
-			&level_roots,
-			&children_q,
-			&level_roots_bags,
-			&visibilities,
-		) {
-			continue;
+	for channel in cache.channels.values() {
+		for &entity in &channel.hit_entities {
+			let Ok(scene) = hosts.get(entity) else {
+				continue;
+			};
+			if !nested_host_parent_allows_refresh(
+				entity,
+				&child_of,
+				&host_levels,
+				&level_roots,
+				&children_q,
+				&level_roots_bags,
+				&visibilities,
+			) {
+				continue;
+			}
+			let level = scene.scene_lod_level_from_levels(&refs);
+			levels.write(LodSceneRefreshLevel { entity, level });
 		}
-		let level = scene.scene_lod_level_from_levels(&refs);
-		levels.write(LodSceneRefreshLevel { entity, level });
 	}
 }
 
-/// Emit levels once from the shared spatial-hit cache.
+/// Emit levels from each channel's spatial-hit set.
 pub fn produce_lod_refresh_levels_erased(world: &mut World) {
-	world.resource_scope(|world, cache: Mut<LodProduceCache>| {
-		if cache.hit_entities.is_empty() || cache.snapshots.is_empty() {
+	world.resource_scope(|world, cache: Mut<LodProduceCaches>| {
+		if cache.is_empty() {
 			return;
 		}
 		let refs = lod_refs_from_snapshots(&cache.snapshots);
-		for &entity in &cache.hit_entities {
-			if !nested_host_parent_allows_refresh_world(world, entity) {
-				continue;
+		for channel in cache.channels.values() {
+			for &entity in &channel.hit_entities {
+				if !nested_host_parent_allows_refresh_world(world, entity) {
+					continue;
+				}
+				let Some(producer) = world.get::<LodLevelProducer>(entity).copied() else {
+					continue;
+				};
+				let Some(level) = (producer.level_from_all)(world, entity, &refs) else {
+					continue;
+				};
+				world.write_message(LodSceneRefreshLevel { entity, level });
 			}
-			let Some(producer) = world.get::<LodLevelProducer>(entity).copied() else {
-				continue;
-			};
-			let Some(level) = (producer.level_from_all)(world, entity, &refs) else {
-				continue;
-			};
-			world.write_message(LodSceneRefreshLevel { entity, level });
 		}
 	});
 }
@@ -303,64 +403,67 @@ fn host_shows_level_root_world(world: &World, host: Entity, level: LodSceneLevel
 	})
 }
 
-/// Fill [`LodProduceCache`] from untyped region AABBs via host index `I`.
-pub struct LodSceneRefreshLevelsFillPlugin<I, F = With<LodViewer>>
+/// Fill [`LodProduceCaches`] once via host index `I` (camera + [`LodViewer`] drivers).
+pub struct LodSceneRefreshLevelsFillPlugin<I>
 where
 	I: SystemParam + 'static,
-	F: QueryFilter + 'static,
 {
-	_marker: PhantomData<fn() -> (I, F)>,
+	_marker: PhantomData<fn() -> I>,
 }
 
-impl<I, F> Default for LodSceneRefreshLevelsFillPlugin<I, F>
+impl<I> Default for LodSceneRefreshLevelsFillPlugin<I>
 where
 	I: SystemParam + 'static,
-	F: QueryFilter + 'static,
 {
 	fn default() -> Self {
 		Self { _marker: PhantomData }
 	}
 }
 
-impl<I, F> Plugin for LodSceneRefreshLevelsFillPlugin<I, F>
+impl<I> Plugin for LodSceneRefreshLevelsFillPlugin<I>
 where
 	I: SystemParam + 'static,
-	F: QueryFilter + 'static,
 	for<'w, 's> I::Item<'w, 's>: LodSceneHostIndex,
 {
 	fn build(&self, app: &mut App) {
 		ensure_refresh_core(app);
 		app.add_systems(
 			Update,
-			fill_lod_produce_cache::<I, F>.in_set(LodLevelProduceSystems::FillCache),
+			fill_lod_produce_cache::<I>.in_set(LodLevelProduceSystems::FillCache),
 		);
 	}
 }
 
-/// Register host `T` with the shared erased level producer.
-pub struct LodSceneRefreshLevelsPlugin<T>
+/// Register host `T` on refresh channel `M` (`M = ()` stamps the producer only).
+pub struct LodSceneRefreshLevelsPlugin<T, M = ()>
 where
 	T: Component + SemanticLodScene + 'static,
+	M: Send + Sync + 'static,
 {
-	_marker: PhantomData<fn() -> T>,
+	_marker: PhantomData<fn() -> (T, M)>,
 }
 
-impl<T> Default for LodSceneRefreshLevelsPlugin<T>
+impl<T, M> Default for LodSceneRefreshLevelsPlugin<T, M>
 where
 	T: Component + SemanticLodScene + 'static,
+	M: Send + Sync + 'static,
 {
 	fn default() -> Self {
 		Self { _marker: PhantomData }
 	}
 }
 
-impl<T> Plugin for LodSceneRefreshLevelsPlugin<T>
+impl<T, M> Plugin for LodSceneRefreshLevelsPlugin<T, M>
 where
 	T: Component + SemanticLodScene + 'static,
+	M: Send + Sync + 'static,
 {
 	fn build(&self, app: &mut App) {
 		ensure_refresh_core(app);
 		app.add_observer(attach_lod_level_producer::<T>);
+		if TypeId::of::<M>() != TypeId::of::<()>() {
+			app.add_observer(attach_lod_refresh_channel::<T, M>);
+		}
 	}
 }
 
@@ -372,8 +475,20 @@ mod tests {
 	fn contained_refresh_region_is_removed_before_spatial_query() {
 		let outer = Aabb3d::from_min_max(Vec3::splat(-100.0), Vec3::splat(100.0));
 		let inner = Aabb3d::from_min_max(Vec3::splat(-10.0), Vec3::splat(10.0));
-		let mut cache = LodProduceCache { regions: vec![inner, outer], ..Default::default() };
-		cache.remove_contained_regions();
-		assert_eq!(cache.regions, vec![outer]);
+		let mut regions = vec![inner, outer];
+		remove_contained_regions(&mut regions);
+		assert_eq!(regions, vec![outer]);
+	}
+
+	#[test]
+	fn contained_drop_is_per_channel() {
+		let urban = Aabb3d::from_min_max(Vec3::splat(-200.0), Vec3::splat(200.0));
+		let veg = Aabb3d::from_min_max(Vec3::splat(-100.0), Vec3::splat(100.0));
+		let mut urban_regions = vec![urban];
+		let mut veg_regions = vec![veg];
+		remove_contained_regions(&mut urban_regions);
+		remove_contained_regions(&mut veg_regions);
+		assert_eq!(urban_regions, vec![urban]);
+		assert_eq!(veg_regions, vec![veg]);
 	}
 }

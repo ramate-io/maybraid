@@ -7,8 +7,9 @@ use bevy::scene::prelude::Scene;
 use chico_sbs_trees::RorysHeadTrained;
 use chico_vegetation_components::{
 	chico_frond_material_ref, chico_leaf_material_ref, chico_stick_material_ref,
-	flattened_components_only_host, FoliageGeometry, FoliageNode, Layers, PlacedVegetation,
-	Placement, StickGeometry, StickNode, StructuralLod, VegetationComponents,
+	flattened_components_only_host, flattened_vegetation_scene_chunks, FoliageGeometry,
+	FoliageNode, Layers, PlacedVegetation, Placement, StickGeometry, StickNode, StructuralLod,
+	VegetationComponents,
 };
 use lod::gen::{LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
@@ -463,7 +464,7 @@ fn merge_proxy_bins<'a>(
 		.collect()
 }
 
-/// Map grove structural level: High/Medium nest plant hosts; Low/UltraLow use canopy proxies.
+/// Map grove structural level: High/Medium nest plant kits; Low/UltraLow use canopy proxies.
 pub fn grove_detail_level(level: LodSceneLevel) -> Option<LodSceneLevel> {
 	match level {
 		LodSceneLevel::High | LodSceneLevel::Medium => Some(level),
@@ -474,7 +475,7 @@ pub fn grove_detail_level(level: LodSceneLevel) -> Option<LodSceneLevel> {
 	}
 }
 
-/// Like [`grove_detail_level`], but Low also nests plants (palm-only groves).
+/// Like [`grove_detail_level`], but Low also nests plant kits (palm-only groves).
 ///
 /// Plant Low is the shared five-chord star; UltraLow still uses cheap-ball bins.
 pub fn grove_detail_level_keep_low(level: LodSceneLevel) -> Option<LodSceneLevel> {
@@ -486,7 +487,7 @@ pub fn grove_detail_level_keep_low(level: LodSceneLevel) -> Option<LodSceneLevel
 
 /// Nest one posed plant as [`chico_vegetation_components::FlattenedComponentsOnly`]`<`[`PlacedVegetation`]`<T>>`.
 ///
-/// Kit nodes spawn as posed content (no per-stick / per-ball LOD hosts).
+/// Isolated `/show` plants. Live groves use [`nest_flattened_plant_chunk`] (kits, no host).
 pub fn nest_flattened_plant_host<T>(
 	plant: T,
 	placement: Placement,
@@ -510,7 +511,9 @@ where
 	)
 }
 
-/// Weighted chunk wrapping [`nest_flattened_plant_host`].
+/// Posed kit chunks for one plant at the grove's current [`LodSceneLevel`].
+///
+/// No per-tree [`chico_vegetation_components::FlattenedComponentsOnly`] host.
 pub fn nest_flattened_plant_chunk<T>(
 	plant: T,
 	placement: Placement,
@@ -518,21 +521,89 @@ pub fn nest_flattened_plant_chunk<T>(
 	ball_material: &MaterialRef,
 	frond_material: &MaterialRef,
 	lod_ref: &LodRef,
+	level: LodSceneLevel,
 ) -> SceneChunk
 where
 	T: VegetationComponents + Clone + Send + Sync + 'static,
 {
-	SceneChunk::weighted(
-		1,
-		nest_flattened_plant_host(
+	flattened_vegetation_scene_chunks(
+		&PlacedVegetation::new(
 			plant,
 			placement,
-			stick_material,
-			ball_material,
-			frond_material,
-			lod_ref,
+			stick_material.clone(),
+			ball_material.clone(),
+			frond_material.clone(),
 		),
+		lod_ref,
+		level,
 	)
+}
+
+/// High-IR sticks for one posed plant (playable capsules on the grove host).
+pub fn placed_plant_stick_nodes<T>(
+	plant: T,
+	placement: Placement,
+	stick_material: &MaterialRef,
+	ball_material: &MaterialRef,
+	frond_material: &MaterialRef,
+	level: LodSceneLevel,
+) -> Layers<StickNode>
+where
+	T: VegetationComponents + Clone + Send + Sync + 'static,
+{
+	PlacedVegetation::new(
+		plant,
+		placement,
+		stick_material.clone(),
+		ball_material.clone(),
+		frond_material.clone(),
+	)
+	.stick_nodes_for_level(level)
+}
+
+/// Plant slot that can contribute High-IR sticks to a per-plant grove compound.
+pub trait GrovePlantStickSource {
+	fn grove_plant_stick_nodes(&self, level: LodSceneLevel) -> Layers<StickNode>;
+}
+
+/// One playable-stick group per plant (plus a non-empty proxy trunk group).
+///
+/// Each group becomes one static Avian compound under the grove host — not a
+/// Host, not an `LodScene`. Kits and produce stay on the tile.
+pub fn woody_playable_stick_groups<P: GrovePlantStickSource>(
+	nests_plants: bool,
+	proxy: Layers<StickNode>,
+	plants: &[P],
+	level: LodSceneLevel,
+) -> Vec<Layers<StickNode>> {
+	if !nests_plants {
+		return if proxy.is_empty() { Vec::new() } else { vec![proxy] };
+	}
+	let mut groups = Vec::with_capacity(plants.len() + 1);
+	if !proxy.is_empty() {
+		groups.push(proxy);
+	}
+	for plant in plants {
+		let nodes = plant.grove_plant_stick_nodes(level);
+		if !nodes.is_empty() {
+			groups.push(nodes);
+		}
+	}
+	groups
+}
+
+/// Merge of [`woody_playable_stick_groups`] for callers that still want a flat list.
+pub fn woody_playable_stick_nodes<P: GrovePlantStickSource>(
+	nests_plants: bool,
+	proxy: Layers<StickNode>,
+	plants: &[P],
+	level: LodSceneLevel,
+) -> Layers<StickNode> {
+	let mut merged = Layers::new();
+	for group in woody_playable_stick_groups(nests_plants, proxy, plants, level) {
+		merged.extend(group);
+	}
+	merged
 }
 
 pub fn grove_lod_level(band: StructuralLod, lod_ref: &LodRef) -> LodSceneLevel {
@@ -549,7 +620,7 @@ pub fn grove_lod_culls(band: StructuralLod, lod_ref: &LodRef) -> LodSceneCulls {
 	cull_offset_bands_from_factor(factor, band.high_factor, band.medium_factor, band.low_factor)
 }
 
-/// High/Medium → nested plant host chunks; Low/UltraLow → canopy-ball vegetation chunks.
+/// High/Medium → nested plant kit chunks; Low/UltraLow → canopy-ball vegetation chunks.
 pub fn woody_grove_scene_chunks(
 	level: LodSceneLevel,
 	lod_ref: &LodRef,
@@ -570,7 +641,7 @@ pub fn woody_grove_scene_chunks(
 	}
 }
 
-/// High/Medium/Low → nested plant hosts; UltraLow → canopy-ball vegetation chunks.
+/// High/Medium/Low → nested plant kits; UltraLow → canopy-ball vegetation chunks.
 ///
 /// Palm-only groves use this so tile Low instances the plant Low star instead of a
 /// crown cheap-ball.

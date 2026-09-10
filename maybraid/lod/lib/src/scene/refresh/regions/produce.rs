@@ -11,7 +11,7 @@ use crate::lod_ref::{
 	collect_node_snapshots, lod_refs_from_snapshots, LodNode, LodNodeBounds, LodNodePose, LodRef,
 };
 
-use super::super::levels::LodSceneRefreshAabb;
+use super::super::levels::LodProduceRegionSink;
 use super::super::{ensure_refresh_core, LodRefreshSystems};
 
 /// Impulse: refresh hosts overlapping `region` (type `M` scopes the channel).
@@ -98,7 +98,7 @@ pub fn produce_lod_refresh_regions<P, F, M>(
 		(With<LodNode>, Changed<LodNodePose>, F),
 	>,
 	mut writer: MessageWriter<LodSceneRefreshRegion<M>>,
-	mut bus: MessageWriter<LodSceneRefreshAabb>,
+	mut sink: ResMut<LodProduceRegionSink>,
 ) where
 	P: Resource + LodRefreshRegions,
 	F: QueryFilter + 'static,
@@ -116,7 +116,7 @@ pub fn produce_lod_refresh_regions<P, F, M>(
 	};
 
 	writer.write(LodSceneRefreshRegion::<M>::new(region));
-	bus.write(LodSceneRefreshAabb { region });
+	sink.push::<M>(region);
 }
 
 /// Produce [`LodSceneRefreshRegion<M>`] from `F`-filtered [`LodNode`]s via strategy `P`.
@@ -151,12 +151,9 @@ where
 {
 	fn build(&self, app: &mut App) {
 		ensure_refresh_core(app);
-		app.init_resource::<P>()
-			.add_message::<LodSceneRefreshRegion<M>>()
-			.add_message::<LodSceneRefreshAabb>()
-			.add_systems(
-				Update,
-				produce_lod_refresh_regions::<P, F, M>.in_set(LodRefreshSystems::ProduceRegions),
-			);
+		app.init_resource::<P>().add_message::<LodSceneRefreshRegion<M>>().add_systems(
+			Update,
+			produce_lod_refresh_regions::<P, F, M>.in_set(LodRefreshSystems::ProduceRegions),
+		);
 	}
 }

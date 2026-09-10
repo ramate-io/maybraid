@@ -2,7 +2,7 @@
 
 Domain IR for Chico vegetation: **geometry + placement → node (`LodScene`)**.
 
-Higher-order trees implement [`VegetationComponents`](src/lib.rs) and present via [`FlattenedComponentsOnly`](src/lib.rs)`<`[`PlacedVegetation`](src/placed_vegetation.rs)`<Arc<T>>>`, mirroring Richmond's [`BuildingComponents`](../../richmond/building-components/). Tuft groves without [`LodScene`](../../lod/lib) yet still use [`ComponentsOnly`](src/lib.rs).
+Higher-order trees implement [`VegetationComponents`](src/lib.rs). Isolated `/show` plants present via [`FlattenedComponentsOnly`](src/lib.rs)`<`[`PlacedVegetation`](src/placed_vegetation.rs)`<Arc<T>>>`. Live groves emit posed kits under the grove host. Tuft groves without [`LodScene`](../../lod/lib) yet still use [`ComponentsOnly`](src/lib.rs).
 
 ## Domains
 

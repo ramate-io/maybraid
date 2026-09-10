@@ -116,8 +116,8 @@ impl Orchard {
 		Self { plants, structural_center, footprint_radius, extent: *extent }
 	}
 
-	/// High/Medium plant hosts — one lazy producer so begin does not clone every tree.
-	fn nest_plant_chunks(&self, lod_ref: &LodRef) -> Vec<SceneChunk> {
+	/// High/Medium plant kits — one lazy producer so begin does not clone every tree.
+	fn nest_plant_chunks(&self, lod_ref: &LodRef, level: lod::LodSceneLevel) -> Vec<SceneChunk> {
 		if self.plants.is_empty() {
 			return Vec::new();
 		}
@@ -147,6 +147,7 @@ impl Orchard {
 				&plant.ball_material,
 				&plant.frond_material,
 				&plant_lod,
+				level,
 			))
 		})]
 	}
@@ -186,6 +187,8 @@ fn grow_plant(
 
 	OrchardPlant { placement, tree, stick_material, ball_material, frond_material }
 }
+
+crate::impl_grove_plant_sticks!(OrchardPlant, tree);
 
 crate::impl_woody_grove_lod!(Orchard, WOODY_LOD);
 

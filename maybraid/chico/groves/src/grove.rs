@@ -77,9 +77,11 @@ pub use vc_compose::{
 	grove_detail_level, grove_detail_level_keep_low, grove_lod_culls, grove_lod_level,
 	grove_lod_status, grove_structural_footprint, layers_from_nodes, nest_flattened_plant_chunk,
 	nest_flattened_plant_host, placed_foliage_nodes, placed_palm_low_fronds,
-	stick_material_from_palette, trained_proxy_stick_nodes_for_level, woody_grove_scene_chunks,
-	woody_grove_scene_chunks_keep_low_plants, CanopyProxySite, TrainedCanopyProxy,
-	DEFAULT_PLANT_MEDIUM_FACTOR, ULTRA_LOW_CANOPY_BIN_METERS,
+	placed_plant_stick_nodes, stick_material_from_palette, trained_proxy_stick_nodes_for_level,
+	woody_grove_scene_chunks, woody_grove_scene_chunks_keep_low_plants,
+	woody_playable_stick_groups, woody_playable_stick_nodes, CanopyProxySite,
+	GrovePlantStickSource, TrainedCanopyProxy, DEFAULT_PLANT_MEDIUM_FACTOR,
+	ULTRA_LOW_CANOPY_BIN_METERS,
 };
 #[cfg(feature = "render")]
 pub use vc_tuft::{remixed_blade_tuft_unit, remixed_spear_tuft_unit, remixed_tuft_unit};

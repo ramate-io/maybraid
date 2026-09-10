@@ -12,14 +12,16 @@ use crate::scene::host::LodLevelSpawnRequest;
 use crate::scene::level::LodSceneLevel;
 use crate::scene::refresh::{
 	LodChunkFulfillBudget, LodCullRegionCursor, LodHostBounds, LodLevelRootPending,
-	LodSceneCullAabb, LodSceneRefreshChunkPlugin, LodSceneRefreshLevel,
+	LodProduceCaches, LodProduceRegionSink, LodRefreshChannels, LodSceneCullAabb,
+	LodSceneRefreshChunkPlugin, LodSceneRefreshLevel, LodSceneRefreshLevelsFillPlugin,
 };
 
 use test_utils::{
-	app_bullseye_regions, app_core, app_cull_enqueue, app_dual_channel_levels, app_entities_only,
-	app_open_lattice, app_spotlight_levels, app_spotlight_regions, host_level, move_viewer, pose,
-	spawn_host, spawn_host_with_roots, spawn_nested_pair, spawn_viewer, BullChan, CullChan,
-	NewCullRegions, NewRegions, Probe, SpotChan,
+	app_bullseye_regions, app_channel_isolation, app_core, app_cull_enqueue,
+	app_dual_channel_levels, app_entities_only, app_open_lattice, app_spotlight_levels,
+	app_spotlight_regions, host_level, move_viewer, pose, spawn_host, spawn_host_with_roots,
+	spawn_nested_pair, spawn_urb_host, spawn_veg_host, spawn_viewer, BullChan, CullChan, MobChan,
+	NewCullRegions, NewRegions, Probe, ScanHostIndex, SpotChan, UrbChan, VegChan,
 };
 
 #[test]
@@ -109,6 +111,11 @@ fn spotlight_writes_level_for_host_in_region() -> anyhow::Result<()> {
 	move_viewer(&mut app, viewer, Vec3::new(10.0, 0.0, 0.0));
 	app.update();
 	assert_eq!(host_level(&app, host), LodSceneLevel::High);
+	assert!(
+		app.world().resource::<LodProduceRegionSink>().is_empty(),
+		"single fill must consume the produce sink"
+	);
+	assert!(app.is_plugin_added::<LodSceneRefreshLevelsFillPlugin<ScanHostIndex>>());
 	Ok(())
 }
 
@@ -160,6 +167,59 @@ fn idle_frame_does_not_rewrite_level() -> anyhow::Result<()> {
 	app.update();
 	assert!(app.world().resource::<NewRegions<SpotChan>>().regions.is_empty());
 	assert_eq!(host_level(&app, host), LodSceneLevel::High);
+	Ok(())
+}
+
+#[test]
+fn channel_membership_keeps_200m_host_off_400m_impulse() -> anyhow::Result<()> {
+	use std::any::TypeId;
+
+	let mut app = app_channel_isolation();
+	spawn_viewer(app.world_mut(), Vec3::ZERO);
+	let veg = spawn_veg_host(app.world_mut(), Vec3::new(150.0, 0.0, 0.0), LodSceneLevel::UltraLow);
+	let urb = spawn_urb_host(app.world_mut(), Vec3::new(150.0, 0.0, 0.0), LodSceneLevel::UltraLow);
+	app.update();
+	assert!(app.world().entity(veg).get::<LodRefreshChannels>().is_some());
+	assert!(app.world().entity(urb).get::<LodRefreshChannels>().is_some());
+
+	let veg_cube = Aabb3d::from_min_max(Vec3::splat(-100.0), Vec3::splat(100.0));
+	let urb_cube = Aabb3d::from_min_max(Vec3::splat(-200.0), Vec3::splat(200.0));
+	{
+		let mut sink = app.world_mut().resource_mut::<LodProduceRegionSink>();
+		sink.push::<VegChan>(veg_cube);
+		sink.push::<UrbChan>(urb_cube);
+	}
+	app.update();
+
+	assert_eq!(host_level(&app, veg), LodSceneLevel::UltraLow);
+	assert_eq!(host_level(&app, urb), LodSceneLevel::High);
+	let cache = app.world().resource::<LodProduceCaches>();
+	let veg_hits = &cache.channels[&TypeId::of::<VegChan>()].hit_entities;
+	let urb_hits = &cache.channels[&TypeId::of::<UrbChan>()].hit_entities;
+	assert!(!veg_hits.contains(&veg));
+	assert!(!veg_hits.contains(&urb));
+	assert!(urb_hits.contains(&urb));
+	assert!(!urb_hits.contains(&veg));
+	Ok(())
+}
+
+#[test]
+fn mob_channel_does_not_refresh_vegetation_host() -> anyhow::Result<()> {
+	use std::any::TypeId;
+
+	let mut app = app_channel_isolation();
+	spawn_viewer(app.world_mut(), Vec3::ZERO);
+	let veg = spawn_veg_host(app.world_mut(), Vec3::ZERO, LodSceneLevel::UltraLow);
+	app.update();
+
+	let mob_cube = Aabb3d::from_min_max(Vec3::splat(-450.0), Vec3::splat(450.0));
+	app.world_mut().resource_mut::<LodProduceRegionSink>().push::<MobChan>(mob_cube);
+	app.update();
+
+	assert_eq!(host_level(&app, veg), LodSceneLevel::UltraLow);
+	let cache = app.world().resource::<LodProduceCaches>();
+	assert!(!cache.channels.contains_key(&TypeId::of::<MobChan>())
+		|| cache.channels[&TypeId::of::<MobChan>()].hit_entities.is_empty());
 	Ok(())
 }
 

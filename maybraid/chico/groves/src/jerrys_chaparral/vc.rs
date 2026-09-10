@@ -131,7 +131,7 @@ impl JerrysChaparral {
 		Self { plants, structural_center, footprint_radius, extent: *extent }
 	}
 
-	fn nest_plant_chunks(&self, lod_ref: &LodRef) -> Vec<SceneChunk> {
+	fn nest_plant_chunks(&self, lod_ref: &LodRef, level: lod::LodSceneLevel) -> Vec<SceneChunk> {
 		if self.plants.is_empty() {
 			return Vec::new();
 		}
@@ -162,6 +162,7 @@ impl JerrysChaparral {
 					&plant.ball_material,
 					&plant.frond_material,
 					&plant_lod,
+					level,
 				),
 				JerrysChaparralKind::Bush(t) => nest_flattened_plant_chunk(
 					Arc::clone(t),
@@ -170,6 +171,7 @@ impl JerrysChaparral {
 					&plant.ball_material,
 					&plant.frond_material,
 					&plant_lod,
+					level,
 				),
 				JerrysChaparralKind::Friends(t) => nest_flattened_plant_chunk(
 					Arc::clone(t),
@@ -178,6 +180,7 @@ impl JerrysChaparral {
 					&plant.ball_material,
 					&plant.frond_material,
 					&plant_lod,
+					level,
 				),
 			})
 		})]
@@ -267,6 +270,8 @@ fn grow_plant(
 		frond_material,
 	}
 }
+
+crate::impl_grove_plant_sticks!(JerrysChaparralPlant, JerrysChaparralKind, Rory, Bush, Friends);
 
 crate::impl_woody_grove_lod!(JerrysChaparral, WOODY_LOD, trunks);
 

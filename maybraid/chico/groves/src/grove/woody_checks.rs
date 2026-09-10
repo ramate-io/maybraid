@@ -27,7 +27,7 @@ fn preview_camera_and_bounds() -> (Transform, Aabb3d) {
 	)
 }
 
-/// High/Medium must nest one lazy flattened host per plant, not per kit node.
+/// High/Medium must nest one lazy kit producer per plant list, not per kit node.
 pub fn assert_high_medium_nests_plants<G>(grove: &G, plant_count: usize, label: &str) -> Result<()>
 where
 	G: VegetationComponents + LodScene,

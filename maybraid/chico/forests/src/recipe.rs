@@ -17,6 +17,9 @@ use chico_groves::{
 	TropicalTuftsParams, TropicalUndergrowthParams, UnendingJungleParams, VineyardParams,
 	WanderingAcaciaParams, WildGrassParams,
 };
+use chico_vegetation_components::{
+	FoliageNode, Layers, StickNode, StructuralLod, VegetationComponents,
+};
 use gimme_gen::Cell;
 use lod::gen::LodScene;
 use lod::lod_ref::LodRef;
@@ -187,6 +190,26 @@ impl ForestGroveTile {
 
 	pub fn scene_bounds(&self) -> Aabb3d {
 		match_forest_grove_tile!(self, g => g.scene_bounds())
+	}
+
+	pub fn stick_nodes_for_level(&self, level: LodSceneLevel) -> Layers<StickNode> {
+		match_forest_grove_tile!(self, g => g.stick_nodes_for_level(level))
+	}
+
+	pub fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
+		match_forest_grove_tile!(self, g => g.foliage_nodes_for_level(level))
+	}
+
+	pub fn playable_stick_nodes_for_level(&self, level: LodSceneLevel) -> Layers<StickNode> {
+		match_forest_grove_tile!(self, g => g.playable_stick_nodes_for_level(level))
+	}
+
+	pub fn playable_stick_groups_for_level(&self, level: LodSceneLevel) -> Vec<Layers<StickNode>> {
+		match_forest_grove_tile!(self, g => g.playable_stick_groups_for_level(level))
+	}
+
+	pub fn structural_lod(&self) -> Option<StructuralLod> {
+		match_forest_grove_tile!(self, g => g.structural_lod())
 	}
 }
 

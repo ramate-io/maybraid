@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 use maybraid::{assets_root, GamePlugin};
 use maybraid_input::PadHidPlugins;
+use maybraid_world::default_window_present_mode;
 
 fn main() {
 	let assets_path = assets_root();
@@ -11,6 +12,7 @@ fn main() {
 					primary_window: Some(Window {
 						title: "Maybraid".into(),
 						resolution: (1280, 720).into(),
+						present_mode: default_window_present_mode(),
 						..default()
 					}),
 					..default()

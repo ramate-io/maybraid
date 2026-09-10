@@ -6,6 +6,9 @@
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, Scene};
+use chico_vegetation_components::{
+	FoliageNode, Layers, StickNode, StructuralLod, VegetationComponents,
+};
 use lod::gen::LodScene;
 use lod::lod_ref::LodRef;
 use lod::{lod_host_scene_pending, LodSceneCulls, LodSceneLevel, LodSceneStatus, SceneChunk};
@@ -109,6 +112,28 @@ impl LodScene for ChicoGroveHost {
 
 	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
 		lod_host_scene_pending(self.scene_lod_level(lod_ref), self.scene_bounds())
+	}
+}
+
+impl VegetationComponents for ChicoGroveHost {
+	fn stick_nodes_for_level(&self, level: LodSceneLevel) -> Layers<StickNode> {
+		self.tile.stick_nodes_for_level(level)
+	}
+
+	fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
+		self.tile.foliage_nodes_for_level(level)
+	}
+
+	fn playable_stick_nodes_for_level(&self, level: LodSceneLevel) -> Layers<StickNode> {
+		self.tile.playable_stick_nodes_for_level(level)
+	}
+
+	fn playable_stick_groups_for_level(&self, level: LodSceneLevel) -> Vec<Layers<StickNode>> {
+		self.tile.playable_stick_groups_for_level(level)
+	}
+
+	fn structural_lod(&self) -> Option<StructuralLod> {
+		self.tile.structural_lod()
 	}
 }
 

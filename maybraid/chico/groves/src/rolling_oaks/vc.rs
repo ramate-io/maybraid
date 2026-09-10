@@ -104,7 +104,7 @@ impl RollingOaks {
 		Self { plants, structural_center, footprint_radius, extent: *extent }
 	}
 
-	fn nest_plant_chunks(&self, lod_ref: &LodRef) -> Vec<SceneChunk> {
+	fn nest_plant_chunks(&self, lod_ref: &LodRef, level: lod::LodSceneLevel) -> Vec<SceneChunk> {
 		if self.plants.is_empty() {
 			return Vec::new();
 		}
@@ -135,6 +135,7 @@ impl RollingOaks {
 					&plant.ball_material,
 					&plant.frond_material,
 					&plant_lod,
+					level,
 				),
 				RollingOaksKind::Storybook(t) => nest_flattened_plant_chunk(
 					Arc::clone(t),
@@ -143,6 +144,7 @@ impl RollingOaks {
 					&plant.ball_material,
 					&plant.frond_material,
 					&plant_lod,
+					level,
 				),
 			})
 		})]
@@ -206,6 +208,8 @@ fn grow_plant(
 		}
 	}
 }
+
+crate::impl_grove_plant_sticks!(RollingOaksPlant, RollingOaksKind, Oak, Storybook);
 
 crate::impl_woody_grove_lod!(RollingOaks, WOODY_LOD);
 

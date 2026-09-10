@@ -193,7 +193,7 @@ impl MonsterGrass {
 	fn tuft_scene_chunks(
 		&self,
 		lod_ref: &lod::lod_ref::LodRef,
-		level: lod::gen::LodSceneLevel,
+		level: LodSceneLevel,
 	) -> lod::SceneChunk {
 		match level {
 			lod::gen::LodSceneLevel::High | lod::gen::LodSceneLevel::Medium => {
