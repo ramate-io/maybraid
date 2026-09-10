@@ -23,8 +23,10 @@ use lod::LodSceneHost;
 use lod::LodSceneLevel;
 use lod_avian::PhysicsInteractionLayer;
 
-/// Two inches. Gate and floor use world-space girth after plant [`Placement`] scale.
-pub const MIN_STICK_COLLIDER_RADIUS_M: f32 = 2.0 * 0.0254;
+/// Four inches. Gate and floor use world-space girth after plant [`Placement`] scale.
+pub const MIN_STICK_COLLIDER_RADIUS_M: f32 = 4.0 * 0.0254;
+/// 10cm. Gates the min length of the stick capsule.
+pub const MIN_STICK_COLLIDER_LENGTH_M: f32 = 0.1;
 
 /// How many pending High/Medium hosts may build compounds in one frame.
 #[derive(Resource, Debug, Clone, Copy, PartialEq, Eq)]
@@ -261,7 +263,7 @@ fn gated_member_pose(parent: Placement, member: &StickMember) -> Option<(Transfo
 
 fn capsule_from_placement(placement: Placement) -> Option<(Transform, f32, f32)> {
 	let length = placement.scale.y;
-	if length < 0.05 {
+	if length < MIN_STICK_COLLIDER_LENGTH_M {
 		return None;
 	}
 	let radius = authored_radius(placement).max(MIN_STICK_COLLIDER_RADIUS_M);
