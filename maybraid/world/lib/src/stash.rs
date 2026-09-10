@@ -105,6 +105,10 @@ pub struct StashDisplayedItem {
 	pub slot: InventorySlot,
 }
 
+/// Local offset from the stash host to the mesh center the halo should ring.
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
+pub struct StashHaloAnchor(pub Vec3);
+
 /// On-screen X / E prompt while a claimable stash is in radius.
 #[derive(Component)]
 struct StashInteractPrompt;
@@ -255,6 +259,7 @@ fn attach_stash_visuals(
 	inventory: &Inventory,
 	assets: Option<&AssetServer>,
 ) {
+	let displayed = inventory.clothing.len() + inventory.weapons.len();
 	let mut pile = 0usize;
 	for &index in &inventory.clothing {
 		let Some(item) = inventory.items.get(index) else {
@@ -265,7 +270,7 @@ fn attach_stash_visuals(
 			host,
 			item,
 			StashDisplayedItem { slot: InventorySlot::Clothing },
-			pile_offset(pile),
+			display_offset(pile, displayed),
 			assets,
 		);
 		pile += 1;
@@ -279,17 +284,37 @@ fn attach_stash_visuals(
 			host,
 			item,
 			StashDisplayedItem { slot: InventorySlot::Weapons },
-			pile_offset(pile),
+			display_offset(pile, displayed),
 			assets,
 		);
 		pile += 1;
 	}
 }
 
+/// One item sits on the host; several fan out so they do not stack.
+fn display_offset(index: usize, count: usize) -> Transform {
+	if count <= 1 {
+		return Transform::from_xyz(0.0, 0.08, 0.0).with_rotation(Quat::from_rotation_x(-0.35));
+	}
+	pile_offset(index)
+}
+
 fn pile_offset(index: usize) -> Transform {
 	let angle = index as f32 * 0.7;
 	Transform::from_xyz(angle.cos() * 0.28, 0.08, angle.sin() * 0.28)
 		.with_rotation(Quat::from_rotation_y(angle) * Quat::from_rotation_x(-0.35))
+}
+
+fn visual_halo_local(item: &InventoryItem, slot: InventorySlot, transform: Transform) -> Vec3 {
+	match slot {
+		InventorySlot::Clothing => transform.translation,
+		InventorySlot::Weapons => item.firearm_spec().map_or(transform.translation, |spec| {
+			let kit = GeneratedFirearm::from_spec(spec);
+			let bounds = firearm_bounds(&kit);
+			let center = (bounds.min + bounds.max) * 0.5;
+			transform.transform_point(Vec3::from(center))
+		}),
+	}
 }
 
 fn clothing_material_ref(material: MaterialRefParams) -> MaterialRef {
@@ -347,6 +372,7 @@ fn spawn_displayed_clothing(
 		commands.entity(entity).insert((
 			Name::new(format!("stash-{}", item.label())),
 			displayed,
+			StashHaloAnchor(visual_halo_local(item, displayed.slot, transform)),
 			ChildOf(host),
 		));
 		return;
@@ -354,6 +380,7 @@ fn spawn_displayed_clothing(
 	let mut visual = commands.spawn((
 		Name::new(format!("stash-{}", item.label())),
 		displayed,
+		StashHaloAnchor(visual_halo_local(item, displayed.slot, transform)),
 		transform,
 		Visibility::default(),
 		ChildOf(host),
@@ -382,6 +409,7 @@ fn spawn_displayed_weapon(
 					commands.entity(entity).insert((
 						Name::new(format!("stash-{}", item.label())),
 						displayed,
+						StashHaloAnchor(visual_halo_local(item, displayed.slot, transform)),
 						ChildOf(host),
 					));
 				}
@@ -394,6 +422,7 @@ fn spawn_displayed_weapon(
 	commands.spawn((
 		Name::new(format!("stash-{}", item.label())),
 		displayed,
+		StashHaloAnchor(visual_halo_local(item, displayed.slot, transform)),
 		transform,
 		Visibility::default(),
 		ChildOf(host),
@@ -577,12 +606,33 @@ fn sync_stash_interact_prompt(
 fn nearest_claim_point<'a>(
 	players: impl IntoIterator<Item = &'a Transform>,
 	stashes: impl IntoIterator<Item = (Entity, &'a Transform, &'a InventoryUser, &'a StashPolicy)>,
+	anchors: impl IntoIterator<Item = (Entity, &'a ChildOf, Option<&'a StashHaloAnchor>)>,
 ) -> Option<Vec3> {
 	let listed: Vec<_> = stashes.into_iter().collect();
+	let anchors: Vec<_> = anchors.into_iter().collect();
 	players.into_iter().find_map(|transform| {
-		nearest_stash_in_radius(player_origin(transform), listed.iter().copied())
-			.map(|(_, _, _, at)| at)
+		nearest_stash_in_radius(player_origin(transform), listed.iter().copied()).map(
+			|(stash, _, _, at)| halo_world_point(at, stash, anchors.iter().copied()),
+		)
 	})
+}
+
+fn halo_world_point<'a>(
+	stash_at: Vec3,
+	stash: Entity,
+	anchors: impl IntoIterator<Item = (Entity, &'a ChildOf, Option<&'a StashHaloAnchor>)>,
+) -> Vec3 {
+	let offsets: Vec<Vec3> = anchors
+		.into_iter()
+		.filter(|(_, child, _)| child.parent() == stash)
+		.map(|(_, _, anchor)| anchor.map_or(Vec3::ZERO, |anchor| anchor.0))
+		.collect();
+	if offsets.is_empty() {
+		return stash_at + Vec3::Y * 0.08;
+	}
+	let sum: Vec3 = offsets.iter().copied().sum();
+	let mean = sum / offsets.len() as f32;
+	Vec3::new(stash_at.x + mean.x, stash_at.y + 0.08, stash_at.z + mean.z)
 }
 
 fn sync_stash_claim_halo(
@@ -595,12 +645,13 @@ fn sync_stash_claim_halo(
 		(Entity, &Transform, &InventoryUser, &StashPolicy),
 		(With<WorldStash>, Without<StashClaimHalo>),
 	>,
+	anchors: Query<(Entity, &ChildOf, Option<&StashHaloAnchor>), With<StashDisplayedItem>>,
 	mut halo: Query<
 		(&mut Transform, &mut Visibility),
 		(With<StashClaimHalo>, Without<WorldStash>, Without<VegetationPlayer>),
 	>,
 ) {
-	let target = nearest_claim_point(players.iter(), stashes.iter());
+	let target = nearest_claim_point(players.iter(), stashes.iter(), anchors.iter());
 	if halo.is_empty() {
 		let Some(meshes) = meshes.as_mut() else {
 			return;
@@ -1192,14 +1243,61 @@ mod tests {
 		Ok(())
 	}
 
+	fn one_garment() -> Inventory {
+		Inventory {
+			items: vec![InventoryItem::clothing(
+				ClothingMesh::Pants,
+				ClothingMaterial::Cloth,
+				ItemColor::Natural,
+			)],
+			clothing: vec![0],
+			weapons: Vec::new(),
+		}
+	}
+
+	#[test]
+	fn single_displayed_item_sits_on_the_host() -> anyhow::Result<()> {
+		let mut world = World::new();
+		world
+			.run_system_once(spawn_stash_system(
+				Transform::from_translation(Vec3::ZERO),
+				one_garment(),
+				StashPolicy::default(),
+			))
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let transform = world
+			.query::<(&StashDisplayedItem, &Transform)>()
+			.iter(&world)
+			.next()
+			.map(|(_, transform)| *transform)
+			.ok_or_else(|| anyhow::anyhow!("visual"))?;
+		assert!(transform.translation.xz().length() < 1e-3);
+		Ok(())
+	}
+
 	#[test]
 	fn claim_halo_marks_the_nearest_stash() -> anyhow::Result<()> {
-		let (mut world, _, near) = claim_setup(Vec3::ZERO, Vec3::new(1.0, 0.0, 0.0))?;
+		let mut world = World::new();
+		world.init_resource::<Messages<CharacterIntent>>();
 		world.init_resource::<Time>();
+		let player_bag = world.spawn(Inventory::default()).id();
+		world.spawn((
+			VegetationPlayer,
+			Transform::IDENTITY,
+			InventoryUser::carrying(player_bag),
+		));
+		let near = world
+			.run_system_once(spawn_stash_system(
+				Transform::from_xyz(1.0, 0.0, 0.0),
+				one_garment(),
+				StashPolicy::default(),
+			))
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?
+			.ok_or_else(|| anyhow::anyhow!("near"))?;
 		world
 			.run_system_once(spawn_stash_system(
 				Transform::from_xyz(3.0, 0.0, 0.0),
-				mixed_bag(),
+				one_garment(),
 				StashPolicy::default(),
 			))
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
@@ -1212,11 +1310,7 @@ mod tests {
 			.single(&world)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		assert_eq!(*visibility, Visibility::Visible);
-		let near_at = world
-			.get::<Transform>(near)
-			.ok_or_else(|| anyhow::anyhow!("near pose"))?
-			.translation;
-		assert!((transform.translation.xz() - near_at.xz()).length() < 1e-3);
+		assert!((transform.translation.xz() - Vec2::new(1.0, 0.0)).length() < 1e-3);
 
 		world.entity_mut(near).insert(Transform::from_xyz(40.0, 0.0, 0.0));
 		world
