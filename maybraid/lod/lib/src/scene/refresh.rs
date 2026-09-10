@@ -3,7 +3,7 @@
 //! Submodules:
 //! - [`regions`] — strategy `P` + nodes `F` → [`LodSceneRefreshRegion<M>`]
 //! - [`cull_regions`] — rotating cull lattice → untyped AABB cache → erased enqueue
-//! - [`levels`] — untyped region AABB → shared host-hit cache → one erased level pass
+//! - [`levels`] — per-domain region AABBs → shared viewer snapshots + host-hit cache → one erased level pass
 //! - [`entities`] — one untyped fold: max level → write [`crate::LodSceneLevel`]
 //! - [`sync`] — root sync, chunk fulfill, cull
 //!
@@ -53,8 +53,8 @@ pub use entities::{
 };
 pub use levels::{
 	fill_lod_produce_cache, produce_lod_refresh_levels, produce_lod_refresh_levels_erased,
-	LodLevelProducer, LodProduceCache, LodSceneRefreshAabb, LodSceneRefreshLevel,
-	LodSceneRefreshLevelsFillPlugin, LodSceneRefreshLevelsPlugin,
+	LodLevelProducer, LodProduceCache, LodRefreshDomain, LodRefreshMembership, LodSceneRefreshAabb,
+	LodSceneRefreshLevel, LodSceneRefreshLevelsFillPlugin, LodSceneRefreshLevelsPlugin,
 };
 pub use regions::{
 	produce_lod_refresh_regions, Bullseye, LodRefreshRegions, LodRefreshRegionsError,
@@ -96,7 +96,7 @@ pub enum LodRefreshSystems {
 /// Order inside [`LodRefreshSystems::ProduceLevels`]: fill the shared cache, then emit.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
 pub enum LodLevelProduceSystems {
-	/// Snapshots + untyped host hits ([`fill_lod_produce_cache`]).
+	/// Snapshots once, then host hits per produce domain ([`fill_lod_produce_cache`]).
 	FillCache,
 	/// Shared hit-driven level emission.
 	Emit,
@@ -161,8 +161,9 @@ impl Plugin for LodRefreshCorePlugin {
 /// Fill + shared typed-callback emit + chunk sync. `I` is an untyped
 /// [`LodSceneHostIndex`].
 ///
-/// Channel `M` is kept so existing `AvianLodSceneRefreshPlugin<T, M, F>` adds
-/// stay valid; each `T` registers a callback while produce runs once. Add
+/// Channel `M` stamps [`LodRefreshMembership`] on host `T` so produce only
+/// emits for matching [`LodSceneRefreshAabb`] domains. Channels that share `M`
+/// (bullseye + spotlight) union into one query. Add
 /// [`LodSceneRefreshRegionPlugin`] separately for region production.
 /// Use [`Self::without_full_scan_cull`] with [`LodSceneRegionCullPlugin`] for
 /// lattice-scoped cull enqueue.
@@ -217,6 +218,7 @@ where
 		if !app.is_plugin_added::<LodSceneRefreshLevelsPlugin<T>>() {
 			app.add_plugins(LodSceneRefreshLevelsPlugin::<T>::default());
 		}
+		app.add_observer(levels::attach_refresh_membership::<T, M>);
 		if !app.is_plugin_added::<LodSceneRefreshSyncPlugin<T, F>>() {
 			if self.full_scan_cull {
 				app.add_plugins(LodSceneRefreshSyncPlugin::<T, F>::default());

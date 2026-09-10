@@ -37,13 +37,15 @@ use scene_ref::SceneRefAdmitBudget;
 
 use crate::stick_physics::{register_vegetation_stick_colliders, StickPhysicsPlugin};
 
-/// Channel marker for bullseye [`lod::LodSceneRefreshRegion`] messages.
+/// Shared produce domain for bullseye and spotlight vegetation refresh.
 #[derive(Debug, Clone, Copy, Default)]
-pub struct VegetationBullseye;
+pub struct VegetationRefresh;
+
+/// Channel marker for bullseye [`lod::LodSceneRefreshRegion`] messages.
+pub type VegetationBullseye = VegetationRefresh;
 
 /// Channel marker for spotlight [`lod::LodSceneRefreshRegion`] messages.
-#[derive(Debug, Clone, Copy, Default)]
-pub struct VegetationSpotlight;
+pub type VegetationSpotlight = VegetationRefresh;
 
 /// Channel marker for OpenLattice [`lod::LodSceneCullRegion`] messages.
 #[derive(Debug, Clone, Copy, Default)]
@@ -56,10 +58,9 @@ type FlattenedPlant<T> = FlattenedComponentsOnly<PlacedVegetation<std::sync::Arc
 macro_rules! avian_host {
 	($app:expr, $ty:ty) => {{
 		$app.add_plugins((
-					AvianLodSceneRefreshPlugin::<$ty, VegetationBullseye, With<Camera>>::without_full_scan_cull(),
-					AvianLodSceneRefreshPlugin::<$ty, VegetationSpotlight, With<Camera>>::without_full_scan_cull(),
-					AvianLodSceneCullPlugin::<$ty, VegetationCull, With<Camera>>::default(),
-				));
+							AvianLodSceneRefreshPlugin::<$ty, VegetationRefresh, With<Camera>>::without_full_scan_cull(),
+							AvianLodSceneCullPlugin::<$ty, VegetationCull, With<Camera>>::default(),
+						));
 	}};
 }
 

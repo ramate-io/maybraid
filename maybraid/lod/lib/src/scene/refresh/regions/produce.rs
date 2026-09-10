@@ -11,7 +11,7 @@ use crate::lod_ref::{
 	collect_node_snapshots, lod_refs_from_snapshots, LodNode, LodNodeBounds, LodNodePose, LodRef,
 };
 
-use super::super::levels::LodSceneRefreshAabb;
+use super::super::levels::{LodRefreshDomain, LodSceneRefreshAabb};
 use super::super::{ensure_refresh_core, LodRefreshSystems};
 
 /// Impulse: refresh hosts overlapping `region` (type `M` scopes the channel).
@@ -116,7 +116,7 @@ pub fn produce_lod_refresh_regions<P, F, M>(
 	};
 
 	writer.write(LodSceneRefreshRegion::<M>::new(region));
-	bus.write(LodSceneRefreshAabb { region });
+	bus.write(LodSceneRefreshAabb { region, domain: LodRefreshDomain::of::<M>() });
 }
 
 /// Produce [`LodSceneRefreshRegion<M>`] from `F`-filtered [`LodNode`]s via strategy `P`.

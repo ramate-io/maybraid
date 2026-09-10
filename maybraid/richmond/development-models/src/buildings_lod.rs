@@ -22,13 +22,15 @@ use richmond_developments::{
 };
 use std::sync::Arc;
 
-/// Channel marker for bullseye [`lod::LodSceneRefreshRegion`] messages.
+/// Shared produce domain for bullseye and spotlight building refresh.
 #[derive(Debug, Clone, Copy, Default)]
-pub struct BuildingsBullseye;
+pub struct BuildingsRefresh;
+
+/// Channel marker for bullseye [`lod::LodSceneRefreshRegion`] messages.
+pub type BuildingsBullseye = BuildingsRefresh;
 
 /// Channel marker for spotlight [`lod::LodSceneRefreshRegion`] messages.
-#[derive(Debug, Clone, Copy, Default)]
-pub struct BuildingsSpotlight;
+pub type BuildingsSpotlight = BuildingsRefresh;
 
 /// Channel marker for OpenLattice [`lod::LodSceneCullRegion`] messages.
 #[derive(Debug, Clone, Copy, Default)]
@@ -37,10 +39,9 @@ pub struct BuildingsCull;
 macro_rules! avian_host {
 	($app:expr, $ty:ty) => {{
 		$app.add_plugins((
-						AvianLodSceneRefreshPlugin::<$ty, BuildingsBullseye, With<Camera>>::without_full_scan_cull(),
-						AvianLodSceneRefreshPlugin::<$ty, BuildingsSpotlight, With<Camera>>::without_full_scan_cull(),
-						AvianLodSceneCullPlugin::<$ty, BuildingsCull, With<Camera>>::default(),
-					));
+								AvianLodSceneRefreshPlugin::<$ty, BuildingsRefresh, With<Camera>>::without_full_scan_cull(),
+								AvianLodSceneCullPlugin::<$ty, BuildingsCull, With<Camera>>::default(),
+							));
 	}};
 }
 

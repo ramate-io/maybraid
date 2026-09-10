@@ -67,5 +67,6 @@ pub use stream::{
 	DEFAULT_FOREST_NOISE, DEFAULT_FOREST_STREAM_RADIUS, FOREST_CAMERA_SPEED,
 };
 pub use view::{
-	VegetationBullseye, VegetationCull, VegetationLodRefreshPlugin, VegetationSpotlight,
+	VegetationBullseye, VegetationCull, VegetationLodRefreshPlugin, VegetationRefresh,
+	VegetationSpotlight,
 };

@@ -20,8 +20,8 @@ use lod::scene::{LodRefreshRegions, LodRefreshRegionsStatus};
 use lod::{
 	update_lod_host_levels, LodGeneratePlugin, LodGenerateRegionPlugin, LodGenerateSystems,
 	LodNode, LodNodePose, LodPresentCullPlugin, LodPresentPlugin, LodPresentRegionPlugin,
-	LodPresentSystems, LodRefreshSystems, LodSceneRefreshAabb, LodSceneRefreshRegion,
-	LodSceneRefreshRegionPlugin, LodViewer,
+	LodPresentSystems, LodRefreshDomain, LodRefreshSystems, LodSceneRefreshAabb,
+	LodSceneRefreshRegion, LodSceneRefreshRegionPlugin, LodViewer,
 };
 use lod_avian::AvianLodSceneRefreshPlugin;
 use maybraid_mobs::{MobLodRefreshMode, MobScene, MobSceneSystems};
@@ -644,7 +644,7 @@ fn pulse_world_mob_high_lod(
 	let union = regions.reduce(|a, b| Aabb3d::from_min_max(a.min.min(b.min), a.max.max(b.max)));
 	if let Some(region) = union {
 		refresh.write(LodSceneRefreshRegion::new(region));
-		bus.write(LodSceneRefreshAabb { region });
+		bus.write(LodSceneRefreshAabb { region, domain: LodRefreshDomain::of::<MobHighLodChan>() });
 	}
 }
 
