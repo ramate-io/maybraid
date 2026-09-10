@@ -20,7 +20,7 @@ Related: [#800](https://github.com/ramate-io/maybraid/issues/800),
 | Shared cull fill | One `fill_lod_cull_produce_cache` per host index; snapshots every `LodNode` | Same dual-`F` footgun as produce. After sharing, gameplay cull fill is **0.65 ms** (`more_rough_gameplay.csv`). |
 | Stairs / doors on Medium | Circulation is High **and** Medium; furniture / labels stay High-only | Nested stair hosts used to keep their own band; flatten dropped the whole shell to Medium and hid stairs. |
 | Unmerge shared wall kits | Stop baking city walls into [`MultiSceneMerge`](scene-ref/src/multi_merge.rs); leave posed [`SceneRef`](scene-ref/src/scene_ref.rs)s | Shared wall GLBs already instanced. Baking per-building layouts made unique meshes × 1 instance. `write_binned` / `visibility_propagate` got worse (`more_rough_gameplay.csv`). |
-| Disable off-band LOD trees | Ready off-band / cull / present-hide trees get recursive [`Disabled`](https://docs.rs/bevy/latest/bevy/ecs/entity_disabling/struct.Disabled.html), not only [`Visibility::Hidden`](https://docs.rs/bevy/latest/bevy/render/view/enum.Visibility.html). Pending fulfill stays Hidden-only. Vis sync writes only on change. | Hidden warm roots still walked `visibility_propagate` / extract. `Disabled` drops them from default queries. Last ~20s window (`last_30.csv`) had `visibility_propagate` **~3.3 ms**. |
+| Disable off-band LOD trees | Ready off-band / cull / present-hide trees get recursive [`Disabled`](https://docs.rs/bevy/latest/bevy/ecs/entity_disabling/struct.Disabled.html), not only [`Visibility::Hidden`](https://docs.rs/bevy/latest/bevy/render/view/enum.Visibility.html). Reveal prunes independently hidden nested trees; pending fulfill stays Hidden-only. Vis sync writes only on change. | Hidden warm roots still walked `visibility_propagate` / extract. `Disabled` drops them from default queries without a parent reveal enabling nested off-band roots. Last ~20s window (`last_30.csv`) had `visibility_propagate` **~3.3 ms**. |
 
 Crate layout after the split: [`lod`](lod/lib/) is the engine-agnostic runtime, [`lod-gimme`](lod/gimme/) owns the host index and refresh/cull plugins, [`lod-avian`](lod/avian/) keeps physics layers. Call sites use `gimme_host!`; unused `avian_host!` wrappers remain.
 
@@ -134,10 +134,15 @@ frame also dirtied `Changed<Visibility>` and re-walked those subtrees.
 Ready off-band, cull-inflight, and present-hide trees now stamp recursive
 `Disabled` (Bevy does not cascade `Disabled` to children unless asked). Pending
 fulfill roots stay Hidden-only so streamed children still enter
-`visibility_propagate`. Produce fill and Gimme `reindex_moved_hosts` do **not**
-use `Allow<Disabled>`. Gimme intentionally retains an existing host AABB while
-the host is Disabled (warm index, no reveal-time reindex); refresh gates any
-such stale spatial hit before producing work.
+`visibility_propagate`, and pending cull never recursively enables descendants.
+Each independently hidden root carries one private hide marker. Reveal walks the
+tree it must re-enable but prunes at nested hide markers; a reveal beneath a
+still-hidden ancestor defers removal until that ancestor reveals. There is no
+per-descendant ownership component. Produce fill and Gimme
+`reindex_moved_hosts` do **not** use `Allow<Disabled>`. Gimme intentionally
+retains an existing host AABB while the host is Disabled (warm index, no
+reveal-time reindex); refresh gates any such stale spatial hit before producing
+work.
 Raw Durham roots replaced by padded urban terrain also update `Visibility` only
 when their replacement state changes, rather than dirtying
 `Changed<Visibility>` every frame.

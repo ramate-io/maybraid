@@ -13,6 +13,12 @@ use crate::scene::level::LodSceneLevel;
 #[derive(Debug, Clone, Copy, Default, Component)]
 pub struct LodSceneHost;
 
+/// Marker: this entity roots an independently hidden LOD tree.
+///
+/// Revealing an ancestor prunes its walk at nested active hide roots.
+#[derive(Debug, Clone, Copy, Default, Component)]
+struct LodTreeHideActive;
+
 /// Whether a visibility value counts as on-screen (warm-hold / cold-fill).
 #[inline]
 pub fn lod_root_is_shown(visibility: Visibility) -> bool {
@@ -34,24 +40,88 @@ pub fn lod_world_entity_is_shown(world: &World, entity: Entity) -> bool {
 /// would still extract. Pending fulfill roots stay Hidden-only so new children
 /// still receive visibility propagate.
 pub fn hide_lod_tree(commands: &mut Commands, entity: Entity) {
-	commands
-		.entity(entity)
-		.insert(Visibility::Hidden)
-		.insert_recursive::<Children>(Disabled);
+	commands.queue(move |world: &mut World| hide_lod_tree_now(world, entity));
 }
 
-/// Reveal a warm LOD tree: drop [`Disabled`] and stamp [`Visibility::Inherited`].
+/// Reveal a warm LOD tree, preserving independently hidden nested trees.
 pub fn show_lod_tree(commands: &mut Commands, entity: Entity) {
-	commands
-		.entity(entity)
-		.remove_recursive::<Children, Disabled>()
-		.insert(Visibility::Inherited);
+	commands.queue(move |world: &mut World| show_lod_tree_now(world, entity));
 }
 
 /// Exclusive-world hide (cull enqueue from `World`).
 pub fn hide_lod_tree_world(entity: &mut EntityWorldMut) {
-	entity.insert(Visibility::Hidden);
-	entity.insert_recursive::<Children>(Disabled);
+	let root = entity.id();
+	entity.world_scope(|world| hide_lod_tree_now(world, root));
+}
+
+fn hide_lod_tree_now(world: &mut World, root: Entity) {
+	let children: Vec<Entity> = {
+		let Ok(mut entity) = world.get_entity_mut(root) else {
+			return;
+		};
+		if entity.contains::<LodTreeHideActive>() {
+			entity.insert(Visibility::Hidden);
+			return;
+		}
+		let children = entity
+			.get::<Children>()
+			.map(|children| children.iter().collect())
+			.unwrap_or_default();
+		entity.insert((Visibility::Hidden, Disabled, LodTreeHideActive));
+		children
+	};
+	for child in children {
+		if let Ok(mut entity) = world.get_entity_mut(child) {
+			entity.insert_recursive::<Children>(Disabled);
+		}
+	}
+}
+
+fn has_active_hide_ancestor(world: &World, entity: Entity) -> bool {
+	let mut current = world.get::<ChildOf>(entity).map(|child| child.parent());
+	while let Some(entity) = current {
+		if world.get::<LodTreeHideActive>(entity).is_some() {
+			return true;
+		}
+		current = world.get::<ChildOf>(entity).map(|child| child.parent());
+	}
+	false
+}
+
+fn show_lod_tree_now(world: &mut World, root: Entity) {
+	let Ok(mut root_entity) = world.get_entity_mut(root) else {
+		return;
+	};
+	let was_hidden_here = root_entity.contains::<LodTreeHideActive>();
+	let was_disabled = root_entity.contains::<Disabled>();
+	root_entity.insert(Visibility::Inherited);
+	if !was_hidden_here && !was_disabled {
+		return;
+	}
+	if has_active_hide_ancestor(world, root) {
+		world.entity_mut(root).remove::<LodTreeHideActive>();
+		return;
+	}
+
+	let mut stack = vec![root];
+	while let Some(entity) = stack.pop() {
+		let Ok(mut entity_mut) = world.get_entity_mut(entity) else {
+			continue;
+		};
+		if entity != root && entity_mut.contains::<LodTreeHideActive>() {
+			continue;
+		}
+		let children: Vec<Entity> = entity_mut
+			.get::<Children>()
+			.map(|children| children.iter().collect())
+			.unwrap_or_default();
+		if entity == root {
+			entity_mut.remove::<(LodTreeHideActive, Disabled)>();
+		} else {
+			entity_mut.remove::<Disabled>();
+		}
+		stack.extend(children);
+	}
 }
 
 /// True when this entity or an ancestor [`LodSceneHost`] is Hidden or [`Disabled`].
@@ -437,9 +507,6 @@ fn apply_lod_level_root_visibility(
 				shown_ready_after += 1;
 			}
 		} else if is_pending {
-			if currently_disabled {
-				commands.entity(child).remove_recursive::<Children, Disabled>();
-			}
 			if currently_shown {
 				commands.entity(child).insert(Visibility::Hidden);
 			}
@@ -675,5 +742,74 @@ mod tests {
 		let mut allowed_meshes =
 			world.query_filtered::<Entity, (With<MeshStandIn>, Allow<Disabled>)>();
 		assert_eq!(allowed_meshes.iter(&world).count(), 1);
+	}
+
+	#[test]
+	fn showing_parent_prunes_nested_hidden_tree() {
+		let mut world = World::new();
+		let nested_leaf = world.spawn(MeshStandIn).id();
+		let nested_root = world.spawn(Visibility::Inherited).id();
+		world.entity_mut(nested_root).add_child(nested_leaf);
+		let shown_leaf = world.spawn(MeshStandIn).id();
+		let shown_root = world.spawn(Visibility::Inherited).id();
+		world.entity_mut(shown_root).add_child(shown_leaf);
+		let parent = world.spawn(Visibility::Inherited).id();
+		world.entity_mut(parent).add_children(&[nested_root, shown_root]);
+
+		hide_lod_tree_now(&mut world, nested_root);
+		hide_lod_tree_now(&mut world, parent);
+		show_lod_tree_now(&mut world, parent);
+
+		assert!(world.get::<Disabled>(parent).is_none());
+		assert!(world.get::<Disabled>(shown_root).is_none());
+		assert!(world.get::<Disabled>(shown_leaf).is_none());
+		assert!(world.get::<Disabled>(nested_root).is_some());
+		assert!(world.get::<Disabled>(nested_leaf).is_some());
+		assert!(world.get::<LodTreeHideActive>(nested_root).is_some());
+
+		show_lod_tree_now(&mut world, nested_root);
+		assert!(world.get::<Disabled>(nested_root).is_none());
+		assert!(world.get::<Disabled>(nested_leaf).is_none());
+	}
+
+	#[test]
+	fn showing_child_beneath_hidden_parent_defers_enable() {
+		let mut world = World::new();
+		let leaf = world.spawn(MeshStandIn).id();
+		let child = world.spawn(Visibility::Inherited).id();
+		world.entity_mut(child).add_child(leaf);
+		let parent = world.spawn(Visibility::Inherited).id();
+		world.entity_mut(parent).add_child(child);
+
+		hide_lod_tree_now(&mut world, child);
+		hide_lod_tree_now(&mut world, parent);
+		show_lod_tree_now(&mut world, child);
+
+		assert!(world.get::<LodTreeHideActive>(child).is_none());
+		assert!(world.get::<Disabled>(child).is_some());
+		assert!(world.get::<Disabled>(leaf).is_some());
+
+		show_lod_tree_now(&mut world, parent);
+		assert!(world.get::<Disabled>(child).is_none());
+		assert!(world.get::<Disabled>(leaf).is_none());
+	}
+
+	#[test]
+	fn showing_parent_enables_hidden_pending_root() {
+		let mut world = World::new();
+		let pending_leaf = world.spawn(MeshStandIn).id();
+		let pending_root = world.spawn((Visibility::Hidden, crate::LodLevelRootPending)).id();
+		world.entity_mut(pending_root).add_child(pending_leaf);
+		let parent = world.spawn(Visibility::Inherited).id();
+		world.entity_mut(parent).add_child(pending_root);
+
+		hide_lod_tree_now(&mut world, parent);
+		show_lod_tree_now(&mut world, parent);
+
+		assert!(world.get::<Disabled>(pending_root).is_none());
+		assert!(world.get::<Disabled>(pending_leaf).is_none());
+		assert!(world
+			.get::<Visibility>(pending_root)
+			.is_some_and(|v| matches!(*v, Visibility::Hidden)));
 	}
 }

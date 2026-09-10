@@ -178,7 +178,6 @@ pub fn produce_lod_cull_for_region_erased(world: &mut World) {
 					entity.insert(LodCullInFlight { started: false });
 					if is_pending {
 						entity.insert(Visibility::Hidden);
-						entity.remove_recursive::<Children, Disabled>();
 					} else {
 						hide_lod_tree_world(&mut entity);
 					}

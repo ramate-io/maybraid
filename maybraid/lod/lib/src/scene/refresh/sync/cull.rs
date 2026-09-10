@@ -72,10 +72,7 @@ pub fn enqueue_lod_cull(
 fn stamp_lod_cull_hide(commands: &mut Commands, entity: Entity, is_pending: bool) {
 	commands.entity(entity).insert(LodCullInFlight { started: false });
 	if is_pending {
-		commands
-			.entity(entity)
-			.insert(Visibility::Hidden)
-			.remove_recursive::<Children, Disabled>();
+		commands.entity(entity).insert(Visibility::Hidden);
 	} else {
 		hide_lod_tree(commands, entity);
 	}
@@ -291,5 +288,38 @@ pub fn drain_lod_cull(
 		} else {
 			root_despawns -= 1;
 		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use bevy::ecs::world::CommandQueue;
+
+	use crate::scene::host::hide_lod_tree_world;
+
+	use super::*;
+
+	#[test]
+	fn pending_cull_preserves_nested_hidden_tree() {
+		let mut world = World::new();
+		let nested_leaf = world.spawn_empty().id();
+		let nested_root = world.spawn(Visibility::Inherited).id();
+		world.entity_mut(nested_root).add_child(nested_leaf);
+		hide_lod_tree_world(&mut world.entity_mut(nested_root));
+
+		let pending_root = world.spawn(Visibility::Inherited).id();
+		world.entity_mut(pending_root).add_child(nested_root);
+
+		let mut queue = CommandQueue::default();
+		let mut commands = Commands::new(&mut queue, &world);
+		stamp_lod_cull_hide(&mut commands, pending_root, true);
+		queue.apply(&mut world);
+
+		assert!(world
+			.get::<Visibility>(pending_root)
+			.is_some_and(|v| matches!(*v, Visibility::Hidden)));
+		assert!(world.get::<Disabled>(pending_root).is_none());
+		assert!(world.get::<Disabled>(nested_root).is_some());
+		assert!(world.get::<Disabled>(nested_leaf).is_some());
 	}
 }
