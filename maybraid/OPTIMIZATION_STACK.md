@@ -15,6 +15,7 @@ Related: [#800](https://github.com/ramate-io/maybraid/issues/800),
 | Slim baseline / [#800](https://github.com/ramate-io/maybraid/issues/800) | Typed LOD refresh domains, less work in `Update` | Late-flight `Update` ~11.6 ms vs ~26.5 ms on `main` |
 | [#803](https://github.com/ramate-io/maybraid/issues/803) | Flattened character visuals | Fewer nested visual hosts on the player |
 | [#802](https://github.com/ramate-io/maybraid/issues/802) | `GimmeLodSceneHostIndex` for refresh / cull | Host cuboids left the Avian broadphase. Produce fill no longer climbs with collider count. |
+| Shared produce fill | One `fill_lod_produce_cache` per host index; snapshots every `LodNode` | Vegetation `With<Camera>` and mob `With<LodViewer>` no longer each walk the index. Tracy should show **one** produce fill. Expected `Update` win ~1–1.5 ms vs the dual-fill captures. |
 
 Crate layout after the split: [`lod`](lod/lib/) is the engine-agnostic runtime, [`lod-gimme`](lod/gimme/) owns the host index and refresh/cull plugins, [`lod-avian`](lod/avian/) keeps physics layers. Call sites use `gimme_host!`; unused `avian_host!` wrappers remain.
 
@@ -44,14 +45,15 @@ of “are we falling over.”
 | `sync_stick_colliders` | 0.077 ms | 0.062 ms |
 
 Whole-capture visibility / collider / dirty-tree heat is load-in and hitch
-**maxes**. The live budget is two produce fills + cull fill, then opaque
+**maxes**. Those dual-fill captures are the pre-shared-fill baseline. The live
+budget after this pass should be **one** produce fill + cull fill, then opaque
 instance write, then present drains. Gimme reindex is cheap. Physics is quiet
 once spawned.
 
-`fill_lod_produce_cache` is **once per (`Index`, `F`)**. Vegetation refresh
-uses `With<Camera>`; mobs use `With<LodViewer>`. Both collect `LodNode`
-snapshots. Cull fill is a **separate** cache — folding produce does not
-automatically fold cull.
+`fill_lod_produce_cache` is **once per host index**. Region production still uses
+`With<Camera>` (vegetation) vs `With<LodViewer>` (mobs); fill snapshots every
+`LodNode` so those filters cannot instantiate two `cache.clear()` walks. Cull
+fill is a **separate** cache — folding produce does not automatically fold cull.
 
 ## Next work (this order)
 
@@ -71,12 +73,9 @@ as an unused Avian Host query path. Refresh plugins do not install them.
 
 ### 2. One shared produce fill
 
-One `fill_lod_produce_cache` (and one snapshot walk) for every refresh domain,
-regardless of `With<Camera>` vs `With<LodViewer>`.
-
-Late window: Camera fill ~2.1 ms + LodViewer fill ~1.7 ms. That is the next
-measured `Update` win. Leave `fill_lod_cull_produce_cache` alone until produce
-is shared; it is a different cache.
+**Status: done in this crate pass.** Re-measure with Tracy: one
+`fill_lod_produce_cache` zone, not Camera + LodViewer. Leave
+`fill_lod_cull_produce_cache` until a capture shows it is still the next lever.
 
 ### 3. Flatten High / Medium building kits
 
@@ -126,5 +125,5 @@ Prefer Tracy over hitch loggers.
 1. `tracy-capture` a several-minute flight that includes urban.
 2. Whole-capture CSV for maxes / load-in.
 3. A late-window export (as `rough_frames.csv`) for the steady budget.
-4. Compare `Update`, the three LOD fills, `write_binned` Opaque3d, and
+4. Compare `Update`, produce fill (**one** zone), cull fill, `write_binned` Opaque3d, and
    `reindex_moved_hosts`.

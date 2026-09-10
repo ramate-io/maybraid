@@ -3,7 +3,6 @@
 use std::any::TypeId;
 use std::marker::PhantomData;
 
-use bevy::ecs::query::QueryFilter;
 use bevy::ecs::system::{StaticSystemParam, SystemParam};
 use bevy::math::bounding::Aabb3d;
 use bevy::platform::collections::{HashMap, HashSet};
@@ -20,7 +19,6 @@ use crate::scene::level::LodSceneLevel;
 use crate::scene::region_index::LodSceneHostIndex;
 use crate::scene::{LodSceneCulls, SceneChunk, SemanticLodScene};
 
-use super::super::viewer::LodViewer;
 use super::super::{ensure_refresh_core, LodLevelProduceSystems};
 
 /// Impulse: set host `entity` toward `level` (folded by max in entity refresh).
@@ -196,17 +194,20 @@ fn contains_region(outer: Aabb3d, inner: Aabb3d) -> bool {
 	outer.min.cmple(inner.min).all() && outer.max.cmpge(inner.max).all()
 }
 
-/// Collect viewer snapshots once, then query hosts per produce domain.
-pub fn fill_lod_produce_cache<I, F>(
+/// Collect every [`LodNode`] snapshot once, then query hosts per produce domain.
+///
+/// Region production still filters drivers (`With<Camera>` vs [`super::super::LodViewer`]).
+/// Fill must not: those filters used to instantiate two systems that each cleared
+/// [`LodProduceCache`], so the second walk wiped the first.
+pub fn fill_lod_produce_cache<I>(
 	mut regions: MessageReader<LodSceneRefreshAabb>,
 	index: StaticSystemParam<I>,
-	nodes: Query<(Entity, &LodNodePose, Option<&LodNodeBounds>), (With<LodNode>, F)>,
+	nodes: Query<(Entity, &LodNodePose, Option<&LodNodeBounds>), With<LodNode>>,
 	membership: Query<&LodRefreshMembership>,
 	mut cache: ResMut<LodProduceCache>,
 ) where
 	I: SystemParam + 'static,
 	for<'w, 's> I::Item<'w, 's>: LodSceneHostIndex,
-	F: QueryFilter + 'static,
 {
 	cache.clear();
 	if regions.is_empty() {
@@ -369,35 +370,35 @@ fn host_shows_level_root_world(world: &World, host: Entity, level: LodSceneLevel
 }
 
 /// Fill [`LodProduceCache`] from untyped region AABBs via host index `I`.
-pub struct LodSceneRefreshLevelsFillPlugin<I, F = With<LodViewer>>
+///
+/// Once per `I`. Snapshot collection is every [`LodNode`], not a node filter:
+/// vegetation `With<Camera>` and mob [`super::super::LodViewer`] share this plugin.
+pub struct LodSceneRefreshLevelsFillPlugin<I>
 where
 	I: SystemParam + 'static,
-	F: QueryFilter + 'static,
 {
-	_marker: PhantomData<fn() -> (I, F)>,
+	_marker: PhantomData<fn() -> I>,
 }
 
-impl<I, F> Default for LodSceneRefreshLevelsFillPlugin<I, F>
+impl<I> Default for LodSceneRefreshLevelsFillPlugin<I>
 where
 	I: SystemParam + 'static,
-	F: QueryFilter + 'static,
 {
 	fn default() -> Self {
 		Self { _marker: PhantomData }
 	}
 }
 
-impl<I, F> Plugin for LodSceneRefreshLevelsFillPlugin<I, F>
+impl<I> Plugin for LodSceneRefreshLevelsFillPlugin<I>
 where
 	I: SystemParam + 'static,
-	F: QueryFilter + 'static,
 	for<'w, 's> I::Item<'w, 's>: LodSceneHostIndex,
 {
 	fn build(&self, app: &mut App) {
 		ensure_refresh_core(app);
 		app.add_systems(
 			Update,
-			fill_lod_produce_cache::<I, F>.in_set(LodLevelProduceSystems::FillCache),
+			fill_lod_produce_cache::<I>.in_set(LodLevelProduceSystems::FillCache),
 		);
 	}
 }
