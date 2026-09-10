@@ -1,14 +1,14 @@
-//! Share-then-merge posed kit GLBs into [`scene_ref::MultiSceneMerge`].
+//! Pose shared kit GLBs as instances ([`scene_ref::SceneRef`]), not baked merges.
 //!
-//! Same kit mesh + material + [`ParentConfines`] bake into one mesh so instance
-//! writes and visibility scale with merged surfaces, not per-tile `Mesh3d`s.
-//! Distinct kits stay separate (no unique whole-block merge).
+//! Same-kit wall tiles must stay one mesh handle so `write_binned` instances them.
+//! [`scene_ref::MultiSceneMerge`] is for vegetation collections whose layouts do not
+//! instance across the city.
 
 use bevy::prelude::Transform;
 use bevy::scene::prelude::{bsn, template_value, Scene};
 use lod::LodLazyPending;
 use material_ref::{MaterialRef, MaterialRefRoot, PropagateToDescendants};
-use scene_ref::{MultiSceneMerge, MultiScenePart, SceneRef};
+use scene_ref::SceneRef;
 
 use crate::lod_host_helper::LodHostHelper;
 use crate::parent_confines::{confined_scene, ParentConfines};
@@ -21,43 +21,13 @@ pub(crate) struct KitPart {
 	pub confines: ParentConfines,
 }
 
-struct MergeGroup {
-	scene: SceneRef,
-	material: Option<MaterialRef>,
-	confines: ParentConfines,
-	transforms: Vec<Transform>,
-}
-
 pub(crate) fn scenes_from_kit_parts(parts: Vec<KitPart>) -> Vec<Box<dyn Scene>> {
-	let mut groups: Vec<MergeGroup> = Vec::new();
-	for part in parts {
-		if let Some(group) = groups.iter_mut().find(|g| {
-			g.scene == part.scene && g.material == part.material && g.confines == part.confines
-		}) {
-			group.transforms.push(part.transform);
-		} else {
-			groups.push(MergeGroup {
-				scene: part.scene,
-				material: part.material,
-				confines: part.confines,
-				transforms: vec![part.transform],
-			});
-		}
-	}
-	groups.into_iter().map(emit_group).collect()
+	parts.into_iter().map(emit_part).collect()
 }
 
-fn emit_group(group: MergeGroup) -> Box<dyn Scene> {
-	let scene = if group.transforms.len() == 1 {
-		posed_kit(group.scene, group.transforms[0], group.material)
-	} else {
-		let parts = group
-			.transforms
-			.into_iter()
-			.map(|transform| MultiScenePart::new(group.scene.clone(), transform));
-		merged_kit(MultiSceneMerge::new(parts), group.material)
-	};
-	match group.confines {
+fn emit_part(part: KitPart) -> Box<dyn Scene> {
+	let scene = posed_kit(part.scene, part.transform, part.material);
+	match part.confines {
 		ParentConfines::External => scene,
 		confines => Box::new(confined_scene(confines, scene)),
 	}
@@ -69,10 +39,6 @@ fn posed_kit(
 	material: Option<MaterialRef>,
 ) -> Box<dyn Scene> {
 	with_optional_material(LodHostHelper::posed_scene_ref_tier(Some(scene), transform), material)
-}
-
-fn merged_kit(merge: MultiSceneMerge, material: Option<MaterialRef>) -> Box<dyn Scene> {
-	with_optional_material(merge.scene(), material)
 }
 
 fn with_optional_material(
@@ -107,23 +73,15 @@ mod tests {
 	}
 
 	#[test]
-	fn same_kit_instances_merge_to_one_scene() {
+	fn same_kit_instances_stay_separate_posed_scenes() {
 		assert_eq!(
 			scenes_from_kit_parts(vec![part("wall.glb", 0.0), part("wall.glb", 1.0)]).len(),
-			1
-		);
-	}
-
-	#[test]
-	fn distinct_kits_stay_separate() {
-		assert_eq!(
-			scenes_from_kit_parts(vec![part("wall.glb", 0.0), part("roof.glb", 0.0)]).len(),
 			2
 		);
 	}
 
 	#[test]
-	fn internal_confines_do_not_merge_with_external() {
+	fn internal_confines_wrap_without_baking_into_the_external_run() {
 		let internal = KitPart {
 			scene: SceneRef::glb("wall.glb"),
 			transform: Transform::IDENTITY,

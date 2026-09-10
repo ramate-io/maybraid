@@ -80,8 +80,6 @@ use lod::lod_ref::LodRef;
 use lod::{lod_host_scene_pending, SceneChunk};
 use std::sync::Arc;
 
-use crate::kit_merge::{scenes_from_kit_parts, KitPart};
-
 /// Domain IR exposed by a building (or building part) for structural composition.
 ///
 /// Each method returns nodes of one domain type, grouped by provenance [`Layer`]
@@ -379,49 +377,6 @@ impl FlattenedKit {
 			Self::Label(node) => Box::new(node.scene_with_level(lod_ref, level)),
 		}
 	}
-
-	fn collect_into(
-		self,
-		lod_ref: &LodRef,
-		level: LodSceneLevel,
-		parts: &mut Vec<KitPart>,
-		unique_scenes: &mut Vec<Box<dyn Scene>>,
-		unique_kits: &mut Vec<FlattenedKit>,
-	) {
-		match self {
-			Self::Panel(node) => parts.extend(node.kit_parts(level)),
-			Self::Partition(node) => parts.extend(node.kit_parts(level)),
-			Self::Floor(node) => {
-				if matches!(node.style, crate::floors::FloorStyle::Wood) {
-					unique_kits.push(Self::Floor(node));
-				} else {
-					node.collect_flattened(lod_ref, level, parts, unique_scenes);
-				}
-			}
-			Self::Roof(node) => parts.extend(node.kit_parts(level)),
-			Self::Joint(node) => parts.extend(node.kit_parts(level)),
-			Self::Stair(node) => unique_kits.push(Self::Stair(node)),
-			Self::Door(node) => unique_kits.push(Self::Door(node)),
-			Self::Furniture(node) => unique_kits.push(Self::Furniture(node)),
-			Self::Label(node) => unique_kits.push(Self::Label(node)),
-		}
-	}
-}
-
-fn collect_flattened_emits(
-	building: &impl BuildingComponents,
-	lod_ref: &LodRef,
-	level: LodSceneLevel,
-) -> (Vec<Box<dyn Scene>>, Vec<FlattenedKit>) {
-	let mut parts = Vec::new();
-	let mut unique_scenes = Vec::new();
-	let mut unique_kits = Vec::new();
-	for kit in flattened_kits(building, level) {
-		kit.collect_into(lod_ref, level, &mut parts, &mut unique_scenes, &mut unique_kits);
-	}
-	let mut scenes = scenes_from_kit_parts(parts);
-	scenes.extend(unique_scenes);
-	(scenes, unique_kits)
 }
 
 fn flattened_kits(building: &impl BuildingComponents, level: LodSceneLevel) -> Vec<FlattenedKit> {
@@ -461,9 +416,8 @@ fn flattened_kits(building: &impl BuildingComponents, level: LodSceneLevel) -> V
 			.into_iter()
 			.map(FlattenedKit::Joint),
 	);
-	// Structural Medium is the exterior/readable shell. Interior fixtures are
-	// too small to contribute at this distance and dominate dense developments.
-	if matches!(level, LodSceneLevel::High) {
+	// Circulation stays readable on Medium. Furniture / labels are High-only.
+	if matches!(level, LodSceneLevel::High | LodSceneLevel::Medium) {
 		kits.extend(
 			building
 				.stair_nodes_for_level(level)
@@ -478,6 +432,8 @@ fn flattened_kits(building: &impl BuildingComponents, level: LodSceneLevel) -> V
 				.into_iter()
 				.map(FlattenedKit::Door),
 		);
+	}
+	if matches!(level, LodSceneLevel::High) {
 		kits.extend(
 			building
 				.furniture_nodes_for_level(level)
@@ -498,10 +454,10 @@ fn flattened_kits(building: &impl BuildingComponents, level: LodSceneLevel) -> V
 
 /// Weighted chunks for one structural level: posed kits, no nested domain hosts.
 ///
-/// Same-kit panels / partitions / floors / roofs / joints bake into one
-/// [`scene_ref::MultiSceneMerge`] per (mesh, material, confines). Unique fixtures
-/// stay separate. Kits are produced lazily so begin does not box every scene up
-/// front. Each emitted mesh costs [`FLATTENED_KIT_CHUNK_WEIGHT`].
+/// Kits are produced lazily so begin does not box every `scene_with_level` up front.
+/// Each kit costs [`FLATTENED_KIT_CHUNK_WEIGHT`]. Shared kit GLBs stay posed
+/// [`scene_ref::SceneRef`]s so the renderer instances them; do not bake them into
+/// unique [`scene_ref::MultiSceneMerge`] meshes.
 pub fn building_scene_chunks(
 	building: &impl BuildingComponents,
 	lod_ref: &LodRef,
@@ -510,8 +466,8 @@ pub fn building_scene_chunks(
 	if is_massing_level(level) && building.structural_lod().is_some() {
 		return SceneChunk::primitive(massing_scene(building, level));
 	}
-	let (merged, unique_kits) = collect_flattened_emits(building, lod_ref, level);
-	let n = merged.len() + unique_kits.len();
+	let kits = flattened_kits(building, level);
+	let n = kits.len();
 	if n == 0 {
 		return SceneChunk::primitive(scene_children(Vec::new()));
 	}
@@ -521,16 +477,16 @@ pub fn building_scene_chunks(
 	let bounds = *lod_ref.bounds;
 	let entity = lod_ref.entity;
 	let kit_w = FLATTENED_KIT_CHUNK_WEIGHT;
-	let mut merged = merged.into_iter();
-	let mut unique_kits = unique_kits.into_iter();
+	let mut index = 0usize;
 	SceneChunk::lazy(n as u32 * kit_w, n, move || {
-		if let Some(scene) = merged.next() {
-			return Some(SceneChunk::weighted(kit_w, scene));
+		if index >= kits.len() {
+			return None;
 		}
-		let kit = unique_kits.next()?;
 		let kit_lod =
 			LodRef { entity, previous_transform: &prev, current_transform: &curr, bounds: &bounds };
-		Some(SceneChunk::weighted(kit_w, kit.scene(&kit_lod, level)))
+		let scene = kits[index].scene(&kit_lod, level);
+		index += 1;
+		Some(SceneChunk::weighted(kit_w, scene))
 	})
 }
 
@@ -567,12 +523,8 @@ pub fn append_flattened_component_scenes(
 	level: LodSceneLevel,
 	children: &mut Vec<Box<dyn Scene>>,
 ) {
-	let (mut scenes, unique_kits) = collect_flattened_emits(building, lod_ref, level);
-	for kit in unique_kits {
+	for kit in flattened_kits(building, level) {
 		children.push(kit.scene(lod_ref, level));
-	}
-	for scene in scenes.drain(..) {
-		children.push(scene);
 	}
 }
 
@@ -736,6 +688,8 @@ pub(crate) use impl_glb_lod_scene;
 #[cfg(test)]
 mod flatten_tests {
 	use super::*;
+	use crate::doors::DoorGeometry;
+	use crate::stairs::StairGeometry;
 	use bevy::prelude::{Entity, Transform};
 
 	struct ShellAndFixture {
@@ -790,6 +744,48 @@ mod flatten_tests {
 		assert_eq!(chunks.total_weight(), FLATTENED_KIT_CHUNK_WEIGHT);
 	}
 
+	struct CirculationAndFixture {
+		panel: PanelNode,
+		stair: StairNode,
+		door: DoorNode,
+		bed: FurnitureNode,
+	}
+
+	impl BuildingComponents for CirculationAndFixture {
+		fn panel_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<PanelNode> {
+			Layers::from_free(vec![self.panel.clone()])
+		}
+
+		fn stair_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<StairNode> {
+			Layers::from_free(vec![self.stair.clone()])
+		}
+
+		fn door_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<DoorNode> {
+			Layers::from_free(vec![self.door.clone()])
+		}
+
+		fn furniture_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<FurnitureNode> {
+			Layers::from_free(vec![self.bed.clone()])
+		}
+	}
+
+	#[test]
+	fn medium_keeps_circulation_omits_furniture() {
+		let building = CirculationAndFixture {
+			panel: PanelNode::rough_stone(PanelGeometry::rectangle(), Placement::IDENTITY),
+			stair: StairNode::rough_stone(StairGeometry::straight(), Placement::IDENTITY),
+			door: DoorNode::wood(DoorGeometry::leaf(), Placement::IDENTITY),
+			bed: FurnitureNode::bed(Placement::IDENTITY),
+		};
+		let tf = Transform::IDENTITY;
+		let bounds = Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE);
+		let medium =
+			building_scene_chunks(&building, &lod_ref(&tf, &bounds), LodSceneLevel::Medium);
+		assert_eq!(medium.total_primitives(), 3);
+		let high = building_scene_chunks(&building, &lod_ref(&tf, &bounds), LodSceneLevel::High);
+		assert_eq!(high.total_primitives(), 4);
+	}
+
 	struct TwoWalls {
 		a: PanelNode,
 		b: PanelNode,
@@ -802,7 +798,7 @@ mod flatten_tests {
 	}
 
 	#[test]
-	fn same_style_panels_merge_into_one_chunk() {
+	fn same_style_panels_stay_separate_posed_chunks() {
 		let building = TwoWalls {
 			a: PanelNode::rough_stone(PanelGeometry::rectangle(), Placement::IDENTITY),
 			b: PanelNode::rough_stone(PanelGeometry::rectangle(), Placement::new(Vec3::X, 0.0)),
@@ -810,8 +806,8 @@ mod flatten_tests {
 		let tf = Transform::IDENTITY;
 		let bounds = Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE);
 		let chunks = building_scene_chunks(&building, &lod_ref(&tf, &bounds), LodSceneLevel::High);
-		assert_eq!(chunks.total_primitives(), 1);
-		assert_eq!(chunks.total_weight(), FLATTENED_KIT_CHUNK_WEIGHT);
+		assert_eq!(chunks.total_primitives(), 2);
+		assert_eq!(chunks.total_weight(), 2 * FLATTENED_KIT_CHUNK_WEIGHT);
 	}
 
 	#[test]

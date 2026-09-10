@@ -5,7 +5,7 @@
 //!
 //! LOD (root [`LodSceneHost`](lod::LodSceneHost)):
 //! - **Low** — cylinder silhouette
-//! - **Medium** — exterior walls
+//! - **Medium** — exterior walls plus circulation (stairs)
 //! - **High** — exterior + internals (`ParentConfines::Internal` on nodes)
 
 pub mod floor;
@@ -146,13 +146,12 @@ impl WizardsTower {
 	}
 
 	fn high_primitives(&self, lod_ref: &LodRef) -> impl Scene + 'static {
-		let spire_confines = self.column.spire_confine_capsule();
 		let mut children: Vec<Box<dyn Scene>> = Vec::new();
 		for floor in &self.column.floors {
 			floor.emit_external_features(&mut children, lod_ref);
-			// Per-storey balls for slabs / lantern; one shaft capsule for all spire stairs.
+			// Per-storey balls for slabs / lantern. Spire stairs come from Medium
+			// flatten (circulation), not a second High-only bake.
 			floor.emit_internal_features(&mut children, lod_ref);
-			floor.emit_spire_features(&mut children, lod_ref, spire_confines);
 		}
 		self.column.perch.emit_external_features(&mut children, lod_ref);
 		self.column.perch.emit_internal_features(&mut children, lod_ref);
@@ -222,13 +221,11 @@ impl LodScene for WizardsTower {
 	fn scene_chunks_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> SceneChunk {
 		match level {
 			LodSceneLevel::High => {
-				let spire_confines = self.column.spire_confine_capsule();
 				let mut chunks = Vec::new();
 				for floor in &self.column.floors {
 					let mut children: Vec<Box<dyn Scene>> = Vec::new();
 					floor.emit_external_features(&mut children, lod_ref);
 					floor.emit_internal_features(&mut children, lod_ref);
-					floor.emit_spire_features(&mut children, lod_ref, spire_confines);
 					chunks.push(SceneChunk::weighted(4, scene_children(children)));
 				}
 				let mut perch_children: Vec<Box<dyn Scene>> = Vec::new();

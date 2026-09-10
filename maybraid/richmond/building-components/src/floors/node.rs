@@ -18,12 +18,10 @@ use crate::floors::{
 	RoughStoneFloorArcFill, RoughStoneFloorStructFill, WoodFloorArcFill, WoodFloorRectangle,
 	WoodFloorStructFill,
 };
-use crate::kit_merge::KitPart;
 use crate::lod_band::placement_bounds;
 use crate::panels::to_centered_rect_placement;
 use crate::parent_confines::{confined_scene, ParentConfines};
 use crate::partitions::geometry::LinearLod;
-use crate::partitions::host::mesh_scene_ref;
 use crate::partitions::mesh_set::PartitionMeshSet;
 use crate::placed::Placement;
 use crate::scene_children::{pose, posed_glb, scene_children, with_pose};
@@ -74,60 +72,6 @@ impl FloorNode {
 				_ => None,
 			})
 			.collect()
-	}
-
-	pub(crate) fn collect_flattened(
-		&self,
-		lod_ref: &LodRef,
-		level: LodSceneLevel,
-		parts: &mut Vec<KitPart>,
-		unique: &mut Vec<Box<dyn Scene>>,
-	) {
-		for piece in self.geometry.placed_kits_for_style(self.style, self.placement) {
-			let transform = match piece.geom {
-				FloorKit::Rectangle => pose(to_centered_rect_placement(piece.placement)),
-				_ => pose(piece.placement),
-			};
-			match piece.geom {
-				FloorKit::Rectangle => parts.push(KitPart {
-					scene: RECTANGLE.scene_ref(),
-					transform,
-					material: None,
-					confines: self.confines,
-				}),
-				FloorKit::RightTriangle { mirror } => parts.push(KitPart {
-					scene: mesh_scene_ref(
-						PartitionMeshSet::new(
-							RIGHT_TRIANGLE_HIGH,
-							RIGHT_TRIANGLE_MID,
-							RIGHT_TRIANGLE_LOW,
-						),
-						level,
-						mirror,
-					),
-					transform,
-					material: None,
-					confines: self.confines,
-				}),
-				FloorKit::CircleInscribedSquare => parts.push(KitPart {
-					scene: INSCRIBED_SQUARE.scene_ref(),
-					transform,
-					material: None,
-					confines: self.confines,
-				}),
-				FloorKit::ArcFill(_) => unique.push(Box::new(confined_scene(
-					self.confines,
-					with_pose(transform, RoughStoneFloorArcFill.scene_with_level(lod_ref, level)),
-				))),
-				FloorKit::StructFill => unique.push(Box::new(confined_scene(
-					self.confines,
-					with_pose(
-						transform,
-						RoughStoneFloorStructFill.scene_with_level(lod_ref, level),
-					),
-				))),
-			}
-		}
 	}
 }
 

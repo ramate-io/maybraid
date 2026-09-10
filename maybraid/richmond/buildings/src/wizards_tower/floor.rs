@@ -152,22 +152,6 @@ impl WizardsTowerFloor {
 		children.push(Box::new(confined_scene(confines, self.lantern_scene())));
 	}
 
-	/// Spire stair run gated by a shared vertical capsule (whole column shaft).
-	pub(crate) fn emit_spire_features(
-		&self,
-		children: &mut Vec<Box<dyn Scene>>,
-		lod_ref: &LodRef,
-		spire_confines: ParentConfines,
-	) {
-		children.push(Box::new(
-			self.arc_spire
-				.stairs
-				.clone()
-				.with_confines(spire_confines)
-				.scene_with_level(lod_ref, LodSceneLevel::High),
-		));
-	}
-
 	fn storey_confine_center(&self) -> Vec3 {
 		let aabb = &self.constraints.aabb;
 		Vec3::from((aabb.min + aabb.max) * 0.5)
@@ -248,7 +232,7 @@ impl BuildingComponents for WizardsTowerFloor {
 	}
 
 	fn stair_nodes_for_level(&self, level: LodSceneLevel) -> Layers<StairNode> {
-		if !Self::is_detail_level(level) {
+		if !Self::is_structure_level(level) {
 			return Layers::new();
 		}
 		Layers::from_free(vec![self
@@ -268,7 +252,6 @@ impl LodScene for WizardsTowerFloor {
 		let mut children: Vec<Box<dyn Scene>> = Vec::new();
 		self.emit_external_features(&mut children, lod_ref);
 		self.emit_internal_features(&mut children, lod_ref);
-		self.emit_spire_features(&mut children, lod_ref, self.storey_spire_capsule());
 		scene_children(children)
 	}
 }

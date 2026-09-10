@@ -17,8 +17,9 @@ Related: [#800](https://github.com/ramate-io/maybraid/issues/800),
 | [#802](https://github.com/ramate-io/maybraid/issues/802) | `GimmeLodSceneHostIndex` for refresh / cull | Host cuboids left the Avian broadphase. Produce fill no longer climbs with collider count. |
 | Shared produce fill | One `fill_lod_produce_cache` per host index; snapshots every `LodNode` | Vegetation `With<Camera>` and mob `With<LodViewer>` no longer each walk the index. Tracy should show **one** produce fill. Expected `Update` win ~1–1.5 ms vs the dual-fill captures. |
 | Flatten building kits | `ComponentsOnly` High/Medium posed kits, not nested panel hosts | Urban host count dropped. `write_binned` still saw per-tile `Mesh3d`s. |
-| Shared cull fill | One `fill_lod_cull_produce_cache` per host index; snapshots every `LodNode` | Same dual-`F` footgun as produce. Gameplay captures already showed **one** Camera specialization (~1.9 ms); sharing keeps a second `LodViewer` walk from appearing. |
-| Merge shared kits | Same GLB + material + [`ParentConfines`](richmond/building-components/src/parent_confines.rs) → one [`MultiSceneMerge`](scene-ref/src/multi_merge.rs) | `write_binned` / visibility / PostUpdate scale with merged surfaces, not per-panel instances. Distinct kits stay separate. |
+| Shared cull fill | One `fill_lod_cull_produce_cache` per host index; snapshots every `LodNode` | Same dual-`F` footgun as produce. After sharing, gameplay cull fill is **0.65 ms** (`more_rough_gameplay.csv`). |
+| Stairs / doors on Medium | Circulation is High **and** Medium; furniture / labels stay High-only | Nested stair hosts used to keep their own band; flatten dropped the whole shell to Medium and hid stairs. |
+| Unmerge shared wall kits | Stop baking city walls into [`MultiSceneMerge`](scene-ref/src/multi_merge.rs); leave posed [`SceneRef`](scene-ref/src/scene_ref.rs)s | Shared wall GLBs already instanced. Baking per-building layouts made unique meshes × 1 instance. `write_binned` / `visibility_propagate` got worse (`more_rough_gameplay.csv`). |
 
 Crate layout after the split: [`lod`](lod/lib/) is the engine-agnostic runtime, [`lod-gimme`](lod/gimme/) owns the host index and refresh/cull plugins, [`lod-avian`](lod/avian/) keeps physics layers. Call sites use `gimme_host!`; unused `avian_host!` wrappers remain.
 
@@ -58,12 +59,19 @@ once spawned.
 `LodNode` so those filters cannot instantiate two `cache.clear()` walks.
 `fill_lod_cull_produce_cache` is the same: once per index, every node. The
 gameplay-window ~1.9 ms was already a **single** Camera walk (vegetation and
-buildings share that filter); sharing does not cut that remaining query. Kit
-merge is the `write_binned` lever.
+buildings share that filter). Sharing plus flatten dropped the named cull fill
+to **0.65 ms**; it is no longer the lever.
 
-Gameplay window (`rough_gameplay.csv`, ~270 frames after flatten + shared produce):
-`Update` **7.4 ms**, produce **0.41 ms**, cull fill **1.94 ms**,
-`write_binned` Opaque3d **1.98 ms**.
+Gameplay window (`rough_gameplay.csv`, ~270 frames after flatten + shared produce,
+before wall merge): `Update` **7.4 ms**, produce **0.41 ms**, cull fill
+**1.94 ms**, `write_binned` Opaque3d **1.98 ms**.
+
+Gameplay window (`more_rough_gameplay.csv`, ~288 frames after wall merge):
+`Update` **8.0 ms**, produce **1.13 ms**, cull fill **0.65 ms**,
+`write_binned` **2.18 ms**, `visibility_propagate` **2.19 ms**,
+`check_visibility` **0.61 ms**. Merge unique-baked the instance set. This
+pass poses kits again; recapture should send `write_binned` back toward
+**~1.5–2.0 ms**.
 
 ## Next work (this order)
 
@@ -94,17 +102,37 @@ as an unused Avian Host query path. Refresh plugins do not install them.
 
 **Status: done in this crate pass.** [`fill_lod_cull_produce_cache`](lod/lib/src/scene/refresh/cull_regions/cache.rs) is once per host index and snapshots every [`LodNode`](lod/lib/src/lod_ref/node.rs). Region production still filters drivers. Re-measure: one cull-fill zone (no Camera vs LodViewer pair).
 
-### 5. Merge shared wall (and similar) kits
+### 5. Merge shared wall kits — reverted
 
-**Status: done in this crate pass.** Flattened High/Medium emit groups identical kit GLBs (same [`SceneRef`](scene-ref/src/scene_ref.rs), material, and [`ParentConfines`](richmond/building-components/src/parent_confines.rs)) into one [`MultiSceneMerge`](scene-ref/src/multi_merge.rs). Singles stay posed `SceneRef`. Stairs / doors / furniture / labels stay unique. Internal vs external confines do not share a mesh.
+**Status: reverted in this crate pass.** Same-kit wall tiles were already one
+[`SceneRef`](scene-ref/src/scene_ref.rs). `write_binned` instanced them.
+[`MultiSceneMerge`](scene-ref/src/multi_merge.rs) bakes transforms into a new mesh;
+each building layout is a unique key → unique meshes × 1 instance. That is the
+unique-merge failure mode at building grain.
 
-Re-measure with Tracy: `write_binned` Opaque3d, `visibility_propagate`, PostUpdate. Expect fewer visible `Mesh3d`s on urban towers, not a smaller host-index cull query.
+Vegetation [`CollectionPresent::Merge`](chico/vegetation-components/src/foliage/present.rs)
+is still the right merge: a **cacheable collection key** (cheap-balls / sticks),
+not “all stone rectangles on this tower.”
 
-### 6. Broader fewer-host work
+Re-measure after unmerge: `write_binned` Opaque3d, `visibility_propagate`. Cull
+fill should stay ~0.65 ms. Stairs should remain visible at Medium.
 
-Same campaign after this recapture: leftover nested
-`FoliageNode` / `StickNode` hosts, grove vs plant, Hidden warm roots that still
-refresh. Keep shrinking what `fill_lod_cull_produce_cache` and visibility walk.
+### 6. Broader fewer-host work (next after recapture)
+
+`visibility_propagate` / `write_binned` now scale with visible `Mesh3d`
+**entities that still share mesh handles**. Flatten + instance is the right
+building grain. Next campaign is leftover vegetation cardinality:
+
+- Nested [`FoliageNode`](chico/vegetation-components/src/foliage/node.rs) /
+  [`StickNode`](chico/vegetation-components/src/sticks/node.rs) hosts — same
+  flatten as buildings: posed kits under the grove/plant host, not a host per
+  frond.
+- Grove vs plant: `chico_grove_host_spawn` still presents many grove tile hosts;
+  collapsing toward plant flatten / fewer Hidden warm roots that still refresh.
+- Hidden warm roots that remain in the visibility walk / host index even when
+  culled.
+
+Do **not** unique-merge city walls further.
 
 ## Not next (and why)
 
@@ -117,8 +145,9 @@ refresh. Keep shrinking what `fill_lod_cull_produce_cache` and visibility walk.
   `GlobalTransform`), not rebuild. Near-field physics is the lever, not a
   recipe cache.
 - **Attacking instances by making unique merged patches.** That explodes GPU
-  memory. Share first (quantize), then fold cardinality. This pass merges
-  **shared** kit instances only.
+  memory and was the wall-merge regression. Share first (quantize / instance
+  the same handle), then fold cardinality (fewer hosts). Vegetation merge stays
+  collection-keyed.
 - **Tighter `build_bone_maps` clamp.** It already rebuilds only when `Children` /
   `Name` change under that [`RigRoot`](rigs/src/bone_map.rs). The gameplay 0.92 ms
   is character-rig fulfill, not a leftover every-frame walk. A clamp would hide
