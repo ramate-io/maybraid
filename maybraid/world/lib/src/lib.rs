@@ -15,6 +15,7 @@ mod mobs;
 mod pitch;
 mod player_lifecycle;
 mod poi;
+mod stash;
 mod ui;
 mod weapon;
 
@@ -29,6 +30,10 @@ pub use mobs::WorldMobsPlugin;
 pub use player_camera::CameraPov;
 pub use player_lifecycle::{WorldPlayerLifecyclePlugin, WorldPlayerRespawnConfig};
 pub use poi::{WorldPoiDiscoveryBudget, WorldPoiPlugin, WorldPoiSystems};
+pub use stash::{
+	spawn_world_stash, StashDisplayedItem, StashPolicy, WorldStash, WorldStashPlugin,
+	WorldStashSettings, DEFAULT_CLAIM_RADIUS, DEFAULT_LOOT_SECS,
+};
 pub use ui::WorldMobHudEnabled;
 pub use weapon::WorldPlayerLoadout;
 
@@ -152,6 +157,7 @@ impl Plugin for WorldPlugin {
 			.add_plugins(WorldIntelligencePlugin)
 			.add_plugins(WorldPoiPlugin)
 			.add_plugins(WorldPlayerLifecyclePlugin)
+			.add_plugins(WorldStashPlugin)
 			.insert_resource(PadMovementEnabled(false))
 			.insert_resource(CharacterCameraFollowEnabled(false))
 			.init_resource::<WorldGameplayEnabled>()

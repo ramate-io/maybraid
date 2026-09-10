@@ -282,6 +282,23 @@ impl Inventory {
 		self.toggle(index)
 	}
 
+	/// Drain every item and clear wear / queue selections on `self`.
+	///
+	/// The returned bag keeps the old selection indices so a world stash can
+	/// still show toggled clothing and queued weapons. Those indices stay
+	/// valid because they refer to the drained `items` list.
+	pub fn take_all(&mut self) -> Self {
+		std::mem::take(self)
+	}
+
+	/// Append `other.items` without auto-wearing or auto-queuing.
+	///
+	/// Incoming clothing / weapon selections are dropped. Existing selections
+	/// on `self` stay valid because new items are only appended.
+	pub fn absorb(&mut self, other: Self) {
+		self.items.extend(other.items);
+	}
+
 	pub fn character_sheet(&self) -> crate::CharacterSheet {
 		crate::CharacterSheet::from_inventory(self)
 	}
@@ -520,5 +537,75 @@ mod tests {
 		let items = random_gallery_firearms(&mut ItemRng::from_seed(1), 20);
 		assert_eq!(items.len(), 20);
 		assert!(items.iter().all(|item| item.firearm_spec().is_some()));
+	}
+
+	#[test]
+	fn take_all_drains_items_and_clears_source_selections() {
+		let mut bag = Inventory {
+			items: vec![
+				InventoryItem::clothing(
+					ClothingMesh::Pants,
+					ClothingMaterial::Cloth,
+					ItemColor::Natural,
+				),
+				InventoryItem::firearm(FirearmMesh::Bullpup),
+				InventoryItem::clothing(
+					ClothingMesh::Robe,
+					ClothingMaterial::Cloth,
+					ItemColor::Cool,
+				),
+			],
+			clothing: vec![0],
+			weapons: vec![1],
+		};
+
+		let taken = bag.take_all();
+
+		assert!(bag.items.is_empty());
+		assert!(bag.clothing.is_empty());
+		assert!(bag.weapons.is_empty());
+		assert_eq!(taken.items.len(), 3);
+		assert_eq!(taken.clothing, vec![0]);
+		assert_eq!(taken.weapons, vec![1]);
+		assert_eq!(
+			taken.primary_weapon().and_then(InventoryItem::firearm_mesh),
+			Some(FirearmMesh::Bullpup)
+		);
+	}
+
+	#[test]
+	fn absorb_appends_without_auto_wear_or_remap() {
+		let mut dest = Inventory {
+			items: vec![InventoryItem::clothing(
+				ClothingMesh::Pants,
+				ClothingMaterial::Cloth,
+				ItemColor::Natural,
+			)],
+			clothing: vec![0],
+			weapons: Vec::new(),
+		};
+		let incoming = Inventory {
+			items: vec![
+				InventoryItem::firearm(FirearmMesh::Reltor),
+				InventoryItem::clothing(
+					ClothingMesh::TankTop,
+					ClothingMaterial::Cloth,
+					ItemColor::Red,
+				),
+			],
+			clothing: vec![1],
+			weapons: vec![0],
+		};
+
+		dest.absorb(incoming);
+
+		assert_eq!(dest.items.len(), 3);
+		assert_eq!(dest.clothing, vec![0]);
+		assert!(dest.weapons.is_empty());
+		assert_eq!(dest.items[0].mesh(), Some(ClothingMesh::Pants));
+		assert_eq!(dest.items[1].firearm_mesh(), Some(FirearmMesh::Reltor));
+		assert_eq!(dest.items[2].mesh(), Some(ClothingMesh::TankTop));
+		assert!(!dest.is_worn(2));
+		assert_eq!(dest.rank(1), None);
 	}
 }
