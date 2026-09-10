@@ -34,11 +34,11 @@ pub enum HomeRoute {
 impl HomeRoute {
 	pub fn from_choice(choice: HomeMenuChoice) -> Self {
 		match choice {
-			HomeMenuChoice::Discovery | HomeMenuChoice::Reliquary => {
-				Self::World { label: choice.label() }
-			}
+			HomeMenuChoice::Discovery => Self::World { label: choice.label() },
 			HomeMenuChoice::Characters => Self::Characters,
-			HomeMenuChoice::TrainingGround | HomeMenuChoice::Settings => Self::Unimplemented,
+			HomeMenuChoice::Reliquary
+			| HomeMenuChoice::TrainingGround
+			| HomeMenuChoice::Settings => Self::Unimplemented,
 		}
 	}
 }
@@ -68,15 +68,16 @@ mod tests {
 	use super::*;
 
 	#[test]
-	fn discovery_and_reliquary_enter_world() {
+	fn discovery_enters_world() {
 		assert_eq!(
 			HomeRoute::from_choice(HomeMenuChoice::Discovery),
 			HomeRoute::World { label: "Discovery" }
 		);
-		assert_eq!(
-			HomeRoute::from_choice(HomeMenuChoice::Reliquary),
-			HomeRoute::World { label: "Reliquary" }
-		);
+	}
+
+	#[test]
+	fn reliquary_is_unimplemented() {
+		assert_eq!(HomeRoute::from_choice(HomeMenuChoice::Reliquary), HomeRoute::Unimplemented);
 	}
 
 	#[test]
