@@ -1,7 +1,9 @@
 //! Stick-flick detector. Either stick; a hold is not a flick. Emits [`SkillMapFlick`].
 
 use bevy::prelude::*;
-use maybraid_input::VirtualPad;
+use maybraid_input::analog::Deadzone;
+use maybraid_input::produce::gamepad::GamepadAxes;
+use maybraid_input::{VirtualPad, VirtualPadConfig};
 
 use crate::SkillMapEnabled;
 
@@ -92,6 +94,8 @@ impl SkillMapController {
 pub fn detect_skill_map_flicks(
 	time: Res<Time>,
 	pad: Option<Res<VirtualPad>>,
+	config: Option<Res<VirtualPadConfig>>,
+	gamepads: Query<&Gamepad>,
 	enabled: Res<SkillMapEnabled>,
 	mut controller: ResMut<SkillMapController>,
 	mut flicks: MessageWriter<SkillMapFlick>,
@@ -103,7 +107,13 @@ pub fn detect_skill_map_flicks(
 	let Some(pad) = pad else {
 		return;
 	};
-	if let Some(flick) = controller.sample(time.elapsed_secs(), pad.move_stick, pad.look_stick) {
+	let deadzone = config.map(|c| c.stick_deadzone).unwrap_or(Deadzone(0.15));
+	let mut look = Vec2::ZERO;
+	for gamepad in &gamepads {
+		look += GamepadAxes::look_stick(gamepad, deadzone);
+	}
+	let look = look.clamp_length_max(1.0);
+	if let Some(flick) = controller.sample(time.elapsed_secs(), pad.move_stick, look) {
 		flicks.write(SkillMapFlick(flick));
 	}
 }

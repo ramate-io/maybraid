@@ -3,7 +3,7 @@
 use bevy::prelude::*;
 use crozon_character_items::SkillMapSpec;
 
-use crate::cursor::{CURSOR_SPEED, FLICK_TRAVEL, WATER_LOCK_SECS};
+use crate::cursor::{CURSOR_SPEED, FLICK_REGION, WATER_LOCK_SECS};
 
 /// Which map the session should present. Index 0 of the bag queue.
 #[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -40,7 +40,7 @@ impl SkillMapUser {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SkillMapUserSettings {
 	pub cursor_speed: f32,
-	pub flick_travel: f32,
+	pub flick_scale: f32,
 	pub water_lock_secs: f32,
 }
 
@@ -48,7 +48,7 @@ impl Default for SkillMapUserSettings {
 	fn default() -> Self {
 		Self {
 			cursor_speed: CURSOR_SPEED,
-			flick_travel: FLICK_TRAVEL,
+			flick_scale: FLICK_REGION,
 			water_lock_secs: WATER_LOCK_SECS,
 		}
 	}

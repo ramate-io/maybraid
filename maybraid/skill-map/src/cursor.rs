@@ -6,13 +6,13 @@ use crate::controller::SkillMapFlick;
 use crate::map::{render_layer, SkillMapId};
 use crate::tile_material::SkillMapTileAssets;
 use crate::user::{SkillMapHeld, SkillMapMember, SkillMapSteerLock, SkillMapUser};
-use crate::viewport::SkillMapViewportCamera;
+use crate::viewport::{map_view_extent, SkillMapViewportCamera};
 use crate::SkillMapEnabled;
 
 pub const CURSOR_SPEED: f32 = 64.0;
 pub const WATER_LOCK_SECS: f32 = 2.0;
-/// World units a unit-length flick travels.
-pub const FLICK_TRAVEL: f32 = 72.0;
+/// Fraction of the visible map region a unit-length flick travels.
+pub const FLICK_REGION: f32 = 0.1;
 const BEAD_SPACING: f32 = 5.5;
 const BEAD_LIFE: f32 = 0.55;
 const BEAD_START: f32 = 0.42;
@@ -56,7 +56,7 @@ pub fn apply_flicks(
 	mut flicks: MessageReader<SkillMapFlick>,
 	users: Query<(&SkillMapUser, &SkillMapSteerLock)>,
 	mut cameras: Query<
-		(&SkillMapId, &SkillMapMember, &mut Transform),
+		(&SkillMapId, &SkillMapMember, &mut Transform, &Projection),
 		(With<SkillMapViewportCamera>, Without<SkillMapCursor>),
 	>,
 ) {
@@ -72,7 +72,7 @@ pub fn apply_flicks(
 		if flick.0 == Vec2::ZERO {
 			continue;
 		}
-		for (map, member, mut transform) in &mut cameras {
+		for (map, member, mut transform, projection) in &mut cameras {
 			let Some((user, lock)) = users.iter().find(|(user, _)| user.maps == member.session)
 			else {
 				continue;
@@ -81,7 +81,7 @@ pub fn apply_flicks(
 				continue;
 			}
 			let start = transform.translation.xy();
-			let delta = flick.0 * user.settings.flick_travel;
+			let delta = flick_delta(flick.0, view_region(projection), user.settings.flick_scale);
 			transform.translation.x += delta.x;
 			transform.translation.y += delta.y;
 			bead_flick(
@@ -95,6 +95,21 @@ pub fn apply_flicks(
 			);
 		}
 	}
+}
+
+fn view_region(projection: &Projection) -> Vec2 {
+	if let Projection::Orthographic(ortho) = projection {
+		let size = ortho.area.size();
+		if size.min_element() > 8.0 {
+			return size;
+		}
+	}
+	map_view_extent()
+}
+
+/// Stick space → map. A unit throw crosses `scale` of the visible region, same way as the stick.
+pub fn flick_delta(stick: Vec2, region: Vec2, scale: f32) -> Vec2 {
+	stick * region * scale
 }
 
 fn bead_flick(
@@ -143,6 +158,18 @@ pub fn tick_flick_beads(
 		if bead.age >= bead.max_age {
 			commands.entity(entity).despawn();
 		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn flick_follows_the_stick_across_a_tenth_of_the_view() {
+		let region = Vec2::new(91.2, 91.2);
+		assert_eq!(flick_delta(Vec2::X, region, 0.1), Vec2::new(9.12, 0.0));
+		assert_eq!(flick_delta(Vec2::Y, region, 0.1), Vec2::new(0.0, 9.12));
 	}
 }
 

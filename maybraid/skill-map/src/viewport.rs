@@ -14,9 +14,13 @@ use crate::tiles::spawn_map_tiles;
 use crate::user::{SkillMapEquip, SkillMapHeld, SkillMapMember, SkillMapSession, SkillMapUser};
 use crate::SkillMapEnabled;
 
-const VIEWPORT_PX: f32 = 228.0;
+pub(crate) const VIEWPORT_PX: f32 = 228.0;
 /// `WindowSize` area is viewport pixels times this. 1.0 showed almost the whole 256 map.
-const MAP_CAMERA_SCALE: f32 = 0.4;
+pub(crate) const MAP_CAMERA_SCALE: f32 = 0.4;
+
+pub(crate) fn map_view_extent() -> Vec2 {
+	Vec2::splat(VIEWPORT_PX * MAP_CAMERA_SCALE)
+}
 const VIEWPORT_GAP: f32 = 12.0;
 const VIEWPORT_INSET: f32 = 16.0;
 const LIVE_BORDER: Color = Color::srgb(1.0, 0.48, 0.08);
