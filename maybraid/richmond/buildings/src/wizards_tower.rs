@@ -40,7 +40,7 @@ use richmond_building_components::floors::FloorNode;
 use richmond_building_components::scene_children;
 use richmond_building_components::stairs::StairNode;
 use richmond_building_components::{
-	append_component_scenes, BuildingComponents, Layers, PartitionNode,
+	append_flattened_component_scenes, BuildingComponents, Layers, PartitionNode,
 };
 
 use crate::portals::{MustAssignPortal, Portal};
@@ -141,7 +141,7 @@ impl WizardsTower {
 
 	fn exterior_primitives(&self, lod_ref: &LodRef) -> impl Scene + 'static {
 		let mut children: Vec<Box<dyn Scene>> = Vec::new();
-		append_component_scenes(self, lod_ref, LodSceneLevel::Medium, &mut children);
+		append_flattened_component_scenes(self, lod_ref, LodSceneLevel::Medium, &mut children);
 		scene_children(children)
 	}
 

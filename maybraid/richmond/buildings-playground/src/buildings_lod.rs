@@ -55,7 +55,10 @@ macro_rules! gimme_host {
 	}};
 }
 
-/// Full modern refresh stack for structural + fine-phase building hosts.
+/// Full refresh stack for structural + leftover fine-phase building hosts.
+///
+/// World `ComponentsOnly` buildings flatten kits under one host. `PanelNode` /
+/// `PartitionNode` / … plugins remain for playgrounds and any nested leftovers.
 pub struct BuildingsLodRefreshPlugin;
 
 impl Plugin for BuildingsLodRefreshPlugin {

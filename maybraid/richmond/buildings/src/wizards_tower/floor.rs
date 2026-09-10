@@ -17,7 +17,7 @@ use richmond_building_components::partitions::PartitionStyle;
 use richmond_building_components::scene_children;
 use richmond_building_components::stairs::{SpiralStair, StairNode};
 use richmond_building_components::{
-	append_component_scenes, confined_scene, BuildingComponents, Layers, ParentConfines,
+	append_flattened_component_scenes, confined_scene, BuildingComponents, Layers, ParentConfines,
 	PartitionNode,
 };
 
@@ -131,7 +131,7 @@ impl WizardsTowerFloor {
 		children: &mut Vec<Box<dyn Scene>>,
 		lod_ref: &LodRef,
 	) {
-		append_component_scenes(self, lod_ref, LodSceneLevel::Medium, children);
+		append_flattened_component_scenes(self, lod_ref, LodSceneLevel::Medium, children);
 	}
 
 	pub(crate) fn emit_internal_features(
@@ -142,11 +142,11 @@ impl WizardsTowerFloor {
 		let confines =
 			ParentConfines::internal(self.storey_confine_center(), self.storey_confine_radius());
 		for node in self.floor_nodes_for_level(LodSceneLevel::High).flatten() {
-			children.push(Box::new(node.scene_with_lod(lod_ref)));
+			children.push(Box::new(node.scene_with_level(lod_ref, LodSceneLevel::High)));
 		}
 		for room in &self.rooms {
 			for node in room.partition_nodes_for_level(LodSceneLevel::High).flatten() {
-				children.push(Box::new(node.scene_with_lod(lod_ref)));
+				children.push(Box::new(node.scene_with_level(lod_ref, LodSceneLevel::High)));
 			}
 		}
 		children.push(Box::new(confined_scene(confines, self.lantern_scene())));
@@ -164,7 +164,7 @@ impl WizardsTowerFloor {
 				.stairs
 				.clone()
 				.with_confines(spire_confines)
-				.scene_with_lod(lod_ref),
+				.scene_with_level(lod_ref, LodSceneLevel::High),
 		));
 	}
 

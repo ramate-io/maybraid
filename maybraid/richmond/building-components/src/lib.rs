@@ -217,8 +217,8 @@ impl<T: BuildingComponents + ?Sized> BuildingComponents for Arc<T> {
 /// Newtype: present a [`BuildingComponents`] value as a structural [`LodScene`] host.
 ///
 /// Prefer this over a custom `LodScene` when the building has no silhouette, lights, or
-/// other non-node extras. Chunk fulfill nests fine-phase domain nodes via
-/// [`LodScene::host`].
+/// other non-node extras. Chunk fulfill drains posed kit *content* (no nested
+/// panel / partition / … hosts), matching flattened vegetation.
 ///
 /// ```ignore
 /// spawn_building_components(commands, &bedroom, transform, bounds);
@@ -325,7 +325,7 @@ impl<T: BuildingComponents + Send + Sync + 'static> LodScene for ComponentsOnly<
 	}
 
 	fn scene_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> impl Scene + 'static {
-		component_only_scene(&self.0, lod_ref, level)
+		flattened_component_scene(&self.0, lod_ref, level)
 	}
 
 	fn scene_chunks_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> SceneChunk {
@@ -341,12 +341,119 @@ impl<T: BuildingComponents + Send + Sync + 'static> LodScene for ComponentsOnly<
 
 	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
 		let level = self.scene_lod_level(lod_ref);
-		// Pending structural host: chunks nest fine-phase domain hosts.
 		lod_host_scene_pending(level, self.scene_bounds())
 	}
 }
 
-/// Weighted chunks for one structural level: each domain node is a nested LOD host.
+/// Drain weight for one posed kit ([`scene_ref::SceneRef`] + later WorldAsset admit).
+///
+/// Same as vegetation: weight 1 treated a GLB instance like an empty transform.
+pub const FLATTENED_KIT_CHUNK_WEIGHT: u32 = 4;
+
+enum FlattenedKit {
+	Panel(PanelNode),
+	Partition(PartitionNode),
+	Floor(FloorNode),
+	Roof(RoofNode),
+	Joint(JointNode),
+	Stair(StairNode),
+	Door(DoorNode),
+	Furniture(FurnitureNode),
+	Label(LabelNode),
+}
+
+impl FlattenedKit {
+	fn scene(&self, lod_ref: &LodRef, level: LodSceneLevel) -> Box<dyn Scene> {
+		match self {
+			Self::Panel(node) => Box::new(node.scene_with_level(lod_ref, level)),
+			Self::Partition(node) => Box::new(node.scene_with_level(lod_ref, level)),
+			Self::Floor(node) => Box::new(node.scene_with_level(lod_ref, level)),
+			Self::Roof(node) => Box::new(node.scene_with_level(lod_ref, level)),
+			Self::Joint(node) => Box::new(node.scene_with_level(lod_ref, level)),
+			Self::Stair(node) => Box::new(node.scene_with_level(lod_ref, level)),
+			Self::Door(node) => Box::new(node.scene_with_level(lod_ref, level)),
+			Self::Furniture(node) => Box::new(node.scene_with_level(lod_ref, level)),
+			Self::Label(node) => Box::new(node.scene_with_level(lod_ref, level)),
+		}
+	}
+}
+
+fn flattened_kits(building: &impl BuildingComponents, level: LodSceneLevel) -> Vec<FlattenedKit> {
+	let mut kits = Vec::new();
+	kits.extend(
+		building
+			.panel_nodes_for_level(level)
+			.flatten()
+			.into_iter()
+			.map(FlattenedKit::Panel),
+	);
+	kits.extend(
+		building
+			.partition_nodes_for_level(level)
+			.flatten()
+			.into_iter()
+			.map(FlattenedKit::Partition),
+	);
+	kits.extend(
+		building
+			.floor_nodes_for_level(level)
+			.flatten()
+			.into_iter()
+			.map(FlattenedKit::Floor),
+	);
+	kits.extend(
+		building
+			.roof_nodes_for_level(level)
+			.flatten()
+			.into_iter()
+			.map(FlattenedKit::Roof),
+	);
+	kits.extend(
+		building
+			.joint_nodes_for_level(level)
+			.flatten()
+			.into_iter()
+			.map(FlattenedKit::Joint),
+	);
+	// Structural Medium is the exterior/readable shell. Interior fixtures are
+	// too small to contribute at this distance and dominate dense developments.
+	if matches!(level, LodSceneLevel::High) {
+		kits.extend(
+			building
+				.stair_nodes_for_level(level)
+				.flatten()
+				.into_iter()
+				.map(FlattenedKit::Stair),
+		);
+		kits.extend(
+			building
+				.door_nodes_for_level(level)
+				.flatten()
+				.into_iter()
+				.map(FlattenedKit::Door),
+		);
+		kits.extend(
+			building
+				.furniture_nodes_for_level(level)
+				.flatten()
+				.into_iter()
+				.map(FlattenedKit::Furniture),
+		);
+		kits.extend(
+			building
+				.label_nodes_for_level(level)
+				.flatten()
+				.into_iter()
+				.map(FlattenedKit::Label),
+		);
+	}
+	kits
+}
+
+/// Weighted chunks for one structural level: posed kits, no nested domain hosts.
+///
+/// Kits are produced lazily so begin does not box every `scene_with_level` up front.
+/// Each kit costs [`FLATTENED_KIT_CHUNK_WEIGHT`].
 pub fn building_scene_chunks(
 	building: &impl BuildingComponents,
 	lod_ref: &LodRef,
@@ -355,83 +462,65 @@ pub fn building_scene_chunks(
 	if is_massing_level(level) && building.structural_lod().is_some() {
 		return SceneChunk::primitive(massing_scene(building, level));
 	}
-	let mut chunks = Vec::new();
-	for node in building.panel_nodes_for_level(level).flatten() {
-		chunks.push(SceneChunk::weighted(1, node.host(lod_ref)));
+	let kits = flattened_kits(building, level);
+	let n = kits.len();
+	if n == 0 {
+		return SceneChunk::primitive(scene_children(Vec::new()));
 	}
-	for node in building.partition_nodes_for_level(level).flatten() {
-		chunks.push(SceneChunk::weighted(1, node.host(lod_ref)));
-	}
-	for node in building.floor_nodes_for_level(level).flatten() {
-		chunks.push(SceneChunk::weighted(1, node.host(lod_ref)));
-	}
-	for node in building.roof_nodes_for_level(level).flatten() {
-		chunks.push(SceneChunk::weighted(1, node.host(lod_ref)));
-	}
-	for node in building.joint_nodes_for_level(level).flatten() {
-		chunks.push(SceneChunk::weighted(1, node.host(lod_ref)));
-	}
-	// Structural Medium is the exterior/readable shell. Interior fixtures are
-	// too small to contribute at this distance and dominate dense developments.
-	if matches!(level, LodSceneLevel::High) {
-		for node in building.stair_nodes_for_level(level).flatten() {
-			chunks.push(SceneChunk::weighted(1, node.host(lod_ref)));
+
+	let prev = *lod_ref.previous_transform;
+	let curr = *lod_ref.current_transform;
+	let bounds = *lod_ref.bounds;
+	let entity = lod_ref.entity;
+	let kit_w = FLATTENED_KIT_CHUNK_WEIGHT;
+	let mut index = 0usize;
+	SceneChunk::lazy(n as u32 * kit_w, n, move || {
+		if index >= kits.len() {
+			return None;
 		}
-		for node in building.door_nodes_for_level(level).flatten() {
-			chunks.push(SceneChunk::weighted(1, node.host(lod_ref)));
-		}
-		for node in building.furniture_nodes_for_level(level).flatten() {
-			chunks.push(SceneChunk::weighted(1, node.host(lod_ref)));
-		}
-		for node in building.label_nodes_for_level(level).flatten() {
-			chunks.push(SceneChunk::weighted(1, node.host(lod_ref)));
-		}
-	}
-	if chunks.is_empty() {
-		SceneChunk::primitive(scene_children(Vec::new()))
-	} else {
-		SceneChunk::chunks(chunks)
-	}
+		let kit_lod =
+			LodRef { entity, previous_transform: &prev, current_transform: &curr, bounds: &bounds };
+		let scene = kits[index].scene(&kit_lod, level);
+		index += 1;
+		Some(SceneChunk::weighted(kit_w, scene))
+	})
 }
 
 /// Append every domain node from `building` at `level` as nested [`LodScene`] hosts.
 ///
 /// Each child is embedded via [`LodScene::host`] (pending host + typed component).
 /// Provenance is flattened away ([`Layers::flatten`]) for presentation today.
+/// Prefer [`append_flattened_component_scenes`] for world / `ComponentsOnly` presentation.
 pub fn append_component_scenes(
 	building: &impl BuildingComponents,
 	lod_ref: &LodRef,
 	level: LodSceneLevel,
 	children: &mut Vec<Box<dyn Scene>>,
 ) {
-	for node in building.panel_nodes_for_level(level).flatten() {
-		children.push(Box::new(node.host(lod_ref)));
-	}
-	for node in building.partition_nodes_for_level(level).flatten() {
-		children.push(Box::new(node.host(lod_ref)));
-	}
-	for node in building.floor_nodes_for_level(level).flatten() {
-		children.push(Box::new(node.host(lod_ref)));
-	}
-	for node in building.roof_nodes_for_level(level).flatten() {
-		children.push(Box::new(node.host(lod_ref)));
-	}
-	for node in building.joint_nodes_for_level(level).flatten() {
-		children.push(Box::new(node.host(lod_ref)));
-	}
-	if matches!(level, LodSceneLevel::High) {
-		for node in building.stair_nodes_for_level(level).flatten() {
-			children.push(Box::new(node.host(lod_ref)));
+	for kit in flattened_kits(building, level) {
+		match kit {
+			FlattenedKit::Panel(node) => children.push(Box::new(node.host(lod_ref))),
+			FlattenedKit::Partition(node) => children.push(Box::new(node.host(lod_ref))),
+			FlattenedKit::Floor(node) => children.push(Box::new(node.host(lod_ref))),
+			FlattenedKit::Roof(node) => children.push(Box::new(node.host(lod_ref))),
+			FlattenedKit::Joint(node) => children.push(Box::new(node.host(lod_ref))),
+			FlattenedKit::Stair(node) => children.push(Box::new(node.host(lod_ref))),
+			FlattenedKit::Door(node) => children.push(Box::new(node.host(lod_ref))),
+			FlattenedKit::Furniture(node) => children.push(Box::new(node.host(lod_ref))),
+			FlattenedKit::Label(node) => children.push(Box::new(node.host(lod_ref))),
 		}
-		for node in building.door_nodes_for_level(level).flatten() {
-			children.push(Box::new(node.host(lod_ref)));
-		}
-		for node in building.furniture_nodes_for_level(level).flatten() {
-			children.push(Box::new(node.host(lod_ref)));
-		}
-		for node in building.label_nodes_for_level(level).flatten() {
-			children.push(Box::new(node.host(lod_ref)));
-		}
+	}
+}
+
+/// Append posed kit *content* (GLB / wireframe scenes), not nested [`LodScene`] hosts.
+pub fn append_flattened_component_scenes(
+	building: &impl BuildingComponents,
+	lod_ref: &LodRef,
+	level: LodSceneLevel,
+	children: &mut Vec<Box<dyn Scene>>,
+) {
+	for kit in flattened_kits(building, level) {
+		children.push(kit.scene(lod_ref, level));
 	}
 }
 
@@ -446,6 +535,20 @@ pub fn component_only_scene(
 	}
 	let mut children: Vec<Box<dyn Scene>> = Vec::new();
 	append_component_scenes(building, lod_ref, level, &mut children);
+	Box::new(scene_children(children)) as Box<dyn Scene>
+}
+
+/// All kit content for `level` as siblings under one parent (no fine-phase hosts).
+pub fn flattened_component_scene(
+	building: &impl BuildingComponents,
+	lod_ref: &LodRef,
+	level: LodSceneLevel,
+) -> impl Scene + 'static {
+	if is_massing_level(level) && building.structural_lod().is_some() {
+		return Box::new(massing_scene(building, level)) as Box<dyn Scene>;
+	}
+	let mut children: Vec<Box<dyn Scene>> = Vec::new();
+	append_flattened_component_scenes(building, lod_ref, level, &mut children);
 	Box::new(scene_children(children)) as Box<dyn Scene>
 }
 
@@ -577,3 +680,61 @@ macro_rules! impl_glb_lod_scene {
 }
 
 pub(crate) use impl_glb_lod_scene;
+
+#[cfg(test)]
+mod flatten_tests {
+	use super::*;
+	use bevy::prelude::{Entity, Transform};
+
+	struct ShellAndFixture {
+		panel: PanelNode,
+		bed: FurnitureNode,
+	}
+
+	impl BuildingComponents for ShellAndFixture {
+		fn panel_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<PanelNode> {
+			Layers::from_free(vec![self.panel.clone()])
+		}
+
+		fn furniture_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<FurnitureNode> {
+			Layers::from_free(vec![self.bed.clone()])
+		}
+	}
+
+	fn sample() -> ShellAndFixture {
+		ShellAndFixture {
+			panel: PanelNode::rough_stone(PanelGeometry::rectangle(), Placement::IDENTITY),
+			bed: FurnitureNode::bed(Placement::IDENTITY),
+		}
+	}
+
+	fn lod_ref<'a>(tf: &'a Transform, bounds: &'a Aabb3d) -> LodRef<'a> {
+		LodRef {
+			entity: Entity::PLACEHOLDER,
+			previous_transform: tf,
+			current_transform: tf,
+			bounds,
+		}
+	}
+
+	#[test]
+	fn high_chunks_are_lazy_kits_weighted_like_vegetation() {
+		let building = sample();
+		let tf = Transform::IDENTITY;
+		let bounds = Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE);
+		let chunks = building_scene_chunks(&building, &lod_ref(&tf, &bounds), LodSceneLevel::High);
+		assert_eq!(chunks.total_primitives(), 2);
+		assert_eq!(chunks.total_weight(), 2 * FLATTENED_KIT_CHUNK_WEIGHT);
+	}
+
+	#[test]
+	fn medium_omits_interior_fixtures() {
+		let building = sample();
+		let tf = Transform::IDENTITY;
+		let bounds = Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE);
+		let chunks =
+			building_scene_chunks(&building, &lod_ref(&tf, &bounds), LodSceneLevel::Medium);
+		assert_eq!(chunks.total_primitives(), 1);
+		assert_eq!(chunks.total_weight(), FLATTENED_KIT_CHUNK_WEIGHT);
+	}
+}

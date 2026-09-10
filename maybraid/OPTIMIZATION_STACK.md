@@ -16,6 +16,7 @@ Related: [#800](https://github.com/ramate-io/maybraid/issues/800),
 | [#803](https://github.com/ramate-io/maybraid/issues/803) | Flattened character visuals | Fewer nested visual hosts on the player |
 | [#802](https://github.com/ramate-io/maybraid/issues/802) | `GimmeLodSceneHostIndex` for refresh / cull | Host cuboids left the Avian broadphase. Produce fill no longer climbs with collider count. |
 | Shared produce fill | One `fill_lod_produce_cache` per host index; snapshots every `LodNode` | Vegetation `With<Camera>` and mob `With<LodViewer>` no longer each walk the index. Tracy should show **one** produce fill. Expected `Update` win ~1–1.5 ms vs the dual-fill captures. |
+| Flatten building kits | `ComponentsOnly` High/Medium posed kits, not nested panel hosts | Urban host/`Mesh3d` count should drop toward the plant flatten. Re-measure produce, visibility, `write_binned`. |
 
 Crate layout after the split: [`lod`](lod/lib/) is the engine-agnostic runtime, [`lod-gimme`](lod/gimme/) owns the host index and refresh/cull plugins, [`lod-avian`](lod/avian/) keeps physics layers. Call sites use `gimme_host!`; unused `avian_host!` wrappers remain.
 
@@ -79,25 +80,9 @@ as an unused Avian Host query path. Refresh plugins do not install them.
 
 ### 3. Flatten High / Medium building kits
 
-[`building_scene_chunks`](richmond/building-components/src/lib.rs) emits
-**each** panel, partition, floor, roof, joint, and (on High) stair / door /
-furniture / label as its own nested [`LodScene`](lod/lib/src/scene/lod_scene.rs)
-host.
+**Status: done in this crate pass.** [`building_scene_chunks`](richmond/building-components/src/lib.rs) drains posed kits (weight 4, lazy) instead of a nested [`LodScene`](lod/lib/src/scene/lod_scene.rs) host per panel / partition / floor / …. Wizard’s Tower emit paths use the same flattened append. Fine-phase `PanelNode` plugins stay registered for leftover nested hosts.
 
-A city block is hundreds of hosts and `Mesh3d`s inside the camera refresh AABB.
-That is why urban is worse than forest High: plants already use
-[`FlattenedComponentsOnly`](chico/vegetation-components/src/lib.rs) (one host,
-posed kits). Buildings still pay the pre-flatten tax.
-
-Mirror vegetation: **one building host**, kit instances (or
-merged-and-**quantized** patches) underneath. Do not merge a unique whole-block
-mesh unless that mesh is also shared.
-
-This is the urban cardinality fix for produce hits, visibility, **and**
-`write_binned_instance_buffers`. That zone scales with **visible `Mesh3d`
-entities**, not triangle count. Quantizing plants (few archetypes, many poses)
-cuts unique meshes; it does not cut instance-buffer writes. Folding many kit
-entities into fewer meshes does.
+Re-measure with Tracy: urban produce hits, visibility, and `write_binned` should drop with host/`Mesh3d` count. Low / UltraLow massing is unchanged.
 
 ### 4. Broader fewer-host work
 
