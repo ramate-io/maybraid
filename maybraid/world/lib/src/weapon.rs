@@ -8,6 +8,7 @@ use chico_vegetation_on_terrain_playground::{
 use crozon_character_items::{CharacterSheet, Inventory, InventoryItem};
 use crozon_characters::{CharacterAppearance, CharacterRoot};
 use crozon_inventory_user::{spawn_bag, InventoryUser};
+use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
 use damage::Health;
 use firearm_user::{
 	live_weapon_from_stats, spawn_held_firearm, spawn_held_kit, spawn_reticle, FirearmUser,
@@ -144,15 +145,56 @@ fn arm_world_player(
 				.spawn(RequestSetCharacterAppearance { appearance: loadout.appearance.clone() });
 		}
 		commands.entity(player).remove::<WorldPlayerAppearanceRequested>();
-		if let Some(InventoryItem::Firearm { spec, stats }) = loadout.inventory.primary_weapon() {
-			let live = live_weapon_from_stats(*stats, sheet.damage).with_weapon_identity(spec);
-			spawn_held_kit(
-				&mut commands,
-				player,
-				FirearmUserSettings::default(),
-				GeneratedFirearm::from_spec(*spec),
-				live,
-			);
+		hold_primary_weapon(&mut commands, player, &loadout.inventory);
+	}
+}
+
+fn hold_primary_weapon(commands: &mut Commands, player: Entity, inventory: &Inventory) {
+	let Some(InventoryItem::Firearm { spec, stats }) = inventory.primary_weapon() else {
+		return;
+	};
+	let sheet = inventory.character_sheet();
+	let live = live_weapon_from_stats(*stats, sheet.damage).with_weapon_identity(spec);
+	spawn_held_kit(
+		commands,
+		player,
+		FirearmUserSettings::default(),
+		GeneratedFirearm::from_spec(*spec),
+		live,
+	);
+}
+
+/// Y cycles the queued guns and puts the new primary in hand.
+fn swap_active_weapon(
+	mut intents: MessageReader<CharacterIntent>,
+	gameplay: Res<WorldGameplayEnabled>,
+	mut commands: Commands,
+	mut loadout: Option<ResMut<WorldPlayerLoadout>>,
+	assets: Option<Res<AssetServer>>,
+	players: Query<(Entity, &InventoryUser, Option<&FirearmUser>), With<VegetationPlayer>>,
+	mut bags: Query<&mut Inventory>,
+) {
+	if !gameplay.0 || !intents.read().any(|intent| matches!(intent, CharacterIntent::SwapActive)) {
+		return;
+	}
+	for (player, user, firearm) in &players {
+		let Ok(mut bag) = bags.get_mut(user.bag) else {
+			continue;
+		};
+		if !bag.swap_active() {
+			continue;
+		}
+		let snapshot = bag.clone();
+		if let Some(firearm) = firearm {
+			commands.entity(firearm.held).try_despawn();
+			commands.entity(player).remove::<(FirearmUser, PlayerUse)>();
+		}
+		if let Some(loadout) = loadout.as_deref_mut() {
+			loadout.retarget_inventory(snapshot.clone());
+			commands.entity(player).insert(AppliedWorldPlayerLoadout(loadout.clone()));
+		}
+		if assets.is_some() {
+			hold_primary_weapon(&mut commands, player, &snapshot);
 		}
 	}
 }
@@ -166,8 +208,15 @@ fn spawn_world_reticle(
 }
 
 pub(crate) fn configure(app: &mut App) {
-	app.add_systems(Startup, spawn_world_reticle)
-		.add_systems(Update, arm_world_player);
+	app.add_systems(Startup, spawn_world_reticle).add_systems(
+		Update,
+		(
+			arm_world_player,
+			swap_active_weapon
+				.after(CharacterControlSystems)
+				.run_if(resource_equals(WorldGameplayEnabled(true))),
+		),
+	);
 }
 
 #[cfg(test)]
@@ -229,6 +278,62 @@ mod tests {
 
 		assert_eq!(world.query::<&RequestSetCharacterAppearance>().iter(&world).count(), 0);
 		assert!(world.get::<WorldPlayerAppearanceRequested>(player).is_none());
+		Ok(())
+	}
+
+	#[test]
+	fn y_swaps_the_queued_primary() -> anyhow::Result<()> {
+		use crozon_inventory_user::InventoryUser;
+		use firearm_user::FirearmUser;
+		use maybraid_character_controller::CharacterIntent;
+
+		use crate::weapon::swap_active_weapon;
+
+		let inventory = Inventory {
+			items: vec![
+				InventoryItem::firearm(FirearmMesh::Bullpup),
+				InventoryItem::firearm(FirearmMesh::Reltor),
+			],
+			clothing: Vec::new(),
+			weapons: vec![0, 1],
+		};
+		let mut world = World::new();
+		world.init_resource::<Messages<CharacterIntent>>();
+		world.insert_resource(WorldGameplayEnabled(true));
+		world.insert_resource(WorldPlayerLoadout::new(
+			"active",
+			CharacterAppearance::default(),
+			inventory.clone(),
+		));
+		let bag = world.spawn(inventory).id();
+		let held = world.spawn_empty().id();
+		world.spawn((
+			VegetationPlayer,
+			InventoryUser::carrying(bag),
+			FirearmUser::holding(held),
+		));
+		world
+			.run_system_once(|mut writer: MessageWriter<CharacterIntent>| {
+				writer.write(CharacterIntent::SwapActive);
+			})
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		world
+			.run_system_once(swap_active_weapon)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+
+		let bag = world.get::<Inventory>(bag).ok_or_else(|| anyhow::anyhow!("bag"))?;
+		assert_eq!(
+			bag.primary_weapon().and_then(InventoryItem::firearm_mesh),
+			Some(FirearmMesh::Reltor)
+		);
+		assert!(!world.entities().contains(held));
+		let loadout = world
+			.get_resource::<WorldPlayerLoadout>()
+			.ok_or_else(|| anyhow::anyhow!("loadout"))?;
+		assert_eq!(
+			loadout.inventory.primary_weapon().and_then(InventoryItem::firearm_mesh),
+			Some(FirearmMesh::Reltor)
+		);
 		Ok(())
 	}
 }

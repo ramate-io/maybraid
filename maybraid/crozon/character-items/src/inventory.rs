@@ -258,6 +258,18 @@ impl Inventory {
 		self.weapons.first().and_then(|&index| self.items.get(index))
 	}
 
+	/// Rotate the switch queue so the next gun becomes primary.
+	///
+	/// No-op when fewer than two weapons are queued. Returns whether the
+	/// primary changed.
+	pub fn swap_active(&mut self) -> bool {
+		if self.weapons.len() < 2 {
+			return false;
+		}
+		self.weapons.rotate_left(1);
+		true
+	}
+
 	/// Wear / queue or remove `index` in its slot. At capacity, selecting a
 	/// new item is a no-op. Returns whether the slot changed.
 	pub fn toggle(&mut self, index: usize) -> bool {
@@ -512,6 +524,27 @@ mod tests {
 		assert!(inventory.toggle_worn(0));
 		assert_eq!(inventory.clothing.len(), WORN_CLOTHING_LIMIT - 1);
 		assert!(inventory.toggle_worn(WORN_CLOTHING_LIMIT));
+	}
+
+	#[test]
+	fn swap_active_rotates_the_weapon_queue() {
+		let items = vec![
+			InventoryItem::firearm(FirearmMesh::Bullpup),
+			InventoryItem::firearm(FirearmMesh::Reltor),
+			InventoryItem::firearm(FirearmMesh::Snailer),
+		];
+		let mut inventory = Inventory { items, clothing: Vec::new(), weapons: vec![0, 1, 2] };
+		assert!(inventory.swap_active());
+		assert_eq!(inventory.weapons, vec![1, 2, 0]);
+		assert_eq!(
+			inventory.primary_weapon().and_then(InventoryItem::firearm_mesh),
+			Some(FirearmMesh::Reltor)
+		);
+		assert!(inventory.swap_active());
+		assert_eq!(inventory.weapons, vec![2, 0, 1]);
+		let mut one = Inventory { weapons: vec![0], ..inventory.clone() };
+		assert!(!one.swap_active());
+		assert!(!Inventory::default().swap_active());
 	}
 
 	#[test]
