@@ -15,10 +15,11 @@
 
 use std::time::{Duration, Instant};
 
+use bevy::ecs::entity_disabling::Disabled;
 use bevy::prelude::*;
 use bevy::scene::prelude::WorldSceneExt;
 
-use crate::scene::host::{lod_root_is_shown, LodLevelRoot, LodSceneHost};
+use crate::scene::host::{lod_world_entity_is_shown, LodLevelRoot, LodSceneHost};
 use crate::scene::level::LodSceneLevel;
 
 use super::schedule::{class_order, for_each_rr, split_presence_desired_active, LevelBand};
@@ -124,7 +125,7 @@ pub fn drain_chunk_lod_fulfill(world: &mut World) {
 		let Some(desired) = world.get::<LodSceneLevel>(snap.host).copied() else {
 			continue;
 		};
-		let shown = world.get::<Visibility>(snap.entity).is_some_and(|v| lod_root_is_shown(*v));
+		let shown = lod_world_entity_is_shown(world, snap.entity);
 		let class = if snap.cold {
 			if snap.self_level != desired {
 				continue;
@@ -184,6 +185,7 @@ fn collect_job_snapshots(world: &mut World) -> Vec<JobSnapshot> {
 	let mut jobs = world.query_filtered::<(Entity, &LodLevelRoot, &LodChunkFulfillment), (
 		With<LodLevelRootPending>,
 		Without<LodCullInFlight>,
+		Allow<Disabled>,
 	)>();
 	jobs.iter(world)
 		.map(|(entity, root, job)| JobSnapshot {

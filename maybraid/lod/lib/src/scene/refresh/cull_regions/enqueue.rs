@@ -2,6 +2,7 @@
 
 use std::marker::PhantomData;
 
+use bevy::ecs::entity_disabling::Disabled;
 use bevy::ecs::query::QueryFilter;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
@@ -9,8 +10,8 @@ use bevy::prelude::*;
 use crate::lod_ref::lod_refs_from_snapshots;
 use crate::scene::cull::LodSceneCulls;
 use crate::scene::host::{
-	lod_level_roots_entity, lod_scene_host_or_ancestor_hidden, LodLevelRoot, LodLevelRoots,
-	LodSceneHost,
+	hide_lod_tree_world, lod_level_roots_entity, lod_scene_host_or_ancestor_hidden,
+	lod_scene_host_or_ancestor_hidden_world, LodLevelRoot, LodLevelRoots, LodSceneHost,
 };
 use crate::scene::level::LodSceneLevel;
 use crate::scene::region_index::LodSceneHostIndex;
@@ -36,14 +37,15 @@ pub fn produce_lod_cull_for_region<T>(
 	mut cull_writer: MessageWriter<LodCullRequest>,
 	cache: Res<LodCullProduceCache>,
 	hosts: Query<&T, (With<LodSceneHost>, With<LodNestedRefreshAllowed>)>,
-	all_hosts: Query<(), With<LodSceneHost>>,
+	all_hosts: Query<(), (With<LodSceneHost>, Allow<Disabled>)>,
 	mut host_levels: Query<&mut LodSceneLevel, With<LodSceneHost>>,
-	host_children_q: Query<&Children, With<LodSceneHost>>,
-	level_roots_heads: Query<&Children, With<LodLevelRoots>>,
-	root_keys: Query<&LodLevelRoot>,
-	wants_cull: Query<(), With<LodCullInFlight>>,
-	child_of: Query<&ChildOf>,
-	visibilities: Query<&Visibility>,
+	host_children_q: Query<&Children, (With<LodSceneHost>, Allow<Disabled>)>,
+	level_roots_heads: Query<&Children, (With<LodLevelRoots>, Allow<Disabled>)>,
+	root_keys: Query<&LodLevelRoot, Allow<Disabled>>,
+	wants_cull: Query<(), (With<LodCullInFlight>, Allow<Disabled>)>,
+	pending: Query<(), (With<crate::LodLevelRootPending>, Allow<Disabled>)>,
+	child_of: Query<&ChildOf, Allow<Disabled>>,
+	visibilities: Query<(&Visibility, Has<Disabled>), Allow<Disabled>>,
 ) where
 	T: Component + SemanticLodScene + 'static,
 {
@@ -105,7 +107,7 @@ pub fn produce_lod_cull_for_region<T>(
 					continue;
 				}
 				if culls.should_cull(root.0) {
-					enqueue_lod_cull(&mut commands, &mut cull_writer, child, &wants_cull);
+					enqueue_lod_cull(&mut commands, &mut cull_writer, child, &wants_cull, &pending);
 				}
 			}
 		}
@@ -170,28 +172,21 @@ pub fn produce_lod_cull_for_region_erased(world: &mut World) {
 				{
 					continue;
 				}
-				world
-					.entity_mut(root_entity)
-					.insert((LodCullInFlight { started: false }, Visibility::Hidden));
+				let is_pending = world.get::<crate::LodLevelRootPending>(root_entity).is_some();
+				{
+					let mut entity = world.entity_mut(root_entity);
+					entity.insert(LodCullInFlight { started: false });
+					if is_pending {
+						entity.insert(Visibility::Hidden);
+						entity.remove_recursive::<Children, Disabled>();
+					} else {
+						hide_lod_tree_world(&mut entity);
+					}
+				}
 				world.write_message(LodCullRequest { entity: root_entity });
 			}
 		}
 	});
-}
-
-fn lod_scene_host_or_ancestor_hidden_world(world: &World, entity: Entity) -> bool {
-	let mut current = Some(entity);
-	while let Some(entity) = current {
-		if world.get::<LodSceneHost>(entity).is_some()
-			&& world
-				.get::<Visibility>(entity)
-				.is_some_and(|visibility| matches!(*visibility, Visibility::Hidden))
-		{
-			return true;
-		}
-		current = world.get::<ChildOf>(entity).map(|child| child.parent());
-	}
-	false
 }
 
 /// Register `T` for the shared erased enqueue from [`LodCullProduceCache`].

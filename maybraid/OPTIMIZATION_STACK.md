@@ -20,6 +20,7 @@ Related: [#800](https://github.com/ramate-io/maybraid/issues/800),
 | Shared cull fill | One `fill_lod_cull_produce_cache` per host index; snapshots every `LodNode` | Same dual-`F` footgun as produce. After sharing, gameplay cull fill is **0.65 ms** (`more_rough_gameplay.csv`). |
 | Stairs / doors on Medium | Circulation is High **and** Medium; furniture / labels stay High-only | Nested stair hosts used to keep their own band; flatten dropped the whole shell to Medium and hid stairs. |
 | Unmerge shared wall kits | Stop baking city walls into [`MultiSceneMerge`](scene-ref/src/multi_merge.rs); leave posed [`SceneRef`](scene-ref/src/scene_ref.rs)s | Shared wall GLBs already instanced. Baking per-building layouts made unique meshes × 1 instance. `write_binned` / `visibility_propagate` got worse (`more_rough_gameplay.csv`). |
+| Disable off-band LOD trees | Ready off-band / cull / present-hide trees get recursive [`Disabled`](https://docs.rs/bevy/latest/bevy/ecs/entity_disabling/struct.Disabled.html), not only [`Visibility::Hidden`](https://docs.rs/bevy/latest/bevy/render/view/enum.Visibility.html). Pending fulfill stays Hidden-only. Vis sync writes only on change. | Hidden warm roots still walked `visibility_propagate` / extract. `Disabled` drops them from default queries. Last ~20s window (`last_30.csv`) had `visibility_propagate` **~3.3 ms**. |
 
 Crate layout after the split: [`lod`](lod/lib/) is the engine-agnostic runtime, [`lod-gimme`](lod/gimme/) owns the host index and refresh/cull plugins, [`lod-avian`](lod/avian/) keeps physics layers. Call sites use `gimme_host!`; unused `avian_host!` wrappers remain.
 
@@ -117,20 +118,37 @@ not “all stone rectangles on this tower.”
 Re-measure after unmerge: `write_binned` Opaque3d, `visibility_propagate`. Cull
 fill should stay ~0.65 ms. Stairs should remain visible at Medium.
 
-### 6. Broader fewer-host work (next after recapture)
+### 6. Disable off-band LOD trees (this crate pass)
 
-`visibility_propagate` / `write_binned` now scale with visible `Mesh3d`
-**entities that still share mesh handles**. Flatten + instance is the right
-building grain. Next campaign is leftover vegetation cardinality:
+**Status: implemented in this crate pass.** Recapture `visibility_propagate`.
 
-- Nested [`FoliageNode`](chico/vegetation-components/src/foliage/node.rs) /
-  [`StickNode`](chico/vegetation-components/src/sticks/node.rs) hosts — same
-  flatten as buildings: posed kits under the grove/plant host, not a host per
-  frond.
-- Grove vs plant: `chico_grove_host_spawn` still presents many grove tile hosts;
-  collapsing toward plant flatten / fewer Hidden warm roots that still refresh.
-- Hidden warm roots that remain in the visibility walk / host index even when
-  culled.
+Woody plants are already flattened posed kits under one plant host
+([`nest_flattened_plant_chunk`](chico/groves/src/grove/vc_compose.rs)) — not a
+host per frond / stick. Binning those hosts into quadrants is a different lever
+and is **not** this step.
+
+The last-window vis cost is the **cardinality of plant/grove trees still in
+Bevy’s visibility walk**, including Hidden warm roots. Rewriting `Hidden` every
+frame also dirtied `Changed<Visibility>` and re-walked those subtrees.
+
+Ready off-band, cull-inflight, and present-hide trees now stamp recursive
+`Disabled` (Bevy does not cascade `Disabled` to children unless asked). Pending
+fulfill roots stay Hidden-only so streamed children still enter
+`visibility_propagate`. Produce fill and Gimme `reindex_moved_hosts` do **not**
+use `Allow<Disabled>` — Disabled nested hosts drop out of those queries.
+
+Do **not** unique-merge city walls. Do **not** widen High vegetation bands to
+cut vis (more entities on-screen). Development-pad `exclusion_zones` still
+help urban look; they do not replace this experiment.
+
+### 7. After recapture
+
+If `visibility_propagate` is still the late-window floor:
+
+- Grove **tile** host count (`chico_grove_host_spawn`) vs plant flatten already
+  done.
+- Near-field present cull / fewer warm holds, not extra concentric bullseyes
+  (level produce is already cell-gated).
 
 Do **not** unique-merge city walls further.
 
@@ -163,5 +181,6 @@ Prefer Tracy over hitch loggers.
 1. `tracy-capture` a several-minute flight that includes urban.
 2. Whole-capture CSV for maxes / load-in.
 3. A late-window export (as `rough_frames.csv`) for the steady budget.
-4. Compare `Update`, produce fill (**one** zone), cull fill (**one** zone), `write_binned` Opaque3d, and
-   `reindex_moved_hosts`.
+4. Compare `Update`, produce fill (**one** zone), cull fill (**one** zone), `write_binned` Opaque3d,
+   `visibility_propagate`, and `reindex_moved_hosts`. A late gameplay slice
+   (~20s, `last_30.csv`) is the better read than whole-capture means.

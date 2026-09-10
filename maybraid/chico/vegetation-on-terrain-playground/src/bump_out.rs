@@ -29,8 +29,8 @@ use lod::gen::{
 use lod::lod_ref::LodRef;
 use lod::presentation::{LodPresentKeepRegion, LodPresentQueue, LodPresentRegion, RegionPresenter};
 use lod::{
-	LodGeneratePlugin, LodGenerateRegionPlugin, LodGenerateSystems, LodPresentCullPlugin,
-	LodPresentPlugin, LodPresentRegionPlugin, LodPresentSystems, LodViewer,
+	hide_lod_tree, LodGeneratePlugin, LodGenerateRegionPlugin, LodGenerateSystems,
+	LodPresentCullPlugin, LodPresentPlugin, LodPresentRegionPlugin, LodPresentSystems, LodViewer,
 };
 use lod_cascade::Chunk;
 use procedural_common::NoiseParams;
@@ -92,7 +92,7 @@ impl<M: Send + Sync + 'static> BumpOutPresenterState<M> {
 	pub fn hide(&mut self, commands: &mut Commands, id: Id) {
 		if let Some(entry) = self.presented.get_mut(&id) {
 			entry.hidden = true;
-			commands.entity(entry.entity).insert(Visibility::Hidden);
+			hide_lod_tree(commands, entry.entity);
 		}
 	}
 
