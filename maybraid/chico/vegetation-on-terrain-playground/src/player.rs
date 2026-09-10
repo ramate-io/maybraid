@@ -87,6 +87,11 @@ pub struct PlayerRespawn {
 	queued_at: Option<f32>,
 }
 
+/// Optional Discovery / playground spawn on XZ (metres). `None` uses the
+/// terrain layout center.
+#[derive(Resource, Clone, Copy, Debug, Default, PartialEq)]
+pub struct PlayerSpawnXz(pub Option<Vec2>);
+
 /// Whether the player rigid body may participate in physics.
 ///
 /// Playgrounds default this on. The game shell keeps it off until Discovery
@@ -178,6 +183,7 @@ impl Plugin for PlayerPlugin {
 			.init_resource::<CharacterLocomotion>()
 			.init_resource::<PlayerRespawn>()
 			.init_resource::<PlayerPhysicsEnabled>()
+			.init_resource::<PlayerSpawnXz>()
 			.add_message::<MovementAction>()
 			.add_systems(Startup, spawn_player)
 			.add_systems(
@@ -203,11 +209,12 @@ fn spawn_player(
 	layout: Res<TerrainCellLayout>,
 	base: Res<WorldBaseTerrain>,
 	locomotion: Res<CharacterLocomotion>,
+	spawn_xz: Res<PlayerSpawnXz>,
 ) {
 	// Startup: composed cells are not in the store yet. Hold above base noise
 	// so the capsule / follow-cam are not born under jersey plateaus.
-	let center = layout.region_center_xz();
-	let spawn = player_spawn_point(&layout, holding_elevation(&base.0, center.x, center.z));
+	let xz = spawn_xz.0.unwrap_or(layout.region_center_xz().xz());
+	let spawn = player_spawn_point_at(xz, holding_elevation(&base.0, xz.x, xz.y));
 	let player =
 		spawn_player_body(&mut commands, &mut meshes, &mut materials, locomotion.as_ref(), spawn);
 	commands.entity(player).insert(AwaitingTerrainSurface);
@@ -278,9 +285,12 @@ pub fn holding_elevation(base: &BaseTerrainNoise, x: f32, z: f32) -> f32 {
 	base.height_at(x, z) + base.height_scale * HOLD_ABOVE_BASE_FACTOR
 }
 
+pub fn player_spawn_point_at(xz: Vec2, elevation: f32) -> Vec3 {
+	player_position_above_surface(Vec3::new(xz.x, elevation, xz.y))
+}
+
 pub fn player_spawn_point(layout: &TerrainCellLayout, elevation: f32) -> Vec3 {
-	let center = layout.region_center_xz();
-	player_position_above_surface(Vec3::new(center.x, elevation, center.z))
+	player_spawn_point_at(layout.region_center_xz().xz(), elevation)
 }
 
 pub(crate) fn snap_player_to_composed_surface(
@@ -302,14 +312,14 @@ pub(crate) fn snap_player_to_composed_surface(
 		return;
 	}
 
-	let center = layout.region_center_xz();
-	let Some(elevation) = store.composed_height_at(&layout, center.x, center.z) else {
+	let xz = transform.translation.xz();
+	let Some(elevation) = store.composed_height_at(&layout, xz.x, xz.y) else {
 		gravity.0 = 0.0;
 		**velocity = Vec3::ZERO;
 		return;
 	};
 
-	let target = player_spawn_point(&layout, elevation);
+	let target = player_spawn_point_at(xz, elevation);
 	if awaiting.single().is_ok() {
 		transform.translation = target;
 		**velocity = Vec3::ZERO;
@@ -383,11 +393,11 @@ fn respawn_fallen_player(
 		respawn.queued_at = None;
 		return;
 	};
-	let center = layout.region_center_xz();
+	let xz = transform.translation.xz();
 	let elevation = store
-		.composed_height_at(&layout, center.x, center.z)
-		.unwrap_or_else(|| holding_elevation(&base.0, center.x, center.z));
-	transform.translation = player_spawn_point(&layout, elevation);
+		.composed_height_at(&layout, xz.x, xz.y)
+		.unwrap_or_else(|| holding_elevation(&base.0, xz.x, xz.y));
+	transform.translation = player_spawn_point_at(xz, elevation);
 	**velocity = Vec3::ZERO;
 	respawn.queued_at = None;
 }

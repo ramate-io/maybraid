@@ -19,6 +19,7 @@ combat-hud = { workspace = true }
 crozon-character-items = { workspace = true }
 crozon-character-ragdoll = { workspace = true }
 crozon-characters = { workspace = true }
+crozon-character-persist = { workspace = true }
 crozon-inventory-user = { workspace = true }
 damage = { workspace = true }
 durham-terrain-models = { workspace = true }
@@ -55,6 +56,8 @@ richmond-development-models = { workspace = true }
 richmond-developments-on-terrain-playground = { workspace = true }
 richmond-urbanization = { workspace = true }
 routing-intelligence = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
 spotting-intelligence = { workspace = true }
 tether-intelligence = { workspace = true }
 threat-intelligence = { workspace = true }
@@ -63,6 +66,7 @@ threat-management-intelligence = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
+tempfile = { workspace = true }
 
 [lints]
 workspace = true

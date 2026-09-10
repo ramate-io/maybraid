@@ -1,4 +1,4 @@
-//! Vegetation LOD refresh: bullseye + spotlight → Avian index → levels → chunk sync.
+//! Vegetation LOD refresh: bullseye + spotlight → Gimme host index → levels → chunk sync.
 //!
 //! Fine-phase domain hosts ([`FoliageNode`], [`StickNode`]) stay registered for
 //! any leftover nested kit nodes. Isolated plants and woody grove children share one
@@ -75,9 +75,9 @@ macro_rules! flattened_plant_host {
 /// Full modern refresh stack for structural + fine-phase vegetation hosts.
 ///
 /// 1. Camera → [`Bullseye`] / [`Spotlight`] region messages
-/// 2. [`PatchSceneBounds`](lod::PatchSceneBounds) stamps host Avian volumes from
+/// 2. [`PatchSceneBounds`](lod::PatchSceneBounds) stamps host bounds from
 ///    [`LodScene::scene_bounds`](lod::LodScene::scene_bounds)
-/// 3. Avian region index → level messages for structural and child component hosts
+/// 3. Gimme region index → level messages for structural and child component hosts
 /// 4. Entity refresh (max fold) + chunk sync
 /// 5. [`OpenLattice`] cull regions → Avian index → budgeted root teardown
 pub struct VegetationLodRefreshPlugin;

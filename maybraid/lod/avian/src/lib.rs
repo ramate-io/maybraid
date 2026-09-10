@@ -1,15 +1,13 @@
-//! Avian-backed region indexes for LOD generate / present / scene refresh.
+//! Avian-backed region indexes for LOD generate / present, plus Gimme scene-host lookup.
 //!
-//! Query volumes are stamped by layer-specific marshallers
-//! ([`AvianLodGenerateBoundsMarshaller`], [`AvianLodPresentBoundsMarshaller`],
-//! [`AvianLodSceneBoundsMarshaller`]) so each spatial query can mask to one
-//! [`PhysicsInteractionLayer`]. Hosts must still carry an Avian [`Collider`]
-//! on the **host** entity (no `RigidBody` required — query-only).
+//! Generate and present volumes stay on Avian query layers
+//! ([`AvianLodGenerateBoundsMarshaller`], [`AvianLodPresentBoundsMarshaller`]).
+//! Scene-host refresh and cull use [`lod::GimmeLodSceneHostIndex`] so Host colliders
+//! are not part of the physics broadphase.
 //!
-//! Scene hosts use [`PhysicsInteractionLayer::Host`]. Generated and presented
-//! volumes use [`PhysicsInteractionLayer::Generate`] and
-//! [`PhysicsInteractionLayer::Present`]. All three are query-only and do not
-//! enter narrowphase against terrain / buildings ([`layers`]).
+//! Generated and presented volumes use [`PhysicsInteractionLayer::Generate`] and
+//! [`PhysicsInteractionLayer::Present`]. Those are query-only and do not enter
+//! narrowphase against terrain / buildings ([`layers`]).
 
 mod layers;
 
@@ -24,8 +22,8 @@ use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use lod::gen::SemanticLodScene;
 use lod::{
-	LodSceneHost, LodSceneHostIndex, LodSceneRefreshPlugin, LodSceneRegionIndex, LodViewer,
-	PatchSceneBounds,
+	GimmeLodHostMarshaller, GimmeLodHostPlugin, GimmeLodSceneHostIndex, LodSceneHost,
+	LodSceneHostIndex, LodSceneRefreshPlugin, LodSceneRegionIndex, LodViewer, PatchSceneBounds,
 };
 
 /// [`LodSceneBoundsMarshaller`] for generated-id volumes ([`PhysicsInteractionLayer::Generate`]).
@@ -118,13 +116,16 @@ impl<T: Component + SemanticLodScene + 'static> LodSceneRegionIndex<T>
 	}
 }
 
-fn ensure_avian_host_bounds<T: Component + SemanticLodScene + 'static>(app: &mut App) {
-	if !app.is_plugin_added::<PatchSceneBounds<T, AvianLodSceneBoundsMarshaller>>() {
-		app.add_plugins(PatchSceneBounds::<T, AvianLodSceneBoundsMarshaller>::default());
+fn ensure_gimme_host_index<T: Component + SemanticLodScene + 'static>(app: &mut App) {
+	if !app.is_plugin_added::<GimmeLodHostPlugin>() {
+		app.add_plugins(GimmeLodHostPlugin);
+	}
+	if !app.is_plugin_added::<PatchSceneBounds<T, GimmeLodHostMarshaller>>() {
+		app.add_plugins(PatchSceneBounds::<T, GimmeLodHostMarshaller>::default());
 	}
 }
 
-/// [`LodSceneRefreshPlugin`] with [`AvianLodSceneHostIndex`] + host volume patch.
+/// [`LodSceneRefreshPlugin`] with [`GimmeLodSceneHostIndex`].
 ///
 /// Fill is once per (`I`, `F`); emit is once per `T`. Channel `M` is accepted so
 /// existing dual bullseye/spotlight plugin adds stay valid.
@@ -170,23 +171,23 @@ where
 	F: QueryFilter + 'static,
 {
 	fn build(&self, app: &mut App) {
-		ensure_avian_host_bounds::<T>(app);
+		ensure_gimme_host_index::<T>(app);
 		if self.full_scan_cull {
 			app.add_plugins(
-				LodSceneRefreshPlugin::<T, M, AvianLodSceneHostIndex<'_, '_>, F>::default(),
+				LodSceneRefreshPlugin::<T, M, GimmeLodSceneHostIndex<'_>, F>::default(),
 			);
 		} else {
 			app.add_plugins(LodSceneRefreshPlugin::<
 				T,
 				M,
-				AvianLodSceneHostIndex<'_, '_>,
+				GimmeLodSceneHostIndex<'_>,
 				F,
 			>::without_full_scan_cull());
 		}
 	}
 }
 
-/// Region-scoped cull enqueue for host `T` on cull channel `M` (Avian index).
+/// Region-scoped cull enqueue for host `T` on cull channel `M` (Gimme index).
 pub struct AvianLodSceneCullPlugin<T, M, F = With<LodViewer>>
 where
 	T: Component + SemanticLodScene + 'static,
@@ -214,9 +215,9 @@ where
 	F: QueryFilter + 'static,
 {
 	fn build(&self, app: &mut App) {
-		ensure_avian_host_bounds::<T>(app);
+		ensure_gimme_host_index::<T>(app);
 		app.add_plugins(
-			lod::LodSceneRegionCullPlugin::<AvianLodSceneHostIndex<'_, '_>, M, T, F>::default(),
+			lod::LodSceneRegionCullPlugin::<GimmeLodSceneHostIndex<'_>, M, T, F>::default(),
 		);
 	}
 }

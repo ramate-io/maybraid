@@ -12,6 +12,7 @@ pub mod bounds_patch;
 pub mod chunk;
 pub mod chunk_fulfill;
 pub mod cull;
+pub mod gimme;
 pub mod host;
 pub mod level;
 pub mod lod_scene;
@@ -39,6 +40,10 @@ pub use cull::{
 	closest_available_lod_level, cull_bands_with_adjacent_depth, cull_named_from_factor,
 	cull_non_adjacent_bands, cull_offset_bands, cull_offset_bands_from_factor, named_band_index,
 	named_band_progress, LodSceneCull, LodSceneCulls, NAMED_BANDS_NEAR_TO_FAR, OFFSET_BAND_DEPTH,
+};
+pub use gimme::{
+	GimmeLodHostIndex, GimmeLodHostMarshaller, GimmeLodHostPlugin, GimmeLodHostVolume,
+	GimmeLodSceneHostIndex,
 };
 pub use host::{
 	host_shows_level_root, lod_host_scene, lod_host_scene_pending, lod_level_roots_entity,

@@ -38,7 +38,8 @@ pub use material_lib::{VegetationOnTerrainMaterialLib, VegetationOnTerrainMateri
 pub use player::{
 	player_position_above_surface, spawn_player_body, CharacterCameraFollowEnabled,
 	CharacterLocomotion, Jumping, MoveWish, MovementAction, PadMovementEnabled, Player,
-	PlayerCapsule, PlayerControlSystems, PlayerPhysicsEnabled, PlayerPlugin, PlaygroundMode,
+	PlayerCapsule, PlayerControlSystems, PlayerPhysicsEnabled, PlayerPlugin, PlayerSpawnXz,
+	PlaygroundMode,
 };
 
 use avian3d::prelude::LinearVelocity;

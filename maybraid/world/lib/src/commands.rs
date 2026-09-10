@@ -20,7 +20,7 @@ pub type Script = CommandScript<PlaygroundCommand>;
 #[command(
 	name = "maybraid-world",
 	version,
-	about = "World model: Durham terrain, streamed forest, sky dome, character",
+	about = "World model: Durham terrain, streamed forest, sky dome, character. --start-at X,Z (or MAYBRAID_START_AT) places the player on that XZ.",
 	rename_all = "kebab-case",
 	disable_help_subcommand = true
 )]
@@ -65,6 +65,12 @@ impl PlaygroundCommand {
 
 	pub fn parse_startup_command() -> Result<Option<Self>, String> {
 		<Self as GameCommand>::parse_startup_command()
+	}
+
+	pub fn parse_startup_from_argv_tail(
+		tail: Vec<std::ffi::OsString>,
+	) -> Result<Option<Self>, String> {
+		<Self as GameCommand>::parse_startup_from_argv_tail(tail)
 	}
 
 	pub fn react(self, commands: &mut Commands, console: &mut String) {

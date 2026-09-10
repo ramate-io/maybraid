@@ -14,12 +14,14 @@ mod material_lib;
 mod mobs;
 mod pitch;
 mod player_lifecycle;
+mod player_position;
 mod poi;
+mod start;
 mod ui;
 mod vsync;
 mod weapon;
 
-pub use chico_vegetation_on_terrain_playground::PlayerPhysicsEnabled;
+pub use chico_vegetation_on_terrain_playground::{PlayerPhysicsEnabled, PlayerSpawnXz};
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use control::{WorldGameplayEnabled, WorldSceneryVisible, WorldSurfaceReady};
 pub use durham_terrain_models::{terrain_streaming_enabled, TerrainStreamingEnabled};
@@ -29,7 +31,12 @@ pub use material_lib::{WorldMaterialLib, WorldMaterialRefPlugin};
 pub use mobs::WorldMobsPlugin;
 pub use player_camera::CameraPov;
 pub use player_lifecycle::{WorldPlayerLifecyclePlugin, WorldPlayerRespawnConfig};
+pub use player_position::{PlayerPositionPlugin, PlayerPositionWaypoints};
 pub use poi::{WorldPoiDiscoveryBudget, WorldPoiPlugin, WorldPoiSystems};
+pub use start::{
+	parse_xz_metres, player_spawn_xz, resolve_start_at, start_at_from_env, take_start_at_from_args,
+	START_AT_ENV,
+};
 pub use ui::WorldMobHudEnabled;
 pub use vsync::{default_window_present_mode, RequestVsyncToggle, VSYNC_TOGGLE_KEY};
 pub use weapon::WorldPlayerLoadout;
@@ -155,6 +162,7 @@ impl Plugin for WorldPlugin {
 			.add_plugins(WorldIntelligencePlugin)
 			.add_plugins(WorldPoiPlugin)
 			.add_plugins(WorldPlayerLifecyclePlugin)
+			.add_plugins(PlayerPositionPlugin)
 			.insert_resource(PadMovementEnabled(false))
 			.insert_resource(CharacterCameraFollowEnabled(false))
 			.init_resource::<WorldGameplayEnabled>()
