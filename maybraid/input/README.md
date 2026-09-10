@@ -25,7 +25,7 @@ event. Chords are queries. Text / IME stays on Bevy `KeyboardInput`.
 | `keys` | Full physical `KeyCode` overlay |
 
 Default keyboard faces: Space → A, Escape → B, Enter → Start, Tab → Select,
-C → left bumper (iron ADS).
+C → left bumper (iron ADS), E / X → X (interact).
 
 Gameplay systems should read sticks / buttons. `keys` is the escape hatch
 (`/`, F1, chords). Set [`PadGameplayEnabled`] to `false` while text is focused

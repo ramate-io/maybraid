@@ -21,8 +21,8 @@ use std::f32::consts::FRAC_PI_2;
 pub use hold::{sync_hands_to_firearm, HoldingArms};
 pub use kit::{kit_from_spec, GeneratedFirearm};
 pub use pose::{
-	pose_held_firearm, spawn_held_firearm, spawn_held_firearm_with, spawn_held_kit,
-	stamp_holding_arms, HeldFirearm,
+	held_scale_from_bounds, pose_held_firearm, spawn_held_firearm, spawn_held_firearm_with,
+	spawn_held_kit, stamp_holding_arms, HeldFirearm,
 };
 pub use reticle::{spawn_reticle, Reticle};
 pub use weapon::{live_weapon_from_stats, LiveWeapon, RECOIL_PITCH_PER_UNIT};

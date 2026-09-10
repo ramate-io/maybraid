@@ -9,15 +9,25 @@
 //! mob corpse lifetime (4 s). Persistent chests omit [`DespawnAfter`].
 //! Absorb never auto-equips.
 
-use bevy::gltf::GltfAssetLabel;
 use bevy::prelude::*;
-use bevy::world_serialization::WorldAssetRoot;
+use bevy::scene::prelude::{bsn, template_value};
+use bevy::text::FontSize;
 use chico_vegetation_on_terrain_playground::Player as VegetationPlayer;
-use crozon_character_items::{Inventory, InventoryItem, InventorySlot};
+use crozon_character_items::{
+	ClothingHost, Inventory, InventoryItem, InventorySlot, MaterialRefParams,
+};
+use crozon_characters::{
+	add_character_components_host, character_bounds, CharacterComponents, ClothingLayer,
+	ComponentsOnly, Layers, PartNode,
+};
 use crozon_inventory_user::{spawn_bag, InventoryUser};
 use damage::{DamageSystems, DespawnAfter, Downed};
-use firearm_user::{FirearmUser, GeneratedFirearm};
+use firearm_user::{held_scale_from_bounds, FirearmUser, FirearmUserSettings, GeneratedFirearm};
 use firearms::{firearm_bounds, spawn_firearm_components};
+use lod::gen::LodSceneLevel;
+use lod::lod_ref::LodRef;
+use lod::LodScene;
+use material_ref::{MaterialRef, MaterialRefRoot, PropagateToDescendants};
 use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
 use player::PlayerUse;
 
@@ -26,8 +36,8 @@ use crate::control::WorldGameplayEnabled;
 /// Default unclaimed-loot lifetime. Independent of the 4 s corpse clock.
 pub const DEFAULT_LOOT_SECS: f32 = 60.0;
 
-/// Default interact radius for take-all claim.
-pub const DEFAULT_CLAIM_RADIUS: f32 = 2.5;
+/// Default interact radius for take-all claim (XZ).
+pub const DEFAULT_CLAIM_RADIUS: f32 = 4.0;
 
 /// Ground pile, player drop, or authored chest. The bag is a related entity.
 #[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -92,21 +102,55 @@ pub struct StashDisplayedItem {
 	pub slot: InventorySlot,
 }
 
+/// On-screen X / E prompt while a claimable stash is in radius.
+#[derive(Component)]
+struct StashInteractPrompt;
+
+/// Bind-pose garment so stash clothing keeps recipe + palette.
+#[derive(Clone, PartialEq)]
+struct StashClothingPreview {
+	layer: ClothingLayer,
+}
+
+impl Default for StashClothingPreview {
+	fn default() -> Self {
+		Self {
+			layer: ClothingLayer::new(
+				crozon_character_items::ClothingMesh::TankTop,
+				crozon_character_items::ItemColor::Natural,
+				ClothingHost::HUMANOID,
+			),
+		}
+	}
+}
+
+impl CharacterComponents for StashClothingPreview {
+	fn part_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<PartNode> {
+		Layers::from_labeled("clothing", vec![self.layer.preview_part_node()])
+	}
+}
+
 pub struct WorldStashPlugin;
 
 impl Plugin for WorldStashPlugin {
 	fn build(&self, app: &mut App) {
-		app.init_resource::<WorldStashSettings>().add_systems(
-			Update,
-			(
-				claim_nearby_stashes
-					.after(CharacterControlSystems)
-					.run_if(resource_equals(WorldGameplayEnabled(true))),
-				drop_player_inventory
-					.after(CharacterControlSystems)
-					.run_if(resource_equals(WorldGameplayEnabled(true))),
-			),
-		);
+		add_character_components_host::<StashClothingPreview>(app);
+		app.init_resource::<WorldStashSettings>()
+			.add_systems(Startup, spawn_stash_interact_prompt)
+			.add_systems(
+				Update,
+				(
+					claim_nearby_stashes
+						.after(CharacterControlSystems)
+						.run_if(resource_equals(WorldGameplayEnabled(true))),
+					drop_player_inventory
+						.after(CharacterControlSystems)
+						.run_if(resource_equals(WorldGameplayEnabled(true))),
+					sync_stash_interact_prompt
+						.after(CharacterControlSystems)
+						.run_if(resource_equals(WorldGameplayEnabled(true))),
+				),
+			);
 		app.add_systems(PostUpdate, detach_downed_npc_loot.after(DamageSystems::Down));
 	}
 }
@@ -187,6 +231,10 @@ fn pile_offset(index: usize) -> Transform {
 		.with_rotation(Quat::from_rotation_y(angle) * Quat::from_rotation_x(-0.35))
 }
 
+fn clothing_material_ref(material: MaterialRefParams) -> MaterialRef {
+	MaterialRef::named(material.id.recipe_id()).with_palette([material.color.color()])
+}
+
 fn spawn_displayed_item(
 	commands: &mut Commands,
 	host: Entity,
@@ -195,37 +243,100 @@ fn spawn_displayed_item(
 	transform: Transform,
 	assets: Option<&AssetServer>,
 ) {
-	let visual = commands
-		.spawn((
-			Name::new(format!("stash-{}", item.label())),
-			displayed,
-			transform,
-			Visibility::default(),
-			ChildOf(host),
-		))
-		.id();
-	if let Some(assets) = assets {
-		match displayed.slot {
-			InventorySlot::Clothing => {
-				commands.entity(visual).insert(WorldAssetRoot(
-					assets.load(GltfAssetLabel::Scene(0).from_asset(item.path())),
-				));
-			}
-			InventorySlot::Weapons => {
-				if let Some(spec) = item.firearm_spec() {
-					let kit = GeneratedFirearm::from_spec(spec);
-					let bounds = firearm_bounds(&kit);
-					for entity in spawn_firearm_components(commands, &kit, transform, bounds) {
-						commands.entity(entity).insert((
-							Name::new(format!("stash-kit-{}", item.label())),
-							displayed,
-							ChildOf(host),
-						));
-					}
-				}
-			}
+	match displayed.slot {
+		InventorySlot::Clothing => {
+			spawn_displayed_clothing(commands, host, item, displayed, transform, assets);
+		}
+		InventorySlot::Weapons => {
+			spawn_displayed_weapon(commands, host, item, displayed, transform, assets);
 		}
 	}
+}
+
+fn spawn_displayed_clothing(
+	commands: &mut Commands,
+	host: Entity,
+	item: &InventoryItem,
+	displayed: StashDisplayedItem,
+	transform: Transform,
+	assets: Option<&AssetServer>,
+) {
+	let material = item.material().map(clothing_material_ref);
+	if let (Some(mesh), Some(params), Some(_)) = (item.mesh(), item.material(), assets) {
+		let preview = StashClothingPreview {
+			layer: ClothingLayer::new(mesh, params.color, ClothingHost::HUMANOID)
+				.with_material(params.id),
+		};
+		let bounds = character_bounds(&preview);
+		let identity = Transform::IDENTITY;
+		let lod_ref = LodRef {
+			entity: Entity::PLACEHOLDER,
+			previous_transform: &identity,
+			current_transform: &identity,
+			bounds: &bounds,
+		};
+		let entity = commands
+			.spawn_scene((
+				ComponentsOnly(preview).host(&lod_ref),
+				bsn! {
+					template_value(transform)
+				},
+			))
+			.id();
+		commands.entity(entity).insert((
+			Name::new(format!("stash-{}", item.label())),
+			displayed,
+			ChildOf(host),
+		));
+		return;
+	}
+	let mut visual = commands.spawn((
+		Name::new(format!("stash-{}", item.label())),
+		displayed,
+		transform,
+		Visibility::default(),
+		ChildOf(host),
+	));
+	if let Some(material) = material {
+		visual.insert((MaterialRefRoot(material), PropagateToDescendants));
+	}
+}
+
+fn spawn_displayed_weapon(
+	commands: &mut Commands,
+	host: Entity,
+	item: &InventoryItem,
+	displayed: StashDisplayedItem,
+	transform: Transform,
+	assets: Option<&AssetServer>,
+) {
+	let transform = match item.firearm_spec() {
+		Some(spec) => {
+			let kit = GeneratedFirearm::from_spec(spec);
+			let bounds = firearm_bounds(&kit);
+			let scale = held_scale_from_bounds(bounds, FirearmUserSettings::default().held_length);
+			let transform = transform.with_scale(Vec3::splat(scale));
+			if assets.is_some() {
+				for entity in spawn_firearm_components(commands, &kit, transform, bounds) {
+					commands.entity(entity).insert((
+						Name::new(format!("stash-{}", item.label())),
+						displayed,
+						ChildOf(host),
+					));
+				}
+				return;
+			}
+			transform
+		}
+		None => transform,
+	};
+	commands.spawn((
+		Name::new(format!("stash-{}", item.label())),
+		displayed,
+		transform,
+		Visibility::default(),
+		ChildOf(host),
+	));
 }
 
 fn despawn_displayed_items(commands: &mut Commands, displayed: &[Entity]) {
@@ -267,6 +378,14 @@ fn detach_downed_npc_loot(
 	}
 }
 
+fn player_origin(transform: &Transform) -> Vec3 {
+	transform.translation
+}
+
+fn xz_distance(a: Vec3, b: Vec3) -> f32 {
+	a.xz().distance(b.xz())
+}
+
 fn claim_nearby_stashes(
 	mut intents: MessageReader<CharacterIntent>,
 	mut commands: Commands,
@@ -279,9 +398,8 @@ fn claim_nearby_stashes(
 		return;
 	}
 	for (player_transform, player_user) in &players {
-		let Some((stash, stash_bag, policy)) =
-			nearest_stash_in_radius(player_transform.translation, &stashes)
-		else {
+		let origin = player_origin(player_transform);
+		let Some((stash, stash_bag, policy)) = nearest_stash_in_radius(origin, &stashes) else {
 			continue;
 		};
 		let Ok(mut source) = bags.get_mut(stash_bag) else {
@@ -313,7 +431,7 @@ fn nearest_stash_in_radius(
 	stashes
 		.iter()
 		.filter_map(|(entity, transform, user, policy)| {
-			let distance = transform.translation.distance(origin);
+			let distance = xz_distance(transform.translation, origin);
 			(distance <= policy.claim_radius).then_some((distance, entity, user.bag, *policy))
 		})
 		.min_by(|a, b| a.0.total_cmp(&b.0))
@@ -345,11 +463,43 @@ fn drop_player_inventory(
 		}
 		spawn_world_stash(
 			&mut commands,
-			Transform::from_translation(transform.translation),
+			Transform::from_translation(player_origin(transform)),
 			loot,
 			settings.ephemeral_policy(),
 			assets,
 		);
+	}
+}
+
+fn spawn_stash_interact_prompt(mut commands: Commands) {
+	commands.spawn((
+		Name::new("stash-interact-prompt"),
+		StashInteractPrompt,
+		Node {
+			position_type: PositionType::Absolute,
+			bottom: Val::Px(48.0),
+			width: Val::Percent(100.0),
+			justify_content: JustifyContent::Center,
+			..default()
+		},
+		Text::new("X / E  Pick up"),
+		TextFont { font_size: FontSize::Px(22.0), ..default() },
+		TextColor(Color::srgba(0.95, 0.92, 0.82, 0.95)),
+		Pickable::IGNORE,
+		Visibility::Hidden,
+	));
+}
+
+fn sync_stash_interact_prompt(
+	players: Query<&Transform, With<VegetationPlayer>>,
+	stashes: Query<(Entity, &Transform, &InventoryUser, &StashPolicy), With<WorldStash>>,
+	mut prompt: Query<&mut Visibility, With<StashInteractPrompt>>,
+) {
+	let in_range = players
+		.iter()
+		.any(|transform| nearest_stash_in_radius(player_origin(transform), &stashes).is_some());
+	for mut visibility in &mut prompt {
+		*visibility = if in_range { Visibility::Visible } else { Visibility::Hidden };
 	}
 }
 
@@ -362,6 +512,8 @@ mod tests {
 		ClothingMaterial, ClothingMesh, FirearmMesh, InventoryItem, ItemColor,
 	};
 	use damage::tick_queued_despawns;
+	use firearm_user::held_scale_from_bounds;
+	use material_ref::MaterialId;
 	use player::Npc;
 
 	fn mixed_bag() -> Inventory {
@@ -695,6 +847,106 @@ mod tests {
 		let player_inv =
 			world.get::<Inventory>(player_bag).ok_or_else(|| anyhow::anyhow!("player"))?;
 		assert_eq!(player_inv.items.len(), 3);
+		Ok(())
+	}
+
+	#[test]
+	fn clothing_keeps_recipe_and_palette() -> anyhow::Result<()> {
+		let mut world = World::new();
+		world
+			.run_system_once(spawn_stash_system(
+				Transform::IDENTITY,
+				mixed_bag(),
+				StashPolicy::default(),
+			))
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+
+		let material = world
+			.query::<(&StashDisplayedItem, &MaterialRefRoot)>()
+			.iter(&world)
+			.find(|(item, _)| item.slot == InventorySlot::Clothing)
+			.map(|(_, root)| root.0.clone())
+			.ok_or_else(|| anyhow::anyhow!("clothing material"))?;
+		assert_eq!(material.name, MaterialId::named(ClothingMaterial::Cloth.recipe_id()));
+		assert_eq!(material.palette[0], ItemColor::Natural.color());
+		Ok(())
+	}
+
+	#[test]
+	fn dropped_weapon_uses_held_kit_scale() -> anyhow::Result<()> {
+		let mut world = World::new();
+		world
+			.run_system_once(spawn_stash_system(
+				Transform::IDENTITY,
+				Inventory {
+					items: vec![InventoryItem::firearm(FirearmMesh::Bullpup)],
+					clothing: Vec::new(),
+					weapons: vec![0],
+				},
+				StashPolicy::default(),
+			))
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+
+		let transform = world
+			.query::<(&StashDisplayedItem, &Transform)>()
+			.iter(&world)
+			.find(|(item, _)| item.slot == InventorySlot::Weapons)
+			.map(|(_, transform)| *transform)
+			.ok_or_else(|| anyhow::anyhow!("weapon visual"))?;
+		let kit = GeneratedFirearm::from_spec(
+			InventoryItem::firearm(FirearmMesh::Bullpup)
+				.firearm_spec()
+				.ok_or_else(|| anyhow::anyhow!("spec"))?,
+		);
+		let expected = held_scale_from_bounds(
+			firearm_bounds(&kit),
+			FirearmUserSettings::default().held_length,
+		);
+		assert!((transform.scale.x - expected).abs() < 1e-4);
+		assert!(transform.scale.x < 1.0);
+		Ok(())
+	}
+
+	#[test]
+	fn xz_claim_ignores_height() -> anyhow::Result<()> {
+		let (mut world, player, stash) =
+			claim_setup(Vec3::new(0.0, 8.0, 0.0), Vec3::new(2.0, 0.0, 0.0))?;
+		write_intent(&mut world, CharacterIntent::StartInteraction)?;
+		world
+			.run_system_once(claim_nearby_stashes)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+
+		assert!(!world.entities().contains(stash));
+		let user = world
+			.get::<InventoryUser>(player)
+			.ok_or_else(|| anyhow::anyhow!("player bag"))?;
+		let bag = world.get::<Inventory>(user.bag).ok_or_else(|| anyhow::anyhow!("inventory"))?;
+		assert_eq!(bag.items.len(), 3);
+		Ok(())
+	}
+
+	#[test]
+	fn interact_prompt_toggles_in_radius() -> anyhow::Result<()> {
+		let (mut world, _, stash) = claim_setup(Vec3::ZERO, Vec3::new(1.0, 0.0, 0.0))?;
+		world.spawn((StashInteractPrompt, Visibility::Hidden, Text::new("X / E  Pick up")));
+		world
+			.run_system_once(sync_stash_interact_prompt)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let visible = world
+			.query_filtered::<&Visibility, With<StashInteractPrompt>>()
+			.single(&world)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert_eq!(*visible, Visibility::Visible);
+
+		world.entity_mut(stash).insert(Transform::from_xyz(40.0, 0.0, 0.0));
+		world
+			.run_system_once(sync_stash_interact_prompt)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let hidden = world
+			.query_filtered::<&Visibility, With<StashInteractPrompt>>()
+			.single(&world)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert_eq!(*hidden, Visibility::Hidden);
 		Ok(())
 	}
 }
