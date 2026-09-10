@@ -11,7 +11,7 @@
 //! - [`LodRefreshCorePlugin`] — sets, node track, untyped level fold, root sync (once)
 //! - [`LodSceneRefreshRegionPlugin<P, F, M>`] — region production
 //! - [`LodSceneCullRegionPlugin<P, F, M>`] — cull region production
-//! - [`LodSceneRefreshLevelsFillPlugin<I, F>`] — once: snapshots + host hits
+//! - [`LodSceneRefreshLevelsFillPlugin<I>`] — once per index: all [`crate::LodNode`] snapshots + host hits
 //! - [`LodSceneRefreshLevelsPlugin<T>`] — register `T` with the shared emitter
 //! - [`LodSceneRefreshSyncPlugin<T, F>`] — chunk fulfill + optional full-scan cull
 //! - [`LodSceneCullProduceFillPlugin<I, F>`] — once: cull snapshots + host hits
@@ -96,7 +96,7 @@ pub enum LodRefreshSystems {
 /// Order inside [`LodRefreshSystems::ProduceLevels`]: fill the shared cache, then emit.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
 pub enum LodLevelProduceSystems {
-	/// Snapshots once, then host hits per produce domain ([`fill_lod_produce_cache`]).
+	/// Every [`crate::LodNode`] snapshot once, then host hits per produce domain ([`fill_lod_produce_cache`]).
 	FillCache,
 	/// Shared hit-driven level emission.
 	Emit,
@@ -161,6 +161,8 @@ impl Plugin for LodRefreshCorePlugin {
 /// Fill + shared typed-callback emit + chunk sync. `I` is an untyped
 /// [`LodSceneHostIndex`].
 ///
+/// Fill is once per `I` ([`LodSceneRefreshLevelsFillPlugin`]) and snapshots every
+/// [`crate::LodNode`]. `F` still selects sync / full-scan cull drivers, not fill.
 /// Channel `M` stamps [`LodRefreshMembership`] on host `T` so produce only
 /// emits for matching [`LodSceneRefreshAabb`] domains. Channels that share `M`
 /// (bullseye + spotlight) union into one query. Add
@@ -212,8 +214,8 @@ where
 {
 	fn build(&self, app: &mut App) {
 		ensure_refresh_core(app);
-		if !app.is_plugin_added::<LodSceneRefreshLevelsFillPlugin<I, F>>() {
-			app.add_plugins(LodSceneRefreshLevelsFillPlugin::<I, F>::default());
+		if !app.is_plugin_added::<LodSceneRefreshLevelsFillPlugin<I>>() {
+			app.add_plugins(LodSceneRefreshLevelsFillPlugin::<I>::default());
 		}
 		if !app.is_plugin_added::<LodSceneRefreshLevelsPlugin<T>>() {
 			app.add_plugins(LodSceneRefreshLevelsPlugin::<T>::default());

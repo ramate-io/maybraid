@@ -20,7 +20,8 @@ fn ensure_gimme_host_index<T: Component + SemanticLodScene + 'static>(app: &mut 
 
 /// [`LodSceneRefreshPlugin`] with [`GimmeLodSceneHostIndex`].
 ///
-/// Fill is once per (`I`, `F`); emit is once per `T`. Channel `M` is accepted so
+/// Fill is once per host index (every [`lod::LodNode`], not `F`); emit is once
+/// per `T`. `F` still selects region / sync drivers. Channel `M` is accepted so
 /// existing dual bullseye/spotlight plugin adds stay valid.
 ///
 /// Use [`Self::without_full_scan_cull`] with [`GimmeLodSceneCullPlugin`] for
