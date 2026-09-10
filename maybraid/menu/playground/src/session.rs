@@ -35,6 +35,23 @@ pub struct ActiveCharacter {
 	pub id: CharacterId,
 }
 
+/// Where Back goes after the character editor closes.
+#[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum CharacterEditorReturn {
+	#[default]
+	Gallery,
+	InGame,
+}
+
+/// Open the saved-character editor. `inventory` overrides the disk bag so the
+/// in-game pause menu can edit the live loadout.
+#[derive(Message, Clone, Debug)]
+pub struct RequestEditCharacter {
+	pub id: CharacterId,
+	pub return_to: CharacterEditorReturn,
+	pub inventory: Option<Inventory>,
+}
+
 pub struct CharacterSessionPlugin;
 
 impl Plugin for CharacterSessionPlugin {
@@ -49,6 +66,7 @@ impl Plugin for CharacterSessionPlugin {
 			app.add_plugins(GalleryScreenPlugin);
 		}
 		app.insert_resource(SaveRoot::workspace())
+			.add_message::<RequestEditCharacter>()
 			.add_observer(on_save_character)
 			.add_systems(Startup, load_active_character)
 			.add_systems(
@@ -56,6 +74,7 @@ impl Plugin for CharacterSessionPlugin {
 				(
 					open_gallery_choice,
 					open_gallery_edit,
+					open_requested_character_editor,
 					open_create_character_hud,
 					sync_gallery_active_caption,
 				),
@@ -195,7 +214,36 @@ fn open_gallery_edit(
 	let Some(active) = active else {
 		return;
 	};
-	open_saved_editor(&mut commands, &sessions, &mut menu_state, &save_root, active.id);
+	open_saved_editor(
+		&mut commands,
+		&sessions,
+		&mut menu_state,
+		&save_root,
+		active.id,
+		None,
+		CharacterEditorReturn::Gallery,
+	);
+}
+
+fn open_requested_character_editor(
+	mut requests: MessageReader<RequestEditCharacter>,
+	save_root: Res<SaveRoot>,
+	mut menu_state: ResMut<CharacterMenuState>,
+	mut commands: Commands,
+	sessions: SessionQuery,
+) {
+	let Some(request) = requests.read().last().cloned() else {
+		return;
+	};
+	open_saved_editor(
+		&mut commands,
+		&sessions,
+		&mut menu_state,
+		&save_root,
+		request.id,
+		request.inventory,
+		request.return_to,
+	);
 }
 
 fn open_saved_editor(
@@ -204,6 +252,8 @@ fn open_saved_editor(
 	menu_state: &mut CharacterMenuState,
 	save_root: &SaveRoot,
 	id: CharacterId,
+	inventory: Option<Inventory>,
+	return_to: CharacterEditorReturn,
 ) {
 	let model = match crozon_character_model_user::load(save_root, id) {
 		Ok(model) => model,
@@ -212,14 +262,18 @@ fn open_saved_editor(
 			return;
 		}
 	};
-	let inventory = match crozon_inventory_user::load(save_root, id) {
-		Ok(inventory) => inventory,
-		Err(error) => {
-			warn!("failed to load inventory {}: {error}", id.to_hex());
-			return;
-		}
+	let inventory = match inventory {
+		Some(inventory) => inventory,
+		None => match crozon_inventory_user::load(save_root, id) {
+			Ok(inventory) => inventory,
+			Err(error) => {
+				warn!("failed to load inventory {}: {error}", id.to_hex());
+				return;
+			}
+		},
 	};
 	commands.insert_resource(EditingCharacter { id });
+	commands.insert_resource(return_to);
 	spawn_session(
 		commands,
 		sessions,

@@ -2,12 +2,14 @@
 //!
 //! One host type ([`WorldStash`]) holds a bag via [`InventoryUser`]. Claim is
 //! take-all on [`CharacterIntent::StartInteraction`] (pad **X**) inside
-//! [`StashPolicy::claim_radius`]. Drop dumps the **whole bag** on
-//! [`CharacterIntent::Inventory`] (Select) — not only worn / queued items.
+//! [`StashPolicy::claim_radius`]. Death and player drop
+//! [`Inventory::explode`] into one stash per item so each piece is claimable
+//! on its own. Authored chests stay a single pile.
 //!
 //! Loot TTL is [`StashPolicy::loot_secs`] (default 60 s), independent of
 //! mob corpse lifetime (4 s). Persistent chests omit [`DespawnAfter`].
-//! Absorb never auto-equips.
+//! Absorb never auto-equips. Claim and drop refresh [`WorldPlayerLoadout`]
+//! so the live bag can persist.
 
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value};
@@ -32,6 +34,7 @@ use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
 use player::PlayerUse;
 
 use crate::control::WorldGameplayEnabled;
+use crate::weapon::{AppliedWorldPlayerLoadout, WorldPlayerLoadout};
 
 /// Default unclaimed-loot lifetime. Independent of the 4 s corpse clock.
 pub const DEFAULT_LOOT_SECS: f32 = 60.0;
@@ -155,6 +158,9 @@ impl Plugin for WorldStashPlugin {
 	}
 }
 
+/// Scatter radius for the first exploded item; grows slowly with count.
+const EXPLODE_BASE_RADIUS: f32 = 0.55;
+
 /// Spawn a stash at `transform` when `inventory` is non-empty.
 ///
 /// The bag is parented so [`DespawnAfter`] on the host also removes loot.
@@ -186,6 +192,51 @@ pub fn spawn_world_stash(
 	}
 	attach_stash_visuals(commands, host, &inventory, assets);
 	Some(host)
+}
+
+/// One [`WorldStash`] per item, ring-scattered around `origin`.
+///
+/// Chests should keep calling [`spawn_world_stash`] so the pile stays take-all.
+pub fn spawn_exploded_stashes(
+	commands: &mut Commands,
+	origin: Vec3,
+	inventory: Inventory,
+	policy: StashPolicy,
+	assets: Option<&AssetServer>,
+) -> Vec<Entity> {
+	let pieces = inventory.explode();
+	let count = pieces.len();
+	pieces
+		.into_iter()
+		.enumerate()
+		.filter_map(|(index, bag)| {
+			let transform = Transform::from_translation(origin + explode_offset(index, count));
+			spawn_world_stash(commands, transform, bag, policy, assets)
+		})
+		.collect()
+}
+
+fn explode_offset(index: usize, count: usize) -> Vec3 {
+	if count <= 1 {
+		return Vec3::new(0.0, 0.05, 0.0);
+	}
+	let angle = index as f32 * std::f32::consts::TAU / count as f32;
+	let radius = EXPLODE_BASE_RADIUS + (count as f32).sqrt() * 0.12;
+	Vec3::new(angle.cos() * radius, 0.05, angle.sin() * radius)
+}
+
+fn apply_claimed_loadout(
+	commands: &mut Commands,
+	player: Entity,
+	inventory: &Inventory,
+	loadout: &mut WorldPlayerLoadout,
+) {
+	loadout.retarget_inventory(inventory.clone());
+	commands.entity(player).insert(AppliedWorldPlayerLoadout(loadout.clone()));
+}
+
+fn apply_dropped_loadout(loadout: &mut WorldPlayerLoadout, inventory: &Inventory) {
+	loadout.retarget_inventory(inventory.clone());
 }
 
 fn attach_stash_visuals(
@@ -368,13 +419,7 @@ fn detach_downed_npc_loot(
 		}
 		let mut policy = settings.ephemeral_policy();
 		policy.loot_secs = settings.loot_secs;
-		spawn_world_stash(
-			&mut commands,
-			Transform::from_translation(downed.point),
-			loot,
-			policy,
-			assets,
-		);
+		spawn_exploded_stashes(&mut commands, downed.point, loot, policy, assets);
 	}
 }
 
@@ -389,7 +434,8 @@ fn xz_distance(a: Vec3, b: Vec3) -> f32 {
 fn claim_nearby_stashes(
 	mut intents: MessageReader<CharacterIntent>,
 	mut commands: Commands,
-	players: Query<(&Transform, &InventoryUser), With<VegetationPlayer>>,
+	mut loadout: Option<ResMut<WorldPlayerLoadout>>,
+	players: Query<(Entity, &Transform, &InventoryUser), With<VegetationPlayer>>,
 	stashes: Query<(Entity, &Transform, &InventoryUser, &StashPolicy), With<WorldStash>>,
 	displayed: Query<(Entity, &ChildOf), With<StashDisplayedItem>>,
 	mut bags: Query<&mut Inventory>,
@@ -397,7 +443,7 @@ fn claim_nearby_stashes(
 	if !intents.read().any(|intent| matches!(intent, CharacterIntent::StartInteraction)) {
 		return;
 	}
-	for (player_transform, player_user) in &players {
+	for (player, player_transform, player_user) in &players {
 		let origin = player_origin(player_transform);
 		let Some((stash, stash_bag, policy)) = nearest_stash_in_radius(origin, &stashes) else {
 			continue;
@@ -410,12 +456,16 @@ fn claim_nearby_stashes(
 			continue;
 		};
 		player_bag.absorb(loot);
+		let snapshot = player_bag.clone();
 		let visual: Vec<Entity> = displayed
 			.iter()
 			.filter(|(_, child)| child.parent() == stash)
 			.map(|(entity, _)| entity)
 			.collect();
 		despawn_displayed_items(&mut commands, &visual);
+		if let Some(loadout) = loadout.as_deref_mut() {
+			apply_claimed_loadout(&mut commands, player, &snapshot, loadout);
+		}
 		if policy.persist {
 			continue;
 		}
@@ -444,6 +494,7 @@ fn drop_player_inventory(
 	settings: Res<WorldStashSettings>,
 	mut intents: MessageReader<CharacterIntent>,
 	mut commands: Commands,
+	mut loadout: Option<ResMut<WorldPlayerLoadout>>,
 	assets: Option<Res<AssetServer>>,
 	players: Query<DroppingPlayer<'_>, With<VegetationPlayer>>,
 	mut bags: Query<&mut Inventory>,
@@ -457,13 +508,17 @@ fn drop_player_inventory(
 			continue;
 		};
 		let loot = bag.take_all();
+		let snapshot = bag.clone();
 		if let Some(firearm) = firearm {
 			commands.entity(firearm.held).try_despawn();
 			commands.entity(player).remove::<(FirearmUser, PlayerUse)>();
 		}
-		spawn_world_stash(
+		if let Some(loadout) = loadout.as_deref_mut() {
+			apply_dropped_loadout(loadout, &snapshot);
+		}
+		spawn_exploded_stashes(
 			&mut commands,
-			Transform::from_translation(player_origin(transform)),
+			player_origin(transform),
 			loot,
 			settings.ephemeral_policy(),
 			assets,
@@ -630,15 +685,18 @@ mod tests {
 			.get::<DespawnAfter>(body)
 			.is_some_and(|timer| { (timer.remaining_secs() - 4.0).abs() < 1e-4 }));
 
-		let (stash, transform, policy, despawn) = world
+		let stashes: Vec<_> = world
 			.query::<(Entity, &Transform, &StashPolicy, &DespawnAfter)>()
-			.single(&world)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		assert_eq!(transform.translation, point);
-		assert!(!policy.persist);
-		assert!((policy.loot_secs - DEFAULT_LOOT_SECS).abs() < 1e-4);
-		assert!((despawn.remaining_secs() - DEFAULT_LOOT_SECS).abs() < 1e-3);
-		assert_ne!(stash, body);
+			.iter(&world)
+			.collect();
+		assert_eq!(stashes.len(), 3);
+		for (stash, transform, policy, despawn) in &stashes {
+			assert!((transform.translation.xz() - point.xz()).length() < 2.0);
+			assert!(!policy.persist);
+			assert!((policy.loot_secs - DEFAULT_LOOT_SECS).abs() < 1e-4);
+			assert!((despawn.remaining_secs() - DEFAULT_LOOT_SECS).abs() < 1e-3);
+			assert_ne!(*stash, body);
+		}
 		Ok(())
 	}
 
@@ -776,7 +834,7 @@ mod tests {
 	}
 
 	#[test]
-	fn inventory_intent_drops_the_whole_bag_as_a_claimable_stash() -> anyhow::Result<()> {
+	fn inventory_intent_explodes_the_bag_into_claimable_items() -> anyhow::Result<()> {
 		let mut world = World::new();
 		world.init_resource::<WorldStashSettings>();
 		world.init_resource::<Messages<CharacterIntent>>();
@@ -799,12 +857,16 @@ mod tests {
 			.ok_or_else(|| anyhow::anyhow!("player bag"))?;
 		assert!(player_inv.items.is_empty());
 
-		let (stash, transform) = world
+		let stashes: Vec<_> = world
 			.query_filtered::<(Entity, &Transform), With<WorldStash>>()
-			.single(&world)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		assert_eq!(transform.translation, Vec3::new(2.0, 0.0, 3.0));
-		assert_ne!(stash, player);
+			.iter(&world)
+			.map(|(entity, transform)| (entity, transform.translation))
+			.collect();
+		assert_eq!(stashes.len(), 3);
+		for (stash, translation) in &stashes {
+			assert!((translation.xz() - Vec2::new(2.0, 3.0)).length() < 2.0);
+			assert_ne!(*stash, player);
+		}
 
 		write_intent(&mut world, CharacterIntent::StartInteraction)?;
 		world
@@ -812,8 +874,97 @@ mod tests {
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		let claimed =
 			world.get::<Inventory>(player_bag).ok_or_else(|| anyhow::anyhow!("claimed"))?;
-		assert_eq!(claimed.items.len(), 3);
+		assert_eq!(claimed.items.len(), 1);
+		assert_eq!(world.query::<&WorldStash>().iter(&world).count(), 2);
+		Ok(())
+	}
+
+	#[test]
+	fn explode_spawns_one_visible_stash_per_item() -> anyhow::Result<()> {
+		let mut world = World::new();
+		let spawned = world
+			.run_system_once(|mut commands: Commands| {
+				spawn_exploded_stashes(
+					&mut commands,
+					Vec3::ZERO,
+					mixed_bag(),
+					StashPolicy::default(),
+					None,
+				)
+			})
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert_eq!(spawned.len(), 3);
+		assert_eq!(world.query::<&WorldStash>().iter(&world).count(), 3);
+		assert_eq!(world.query::<&StashDisplayedItem>().iter(&world).count(), 3);
+
+		let origins: Vec<Vec3> = world
+			.query_filtered::<&Transform, With<WorldStash>>()
+			.iter(&world)
+			.map(|transform| transform.translation)
+			.collect();
+		assert!(origins.windows(2).any(|pair| pair[0].distance(pair[1]) > 0.3));
+		Ok(())
+	}
+
+	#[test]
+	fn claim_updates_world_player_loadout() -> anyhow::Result<()> {
+		use crate::weapon::WorldPlayerLoadout;
+		use crozon_characters::CharacterAppearance;
+
+		let (mut world, player, stash) = claim_setup(Vec3::ZERO, Vec3::new(1.0, 0.0, 0.0))?;
+		world.insert_resource(WorldPlayerLoadout::new(
+			"active",
+			CharacterAppearance::default(),
+			Inventory::default(),
+		));
+		write_intent(&mut world, CharacterIntent::StartInteraction)?;
+		world
+			.run_system_once(claim_nearby_stashes)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+
 		assert!(!world.entities().contains(stash));
+		let loadout = world
+			.get_resource::<WorldPlayerLoadout>()
+			.ok_or_else(|| anyhow::anyhow!("loadout"))?;
+		assert_eq!(loadout.inventory.items.len(), 3);
+		let applied = world
+			.get::<crate::weapon::AppliedWorldPlayerLoadout>(player)
+			.ok_or_else(|| anyhow::anyhow!("applied"))?;
+		assert_eq!(applied.0.inventory.items.len(), 3);
+		Ok(())
+	}
+
+	#[test]
+	fn drop_clears_world_player_loadout() -> anyhow::Result<()> {
+		use crate::weapon::WorldPlayerLoadout;
+		use crozon_characters::CharacterAppearance;
+
+		let mut world = World::new();
+		world.init_resource::<WorldStashSettings>();
+		world.init_resource::<Messages<CharacterIntent>>();
+		let bag = mixed_bag();
+		world.insert_resource(WorldPlayerLoadout::new(
+			"active",
+			CharacterAppearance::default(),
+			bag.clone(),
+		));
+		let player_bag = world.spawn(bag).id();
+		world.spawn((
+			VegetationPlayer,
+			Transform::IDENTITY,
+			InventoryUser::carrying(player_bag),
+		));
+
+		write_intent(&mut world, CharacterIntent::Inventory)?;
+		world
+			.run_system_once(drop_player_inventory)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+
+		let loadout = world
+			.get_resource::<WorldPlayerLoadout>()
+			.ok_or_else(|| anyhow::anyhow!("loadout"))?;
+		assert!(loadout.inventory.items.is_empty());
+		assert_eq!(world.query::<&WorldStash>().iter(&world).count(), 3);
 		Ok(())
 	}
 

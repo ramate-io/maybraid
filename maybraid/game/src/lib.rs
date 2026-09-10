@@ -15,8 +15,9 @@ use maybraid_world::{
 };
 use menu_components::{consume_screen_back, ActiveOverlayKey, ScreenBackPressed, MENU_CLEAR};
 use menu_playground::{
-	ActiveCharacter, CharacterPreviewPlugin, CharacterScreen, CharacterScreenPlugin,
-	CharacterSessionPlugin,
+	ActiveCharacter, CharacterEditBaseline, CharacterEditorReturn, CharacterMenuState,
+	CharacterPreviewPlugin, CharacterScreen, CharacterScreenPlugin, CharacterSessionPlugin,
+	EditingCharacter, RequestEditCharacter,
 };
 use menu_screens::{
 	cancel_pending_create, request_show_gallery, request_show_in_game,
@@ -27,9 +28,10 @@ use menu_screens::{
 use std::path::{Path, PathBuf};
 
 use crate::shell::{
-	apply_shell_look, attach_preview_camera, despawn_loading_backdrop, detach_preview_camera,
-	enter_characters, enter_home, enter_loading_world, enter_world, enter_world_menu,
-	exit_world_menu, spawn_loading_backdrop, stamp_preview_render_layers,
+	apply_pause_character_look, apply_shell_look, attach_preview_camera, despawn_loading_backdrop,
+	detach_preview_camera, enter_characters, enter_home, enter_loading_world, enter_world,
+	enter_world_menu, exit_world_menu, restore_stashed_world_camera, spawn_loading_backdrop,
+	stamp_preview_render_layers,
 };
 
 /// Crate-local asset directory (`maybraid/game/assets`).
@@ -85,7 +87,7 @@ impl Plugin for GamePlugin {
 			)
 			.add_systems(OnEnter(WorldPause::Playing), apply_shell_look)
 			.add_systems(OnEnter(WorldPause::Menu), (enter_world_menu, apply_shell_look))
-			.add_systems(OnExit(WorldPause::Menu), exit_world_menu)
+			.add_systems(OnExit(WorldPause::Menu), (exit_world_menu, restore_stashed_world_camera))
 			.add_systems(PostStartup, (enter_home, apply_shell_look, attach_preview_camera))
 			.add_systems(
 				Update,
@@ -94,6 +96,9 @@ impl Plugin for GamePlugin {
 					finish_world_loading.run_if(in_state(GameFlow::LoadingWorld)),
 					route_home_choice.run_if(in_state(GameFlow::Home)),
 					route_in_game_choice.run_if(in_state(WorldPause::Menu)),
+					apply_pause_character_look.run_if(in_state(WorldPause::Menu)),
+					sync_world_loadout_from_editor.run_if(in_state(WorldPause::Menu)),
+					persist_changed_player_inventory,
 					sync_world_mob_hud,
 					pause_menu_back.run_if(in_state(WorldPause::Menu)),
 					character_back.run_if(in_state(GameFlow::Characters)),
@@ -162,6 +167,9 @@ fn route_in_game_choice(
 	mut choices: MessageReader<InGameMenuChoice>,
 	mut flow: ResMut<NextState<GameFlow>>,
 	mut commands: Commands,
+	mut edits: MessageWriter<RequestEditCharacter>,
+	active: Option<Res<ActiveCharacter>>,
+	loadout: Option<Res<WorldPlayerLoadout>>,
 ) {
 	let Some(choice) = choices.read().last().copied() else {
 		return;
@@ -169,8 +177,64 @@ fn route_in_game_choice(
 	match PauseMenuRoute::from_choice(choice) {
 		PauseMenuRoute::Leave => flow.set(GameFlow::Home),
 		PauseMenuRoute::Settings => request_show_in_game_settings(&mut commands),
+		PauseMenuRoute::Character => {
+			let Some(active) = active else {
+				warn!("pause character: no active character");
+				return;
+			};
+			edits.write(RequestEditCharacter {
+				id: active.id,
+				return_to: CharacterEditorReturn::InGame,
+				inventory: loadout.map(|loadout| loadout.inventory.clone()),
+			});
+		}
 		PauseMenuRoute::Stay => {}
 	}
+}
+
+fn persist_changed_player_inventory(
+	loadout: Option<Res<WorldPlayerLoadout>>,
+	active: Option<Res<ActiveCharacter>>,
+	save_root: Res<crozon_character_persist::SaveRoot>,
+) {
+	let Some(loadout) = loadout else {
+		return;
+	};
+	if !loadout.is_changed() {
+		return;
+	}
+	let Some(active) = active else {
+		return;
+	};
+	if let Err(error) = crozon_inventory_user::save(&save_root, active.id, &loadout.inventory) {
+		warn!("failed to persist inventory {}: {error}", active.id.to_hex());
+	}
+}
+
+fn sync_world_loadout_from_editor(
+	baseline: Option<Res<CharacterEditBaseline>>,
+	editing: Option<Res<EditingCharacter>>,
+	menu: Res<CharacterMenuState>,
+	return_to: Option<Res<CharacterEditorReturn>>,
+	mut commands: Commands,
+) {
+	let Some(baseline) = baseline else {
+		return;
+	};
+	if !baseline.is_changed() {
+		return;
+	}
+	if return_to.as_deref() != Some(&CharacterEditorReturn::InGame) {
+		return;
+	}
+	let Some(editing) = editing else {
+		return;
+	};
+	commands.insert_resource(WorldPlayerLoadout::new(
+		editing.id.to_hex(),
+		menu.0.appearance(),
+		menu.0.inventory.clone().unwrap_or_default(),
+	));
 }
 
 fn sync_world_mob_hud(settings: Res<InGameSettings>, mut hud: ResMut<WorldMobHudEnabled>) {
@@ -185,13 +249,15 @@ fn pause_menu_back(
 	overlay: Res<ActiveOverlayKey>,
 	mut backs: MessageReader<ScreenBackPressed>,
 	settings: Query<(), With<InGameSettingsScreen>>,
+	character: Query<(), With<CharacterScreen>>,
 ) {
-	if settings.is_empty() {
+	if settings.is_empty() && character.is_empty() {
 		return;
 	}
 	if !consume_screen_back(nav.as_ref(), overlay.0.is_some(), &mut backs) {
 		return;
 	}
+	commands.remove_resource::<CharacterEditorReturn>();
 	request_show_in_game(&mut commands);
 }
 
@@ -242,12 +308,18 @@ fn character_back(
 
 #[cfg(test)]
 mod tests {
-	use crozon_character_items::Inventory;
+	use bevy::ecs::system::RunSystemOnce;
+	use bevy::prelude::*;
+	use crozon_character_items::{
+		ClothingMaterial, ClothingMesh, FirearmMesh, Inventory, InventoryItem, ItemColor,
+	};
 	use crozon_character_model_user::CharacterModel;
 	use crozon_character_persist::{CharacterId, SaveRoot};
 	use crozon_characters::CharacterAppearance;
+	use menu_playground::ActiveCharacter;
 
-	use crate::{assets_root, read_player_loadout};
+	use crate::{assets_root, persist_changed_player_inventory, read_player_loadout};
+	use maybraid_world::WorldPlayerLoadout;
 
 	#[test]
 	fn crate_assets_contain_barlow() {
@@ -269,6 +341,42 @@ mod tests {
 		assert_eq!(loadout.key, id.to_hex());
 		assert_eq!(loadout.inventory, inventory);
 		assert_eq!(loadout.appearance.species_id(), model.appearance.species_id());
+		Ok(())
+	}
+
+	#[test]
+	fn persist_writes_the_live_bag() -> anyhow::Result<()> {
+		let dir = tempfile::tempdir()?;
+		let root = SaveRoot::at(dir.path());
+		let id = CharacterId(7);
+		let model = CharacterModel::new(id, "Live", CharacterAppearance::default());
+		crozon_character_model_user::save(&root, &model)?;
+		crozon_inventory_user::save(&root, id, &Inventory::default())?;
+
+		let bag = Inventory::with_starter_outfit(vec![
+			InventoryItem::clothing(
+				ClothingMesh::Pants,
+				ClothingMaterial::Cloth,
+				ItemColor::Natural,
+			),
+			InventoryItem::firearm(FirearmMesh::Bullpup),
+		]);
+		let mut world = World::new();
+		world.insert_resource(root.clone());
+		world.insert_resource(ActiveCharacter { id });
+		world.insert_resource(WorldPlayerLoadout::new(
+			id.to_hex(),
+			CharacterAppearance::default(),
+			bag.clone(),
+		));
+		world
+			.run_system_once(persist_changed_player_inventory)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+
+		let loaded = crozon_inventory_user::load(&root, id)?;
+		assert_eq!(loaded.items.len(), bag.items.len());
+		assert_eq!(loaded.clothing, bag.clothing);
+		assert_eq!(loaded.weapons, bag.weapons);
 		Ok(())
 	}
 }

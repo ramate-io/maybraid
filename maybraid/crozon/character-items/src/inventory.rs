@@ -299,6 +299,22 @@ impl Inventory {
 		self.items.extend(other.items);
 	}
 
+	/// One bag per item so each piece can sit on the ground as its own stash.
+	///
+	/// Each bag visualizes its item (toggled) so clothing and weapons both
+	/// render. Wear / queue from the source bag is not preserved — exploded
+	/// loot is claimable individually, not worn on pickup.
+	pub fn explode(self) -> Vec<Self> {
+		self.items
+			.into_iter()
+			.map(|item| {
+				let mut bag = Self { items: vec![item], clothing: Vec::new(), weapons: Vec::new() };
+				let _ = bag.toggle(0);
+				bag
+			})
+			.collect()
+	}
+
 	pub fn character_sheet(&self) -> crate::CharacterSheet {
 		crate::CharacterSheet::from_inventory(self)
 	}
@@ -607,5 +623,44 @@ mod tests {
 		assert_eq!(dest.items[2].mesh(), Some(ClothingMesh::TankTop));
 		assert!(!dest.is_worn(2));
 		assert_eq!(dest.rank(1), None);
+	}
+
+	#[test]
+	fn explode_makes_one_visualized_bag_per_item() {
+		let bag = Inventory {
+			items: vec![
+				InventoryItem::clothing(
+					ClothingMesh::Pants,
+					ClothingMaterial::Cloth,
+					ItemColor::Natural,
+				),
+				InventoryItem::firearm(FirearmMesh::Bullpup),
+				InventoryItem::clothing(
+					ClothingMesh::Robe,
+					ClothingMaterial::Cloth,
+					ItemColor::Cool,
+				),
+			],
+			clothing: vec![0],
+			weapons: vec![1],
+		};
+
+		let exploded = bag.explode();
+
+		assert_eq!(exploded.len(), 3);
+		assert!(exploded.iter().all(|piece| piece.items.len() == 1));
+		assert_eq!(exploded[0].clothing, vec![0]);
+		assert!(exploded[0].weapons.is_empty());
+		assert_eq!(exploded[1].weapons, vec![0]);
+		assert!(exploded[1].clothing.is_empty());
+		assert_eq!(exploded[2].clothing, vec![0]);
+		assert_eq!(exploded[0].items[0].mesh(), Some(ClothingMesh::Pants));
+		assert_eq!(exploded[1].items[0].firearm_mesh(), Some(FirearmMesh::Bullpup));
+		assert_eq!(exploded[2].items[0].mesh(), Some(ClothingMesh::Robe));
+	}
+
+	#[test]
+	fn explode_empty_is_empty() {
+		assert!(Inventory::default().explode().is_empty());
 	}
 }

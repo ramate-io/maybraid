@@ -31,8 +31,8 @@ pub use player_camera::CameraPov;
 pub use player_lifecycle::{WorldPlayerLifecyclePlugin, WorldPlayerRespawnConfig};
 pub use poi::{WorldPoiDiscoveryBudget, WorldPoiPlugin, WorldPoiSystems};
 pub use stash::{
-	spawn_world_stash, StashDisplayedItem, StashPolicy, WorldStash, WorldStashPlugin,
-	WorldStashSettings, DEFAULT_CLAIM_RADIUS, DEFAULT_LOOT_SECS,
+	spawn_exploded_stashes, spawn_world_stash, StashDisplayedItem, StashPolicy, WorldStash,
+	WorldStashPlugin, WorldStashSettings, DEFAULT_CLAIM_RADIUS, DEFAULT_LOOT_SECS,
 };
 pub use ui::WorldMobHudEnabled;
 pub use weapon::WorldPlayerLoadout;

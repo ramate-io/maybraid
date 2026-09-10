@@ -37,10 +37,15 @@ impl WorldPlayerLoadout {
 		let appearance = appearance.with_inventory_clothing(&inventory);
 		Self { key: key.into(), appearance, inventory }
 	}
+
+	/// Replace the bag and rebuild worn garments from the new wear list.
+	pub fn retarget_inventory(&mut self, inventory: Inventory) {
+		*self = Self::new(self.key.clone(), self.appearance.clone(), inventory);
+	}
 }
 
 #[derive(Component)]
-struct AppliedWorldPlayerLoadout(WorldPlayerLoadout);
+pub(crate) struct AppliedWorldPlayerLoadout(pub WorldPlayerLoadout);
 
 /// The replacement lifecycle already queued this body's configured visual.
 #[derive(Component)]
