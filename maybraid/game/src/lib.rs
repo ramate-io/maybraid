@@ -417,6 +417,7 @@ mod tests {
 		assert_eq!(loaded.items.len(), bag.items.len());
 		assert_eq!(loaded.clothing, bag.clothing);
 		assert_eq!(loaded.weapons, bag.weapons);
+		assert_eq!(loaded.skills, bag.skills);
 		Ok(())
 	}
 }

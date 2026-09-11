@@ -7,7 +7,7 @@
 use character_ui_menu::{
 	AssetChoice, AssetOption, AssetSingleSelect, CameraFocus, GridCatalogChoice, ItemRow,
 	MenuComponent, MenuNode, MultiSelect, PreviewColor, SelectGroup, SingleSelect, StatCard,
-	StatLine, SwatchChoice, SwatchSingleSelect,
+	StatLine, SwatchChoice, SwatchSingleSelect, ThumbnailCamera,
 };
 use crozon_character_items::{
 	CharacterSheet, ClothingColor, ClothingMaterial, ClothingMaterialChoice, ClothingMesh,
@@ -194,6 +194,7 @@ fn inventory_catalog(menu: &ClothingMenu, owned: &[InventoryItem]) -> MenuNode<M
 				path: asset.path,
 				thumbnail_camera: asset.thumbnail_camera,
 				preview: PreviewColor::of(item.material()?.color),
+				image_key: None,
 				selected: menu.layers.contains(mesh),
 				rank: None,
 				event: MenuEvent::ToggleInventory(index),
@@ -251,6 +252,30 @@ pub(crate) fn weapons_catalog(inventory: &Inventory) -> MenuNode<MenuEvent> {
 				path: asset.path,
 				thumbnail_camera: asset.thumbnail_camera,
 				preview: PreviewColor::WHITE,
+				image_key: None,
+				selected: rank.is_some(),
+				rank,
+				event: MenuEvent::ToggleInventory(index),
+			})
+		}),
+	)
+}
+
+pub(crate) fn skills_catalog(inventory: &Inventory) -> MenuNode<MenuEvent> {
+	MenuNode::grid_catalog(
+		InventorySlot::Skills.label(),
+		InventorySlot::Skills.capacity(),
+		inventory.items.iter().enumerate().filter_map(|(index, item)| {
+			let spec = item.skill_map_spec()?;
+			let [red, green, blue] = spec.kind.preview_srgb();
+			let rank = inventory.rank(index);
+			Some(GridCatalogChoice {
+				label: item.name(),
+				detail: item.catalog_detail(),
+				path: item.path(),
+				thumbnail_camera: ThumbnailCamera::DEFAULT,
+				preview: PreviewColor::srgb(red, green, blue),
+				image_key: Some(spec.catalog_key()),
 				selected: rank.is_some(),
 				rank,
 				event: MenuEvent::ToggleInventory(index),
@@ -303,6 +328,19 @@ pub(crate) fn loadout_section(inventory: &Inventory) -> MenuNode<MenuEvent> {
 				.stat_rows()
 				.into_iter()
 				.map(|(label, value)| StatLine::unsigned(label, value))
+				.collect(),
+		});
+	}
+	for &index in &inventory.skills {
+		let Some(item) = inventory.items.get(index) else {
+			continue;
+		};
+		cards.push(StatCard {
+			title: item.name(),
+			rows: item
+				.stat_rows()
+				.into_iter()
+				.map(|(label, value)| StatLine::from_display(label, value))
 				.collect(),
 		});
 	}

@@ -8,12 +8,13 @@ use chico_vegetation_on_terrain_playground::{
 use crozon_character_items::{CharacterSheet, Inventory, InventoryItem};
 use crozon_characters::{CharacterAppearance, CharacterRoot};
 use crozon_inventory_user::{spawn_bag, InventoryUser};
-use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
 use damage::Health;
 use firearm_user::{
 	live_weapon_from_stats, spawn_held_firearm, spawn_held_kit, spawn_reticle, FirearmUser,
 	FirearmUserSettings, FirearmUserSystems, GeneratedFirearm, WeaponSwap,
 };
+use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
+use maybraid_skill_map::{spawn_skill_maps, SkillMapEquip, SkillMapSystems};
 use player::{
 	apply_character_mobility, CameraFollow, Player as MaybraidPlayer, PlayerCameraAim, PlayerLook,
 	PlayerUse, PlayerVisual as MaybraidPlayerVisual, PlayerYawOwner,
@@ -56,6 +57,7 @@ type WorldPlayerEquipment<'a> = (
 	Entity,
 	Option<&'a FirearmUser>,
 	Option<&'a InventoryUser>,
+	Option<&'a maybraid_skill_map::SkillMapUser>,
 	Option<&'a AppliedWorldPlayerLoadout>,
 	Has<WorldPlayerAppearanceRequested>,
 );
@@ -78,7 +80,9 @@ fn arm_world_player(
 	if !gameplay.0 {
 		return;
 	}
-	for (player, firearm_user, inventory_user, applied, appearance_requested) in &players {
+	for (player, firearm_user, inventory_user, skill_map_user, applied, appearance_requested) in
+		&players
+	{
 		let Some((visual, _, presented)) =
 			visuals.iter().find(|(_, child, _)| child.parent() == player)
 		else {
@@ -86,6 +90,9 @@ fn arm_world_player(
 		};
 		if !presented {
 			commands.entity(visual).insert((MaybraidPlayerVisual, PlayerYawOwner::Wish));
+		}
+		if skill_map_user.is_none() {
+			spawn_skill_maps(&mut commands, player);
 		}
 		if loadout.is_none() && applied.is_none() && firearm_user.is_some() {
 			continue;
@@ -140,6 +147,7 @@ fn arm_world_player(
 			f32::from(sheet.jump) / f32::from(CharacterSheet::BASE.jump),
 		);
 		spawn_bag(&mut commands, player, loadout.inventory.clone());
+		commands.entity(player).insert(skill_map_equip_from(&loadout.inventory));
 		if !appearance_requested {
 			commands
 				.spawn(RequestSetCharacterAppearance { appearance: loadout.appearance.clone() });
@@ -147,6 +155,10 @@ fn arm_world_player(
 		commands.entity(player).remove::<WorldPlayerAppearanceRequested>();
 		hold_primary_weapon(&mut commands, player, &loadout.inventory);
 	}
+}
+
+fn skill_map_equip_from(inventory: &Inventory) -> SkillMapEquip {
+	SkillMapEquip::from_spec(inventory.primary_skill_map().and_then(InventoryItem::skill_map_spec))
 }
 
 fn hold_primary_weapon(commands: &mut Commands, player: Entity, inventory: &Inventory) {
@@ -227,6 +239,53 @@ fn commit_weapon_swap(
 	}
 }
 
+fn cycle_skill_maps(
+	mut intents: MessageReader<CharacterIntent>,
+	gameplay: Res<WorldGameplayEnabled>,
+	mut commands: Commands,
+	mut loadout: Option<ResMut<WorldPlayerLoadout>>,
+	players: Query<(Entity, &InventoryUser), With<VegetationPlayer>>,
+	mut bags: Query<&mut Inventory>,
+) {
+	if !gameplay.0 {
+		return;
+	}
+	let Some(dir) = intents.read().find_map(|intent| match *intent {
+		CharacterIntent::CycleSkillMap(dir) => Some(dir),
+		_ => None,
+	}) else {
+		return;
+	};
+	for (player, user) in &players {
+		let Ok(mut bag) = bags.get_mut(user.bag) else {
+			continue;
+		};
+		if !bag.cycle_skills(dir) {
+			continue;
+		}
+		let snapshot = bag.clone();
+		if let Some(loadout) = loadout.as_deref_mut() {
+			loadout.retarget_inventory(snapshot.clone());
+			commands.entity(player).insert(AppliedWorldPlayerLoadout(loadout.clone()));
+		}
+	}
+}
+
+fn sync_skill_map_equip(
+	mut users: Query<(&InventoryUser, &mut SkillMapEquip)>,
+	bags: Query<&Inventory>,
+) {
+	for (user, mut equip) in &mut users {
+		let Ok(bag) = bags.get(user.bag) else {
+			continue;
+		};
+		let next = skill_map_equip_from(bag);
+		if *equip != next {
+			*equip = next;
+		}
+	}
+}
+
 fn spawn_world_reticle(
 	mut commands: Commands,
 	mut meshes: ResMut<Assets<Mesh>>,
@@ -243,6 +302,11 @@ pub(crate) fn configure(app: &mut App) {
 			(begin_weapon_swap, commit_weapon_swap.after(FirearmUserSystems::Swap))
 				.chain()
 				.after(CharacterControlSystems)
+				.run_if(resource_equals(WorldGameplayEnabled(true))),
+			(cycle_skill_maps, sync_skill_map_equip)
+				.chain()
+				.after(CharacterControlSystems)
+				.before(SkillMapSystems::Spawn)
 				.run_if(resource_equals(WorldGameplayEnabled(true))),
 		),
 	);
@@ -307,6 +371,7 @@ mod tests {
 
 		assert_eq!(world.query::<&RequestSetCharacterAppearance>().iter(&world).count(), 0);
 		assert!(world.get::<WorldPlayerAppearanceRequested>(player).is_none());
+		assert!(world.get::<maybraid_skill_map::SkillMapUser>(player).is_some());
 		Ok(())
 	}
 
@@ -318,6 +383,21 @@ mod tests {
 			],
 			clothing: Vec::new(),
 			weapons: vec![0, 1],
+			skills: Vec::new(),
+		}
+	}
+
+	fn two_map_bag() -> Inventory {
+		use crozon_character_items::{SkillMapKind, SkillMapSpec};
+
+		Inventory {
+			items: vec![
+				InventoryItem::skill_map(SkillMapSpec::new(SkillMapKind::Fireball, 1)),
+				InventoryItem::skill_map(SkillMapSpec::new(SkillMapKind::Dumbwave, 2)),
+			],
+			clothing: Vec::new(),
+			weapons: Vec::new(),
+			skills: vec![0, 1],
 		}
 	}
 
@@ -336,11 +416,7 @@ mod tests {
 		let bag = world.spawn(inventory).id();
 		let held = world.spawn_empty().id();
 		let player = world
-			.spawn((
-				VegetationPlayer,
-				InventoryUser::carrying(bag),
-				FirearmUser::holding(held),
-			))
+			.spawn((VegetationPlayer, InventoryUser::carrying(bag), FirearmUser::holding(held)))
 			.id();
 		world
 			.run_system_once(|mut writer: MessageWriter<CharacterIntent>| {
@@ -404,6 +480,63 @@ mod tests {
 		assert_eq!(
 			loadout.inventory.primary_weapon().and_then(InventoryItem::firearm_mesh),
 			Some(FirearmMesh::Reltor)
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn dpad_cycles_the_presented_skill_map() -> anyhow::Result<()> {
+		use crozon_character_items::{SkillMapKind, SkillMapSpec};
+		use crozon_inventory_user::InventoryUser;
+		use maybraid_character_controller::CharacterIntent;
+		use maybraid_skill_map::SkillMapEquip;
+
+		use crate::weapon::{cycle_skill_maps, sync_skill_map_equip};
+
+		let inventory = two_map_bag();
+		let mut world = World::new();
+		world.init_resource::<Messages<CharacterIntent>>();
+		world.insert_resource(WorldGameplayEnabled(true));
+		world.insert_resource(WorldPlayerLoadout::new(
+			"active",
+			CharacterAppearance::default(),
+			inventory.clone(),
+		));
+		let bag = world.spawn(inventory).id();
+		let player = world
+			.spawn((
+				VegetationPlayer,
+				InventoryUser::carrying(bag),
+				SkillMapEquip::from_spec(Some(SkillMapSpec::new(SkillMapKind::Fireball, 1))),
+			))
+			.id();
+		world
+			.run_system_once(|mut writer: MessageWriter<CharacterIntent>| {
+				writer.write(CharacterIntent::CycleSkillMap(1));
+			})
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		world
+			.run_system_once(cycle_skill_maps)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		world
+			.run_system_once(sync_skill_map_equip)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+
+		let bag = world.get::<Inventory>(bag).ok_or_else(|| anyhow::anyhow!("bag"))?;
+		assert_eq!(
+			bag.primary_skill_map().and_then(InventoryItem::skill_map_spec),
+			Some(SkillMapSpec::new(SkillMapKind::Dumbwave, 2))
+		);
+		assert_eq!(
+			world.get::<SkillMapEquip>(player).copied(),
+			Some(SkillMapEquip::from_spec(Some(SkillMapSpec::new(SkillMapKind::Dumbwave, 2))))
+		);
+		let loadout = world
+			.get_resource::<WorldPlayerLoadout>()
+			.ok_or_else(|| anyhow::anyhow!("loadout"))?;
+		assert_eq!(
+			loadout.inventory.primary_skill_map().and_then(InventoryItem::skill_map_spec),
+			Some(SkillMapSpec::new(SkillMapKind::Dumbwave, 2))
 		);
 		Ok(())
 	}

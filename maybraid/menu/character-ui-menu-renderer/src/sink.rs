@@ -27,6 +27,15 @@ pub trait MenuThumbnailContext {
 		color: Color,
 		camera: character_ui_menu::ThumbnailCamera,
 	) -> Option<Handle<Image>>;
+
+	fn image_for_key(&mut self, _key: u64) -> Option<Handle<Image>> {
+		None
+	}
+
+	/// Off-screen [`Camera2d`] for a catalog [`bevy::ui::widget::ViewportNode`].
+	fn viewport_for_key(&mut self, _key: u64) -> Option<Entity> {
+		None
+	}
 }
 
 /// Thumbnail context that never returns an image.
@@ -71,7 +80,9 @@ impl<T> RenderContext<'_, T> {
 	}
 
 	pub fn header_color(&self, label: &str) -> Color {
-		if self.lock_appearance && !matches!(label, "Clothing" | "Weapons" | "Loadout") {
+		if self.lock_appearance
+			&& !matches!(label, "Clothing" | "Weapons" | "Skill Maps" | "Loadout")
+		{
 			TEXT_YELLOW_FAINT
 		} else {
 			TEXT_YELLOW
@@ -469,6 +480,8 @@ impl MaybraidMenuSink {
 		selected: bool,
 		rank: Option<u8>,
 		thumbnail: Option<Handle<Image>>,
+		viewport: Option<Entity>,
+		swatch: Option<Color>,
 		event: E,
 	) {
 		if context.interactive {
@@ -480,6 +493,8 @@ impl MaybraidMenuSink {
 				selected,
 				rank,
 				thumbnail,
+				viewport,
+				swatch,
 				false,
 				(MenuButton(event), context.stamp_hud_item()),
 			);
@@ -492,6 +507,8 @@ impl MaybraidMenuSink {
 				selected,
 				rank,
 				thumbnail,
+				viewport,
+				swatch,
 				true,
 				Pickable::IGNORE,
 			);
@@ -531,7 +548,14 @@ impl MaybraidMenuSink {
 	) {
 		spawn_tile_grid(parent, self.justify.content(), |grid| {
 			for choice in choices {
-				let thumbnail = grid_catalog_thumbnail(choice, bevy_color(choice.preview), context);
+				let viewport =
+					choice.image_key.and_then(|key| context.thumbnails.viewport_for_key(key));
+				let thumbnail = if viewport.is_some() {
+					None
+				} else {
+					grid_catalog_thumbnail(choice, bevy_color(choice.preview), context)
+				};
+				let swatch = choice.path.is_empty().then_some(bevy_color(choice.preview));
 				self.catalog_tile(
 					grid,
 					context,
@@ -540,6 +564,8 @@ impl MaybraidMenuSink {
 					choice.selected,
 					choice.rank,
 					thumbnail,
+					viewport,
+					swatch,
 					choice.event,
 				);
 			}
@@ -616,6 +642,11 @@ fn grid_catalog_thumbnail<E: Copy + Send + Sync + 'static, C: MenuThumbnailConte
 	preview: Color,
 	context: &mut RenderContext<'_, C>,
 ) -> Option<Handle<Image>> {
+	if let Some(key) = choice.image_key {
+		if let Some(image) = context.thumbnails.image_for_key(key) {
+			return Some(image);
+		}
+	}
 	thumbnail_image(choice.path, choice.path, choice.thumbnail_camera, preview, context)
 }
 

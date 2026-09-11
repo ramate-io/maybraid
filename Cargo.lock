@@ -4705,6 +4705,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "maybraid-skill-map"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "avian3d",
+ "bevy",
+ "bevy_hanabi",
+ "combat-targeting",
+ "crozon-character-items",
+ "damage",
+ "evasion-intelligence",
+ "lod-avian",
+ "maybraid-character-controller",
+ "maybraid-input",
+ "menu-components",
+ "noise",
+ "player",
+ "projectiles",
+ "threat-management-intelligence",
+]
+
+[[package]]
 name = "maybraid-sky"
 version = "0.0.1"
 dependencies = [
@@ -4747,6 +4769,7 @@ dependencies = [
  "maybraid-character-controller",
  "maybraid-input",
  "maybraid-mobs",
+ "maybraid-skill-map",
  "maybraid-sky",
  "meandering-intelligence",
  "mob-characters",
@@ -4837,6 +4860,7 @@ dependencies = [
  "maybraid-character-ui-menu-renderer",
  "maybraid-input",
  "maybraid-menu-controller",
+ "maybraid-skill-map",
  "menu-components",
  "menu-screens",
  "player",

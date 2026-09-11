@@ -60,11 +60,22 @@ pub fn produce_keyboard(
 	if keyboard.pressed(KeyCode::KeyC) {
 		pad.hold_digital(PadButton::BumperFocus);
 	}
+	// V is RB. Skill maps read stick flicks, not a C+V chord.
+	if keyboard.pressed(KeyCode::KeyV) {
+		pad.hold_digital(PadButton::BumperFire);
+	}
 	if keyboard.pressed(KeyCode::KeyE) || keyboard.pressed(KeyCode::KeyX) {
 		pad.hold_digital(PadButton::X);
 	}
 	if keyboard.pressed(KeyCode::KeyY) {
 		pad.hold_digital(PadButton::Y);
+	}
+	// Brackets cycle skill maps. Arrows already walk and feed the analog D-Pad.
+	if keyboard.pressed(KeyCode::BracketLeft) {
+		pad.hold_digital(PadButton::DpadLeft);
+	}
+	if keyboard.pressed(KeyCode::BracketRight) {
+		pad.hold_digital(PadButton::DpadRight);
 	}
 
 	pad.keys = keyboard.clone();
@@ -120,5 +131,27 @@ mod tests {
 			}
 			assert!(pad.digital_held(PadButton::X));
 		}
+	}
+
+	#[test]
+	fn v_holds_right_bumper() {
+		let mut pad = VirtualPad::default();
+		let mut keyboard = ButtonInput::<KeyCode>::default();
+		keyboard.press(KeyCode::KeyV);
+		if keyboard.pressed(KeyCode::KeyV) {
+			pad.hold_digital(PadButton::BumperFire);
+		}
+		assert!(pad.digital_held(PadButton::BumperFire));
+	}
+
+	#[test]
+	fn brackets_hold_dpad() {
+		let mut pad = VirtualPad::default();
+		let mut keyboard = ButtonInput::<KeyCode>::default();
+		keyboard.press(KeyCode::BracketLeft);
+		if keyboard.pressed(KeyCode::BracketLeft) {
+			pad.hold_digital(PadButton::DpadLeft);
+		}
+		assert!(pad.digital_held(PadButton::DpadLeft));
 	}
 }

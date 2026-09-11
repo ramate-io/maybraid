@@ -10,6 +10,8 @@ pub enum CharacterIntent {
 	Focus(f32),
 	/// Cheek-weld ADS with iron-sight FOV. Left bumper / middle mouse.
 	Ads(f32),
+	/// Unused hold chord. Discover maps now read stick flicks, not bumpers.
+	SkillMap,
 	UseItem(f32),
 	StartSprint,
 	StopSprint,
@@ -19,6 +21,9 @@ pub enum CharacterIntent {
 	StartInteraction,
 	/// Cycle the weapon queue (pad **Y** / keyboard **Y**).
 	SwapActive,
+	/// Cycle the equipped skill-map queue. D-Pad left/right, or **[** / **]**.
+	/// Negative steps backward; non-negative advances.
+	CycleSkillMap(i8),
 	InGameMenu,
 	Inventory,
 	PowerUseItem,
@@ -31,6 +36,7 @@ impl CharacterIntent {
 			Self::Look(_) => "look",
 			Self::Focus(_) => "focus",
 			Self::Ads(_) => "ads",
+			Self::SkillMap => "skill-map",
 			Self::UseItem(_) => "use-item",
 			Self::StartSprint => "start-sprint",
 			Self::StopSprint => "stop-sprint",
@@ -39,6 +45,7 @@ impl CharacterIntent {
 			Self::ExitInteraction => "exit-interaction",
 			Self::StartInteraction => "start-interaction",
 			Self::SwapActive => "swap-active",
+			Self::CycleSkillMap(_) => "cycle-skill-map",
 			Self::InGameMenu => "in-game-menu",
 			Self::Inventory => "inventory",
 			Self::PowerUseItem => "power-use-item",

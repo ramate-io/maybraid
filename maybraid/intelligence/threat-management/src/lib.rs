@@ -15,7 +15,7 @@ pub use scoring::{
 	ThreatManagementElement,
 };
 pub use select::select_threat_tactics;
-pub use tactic::{CombatSelected, EvadeSelected, ThreatTactic, ThreatTacticChanged};
+pub use tactic::{CombatSelected, EvadeSelected, SkillDaze, ThreatTactic, ThreatTacticChanged};
 pub use user::ThreatManagementIntelligence;
 
 #[cfg(test)]

@@ -4,7 +4,7 @@
 //! the triple picks one word from each list so the same item always has the same
 //! name (`Celestial Red Tide Joggers`).
 
-use crate::{ClothingMaterial, ClothingMesh, FirearmSpec, ItemColor};
+use crate::{ClothingMaterial, ClothingMesh, FirearmSpec, ItemColor, SkillMapSpec};
 
 /// Material adjective, then color adjective, then clothing noun.
 pub fn hashed_item_name(
@@ -30,6 +30,12 @@ pub fn hashed_firearm_name(spec: FirearmSpec) -> String {
 		pick(spec.looks.body.color.adjectives(), hash >> 17),
 		pick(spec.kit.body.nouns(), hash >> 33),
 	)
+}
+
+/// Adjective plus the authored kind so two seeds of the same map still differ.
+pub fn hashed_skill_map_name(spec: SkillMapSpec) -> String {
+	let hash = mix(0x5A11_5A1D_0000_0001, spec.kind.label()).wrapping_add(u64::from(spec.seed));
+	format!("{} {}", pick(spec.kind.adjectives(), hash), spec.kind.display_name())
 }
 
 pub(crate) fn mix(seed: u64, label: &str) -> u64 {
@@ -146,6 +152,12 @@ mod tests {
 		}
 		for material in FirearmMaterial::VALUES {
 			assert!(!material.adjectives().is_empty(), "{}", material.label());
+		}
+		for kind in crate::SkillMapKind::VALUES {
+			assert!(!kind.adjectives().is_empty(), "{}", kind.label());
+			let name = hashed_skill_map_name(crate::SkillMapSpec::new(*kind, 7));
+			assert!(name.contains(kind.display_name()), "{name}");
+			assert_ne!(kind.preview_srgb(), [1.0, 1.0, 1.0], "{}", kind.label());
 		}
 	}
 }

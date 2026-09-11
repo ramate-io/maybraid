@@ -161,6 +161,7 @@ fn action_copy(
 		let kind = match item.slot() {
 			InventorySlot::Clothing => "Clothing Item",
 			InventorySlot::Weapons => "Weapon",
+			InventorySlot::Skills => "Skill Map",
 		};
 		("Next".into(), format!("{kind} ({}/{})", index + 1, total))
 	}

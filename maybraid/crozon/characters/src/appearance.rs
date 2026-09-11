@@ -170,8 +170,12 @@ mod tests {
 		);
 		let packed =
 			InventoryItem::clothing(ClothingMesh::Pants, ClothingMaterial::Cloth, ItemColor::Red);
-		let inventory =
-			Inventory { items: vec![worn, packed], clothing: vec![0], weapons: Vec::new() };
+		let inventory = Inventory {
+			items: vec![worn, packed],
+			clothing: vec![0],
+			weapons: Vec::new(),
+			skills: Vec::new(),
+		};
 		let appearance = CharacterAppearance::default().with_inventory_clothing(&inventory);
 		let CharacterAppearance::Braidman(config) = appearance else {
 			anyhow::bail!("default appearance should remain a braidman");

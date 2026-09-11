@@ -2,13 +2,14 @@
 //!
 //! The bag is a flat [`InventoryItem`] list. Each item belongs to one
 //! [`InventorySlot`]; that slot holds an ordered unique selection of bag
-//! indices (clothing wear order, weapons switch queue).
+//! indices (clothing wear order, weapons switch queue, skill-map queue).
 
 use bevy::prelude::*;
 
 use crate::{
-	hashed_firearm_name, hashed_item_name, ClothingKind, ClothingMaterial, ClothingMesh,
-	ClothingStats, FirearmMesh, FirearmSpec, FirearmStats, ItemColor,
+	hashed_firearm_name, hashed_item_name, hashed_skill_map_name, ClothingKind, ClothingMaterial,
+	ClothingMesh, ClothingStats, FirearmMesh, FirearmSpec, FirearmStats, ItemColor, SkillMapKind,
+	SkillMapSpec,
 };
 
 /// How many garments character creation rolls before the body editor.
@@ -23,11 +24,21 @@ pub const WORN_CLOTHING_LIMIT: usize = 6;
 /// Hard cap on the active weapon queue. Index 0 is the primary.
 pub const WEAPON_QUEUE_LIMIT: usize = 3;
 
+/// How many skill maps character creation rolls into the bag.
+pub const STARTER_SKILL_MAP_COUNT: usize = 1;
+
+/// Hard cap on the equipped skill-map queue. Index 0 is the presented map.
+pub const SKILL_MAP_QUEUE_LIMIT: usize = 3;
+
+/// Hard cap on skill maps sitting in the bag (equipped or not).
+pub const SKILL_MAP_BAG_LIMIT: usize = 6;
+
 /// Bag partition. Slots are typed; items are not stored in separate vecs.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum InventorySlot {
 	Clothing,
 	Weapons,
+	Skills,
 }
 
 impl InventorySlot {
@@ -35,6 +46,7 @@ impl InventorySlot {
 		match self {
 			Self::Clothing => WORN_CLOTHING_LIMIT,
 			Self::Weapons => WEAPON_QUEUE_LIMIT,
+			Self::Skills => SKILL_MAP_QUEUE_LIMIT,
 		}
 	}
 
@@ -42,6 +54,7 @@ impl InventorySlot {
 		match self {
 			Self::Clothing => "Clothing",
 			Self::Weapons => "Weapons",
+			Self::Skills => "Skill Maps",
 		}
 	}
 }
@@ -64,6 +77,7 @@ impl MaterialRefParams {
 pub enum InventoryItem {
 	Clothing { mesh: ClothingMesh, material: MaterialRefParams, stats: ClothingStats },
 	Firearm { spec: FirearmSpec, stats: FirearmStats },
+	SkillMap { spec: SkillMapSpec },
 }
 
 impl InventoryItem {
@@ -83,52 +97,64 @@ impl InventoryItem {
 		Self::Firearm { spec, stats: FirearmStats::generate(&spec) }
 	}
 
+	pub const fn skill_map(spec: SkillMapSpec) -> Self {
+		Self::SkillMap { spec }
+	}
+
 	pub const fn slot(&self) -> InventorySlot {
 		match self {
 			Self::Clothing { .. } => InventorySlot::Clothing,
 			Self::Firearm { .. } => InventorySlot::Weapons,
+			Self::SkillMap { .. } => InventorySlot::Skills,
 		}
 	}
 
 	pub const fn mesh(&self) -> Option<ClothingMesh> {
 		match self {
 			Self::Clothing { mesh, .. } => Some(*mesh),
-			Self::Firearm { .. } => None,
+			Self::Firearm { .. } | Self::SkillMap { .. } => None,
 		}
 	}
 
 	pub const fn firearm_mesh(&self) -> Option<FirearmMesh> {
 		match self {
 			Self::Firearm { spec, .. } => Some(spec.kit.body),
-			Self::Clothing { .. } => None,
+			Self::Clothing { .. } | Self::SkillMap { .. } => None,
 		}
 	}
 
 	pub const fn firearm_spec(&self) -> Option<FirearmSpec> {
 		match self {
 			Self::Firearm { spec, .. } => Some(*spec),
-			Self::Clothing { .. } => None,
+			Self::Clothing { .. } | Self::SkillMap { .. } => None,
+		}
+	}
+
+	pub const fn skill_map_spec(&self) -> Option<SkillMapSpec> {
+		match self {
+			Self::SkillMap { spec } => Some(*spec),
+			Self::Clothing { .. } | Self::Firearm { .. } => None,
 		}
 	}
 
 	pub const fn material(&self) -> Option<MaterialRefParams> {
 		match self {
 			Self::Clothing { material, .. } => Some(*material),
-			Self::Firearm { .. } => None,
+			Self::Firearm { .. } | Self::SkillMap { .. } => None,
 		}
 	}
 
 	pub const fn clothing_stats(&self) -> Option<ClothingStats> {
 		match self {
 			Self::Clothing { stats, .. } => Some(*stats),
-			Self::Firearm { .. } => None,
+			Self::Firearm { .. } | Self::SkillMap { .. } => None,
 		}
 	}
 
 	pub const fn firearm_stats(&self) -> Option<FirearmStats> {
 		match self {
 			Self::Firearm { stats, .. } => Some(*stats),
-			Self::Clothing { .. } => None,
+			Self::Clothing { .. } | Self::SkillMap { .. } => None,
 		}
 	}
 
@@ -136,6 +162,9 @@ impl InventoryItem {
 		match self {
 			Self::Clothing { stats, .. } => stats.catalog_detail(),
 			Self::Firearm { stats, .. } => stats.catalog_detail(),
+			Self::SkillMap { spec } => {
+				format!("{} · {:04X}", spec.kind.display_name(), spec.seed as u16)
+			}
 		}
 	}
 
@@ -143,6 +172,10 @@ impl InventoryItem {
 		match self {
 			Self::Clothing { stats, .. } => stats.stat_rows(),
 			Self::Firearm { stats, .. } => stats.stat_rows(),
+			Self::SkillMap { spec } => vec![
+				(String::from("Kind"), spec.kind.display_name().to_string()),
+				(String::from("Seed"), format!("{:08X}", spec.seed)),
+			],
 		}
 	}
 
@@ -150,6 +183,7 @@ impl InventoryItem {
 		match self {
 			Self::Clothing { mesh, .. } => mesh.label(),
 			Self::Firearm { spec, .. } => spec.kit.body.label(),
+			Self::SkillMap { spec } => spec.kind.label(),
 		}
 	}
 
@@ -159,6 +193,7 @@ impl InventoryItem {
 				hashed_item_name(*mesh, material.id, material.color)
 			}
 			Self::Firearm { spec, .. } => hashed_firearm_name(*spec),
+			Self::SkillMap { spec } => hashed_skill_map_name(*spec),
 		}
 	}
 
@@ -166,17 +201,19 @@ impl InventoryItem {
 		match self {
 			Self::Clothing { mesh, .. } => mesh.path(),
 			Self::Firearm { spec, .. } => spec.kit.body.path(),
+			Self::SkillMap { .. } => "",
 		}
 	}
 }
 
-/// Owned items plus per-slot selections. Clothing is wear order; weapons are
-/// the switch queue (first selected is primary).
+/// Owned items plus per-slot selections. Clothing is wear order; weapons and
+/// skill maps are switch queues (first selected is primary / presented).
 #[derive(Component, Clone, Debug, Default, PartialEq, Eq)]
 pub struct Inventory {
 	pub items: Vec<InventoryItem>,
 	pub clothing: Vec<usize>,
 	pub weapons: Vec<usize>,
+	pub skills: Vec<usize>,
 }
 
 impl Inventory {
@@ -189,7 +226,7 @@ impl Inventory {
 			.map(|(index, _)| index)
 			.take(InventorySlot::Clothing.capacity())
 			.collect();
-		Self { items, clothing, weapons: Vec::new() }
+		Self { items, clothing, weapons: Vec::new(), skills: Vec::new() }
 	}
 
 	/// Create-mode bag: wear the first lower and first upper; queue every
@@ -215,13 +252,21 @@ impl Inventory {
 			.map(|(index, _)| index)
 			.take(InventorySlot::Weapons.capacity())
 			.collect();
-		Self { items, clothing, weapons }
+		let skills: Vec<usize> = items
+			.iter()
+			.enumerate()
+			.filter(|(_, item)| item.slot() == InventorySlot::Skills)
+			.map(|(index, _)| index)
+			.take(InventorySlot::Skills.capacity())
+			.collect();
+		Self { items, clothing, weapons, skills }
 	}
 
 	pub fn selected(&self, slot: InventorySlot) -> &[usize] {
 		match slot {
 			InventorySlot::Clothing => &self.clothing,
 			InventorySlot::Weapons => &self.weapons,
+			InventorySlot::Skills => &self.skills,
 		}
 	}
 
@@ -229,6 +274,7 @@ impl Inventory {
 		match slot {
 			InventorySlot::Clothing => &mut self.clothing,
 			InventorySlot::Weapons => &mut self.weapons,
+			InventorySlot::Skills => &mut self.skills,
 		}
 	}
 
@@ -256,6 +302,24 @@ impl Inventory {
 
 	pub fn primary_weapon(&self) -> Option<&InventoryItem> {
 		self.weapons.first().and_then(|&index| self.items.get(index))
+	}
+
+	pub fn primary_skill_map(&self) -> Option<&InventoryItem> {
+		self.skills.first().and_then(|&index| self.items.get(index))
+	}
+
+	/// Rotate the equipped skill-map queue. `dir >= 0` advances (D-Pad right);
+	/// `dir < 0` goes back. No-op when fewer than two maps are equipped.
+	pub fn cycle_skills(&mut self, dir: i8) -> bool {
+		if self.skills.len() < 2 {
+			return false;
+		}
+		if dir < 0 {
+			self.skills.rotate_right(1);
+		} else {
+			self.skills.rotate_left(1);
+		}
+		true
 	}
 
 	/// Rotate the switch queue so the next gun becomes primary.
@@ -320,7 +384,12 @@ impl Inventory {
 		self.items
 			.into_iter()
 			.map(|item| {
-				let mut bag = Self { items: vec![item], clothing: Vec::new(), weapons: Vec::new() };
+				let mut bag = Self {
+					items: vec![item],
+					clothing: Vec::new(),
+					weapons: Vec::new(),
+					skills: Vec::new(),
+				};
 				let _ = bag.toggle(0);
 				bag
 			})
@@ -446,10 +515,25 @@ pub fn random_starter_firearms(rng: &mut ItemRng, count: usize) -> Vec<Inventory
 	items
 }
 
-/// Clothing starter plus two unique firearms.
+/// One skill map: a unique kind and a rolled seed. Not every starter shares
+/// the same pair of maps.
+pub fn random_starter_skill_maps(rng: &mut ItemRng, count: usize) -> Vec<InventoryItem> {
+	let mut remaining: Vec<SkillMapKind> = SkillMapKind::VALUES.to_vec();
+	let mut items = Vec::new();
+	let take = count.min(remaining.len()).min(SKILL_MAP_BAG_LIMIT);
+	for _ in 0..take {
+		let index = rng.gen_index(remaining.len());
+		let kind = remaining.swap_remove(index);
+		items.push(InventoryItem::skill_map(SkillMapSpec::new(kind, rng.in_range(1, u32::MAX))));
+	}
+	items
+}
+
+/// Clothing starter, two unique firearms, and one rolled skill map.
 pub fn random_starter_loadout(rng: &mut ItemRng) -> Vec<InventoryItem> {
 	let mut items = random_starter_clothing(rng, STARTER_CLOTHING_COUNT);
 	items.extend(random_starter_firearms(rng, STARTER_WEAPON_COUNT));
+	items.extend(random_starter_skill_maps(rng, STARTER_SKILL_MAP_COUNT));
 	items
 }
 
@@ -533,7 +617,8 @@ mod tests {
 			InventoryItem::firearm(FirearmMesh::Reltor),
 			InventoryItem::firearm(FirearmMesh::Snailer),
 		];
-		let mut inventory = Inventory { items, clothing: Vec::new(), weapons: vec![0, 1, 2] };
+		let mut inventory =
+			Inventory { items, clothing: Vec::new(), weapons: vec![0, 1, 2], skills: Vec::new() };
 		assert!(inventory.swap_active());
 		assert_eq!(inventory.weapons, vec![1, 2, 0]);
 		assert_eq!(
@@ -551,7 +636,8 @@ mod tests {
 	fn weapon_queue_caps_at_three_and_compacts_rank() {
 		let items: Vec<_> =
 			FirearmMesh::VALUES.iter().map(|mesh| InventoryItem::firearm(*mesh)).collect();
-		let mut inventory = Inventory { items, clothing: Vec::new(), weapons: vec![0, 1, 2] };
+		let mut inventory =
+			Inventory { items, clothing: Vec::new(), weapons: vec![0, 1, 2], skills: Vec::new() };
 		assert!(!inventory.toggle(3));
 		assert!(inventory.toggle(1));
 		assert_eq!(inventory.weapons, vec![0, 2]);
@@ -562,15 +648,74 @@ mod tests {
 	}
 
 	#[test]
-	fn starter_loadout_has_clothes_and_two_guns() {
+	fn starter_loadout_has_clothes_two_guns_and_one_skill_map() {
 		let items = random_starter_loadout(&mut ItemRng::from_seed(42));
-		assert_eq!(items.len(), STARTER_CLOTHING_COUNT + STARTER_WEAPON_COUNT);
+		assert_eq!(
+			items.len(),
+			STARTER_CLOTHING_COUNT + STARTER_WEAPON_COUNT + STARTER_SKILL_MAP_COUNT
+		);
 		assert_eq!(items.iter().filter(|item| item.slot() == InventorySlot::Clothing).count(), 3);
 		assert_eq!(items.iter().filter(|item| item.slot() == InventorySlot::Weapons).count(), 2);
+		assert_eq!(items.iter().filter(|item| item.slot() == InventorySlot::Skills).count(), 1);
 		let mut guns: Vec<_> = items.iter().filter_map(InventoryItem::firearm_mesh).collect();
 		guns.sort_by_key(|mesh| mesh.label());
 		guns.dedup();
 		assert_eq!(guns.len(), 2);
+		let outfit = Inventory::with_starter_outfit(items);
+		assert_eq!(outfit.skills.len(), 1);
+		assert!(outfit.primary_skill_map().and_then(InventoryItem::skill_map_spec).is_some());
+	}
+
+	#[test]
+	fn starter_skill_map_kind_depends_on_the_seed() {
+		let a = random_starter_skill_maps(&mut ItemRng::from_seed(1), STARTER_SKILL_MAP_COUNT);
+		let b = random_starter_skill_maps(&mut ItemRng::from_seed(2), STARTER_SKILL_MAP_COUNT);
+		assert_eq!(a.len(), 1);
+		assert_eq!(b.len(), 1);
+		assert_ne!(a[0].skill_map_spec(), b[0].skill_map_spec());
+		let kinds: std::collections::HashSet<_> = [1_u64, 2, 3, 4, 5, 6, 7, 8]
+			.into_iter()
+			.filter_map(|seed| {
+				random_starter_skill_maps(&mut ItemRng::from_seed(seed), 1)
+					.first()
+					.and_then(InventoryItem::skill_map_spec)
+					.map(|spec| spec.kind)
+			})
+			.collect();
+		assert!(kinds.len() > 1, "starter kind should not be the same for every seed");
+	}
+
+	#[test]
+	fn cycle_skills_rotates_the_equipped_queue() {
+		let items = vec![
+			InventoryItem::skill_map(SkillMapSpec::new(SkillMapKind::Fireball, 1)),
+			InventoryItem::skill_map(SkillMapSpec::new(SkillMapKind::Dumbwave, 2)),
+		];
+		let mut inventory =
+			Inventory { items, clothing: Vec::new(), weapons: Vec::new(), skills: vec![0, 1] };
+		assert!(inventory.cycle_skills(1));
+		assert_eq!(inventory.skills, vec![1, 0]);
+		assert_eq!(
+			inventory.primary_skill_map().and_then(InventoryItem::skill_map_spec),
+			Some(SkillMapSpec::new(SkillMapKind::Dumbwave, 2))
+		);
+		assert!(inventory.cycle_skills(-1));
+		assert_eq!(inventory.skills, vec![0, 1]);
+		assert!(!Inventory::default().cycle_skills(1));
+	}
+
+	#[test]
+	fn skill_queue_caps_at_three() {
+		let items: Vec<_> = (0..4)
+			.map(|seed| InventoryItem::skill_map(SkillMapSpec::new(SkillMapKind::Fireball, seed)))
+			.collect();
+		let mut inventory =
+			Inventory { items, clothing: Vec::new(), weapons: Vec::new(), skills: vec![0, 1, 2] };
+		assert!(!inventory.toggle(3));
+		assert!(inventory.toggle(1));
+		assert_eq!(inventory.skills, vec![0, 2]);
+		assert!(inventory.toggle(3));
+		assert_eq!(inventory.skills, vec![0, 2, 3]);
 	}
 
 	#[test]
@@ -606,6 +751,7 @@ mod tests {
 			],
 			clothing: vec![0],
 			weapons: vec![1],
+			skills: Vec::new(),
 		};
 
 		let taken = bag.take_all();
@@ -613,6 +759,7 @@ mod tests {
 		assert!(bag.items.is_empty());
 		assert!(bag.clothing.is_empty());
 		assert!(bag.weapons.is_empty());
+		assert!(bag.skills.is_empty());
 		assert_eq!(taken.items.len(), 3);
 		assert_eq!(taken.clothing, vec![0]);
 		assert_eq!(taken.weapons, vec![1]);
@@ -632,6 +779,7 @@ mod tests {
 			)],
 			clothing: vec![0],
 			weapons: Vec::new(),
+			skills: Vec::new(),
 		};
 		let incoming = Inventory {
 			items: vec![
@@ -644,6 +792,7 @@ mod tests {
 			],
 			clothing: vec![1],
 			weapons: vec![0],
+			skills: Vec::new(),
 		};
 
 		dest.absorb(incoming);
@@ -676,6 +825,7 @@ mod tests {
 			],
 			clothing: vec![0],
 			weapons: vec![1],
+			skills: Vec::new(),
 		};
 
 		let exploded = bag.explode();

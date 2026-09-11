@@ -5,13 +5,13 @@ use crozon_character_items::{
 	BoltMaterial, ClothingMaterial, ClothingMesh, ClothingStats, FirearmBarrel, FirearmGrip,
 	FirearmKitSpec, FirearmLooks, FirearmMaterial, FirearmMesh, FirearmScales, FirearmSight,
 	FirearmSpec, FirearmStats, FirearmStock, FirearmTriggerBox, Inventory, InventoryItem,
-	InventorySlot, ItemColor, WORN_CLOTHING_LIMIT,
+	InventorySlot, ItemColor, SkillMapKind, SkillMapSpec, WORN_CLOTHING_LIMIT,
 };
 use crozon_character_persist::{CharacterId, PersistError, SaveRoot};
 use serde::{Deserialize, Serialize};
 use std::fs;
 
-const VERSION: u32 = 4;
+const VERSION: u32 = 5;
 
 /// Capsule/session using an inventory bag.
 ///
@@ -62,6 +62,8 @@ struct InventoryFile {
 	clothing: Vec<usize>,
 	#[serde(default)]
 	weapons: Vec<usize>,
+	#[serde(default)]
+	skills: Vec<usize>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -98,6 +100,10 @@ enum InventoryItemFile {
 		bolt: Option<BoltMaterial>,
 		#[serde(default)]
 		stats: Option<FirearmStats>,
+	},
+	SkillMap {
+		skill: SkillMapKind,
+		seed: u32,
 	},
 }
 
@@ -161,6 +167,9 @@ impl InventoryItemFile {
 				bolt: Some(spec.bolt),
 				stats: Some(*stats),
 			},
+			InventoryItem::SkillMap { spec } => {
+				Self::SkillMap { skill: spec.kind, seed: spec.seed }
+			}
 		}
 	}
 
@@ -187,6 +196,9 @@ impl InventoryItemFile {
 					spec,
 					stats: stats.unwrap_or_else(|| FirearmStats::generate(&spec)),
 				}
+			}
+			Self::SkillMap { skill, seed } => {
+				InventoryItem::skill_map(SkillMapSpec::new(skill, seed))
 			}
 		}
 	}
@@ -239,6 +251,11 @@ pub fn save(root: &SaveRoot, id: CharacterId, inventory: &Inventory) -> Result<(
 			inventory.weapons.iter().copied(),
 			InventorySlot::Weapons,
 		),
+		skills: sanitize_selection(
+			&inventory.items,
+			inventory.skills.iter().copied(),
+			InventorySlot::Skills,
+		),
 	};
 	let json = serde_json::to_string_pretty(&file)?;
 	fs::write(root.inventory_path(id), json)?;
@@ -263,13 +280,14 @@ pub fn load(root: &SaveRoot, id: CharacterId) -> Result<Inventory, PersistError>
 			file.items.into_iter().map(InventoryItemFile::into_item).collect();
 		let clothing = sanitize_selection(&items, file.clothing, InventorySlot::Clothing);
 		let weapons = sanitize_selection(&items, file.weapons, InventorySlot::Weapons);
-		return Ok(Inventory { items, clothing, weapons });
+		let skills = sanitize_selection(&items, file.skills, InventorySlot::Skills);
+		return Ok(Inventory { items, clothing, weapons, skills });
 	}
 	let file: InventoryFileV1 = serde_json::from_value(value)?;
 	let items: Vec<InventoryItem> =
 		file.items.into_iter().map(ClothingItemFile::into_item).collect();
 	let clothing = sanitize_selection(&items, file.worn, InventorySlot::Clothing);
-	Ok(Inventory { items, clothing, weapons: Vec::new() })
+	Ok(Inventory { items, clothing, weapons: Vec::new(), skills: Vec::new() })
 }
 
 pub fn spawn_bag(commands: &mut Commands, host: Entity, inventory: Inventory) -> Entity {
@@ -330,7 +348,8 @@ mod tests {
 			InventoryItem::firearm(FirearmMesh::Bullpup),
 			InventoryItem::firearm(FirearmMesh::Reltor),
 		];
-		let inventory = Inventory { items, clothing: vec![0], weapons: vec![1, 2] };
+		let inventory =
+			Inventory { items, clothing: vec![0], weapons: vec![1, 2], skills: Vec::new() };
 		save(&root, id, &inventory).expect("save");
 		let json = fs::read_to_string(root.inventory_path(id)).expect("read");
 		assert!(json.contains("\"kind\": \"firearm\""));
@@ -390,6 +409,52 @@ mod tests {
 		assert_eq!(loaded.items.len(), 2);
 		assert_eq!(loaded.clothing, vec![0, 1]);
 		assert!(loaded.weapons.is_empty());
+		assert!(loaded.skills.is_empty());
 		assert_eq!(loaded.items[0].mesh(), Some(ClothingMesh::Pants));
+	}
+
+	#[test]
+	fn skill_map_round_trips() {
+		use crozon_character_items::{SkillMapKind, SkillMapSpec};
+
+		let dir = tempfile::tempdir().expect("tempdir");
+		let root = SaveRoot::at(dir.path());
+		let id = CharacterId(13);
+		let items = vec![
+			InventoryItem::clothing(
+				ClothingMesh::Pants,
+				ClothingMaterial::Cloth,
+				ItemColor::Natural,
+			),
+			InventoryItem::skill_map(SkillMapSpec::new(SkillMapKind::Dumbwave, 0xA11A_5EED)),
+		];
+		let inventory =
+			Inventory { items, clothing: vec![0], weapons: Vec::new(), skills: vec![1] };
+		save(&root, id, &inventory).expect("save");
+		let json = fs::read_to_string(root.inventory_path(id)).expect("read");
+		assert!(json.contains("\"kind\": \"skill-map\""));
+		assert!(json.contains("\"dumbwave\""));
+		assert_eq!(load(&root, id).expect("load"), inventory);
+	}
+
+	#[test]
+	fn v4_file_without_skills_stays_empty() {
+		let dir = tempfile::tempdir().expect("tempdir");
+		let root = SaveRoot::at(dir.path());
+		root.ensure_dirs().expect("dirs");
+		let id = CharacterId(14);
+		let json = r#"{
+			"version": 4,
+			"id": "0000000000000000000000000000000e",
+			"items": [
+				{ "kind": "clothing", "mesh": "pants", "material": "cloth", "color": "natural" }
+			],
+			"clothing": [0],
+			"weapons": []
+		}"#;
+		fs::write(root.inventory_path(id), json).expect("write");
+		let loaded = load(&root, id).expect("load");
+		assert!(loaded.skills.is_empty());
+		assert_eq!(loaded.clothing, vec![0]);
 	}
 }
