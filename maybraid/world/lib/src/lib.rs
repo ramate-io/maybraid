@@ -28,6 +28,7 @@ pub use control::{WorldGameplayEnabled, WorldSceneryVisible, WorldSurfaceReady};
 pub use durham_terrain_models::{terrain_streaming_enabled, TerrainStreamingEnabled};
 pub use game_commands::command::PendingStartupCommand;
 pub use intelligence::WorldIntelligencePlugin;
+pub use lod::LodJobCounter;
 pub use material_lib::{WorldMaterialLib, WorldMaterialRefPlugin};
 pub use mobs::WorldMobsPlugin;
 pub use player_camera::CameraPov;
@@ -119,7 +120,8 @@ impl WorldPlugin {
 impl Plugin for WorldPlugin {
 	fn build(&self, app: &mut App) {
 		register_motor_traction_physics(app);
-		app.insert_resource(PlaygroundMode::Character)
+		app.init_resource::<lod::LodJobCounter>()
+			.insert_resource(PlaygroundMode::Character)
 			.insert_resource(PlaygroundDiag {
 				fps: self.fps_diag || self.debug_chrome,
 				hud: self.debug_chrome,

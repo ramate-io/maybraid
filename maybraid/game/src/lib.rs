@@ -1,6 +1,7 @@
 //! Maybraid game executable: home shell over the world playground.
 
 mod flow;
+mod load;
 mod shell;
 
 pub use flow::{GameFlow, HomeRoute, PauseMenuRoute, WorldPause};
@@ -11,7 +12,7 @@ use maybraid_input::MenuNavPad;
 use maybraid_menu_controller::MenuControllerPlugin;
 use maybraid_world::{
 	PlayerPhysicsEnabled, PlayerSpawnXz, TerrainStreamingEnabled, WorldGameplayEnabled,
-	WorldMobHudEnabled, WorldPlayerLoadout, WorldPlugin, WorldSceneryVisible, WorldSurfaceReady,
+	WorldMobHudEnabled, WorldPlayerLoadout, WorldPlugin, WorldSceneryVisible,
 };
 use menu_components::{consume_screen_back, ActiveOverlayKey, ScreenBackPressed, MENU_CLEAR};
 use menu_playground::{
@@ -23,7 +24,7 @@ use menu_screens::{
 	cancel_pending_create, request_show_gallery, request_show_in_game,
 	request_show_in_game_settings, CreateCharacterPlugin, GalleryScreen, GameMode, HomeMenuChoice,
 	HomeScreenPlugin, InGameMenuChoice, InGameScreenPlugin, InGameSettings, InGameSettingsScreen,
-	LoadingScreenPlugin, MenuScreen, SpinRevealScreen,
+	LoadingScreenPlugin, LoadingScreenSystems, MenuScreen, SpinRevealScreen,
 };
 use std::path::{Path, PathBuf};
 
@@ -77,9 +78,13 @@ impl Plugin for GamePlugin {
 					spawn_loading_backdrop,
 					apply_shell_look,
 					detach_preview_camera,
+					crate::load::arm_first_load,
 				),
 			)
-			.add_systems(OnExit(GameFlow::LoadingWorld), despawn_loading_backdrop)
+			.add_systems(
+				OnExit(GameFlow::LoadingWorld),
+				(despawn_loading_backdrop, crate::load::disarm_first_load),
+			)
 			.add_systems(
 				OnEnter(GameFlow::World),
 				(load_active_player_loadout, enter_world, apply_shell_look, detach_preview_camera)
@@ -101,7 +106,9 @@ impl Plugin for GamePlugin {
 				Update,
 				(
 					stamp_preview_render_layers,
-					finish_world_loading.run_if(in_state(GameFlow::LoadingWorld)),
+					crate::load::finish_world_loading
+						.run_if(in_state(GameFlow::LoadingWorld))
+						.before(LoadingScreenSystems::Apply),
 					route_home_choice.run_if(in_state(GameFlow::Home)),
 					route_in_game_choice.run_if(in_state(WorldPause::Menu)),
 					apply_pause_character_look.run_if(in_state(WorldPause::Menu)),
@@ -136,12 +143,6 @@ fn boot_shell(
 		return;
 	}
 	enter_home(commands);
-}
-
-fn finish_world_loading(ready: Res<WorldSurfaceReady>, mut flow: ResMut<NextState<GameFlow>>) {
-	if ready.0 {
-		flow.set(GameFlow::World);
-	}
 }
 
 fn load_active_player_loadout(

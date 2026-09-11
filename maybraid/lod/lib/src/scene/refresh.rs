@@ -140,6 +140,7 @@ impl Plugin for LodRefreshCorePlugin {
 		if !app.is_plugin_added::<LodNodePlugin>() {
 			app.add_plugins(LodNodePlugin);
 		}
+		crate::jobs::ensure_lod_job_counter(app);
 		app.init_resource::<LodProduceCache>()
 			.init_resource::<LodCullProduceCache>()
 			.add_message::<LodSceneRefreshAabb>()
