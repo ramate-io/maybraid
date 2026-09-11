@@ -25,6 +25,10 @@ use maybraid_input::{MenuNav, MenuNavPad};
 #[derive(Component, Debug, Default, Clone, Copy)]
 pub struct TextCursorMenu;
 
+/// Scroll viewport under a sticky [`TextCursorColumn`] header.
+#[derive(Component, Debug, Default, Clone, Copy)]
+pub struct TextCursorScroll;
+
 /// Reserved gutter on a row; the animated mark is a child.
 #[derive(Component, Debug, Default, Clone, Copy)]
 pub struct TextCursorSlot;
@@ -198,29 +202,47 @@ impl<E: Component + Copy + Default + Unpin + Send + Sync + 'static> TextCursorCo
 		if let Some(header) = self.header {
 			children.push(Box::new(TextMenuHeader::new(header).scene()));
 		}
+		let mut rows: Vec<Box<dyn Scene>> = Vec::with_capacity(item_count);
 		for (index, row) in self.items.into_iter().enumerate() {
 			let item = if row.locked {
 				TextMenuItem::faint_yellow(index)
 			} else {
 				TextMenuItem::yellow(index)
 			};
-			children.push(Box::new(cursor_row_scene(item, row, self.align, selected)));
-		}
-		if let Some(description) = self.description {
-			children.push(Box::new(TextMenuDescription::under_column(description)));
+			rows.push(Box::new(cursor_row_scene(item, row, self.align, selected)));
 		}
 		let mut node = self.anchor.node(self.align);
 		if self.scrollable {
 			node.bottom = Val::Px(COLUMN_BOTTOM);
 			node.max_width = Val::Percent(DESCRIPTION_PANE_LEFT_PERCENT);
 			node.min_height = Val::Px(0.0);
-			node.overflow = Overflow::scroll_y();
+			let scroll_node = Node {
+				width: Val::Percent(100.0),
+				flex_grow: 1.0,
+				flex_shrink: 1.0,
+				min_height: Val::Px(0.0),
+				flex_direction: FlexDirection::Column,
+				align_items: self.align.items(),
+				row_gap: Val::Px(ITEM_ROW_GAP),
+				overflow: Overflow::scroll_y(),
+				..default()
+			};
+			children.push(Box::new(bsn! {
+				TextCursorScroll
+				template_value(scroll_node)
+				ScrollPosition::default()
+				Children [ {rows} ]
+			}));
+		} else {
+			children.extend(rows);
+		}
+		if let Some(description) = self.description {
+			children.push(Box::new(TextMenuDescription::under_column(description)));
 		}
 		bsn! {
 			TextCursorMenu
 			template_value(TextMenu::with_selected(item_count, selected))
 			template_value(node)
-			ScrollPosition::default()
 			Children [ {children} ]
 		}
 	}
@@ -602,18 +624,23 @@ pub fn sync_text_cursor_icons(
 
 /// Follow the selected roster row so a long gallery stays on-screen.
 pub fn scroll_text_cursor_selection_into_view(
-	mut menus: Query<
-		(&TextMenu, &ComputedNode, &Children, &mut ScrollPosition),
-		With<TextCursorMenu>,
-	>,
+	menus: Query<(&TextMenu, &Children), With<TextCursorMenu>>,
+	mut scrolls: Query<(&ComputedNode, &Children, &mut ScrollPosition), With<TextCursorScroll>>,
 	computed: Query<&ComputedNode>,
 	items: Query<&TextMenuItem>,
 	descendants: Query<&Children>,
 ) {
-	for (menu, viewport, children, mut scroll) in &mut menus {
+	for (menu, menu_children) in &menus {
 		if menu.item_count == 0 {
 			continue;
 		}
+		let Some(scroll_entity) = menu_children.iter().find(|child| scrolls.contains(*child))
+		else {
+			continue;
+		};
+		let Ok((viewport, children, mut scroll)) = scrolls.get_mut(scroll_entity) else {
+			continue;
+		};
 		let scale = viewport.inverse_scale_factor();
 		let view_h = viewport.size().y * scale;
 		if view_h <= 0.0 {
@@ -673,7 +700,8 @@ fn text_cursor_menu<'a>(
 
 #[cfg(test)]
 mod tests {
-	use super::{MenuObjectiveKind, TextCursorRow};
+	use super::{MenuObjectiveKind, TextCursorColumn, TextCursorRow};
+	use crate::single_select::{TextColumnAlign, TextColumnAnchor};
 	use crate::theme::{OBJECTIVE_MARKER_FONT_SIZE, TEXT_LIME, TEXT_PURPLE, TEXT_SALMON};
 	use crate::ITEM_FONT_SIZE;
 
@@ -711,5 +739,20 @@ mod tests {
 		assert_eq!(row.subtext.as_deref(), Some("Braidman"));
 		assert_eq!(row.objective, Some(MenuObjectiveKind::StartHere));
 		assert!(!row.locked);
+	}
+
+	#[test]
+	fn scrollable_roster_keeps_a_sticky_header() {
+		let column = TextCursorColumn {
+			header: Some(String::from("Characters")),
+			items: vec![TextCursorRow::new("Ada", RowAction::Go)],
+			anchor: TextColumnAnchor::TopLeft,
+			align: TextColumnAlign::Start,
+			selected: 0,
+			description: None,
+			scrollable: true,
+		};
+		assert!(column.scrollable);
+		assert_eq!(column.header.as_deref(), Some("Characters"));
 	}
 }

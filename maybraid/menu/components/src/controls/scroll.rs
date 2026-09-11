@@ -6,7 +6,7 @@ use bevy::picking::hover::HoverMap;
 use bevy::prelude::*;
 
 use crate::controls::hud_menu::{HudMenu, HudMenuItem};
-use crate::theme::{SCROLLBAR_THUMB, SCROLLBAR_TRACK, SCROLLBAR_WIDTH};
+use crate::theme::{SCROLLBAR_THUMB, SCROLLBAR_TRACK, SCROLLBAR_WIDTH, TILE_FOCUS_PAD};
 
 const SCROLL_LINE_PX: f32 = 14.0;
 const MIN_THUMB_PX: f32 = 24.0;
@@ -219,10 +219,11 @@ pub fn scroll_hud_selection_into_view(
 		let item_h = item_node.size().y * item_node.inverse_scale_factor();
 		let view_top = view_tf.affine().translation.y;
 		let item_top = item_tf.affine().translation.y;
-		if item_top < view_top {
-			scroll.y = (scroll.y - (view_top - item_top)).max(0.0);
-		} else if item_top + item_h > view_top + view_h {
-			scroll.y += item_top + item_h - (view_top + view_h);
+		let slack = TILE_FOCUS_PAD;
+		if item_top < view_top + slack {
+			scroll.y = (scroll.y - (view_top + slack - item_top)).max(0.0);
+		} else if item_top + item_h > view_top + view_h - slack {
+			scroll.y += item_top + item_h - (view_top + view_h - slack);
 		}
 	}
 }

@@ -197,6 +197,9 @@ pub const PANEL_ROW_GAP: f32 = 10.0;
 /// Gap between swatches or tiles in a wrapping row.
 pub const PANEL_CHIP_GAP: f32 = 8.0;
 
+/// Inset so tile / swatch focus outlines are not clipped by a scroll pane.
+pub const TILE_FOCUS_PAD: f32 = 6.0;
+
 /// Visible scrollbar thickness when a HUD pane overflows.
 pub const SCROLLBAR_WIDTH: f32 = 6.0;
 

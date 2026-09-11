@@ -18,7 +18,7 @@ use crate::theme::{
 	PANEL_HEADER_FONT_SIZE, PANEL_ITEM_FONT_SIZE, PANEL_ROW_GAP, PANEL_VALUE_FONT_SIZE,
 	TEXT_YELLOW, TEXT_YELLOW_FAINT, TEXT_YELLOW_HOVER,
 };
-use maybraid_input::{MenuNav, MenuNavImpulse};
+use maybraid_input::{MenuNav, MenuNavImpulse, PadButton, VirtualPad};
 
 use super::button::spawn_text_button;
 use super::display::menu_display_name;
@@ -371,6 +371,7 @@ pub fn emit_short_text_pad_on_click(
 
 pub fn emit_short_text_pad_on_nav(
 	impulse: On<MenuNavImpulse>,
+	pad_state: Option<Res<VirtualPad>>,
 	pads: Query<(Entity, &HudMenu), With<ShortTextPad>>,
 	keys: Query<(Entity, &HudMenuItem, Option<&ShortTextPadKey>, Option<&ShortTextSubmit>)>,
 	mut fields: Query<&mut ShortTextField>,
@@ -386,17 +387,37 @@ pub fn emit_short_text_pad_on_nav(
 			cancel_short_text_modal(&mut active, &mut modal, &mut fields, &mut commands);
 		}
 		MenuNav::Select => {
-			activate_selected_pad_item(
-				pad,
-				menu,
-				&keys,
-				&mut fields,
-				&mut active,
-				&mut modal,
-				&mut commands,
-			);
+			if pad_state.as_ref().is_some_and(|pad| pad.just_pressed(PadButton::Start)) {
+				submit_short_text_modal(&mut active, &mut modal, &mut fields, &mut commands);
+			} else {
+				activate_selected_pad_item(
+					pad,
+					menu,
+					&keys,
+					&mut fields,
+					&mut active,
+					&mut modal,
+					&mut commands,
+				);
+			}
 		}
 		_ => {}
+	}
+}
+
+/// Left-stick click toggles caps while the in-game keypad is open.
+pub fn emit_short_text_pad_shortcuts(
+	pad: Option<Res<VirtualPad>>,
+	mut modal: ResMut<ShortTextModal>,
+) {
+	let Some(pad) = pad else {
+		return;
+	};
+	if !modal.is_open() || !pad.just_pressed(PadButton::StickClickMove) {
+		return;
+	}
+	if let Some(session) = modal.session.as_mut() {
+		session.shift = !session.shift;
 	}
 }
 
@@ -964,7 +985,11 @@ pub fn sync_short_text_ime(
 
 #[cfg(test)]
 mod tests {
-	use super::{is_short_text_char, pad_letter_label, push_short_text_char};
+	use super::{
+		apply_short_text_pad_key, is_short_text_char, pad_letter_label, push_short_text_char,
+		ShortTextModal, ShortTextPadKey, ShortTextSession,
+	};
+	use bevy::prelude::Entity;
 
 	#[test]
 	fn pad_letters_follow_shift() {
@@ -986,5 +1011,23 @@ mod tests {
 		assert!(is_short_text_char('Z'));
 		assert!(is_short_text_char('0'));
 		assert!(!is_short_text_char('!'));
+	}
+
+	#[test]
+	fn pad_shift_toggles_caps() {
+		let mut modal = ShortTextModal {
+			session: Some(ShortTextSession {
+				key: "name",
+				source: Entity::PLACEHOLDER,
+				value: String::new(),
+				original: String::new(),
+				max_len: 8,
+				shift: false,
+			}),
+		};
+		apply_short_text_pad_key(ShortTextPadKey::Shift, &mut modal);
+		assert!(modal.session.as_ref().is_some_and(|session| session.shift));
+		apply_short_text_pad_key(ShortTextPadKey::Shift, &mut modal);
+		assert!(modal.session.as_ref().is_some_and(|session| !session.shift));
 	}
 }

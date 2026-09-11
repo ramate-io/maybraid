@@ -34,11 +34,12 @@ pub use section::{
 };
 pub use short_text::{
 	capture_short_text_input, emit_short_text_cancel_on_click, emit_short_text_pad_on_click,
-	emit_short_text_pad_on_nav, emit_short_text_submit_on_click, emit_short_text_toggle_on_click,
-	emit_short_text_toggle_on_enter, emit_short_text_toggle_on_nav, restore_short_text_editing,
-	spawn_short_text_button, sync_short_text_cursors, sync_short_text_display, sync_short_text_ime,
-	sync_short_text_modal, sync_short_text_pad_focus, ActiveShortText, ShortTextChange,
-	ShortTextField, ShortTextKey, ShortTextModal, ShortTextPad, ShortTextToggle, ShortTextValue,
+	emit_short_text_pad_on_nav, emit_short_text_pad_shortcuts, emit_short_text_submit_on_click,
+	emit_short_text_toggle_on_click, emit_short_text_toggle_on_enter,
+	emit_short_text_toggle_on_nav, restore_short_text_editing, spawn_short_text_button,
+	sync_short_text_cursors, sync_short_text_display, sync_short_text_ime, sync_short_text_modal,
+	sync_short_text_pad_focus, ActiveShortText, ShortTextChange, ShortTextField, ShortTextKey,
+	ShortTextModal, ShortTextPad, ShortTextToggle, ShortTextValue,
 };
 pub use stepper::spawn_stepper;
 pub use swatch::{color_from_hex, spawn_swatch, spawn_swatch_row};

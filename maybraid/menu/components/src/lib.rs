@@ -47,8 +47,8 @@ pub use single_select::{
 	sync_text_menu_item_colors, ButtonWithSubtext, KeyboardMenuNav, MenuActivate, MenuFocus,
 	MenuItemLocked, MenuObjectiveKind, MenuObjectiveMarker, ScreenBack, ScreenBackPressed,
 	ScreenEdit, ScreenEditPressed, TextColumnAlign, TextColumnAnchor, TextCursorColumn,
-	TextCursorMenu, TextCursorRow, TextCursorSlot, TextMenu, TextMenuColumn, TextMenuHeader,
-	TextMenuInputLock, TextMenuItem, TextMenuItemLabel,
+	TextCursorMenu, TextCursorRow, TextCursorScroll, TextCursorSlot, TextMenu, TextMenuColumn,
+	TextMenuHeader, TextMenuInputLock, TextMenuItem, TextMenuItemLabel,
 };
 pub use spin_reveal::{
 	SpinRevealCover, SpinRevealFace, SpinRevealPayload, SpinRevealSlot, SpinRevealViewport,
@@ -115,6 +115,7 @@ impl Plugin for MenuComponentsPlugin {
 					controls::sync_short_text_modal,
 					controls::short_text::sync_short_text_pad_shift,
 					controls::short_text::sync_short_text_pad_focus,
+					controls::emit_short_text_pad_shortcuts,
 					controls::emit_short_text_toggle_on_enter,
 					controls::capture_short_text_input,
 				),

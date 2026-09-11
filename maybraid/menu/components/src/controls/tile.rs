@@ -6,7 +6,7 @@ use bevy::text::{Justify, LineBreak, LineHeight, TextBounds, TextSpan};
 use crate::theme::{
 	PANEL_CHIP_GAP, PANEL_GROUP_FONT_SIZE, PANEL_ITEM_FONT_SIZE, PANEL_TILE_MIN_HEIGHT,
 	PANEL_TILE_MIN_WIDTH, TEXT_LIME, TEXT_SALMON, TEXT_YELLOW, TEXT_YELLOW_FAINT,
-	TEXT_YELLOW_HOVER,
+	TEXT_YELLOW_HOVER, TILE_FOCUS_PAD,
 };
 
 use super::display::menu_display_name;
@@ -238,6 +238,7 @@ pub fn spawn_tile_grid(
 				row_gap: Val::Px(PANEL_CHIP_GAP),
 				align_items: AlignItems::FlexStart,
 				justify_content: justify,
+				padding: UiRect::all(Val::Px(TILE_FOCUS_PAD)),
 				..default()
 			},
 			Pickable::IGNORE,
