@@ -241,3 +241,41 @@ fn empty_knowledge_retracts_combat_membership() {
 	);
 	assert!(app.world().get::<CombatSelected>(combatant).is_none());
 }
+
+#[test]
+fn downed_drops_combat_even_before_the_next_select() {
+	let mut app = App::new();
+	app.add_plugins((MinimalPlugins, ThreatManagementPlugin));
+	let threat = app.world_mut().spawn_empty().id();
+	let combatant = app
+		.world_mut()
+		.spawn((
+			GlobalTransform::default(),
+			known_threat(threat, Vec3::X),
+			ThreatManagementIntelligence {
+				next_select_at: 10.0,
+				tactic: ThreatTactic::Combat,
+				generation: 1,
+				..ThreatManagementIntelligence::ffa()
+			},
+			CombatTargeting::default(),
+			CombatSelected,
+			damage::Downed { source: None, point: Vec3::ZERO, at: 0.0 },
+		))
+		.id();
+	app.world_mut()
+		.get_mut::<CombatTargeting>(combatant)
+		.unwrap()
+		.include(threat, TargetSource::ENEMYSHIP);
+	app.update();
+	assert_eq!(
+		app.world()
+			.get::<ThreatManagementIntelligence>(combatant)
+			.map(|user| user.tactic),
+		Some(ThreatTactic::Ignore)
+	);
+	assert!(app.world().get::<CombatSelected>(combatant).is_none());
+	assert!(app.world().get::<CombatTargeting>(combatant).is_some_and(|targeting| {
+		!targeting.enabled && targeting.active_target(threat).is_none()
+	}));
+}

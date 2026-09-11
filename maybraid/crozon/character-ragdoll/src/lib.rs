@@ -16,7 +16,8 @@ use crozon_characters::CharacterRoot;
 use damage::{DamageSystems, DespawnAfter, Downed};
 use lod_avian::PhysicsInteractionLayer;
 use player::{
-	CameraFollow, CharacterController, Npc, Player, PlayerCameraAim, PlayerVisual, PlayerYawOwner,
+	CameraFollow, CharacterController, MoveWish, Npc, Player, PlayerCameraAim, PlayerVisual,
+	PlayerYawOwner,
 };
 
 const PARTICLE_SKIN: f32 = 0.01;
@@ -212,6 +213,11 @@ struct CorpseHandoff {
 	started_at: f32,
 }
 
+/// Gameplay ownership already left this body. Distinct from [`DespawnAfter`],
+/// which mobs stamp as a 4 s corpse clock before ragdoll handoff finishes.
+#[derive(Component, Clone, Copy, Debug)]
+struct CorpseRetired;
+
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum CharacterRagdollSystems {
 	Handoff,
@@ -232,8 +238,15 @@ type PendingRigHosts<'w, 's> = Query<
 type DownedBodies<'w, 's> = Query<
 	'w,
 	's,
-	(Entity, &'static Downed, Option<&'static LinearVelocity>, Has<Player>, Has<Npc>),
-	(Without<DespawnAfter>, Without<CorpseHandoff>),
+	(
+		Entity,
+		&'static Downed,
+		Option<&'static mut LinearVelocity>,
+		Option<&'static mut MoveWish>,
+		Has<Player>,
+		Has<Npc>,
+	),
+	(Without<CorpseHandoff>, Without<CorpseRetired>),
 >;
 
 impl Plugin for CharacterRagdollPlugin {
@@ -280,26 +293,36 @@ fn begin_corpse_handoffs(
 	time: Res<Time>,
 	targets: Res<CharacterRagdollTargets>,
 	mut commands: Commands,
-	downed: DownedBodies,
+	mut downed: DownedBodies,
 	visuals: Query<(Entity, &ChildOf), With<CharacterRoot>>,
 ) {
 	let now = time.elapsed_secs();
-	for (body, downed, velocity, player, npc) in &downed {
+	for (body, downed, velocity, wish, player, npc) in &mut downed {
 		let enabled = (player && targets.players)
 			|| (npc && targets.npcs)
 			|| (!player && !npc && targets.unmarked);
 		if !enabled {
 			continue;
 		}
+		let inherited = velocity.as_ref().map_or(Vec3::ZERO, |velocity| velocity.0);
+		if let Some(mut velocity) = velocity {
+			velocity.0 = Vec3::ZERO;
+		}
+		if let Some(mut wish) = wish {
+			wish.0 = Vec3::ZERO;
+		}
+		commands
+			.entity(body)
+			.remove::<CharacterController>()
+			.try_insert((RigidBodyDisabled, ColliderDisabled));
 		for (visual, child_of) in &visuals {
 			if child_of.parent() != body {
 				continue;
 			}
-			commands.entity(visual).insert(Corpse {
-				source: downed.source,
-				point: downed.point,
-				inherited_velocity: velocity.map_or(Vec3::ZERO, |velocity| velocity.0),
-			});
+			commands.entity(visual).insert((
+				Corpse { source: downed.source, point: downed.point, inherited_velocity: inherited },
+				SuspendAnimation,
+			));
 			commands.entity(body).try_insert(CorpseHandoff { visual, started_at: now });
 			break;
 		}
@@ -310,9 +333,10 @@ fn finish_corpse_handoffs(
 	time: Res<Time>,
 	settings: Res<CharacterRagdollSettings>,
 	mut commands: Commands,
-	handoffs: Query<(Entity, &CorpseHandoff), Without<DespawnAfter>>,
+	handoffs: Query<(Entity, &CorpseHandoff), Without<CorpseRetired>>,
 	visuals: Query<(Option<&ChildOf>, Option<&Corpse>)>,
 	ragdolls: Query<&RagdollState>,
+	queued: Query<(), With<DespawnAfter>>,
 ) {
 	let now = time.elapsed_secs();
 	for (body, handoff) in &handoffs {
@@ -329,14 +353,23 @@ fn finish_corpse_handoffs(
 			commands
 				.entity(handoff.visual)
 				.remove::<(PlayerVisual, PlayerYawOwner, ApplyTerrainPitch)>();
-			commands
-				.entity(body)
-				.remove::<(Player, Npc, CameraFollow, PlayerCameraAim, CharacterController)>()
-				.try_insert((
-					RigidBodyDisabled,
-					ColliderDisabled,
-					DespawnAfter::seconds(settings.corpse_lifetime_secs),
-				));
+			let missing_ttl = queued.get(body).is_err();
+			if missing_ttl {
+				commands
+					.entity(body)
+					.remove::<(Player, Npc, CameraFollow, PlayerCameraAim, CharacterController)>()
+					.try_insert((
+						RigidBodyDisabled,
+						ColliderDisabled,
+						CorpseRetired,
+						DespawnAfter::seconds(settings.corpse_lifetime_secs),
+					));
+			} else {
+				commands
+					.entity(body)
+					.remove::<(Player, Npc, CameraFollow, PlayerCameraAim, CharacterController)>()
+					.try_insert((RigidBodyDisabled, ColliderDisabled, CorpseRetired));
+			}
 		}
 	}
 }
@@ -777,6 +810,8 @@ fn resolve_rotation(
 
 #[cfg(test)]
 mod tests {
+	use bevy::ecs::system::RunSystemOnce;
+
 	use super::*;
 
 	fn particle(position: Vec3) -> RagdollParticle {
@@ -892,6 +927,38 @@ mod tests {
 		assert!(world.get::<ChildOf>(visual).is_some_and(|child_of| child_of.parent() == body));
 		assert!(world.get::<PlayerVisual>(visual).is_none());
 		assert!(world.get::<ApplyTerrainPitch>(visual).is_none());
+		Ok(())
+	}
+
+	#[test]
+	fn handoff_starts_even_when_a_corpse_timer_is_already_set() -> anyhow::Result<()> {
+		let mut world = World::new();
+		world.init_resource::<Time>();
+		world.init_resource::<CharacterRagdollTargets>();
+		let body = world
+			.spawn((
+				Downed { source: None, point: Vec3::ZERO, at: 0.0 },
+				Npc,
+				CharacterController,
+				MoveWish(Vec3::X),
+				LinearVelocity(Vec3::Z),
+				DespawnAfter::seconds(4.0),
+			))
+			.id();
+		let visual = world
+			.spawn((CharacterRoot, Transform::IDENTITY, GlobalTransform::IDENTITY, ChildOf(body)))
+			.id();
+
+		world
+			.run_system_once(begin_corpse_handoffs)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+
+		assert!(world.get::<Corpse>(visual).is_some());
+		assert!(world.get::<CorpseHandoff>(body).is_some());
+		assert!(world.get::<CharacterController>(body).is_none());
+		assert!(world.get::<MoveWish>(body).is_some_and(|wish| wish.0 == Vec3::ZERO));
+		assert!(world.get::<LinearVelocity>(body).is_some_and(|velocity| velocity.0 == Vec3::ZERO));
+		assert!(world.get::<DespawnAfter>(body).is_some());
 		Ok(())
 	}
 

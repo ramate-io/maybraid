@@ -48,6 +48,7 @@ impl HomeRoute {
 pub enum PauseMenuRoute {
 	Leave,
 	Settings,
+	Character,
 	Stay,
 }
 
@@ -56,9 +57,8 @@ impl PauseMenuRoute {
 		match choice {
 			InGameMenuChoice::Leave => Self::Leave,
 			InGameMenuChoice::Settings => Self::Settings,
-			InGameMenuChoice::Character | InGameMenuChoice::Records | InGameMenuChoice::Help => {
-				Self::Stay
-			}
+			InGameMenuChoice::Character => Self::Character,
+			InGameMenuChoice::Records | InGameMenuChoice::Help => Self::Stay,
 		}
 	}
 }
@@ -105,5 +105,13 @@ mod tests {
 	#[test]
 	fn pause_leave_returns_home() {
 		assert_eq!(PauseMenuRoute::from_choice(InGameMenuChoice::Leave), PauseMenuRoute::Leave);
+	}
+
+	#[test]
+	fn pause_character_opens_the_editor() {
+		assert_eq!(
+			PauseMenuRoute::from_choice(InGameMenuChoice::Character),
+			PauseMenuRoute::Character
+		);
 	}
 }

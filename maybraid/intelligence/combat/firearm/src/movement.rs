@@ -2,6 +2,7 @@
 
 use bevy::prelude::*;
 use combat_targeting::CombatTargeting;
+use damage::Downed;
 use intelligence_lod::{IntelligenceBand, IntelligenceLod};
 use movement_intelligence::{
 	MovementIntelligence, MovementLocation, MovementObjective, ReplanMovement,
@@ -78,15 +79,18 @@ impl Default for FirearmMovementIntelligence {
 
 pub(crate) fn write_firearm_movement_objectives(
 	time: Res<Time>,
-	mut combatants: Query<(
-		Entity,
-		&Transform,
-		&FirearmIntelligence,
-		&CombatTargeting,
-		&mut FirearmMovementIntelligence,
-		&mut MovementIntelligence,
-		Option<&IntelligenceLod>,
-	)>,
+	mut combatants: Query<
+		(
+			Entity,
+			&Transform,
+			&FirearmIntelligence,
+			&CombatTargeting,
+			&mut FirearmMovementIntelligence,
+			&mut MovementIntelligence,
+			Option<&IntelligenceLod>,
+		),
+		Without<Downed>,
+	>,
 	mut commands: Commands,
 ) {
 	let now = time.elapsed_secs();

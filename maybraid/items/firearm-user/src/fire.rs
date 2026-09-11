@@ -8,7 +8,7 @@ use player_camera::CameraController;
 use std::f32::consts::FRAC_PI_2;
 
 use crate::weapon::RecoilPattern;
-use crate::FirearmUser;
+use crate::{FirearmUser, WeaponSwap};
 
 /// Seconds to lerp from the current aim to the kicked aim. A new shot retargets
 /// the remaining path over a fresh window.
@@ -17,7 +17,7 @@ pub(crate) const RECOIL_LERP_SECS: f32 = 0.08;
 pub(crate) fn apply_fire_intents(
 	mouse: Res<ButtonInput<MouseButton>>,
 	mut intents: MessageReader<CharacterIntent>,
-	users: Query<&FirearmUser, With<Player>>,
+	users: Query<(&FirearmUser, Has<WeaponSwap>), With<Player>>,
 	mut triggers: Query<&mut WeaponTrigger>,
 ) {
 	let mut fire = mouse.pressed(MouseButton::Left);
@@ -26,9 +26,9 @@ pub(crate) fn apply_fire_intents(
 			fire = true;
 		}
 	}
-	for user in &users {
+	for (user, swapping) in &users {
 		if let Ok(mut trigger) = triggers.get_mut(user.held) {
-			trigger.0 = fire;
+			trigger.0 = fire && !swapping;
 		}
 	}
 }

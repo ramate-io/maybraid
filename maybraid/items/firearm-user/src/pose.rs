@@ -28,12 +28,12 @@ impl HeldFirearm {
 	}
 }
 
-pub(crate) fn authored_length(bounds: Aabb3d) -> f32 {
+pub fn authored_length(bounds: Aabb3d) -> f32 {
 	let size = bounds.max - bounds.min;
 	size.x.max(size.y).max(size.z).max(1e-3)
 }
 
-pub(crate) fn held_scale_from_bounds(bounds: Aabb3d, held_length: f32) -> f32 {
+pub fn held_scale_from_bounds(bounds: Aabb3d, held_length: f32) -> f32 {
 	(held_length / authored_length(bounds)).clamp(0.15, 1.0)
 }
 

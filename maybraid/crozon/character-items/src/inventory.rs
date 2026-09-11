@@ -258,6 +258,18 @@ impl Inventory {
 		self.weapons.first().and_then(|&index| self.items.get(index))
 	}
 
+	/// Rotate the switch queue so the next gun becomes primary.
+	///
+	/// No-op when fewer than two weapons are queued. Returns whether the
+	/// primary changed.
+	pub fn swap_active(&mut self) -> bool {
+		if self.weapons.len() < 2 {
+			return false;
+		}
+		self.weapons.rotate_left(1);
+		true
+	}
+
 	/// Wear / queue or remove `index` in its slot. At capacity, selecting a
 	/// new item is a no-op. Returns whether the slot changed.
 	pub fn toggle(&mut self, index: usize) -> bool {
@@ -280,6 +292,39 @@ impl Inventory {
 	/// Clothing-only name for [`Self::toggle`].
 	pub fn toggle_worn(&mut self, index: usize) -> bool {
 		self.toggle(index)
+	}
+
+	/// Drain every item and clear wear / queue selections on `self`.
+	///
+	/// The returned bag keeps the old selection indices so a world stash can
+	/// still show toggled clothing and queued weapons. Those indices stay
+	/// valid because they refer to the drained `items` list.
+	pub fn take_all(&mut self) -> Self {
+		std::mem::take(self)
+	}
+
+	/// Append `other.items` without auto-wearing or auto-queuing.
+	///
+	/// Incoming clothing / weapon selections are dropped. Existing selections
+	/// on `self` stay valid because new items are only appended.
+	pub fn absorb(&mut self, other: Self) {
+		self.items.extend(other.items);
+	}
+
+	/// One bag per item so each piece can sit on the ground as its own stash.
+	///
+	/// Each bag visualizes its item (toggled) so clothing and weapons both
+	/// render. Wear / queue from the source bag is not preserved — exploded
+	/// loot is claimable individually, not worn on pickup.
+	pub fn explode(self) -> Vec<Self> {
+		self.items
+			.into_iter()
+			.map(|item| {
+				let mut bag = Self { items: vec![item], clothing: Vec::new(), weapons: Vec::new() };
+				let _ = bag.toggle(0);
+				bag
+			})
+			.collect()
 	}
 
 	pub fn character_sheet(&self) -> crate::CharacterSheet {
@@ -482,6 +527,27 @@ mod tests {
 	}
 
 	#[test]
+	fn swap_active_rotates_the_weapon_queue() {
+		let items = vec![
+			InventoryItem::firearm(FirearmMesh::Bullpup),
+			InventoryItem::firearm(FirearmMesh::Reltor),
+			InventoryItem::firearm(FirearmMesh::Snailer),
+		];
+		let mut inventory = Inventory { items, clothing: Vec::new(), weapons: vec![0, 1, 2] };
+		assert!(inventory.swap_active());
+		assert_eq!(inventory.weapons, vec![1, 2, 0]);
+		assert_eq!(
+			inventory.primary_weapon().and_then(InventoryItem::firearm_mesh),
+			Some(FirearmMesh::Reltor)
+		);
+		assert!(inventory.swap_active());
+		assert_eq!(inventory.weapons, vec![2, 0, 1]);
+		let mut one = Inventory { weapons: vec![0], ..inventory.clone() };
+		assert!(!one.swap_active());
+		assert!(!Inventory::default().swap_active());
+	}
+
+	#[test]
 	fn weapon_queue_caps_at_three_and_compacts_rank() {
 		let items: Vec<_> =
 			FirearmMesh::VALUES.iter().map(|mesh| InventoryItem::firearm(*mesh)).collect();
@@ -520,5 +586,114 @@ mod tests {
 		let items = random_gallery_firearms(&mut ItemRng::from_seed(1), 20);
 		assert_eq!(items.len(), 20);
 		assert!(items.iter().all(|item| item.firearm_spec().is_some()));
+	}
+
+	#[test]
+	fn take_all_drains_items_and_clears_source_selections() {
+		let mut bag = Inventory {
+			items: vec![
+				InventoryItem::clothing(
+					ClothingMesh::Pants,
+					ClothingMaterial::Cloth,
+					ItemColor::Natural,
+				),
+				InventoryItem::firearm(FirearmMesh::Bullpup),
+				InventoryItem::clothing(
+					ClothingMesh::Robe,
+					ClothingMaterial::Cloth,
+					ItemColor::Cool,
+				),
+			],
+			clothing: vec![0],
+			weapons: vec![1],
+		};
+
+		let taken = bag.take_all();
+
+		assert!(bag.items.is_empty());
+		assert!(bag.clothing.is_empty());
+		assert!(bag.weapons.is_empty());
+		assert_eq!(taken.items.len(), 3);
+		assert_eq!(taken.clothing, vec![0]);
+		assert_eq!(taken.weapons, vec![1]);
+		assert_eq!(
+			taken.primary_weapon().and_then(InventoryItem::firearm_mesh),
+			Some(FirearmMesh::Bullpup)
+		);
+	}
+
+	#[test]
+	fn absorb_appends_without_auto_wear_or_remap() {
+		let mut dest = Inventory {
+			items: vec![InventoryItem::clothing(
+				ClothingMesh::Pants,
+				ClothingMaterial::Cloth,
+				ItemColor::Natural,
+			)],
+			clothing: vec![0],
+			weapons: Vec::new(),
+		};
+		let incoming = Inventory {
+			items: vec![
+				InventoryItem::firearm(FirearmMesh::Reltor),
+				InventoryItem::clothing(
+					ClothingMesh::TankTop,
+					ClothingMaterial::Cloth,
+					ItemColor::Red,
+				),
+			],
+			clothing: vec![1],
+			weapons: vec![0],
+		};
+
+		dest.absorb(incoming);
+
+		assert_eq!(dest.items.len(), 3);
+		assert_eq!(dest.clothing, vec![0]);
+		assert!(dest.weapons.is_empty());
+		assert_eq!(dest.items[0].mesh(), Some(ClothingMesh::Pants));
+		assert_eq!(dest.items[1].firearm_mesh(), Some(FirearmMesh::Reltor));
+		assert_eq!(dest.items[2].mesh(), Some(ClothingMesh::TankTop));
+		assert!(!dest.is_worn(2));
+		assert_eq!(dest.rank(1), None);
+	}
+
+	#[test]
+	fn explode_makes_one_visualized_bag_per_item() {
+		let bag = Inventory {
+			items: vec![
+				InventoryItem::clothing(
+					ClothingMesh::Pants,
+					ClothingMaterial::Cloth,
+					ItemColor::Natural,
+				),
+				InventoryItem::firearm(FirearmMesh::Bullpup),
+				InventoryItem::clothing(
+					ClothingMesh::Robe,
+					ClothingMaterial::Cloth,
+					ItemColor::Cool,
+				),
+			],
+			clothing: vec![0],
+			weapons: vec![1],
+		};
+
+		let exploded = bag.explode();
+
+		assert_eq!(exploded.len(), 3);
+		assert!(exploded.iter().all(|piece| piece.items.len() == 1));
+		assert_eq!(exploded[0].clothing, vec![0]);
+		assert!(exploded[0].weapons.is_empty());
+		assert_eq!(exploded[1].weapons, vec![0]);
+		assert!(exploded[1].clothing.is_empty());
+		assert_eq!(exploded[2].clothing, vec![0]);
+		assert_eq!(exploded[0].items[0].mesh(), Some(ClothingMesh::Pants));
+		assert_eq!(exploded[1].items[0].firearm_mesh(), Some(FirearmMesh::Bullpup));
+		assert_eq!(exploded[2].items[0].mesh(), Some(ClothingMesh::Robe));
+	}
+
+	#[test]
+	fn explode_empty_is_empty() {
+		assert!(Inventory::default().explode().is_empty());
 	}
 }

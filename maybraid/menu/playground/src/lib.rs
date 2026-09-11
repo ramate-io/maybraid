@@ -9,15 +9,15 @@ mod ui;
 mod weapon_gallery;
 
 pub use character::{
-	request_show_character, CharacterMenuState, CharacterScreen, CharacterScreenPlugin,
-	RequestShowCharacter,
+	request_show_character, CharacterEditBaseline, CharacterMenuState, CharacterScreen,
+	CharacterScreenPlugin, RequestShowCharacter,
 };
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use game_commands::command::PendingStartupCommand;
 pub use preview::{CharacterPreviewLight, CharacterPreviewPlugin, CharacterPreviewRoot};
 pub use session::{
-	save_editing_character, ActiveCharacter, CharacterSession, CharacterSessionPlugin,
-	EditingCharacter,
+	save_editing_character, ActiveCharacter, CharacterEditorReturn, CharacterSession,
+	CharacterSessionPlugin, EditingCharacter, RequestEditCharacter,
 };
 pub use weapon_gallery::{request_show_weapons, WeaponGalleryPlugin, WeaponGalleryScreen};
 
@@ -125,13 +125,25 @@ fn echo_home_choice(
 
 fn echo_in_game_choice(
 	mut choices: MessageReader<InGameMenuChoice>,
+	active: Option<Res<ActiveCharacter>>,
+	mut edits: MessageWriter<crate::RequestEditCharacter>,
 	mut console: ResMut<CommandConsoleOutput>,
 	mut commands: Commands,
 ) {
 	for choice in choices.read() {
 		console.0 = format!("in-game: {}", choice.label());
-		if *choice == InGameMenuChoice::Settings {
-			request_show_in_game_settings(&mut commands);
+		match *choice {
+			InGameMenuChoice::Settings => request_show_in_game_settings(&mut commands),
+			InGameMenuChoice::Character => {
+				if let Some(active) = active.as_ref() {
+					edits.write(crate::RequestEditCharacter {
+						id: active.id,
+						return_to: crate::CharacterEditorReturn::InGame,
+						inventory: None,
+					});
+				}
+			}
+			_ => {}
 		}
 	}
 }
@@ -179,6 +191,7 @@ fn editor_back(
 	nav: Res<MenuNavPad>,
 	overlay: Res<ActiveOverlayKey>,
 	mut backs: MessageReader<ScreenBackPressed>,
+	return_to: Option<Res<crate::CharacterEditorReturn>>,
 	character: Query<(), With<CharacterScreen>>,
 	spin: Query<(), With<SpinRevealScreen>>,
 	gallery: Query<(), With<GalleryScreen>>,
@@ -194,7 +207,12 @@ fn editor_back(
 	}
 	if !character.is_empty() {
 		// Leave without writing; [`save_editing_character`] is Save-only.
-		request_show_gallery(&mut commands);
+		if return_to.as_deref() == Some(&crate::CharacterEditorReturn::InGame) {
+			request_show_in_game(&mut commands);
+		} else {
+			request_show_gallery(&mut commands);
+		}
+		commands.remove_resource::<crate::CharacterEditorReturn>();
 		return;
 	}
 	if !spin.is_empty() {
