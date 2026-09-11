@@ -81,16 +81,13 @@ impl GalleryChoice {
 
 fn gallery_rows(
 	summaries: &[CharacterSummary],
-	active: Option<CharacterId>,
+	_active: Option<CharacterId>,
 ) -> Vec<TextCursorRow<GalleryChoice>> {
 	let mut rows = vec![GalleryChoice::create_row(summaries.is_empty())];
 	rows.extend(summaries.iter().map(|summary| {
-		let mut row = TextCursorRow::new(summary.name.clone(), GalleryChoice::Select(summary.id))
-			.with_subtext(summary.species_title);
-		if Some(summary.id) == active {
-			row = row.with_objective(MenuObjectiveKind::Selected);
-		}
-		row
+		TextCursorRow::new(summary.name.clone(), GalleryChoice::Select(summary.id))
+			.with_subtext(summary.species_title)
+			.with_objective(MenuObjectiveKind::Selected)
 	}));
 	rows
 }
@@ -175,11 +172,11 @@ mod tests {
 		assert!(rows[0].objective.is_none());
 		assert_eq!(rows[0].label, "Create a Character");
 		assert_eq!(rows[1].subtext.as_deref(), Some("Braidman"));
-		assert!(rows[1].objective.is_none());
+		assert_eq!(rows[1].objective, Some(MenuObjectiveKind::Selected));
 	}
 
 	#[test]
-	fn active_character_wears_selected() {
+	fn every_saved_row_can_wear_selected() {
 		let jeff = CharacterId(1);
 		let unnamed = CharacterId(2);
 		let summaries = [
@@ -188,6 +185,7 @@ mod tests {
 		];
 		let rows = gallery_rows(&summaries, Some(jeff));
 		assert_eq!(rows[1].objective, Some(MenuObjectiveKind::Selected));
-		assert!(rows[2].objective.is_none());
+		assert_eq!(rows[2].objective, Some(MenuObjectiveKind::Selected));
+		assert!(rows[0].objective.is_none());
 	}
 }

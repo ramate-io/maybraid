@@ -476,7 +476,12 @@ where
 		Box::new(cursor_label_scene(label, align, item.idle)),
 	];
 	if let Some(kind) = objective {
-		children.push(Box::new(objective_marker_scene(kind)));
+		let marker_visibility = if kind == MenuObjectiveKind::Selected && item.index != selected {
+			Visibility::Hidden
+		} else {
+			Visibility::Inherited
+		};
+		children.push(Box::new(objective_marker_scene(kind, marker_visibility)));
 	}
 	let column_gap = match align {
 		TextColumnAlign::Start => Val::Px(CURSOR_ICON_GAP),
@@ -517,7 +522,7 @@ where
 	}
 }
 
-fn objective_marker_scene(kind: MenuObjectiveKind) -> impl Scene + 'static {
+fn objective_marker_scene(kind: MenuObjectiveKind, visibility: Visibility) -> impl Scene + 'static {
 	let marker = kind.marker();
 	let label = marker.label.clone();
 	let color = marker.color;
@@ -535,6 +540,7 @@ fn objective_marker_scene(kind: MenuObjectiveKind) -> impl Scene + 'static {
 	bsn! {
 		template_value(kind)
 		template_value(marker)
+		template_value(visibility)
 		Node {
 			padding: UiRect::axes(px(OBJECTIVE_MARKER_PAD_X), px(OBJECTIVE_MARKER_PAD_Y)),
 			border: UiRect::all(px(OBJECTIVE_MARKER_BORDER)),

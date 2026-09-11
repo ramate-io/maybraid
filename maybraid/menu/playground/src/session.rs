@@ -9,7 +9,7 @@ use crozon_character_persist::{CharacterId, PersistError, SaveRoot};
 use crozon_character_ui_menus::{CharacterMenu, MenuEvent};
 use crozon_inventory_user::{spawn_bag, InventoryUser, InventoryUserPlugin};
 use menu_components::info::description::{set_description_for_menu, TextMenuDescription};
-use menu_components::{MenuActivate, ScreenEditPressed};
+use menu_components::{MenuActivate, MenuObjectiveKind, MenuObjectiveMarker, ScreenEditPressed};
 use menu_screens::{
 	request_show_create_character_id, request_show_gallery, CreateCharacterReady, GalleryChoice,
 	GalleryScreen, GalleryScreenPlugin,
@@ -77,6 +77,7 @@ impl Plugin for CharacterSessionPlugin {
 					open_requested_character_editor,
 					open_create_character_hud,
 					sync_gallery_active_caption,
+					sync_gallery_selected_tag,
 				),
 			);
 	}
@@ -172,6 +173,45 @@ fn sync_gallery_active_caption(
 		})
 		.unwrap_or_default();
 	set_description_for_menu(root, caption, &children, &mut lines);
+}
+
+/// Keep the Selected chip on the active character after a new row is chosen.
+fn sync_gallery_selected_tag(
+	active: Option<Res<ActiveCharacter>>,
+	screens: Query<Entity, With<GalleryScreen>>,
+	items: Query<(Entity, &GalleryChoice, &Children)>,
+	markers: Query<(), Or<(With<MenuObjectiveKind>, With<MenuObjectiveMarker>)>>,
+	mut commands: Commands,
+	mut visibilities: Query<&mut Visibility>,
+) {
+	if screens.is_empty() {
+		return;
+	}
+	let active_id = active.map(|active| active.id);
+	for (entity, choice, children) in &items {
+		let GalleryChoice::Select(id) = *choice else {
+			continue;
+		};
+		let is_active = gallery_row_is_active(Some(id), active_id);
+		if is_active {
+			commands.entity(entity).insert(MenuObjectiveKind::Selected);
+		} else {
+			commands.entity(entity).remove::<MenuObjectiveKind>();
+		}
+		for child in children {
+			if markers.get(*child).is_err() {
+				continue;
+			}
+			if let Ok(mut visibility) = visibilities.get_mut(*child) {
+				*visibility = if is_active { Visibility::Inherited } else { Visibility::Hidden };
+			}
+			if is_active {
+				commands.entity(*child).insert(MenuObjectiveKind::Selected);
+			} else {
+				commands.entity(*child).remove::<MenuObjectiveKind>();
+			}
+		}
+	}
 }
 
 fn open_gallery_choice(
@@ -354,9 +394,13 @@ fn gallery_select_opens_edit(active: Option<CharacterId>, picked: CharacterId) -
 	active == Some(picked)
 }
 
+fn gallery_row_is_active(row: Option<CharacterId>, active: Option<CharacterId>) -> bool {
+	row.is_some() && row == active
+}
+
 #[cfg(test)]
 mod tests {
-	use super::gallery_select_opens_edit;
+	use super::{gallery_row_is_active, gallery_select_opens_edit};
 	use crozon_character_persist::CharacterId;
 
 	#[test]
@@ -365,5 +409,13 @@ mod tests {
 		assert!(!gallery_select_opens_edit(None, id));
 		assert!(!gallery_select_opens_edit(Some(CharacterId(1)), id));
 		assert!(gallery_select_opens_edit(Some(id), id));
+	}
+
+	#[test]
+	fn selected_tag_stays_on_the_active_character() {
+		let id = CharacterId(7);
+		assert!(gallery_row_is_active(Some(id), Some(id)));
+		assert!(!gallery_row_is_active(Some(id), Some(CharacterId(1))));
+		assert!(!gallery_row_is_active(Some(id), None));
 	}
 }
