@@ -4759,6 +4759,7 @@ dependencies = [
  "poi-intelligence",
  "procedural-common",
  "richmond-building-physics",
+ "richmond-building-shaders",
  "richmond-development-models",
  "richmond-developments-on-terrain-playground",
  "richmond-urbanization",
