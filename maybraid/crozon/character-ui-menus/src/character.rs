@@ -3,6 +3,7 @@ use character_ui_menu::{
 };
 use crozon_character_items::{Inventory, InventoryItem};
 use crozon_characters::{
+	CharacterAppearance, ConceptAnimation,
 	species::{
 		braidman::BraidmanConfig, brenal::BrenalConfig, brodler::BrodlerConfig,
 		brokker::BrokkerConfig, caole::CaoleConfig, chupri::ChupriConfig, claber::ClaberConfig,
@@ -13,7 +14,6 @@ use crozon_characters::{
 		tipple::TippleConfig, topple::ToppleConfig, tuberwaber::TuberwaberConfig,
 		wumbus::WumbusConfig, ylter::YilterConfig,
 	},
-	CharacterAppearance, ConceptAnimation,
 };
 
 use crate::{
@@ -317,11 +317,7 @@ impl CharacterMenu {
 
 	pub fn saved_name(&self) -> String {
 		let name = self.name.trim();
-		if name.is_empty() {
-			String::from("Unnamed")
-		} else {
-			name.to_string()
-		}
+		if name.is_empty() { String::from("Unnamed") } else { name.to_string() }
 	}
 
 	pub fn is_create(&self) -> bool {
@@ -3878,6 +3874,7 @@ pub struct SectionOpenState {
 	pub hair_open: bool,
 	pub clothing_open: bool,
 	pub weapons_open: bool,
+	pub skills_open: bool,
 	pub loadout_open: bool,
 	pub animation_open: bool,
 }
@@ -3892,6 +3889,7 @@ impl SectionOpenState {
 			SectionId::Hair => self.hair_open,
 			SectionId::Clothing => self.clothing_open,
 			SectionId::Weapons => self.weapons_open,
+			SectionId::SkillMaps => self.skills_open,
 			SectionId::Loadout => self.loadout_open,
 			SectionId::Animation => self.animation_open,
 		}
@@ -3906,6 +3904,7 @@ impl SectionOpenState {
 			SectionId::Hair => self.hair_open = !self.hair_open,
 			SectionId::Clothing => self.clothing_open = !self.clothing_open,
 			SectionId::Weapons => self.weapons_open = !self.weapons_open,
+			SectionId::SkillMaps => self.skills_open = !self.skills_open,
 			SectionId::Loadout => self.loadout_open = !self.loadout_open,
 			SectionId::Animation => self.animation_open = !self.animation_open,
 		}
@@ -3922,6 +3921,7 @@ impl Default for SectionOpenState {
 			hair_open: false,
 			clothing_open: true,
 			weapons_open: true,
+			skills_open: true,
 			loadout_open: true,
 			animation_open: false,
 		}

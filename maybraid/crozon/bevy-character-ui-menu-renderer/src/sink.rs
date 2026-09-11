@@ -25,6 +25,10 @@ pub trait MenuThumbnailContext {
 		color: Color,
 		camera: character_ui_menu::ThumbnailCamera,
 	) -> Option<Handle<Image>>;
+
+	fn image_for_key(&mut self, _key: u64) -> Option<Handle<Image>> {
+		None
+	}
 }
 
 /// Per-rebuild rendering state shared across the whole node tree.
@@ -417,6 +421,11 @@ fn grid_catalog_thumbnail<E: Copy + Send + Sync + 'static, C: MenuThumbnailConte
 	preview: Color,
 	context: &mut RenderContext<'_, C>,
 ) -> Option<Handle<Image>> {
+	if let Some(key) = choice.image_key {
+		if let Some(image) = context.thumbnails.image_for_key(key) {
+			return Some(image);
+		}
+	}
 	thumbnail_image(choice.path, choice.path, choice.thumbnail_camera, preview, context)
 }
 

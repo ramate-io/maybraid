@@ -46,6 +46,16 @@ impl SkillMapKind {
 			Self::Cosimo => &["Celestial", "Astral", "Violet", "Sidereal", "Midnight"],
 		}
 	}
+
+	/// Catalog plate. Matches the live viewport clear for that kind.
+	pub const fn preview_srgb(self) -> [f32; 3] {
+		match self {
+			Self::Fireball => [0.82, 0.22, 0.08],
+			Self::Dumbwave => [0.12, 0.62, 0.72],
+			Self::Rockadder => [0.78, 0.58, 0.18],
+			Self::Cosimo => [0.48, 0.18, 0.78],
+		}
+	}
 }
 
 /// One owned skill map: which effect, and which noise field.
@@ -58,5 +68,16 @@ pub struct SkillMapSpec {
 impl SkillMapSpec {
 	pub const fn new(kind: SkillMapKind, seed: u32) -> Self {
 		Self { kind, seed }
+	}
+
+	/// Stable catalog thumbnail key: kind in the high word, seed in the low.
+	pub const fn catalog_key(self) -> u64 {
+		let kind = match self.kind {
+			SkillMapKind::Fireball => 0,
+			SkillMapKind::Dumbwave => 1,
+			SkillMapKind::Rockadder => 2,
+			SkillMapKind::Cosimo => 3,
+		};
+		(kind << 32) | self.seed as u64
 	}
 }

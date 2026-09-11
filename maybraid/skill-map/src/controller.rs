@@ -58,7 +58,11 @@ impl FlickLane {
 		self.active = false;
 		let peak = self.peak;
 		self.peak = Vec2::ZERO;
-		if elapsed >= FLICK_MIN_SECS && peak.length() >= FLICK_MIN_PEAK { Some(peak) } else { None }
+		if elapsed >= FLICK_MIN_SECS && peak.length() >= FLICK_MIN_PEAK {
+			Some(peak)
+		} else {
+			None
+		}
 	}
 }
 

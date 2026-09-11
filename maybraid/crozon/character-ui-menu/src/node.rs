@@ -171,6 +171,8 @@ pub struct GridCatalogChoice<E> {
 	pub path: &'static str,
 	pub thumbnail_camera: ThumbnailCamera,
 	pub preview: PreviewColor,
+	/// Host-rendered image (skill-map catalog). Checked before mesh path.
+	pub image_key: Option<u64>,
 	pub selected: bool,
 	/// 1-based slot rank when this item is queued (weapons). Clothing leaves
 	/// this `None` and uses the Maybraid son for selection.

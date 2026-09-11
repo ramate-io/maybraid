@@ -2,12 +2,12 @@
 
 use bevy::prelude::*;
 
-use crate::SkillMapEnabled;
 use crate::controller::SkillMapFlick;
-use crate::map::{SkillMapId, render_layer};
+use crate::map::{render_layer, SkillMapId};
 use crate::tile_material::SkillMapTileAssets;
 use crate::user::{SkillMapHeld, SkillMapMember, SkillMapSteerLock, SkillMapUser};
-use crate::viewport::{SkillMapViewportCamera, map_view_extent};
+use crate::viewport::{map_view_extent, SkillMapViewportCamera};
+use crate::SkillMapEnabled;
 
 pub const CURSOR_SPEED: f32 = 64.0;
 pub const WATER_LOCK_SECS: f32 = 2.0;

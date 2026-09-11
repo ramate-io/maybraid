@@ -1,5 +1,8 @@
 //! Right-justified character-creator panel over the playground camera.
 
+use std::collections::HashMap;
+
+use bevy::camera::visibility::RenderLayers;
 use bevy::prelude::*;
 use character_ui_menu::{AssetThumbnailDisplay, MenuComponent};
 use crozon_character_items::Inventory;
@@ -7,10 +10,14 @@ use crozon_character_ui_menus::{CharacterMenu, MenuEvent};
 use maybraid_character_ui_menu_renderer::{
 	find_overlay_node, overlay_closes_on_pick, render_overlay_body, spawn_overlay_shell,
 	CharacterHudSystems, CharacterMenuEvent, MaybraidCharacterMenuRendererPlugin, MaybraidMenuSink,
-	MenuButton, MenuJustify, MenuSink, NoThumbnails, OverlayClose, OverlayOpen, OverlaySelectRoot,
-	OverlaySelectViewport, RenderContext,
+	MenuButton, MenuJustify, MenuSink, MenuThumbnailContext, OverlayClose, OverlayOpen,
+	OverlaySelectRoot, OverlaySelectViewport, RenderContext,
 };
 use maybraid_menu_controller::MenuController;
+use maybraid_skill_map::{
+	spawn_skill_map_catalog_preview, SkillMapCatalogPreview, SkillMapId, SkillMapMenuPreview,
+	SkillMapTileAssets, SkillMapTileMaterialPlugin,
+};
 use menu_components::theme::{CORNER_BOTTOM, CORNER_INSET};
 use menu_components::{
 	spawn_corner_action, spawn_scroll_pane, ActiveOverlayKey, HudFonts, HudMenu, HudMenuItem,
@@ -102,6 +109,36 @@ struct CharacterSaveCorner;
 #[derive(Component)]
 struct CharacterBackCorner;
 
+#[derive(Resource, Default)]
+struct SkillMapMenuPreviewCache {
+	entries: HashMap<u64, SkillMapCatalogPreview>,
+	next_slot: u32,
+}
+
+struct SkillMapCatalogThumbs<'a> {
+	entries: &'a HashMap<u64, SkillMapCatalogPreview>,
+}
+
+impl MenuThumbnailContext for SkillMapCatalogThumbs<'_> {
+	fn image_for_asset(
+		&mut self,
+		_label: &'static str,
+		_asset_path: &'static str,
+		_color: Color,
+		_camera: character_ui_menu::ThumbnailCamera,
+	) -> Option<Handle<Image>> {
+		None
+	}
+
+	fn image_for_key(&mut self, key: u64) -> Option<Handle<Image>> {
+		self.entries.get(&key).map(|entry| entry.image.clone())
+	}
+
+	fn viewport_for_key(&mut self, key: u64) -> Option<Entity> {
+		self.entries.get(&key).map(|entry| entry.camera)
+	}
+}
+
 pub fn request_show_character(commands: &mut Commands) {
 	commands.spawn(RequestShowCharacter);
 }
@@ -110,11 +147,15 @@ pub struct CharacterScreenPlugin;
 
 impl Plugin for CharacterScreenPlugin {
 	fn build(&self, app: &mut App) {
-		app.add_plugins(MaybraidCharacterMenuRendererPlugin::<MenuEvent>::default())
-			.init_resource::<CharacterMenuState>()
+		app.add_plugins(MaybraidCharacterMenuRendererPlugin::<MenuEvent>::default());
+		if !app.is_plugin_added::<SkillMapTileMaterialPlugin>() {
+			app.add_plugins(SkillMapTileMaterialPlugin);
+		}
+		app.init_resource::<CharacterMenuState>()
 			.init_resource::<CharacterUiSyncState>()
 			.init_resource::<OverlaySelectState>()
 			.init_resource::<OverlayUiSyncState>()
+			.init_resource::<SkillMapMenuPreviewCache>()
 			.add_observer(on_overlay_open)
 			.add_observer(on_overlay_close)
 			.add_observer(on_menu_activate)
@@ -122,7 +163,18 @@ impl Plugin for CharacterScreenPlugin {
 			.add_observer(on_short_text_change)
 			.add_systems(
 				Update,
-				(apply_show_character, sync_character_ui, sync_overlay_select)
+				(isolate_ui_cameras_from_skill_maps, ensure_skill_map_menu_previews)
+					.chain()
+					.before(CharacterHudSystems::Sync),
+			)
+			.add_systems(
+				Update,
+				(
+					apply_show_character,
+					sync_character_ui,
+					sync_overlay_select,
+					clear_skill_map_menu_previews,
+				)
 					.chain()
 					.in_set(CharacterHudSystems::Sync),
 			);
@@ -140,6 +192,7 @@ fn apply_show_character(
 	mut overlay: ResMut<OverlaySelectState>,
 	mut overlay_sync: ResMut<OverlayUiSyncState>,
 	mut active_overlay: ResMut<ActiveOverlayKey>,
+	previews: Res<SkillMapMenuPreviewCache>,
 ) {
 	if !take_menu_show_request(&mut commands, &requests, &existing) {
 		return;
@@ -160,6 +213,7 @@ fn apply_show_character(
 		Some(save_corner),
 		Some(back_corner),
 		&[],
+		&previews.entries,
 	);
 }
 
@@ -173,6 +227,7 @@ fn sync_character_ui(
 	viewports: Query<(Entity, Option<&HudMenu>), With<CharacterPanelViewport>>,
 	save_corners: Query<Entity, With<CharacterSaveCorner>>,
 	back_corners: Query<Entity, With<CharacterBackCorner>>,
+	previews: Res<SkillMapMenuPreviewCache>,
 ) {
 	if screens.is_empty() {
 		return;
@@ -196,6 +251,7 @@ fn sync_character_ui(
 		save_corner,
 		back_corner,
 		&previous,
+		&previews.entries,
 	);
 }
 
@@ -273,6 +329,7 @@ fn rebuild_character_ui_panel(
 	save_corner: Option<Entity>,
 	back_corner: Option<Entity>,
 	previous: &[(Entity, Option<HudMenu>)],
+	thumbnails: &HashMap<u64, SkillMapCatalogPreview>,
 ) {
 	let mut prewarm = Vec::new();
 	for viewport in viewports {
@@ -283,8 +340,14 @@ fn rebuild_character_ui_panel(
 		commands.entity(viewport).despawn_related::<Children>();
 		let mut item_count = 0;
 		commands.entity(viewport).with_children(|panel| {
-			item_count =
-				populate_character_ui_panel(panel, fonts, menu_state, viewport, &mut prewarm);
+			item_count = populate_character_ui_panel(
+				panel,
+				fonts,
+				menu_state,
+				viewport,
+				&mut prewarm,
+				thumbnails,
+			);
 		});
 		if let Some(corner) = back_corner {
 			commands.entity(corner).despawn_related::<Children>();
@@ -319,8 +382,9 @@ fn populate_character_ui_panel(
 	menu_state: &CharacterMenuState,
 	hud_menu: Entity,
 	prewarm: &mut Vec<character_ui_menu::ThumbnailRequest>,
+	images: &HashMap<u64, SkillMapCatalogPreview>,
 ) -> usize {
-	let mut thumbnails = NoThumbnails;
+	let mut thumbnails = SkillMapCatalogThumbs { entries: images };
 	let mut context = RenderContext {
 		fonts,
 		thumbnails: &mut thumbnails,
@@ -348,6 +412,7 @@ fn sync_overlay_select(
 	menu_state: Res<CharacterMenuState>,
 	overlay: Res<OverlaySelectState>,
 	mut overlay_sync: ResMut<OverlayUiSyncState>,
+	previews: Res<SkillMapMenuPreviewCache>,
 ) {
 	let Ok(screen) = screens.single() else {
 		return;
@@ -362,7 +427,7 @@ fn sync_overlay_select(
 
 	let Some(key) = overlay.open else {
 		for entity in &overlays {
-			commands.entity(entity).despawn();
+			commands.entity(entity).try_despawn();
 		}
 		return;
 	};
@@ -371,14 +436,14 @@ fn sync_overlay_select(
 	let nodes = menu_state.0.menu_nodes();
 	let Some(node) = find_overlay_node(&nodes, key) else {
 		for entity in &overlays {
-			commands.entity(entity).despawn();
+			commands.entity(entity).try_despawn();
 		}
 		return;
 	};
 
 	if overlays.is_empty() || open_changed {
 		for entity in &overlays {
-			commands.entity(entity).despawn();
+			commands.entity(entity).try_despawn();
 		}
 		let mut viewport = Entity::PLACEHOLDER;
 		let title_color =
@@ -393,6 +458,7 @@ fn sync_overlay_select(
 			node,
 			None,
 			menu_state.0.overlay_editable(key),
+			&previews.entries,
 		);
 		return;
 	}
@@ -405,6 +471,7 @@ fn sync_overlay_select(
 			node,
 			menu.copied(),
 			menu_state.0.overlay_editable(key),
+			&previews.entries,
 		);
 	}
 }
@@ -416,9 +483,10 @@ fn populate_overlay_viewport<E: Copy + Send + Sync + 'static>(
 	node: &character_ui_menu::MenuNode<E>,
 	previous: Option<HudMenu>,
 	interactive: bool,
+	images: &HashMap<u64, SkillMapCatalogPreview>,
 ) {
 	let mut prewarm = Vec::new();
-	let mut thumbnails = NoThumbnails;
+	let mut thumbnails = SkillMapCatalogThumbs { entries: images };
 	commands.entity(viewport).despawn_related::<Children>();
 	let mut item_count = 0;
 	commands.entity(viewport).with_children(|body| {
@@ -438,6 +506,70 @@ fn populate_overlay_viewport<E: Copy + Send + Sync + 'static>(
 	commands
 		.entity(viewport)
 		.insert((HudMenu::retain(item_count, previous), HudOverlayMenu));
+}
+
+/// Default UI `Camera2d` sees every layer. Keep authored tiles at the play
+/// origin so the shade matches, and hide those layers from the HUD camera.
+fn isolate_ui_cameras_from_skill_maps(
+	mut commands: Commands,
+	cameras: Query<Entity, (With<Camera2d>, Without<RenderLayers>, Without<SkillMapId>)>,
+) {
+	for entity in &cameras {
+		commands.entity(entity).insert(RenderLayers::layer(0));
+	}
+}
+
+fn ensure_skill_map_menu_previews(
+	mut commands: Commands,
+	mut images: ResMut<Assets<Image>>,
+	tiles: Option<Res<SkillMapTileAssets>>,
+	menu_state: Res<CharacterMenuState>,
+	mut cache: ResMut<SkillMapMenuPreviewCache>,
+	mut ui_sync: ResMut<CharacterUiSyncState>,
+	mut overlay_sync: ResMut<OverlayUiSyncState>,
+) {
+	let Some(tiles) = tiles else {
+		return;
+	};
+	let Some(inventory) = menu_state.0.inventory.as_ref() else {
+		return;
+	};
+	let mut spawned = false;
+	for item in &inventory.items {
+		let Some(spec) = item.skill_map_spec() else {
+			continue;
+		};
+		let key = spec.catalog_key();
+		if cache.entries.contains_key(&key) {
+			continue;
+		}
+		let slot = cache.next_slot;
+		cache.next_slot += 1;
+		let preview =
+			spawn_skill_map_catalog_preview(&mut commands, images.as_mut(), &tiles, spec, slot);
+		cache.entries.insert(key, preview);
+		spawned = true;
+	}
+	if spawned {
+		ui_sync.menu_dirty = true;
+		overlay_sync.menu_dirty = true;
+	}
+}
+
+fn clear_skill_map_menu_previews(
+	screens: Query<(), With<CharacterScreen>>,
+	mut cache: ResMut<SkillMapMenuPreviewCache>,
+	hosts: Query<Entity, With<SkillMapMenuPreview>>,
+	mut commands: Commands,
+) {
+	if !screens.is_empty() || cache.entries.is_empty() {
+		return;
+	}
+	for host in &hosts {
+		commands.entity(host).try_despawn();
+	}
+	cache.entries.clear();
+	cache.next_slot = 0;
 }
 
 fn on_overlay_open(

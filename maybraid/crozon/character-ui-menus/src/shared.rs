@@ -194,6 +194,7 @@ fn inventory_catalog(menu: &ClothingMenu, owned: &[InventoryItem]) -> MenuNode<M
 				path: asset.path,
 				thumbnail_camera: asset.thumbnail_camera,
 				preview: PreviewColor::of(item.material()?.color),
+				image_key: None,
 				selected: menu.layers.contains(mesh),
 				rank: None,
 				event: MenuEvent::ToggleInventory(index),
@@ -251,6 +252,7 @@ pub(crate) fn weapons_catalog(inventory: &Inventory) -> MenuNode<MenuEvent> {
 				path: asset.path,
 				thumbnail_camera: asset.thumbnail_camera,
 				preview: PreviewColor::WHITE,
+				image_key: None,
 				selected: rank.is_some(),
 				rank,
 				event: MenuEvent::ToggleInventory(index),
@@ -264,14 +266,16 @@ pub(crate) fn skills_catalog(inventory: &Inventory) -> MenuNode<MenuEvent> {
 		InventorySlot::Skills.label(),
 		InventorySlot::Skills.capacity(),
 		inventory.items.iter().enumerate().filter_map(|(index, item)| {
-			item.skill_map_spec()?;
+			let spec = item.skill_map_spec()?;
+			let [red, green, blue] = spec.kind.preview_srgb();
 			let rank = inventory.rank(index);
 			Some(GridCatalogChoice {
 				label: item.name(),
 				detail: item.catalog_detail(),
 				path: item.path(),
 				thumbnail_camera: ThumbnailCamera::DEFAULT,
-				preview: PreviewColor::WHITE,
+				preview: PreviewColor::srgb(red, green, blue),
+				image_key: Some(spec.catalog_key()),
 				selected: rank.is_some(),
 				rank,
 				event: MenuEvent::ToggleInventory(index),

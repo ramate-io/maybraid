@@ -7,11 +7,11 @@ use noise::{Fbm, MultiFractal, NoiseFn, OpenSimplex};
 
 use crate::cursor::SkillMapCursor;
 use crate::map::{
-	AuthoredMap, MapExtents, SkillKind, SkillMapId, pinned_power_cells, render_layer,
+	pinned_power_cells, render_layer, AuthoredMap, MapExtents, SkillKind, SkillMapId,
 };
 use crate::tile_material::SkillMapTileAssets;
 use crate::user::{SkillMapHeld, SkillMapMember, SkillMapSession, SkillMapSteerLock, SkillMapUser};
-use crate::viewport::{SkillMapViewportCamera, spawn_debraid};
+use crate::viewport::{spawn_debraid, SkillMapViewportCamera};
 use crate::{SkillMapEnabled, SkillMapEvent};
 
 /// Half-extents for the cheap AABB claim test. Independent of the render mesh.
@@ -64,6 +64,17 @@ pub fn spawn_map_tiles(
 	member: SkillMapMember,
 	assets: &SkillMapTileAssets,
 ) {
+	spawn_map_tiles_at(commands, spec, Some(member), assets, Vec2::ZERO, None);
+}
+
+pub fn spawn_map_tiles_at(
+	commands: &mut Commands,
+	spec: AuthoredMap,
+	member: Option<SkillMapMember>,
+	assets: &SkillMapTileAssets,
+	origin: Vec2,
+	parent: Option<Entity>,
+) {
 	let extents = MapExtents::default();
 	let size = extents.tile_size();
 	let layer = render_layer(spec.id);
@@ -73,8 +84,9 @@ pub fn spawn_map_tiles(
 
 	for x in 0..extents.steps {
 		for y in 0..extents.steps {
-			let center = extents.tile_center(x, y);
-			let raw = noise.get([center.x as f64, center.y as f64]) as f32;
+			let local = extents.tile_center(x, y);
+			let raw = noise.get([local.x as f64, local.y as f64]) as f32;
+			let center = local + origin;
 			let kind = if x == mid && y == mid {
 				TileKind::Land
 			} else if pins.contains(&(x, y)) {
@@ -91,6 +103,7 @@ pub fn spawn_map_tiles(
 				size,
 				layer.clone(),
 				member,
+				parent,
 				assets,
 			);
 		}
@@ -105,7 +118,8 @@ fn spawn_tile(
 	center: Vec2,
 	size: Vec2,
 	layer: RenderLayers,
-	member: SkillMapMember,
+	member: Option<SkillMapMember>,
+	parent: Option<Entity>,
 	assets: &SkillMapTileAssets,
 ) {
 	// Water and marks sit on land so a blob or a claim does not punch a hole.
@@ -119,6 +133,7 @@ fn spawn_tile(
 			size,
 			layer.clone(),
 			member,
+			parent,
 			assets,
 		);
 	}
@@ -127,16 +142,22 @@ fn spawn_tile(
 		TileKind::Water => 0.1,
 		TileKind::Land => 0.0,
 	};
-	commands.spawn((
+	let mut entity = commands.spawn((
 		Name::new("skill-map-tile"),
 		SkillMapTile { map, kind },
 		TileBounds { half: size * 0.5 },
-		member,
 		Mesh2d(assets.mesh.clone()),
 		MeshMaterial2d(assets.material(kind, map_kind)),
 		Transform::from_xyz(center.x, center.y, z),
 		layer,
 	));
+	if let Some(member) = member {
+		entity.insert(member);
+	}
+	let id = entity.id();
+	if let Some(parent) = parent {
+		commands.entity(parent).add_child(id);
+	}
 }
 
 type CursorRow<'a> =

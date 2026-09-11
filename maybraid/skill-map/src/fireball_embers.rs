@@ -1,15 +1,15 @@
 //! Continuous Hanabi embers parented to a live fireball.
 
 use bevy::prelude::*;
-use bevy_hanabi::Gradient;
 use bevy_hanabi::prelude::{
 	AccelModifier, Attribute, ColorBlendMask, ColorBlendMode, ColorOverLifetimeModifier,
 	EffectAsset, ExprWriter, LinearDragModifier, OrientMode, OrientModifier, SetAttributeModifier,
 	SetPositionSphereModifier, SetVelocitySphereModifier, ShapeDimension, SimulationSpace,
 	SizeOverLifetimeModifier, SpawnerSettings,
 };
+use bevy_hanabi::Gradient;
 
-use crate::fireball_material::{FireballMaterial, fireball_visual_mesh};
+use crate::fireball_material::{fireball_visual_mesh, FireballMaterial};
 
 /// Shared mesh + material for the head and every leave-behind bead.
 #[derive(Resource, Clone)]

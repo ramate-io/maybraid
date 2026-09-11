@@ -2,6 +2,7 @@
 
 use bevy::prelude::*;
 use bevy::text::{Justify, LineBreak, LineHeight, TextBounds, TextSpan};
+use bevy::ui::widget::ViewportNode;
 
 use crate::theme::{
 	PANEL_CHIP_GAP, PANEL_GROUP_FONT_SIZE, PANEL_ITEM_FONT_SIZE, PANEL_TILE_COLUMNS,
@@ -115,11 +116,14 @@ pub fn spawn_grid_catalog_tile(
 	selected: bool,
 	rank: Option<u8>,
 	thumbnail: Option<Handle<Image>>,
+	viewport: Option<Entity>,
+	swatch: Option<Color>,
 	muted: bool,
 	extra: impl Bundle,
 ) {
 	let face = tile_face(selected, muted);
 	let mark = if muted { TEXT_YELLOW_FAINT } else { TEXT_YELLOW };
+	let pictured = thumbnail.is_some() || viewport.is_some();
 	let mut tile = parent.spawn((
 		Button,
 		HoverTile { equipped: selected, preserve_fill: false },
@@ -135,8 +139,11 @@ pub fn spawn_grid_catalog_tile(
 		button
 			.spawn((
 				Node {
-					width: Val::Px(54.0),
-					height: Val::Px(54.0),
+					width: if pictured { Val::Percent(100.0) } else { Val::Px(54.0) },
+					height: if pictured { Val::Auto } else { Val::Px(54.0) },
+					aspect_ratio: pictured.then_some(1.0),
+					min_height: if pictured { Val::Px(120.0) } else { Val::Px(54.0) },
+					position_type: PositionType::Relative,
 					justify_content: JustifyContent::Center,
 					align_items: AlignItems::Center,
 					..default()
@@ -144,10 +151,55 @@ pub fn spawn_grid_catalog_tile(
 				Pickable::IGNORE,
 			))
 			.with_children(|slot| {
-				if let Some(thumbnail) = thumbnail {
+				if !pictured {
+					if let Some(fill) = swatch {
+						let accent = Color::srgb(
+							(fill.to_srgba().red * 0.35 + 0.65).min(1.0),
+							(fill.to_srgba().green * 0.35 + 0.65).min(1.0),
+							(fill.to_srgba().blue * 0.35 + 0.65).min(1.0),
+						);
+						slot.spawn((
+							Node {
+								position_type: PositionType::Absolute,
+								width: Val::Px(54.0),
+								height: Val::Px(54.0),
+								justify_content: JustifyContent::Center,
+								align_items: AlignItems::Center,
+								border_radius: BorderRadius::all(Val::Px(6.0)),
+								..default()
+							},
+							BackgroundColor(fill),
+							Pickable::IGNORE,
+						))
+						.with_children(|plate| {
+							plate.spawn((
+								Node {
+									width: Val::Px(22.0),
+									height: Val::Px(22.0),
+									border_radius: BorderRadius::all(Val::Px(3.0)),
+									..default()
+								},
+								BackgroundColor(accent),
+								Pickable::IGNORE,
+							));
+						});
+					}
+				}
+				if let Some(camera) = viewport {
+					slot.spawn((
+						ViewportNode::new(camera),
+						Node {
+							width: Val::Percent(100.0),
+							height: Val::Percent(100.0),
+							aspect_ratio: Some(1.0),
+							..default()
+						},
+						Pickable::IGNORE,
+					));
+				} else if let Some(thumbnail) = thumbnail {
 					slot.spawn((
 						ImageNode::new(thumbnail),
-						Node { width: Val::Px(54.0), height: Val::Px(54.0), ..default() },
+						Node { width: Val::Percent(100.0), aspect_ratio: Some(1.0), ..default() },
 						Pickable::IGNORE,
 					));
 				}
@@ -262,7 +314,8 @@ pub fn sync_hover_tiles(
 			continue;
 		}
 		node.border = UiRect::all(Val::Px(if tile.preserve_fill { 1.0 } else { TILE_BORDER }));
-		*border = BorderColor::all(if tile.preserve_fill { TEXT_YELLOW_FAINT } else { Color::NONE });
+		*border =
+			BorderColor::all(if tile.preserve_fill { TEXT_YELLOW_FAINT } else { Color::NONE });
 		if !tile.preserve_fill {
 			background.0 = Color::NONE;
 		}
@@ -306,9 +359,7 @@ mod tests {
 	use bevy::ecs::system::RunSystemOnce;
 	use bevy::prelude::*;
 
-	use super::{
-		sync_hover_tiles, tile_caption, tile_grid_columns, tile_node, HoverTile,
-	};
+	use super::{sync_hover_tiles, tile_caption, tile_grid_columns, tile_node, HoverTile};
 	use crate::controls::hud_menu::{HudMenu, HudMenuItem};
 	use crate::theme::PANEL_TILE_COLUMNS;
 
@@ -319,10 +370,7 @@ mod tests {
 
 	#[test]
 	fn long_caption_keeps_every_word() {
-		assert_eq!(
-			tile_caption("celestial-red-tide-joggers"),
-			"Celestial Red Tide Joggers"
-		);
+		assert_eq!(tile_caption("celestial-red-tide-joggers"), "Celestial Red Tide Joggers");
 	}
 
 	#[test]

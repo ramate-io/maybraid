@@ -4,7 +4,7 @@ use combat_targeting::CombatTargeting;
 use damage::HitPayload;
 use evasion_intelligence::EvasionIntelligenceUser;
 use player::PlayerLook;
-use projectiles::{ProjectileSource, ProjectileVisualCache, spawn_flight};
+use projectiles::{spawn_flight, ProjectileSource, ProjectileVisualCache};
 use threat_management_intelligence::{
 	SkillDaze, ThreatManagementIntelligence, ThreatTactic, ThreatTacticChanged,
 };

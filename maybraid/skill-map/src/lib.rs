@@ -14,6 +14,7 @@ mod fireball_embers;
 mod fireball_material;
 mod fireball_trail;
 mod map;
+mod preview;
 mod tile_material;
 mod tiles;
 mod user;
@@ -21,25 +22,29 @@ mod viewport;
 
 use bevy::prelude::*;
 use fireball_material::FireballMaterialPlugin;
-use tile_material::SkillMapTileMaterialPlugin;
 
 use maybraid_character_controller::CharacterControlSystems;
 use projectiles::ProjectilesPlugin;
 use threat_management_intelligence::ThreatManagementSystems;
 
 pub use burst::{
-	COSIMO_BURST_DAMAGE, COSIMO_BURST_RADIUS, COSIMO_LAUNCH_HEIGHT, ROCKADDER_DAMAGE,
-	ROCKADDER_RADIUS, launch_vy,
+	launch_vy, COSIMO_BURST_DAMAGE, COSIMO_BURST_RADIUS, COSIMO_LAUNCH_HEIGHT, ROCKADDER_DAMAGE,
+	ROCKADDER_RADIUS,
 };
 pub use controller::{SkillMapController, SkillMapFlick};
 pub use effects::{
-	FIREBALL_COLOR, FIREBALL_GRAVITY, FIREBALL_RADIUS, FIREBALL_SPEED, forget_chance,
+	forget_chance, FIREBALL_COLOR, FIREBALL_GRAVITY, FIREBALL_RADIUS, FIREBALL_SPEED,
 };
-pub use map::{SkillKind, SkillMapId, authored_map, authored_map_from_spec, authored_maps};
-pub use tiles::{TileKind, classify_noise};
+pub use map::{authored_map, authored_map_from_spec, authored_maps, SkillKind, SkillMapId};
+pub use preview::{
+	spawn_skill_map_catalog_preview, SkillMapCatalogPreview, SkillMapMenuPreview,
+	CATALOG_PREVIEW_PX,
+};
+pub use tile_material::{SkillMapTileAssets, SkillMapTileMaterialPlugin};
+pub use tiles::{classify_noise, TileKind};
 pub use user::{
-	MappedBy, SkillMapEquip, SkillMapHeld, SkillMapMember, SkillMapSession, SkillMapSteerLock,
-	SkillMapUser, SkillMapUserSettings, spawn_skill_maps, spawn_skill_maps_with,
+	spawn_skill_maps, spawn_skill_maps_with, MappedBy, SkillMapEquip, SkillMapHeld, SkillMapMember,
+	SkillMapSession, SkillMapSteerLock, SkillMapUser, SkillMapUserSettings,
 };
 pub use viewport::{Debraid, SkillMapViewport};
 

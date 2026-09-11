@@ -4840,6 +4840,7 @@ dependencies = [
  "maybraid-character-ui-menu-renderer",
  "maybraid-input",
  "maybraid-menu-controller",
+ "maybraid-skill-map",
  "menu-components",
  "menu-screens",
  "player",

@@ -157,6 +157,7 @@ mod tests {
 			assert!(!kind.adjectives().is_empty(), "{}", kind.label());
 			let name = hashed_skill_map_name(crate::SkillMapSpec::new(*kind, 7));
 			assert!(name.contains(kind.display_name()), "{name}");
+			assert_ne!(kind.preview_srgb(), [1.0, 1.0, 1.0], "{}", kind.label());
 		}
 	}
 }

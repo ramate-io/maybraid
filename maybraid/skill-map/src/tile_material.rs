@@ -1,7 +1,7 @@
 //! Shared 2D tile [`Material2d`]: subdivided quad, world-space shade, thematic marks.
 
 use bevy::{
-	asset::{RenderAssetUsages, embedded_asset},
+	asset::{embedded_asset, RenderAssetUsages},
 	mesh::Indices,
 	prelude::*,
 	reflect::TypePath,
