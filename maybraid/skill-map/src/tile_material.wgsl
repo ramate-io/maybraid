@@ -1,6 +1,7 @@
 //---------------------------------------------------------
 // Skill-map tiles: world-space shade, sway, blobby water.
-// Kind: 0 fire land, 1 water, 2 fire mark, 3 wave mark, 4 cursor, 5 wave land.
+// Kind: 0 fire land, 1 water, 2 fire mark, 3 wave mark, 4 cursor, 5 wave land,
+// 6 rock land, 7 cosmos land, 8 rock mark, 9 cosmos mark.
 //---------------------------------------------------------
 
 #import bevy_sprite::{
@@ -25,6 +26,10 @@ const KIND_FIRE: f32 = 2.0;
 const KIND_WAVE: f32 = 3.0;
 const KIND_CURSOR: f32 = 4.0;
 const KIND_LAND_WAVE: f32 = 5.0;
+const KIND_LAND_ROCK: f32 = 6.0;
+const KIND_LAND_COSMO: f32 = 7.0;
+const KIND_ROCK: f32 = 8.0;
+const KIND_COSMO: f32 = 9.0;
 
 fn hash12(p: vec2<f32>) -> f32 {
     let p3 = fract(vec3<f32>(p.x, p.y, p.x) * vec3<f32>(0.1031, 0.1030, 0.0973));
@@ -253,6 +258,98 @@ fn shade_wave(uv: vec2<f32>, world: vec2<f32>) -> vec3<f32> {
     return color * (1.0 + blank * 0.2);
 }
 
+fn rot45(p: vec2<f32>) -> vec2<f32> {
+    return vec2<f32>(p.x + p.y, p.y - p.x) * 0.70710678;
+}
+
+fn lattice(p: vec2<f32>) -> vec2<f32> {
+    return abs(fract(p) - 0.5);
+}
+
+/// Islamic-tile mosaic: two square lattices, 8-fold stars, terracotta/teal/gold.
+fn shade_mosaic(world: vec2<f32>) -> vec3<f32> {
+    let t = globals.time;
+    let p = world * 0.078;
+    let g1 = lattice(p);
+    let g2 = lattice(rot45(p));
+    let line1 = min(g1.x, g1.y);
+    let line2 = min(g2.x, g2.y);
+    let star = min(line1, line2);
+    let cell = hash12(floor(p * 2.0));
+    let cell2 = hash12(floor(rot45(p) * 2.0 + vec2<f32>(3.1, 1.7)));
+    let ink = vec3<f32>(0.08, 0.06, 0.05);
+    let terracotta = vec3<f32>(0.62, 0.28, 0.16);
+    let teal = vec3<f32>(0.12, 0.38, 0.36);
+    let cream = vec3<f32>(0.86, 0.78, 0.62);
+    let gold = vec3<f32>(0.78, 0.58, 0.22);
+    var fill = mix(terracotta, teal, step(0.5, cell));
+    fill = mix(fill, cream, step(0.82, cell2) * 0.85);
+    fill = mix(fill, gold, step(0.92, cell) * 0.7);
+    let grout = 1.0 - smoothstep(0.0, 0.045, star);
+    var color = mix(fill, ink, grout * 0.92);
+    let diamond = max(g2.x, g2.y);
+    let star_fill = 1.0 - smoothstep(0.18, 0.26, diamond);
+    color = mix(color, gold, star_fill * step(0.7, cell2) * 0.55);
+    let n = fbm(world * 0.03 + vec2<f32>(t * 0.01, -t * 0.008));
+    color *= 0.88 + n * 0.18;
+    return color;
+}
+
+/// Deep purple celestial field: nebula bands and smooth star glints.
+fn shade_cosmos(world: vec2<f32>) -> vec3<f32> {
+    let t = globals.time;
+    let n = fbm(world * 0.018 + vec2<f32>(t * 0.012, -t * 0.01));
+    let n2 = fbm(world * 0.042 + vec2<f32>(-t * 0.016, t * 0.014));
+    let void_c = vec3<f32>(0.04, 0.02, 0.09);
+    let nebula = vec3<f32>(0.22, 0.06, 0.38);
+    let bloom = vec3<f32>(0.42, 0.16, 0.62);
+    var color = mix(void_c, nebula, n);
+    color = mix(color, bloom, smoothstep(0.55, 0.9, n2) * 0.42);
+    let band = 0.5 + 0.5 * sin(world.x * 0.04 + world.y * 0.09 + t * 0.35 + n * 2.0);
+    color += vec3<f32>(0.55, 0.28, 0.72) * smoothstep(0.75, 1.0, band) * 0.14;
+    let meridian = 0.5 + 0.5 * sin(world.x * 0.11 - world.y * 0.03 + t * 0.2);
+    color += vec3<f32>(0.35, 0.18, 0.55) * smoothstep(0.88, 1.0, meridian) * 0.08;
+    let glint = pow(saturate(n2), 12.0) * (0.5 + 0.5 * sin(t * 1.4 + n * 6.0));
+    color += vec3<f32>(0.95, 0.82, 1.0) * glint * 0.55;
+    let glint2 = pow(saturate(n), 14.0);
+    color += vec3<f32>(0.7, 0.9, 1.0) * glint2 * 0.25;
+    return color;
+}
+
+fn shade_rock(uv: vec2<f32>, world: vec2<f32>) -> vec3<f32> {
+    var color = shade_mosaic(world);
+    let q = uv - vec2<f32>(0.5, 0.5);
+    let diamond = abs(q.x) + abs(q.y);
+    let square = max(abs(q.x), abs(q.y));
+    let stamp = 1.0 - smoothstep(0.2, 0.32, diamond);
+    let rim = smoothstep(0.18, 0.24, diamond) * (1.0 - smoothstep(0.28, 0.38, diamond));
+    let nest = 1.0 - smoothstep(0.1, 0.16, square);
+    let gold = vec3<f32>(0.92, 0.72, 0.28);
+    let cream = vec3<f32>(0.94, 0.88, 0.72);
+    color = mix(color, gold, stamp * 0.72);
+    color = mix(color, cream, nest * 0.85);
+    color += gold * rim * 0.55;
+    return color * (1.0 + nest * 0.2);
+}
+
+fn shade_cosmo(uv: vec2<f32>, world: vec2<f32>) -> vec3<f32> {
+    var color = shade_cosmos(world);
+    let q = uv - vec2<f32>(0.5, 0.5);
+    let r = length(q);
+    let ang = atan2(q.y, q.x);
+    let spoke = abs(fract(ang / 6.2831853 * 6.0) - 0.5);
+    let star = 1.0 - smoothstep(0.0, 0.16, r + spoke * 0.28);
+    let flare = 1.0 - smoothstep(0.08, 0.42, r);
+    let core = 1.0 - smoothstep(0.0, 0.12, r);
+    let violet = vec3<f32>(0.62, 0.28, 1.0);
+    let gold = vec3<f32>(1.0, 0.78, 0.35);
+    let white = vec3<f32>(0.96, 0.9, 1.0);
+    color = mix(color, violet, flare * 0.55);
+    color = mix(color, gold, star * 0.7);
+    color = mix(color, white, core * 0.85);
+    return color * (1.0 + core * 0.35);
+}
+
 fn shade_cursor(uv: vec2<f32>) -> vec3<f32> {
     let q = uv - vec2<f32>(0.5, 0.5);
     let r = length(q);
@@ -278,8 +375,16 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
         color = shade_wave(in.uv, world);
     } else if kind > 3.5 && kind < 4.5 {
         color = shade_cursor(in.uv);
-    } else if kind > 4.5 {
+    } else if kind > 4.5 && kind < 5.5 {
         color = shade_mist(world);
+    } else if kind > 5.5 && kind < 6.5 {
+        color = shade_mosaic(world);
+    } else if kind > 6.5 && kind < 7.5 {
+        color = shade_cosmos(world);
+    } else if kind > 7.5 && kind < 8.5 {
+        color = shade_rock(in.uv, world);
+    } else if kind > 8.5 {
+        color = shade_cosmo(in.uv, world);
     }
     color *= material.tint.xyz * material.style.y;
     return vec4<f32>(color, alpha);

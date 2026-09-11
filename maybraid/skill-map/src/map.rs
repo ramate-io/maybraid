@@ -1,10 +1,10 @@
-//! Authored Fireball / Dumbwave maps and the render-layer range from the POC.
+//! Authored skill maps and the render-layer range from the POC.
 
 use bevy::camera::visibility::RenderLayers;
 use bevy::prelude::*;
 use crozon_character_items::{SkillMapKind, SkillMapSpec};
 
-/// User-facing map id. `0` is Fireball, `1` is Dumbwave.
+/// User-facing map id. Live play presents one equipped spec at layer `0`.
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct SkillMapId(pub u32);
 
@@ -13,6 +13,8 @@ pub struct SkillMapId(pub u32);
 pub enum SkillKind {
 	Fireball,
 	Dumbwave,
+	Rockadder,
+	Cosimo,
 }
 
 impl SkillKind {
@@ -20,6 +22,8 @@ impl SkillKind {
 		match self {
 			Self::Fireball => "Fireball",
 			Self::Dumbwave => "Dumbwave",
+			Self::Rockadder => "Rockadder",
+			Self::Cosimo => "Cosimo",
 		}
 	}
 
@@ -27,6 +31,8 @@ impl SkillKind {
 		match kind {
 			SkillMapKind::Fireball => Self::Fireball,
 			SkillMapKind::Dumbwave => Self::Dumbwave,
+			SkillMapKind::Rockadder => Self::Rockadder,
+			SkillMapKind::Cosimo => Self::Cosimo,
 		}
 	}
 
@@ -34,6 +40,8 @@ impl SkillKind {
 		match self {
 			Self::Fireball => Color::srgb(0.82, 0.18, 0.78),
 			Self::Dumbwave => Color::srgb(0.22, 0.78, 0.86),
+			Self::Rockadder => Color::srgb(0.72, 0.38, 0.16),
+			Self::Cosimo => Color::srgb(0.42, 0.16, 0.72),
 		}
 	}
 
@@ -41,6 +49,8 @@ impl SkillKind {
 		match self {
 			Self::Fireball => Color::srgb(0.11, 0.09, 0.07),
 			Self::Dumbwave => Color::srgb(0.04, 0.07, 0.10),
+			Self::Rockadder => Color::srgb(0.10, 0.07, 0.05),
+			Self::Cosimo => Color::srgb(0.06, 0.03, 0.10),
 		}
 	}
 }
@@ -69,6 +79,8 @@ pub fn authored_map(kind: SkillKind, seed: u32) -> AuthoredMap {
 		frequency: match kind {
 			SkillKind::Fireball => 0.08,
 			SkillKind::Dumbwave => 0.11,
+			SkillKind::Rockadder => 0.09,
+			SkillKind::Cosimo => 0.07,
 		},
 		label: kind.label(),
 	}
@@ -78,9 +90,14 @@ pub fn authored_map_from_spec(spec: SkillMapSpec) -> AuthoredMap {
 	authored_map(SkillKind::from_item(spec.kind), spec.seed)
 }
 
-/// Catalog of kinds. Live play presents one equipped spec, not this pair.
-pub fn authored_maps() -> [AuthoredMap; 2] {
-	[authored_map(SkillKind::Fireball, 0), authored_map(SkillKind::Dumbwave, 7)]
+/// Catalog of kinds. Live play presents one equipped spec, not this list.
+pub fn authored_maps() -> [AuthoredMap; 4] {
+	[
+		authored_map(SkillKind::Fireball, 0),
+		authored_map(SkillKind::Dumbwave, 7),
+		authored_map(SkillKind::Rockadder, 13),
+		authored_map(SkillKind::Cosimo, 19),
+	]
 }
 
 #[derive(Clone, Copy, Debug)]

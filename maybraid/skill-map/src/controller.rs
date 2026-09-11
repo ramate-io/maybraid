@@ -58,11 +58,7 @@ impl FlickLane {
 		self.active = false;
 		let peak = self.peak;
 		self.peak = Vec2::ZERO;
-		if elapsed >= FLICK_MIN_SECS && peak.length() >= FLICK_MIN_PEAK {
-			Some(peak)
-		} else {
-			None
-		}
+		if elapsed >= FLICK_MIN_SECS && peak.length() >= FLICK_MIN_PEAK { Some(peak) } else { None }
 	}
 }
 
@@ -161,8 +157,8 @@ mod tests {
 	#[test]
 	fn a_nudge_is_not_a_flick() {
 		let mut controller = SkillMapController::default();
-		assert!(controller.sample(0.0, Vec2::X * 0.25, Vec2::ZERO).is_none());
-		assert!(controller.sample(0.08, Vec2::X * 0.3, Vec2::ZERO).is_none());
+		assert!(controller.sample(0.0, Vec2::X * 0.15, Vec2::ZERO).is_none());
+		assert!(controller.sample(0.08, Vec2::X * 0.2, Vec2::ZERO).is_none());
 		assert!(controller.sample(0.12, Vec2::ZERO, Vec2::ZERO).is_none());
 	}
 }

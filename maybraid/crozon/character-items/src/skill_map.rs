@@ -12,15 +12,20 @@ pub enum SkillMapKind {
 	#[default]
 	Fireball,
 	Dumbwave,
+	Rockadder,
+	Cosimo,
 }
 
 impl SkillMapKind {
-	pub const VALUES: &'static [Self] = &[Self::Fireball, Self::Dumbwave];
+	pub const VALUES: &'static [Self] =
+		&[Self::Fireball, Self::Dumbwave, Self::Rockadder, Self::Cosimo];
 
 	pub const fn label(self) -> &'static str {
 		match self {
 			Self::Fireball => "fireball",
 			Self::Dumbwave => "dumbwave",
+			Self::Rockadder => "rockadder",
+			Self::Cosimo => "cosimo",
 		}
 	}
 
@@ -28,6 +33,8 @@ impl SkillMapKind {
 		match self {
 			Self::Fireball => "Fireball",
 			Self::Dumbwave => "Dumbwave",
+			Self::Rockadder => "Rockadder",
+			Self::Cosimo => "Cosimo",
 		}
 	}
 
@@ -35,6 +42,8 @@ impl SkillMapKind {
 		match self {
 			Self::Fireball => &["Searing", "Ember", "Cinder", "Solar", "Ashen"],
 			Self::Dumbwave => &["Dull", "Hollow", "Mute", "Blank", "Haze"],
+			Self::Rockadder => &["Inlaid", "Tessellated", "Faceted", "Mosaic", "Geometric"],
+			Self::Cosimo => &["Celestial", "Astral", "Violet", "Sidereal", "Midnight"],
 		}
 	}
 }

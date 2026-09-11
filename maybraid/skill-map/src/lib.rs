@@ -6,6 +6,7 @@
 //! [`firearm_user::FirearmUser`]). Pause / text-entry should clear
 //! [`SkillMapEnabled`].
 
+mod burst;
 mod controller;
 mod cursor;
 mod effects;
@@ -26,15 +27,19 @@ use maybraid_character_controller::CharacterControlSystems;
 use projectiles::ProjectilesPlugin;
 use threat_management_intelligence::ThreatManagementSystems;
 
+pub use burst::{
+	COSIMO_BURST_DAMAGE, COSIMO_BURST_RADIUS, COSIMO_LAUNCH_HEIGHT, ROCKADDER_DAMAGE,
+	ROCKADDER_RADIUS, launch_vy,
+};
 pub use controller::{SkillMapController, SkillMapFlick};
 pub use effects::{
-	forget_chance, FIREBALL_COLOR, FIREBALL_GRAVITY, FIREBALL_RADIUS, FIREBALL_SPEED,
+	FIREBALL_COLOR, FIREBALL_GRAVITY, FIREBALL_RADIUS, FIREBALL_SPEED, forget_chance,
 };
-pub use map::{authored_map, authored_map_from_spec, authored_maps, SkillKind, SkillMapId};
-pub use tiles::{classify_noise, TileKind};
+pub use map::{SkillKind, SkillMapId, authored_map, authored_map_from_spec, authored_maps};
+pub use tiles::{TileKind, classify_noise};
 pub use user::{
-	spawn_skill_maps, spawn_skill_maps_with, MappedBy, SkillMapEquip, SkillMapHeld, SkillMapMember,
-	SkillMapSession, SkillMapSteerLock, SkillMapUser, SkillMapUserSettings,
+	MappedBy, SkillMapEquip, SkillMapHeld, SkillMapMember, SkillMapSession, SkillMapSteerLock,
+	SkillMapUser, SkillMapUserSettings, spawn_skill_maps, spawn_skill_maps_with,
 };
 pub use viewport::{Debraid, SkillMapViewport};
 
@@ -76,6 +81,7 @@ impl Plugin for SkillMapPlugin {
 		app.add_plugins(FireballMaterialPlugin)
 			.add_plugins(SkillMapTileMaterialPlugin)
 			.add_systems(Startup, fireball_embers::setup_fireball_effects)
+			.add_systems(Startup, burst::setup_burst_assets)
 			.init_resource::<SkillMapEnabled>()
 			.init_resource::<controller::SkillMapController>()
 			.add_message::<SkillMapEvent>()
@@ -114,7 +120,12 @@ impl Plugin for SkillMapPlugin {
 					tiles::restore_spent_tiles,
 					effects::dispatch_fireballs,
 					effects::dispatch_dumbwaves,
+					burst::dispatch_rockadders,
+					burst::dispatch_cosmos,
 					effects::tick_pulses,
+					burst::tick_bursts,
+					burst::tick_shards,
+					burst::contact_bursts,
 					user::despawn_orphaned_skill_maps,
 				)
 					.chain()
@@ -144,12 +155,15 @@ mod tests {
 	}
 
 	#[test]
-	fn authored_maps_are_fireball_and_dumbwave() {
+	fn authored_maps_cover_the_four_base_kinds() {
 		let maps = authored_maps();
-		assert_eq!(maps.len(), 2);
+		assert_eq!(maps.len(), 4);
 		assert_eq!(maps[0].kind, SkillKind::Fireball);
 		assert_eq!(maps[1].kind, SkillKind::Dumbwave);
+		assert_eq!(maps[2].kind, SkillKind::Rockadder);
+		assert_eq!(maps[3].kind, SkillKind::Cosimo);
 		assert_ne!(SkillKind::Fireball.viewport_clear(), SkillKind::Dumbwave.viewport_clear());
+		assert_ne!(SkillKind::Rockadder.viewport_clear(), SkillKind::Cosimo.viewport_clear());
 		let seeded = authored_map(SkillKind::Fireball, 99);
 		assert_eq!(seeded.seed, 99);
 		assert_eq!(seeded.id, SkillMapId(0));

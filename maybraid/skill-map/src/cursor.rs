@@ -2,12 +2,12 @@
 
 use bevy::prelude::*;
 
+use crate::SkillMapEnabled;
 use crate::controller::SkillMapFlick;
-use crate::map::{render_layer, SkillMapId};
+use crate::map::{SkillMapId, render_layer};
 use crate::tile_material::SkillMapTileAssets;
 use crate::user::{SkillMapHeld, SkillMapMember, SkillMapSteerLock, SkillMapUser};
-use crate::viewport::{map_view_extent, SkillMapViewportCamera};
-use crate::SkillMapEnabled;
+use crate::viewport::{SkillMapViewportCamera, map_view_extent};
 
 pub const CURSOR_SPEED: f32 = 64.0;
 pub const WATER_LOCK_SECS: f32 = 2.0;
@@ -172,4 +172,3 @@ mod tests {
 		assert_eq!(flick_delta(Vec2::Y, region, 0.1), Vec2::new(0.0, 9.12));
 	}
 }
-

@@ -149,7 +149,7 @@ mod tests {
 	use bevy::prelude::*;
 
 	use super::{
-		despawn_orphaned_skill_maps, spawn_skill_maps, SkillMapEquip, SkillMapSession, SkillMapUser,
+		SkillMapEquip, SkillMapSession, SkillMapUser, despawn_orphaned_skill_maps, spawn_skill_maps,
 	};
 
 	#[test]

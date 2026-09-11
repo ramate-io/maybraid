@@ -7,11 +7,11 @@ use noise::{Fbm, MultiFractal, NoiseFn, OpenSimplex};
 
 use crate::cursor::SkillMapCursor;
 use crate::map::{
-	pinned_power_cells, render_layer, AuthoredMap, MapExtents, SkillKind, SkillMapId,
+	AuthoredMap, MapExtents, SkillKind, SkillMapId, pinned_power_cells, render_layer,
 };
 use crate::tile_material::SkillMapTileAssets;
 use crate::user::{SkillMapHeld, SkillMapMember, SkillMapSession, SkillMapSteerLock, SkillMapUser};
-use crate::viewport::{spawn_debraid, SkillMapViewportCamera};
+use crate::viewport::{SkillMapViewportCamera, spawn_debraid};
 use crate::{SkillMapEnabled, SkillMapEvent};
 
 /// Half-extents for the cheap AABB claim test. Independent of the render mesh.

@@ -7,12 +7,12 @@ use bevy::render::render_resource::{TextureDimension, TextureFormat, TextureUsag
 use bevy::text::FontSize;
 use bevy::ui::widget::ViewportNode;
 
+use crate::SkillMapEnabled;
 use crate::cursor::SkillMapCursor;
-use crate::map::{authored_map_from_spec, render_layer, AuthoredMap, SkillMapId};
+use crate::map::{AuthoredMap, SkillMapId, authored_map_from_spec, render_layer};
 use crate::tile_material::SkillMapTileAssets;
 use crate::tiles::spawn_map_tiles;
 use crate::user::{SkillMapEquip, SkillMapHeld, SkillMapMember, SkillMapSession, SkillMapUser};
-use crate::SkillMapEnabled;
 
 pub(crate) const VIEWPORT_PX: f32 = 228.0;
 /// `WindowSize` area is viewport pixels times this. 1.0 showed almost the whole 256 map.

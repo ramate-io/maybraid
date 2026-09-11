@@ -1,7 +1,7 @@
 //! Shared 2D tile [`Material2d`]: subdivided quad, world-space shade, thematic marks.
 
 use bevy::{
-	asset::{embedded_asset, RenderAssetUsages},
+	asset::{RenderAssetUsages, embedded_asset},
 	mesh::Indices,
 	prelude::*,
 	reflect::TypePath,
@@ -19,6 +19,10 @@ pub const TILE_KIND_FIRE: f32 = 2.0;
 pub const TILE_KIND_WAVE: f32 = 3.0;
 pub const TILE_KIND_CURSOR: f32 = 4.0;
 pub const TILE_KIND_LAND_WAVE: f32 = 5.0;
+pub const TILE_KIND_LAND_ROCK: f32 = 6.0;
+pub const TILE_KIND_LAND_COSMO: f32 = 7.0;
+pub const TILE_KIND_ROCK: f32 = 8.0;
+pub const TILE_KIND_COSMO: f32 = 9.0;
 const TILE_DIVISIONS: u32 = 12;
 
 #[derive(Clone, Copy, Debug, ShaderType)]
@@ -41,6 +45,8 @@ impl SkillMapTileMaterial {
 			TileKind::Water => (Vec4::ONE, TILE_KIND_WATER),
 			TileKind::Power(SkillKind::Fireball) => (Vec4::ONE, TILE_KIND_FIRE),
 			TileKind::Power(SkillKind::Dumbwave) => (Vec4::ONE, TILE_KIND_WAVE),
+			TileKind::Power(SkillKind::Rockadder) => (Vec4::ONE, TILE_KIND_ROCK),
+			TileKind::Power(SkillKind::Cosimo) => (Vec4::ONE, TILE_KIND_COSMO),
 		};
 		Self { params: TileParams { tint, style: Vec4::new(code, 1.0, seed as f32, 0.0) } }
 	}
@@ -49,6 +55,8 @@ impl SkillMapTileMaterial {
 		let code = match map {
 			SkillKind::Fireball => TILE_KIND_LAND,
 			SkillKind::Dumbwave => TILE_KIND_LAND_WAVE,
+			SkillKind::Rockadder => TILE_KIND_LAND_ROCK,
+			SkillKind::Cosimo => TILE_KIND_LAND_COSMO,
 		};
 		Self { params: TileParams { tint: Vec4::ONE, style: Vec4::new(code, 1.0, 1.0, 0.0) } }
 	}
@@ -89,9 +97,13 @@ pub struct SkillMapTileAssets {
 	pub bead_mesh: Handle<Mesh>,
 	pub land_fire: Handle<SkillMapTileMaterial>,
 	pub land_wave: Handle<SkillMapTileMaterial>,
+	pub land_rock: Handle<SkillMapTileMaterial>,
+	pub land_cosmo: Handle<SkillMapTileMaterial>,
 	pub water: Handle<SkillMapTileMaterial>,
 	pub fireball: Handle<SkillMapTileMaterial>,
 	pub dumbwave: Handle<SkillMapTileMaterial>,
+	pub rockadder: Handle<SkillMapTileMaterial>,
+	pub cosimo: Handle<SkillMapTileMaterial>,
 	pub cursor: Handle<SkillMapTileMaterial>,
 }
 
@@ -101,10 +113,14 @@ impl SkillMapTileAssets {
 			TileKind::Land => match map {
 				SkillKind::Fireball => self.land_fire.clone(),
 				SkillKind::Dumbwave => self.land_wave.clone(),
+				SkillKind::Rockadder => self.land_rock.clone(),
+				SkillKind::Cosimo => self.land_cosmo.clone(),
 			},
 			TileKind::Water => self.water.clone(),
 			TileKind::Power(SkillKind::Fireball) => self.fireball.clone(),
 			TileKind::Power(SkillKind::Dumbwave) => self.dumbwave.clone(),
+			TileKind::Power(SkillKind::Rockadder) => self.rockadder.clone(),
+			TileKind::Power(SkillKind::Cosimo) => self.cosimo.clone(),
 		}
 	}
 }
@@ -133,11 +149,17 @@ fn setup_tile_assets(
 		bead_mesh,
 		land_fire: materials.add(SkillMapTileMaterial::land(SkillKind::Fireball)),
 		land_wave: materials.add(SkillMapTileMaterial::land(SkillKind::Dumbwave)),
+		land_rock: materials.add(SkillMapTileMaterial::land(SkillKind::Rockadder)),
+		land_cosmo: materials.add(SkillMapTileMaterial::land(SkillKind::Cosimo)),
 		water: materials.add(SkillMapTileMaterial::for_kind(TileKind::Water, 2)),
 		fireball: materials
 			.add(SkillMapTileMaterial::for_kind(TileKind::Power(SkillKind::Fireball), 3)),
 		dumbwave: materials
 			.add(SkillMapTileMaterial::for_kind(TileKind::Power(SkillKind::Dumbwave), 4)),
+		rockadder: materials
+			.add(SkillMapTileMaterial::for_kind(TileKind::Power(SkillKind::Rockadder), 5)),
+		cosimo: materials
+			.add(SkillMapTileMaterial::for_kind(TileKind::Power(SkillKind::Cosimo), 6)),
 		cursor: materials.add(SkillMapTileMaterial::cursor()),
 	});
 }
@@ -196,5 +218,17 @@ mod tests {
 			SkillMapTileMaterial::land(SkillKind::Dumbwave).params.style.x,
 			TILE_KIND_LAND_WAVE
 		);
+		assert_eq!(
+			SkillMapTileMaterial::land(SkillKind::Rockadder).params.style.x,
+			TILE_KIND_LAND_ROCK
+		);
+		assert_eq!(
+			SkillMapTileMaterial::land(SkillKind::Cosimo).params.style.x,
+			TILE_KIND_LAND_COSMO
+		);
+		let rock = SkillMapTileMaterial::for_kind(TileKind::Power(SkillKind::Rockadder), 0);
+		let cosmos = SkillMapTileMaterial::for_kind(TileKind::Power(SkillKind::Cosimo), 0);
+		assert_eq!(rock.params.style.x, TILE_KIND_ROCK);
+		assert_eq!(cosmos.params.style.x, TILE_KIND_COSMO);
 	}
 }
