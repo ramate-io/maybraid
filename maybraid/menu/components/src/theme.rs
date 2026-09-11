@@ -58,6 +58,21 @@ pub const CURSOR_ICON_SIZE: f32 = 36.0;
 /// Gap between the cursor mark and the row label.
 pub const CURSOR_ICON_GAP: f32 = 12.0;
 
+/// Face size inside a [`crate::MenuObjective`] chip.
+pub const OBJECTIVE_MARKER_FONT_SIZE: f32 = 16.0;
+
+/// Horizontal padding inside an objective tag.
+pub const OBJECTIVE_MARKER_PAD_X: f32 = 8.0;
+
+/// Vertical padding inside an objective tag.
+pub const OBJECTIVE_MARKER_PAD_Y: f32 = 2.0;
+
+/// Stroke on an objective tag.
+pub const OBJECTIVE_MARKER_BORDER: f32 = 1.5;
+
+/// Corner radius on an objective tag.
+pub const OBJECTIVE_MARKER_RADIUS: f32 = 8.0;
+
 /// Maybraid mark, under `maybraid/assets`. Author file: `art/iconography/maybraid_logo_icon.blend`.
 pub const MAYBRAID_LOGO: &str = "iconography/maybraid_logo_icon.png";
 

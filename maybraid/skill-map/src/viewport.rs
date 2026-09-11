@@ -4,8 +4,8 @@ use bevy::asset::RenderAssetUsages;
 use bevy::camera::{ClearColorConfig, RenderTarget};
 use bevy::prelude::*;
 use bevy::render::render_resource::{TextureDimension, TextureFormat, TextureUsages};
-use bevy::text::FontSize;
 use bevy::ui::widget::ViewportNode;
+use menu_components::{spawn_menu_objective, HudFonts, MenuObjective};
 
 use crate::cursor::SkillMapCursor;
 use crate::map::{authored_map_from_spec, render_layer, AuthoredMap, SkillMapId};
@@ -25,7 +25,6 @@ const VIEWPORT_GAP: f32 = 12.0;
 const VIEWPORT_INSET: f32 = 16.0;
 const LIVE_BORDER: Color = Color::srgb(1.0, 0.48, 0.08);
 const IDLE_BORDER: Color = Color::srgba(1.0, 0.86, 0.22, 0.42);
-const LABEL_YELLOW: Color = Color::srgb(1.0, 0.86, 0.22);
 
 #[derive(Component)]
 pub struct SkillMapViewport;
@@ -48,6 +47,7 @@ pub(crate) struct DebraidOverlay;
 pub fn present_skill_maps(
 	mut commands: Commands,
 	mut images: ResMut<Assets<Image>>,
+	asset_server: Res<AssetServer>,
 	tiles: Res<SkillMapTileAssets>,
 	users: Query<(Entity, &SkillMapUser, &SkillMapEquip)>,
 	mut sessions: Query<&mut SkillMapSession>,
@@ -69,6 +69,7 @@ pub fn present_skill_maps(
 		spawn_one_map(
 			&mut commands,
 			&mut images,
+			&HudFonts::load(asset_server.as_ref()),
 			&tiles,
 			user,
 			mapping.maps,
@@ -147,6 +148,7 @@ pub fn spawn_skill_map_view(
 fn spawn_one_map(
 	commands: &mut Commands,
 	images: &mut Assets<Image>,
+	fonts: &HudFonts,
 	tiles: &SkillMapTileAssets,
 	user: Entity,
 	session: Entity,
@@ -171,6 +173,7 @@ fn spawn_one_map(
 	let layer = render_layer(spec.id);
 
 	let bottom = VIEWPORT_INSET + stack_index as f32 * (VIEWPORT_PX + VIEWPORT_GAP);
+	let caption = format!("{} {:04X}", spec.label, spec.seed as u16);
 	let node = commands
 		.spawn((
 			Name::new(format!("skill-map-viewport-{}", spec.label)),
@@ -184,27 +187,47 @@ fn spawn_one_map(
 				width: Val::Px(VIEWPORT_PX),
 				height: Val::Px(VIEWPORT_PX),
 				border: UiRect::all(Val::Px(2.0)),
-				padding: UiRect::all(Val::Px(8.0)),
 				border_radius: BorderRadius::all(Val::Px(14.0)),
-				flex_direction: FlexDirection::Column,
-				justify_content: JustifyContent::FlexStart,
-				align_items: AlignItems::FlexStart,
+				overflow: Overflow::clip(),
 				..default()
 			},
 			BorderColor::all(IDLE_BORDER),
 			BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.12)),
-			ViewportNode::new(camera),
 			Visibility::Hidden,
 			Pickable::IGNORE,
 		))
 		.with_children(|parent| {
 			parent.spawn((
-				SkillMapLabel,
-				Text::new(format!("{} {:04X}", spec.label, spec.seed as u16)),
-				TextFont { font_size: FontSize::Px(16.0), ..default() },
-				TextColor(LABEL_YELLOW),
+				ViewportNode::new(camera),
+				Node {
+					position_type: PositionType::Absolute,
+					left: Val::Px(2.0),
+					right: Val::Px(2.0),
+					top: Val::Px(2.0),
+					bottom: Val::Px(2.0),
+					border_radius: BorderRadius::all(Val::Px(12.0)),
+					..default()
+				},
 				Pickable::IGNORE,
 			));
+			parent
+				.spawn((
+					Node {
+						position_type: PositionType::Absolute,
+						top: Val::Px(8.0),
+						left: Val::Px(8.0),
+						..default()
+					},
+					Pickable::IGNORE,
+				))
+				.with_children(|slot| {
+					spawn_menu_objective(
+						slot,
+						fonts,
+						MenuObjective::yellow(caption),
+						SkillMapLabel,
+					);
+				});
 		})
 		.id();
 

@@ -4706,6 +4706,7 @@ dependencies = [
  "lod-avian",
  "maybraid-character-controller",
  "maybraid-input",
+ "menu-components",
  "noise",
  "player",
  "projectiles",
