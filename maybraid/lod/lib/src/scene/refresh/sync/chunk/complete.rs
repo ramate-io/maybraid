@@ -1,8 +1,9 @@
 //! Warm-swap completion once content + nested hosts are Streamed.
 
+use bevy::ecs::entity_disabling::Disabled;
 use bevy::prelude::*;
 
-use crate::scene::host::{LodLevelRoot, LodLevelRootOverlap, LodSceneHost};
+use crate::scene::host::{show_lod_tree, LodLevelRoot, LodLevelRootOverlap, LodSceneHost};
 
 use super::types::{
 	LodChunkFulfillBudget, LodChunkFulfillment, LodCullInFlight, LodLazyPending,
@@ -27,12 +28,11 @@ pub fn complete_chunk_lod_fulfill(
 		(Entity, Option<&mut LodChunkFulfillment>, Option<&ChildOf>, Has<LodLevelRootStreamed>),
 		(With<LodLevelRootPending>, Without<LodCullInFlight>),
 	>,
-	children_q: Query<&Children>,
-	nested_hosts: Query<(), With<LodSceneHost>>,
-	streamed_hosts: Query<(), With<LodSceneHostStreamed>>,
-	lazy_pending: Query<(), With<LodLazyPending>>,
-	child_of: Query<&ChildOf>,
-	mut visibilities: Query<&mut Visibility>,
+	children_q: Query<&Children, Allow<Disabled>>,
+	nested_hosts: Query<(), (With<LodSceneHost>, Allow<Disabled>)>,
+	streamed_hosts: Query<(), (With<LodSceneHostStreamed>, Allow<Disabled>)>,
+	lazy_pending: Query<(), (With<LodLazyPending>, Allow<Disabled>)>,
+	child_of: Query<&ChildOf, Allow<Disabled>>,
 	budget: Res<LodChunkFulfillBudget>,
 ) {
 	let mut remaining = budget.completes_per_frame;
@@ -50,7 +50,7 @@ pub fn complete_chunk_lod_fulfill(
 			}
 			remaining -= 1;
 			commands.entity(root_entity).remove::<LodLevelRootPending>();
-			finish_root(&mut commands, root_entity, root_child_of, &child_of, &mut visibilities);
+			finish_root(&mut commands, root_entity, root_child_of, &child_of);
 			continue;
 		};
 
@@ -81,7 +81,7 @@ pub fn complete_chunk_lod_fulfill(
 			.entity(root_entity)
 			.remove::<LodChunkFulfillment>()
 			.remove::<LodLevelRootPending>();
-		finish_root(&mut commands, root_entity, root_child_of, &child_of, &mut visibilities);
+		finish_root(&mut commands, root_entity, root_child_of, &child_of);
 	}
 }
 
@@ -89,12 +89,9 @@ fn finish_root(
 	commands: &mut Commands,
 	root_entity: Entity,
 	root_child_of: Option<&ChildOf>,
-	child_of: &Query<&ChildOf>,
-	visibilities: &mut Query<&mut Visibility>,
+	child_of: &Query<&ChildOf, Allow<Disabled>>,
 ) {
-	if let Ok(mut vis) = visibilities.get_mut(root_entity) {
-		*vis = Visibility::Inherited;
-	}
+	show_lod_tree(commands, root_entity);
 
 	let Some(root_child_of) = root_child_of else {
 		return;

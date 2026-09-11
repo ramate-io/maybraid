@@ -3,10 +3,9 @@
 use bevy::ecs::query::Has;
 use bevy::ecs::relationship::RelationshipTarget;
 use bevy::prelude::*;
-use bevy::scene::prelude::{bsn, template_value};
 use clap::ValueEnum;
 use crozon_characters::{
-	character_bounds,
+	spawn_fixed_character_assembly,
 	species::{
 		braidman::BraidmanConfig, brenal::BrenalConfig, brodler::BrodlerConfig,
 		brokker::BrokkerConfig, caole::CaoleConfig, chupri::ChupriConfig, claber::ClaberConfig,
@@ -19,11 +18,9 @@ use crozon_characters::{
 	},
 	AnimClip, AnimId, AnimRef, AnimRefRoot, CharacterAppearance, CharacterHeading,
 	CharacterMembers, CharacterRecipe, CharacterRig, CharacterRigRole, CharacterRoot,
-	ComponentsOnly, RigSkeletonKind,
+	RigSkeletonKind,
 };
 use game_commands::ui::GameCommandStatusText;
-use lod::gen::LodScene;
-use lod::lod_ref::LodRef;
 
 use crate::commands::RequestModeCharacter;
 use crate::player::{
@@ -307,23 +304,7 @@ fn spawn_species(
 	macro_rules! spawn_preview {
 		($config:ty) => {{
 			let clothed = CharacterRecipe::clothed(&<$config>::default_preview());
-			let bounds = character_bounds(&clothed);
-			let identity = Transform::IDENTITY;
-			let lod_ref = LodRef {
-				entity: Entity::PLACEHOLDER,
-				previous_transform: &identity,
-				current_transform: &identity,
-				bounds: &bounds,
-			};
-			let host = ComponentsOnly(clothed);
-			vec![commands
-				.spawn_scene((
-					host.host(&lod_ref),
-					bsn! {
-						template_value(transform)
-					},
-				))
-				.id()]
+			vec![spawn_fixed_character_assembly(commands, &clothed, transform)]
 		}};
 	}
 	match species {
@@ -366,23 +347,7 @@ fn spawn_appearance(
 	macro_rules! spawn_config {
 		($config:expr) => {{
 			let clothed = CharacterRecipe::clothed($config);
-			let bounds = character_bounds(&clothed);
-			let identity = Transform::IDENTITY;
-			let lod_ref = LodRef {
-				entity: Entity::PLACEHOLDER,
-				previous_transform: &identity,
-				current_transform: &identity,
-				bounds: &bounds,
-			};
-			let host = ComponentsOnly(clothed);
-			vec![commands
-				.spawn_scene((
-					host.host(&lod_ref),
-					bsn! {
-						template_value(transform)
-					},
-				))
-				.id()]
+			vec![spawn_fixed_character_assembly(commands, &clothed, transform)]
 		}};
 	}
 	match appearance {

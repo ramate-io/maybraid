@@ -5,6 +5,7 @@
 //! This path only clears [`LodCullInFlight`] so a pending root re-enters drain
 //! before teardown [`LodCullInFlight::started`].
 
+use bevy::ecs::entity_disabling::Disabled;
 use bevy::prelude::*;
 
 use crate::lod_ref::{point_bounds, LodNode, LodNodeBounds, LodNodePose};
@@ -22,10 +23,13 @@ use super::types::{LodCullInFlight, LodLevelRootPending};
 /// gone (stale High after the camera left the bullseye).
 pub fn cancel_unstarted_cull_for_desired_pending_roots<T: Component + SemanticLodScene>(
 	mut commands: Commands,
-	cull_inflight: Query<(Entity, &LodCullInFlight, &LodLevelRoot), With<LodLevelRootPending>>,
-	child_of: Query<&ChildOf>,
-	host_levels: Query<&LodSceneLevel, With<LodSceneHost>>,
-	level_roots_bags: Query<(), With<LodLevelRoots>>,
+	cull_inflight: Query<
+		(Entity, &LodCullInFlight, &LodLevelRoot),
+		(With<LodLevelRootPending>, Allow<Disabled>),
+	>,
+	child_of: Query<&ChildOf, Allow<Disabled>>,
+	host_levels: Query<&LodSceneLevel, (With<LodSceneHost>, Allow<Disabled>)>,
+	level_roots_bags: Query<(), (With<LodLevelRoots>, Allow<Disabled>)>,
 	scenes: Query<&T, With<LodSceneHost>>,
 	viewer: Query<(Entity, &LodNodePose, Option<&LodNodeBounds>), (With<LodNode>, With<LodViewer>)>,
 ) {
@@ -92,9 +96,10 @@ pub fn cancel_unstarted_cull_for_desired_pending_roots_erased(world: &mut World)
 		})
 	};
 	let roots: Vec<_> = {
-		let mut query = world
-			.query_filtered::<(Entity, &LodCullInFlight, &LodLevelRoot), With<LodLevelRootPending>>(
-			);
+		let mut query = world.query_filtered::<
+			(Entity, &LodCullInFlight, &LodLevelRoot),
+			(With<LodLevelRootPending>, Allow<Disabled>),
+		>();
 		query
 			.iter(world)
 			.filter_map(|(entity, cull, root)| (!cull.started).then_some((entity, *root)))

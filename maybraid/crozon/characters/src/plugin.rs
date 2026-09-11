@@ -33,7 +33,7 @@ where
 /// [`crozon_character_motion::CharacterMotionSystems::Anim`].
 pub type CharacterHostSystems = RigSystems;
 
-/// Nested character hosts are spawned as LodScene; membership is stamped after fulfill.
+/// Nested preview hosts still spawn as LodScene; runtime fixed assemblies drain first.
 pub struct CharacterComponentsPlugin;
 
 impl Plugin for CharacterComponentsPlugin {
@@ -60,6 +60,16 @@ impl Plugin for CharacterComponentsPlugin {
 			)
 				.in_set(CharacterHostSystems::Fulfill),
 		);
+		app.add_systems(
+			Update,
+			crate::fixed::drain_character_assembly.before(CharacterHostSystems::Membership),
+		);
+		app.add_systems(
+			Update,
+			crate::fixed::reveal_ready_fixed_members.after(SceneSpawnerSystems::WorldInstanceSpawn),
+		);
+		app.init_resource::<crate::fixed::CharacterAssemblyBudget>()
+			.init_resource::<crate::fixed::CharacterAssemblyDiagnostics>();
 		app.add_systems(Update, prepare_character_terrain_pitch.after(CharacterHostSystems::Pose));
 	}
 }

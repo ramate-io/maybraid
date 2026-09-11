@@ -46,10 +46,10 @@ pub use single_select::{
 	emit_screen_back_on_click, emit_screen_edit_on_click, navigate_text_menus,
 	republish_menu_activate, screen_back_scene, screen_edit_scene, select_text_menu_item_on_over,
 	sync_text_cursor_icons, sync_text_menu_item_colors, ButtonWithSubtext, KeyboardMenuNav,
-	MenuActivate, MenuFocus, ScreenBack, ScreenBackPressed, ScreenEdit, ScreenEditPressed,
-	TextColumnAlign, TextColumnAnchor, TextCursorColumn, TextCursorMenu, TextCursorRow,
-	TextCursorSlot, TextMenu, TextMenuColumn, TextMenuHeader, TextMenuInputLock, TextMenuItem,
-	TextMenuItemLabel,
+	MenuActivate, MenuFocus, MenuItemLocked, MenuObjectiveKind, MenuObjectiveMarker, ScreenBack,
+	ScreenBackPressed, ScreenEdit, ScreenEditPressed, TextColumnAlign, TextColumnAnchor,
+	TextCursorColumn, TextCursorMenu, TextCursorRow, TextCursorSlot, TextMenu, TextMenuColumn,
+	TextMenuHeader, TextMenuInputLock, TextMenuItem, TextMenuItemLabel,
 };
 pub use spin_reveal::{
 	SpinRevealCover, SpinRevealFace, SpinRevealPayload, SpinRevealSlot, SpinRevealViewport,
@@ -57,9 +57,10 @@ pub use spin_reveal::{
 };
 pub use theme::{
 	BARLOW_BLACK, BARLOW_REGULAR, BARLOW_SEMIBOLD, DESCRIPTION_PANE_LEFT_PERCENT, HEADER_FONT_SIZE,
-	ITEM_FONT_SIZE, LOADING_ICON_SIZE, MENU_CLEAR, PANEL_BLOCK_FONT_SIZE, PANEL_GROUP_FONT_SIZE,
-	PANEL_HEADER_FONT_SIZE, PANEL_ITEM_FONT_SIZE, PANEL_LABEL_FONT_SIZE, PANEL_ROW_GAP,
-	TEXT_LIGHT_BLUE, TEXT_LIME, TEXT_SALMON, TEXT_YELLOW, TEXT_YELLOW_FAINT, TEXT_YELLOW_HOVER,
+	ITEM_FONT_SIZE, LOADING_ICON_SIZE, MENU_CLEAR, OBJECTIVE_MARKER_FONT_SIZE,
+	PANEL_BLOCK_FONT_SIZE, PANEL_GROUP_FONT_SIZE, PANEL_HEADER_FONT_SIZE, PANEL_ITEM_FONT_SIZE,
+	PANEL_LABEL_FONT_SIZE, PANEL_ROW_GAP, TEXT_LIGHT_BLUE, TEXT_LIME, TEXT_PURPLE, TEXT_SALMON,
+	TEXT_YELLOW, TEXT_YELLOW_FAINT, TEXT_YELLOW_FAINT_FOCUS, TEXT_YELLOW_HOVER,
 };
 
 use bevy::prelude::*;

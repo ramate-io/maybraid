@@ -50,17 +50,22 @@ impl BaseScale {
 
 	/// All canonical grid cells intersecting `bounds` at `level`.
 	pub fn enumerate_cells(self, bounds: &Aabb3d, level: Level) -> Vec<Cell> {
+		let mut cells = Vec::new();
+		self.for_each_coord(bounds, level, |coord| cells.push(self.cell_at(level, coord)));
+		cells
+	}
+
+	/// Integer grid slots intersecting `bounds` at `level`.
+	pub fn for_each_coord(self, bounds: &Aabb3d, level: Level, mut visit: impl FnMut(IVec3)) {
 		let cell_size = self.cell_size_at(level);
 		let (min_coord, max_coord) = Self::grid_coord_range(bounds, cell_size);
-		let mut cells = Vec::new();
 		for x in min_coord.x..=max_coord.x {
 			for y in min_coord.y..=max_coord.y {
 				for z in min_coord.z..=max_coord.z {
-					cells.push(self.cell_at(level, IVec3::new(x, y, z)));
+					visit(IVec3::new(x, y, z));
 				}
 			}
 		}
-		cells
 	}
 
 	/// Smallest level whose cells can bound `bounds`.

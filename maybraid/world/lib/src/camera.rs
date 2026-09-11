@@ -3,7 +3,10 @@
 use avian3d::prelude::{Collider, ShapeCastConfig, SpatialQuery, SpatialQueryFilter};
 use bevy::core_pipeline::prepass::DepthPrepass;
 use bevy::prelude::*;
-use chico_vegetation_on_terrain_playground::{Player as VegetationPlayer, PlaygroundMode};
+use chico_vegetation_on_terrain_playground::{
+	player::holding_elevation, Player as VegetationPlayer, PlayerSpawnXz, PlaygroundMode,
+};
+use durham_terrain_models::WorldBaseTerrain;
 use game_commands::command::TextEntryFocus;
 use lod_avian::PhysicsInteractionLayer;
 use maybraid_input::{PadButton, VirtualPad};
@@ -30,9 +33,24 @@ fn world_follow_camera() -> FollowCamera {
 	FollowCamera { near: WORLD_CAMERA_NEAR, far: WORLD_CAMERA_FAR, ..default() }
 }
 
-pub(crate) fn spawn_world_camera(mut commands: Commands) {
+pub(crate) fn spawn_world_camera(
+	mut commands: Commands,
+	spawn: Res<PlayerSpawnXz>,
+	base: Option<Res<WorldBaseTerrain>>,
+) {
 	let follow = world_follow_camera();
 	let camera = spawn_follow_camera(&mut commands);
+	if let Some(xz) = spawn.0 {
+		let y = base
+			.as_ref()
+			.map(|base| holding_elevation(&base.0, xz.x, xz.y))
+			.unwrap_or(follow.height);
+		let look = Vec3::new(xz.x, y + follow.look_height, xz.y);
+		let eye = look + Vec3::new(-follow.distance, follow.height, 0.0);
+		commands
+			.entity(camera)
+			.insert(Transform::from_translation(eye).looking_at(look, Vec3::Y));
+	}
 	commands.entity(camera).insert((
 		follow,
 		Projection::Perspective(PerspectiveProjection {
@@ -203,6 +221,7 @@ mod tests {
 	#[test]
 	fn world_camera_setup_spawns_one_shared_gameplay_camera() {
 		let mut app = App::new();
+		app.init_resource::<chico_vegetation_on_terrain_playground::PlayerSpawnXz>();
 		app.add_systems(Startup, spawn_world_camera);
 		app.update();
 		let mut cameras = app

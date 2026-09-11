@@ -77,9 +77,9 @@ via the Fit / parameterized → plan path and the shared
 
 `LodScene` is a compatibility alias for [`SemanticLodScene`](../lod/lib/src/scene/lod_scene.rs) (main-world spawn). Per-view render LOD is [`VisualLodScene`](../lod/lib/src/scene/lod_scene.rs); do not put packed forest in `scene_chunks_with_level`.
 
-Most buildings should implement [`BuildingComponents`](building-components/src/lib.rs) and present via [`ComponentsOnly`](building-components/src/lib.rs)`<T>` (`scene_lod_status` = `Unchanged`; `scene_with_level` = [`component_only_scene`](building-components/src/lib.rs)).
+Most buildings should implement [`BuildingComponents`](building-components/src/lib.rs) and present via [`ComponentsOnly`](building-components/src/lib.rs)`<T>`. High / Medium drain **posed kits** ([`building_scene_chunks`](building-components/src/lib.rs) / [`flattened_component_scene`](building-components/src/lib.rs)) — one structural host, not a nested `LodScene` per panel. Fine-phase node types stay `LodScene` for playgrounds and leftover nested hosts.
 
-Types with host banding, silhouettes, lights, or late-bound [`ParentConfines`](building-components/src/parent_confines.rs) (e.g. Wizard’s Tower) implement `BuildingComponents` and keep a custom `LodScene`. Prefer [`append_component_scenes`](building-components/src/lib.rs) for the node portion.
+Types with silhouettes, lights, or late-bound [`ParentConfines`](building-components/src/parent_confines.rs) (e.g. Wizard’s Tower) implement `BuildingComponents` and keep a custom `LodScene`. Prefer [`append_flattened_component_scenes`](building-components/src/lib.rs) for the node portion. [`append_component_scenes`](building-components/src/lib.rs) still nests `LodScene::host` when you need a per-node host.
 
 `LodScene` methods:
 
@@ -89,7 +89,7 @@ Types with host banding, silhouettes, lights, or late-bound [`ParentConfines`](b
 - `scene_with_level` — primary builder for one level root.
 - `scene_with_lod` — first present via [`lod_host_scene`](../lod/lib/src/lod_scene_host.rs).
 
-Hosts flip level-root visibility / lazily spawn missing roots. Nested hosts are independent.
+Hosts flip level-root visibility / lazily spawn missing roots. Nested hosts are independent. World buildings should not nest a host per kit — structural `ComponentsOnly` / flattened append is the urban path.
 
 **Refresh pass:** [`LodRefreshCorePlugin`](../lod/lib/src/scene/refresh.rs) tracks [`LodNode`](../lod/lib/src/lod_ref.rs) poses. Prefer the Avian region stack (Bullseye / Spotlight → index → levels → chunk sync; OpenLattice cull) as in the buildings and sbs-trees playgrounds, or [`LodSceneRefreshPlugin`](../lod/lib/src/scene/refresh.rs) generally. Hosts present via [`lod_host_scene_pending`](../lod/lib/src/scene/host.rs) / [`LodScene::host`](../lod/lib/src/scene/lod_scene.rs) and override [`scene_chunks_with_level`](../lod/lib/src/scene/lod_scene.rs) when content should amortize — see [scene chunks](../lod/docs/scene-chunks.md). Cameras are playground-only (`LodViewer` requires `LodNode` on the fly-cam). See also [structural LOD collectors](../lod/docs/structural-lod-collectors.md).
 
@@ -149,7 +149,7 @@ Panel kits reuse the roof distance factors ([`PANEL_*_FACTOR`](building-componen
 | High / Medium / Low | Style triad (`*_high_res` / `*_mid_res` / `*_low_res`) |
 | UltraLow | Flat low-res ([`PANEL_ULTRA_LOW_RECTANGLE`](building-components/src/panels/lod.rs) / [`PANEL_ULTRA_LOW_RIGHT_TRIANGLE`](building-components/src/panels/lod.rs)) |
 
-Shared mapping lives in [`lod_band`](building-components/src/lod_band.rs); fine-phase updates run `update_partition_host_levels`, `update_panel_host_levels`, and `update_roof_host_levels` separately.
+Shared mapping lives in [`lod_band`](building-components/src/lod_band.rs). Fine-phase `update_*_host_levels` still run for leftover nested node hosts (playgrounds). World `ComponentsOnly` buildings pick kit GLBs from the **structural** High / Medium / Low root via `scene_with_level`.
 
 ## Internal vs external emission
 

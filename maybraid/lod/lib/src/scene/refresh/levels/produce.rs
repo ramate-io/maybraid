@@ -1,11 +1,12 @@
 //! Produce [`LodSceneRefreshLevel`] from region impulses and a spatial index.
 
+use std::any::TypeId;
 use std::marker::PhantomData;
 
-use bevy::ecs::query::QueryFilter;
+use bevy::ecs::entity_disabling::Disabled;
 use bevy::ecs::system::{StaticSystemParam, SystemParam};
 use bevy::math::bounding::Aabb3d;
-use bevy::platform::collections::HashSet;
+use bevy::platform::collections::{HashMap, HashSet};
 use bevy::prelude::*;
 
 use crate::lod_ref::{
@@ -13,13 +14,13 @@ use crate::lod_ref::{
 	LodNodeSnapshot,
 };
 use crate::scene::host::{
-	nested_host_parent_allows_refresh, LodLevelRoot, LodLevelRoots, LodSceneHost,
+	nested_host_parent_allows_refresh, nested_host_parent_allows_refresh_world, LodLevelRoot,
+	LodLevelRoots, LodSceneHost,
 };
 use crate::scene::level::LodSceneLevel;
 use crate::scene::region_index::LodSceneHostIndex;
 use crate::scene::{LodSceneCulls, SceneChunk, SemanticLodScene};
 
-use super::super::viewer::LodViewer;
 use super::super::{ensure_refresh_core, LodLevelProduceSystems};
 
 /// Impulse: set host `entity` toward `level` (folded by max in entity refresh).
@@ -112,47 +113,76 @@ where
 	}
 }
 
-/// Untyped refresh AABB (union of every [`LodSceneRefreshRegion<M>`] channel).
+pub(crate) fn attach_refresh_membership<T, D>(add: On<Add, T>, mut commands: Commands)
+where
+	T: Component,
+	D: Send + Sync + 'static,
+{
+	if let Ok(mut entity) = commands.get_entity(add.entity) {
+		entity.insert(LodRefreshMembership(LodRefreshDomain::of::<D>()));
+	}
+}
+
+/// Semantic produce domain. Channels that share a domain (bullseye + spotlight)
+/// union into one spatial query; mob High does not widen vegetation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct LodRefreshDomain(TypeId);
+
+impl LodRefreshDomain {
+	pub fn of<T: 'static>() -> Self {
+		Self(TypeId::of::<T>())
+	}
+}
+
+/// Hosts stamped with this only emit levels for matching [`LodSceneRefreshAabb::domain`].
 ///
-/// Region production writes this beside the typed channel message. One fill
-/// system reads it so produce is once per host type, not once per channel.
+/// Unstamped hosts still participate in every domain (playgrounds / tests).
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct LodRefreshMembership(pub LodRefreshDomain);
+
+/// Refresh AABB tagged with the channel's produce domain.
+///
+/// Region production writes this beside the typed [`super::super::LodSceneRefreshRegion`]
+/// message. Fill unions regions **per domain**, then queries once per domain.
 #[derive(Message, Debug, Clone, Copy)]
 pub struct LodSceneRefreshAabb {
 	pub region: Aabb3d,
+	pub domain: LodRefreshDomain,
 }
 
-/// This-frame driver snapshots + deduplicated host hits.
+#[derive(Debug, Default)]
+struct DomainHits {
+	hits: HashSet<Entity>,
+}
+
+/// This-frame driver snapshots + per-domain host hits.
 ///
 /// Filled once by [`fill_lod_produce_cache`], then consumed once by the erased
-/// producer.
+/// producer. Viewer snapshots are collected once even when several domains fire.
 #[derive(Resource, Debug, Default)]
 pub struct LodProduceCache {
 	pub snapshots: Vec<LodNodeSnapshot>,
 	pub hit_entities: HashSet<Entity>,
-	regions: Vec<Aabb3d>,
+	domains: HashMap<LodRefreshDomain, DomainHits>,
 }
 
 impl LodProduceCache {
 	fn clear(&mut self) {
 		self.snapshots.clear();
 		self.hit_entities.clear();
-		self.regions.clear();
+		self.domains.clear();
 	}
+}
 
-	fn has_region(&self, region: Aabb3d) -> bool {
-		self.regions.contains(&region)
-	}
-
-	fn remove_contained_regions(&mut self) {
-		self.regions.sort_by(|a, b| region_volume(*b).total_cmp(&region_volume(*a)));
-		let mut index = 0;
-		while index < self.regions.len() {
-			let region = self.regions[index];
-			if self.regions[..index].iter().any(|outer| contains_region(*outer, region)) {
-				self.regions.remove(index);
-			} else {
-				index += 1;
-			}
+fn remove_contained_regions(regions: &mut Vec<Aabb3d>) {
+	regions.sort_by(|a, b| region_volume(*b).total_cmp(&region_volume(*a)));
+	let mut index = 0;
+	while index < regions.len() {
+		let region = regions[index];
+		if regions[..index].iter().any(|outer| contains_region(*outer, region)) {
+			regions.remove(index);
+		} else {
+			index += 1;
 		}
 	}
 }
@@ -166,36 +196,55 @@ fn contains_region(outer: Aabb3d, inner: Aabb3d) -> bool {
 	outer.min.cmple(inner.min).all() && outer.max.cmpge(inner.max).all()
 }
 
-/// Collect driver refs and untyped host hits once per frame.
-pub fn fill_lod_produce_cache<I, F>(
+/// Collect every [`LodNode`] snapshot once, then query hosts per produce domain.
+///
+/// Region production still filters drivers (`With<Camera>` vs [`super::super::LodViewer`]).
+/// Fill must not: those filters used to instantiate two systems that each cleared
+/// [`LodProduceCache`], so the second walk wiped the first.
+pub fn fill_lod_produce_cache<I>(
 	mut regions: MessageReader<LodSceneRefreshAabb>,
 	index: StaticSystemParam<I>,
-	nodes: Query<(Entity, &LodNodePose, Option<&LodNodeBounds>), (With<LodNode>, F)>,
+	nodes: Query<(Entity, &LodNodePose, Option<&LodNodeBounds>), With<LodNode>>,
+	membership: Query<&LodRefreshMembership>,
 	mut cache: ResMut<LodProduceCache>,
 ) where
 	I: SystemParam + 'static,
 	for<'w, 's> I::Item<'w, 's>: LodSceneHostIndex,
-	F: QueryFilter + 'static,
 {
 	cache.clear();
 	if regions.is_empty() {
 		return;
 	}
+
+	let mut by_domain: HashMap<LodRefreshDomain, Vec<Aabb3d>> = HashMap::new();
+	for msg in regions.read() {
+		let list = by_domain.entry(msg.domain).or_default();
+		if !list.contains(&msg.region) {
+			list.push(msg.region);
+		}
+	}
+	if by_domain.is_empty() {
+		return;
+	}
+
 	cache.snapshots = collect_node_snapshots(&nodes);
 	if cache.snapshots.is_empty() {
 		return;
 	}
 
 	let mut index = index.into_inner();
-	for msg in regions.read() {
-		if !cache.has_region(msg.region) {
-			cache.regions.push(msg.region);
+	for (domain, mut regions) in by_domain {
+		remove_contained_regions(&mut regions);
+		let mut hits = HashSet::new();
+		for region in &regions {
+			for entity in index.hosts_in_region(*region) {
+				if membership_allows(membership.get(entity).ok(), domain) {
+					hits.insert(entity);
+				}
+			}
 		}
-	}
-	cache.remove_contained_regions();
-	for region_index in 0..cache.regions.len() {
-		let region = cache.regions[region_index];
-		cache.hit_entities.extend(index.hosts_in_region(region));
+		cache.hit_entities.extend(hits.iter().copied());
+		cache.domains.insert(domain, DomainHits { hits });
 	}
 }
 
@@ -203,136 +252,111 @@ pub fn fill_lod_produce_cache<I, F>(
 pub fn produce_lod_refresh_levels<T>(
 	cache: Res<LodProduceCache>,
 	hosts: Query<&T, With<LodSceneHost>>,
+	membership: Query<&LodRefreshMembership>,
 	mut levels: MessageWriter<LodSceneRefreshLevel>,
-	child_of: Query<&ChildOf>,
-	host_levels: Query<&LodSceneLevel, With<LodSceneHost>>,
-	level_roots: Query<&LodLevelRoot>,
-	children_q: Query<&Children>,
-	level_roots_bags: Query<(), With<LodLevelRoots>>,
-	visibilities: Query<&Visibility>,
+	child_of: Query<&ChildOf, Allow<Disabled>>,
+	host_levels: Query<&LodSceneLevel, (With<LodSceneHost>, Allow<Disabled>)>,
+	level_roots: Query<&LodLevelRoot, Allow<Disabled>>,
+	children_q: Query<&Children, Allow<Disabled>>,
+	level_roots_bags: Query<(), (With<LodLevelRoots>, Allow<Disabled>)>,
+	visibilities: Query<(&Visibility, Has<Disabled>), Allow<Disabled>>,
 ) where
 	T: Component + SemanticLodScene + 'static,
 {
-	if cache.hit_entities.is_empty() || cache.snapshots.is_empty() {
+	if cache.domains.is_empty() || cache.snapshots.is_empty() {
 		return;
 	}
 	let refs = lod_refs_from_snapshots(&cache.snapshots);
-	for &entity in &cache.hit_entities {
-		let Ok(scene) = hosts.get(entity) else {
-			continue;
-		};
-		if !nested_host_parent_allows_refresh(
-			entity,
-			&child_of,
-			&host_levels,
-			&level_roots,
-			&children_q,
-			&level_roots_bags,
-			&visibilities,
-		) {
-			continue;
+	for (domain, hits) in &cache.domains {
+		for &entity in &hits.hits {
+			if !membership_allows(membership.get(entity).ok(), *domain) {
+				continue;
+			}
+			let Ok(scene) = hosts.get(entity) else {
+				continue;
+			};
+			if !nested_host_parent_allows_refresh(
+				entity,
+				&child_of,
+				&host_levels,
+				&level_roots,
+				&children_q,
+				&level_roots_bags,
+				&visibilities,
+			) {
+				continue;
+			}
+			let level = scene.scene_lod_level_from_levels(&refs);
+			levels.write(LodSceneRefreshLevel { entity, level });
 		}
-		let level = scene.scene_lod_level_from_levels(&refs);
-		levels.write(LodSceneRefreshLevel { entity, level });
 	}
 }
 
 /// Emit levels once from the shared spatial-hit cache.
 pub fn produce_lod_refresh_levels_erased(world: &mut World) {
 	world.resource_scope(|world, cache: Mut<LodProduceCache>| {
-		if cache.hit_entities.is_empty() || cache.snapshots.is_empty() {
+		if cache.domains.is_empty() || cache.snapshots.is_empty() {
 			return;
 		}
 		let refs = lod_refs_from_snapshots(&cache.snapshots);
-		for &entity in &cache.hit_entities {
-			if !nested_host_parent_allows_refresh_world(world, entity) {
-				continue;
+		for (domain, hits) in &cache.domains {
+			for &entity in &hits.hits {
+				if !host_matches_domain(world, entity, *domain) {
+					continue;
+				}
+				if !nested_host_parent_allows_refresh_world(world, entity) {
+					continue;
+				}
+				let Some(producer) = world.get::<LodLevelProducer>(entity).copied() else {
+					continue;
+				};
+				let Some(level) = (producer.level_from_all)(world, entity, &refs) else {
+					continue;
+				};
+				world.write_message(LodSceneRefreshLevel { entity, level });
 			}
-			let Some(producer) = world.get::<LodLevelProducer>(entity).copied() else {
-				continue;
-			};
-			let Some(level) = (producer.level_from_all)(world, entity, &refs) else {
-				continue;
-			};
-			world.write_message(LodSceneRefreshLevel { entity, level });
 		}
 	});
 }
 
-fn nested_host_parent_allows_refresh_world(world: &World, entity: Entity) -> bool {
-	let Some(parent) = world.get::<ChildOf>(entity) else {
-		return true;
-	};
-	let mut current = parent.parent();
-	let mut enclosing_root = None;
-	loop {
-		if enclosing_root.is_none() {
-			enclosing_root = world.get::<LodLevelRoot>(current).map(|root| root.0);
-		}
-		if world.get::<LodSceneHost>(current).is_some() {
-			if let Some(desired) = world.get::<LodSceneLevel>(current) {
-				return enclosing_root.is_none_or(|root_level| {
-					root_level == *desired
-						|| host_shows_level_root_world(world, current, root_level)
-				});
-			}
-		}
-		let Some(parent) = world.get::<ChildOf>(current) else {
-			return true;
-		};
-		current = parent.parent();
-	}
+fn membership_allows(membership: Option<&LodRefreshMembership>, domain: LodRefreshDomain) -> bool {
+	membership.is_none_or(|membership| membership.0 == domain)
 }
 
-fn host_shows_level_root_world(world: &World, host: Entity, level: LodSceneLevel) -> bool {
-	let Some(host_children) = world.get::<Children>(host) else {
-		return false;
-	};
-	let Some(bag) = host_children.iter().find(|&child| world.get::<LodLevelRoots>(child).is_some())
-	else {
-		return false;
-	};
-	let Some(root_children) = world.get::<Children>(bag) else {
-		return false;
-	};
-	root_children.iter().any(|root| {
-		world.get::<LodLevelRoot>(root).is_some_and(|key| key.0 == level)
-			&& world
-				.get::<Visibility>(root)
-				.is_some_and(|visibility| !matches!(*visibility, Visibility::Hidden))
-	})
+fn host_matches_domain(world: &World, entity: Entity, domain: LodRefreshDomain) -> bool {
+	membership_allows(world.get::<LodRefreshMembership>(entity), domain)
 }
 
 /// Fill [`LodProduceCache`] from untyped region AABBs via host index `I`.
-pub struct LodSceneRefreshLevelsFillPlugin<I, F = With<LodViewer>>
+///
+/// Once per `I`. Snapshot collection is every [`LodNode`], not a node filter:
+/// vegetation `With<Camera>` and mob [`super::super::LodViewer`] share this plugin.
+pub struct LodSceneRefreshLevelsFillPlugin<I>
 where
 	I: SystemParam + 'static,
-	F: QueryFilter + 'static,
 {
-	_marker: PhantomData<fn() -> (I, F)>,
+	_marker: PhantomData<fn() -> I>,
 }
 
-impl<I, F> Default for LodSceneRefreshLevelsFillPlugin<I, F>
+impl<I> Default for LodSceneRefreshLevelsFillPlugin<I>
 where
 	I: SystemParam + 'static,
-	F: QueryFilter + 'static,
 {
 	fn default() -> Self {
 		Self { _marker: PhantomData }
 	}
 }
 
-impl<I, F> Plugin for LodSceneRefreshLevelsFillPlugin<I, F>
+impl<I> Plugin for LodSceneRefreshLevelsFillPlugin<I>
 where
 	I: SystemParam + 'static,
-	F: QueryFilter + 'static,
 	for<'w, 's> I::Item<'w, 's>: LodSceneHostIndex,
 {
 	fn build(&self, app: &mut App) {
 		ensure_refresh_core(app);
 		app.add_systems(
 			Update,
-			fill_lod_produce_cache::<I, F>.in_set(LodLevelProduceSystems::FillCache),
+			fill_lod_produce_cache::<I>.in_set(LodLevelProduceSystems::FillCache),
 		);
 	}
 }
@@ -372,8 +396,21 @@ mod tests {
 	fn contained_refresh_region_is_removed_before_spatial_query() {
 		let outer = Aabb3d::from_min_max(Vec3::splat(-100.0), Vec3::splat(100.0));
 		let inner = Aabb3d::from_min_max(Vec3::splat(-10.0), Vec3::splat(10.0));
-		let mut cache = LodProduceCache { regions: vec![inner, outer], ..Default::default() };
-		cache.remove_contained_regions();
-		assert_eq!(cache.regions, vec![outer]);
+		let mut regions = vec![inner, outer];
+		remove_contained_regions(&mut regions);
+		assert_eq!(regions, vec![outer]);
+	}
+
+	struct VegDomain;
+	struct MobDomain;
+
+	#[test]
+	fn overlapping_channels_share_a_domain_without_a_second_query_region() {
+		let outer = Aabb3d::from_min_max(Vec3::splat(-100.0), Vec3::splat(100.0));
+		let inner = Aabb3d::from_min_max(Vec3::splat(-10.0), Vec3::splat(10.0));
+		let mut veg = vec![inner, outer];
+		remove_contained_regions(&mut veg);
+		assert_eq!(veg, vec![outer]);
+		assert_ne!(LodRefreshDomain::of::<VegDomain>(), LodRefreshDomain::of::<MobDomain>());
 	}
 }

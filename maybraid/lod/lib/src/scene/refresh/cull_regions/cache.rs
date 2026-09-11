@@ -2,7 +2,6 @@
 
 use std::marker::PhantomData;
 
-use bevy::ecs::query::QueryFilter;
 use bevy::ecs::system::{StaticSystemParam, SystemParam};
 use bevy::math::bounding::Aabb3d;
 use bevy::platform::collections::HashSet;
@@ -15,12 +14,11 @@ use crate::scene::region_index::LodSceneHostIndex;
 
 use super::super::ensure_refresh_core;
 use super::super::sync::LodChunkCullSystems;
-use super::super::viewer::LodViewer;
 
 /// Untyped cull AABB (union of every [`super::LodSceneCullRegion<M>`] channel).
 ///
 /// Region production writes this beside the typed channel message. One fill
-/// system reads it so the Avian query is once per unique region, not once per `T`.
+/// system reads it so the host-index query is once per unique region, not once per `T`.
 #[derive(Message, Debug, Clone, Copy)]
 pub struct LodSceneCullAabb {
 	pub region: Aabb3d,
@@ -49,16 +47,19 @@ impl LodCullProduceCache {
 	}
 }
 
-/// Collect driver refs and untyped host hits once per frame.
-pub fn fill_lod_cull_produce_cache<I, F>(
+/// Collect every [`LodNode`] snapshot once, then query hosts per unique cull AABB.
+///
+/// Region production still filters drivers (`With<Camera>` vs [`super::super::LodViewer`]).
+/// Fill must not: those filters used to instantiate two systems that each cleared
+/// [`LodCullProduceCache`], so the second walk wiped the first.
+pub fn fill_lod_cull_produce_cache<I>(
 	mut regions: MessageReader<LodSceneCullAabb>,
 	index: StaticSystemParam<I>,
-	nodes: Query<(Entity, &LodNodePose, Option<&LodNodeBounds>), (With<LodNode>, F)>,
+	nodes: Query<(Entity, &LodNodePose, Option<&LodNodeBounds>), With<LodNode>>,
 	mut cache: ResMut<LodCullProduceCache>,
 ) where
 	I: SystemParam + 'static,
 	for<'w, 's> I::Item<'w, 's>: LodSceneHostIndex,
-	F: QueryFilter + 'static,
 {
 	cache.clear();
 	if regions.is_empty() {
@@ -81,35 +82,32 @@ pub fn fill_lod_cull_produce_cache<I, F>(
 }
 
 /// Fill [`LodCullProduceCache`] from untyped cull AABBs via host index `I`.
-pub struct LodSceneCullProduceFillPlugin<I, F = With<LodViewer>>
+pub struct LodSceneCullProduceFillPlugin<I>
 where
 	I: SystemParam + 'static,
-	F: QueryFilter + 'static,
 {
-	_marker: PhantomData<fn() -> (I, F)>,
+	_marker: PhantomData<fn() -> I>,
 }
 
-impl<I, F> Default for LodSceneCullProduceFillPlugin<I, F>
+impl<I> Default for LodSceneCullProduceFillPlugin<I>
 where
 	I: SystemParam + 'static,
-	F: QueryFilter + 'static,
 {
 	fn default() -> Self {
 		Self { _marker: PhantomData }
 	}
 }
 
-impl<I, F> Plugin for LodSceneCullProduceFillPlugin<I, F>
+impl<I> Plugin for LodSceneCullProduceFillPlugin<I>
 where
 	I: SystemParam + 'static,
-	F: QueryFilter + 'static,
 	for<'w, 's> I::Item<'w, 's>: LodSceneHostIndex,
 {
 	fn build(&self, app: &mut App) {
 		ensure_refresh_core(app);
 		app.add_systems(
 			Update,
-			fill_lod_cull_produce_cache::<I, F>.in_set(LodChunkCullSystems::FillCache),
+			fill_lod_cull_produce_cache::<I>.in_set(LodChunkCullSystems::FillCache),
 		);
 	}
 }

@@ -521,17 +521,19 @@ pub fn present_urbanization_padded_terrain(
 /// Hide raw Durham visual roots while their padded replacements are active.
 /// Collision lives on the padded fill scene itself.
 pub fn sync_raw_terrain_replacements(
-	mut commands: Commands,
 	state: Res<UrbanizationPaddedTerrainState>,
-	raw_roots: Query<(Entity, &PresentedTerrainScene)>,
+	mut raw_roots: Query<(&PresentedTerrainScene, &mut Visibility)>,
 ) {
-	for (root, presented) in &raw_roots {
+	for (presented, mut visibility) in &mut raw_roots {
 		let replaced = state.wanted.contains(&presented.0);
-		commands.entity(root).insert(if replaced {
+		let desired = if replaced {
 			Visibility::Hidden
 		} else {
 			Visibility::Inherited
-		});
+		};
+		if *visibility != desired {
+			*visibility = desired;
+		}
 	}
 }
 

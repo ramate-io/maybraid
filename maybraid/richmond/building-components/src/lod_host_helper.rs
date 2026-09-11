@@ -1,9 +1,8 @@
 //! [`LodHostHelper`]: posed kit content for one LOD level root.
 //!
-//! Domain nodes are the [`lod::LodScene`] hosts (see [`crate::PartitionNode`], …); this
-//! helper only builds the **content** a level root holds. Host scaffolding itself comes
-//! from [`lod::lod_host_scene_pending`] via [`lod::LodScene::host`], so a node nested
-//! under a parent streams its level through chunk fulfill instead of warming every band.
+//! Domain nodes still implement [`lod::LodScene`]. World [`crate::ComponentsOnly`]
+//! hosts drain that **content** via `scene_with_level` (no nested kit hosts).
+//! Nested [`lod::LodScene::host`] is for playgrounds and leftover fine-phase hosts.
 //!
 //! Contrast with [`crate::partitions::host`], which maps **resolution GLB sets**
 //! (high / mid / low — ultra-low when authored) onto a [`lod::gen::LodSceneLevel`].

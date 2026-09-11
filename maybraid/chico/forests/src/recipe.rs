@@ -24,6 +24,12 @@ use lod::{LodSceneCulls, LodSceneLevel, LodSceneStatus, SceneChunk};
 
 use crate::{ForestGroveKind, ForestGroveTile};
 
+/// Unique woody archetypes for assembled world/forest tiles.
+///
+/// Authored grove previews keep [`chico_groves::GrovePreviewParams::default`]
+/// (`100`). Runtime world diversity is a separate setting.
+pub const WORLD_FOREST_TREE_VARIANTS: u32 = 32;
+
 /// Blend result for one presenting tile: kind plus the cells that won.
 ///
 /// `cells` is `None` when the tile is uniform (grow the whole footprint).
@@ -62,6 +68,9 @@ macro_rules! impl_kind_recipe {
 			}
 
 			/// Grow the full tile with default params (no construction-seed bias).
+			///
+			/// Caps woody archetypes at [`WORLD_FOREST_TREE_VARIANTS`]. Authored
+			/// grove previews keep [`chico_groves::GrovePreviewParams::default`].
 			pub fn grow_tile(
 				self,
 				extent: GroveExtent,
@@ -69,7 +78,10 @@ macro_rules! impl_kind_recipe {
 			) -> ForestGroveTile {
 				match self {
 					$(Self::$Kind => ForestGroveTile::$Kind(
-						$Params::default().with_extent(extent).build_on(world),
+						$Params::default()
+							.with_extent(extent)
+							.with_tree_variants(WORLD_FOREST_TREE_VARIANTS)
+							.build_on(world),
 					),)+
 				}
 			}
@@ -91,7 +103,9 @@ macro_rules! impl_kind_recipe {
 								GroveRecipe::select_cell(&grove, cell, &extent, world).into_placed()
 							})
 							.collect();
-						let mut params = $Params::default().with_extent(extent);
+						let mut params = $Params::default()
+							.with_extent(extent)
+							.with_tree_variants(WORLD_FOREST_TREE_VARIANTS);
 						params.preview = params.preview.clone().with_resolved_placements(placements);
 						ForestGroveTile::$Kind(params.build_on(world))
 					})+
@@ -195,7 +209,7 @@ mod tests {
 	use super::*;
 	use anyhow::Result;
 	use bevy_math::Vec3;
-	use chico_groves::{cell_center, FlatTerrainSample, GroveExtent};
+	use chico_groves::{cell_center, FlatTerrainSample, GroveExtent, OrchardParams};
 
 	#[test]
 	fn orchard_cell_extent_matches_definition() -> Result<()> {
@@ -216,5 +230,17 @@ mod tests {
 		assert!(matches!(tile, ForestGroveTile::Orchard(_)));
 		let _ = cell_center(&one);
 		Ok(())
+	}
+
+	#[test]
+	fn world_forest_tree_variants_stay_below_authored_preview_default() {
+		assert_eq!(WORLD_FOREST_TREE_VARIANTS, 32);
+		let preview = chico_groves::GrovePreviewParams::<()>::default();
+		assert_eq!(preview.tree_variants, 100);
+		assert!(WORLD_FOREST_TREE_VARIANTS < preview.tree_variants);
+		let params = OrchardParams::default()
+			.with_extent(GroveExtent::new(Vec3::ZERO, Vec3::new(100.0, 1.0, 100.0)))
+			.with_tree_variants(WORLD_FOREST_TREE_VARIANTS);
+		assert_eq!(params.tree_variants, WORLD_FOREST_TREE_VARIANTS);
 	}
 }

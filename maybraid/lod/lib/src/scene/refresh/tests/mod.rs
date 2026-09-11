@@ -7,19 +7,22 @@ use bevy::prelude::*;
 use bevy::math::bounding::Aabb3d;
 use bevy::scene::ScenePlugin;
 
-use crate::lod_ref::LodNodePose;
+use crate::lod_ref::{LodNode, LodNodePose};
 use crate::scene::host::LodLevelSpawnRequest;
 use crate::scene::level::LodSceneLevel;
 use crate::scene::refresh::{
-	LodChunkFulfillBudget, LodCullRegionCursor, LodHostBounds, LodLevelRootPending,
-	LodSceneCullAabb, LodSceneRefreshChunkPlugin, LodSceneRefreshLevel,
+	LodChunkFulfillBudget, LodCullProduceCache, LodCullRegionCursor, LodHostBounds,
+	LodLevelRootPending, LodProduceCache, LodRefreshDomain, LodRefreshMembership, LodSceneCullAabb,
+	LodSceneCullProduceFillPlugin, LodSceneRefreshAabb, LodSceneRefreshChunkPlugin,
+	LodSceneRefreshLevel, LodSceneRefreshLevelsFillPlugin, LodSceneRefreshPlugin,
+	LodSceneRegionCullPlugin, LodViewer,
 };
 
 use test_utils::{
 	app_bullseye_regions, app_core, app_cull_enqueue, app_dual_channel_levels, app_entities_only,
 	app_open_lattice, app_spotlight_levels, app_spotlight_regions, host_level, move_viewer, pose,
 	spawn_host, spawn_host_with_roots, spawn_nested_pair, spawn_viewer, BullChan, CullChan,
-	NewCullRegions, NewRegions, Probe, SpotChan,
+	NewCullRegions, NewRegions, Probe, ScanHostIndex, SpotChan,
 };
 
 #[test]
@@ -175,6 +178,105 @@ fn dual_channel_small_move_is_spotlight_only() -> anyhow::Result<()> {
 	assert_eq!(app.world().resource::<NewRegions<SpotChan>>().regions.len(), 1);
 	assert!(app.world().resource::<NewRegions<BullChan>>().regions.is_empty());
 	assert_eq!(host_level(&app, host), LodSceneLevel::High);
+	Ok(())
+}
+
+#[test]
+fn stamped_hosts_only_follow_their_domain_aabb() -> anyhow::Result<()> {
+	let mut app = app_spotlight_levels();
+	spawn_viewer(app.world_mut(), Vec3::ZERO);
+	let vegetation = spawn_host(app.world_mut(), Vec3::ZERO, LodSceneLevel::UltraLow);
+	let mob = spawn_host(app.world_mut(), Vec3::ZERO, LodSceneLevel::UltraLow);
+	app.world_mut()
+		.entity_mut(vegetation)
+		.insert(LodRefreshMembership(LodRefreshDomain::of::<SpotChan>()));
+	app.world_mut()
+		.entity_mut(mob)
+		.insert(LodRefreshMembership(LodRefreshDomain::of::<BullChan>()));
+	app.update();
+
+	let region = Aabb3d::from_min_max(Vec3::splat(-50.0), Vec3::splat(50.0));
+	app.world_mut()
+		.write_message(LodSceneRefreshAabb { region, domain: LodRefreshDomain::of::<BullChan>() });
+	app.update();
+	assert_eq!(host_level(&app, vegetation), LodSceneLevel::UltraLow);
+	assert_eq!(host_level(&app, mob), LodSceneLevel::High);
+
+	app.world_mut()
+		.write_message(LodSceneRefreshAabb { region, domain: LodRefreshDomain::of::<SpotChan>() });
+	app.update();
+	assert_eq!(host_level(&app, vegetation), LodSceneLevel::High);
+	assert_eq!(host_level(&app, mob), LodSceneLevel::High);
+	Ok(())
+}
+
+#[test]
+fn camera_and_viewer_refresh_plugins_share_one_produce_fill() -> anyhow::Result<()> {
+	#[derive(Component)]
+	struct CameraLike;
+
+	let mut app = App::new();
+	app.add_plugins(MinimalPlugins)
+		.add_plugins(LodSceneRefreshPlugin::<
+			Probe,
+			SpotChan,
+			ScanHostIndex,
+			With<LodViewer>,
+		>::without_full_scan_cull())
+		.add_plugins(LodSceneRefreshPlugin::<
+			Probe,
+			BullChan,
+			ScanHostIndex,
+			With<CameraLike>,
+		>::without_full_scan_cull());
+	assert!(
+		app.is_plugin_added::<LodSceneRefreshLevelsFillPlugin<ScanHostIndex>>(),
+		"fill is once per host index, not once per node filter"
+	);
+
+	app.world_mut().spawn((LodNode, Transform::from_xyz(8.0, 0.0, 0.0)));
+	spawn_viewer(app.world_mut(), Vec3::ZERO);
+	let region = Aabb3d::from_min_max(Vec3::splat(-50.0), Vec3::splat(50.0));
+	app.world_mut()
+		.write_message(LodSceneRefreshAabb { region, domain: LodRefreshDomain::of::<SpotChan>() });
+	app.update();
+
+	assert_eq!(
+		app.world().resource::<LodProduceCache>().snapshots.len(),
+		2,
+		"one fill must snapshot every LodNode, not a Camera- or LodViewer-only subset"
+	);
+	Ok(())
+}
+
+#[test]
+fn camera_and_viewer_cull_plugins_share_one_cull_fill() -> anyhow::Result<()> {
+	#[derive(Component)]
+	struct CameraLike;
+
+	let mut app = App::new();
+	app.add_plugins(MinimalPlugins)
+		.add_plugins(
+			LodSceneRegionCullPlugin::<ScanHostIndex, CullChan, Probe, With<LodViewer>>::default(),
+		)
+		.add_plugins(
+			LodSceneRegionCullPlugin::<ScanHostIndex, SpotChan, Probe, With<CameraLike>>::default(),
+		);
+	assert!(
+		app.is_plugin_added::<LodSceneCullProduceFillPlugin<ScanHostIndex>>(),
+		"cull fill is once per host index, not once per node filter"
+	);
+
+	app.world_mut().spawn((LodNode, Transform::from_xyz(8.0, 0.0, 0.0)));
+	spawn_viewer(app.world_mut(), Vec3::ZERO);
+	app.world_mut().write_message(world_cull_aabb());
+	app.update();
+
+	assert_eq!(
+		app.world().resource::<LodCullProduceCache>().snapshots.len(),
+		2,
+		"one cull fill must snapshot every LodNode, not a Camera- or LodViewer-only subset"
+	);
 	Ok(())
 }
 

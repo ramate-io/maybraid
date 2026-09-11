@@ -12,7 +12,7 @@ use futures::FutureExt;
 use lod::gen::{Id, SpatialIndex, Version};
 use lod::lod_ref::LodRef;
 use lod::presentation::RegionPresenter;
-use lod::LodScene;
+use lod::{hide_lod_tree, LodScene};
 
 use crate::{
 	forest_world_sample, ChicoGrove, ChicoGroveHost, ForestGroveTile, ForestIndex, ForestLayer,
@@ -76,7 +76,7 @@ impl ForestPresenterState {
 		if let Some(entry) = self.presented.get_mut(&id) {
 			entry.hidden = true;
 			for entity in &entry.entities {
-				commands.entity(*entity).insert(Visibility::Hidden);
+				hide_lod_tree(commands, *entity);
 			}
 		}
 	}
@@ -121,7 +121,7 @@ impl ForestPresenterState {
 			// Keep polling / spawning the in-flight version.
 		} else if let Some(previous) = self.retire(id) {
 			for entity in &previous.entities {
-				commands.entity(*entity).insert(Visibility::Hidden);
+				hide_lod_tree(commands, *entity);
 			}
 			self.pending_despawn.push_back(previous.entities);
 		}

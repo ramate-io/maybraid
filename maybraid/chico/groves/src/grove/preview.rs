@@ -14,7 +14,7 @@ use crate::grove::{GroveCellVariant, GroveDefinition};
 
 /// Shared authoring fields for a grove preview / isolation build.
 ///
-/// Forest attachment later is `Params::default().with_extent(e).build_on(&world)`.
+/// Forest attachment later is `Params::default().with_extent(e).with_tree_variants(n).build_on(&world)`.
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "render", derive(clap::Args))]
 #[cfg_attr(feature = "render", command(rename_all = "kebab-case"))]
@@ -29,8 +29,9 @@ pub struct GrovePreviewParams<V: Clone> {
 	pub terrain: FlatTerrainSample,
 
 	/// Number of unit archetypes (`unit_from_num(0..n)`). Caps unique merged-mesh
-	/// handles for High/Medium. Tuft groves that also cap patches keep
-	/// `patch_variants` on the grove-specific params.
+	/// handles for High/Medium. Authored / playground default is 100; assembled
+	/// world forests apply a separate, lower cap. Tuft groves that also cap
+	/// patches keep `patch_variants` on the grove-specific params.
 	#[cfg_attr(feature = "render", arg(long, default_value_t = 100))]
 	pub tree_variants: u32,
 
@@ -64,6 +65,11 @@ impl<V: Clone> GrovePreviewParams<V> {
 		self
 	}
 
+	pub fn with_tree_variants(mut self, tree_variants: u32) -> Self {
+		self.tree_variants = tree_variants.max(1);
+		self
+	}
+
 	pub fn with_resolved_placements(mut self, placements: Vec<GroveCellVariant<V>>) -> Self {
 		self.resolved_placements = Some(placements);
 		self
@@ -94,7 +100,7 @@ impl<V: Clone> GrovePreviewParams<V> {
 	}
 }
 
-/// Deref + `with_extent` / `placements_on` on a grove `*Params` that flattens
+/// Deref + `with_extent` / `with_tree_variants` / `placements_on` on a grove `*Params` that flattens
 /// [`GrovePreviewParams`]. `$definition` is the authored `fn definition()`.
 #[macro_export]
 macro_rules! impl_grove_preview_params {
@@ -121,6 +127,11 @@ macro_rules! impl_grove_preview_params {
 
 			pub fn with_terrain(mut self, terrain: $crate::FlatTerrainSample) -> Self {
 				self.preview.terrain = terrain;
+				self
+			}
+
+			pub fn with_tree_variants(mut self, tree_variants: u32) -> Self {
+				self.preview.tree_variants = tree_variants.max(1);
 				self
 			}
 

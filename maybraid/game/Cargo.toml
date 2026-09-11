@@ -15,6 +15,7 @@ path = "src/main.rs"
 
 [dependencies]
 bevy = { workspace = true }
+clap = { workspace = true }
 crozon-character-model-user = { workspace = true }
 crozon-character-playground = { workspace = true }
 crozon-inventory-user = { workspace = true }

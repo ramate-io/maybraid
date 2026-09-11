@@ -180,7 +180,7 @@ fn echo_gallery_choice(
 ) {
 	for choice in choices.read() {
 		console.0 = match choice {
-			GalleryChoice::New => String::from("gallery: new character"),
+			GalleryChoice::New => String::from("gallery: create a character"),
 			GalleryChoice::Select(id) => format!("gallery: {}", id.to_hex()),
 		};
 	}

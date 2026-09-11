@@ -1,6 +1,7 @@
 //! Runtime ECS hosts that switch LOD level roots without despawning the host.
 
-use bevy::ecs::query::QueryData;
+use bevy::ecs::entity_disabling::Disabled;
+use bevy::ecs::query::{QueryData, QueryFilter};
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value, Scene};
@@ -12,26 +13,133 @@ use crate::scene::level::LodSceneLevel;
 #[derive(Debug, Clone, Copy, Default, Component)]
 pub struct LodSceneHost;
 
+/// Marker: this entity roots an independently hidden LOD tree.
+///
+/// Revealing an ancestor prunes its walk at nested active hide roots.
+#[derive(Debug, Clone, Copy, Default, Component)]
+struct LodTreeHideActive;
+
 /// Whether a visibility value counts as on-screen (warm-hold / cold-fill).
 #[inline]
 pub fn lod_root_is_shown(visibility: Visibility) -> bool {
 	!matches!(visibility, Visibility::Hidden)
 }
 
-/// True when this entity or an ancestor [`LodSceneHost`] is [`Visibility::Hidden`].
+/// Shown to default queries: not [`Visibility::Hidden`] and not [`Disabled`].
+#[inline]
+pub fn lod_world_entity_is_shown(world: &World, entity: Entity) -> bool {
+	world.get::<Disabled>(entity).is_none()
+		&& world
+			.get::<Visibility>(entity)
+			.is_some_and(|visibility| lod_root_is_shown(*visibility))
+}
+
+/// Hide a warm LOD tree from default queries (visibility / extract / host index).
 ///
-/// Present-layer hide stamps Hidden on leaving grove parents so scene cull
-/// does not nibble High roots on a host about to despawn.
+/// [`Disabled`] is recursive: Bevy only disables the stamped entity, so children
+/// would still extract. Pending fulfill roots stay Hidden-only so new children
+/// still receive visibility propagate.
+pub fn hide_lod_tree(commands: &mut Commands, entity: Entity) {
+	commands.queue(move |world: &mut World| hide_lod_tree_now(world, entity));
+}
+
+/// Reveal a warm LOD tree, preserving independently hidden nested trees.
+pub fn show_lod_tree(commands: &mut Commands, entity: Entity) {
+	commands.queue(move |world: &mut World| show_lod_tree_now(world, entity));
+}
+
+/// Exclusive-world hide (cull enqueue from `World`).
+pub fn hide_lod_tree_world(entity: &mut EntityWorldMut) {
+	let root = entity.id();
+	entity.world_scope(|world| hide_lod_tree_now(world, root));
+}
+
+fn hide_lod_tree_now(world: &mut World, root: Entity) {
+	let children: Vec<Entity> = {
+		let Ok(mut entity) = world.get_entity_mut(root) else {
+			return;
+		};
+		if entity.contains::<LodTreeHideActive>() {
+			entity.insert(Visibility::Hidden);
+			return;
+		}
+		let children = entity
+			.get::<Children>()
+			.map(|children| children.iter().collect())
+			.unwrap_or_default();
+		entity.insert((Visibility::Hidden, Disabled, LodTreeHideActive));
+		children
+	};
+	for child in children {
+		if let Ok(mut entity) = world.get_entity_mut(child) {
+			entity.insert_recursive::<Children>(Disabled);
+		}
+	}
+}
+
+fn has_active_hide_ancestor(world: &World, entity: Entity) -> bool {
+	let mut current = world.get::<ChildOf>(entity).map(|child| child.parent());
+	while let Some(entity) = current {
+		if world.get::<LodTreeHideActive>(entity).is_some() {
+			return true;
+		}
+		current = world.get::<ChildOf>(entity).map(|child| child.parent());
+	}
+	false
+}
+
+fn show_lod_tree_now(world: &mut World, root: Entity) {
+	let Ok(mut root_entity) = world.get_entity_mut(root) else {
+		return;
+	};
+	let was_hidden_here = root_entity.contains::<LodTreeHideActive>();
+	let was_disabled = root_entity.contains::<Disabled>();
+	root_entity.insert(Visibility::Inherited);
+	if !was_hidden_here && !was_disabled {
+		return;
+	}
+	if has_active_hide_ancestor(world, root) {
+		world.entity_mut(root).remove::<LodTreeHideActive>();
+		return;
+	}
+
+	let mut stack = vec![root];
+	while let Some(entity) = stack.pop() {
+		let Ok(mut entity_mut) = world.get_entity_mut(entity) else {
+			continue;
+		};
+		if entity != root && entity_mut.contains::<LodTreeHideActive>() {
+			continue;
+		}
+		let children: Vec<Entity> = entity_mut
+			.get::<Children>()
+			.map(|children| children.iter().collect())
+			.unwrap_or_default();
+		if entity == root {
+			entity_mut.remove::<(LodTreeHideActive, Disabled)>();
+		} else {
+			entity_mut.remove::<Disabled>();
+		}
+		stack.extend(children);
+	}
+}
+
+/// True when this entity or an ancestor [`LodSceneHost`] is Hidden or [`Disabled`].
+///
+/// Present-layer hide stamps Hidden+Disabled on leaving grove parents so scene
+/// cull does not nibble High roots on a host about to despawn.
 pub fn lod_scene_host_or_ancestor_hidden(
 	entity: Entity,
-	child_of: &Query<&ChildOf>,
-	hosts: &Query<(), With<LodSceneHost>>,
-	visibilities: &Query<&Visibility>,
+	child_of: &Query<&ChildOf, Allow<Disabled>>,
+	hosts: &Query<(), (With<LodSceneHost>, Allow<Disabled>)>,
+	visibilities: &Query<(&Visibility, Has<Disabled>), Allow<Disabled>>,
 ) -> bool {
 	let mut current = Some(entity);
 	while let Some(entity) = current {
 		if hosts.contains(entity)
-			&& visibilities.get(entity).is_ok_and(|vis| matches!(*vis, Visibility::Hidden))
+			&& visibilities
+				.get(entity)
+				.is_ok_and(|(vis, disabled)| disabled || matches!(*vis, Visibility::Hidden))
 		{
 			return true;
 		}
@@ -40,14 +148,31 @@ pub fn lod_scene_host_or_ancestor_hidden(
 	false
 }
 
-/// Whether `host` currently shows a [`LodLevelRoot`] at `level` (not Hidden).
+/// World walk used by exclusive enqueue (bypasses query filters).
+pub fn lod_scene_host_or_ancestor_hidden_world(world: &World, entity: Entity) -> bool {
+	let mut current = Some(entity);
+	while let Some(entity) = current {
+		if world.get::<LodSceneHost>(entity).is_some()
+			&& (world.get::<Disabled>(entity).is_some()
+				|| world
+					.get::<Visibility>(entity)
+					.is_some_and(|visibility| matches!(*visibility, Visibility::Hidden)))
+		{
+			return true;
+		}
+		current = world.get::<ChildOf>(entity).map(|child| child.parent());
+	}
+	false
+}
+
+/// Whether `host` currently shows a [`LodLevelRoot`] at `level` (not Hidden/Disabled).
 pub fn host_shows_level_root(
 	host: Entity,
 	level: LodSceneLevel,
-	children_q: &Query<&Children>,
-	level_roots_bags: &Query<(), With<LodLevelRoots>>,
-	root_keys: &Query<&LodLevelRoot>,
-	visibilities: &Query<&Visibility>,
+	children_q: &Query<&Children, Allow<Disabled>>,
+	level_roots_bags: &Query<(), (With<LodLevelRoots>, Allow<Disabled>)>,
+	root_keys: &Query<&LodLevelRoot, Allow<Disabled>>,
+	visibilities: &Query<(&Visibility, Has<Disabled>), Allow<Disabled>>,
 ) -> bool {
 	let Ok(host_kids) = children_q.get(host) else {
 		return false;
@@ -60,7 +185,26 @@ pub fn host_shows_level_root(
 	};
 	root_kids.iter().any(|root_e| {
 		root_keys.get(root_e).is_ok_and(|root| root.0 == level)
-			&& visibilities.get(root_e).is_ok_and(|vis| lod_root_is_shown(*vis))
+			&& visibilities
+				.get(root_e)
+				.is_ok_and(|(vis, disabled)| !disabled && lod_root_is_shown(*vis))
+	})
+}
+
+/// World equivalent of [`host_shows_level_root`].
+pub fn host_shows_level_root_world(world: &World, host: Entity, level: LodSceneLevel) -> bool {
+	let Some(host_children) = world.get::<Children>(host) else {
+		return false;
+	};
+	let Some(bag) = host_children.iter().find(|&child| world.get::<LodLevelRoots>(child).is_some())
+	else {
+		return false;
+	};
+	world.get::<Children>(bag).is_some_and(|children| {
+		children.iter().any(|root| {
+			world.get::<LodLevelRoot>(root).is_some_and(|key| key.0 == level)
+				&& lod_world_entity_is_shown(world, root)
+		})
 	})
 }
 
@@ -76,13 +220,16 @@ pub fn host_shows_level_root(
 /// admits empty nested hosts; upgrades require this gate once any root exists.
 pub fn nested_host_parent_allows_refresh(
 	entity: Entity,
-	child_of: &Query<&ChildOf>,
-	host_levels: &Query<&LodSceneLevel, With<LodSceneHost>>,
-	level_roots: &Query<&LodLevelRoot>,
-	children_q: &Query<&Children>,
-	level_roots_bags: &Query<(), With<LodLevelRoots>>,
-	visibilities: &Query<&Visibility>,
+	child_of: &Query<&ChildOf, Allow<Disabled>>,
+	host_levels: &Query<&LodSceneLevel, (With<LodSceneHost>, Allow<Disabled>)>,
+	level_roots: &Query<&LodLevelRoot, Allow<Disabled>>,
+	children_q: &Query<&Children, Allow<Disabled>>,
+	level_roots_bags: &Query<(), (With<LodLevelRoots>, Allow<Disabled>)>,
+	visibilities: &Query<(&Visibility, Has<Disabled>), Allow<Disabled>>,
 ) -> bool {
+	if visibilities.get(entity).is_ok_and(|(_, disabled)| disabled) {
+		return false;
+	}
 	let Ok(parent) = child_of.get(entity) else {
 		return true;
 	};
@@ -117,6 +264,35 @@ pub fn nested_host_parent_allows_refresh(
 	}
 }
 
+/// World walk used by exclusive produce / begin (bypasses query filters).
+pub fn nested_host_parent_allows_refresh_world(world: &World, entity: Entity) -> bool {
+	if world.get::<Disabled>(entity).is_some() {
+		return false;
+	}
+	let Some(parent) = world.get::<ChildOf>(entity) else {
+		return true;
+	};
+	let mut current = parent.parent();
+	let mut enclosing_root: Option<LodSceneLevel> = None;
+	loop {
+		if enclosing_root.is_none() {
+			enclosing_root = world.get::<LodLevelRoot>(current).map(|root| root.0);
+		}
+		if world.get::<LodSceneHost>(current).is_some() {
+			return world.get::<LodSceneLevel>(current).is_none_or(|desired| {
+				enclosing_root.is_none_or(|root_level| {
+					root_level == *desired
+						|| host_shows_level_root_world(world, current, root_level)
+				})
+			});
+		}
+		let Some(parent) = world.get::<ChildOf>(current) else {
+			return true;
+		};
+		current = parent.parent();
+	}
+}
+
 /// Desired [`LodSceneLevel`] of the nearest ancestor [`LodSceneHost`], or
 /// [`LodSceneLevel::High`] when there is none (top-level ranking).
 ///
@@ -124,8 +300,8 @@ pub fn nested_host_parent_allows_refresh(
 /// `(parent_level, self_level)`.
 pub fn parent_host_desired_or_high(
 	host: Entity,
-	child_of: &Query<&ChildOf>,
-	host_levels: &Query<&LodSceneLevel, With<LodSceneHost>>,
+	child_of: &Query<&ChildOf, Allow<Disabled>>,
+	host_levels: &Query<&LodSceneLevel, (With<LodSceneHost>, Allow<Disabled>)>,
 ) -> LodSceneLevel {
 	let Ok(parent) = child_of.get(host) else {
 		return LodSceneLevel::High;
@@ -147,9 +323,9 @@ pub fn parent_host_desired_or_high(
 pub struct LodLevelRoots;
 
 /// Direct child that owns [`LodLevelRoot`]s, if this host has one.
-pub fn lod_level_roots_entity<D: QueryData>(
+pub fn lod_level_roots_entity<D: QueryData, F: QueryFilter>(
 	host_children: &Children,
-	bags: &Query<D, With<LodLevelRoots>>,
+	bags: &Query<D, F>,
 ) -> Option<Entity> {
 	host_children.iter().find(|&child| bags.contains(child))
 }
@@ -256,12 +432,13 @@ pub(crate) fn lod_root_should_show(
 }
 
 fn apply_lod_level_root_visibility(
+	commands: &mut Commands,
 	desired: LodSceneLevel,
 	child_ids: &[Entity],
-	root_keys: &Query<&LodLevelRoot>,
-	pending: &Query<(), With<crate::LodLevelRootPending>>,
-	wants_cull: &Query<(), With<crate::LodCullInFlight>>,
-	visibilities: &mut Query<&mut Visibility>,
+	root_keys: &Query<&LodLevelRoot, Allow<Disabled>>,
+	pending: &Query<(), (With<crate::LodLevelRootPending>, Allow<Disabled>)>,
+	wants_cull: &Query<(), (With<crate::LodCullInFlight>, Allow<Disabled>)>,
+	visibilities: &Query<(&Visibility, Has<Disabled>), Allow<Disabled>>,
 ) -> bool {
 	let mut has_ready_desired = false;
 	let mut ready_levels: Vec<LodSceneLevel> = Vec::new();
@@ -280,7 +457,10 @@ fn apply_lod_level_root_visibility(
 			if root.0 == desired {
 				has_ready_desired = true;
 			}
-			if visibilities.get(child).is_ok_and(|v| lod_root_is_shown(*v)) {
+			if visibilities
+				.get(child)
+				.is_ok_and(|(v, disabled)| !disabled && lod_root_is_shown(*v))
+			{
 				shown_ready.push(child);
 				if root.0 == desired {
 					desired_was_shown = true;
@@ -301,11 +481,7 @@ fn apply_lod_level_root_visibility(
 		let Ok(root) = root_keys.get(child) else {
 			continue;
 		};
-		let Ok(mut visibility) = visibilities.get_mut(child) else {
-			continue;
-		};
 		if wants_cull.contains(child) {
-			*visibility = Visibility::Hidden;
 			continue;
 		}
 		let is_pending = pending.contains(child);
@@ -319,9 +495,28 @@ fn apply_lod_level_root_visibility(
 			desired_was_shown,
 			shown_ready.contains(&child),
 		);
-		*visibility = if show { Visibility::Inherited } else { Visibility::Hidden };
-		if show && !is_pending {
-			shown_ready_after += 1;
+		let currently_disabled = visibilities.get(child).is_ok_and(|(_, disabled)| disabled);
+		let currently_shown = visibilities
+			.get(child)
+			.is_ok_and(|(v, disabled)| !disabled && lod_root_is_shown(*v));
+		if show {
+			if currently_disabled || !currently_shown {
+				show_lod_tree(commands, child);
+			}
+			if !is_pending {
+				shown_ready_after += 1;
+			}
+		} else if is_pending {
+			if currently_shown {
+				commands.entity(child).insert(Visibility::Hidden);
+			}
+		} else {
+			let already_warm_hidden = visibilities
+				.get(child)
+				.is_ok_and(|(v, disabled)| disabled && matches!(*v, Visibility::Hidden));
+			if !already_warm_hidden {
+				hide_lod_tree(commands, child);
+			}
 		}
 	}
 	shown_ready_after > 1
@@ -352,11 +547,11 @@ pub fn sync_lod_level_roots(
 		(Entity, &LodSceneLevel, Option<&Children>),
 		(With<LodSceneHost>, Changed<LodSceneLevel>),
 	>,
-	level_roots_heads: Query<&Children, With<LodLevelRoots>>,
-	root_keys: Query<&LodLevelRoot>,
-	pending: Query<(), With<crate::LodLevelRootPending>>,
-	wants_cull: Query<(), With<crate::LodCullInFlight>>,
-	mut visibilities: Query<&mut Visibility>,
+	level_roots_heads: Query<&Children, (With<LodLevelRoots>, Allow<Disabled>)>,
+	root_keys: Query<&LodLevelRoot, Allow<Disabled>>,
+	pending: Query<(), (With<crate::LodLevelRootPending>, Allow<Disabled>)>,
+	wants_cull: Query<(), (With<crate::LodCullInFlight>, Allow<Disabled>)>,
+	visibilities: Query<(&Visibility, Has<Disabled>), Allow<Disabled>>,
 ) {
 	for (host, level, host_children) in &hosts {
 		let desired = *level;
@@ -391,12 +586,13 @@ pub fn sync_lod_level_roots(
 		}
 
 		if apply_lod_level_root_visibility(
+			&mut commands,
 			desired,
 			&child_ids,
 			&root_keys,
 			&pending,
 			&wants_cull,
-			&mut visibilities,
+			&visibilities,
 		) {
 			commands.entity(host).insert(LodLevelRootOverlap);
 		} else {
@@ -425,11 +621,11 @@ pub fn settle_lod_level_root_visibility(
 		(Entity, &LodSceneLevel, Option<&Children>),
 		(With<LodSceneHost>, With<LodLevelRootOverlap>),
 	>,
-	level_roots_heads: Query<&Children, With<LodLevelRoots>>,
-	root_keys: Query<&LodLevelRoot>,
-	pending: Query<(), With<crate::LodLevelRootPending>>,
-	wants_cull: Query<(), With<crate::LodCullInFlight>>,
-	mut visibilities: Query<&mut Visibility>,
+	level_roots_heads: Query<&Children, (With<LodLevelRoots>, Allow<Disabled>)>,
+	root_keys: Query<&LodLevelRoot, Allow<Disabled>>,
+	pending: Query<(), (With<crate::LodLevelRootPending>, Allow<Disabled>)>,
+	wants_cull: Query<(), (With<crate::LodCullInFlight>, Allow<Disabled>)>,
+	visibilities: Query<(&Visibility, Has<Disabled>), Allow<Disabled>>,
 ) {
 	for (host, level, host_children) in &hosts {
 		let Some(host_children) = host_children else {
@@ -445,12 +641,13 @@ pub fn settle_lod_level_root_visibility(
 		};
 		let child_ids: Vec<Entity> = root_children.iter().collect();
 		if !apply_lod_level_root_visibility(
+			&mut commands,
 			*level,
 			&child_ids,
 			&root_keys,
 			&pending,
 			&wants_cull,
-			&mut visibilities,
+			&visibilities,
 		) {
 			commands.entity(host).remove::<LodLevelRootOverlap>();
 		}
@@ -523,5 +720,96 @@ mod tests {
 			false,
 			true,
 		));
+	}
+
+	#[derive(Component)]
+	struct MeshStandIn;
+
+	#[test]
+	fn hide_lod_tree_stamps_recursive_disabled() {
+		let mut world = World::new();
+		let leaf = world.spawn(MeshStandIn).id();
+		let root = world.spawn(Visibility::Inherited).id();
+		world.entity_mut(root).add_child(leaf);
+		hide_lod_tree_world(&mut world.entity_mut(root));
+
+		assert!(world.get::<Visibility>(root).is_some_and(|v| matches!(*v, Visibility::Hidden)));
+		assert!(world.get::<Disabled>(root).is_some());
+		assert!(world.get::<Disabled>(leaf).is_some());
+
+		let mut default_meshes = world.query_filtered::<Entity, With<MeshStandIn>>();
+		assert_eq!(default_meshes.iter(&world).count(), 0);
+		let mut allowed_meshes =
+			world.query_filtered::<Entity, (With<MeshStandIn>, Allow<Disabled>)>();
+		assert_eq!(allowed_meshes.iter(&world).count(), 1);
+	}
+
+	#[test]
+	fn showing_parent_prunes_nested_hidden_tree() {
+		let mut world = World::new();
+		let nested_leaf = world.spawn(MeshStandIn).id();
+		let nested_root = world.spawn(Visibility::Inherited).id();
+		world.entity_mut(nested_root).add_child(nested_leaf);
+		let shown_leaf = world.spawn(MeshStandIn).id();
+		let shown_root = world.spawn(Visibility::Inherited).id();
+		world.entity_mut(shown_root).add_child(shown_leaf);
+		let parent = world.spawn(Visibility::Inherited).id();
+		world.entity_mut(parent).add_children(&[nested_root, shown_root]);
+
+		hide_lod_tree_now(&mut world, nested_root);
+		hide_lod_tree_now(&mut world, parent);
+		show_lod_tree_now(&mut world, parent);
+
+		assert!(world.get::<Disabled>(parent).is_none());
+		assert!(world.get::<Disabled>(shown_root).is_none());
+		assert!(world.get::<Disabled>(shown_leaf).is_none());
+		assert!(world.get::<Disabled>(nested_root).is_some());
+		assert!(world.get::<Disabled>(nested_leaf).is_some());
+		assert!(world.get::<LodTreeHideActive>(nested_root).is_some());
+
+		show_lod_tree_now(&mut world, nested_root);
+		assert!(world.get::<Disabled>(nested_root).is_none());
+		assert!(world.get::<Disabled>(nested_leaf).is_none());
+	}
+
+	#[test]
+	fn showing_child_beneath_hidden_parent_defers_enable() {
+		let mut world = World::new();
+		let leaf = world.spawn(MeshStandIn).id();
+		let child = world.spawn(Visibility::Inherited).id();
+		world.entity_mut(child).add_child(leaf);
+		let parent = world.spawn(Visibility::Inherited).id();
+		world.entity_mut(parent).add_child(child);
+
+		hide_lod_tree_now(&mut world, child);
+		hide_lod_tree_now(&mut world, parent);
+		show_lod_tree_now(&mut world, child);
+
+		assert!(world.get::<LodTreeHideActive>(child).is_none());
+		assert!(world.get::<Disabled>(child).is_some());
+		assert!(world.get::<Disabled>(leaf).is_some());
+
+		show_lod_tree_now(&mut world, parent);
+		assert!(world.get::<Disabled>(child).is_none());
+		assert!(world.get::<Disabled>(leaf).is_none());
+	}
+
+	#[test]
+	fn showing_parent_enables_hidden_pending_root() {
+		let mut world = World::new();
+		let pending_leaf = world.spawn(MeshStandIn).id();
+		let pending_root = world.spawn((Visibility::Hidden, crate::LodLevelRootPending)).id();
+		world.entity_mut(pending_root).add_child(pending_leaf);
+		let parent = world.spawn(Visibility::Inherited).id();
+		world.entity_mut(parent).add_child(pending_root);
+
+		hide_lod_tree_now(&mut world, parent);
+		show_lod_tree_now(&mut world, parent);
+
+		assert!(world.get::<Disabled>(pending_root).is_none());
+		assert!(world.get::<Disabled>(pending_leaf).is_none());
+		assert!(world
+			.get::<Visibility>(pending_root)
+			.is_some_and(|v| matches!(*v, Visibility::Hidden)));
 	}
 }

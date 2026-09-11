@@ -7,8 +7,8 @@ use super::LodRef;
 
 /// Marker: this entity is an LOD driver (camera, probe, cascade track, …).
 ///
-/// Pose history lives on [`LodNodePose`]. Filter with `F` in refresh systems
-/// to select which nodes contribute [`LodRef`]s.
+/// Pose history lives on [`LodNodePose`]. Region production still filters with `F`
+/// (`With<Camera>` vs [`crate::LodViewer`]); produce- and cull-cache fill snapshot every node.
 #[derive(Debug, Clone, Copy, Default, Component)]
 #[require(LodNodePose)]
 pub struct LodNode;

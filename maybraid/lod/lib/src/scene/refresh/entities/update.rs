@@ -1,5 +1,6 @@
 //! Write desired [`LodSceneLevel`] on hosts from [`LodNode`] drivers.
 
+use bevy::ecs::entity_disabling::Disabled;
 use bevy::ecs::query::QueryFilter;
 use bevy::prelude::*;
 
@@ -27,14 +28,14 @@ pub fn dominant_lod_ref<'a, T: SemanticLodScene>(
 /// Nested hosts not under their parent's desired or shown [`LodLevelRoot`] are skipped.
 pub fn update_lod_host_levels<T, FHost, FNode>(
 	nodes: Query<(Entity, &LodNodePose, Option<&LodNodeBounds>), (With<LodNode>, FNode)>,
-	child_of: Query<&ChildOf>,
-	level_roots: Query<&LodLevelRoot>,
-	children_q: Query<&Children>,
-	level_roots_bags: Query<(), With<LodLevelRoots>>,
-	visibilities: Query<&Visibility>,
+	child_of: Query<&ChildOf, Allow<Disabled>>,
+	level_roots: Query<&LodLevelRoot, Allow<Disabled>>,
+	children_q: Query<&Children, Allow<Disabled>>,
+	level_roots_bags: Query<(), (With<LodLevelRoots>, Allow<Disabled>)>,
+	visibilities: Query<(&Visibility, Has<Disabled>), Allow<Disabled>>,
 	mut sets: ParamSet<(
 		(
-			Query<&'static LodSceneLevel, With<LodSceneHost>>,
+			Query<&'static LodSceneLevel, (With<LodSceneHost>, Allow<Disabled>)>,
 			Query<(Entity, &'static T), (With<LodSceneHost>, FHost)>,
 		),
 		Query<(Entity, &'static mut LodSceneLevel), (With<LodSceneHost>, With<T>, FHost)>,

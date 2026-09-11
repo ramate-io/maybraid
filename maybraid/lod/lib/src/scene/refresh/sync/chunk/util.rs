@@ -1,5 +1,6 @@
 //! Small helpers shared by begin / drain / complete.
 
+use bevy::ecs::entity_disabling::Disabled;
 use bevy::prelude::*;
 
 use crate::scene::host::{LodLevelRoot, LodSceneHost};
@@ -13,8 +14,8 @@ use super::types::{LodCullInFlight, LodLazyPending, LodSceneHostStreamed};
 /// Medium root would push High into the cold Presence queue and starve it.
 pub(super) fn has_present_root(
 	root_children: &Children,
-	root_keys: &Query<&LodLevelRoot>,
-	cull_inflight: &Query<(), With<LodCullInFlight>>,
+	root_keys: &Query<&LodLevelRoot, Allow<Disabled>>,
+	cull_inflight: &Query<(), (With<LodCullInFlight>, Allow<Disabled>)>,
 ) -> bool {
 	root_children
 		.iter()
@@ -26,9 +27,9 @@ pub(super) fn has_present_root(
 /// Returns `Some(streamed)` when a next-level host is found.
 fn next_level_host_streamed(
 	entity: Entity,
-	children_q: &Query<&Children>,
-	hosts: &Query<(), With<LodSceneHost>>,
-	streamed_hosts: &Query<(), With<LodSceneHostStreamed>>,
+	children_q: &Query<&Children, Allow<Disabled>>,
+	hosts: &Query<(), (With<LodSceneHost>, Allow<Disabled>)>,
+	streamed_hosts: &Query<(), (With<LodSceneHostStreamed>, Allow<Disabled>)>,
 ) -> Option<bool> {
 	if hosts.contains(entity) {
 		return Some(streamed_hosts.contains(entity));
@@ -50,9 +51,9 @@ fn next_level_host_streamed(
 /// (mesh-only roots complete immediately).
 pub(super) fn count_nested_hosts(
 	root: Entity,
-	children_q: &Query<&Children>,
-	hosts: &Query<(), With<LodSceneHost>>,
-	streamed_hosts: &Query<(), With<LodSceneHostStreamed>>,
+	children_q: &Query<&Children, Allow<Disabled>>,
+	hosts: &Query<(), (With<LodSceneHost>, Allow<Disabled>)>,
+	streamed_hosts: &Query<(), (With<LodSceneHostStreamed>, Allow<Disabled>)>,
 ) -> (usize, usize) {
 	let Ok(children) = children_q.get(root) else {
 		return (0, 0);
@@ -76,8 +77,8 @@ pub(super) fn count_nested_hosts(
 /// True when `root` or any descendant still holds [`LodLazyPending`].
 pub(super) fn subtree_has_lod_lazy_pending(
 	root: Entity,
-	children_q: &Query<&Children>,
-	lazy: &Query<(), With<LodLazyPending>>,
+	children_q: &Query<&Children, Allow<Disabled>>,
+	lazy: &Query<(), (With<LodLazyPending>, Allow<Disabled>)>,
 ) -> bool {
 	if lazy.contains(root) {
 		return true;

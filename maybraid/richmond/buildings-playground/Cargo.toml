@@ -23,6 +23,7 @@ game-commands = { workspace = true }
 log = { workspace = true }
 lod = { workspace = true }
 lod-avian = { workspace = true }
+lod-gimme = { workspace = true }
 scene-ref = { workspace = true }
 richmond-building-components = { workspace = true }
 richmond-buildings = { workspace = true }
