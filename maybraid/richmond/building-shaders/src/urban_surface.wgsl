@@ -132,13 +132,10 @@ fn terracotta_look(p: vec3<f32>) -> vec4<f32> {
 fn wood_look(p: vec3<f32>) -> vec4<f32> {
     let base = palette_base();
     let accent = palette_accent();
-    let scale = mix(1.6, 3.6, saturate(scalar1()));
-    let along = p.y * scale * 2.8 + p.x * 0.35;
-    let grain = sin(along + fbm(p * scale) * 3.2) * 0.5 + 0.5;
-    let pore = value_noise_3d(vec3<f32>(p.x * scale * 6.0, p.y * scale * 0.4, p.z * scale * 6.0));
-    var tint = mix(base, accent, grain * 0.55);
-    tint *= 0.9 + 0.16 * pore;
-    let roughness = mix(0.62, 0.82, grain);
+    let scale = mix(1.1, 2.2, saturate(scalar1()));
+    let mottling = fbm(p * scale);
+    var tint = mix(base, accent, mottling * 0.28);
+    let roughness = mix(0.64, 0.80, mottling);
     return vec4<f32>(tint, mix(roughness, saturate(scalar0()), step(1e-4, scalar0())));
 }
 

@@ -53,6 +53,7 @@ poi-intelligence = { workspace = true }
 procedural-common = { workspace = true }
 chico-vegetation-on-terrain-playground = { workspace = true }
 richmond-building-physics = { workspace = true }
+richmond-building-shaders = { workspace = true }
 richmond-development-models = { workspace = true }
 richmond-developments-on-terrain-playground = { workspace = true }
 richmond-urbanization = { workspace = true }

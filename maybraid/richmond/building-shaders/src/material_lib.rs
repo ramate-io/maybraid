@@ -94,3 +94,30 @@ impl Plugin for RichmondUrbanMaterialRefPlugin {
 		app.add_plugins(MaterialRefPlugin::<RichmondUrbanMaterialLib<'_>>::default());
 	}
 }
+
+#[cfg(test)]
+mod tests {
+	use bevy::prelude::*;
+	use material_ref::{MaterialRef, MaterialRefApplied, MaterialRefPlugin, MaterialRefRoot};
+
+	use super::*;
+	use crate::{UrbanSurfaceMaterial, RECIPE_WOOD};
+
+	#[test]
+	fn urban_lib_fulfills_wood_as_urban_surface() {
+		let mut app = App::new();
+		app.add_plugins((MinimalPlugins, AssetPlugin::default()))
+			.init_asset::<StandardMaterial>()
+			.init_asset::<UrbanSurfaceMaterial>()
+			.init_resource::<StandardMaterialRefCache>()
+			.init_resource::<UrbanSurfaceMaterialRefCache>()
+			.add_plugins(MaterialRefPlugin::<UrbanSurfaceMaterialLib<'_>>::default());
+
+		let entity = app.world_mut().spawn(MaterialRefRoot(MaterialRef::named(RECIPE_WOOD))).id();
+		app.update();
+
+		assert!(app.world().get::<MaterialRefApplied>(entity).is_some());
+		assert!(app.world().get::<MeshMaterial3d<UrbanSurfaceMaterial>>(entity).is_some());
+		assert!(app.world().get::<MeshMaterial3d<StandardMaterial>>(entity).is_none());
+	}
+}
