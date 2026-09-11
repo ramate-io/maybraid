@@ -301,7 +301,7 @@ pub fn track_cursors(cameras: TrackedCameras, mut cursors: TrackedCursors) {
 
 pub fn spawn_debraid(
 	commands: &mut Commands,
-	fonts: &HudFonts,
+	fonts: Option<&HudFonts>,
 	session: &SkillMapSession,
 	id: SkillMapId,
 	secs: f32,
@@ -331,9 +331,12 @@ pub fn spawn_debraid(
 				Pickable::IGNORE,
 			))
 			.with_children(|overlay| {
+				let font = fonts.map(|fonts| fonts.header(PANEL_BLOCK_FONT_SIZE)).unwrap_or(
+					TextFont { font_size: FontSize::Px(PANEL_BLOCK_FONT_SIZE), ..default() },
+				);
 				overlay.spawn((
 					Text::new("DEBRAID"),
-					fonts.header(PANEL_BLOCK_FONT_SIZE),
+					font,
 					TextColor(Color::WHITE),
 					Pickable::IGNORE,
 				));

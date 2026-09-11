@@ -174,7 +174,7 @@ type MapCameras<'w, 's> = Query<
 #[allow(clippy::too_many_arguments)]
 pub fn collide_tiles(
 	mut commands: Commands,
-	asset_server: Res<AssetServer>,
+	asset_server: Option<Res<AssetServer>>,
 	enabled: Res<SkillMapEnabled>,
 	mut users: Query<(Entity, &SkillMapUser, &SkillMapHeld, &mut SkillMapSteerLock)>,
 	mut sessions: Query<&mut SkillMapSession>,
@@ -244,9 +244,10 @@ pub fn collide_tiles(
 							map: tile.map,
 						});
 						if let Ok(session) = sessions.get_mut(cursor_member.session) {
+							let fonts = asset_server.as_ref().map(|server| HudFonts::load(server));
 							spawn_debraid(
 								&mut commands,
-								&HudFonts::load(asset_server.as_ref()),
+								fonts.as_ref(),
 								&session,
 								tile.map,
 								settings.water_lock_secs,
