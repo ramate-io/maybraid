@@ -192,14 +192,15 @@ pub fn on_hud_scroll(
 	}
 }
 
-/// Keep the focused HUD item inside a scroll viewport (clothing / weapons grids).
+/// Keep the focused HUD item inside a scroll viewport (sliders, clothing / weapons).
 pub fn scroll_hud_selection_into_view(
 	mut viewports: Query<
 		(Entity, &HudMenu, &ComputedNode, &mut ScrollPosition),
 		With<HudScrollViewport>,
 	>,
-	items: Query<(&HudMenuItem, &ComputedNode, &bevy::ui::UiGlobalTransform)>,
+	items: Query<(Entity, &HudMenuItem, &ComputedNode, &bevy::ui::UiGlobalTransform)>,
 	transforms: Query<&bevy::ui::UiGlobalTransform>,
+	child_of: Query<&ChildOf>,
 ) {
 	for (viewport, menu, computed, mut scroll) in &mut viewports {
 		if menu.item_count == 0 {
@@ -208,22 +209,100 @@ pub fn scroll_hud_selection_into_view(
 		let Ok(view_tf) = transforms.get(viewport) else {
 			continue;
 		};
-		let Some((_, item_node, item_tf)) = items
-			.iter()
-			.find(|(item, _, _)| item.menu == viewport && item.index == menu.selected)
-		else {
+		let Some((_, _, item_node, item_tf)) = items.iter().find(|(entity, item, _, _)| {
+			item.menu == viewport
+				&& item.index == menu.selected
+				&& is_under(*entity, viewport, &child_of)
+		}) else {
 			continue;
 		};
 		let scale = computed.inverse_scale_factor();
-		let view_h = computed.size().y * scale;
-		let item_h = item_node.size().y * item_node.inverse_scale_factor();
-		let view_top = view_tf.affine().translation.y;
-		let item_top = item_tf.affine().translation.y;
-		let slack = TILE_FOCUS_PAD;
-		if item_top < view_top + slack {
-			scroll.y = (scroll.y - (view_top + slack - item_top)).max(0.0);
-		} else if item_top + item_h > view_top + view_h - slack {
-			scroll.y += item_top + item_h - (view_top + view_h - slack);
+		let view_h = computed.size().y;
+		let item_h = item_node.size().y;
+		if view_h <= 0.0 || item_h <= 0.0 {
+			continue;
 		}
+		let slack = TILE_FOCUS_PAD / scale.max(f32::EPSILON);
+		let delta = scroll_delta_to_reveal(
+			view_tf.affine().translation.y,
+			view_h,
+			item_tf.affine().translation.y,
+			item_h,
+			slack,
+		);
+		if delta == 0.0 {
+			continue;
+		}
+		let max_scroll = ((computed.content_size().y - view_h) * scale).max(0.0);
+		scroll.y = (scroll.y + delta * scale).clamp(0.0, max_scroll);
+	}
+}
+
+/// [`UiGlobalTransform`] is the node center. Delta is in the same space as the
+/// sizes: negative scrolls up, positive scrolls down.
+fn scroll_delta_to_reveal(
+	view_center: f32,
+	view_h: f32,
+	item_center: f32,
+	item_h: f32,
+	slack: f32,
+) -> f32 {
+	let view_top = view_center - view_h * 0.5;
+	let item_top = item_center - item_h * 0.5;
+	if item_top < view_top + slack {
+		item_top - (view_top + slack)
+	} else if item_top + item_h > view_top + view_h - slack {
+		item_top + item_h - (view_top + view_h - slack)
+	} else {
+		0.0
+	}
+}
+
+fn is_under(mut entity: Entity, root: Entity, child_of: &Query<&ChildOf>) -> bool {
+	if entity == root {
+		return true;
+	}
+	loop {
+		let Ok(parent) = child_of.get(entity) else {
+			return false;
+		};
+		if parent.parent() == root {
+			return true;
+		}
+		entity = parent.parent();
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::scroll_delta_to_reveal;
+
+	#[test]
+	fn item_already_visible_does_not_scroll() {
+		assert_eq!(scroll_delta_to_reveal(400.0, 800.0, 400.0, 30.0, 6.0), 0.0);
+	}
+
+	#[test]
+	fn item_below_the_fold_scrolls_down() {
+		let delta = scroll_delta_to_reveal(400.0, 800.0, 900.0, 30.0, 6.0);
+		assert!(delta > 0.0, "expected down, got {delta}");
+	}
+
+	#[test]
+	fn treating_center_as_top_would_miss_the_below_item() {
+		let view_center = 400.0;
+		let view_h = 800.0;
+		let item_center = 900.0;
+		let item_h = 30.0;
+		let slack = 6.0;
+		let bogus_still_inside = item_center + item_h <= view_center + view_h - slack;
+		assert!(bogus_still_inside);
+		assert!(scroll_delta_to_reveal(view_center, view_h, item_center, item_h, slack) > 0.0);
+	}
+
+	#[test]
+	fn item_above_the_fold_scrolls_up() {
+		let delta = scroll_delta_to_reveal(400.0, 800.0, 20.0, 30.0, 6.0);
+		assert!(delta < 0.0, "expected up, got {delta}");
 	}
 }

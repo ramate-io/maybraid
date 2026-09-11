@@ -107,7 +107,7 @@ impl Plugin for MenuComponentsPlugin {
 					sync_loading_bar_fill,
 					send_hud_scroll_events,
 					sync_hud_scrollbars,
-					scroll_hud_selection_into_view,
+					scroll_hud_selection_into_view.after(TextMenuSystems::Navigate),
 					scroll_text_cursor_selection_into_view,
 					(sync_hud_cursors, sync_screen_edit_cursor).chain(),
 					sync_hud_item_focus,
