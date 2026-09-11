@@ -16,7 +16,7 @@ pub use cache::{
 	fill_lod_cull_produce_cache, LodCullProduceCache, LodSceneCullAabb,
 	LodSceneCullProduceFillPlugin,
 };
-pub use cursor::LodCullRegionCursor;
+pub use cursor::{LodCullProduceCadence, LodCullRegionCursor};
 pub use enqueue::{
 	produce_lod_cull_for_region, produce_lod_cull_for_region_erased, LodSceneRegionCullPlugin,
 };

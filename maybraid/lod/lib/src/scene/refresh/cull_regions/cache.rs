@@ -24,26 +24,28 @@ pub struct LodSceneCullAabb {
 	pub region: Aabb3d,
 }
 
-/// This-frame driver snapshots + host hits per unique cull AABB.
+/// This-frame driver snapshots + deduplicated host hits.
 ///
-/// Filled once ([`fill_lod_cull_produce_cache`]); every `T` reuses it.
+/// Filled once ([`fill_lod_cull_produce_cache`]); typed and erased enqueue
+/// both read [`Self::hit_entities`]. Unique cull AABBs are de-duped so the
+/// host-index query is once per tile, not once per channel.
 #[derive(Resource, Debug, Default)]
 pub struct LodCullProduceCache {
 	pub snapshots: Vec<LodNodeSnapshot>,
-	pub region_hits: Vec<(Aabb3d, Vec<Entity>)>,
-	/// Deduplicated union consumed by the erased producer.
+	/// Deduplicated union consumed by region enqueue.
 	pub hit_entities: HashSet<Entity>,
+	seen_regions: Vec<Aabb3d>,
 }
 
 impl LodCullProduceCache {
 	fn clear(&mut self) {
 		self.snapshots.clear();
-		self.region_hits.clear();
 		self.hit_entities.clear();
+		self.seen_regions.clear();
 	}
 
 	fn has_region(&self, region: Aabb3d) -> bool {
-		self.region_hits.iter().any(|(r, _)| *r == region)
+		self.seen_regions.iter().any(|r| *r == region)
 	}
 }
 
@@ -75,9 +77,8 @@ pub fn fill_lod_cull_produce_cache<I>(
 		if cache.has_region(msg.region) {
 			continue;
 		}
-		let hits: Vec<Entity> = index.hosts_in_region(msg.region).collect();
-		cache.hit_entities.extend(hits.iter().copied());
-		cache.region_hits.push((msg.region, hits));
+		cache.seen_regions.push(msg.region);
+		cache.hit_entities.extend(index.hosts_in_region(msg.region));
 	}
 }
 

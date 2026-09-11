@@ -3,6 +3,40 @@
 use bevy::math::IVec3;
 use bevy::prelude::*;
 
+/// How often [`super::produce_lod_cull_regions`] advances the shared cursor.
+///
+/// Default is every frame (tests / playgrounds). Vegetation sets `4` so the
+/// 112-cell OpenLattice sweep is ~7.5 s at 60 FPS instead of ~1.9 s, and cull
+/// fill is not paid on the skipped ticks.
+#[derive(Resource, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LodCullProduceCadence {
+	pub frames_per_emit: u32,
+}
+
+impl Default for LodCullProduceCadence {
+	fn default() -> Self {
+		Self { frames_per_emit: 1 }
+	}
+}
+
+impl LodCullProduceCadence {
+	pub fn every_n_frames(n: u32) -> Self {
+		Self { frames_per_emit: n.max(1) }
+	}
+
+	/// `true` on the first call and every `frames_per_emit` ticks after that.
+	pub fn should_emit(self, frames_since: &mut u32) -> bool {
+		let every = self.frames_per_emit.max(1);
+		if *frames_since == 0 || *frames_since >= every {
+			*frames_since = 1;
+			true
+		} else {
+			*frames_since += 1;
+			false
+		}
+	}
+}
+
 /// Stable RR state for [`super::LodCullRegions`] producers (e.g. [`super::OpenLattice`]).
 ///
 /// - **`cells`** is replaced when the driver anchor cell changes.
@@ -57,5 +91,30 @@ impl LodCullRegionCursor {
 			self.next = self.next.wrapping_add(1);
 		}
 		out
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn cadence_emits_first_tick_then_every_n() {
+		let cadence = LodCullProduceCadence::every_n_frames(4);
+		let mut frames = 0;
+		assert!(cadence.should_emit(&mut frames));
+		assert!(!cadence.should_emit(&mut frames));
+		assert!(!cadence.should_emit(&mut frames));
+		assert!(!cadence.should_emit(&mut frames));
+		assert!(cadence.should_emit(&mut frames));
+	}
+
+	#[test]
+	fn default_cadence_emits_every_tick() {
+		let cadence = LodCullProduceCadence::default();
+		let mut frames = 0;
+		assert!(cadence.should_emit(&mut frames));
+		assert!(cadence.should_emit(&mut frames));
+		assert!(cadence.should_emit(&mut frames));
 	}
 }

@@ -22,7 +22,7 @@ use super::super::sync::{enqueue_lod_cull, LodChunkBudgetPlugin, LodCullInFlight
 use super::super::viewer::LodViewer;
 use super::super::LodSceneRefreshLevelsPlugin;
 use super::cache::{LodCullProduceCache, LodSceneCullProduceFillPlugin};
-use super::markers::{LodCullMarkerPlugin, LodNestedRefreshAllowed};
+use super::markers::{LodCullMarkerPlugin, LodHostHasCullableRoots, LodNestedRefreshAllowed};
 use super::produce::LodSceneCullRegion;
 use crate::scene::LodLevelProducer;
 
@@ -38,6 +38,7 @@ pub fn produce_lod_cull_for_region<T>(
 	cache: Res<LodCullProduceCache>,
 	hosts: Query<&T, (With<LodSceneHost>, With<LodNestedRefreshAllowed>)>,
 	all_hosts: Query<(), (With<LodSceneHost>, Allow<Disabled>)>,
+	cullable: Query<(), With<LodHostHasCullableRoots>>,
 	mut host_levels: Query<&mut LodSceneLevel, With<LodSceneHost>>,
 	host_children_q: Query<&Children, (With<LodSceneHost>, Allow<Disabled>)>,
 	level_roots_heads: Query<&Children, (With<LodLevelRoots>, Allow<Disabled>)>,
@@ -49,7 +50,7 @@ pub fn produce_lod_cull_for_region<T>(
 ) where
 	T: Component + SemanticLodScene + 'static,
 {
-	if cache.region_hits.is_empty() || cache.snapshots.is_empty() {
+	if cache.hit_entities.is_empty() || cache.snapshots.is_empty() {
 		return;
 	}
 	if hosts.is_empty() {
@@ -61,54 +62,55 @@ pub fn produce_lod_cull_for_region<T>(
 		return;
 	};
 
-	for (_region, hits) in &cache.region_hits {
-		for &entity in hits {
-			if lod_scene_host_or_ancestor_hidden(entity, &child_of, &all_hosts, &visibilities) {
+	for &entity in &cache.hit_entities {
+		if lod_scene_host_or_ancestor_hidden(entity, &child_of, &all_hosts, &visibilities) {
+			continue;
+		}
+		let Ok(scene) = hosts.get(entity) else {
+			continue;
+		};
+
+		let Ok(mut current) = host_levels.get_mut(entity) else {
+			continue;
+		};
+		let distance_level = scene.scene_lod_level(viewer_ref);
+		let lowered = distance_level < *current;
+		if lowered {
+			*current = distance_level;
+		}
+		let current_level = *current;
+		drop(current);
+		if !lowered && !cullable.contains(entity) {
+			continue;
+		}
+
+		let culls = scene.scene_lod_culls(viewer_ref, current_level);
+		if matches!(culls, LodSceneCulls::None) {
+			continue;
+		}
+
+		let Ok(host_children) = host_children_q.get(entity) else {
+			continue;
+		};
+		let Some(roots_entity) = lod_level_roots_entity(host_children, &level_roots_heads) else {
+			continue;
+		};
+		let Ok(root_children) = level_roots_heads.get(roots_entity) else {
+			continue;
+		};
+
+		for child in root_children.iter() {
+			let Ok(root) = root_keys.get(child) else {
+				continue;
+			};
+			if root.0 == current_level {
 				continue;
 			}
-			let Ok(scene) = hosts.get(entity) else {
-				continue;
-			};
-
-			let Ok(mut current) = host_levels.get_mut(entity) else {
-				continue;
-			};
-			let distance_level = scene.scene_lod_level(viewer_ref);
-			if distance_level < *current {
-				*current = distance_level;
-			}
-			let current_level = *current;
-			drop(current);
-
-			let culls = scene.scene_lod_culls(viewer_ref, current_level);
-			if matches!(culls, LodSceneCulls::None) {
+			if wants_cull.contains(child) {
 				continue;
 			}
-
-			let Ok(host_children) = host_children_q.get(entity) else {
-				continue;
-			};
-			let Some(roots_entity) = lod_level_roots_entity(host_children, &level_roots_heads)
-			else {
-				continue;
-			};
-			let Ok(root_children) = level_roots_heads.get(roots_entity) else {
-				continue;
-			};
-
-			for child in root_children.iter() {
-				let Ok(root) = root_keys.get(child) else {
-					continue;
-				};
-				if root.0 == current_level {
-					continue;
-				}
-				if wants_cull.contains(child) {
-					continue;
-				}
-				if culls.should_cull(root.0) {
-					enqueue_lod_cull(&mut commands, &mut cull_writer, child, &wants_cull, &pending);
-				}
+			if culls.should_cull(root.0) {
+				enqueue_lod_cull(&mut commands, &mut cull_writer, child, &wants_cull, &pending);
 			}
 		}
 	}
@@ -141,9 +143,13 @@ pub fn produce_lod_cull_for_region_erased(world: &mut World) {
 			let Some(distance_level) = producer.level_for(world, entity, viewer_ref) else {
 				continue;
 			};
-			if distance_level < current_level {
+			let lowered = distance_level < current_level;
+			if lowered {
 				current_level = distance_level;
 				world.entity_mut(entity).insert(current_level);
+			}
+			if !lowered && world.get::<LodHostHasCullableRoots>(entity).is_none() {
+				continue;
 			}
 			let Some(culls) = producer.culls_for(world, entity, viewer_ref, current_level) else {
 				continue;

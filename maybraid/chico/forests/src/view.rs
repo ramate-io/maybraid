@@ -28,8 +28,9 @@ use chico_vegetation_components::{
 	FlattenedComponentsOnly, FoliageNode, PlacedVegetation, StickNode,
 };
 use lod::{
-	Bullseye, LodChunkFulfillBudget, LodCullRegionCursor, LodRefreshCorePlugin,
-	LodSceneCullRegionPlugin, LodSceneRefreshRegionPlugin, OpenLattice, Spotlight,
+	Bullseye, LodChunkFulfillBudget, LodCullProduceCadence, LodCullRegionCursor,
+	LodRefreshCorePlugin, LodSceneCullRegionPlugin, LodSceneRefreshRegionPlugin, OpenLattice,
+	Spotlight,
 };
 use lod_gimme::{GimmeLodSceneCullPlugin, GimmeLodSceneRefreshPlugin};
 use lod_lazy_refs::LodLazyRefsPlugin;
@@ -119,6 +120,7 @@ impl Plugin for VegetationLodRefreshPlugin {
 			tile_size: 500.0,
 		})
 		.insert_resource(LodCullRegionCursor::default().with_regions_per_tick(1))
+		.insert_resource(LodCullProduceCadence::every_n_frames(4))
 		.insert_resource(LodChunkFulfillBudget {
 			spawn_weights_per_frame: 1024,
 			cull_weights_per_frame: 128,

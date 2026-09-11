@@ -182,6 +182,10 @@ impl TerrainEntryStore {
 		Version(self.next_version)
 	}
 
+	pub fn membership_revision(&self) -> u64 {
+		self.next_version
+	}
+
 	pub fn len(&self) -> usize {
 		self.terrain.len()
 	}

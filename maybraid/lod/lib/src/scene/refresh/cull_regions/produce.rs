@@ -12,7 +12,7 @@ use crate::lod_ref::{
 
 use super::super::{ensure_refresh_core, LodRefreshSystems};
 use super::cache::LodSceneCullAabb;
-use super::cursor::LodCullRegionCursor;
+use super::cursor::{LodCullProduceCadence, LodCullRegionCursor};
 
 /// Impulse: cull-evaluate hosts overlapping `region` (channel `M`).
 #[derive(Message, Debug, Clone)]
@@ -53,15 +53,20 @@ pub trait LodCullRegions: Send + Sync + 'static {
 pub fn produce_lod_cull_regions<P, F, M>(
 	producer: Res<P>,
 	mut cursor: ResMut<LodCullRegionCursor>,
+	cadence: Res<LodCullProduceCadence>,
 	nodes: Query<(Entity, &LodNodePose, Option<&LodNodeBounds>), (With<LodNode>, F)>,
 	mut writer: MessageWriter<LodSceneCullRegion<M>>,
 	mut bus: MessageWriter<LodSceneCullAabb>,
+	mut frames_since: Local<u32>,
 ) where
 	P: Resource + LodCullRegions,
 	F: QueryFilter + 'static,
 	M: Send + Sync + 'static,
 {
 	if nodes.is_empty() {
+		return;
+	}
+	if !cadence.should_emit(&mut frames_since) {
 		return;
 	}
 	if producer.is_changed() {
@@ -112,6 +117,7 @@ where
 		ensure_refresh_core(app);
 		app.init_resource::<P>()
 			.init_resource::<LodCullRegionCursor>()
+			.init_resource::<LodCullProduceCadence>()
 			.add_message::<LodSceneCullRegion<M>>()
 			.add_message::<LodSceneCullAabb>()
 			.add_systems(

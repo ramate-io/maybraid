@@ -259,6 +259,10 @@ impl SpatialIndex<WorldMobCell> for WorldMobIndex {
 		self.cells.get(&id).map(|entry| entry.version)
 	}
 
+	fn membership_revision(&self) -> u64 {
+		self.next_version
+	}
+
 	fn insert(&mut self, id: Id, value: WorldMobCell, bounds: Aabb3d, _lod_ref: &LodRef) {
 		let version = self.next_version();
 		self.cells.insert(id, StoredMobCell { value, bounds, version });
