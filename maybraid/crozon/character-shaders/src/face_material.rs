@@ -175,7 +175,9 @@ impl FaceMaterialUniform {
 		};
 		if kind == FaceShaderKind::Eye {
 			let derived = derived_eye_palette(colors[EYE_PALETTE_IRIS]);
-			for (slot, color) in colors.iter_mut().take(EYE_PALETTE_DETAIL_SLOTS).zip(derived).skip(provided) {
+			for (slot, color) in
+				colors.iter_mut().take(EYE_PALETTE_DETAIL_SLOTS).zip(derived).skip(provided)
+			{
 				*slot = color;
 			}
 		} else {
@@ -223,7 +225,10 @@ impl FaceMaterialUniform {
 	}
 }
 
-fn packed_face_scalars(kind: FaceShaderKind, mut scalars: [Vec4; SCALAR_VEC4S]) -> [Vec4; SCALAR_VEC4S] {
+fn packed_face_scalars(
+	kind: FaceShaderKind,
+	mut scalars: [Vec4; SCALAR_VEC4S],
+) -> [Vec4; SCALAR_VEC4S] {
 	if kind == FaceShaderKind::Mouth && scalars[0][MOUTH_SCALAR_OPEN_RATE] <= 1e-4 {
 		scalars[0][MOUTH_SCALAR_OPEN_RATE] = DEFAULT_MOUTH_OPEN_RATE;
 	}
@@ -457,7 +462,8 @@ mod tests {
 		assert!(mouth.params.colors[MOUTH_PALETTE_INTERIOR].x < 0.3);
 		assert!(mouth.params.colors[MOUTH_PALETTE_TEETH].x > 0.8);
 		assert!(
-			(mouth.params.scalars[0][MOUTH_SCALAR_OPEN_RATE] - DEFAULT_MOUTH_OPEN_RATE).abs() < 1e-5
+			(mouth.params.scalars[0][MOUTH_SCALAR_OPEN_RATE] - DEFAULT_MOUTH_OPEN_RATE).abs()
+				< 1e-5
 		);
 
 		let frequent = FaceShaderMaterial::from_material_ref(

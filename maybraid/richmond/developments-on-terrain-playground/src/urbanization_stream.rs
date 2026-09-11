@@ -526,11 +526,7 @@ pub fn sync_raw_terrain_replacements(
 ) {
 	for (presented, mut visibility) in &mut raw_roots {
 		let replaced = state.wanted.contains(&presented.0);
-		let desired = if replaced {
-			Visibility::Hidden
-		} else {
-			Visibility::Inherited
-		};
+		let desired = if replaced { Visibility::Hidden } else { Visibility::Inherited };
 		if *visibility != desired {
 			*visibility = desired;
 		}

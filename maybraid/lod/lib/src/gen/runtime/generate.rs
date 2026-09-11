@@ -14,6 +14,7 @@ use crate::gen::{
 	GeneratingSpatialIndex, GenerationScheme, Id, MaterializeStatus, StorageStatus,
 	QUEUE_KEEP_SLACK_XZ,
 };
+use crate::jobs::{ensure_lod_job_counter, LodJobCounter};
 use crate::lod_ref::{
 	collect_node_snapshots, lod_refs_from_snapshots, LodNode, LodNodeBounds, LodNodePlugin,
 	LodNodePose, LodNodeSystems,
@@ -109,6 +110,10 @@ impl<T> LodGenerateQueue<T> {
 		self.pending.is_empty()
 	}
 
+	pub fn len(&self) -> usize {
+		self.pending.len()
+	}
+
 	pub fn contains(&self, id: &Id) -> bool {
 		self.pending_ids.contains(id)
 	}
@@ -144,15 +149,17 @@ impl<T> LodGenerateQueue<T> {
 		std::mem::take(&mut self.reset_scan)
 	}
 
-	fn expire_outside_keep(&mut self, keep: Option<Aabb3d>, slack: f32) {
+	fn expire_outside_keep(&mut self, keep: Option<Aabb3d>, slack: f32) -> u64 {
 		let Some(keep) = keep else {
-			return;
+			return 0;
 		};
+		let before = self.pending.len();
 		self.pending.retain(|id| id_lives_in_keep(*id, keep, slack));
 		self.pending_ids.clear();
 		self.pending_ids.extend(self.pending.iter().copied());
 		let live = expand_keep_xz(keep, slack);
 		self.scan_regions.retain(|region| regions_overlap_xz(*region, live));
+		before.saturating_sub(self.pending.len()) as u64
 	}
 }
 
@@ -201,6 +208,7 @@ impl Plugin for LodGenerateSetsPlugin {
 		if !app.is_plugin_added::<LodNodePlugin>() {
 			app.add_plugins(LodNodePlugin);
 		}
+		ensure_lod_job_counter(app);
 		app.init_resource::<LodGenerateBudget>()
 			.init_resource::<LodGenerateTimeBudget>()
 			.configure_sets(
@@ -251,6 +259,7 @@ pub fn drain_lod_generate<T, S, M, F>(
 	mut queue: ResMut<LodGenerateQueue<T>>,
 	budget: Res<LodGenerateBudget>,
 	time_budget: Res<LodGenerateTimeBudget>,
+	jobs: Res<LodJobCounter>,
 	mut regions: MessageReader<LodGenerateRegion<M>>,
 	keep: Res<LodGenerateKeepRegion<M>>,
 	nodes: Query<(Entity, &LodNodePose, Option<&LodNodeBounds>), (With<LodNode>, F)>,
@@ -270,7 +279,7 @@ pub fn drain_lod_generate<T, S, M, F>(
 	}
 	if keep_region_changed(*last_keep, keep.region) {
 		*last_keep = keep.region;
-		queue.expire_outside_keep(keep.region, keep.slack_xz);
+		jobs.end_n(queue.expire_outside_keep(keep.region, keep.slack_xz));
 	}
 
 	let mut received_region = false;
@@ -311,7 +320,9 @@ pub fn drain_lod_generate<T, S, M, F>(
 			{
 				continue;
 			}
-			queue.enqueue(original.0);
+			if queue.enqueue(original.0) {
+				jobs.begin();
+			}
 		}
 		warn_atomic_overrun("generate region scan", quantum.elapsed(), time_budget.max_atomic_cost);
 		scanned = true;
@@ -350,6 +361,7 @@ pub fn drain_lod_generate<T, S, M, F>(
 		let Some(id) = queue.pop_front() else {
 			break;
 		};
+		jobs.end();
 		let quantum = Instant::now();
 		if index.get_or_generate(id, lod_ref) == Some(MaterializeStatus::Created) {
 			generated.write(LodGenerated::new(id));
@@ -518,5 +530,20 @@ mod tests {
 		);
 		let area: f32 = strips.into_iter().map(xz_area).sum();
 		assert_eq!(area, 96.0);
+	}
+
+	#[test]
+	fn expire_releases_job_tickets() {
+		let jobs = LodJobCounter::default();
+		let mut queue = LodGenerateQueue::<()>::default();
+		assert!(queue.enqueue(Id::from_cell(region(250.0, 0.0, 251.0, 1.0))));
+		jobs.begin();
+		assert!(queue.enqueue(Id::from_cell(region(0.0, 0.0, 1.0, 1.0))));
+		jobs.begin();
+		assert_eq!(jobs.active(), 2);
+		jobs.end_n(queue.expire_outside_keep(Some(region(0.0, 0.0, 1.0, 1.0)), 0.0));
+		assert_eq!(jobs.active(), 1);
+		assert!(queue.contains(&Id::from_cell(region(0.0, 0.0, 1.0, 1.0))));
+		assert!(!queue.contains(&Id::from_cell(region(250.0, 0.0, 251.0, 1.0))));
 	}
 }

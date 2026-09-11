@@ -6,6 +6,7 @@ pub use lod_cascade as cascade;
 pub use lod_cascade_system as cascade_system;
 
 pub mod gen;
+pub mod jobs;
 pub mod lod_ref;
 pub mod presentation;
 pub mod scene;
@@ -24,6 +25,7 @@ pub use gen::{
 	LodGeneratePlugin, LodGenerateQueue, LodGenerateRegion, LodGenerateRegionPlugin,
 	LodGenerateSystems, LodGenerateTimeBudget, LodGenerated,
 };
+pub use jobs::{ensure_lod_job_counter, LodJobCounter};
 pub use lod_ref::{
 	collect_node_snapshots, lod_refs_from_snapshots, point_bounds, track_lod_nodes, FineLod,
 	LodNode, LodNodeBounds, LodNodePlugin, LodNodePose, LodNodeSnapshot, LodNodeSystems, LodRef,
