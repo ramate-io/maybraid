@@ -36,6 +36,13 @@ impl SkillKind {
 			Self::Dumbwave => Color::srgb(0.22, 0.78, 0.86),
 		}
 	}
+
+	pub fn viewport_clear(self) -> Color {
+		match self {
+			Self::Fireball => Color::srgb(0.11, 0.09, 0.07),
+			Self::Dumbwave => Color::srgb(0.04, 0.07, 0.10),
+		}
+	}
 }
 
 /// First Bevy render layer reserved for skill maps (POC used 24..34).

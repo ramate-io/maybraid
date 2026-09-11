@@ -174,12 +174,19 @@ fn shade_glimmer(world: vec2<f32>) -> vec3<f32> {
 
 fn shade_mist(world: vec2<f32>) -> vec3<f32> {
     let t = globals.time;
-    let n = fbm(world * 0.026 + vec2<f32>(t * 0.02, 0.0));
-    let dusk = vec3<f32>(0.06, 0.08, 0.12);
-    let bloom = vec3<f32>(0.16, 0.28, 0.34);
-    var color = mix(dusk, bloom, n);
-    let glint = pow(saturate(fbm(world * 0.05 + vec2<f32>(-t * 0.02, t * 0.03))), 9.0);
-    color += vec3<f32>(0.55, 0.85, 0.95) * glint * 0.28;
+    let n = fbm(world * 0.022 + vec2<f32>(t * 0.018, -t * 0.012));
+    let n2 = fbm(world * 0.046 + vec2<f32>(-t * 0.02, t * 0.016));
+    let void_c = vec3<f32>(0.03, 0.05, 0.08);
+    let tide = vec3<f32>(0.07, 0.14, 0.2);
+    let bloom = vec3<f32>(0.16, 0.36, 0.4);
+    var color = mix(void_c, tide, n);
+    color = mix(color, bloom, smoothstep(0.52, 0.88, n2) * 0.38);
+    let swell = 0.5 + 0.5 * sin(world.x * 0.055 + world.y * 0.04 + t * 0.85 + n * 2.4);
+    let cross = 0.5 + 0.5 * sin(world.x * -0.03 + world.y * 0.07 + t * 0.55 + n2 * 2.0);
+    color += vec3<f32>(0.22, 0.62, 0.7) * smoothstep(0.72, 1.0, swell) * 0.16;
+    color += vec3<f32>(0.4, 0.75, 0.82) * smoothstep(0.82, 1.0, cross) * 0.08;
+    let glint = pow(saturate(n2), 9.0) * (0.4 + 0.6 * sin(t * 1.15 + n * 4.0));
+    color += vec3<f32>(0.65, 0.92, 0.98) * glint * 0.22;
     return color;
 }
 
@@ -227,15 +234,23 @@ fn shade_fire(uv: vec2<f32>, world: vec2<f32>) -> vec3<f32> {
 fn shade_wave(uv: vec2<f32>, world: vec2<f32>) -> vec3<f32> {
     var color = shade_mist(world);
     let q = uv - vec2<f32>(0.5, 0.5);
-    let t = globals.time * 1.4 + tile_seed() * 0.03;
-    let r = length(q);
-    let rings = 0.5 + 0.5 * sin(r * 28.0 - t * 4.2);
-    let disk = 1.0 - smoothstep(0.18, 0.46, r);
-    let glow = vec3<f32>(0.28, 0.82, 0.9);
-    let mist = vec3<f32>(0.72, 0.9, 0.95);
-    color = mix(color, glow, disk * 0.55);
-    color = mix(color, mist, smoothstep(0.55, 0.9, rings) * disk);
-    return color;
+    let t = globals.time * 1.15 + tile_seed() * 0.03;
+    let warp = fbm(world * 0.14 + vec2<f32>(t * 0.22, -t * 0.18));
+    let r = length(q + vec2<f32>(warp - 0.5) * 0.12);
+    let pulse = fract(t * 0.22);
+    let ring_a = abs(r - (0.12 + pulse * 0.28));
+    let ring_b = abs(r - (0.08 + fract(pulse + 0.45) * 0.3));
+    let band = 1.0 - smoothstep(0.0, 0.055, ring_a);
+    let band2 = 1.0 - smoothstep(0.0, 0.04, ring_b);
+    let disk = 1.0 - smoothstep(0.14, 0.48, r);
+    let blank = 1.0 - smoothstep(0.0, 0.14, r);
+    let glow = vec3<f32>(0.2, 0.72, 0.82);
+    let mist = vec3<f32>(0.78, 0.94, 0.98);
+    let core = vec3<f32>(0.9, 0.97, 1.0);
+    color = mix(color, glow, disk * 0.5);
+    color = mix(color, mist, max(band, band2) * disk);
+    color = mix(color, core, blank * 0.75);
+    return color * (1.0 + blank * 0.2);
 }
 
 fn shade_cursor(uv: vec2<f32>) -> vec3<f32> {

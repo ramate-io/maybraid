@@ -125,7 +125,7 @@ fn spawn_one_map(
 			Camera2d,
 			Camera {
 				order: -2 - stack_index as isize,
-				clear_color: ClearColorConfig::Custom(Color::srgb(0.11, 0.09, 0.07)),
+				clear_color: ClearColorConfig::Custom(spec.kind.viewport_clear()),
 				..default()
 			},
 			RenderTarget::Image(image_handle.into()),

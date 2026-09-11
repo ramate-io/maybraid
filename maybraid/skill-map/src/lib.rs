@@ -149,6 +149,7 @@ mod tests {
 		assert_eq!(maps.len(), 2);
 		assert_eq!(maps[0].kind, SkillKind::Fireball);
 		assert_eq!(maps[1].kind, SkillKind::Dumbwave);
+		assert_ne!(SkillKind::Fireball.viewport_clear(), SkillKind::Dumbwave.viewport_clear());
 		let seeded = authored_map(SkillKind::Fireball, 99);
 		assert_eq!(seeded.seed, 99);
 		assert_eq!(seeded.id, SkillMapId(0));
