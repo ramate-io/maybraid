@@ -7,7 +7,7 @@
 #import bevy_pbr::{
     forward_io::VertexOutput,
     mesh_view_bindings::view,
-    pbr_types::{PbrInput, pbr_input_new},
+    pbr_fragment::pbr_input_from_vertex_output,
     pbr_functions as fns,
 }
 #import bevy_core_pipeline::tonemapping::tone_mapping
@@ -173,7 +173,9 @@ fn fragment(
     @builtin(front_facing) is_front: bool,
     mesh: VertexOutput,
 ) -> @location(0) vec4<f32> {
-    var pbr_input: PbrInput = pbr_input_new();
+    // Copy mesh flags (shadow receiver, etc.) plus view / frag / prepared N.
+    // `pbr_input_new()` leaves `flags = 0`, so `apply_pbr_lighting` skipped shadow maps.
+    var pbr_input = pbr_input_from_vertex_output(mesh, is_front, false);
     let p = look_coord(mesh);
     var look = vec4<f32>(palette_base(), 0.8);
     var metallic = 0.0;
@@ -205,16 +207,6 @@ fn fragment(
     pbr_input.material.perceptual_roughness = look.w;
     pbr_input.material.metallic = metallic;
     pbr_input.material.reflectance = vec3<f32>(0.18, 0.18, 0.18);
-
-    pbr_input.frag_coord = mesh.position;
-    pbr_input.world_position = mesh.world_position;
-    pbr_input.is_orthographic = view.clip_from_view[3].w == 1.0;
-    pbr_input.V = fns::calculate_view(mesh.world_position, pbr_input.is_orthographic);
-
-    let prepared_normal = fns::prepare_world_normal(mesh.world_normal, false, is_front);
-    let n = normalize(prepared_normal);
-    pbr_input.world_normal = n;
-    pbr_input.N = n;
 
     let lit_color = fns::apply_pbr_lighting(pbr_input);
     return tone_mapping(vec4<f32>(lit_color.rgb, 1.0), view.color_grading);
