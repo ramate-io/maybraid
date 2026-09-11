@@ -197,6 +197,9 @@ pub const PANEL_TILE_MIN_HEIGHT: f32 = 56.0;
 /// Vertical rhythm inside a panel.
 pub const PANEL_ROW_GAP: f32 = 10.0;
 
+/// Extra air above and below a `− / +` stepper so stacked sliders do not touch.
+pub const PANEL_STEPPER_PAD_Y: f32 = 10.0;
+
 /// Gap between swatches or tiles in a wrapping row.
 pub const PANEL_CHIP_GAP: f32 = 8.0;
 

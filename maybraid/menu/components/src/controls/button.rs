@@ -10,6 +10,7 @@ use crate::theme::{
 
 use super::section::CursorRow;
 use super::text::{spawn_cursor_slot_sized, spawn_header_line, spawn_hud_text};
+use super::tile::HoverTile;
 use super::HudFonts;
 
 /// Pickable label with no chip background. `extra` is typically `MenuButton<E>`.
@@ -22,15 +23,19 @@ pub fn spawn_text_button(
 	parent
 		.spawn((
 			Button,
+			HoverTile { equipped: false, preserve_fill: false },
 			extra,
 			Node {
 				min_width: Val::Px(22.0),
 				padding: UiRect::axes(Val::Px(4.0), Val::Px(2.0)),
 				justify_content: JustifyContent::Center,
 				align_items: AlignItems::Center,
+				border: UiRect::all(Val::Px(2.0)),
 				..default()
 			},
+			BorderColor::all(Color::NONE),
 			BackgroundColor(Color::NONE),
+			Outline::new(Val::Px(2.0), Val::Px(2.0), Color::NONE),
 		))
 		.with_children(|button| {
 			spawn_hud_text(

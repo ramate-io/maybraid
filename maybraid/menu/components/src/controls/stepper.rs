@@ -3,7 +3,7 @@
 use bevy::prelude::*;
 use bevy::text::Justify;
 
-use crate::theme::{PANEL_VALUE_FONT_SIZE, TEXT_YELLOW};
+use crate::theme::{PANEL_STEPPER_PAD_Y, PANEL_VALUE_FONT_SIZE, TEXT_YELLOW};
 
 use super::button::spawn_text_button;
 use super::text::spawn_hud_text;
@@ -25,6 +25,7 @@ pub fn spawn_stepper(
 				flex_direction: FlexDirection::Row,
 				column_gap: Val::Px(8.0),
 				align_items: AlignItems::Center,
+				padding: UiRect::vertical(Val::Px(PANEL_STEPPER_PAD_Y)),
 				..default()
 			},
 			Pickable::IGNORE,
@@ -40,4 +41,14 @@ pub fn spawn_stepper(
 			);
 			spawn_text_button(row, fonts, plus_label, plus);
 		});
+}
+
+#[cfg(test)]
+mod tests {
+	use crate::theme::{PANEL_ROW_GAP, PANEL_STEPPER_PAD_Y};
+
+	#[test]
+	fn stepper_adds_vertical_air_around_the_row() {
+		assert!(PANEL_STEPPER_PAD_Y >= PANEL_ROW_GAP);
+	}
 }
