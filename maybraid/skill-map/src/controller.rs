@@ -8,12 +8,12 @@ use maybraid_input::{VirtualPad, VirtualPadConfig};
 use crate::SkillMapEnabled;
 
 /// Rest nest. Below this the stick has come home.
-pub const FLICK_REST: f32 = 0.18;
+pub const FLICK_REST: f32 = 0.28;
 /// Peak must clear this or it was a nudge.
-pub const FLICK_MIN_PEAK: f32 = 0.58;
+pub const FLICK_MIN_PEAK: f32 = 0.28;
 /// Faster than a hold, slower than a one-frame tap.
-pub const FLICK_MIN_SECS: f32 = 0.07;
-pub const FLICK_MAX_SECS: f32 = 0.22;
+pub const FLICK_MIN_SECS: f32 = 0.02;
+pub const FLICK_MAX_SECS: f32 = 0.32;
 
 /// One completed flick. Direction is the stick throw; length is how hard (0..1+).
 #[derive(Message, Clone, Copy, Debug, PartialEq)]
