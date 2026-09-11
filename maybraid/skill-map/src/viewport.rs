@@ -5,7 +5,7 @@ use bevy::camera::{ClearColorConfig, RenderTarget};
 use bevy::prelude::*;
 use bevy::render::render_resource::{TextureDimension, TextureFormat, TextureUsages};
 use bevy::ui::widget::ViewportNode;
-use menu_components::{spawn_menu_objective, HudFonts, MenuObjective};
+use menu_components::{spawn_menu_objective, HudFonts, MenuObjective, PANEL_BLOCK_FONT_SIZE};
 
 use crate::cursor::SkillMapCursor;
 use crate::map::{authored_map_from_spec, render_layer, AuthoredMap, SkillMapId};
@@ -23,6 +23,9 @@ pub(crate) fn map_view_extent() -> Vec2 {
 }
 const VIEWPORT_GAP: f32 = 12.0;
 const VIEWPORT_INSET: f32 = 16.0;
+const FRAME_BORDER: f32 = 2.0;
+const FRAME_RADIUS: f32 = 14.0;
+const FRAME_INNER_RADIUS: f32 = FRAME_RADIUS - FRAME_BORDER;
 const LIVE_BORDER: Color = Color::srgb(1.0, 0.48, 0.08);
 const IDLE_BORDER: Color = Color::srgba(1.0, 0.86, 0.22, 0.42);
 
@@ -186,8 +189,8 @@ fn spawn_one_map(
 				right: Val::Px(VIEWPORT_INSET),
 				width: Val::Px(VIEWPORT_PX),
 				height: Val::Px(VIEWPORT_PX),
-				border: UiRect::all(Val::Px(2.0)),
-				border_radius: BorderRadius::all(Val::Px(14.0)),
+				border: UiRect::all(Val::Px(FRAME_BORDER)),
+				border_radius: BorderRadius::all(Val::Px(FRAME_RADIUS)),
 				overflow: Overflow::clip(),
 				..default()
 			},
@@ -201,11 +204,11 @@ fn spawn_one_map(
 				ViewportNode::new(camera),
 				Node {
 					position_type: PositionType::Absolute,
-					left: Val::Px(2.0),
-					right: Val::Px(2.0),
-					top: Val::Px(2.0),
-					bottom: Val::Px(2.0),
-					border_radius: BorderRadius::all(Val::Px(12.0)),
+					left: Val::Px(FRAME_BORDER),
+					right: Val::Px(FRAME_BORDER),
+					top: Val::Px(FRAME_BORDER),
+					bottom: Val::Px(FRAME_BORDER),
+					border_radius: BorderRadius::all(Val::Px(FRAME_INNER_RADIUS)),
 					..default()
 				},
 				Pickable::IGNORE,
@@ -298,6 +301,7 @@ pub fn track_cursors(cameras: TrackedCameras, mut cursors: TrackedCursors) {
 
 pub fn spawn_debraid(
 	commands: &mut Commands,
+	fonts: &HudFonts,
 	session: &SkillMapSession,
 	id: SkillMapId,
 	secs: f32,
@@ -313,12 +317,14 @@ pub fn spawn_debraid(
 				id,
 				Node {
 					position_type: PositionType::Absolute,
-					left: Val::Px(0.0),
-					right: Val::Px(0.0),
-					top: Val::Px(0.0),
-					bottom: Val::Px(0.0),
+					left: Val::Px(FRAME_BORDER),
+					right: Val::Px(FRAME_BORDER),
+					top: Val::Px(FRAME_BORDER),
+					bottom: Val::Px(FRAME_BORDER),
+					border_radius: BorderRadius::all(Val::Px(FRAME_INNER_RADIUS)),
 					justify_content: JustifyContent::Center,
 					align_items: AlignItems::Center,
+					overflow: Overflow::clip(),
 					..default()
 				},
 				BackgroundColor(Color::srgba(0.85, 0.08, 0.06, 0.55)),
@@ -327,7 +333,7 @@ pub fn spawn_debraid(
 			.with_children(|overlay| {
 				overlay.spawn((
 					Text::new("DEBRAID"),
-					TextFont { font_size: FontSize::Px(22.0), ..default() },
+					fonts.header(PANEL_BLOCK_FONT_SIZE),
 					TextColor(Color::WHITE),
 					Pickable::IGNORE,
 				));

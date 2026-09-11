@@ -3,6 +3,7 @@
 use bevy::camera::visibility::RenderLayers;
 use bevy::math::bounding::{Aabb2d, IntersectsVolume};
 use bevy::prelude::*;
+use menu_components::HudFonts;
 use noise::{Fbm, MultiFractal, NoiseFn, OpenSimplex};
 
 use crate::cursor::SkillMapCursor;
@@ -173,6 +174,7 @@ type MapCameras<'w, 's> = Query<
 #[allow(clippy::too_many_arguments)]
 pub fn collide_tiles(
 	mut commands: Commands,
+	asset_server: Res<AssetServer>,
 	enabled: Res<SkillMapEnabled>,
 	mut users: Query<(Entity, &SkillMapUser, &SkillMapHeld, &mut SkillMapSteerLock)>,
 	mut sessions: Query<&mut SkillMapSession>,
@@ -244,6 +246,7 @@ pub fn collide_tiles(
 						if let Ok(session) = sessions.get_mut(cursor_member.session) {
 							spawn_debraid(
 								&mut commands,
+								&HudFonts::load(asset_server.as_ref()),
 								&session,
 								tile.map,
 								settings.water_lock_secs,
