@@ -10,14 +10,16 @@
 //! shared begin weight for **prefilled** primitives only
 //! ([`LodChunkFulfillBudget::begin_prefill_weights_per_job`]); lazy tails drain later.
 
+use bevy::ecs::entity_disabling::Disabled;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value};
 
 use crate::lod_ref::{point_bounds, LodNode, LodNodeBounds, LodNodePose, LodRef};
 use crate::scene::host::{
-	lod_level_roots_entity, nested_host_parent_allows_refresh, parent_host_desired_or_high,
-	LodLevelRoot, LodLevelRoots, LodLevelSpawnRequest, LodSceneHost,
+	lod_level_roots_entity, nested_host_parent_allows_refresh,
+	nested_host_parent_allows_refresh_world, parent_host_desired_or_high, LodLevelRoot,
+	LodLevelRoots, LodLevelSpawnRequest, LodSceneHost,
 };
 use crate::scene::level::LodSceneLevel;
 use crate::scene::refresh::LodHostBounds;
@@ -69,14 +71,14 @@ pub fn begin_chunk_lod_fulfill<T: Component + SemanticLodScene>(
 		Query<(Entity, &LodLevelSpawnRequest), (With<LodSceneHost>, With<T>)>,
 		Query<&'static T, With<LodSceneHost>>,
 	)>,
-	root_keys: Query<&LodLevelRoot>,
-	pending: Query<(), With<LodLevelRootPending>>,
-	wants_cull: Query<(), With<LodCullInFlight>>,
-	child_of: Query<&ChildOf>,
-	host_levels: Query<&LodSceneLevel, With<LodSceneHost>>,
-	children_q: Query<&Children>,
-	level_roots_bags: Query<(), With<LodLevelRoots>>,
-	visibilities: Query<&Visibility>,
+	root_keys: Query<&LodLevelRoot, Allow<Disabled>>,
+	pending: Query<(), (With<LodLevelRootPending>, Allow<Disabled>)>,
+	wants_cull: Query<(), (With<LodCullInFlight>, Allow<Disabled>)>,
+	child_of: Query<&ChildOf, Allow<Disabled>>,
+	host_levels: Query<&LodSceneLevel, (With<LodSceneHost>, Allow<Disabled>)>,
+	children_q: Query<&Children, Allow<Disabled>>,
+	level_roots_bags: Query<(), (With<LodLevelRoots>, Allow<Disabled>)>,
+	visibilities: Query<(&Visibility, Has<Disabled>), Allow<Disabled>>,
 	host_pose: Query<(&Transform, Option<&LodHostBounds>), With<LodSceneHost>>,
 	mut scan_cursor: Local<u32>,
 ) {
@@ -424,45 +426,6 @@ fn level_roots_entity_world(world: &World, host: Entity) -> Option<Entity> {
 		.find(|child| world.get::<LodLevelRoots>(*child).is_some())
 }
 
-fn nested_host_parent_allows_refresh_world(world: &World, entity: Entity) -> bool {
-	let Some(parent) = world.get::<ChildOf>(entity) else {
-		return true;
-	};
-	let mut current = parent.parent();
-	let mut enclosing_root = None;
-	loop {
-		if enclosing_root.is_none() {
-			enclosing_root = world.get::<LodLevelRoot>(current).map(|root| root.0);
-		}
-		if world.get::<LodSceneHost>(current).is_some() {
-			return world.get::<LodSceneLevel>(current).is_none_or(|desired| {
-				enclosing_root.is_none_or(|root_level| {
-					root_level == *desired
-						|| host_shows_level_root_world(world, current, root_level)
-				})
-			});
-		}
-		let Some(parent) = world.get::<ChildOf>(current) else {
-			return true;
-		};
-		current = parent.parent();
-	}
-}
-
-fn host_shows_level_root_world(world: &World, host: Entity, level: LodSceneLevel) -> bool {
-	let Some(roots_entity) = level_roots_entity_world(world, host) else {
-		return false;
-	};
-	world.get::<Children>(roots_entity).is_some_and(|children| {
-		children.iter().any(|root| {
-			world.get::<LodLevelRoot>(root).is_some_and(|key| key.0 == level)
-				&& world
-					.get::<Visibility>(root)
-					.is_some_and(|visibility| !matches!(*visibility, Visibility::Hidden))
-		})
-	})
-}
-
 fn parent_host_desired_or_high_world(world: &World, host: Entity) -> LodSceneLevel {
 	let Some(parent) = world.get::<ChildOf>(host) else {
 		return LodSceneLevel::High;
@@ -614,14 +577,14 @@ fn classify_begin_candidate(
 	host: Entity,
 	request: &LodLevelSpawnRequest,
 	commands: &mut Commands,
-	root_keys: &Query<&LodLevelRoot>,
-	pending: &Query<(), With<LodLevelRootPending>>,
-	wants_cull: &Query<(), With<LodCullInFlight>>,
-	child_of: &Query<&ChildOf>,
-	host_levels: &Query<&LodSceneLevel, With<LodSceneHost>>,
-	children_q: &Query<&Children>,
-	level_roots_bags: &Query<(), With<LodLevelRoots>>,
-	visibilities: &Query<&Visibility>,
+	root_keys: &Query<&LodLevelRoot, Allow<Disabled>>,
+	pending: &Query<(), (With<LodLevelRootPending>, Allow<Disabled>)>,
+	wants_cull: &Query<(), (With<LodCullInFlight>, Allow<Disabled>)>,
+	child_of: &Query<&ChildOf, Allow<Disabled>>,
+	host_levels: &Query<&LodSceneLevel, (With<LodSceneHost>, Allow<Disabled>)>,
+	children_q: &Query<&Children, Allow<Disabled>>,
+	level_roots_bags: &Query<(), (With<LodLevelRoots>, Allow<Disabled>)>,
+	visibilities: &Query<(&Visibility, Has<Disabled>), Allow<Disabled>>,
 ) -> Option<BeginCandidate> {
 	let Ok(desired) = host_levels.get(host) else {
 		return None;

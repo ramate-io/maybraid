@@ -4529,7 +4529,8 @@ fn spawn_building_preview<T>(
 {
 	use lod::gen::LodScene;
 	use richmond_building_components::{
-		append_component_scenes, scene_children, spawn_building_components, ComponentsOnly,
+		append_flattened_component_scenes, scene_children, spawn_building_components,
+		ComponentsOnly,
 	};
 	if building.structural_lod().is_some() {
 		let host = ComponentsOnly(building.clone());
@@ -4539,7 +4540,12 @@ fn spawn_building_preview<T>(
 		}
 	} else {
 		let mut children: Vec<Box<dyn bevy::scene::Scene>> = Vec::new();
-		append_component_scenes(building, lod_ref, lod::gen::LodSceneLevel::High, &mut children);
+		append_flattened_component_scenes(
+			building,
+			lod_ref,
+			lod::gen::LodSceneLevel::High,
+			&mut children,
+		);
 		spawn_preview(commands, transform, scene_children(children));
 	}
 }

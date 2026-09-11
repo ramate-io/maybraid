@@ -20,10 +20,10 @@ use lod::scene::{LodRefreshRegions, LodRefreshRegionsStatus};
 use lod::{
 	update_lod_host_levels, LodGeneratePlugin, LodGenerateRegionPlugin, LodGenerateSystems,
 	LodNode, LodNodePose, LodPresentCullPlugin, LodPresentPlugin, LodPresentRegionPlugin,
-	LodPresentSystems, LodRefreshSystems, LodSceneRefreshAabb, LodSceneRefreshRegion,
-	LodSceneRefreshRegionPlugin, LodViewer,
+	LodPresentSystems, LodRefreshDomain, LodRefreshSystems, LodSceneRefreshAabb,
+	LodSceneRefreshRegion, LodSceneRefreshRegionPlugin, LodViewer,
 };
-use lod_avian::AvianLodSceneRefreshPlugin;
+use lod_gimme::GimmeLodSceneRefreshPlugin;
 use maybraid_mobs::{MobLodRefreshMode, MobScene, MobSceneSystems};
 use mob_groups::{
 	GroupKind, MobEnvironmentSample, MobGroup, MobGroupsPlugin, MobPlantHost, MobWorldHosts,
@@ -39,7 +39,8 @@ const MOB_GENERATE_RADIUS: f32 = 3_000.0;
 const MOB_PRESENT_RADIUS: f32 = 1_000.0;
 const MOB_WORLD_SEED: u64 = 42;
 const MOB_CELL_OCCUPANCY_PERCENT: u64 = 35;
-const MOB_HIGH_LOD_REFRESH_RADIUS: f32 = 450.0;
+/// Half-extent of the High produce cube. Sized a margin past the 200 m High sphere.
+const MOB_HIGH_LOD_REFRESH_RADIUS: f32 = 250.0;
 const MOB_HIGH_LOD_REFRESH_INTERVAL: Duration = Duration::from_millis(250);
 const MOB_HIGH_LOD_RECONCILE_INTERVAL: Duration = Duration::from_secs(1);
 
@@ -256,6 +257,10 @@ impl SpatialIndex<WorldMobCell> for WorldMobIndex {
 
 	fn version(&self, id: Id) -> Option<Version> {
 		self.cells.get(&id).map(|entry| entry.version)
+	}
+
+	fn membership_revision(&self) -> u64 {
+		self.next_version
 	}
 
 	fn insert(&mut self, id: Id, value: WorldMobCell, bounds: Aabb3d, _lod_ref: &LodRef) {
@@ -643,7 +648,7 @@ fn pulse_world_mob_high_lod(
 	let union = regions.reduce(|a, b| Aabb3d::from_min_max(a.min.min(b.min), a.max.max(b.max)));
 	if let Some(region) = union {
 		refresh.write(LodSceneRefreshRegion::new(region));
-		bus.write(LodSceneRefreshAabb { region });
+		bus.write(LodSceneRefreshAabb { region, domain: LodRefreshDomain::of::<MobHighLodChan>() });
 	}
 }
 
@@ -713,7 +718,7 @@ impl Plugin for WorldMobsPlugin {
 				MobHighLodChan,
 			>::default())
 			.add_plugins(
-				AvianLodSceneRefreshPlugin::<
+				GimmeLodSceneRefreshPlugin::<
 					MobScene,
 					MobHighLodChan,
 					With<LodViewer>,
@@ -764,6 +769,12 @@ mod tests {
 		let region = MobHighLodRegion::region_at(center);
 		assert_eq!(Vec3::from(region.min), center - Vec3::splat(MOB_HIGH_LOD_REFRESH_RADIUS));
 		assert_eq!(Vec3::from(region.max), center + Vec3::splat(MOB_HIGH_LOD_REFRESH_RADIUS));
+	}
+
+	#[test]
+	fn high_lod_refresh_keeps_margin_around_the_high_band() {
+		assert_eq!(MOB_HIGH_LOD_REFRESH_RADIUS, 250.0);
+		assert!(MOB_HIGH_LOD_REFRESH_RADIUS > maybraid_mobs::DEFAULT_MOB_HIGH_RADIUS);
 	}
 
 	#[test]

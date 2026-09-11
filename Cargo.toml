@@ -36,6 +36,7 @@ members = [
 
   "maybraid/lod/lib",
   "maybraid/lod/avian",
+  "maybraid/lod/gimme",
   "maybraid/lod/cascade",
   "maybraid/lod/cascade-system",
   "maybraid/lod-lazy-refs",
@@ -265,6 +266,7 @@ avian3d = "0.7"
 
 lod = { path = "maybraid/lod/lib" }
 lod-avian = { path = "maybraid/lod/avian" }
+lod-gimme = { path = "maybraid/lod/gimme" }
 lod-cascade = { path = "maybraid/lod/cascade" }
 lod-cascade-system = { path = "maybraid/lod/cascade-system" }
 lod-lazy-refs = { path = "maybraid/lod-lazy-refs" }

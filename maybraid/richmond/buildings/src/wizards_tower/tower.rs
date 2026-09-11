@@ -152,7 +152,7 @@ impl BuildingComponents for WizardsTowerColumn {
 	}
 
 	fn stair_nodes_for_level(&self, level: LodSceneLevel) -> Layers<StairNode> {
-		if !matches!(level, LodSceneLevel::High) {
+		if !matches!(level, LodSceneLevel::High | LodSceneLevel::Medium) {
 			return Layers::new();
 		}
 		let spire_confines = self.spire_confine_capsule();

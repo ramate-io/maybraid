@@ -7,8 +7,11 @@ use chico_vegetation_on_terrain_playground::commands::{
 use chico_vegetation_on_terrain_playground::{
 	CharacterSpecies, RequestFpsToggle, RequestSetCharacter,
 };
+
 use clap::{Parser, Subcommand};
 use game_commands::command::{CommandScript, GameCommand};
+
+use crate::RequestVsyncToggle;
 
 pub const PLAYGROUND_CLI_NAME: &str = "maybraid-world";
 pub type Script = CommandScript<PlaygroundCommand>;
@@ -17,7 +20,7 @@ pub type Script = CommandScript<PlaygroundCommand>;
 #[command(
 	name = "maybraid-world",
 	version,
-	about = "World model: Durham terrain, streamed forest, sky dome, character",
+	about = "World model: Durham terrain, streamed forest, sky dome, character. --start-at X,Z (or MAYBRAID_START_AT) places the player on that XZ.",
 	rename_all = "kebab-case",
 	disable_help_subcommand = true
 )]
@@ -51,6 +54,8 @@ pub enum Stats {
 	Mesh,
 	/// Toggle the `[veg.timing]` FPS log (and HUD when debug chrome is on).
 	Fps,
+	/// Toggle vsync (`AutoVsync` ↔ `Immediate`). Also `F8` / `MAYBRAID_VSYNC=off`.
+	Vsync,
 }
 
 impl PlaygroundCommand {
@@ -60,6 +65,12 @@ impl PlaygroundCommand {
 
 	pub fn parse_startup_command() -> Result<Option<Self>, String> {
 		<Self as GameCommand>::parse_startup_command()
+	}
+
+	pub fn parse_startup_from_argv_tail(
+		tail: Vec<std::ffi::OsString>,
+	) -> Result<Option<Self>, String> {
+		<Self as GameCommand>::parse_startup_from_argv_tail(tail)
 	}
 
 	pub fn react(self, commands: &mut Commands, console: &mut String) {
@@ -106,6 +117,10 @@ impl Stats {
 				commands.spawn(RequestFpsToggle);
 				*console = "stats fps: toggling".into();
 			}
+			Stats::Vsync => {
+				commands.spawn(RequestVsyncToggle);
+				*console = "stats vsync: toggling".into();
+			}
 		}
 	}
 }
@@ -126,6 +141,12 @@ mod tests {
 	fn parse_stats_mesh() {
 		let cmd = PlaygroundCommand::parse_line("stats mesh").unwrap();
 		assert!(matches!(cmd, PlaygroundCommand::Stats(Stats::Mesh)));
+	}
+
+	#[test]
+	fn parse_stats_vsync() {
+		let cmd = PlaygroundCommand::parse_line("stats vsync").unwrap();
+		assert!(matches!(cmd, PlaygroundCommand::Stats(Stats::Vsync)));
 	}
 
 	#[test]

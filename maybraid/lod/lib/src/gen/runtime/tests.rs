@@ -8,6 +8,7 @@ use crate::gen::runtime::{
 };
 use crate::gen::tests::test_utils::{cell, Vegetation, WorldIndex};
 use crate::gen::{Id, SpatialIndex};
+use crate::jobs::LodJobCounter;
 use crate::lod_ref::{LodNode, LodNodePose};
 use crate::scene::{Bullseye, LodRefreshCorePlugin};
 
@@ -54,6 +55,11 @@ fn drain_generate_materializes_one_id_per_budget() -> Result<()> {
 	.count();
 	assert_eq!(created, 1);
 	assert!(!queue.is_empty());
+	assert_eq!(app.world().resource::<LodJobCounter>().active(), queue.len() as u64);
+	while !app.world().resource::<LodGenerateQueue<Vegetation>>().is_empty() {
+		app.update();
+	}
+	assert_eq!(app.world().resource::<LodJobCounter>().active(), 0);
 	Ok(())
 }
 

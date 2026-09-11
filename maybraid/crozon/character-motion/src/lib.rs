@@ -1,7 +1,8 @@
 //! Per-frame character articulation: clips, mailbox, terrain pitch.
 //!
 //! Recipes (`crozon-characters`) stamp host identity. This crate syncs host
-//! motion markers from the shown LOD band, clamps mailbox work from plant
+//! motion markers from the shown LOD band (or visual High when there is no
+//! [`lod::LodSceneHost`]), clamps mailbox work from plant
 //! [`intelligence_lod::IntelligenceLod`] (missing = Near), and realizes clips /
 //! pitch. See [README.md](../README.md).
 //!

@@ -5,6 +5,7 @@
 //! bag roots (same shallow scan as fulfill streaming), then recursive-despawns
 //! a ready entity in one command under [`super::chunk::LodChunkBudgetClock`].
 
+use bevy::ecs::entity_disabling::Disabled;
 use bevy::ecs::query::QueryFilter;
 use bevy::prelude::*;
 
@@ -14,11 +15,13 @@ use crate::lod_ref::{
 use crate::scene::chunk::DEFAULT_CHUNK_WEIGHT;
 use crate::scene::cull::LodSceneCulls;
 use crate::scene::host::{
-	lod_level_roots_entity, lod_scene_host_or_ancestor_hidden, nested_host_parent_allows_refresh,
-	LodLevelRoot, LodLevelRoots, LodSceneHost,
+	hide_lod_tree, lod_level_roots_entity, lod_scene_host_or_ancestor_hidden,
+	nested_host_parent_allows_refresh, LodLevelRoot, LodLevelRoots, LodSceneHost,
 };
 use crate::scene::level::LodSceneLevel;
 use crate::scene::SemanticLodScene;
+
+use super::super::cull_regions::LodHostHasCullableRoots;
 
 use super::chunk::{
 	LodChunkBudgetClock, LodChunkFulfillBudget, LodChunkFulfillment, LodCullInFlight,
@@ -39,32 +42,42 @@ pub struct LodCullRequest {
 pub fn apply_lod_cull_requests(
 	mut commands: Commands,
 	mut reader: MessageReader<LodCullRequest>,
-	existing: Query<(), With<LodCullInFlight>>,
+	existing: Query<(), (With<LodCullInFlight>, Allow<Disabled>)>,
+	pending: Query<(), (With<LodLevelRootPending>, Allow<Disabled>)>,
 ) {
 	for LodCullRequest { entity } in reader.read() {
 		if existing.contains(*entity) {
 			continue;
 		}
-		if let Ok(mut entity_commands) = commands.get_entity(*entity) {
-			entity_commands.insert((LodCullInFlight { started: false }, Visibility::Hidden));
+		if commands.get_entity(*entity).is_err() {
+			continue;
 		}
+		stamp_lod_cull_hide(&mut commands, *entity, pending.contains(*entity));
 	}
 }
 
-/// Enqueue budgeted cull: message + component (hidden).
+/// Enqueue budgeted cull: message + component (hidden / Disabled for ready trees).
 pub fn enqueue_lod_cull(
 	commands: &mut Commands,
 	writer: &mut MessageWriter<LodCullRequest>,
 	entity: Entity,
-	already: &Query<(), With<LodCullInFlight>>,
+	already: &Query<(), (With<LodCullInFlight>, Allow<Disabled>)>,
+	pending: &Query<(), (With<LodLevelRootPending>, Allow<Disabled>)>,
 ) {
 	if already.contains(entity) {
 		return;
 	}
 	writer.write(LodCullRequest { entity });
-	commands
-		.entity(entity)
-		.insert((LodCullInFlight { started: false }, Visibility::Hidden));
+	stamp_lod_cull_hide(commands, entity, pending.contains(entity));
+}
+
+fn stamp_lod_cull_hide(commands: &mut Commands, entity: Entity, is_pending: bool) {
+	commands.entity(entity).insert(LodCullInFlight { started: false });
+	if is_pending {
+		commands.entity(entity).insert(Visibility::Hidden);
+	} else {
+		hide_lod_tree(commands, entity);
+	}
 }
 
 /// Mark inactive [`LodLevelRoot`]s for budgeted cull per [`LodScene::scene_lod_culls`].
@@ -76,15 +89,19 @@ pub fn cull_lod_level_roots<T, FHost, FNode>(
 	mut commands: Commands,
 	mut cull_writer: MessageWriter<LodCullRequest>,
 	nodes: Query<(Entity, &LodNodePose, Option<&LodNodeBounds>), (With<LodNode>, FNode)>,
-	hosts: Query<(Entity, &T, &LodSceneLevel), (With<LodSceneHost>, FHost)>,
-	all_hosts: Query<(), With<LodSceneHost>>,
-	level_roots_bags: Query<(), With<LodLevelRoots>>,
-	root_keys: Query<&LodLevelRoot>,
-	wants_cull: Query<(), With<LodCullInFlight>>,
-	child_of: Query<&ChildOf>,
-	host_levels: Query<&LodSceneLevel, With<LodSceneHost>>,
-	children_q: Query<&Children>,
-	visibilities: Query<&Visibility>,
+	hosts: Query<
+		(Entity, &T, &LodSceneLevel),
+		(With<LodSceneHost>, With<LodHostHasCullableRoots>, FHost),
+	>,
+	all_hosts: Query<(), (With<LodSceneHost>, Allow<Disabled>)>,
+	level_roots_bags: Query<(), (With<LodLevelRoots>, Allow<Disabled>)>,
+	root_keys: Query<&LodLevelRoot, Allow<Disabled>>,
+	wants_cull: Query<(), (With<LodCullInFlight>, Allow<Disabled>)>,
+	pending: Query<(), (With<LodLevelRootPending>, Allow<Disabled>)>,
+	child_of: Query<&ChildOf, Allow<Disabled>>,
+	host_levels: Query<&LodSceneLevel, (With<LodSceneHost>, Allow<Disabled>)>,
+	children_q: Query<&Children, Allow<Disabled>>,
+	visibilities: Query<(&Visibility, Has<Disabled>), Allow<Disabled>>,
 ) where
 	T: Component + SemanticLodScene,
 	FHost: QueryFilter + 'static,
@@ -141,7 +158,7 @@ pub fn cull_lod_level_roots<T, FHost, FNode>(
 				continue;
 			}
 			if culls.should_cull(root.0) {
-				enqueue_lod_cull(&mut commands, &mut cull_writer, child, &wants_cull);
+				enqueue_lod_cull(&mut commands, &mut cull_writer, child, &wants_cull, &pending);
 			}
 		}
 	}
@@ -152,8 +169,8 @@ pub fn cull_lod_level_roots<T, FHost, FNode>(
 /// Same contract as fulfill streaming (`count_nested_hosts`) — does not DFS kits.
 fn shallow_nested_hosts(
 	root: Entity,
-	children_q: &Query<&Children>,
-	hosts: &Query<(), With<LodSceneHost>>,
+	children_q: &Query<&Children, Allow<Disabled>>,
+	hosts: &Query<(), (With<LodSceneHost>, Allow<Disabled>)>,
 ) -> Vec<Entity> {
 	let Ok(children) = children_q.get(root) else {
 		return Vec::new();
@@ -181,9 +198,9 @@ fn shallow_nested_hosts(
 /// [`LodLevelRoot`]s in this host's [`LodLevelRoots`] bag (not a content DFS).
 fn bag_level_roots(
 	host: Entity,
-	children_q: &Query<&Children>,
-	bags: &Query<(), With<LodLevelRoots>>,
-	level_roots: &Query<(), With<LodLevelRoot>>,
+	children_q: &Query<&Children, Allow<Disabled>>,
+	bags: &Query<(), (With<LodLevelRoots>, Allow<Disabled>)>,
+	level_roots: &Query<(), (With<LodLevelRoot>, Allow<Disabled>)>,
 ) -> Vec<Entity> {
 	let Ok(host_children) = children_q.get(host) else {
 		return Vec::new();
@@ -210,12 +227,16 @@ pub fn drain_lod_cull(
 	mut clock: ResMut<LodChunkBudgetClock>,
 	budget: Res<LodChunkFulfillBudget>,
 	mut cull_writer: MessageWriter<LodCullRequest>,
-	mut culling: Query<(Entity, &mut LodCullInFlight, Option<&mut LodChunkFulfillment>)>,
-	children_q: Query<&Children>,
-	hosts: Query<(), With<LodSceneHost>>,
-	bags: Query<(), With<LodLevelRoots>>,
-	level_roots: Query<(), With<LodLevelRoot>>,
-	wants_cull: Query<(), With<LodCullInFlight>>,
+	mut culling: Query<
+		(Entity, &mut LodCullInFlight, Option<&mut LodChunkFulfillment>),
+		Allow<Disabled>,
+	>,
+	children_q: Query<&Children, Allow<Disabled>>,
+	hosts: Query<(), (With<LodSceneHost>, Allow<Disabled>)>,
+	bags: Query<(), (With<LodLevelRoots>, Allow<Disabled>)>,
+	level_roots: Query<(), (With<LodLevelRoot>, Allow<Disabled>)>,
+	wants_cull: Query<(), (With<LodCullInFlight>, Allow<Disabled>)>,
+	pending: Query<(), (With<LodLevelRootPending>, Allow<Disabled>)>,
 ) {
 	let mut root_despawns = budget.cull_root_despawns_per_frame;
 	if clock.cull_remaining == 0 && root_despawns == 0 {
@@ -232,7 +253,7 @@ pub fn drain_lod_cull(
 		let nested_hosts = shallow_nested_hosts(entity, &children_q, &hosts);
 		if !nested_hosts.is_empty() {
 			for host in nested_hosts {
-				enqueue_lod_cull(&mut commands, &mut cull_writer, host, &wants_cull);
+				enqueue_lod_cull(&mut commands, &mut cull_writer, host, &wants_cull, &pending);
 			}
 			continue;
 		}
@@ -241,7 +262,7 @@ pub fn drain_lod_cull(
 			let roots = bag_level_roots(entity, &children_q, &bags, &level_roots);
 			if !roots.is_empty() {
 				for root in roots {
-					enqueue_lod_cull(&mut commands, &mut cull_writer, root, &wants_cull);
+					enqueue_lod_cull(&mut commands, &mut cull_writer, root, &wants_cull, &pending);
 				}
 				continue;
 			}
@@ -272,5 +293,38 @@ pub fn drain_lod_cull(
 		} else {
 			root_despawns -= 1;
 		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use bevy::ecs::world::CommandQueue;
+
+	use crate::scene::host::hide_lod_tree_world;
+
+	use super::*;
+
+	#[test]
+	fn pending_cull_preserves_nested_hidden_tree() {
+		let mut world = World::new();
+		let nested_leaf = world.spawn_empty().id();
+		let nested_root = world.spawn(Visibility::Inherited).id();
+		world.entity_mut(nested_root).add_child(nested_leaf);
+		hide_lod_tree_world(&mut world.entity_mut(nested_root));
+
+		let pending_root = world.spawn(Visibility::Inherited).id();
+		world.entity_mut(pending_root).add_child(nested_root);
+
+		let mut queue = CommandQueue::default();
+		let mut commands = Commands::new(&mut queue, &world);
+		stamp_lod_cull_hide(&mut commands, pending_root, true);
+		queue.apply(&mut world);
+
+		assert!(world
+			.get::<Visibility>(pending_root)
+			.is_some_and(|v| matches!(*v, Visibility::Hidden)));
+		assert!(world.get::<Disabled>(pending_root).is_none());
+		assert!(world.get::<Disabled>(nested_root).is_some());
+		assert!(world.get::<Disabled>(nested_leaf).is_some());
 	}
 }

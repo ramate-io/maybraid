@@ -4,62 +4,40 @@
 //! ([`CollisionLayers::interacts_with`]). [`LayerMask::NONE`] is empty (no layers),
 //! not “all” — use [`LayerMask::ALL`] for the inclusive-everything mask.
 //!
-//! LOD query volumes are split so generate / present / scene-host spatial
-//! queries do not walk each other's colliders (or terrain / movers):
-//!
 //! | Layer | Role | Typical filters |
 //! | --- | --- | --- |
-//! | [`PhysicsInteractionLayer::Generate`] | Generated-id volumes | none (query-only) |
-//! | [`PhysicsInteractionLayer::Present`] | Presented-id volumes | none (query-only) |
-//! | [`PhysicsInteractionLayer::Host`] | Scene-host volumes | none (query-only) |
+//! | [`PhysicsInteractionLayer::Host`] | Optional Avian scene-host volumes | none (query-only) |
 //! | [`PhysicsInteractionLayer::Projectile`] | Blaster bolts / bullets | none (query-only; sweeps query Fixed) |
 //! | [`PhysicsInteractionLayer::Fixed`] | Terrain / buildings | [`Animated`](PhysicsInteractionLayer::Animated) |
 //! | [`PhysicsInteractionLayer::Animated`] | Characters / movers | [`Fixed`](PhysicsInteractionLayer::Fixed) + [`Animated`](PhysicsInteractionLayer::Animated) |
+//!
+//! Generate / present ids use typed [`lod::gen::SpatialIndex`] resources, not
+//! Avian query volumes. Scene-host refresh uses Gimme, not Host colliders.
 
 use avian3d::prelude::{Collider, CollisionLayers, LayerMask, PhysicsLayer, SpatialQueryFilter};
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 
-use crate::{
-	AvianLodGenerateBoundsMarshaller, AvianLodPresentBoundsMarshaller,
-	AvianLodSceneBoundsMarshaller,
-};
+use crate::AvianLodSceneBoundsMarshaller;
 use lod::LodSceneBoundsMarshaller;
 
 /// Maybraid physics layers (Avian bit 0 is reserved as the engine default layer).
-///
-/// [`Host`](Self::Host) / [`Fixed`](Self::Fixed) / [`Animated`](Self::Animated) keep
-/// their existing bits; generate / present append after them.
 #[derive(PhysicsLayer, Default, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum PhysicsInteractionLayer {
 	/// Avian default layer (bit 0). Prefer tagging new colliders explicitly.
 	#[default]
 	Default,
-	/// LOD scene-host volumes ([`AvianLodSceneBoundsMarshaller`]). Query-only.
+	/// Optional Avian scene-host volumes ([`AvianLodSceneBoundsMarshaller`]). Query-only.
 	Host,
 	/// Static world geometry (terrain trimeshes, buildings).
 	Fixed,
 	/// Dynamic movers (characters, props that should rest on Fixed).
 	Animated,
-	/// Generated spatial-index volumes ([`AvianLodGenerateBoundsMarshaller`]). Query-only.
-	Generate,
-	/// Presented-id volumes ([`AvianLodPresentBoundsMarshaller`]). Query-only.
-	Present,
 	/// Bolts / bullets. Query-only; they sweep [`Fixed`](Self::Fixed) instead of contacting.
 	Projectile,
 }
 
 impl PhysicsInteractionLayer {
-	/// Generated ids: member of [`Generate`](Self::Generate), contacts nobody.
-	pub fn generate_layers() -> CollisionLayers {
-		CollisionLayers::new(Self::Generate, LayerMask::NONE)
-	}
-
-	/// Presented ids: member of [`Present`](Self::Present), contacts nobody.
-	pub fn present_layers() -> CollisionLayers {
-		CollisionLayers::new(Self::Present, LayerMask::NONE)
-	}
-
 	/// Scene hosts: member of [`Host`](Self::Host), contacts nobody.
 	pub fn host_layers() -> CollisionLayers {
 		CollisionLayers::new(Self::Host, LayerMask::NONE)
@@ -112,22 +90,6 @@ pub(crate) fn volume_from_bounds(bounds: Aabb3d, layers: CollisionLayers) -> Avi
 	AvianLodQueryVolume { collider, layers }
 }
 
-impl LodSceneBoundsMarshaller for AvianLodGenerateBoundsMarshaller {
-	type Volume = AvianLodQueryVolume;
-
-	fn volume_from_bounds(bounds: Aabb3d) -> Self::Volume {
-		volume_from_bounds(bounds, PhysicsInteractionLayer::generate_layers())
-	}
-}
-
-impl LodSceneBoundsMarshaller for AvianLodPresentBoundsMarshaller {
-	type Volume = AvianLodQueryVolume;
-
-	fn volume_from_bounds(bounds: Aabb3d) -> Self::Volume {
-		volume_from_bounds(bounds, PhysicsInteractionLayer::present_layers())
-	}
-}
-
 impl LodSceneBoundsMarshaller for AvianLodSceneBoundsMarshaller {
 	type Volume = AvianLodQueryVolume;
 
@@ -140,13 +102,8 @@ impl LodSceneBoundsMarshaller for AvianLodSceneBoundsMarshaller {
 mod tests {
 	use super::*;
 
-	fn query_only_layers() -> [CollisionLayers; 4] {
-		[
-			PhysicsInteractionLayer::generate_layers(),
-			PhysicsInteractionLayer::present_layers(),
-			PhysicsInteractionLayer::host_layers(),
-			PhysicsInteractionLayer::projectile_layers(),
-		]
+	fn query_only_layers() -> [CollisionLayers; 2] {
+		[PhysicsInteractionLayer::host_layers(), PhysicsInteractionLayer::projectile_layers()]
 	}
 
 	#[test]
@@ -164,15 +121,10 @@ mod tests {
 
 	#[test]
 	fn lod_query_layers_do_not_contact_each_other() {
-		let generate = PhysicsInteractionLayer::generate_layers();
-		let present = PhysicsInteractionLayer::present_layers();
 		let host = PhysicsInteractionLayer::host_layers();
-		assert!(!generate.interacts_with(present));
-		assert!(!generate.interacts_with(host));
-		assert!(!present.interacts_with(host));
-		assert!(!present.interacts_with(generate));
-		assert!(!host.interacts_with(generate));
-		assert!(!host.interacts_with(present));
+		let projectile = PhysicsInteractionLayer::projectile_layers();
+		assert!(!host.interacts_with(projectile));
+		assert!(!projectile.interacts_with(host));
 	}
 
 	#[test]
@@ -196,13 +148,9 @@ mod tests {
 	}
 
 	#[test]
-	fn marshallers_stamp_distinct_memberships() {
+	fn host_marshaller_stamps_host_membership() {
 		let bounds = Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE);
-		let generate = AvianLodGenerateBoundsMarshaller::volume_from_bounds(bounds);
-		let present = AvianLodPresentBoundsMarshaller::volume_from_bounds(bounds);
 		let host = AvianLodSceneBoundsMarshaller::volume_from_bounds(bounds);
-		assert_eq!(generate.layers, PhysicsInteractionLayer::generate_layers());
-		assert_eq!(present.layers, PhysicsInteractionLayer::present_layers());
 		assert_eq!(host.layers, PhysicsInteractionLayer::host_layers());
 	}
 }

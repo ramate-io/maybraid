@@ -23,8 +23,10 @@ use lod::LodSceneHost;
 use lod::LodSceneLevel;
 use lod_avian::PhysicsInteractionLayer;
 
-/// Two inches. Gate and floor use world-space girth after plant [`Placement`] scale.
-pub const MIN_STICK_COLLIDER_RADIUS_M: f32 = 2.0 * 0.0254;
+/// Four inches. Gate and floor use world-space girth after plant [`Placement`] scale.
+pub const MIN_STICK_COLLIDER_RADIUS_M: f32 = 4.0 * 0.0254;
+/// 10cm. Gates the min length of the stick capsule.
+pub const MIN_STICK_COLLIDER_LENGTH_M: f32 = 0.1;
 
 /// How many pending High/Medium hosts may build compounds in one frame.
 #[derive(Resource, Debug, Clone, Copy, PartialEq, Eq)]
@@ -212,7 +214,7 @@ fn authored_radius(placement: Placement) -> f32 {
 	(placement.scale.x.abs() * STICK_KIT_HALF).max(placement.scale.z.abs() * STICK_KIT_HALF)
 }
 
-/// Trunks always; branches at least two inches in world space. Thinner High twigs stay visual-only.
+/// Trunks always; branches at least four inches in world space. Thinner High twigs stay visual-only.
 fn should_collide_member(is_trunk: bool, placement: Placement) -> bool {
 	is_trunk || authored_radius(placement) + 1e-5 >= MIN_STICK_COLLIDER_RADIUS_M
 }
@@ -261,7 +263,7 @@ fn gated_member_pose(parent: Placement, member: &StickMember) -> Option<(Transfo
 
 fn capsule_from_placement(placement: Placement) -> Option<(Transform, f32, f32)> {
 	let length = placement.scale.y;
-	if length < 0.05 {
+	if length < MIN_STICK_COLLIDER_LENGTH_M {
 		return None;
 	}
 	let radius = authored_radius(placement).max(MIN_STICK_COLLIDER_RADIUS_M);
@@ -331,7 +333,25 @@ mod tests {
 	#[test]
 	fn collection_keeps_every_gated_member() {
 		let count = 84;
+		// World girth `scale.x * STICK_KIT_HALF` must meet the four-inch branch gate.
+		let girth = MIN_STICK_COLLIDER_RADIUS_M / STICK_KIT_HALF + 0.01;
 		let members = (0..count)
+			.map(|index| StickMember {
+				geometry: StickGeometry::Segment,
+				placement: Placement::new(Vec3::new(index as f32, 0.0, 0.0), 0.0)
+					.with_scale(Vec3::new(girth, 2.0, girth)),
+			})
+			.collect::<Vec<_>>();
+		let node = StickNode::collection(
+			StickCollection::new(members).bake_bounds_from_members(),
+			Placement::IDENTITY,
+		);
+		assert_eq!(collider_poses(&node, LodSceneLevel::High).len(), count);
+	}
+
+	#[test]
+	fn ungated_segments_keep_the_thickest_member() {
+		let members = (0..8)
 			.map(|index| StickMember {
 				geometry: StickGeometry::Segment,
 				placement: Placement::new(Vec3::new(index as f32, 0.0, 0.0), 0.0)
@@ -342,7 +362,7 @@ mod tests {
 			StickCollection::new(members).bake_bounds_from_members(),
 			Placement::IDENTITY,
 		);
-		assert_eq!(collider_poses(&node, LodSceneLevel::High).len(), count);
+		assert_eq!(collider_poses(&node, LodSceneLevel::High).len(), 1);
 	}
 
 	fn playable_trunk() -> StickNode {

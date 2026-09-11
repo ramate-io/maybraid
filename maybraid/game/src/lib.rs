@@ -1,6 +1,7 @@
 //! Maybraid game executable: home shell over the world playground.
 
 mod flow;
+mod load;
 mod shell;
 
 pub use flow::{GameFlow, HomeRoute, PauseMenuRoute, WorldPause};
@@ -10,8 +11,8 @@ use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
 use maybraid_input::MenuNavPad;
 use maybraid_menu_controller::MenuControllerPlugin;
 use maybraid_world::{
-	PlayerPhysicsEnabled, TerrainStreamingEnabled, WorldGameplayEnabled, WorldMobHudEnabled,
-	WorldPlayerLoadout, WorldPlugin, WorldSceneryVisible, WorldSurfaceReady,
+	PlayerPhysicsEnabled, PlayerSpawnXz, TerrainStreamingEnabled, WorldGameplayEnabled,
+	WorldMobHudEnabled, WorldPlayerLoadout, WorldPlugin, WorldSceneryVisible,
 };
 use menu_components::{consume_screen_back, ActiveOverlayKey, ScreenBackPressed, MENU_CLEAR};
 use menu_playground::{
@@ -23,7 +24,7 @@ use menu_screens::{
 	cancel_pending_create, request_show_gallery, request_show_in_game,
 	request_show_in_game_settings, CreateCharacterPlugin, GalleryScreen, GameMode, HomeMenuChoice,
 	HomeScreenPlugin, InGameMenuChoice, InGameScreenPlugin, InGameSettings, InGameSettingsScreen,
-	LoadingScreenPlugin, SpinRevealScreen,
+	LoadingScreenPlugin, LoadingScreenSystems, MenuScreen, SpinRevealScreen,
 };
 use std::path::{Path, PathBuf};
 
@@ -77,9 +78,13 @@ impl Plugin for GamePlugin {
 					spawn_loading_backdrop,
 					apply_shell_look,
 					detach_preview_camera,
+					crate::load::arm_first_load,
 				),
 			)
-			.add_systems(OnExit(GameFlow::LoadingWorld), despawn_loading_backdrop)
+			.add_systems(
+				OnExit(GameFlow::LoadingWorld),
+				(despawn_loading_backdrop, crate::load::disarm_first_load),
+			)
 			.add_systems(
 				OnEnter(GameFlow::World),
 				(load_active_player_loadout, enter_world, apply_shell_look, detach_preview_camera)
@@ -88,12 +93,22 @@ impl Plugin for GamePlugin {
 			.add_systems(OnEnter(WorldPause::Playing), apply_shell_look)
 			.add_systems(OnEnter(WorldPause::Menu), (enter_world_menu, apply_shell_look))
 			.add_systems(OnExit(WorldPause::Menu), (exit_world_menu, restore_stashed_world_camera))
-			.add_systems(PostStartup, (enter_home, apply_shell_look, attach_preview_camera))
+			.add_systems(
+				PostStartup,
+				(
+					boot_shell,
+					apply_shell_look,
+					attach_preview_camera.run_if(not(starting_discovery_at_override)),
+				)
+					.chain(),
+			)
 			.add_systems(
 				Update,
 				(
 					stamp_preview_render_layers,
-					finish_world_loading.run_if(in_state(GameFlow::LoadingWorld)),
+					crate::load::finish_world_loading
+						.run_if(in_state(GameFlow::LoadingWorld))
+						.before(LoadingScreenSystems::Apply),
 					route_home_choice.run_if(in_state(GameFlow::Home)),
 					route_in_game_choice.run_if(in_state(WorldPause::Menu)),
 					apply_pause_character_look.run_if(in_state(WorldPause::Menu)),
@@ -110,10 +125,24 @@ impl Plugin for GamePlugin {
 	}
 }
 
-fn finish_world_loading(ready: Res<WorldSurfaceReady>, mut flow: ResMut<NextState<GameFlow>>) {
-	if ready.0 {
-		flow.set(GameFlow::World);
+fn starting_discovery_at_override(spawn: Res<PlayerSpawnXz>) -> bool {
+	spawn.0.is_some()
+}
+
+fn boot_shell(
+	spawn: Res<PlayerSpawnXz>,
+	mut flow: ResMut<NextState<GameFlow>>,
+	mut mode: ResMut<GameMode>,
+	commands: Commands,
+	screens: Query<Entity, With<MenuScreen>>,
+) {
+	if spawn.0.is_some() {
+		mode.label = String::from("Discovery");
+		enter_loading_world(commands, screens);
+		flow.set(GameFlow::LoadingWorld);
+		return;
 	}
+	enter_home(commands);
 }
 
 fn load_active_player_loadout(

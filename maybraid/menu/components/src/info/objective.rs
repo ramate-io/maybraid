@@ -8,21 +8,6 @@ use crate::theme::{
 };
 use crate::HudFonts;
 
-/// Preset faces for [`MenuObjective`]. Yellow is the in-game HUD chip.
-#[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum MenuObjectiveKind {
-	#[default]
-	Yellow,
-}
-
-impl MenuObjectiveKind {
-	pub fn color(self) -> Color {
-		match self {
-			Self::Yellow => TEXT_YELLOW,
-		}
-	}
-}
-
 /// Bordered label that stays readable on busy art.
 #[derive(Component, Debug, Clone, PartialEq)]
 pub struct MenuObjective {
@@ -32,7 +17,7 @@ pub struct MenuObjective {
 
 impl MenuObjective {
 	pub fn yellow(label: impl Into<String>) -> Self {
-		Self { label: label.into(), color: MenuObjectiveKind::Yellow.color() }
+		Self { label: label.into(), color: TEXT_YELLOW }
 	}
 }
 
@@ -85,6 +70,5 @@ mod tests {
 		let chip = MenuObjective::yellow("Fireball 00A1");
 		assert_eq!(chip.label, "Fireball 00A1");
 		assert_eq!(chip.color, TEXT_YELLOW);
-		assert_eq!(MenuObjectiveKind::Yellow.color(), TEXT_YELLOW);
 	}
 }

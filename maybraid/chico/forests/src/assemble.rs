@@ -1,7 +1,7 @@
 //! Grow selected groves on 100 m tiles inside a forest cell.
 //!
-//! Each tile calls `Params::default().with_extent(tile).build_on(world)`. Construction
-//! noise stays on the grove default — forests do not bias `build_unit` seeds.
+//! Each tile calls `Params::default().with_extent(tile).with_tree_variants(WORLD_FOREST_TREE_VARIANTS).build_on(world)`.
+//! Construction noise stays on the grove default — forests do not bias `build_unit` seeds.
 
 use bevy_math::Vec3;
 use chico_groves::{GroveExtent, GroveWorldSample};

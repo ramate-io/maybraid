@@ -231,6 +231,7 @@ impl Plugin for DevelopmentsOnTerrainPlugin {
 			);
 		}
 
+		#[allow(private_interfaces)]
 		app.add_systems(
 			Update,
 			(

@@ -12,6 +12,7 @@ use crate::scene::level::LodSceneLevel;
 /// Content may already be [`LodLevelRootStreamed`] while nested hosts catch up.
 /// Cold-start roots may be visible while pending.
 #[derive(Debug, Clone, Copy, Default, Component)]
+#[component(on_add = crate::jobs::count_lod_job_add, on_remove = crate::jobs::count_lod_job_remove)]
 pub struct LodLevelRootPending;
 
 /// This level root's chunk plan is fully spawned (full scene representation).

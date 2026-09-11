@@ -16,7 +16,7 @@ pub fn ui_config() -> GameCommandUiConfig {
 	GameCommandUiConfig {
 		title: "World — character on Durham + forest + urbanization + sky — / for commands — Y or F1 drawer"
 			.into(),
-		empty_console_text: "Console: `mode free`, `set-character`, `stats mesh`, `help`".into(),
+		empty_console_text: "Console: `mode free`, `set-character`, `stats mesh`, `stats vsync`, `help`".into(),
 		root_background: Color::srgba(0.08, 0.16, 0.22, 0.82),
 		controls_hint:
 			"L-stick move — R-stick look — flick either stick to throw the skill map — L3 sprint — R3 POV — A jump — LT optic — LB irons — D-Pad / [ ] cycle map — RT use — X / E pick up — Tab drop — RT+X power — / commands"

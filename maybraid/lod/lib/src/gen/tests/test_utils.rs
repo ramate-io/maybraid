@@ -197,6 +197,10 @@ macro_rules! impl_spatial_index {
 				self.$field.get(&id).map(|entry| entry.version)
 			}
 
+			fn membership_revision(&self) -> u64 {
+				self.next_version
+			}
+
 			fn insert(&mut self, id: Id, value: $ty, bounds: Aabb3d, _lod_ref: &LodRef) {
 				let version = self.next_version();
 				self.$field.insert(id, StoredEntry { value, bounds, version });

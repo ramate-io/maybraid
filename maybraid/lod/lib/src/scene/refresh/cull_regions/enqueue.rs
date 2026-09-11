@@ -2,6 +2,7 @@
 
 use std::marker::PhantomData;
 
+use bevy::ecs::entity_disabling::Disabled;
 use bevy::ecs::query::QueryFilter;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
@@ -9,8 +10,8 @@ use bevy::prelude::*;
 use crate::lod_ref::lod_refs_from_snapshots;
 use crate::scene::cull::LodSceneCulls;
 use crate::scene::host::{
-	lod_level_roots_entity, lod_scene_host_or_ancestor_hidden, LodLevelRoot, LodLevelRoots,
-	LodSceneHost,
+	hide_lod_tree_world, lod_level_roots_entity, lod_scene_host_or_ancestor_hidden,
+	lod_scene_host_or_ancestor_hidden_world, LodLevelRoot, LodLevelRoots, LodSceneHost,
 };
 use crate::scene::level::LodSceneLevel;
 use crate::scene::region_index::LodSceneHostIndex;
@@ -21,7 +22,7 @@ use super::super::sync::{enqueue_lod_cull, LodChunkBudgetPlugin, LodCullInFlight
 use super::super::viewer::LodViewer;
 use super::super::LodSceneRefreshLevelsPlugin;
 use super::cache::{LodCullProduceCache, LodSceneCullProduceFillPlugin};
-use super::markers::{LodCullMarkerPlugin, LodNestedRefreshAllowed};
+use super::markers::{LodCullMarkerPlugin, LodHostHasCullableRoots, LodNestedRefreshAllowed};
 use super::produce::LodSceneCullRegion;
 use crate::scene::LodLevelProducer;
 
@@ -36,18 +37,20 @@ pub fn produce_lod_cull_for_region<T>(
 	mut cull_writer: MessageWriter<LodCullRequest>,
 	cache: Res<LodCullProduceCache>,
 	hosts: Query<&T, (With<LodSceneHost>, With<LodNestedRefreshAllowed>)>,
-	all_hosts: Query<(), With<LodSceneHost>>,
+	all_hosts: Query<(), (With<LodSceneHost>, Allow<Disabled>)>,
+	cullable: Query<(), With<LodHostHasCullableRoots>>,
 	mut host_levels: Query<&mut LodSceneLevel, With<LodSceneHost>>,
-	host_children_q: Query<&Children, With<LodSceneHost>>,
-	level_roots_heads: Query<&Children, With<LodLevelRoots>>,
-	root_keys: Query<&LodLevelRoot>,
-	wants_cull: Query<(), With<LodCullInFlight>>,
-	child_of: Query<&ChildOf>,
-	visibilities: Query<&Visibility>,
+	host_children_q: Query<&Children, (With<LodSceneHost>, Allow<Disabled>)>,
+	level_roots_heads: Query<&Children, (With<LodLevelRoots>, Allow<Disabled>)>,
+	root_keys: Query<&LodLevelRoot, Allow<Disabled>>,
+	wants_cull: Query<(), (With<LodCullInFlight>, Allow<Disabled>)>,
+	pending: Query<(), (With<crate::LodLevelRootPending>, Allow<Disabled>)>,
+	child_of: Query<&ChildOf, Allow<Disabled>>,
+	visibilities: Query<(&Visibility, Has<Disabled>), Allow<Disabled>>,
 ) where
 	T: Component + SemanticLodScene + 'static,
 {
-	if cache.region_hits.is_empty() || cache.snapshots.is_empty() {
+	if cache.hit_entities.is_empty() || cache.snapshots.is_empty() {
 		return;
 	}
 	if hosts.is_empty() {
@@ -59,54 +62,55 @@ pub fn produce_lod_cull_for_region<T>(
 		return;
 	};
 
-	for (_region, hits) in &cache.region_hits {
-		for &entity in hits {
-			if lod_scene_host_or_ancestor_hidden(entity, &child_of, &all_hosts, &visibilities) {
+	for &entity in &cache.hit_entities {
+		if lod_scene_host_or_ancestor_hidden(entity, &child_of, &all_hosts, &visibilities) {
+			continue;
+		}
+		let Ok(scene) = hosts.get(entity) else {
+			continue;
+		};
+
+		let Ok(mut current) = host_levels.get_mut(entity) else {
+			continue;
+		};
+		let distance_level = scene.scene_lod_level(viewer_ref);
+		let lowered = distance_level < *current;
+		if lowered {
+			*current = distance_level;
+		}
+		let current_level = *current;
+		drop(current);
+		if !lowered && !cullable.contains(entity) {
+			continue;
+		}
+
+		let culls = scene.scene_lod_culls(viewer_ref, current_level);
+		if matches!(culls, LodSceneCulls::None) {
+			continue;
+		}
+
+		let Ok(host_children) = host_children_q.get(entity) else {
+			continue;
+		};
+		let Some(roots_entity) = lod_level_roots_entity(host_children, &level_roots_heads) else {
+			continue;
+		};
+		let Ok(root_children) = level_roots_heads.get(roots_entity) else {
+			continue;
+		};
+
+		for child in root_children.iter() {
+			let Ok(root) = root_keys.get(child) else {
+				continue;
+			};
+			if root.0 == current_level {
 				continue;
 			}
-			let Ok(scene) = hosts.get(entity) else {
-				continue;
-			};
-
-			let Ok(mut current) = host_levels.get_mut(entity) else {
-				continue;
-			};
-			let distance_level = scene.scene_lod_level(viewer_ref);
-			if distance_level < *current {
-				*current = distance_level;
-			}
-			let current_level = *current;
-			drop(current);
-
-			let culls = scene.scene_lod_culls(viewer_ref, current_level);
-			if matches!(culls, LodSceneCulls::None) {
+			if wants_cull.contains(child) {
 				continue;
 			}
-
-			let Ok(host_children) = host_children_q.get(entity) else {
-				continue;
-			};
-			let Some(roots_entity) = lod_level_roots_entity(host_children, &level_roots_heads)
-			else {
-				continue;
-			};
-			let Ok(root_children) = level_roots_heads.get(roots_entity) else {
-				continue;
-			};
-
-			for child in root_children.iter() {
-				let Ok(root) = root_keys.get(child) else {
-					continue;
-				};
-				if root.0 == current_level {
-					continue;
-				}
-				if wants_cull.contains(child) {
-					continue;
-				}
-				if culls.should_cull(root.0) {
-					enqueue_lod_cull(&mut commands, &mut cull_writer, child, &wants_cull);
-				}
+			if culls.should_cull(root.0) {
+				enqueue_lod_cull(&mut commands, &mut cull_writer, child, &wants_cull, &pending);
 			}
 		}
 	}
@@ -139,9 +143,13 @@ pub fn produce_lod_cull_for_region_erased(world: &mut World) {
 			let Some(distance_level) = producer.level_for(world, entity, viewer_ref) else {
 				continue;
 			};
-			if distance_level < current_level {
+			let lowered = distance_level < current_level;
+			if lowered {
 				current_level = distance_level;
 				world.entity_mut(entity).insert(current_level);
+			}
+			if !lowered && world.get::<LodHostHasCullableRoots>(entity).is_none() {
+				continue;
 			}
 			let Some(culls) = producer.culls_for(world, entity, viewer_ref, current_level) else {
 				continue;
@@ -170,34 +178,27 @@ pub fn produce_lod_cull_for_region_erased(world: &mut World) {
 				{
 					continue;
 				}
-				world
-					.entity_mut(root_entity)
-					.insert((LodCullInFlight { started: false }, Visibility::Hidden));
+				let is_pending = world.get::<crate::LodLevelRootPending>(root_entity).is_some();
+				{
+					let mut entity = world.entity_mut(root_entity);
+					entity.insert(LodCullInFlight { started: false });
+					if is_pending {
+						entity.insert(Visibility::Hidden);
+					} else {
+						hide_lod_tree_world(&mut entity);
+					}
+				}
 				world.write_message(LodCullRequest { entity: root_entity });
 			}
 		}
 	});
 }
 
-fn lod_scene_host_or_ancestor_hidden_world(world: &World, entity: Entity) -> bool {
-	let mut current = Some(entity);
-	while let Some(entity) = current {
-		if world.get::<LodSceneHost>(entity).is_some()
-			&& world
-				.get::<Visibility>(entity)
-				.is_some_and(|visibility| matches!(*visibility, Visibility::Hidden))
-		{
-			return true;
-		}
-		current = world.get::<ChildOf>(entity).map(|child| child.parent());
-	}
-	false
-}
-
 /// Register `T` for the shared erased enqueue from [`LodCullProduceCache`].
 ///
-/// Channel `M` stays so existing `AvianLodSceneCullPlugin<T, M, F>` adds remain
-/// valid; the spatial query is registered once per (`I`, `F`).
+/// Channel `M` stays so existing `GimmeLodSceneCullPlugin<T, M, F>` adds remain
+/// valid; the spatial query is registered once per index `I` (every [`crate::LodNode`]).
+/// `F` is accepted so dual Camera / LodViewer plugin adds stay valid; fill does not filter on it.
 pub struct LodSceneRegionCullPlugin<I, M, T, F = With<LodViewer>>
 where
 	I: SystemParam + 'static,
@@ -239,8 +240,8 @@ where
 		if !app.is_plugin_added::<LodSceneRefreshLevelsPlugin<T>>() {
 			app.add_plugins(LodSceneRefreshLevelsPlugin::<T>::default());
 		}
-		if !app.is_plugin_added::<LodSceneCullProduceFillPlugin<I, F>>() {
-			app.add_plugins(LodSceneCullProduceFillPlugin::<I, F>::default());
+		if !app.is_plugin_added::<LodSceneCullProduceFillPlugin<I>>() {
+			app.add_plugins(LodSceneCullProduceFillPlugin::<I>::default());
 		}
 		app.add_message::<LodSceneCullRegion<M>>();
 	}

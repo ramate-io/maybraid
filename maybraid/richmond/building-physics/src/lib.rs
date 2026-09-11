@@ -1,9 +1,9 @@
 //! Fixed-layer walk colliders from Richmond domain IR.
 //!
-//! LOD hosts stay on [`lod_avian::PhysicsInteractionLayer::Host`]. Walk geometry is
+//! LOD hosts are indexed by Gimme, not Avian Host volumes. Walk geometry is
 //! spawned as child [`RigidBody::Static`] colliders on
 //! [`lod_avian::PhysicsInteractionLayer::Fixed`] so movers can stand on floors,
-//! triangle landings, and stair ramps without treating Host volumes as contact.
+//! triangle landings, and stair ramps without treating LOD host AABBs as contact.
 
 mod colliders;
 

@@ -1,7 +1,9 @@
 //! Apply [`CharacterIntent`] to the vegetation capsule / camera-relative wish.
 
 use bevy::prelude::*;
-use chico_vegetation_on_terrain_playground::{MoveWish, MovementAction, Player, PlaygroundMode};
+use chico_vegetation_on_terrain_playground::{
+	MoveWish, MovementAction, Player, PlayerSpawnXz, PlaygroundMode,
+};
 use durham_terrain_models::{
 	terrain_collider_covers_xz, CascadeChunk, TerrainCellLayout, TerrainEntryStore,
 	TerrainTrimeshCollider,
@@ -40,12 +42,29 @@ pub struct WorldSurfaceReady(pub bool);
 pub(crate) fn update_world_surface_ready(
 	store: Res<TerrainEntryStore>,
 	layout: Res<TerrainCellLayout>,
+	spawn: Res<PlayerSpawnXz>,
+	players: Query<&Transform, With<Player>>,
 	colliders: Query<&CascadeChunk, With<TerrainTrimeshCollider>>,
 	mut ready: ResMut<WorldSurfaceReady>,
 ) {
-	let center = layout.region_center_xz();
-	ready.0 = terrain_collider_covers_xz(center, colliders.iter())
-		&& store.composed_height_at(&layout, center.x, center.z).is_some();
+	let xz = discovery_xz(&spawn, &players, &layout);
+	let at = Vec3::new(xz.x, 0.0, xz.y);
+	ready.0 = terrain_collider_covers_xz(at, colliders.iter())
+		&& store.composed_height_at(&layout, xz.x, xz.y).is_some();
+}
+
+fn discovery_xz(
+	spawn: &PlayerSpawnXz,
+	players: &Query<&Transform, With<Player>>,
+	layout: &TerrainCellLayout,
+) -> Vec2 {
+	if let Some(xz) = spawn.0 {
+		return xz;
+	}
+	if let Ok(player) = players.single() {
+		return player.translation.xz();
+	}
+	layout.region_center_xz().xz()
 }
 
 pub(crate) fn sync_skill_map_enabled(

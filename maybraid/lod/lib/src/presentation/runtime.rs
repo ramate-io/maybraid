@@ -14,6 +14,7 @@ use crate::gen::{
 	entering_keep_regions, expand_keep_xz, id_lives_in_keep, id_xz_distance2, keep_region_changed,
 	Id, LodGenerated, SpatialIndex, QUEUE_KEEP_SLACK_XZ,
 };
+use crate::jobs::{ensure_lod_job_counter, LodJobCounter};
 use crate::lod_ref::{
 	collect_node_snapshots, lod_refs_from_snapshots, LodNode, LodNodeBounds, LodNodePlugin,
 	LodNodePose, LodNodeSystems,
@@ -169,15 +170,17 @@ impl<T> LodPresentQueue<T> {
 		std::mem::take(&mut self.reset_scan)
 	}
 
-	fn expire_outside_keep(&mut self, keep: Option<Aabb3d>, slack: f32) {
+	fn expire_outside_keep(&mut self, keep: Option<Aabb3d>, slack: f32) -> u64 {
 		let Some(keep) = keep else {
-			return;
+			return 0;
 		};
+		let before = self.pending.len();
 		self.pending.retain(|id| id_lives_in_keep(*id, keep, slack));
 		self.pending_ids.clear();
 		self.pending_ids.extend(self.pending.iter().copied());
 		let live = expand_keep_xz(keep, slack);
 		self.scan_regions.retain(|region| regions_overlap_xz(*region, live));
+		before.saturating_sub(self.pending.len()) as u64
 	}
 }
 
@@ -233,6 +236,7 @@ impl Plugin for LodPresentSetsPlugin {
 		if !app.is_plugin_added::<LodNodePlugin>() {
 			app.add_plugins(LodNodePlugin);
 		}
+		ensure_lod_job_counter(app);
 		app.init_resource::<LodPresentBudget>()
 			.init_resource::<LodPresentTimeBudget>()
 			.init_resource::<LodPresentCullBudget>()
@@ -290,6 +294,7 @@ pub fn drain_lod_present<T, S, Pr, M, F>(
 	mut queue: ResMut<LodPresentQueue<T>>,
 	budget: Res<LodPresentBudget>,
 	time_budget: Res<LodPresentTimeBudget>,
+	jobs: Res<LodJobCounter>,
 	mut regions: MessageReader<LodPresentRegion<M>>,
 	mut generated: MessageReader<LodGenerated<T>>,
 	keep: Res<LodPresentKeepRegion<M>>,
@@ -312,7 +317,7 @@ pub fn drain_lod_present<T, S, Pr, M, F>(
 	}
 	if keep_region_changed(*last_keep, keep.region) {
 		*last_keep = keep.region;
-		queue.expire_outside_keep(keep.region, keep.slack_xz);
+		jobs.end_n(queue.expire_outside_keep(keep.region, keep.slack_xz));
 	}
 
 	let mut received_region = false;
@@ -346,6 +351,7 @@ pub fn drain_lod_present<T, S, Pr, M, F>(
 			continue;
 		}
 		if queue.enqueue_back(message.id) {
+			jobs.begin();
 			reorder_pending = true;
 		}
 	}
@@ -371,6 +377,7 @@ pub fn drain_lod_present<T, S, Pr, M, F>(
 				continue;
 			}
 			if queue.enqueue_back(tracked.0) {
+				jobs.begin();
 				reorder_pending = true;
 			}
 		}
@@ -408,6 +415,7 @@ pub fn drain_lod_present<T, S, Pr, M, F>(
 		let Some(id) = queue.pop_front() else {
 			break;
 		};
+		jobs.end();
 		handled += 1;
 		let Some(version) = index.version(id) else {
 			continue;
@@ -429,8 +437,8 @@ pub fn drain_lod_present<T, S, Pr, M, F>(
 		// keep rescan.
 		let still_needs =
 			presenter.presented_version(id).is_none_or(|presented| presented < version);
-		if still_needs {
-			queue.enqueue_front(id);
+		if still_needs && queue.enqueue_front(id) {
+			jobs.begin();
 		}
 	}
 }
@@ -490,14 +498,44 @@ pub fn produce_lod_present_cull_regions<P, F, M>(
 	}
 }
 
+#[derive(Default)]
+struct PresentCullKeepCache {
+	region: Option<Aabb3d>,
+	revision: u64,
+	ids: HashSet<Id>,
+}
+
+fn present_cull_keep_ids<'a, T, S>(
+	index: &S,
+	keep_region: Aabb3d,
+	cache: &'a mut PresentCullKeepCache,
+) -> &'a HashSet<Id>
+where
+	S: SpatialIndex<T>,
+{
+	let revision = index.membership_revision();
+	let stale = cache.region != Some(keep_region) || revision == 0 || cache.revision != revision;
+	if stale {
+		cache.region = Some(keep_region);
+		cache.revision = revision;
+		cache.ids.clear();
+		cache.ids.extend(index.tracked_ids_for(keep_region).into_iter().map(|tracked| tracked.0));
+	}
+	&cache.ids
+}
+
 /// Hide, then budget-despawn, presented ids outside the keep ring.
 ///
-/// Runs whenever keep is live. Does not wait for lattice tiles.
+/// Runs whenever keep is live. Does not wait for lattice tiles. The keep-id
+/// set is rebuilt when the live keep AABB or [`SpatialIndex::membership_revision`]
+/// changes; a `0` revision always rebuilds.
+#[allow(private_interfaces)]
 pub fn drain_lod_present_cull<T, S, Pr, M>(
 	presenter: StaticSystemParam<Pr>,
 	index: Res<S>,
 	keep: Res<LodPresentKeepRegion<M>>,
 	budget: Res<LodPresentCullBudget>,
+	mut keep_ids: Local<PresentCullKeepCache>,
 ) where
 	T: Send + Sync + 'static,
 	S: Resource + SpatialIndex<T>,
@@ -508,13 +546,9 @@ pub fn drain_lod_present_cull<T, S, Pr, M>(
 	let Some(keep_region) = keep.live_region() else {
 		return;
 	};
-	let keep_ids: HashSet<Id> = index
-		.tracked_ids_for(keep_region)
-		.into_iter()
-		.map(|tracked| tracked.0)
-		.collect();
+	let keep_ids = present_cull_keep_ids::<T, S>(&*index, keep_region, &mut keep_ids);
 	let mut presenter = presenter.into_inner();
-	presenter.cull(&*index, &keep_ids, budget.despawns_per_frame);
+	presenter.cull(&*index, keep_ids, budget.despawns_per_frame);
 }
 
 /// Produce [`LodPresentRegion<M>`] from `F`-filtered [`LodNode`]s via strategy `P`.

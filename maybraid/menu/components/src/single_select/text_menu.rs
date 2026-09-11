@@ -12,7 +12,7 @@ use bevy::text::{FontSourceTemplate, Justify};
 use crate::theme::{
 	BARLOW_BLACK, BARLOW_SEMIBOLD, COLUMN_BOTTOM, COLUMN_INSET, CORNER_BOTTOM, CORNER_INSET,
 	HEADER_FONT_SIZE, HEADER_MARGIN_BOTTOM, ITEM_FONT_SIZE, ITEM_ROW_GAP, TEXT_YELLOW,
-	TEXT_YELLOW_HOVER,
+	TEXT_YELLOW_FAINT, TEXT_YELLOW_FAINT_FOCUS, TEXT_YELLOW_HOVER,
 };
 use maybraid_input::{MenuNav, MenuNavImpulse};
 
@@ -80,9 +80,18 @@ pub struct TextMenuItem {
 	pub active: Color,
 }
 
+/// Locked pickable row: still receives [`MenuFocus`], never [`MenuActivate`].
+#[derive(Component, Debug, Default, Clone, Copy)]
+pub struct MenuItemLocked;
+
 impl TextMenuItem {
 	pub fn yellow(index: usize) -> Self {
 		Self { index, idle: TEXT_YELLOW, active: TEXT_YELLOW_HOVER }
+	}
+
+	/// Dampened chrome for a locked row (idle and focused).
+	pub fn faint_yellow(index: usize) -> Self {
+		Self { index, idle: TEXT_YELLOW_FAINT, active: TEXT_YELLOW_FAINT_FOCUS }
 	}
 
 	/// Pickable row that stamps `action` for [`MenuFocus`] / [`MenuActivate`].
@@ -355,16 +364,25 @@ pub struct MenuActivate<E> {
 	pub choice: E,
 }
 
+fn selected_item<E: Component + Copy>(
+	menu_entity: Entity,
+	menu: &TextMenu,
+	items: &Query<(Entity, &TextMenuItem, &E, &ChildOf)>,
+	child_of: &Query<&ChildOf>,
+) -> Option<(Entity, E)> {
+	items.iter().find_map(|(entity, item, choice, item_child)| {
+		(item.index == menu.selected && entity_is_under(item_child.parent(), menu_entity, child_of))
+			.then_some((entity, *choice))
+	})
+}
+
 fn selected_choice<E: Component + Copy>(
 	menu_entity: Entity,
 	menu: &TextMenu,
-	items: &Query<(&TextMenuItem, &E, &ChildOf)>,
+	items: &Query<(Entity, &TextMenuItem, &E, &ChildOf)>,
 	child_of: &Query<&ChildOf>,
 ) -> Option<E> {
-	items.iter().find_map(|(item, choice, item_child)| {
-		(item.index == menu.selected && entity_is_under(item_child.parent(), menu_entity, child_of))
-			.then_some(*choice)
-	})
+	selected_item(menu_entity, menu, items, child_of).map(|(_, choice)| choice)
 }
 
 fn entity_is_under(mut entity: Entity, ancestor: Entity, child_of: &Query<&ChildOf>) -> bool {
@@ -382,7 +400,7 @@ fn entity_is_under(mut entity: Entity, ancestor: Entity, child_of: &Query<&Child
 /// Trigger [`MenuFocus<E>`] on a menu when its [`TextMenu::selected`] changes.
 pub fn emit_menu_focus<E: Component + Copy + Send + Sync + 'static>(
 	menus: Query<(Entity, &TextMenu), Changed<TextMenu>>,
-	items: Query<(&TextMenuItem, &E, &ChildOf)>,
+	items: Query<(Entity, &TextMenuItem, &E, &ChildOf)>,
 	child_of: Query<&ChildOf>,
 	mut commands: Commands,
 ) {
@@ -398,11 +416,12 @@ pub fn emit_menu_activate_on_click<E: Component + Copy>(
 	click: On<Pointer<Click>>,
 	lock: Res<TextMenuInputLock>,
 	items: Query<&E, With<TextMenuItem>>,
+	locked: Query<(), With<MenuItemLocked>>,
 	child_of: Query<&ChildOf>,
 	menus: Query<(), With<TextMenu>>,
 	mut commands: Commands,
 ) {
-	if lock.0 {
+	if lock.0 || locked.contains(click.entity) {
 		return;
 	}
 	let Ok(choice) = items.get(click.entity) else {
@@ -420,7 +439,8 @@ pub fn emit_menu_activate_on_enter<E: Component + Copy + Send + Sync + 'static>(
 	keyboard_nav: Res<KeyboardMenuNav>,
 	lock: Res<TextMenuInputLock>,
 	menus: Query<(Entity, &TextMenu)>,
-	items: Query<(&TextMenuItem, &E, &ChildOf)>,
+	items: Query<(Entity, &TextMenuItem, &E, &ChildOf)>,
+	locked: Query<(), With<MenuItemLocked>>,
 	child_of: Query<&ChildOf>,
 	mut commands: Commands,
 ) {
@@ -428,7 +448,10 @@ pub fn emit_menu_activate_on_enter<E: Component + Copy + Send + Sync + 'static>(
 		return;
 	}
 	for (menu_entity, menu) in &menus {
-		if let Some(choice) = selected_choice(menu_entity, menu, &items, &child_of) {
+		if let Some((item, choice)) = selected_item(menu_entity, menu, &items, &child_of) {
+			if locked.contains(item) {
+				continue;
+			}
 			commands.trigger(MenuActivate { entity: menu_entity, choice });
 		}
 	}
@@ -439,7 +462,8 @@ pub fn emit_menu_activate_on_nav<E: Component + Copy + Send + Sync + 'static>(
 	impulse: On<MenuNavImpulse>,
 	lock: Res<TextMenuInputLock>,
 	menus: Query<&TextMenu>,
-	items: Query<(&TextMenuItem, &E, &ChildOf)>,
+	items: Query<(Entity, &TextMenuItem, &E, &ChildOf)>,
+	locked: Query<(), With<MenuItemLocked>>,
 	child_of: Query<&ChildOf>,
 	mut commands: Commands,
 ) {
@@ -450,7 +474,10 @@ pub fn emit_menu_activate_on_nav<E: Component + Copy + Send + Sync + 'static>(
 	let Ok(menu) = menus.get(menu_entity) else {
 		return;
 	};
-	if let Some(choice) = selected_choice(menu_entity, menu, &items, &child_of) {
+	if let Some((item, choice)) = selected_item(menu_entity, menu, &items, &child_of) {
+		if locked.contains(item) {
+			return;
+		}
 		commands.trigger(MenuActivate { entity: menu_entity, choice });
 	}
 }
@@ -535,7 +562,7 @@ fn text_menu_for_item<'a>(
 mod tests {
 	use super::{TextColumnAlign, TextColumnAnchor, TextMenu};
 	use crate::theme::COLUMN_INSET;
-	use bevy::prelude::{AlignItems, JustifyContent, Val};
+	use bevy::prelude::*;
 	use bevy::text::Justify;
 
 	#[test]
@@ -568,5 +595,74 @@ mod tests {
 		assert_eq!(node.left, Val::Px(COLUMN_INSET));
 		assert_eq!(node.top, Val::Px(COLUMN_INSET));
 		assert_eq!(node.bottom, Val::Auto);
+	}
+
+	#[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
+	enum TestChoice {
+		#[default]
+		Go,
+	}
+
+	#[derive(Resource, Default)]
+	struct ActivateHits(u32);
+
+	fn count_activate(
+		_activate: On<super::MenuActivate<TestChoice>>,
+		mut hits: ResMut<ActivateHits>,
+	) {
+		hits.0 += 1;
+	}
+
+	fn activate_app() -> App {
+		let mut app = App::new();
+		app.init_resource::<ButtonInput<KeyCode>>()
+			.init_resource::<super::KeyboardMenuNav>()
+			.init_resource::<super::TextMenuInputLock>()
+			.init_resource::<ActivateHits>()
+			.add_observer(count_activate)
+			.add_systems(Update, super::emit_menu_activate_on_enter::<TestChoice>);
+		app
+	}
+
+	fn spawn_row(app: &mut App, locked: bool) -> Entity {
+		let menu = app.world_mut().spawn(super::TextMenu::new(1)).id();
+		let mut entity =
+			app.world_mut()
+				.spawn((super::TextMenuItem::yellow(0), TestChoice::Go, ChildOf(menu)));
+		if locked {
+			entity.insert(super::MenuItemLocked);
+		}
+		menu
+	}
+
+	#[test]
+	fn locked_row_does_not_activate_on_enter() {
+		let mut app = activate_app();
+		spawn_row(&mut app, true);
+		app.world_mut().resource_mut::<ButtonInput<KeyCode>>().press(KeyCode::Enter);
+		app.update();
+		assert_eq!(app.world().resource::<ActivateHits>().0, 0);
+	}
+
+	#[test]
+	fn unlocked_row_activates_on_enter() {
+		let mut app = activate_app();
+		spawn_row(&mut app, false);
+		app.world_mut().resource_mut::<ButtonInput<KeyCode>>().press(KeyCode::Enter);
+		app.update();
+		assert_eq!(app.world().resource::<ActivateHits>().0, 1);
+	}
+
+	#[test]
+	fn locked_row_does_not_activate_on_nav_select() {
+		let mut app = App::new();
+		app.init_resource::<super::TextMenuInputLock>()
+			.init_resource::<ActivateHits>()
+			.add_observer(count_activate)
+			.add_observer(super::emit_menu_activate_on_nav::<TestChoice>);
+		let menu = spawn_row(&mut app, true);
+		app.world_mut()
+			.trigger(maybraid_input::MenuNavImpulse::new(menu, maybraid_input::MenuNav::Select));
+		assert_eq!(app.world().resource::<ActivateHits>().0, 0);
 	}
 }

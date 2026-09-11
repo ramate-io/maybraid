@@ -1,5 +1,6 @@
 //! Cheap eligibility markers for nested refresh / cull filters.
 
+use bevy::ecs::entity_disabling::Disabled;
 use bevy::prelude::*;
 
 use crate::scene::host::{
@@ -26,6 +27,10 @@ pub struct LodNestedRefreshAllowed;
 pub struct LodNestedRefreshBlocked;
 
 /// Host currently has at least one non-current, non-culling level root.
+///
+/// Region enqueue still lowers a stale desired level on unmarked hosts, then
+/// walks roots when the level just dropped or this marker is present. Mob
+/// full-scan cull filters `With<Self>` because that path does not lower levels.
 #[derive(Debug, Clone, Copy, Default, Component)]
 pub struct LodHostHasCullableRoots;
 
@@ -56,12 +61,12 @@ pub(crate) struct LodNestedRefreshPending {
 fn set_nested_refresh_gate(
 	commands: &mut Commands,
 	entity: Entity,
-	child_of: &Query<&ChildOf>,
-	host_levels: &Query<&LodSceneLevel, With<LodSceneHost>>,
-	level_roots: &Query<&LodLevelRoot>,
-	children_q: &Query<&Children>,
-	level_roots_bags: &Query<(), With<LodLevelRoots>>,
-	visibilities: &Query<&Visibility>,
+	child_of: &Query<&ChildOf, Allow<Disabled>>,
+	host_levels: &Query<&LodSceneLevel, (With<LodSceneHost>, Allow<Disabled>)>,
+	level_roots: &Query<&LodLevelRoot, Allow<Disabled>>,
+	children_q: &Query<&Children, Allow<Disabled>>,
+	level_roots_bags: &Query<(), (With<LodLevelRoots>, Allow<Disabled>)>,
+	visibilities: &Query<(&Visibility, Has<Disabled>), Allow<Disabled>>,
 	allowed: &Query<(), With<LodNestedRefreshAllowed>>,
 	blocked: &Query<(), With<LodNestedRefreshBlocked>>,
 ) {
@@ -96,8 +101,8 @@ fn set_nested_refresh_gate(
 /// Visit one hierarchy node: enqueue child hosts for stamp, continue BFS into children.
 fn expand_one(
 	node: Entity,
-	children_q: &Query<&Children>,
-	hosts: &Query<(), With<LodSceneHost>>,
+	children_q: &Query<&Children, Allow<Disabled>>,
+	hosts: &Query<(), (With<LodSceneHost>, Allow<Disabled>)>,
 	stamp: &mut Vec<Entity>,
 	expand: &mut Vec<Entity>,
 ) {
@@ -127,14 +132,17 @@ pub fn sync_nested_refresh_allowed(
 		(With<LodSceneHost>, Without<LodNestedRefreshAllowed>, Without<LodNestedRefreshBlocked>),
 	>,
 	changed_levels: Query<Entity, (With<LodSceneHost>, Changed<LodSceneLevel>)>,
-	changed_root_vis: Query<(Entity, &ChildOf), (With<LodLevelRoot>, Changed<Visibility>)>,
-	children_q: Query<&Children>,
-	hosts: Query<(), With<LodSceneHost>>,
-	child_of: Query<&ChildOf>,
-	host_levels: Query<&LodSceneLevel, With<LodSceneHost>>,
-	level_roots: Query<&LodLevelRoot>,
-	level_roots_bags: Query<(), With<LodLevelRoots>>,
-	visibilities: Query<&Visibility>,
+	changed_root_vis: Query<
+		(Entity, &ChildOf),
+		(With<LodLevelRoot>, Or<(Changed<Visibility>, Added<Disabled>)>, Allow<Disabled>),
+	>,
+	children_q: Query<&Children, Allow<Disabled>>,
+	hosts: Query<(), (With<LodSceneHost>, Allow<Disabled>)>,
+	child_of: Query<&ChildOf, Allow<Disabled>>,
+	host_levels: Query<&LodSceneLevel, (With<LodSceneHost>, Allow<Disabled>)>,
+	level_roots: Query<&LodLevelRoot, Allow<Disabled>>,
+	level_roots_bags: Query<(), (With<LodLevelRoots>, Allow<Disabled>)>,
+	visibilities: Query<(&Visibility, Has<Disabled>), Allow<Disabled>>,
 	allowed: Query<(), With<LodNestedRefreshAllowed>>,
 	blocked: Query<(), With<LodNestedRefreshBlocked>>,
 ) {
@@ -297,6 +305,7 @@ impl Plugin for LodCullMarkerPlugin {
 				(
 					sync_nested_refresh_allowed
 						.after(LodRefreshSystems::UpdateLevels)
+						.after(LodRefreshSystems::SyncRoots)
 						.before(LodRefreshSystems::Cull),
 					sync_cullable_roots_marker
 						.after(LodRefreshSystems::SyncRoots)

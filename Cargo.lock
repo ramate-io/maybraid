@@ -2252,6 +2252,7 @@ dependencies = [
  "gimme-gen",
  "lod",
  "lod-avian",
+ "lod-gimme",
  "lod-lazy-refs",
  "procedural-common",
  "scene-ref",
@@ -3390,6 +3391,7 @@ dependencies = [
  "hiding-intelligence",
  "lod",
  "lod-avian",
+ "lod-gimme",
  "material-ref",
  "maybraid-character-controller",
  "maybraid-input",
@@ -4509,6 +4511,7 @@ dependencies = [
  "avian3d",
  "bevy",
  "lod",
+ "lod-gimme",
 ]
 
 [[package]]
@@ -4525,6 +4528,15 @@ dependencies = [
  "anyhow",
  "bevy",
  "lod-cascade",
+]
+
+[[package]]
+name = "lod-gimme"
+version = "0.0.1"
+dependencies = [
+ "bevy",
+ "gimme-core",
+ "lod",
 ]
 
 [[package]]
@@ -4616,6 +4628,7 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "bevy",
+ "clap",
  "crozon-character-items",
  "crozon-character-model-user",
  "crozon-character-persist",
@@ -4733,6 +4746,7 @@ dependencies = [
  "clap",
  "combat-hud",
  "crozon-character-items",
+ "crozon-character-persist",
  "crozon-character-ragdoll",
  "crozon-characters",
  "crozon-inventory-user",
@@ -4749,6 +4763,7 @@ dependencies = [
  "intelligence-lod",
  "lod",
  "lod-avian",
+ "lod-gimme",
  "log",
  "material-ref",
  "maybraid-character-controller",
@@ -4767,11 +4782,15 @@ dependencies = [
  "poi-intelligence",
  "procedural-common",
  "richmond-building-physics",
+ "richmond-building-shaders",
  "richmond-development-models",
  "richmond-developments-on-terrain-playground",
  "richmond-urbanization",
  "routing-intelligence",
+ "serde",
+ "serde_json",
  "spotting-intelligence",
+ "tempfile",
  "tether-intelligence",
  "threat-intelligence",
  "threat-intelligence-damage",
@@ -5961,7 +5980,6 @@ dependencies = [
  "avian3d",
  "bevy",
  "crozon-characters",
- "lod",
  "lod-avian",
  "maybraid-character-controller",
 ]
@@ -6485,6 +6503,7 @@ dependencies = [
  "game-commands",
  "lod",
  "lod-avian",
+ "lod-gimme",
  "log",
  "procedural-common",
  "richmond-building-components",
@@ -6505,6 +6524,7 @@ dependencies = [
  "jersey-terrain-stamps",
  "lod",
  "lod-avian",
+ "lod-gimme",
  "lod-lazy-refs",
  "marazion-watersheds",
  "material-ref",

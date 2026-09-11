@@ -177,7 +177,7 @@ pub fn app_spotlight_levels() -> App {
 	app.add_plugins(MinimalPlugins)
 		.insert_resource(Spotlight::new(200.0))
 		.add_plugins(LodSceneRefreshRegionPlugin::<Spotlight, With<LodViewer>, SpotChan>::default())
-		.add_plugins(LodSceneRefreshLevelsFillPlugin::<ScanHostIndex, With<LodViewer>>::default())
+		.add_plugins(LodSceneRefreshLevelsFillPlugin::<ScanHostIndex>::default())
 		.add_plugins(LodSceneRefreshLevelsPlugin::<Probe>::default())
 		.init_resource::<NewRegions<SpotChan>>()
 		.add_systems(Update, capture_regions::<SpotChan>.after(LodRefreshSystems::ProduceRegions));
@@ -192,7 +192,7 @@ pub fn app_dual_channel_levels() -> App {
 		.insert_resource(Bullseye::new(50.0, 500.0))
 		.add_plugins(LodSceneRefreshRegionPlugin::<Spotlight, With<LodViewer>, SpotChan>::default())
 		.add_plugins(LodSceneRefreshRegionPlugin::<Bullseye, With<LodViewer>, BullChan>::default())
-		.add_plugins(LodSceneRefreshLevelsFillPlugin::<ScanHostIndex, With<LodViewer>>::default())
+		.add_plugins(LodSceneRefreshLevelsFillPlugin::<ScanHostIndex>::default())
 		.add_plugins(LodSceneRefreshLevelsPlugin::<Probe>::default())
 		.init_resource::<NewRegions<SpotChan>>()
 		.init_resource::<NewRegions<BullChan>>()

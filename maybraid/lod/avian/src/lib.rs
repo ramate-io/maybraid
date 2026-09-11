@@ -1,42 +1,33 @@
-//! Avian-backed region indexes for LOD generate / present / scene refresh.
+//! Avian physics layers for Maybraid LOD / terrain / motion.
 //!
-//! Query volumes are stamped by layer-specific marshallers
-//! ([`AvianLodGenerateBoundsMarshaller`], [`AvianLodPresentBoundsMarshaller`],
-//! [`AvianLodSceneBoundsMarshaller`]) so each spatial query can mask to one
-//! [`PhysicsInteractionLayer`]. Hosts must still carry an Avian [`Collider`]
-//! on the **host** entity (no `RigidBody` required — query-only).
+//! Scene-host refresh and cull live in [`lod-gimme`](lod_gimme). Call sites use
+//! `gimme_host!` (`GimmeLodSceneRefreshPlugin` / `GimmeLodSceneCullPlugin`).
+//! This crate still re-exports those plugins as [`AvianLodSceneRefreshPlugin`] /
+//! [`AvianLodSceneCullPlugin`] for the unused `avian_host!` wrappers.
 //!
-//! Scene hosts use [`PhysicsInteractionLayer::Host`]. Generated and presented
-//! volumes use [`PhysicsInteractionLayer::Generate`] and
-//! [`PhysicsInteractionLayer::Present`]. All three are query-only and do not
-//! enter narrowphase against terrain / buildings ([`layers`]).
+//! Generate and present id lookup stays on typed [`lod::gen::SpatialIndex`]
+//! resources.
 
 mod layers;
 
 pub use layers::{AvianLodHostVolume, AvianLodQueryVolume, PhysicsInteractionLayer};
-
-use std::marker::PhantomData;
+pub use lod_gimme::{
+	GimmeLodSceneCullPlugin as AvianLodSceneCullPlugin,
+	GimmeLodSceneRefreshPlugin as AvianLodSceneRefreshPlugin,
+};
 
 use avian3d::prelude::{Collider, SpatialQuery, SpatialQueryFilter};
-use bevy::ecs::query::QueryFilter;
 use bevy::ecs::system::SystemParam;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use lod::gen::SemanticLodScene;
-use lod::{
-	LodSceneHost, LodSceneHostIndex, LodSceneRefreshPlugin, LodSceneRegionIndex, LodViewer,
-	PatchSceneBounds,
-};
+use lod::{LodSceneHost, LodSceneHostIndex, LodSceneRegionIndex};
 
-/// [`LodSceneBoundsMarshaller`] for generated-id volumes ([`PhysicsInteractionLayer::Generate`]).
-#[derive(Debug, Clone, Copy, Default)]
-pub struct AvianLodGenerateBoundsMarshaller;
-
-/// [`LodSceneBoundsMarshaller`] for presented-id volumes ([`PhysicsInteractionLayer::Present`]).
-#[derive(Debug, Clone, Copy, Default)]
-pub struct AvianLodPresentBoundsMarshaller;
-
-/// [`LodSceneBoundsMarshaller`] for scene-host volumes ([`PhysicsInteractionLayer::Host`]).
+/// [`lod::LodSceneBoundsMarshaller`] for scene-host volumes ([`PhysicsInteractionLayer::Host`]).
+///
+/// Refresh plugins do not install this marshaller; they use
+/// [`lod_gimme::GimmeLodHostMarshaller`]. Kept so an Avian host query remains
+/// possible without reintroducing Generate / Present volumes.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct AvianLodSceneBoundsMarshaller;
 
@@ -57,34 +48,10 @@ fn region_hits(
 	)
 }
 
-/// Untyped Avian lookup of generated-id volumes.
-#[derive(SystemParam)]
-pub struct AvianLodGenerateIndex<'w, 's> {
-	spatial: SpatialQuery<'w, 's>,
-}
-
-impl AvianLodGenerateIndex<'_, '_> {
-	pub fn entities_in_region(&self, region: Aabb3d) -> Vec<Entity> {
-		region_hits(&self.spatial, region, PhysicsInteractionLayer::Generate)
-	}
-}
-
-/// Untyped Avian lookup of presented-id volumes.
-#[derive(SystemParam)]
-pub struct AvianLodPresentIndex<'w, 's> {
-	spatial: SpatialQuery<'w, 's>,
-}
-
-impl AvianLodPresentIndex<'_, '_> {
-	pub fn entities_in_region(&self, region: Aabb3d) -> Vec<Entity> {
-		region_hits(&self.spatial, region, PhysicsInteractionLayer::Present)
-	}
-}
-
-/// Untyped Avian host lookup for the shared produce cache.
+/// Untyped Avian host lookup.
 ///
-/// Hits are already restricted to [`PhysicsInteractionLayer::Host`], so this
-/// does not scan generate / present / terrain / mover colliders.
+/// Hits are already restricted to [`PhysicsInteractionLayer::Host`]. Refresh
+/// and cull plugins use [`lod_gimme::GimmeLodSceneHostIndex`] instead.
 #[derive(SystemParam)]
 pub struct AvianLodSceneHostIndex<'w, 's> {
 	spatial: SpatialQuery<'w, 's>,
@@ -115,108 +82,5 @@ impl<T: Component + SemanticLodScene + 'static> LodSceneRegionIndex<T>
 		region_hits(&self.spatial, region, PhysicsInteractionLayer::Host)
 			.into_iter()
 			.filter_map(|entity| self.hosts.get(entity).ok().map(|scene| (entity, scene)))
-	}
-}
-
-fn ensure_avian_host_bounds<T: Component + SemanticLodScene + 'static>(app: &mut App) {
-	if !app.is_plugin_added::<PatchSceneBounds<T, AvianLodSceneBoundsMarshaller>>() {
-		app.add_plugins(PatchSceneBounds::<T, AvianLodSceneBoundsMarshaller>::default());
-	}
-}
-
-/// [`LodSceneRefreshPlugin`] with [`AvianLodSceneHostIndex`] + host volume patch.
-///
-/// Fill is once per (`I`, `F`); emit is once per `T`. Channel `M` is accepted so
-/// existing dual bullseye/spotlight plugin adds stay valid.
-///
-/// Use [`Self::without_full_scan_cull`] with [`AvianLodSceneCullPlugin`] for
-/// OpenLattice (or other) region-scoped cull enqueue.
-pub struct AvianLodSceneRefreshPlugin<T, M, F = With<LodViewer>>
-where
-	T: Component + SemanticLodScene + 'static,
-	M: Send + Sync + 'static,
-	F: QueryFilter + 'static,
-{
-	full_scan_cull: bool,
-	_marker: PhantomData<fn() -> (T, M, F)>,
-}
-
-impl<T, M, F> Default for AvianLodSceneRefreshPlugin<T, M, F>
-where
-	T: Component + SemanticLodScene + 'static,
-	M: Send + Sync + 'static,
-	F: QueryFilter + 'static,
-{
-	fn default() -> Self {
-		Self { full_scan_cull: true, _marker: PhantomData }
-	}
-}
-
-impl<T, M, F> AvianLodSceneRefreshPlugin<T, M, F>
-where
-	T: Component + SemanticLodScene + 'static,
-	M: Send + Sync + 'static,
-	F: QueryFilter + 'static,
-{
-	pub fn without_full_scan_cull() -> Self {
-		Self { full_scan_cull: false, _marker: PhantomData }
-	}
-}
-
-impl<T, M, F> Plugin for AvianLodSceneRefreshPlugin<T, M, F>
-where
-	T: Component + SemanticLodScene + 'static,
-	M: Send + Sync + 'static,
-	F: QueryFilter + 'static,
-{
-	fn build(&self, app: &mut App) {
-		ensure_avian_host_bounds::<T>(app);
-		if self.full_scan_cull {
-			app.add_plugins(
-				LodSceneRefreshPlugin::<T, M, AvianLodSceneHostIndex<'_, '_>, F>::default(),
-			);
-		} else {
-			app.add_plugins(LodSceneRefreshPlugin::<
-				T,
-				M,
-				AvianLodSceneHostIndex<'_, '_>,
-				F,
-			>::without_full_scan_cull());
-		}
-	}
-}
-
-/// Region-scoped cull enqueue for host `T` on cull channel `M` (Avian index).
-pub struct AvianLodSceneCullPlugin<T, M, F = With<LodViewer>>
-where
-	T: Component + SemanticLodScene + 'static,
-	M: Send + Sync + 'static,
-	F: QueryFilter + 'static,
-{
-	_marker: PhantomData<fn() -> (T, M, F)>,
-}
-
-impl<T, M, F> Default for AvianLodSceneCullPlugin<T, M, F>
-where
-	T: Component + SemanticLodScene + 'static,
-	M: Send + Sync + 'static,
-	F: QueryFilter + 'static,
-{
-	fn default() -> Self {
-		Self { _marker: PhantomData }
-	}
-}
-
-impl<T, M, F> Plugin for AvianLodSceneCullPlugin<T, M, F>
-where
-	T: Component + SemanticLodScene + 'static,
-	M: Send + Sync + 'static,
-	F: QueryFilter + 'static,
-{
-	fn build(&self, app: &mut App) {
-		ensure_avian_host_bounds::<T>(app);
-		app.add_plugins(
-			lod::LodSceneRegionCullPlugin::<AvianLodSceneHostIndex<'_, '_>, M, T, F>::default(),
-		);
 	}
 }

@@ -1,7 +1,7 @@
 //! Character id and on-disk save directories.
 //!
 //! Default root is `<repo>/.maybraid/saves`, derived from this crate's
-//! `CARGO_MANIFEST_DIR`. Character appearance and inventory files live in
+//! `CARGO_MANIFEST_DIR`. Character appearance, inventory, and position files live in
 //! sibling folders keyed by the same [`CharacterId`].
 
 use bevy::prelude::*;
@@ -14,6 +14,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 const CHARACTERS_DIR: &str = "characters";
 const INVENTORIES_DIR: &str = "inventories";
+const POSITIONS_DIR: &str = "positions";
 const ACTIVE_FILE: &str = "active.json";
 
 static ID_COUNTER: AtomicU64 = AtomicU64::new(1);
@@ -65,7 +66,7 @@ impl<'de> Deserialize<'de> for CharacterId {
 	}
 }
 
-/// Root of `characters/` and `inventories/`.
+/// Root of `characters/`, `inventories/`, and `positions/`.
 #[derive(Resource, Clone, Debug)]
 pub struct SaveRoot {
 	pub path: PathBuf,
@@ -97,6 +98,14 @@ impl SaveRoot {
 		self.inventories_dir().join(format!("{}.json", id.to_hex()))
 	}
 
+	pub fn positions_dir(&self) -> PathBuf {
+		self.path.join(POSITIONS_DIR)
+	}
+
+	pub fn position_path(&self, id: CharacterId) -> PathBuf {
+		self.positions_dir().join(format!("{}.json", id.to_hex()))
+	}
+
 	pub fn active_path(&self) -> PathBuf {
 		self.path.join(ACTIVE_FILE)
 	}
@@ -104,6 +113,7 @@ impl SaveRoot {
 	pub fn ensure_dirs(&self) -> io::Result<()> {
 		fs::create_dir_all(self.characters_dir())?;
 		fs::create_dir_all(self.inventories_dir())?;
+		fs::create_dir_all(self.positions_dir())?;
 		Ok(())
 	}
 
@@ -132,10 +142,11 @@ impl SaveRoot {
 		Ok(ids)
 	}
 
-	/// Removes both the appearance and inventory files when present.
+	/// Removes appearance, inventory, and position files when present.
 	pub fn delete(&self, id: CharacterId) -> io::Result<()> {
 		remove_if_exists(&self.character_path(id))?;
 		remove_if_exists(&self.inventory_path(id))?;
+		remove_if_exists(&self.position_path(id))?;
 		Ok(())
 	}
 }
@@ -196,11 +207,13 @@ mod tests {
 		let id = CharacterId(1);
 		fs::write(root.character_path(id), "{}").expect("write");
 		fs::write(root.inventory_path(id), "{}").expect("write");
+		fs::write(root.position_path(id), "{}").expect("write");
 		assert_eq!(root.list_ids().expect("list"), vec![id]);
 		root.delete(id).expect("delete");
 		assert!(root.list_ids().expect("list").is_empty());
 		assert!(!root.character_path(id).exists());
 		assert!(!root.inventory_path(id).exists());
+		assert!(!root.position_path(id).exists());
 	}
 
 	#[test]

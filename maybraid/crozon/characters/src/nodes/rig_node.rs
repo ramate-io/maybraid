@@ -1,7 +1,7 @@
 //! Fine-phase armature [`lod::LodScene`] host.
 
 use bevy::math::bounding::Aabb3d;
-use bevy::prelude::{Component, Vec3};
+use bevy::prelude::{Component, Vec3, Visibility};
 use bevy::scene::prelude::{bsn, template_value, Scene};
 use crozon_rigs::ResolvedRigPose;
 use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
@@ -106,6 +106,54 @@ impl RigNode {
 		// band — level content is only the GLB / mesh scene.
 		self.scene.clone().scene()
 	}
+
+	/// Typed rig member without [`lod::LodSceneHost`] scaffolding.
+	///
+	/// Runtime world/mob visuals spawn this. Playground [`LodScene::host`] still
+	/// wraps [`Self::host_contents`] in a pending host + level root.
+	pub fn assembly_contents(&self) -> impl Scene + 'static {
+		self.member_contents(motion_policy(LodSceneLevel::High), false)
+	}
+
+	/// [`Self::assembly_contents`] plus the GLB [`SceneRef`] on the same entity.
+	pub fn assembly_scene(&self) -> impl Scene + 'static {
+		(self.assembly_contents(), self.scene.clone().scene(), bsn! { Visibility::Hidden })
+	}
+
+	fn member_contents(
+		&self,
+		policy: crozon_character_motion::MotionPolicy,
+		lod_host: bool,
+	) -> impl Scene + 'static {
+		let node = self.clone();
+		let transform = node.normalization.transform();
+		let rig = CharacterRig { role: node.id.role(), skeleton: node.skeleton };
+		let pose = ActiveRigPose { pose: node.pose.clone() };
+		let socket = node.socket.map(SocketRefRoot);
+		let body = node.id == RigId::Body;
+		let anim = body.then_some(AnimRefRoot::default());
+		let bones = body.then_some(()).and(policy.animate_bones());
+		let effects = body.then_some(()).and(policy.animate_effects());
+		let lod_rig = lod_host.then_some(LodCharacterRig);
+		let rig_root = RigRoot::new(node.id.into()).with_landmarks(node.skeleton.landmark_bones());
+		(
+			bsn! {
+				template_value(node)
+				template_value(transform)
+				template_value(rig)
+				AssemblyHost
+				template_value(rig_root)
+				template_value(BoneMap::default())
+				template_value(pose)
+				template_value(RigBindScales::default())
+			},
+			maybe_component(lod_rig),
+			maybe_component(socket),
+			maybe_component(anim),
+			maybe_component(bones),
+			maybe_component(effects),
+		)
+	}
 }
 
 impl LodScene for RigNode {
@@ -137,35 +185,6 @@ impl LodScene for RigNode {
 	where
 		Self: Component + Clone + Default + Unpin + Sized,
 	{
-		let _ = lod_ref;
-		let level = self.scene_lod_level(lod_ref);
-		let node = self.clone();
-		let transform = node.normalization.transform();
-		let rig = CharacterRig { role: node.id.role(), skeleton: node.skeleton };
-		let pose = ActiveRigPose { pose: node.pose.clone() };
-		let socket = node.socket.map(SocketRefRoot);
-		let body = node.id == RigId::Body;
-		let anim = body.then_some(AnimRefRoot::default());
-		let policy = motion_policy(level);
-		let bones = body.then_some(()).and(policy.animate_bones());
-		let effects = body.then_some(()).and(policy.animate_effects());
-		let rig_root = RigRoot::new(node.id.into()).with_landmarks(node.skeleton.landmark_bones());
-		(
-			bsn! {
-				template_value(node)
-				template_value(transform)
-				template_value(rig)
-				LodCharacterRig
-				AssemblyHost
-				template_value(rig_root)
-				template_value(BoneMap::default())
-				template_value(pose)
-				template_value(RigBindScales::default())
-			},
-			maybe_component(socket),
-			maybe_component(anim),
-			maybe_component(bones),
-			maybe_component(effects),
-		)
+		self.member_contents(motion_policy(self.scene_lod_level(lod_ref)), true)
 	}
 }
