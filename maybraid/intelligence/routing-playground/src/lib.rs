@@ -31,7 +31,7 @@ use durham_terrain_models::{
 	AvianTerrainIndex, BaseTerrainNoise, ComposedWater, DurhamTerrainModelsPlugin, Terrain,
 	TerrainCellLayout, TerrainConfig, TerrainEntryStore, TerrainMeshBuilder, TerrainMeshLodBand,
 	TerrainPresentationAssets, TerrainRegionPresenter, TerrainStoreView, TerrainTrimeshCollider,
-	Water, WaterPresentationAssets, WaterRegionPresenter, WaterStoreView,
+	Water, WaterPresentationAssets,
 };
 use game_commands::command::{
 	capture_command_line_input, GameCommandPlugin, TextEntryBlocked, TextEntryFocus,

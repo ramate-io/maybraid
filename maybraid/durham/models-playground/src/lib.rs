@@ -30,7 +30,7 @@ use durham_terrain_models::{
 	JerseyStampConfigs, MarazionWatershedConfigs, OuterCellRing, Terrain, TerrainCellLayout,
 	TerrainConfig, TerrainEntryStore, TerrainMeshBuilder, TerrainMeshLodBand,
 	TerrainPresentationAssets, TerrainRegionPresenter, TerrainStoreView, Water,
-	WaterPresentationAssets, WaterRegionPresenter, WaterStoreView, TERRAIN_CELL_SIZE,
+	WaterPresentationAssets, TERRAIN_CELL_SIZE,
 };
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use game_commands::ui::{GameCommandDrawerConfig, GameCommandStatusText};

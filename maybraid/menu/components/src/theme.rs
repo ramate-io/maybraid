@@ -31,6 +31,12 @@ pub const TEXT_YELLOW_HOVER: Color = Color::srgb(0.82, 0.68, 0.12);
 /// Description strip: same yellow, lower alpha. Read-only stats use this too.
 pub const TEXT_YELLOW_FAINT: Color = Color::srgba(1.0, 0.86, 0.22, 0.42);
 
+/// Focused locked-row yellow: still dampened, a bit stronger than idle faint.
+pub const TEXT_YELLOW_FAINT_FOCUS: Color = Color::srgba(1.0, 0.86, 0.22, 0.68);
+
+/// Lime-adjacent violet for “Coming Soon” objective badges.
+pub const TEXT_PURPLE: Color = Color::srgb(0.72, 0.48, 0.92);
+
 /// Positive modifier (`+6`).
 pub const TEXT_LIME: Color = Color::srgb(0.55, 0.92, 0.38);
 
@@ -39,6 +45,25 @@ pub const TEXT_SALMON: Color = Color::srgb(0.95, 0.45, 0.42);
 
 /// Derived formula (pace equation).
 pub const TEXT_LIGHT_BLUE: Color = Color::srgb(0.62, 0.86, 1.0);
+
+/// Badge beside a text-cursor title. Smaller than the adjacent [`ITEM_FONT_SIZE`]
+/// line so the tag reads as a chip, not a second title.
+pub const OBJECTIVE_MARKER_FONT_SIZE: f32 = 24.0;
+
+/// Horizontal padding inside an objective tag.
+pub const OBJECTIVE_MARKER_PAD_X: f32 = 8.0;
+
+/// Vertical padding inside an objective tag.
+pub const OBJECTIVE_MARKER_PAD_Y: f32 = 1.0;
+
+/// Stroke on an objective tag.
+pub const OBJECTIVE_MARKER_BORDER: f32 = 1.5;
+
+/// Corner radius on an objective tag.
+pub const OBJECTIVE_MARKER_RADIUS: f32 = 8.0;
+
+/// Optical drop so the chip sits on the title’s ink, not the top of its line box.
+pub const OBJECTIVE_MARKER_OFFSET_Y: f32 = 3.0;
 
 /// Description line under the menu column.
 pub const DESCRIPTION_FONT_SIZE: f32 = 22.0;
