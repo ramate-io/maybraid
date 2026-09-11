@@ -124,6 +124,7 @@ pub fn spawn_grid_catalog_tile(
 	let face = tile_face(selected, muted);
 	let mark = if muted { TEXT_YELLOW_FAINT } else { TEXT_YELLOW };
 	let pictured = thumbnail.is_some() || viewport.is_some();
+	const VIEWPORT_PX: f32 = 160.0;
 	let mut tile = parent.spawn((
 		Button,
 		HoverTile { equipped: selected, preserve_fill: false },
@@ -139,10 +140,28 @@ pub fn spawn_grid_catalog_tile(
 		button
 			.spawn((
 				Node {
-					width: if pictured { Val::Percent(100.0) } else { Val::Px(54.0) },
-					height: if pictured { Val::Auto } else { Val::Px(54.0) },
+					width: if viewport.is_some() {
+						Val::Px(VIEWPORT_PX)
+					} else if pictured {
+						Val::Percent(100.0)
+					} else {
+						Val::Px(54.0)
+					},
+					height: if viewport.is_some() {
+						Val::Px(VIEWPORT_PX)
+					} else if pictured {
+						Val::Auto
+					} else {
+						Val::Px(54.0)
+					},
 					aspect_ratio: pictured.then_some(1.0),
-					min_height: if pictured { Val::Px(120.0) } else { Val::Px(54.0) },
+					min_height: if viewport.is_some() {
+						Val::Px(VIEWPORT_PX)
+					} else if pictured {
+						Val::Px(120.0)
+					} else {
+						Val::Px(54.0)
+					},
 					position_type: PositionType::Relative,
 					justify_content: JustifyContent::Center,
 					align_items: AlignItems::Center,
@@ -189,9 +208,8 @@ pub fn spawn_grid_catalog_tile(
 					slot.spawn((
 						ViewportNode::new(camera),
 						Node {
-							width: Val::Percent(100.0),
-							height: Val::Percent(100.0),
-							aspect_ratio: Some(1.0),
+							width: Val::Px(VIEWPORT_PX),
+							height: Val::Px(VIEWPORT_PX),
 							..default()
 						},
 						Pickable::IGNORE,

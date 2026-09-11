@@ -1,16 +1,16 @@
-//! Off-screen catalog render of an authored map. Same tiles and shade as play.
+//! Menu bind of the live skill-map view: same camera, tiles, and [`ViewportNode`].
 
-use bevy::asset::RenderAssetUsages;
-use bevy::camera::{ClearColorConfig, RenderTarget, ScalingMode};
+use bevy::camera::ScalingMode;
 use bevy::prelude::*;
-use bevy::render::render_resource::{TextureDimension, TextureFormat, TextureUsages};
+use bevy::ui::widget::ViewportNode;
 use crozon_character_items::SkillMapSpec;
 
-use crate::map::{authored_map, render_layer, MapExtents, SkillKind, SkillMapId};
+use crate::map::{authored_map, MapExtents, SkillKind, SkillMapId};
 use crate::tile_material::SkillMapTileAssets;
-use crate::tiles::spawn_map_tiles_at;
+use crate::user::SkillMapMember;
+use crate::viewport::spawn_skill_map_view;
 
-/// Square starting target; [`bevy::ui::widget::ViewportNode`] resizes it to the cell.
+/// Square catalog cell. [`ViewportNode`] resizes the target to this.
 pub const CATALOG_PREVIEW_PX: u32 = 160;
 /// First [`SkillMapId`] reserved for menu previews (live play uses `0`).
 pub const MENU_PREVIEW_ID_BASE: u32 = 16;
@@ -20,21 +20,36 @@ pub struct SkillMapMenuPreview {
 	pub spec: SkillMapSpec,
 }
 
-/// Camera + image a catalog [`ViewportNode`] can bind.
+/// Root HUD used while a starter skill map is revealed.
+#[derive(Component, Debug, Default, Clone, Copy)]
+pub struct SkillMapSpinRevealHud;
+
+#[derive(Component, Debug, Default, Clone, Copy)]
+pub struct SkillMapSpinRevealHudView;
+
+/// Camera + image a catalog or reveal [`ViewportNode`] can bind.
 #[derive(Clone, Debug)]
 pub struct SkillMapCatalogPreview {
 	pub host: Entity,
 	pub camera: Entity,
 	pub image: Handle<Image>,
+	pub spec: SkillMapSpec,
 }
 
-/// World units visible along one catalog edge. Matches [`MapExtents`] (256).
 fn catalog_world_span() -> f32 {
 	let extents = MapExtents::default();
 	extents.tile_size().x * extents.steps as f32
 }
 
-/// Camera + tiles into an image. Caller owns the handle and camera for UI.
+fn catalog_projection() -> OrthographicProjection {
+	let mut projection = OrthographicProjection::default_2d();
+	let span = catalog_world_span();
+	projection.scaling_mode = ScalingMode::Fixed { width: span, height: span };
+	projection.scale = 1.0;
+	projection
+}
+
+/// Same [`spawn_skill_map_view`] path as play. Caller attaches [`ViewportNode`].
 pub fn spawn_skill_map_catalog_preview(
 	commands: &mut Commands,
 	images: &mut Assets<Image>,
@@ -45,47 +60,55 @@ pub fn spawn_skill_map_catalog_preview(
 	let id = SkillMapId(MENU_PREVIEW_ID_BASE + slot);
 	let mut authored = authored_map(SkillKind::from_item(spec.kind), spec.seed);
 	authored.id = id;
-	let layer = render_layer(id);
 	let host = commands
 		.spawn((
 			Name::new(format!("skill-map-catalog-{}", spec.kind.label())),
 			SkillMapMenuPreview { spec },
 		))
 		.id();
-
-	let mut image = Image::new_uninit(
-		default(),
-		TextureDimension::D2,
-		TextureFormat::Bgra8UnormSrgb,
-		RenderAssetUsages::all(),
+	let member = SkillMapMember { user: host, session: host };
+	let view = spawn_skill_map_view(
+		commands,
+		images,
+		tiles,
+		authored,
+		member,
+		-40 - slot as isize,
+		catalog_projection(),
+		(),
 	);
-	image.texture_descriptor.usage =
-		TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST | TextureUsages::RENDER_ATTACHMENT;
-	let image_handle = images.add(image);
+	SkillMapCatalogPreview { host, camera: view.camera, image: view.image, spec }
+}
 
-	let mut projection = OrthographicProjection::default_2d();
-	let span = catalog_world_span();
-	projection.scaling_mode = ScalingMode::Fixed { width: span, height: span };
-	projection.scale = 1.0;
-	let camera = commands
+/// Centered root [`ViewportNode`], same attach as the live corner map.
+pub fn spawn_skill_map_spin_reveal_hud(commands: &mut Commands, camera: Entity, size: f32) -> Entity {
+	commands
 		.spawn((
-			Name::new(format!("skill-map-catalog-camera-{}", spec.kind.label())),
-			Camera2d,
-			Camera {
-				order: -40 - slot as isize,
-				clear_color: ClearColorConfig::Custom(authored.kind.viewport_clear()),
+			Name::new("skill-map-spin-reveal-hud"),
+			SkillMapSpinRevealHud,
+			Node {
+				position_type: PositionType::Absolute,
+				left: Val::Px(0.0),
+				right: Val::Px(0.0),
+				top: Val::Px(0.0),
+				bottom: Val::Px(0.0),
+				width: Val::Percent(100.0),
+				height: Val::Percent(100.0),
+				justify_content: JustifyContent::Center,
+				align_items: AlignItems::Center,
 				..default()
 			},
-			RenderTarget::Image(image_handle.clone().into()),
-			Projection::Orthographic(projection),
-			Transform::from_xyz(0.0, 0.0, 1.0),
-			id,
-			layer,
-			ChildOf(host),
+			Pickable::IGNORE,
 		))
-		.id();
-	spawn_map_tiles_at(commands, authored, None, tiles, Vec2::ZERO, Some(host));
-	SkillMapCatalogPreview { host, camera, image: image_handle }
+		.with_children(|center| {
+			center.spawn((
+				SkillMapSpinRevealHudView,
+				ViewportNode::new(camera),
+				Node { width: Val::Px(size), height: Val::Px(size), ..default() },
+				Pickable::IGNORE,
+			));
+		})
+		.id()
 }
 
 #[cfg(test)]

@@ -2,10 +2,10 @@
 
 use std::collections::HashMap;
 
-use bevy::camera::visibility::RenderLayers;
 use bevy::prelude::*;
+use bevy::ui::widget::ViewportNode;
 use character_ui_menu::{AssetThumbnailDisplay, MenuComponent};
-use crozon_character_items::Inventory;
+use crozon_character_items::{Inventory, InventoryItem};
 use crozon_character_ui_menus::{CharacterMenu, MenuEvent};
 use maybraid_character_ui_menu_renderer::{
 	find_overlay_node, overlay_closes_on_pick, render_overlay_body, spawn_overlay_shell,
@@ -15,16 +15,19 @@ use maybraid_character_ui_menu_renderer::{
 };
 use maybraid_menu_controller::MenuController;
 use maybraid_skill_map::{
-	spawn_skill_map_catalog_preview, SkillMapCatalogPreview, SkillMapId, SkillMapMenuPreview,
-	SkillMapTileAssets, SkillMapTileMaterialPlugin,
+	spawn_skill_map_catalog_preview, spawn_skill_map_spin_reveal_hud, SkillMapCatalogPreview,
+	SkillMapMember, SkillMapSpinRevealHud, SkillMapSpinRevealHudView, SkillMapTileAssets,
+	SkillMapTileMaterialPlugin,
 };
 use menu_components::theme::{CORNER_BOTTOM, CORNER_INSET};
 use menu_components::{
 	spawn_corner_action, spawn_scroll_pane, ActiveOverlayKey, HudFonts, HudMenu, HudMenuItem,
 	HudOverlayMenu, MenuActivate, MenuFocus, ScreenBack, ShortTextChange, PANEL_ROW_GAP,
-	TEXT_YELLOW, TEXT_YELLOW_FAINT,
+	SPIN_REVEAL_SLOT_SIZE, TEXT_YELLOW, TEXT_YELLOW_FAINT,
 };
-use menu_screens::{take_menu_show_request, MenuScreen};
+use menu_screens::{
+	take_menu_show_request, MenuScreen, SpinRevealCurrent, SpinRevealItems, SpinRevealScreen,
+};
 
 const PANEL_WIDTH: f32 = 480.0;
 const PANEL_HEIGHT_PERCENT: f32 = 82.0;
@@ -163,9 +166,7 @@ impl Plugin for CharacterScreenPlugin {
 			.add_observer(on_short_text_change)
 			.add_systems(
 				Update,
-				(isolate_ui_cameras_from_skill_maps, ensure_skill_map_menu_previews)
-					.chain()
-					.before(CharacterHudSystems::Sync),
+				ensure_skill_map_menu_previews.before(CharacterHudSystems::Sync),
 			)
 			.add_systems(
 				Update,
@@ -173,6 +174,7 @@ impl Plugin for CharacterScreenPlugin {
 					apply_show_character,
 					sync_character_ui,
 					sync_overlay_select,
+					sync_spin_reveal_skill_map,
 					clear_skill_map_menu_previews,
 				)
 					.chain()
@@ -508,22 +510,12 @@ fn populate_overlay_viewport<E: Copy + Send + Sync + 'static>(
 		.insert((HudMenu::retain(item_count, previous), HudOverlayMenu));
 }
 
-/// Default UI `Camera2d` sees every layer. Keep authored tiles at the play
-/// origin so the shade matches, and hide those layers from the HUD camera.
-fn isolate_ui_cameras_from_skill_maps(
-	mut commands: Commands,
-	cameras: Query<Entity, (With<Camera2d>, Without<RenderLayers>, Without<SkillMapId>)>,
-) {
-	for entity in &cameras {
-		commands.entity(entity).insert(RenderLayers::layer(0));
-	}
-}
-
 fn ensure_skill_map_menu_previews(
 	mut commands: Commands,
 	mut images: ResMut<Assets<Image>>,
 	tiles: Option<Res<SkillMapTileAssets>>,
 	menu_state: Res<CharacterMenuState>,
+	spin_items: Option<Res<SpinRevealItems>>,
 	mut cache: ResMut<SkillMapMenuPreviewCache>,
 	mut ui_sync: ResMut<CharacterUiSyncState>,
 	mut overlay_sync: ResMut<OverlayUiSyncState>,
@@ -531,14 +523,8 @@ fn ensure_skill_map_menu_previews(
 	let Some(tiles) = tiles else {
 		return;
 	};
-	let Some(inventory) = menu_state.0.inventory.as_ref() else {
-		return;
-	};
 	let mut spawned = false;
-	for item in &inventory.items {
-		let Some(spec) = item.skill_map_spec() else {
-			continue;
-		};
+	for spec in skill_map_specs_to_preview(menu_state.0.inventory.as_ref(), spin_items.as_deref()) {
 		let key = spec.catalog_key();
 		if cache.entries.contains_key(&key) {
 			continue;
@@ -556,17 +542,77 @@ fn ensure_skill_map_menu_previews(
 	}
 }
 
-fn clear_skill_map_menu_previews(
-	screens: Query<(), With<CharacterScreen>>,
-	mut cache: ResMut<SkillMapMenuPreviewCache>,
-	hosts: Query<Entity, With<SkillMapMenuPreview>>,
+fn skill_map_specs_to_preview(
+	inventory: Option<&Inventory>,
+	spin: Option<&SpinRevealItems>,
+) -> Vec<crozon_character_items::SkillMapSpec> {
+	let mut specs = Vec::new();
+	if let Some(inventory) = inventory {
+		specs.extend(inventory.items.iter().filter_map(InventoryItem::skill_map_spec));
+	}
+	if let Some(spin) = spin {
+		specs.extend(spin.0.iter().filter_map(InventoryItem::skill_map_spec));
+	}
+	specs
+}
+
+fn sync_spin_reveal_skill_map(
 	mut commands: Commands,
+	spin: Option<Res<SpinRevealCurrent>>,
+	spin_screens: Query<(), With<SpinRevealScreen>>,
+	cache: Res<SkillMapMenuPreviewCache>,
+	mut hosts: Query<&mut Visibility, With<SkillMapSpinRevealHud>>,
+	mut views: Query<&mut ViewportNode, With<SkillMapSpinRevealHudView>>,
 ) {
-	if !screens.is_empty() || cache.entries.is_empty() {
+	let wanted = (!spin_screens.is_empty())
+		.then_some(spin.as_deref())
+		.flatten()
+		.filter(|spin| spin.revealed)
+		.and_then(|spin| spin.item.skill_map_spec())
+		.and_then(|spec| cache.entries.get(&spec.catalog_key()));
+	let Some(preview) = wanted else {
+		for mut visibility in &mut hosts {
+			*visibility = Visibility::Hidden;
+		}
+		return;
+	};
+	if hosts.is_empty() {
+		spawn_skill_map_spin_reveal_hud(&mut commands, preview.camera, SPIN_REVEAL_SLOT_SIZE);
 		return;
 	}
-	for host in &hosts {
+	for mut visibility in &mut hosts {
+		*visibility = Visibility::Inherited;
+	}
+	for mut viewport in &mut views {
+		viewport.camera = Some(preview.camera);
+	}
+}
+
+fn clear_skill_map_menu_previews(
+	screens: Query<(), With<CharacterScreen>>,
+	spin_screens: Query<(), With<SpinRevealScreen>>,
+	mut cache: ResMut<SkillMapMenuPreviewCache>,
+	members: Query<(Entity, &SkillMapMember)>,
+	huds: Query<Entity, With<SkillMapSpinRevealHud>>,
+	mut commands: Commands,
+) {
+	if !screens.is_empty() || !spin_screens.is_empty() {
+		return;
+	}
+	if cache.entries.is_empty() && huds.is_empty() {
+		return;
+	}
+	let hosts: Vec<Entity> = cache.entries.values().map(|entry| entry.host).collect();
+	for (entity, member) in &members {
+		if hosts.contains(&member.session) {
+			commands.entity(entity).try_despawn();
+		}
+	}
+	for host in hosts {
 		commands.entity(host).try_despawn();
+	}
+	for hud in &huds {
+		commands.entity(hud).try_despawn();
 	}
 	cache.entries.clear();
 	cache.next_slot = 0;

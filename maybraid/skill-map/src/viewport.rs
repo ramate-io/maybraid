@@ -95,6 +95,55 @@ fn clear_presented(
 	viewports.presented = None;
 }
 
+/// Camera + tiles into an image. [`ViewportNode`] resizes the target and composites it.
+pub struct SpawnedSkillMapView {
+	pub camera: Entity,
+	pub image: Handle<Image>,
+}
+
+/// Same off-screen `Camera2d` + authored tiles used by the live corner map.
+pub fn spawn_skill_map_view(
+	commands: &mut Commands,
+	images: &mut Assets<Image>,
+	tiles: &SkillMapTileAssets,
+	spec: AuthoredMap,
+	member: SkillMapMember,
+	order: isize,
+	projection: OrthographicProjection,
+	extras: impl Bundle,
+) -> SpawnedSkillMapView {
+	let layer = render_layer(spec.id);
+	let mut image = Image::new_uninit(
+		default(),
+		TextureDimension::D2,
+		TextureFormat::Bgra8UnormSrgb,
+		RenderAssetUsages::all(),
+	);
+	image.texture_descriptor.usage =
+		TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST | TextureUsages::RENDER_ATTACHMENT;
+	let image_handle = images.add(image);
+	let camera = commands
+		.spawn((
+			Name::new(format!("skill-map-camera-{}", spec.label)),
+			Camera2d,
+			Camera {
+				order,
+				clear_color: ClearColorConfig::Custom(spec.kind.viewport_clear()),
+				..default()
+			},
+			RenderTarget::Image(image_handle.clone().into()),
+			Projection::Orthographic(projection),
+			Transform::from_xyz(0.0, 0.0, 1.0),
+			spec.id,
+			member,
+			layer,
+			extras,
+		))
+		.id();
+	spawn_map_tiles(commands, spec, member, tiles);
+	SpawnedSkillMapView { camera, image: image_handle }
+}
+
 fn spawn_one_map(
 	commands: &mut Commands,
 	images: &mut Assets<Image>,
@@ -105,38 +154,21 @@ fn spawn_one_map(
 	spec: AuthoredMap,
 	stack_index: usize,
 ) {
-	let layer = render_layer(spec.id);
 	let member = SkillMapMember { user, session };
-	let mut image = Image::new_uninit(
-		default(),
-		TextureDimension::D2,
-		TextureFormat::Bgra8UnormSrgb,
-		RenderAssetUsages::all(),
-	);
-	image.texture_descriptor.usage =
-		TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST | TextureUsages::RENDER_ATTACHMENT;
-	let image_handle = images.add(image);
-
 	let mut projection = OrthographicProjection::default_2d();
 	projection.scale = MAP_CAMERA_SCALE;
-	let camera = commands
-		.spawn((
-			Name::new(format!("skill-map-camera-{}", spec.label)),
-			Camera2d,
-			Camera {
-				order: -2 - stack_index as isize,
-				clear_color: ClearColorConfig::Custom(spec.kind.viewport_clear()),
-				..default()
-			},
-			RenderTarget::Image(image_handle.into()),
-			Projection::Orthographic(projection),
-			Transform::from_xyz(0.0, 0.0, 1.0),
-			SkillMapViewportCamera,
-			spec.id,
-			member,
-			layer.clone(),
-		))
-		.id();
+	let view = spawn_skill_map_view(
+		commands,
+		images,
+		tiles,
+		spec,
+		member,
+		-2 - stack_index as isize,
+		projection,
+		SkillMapViewportCamera,
+	);
+	let camera = view.camera;
+	let layer = render_layer(spec.id);
 
 	let bottom = VIEWPORT_INSET + stack_index as f32 * (VIEWPORT_PX + VIEWPORT_GAP);
 	let node = commands
@@ -187,7 +219,6 @@ fn spawn_one_map(
 		layer,
 	));
 
-	spawn_map_tiles(commands, spec, member, tiles);
 	viewports.cameras.insert(spec.id, camera);
 	viewports.nodes.insert(spec.id, node);
 }

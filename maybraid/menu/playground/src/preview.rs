@@ -143,6 +143,11 @@ fn sync_preview(
 
 	if !spin_screens.is_empty() {
 		if let Some(spin) = spin {
+			if spin.item.skill_map_spec().is_some() {
+				clear_preview(&mut commands, &mut sync, &mut pending, &roots);
+				sync.key = format!("spin-map:{:?}", spin.item);
+				return;
+			}
 			let key = format!("spin:{:?}", spin.item);
 			if sync.key == key && !roots.is_empty() {
 				return;
