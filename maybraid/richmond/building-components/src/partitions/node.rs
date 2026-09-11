@@ -6,17 +6,20 @@
 
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::{Component, Transform};
-use bevy::scene::prelude::{bsn, template_value, Scene};
+use bevy::scene::prelude::Scene;
 use bevy_math::Vec3;
 use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
-use lod::{LodLazyPending, SceneChunk};
-use material_ref::{MaterialRef, MaterialRefRoot, PropagateToDescendants};
+use lod::SceneChunk;
+use material_ref::MaterialRef;
 
+use crate::kit_merge::{scenes_from_kit_parts, KitPart};
 use crate::layer::Layers;
 use crate::lod_band::{placement_bounds, warm_mesh_lod_culls};
-use crate::parent_confines::{confined_scene, ParentConfines};
+use crate::parent_confines::ParentConfines;
 use crate::partitions::geometry::{JointLod, LinearLod, PartitionGeometry, PartitionTile};
+use crate::partitions::host::mesh_scene_ref;
+use crate::partitions::mesh_set::PartitionMeshSet;
 use crate::partitions::style::PartitionStyle;
 use crate::placed::Placement;
 use crate::scene_children::{pose, scene_children};
@@ -67,49 +70,49 @@ impl PartitionNode {
 		node.scene_lod_status(lod_ref)
 	}
 
-	fn kit_scenes_for_level(&self, level: LodSceneLevel) -> Vec<Box<dyn Scene>> {
+	pub(crate) fn kit_parts(&self, level: LodSceneLevel) -> Vec<KitPart> {
 		self.geometry
 			.placed_tiles_for_style(self.style, self.placement)
 			.into_iter()
 			.filter_map(|piece| {
-				let transform = pose(piece.placement);
-				let scene = match self.style {
-					PartitionStyle::RoughStonework => match piece.geom {
-						PartitionTile::Joint => {
-							if !JointLod::included_at(level) {
-								return None;
-							}
-							Some(Box::new(JointLod::posed_tier(transform, level)) as Box<dyn Scene>)
-						}
-						PartitionTile::RightTriangle { mirror } => {
-							use crate::assets::panels::rough_stonework::{
-								RIGHT_TRIANGLE_HIGH, RIGHT_TRIANGLE_LOW, RIGHT_TRIANGLE_MID,
-							};
-							use crate::partitions::mesh_set::PartitionMeshSet;
-							Some(Box::new(LinearLod::posed_mirrored_tier(
-								PartitionMeshSet::new(
-									RIGHT_TRIANGLE_HIGH,
-									RIGHT_TRIANGLE_MID,
-									RIGHT_TRIANGLE_LOW,
-								),
-								transform,
-								level,
-								mirror,
-							)) as Box<dyn Scene>)
-						}
-						tile => {
-							if let Some(meshes) = tile.mesh_set() {
-								Some(Box::new(LinearLod::posed_tier(meshes, transform, level))
-									as Box<dyn Scene>)
-							} else {
-								None
-							}
-						}
-					},
-				}?;
-				Some(material_kit_scene(scene, self.material.clone()))
+				let scene = tile_scene_ref(self.style, piece.geom, level)?;
+				Some(KitPart {
+					scene,
+					transform: pose(piece.placement),
+					material: self.material.clone(),
+					confines: self.confines,
+				})
 			})
 			.collect()
+	}
+}
+
+fn tile_scene_ref(
+	style: PartitionStyle,
+	tile: PartitionTile,
+	level: LodSceneLevel,
+) -> Option<scene_ref::SceneRef> {
+	match style {
+		PartitionStyle::RoughStonework => match tile {
+			PartitionTile::Joint => {
+				JointLod::asset_for_level(level).map(crate::assets::AssetPath::scene_ref)
+			}
+			PartitionTile::RightTriangle { mirror } => {
+				use crate::assets::panels::rough_stonework::{
+					RIGHT_TRIANGLE_HIGH, RIGHT_TRIANGLE_LOW, RIGHT_TRIANGLE_MID,
+				};
+				Some(mesh_scene_ref(
+					PartitionMeshSet::new(
+						RIGHT_TRIANGLE_HIGH,
+						RIGHT_TRIANGLE_MID,
+						RIGHT_TRIANGLE_LOW,
+					),
+					level,
+					mirror,
+				))
+			}
+			tile => tile.mesh_set().map(|meshes| mesh_scene_ref(meshes, level, None)),
+		},
 	}
 }
 
@@ -117,20 +120,6 @@ impl Layers<PartitionNode> {
 	/// Stamp a shader look onto every partition, leaving kit [`PartitionStyle`] unchanged.
 	pub fn with_material(self, material: MaterialRef) -> Self {
 		self.map(|node| node.with_material(material.clone()))
-	}
-}
-
-fn material_kit_scene(scene: Box<dyn Scene>, material: Option<MaterialRef>) -> Box<dyn Scene> {
-	match material {
-		Some(material) => Box::new((
-			bsn! {
-				template_value(MaterialRefRoot(material))
-				PropagateToDescendants
-				LodLazyPending
-			},
-			scene,
-		)),
-		None => scene,
 	}
 }
 
@@ -163,7 +152,7 @@ impl LodScene for PartitionNode {
 	}
 
 	fn scene_with_level(&self, _lod_ref: &LodRef, level: LodSceneLevel) -> impl Scene + 'static {
-		confined_scene(self.confines, scene_children(self.kit_scenes_for_level(level)))
+		scene_children(scenes_from_kit_parts(self.kit_parts(level)))
 	}
 
 	fn scene_chunks_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> SceneChunk {

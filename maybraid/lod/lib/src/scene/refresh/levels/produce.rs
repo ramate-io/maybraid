@@ -3,6 +3,7 @@
 use std::any::TypeId;
 use std::marker::PhantomData;
 
+use bevy::ecs::entity_disabling::Disabled;
 use bevy::ecs::system::{StaticSystemParam, SystemParam};
 use bevy::math::bounding::Aabb3d;
 use bevy::platform::collections::{HashMap, HashSet};
@@ -13,7 +14,8 @@ use crate::lod_ref::{
 	LodNodeSnapshot,
 };
 use crate::scene::host::{
-	nested_host_parent_allows_refresh, LodLevelRoot, LodLevelRoots, LodSceneHost,
+	nested_host_parent_allows_refresh, nested_host_parent_allows_refresh_world, LodLevelRoot,
+	LodLevelRoots, LodSceneHost,
 };
 use crate::scene::level::LodSceneLevel;
 use crate::scene::region_index::LodSceneHostIndex;
@@ -252,12 +254,12 @@ pub fn produce_lod_refresh_levels<T>(
 	hosts: Query<&T, With<LodSceneHost>>,
 	membership: Query<&LodRefreshMembership>,
 	mut levels: MessageWriter<LodSceneRefreshLevel>,
-	child_of: Query<&ChildOf>,
-	host_levels: Query<&LodSceneLevel, With<LodSceneHost>>,
-	level_roots: Query<&LodLevelRoot>,
-	children_q: Query<&Children>,
-	level_roots_bags: Query<(), With<LodLevelRoots>>,
-	visibilities: Query<&Visibility>,
+	child_of: Query<&ChildOf, Allow<Disabled>>,
+	host_levels: Query<&LodSceneLevel, (With<LodSceneHost>, Allow<Disabled>)>,
+	level_roots: Query<&LodLevelRoot, Allow<Disabled>>,
+	children_q: Query<&Children, Allow<Disabled>>,
+	level_roots_bags: Query<(), (With<LodLevelRoots>, Allow<Disabled>)>,
+	visibilities: Query<(&Visibility, Has<Disabled>), Allow<Disabled>>,
 ) where
 	T: Component + SemanticLodScene + 'static,
 {
@@ -323,50 +325,6 @@ fn membership_allows(membership: Option<&LodRefreshMembership>, domain: LodRefre
 
 fn host_matches_domain(world: &World, entity: Entity, domain: LodRefreshDomain) -> bool {
 	membership_allows(world.get::<LodRefreshMembership>(entity), domain)
-}
-
-fn nested_host_parent_allows_refresh_world(world: &World, entity: Entity) -> bool {
-	let Some(parent) = world.get::<ChildOf>(entity) else {
-		return true;
-	};
-	let mut current = parent.parent();
-	let mut enclosing_root = None;
-	loop {
-		if enclosing_root.is_none() {
-			enclosing_root = world.get::<LodLevelRoot>(current).map(|root| root.0);
-		}
-		if world.get::<LodSceneHost>(current).is_some() {
-			if let Some(desired) = world.get::<LodSceneLevel>(current) {
-				return enclosing_root.is_none_or(|root_level| {
-					root_level == *desired
-						|| host_shows_level_root_world(world, current, root_level)
-				});
-			}
-		}
-		let Some(parent) = world.get::<ChildOf>(current) else {
-			return true;
-		};
-		current = parent.parent();
-	}
-}
-
-fn host_shows_level_root_world(world: &World, host: Entity, level: LodSceneLevel) -> bool {
-	let Some(host_children) = world.get::<Children>(host) else {
-		return false;
-	};
-	let Some(bag) = host_children.iter().find(|&child| world.get::<LodLevelRoots>(child).is_some())
-	else {
-		return false;
-	};
-	let Some(root_children) = world.get::<Children>(bag) else {
-		return false;
-	};
-	root_children.iter().any(|root| {
-		world.get::<LodLevelRoot>(root).is_some_and(|key| key.0 == level)
-			&& world
-				.get::<Visibility>(root)
-				.is_some_and(|visibility| !matches!(*visibility, Visibility::Hidden))
-	})
 }
 
 /// Fill [`LodProduceCache`] from untyped region AABBs via host index `I`.

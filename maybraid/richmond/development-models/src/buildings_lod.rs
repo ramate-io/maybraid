@@ -56,7 +56,7 @@ macro_rules! gimme_host {
 	}};
 }
 
-/// Full refresh stack for structural + fine-phase development hosts.
+/// Full refresh stack for structural + leftover fine-phase development hosts.
 #[derive(Default)]
 pub struct DevelopmentsBuildingsLodPlugin;
 

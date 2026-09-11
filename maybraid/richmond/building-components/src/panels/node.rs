@@ -2,24 +2,23 @@
 
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::Component;
-use bevy::scene::prelude::{bsn, template_value, Scene};
+use bevy::scene::prelude::Scene;
 use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
-use lod::{LodLazyPending, SceneChunk};
-use material_ref::{MaterialRef, MaterialRefRoot, PropagateToDescendants};
-use scene_ref::MirrorAxis;
+use lod::SceneChunk;
+use material_ref::MaterialRef;
 
-use crate::assets::AssetPath;
+use crate::kit_merge::{scenes_from_kit_parts, KitPart};
 use crate::layer::Layers;
 use crate::lod_band::{placement_bounds, warm_mesh_lod_culls};
 use crate::panels::geometry::{PanelGeometry, Rectangle, RightTriangle};
 use crate::panels::lod::{
-	panel_scene_ref_for_level, PanelLodProbe, PANEL_ULTRA_LOW_RECTANGLE,
-	PANEL_ULTRA_LOW_RIGHT_TRIANGLE,
+	panel_kit_scene_ref, PANEL_ULTRA_LOW_RECTANGLE, PANEL_ULTRA_LOW_RIGHT_TRIANGLE,
 };
 use crate::panels::style::PanelStyle;
+use crate::parent_confines::ParentConfines;
 use crate::placed::Placement;
-use crate::scene_children::{pose, scene_children, with_pose};
+use crate::scene_children::{pose, scene_children};
 
 /// Authoring IR for a shared panel feature (rectangle / triangle tessellation).
 ///
@@ -51,54 +50,51 @@ impl PanelNode {
 		Self::new(PanelStyle::ShepherdsThatch, geometry, placement)
 	}
 
-	fn probe(&self) -> PanelLodProbe {
-		PanelLodProbe::from_placement(&self.placement)
+	fn probe(&self) -> crate::panels::lod::PanelLodProbe {
+		crate::panels::lod::PanelLodProbe::from_placement(&self.placement)
 	}
 
-	fn content_for_level(&self, level: LodSceneLevel) -> impl Scene + 'static {
-		let material = self.material.clone();
-		let children: Vec<Box<dyn Scene>> = self
-			.geometry
+	pub(crate) fn kit_parts(&self, level: LodSceneLevel) -> Vec<KitPart> {
+		self.geometry
 			.flatten(self.style.kit_caps())
 			.into_iter()
 			.filter_map(|piece| {
 				let transform = pose(self.placement) * pose(piece.placement);
-				match piece.geom {
+				let scene = match piece.geom {
 					PanelGeometry::Rectangle(Rectangle) => {
 						let (high, mid, low) = self.style.rectangle_lod()?;
-						Some(Box::new(with_pose(
-							transform,
-							lod_quad_scene(
-								high,
-								mid,
-								low,
-								PANEL_ULTRA_LOW_RECTANGLE,
-								level,
-								None,
-								material.clone(),
-							),
-						)) as Box<dyn Scene>)
+						Some(panel_kit_scene_ref(
+							high.scene_ref(),
+							mid.scene_ref(),
+							low.scene_ref(),
+							PANEL_ULTRA_LOW_RECTANGLE.scene_ref(),
+							level,
+						))
 					}
 					PanelGeometry::RightTriangle(RightTriangle { mirror }) => {
 						let (high, mid, low) = self.style.right_triangle_lod()?;
-						Some(Box::new(with_pose(
-							transform,
-							lod_quad_scene(
-								high,
-								mid,
-								low,
-								PANEL_ULTRA_LOW_RIGHT_TRIANGLE,
-								level,
-								mirror,
-								material.clone(),
-							),
-						)) as Box<dyn Scene>)
+						Some(panel_kit_scene_ref(
+							high.scene_ref().with_mirror(mirror),
+							mid.scene_ref().with_mirror(mirror),
+							low.scene_ref().with_mirror(mirror),
+							PANEL_ULTRA_LOW_RIGHT_TRIANGLE.scene_ref().with_mirror(mirror),
+							level,
+						))
 					}
 					_ => None,
-				}
+				}?;
+				Some(KitPart {
+					scene,
+					transform,
+					material: self.material.clone(),
+					confines: ParentConfines::External,
+				})
 			})
-			.collect();
-		scene_children(children)
+			.collect()
+	}
+
+	fn content_for_level(&self, level: LodSceneLevel) -> impl Scene + 'static {
+		scene_children(scenes_from_kit_parts(self.kit_parts(level)))
 	}
 }
 
@@ -106,42 +102,6 @@ impl Layers<PanelNode> {
 	/// Stamp a shader look onto every panel, leaving kit [`PanelStyle`] unchanged.
 	pub fn with_material(self, material: MaterialRef) -> Self {
 		self.map(|node| node.with_material(material.clone()))
-	}
-}
-
-fn lod_quad_scene(
-	high: AssetPath,
-	mid: AssetPath,
-	low: AssetPath,
-	ultra_low: AssetPath,
-	level: LodSceneLevel,
-	mirror: Option<MirrorAxis>,
-	material: Option<MaterialRef>,
-) -> Box<dyn Scene> {
-	let scene = panel_scene_ref_for_level(
-		high.scene_ref().with_mirror(mirror),
-		mid.scene_ref().with_mirror(mirror),
-		low.scene_ref().with_mirror(mirror),
-		ultra_low.scene_ref().with_mirror(mirror),
-		level,
-	);
-	material_kit_scene(scene, material)
-}
-
-fn material_kit_scene(
-	scene: impl Scene + 'static,
-	material: Option<MaterialRef>,
-) -> Box<dyn Scene> {
-	match material {
-		Some(material) => Box::new((
-			bsn! {
-				template_value(MaterialRefRoot(material))
-				PropagateToDescendants
-				LodLazyPending
-			},
-			scene,
-		)),
-		None => Box::new(scene),
 	}
 }
 

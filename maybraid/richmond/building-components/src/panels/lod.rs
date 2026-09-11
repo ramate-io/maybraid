@@ -144,6 +144,23 @@ impl LodScene for PanelLodProbe {
 	}
 }
 
+/// Kit [`SceneRef`] for one [`LodSceneLevel`] (no host scaffolding).
+pub(crate) fn panel_kit_scene_ref(
+	high: SceneRef,
+	mid: SceneRef,
+	low: SceneRef,
+	ultra_low: SceneRef,
+	level: LodSceneLevel,
+) -> SceneRef {
+	match level {
+		LodSceneLevel::High => high,
+		LodSceneLevel::Medium => mid,
+		LodSceneLevel::Low => low,
+		LodSceneLevel::UltraLow => ultra_low,
+		LodSceneLevel::Distance(_) | LodSceneLevel::Resolution(_) => mid,
+	}
+}
+
 /// Posed panel kit content for one [`LodSceneLevel`] (no host scaffolding).
 pub fn panel_scene_ref_for_level(
 	high: SceneRef,
@@ -152,14 +169,7 @@ pub fn panel_scene_ref_for_level(
 	ultra_low: SceneRef,
 	level: LodSceneLevel,
 ) -> impl Scene + 'static {
-	let scene = match level {
-		LodSceneLevel::High => high,
-		LodSceneLevel::Medium => mid,
-		LodSceneLevel::Low => low,
-		LodSceneLevel::UltraLow => ultra_low,
-		LodSceneLevel::Distance(_) | LodSceneLevel::Resolution(_) => mid,
-	};
-	scene.scene()
+	panel_kit_scene_ref(high, mid, low, ultra_low, level).scene()
 }
 
 /// Update panel host levels from the [`lod::LodViewer`] pose.

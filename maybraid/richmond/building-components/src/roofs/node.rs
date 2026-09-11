@@ -7,21 +7,21 @@ use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
 use lod::SceneChunk;
 
-use crate::arc_kit::ArcKit;
 use crate::assets::panels::shepherds_thatch::{RECTANGLE_HIGH, RECTANGLE_LOW, RECTANGLE_MID};
 use crate::assets::roofs::shepherds_thatch::{
 	RIGHT_TRIANGLE_HIGH, RIGHT_TRIANGLE_LOW, RIGHT_TRIANGLE_MID,
 };
-use crate::empty_scene;
+use crate::kit_merge::{scenes_from_kit_parts, KitPart};
 use crate::lod_band::{placement_bounds, warm_mesh_lod_culls};
-use crate::partitions::geometry::LinearLod;
+use crate::parent_confines::ParentConfines;
+use crate::partitions::host::mesh_scene_ref;
 use crate::partitions::mesh_set::PartitionMeshSet;
 use crate::placed::Placement;
 use crate::roofs::geometry::RoofGeometry;
-use crate::roofs::lod::{roof_scene_ref_for_level, RoofLodProbe};
+use crate::roofs::lod::{roof_kit_scene_ref, RoofLodProbe};
 use crate::roofs::style::RoofStyle;
 use crate::roofs::tessellate::RoofKit;
-use crate::scene_children::{pose, scene_children, with_pose};
+use crate::scene_children::{pose, scene_children};
 
 /// Authoring IR for a roof / cap feature.
 #[derive(Debug, Clone, PartialEq, Component, Default)]
@@ -44,46 +44,46 @@ impl RoofNode {
 		RoofLodProbe::from_placement(&self.placement)
 	}
 
-	fn content_for_level(&self, level: LodSceneLevel) -> impl Scene + 'static {
+	pub(crate) fn kit_parts(&self, level: LodSceneLevel) -> Vec<KitPart> {
 		let parent = pose(self.placement);
 		let pitch = Transform::from_rotation(Quat::from_rotation_x(self.geometry.pitch_radians()));
-		let children: Vec<Box<dyn Scene>> = self
-			.geometry
+		self.geometry
 			.kit_pieces_for_style(self.style)
 			.into_iter()
-			.map(|piece| {
+			.filter_map(|piece| {
 				let transform = parent * pitch * pose(piece.placement);
-				let child: Box<dyn Scene> = match (self.style, piece.geom) {
+				let scene = match (self.style, piece.geom) {
 					(RoofStyle::ShepherdsThatch, RoofKit::RightTriangle { mirror }) => {
-						Box::new(LinearLod::posed_mirrored_tier(
+						Some(mesh_scene_ref(
 							PartitionMeshSet::new(
 								RIGHT_TRIANGLE_HIGH,
 								RIGHT_TRIANGLE_MID,
 								RIGHT_TRIANGLE_LOW,
 							),
-							Transform::IDENTITY,
 							level,
 							mirror,
 						))
 					}
-					(RoofStyle::ShepherdsThatch, RoofKit::Rectangle) => {
-						Box::new(roof_scene_ref_for_level(
-							RECTANGLE_HIGH.scene_ref(),
-							RECTANGLE_MID.scene_ref(),
-							RECTANGLE_LOW.scene_ref(),
-							level,
-						))
-					}
-					(RoofStyle::ShepherdsThatch, RoofKit::DomeArc(ArcKit::D15))
-					| (RoofStyle::ShepherdsThatch, RoofKit::DomeArc(ArcKit::D90))
-					| (RoofStyle::ShepherdsThatch, RoofKit::DomeArc(ArcKit::D180)) => {
-						Box::new(bevy::scene::SceneFunction(empty_scene))
-					}
-				};
-				Box::new(with_pose(transform, child)) as Box<dyn Scene>
+					(RoofStyle::ShepherdsThatch, RoofKit::Rectangle) => Some(roof_kit_scene_ref(
+						RECTANGLE_HIGH.scene_ref(),
+						RECTANGLE_MID.scene_ref(),
+						RECTANGLE_LOW.scene_ref(),
+						level,
+					)),
+					(RoofStyle::ShepherdsThatch, RoofKit::DomeArc(_)) => None,
+				}?;
+				Some(KitPart {
+					scene,
+					transform,
+					material: None,
+					confines: ParentConfines::External,
+				})
 			})
-			.collect();
-		scene_children(children)
+			.collect()
+	}
+
+	fn content_for_level(&self, level: LodSceneLevel) -> impl Scene + 'static {
+		scene_children(scenes_from_kit_parts(self.kit_parts(level)))
 	}
 }
 

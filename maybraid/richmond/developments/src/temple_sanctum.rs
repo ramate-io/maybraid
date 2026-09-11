@@ -215,7 +215,7 @@ impl TempleSanctum {
 		level: LodSceneLevel,
 		out: &mut Layers<StairNode>,
 	) {
-		if !matches!(level, LodSceneLevel::High) {
+		if !matches!(level, LodSceneLevel::High | LodSceneLevel::Medium) {
 			return;
 		}
 		for keep in &components.keeps {

@@ -20,9 +20,9 @@ fn ensure_gimme_host_index<T: Component + SemanticLodScene + 'static>(app: &mut 
 
 /// [`LodSceneRefreshPlugin`] with [`GimmeLodSceneHostIndex`].
 ///
-/// Fill is once per host index (every [`lod::LodNode`], not `F`); emit is once
-/// per `T`. `F` still selects region / sync drivers. Channel `M` is accepted so
-/// existing dual bullseye/spotlight plugin adds stay valid.
+/// Produce and cull fill are once per host index (every [`lod::LodNode`], not `F`);
+/// emit is once per `T`. `F` still selects region / sync drivers. Channel `M` is
+/// accepted so existing dual bullseye/spotlight plugin adds stay valid.
 ///
 /// Use [`Self::without_full_scan_cull`] with [`GimmeLodSceneCullPlugin`] for
 /// OpenLattice (or other) region-scoped cull enqueue.
@@ -82,6 +82,9 @@ where
 }
 
 /// Region-scoped cull enqueue for host `T` on cull channel `M` (Gimme index).
+///
+/// Fill is once per host index (every [`lod::LodNode`]); `F` is accepted so existing
+/// Camera / LodViewer plugin adds stay valid.
 pub struct GimmeLodSceneCullPlugin<T, M, F = With<LodViewer>>
 where
 	T: Component + SemanticLodScene + 'static,

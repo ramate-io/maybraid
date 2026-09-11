@@ -12,7 +12,7 @@ use richmond_building_components::floors::FloorNode;
 use richmond_building_components::partitions::PartitionStyle;
 use richmond_building_components::scene_children;
 use richmond_building_components::{
-	append_component_scenes, BuildingComponents, Layers, ParentConfines, PartitionNode,
+	append_flattened_component_scenes, BuildingComponents, Layers, ParentConfines, PartitionNode,
 };
 
 use crate::arcs::{portal_ring_wall, PortalRingParams, PortalRingWall};
@@ -74,7 +74,7 @@ impl WizardsTowerPerch {
 		children: &mut Vec<Box<dyn Scene>>,
 		lod_ref: &LodRef,
 	) {
-		append_component_scenes(self, lod_ref, LodSceneLevel::Medium, children);
+		append_flattened_component_scenes(self, lod_ref, LodSceneLevel::Medium, children);
 	}
 
 	pub(crate) fn emit_internal_features(
@@ -83,7 +83,7 @@ impl WizardsTowerPerch {
 		lod_ref: &LodRef,
 	) {
 		for node in self.floor_nodes_for_level(LodSceneLevel::High).flatten() {
-			children.push(Box::new(node.scene_with_lod(lod_ref)));
+			children.push(Box::new(node.scene_with_level(lod_ref, LodSceneLevel::High)));
 		}
 	}
 

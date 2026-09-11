@@ -14,7 +14,7 @@
 //! - [`LodSceneRefreshLevelsFillPlugin<I>`] — once per index: all [`crate::LodNode`] snapshots + host hits
 //! - [`LodSceneRefreshLevelsPlugin<T>`] — register `T` with the shared emitter
 //! - [`LodSceneRefreshSyncPlugin<T, F>`] — chunk fulfill + optional full-scan cull
-//! - [`LodSceneCullProduceFillPlugin<I, F>`] — once: cull snapshots + host hits
+//! - [`LodSceneCullProduceFillPlugin<I>`] — once per index: all [`crate::LodNode`] snapshots + host hits
 //! - [`LodSceneRegionCullPlugin<I, M, T, F>`] — producer registration over shared enqueue
 //! - [`LodSceneRefreshPlugin<T, M, I, F>`] — fill + emit + sync (region separate)
 
