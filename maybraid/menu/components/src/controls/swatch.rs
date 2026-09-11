@@ -2,7 +2,9 @@
 
 use bevy::prelude::*;
 
-use crate::theme::{PANEL_CHIP_GAP, PANEL_SWATCH_SIZE, TEXT_YELLOW, TEXT_YELLOW_FAINT};
+use crate::theme::{
+	PANEL_CHIP_GAP, PANEL_SWATCH_SIZE, TEXT_YELLOW, TEXT_YELLOW_FAINT, TILE_FOCUS_PAD,
+};
 
 /// Parse `#RRGGBB`; malformed input falls back to faint yellow.
 pub fn color_from_hex(hex: &str) -> Color {
@@ -42,6 +44,7 @@ pub fn spawn_swatch(
 		},
 		BorderColor::all(if selected { TEXT_YELLOW } else { TEXT_YELLOW_FAINT }),
 		BackgroundColor(color_from_hex(hex)),
+		Outline::new(Val::Px(2.0), Val::Px(2.0), Color::NONE),
 	));
 }
 
@@ -59,6 +62,7 @@ pub fn spawn_swatch_row(
 				row_gap: Val::Px(PANEL_CHIP_GAP),
 				align_items: AlignItems::Center,
 				justify_content: justify,
+				padding: UiRect::all(Val::Px(TILE_FOCUS_PAD)),
 				..default()
 			},
 			Pickable::IGNORE,

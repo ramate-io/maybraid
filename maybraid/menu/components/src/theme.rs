@@ -125,8 +125,8 @@ pub const CORNER_INSET: f32 = 16.0;
 /// Upper-corner brand / mode line (`Maybraid - Discovery`).
 pub const BRAND_MODE_FONT_SIZE: f32 = 36.0;
 
-/// Menu column sits above the description strip.
-pub const COLUMN_BOTTOM: f32 = 88.0;
+/// Menu column sits above the footer chrome (Back / Edit).
+pub const COLUMN_BOTTOM: f32 = 120.0;
 
 /// Corner action (Back / Edit / Save) inset from the window bottom.
 pub const CORNER_BOTTOM: f32 = 40.0;
@@ -197,8 +197,14 @@ pub const PANEL_TILE_MIN_HEIGHT: f32 = 56.0;
 /// Vertical rhythm inside a panel.
 pub const PANEL_ROW_GAP: f32 = 10.0;
 
+/// Extra air above and below a `− / +` stepper so stacked sliders do not touch.
+pub const PANEL_STEPPER_PAD_Y: f32 = 10.0;
+
 /// Gap between swatches or tiles in a wrapping row.
 pub const PANEL_CHIP_GAP: f32 = 8.0;
+
+/// Inset so tile / swatch focus outlines are not clipped by a scroll pane.
+pub const TILE_FOCUS_PAD: f32 = 6.0;
 
 /// Visible scrollbar thickness when a HUD pane overflows.
 pub const SCROLLBAR_WIDTH: f32 = 6.0;

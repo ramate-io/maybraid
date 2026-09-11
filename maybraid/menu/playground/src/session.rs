@@ -9,7 +9,7 @@ use crozon_character_persist::{CharacterId, PersistError, SaveRoot};
 use crozon_character_ui_menus::{CharacterMenu, MenuEvent};
 use crozon_inventory_user::{spawn_bag, InventoryUser, InventoryUserPlugin};
 use menu_components::info::description::{set_description_for_menu, TextMenuDescription};
-use menu_components::{MenuActivate, ScreenEditPressed};
+use menu_components::{MenuActivate, MenuObjectiveMarker, ScreenEditPressed};
 use menu_screens::{
 	request_show_create_character_id, request_show_gallery, CreateCharacterReady, GalleryChoice,
 	GalleryScreen, GalleryScreenPlugin,
@@ -77,6 +77,7 @@ impl Plugin for CharacterSessionPlugin {
 					open_requested_character_editor,
 					open_create_character_hud,
 					sync_gallery_active_caption,
+					sync_gallery_selected_tag,
 				),
 			);
 	}
@@ -174,10 +175,41 @@ fn sync_gallery_active_caption(
 	set_description_for_menu(root, caption, &children, &mut lines);
 }
 
+/// Keep the Selected chip on the active character after a new row is chosen.
+/// Every saved row already owns the badge; this only flips visibility.
+fn sync_gallery_selected_tag(
+	active: Option<Res<ActiveCharacter>>,
+	screens: Query<Entity, With<GalleryScreen>>,
+	items: Query<(&GalleryChoice, &Children)>,
+	markers: Query<(), With<MenuObjectiveMarker>>,
+	mut visibilities: Query<&mut Visibility>,
+) {
+	if screens.is_empty() {
+		return;
+	}
+	let active_id = active.map(|active| active.id);
+	for (choice, children) in &items {
+		let GalleryChoice::Select(id) = *choice else {
+			continue;
+		};
+		let show = Some(id) == active_id;
+		for child in children {
+			if markers.get(*child).is_err() {
+				continue;
+			}
+			if let Ok(mut visibility) = visibilities.get_mut(*child) {
+				*visibility = if show { Visibility::Inherited } else { Visibility::Hidden };
+			}
+		}
+	}
+}
+
 fn open_gallery_choice(
 	mut choices: MessageReader<GalleryChoice>,
 	save_root: Res<SaveRoot>,
+	active: Option<Res<ActiveCharacter>>,
 	mut commands: Commands,
+	mut edits: MessageWriter<ScreenEditPressed>,
 ) {
 	let Some(choice) = choices.read().last().copied() else {
 		return;
@@ -190,6 +222,10 @@ fn open_gallery_choice(
 			request_show_create_character_id(&mut commands, id);
 		}
 		GalleryChoice::Select(id) => {
+			if gallery_select_opens_edit(active.as_deref().map(|active| active.id), id) {
+				edits.write(ScreenEditPressed);
+				return;
+			}
 			if let Err(error) = crozon_character_model_user::load(&save_root, id) {
 				warn!("failed to load character {}: {error}", id.to_hex());
 				return;
@@ -341,5 +377,23 @@ fn on_save_character(
 		*baseline = CharacterEditBaseline::capture(&menu_state.0);
 	} else {
 		commands.insert_resource(CharacterEditBaseline::capture(&menu_state.0));
+	}
+}
+
+fn gallery_select_opens_edit(active: Option<CharacterId>, picked: CharacterId) -> bool {
+	active == Some(picked)
+}
+
+#[cfg(test)]
+mod tests {
+	use super::gallery_select_opens_edit;
+	use crozon_character_persist::CharacterId;
+
+	#[test]
+	fn second_select_on_the_active_row_is_edit() {
+		let id = CharacterId(7);
+		assert!(!gallery_select_opens_edit(None, id));
+		assert!(!gallery_select_opens_edit(Some(CharacterId(1)), id));
+		assert!(gallery_select_opens_edit(Some(id), id));
 	}
 }

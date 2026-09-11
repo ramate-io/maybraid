@@ -10,14 +10,16 @@ use super::text_menu::{
 	MenuItemLocked, TextColumnAlign, TextColumnAnchor, TextMenu, TextMenuHeader, TextMenuItem,
 	TextMenuItemLabel,
 };
-use crate::controls::section::CursorRow;
+use crate::controls::scroll::{entity_is_under, reveal_item_in_viewport};
+use crate::controls::section::{ActiveOverlayKey, CursorRow};
 use crate::info::description::TextMenuDescription;
 use crate::theme::{
-	BARLOW_SEMIBOLD, CORNER_BOTTOM, CORNER_INSET, CURSOR_ICON_GAP, CURSOR_ICON_SIZE,
-	DESCRIPTION_FONT_SIZE, ITEM_FONT_SIZE, OBJECTIVE_MARKER_BORDER, OBJECTIVE_MARKER_FONT_SIZE,
-	OBJECTIVE_MARKER_OFFSET_Y, OBJECTIVE_MARKER_PAD_X, OBJECTIVE_MARKER_PAD_Y,
-	OBJECTIVE_MARKER_RADIUS, TEXT_LIME, TEXT_PURPLE, TEXT_SALMON, TEXT_YELLOW, TEXT_YELLOW_FAINT,
-	TEXT_YELLOW_FAINT_FOCUS,
+	BARLOW_SEMIBOLD, COLUMN_BOTTOM, CORNER_BOTTOM, CORNER_INSET, CURSOR_ICON_GAP, CURSOR_ICON_SIZE,
+	DESCRIPTION_FONT_SIZE, DESCRIPTION_PANE_LEFT_PERCENT, ITEM_FONT_SIZE, ITEM_ROW_GAP,
+	OBJECTIVE_MARKER_BORDER, OBJECTIVE_MARKER_FONT_SIZE, OBJECTIVE_MARKER_OFFSET_Y,
+	OBJECTIVE_MARKER_PAD_X, OBJECTIVE_MARKER_PAD_Y, OBJECTIVE_MARKER_RADIUS, TEXT_LIME,
+	TEXT_PURPLE, TEXT_SALMON, TEXT_YELLOW, TEXT_YELLOW_FAINT, TEXT_YELLOW_FAINT_FOCUS,
+	TILE_FOCUS_PAD,
 };
 use maybraid_input::{MenuNav, MenuNavPad};
 
@@ -25,18 +27,23 @@ use maybraid_input::{MenuNav, MenuNavPad};
 #[derive(Component, Debug, Default, Clone, Copy)]
 pub struct TextCursorMenu;
 
+/// Scroll viewport under a sticky [`TextCursorColumn`] header.
+#[derive(Component, Debug, Default, Clone, Copy)]
+pub struct TextCursorScroll;
+
 /// Reserved gutter on a row; the animated mark is a child.
 #[derive(Component, Debug, Default, Clone, Copy)]
 pub struct TextCursorSlot;
 
 /// Onboarding / availability badge copy and color. Screens set a kind rather
-/// than free-stringing the three strings.
+/// than free-stringing the strings.
 #[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum MenuObjectiveKind {
 	#[default]
 	ComingSoon,
 	StartHere,
 	NeedsCharacter,
+	Selected,
 }
 
 impl MenuObjectiveKind {
@@ -45,6 +52,7 @@ impl MenuObjectiveKind {
 			Self::ComingSoon => "Coming Soon",
 			Self::StartHere => "Start Here",
 			Self::NeedsCharacter => "Needs Character.",
+			Self::Selected => "Selected",
 		}
 	}
 
@@ -53,6 +61,7 @@ impl MenuObjectiveKind {
 			Self::ComingSoon => TEXT_PURPLE,
 			Self::StartHere => TEXT_LIME,
 			Self::NeedsCharacter => TEXT_SALMON,
+			Self::Selected => TEXT_LIME,
 		}
 	}
 
@@ -74,12 +83,21 @@ pub struct TextCursorRow<E> {
 	pub subtext: Option<String>,
 	pub action: E,
 	pub objective: Option<MenuObjectiveKind>,
+	/// When `false`, the badge node is still spawned so a screen can show it later.
+	pub objective_visible: bool,
 	pub locked: bool,
 }
 
 impl<E> TextCursorRow<E> {
 	pub fn new(label: impl Into<String>, action: E) -> Self {
-		Self { label: label.into(), subtext: None, action, objective: None, locked: false }
+		Self {
+			label: label.into(),
+			subtext: None,
+			action,
+			objective: None,
+			objective_visible: true,
+			locked: false,
+		}
 	}
 
 	pub fn with_subtext(mut self, subtext: impl Into<String>) -> Self {
@@ -90,6 +108,14 @@ impl<E> TextCursorRow<E> {
 
 	pub fn with_objective(mut self, kind: MenuObjectiveKind) -> Self {
 		self.objective = Some(kind);
+		self.objective_visible = true;
+		self
+	}
+
+	/// Same badge as [`Self::with_objective`], hidden until a system reveals it.
+	pub fn with_hidden_objective(mut self, kind: MenuObjectiveKind) -> Self {
+		self.objective = Some(kind);
+		self.objective_visible = false;
 		self
 	}
 
@@ -107,6 +133,7 @@ pub struct TextCursorColumn<E> {
 	pub align: TextColumnAlign,
 	pub selected: usize,
 	pub description: Option<String>,
+	pub scrollable: bool,
 }
 
 impl<E: Component + Copy + Default + Unpin + Send + Sync + 'static> TextCursorColumn<E> {
@@ -124,6 +151,7 @@ impl<E: Component + Copy + Default + Unpin + Send + Sync + 'static> TextCursorCo
 			align: TextColumnAlign::Start,
 			selected: 0,
 			description: None,
+			scrollable: false,
 		}
 	}
 
@@ -139,6 +167,7 @@ impl<E: Component + Copy + Default + Unpin + Send + Sync + 'static> TextCursorCo
 			align: TextColumnAlign::Start,
 			selected: 0,
 			description: None,
+			scrollable: false,
 		}
 	}
 
@@ -153,6 +182,7 @@ impl<E: Component + Copy + Default + Unpin + Send + Sync + 'static> TextCursorCo
 			align: TextColumnAlign::Start,
 			selected: 0,
 			description: None,
+			scrollable: false,
 		}
 	}
 
@@ -176,6 +206,13 @@ impl<E: Component + Copy + Default + Unpin + Send + Sync + 'static> TextCursorCo
 		self
 	}
 
+	/// Pin the column between the top inset and the footer band and scroll
+	/// overflow so a long roster stays reachable.
+	pub fn scrollable(mut self) -> Self {
+		self.scrollable = true;
+		self
+	}
+
 	pub fn scene(self) -> impl Scene + 'static {
 		let item_count = self.items.len();
 		let selected = if item_count == 0 { 0 } else { self.selected.min(item_count - 1) };
@@ -187,18 +224,43 @@ impl<E: Component + Copy + Default + Unpin + Send + Sync + 'static> TextCursorCo
 		if let Some(header) = self.header {
 			children.push(Box::new(TextMenuHeader::new(header).scene()));
 		}
+		let mut rows: Vec<Box<dyn Scene>> = Vec::with_capacity(item_count);
 		for (index, row) in self.items.into_iter().enumerate() {
 			let item = if row.locked {
 				TextMenuItem::faint_yellow(index)
 			} else {
 				TextMenuItem::yellow(index)
 			};
-			children.push(Box::new(cursor_row_scene(item, row, self.align, selected)));
+			rows.push(Box::new(cursor_row_scene(item, row, self.align, selected)));
+		}
+		let mut node = self.anchor.node(self.align);
+		if self.scrollable {
+			node.bottom = Val::Px(COLUMN_BOTTOM);
+			node.max_width = Val::Percent(DESCRIPTION_PANE_LEFT_PERCENT);
+			node.min_height = Val::Px(0.0);
+			let scroll_node = Node {
+				width: Val::Percent(100.0),
+				flex_grow: 1.0,
+				flex_shrink: 1.0,
+				min_height: Val::Px(0.0),
+				flex_direction: FlexDirection::Column,
+				align_items: self.align.items(),
+				row_gap: Val::Px(ITEM_ROW_GAP),
+				overflow: Overflow::scroll_y(),
+				..default()
+			};
+			children.push(Box::new(bsn! {
+				TextCursorScroll
+				template_value(scroll_node)
+				ScrollPosition::default()
+				Children [ {rows} ]
+			}));
+		} else {
+			children.extend(rows);
 		}
 		if let Some(description) = self.description {
 			children.push(Box::new(TextMenuDescription::under_column(description)));
 		}
-		let node = self.anchor.node(self.align);
 		bsn! {
 			TextCursorMenu
 			template_value(TextMenu::with_selected(item_count, selected))
@@ -244,6 +306,7 @@ impl<E: Component + Copy + Default + Unpin + Send + Sync + 'static> ButtonWithSu
 				0,
 				false,
 				None,
+				true,
 			),
 			Box::new(subtext_caption_scene(self.subtext)),
 		];
@@ -300,14 +363,26 @@ pub fn emit_screen_back_on_click(
 	}
 }
 
-/// Click on [`ScreenBack`], or pad/keyboard B, while no overlay is open.
+/// Pad B already closed a modal / overlay this frame. Screen leave must not
+/// also fire on that edge.
+#[derive(Resource, Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct MenuBackConsumed(pub bool);
+
+pub fn clear_menu_back_consumed(mut consumed: ResMut<MenuBackConsumed>) {
+	consumed.0 = false;
+}
+
+/// Click on [`ScreenBack`], or pad B, while no overlay / keypad / consumed Back
+/// is holding the edge.
 pub fn consume_screen_back(
 	nav: &MenuNavPad,
-	overlay_open: bool,
+	overlay: &ActiveOverlayKey,
+	modal_open: bool,
+	consumed: &MenuBackConsumed,
 	backs: &mut MessageReader<ScreenBackPressed>,
 ) -> bool {
 	let clicked = backs.read().next().is_some();
-	if overlay_open {
+	if overlay.0.is_some() || modal_open || consumed.0 {
 		return false;
 	}
 	clicked || nav.just_pressed(MenuNav::Back)
@@ -370,6 +445,7 @@ where
 		selected,
 		row.locked,
 		row.objective,
+		row.objective_visible,
 	)];
 	if let Some(subtext) = row.subtext {
 		children.push(Box::new(subtext_caption_scene(subtext)));
@@ -412,6 +488,7 @@ fn cursor_item_scene<E>(
 	selected: usize,
 	locked: bool,
 	objective: Option<MenuObjectiveKind>,
+	objective_visible: bool,
 ) -> Box<dyn Scene>
 where
 	E: Component + Copy + Default + Unpin + Send + Sync + 'static,
@@ -424,7 +501,9 @@ where
 		Box::new(cursor_label_scene(label, align, item.idle)),
 	];
 	if let Some(kind) = objective {
-		children.push(Box::new(objective_marker_scene(kind)));
+		let marker_visibility =
+			if objective_visible { Visibility::Inherited } else { Visibility::Hidden };
+		children.push(Box::new(objective_marker_scene(kind, marker_visibility)));
 	}
 	let column_gap = match align {
 		TextColumnAlign::Start => Val::Px(CURSOR_ICON_GAP),
@@ -465,7 +544,7 @@ where
 	}
 }
 
-fn objective_marker_scene(kind: MenuObjectiveKind) -> impl Scene + 'static {
+fn objective_marker_scene(kind: MenuObjectiveKind, visibility: Visibility) -> impl Scene + 'static {
 	let marker = kind.marker();
 	let label = marker.label.clone();
 	let color = marker.color;
@@ -483,6 +562,7 @@ fn objective_marker_scene(kind: MenuObjectiveKind) -> impl Scene + 'static {
 	bsn! {
 		template_value(kind)
 		template_value(marker)
+		template_value(visibility)
 		Node {
 			padding: UiRect::axes(px(OBJECTIVE_MARKER_PAD_X), px(OBJECTIVE_MARKER_PAD_Y)),
 			border: UiRect::all(px(OBJECTIVE_MARKER_BORDER)),
@@ -550,36 +630,135 @@ fn cursor_label_scene(label: String, align: TextColumnAlign, color: Color) -> im
 }
 
 /// Show the animated mark only in the selected row’s gutter.
+///
+/// A visible [`MenuObjectiveKind::Selected`] chip moves the mark to [`ScreenEdit`].
 pub fn sync_text_cursor_icons(
 	menus: Query<&TextMenu, With<TextCursorMenu>>,
 	items: Query<(Entity, &TextMenuItem)>,
 	child_of: Query<&ChildOf>,
 	children: Query<&Children>,
+	kinds: Query<&MenuObjectiveKind>,
+	markers: Query<&Visibility, (With<MenuObjectiveMarker>, Without<AnimatedIcon>)>,
 	slots: Query<(), With<TextCursorSlot>>,
-	mut icons: Query<&mut Visibility, With<AnimatedIcon>>,
+	mut icons: Query<&mut Visibility, (With<AnimatedIcon>, Without<MenuObjectiveMarker>)>,
 ) {
 	for (item_entity, item) in &items {
 		let Some(menu) = text_cursor_menu(item_entity, &child_of, &menus) else {
 			continue;
 		};
-		let show = item.index == menu.selected;
+		let edit_cue = descendant_shows_kind(
+			item_entity,
+			MenuObjectiveKind::Selected,
+			&kinds,
+			&markers,
+			&children,
+		);
+		let show = item.index == menu.selected && !edit_cue;
 		let Ok(item_children) = children.get(item_entity) else {
 			continue;
 		};
-		for child in item_children {
-			if slots.get(*child).is_err() {
-				continue;
-			}
-			let Ok(slot_children) = children.get(*child) else {
-				continue;
-			};
-			for icon_entity in slot_children {
-				if let Ok(mut visibility) = icons.get_mut(*icon_entity) {
-					*visibility = if show { Visibility::Inherited } else { Visibility::Hidden };
-				}
+		set_slot_icon_visibility(item_children, show, &slots, &children, &mut icons);
+	}
+}
+
+/// Point the Maybraid mark at Edit when the active character row is live.
+pub fn sync_screen_edit_cursor(
+	menus: Query<&TextMenu, With<TextCursorMenu>>,
+	items: Query<(Entity, &TextMenuItem, Option<&Interaction>)>,
+	edits: Query<&Children, With<ScreenEdit>>,
+	kinds: Query<&MenuObjectiveKind>,
+	markers: Query<&Visibility, (With<MenuObjectiveMarker>, Without<AnimatedIcon>)>,
+	slots: Query<(), With<TextCursorSlot>>,
+	children: Query<&Children>,
+	mut icons: Query<&mut Visibility, (With<AnimatedIcon>, Without<MenuObjectiveMarker>)>,
+) {
+	let cue = items.iter().any(|(entity, item, interaction)| {
+		if !descendant_shows_kind(entity, MenuObjectiveKind::Selected, &kinds, &markers, &children)
+		{
+			return false;
+		}
+		let focused = menus.iter().any(|menu| menu.selected == item.index);
+		let hovered = matches!(interaction, Some(Interaction::Hovered | Interaction::Pressed));
+		focused || hovered
+	});
+	if !cue {
+		return;
+	}
+	for row_children in &edits {
+		set_slot_icon_visibility(row_children, true, &slots, &children, &mut icons);
+	}
+}
+
+/// Follow the selected roster row so a long gallery stays on-screen.
+pub fn scroll_text_cursor_selection_into_view(
+	menus: Query<(&TextMenu, &Children), With<TextCursorMenu>>,
+	mut scrolls: Query<(Entity, &ComputedNode, &mut ScrollPosition), With<TextCursorScroll>>,
+	items: Query<(Entity, &TextMenuItem, &ComputedNode, &bevy::ui::UiGlobalTransform)>,
+	transforms: Query<&bevy::ui::UiGlobalTransform>,
+	child_of: Query<&ChildOf>,
+) {
+	for (menu, menu_children) in &menus {
+		if menu.item_count == 0 {
+			continue;
+		}
+		let Some(scroll_entity) = menu_children.iter().find(|child| scrolls.contains(*child))
+		else {
+			continue;
+		};
+		let Ok((_, viewport, mut scroll)) = scrolls.get_mut(scroll_entity) else {
+			continue;
+		};
+		let Ok(view_tf) = transforms.get(scroll_entity) else {
+			continue;
+		};
+		let Some((_, _, item_node, item_tf)) = items.iter().find(|(entity, item, _, _)| {
+			item.index == menu.selected && entity_is_under(*entity, scroll_entity, &child_of)
+		}) else {
+			continue;
+		};
+		reveal_item_in_viewport(viewport, view_tf, item_node, item_tf, TILE_FOCUS_PAD, &mut scroll);
+	}
+}
+
+fn set_slot_icon_visibility(
+	row_children: &Children,
+	show: bool,
+	slots: &Query<(), With<TextCursorSlot>>,
+	children: &Query<&Children>,
+	icons: &mut Query<&mut Visibility, (With<AnimatedIcon>, Without<MenuObjectiveMarker>)>,
+) {
+	for child in row_children {
+		if slots.get(*child).is_err() {
+			continue;
+		}
+		let Ok(slot_children) = children.get(*child) else {
+			continue;
+		};
+		for icon_entity in slot_children {
+			if let Ok(mut visibility) = icons.get_mut(*icon_entity) {
+				*visibility = if show { Visibility::Inherited } else { Visibility::Hidden };
 			}
 		}
 	}
+}
+
+/// Visible badge of `kind` under `root`. Hidden Selected chips do not count, so
+/// the Edit mark stays on the active character only.
+fn descendant_shows_kind(
+	root: Entity,
+	kind: MenuObjectiveKind,
+	kinds: &Query<&MenuObjectiveKind>,
+	markers: &Query<&Visibility, (With<MenuObjectiveMarker>, Without<AnimatedIcon>)>,
+	children: &Query<&Children>,
+) -> bool {
+	if kinds.get(root).is_ok_and(|found| *found == kind) {
+		return !matches!(markers.get(root), Ok(Visibility::Hidden));
+	}
+	let Ok(kids) = children.get(root) else {
+		return false;
+	};
+	kids.iter()
+		.any(|child| descendant_shows_kind(child, kind, kinds, markers, children))
 }
 
 fn text_cursor_menu<'a>(
@@ -598,7 +777,8 @@ fn text_cursor_menu<'a>(
 
 #[cfg(test)]
 mod tests {
-	use super::{MenuObjectiveKind, TextCursorRow};
+	use super::{MenuObjectiveKind, TextCursorColumn, TextCursorRow};
+	use crate::single_select::{TextColumnAlign, TextColumnAnchor};
 	use crate::theme::{OBJECTIVE_MARKER_FONT_SIZE, TEXT_LIME, TEXT_PURPLE, TEXT_SALMON};
 	use crate::ITEM_FONT_SIZE;
 
@@ -612,9 +792,19 @@ mod tests {
 		assert_eq!(MenuObjectiveKind::ComingSoon.label(), "Coming Soon");
 		assert_eq!(MenuObjectiveKind::StartHere.label(), "Start Here");
 		assert_eq!(MenuObjectiveKind::NeedsCharacter.label(), "Needs Character.");
+		assert_eq!(MenuObjectiveKind::Selected.label(), "Selected");
 		assert_eq!(MenuObjectiveKind::ComingSoon.color(), TEXT_PURPLE);
 		assert_eq!(MenuObjectiveKind::StartHere.color(), TEXT_LIME);
 		assert_eq!(MenuObjectiveKind::NeedsCharacter.color(), TEXT_SALMON);
+		assert_eq!(MenuObjectiveKind::Selected.color(), TEXT_LIME);
+	}
+
+	#[test]
+	fn hidden_objective_keeps_the_badge_kind() {
+		let row = TextCursorRow::new("Jeff", RowAction::Go)
+			.with_hidden_objective(MenuObjectiveKind::Selected);
+		assert_eq!(row.objective, Some(MenuObjectiveKind::Selected));
+		assert!(!row.objective_visible);
 	}
 
 	#[test]
@@ -636,5 +826,20 @@ mod tests {
 		assert_eq!(row.subtext.as_deref(), Some("Braidman"));
 		assert_eq!(row.objective, Some(MenuObjectiveKind::StartHere));
 		assert!(!row.locked);
+	}
+
+	#[test]
+	fn scrollable_roster_keeps_a_sticky_header() {
+		let column = TextCursorColumn {
+			header: Some(String::from("Characters")),
+			items: vec![TextCursorRow::new("Ada", RowAction::Go)],
+			anchor: TextColumnAnchor::TopLeft,
+			align: TextColumnAlign::Start,
+			selected: 0,
+			description: None,
+			scrollable: true,
+		};
+		assert!(column.scrollable);
+		assert_eq!(column.header.as_deref(), Some("Characters"));
 	}
 }

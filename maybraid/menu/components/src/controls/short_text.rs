@@ -12,17 +12,17 @@ use bevy::text::{Justify, LineBreak, LineHeight, TextSpan};
 use bevy::window::{Ime, PrimaryWindow};
 
 use crate::icons::AnimatedIcon;
-use crate::single_select::{KeyboardMenuNav, TextCursorSlot, TextMenuInputLock};
+use crate::single_select::{KeyboardMenuNav, MenuBackConsumed, TextCursorSlot, TextMenuInputLock};
 use crate::theme::{
 	HEADER_FONT_SIZE, PANEL_CHIP_GAP, PANEL_CURSOR_ICON_GAP, PANEL_HEADER_CURSOR_ICON_SIZE,
 	PANEL_HEADER_FONT_SIZE, PANEL_ITEM_FONT_SIZE, PANEL_ROW_GAP, PANEL_VALUE_FONT_SIZE,
-	TEXT_YELLOW, TEXT_YELLOW_FAINT,
+	TEXT_YELLOW, TEXT_YELLOW_FAINT, TEXT_YELLOW_HOVER,
 };
-use maybraid_input::{MenuNav, MenuNavImpulse};
+use maybraid_input::{MenuNav, MenuNavImpulse, PadButton, VirtualPad};
 
 use super::button::spawn_text_button;
 use super::display::menu_display_name;
-use super::hud_menu::{HudMenu, HudMenuItem};
+use super::hud_menu::{HudMenu, HudMenuIgnoresLock, HudMenuItem, HudOverlayMenu};
 use super::text::{spawn_cursor_slot_sized, spawn_hud_text};
 use super::HudFonts;
 
@@ -366,10 +366,70 @@ pub fn emit_short_text_pad_on_click(
 	let Ok(key) = keys.get(click.entity) else {
 		return;
 	};
+	apply_short_text_pad_key(*key, &mut modal);
+}
+
+pub fn emit_short_text_pad_on_nav(
+	impulse: On<MenuNavImpulse>,
+	pad_state: Option<Res<VirtualPad>>,
+	pads: Query<(Entity, &HudMenu), With<ShortTextPad>>,
+	keys: Query<(Entity, &HudMenuItem, Option<&ShortTextPadKey>, Option<&ShortTextSubmit>)>,
+	mut fields: Query<&mut ShortTextField>,
+	mut active: ResMut<ActiveShortText>,
+	mut modal: ResMut<ShortTextModal>,
+	mut consumed: ResMut<MenuBackConsumed>,
+	mut commands: Commands,
+) {
+	let Ok((pad, menu)) = pads.get(impulse.entity) else {
+		return;
+	};
+	match impulse.event().nav {
+		MenuNav::Back => {
+			consumed.0 = true;
+			cancel_short_text_modal(&mut active, &mut modal, &mut fields, &mut commands);
+		}
+		MenuNav::Select => {
+			if pad_start_submits(pad_state.as_deref()) {
+				submit_short_text_modal(&mut active, &mut modal, &mut fields, &mut commands);
+			} else {
+				activate_selected_pad_item(
+					pad,
+					menu,
+					&keys,
+					&mut fields,
+					&mut active,
+					&mut modal,
+					&mut commands,
+				);
+			}
+		}
+		_ => {}
+	}
+}
+
+/// Left-stick click toggles caps while the in-game keypad is open.
+pub fn emit_short_text_pad_shortcuts(
+	pad: Option<Res<VirtualPad>>,
+	mut modal: ResMut<ShortTextModal>,
+) {
+	let Some(pad) = pad else {
+		return;
+	};
+	if !modal.is_open() || !pad.just_pressed(PadButton::StickClickMove) {
+		return;
+	}
+	apply_short_text_pad_key(ShortTextPadKey::Shift, &mut modal);
+}
+
+fn pad_start_submits(pad: Option<&VirtualPad>) -> bool {
+	pad.is_some_and(|pad| pad.just_pressed(PadButton::Start))
+}
+
+fn apply_short_text_pad_key(key: ShortTextPadKey, modal: &mut ShortTextModal) {
 	let Some(session) = modal.session.as_mut() else {
 		return;
 	};
-	match *key {
+	match key {
 		ShortTextPadKey::Shift => session.shift = !session.shift,
 		ShortTextPadKey::Backspace => {
 			session.value.pop();
@@ -384,6 +444,29 @@ pub fn emit_short_text_pad_on_click(
 			let ch = if session.shift { ch.to_ascii_uppercase() } else { ch.to_ascii_lowercase() };
 			push_short_text_char(&mut session.value, session.max_len, ch);
 		}
+	}
+}
+
+fn activate_selected_pad_item(
+	pad: Entity,
+	menu: &HudMenu,
+	keys: &Query<(Entity, &HudMenuItem, Option<&ShortTextPadKey>, Option<&ShortTextSubmit>)>,
+	fields: &mut Query<&mut ShortTextField>,
+	active: &mut ActiveShortText,
+	modal: &mut ShortTextModal,
+	commands: &mut Commands,
+) {
+	for (_, item, key, submit) in keys.iter() {
+		if item.menu != pad || item.index != menu.selected {
+			continue;
+		}
+		if let Some(key) = key {
+			apply_short_text_pad_key(*key, modal);
+		}
+		if submit.is_some() {
+			submit_short_text_modal(active, modal, fields, commands);
+		}
+		return;
 	}
 }
 
@@ -583,26 +666,31 @@ const PAD_KEY_SIZE: f32 = 40.0;
 const PAD_WIDE_KEY: f32 = 88.0;
 
 fn spawn_short_text_pad(parent: &mut ChildSpawnerCommands, fonts: &HudFonts, shift: bool) {
-	parent
-		.spawn((
-			ShortTextPad,
-			Node {
-				width: Val::Percent(100.0),
-				flex_direction: FlexDirection::Column,
-				align_items: AlignItems::FlexStart,
-				row_gap: Val::Px(PANEL_CHIP_GAP),
-				margin: UiRect::top(Val::Px(PANEL_ROW_GAP)),
-				..default()
-			},
-			Pickable::IGNORE,
-		))
-		.with_children(|pad| {
-			for row in PAD_LETTERS {
-				spawn_pad_letter_row(pad, fonts, row, shift);
-			}
-			spawn_pad_digit_row(pad, fonts);
-			spawn_pad_action_row(pad, fonts);
-		});
+	let mut index = 0;
+	let mut pad = parent.spawn((
+		ShortTextPad,
+		HudOverlayMenu,
+		HudMenuIgnoresLock,
+		HudMenu::new(0),
+		Node {
+			width: Val::Percent(100.0),
+			flex_direction: FlexDirection::Column,
+			align_items: AlignItems::FlexStart,
+			row_gap: Val::Px(PANEL_CHIP_GAP),
+			margin: UiRect::top(Val::Px(PANEL_ROW_GAP)),
+			..default()
+		},
+		Pickable::IGNORE,
+	));
+	let pad_id = pad.id();
+	pad.with_children(|pad| {
+		for row in PAD_LETTERS {
+			spawn_pad_letter_row(pad, fonts, row, shift, pad_id, &mut index);
+		}
+		spawn_pad_digit_row(pad, fonts, pad_id, &mut index);
+		spawn_pad_action_row(pad, fonts, pad_id, &mut index);
+	});
+	pad.insert(HudMenu::new(index));
 }
 
 fn spawn_pad_letter_row(
@@ -610,6 +698,8 @@ fn spawn_pad_letter_row(
 	fonts: &HudFonts,
 	letters: &str,
 	shift: bool,
+	pad: Entity,
+	index: &mut usize,
 ) {
 	parent
 		.spawn((
@@ -628,14 +718,20 @@ fn spawn_pad_letter_row(
 					fonts,
 					&pad_letter_label(ch, shift),
 					PAD_KEY_SIZE,
-					ShortTextPadKey::Letter(ch),
+					(ShortTextPadKey::Letter(ch), HudMenuItem { index: *index, menu: pad }),
 					Some(ch),
 				);
+				*index += 1;
 			}
 		});
 }
 
-fn spawn_pad_digit_row(parent: &mut ChildSpawnerCommands, fonts: &HudFonts) {
+fn spawn_pad_digit_row(
+	parent: &mut ChildSpawnerCommands,
+	fonts: &HudFonts,
+	pad: Entity,
+	index: &mut usize,
+) {
 	parent
 		.spawn((
 			Node {
@@ -653,14 +749,20 @@ fn spawn_pad_digit_row(parent: &mut ChildSpawnerCommands, fonts: &HudFonts) {
 					fonts,
 					&ch.to_string(),
 					PAD_KEY_SIZE,
-					ShortTextPadKey::Digit(ch),
+					(ShortTextPadKey::Digit(ch), HudMenuItem { index: *index, menu: pad }),
 					None,
 				);
+				*index += 1;
 			}
 		});
 }
 
-fn spawn_pad_action_row(parent: &mut ChildSpawnerCommands, fonts: &HudFonts) {
+fn spawn_pad_action_row(
+	parent: &mut ChildSpawnerCommands,
+	fonts: &HudFonts,
+	pad: Entity,
+	index: &mut usize,
+) {
 	parent
 		.spawn((
 			Node {
@@ -673,10 +775,42 @@ fn spawn_pad_action_row(parent: &mut ChildSpawnerCommands, fonts: &HudFonts) {
 			Pickable::IGNORE,
 		))
 		.with_children(|row| {
-			spawn_pad_key(row, fonts, "shift", PAD_WIDE_KEY, ShortTextPadKey::Shift, None);
-			spawn_pad_key(row, fonts, "space", PAD_WIDE_KEY * 2.0, ShortTextPadKey::Space, None);
-			spawn_pad_key(row, fonts, "back", PAD_WIDE_KEY, ShortTextPadKey::Backspace, None);
-			spawn_pad_key(row, fonts, "submit", PAD_WIDE_KEY, ShortTextSubmit, None);
+			spawn_pad_key(
+				row,
+				fonts,
+				"shift",
+				PAD_WIDE_KEY,
+				(ShortTextPadKey::Shift, HudMenuItem { index: *index, menu: pad }),
+				None,
+			);
+			*index += 1;
+			spawn_pad_key(
+				row,
+				fonts,
+				"space",
+				PAD_WIDE_KEY * 2.0,
+				(ShortTextPadKey::Space, HudMenuItem { index: *index, menu: pad }),
+				None,
+			);
+			*index += 1;
+			spawn_pad_key(
+				row,
+				fonts,
+				"back",
+				PAD_WIDE_KEY,
+				(ShortTextPadKey::Backspace, HudMenuItem { index: *index, menu: pad }),
+				None,
+			);
+			*index += 1;
+			spawn_pad_key(
+				row,
+				fonts,
+				"submit",
+				PAD_WIDE_KEY,
+				(ShortTextSubmit, HudMenuItem { index: *index, menu: pad }),
+				None,
+			);
+			*index += 1;
 		});
 }
 
@@ -701,6 +835,7 @@ fn spawn_pad_key(
 				..default()
 			},
 			BackgroundColor(Color::NONE),
+			Outline::new(Val::Px(2.0), Val::Px(1.0), Color::NONE),
 		))
 		.with_children(|button| {
 			let mut text = button.spawn((
@@ -784,6 +919,34 @@ pub fn restore_short_text_editing(
 	}
 }
 
+pub fn sync_short_text_pad_focus(
+	pads: Query<(Entity, &HudMenu), With<ShortTextPad>>,
+	items: Query<(Entity, &HudMenuItem)>,
+	mut outlines: Query<&mut Outline>,
+	mut colors: Query<&mut TextColor>,
+	children: Query<&Children>,
+) {
+	for (pad, menu) in &pads {
+		for (entity, item) in &items {
+			if item.menu != pad {
+				continue;
+			}
+			let focused = item.index == menu.selected;
+			if let Ok(mut outline) = outlines.get_mut(entity) {
+				outline.color = if focused { TEXT_YELLOW } else { Color::NONE };
+			}
+			let Ok(row_children) = children.get(entity) else {
+				continue;
+			};
+			for child in row_children {
+				if let Ok(mut color) = colors.get_mut(*child) {
+					color.0 = if focused { TEXT_YELLOW_HOVER } else { TEXT_YELLOW };
+				}
+			}
+		}
+	}
+}
+
 pub fn sync_short_text_cursors(
 	fields: Query<(&ShortTextField, Option<&HudMenuItem>, &Children)>,
 	menus: Query<&HudMenu>,
@@ -826,7 +989,11 @@ pub fn sync_short_text_ime(
 
 #[cfg(test)]
 mod tests {
-	use super::{is_short_text_char, pad_letter_label, push_short_text_char};
+	use super::{
+		apply_short_text_pad_key, is_short_text_char, pad_letter_label, push_short_text_char,
+		ShortTextModal, ShortTextPadKey, ShortTextSession,
+	};
+	use bevy::prelude::Entity;
 
 	#[test]
 	fn pad_letters_follow_shift() {
@@ -848,5 +1015,23 @@ mod tests {
 		assert!(is_short_text_char('Z'));
 		assert!(is_short_text_char('0'));
 		assert!(!is_short_text_char('!'));
+	}
+
+	#[test]
+	fn pad_shift_toggles_caps() {
+		let mut modal = ShortTextModal {
+			session: Some(ShortTextSession {
+				key: "name",
+				source: Entity::PLACEHOLDER,
+				value: String::new(),
+				original: String::new(),
+				max_len: 8,
+				shift: false,
+			}),
+		};
+		apply_short_text_pad_key(ShortTextPadKey::Shift, &mut modal);
+		assert!(modal.session.as_ref().is_some_and(|session| session.shift));
+		apply_short_text_pad_key(ShortTextPadKey::Shift, &mut modal);
+		assert!(modal.session.as_ref().is_some_and(|session| !session.shift));
 	}
 }

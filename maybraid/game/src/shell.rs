@@ -16,8 +16,8 @@ use maybraid_world::{
 	PlayerPhysicsEnabled, TerrainStreamingEnabled, WorldGameplayEnabled, WorldSceneryVisible,
 };
 use menu_components::MENU_CLEAR;
-use menu_playground::{CharacterPreviewLight, CharacterPreviewRoot};
 use menu_playground::CharacterScreen;
+use menu_playground::{CharacterPreviewLight, CharacterPreviewRoot};
 use menu_screens::{
 	despawn_menu_screens, request_show_gallery, request_show_home, request_show_in_game,
 	request_show_loading, MenuScreen,

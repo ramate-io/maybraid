@@ -7,7 +7,9 @@ pub use controller::MenuController;
 
 use bevy::prelude::*;
 use maybraid_input::{PadGameplayEnabled, VirtualPadPlugin, VirtualPadSystems};
-use menu_components::{KeyboardMenuNav, MenuComponentsPlugin, TextMenuInputLock, TextMenuSystems};
+use menu_components::{
+	KeyboardMenuNav, MenuComponentsPlugin, ShortTextModal, TextMenuInputLock, TextMenuSystems,
+};
 
 pub struct MenuControllerPlugin;
 
@@ -30,6 +32,10 @@ impl Plugin for MenuControllerPlugin {
 	}
 }
 
-fn sync_pad_from_menu_lock(lock: Res<TextMenuInputLock>, mut enabled: ResMut<PadGameplayEnabled>) {
-	enabled.0 = !lock.0;
+fn sync_pad_from_menu_lock(
+	lock: Res<TextMenuInputLock>,
+	modal: Res<ShortTextModal>,
+	mut enabled: ResMut<PadGameplayEnabled>,
+) {
+	enabled.0 = !lock.0 || modal.is_open();
 }

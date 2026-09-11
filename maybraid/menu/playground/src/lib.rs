@@ -32,7 +32,10 @@ use lod::LodViewer;
 use maybraid_character_ui_menu_renderer::CharacterMenuEvent;
 use maybraid_input::{MenuNavPad, VirtualPadPlugin};
 use maybraid_menu_controller::MenuControllerPlugin;
-use menu_components::{consume_screen_back, ActiveOverlayKey, ScreenBackPressed};
+use menu_components::{
+	consume_screen_back, ActiveOverlayKey, MenuBackConsumed, ScreenBackPressed, ShortTextModal,
+	TextMenuSystems,
+};
 use menu_screens::{
 	cancel_pending_create, request_show_gallery, request_show_home, request_show_in_game,
 	request_show_in_game_settings, CreateCharacterPlugin, GalleryChoice, GalleryScreen,
@@ -84,7 +87,7 @@ impl Plugin for MenuPlaygroundPlugin {
 				echo_in_game_settings_choice,
 				echo_character_menu,
 				echo_gallery_choice,
-				editor_back,
+				editor_back.after(TextMenuSystems::Navigate),
 				loading_demo::run_loading_demo.before(LoadingScreenSystems::Apply),
 				ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 			),
@@ -190,6 +193,8 @@ fn editor_back(
 	mut commands: Commands,
 	nav: Res<MenuNavPad>,
 	overlay: Res<ActiveOverlayKey>,
+	modal: Res<ShortTextModal>,
+	consumed: Res<MenuBackConsumed>,
 	mut backs: MessageReader<ScreenBackPressed>,
 	return_to: Option<Res<crate::CharacterEditorReturn>>,
 	character: Query<(), With<CharacterScreen>>,
@@ -198,7 +203,7 @@ fn editor_back(
 	weapons: Query<(), With<WeaponGalleryScreen>>,
 	settings: Query<(), With<InGameSettingsScreen>>,
 ) {
-	if !consume_screen_back(&nav, overlay.0.is_some(), &mut backs) {
+	if !consume_screen_back(&nav, &overlay, modal.is_open(), &consumed, &mut backs) {
 		return;
 	}
 	if !settings.is_empty() {

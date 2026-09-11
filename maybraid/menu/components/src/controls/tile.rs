@@ -6,7 +6,7 @@ use bevy::text::{Justify, LineBreak, LineHeight, TextBounds, TextSpan};
 use crate::theme::{
 	PANEL_CHIP_GAP, PANEL_GROUP_FONT_SIZE, PANEL_ITEM_FONT_SIZE, PANEL_TILE_COLUMNS,
 	PANEL_TILE_MIN_HEIGHT, TEXT_LIME, TEXT_SALMON, TEXT_YELLOW, TEXT_YELLOW_FAINT,
-	TEXT_YELLOW_HOVER,
+	TEXT_YELLOW_HOVER, TILE_FOCUS_PAD,
 };
 
 use super::display::menu_display_name;
@@ -88,6 +88,7 @@ pub fn spawn_asset_tile(
 			tile_node(),
 			BorderColor::all(if selected { face } else { Color::NONE }),
 			BackgroundColor(Color::NONE),
+			Outline::new(Val::Px(2.0), Val::Px(2.0), Color::NONE),
 		))
 		.with_children(|button| {
 			if let Some(thumbnail) = thumbnail {
@@ -127,6 +128,7 @@ pub fn spawn_grid_catalog_tile(
 		tile_node(),
 		BorderColor::all(Color::NONE),
 		BackgroundColor(Color::NONE),
+		Outline::new(Val::Px(2.0), Val::Px(2.0), Color::NONE),
 	));
 	if let Some(rank) = rank {
 		tile.insert(SlotRank(rank));
@@ -262,7 +264,8 @@ pub fn sync_hover_tiles(
 			continue;
 		}
 		node.border = UiRect::all(Val::Px(if tile.preserve_fill { 1.0 } else { TILE_BORDER }));
-		*border = BorderColor::all(if tile.preserve_fill { TEXT_YELLOW_FAINT } else { Color::NONE });
+		*border =
+			BorderColor::all(if tile.preserve_fill { TEXT_YELLOW_FAINT } else { Color::NONE });
 		if !tile.preserve_fill {
 			background.0 = Color::NONE;
 		}
@@ -294,6 +297,7 @@ pub fn spawn_tile_grid(
 				row_gap: Val::Px(PANEL_CHIP_GAP),
 				align_items: AlignItems::Stretch,
 				justify_content: justify,
+				padding: UiRect::all(Val::Px(TILE_FOCUS_PAD)),
 				..default()
 			},
 			Pickable::IGNORE,
@@ -306,9 +310,7 @@ mod tests {
 	use bevy::ecs::system::RunSystemOnce;
 	use bevy::prelude::*;
 
-	use super::{
-		sync_hover_tiles, tile_caption, tile_grid_columns, tile_node, HoverTile,
-	};
+	use super::{sync_hover_tiles, tile_caption, tile_grid_columns, tile_node, HoverTile};
 	use crate::controls::hud_menu::{HudMenu, HudMenuItem};
 	use crate::theme::PANEL_TILE_COLUMNS;
 
@@ -319,10 +321,7 @@ mod tests {
 
 	#[test]
 	fn long_caption_keeps_every_word() {
-		assert_eq!(
-			tile_caption("celestial-red-tide-joggers"),
-			"Celestial Red Tide Joggers"
-		);
+		assert_eq!(tile_caption("celestial-red-tide-joggers"), "Celestial Red Tide Joggers");
 	}
 
 	#[test]

@@ -14,7 +14,10 @@ use maybraid_world::{
 	PlayerPhysicsEnabled, PlayerSpawnXz, TerrainStreamingEnabled, WorldGameplayEnabled,
 	WorldMobHudEnabled, WorldPlayerLoadout, WorldPlugin, WorldSceneryVisible,
 };
-use menu_components::{consume_screen_back, ActiveOverlayKey, ScreenBackPressed, MENU_CLEAR};
+use menu_components::{
+	consume_screen_back, ActiveOverlayKey, MenuBackConsumed, ScreenBackPressed, ShortTextModal,
+	TextMenuSystems, MENU_CLEAR,
+};
 use menu_playground::{
 	ActiveCharacter, CharacterEditBaseline, CharacterEditorReturn, CharacterMenuState,
 	CharacterPreviewPlugin, CharacterScreen, CharacterScreenPlugin, CharacterSessionPlugin,
@@ -115,8 +118,12 @@ impl Plugin for GamePlugin {
 					sync_world_loadout_from_editor.run_if(in_state(WorldPause::Menu)),
 					persist_changed_player_inventory,
 					sync_world_mob_hud,
-					pause_menu_back.run_if(in_state(WorldPause::Menu)),
-					character_back.run_if(in_state(GameFlow::Characters)),
+					pause_menu_back
+						.after(TextMenuSystems::Navigate)
+						.run_if(in_state(WorldPause::Menu)),
+					character_back
+						.after(TextMenuSystems::Navigate)
+						.run_if(in_state(GameFlow::Characters)),
 					toggle_world_pause
 						.after(CharacterControlSystems)
 						.run_if(in_state(GameFlow::World)),
@@ -276,6 +283,8 @@ fn pause_menu_back(
 	mut commands: Commands,
 	nav: Res<MenuNavPad>,
 	overlay: Res<ActiveOverlayKey>,
+	modal: Res<ShortTextModal>,
+	consumed: Res<MenuBackConsumed>,
 	mut backs: MessageReader<ScreenBackPressed>,
 	settings: Query<(), With<InGameSettingsScreen>>,
 	character: Query<(), With<CharacterScreen>>,
@@ -283,7 +292,7 @@ fn pause_menu_back(
 	if settings.is_empty() && character.is_empty() {
 		return;
 	}
-	if !consume_screen_back(nav.as_ref(), overlay.0.is_some(), &mut backs) {
+	if !consume_screen_back(nav.as_ref(), &overlay, modal.is_open(), &consumed, &mut backs) {
 		return;
 	}
 	commands.remove_resource::<CharacterEditorReturn>();
@@ -313,12 +322,14 @@ fn character_back(
 	mut commands: Commands,
 	nav: Res<MenuNavPad>,
 	overlay: Res<ActiveOverlayKey>,
+	modal: Res<ShortTextModal>,
+	consumed: Res<MenuBackConsumed>,
 	mut backs: MessageReader<ScreenBackPressed>,
 	character: Query<(), With<CharacterScreen>>,
 	spin: Query<(), With<SpinRevealScreen>>,
 	gallery: Query<(), With<GalleryScreen>>,
 ) {
-	if !consume_screen_back(nav.as_ref(), overlay.0.is_some(), &mut backs) {
+	if !consume_screen_back(nav.as_ref(), &overlay, modal.is_open(), &consumed, &mut backs) {
 		return;
 	}
 	if !character.is_empty() {

@@ -3,8 +3,8 @@
 use bevy::prelude::*;
 use maybraid_input::{MenuNav, MenuNavImpulse};
 use menu_components::{
-	HudMenu, HudMenuItem, HudOverlayMenu, KeyboardMenuNav, MenuActivate, MenuFocus,
-	TextMenuInputLock,
+	HudMenu, HudMenuItem, HudOverlayMenu, KeyboardMenuNav, MenuActivate, MenuBackConsumed,
+	MenuFocus, TextMenuInputLock,
 };
 
 use crate::event::{OverlayClose, OverlayOpen};
@@ -164,6 +164,7 @@ pub fn emit_overlay_close_on_nav(
 	impulse: On<MenuNavImpulse>,
 	lock: Res<TextMenuInputLock>,
 	roots: Query<Entity, With<OverlaySelectRoot>>,
+	mut consumed: ResMut<MenuBackConsumed>,
 	mut commands: Commands,
 ) {
 	if lock.0 || impulse.event().nav != MenuNav::Back {
@@ -172,5 +173,6 @@ pub fn emit_overlay_close_on_nav(
 	let Ok(root) = roots.single() else {
 		return;
 	};
+	consumed.0 = true;
 	commands.trigger(OverlayClose { entity: root });
 }
