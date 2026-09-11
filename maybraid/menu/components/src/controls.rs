@@ -25,8 +25,9 @@ pub use hud_menu::{
 };
 pub use row::spawn_labeled_row;
 pub use scroll::{
-	on_hud_scroll, scroll_hud_selection_into_view, send_hud_scroll_events, spawn_scroll_pane,
-	sync_hud_scrollbars, HudScroll, HudScrollThumb, HudScrollTrack, HudScrollViewport,
+	on_hud_scroll, scroll_hud_selection_into_view, scroll_hud_viewport_on_nav,
+	send_hud_scroll_events, spawn_scroll_pane, sync_hud_scrollbars, HudScroll, HudScrollThumb,
+	HudScrollTrack, HudScrollViewport,
 };
 pub use section::{
 	spawn_section_header, sync_hud_cursors, ActiveOverlayKey, CursorRow, OverlayHeader,

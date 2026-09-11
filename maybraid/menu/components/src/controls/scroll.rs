@@ -7,9 +7,12 @@ use bevy::prelude::*;
 
 use crate::controls::hud_menu::{HudMenu, HudMenuItem};
 use crate::theme::{SCROLLBAR_THUMB, SCROLLBAR_TRACK, SCROLLBAR_WIDTH, TILE_FOCUS_PAD};
+use maybraid_input::{MenuNav, MenuNavImpulse};
 
 const SCROLL_LINE_PX: f32 = 14.0;
 const MIN_THUMB_PX: f32 = 24.0;
+/// Pad / D-pad step when a scroll pane has no focusable HUD items (Loadout).
+const HUD_NAV_SCROLL_LINE: f32 = 56.0;
 
 /// Scrollable column that a [`HudScrollThumb`] tracks.
 #[derive(Component, Debug, Default, Clone, Copy)]
@@ -192,6 +195,37 @@ pub fn on_hud_scroll(
 	}
 }
 
+/// Read-only panes (Loadout) have a [`HudMenu`] with no items, so arrows never
+/// change selection. Step the viewport instead.
+pub fn scroll_hud_viewport_on_nav(
+	impulse: On<MenuNavImpulse>,
+	mut viewports: Query<(&HudMenu, &ComputedNode, &mut ScrollPosition), With<HudScrollViewport>>,
+) {
+	let Ok((menu, computed, mut scroll)) = viewports.get_mut(impulse.entity) else {
+		return;
+	};
+	if menu.item_count > 0 {
+		return;
+	}
+	let scale = computed.inverse_scale_factor();
+	let max_scroll = ((computed.content_size().y - computed.size().y) * scale).max(0.0);
+	if max_scroll <= 0.0 {
+		return;
+	}
+	let Some(delta) = hud_nav_scroll_delta(impulse.event().nav) else {
+		return;
+	};
+	scroll.y = (scroll.y + delta).clamp(0.0, max_scroll);
+}
+
+fn hud_nav_scroll_delta(nav: MenuNav) -> Option<f32> {
+	match nav {
+		MenuNav::Down => Some(HUD_NAV_SCROLL_LINE),
+		MenuNav::Up => Some(-HUD_NAV_SCROLL_LINE),
+		_ => None,
+	}
+}
+
 /// Keep the focused HUD item inside a scroll viewport (sliders, clothing / weapons).
 pub fn scroll_hud_selection_into_view(
 	mut viewports: Query<
@@ -275,7 +309,8 @@ fn is_under(mut entity: Entity, root: Entity, child_of: &Query<&ChildOf>) -> boo
 
 #[cfg(test)]
 mod tests {
-	use super::scroll_delta_to_reveal;
+	use super::{hud_nav_scroll_delta, scroll_delta_to_reveal, HUD_NAV_SCROLL_LINE};
+	use maybraid_input::MenuNav;
 
 	#[test]
 	fn item_already_visible_does_not_scroll() {
@@ -304,5 +339,13 @@ mod tests {
 	fn item_above_the_fold_scrolls_up() {
 		let delta = scroll_delta_to_reveal(400.0, 800.0, 20.0, 30.0, 6.0);
 		assert!(delta < 0.0, "expected up, got {delta}");
+	}
+
+	#[test]
+	fn empty_pane_maps_pad_arrows_to_scroll() {
+		assert_eq!(hud_nav_scroll_delta(MenuNav::Down), Some(HUD_NAV_SCROLL_LINE));
+		assert_eq!(hud_nav_scroll_delta(MenuNav::Up), Some(-HUD_NAV_SCROLL_LINE));
+		assert_eq!(hud_nav_scroll_delta(MenuNav::Left), None);
+		assert_eq!(hud_nav_scroll_delta(MenuNav::Select), None);
 	}
 }

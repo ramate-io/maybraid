@@ -16,17 +16,17 @@ pub mod theme;
 
 pub use controls::{
 	apply_hud_menu_nav, color_from_hex, menu_display_name, navigate_hud_menus, on_hud_scroll,
-	restore_short_text_editing, scroll_hud_selection_into_view, select_hud_item_on_over,
-	send_hud_scroll_events, spawn_asset_tile, spawn_block_label, spawn_corner_action,
-	spawn_cursor_slot, spawn_cursor_slot_sized, spawn_grid_catalog_tile, spawn_group_label,
-	spawn_header_line, spawn_hud_action, spawn_hud_plain, spawn_hud_text, spawn_labeled_row,
-	spawn_panel_title, spawn_scroll_pane, spawn_section_header, spawn_short_text_button,
-	spawn_stepper, spawn_swatch, spawn_swatch_row, spawn_text_button, spawn_tile_grid,
-	sync_hover_tiles, sync_hud_cursors, sync_hud_item_focus, sync_hud_scrollbars, sync_tile_wrap,
-	ActiveOverlayKey, ActiveShortText, CursorRow, HoverTile, HudFonts, HudMenu, HudMenuIgnoresLock,
-	HudMenuItem, HudOverlayMenu, HudScroll, HudScrollThumb, HudScrollTrack, HudScrollViewport,
-	OverlayHeader, OverlayHeaderKey, ShortTextChange, ShortTextField, ShortTextKey, ShortTextModal,
-	ShortTextPad, ShortTextToggle, ShortTextValue, SlotRank,
+	restore_short_text_editing, scroll_hud_selection_into_view, scroll_hud_viewport_on_nav,
+	select_hud_item_on_over, send_hud_scroll_events, spawn_asset_tile, spawn_block_label,
+	spawn_corner_action, spawn_cursor_slot, spawn_cursor_slot_sized, spawn_grid_catalog_tile,
+	spawn_group_label, spawn_header_line, spawn_hud_action, spawn_hud_plain, spawn_hud_text,
+	spawn_labeled_row, spawn_panel_title, spawn_scroll_pane, spawn_section_header,
+	spawn_short_text_button, spawn_stepper, spawn_swatch, spawn_swatch_row, spawn_text_button,
+	spawn_tile_grid, sync_hover_tiles, sync_hud_cursors, sync_hud_item_focus, sync_hud_scrollbars,
+	sync_tile_wrap, ActiveOverlayKey, ActiveShortText, CursorRow, HoverTile, HudFonts, HudMenu,
+	HudMenuIgnoresLock, HudMenuItem, HudOverlayMenu, HudScroll, HudScrollThumb, HudScrollTrack,
+	HudScrollViewport, OverlayHeader, OverlayHeaderKey, ShortTextChange, ShortTextField,
+	ShortTextKey, ShortTextModal, ShortTextPad, ShortTextToggle, ShortTextValue, SlotRank,
 };
 pub use icons::{blink_animated_icons, spin_icons, AnimatedIcon, Icon, SpinningIcon};
 pub use info::{
@@ -90,6 +90,7 @@ impl Plugin for MenuComponentsPlugin {
 			.add_observer(select_hud_item_on_over)
 			.add_observer(apply_text_menu_nav)
 			.add_observer(apply_hud_menu_nav)
+			.add_observer(scroll_hud_viewport_on_nav)
 			.add_observer(on_hud_scroll)
 			.add_observer(emit_screen_back_on_click)
 			.add_observer(emit_screen_edit_on_click)
