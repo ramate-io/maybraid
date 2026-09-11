@@ -356,6 +356,13 @@ fn drain_present_cull_hides_leaving_id_without_a_lattice_message() -> Result<()>
 	);
 	assert!(presenter.vegetation.contains_key(&far_id));
 	assert!(presenter.vegetation.contains_key(&near_id));
+
+	app.update();
+	let presenter = app.world().resource::<RecordingPresenter>();
+	assert!(
+		presenter.hidden.contains(&far_id),
+		"unchanged keep + membership revision must keep the cached hide set"
+	);
 	Ok(())
 }
 

@@ -60,6 +60,12 @@ pub fn produce_keyboard(
 	if keyboard.pressed(KeyCode::KeyC) {
 		pad.hold_digital(PadButton::BumperFocus);
 	}
+	if keyboard.pressed(KeyCode::KeyE) || keyboard.pressed(KeyCode::KeyX) {
+		pad.hold_digital(PadButton::X);
+	}
+	if keyboard.pressed(KeyCode::KeyY) {
+		pad.hold_digital(PadButton::Y);
+	}
 
 	pad.keys = keyboard.clone();
 	for event in key_reader.read() {
@@ -90,5 +96,29 @@ mod tests {
 		let move_stick = move_stick.clamp_length_max(1.0);
 		assert!((move_stick.length() - 1.0).abs() < 1e-5);
 		Ok(())
+	}
+
+	#[test]
+	fn y_holds_swap_active() {
+		let mut pad = VirtualPad::default();
+		let mut keyboard = ButtonInput::<KeyCode>::default();
+		keyboard.press(KeyCode::KeyY);
+		if keyboard.pressed(KeyCode::KeyY) {
+			pad.hold_digital(PadButton::Y);
+		}
+		assert!(pad.digital_held(PadButton::Y));
+	}
+
+	#[test]
+	fn e_and_x_hold_interact() {
+		for key in [KeyCode::KeyE, KeyCode::KeyX] {
+			let mut pad = VirtualPad::default();
+			let mut keyboard = ButtonInput::<KeyCode>::default();
+			keyboard.press(key);
+			if keyboard.pressed(KeyCode::KeyE) || keyboard.pressed(KeyCode::KeyX) {
+				pad.hold_digital(PadButton::X);
+			}
+			assert!(pad.digital_held(PadButton::X));
+		}
 	}
 }

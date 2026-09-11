@@ -16,11 +16,18 @@ use maybraid_world::{
 	PlayerPhysicsEnabled, TerrainStreamingEnabled, WorldGameplayEnabled, WorldSceneryVisible,
 };
 use menu_components::MENU_CLEAR;
+use menu_playground::CharacterScreen;
 use menu_playground::{CharacterPreviewLight, CharacterPreviewRoot};
 use menu_screens::{
 	despawn_menu_screens, request_show_gallery, request_show_home, request_show_in_game,
 	request_show_loading, MenuScreen,
 };
+
+/// World camera pose stashed while the pause character editor uses the preview eye.
+#[derive(Resource, Clone, Copy, Debug)]
+pub(crate) struct StashedWorldCamera {
+	transform: Transform,
+}
 
 use crate::flow::{GameFlow, WorldPause};
 
@@ -78,6 +85,67 @@ pub(crate) fn enter_world_menu(mut commands: Commands) {
 
 pub(crate) fn exit_world_menu(mut commands: Commands, overlay: Query<Entity, With<MenuScreen>>) {
 	despawn_menu_screens(&mut commands, overlay);
+	commands.remove_resource::<menu_playground::CharacterEditorReturn>();
+}
+
+pub(crate) fn restore_stashed_world_camera(
+	mut commands: Commands,
+	stashed: Option<Res<StashedWorldCamera>>,
+	mut cameras: Query<(Entity, &mut Transform), (With<Camera3d>, Without<LoadingBackdropCamera>)>,
+) {
+	let Some(stashed) = stashed else {
+		return;
+	};
+	for (entity, mut transform) in &mut cameras {
+		*transform = stashed.transform;
+		commands.entity(entity).remove::<PreviewCameraController>();
+	}
+	commands.remove_resource::<StashedWorldCamera>();
+}
+
+/// Preview layers + eye while the pause menu is on the character page.
+pub(crate) fn apply_pause_character_look(
+	mut commands: Commands,
+	character: Query<(), With<CharacterScreen>>,
+	stashed: Option<Res<StashedWorldCamera>>,
+	mut scenery: ResMut<WorldSceneryVisible>,
+	mut cameras: Query<
+		(Entity, &mut Transform, Has<PreviewCameraController>),
+		(With<Camera3d>, Without<LoadingBackdropCamera>),
+	>,
+) {
+	let editing = !character.is_empty();
+	scenery.0 = !editing;
+	let layers = if editing {
+		RenderLayers::layer(PREVIEW_RENDER_LAYER)
+	} else {
+		RenderLayers::layer(WORLD_RENDER_LAYER)
+	};
+	if editing && stashed.is_none() {
+		if let Some((_, transform, _)) = cameras.iter().next() {
+			commands.insert_resource(StashedWorldCamera { transform: *transform });
+		}
+	}
+	for (entity, mut transform, has_preview) in &mut cameras {
+		commands.entity(entity).insert(layers.clone());
+		if editing && !has_preview {
+			*transform = Transform::from_translation(PREVIEW_EYE).looking_at(PREVIEW_LOOK, Vec3::Y);
+			commands.entity(entity).insert(PreviewCameraController {
+				speed: 6.0,
+				sensitivity: 0.005,
+				yaw: 0.0,
+				pitch: 0.0,
+			});
+		} else if !editing && has_preview {
+			if let Some(stashed) = stashed.as_ref() {
+				*transform = stashed.transform;
+			}
+			commands.entity(entity).remove::<PreviewCameraController>();
+		}
+	}
+	if !editing && stashed.is_some() {
+		commands.remove_resource::<StashedWorldCamera>();
+	}
 }
 
 pub(crate) fn apply_shell_look(

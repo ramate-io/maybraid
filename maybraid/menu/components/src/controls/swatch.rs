@@ -33,6 +33,7 @@ pub fn spawn_swatch(
 ) {
 	parent.spawn((
 		Button,
+		crate::controls::tile::HoverTile { equipped: selected, preserve_fill: true },
 		extra,
 		Node {
 			width: Val::Px(PANEL_SWATCH_SIZE),

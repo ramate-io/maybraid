@@ -34,13 +34,14 @@ pub struct TextCursorScroll;
 pub struct TextCursorSlot;
 
 /// Onboarding / availability badge copy and color. Screens set a kind rather
-/// than free-stringing the three strings.
+/// than free-stringing the strings.
 #[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum MenuObjectiveKind {
 	#[default]
 	ComingSoon,
 	StartHere,
 	NeedsCharacter,
+	Selected,
 }
 
 impl MenuObjectiveKind {
@@ -49,6 +50,7 @@ impl MenuObjectiveKind {
 			Self::ComingSoon => "Coming Soon",
 			Self::StartHere => "Start Here",
 			Self::NeedsCharacter => "Needs Character.",
+			Self::Selected => "Selected",
 		}
 	}
 
@@ -57,6 +59,7 @@ impl MenuObjectiveKind {
 			Self::ComingSoon => TEXT_PURPLE,
 			Self::StartHere => TEXT_LIME,
 			Self::NeedsCharacter => TEXT_SALMON,
+			Self::Selected => TEXT_LIME,
 		}
 	}
 
@@ -340,14 +343,23 @@ pub fn emit_screen_back_on_click(
 	}
 }
 
-/// Click on [`ScreenBack`], or pad/keyboard B, while no overlay is open.
+/// Pad B already closed a modal / overlay this frame. Screen leave must not
+/// also fire on that edge.
+#[derive(Resource, Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct MenuBackConsumed(pub bool);
+
+pub fn clear_menu_back_consumed(mut consumed: ResMut<MenuBackConsumed>) {
+	consumed.0 = false;
+}
+
+/// Click on [`ScreenBack`], or pad B, while no modal is holding Back.
 pub fn consume_screen_back(
 	nav: &MenuNavPad,
-	overlay_open: bool,
+	block: bool,
 	backs: &mut MessageReader<ScreenBackPressed>,
 ) -> bool {
 	let clicked = backs.read().next().is_some();
-	if overlay_open {
+	if block {
 		return false;
 	}
 	clicked || nav.just_pressed(MenuNav::Back)
@@ -590,11 +602,14 @@ fn cursor_label_scene(label: String, align: TextColumnAlign, color: Color) -> im
 }
 
 /// Show the animated mark only in the selected row’s gutter.
+///
+/// A [`MenuObjectiveKind::Selected`] row moves the mark to [`ScreenEdit`].
 pub fn sync_text_cursor_icons(
 	menus: Query<&TextMenu, With<TextCursorMenu>>,
 	items: Query<(Entity, &TextMenuItem)>,
 	child_of: Query<&ChildOf>,
 	children: Query<&Children>,
+	kinds: Query<&MenuObjectiveKind>,
 	slots: Query<(), With<TextCursorSlot>>,
 	mut icons: Query<&mut Visibility, With<AnimatedIcon>>,
 ) {
@@ -602,7 +617,9 @@ pub fn sync_text_cursor_icons(
 		let Some(menu) = text_cursor_menu(item_entity, &child_of, &menus) else {
 			continue;
 		};
-		let show = item.index == menu.selected;
+		let edit_cue =
+			descendant_has_kind(item_entity, MenuObjectiveKind::Selected, &kinds, &children);
+		let show = item.index == menu.selected && !edit_cue;
 		let Ok(item_children) = children.get(item_entity) else {
 			continue;
 		};
@@ -616,6 +633,44 @@ pub fn sync_text_cursor_icons(
 			for icon_entity in slot_children {
 				if let Ok(mut visibility) = icons.get_mut(*icon_entity) {
 					*visibility = if show { Visibility::Inherited } else { Visibility::Hidden };
+				}
+			}
+		}
+	}
+}
+
+/// Point the Maybraid mark at Edit when the active character row is live.
+pub fn sync_screen_edit_cursor(
+	menus: Query<&TextMenu, With<TextCursorMenu>>,
+	items: Query<(Entity, &TextMenuItem, Option<&Interaction>)>,
+	edits: Query<&Children, With<ScreenEdit>>,
+	kinds: Query<&MenuObjectiveKind>,
+	slots: Query<(), With<TextCursorSlot>>,
+	children: Query<&Children>,
+	mut icons: Query<&mut Visibility, With<AnimatedIcon>>,
+) {
+	let cue = items.iter().any(|(entity, item, interaction)| {
+		if !descendant_has_kind(entity, MenuObjectiveKind::Selected, &kinds, &children) {
+			return false;
+		}
+		let focused = menus.iter().any(|menu| menu.selected == item.index);
+		let hovered = matches!(interaction, Some(Interaction::Hovered | Interaction::Pressed));
+		focused || hovered
+	});
+	if !cue {
+		return;
+	}
+	for row_children in &edits {
+		for child in row_children {
+			if slots.get(*child).is_err() {
+				continue;
+			}
+			let Ok(slot_children) = children.get(*child) else {
+				continue;
+			};
+			for icon_entity in slot_children {
+				if let Ok(mut visibility) = icons.get_mut(*icon_entity) {
+					*visibility = Visibility::Inherited;
 				}
 			}
 		}
@@ -684,6 +739,21 @@ fn descendant_has_selected(
 		.any(|child| descendant_has_selected(child, selected, items, children))
 }
 
+fn descendant_has_kind(
+	root: Entity,
+	kind: MenuObjectiveKind,
+	kinds: &Query<&MenuObjectiveKind>,
+	children: &Query<&Children>,
+) -> bool {
+	if kinds.get(root).is_ok_and(|found| *found == kind) {
+		return true;
+	}
+	let Ok(kids) = children.get(root) else {
+		return false;
+	};
+	kids.iter().any(|child| descendant_has_kind(child, kind, kinds, children))
+}
+
 fn text_cursor_menu<'a>(
 	start: Entity,
 	child_of: &Query<&ChildOf>,
@@ -715,9 +785,11 @@ mod tests {
 		assert_eq!(MenuObjectiveKind::ComingSoon.label(), "Coming Soon");
 		assert_eq!(MenuObjectiveKind::StartHere.label(), "Start Here");
 		assert_eq!(MenuObjectiveKind::NeedsCharacter.label(), "Needs Character.");
+		assert_eq!(MenuObjectiveKind::Selected.label(), "Selected");
 		assert_eq!(MenuObjectiveKind::ComingSoon.color(), TEXT_PURPLE);
 		assert_eq!(MenuObjectiveKind::StartHere.color(), TEXT_LIME);
 		assert_eq!(MenuObjectiveKind::NeedsCharacter.color(), TEXT_SALMON);
+		assert_eq!(MenuObjectiveKind::Selected.color(), TEXT_LIME);
 	}
 
 	#[test]

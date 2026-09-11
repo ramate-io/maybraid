@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use bevy::prelude::*;
 use combat_targeting::{CombatTargeting, TargetSource};
-use damage::Health;
+use damage::{Downed, Health};
 use evasion_intelligence::{AssailantSource, EvasionIntelligenceUser};
 use threat_intelligence::{ThreatKnowledge, ThreatSource};
 
@@ -22,6 +22,7 @@ type Managers<'w, 's> = Query<
 		Option<&'static Health>,
 		Option<&'static mut CombatTargeting>,
 		Option<&'static mut EvasionIntelligenceUser>,
+		Has<Downed>,
 	),
 >;
 
@@ -33,9 +34,39 @@ pub fn select_threat_tactics(
 	mut managers: Managers,
 ) {
 	let now = time.elapsed_secs();
-	for (entity, transform, knowledge, mut management, health, mut targeting, mut evasion) in
-		&mut managers
+	for (
+		entity,
+		transform,
+		knowledge,
+		mut management,
+		health,
+		mut targeting,
+		mut evasion,
+		downed,
+	) in &mut managers
 	{
+		if downed {
+			if management.tactic != ThreatTactic::Ignore {
+				let from = management.tactic;
+				management.generation = management.generation.wrapping_add(1).max(1);
+				management.tactic = ThreatTactic::Ignore;
+				changed.write(ThreatTacticChanged {
+					entity,
+					from,
+					to: ThreatTactic::Ignore,
+					generation: management.generation,
+				});
+			}
+			apply_tactic(
+				&mut commands,
+				entity,
+				knowledge,
+				ThreatTactic::Ignore,
+				targeting.as_deref_mut(),
+				evasion.as_deref_mut(),
+			);
+			continue;
+		}
 		if now < management.next_select_at {
 			continue;
 		}

@@ -447,20 +447,52 @@ fn pad_visual_region(
 	}
 }
 
+const PADDED_VIEWER_QUANT_XZ: f32 = 8.0;
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct PaddedTerrainTickKey {
+	region: bevy::math::bounding::Aabb3d,
+	store_rev: u64,
+	terrain_rev: u64,
+	urban: bool,
+	viewer: Option<(i32, i32)>,
+}
+
+fn quantize_viewer_xz(translation: Vec3) -> (i32, i32) {
+	(
+		(translation.x / PADDED_VIEWER_QUANT_XZ).floor() as i32,
+		(translation.z / PADDED_VIEWER_QUANT_XZ).floor() as i32,
+	)
+}
+
 /// Compose pads only for Durham cells that are already stored.
+#[allow(private_interfaces)]
 pub fn generate_urbanization_padded_terrain(
 	config: Res<crate::PlaygroundConfig>,
 	keep: Res<LodPresentKeepRegion<UrbanizationLodChan>>,
 	layout: Res<TerrainCellLayout>,
 	mut development: DevelopmentIndex,
+	mut last: Local<Option<PaddedTerrainTickKey>>,
 ) {
 	if config.urbanization.is_none() {
+		*last = None;
 		return;
 	}
 	let Some(region) = pad_visual_region(&layout, keep.region) else {
+		*last = None;
 		return;
 	};
-	development.store.invalidate_dirty_padded();
+	let removed = development.store.invalidate_dirty_padded();
+	let key = PaddedTerrainTickKey {
+		region,
+		store_rev: development.store.membership_revision(),
+		terrain_rev: development.terrain_store().membership_revision(),
+		urban: true,
+		viewer: None,
+	};
+	if removed == 0 && last.as_ref() == Some(&key) {
+		return;
+	}
 	let identity = Transform::IDENTITY;
 	let lod_ref = LodRef {
 		entity: Entity::PLACEHOLDER,
@@ -475,9 +507,17 @@ pub fn generate_urbanization_padded_terrain(
 			&lod_ref,
 		);
 	}
+	*last = Some(PaddedTerrainTickKey {
+		region,
+		store_rev: development.store.membership_revision(),
+		terrain_rev: development.terrain_store().membership_revision(),
+		urban: true,
+		viewer: None,
+	});
 }
 
 /// Present padded replacements for the urbanization keep and cull stale cells.
+#[allow(private_interfaces)]
 pub fn present_urbanization_padded_terrain(
 	config: Res<crate::PlaygroundConfig>,
 	keep: Res<LodPresentKeepRegion<UrbanizationLodChan>>,
@@ -487,12 +527,16 @@ pub fn present_urbanization_padded_terrain(
 	mut state: ResMut<UrbanizationPaddedTerrainState>,
 	lod_viewers: Query<&GlobalTransform, With<LodViewer>>,
 	cameras: Query<&GlobalTransform, With<Camera3d>>,
+	mut last: Local<Option<PaddedTerrainTickKey>>,
 ) {
-	state.wanted.clear();
 	let Some(region) =
 		pad_visual_region(&layout, keep.region).filter(|_| config.urbanization.is_some())
 	else {
-		presenter.remove_stale(&state.wanted);
+		if last.is_some() || !state.wanted.is_empty() {
+			state.wanted.clear();
+			presenter.remove_stale(&state.wanted);
+		}
+		*last = None;
 		return;
 	};
 	let viewer = lod_viewers
@@ -504,6 +548,16 @@ pub fn present_urbanization_padded_terrain(
 			Transform::from_translation(Vec3::new(t.x, 0.0, t.z))
 		})
 		.unwrap_or(Transform::IDENTITY);
+	let key = PaddedTerrainTickKey {
+		region,
+		store_rev: store.membership_revision(),
+		terrain_rev: presenter.terrain_membership_revision(),
+		urban: true,
+		viewer: Some(quantize_viewer_xz(viewer.translation)),
+	};
+	if last.as_ref() == Some(&key) {
+		return;
+	}
 	let lod_ref = LodRef {
 		entity: Entity::PLACEHOLDER,
 		previous_transform: &viewer,
@@ -511,11 +565,13 @@ pub fn present_urbanization_padded_terrain(
 		bounds: &region,
 	};
 	let view = PaddedStoreView::new(&store);
-	presenter.present_banded(&view, region, &lod_ref);
-	state.wanted = SpatialIndex::<TerrainWithPads>::tracked_ids_for(&view, region)
+	let tracked: HashSet<Id> = SpatialIndex::<TerrainWithPads>::tracked_ids_for(&view, region)
 		.into_iter()
 		.map(|tracked| tracked.0)
 		.collect();
+	presenter.present_tracked(&view, &tracked, &lod_ref);
+	state.wanted = tracked;
+	*last = Some(key);
 }
 
 /// Hide raw Durham visual roots while their padded replacements are active.
@@ -563,6 +619,13 @@ mod tests {
 		let (present, generate) = stream_radii_m(DEFAULT_URBANIZATION_STREAM_RADIUS);
 		assert!((present - DEVELOPMENT_PRESENT_RADIUS_M).abs() < 1e-3);
 		assert!((generate - DEVELOPMENT_GENERATE_RADIUS_M).abs() < 1e-3);
+		Ok(())
+	}
+
+	#[test]
+	fn padded_viewer_quant_is_stable_inside_cell() -> Result<()> {
+		assert_eq!(quantize_viewer_xz(Vec3::new(0.1, 12.0, 7.9)), (0, 0));
+		assert_eq!(quantize_viewer_xz(Vec3::new(8.0, 0.0, -0.1)), (1, -1));
 		Ok(())
 	}
 

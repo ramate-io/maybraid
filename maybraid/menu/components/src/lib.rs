@@ -22,11 +22,11 @@ pub use controls::{
 	spawn_header_line, spawn_hud_action, spawn_hud_plain, spawn_hud_text, spawn_labeled_row,
 	spawn_panel_title, spawn_scroll_pane, spawn_section_header, spawn_short_text_button,
 	spawn_stepper, spawn_swatch, spawn_swatch_row, spawn_text_button, spawn_tile_grid,
-	sync_hud_cursors, sync_hud_item_focus, sync_hud_scrollbars, ActiveOverlayKey, ActiveShortText,
-	CursorRow, HudFonts, HudMenu, HudMenuIgnoresLock, HudMenuItem, HudOverlayMenu, HudScroll,
-	HudScrollThumb, HudScrollTrack, HudScrollViewport, OverlayHeader, OverlayHeaderKey,
-	ShortTextChange, ShortTextField, ShortTextKey, ShortTextModal, ShortTextPad, ShortTextToggle,
-	ShortTextValue, SlotRank,
+	sync_hover_tiles, sync_hud_cursors, sync_hud_item_focus, sync_hud_scrollbars, sync_tile_wrap,
+	ActiveOverlayKey, ActiveShortText, CursorRow, HoverTile, HudFonts, HudMenu, HudMenuIgnoresLock,
+	HudMenuItem, HudOverlayMenu, HudScroll, HudScrollThumb, HudScrollTrack, HudScrollViewport,
+	OverlayHeader, OverlayHeaderKey, ShortTextChange, ShortTextField, ShortTextKey, ShortTextModal,
+	ShortTextPad, ShortTextToggle, ShortTextValue, SlotRank,
 };
 pub use icons::{blink_animated_icons, spin_icons, AnimatedIcon, Icon, SpinningIcon};
 pub use info::{
@@ -39,16 +39,17 @@ pub use loading::{
 	LoadingExplainer, LoadingPanel, LoadingStack,
 };
 pub use single_select::{
-	apply_text_menu_nav, consume_screen_back, emit_menu_activate_on_click,
-	emit_menu_activate_on_enter, emit_menu_activate_on_nav, emit_menu_focus,
-	emit_screen_back_on_click, emit_screen_edit_on_click, navigate_text_menus,
+	apply_text_menu_nav, clear_menu_back_consumed, consume_screen_back,
+	emit_menu_activate_on_click, emit_menu_activate_on_enter, emit_menu_activate_on_nav,
+	emit_menu_focus, emit_screen_back_on_click, emit_screen_edit_on_click, navigate_text_menus,
 	republish_menu_activate, screen_back_scene, screen_edit_scene,
-	scroll_text_cursor_selection_into_view, select_text_menu_item_on_over, sync_text_cursor_icons,
-	sync_text_menu_item_colors, ButtonWithSubtext, KeyboardMenuNav, MenuActivate, MenuFocus,
-	MenuItemLocked, MenuObjectiveKind, MenuObjectiveMarker, ScreenBack, ScreenBackPressed,
-	ScreenEdit, ScreenEditPressed, TextColumnAlign, TextColumnAnchor, TextCursorColumn,
-	TextCursorMenu, TextCursorRow, TextCursorScroll, TextCursorSlot, TextMenu, TextMenuColumn,
-	TextMenuHeader, TextMenuInputLock, TextMenuItem, TextMenuItemLabel,
+	scroll_text_cursor_selection_into_view, select_text_menu_item_on_over, sync_screen_edit_cursor,
+	sync_text_cursor_icons, sync_text_menu_item_colors, ButtonWithSubtext, KeyboardMenuNav,
+	MenuActivate, MenuBackConsumed, MenuFocus, MenuItemLocked, MenuObjectiveKind,
+	MenuObjectiveMarker, ScreenBack, ScreenBackPressed, ScreenEdit, ScreenEditPressed,
+	TextColumnAlign, TextColumnAnchor, TextCursorColumn, TextCursorMenu, TextCursorRow,
+	TextCursorScroll, TextCursorSlot, TextMenu, TextMenuColumn, TextMenuHeader, TextMenuInputLock,
+	TextMenuItem, TextMenuItemLabel,
 };
 pub use spin_reveal::{
 	SpinRevealCover, SpinRevealFace, SpinRevealPayload, SpinRevealSlot, SpinRevealViewport,
@@ -80,9 +81,11 @@ impl Plugin for MenuComponentsPlugin {
 			.init_resource::<ActiveOverlayKey>()
 			.init_resource::<ActiveShortText>()
 			.init_resource::<ShortTextModal>()
+			.init_resource::<MenuBackConsumed>()
 			.add_message::<ScreenBackPressed>()
 			.add_message::<ScreenEditPressed>()
 			.configure_sets(Update, TextMenuSystems::InputLock.before(TextMenuSystems::Navigate))
+			.add_systems(Update, clear_menu_back_consumed.in_set(TextMenuSystems::InputLock))
 			.add_observer(select_text_menu_item_on_over)
 			.add_observer(select_hud_item_on_over)
 			.add_observer(apply_text_menu_nav)
@@ -106,8 +109,15 @@ impl Plugin for MenuComponentsPlugin {
 					sync_hud_scrollbars,
 					scroll_hud_selection_into_view,
 					scroll_text_cursor_selection_into_view,
-					sync_hud_cursors,
+					(sync_hud_cursors, sync_screen_edit_cursor).chain(),
 					sync_hud_item_focus,
+					sync_hover_tiles,
+					sync_tile_wrap,
+				),
+			)
+			.add_systems(
+				Update,
+				(
 					controls::restore_short_text_editing,
 					controls::sync_short_text_display,
 					controls::sync_short_text_cursors,

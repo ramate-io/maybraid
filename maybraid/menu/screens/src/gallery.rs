@@ -79,11 +79,18 @@ impl GalleryChoice {
 	}
 }
 
-fn gallery_rows(summaries: &[CharacterSummary]) -> Vec<TextCursorRow<GalleryChoice>> {
+fn gallery_rows(
+	summaries: &[CharacterSummary],
+	active: Option<CharacterId>,
+) -> Vec<TextCursorRow<GalleryChoice>> {
 	let mut rows = vec![GalleryChoice::create_row(summaries.is_empty())];
 	rows.extend(summaries.iter().map(|summary| {
-		TextCursorRow::new(summary.name.clone(), GalleryChoice::Select(summary.id))
-			.with_subtext(summary.species_title)
+		let mut row = TextCursorRow::new(summary.name.clone(), GalleryChoice::Select(summary.id))
+			.with_subtext(summary.species_title);
+		if Some(summary.id) == active {
+			row = row.with_objective(MenuObjectiveKind::Selected);
+		}
+		row
 	}));
 	rows
 }
@@ -92,7 +99,7 @@ fn gallery_scene(
 	summaries: &[CharacterSummary],
 	active: Option<CharacterId>,
 ) -> impl Scene + 'static {
-	let rows = gallery_rows(summaries);
+	let rows = gallery_rows(summaries, active);
 	let selected = gallery_selected_index(summaries, active);
 	let children: Vec<Box<dyn Scene>> = vec![
 		Box::new(
@@ -154,7 +161,7 @@ mod tests {
 		assert_eq!(row.objective, Some(MenuObjectiveKind::StartHere));
 		assert!(!row.locked);
 		assert!(row.subtext.is_none());
-		assert!(gallery_rows(&[]).len() == 1);
+		assert!(gallery_rows(&[], None).len() == 1);
 	}
 
 	#[test]
@@ -164,10 +171,23 @@ mod tests {
 			name: "Jeff".into(),
 			species_title: "Braidman",
 		}];
-		let rows = gallery_rows(&summaries);
+		let rows = gallery_rows(&summaries, None);
 		assert!(rows[0].objective.is_none());
 		assert_eq!(rows[0].label, "Create a Character");
 		assert_eq!(rows[1].subtext.as_deref(), Some("Braidman"));
 		assert!(rows[1].objective.is_none());
+	}
+
+	#[test]
+	fn active_character_wears_selected() {
+		let jeff = CharacterId(1);
+		let unnamed = CharacterId(2);
+		let summaries = [
+			CharacterSummary { id: jeff, name: "Jeff".into(), species_title: "Braidman" },
+			CharacterSummary { id: unnamed, name: "Unnamed".into(), species_title: "Braidman" },
+		];
+		let rows = gallery_rows(&summaries, Some(jeff));
+		assert_eq!(rows[1].objective, Some(MenuObjectiveKind::Selected));
+		assert!(rows[2].objective.is_none());
 	}
 }

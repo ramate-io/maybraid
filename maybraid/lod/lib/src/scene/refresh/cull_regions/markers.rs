@@ -27,6 +27,10 @@ pub struct LodNestedRefreshAllowed;
 pub struct LodNestedRefreshBlocked;
 
 /// Host currently has at least one non-current, non-culling level root.
+///
+/// Region enqueue still lowers a stale desired level on unmarked hosts, then
+/// walks roots when the level just dropped or this marker is present. Mob
+/// full-scan cull filters `With<Self>` because that path does not lower levels.
 #[derive(Debug, Clone, Copy, Default, Component)]
 pub struct LodHostHasCullableRoots;
 

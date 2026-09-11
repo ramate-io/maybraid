@@ -16,6 +16,7 @@ mod pitch;
 mod player_lifecycle;
 mod player_position;
 mod poi;
+mod stash;
 mod start;
 mod ui;
 mod vsync;
@@ -34,6 +35,10 @@ pub use player_camera::CameraPov;
 pub use player_lifecycle::{WorldPlayerLifecyclePlugin, WorldPlayerRespawnConfig};
 pub use player_position::{PlayerPositionPlugin, PlayerPositionWaypoints};
 pub use poi::{WorldPoiDiscoveryBudget, WorldPoiPlugin, WorldPoiSystems};
+pub use stash::{
+	spawn_exploded_stashes, spawn_world_stash, StashDisplayedItem, StashPolicy, WorldStash,
+	WorldStashPlugin, WorldStashSettings, DEFAULT_CLAIM_RADIUS, DEFAULT_LOOT_SECS,
+};
 pub use start::{
 	parse_xz_metres, player_spawn_xz, resolve_start_at, start_at_from_env, take_start_at_from_args,
 	START_AT_ENV,
@@ -146,7 +151,7 @@ impl Plugin for WorldPlugin {
 			})
 			.insert_resource(CharacterRagdollTargets {
 				players: true,
-				npcs: false,
+				npcs: true,
 				unmarked: false,
 			})
 			.add_plugins(CharacterRagdollPlugin)
@@ -164,6 +169,7 @@ impl Plugin for WorldPlugin {
 			.add_plugins(WorldIntelligencePlugin)
 			.add_plugins(WorldPoiPlugin)
 			.add_plugins(WorldPlayerLifecyclePlugin)
+			.add_plugins(WorldStashPlugin)
 			.add_plugins(PlayerPositionPlugin)
 			.insert_resource(PadMovementEnabled(false))
 			.insert_resource(CharacterCameraFollowEnabled(false))

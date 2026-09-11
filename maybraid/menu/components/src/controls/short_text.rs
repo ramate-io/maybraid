@@ -12,7 +12,7 @@ use bevy::text::{Justify, LineBreak, LineHeight, TextSpan};
 use bevy::window::{Ime, PrimaryWindow};
 
 use crate::icons::AnimatedIcon;
-use crate::single_select::{KeyboardMenuNav, TextCursorSlot, TextMenuInputLock};
+use crate::single_select::{KeyboardMenuNav, MenuBackConsumed, TextCursorSlot, TextMenuInputLock};
 use crate::theme::{
 	HEADER_FONT_SIZE, PANEL_CHIP_GAP, PANEL_CURSOR_ICON_GAP, PANEL_HEADER_CURSOR_ICON_SIZE,
 	PANEL_HEADER_FONT_SIZE, PANEL_ITEM_FONT_SIZE, PANEL_ROW_GAP, PANEL_VALUE_FONT_SIZE,
@@ -377,6 +377,7 @@ pub fn emit_short_text_pad_on_nav(
 	mut fields: Query<&mut ShortTextField>,
 	mut active: ResMut<ActiveShortText>,
 	mut modal: ResMut<ShortTextModal>,
+	mut consumed: ResMut<MenuBackConsumed>,
 	mut commands: Commands,
 ) {
 	let Ok((pad, menu)) = pads.get(impulse.entity) else {
@@ -384,6 +385,7 @@ pub fn emit_short_text_pad_on_nav(
 	};
 	match impulse.event().nav {
 		MenuNav::Back => {
+			consumed.0 = true;
 			cancel_short_text_modal(&mut active, &mut modal, &mut fields, &mut commands);
 		}
 		MenuNav::Select => {

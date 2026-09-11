@@ -17,6 +17,7 @@ pub enum CharacterIntent {
 	Jump,
 	ExitInteraction,
 	StartInteraction,
+	/// Cycle the weapon queue (pad **Y** / keyboard **Y**).
 	SwapActive,
 	InGameMenu,
 	Inventory,

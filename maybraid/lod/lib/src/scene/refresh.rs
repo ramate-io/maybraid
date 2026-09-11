@@ -41,7 +41,8 @@ pub use bounds::LodHostBounds;
 pub use cull_regions::{
 	fill_lod_cull_produce_cache, produce_lod_cull_for_region, produce_lod_cull_for_region_erased,
 	produce_lod_cull_regions, sync_cullable_roots_marker, sync_nested_refresh_allowed,
-	LodCullMarkerPlugin, LodCullProduceCache, LodCullRegionCursor, LodCullRegions,
+	LodCullMarkerPlugin, LodCullProduceCache, LodCullProduceCadence, LodCullRegionCursor,
+	LodCullRegions,
 	LodCullRegionsStatus, LodHostHasCullableRoots, LodNestedRefreshAllowed,
 	LodNestedRefreshBlocked, LodNestedRefreshSyncBudget, LodSceneCullAabb,
 	LodSceneCullProduceFillPlugin, LodSceneCullRegion, LodSceneCullRegionPlugin,

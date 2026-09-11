@@ -125,8 +125,8 @@ pub const CORNER_INSET: f32 = 16.0;
 /// Upper-corner brand / mode line (`Maybraid - Discovery`).
 pub const BRAND_MODE_FONT_SIZE: f32 = 36.0;
 
-/// Menu column sits above the description strip.
-pub const COLUMN_BOTTOM: f32 = 88.0;
+/// Menu column sits above the footer chrome (Back / Edit).
+pub const COLUMN_BOTTOM: f32 = 120.0;
 
 /// Corner action (Back / Edit / Save) inset from the window bottom.
 pub const CORNER_BOTTOM: f32 = 40.0;
@@ -185,8 +185,11 @@ pub const PANEL_CURSOR_ICON_GAP: f32 = 10.0;
 /// Color chip size in a panel swatch row.
 pub const PANEL_SWATCH_SIZE: f32 = 22.0;
 
-/// Minimum asset-tile width when thumbnails are off.
+/// Floor width so a grid cell does not collapse under long wrap.
 pub const PANEL_TILE_MIN_WIDTH: f32 = 88.0;
+
+/// Catalog / select tiles sit two to a row.
+pub const PANEL_TILE_COLUMNS: u16 = 2;
 
 /// Minimum asset-tile height when thumbnails are off.
 pub const PANEL_TILE_MIN_HEIGHT: f32 = 56.0;
