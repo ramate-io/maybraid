@@ -389,7 +389,7 @@ pub fn emit_short_text_pad_on_nav(
 			cancel_short_text_modal(&mut active, &mut modal, &mut fields, &mut commands);
 		}
 		MenuNav::Select => {
-			if pad_state.as_ref().is_some_and(|pad| pad.just_pressed(PadButton::Start)) {
+			if pad_start_submits(pad_state.as_deref()) {
 				submit_short_text_modal(&mut active, &mut modal, &mut fields, &mut commands);
 			} else {
 				activate_selected_pad_item(
@@ -418,9 +418,11 @@ pub fn emit_short_text_pad_shortcuts(
 	if !modal.is_open() || !pad.just_pressed(PadButton::StickClickMove) {
 		return;
 	}
-	if let Some(session) = modal.session.as_mut() {
-		session.shift = !session.shift;
-	}
+	apply_short_text_pad_key(ShortTextPadKey::Shift, &mut modal);
+}
+
+fn pad_start_submits(pad: Option<&VirtualPad>) -> bool {
+	pad.is_some_and(|pad| pad.just_pressed(PadButton::Start))
 }
 
 fn apply_short_text_pad_key(key: ShortTextPadKey, modal: &mut ShortTextModal) {

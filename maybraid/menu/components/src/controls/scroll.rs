@@ -207,15 +207,10 @@ pub fn scroll_hud_viewport_on_nav(
 	if menu.item_count > 0 {
 		return;
 	}
-	let scale = computed.inverse_scale_factor();
-	let max_scroll = ((computed.content_size().y - computed.size().y) * scale).max(0.0);
-	if max_scroll <= 0.0 {
-		return;
-	}
 	let Some(delta) = hud_nav_scroll_delta(impulse.event().nav) else {
 		return;
 	};
-	scroll.y = (scroll.y + delta).clamp(0.0, max_scroll);
+	add_scroll_y(&mut scroll, computed, delta);
 }
 
 fn hud_nav_scroll_delta(nav: MenuNav) -> Option<f32> {
@@ -246,30 +241,49 @@ pub fn scroll_hud_selection_into_view(
 		let Some((_, _, item_node, item_tf)) = items.iter().find(|(entity, item, _, _)| {
 			item.menu == viewport
 				&& item.index == menu.selected
-				&& is_under(*entity, viewport, &child_of)
+				&& entity_is_under(*entity, viewport, &child_of)
 		}) else {
 			continue;
 		};
-		let scale = computed.inverse_scale_factor();
-		let view_h = computed.size().y;
-		let item_h = item_node.size().y;
-		if view_h <= 0.0 || item_h <= 0.0 {
-			continue;
-		}
-		let slack = TILE_FOCUS_PAD / scale.max(f32::EPSILON);
-		let delta = scroll_delta_to_reveal(
-			view_tf.affine().translation.y,
-			view_h,
-			item_tf.affine().translation.y,
-			item_h,
-			slack,
-		);
-		if delta == 0.0 {
-			continue;
-		}
-		let max_scroll = ((computed.content_size().y - view_h) * scale).max(0.0);
-		scroll.y = (scroll.y + delta * scale).clamp(0.0, max_scroll);
+		reveal_item_in_viewport(computed, view_tf, item_node, item_tf, TILE_FOCUS_PAD, &mut scroll);
 	}
+}
+
+pub(crate) fn reveal_item_in_viewport(
+	view: &ComputedNode,
+	view_tf: &bevy::ui::UiGlobalTransform,
+	item: &ComputedNode,
+	item_tf: &bevy::ui::UiGlobalTransform,
+	slack_px: f32,
+	scroll: &mut ScrollPosition,
+) {
+	let scale = view.inverse_scale_factor();
+	let view_h = view.size().y;
+	let item_h = item.size().y;
+	if view_h <= 0.0 || item_h <= 0.0 {
+		return;
+	}
+	let slack = slack_px / scale.max(f32::EPSILON);
+	let delta = scroll_delta_to_reveal(
+		view_tf.affine().translation.y,
+		view_h,
+		item_tf.affine().translation.y,
+		item_h,
+		slack,
+	);
+	if delta == 0.0 {
+		return;
+	}
+	add_scroll_y(scroll, view, delta * scale);
+}
+
+fn add_scroll_y(scroll: &mut ScrollPosition, computed: &ComputedNode, delta: f32) {
+	let scale = computed.inverse_scale_factor();
+	let max_scroll = ((computed.content_size().y - computed.size().y) * scale).max(0.0);
+	if max_scroll <= 0.0 {
+		return;
+	}
+	scroll.y = (scroll.y + delta).clamp(0.0, max_scroll);
 }
 
 /// [`UiGlobalTransform`] is the node center. Delta is in the same space as the
@@ -292,7 +306,11 @@ fn scroll_delta_to_reveal(
 	}
 }
 
-fn is_under(mut entity: Entity, root: Entity, child_of: &Query<&ChildOf>) -> bool {
+pub(crate) fn entity_is_under(
+	mut entity: Entity,
+	root: Entity,
+	child_of: &Query<&ChildOf>,
+) -> bool {
 	if entity == root {
 		return true;
 	}

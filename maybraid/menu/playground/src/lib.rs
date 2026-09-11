@@ -203,8 +203,7 @@ fn editor_back(
 	weapons: Query<(), With<WeaponGalleryScreen>>,
 	settings: Query<(), With<InGameSettingsScreen>>,
 ) {
-	if !consume_screen_back(&nav, overlay.0.is_some() || modal.is_open() || consumed.0, &mut backs)
-	{
+	if !consume_screen_back(&nav, &overlay, modal.is_open(), &consumed, &mut backs) {
 		return;
 	}
 	if !settings.is_empty() {

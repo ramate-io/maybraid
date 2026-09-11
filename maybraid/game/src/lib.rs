@@ -292,11 +292,7 @@ fn pause_menu_back(
 	if settings.is_empty() && character.is_empty() {
 		return;
 	}
-	if !consume_screen_back(
-		nav.as_ref(),
-		overlay.0.is_some() || modal.is_open() || consumed.0,
-		&mut backs,
-	) {
+	if !consume_screen_back(nav.as_ref(), &overlay, modal.is_open(), &consumed, &mut backs) {
 		return;
 	}
 	commands.remove_resource::<CharacterEditorReturn>();
@@ -333,11 +329,7 @@ fn character_back(
 	spin: Query<(), With<SpinRevealScreen>>,
 	gallery: Query<(), With<GalleryScreen>>,
 ) {
-	if !consume_screen_back(
-		nav.as_ref(),
-		overlay.0.is_some() || modal.is_open() || consumed.0,
-		&mut backs,
-	) {
+	if !consume_screen_back(nav.as_ref(), &overlay, modal.is_open(), &consumed, &mut backs) {
 		return;
 	}
 	if !character.is_empty() {
