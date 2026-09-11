@@ -13,11 +13,11 @@ use super::text_menu::{
 use crate::controls::section::CursorRow;
 use crate::info::description::TextMenuDescription;
 use crate::theme::{
-	BARLOW_SEMIBOLD, CORNER_BOTTOM, CORNER_INSET, CURSOR_ICON_GAP, CURSOR_ICON_SIZE,
-	DESCRIPTION_FONT_SIZE, ITEM_FONT_SIZE, OBJECTIVE_MARKER_BORDER, OBJECTIVE_MARKER_FONT_SIZE,
-	OBJECTIVE_MARKER_OFFSET_Y, OBJECTIVE_MARKER_PAD_X, OBJECTIVE_MARKER_PAD_Y,
-	OBJECTIVE_MARKER_RADIUS, TEXT_LIME, TEXT_PURPLE, TEXT_SALMON, TEXT_YELLOW, TEXT_YELLOW_FAINT,
-	TEXT_YELLOW_FAINT_FOCUS,
+	BARLOW_SEMIBOLD, COLUMN_BOTTOM, CORNER_BOTTOM, CORNER_INSET, CURSOR_ICON_GAP, CURSOR_ICON_SIZE,
+	DESCRIPTION_FONT_SIZE, DESCRIPTION_PANE_LEFT_PERCENT, ITEM_FONT_SIZE, ITEM_ROW_GAP,
+	OBJECTIVE_MARKER_BORDER, OBJECTIVE_MARKER_FONT_SIZE, OBJECTIVE_MARKER_OFFSET_Y,
+	OBJECTIVE_MARKER_PAD_X, OBJECTIVE_MARKER_PAD_Y, OBJECTIVE_MARKER_RADIUS, TEXT_LIME,
+	TEXT_PURPLE, TEXT_SALMON, TEXT_YELLOW, TEXT_YELLOW_FAINT, TEXT_YELLOW_FAINT_FOCUS,
 };
 use maybraid_input::{MenuNav, MenuNavPad};
 
@@ -107,6 +107,7 @@ pub struct TextCursorColumn<E> {
 	pub align: TextColumnAlign,
 	pub selected: usize,
 	pub description: Option<String>,
+	pub scrollable: bool,
 }
 
 impl<E: Component + Copy + Default + Unpin + Send + Sync + 'static> TextCursorColumn<E> {
@@ -124,6 +125,7 @@ impl<E: Component + Copy + Default + Unpin + Send + Sync + 'static> TextCursorCo
 			align: TextColumnAlign::Start,
 			selected: 0,
 			description: None,
+			scrollable: false,
 		}
 	}
 
@@ -139,6 +141,7 @@ impl<E: Component + Copy + Default + Unpin + Send + Sync + 'static> TextCursorCo
 			align: TextColumnAlign::Start,
 			selected: 0,
 			description: None,
+			scrollable: false,
 		}
 	}
 
@@ -153,6 +156,7 @@ impl<E: Component + Copy + Default + Unpin + Send + Sync + 'static> TextCursorCo
 			align: TextColumnAlign::Start,
 			selected: 0,
 			description: None,
+			scrollable: false,
 		}
 	}
 
@@ -173,6 +177,13 @@ impl<E: Component + Copy + Default + Unpin + Send + Sync + 'static> TextCursorCo
 
 	pub fn with_description(mut self, description: impl Into<String>) -> Self {
 		self.description = Some(description.into());
+		self
+	}
+
+	/// Pin the column between the top inset and the footer band and scroll
+	/// overflow so a long roster stays reachable.
+	pub fn scrollable(mut self) -> Self {
+		self.scrollable = true;
 		self
 	}
 
@@ -198,11 +209,18 @@ impl<E: Component + Copy + Default + Unpin + Send + Sync + 'static> TextCursorCo
 		if let Some(description) = self.description {
 			children.push(Box::new(TextMenuDescription::under_column(description)));
 		}
-		let node = self.anchor.node(self.align);
+		let mut node = self.anchor.node(self.align);
+		if self.scrollable {
+			node.bottom = Val::Px(COLUMN_BOTTOM);
+			node.max_width = Val::Percent(DESCRIPTION_PANE_LEFT_PERCENT);
+			node.min_height = Val::Px(0.0);
+			node.overflow = Overflow::scroll_y();
+		}
 		bsn! {
 			TextCursorMenu
 			template_value(TextMenu::with_selected(item_count, selected))
 			template_value(node)
+			ScrollPosition::default()
 			Children [ {children} ]
 		}
 	}
@@ -580,6 +598,63 @@ pub fn sync_text_cursor_icons(
 			}
 		}
 	}
+}
+
+/// Follow the selected roster row so a long gallery stays on-screen.
+pub fn scroll_text_cursor_selection_into_view(
+	mut menus: Query<
+		(&TextMenu, &ComputedNode, &Children, &mut ScrollPosition),
+		With<TextCursorMenu>,
+	>,
+	computed: Query<&ComputedNode>,
+	items: Query<&TextMenuItem>,
+	descendants: Query<&Children>,
+) {
+	for (menu, viewport, children, mut scroll) in &mut menus {
+		if menu.item_count == 0 {
+			continue;
+		}
+		let scale = viewport.inverse_scale_factor();
+		let view_h = viewport.size().y * scale;
+		if view_h <= 0.0 {
+			continue;
+		}
+		let mut y = 0.0;
+		for (i, child) in children.iter().enumerate() {
+			let height = computed
+				.get(child)
+				.map(|node| node.size().y * node.inverse_scale_factor())
+				.unwrap_or(0.0);
+			if descendant_has_selected(child, menu.selected, &items, &descendants) {
+				if y < scroll.y {
+					scroll.y = y.max(0.0);
+				} else if y + height > scroll.y + view_h {
+					scroll.y = (y + height - view_h).max(0.0);
+				}
+				break;
+			}
+			y += height;
+			if i + 1 < children.len() {
+				y += ITEM_ROW_GAP;
+			}
+		}
+	}
+}
+
+fn descendant_has_selected(
+	root: Entity,
+	selected: usize,
+	items: &Query<&TextMenuItem>,
+	children: &Query<&Children>,
+) -> bool {
+	if items.get(root).is_ok_and(|item| item.index == selected) {
+		return true;
+	}
+	let Ok(kids) = children.get(root) else {
+		return false;
+	};
+	kids.iter()
+		.any(|child| descendant_has_selected(child, selected, items, children))
 }
 
 fn text_cursor_menu<'a>(

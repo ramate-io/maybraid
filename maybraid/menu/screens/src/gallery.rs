@@ -95,7 +95,12 @@ fn gallery_scene(
 	let rows = gallery_rows(summaries);
 	let selected = gallery_selected_index(summaries, active);
 	let children: Vec<Box<dyn Scene>> = vec![
-		Box::new(TextCursorColumn::rows("Characters", rows).with_selected(selected).scene()),
+		Box::new(
+			TextCursorColumn::rows("Characters", rows)
+				.with_selected(selected)
+				.scrollable()
+				.scene(),
+		),
 		Box::new(TextMenuDescription::scene(String::new())),
 		Box::new(screen_back_scene()),
 		Box::new(screen_edit_scene()),

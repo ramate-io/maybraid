@@ -54,6 +54,7 @@ pub fn spawn_asset_tile(
 			},
 			BorderColor::all(if selected { face } else { Color::NONE }),
 			BackgroundColor(Color::NONE),
+			Outline::new(Val::Px(2.0), Val::Px(2.0), Color::NONE),
 		))
 		.with_children(|button| {
 			if let Some(thumbnail) = thumbnail {
@@ -108,6 +109,7 @@ pub fn spawn_grid_catalog_tile(
 			..default()
 		},
 		BackgroundColor(Color::NONE),
+		Outline::new(Val::Px(2.0), Val::Px(2.0), Color::NONE),
 	));
 	if let Some(rank) = rank {
 		tile.insert(SlotRank(rank));

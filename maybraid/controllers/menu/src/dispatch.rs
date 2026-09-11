@@ -2,7 +2,9 @@
 
 use bevy::prelude::*;
 use maybraid_input::{MenuNavImpulse, MenuNavPad};
-use menu_components::{HudMenu, HudOverlayMenu, TextMenu, TextMenuInputLock};
+use menu_components::{
+	HudMenu, HudOverlayMenu, ShortTextModal, ShortTextPad, TextMenu, TextMenuInputLock,
+};
 
 use crate::controller::MenuController;
 
@@ -21,11 +23,25 @@ pub fn refresh_menu_focus(
 
 pub fn dispatch_menu_nav(
 	lock: Res<TextMenuInputLock>,
+	modal: Res<ShortTextModal>,
 	nav: Res<MenuNavPad>,
 	controllers: Query<&MenuController>,
+	pads: Query<Entity, (With<ShortTextPad>, With<HudMenu>)>,
 	mut commands: Commands,
 ) {
-	if lock.0 || nav.events.is_empty() {
+	if nav.events.is_empty() {
+		return;
+	}
+	if modal.is_open() {
+		let Some(pad) = pads.iter().next() else {
+			return;
+		};
+		for event in &nav.events {
+			commands.trigger(MenuNavImpulse::new(pad, *event));
+		}
+		return;
+	}
+	if lock.0 {
 		return;
 	}
 	for controller in &controllers {

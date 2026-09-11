@@ -41,6 +41,7 @@ pub fn spawn_swatch(
 		},
 		BorderColor::all(if selected { TEXT_YELLOW } else { TEXT_YELLOW_FAINT }),
 		BackgroundColor(color_from_hex(hex)),
+		Outline::new(Val::Px(2.0), Val::Px(2.0), Color::NONE),
 	));
 }
 

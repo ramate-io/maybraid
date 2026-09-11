@@ -5,6 +5,7 @@ use bevy::input::mouse::{MouseScrollUnit, MouseWheel};
 use bevy::picking::hover::HoverMap;
 use bevy::prelude::*;
 
+use crate::controls::hud_menu::{HudMenu, HudMenuItem};
 use crate::theme::{SCROLLBAR_THUMB, SCROLLBAR_TRACK, SCROLLBAR_WIDTH};
 
 const SCROLL_LINE_PX: f32 = 14.0;
@@ -188,5 +189,40 @@ pub fn on_hud_scroll(
 	}
 	if *delta == Vec2::ZERO {
 		scroll.propagate(false);
+	}
+}
+
+/// Keep the focused HUD item inside a scroll viewport (clothing / weapons grids).
+pub fn scroll_hud_selection_into_view(
+	mut viewports: Query<
+		(Entity, &HudMenu, &ComputedNode, &mut ScrollPosition),
+		With<HudScrollViewport>,
+	>,
+	items: Query<(&HudMenuItem, &ComputedNode, &bevy::ui::UiGlobalTransform)>,
+	transforms: Query<&bevy::ui::UiGlobalTransform>,
+) {
+	for (viewport, menu, computed, mut scroll) in &mut viewports {
+		if menu.item_count == 0 {
+			continue;
+		}
+		let Ok(view_tf) = transforms.get(viewport) else {
+			continue;
+		};
+		let Some((_, item_node, item_tf)) = items
+			.iter()
+			.find(|(item, _, _)| item.menu == viewport && item.index == menu.selected)
+		else {
+			continue;
+		};
+		let scale = computed.inverse_scale_factor();
+		let view_h = computed.size().y * scale;
+		let item_h = item_node.size().y * item_node.inverse_scale_factor();
+		let view_top = view_tf.affine().translation.y;
+		let item_top = item_tf.affine().translation.y;
+		if item_top < view_top {
+			scroll.y = (scroll.y - (view_top - item_top)).max(0.0);
+		} else if item_top + item_h > view_top + view_h {
+			scroll.y += item_top + item_h - (view_top + view_h);
+		}
 	}
 }

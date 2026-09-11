@@ -158,7 +158,9 @@ fn sync_gallery_active_caption(
 fn open_gallery_choice(
 	mut choices: MessageReader<GalleryChoice>,
 	save_root: Res<SaveRoot>,
+	active: Option<Res<ActiveCharacter>>,
 	mut commands: Commands,
+	mut edits: MessageWriter<ScreenEditPressed>,
 ) {
 	let Some(choice) = choices.read().last().copied() else {
 		return;
@@ -171,6 +173,10 @@ fn open_gallery_choice(
 			request_show_create_character_id(&mut commands, id);
 		}
 		GalleryChoice::Select(id) => {
+			if gallery_select_opens_edit(active.as_deref().map(|active| active.id), id) {
+				edits.write(ScreenEditPressed);
+				return;
+			}
 			if let Err(error) = crozon_character_model_user::load(&save_root, id) {
 				warn!("failed to load character {}: {error}", id.to_hex());
 				return;
@@ -287,5 +293,23 @@ fn on_save_character(
 		*baseline = CharacterEditBaseline::capture(&menu_state.0);
 	} else {
 		commands.insert_resource(CharacterEditBaseline::capture(&menu_state.0));
+	}
+}
+
+fn gallery_select_opens_edit(active: Option<CharacterId>, picked: CharacterId) -> bool {
+	active == Some(picked)
+}
+
+#[cfg(test)]
+mod tests {
+	use super::gallery_select_opens_edit;
+	use crozon_character_persist::CharacterId;
+
+	#[test]
+	fn second_select_on_the_active_row_is_edit() {
+		let id = CharacterId(7);
+		assert!(!gallery_select_opens_edit(None, id));
+		assert!(!gallery_select_opens_edit(Some(CharacterId(1)), id));
+		assert!(gallery_select_opens_edit(Some(id), id));
 	}
 }

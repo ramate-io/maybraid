@@ -16,16 +16,17 @@ pub mod theme;
 
 pub use controls::{
 	apply_hud_menu_nav, color_from_hex, menu_display_name, navigate_hud_menus, on_hud_scroll,
-	restore_short_text_editing, select_hud_item_on_over, send_hud_scroll_events, spawn_asset_tile,
-	spawn_block_label, spawn_corner_action, spawn_cursor_slot, spawn_cursor_slot_sized,
-	spawn_grid_catalog_tile, spawn_group_label, spawn_header_line, spawn_hud_action,
-	spawn_hud_plain, spawn_hud_text, spawn_labeled_row, spawn_panel_title, spawn_scroll_pane,
-	spawn_section_header, spawn_short_text_button, spawn_stepper, spawn_swatch, spawn_swatch_row,
-	spawn_text_button, spawn_tile_grid, sync_hud_cursors, sync_hud_scrollbars, ActiveOverlayKey,
-	ActiveShortText, CursorRow, HudFonts, HudMenu, HudMenuItem, HudOverlayMenu, HudScroll,
+	restore_short_text_editing, scroll_hud_selection_into_view, select_hud_item_on_over,
+	send_hud_scroll_events, spawn_asset_tile, spawn_block_label, spawn_corner_action,
+	spawn_cursor_slot, spawn_cursor_slot_sized, spawn_grid_catalog_tile, spawn_group_label,
+	spawn_header_line, spawn_hud_action, spawn_hud_plain, spawn_hud_text, spawn_labeled_row,
+	spawn_panel_title, spawn_scroll_pane, spawn_section_header, spawn_short_text_button,
+	spawn_stepper, spawn_swatch, spawn_swatch_row, spawn_text_button, spawn_tile_grid,
+	sync_hud_cursors, sync_hud_item_focus, sync_hud_scrollbars, ActiveOverlayKey, ActiveShortText,
+	CursorRow, HudFonts, HudMenu, HudMenuIgnoresLock, HudMenuItem, HudOverlayMenu, HudScroll,
 	HudScrollThumb, HudScrollTrack, HudScrollViewport, OverlayHeader, OverlayHeaderKey,
-	ShortTextChange, ShortTextField, ShortTextKey, ShortTextModal, ShortTextToggle, ShortTextValue,
-	SlotRank,
+	ShortTextChange, ShortTextField, ShortTextKey, ShortTextModal, ShortTextPad, ShortTextToggle,
+	ShortTextValue, SlotRank,
 };
 pub use icons::{blink_animated_icons, spin_icons, AnimatedIcon, Icon, SpinningIcon};
 pub use info::{
@@ -41,12 +42,13 @@ pub use single_select::{
 	apply_text_menu_nav, consume_screen_back, emit_menu_activate_on_click,
 	emit_menu_activate_on_enter, emit_menu_activate_on_nav, emit_menu_focus,
 	emit_screen_back_on_click, emit_screen_edit_on_click, navigate_text_menus,
-	republish_menu_activate, screen_back_scene, screen_edit_scene, select_text_menu_item_on_over,
-	sync_text_cursor_icons, sync_text_menu_item_colors, ButtonWithSubtext, KeyboardMenuNav,
-	MenuActivate, MenuFocus, MenuItemLocked, MenuObjectiveKind, MenuObjectiveMarker, ScreenBack,
-	ScreenBackPressed, ScreenEdit, ScreenEditPressed, TextColumnAlign, TextColumnAnchor,
-	TextCursorColumn, TextCursorMenu, TextCursorRow, TextCursorSlot, TextMenu, TextMenuColumn,
-	TextMenuHeader, TextMenuInputLock, TextMenuItem, TextMenuItemLabel,
+	republish_menu_activate, screen_back_scene, screen_edit_scene,
+	scroll_text_cursor_selection_into_view, select_text_menu_item_on_over, sync_text_cursor_icons,
+	sync_text_menu_item_colors, ButtonWithSubtext, KeyboardMenuNav, MenuActivate, MenuFocus,
+	MenuItemLocked, MenuObjectiveKind, MenuObjectiveMarker, ScreenBack, ScreenBackPressed,
+	ScreenEdit, ScreenEditPressed, TextColumnAlign, TextColumnAnchor, TextCursorColumn,
+	TextCursorMenu, TextCursorRow, TextCursorSlot, TextMenu, TextMenuColumn, TextMenuHeader,
+	TextMenuInputLock, TextMenuItem, TextMenuItemLabel,
 };
 pub use spin_reveal::{
 	SpinRevealCover, SpinRevealFace, SpinRevealPayload, SpinRevealSlot, SpinRevealViewport,
@@ -92,6 +94,7 @@ impl Plugin for MenuComponentsPlugin {
 			.add_observer(controls::emit_short_text_toggle_on_nav)
 			.add_observer(controls::emit_short_text_submit_on_click)
 			.add_observer(controls::emit_short_text_pad_on_click)
+			.add_observer(controls::emit_short_text_pad_on_nav)
 			.add_observer(controls::emit_short_text_cancel_on_click)
 			.add_systems(
 				Update,
@@ -101,13 +104,17 @@ impl Plugin for MenuComponentsPlugin {
 					sync_loading_bar_fill,
 					send_hud_scroll_events,
 					sync_hud_scrollbars,
+					scroll_hud_selection_into_view,
+					scroll_text_cursor_selection_into_view,
 					sync_hud_cursors,
+					sync_hud_item_focus,
 					controls::restore_short_text_editing,
 					controls::sync_short_text_display,
 					controls::sync_short_text_cursors,
 					controls::sync_short_text_ime,
 					controls::sync_short_text_modal,
 					controls::short_text::sync_short_text_pad_shift,
+					controls::short_text::sync_short_text_pad_focus,
 					controls::emit_short_text_toggle_on_enter,
 					controls::capture_short_text_input,
 				),
