@@ -26,6 +26,8 @@ const DEFAULT_GRAVITY: f32 = 9.81;
 const DEFAULT_GRAVITY_SCALE: f32 = 1.25;
 const RING_STEP: f32 = 2.0;
 const SHARD_LIFE: f32 = 0.42;
+const ROCKADDER_SHARD_LIFE: f32 = SHARD_LIFE * 2.0;
+const COSIMO_SHARD_LIFE: f32 = SHARD_LIFE * 5.0;
 const FEET_DROP: f32 = 0.9;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -48,6 +50,7 @@ pub(crate) struct ExpandingBurst {
 pub(crate) struct BurstShard {
 	age: f32,
 	max_age: f32,
+	start_scale: Vec3,
 }
 
 #[derive(Resource)]
@@ -308,6 +311,7 @@ fn spawn_rock_ring(
 			pos,
 			Quat::from_rotation_y(yaw),
 			Vec3::splat(scale),
+			ROCKADDER_SHARD_LIFE,
 		);
 	}
 }
@@ -331,6 +335,7 @@ fn spawn_flare_ring(
 			pos,
 			Quat::from_rotation_arc(Vec3::Y, dir),
 			scale,
+			COSIMO_SHARD_LIFE,
 		);
 	}
 }
@@ -351,10 +356,11 @@ fn spawn_shard(
 	translation: Vec3,
 	rotation: Quat,
 	scale: Vec3,
+	max_age: f32,
 ) {
 	commands.spawn((
 		Name::new("skill-burst-shard"),
-		BurstShard { age: 0.0, max_age: SHARD_LIFE },
+		BurstShard { age: 0.0, max_age, start_scale: scale },
 		Mesh3d(mesh),
 		MeshMaterial3d(material),
 		Transform { translation, rotation, scale },
@@ -370,9 +376,10 @@ pub fn tick_shards(
 	let dt = time.delta_secs();
 	for (entity, mut shard, mut transform) in &mut shards {
 		shard.age += dt;
-		let life = (shard.age / shard.max_age).clamp(0.0, 1.0);
-		transform.scale *= 1.0 - dt * 1.6;
-		if life >= 1.0 || transform.scale.max_element() < 0.04 {
+		let life = (shard.age / shard.max_age.max(1e-3)).clamp(0.0, 1.0);
+		let fade = ((life - 0.7) / 0.3).clamp(0.0, 1.0);
+		transform.scale = shard.start_scale * (1.0 - fade * 0.9);
+		if life >= 1.0 {
 			commands.entity(entity).despawn();
 		}
 	}
@@ -443,5 +450,11 @@ mod tests {
 		assert!((ROCKADDER_RADIUS - 20.0).abs() < 1e-5);
 		assert!((COSIMO_BURST_RADIUS - 10.0).abs() < 1e-5);
 		assert!(ROCKADDER_DAMAGE > 0.0 && COSIMO_BURST_DAMAGE > 0.0);
+	}
+
+	#[test]
+	fn shards_hold_for_the_requested_multiples() {
+		assert!((ROCKADDER_SHARD_LIFE - SHARD_LIFE * 2.0).abs() < 1e-5);
+		assert!((COSIMO_SHARD_LIFE - SHARD_LIFE * 5.0).abs() < 1e-5);
 	}
 }

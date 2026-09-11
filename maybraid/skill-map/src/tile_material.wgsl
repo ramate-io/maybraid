@@ -321,15 +321,17 @@ fn shade_rock(uv: vec2<f32>, world: vec2<f32>) -> vec3<f32> {
     let q = uv - vec2<f32>(0.5, 0.5);
     let diamond = abs(q.x) + abs(q.y);
     let square = max(abs(q.x), abs(q.y));
-    let stamp = 1.0 - smoothstep(0.2, 0.32, diamond);
-    let rim = smoothstep(0.18, 0.24, diamond) * (1.0 - smoothstep(0.28, 0.38, diamond));
-    let nest = 1.0 - smoothstep(0.1, 0.16, square);
-    let gold = vec3<f32>(0.92, 0.72, 0.28);
-    let cream = vec3<f32>(0.94, 0.88, 0.72);
-    color = mix(color, gold, stamp * 0.72);
-    color = mix(color, cream, nest * 0.85);
-    color += gold * rim * 0.55;
-    return color * (1.0 + nest * 0.2);
+    let plate = 1.0 - smoothstep(0.2, 0.34, diamond);
+    let rim = smoothstep(0.16, 0.22, diamond) * (1.0 - smoothstep(0.3, 0.44, diamond));
+    let nest = 1.0 - smoothstep(0.07, 0.14, square);
+    let ink = vec3<f32>(0.04, 0.02, 0.01);
+    let gold = vec3<f32>(1.0, 0.84, 0.16);
+    let hot = vec3<f32>(1.0, 0.96, 0.72);
+    color = mix(color, ink, plate * 0.95);
+    color = mix(color, gold, plate * 0.92);
+    color = mix(color, hot, nest);
+    color += gold * rim * 1.2;
+    return color * (1.0 + nest * 0.5);
 }
 
 fn shade_cosmo(uv: vec2<f32>, world: vec2<f32>) -> vec3<f32> {
