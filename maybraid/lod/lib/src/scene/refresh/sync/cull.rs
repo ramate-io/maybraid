@@ -21,6 +21,8 @@ use crate::scene::host::{
 use crate::scene::level::LodSceneLevel;
 use crate::scene::SemanticLodScene;
 
+use super::super::cull_regions::LodHostHasCullableRoots;
+
 use super::chunk::{
 	LodChunkBudgetClock, LodChunkFulfillBudget, LodChunkFulfillment, LodCullInFlight,
 	LodLevelRootPending,
@@ -87,7 +89,10 @@ pub fn cull_lod_level_roots<T, FHost, FNode>(
 	mut commands: Commands,
 	mut cull_writer: MessageWriter<LodCullRequest>,
 	nodes: Query<(Entity, &LodNodePose, Option<&LodNodeBounds>), (With<LodNode>, FNode)>,
-	hosts: Query<(Entity, &T, &LodSceneLevel), (With<LodSceneHost>, FHost)>,
+	hosts: Query<
+		(Entity, &T, &LodSceneLevel),
+		(With<LodSceneHost>, With<LodHostHasCullableRoots>, FHost),
+	>,
 	all_hosts: Query<(), (With<LodSceneHost>, Allow<Disabled>)>,
 	level_roots_bags: Query<(), (With<LodLevelRoots>, Allow<Disabled>)>,
 	root_keys: Query<&LodLevelRoot, Allow<Disabled>>,

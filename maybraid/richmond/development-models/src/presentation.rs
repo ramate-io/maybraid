@@ -50,6 +50,10 @@ impl PaddedTerrainPresenter<'_, '_> {
 		self.state.clear(&mut self.commands);
 	}
 
+	pub fn terrain_membership_revision(&self) -> u64 {
+		self.terrain_store.membership_revision()
+	}
+
 	pub fn remove_stale(&mut self, wanted: &HashSet<Id>) {
 		let stale: Vec<(Id, Entity)> = self
 			.state
@@ -108,12 +112,28 @@ impl PaddedTerrainPresenter<'_, '_> {
 		region: bevy::math::bounding::Aabb3d,
 		lod_ref: &LodRef,
 	) {
-		let wanted: HashSet<Id> = SpatialIndex::<TerrainWithPads>::tracked_ids_for(view, region)
+		let tracked: HashSet<Id> = SpatialIndex::<TerrainWithPads>::tracked_ids_for(view, region)
 			.into_iter()
-			.filter_map(|tracked| {
-				let value = SpatialIndex::<TerrainWithPads>::get(view, tracked.0)?;
-				let level = value.scene_lod_level(lod_ref);
-				(stream_banded_draws(value, level) || value.seeds_collision()).then_some(tracked.0)
+			.map(|tracked| tracked.0)
+			.collect();
+		self.present_tracked(view, &tracked, lod_ref);
+	}
+
+	/// Present already-known tracked ids (draw / collision filter is still applied).
+	pub fn present_tracked(
+		&mut self,
+		view: &PaddedStoreView<'_>,
+		tracked: &HashSet<Id>,
+		lod_ref: &LodRef,
+	) {
+		let wanted: HashSet<Id> = tracked
+			.iter()
+			.copied()
+			.filter(|&id| {
+				SpatialIndex::<TerrainWithPads>::get(view, id).is_some_and(|value| {
+					let level = value.scene_lod_level(lod_ref);
+					stream_banded_draws(value, level) || value.seeds_collision()
+				})
 			})
 			.collect();
 

@@ -11,7 +11,8 @@ use crate::lod_ref::{LodNode, LodNodePose};
 use crate::scene::host::LodLevelSpawnRequest;
 use crate::scene::level::LodSceneLevel;
 use crate::scene::refresh::{
-	LodChunkFulfillBudget, LodCullProduceCache, LodCullRegionCursor, LodHostBounds,
+	LodChunkFulfillBudget, LodCullProduceCache, LodCullProduceCadence, LodCullRegionCursor,
+	LodHostBounds, LodHostHasCullableRoots,
 	LodLevelRootPending, LodProduceCache, LodRefreshDomain, LodRefreshMembership, LodSceneCullAabb,
 	LodSceneCullProduceFillPlugin, LodSceneRefreshAabb, LodSceneRefreshChunkPlugin,
 	LodSceneRefreshLevel, LodSceneRefreshLevelsFillPlugin, LodSceneRefreshPlugin,
@@ -311,6 +312,24 @@ fn open_lattice_emits_while_camera_still() -> anyhow::Result<()> {
 }
 
 #[test]
+fn open_lattice_respects_produce_cadence() -> anyhow::Result<()> {
+	let mut app = app_open_lattice();
+	app.insert_resource(LodCullProduceCadence::every_n_frames(4));
+	spawn_viewer(app.world_mut(), Vec3::ZERO);
+	app.update();
+	assert_eq!(app.world().resource::<NewCullRegions<CullChan>>().regions.len(), 1);
+	app.update();
+	assert!(app.world().resource::<NewCullRegions<CullChan>>().regions.is_empty());
+	app.update();
+	assert!(app.world().resource::<NewCullRegions<CullChan>>().regions.is_empty());
+	app.update();
+	assert!(app.world().resource::<NewCullRegions<CullChan>>().regions.is_empty());
+	app.update();
+	assert_eq!(app.world().resource::<NewCullRegions<CullChan>>().regions.len(), 1);
+	Ok(())
+}
+
+#[test]
 fn nested_host_under_hidden_root_is_not_refreshed() -> anyhow::Result<()> {
 	let mut app = app_spotlight_levels();
 	let viewer = spawn_viewer(app.world_mut(), Vec3::ZERO);
@@ -350,6 +369,29 @@ fn cull_produce_lowers_stale_desired_and_enqueues_high() -> anyhow::Result<()> {
 		"High root must be culled once desired drops"
 	);
 	assert!(app.world().get_entity(roots[1]).is_ok(), "early Low keeps Medium warm");
+	Ok(())
+}
+
+#[test]
+fn cull_produce_lowers_and_walks_when_cullable_marker_is_absent() -> anyhow::Result<()> {
+	let mut app = app_cull_enqueue();
+	spawn_viewer(app.world_mut(), Vec3::new(100.0, 0.0, 0.0));
+	let (host, roots) =
+		spawn_host_with_roots(app.world_mut(), Vec3::ZERO, LodSceneLevel::High, &[LodSceneLevel::High]);
+	app.update();
+	assert!(
+		app.world().get::<LodHostHasCullableRoots>(host).is_none(),
+		"only the current root is present, so the marker stays off"
+	);
+
+	app.world_mut().write_message(world_cull_aabb());
+	app.update();
+
+	assert_eq!(host_level(&app, host), LodSceneLevel::Low);
+	assert!(
+		app.world().get_entity(roots[0]).is_err(),
+		"lowering must still walk roots when the marker was stale"
+	);
 	Ok(())
 }
 

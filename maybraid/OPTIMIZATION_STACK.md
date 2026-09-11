@@ -21,6 +21,10 @@ Related: [#800](https://github.com/ramate-io/maybraid/issues/800),
 | Stairs / doors on Medium | Circulation is High **and** Medium; furniture / labels stay High-only | Nested stair hosts used to keep their own band; flatten dropped the whole shell to Medium and hid stairs. |
 | Unmerge shared wall kits | Stop baking city walls into [`MultiSceneMerge`](scene-ref/src/multi_merge.rs); leave posed [`SceneRef`](scene-ref/src/scene_ref.rs)s | Shared wall GLBs already instanced. Baking per-building layouts made unique meshes × 1 instance. `write_binned` / `visibility_propagate` got worse (`more_rough_gameplay.csv`). |
 | Disable off-band LOD trees | Ready off-band / cull / present-hide trees get recursive [`Disabled`](https://docs.rs/bevy/latest/bevy/ecs/entity_disabling/struct.Disabled.html), not only [`Visibility::Hidden`](https://docs.rs/bevy/latest/bevy/render/view/enum.Visibility.html). Reveal prunes independently hidden nested trees; pending fulfill stays Hidden-only. Vis sync writes only on change. | Hidden warm roots still walked `visibility_propagate` / extract. `Disabled` drops them from default queries without a parent reveal enabling nested off-band roots. Last ~20s window (`last_30.csv`) had `visibility_propagate` **~3.3 ms**. |
+| Cache present-cull keep ids | [`drain_lod_present_cull`](lod/lib/src/presentation/runtime.rs) rebuilds the keep [`HashSet`](https://doc.rust-lang.org/std/collections/struct.HashSet.html) only when the live keep AABB or [`SpatialIndex::membership_revision`](lod/lib/src/gen/spatial_index.rs) changes | Grove / canopy drains were paying `tracked_ids_for` + HashSet every frame (`last_30.csv` ~0.78 ms canopy + ~0.58 ms grove) while the ring was still. |
+| Consume cullable-root marker | Region enqueue still lowers a stale desired level, then walks roots only if the level just dropped or [`LodHostHasCullableRoots`](lod/lib/src/scene/refresh/cull_regions/markers.rs) is present. Mob full-scan cull filters on the marker. Drop unused [`LodProduceCache`](lod/lib/src/scene/refresh/levels/produce.rs) `hit_entities` and the unused per-region cull-hit `Vec`s | Marker was written every sync and never read. Cull fill also stored both a per-tile `Vec` and a union set; only the union is scheduled. |
+| Throttle scene-cull lattice | [`LodCullProduceCadence`](lod/lib/src/scene/refresh/cull_regions/cursor.rs) (vegetation: every 4 frames). Cursor does not advance on skipped ticks | Default OpenLattice is 1 km hole / 5 km outer / 500 m tiles → 112 cells. 1 tile/tick at 60 FPS is a ~1.9 s sweep and a cull-fill every frame (~0.78 ms). Every 4th frame is ~7.5 s and drops three of four fill ticks. |
+| Event-drive padded terrain | [`generate_urbanization_padded_terrain`](richmond/developments-on-terrain-playground/src/urbanization_stream.rs) / [`present_urbanization_padded_terrain`](richmond/developments-on-terrain-playground/src/urbanization_stream.rs) skip when keep AABB, store / terrain revision, and (for present) 8 m viewer quant are unchanged. Present reuses one tracked-id set | `last_30.csv` paid ~0.32 ms generate + ~0.55 ms present every frame. Dirty-pad invalidation still runs; a removed pad forces generate. |
 
 Crate layout after the split: [`lod`](lod/lib/) is the engine-agnostic runtime, [`lod-gimme`](lod/gimme/) owns the host index and refresh/cull plugins, [`lod-avian`](lod/avian/) keeps physics layers. Call sites use `gimme_host!`; unused `avian_host!` wrappers remain.
 
@@ -151,6 +155,32 @@ Do **not** unique-merge city walls. Do **not** widen High vegetation bands to
 cut vis (more entities on-screen). Development-pad `exclusion_zones` still
 help urban look; they do not replace this experiment.
 
+### 8. Pre-quadrant runtime skips (this crate pass)
+
+**Status: implemented in this crate pass.** Recapture present-cull, cull fill,
+and padded-terrain zones before vegetation quadrants.
+
+These four skip the leftover every-frame walks that still showed in
+`last_30.csv` after off-band `Disabled`:
+
+1. **Present-cull keep membership.** Grove and canopy `tracked_ids_for` already
+   walk cell grids; the HashSet collect was still every tick. Cache by live
+   keep AABB + index membership revision (`0` = unknown, always rebuild).
+2. **`LodHostHasCullableRoots`.** Fill still snapshots every host in the tile
+   (level lower needs them). Enqueue skips the bag walk unless the desired
+   level just dropped or the host already has a non-current root. Full-scan
+   mob cull filters on the marker. Produce-cache `hit_entities` and per-region
+   cull `Vec`s were write-only.
+3. **OpenLattice cadence.** Vegetation emits one tile every 4 frames. Tests and
+   other playgrounds stay at 1. Rotating sweep is unchanged — only the clock.
+4. **Padded urban terrain.** Generate still invalidates dirty pads, then skips
+   `get_or_generate` when the keep AABB and store / terrain revisions match.
+   Present skips when those plus an 8 m viewer quant match, and reuses one
+   tracked-id set for band present + raw-root hide.
+
+Do **not** unique-merge city walls. Do **not** implement vegetation quadrants
+until Tracy says vis / `write_binned` still dominate after this pass.
+
 ### 7. After recapture
 
 If `visibility_propagate` is still the late-window floor:
@@ -159,6 +189,7 @@ If `visibility_propagate` is still the late-window floor:
   done.
 - Near-field present cull / fewer warm holds, not extra concentric bullseyes
   (level produce is already cell-gated).
+- Vegetation **quadrants** (bin plant/grove hosts), not wider High bands.
 
 Do **not** unique-merge city walls further.
 
@@ -191,6 +222,8 @@ Prefer Tracy over hitch loggers.
 1. `tracy-capture` a several-minute flight that includes urban.
 2. Whole-capture CSV for maxes / load-in.
 3. A late-window export (as `rough_frames.csv`) for the steady budget.
-4. Compare `Update`, produce fill (**one** zone), cull fill (**one** zone), `write_binned` Opaque3d,
-   `visibility_propagate`, and `reindex_moved_hosts`. A late gameplay slice
-   (~20s, `last_30.csv`) is the better read than whole-capture means.
+4. Compare `Update`, produce fill (**one** zone), cull fill (**one** zone),
+   `drain_lod_present_cull` (grove / canopy), padded generate / present,
+   `write_binned` Opaque3d, `visibility_propagate`, and `reindex_moved_hosts`.
+   A late gameplay slice (~20s, `last_30.csv`) is the better read than
+   whole-capture means. Cull fill should fire about every 4th frame.

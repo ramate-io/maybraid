@@ -118,6 +118,10 @@ impl SpatialIndex<SelectedUrbanization> for UrbanizationIndex {
 		self.cells.get(&id).map(|entry| entry.version)
 	}
 
+	fn membership_revision(&self) -> u64 {
+		self.next_version
+	}
+
 	fn insert(&mut self, id: Id, t: SelectedUrbanization, bounds: Aabb3d, _lod_ref: &LodRef) {
 		let version = self.next_version();
 		self.cells.insert(id, Entry { value: t, bounds, version });

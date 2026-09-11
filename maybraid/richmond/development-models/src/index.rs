@@ -55,6 +55,10 @@ impl DevelopmentEntryStore {
 		Version(self.next_version)
 	}
 
+	pub fn membership_revision(&self) -> u64 {
+		self.next_version
+	}
+
 	pub fn cell(&self, id: Id) -> Option<&DevelopmentCell> {
 		self.cells.get(&id).map(|e| &e.value)
 	}
@@ -308,6 +312,10 @@ macro_rules! impl_spatial {
 				self.store.$field.get(&id).map(|e| e.version)
 			}
 
+			fn membership_revision(&self) -> u64 {
+				self.store.membership_revision()
+			}
+
 			fn insert(&mut self, id: Id, t: $ty, bounds: Aabb3d, _lod_ref: &LodRef) {
 				$(self.store.$before_insert(id, &t);)?
 				let version = self.store.stamp();
@@ -353,6 +361,10 @@ macro_rules! impl_spatial {
 
 			fn version(&self, id: Id) -> Option<Version> {
 				self.store.$field.get(&id).map(|entry| entry.version)
+			}
+
+			fn membership_revision(&self) -> u64 {
+				self.store.membership_revision()
 			}
 
 			fn insert(&mut self, _id: Id, _t: $ty, _bounds: Aabb3d, _lod_ref: &LodRef) {

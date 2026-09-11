@@ -130,6 +130,10 @@ impl ForestIndex {
 		Version(self.next_version)
 	}
 
+	pub fn membership_revision(&self) -> u64 {
+		self.next_version
+	}
+
 	fn index_grove(&mut self, id: Id, bounds: Aabb3d) {
 		for cell in grove_cells_for(bounds) {
 			self.grove_cells.entry(cell).or_default().push(id);
@@ -201,6 +205,10 @@ impl SpatialIndex<ChicoForest> for ForestIndex {
 		self.forests.get(&id).map(|entry| entry.version)
 	}
 
+	fn membership_revision(&self) -> u64 {
+		ForestIndex::membership_revision(self)
+	}
+
 	fn insert(&mut self, id: Id, t: ChicoForest, bounds: Aabb3d, _lod_ref: &LodRef) {
 		let version = self.next_version();
 		self.forests.insert(id, ForestEntry { value: t, bounds, version });
@@ -252,6 +260,10 @@ impl SpatialIndex<ChicoGrove> for ForestIndex {
 
 	fn version(&self, id: Id) -> Option<Version> {
 		self.groves.get(&id).map(|entry| entry.version)
+	}
+
+	fn membership_revision(&self) -> u64 {
+		ForestIndex::membership_revision(self)
 	}
 
 	fn insert(&mut self, id: Id, t: ChicoGrove, bounds: Aabb3d, _lod_ref: &LodRef) {
@@ -308,6 +320,10 @@ impl SpatialIndex<CanopyBumpOut> for ForestIndex {
 		self.bump_outs.get(&id).map(|entry| entry.version)
 	}
 
+	fn membership_revision(&self) -> u64 {
+		ForestIndex::membership_revision(self)
+	}
+
 	fn insert(&mut self, id: Id, t: CanopyBumpOut, bounds: Aabb3d, _lod_ref: &LodRef) {
 		let version = self.next_version();
 		if let Some(previous_bounds) = self.bump_outs.get(&id).map(|previous| previous.bounds) {
@@ -347,6 +363,10 @@ impl SpatialIndex<MediumCanopyBumpOut> for ForestIndex {
 
 	fn version(&self, id: Id) -> Option<Version> {
 		self.medium_bump_outs.get(&id).map(|entry| entry.version)
+	}
+
+	fn membership_revision(&self) -> u64 {
+		ForestIndex::membership_revision(self)
 	}
 
 	fn insert(&mut self, id: Id, value: MediumCanopyBumpOut, bounds: Aabb3d, _lod_ref: &LodRef) {

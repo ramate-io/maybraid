@@ -162,14 +162,12 @@ struct DomainHits {
 #[derive(Resource, Debug, Default)]
 pub struct LodProduceCache {
 	pub snapshots: Vec<LodNodeSnapshot>,
-	pub hit_entities: HashSet<Entity>,
 	domains: HashMap<LodRefreshDomain, DomainHits>,
 }
 
 impl LodProduceCache {
 	fn clear(&mut self) {
 		self.snapshots.clear();
-		self.hit_entities.clear();
 		self.domains.clear();
 	}
 }
@@ -243,7 +241,6 @@ pub fn fill_lod_produce_cache<I>(
 				}
 			}
 		}
-		cache.hit_entities.extend(hits.iter().copied());
 		cache.domains.insert(domain, DomainHits { hits });
 	}
 }

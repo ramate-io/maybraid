@@ -490,14 +490,44 @@ pub fn produce_lod_present_cull_regions<P, F, M>(
 	}
 }
 
+#[derive(Default)]
+struct PresentCullKeepCache {
+	region: Option<Aabb3d>,
+	revision: u64,
+	ids: HashSet<Id>,
+}
+
+fn present_cull_keep_ids<'a, T, S>(
+	index: &S,
+	keep_region: Aabb3d,
+	cache: &'a mut PresentCullKeepCache,
+) -> &'a HashSet<Id>
+where
+	S: SpatialIndex<T>,
+{
+	let revision = index.membership_revision();
+	let stale = cache.region != Some(keep_region) || revision == 0 || cache.revision != revision;
+	if stale {
+		cache.region = Some(keep_region);
+		cache.revision = revision;
+		cache.ids.clear();
+		cache.ids.extend(index.tracked_ids_for(keep_region).into_iter().map(|tracked| tracked.0));
+	}
+	&cache.ids
+}
+
 /// Hide, then budget-despawn, presented ids outside the keep ring.
 ///
-/// Runs whenever keep is live. Does not wait for lattice tiles.
+/// Runs whenever keep is live. Does not wait for lattice tiles. The keep-id
+/// set is rebuilt when the live keep AABB or [`SpatialIndex::membership_revision`]
+/// changes; a `0` revision always rebuilds.
+#[allow(private_interfaces)]
 pub fn drain_lod_present_cull<T, S, Pr, M>(
 	presenter: StaticSystemParam<Pr>,
 	index: Res<S>,
 	keep: Res<LodPresentKeepRegion<M>>,
 	budget: Res<LodPresentCullBudget>,
+	mut keep_ids: Local<PresentCullKeepCache>,
 ) where
 	T: Send + Sync + 'static,
 	S: Resource + SpatialIndex<T>,
@@ -508,13 +538,9 @@ pub fn drain_lod_present_cull<T, S, Pr, M>(
 	let Some(keep_region) = keep.live_region() else {
 		return;
 	};
-	let keep_ids: HashSet<Id> = index
-		.tracked_ids_for(keep_region)
-		.into_iter()
-		.map(|tracked| tracked.0)
-		.collect();
+	let keep_ids = present_cull_keep_ids::<T, S>(&*index, keep_region, &mut keep_ids);
 	let mut presenter = presenter.into_inner();
-	presenter.cull(&*index, &keep_ids, budget.despawns_per_frame);
+	presenter.cull(&*index, keep_ids, budget.despawns_per_frame);
 }
 
 /// Produce [`LodPresentRegion<M>`] from `F`-filtered [`LodNode`]s via strategy `P`.
