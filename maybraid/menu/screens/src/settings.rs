@@ -23,15 +23,45 @@ pub struct RequestShowInGameSettings;
 #[derive(Component, Debug, Default, Clone, Copy)]
 pub struct InGameSettingsScreen;
 
-/// Live pause-menu settings. The game copies [`Self::mob_hud`] onto the world HUD.
+/// Sun cascade quality. The game copies this onto the sky sun
+/// (`maybraid_sky::ShadowQuality`) without a sky dependency here.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum InGameShadowQuality {
+	Off,
+	Low,
+	#[default]
+	High,
+}
+
+impl InGameShadowQuality {
+	pub fn cycle(self) -> Self {
+		match self {
+			Self::High => Self::Low,
+			Self::Low => Self::Off,
+			Self::Off => Self::High,
+		}
+	}
+
+	pub fn label(self) -> &'static str {
+		match self {
+			Self::High => "High",
+			Self::Low => "Low",
+			Self::Off => "Off",
+		}
+	}
+}
+
+/// Live pause-menu settings. The game copies [`Self::mob_hud`] onto the world
+/// HUD and [`Self::shadows`] onto the sky sun quality resource.
 #[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct InGameSettings {
 	pub mob_hud: bool,
+	pub shadows: InGameShadowQuality,
 }
 
 impl Default for InGameSettings {
 	fn default() -> Self {
-		Self { mob_hud: false }
+		Self { mob_hud: false, shadows: InGameShadowQuality::High }
 	}
 }
 
@@ -43,9 +73,16 @@ impl InGameSettings {
 			"Off"
 		}
 	}
+
+	pub fn state_label(self, choice: InGameSettingsChoice) -> &'static str {
+		match choice {
+			InGameSettingsChoice::Shadows => self.shadows.label(),
+			InGameSettingsChoice::MobHud => self.mob_hud_state_label(),
+		}
+	}
 }
 
-/// Settings rows. Activate toggles the matching [`InGameSettings`] flag.
+/// Settings rows. Activate toggles or cycles the matching [`InGameSettings`] field.
 ///
 /// In-screen: [`MenuFocus<Self>`] / [`menu_components::MenuActivate<Self>`] bubble
 /// to this root. Outside the screen: [`republish_menu_activate`] copies activate
@@ -53,20 +90,25 @@ impl InGameSettings {
 #[derive(Clone, Copy, Debug, Default, Message, Component, PartialEq, Eq)]
 pub enum InGameSettingsChoice {
 	#[default]
+	Shadows,
 	MobHud,
 }
 
 impl InGameSettingsChoice {
-	pub const ALL: [Self; 1] = [Self::MobHud];
+	pub const ALL: [Self; 2] = [Self::Shadows, Self::MobHud];
 
 	pub fn label(self) -> &'static str {
 		match self {
+			Self::Shadows => "Shadows",
 			Self::MobHud => "Mob HUD",
 		}
 	}
 
 	pub fn description(self) -> &'static str {
 		match self {
+			Self::Shadows => {
+				"Sun cascade shadows. High is four maps to 150 m. Low is two maps to 60 m. Off disables the sun's shadow maps."
+			}
 			Self::MobHud => {
 				"Pins and colored poles on presented mob hosts. Use this to find where groups should stand."
 			}
@@ -82,12 +124,12 @@ impl InGameSettingsScreen {
 					"Settings",
 					InGameSettingsChoice::ALL.into_iter().map(|choice| {
 						TextCursorRow::new(choice.label(), choice)
-							.with_subtext(settings.mob_hud_state_label())
+							.with_subtext(settings.state_label(choice))
 					}),
 				)
 				.anchored(TextColumnAnchor::Center)
 				.aligned(TextColumnAlign::Center)
-				.with_description(InGameSettingsChoice::MobHud.description())
+				.with_description(InGameSettingsChoice::Shadows.description())
 				.scene(),
 			),
 			Box::new(BrandModeLine::new(mode.label.clone()).scene()),
@@ -144,6 +186,7 @@ fn apply_in_game_settings_choice(
 		return;
 	};
 	match choice {
+		InGameSettingsChoice::Shadows => settings.shadows = settings.shadows.cycle(),
 		InGameSettingsChoice::MobHud => settings.mob_hud = !settings.mob_hud,
 	}
 	request_show_in_game_settings(&mut commands);
@@ -192,7 +235,7 @@ fn sync_settings_description(
 
 #[cfg(test)]
 mod tests {
-	use super::{InGameSettings, InGameSettingsChoice};
+	use super::{InGameSettings, InGameSettingsChoice, InGameShadowQuality};
 
 	#[test]
 	fn labels_and_descriptions_are_nonempty() {
@@ -205,7 +248,27 @@ mod tests {
 	#[test]
 	fn mob_hud_starts_off() {
 		assert!(!InGameSettings::default().mob_hud);
-		assert_eq!(InGameSettings { mob_hud: false }.mob_hud_state_label(), "Off");
-		assert_eq!(InGameSettings { mob_hud: true }.mob_hud_state_label(), "On");
+		assert_eq!(
+			InGameSettings { mob_hud: false, shadows: InGameShadowQuality::High }
+				.mob_hud_state_label(),
+			"Off"
+		);
+		assert_eq!(
+			InGameSettings { mob_hud: true, shadows: InGameShadowQuality::High }
+				.mob_hud_state_label(),
+			"On"
+		);
+	}
+
+	#[test]
+	fn shadows_start_high_and_cycle() {
+		assert_eq!(InGameSettings::default().shadows, InGameShadowQuality::High);
+		assert_eq!(InGameShadowQuality::High.cycle(), InGameShadowQuality::Low);
+		assert_eq!(InGameShadowQuality::Low.cycle(), InGameShadowQuality::Off);
+		assert_eq!(InGameShadowQuality::Off.cycle(), InGameShadowQuality::High);
+		assert_eq!(
+			InGameSettings::default().state_label(InGameSettingsChoice::Shadows),
+			"High"
+		);
 	}
 }

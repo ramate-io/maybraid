@@ -11,8 +11,8 @@ use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
 use maybraid_input::MenuNavPad;
 use maybraid_menu_controller::MenuControllerPlugin;
 use maybraid_world::{
-	PlayerPhysicsEnabled, PlayerSpawnXz, TerrainStreamingEnabled, WorldGameplayEnabled,
-	WorldMobHudEnabled, WorldPlayerLoadout, WorldPlugin, WorldSceneryVisible,
+	PlayerPhysicsEnabled, PlayerSpawnXz, ShadowQuality, TerrainStreamingEnabled,
+	WorldGameplayEnabled, WorldMobHudEnabled, WorldPlayerLoadout, WorldPlugin, WorldSceneryVisible,
 };
 use menu_components::{
 	consume_screen_back, ActiveOverlayKey, MenuBackConsumed, ScreenBackPressed, ShortTextModal,
@@ -24,10 +24,10 @@ use menu_playground::{
 	EditingCharacter, RequestEditCharacter,
 };
 use menu_screens::{
-	cancel_pending_create, request_show_gallery, request_show_in_game,
+	cancel_pending_create, request_show_gallery, request_show_home, request_show_in_game,
 	request_show_in_game_settings, CreateCharacterPlugin, GalleryScreen, GameMode, HomeMenuChoice,
 	HomeScreenPlugin, InGameMenuChoice, InGameScreenPlugin, InGameSettings, InGameSettingsScreen,
-	LoadingScreenPlugin, LoadingScreenSystems, MenuScreen, SpinRevealScreen,
+	InGameShadowQuality, LoadingScreenPlugin, LoadingScreenSystems, MenuScreen, SpinRevealScreen,
 };
 use std::path::{Path, PathBuf};
 
@@ -113,11 +113,15 @@ impl Plugin for GamePlugin {
 						.run_if(in_state(GameFlow::LoadingWorld))
 						.before(LoadingScreenSystems::Apply),
 					route_home_choice.run_if(in_state(GameFlow::Home)),
+					home_settings_back
+						.after(TextMenuSystems::Navigate)
+						.run_if(in_state(GameFlow::Home)),
 					route_in_game_choice.run_if(in_state(WorldPause::Menu)),
 					apply_pause_character_look.run_if(in_state(WorldPause::Menu)),
 					sync_world_loadout_from_editor.run_if(in_state(WorldPause::Menu)),
 					persist_changed_player_inventory,
 					sync_world_mob_hud,
+					sync_world_shadows,
 					pause_menu_back
 						.after(TextMenuSystems::Navigate)
 						.run_if(in_state(WorldPause::Menu)),
@@ -185,6 +189,7 @@ fn route_home_choice(
 	mut choices: MessageReader<HomeMenuChoice>,
 	mut flow: ResMut<NextState<GameFlow>>,
 	mut mode: ResMut<GameMode>,
+	mut commands: Commands,
 ) {
 	let Some(choice) = choices.read().last().copied() else {
 		return;
@@ -195,6 +200,7 @@ fn route_home_choice(
 			flow.set(GameFlow::LoadingWorld);
 		}
 		HomeRoute::Characters => flow.set(GameFlow::Characters),
+		HomeRoute::Settings => request_show_in_game_settings(&mut commands),
 		HomeRoute::Unimplemented => {}
 	}
 }
@@ -279,6 +285,35 @@ fn sync_world_mob_hud(settings: Res<InGameSettings>, mut hud: ResMut<WorldMobHud
 	}
 }
 
+fn sync_world_shadows(settings: Res<InGameSettings>, mut quality: ResMut<ShadowQuality>) {
+	let wanted = match settings.shadows {
+		InGameShadowQuality::High => ShadowQuality::High,
+		InGameShadowQuality::Low => ShadowQuality::Low,
+		InGameShadowQuality::Off => ShadowQuality::Off,
+	};
+	if *quality != wanted {
+		*quality = wanted;
+	}
+}
+
+fn home_settings_back(
+	mut commands: Commands,
+	nav: Res<MenuNavPad>,
+	overlay: Res<ActiveOverlayKey>,
+	modal: Res<ShortTextModal>,
+	consumed: Res<MenuBackConsumed>,
+	mut backs: MessageReader<ScreenBackPressed>,
+	settings: Query<(), With<InGameSettingsScreen>>,
+) {
+	if settings.is_empty() {
+		return;
+	}
+	if !consume_screen_back(nav.as_ref(), &overlay, modal.is_open(), &consumed, &mut backs) {
+		return;
+	}
+	request_show_home(&mut commands);
+}
+
 fn pause_menu_back(
 	mut commands: Commands,
 	nav: Res<MenuNavPad>,
@@ -358,8 +393,11 @@ mod tests {
 	use crozon_characters::CharacterAppearance;
 	use menu_playground::ActiveCharacter;
 
-	use crate::{assets_root, persist_changed_player_inventory, read_player_loadout};
-	use maybraid_world::WorldPlayerLoadout;
+	use crate::{
+		assets_root, persist_changed_player_inventory, read_player_loadout, sync_world_shadows,
+	};
+	use maybraid_world::{ShadowQuality, WorldPlayerLoadout};
+	use menu_screens::{InGameSettings, InGameShadowQuality};
 
 	#[test]
 	fn crate_assets_contain_barlow() {
@@ -418,6 +456,21 @@ mod tests {
 		assert_eq!(loaded.clothing, bag.clothing);
 		assert_eq!(loaded.weapons, bag.weapons);
 		assert_eq!(loaded.skills, bag.skills);
+		Ok(())
+	}
+
+	#[test]
+	fn pause_settings_copy_onto_the_sky_sun() -> anyhow::Result<()> {
+		let mut world = World::new();
+		world.insert_resource(InGameSettings {
+			mob_hud: false,
+			shadows: InGameShadowQuality::Low,
+		});
+		world.insert_resource(ShadowQuality::High);
+		world
+			.run_system_once(sync_world_shadows)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert_eq!(*world.resource::<ShadowQuality>(), ShadowQuality::Low);
 		Ok(())
 	}
 }
