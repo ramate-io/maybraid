@@ -24,7 +24,7 @@ use menu_playground::{
 	EditingCharacter, RequestEditCharacter,
 };
 use menu_screens::{
-	cancel_pending_create, request_show_gallery, request_show_in_game,
+	cancel_pending_create, request_show_gallery, request_show_home, request_show_in_game,
 	request_show_in_game_settings, CreateCharacterPlugin, GalleryScreen, GameMode, HomeMenuChoice,
 	HomeScreenPlugin, InGameMenuChoice, InGameScreenPlugin, InGameSettings, InGameSettingsScreen,
 	InGameShadowQuality, LoadingScreenPlugin, LoadingScreenSystems, MenuScreen, SpinRevealScreen,
@@ -113,6 +113,9 @@ impl Plugin for GamePlugin {
 						.run_if(in_state(GameFlow::LoadingWorld))
 						.before(LoadingScreenSystems::Apply),
 					route_home_choice.run_if(in_state(GameFlow::Home)),
+					home_settings_back
+						.after(TextMenuSystems::Navigate)
+						.run_if(in_state(GameFlow::Home)),
 					route_in_game_choice.run_if(in_state(WorldPause::Menu)),
 					apply_pause_character_look.run_if(in_state(WorldPause::Menu)),
 					sync_world_loadout_from_editor.run_if(in_state(WorldPause::Menu)),
@@ -186,6 +189,7 @@ fn route_home_choice(
 	mut choices: MessageReader<HomeMenuChoice>,
 	mut flow: ResMut<NextState<GameFlow>>,
 	mut mode: ResMut<GameMode>,
+	mut commands: Commands,
 ) {
 	let Some(choice) = choices.read().last().copied() else {
 		return;
@@ -196,6 +200,7 @@ fn route_home_choice(
 			flow.set(GameFlow::LoadingWorld);
 		}
 		HomeRoute::Characters => flow.set(GameFlow::Characters),
+		HomeRoute::Settings => request_show_in_game_settings(&mut commands),
 		HomeRoute::Unimplemented => {}
 	}
 }
@@ -289,6 +294,24 @@ fn sync_world_shadows(settings: Res<InGameSettings>, mut quality: ResMut<ShadowQ
 	if *quality != wanted {
 		*quality = wanted;
 	}
+}
+
+fn home_settings_back(
+	mut commands: Commands,
+	nav: Res<MenuNavPad>,
+	overlay: Res<ActiveOverlayKey>,
+	modal: Res<ShortTextModal>,
+	consumed: Res<MenuBackConsumed>,
+	mut backs: MessageReader<ScreenBackPressed>,
+	settings: Query<(), With<InGameSettingsScreen>>,
+) {
+	if settings.is_empty() {
+		return;
+	}
+	if !consume_screen_back(nav.as_ref(), &overlay, modal.is_open(), &consumed, &mut backs) {
+		return;
+	}
+	request_show_home(&mut commands);
 }
 
 fn pause_menu_back(
