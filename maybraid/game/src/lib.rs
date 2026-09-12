@@ -7,12 +7,16 @@ mod shell;
 pub use flow::{GameFlow, HomeRoute, PauseMenuRoute, WorldPause};
 
 use bevy::prelude::*;
+use bevy::render::camera::{extract_cameras, ExtractedCamera};
+use bevy::render::view::ExtractedView;
+use bevy::render::{Extract, ExtractSchedule, RenderApp};
+use bevy::window::PrimaryWindow;
 use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
 use maybraid_input::MenuNavPad;
 use maybraid_menu_controller::MenuControllerPlugin;
 use maybraid_world::{
-	PlayerPhysicsEnabled, PlayerSpawnXz, TerrainStreamingEnabled, WorldGameplayEnabled,
-	WorldMobHudEnabled, WorldPlayerLoadout, WorldPlugin, WorldSceneryVisible,
+	PlayerPhysicsEnabled, PlayerSpawnXz, ShadowQuality, TerrainStreamingEnabled,
+	WorldGameplayEnabled, WorldMobHudEnabled, WorldPlayerLoadout, WorldPlugin, WorldSceneryVisible,
 };
 use menu_components::{
 	consume_screen_back, ActiveOverlayKey, MenuBackConsumed, ScreenBackPressed, ShortTextModal,
@@ -24,10 +28,11 @@ use menu_playground::{
 	EditingCharacter, RequestEditCharacter,
 };
 use menu_screens::{
-	cancel_pending_create, request_show_gallery, request_show_in_game,
+	cancel_pending_create, request_show_gallery, request_show_home, request_show_in_game,
 	request_show_in_game_settings, CreateCharacterPlugin, GalleryScreen, GameMode, HomeMenuChoice,
-	HomeScreenPlugin, InGameMenuChoice, InGameScreenPlugin, InGameSettings, InGameSettingsScreen,
-	LoadingScreenPlugin, LoadingScreenSystems, MenuScreen, SpinRevealScreen,
+	HomeScreenPlugin, InGameMenuChoice, InGameScreenPlugin, InGameSettings,
+	InGameSettingsScreen, InGameShadowQuality, LoadingScreenPlugin, LoadingScreenSystems,
+	MenuScreen, SpinRevealScreen,
 };
 use std::path::{Path, PathBuf};
 
@@ -113,11 +118,16 @@ impl Plugin for GamePlugin {
 						.run_if(in_state(GameFlow::LoadingWorld))
 						.before(LoadingScreenSystems::Apply),
 					route_home_choice.run_if(in_state(GameFlow::Home)),
+					home_settings_back
+						.after(TextMenuSystems::Navigate)
+						.run_if(in_state(GameFlow::Home)),
 					route_in_game_choice.run_if(in_state(WorldPause::Menu)),
 					apply_pause_character_look.run_if(in_state(WorldPause::Menu)),
 					sync_world_loadout_from_editor.run_if(in_state(WorldPause::Menu)),
 					persist_changed_player_inventory,
 					sync_world_mob_hud,
+					sync_world_shadows,
+					restore_window_after_pixel_count_resize,
 					pause_menu_back
 						.after(TextMenuSystems::Navigate)
 						.run_if(in_state(WorldPause::Menu)),
@@ -129,6 +139,12 @@ impl Plugin for GamePlugin {
 						.run_if(in_state(GameFlow::World)),
 				),
 			);
+		if let Some(render_app) = app.get_sub_app_mut(RenderApp) {
+			render_app.add_systems(
+				ExtractSchedule,
+				apply_extracted_pixel_count.after(extract_cameras),
+			);
+		}
 	}
 }
 
@@ -185,6 +201,7 @@ fn route_home_choice(
 	mut choices: MessageReader<HomeMenuChoice>,
 	mut flow: ResMut<NextState<GameFlow>>,
 	mut mode: ResMut<GameMode>,
+	mut commands: Commands,
 ) {
 	let Some(choice) = choices.read().last().copied() else {
 		return;
@@ -195,6 +212,7 @@ fn route_home_choice(
 			flow.set(GameFlow::LoadingWorld);
 		}
 		HomeRoute::Characters => flow.set(GameFlow::Characters),
+		HomeRoute::Settings => request_show_in_game_settings(&mut commands),
 		HomeRoute::Unimplemented => {}
 	}
 }
@@ -279,6 +297,77 @@ fn sync_world_mob_hud(settings: Res<InGameSettings>, mut hud: ResMut<WorldMobHud
 	}
 }
 
+fn sync_world_shadows(settings: Res<InGameSettings>, mut quality: ResMut<ShadowQuality>) {
+	let wanted = match settings.shadows {
+		InGameShadowQuality::High => ShadowQuality::High,
+		InGameShadowQuality::Low => ShadowQuality::Low,
+		InGameShadowQuality::Off => ShadowQuality::Off,
+	};
+	if *quality != wanted {
+		*quality = wanted;
+	}
+}
+
+/// Undo the earlier apply path that resized the window. Pixel count now
+/// shrinks the extracted 3D main pass; Bevy's upscale blit fills the
+/// native swapchain.
+fn restore_window_after_pixel_count_resize(
+	mut windows: Query<&mut Window, With<PrimaryWindow>>,
+	mut done: Local<bool>,
+) {
+	if *done {
+		return;
+	}
+	let Ok(mut window) = windows.single_mut() else {
+		return;
+	};
+	if window.resolution.scale_factor_override().is_some() {
+		window.resolution.set_scale_factor_override(None);
+		window.resolution.set(1280.0, 720.0);
+	}
+	*done = true;
+}
+
+fn apply_extracted_pixel_count(
+	settings: Extract<Res<InGameSettings>>,
+	windows: Extract<Query<&Window, With<PrimaryWindow>>>,
+	mut cameras: Query<(&mut ExtractedCamera, &mut ExtractedView), With<Camera3d>>,
+) {
+	let Ok(window) = windows.single() else {
+		return;
+	};
+	let Some(size) = settings
+		.pixel_count
+		.main_pass_size(window.resolution.physical_size(), window.resolution.base_scale_factor())
+	else {
+		return;
+	};
+	for (mut camera, mut view) in &mut cameras {
+		camera.physical_viewport_size = Some(size);
+		camera.physical_target_size = Some(size);
+		view.viewport.z = size.x;
+		view.viewport.w = size.y;
+	}
+}
+
+fn home_settings_back(
+	mut commands: Commands,
+	nav: Res<MenuNavPad>,
+	overlay: Res<ActiveOverlayKey>,
+	modal: Res<ShortTextModal>,
+	consumed: Res<MenuBackConsumed>,
+	mut backs: MessageReader<ScreenBackPressed>,
+	settings: Query<(), With<InGameSettingsScreen>>,
+) {
+	if settings.is_empty() {
+		return;
+	}
+	if !consume_screen_back(nav.as_ref(), &overlay, modal.is_open(), &consumed, &mut backs) {
+		return;
+	}
+	request_show_home(&mut commands);
+}
+
 fn pause_menu_back(
 	mut commands: Commands,
 	nav: Res<MenuNavPad>,
@@ -358,8 +447,11 @@ mod tests {
 	use crozon_characters::CharacterAppearance;
 	use menu_playground::ActiveCharacter;
 
-	use crate::{assets_root, persist_changed_player_inventory, read_player_loadout};
-	use maybraid_world::WorldPlayerLoadout;
+	use crate::{
+		assets_root, persist_changed_player_inventory, read_player_loadout, sync_world_shadows,
+	};
+	use maybraid_world::{ShadowQuality, WorldPlayerLoadout};
+	use menu_screens::{InGamePixelCount, InGameSettings, InGameShadowQuality};
 
 	#[test]
 	fn crate_assets_contain_barlow() {
@@ -418,6 +510,22 @@ mod tests {
 		assert_eq!(loaded.clothing, bag.clothing);
 		assert_eq!(loaded.weapons, bag.weapons);
 		assert_eq!(loaded.skills, bag.skills);
+		Ok(())
+	}
+
+	#[test]
+	fn pause_settings_copy_onto_the_sky_sun() -> anyhow::Result<()> {
+		let mut world = World::new();
+		world.insert_resource(InGameSettings {
+			mob_hud: false,
+			shadows: InGameShadowQuality::Low,
+			pixel_count: InGamePixelCount::Native,
+		});
+		world.insert_resource(ShadowQuality::High);
+		world
+			.run_system_once(sync_world_shadows)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert_eq!(*world.resource::<ShadowQuality>(), ShadowQuality::Low);
 		Ok(())
 	}
 }

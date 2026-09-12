@@ -1,10 +1,14 @@
 //! Distance-fade sky dome. An inverted sphere follows the camera so far
 //! terrain and forest wash to blue. This is an aesthetic mask, not a cull clock.
 
+mod shadows;
+
 use bevy::asset::RenderAssetUsages;
 use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
 use std::f32::consts::PI;
+
+pub use shadows::{ShadowQuality, SkySun};
 
 /// Start a light haze at this XZ radius (m).
 pub const DEFAULT_INNER_FADE_M: f32 = 350.0;
@@ -52,8 +56,16 @@ impl Plugin for SkyDomePlugin {
 		};
 		app.insert_resource(ClearColor(self.color))
 			.insert_resource(settings)
-			.add_systems(Startup, (spawn_sky_dome, spawn_sky_lights))
-			.add_systems(Update, follow_camera);
+			.init_resource::<ShadowQuality>()
+			.add_systems(
+				Startup,
+				(spawn_sky_dome, spawn_sky_lights, shadows::apply_shadow_quality).chain(),
+			)
+			.add_systems(Update, follow_camera)
+			.add_systems(
+				PostUpdate,
+				shadows::apply_shadow_quality.run_if(resource_changed::<ShadowQuality>),
+			);
 	}
 }
 
@@ -105,10 +117,17 @@ fn follow_camera(
 	tf.rotation = Quat::IDENTITY;
 }
 
-fn spawn_sky_lights(mut commands: Commands) {
+fn spawn_sky_lights(mut commands: Commands, quality: Res<ShadowQuality>) {
 	commands.insert_resource(GlobalAmbientLight { brightness: 450.0, ..default() });
+	commands.insert_resource(quality.shadow_map());
 	commands.spawn((
-		DirectionalLight { illuminance: 12_000.0, shadow_maps_enabled: true, ..default() },
+		SkySun,
+		DirectionalLight {
+			illuminance: 12_000.0,
+			shadow_maps_enabled: quality.maps_enabled(),
+			..default()
+		},
+		quality.cascade_config(),
 		Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -PI / 4.0, PI / 4.0, 0.0)),
 	));
 	commands.spawn((
