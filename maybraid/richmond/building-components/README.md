@@ -102,7 +102,7 @@ Partition linear leaves consume `panels/.../rectangle_001_{high,mid,low}_res` vi
 
 ## Furniture (placeholders)
 
-[`furniture/`](src/furniture.rs) follows the same Style + Geometry + Placement → `LodScene` IR (`FurnitureNode`). Until kit GLBs exist, [`FurnitureStyle::Placeholder`](src/furniture/style.rs) renders color-coded **wireframe** unit cubes (line-list mesh). Apps must add [`FurnitureWireframePlugin`](src/furniture/wireframe.rs) before spawning furniture scenes. Geometry kinds include bed, wardrobe, dresser, nightstand, bedroom furniture, and toilet.
+[`furniture/`](src/furniture.rs) follows the same Style + Geometry + Placement → `LodScene` IR (`FurnitureNode`), plus optional [`FurnitureAbutment`](src/furniture/abutment.rs) and a `finish_seed` so a later fill pass can face and paint without re-reading the floor plan. World pose is the development host transform composed with [`Placement`](src/placed.rs). Until kit GLBs exist, [`FurnitureStyle::Placeholder`](src/furniture/style.rs) renders color-coded **wireframe** unit cubes (line-list mesh). Apps must add [`FurnitureWireframePlugin`](src/furniture/wireframe.rs) before spawning furniture scenes. Geometry kinds include bed, chair, chest, counter, wardrobe, dresser, nightstand, bedroom furniture, and toilet.
 
 ## Pipeline
 

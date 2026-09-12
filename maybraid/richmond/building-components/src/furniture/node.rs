@@ -7,6 +7,7 @@ use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
 use lod::SceneChunk;
 
+use crate::furniture::abutment::FurnitureAbutment;
 use crate::furniture::geometry::FurnitureGeometry;
 use crate::furniture::style::FurnitureStyle;
 use crate::furniture::wireframe::FurnitureWireframeAssets;
@@ -14,17 +15,28 @@ use crate::lod_band::placement_bounds;
 use crate::placed::Placement;
 use crate::scene_children::{pose, wireframe_box_with_handles};
 
-/// Authoring IR for a furniture / fixture placeholder.
+/// Authoring IR for a furniture / fixture **slot**.
+///
+/// World pose is the `DevelopmentHost` transform composed with [`Self::placement`]
+/// (same as other building kits). [`Self::abutment`] and `placement.yaw` stay in
+/// that building-local frame so a later assembly pass can face the kit without
+/// re-reading the floor plan.
+///
+/// Until kit GLBs exist, [`FurnitureStyle::Placeholder`] draws a wireframe cube.
 #[derive(Debug, Clone, PartialEq, Component, Default)]
 pub struct FurnitureNode {
 	pub style: FurnitureStyle,
 	pub geometry: FurnitureGeometry,
 	pub placement: Placement,
+	/// Host / partition face the packed box flushes to, when the packer said so.
+	pub abutment: Option<FurnitureAbutment>,
+	/// Stable palette key for a later finish pass (not a development-kind walk).
+	pub finish_seed: u64,
 }
 
 impl FurnitureNode {
 	pub fn new(style: FurnitureStyle, geometry: FurnitureGeometry, placement: Placement) -> Self {
-		Self { style, geometry, placement }
+		Self { style, geometry, placement, abutment: None, finish_seed: 0 }
 	}
 
 	pub fn placeholder(geometry: FurnitureGeometry, placement: Placement) -> Self {
@@ -54,6 +66,58 @@ impl FurnitureNode {
 	pub fn toilet(placement: Placement) -> Self {
 		Self::placeholder(FurnitureGeometry::Toilet, placement)
 	}
+
+	pub fn chair(placement: Placement) -> Self {
+		Self::placeholder(FurnitureGeometry::Chair, placement)
+	}
+
+	pub fn chest(placement: Placement) -> Self {
+		Self::placeholder(FurnitureGeometry::Chest, placement)
+	}
+
+	pub fn counter(placement: Placement) -> Self {
+		Self::placeholder(FurnitureGeometry::Counter, placement)
+	}
+
+	pub fn with_abutment(mut self, abutment: FurnitureAbutment) -> Self {
+		self.abutment = Some(abutment);
+		self.placement.yaw = abutment.facing_yaw();
+		self
+	}
+
+	pub fn with_finish_seed(mut self, finish_seed: u64) -> Self {
+		self.finish_seed = finish_seed;
+		self
+	}
+
+	/// Stamp abutment, facing, and finish seed from the packed AABB versus host.
+	///
+	/// Flush walls come from the packer's committed box, not a second room walk.
+	/// Free boxes use the shorter-axis / nearer-wall yaw convention.
+	pub fn stamp_host_slot(&mut self, slot: &Aabb3d, host: &Aabb3d) {
+		self.finish_seed = finish_seed_for(self.geometry, slot);
+		if let Some(abutment) = FurnitureAbutment::from_flush(slot, host) {
+			self.abutment = Some(abutment);
+			self.placement.yaw = abutment.facing_yaw();
+		} else {
+			self.abutment = None;
+			self.placement.yaw = FurnitureAbutment::free_facing_yaw(slot, host);
+		}
+	}
+}
+
+/// Mix geometry + slot center into a stable finish key.
+pub fn finish_seed_for(geometry: FurnitureGeometry, slot: &Aabb3d) -> u64 {
+	let center = (slot.min + slot.max) * 0.5;
+	let mut value = geometry.finish_salt()
+		^ (center.x.to_bits() as u64).rotate_left(7)
+		^ (center.y.to_bits() as u64).rotate_left(17)
+		^ (center.z.to_bits() as u64).rotate_left(29);
+	value ^= value >> 30;
+	value = value.wrapping_mul(0xbf58_476d_1ce4_e5b9);
+	value ^= value >> 27;
+	value = value.wrapping_mul(0x94d0_49bb_1331_11eb);
+	value ^ (value >> 31)
 }
 
 impl LodScene for FurnitureNode {

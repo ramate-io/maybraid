@@ -27,7 +27,9 @@ pub use arc_kit::{arc_ring_dir, arc_ring_dir_deg, decompose_arc_sweep, ArcKit};
 pub use assets::AssetPath;
 pub use doors::DoorNode;
 pub use floors::FloorNode;
-pub use furniture::{FurnitureGeometry, FurnitureNode, FurnitureStyle, FurnitureWireframePlugin};
+pub use furniture::{
+	FurnitureAbutment, FurnitureGeometry, FurnitureNode, FurnitureStyle, FurnitureWireframePlugin,
+};
 pub use joints::{JointGeometry, JointNode, JointStyle};
 pub use labels::{LabelGeometry, LabelNode, LabelStyle, LabelWireframePlugin};
 pub use layer::{Layer, Layers};
