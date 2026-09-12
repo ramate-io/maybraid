@@ -3,10 +3,10 @@ use bevy_character_ui_menu_renderer::{CharacterMenuEvent, MenuButton, ToggleSect
 use crozon_character_ui_menus::{CharacterMenu, ConceptSpecies, MenuEvent, SectionId};
 
 use crate::{
-	camera_focus::{focus_debug_enabled, queue_camera_focus, PendingCameraFocus},
+	camera_focus::{PendingCameraFocus, focus_debug_enabled, queue_camera_focus},
 	focus_reference::FocusReferenceSyncState,
 	preview::{ConceptPreviewConfig, ConceptPreviewSyncState, PreviewRespawnCooldown},
-	species_session::{reset_for_species_switch, CameraFocusBootState, SpeciesSessionState},
+	species_session::{CameraFocusBootState, SpeciesSessionState, reset_for_species_switch},
 };
 
 #[derive(Resource, Clone, Debug, PartialEq)]
@@ -359,6 +359,7 @@ fn section_id_for_label(label: &'static str) -> Option<SectionId> {
 		"Hair" => Some(SectionId::Hair),
 		"Clothing" => Some(SectionId::Clothing),
 		"Weapons" => Some(SectionId::Weapons),
+		"Skill Maps" => Some(SectionId::SkillMaps),
 		"Loadout" => Some(SectionId::Loadout),
 		"Animation" => Some(SectionId::Animation),
 		_ => None,

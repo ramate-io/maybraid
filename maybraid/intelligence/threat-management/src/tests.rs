@@ -7,8 +7,9 @@ use threat_intelligence::{
 };
 
 use crate::{
-	meets_commitment, proximity, select_tactic, CombatSelected, EvadeSelected, TacticScores,
-	ThreatManagementElement, ThreatManagementIntelligence, ThreatManagementPlugin, ThreatTactic,
+	meets_commitment, proximity, select_tactic, CombatSelected, EvadeSelected, SkillDaze,
+	TacticScores, ThreatManagementElement, ThreatManagementIntelligence, ThreatManagementPlugin,
+	ThreatTactic,
 };
 
 const FFA: ThreatGroupId = ThreatGroupId::group(1);
@@ -278,4 +279,52 @@ fn downed_drops_combat_even_before_the_next_select() {
 	assert!(app.world().get::<CombatTargeting>(combatant).is_some_and(|targeting| {
 		!targeting.enabled && targeting.active_target(threat).is_none()
 	}));
+}
+
+#[test]
+fn skill_daze_drops_combat_until_it_expires() {
+	let mut app = App::new();
+	app.add_plugins((MinimalPlugins, ThreatManagementPlugin));
+	let threat = app.world_mut().spawn_empty().id();
+	let combatant = app
+		.world_mut()
+		.spawn((
+			GlobalTransform::default(),
+			known_threat(threat, Vec3::X),
+			ThreatManagementIntelligence {
+				next_select_at: 10.0,
+				tactic: ThreatTactic::Combat,
+				generation: 1,
+				..ThreatManagementIntelligence::ffa()
+			},
+			CombatTargeting::default(),
+			CombatSelected,
+			SkillDaze { until: 10.0 },
+		))
+		.id();
+	app.world_mut()
+		.get_mut::<CombatTargeting>(combatant)
+		.expect("combat targeting")
+		.include(threat, TargetSource::ENEMYSHIP);
+
+	app.update();
+	assert_eq!(
+		app.world()
+			.get::<ThreatManagementIntelligence>(combatant)
+			.map(|user| user.tactic),
+		Some(ThreatTactic::Ignore)
+	);
+	assert!(app.world().get::<CombatSelected>(combatant).is_none());
+	assert!(app.world().get::<SkillDaze>(combatant).is_some());
+
+	app.world_mut().entity_mut(combatant).insert(SkillDaze { until: 0.0 });
+	app.update();
+	assert!(app.world().get::<SkillDaze>(combatant).is_none());
+	assert_eq!(
+		app.world()
+			.get::<ThreatManagementIntelligence>(combatant)
+			.map(|user| user.tactic),
+		Some(ThreatTactic::Combat)
+	);
+	assert!(app.world().get::<CombatSelected>(combatant).is_some());
 }

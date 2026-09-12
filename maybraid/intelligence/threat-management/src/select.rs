@@ -7,7 +7,7 @@ use evasion_intelligence::{AssailantSource, EvasionIntelligenceUser};
 use threat_intelligence::{ThreatKnowledge, ThreatSource};
 
 use crate::{
-	nearest_known_xz, proximity, select_tactic, CombatSelected, EvadeSelected,
+	nearest_known_xz, proximity, select_tactic, CombatSelected, EvadeSelected, SkillDaze,
 	ThreatManagementIntelligence, ThreatTactic, ThreatTacticChanged,
 };
 
@@ -22,6 +22,7 @@ type Managers<'w, 's> = Query<
 		Option<&'static Health>,
 		Option<&'static mut CombatTargeting>,
 		Option<&'static mut EvasionIntelligenceUser>,
+		Option<&'static SkillDaze>,
 		Has<Downed>,
 	),
 >;
@@ -42,10 +43,16 @@ pub fn select_threat_tactics(
 		health,
 		mut targeting,
 		mut evasion,
+		daze,
 		downed,
 	) in &mut managers
 	{
-		if downed {
+		let dazed = daze.is_some_and(|daze| daze.active(now));
+		if daze.is_some_and(|daze| !daze.active(now)) {
+			commands.entity(entity).remove::<SkillDaze>();
+			management.next_select_at = now;
+		}
+		if downed || dazed {
 			if management.tactic != ThreatTactic::Ignore {
 				let from = management.tactic;
 				management.generation = management.generation.wrapping_add(1).max(1);

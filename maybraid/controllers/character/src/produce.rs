@@ -60,6 +60,13 @@ pub fn collect(pad: &VirtualPad, trigger_threshold: f32) -> Vec<CharacterIntent>
 	if pad.just_pressed(PadButton::Y) {
 		out.push(CharacterIntent::SwapActive);
 	}
+	// Arrow keys also hold D-Pad (menus + walk). Do not cycle maps on arrows.
+	if pad.just_pressed(PadButton::DpadLeft) && !pad.keys.just_pressed(KeyCode::ArrowLeft) {
+		out.push(CharacterIntent::CycleSkillMap(-1));
+	}
+	if pad.just_pressed(PadButton::DpadRight) && !pad.keys.just_pressed(KeyCode::ArrowRight) {
+		out.push(CharacterIntent::CycleSkillMap(1));
+	}
 	if pad.just_pressed(PadButton::Start) {
 		out.push(CharacterIntent::InGameMenu);
 	}
@@ -180,6 +187,45 @@ mod tests {
 		pad.hold_digital(PadButton::BumperFocus);
 		finish(&mut pad);
 		assert_eq!(collect(&pad, 0.5), vec![CharacterIntent::Ads(1.0)]);
+		Ok(())
+	}
+
+	#[test]
+	fn both_bumpers_do_not_open_the_skill_map() -> anyhow::Result<()> {
+		let mut pad = VirtualPad::default();
+		pad.begin_frame();
+		pad.hold_digital(PadButton::BumperFocus);
+		pad.hold_digital(PadButton::BumperFire);
+		finish(&mut pad);
+		assert_eq!(collect(&pad, 0.5), vec![CharacterIntent::Ads(1.0)]);
+		Ok(())
+	}
+
+	#[test]
+	fn dpad_cycles_the_skill_map() -> anyhow::Result<()> {
+		let mut pad = VirtualPad::default();
+		pad.begin_frame();
+		pad.hold_digital(PadButton::DpadRight);
+		finish(&mut pad);
+		assert_eq!(collect(&pad, 0.5), vec![CharacterIntent::CycleSkillMap(1)]);
+
+		pad.begin_frame();
+		pad.hold_digital(PadButton::DpadLeft);
+		finish(&mut pad);
+		assert_eq!(collect(&pad, 0.5), vec![CharacterIntent::CycleSkillMap(-1)]);
+		Ok(())
+	}
+
+	#[test]
+	fn arrow_keys_do_not_cycle_the_skill_map() -> anyhow::Result<()> {
+		let mut pad = VirtualPad::default();
+		let mut keys = bevy::input::ButtonInput::<KeyCode>::default();
+		keys.press(KeyCode::ArrowLeft);
+		pad.keys = keys;
+		pad.begin_frame();
+		pad.hold_digital(PadButton::DpadLeft);
+		finish(&mut pad);
+		assert!(!collect(&pad, 0.5).contains(&CharacterIntent::CycleSkillMap(-1)));
 		Ok(())
 	}
 }

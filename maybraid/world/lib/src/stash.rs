@@ -259,7 +259,7 @@ fn attach_stash_visuals(
 	inventory: &Inventory,
 	assets: Option<&AssetServer>,
 ) {
-	let displayed = inventory.clothing.len() + inventory.weapons.len();
+	let displayed = inventory.clothing.len() + inventory.weapons.len() + inventory.skills.len();
 	let mut pile = 0usize;
 	for &index in &inventory.clothing {
 		let Some(item) = inventory.items.get(index) else {
@@ -289,6 +289,20 @@ fn attach_stash_visuals(
 		);
 		pile += 1;
 	}
+	for &index in &inventory.skills {
+		let Some(item) = inventory.items.get(index) else {
+			continue;
+		};
+		spawn_displayed_item(
+			commands,
+			host,
+			item,
+			StashDisplayedItem { slot: InventorySlot::Skills },
+			display_offset(pile, displayed),
+			assets,
+		);
+		pile += 1;
+	}
 }
 
 /// One item sits on the host; several fan out so they do not stack.
@@ -307,7 +321,7 @@ fn pile_offset(index: usize) -> Transform {
 
 fn visual_halo_local(item: &InventoryItem, slot: InventorySlot, transform: Transform) -> Vec3 {
 	match slot {
-		InventorySlot::Clothing => transform.translation,
+		InventorySlot::Clothing | InventorySlot::Skills => transform.translation,
 		InventorySlot::Weapons => item.firearm_spec().map_or(transform.translation, |spec| {
 			let kit = GeneratedFirearm::from_spec(spec);
 			let bounds = firearm_bounds(&kit);
@@ -336,7 +350,27 @@ fn spawn_displayed_item(
 		InventorySlot::Weapons => {
 			spawn_displayed_weapon(commands, host, item, displayed, transform, assets);
 		}
+		InventorySlot::Skills => {
+			spawn_displayed_skill_map(commands, host, item, displayed, transform);
+		}
 	}
+}
+
+fn spawn_displayed_skill_map(
+	commands: &mut Commands,
+	host: Entity,
+	item: &InventoryItem,
+	displayed: StashDisplayedItem,
+	transform: Transform,
+) {
+	commands.spawn((
+		Name::new(format!("stash-{}", item.label())),
+		displayed,
+		StashHaloAnchor(visual_halo_local(item, displayed.slot, transform)),
+		transform,
+		Visibility::default(),
+		ChildOf(host),
+	));
 }
 
 fn spawn_displayed_clothing(
@@ -435,8 +469,7 @@ fn despawn_displayed_items(commands: &mut Commands, displayed: &[Entity]) {
 	}
 }
 
-type DownedNpcLoot<'a> =
-	(Entity, &'a Downed, Option<&'a InventoryUser>, Option<&'a FirearmUser>);
+type DownedNpcLoot<'a> = (Entity, &'a Downed, Option<&'a InventoryUser>, Option<&'a FirearmUser>);
 
 fn detach_downed_npc_loot(
 	settings: Res<WorldStashSettings>,
@@ -447,10 +480,9 @@ fn detach_downed_npc_loot(
 ) {
 	let assets = assets.as_deref();
 	for (body, downed, user, firearm) in &downed {
-		let loot = user.and_then(|user| bags.get_mut(user.bag).ok()).map_or_else(
-			Inventory::default,
-			|mut bag| bag.take_all(),
-		);
+		let loot = user
+			.and_then(|user| bags.get_mut(user.bag).ok())
+			.map_or_else(Inventory::default, |mut bag| bag.take_all());
 		if let Some(user) = user {
 			commands.entity(user.bag).try_despawn();
 			commands.entity(body).remove::<InventoryUser>();
@@ -526,8 +558,13 @@ fn nearest_stash_in_radius<'a>(
 		.filter_map(|(entity, transform, user, policy)| {
 			let translation = transform.translation;
 			let distance = xz_distance(translation, origin);
-			(distance <= policy.claim_radius)
-				.then_some((distance, entity, user.bag, *policy, translation))
+			(distance <= policy.claim_radius).then_some((
+				distance,
+				entity,
+				user.bag,
+				*policy,
+				translation,
+			))
 		})
 		.min_by(|a, b| a.0.total_cmp(&b.0))
 		.map(|(_, entity, bag, policy, translation)| (entity, bag, policy, translation))
@@ -595,9 +632,9 @@ fn sync_stash_interact_prompt(
 	stashes: Query<(Entity, &Transform, &InventoryUser, &StashPolicy), With<WorldStash>>,
 	mut prompt: Query<&mut Visibility, With<StashInteractPrompt>>,
 ) {
-	let in_range = players
-		.iter()
-		.any(|transform| nearest_stash_in_radius(player_origin(transform), stashes.iter()).is_some());
+	let in_range = players.iter().any(|transform| {
+		nearest_stash_in_radius(player_origin(transform), stashes.iter()).is_some()
+	});
 	for mut visibility in &mut prompt {
 		*visibility = if in_range { Visibility::Visible } else { Visibility::Hidden };
 	}
@@ -611,9 +648,8 @@ fn nearest_claim_point<'a>(
 	let listed: Vec<_> = stashes.into_iter().collect();
 	let anchors: Vec<_> = anchors.into_iter().collect();
 	players.into_iter().find_map(|transform| {
-		nearest_stash_in_radius(player_origin(transform), listed.iter().copied()).map(
-			|(stash, _, _, at)| halo_world_point(at, stash, anchors.iter().copied()),
-		)
+		nearest_stash_in_radius(player_origin(transform), listed.iter().copied())
+			.map(|(stash, _, _, at)| halo_world_point(at, stash, anchors.iter().copied()))
 	})
 }
 
@@ -730,6 +766,7 @@ mod tests {
 			],
 			clothing: vec![0],
 			weapons: vec![1],
+			skills: Vec::new(),
 		}
 	}
 
@@ -1091,11 +1128,7 @@ mod tests {
 			bag.clone(),
 		));
 		let player_bag = world.spawn(bag).id();
-		world.spawn((
-			VegetationPlayer,
-			Transform::IDENTITY,
-			InventoryUser::carrying(player_bag),
-		));
+		world.spawn((VegetationPlayer, Transform::IDENTITY, InventoryUser::carrying(player_bag)));
 
 		write_intent(&mut world, CharacterIntent::Inventory)?;
 		world
@@ -1175,6 +1208,7 @@ mod tests {
 					items: vec![InventoryItem::firearm(FirearmMesh::Bullpup)],
 					clothing: Vec::new(),
 					weapons: vec![0],
+					skills: Vec::new(),
 				},
 				StashPolicy::default(),
 			))
@@ -1252,6 +1286,7 @@ mod tests {
 			)],
 			clothing: vec![0],
 			weapons: Vec::new(),
+			skills: Vec::new(),
 		}
 	}
 
@@ -1281,11 +1316,7 @@ mod tests {
 		world.init_resource::<Messages<CharacterIntent>>();
 		world.init_resource::<Time>();
 		let player_bag = world.spawn(Inventory::default()).id();
-		world.spawn((
-			VegetationPlayer,
-			Transform::IDENTITY,
-			InventoryUser::carrying(player_bag),
-		));
+		world.spawn((VegetationPlayer, Transform::IDENTITY, InventoryUser::carrying(player_bag)));
 		let near = world
 			.run_system_once(spawn_stash_system(
 				Transform::from_xyz(1.0, 0.0, 0.0),

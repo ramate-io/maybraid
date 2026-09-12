@@ -43,6 +43,7 @@ pub(crate) fn apply_look_intents(
 	let mut focus = f32::from(mouse.pressed(MouseButton::Right));
 	let mut ads = f32::from(mouse.pressed(MouseButton::Middle));
 	let mut swap_pov = false;
+	let mut skill_map = false;
 	for intent in intents.read() {
 		match *intent {
 			CharacterIntent::Look(value) => {
@@ -54,9 +55,13 @@ pub(crate) fn apply_look_intents(
 			}
 			CharacterIntent::Focus(value) => focus = focus.max(value),
 			CharacterIntent::Ads(value) => ads = ads.max(value),
+			CharacterIntent::SkillMap => skill_map = true,
 			CharacterIntent::SwapPov => swap_pov = true,
 			_ => {}
 		}
+	}
+	if skill_map {
+		ads = 0.0;
 	}
 	if let Ok((mut controller, _)) = cameras.single_mut() {
 		controller.focus = focus.clamp(0.0, 1.0);
