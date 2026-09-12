@@ -15,24 +15,27 @@ pub struct FurnitureFill {
 	pub furniture: FurnitureNode,
 }
 
-/// Build a labeled furniture fill from a packed AABB.
+/// Build a labeled furniture fill from a packed AABB versus the host volume.
 ///
-/// Kit reuse: `dresser` ≈ counters/surfaces, `bedroom_furniture` ≈ tables/seating,
-/// `nightstand` / `wardrobe` for compact fillers and storage silhouettes.
+/// Stamps abutment, facing yaw, and finish seed from the committed box. Kit
+/// reuse: `chair` for seating, `counter` for kitchen runs, `chest` for compact
+/// bedroom storage, `dresser` / `wardrobe` for desks and bookcases.
 pub fn furniture_fill(
 	style: LabelStyle,
 	text: &str,
 	aabb: &Aabb3d,
+	host: &Aabb3d,
 	roll: f32,
 	make: fn(Placement) -> FurnitureNode,
 ) -> FurnitureFill {
-	FurnitureFill {
-		label: label_filling_aabb(style, text, aabb, roll),
-		furniture: make(placement_filling_aabb(aabb)),
-	}
+	let mut furniture = make(placement_filling_aabb(aabb));
+	furniture.stamp_host_slot(aabb, host);
+	FurnitureFill { label: label_filling_aabb(style, text, aabb, roll), furniture }
 }
 
 /// Placement that fills `aabb` with a unit cube centered in the volume.
+///
+/// Yaw is identity here; [`FurnitureNode::stamp_host_slot`] writes facing.
 pub fn placement_filling_aabb(aabb: &Aabb3d) -> Placement {
 	let center = Vec3::from((aabb.min + aabb.max) * 0.5);
 	let extent = Vec3::from(aabb.max - aabb.min).max(Vec3::splat(1e-4));

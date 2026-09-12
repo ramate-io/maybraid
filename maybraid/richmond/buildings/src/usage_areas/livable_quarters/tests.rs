@@ -11,6 +11,7 @@ use crate::usage_areas::livable_quarters::{
 	KitchenParameterized, LivingRoom, LivingRoomParameterized, SittingRoom,
 	SittingRoomParameterized,
 };
+use richmond_building_components::FurnitureGeometry;
 
 fn south_door(extent: Vec3) -> Confines {
 	let mut openings = Openings::new();
@@ -41,6 +42,10 @@ fn living_and_sitting_gallery_cells_fit() {
 		)
 		.unwrap_or_else(|e| panic!("living {extent:?} seed={seed}: {e}"));
 		assert!(!room.primary_seating.is_empty());
+		assert!(room
+			.primary_seating
+			.iter()
+			.all(|f| f.furniture.geometry == FurnitureGeometry::Chair));
 	}
 	let sitting = [
 		(Vec3::new(4.0, 2.8, 3.5), 7, 1.1, 0.4),
@@ -55,6 +60,10 @@ fn living_and_sitting_gallery_cells_fit() {
 		)
 		.unwrap_or_else(|e| panic!("sitting {extent:?} seed={seed}: {e}"));
 		assert!(!room.primary_seating.is_empty());
+		assert!(room
+			.primary_seating
+			.iter()
+			.all(|f| f.furniture.geometry == FurnitureGeometry::Chair));
 	}
 }
 
@@ -72,6 +81,16 @@ fn kitchen_layouts_and_thin_dining_fit() {
 		)
 		.unwrap_or_else(|e| panic!("kitchen {layout:?}: {e}"));
 		assert!(!room.counter_runs.is_empty());
+		assert!(room
+			.counter_runs
+			.iter()
+			.all(|f| f.furniture.geometry == FurnitureGeometry::Counter));
+		assert!(room
+			.peninsulas
+			.iter()
+			.all(|f| f.furniture.geometry == FurnitureGeometry::Counter));
+		assert!(room.islands.iter().all(|f| f.furniture.geometry == FurnitureGeometry::Counter));
+		assert!(room.counter_runs.iter().any(|f| f.furniture.abutment.is_some()));
 		if layout == KitchenCounterLayout::LShape {
 			assert!(
 				room.counter_runs.len() >= 2 || room.counter_layout == KitchenCounterLayout::Galley,

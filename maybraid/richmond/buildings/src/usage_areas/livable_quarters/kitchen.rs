@@ -29,12 +29,20 @@ impl Kitchen {
 	pub fn from_plan(plan: KitchenPlan, confines: &Confines) -> Self {
 		let style = plan.parameterized.style;
 		let counter_layout = plan.packed.layout.unwrap_or(KitchenCounterLayout::Galley);
+		let host = &confines.bounds;
 		let counter_runs = plan
 			.packed
 			.counter_runs
 			.iter()
 			.map(|aabb| {
-				furniture_fill(style, "CounterRun", aabb, confines.roll, FurnitureNode::dresser)
+				furniture_fill(
+					style,
+					"CounterRun",
+					aabb,
+					host,
+					confines.roll,
+					FurnitureNode::counter,
+				)
 			})
 			.collect();
 		let peninsulas = plan
@@ -42,7 +50,14 @@ impl Kitchen {
 			.peninsulas
 			.iter()
 			.map(|aabb| {
-				furniture_fill(style, "Peninsula", aabb, confines.roll, FurnitureNode::dresser)
+				furniture_fill(
+					style,
+					"Peninsula",
+					aabb,
+					host,
+					confines.roll,
+					FurnitureNode::counter,
+				)
 			})
 			.collect();
 		let islands = plan
@@ -50,13 +65,7 @@ impl Kitchen {
 			.islands
 			.iter()
 			.map(|aabb| {
-				furniture_fill(
-					style,
-					"Island",
-					aabb,
-					confines.roll,
-					FurnitureNode::bedroom_furniture,
-				)
+				furniture_fill(style, "Island", aabb, host, confines.roll, FurnitureNode::counter)
 			})
 			.collect();
 		let fillers = plan
@@ -68,6 +77,7 @@ impl Kitchen {
 					style,
 					"KitchenFiller",
 					aabb,
+					host,
 					confines.roll,
 					FurnitureNode::nightstand,
 				)

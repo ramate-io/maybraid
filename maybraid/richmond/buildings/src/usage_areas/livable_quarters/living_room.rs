@@ -25,6 +25,7 @@ pub struct LivingRoom {
 impl LivingRoom {
 	pub fn from_plan(plan: LivingRoomPlan, confines: &Confines) -> Self {
 		let style = plan.parameterized.style;
+		let host = &confines.bounds;
 		let primary_seating = plan
 			.packed
 			.primary_seating
@@ -34,8 +35,9 @@ impl LivingRoom {
 					style,
 					"PrimarySeating",
 					aabb,
+					host,
 					confines.roll,
-					FurnitureNode::bedroom_furniture,
+					FurnitureNode::chair,
 				)
 			})
 			.collect();
@@ -48,8 +50,9 @@ impl LivingRoom {
 					style,
 					"SecondarySeating",
 					aabb,
+					host,
 					confines.roll,
-					FurnitureNode::bedroom_furniture,
+					FurnitureNode::chair,
 				)
 			})
 			.collect();
@@ -58,7 +61,14 @@ impl LivingRoom {
 			.fillers
 			.iter()
 			.map(|aabb| {
-				furniture_fill(style, "LivingFiller", aabb, confines.roll, FurnitureNode::dresser)
+				furniture_fill(
+					style,
+					"LivingFiller",
+					aabb,
+					host,
+					confines.roll,
+					FurnitureNode::dresser,
+				)
 			})
 			.collect();
 		Self {

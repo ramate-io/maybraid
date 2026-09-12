@@ -24,18 +24,28 @@ pub struct Study {
 impl Study {
 	pub fn from_plan(plan: StudyPlan, confines: &Confines) -> Self {
 		let style = plan.parameterized.style;
+		let host = &confines.bounds;
 		let desks = plan
 			.packed
 			.desks
 			.iter()
-			.map(|aabb| furniture_fill(style, "Desk", aabb, confines.roll, FurnitureNode::dresser))
+			.map(|aabb| {
+				furniture_fill(style, "Desk", aabb, host, confines.roll, FurnitureNode::dresser)
+			})
 			.collect();
 		let bookcases = plan
 			.packed
 			.bookcases
 			.iter()
 			.map(|aabb| {
-				furniture_fill(style, "Bookcase", aabb, confines.roll, FurnitureNode::wardrobe)
+				furniture_fill(
+					style,
+					"Bookcase",
+					aabb,
+					host,
+					confines.roll,
+					FurnitureNode::wardrobe,
+				)
 			})
 			.collect();
 		Self {
