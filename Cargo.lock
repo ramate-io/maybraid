@@ -3513,6 +3513,36 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aa9a19cbb55df58761df49b23516a86d432839add4af60fc256da840f66ed35b"
 
 [[package]]
+name = "furniture-assemblies"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "lod",
+ "material-ref",
+ "richmond-building-components",
+ "richmond-building-shaders",
+]
+
+[[package]]
+name = "furniture-playground"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "clap",
+ "furniture-assemblies",
+ "game-commands",
+ "lod",
+ "lod-lazy-refs",
+ "procedural-common",
+ "richmond-building-components",
+ "richmond-building-shaders",
+ "richmond-buildings",
+ "scene-ref",
+]
+
+[[package]]
 name = "futures"
 version = "0.3.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"

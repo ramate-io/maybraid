@@ -15,6 +15,9 @@ members = [
   "maybraid/richmond/urbanization",
   "maybraid/richmond/developments-on-terrain-playground",
 
+  "maybraid/furniture/assemblies",
+  "maybraid/furniture/playground",
+
   "maybraid/menu/components",
   "maybraid/menu/character-ui-menu-renderer",
   "maybraid/menu/screens",
@@ -249,6 +252,9 @@ richmond-developments = { path = "maybraid/richmond/developments" }
 richmond-development-models = { path = "maybraid/richmond/development-models" }
 richmond-urbanization = { path = "maybraid/richmond/urbanization" }
 richmond-developments-on-terrain-playground = { path = "maybraid/richmond/developments-on-terrain-playground" }
+
+furniture-assemblies = { path = "maybraid/furniture/assemblies" }
+furniture-playground = { path = "maybraid/furniture/playground" }
 
 menu-components = { path = "maybraid/menu/components" }
 maybraid-character-ui-menu-renderer = { path = "maybraid/menu/character-ui-menu-renderer" }

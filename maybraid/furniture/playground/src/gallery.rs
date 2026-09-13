@@ -1,0 +1,296 @@
+//! Richmond-shaped slots plus authored extremes for `/show gallery`.
+
+use bevy::math::bounding::Aabb3d;
+use bevy::math::Vec3;
+use lod::gen::LodSceneLevel;
+use procedural_common::NoiseParams;
+use richmond_building_components::{
+	BuildingComponents, FurnitureAbutment, FurnitureGeometry, FurnitureNode, Placement,
+};
+use richmond_buildings::{
+	CommonBedroom, CommonBedroomParameterized, Confines, Kitchen, KitchenCounterLayout,
+	KitchenParameterized, LivingRoom, LivingRoomParameterized, Opening, OpeningId, Openings,
+};
+
+/// One gallery cell: world-space slot (already offset).
+#[derive(Clone, Debug)]
+pub struct GallerySlot {
+	/// Exhibit group (`richmond-bedroom`, `seed-a`, …). Read by gallery tests.
+	#[allow(dead_code)]
+	pub label: &'static str,
+	pub node: FurnitureNode,
+}
+
+fn south_door(extent: Vec3) -> Confines {
+	let mut openings = Openings::new();
+	let w = (extent.x * 0.25).clamp(0.8, 1.2);
+	let x0 = (extent.x - w) * 0.5;
+	openings.insert(
+		OpeningId::new("door"),
+		Opening::passage(Aabb3d::from_min_max(
+			Vec3::new(x0, 0.0, -0.15),
+			Vec3::new(x0 + w, 2.1, 0.15),
+		)),
+	);
+	Confines::new(Aabb3d::from_min_max(Vec3::ZERO, extent), 0.0, openings)
+}
+
+fn offset_node(mut node: FurnitureNode, origin: Vec3) -> FurnitureNode {
+	node.placement.translation += origin;
+	node
+}
+
+fn slot_filling(
+	make: fn(Placement) -> FurnitureNode,
+	min: Vec3,
+	max: Vec3,
+	host: &Aabb3d,
+) -> FurnitureNode {
+	let aabb = Aabb3d::from_min_max(min, max);
+	let center = Vec3::from((aabb.min + aabb.max) * 0.5);
+	let extent = Vec3::from(aabb.max - aabb.min).max(Vec3::splat(1e-4));
+	let mut node = make(Placement::new(center, 0.0).with_scale(extent));
+	node.stamp_host_slot(&aabb, host);
+	node
+}
+
+fn typical_slot(
+	make: fn(Placement) -> FurnitureNode,
+	size: Vec3,
+	origin: Vec3,
+	seed: u64,
+	abutment: Option<FurnitureAbutment>,
+) -> FurnitureNode {
+	let mut node =
+		make(Placement::new(origin + Vec3::new(0.0, size.y * 0.5, 0.0), 0.0).with_scale(size));
+	node.finish_seed = seed;
+	if let Some(side) = abutment {
+		node = node.with_abutment(side);
+	}
+	node
+}
+
+/// Packed Richmond rooms: wall bedroom, galley kitchen, living seating.
+pub fn recorded_richmond_slots() -> anyhow::Result<Vec<GallerySlot>> {
+	let mut out = Vec::new();
+
+	let bedroom_origin = Vec3::ZERO;
+	let mut bedroom_params = CommonBedroomParameterized::with_fill(1.0, 0.4);
+	bedroom_params.bed_against_wall = true;
+	let (bedroom, _) = CommonBedroom::fit_with_fill(
+		&south_door(Vec3::new(6.0, 3.0, 6.0)),
+		NoiseParams { seed: 5, ..NoiseParams::default() },
+		bedroom_params,
+	)
+	.map_err(|err| anyhow::anyhow!("bedroom fit: {err}"))?;
+	for node in bedroom.furniture_nodes_for_level(LodSceneLevel::High).flatten() {
+		out.push(GallerySlot {
+			label: "richmond-bedroom",
+			node: offset_node(node, bedroom_origin),
+		});
+	}
+
+	let kitchen_origin = Vec3::new(10.0, 0.0, 0.0);
+	let (kitchen, _) = Kitchen::fit_with_fill(
+		&south_door(Vec3::new(6.0, 3.0, 4.5)),
+		NoiseParams { seed: 7, ..NoiseParams::default() },
+		KitchenParameterized::with_fill(1.2, 0.4).with_layout(KitchenCounterLayout::Galley),
+	)
+	.map_err(|err| anyhow::anyhow!("kitchen fit: {err}"))?;
+	for node in kitchen.furniture_nodes_for_level(LodSceneLevel::High).flatten() {
+		out.push(GallerySlot {
+			label: "richmond-kitchen",
+			node: offset_node(node, kitchen_origin),
+		});
+	}
+
+	let living_origin = Vec3::new(20.0, 0.0, 0.0);
+	let (living, _) = LivingRoom::fit_with_fill(
+		&south_door(Vec3::new(6.0, 2.8, 4.5)),
+		NoiseParams { seed: 11, ..NoiseParams::default() },
+		LivingRoomParameterized::with_fill(1.2, 0.4),
+	)
+	.map_err(|err| anyhow::anyhow!("living fit: {err}"))?;
+	for node in living.furniture_nodes_for_level(LodSceneLevel::High).flatten() {
+		out.push(GallerySlot { label: "richmond-living", node: offset_node(node, living_origin) });
+	}
+
+	Ok(out)
+}
+
+/// Authored extremes: flat bed, tall chair, long counter, wall vs free, two seeds.
+pub fn authored_extreme_slots() -> Vec<GallerySlot> {
+	let host = Aabb3d::from_min_max(Vec3::new(-20.0, 0.0, 10.0), Vec3::new(20.0, 3.0, 22.0));
+	vec![
+		GallerySlot {
+			label: "flat-bed",
+			node: typical_slot(
+				FurnitureNode::bed,
+				Vec3::new(2.0, 0.18, 1.6),
+				Vec3::new(0.0, 0.0, 14.0),
+				11,
+				Some(FurnitureAbutment::NegZ),
+			),
+		},
+		GallerySlot {
+			label: "tall-chair",
+			node: typical_slot(
+				FurnitureNode::chair,
+				Vec3::new(0.42, 1.35, 0.42),
+				Vec3::new(4.0, 0.0, 14.0),
+				13,
+				None,
+			),
+		},
+		GallerySlot {
+			label: "long-counter",
+			node: slot_filling(
+				FurnitureNode::counter,
+				Vec3::new(7.0, 0.0, 13.7),
+				Vec3::new(11.2, 0.9, 14.3),
+				&host,
+			),
+		},
+		GallerySlot {
+			label: "wall-bed",
+			node: typical_slot(
+				FurnitureNode::bed,
+				Vec3::new(2.0, 0.55, 1.6),
+				Vec3::new(14.0, 0.0, 14.0),
+				17,
+				Some(FurnitureAbutment::PosZ),
+			),
+		},
+		GallerySlot {
+			label: "free-bed",
+			node: typical_slot(
+				FurnitureNode::bed,
+				Vec3::new(2.0, 0.55, 1.6),
+				Vec3::new(18.0, 0.0, 14.0),
+				17,
+				None,
+			),
+		},
+		GallerySlot {
+			label: "seed-a",
+			node: typical_slot(
+				FurnitureNode::chest,
+				Vec3::new(0.9, 0.7, 0.5),
+				Vec3::new(0.0, 0.0, 18.0),
+				1,
+				Some(FurnitureAbutment::NegZ),
+			),
+		},
+		GallerySlot {
+			label: "seed-b",
+			node: typical_slot(
+				FurnitureNode::chest,
+				Vec3::new(0.9, 0.7, 0.5),
+				Vec3::new(2.4, 0.0, 18.0),
+				99,
+				Some(FurnitureAbutment::NegZ),
+			),
+		},
+	]
+}
+
+/// Richmond rooms plus authored extremes.
+pub fn gallery_slots() -> anyhow::Result<Vec<GallerySlot>> {
+	let mut slots = recorded_richmond_slots()?;
+	slots.extend(authored_extreme_slots());
+	Ok(slots)
+}
+
+/// Typical unit-assembly slot used by `/show bed|chair|chest|counter`.
+pub fn unit_slot(geometry: FurnitureGeometry, seed: u64) -> FurnitureNode {
+	let (make, size): (fn(Placement) -> FurnitureNode, Vec3) = match geometry {
+		FurnitureGeometry::Bed => (FurnitureNode::bed, Vec3::new(2.0, 0.55, 1.6)),
+		FurnitureGeometry::Chair => (FurnitureNode::chair, Vec3::new(0.5, 0.9, 0.5)),
+		FurnitureGeometry::Chest => (FurnitureNode::chest, Vec3::new(0.9, 0.7, 0.5)),
+		FurnitureGeometry::Counter => (FurnitureNode::counter, Vec3::new(1.8, 0.9, 0.6)),
+		_ => (FurnitureNode::bed, Vec3::ONE),
+	};
+	typical_slot(make, size, Vec3::ZERO, seed, Some(FurnitureAbutment::NegZ))
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use furniture_assemblies::{try_assembly, PartKind};
+	use richmond_building_components::FurnitureAbutment;
+
+	#[test]
+	fn richmond_rooms_emit_expected_kinds() -> anyhow::Result<()> {
+		let slots = recorded_richmond_slots()?;
+		let bedroom_beds: Vec<_> = slots
+			.iter()
+			.filter(|s| s.label == "richmond-bedroom" && s.node.geometry == FurnitureGeometry::Bed)
+			.collect();
+		if bedroom_beds.is_empty() {
+			return Err(anyhow::anyhow!("bedroom packer should emit a bed"));
+		}
+		if bedroom_beds.iter().any(|s| s.node.abutment.is_none()) {
+			return Err(anyhow::anyhow!("wall bedroom should stamp abutment"));
+		}
+		if !slots
+			.iter()
+			.any(|s| s.label == "richmond-kitchen" && s.node.geometry == FurnitureGeometry::Counter)
+		{
+			return Err(anyhow::anyhow!("galley kitchen should emit a counter"));
+		}
+		if !slots
+			.iter()
+			.any(|s| s.label == "richmond-living" && s.node.geometry == FurnitureGeometry::Chair)
+		{
+			return Err(anyhow::anyhow!("living room should emit a chair"));
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn two_seeds_share_topology() -> anyhow::Result<()> {
+		let slots = authored_extreme_slots();
+		let a = slots
+			.iter()
+			.find(|s| s.label == "seed-a")
+			.ok_or_else(|| anyhow::anyhow!("missing seed-a"))?;
+		let b = slots
+			.iter()
+			.find(|s| s.label == "seed-b")
+			.ok_or_else(|| anyhow::anyhow!("missing seed-b"))?;
+		let pa = try_assembly(&a.node).ok_or_else(|| anyhow::anyhow!("seed-a paint"))?;
+		let pb = try_assembly(&b.node).ok_or_else(|| anyhow::anyhow!("seed-b paint"))?;
+		if pa.parts.len() != pb.parts.len() {
+			return Err(anyhow::anyhow!("seed topology length diverged"));
+		}
+		let mut paint_changed = false;
+		for (left, right) in pa.parts.iter().zip(&pb.parts) {
+			if left.kind != right.kind || left.placement != right.placement {
+				return Err(anyhow::anyhow!("seed changed topology"));
+			}
+			paint_changed |= left.material != right.material;
+		}
+		if !paint_changed {
+			return Err(anyhow::anyhow!("two seeds should pick different paint"));
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn unit_chair_back_faces_the_wall() -> anyhow::Result<()> {
+		let slot = unit_slot(FurnitureGeometry::Chair, 4);
+		if slot.abutment != Some(FurnitureAbutment::NegZ) {
+			return Err(anyhow::anyhow!("unit chair should abut −Z"));
+		}
+		let assembly = try_assembly(&slot).ok_or_else(|| anyhow::anyhow!("chair paint"))?;
+		let back = assembly
+			.parts
+			.iter()
+			.find(|p| p.kind == PartKind::ChairBack)
+			.ok_or_else(|| anyhow::anyhow!("missing back"))?;
+		if back.placement.translation.z <= 0.0 {
+			return Err(anyhow::anyhow!("kit back stays on +Z before compose"));
+		}
+		Ok(())
+	}
+}

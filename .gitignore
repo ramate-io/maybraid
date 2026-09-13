@@ -11,3 +11,7 @@ issues
 commits
 comments
 .nix-dev-profile*
+dist
+packaging/*.local.md
+packaging/*.local.env
+packaging/identity.local.md
