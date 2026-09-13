@@ -1,11 +1,13 @@
 //! Character id and on-disk save directories.
 //!
-//! Default root is `<repo>/.maybraid/saves`, derived from this crate's
-//! `CARGO_MANIFEST_DIR`. Character appearance, inventory, and position files live in
-//! sibling folders keyed by the same [`CharacterId`].
+//! Default root is `<repo>/.maybraid/saves` in a checkout ([`SaveRoot::workspace`]).
+//! Packaged builds use [`SaveRoot::discover`] (user data, or `MAYBRAID_SAVES`).
+//! Character appearance, inventory, and position files live in sibling folders
+//! keyed by the same [`CharacterId`].
 
 use bevy::prelude::*;
 use serde::{de::Error as DeError, Deserialize, Deserializer, Serialize, Serializer};
+use std::env;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -82,6 +84,21 @@ impl SaveRoot {
 		Self { path: Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../.maybraid/saves") }
 	}
 
+	/// Packaged install → user data; otherwise [`Self::workspace`].
+	///
+	/// `MAYBRAID_SAVES` wins. A macOS `.app`, a sidecar `assets/` next to the
+	/// exe (outside Cargo `target/`), or `MAYBRAID_PACKAGED` selects the
+	/// platform user-data directory (`io.ramate.maybraid`).
+	pub fn discover() -> Self {
+		if let Ok(path) = env::var("MAYBRAID_SAVES") {
+			return Self::at(path);
+		}
+		if packaged_install() {
+			return Self::at(user_saves_dir());
+		}
+		Self::workspace()
+	}
+
 	pub fn characters_dir(&self) -> PathBuf {
 		self.path.join(CHARACTERS_DIR)
 	}
@@ -149,6 +166,63 @@ impl SaveRoot {
 		remove_if_exists(&self.position_path(id))?;
 		Ok(())
 	}
+}
+
+const APP_DATA_DIR: &str = "io.ramate.maybraid";
+
+fn packaged_install() -> bool {
+	env::var_os("MAYBRAID_PACKAGED").is_some()
+		|| env::current_exe().ok().is_some_and(|exe| executable_is_packaged(&exe))
+}
+
+fn executable_is_packaged(exe: &Path) -> bool {
+	is_macos_bundle(exe) || sidecar_assets_outside_cargo_target(exe)
+}
+
+fn is_macos_bundle(exe: &Path) -> bool {
+	let Some(macos) = exe.parent() else {
+		return false;
+	};
+	macos.file_name() == Some("MacOS".as_ref())
+		&& macos.parent().and_then(|contents| contents.file_name()) == Some("Contents".as_ref())
+}
+
+fn sidecar_assets_outside_cargo_target(exe: &Path) -> bool {
+	let Some(dir) = exe.parent() else {
+		return false;
+	};
+	dir.join("assets").is_dir()
+		&& !exe.components().any(|component| component.as_os_str() == "target")
+}
+
+fn user_saves_dir() -> PathBuf {
+	#[cfg(target_os = "macos")]
+	{
+		home_dir().join("Library/Application Support").join(APP_DATA_DIR).join("saves")
+	}
+	#[cfg(target_os = "windows")]
+	{
+		env::var_os("APPDATA")
+			.map(PathBuf::from)
+			.unwrap_or_else(home_dir)
+			.join("Maybraid")
+			.join("saves")
+	}
+	#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+	{
+		env::var_os("XDG_DATA_HOME")
+			.map(PathBuf::from)
+			.unwrap_or_else(|| home_dir().join(".local/share"))
+			.join("maybraid")
+			.join("saves")
+	}
+}
+
+fn home_dir() -> PathBuf {
+	env::var_os("HOME")
+		.or_else(|| env::var_os("USERPROFILE"))
+		.map(PathBuf::from)
+		.unwrap_or_else(|| PathBuf::from("."))
 }
 
 fn remove_if_exists(path: &Path) -> io::Result<()> {
@@ -223,5 +297,22 @@ mod tests {
 		let id = CharacterId(7);
 		save_active(&root, id).expect("save");
 		assert_eq!(load_active(&root), Some(id));
+	}
+
+	#[test]
+	fn macos_bundle_exe_is_packaged() {
+		let exe = Path::new("/Applications/Maybraid.app/Contents/MacOS/maybraid");
+		assert!(is_macos_bundle(exe));
+		assert!(executable_is_packaged(exe));
+		assert!(!is_macos_bundle(Path::new("/tmp/target/release/maybraid")));
+	}
+
+	#[test]
+	fn cargo_target_sidecar_is_not_packaged() {
+		let dir = tempfile::tempdir().expect("tempdir");
+		let target = dir.path().join("target").join("release");
+		fs::create_dir_all(target.join("assets")).expect("assets");
+		let exe = target.join("maybraid");
+		assert!(!sidecar_assets_outside_cargo_target(&exe));
 	}
 }

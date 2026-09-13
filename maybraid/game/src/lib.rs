@@ -2,10 +2,18 @@
 
 mod flow;
 mod load;
+mod paths;
 mod shell;
 
 pub use flow::{GameFlow, HomeRoute, PauseMenuRoute, WorldPause};
+pub use paths::assets_root;
 
+use crate::shell::{
+	apply_pause_character_look, apply_shell_look, attach_preview_camera, despawn_loading_backdrop,
+	detach_preview_camera, enter_characters, enter_home, enter_loading_world, enter_world,
+	enter_world_menu, exit_world_menu, restore_stashed_world_camera, spawn_loading_backdrop,
+	stamp_preview_render_layers,
+};
 use bevy::prelude::*;
 use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
 use maybraid_input::MenuNavPad;
@@ -29,19 +37,6 @@ use menu_screens::{
 	HomeScreenPlugin, InGameMenuChoice, InGameScreenPlugin, InGameSettings, InGameSettingsScreen,
 	LoadingScreenPlugin, LoadingScreenSystems, MenuScreen, SpinRevealScreen,
 };
-use std::path::{Path, PathBuf};
-
-use crate::shell::{
-	apply_pause_character_look, apply_shell_look, attach_preview_camera, despawn_loading_backdrop,
-	detach_preview_camera, enter_characters, enter_home, enter_loading_world, enter_world,
-	enter_world_menu, exit_world_menu, restore_stashed_world_camera, spawn_loading_backdrop,
-	stamp_preview_render_layers,
-};
-
-/// Crate-local asset directory (`maybraid/game/assets`).
-pub fn assets_root() -> PathBuf {
-	Path::new(env!("CARGO_MANIFEST_DIR")).join("assets")
-}
 
 pub struct GamePlugin;
 

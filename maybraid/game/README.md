@@ -11,4 +11,10 @@ home. Training Ground and Settings are not wired yet.
 cargo run -p maybraid
 ```
 
-Assets live in this crate’s `assets/` directory (Bevy’s usual layout).
+Assets live in this crate’s `assets/` symlink (`maybraid/assets`). A packaged
+`.app` reads `Contents/Resources/assets` instead; see [packaging/](../../packaging/).
+
+```bash
+packaging/scripts/package-macos.sh
+open dist/Maybraid.app
+```
