@@ -17,6 +17,7 @@ members = [
 
   "maybraid/furniture/components",
   "maybraid/furniture/assemblies",
+  "maybraid/furniture/shaders",
   "maybraid/furniture/playground",
 
   "maybraid/menu/components",
@@ -256,6 +257,7 @@ richmond-developments-on-terrain-playground = { path = "maybraid/richmond/develo
 
 furniture-components = { path = "maybraid/furniture/components" }
 furniture-assemblies = { path = "maybraid/furniture/assemblies" }
+furniture-shaders = { path = "maybraid/furniture/shaders" }
 furniture-playground = { path = "maybraid/furniture/playground" }
 
 menu-components = { path = "maybraid/menu/components" }

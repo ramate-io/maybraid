@@ -18,12 +18,11 @@ pub fn try_assembly(node: &FurnitureNode) -> Option<Assembly> {
 		FurnitureGeometry::Bed => BedParams { finish_seed: seed }.build().assembly(),
 		FurnitureGeometry::Chair => ChairParams { finish_seed: seed }.build().assembly(),
 		FurnitureGeometry::Chest => ChestParams { finish_seed: seed }.build().assembly(),
-		FurnitureGeometry::Counter => CounterParams {
-			finish_seed: seed,
-			flush_back: node.abutment.is_some(),
+		FurnitureGeometry::Counter => {
+			CounterParams { finish_seed: seed, flush_back: node.abutment.is_some() }
+				.build()
+				.assembly()
 		}
-		.build()
-		.assembly(),
 		_ => return None,
 	})
 }
@@ -66,7 +65,8 @@ mod tests {
 
 	#[test]
 	fn wall_counter_flushes_the_toekick() -> anyhow::Result<()> {
-		let slot = FurnitureNode::counter(Placement::IDENTITY).with_abutment(FurnitureAbutment::PosZ);
+		let slot =
+			FurnitureNode::counter(Placement::IDENTITY).with_abutment(FurnitureAbutment::PosZ);
 		let assembly = try_assembly(&slot).ok_or_else(|| anyhow::anyhow!("counter paint"))?;
 		let footer = assembly
 			.parts

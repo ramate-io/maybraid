@@ -14,12 +14,12 @@ pub use preview::{PreviewConfig, PreviewSubject};
 
 use bevy::prelude::*;
 use furniture_assemblies::FurnitureAssembliesPlugin;
+use furniture_shaders::{FurnitureMaterialRefPlugin, FurnitureShadersPlugin};
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use ground::setup_ground;
 use lod_lazy_refs::LodLazyRefsPlugin;
 use preview::present_preview;
 use richmond_building_components::FurnitureWireframePlugin;
-use richmond_building_shaders::{RichmondBuildingShadersPlugin, RichmondUrbanMaterialRefPlugin};
 use scene_ref::SceneRefPlugin;
 
 pub struct FurniturePlaygroundPlugin;
@@ -29,8 +29,8 @@ impl Plugin for FurniturePlaygroundPlugin {
 		app.init_resource::<PreviewConfig>().add_plugins((
 			SceneRefPlugin,
 			LodLazyRefsPlugin,
-			RichmondBuildingShadersPlugin,
-			RichmondUrbanMaterialRefPlugin,
+			FurnitureShadersPlugin,
+			FurnitureMaterialRefPlugin,
 			FurnitureWireframePlugin,
 			FurnitureAssembliesPlugin,
 			GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()),
@@ -50,13 +50,27 @@ impl Plugin for FurniturePlaygroundPlugin {
 
 fn setup_lighting(mut commands: Commands) {
 	use std::f32::consts::PI;
-	commands.insert_resource(GlobalAmbientLight { brightness: 450.0, ..default() });
+	commands.insert_resource(GlobalAmbientLight {
+		brightness: 560.0,
+		color: Color::srgb(1.0, 0.90, 0.76),
+		..default()
+	});
 	commands.spawn((
-		DirectionalLight { illuminance: 10000.0, shadow_maps_enabled: true, ..default() },
+		DirectionalLight {
+			illuminance: 12800.0,
+			color: Color::srgb(1.0, 0.88, 0.70),
+			shadow_maps_enabled: true,
+			..default()
+		},
 		Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -PI / 3.0, PI / 5.0, 0.0)),
 	));
 	commands.spawn((
-		DirectionalLight { illuminance: 3500.0, shadow_maps_enabled: false, ..default() },
+		DirectionalLight {
+			illuminance: 4200.0,
+			color: Color::srgb(1.0, 0.72, 0.48),
+			shadow_maps_enabled: false,
+			..default()
+		},
 		Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, PI / 5.0, -PI / 4.0, 0.0)),
 	));
 }

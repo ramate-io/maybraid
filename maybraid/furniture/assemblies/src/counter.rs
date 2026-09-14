@@ -1,6 +1,6 @@
 //! Counter: toekick, cabinet, top — flush ends, depth-only kick.
 
-use crate::palette::wood;
+use crate::palette::{marble, wood};
 use crate::Assembly;
 use furniture_components::{run_slab, PartKind, PlacedPart};
 use richmond_building_components::FurnitureGeometry;
@@ -60,7 +60,7 @@ impl Counter {
 				PlacedPart {
 					kind: PartKind::CounterTop,
 					placement: run_slab(1.0, CABINET_Z, 0.88, 1.0, flush),
-					material: wood(seed, 3),
+					material: marble(seed, 3),
 				},
 			],
 		}
@@ -139,5 +139,19 @@ mod tests {
 			return Err(anyhow::anyhow!("flush toekick should still inset the room side"));
 		}
 		Ok(())
+	}
+
+	#[test]
+	fn top_uses_marble() -> anyhow::Result<()> {
+		let counter = CounterParams::unit_from_num(8).build();
+		let top = part(&counter, PartKind::CounterTop)?;
+		match &top.material.name {
+			material_ref::MaterialId::Name(name)
+				if name == furniture_shaders::RECIPE_FURNITURE_MARBLE =>
+			{
+				Ok(())
+			}
+			other => Err(anyhow::anyhow!("countertop should be marble, got {other:?}")),
+		}
 	}
 }

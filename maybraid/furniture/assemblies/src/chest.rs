@@ -1,6 +1,6 @@
 //! Chest: trunk plus a lid on top.
 
-use crate::palette::wood;
+use crate::palette::ornate;
 use crate::Assembly;
 use furniture_components::{slab, PartKind, PlacedPart};
 use richmond_building_components::FurnitureGeometry;
@@ -37,12 +37,12 @@ impl Chest {
 				PlacedPart {
 					kind: PartKind::ChestTrunk,
 					placement: slab(1.0, 0.0, 0.78),
-					material: wood(seed, 1),
+					material: ornate(seed, 1),
 				},
 				PlacedPart {
 					kind: PartKind::ChestLid,
 					placement: slab(1.02, 0.78, 1.0),
-					material: wood(seed, 2),
+					material: ornate(seed, 2),
 				},
 			],
 		}
@@ -89,6 +89,21 @@ mod tests {
 			return Err(anyhow::anyhow!(
 				"lid bottom {lid_bottom} should meet trunk top {trunk_top}"
 			));
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn trunk_and_lid_use_ornate() -> anyhow::Result<()> {
+		let chest = ChestParams::unit_from_num(3).build();
+		for part in &chest.parts {
+			match &part.material.name {
+				material_ref::MaterialId::Name(name)
+					if name == furniture_shaders::RECIPE_FURNITURE_ORNATE => {}
+				other => {
+					return Err(anyhow::anyhow!("{:?} should be ornate, got {other:?}", part.kind));
+				}
+			}
 		}
 		Ok(())
 	}

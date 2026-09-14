@@ -3519,9 +3519,10 @@ dependencies = [
  "anyhow",
  "bevy",
  "furniture-components",
+ "furniture-shaders",
  "material-ref",
+ "procedural-common",
  "richmond-building-components",
- "richmond-building-shaders",
 ]
 
 [[package]]
@@ -3544,14 +3545,22 @@ dependencies = [
  "bevy",
  "clap",
  "furniture-assemblies",
+ "furniture-shaders",
  "game-commands",
  "lod",
  "lod-lazy-refs",
  "procedural-common",
  "richmond-building-components",
- "richmond-building-shaders",
  "richmond-buildings",
  "scene-ref",
+]
+
+[[package]]
+name = "furniture-shaders"
+version = "0.0.1"
+dependencies = [
+ "bevy",
+ "material-ref",
 ]
 
 [[package]]

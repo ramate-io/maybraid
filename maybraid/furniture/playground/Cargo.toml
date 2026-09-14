@@ -18,12 +18,12 @@ anyhow = { workspace = true }
 bevy = { workspace = true }
 clap = { workspace = true }
 furniture-assemblies = { workspace = true }
+furniture-shaders = { workspace = true }
 game-commands = { workspace = true }
 lod = { workspace = true }
 lod-lazy-refs = { workspace = true }
 procedural-common = { workspace = true }
 richmond-building-components = { workspace = true }
-richmond-building-shaders = { workspace = true }
 richmond-buildings = { workspace = true }
 scene-ref = { workspace = true }
 
