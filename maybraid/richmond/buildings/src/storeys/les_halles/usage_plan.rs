@@ -22,7 +22,8 @@ use richmond_building_components::{BuildingComponents, Layers};
 
 use crate::fit::{FillableRegions, Fit, FitError, SpaceKind};
 use crate::usage_areas::furniture_util::{
-	as_closet_if_internal, chest_in_confines, chests_for_regions, FurnitureFill,
+	as_closet_if_internal, chests_for_regions, confines_from_label, occasional_chest_in_confines,
+	FurnitureFill,
 };
 use crate::usage_areas::{CommercialStallInterior, CommercialStallStrip};
 
@@ -70,12 +71,26 @@ impl LesHallesUsagePlan for LesHallesCommercialUsage {
 		let mut residual_chests = chests_for_regions(&residual_within, noise);
 		for (si, strip) in stall_strips.iter().enumerate() {
 			for (ti, stall) in strip.stalls().iter().enumerate() {
-				if !matches!(stall.interior(), CommercialStallInterior::Lounge(_)) {
-					continue;
-				}
-				if let Some(fill) =
-					chest_in_confines(&stall.confines, noise, 300 + si as u32 * 17 + ti as u32)
-				{
+				let salt = 300 + si as u32 * 17 + ti as u32;
+				let fill = match stall.interior() {
+					CommercialStallInterior::Lounge(_) => {
+						occasional_chest_in_confines(&stall.confines, noise, salt, 0.55)
+					}
+					CommercialStallInterior::Bites(bites) => occasional_chest_in_confines(
+						&confines_from_label(&bites.bites_kitchen, stall.confines.roll),
+						noise,
+						salt,
+						0.55,
+					),
+					CommercialStallInterior::BitesSitdown(bites) => occasional_chest_in_confines(
+						&confines_from_label(&bites.bites_kitchen, stall.confines.roll),
+						noise,
+						salt,
+						0.55,
+					),
+					_ => None,
+				};
+				if let Some(fill) = fill {
 					residual_chests.push(fill);
 				}
 			}
@@ -100,8 +115,15 @@ impl BuildingComponents for LesHallesCommercialUsage {
 		Layers::new()
 	}
 
-	fn furniture_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<FurnitureNode> {
-		Layers::from_free(self.residual_chests.iter().map(|fill| fill.furniture.clone()).collect())
+	fn furniture_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FurnitureNode> {
+		let mut out = Layers::new();
+		for strip in &self.stall_strips {
+			out.extend(strip.furniture_nodes_for_level(level));
+		}
+		out.extend(Layers::from_free(
+			self.residual_chests.iter().map(|fill| fill.furniture.clone()).collect(),
+		));
+		out
 	}
 
 	fn label_nodes_for_level(&self, level: LodSceneLevel) -> Layers<LabelNode> {

@@ -9,6 +9,7 @@
 
 use lod::gen::LodSceneLevel;
 use procedural_common::{NoiseParams, NoiseType, TypedBucketThrow};
+use richmond_building_components::furniture::FurnitureNode;
 use richmond_building_components::panels::PanelNode;
 use richmond_building_components::{BuildingComponents, LabelNode, Layers};
 
@@ -140,6 +141,16 @@ impl BuildingComponents for CommercialStallInterior {
 			Self::Parts(s) => s.label_nodes_for_level(level),
 			Self::PublicRestroom(s) => s.label_nodes_for_level(level),
 			Self::Lounge(s) => s.label_nodes_for_level(level),
+		}
+	}
+
+	fn furniture_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FurnitureNode> {
+		match self {
+			Self::Bites(s) => s.furniture_nodes_for_level(level),
+			Self::BitesSitdown(s) => s.furniture_nodes_for_level(level),
+			Self::MiniMart(s) => s.furniture_nodes_for_level(level),
+			Self::Lounge(s) => s.furniture_nodes_for_level(level),
+			Self::KnickKnack(_) | Self::Parts(_) | Self::PublicRestroom(_) => Layers::new(),
 		}
 	}
 }

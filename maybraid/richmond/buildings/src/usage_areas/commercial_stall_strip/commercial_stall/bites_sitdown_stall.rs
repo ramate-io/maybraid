@@ -14,28 +14,48 @@ pub use parameterized::{BitesSitdownParameterized, BitesSitdownPlan};
 
 use lod::gen::LodSceneLevel;
 use procedural_common::NoiseParams;
+use richmond_building_components::furniture::FurnitureNode;
 use richmond_building_components::{BuildingComponents, LabelNode, LabelStyle, Layers};
 
 use crate::fit::{Confines, FillableRegions, Fit, FitError};
+use crate::usage_areas::furniture_util::{chairs_in_aabb, furniture_fill, FurnitureFill};
 
 use super::label_util::label_filling_aabb;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct BitesSitdownStall {
 	pub stall_type: LabelNode,
-	pub bites_counters: Vec<LabelNode>,
+	pub bites_counters: Vec<FurnitureFill>,
 	pub bites_kitchen: LabelNode,
 	pub bites_seating_area: LabelNode,
+	pub bites_seating: Vec<FurnitureFill>,
 }
 
 impl BitesSitdownStall {
-	pub fn from_plan(plan: BitesSitdownPlan, confines: &Confines) -> Self {
+	pub fn from_plan(plan: BitesSitdownPlan, confines: &Confines, noise: NoiseParams) -> Self {
 		let style = plan.parameterized.style();
+		let host = &confines.bounds;
 		let bites_counters = plan
 			.counter_aabbs
 			.iter()
-			.map(|aabb| label_filling_aabb(style, "BitesCounter", aabb, confines.roll))
+			.map(|aabb| {
+				furniture_fill(
+					style,
+					"BitesCounter",
+					aabb,
+					host,
+					confines.roll,
+					FurnitureNode::counter,
+				)
+			})
 			.collect();
+		let bites_seating = chairs_in_aabb(
+			&plan.seating_aabb,
+			confines.roll,
+			noise,
+			LabelStyle::Green,
+			"BitesSeating",
+		);
 		Self {
 			stall_type: label_filling_aabb(
 				LabelStyle::Yellow,
@@ -56,6 +76,7 @@ impl BitesSitdownStall {
 				&plan.seating_aabb,
 				confines.roll,
 			),
+			bites_seating,
 		}
 	}
 }
@@ -67,17 +88,28 @@ impl Fit for BitesSitdownStall {
 	) -> Result<(Self, FillableRegions), FitError> {
 		let params = BitesSitdownParameterized::sample(confines, noise)?;
 		let plan = BitesSitdownPlan::from_parameterized(params, confines)?;
-		Ok((Self::from_plan(plan, confines), FillableRegions::empty()))
+		Ok((Self::from_plan(plan, confines, noise), FillableRegions::empty()))
 	}
 }
 
 impl BuildingComponents for BitesSitdownStall {
 	fn label_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<LabelNode> {
 		let mut labels = vec![self.stall_type.clone()];
-		labels.extend(self.bites_counters.iter().cloned());
+		labels.extend(self.bites_counters.iter().map(|fill| fill.label.clone()));
 		labels.push(self.bites_kitchen.clone());
 		labels.push(self.bites_seating_area.clone());
+		labels.extend(self.bites_seating.iter().map(|fill| fill.label.clone()));
 		Layers::from_free(labels)
+	}
+
+	fn furniture_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<FurnitureNode> {
+		let mut out = self
+			.bites_counters
+			.iter()
+			.map(|fill| fill.furniture.clone())
+			.collect::<Vec<_>>();
+		out.extend(self.bites_seating.iter().map(|fill| fill.furniture.clone()));
+		Layers::from_free(out)
 	}
 }
 
@@ -143,8 +175,15 @@ mod tests {
 	fn sitdown_emits_counters_seating_kitchen() {
 		let confines = roomy_south();
 		let plan = BitesSitdownPlan::from_parameterized(roomy_params(35.0), &confines).unwrap();
-		let stall = BitesSitdownStall::from_plan(plan, &confines);
+		let stall = BitesSitdownStall::from_plan(plan, &confines, NoiseParams::default());
 		assert!(!stall.bites_counters.is_empty());
+		assert!(stall.bites_counters.iter().all(|fill| {
+			fill.furniture.geometry == richmond_building_components::FurnitureGeometry::Counter
+		}));
+		assert!(!stall.bites_seating.is_empty());
+		assert!(stall.bites_seating.iter().all(|fill| {
+			fill.furniture.geometry == richmond_building_components::FurnitureGeometry::Chair
+		}));
 		assert_eq!(stall.stall_type.text, "BitesSitdownStall");
 		assert_eq!(stall.bites_seating_area.text, "BitesSeatingArea");
 		assert!(stall.bites_seating_area.placement.scale.x >= 1.0);

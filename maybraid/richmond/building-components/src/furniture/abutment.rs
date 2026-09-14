@@ -34,6 +34,14 @@ impl FurnitureAbutment {
 		}
 	}
 
+	/// Kit-local scale so the unit cube fills `slot` **after** [`Self::facing_yaw`].
+	///
+	/// [`Placement::scale`] is applied before rotation. World AABB extents as
+	/// scale plus a ±90° yaw swing the long run out of the packed box.
+	pub fn local_scale(self, slot: &Aabb3d) -> bevy::math::Vec3 {
+		local_scale_for_yaw(slot, self.facing_yaw())
+	}
+
 	/// Longest flush contact between `slot` and `host`, if any face is within
 	/// [`Self::FLUSH_EPS`].
 	pub fn from_flush(slot: &Aabb3d, host: &Aabb3d) -> Option<Self> {
@@ -100,6 +108,16 @@ impl FurnitureAbutment {
 	}
 }
 
+/// Kit-local `(along, height, depth)` for a yaw that aims \(+Z\) at a wall.
+pub fn local_scale_for_yaw(slot: &Aabb3d, yaw: f32) -> bevy::math::Vec3 {
+	let span = slot.max - slot.min;
+	if yaw.cos().abs() < 0.5 {
+		bevy::math::Vec3::new(span.z, span.y, span.x)
+	} else {
+		bevy::math::Vec3::new(span.x, span.y, span.z)
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -125,5 +143,14 @@ mod tests {
 		let host = box_at(Vec3::ZERO, Vec3::new(10.0, 3.0, 8.0));
 		let bed = box_at(Vec3::new(3.0, 0.0, 0.5), Vec3::new(5.0, 0.55, 2.1));
 		assert!((FurnitureAbutment::free_facing_yaw(&bed, &host) - PI).abs() < 1e-5);
+	}
+
+	#[test]
+	fn east_wall_local_scale_swaps_xz() {
+		let slot = box_at(Vec3::new(5.2, 0.0, 1.0), Vec3::new(6.0, 1.0, 5.0));
+		let scale = FurnitureAbutment::PosX.local_scale(&slot);
+		assert!((scale.x - 4.0).abs() < 1e-4);
+		assert!((scale.y - 1.0).abs() < 1e-4);
+		assert!((scale.z - 0.8).abs() < 1e-4);
 	}
 }

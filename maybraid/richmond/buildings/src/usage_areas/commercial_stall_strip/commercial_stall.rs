@@ -35,6 +35,7 @@ use bevy_math::bounding::Aabb3d;
 use bevy_math::{Vec2, Vec3};
 use lod::gen::LodSceneLevel;
 use procedural_common::{NoiseConfig, NoiseParams};
+use richmond_building_components::furniture::FurnitureNode;
 use richmond_building_components::panels::{PanelNode, PanelStyle};
 use richmond_building_components::{BuildingComponents, LabelNode, LabelStyle, Layers};
 
@@ -134,6 +135,10 @@ impl BuildingComponents for CommercialStall {
 
 	fn label_nodes_for_level(&self, level: LodSceneLevel) -> Layers<LabelNode> {
 		self.plan.interior.label_nodes_for_level(level)
+	}
+
+	fn furniture_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FurnitureNode> {
+		self.plan.interior.furniture_nodes_for_level(level)
 	}
 }
 

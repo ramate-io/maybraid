@@ -96,10 +96,8 @@ impl LesHallesUsagePlan for LesHallesLivableUsage {
 								.extend(nested.within.into_iter().map(as_closet_if_internal));
 						}
 						Err(FitError::TooSmall { .. }) => {
-							residual_within.push(FillRegion::new(
-								SpaceKind::ExternalSpace,
-								region.confines,
-							));
+							residual_within
+								.push(FillRegion::new(SpaceKind::ExternalSpace, region.confines));
 						}
 						Err(err) => return Err(err),
 					}

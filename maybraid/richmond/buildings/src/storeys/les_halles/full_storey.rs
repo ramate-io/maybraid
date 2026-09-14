@@ -115,12 +115,36 @@ mod tests {
 			within: vec![crate::fit::FillRegion::new(SpaceKind::ExternalSpace, leftover)],
 			atop: Vec::new(),
 		};
-		let (usage, _) =
-			LesHallesCommercialUsage::paint(regions, NoiseParams::default()).unwrap();
+		let (usage, _) = LesHallesCommercialUsage::paint(regions, NoiseParams::default()).unwrap();
 		assert!(!usage.stall_strips.is_empty() || !usage.residual_chests.is_empty());
 		assert!(
 			!usage.furniture_nodes_for_level(LodSceneLevel::High).flatten().is_empty(),
-			"empty gallery leftover should still get a painted chest"
+			"gallery leftover should get stall counters / chairs or a residual chest"
 		);
+	}
+
+	#[test]
+	fn leftover_walkways_allocate_occasional_chests() {
+		let walk =
+			Confines::from_bounds(Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(6.0, 3.0, 4.0)));
+		let regions = crate::fit::FillableRegions {
+			within: vec![crate::fit::FillRegion::new(SpaceKind::Walkway, walk)],
+			atop: Vec::new(),
+		};
+		let mut any = false;
+		for seed in 0..24 {
+			let (usage, _) = LesHallesCommercialUsage::paint(
+				regions.clone(),
+				NoiseParams { seed, ..NoiseParams::default() },
+			)
+			.unwrap();
+			if usage.residual_chests.iter().any(|fill| {
+				fill.furniture.geometry == richmond_building_components::FurnitureGeometry::Chest
+			}) {
+				any = true;
+				break;
+			}
+		}
+		assert!(any, "walkway residuals should feed occasional chests into generate");
 	}
 }

@@ -90,18 +90,23 @@ impl FurnitureNode {
 		self
 	}
 
-	/// Stamp abutment, facing, and finish seed from the packed AABB versus host.
+	/// Stamp pose, abutment, and finish seed from the packed AABB versus host.
 	///
 	/// Flush walls come from the packer's committed box, not a second room walk.
-	/// Free boxes use the shorter-axis / nearer-wall yaw convention.
+	/// Free boxes use the shorter-axis / nearer-wall yaw convention. Scale is
+	/// kit-local so a ±90° yaw still fills `slot` (not a rotated world AABB).
 	pub fn stamp_host_slot(&mut self, slot: &Aabb3d, host: &Aabb3d) {
 		self.finish_seed = finish_seed_for(self.geometry, slot);
+		self.placement.translation = bevy::math::Vec3::from((slot.min + slot.max) * 0.5);
 		if let Some(abutment) = FurnitureAbutment::from_flush(slot, host) {
 			self.abutment = Some(abutment);
 			self.placement.yaw = abutment.facing_yaw();
+			self.placement.scale = abutment.local_scale(slot);
 		} else {
 			self.abutment = None;
 			self.placement.yaw = FurnitureAbutment::free_facing_yaw(slot, host);
+			self.placement.scale =
+				crate::furniture::abutment::local_scale_for_yaw(slot, self.placement.yaw);
 		}
 	}
 }

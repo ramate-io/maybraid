@@ -9,7 +9,8 @@ use crate::Assembly;
 /// High-LOD furniture slots on a Richmond building (the generate pass).
 ///
 /// Room packers already stamped abutment, facing, and [`FurnitureNode::finish_seed`].
-/// This does not invent new boxes.
+/// Residual gallery / walkway / kitchen leftovers emit occasional chests on the
+/// usage plan; this pass only collects those High slots.
 pub fn collect_furniture_slots(building: &impl BuildingComponents) -> Vec<FurnitureNode> {
 	building.furniture_nodes_for_level(LodSceneLevel::High).flatten()
 }
@@ -23,7 +24,10 @@ pub fn generate_assemblies(building: &impl BuildingComponents) -> Vec<(Furniture
 pub fn generate_assemblies_from_nodes(
 	nodes: impl IntoIterator<Item = FurnitureNode>,
 ) -> Vec<(FurnitureNode, Assembly)> {
-	nodes.into_iter().filter_map(|node| try_assembly(&node).map(|assembly| (node, assembly))).collect()
+	nodes
+		.into_iter()
+		.filter_map(|node| try_assembly(&node).map(|assembly| (node, assembly)))
+		.collect()
 }
 
 #[cfg(test)]

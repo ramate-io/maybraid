@@ -5,19 +5,22 @@
 
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use bevy::math::bounding::{Aabb3d, IntersectsVolume};
+use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use lod::gen::{GenerationScheme, Id, OriginalId, SpatialIndex, StorageStatus, TrackedId, Version};
 use lod::lod_ref::LodRef;
 use lod::presentation::{LodPresentKeepRegion, LodPresentRegion};
 use lod::scene::{LodRefreshRegions, LodRefreshRegionsStatus};
 use lod::LodGenerateKeepRegion;
-use lod::{LodPresentRegionPlugin, LodRefreshCorePlugin, LodSceneRefreshRegionPlugin};
+use lod::{
+	LodPresentRegionPlugin, LodRefreshCorePlugin, LodSceneRefreshRegion,
+	LodSceneRefreshRegionPlugin,
+};
 use lod_gimme::GimmeLodSceneRefreshPlugin;
 use richmond_development_models::{BuiltDevelopment, DevelopmentEntryStore, DevelopmentHosts};
 
 use crate::cell::{
-	world_slot, xz_radius_aabb, FurnitureCellExtent, FURNITURE_GENERATE_RADIUS,
+	intersects_xz, world_slot, xz_radius_aabb, FurnitureCellExtent, FURNITURE_GENERATE_RADIUS,
 	FURNITURE_PRESENT_RADIUS,
 };
 use crate::host::{spawn_furniture_cell, FurnitureCell};
@@ -148,7 +151,7 @@ impl SpatialIndex<FurnitureCell> for FurnitureIndex {
 	fn tracked_ids_for(&self, region: Aabb3d) -> Vec<TrackedId> {
 		self.cells
 			.iter()
-			.filter(|(_, entry)| region.intersects(&entry.bounds))
+			.filter(|(_, entry)| intersects_xz(region, entry.bounds))
 			.map(|(id, _)| TrackedId(*id))
 			.collect()
 	}
@@ -317,6 +320,7 @@ fn stream_furniture_keep(
 	mut generate_keep: ResMut<LodGenerateKeepRegion<FurnitureLodChan>>,
 	mut present_keep: ResMut<LodPresentKeepRegion<FurnitureLodChan>>,
 	mut present_regions: MessageWriter<LodPresentRegion<FurnitureLodChan>>,
+	mut refresh_regions: MessageWriter<LodSceneRefreshRegion<FurnitureRefresh>>,
 	mut previous_cell: Local<Option<(i32, i32)>>,
 ) {
 	let Ok(camera) = camera.single() else {
@@ -333,6 +337,7 @@ fn stream_furniture_keep(
 		return;
 	}
 	present_regions.write(LodPresentRegion::new(present_aabb));
+	refresh_regions.write(LodSceneRefreshRegion::new(present_aabb));
 	*previous_cell = Some(current);
 }
 
@@ -377,6 +382,7 @@ fn present_furniture_cells(
 	present_keep: Res<LodPresentKeepRegion<FurnitureLodChan>>,
 	index: Res<FurnitureIndex>,
 	mut state: ResMut<FurniturePresenterState>,
+	mut refresh_regions: MessageWriter<LodSceneRefreshRegion<FurnitureRefresh>>,
 ) {
 	let Some(region) = present_keep.region else {
 		return;
@@ -401,6 +407,7 @@ fn present_furniture_cells(
 		missing.push((id, distance, version, cell.clone()));
 	}
 	missing.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+	let mut spawned = false;
 	for (id, _, version, cell) in missing.into_iter().take(FURNITURE_PRESENT_CELLS_PER_FRAME) {
 		if let Some(previous) = state.retire(id) {
 			state.pending_despawn.push_back(previous.entities);
@@ -409,6 +416,10 @@ fn present_furniture_cells(
 		state
 			.presented
 			.insert(id, PresentedFurnitureCell { version, entities: vec![entity] });
+		spawned = true;
+	}
+	if spawned {
+		refresh_regions.write(LodSceneRefreshRegion::new(region));
 	}
 	state.remove_stale(&mut commands, &wanted);
 }
@@ -470,10 +481,8 @@ mod tests {
 		let b = richmond_building_components::FurnitureNode::chair(Placement::IDENTITY)
 			.with_finish_seed(9);
 		assert!(slots_match(&[a.clone()], &[b]));
-		let moved = richmond_building_components::FurnitureNode::chair(Placement::new(
-			Vec3::X,
-			0.0,
-		));
+		let moved =
+			richmond_building_components::FurnitureNode::chair(Placement::new(Vec3::X, 0.0));
 		assert!(!slots_match(&[a], &[moved]));
 	}
 
@@ -492,5 +501,32 @@ mod tests {
 		let region = xz_radius_aabb(Vec3::ZERO, 200.0);
 		let ids = FurnitureCell::original_ids_for(&mut index, region);
 		assert_eq!(ids.len(), 2);
+	}
+
+	#[test]
+	fn tracked_ids_find_cells_below_sea_level() {
+		let mut index = FurnitureIndex::default();
+		let extent = FurnitureCellExtent::from_cell_index(18, 36);
+		let slot = richmond_building_components::FurnitureNode::chair(Placement::new(
+			Vec3::new(extent.center().x, -141.0, extent.center().z),
+			0.0,
+		));
+		let cell = FurnitureCell::new(extent, vec![slot]);
+		let bounds = cell.bounds();
+		let identity = Transform::IDENTITY;
+		let lod_ref = LodRef {
+			entity: Entity::PLACEHOLDER,
+			previous_transform: &identity,
+			current_transform: &identity,
+			bounds: &bounds,
+		};
+		index.insert(extent.id(), cell, bounds, &lod_ref);
+		let camera = xz_radius_aabb(Vec3::new(extent.center().x, -141.0, extent.center().z), 125.0);
+		assert_eq!(SpatialIndex::<FurnitureCell>::tracked_ids_for(&index, camera).len(), 1);
+		let sea = Aabb3d::from_min_max(
+			Vec3::new(extent.min.x, 0.0, extent.min.z),
+			Vec3::new(extent.max.x, 1.0, extent.max.z),
+		);
+		assert_eq!(SpatialIndex::<FurnitureCell>::tracked_ids_for(&index, sea).len(), 1);
 	}
 }

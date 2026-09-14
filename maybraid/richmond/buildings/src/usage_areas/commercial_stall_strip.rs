@@ -19,6 +19,7 @@ use bevy_math::Vec2;
 use bevy_math::Vec3;
 use lod::gen::LodSceneLevel;
 use procedural_common::{NoiseConfig, NoiseParams};
+use richmond_building_components::furniture::FurnitureNode;
 use richmond_building_components::panels::PanelNode;
 use richmond_building_components::{BuildingComponents, LabelNode, Layers};
 
@@ -376,6 +377,14 @@ impl BuildingComponents for CommercialStallStrip {
 		}
 		out
 	}
+
+	fn furniture_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FurnitureNode> {
+		let mut out = Layers::new();
+		for stall in &self.plan.stalls {
+			out.extend(stall.furniture_nodes_for_level(level));
+		}
+		out
+	}
 }
 
 #[cfg(test)]
@@ -464,6 +473,14 @@ mod tests {
 			CommercialStallStrip::fit_to_confines(&confines, NoiseParams::default()).unwrap();
 		assert_eq!(strip.stalls().len(), 1);
 		assert!(!strip.label_nodes_for_level(LodSceneLevel::High).flatten().is_empty());
+		assert!(
+			strip
+				.furniture_nodes_for_level(LodSceneLevel::High)
+				.flatten()
+				.iter()
+				.any(|node| node.geometry == richmond_building_components::FurnitureGeometry::Chair),
+			"lounge sitting should reach the strip chair collection"
+		);
 	}
 
 	#[test]
