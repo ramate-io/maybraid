@@ -73,7 +73,11 @@ impl BuildingComponents for CircularTower {
 	}
 
 	fn floor_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FloorNode> {
-		self.tower.floor_nodes_for_level(level)
+		let mut out = self.tower.floor_nodes_for_level(level);
+		if let Some(material) = &self.wall_material {
+			out = out.with_material(material.clone());
+		}
+		out
 	}
 
 	fn structural_lod(&self) -> Option<BuildingStructuralLodProbe> {
@@ -153,6 +157,9 @@ impl BuildingComponents for TrazaloidTower {
 			{
 				out.push_free(node);
 			}
+		}
+		if let Some(material) = &self.wall_material {
+			out = out.with_material(material.clone());
 		}
 		out
 	}
@@ -363,7 +370,8 @@ fn keep_stairwells(
 		);
 		out.push(
 			ConnectingStairwell::from_well_kind(PanelStyle::RoughStonework, well, kind)
-				.with_upper_landing(i == last_well_i),
+				.with_upper_landing(i == last_well_i)
+				.with_shaft_walls(true),
 		);
 	}
 	out
@@ -512,6 +520,10 @@ mod tests {
 				aabb.walk_on == WellSide::PosX && aabb.walk_off == WellSide::PosX,
 				"well {i} should share one face"
 			);
+			anyhow::ensure!(
+				well.shaft_walls().len() == 3,
+				"same-face well should wall the three closed sides"
+			);
 			if i + 1 < wells.len() {
 				anyhow::ensure!(
 					aabb.walk_off == wells[i + 1].well().walk_on,
@@ -540,6 +552,42 @@ mod tests {
 		for well in &circular {
 			let aabb = well.well();
 			anyhow::ensure!(aabb.walk_on == WellSide::PosX && aabb.walk_off == WellSide::PosX);
+			anyhow::ensure!(
+				well.shaft_walls().len() == 3,
+				"circular keep should wall the three closed faces"
+			);
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn keep_floors_and_stairs_take_the_wall_look() -> anyhow::Result<()> {
+		use material_ref::MaterialId;
+		use richmond_building_components::BuildingComponents;
+
+		let wall = MaterialRef::named("stucco");
+		let keep =
+			RingFortKeep::trazaloid(Vec3::ZERO, 16.0, 4, (1.0, 1.0)).with_wall_material(wall);
+		let floors = keep.floor_nodes_for_level(LodSceneLevel::High).flatten();
+		anyhow::ensure!(!floors.is_empty(), "trazaloid keep should emit floors");
+		anyhow::ensure!(
+			floors.iter().all(|n| {
+				matches!(n.material.as_ref().map(|m| &m.name), Some(MaterialId::Name(n)) if n == "stucco")
+			}),
+			"keep floors should carry the wall look"
+		);
+		let stairs = keep.stairwells();
+		anyhow::ensure!(!stairs.is_empty());
+		for well in stairs {
+			anyhow::ensure!(well.shaft_walls().len() == 3);
+			let nodes = well.stair_nodes_for_level(LodSceneLevel::High).flatten();
+			anyhow::ensure!(!nodes.is_empty());
+			anyhow::ensure!(
+				nodes.iter().all(|n| {
+					matches!(n.material.as_ref().map(|m| &m.name), Some(MaterialId::Name(n)) if n == "stucco")
+				}),
+				"keep stairs should carry the wall look"
+			);
 		}
 		Ok(())
 	}

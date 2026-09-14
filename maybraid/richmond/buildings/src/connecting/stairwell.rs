@@ -19,6 +19,7 @@ pub use opening::StairwellOpening;
 pub use tread::TreadEnd;
 pub use well::{WellAabb, WellSide};
 
+use bevy_math::Vec3;
 use lod::gen::LodSceneLevel;
 use material_ref::MaterialRef;
 use richmond_building_components::floors::FloorNode;
@@ -27,8 +28,9 @@ use richmond_building_components::panels::{PanelNode, PanelStyle};
 use richmond_building_components::stairs::StairNode;
 use richmond_building_components::{BuildingComponents, BuildingStructuralLodProbe, Layers};
 
-use crate::paneling::panel_complex::PanelComplexJointPolicy;
+use crate::paneling::panel_complex::{PanelComplexJointPolicy, DEFAULT_PANEL_THICKNESS};
 use crate::paneling::quad_panel::QuadPanel;
+use crate::paneling::rectangle::Rectangle;
 
 /// Aesthetic run-in depth along the walk-on (meters).
 pub const RUN_IN_M: f32 = 0.75;
@@ -63,6 +65,9 @@ pub struct ConnectingStairwell {
 	upper_landing: Option<QuadPanel>,
 	mid_landings: Vec<QuadPanel>,
 	stairs: Vec<StairNode>,
+	/// Rectangular liners on faces that are not walk-on or walk-off.
+	want_shaft_walls: bool,
+	shaft_walls: Vec<Rectangle>,
 	surface_material: Option<MaterialRef>,
 }
 
@@ -96,6 +101,8 @@ impl ConnectingStairwell {
 			mid_landings: mids,
 			stairs,
 			well,
+			want_shaft_walls: false,
+			shaft_walls: Vec::new(),
 			surface_material: None,
 		}
 	}
@@ -111,6 +118,16 @@ impl ConnectingStairwell {
 	/// that floor (its run-in).
 	pub fn with_upper_landing(mut self, enabled: bool) -> Self {
 		self.want_landing = enabled;
+		self.rebuild();
+		self
+	}
+
+	/// Rectangular panels on well faces that are not walk-on or walk-off.
+	///
+	/// Default `false`. Keep / tower shafts turn this on so the hole is lined
+	/// on the three closed sides.
+	pub fn with_shaft_walls(mut self, enabled: bool) -> Self {
+		self.want_shaft_walls = enabled;
 		self.rebuild();
 		self
 	}
@@ -167,6 +184,11 @@ impl ConnectingStairwell {
 		self.run_in = self.well.run_in_slab(self.style, self.slab_thickness);
 		self.upper_landing = door;
 		self.mid_landings = mids;
+		self.shaft_walls = if self.want_shaft_walls {
+			enclosure_walls(&self.well, self.style)
+		} else {
+			Vec::new()
+		};
 	}
 
 	pub fn well(&self) -> WellAabb {
@@ -197,6 +219,10 @@ impl ConnectingStairwell {
 		&self.mid_landings
 	}
 
+	pub fn shaft_walls(&self) -> &[Rectangle] {
+		&self.shaft_walls
+	}
+
 	pub fn stairs(&self) -> &[StairNode] {
 		&self.stairs
 	}
@@ -214,6 +240,9 @@ impl BuildingComponents for ConnectingStairwell {
 		}
 		if let Some(landing) = &self.upper_landing {
 			out.extend(landing.panel_nodes_for_level(level));
+		}
+		for wall in &self.shaft_walls {
+			out.extend(wall.panel_nodes_for_level(level));
 		}
 		if let Some(material) = &self.surface_material {
 			out = out.with_material(material.clone());
@@ -237,7 +266,11 @@ impl BuildingComponents for ConnectingStairwell {
 	}
 
 	fn stair_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<StairNode> {
-		Layers::from_free(self.stairs.clone())
+		let mut out = Layers::from_free(self.stairs.clone());
+		if let Some(material) = &self.surface_material {
+			out = out.with_material(material.clone());
+		}
+		out
 	}
 
 	fn structural_lod(&self) -> Option<BuildingStructuralLodProbe> {
@@ -265,6 +298,22 @@ impl Fit {
 	fn with_door(self, want: bool) -> Self {
 		Self { door: want.then_some(self.door).flatten(), ..self }
 	}
+}
+
+/// Closed well faces as ordinary rectangle kits, thickness toward the well.
+fn enclosure_walls(well: &WellAabb, style: PanelStyle) -> Vec<Rectangle> {
+	[WellSide::NegZ, WellSide::PosX, WellSide::PosZ, WellSide::NegX]
+		.into_iter()
+		.filter(|side| *side != well.walk_on && *side != well.walk_off)
+		.map(|side| {
+			let mid = well.side_mid(side, well.bottom_y());
+			let along = side.travel_xz();
+			let half = well.face_half(side);
+			let origin = Vec3::new(mid.x - along.x * half, well.bottom_y(), mid.z - along.y * half);
+			let edge = Vec3::new(along.x * 2.0 * half, 0.0, along.y * 2.0 * half);
+			Rectangle::new(style, origin, edge, well.rise(), DEFAULT_PANEL_THICKNESS, 0.0)
+		})
+		.collect()
 }
 
 fn fit_kind(
@@ -526,6 +575,56 @@ mod tests {
 			tiny.rise() / turns.max(1e-4) + 1e-3 >= tiny.rise() - 0.05,
 			"one lap should keep the full rise as headroom, turns={turns}"
 		);
+	}
+
+	#[test]
+	fn shaft_walls_omit_enter_and_exit_faces() {
+		use richmond_building_components::panels::PanelGeometry;
+
+		let same = ConnectingStairwell::from_well_kind(
+			PanelStyle::RoughStonework,
+			WellAabb::from_plan(
+				Vec3::new(-1.2, 0.0, -1.2),
+				Vec3::new(1.2, 4.8, 1.2),
+				WellSide::PosX,
+				WellSide::PosX,
+				TREAD_FILL_DEFAULT,
+			),
+			StairwellKind::Rectangular,
+		)
+		.with_shaft_walls(true);
+		assert_eq!(same.shaft_walls().len(), 3, "same-face well leaves three closed sides");
+		assert!(same
+			.shaft_walls()
+			.iter()
+			.all(|w| { matches!(w.panel.geometry, PanelGeometry::Rectangle(_)) }));
+
+		let opposite = ConnectingStairwell::from_well_kind(
+			PanelStyle::RoughStonework,
+			WellAabb::from_plan(
+				Vec3::new(-1.2, 0.0, -1.2),
+				Vec3::new(1.2, 4.8, 1.2),
+				WellSide::PosX,
+				WellSide::NegX,
+				TREAD_FILL_DEFAULT,
+			),
+			StairwellKind::Rectangular,
+		)
+		.with_shaft_walls(true);
+		assert_eq!(opposite.shaft_walls().len(), 2, "opposite doors leave two closed sides");
+		assert!(ConnectingStairwell::from_well_kind(
+			PanelStyle::RoughStonework,
+			WellAabb::from_plan(
+				Vec3::new(-1.2, 0.0, -1.2),
+				Vec3::new(1.2, 3.0, 1.2),
+				WellSide::NegZ,
+				WellSide::NegZ,
+				TREAD_FILL_DEFAULT,
+			),
+			StairwellKind::Rectangular,
+		)
+		.shaft_walls()
+		.is_empty());
 	}
 
 	#[test]
