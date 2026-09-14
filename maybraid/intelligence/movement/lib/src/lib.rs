@@ -19,7 +19,10 @@ mod user;
 use bevy::prelude::*;
 use player::PlayerSystems;
 
-pub use ability::{Covering, MovementAbility, MovementBody, MovementSheet, VantageStandoffs};
+pub use ability::{
+	Covering, MovementAbility, MovementBody, MovementSheet, VantageStandoffs,
+	WALK_DETOUR_WORK_FRACTION,
+};
 pub use candidate::{MovementCandidate, MovementCandidateHints};
 pub use intelligence_lod::{
 	due_by_rank, reserve_fairness, IntelligenceBand, IntelligenceLod, IntelligencePriority,
