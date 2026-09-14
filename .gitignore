@@ -11,3 +11,4 @@ issues
 commits
 comments
 .nix-dev-profile*
+.nix-profile*

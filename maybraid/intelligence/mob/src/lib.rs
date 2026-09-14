@@ -14,6 +14,7 @@ mod member;
 mod plugin;
 mod roster;
 mod roster_ref;
+mod share;
 mod travel;
 
 pub use host::{
@@ -23,6 +24,7 @@ pub use host::{
 pub use lock::MobTetherLock;
 pub use member::{ancestor_mob, MemberOf, MobMemberBody, MobSlot};
 pub use plugin::{MobIntelligencePlugin, MobSystems};
+pub use share::{MobKnowledge, MobSharePolicy};
 pub use roster::{
 	MobAffiliations, MobInterests, MobMemberNeeded, MobRespawn, MobRespawnAt, MobRoster,
 	RosterMember,

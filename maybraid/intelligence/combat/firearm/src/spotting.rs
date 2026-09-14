@@ -10,7 +10,8 @@ const ACTIONABLE_SOURCES: TargetSource = TargetSource::from_bits(
 	TargetSource::OBJECTIVE.bits()
 		| TargetSource::RECEIVED_FIRE.bits()
 		| TargetSource::ENEMYSHIP.bits()
-		| TargetSource::FIREARM.bits(),
+		| TargetSource::FIREARM.bits()
+		| TargetSource::SHARED.bits(),
 );
 
 /// Refresh combat memory from successful generic spotting contacts.
@@ -153,6 +154,32 @@ mod tests {
 		assert!(targeting.contact(enemy).is_some());
 		assert!(targeting.contact(ally).is_none());
 		assert!(targeting.active_target(ally).is_none());
+		Ok(())
+	}
+
+	#[test]
+	fn shared_membership_can_admit_a_later_sighting(
+	) -> Result<(), bevy::ecs::system::RunSystemError> {
+		let target = Entity::from_bits(7);
+		let mut world = World::new();
+		let mut spotting =
+			SpottingUser::new(Vec3::Y, [SpotDirective::new(InterestLayers::CHARACTER, 20.0)])
+				.with_settings(SpottingSettings::new(4, 4, 2.5));
+		spotting.contacts.insert(
+			target,
+			SpottedContact::new(target, Vec3::X * 4.0, Vec3::ZERO, Vec3::X * 4.0, None, 1.0, 0.1),
+		);
+		let mut targeting = CombatTargeting::default();
+		targeting.include(target, TargetSource::SHARED);
+		world.spawn((Transform::default(), spotting, FirearmIntelligence::new(), targeting));
+
+		world.run_system_once(sync_spotted_combat_targets)?;
+		let targeting = world.query::<&CombatTargeting>().single(&world)?;
+		assert!(targeting.contact(target).is_some());
+		assert!(targeting
+			.active_target(target)
+			.is_some_and(|target| target.has_source(TargetSource::SHARED)
+				&& target.has_source(TargetSource::SPOTTING)));
 		Ok(())
 	}
 }

@@ -21,7 +21,8 @@ use crate::lock::{
 };
 use crate::{
 	spawn_mob, MemberOf, Mob, MobAffiliations, MobId, MobInstall, MobIntelligencePlugin,
-	MobMemberNeeded, MobRespawn, MobRespawnAt, MobRoster, MobSlot, MobTetherLock, RosterMember,
+	MobKnowledge, MobMemberNeeded, MobRespawn, MobRespawnAt, MobRoster, MobSharePolicy, MobSlot,
+	MobTetherLock, RosterMember,
 };
 
 const PACK: ThreatGroupId = ThreatGroupId::group(9);
@@ -59,6 +60,8 @@ fn host_is_a_tether_anchor() {
 		spawn_host(&mut world, MobId(1), vec![RosterMember::new(Personality::Grazer, Vec3::X)]);
 	assert!(world.get::<Tether>(host).is_some());
 	assert!(world.get::<Mob>(host).is_some_and(|mob| (mob.leash - 12.0).abs() < 1e-4));
+	assert!(world.get::<MobKnowledge>(host).is_some());
+	assert_eq!(world.get::<MobSharePolicy>(host), Some(&MobSharePolicy::on()));
 }
 
 #[test]

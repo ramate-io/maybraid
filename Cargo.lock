@@ -4957,6 +4957,7 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "bevy",
+ "combat-targeting",
  "damage",
  "firearm-intelligence",
  "journeying-intelligence",
@@ -4964,8 +4965,10 @@ dependencies = [
  "npc-intelligence",
  "poi-intelligence",
  "routing-intelligence",
+ "spotting-intelligence",
  "tether-intelligence",
  "threat-intelligence",
+ "threat-intelligence-damage",
  "threat-management-intelligence",
 ]
 

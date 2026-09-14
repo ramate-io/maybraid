@@ -8,7 +8,11 @@ Local semantic threat discovery with retained per-recipient knowledge.
   Net threat is max aggravation minus max mitigation.
 - A Gimme typed index provides bounded local candidate scans.
 - `ThreatObservation` is the directed inbox for sessions, received fire,
-  sharing, and other non-spatial discovery sources.
+  sharing, and other non-spatial discovery sources. Pack share still applies
+  `observe` with `ThreatSource::SHARED` directly so mates classify the same
+  frame; it does not enqueue a second inbox pass.
+- `ThreatSource::FIRST_HAND` is the write-up mask. `SHARED` is derived only
+  and is never copied onto pack-mates as a first-hand bit.
 - `ThreatKnowledge` retains candidates between scans and reclassifies them as
   affiliation weights decay.
 - Threat-owned spotting hints feed candidates to spotting without fabricating

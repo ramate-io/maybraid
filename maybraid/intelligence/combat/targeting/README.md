@@ -7,7 +7,7 @@ Shared, weapon-neutral combat contact memory and target ranking.
 - `memory` contains recently visible `CombatContact` snapshots.
 - `active` contains entities admitted by one or more semantic `TargetSource`
   bits. A target can remain active after its sighting expires when another
-  source, such as `OBJECTIVE` or `RECEIVED_FIRE`, still admits it.
+  source, such as `OBJECTIVE`, `RECEIVED_FIRE`, or pack `SHARED`, still admits it.
 
 ## Typical use
 
