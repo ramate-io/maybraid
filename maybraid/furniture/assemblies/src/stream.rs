@@ -7,13 +7,11 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::prelude::*;
-use lod::gen::{
-	GenerationScheme, Id, OriginalId, SpatialIndex, StorageStatus, TrackedId, Version,
-};
-use lod::LodGenerateKeepRegion;
+use lod::gen::{GenerationScheme, Id, OriginalId, SpatialIndex, StorageStatus, TrackedId, Version};
 use lod::lod_ref::LodRef;
 use lod::presentation::{LodPresentKeepRegion, LodPresentRegion};
 use lod::scene::{LodRefreshRegions, LodRefreshRegionsStatus};
+use lod::LodGenerateKeepRegion;
 use lod::{LodPresentRegionPlugin, LodRefreshCorePlugin, LodSceneRefreshRegionPlugin};
 use lod_gimme::GimmeLodSceneRefreshPlugin;
 use richmond_development_models::{BuiltDevelopment, DevelopmentEntryStore, DevelopmentHosts};
@@ -23,6 +21,10 @@ use crate::cell::{
 	FURNITURE_PRESENT_RADIUS,
 };
 use crate::host::{spawn_furniture_cell, FurnitureCell};
+
+/// One 50 m host begin / rebuild per frame so fulfill can drain kits.
+const FURNITURE_GENERATE_CELLS_PER_FRAME: usize = 1;
+const FURNITURE_PRESENT_CELLS_PER_FRAME: usize = 1;
 
 /// Channel marker for furniture generate / present / refresh.
 #[derive(Debug, Clone, Copy, Default)]
@@ -45,12 +47,20 @@ struct StoredFurnitureCell {
 	version: Version,
 }
 
+struct CachedDevelopmentSlots {
+	version: Version,
+	slots: Vec<richmond_building_components::FurnitureNode>,
+}
+
 /// Generated 50 m furniture cells plus the current world-space slot list.
 #[derive(Resource, Default)]
 pub struct FurnitureIndex {
 	next_version: u64,
 	cells: HashMap<Id, StoredFurnitureCell>,
 	slots: Vec<richmond_building_components::FurnitureNode>,
+	development_slots: HashMap<Id, CachedDevelopmentSlots>,
+	slots_fingerprint: Vec<(Id, Version)>,
+	slots_region_cell: Option<(i32, i32)>,
 }
 
 impl FurnitureIndex {
@@ -59,34 +69,79 @@ impl FurnitureIndex {
 		Version(self.next_version)
 	}
 
+	/// Generated 50 m host count (HUD).
+	pub fn cell_count(&self) -> usize {
+		self.cells.len()
+	}
+
+	/// Flattened High slots currently in the generate ring (HUD).
+	pub fn slot_count(&self) -> usize {
+		self.slots.len()
+	}
+
 	fn refresh_slots(&mut self, developments: &DevelopmentEntryStore, region: Aabb3d) {
-		self.slots.clear();
-		for development in developments.developments_overlapping(region) {
-			self.slots.extend(world_slots_in_region(development, region));
+		let tracked = developments.developments_overlapping_tracked(region);
+		let mut fingerprint: Vec<_> =
+			tracked.iter().map(|(id, version, _)| (*id, *version)).collect();
+		fingerprint.sort();
+		let region_cell = FurnitureCellExtent::cell_index_containing(Vec3::new(
+			(region.min.x + region.max.x) * 0.5,
+			0.0,
+			(region.min.z + region.max.z) * 0.5,
+		));
+		if fingerprint == self.slots_fingerprint && Some(region_cell) == self.slots_region_cell {
+			return;
 		}
+		self.slots.clear();
+		for (id, version, development) in tracked {
+			let cached = self.development_slots.entry(id).or_insert_with(|| {
+				CachedDevelopmentSlots { version: Version(0), slots: Vec::new() }
+			});
+			if cached.version != version {
+				cached.slots = world_slots_of(development);
+				cached.version = version;
+			}
+			self.slots.extend(
+				cached
+					.slots
+					.iter()
+					.filter(|slot| {
+						let p = slot.placement.translation;
+						p.x >= region.min.x
+							&& p.x <= region.max.x
+							&& p.z >= region.min.z
+							&& p.z <= region.max.z
+					})
+					.cloned(),
+			);
+		}
+		self.slots_fingerprint = fingerprint;
+		self.slots_region_cell = Some(region_cell);
 	}
 }
 
-fn world_slots_in_region(
+fn world_slots_of(
 	development: &BuiltDevelopment,
-	region: Aabb3d,
 ) -> Vec<richmond_building_components::FurnitureNode> {
 	let mut out = Vec::new();
 	for host in development.hosts() {
 		let transform = host.transform();
 		for node in host.furniture_nodes() {
-			let world = world_slot(transform, node);
-			let p = world.placement.translation;
-			if p.x >= region.min.x
-				&& p.x <= region.max.x
-				&& p.z >= region.min.z
-				&& p.z <= region.max.z
-			{
-				out.push(world);
-			}
+			out.push(world_slot(transform, node));
 		}
 	}
 	out
+}
+
+fn slots_match(
+	left: &[richmond_building_components::FurnitureNode],
+	right: &[richmond_building_components::FurnitureNode],
+) -> bool {
+	left.len() == right.len()
+		&& left.iter().zip(right).all(|(a, b)| {
+			a.geometry == b.geometry
+				&& (a.placement.translation - b.placement.translation).length_squared() < 1e-4
+		})
 }
 
 impl SpatialIndex<FurnitureCell> for FurnitureIndex {
@@ -137,11 +192,13 @@ impl GenerationScheme<FurnitureIndex> for FurnitureCell {
 			{
 				continue;
 			}
-			ids.insert(FurnitureCellExtent::from_cell_index(
-				FurnitureCellExtent::cell_index_containing(p).0,
-				FurnitureCellExtent::cell_index_containing(p).1,
-			)
-			.id());
+			ids.insert(
+				FurnitureCellExtent::from_cell_index(
+					FurnitureCellExtent::cell_index_containing(p).0,
+					FurnitureCellExtent::cell_index_containing(p).1,
+				)
+				.id(),
+			);
 		}
 		ids.into_iter().map(OriginalId).collect()
 	}
@@ -244,7 +301,7 @@ impl FurniturePresenterState {
 				self.pending_despawn.push_back(entry.entities);
 			}
 		}
-		while let Some(entities) = self.pending_despawn.pop_front() {
+		if let Some(entities) = self.pending_despawn.pop_front() {
 			for entity in entities {
 				commands.entity(entity).despawn();
 			}
@@ -297,19 +354,26 @@ fn generate_furniture_cells(
 		current_transform: &identity,
 		bounds: &region,
 	};
+	let mut built = 0usize;
 	for OriginalId(id) in FurnitureCell::original_ids_for(&mut index, region) {
-		if index.get(id).is_some() {
+		let Some((cell, bounds)) = FurnitureCell::build_with_id(&mut index, id, &lod_ref) else {
+			continue;
+		};
+		if index.get(id).is_some_and(|existing| slots_match(&existing.slots, &cell.slots)) {
 			continue;
 		}
-		if let Some((cell, bounds)) = FurnitureCell::build_with_id(&mut index, id, &lod_ref) {
-			index.insert(id, cell, bounds, &lod_ref);
+		if built >= FURNITURE_GENERATE_CELLS_PER_FRAME {
+			break;
 		}
+		index.insert(id, cell, bounds, &lod_ref);
+		built += 1;
 	}
 }
 
 /// Spawn flattened hosts for the present neighborhood; despawn the rest.
 fn present_furniture_cells(
 	mut commands: Commands,
+	camera: Query<&Transform, With<Camera3d>>,
 	present_keep: Res<LodPresentKeepRegion<FurnitureLodChan>>,
 	index: Res<FurnitureIndex>,
 	mut state: ResMut<FurniturePresenterState>,
@@ -317,7 +381,9 @@ fn present_furniture_cells(
 	let Some(region) = present_keep.region else {
 		return;
 	};
+	let origin = camera.single().map(|transform| transform.translation).unwrap_or(Vec3::ZERO);
 	let mut wanted = HashSet::new();
+	let mut missing = Vec::new();
 	for tracked in SpatialIndex::<FurnitureCell>::tracked_ids_for(&*index, region) {
 		let id = tracked.0;
 		let Some(cell) = index.get(id) else {
@@ -330,11 +396,19 @@ fn present_furniture_cells(
 		if state.presented.get(&id).is_some_and(|entry| entry.version == version) {
 			continue;
 		}
+		let center = cell.extent.center();
+		let distance = Vec2::new(center.x, center.z).distance(origin.xz());
+		missing.push((id, distance, version, cell.clone()));
+	}
+	missing.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+	for (id, _, version, cell) in missing.into_iter().take(FURNITURE_PRESENT_CELLS_PER_FRAME) {
 		if let Some(previous) = state.retire(id) {
 			state.pending_despawn.push_back(previous.entities);
 		}
-		let entity = spawn_furniture_cell(&mut commands, cell.clone());
-		state.presented.insert(id, PresentedFurnitureCell { version, entities: vec![entity] });
+		let entity = spawn_furniture_cell(&mut commands, cell);
+		state
+			.presented
+			.insert(id, PresentedFurnitureCell { version, entities: vec![entity] });
 	}
 	state.remove_stale(&mut commands, &wanted);
 }
@@ -390,12 +464,31 @@ mod tests {
 	use richmond_building_components::Placement;
 
 	#[test]
+	fn matching_slots_ignore_finish_seed() {
+		let a = richmond_building_components::FurnitureNode::chair(Placement::IDENTITY)
+			.with_finish_seed(1);
+		let b = richmond_building_components::FurnitureNode::chair(Placement::IDENTITY)
+			.with_finish_seed(9);
+		assert!(slots_match(&[a.clone()], &[b]));
+		let moved = richmond_building_components::FurnitureNode::chair(Placement::new(
+			Vec3::X,
+			0.0,
+		));
+		assert!(!slots_match(&[a], &[moved]));
+	}
+
+	#[test]
 	fn original_ids_bin_slots_to_cells() {
 		let mut index = FurnitureIndex::default();
-		index.slots.push(richmond_building_components::FurnitureNode::chest(Placement::IDENTITY));
-		index.slots.push(richmond_building_components::FurnitureNode::chair(
-			Placement::new(Vec3::new(60.0, 0.0, 0.0), 0.0),
-		));
+		index
+			.slots
+			.push(richmond_building_components::FurnitureNode::chest(Placement::IDENTITY));
+		index
+			.slots
+			.push(richmond_building_components::FurnitureNode::chair(Placement::new(
+				Vec3::new(60.0, 0.0, 0.0),
+				0.0,
+			)));
 		let region = xz_radius_aabb(Vec3::ZERO, 200.0);
 		let ids = FurnitureCell::original_ids_for(&mut index, region);
 		assert_eq!(ids.len(), 2);

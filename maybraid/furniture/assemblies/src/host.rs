@@ -4,13 +4,13 @@ use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec3;
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, Scene};
-use furniture_components::assembly_scene;
+use furniture_components::{assembly_scene, posed_kit};
 use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_host_scene_pending;
 use lod::lod_ref::LodRef;
 use lod::SceneChunk;
 use richmond_building_components::{
-	scene_children, FurnitureNode, FLATTENED_KIT_CHUNK_WEIGHT,
+	pose, scene_children, FurnitureNode, FLATTENED_KIT_CHUNK_WEIGHT,
 };
 
 use crate::cell::FurnitureCellExtent;
@@ -44,16 +44,66 @@ fn furniture_kit_scene(node: &FurnitureNode) -> Box<dyn Scene> {
 	if let Some(parts) = posed_assembly(node) {
 		Box::new(assembly_scene(&parts))
 	} else {
-		let identity = Transform::IDENTITY;
-		let bounds = node.scene_bounds();
-		let lod_ref = LodRef {
-			entity: Entity::PLACEHOLDER,
-			previous_transform: &identity,
-			current_transform: &identity,
-			bounds: &bounds,
-		};
-		Box::new(node.scene_with_level(&lod_ref, LodSceneLevel::High))
+		furniture_wireframe_scene(node)
 	}
+}
+
+fn furniture_wireframe_scene(node: &FurnitureNode) -> Box<dyn Scene> {
+	let identity = Transform::IDENTITY;
+	let bounds = node.scene_bounds();
+	let lod_ref = LodRef {
+		entity: Entity::PLACEHOLDER,
+		previous_transform: &identity,
+		current_transform: &identity,
+		bounds: &bounds,
+	};
+	Box::new(node.scene_with_level(&lod_ref, LodSceneLevel::High))
+}
+
+fn furniture_part_scene(part: &furniture_components::PlacedPart) -> impl Scene + 'static {
+	posed_kit(part.kind.asset_path(), part.material.clone(), pose(part.placement))
+}
+
+/// One fulfill quantum per painted GLB (or one wireframe kit).
+///
+/// A single lazy stream — nested lazy would subtract part counts from the slot
+/// remaining-primitive budget and drop later slots.
+fn furniture_cell_chunks(slots: Vec<FurnitureNode>) -> SceneChunk {
+	if slots.is_empty() {
+		return SceneChunk::primitive(scene_children(Vec::new()));
+	}
+	let kit_w = FLATTENED_KIT_CHUNK_WEIGHT;
+	let estimate = slots.len() * 16;
+	let mut slot_index = 0usize;
+	let mut parts: Option<Vec<furniture_components::PlacedPart>> = None;
+	let mut part_index = 0usize;
+	SceneChunk::lazy(estimate as u32 * kit_w, estimate, move || loop {
+		if let Some(current) = parts.as_ref() {
+			if part_index < current.len() {
+				let scene = furniture_part_scene(&current[part_index]);
+				part_index += 1;
+				return Some(SceneChunk::weighted(kit_w, scene));
+			}
+			parts = None;
+			slot_index += 1;
+		}
+		if slot_index >= slots.len() {
+			return None;
+		}
+		if let Some(assembled) = posed_assembly(&slots[slot_index]) {
+			parts = Some(assembled);
+			part_index = 0;
+			continue;
+		}
+		let scene = furniture_wireframe_scene(&slots[slot_index]);
+		slot_index += 1;
+		return Some(SceneChunk::weighted(kit_w, scene));
+	})
+}
+
+#[cfg(test)]
+fn furniture_slot_chunks(node: FurnitureNode) -> SceneChunk {
+	furniture_cell_chunks(vec![node])
 }
 
 impl LodScene for FurnitureCell {
@@ -82,18 +132,7 @@ impl LodScene for FurnitureCell {
 		if !matches!(level, LodSceneLevel::High) || self.slots.is_empty() {
 			return SceneChunk::primitive(scene_children(Vec::new()));
 		}
-		let slots = self.slots.clone();
-		let n = slots.len();
-		let kit_w = FLATTENED_KIT_CHUNK_WEIGHT;
-		let mut index = 0usize;
-		SceneChunk::lazy(n as u32 * kit_w, n, move || {
-			if index >= slots.len() {
-				return None;
-			}
-			let scene = furniture_kit_scene(&slots[index]);
-			index += 1;
-			Some(SceneChunk::weighted(kit_w, scene))
-		})
+		furniture_cell_chunks(self.slots.clone())
 	}
 
 	fn scene_bounds(&self) -> Aabb3d {
@@ -128,4 +167,50 @@ pub fn spawn_furniture_cell(commands: &mut Commands, cell: FurnitureCell) -> Ent
 		.id();
 	commands.entity(entity).insert(cell);
 	entity
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use richmond_building_components::Placement;
+
+	fn lod_ref<'a>(tf: &'a Transform, bounds: &'a Aabb3d) -> LodRef<'a> {
+		LodRef {
+			entity: Entity::PLACEHOLDER,
+			previous_transform: tf,
+			current_transform: tf,
+			bounds,
+		}
+	}
+
+	#[test]
+	fn high_chunks_are_lazy_slots_not_one_blob() {
+		let cell = FurnitureCell::new(
+			FurnitureCellExtent::from_cell_index(0, 0),
+			vec![
+				FurnitureNode::chair(Placement::IDENTITY).with_finish_seed(1),
+				FurnitureNode::chest(Placement::IDENTITY).with_finish_seed(2),
+			],
+		);
+		let tf = Transform::IDENTITY;
+		let bounds = cell.bounds();
+		let chunks = cell.scene_chunks_with_level(&lod_ref(&tf, &bounds), LodSceneLevel::High);
+		assert!(chunks.total_primitives() >= 2);
+		assert!(chunks.total_weight() >= 2 * FLATTENED_KIT_CHUNK_WEIGHT);
+	}
+
+	#[test]
+	fn painted_slot_expands_one_chunk_per_part() {
+		let chair = FurnitureNode::chair(Placement::IDENTITY).with_finish_seed(3);
+		let chunks = furniture_slot_chunks(chair);
+		let mut queue = std::collections::VecDeque::from([chunks]);
+		let mut pulled = 0u32;
+		let mut weight = 0u32;
+		while let Some((w, _)) = lod::scene::pull_primitive(&mut queue) {
+			pulled += 1;
+			weight += w;
+		}
+		assert_eq!(pulled, 6);
+		assert_eq!(weight, 6 * FLATTENED_KIT_CHUNK_WEIGHT);
+	}
 }

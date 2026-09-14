@@ -26,7 +26,7 @@ use super::{placement_noise, FlatTerrainSample, GroveCellVariant, GroveExtent, P
 
 /// Structural LOD factors shared by tuft / grass grove hosts (× footprint).
 pub const TUFT_GROVE_STRUCTURAL_HIGH_FACTOR: f32 = 6.0;
-pub const TUFT_GROVE_STRUCTURAL_MEDIUM_FACTOR: f32 = 14.0;
+pub const TUFT_GROVE_STRUCTURAL_MEDIUM_FACTOR: f32 = 8.0;
 pub const TUFT_GROVE_STRUCTURAL_LOW_FACTOR: f32 = 20.0;
 
 /// Keep every Nth plant for Medium (¼ density).

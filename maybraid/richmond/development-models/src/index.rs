@@ -242,10 +242,21 @@ impl DevelopmentEntryStore {
 
 	/// Built developments whose stored bounds overlap `region` on XZ.
 	pub fn developments_overlapping(&self, region: Aabb3d) -> Vec<&BuiltDevelopment> {
+		self.developments_overlapping_tracked(region)
+			.into_iter()
+			.map(|(_, _, development)| development)
+			.collect()
+	}
+
+	/// Overlapping developments with store id + version (furniture slot cache).
+	pub fn developments_overlapping_tracked(
+		&self,
+		region: Aabb3d,
+	) -> Vec<(Id, Version, &BuiltDevelopment)> {
 		self.developments
-			.values()
-			.filter(|entry| region.intersects(&entry.bounds))
-			.map(|entry| &entry.value)
+			.iter()
+			.filter(|(_, entry)| region.intersects(&entry.bounds))
+			.map(|(id, entry)| (*id, entry.version, &entry.value))
 			.collect()
 	}
 }

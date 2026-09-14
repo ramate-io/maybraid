@@ -26,6 +26,7 @@ durham-terrain-models = { workspace = true }
 evasion-intelligence = { workspace = true }
 firearm-intelligence = { workspace = true }
 firearm-user = { workspace = true }
+furniture-assemblies = { workspace = true }
 furniture-shaders = { workspace = true }
 firearms = { workspace = true }
 fleeing-intelligence = { workspace = true }
@@ -54,6 +55,7 @@ movement-realization = { workspace = true }
 poi-intelligence = { workspace = true }
 procedural-common = { workspace = true }
 chico-vegetation-on-terrain-playground = { workspace = true }
+richmond-building-components = { workspace = true }
 richmond-building-physics = { workspace = true }
 richmond-building-shaders = { workspace = true }
 richmond-development-models = { workspace = true }

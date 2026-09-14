@@ -195,7 +195,7 @@ use crate::grove::WoodyGroveLod;
 /// Typical sentinels ~36 m. `grove_bands_for_typical_height(36)`.
 pub const ROLLING_OAKS_STRUCTURAL_HIGH_FACTOR: f32 = 8.0;
 #[cfg(feature = "render")]
-pub const ROLLING_OAKS_STRUCTURAL_MEDIUM_FACTOR: f32 = 14.0;
+pub const ROLLING_OAKS_STRUCTURAL_MEDIUM_FACTOR: f32 = 10.0;
 #[cfg(feature = "render")]
 pub const ROLLING_OAKS_STRUCTURAL_LOW_FACTOR: f32 = 20.0;
 

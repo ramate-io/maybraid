@@ -101,6 +101,8 @@ pub(crate) fn sync_command_status_text(
 	mut status: ResMut<GameCommandStatusText>,
 	camera: Query<&GlobalTransform, With<Camera3d>>,
 	hosts: Query<(&MobScene, &GlobalTransform)>,
+	furniture: Query<&furniture_assemblies::FurnitureCell>,
+	furniture_index: Option<Res<furniture_assemblies::FurnitureIndex>>,
 ) {
 	let mut nearest = ranked_hosts(&camera, &hosts);
 	nearest.truncate(4);
@@ -114,9 +116,13 @@ pub(crate) fn sync_command_status_text(
 			.collect::<Vec<_>>()
 			.join("   ")
 	};
+	let furniture_cells = furniture.iter().count();
+	let furniture_items: usize = furniture.iter().map(|cell| cell.slots.len()).sum();
+	let furniture_generated = furniture_index.map(|index| index.cell_count()).unwrap_or(0);
 	status.0 = format!(
 		"world  character  forest hopscotch  urbanization hopscotch  grove 1 km  bump-outs 1–5 km\n\
 		 mobs {presented} presented   nearest {nearest_line}\n\
+		 furniture  {furniture_cells}/{furniture_generated} cells   {furniture_items} items   pin dim = still fulfilling\n\
 		 HUD pins = 8 nearest (edge-clamped)   colored pole = host   plants only inside {DEFAULT_MOB_HIGH_RADIUS:.0} m\n\
 		 NPC behavior: gray circle = ignore   amber arrow = flee   blue square = hide   red cross = combat"
 	);
@@ -350,7 +356,7 @@ fn ranked_hosts_with_entity(
 	ranked
 }
 
-fn project_mob_pin(
+pub(crate) fn project_mob_pin(
 	camera: &Camera,
 	camera_transform: &GlobalTransform,
 	world: Vec3,
@@ -384,7 +390,7 @@ fn mob_pin_anchor(host: Vec3) -> Vec3 {
 	host + Vec3::Y * HUD_PIN_WORLD_HEIGHT
 }
 
-fn clamp_to_rect(center: Vec2, point: Vec2, min: Vec2, max: Vec2) -> Vec2 {
+pub(crate) fn clamp_to_rect(center: Vec2, point: Vec2, min: Vec2, max: Vec2) -> Vec2 {
 	let dir = point - center;
 	if dir.length_squared() < 1e-6 {
 		return Vec2::new(center.x.clamp(min.x, max.x), center.y.clamp(min.y, max.y));
@@ -401,7 +407,7 @@ fn clamp_to_rect(center: Vec2, point: Vec2, min: Vec2, max: Vec2) -> Vec2 {
 	center + dir * t.clamp(0.0, 1.0)
 }
 
-fn pin_node(screen: Vec2) -> Node {
+pub(crate) fn pin_node(screen: Vec2) -> Node {
 	Node {
 		position_type: PositionType::Absolute,
 		left: Val::Px(screen.x - HUD_PIN_WIDTH * 0.5),
@@ -413,7 +419,7 @@ fn pin_node(screen: Vec2) -> Node {
 	}
 }
 
-fn place_pin(node: &mut Node, screen: Vec2) {
+pub(crate) fn place_pin(node: &mut Node, screen: Vec2) {
 	node.left = Val::Px(screen.x - HUD_PIN_WIDTH * 0.5);
 	node.top = Val::Px(screen.y - 12.0);
 }
