@@ -3,7 +3,7 @@
 // ornate / lava / cosmos / scales.
 //
 // Kind: 0 wood, 1 cloth, 2 soft, 3 marble, 4 ornate,
-//       5 lava, 6 cosmos, 7 scales, 8 lacquer, 9 metal.
+//       5 lava, 6 cosmos, 7 scales, 8 lacquer, 9 metal, 10 rockadder.
 //---------------------------------------------------------
 
 #import bevy_pbr::{
@@ -36,6 +36,7 @@ const KIND_COSMOS: u32 = 6u;
 const KIND_SCALES: u32 = 7u;
 const KIND_LACQUER: u32 = 8u;
 const KIND_METAL: u32 = 9u;
+const KIND_ROCKADDER: u32 = 10u;
 
 struct Look {
     rgb: vec3<f32>,
@@ -118,6 +119,9 @@ fn rim_color(kind: u32) -> vec3<f32> {
     if (kind == KIND_METAL) {
         return palette_or(1u, vec3<f32>(0.85, 0.78, 0.62));
     }
+    if (kind == KIND_ROCKADDER) {
+        return palette_or(2u, vec3<f32>(1.0, 0.84, 0.16));
+    }
     return vec3<f32>(1.0, 0.78, 0.42);
 }
 
@@ -130,13 +134,24 @@ fn finish(kind: u32, rgb: vec3<f32>, n: vec3<f32>, world_pos: vec3<f32>) -> vec3
     return tint;
 }
 
-/// BotW stained wood: a flat wash, no rings or smudged grain.
+/// BotW painted wood: large hue islands, no rings or smudged grain.
 fn wood_look(p: vec3<f32>) -> Look {
     let base = palette(0u);
-    let accent = palette_or(1u, base * vec3<f32>(1.04, 1.02, 0.98));
-    let wash = fbm(p * 0.16);
-    let tint = mix(base, accent, (wash - 0.5) * 0.05 + 0.5);
+    let accent = palette_or(1u, base * vec3<f32>(1.12, 0.78, 0.55));
+    let shade = palette_or(2u, base * vec3<f32>(0.62, 0.58, 0.52));
+    let stain = fbm(p * 0.72);
+    let wash = fbm(p * 0.28 + vec3<f32>(3.1, 1.7, 8.2));
+    var tint = mix(base, accent, smoothstep(0.34, 0.66, stain));
+    tint = mix(tint, shade, smoothstep(0.42, 0.78, wash) * 0.42);
     return Look(tint, 0.48, 0.0, 0.18);
+}
+
+fn rot45(p: vec2<f32>) -> vec2<f32> {
+    return vec2<f32>(p.x + p.y, p.y - p.x) * 0.70710678;
+}
+
+fn lattice(p: vec2<f32>) -> vec2<f32> {
+    return abs(fract(p) - 0.5);
 }
 
 fn cloth_look(p: vec3<f32>) -> Look {
@@ -259,6 +274,41 @@ fn lacquer_look(p: vec3<f32>) -> Look {
     return Look(tint, mix(0.20, 0.36, peel), 0.05, 0.34);
 }
 
+/// Rockadder: terracotta / teal mosaic, ink grout, gold diamond inlay.
+fn rockadder_look(p: vec3<f32>) -> Look {
+    let terracotta = palette(0u);
+    let teal = palette_or(1u, vec3<f32>(0.12, 0.38, 0.36));
+    let gold = palette_or(2u, vec3<f32>(0.90, 0.68, 0.22));
+    let ink = terracotta * vec3<f32>(0.16, 0.14, 0.12);
+    let cream = mix(terracotta, vec3<f32>(0.86, 0.78, 0.62), 0.72);
+    let uv = vec2<f32>(p.x + p.z * 0.35, p.y) * 2.6;
+    let g1 = lattice(uv);
+    let g2 = lattice(rot45(uv));
+    let star = min(min(g1.x, g1.y), min(g2.x, g2.y));
+    let cell = hash13(floor(vec3<f32>(uv * 2.0, 0.4)));
+    let cell2 = hash13(floor(vec3<f32>(rot45(uv) * 2.0, 1.7)));
+    var fill = mix(terracotta, teal, step(0.5, cell));
+    fill = mix(fill, cream, step(0.82, cell2) * 0.85);
+    fill = mix(fill, gold, step(0.92, cell) * 0.7);
+    let grout = 1.0 - smoothstep(0.0, 0.045, star);
+    var tint = mix(fill, ink, grout * 0.92);
+    let star_fill = 1.0 - smoothstep(0.18, 0.26, max(g2.x, g2.y));
+    tint = mix(tint, gold, star_fill * step(0.7, cell2) * 0.55);
+    let q = fract(uv * 0.45) - vec2<f32>(0.5);
+    let diamond = abs(q.x) + abs(q.y);
+    let square = max(abs(q.x), abs(q.y));
+    let plate = 1.0 - smoothstep(0.20, 0.34, diamond);
+    let rim = smoothstep(0.16, 0.22, diamond) * (1.0 - smoothstep(0.30, 0.44, diamond));
+    let nest = 1.0 - smoothstep(0.07, 0.14, square);
+    let hot = vec3<f32>(1.0, 0.96, 0.72);
+    tint = mix(tint, ink, plate * 0.55);
+    tint = mix(tint, gold, plate * 0.88);
+    tint = mix(tint, hot, nest * 0.85);
+    tint += gold * rim * 0.55;
+    let metal = saturate(plate * 0.9 + rim);
+    return Look(tint, mix(0.42, 0.18, metal), metal * 0.55, mix(0.16, 0.44, metal));
+}
+
 fn metal_look(p: vec3<f32>) -> Look {
     let base = palette(0u);
     let accent = palette_or(1u, base * 1.2);
@@ -288,6 +338,7 @@ fn fragment(
         case KIND_SCALES: { look = scales_look(p); }
         case KIND_LACQUER: { look = lacquer_look(p); }
         case KIND_METAL: { look = metal_look(p); }
+        case KIND_ROCKADDER: { look = rockadder_look(p); }
         default: { look = wood_look(p); }
     }
 

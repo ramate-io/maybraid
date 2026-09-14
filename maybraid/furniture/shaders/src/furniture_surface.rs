@@ -22,6 +22,7 @@ pub const RECIPE_FURNITURE_COSMOS: &str = "furniture_cosmos";
 pub const RECIPE_FURNITURE_SCALES: &str = "furniture_scales";
 pub const RECIPE_FURNITURE_LACQUER: &str = "furniture_lacquer";
 pub const RECIPE_FURNITURE_METAL: &str = "furniture_metal";
+pub const RECIPE_FURNITURE_ROCKADDER: &str = "furniture_rockadder";
 
 pub const KIND_WOOD: u32 = 0;
 pub const KIND_CLOTH: u32 = 1;
@@ -33,6 +34,7 @@ pub const KIND_COSMOS: u32 = 6;
 pub const KIND_SCALES: u32 = 7;
 pub const KIND_LACQUER: u32 = 8;
 pub const KIND_METAL: u32 = 9;
+pub const KIND_ROCKADDER: u32 = 10;
 
 const SCALAR_VEC4S: usize = MATERIAL_SCALAR_FLOATS / 4;
 const DEFAULT_WOOD: Vec4 = Vec4::new(0.72, 0.46, 0.20, 1.0);
@@ -60,6 +62,7 @@ pub enum FurnitureSurfaceKind {
 	Scales,
 	Lacquer,
 	Metal,
+	Rockadder,
 }
 
 impl FurnitureSurfaceKind {
@@ -75,6 +78,7 @@ impl FurnitureSurfaceKind {
 			Self::Scales => KIND_SCALES,
 			Self::Lacquer => KIND_LACQUER,
 			Self::Metal => KIND_METAL,
+			Self::Rockadder => KIND_ROCKADDER,
 		}
 	}
 
@@ -89,6 +93,7 @@ impl FurnitureSurfaceKind {
 			RECIPE_FURNITURE_SCALES => Self::Scales,
 			RECIPE_FURNITURE_LACQUER => Self::Lacquer,
 			RECIPE_FURNITURE_METAL => Self::Metal,
+			RECIPE_FURNITURE_ROCKADDER => Self::Rockadder,
 			_ => Self::Wood,
 		}
 	}
@@ -201,6 +206,7 @@ pub fn is_furniture_surface_recipe(name: &str) -> bool {
 			| RECIPE_FURNITURE_SCALES
 			| RECIPE_FURNITURE_LACQUER
 			| RECIPE_FURNITURE_METAL
+			| RECIPE_FURNITURE_ROCKADDER
 	)
 }
 
@@ -220,5 +226,9 @@ mod tests {
 		let lava =
 			FurnitureSurfaceMaterial::from_material_ref(&MaterialRef::named(RECIPE_FURNITURE_LAVA));
 		assert_eq!(lava.params.kind, KIND_LAVA);
+		let rock = FurnitureSurfaceMaterial::from_material_ref(&MaterialRef::named(
+			RECIPE_FURNITURE_ROCKADDER,
+		));
+		assert_eq!(rock.params.kind, KIND_ROCKADDER);
 	}
 }

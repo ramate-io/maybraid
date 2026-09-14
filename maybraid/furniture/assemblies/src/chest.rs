@@ -106,6 +106,7 @@ mod tests {
 			crate::palette::ChestKind::Lava => furniture_shaders::RECIPE_FURNITURE_LAVA,
 			crate::palette::ChestKind::Cosmos => furniture_shaders::RECIPE_FURNITURE_COSMOS,
 			crate::palette::ChestKind::Scales => furniture_shaders::RECIPE_FURNITURE_SCALES,
+			crate::palette::ChestKind::Rockadder => furniture_shaders::RECIPE_FURNITURE_ROCKADDER,
 		};
 		for part in built.parts.iter().filter(|p| p.kind != PartKind::ChestLatch) {
 			match &part.material.name {

@@ -20,6 +20,7 @@
 //! | Lava | `furniture_lava` | coal + pulsing veins |
 //! | Cosmos | `furniture_cosmos` | nebula + star glints |
 //! | Scales | `furniture_scales` | overlapping iridescent tiles |
+//! | Rockadder | `furniture_rockadder` | terracotta / teal mosaic + gold inlay |
 //!
 //! Unpainted Richmond kinds stay wireframe.
 
@@ -27,7 +28,8 @@ use bevy::prelude::Color;
 use furniture_shaders::{
 	RECIPE_FURNITURE_CLOTH, RECIPE_FURNITURE_COSMOS, RECIPE_FURNITURE_LACQUER,
 	RECIPE_FURNITURE_LAVA, RECIPE_FURNITURE_MARBLE, RECIPE_FURNITURE_METAL,
-	RECIPE_FURNITURE_ORNATE, RECIPE_FURNITURE_SCALES, RECIPE_FURNITURE_SOFT, RECIPE_FURNITURE_WOOD,
+	RECIPE_FURNITURE_ORNATE, RECIPE_FURNITURE_ROCKADDER, RECIPE_FURNITURE_SCALES,
+	RECIPE_FURNITURE_SOFT, RECIPE_FURNITURE_WOOD,
 };
 use material_ref::MaterialRef;
 use procedural_common::NoiseParams;
@@ -50,9 +52,11 @@ pub enum ChestKind {
 	Lava,
 	Cosmos,
 	Scales,
+	Rockadder,
 }
 
 /// Muted stained woods first; pale / cool rows are rare picks.
+/// Accents are a different hue, not a lighter copy of the same stain.
 pub const WOOD: [[f32; 3]; 6] = [
 	[0.58, 0.40, 0.24],
 	[0.50, 0.28, 0.20],
@@ -62,12 +66,20 @@ pub const WOOD: [[f32; 3]; 6] = [
 	[0.42, 0.44, 0.42],
 ];
 pub const WOOD_ACCENT: [[f32; 3]; 6] = [
-	[0.64, 0.46, 0.28],
-	[0.56, 0.32, 0.22],
-	[0.84, 0.76, 0.58],
-	[0.24, 0.16, 0.14],
-	[0.44, 0.46, 0.28],
-	[0.50, 0.52, 0.50],
+	[0.72, 0.38, 0.14],
+	[0.38, 0.18, 0.24],
+	[0.82, 0.58, 0.28],
+	[0.42, 0.10, 0.34],
+	[0.26, 0.42, 0.22],
+	[0.54, 0.38, 0.28],
+];
+pub const WOOD_SHADE: [[f32; 3]; 6] = [
+	[0.36, 0.24, 0.18],
+	[0.28, 0.14, 0.12],
+	[0.52, 0.44, 0.32],
+	[0.10, 0.08, 0.08],
+	[0.22, 0.26, 0.16],
+	[0.28, 0.28, 0.30],
 ];
 
 pub const LACQUER: [[f32; 3]; 4] =
@@ -121,6 +133,13 @@ pub const SCALE_EDGE: [[f32; 3]; 4] =
 pub const SCALE_IRID: [[f32; 3]; 4] =
 	[[0.32, 0.88, 0.70], [0.88, 0.42, 0.62], [0.42, 0.72, 0.95], [0.95, 0.78, 0.32]];
 
+pub const ROCK_TILE: [[f32; 3]; 4] =
+	[[0.62, 0.28, 0.16], [0.72, 0.38, 0.16], [0.52, 0.22, 0.14], [0.68, 0.32, 0.18]];
+pub const ROCK_TEAL: [[f32; 3]; 4] =
+	[[0.12, 0.38, 0.36], [0.10, 0.32, 0.40], [0.16, 0.42, 0.30], [0.08, 0.28, 0.32]];
+pub const ROCK_GOLD: [[f32; 3]; 4] =
+	[[0.90, 0.68, 0.22], [1.00, 0.84, 0.16], [0.78, 0.58, 0.18], [0.96, 0.74, 0.28]];
+
 pub fn mix_seed(seed: u64, salt: u64) -> u64 {
 	let mut value = seed ^ salt;
 	value ^= value >> 30;
@@ -163,11 +182,12 @@ pub fn carcass_kind(seed: u64) -> CarcassKind {
 
 /// Chest field recipe from the assembly seed (trunk and lid share it).
 pub fn chest_kind(seed: u64) -> ChestKind {
-	match mix_seed(seed, CHEST_SALT) % 4 {
+	match mix_seed(seed, CHEST_SALT) % 5 {
 		0 => ChestKind::Ornate,
 		1 => ChestKind::Lava,
 		2 => ChestKind::Cosmos,
-		_ => ChestKind::Scales,
+		3 => ChestKind::Scales,
+		_ => ChestKind::Rockadder,
 	}
 }
 
@@ -197,12 +217,12 @@ pub fn wood(seed: u64, salt: u64) -> MaterialRef {
 	recipe(
 		RECIPE_FURNITURE_WOOD,
 		seed ^ salt,
-		1.1,
-		[Color::srgb(WOOD[row][0], WOOD[row][1], WOOD[row][2]), Color::srgb(
-			WOOD_ACCENT[row][0],
-			WOOD_ACCENT[row][1],
-			WOOD_ACCENT[row][2],
-		)],
+		2.4,
+		[
+			Color::srgb(WOOD[row][0], WOOD[row][1], WOOD[row][2]),
+			Color::srgb(WOOD_ACCENT[row][0], WOOD_ACCENT[row][1], WOOD_ACCENT[row][2]),
+			Color::srgb(WOOD_SHADE[row][0], WOOD_SHADE[row][1], WOOD_SHADE[row][2]),
+		],
 	)
 }
 
@@ -298,6 +318,19 @@ pub fn cosmos(seed: u64, salt: u64) -> MaterialRef {
 	)
 }
 
+pub fn rockadder(seed: u64, salt: u64) -> MaterialRef {
+	recipe(
+		RECIPE_FURNITURE_ROCKADDER,
+		seed ^ salt,
+		2.0,
+		[
+			rgb(&ROCK_TILE, seed, salt),
+			rgb(&ROCK_TEAL, seed, salt.wrapping_add(3)),
+			rgb(&ROCK_GOLD, seed, salt.wrapping_add(7)),
+		],
+	)
+}
+
 pub fn scales(seed: u64, salt: u64) -> MaterialRef {
 	recipe(
 		RECIPE_FURNITURE_SCALES,
@@ -318,6 +351,7 @@ pub fn chest(seed: u64, salt: u64) -> MaterialRef {
 		ChestKind::Lava => lava(seed, salt),
 		ChestKind::Cosmos => cosmos(seed, salt),
 		ChestKind::Scales => scales(seed, salt),
+		ChestKind::Rockadder => rockadder(seed, salt),
 	}
 }
 
@@ -354,6 +388,20 @@ mod tests {
 	}
 
 	#[test]
+	fn wood_accent_is_a_different_hue() -> anyhow::Result<()> {
+		for (i, (base, accent)) in WOOD.iter().zip(WOOD_ACCENT.iter()).enumerate() {
+			let scale = base[0] / accent[0].max(1e-4);
+			let aligned = (base[1] - accent[1] * scale).abs() + (base[2] - accent[2] * scale).abs();
+			if aligned < 0.12 {
+				return Err(anyhow::anyhow!(
+					"wood row {i} accent is a scale of the base, not a hue shift"
+				));
+			}
+		}
+		Ok(())
+	}
+
+	#[test]
 	fn carcass_is_usually_wood() -> anyhow::Result<()> {
 		let kinds: Vec<_> = (0..40).map(carcass_kind).collect();
 		let wood = kinds.iter().filter(|k| **k == CarcassKind::Wood).count();
@@ -368,9 +416,15 @@ mod tests {
 
 	#[test]
 	fn chest_skins_cover_the_set() -> anyhow::Result<()> {
-		for want in [ChestKind::Ornate, ChestKind::Lava, ChestKind::Cosmos, ChestKind::Scales] {
-			if first_seed_for_chest(want, 64).is_none() {
-				return Err(anyhow::anyhow!("no seed in 0..64 for {want:?}"));
+		for want in [
+			ChestKind::Ornate,
+			ChestKind::Lava,
+			ChestKind::Cosmos,
+			ChestKind::Scales,
+			ChestKind::Rockadder,
+		] {
+			if first_seed_for_chest(want, 80).is_none() {
+				return Err(anyhow::anyhow!("no seed in 0..80 for {want:?}"));
 			}
 		}
 		Ok(())
@@ -383,6 +437,9 @@ mod tests {
 		}
 		if recipe_name(&lava(3, 1)) != Some(RECIPE_FURNITURE_LAVA) {
 			return Err(anyhow::anyhow!("lava recipe drifted"));
+		}
+		if recipe_name(&rockadder(3, 1)) != Some(RECIPE_FURNITURE_ROCKADDER) {
+			return Err(anyhow::anyhow!("rockadder recipe drifted"));
 		}
 		Ok(())
 	}

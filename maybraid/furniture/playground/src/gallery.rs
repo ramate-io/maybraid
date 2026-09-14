@@ -286,6 +286,11 @@ pub fn authored_extreme_slots() -> Vec<GallerySlot> {
 			furniture_assemblies::palette::ChestKind::Scales,
 			Vec3::new(9.8, 0.0, 18.0),
 		),
+		chest_skin_slot(
+			"chest-rockadder",
+			furniture_assemblies::palette::ChestKind::Rockadder,
+			Vec3::new(12.2, 0.0, 18.0),
+		),
 	]
 }
 
@@ -411,12 +416,13 @@ mod tests {
 	}
 
 	#[test]
-	fn authored_chests_include_lava_cosmos_scales() -> anyhow::Result<()> {
+	fn authored_chests_include_lava_cosmos_scales_rockadder() -> anyhow::Result<()> {
 		let slots = authored_extreme_slots();
 		for (label, want) in [
 			("chest-lava", furniture_shaders::RECIPE_FURNITURE_LAVA),
 			("chest-cosmos", furniture_shaders::RECIPE_FURNITURE_COSMOS),
 			("chest-scales", furniture_shaders::RECIPE_FURNITURE_SCALES),
+			("chest-rockadder", furniture_shaders::RECIPE_FURNITURE_ROCKADDER),
 		] {
 			let slot = slots
 				.iter()
