@@ -1,28 +1,8 @@
-//! Seeded finish picks: carcass (wood / lacquer / metal) and chest skins.
+//! Seeded finish picks: quiet carcass wood and a small chest rotation.
 //!
-//! [`carcass`] is wood most of the time. Lacquer and metal are rare
-//! (~5% each). Within wood, muted honey / cherry / ebon lead; pale and
-//! painted rows are uncommon.
-//!
-//! # Carcass (frames, legs, backs, cabinet bodies)
-//!
-//! | Kind | Odds | Recipe | Palette |
-//! |---|---|---|---|
-//! | Wood | ~90% | `furniture_wood` | muted honey / cherry / ebon; rare birch / olive / drift |
-//! | Lacquer | ~5% | `furniture_lacquer` | vermillion, indigo, jade, cream |
-//! | Metal | ~5% | `furniture_metal` | brass, copper, pewter, iron |
-//!
-//! # Chests
-//!
-//! | Kind | Recipe | Field |
-//! |---|---|---|
-//! | Ornate | `furniture_ornate` | wood + gold filigree |
-//! | Lava | `furniture_lava` | coal + pulsing veins |
-//! | Cosmos | `furniture_cosmos` | nebula + star glints |
-//! | Scales | `furniture_scales` | overlapping iridescent tiles |
-//! | Rockadder | `furniture_rockadder` | terracotta / teal mosaic + gold inlay |
-//!
-//! Unpainted Richmond kinds stay wireframe.
+//! Frames stay stained wood. Chests pick among the looks that already read
+//! well in the world — Rockadder mosaics, Cosimo nebula, foliage, and
+//! Durham earth — instead of lava / ornate / scale carnival skins.
 
 use bevy::prelude::Color;
 use furniture_shaders::{
@@ -34,52 +14,50 @@ use furniture_shaders::{
 use material_ref::MaterialRef;
 use procedural_common::NoiseParams;
 
-const CARCASS_SALT: u64 = 0xCA2C_A55E;
 const CHEST_SALT: u64 = 0xC7E5_7B0D;
+
+/// Frond recipe: foliage lighting and grove greens, no leaf-cheese holes.
+pub const RECIPE_FOLIAGE: &str = "CHICO_FROND_MATERIAL";
 
 /// Structural look for frames, legs, backs, and cabinet bodies.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CarcassKind {
 	Wood,
-	Lacquer,
-	Metal,
 }
 
 /// Chest field look. Trunk and lid share one kind per seed.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ChestKind {
-	Ornate,
-	Lava,
-	Cosmos,
-	Scales,
 	Rockadder,
+	Cosimo,
+	Foliage,
+	Terrain,
 }
 
-/// Muted stained woods first; pale / cool rows are rare picks.
-/// Accents are a different hue, not a lighter copy of the same stain.
+/// Honey / cherry lead; olive, bark, and greige are the quieter rows.
 pub const WOOD: [[f32; 3]; 6] = [
 	[0.58, 0.40, 0.24],
 	[0.50, 0.28, 0.20],
-	[0.78, 0.70, 0.52],
+	[0.72, 0.62, 0.46],
 	[0.18, 0.12, 0.10],
-	[0.38, 0.40, 0.24],
-	[0.42, 0.44, 0.42],
+	[0.42, 0.52, 0.28],
+	[0.46, 0.38, 0.34],
 ];
 pub const WOOD_ACCENT: [[f32; 3]; 6] = [
-	[0.72, 0.38, 0.14],
-	[0.38, 0.18, 0.24],
-	[0.82, 0.58, 0.28],
-	[0.42, 0.10, 0.34],
-	[0.26, 0.42, 0.22],
-	[0.54, 0.38, 0.28],
+	[0.62, 0.36, 0.16],
+	[0.32, 0.36, 0.22],
+	[0.58, 0.48, 0.28],
+	[0.16, 0.22, 0.18],
+	[0.32, 0.28, 0.16],
+	[0.32, 0.40, 0.24],
 ];
 pub const WOOD_SHADE: [[f32; 3]; 6] = [
 	[0.36, 0.24, 0.18],
 	[0.28, 0.14, 0.12],
-	[0.52, 0.44, 0.32],
+	[0.48, 0.40, 0.28],
 	[0.10, 0.08, 0.08],
-	[0.22, 0.26, 0.16],
-	[0.28, 0.28, 0.30],
+	[0.22, 0.28, 0.16],
+	[0.28, 0.22, 0.20],
 ];
 
 pub const LACQUER: [[f32; 3]; 4] =
@@ -92,23 +70,45 @@ pub const METAL: [[f32; 3]; 4] =
 pub const METAL_ACCENT: [[f32; 3]; 4] =
 	[[0.96, 0.82, 0.42], [0.92, 0.52, 0.30], [0.82, 0.84, 0.86], [0.40, 0.38, 0.40]];
 
-pub const CLOTH: [[f32; 3]; 4] =
-	[[0.94, 0.62, 0.16], [0.92, 0.36, 0.30], [0.16, 0.64, 0.58], [0.62, 0.26, 0.56]];
-pub const CLOTH_ACCENT: [[f32; 3]; 4] =
-	[[1.00, 0.82, 0.36], [1.00, 0.58, 0.42], [0.28, 0.86, 0.78], [0.82, 0.42, 0.78]];
+/// Grove foliage + linen. No neon yellow / magenta.
+pub const CLOTH: [[f32; 3]; 4] = [
+	[0.42, 0.52, 0.28],
+	[0.25, 0.62, 0.32],
+	[0.12, 0.35, 0.18],
+	[0.86, 0.78, 0.62],
+];
+pub const CLOTH_ACCENT: [[f32; 3]; 4] = [
+	[0.32, 0.40, 0.22],
+	[0.38, 0.48, 0.28],
+	[0.22, 0.42, 0.28],
+	[0.72, 0.62, 0.46],
+];
 
 pub const MATTRESS: [[f32; 3]; 4] =
-	[[0.96, 0.90, 0.78], [0.98, 0.94, 0.86], [0.90, 0.82, 0.66], [0.92, 0.84, 0.80]];
+	[[0.92, 0.86, 0.74], [0.88, 0.84, 0.76], [0.86, 0.78, 0.62], [0.80, 0.74, 0.64]];
 
-pub const MARBLE: [[f32; 3]; 4] =
-	[[0.94, 0.88, 0.76], [0.78, 0.86, 0.74], [0.92, 0.78, 0.76], [0.22, 0.24, 0.28]];
-pub const MARBLE_VEIN: [[f32; 3]; 4] =
-	[[0.72, 0.52, 0.24], [0.36, 0.48, 0.38], [0.70, 0.36, 0.38], [0.82, 0.70, 0.42]];
-pub const MARBLE_SPARK: [[f32; 3]; 4] =
-	[[0.99, 0.94, 0.80], [0.90, 0.96, 0.88], [0.99, 0.88, 0.86], [0.95, 0.90, 0.72]];
+/// Durham macro swatches: greige, chalk, shale, baked clay.
+pub const MARBLE: [[f32; 3]; 4] = [
+	[0.46, 0.38, 0.34],
+	[0.82, 0.80, 0.70],
+	[0.18, 0.20, 0.22],
+	[0.48, 0.20, 0.12],
+];
+pub const MARBLE_VEIN: [[f32; 3]; 4] = [
+	[0.34, 0.28, 0.24],
+	[0.62, 0.58, 0.48],
+	[0.10, 0.12, 0.13],
+	[0.32, 0.14, 0.10],
+];
+pub const MARBLE_SPARK: [[f32; 3]; 4] = [
+	[0.62, 0.53, 0.49],
+	[0.92, 0.88, 0.78],
+	[0.28, 0.30, 0.32],
+	[0.68, 0.34, 0.20],
+];
 
 pub const GOLD: [[f32; 3]; 4] =
-	[[0.96, 0.74, 0.24], [0.98, 0.82, 0.34], [0.90, 0.62, 0.18], [0.86, 0.68, 0.28]];
+	[[0.78, 0.58, 0.22], [0.72, 0.54, 0.20], [0.68, 0.50, 0.18], [0.74, 0.56, 0.24]];
 pub const GEM: [[f32; 3]; 4] =
 	[[0.18, 0.46, 0.62], [0.62, 0.18, 0.28], [0.16, 0.52, 0.38], [0.42, 0.22, 0.58]];
 
@@ -119,12 +119,13 @@ pub const LAVA_GLOW: [[f32; 3]; 4] =
 pub const LAVA_HOT: [[f32; 3]; 4] =
 	[[1.00, 0.88, 0.42], [1.00, 0.78, 0.28], [1.00, 0.94, 0.62], [0.98, 0.70, 0.22]];
 
+/// Skill-map Cosimo: void / nebula / bloom. Bloom stays violet, not neon.
 pub const COSMOS_VOID: [[f32; 3]; 4] =
-	[[0.04, 0.02, 0.09], [0.06, 0.02, 0.12], [0.03, 0.04, 0.10], [0.08, 0.03, 0.08]];
+	[[0.04, 0.02, 0.09], [0.05, 0.03, 0.11], [0.03, 0.04, 0.10], [0.06, 0.02, 0.08]];
 pub const COSMOS_NEBULA: [[f32; 3]; 4] =
-	[[0.22, 0.06, 0.40], [0.14, 0.08, 0.48], [0.32, 0.08, 0.36], [0.10, 0.16, 0.42]];
+	[[0.22, 0.06, 0.38], [0.18, 0.08, 0.36], [0.26, 0.08, 0.34], [0.16, 0.10, 0.40]];
 pub const COSMOS_BLOOM: [[f32; 3]; 4] =
-	[[0.82, 0.48, 1.00], [0.62, 0.28, 1.00], [0.95, 0.62, 0.88], [0.45, 0.72, 1.00]];
+	[[0.42, 0.16, 0.62], [0.38, 0.14, 0.56], [0.46, 0.20, 0.58], [0.36, 0.18, 0.52]];
 
 pub const SCALE_BELLY: [[f32; 3]; 4] =
 	[[0.22, 0.48, 0.38], [0.48, 0.22, 0.28], [0.18, 0.32, 0.52], [0.62, 0.48, 0.18]];
@@ -133,12 +134,49 @@ pub const SCALE_EDGE: [[f32; 3]; 4] =
 pub const SCALE_IRID: [[f32; 3]; 4] =
 	[[0.32, 0.88, 0.70], [0.88, 0.42, 0.62], [0.42, 0.72, 0.95], [0.95, 0.78, 0.32]];
 
+/// Skill-map mosaic: terracotta, teal, cream, muted gold.
 pub const ROCK_TILE: [[f32; 3]; 4] =
-	[[0.62, 0.28, 0.16], [0.72, 0.38, 0.16], [0.52, 0.22, 0.14], [0.68, 0.32, 0.18]];
+	[[0.62, 0.28, 0.16], [0.86, 0.78, 0.62], [0.52, 0.22, 0.14], [0.12, 0.38, 0.36]];
 pub const ROCK_TEAL: [[f32; 3]; 4] =
-	[[0.12, 0.38, 0.36], [0.10, 0.32, 0.40], [0.16, 0.42, 0.30], [0.08, 0.28, 0.32]];
+	[[0.12, 0.38, 0.36], [0.08, 0.06, 0.05], [0.10, 0.32, 0.40], [0.86, 0.78, 0.62]];
 pub const ROCK_GOLD: [[f32; 3]; 4] =
-	[[0.90, 0.68, 0.22], [1.00, 0.84, 0.16], [0.78, 0.58, 0.18], [0.96, 0.74, 0.28]];
+	[[0.78, 0.58, 0.22], [0.78, 0.58, 0.22], [0.72, 0.58, 0.40], [0.62, 0.28, 0.16]];
+
+/// Whole square-lattice rows so tile / grout / inlay stay a set.
+pub const ROCK_SQUARES: [[[f32; 3]; 3]; 4] = [
+	[[0.62, 0.28, 0.16], [0.12, 0.38, 0.36], [0.78, 0.58, 0.22]],
+	[[0.86, 0.78, 0.62], [0.08, 0.06, 0.05], [0.78, 0.58, 0.22]],
+	[[0.12, 0.38, 0.36], [0.86, 0.78, 0.62], [0.62, 0.28, 0.16]],
+	[[0.52, 0.22, 0.14], [0.10, 0.28, 0.32], [0.72, 0.58, 0.40]],
+];
+
+/// Grove canopy mix: olive, fresh, deep, sage.
+pub const FOLIAGE: [[f32; 3]; 4] = [
+	[0.42, 0.52, 0.28],
+	[0.25, 0.62, 0.32],
+	[0.12, 0.35, 0.18],
+	[0.42, 0.48, 0.32],
+];
+
+/// Durham earth: weathered greige, baked clay, sage alluvium, shale.
+pub const TERRAIN: [[f32; 3]; 4] = [
+	[0.46, 0.38, 0.34],
+	[0.48, 0.20, 0.12],
+	[0.46, 0.50, 0.36],
+	[0.18, 0.20, 0.22],
+];
+pub const TERRAIN_VEIN: [[f32; 3]; 4] = [
+	[0.34, 0.28, 0.24],
+	[0.32, 0.14, 0.10],
+	[0.32, 0.36, 0.24],
+	[0.10, 0.12, 0.13],
+];
+pub const TERRAIN_SPARK: [[f32; 3]; 4] = [
+	[0.62, 0.53, 0.49],
+	[0.68, 0.34, 0.20],
+	[0.66, 0.64, 0.42],
+	[0.28, 0.30, 0.32],
+];
 
 pub fn mix_seed(seed: u64, salt: u64) -> u64 {
 	let mut value = seed ^ salt;
@@ -170,24 +208,19 @@ fn recipe(
 }
 
 /// Carcass recipe from the assembly seed (same for every woody part).
-///
-/// Wood is the default. Lacquer and metal each land on one bucket in twenty.
-pub fn carcass_kind(seed: u64) -> CarcassKind {
-	match mix_seed(seed, CARCASS_SALT) % 20 {
-		0 => CarcassKind::Lacquer,
-		1 => CarcassKind::Metal,
-		_ => CarcassKind::Wood,
-	}
+pub fn carcass_kind(_seed: u64) -> CarcassKind {
+	CarcassKind::Wood
 }
 
 /// Chest field recipe from the assembly seed (trunk and lid share it).
+///
+/// Rockadder is the common mosaic; Cosimo, foliage, and terrain share the rest.
 pub fn chest_kind(seed: u64) -> ChestKind {
 	match mix_seed(seed, CHEST_SALT) % 5 {
-		0 => ChestKind::Ornate,
-		1 => ChestKind::Lava,
-		2 => ChestKind::Cosmos,
-		3 => ChestKind::Scales,
-		_ => ChestKind::Rockadder,
+		0 | 1 => ChestKind::Rockadder,
+		2 => ChestKind::Cosimo,
+		3 => ChestKind::Foliage,
+		_ => ChestKind::Terrain,
 	}
 }
 
@@ -244,13 +277,23 @@ pub fn metal(seed: u64, salt: u64) -> MaterialRef {
 	)
 }
 
-/// Frame / leg / back / cabinet body. Recipe from `seed`; hue jitter from `salt`.
+/// Pewter / iron latch hardware — no carnival brass.
+pub fn hardware(seed: u64, salt: u64) -> MaterialRef {
+	let row = 2 + (mix_seed(seed, salt) as usize % 2);
+	recipe(
+		RECIPE_FURNITURE_METAL,
+		seed ^ salt,
+		2.8,
+		[
+			Color::srgb(METAL[row][0], METAL[row][1], METAL[row][2]),
+			Color::srgb(METAL_ACCENT[row][0], METAL_ACCENT[row][1], METAL_ACCENT[row][2]),
+		],
+	)
+}
+
+/// Frame / leg / back / cabinet body. Stained wood only.
 pub fn carcass(seed: u64, salt: u64) -> MaterialRef {
-	match carcass_kind(seed) {
-		CarcassKind::Wood => wood(seed, salt),
-		CarcassKind::Lacquer => lacquer(seed, salt),
-		CarcassKind::Metal => metal(seed, salt),
-	}
+	wood(seed, salt)
 }
 
 pub fn cloth(seed: u64, salt: u64) -> MaterialRef {
@@ -319,14 +362,16 @@ pub fn cosmos(seed: u64, salt: u64) -> MaterialRef {
 }
 
 pub fn rockadder(seed: u64, salt: u64) -> MaterialRef {
+	let set = (mix_seed(seed, salt) as usize) % ROCK_SQUARES.len();
+	let [tile, teal, gold] = ROCK_SQUARES[set];
 	recipe(
 		RECIPE_FURNITURE_ROCKADDER,
 		seed ^ salt,
 		2.0,
 		[
-			rgb(&ROCK_TILE, seed, salt),
-			rgb(&ROCK_TEAL, seed, salt.wrapping_add(3)),
-			rgb(&ROCK_GOLD, seed, salt.wrapping_add(7)),
+			Color::srgb(tile[0], tile[1], tile[2]),
+			Color::srgb(teal[0], teal[1], teal[2]),
+			Color::srgb(gold[0], gold[1], gold[2]),
 		],
 	)
 }
@@ -344,14 +389,31 @@ pub fn scales(seed: u64, salt: u64) -> MaterialRef {
 	)
 }
 
+pub fn foliage(seed: u64, salt: u64) -> MaterialRef {
+	recipe(RECIPE_FOLIAGE, seed ^ salt, 1.8, [rgb(&FOLIAGE, seed, salt)])
+}
+
+/// Durham earth swatches through the marble look (stone / dirt coffer).
+pub fn terrain(seed: u64, salt: u64) -> MaterialRef {
+	recipe(
+		RECIPE_FURNITURE_MARBLE,
+		seed ^ salt,
+		1.6,
+		[
+			rgb(&TERRAIN, seed, salt),
+			rgb(&TERRAIN_VEIN, seed, salt.wrapping_add(3)),
+			rgb(&TERRAIN_SPARK, seed, salt.wrapping_add(7)),
+		],
+	)
+}
+
 /// Chest field. Recipe from `seed`; trunk/lid salts only change the row.
 pub fn chest(seed: u64, salt: u64) -> MaterialRef {
 	match chest_kind(seed) {
-		ChestKind::Ornate => ornate(seed, salt),
-		ChestKind::Lava => lava(seed, salt),
-		ChestKind::Cosmos => cosmos(seed, salt),
-		ChestKind::Scales => scales(seed, salt),
 		ChestKind::Rockadder => rockadder(seed, salt),
+		ChestKind::Cosimo => cosmos(seed, salt),
+		ChestKind::Foliage => foliage(seed, salt),
+		ChestKind::Terrain => terrain(seed, salt),
 	}
 }
 
@@ -402,14 +464,12 @@ mod tests {
 	}
 
 	#[test]
-	fn carcass_is_usually_wood() -> anyhow::Result<()> {
-		let kinds: Vec<_> = (0..40).map(carcass_kind).collect();
-		let wood = kinds.iter().filter(|k| **k == CarcassKind::Wood).count();
-		if wood < 30 {
-			return Err(anyhow::anyhow!("carcass should be wood on most seeds, got {wood}/40"));
+	fn carcass_is_wood() -> anyhow::Result<()> {
+		if (0..40).any(|seed| carcass_kind(seed) != CarcassKind::Wood) {
+			return Err(anyhow::anyhow!("carcass should stay wood"));
 		}
-		if (0..256).all(|seed| carcass_kind(seed) == CarcassKind::Wood) {
-			return Err(anyhow::anyhow!("rare lacquer/metal never appeared in 0..256"));
+		if (0..16).any(|seed| recipe_name(&carcass(seed, 1)) != Some(RECIPE_FURNITURE_WOOD)) {
+			return Err(anyhow::anyhow!("carcass recipe should be furniture_wood"));
 		}
 		Ok(())
 	}
@@ -417,11 +477,10 @@ mod tests {
 	#[test]
 	fn chest_skins_cover_the_set() -> anyhow::Result<()> {
 		for want in [
-			ChestKind::Ornate,
-			ChestKind::Lava,
-			ChestKind::Cosmos,
-			ChestKind::Scales,
 			ChestKind::Rockadder,
+			ChestKind::Cosimo,
+			ChestKind::Foliage,
+			ChestKind::Terrain,
 		] {
 			if first_seed_for_chest(want, 80).is_none() {
 				return Err(anyhow::anyhow!("no seed in 0..80 for {want:?}"));
@@ -435,11 +494,17 @@ mod tests {
 		if recipe_name(&marble(3, 1)) != Some(RECIPE_FURNITURE_MARBLE) {
 			return Err(anyhow::anyhow!("marble recipe drifted"));
 		}
-		if recipe_name(&lava(3, 1)) != Some(RECIPE_FURNITURE_LAVA) {
-			return Err(anyhow::anyhow!("lava recipe drifted"));
-		}
 		if recipe_name(&rockadder(3, 1)) != Some(RECIPE_FURNITURE_ROCKADDER) {
 			return Err(anyhow::anyhow!("rockadder recipe drifted"));
+		}
+		if recipe_name(&cosmos(3, 1)) != Some(RECIPE_FURNITURE_COSMOS) {
+			return Err(anyhow::anyhow!("cosimo recipe drifted"));
+		}
+		if recipe_name(&foliage(3, 1)) != Some(RECIPE_FOLIAGE) {
+			return Err(anyhow::anyhow!("foliage recipe drifted"));
+		}
+		if recipe_name(&terrain(3, 1)) != Some(RECIPE_FURNITURE_MARBLE) {
+			return Err(anyhow::anyhow!("terrain recipe drifted"));
 		}
 		Ok(())
 	}

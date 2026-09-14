@@ -3546,6 +3546,7 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "bevy",
+ "chico-vegetation-shaders",
  "clap",
  "furniture-assemblies",
  "furniture-shaders",
