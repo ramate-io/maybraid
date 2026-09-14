@@ -124,7 +124,7 @@ impl BuildingComponents for MixedUseLesHallesStorey {
 		match self {
 			Self::Livable { usage, .. } => usage.furniture_nodes_for_level(level),
 			Self::Commercial { usage, .. } => usage.furniture_nodes_for_level(level),
-			Self::Arcade { .. } => Layers::new(),
+			Self::Arcade { usage, .. } => usage.furniture_nodes_for_level(level),
 		}
 	}
 
@@ -132,7 +132,7 @@ impl BuildingComponents for MixedUseLesHallesStorey {
 		match self {
 			Self::Commercial { usage, .. } => usage.label_nodes_for_level(level),
 			Self::Livable { usage, .. } => usage.label_nodes_for_level(level),
-			Self::Arcade { .. } => Layers::new(),
+			Self::Arcade { usage, .. } => usage.label_nodes_for_level(level),
 		}
 	}
 
@@ -478,10 +478,7 @@ mod tests {
 				if floor.is_commercial() {
 					continue;
 				}
-				assert!(
-					!slots.is_empty(),
-					"seed {seed} livable floor {i} should emit furniture"
-				);
+				assert!(!slots.is_empty(), "seed {seed} livable floor {i} should emit furniture");
 			}
 		}
 	}

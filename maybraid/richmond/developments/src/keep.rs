@@ -17,7 +17,7 @@ use richmond_buildings::{
 
 use bevy_math::{Vec2, Vec3};
 
-pub const TOWER_STOREY_HEIGHT: f32 = 3.2;
+pub const TOWER_STOREY_HEIGHT: f32 = 3.2 * 1.5;
 const KEEP_TREAD_FILL: f32 = 0.55;
 
 /// Shell plus the wells that climb it.
@@ -422,8 +422,9 @@ fn build_trazaloid_tower(
 					Trazaloid::side_passage_opening(
 						side,
 						footprint,
-						(footprint.x.min(footprint.y) * 0.22).clamp(1.1, 1.8),
-						2.1,
+						(footprint.x.min(footprint.y) * 0.22).clamp(1.1, 1.8)
+							* richmond_buildings::DOOR_SIZE_SCALE,
+						2.1 * richmond_buildings::DOOR_SIZE_SCALE,
 					),
 				);
 			}
@@ -433,9 +434,9 @@ fn build_trazaloid_tower(
 				origin: Vec3::new(origin.x, y, origin.z),
 				footprint,
 				ridge,
-				lower_height: TOWER_STOREY_HEIGHT * 0.52,
-				upper_height: TOWER_STOREY_HEIGHT * 0.35,
-				band_vertical_offset: TOWER_STOREY_HEIGHT * 0.13,
+				lower_height: TOWER_STOREY_HEIGHT * 0.70,
+				upper_height: TOWER_STOREY_HEIGHT * 0.20,
+				band_vertical_offset: TOWER_STOREY_HEIGHT * 0.10,
 				openings,
 				floor: TrazaloidSlab::None,
 				ceiling: if i + 1 == floors { TrazaloidSlab::Solid } else { TrazaloidSlab::None },

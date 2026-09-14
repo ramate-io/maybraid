@@ -140,19 +140,33 @@ impl BuildingComponents for LesHallesCommercialUsage {
 
 /// Ground arcade: gallery strips stay open (no stall / apartment fill).
 #[derive(Debug, Clone, PartialEq, Default)]
-pub struct LesHallesArcadeUsage;
+pub struct LesHallesArcadeUsage {
+	/// Chests in leftover gallery / balcony pockets (no commercial strips).
+	pub residual_chests: Vec<FurnitureFill>,
+}
 
 impl LesHallesArcadeUsage {
 	pub fn is_empty(&self) -> bool {
-		true
+		self.residual_chests.is_empty()
 	}
 }
 
 impl LesHallesUsagePlan for LesHallesArcadeUsage {
 	fn paint(
 		regions: FillableRegions,
-		_noise: NoiseParams,
+		noise: NoiseParams,
 	) -> Result<(Self, FillableRegions), FitError> {
-		Ok((Self, regions))
+		let residual_chests = chests_for_regions(&regions.within, noise);
+		Ok((Self { residual_chests }, regions))
+	}
+}
+
+impl BuildingComponents for LesHallesArcadeUsage {
+	fn furniture_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<FurnitureNode> {
+		Layers::from_free(self.residual_chests.iter().map(|fill| fill.furniture.clone()).collect())
+	}
+
+	fn label_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<LabelNode> {
+		Layers::from_free(self.residual_chests.iter().map(|fill| fill.label.clone()).collect())
 	}
 }

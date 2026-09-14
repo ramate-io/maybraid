@@ -2,7 +2,9 @@
 
 use lod::gen::LodSceneLevel;
 use procedural_common::NoiseParams;
+use richmond_building_components::furniture::FurnitureNode;
 use richmond_building_components::joints::JointNode;
+use richmond_building_components::labels::LabelNode;
 use richmond_building_components::panels::PanelNode;
 use richmond_building_components::{BuildingComponents, Layers};
 
@@ -57,6 +59,14 @@ impl BuildingComponents for LesHallesArcadeStorey {
 	fn joint_nodes_for_level(&self, level: LodSceneLevel) -> Layers<JointNode> {
 		self.floor_plan.joint_nodes_for_level(level)
 	}
+
+	fn furniture_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FurnitureNode> {
+		self.usage.furniture_nodes_for_level(level)
+	}
+
+	fn label_nodes_for_level(&self, level: LodSceneLevel) -> Layers<LabelNode> {
+		self.usage.label_nodes_for_level(level)
+	}
 }
 
 #[cfg(test)]
@@ -83,6 +93,6 @@ mod tests {
 		assert_eq!(storey.floor_plan.gallery.wall_count(), 4);
 		assert!(storey.floor_plan.arcade_pillars.iter().any(|l| !l.is_empty()));
 		assert!(residual.within.iter().any(|r| r.kind == SpaceKind::ExternalSpace));
-		assert!(storey.usage.is_empty());
+		assert!(!storey.usage.is_empty(), "open arcade leftovers should still get residual chests");
 	}
 }
