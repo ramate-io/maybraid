@@ -45,14 +45,15 @@ pub const BOX_KIT_TO_UNIT: Placement = Placement {
 	scale: Vec3::new(0.5, 1.0, 0.5),
 };
 
-/// Latch kit → unit slot: front centroid on the \(−Z\) face.
+/// Latch kit → unit slot: origin pinned on the \(−Z\) face, face toward the room.
 ///
-/// Authored \(X,Y \in [-1, 1]\) are centered (`scale = 0.5`, no \(Y\) shift).
-/// Authored \(Z \in [0, 1]\) is depth from the front (`translation.z = -0.5`).
+/// Authored \(X,Y \in [-1, 1]\) are centered (`scale = 0.5`). Authored \(+Z\)
+/// is depth from the front centroid; other kits treat \(+Z\) as the back, so
+/// yaw \(\pi\) turns that axis toward the room. The origin stays on \(z=-0.5\).
 /// Use [`latch_slab`] so floor-fraction \(y0..y1\) still lands correctly.
 pub const LATCH_KIT_TO_UNIT: Placement = Placement {
 	translation: Vec3::new(0.0, 0.0, -0.5),
-	yaw: 0.0,
+	yaw: std::f32::consts::PI,
 	pitch: 0.0,
 	roll: 0.0,
 	scale: Vec3::new(0.5, 0.5, 0.5),
@@ -186,7 +187,13 @@ mod tests {
 		let placed = place_kit(Placement::IDENTITY, LATCH_KIT_TO_UNIT, unit);
 		let front = placed.translation.z;
 		if (front + 0.5).abs() > 1e-4 {
-			return Err(anyhow::anyhow!("latch front should sit at z=-0.5, got {front}"));
+			return Err(anyhow::anyhow!("latch origin should stay pinned at z=-0.5, got {front}"));
+		}
+		if (placed.yaw - std::f32::consts::PI).abs() > 1e-4 {
+			return Err(anyhow::anyhow!(
+				"latch yaw should turn the face toward the room, got {}",
+				placed.yaw
+			));
 		}
 		let y_lo = placed.translation.y - placed.scale.y;
 		let y_hi = placed.translation.y + placed.scale.y;
