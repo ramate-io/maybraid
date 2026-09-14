@@ -11,10 +11,10 @@ use richmond_building_components::FurnitureGeometry;
 pub const SEAT_Y0: f32 = 0.42;
 /// See [`SEAT_Y0`].
 pub const SEAT_Y1: f32 = 0.54;
-/// Authored leg width over authored seat width (`0.4 / 2.0`).
-pub const LEG_XZ: f32 = 0.20;
-/// Inset from the slot rim so a 0.20-wide post flushes the seat corner.
-pub const LEG_INSET: f32 = 0.40;
+/// Leg plan scale in the unit slot (posts sit under the seat, not on the rim).
+pub const LEG_XZ: f32 = 0.12;
+/// Center offset so a 0.12-wide post stays inside the seat half-extent (0.5).
+pub const LEG_INSET: f32 = 0.32;
 
 /// Finish-only knobs. Topology does not change with [`Self::finish_seed`].
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -101,6 +101,30 @@ mod tests {
 				"chair back should sit on the seat top, got y={}",
 				back.placement.translation.y
 			));
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn legs_sit_inside_the_seat_plan() -> anyhow::Result<()> {
+		let chair = ChairParams::unit_from_num(4).build();
+		let posed = pose_parts(Placement::IDENTITY, &chair.parts);
+		let seat = posed
+			.iter()
+			.find(|p| p.kind == PartKind::ChairSeat)
+			.ok_or_else(|| anyhow::anyhow!("missing seat"))?;
+		// Box kit half-extent is 1; after remap, visual half is `scale.x`.
+		let seat_half = seat.placement.scale.x;
+		for part in posed.iter().filter(|p| p.kind == PartKind::ChairLeg) {
+			// Leg kit half-extent is 0.2.
+			let half = part.placement.scale.x * 0.2;
+			let max = part.placement.translation.x.abs() + half;
+			if max > seat_half + 1e-4 {
+				return Err(anyhow::anyhow!(
+					"leg at x={} extends to {max}, past seat half {seat_half}",
+					part.placement.translation.x
+				));
+			}
 		}
 		Ok(())
 	}

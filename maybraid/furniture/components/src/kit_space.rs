@@ -76,8 +76,18 @@ pub fn shift(mut placement: Placement, delta: Vec3) -> Placement {
 }
 
 /// Map a unit-slot slab onto an authored kit, then into `slot`.
+///
+/// Plan offsets on `unit` stay in unit-slot space. [`compose_child`] would
+/// otherwise scale them by [`LEG_KIT_TO_UNIT`] (2.5) and throw chair legs
+/// outside the seat.
 pub fn place_kit(slot: Placement, kit_to_unit: Placement, unit: Placement) -> Placement {
-	slot.compose_child(kit_to_unit.compose_child(unit))
+	let plan_offset = Vec3::new(unit.translation.x, 0.0, unit.translation.z);
+	let mut centered = unit;
+	centered.translation.x = 0.0;
+	centered.translation.z = 0.0;
+	let mut local = kit_to_unit.compose_child(centered);
+	local.translation += plan_offset;
+	slot.compose_child(local)
 }
 
 #[cfg(test)]
@@ -92,6 +102,21 @@ mod tests {
 		}
 		if (floor.scale - Vec3::new(0.5, 1.0, 0.5)).length() > 1e-5 {
 			return Err(anyhow::anyhow!("box kit scale should be (0.5, 1, 0.5)"));
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn plan_offsets_are_not_scaled_by_the_leg_kit() -> anyhow::Result<()> {
+		let unit = shift(slab(0.12, 0.0, 0.42), Vec3::new(0.32, 0.0, 0.32));
+		let placed = place_kit(Placement::IDENTITY, LEG_KIT_TO_UNIT, unit);
+		if (placed.translation.x - 0.32).abs() > 1e-4 || (placed.translation.z - 0.32).abs() > 1e-4
+		{
+			return Err(anyhow::anyhow!(
+				"leg plan offset should stay 0.32 in unit space, got ({}, {})",
+				placed.translation.x,
+				placed.translation.z
+			));
 		}
 		Ok(())
 	}

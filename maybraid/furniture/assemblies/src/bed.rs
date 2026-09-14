@@ -1,6 +1,6 @@
 //! Bed: frame, mattress, covers.
 
-use crate::palette::{cloth, wood};
+use crate::palette::{cloth, mattress, wood};
 use crate::Assembly;
 use furniture_components::{slab, PartKind, PlacedPart};
 use richmond_building_components::FurnitureGeometry;
@@ -33,7 +33,7 @@ pub struct Bed {
 impl Bed {
 	pub fn from_params(params: BedParams) -> Self {
 		let seed = params.finish_seed;
-		let mattress = slab(0.92, 0.32, 0.92);
+		let mattress_placement = slab(0.92, 0.32, 0.92);
 		Self {
 			finish_seed: seed,
 			parts: vec![
@@ -44,12 +44,12 @@ impl Bed {
 				},
 				PlacedPart {
 					kind: PartKind::Mattress,
-					placement: mattress,
-					material: cloth(seed, 2),
+					placement: mattress_placement,
+					material: mattress(seed, 2),
 				},
 				PlacedPart {
 					kind: PartKind::Covers,
-					placement: mattress,
+					placement: mattress_placement,
 					material: cloth(seed, 3),
 				},
 			],
@@ -88,6 +88,9 @@ mod tests {
 			.ok_or_else(|| anyhow::anyhow!("missing covers"))?;
 		if mattress.placement != covers.placement {
 			return Err(anyhow::anyhow!("covers must use the mattress transform"));
+		}
+		if mattress.material == covers.material {
+			return Err(anyhow::anyhow!("mattress and covers must paint differently"));
 		}
 		Ok(())
 	}

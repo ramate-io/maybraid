@@ -21,7 +21,7 @@ impl CounterParams {
 	}
 }
 
-/// Footer fills the plan; volume insets; top over-sails.
+/// Toekick (footer) is the narrowest plan; volume is the cabinet; top over-sails.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Counter {
 	pub finish_seed: u64,
@@ -36,12 +36,12 @@ impl Counter {
 			parts: vec![
 				PlacedPart {
 					kind: PartKind::CounterFooter,
-					placement: slab(1.0, 0.0, 0.12),
+					placement: slab(0.78, 0.0, 0.12),
 					material: wood(seed, 1),
 				},
 				PlacedPart {
 					kind: PartKind::CounterVolume,
-					placement: slab(0.92, 0.12, 0.88),
+					placement: slab(0.96, 0.12, 0.88),
 					material: wood(seed, 2),
 				},
 				PlacedPart {
@@ -75,8 +75,13 @@ mod tests {
 	}
 
 	#[test]
-	fn top_oversails_the_volume() -> anyhow::Result<()> {
+	fn toekick_is_narrower_than_the_volume() -> anyhow::Result<()> {
 		let counter = CounterParams::unit_from_num(8).build();
+		let footer = counter
+			.parts
+			.iter()
+			.find(|p| p.kind == PartKind::CounterFooter)
+			.ok_or_else(|| anyhow::anyhow!("missing footer"))?;
 		let volume = counter
 			.parts
 			.iter()
@@ -87,6 +92,9 @@ mod tests {
 			.iter()
 			.find(|p| p.kind == PartKind::CounterTop)
 			.ok_or_else(|| anyhow::anyhow!("missing top"))?;
+		if xz(footer) >= xz(volume) {
+			return Err(anyhow::anyhow!("toekick must be narrower than the volume"));
+		}
 		if xz(top) <= xz(volume) {
 			return Err(anyhow::anyhow!("countertop must oversail the volume"));
 		}
