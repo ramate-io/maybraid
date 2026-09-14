@@ -32,6 +32,8 @@ use commands::{
 	RequestDevelopmentFocus, RequestLikelihood, RequestMeshStats, RequestRebuild, RequestSeed,
 	RequestTerrainRadius,
 };
+use furniture_assemblies::FurnitureAssembliesPlugin;
+use furniture_shaders::FurnitureShadersPlugin;
 use durham_terrain::shaders::{DurhamTerrainShader, DurhamTerrainShaderPlugin, RefractionWater};
 use durham_terrain_models::{
 	AvianTerrainIndex, BaseTerrainNoise, ComposedWater, DurhamTerrainModelsPlugin,
@@ -175,6 +177,12 @@ impl Plugin for DevelopmentsOnTerrainPlugin {
 		}
 
 		app.add_plugins(RichmondDevelopmentModelsPlugin);
+		if !app.is_plugin_added::<FurnitureShadersPlugin>() {
+			app.add_plugins(FurnitureShadersPlugin);
+		}
+		if !app.is_plugin_added::<FurnitureAssembliesPlugin>() {
+			app.add_plugins(FurnitureAssembliesPlugin);
+		}
 		register_urbanization_lod(app);
 		if self.register_development_forest_lod {
 			register_forest_lod::<DevelopmentForestPresenter>(app);

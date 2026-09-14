@@ -6,12 +6,16 @@
 //!
 //! Kit remap lives in furniture-components. Slot facing / abutment come from
 //! the Richmond node (`placement.yaw`); assemblies do not re-read a floor plan.
+//! [`generation`] walks building High slots; [`on_buildings`] paints them onto
+//! presented development hosts.
 
 pub mod bed;
 pub mod chair;
 pub mod chest;
 pub mod counter;
 pub mod fill;
+pub mod generation;
+pub mod on_buildings;
 pub mod palette;
 pub mod plugin;
 pub mod present;
@@ -21,6 +25,10 @@ pub use chair::{Chair, ChairParams};
 pub use chest::{Chest, ChestParams};
 pub use counter::{Counter, CounterParams};
 pub use fill::{abutment_wall, posed_assembly, try_assembly};
+pub use generation::{
+	collect_furniture_slots, generate_assemblies, generate_assemblies_from_nodes,
+};
+pub use on_buildings::{paint_host_furniture, PaintedFurniture};
 pub use furniture_components::{
 	assembly_scene, pose_parts, posed_kit, PartKind, PlacedPart, BOX_KIT_TO_UNIT, LEG_KIT_TO_UNIT,
 };

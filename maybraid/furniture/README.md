@@ -1,6 +1,6 @@
 # Furniture
 
-Painted assemblies that fill Richmond [`FurnitureNode`](../richmond/building-components/src/furniture/node.rs) slots. This is a generate/present layer next to Richmond, not a second world binary.
+Painted assemblies that fill Richmond [`FurnitureNode`](../richmond/building-components/src/furniture/node.rs) slots. Generate is a pass over building High slots ([`collect_furniture_slots`](assemblies/src/generation.rs)). World present parents kit GLBs to development hosts — they are not baked into building High chunks.
 
 - [`components`](components/) — kit `AssetPath`s, Blender→engine remap, posed `SceneRef` + `MaterialRef`
 - [`assemblies`](assemblies/) — `FooParams` → `build()` → exploded parts

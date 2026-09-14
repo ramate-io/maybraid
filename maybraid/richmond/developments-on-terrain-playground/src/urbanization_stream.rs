@@ -18,7 +18,7 @@ use lod::presentation::{LodPresentKeepRegion, LodPresentRegion};
 use lod::{LodGeneratePlugin, LodGenerateRegionPlugin, LodPresentRegionPlugin, LodViewer};
 use procedural_common::NoiseParams;
 use richmond_development_models::{
-	BuiltDevelopment, DevelopmentCell, DevelopmentEntryStore, DevelopmentHosts, DevelopmentIndex,
+	BuiltDevelopment, DevelopmentCell, DevelopmentEntryStore, DevelopmentIndex,
 	PaddedStoreView, PaddedTerrainPresenter, TerrainWithPads,
 };
 use richmond_urbanization::{
@@ -27,7 +27,7 @@ use richmond_urbanization::{
 	DEFAULT_URBANIZATION_EXTENT_XZ, DEVELOPMENT_GENERATE_RADIUS_M, DEVELOPMENT_PRESENT_RADIUS_M,
 };
 
-use crate::hosts::DevelopmentHostRoot;
+use crate::hosts::spawn_tagged_host_entities;
 
 /// Default present ring multiplier (`1` → 1 km present / 3 km generate).
 pub const DEFAULT_URBANIZATION_STREAM_RADIUS: u32 = 1;
@@ -207,20 +207,9 @@ impl UrbanizationPresenterState {
 				Transform::from_xyz(center.x, elevation, center.z),
 			))
 			.id()];
-		entities.extend(spawn_tagged_hosts(commands, built));
+		entities.extend(spawn_tagged_host_entities(commands, built));
 		self.presented.insert(leaf_id, PresentedUrbanization { version, entities });
 	}
-}
-
-fn spawn_tagged_hosts(commands: &mut Commands, development: &impl DevelopmentHosts) -> Vec<Entity> {
-	let mut spawned = Vec::new();
-	for host in development.hosts() {
-		for entity in host.spawn(commands) {
-			commands.entity(entity).insert(DevelopmentHostRoot);
-			spawned.push(entity);
-		}
-	}
-	spawned
 }
 
 /// Keep / queue / bullseye resources the stream system drives.

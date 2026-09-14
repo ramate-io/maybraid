@@ -1,6 +1,6 @@
 # Furniture playground
 
-Isolated `/show` catalog for painted furniture assemblies. No world streamer — assembled world stays on `maybraid-world-playground`.
+Isolated `/show` catalog for painted furniture assemblies. Maybraid World paints the same slots when urbanization presents development hosts.
 
 ```bash
 cargo run -p furniture-playground -- show bed
