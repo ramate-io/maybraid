@@ -21,6 +21,10 @@ impl ThreatSource {
 			| Self::OBJECTIVE.0,
 	);
 
+	/// Injury, incoming fire, or a pack-shared finding. Raises perception to High.
+	pub const ALERT_PERCEPTION: Self =
+		Self(Self::RECEIVED_FIRE.0 | Self::RECEIVED_DAMAGE.0 | Self::SHARED.0);
+
 	pub const fn is_empty(self) -> bool {
 		self.0 == 0
 	}
@@ -71,6 +75,9 @@ mod tests {
 		assert!(ThreatSource::OBJECTIVE.is_first_hand());
 		assert!(!(ThreatSource::SHARED.is_first_hand()));
 		assert!((ThreatSource::LOCAL_SCAN | ThreatSource::SHARED).is_first_hand());
+		assert!(ThreatSource::RECEIVED_DAMAGE.intersects(ThreatSource::ALERT_PERCEPTION));
+		assert!(ThreatSource::SHARED.intersects(ThreatSource::ALERT_PERCEPTION));
+		assert!(!ThreatSource::LOCAL_SCAN.intersects(ThreatSource::ALERT_PERCEPTION));
 		Ok(())
 	}
 }

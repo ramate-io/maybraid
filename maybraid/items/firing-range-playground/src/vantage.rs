@@ -91,6 +91,7 @@ pub(crate) fn sync_range_threat_actors(
 				candidates_per_scan: 16,
 				max_known: 32,
 				threat_threshold: 0.2,
+				alert_radius: ThreatDiscoveryPolicy::ALERT_RANGE,
 			}));
 		}
 		if has_spotting && !has_knowledge {
