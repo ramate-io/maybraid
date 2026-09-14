@@ -1,4 +1,4 @@
-//! Shared unit-cube mesh + placeholder materials for procedural kits.
+//! Shared unit-cube mesh for gallery abutment walls (kits are GLBs).
 
 use bevy::prelude::*;
 
@@ -6,7 +6,6 @@ use bevy::prelude::*;
 #[derive(Resource, Clone)]
 pub struct FurnitureKitMeshes {
 	pub unit_cube: Handle<Mesh>,
-	pub placeholder: Handle<StandardMaterial>,
 	pub wall: Handle<StandardMaterial>,
 }
 
@@ -26,11 +25,6 @@ fn init_kit_meshes(
 ) {
 	commands.insert_resource(FurnitureKitMeshes {
 		unit_cube: meshes.add(Cuboid::from_length(1.0)),
-		placeholder: materials.add(StandardMaterial {
-			base_color: Color::srgb(0.55, 0.48, 0.40),
-			perceptual_roughness: 0.85,
-			..default()
-		}),
 		wall: materials.add(StandardMaterial {
 			base_color: Color::srgba(0.78, 0.76, 0.72, 0.55),
 			unlit: true,

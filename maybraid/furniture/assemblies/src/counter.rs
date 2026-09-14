@@ -1,8 +1,8 @@
 //! Counter: footer, inset volume, over-sailing top.
 
-use crate::kit_space::slab;
 use crate::palette::wood;
-use crate::parts::{Assembly, PartKind, PlacedPart};
+use crate::Assembly;
+use furniture_components::{slab, PartKind, PlacedPart};
 use richmond_building_components::FurnitureGeometry;
 
 /// Finish-only knobs. Topology does not change with [`Self::finish_seed`].

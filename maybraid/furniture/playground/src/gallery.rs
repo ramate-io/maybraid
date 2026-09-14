@@ -283,13 +283,14 @@ mod tests {
 			return Err(anyhow::anyhow!("unit chair should abut −Z"));
 		}
 		let assembly = try_assembly(&slot).ok_or_else(|| anyhow::anyhow!("chair paint"))?;
-		let back = assembly
-			.parts
-			.iter()
-			.find(|p| p.kind == PartKind::ChairBack)
-			.ok_or_else(|| anyhow::anyhow!("missing back"))?;
-		if back.placement.translation.z <= 0.0 {
-			return Err(anyhow::anyhow!("kit back stays on +Z before compose"));
+		if assembly.parts.iter().all(|p| p.kind != PartKind::ChairBack) {
+			return Err(anyhow::anyhow!("missing back"));
+		}
+		if (slot.placement.yaw - FurnitureAbutment::NegZ.facing_yaw()).abs() > 1e-5 {
+			return Err(anyhow::anyhow!(
+				"unit chair yaw should be NegZ facing, got {}",
+				slot.placement.yaw
+			));
 		}
 		Ok(())
 	}

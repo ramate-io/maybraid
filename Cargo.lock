@@ -3518,10 +3518,22 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "bevy",
- "lod",
+ "furniture-components",
  "material-ref",
  "richmond-building-components",
  "richmond-building-shaders",
+]
+
+[[package]]
+name = "furniture-components"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "lod",
+ "material-ref",
+ "richmond-building-components",
+ "scene-ref",
 ]
 
 [[package]]

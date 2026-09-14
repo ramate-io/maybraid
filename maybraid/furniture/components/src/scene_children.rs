@@ -1,0 +1,44 @@
+//! Posed furniture GLBs with deferred [`MaterialRef`] paint.
+//!
+//! One [`scene_ref::SceneRef`] per part — do not [`scene_ref::MultiSceneMerge`].
+
+use bevy::prelude::{Children, Transform, Visibility};
+use bevy::scene::prelude::{bsn, template_value, Scene};
+use lod::LodLazyPending;
+use material_ref::{MaterialRef, MaterialRefRoot, PropagateToDescendants};
+use richmond_building_components::{pose, scene_children, AssetPath};
+
+use crate::parts::PlacedPart;
+
+/// Authored kit under a transform, with propagating [`MaterialRefRoot`].
+pub fn posed_kit(
+	asset: AssetPath,
+	material: MaterialRef,
+	transform: Transform,
+) -> impl Scene + 'static {
+	let children: Vec<Box<dyn Scene>> = vec![Box::new((
+		bsn! {
+			template_value(MaterialRefRoot(material))
+			PropagateToDescendants
+			LodLazyPending
+		},
+		asset.scene_ref().scene(),
+	))];
+	bsn! {
+		template_value(transform)
+		Visibility::default()
+		Children [ {children} ]
+	}
+}
+
+/// Instance each part as its own posed GLB.
+pub fn assembly_scene(parts: &[PlacedPart]) -> impl Scene + 'static {
+	let children: Vec<Box<dyn Scene>> = parts
+		.iter()
+		.map(|part| {
+			Box::new(posed_kit(part.kind.asset_path(), part.material.clone(), pose(part.placement)))
+				as Box<dyn Scene>
+		})
+		.collect();
+	scene_children(children)
+}

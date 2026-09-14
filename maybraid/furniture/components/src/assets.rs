@@ -1,8 +1,8 @@
-//! Runtime paths for authored furniture GLBs (under `maybraid/assets`).
+//! Runtime paths for furniture GLBs (under `maybraid/assets`).
 //!
-//! Blender sources live in `maybraid/art/furniture/`. Export scene 0 into these
-//! paths; skip `.blend1` autosaves. Until the GLBs land, assemblies instance
-//! procedural cuboids that fill the remapped kit AABB in [`crate::kit_space`].
+//! Sources are the Blender kits from [`ecb5a8a`](https://github.com/ramate-io/maybraid/commit/ecb5a8a31d2894311fa690cfbe8ab01cee385fba)
+//! in `maybraid/art/furniture/` (skip `.blend1`). Export scene 0 into these
+//! paths. Authored space is documented in [`crate::kit_space`].
 
 use richmond_building_components::AssetPath;
 
@@ -10,7 +10,7 @@ use richmond_building_components::AssetPath;
 pub const BEDFRAME_001: AssetPath = AssetPath::new("furniture/bed/bedframe/bedframe_001.glb");
 /// Mattress kit (same authored box as the frame).
 pub const MATTRESS_001: AssetPath = AssetPath::new("furniture/bed/mattress/mattress_001.glb");
-/// Covers kit (same authored box as the mattress).
+/// Covers kit (same authored box as the mattress — same slot transform).
 pub const COVERS_001: AssetPath = AssetPath::new("furniture/bed/covers/covers_001.glb");
 
 /// Chest trunk.
@@ -22,7 +22,7 @@ pub const CHEST_LID_001: AssetPath = AssetPath::new("furniture/chest/lid/lid_001
 pub const CHAIR_LEG_001: AssetPath = AssetPath::new("furniture/chair/legs/chair_leg_001.glb");
 /// Chair seat.
 pub const CHAIR_SEAT_001: AssetPath = AssetPath::new("furniture/chair/seat/chair_seat_001.glb");
-/// Chair back (authored \(+Y\)).
+/// Chair back (authored \(+Y\) → engine \(+Z\)).
 pub const CHAIR_BACK_001: AssetPath = AssetPath::new("furniture/chair/back/chair_back_001.glb");
 
 /// Counter footer.

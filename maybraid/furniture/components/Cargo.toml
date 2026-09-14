@@ -1,5 +1,5 @@
 [package]
-name = "furniture-assemblies"
+name = "furniture-components"
 version = { workspace = true }
 edition = { workspace = true }
 license = { workspace = true }
@@ -11,10 +11,10 @@ rust-version = { workspace = true }
 
 [dependencies]
 bevy = { workspace = true }
-furniture-components = { workspace = true }
+lod = { workspace = true }
 material-ref = { workspace = true }
 richmond-building-components = { workspace = true }
-richmond-building-shaders = { workspace = true }
+scene-ref = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }

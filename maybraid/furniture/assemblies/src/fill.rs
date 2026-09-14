@@ -6,7 +6,8 @@ use crate::bed::BedParams;
 use crate::chair::ChairParams;
 use crate::chest::ChestParams;
 use crate::counter::CounterParams;
-use crate::parts::{pose_parts, Assembly, PlacedPart};
+use crate::Assembly;
+use furniture_components::{pose_parts, PlacedPart};
 
 /// Paint [`FurnitureGeometry::Bed`] / [`Chair`](FurnitureGeometry::Chair) /
 /// [`Chest`](FurnitureGeometry::Chest) / [`Counter`](FurnitureGeometry::Counter).
@@ -25,7 +26,7 @@ pub fn try_assembly(node: &FurnitureNode) -> Option<Assembly> {
 /// Unit-slot parts composed under the slot placement (yaw / scale / abutment).
 pub fn posed_assembly(node: &FurnitureNode) -> Option<Vec<PlacedPart>> {
 	let assembly = try_assembly(node)?;
-	Some(pose_parts(node, &assembly.parts))
+	Some(pose_parts(node.placement, &assembly.parts))
 }
 
 /// Thin wall just past the kit \(+Z\) face (already aimed at [`FurnitureNode::abutment`]).

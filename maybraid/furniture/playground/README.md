@@ -12,4 +12,4 @@ cargo run -p furniture-playground -- show gallery
 
 In-game, press `/` for the same clap commands.
 
-`/show gallery` packs a wall-flush common bedroom, a galley kitchen, and living-room seating with the Richmond packers, then adds authored extremes (flat bed, tall chair, long counter, wall vs free, two finish seeds). Slot wireframes stay visible; painted kinds (bed / chair / chest / counter) explode into cuboid stand-ins until the furniture GLBs exist.
+`/show gallery` packs a wall-flush common bedroom, a galley kitchen, and living-room seating with the Richmond packers, then adds authored extremes (flat bed, tall chair, long counter, wall vs free, two finish seeds). Slot wireframes stay visible; painted kinds instance the furniture GLBs from `furniture-components`.

@@ -1,8 +1,8 @@
 //! Bed: frame, mattress, covers.
 
-use crate::kit_space::slab;
 use crate::palette::{cloth, wood};
-use crate::parts::{Assembly, PartKind, PlacedPart};
+use crate::Assembly;
+use furniture_components::{slab, PartKind, PlacedPart};
 use richmond_building_components::FurnitureGeometry;
 
 /// Finish-only knobs. Topology does not change with [`Self::finish_seed`].
@@ -22,7 +22,8 @@ impl BedParams {
 	}
 }
 
-/// Frame under an inset mattress; covers share the mattress volume with a larger plan.
+/// Frame under an inset mattress. Covers use the **same** transform as the
+/// mattress — the authored covers GLB already carries the cloth lip.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Bed {
 	pub finish_seed: u64,
@@ -32,6 +33,7 @@ pub struct Bed {
 impl Bed {
 	pub fn from_params(params: BedParams) -> Self {
 		let seed = params.finish_seed;
+		let mattress = slab(0.92, 0.32, 0.92);
 		Self {
 			finish_seed: seed,
 			parts: vec![
@@ -42,12 +44,12 @@ impl Bed {
 				},
 				PlacedPart {
 					kind: PartKind::Mattress,
-					placement: slab(0.92, 0.32, 0.92),
+					placement: mattress,
 					material: cloth(seed, 2),
 				},
 				PlacedPart {
 					kind: PartKind::Covers,
-					placement: slab(0.98, 0.32, 0.92),
+					placement: mattress,
 					material: cloth(seed, 3),
 				},
 			],
@@ -71,12 +73,8 @@ impl Bed {
 mod tests {
 	use super::*;
 
-	fn xz(part: &PlacedPart) -> f32 {
-		part.placement.scale.x.min(part.placement.scale.z)
-	}
-
 	#[test]
-	fn covers_oversize_the_mattress_plan() -> anyhow::Result<()> {
+	fn covers_share_the_mattress_transform() -> anyhow::Result<()> {
 		let bed = BedParams::unit_from_num(1).build();
 		let mattress = bed
 			.parts
@@ -88,8 +86,8 @@ mod tests {
 			.iter()
 			.find(|p| p.kind == PartKind::Covers)
 			.ok_or_else(|| anyhow::anyhow!("missing covers"))?;
-		if xz(covers) <= xz(mattress) {
-			return Err(anyhow::anyhow!("covers must oversail the mattress"));
+		if mattress.placement != covers.placement {
+			return Err(anyhow::anyhow!("covers must use the mattress transform"));
 		}
 		Ok(())
 	}

@@ -1,8 +1,8 @@
 //! Chest: trunk plus a lid on top.
 
-use crate::kit_space::slab;
 use crate::palette::wood;
-use crate::parts::{Assembly, PartKind, PlacedPart};
+use crate::Assembly;
+use furniture_components::{slab, PartKind, PlacedPart};
 use richmond_building_components::FurnitureGeometry;
 
 /// Finish-only knobs. Topology does not change with [`Self::finish_seed`].
@@ -65,9 +65,9 @@ impl Chest {
 mod tests {
 	use super::*;
 
-	fn y_range(part: &PlacedPart) -> (f32, f32) {
-		let half = part.placement.scale.y * 0.5;
-		(part.placement.translation.y - half, part.placement.translation.y + half)
+	fn y_span(part: &PlacedPart) -> (f32, f32) {
+		let y0 = part.placement.translation.y;
+		(y0, y0 + part.placement.scale.y)
 	}
 
 	#[test]
@@ -83,8 +83,8 @@ mod tests {
 			.iter()
 			.find(|p| p.kind == PartKind::ChestLid)
 			.ok_or_else(|| anyhow::anyhow!("missing lid"))?;
-		let (_, trunk_top) = y_range(trunk);
-		let (lid_bottom, _) = y_range(lid);
+		let (_, trunk_top) = y_span(trunk);
+		let (lid_bottom, _) = y_span(lid);
 		if (lid_bottom - trunk_top).abs() > 1e-4 {
 			return Err(anyhow::anyhow!(
 				"lid bottom {lid_bottom} should meet trunk top {trunk_top}"
