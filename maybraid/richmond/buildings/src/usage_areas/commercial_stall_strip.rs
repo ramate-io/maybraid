@@ -9,8 +9,8 @@
 //! stall uniquely owns ≥1 passage; runs that cannot host their own stall
 //! (including leading/trailing corner overhangs past the last door, or a
 //! `TooSmall` bay) are absorbed by extending the previous stall’s bounds.
-//! Soft-fail the whole strip if it is shorter than the minimum along length
-//! or has no passages.
+//! Soft-fail the whole strip if it is shorter than the minimum along length.
+//! A strip with no passages still gets one lounge stall so the bay is not a void.
 
 pub mod commercial_stall;
 
@@ -82,7 +82,8 @@ impl CommercialStallStripPlan {
 
 		let passages = collect_passages_along(&confines.openings, along_x, min, along);
 		if passages.is_empty() {
-			return Err(FitError::TooSmall { reason: "no passage" });
+			let (stall, _) = CommercialStall::fit_to_confines(confines, noise)?;
+			return Ok(Self { parameterized: params, stalls: vec![stall] });
 		}
 
 		let min_bay = params.bay_width.clamp(MIN_STALL_ALONG, along.max(MIN_STALL_ALONG));
@@ -456,12 +457,13 @@ mod tests {
 	}
 
 	#[test]
-	fn without_passage_strip_fails() {
+	fn without_passage_strip_gets_a_lounge() {
 		let confines =
 			Confines::from_bounds(Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(12.0, 3.5, 5.0)));
-		let err =
-			CommercialStallStrip::fit_to_confines(&confines, NoiseParams::default()).unwrap_err();
-		assert!(matches!(err, FitError::TooSmall { reason } if reason.contains("passage")));
+		let (strip, _) =
+			CommercialStallStrip::fit_to_confines(&confines, NoiseParams::default()).unwrap();
+		assert_eq!(strip.stalls().len(), 1);
+		assert!(!strip.label_nodes_for_level(LodSceneLevel::High).flatten().is_empty());
 	}
 
 	#[test]

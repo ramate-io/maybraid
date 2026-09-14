@@ -97,11 +97,13 @@ impl CommercialStallPlan {
 #[derive(Debug, Clone, PartialEq)]
 pub struct CommercialStall {
 	pub plan: CommercialStallPlan,
+	/// Bay the stall claimed — used to drop a residual chest in empty lounges.
+	pub confines: Confines,
 }
 
 impl CommercialStall {
-	pub fn from_plan(plan: CommercialStallPlan) -> Self {
-		Self { plan }
+	pub fn from_plan(plan: CommercialStallPlan, confines: Confines) -> Self {
+		Self { plan, confines }
 	}
 
 	pub fn interior(&self) -> &CommercialStallInterior {
@@ -116,7 +118,7 @@ impl Fit for CommercialStall {
 	) -> Result<(Self, FillableRegions), FitError> {
 		let params = CommercialStallParameterized::sample(confines, noise);
 		let (plan, regions) = CommercialStallPlan::from_parameterized(params, confines, noise)?;
-		Ok((Self::from_plan(plan), regions))
+		Ok((Self::from_plan(plan, confines.clone()), regions))
 	}
 }
 

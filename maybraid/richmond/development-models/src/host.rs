@@ -176,7 +176,7 @@ impl DevelopmentHost {
 			Self::SkybridgeHall(building, transform) => spawn(commands, building, *transform),
 		};
 		if let Some(place) = self.discoverable_place() {
-			for entity in &entities {
+			if let Some(entity) = entities.first() {
 				commands.entity(*entity).insert(place);
 			}
 		}

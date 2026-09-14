@@ -123,7 +123,8 @@ impl BuildingComponents for MixedUseLesHallesStorey {
 	fn furniture_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FurnitureNode> {
 		match self {
 			Self::Livable { usage, .. } => usage.furniture_nodes_for_level(level),
-			Self::Arcade { .. } | Self::Commercial { .. } => Layers::new(),
+			Self::Commercial { usage, .. } => usage.furniture_nodes_for_level(level),
+			Self::Arcade { .. } => Layers::new(),
 		}
 	}
 
@@ -460,6 +461,28 @@ mod tests {
 				"expected inbound slot {slot} in {:?}",
 				tower.shaft_slots
 			);
+		}
+	}
+
+	#[test]
+	fn filled_floors_emit_furniture() {
+		let confines = Confines::from_bounds(large_tower_bounds());
+		for seed in [7, 42, 1337] {
+			let noise = NoiseParams { seed, ..NoiseParams::default() };
+			let (tower, _) = MixedUseLesHallesMonotower::fit_to_confines(&confines, noise).unwrap();
+			for (i, floor) in tower.floors.iter().enumerate() {
+				if floor.is_arcade() {
+					continue;
+				}
+				let slots = floor.furniture_nodes_for_level(LodSceneLevel::High).flatten();
+				if floor.is_commercial() {
+					continue;
+				}
+				assert!(
+					!slots.is_empty(),
+					"seed {seed} livable floor {i} should emit furniture"
+				);
+			}
 		}
 	}
 
