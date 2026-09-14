@@ -4,7 +4,7 @@
 //! Two horizontal shaft faces allocate one orthogonal box. Offset / skew / size
 //! mismatch is another well (or a hall), not a polyline. Walk-off is a landing.
 //! The last tread arrives at that landing's interior edge (the back-point).
-//! Extra laps for going exist only when headroom still holds. Run-and-landing
+//! Circuit wrapping stays at one lap (a tight going is accepted). Run-and-landing
 //! may add one routing switchback so a leftover U is not required.
 
 mod laws;
@@ -461,7 +461,7 @@ mod tests {
 	}
 
 	#[test]
-	fn tall_well_adds_turns_to_protect_going() {
+	fn tall_well_keeps_one_circuit() {
 		let short = WellAabb::from_plan(
 			Vec3::new(-1.2, 0.0, -1.2),
 			Vec3::new(1.2, 3.0, 1.2),
@@ -470,25 +470,35 @@ mod tests {
 			TREAD_FILL_DEFAULT,
 		);
 		let tall = WellAabb::from_plan(
-			Vec3::new(-1.2, 0.0, -1.2),
-			Vec3::new(1.2, 6.0, 1.2),
-			WellSide::NegZ,
-			WellSide::NegZ,
-			TREAD_FILL_DEFAULT,
+			Vec3::new(-1.7, 0.0, -1.7),
+			Vec3::new(1.7, 4.8, 1.7),
+			WellSide::PosX,
+			WellSide::NegX,
+			0.55,
 		);
 		let a = ConnectingStairwell::from_well(PanelStyle::RoughStonework, short);
-		let b = ConnectingStairwell::from_well(PanelStyle::RoughStonework, tall);
-		assert!(b.stairs().len() > a.stairs().len());
-		for s in b.stairs() {
-			let Stair::Straight(g) = &s.geometry else {
-				panic!("spiral well should emit Straight treads");
+		let b = ConnectingStairwell::from_well_kind(
+			PanelStyle::RoughStonework,
+			tall,
+			StairwellKind::Rectangular,
+		);
+		let spiral_turns = |well: &ConnectingStairwell, aabb: &WellAabb| {
+			let going = match &well.stairs()[0].geometry {
+				Stair::Straight(g) => g.going_per_tread(),
+				Stair::Spiral(_) => panic!("expected straight treads"),
 			};
-			assert!(
-				g.going_per_tread() + 1e-3 >= laws::MIN_GOING,
-				"going {} below floor",
-				g.going_per_tread()
-			);
-		}
+			let center = aabb.center_xz();
+			let p = well.stairs()[0].placement.translation;
+			let radius = (Vec2::new(p.x, p.z) - center).length().max(1e-4);
+			let intervals = well.stairs().len().saturating_sub(1).max(1) as f32;
+			going * intervals / (std::f32::consts::TAU * radius)
+		};
+		assert!(spiral_turns(&a, &short) < 1.5, "short same-side spiral must stay one circuit");
+		assert_eq!(
+			b.stairs().len(),
+			2,
+			"4.8 m opposite-face keep well should stay one L, not a second lap"
+		);
 	}
 
 	#[test]

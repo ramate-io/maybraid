@@ -3,9 +3,8 @@
 //! Hug each wall CCW. Corner pads are axis-aligned and at least as wide as the
 //! tread so the last leading meets the next flight. A circuit wall with no
 //! treads still gets a full-face strip so two runs are not stranded across a
-//! gap. The walk-off landing is a door strip. Extra full laps only when going
-//! would fall under [`super::laws::MIN_GOING`] and rise-per-lap still has
-//! [`super::laws::MIN_HEADROOM`]. A skinny well may collapse the hole.
+//! gap. The walk-off landing is a door strip. One circuit from walk-on to
+//! walk-off. A skinny well may collapse the hole.
 
 use bevy_math::{Vec2, Vec3};
 use richmond_building_components::panels::PanelStyle;

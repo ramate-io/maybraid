@@ -12,7 +12,7 @@ use crate::fit::{Confines, FillableRegions, Fit, FitError};
 
 use super::floor_plan::{LesHallesFloorPlan, LesHallesOpeningProgram};
 use super::parameterized::LesHallesParameterized;
-use super::usage_plan::{LesHallesArcadeUsage, LesHallesUsagePlan};
+use super::usage_plan::LesHallesArcadeUsage;
 
 /// Full Les Halles ground storey: ring shell plus empty arcade usage.
 #[derive(Debug, Clone, PartialEq)]
@@ -28,7 +28,8 @@ impl LesHallesArcadeStorey {
 		noise: NoiseParams,
 	) -> Result<(Self, FillableRegions), FitError> {
 		let regions = floor_plan.fillable_regions();
-		let (usage, residual) = LesHallesArcadeUsage::paint(regions, noise)?;
+		let keep_outs = LesHallesArcadeUsage::pillar_keep_outs_of(&floor_plan);
+		let (usage, residual) = LesHallesArcadeUsage::paint_avoiding(regions, noise, &keep_outs)?;
 		Ok((Self { floor_plan, usage }, residual))
 	}
 }
@@ -46,7 +47,8 @@ impl Fit for LesHallesArcadeStorey {
 			crate::shells::rect_ring_floor::RectRingFloorSlab::None,
 			LesHallesOpeningProgram::GroundArcade,
 		)?;
-		let (usage, residual) = LesHallesArcadeUsage::paint(regions, noise)?;
+		let keep_outs = LesHallesArcadeUsage::pillar_keep_outs_of(&floor_plan);
+		let (usage, residual) = LesHallesArcadeUsage::paint_avoiding(regions, noise, &keep_outs)?;
 		Ok((Self { floor_plan, usage }, residual))
 	}
 }

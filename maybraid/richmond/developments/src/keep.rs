@@ -348,6 +348,9 @@ fn keep_stairwells(
 	}
 	let last_well_i = floors - 2;
 	let mut out = Vec::with_capacity(floors - 1);
+	// Same-face walk-on / walk-off (Les Halles / gallery stacked). Rectangular
+	// fit hugs four walls; stacked wells share this face so the upper slab
+	// is the next run-in, not a dead-end landing on the opposite side.
 	for i in 0..=last_well_i {
 		let y0 = origin.y + i as f32 * TOWER_STOREY_HEIGHT;
 		let y1 = y0 + TOWER_STOREY_HEIGHT;
@@ -355,7 +358,7 @@ fn keep_stairwells(
 			Vec3::new(origin.x - well_half, y0, origin.z - well_half),
 			Vec3::new(origin.x + well_half, y1, origin.z + well_half),
 			WellSide::PosX,
-			WellSide::NegX,
+			WellSide::PosX,
 			KEEP_TREAD_FILL,
 		);
 		out.push(
@@ -495,6 +498,49 @@ mod tests {
 		);
 		anyhow::ensure!(intermediate.len() == 4, "intermediate floors keep a stair hole");
 		anyhow::ensure!(nodes.len() > ground.len(), "upper storeys should add holed floors");
+		Ok(())
+	}
+
+	#[test]
+	fn keep_wells_walk_on_and_off_the_same_face() -> anyhow::Result<()> {
+		let origin = Vec3::ZERO;
+		let wells = keep_stairwells(origin, 2.4, 4, StairwellKind::Rectangular);
+		anyhow::ensure!(wells.len() == 3, "four floors → three wells");
+		for (i, well) in wells.iter().enumerate() {
+			let aabb = well.well();
+			anyhow::ensure!(
+				aabb.walk_on == WellSide::PosX && aabb.walk_off == WellSide::PosX,
+				"well {i} should share one face"
+			);
+			if i + 1 < wells.len() {
+				anyhow::ensure!(
+					aabb.walk_off == wells[i + 1].well().walk_on,
+					"stacked wells should share the walk-off face"
+				);
+				anyhow::ensure!(well.upper_landing().is_none(), "shared-face omit");
+			} else {
+				anyhow::ensure!(well.upper_landing().is_some(), "last-storey pad");
+			}
+		}
+
+		let last = wells.last().expect("wells");
+		anyhow::ensure!(
+			last.stairs().len() == 4,
+			"same-face circuit should hug four walls, got {}",
+			last.stairs().len()
+		);
+		anyhow::ensure!(
+			last.mid_landings().len() == 3,
+			"four flights need three corner pads, got {}",
+			last.mid_landings().len()
+		);
+
+		let circular = keep_stairwells(origin, 2.4, 3, StairwellKind::Circular);
+		anyhow::ensure!(circular.len() == 2);
+		for well in &circular {
+			let aabb = well.well();
+			anyhow::ensure!(aabb.walk_on == WellSide::PosX && aabb.walk_off == WellSide::PosX);
+		}
 		Ok(())
 	}
 }

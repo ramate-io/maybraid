@@ -177,7 +177,9 @@ fn finish_tower(
 		)?;
 		let floor_noise = floor_noise(noise, i);
 		tower.floors[i] = if arcade {
-			let (usage, _) = LesHallesArcadeUsage::paint(regions, floor_noise)?;
+			let keep_outs = LesHallesArcadeUsage::pillar_keep_outs_of(&floor_plan);
+			let (usage, _) =
+				LesHallesArcadeUsage::paint_avoiding(regions, floor_noise, &keep_outs)?;
 			MixedUseLesHallesStorey::Arcade { floor_plan, usage, wall_material: None }
 		} else if commercial {
 			let (usage, _) = LesHallesCommercialUsage::paint(regions, floor_noise)?;

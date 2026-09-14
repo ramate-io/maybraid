@@ -17,7 +17,9 @@ use richmond_building_components::panels::PanelStyle;
 use richmond_building_components::{
 	BuildingComponents, BuildingStructuralLodProbe, JointNode, Layers, PanelNode,
 };
-use richmond_buildings::usage_areas::furniture_util::chest_in_confines;
+use richmond_buildings::usage_areas::furniture_util::{
+	chest_in_confines_clear, pillar_keep_outs, PILLAR_CHEST_PAD,
+};
 use richmond_buildings::{
 	Confines, ConnectingStairwell, EndCap, FillableRegions, Fit, FitError, FittedRectangle,
 	LesHallesFloorPlan, Opening, OpeningId, OpeningLabel, Openings, Overhang, PanelPillar,
@@ -313,8 +315,13 @@ impl Fit for RingFort {
 		let (colonnade, roof) = gallery_colonnade_and_roof(&last, &keeps);
 		let shafts = terrace_shafts(&last);
 		open_last_storey_for_terrace(&mut ring);
-		let terrace = gallery_terrace(&last, &shafts)
-			.with_chests(terrace_chests(&last, &keeps, &shafts, noise));
+		let terrace = gallery_terrace(&last, &shafts).with_chests(terrace_chests(
+			&last,
+			&keeps,
+			&shafts,
+			colonnade.pillars(),
+			noise,
+		));
 		let terrace_stairs = terrace_stairs(&last, &shafts);
 
 		let mut nodes = Vec::with_capacity(5);
@@ -607,23 +614,29 @@ fn terrace_chests(
 	plan: &LesHallesFloorPlan,
 	keeps: &[RingFortKeep],
 	shafts: &[Aabb3d],
+	colonnade: &PanelPillarLine,
 	noise: NoiseParams,
 ) -> Vec<FurnitureNode> {
 	let y0 = plan.center_xz.y + plan.storey_height;
 	let y1 = y0 + TERRACE_CHEST_HEIGHT;
+	let keep_outs = pillar_keep_outs(colonnade.pillars.iter(), PILLAR_CHEST_PAD);
 	let mut fills = Vec::new();
 	let mut salt = 500u32;
 	for aabb in colonnade_undercroft_aabbs(plan, keeps, y0, y1) {
 		for chunk in split_aabb_along(aabb, COLONNADE_CHEST_CHUNK) {
 			salt += 1;
-			if let Some(fill) = chest_in_confines(&Confines::from_bounds(chunk), noise, salt) {
+			if let Some(fill) =
+				chest_in_confines_clear(&Confines::from_bounds(chunk), noise, salt, &keep_outs)
+			{
 				fills.push(fill);
 			}
 		}
 	}
 	for aabb in keep_apron_aabbs(plan, keeps, y0, y1) {
 		salt += 1;
-		if let Some(fill) = chest_in_confines(&Confines::from_bounds(aabb), noise, salt) {
+		if let Some(fill) =
+			chest_in_confines_clear(&Confines::from_bounds(aabb), noise, salt, &keep_outs)
+		{
 			fills.push(fill);
 		}
 	}

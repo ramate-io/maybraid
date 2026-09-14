@@ -22,8 +22,8 @@ use richmond_building_components::{BuildingComponents, Layers};
 
 use crate::fit::{FillableRegions, Fit, FitError, SpaceKind};
 use crate::usage_areas::furniture_util::{
-	as_closet_if_internal, chests_for_regions, confines_from_label, occasional_chest_in_confines,
-	FurnitureFill,
+	as_closet_if_internal, chests_for_regions, chests_for_regions_clear, confines_from_label,
+	occasional_chest_in_confines, pillar_keep_outs, FurnitureFill, PILLAR_CHEST_PAD,
 };
 use crate::usage_areas::{CommercialStallInterior, CommercialStallStrip};
 
@@ -149,6 +149,26 @@ impl LesHallesArcadeUsage {
 	pub fn is_empty(&self) -> bool {
 		self.residual_chests.is_empty()
 	}
+
+	/// Paint leftover chests, staying clear of arcade piers.
+	pub fn paint_avoiding(
+		regions: FillableRegions,
+		noise: NoiseParams,
+		keep_outs: &[bevy_math::bounding::Aabb2d],
+	) -> Result<(Self, FillableRegions), FitError> {
+		let residual_chests = chests_for_regions_clear(&regions.within, noise, keep_outs);
+		Ok((Self { residual_chests }, regions))
+	}
+
+	/// Keep-outs for [`LesHallesFloorPlan::arcade_pillars`].
+	pub fn pillar_keep_outs_of(
+		plan: &super::floor_plan::LesHallesFloorPlan,
+	) -> Vec<bevy_math::bounding::Aabb2d> {
+		pillar_keep_outs(
+			plan.arcade_pillars.iter().flat_map(|line| &line.pillars),
+			PILLAR_CHEST_PAD,
+		)
+	}
 }
 
 impl LesHallesUsagePlan for LesHallesArcadeUsage {
@@ -156,8 +176,7 @@ impl LesHallesUsagePlan for LesHallesArcadeUsage {
 		regions: FillableRegions,
 		noise: NoiseParams,
 	) -> Result<(Self, FillableRegions), FitError> {
-		let residual_chests = chests_for_regions(&regions.within, noise);
-		Ok((Self { residual_chests }, regions))
+		Self::paint_avoiding(regions, noise, &[])
 	}
 }
 

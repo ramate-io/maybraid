@@ -1,13 +1,14 @@
 //! Shared furniture placement helpers for usage-area fills.
 
-use bevy_math::bounding::Aabb3d;
-use bevy_math::Vec3;
+use bevy_math::bounding::{Aabb2d, Aabb3d};
+use bevy_math::{Vec2, Vec3};
 use procedural_common::{aabb3_to_plan, NoiseConfig, NoiseParams, PlanAxes};
 use richmond_building_components::furniture::{FurnitureGeometry, FurnitureNode};
 use richmond_building_components::placed::Placement;
 use richmond_building_components::{LabelNode, LabelStyle};
 
 use crate::fit::{aabb_xz_extent, Confines, FillRegion, SpaceKind};
+use crate::paneling::pillar::PanelPillar;
 use crate::placer::{try_free_extent, try_wall_long, FreeExtentKnobs, WallLongKnobs, WALL_EPS};
 use crate::usage_areas::label_util::label_filling_aabb;
 use crate::usage_areas::plan_geom::host_xz;
@@ -23,6 +24,8 @@ const MAX_COMMERCIAL_CHAIRS: usize = 4;
 pub const COUNTER_SLOT_HEIGHT: f32 = 1.0;
 /// Walkway leftovers get a chest less often than closet / failed-strip pockets.
 const WALKWAY_CHEST_RATE: f32 = 0.35;
+/// Plan pad around a column so a residual chest does not kiss or intersect it.
+pub const PILLAR_CHEST_PAD: f32 = 0.45;
 
 /// Label + furniture kit pair for one placed AABB.
 #[derive(Debug, Clone, PartialEq)]
@@ -149,11 +152,39 @@ pub fn as_closet_if_internal(region: FillRegion) -> FillRegion {
 	}
 }
 
+/// Square keep-outs around columns, padded so a chest cannot sit on a pier.
+pub fn pillar_keep_outs<'a>(
+	pillars: impl IntoIterator<Item = &'a PanelPillar>,
+	pad: f32,
+) -> Vec<Aabb2d> {
+	let pad = pad.max(0.0);
+	pillars
+		.into_iter()
+		.map(|pillar| {
+			let half = pillar.width * 0.5 + pad;
+			Aabb2d {
+				min: Vec2::new(pillar.center.x - half, pillar.center.z - half),
+				max: Vec2::new(pillar.center.x + half, pillar.center.z + half),
+			}
+		})
+		.collect()
+}
+
 /// One wall-hugging chest inside `confines`, or `None` if the pocket is too tight.
 pub fn chest_in_confines(
 	confines: &Confines,
 	noise: NoiseParams,
 	salt: u32,
+) -> Option<FurnitureFill> {
+	chest_in_confines_clear(confines, noise, salt, &[])
+}
+
+/// [`chest_in_confines`] that stays clear of `keep_outs` (columns, shafts).
+pub fn chest_in_confines_clear(
+	confines: &Confines,
+	noise: NoiseParams,
+	salt: u32,
+	keep_outs: &[Aabb2d],
 ) -> Option<FurnitureFill> {
 	let host3 = &confines.bounds;
 	let fp = aabb_xz_extent(host3);
@@ -171,7 +202,7 @@ pub fn chest_in_confines(
 	let aabb = try_wall_long(
 		host3,
 		host,
-		&[],
+		keep_outs,
 		&cfg,
 		salt,
 		WallLongKnobs { extent, wall_eps: WALL_EPS, attempts: 16 },
@@ -180,7 +211,7 @@ pub fn chest_in_confines(
 		try_free_extent(
 			host3,
 			host,
-			&[],
+			keep_outs,
 			&cfg,
 			salt.wrapping_add(17),
 			FreeExtentKnobs { extent, prefer_wall: true, wall_eps: WALL_EPS, attempts: 16 },
@@ -201,6 +232,15 @@ pub fn chest_in_confines(
 /// Walkways are occasional (`WALKWAY_CHEST_RATE`). Failed strips and closets
 /// always try.
 pub fn chests_for_regions(regions: &[FillRegion], noise: NoiseParams) -> Vec<FurnitureFill> {
+	chests_for_regions_clear(regions, noise, &[])
+}
+
+/// [`chests_for_regions`] that stays clear of `keep_outs` (arcade / colonnade piers).
+pub fn chests_for_regions_clear(
+	regions: &[FillRegion],
+	noise: NoiseParams,
+	keep_outs: &[Aabb2d],
+) -> Vec<FurnitureFill> {
 	let cfg = NoiseConfig::new(noise);
 	regions
 		.iter()
@@ -215,7 +255,7 @@ pub fn chests_for_regions(regions: &[FillRegion], noise: NoiseParams) -> Vec<Fur
 			{
 				return None;
 			}
-			chest_in_confines(&region.confines, noise, salt)
+			chest_in_confines_clear(&region.confines, noise, salt, keep_outs)
 		})
 		.collect()
 }
@@ -313,5 +353,40 @@ mod tests {
 			}
 		}
 		assert!(any, "walkway leftovers should get an occasional chest");
+	}
+
+	#[test]
+	fn residual_chest_stays_clear_of_a_column() {
+		use crate::paneling::pillar::PanelPillar;
+		let host =
+			Confines::from_bounds(Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(8.0, 3.0, 4.0)));
+		let pillar = PanelPillar::rough_stone(Vec3::new(1.0, 0.0, 0.5), 0.7, 3.0);
+		let keep_outs = pillar_keep_outs(std::iter::once(&pillar), PILLAR_CHEST_PAD);
+		let mut placed = 0usize;
+		for seed in 0..20 {
+			let Some(fill) = chest_in_confines_clear(
+				&host,
+				NoiseParams { seed, ..NoiseParams::default() },
+				1,
+				&keep_outs,
+			) else {
+				continue;
+			};
+			placed += 1;
+			let c = fill.furniture.placement.translation;
+			let half = fill.furniture.placement.scale * 0.5;
+			let chest = Aabb2d {
+				min: Vec2::new(c.x - half.x, c.z - half.z),
+				max: Vec2::new(c.x + half.x, c.z + half.z),
+			};
+			assert!(
+				keep_outs.iter().all(|k| chest.max.x <= k.min.x + 1e-3
+					|| k.max.x <= chest.min.x + 1e-3
+					|| chest.max.y <= k.min.y + 1e-3
+					|| k.max.y <= chest.min.y + 1e-3),
+				"chest {chest:?} overlapped column keep-out"
+			);
+		}
+		assert!(placed > 0, "gallery leftover should still place a chest beside the pier");
 	}
 }
