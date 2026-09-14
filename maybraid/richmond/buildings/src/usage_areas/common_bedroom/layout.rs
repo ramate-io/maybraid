@@ -24,10 +24,10 @@ use crate::usage_areas::enclosed_room::{EnclosedRoom, EnclosedRoomMins, Enclosed
 
 use super::parameterized::SCOPE;
 
-const DOOR_WIDTH_MIN: f32 = 0.65;
-const DOOR_WIDTH_MAX: f32 = 1.15;
-const DOOR_HEIGHT_MIN: f32 = 1.8;
-const DOOR_HEIGHT_MAX: f32 = 2.3;
+const DOOR_WIDTH_MIN: f32 = 0.65 * crate::usage_areas::plan_access::DOOR_SIZE_SCALE;
+const DOOR_WIDTH_MAX: f32 = 1.15 * crate::usage_areas::plan_access::DOOR_SIZE_SCALE;
+const DOOR_HEIGHT_MIN: f32 = 1.8 * crate::usage_areas::plan_access::DOOR_SIZE_SCALE;
+const DOOR_HEIGHT_MAX: f32 = 2.3 * crate::usage_areas::plan_access::DOOR_SIZE_SCALE;
 const DOOR_HEADER_MIN: f32 = 0.2;
 /// Plan pad kept between closet↔closet and closet↔ensuite (avoids thin wall slivers).
 const PARTITION_SEP: f32 = 1.0;

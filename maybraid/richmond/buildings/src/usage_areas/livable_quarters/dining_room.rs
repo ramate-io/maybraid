@@ -24,6 +24,7 @@ pub struct DiningRoom {
 impl DiningRoom {
 	pub fn from_plan(plan: DiningRoomPlan, confines: &Confines) -> Self {
 		let style = plan.parameterized.style;
+		let host = &confines.bounds;
 		let tables = plan
 			.packed
 			.tables
@@ -33,6 +34,7 @@ impl DiningRoom {
 					style,
 					"DiningTable",
 					aabb,
+					host,
 					confines.roll,
 					FurnitureNode::bedroom_furniture,
 				)
@@ -47,6 +49,7 @@ impl DiningRoom {
 					style,
 					"DiningFiller",
 					aabb,
+					host,
 					confines.roll,
 					FurnitureNode::nightstand,
 				)

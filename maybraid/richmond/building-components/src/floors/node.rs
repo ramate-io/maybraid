@@ -18,6 +18,8 @@ use crate::floors::{
 	RoughStoneFloorArcFill, RoughStoneFloorStructFill, WoodFloorArcFill, WoodFloorRectangle,
 	WoodFloorStructFill,
 };
+use crate::kit_merge::with_optional_material;
+use crate::layer::Layers;
 use crate::lod_band::placement_bounds;
 use crate::panels::to_centered_rect_placement;
 use crate::parent_confines::{confined_scene, ParentConfines};
@@ -26,8 +28,12 @@ use crate::partitions::mesh_set::PartitionMeshSet;
 use crate::placed::Placement;
 use crate::scene_children::{pose, posed_glb, scene_children, with_pose};
 use bevy_math::{Quat, Vec3};
+use material_ref::MaterialRef;
 
 /// Authoring IR for a floor slab feature.
+///
+/// [`Self::style`] picks the kit GLB path. [`Self::material`] is an optional
+/// shader look ([`MaterialRef`]) stamped onto that kit after spawn.
 #[derive(Debug, Clone, PartialEq, Component, Default)]
 pub struct FloorNode {
 	pub style: FloorStyle,
@@ -35,11 +41,12 @@ pub struct FloorNode {
 	pub placement: Placement,
 	/// External silhouette vs internal detail gating.
 	pub confines: ParentConfines,
+	pub material: Option<MaterialRef>,
 }
 
 impl FloorNode {
 	pub fn new(style: FloorStyle, geometry: FloorGeometry, placement: Placement) -> Self {
-		Self { style, geometry, placement, confines: ParentConfines::External }
+		Self { style, geometry, placement, confines: ParentConfines::External, material: None }
 	}
 
 	pub fn rough_stone(geometry: FloorGeometry, placement: Placement) -> Self {
@@ -48,6 +55,11 @@ impl FloorNode {
 
 	pub fn wood(geometry: FloorGeometry, placement: Placement) -> Self {
 		Self::new(FloorStyle::Wood, geometry, placement)
+	}
+
+	pub fn with_material(mut self, material: MaterialRef) -> Self {
+		self.material = Some(material);
+		self
 	}
 
 	pub fn with_confines(mut self, confines: ParentConfines) -> Self {
@@ -143,7 +155,10 @@ impl LodScene for FloorNode {
 				}
 			})
 			.collect();
-		confined_scene(self.confines, scene_children(children))
+		with_optional_material(
+			confined_scene(self.confines, scene_children(children)),
+			self.material.clone(),
+		)
 	}
 
 	fn scene_chunks_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> SceneChunk {
@@ -152,5 +167,30 @@ impl LodScene for FloorNode {
 
 	fn scene_bounds(&self) -> Aabb3d {
 		placement_bounds(&self.placement)
+	}
+}
+
+impl Layers<FloorNode> {
+	/// Stamp a shader look onto every floor, leaving kit [`FloorStyle`] unchanged.
+	pub fn with_material(self, material: MaterialRef) -> Self {
+		self.map(|node| node.with_material(material.clone()))
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use crate::floors::geometry::FloorGeometry;
+	use crate::placed::Placement;
+
+	#[test]
+	fn with_material_stamps_ref_without_changing_style() {
+		let node = FloorNode::rough_stone(FloorGeometry::rectangle(), Placement::default())
+			.with_material(MaterialRef::named("stucco"));
+		assert_eq!(node.style, FloorStyle::RoughStonework);
+		assert_eq!(
+			node.material.as_ref().map(|m| &m.name),
+			Some(&material_ref::MaterialId::named("stucco"))
+		);
 	}
 }

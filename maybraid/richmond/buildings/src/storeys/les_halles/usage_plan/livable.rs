@@ -24,6 +24,9 @@ use crate::openings::{OpeningId, OpeningLabel, Openings};
 use crate::paneling::clipped_rectangular_strip::ClippedRectangularStrip;
 use crate::paneling::rectangular_strip::RectangularStripNode;
 use crate::paneling::DEFAULT_PANEL_THICKNESS;
+use crate::usage_areas::furniture_util::{
+	as_closet_if_internal, chests_for_regions, FurnitureFill,
+};
 use crate::usage_areas::livable_apartment::INTERNAL_WALLS_LAYER;
 use crate::usage_areas::plan_access::DEFAULT_WALK_CLEAR;
 use crate::usage_areas::plan_cells::shared_edge_span;
@@ -57,6 +60,8 @@ pub struct LesHallesLivableUsage {
 	pub areas: Vec<RectangularLivableArea>,
 	/// Within-strip bay cuts + noisy cross-strip shared edges.
 	pub party_walls: Vec<ClippedRectangularStrip>,
+	/// Chests in leftover gallery / closet pockets the RLA packer could not fill.
+	pub residual_chests: Vec<FurnitureFill>,
 }
 
 impl LesHallesUsagePlan for LesHallesLivableUsage {
@@ -83,6 +88,20 @@ impl LesHallesUsagePlan for LesHallesLivableUsage {
 					party_walls.extend(walls);
 					residual_within.extend(nested.within.into_iter().map(as_closet_if_internal));
 				}
+				Err(FitError::TooSmall { reason }) if reason == "no passage" => {
+					match fit_open_strip_without_passages(&region.confines, strip_noise) {
+						Ok((area, nested)) => {
+							tagged.push((strip_i, area));
+							residual_within
+								.extend(nested.within.into_iter().map(as_closet_if_internal));
+						}
+						Err(FitError::TooSmall { .. }) => {
+							residual_within
+								.push(FillRegion::new(SpaceKind::ExternalSpace, region.confines));
+						}
+						Err(err) => return Err(err),
+					}
+				}
 				Err(FitError::TooSmall { .. }) => {
 					residual_within
 						.push(FillRegion::new(SpaceKind::ExternalSpace, region.confines));
@@ -94,9 +113,10 @@ impl LesHallesUsagePlan for LesHallesLivableUsage {
 
 		party_walls.extend(noisy_cross_strip_party_walls(&tagged, noise));
 		let areas = tagged.into_iter().map(|(_, a)| a).collect();
+		let residual_chests = chests_for_regions(&residual_within, noise);
 
 		Ok((
-			Self { areas, party_walls },
+			Self { areas, party_walls, residual_chests },
 			FillableRegions { within: residual_within, atop: regions.atop },
 		))
 	}
@@ -130,6 +150,9 @@ impl BuildingComponents for LesHallesLivableUsage {
 		for area in &self.areas {
 			out.extend(area.furniture_nodes_for_level(level));
 		}
+		out.extend(Layers::from_free(
+			self.residual_chests.iter().map(|fill| fill.furniture.clone()).collect(),
+		));
 		out
 	}
 
@@ -138,8 +161,23 @@ impl BuildingComponents for LesHallesLivableUsage {
 		for area in &self.areas {
 			out.extend(area.label_nodes_for_level(level));
 		}
+		out.extend(Layers::from_free(
+			self.residual_chests.iter().map(|fill| fill.label.clone()).collect(),
+		));
 		out
 	}
+}
+
+fn fit_open_strip_without_passages(
+	confines: &Confines,
+	noise: NoiseParams,
+) -> Result<(RectangularLivableArea, FillableRegions), FitError> {
+	RectangularLivableArea::fit_with_params(
+		confines,
+		noise,
+		rla_params(RectLivableStrategy::AllOpen),
+		&[RectQuarterKind::Living],
+	)
 }
 
 /// High keeps tagged internals; coarser bands drop [`INTERNAL_WALLS_LAYER`].
@@ -148,13 +186,6 @@ fn structural_layers<T>(level: LodSceneLevel, layers: Layers<T>) -> Layers<T> {
 		layers
 	} else {
 		layers.except([INTERNAL_WALLS_LAYER])
-	}
-}
-
-fn as_closet_if_internal(region: FillRegion) -> FillRegion {
-	match region.kind {
-		SpaceKind::InternalSpace => FillRegion::new(SpaceKind::ClosetSpace, region.confines),
-		_ => region,
 	}
 }
 

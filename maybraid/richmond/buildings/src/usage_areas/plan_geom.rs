@@ -11,7 +11,9 @@ use crate::paneling::DEFAULT_PANEL_THICKNESS;
 const EPS: f32 = 1e-3;
 
 // Re-export residential defaults — canonical defs live in [`super::plan_access`].
-pub use super::plan_access::{DOOR_WIDTH, MIN_ROOM};
+pub use super::plan_access::{
+	door_leaf_height, DOOR_HEIGHT, DOOR_SIZE_SCALE, DOOR_WIDTH, DOOR_WIDTH_MAX, MIN_ROOM,
+};
 
 /// Floor XZ of an axis-aligned 3D AABB (`y` up).
 pub fn host_xz(bounds: &Aabb3d) -> Aabb2d {
@@ -64,7 +66,7 @@ pub fn connecting_passage(
 	let door_lo = (center - half).max(lo);
 	let door_hi = (center + half).min(hi);
 	let half_d = (DEFAULT_PANEL_THICKNESS * 0.5 + 0.06).max(0.12);
-	let door_h = (y1 - y0).min(2.2);
+	let door_h = door_leaf_height(y1 - y0).min(DOOR_HEIGHT);
 	let bounds = if along_x {
 		Aabb3d::from_min_max(
 			Vec3::new(door_lo, y0, mid - half_d),
@@ -91,7 +93,7 @@ pub fn synthetic_edge_passage(
 	let door_w = DOOR_WIDTH.min(xz.max.x - xz.min.x - 0.2).max(0.7);
 	let half = door_w * 0.5;
 	let cx = 0.5 * (xz.min.x + xz.max.x);
-	let door_h = (y1 - y0).min(2.15).max(1.9);
+	let door_h = door_leaf_height(y1 - y0);
 	let half_d = 0.12_f32;
 	(
 		OpeningId::scoped(scope, kind, id_tag),

@@ -78,12 +78,13 @@ impl CommonBedroomParameterized {
 		let closet_along_t = cfg.sample_range_f32_4d(0.1, 0.9, c.x, c.y, c.z, 12.0);
 		let walk_in_along_t = cfg.sample_range_f32_4d(0.1, 0.9, c.x, c.y, c.z, 21.0);
 		let ensuite_along_t = cfg.sample_range_f32_4d(0.1, 0.9, c.x, c.y, c.z, 13.0);
-		let door_width = cfg.sample_range_f32_4d(0.7, 1.05, c.x, c.y, c.z, 14.0);
+		let scale = crate::usage_areas::plan_access::DOOR_SIZE_SCALE;
+		let door_width = cfg.sample_range_f32_4d(0.7 * scale, 1.05 * scale, c.x, c.y, c.z, 14.0);
 		let door_along_t = cfg.sample_range_f32_4d(0.2, 0.8, c.x, c.y, c.z, 15.0);
 		let host_h = (confines.bounds.max.y - confines.bounds.min.y).max(1.0);
-		let door_hi = 2.2_f32.min((host_h - 0.25).max(1.8));
+		let door_hi = (2.2 * scale).min((host_h - 0.25).max(1.8 * scale));
 		let door_height =
-			cfg.sample_range_f32_4d(1.9_f32.min(door_hi), door_hi, c.x, c.y, c.z, 16.0);
+			cfg.sample_range_f32_4d((1.9 * scale).min(door_hi), door_hi, c.x, c.y, c.z, 16.0);
 
 		Ok(Self {
 			style: LabelStyle::Blue,
@@ -122,9 +123,9 @@ impl CommonBedroomParameterized {
 			closet_along_t: 0.5,
 			walk_in_along_t: 0.5,
 			ensuite_along_t: 0.5,
-			door_width: 0.85,
+			door_width: 0.85 * crate::usage_areas::plan_access::DOOR_SIZE_SCALE,
 			door_along_t: 0.5,
-			door_height: 2.1,
+			door_height: crate::usage_areas::plan_access::DOOR_HEIGHT,
 		}
 	}
 }

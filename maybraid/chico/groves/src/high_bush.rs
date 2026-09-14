@@ -237,7 +237,7 @@ use crate::grove::WoodyGroveLod;
 #[cfg(feature = "render")]
 pub const HIGH_BUSH_STRUCTURAL_HIGH_FACTOR: f32 = 6.0;
 #[cfg(feature = "render")]
-pub const HIGH_BUSH_STRUCTURAL_MEDIUM_FACTOR: f32 = 14.0;
+pub const HIGH_BUSH_STRUCTURAL_MEDIUM_FACTOR: f32 = 8.0;
 #[cfg(feature = "render")]
 pub const HIGH_BUSH_STRUCTURAL_LOW_FACTOR: f32 = 20.0;
 

@@ -1,7 +1,7 @@
 //! Corner keep: a circular or trazaloid shell plus storey-to-storey stairwells.
 
 use lod::gen::LodSceneLevel;
-use material_ref::MaterialRef;
+use material_ref::{MaterialId, MaterialRef};
 use richmond_building_components::floors::FloorGeometry;
 use richmond_building_components::panels::PanelStyle;
 use richmond_building_components::partitions::PartitionStyle;
@@ -17,7 +17,7 @@ use richmond_buildings::{
 
 use bevy_math::{Vec2, Vec3};
 
-pub const TOWER_STOREY_HEIGHT: f32 = 3.2;
+pub const TOWER_STOREY_HEIGHT: f32 = 3.2 * 1.5;
 const KEEP_TREAD_FILL: f32 = 0.55;
 
 /// Shell plus the wells that climb it.
@@ -73,7 +73,11 @@ impl BuildingComponents for CircularTower {
 	}
 
 	fn floor_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FloorNode> {
-		self.tower.floor_nodes_for_level(level)
+		let mut out = self.tower.floor_nodes_for_level(level);
+		if let Some(material) = &self.wall_material {
+			out = out.with_material(material.clone());
+		}
+		out
 	}
 
 	fn structural_lod(&self) -> Option<BuildingStructuralLodProbe> {
@@ -154,6 +158,17 @@ impl BuildingComponents for TrazaloidTower {
 				out.push_free(node);
 			}
 		}
+		if let Some(top) = self.storeys.last() {
+			let params = top.params();
+			let roof = params.origin + Vec3::Y * TOWER_STOREY_HEIGHT;
+			for node in keep_rect_floor(roof, params.ridge.x, params.ridge.y, Some(self.well_half))
+			{
+				out.push_free(node);
+			}
+		}
+		if let Some(material) = &self.wall_material {
+			out = out.with_material(material.clone());
+		}
 		out
 	}
 
@@ -227,7 +242,7 @@ impl RingFortKeep {
 	pub fn circular(origin: Vec3, radius: f32, floors: usize) -> Self {
 		let well_half = keep_well_half(radius);
 		let shell = build_circular_tower(origin, radius, floors, well_half * 2.0);
-		let stairwells = keep_stairwells(origin, well_half, floors, StairwellKind::Circular);
+		let stairwells = keep_stairwells(origin, well_half, floors, StairwellKind::Circular, false);
 		Self::Circular(Keep::new(shell, stairwells))
 	}
 
@@ -237,7 +252,8 @@ impl RingFortKeep {
 		let top_foot = foot + (foot * 0.48 - foot) * t_top;
 		let well_half = keep_well_half(top_foot * 0.5);
 		let shell = build_trazaloid_tower(origin, foot, floors, corner, well_half);
-		let stairwells = keep_stairwells(origin, well_half, floors, StairwellKind::Rectangular);
+		let stairwells =
+			keep_stairwells(origin, well_half, floors, StairwellKind::Rectangular, true);
 		Self::Trazaloid(Keep::new(shell, stairwells))
 	}
 }
@@ -278,8 +294,25 @@ fn stamp_stairs(
 ) -> Vec<ConnectingStairwell> {
 	stairwells
 		.into_iter()
-		.map(|stair| stair.with_surface_material(wall.clone()))
+		.map(|stair| paint_stairwell(stair, wall.clone()))
 		.collect()
+}
+
+/// Wood treads against masonry, marble treads against timber.
+pub(crate) fn contrasting_stair_material(surround: &MaterialRef) -> MaterialRef {
+	match &surround.name {
+		MaterialId::Name(name) if name == "wood" => MaterialRef::named("furniture_marble"),
+		_ => MaterialRef::named("wood"),
+	}
+}
+
+pub(crate) fn paint_stairwell(
+	stair: ConnectingStairwell,
+	wall: MaterialRef,
+) -> ConnectingStairwell {
+	stair
+		.with_surface_material(wall.clone())
+		.with_stair_material(contrasting_stair_material(&wall))
 }
 
 fn keep_rect_floor(origin: Vec3, width: f32, depth: f32, hole_half: Option<f32>) -> Vec<FloorNode> {
@@ -342,12 +375,19 @@ fn keep_stairwells(
 	well_half: f32,
 	floors: usize,
 	kind: StairwellKind,
+	onto_roof: bool,
 ) -> Vec<ConnectingStairwell> {
-	if floors < 2 {
+	let last_well_i = if onto_roof { floors.saturating_sub(1) } else { floors.saturating_sub(2) };
+	if floors < 2 && !onto_roof {
 		return Vec::new();
 	}
-	let last_well_i = floors - 2;
-	let mut out = Vec::with_capacity(floors - 1);
+	if floors == 0 {
+		return Vec::new();
+	}
+	let mut out = Vec::with_capacity(last_well_i + 1);
+	// Same-face walk-on / walk-off (Les Halles / gallery stacked). Rectangular
+	// fit hugs four walls; stacked wells share this face so the upper slab
+	// is the next run-in, not a dead-end landing on the opposite side.
 	for i in 0..=last_well_i {
 		let y0 = origin.y + i as f32 * TOWER_STOREY_HEIGHT;
 		let y1 = y0 + TOWER_STOREY_HEIGHT;
@@ -355,12 +395,13 @@ fn keep_stairwells(
 			Vec3::new(origin.x - well_half, y0, origin.z - well_half),
 			Vec3::new(origin.x + well_half, y1, origin.z + well_half),
 			WellSide::PosX,
-			WellSide::NegX,
+			WellSide::PosX,
 			KEEP_TREAD_FILL,
 		);
 		out.push(
 			ConnectingStairwell::from_well_kind(PanelStyle::RoughStonework, well, kind)
-				.with_upper_landing(i == last_well_i),
+				.with_upper_landing(i == last_well_i)
+				.with_shaft_walls(true),
 		);
 	}
 	out
@@ -422,8 +463,9 @@ fn build_trazaloid_tower(
 					Trazaloid::side_passage_opening(
 						side,
 						footprint,
-						(footprint.x.min(footprint.y) * 0.22).clamp(1.1, 1.8),
-						2.1,
+						(footprint.x.min(footprint.y) * 0.22).clamp(1.1, 1.8)
+							* richmond_buildings::DOOR_SIZE_SCALE,
+						2.1 * richmond_buildings::DOOR_SIZE_SCALE,
 					),
 				);
 			}
@@ -433,12 +475,13 @@ fn build_trazaloid_tower(
 				origin: Vec3::new(origin.x, y, origin.z),
 				footprint,
 				ridge,
-				lower_height: TOWER_STOREY_HEIGHT * 0.52,
-				upper_height: TOWER_STOREY_HEIGHT * 0.35,
-				band_vertical_offset: TOWER_STOREY_HEIGHT * 0.13,
+				lower_height: TOWER_STOREY_HEIGHT * 0.70,
+				upper_height: TOWER_STOREY_HEIGHT * 0.20,
+				band_vertical_offset: TOWER_STOREY_HEIGHT * 0.10,
 				openings,
 				floor: TrazaloidSlab::None,
-				ceiling: if i + 1 == floors { TrazaloidSlab::Solid } else { TrazaloidSlab::None },
+				// Roof is a holed kit deck (see `floor_nodes_for_level`), not a solid lid.
+				ceiling: TrazaloidSlab::None,
 				style: PanelStyle::RoughStonework,
 				..TrazaloidParams::default()
 			}
@@ -473,7 +516,10 @@ mod tests {
 				"storey {i} panel floor would cover kit flooring"
 			);
 			if i + 1 == n {
-				anyhow::ensure!(storey.ceiling().is_some(), "top storey should own the ceiling");
+				anyhow::ensure!(
+					storey.ceiling().is_none(),
+					"roof is a holed kit deck, not a solid lid"
+				);
 			} else {
 				anyhow::ensure!(
 					storey.ceiling().is_none(),
@@ -494,6 +540,133 @@ mod tests {
 		);
 		anyhow::ensure!(intermediate.len() == 4, "intermediate floors keep a stair hole");
 		anyhow::ensure!(nodes.len() > ground.len(), "upper storeys should add holed floors");
+		anyhow::ensure!(
+			keep.stairwells.len() == 5,
+			"five storeys plus roof → five wells, got {}",
+			keep.stairwells.len()
+		);
+		let roof = keep.stairwells.last().expect("roof well");
+		let top = origin.y + 5.0 * TOWER_STOREY_HEIGHT;
+		anyhow::ensure!(
+			(roof.well().top_y() - top).abs() < 1e-3,
+			"last well should land on the roof"
+		);
+		anyhow::ensure!(roof.upper_landing().is_some(), "roof pad");
+		Ok(())
+	}
+
+	#[test]
+	fn keep_wells_walk_on_and_off_the_same_face() -> anyhow::Result<()> {
+		let origin = Vec3::ZERO;
+		let wells = keep_stairwells(origin, 2.4, 4, StairwellKind::Rectangular, false);
+		anyhow::ensure!(wells.len() == 3, "four floors → three wells");
+		for (i, well) in wells.iter().enumerate() {
+			let aabb = well.well();
+			anyhow::ensure!(
+				aabb.walk_on == WellSide::PosX && aabb.walk_off == WellSide::PosX,
+				"well {i} should share one face"
+			);
+			anyhow::ensure!(
+				well.shaft_walls().len() == 3,
+				"same-face well should wall the three closed sides"
+			);
+			if i + 1 < wells.len() {
+				anyhow::ensure!(
+					aabb.walk_off == wells[i + 1].well().walk_on,
+					"stacked wells should share the walk-off face"
+				);
+				anyhow::ensure!(well.upper_landing().is_none(), "shared-face omit");
+			} else {
+				anyhow::ensure!(well.upper_landing().is_some(), "last-storey pad");
+			}
+		}
+
+		let last = wells.last().expect("wells");
+		anyhow::ensure!(
+			last.stairs().len() == 4,
+			"same-face circuit should hug four walls, got {}",
+			last.stairs().len()
+		);
+		anyhow::ensure!(
+			last.mid_landings().len() == 3,
+			"four flights need three corner pads, got {}",
+			last.mid_landings().len()
+		);
+
+		let circular = keep_stairwells(origin, 2.4, 3, StairwellKind::Circular, false);
+		anyhow::ensure!(circular.len() == 2);
+		for well in &circular {
+			let aabb = well.well();
+			anyhow::ensure!(aabb.walk_on == WellSide::PosX && aabb.walk_off == WellSide::PosX);
+			anyhow::ensure!(
+				well.shaft_walls().len() == 3,
+				"circular keep should wall the three closed faces"
+			);
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn keep_floors_and_stairs_take_the_wall_look() -> anyhow::Result<()> {
+		use richmond_building_components::BuildingComponents;
+
+		let wall = MaterialRef::named("stucco");
+		let keep =
+			RingFortKeep::trazaloid(Vec3::ZERO, 16.0, 4, (1.0, 1.0)).with_wall_material(wall);
+		let floors = keep.floor_nodes_for_level(LodSceneLevel::High).flatten();
+		anyhow::ensure!(!floors.is_empty(), "trazaloid keep should emit floors");
+		anyhow::ensure!(
+			floors.iter().all(|n| {
+				matches!(n.material.as_ref().map(|m| &m.name), Some(MaterialId::Name(n)) if n == "stucco")
+			}),
+			"keep floors should carry the wall look"
+		);
+		let stairs = keep.stairwells();
+		anyhow::ensure!(!stairs.is_empty());
+		for well in stairs {
+			anyhow::ensure!(well.shaft_walls().len() == 3);
+			anyhow::ensure!(
+				matches!(well.surface_material().map(|m| &m.name), Some(MaterialId::Name(n)) if n == "stucco"),
+				"shaft walls stay with the surround"
+			);
+			let nodes = well.stair_nodes_for_level(LodSceneLevel::High).flatten();
+			anyhow::ensure!(!nodes.is_empty());
+			anyhow::ensure!(
+				nodes.iter().all(|n| {
+					matches!(n.material.as_ref().map(|m| &m.name), Some(MaterialId::Name(n)) if n == "wood")
+				}),
+				"stone surrounds should get wood treads"
+			);
+			let panels = well.panel_nodes_for_level(LodSceneLevel::High).flatten();
+			anyhow::ensure!(
+				panels.iter().any(|n| {
+					matches!(n.material.as_ref().map(|m| &m.name), Some(MaterialId::Name(n)) if n == "wood")
+				}),
+				"stone surrounds should get wood landings"
+			);
+			anyhow::ensure!(
+				panels.iter().any(|n| {
+					matches!(n.material.as_ref().map(|m| &m.name), Some(MaterialId::Name(n)) if n == "stucco")
+				}),
+				"shaft walls stay with the surround"
+			);
+		}
+
+		let timber = MaterialRef::named("wood");
+		let wooden =
+			RingFortKeep::trazaloid(Vec3::ZERO, 16.0, 3, (1.0, 1.0)).with_wall_material(timber);
+		for well in wooden.stairwells() {
+			anyhow::ensure!(
+				matches!(well.stair_material().map(|m| &m.name), Some(MaterialId::Name(n)) if n == "furniture_marble"),
+				"wood surrounds should get marble treads"
+			);
+			anyhow::ensure!(
+				well.panel_nodes_for_level(LodSceneLevel::High).flatten().iter().any(|n| {
+					matches!(n.material.as_ref().map(|m| &m.name), Some(MaterialId::Name(n)) if n == "furniture_marble")
+				}),
+				"wood surrounds should get marble landings"
+			);
+		}
 		Ok(())
 	}
 }

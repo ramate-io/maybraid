@@ -4,17 +4,21 @@ use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use chico_vegetation_on_terrain_playground::VegetationOnTerrainMaterialLib;
 use crozon_characters::material_lib::{init_crozon_material_caches, CrozonMaterialLib};
+use furniture_shaders::{init_furniture_material_caches, FurnitureMaterialLib};
 use material_ref::{material_ref_plugin_installed, MaterialLib, MaterialRef, MaterialRefPlugin};
 use richmond_building_shaders::{init_richmond_urban_material_caches, UrbanSurfaceMaterialLib};
 
-/// World-model lib: Crozon face / clothing, Richmond urban surfaces, then vegetation and Standard.
+/// World-model lib: furniture kits, Crozon face / clothing, Richmond urban
+/// surfaces, then vegetation and Standard.
 ///
-/// Urban recipes (`stucco`, `wood`, …) must be claimed **before** vegetation's
-/// [`StandardMaterial`] fallback or streamed kits never run the urban PBR shader.
+/// Furniture recipes (`furniture_wood`, …) must be claimed **before** urban
+/// `wood`. Urban recipes (`stucco`, `wood`, …) must be claimed **before**
+/// vegetation's [`StandardMaterial`] fallback.
 ///
 /// Further domain libs (Durham recipes on [`MaterialRef`], sky) compose here.
 #[derive(SystemParam)]
 pub struct WorldMaterialLib<'w> {
+	pub furniture: FurnitureMaterialLib<'w>,
 	pub crozon: CrozonMaterialLib<'w>,
 	pub urban: UrbanSurfaceMaterialLib<'w>,
 	pub vegetation: VegetationOnTerrainMaterialLib<'w>,
@@ -27,7 +31,8 @@ impl MaterialLib for WorldMaterialLib<'_> {
 		material_ref: &MaterialRef,
 		commands: &mut Commands,
 	) -> bool {
-		self.crozon.try_fulfill(entity, material_ref, commands)
+		self.furniture.try_fulfill(entity, material_ref, commands)
+			|| self.crozon.try_fulfill(entity, material_ref, commands)
 			|| self.urban.try_fulfill(entity, material_ref, commands)
 			|| self.vegetation.try_fulfill(entity, material_ref, commands)
 	}
@@ -47,6 +52,7 @@ pub struct WorldMaterialRefPlugin;
 
 impl Plugin for WorldMaterialRefPlugin {
 	fn build(&self, app: &mut App) {
+		init_furniture_material_caches(app);
 		init_crozon_material_caches(app);
 		init_richmond_urban_material_caches(app);
 		if material_ref_plugin_installed(app) {
@@ -63,6 +69,7 @@ mod tests {
 		ClothingShaderMaterialRefCache, FaceShaderMaterialRefCache,
 	};
 
+	use furniture_shaders::FurnitureSurfaceMaterialRefCache;
 	use richmond_building_shaders::UrbanSurfaceMaterialRefCache;
 
 	use crate::material_lib::WorldMaterialRefPlugin;
@@ -74,5 +81,6 @@ mod tests {
 		assert!(app.world().contains_resource::<ClothingShaderMaterialRefCache>());
 		assert!(app.world().contains_resource::<FaceShaderMaterialRefCache>());
 		assert!(app.world().contains_resource::<UrbanSurfaceMaterialRefCache>());
+		assert!(app.world().contains_resource::<FurnitureSurfaceMaterialRefCache>());
 	}
 }

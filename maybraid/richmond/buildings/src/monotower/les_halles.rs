@@ -123,7 +123,8 @@ impl BuildingComponents for MixedUseLesHallesStorey {
 	fn furniture_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FurnitureNode> {
 		match self {
 			Self::Livable { usage, .. } => usage.furniture_nodes_for_level(level),
-			Self::Arcade { .. } | Self::Commercial { .. } => Layers::new(),
+			Self::Commercial { usage, .. } => usage.furniture_nodes_for_level(level),
+			Self::Arcade { usage, .. } => usage.furniture_nodes_for_level(level),
 		}
 	}
 
@@ -131,7 +132,7 @@ impl BuildingComponents for MixedUseLesHallesStorey {
 		match self {
 			Self::Commercial { usage, .. } => usage.label_nodes_for_level(level),
 			Self::Livable { usage, .. } => usage.label_nodes_for_level(level),
-			Self::Arcade { .. } => Layers::new(),
+			Self::Arcade { usage, .. } => usage.label_nodes_for_level(level),
 		}
 	}
 
@@ -212,7 +213,9 @@ impl MixedUseLesHallesMonotower {
 			)?;
 			let floor_noise = floor_noise(noise, i);
 			let storey = if i == 0 {
-				let (usage, _) = LesHallesArcadeUsage::paint(regions, floor_noise)?;
+				let keep_outs = LesHallesArcadeUsage::pillar_keep_outs_of(&floor_plan);
+				let (usage, _) =
+					LesHallesArcadeUsage::paint_avoiding(regions, floor_noise, &keep_outs)?;
 				MixedUseLesHallesStorey::Arcade { floor_plan, usage, wall_material: None }
 			} else if i <= n_commercial {
 				let (usage, _) = LesHallesCommercialUsage::paint(regions, floor_noise)?;
@@ -460,6 +463,25 @@ mod tests {
 				"expected inbound slot {slot} in {:?}",
 				tower.shaft_slots
 			);
+		}
+	}
+
+	#[test]
+	fn filled_floors_emit_furniture() {
+		let confines = Confines::from_bounds(large_tower_bounds());
+		for seed in [7, 42, 1337] {
+			let noise = NoiseParams { seed, ..NoiseParams::default() };
+			let (tower, _) = MixedUseLesHallesMonotower::fit_to_confines(&confines, noise).unwrap();
+			for (i, floor) in tower.floors.iter().enumerate() {
+				if floor.is_arcade() {
+					continue;
+				}
+				let slots = floor.furniture_nodes_for_level(LodSceneLevel::High).flatten();
+				if floor.is_commercial() {
+					continue;
+				}
+				assert!(!slots.is_empty(), "seed {seed} livable floor {i} should emit furniture");
+			}
 		}
 	}
 

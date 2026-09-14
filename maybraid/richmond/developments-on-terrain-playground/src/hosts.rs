@@ -10,18 +10,21 @@ pub fn spawn_development_hosts(
 	commands: &mut Commands,
 	development: &impl DevelopmentHosts,
 ) -> usize {
-	let mut count = 0;
-	for host in development.hosts() {
-		let entities = host.spawn(commands);
-		count += tag_hosts(commands, entities);
-	}
-	count
+	spawn_tagged_host_entities(commands, development).len()
 }
 
-fn tag_hosts(commands: &mut Commands, entities: Vec<Entity>) -> usize {
-	let n = entities.len();
-	for entity in entities {
-		commands.entity(entity).insert(DevelopmentHostRoot);
+/// Spawn each host and tag [`DevelopmentHostRoot`]. Furniture presents on its
+/// own 50 m cell hosts — do not parent kits here.
+pub fn spawn_tagged_host_entities(
+	commands: &mut Commands,
+	development: &impl DevelopmentHosts,
+) -> Vec<Entity> {
+	let mut spawned = Vec::new();
+	for host in development.hosts() {
+		for entity in host.spawn(commands) {
+			commands.entity(entity).insert(DevelopmentHostRoot);
+			spawned.push(entity);
+		}
 	}
-	n
+	spawned
 }

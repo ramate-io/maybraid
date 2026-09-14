@@ -26,10 +26,10 @@ pub const RESTROOM_STALLS_CONTACT: f32 = 2.0;
 pub const RESTROOM_SINK_MIN: f32 = 0.5;
 pub const RESTROOM_SINK_DEPTH_MIN: f32 = 0.5;
 pub const RESTROOM_SINK_DEPTH_MAX: f32 = 0.9;
-pub const RESTROOM_DOOR_WIDTH_MIN: f32 = 0.9;
-pub const RESTROOM_DOOR_WIDTH_MAX: f32 = 1.2;
-pub const RESTROOM_DOOR_HEIGHT_MIN: f32 = 2.0;
-pub const RESTROOM_DOOR_HEIGHT_MAX: f32 = 2.4;
+pub const RESTROOM_DOOR_WIDTH_MIN: f32 = 0.9 * crate::usage_areas::plan_access::DOOR_SIZE_SCALE;
+pub const RESTROOM_DOOR_WIDTH_MAX: f32 = 1.2 * crate::usage_areas::plan_access::DOOR_SIZE_SCALE;
+pub const RESTROOM_DOOR_HEIGHT_MIN: f32 = 2.0 * crate::usage_areas::plan_access::DOOR_SIZE_SCALE;
+pub const RESTROOM_DOOR_HEIGHT_MAX: f32 = 2.4 * crate::usage_areas::plan_access::DOOR_SIZE_SCALE;
 pub const RESTROOM_DOOR_HEADER_MIN: f32 = 0.25;
 
 #[derive(Debug, Clone, PartialEq)]

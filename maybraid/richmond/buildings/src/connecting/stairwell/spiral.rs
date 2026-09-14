@@ -2,9 +2,8 @@
 //!
 //! Inscribe a circle so the outer rail stays in the box. First tread at the
 //! walk-on azimuth, last at the walk-off. The walk-off landing is a door strip
-//! authored first; the last leading arrives on that strip. Extra turns only
-//! when going would fall under [`super::laws::MIN_GOING`] and rise-per-turn
-//! still has [`super::laws::MIN_HEADROOM`].
+//! authored first; the last leading arrives on that strip. One circuit from
+//! walk-on to walk-off (wrapping coefficient at most one).
 
 use std::f32::consts::TAU;
 
@@ -13,7 +12,7 @@ use richmond_building_components::panels::PanelStyle;
 use richmond_building_components::placed::Placement;
 use richmond_building_components::stairs::{Stair, StairNode, StraightStair};
 
-use super::laws::{headroom_allows, resolved_rise, tread_count, MIN_GOING, MIN_LANDING};
+use super::laws::{resolved_rise, tread_count, MIN_LANDING};
 use super::well::{yaw_xz, WellAabb};
 use super::Fit;
 
@@ -25,7 +24,7 @@ pub(crate) fn fit(well: &WellAabb, style: PanelStyle, thickness: f32) -> Fit {
 	let width = well.tread_width();
 	let radius = (well.half_min() - MIN_LANDING - 0.5 * width).max(MIN_RADIUS);
 	let n = tread_count(rise);
-	let turns = spiral_turns(well, radius, n, rise);
+	let turns = spiral_turns(well);
 	let intervals = n.saturating_sub(1).max(1);
 	let going = (turns * TAU * radius) / intervals as f32;
 	let center = well.center_xz();
@@ -40,23 +39,14 @@ pub(crate) fn fit(well: &WellAabb, style: PanelStyle, thickness: f32) -> Fit {
 	}
 }
 
-fn spiral_turns(well: &WellAabb, radius: f32, n: u32, rise: f32) -> f32 {
+fn spiral_turns(well: &WellAabb) -> f32 {
 	let start = yaw_xz(well.walk_on.into_xz());
 	let end = yaw_xz(well.walk_off.into_xz());
 	let mut sweep = wrap_ccw(end - start);
 	if sweep < 0.2 * TAU {
 		sweep += TAU;
 	}
-	let mut turns = sweep / TAU;
-	let r = radius.max(1e-4);
-	let intervals = n.saturating_sub(1).max(1) as f32;
-	while (turns * TAU * r) / intervals + 1e-4 < MIN_GOING {
-		if !headroom_allows(rise, turns + 1.0) {
-			break;
-		}
-		turns += 1.0;
-	}
-	turns
+	(sweep / TAU).min(1.0)
 }
 
 fn circular_nodes(
