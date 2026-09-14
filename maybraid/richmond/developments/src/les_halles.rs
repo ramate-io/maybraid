@@ -77,7 +77,7 @@ impl MixedUseLesHallesDevelopment {
 		self.stairwells = self
 			.stairwells
 			.into_iter()
-			.map(|stairwell| stairwell.with_surface_material(wall.clone()))
+			.map(|stairwell| crate::keep::paint_stairwell(stairwell, wall.clone()))
 			.collect();
 		self.roof = self.roof.with_surface_material(roof);
 		self

@@ -69,6 +69,7 @@ pub struct ConnectingStairwell {
 	want_shaft_walls: bool,
 	shaft_walls: Vec<Rectangle>,
 	surface_material: Option<MaterialRef>,
+	stair_material: Option<MaterialRef>,
 }
 
 impl ConnectingStairwell {
@@ -104,6 +105,7 @@ impl ConnectingStairwell {
 			want_shaft_walls: false,
 			shaft_walls: Vec::new(),
 			surface_material: None,
+			stair_material: None,
 		}
 	}
 
@@ -173,8 +175,18 @@ impl ConnectingStairwell {
 		self
 	}
 
+	/// Stamp a shader look onto treads. Falls back to [`Self::surface_material`].
+	pub fn with_stair_material(mut self, material: MaterialRef) -> Self {
+		self.stair_material = Some(material);
+		self
+	}
+
 	pub fn surface_material(&self) -> Option<&MaterialRef> {
 		self.surface_material.as_ref()
+	}
+
+	pub fn stair_material(&self) -> Option<&MaterialRef> {
+		self.stair_material.as_ref().or(self.surface_material.as_ref())
 	}
 
 	fn rebuild(&mut self) {
@@ -267,7 +279,7 @@ impl BuildingComponents for ConnectingStairwell {
 
 	fn stair_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<StairNode> {
 		let mut out = Layers::from_free(self.stairs.clone());
-		if let Some(material) = &self.surface_material {
+		if let Some(material) = self.stair_material() {
 			out = out.with_material(material.clone());
 		}
 		out

@@ -262,7 +262,7 @@ impl RingFort {
 			.terrace_stairs
 			.iter()
 			.cloned()
-			.map(|stair| stair.with_surface_material(wall.clone()))
+			.map(|stair| crate::keep::paint_stairwell(stair, wall.clone()))
 			.collect();
 		self.colonnade = self.colonnade.clone().with_wall_material(wall);
 		self.roof = self.roof.clone().with_surface_material(roof);
