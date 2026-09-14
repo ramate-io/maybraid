@@ -13,6 +13,7 @@ pub use parameterized::{MiniMartParameterized, MiniMartPlan};
 
 use lod::gen::LodSceneLevel;
 use procedural_common::NoiseParams;
+use richmond_building_components::furniture::FurnitureNode;
 use richmond_building_components::panels::PanelNode;
 use richmond_building_components::{BuildingComponents, LabelNode, LabelStyle, Layers};
 
@@ -21,6 +22,7 @@ use bevy_math::bounding::Aabb3d;
 use crate::fit::{Confines, FillRegion, FillableRegions, Fit, FitError, SpaceKind};
 use crate::openings::{Opening, OpeningId, Openings};
 use crate::paneling::Rectangle;
+use crate::usage_areas::furniture_util::{furniture_fill, FurnitureFill};
 
 use super::label_util::label_filling_aabb;
 use super::stall_layout::mini_mart::MiniMartOfficeDoor;
@@ -32,7 +34,7 @@ pub struct MiniMart {
 	pub office_bounds: Aabb3d,
 	pub office: LabelNode,
 	pub stall_aisles: Vec<LabelNode>,
-	pub register: LabelNode,
+	pub register: FurnitureFill,
 	pub grocery_shelves: Vec<LabelNode>,
 	/// Tracked passage through the office sales divider.
 	pub office_door_id: OpeningId,
@@ -67,11 +69,13 @@ impl MiniMart {
 			office_bounds,
 			office: label_filling_aabb(style, "MiniMartOffice", &office_bounds, confines.roll),
 			stall_aisles,
-			register: label_filling_aabb(
+			register: furniture_fill(
 				LabelStyle::Magenta,
 				"Register",
 				&plan.packed.register,
+				&confines.bounds,
 				confines.roll,
+				FurnitureNode::counter,
 			),
 			grocery_shelves,
 			office_door_id: id,
@@ -113,10 +117,15 @@ impl BuildingComponents for MiniMart {
 	}
 
 	fn label_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<LabelNode> {
-		let mut labels = vec![self.stall_type.clone(), self.office.clone(), self.register.clone()];
+		let mut labels =
+			vec![self.stall_type.clone(), self.office.clone(), self.register.label.clone()];
 		labels.extend(self.stall_aisles.iter().cloned());
 		labels.extend(self.grocery_shelves.iter().cloned());
 		Layers::from_free(labels)
+	}
+
+	fn furniture_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<FurnitureNode> {
+		Layers::from_free(vec![self.register.furniture.clone()])
 	}
 }
 
@@ -172,6 +181,11 @@ mod tests {
 			MiniMart::fit_to_confines(&confines, NoiseParams { seed: 7, ..Default::default() })
 				.unwrap();
 		assert_eq!(stall.stall_type.text.as_str(), "MiniMart");
+		assert_eq!(stall.register.label.text.as_str(), "Register");
+		assert_eq!(
+			stall.register.furniture.geometry,
+			richmond_building_components::FurnitureGeometry::Counter
+		);
 		assert!(
 			stall.office_walls.len() >= 3,
 			"office should enclose open sides (laterals + door jambs/header), got {}",

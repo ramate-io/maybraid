@@ -11,7 +11,9 @@ use crate::openings::{Opening, OpeningId, OpeningLabel, Openings};
 use crate::usage_areas::clearance::PassageClearance;
 use crate::usage_areas::livable_quarters::dining_room::{DiningRoomParameterized, DiningRoomPlan};
 use crate::usage_areas::livable_quarters::kitchen::{KitchenParameterized, KitchenPlan};
-use crate::usage_areas::plan_geom::{confines_from_xz, connecting_passage, host_xz, DOOR_WIDTH};
+use crate::usage_areas::plan_geom::{
+	confines_from_xz, connecting_passage, door_leaf_height, host_xz, DOOR_WIDTH, DOOR_WIDTH_MAX,
+};
 
 use super::parameterized::{EatingAreaPacked, EatingAreaParameterized, EatingAreaPlan, SCOPE};
 
@@ -240,9 +242,9 @@ fn shared_edge(a: Aabb2d, b: Aabb2d) -> Option<(bool, f32, f32, f32)> {
 fn edge_passage(xz: Aabb2d, y0: f32, y1: f32, tag: u32, openings: &mut Openings) {
 	let sx = xz.max.x - xz.min.x;
 	let sz = xz.max.y - xz.min.y;
-	let door_w = DOOR_WIDTH.min(sx.max(sz) - 0.25).clamp(0.7, 1.15);
+	let door_w = DOOR_WIDTH.min(sx.max(sz) - 0.25).clamp(0.7, DOOR_WIDTH_MAX);
 	let half = door_w * 0.5;
-	let door_h = (y1 - y0).min(2.15).max(1.9);
+	let door_h = door_leaf_height(y1 - y0);
 	let half_d = 0.12_f32;
 	let bounds = if sx >= sz {
 		let cx = 0.5 * (xz.min.x + xz.max.x);

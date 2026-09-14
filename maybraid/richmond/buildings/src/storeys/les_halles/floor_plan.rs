@@ -807,7 +807,8 @@ impl LesHallesFloorPlan {
 		shaft_slots: &[usize],
 	) -> Openings {
 		let mut openings = Openings::new();
-		let door_h = (height * 0.72).clamp(2.0, height.max(2.0));
+		let door_h = (height * 0.72 * crate::usage_areas::plan_access::DOOR_SIZE_SCALE)
+			.clamp(2.0 * crate::usage_areas::plan_access::DOOR_SIZE_SCALE, height.max(2.0));
 		let win_h = (height * 0.42).clamp(1.0, height.max(1.0));
 		let sill = (height * 0.28).clamp(0.7, height * 0.45);
 

@@ -5,10 +5,13 @@
 //! clone Durham fine-cell mesh handles. Vegetation LOD bullseye / lattice
 //! cover the grove fill ring. Urbanization hopscotch streams at the same
 //! 1 km / 3 km rings without re-registering Durham (`TerrainPlugin` owns terrain).
+//! Painted furniture is a generate pass over Richmond High slots, presented as
+//! flattened 50 m cell hosts in a neighborhood around the camera.
 
 mod camera;
 pub mod commands;
 mod control;
+mod furniture_hud;
 mod intelligence;
 mod material_lib;
 mod mobs;
@@ -59,6 +62,7 @@ use combat_hud::CombatHudPlugin;
 use crozon_character_ragdoll::{CharacterRagdollPlugin, CharacterRagdollTargets};
 use crozon_characters::{CharacterMotionSystems, DrawTerrainPitchProbes};
 use durham_terrain_models::{Durham, TerrainFrictionConfig, TerrainPlugin};
+use furniture_shaders::FurnitureShadersPlugin;
 use game_commands::command::{GameCommandPlugin, TextEntryFocus};
 use game_commands::ui::GameCommandDrawerConfig;
 use lod::{Bullseye, OpenLattice};
@@ -132,6 +136,7 @@ impl Plugin for WorldPlugin {
 			.insert_resource(player::CharacterLocomotion { max_slope_angle: WORLD_MAX_SLOPE_ANGLE })
 			.insert_resource(TerrainFrictionConfig(WORLD_TERRAIN_FRICTION))
 			.insert_resource(WORLD_TERRAIN_PITCH_GIZMOS)
+			.add_plugins(FurnitureShadersPlugin)
 			.add_plugins(WorldMaterialRefPlugin)
 			.add_plugins(TerrainPlugin::<Durham>::playable_world())
 			.add_plugins(VirtualPadPlugin::new(VirtualPadConfig {
@@ -238,6 +243,10 @@ impl Plugin for WorldPlugin {
 				ui::sync_mob_debug_pins.run_if(resource_equals(WorldMobHudEnabled(true))),
 				ui::draw_mob_debug_gizmos.run_if(resource_equals(WorldMobHudEnabled(true))),
 				ui::draw_npc_behavior_gizmos.run_if(resource_equals(WorldMobHudEnabled(true))),
+				furniture_hud::sync_furniture_debug_pins
+					.run_if(resource_equals(WorldMobHudEnabled(true))),
+				furniture_hud::draw_furniture_debug_gizmos
+					.run_if(resource_equals(WorldMobHudEnabled(true))),
 			),
 		);
 		if self.debug_chrome {

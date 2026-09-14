@@ -42,9 +42,9 @@ Woody High and Medium both nest plant hosts; Low swaps the tile to canopy proxie
 
 | Class | Typical height | Factors | Metres @ 50 m |
 |---|---|---|---|
-| Short | < 24 m | `6 / 14 / 20` | 300 / 700 / 1000 |
-| Mid | 24–80 m | `8 / 14 / 20` | 400 / 700 / 1000 |
-| Tall | ≥ 80 m | `10 / 14 / 24` | 500 / 700 / 1200 |
+| Short | < 24 m | `6 / 8 / 20` | 300 / 400 / 1000 |
+| Mid | 24–80 m | `8 / 10 / 20` | 400 / 500 / 1000 |
+| Tall | ≥ 80 m | `10 / 12 / 24` | 500 / 600 / 1200 |
 
 [Jungle](src/jungle_massives.rs) / [Temperate](src/temperate_massives.rs) / [Conifer Massives](src/conifer_massives.rs) are tall. Alpine / trade winds / rolling oaks / palm shade are mid. Tufts, orchard, and bushes are short.
 

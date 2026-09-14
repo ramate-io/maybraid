@@ -13,9 +13,11 @@ pub use parameterized::{BitesStallParameterized, BitesStallPlan};
 
 use lod::gen::LodSceneLevel;
 use procedural_common::NoiseParams;
+use richmond_building_components::furniture::FurnitureNode;
 use richmond_building_components::{BuildingComponents, LabelNode, LabelStyle, Layers};
 
 use crate::fit::{Confines, FillableRegions, Fit, FitError};
+use crate::usage_areas::furniture_util::{furniture_fill, FurnitureFill};
 
 use super::label_util::label_filling_aabb;
 
@@ -23,17 +25,27 @@ use super::label_util::label_filling_aabb;
 pub struct BitesStall {
 	/// Higher-order type label covering the whole stall.
 	pub stall_type: LabelNode,
-	pub bites_counters: Vec<LabelNode>,
+	pub bites_counters: Vec<FurnitureFill>,
 	pub bites_kitchen: LabelNode,
 }
 
 impl BitesStall {
 	pub fn from_plan(plan: BitesStallPlan, confines: &Confines) -> Self {
 		let style = plan.parameterized.style;
+		let host = &confines.bounds;
 		let bites_counters = plan
 			.counter_aabbs
 			.iter()
-			.map(|aabb| label_filling_aabb(style, "BitesCounter", aabb, confines.roll))
+			.map(|aabb| {
+				furniture_fill(
+					style,
+					"BitesCounter",
+					aabb,
+					host,
+					confines.roll,
+					FurnitureNode::counter,
+				)
+			})
 			.collect();
 		Self {
 			stall_type: label_filling_aabb(
@@ -67,9 +79,13 @@ impl Fit for BitesStall {
 impl BuildingComponents for BitesStall {
 	fn label_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<LabelNode> {
 		let mut labels = vec![self.stall_type.clone()];
-		labels.extend(self.bites_counters.iter().cloned());
+		labels.extend(self.bites_counters.iter().map(|fill| fill.label.clone()));
 		labels.push(self.bites_kitchen.clone());
 		Layers::from_free(labels)
+	}
+
+	fn furniture_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<FurnitureNode> {
+		Layers::from_free(self.bites_counters.iter().map(|fill| fill.furniture.clone()).collect())
 	}
 }
 
@@ -125,6 +141,12 @@ mod tests {
 		let stall = BitesStall::from_plan(plan, &confines);
 		assert_eq!(stall.stall_type.text, "BitesStall");
 		assert_eq!(stall.bites_kitchen.text, "BitesKitchen");
+		assert_eq!(stall.bites_counters.len(), 2);
+		assert!(stall.bites_counters.iter().all(|fill| {
+			fill.label.text == "BitesCounter"
+				&& fill.furniture.geometry
+					== richmond_building_components::FurnitureGeometry::Counter
+		}));
 	}
 
 	#[test]

@@ -22,6 +22,8 @@ chico-vegetation-on-terrain-playground = { workspace = true }
 clap = { workspace = true }
 durham-terrain = { workspace = true }
 durham-terrain-models = { workspace = true }
+furniture-assemblies = { workspace = true }
+furniture-shaders = { workspace = true }
 game-commands = { workspace = true }
 log = { workspace = true }
 lod = { workspace = true }

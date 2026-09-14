@@ -8,8 +8,9 @@ use bevy::prelude::{
 use lod::gen::LodScene;
 use lod::lod_host_scene_pending;
 use lod::lod_ref::LodRef;
+use lod::LodSceneLevel;
 use richmond_building_components::{
-	building_bounds, spawn_building_components, BuildingComponents,
+	building_bounds, spawn_building_components, BuildingComponents, FurnitureNode,
 };
 use richmond_building_physics::{spawn_building_walk_colliders, BUILDING_FRICTION};
 use richmond_buildings::wizards_tower::WizardsTower;
@@ -117,6 +118,48 @@ impl DevelopmentHost {
 		})
 	}
 
+	/// World transform of the development host (building-local furniture composes under this).
+	pub fn transform(&self) -> Transform {
+		match self {
+			Self::LesHallesStorey(_, transform)
+			| Self::LesHallesStairwell(_, transform)
+			| Self::LesHallesRoof(_, transform)
+			| Self::ShepherdsHouse(_, transform)
+			| Self::ShepherdsHut(_, transform)
+			| Self::OldCityMarketTerrace(_, transform)
+			| Self::RingFortCircularTower(_, transform)
+			| Self::RingFortTrazaloidTower(_, transform)
+			| Self::RingFortGalleryTerrace(_, transform)
+			| Self::RingFortGalleryColonnade(_, transform)
+			| Self::RingFortGalleryRoof(_, transform)
+			| Self::SingleHighrise(_, transform)
+			| Self::TempleSanctum(_, transform)
+			| Self::WizardsTower(_, transform)
+			| Self::SkybridgeHall(_, transform) => *transform,
+		}
+	}
+
+	/// High-LOD furniture slots on this host (Richmond packer IR).
+	pub fn furniture_nodes(&self) -> Vec<FurnitureNode> {
+		match self {
+			Self::LesHallesStorey(building, _) => furniture_of(building.as_ref()),
+			Self::LesHallesStairwell(building, _) => furniture_of(building.as_ref()),
+			Self::LesHallesRoof(building, _) => furniture_of(building.as_ref()),
+			Self::ShepherdsHouse(building, _) => furniture_of(building.as_ref()),
+			Self::ShepherdsHut(building, _) => furniture_of(building.as_ref()),
+			Self::OldCityMarketTerrace(building, _) => furniture_of(building.as_ref()),
+			Self::RingFortCircularTower(building, _) => furniture_of(building.as_ref()),
+			Self::RingFortTrazaloidTower(building, _) => furniture_of(building.as_ref()),
+			Self::RingFortGalleryTerrace(building, _) => furniture_of(building.as_ref()),
+			Self::RingFortGalleryColonnade(building, _) => furniture_of(building.as_ref()),
+			Self::RingFortGalleryRoof(building, _) => furniture_of(building.as_ref()),
+			Self::SingleHighrise(building, _) => furniture_of(building.as_ref()),
+			Self::TempleSanctum(building, _) => furniture_of(building.as_ref()),
+			Self::WizardsTower(building, _) => furniture_of(building.as_ref()),
+			Self::SkybridgeHall(building, _) => furniture_of(building.as_ref()),
+		}
+	}
+
 	pub fn spawn(&self, commands: &mut Commands) -> Vec<Entity> {
 		let entities = match self {
 			Self::LesHallesStorey(building, transform) => spawn(commands, building, *transform),
@@ -154,12 +197,16 @@ impl DevelopmentHost {
 			Self::SkybridgeHall(building, transform) => spawn(commands, building, *transform),
 		};
 		if let Some(place) = self.discoverable_place() {
-			for entity in &entities {
+			if let Some(entity) = entities.first() {
 				commands.entity(*entity).insert(place);
 			}
 		}
 		entities
 	}
+}
+
+fn furniture_of(building: &impl BuildingComponents) -> Vec<FurnitureNode> {
+	building.furniture_nodes_for_level(LodSceneLevel::High).flatten()
 }
 
 fn arrival_from_building(building: &impl BuildingComponents) -> f32 {

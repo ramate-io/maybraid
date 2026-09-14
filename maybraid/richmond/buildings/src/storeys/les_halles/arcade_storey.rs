@@ -2,7 +2,9 @@
 
 use lod::gen::LodSceneLevel;
 use procedural_common::NoiseParams;
+use richmond_building_components::furniture::FurnitureNode;
 use richmond_building_components::joints::JointNode;
+use richmond_building_components::labels::LabelNode;
 use richmond_building_components::panels::PanelNode;
 use richmond_building_components::{BuildingComponents, Layers};
 
@@ -10,7 +12,7 @@ use crate::fit::{Confines, FillableRegions, Fit, FitError};
 
 use super::floor_plan::{LesHallesFloorPlan, LesHallesOpeningProgram};
 use super::parameterized::LesHallesParameterized;
-use super::usage_plan::{LesHallesArcadeUsage, LesHallesUsagePlan};
+use super::usage_plan::LesHallesArcadeUsage;
 
 /// Full Les Halles ground storey: ring shell plus empty arcade usage.
 #[derive(Debug, Clone, PartialEq)]
@@ -26,7 +28,8 @@ impl LesHallesArcadeStorey {
 		noise: NoiseParams,
 	) -> Result<(Self, FillableRegions), FitError> {
 		let regions = floor_plan.fillable_regions();
-		let (usage, residual) = LesHallesArcadeUsage::paint(regions, noise)?;
+		let keep_outs = LesHallesArcadeUsage::pillar_keep_outs_of(&floor_plan);
+		let (usage, residual) = LesHallesArcadeUsage::paint_avoiding(regions, noise, &keep_outs)?;
 		Ok((Self { floor_plan, usage }, residual))
 	}
 }
@@ -44,7 +47,8 @@ impl Fit for LesHallesArcadeStorey {
 			crate::shells::rect_ring_floor::RectRingFloorSlab::None,
 			LesHallesOpeningProgram::GroundArcade,
 		)?;
-		let (usage, residual) = LesHallesArcadeUsage::paint(regions, noise)?;
+		let keep_outs = LesHallesArcadeUsage::pillar_keep_outs_of(&floor_plan);
+		let (usage, residual) = LesHallesArcadeUsage::paint_avoiding(regions, noise, &keep_outs)?;
 		Ok((Self { floor_plan, usage }, residual))
 	}
 }
@@ -56,6 +60,14 @@ impl BuildingComponents for LesHallesArcadeStorey {
 
 	fn joint_nodes_for_level(&self, level: LodSceneLevel) -> Layers<JointNode> {
 		self.floor_plan.joint_nodes_for_level(level)
+	}
+
+	fn furniture_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FurnitureNode> {
+		self.usage.furniture_nodes_for_level(level)
+	}
+
+	fn label_nodes_for_level(&self, level: LodSceneLevel) -> Layers<LabelNode> {
+		self.usage.label_nodes_for_level(level)
 	}
 }
 
@@ -83,6 +95,6 @@ mod tests {
 		assert_eq!(storey.floor_plan.gallery.wall_count(), 4);
 		assert!(storey.floor_plan.arcade_pillars.iter().any(|l| !l.is_empty()));
 		assert!(residual.within.iter().any(|r| r.kind == SpaceKind::ExternalSpace));
-		assert!(storey.usage.is_empty());
+		assert!(!storey.usage.is_empty(), "open arcade leftovers should still get residual chests");
 	}
 }

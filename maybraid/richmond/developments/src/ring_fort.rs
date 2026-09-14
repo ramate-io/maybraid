@@ -12,9 +12,13 @@ use bevy_math::{Vec2, Vec3};
 use lod::gen::LodSceneLevel;
 use material_ref::MaterialRef;
 use procedural_common::{NoiseConfig, NoiseParams};
+use richmond_building_components::furniture::FurnitureNode;
 use richmond_building_components::panels::PanelStyle;
 use richmond_building_components::{
 	BuildingComponents, BuildingStructuralLodProbe, JointNode, Layers, PanelNode,
+};
+use richmond_buildings::usage_areas::furniture_util::{
+	chest_in_confines_clear, pillar_keep_outs, PILLAR_CHEST_PAD,
 };
 use richmond_buildings::{
 	Confines, ConnectingStairwell, EndCap, FillableRegions, Fit, FitError, FittedRectangle,
@@ -59,6 +63,10 @@ const ROOF_LINE_OVERHANG: f32 = 0.35;
 const TERRACE_TREAD_FILL: f32 = 0.85;
 const TERRACE_PARAPET: f32 = 0.55;
 const TERRACE_SLAB: f32 = 0.32;
+const TERRACE_CHEST_HEIGHT: f32 = 2.4;
+const COLONNADE_CHEST_CHUNK: f32 = 12.0;
+const KEEP_APRON_DEPTH: f32 = 3.6;
+const KEEP_APRON_ALONG: f32 = 4.5;
 
 const CORNERS: [(f32, f32); 4] = [(1.0, 1.0), (-1.0, 1.0), (1.0, -1.0), (-1.0, -1.0)];
 
@@ -91,6 +99,7 @@ pub enum RingFortHost {
 pub struct GalleryTerrace {
 	deck: RectRingFloor,
 	wall_material: Option<MaterialRef>,
+	residual_chests: Vec<FurnitureNode>,
 }
 
 impl GalleryTerrace {
@@ -100,6 +109,11 @@ impl GalleryTerrace {
 
 	pub fn with_wall_material(mut self, wall: MaterialRef) -> Self {
 		self.wall_material = Some(wall);
+		self
+	}
+
+	fn with_chests(mut self, residual_chests: Vec<FurnitureNode>) -> Self {
+		self.residual_chests = residual_chests;
 		self
 	}
 }
@@ -115,6 +129,13 @@ impl BuildingComponents for GalleryTerrace {
 
 	fn joint_nodes_for_level(&self, level: LodSceneLevel) -> Layers<JointNode> {
 		self.deck.joint_nodes_for_level(level)
+	}
+
+	fn furniture_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FurnitureNode> {
+		if !matches!(level, LodSceneLevel::High) {
+			return Layers::new();
+		}
+		Layers::from_free(self.residual_chests.clone())
 	}
 
 	fn structural_lod(&self) -> Option<BuildingStructuralLodProbe> {
@@ -241,7 +262,7 @@ impl RingFort {
 			.terrace_stairs
 			.iter()
 			.cloned()
-			.map(|stair| stair.with_surface_material(wall.clone()))
+			.map(|stair| crate::keep::paint_stairwell(stair, wall.clone()))
 			.collect();
 		self.colonnade = self.colonnade.clone().with_wall_material(wall);
 		self.roof = self.roof.clone().with_surface_material(roof);
@@ -294,7 +315,13 @@ impl Fit for RingFort {
 		let (colonnade, roof) = gallery_colonnade_and_roof(&last, &keeps);
 		let shafts = terrace_shafts(&last);
 		open_last_storey_for_terrace(&mut ring);
-		let terrace = gallery_terrace(&last, &shafts);
+		let terrace = gallery_terrace(&last, &shafts).with_chests(terrace_chests(
+			&last,
+			&keeps,
+			&shafts,
+			colonnade.pillars(),
+			noise,
+		));
 		let terrace_stairs = terrace_stairs(&last, &shafts);
 
 		let mut nodes = Vec::with_capacity(5);
@@ -553,6 +580,7 @@ fn gallery_terrace(plan: &LesHallesFloorPlan, shafts: &[Aabb3d]) -> GalleryTerra
 			.joint_thickness(TERRACE_SLAB)
 			.build(),
 		wall_material: None,
+		residual_chests: Vec::new(),
 	}
 }
 
@@ -580,6 +608,152 @@ fn terrace_stairs(plan: &LesHallesFloorPlan, shafts: &[Aabb3d]) -> Vec<Connectin
 			.with_upper_landing(true)
 		})
 		.collect()
+}
+
+fn terrace_chests(
+	plan: &LesHallesFloorPlan,
+	keeps: &[RingFortKeep],
+	shafts: &[Aabb3d],
+	colonnade: &PanelPillarLine,
+	noise: NoiseParams,
+) -> Vec<FurnitureNode> {
+	let y0 = plan.center_xz.y + plan.storey_height;
+	let y1 = y0 + TERRACE_CHEST_HEIGHT;
+	let keep_outs = pillar_keep_outs(colonnade.pillars.iter(), PILLAR_CHEST_PAD);
+	let mut fills = Vec::new();
+	let mut salt = 500u32;
+	for aabb in colonnade_undercroft_aabbs(plan, keeps, y0, y1) {
+		for chunk in split_aabb_along(aabb, COLONNADE_CHEST_CHUNK) {
+			salt += 1;
+			if let Some(fill) =
+				chest_in_confines_clear(&Confines::from_bounds(chunk), noise, salt, &keep_outs)
+			{
+				fills.push(fill);
+			}
+		}
+	}
+	for aabb in keep_apron_aabbs(plan, keeps, y0, y1) {
+		salt += 1;
+		if let Some(fill) =
+			chest_in_confines_clear(&Confines::from_bounds(aabb), noise, salt, &keep_outs)
+		{
+			fills.push(fill);
+		}
+	}
+	fills
+		.into_iter()
+		.filter(|fill| chest_clear_of_shafts(fill.furniture.placement.translation, shafts))
+		.map(|fill| fill.furniture)
+		.collect()
+}
+
+fn colonnade_undercroft_aabbs(
+	plan: &LesHallesFloorPlan,
+	keeps: &[RingFortKeep],
+	y0: f32,
+	y1: f32,
+) -> Vec<Aabb3d> {
+	let cx = plan.center_xz.x;
+	let cz = plan.center_xz.z;
+	let ox = plan.outer.x * 0.5;
+	let oz = plan.outer.y * 0.5;
+	let ix = plan.courtyard.x * 0.5;
+	let iz = plan.courtyard.y * 0.5;
+	let keep = |sx: f32, sz: f32| {
+		let i = CORNERS.iter().position(|&c| c == (sx, sz)).unwrap_or(0);
+		&keeps[i]
+	};
+	let mut out = Vec::new();
+	let mut push = |along_x: bool, a: &RingFortKeep, b: &RingFortKeep, inner: f32, outer: f32| {
+		let along_center = if along_x { cx } else { cz };
+		let along_inner_half = if along_x { ix } else { iz };
+		let Some((start, end)) = run_between(a, b, along_x, along_center, along_inner_half) else {
+			return;
+		};
+		let (inner, outer) = if inner < outer { (inner, outer) } else { (outer, inner) };
+		out.push(if along_x {
+			Aabb3d::from_min_max(Vec3::new(start, y0, inner), Vec3::new(end, y1, outer))
+		} else {
+			Aabb3d::from_min_max(Vec3::new(inner, y0, start), Vec3::new(outer, y1, end))
+		});
+	};
+	push(true, keep(-1.0, 1.0), keep(1.0, 1.0), cz + iz + PILLAR_INSET, cz + oz - PILLAR_INSET);
+	push(true, keep(-1.0, -1.0), keep(1.0, -1.0), cz - iz - PILLAR_INSET, cz - oz + PILLAR_INSET);
+	push(false, keep(-1.0, -1.0), keep(-1.0, 1.0), cx - ix - PILLAR_INSET, cx - ox + PILLAR_INSET);
+	push(false, keep(1.0, -1.0), keep(1.0, 1.0), cx + ix + PILLAR_INSET, cx + ox - PILLAR_INSET);
+	out
+}
+
+fn keep_apron_aabbs(
+	plan: &LesHallesFloorPlan,
+	keeps: &[RingFortKeep],
+	y0: f32,
+	y1: f32,
+) -> Vec<Aabb3d> {
+	let mut out = Vec::new();
+	for keep in keeps {
+		let c = keep.center_xz();
+		let half = keep.plan_half_extent();
+		let toward_x = (plan.center_xz.x - c.x).signum();
+		let toward_z = (plan.center_xz.z - c.z).signum();
+		if toward_x.abs() < 0.5 || toward_z.abs() < 0.5 {
+			continue;
+		}
+		let depth = KEEP_APRON_DEPTH;
+		let along = KEEP_APRON_ALONG;
+		let x0 = c.x + toward_x * half;
+		let x1 = x0 + toward_x * depth;
+		out.push(Aabb3d::from_min_max(
+			Vec3::new(x0.min(x1), y0, c.z - along * 0.5),
+			Vec3::new(x0.max(x1), y1, c.z + along * 0.5),
+		));
+		let z0 = c.z + toward_z * half;
+		let z1 = z0 + toward_z * depth;
+		out.push(Aabb3d::from_min_max(
+			Vec3::new(c.x - along * 0.5, y0, z0.min(z1)),
+			Vec3::new(c.x + along * 0.5, y1, z0.max(z1)),
+		));
+	}
+	out
+}
+
+fn split_aabb_along(bounds: Aabb3d, chunk: f32) -> Vec<Aabb3d> {
+	let min = Vec3::from(bounds.min);
+	let max = Vec3::from(bounds.max);
+	let dx = (max.x - min.x).max(0.0);
+	let dz = (max.z - min.z).max(0.0);
+	let chunk = chunk.max(1.0);
+	if dx >= dz {
+		let n = ((dx / chunk).floor() as usize).max(1);
+		let step = dx / n as f32;
+		(0..n)
+			.map(|i| {
+				let x0 = min.x + i as f32 * step;
+				Aabb3d::from_min_max(
+					Vec3::new(x0, min.y, min.z),
+					Vec3::new(x0 + step, max.y, max.z),
+				)
+			})
+			.collect()
+	} else {
+		let n = ((dz / chunk).floor() as usize).max(1);
+		let step = dz / n as f32;
+		(0..n)
+			.map(|i| {
+				let z0 = min.z + i as f32 * step;
+				Aabb3d::from_min_max(
+					Vec3::new(min.x, min.y, z0),
+					Vec3::new(max.x, max.y, z0 + step),
+				)
+			})
+			.collect()
+	}
+}
+
+fn chest_clear_of_shafts(p: Vec3, shafts: &[Aabb3d]) -> bool {
+	!shafts.iter().any(|shaft| {
+		p.x >= shaft.min.x && p.x <= shaft.max.x && p.z >= shaft.min.z && p.z <= shaft.max.z
+	})
 }
 
 #[cfg(test)]
@@ -665,6 +839,23 @@ mod tests {
 			h,
 			RingFortHost::Ring(inner) if matches!(inner.as_ref(), MixedUseLesHallesHost::Roof(_))
 		)));
+		Ok(())
+	}
+
+	#[test]
+	fn terrace_packs_chests_under_the_colonnade() -> anyhow::Result<()> {
+		let fort = fit_fort(7)?;
+		let chests = fort.terrace.furniture_nodes_for_level(LodSceneLevel::High).flatten();
+		anyhow::ensure!(!chests.is_empty(), "upper deck should keep residual chests");
+		let eave_y = fort
+			.ring()
+			.and_then(|ring| ring.last_plan().cloned())
+			.map(|plan| plan.center_xz.y + plan.storey_height)
+			.ok_or_else(|| anyhow::anyhow!("missing last storey"))?;
+		anyhow::ensure!(
+			chests.iter().any(|node| (node.placement.translation.y - eave_y).abs() < 2.0),
+			"chests should sit on the terrace deck"
+		);
 		Ok(())
 	}
 

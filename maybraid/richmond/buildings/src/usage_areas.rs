@@ -67,8 +67,9 @@ pub use livable_quarters::{
 	SITTING_ROOM_SCOPE, STUDY_SCOPE,
 };
 pub use plan_access::{
-	GroupFootprint, PlanAccessParams, DEFAULT_SOFT_ASPECT, DEFAULT_WALK_CLEAR, DOOR_WIDTH,
-	MIN_GROUP_CONNECTIVITY, MIN_ROOM,
+	door_leaf_height, GroupFootprint, PlanAccessParams, DEFAULT_SOFT_ASPECT, DEFAULT_WALK_CLEAR,
+	DOOR_HEIGHT, DOOR_HEIGHT_MIN, DOOR_HEIGHT_SOFT_MAX, DOOR_SIZE_SCALE, DOOR_WIDTH,
+	DOOR_WIDTH_MAX, MIN_GROUP_CONNECTIVITY, MIN_ROOM,
 };
 pub use plan_cells::{
 	cell_has_hall_frontage, cells_edge_adjacent, cells_well_connected, decompose_max_rects,

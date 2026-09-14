@@ -168,7 +168,7 @@ use crate::grove::WoodyGroveLod;
 /// Typical Waialea ~32 m; plant Medium is 36. `grove_bands_for_typical_height_and_plant_medium(32, 36)`.
 pub const PALM_SHADE_STRUCTURAL_HIGH_FACTOR: f32 = 8.0;
 #[cfg(feature = "render")]
-pub const PALM_SHADE_STRUCTURAL_MEDIUM_FACTOR: f32 = 14.0;
+pub const PALM_SHADE_STRUCTURAL_MEDIUM_FACTOR: f32 = 10.0;
 #[cfg(feature = "render")]
 pub const PALM_SHADE_STRUCTURAL_LOW_FACTOR: f32 = 20.0;
 

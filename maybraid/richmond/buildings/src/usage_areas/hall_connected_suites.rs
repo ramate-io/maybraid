@@ -31,7 +31,7 @@ use crate::usage_areas::plan_cells::{
 use crate::usage_areas::plan_geom::host_xz;
 
 const EPS: f32 = 1e-3;
-const DEFAULT_DOOR_WIDTH: f32 = 1.1;
+const DEFAULT_DOOR_WIDTH: f32 = 1.1 * crate::usage_areas::plan_access::DOOR_SIZE_SCALE;
 const DEFAULT_MIN_ROOM: f32 = 2.5;
 
 /// Knobs for packing hall-connected residual groups.
@@ -363,7 +363,7 @@ fn group_hall_door(
 	let door_lo = (center - half).max(lo);
 	let door_hi = (center + half).min(hi);
 	let half_d = (DEFAULT_PANEL_THICKNESS * 0.5 + 0.06).max(0.12);
-	let door_h = (y1 - y0).min(2.2);
+	let door_h = crate::usage_areas::plan_access::door_leaf_height(y1 - y0);
 	let bounds = if along_x {
 		Aabb3d::from_min_max(
 			Vec3::new(door_lo, y0, mid - half_d),

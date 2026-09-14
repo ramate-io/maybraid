@@ -44,8 +44,8 @@ use crate::usage_areas::livable_quarters::{
 use crate::usage_areas::plan_access::PlanAccessParams;
 use crate::usage_areas::plan_cells::{shared_edge_span, subtract_aabb2};
 use crate::usage_areas::plan_geom::{
-	aabb2_near_eq, confines_from_xz, connecting_passage, host_xz, noise_for_cell, DOOR_WIDTH,
-	MIN_ROOM,
+	aabb2_near_eq, confines_from_xz, connecting_passage, door_leaf_height, host_xz, noise_for_cell,
+	DOOR_WIDTH, DOOR_WIDTH_MAX, MIN_ROOM,
 };
 
 const EPS: f32 = 1e-3;
@@ -1562,9 +1562,9 @@ fn slot_edge_passage(xz: Aabb2d, y0: f32, y1: f32, slot_id: u32) -> Openings {
 	let mut openings = Openings::new();
 	let sx = xz.max.x - xz.min.x;
 	let sz = xz.max.y - xz.min.y;
-	let door_w = DOOR_WIDTH.min(sx.max(sz) - 0.25).clamp(0.7, 1.15);
+	let door_w = DOOR_WIDTH.min(sx.max(sz) - 0.25).clamp(0.7, DOOR_WIDTH_MAX);
 	let half = door_w * 0.5;
-	let door_h = (y1 - y0).min(2.15).max(1.9);
+	let door_h = door_leaf_height(y1 - y0);
 	let half_d = 0.12_f32;
 	let bounds = if sx >= sz {
 		let cx = 0.5 * (xz.min.x + xz.max.x);
@@ -2003,7 +2003,7 @@ pub fn passages_on_faces(
 	for (i, &(face, t)) in faces.iter().enumerate() {
 		let door_w = DOOR_WIDTH;
 		let half = door_w * 0.5;
-		let door_h = (y1 - y0).min(2.15).max(1.9);
+		let door_h = door_leaf_height(y1 - y0);
 		let half_d = 0.12_f32;
 		let bounds = match face {
 			CardinalFace::West => {

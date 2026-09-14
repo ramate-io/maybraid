@@ -3513,6 +3513,61 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aa9a19cbb55df58761df49b23516a86d432839add4af60fc256da840f66ed35b"
 
 [[package]]
+name = "furniture-assemblies"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "furniture-components",
+ "furniture-shaders",
+ "lod",
+ "lod-gimme",
+ "material-ref",
+ "procedural-common",
+ "richmond-building-components",
+ "richmond-development-models",
+]
+
+[[package]]
+name = "furniture-components"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "lod",
+ "material-ref",
+ "richmond-building-components",
+ "scene-ref",
+]
+
+[[package]]
+name = "furniture-playground"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "clap",
+ "furniture-assemblies",
+ "furniture-shaders",
+ "game-commands",
+ "lod",
+ "lod-lazy-refs",
+ "material-ref",
+ "procedural-common",
+ "richmond-building-components",
+ "richmond-buildings",
+ "scene-ref",
+]
+
+[[package]]
+name = "furniture-shaders"
+version = "0.0.1"
+dependencies = [
+ "bevy",
+ "material-ref",
+]
+
+[[package]]
 name = "futures"
 version = "0.3.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4757,6 +4812,8 @@ dependencies = [
  "firearm-user",
  "firearms",
  "fleeing-intelligence",
+ "furniture-assemblies",
+ "furniture-shaders",
  "game-commands",
  "ground-avian",
  "hiding-intelligence",
@@ -4781,6 +4838,7 @@ dependencies = [
  "player-camera",
  "poi-intelligence",
  "procedural-common",
+ "richmond-building-components",
  "richmond-building-physics",
  "richmond-building-shaders",
  "richmond-development-models",
@@ -6565,6 +6623,8 @@ dependencies = [
  "clap",
  "durham-terrain",
  "durham-terrain-models",
+ "furniture-assemblies",
+ "furniture-shaders",
  "game-commands",
  "lod",
  "lod-cascade",

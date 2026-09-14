@@ -183,4 +183,38 @@ mod tests {
 		assert!(usage.areas.is_empty());
 		assert!(residual.within.iter().any(|r| r.kind == SpaceKind::ExternalSpace));
 	}
+
+	#[test]
+	fn residual_gallery_gets_a_chest() {
+		// Tall enough to walk, too short on Y for RLA (needs height >= 2).
+		let leftover = Confines::from_bounds(Aabb3d::from_min_max(
+			Vec3::new(0.0, 0.0, 0.0),
+			Vec3::new(6.0, 1.8, 4.0),
+		));
+		let regions = FillableRegions {
+			within: vec![FillRegion::new(SpaceKind::ExternalSpace, leftover)],
+			atop: Vec::new(),
+		};
+		let (usage, _) = LesHallesLivableUsage::paint(regions, NoiseParams::default()).unwrap();
+		assert!(usage.areas.is_empty());
+		assert_eq!(usage.residual_chests.len(), 1);
+		assert!(!usage.furniture_nodes_for_level(LodSceneLevel::High).flatten().is_empty());
+	}
+
+	#[test]
+	fn strip_without_passages_still_gets_an_open_room() {
+		let open = Confines::from_bounds(Aabb3d::from_min_max(
+			Vec3::new(0.0, 0.0, 0.0),
+			Vec3::new(8.0, 3.2, 5.0),
+		));
+		let regions = FillableRegions {
+			within: vec![FillRegion::new(SpaceKind::ExternalSpace, open)],
+			atop: Vec::new(),
+		};
+		let (usage, residual) =
+			LesHallesLivableUsage::paint(regions, NoiseParams::default()).unwrap();
+		assert_eq!(usage.areas.len(), 1);
+		assert!(residual.within.iter().all(|r| r.kind != SpaceKind::ExternalSpace));
+		assert!(!usage.furniture_nodes_for_level(LodSceneLevel::High).flatten().is_empty());
+	}
 }
