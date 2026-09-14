@@ -3521,9 +3521,11 @@ dependencies = [
  "furniture-components",
  "furniture-shaders",
  "lod",
+ "lod-gimme",
  "material-ref",
  "procedural-common",
  "richmond-building-components",
+ "richmond-development-models",
 ]
 
 [[package]]

@@ -32,7 +32,7 @@ use commands::{
 	RequestDevelopmentFocus, RequestLikelihood, RequestMeshStats, RequestRebuild, RequestSeed,
 	RequestTerrainRadius,
 };
-use furniture_assemblies::FurnitureAssembliesPlugin;
+use furniture_assemblies::{FurnitureAssembliesPlugin, FurnitureStreamPlugin, FurnitureStreamSystems};
 use furniture_shaders::FurnitureShadersPlugin;
 use durham_terrain::shaders::{DurhamTerrainShader, DurhamTerrainShaderPlugin, RefractionWater};
 use durham_terrain_models::{
@@ -183,6 +183,9 @@ impl Plugin for DevelopmentsOnTerrainPlugin {
 		if !app.is_plugin_added::<FurnitureAssembliesPlugin>() {
 			app.add_plugins(FurnitureAssembliesPlugin);
 		}
+		if !app.is_plugin_added::<FurnitureStreamPlugin>() {
+			app.add_plugins(FurnitureStreamPlugin);
+		}
 		register_urbanization_lod(app);
 		if self.register_development_forest_lod {
 			register_forest_lod::<DevelopmentForestPresenter>(app);
@@ -223,6 +226,7 @@ impl Plugin for DevelopmentsOnTerrainPlugin {
 		}
 
 		if self.own_terrain {
+			app.configure_sets(Update, FurnitureStreamSystems::Generate.after(spawn_hosts));
 			app.add_systems(
 				Update,
 				(
@@ -240,6 +244,10 @@ impl Plugin for DevelopmentsOnTerrainPlugin {
 		}
 
 		#[allow(private_interfaces)]
+		app.configure_sets(
+			Update,
+			FurnitureStreamSystems::Generate.after(generate_urbanization_developments),
+		);
 		app.add_systems(
 			Update,
 			(

@@ -118,6 +118,27 @@ impl DevelopmentHost {
 		})
 	}
 
+	/// World transform of the development host (building-local furniture composes under this).
+	pub fn transform(&self) -> Transform {
+		match self {
+			Self::LesHallesStorey(_, transform)
+			| Self::LesHallesStairwell(_, transform)
+			| Self::LesHallesRoof(_, transform)
+			| Self::ShepherdsHouse(_, transform)
+			| Self::ShepherdsHut(_, transform)
+			| Self::OldCityMarketTerrace(_, transform)
+			| Self::RingFortCircularTower(_, transform)
+			| Self::RingFortTrazaloidTower(_, transform)
+			| Self::RingFortGalleryTerrace(_, transform)
+			| Self::RingFortGalleryColonnade(_, transform)
+			| Self::RingFortGalleryRoof(_, transform)
+			| Self::SingleHighrise(_, transform)
+			| Self::TempleSanctum(_, transform)
+			| Self::WizardsTower(_, transform)
+			| Self::SkybridgeHall(_, transform) => *transform,
+		}
+	}
+
 	/// High-LOD furniture slots on this host (Richmond packer IR).
 	pub fn furniture_nodes(&self) -> Vec<FurnitureNode> {
 		match self {

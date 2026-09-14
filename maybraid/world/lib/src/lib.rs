@@ -5,8 +5,8 @@
 //! clone Durham fine-cell mesh handles. Vegetation LOD bullseye / lattice
 //! cover the grove fill ring. Urbanization hopscotch streams at the same
 //! 1 km / 3 km rings without re-registering Durham (`TerrainPlugin` owns terrain).
-//! Painted furniture is a generate pass over Richmond High slots, instanced as
-//! host children when developments present.
+//! Painted furniture is a generate pass over Richmond High slots, presented as
+//! flattened 50 m cell hosts in a neighborhood around the camera.
 
 mod camera;
 pub mod commands;

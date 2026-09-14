@@ -1,4 +1,4 @@
-//! Present painted assemblies as children of a Richmond development host.
+//! Isolated paint helper. World present uses 50 m [`crate::FurnitureCell`] hosts.
 
 use bevy::prelude::{ChildOf, Commands, CommandsSceneExt, Component, Entity};
 use furniture_components::assembly_scene;

@@ -361,7 +361,6 @@ enum FlattenedKit {
 	Joint(JointNode),
 	Stair(StairNode),
 	Door(DoorNode),
-	Furniture(FurnitureNode),
 	Label(LabelNode),
 }
 
@@ -375,7 +374,6 @@ impl FlattenedKit {
 			Self::Joint(node) => Box::new(node.scene_with_level(lod_ref, level)),
 			Self::Stair(node) => Box::new(node.scene_with_level(lod_ref, level)),
 			Self::Door(node) => Box::new(node.scene_with_level(lod_ref, level)),
-			Self::Furniture(node) => Box::new(node.scene_with_level(lod_ref, level)),
 			Self::Label(node) => Box::new(node.scene_with_level(lod_ref, level)),
 		}
 	}
@@ -418,7 +416,8 @@ fn flattened_kits(building: &impl BuildingComponents, level: LodSceneLevel) -> V
 			.into_iter()
 			.map(FlattenedKit::Joint),
 	);
-	// Circulation stays readable on Medium. Furniture / labels are High-only.
+	// Circulation stays readable on Medium. Labels are High-only.
+	// Furniture presents on a separate 50 m host neighborhood, not this tree.
 	if matches!(level, LodSceneLevel::High | LodSceneLevel::Medium) {
 		kits.extend(
 			building
@@ -436,13 +435,6 @@ fn flattened_kits(building: &impl BuildingComponents, level: LodSceneLevel) -> V
 		);
 	}
 	if matches!(level, LodSceneLevel::High) {
-		kits.extend(
-			building
-				.furniture_nodes_for_level(level)
-				.flatten()
-				.into_iter()
-				.map(FlattenedKit::Furniture),
-		);
 		kits.extend(
 			building
 				.label_nodes_for_level(level)
@@ -512,7 +504,6 @@ pub fn append_component_scenes(
 			FlattenedKit::Joint(node) => children.push(Box::new(node.host(lod_ref))),
 			FlattenedKit::Stair(node) => children.push(Box::new(node.host(lod_ref))),
 			FlattenedKit::Door(node) => children.push(Box::new(node.host(lod_ref))),
-			FlattenedKit::Furniture(node) => children.push(Box::new(node.host(lod_ref))),
 			FlattenedKit::Label(node) => children.push(Box::new(node.host(lod_ref))),
 		}
 	}
@@ -622,9 +613,6 @@ pub fn building_bounds(building: &impl BuildingComponents) -> Aabb3d {
 	for node in building.joint_nodes_for_level(LodSceneLevel::High).flatten() {
 		absorb(node.scene_bounds());
 	}
-	for node in building.furniture_nodes_for_level(LodSceneLevel::High).flatten() {
-		absorb(node.scene_bounds());
-	}
 	for node in building.label_nodes_for_level(LodSceneLevel::High).flatten() {
 		absorb(node.scene_bounds());
 	}
@@ -731,8 +719,8 @@ mod flatten_tests {
 		let tf = Transform::IDENTITY;
 		let bounds = Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE);
 		let chunks = building_scene_chunks(&building, &lod_ref(&tf, &bounds), LodSceneLevel::High);
-		assert_eq!(chunks.total_primitives(), 2);
-		assert_eq!(chunks.total_weight(), 2 * FLATTENED_KIT_CHUNK_WEIGHT);
+		assert_eq!(chunks.total_primitives(), 1);
+		assert_eq!(chunks.total_weight(), FLATTENED_KIT_CHUNK_WEIGHT);
 	}
 
 	#[test]
@@ -785,7 +773,7 @@ mod flatten_tests {
 			building_scene_chunks(&building, &lod_ref(&tf, &bounds), LodSceneLevel::Medium);
 		assert_eq!(medium.total_primitives(), 3);
 		let high = building_scene_chunks(&building, &lod_ref(&tf, &bounds), LodSceneLevel::High);
-		assert_eq!(high.total_primitives(), 4);
+		assert_eq!(high.total_primitives(), 3);
 	}
 
 	struct TwoWalls {

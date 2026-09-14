@@ -239,6 +239,15 @@ impl DevelopmentEntryStore {
 	pub fn development(&self, id: Id) -> Option<&BuiltDevelopment> {
 		self.developments.get(&id).map(|e| &e.value)
 	}
+
+	/// Built developments whose stored bounds overlap `region` on XZ.
+	pub fn developments_overlapping(&self, region: Aabb3d) -> Vec<&BuiltDevelopment> {
+		self.developments
+			.values()
+			.filter(|entry| region.intersects(&entry.bounds))
+			.map(|entry| &entry.value)
+			.collect()
+	}
 }
 
 const PAD_INDEX_CELL_XZ: f32 = 160.0;
