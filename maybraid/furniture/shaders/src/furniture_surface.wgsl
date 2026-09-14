@@ -123,10 +123,6 @@ fn rim_color(kind: u32) -> vec3<f32> {
 
 fn finish(kind: u32, rgb: vec3<f32>, n: vec3<f32>, world_pos: vec3<f32>) -> vec3<f32> {
     var tint = rgb;
-    // Wood only: a light honey lift. Other recipes keep their authored hue.
-    if (kind == KIND_WOOD) {
-        tint = rgb * vec3<f32>(1.04, 1.01, 0.97) + vec3<f32>(0.015, 0.008, 0.0);
-    }
     tint *= mix(vec3<f32>(1.0), hemi(n), 0.12);
     let v = normalize(view.world_position.xyz - world_pos);
     let rim = pow(1.0 - saturate(abs(dot(normalize(n), v))), 2.4);
@@ -134,18 +130,13 @@ fn finish(kind: u32, rgb: vec3<f32>, n: vec3<f32>, world_pos: vec3<f32>) -> vec3
     return tint;
 }
 
+/// BotW stained wood: a flat wash, no rings or smudged grain.
 fn wood_look(p: vec3<f32>) -> Look {
     let base = palette(0u);
-    let accent = palette_or(1u, base * 1.18);
-    let scale = mix(1.4, 2.8, saturate(material.scalars[0].y));
-    let mottling = fbm(p * scale);
-    let radial = length(p.xz);
-    let ring = abs(sin(radial * scale * 16.0 + mottling * 5.2));
-    let latewood = pow(ring, 10.0);
-    var tint = mix(base, accent, mottling * 0.38);
-    tint = mix(tint, tint * 0.72, latewood * 0.5);
-    let roughness = mix(0.36, 0.58, mottling);
-    return Look(tint, roughness, 0.0, 0.24);
+    let accent = palette_or(1u, base * vec3<f32>(1.04, 1.02, 0.98));
+    let wash = fbm(p * 0.16);
+    let tint = mix(base, accent, (wash - 0.5) * 0.05 + 0.5);
+    return Look(tint, 0.48, 0.0, 0.18);
 }
 
 fn cloth_look(p: vec3<f32>) -> Look {

@@ -1,8 +1,8 @@
-//! Chest: trunk plus a lid on top.
+//! Chest: trunk, lid, and a metal latch on the trunk front.
 
-use crate::palette::chest;
+use crate::palette::{chest, metal};
 use crate::Assembly;
-use furniture_components::{slab, PartKind, PlacedPart};
+use furniture_components::{latch_slab, slab, PartKind, PlacedPart};
 use richmond_building_components::FurnitureGeometry;
 
 /// Finish-only knobs. Topology does not change with [`Self::finish_seed`].
@@ -21,7 +21,7 @@ impl ChestParams {
 	}
 }
 
-/// Trunk fills most of the slot; lid occupies the top band.
+/// Trunk fills most of the slot; lid occupies the top band; latch on the front.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Chest {
 	pub finish_seed: u64,
@@ -43,6 +43,11 @@ impl Chest {
 					kind: PartKind::ChestLid,
 					placement: slab(1.02, 0.78, 1.0),
 					material: chest(seed, 2),
+				},
+				PlacedPart {
+					kind: PartKind::ChestLatch,
+					placement: latch_slab(0.22, 0.56, 0.74, 0.12),
+					material: metal(seed, 3),
 				},
 			],
 		}
@@ -102,13 +107,44 @@ mod tests {
 			crate::palette::ChestKind::Cosmos => furniture_shaders::RECIPE_FURNITURE_COSMOS,
 			crate::palette::ChestKind::Scales => furniture_shaders::RECIPE_FURNITURE_SCALES,
 		};
-		for part in &built.parts {
+		for part in built.parts.iter().filter(|p| p.kind != PartKind::ChestLatch) {
 			match &part.material.name {
 				material_ref::MaterialId::Name(name) if name == want => {}
 				other => {
 					return Err(anyhow::anyhow!("{:?} should be {want}, got {other:?}", part.kind));
 				}
 			}
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn latch_sits_on_the_trunk_front() -> anyhow::Result<()> {
+		let chest = ChestParams::unit_from_num(3).build();
+		let latch = chest
+			.parts
+			.iter()
+			.find(|p| p.kind == PartKind::ChestLatch)
+			.ok_or_else(|| anyhow::anyhow!("missing latch"))?;
+		match &latch.material.name {
+			material_ref::MaterialId::Name(name)
+				if name == furniture_shaders::RECIPE_FURNITURE_METAL => {}
+			other => return Err(anyhow::anyhow!("latch should be metal, got {other:?}")),
+		}
+		let want = latch_slab(0.22, 0.56, 0.74, 0.12);
+		if (latch.placement.translation - want.translation).length() > 1e-4
+			|| (latch.placement.scale - want.scale).length() > 1e-4
+		{
+			return Err(anyhow::anyhow!(
+				"latch should sit on the upper trunk front, got {:?}",
+				latch.placement
+			));
+		}
+		if latch.placement.translation.z.abs() > 1e-4 {
+			return Err(anyhow::anyhow!(
+				"latch plan Z offset should stay 0 (front from kit map), got {}",
+				latch.placement.translation.z
+			));
 		}
 		Ok(())
 	}

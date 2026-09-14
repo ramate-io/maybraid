@@ -4,7 +4,7 @@
 //! look graph keyed by recipe (`furniture_wood`, `furniture_lacquer`,
 //! `furniture_metal`, `furniture_marble`, `furniture_ornate`, `furniture_lava`,
 //! `furniture_cosmos`, `furniture_scales`, …). Grain, veins, nebula, and
-//! gold inlay are procedural.
+//! gold inlay are procedural. Wood is a flat BotW stain, not ring grain.
 
 use bevy::prelude::*;
 

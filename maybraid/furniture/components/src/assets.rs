@@ -17,6 +17,8 @@ pub const COVERS_001: AssetPath = AssetPath::new("furniture/bed/covers/covers_00
 pub const CHEST_TRUNK_001: AssetPath = AssetPath::new("furniture/chest/trunk/trunk_001.glb");
 /// Chest lid (sits on the trunk).
 pub const CHEST_LID_001: AssetPath = AssetPath::new("furniture/chest/lid/lid_001.glb");
+/// Chest latch (Blender \(Y \in [0,1]\) from the front, \(X,Z \in [-1,1]\)).
+pub const CHEST_LATCH_001: AssetPath = AssetPath::new("furniture/chest/latch/latch_001.glb");
 
 /// Chair leg tube.
 pub const CHAIR_LEG_001: AssetPath = AssetPath::new("furniture/chair/legs/chair_leg_001.glb");

@@ -10,9 +10,11 @@
 //! - authored \(+Z\) (up) becomes engine \(+Y\)
 //!
 //! After remap a box kit is \(X,Z \in [-1, 1]\), \(Y \in [0, 1]\) (origin on
-//! the floor). [`BOX_KIT_TO_UNIT`] maps that into the Richmond unit slot cube
-//! \([-0.5, 0.5]^3\). [`slab`] is floor-origin in that cube; compose
-//! `kit_to_unit.compose_child(slab)` before applying the slot placement.
+//! the floor). The chest latch is front-centroid: \(X,Y \in [-1, 1]\),
+//! \(Z \in [0, 1]\) inward from the front face. [`BOX_KIT_TO_UNIT`] maps a
+//! floor box into the Richmond unit slot cube \([-0.5, 0.5]^3\). [`slab`] is
+//! floor-origin in that cube; [`latch_slab`] is the latch equivalent. Compose
+//! `kit_to_unit.compose_child(unit)` before applying the slot placement.
 
 use bevy::math::Vec3;
 use richmond_building_components::Placement;
@@ -21,6 +23,13 @@ use richmond_building_components::Placement;
 pub const BOX_KIT_MIN: Vec3 = Vec3::new(-1.0, 0.0, -1.0);
 /// See [`BOX_KIT_MIN`].
 pub const BOX_KIT_MAX: Vec3 = Vec3::new(1.0, 1.0, 1.0);
+
+/// Latch after remap: front-centroid, \(X,Y \in [-1, 1]\), \(Z \in [0, 1]\) inward.
+///
+/// Authored Blender: \(Y \in [0, 1]\) (depth from the front), \(X,Z \in [-1, 1]\).
+pub const LATCH_KIT_MIN: Vec3 = Vec3::new(-1.0, -1.0, 0.0);
+/// See [`LATCH_KIT_MIN`].
+pub const LATCH_KIT_MAX: Vec3 = Vec3::new(1.0, 1.0, 1.0);
 
 /// Authored chair-leg tube after remap: plan \(X,Z \in [-0.2, 0.2]\), \(Y \in [0, 1]\).
 pub const LEG_KIT_MIN: Vec3 = Vec3::new(-0.2, 0.0, -0.2);
@@ -34,6 +43,19 @@ pub const BOX_KIT_TO_UNIT: Placement = Placement {
 	pitch: 0.0,
 	roll: 0.0,
 	scale: Vec3::new(0.5, 1.0, 0.5),
+};
+
+/// Latch kit → unit slot: front centroid on the \(−Z\) face.
+///
+/// Authored \(X,Y \in [-1, 1]\) are centered (`scale = 0.5`, no \(Y\) shift).
+/// Authored \(Z \in [0, 1]\) is depth from the front (`translation.z = -0.5`).
+/// Use [`latch_slab`] so floor-fraction \(y0..y1\) still lands correctly.
+pub const LATCH_KIT_TO_UNIT: Placement = Placement {
+	translation: Vec3::new(0.0, 0.0, -0.5),
+	yaw: 0.0,
+	pitch: 0.0,
+	roll: 0.0,
+	scale: Vec3::new(0.5, 0.5, 0.5),
 };
 
 /// Leg tube → unit slot (same floor origin).
@@ -77,6 +99,21 @@ pub fn run_slab(scale_x: f32, scale_z: f32, y0: f32, y1: f32, flush_pos_z: bool)
 		p.translation.z = 0.5 - p.scale.z * 0.5;
 	}
 	p
+}
+
+/// Front-centroid latch in the unit slot: \(y0..y1\) are floor-origin height
+/// fractions; `width` / `depth` are slot-plan fractions. The kit front stays
+/// on the unit-cube \(−Z\) face.
+pub fn latch_slab(width: f32, y0: f32, y1: f32, depth: f32) -> Placement {
+	let y0 = y0.clamp(0.0, 1.0);
+	let y1 = y1.clamp(y0 + 1e-4, 1.0);
+	Placement {
+		translation: Vec3::new(0.0, y0 + y1 - 1.0, 0.0),
+		yaw: 0.0,
+		pitch: 0.0,
+		roll: 0.0,
+		scale: Vec3::new(width.max(1e-4), (y1 - y0).max(1e-4), depth.max(1e-4)),
+	}
 }
 
 /// Offset a placement in unit-slot coordinates (fractions of the parent cube).
@@ -139,6 +176,26 @@ mod tests {
 		}
 		if (band.scale.y - 0.60).abs() > 1e-5 {
 			return Err(anyhow::anyhow!("slab height should be y1-y0"));
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn latch_slab_pins_the_front_and_the_height_band() -> anyhow::Result<()> {
+		let unit = latch_slab(0.22, 0.56, 0.74, 0.12);
+		let placed = place_kit(Placement::IDENTITY, LATCH_KIT_TO_UNIT, unit);
+		let front = placed.translation.z;
+		if (front + 0.5).abs() > 1e-4 {
+			return Err(anyhow::anyhow!("latch front should sit at z=-0.5, got {front}"));
+		}
+		let y_lo = placed.translation.y - placed.scale.y;
+		let y_hi = placed.translation.y + placed.scale.y;
+		if (y_lo + 0.5 - 0.56).abs() > 1e-4 || (y_hi + 0.5 - 0.74).abs() > 1e-4 {
+			return Err(anyhow::anyhow!(
+				"latch Y should span floor-frac 0.56..0.74, got {}..{}",
+				y_lo + 0.5,
+				y_hi + 0.5
+			));
 		}
 		Ok(())
 	}

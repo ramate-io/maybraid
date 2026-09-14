@@ -1,17 +1,16 @@
 //! Seeded finish picks: carcass (wood / lacquer / metal) and chest skins.
 //!
-//! Recipe is **not** fixed per part. [`carcass`] and [`chest`] choose a look
-//! from [`finish_seed`](super::Assembly::finish_seed); salt only jitters the
-//! palette inside that look. The shader no longer force-warms every albedo
-//! toward honey, so birch / ebon / lacquer indigo actually read.
+//! [`carcass`] is wood most of the time. Lacquer and metal are rare
+//! (~5% each). Within wood, muted honey / cherry / ebon lead; pale and
+//! painted rows are uncommon.
 //!
 //! # Carcass (frames, legs, backs, cabinet bodies)
 //!
-//! | Kind | Recipe | Palette families |
-//! |---|---|---|
-//! | Wood | `furniture_wood` | honey, cherry, birch, ebon, olive, drift |
-//! | Lacquer | `furniture_lacquer` | vermillion, indigo, jade, cream |
-//! | Metal | `furniture_metal` | brass, copper, pewter, iron |
+//! | Kind | Odds | Recipe | Palette |
+//! |---|---|---|---|
+//! | Wood | ~90% | `furniture_wood` | muted honey / cherry / ebon; rare birch / olive / drift |
+//! | Lacquer | ~5% | `furniture_lacquer` | vermillion, indigo, jade, cream |
+//! | Metal | ~5% | `furniture_metal` | brass, copper, pewter, iron |
 //!
 //! # Chests
 //!
@@ -53,22 +52,22 @@ pub enum ChestKind {
 	Scales,
 }
 
-/// Honey, cherry, birch, ebon, olive, drift-grey.
+/// Muted stained woods first; pale / cool rows are rare picks.
 pub const WOOD: [[f32; 3]; 6] = [
-	[0.78, 0.50, 0.22],
-	[0.70, 0.28, 0.20],
-	[0.86, 0.78, 0.58],
-	[0.16, 0.10, 0.14],
-	[0.42, 0.46, 0.22],
-	[0.46, 0.52, 0.50],
+	[0.58, 0.40, 0.24],
+	[0.50, 0.28, 0.20],
+	[0.78, 0.70, 0.52],
+	[0.18, 0.12, 0.10],
+	[0.38, 0.40, 0.24],
+	[0.42, 0.44, 0.42],
 ];
 pub const WOOD_ACCENT: [[f32; 3]; 6] = [
-	[0.96, 0.72, 0.32],
-	[0.88, 0.42, 0.28],
-	[0.96, 0.90, 0.72],
-	[0.32, 0.20, 0.28],
-	[0.62, 0.66, 0.32],
-	[0.68, 0.74, 0.72],
+	[0.64, 0.46, 0.28],
+	[0.56, 0.32, 0.22],
+	[0.84, 0.76, 0.58],
+	[0.24, 0.16, 0.14],
+	[0.44, 0.46, 0.28],
+	[0.50, 0.52, 0.50],
 ];
 
 pub const LACQUER: [[f32; 3]; 4] =
@@ -152,11 +151,13 @@ fn recipe(
 }
 
 /// Carcass recipe from the assembly seed (same for every woody part).
+///
+/// Wood is the default. Lacquer and metal each land on one bucket in twenty.
 pub fn carcass_kind(seed: u64) -> CarcassKind {
-	match mix_seed(seed, CARCASS_SALT) % 3 {
-		0 => CarcassKind::Wood,
-		1 => CarcassKind::Lacquer,
-		_ => CarcassKind::Metal,
+	match mix_seed(seed, CARCASS_SALT) % 20 {
+		0 => CarcassKind::Lacquer,
+		1 => CarcassKind::Metal,
+		_ => CarcassKind::Wood,
 	}
 }
 
@@ -175,12 +176,33 @@ pub fn first_seed_for_chest(want: ChestKind, limit: u64) -> Option<u64> {
 	(0..limit).find(|&seed| chest_kind(seed) == want)
 }
 
+fn wood_row(seed: u64, salt: u64) -> usize {
+	match mix_seed(seed, salt) % 12 {
+		0..=4 => 0,
+		5..=8 => 1,
+		9 => 3,
+		10 => 4,
+		_ => {
+			if mix_seed(seed, salt.wrapping_add(1)) % 2 == 0 {
+				2
+			} else {
+				5
+			}
+		}
+	}
+}
+
 pub fn wood(seed: u64, salt: u64) -> MaterialRef {
+	let row = wood_row(seed, salt);
 	recipe(
 		RECIPE_FURNITURE_WOOD,
 		seed ^ salt,
-		2.6,
-		[rgb(&WOOD, seed, salt), rgb(&WOOD_ACCENT, seed, salt.wrapping_add(11))],
+		1.1,
+		[Color::srgb(WOOD[row][0], WOOD[row][1], WOOD[row][2]), Color::srgb(
+			WOOD_ACCENT[row][0],
+			WOOD_ACCENT[row][1],
+			WOOD_ACCENT[row][2],
+		)],
 	)
 }
 
@@ -332,15 +354,14 @@ mod tests {
 	}
 
 	#[test]
-	fn carcass_recipe_varies_with_seed() -> anyhow::Result<()> {
-		let kinds: Vec<_> = (0..18).map(carcass_kind).collect();
+	fn carcass_is_usually_wood() -> anyhow::Result<()> {
+		let kinds: Vec<_> = (0..40).map(carcass_kind).collect();
 		let wood = kinds.iter().filter(|k| **k == CarcassKind::Wood).count();
-		let other = kinds.len() - wood;
-		if other == 0 {
-			return Err(anyhow::anyhow!("carcass stayed wood for every seed"));
+		if wood < 30 {
+			return Err(anyhow::anyhow!("carcass should be wood on most seeds, got {wood}/40"));
 		}
-		if wood == 0 {
-			return Err(anyhow::anyhow!("carcass never picked wood"));
+		if (0..256).all(|seed| carcass_kind(seed) == CarcassKind::Wood) {
+			return Err(anyhow::anyhow!("rare lacquer/metal never appeared in 0..256"));
 		}
 		Ok(())
 	}

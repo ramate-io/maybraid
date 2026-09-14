@@ -4,7 +4,7 @@ use material_ref::MaterialRef;
 use richmond_building_components::{AssetPath, Placement};
 
 use crate::assets;
-use crate::kit_space::{place_kit, BOX_KIT_TO_UNIT, LEG_KIT_TO_UNIT};
+use crate::kit_space::{place_kit, BOX_KIT_TO_UNIT, LATCH_KIT_TO_UNIT, LEG_KIT_TO_UNIT};
 
 /// One kit piece: unit-slot slab + deferred paint.
 #[derive(Clone, Debug, PartialEq)]
@@ -22,6 +22,7 @@ pub enum PartKind {
 	Covers,
 	ChestTrunk,
 	ChestLid,
+	ChestLatch,
 	ChairLeg,
 	ChairSeat,
 	ChairBack,
@@ -39,6 +40,7 @@ impl PartKind {
 			Self::Covers => assets::COVERS_001,
 			Self::ChestTrunk => assets::CHEST_TRUNK_001,
 			Self::ChestLid => assets::CHEST_LID_001,
+			Self::ChestLatch => assets::CHEST_LATCH_001,
 			Self::ChairLeg => assets::CHAIR_LEG_001,
 			Self::ChairSeat => assets::CHAIR_SEAT_001,
 			Self::ChairBack => assets::CHAIR_BACK_001,
@@ -52,6 +54,7 @@ impl PartKind {
 	pub const fn kit_to_unit(self) -> Placement {
 		match self {
 			Self::ChairLeg => LEG_KIT_TO_UNIT,
+			Self::ChestLatch => LATCH_KIT_TO_UNIT,
 			_ => BOX_KIT_TO_UNIT,
 		}
 	}
@@ -85,6 +88,9 @@ mod tests {
 		}
 		if PartKind::ChairLeg.asset_path().as_str() != "furniture/chair/legs/chair_leg_001.glb" {
 			return Err(anyhow::anyhow!("chair-leg path drifted from art/furniture"));
+		}
+		if PartKind::ChestLatch.asset_path().as_str() != "furniture/chest/latch/latch_001.glb" {
+			return Err(anyhow::anyhow!("latch path drifted from art/furniture"));
 		}
 		Ok(())
 	}
