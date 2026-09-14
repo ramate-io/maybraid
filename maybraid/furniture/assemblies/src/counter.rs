@@ -1,6 +1,6 @@
 //! Counter: toekick, cabinet, top — flush ends, depth-only kick.
 
-use crate::palette::{marble, wood};
+use crate::palette::{carcass, marble};
 use crate::Assembly;
 use furniture_components::{run_slab, PartKind, PlacedPart};
 use richmond_building_components::FurnitureGeometry;
@@ -50,12 +50,12 @@ impl Counter {
 				PlacedPart {
 					kind: PartKind::CounterFooter,
 					placement: run_slab(1.0, TOEKICK_Z, 0.0, 0.12, flush),
-					material: wood(seed, 1),
+					material: carcass(seed, 1),
 				},
 				PlacedPart {
 					kind: PartKind::CounterVolume,
 					placement: run_slab(1.0, CABINET_Z, 0.12, 0.88, flush),
-					material: wood(seed, 2),
+					material: carcass(seed, 2),
 				},
 				PlacedPart {
 					kind: PartKind::CounterTop,

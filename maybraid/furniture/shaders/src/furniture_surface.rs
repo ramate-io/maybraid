@@ -17,12 +17,22 @@ pub const RECIPE_FURNITURE_CLOTH: &str = "furniture_cloth";
 pub const RECIPE_FURNITURE_SOFT: &str = "furniture_soft";
 pub const RECIPE_FURNITURE_MARBLE: &str = "furniture_marble";
 pub const RECIPE_FURNITURE_ORNATE: &str = "furniture_ornate";
+pub const RECIPE_FURNITURE_LAVA: &str = "furniture_lava";
+pub const RECIPE_FURNITURE_COSMOS: &str = "furniture_cosmos";
+pub const RECIPE_FURNITURE_SCALES: &str = "furniture_scales";
+pub const RECIPE_FURNITURE_LACQUER: &str = "furniture_lacquer";
+pub const RECIPE_FURNITURE_METAL: &str = "furniture_metal";
 
 pub const KIND_WOOD: u32 = 0;
 pub const KIND_CLOTH: u32 = 1;
 pub const KIND_SOFT: u32 = 2;
 pub const KIND_MARBLE: u32 = 3;
 pub const KIND_ORNATE: u32 = 4;
+pub const KIND_LAVA: u32 = 5;
+pub const KIND_COSMOS: u32 = 6;
+pub const KIND_SCALES: u32 = 7;
+pub const KIND_LACQUER: u32 = 8;
+pub const KIND_METAL: u32 = 9;
 
 const SCALAR_VEC4S: usize = MATERIAL_SCALAR_FLOATS / 4;
 const DEFAULT_WOOD: Vec4 = Vec4::new(0.72, 0.46, 0.20, 1.0);
@@ -45,6 +55,11 @@ pub enum FurnitureSurfaceKind {
 	Soft,
 	Marble,
 	Ornate,
+	Lava,
+	Cosmos,
+	Scales,
+	Lacquer,
+	Metal,
 }
 
 impl FurnitureSurfaceKind {
@@ -55,6 +70,11 @@ impl FurnitureSurfaceKind {
 			Self::Soft => KIND_SOFT,
 			Self::Marble => KIND_MARBLE,
 			Self::Ornate => KIND_ORNATE,
+			Self::Lava => KIND_LAVA,
+			Self::Cosmos => KIND_COSMOS,
+			Self::Scales => KIND_SCALES,
+			Self::Lacquer => KIND_LACQUER,
+			Self::Metal => KIND_METAL,
 		}
 	}
 
@@ -64,6 +84,11 @@ impl FurnitureSurfaceKind {
 			RECIPE_FURNITURE_SOFT => Self::Soft,
 			RECIPE_FURNITURE_MARBLE => Self::Marble,
 			RECIPE_FURNITURE_ORNATE => Self::Ornate,
+			RECIPE_FURNITURE_LAVA => Self::Lava,
+			RECIPE_FURNITURE_COSMOS => Self::Cosmos,
+			RECIPE_FURNITURE_SCALES => Self::Scales,
+			RECIPE_FURNITURE_LACQUER => Self::Lacquer,
+			RECIPE_FURNITURE_METAL => Self::Metal,
 			_ => Self::Wood,
 		}
 	}
@@ -171,6 +196,11 @@ pub fn is_furniture_surface_recipe(name: &str) -> bool {
 			| RECIPE_FURNITURE_SOFT
 			| RECIPE_FURNITURE_MARBLE
 			| RECIPE_FURNITURE_ORNATE
+			| RECIPE_FURNITURE_LAVA
+			| RECIPE_FURNITURE_COSMOS
+			| RECIPE_FURNITURE_SCALES
+			| RECIPE_FURNITURE_LACQUER
+			| RECIPE_FURNITURE_METAL
 	)
 }
 
@@ -187,5 +217,8 @@ mod tests {
 		assert!((material.params.colors[0].x - 1.0).abs() < 1e-5);
 		assert!(is_furniture_surface_recipe(RECIPE_FURNITURE_ORNATE));
 		assert!(!is_furniture_surface_recipe("wood"));
+		let lava =
+			FurnitureSurfaceMaterial::from_material_ref(&MaterialRef::named(RECIPE_FURNITURE_LAVA));
+		assert_eq!(lava.params.kind, KIND_LAVA);
 	}
 }

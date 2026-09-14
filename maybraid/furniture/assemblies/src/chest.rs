@@ -1,6 +1,6 @@
 //! Chest: trunk plus a lid on top.
 
-use crate::palette::ornate;
+use crate::palette::chest;
 use crate::Assembly;
 use furniture_components::{slab, PartKind, PlacedPart};
 use richmond_building_components::FurnitureGeometry;
@@ -37,12 +37,12 @@ impl Chest {
 				PlacedPart {
 					kind: PartKind::ChestTrunk,
 					placement: slab(1.0, 0.0, 0.78),
-					material: ornate(seed, 1),
+					material: chest(seed, 1),
 				},
 				PlacedPart {
 					kind: PartKind::ChestLid,
 					placement: slab(1.02, 0.78, 1.0),
-					material: ornate(seed, 2),
+					material: chest(seed, 2),
 				},
 			],
 		}
@@ -94,14 +94,19 @@ mod tests {
 	}
 
 	#[test]
-	fn trunk_and_lid_use_ornate() -> anyhow::Result<()> {
-		let chest = ChestParams::unit_from_num(3).build();
-		for part in &chest.parts {
+	fn trunk_and_lid_share_the_chest_skin() -> anyhow::Result<()> {
+		let built = ChestParams::unit_from_num(3).build();
+		let want = match crate::palette::chest_kind(3) {
+			crate::palette::ChestKind::Ornate => furniture_shaders::RECIPE_FURNITURE_ORNATE,
+			crate::palette::ChestKind::Lava => furniture_shaders::RECIPE_FURNITURE_LAVA,
+			crate::palette::ChestKind::Cosmos => furniture_shaders::RECIPE_FURNITURE_COSMOS,
+			crate::palette::ChestKind::Scales => furniture_shaders::RECIPE_FURNITURE_SCALES,
+		};
+		for part in &built.parts {
 			match &part.material.name {
-				material_ref::MaterialId::Name(name)
-					if name == furniture_shaders::RECIPE_FURNITURE_ORNATE => {}
+				material_ref::MaterialId::Name(name) if name == want => {}
 				other => {
-					return Err(anyhow::anyhow!("{:?} should be ornate, got {other:?}", part.kind));
+					return Err(anyhow::anyhow!("{:?} should be {want}, got {other:?}", part.kind));
 				}
 			}
 		}

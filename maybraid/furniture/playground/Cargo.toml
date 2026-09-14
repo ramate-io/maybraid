@@ -20,6 +20,7 @@ clap = { workspace = true }
 furniture-assemblies = { workspace = true }
 furniture-shaders = { workspace = true }
 game-commands = { workspace = true }
+material-ref = { workspace = true }
 lod = { workspace = true }
 lod-lazy-refs = { workspace = true }
 procedural-common = { workspace = true }

@@ -271,7 +271,40 @@ pub fn authored_extreme_slots() -> Vec<GallerySlot> {
 				Some(FurnitureAbutment::NegZ),
 			),
 		},
+		chest_skin_slot(
+			"chest-lava",
+			furniture_assemblies::palette::ChestKind::Lava,
+			Vec3::new(5.0, 0.0, 18.0),
+		),
+		chest_skin_slot(
+			"chest-cosmos",
+			furniture_assemblies::palette::ChestKind::Cosmos,
+			Vec3::new(7.4, 0.0, 18.0),
+		),
+		chest_skin_slot(
+			"chest-scales",
+			furniture_assemblies::palette::ChestKind::Scales,
+			Vec3::new(9.8, 0.0, 18.0),
+		),
 	]
+}
+
+fn chest_skin_slot(
+	label: &'static str,
+	skin: furniture_assemblies::palette::ChestKind,
+	origin: Vec3,
+) -> GallerySlot {
+	let seed = furniture_assemblies::palette::first_seed_for_chest(skin, 128).unwrap_or(0);
+	GallerySlot {
+		label,
+		node: typical_slot(
+			FurnitureNode::chest,
+			Vec3::new(0.9, 0.7, 0.5),
+			origin,
+			seed,
+			Some(FurnitureAbutment::NegZ),
+		),
+	}
 }
 
 /// Richmond rooms plus authored extremes.
@@ -373,6 +406,33 @@ mod tests {
 		}
 		if !paint_changed {
 			return Err(anyhow::anyhow!("two seeds should pick different paint"));
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn authored_chests_include_lava_cosmos_scales() -> anyhow::Result<()> {
+		let slots = authored_extreme_slots();
+		for (label, want) in [
+			("chest-lava", furniture_shaders::RECIPE_FURNITURE_LAVA),
+			("chest-cosmos", furniture_shaders::RECIPE_FURNITURE_COSMOS),
+			("chest-scales", furniture_shaders::RECIPE_FURNITURE_SCALES),
+		] {
+			let slot = slots
+				.iter()
+				.find(|s| s.label == label)
+				.ok_or_else(|| anyhow::anyhow!("missing {label}"))?;
+			let assembly =
+				try_assembly(&slot.node).ok_or_else(|| anyhow::anyhow!("{label} paint"))?;
+			let trunk = assembly
+				.parts
+				.iter()
+				.find(|p| p.kind == PartKind::ChestTrunk)
+				.ok_or_else(|| anyhow::anyhow!("{label} trunk"))?;
+			match &trunk.material.name {
+				material_ref::MaterialId::Name(name) if name == want => {}
+				other => return Err(anyhow::anyhow!("{label} should be {want}, got {other:?}")),
+			}
 		}
 		Ok(())
 	}

@@ -1,6 +1,6 @@
 //! Bed: frame, mattress, covers.
 
-use crate::palette::{cloth, mattress, wood};
+use crate::palette::{carcass, cloth, mattress};
 use crate::Assembly;
 use furniture_components::{slab, PartKind, PlacedPart};
 use richmond_building_components::FurnitureGeometry;
@@ -40,7 +40,7 @@ impl Bed {
 				PlacedPart {
 					kind: PartKind::BedFrame,
 					placement: slab(1.0, 0.0, 0.32),
-					material: wood(seed, 1),
+					material: carcass(seed, 1),
 				},
 				PlacedPart {
 					kind: PartKind::Mattress,

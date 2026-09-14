@@ -2,7 +2,7 @@
 
 use bevy::math::Vec3;
 
-use crate::palette::{cloth, wood};
+use crate::palette::{carcass, cloth};
 use crate::Assembly;
 use furniture_components::{shift, slab, PartKind, PlacedPart};
 use richmond_building_components::FurnitureGeometry;
@@ -53,7 +53,7 @@ impl Chair {
 			parts.push(PlacedPart {
 				kind: PartKind::ChairLeg,
 				placement: shift(slab(LEG_XZ, 0.0, SEAT_Y0), Vec3::new(x, 0.0, z)),
-				material: wood(seed, 1),
+				material: carcass(seed, 1),
 			});
 		}
 		parts.push(PlacedPart {
@@ -64,7 +64,7 @@ impl Chair {
 		parts.push(PlacedPart {
 			kind: PartKind::ChairBack,
 			placement: slab(1.0, SEAT_Y0, 1.0),
-			material: wood(seed, 3),
+			material: carcass(seed, 3),
 		});
 		Self { finish_seed: seed, parts }
 	}

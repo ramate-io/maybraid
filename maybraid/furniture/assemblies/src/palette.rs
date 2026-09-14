@@ -1,64 +1,127 @@
-//! Noisy wood / cloth / marble / ornate picks keyed by a slot finish seed.
+//! Seeded finish picks: carcass (wood / lacquer / metal) and chest skins.
 //!
-//! BotW-warm: honey woods, saffron cloth, veined marble, gold inlay. Seed
-//! picks a row; recipe is fixed per part.
+//! Recipe is **not** fixed per part. [`carcass`] and [`chest`] choose a look
+//! from [`finish_seed`](super::Assembly::finish_seed); salt only jitters the
+//! palette inside that look. The shader no longer force-warms every albedo
+//! toward honey, so birch / ebon / lacquer indigo actually read.
 //!
-//! # Color table (sRGB; seed picks a row)
+//! # Carcass (frames, legs, backs, cabinet bodies)
 //!
-//! | Part | Recipe | Palette |
+//! | Kind | Recipe | Palette families |
 //! |---|---|---|
-//! | Frame, legs, back, counter body | `furniture_wood` | honey / amber / cherry / teak |
-//! | Chair seat, bed covers | `furniture_cloth` | saffron / coral / teal / plum |
-//! | Mattress | `furniture_soft` | warm ivory / cream / oatmeal / blush |
-//! | Countertop | `furniture_marble` | cream+gold / sage / rose / ink |
-//! | Chest trunk + lid | `furniture_ornate` | wood + gold + gem panel |
+//! | Wood | `furniture_wood` | honey, cherry, birch, ebon, olive, drift |
+//! | Lacquer | `furniture_lacquer` | vermillion, indigo, jade, cream |
+//! | Metal | `furniture_metal` | brass, copper, pewter, iron |
 //!
-//! Unpainted Richmond kinds (nightstand, dresser, wardrobe, …) stay wireframe
-//! using [`richmond_building_components::FurnitureGeometry::wireframe_color`].
+//! # Chests
+//!
+//! | Kind | Recipe | Field |
+//! |---|---|---|
+//! | Ornate | `furniture_ornate` | wood + gold filigree |
+//! | Lava | `furniture_lava` | coal + pulsing veins |
+//! | Cosmos | `furniture_cosmos` | nebula + star glints |
+//! | Scales | `furniture_scales` | overlapping iridescent tiles |
+//!
+//! Unpainted Richmond kinds stay wireframe.
 
 use bevy::prelude::Color;
 use furniture_shaders::{
-	RECIPE_FURNITURE_CLOTH, RECIPE_FURNITURE_MARBLE, RECIPE_FURNITURE_ORNATE,
-	RECIPE_FURNITURE_SOFT, RECIPE_FURNITURE_WOOD,
+	RECIPE_FURNITURE_CLOTH, RECIPE_FURNITURE_COSMOS, RECIPE_FURNITURE_LACQUER,
+	RECIPE_FURNITURE_LAVA, RECIPE_FURNITURE_MARBLE, RECIPE_FURNITURE_METAL,
+	RECIPE_FURNITURE_ORNATE, RECIPE_FURNITURE_SCALES, RECIPE_FURNITURE_SOFT, RECIPE_FURNITURE_WOOD,
 };
-use material_ref::{MaterialId, MaterialRef};
+use material_ref::MaterialRef;
 use procedural_common::NoiseParams;
 
-/// Honey / amber / cherry / teak — lifted out of urban mud.
-pub const WOOD: [[f32; 3]; 4] =
-	[[0.78, 0.50, 0.22], [0.86, 0.56, 0.20], [0.70, 0.32, 0.18], [0.58, 0.36, 0.16]];
-/// Grain highlight (gold-orange).
-pub const WOOD_ACCENT: [[f32; 3]; 4] =
-	[[0.96, 0.72, 0.32], [0.98, 0.78, 0.38], [0.88, 0.48, 0.24], [0.82, 0.58, 0.28]];
+const CARCASS_SALT: u64 = 0xCA2C_A55E;
+const CHEST_SALT: u64 = 0xC7E5_7B0D;
 
-/// Dyed cloth: covers and chair seats.
+/// Structural look for frames, legs, backs, and cabinet bodies.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CarcassKind {
+	Wood,
+	Lacquer,
+	Metal,
+}
+
+/// Chest field look. Trunk and lid share one kind per seed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ChestKind {
+	Ornate,
+	Lava,
+	Cosmos,
+	Scales,
+}
+
+/// Honey, cherry, birch, ebon, olive, drift-grey.
+pub const WOOD: [[f32; 3]; 6] = [
+	[0.78, 0.50, 0.22],
+	[0.70, 0.28, 0.20],
+	[0.86, 0.78, 0.58],
+	[0.16, 0.10, 0.14],
+	[0.42, 0.46, 0.22],
+	[0.46, 0.52, 0.50],
+];
+pub const WOOD_ACCENT: [[f32; 3]; 6] = [
+	[0.96, 0.72, 0.32],
+	[0.88, 0.42, 0.28],
+	[0.96, 0.90, 0.72],
+	[0.32, 0.20, 0.28],
+	[0.62, 0.66, 0.32],
+	[0.68, 0.74, 0.72],
+];
+
+pub const LACQUER: [[f32; 3]; 4] =
+	[[0.86, 0.16, 0.14], [0.18, 0.22, 0.62], [0.12, 0.52, 0.38], [0.92, 0.84, 0.68]];
+pub const LACQUER_ACCENT: [[f32; 3]; 4] =
+	[[1.00, 0.38, 0.22], [0.38, 0.42, 0.88], [0.28, 0.72, 0.52], [1.00, 0.94, 0.80]];
+
+pub const METAL: [[f32; 3]; 4] =
+	[[0.78, 0.62, 0.28], [0.72, 0.38, 0.22], [0.58, 0.60, 0.62], [0.22, 0.20, 0.22]];
+pub const METAL_ACCENT: [[f32; 3]; 4] =
+	[[0.96, 0.82, 0.42], [0.92, 0.52, 0.30], [0.82, 0.84, 0.86], [0.40, 0.38, 0.40]];
+
 pub const CLOTH: [[f32; 3]; 4] =
 	[[0.94, 0.62, 0.16], [0.92, 0.36, 0.30], [0.16, 0.64, 0.58], [0.62, 0.26, 0.56]];
 pub const CLOTH_ACCENT: [[f32; 3]; 4] =
 	[[1.00, 0.82, 0.36], [1.00, 0.58, 0.42], [0.28, 0.86, 0.78], [0.82, 0.42, 0.78]];
 
-/// Pale ticking: mattress only.
 pub const MATTRESS: [[f32; 3]; 4] =
 	[[0.96, 0.90, 0.78], [0.98, 0.94, 0.86], [0.90, 0.82, 0.66], [0.92, 0.84, 0.80]];
 
-/// Countertop field.
 pub const MARBLE: [[f32; 3]; 4] =
 	[[0.94, 0.88, 0.76], [0.78, 0.86, 0.74], [0.92, 0.78, 0.76], [0.22, 0.24, 0.28]];
-/// Vein / gold hairline.
 pub const MARBLE_VEIN: [[f32; 3]; 4] =
 	[[0.72, 0.52, 0.24], [0.36, 0.48, 0.38], [0.70, 0.36, 0.38], [0.82, 0.70, 0.42]];
-/// Specular sparkle.
 pub const MARBLE_SPARK: [[f32; 3]; 4] =
 	[[0.99, 0.94, 0.80], [0.90, 0.96, 0.88], [0.99, 0.88, 0.86], [0.95, 0.90, 0.72]];
 
-/// Chest gold leaf.
 pub const GOLD: [[f32; 3]; 4] =
 	[[0.96, 0.74, 0.24], [0.98, 0.82, 0.34], [0.90, 0.62, 0.18], [0.86, 0.68, 0.28]];
-/// Painted chest panel / gem.
 pub const GEM: [[f32; 3]; 4] =
 	[[0.18, 0.46, 0.62], [0.62, 0.18, 0.28], [0.16, 0.52, 0.38], [0.42, 0.22, 0.58]];
 
-/// Splitmix-style mix so nearby seeds diverge.
+pub const LAVA_COAL: [[f32; 3]; 4] =
+	[[0.10, 0.05, 0.04], [0.14, 0.06, 0.04], [0.08, 0.04, 0.06], [0.16, 0.08, 0.05]];
+pub const LAVA_GLOW: [[f32; 3]; 4] =
+	[[1.00, 0.32, 0.05], [0.95, 0.22, 0.04], [1.00, 0.42, 0.10], [0.90, 0.18, 0.08]];
+pub const LAVA_HOT: [[f32; 3]; 4] =
+	[[1.00, 0.88, 0.42], [1.00, 0.78, 0.28], [1.00, 0.94, 0.62], [0.98, 0.70, 0.22]];
+
+pub const COSMOS_VOID: [[f32; 3]; 4] =
+	[[0.04, 0.02, 0.09], [0.06, 0.02, 0.12], [0.03, 0.04, 0.10], [0.08, 0.03, 0.08]];
+pub const COSMOS_NEBULA: [[f32; 3]; 4] =
+	[[0.22, 0.06, 0.40], [0.14, 0.08, 0.48], [0.32, 0.08, 0.36], [0.10, 0.16, 0.42]];
+pub const COSMOS_BLOOM: [[f32; 3]; 4] =
+	[[0.82, 0.48, 1.00], [0.62, 0.28, 1.00], [0.95, 0.62, 0.88], [0.45, 0.72, 1.00]];
+
+pub const SCALE_BELLY: [[f32; 3]; 4] =
+	[[0.22, 0.48, 0.38], [0.48, 0.22, 0.28], [0.18, 0.32, 0.52], [0.62, 0.48, 0.18]];
+pub const SCALE_EDGE: [[f32; 3]; 4] =
+	[[0.08, 0.16, 0.12], [0.18, 0.08, 0.10], [0.06, 0.10, 0.20], [0.22, 0.16, 0.06]];
+pub const SCALE_IRID: [[f32; 3]; 4] =
+	[[0.32, 0.88, 0.70], [0.88, 0.42, 0.62], [0.42, 0.72, 0.95], [0.95, 0.78, 0.32]];
+
 pub fn mix_seed(seed: u64, salt: u64) -> u64 {
 	let mut value = seed ^ salt;
 	value ^= value >> 30;
@@ -68,7 +131,7 @@ pub fn mix_seed(seed: u64, salt: u64) -> u64 {
 	value ^ (value >> 31)
 }
 
-fn rgb(table: &[[f32; 3]; 4], seed: u64, salt: u64) -> Color {
+fn rgb(table: &[[f32; 3]], seed: u64, salt: u64) -> Color {
 	let [r, g, b] = table[(mix_seed(seed, salt) as usize) % table.len()];
 	Color::srgb(r, g, b)
 }
@@ -88,7 +151,30 @@ fn recipe(
 		.with_noise(look_noise(seed, frequency))
 }
 
-/// Honey wood + grain accent (frame, legs, footer, cabinet).
+/// Carcass recipe from the assembly seed (same for every woody part).
+pub fn carcass_kind(seed: u64) -> CarcassKind {
+	match mix_seed(seed, CARCASS_SALT) % 3 {
+		0 => CarcassKind::Wood,
+		1 => CarcassKind::Lacquer,
+		_ => CarcassKind::Metal,
+	}
+}
+
+/// Chest field recipe from the assembly seed (trunk and lid share it).
+pub fn chest_kind(seed: u64) -> ChestKind {
+	match mix_seed(seed, CHEST_SALT) % 4 {
+		0 => ChestKind::Ornate,
+		1 => ChestKind::Lava,
+		2 => ChestKind::Cosmos,
+		_ => ChestKind::Scales,
+	}
+}
+
+/// First seed in `0..limit` that yields `want`, if any.
+pub fn first_seed_for_chest(want: ChestKind, limit: u64) -> Option<u64> {
+	(0..limit).find(|&seed| chest_kind(seed) == want)
+}
+
 pub fn wood(seed: u64, salt: u64) -> MaterialRef {
 	recipe(
 		RECIPE_FURNITURE_WOOD,
@@ -98,7 +184,33 @@ pub fn wood(seed: u64, salt: u64) -> MaterialRef {
 	)
 }
 
-/// Vivid cloth / weave for covers and seat pads.
+pub fn lacquer(seed: u64, salt: u64) -> MaterialRef {
+	recipe(
+		RECIPE_FURNITURE_LACQUER,
+		seed ^ salt,
+		2.2,
+		[rgb(&LACQUER, seed, salt), rgb(&LACQUER_ACCENT, seed, salt.wrapping_add(7))],
+	)
+}
+
+pub fn metal(seed: u64, salt: u64) -> MaterialRef {
+	recipe(
+		RECIPE_FURNITURE_METAL,
+		seed ^ salt,
+		2.8,
+		[rgb(&METAL, seed, salt), rgb(&METAL_ACCENT, seed, salt.wrapping_add(13))],
+	)
+}
+
+/// Frame / leg / back / cabinet body. Recipe from `seed`; hue jitter from `salt`.
+pub fn carcass(seed: u64, salt: u64) -> MaterialRef {
+	match carcass_kind(seed) {
+		CarcassKind::Wood => wood(seed, salt),
+		CarcassKind::Lacquer => lacquer(seed, salt),
+		CarcassKind::Metal => metal(seed, salt),
+	}
+}
+
 pub fn cloth(seed: u64, salt: u64) -> MaterialRef {
 	recipe(
 		RECIPE_FURNITURE_CLOTH,
@@ -108,12 +220,10 @@ pub fn cloth(seed: u64, salt: u64) -> MaterialRef {
 	)
 }
 
-/// Soft ticking for mattresses (never the covers table).
 pub fn mattress(seed: u64, salt: u64) -> MaterialRef {
 	recipe(RECIPE_FURNITURE_SOFT, seed ^ salt, 2.2, [rgb(&MATTRESS, seed, salt)])
 }
 
-/// Veined marble for countertops.
 pub fn marble(seed: u64, salt: u64) -> MaterialRef {
 	recipe(
 		RECIPE_FURNITURE_MARBLE,
@@ -127,7 +237,6 @@ pub fn marble(seed: u64, salt: u64) -> MaterialRef {
 	)
 }
 
-/// Painted wood + gold filigree for chests.
 pub fn ornate(seed: u64, salt: u64) -> MaterialRef {
 	recipe(
 		RECIPE_FURNITURE_ORNATE,
@@ -141,11 +250,60 @@ pub fn ornate(seed: u64, salt: u64) -> MaterialRef {
 	)
 }
 
+pub fn lava(seed: u64, salt: u64) -> MaterialRef {
+	recipe(
+		RECIPE_FURNITURE_LAVA,
+		seed ^ salt,
+		1.9,
+		[
+			rgb(&LAVA_COAL, seed, salt),
+			rgb(&LAVA_GLOW, seed, salt.wrapping_add(3)),
+			rgb(&LAVA_HOT, seed, salt.wrapping_add(7)),
+		],
+	)
+}
+
+pub fn cosmos(seed: u64, salt: u64) -> MaterialRef {
+	recipe(
+		RECIPE_FURNITURE_COSMOS,
+		seed ^ salt,
+		1.6,
+		[
+			rgb(&COSMOS_VOID, seed, salt),
+			rgb(&COSMOS_NEBULA, seed, salt.wrapping_add(3)),
+			rgb(&COSMOS_BLOOM, seed, salt.wrapping_add(7)),
+		],
+	)
+}
+
+pub fn scales(seed: u64, salt: u64) -> MaterialRef {
+	recipe(
+		RECIPE_FURNITURE_SCALES,
+		seed ^ salt,
+		2.1,
+		[
+			rgb(&SCALE_BELLY, seed, salt),
+			rgb(&SCALE_EDGE, seed, salt.wrapping_add(3)),
+			rgb(&SCALE_IRID, seed, salt.wrapping_add(7)),
+		],
+	)
+}
+
+/// Chest field. Recipe from `seed`; trunk/lid salts only change the row.
+pub fn chest(seed: u64, salt: u64) -> MaterialRef {
+	match chest_kind(seed) {
+		ChestKind::Ornate => ornate(seed, salt),
+		ChestKind::Lava => lava(seed, salt),
+		ChestKind::Cosmos => cosmos(seed, salt),
+		ChestKind::Scales => scales(seed, salt),
+	}
+}
+
 #[cfg(test)]
 fn recipe_name(material: &MaterialRef) -> Option<&str> {
 	match &material.name {
-		MaterialId::Name(name) => Some(name.as_str()),
-		MaterialId::Default => None,
+		material_ref::MaterialId::Name(name) => Some(name.as_str()),
+		material_ref::MaterialId::Default => None,
 	}
 }
 
@@ -164,13 +322,34 @@ mod tests {
 	}
 
 	#[test]
-	fn wood_rows_stay_warmer_than_cool_brown() -> anyhow::Result<()> {
-		for row in WOOD {
-			if row[0] <= row[2] + 0.12 {
-				return Err(anyhow::anyhow!("wood row {row:?} is not warm (R should lead B)"));
-			}
-			if row[0] + row[1] < 0.85 {
-				return Err(anyhow::anyhow!("wood row {row:?} is too drab"));
+	fn wood_table_spans_more_than_honey() -> anyhow::Result<()> {
+		let warm = WOOD.iter().any(|row| row[0] > row[2] + 0.25);
+		let pale_or_cool = WOOD.iter().any(|row| row[2] + 0.05 >= row[0] || row[1] > row[0]);
+		if !warm || !pale_or_cool {
+			return Err(anyhow::anyhow!("wood table should mix warm and pale/cool rows"));
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn carcass_recipe_varies_with_seed() -> anyhow::Result<()> {
+		let kinds: Vec<_> = (0..18).map(carcass_kind).collect();
+		let wood = kinds.iter().filter(|k| **k == CarcassKind::Wood).count();
+		let other = kinds.len() - wood;
+		if other == 0 {
+			return Err(anyhow::anyhow!("carcass stayed wood for every seed"));
+		}
+		if wood == 0 {
+			return Err(anyhow::anyhow!("carcass never picked wood"));
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn chest_skins_cover_the_set() -> anyhow::Result<()> {
+		for want in [ChestKind::Ornate, ChestKind::Lava, ChestKind::Cosmos, ChestKind::Scales] {
+			if first_seed_for_chest(want, 64).is_none() {
+				return Err(anyhow::anyhow!("no seed in 0..64 for {want:?}"));
 			}
 		}
 		Ok(())
@@ -181,8 +360,8 @@ mod tests {
 		if recipe_name(&marble(3, 1)) != Some(RECIPE_FURNITURE_MARBLE) {
 			return Err(anyhow::anyhow!("marble recipe drifted"));
 		}
-		if recipe_name(&ornate(3, 1)) != Some(RECIPE_FURNITURE_ORNATE) {
-			return Err(anyhow::anyhow!("ornate recipe drifted"));
+		if recipe_name(&lava(3, 1)) != Some(RECIPE_FURNITURE_LAVA) {
+			return Err(anyhow::anyhow!("lava recipe drifted"));
 		}
 		Ok(())
 	}

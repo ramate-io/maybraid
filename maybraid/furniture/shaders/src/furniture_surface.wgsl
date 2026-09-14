@@ -1,12 +1,14 @@
 //---------------------------------------------------------
-// Furniture surfaces: BotW-warm wood / cloth, marble, ornate inlay.
+// Furniture surfaces: wood / cloth / lacquer / metal / marble /
+// ornate / lava / cosmos / scales.
 //
-// Kind: 0 wood, 1 cloth, 2 soft, 3 marble, 4 ornate.
+// Kind: 0 wood, 1 cloth, 2 soft, 3 marble, 4 ornate,
+//       5 lava, 6 cosmos, 7 scales, 8 lacquer, 9 metal.
 //---------------------------------------------------------
 
 #import bevy_pbr::{
     forward_io::VertexOutput,
-    mesh_view_bindings::view,
+    mesh_view_bindings::{view, globals},
     pbr_fragment::pbr_input_from_vertex_output,
     pbr_functions as fns,
 }
@@ -29,6 +31,11 @@ const KIND_CLOTH: u32 = 1u;
 const KIND_SOFT: u32 = 2u;
 const KIND_MARBLE: u32 = 3u;
 const KIND_ORNATE: u32 = 4u;
+const KIND_LAVA: u32 = 5u;
+const KIND_COSMOS: u32 = 6u;
+const KIND_SCALES: u32 = 7u;
+const KIND_LACQUER: u32 = 8u;
+const KIND_METAL: u32 = 9u;
 
 struct Look {
     rgb: vec3<f32>,
@@ -93,42 +100,52 @@ fn palette_or(i: u32, fallback: vec3<f32>) -> vec3<f32> {
     return c;
 }
 
-/// Honey-hour lift: keep furniture out of the urban-mud range.
-fn warm_bias(rgb: vec3<f32>) -> vec3<f32> {
-    return rgb * vec3<f32>(1.10, 1.03, 0.90) + vec3<f32>(0.04, 0.02, 0.0);
-}
-
-fn warm_rim(n: vec3<f32>, world_pos: vec3<f32>) -> vec3<f32> {
-    let v = normalize(view.world_position.xyz - world_pos);
-    let rim = pow(1.0 - saturate(abs(dot(normalize(n), v))), 2.4);
-    return vec3<f32>(1.0, 0.78, 0.42) * rim * 0.18;
-}
-
 fn hemi(n: vec3<f32>) -> vec3<f32> {
     let t = saturate(normalize(n).y * 0.5 + 0.5);
-    return mix(vec3<f32>(0.62, 0.42, 0.28), vec3<f32>(1.04, 0.96, 0.82), t);
+    return mix(vec3<f32>(0.55, 0.48, 0.46), vec3<f32>(1.02, 0.98, 0.94), t);
 }
 
-fn finish(rgb: vec3<f32>, n: vec3<f32>, world_pos: vec3<f32>) -> vec3<f32> {
-    var tint = warm_bias(rgb);
-    tint *= mix(vec3<f32>(1.0), hemi(n), 0.16);
-    tint += warm_rim(n, world_pos);
+fn rim_color(kind: u32) -> vec3<f32> {
+    if (kind == KIND_LAVA) {
+        return vec3<f32>(1.0, 0.42, 0.10);
+    }
+    if (kind == KIND_COSMOS) {
+        return vec3<f32>(0.72, 0.42, 1.0);
+    }
+    if (kind == KIND_SCALES) {
+        return palette_or(2u, vec3<f32>(0.35, 0.88, 0.72));
+    }
+    if (kind == KIND_METAL) {
+        return palette_or(1u, vec3<f32>(0.85, 0.78, 0.62));
+    }
+    return vec3<f32>(1.0, 0.78, 0.42);
+}
+
+fn finish(kind: u32, rgb: vec3<f32>, n: vec3<f32>, world_pos: vec3<f32>) -> vec3<f32> {
+    var tint = rgb;
+    // Wood only: a light honey lift. Other recipes keep their authored hue.
+    if (kind == KIND_WOOD) {
+        tint = rgb * vec3<f32>(1.04, 1.01, 0.97) + vec3<f32>(0.015, 0.008, 0.0);
+    }
+    tint *= mix(vec3<f32>(1.0), hemi(n), 0.12);
+    let v = normalize(view.world_position.xyz - world_pos);
+    let rim = pow(1.0 - saturate(abs(dot(normalize(n), v))), 2.4);
+    tint += rim_color(kind) * rim * 0.16;
     return tint;
 }
 
 fn wood_look(p: vec3<f32>) -> Look {
     let base = palette(0u);
-    let accent = palette_or(1u, base * vec3<f32>(1.25, 0.85, 0.45));
+    let accent = palette_or(1u, base * 1.18);
     let scale = mix(1.4, 2.8, saturate(material.scalars[0].y));
     let mottling = fbm(p * scale);
     let radial = length(p.xz);
     let ring = abs(sin(radial * scale * 16.0 + mottling * 5.2));
     let latewood = pow(ring, 10.0);
-    var tint = mix(base, accent, mottling * 0.42);
-    tint = mix(tint, tint * vec3<f32>(0.62, 0.48, 0.32), latewood * 0.55);
-    tint += vec3<f32>(0.16, 0.09, 0.02) * (1.0 - latewood) * 0.45;
+    var tint = mix(base, accent, mottling * 0.38);
+    tint = mix(tint, tint * 0.72, latewood * 0.5);
     let roughness = mix(0.36, 0.58, mottling);
-    return Look(tint, roughness, 0.0, 0.26);
+    return Look(tint, roughness, 0.0, 0.24);
 }
 
 fn cloth_look(p: vec3<f32>) -> Look {
@@ -191,6 +208,76 @@ fn ornate_look(p: vec3<f32>) -> Look {
     return Look(tint, roughness, metal * 0.82, mix(wood.reflectance, 0.46, metal));
 }
 
+fn lava_look(p: vec3<f32>) -> Look {
+    let coal = palette(0u);
+    let glow = palette_or(1u, vec3<f32>(1.0, 0.32, 0.05));
+    let hot = palette_or(2u, vec3<f32>(1.0, 0.86, 0.40));
+    let t = globals.time;
+    let q = p * 1.85;
+    let warp = vec3<f32>(fbm(q + vec3<f32>(t * 0.16, 0.0, 0.0)), fbm(q + 19.2), fbm(q + 4.8));
+    let body = fbm(q * 0.68 + warp * 1.65);
+    let vein = smoothstep(0.45, 0.54, body) * (1.0 - smoothstep(0.54, 0.72, body));
+    let pulse = 0.72 + 0.28 * sin(t * 2.3 + body * 7.0);
+    var tint = mix(coal * 0.42, glow, vein);
+    tint = mix(tint, hot, pow(vein, 2.2) * pulse);
+    tint *= 1.0 + vein * 0.65;
+    return Look(tint, mix(0.64, 0.16, vein), 0.06, mix(0.14, 0.40, vein));
+}
+
+fn cosmos_look(p: vec3<f32>) -> Look {
+    let void_c = palette(0u);
+    let nebula = palette_or(1u, vec3<f32>(0.22, 0.06, 0.40));
+    let bloom = palette_or(2u, vec3<f32>(0.82, 0.48, 1.0));
+    let t = globals.time;
+    let n = fbm(p * 0.55 + vec3<f32>(t * 0.03, -t * 0.02, 0.0));
+    let n2 = fbm(p * 1.25 + vec3<f32>(-t * 0.04, t * 0.03, 2.1));
+    var tint = mix(void_c, nebula, n);
+    tint = mix(tint, bloom, smoothstep(0.55, 0.9, n2) * 0.48);
+    let band = 0.5 + 0.5 * sin(p.x * 2.2 + p.y * 1.4 + t * 0.4 + n * 2.0);
+    tint += vec3<f32>(0.55, 0.28, 0.78) * smoothstep(0.75, 1.0, band) * 0.16;
+    let glint = pow(saturate(n2), 12.0) * (0.5 + 0.5 * sin(t * 1.55 + n * 8.0));
+    tint += vec3<f32>(0.95, 0.84, 1.0) * glint * 0.75;
+    let hy = fract(p.y * 1.65 + 0.12);
+    let strap = 1.0 - smoothstep(0.07, 0.13, abs(hy - 0.28));
+    tint = mix(tint, vec3<f32>(0.96, 0.74, 0.28), strap * 0.85);
+    return Look(tint, mix(0.58, 0.20, strap), strap * 0.72, mix(0.18, 0.46, strap));
+}
+
+fn scales_look(p: vec3<f32>) -> Look {
+    let belly = palette(0u);
+    let edge = palette_or(1u, belly * 0.42);
+    let irid = palette_or(2u, vec3<f32>(0.32, 0.86, 0.70));
+    let q = vec2<f32>(p.x, p.y) * 6.2;
+    let row = floor(q.y);
+    let odd = select(0.0, 0.5, (i32(row) & 1) == 1);
+    let cell = fract(vec2<f32>(q.x + odd, q.y)) - vec2<f32>(0.5);
+    let d = length(cell * vec2<f32>(1.0, 1.18));
+    let body = 1.0 - smoothstep(0.30, 0.44, d);
+    let rim = smoothstep(0.28, 0.36, d) * (1.0 - smoothstep(0.40, 0.50, d));
+    var tint = mix(edge, belly, body);
+    tint = mix(tint, irid, rim * 0.7);
+    return Look(tint, mix(0.44, 0.26, body), 0.18 + rim * 0.28, 0.30);
+}
+
+fn lacquer_look(p: vec3<f32>) -> Look {
+    let base = palette(0u);
+    let accent = palette_or(1u, base * 1.12);
+    let peel = fbm(p * 5.8);
+    var tint = mix(base, accent, peel * 0.16);
+    tint *= 0.90 + 0.14 * peel;
+    return Look(tint, mix(0.20, 0.36, peel), 0.05, 0.34);
+}
+
+fn metal_look(p: vec3<f32>) -> Look {
+    let base = palette(0u);
+    let accent = palette_or(1u, base * 1.2);
+    let streak = abs(sin(p.y * 22.0 + fbm(p) * 3.0));
+    let speckle = value_noise_3d(p * 18.0);
+    var tint = mix(base, accent, streak * 0.32);
+    tint *= 0.72 + 0.38 * speckle;
+    return Look(tint, mix(0.20, 0.46, 1.0 - streak), 0.80, 0.50);
+}
+
 @fragment
 fn fragment(
     @builtin(front_facing) is_front: bool,
@@ -205,10 +292,15 @@ fn fragment(
         case KIND_SOFT: { look = soft_look(p); }
         case KIND_MARBLE: { look = marble_look(p); }
         case KIND_ORNATE: { look = ornate_look(p); }
+        case KIND_LAVA: { look = lava_look(p); }
+        case KIND_COSMOS: { look = cosmos_look(p); }
+        case KIND_SCALES: { look = scales_look(p); }
+        case KIND_LACQUER: { look = lacquer_look(p); }
+        case KIND_METAL: { look = metal_look(p); }
         default: { look = wood_look(p); }
     }
 
-    let rgb = finish(look.rgb, mesh.world_normal, mesh.world_position.xyz);
+    let rgb = finish(material.kind, look.rgb, mesh.world_normal, mesh.world_position.xyz);
     pbr_input.material.base_color = vec4<f32>(rgb, 1.0);
     pbr_input.material.perceptual_roughness = look.roughness;
     pbr_input.material.metallic = look.metallic;

@@ -3549,6 +3549,7 @@ dependencies = [
  "game-commands",
  "lod",
  "lod-lazy-refs",
+ "material-ref",
  "procedural-common",
  "richmond-building-components",
  "richmond-buildings",
