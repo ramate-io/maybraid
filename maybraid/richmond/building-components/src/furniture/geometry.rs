@@ -21,15 +21,15 @@ impl FurnitureGeometry {
 	/// Debug wireframe color for this kind.
 	pub fn wireframe_color(self) -> Color {
 		match self {
-			Self::Bed => Color::srgba(0.35, 0.55, 0.95, 0.85),
-			Self::Wardrobe => Color::srgba(0.75, 0.45, 0.25, 0.85),
-			Self::Dresser => Color::srgba(0.65, 0.40, 0.35, 0.85),
-			Self::Nightstand => Color::srgba(0.45, 0.85, 0.50, 0.85),
-			Self::BedroomFurniture => Color::srgba(0.55, 0.70, 0.45, 0.85),
-			Self::Toilet => Color::srgba(0.85, 0.85, 0.90, 0.85),
-			Self::Chair => Color::srgba(0.90, 0.55, 0.25, 0.85),
-			Self::Chest => Color::srgba(0.55, 0.35, 0.70, 0.85),
-			Self::Counter => Color::srgba(0.40, 0.75, 0.80, 0.85),
+			Self::Bed => Color::srgba(0.20, 0.55, 1.00, 1.0),
+			Self::Wardrobe => Color::srgba(1.00, 0.55, 0.12, 1.0),
+			Self::Dresser => Color::srgba(1.00, 0.38, 0.28, 1.0),
+			Self::Nightstand => Color::srgba(0.20, 1.00, 0.38, 1.0),
+			Self::BedroomFurniture => Color::srgba(0.55, 1.00, 0.20, 1.0),
+			Self::Toilet => Color::srgba(0.95, 0.95, 1.00, 1.0),
+			Self::Chair => Color::srgba(1.00, 0.78, 0.08, 1.0),
+			Self::Chest => Color::srgba(0.88, 0.28, 1.00, 1.0),
+			Self::Counter => Color::srgba(0.08, 0.95, 1.00, 1.0),
 		}
 	}
 

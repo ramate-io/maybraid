@@ -69,6 +69,16 @@ pub fn slab_xz(scale_x: f32, scale_z: f32, y0: f32, y1: f32) -> Placement {
 	p
 }
 
+/// Length `scale_x` (1 = flush ends). Depth `scale_z`. When `flush_pos_z`,
+/// the \(+Z\) face sits on the unit-cube wall (kit facing / abutment).
+pub fn run_slab(scale_x: f32, scale_z: f32, y0: f32, y1: f32, flush_pos_z: bool) -> Placement {
+	let mut p = slab_xz(scale_x, scale_z, y0, y1);
+	if flush_pos_z {
+		p.translation.z = 0.5 - p.scale.z * 0.5;
+	}
+	p
+}
+
 /// Offset a placement in unit-slot coordinates (fractions of the parent cube).
 pub fn shift(mut placement: Placement, delta: Vec3) -> Placement {
 	placement.translation += delta;
@@ -129,6 +139,19 @@ mod tests {
 		}
 		if (band.scale.y - 0.60).abs() > 1e-5 {
 			return Err(anyhow::anyhow!("slab height should be y1-y0"));
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn flush_run_puts_the_pos_z_face_on_the_wall() -> anyhow::Result<()> {
+		let run = run_slab(1.0, 0.72, 0.0, 0.12, true);
+		let face = run.translation.z + run.scale.z * 0.5;
+		if (face - 0.5).abs() > 1e-5 {
+			return Err(anyhow::anyhow!("flush +Z face should sit at 0.5, got {face}"));
+		}
+		if (run.scale.x - 1.0).abs() > 1e-5 {
+			return Err(anyhow::anyhow!("run length should stay flush"));
 		}
 		Ok(())
 	}

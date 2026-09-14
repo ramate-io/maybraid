@@ -32,8 +32,8 @@ impl ChairParams {
 	}
 }
 
-/// Seat is the slot plan band; legs drop to the floor; back is the box kit in
-/// the upper band (authored \(+Y\) is engine \(+Z\)).
+/// Seat is the slot plan band; legs drop to the floor; back starts at the seat
+/// so the authored inset sits on the cushion (authored \(+Y\) is engine \(+Z\)).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Chair {
 	pub finish_seed: u64,
@@ -63,7 +63,7 @@ impl Chair {
 		});
 		parts.push(PlacedPart {
 			kind: PartKind::ChairBack,
-			placement: slab(1.0, SEAT_Y1, 1.0),
+			placement: slab(1.0, SEAT_Y0, 1.0),
 			material: wood(seed, 3),
 		});
 		Self { finish_seed: seed, parts }
@@ -89,16 +89,16 @@ mod tests {
 	use richmond_building_components::{FurnitureAbutment, FurnitureNode, Placement};
 
 	#[test]
-	fn back_uses_the_upper_band() -> anyhow::Result<()> {
+	fn back_sits_on_the_seat_band() -> anyhow::Result<()> {
 		let chair = ChairParams::unit_from_num(4).build();
 		let back = chair
 			.parts
 			.iter()
 			.find(|p| p.kind == PartKind::ChairBack)
 			.ok_or_else(|| anyhow::anyhow!("missing back"))?;
-		if (back.placement.translation.y - SEAT_Y1).abs() > 1e-5 {
+		if (back.placement.translation.y - SEAT_Y0).abs() > 1e-5 {
 			return Err(anyhow::anyhow!(
-				"chair back should sit on the seat top, got y={}",
+				"chair back should start at the seat band, got y={}",
 				back.placement.translation.y
 			));
 		}

@@ -15,8 +15,8 @@ pub mod parts;
 pub mod scene_children;
 
 pub use kit_space::{
-	place_kit, shift, slab, slab_xz, BOX_KIT_MAX, BOX_KIT_MIN, BOX_KIT_TO_UNIT, LEG_KIT_MAX,
-	LEG_KIT_MIN, LEG_KIT_TO_UNIT,
+	place_kit, run_slab, shift, slab, slab_xz, BOX_KIT_MAX, BOX_KIT_MIN, BOX_KIT_TO_UNIT,
+	LEG_KIT_MAX, LEG_KIT_MIN, LEG_KIT_TO_UNIT,
 };
 pub use parts::{pose_parts, PartKind, PlacedPart};
 pub use scene_children::{assembly_scene, posed_kit};
