@@ -175,7 +175,7 @@ impl ConnectingStairwell {
 		self
 	}
 
-	/// Stamp a shader look onto treads. Falls back to [`Self::surface_material`].
+	/// Stamp a shader look onto treads and landings. Falls back to [`Self::surface_material`].
 	pub fn with_stair_material(mut self, material: MaterialRef) -> Self {
 		self.stair_material = Some(material);
 		self
@@ -246,20 +246,25 @@ impl ConnectingStairwell {
 
 impl BuildingComponents for ConnectingStairwell {
 	fn panel_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PanelNode> {
-		let mut out = self.run_in.panel_nodes_for_level(level);
+		let mut landings = self.run_in.panel_nodes_for_level(level);
 		for pad in &self.mid_landings {
-			out.extend(pad.panel_nodes_for_level(level));
+			landings.extend(pad.panel_nodes_for_level(level));
 		}
 		if let Some(landing) = &self.upper_landing {
-			out.extend(landing.panel_nodes_for_level(level));
+			landings.extend(landing.panel_nodes_for_level(level));
 		}
+		if let Some(material) = self.stair_material() {
+			landings = landings.with_material(material.clone());
+		}
+		let mut walls = Layers::new();
 		for wall in &self.shaft_walls {
-			out.extend(wall.panel_nodes_for_level(level));
+			walls.extend(wall.panel_nodes_for_level(level));
 		}
 		if let Some(material) = &self.surface_material {
-			out = out.with_material(material.clone());
+			walls = walls.with_material(material.clone());
 		}
-		out
+		landings.extend(walls);
+		landings
 	}
 
 	fn joint_nodes_for_level(&self, level: LodSceneLevel) -> Layers<JointNode> {

@@ -637,6 +637,19 @@ mod tests {
 				}),
 				"stone surrounds should get wood treads"
 			);
+			let panels = well.panel_nodes_for_level(LodSceneLevel::High).flatten();
+			anyhow::ensure!(
+				panels.iter().any(|n| {
+					matches!(n.material.as_ref().map(|m| &m.name), Some(MaterialId::Name(n)) if n == "wood")
+				}),
+				"stone surrounds should get wood landings"
+			);
+			anyhow::ensure!(
+				panels.iter().any(|n| {
+					matches!(n.material.as_ref().map(|m| &m.name), Some(MaterialId::Name(n)) if n == "stucco")
+				}),
+				"shaft walls stay with the surround"
+			);
 		}
 
 		let timber = MaterialRef::named("wood");
@@ -646,6 +659,12 @@ mod tests {
 			anyhow::ensure!(
 				matches!(well.stair_material().map(|m| &m.name), Some(MaterialId::Name(n)) if n == "furniture_marble"),
 				"wood surrounds should get marble treads"
+			);
+			anyhow::ensure!(
+				well.panel_nodes_for_level(LodSceneLevel::High).flatten().iter().any(|n| {
+					matches!(n.material.as_ref().map(|m| &m.name), Some(MaterialId::Name(n)) if n == "furniture_marble")
+				}),
+				"wood surrounds should get marble landings"
 			);
 		}
 		Ok(())
