@@ -28,7 +28,18 @@ impl LabelStyle {
 		Self::Gray,
 	];
 
-	/// Wireframe stroke color for this style.
+	/// Richmond label-box stroke. Kitchen rooms use [`Self::Yellow`].
+	///
+	/// | Style | Color | sRGBA |
+	/// |---|---|---|
+	/// | Red | red | `1.00, 0.18, 0.18, 1.0` |
+	/// | Orange | orange | `1.00, 0.62, 0.08, 1.0` |
+	/// | Yellow | yellow | `1.00, 0.92, 0.12, 1.0` |
+	/// | Green | green | `0.18, 1.00, 0.32, 1.0` |
+	/// | Cyan | cyan | `0.08, 0.95, 1.00, 1.0` |
+	/// | Blue | blue | `0.22, 0.48, 1.00, 1.0` |
+	/// | Magenta | magenta | `1.00, 0.22, 1.00, 1.0` |
+	/// | Gray | gray | `0.82, 0.82, 0.88, 1.0` |
 	pub fn color(self) -> Color {
 		match self {
 			Self::Red => Color::srgba(1.00, 0.18, 0.18, 1.0),

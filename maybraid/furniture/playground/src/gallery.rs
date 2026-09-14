@@ -70,7 +70,10 @@ fn typical_slot(
 	node
 }
 
-/// Packed Richmond rooms: wall bedroom, galley kitchen, living seating.
+/// Packed Richmond rooms: wall bedroom, kitchen adjacencies, living seating.
+///
+/// Kitchen row is galley / L / peninsula / island so side-constraint fitting
+/// can be checked on corner joins, stubs, and free runs.
 pub fn recorded_richmond_slots() -> anyhow::Result<Vec<GallerySlot>> {
 	let mut out = Vec::new();
 
@@ -90,21 +93,42 @@ pub fn recorded_richmond_slots() -> anyhow::Result<Vec<GallerySlot>> {
 		});
 	}
 
-	let kitchen_origin = Vec3::new(10.0, 0.0, 0.0);
-	let (kitchen, _) = Kitchen::fit_with_fill(
-		&south_door(Vec3::new(6.0, 3.0, 4.5)),
-		NoiseParams { seed: 7, ..NoiseParams::default() },
+	out.extend(pack_kitchen_slots(
+		"richmond-kitchen",
+		Vec3::new(10.0, 0.0, 0.0),
+		Vec3::new(6.0, 3.0, 4.5),
+		7,
 		KitchenParameterized::with_fill(1.2, 0.4).with_layout(KitchenCounterLayout::Galley),
-	)
-	.map_err(|err| anyhow::anyhow!("kitchen fit: {err}"))?;
-	for node in kitchen.furniture_nodes_for_level(LodSceneLevel::High).flatten() {
-		out.push(GallerySlot {
-			label: "richmond-kitchen",
-			node: offset_node(node, kitchen_origin),
-		});
-	}
+	)?);
+	out.extend(require_kitchen_slots(
+		"richmond-kitchen-l",
+		Vec3::new(18.0, 0.0, 0.0),
+		Vec3::new(7.0, 3.0, 5.5),
+		&[11, 3, 5, 13, 17, 19, 23],
+		KitchenParameterized::with_fill(1.15, 0.4).with_layout(KitchenCounterLayout::LShape),
+		|k| k.counter_runs.len() >= 2,
+		"L kitchen should keep two corner runs",
+	)?);
+	out.extend(require_kitchen_slots(
+		"richmond-kitchen-peninsula",
+		Vec3::new(28.0, 0.0, 0.0),
+		Vec3::new(7.0, 3.0, 5.5),
+		&[21, 3, 7, 11, 15, 19, 25],
+		KitchenParameterized::with_fill(1.15, 0.4).with_layout(KitchenCounterLayout::Peninsula),
+		|k| !k.peninsulas.is_empty(),
+		"peninsula kitchen should emit a stub",
+	)?);
+	out.extend(require_kitchen_slots(
+		"richmond-kitchen-island",
+		Vec3::new(38.0, 0.0, 0.0),
+		Vec3::new(8.0, 3.0, 6.0),
+		&[3, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41],
+		KitchenParameterized::with_fill(1.1, 0.55).with_layout(KitchenCounterLayout::Galley),
+		|k| !k.islands.is_empty(),
+		"island kitchen should emit a free run",
+	)?);
 
-	let living_origin = Vec3::new(20.0, 0.0, 0.0);
+	let living_origin = Vec3::new(50.0, 0.0, 0.0);
 	let (living, _) = LivingRoom::fit_with_fill(
 		&south_door(Vec3::new(6.0, 2.8, 4.5)),
 		NoiseParams { seed: 11, ..NoiseParams::default() },
@@ -116,6 +140,62 @@ pub fn recorded_richmond_slots() -> anyhow::Result<Vec<GallerySlot>> {
 	}
 
 	Ok(out)
+}
+
+fn pack_kitchen_slots(
+	label: &'static str,
+	origin: Vec3,
+	extent: Vec3,
+	seed: i32,
+	params: KitchenParameterized,
+) -> anyhow::Result<Vec<GallerySlot>> {
+	let (kitchen, _) = Kitchen::fit_with_fill(
+		&south_door(extent),
+		NoiseParams { seed, ..NoiseParams::default() },
+		params,
+	)
+	.map_err(|err| anyhow::anyhow!("{label} fit: {err}"))?;
+	Ok(kitchen_to_slots(label, origin, &kitchen))
+}
+
+fn require_kitchen_slots(
+	label: &'static str,
+	origin: Vec3,
+	extent: Vec3,
+	seeds: &[i32],
+	params: KitchenParameterized,
+	ok: fn(&Kitchen) -> bool,
+	why: &str,
+) -> anyhow::Result<Vec<GallerySlot>> {
+	let mut last = String::new();
+	for &seed in seeds {
+		let (kitchen, _) = Kitchen::fit_with_fill(
+			&south_door(extent),
+			NoiseParams { seed, ..NoiseParams::default() },
+			params.clone(),
+		)
+		.map_err(|err| anyhow::anyhow!("{label} seed={seed} fit: {err}"))?;
+		if ok(&kitchen) {
+			return Ok(kitchen_to_slots(label, origin, &kitchen));
+		}
+		last = format!(
+			"{label} seed={seed} runs={} pen={} islands={} layout={:?}",
+			kitchen.counter_runs.len(),
+			kitchen.peninsulas.len(),
+			kitchen.islands.len(),
+			kitchen.counter_layout
+		);
+	}
+	Err(anyhow::anyhow!("{why} ({last})"))
+}
+
+fn kitchen_to_slots(label: &'static str, origin: Vec3, kitchen: &Kitchen) -> Vec<GallerySlot> {
+	kitchen
+		.furniture_nodes_for_level(LodSceneLevel::High)
+		.flatten()
+		.into_iter()
+		.map(|node| GallerySlot { label, node: offset_node(node, origin) })
+		.collect()
 }
 
 /// Authored extremes: flat bed, tall chair, long counter, wall vs free, two seeds.
@@ -237,6 +317,27 @@ mod tests {
 			.any(|s| s.label == "richmond-kitchen" && s.node.geometry == FurnitureGeometry::Counter)
 		{
 			return Err(anyhow::anyhow!("galley kitchen should emit a counter"));
+		}
+		let l_runs: Vec<_> = slots
+			.iter()
+			.filter(|s| {
+				s.label == "richmond-kitchen-l" && s.node.geometry == FurnitureGeometry::Counter
+			})
+			.collect();
+		if l_runs.iter().filter(|s| s.node.abutment.is_some()).count() < 2 {
+			return Err(anyhow::anyhow!("L kitchen should emit two wall-flush counter runs"));
+		}
+		if !slots.iter().any(|s| {
+			s.label == "richmond-kitchen-peninsula" && s.node.geometry == FurnitureGeometry::Counter
+		}) {
+			return Err(anyhow::anyhow!("peninsula kitchen should emit counters"));
+		}
+		if !slots.iter().any(|s| {
+			s.label == "richmond-kitchen-island"
+				&& s.node.geometry == FurnitureGeometry::Counter
+				&& s.node.abutment.is_none()
+		}) {
+			return Err(anyhow::anyhow!("island kitchen should emit a free counter"));
 		}
 		if !slots
 			.iter()

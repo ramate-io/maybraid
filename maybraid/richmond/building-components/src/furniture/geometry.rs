@@ -18,7 +18,19 @@ pub enum FurnitureGeometry {
 }
 
 impl FurnitureGeometry {
-	/// Debug wireframe color for this kind.
+	/// Furniture playground slot boxes (cyan = counter, gold = chair, …).
+	///
+	/// | Kind | Color | sRGBA |
+	/// |---|---|---|
+	/// | Bed | blue | `0.20, 0.55, 1.00, 1.0` |
+	/// | Wardrobe | orange | `1.00, 0.55, 0.12, 1.0` |
+	/// | Dresser | coral | `1.00, 0.38, 0.28, 1.0` |
+	/// | Nightstand | green | `0.20, 1.00, 0.38, 1.0` |
+	/// | BedroomFurniture | lime | `0.55, 1.00, 0.20, 1.0` |
+	/// | Toilet | white | `0.95, 0.95, 1.00, 1.0` |
+	/// | Chair | gold | `1.00, 0.78, 0.08, 1.0` |
+	/// | Chest | magenta | `0.88, 0.28, 1.00, 1.0` |
+	/// | Counter | cyan | `0.08, 0.95, 1.00, 1.0` |
 	pub fn wireframe_color(self) -> Color {
 		match self {
 			Self::Bed => Color::srgba(0.20, 0.55, 1.00, 1.0),
