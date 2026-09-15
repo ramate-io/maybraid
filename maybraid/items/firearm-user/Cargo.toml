@@ -25,5 +25,8 @@ maybraid-input = { workspace = true }
 player = { workspace = true }
 player-camera = { workspace = true }
 
+[dev-dependencies]
+anyhow = { workspace = true }
+
 [lints]
 workspace = true
