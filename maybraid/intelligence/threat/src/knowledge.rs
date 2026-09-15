@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use bevy::prelude::*;
 
 use crate::{Affiliations, ThreatId, ThreatRecord, ThreatSource};
+use spotting_intelligence::SpottingUser;
 
 /// Discovery cadence, retention, and bounded work for one recipient.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -15,6 +16,13 @@ pub struct ThreatDiscoveryPolicy {
 	pub candidates_per_scan: usize,
 	pub max_known: usize,
 	pub threat_threshold: f32,
+	/// Idle plants keep `radius`. Damage / shared alert uses at least this.
+	pub alert_radius: f32,
+}
+
+impl ThreatDiscoveryPolicy {
+	/// High-band envelope. Idle spotting stays closer; alert fills this gap.
+	pub const ALERT_RANGE: f32 = 200.0;
 }
 
 impl Default for ThreatDiscoveryPolicy {
@@ -28,6 +36,7 @@ impl Default for ThreatDiscoveryPolicy {
 			candidates_per_scan: 24,
 			max_known: 64,
 			threat_threshold: 0.2,
+			alert_radius: Self::ALERT_RANGE,
 		}
 	}
 }
@@ -130,6 +139,12 @@ impl ThreatKnowledge {
 		self.known.is_empty()
 	}
 
+	/// Injury, incoming fire, or a pack-shared finding. Not a local scan alone.
+	pub fn wants_alert_perception(&self) -> bool {
+		self.iter()
+			.any(|known| known.sources.intersects(ThreatSource::ALERT_PERCEPTION))
+	}
+
 	pub fn remove_source(&mut self, id: ThreatId, source: ThreatSource) -> bool {
 		let Some(known) = self.known.get_mut(&id) else {
 			return false;
@@ -190,6 +205,8 @@ impl ThreatKnowledge {
 #[derive(Component, Clone, Debug)]
 pub struct ThreatIntelligenceUser {
 	pub policy: ThreatDiscoveryPolicy,
+	/// Idle `SpotDirective::range` snapshot. Zero until the first alert apply.
+	pub idle_spotting_range: f32,
 	pub(crate) next_scan_at: f32,
 	pub(crate) next_forget_at: f32,
 	pub(crate) sample_cursor: usize,
@@ -199,6 +216,7 @@ impl Default for ThreatIntelligenceUser {
 	fn default() -> Self {
 		Self {
 			policy: ThreatDiscoveryPolicy::default(),
+			idle_spotting_range: 0.0,
 			next_scan_at: 0.0,
 			next_forget_at: 0.0,
 			sample_cursor: 0,
@@ -209,5 +227,33 @@ impl Default for ThreatIntelligenceUser {
 impl ThreatIntelligenceUser {
 	pub fn new(policy: ThreatDiscoveryPolicy) -> Self {
 		Self { policy, ..default() }
+	}
+
+	pub fn perception_radius(&self, knowledge: &ThreatKnowledge) -> f32 {
+		if knowledge.wants_alert_perception() {
+			self.policy.radius.max(self.policy.alert_radius)
+		} else {
+			self.policy.radius
+		}
+	}
+
+	/// Stretch or restore spotting directives so hinted subjects can be probed.
+	pub fn apply_alert_spotting(
+		&mut self,
+		knowledge: &ThreatKnowledge,
+		spotting: &mut SpottingUser,
+	) {
+		if self.idle_spotting_range <= 0.0 {
+			self.idle_spotting_range =
+				spotting.directives.iter().map(|directive| directive.range).fold(0.0, f32::max);
+		}
+		let range = if knowledge.wants_alert_perception() {
+			self.idle_spotting_range.max(self.policy.alert_radius)
+		} else {
+			self.idle_spotting_range
+		};
+		for directive in &mut spotting.directives {
+			directive.range = range;
+		}
 	}
 }

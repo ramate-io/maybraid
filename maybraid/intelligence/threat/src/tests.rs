@@ -1,7 +1,7 @@
 use bevy::ecs::system::RunSystemOnce;
 use bevy::prelude::*;
 use intelligence_lod::{IntelligenceBand, IntelligenceLod, IntelligencePriority};
-use spotting_intelligence::SpottingUser;
+use spotting_intelligence::{InterestLayers, SpotDirective, SpottingUser};
 
 use crate::{
 	AffiliationStrength, Affiliations, ThreatDiscoverLimits, ThreatDiscoveryPolicy, ThreatGroupId,
@@ -201,6 +201,69 @@ fn exported_threat_hint_is_removed_with_knowledge() -> Result<(), bevy::ecs::sys
 	assert!(world
 		.get::<SpottingUser>(user)
 		.is_some_and(|spotting| !spotting.hints.contains_key(&threat)));
+	Ok(())
+}
+
+#[test]
+fn damage_or_share_raises_spotting_to_high_band() -> anyhow::Result<()> {
+	let mut world = World::new();
+	let threat = world.spawn_empty().id();
+	let record = ThreatRecord {
+		id: ThreatId(2),
+		entity: threat,
+		position: Vec3::X * 150.0,
+		salience: 1.0,
+		affiliations: ffa_affiliations(ThreatId(2)),
+	};
+	let recipient = ffa_affiliations(ThreatId(1));
+	let mut knowledge = ThreatKnowledge::default();
+	knowledge.observe(&record, &recipient, ThreatSource::RECEIVED_DAMAGE, 1.0, 0.0, 0.2);
+	let idle = 40.0;
+	let observer = world
+		.spawn((
+			knowledge,
+			ThreatIntelligenceUser::default(),
+			SpottingUser::new(Vec3::Y, [SpotDirective::new(InterestLayers::CHARACTER, idle)]),
+		))
+		.id();
+	anyhow::ensure!(world.run_system_once(crate::export_threat_spotting_hints).is_ok());
+	let spotting = world
+		.get::<SpottingUser>(observer)
+		.ok_or_else(|| anyhow::anyhow!("missing spotting"))?;
+	anyhow::ensure!(spotting
+		.directives
+		.iter()
+		.all(|directive| { (directive.range - ThreatDiscoveryPolicy::ALERT_RANGE).abs() < 1e-4 }));
+
+	world
+		.get_mut::<ThreatKnowledge>(observer)
+		.map(|mut knowledge| knowledge.remove_source(record.id, ThreatSource::RECEIVED_DAMAGE));
+	anyhow::ensure!(world.run_system_once(crate::export_threat_spotting_hints).is_ok());
+	let spotting = world
+		.get::<SpottingUser>(observer)
+		.ok_or_else(|| anyhow::anyhow!("missing spotting after restore"))?;
+	anyhow::ensure!(spotting
+		.directives
+		.iter()
+		.all(|directive| (directive.range - idle).abs() < 1e-4));
+	Ok(())
+}
+
+#[test]
+fn local_scan_alone_does_not_raise_perception() -> anyhow::Result<()> {
+	let recipient = ffa_affiliations(ThreatId(1));
+	let record = ThreatRecord {
+		id: ThreatId(2),
+		entity: Entity::from_bits(2),
+		position: Vec3::X,
+		salience: 1.0,
+		affiliations: ffa_affiliations(ThreatId(2)),
+	};
+	let mut knowledge = ThreatKnowledge::default();
+	knowledge.observe(&record, &recipient, ThreatSource::LOCAL_SCAN, 1.0, 0.0, 0.2);
+	anyhow::ensure!(!knowledge.wants_alert_perception());
+	knowledge.observe(&record, &recipient, ThreatSource::SHARED, 1.0, 0.0, 0.2);
+	anyhow::ensure!(knowledge.wants_alert_perception());
 	Ok(())
 }
 

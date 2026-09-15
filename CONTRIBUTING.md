@@ -212,6 +212,11 @@ opportunity as separate layers:
    [`DamageApplied`](maybraid/damage/src/lib.rs) onto decaying individual
    antagonism and a directed `RECEIVED_DAMAGE` observation. That is typed
    knowledge for the victim; it does not fabricate a sighting.
+7. Pack share writes `SHARED` knowledge, not sightings. [`MobKnowledge`](maybraid/intelligence/mob/src/share.rs)
+   unions first-hand threat ids and shareable combat-target membership on the
+   host, then fans missing entries to live mates as `ThreatSource::SHARED` /
+   `TargetSource::SHARED`. Recipients still need their own visibility probe
+   before `SpottedContact` or combat contact memory exists.
 
 An active target may intentionally have no current contact memory. Consumers
 must therefore select the highest-ranked target with the knowledge they require,

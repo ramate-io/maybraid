@@ -11,6 +11,7 @@ rust-version = { workspace = true }
 
 [dependencies]
 bevy = { workspace = true }
+combat-targeting = { workspace = true }
 damage = { workspace = true }
 firearm-intelligence = { workspace = true }
 journeying-intelligence = { workspace = true }
@@ -24,6 +25,8 @@ routing-intelligence = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
+spotting-intelligence = { workspace = true }
+threat-intelligence-damage = { workspace = true }
 
 [lints]
 workspace = true
