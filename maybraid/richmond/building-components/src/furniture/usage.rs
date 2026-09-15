@@ -18,6 +18,8 @@ pub enum FurnitureUsage {
 	BitesCounter,
 	/// Max-empty remainder behind those bands.
 	BitesKitchen,
+	/// Sit-down seating pocket (tables + chairs).
+	BitesSeating,
 }
 
 impl FurnitureUsage {
@@ -26,6 +28,7 @@ impl FurnitureUsage {
 		match self {
 			Self::BitesCounter => 0x6263_6e74,
 			Self::BitesKitchen => 0x626b_7463,
+			Self::BitesSeating => 0x6273_6561,
 		}
 	}
 }
@@ -54,6 +57,10 @@ impl FurnitureUsageNode {
 
 	pub fn bites_kitchen(placement: Placement) -> Self {
 		Self::new(FurnitureUsage::BitesKitchen, placement)
+	}
+
+	pub fn bites_seating(placement: Placement) -> Self {
+		Self::new(FurnitureUsage::BitesSeating, placement)
 	}
 
 	pub fn with_abutment(mut self, abutment: FurnitureAbutment) -> Self {

@@ -7,10 +7,12 @@
 
 pub mod bites_counter;
 pub mod bites_kitchen;
+pub mod bites_seating;
 pub mod expand;
 pub mod region;
 
 pub use bites_counter::BitesCounterUsage;
 pub use bites_kitchen::BitesKitchenUsage;
+pub use bites_seating::BitesSeatingUsage;
 pub use expand::{expand_usage, expand_usages};
 pub use region::{along_is_x, floor_height_aabb, slice_along, COUNTER_SLOT_HEIGHT};

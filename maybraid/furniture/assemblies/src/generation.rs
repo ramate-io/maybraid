@@ -10,7 +10,7 @@ use crate::Assembly;
 /// High-LOD furniture slots on a Richmond building (the generate pass).
 ///
 /// Room packers already stamped abutment, facing, and [`FurnitureNode::finish_seed`].
-/// Usage regions (`BitesCounter`, `BitesKitchen`) expand into ensembles here.
+/// Usage regions (`BitesCounter`, `BitesKitchen`, `BitesSeating`) expand into ensembles here.
 /// Residual gallery / walkway leftovers still emit occasional chests as slots.
 pub fn collect_furniture_slots(building: &impl BuildingComponents) -> Vec<FurnitureNode> {
 	let mut nodes = building.furniture_nodes_for_level(LodSceneLevel::High).flatten();

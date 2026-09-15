@@ -128,6 +128,47 @@ pub fn stamp_make(
 	stamp_slot(make(Placement::IDENTITY), slot, host, abutment)
 }
 
+/// Same as [`stamp_make`], then add `extra_yaw` (sit-on spin, chair toward a table).
+pub fn stamp_make_yaw(
+	make: fn(Placement) -> FurnitureNode,
+	slot: &Aabb3d,
+	host: &Aabb3d,
+	abutment: Option<FurnitureAbutment>,
+	extra_yaw: f32,
+) -> FurnitureNode {
+	let mut node = stamp_make(make, slot, host, abutment);
+	node.placement.yaw += extra_yaw;
+	node
+}
+
+/// Drop the wall strip of `depth` so the leftover is the room interior.
+pub fn cut_from_wall(region: &Aabb3d, side: FurnitureAbutment, depth: f32) -> Aabb3d {
+	let depth = depth.max(0.0);
+	match side {
+		FurnitureAbutment::NegX => Aabb3d::from_min_max(
+			Vec3::new((region.min.x + depth).min(region.max.x - 1e-4), region.min.y, region.min.z),
+			region.max,
+		),
+		FurnitureAbutment::PosX => Aabb3d::from_min_max(
+			region.min,
+			Vec3::new((region.max.x - depth).max(region.min.x + 1e-4), region.max.y, region.max.z),
+		),
+		FurnitureAbutment::NegZ => Aabb3d::from_min_max(
+			Vec3::new(region.min.x, region.min.y, (region.min.z + depth).min(region.max.z - 1e-4)),
+			region.max,
+		),
+		FurnitureAbutment::PosZ => Aabb3d::from_min_max(
+			region.min,
+			Vec3::new(region.max.x, region.max.y, (region.max.z - depth).max(region.min.z + 1e-4)),
+		),
+	}
+}
+
+/// Quarter-turn in `[0, 2π)` from a finish seed.
+pub fn yaw_turns(seed: u64, salt: u64) -> f32 {
+	std::f32::consts::FRAC_PI_2 * ((unit(seed, salt) * 4.0).floor())
+}
+
 /// Unit in `[0, 1)` from a finish seed and salt.
 pub fn unit(seed: u64, salt: u64) -> f32 {
 	let mut x = seed ^ salt.wrapping_mul(0x9e37_79b9_7f4a_7c15);

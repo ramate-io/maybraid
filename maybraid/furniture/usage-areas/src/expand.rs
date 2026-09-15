@@ -4,12 +4,14 @@ use richmond_building_components::{FurnitureNode, FurnitureUsage, FurnitureUsage
 
 use crate::bites_counter::BitesCounterUsage;
 use crate::bites_kitchen::BitesKitchenUsage;
+use crate::bites_seating::BitesSeatingUsage;
 
 /// Expand one packed usage region into kit slots.
 pub fn expand_usage(node: &FurnitureUsageNode) -> Vec<FurnitureNode> {
 	match node.kind {
 		FurnitureUsage::BitesCounter => BitesCounterUsage::expand(node),
 		FurnitureUsage::BitesKitchen => BitesKitchenUsage::expand(node),
+		FurnitureUsage::BitesSeating => BitesSeatingUsage::expand(node),
 	}
 }
 
