@@ -1,4 +1,4 @@
-//! Materialize mob hosts, death replacements, and pack pursuit.
+//! Materialize mob hosts, death replacements, and player-prey targeting.
 
 use bevy::prelude::*;
 use damage::Health;
@@ -9,38 +9,21 @@ use lod::{
 };
 use mob_characters::{CharacterSceneSystems, MobCharacterScenesPlugin};
 use mob_intelligence::{
-	install_mob, MobIdAlloc, MobInstall, MobIntelligencePlugin, MobMemberNeeded, MobSlot,
-	MobSystems, MobTetherLock, RosterMember,
+	install_mob, install_prey_targeting, MobIdAlloc, MobInstall, MobIntelligencePlugin,
+	MobMemberNeeded, MobSlot, MobSystems, RosterMember,
 };
-use poi_intelligence::{PoiGoal, PoiId, PoiIntelligencePlugin, PoiKind};
+use poi_intelligence::PoiIntelligencePlugin;
 use routing_intelligence::RoutingPlugin;
 use tether_intelligence::TetherPlugin;
 
-use crate::{MobKind, MobScene};
+use crate::MobScene;
 
-const PREY_POI: PoiKind = PoiKind::new("mobs/prey");
-const PACK_LOCK_SECS: f32 = 45.0;
-const PACK_BROWSE_SECS: f32 = 8.0;
-const PACK_ARRIVAL_RADIUS: f32 = 12.0;
 const RESPAWN_RETRY_SECS: f32 = 1.0;
-
-#[derive(Component, Clone, Copy, Debug)]
-struct PackPursuit {
-	browse_until: f32,
-	generation: u64,
-}
-
-impl Default for PackPursuit {
-	fn default() -> Self {
-		Self { browse_until: 0.0, generation: 1 }
-	}
-}
 
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum MobSceneSystems {
 	Install,
 	Fulfill,
-	Pursuit,
 	Respawn,
 	Surface,
 	Center,
@@ -84,13 +67,7 @@ impl Plugin for MobScenesPlugin {
 		}
 		app.configure_sets(
 			Update,
-			(
-				MobSceneSystems::Install,
-				MobSceneSystems::Fulfill,
-				MobSceneSystems::Pursuit,
-				MobSceneSystems::Respawn,
-			)
-				.chain(),
+			(MobSceneSystems::Install, MobSceneSystems::Fulfill, MobSceneSystems::Respawn).chain(),
 		)
 		.configure_sets(
 			Update,
@@ -111,13 +88,6 @@ impl Plugin for MobScenesPlugin {
 				.in_set(MobSceneSystems::Install)
 				.before(CharacterSceneSystems::Materialize)
 				.before(MobSystems::Bind),
-		)
-		.add_systems(
-			Update,
-			(start_pack_browse, packs_track_herds)
-				.chain()
-				.in_set(MobSceneSystems::Pursuit)
-				.before(MobSystems::Travel),
 		)
 		.add_systems(
 			Update,
@@ -165,8 +135,8 @@ fn install_mob_scenes(
 		}
 		install_mob(&mut commands, host, install);
 		commands.entity(host).insert(brain.clone());
-		if scene.mob.kind == MobKind::Pack {
-			commands.entity(host).insert(PackPursuit::default());
+		if let Some(targeting) = brain.prey_targeting() {
+			install_prey_targeting(&mut commands, host, targeting, transform.translation);
 		}
 	}
 }
@@ -203,84 +173,6 @@ fn sync_mob_scene_centers(mut hosts: Query<(&Transform, &mut MobScene), Changed<
 	}
 }
 
-fn start_pack_browse(
-	time: Res<Time>,
-	mut released: RemovedComponents<MobTetherLock>,
-	mut packs: Query<&mut PackPursuit>,
-) {
-	let now = time.elapsed_secs();
-	for entity in released.read() {
-		let Ok(mut pursuit) = packs.get_mut(entity) else {
-			continue;
-		};
-		if pursuit.browse_until <= now {
-			pursuit.browse_until = now + PACK_BROWSE_SECS;
-		}
-	}
-}
-
-fn packs_track_herds(
-	time: Res<Time>,
-	mut commands: Commands,
-	hosts: Query<(Entity, &MobScene, &GlobalTransform)>,
-	mut packs: Query<(Entity, Option<&MobTetherLock>, &mut PackPursuit)>,
-	mut goals: Query<&mut PoiGoal>,
-) {
-	let herds: Vec<_> = hosts
-		.iter()
-		.filter(|(_, scene, _)| scene.mob.kind == MobKind::Herd)
-		.map(|(entity, _, transform)| (entity, transform.translation()))
-		.collect();
-	let now = time.elapsed_secs();
-	for (pack, lock, mut pursuit) in &mut packs {
-		let Ok((_, _, pack_transform)) = hosts.get(pack) else {
-			continue;
-		};
-		let pack_at = pack_transform.translation();
-		let target = lock
-			.and_then(|lock| herds.iter().copied().find(|(entity, _)| *entity == lock.subject))
-			.or_else(|| {
-				herds.iter().copied().min_by(|(_, a), (_, b)| {
-					pack_at.distance_squared(*a).total_cmp(&pack_at.distance_squared(*b))
-				})
-			});
-		let Some((prey, prey_at)) = target else {
-			continue;
-		};
-		if lock.is_none() && pursuit.browse_until > now {
-			if goals.get(pack).is_ok_and(|goal| goal.kind == PREY_POI) {
-				commands.entity(pack).remove::<PoiGoal>();
-			}
-			continue;
-		}
-		if lock.is_none() && pursuit.browse_until > 0.0 {
-			pursuit.browse_until = 0.0;
-			pursuit.generation = pursuit.generation.saturating_add(1).max(1);
-		}
-		let point = Vec3::new(prey_at.x, pack_at.y, prey_at.z);
-		if let Ok(mut goal) = goals.get_mut(pack) {
-			goal.generation = pursuit.generation;
-			goal.target = PoiId(prey.to_bits());
-			goal.kind = PREY_POI;
-			goal.poi_entity = Some(prey);
-			goal.location.point = point;
-			goal.location.radius = PACK_ARRIVAL_RADIUS;
-			goal.linger_secs = PACK_LOCK_SECS;
-		} else {
-			commands.entity(pack).insert(PoiGoal::new(
-				pursuit.generation,
-				PoiId(prey.to_bits()),
-				Some(prey),
-				PREY_POI,
-				point,
-				PACK_ARRIVAL_RADIUS,
-				now,
-				PACK_LOCK_SECS,
-			));
-		}
-	}
-}
-
 #[cfg(test)]
 mod tests {
 	use anyhow::Result;
@@ -288,7 +180,10 @@ mod tests {
 	use npc_intelligence::Personality;
 
 	use super::*;
-	use mob_intelligence::{MobId, MobMemberNeeded, MobRoster};
+	use crate::MobKind;
+	use mob_intelligence::{
+		MobId, MobMemberNeeded, MobRoster, PreyTargetMemory, PreyTargetingIntelligence,
+	};
 
 	#[test]
 	fn plugin_update_schedule_is_acyclic() -> Result<()> {
@@ -356,6 +251,28 @@ mod tests {
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 
 		assert_eq!(world.get::<MobScene>(host).map(|scene| scene.center), Some(at));
+		Ok(())
+	}
+
+	#[test]
+	fn pack_install_pins_player_prey_at_spawn() -> Result<()> {
+		let mut world = World::new();
+		world.init_resource::<Time>();
+		world.init_resource::<MobIdAlloc>();
+		let home = Vec3::new(12.0, 0.0, -4.0);
+		world.spawn((MobScene::of_kind(MobKind::Pack, 0.4), Transform::from_translation(home)));
+
+		world
+			.run_system_once(install_mob_scenes)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+
+		let host = world
+			.query::<(Entity, &PreyTargetingIntelligence, &PreyTargetMemory)>()
+			.iter(&world)
+			.next()
+			.ok_or_else(|| anyhow::anyhow!("pack should install player targeting"))?;
+		assert_eq!(host.1.kind, poi_intelligence::PoiKind::new("world/player"));
+		assert_eq!(host.2.home, home);
 		Ok(())
 	}
 }
