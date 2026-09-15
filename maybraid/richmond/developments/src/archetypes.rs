@@ -53,6 +53,14 @@ macro_rules! delegate_components {
 			{
 				self.$field.furniture_nodes_for_level(level)
 			}
+			fn furniture_usage_nodes_for_level(
+				&self,
+				level: lod::gen::LodSceneLevel,
+			) -> richmond_building_components::Layers<
+				richmond_building_components::FurnitureUsageNode,
+			> {
+				self.$field.furniture_usage_nodes_for_level(level)
+			}
 			fn label_nodes_for_level(
 				&self,
 				level: lod::gen::LodSceneLevel,

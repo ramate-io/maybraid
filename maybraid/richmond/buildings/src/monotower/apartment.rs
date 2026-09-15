@@ -208,6 +208,10 @@ impl BuildingComponents for SingleHighriseStorey {
 	storey_components!(door_nodes_for_level, DoorNode);
 	storey_components!(joint_nodes_for_level, JointNode);
 	storey_components!(furniture_nodes_for_level, FurnitureNode);
+	storey_components!(
+		furniture_usage_nodes_for_level,
+		richmond_building_components::FurnitureUsageNode
+	);
 	storey_components!(label_nodes_for_level, LabelNode);
 }
 
@@ -281,6 +285,10 @@ impl BuildingComponents for ApartmentMonotower {
 	tower_components!(door_nodes_for_level, DoorNode);
 	tower_components!(joint_nodes_for_level, JointNode);
 	tower_components!(furniture_nodes_for_level, FurnitureNode);
+	tower_components!(
+		furniture_usage_nodes_for_level,
+		richmond_building_components::FurnitureUsageNode
+	);
 	tower_components!(label_nodes_for_level, LabelNode);
 }
 
@@ -416,6 +424,13 @@ impl BuildingComponents for SingleHighrise {
 
 	fn furniture_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FurnitureNode> {
 		self.tower.furniture_nodes_for_level(level)
+	}
+
+	fn furniture_usage_nodes_for_level(
+		&self,
+		level: LodSceneLevel,
+	) -> Layers<richmond_building_components::FurnitureUsageNode> {
+		self.tower.furniture_usage_nodes_for_level(level)
 	}
 
 	fn label_nodes_for_level(&self, level: LodSceneLevel) -> Layers<LabelNode> {

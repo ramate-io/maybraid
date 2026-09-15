@@ -79,6 +79,42 @@ impl FurnitureNode {
 		Self::placeholder(FurnitureGeometry::Counter, placement)
 	}
 
+	pub fn shelf(placement: Placement) -> Self {
+		Self::placeholder(FurnitureGeometry::Shelf, placement)
+	}
+
+	pub fn range(placement: Placement) -> Self {
+		Self::placeholder(FurnitureGeometry::Range, placement)
+	}
+
+	pub fn basin(placement: Placement) -> Self {
+		Self::placeholder(FurnitureGeometry::Basin, placement)
+	}
+
+	pub fn faucet(placement: Placement) -> Self {
+		Self::placeholder(FurnitureGeometry::Faucet, placement)
+	}
+
+	pub fn food_display(placement: Placement) -> Self {
+		Self::placeholder(FurnitureGeometry::FoodDisplay, placement)
+	}
+
+	pub fn fridge(placement: Placement) -> Self {
+		Self::placeholder(FurnitureGeometry::Fridge, placement)
+	}
+
+	pub fn fruit(placement: Placement) -> Self {
+		Self::placeholder(FurnitureGeometry::Fruit, placement)
+	}
+
+	pub fn bread(placement: Placement) -> Self {
+		Self::placeholder(FurnitureGeometry::Bread, placement)
+	}
+
+	pub fn cookware(placement: Placement) -> Self {
+		Self::placeholder(FurnitureGeometry::Cookware, placement)
+	}
+
 	pub fn with_abutment(mut self, abutment: FurnitureAbutment) -> Self {
 		self.abutment = Some(abutment);
 		self.placement.yaw = abutment.facing_yaw();

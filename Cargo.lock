@@ -3520,6 +3520,7 @@ dependencies = [
  "bevy",
  "furniture-components",
  "furniture-shaders",
+ "furniture-usage-areas",
  "lod",
  "lod-gimme",
  "material-ref",
@@ -3566,6 +3567,14 @@ version = "0.0.1"
 dependencies = [
  "bevy",
  "material-ref",
+]
+
+[[package]]
+name = "furniture-usage-areas"
+version = "0.0.1"
+dependencies = [
+ "bevy",
+ "richmond-building-components",
 ]
 
 [[package]]

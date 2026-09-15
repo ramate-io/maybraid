@@ -28,7 +28,8 @@ pub use assets::AssetPath;
 pub use doors::DoorNode;
 pub use floors::FloorNode;
 pub use furniture::{
-	FurnitureAbutment, FurnitureGeometry, FurnitureNode, FurnitureStyle, FurnitureWireframePlugin,
+	FurnitureAbutment, FurnitureGeometry, FurnitureNode, FurnitureStyle, FurnitureUsage,
+	FurnitureUsageNode, FurnitureWireframePlugin,
 };
 pub use joints::{JointGeometry, JointNode, JointStyle};
 pub use labels::{LabelGeometry, LabelNode, LabelStyle, LabelWireframePlugin};
@@ -121,6 +122,10 @@ pub trait BuildingComponents {
 		Layers::new()
 	}
 
+	fn furniture_usage_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<FurnitureUsageNode> {
+		Layers::new()
+	}
+
 	fn label_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<LabelNode> {
 		Layers::new()
 	}
@@ -166,6 +171,10 @@ impl<T: BuildingComponents + ?Sized> BuildingComponents for &T {
 		(**self).furniture_nodes_for_level(level)
 	}
 
+	fn furniture_usage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FurnitureUsageNode> {
+		(**self).furniture_usage_nodes_for_level(level)
+	}
+
 	fn label_nodes_for_level(&self, level: LodSceneLevel) -> Layers<LabelNode> {
 		(**self).label_nodes_for_level(level)
 	}
@@ -206,6 +215,10 @@ impl<T: BuildingComponents + ?Sized> BuildingComponents for Arc<T> {
 
 	fn furniture_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FurnitureNode> {
 		(**self).furniture_nodes_for_level(level)
+	}
+
+	fn furniture_usage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FurnitureUsageNode> {
+		(**self).furniture_usage_nodes_for_level(level)
 	}
 
 	fn label_nodes_for_level(&self, level: LodSceneLevel) -> Layers<LabelNode> {
@@ -286,6 +299,10 @@ impl<T: BuildingComponents + Send + Sync + 'static> BuildingComponents for Compo
 
 	fn furniture_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FurnitureNode> {
 		self.0.furniture_nodes_for_level(level)
+	}
+
+	fn furniture_usage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FurnitureUsageNode> {
+		self.0.furniture_usage_nodes_for_level(level)
 	}
 
 	fn label_nodes_for_level(&self, level: LodSceneLevel) -> Layers<LabelNode> {

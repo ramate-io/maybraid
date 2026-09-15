@@ -132,6 +132,9 @@ fn world_slots_of(
 		for node in host.furniture_nodes() {
 			out.push(world_slot(transform, node));
 		}
+		for node in furniture_usage_areas::expand_usages(host.furniture_usage_nodes()) {
+			out.push(world_slot(transform, node));
+		}
 	}
 	out
 }

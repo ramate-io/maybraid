@@ -19,6 +19,7 @@ lod-gimme = { workspace = true }
 procedural-common = { workspace = true }
 richmond-building-components = { workspace = true }
 richmond-development-models = { workspace = true }
+furniture-usage-areas = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
