@@ -46,9 +46,9 @@ pub fn sync_hands_to_firearm(
 		let Some(body_rot) = body_rot else {
 			continue;
 		};
-		let (Some(trigger), Some(grip)) = (trigger, grip) else {
+		if trigger.is_none() && grip.is_none() {
 			continue;
-		};
+		}
 
 		for member in members.iter() {
 			let Ok((mut rig, map, mailbox)) = rigs.get_mut(member) else {
@@ -58,15 +58,16 @@ pub fn sync_hands_to_firearm(
 				continue;
 			}
 			let current = transforms.p0();
-			let right_target =
-				target_from(body_rot, bone_world(map, &current, "humerus.R"), trigger);
-			let left_target = target_from(body_rot, bone_world(map, &current, "humerus.L"), grip);
+			let right_target = trigger.and_then(|trigger| {
+				target_from(body_rot, bone_world(map, &current, "humerus.R"), trigger)
+			});
+			let left_target = grip.and_then(|grip| {
+				target_from(body_rot, bone_world(map, &current, "humerus.L"), grip)
+			});
 			drop(current);
 			let mut bones = transforms.p1();
 			rig.pose.clone_from(&mailbox.output);
 			pose_firing_torso(&mut rig, settings.firing_torso_yaw);
-			reset_arm_to_rest(&mut rig, map, &bones, Side::Right);
-			reset_arm_to_rest(&mut rig, map, &bones, Side::Left);
 			let right = arm_reach(&rig, Side::Right, right_target, settings.right_pole, 1.0);
 			let left = arm_reach(
 				&rig,
@@ -76,9 +77,11 @@ pub fn sync_hands_to_firearm(
 				settings.left_reach_stretch,
 			);
 			if let Some(right) = right {
+				reset_arm_to_rest(&mut rig, map, &bones, Side::Right);
 				pose_arm(&mut rig, Side::Right, right, 1.0, settings.humerus_roll);
 			}
 			if let Some(left) = left {
+				reset_arm_to_rest(&mut rig, map, &bones, Side::Left);
 				pose_arm(
 					&mut rig,
 					Side::Left,
@@ -422,5 +425,235 @@ mod tests {
 		assert!(spine.midback.swing.abs() > spine.lumbar.swing.abs());
 		assert!(spine.upper_back.swing.abs() > spine.midback.swing.abs());
 		Ok(())
+	}
+
+	#[test]
+	fn failed_reach_keeps_idle_hang() -> anyhow::Result<()> {
+		let mut world = hold_world()?;
+		let right = world.resource::<HoldBones>().humerus_r;
+		let hang = world.get::<Transform>(right).copied().expect("hang");
+		let rest = world.get::<AnimBone>(right).expect("rest").rest;
+		assert!(
+			(hang.rotation.xyz() - rest.rotation.xyz()).length() > 0.2,
+			"fixture should start hung, not rest"
+		);
+
+		world
+			.run_system_once(sync_hands_to_firearm)
+			.map_err(|err| anyhow::anyhow!("{err}"))?;
+
+		let after = world.get::<Transform>(right).copied().expect("after");
+		anyhow::ensure!(
+			(after.rotation.xyz() - hang.rotation.xyz()).length() < 0.05,
+			"failed reach must leave Idle hang, got {after:?} vs hang {hang:?}"
+		);
+		anyhow::ensure!(
+			(after.rotation.xyz() - rest.rotation.xyz()).length() > 0.2,
+			"failed reach must not reset to T-pose rest"
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn armed_ignore_holds_off_rest() -> anyhow::Result<()> {
+		let mut world = hold_world_reachable()?;
+		let right = world.resource::<HoldBones>().humerus_r;
+		let rest = world.get::<AnimBone>(right).expect("rest").rest;
+
+		world
+			.run_system_once(crate::pose::pose_held_firearm)
+			.map_err(|err| anyhow::anyhow!("{err}"))?;
+		sync_gun_global(&mut world);
+		world
+			.run_system_once(sync_hands_to_firearm)
+			.map_err(|err| anyhow::anyhow!("{err}"))?;
+
+		let after = world.get::<Transform>(right).copied().expect("after");
+		anyhow::ensure!(
+			(after.rotation.xyz() - rest.rotation.xyz()).length() > 0.15,
+			"trigger hand should leave T-pose rest, got {after:?} vs rest {rest:?}"
+		);
+		let gun = world.resource::<HoldBones>().gun;
+		let stock = world.resource::<HoldBones>().stock;
+		let gun_tf = world.get::<Transform>(gun).copied().expect("gun");
+		let stock_local = world.get::<Transform>(stock).expect("stock").translation;
+		let stock_world = gun_tf.translation + gun_tf.rotation * stock_local;
+		let shoulder = Vec3::new(0.2, 1.5, 0.0);
+		anyhow::ensure!(
+			(stock_world - shoulder).length() < 0.45,
+			"stock should sit at the shoulder, {stock_world:?} vs {shoulder:?}"
+		);
+		Ok(())
+	}
+
+	#[derive(Resource)]
+	struct HoldBones {
+		humerus_r: Entity,
+		gun: Entity,
+		stock: Entity,
+	}
+
+	fn hang_transform(translation: Vec3) -> Transform {
+		Transform { translation, rotation: Quat::from_rotation_x(1.2), ..default() }
+	}
+
+	fn rest_transform(translation: Vec3) -> Transform {
+		Transform::from_translation(translation)
+	}
+
+	fn insert_arm_pose(rig: &mut HumanoidV0Rig, name: &str, transform: Transform, flex: f32) {
+		rig.pose.insert(crozon_rigs::BonePose {
+			name: crozon_rigs::Name::from(name),
+			transform,
+			swing: 0.0,
+			flex,
+			twist: 0.0,
+		});
+	}
+
+	fn hold_world() -> anyhow::Result<World> {
+		hold_scene(Vec3::new(0.2, 1.5, 0.0), Vec3::new(-0.2, 1.5, 0.0))
+	}
+
+	fn hold_world_reachable() -> anyhow::Result<World> {
+		hold_scene(Vec3::new(0.2, 1.45, -0.4), Vec3::new(-0.15, 1.4, -0.35))
+	}
+
+	fn hold_scene(trigger_at: Vec3, grip_at: Vec3) -> anyhow::Result<World> {
+		use std::collections::HashMap;
+
+		use crate::{FirearmUser, FirearmUserSettings};
+		use crozon_characters::{
+			AnimMailbox, AnimateBones, CharacterHeading, CharacterRoot, MemberOf,
+		};
+		use crozon_rigs::Name as RigName;
+		use firearms::FirearmRoot;
+		use player::PlayerLook;
+
+		use crate::pose::HeldFirearm;
+
+		let mut world = World::new();
+		let mut rig = HumanoidV0Rig::imported();
+		let hang_r = hang_transform(Vec3::new(0.2, 1.5, 0.0));
+		let hang_l = hang_transform(Vec3::new(-0.2, 1.5, 0.0));
+		let forearm = Transform::from_translation(Vec3::NEG_Y * 0.5);
+		for (name, tf, flex) in [
+			("shoulder.L", hang_transform(Vec3::new(-0.2, 1.55, 0.0)), 0.0),
+			("shoulder.R", hang_transform(Vec3::new(0.2, 1.55, 0.0)), 0.0),
+			("humerus.L", hang_l, 1.2),
+			("humerus.R", hang_r, 1.2),
+			("forearm.L", forearm, 0.32),
+			("forearm.R", forearm, 0.32),
+			("lumbar", Transform::IDENTITY, 0.0),
+			("midback", Transform::IDENTITY, 0.0),
+			("upper_back", Transform::IDENTITY, 0.0),
+		] {
+			insert_arm_pose(&mut rig, name, tf, flex);
+		}
+		let mut mailbox = AnimMailbox::new(Transform::IDENTITY);
+		mailbox.output = rig.pose.clone();
+
+		let gun = world
+			.spawn((
+				FirearmRoot,
+				HeldFirearm { scale: 1.0 },
+				Transform::IDENTITY,
+				GlobalTransform::IDENTITY,
+			))
+			.id();
+		let user = world
+			.spawn((
+				FirearmUser { held: gun, settings: FirearmUserSettings::default() },
+				PlayerLook::default(),
+			))
+			.id();
+		let visual = world
+			.spawn((
+				CharacterRoot,
+				CharacterHeading(Vec3::NEG_Z),
+				Transform::IDENTITY,
+				GlobalTransform::IDENTITY,
+				ChildOf(user),
+			))
+			.id();
+
+		let mut body_bones = HashMap::new();
+		let mut humerus_r = Entity::PLACEHOLDER;
+		for (name, translation) in [
+			("shoulder.L", Vec3::new(-0.2, 1.55, 0.0)),
+			("shoulder.R", Vec3::new(0.2, 1.55, 0.0)),
+			("humerus.L", Vec3::new(-0.2, 1.5, 0.0)),
+			("humerus.R", Vec3::new(0.2, 1.5, 0.0)),
+			("forearm.L", Vec3::new(-0.2, 1.0, 0.0)),
+			("forearm.R", Vec3::new(0.2, 1.0, 0.0)),
+			("lumbar", Vec3::ZERO),
+			("midback", Vec3::ZERO),
+			("upper_back", Vec3::ZERO),
+		] {
+			let hang = if name.starts_with("humerus") || name.starts_with("shoulder") {
+				hang_transform(translation)
+			} else if name.starts_with("forearm") {
+				Transform { translation, rotation: Quat::from_rotation_x(0.32), ..default() }
+			} else {
+				Transform::from_translation(translation)
+			};
+			let entity = world
+				.spawn((
+					AnimBone { name: RigName::from(name), rest: rest_transform(translation) },
+					hang,
+					GlobalTransform::from(hang),
+				))
+				.id();
+			body_bones.insert(name.to_string(), entity);
+			if name == "humerus.R" {
+				humerus_r = entity;
+			}
+		}
+
+		world.spawn((
+			HoldingArms,
+			AnimateBones,
+			rig,
+			mailbox,
+			BoneMap { by_name: body_bones },
+			ChildOf(visual),
+			MemberOf(visual),
+		));
+
+		let stock = world
+			.spawn((
+				Transform::from_translation(Vec3::new(0.0, 0.0, -0.2)),
+				GlobalTransform::from_translation(Vec3::new(0.0, 0.0, -0.2)),
+			))
+			.id();
+		let trigger = world
+			.spawn((
+				Transform::from_translation(trigger_at),
+				GlobalTransform::from_translation(trigger_at),
+			))
+			.id();
+		let grip = world
+			.spawn((
+				Transform::from_translation(grip_at),
+				GlobalTransform::from_translation(grip_at),
+			))
+			.id();
+		let mut gun_bones = HashMap::new();
+		gun_bones.insert("stock".to_string(), stock);
+		gun_bones.insert("trigger_point".to_string(), trigger);
+		gun_bones.insert("grip".to_string(), grip);
+		world.spawn((BoneMap { by_name: gun_bones }, ChildOf(gun), MemberOf(gun)));
+		world.flush();
+
+		world.insert_resource(HoldBones { humerus_r, gun, stock });
+		Ok(world)
+	}
+
+	fn sync_gun_global(world: &mut World) {
+		let gun = world.resource::<HoldBones>().gun;
+		let tf = world.get::<Transform>(gun).copied().expect("gun tf");
+		if let Some(mut global) = world.get_mut::<GlobalTransform>(gun) {
+			*global = GlobalTransform::from(tf);
+		}
 	}
 }

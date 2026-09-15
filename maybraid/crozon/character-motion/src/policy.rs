@@ -58,13 +58,21 @@ pub fn motion_policy(level: LodSceneLevel) -> MotionPolicy {
 	}
 }
 
-/// Drop mailbox and pitch work on Mid / Far plants. Missing lod is Near
-/// (local player).
+/// Drop mailbox and pitch work on Mid / Far plants that are not presenting.
+/// Missing lod is Near (local player).
 ///
 /// Character `LodScene` stays High — this is not a scene cull. Effects go with
 /// bones so [`crate::apply_anim_mailbox`] does not keep the expensive path.
-pub fn clamp_intelligence(mut policy: MotionPolicy, lod: Option<&IntelligenceLod>) -> MotionPolicy {
-	if IntelligenceLod::band_or_near(lod) != IntelligenceBand::Near {
+///
+/// `presenting` is the look-frustum / focus grant. Combat / Evade may still
+/// promote thinking [`IntelligenceBand::Near`]; they must not be the only way
+/// a visible High body hangs Idle arms or holds a firearm.
+pub fn clamp_intelligence(
+	mut policy: MotionPolicy,
+	lod: Option<&IntelligenceLod>,
+	presenting: bool,
+) -> MotionPolicy {
+	if IntelligenceLod::band_or_near(lod) != IntelligenceBand::Near && !presenting {
 		policy.bones = false;
 		policy.effects = false;
 		policy.pitch = false;
@@ -106,18 +114,35 @@ mod tests {
 	#[test]
 	fn missing_and_near_keep_high_mailbox() {
 		let high = motion_policy(LodSceneLevel::High);
-		assert_eq!(clamp_intelligence(high, None), MotionPolicy::HIGH);
-		assert_eq!(clamp_intelligence(high, Some(&IntelligenceLod::missing())), MotionPolicy::HIGH);
+		assert_eq!(clamp_intelligence(high, None, false), MotionPolicy::HIGH);
+		assert_eq!(
+			clamp_intelligence(high, Some(&IntelligenceLod::missing()), false),
+			MotionPolicy::HIGH
+		);
 	}
 
 	#[test]
-	fn mid_and_far_drop_mailbox_and_pitch() {
+	fn mid_and_far_drop_mailbox_and_pitch_when_not_presenting() {
 		let high = motion_policy(LodSceneLevel::High);
 		let mid = IntelligenceLod { band: IntelligenceBand::Mid, skips: 0 };
 		let far = IntelligenceLod { band: IntelligenceBand::Far, skips: 0 };
-		let mid_p = clamp_intelligence(high, Some(&mid));
-		let far_p = clamp_intelligence(high, Some(&far));
+		let mid_p = clamp_intelligence(high, Some(&mid), false);
+		let far_p = clamp_intelligence(high, Some(&far), false);
 		assert!(!mid_p.bones && !mid_p.effects && !mid_p.pitch);
 		assert!(!far_p.bones && !far_p.effects && !far_p.pitch);
+	}
+
+	#[test]
+	fn mid_presenting_keeps_high_mailbox() {
+		let high = motion_policy(LodSceneLevel::High);
+		let mid = IntelligenceLod { band: IntelligenceBand::Mid, skips: 0 };
+		assert_eq!(clamp_intelligence(high, Some(&mid), true), MotionPolicy::HIGH);
+	}
+
+	#[test]
+	fn presenting_does_not_add_bones_to_medium() {
+		let medium = motion_policy(LodSceneLevel::Medium);
+		let mid = IntelligenceLod { band: IntelligenceBand::Mid, skips: 0 };
+		assert_eq!(clamp_intelligence(medium, Some(&mid), true), MotionPolicy::MEDIUM);
 	}
 }

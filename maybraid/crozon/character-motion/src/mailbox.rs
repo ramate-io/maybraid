@@ -2,9 +2,10 @@
 //!
 //! [`tick_anim_mailbox`] advances clip time for every body host. [`apply_anim_mailbox`]
 //! samples and writes only hosts with [`AnimateBones`] and/or [`AnimateEffects`].
-//! [`select_mailbox_applies`] rank-fills a count budget among on-screen Near bodies;
-//! off-screen Near holds the last pose. No published look means every Near body
-//! competes (tests / playgrounds).
+//! [`select_mailbox_applies`] rank-fills a count budget among on-screen marked
+//! bodies; off-screen Near holds the last pose. Visible High Mid/Far plants
+//! keep [`AnimateBones`] from sync, so they compete here too. No published look
+//! means every marked body competes (tests / playgrounds).
 
 use std::collections::HashSet;
 
@@ -95,7 +96,7 @@ pub struct AnimMailbox {
 pub struct AnimProgress(pub f32);
 
 impl AnimMailbox {
-	fn new(bind_transform: Transform) -> Self {
+	pub fn new(bind_transform: Transform) -> Self {
 		Self {
 			output: RigPose::new(),
 			apply_skips: 0,
@@ -736,8 +737,15 @@ mod tests {
 	#[test]
 	fn still_samples_idle_on_humanoid() {
 		let mut rig = HumanoidV0Rig::imported();
-		for bone in ["shoulder.L", "shoulder.R", "humerus.L", "forearm.L", "lower_neck", "pelvis.L"]
-		{
+		for bone in [
+			"shoulder.L",
+			"shoulder.R",
+			"humerus.L",
+			"humerus.R",
+			"forearm.L",
+			"lower_neck",
+			"pelvis.L",
+		] {
 			rig.pose.insert(BonePose::new(RigName::from(bone), Transform::IDENTITY));
 		}
 
@@ -746,8 +754,13 @@ mod tests {
 		let left = rig.pose.get(&RigName::from("shoulder.L")).expect("left");
 		assert!(left.swing.abs() > 0.0);
 		assert!(left.swing.abs() < 0.1);
+		let hang = Idle::default().arm_hang;
 		let humerus = rig.pose.get(&RigName::from("humerus.L")).expect("humerus");
-		assert!(humerus.flex.abs() > 1.0);
+		assert!(
+			humerus.flex.abs() > hang * 0.8,
+			"Still should hang arms off T-pose rest 0, matching Idle::arm_hang {hang}, got {}",
+			humerus.flex
+		);
 	}
 
 	#[test]
