@@ -11,7 +11,7 @@ Blender Z-up:
 
 - box carcass: X,Y ∈ [-1, 1], Z ∈ [0, 1] (floor origin, +Y is the wall / back)
 - hinge door: origin at hinge-front-bottom; X ∈ [0, 1], Y thin about 0, Z ∈ [0, 1]
-- basin: sit-on-top, contact at Z = 0, bowl in +Z
+- basin: sit-on-top on an existing counter, contact at Z = 0, bowl in +Z
 - faucet: deck mount at origin, spout toward −Y
 - props (fruit / bread / display): sit on Z = 0
 - shelf row: poles Z ∈ [0, 1], slanted deck starts at Z = 0 (stack on Z)
@@ -254,6 +254,33 @@ def finish_named(name: str, keep):
     return keep
 
 
+def quarter_rib(name: str, x, y_back=1.0, y_front=-1.0, z0=0.08, z1=1.0, radius=0.05, segs=8):
+    """Quarter-ellipse tube in the YZ plane: back-top → front-tray."""
+    bpy = _bpy()
+    data = bpy.data.curves.new(name, "CURVE")
+    data.dimensions = "3D"
+    data.bevel_depth = radius
+    data.bevel_resolution = 1
+    data.resolution_u = 2
+    spline = data.splines.new("POLY")
+    pts = []
+    for i in range(segs + 1):
+        theta = (i / segs) * math.pi * 0.5
+        y = y_back + (y_front - y_back) * math.sin(theta)
+        z = z0 + (z1 - z0) * math.cos(theta)
+        pts.append((x, y, z))
+    spline.points.add(len(pts) - 1)
+    for i, (px, py, pz) in enumerate(pts):
+        spline.points[i].co = (px, py, pz, 1.0)
+    obj = bpy.data.objects.new(name, data)
+    link(obj)
+    bpy.ops.object.select_all(action="DESELECT")
+    obj.select_set(True)
+    bpy.context.view_layer.objects.active = obj
+    bpy.ops.object.convert(target="MESH")
+    return bpy.context.active_object
+
+
 def chamfer_slab(name: str, xmin, xmax, ymin, ymax, zmin, zmax, chamfer=0.22):
     """Axis-aligned slab with the four plan corners cut."""
     bpy = _bpy()
@@ -297,8 +324,8 @@ def chamfer_slab(name: str, xmin, xmax, ymin, ymax, zmin, zmax, chamfer=0.22):
 @kit("shelf/row/shelf_row_001.blend")
 def shelf_row() -> None:
     """Pair of poles + slanted deck with a front lip. Deck starts at Z = 0."""
-    cyl("pole_l", 0.07, 1.00, (-0.90, 0.55, 0.50), vertices=8)
-    cyl("pole_r", 0.07, 1.00, (0.90, 0.55, 0.50), vertices=8)
+    cyl("pole_l", 0.16, 1.00, (-0.86, 0.55, 0.50), vertices=8)
+    cyl("pole_r", 0.16, 1.00, (0.86, 0.55, 0.50), vertices=8)
     deck = box("deck", -0.86, 0.86, -0.95, 0.92, 0.00, 0.08)
 
     def slant(co):
@@ -579,24 +606,13 @@ def boule() -> None:
 
 @kit("food_display/case/food_display_001.blend")
 def food_display() -> None:
-    """50s diner pie stand: rounded tray, back, chrome hoop. Open front."""
-    tray = cyl("tray", 1.00, 0.10, (0.0, 0.0, 0.05), vertices=12)
-    scale_verts(tray, sx=1.00, sy=0.72, sz=1.00, origin=(0.0, 0.0, 0.05))
-    rim = torus("rim", 0.90, 0.055, (0.0, 0.0, 0.12), major_seg=12, minor_seg=6)
-    scale_verts(rim, sx=1.00, sy=0.72, sz=0.80, origin=(0.0, 0.0, 0.12))
-    back = cyl("back", 0.96, 0.78, (0.0, 0.12, 0.52), vertices=12)
-    scale_verts(back, sx=1.00, sy=0.62, sz=1.00, origin=(0.0, 0.12, 0.52))
-    boolean_difference(back, box("front_cut", -1.20, 1.20, -1.20, 0.18, 0.10, 1.10), "OpenFront")
-    hoop = torus(
-        "hoop",
-        0.78,
-        0.045,
-        (0.0, 0.10, 0.58),
-        rotation=(math.pi * 0.5, 0.0, 0.0),
-        major_seg=14,
-        minor_seg=6,
-    )
-    boolean_difference(hoop, box("hoop_cut", -1.20, 1.20, -1.20, 1.20, -0.20, 0.32), "Arch")
+    """Rectangular tray + back; quarter-circle ribs from back-top to front."""
+    box("tray", -1.00, 1.00, -1.00, 1.00, 0.00, 0.08)
+    box("lip", -1.00, 1.00, -1.00, -0.88, 0.08, 0.16)
+    box("back", -1.00, 1.00, 0.88, 1.00, 0.08, 1.00)
+    quarter_rib("rib_l", -0.92)
+    quarter_rib("rib_r", 0.92)
+    quarter_rib("rib_m", 0.00, radius=0.04)
     finish("food_display_001")
 
 
@@ -625,18 +641,8 @@ def toilet() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Sinks — vanity carcass; basin sits on the deck; shared faucet
+# Sinks — basin sits on an existing counter; shared faucet
 # ---------------------------------------------------------------------------
-
-
-@kit("sink/vanity/vanity_001.blend")
-def vanity() -> None:
-    """Bathroom vanity: toekick on −Y, solid deck. Basin sits on top."""
-    box("kick", -1.00, 1.00, -0.70, 1.00, 0.00, 0.12)
-    box("carcass", -1.00, 1.00, -1.00, 1.00, 0.12, 0.86)
-    box("deck", -1.06, 1.06, -1.06, 1.00, 0.86, 1.00)
-    box("reveal", -0.03, 0.03, -1.00, -0.90, 0.20, 0.78)
-    finish("vanity_001")
 
 
 @kit("sink/basin/basin_001.blend")
@@ -721,6 +727,131 @@ def table_pedestal() -> None:
     cyl("column", 0.16, 0.62, (0.0, 0.0, 0.52), vertices=8)
     cyl("cap", 0.38, 0.10, (0.0, 0.0, 0.95), vertices=10)
     finish("table_pedestal_001")
+
+
+# ---------------------------------------------------------------------------
+# Range / stove
+# ---------------------------------------------------------------------------
+
+
+@kit("range/body/range_body_001.blend")
+def range_body() -> None:
+    """Oven carcass, cooktop, backsplash. Floor origin, +Y wall."""
+    body = box("body", -1.00, 1.00, -1.00, 1.00, 0.00, 0.78)
+    cutter = box("cavity", -0.82, 0.82, -1.08, -0.35, 0.12, 0.68)
+    boolean_difference(body, cutter, "Oven")
+    box("cooktop", -1.00, 1.00, -1.00, 0.72, 0.78, 0.90)
+    box("splash", -1.00, 1.00, 0.72, 1.00, 0.78, 1.00)
+    box("toe", -1.00, 1.00, -1.00, -0.72, 0.00, 0.08)
+    finish("range_body_001")
+
+
+@kit("range/door/range_door_001.blend")
+def range_door() -> None:
+    """Bottom-hinge oven door. Origin at front-bottom; panel in +Z, proud −Y."""
+    box("panel", -0.96, 0.96, -0.10, 0.02, 0.02, 0.96)
+    box("window", -0.62, 0.62, -0.12, -0.06, 0.22, 0.72)
+    box("handle", -0.40, 0.40, -0.24, -0.10, 0.82, 0.92)
+    finish("range_door_001")
+
+
+@kit("range/burner/range_burner_001.blend")
+def range_burner() -> None:
+    """One burner + grate. Sits on Z = 0, plan about the origin."""
+    cyl("ring_o", 0.92, 0.08, (0.0, 0.0, 0.06), vertices=10)
+    cyl("ring_i", 0.55, 0.10, (0.0, 0.0, 0.08), vertices=8)
+    cyl("cap", 0.22, 0.08, (0.0, 0.0, 0.12), vertices=8)
+    box("grate_a", -0.95, 0.95, -0.08, 0.08, 0.14, 0.22)
+    box("grate_b", -0.08, 0.08, -0.95, 0.95, 0.14, 0.22)
+    finish("range_burner_001")
+
+
+@kit("range/knob/range_knob_001.blend")
+def range_knob() -> None:
+    """Backsplash knob. Origin at the mount, stem in +Z."""
+    cyl("stem", 0.12, 0.10, (0.0, 0.0, 0.05), vertices=8)
+    cyl("dial", 0.28, 0.16, (0.0, 0.0, 0.16), vertices=8)
+    box("pointer", -0.06, 0.06, -0.28, 0.04, 0.22, 0.28)
+    finish("range_knob_001")
+
+
+# ---------------------------------------------------------------------------
+# Rugs — thin floor cloths, Z ≈ 0
+# ---------------------------------------------------------------------------
+
+
+@kit("rug/rect/rug_rect_001.blend")
+def rug_rect() -> None:
+    rug = chamfer_slab("rug", -1.00, 1.00, -1.00, 1.00, 0.00, 0.08, chamfer=0.12)
+    box("bind", -1.00, 1.00, -1.00, -0.88, 0.00, 0.10)
+    box("bind_b", -1.00, 1.00, 0.88, 1.00, 0.00, 0.10)
+    finish("rug_rect_001")
+
+
+@kit("rug/oval/rug_oval_001.blend")
+def rug_oval() -> None:
+    rug = cyl("rug", 1.00, 0.08, (0.0, 0.0, 0.04), vertices=12)
+    scale_verts(rug, sx=1.00, sy=0.72, sz=1.00, origin=(0.0, 0.0, 0.04))
+    finish_named("rug_oval_001", rug)
+
+
+@kit("rug/runner/rug_runner_001.blend")
+def rug_runner() -> None:
+    rug = chamfer_slab("rug", -1.00, 1.00, -0.38, 0.38, 0.00, 0.08, chamfer=0.08)
+    box("fringe_a", -1.00, -0.88, -0.38, 0.38, 0.00, 0.06)
+    box("fringe_b", 0.88, 1.00, -0.38, 0.38, 0.00, 0.06)
+    finish("rug_runner_001")
+
+
+@kit("rug/round/rug_round_001.blend")
+def rug_round() -> None:
+    rug = cyl("rug", 1.00, 0.08, (0.0, 0.0, 0.04), vertices=12)
+    finish_named("rug_round_001", rug)
+
+
+# ---------------------------------------------------------------------------
+# Pots and pans — sit on Z = 0
+# ---------------------------------------------------------------------------
+
+
+@kit("cookware/pot/pot_001.blend")
+def pot() -> None:
+    body = cyl("body", 0.72, 0.70, (0.0, 0.0, 0.38), vertices=10)
+    inner = cyl("inner", 0.60, 0.62, (0.0, 0.0, 0.42), vertices=10)
+    boolean_difference(body, inner, "Hollow")
+    cyl("handle_l", 0.07, 0.28, (-0.82, 0.0, 0.58), rotation=(0.0, math.pi * 0.5, 0.0), vertices=6)
+    cyl("handle_r", 0.07, 0.28, (0.82, 0.0, 0.58), rotation=(0.0, math.pi * 0.5, 0.0), vertices=6)
+    finish("pot_001")
+
+
+@kit("cookware/lid/pot_lid_001.blend")
+def pot_lid() -> None:
+    """Underside on Z = 0 so it sits on a pot rim."""
+    cyl("disc", 0.74, 0.08, (0.0, 0.0, 0.04), vertices=10)
+    cyl("lip", 0.58, 0.06, (0.0, 0.0, -0.01), vertices=10)
+    cyl("knob", 0.10, 0.14, (0.0, 0.0, 0.14), vertices=6)
+    finish("pot_lid_001")
+
+
+@kit("cookware/skillet/skillet_001.blend")
+def skillet() -> None:
+    """Shallow pan, handle toward −Y."""
+    body = cyl("body", 0.70, 0.22, (0.0, 0.0, 0.14), vertices=10)
+    inner = cyl("inner", 0.58, 0.18, (0.0, 0.0, 0.18), vertices=10)
+    boolean_difference(body, inner, "Hollow")
+    cyl("handle", 0.07, 0.70, (0.0, -0.95, 0.18), rotation=(math.pi * 0.5, 0.0, 0.0), vertices=6)
+    cyl("tip", 0.10, 0.08, (0.0, -1.28, 0.18), vertices=6)
+    finish("skillet_001")
+
+
+@kit("cookware/saucepan/saucepan_001.blend")
+def saucepan() -> None:
+    """Smaller pot, one handle toward −Y."""
+    body = cyl("body", 0.52, 0.42, (0.0, 0.0, 0.24), vertices=10)
+    inner = cyl("inner", 0.42, 0.36, (0.0, 0.0, 0.28), vertices=10)
+    boolean_difference(body, inner, "Hollow")
+    cyl("handle", 0.06, 0.48, (0.0, -0.78, 0.36), rotation=(math.pi * 0.5, 0.0, 0.0), vertices=6)
+    finish("saucepan_001")
 
 
 # ---------------------------------------------------------------------------
