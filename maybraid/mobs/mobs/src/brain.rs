@@ -6,7 +6,7 @@ use mob_intelligence::{MobAffiliations, MobRespawn, MobTravel, PreyTargetingInte
 use poi_intelligence::{PoiInterest, PoiInterests};
 use threat_intelligence::{AffiliationStrength, Affiliations, ThreatGroupId, ThreatId};
 
-use crate::{MobKind, DEFAULT_MOB_HIGH_RADIUS};
+use crate::MobKind;
 
 /// Shared membership used to classify the controlled world player.
 pub const PLAYER_GROUP: ThreatGroupId = ThreatGroupId::group(29);
@@ -57,15 +57,21 @@ impl MobBrain {
 		}
 	}
 
-	/// Player-prey install for hunt / brawler / guard hosts. Grazer families omit it.
+	/// Player-prey install for journeying hunt hosts (pack / raider). Stationary
+	/// guard / brawler hosts and grazer families omit it. Off-course is vs the
+	/// current POI course, not spawn.
 	pub fn prey_targeting(&self) -> Option<PreyTargetingIntelligence> {
-		let (duration, extra) = match self.kind {
-			MobKind::Pack => (24.0, 40.0),
-			MobKind::Guard | MobKind::Brawler => (15.0, 24.0),
-			MobKind::Herd | MobKind::Raider | MobKind::Pleb | MobKind::Rambles => return None,
-		};
-		let cap = (DEFAULT_MOB_HIGH_RADIUS - self.leash).max(0.0);
-		Some(PreyTargetingIntelligence::player(duration, (self.leash + extra).min(cap)))
+		if self.travel.is_none() || !self.journey {
+			return None;
+		}
+		match self.kind {
+			MobKind::Pack | MobKind::Raider => Some(PreyTargetingIntelligence::player(24.0, 250.0)),
+			MobKind::Herd
+			| MobKind::Guard
+			| MobKind::Pleb
+			| MobKind::Rambles
+			| MobKind::Brawler => None,
+		}
 	}
 }
 
@@ -203,21 +209,22 @@ mod tests {
 	}
 
 	#[test]
-	fn hunt_brawler_and_guard_install_player_prey_inside_high() {
+	fn journeying_hunters_install_player_prey_inside_high() {
 		let pack = MobBrain::for_kind(MobKind::Pack);
 		let targeting = pack.prey_targeting().expect("pack hunts the player");
 		assert_eq!(targeting.kind, poi_intelligence::PoiKind::new("world/player"));
 		assert!((targeting.duration - 24.0).abs() < 1e-4);
-		assert!((targeting.off_course_distance - 56.0).abs() < 1e-4);
-		assert!(targeting.off_course_distance <= DEFAULT_MOB_HIGH_RADIUS - pack.leash);
+		assert!((targeting.off_course_distance - 250.0).abs() < 1e-4);
+		assert!(targeting.engage.intersects(threat_intelligence::ThreatSource::RECEIVED_DAMAGE));
 
-		let guard = MobBrain::for_kind(MobKind::Guard).prey_targeting().expect("guard");
-		assert!((guard.duration - 15.0).abs() < 1e-4);
-		assert!((guard.off_course_distance - 36.0).abs() < 1e-4);
+		let raider = MobBrain::for_kind(MobKind::Raider);
+		let targeting = raider.prey_targeting().expect("raider hunts the player");
+		assert!((targeting.off_course_distance - 250.0).abs() < 1e-4);
 
-		let brawler = MobBrain::for_kind(MobKind::Brawler).prey_targeting().expect("brawler");
-		assert!((brawler.off_course_distance - 38.0).abs() < 1e-4);
+		assert!(MobBrain::for_kind(MobKind::Guard).prey_targeting().is_none());
+		assert!(MobBrain::for_kind(MobKind::Brawler).prey_targeting().is_none());
 		assert!(MobBrain::for_kind(MobKind::Herd).prey_targeting().is_none());
 		assert!(MobBrain::for_kind(MobKind::Pleb).prey_targeting().is_none());
+		assert!(MobBrain::for_kind(MobKind::Rambles).prey_targeting().is_none());
 	}
 }

@@ -255,24 +255,34 @@ mod tests {
 	}
 
 	#[test]
-	fn pack_install_pins_player_prey_at_spawn() -> Result<()> {
+	fn journeying_hunters_pin_player_prey_at_spawn() -> Result<()> {
 		let mut world = World::new();
 		world.init_resource::<Time>();
 		world.init_resource::<MobIdAlloc>();
-		let home = Vec3::new(12.0, 0.0, -4.0);
-		world.spawn((MobScene::of_kind(MobKind::Pack, 0.4), Transform::from_translation(home)));
+		let pack_home = Vec3::new(12.0, 0.0, -4.0);
+		let raider_home = Vec3::new(-8.0, 0.0, 10.0);
+		world
+			.spawn((MobScene::of_kind(MobKind::Pack, 0.4), Transform::from_translation(pack_home)));
+		world.spawn((
+			MobScene::of_kind(MobKind::Raider, 0.6),
+			Transform::from_translation(raider_home),
+		));
+		world.spawn((MobScene::of_kind(MobKind::Guard, 0.2), Transform::default()));
 
 		world
 			.run_system_once(install_mob_scenes)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 
-		let host = world
-			.query::<(Entity, &PreyTargetingIntelligence, &PreyTargetMemory)>()
+		let mut homes: Vec<Vec3> = world
+			.query::<(&PreyTargetingIntelligence, &PreyTargetMemory)>()
 			.iter(&world)
-			.next()
-			.ok_or_else(|| anyhow::anyhow!("pack should install player targeting"))?;
-		assert_eq!(host.1.kind, poi_intelligence::PoiKind::new("world/player"));
-		assert_eq!(host.2.home, home);
+			.map(|(user, memory)| {
+				assert_eq!(user.kind, poi_intelligence::PoiKind::new("world/player"));
+				memory.course
+			})
+			.collect();
+		homes.sort_by(|a, b| a.x.total_cmp(&b.x));
+		assert_eq!(homes, vec![raider_home, pack_home]);
 		Ok(())
 	}
 }
