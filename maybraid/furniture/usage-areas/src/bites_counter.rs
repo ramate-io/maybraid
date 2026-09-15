@@ -12,8 +12,8 @@ use crate::region::{
 const STATION: f32 = 1.4;
 const STATION_MIN: f32 = 1.1;
 const DISPLAY_MIN: f32 = 0.55;
-const DISPLAY_SIZE: Vec3 = Vec3::new(0.55, 0.36, 0.38);
-const FOOD_SIZE: Vec3 = Vec3::new(0.22, 0.16, 0.22);
+const DISPLAY_SIZE: Vec3 = Vec3::new(0.70, 0.42, 0.50);
+const FOOD_SIZE: Vec3 = Vec3::new(0.28, 0.22, 0.28);
 
 /// Expand a [`FurnitureUsage::BitesCounter`](richmond_building_components::FurnitureUsage::BitesCounter) band.
 pub struct BitesCounterUsage;
@@ -47,7 +47,7 @@ impl BitesCounterUsage {
 			let slab = floor_height_aabb(&leftover, COUNTER_SLOT_HEIGHT);
 			out.push(stamp_make(FurnitureNode::counter, &slab, &region, node.abutment));
 			out.extend(sit_ons_on(&slab, &region, node));
-		} else if let Some(last) = out.first() {
+		} else if let Some(last) = out.last() {
 			let slab = last_slab(last);
 			out.extend(sit_ons_on(&slab, &region, node));
 		}

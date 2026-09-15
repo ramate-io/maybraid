@@ -36,3 +36,38 @@ pub const COUNTER_VOLUME_001: AssetPath =
 /// Countertop (over-sails the volume).
 pub const COUNTER_TOP_001: AssetPath =
 	AssetPath::new("furniture/counter/countertop/countertop_001.glb");
+
+/// Diner food-display case (sit-on).
+pub const FOOD_DISPLAY_001: AssetPath =
+	AssetPath::new("furniture/food_display/case/food_display_001.glb");
+
+pub const APPLE_001: AssetPath = AssetPath::new("furniture/fruit/apple/apple_001.glb");
+pub const ORANGE_001: AssetPath = AssetPath::new("furniture/fruit/orange/orange_001.glb");
+pub const PEAR_001: AssetPath = AssetPath::new("furniture/fruit/pear/pear_001.glb");
+pub const BANANA_001: AssetPath = AssetPath::new("furniture/fruit/banana/banana_001.glb");
+
+pub const LOAF_001: AssetPath = AssetPath::new("furniture/bread/loaf/loaf_001.glb");
+pub const BAGUETTE_001: AssetPath = AssetPath::new("furniture/bread/baguette/baguette_001.glb");
+pub const BUN_001: AssetPath = AssetPath::new("furniture/bread/bun/bun_001.glb");
+pub const BOULE_001: AssetPath = AssetPath::new("furniture/bread/boule/boule_001.glb");
+
+pub const SHELF_ROW_001: AssetPath = AssetPath::new("furniture/shelf/row/shelf_row_001.glb");
+
+pub const RANGE_BODY_001: AssetPath = AssetPath::new("furniture/range/body/range_body_001.glb");
+pub const RANGE_DOOR_001: AssetPath = AssetPath::new("furniture/range/door/range_door_001.glb");
+pub const RANGE_BURNER_001: AssetPath =
+	AssetPath::new("furniture/range/burner/range_burner_001.glb");
+pub const RANGE_KNOB_001: AssetPath = AssetPath::new("furniture/range/knob/range_knob_001.glb");
+
+pub const BASIN_001: AssetPath = AssetPath::new("furniture/sink/basin/basin_001.glb");
+pub const FAUCET_001: AssetPath = AssetPath::new("furniture/sink/faucet/faucet_001.glb");
+
+pub const FRIDGE_BODY_001: AssetPath =
+	AssetPath::new("furniture/refrigerator/body/refrigerator_body_001.glb");
+pub const FRIDGE_DOOR_001: AssetPath =
+	AssetPath::new("furniture/refrigerator/door/refrigerator_door_001.glb");
+
+pub const POT_001: AssetPath = AssetPath::new("furniture/cookware/pot/pot_001.glb");
+pub const POT_LID_001: AssetPath = AssetPath::new("furniture/cookware/lid/pot_lid_001.glb");
+pub const SKILLET_001: AssetPath = AssetPath::new("furniture/cookware/skillet/skillet_001.glb");
+pub const SAUCEPAN_001: AssetPath = AssetPath::new("furniture/cookware/saucepan/saucepan_001.glb");

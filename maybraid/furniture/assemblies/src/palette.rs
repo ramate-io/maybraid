@@ -71,41 +71,21 @@ pub const METAL_ACCENT: [[f32; 3]; 4] =
 	[[0.96, 0.82, 0.42], [0.92, 0.52, 0.30], [0.82, 0.84, 0.86], [0.40, 0.38, 0.40]];
 
 /// Grove foliage + linen. No neon yellow / magenta.
-pub const CLOTH: [[f32; 3]; 4] = [
-	[0.42, 0.52, 0.28],
-	[0.25, 0.62, 0.32],
-	[0.12, 0.35, 0.18],
-	[0.86, 0.78, 0.62],
-];
-pub const CLOTH_ACCENT: [[f32; 3]; 4] = [
-	[0.32, 0.40, 0.22],
-	[0.38, 0.48, 0.28],
-	[0.22, 0.42, 0.28],
-	[0.72, 0.62, 0.46],
-];
+pub const CLOTH: [[f32; 3]; 4] =
+	[[0.42, 0.52, 0.28], [0.25, 0.62, 0.32], [0.12, 0.35, 0.18], [0.86, 0.78, 0.62]];
+pub const CLOTH_ACCENT: [[f32; 3]; 4] =
+	[[0.32, 0.40, 0.22], [0.38, 0.48, 0.28], [0.22, 0.42, 0.28], [0.72, 0.62, 0.46]];
 
 pub const MATTRESS: [[f32; 3]; 4] =
 	[[0.92, 0.86, 0.74], [0.88, 0.84, 0.76], [0.86, 0.78, 0.62], [0.80, 0.74, 0.64]];
 
 /// Durham macro swatches: greige, chalk, shale, baked clay.
-pub const MARBLE: [[f32; 3]; 4] = [
-	[0.46, 0.38, 0.34],
-	[0.82, 0.80, 0.70],
-	[0.18, 0.20, 0.22],
-	[0.48, 0.20, 0.12],
-];
-pub const MARBLE_VEIN: [[f32; 3]; 4] = [
-	[0.34, 0.28, 0.24],
-	[0.62, 0.58, 0.48],
-	[0.10, 0.12, 0.13],
-	[0.32, 0.14, 0.10],
-];
-pub const MARBLE_SPARK: [[f32; 3]; 4] = [
-	[0.62, 0.53, 0.49],
-	[0.92, 0.88, 0.78],
-	[0.28, 0.30, 0.32],
-	[0.68, 0.34, 0.20],
-];
+pub const MARBLE: [[f32; 3]; 4] =
+	[[0.46, 0.38, 0.34], [0.82, 0.80, 0.70], [0.18, 0.20, 0.22], [0.48, 0.20, 0.12]];
+pub const MARBLE_VEIN: [[f32; 3]; 4] =
+	[[0.34, 0.28, 0.24], [0.62, 0.58, 0.48], [0.10, 0.12, 0.13], [0.32, 0.14, 0.10]];
+pub const MARBLE_SPARK: [[f32; 3]; 4] =
+	[[0.62, 0.53, 0.49], [0.92, 0.88, 0.78], [0.28, 0.30, 0.32], [0.68, 0.34, 0.20]];
 
 pub const GOLD: [[f32; 3]; 4] =
 	[[0.78, 0.58, 0.22], [0.72, 0.54, 0.20], [0.68, 0.50, 0.18], [0.74, 0.56, 0.24]];
@@ -151,32 +131,26 @@ pub const ROCK_SQUARES: [[[f32; 3]; 3]; 4] = [
 ];
 
 /// Grove canopy mix: olive, fresh, deep, sage.
-pub const FOLIAGE: [[f32; 3]; 4] = [
-	[0.42, 0.52, 0.28],
-	[0.25, 0.62, 0.32],
-	[0.12, 0.35, 0.18],
-	[0.42, 0.48, 0.32],
-];
+pub const FOLIAGE: [[f32; 3]; 4] =
+	[[0.42, 0.52, 0.28], [0.25, 0.62, 0.32], [0.12, 0.35, 0.18], [0.42, 0.48, 0.32]];
+
+/// Produce skins: apple, orange, pear, banana.
+pub const PRODUCE: [[f32; 3]; 4] =
+	[[0.78, 0.16, 0.14], [0.92, 0.48, 0.12], [0.42, 0.58, 0.18], [0.92, 0.78, 0.22]];
+pub const PRODUCE_SHADE: [[f32; 3]; 4] =
+	[[0.48, 0.10, 0.10], [0.62, 0.28, 0.08], [0.22, 0.36, 0.12], [0.62, 0.50, 0.12]];
+
+/// Bread crust / crumb.
+pub const CRUST: [[f32; 3]; 4] =
+	[[0.72, 0.48, 0.22], [0.86, 0.70, 0.42], [0.52, 0.32, 0.16], [0.90, 0.78, 0.52]];
 
 /// Durham earth: weathered greige, baked clay, sage alluvium, shale.
-pub const TERRAIN: [[f32; 3]; 4] = [
-	[0.46, 0.38, 0.34],
-	[0.48, 0.20, 0.12],
-	[0.46, 0.50, 0.36],
-	[0.18, 0.20, 0.22],
-];
-pub const TERRAIN_VEIN: [[f32; 3]; 4] = [
-	[0.34, 0.28, 0.24],
-	[0.32, 0.14, 0.10],
-	[0.32, 0.36, 0.24],
-	[0.10, 0.12, 0.13],
-];
-pub const TERRAIN_SPARK: [[f32; 3]; 4] = [
-	[0.62, 0.53, 0.49],
-	[0.68, 0.34, 0.20],
-	[0.66, 0.64, 0.42],
-	[0.28, 0.30, 0.32],
-];
+pub const TERRAIN: [[f32; 3]; 4] =
+	[[0.46, 0.38, 0.34], [0.48, 0.20, 0.12], [0.46, 0.50, 0.36], [0.18, 0.20, 0.22]];
+pub const TERRAIN_VEIN: [[f32; 3]; 4] =
+	[[0.34, 0.28, 0.24], [0.32, 0.14, 0.10], [0.32, 0.36, 0.24], [0.10, 0.12, 0.13]];
+pub const TERRAIN_SPARK: [[f32; 3]; 4] =
+	[[0.62, 0.53, 0.49], [0.68, 0.34, 0.20], [0.66, 0.64, 0.42], [0.28, 0.30, 0.32]];
 
 pub fn mix_seed(seed: u64, salt: u64) -> u64 {
 	let mut value = seed ^ salt;
@@ -393,6 +367,31 @@ pub fn foliage(seed: u64, salt: u64) -> MaterialRef {
 	recipe(RECIPE_FOLIAGE, seed ^ salt, 1.8, [rgb(&FOLIAGE, seed, salt)])
 }
 
+/// Shiny fruit skin.
+pub fn produce(seed: u64, salt: u64) -> MaterialRef {
+	recipe(
+		RECIPE_FURNITURE_LACQUER,
+		seed ^ salt,
+		2.0,
+		[rgb(&PRODUCE, seed, salt), rgb(&PRODUCE_SHADE, seed, salt.wrapping_add(5))],
+	)
+}
+
+/// Baked crust.
+pub fn crust(seed: u64, salt: u64) -> MaterialRef {
+	recipe(
+		RECIPE_FURNITURE_MARBLE,
+		seed ^ salt,
+		1.7,
+		[rgb(&CRUST, seed, salt), rgb(&CRUST, seed, salt.wrapping_add(3))],
+	)
+}
+
+/// Enamel appliance body (fridge / basin).
+pub fn enamel(seed: u64, salt: u64) -> MaterialRef {
+	marble(seed, salt)
+}
+
 /// Durham earth swatches through the marble look (stone / dirt coffer).
 pub fn terrain(seed: u64, salt: u64) -> MaterialRef {
 	recipe(
@@ -476,12 +475,9 @@ mod tests {
 
 	#[test]
 	fn chest_skins_cover_the_set() -> anyhow::Result<()> {
-		for want in [
-			ChestKind::Rockadder,
-			ChestKind::Cosimo,
-			ChestKind::Foliage,
-			ChestKind::Terrain,
-		] {
+		for want in
+			[ChestKind::Rockadder, ChestKind::Cosimo, ChestKind::Foliage, ChestKind::Terrain]
+		{
 			if first_seed_for_chest(want, 80).is_none() {
 				return Err(anyhow::anyhow!("no seed in 0..80 for {want:?}"));
 			}

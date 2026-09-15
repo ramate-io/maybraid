@@ -21,6 +21,24 @@ pub enum Show {
 	Chest(UnitShow),
 	/// Unit counter slot (footer / volume / top).
 	Counter(UnitShow),
+	/// Sit-on diner display.
+	FoodDisplay(UnitShow),
+	/// Sit-on fruit.
+	Fruit(UnitShow),
+	/// Sit-on bread.
+	Bread(UnitShow),
+	/// Sit-on pot / skillet / saucepan.
+	Cookware(UnitShow),
+	/// Sit-on basin.
+	Basin(UnitShow),
+	/// Deck-mount faucet.
+	Faucet(UnitShow),
+	/// Wall shelf row.
+	Shelf(UnitShow),
+	/// Range / stove.
+	Range(UnitShow),
+	/// Refrigerator.
+	Fridge(UnitShow),
 	/// Richmond bedroom / kitchen / living packers plus authored extremes.
 	Gallery(GalleryShow),
 }
@@ -59,6 +77,42 @@ impl Show {
 			),
 			Self::Counter(cmd) => (
 				PreviewSubject::Unit { geometry: FurnitureGeometry::Counter, seed: cmd.seed },
+				cmd.transform.transform(),
+			),
+			Self::FoodDisplay(cmd) => (
+				PreviewSubject::Unit { geometry: FurnitureGeometry::FoodDisplay, seed: cmd.seed },
+				cmd.transform.transform(),
+			),
+			Self::Fruit(cmd) => (
+				PreviewSubject::Unit { geometry: FurnitureGeometry::Fruit, seed: cmd.seed },
+				cmd.transform.transform(),
+			),
+			Self::Bread(cmd) => (
+				PreviewSubject::Unit { geometry: FurnitureGeometry::Bread, seed: cmd.seed },
+				cmd.transform.transform(),
+			),
+			Self::Cookware(cmd) => (
+				PreviewSubject::Unit { geometry: FurnitureGeometry::Cookware, seed: cmd.seed },
+				cmd.transform.transform(),
+			),
+			Self::Basin(cmd) => (
+				PreviewSubject::Unit { geometry: FurnitureGeometry::Basin, seed: cmd.seed },
+				cmd.transform.transform(),
+			),
+			Self::Faucet(cmd) => (
+				PreviewSubject::Unit { geometry: FurnitureGeometry::Faucet, seed: cmd.seed },
+				cmd.transform.transform(),
+			),
+			Self::Shelf(cmd) => (
+				PreviewSubject::Unit { geometry: FurnitureGeometry::Shelf, seed: cmd.seed },
+				cmd.transform.transform(),
+			),
+			Self::Range(cmd) => (
+				PreviewSubject::Unit { geometry: FurnitureGeometry::Range, seed: cmd.seed },
+				cmd.transform.transform(),
+			),
+			Self::Fridge(cmd) => (
+				PreviewSubject::Unit { geometry: FurnitureGeometry::Fridge, seed: cmd.seed },
 				cmd.transform.transform(),
 			),
 			Self::Gallery(cmd) => (PreviewSubject::Gallery, cmd.transform.transform()),

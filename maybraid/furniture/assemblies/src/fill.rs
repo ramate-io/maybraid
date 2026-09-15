@@ -2,26 +2,49 @@
 
 use richmond_building_components::{FurnitureGeometry, FurnitureNode};
 
+use crate::basin::BasinParams;
 use crate::bed::BedParams;
+use crate::bread::BreadParams;
 use crate::chair::ChairParams;
 use crate::chest::ChestParams;
+use crate::cookware::CookwareParams;
 use crate::counter::CounterParams;
+use crate::faucet::FaucetParams;
+use crate::food_display::FoodDisplayParams;
+use crate::fridge::FridgeParams;
+use crate::fruit::FruitParams;
+use crate::range::RangeParams;
+use crate::shelf::ShelfParams;
 use crate::Assembly;
 use furniture_components::{pose_parts, PlacedPart};
 
-/// Paint [`FurnitureGeometry::Bed`] / [`Chair`](FurnitureGeometry::Chair) /
-/// [`Chest`](FurnitureGeometry::Chest) / [`Counter`](FurnitureGeometry::Counter).
-/// Other kinds stay wireframe-only until they have assemblies.
+/// Paint kits that have assemblies. Dresser / wardrobe / toilet stay wireframe.
 pub fn try_assembly(node: &FurnitureNode) -> Option<Assembly> {
 	let seed = node.finish_seed;
+	let flush = node.abutment.is_some();
 	Some(match node.geometry {
 		FurnitureGeometry::Bed => BedParams { finish_seed: seed }.build().assembly(),
 		FurnitureGeometry::Chair => ChairParams { finish_seed: seed }.build().assembly(),
 		FurnitureGeometry::Chest => ChestParams { finish_seed: seed }.build().assembly(),
 		FurnitureGeometry::Counter => {
-			CounterParams { finish_seed: seed, flush_back: node.abutment.is_some() }
-				.build()
-				.assembly()
+			CounterParams { finish_seed: seed, flush_back: flush }.build().assembly()
+		}
+		FurnitureGeometry::FoodDisplay => {
+			FoodDisplayParams { finish_seed: seed }.build().assembly()
+		}
+		FurnitureGeometry::Fruit => FruitParams { finish_seed: seed }.build().assembly(),
+		FurnitureGeometry::Bread => BreadParams { finish_seed: seed }.build().assembly(),
+		FurnitureGeometry::Cookware => CookwareParams { finish_seed: seed }.build().assembly(),
+		FurnitureGeometry::Basin => BasinParams { finish_seed: seed }.build().assembly(),
+		FurnitureGeometry::Faucet => FaucetParams { finish_seed: seed }.build().assembly(),
+		FurnitureGeometry::Shelf => {
+			ShelfParams { finish_seed: seed, flush_back: flush }.build().assembly()
+		}
+		FurnitureGeometry::Range => {
+			RangeParams { finish_seed: seed, flush_back: flush }.build().assembly()
+		}
+		FurnitureGeometry::Fridge => {
+			FridgeParams { finish_seed: seed, flush_back: flush }.build().assembly()
 		}
 		_ => return None,
 	})

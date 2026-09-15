@@ -326,6 +326,17 @@ pub fn unit_slot(geometry: FurnitureGeometry, seed: u64) -> FurnitureNode {
 		FurnitureGeometry::Chair => (FurnitureNode::chair, Vec3::new(0.5, 0.9, 0.5)),
 		FurnitureGeometry::Chest => (FurnitureNode::chest, Vec3::new(0.9, 0.7, 0.5)),
 		FurnitureGeometry::Counter => (FurnitureNode::counter, Vec3::new(1.8, 0.9, 0.6)),
+		FurnitureGeometry::FoodDisplay => {
+			(FurnitureNode::food_display, Vec3::new(0.70, 0.42, 0.50))
+		}
+		FurnitureGeometry::Fruit => (FurnitureNode::fruit, Vec3::new(0.28, 0.22, 0.28)),
+		FurnitureGeometry::Bread => (FurnitureNode::bread, Vec3::new(0.36, 0.18, 0.22)),
+		FurnitureGeometry::Cookware => (FurnitureNode::cookware, Vec3::new(0.36, 0.22, 0.36)),
+		FurnitureGeometry::Basin => (FurnitureNode::basin, Vec3::new(0.56, 0.22, 0.48)),
+		FurnitureGeometry::Faucet => (FurnitureNode::faucet, Vec3::new(0.18, 0.34, 0.18)),
+		FurnitureGeometry::Shelf => (FurnitureNode::shelf, Vec3::new(1.4, 0.35, 0.32)),
+		FurnitureGeometry::Range => (FurnitureNode::range, Vec3::new(0.85, 0.90, 0.70)),
+		FurnitureGeometry::Fridge => (FurnitureNode::fridge, Vec3::new(0.70, 1.80, 0.70)),
 		_ => (FurnitureNode::bed, Vec3::ONE),
 	};
 	typical_slot(make, size, Vec3::ZERO, seed, Some(FurnitureAbutment::NegZ))

@@ -4,7 +4,10 @@ use material_ref::MaterialRef;
 use richmond_building_components::{AssetPath, Placement};
 
 use crate::assets;
-use crate::kit_space::{place_kit, BOX_KIT_TO_UNIT, LATCH_KIT_TO_UNIT, LEG_KIT_TO_UNIT};
+use crate::kit_space::{
+	place_kit, BOX_KIT_TO_UNIT, HINGE_KIT_TO_UNIT, LATCH_KIT_TO_UNIT, LEG_KIT_TO_UNIT,
+	RANGE_DOOR_KIT_TO_UNIT,
+};
 
 /// One kit piece: unit-slot slab + deferred paint.
 #[derive(Clone, Debug, PartialEq)]
@@ -29,6 +32,28 @@ pub enum PartKind {
 	CounterFooter,
 	CounterVolume,
 	CounterTop,
+	FoodDisplay,
+	Apple,
+	Orange,
+	Pear,
+	Banana,
+	Loaf,
+	Baguette,
+	Bun,
+	Boule,
+	ShelfRow,
+	RangeBody,
+	RangeDoor,
+	RangeBurner,
+	RangeKnob,
+	Basin,
+	Faucet,
+	FridgeBody,
+	FridgeDoor,
+	Pot,
+	PotLid,
+	Skillet,
+	Saucepan,
 }
 
 impl PartKind {
@@ -47,6 +72,28 @@ impl PartKind {
 			Self::CounterFooter => assets::COUNTER_FOOTER_001,
 			Self::CounterVolume => assets::COUNTER_VOLUME_001,
 			Self::CounterTop => assets::COUNTER_TOP_001,
+			Self::FoodDisplay => assets::FOOD_DISPLAY_001,
+			Self::Apple => assets::APPLE_001,
+			Self::Orange => assets::ORANGE_001,
+			Self::Pear => assets::PEAR_001,
+			Self::Banana => assets::BANANA_001,
+			Self::Loaf => assets::LOAF_001,
+			Self::Baguette => assets::BAGUETTE_001,
+			Self::Bun => assets::BUN_001,
+			Self::Boule => assets::BOULE_001,
+			Self::ShelfRow => assets::SHELF_ROW_001,
+			Self::RangeBody => assets::RANGE_BODY_001,
+			Self::RangeDoor => assets::RANGE_DOOR_001,
+			Self::RangeBurner => assets::RANGE_BURNER_001,
+			Self::RangeKnob => assets::RANGE_KNOB_001,
+			Self::Basin => assets::BASIN_001,
+			Self::Faucet => assets::FAUCET_001,
+			Self::FridgeBody => assets::FRIDGE_BODY_001,
+			Self::FridgeDoor => assets::FRIDGE_DOOR_001,
+			Self::Pot => assets::POT_001,
+			Self::PotLid => assets::POT_LID_001,
+			Self::Skillet => assets::SKILLET_001,
+			Self::Saucepan => assets::SAUCEPAN_001,
 		}
 	}
 
@@ -55,6 +102,8 @@ impl PartKind {
 		match self {
 			Self::ChairLeg => LEG_KIT_TO_UNIT,
 			Self::ChestLatch => LATCH_KIT_TO_UNIT,
+			Self::FridgeDoor => HINGE_KIT_TO_UNIT,
+			Self::RangeDoor => RANGE_DOOR_KIT_TO_UNIT,
 			_ => BOX_KIT_TO_UNIT,
 		}
 	}
@@ -91,6 +140,11 @@ mod tests {
 		}
 		if PartKind::ChestLatch.asset_path().as_str() != "furniture/chest/latch/latch_001.glb" {
 			return Err(anyhow::anyhow!("latch path drifted from art/furniture"));
+		}
+		if PartKind::FoodDisplay.asset_path().as_str()
+			!= "furniture/food_display/case/food_display_001.glb"
+		{
+			return Err(anyhow::anyhow!("food-display path drifted from art/furniture"));
 		}
 		Ok(())
 	}

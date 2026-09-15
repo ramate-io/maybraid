@@ -17,9 +17,9 @@ const SHELF_H: f32 = 0.35;
 const SHELF_DEPTH: f32 = 0.32;
 const RANGE_ALONG: f32 = 0.85;
 const FRIDGE: Vec3 = Vec3::new(0.7, 1.8, 0.7);
-const BASIN: Vec3 = Vec3::new(0.48, 0.18, 0.42);
-const FAUCET: Vec3 = Vec3::new(0.12, 0.28, 0.12);
-const COOKWARE: Vec3 = Vec3::new(0.28, 0.14, 0.28);
+const BASIN: Vec3 = Vec3::new(0.56, 0.22, 0.48);
+const FAUCET: Vec3 = Vec3::new(0.18, 0.34, 0.18);
+const COOKWARE: Vec3 = Vec3::new(0.36, 0.22, 0.36);
 
 /// Expand a [`FurnitureUsage::BitesKitchen`](richmond_building_components::FurnitureUsage::BitesKitchen) remainder.
 pub struct BitesKitchenUsage;
