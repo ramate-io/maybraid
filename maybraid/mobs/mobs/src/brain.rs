@@ -2,7 +2,7 @@
 
 use bevy::prelude::Component;
 use mob_characters::{CHARACTER_POI, LOCAL_POI, SALOON_POI, URBAN_POI, VEGETATION_POI};
-use mob_intelligence::{MobAffiliations, MobRespawn, MobTravel};
+use mob_intelligence::{MobAffiliations, MobRespawn, MobTravel, PreyTargetingIntelligence};
 use poi_intelligence::{PoiInterest, PoiInterests};
 use threat_intelligence::{AffiliationStrength, Affiliations, ThreatGroupId, ThreatId};
 
@@ -54,6 +54,23 @@ impl MobBrain {
 			respawn: MobRespawn::default(),
 			travel,
 			journey,
+		}
+	}
+
+	/// Player-prey install for journeying hunt hosts (pack / raider). Stationary
+	/// guard / brawler hosts and grazer families omit it. Off-course is vs the
+	/// current POI course, not spawn.
+	pub fn prey_targeting(&self) -> Option<PreyTargetingIntelligence> {
+		if self.travel.is_none() || !self.journey {
+			return None;
+		}
+		match self.kind {
+			MobKind::Pack | MobKind::Raider => Some(PreyTargetingIntelligence::player(24.0, 250.0)),
+			MobKind::Herd
+			| MobKind::Guard
+			| MobKind::Pleb
+			| MobKind::Rambles
+			| MobKind::Brawler => None,
 		}
 	}
 }
@@ -189,5 +206,25 @@ mod tests {
 		assert_eq!(brawler.weight(SALOON_POI), Some(1.6));
 		assert_eq!(brawler.weight(URBAN_POI), Some(0.75));
 		assert_eq!(brawler.weight(LOCAL_POI), Some(0.6));
+	}
+
+	#[test]
+	fn journeying_hunters_install_player_prey_inside_high() {
+		let pack = MobBrain::for_kind(MobKind::Pack);
+		let targeting = pack.prey_targeting().expect("pack hunts the player");
+		assert_eq!(targeting.kind, poi_intelligence::PoiKind::new("world/player"));
+		assert!((targeting.duration - 24.0).abs() < 1e-4);
+		assert!((targeting.off_course_distance - 250.0).abs() < 1e-4);
+		assert!(targeting.engage.intersects(threat_intelligence::ThreatSource::RECEIVED_DAMAGE));
+
+		let raider = MobBrain::for_kind(MobKind::Raider);
+		let targeting = raider.prey_targeting().expect("raider hunts the player");
+		assert!((targeting.off_course_distance - 250.0).abs() < 1e-4);
+
+		assert!(MobBrain::for_kind(MobKind::Guard).prey_targeting().is_none());
+		assert!(MobBrain::for_kind(MobKind::Brawler).prey_targeting().is_none());
+		assert!(MobBrain::for_kind(MobKind::Herd).prey_targeting().is_none());
+		assert!(MobBrain::for_kind(MobKind::Pleb).prey_targeting().is_none());
+		assert!(MobBrain::for_kind(MobKind::Rambles).prey_targeting().is_none());
 	}
 }
