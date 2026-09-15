@@ -95,11 +95,13 @@ pub fn longest_wall(region: &Aabb3d) -> FurnitureAbutment {
 
 pub fn sit_on_aabb(slab: &Aabb3d, size: Vec3) -> Aabb3d {
 	let c = (slab.min + slab.max) * 0.5;
-	let half = Vec3::new(size.x, size.y, size.z) * 0.5;
+	let pad = 0.03;
+	let hx = (size.x * 0.5).min(((slab.max.x - slab.min.x) * 0.5 - pad).max(0.06));
+	let hz = (size.z * 0.5).min(((slab.max.z - slab.min.z) * 0.5 - pad).max(0.06));
 	let y0 = slab.max.y;
 	Aabb3d::from_min_max(
-		Vec3::new(c.x - half.x, y0, c.z - half.z),
-		Vec3::new(c.x + half.x, y0 + size.y.max(1e-4), c.z + half.z),
+		Vec3::new(c.x - hx, y0, c.z - hz),
+		Vec3::new(c.x + hx, y0 + size.y.max(1e-4), c.z + hz),
 	)
 }
 

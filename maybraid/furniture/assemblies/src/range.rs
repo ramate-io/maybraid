@@ -46,10 +46,10 @@ impl Range {
 				material: hardware(seed, 2),
 			},
 		];
-		for (x, z) in [(-0.22, -0.12), (0.22, -0.12), (-0.22, 0.10), (0.22, 0.10)] {
+		for (x, z) in [(-0.26, -0.14), (0.26, -0.14), (-0.26, 0.12), (0.26, 0.12)] {
 			parts.push(PlacedPart {
 				kind: PartKind::RangeBurner,
-				placement: shift(slab(0.22, 0.86, 1.0), Vec3::new(x, 0.0, z)),
+				placement: shift(slab(0.28, 0.84, 1.0), Vec3::new(x, 0.0, z)),
 				material: hardware(seed, 3),
 			});
 		}

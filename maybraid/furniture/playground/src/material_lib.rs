@@ -9,8 +9,8 @@ use furniture_shaders::{
 	init_furniture_material_caches, FurnitureMaterialLib, FurnitureShadersPlugin,
 };
 use material_ref::{
-	material_ref_plugin_installed, MaterialLib, MaterialRef, MaterialRefPlugin, StandardMaterialLib,
-	StandardMaterialRefCache,
+	material_ref_plugin_installed, MaterialLib, MaterialRef, MaterialRefPlugin,
+	StandardMaterialLib, StandardMaterialRefCache,
 };
 
 /// Isolated catalog lib: furniture surfaces, then leaf / stick / frond.
