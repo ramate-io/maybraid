@@ -324,6 +324,7 @@ pub fn unit_slot(geometry: FurnitureGeometry, seed: u64) -> FurnitureNode {
 	let (make, size): (fn(Placement) -> FurnitureNode, Vec3) = match geometry {
 		FurnitureGeometry::Bed => (FurnitureNode::bed, Vec3::new(2.0, 0.55, 1.6)),
 		FurnitureGeometry::Chair => (FurnitureNode::chair, Vec3::new(0.5, 0.9, 0.5)),
+		FurnitureGeometry::Table => (FurnitureNode::table, Vec3::new(1.35, 0.75, 0.85)),
 		FurnitureGeometry::Chest => (FurnitureNode::chest, Vec3::new(0.9, 0.7, 0.5)),
 		FurnitureGeometry::Counter => (FurnitureNode::counter, Vec3::new(1.8, 0.9, 0.6)),
 		FurnitureGeometry::FoodDisplay => {

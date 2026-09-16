@@ -13,6 +13,7 @@ pub enum FurnitureGeometry {
 	BedroomFurniture,
 	Toilet,
 	Chair,
+	Table,
 	Chest,
 	Counter,
 	Shelf,
@@ -38,6 +39,7 @@ impl FurnitureGeometry {
 	/// | BedroomFurniture | lime | `0.55, 1.00, 0.20, 1.0` |
 	/// | Toilet | white | `0.95, 0.95, 1.00, 1.0` |
 	/// | Chair | gold | `1.00, 0.78, 0.08, 1.0` |
+	/// | Table | amber | `0.82, 0.58, 0.22, 1.0` |
 	/// | Chest | magenta | `0.88, 0.28, 1.00, 1.0` |
 	/// | Counter | cyan | `0.08, 0.95, 1.00, 1.0` |
 	/// | Shelf | brown | `0.62, 0.40, 0.22, 1.0` |
@@ -58,6 +60,7 @@ impl FurnitureGeometry {
 			Self::BedroomFurniture => Color::srgba(0.55, 1.00, 0.20, 1.0),
 			Self::Toilet => Color::srgba(0.95, 0.95, 1.00, 1.0),
 			Self::Chair => Color::srgba(1.00, 0.78, 0.08, 1.0),
+			Self::Table => Color::srgba(0.82, 0.58, 0.22, 1.0),
 			Self::Chest => Color::srgba(0.88, 0.28, 1.00, 1.0),
 			Self::Counter => Color::srgba(0.08, 0.95, 1.00, 1.0),
 			Self::Shelf => Color::srgba(0.62, 0.40, 0.22, 1.0),
@@ -82,6 +85,7 @@ impl FurnitureGeometry {
 			Self::BedroomFurniture => 0x6265_6472,
 			Self::Toilet => 0x746f_696c,
 			Self::Chair => 0x6368_6169,
+			Self::Table => 0x7461_626c,
 			Self::Chest => 0x6368_6573,
 			Self::Counter => 0x636f_756e,
 			Self::Shelf => 0x7368_6c66,
@@ -97,7 +101,7 @@ impl FurnitureGeometry {
 	}
 
 	/// All kinds (for wireframe material registration).
-	pub const ALL: [Self; 18] = [
+	pub const ALL: [Self; 19] = [
 		Self::Bed,
 		Self::Wardrobe,
 		Self::Dresser,
@@ -105,6 +109,7 @@ impl FurnitureGeometry {
 		Self::BedroomFurniture,
 		Self::Toilet,
 		Self::Chair,
+		Self::Table,
 		Self::Chest,
 		Self::Counter,
 		Self::Shelf,

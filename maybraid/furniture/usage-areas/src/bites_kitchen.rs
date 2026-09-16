@@ -18,11 +18,10 @@ const FRIDGE: Vec3 = Vec3::new(0.78, 1.85, 0.72);
 const BASIN: Vec3 = Vec3::new(0.82, 0.32, 0.64);
 const FAUCET: Vec3 = Vec3::new(0.24, 0.44, 0.22);
 const COOKWARE: Vec3 = Vec3::new(0.42, 0.26, 0.42);
-const SHELF_BAY: f32 = 1.45;
-const SHELF_DEPTH: f32 = 0.42;
-const SHELF_AISLE: f32 = 0.90;
-const SHELF_DECK: f32 = 0.38;
-const SHELF_DECKS: usize = 3;
+const SHELF_PLAN: f32 = 2.0;
+const SHELF_DECK: f32 = 0.75;
+const SHELF_DECKS: usize = 5;
+const SHELF_GAP: f32 = 1.5;
 
 /// Expand a [`FurnitureUsage::BitesKitchen`](richmond_building_components::FurnitureUsage::BitesKitchen) remainder.
 pub struct BitesKitchenUsage;
@@ -108,47 +107,40 @@ impl BitesKitchenUsage {
 			));
 		}
 
-		out.extend(shelf_aisles(&interior, &region, node.finish_seed));
+		out.extend(shelf_aisles(&interior, &region));
 		out
 	}
 }
 
-fn shelf_aisles(floor: &Aabb3d, host: &Aabb3d, seed: u64) -> Vec<FurnitureNode> {
+fn shelf_aisles(floor: &Aabb3d, host: &Aabb3d) -> Vec<FurnitureNode> {
 	let sx = floor.max.x - floor.min.x;
 	let sz = floor.max.z - floor.min.z;
-	if sx < 0.85 || sz < 0.85 {
+	if sx < SHELF_PLAN + 0.35 || sz < SHELF_PLAN + 0.35 {
 		return Vec::new();
 	}
-	let along_x = sx + 1e-4 >= sz;
-	let along = if along_x { sx } else { sz };
-	let depth = if along_x { sz } else { sx };
-	let pitch = SHELF_DEPTH + SHELF_AISLE;
-	let n_rows = ((depth + SHELF_AISLE) / pitch).floor() as usize;
-	let n_rows = n_rows.max(if depth >= SHELF_DEPTH + 0.12 { 1 } else { 0 });
-	if n_rows == 0 {
+	let pitch = SHELF_PLAN + SHELF_GAP;
+	let n_x = count_units(sx, SHELF_PLAN, SHELF_GAP, 2);
+	let n_z = count_units(sz, SHELF_PLAN, SHELF_GAP, 2);
+	if n_x == 0 || n_z == 0 {
 		return Vec::new();
 	}
-	let n_bays = ((along / SHELF_BAY).floor() as usize).max(1);
-	let bay = along / n_bays as f32;
-	let used_d = n_rows as f32 * SHELF_DEPTH + (n_rows.saturating_sub(1) as f32) * SHELF_AISLE;
-	let d0 = ((depth - used_d) * 0.5).max(0.04);
-	let decks = ((floor.max.y - floor.min.y - 0.25) / SHELF_DECK).floor() as usize;
-	let decks = decks.clamp(1, SHELF_DECKS);
+	let used_x = n_x as f32 * SHELF_PLAN + n_x.saturating_sub(1) as f32 * SHELF_GAP;
+	let used_z = n_z as f32 * SHELF_PLAN + n_z.saturating_sub(1) as f32 * SHELF_GAP;
+	let x0 = floor.min.x + ((sx - used_x) * 0.5).max(0.15);
+	let z0 = floor.min.z + ((sz - used_z) * 0.5).max(0.15);
+	let decks = ((floor.max.y - floor.min.y - 0.15) / SHELF_DECK).floor() as usize;
+	let decks = decks.clamp(2, SHELF_DECKS);
 	let mut out = Vec::new();
-	for row in 0..n_rows {
-		let d_off = d0 + row as f32 * pitch;
-		for bay_i in 0..n_bays {
-			let a0 = bay_i as f32 * bay + 0.04;
-			let a1 = (bay_i as f32 + 1.0) * bay - 0.04;
-			if a1 - a0 < 0.55 {
-				continue;
-			}
+	for iz in 0..n_z {
+		for ix in 0..n_x {
+			let x = x0 + ix as f32 * pitch;
+			let z = z0 + iz as f32 * pitch;
 			for deck in 0..decks {
 				let y0 = floor.min.y + deck as f32 * SHELF_DECK;
-				let slot = aisle_slot(floor, along_x, a0, a1, d_off, d_off + SHELF_DEPTH, y0);
-				if unit(seed, 80 + (row * 11 + bay_i * 3 + deck) as u64) < 0.04 {
-					continue;
-				}
+				let slot = Aabb3d::from_min_max(
+					Vec3::new(x, y0, z),
+					Vec3::new(x + SHELF_PLAN, y0 + SHELF_DECK, z + SHELF_PLAN),
+				);
 				out.push(stamp_make(FurnitureNode::shelf, &slot, host, None));
 			}
 		}
@@ -156,26 +148,12 @@ fn shelf_aisles(floor: &Aabb3d, host: &Aabb3d, seed: u64) -> Vec<FurnitureNode> 
 	out
 }
 
-fn aisle_slot(
-	floor: &Aabb3d,
-	along_x: bool,
-	a0: f32,
-	a1: f32,
-	d0: f32,
-	d1: f32,
-	y0: f32,
-) -> Aabb3d {
-	if along_x {
-		Aabb3d::from_min_max(
-			Vec3::new(floor.min.x + a0, y0, floor.min.z + d0),
-			Vec3::new(floor.min.x + a1, y0 + SHELF_DECK, floor.min.z + d1),
-		)
-	} else {
-		Aabb3d::from_min_max(
-			Vec3::new(floor.min.x + d0, y0, floor.min.z + a0),
-			Vec3::new(floor.min.x + d1, y0 + SHELF_DECK, floor.min.z + a1),
-		)
+fn count_units(span: f32, plan: f32, gap: f32, max: usize) -> usize {
+	if span < plan + 0.3 {
+		return 0;
 	}
+	let n = ((span + gap) / (plan + gap)).floor() as usize;
+	n.clamp(1, max)
 }
 
 fn fridge_on_wall(
@@ -277,6 +255,16 @@ mod tests {
 		let got = kinds(&pieces);
 		assert!(got.contains(&FurnitureGeometry::Range), "range {got:?}");
 		assert!(got.contains(&FurnitureGeometry::Shelf), "shelf {got:?}");
+		let shelves: Vec<_> =
+			pieces.iter().filter(|n| n.geometry == FurnitureGeometry::Shelf).collect();
+		assert!(shelves.len() >= 2, "stacked shelf rows, got {}", shelves.len());
+		assert!(shelves.len() <= 20, "a few 2 m towers, got {}", shelves.len());
+		for s in &shelves {
+			let px = s.placement.scale.x;
+			let pz = s.placement.scale.z;
+			assert!((px - pz).abs() < 0.15, "shelf XZ should stay square, got {px} x {pz}");
+			assert!((s.placement.scale.y - SHELF_DECK).abs() < 0.05);
+		}
 		assert!(got.contains(&FurnitureGeometry::Fridge), "fridge {got:?}");
 		assert!(got.contains(&FurnitureGeometry::Basin), "basin {got:?}");
 		assert!(got.contains(&FurnitureGeometry::Cookware), "cookware {got:?}");

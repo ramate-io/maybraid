@@ -5,7 +5,7 @@ Expand Richmond [`FurnitureUsageNode`](../../richmond/building-components/src/fu
 Richmond packers keep labels such as `BitesCounter` and `BitesKitchen` on the packed AABB. They do **not** remap a whole band to one stretched `Counter`. This crate fills those boxes:
 
 - [`BitesCounterUsage`](src/bites_counter.rs) — station-width counters (about 1.2–1.8 m) plus leftover sit-on display / fruit / bread on the 1 m slab
-- [`BitesKitchenUsage`](src/bites_kitchen.rs) — wall-run counters, sit-on cooktop + pans, basin, fridge, mid-room shelf aisles
-- [`BitesSeatingUsage`](src/bites_seating.rs) — cafe tables and chairs filling a sit-down pocket
+- [`BitesKitchenUsage`](src/bites_kitchen.rs) — wall-run counters, sit-on cooktop + pans, basin, fridge, ~2 m square shelf stacks (0.75 m decks)
+- [`BitesSeatingUsage`](src/bites_seating.rs) — cafe tables and chairs fitted into the packed seating box
 
 Depends on [`richmond-building-components`](../../richmond/building-components/) only. [`furniture-assemblies`](../assemblies/) `collect_furniture_slots` / the 50 m cell stream call [`expand_usages`](src/expand.rs) after collecting High usage nodes.

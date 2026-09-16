@@ -31,6 +31,7 @@ pub mod present;
 pub mod range;
 pub mod shelf;
 pub mod stream;
+pub mod table;
 
 pub use basin::{Basin, BasinParams};
 pub use bed::{Bed, BedParams};
@@ -63,6 +64,7 @@ pub use stream::{
 	FurnitureIndex, FurnitureLodChan, FurnitureRefresh, FurnitureStreamPlugin,
 	FurnitureStreamSystems,
 };
+pub use table::{Table, TableParams};
 
 use richmond_building_components::FurnitureGeometry;
 

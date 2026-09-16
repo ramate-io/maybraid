@@ -71,3 +71,11 @@ pub const POT_001: AssetPath = AssetPath::new("furniture/cookware/pot/pot_001.gl
 pub const POT_LID_001: AssetPath = AssetPath::new("furniture/cookware/lid/pot_lid_001.glb");
 pub const SKILLET_001: AssetPath = AssetPath::new("furniture/cookware/skillet/skillet_001.glb");
 pub const SAUCEPAN_001: AssetPath = AssetPath::new("furniture/cookware/saucepan/saucepan_001.glb");
+
+pub const TABLE_TOP_001: AssetPath = AssetPath::new("furniture/table/top/table_top_001.glb");
+pub const TABLE_TOP_ROUND_001: AssetPath =
+	AssetPath::new("furniture/table/top/table_top_round_001.glb");
+pub const TABLE_LEG_001: AssetPath = AssetPath::new("furniture/table/leg/table_leg_001.glb");
+pub const TABLE_APRON_001: AssetPath = AssetPath::new("furniture/table/apron/table_apron_001.glb");
+pub const TABLE_PEDESTAL_001: AssetPath =
+	AssetPath::new("furniture/table/pedestal/table_pedestal_001.glb");

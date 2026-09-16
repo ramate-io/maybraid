@@ -36,7 +36,7 @@ impl DiningRoom {
 					aabb,
 					host,
 					confines.roll,
-					FurnitureNode::bedroom_furniture,
+					FurnitureNode::table,
 				)
 			})
 			.collect();

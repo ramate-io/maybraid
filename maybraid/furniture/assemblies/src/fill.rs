@@ -15,6 +15,7 @@ use crate::fridge::FridgeParams;
 use crate::fruit::FruitParams;
 use crate::range::RangeParams;
 use crate::shelf::ShelfParams;
+use crate::table::TableParams;
 use crate::Assembly;
 use furniture_components::{pose_parts, PlacedPart};
 
@@ -25,6 +26,7 @@ pub fn try_assembly(node: &FurnitureNode) -> Option<Assembly> {
 	Some(match node.geometry {
 		FurnitureGeometry::Bed => BedParams { finish_seed: seed }.build().assembly(),
 		FurnitureGeometry::Chair => ChairParams { finish_seed: seed }.build().assembly(),
+		FurnitureGeometry::Table => TableParams { finish_seed: seed }.build().assembly(),
 		FurnitureGeometry::Chest => ChestParams { finish_seed: seed }.build().assembly(),
 		FurnitureGeometry::Counter => {
 			CounterParams { finish_seed: seed, flush_back: flush }.build().assembly()

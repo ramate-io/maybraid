@@ -71,6 +71,10 @@ impl FurnitureNode {
 		Self::placeholder(FurnitureGeometry::Chair, placement)
 	}
 
+	pub fn table(placement: Placement) -> Self {
+		Self::placeholder(FurnitureGeometry::Table, placement)
+	}
+
 	pub fn chest(placement: Placement) -> Self {
 		Self::placeholder(FurnitureGeometry::Chest, placement)
 	}

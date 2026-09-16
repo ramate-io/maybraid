@@ -54,6 +54,11 @@ pub enum PartKind {
 	PotLid,
 	Skillet,
 	Saucepan,
+	TableTop,
+	TableTopRound,
+	TableLeg,
+	TableApron,
+	TablePedestal,
 }
 
 impl PartKind {
@@ -94,13 +99,18 @@ impl PartKind {
 			Self::PotLid => assets::POT_LID_001,
 			Self::Skillet => assets::SKILLET_001,
 			Self::Saucepan => assets::SAUCEPAN_001,
+			Self::TableTop => assets::TABLE_TOP_001,
+			Self::TableTopRound => assets::TABLE_TOP_ROUND_001,
+			Self::TableLeg => assets::TABLE_LEG_001,
+			Self::TableApron => assets::TABLE_APRON_001,
+			Self::TablePedestal => assets::TABLE_PEDESTAL_001,
 		}
 	}
 
 	/// Authored-kit → unit-slot map for this piece.
 	pub const fn kit_to_unit(self) -> Placement {
 		match self {
-			Self::ChairLeg => LEG_KIT_TO_UNIT,
+			Self::ChairLeg | Self::TableLeg => LEG_KIT_TO_UNIT,
 			Self::ChestLatch => LATCH_KIT_TO_UNIT,
 			Self::FridgeDoor => HINGE_KIT_TO_UNIT,
 			Self::RangeDoor => RANGE_DOOR_KIT_TO_UNIT,

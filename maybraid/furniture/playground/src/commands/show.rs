@@ -17,6 +17,8 @@ pub enum Show {
 	Bed(UnitShow),
 	/// Unit chair slot (legs / seat / +Z back).
 	Chair(UnitShow),
+	/// Unit cafe table (pedestal or four-leg).
+	Table(UnitShow),
 	/// Unit chest slot (trunk / lid).
 	Chest(UnitShow),
 	/// Unit counter slot (footer / volume / top).
@@ -69,6 +71,10 @@ impl Show {
 			),
 			Self::Chair(cmd) => (
 				PreviewSubject::Unit { geometry: FurnitureGeometry::Chair, seed: cmd.seed },
+				cmd.transform.transform(),
+			),
+			Self::Table(cmd) => (
+				PreviewSubject::Unit { geometry: FurnitureGeometry::Table, seed: cmd.seed },
 				cmd.transform.transform(),
 			),
 			Self::Chest(cmd) => (
