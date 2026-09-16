@@ -1,13 +1,22 @@
 //! Distance-fade sky dome. An inverted sphere follows the camera so far
-//! terrain and forest wash to blue. This is an aesthetic mask, not a cull clock.
+//! terrain and forest wash toward a late-afternoon horizon. This is an
+//! aesthetic mask, not a cull clock.
 
+mod celestial;
+mod dome;
 mod shadows;
 
-use bevy::asset::RenderAssetUsages;
-use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
 use std::f32::consts::PI;
 
+use celestial::spawn_sky_celestial;
+use dome::DomeSettings;
+
+pub use celestial::{
+	SkyMoon, SkyStars, SkySunDisk, CELESTIAL_DISTANCE_FACTOR, MOON_COLOR, MOON_LIFT, MOON_RADIUS_M,
+	MOON_YAW_OFFSET, STAR_COLOR, STAR_COUNT, SUN_CORONA_COLOR, SUN_CORONA_RADIUS_M, SUN_DISK_COLOR,
+	SUN_DISK_RADIUS_M,
+};
 pub use shadows::{ShadowQuality, SkySun};
 
 /// Start a light haze at this XZ radius (m).
@@ -19,8 +28,30 @@ pub const DEFAULT_SPHERE_RADIUS_M: f32 = 2_800.0;
 /// Peak wash. Stay well under 1 so ridges are not cut out by an opaque band.
 pub const DEFAULT_MAX_ALPHA: f32 = 0.32;
 
-/// Clear / dome blue used by the vegetation-on-terrain and world playgrounds.
-pub const SKY_BLUE: Color = Color::hsla(201.0, 0.69, 0.62, 1.0);
+/// Cooler, less saturated overhead. Vertex color near zenith.
+pub const SKY_ZENITH: Color = Color::hsla(214.0, 0.18, 0.52, 1.0);
+/// Warm peach / wheat wash at the horizon band.
+pub const SKY_HORIZON: Color = Color::hsla(34.0, 0.55, 0.72, 1.0);
+/// Darker below-horizon ring so the shell does not glow under the camera.
+pub const SKY_NADIR: Color = Color::hsla(26.0, 0.22, 0.28, 1.0);
+/// Late-afternoon clear (the overhead hole). Not the old cyan.
+pub const SKY_CLEAR: Color = Color::hsla(48.0, 0.16, 0.80, 1.0);
+/// Playground alias for [`SKY_CLEAR`].
+pub const SKY_BLUE: Color = SKY_CLEAR;
+
+/// Soft amber key. Not sodium orange.
+pub const SUN_COLOR: Color = Color::hsla(38.0, 0.38, 0.78, 1.0);
+/// Lower than the old 12 klux white key so mid-ground is not flash-lit.
+pub const SUN_ILLUMINANCE: f32 = 8_000.0;
+/// Cooler, dimmer fill so the key keeps a direction.
+pub const FILL_COLOR: Color = Color::hsla(218.0, 0.22, 0.70, 1.0);
+pub const FILL_ILLUMINANCE: f32 = 1_600.0;
+/// Lifted so Off-shadow tree wells do not go black.
+pub const AMBIENT_BRIGHTNESS: f32 = 620.0;
+
+/// Existing Discovery key pose (pitch / yaw). Not a clock.
+pub const SUN_PITCH: f32 = -PI / 4.0;
+pub const SUN_YAW: f32 = PI / 4.0;
 
 #[derive(Component)]
 pub struct SkyDome;
@@ -30,7 +61,9 @@ pub struct SkyDomePlugin {
 	pub outer_fade_m: f32,
 	pub sphere_radius_m: f32,
 	pub max_alpha: f32,
+	/// Horizon wash. Zenith / nadir stay on the named palette constants.
 	pub color: Color,
+	pub clear: Color,
 }
 
 impl Default for SkyDomePlugin {
@@ -40,7 +73,8 @@ impl Default for SkyDomePlugin {
 			outer_fade_m: DEFAULT_OUTER_FADE_M,
 			sphere_radius_m: DEFAULT_SPHERE_RADIUS_M,
 			max_alpha: DEFAULT_MAX_ALPHA,
-			color: SKY_BLUE,
+			color: SKY_HORIZON,
+			clear: SKY_CLEAR,
 		}
 	}
 }
@@ -52,14 +86,22 @@ impl Plugin for SkyDomePlugin {
 			outer_fade_m: self.outer_fade_m.max(self.inner_fade_m + 1.0),
 			sphere_radius_m: self.sphere_radius_m.max(self.outer_fade_m),
 			max_alpha: self.max_alpha.clamp(0.0, 1.0),
-			color: self.color,
+			horizon: self.color,
+			zenith: SKY_ZENITH,
+			nadir: SKY_NADIR,
 		};
-		app.insert_resource(ClearColor(self.color))
+		app.insert_resource(ClearColor(self.clear))
 			.insert_resource(settings)
 			.init_resource::<ShadowQuality>()
 			.add_systems(
 				Startup,
-				(spawn_sky_dome, spawn_sky_lights, shadows::apply_shadow_quality).chain(),
+				(
+					spawn_sky_dome,
+					spawn_sky_lights,
+					spawn_sky_celestial,
+					shadows::apply_shadow_quality,
+				)
+					.chain(),
 			)
 			.add_systems(Update, follow_camera)
 			.add_systems(
@@ -69,22 +111,16 @@ impl Plugin for SkyDomePlugin {
 	}
 }
 
-#[derive(Resource, Clone, Copy)]
-struct DomeSettings {
-	inner_fade_m: f32,
-	outer_fade_m: f32,
-	sphere_radius_m: f32,
-	max_alpha: f32,
-	color: Color,
-}
-
 fn spawn_sky_dome(
 	mut commands: Commands,
 	mut meshes: ResMut<Assets<Mesh>>,
 	mut materials: ResMut<Assets<StandardMaterial>>,
 	settings: Res<DomeSettings>,
 ) {
-	let mesh = meshes.add(fade_sphere(*settings));
+	let root = commands
+		.spawn((SkyDome, Transform::IDENTITY, Visibility::Visible, Name::new("sky-dome")))
+		.id();
+	let mesh = meshes.add(settings.fade_sphere());
 	let material = materials.add(StandardMaterial {
 		base_color: Color::WHITE,
 		unlit: true,
@@ -95,11 +131,11 @@ fn spawn_sky_dome(
 		..default()
 	});
 	commands.spawn((
-		SkyDome,
 		Mesh3d(mesh),
 		MeshMaterial3d(material),
 		Transform::IDENTITY,
-		Visibility::Visible,
+		Visibility::Inherited,
+		ChildOf(root),
 	));
 }
 
@@ -118,98 +154,86 @@ fn follow_camera(
 }
 
 fn spawn_sky_lights(mut commands: Commands, quality: Res<ShadowQuality>) {
-	commands.insert_resource(GlobalAmbientLight { brightness: 450.0, ..default() });
+	commands.insert_resource(GlobalAmbientLight { brightness: AMBIENT_BRIGHTNESS, ..default() });
 	commands.insert_resource(quality.shadow_map());
 	commands.spawn((
 		SkySun,
 		DirectionalLight {
-			illuminance: 12_000.0,
+			color: SUN_COLOR,
+			illuminance: SUN_ILLUMINANCE,
 			shadow_maps_enabled: quality.maps_enabled(),
 			..default()
 		},
 		quality.cascade_config(),
-		Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -PI / 4.0, PI / 4.0, 0.0)),
+		SkySun::pose(),
 	));
 	commands.spawn((
-		DirectionalLight { illuminance: 2_500.0, shadow_maps_enabled: false, ..default() },
+		DirectionalLight {
+			color: FILL_COLOR,
+			illuminance: FILL_ILLUMINANCE,
+			shadow_maps_enabled: false,
+			..default()
+		},
 		Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, PI / 4.0, -PI / 4.0, 0.0)),
 	));
-}
-
-fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
-	let t = ((x - edge0) / (edge1 - edge0)).clamp(0.0, 1.0);
-	t * t * (3.0 - 2.0 * t)
-}
-
-/// UV sphere. Vertex alpha rises with XZ radius so the horizon washes blue
-/// and the volume over the viewer stays clear.
-fn fade_sphere(settings: DomeSettings) -> Mesh {
-	let rings = 48u32;
-	let segs = 64u32;
-	let rgba = settings.color.to_linear();
-	let radius = settings.sphere_radius_m;
-
-	let mut positions = Vec::new();
-	let mut normals = Vec::new();
-	let mut colors = Vec::new();
-	let mut indices = Vec::new();
-
-	for ring in 0..=rings {
-		let v = ring as f32 / rings as f32;
-		let theta = v * PI;
-		let y = radius * theta.cos();
-		let ring_r = radius * theta.sin();
-		for seg in 0..=segs {
-			let u = seg as f32 / segs as f32;
-			let phi = u * 2.0 * PI;
-			let x = ring_r * phi.cos();
-			let z = ring_r * phi.sin();
-			positions.push([x, y, z]);
-			let len = (x * x + y * y + z * z).sqrt().max(1e-5);
-			normals.push([-x / len, -y / len, -z / len]);
-			let xz = (x * x + z * z).sqrt();
-			let fade = smoothstep(settings.inner_fade_m, settings.outer_fade_m, xz);
-			let alpha = settings.max_alpha * fade * fade;
-			colors.push([rgba.red, rgba.green, rgba.blue, alpha]);
-		}
-	}
-
-	let verts_per_ring = segs + 1;
-	for ring in 0..rings {
-		for seg in 0..segs {
-			let a = ring * verts_per_ring + seg;
-			let b = a + verts_per_ring;
-			indices.extend_from_slice(&[a, a + 1, b, a + 1, b + 1, b]);
-		}
-	}
-
-	let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default());
-	mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
-	mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
-	mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, colors);
-	mesh.insert_indices(Indices::U32(indices));
-	mesh
 }
 
 #[cfg(test)]
 mod tests {
 	use super::*;
 
+	fn sky_test_app(quality: ShadowQuality) -> App {
+		let mut app = App::new();
+		app.add_plugins((MinimalPlugins, AssetPlugin::default()))
+			.init_asset::<Mesh>()
+			.init_asset::<StandardMaterial>()
+			.insert_resource(quality)
+			.add_plugins(SkyDomePlugin::default());
+		app.update();
+		app
+	}
+
 	#[test]
-	fn fade_sphere_stays_a_wash_not_a_wall() {
-		let mesh = fade_sphere(DomeSettings {
-			inner_fade_m: DEFAULT_INNER_FADE_M,
-			outer_fade_m: DEFAULT_OUTER_FADE_M,
-			sphere_radius_m: DEFAULT_SPHERE_RADIUS_M,
-			max_alpha: DEFAULT_MAX_ALPHA,
-			color: SKY_BLUE,
-		});
-		let colors = mesh.attribute(Mesh::ATTRIBUTE_COLOR).expect("colors");
-		let bevy::mesh::VertexAttributeValues::Float32x4(colors) = colors else {
-			panic!("expected rgba colors");
+	fn sun_disk_tracks_the_key() -> anyhow::Result<()> {
+		let mut app = sky_test_app(ShadowQuality::High);
+		let sun_dir = {
+			let mut suns = app.world_mut().query_filtered::<&Transform, With<SkySun>>();
+			let sun = *suns.single(app.world()).map_err(|error| anyhow::anyhow!("{error:?}"))?;
+			SkySun::disk_direction(&sun)
 		};
-		assert!(colors.iter().any(|c| c[3] < 0.02), "near-axis vertices stay clear");
-		let peak = colors.iter().map(|c| c[3]).fold(0.0_f32, f32::max);
-		assert!(peak > 0.15 && peak <= DEFAULT_MAX_ALPHA + 1e-4, "peak={peak}");
+		let disk_dir = {
+			let mut disks = app.world_mut().query_filtered::<&Transform, With<SkySunDisk>>();
+			let disk = disks.single(app.world()).map_err(|error| anyhow::anyhow!("{error:?}"))?;
+			disk.translation.normalize_or_zero()
+		};
+		assert!(sun_dir.dot(disk_dir) > 0.995, "disk={disk_dir} sun={sun_dir}");
+		Ok(())
+	}
+
+	#[test]
+	fn no_extra_shadow_casters() -> anyhow::Result<()> {
+		let mut app = sky_test_app(ShadowQuality::High);
+		let lights: Vec<(bool, bool)> = {
+			let mut query = app.world_mut().query::<(&DirectionalLight, Option<&SkySun>)>();
+			query
+				.iter(app.world())
+				.map(|(light, sun)| (sun.is_some(), light.shadow_maps_enabled))
+				.collect()
+		};
+		assert_eq!(lights.len(), 2, "still two directionals");
+		let sun_shadows = lights.iter().filter(|(is_sun, shadows)| *is_sun && *shadows).count();
+		let fill_shadows = lights.iter().filter(|(is_sun, shadows)| !*is_sun && *shadows).count();
+		assert_eq!(sun_shadows, 1);
+		assert_eq!(fill_shadows, 0);
+		Ok(())
+	}
+
+	#[test]
+	fn off_quality_disables_sun_maps() -> anyhow::Result<()> {
+		let mut app = sky_test_app(ShadowQuality::Off);
+		let mut query = app.world_mut().query_filtered::<&DirectionalLight, With<SkySun>>();
+		let sun = query.single(app.world()).map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(!sun.shadow_maps_enabled);
+		Ok(())
 	}
 }

@@ -11,6 +11,33 @@ use bevy::prelude::*;
 #[derive(Component, Debug, Clone, Copy)]
 pub struct SkySun;
 
+impl SkySun {
+	/// Late-afternoon key pose. Light shines along [`Transform::forward`].
+	pub fn pose() -> Transform {
+		Transform::from_rotation(Quat::from_euler(
+			EulerRot::XYZ,
+			crate::SUN_PITCH,
+			crate::SUN_YAW,
+			0.0,
+		))
+	}
+
+	/// Direction the key illuminates (Bevy local −Z).
+	pub fn shine_direction(transform: &Transform) -> Vec3 {
+		transform.forward().as_vec3()
+	}
+
+	/// Direction from the camera toward the visible disk (opposite the shine ray).
+	pub fn disk_direction(transform: &Transform) -> Vec3 {
+		-Self::shine_direction(transform)
+	}
+
+	/// Camera-relative offset for an unlit disk sitting on the key axis.
+	pub fn disk_offset(transform: &Transform, distance: f32) -> Vec3 {
+		Self::disk_direction(transform) * distance
+	}
+}
+
 /// User-facing sun shadow quality.
 #[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum ShadowQuality {
