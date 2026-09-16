@@ -136,7 +136,7 @@ fn install_mob_scenes(
 		install_mob(&mut commands, host, install);
 		commands.entity(host).insert(brain.clone());
 		if let Some(targeting) = brain.prey_targeting() {
-			install_prey_targeting(&mut commands, host, targeting, transform.translation);
+			install_prey_targeting(&mut commands, host, targeting);
 		}
 	}
 }
@@ -273,16 +273,17 @@ mod tests {
 			.run_system_once(install_mob_scenes)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 
-		let mut homes: Vec<Vec3> = world
-			.query::<(&PreyTargetingIntelligence, &PreyTargetMemory)>()
+		let mut kinds: Vec<_> = world
+			.query::<(&PreyTargetingIntelligence, &Transform)>()
 			.iter(&world)
-			.map(|(user, memory)| {
+			.map(|(user, transform)| {
 				assert_eq!(user.kind, poi_intelligence::PoiKind::new("world/player"));
-				memory.course
+				transform.translation
 			})
 			.collect();
-		homes.sort_by(|a, b| a.x.total_cmp(&b.x));
-		assert_eq!(homes, vec![raider_home, pack_home]);
+		kinds.sort_by(|a, b| a.x.total_cmp(&b.x));
+		assert_eq!(kinds, vec![raider_home, pack_home]);
+		assert!(world.query::<&PreyTargetMemory>().iter(&world).count() == 2);
 		Ok(())
 	}
 }

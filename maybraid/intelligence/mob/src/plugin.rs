@@ -14,7 +14,7 @@ use crate::lock::{
 	apply_mob_tether_subjects, expire_mob_tether_locks, forget_mob_tether_lock_when_leaving,
 	lock_mobs_on_poi_arrival,
 };
-use crate::prey::{prey_tracks_subject, start_prey_browse};
+use crate::prey::grant_prey_objective;
 use crate::roster::MobMemberNeeded;
 use crate::share::{share_mob_targets, share_mob_threats};
 use crate::travel::travel_mobs;
@@ -89,7 +89,7 @@ impl Plugin for MobIntelligencePlugin {
 						.in_set(MobSystems::Writeback),
 					respawn_mob_members.in_set(MobSystems::Respawn),
 					travel_mobs.in_set(MobSystems::Travel),
-					(start_prey_browse, prey_tracks_subject).chain().in_set(MobSystems::Prey),
+					grant_prey_objective.in_set(MobSystems::Prey),
 					(
 						expire_mob_tether_locks,
 						lock_mobs_on_poi_arrival,

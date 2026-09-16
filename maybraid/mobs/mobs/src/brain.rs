@@ -57,9 +57,8 @@ impl MobBrain {
 		}
 	}
 
-	/// Player-prey install for journeying hunt hosts (pack / raider). Stationary
-	/// guard / brawler hosts and grazer families omit it. Off-course is vs the
-	/// current POI course, not spawn.
+	/// Player-prey grant for journeying hunt hosts (pack / raider). Stationary
+	/// guard / brawler hosts and grazer families omit it. Range is host-to-player.
 	pub fn prey_targeting(&self) -> Option<PreyTargetingIntelligence> {
 		if self.travel.is_none() || !self.journey {
 			return None;

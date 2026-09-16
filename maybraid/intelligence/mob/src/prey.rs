@@ -1,18 +1,21 @@
-//! Host brain that travels onto a live subject, locks members, browses, then re-acquires.
+//! Grant policy that preempts a host [`PoiGoal`] onto a live [`PreySubject`].
 //!
-//! Plants write first-hand findings up to [`MobKnowledge`]. This user turns
-//! Opportunity (subject on the POI course) and Alert (`engage` ∩ board sources)
-//! into one grant clock, then writes a kind-scoped [`PoiGoal`]. Callers stamp
-//! [`PreySubject`]; this crate does not know `PackKind` or `Player`.
+//! Hunt does not travel. It observes the subject, calls [`begin_poi_goal`], and
+//! drops that goal when the grant ends. [`drive_poi_goals`](poi_intelligence::drive_poi_goals)
+//! and [`MobTravel`](crate::MobTravel) own the corridor. Journeying is
+//! `Without<PoiGoal>` and resumes after the drop; the interrupted hop stays in
+//! knowledge and is not marked visited.
+//!
+//! Opportunity: subject inside `off_course_distance` of the **host**. Alert:
+//! first-hand [`MobKnowledge`] bits ∩ `engage`. Callers stamp [`PreySubject`].
 
 use bevy::prelude::*;
 use poi_intelligence::{
-	mix_seed, LocalPoi, Poi, PoiGoal, PoiGoalState, PoiGoalStatus, PoiId, PoiKind, PoiKnowledge,
-	PoiSource,
+	begin_poi_goal, mix_seed, KnownPoi, LocalPoi, Poi, PoiGoal, PoiGoalState, PoiId, PoiKind,
+	PoiKnowledge, PoiObservation, PoiSource,
 };
 use threat_intelligence::{ThreatRegistry, ThreatSource};
 
-use crate::lock::MobTetherLock;
 use crate::share::MobKnowledge;
 use crate::Mob;
 
@@ -20,7 +23,7 @@ use crate::Mob;
 #[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct PreySubject;
 
-/// Installed hunt loop. Presence is the assignment; [`PreyTargetMemory::grant_until`]
+/// Installed grant policy. Presence is the assignment; [`PreyTargetMemory::grant_until`]
 /// is the grant.
 #[derive(Component, Clone, Copy, Debug, PartialEq)]
 pub struct PreyTargetingIntelligence {
@@ -30,9 +33,9 @@ pub struct PreyTargetingIntelligence {
 	pub arrival_radius: f32,
 	/// Nominal lock / chase linger. Noisy installs jitter this.
 	pub duration: f32,
-	/// Browse after lock or timeout before Opportunity may re-acquire.
+	/// Cooldown after a grant ends before Opportunity may re-acquire.
 	pub browse_secs: f32,
-	/// Max XZ from [`PreyTargetMemory::course`] to the prey.
+	/// Max XZ from the host to the prey.
 	pub off_course_distance: f32,
 	/// First-hand board bits that raise Alert. Empty: Opportunity only.
 	pub engage: ThreatSource,
@@ -67,8 +70,8 @@ impl PreyTargetingIntelligence {
 		}
 	}
 
-	pub fn in_range(self, course: Vec3, prey: Vec3) -> bool {
-		course.xz().distance(prey.xz()) <= self.off_course_distance
+	pub fn in_range(self, host: Vec3, prey: Vec3) -> bool {
+		host.xz().distance(prey.xz()) <= self.off_course_distance
 	}
 
 	#[cfg(test)]
@@ -85,65 +88,19 @@ impl PreyTargetingIntelligence {
 		let unit = ((mixed >> 40) as f32) / ((1_u32 << 24) as f32);
 		self.duration.max(0.0) * (0.7 + 0.6 * unit)
 	}
-
-	#[allow(clippy::too_many_arguments)]
-	pub fn write_goal(
-		self,
-		commands: &mut Commands,
-		host: Entity,
-		memory: &PreyTargetMemory,
-		prey: Entity,
-		prey_at: Vec3,
-		now: f32,
-		goals: &mut Query<&mut PoiGoal>,
-	) {
-		let generation = memory.chase_generation.max(1);
-		let linger = memory.remaining(now);
-		let at = Vec3::new(prey_at.x, prey_at.y, prey_at.z);
-		commands.entity(prey).insert((
-			Poi::new(self.poi_id, self.kind).with_arrival_radius(self.arrival_radius),
-			LocalPoi,
-		));
-		commands.entity(host).insert(PoiGoalState {
-			generation,
-			target: self.poi_id,
-			status: PoiGoalStatus::Active,
-		});
-		if let Ok(mut goal) = goals.get_mut(host) {
-			goal.generation = generation;
-			goal.target = self.poi_id;
-			goal.kind = self.kind;
-			goal.poi_entity = Some(prey);
-			goal.location.point = at;
-			goal.location.radius = self.arrival_radius;
-			goal.linger_secs = linger;
-			return;
-		}
-		commands.entity(host).insert(PoiGoal::new(
-			generation,
-			self.poi_id,
-			Some(prey),
-			self.kind,
-			at,
-			self.arrival_radius,
-			now,
-			linger,
-		));
-	}
 }
 
-/// Browse / grant bookkeeping. `course` is the last non-prey hop, or install pose.
+/// Grant / browse bookkeeping. No course pin; range is host-to-prey.
 #[derive(Component, Clone, Copy, Debug, PartialEq)]
 pub struct PreyTargetMemory {
-	pub course: Vec3,
 	pub grant_until: f32,
 	pub browse_until: f32,
 	pub chase_generation: u64,
 }
 
 impl PreyTargetMemory {
-	pub fn new(course: Vec3) -> Self {
-		Self { course, grant_until: 0.0, browse_until: 0.0, chase_generation: 1 }
+	pub fn new() -> Self {
+		Self { grant_until: 0.0, browse_until: 0.0, chase_generation: 1 }
 	}
 
 	pub fn browsing(self, now: f32) -> bool {
@@ -152,10 +109,6 @@ impl PreyTargetMemory {
 
 	pub fn granted(self, now: f32) -> bool {
 		self.grant_until > now
-	}
-
-	pub fn remaining(self, now: f32) -> f32 {
-		(self.grant_until - now).max(0.0)
 	}
 
 	fn raise_grant(&mut self, host: Entity, user: PreyTargetingIntelligence, now: f32) {
@@ -167,39 +120,24 @@ impl PreyTargetMemory {
 	}
 }
 
-/// Stamp the user and a course pin (install pose until a hop is seen).
+impl Default for PreyTargetMemory {
+	fn default() -> Self {
+		Self::new()
+	}
+}
+
+/// Stamp the grant policy. Journeying / travel already live on the host.
 pub fn install_prey_targeting(
 	commands: &mut Commands,
 	host: Entity,
 	intelligence: PreyTargetingIntelligence,
-	course: Vec3,
 ) {
-	commands.entity(host).insert((intelligence, PreyTargetMemory::new(course)));
+	commands.entity(host).insert((intelligence, PreyTargetMemory::new()));
 }
 
-/// Hunt lock expiry starts a browse window. Waypoint locks during browse
-/// must not reset it.
-pub(crate) fn start_prey_browse(
-	time: Res<Time>,
-	mut released: RemovedComponents<MobTetherLock>,
-	mut memories: Query<(&PreyTargetingIntelligence, &mut PreyTargetMemory)>,
-) {
-	let now = time.elapsed_secs();
-	for entity in released.read() {
-		let Ok((user, mut memory)) = memories.get_mut(entity) else {
-			continue;
-		};
-		if memory.browsing(now) {
-			continue;
-		}
-		memory.grant_until = 0.0;
-		memory.browse_until = now + user.browse_secs;
-	}
-}
-
-/// Write or drop a host prey [`PoiGoal`]. Grant-live writes may steal a hop;
-/// the interrupted POI stays in [`PoiKnowledge`] and is not marked visited.
-pub(crate) fn prey_tracks_subject(
+/// Observe the subject and [`begin_poi_goal`] while granted. After Select so
+/// a live hop can be preempted; Drive then copies the goal onto routing.
+pub(crate) fn grant_prey_objective(
 	time: Res<Time>,
 	registry: Res<ThreatRegistry>,
 	mut commands: Commands,
@@ -207,55 +145,96 @@ pub(crate) fn prey_tracks_subject(
 	mut hosts: Query<
 		(
 			Entity,
+			&GlobalTransform,
 			&PreyTargetingIntelligence,
-			Option<&MobTetherLock>,
 			Option<&MobKnowledge>,
 			Option<&mut PoiKnowledge>,
+			Option<&mut PoiGoalState>,
+			Option<&PoiGoal>,
 			&mut PreyTargetMemory,
 		),
 		With<Mob>,
 	>,
-	mut goals: Query<&mut PoiGoal>,
 ) {
 	let now = time.elapsed_secs();
 	let prey = subjects
 		.iter()
 		.next()
 		.map(|(entity, transform)| (entity, transform.translation()));
-	for (host, user, lock, board, mut knowledge, mut memory) in &mut hosts {
-		remember_course(&mut memory, host, user.kind, &goals);
+	for (host, host_at, user, board, mut knowledge, mut state, goal, mut memory) in &mut hosts {
 		let Some((prey, prey_at)) = prey else {
 			memory.grant_until = 0.0;
-			drop_kind_goal(&mut commands, host, user.kind, &goals);
+			drop_kind_goal(&mut commands, host, user.kind, goal);
 			continue;
 		};
-		let on_course = user.in_range(memory.course, prey_at);
+		let on_host = user.in_range(host_at.translation(), prey_at);
 		let alert = board.is_some_and(|board| board.alerts(&registry, prey, user.engage));
-		refresh_grant(host, *user, &mut memory, on_course, alert, now);
+		refresh_grant(host, *user, &mut memory, on_host, alert, now);
 
-		if lock.is_none() && (memory.browsing(now) || !memory.granted(now)) {
-			drop_kind_goal(&mut commands, host, user.kind, &goals);
+		if memory.browsing(now) || !memory.granted(now) {
+			drop_kind_goal(&mut commands, host, user.kind, goal);
 			continue;
 		}
-		if !on_course {
-			drop_kind_goal(&mut commands, host, user.kind, &goals);
+		if !on_host {
+			drop_kind_goal(&mut commands, host, user.kind, goal);
 			continue;
 		}
-		interrupt_course(host, user.kind, knowledge.as_deref_mut(), &goals);
-		user.write_goal(&mut commands, host, &memory, prey, prey_at, now, &mut goals);
+
+		commands.entity(prey).insert((
+			Poi::new(user.poi_id, user.kind).with_arrival_radius(user.arrival_radius),
+			LocalPoi,
+		));
+		let known = remember_subject(host, *user, prey, prey_at, now, knowledge.as_deref_mut());
+		if goal.is_some_and(|goal| goal.kind == user.kind && goal.target == user.poi_id) {
+			continue;
+		}
+		begin_poi_goal(
+			&mut commands,
+			host,
+			known,
+			now,
+			memory.grant_until - now,
+			state.as_deref_mut(),
+			0,
+		);
 	}
 }
 
-fn remember_course(
-	memory: &mut PreyTargetMemory,
+fn remember_subject(
 	host: Entity,
-	kind: PoiKind,
-	goals: &Query<&mut PoiGoal>,
-) {
-	if let Ok(goal) = goals.get(host) {
-		if goal.kind != kind {
-			memory.course = goal.location.point;
+	user: PreyTargetingIntelligence,
+	prey: Entity,
+	prey_at: Vec3,
+	now: f32,
+	knowledge: Option<&mut PoiKnowledge>,
+) -> KnownPoi {
+	let observation = PoiObservation {
+		user: host,
+		id: user.poi_id,
+		entity: Some(prey),
+		kind: user.kind,
+		position: prey_at,
+		arrival_radius: user.arrival_radius,
+		salience: 1.0,
+		confidence: 1.0,
+		source: PoiSource::EXTERNAL | PoiSource::OBJECTIVE,
+	};
+	if let Some(knowledge) = knowledge {
+		if let Some(known) = knowledge.observe(observation, now) {
+			return known;
 		}
+	}
+	KnownPoi {
+		id: user.poi_id,
+		entity: Some(prey),
+		kind: user.kind,
+		position: prey_at,
+		arrival_radius: user.arrival_radius,
+		salience: 1.0,
+		confidence: 1.0,
+		sources: observation.source,
+		first_observed_at: now,
+		last_observed_at: now,
 	}
 }
 
@@ -263,15 +242,18 @@ fn refresh_grant(
 	host: Entity,
 	user: PreyTargetingIntelligence,
 	memory: &mut PreyTargetMemory,
-	on_course: bool,
+	on_host: bool,
 	alert: bool,
 	now: f32,
 ) {
 	if alert {
 		memory.raise_grant(host, user, now);
 	}
-	if !on_course {
-		memory.grant_until = 0.0;
+	if !on_host {
+		if memory.granted(now) {
+			memory.grant_until = 0.0;
+			memory.browse_until = now + user.browse_secs;
+		}
 		return;
 	}
 	if memory.grant_until > 0.0 && now >= memory.grant_until && !memory.browsing(now) {
@@ -284,30 +266,8 @@ fn refresh_grant(
 	}
 }
 
-fn interrupt_course(
-	host: Entity,
-	kind: PoiKind,
-	knowledge: Option<&mut PoiKnowledge>,
-	goals: &Query<&mut PoiGoal>,
-) {
-	let Ok(goal) = goals.get(host) else {
-		return;
-	};
-	if goal.kind == kind {
-		return;
-	}
-	if let Some(knowledge) = knowledge {
-		knowledge.remove_source(goal.target, PoiSource::OBJECTIVE);
-	}
-}
-
-fn drop_kind_goal(
-	commands: &mut Commands,
-	host: Entity,
-	kind: PoiKind,
-	goals: &Query<&mut PoiGoal>,
-) {
-	if goals.get(host).is_ok_and(|goal| goal.kind == kind) {
+fn drop_kind_goal(commands: &mut Commands, host: Entity, kind: PoiKind, goal: Option<&PoiGoal>) {
+	if goal.is_some_and(|goal| goal.kind == kind) {
 		commands.entity(host).remove::<PoiGoal>();
 	}
 }
@@ -318,7 +278,8 @@ mod tests {
 	use anyhow::Result;
 	use bevy::ecs::system::RunSystemOnce;
 	use npc_intelligence::Personality;
-	use poi_intelligence::{PoiObservation, PoiVisitState};
+	use poi_intelligence::{drive_poi_goals, PoiVisitState};
+	use routing_intelligence::{RoutingIntelligenceUser, RoutingSettings};
 	use threat_intelligence::{Affiliations, ThreatId, ThreatSubject};
 
 	use super::*;
@@ -341,7 +302,7 @@ mod tests {
 			install = install.with_travel(MobTravel::new(speed));
 		}
 		let host = spawn_mob(&mut world.commands(), Transform::from_translation(home), install);
-		install_prey_targeting(&mut world.commands(), host, user, home);
+		install_prey_targeting(&mut world.commands(), host, user);
 		world.flush();
 		world.entity_mut(host).insert(GlobalTransform::from_translation(home));
 		host
@@ -365,9 +326,9 @@ mod tests {
 			.advance_by(std::time::Duration::from_secs_f32(secs));
 	}
 
-	fn track(world: &mut World) -> Result<()> {
+	fn grant(world: &mut World) -> Result<()> {
 		world
-			.run_system_once(prey_tracks_subject)
+			.run_system_once(grant_prey_objective)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		world.flush();
 		Ok(())
@@ -383,7 +344,7 @@ mod tests {
 			spawn_chaser(&mut world, home, PreyTargetingIntelligence::hunt_herd(), Some(4.0));
 		let herd = spawn_subject(&mut world, herd_at);
 
-		track(&mut world)?;
+		grant(&mut world)?;
 		let goal =
 			world.get::<PoiGoal>(host).ok_or_else(|| anyhow::anyhow!("missing prey goal"))?;
 		assert_eq!(goal.kind, PoiKind::new("mob-brain/prey"));
@@ -399,25 +360,21 @@ mod tests {
 			.run_system_once(lock_mobs_on_poi_arrival)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		world.flush();
-		assert_eq!(world.get::<MobTetherLock>(host).map(|lock| lock.subject), Some(herd));
+		assert_eq!(
+			world.get::<crate::lock::MobTetherLock>(host).map(|lock| lock.subject),
+			Some(herd)
+		);
 
 		set_time(&mut world, 45.0);
-		world
-			.run_system_once(crate::lock::expire_mob_tether_locks)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		world.flush();
-		world
-			.run_system_once(start_prey_browse)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		track(&mut world)?;
+		grant(&mut world)?;
 		assert!(world.get::<PoiGoal>(host).is_none());
 
 		set_time(&mut world, 7.0);
-		track(&mut world)?;
+		grant(&mut world)?;
 		assert!(world.get::<PoiGoal>(host).is_none(), "browse must not re-write early");
 
 		set_time(&mut world, 2.0);
-		track(&mut world)?;
+		grant(&mut world)?;
 		let goal = world
 			.get::<PoiGoal>(host)
 			.ok_or_else(|| anyhow::anyhow!("missing re-acquire"))?;
@@ -427,7 +384,7 @@ mod tests {
 	}
 
 	#[test]
-	fn player_install_uses_the_same_write() -> Result<()> {
+	fn player_install_uses_begin_poi_goal() -> Result<()> {
 		let mut world = World::new();
 		world.init_resource::<Time>();
 		let home = Vec3::ZERO;
@@ -439,7 +396,7 @@ mod tests {
 		);
 		spawn_subject(&mut world, Vec3::new(20.0, 0.0, 0.0));
 
-		track(&mut world)?;
+		grant(&mut world)?;
 		let goal = world
 			.get::<PoiGoal>(host)
 			.ok_or_else(|| anyhow::anyhow!("missing player goal"))?;
@@ -459,7 +416,44 @@ mod tests {
 	}
 
 	#[test]
-	fn off_course_does_not_write() -> Result<()> {
+	fn grant_drives_routing_to_the_subject() -> Result<()> {
+		let mut world = World::new();
+		world.init_resource::<Time>();
+		let home = Vec3::ZERO;
+		let prey_at = Vec3::new(20.0, 0.0, 0.0);
+		let host = spawn_chaser(
+			&mut world,
+			home,
+			PreyTargetingIntelligence::player(10.0, 250.0).without_noise(),
+			Some(8.0),
+		);
+		spawn_subject(&mut world, prey_at);
+		world.entity_mut(host).insert((
+			PoiGoal::new(4, PoiId(3), None, CAMP, Vec3::new(400.0, 0.0, 0.0), 4.0, 0.0, 2.5),
+			RoutingIntelligenceUser::new(RoutingSettings::from_segments([40.0])),
+		));
+		if let Some(mut routing) = world.get_mut::<RoutingIntelligenceUser>(host) {
+			routing.set_destination(Vec3::new(400.0, 0.0, 0.0));
+		}
+
+		grant(&mut world)?;
+		world
+			.run_system_once(drive_poi_goals)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let dest = world
+			.get::<RoutingIntelligenceUser>(host)
+			.and_then(|routing| routing.destination)
+			.ok_or_else(|| anyhow::anyhow!("missing routing dest"))?;
+		assert!((dest.x - prey_at.x).abs() < 1e-3);
+		assert_eq!(
+			world.get::<PoiGoal>(host).map(|goal| goal.kind),
+			Some(PoiKind::new("world/player"))
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn off_host_does_not_write() -> Result<()> {
 		let mut world = World::new();
 		world.init_resource::<Time>();
 		let home = Vec3::ZERO;
@@ -471,14 +465,14 @@ mod tests {
 		);
 		spawn_subject(&mut world, Vec3::new(80.0, 0.0, 0.0));
 
-		track(&mut world)?;
+		grant(&mut world)?;
 		assert!(world.get::<PoiGoal>(host).is_none());
 		assert_eq!(world.get::<Transform>(host).map(|transform| transform.translation), Some(home));
 		Ok(())
 	}
 
 	#[test]
-	fn off_course_drops_a_live_goal() -> Result<()> {
+	fn off_host_drops_a_live_goal() -> Result<()> {
 		let mut world = World::new();
 		world.init_resource::<Time>();
 		let home = Vec3::ZERO;
@@ -490,22 +484,15 @@ mod tests {
 		);
 		let prey = spawn_subject(&mut world, Vec3::new(20.0, 0.0, 0.0));
 
-		track(&mut world)?;
+		grant(&mut world)?;
 		assert!(world.get::<PoiGoal>(host).is_some());
-		world
-			.entity_mut(host)
-			.insert(MobTetherLock { subject: prey, generation: 1, until: 30.0 });
 		world.entity_mut(prey).insert((
 			Transform::from_xyz(80.0, 0.0, 0.0),
 			GlobalTransform::from_xyz(80.0, 0.0, 0.0),
 		));
 
-		track(&mut world)?;
+		grant(&mut world)?;
 		assert!(world.get::<PoiGoal>(host).is_none());
-		assert!(
-			world.get::<MobTetherLock>(host).is_some(),
-			"off-course drops the goal, not the lock"
-		);
 		Ok(())
 	}
 
@@ -523,28 +510,23 @@ mod tests {
 		spawn_subject(&mut world, Vec3::new(20.0, 0.0, 0.0));
 		world.entity_mut(host).insert((
 			PoiGoal::new(4, PoiId(3), None, CAMP, Vec3::new(6.0, 0.0, 0.0), 4.0, 0.0, 2.5),
-			PreyTargetMemory {
-				course: home,
-				grant_until: 0.0,
-				browse_until: 8.0,
-				chase_generation: 1,
-			},
+			PreyTargetMemory { grant_until: 0.0, browse_until: 8.0, chase_generation: 1 },
 		));
 
-		track(&mut world)?;
+		grant(&mut world)?;
 		assert!(world.get::<PoiGoal>(host).is_some_and(|goal| goal.kind == CAMP));
 		Ok(())
 	}
 
 	#[test]
-	fn steal_clears_objective_but_keeps_the_hop_in_knowledge() -> Result<()> {
+	fn preempt_keeps_the_hop_in_knowledge() -> Result<()> {
 		let mut world = World::new();
 		world.init_resource::<Time>();
 		let home = Vec3::ZERO;
 		let host = spawn_chaser(
 			&mut world,
 			home,
-			PreyTargetingIntelligence::player(10.0, 40.0).without_noise(),
+			PreyTargetingIntelligence::player(10.0, 250.0).without_noise(),
 			Some(8.0),
 		);
 		spawn_subject(&mut world, Vec3::new(20.0, 0.0, 0.0));
@@ -556,7 +538,7 @@ mod tests {
 				id: camp_id,
 				entity: None,
 				kind: CAMP,
-				position: Vec3::new(6.0, 0.0, 0.0),
+				position: Vec3::new(400.0, 0.0, 0.0),
 				arrival_radius: 4.0,
 				salience: 1.0,
 				confidence: 1.0,
@@ -565,12 +547,12 @@ mod tests {
 			0.0,
 		);
 		world.entity_mut(host).insert((
-			PoiGoal::new(4, camp_id, None, CAMP, Vec3::new(6.0, 0.0, 0.0), 4.0, 0.0, 2.5),
+			PoiGoal::new(4, camp_id, None, CAMP, Vec3::new(400.0, 0.0, 0.0), 4.0, 0.0, 2.5),
 			knowledge,
 			PoiVisitState::default(),
 		));
 
-		track(&mut world)?;
+		grant(&mut world)?;
 		assert!(world
 			.get::<PoiGoal>(host)
 			.is_some_and(|goal| goal.kind == PoiKind::new("world/player")));
@@ -578,15 +560,10 @@ mod tests {
 			.get::<PoiKnowledge>(host)
 			.ok_or_else(|| anyhow::anyhow!("missing knowledge"))?;
 		let known = knowledge.get(camp_id).ok_or_else(|| anyhow::anyhow!("camp forgotten"))?;
-		assert!(!known.sources.contains(PoiSource::OBJECTIVE));
 		assert!(known.sources.contains(PoiSource::LOCAL_SCAN));
 		assert!(world
 			.get::<PoiVisitState>(host)
 			.is_some_and(|visits| visits.last_visited_at(camp_id).is_none()));
-		assert_eq!(
-			world.get::<PreyTargetMemory>(host).map(|memory| memory.course),
-			Some(Vec3::new(6.0, 0.0, 0.0))
-		);
 		Ok(())
 	}
 
@@ -616,50 +593,14 @@ mod tests {
 		world.entity_mut(host).insert((
 			board,
 			PoiGoal::new(4, PoiId(3), None, CAMP, Vec3::new(6.0, 0.0, 0.0), 4.0, 0.0, 2.5),
-			PreyTargetMemory {
-				course: home,
-				grant_until: 0.0,
-				browse_until: 8.0,
-				chase_generation: 1,
-			},
+			PreyTargetMemory { grant_until: 0.0, browse_until: 8.0, chase_generation: 1 },
 		));
 
-		track(&mut world)?;
+		grant(&mut world)?;
 		assert!(world
 			.get::<PoiGoal>(host)
 			.is_some_and(|goal| goal.kind == PoiKind::new("world/player")));
 		assert!(world.get::<PreyTargetMemory>(host).is_some_and(|memory| memory.granted(0.0)));
-		Ok(())
-	}
-
-	#[test]
-	fn high_stays_plausible_after_an_in_range_sally() -> Result<()> {
-		let mut world = World::new();
-		world.init_resource::<Time>();
-		let home = Vec3::ZERO;
-		let off_course = 40.0;
-		let host = spawn_chaser(
-			&mut world,
-			home,
-			PreyTargetingIntelligence::player(10.0, off_course).without_noise(),
-			Some(20.0),
-		);
-		spawn_subject(&mut world, Vec3::new(20.0, 0.0, 0.0));
-
-		track(&mut world)?;
-		set_time(&mut world, 2.0);
-		world
-			.run_system_once(travel_mobs)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		let at = world
-			.get::<Transform>(host)
-			.ok_or_else(|| anyhow::anyhow!("missing transform"))?
-			.translation;
-		let memory = world
-			.get::<PreyTargetMemory>(host)
-			.ok_or_else(|| anyhow::anyhow!("missing memory"))?;
-		assert!(at.distance(memory.course) <= off_course + 1e-3);
-		assert!(at.x > 0.0);
 		Ok(())
 	}
 

@@ -250,12 +250,7 @@ pub fn spawn_packs(
 			commands.entity(host).insert(PreySubject);
 		}
 		if recipe.kind == PackKind::Hunt {
-			install_prey_targeting(
-				commands,
-				host,
-				PreyTargetingIntelligence::hunt_herd(),
-				Vec3::new(recipe.at.x, 0.0, recipe.at.y),
-			);
+			install_prey_targeting(commands, host, PreyTargetingIntelligence::hunt_herd());
 		}
 		if recipe.journeys() {
 			stamp_journey(commands, host, id.0, recipe.journey_linger);
