@@ -5,6 +5,7 @@
 #
 # Looks for maybraid.exe in target/x86_64-pc-windows-msvc/release or
 # target/release. Does not sign (Authenticode is a later CA cert).
+# GitHub windows-latest has neither ditto nor zip; use Compress-Archive.
 
 set -euo pipefail
 
@@ -45,9 +46,23 @@ if command -v ditto >/dev/null; then
     ditto -c -k --keepParent "$OUT" "$ZIP"
 elif command -v zip >/dev/null; then
     (cd "$DIST" && zip -r "$(basename "$ZIP")" "$(basename "$OUT")")
+elif command -v powershell.exe >/dev/null; then
+    src="$OUT"
+    dest="$ZIP"
+    if command -v cygpath >/dev/null; then
+        src="$(cygpath -w "$OUT")"
+        dest="$(cygpath -w "$ZIP")"
+    fi
+    powershell.exe -NoProfile -Command \
+        "Compress-Archive -LiteralPath '${src}' -DestinationPath '${dest}' -Force"
 else
-    echo "No zip/ditto; left folder at $OUT" >&2
-    exit 0
+    echo "Need ditto, zip, or powershell.exe to write ${ZIP}" >&2
+    exit 1
+fi
+
+if [[ ! -f "$ZIP" ]]; then
+    echo "Archive was not created: $ZIP" >&2
+    exit 1
 fi
 
 echo
