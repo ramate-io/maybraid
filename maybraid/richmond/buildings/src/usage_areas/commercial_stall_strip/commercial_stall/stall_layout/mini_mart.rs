@@ -42,11 +42,11 @@ pub const MINI_MART_SHELF_ALONG_MIN: f32 = 0.75;
 /// Default place-rate for optional wall shelves.
 pub const MINI_MART_SHELF_PLACE_RATE: f32 = 0.55;
 /// Office door along-width range.
-pub const MINI_MART_DOOR_WIDTH_MIN: f32 = 0.9;
-pub const MINI_MART_DOOR_WIDTH_MAX: f32 = 1.2;
+pub const MINI_MART_DOOR_WIDTH_MIN: f32 = 0.9 * crate::usage_areas::plan_access::DOOR_SIZE_SCALE;
+pub const MINI_MART_DOOR_WIDTH_MAX: f32 = 1.2 * crate::usage_areas::plan_access::DOOR_SIZE_SCALE;
 /// Office door clear opening height (leaves a header to the ceiling when host is taller).
-pub const MINI_MART_DOOR_HEIGHT_MIN: f32 = 2.0;
-pub const MINI_MART_DOOR_HEIGHT_MAX: f32 = 2.4;
+pub const MINI_MART_DOOR_HEIGHT_MIN: f32 = 2.0 * crate::usage_areas::plan_access::DOOR_SIZE_SCALE;
+pub const MINI_MART_DOOR_HEIGHT_MAX: f32 = 2.4 * crate::usage_areas::plan_access::DOOR_SIZE_SCALE;
 /// Minimum header band above the office door.
 pub const MINI_MART_DOOR_HEADER_MIN: f32 = 0.25;
 /// Minimum office face contact when seeding.

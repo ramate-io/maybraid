@@ -6,6 +6,8 @@ use crate::usage_areas::livable_quarters::ResidentialBathroom;
 use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
 use procedural_common::{aabb3_to_plan, PlanAxes};
+use richmond_building_components::furniture::FurnitureAbutment;
+use richmond_building_components::FurnitureGeometry;
 
 fn roomy_south() -> Confines {
 	let mut openings = Openings::new();
@@ -231,6 +233,17 @@ fn common_bedroom_bed_against_wall_prefers_host_edge() {
 		|| (bed.min.y - host.min.y).abs() < EPS
 		|| (bed.max.y - host.max.y).abs() < EPS;
 	assert!(against, "bed_against_wall did not flush bed to a host wall");
+
+	let packed_bed = plan.packed.beds[0];
+	let expected = FurnitureAbutment::from_flush(&packed_bed, &confines.bounds)
+		.expect("packed bed still flushes the host");
+	let room = CommonBedroom::from_plan(plan, &confines);
+	let slot = &room.beds[0].furniture;
+	assert_eq!(slot.geometry, FurnitureGeometry::Bed);
+	let abutment = slot.abutment.expect("wall-flush bed should stamp abutment");
+	assert_eq!(abutment, expected);
+	assert!((slot.placement.yaw - abutment.facing_yaw()).abs() < 1e-5);
+	assert_ne!(slot.finish_seed, 0);
 }
 
 #[test]

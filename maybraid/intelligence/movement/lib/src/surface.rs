@@ -39,20 +39,30 @@ impl CandidateBudget {
 
 	/// Objective- and distance-scale a clamped budget.
 	///
-	/// `Reach` is a routing hop / POI snap: one candidate, no detours.
-	/// `VantageOn` / `FleeFrom` keep the fan nearby and collapse when far.
+	/// `Reach` / `EdgeOf` keep one (or a small) candidate set and allow walk
+	/// detours unless the mover is already on the disk. Viewer [`Self::clamp_viewer`]
+	/// still snaps Far. `VantageOn` / `FleeFrom` keep the fan nearby and collapse
+	/// when far.
 	pub fn lod_for(self, from: Vec3, objective: MovementObjective) -> Self {
-		let goal = objective.location().point;
-		let dist = Vec2::new(from.x - goal.x, from.z - goal.z).length();
+		let location = objective.location();
+		let dist = Vec2::new(from.x - location.point.x, from.z - location.point.z).length();
 		match objective {
-			MovementObjective::Reach(_) => {
-				Self { max_candidates: 1, max_steps: 1, horizon: self.horizon }
+			MovementObjective::Reach(location) => {
+				let arrived = dist <= location.radius;
+				Self {
+					max_candidates: 1,
+					max_steps: if arrived { 1 } else { self.max_steps.max(2) },
+					horizon: self.horizon,
+				}
 			}
-			MovementObjective::EdgeOf(_) => Self {
-				max_candidates: self.max_candidates.min(4),
-				max_steps: 1,
-				horizon: self.horizon,
-			},
+			MovementObjective::EdgeOf(location) => {
+				let on_ring = (dist - location.radius).abs() <= 0.2;
+				Self {
+					max_candidates: self.max_candidates.min(4),
+					max_steps: if on_ring { 1 } else { self.max_steps.max(2) },
+					horizon: self.horizon,
+				}
+			}
 			MovementObjective::FleeFrom(_) | MovementObjective::VantageOn { .. } => {
 				if dist >= Self::FAR_M {
 					Self { max_candidates: 1, max_steps: 1, horizon: self.horizon }
@@ -221,14 +231,41 @@ mod tests {
 	}
 
 	#[test]
-	fn reach_lod_is_one_snap() -> anyhow::Result<()> {
+	fn reach_lod_keeps_detours_until_the_disk() -> anyhow::Result<()> {
 		let full = CandidateBudget { max_candidates: 8, max_steps: 3, horizon: 28.0 };
-		let reach = full.lod_for(
+		let away = full.lod_for(
 			Vec3::ZERO,
 			MovementObjective::Reach(MovementLocation::new(Vec3::X * 20.0, 1.0)),
 		);
-		anyhow::ensure!(reach.max_candidates == 1);
-		anyhow::ensure!(reach.max_steps == 1);
+		anyhow::ensure!(away.max_candidates == 1);
+		anyhow::ensure!(away.max_steps >= 2);
+		let arrived = full.lod_for(
+			Vec3::X * 0.4,
+			MovementObjective::Reach(MovementLocation::new(Vec3::ZERO, 1.0)),
+		);
+		anyhow::ensure!(arrived.max_steps == 1);
+		let mid = away.clamp_viewer(IntelligenceBand::Mid);
+		anyhow::ensure!(mid.max_steps == 2);
+		let far = away.clamp_viewer(IntelligenceBand::Far);
+		anyhow::ensure!(far.max_candidates == 1);
+		anyhow::ensure!(far.max_steps == 1);
+		Ok(())
+	}
+
+	#[test]
+	fn edge_of_lod_keeps_detours_off_the_ring() -> anyhow::Result<()> {
+		let full = CandidateBudget { max_candidates: 8, max_steps: 3, horizon: 28.0 };
+		let away = full.lod_for(
+			Vec3::ZERO,
+			MovementObjective::EdgeOf(MovementLocation::new(Vec3::X * 20.0, 8.0)),
+		);
+		anyhow::ensure!(away.max_candidates == 4);
+		anyhow::ensure!(away.max_steps >= 2);
+		let on_ring = full.lod_for(
+			Vec3::X * 8.0,
+			MovementObjective::EdgeOf(MovementLocation::new(Vec3::ZERO, 8.0)),
+		);
+		anyhow::ensure!(on_ring.max_steps == 1);
 		Ok(())
 	}
 

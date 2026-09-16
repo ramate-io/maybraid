@@ -9,6 +9,8 @@ use lod::lod_ref::LodRef;
 use lod::SceneChunk;
 
 use crate::assets::stairs::rough_stonework::TREAD;
+use crate::kit_merge::with_optional_material;
+use crate::layer::Layers;
 use crate::lod_band::placement_bounds;
 use crate::parent_confines::{confined_scene, ParentConfines};
 use crate::placed::Placement;
@@ -17,8 +19,12 @@ use crate::stairs::geometry::StairGeometry;
 use crate::stairs::style::StairStyle;
 use crate::stairs::tessellate::StairKit;
 use crate::stairs::{RoughStoneSpiralStair, RoughStoneStraightStair, WoodStraightStair};
+use material_ref::MaterialRef;
 
 /// Authoring IR for a stair feature.
+///
+/// [`Self::style`] picks the kit GLB path. [`Self::material`] is an optional
+/// shader look ([`MaterialRef`]) stamped onto that kit after spawn.
 #[derive(Debug, Clone, PartialEq, Component, Default)]
 pub struct StairNode {
 	pub style: StairStyle,
@@ -26,11 +32,12 @@ pub struct StairNode {
 	pub placement: Placement,
 	/// External silhouette vs internal detail gating.
 	pub confines: ParentConfines,
+	pub material: Option<MaterialRef>,
 }
 
 impl StairNode {
 	pub fn new(style: StairStyle, geometry: StairGeometry, placement: Placement) -> Self {
-		Self { style, geometry, placement, confines: ParentConfines::External }
+		Self { style, geometry, placement, confines: ParentConfines::External, material: None }
 	}
 
 	pub fn rough_stone(geometry: StairGeometry, placement: Placement) -> Self {
@@ -39,6 +46,11 @@ impl StairNode {
 
 	pub fn wood(geometry: StairGeometry, placement: Placement) -> Self {
 		Self::new(StairStyle::Wood, geometry, placement)
+	}
+
+	pub fn with_material(mut self, material: MaterialRef) -> Self {
+		self.material = Some(material);
+		self
 	}
 
 	pub fn with_confines(mut self, confines: ParentConfines) -> Self {
@@ -180,7 +192,10 @@ impl LodScene for StairNode {
 				}
 			})
 			.collect();
-		confined_scene(self.confines, scene_children(children))
+		with_optional_material(
+			confined_scene(self.confines, scene_children(children)),
+			self.material.clone(),
+		)
 	}
 
 	fn scene_chunks_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> SceneChunk {
@@ -192,9 +207,30 @@ impl LodScene for StairNode {
 	}
 }
 
+impl Layers<StairNode> {
+	/// Stamp a shader look onto every stair, leaving kit [`StairStyle`] unchanged.
+	pub fn with_material(self, material: MaterialRef) -> Self {
+		self.map(|node| node.with_material(material.clone()))
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	#[test]
+	fn with_material_stamps_ref_without_changing_style() {
+		let node = StairNode::rough_stone(
+			StairGeometry::straight_run(1.8, 3.6, 0.8, 0.36),
+			Placement::new(Vec3::ZERO, 0.0),
+		)
+		.with_material(MaterialRef::named("stucco"));
+		assert_eq!(node.style, StairStyle::RoughStonework);
+		assert_eq!(
+			node.material.as_ref().map(|m| &m.name),
+			Some(&material_ref::MaterialId::named("stucco"))
+		);
+	}
 
 	#[test]
 	fn straight_ramp_is_one_slab_along_the_flight() -> anyhow::Result<()> {

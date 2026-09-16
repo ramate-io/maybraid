@@ -62,10 +62,12 @@ impl CanopyProxySite {
 /// Tile High / Medium / Low on the 100 m grove half-extent (radius 50 m).
 ///
 /// Factors are doubled from metre targets so `factor × 50 m` matches:
-/// short 300 / 700 / 1000, mid-height 400 / 700 / 1000, tall 500 / 700 / 1200.
-pub const GROVE_TILE_BANDS_SHORT: (f32, f32, f32) = (6.0, 14.0, 20.0);
-pub const GROVE_TILE_BANDS_MID: (f32, f32, f32) = (8.0, 14.0, 20.0);
-pub const GROVE_TILE_BANDS_TALL: (f32, f32, f32) = (10.0, 14.0, 24.0);
+/// short 300 / 400 / 1000, mid-height 400 / 500 / 1000, tall 500 / 600 / 1200.
+/// Medium is pulled in so tiles proxy (Low) sooner — fewer High/Medium nest tiles
+/// ([#824](https://github.com/ramate-io/maybraid/issues/824)).
+pub const GROVE_TILE_BANDS_SHORT: (f32, f32, f32) = (6.0, 8.0, 20.0);
+pub const GROVE_TILE_BANDS_MID: (f32, f32, f32) = (8.0, 10.0, 20.0);
+pub const GROVE_TILE_BANDS_TALL: (f32, f32, f32) = (10.0, 12.0, 24.0);
 
 /// Tile High / Medium / Low for a default 100 m grove ([`DEFAULT_GROVE_EXTENT_XZ`]).
 pub fn grove_bands_for_typical_height(typical_height_m: f32) -> (f32, f32, f32) {
@@ -663,7 +665,7 @@ mod tests {
 			GROVE_TILE_BANDS_MID
 		);
 		assert_eq!(grove_bands_for_typical_height(20.0), GROVE_TILE_BANDS_SHORT);
-		assert_eq!(grove_bands_for_typical_height(180.0).1, 14.0);
+		assert_eq!(grove_bands_for_typical_height(180.0).1, 12.0);
 	}
 
 	#[test]

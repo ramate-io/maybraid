@@ -24,10 +24,10 @@ pub const PARTS_OFFICE_MIN: f32 = 2.0;
 pub const PARTS_OFFICE_CONTACT: f32 = 2.0;
 pub const PARTS_REGION_MIN: f32 = 2.0;
 pub const PARTS_REGION_EXTRA_MIN: f32 = 1.5;
-pub const PARTS_DOOR_WIDTH_MIN: f32 = 0.9;
-pub const PARTS_DOOR_WIDTH_MAX: f32 = 1.2;
-pub const PARTS_DOOR_HEIGHT_MIN: f32 = 2.0;
-pub const PARTS_DOOR_HEIGHT_MAX: f32 = 2.4;
+pub const PARTS_DOOR_WIDTH_MIN: f32 = 0.9 * crate::usage_areas::plan_access::DOOR_SIZE_SCALE;
+pub const PARTS_DOOR_WIDTH_MAX: f32 = 1.2 * crate::usage_areas::plan_access::DOOR_SIZE_SCALE;
+pub const PARTS_DOOR_HEIGHT_MIN: f32 = 2.0 * crate::usage_areas::plan_access::DOOR_SIZE_SCALE;
+pub const PARTS_DOOR_HEIGHT_MAX: f32 = 2.4 * crate::usage_areas::plan_access::DOOR_SIZE_SCALE;
 pub const PARTS_DOOR_HEADER_MIN: f32 = 0.25;
 
 #[derive(Debug, Clone, PartialEq)]

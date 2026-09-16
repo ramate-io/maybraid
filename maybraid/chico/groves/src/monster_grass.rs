@@ -245,7 +245,7 @@ impl MonsterGrassCell {
 pub const MONSTER_GRASS_STRUCTURAL_HIGH_FACTOR: f32 = 6.0;
 #[cfg(feature = "render")]
 /// Structural Medium band (× footprint): ~¼ of High tufts (same blade geometry).
-pub const MONSTER_GRASS_STRUCTURAL_MEDIUM_FACTOR: f32 = 14.0;
+pub const MONSTER_GRASS_STRUCTURAL_MEDIUM_FACTOR: f32 = 8.0;
 #[cfg(feature = "render")]
 /// Structural Low band (× footprint): one upright proxy per ~8 placement cells; beyond → UltraLow.
 pub const MONSTER_GRASS_STRUCTURAL_LOW_FACTOR: f32 = 20.0;

@@ -218,7 +218,7 @@ use crate::grove::WoodyGroveLod;
 /// Typical large types ~160 m (northern / friends firs). `grove_bands_for_typical_height(160)`.
 pub const CONIFER_MASSIVES_STRUCTURAL_HIGH_FACTOR: f32 = 10.0;
 #[cfg(feature = "render")]
-pub const CONIFER_MASSIVES_STRUCTURAL_MEDIUM_FACTOR: f32 = 14.0;
+pub const CONIFER_MASSIVES_STRUCTURAL_MEDIUM_FACTOR: f32 = 12.0;
 #[cfg(feature = "render")]
 pub const CONIFER_MASSIVES_STRUCTURAL_LOW_FACTOR: f32 = 24.0;
 

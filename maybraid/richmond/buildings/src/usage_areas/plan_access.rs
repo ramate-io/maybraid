@@ -10,8 +10,23 @@ use procedural_common::aabb2_area;
 
 const EPS: f32 = 1e-3;
 
+/// Applied to authored door / passage leaf width and height.
+pub const DOOR_SIZE_SCALE: f32 = 1.25;
 /// Nominal authored door / passage face width (m) — residential default.
-pub const DOOR_WIDTH: f32 = 1.0;
+pub const DOOR_WIDTH: f32 = 1.0 * DOOR_SIZE_SCALE;
+/// Soft max for synthetic / edge door faces (m).
+pub const DOOR_WIDTH_MAX: f32 = 1.15 * DOOR_SIZE_SCALE;
+/// Nominal authored door leaf height (m).
+pub const DOOR_HEIGHT: f32 = 2.1 * DOOR_SIZE_SCALE;
+/// Floor when a storey is shorter than [`DOOR_HEIGHT`].
+pub const DOOR_HEIGHT_MIN: f32 = 1.9 * DOOR_SIZE_SCALE;
+/// Soft ceiling used when a storey is taller than a door.
+pub const DOOR_HEIGHT_SOFT_MAX: f32 = 2.15 * DOOR_SIZE_SCALE;
+
+/// Leaf height that fits `storey_height` without punching the header.
+pub fn door_leaf_height(storey_height: f32) -> f32 {
+	storey_height.min(DOOR_HEIGHT_SOFT_MAX).max(DOOR_HEIGHT_MIN.min(storey_height))
+}
 /// Minimum usable room edge (m) — residential default for plan scraps / RLA.
 pub const MIN_ROOM: f32 = 2.2;
 /// Default suite-join shared-edge length (m).

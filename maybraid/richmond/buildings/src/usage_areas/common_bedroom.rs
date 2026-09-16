@@ -27,7 +27,7 @@ use richmond_building_components::{BuildingComponents, LabelNode, LabelStyle, La
 use crate::fit::{Confines, FillRegion, FillableRegions, Fit, FitError, SpaceKind};
 use crate::paneling::Rectangle;
 use crate::placer::WalledRoomFill;
-use crate::usage_areas::furniture_util::placement_filling_aabb;
+use crate::usage_areas::furniture_util::furniture_fill;
 use crate::usage_areas::label_util::label_filling_aabb;
 use crate::usage_areas::livable_quarters::ResidentialBathroom;
 
@@ -139,58 +139,95 @@ impl std::ops::Deref for EnsuiteFill {
 impl CommonBedroom {
 	pub fn from_plan(plan: CommonBedroomPlan, confines: &Confines) -> Self {
 		let style = plan.parameterized.style;
+		let host = &confines.bounds;
 		let beds = plan
 			.packed
 			.beds
 			.iter()
-			.map(|aabb| BedFill {
-				label: label_filling_aabb(style, "Bed", aabb, confines.roll),
-				furniture: FurnitureNode::bed(placement_filling_aabb(aabb)),
+			.map(|aabb| {
+				let fill =
+					furniture_fill(style, "Bed", aabb, host, confines.roll, FurnitureNode::bed);
+				BedFill { label: fill.label, furniture: fill.furniture }
 			})
 			.collect();
 		let nightstands = plan
 			.packed
 			.nightstands
 			.iter()
-			.map(|aabb| NightstandFill {
-				label: label_filling_aabb(style, "Nightstand", aabb, confines.roll),
-				furniture: FurnitureNode::nightstand(placement_filling_aabb(aabb)),
+			.map(|aabb| {
+				let fill = furniture_fill(
+					style,
+					"Nightstand",
+					aabb,
+					host,
+					confines.roll,
+					FurnitureNode::nightstand,
+				);
+				NightstandFill { label: fill.label, furniture: fill.furniture }
 			})
 			.collect();
 		let small_bedroom_furniture = plan
 			.packed
 			.small_bedroom_furniture
 			.iter()
-			.map(|aabb| SmallBedroomFurnitureFill {
-				label: label_filling_aabb(style, "SmallBedroomFurniture", aabb, confines.roll),
-				furniture: FurnitureNode::nightstand(placement_filling_aabb(aabb)),
+			.map(|aabb| {
+				let fill = furniture_fill(
+					style,
+					"SmallBedroomFurniture",
+					aabb,
+					host,
+					confines.roll,
+					FurnitureNode::chest,
+				);
+				SmallBedroomFurnitureFill { label: fill.label, furniture: fill.furniture }
 			})
 			.collect();
 		let wardrobes = plan
 			.packed
 			.wardrobes
 			.iter()
-			.map(|aabb| WardrobeFill {
-				label: label_filling_aabb(style, "Wardrobe", aabb, confines.roll),
-				furniture: FurnitureNode::wardrobe(placement_filling_aabb(aabb)),
+			.map(|aabb| {
+				let fill = furniture_fill(
+					style,
+					"Wardrobe",
+					aabb,
+					host,
+					confines.roll,
+					FurnitureNode::wardrobe,
+				);
+				WardrobeFill { label: fill.label, furniture: fill.furniture }
 			})
 			.collect();
 		let dressers = plan
 			.packed
 			.dressers
 			.iter()
-			.map(|aabb| DresserFill {
-				label: label_filling_aabb(style, "Dresser", aabb, confines.roll),
-				furniture: FurnitureNode::dresser(placement_filling_aabb(aabb)),
+			.map(|aabb| {
+				let fill = furniture_fill(
+					style,
+					"Dresser",
+					aabb,
+					host,
+					confines.roll,
+					FurnitureNode::dresser,
+				);
+				DresserFill { label: fill.label, furniture: fill.furniture }
 			})
 			.collect();
 		let bedroom_furniture = plan
 			.packed
 			.bedroom_furniture
 			.iter()
-			.map(|aabb| BedroomFurnitureFill {
-				label: label_filling_aabb(style, "BedroomFurniture", aabb, confines.roll),
-				furniture: FurnitureNode::bedroom_furniture(placement_filling_aabb(aabb)),
+			.map(|aabb| {
+				let fill = furniture_fill(
+					style,
+					"BedroomFurniture",
+					aabb,
+					host,
+					confines.roll,
+					FurnitureNode::bedroom_furniture,
+				);
+				BedroomFurnitureFill { label: fill.label, furniture: fill.furniture }
 			})
 			.collect();
 

@@ -239,6 +239,30 @@ impl DevelopmentEntryStore {
 	pub fn development(&self, id: Id) -> Option<&BuiltDevelopment> {
 		self.developments.get(&id).map(|e| &e.value)
 	}
+
+	/// Built developments whose stored bounds overlap `region` on XZ.
+	pub fn developments_overlapping(&self, region: Aabb3d) -> Vec<&BuiltDevelopment> {
+		self.developments_overlapping_tracked(region)
+			.into_iter()
+			.map(|(_, _, development)| development)
+			.collect()
+	}
+
+	/// Overlapping developments with store id + version (furniture slot cache).
+	pub fn developments_overlapping_tracked(
+		&self,
+		region: Aabb3d,
+	) -> Vec<(Id, Version, &BuiltDevelopment)> {
+		self.developments
+			.iter()
+			.filter(|(_, entry)| bounds_overlap_xz(region, entry.bounds))
+			.map(|(id, entry)| (*id, entry.version, &entry.value))
+			.collect()
+	}
+}
+
+fn bounds_overlap_xz(a: Aabb3d, b: Aabb3d) -> bool {
+	a.min.x <= b.max.x && a.max.x >= b.min.x && a.min.z <= b.max.z && a.max.z >= b.min.z
 }
 
 const PAD_INDEX_CELL_XZ: f32 = 160.0;
@@ -453,5 +477,14 @@ mod tests {
 		assert_eq!(store.invalidate_dirty_padded(), 1);
 		assert!(!store.padded.contains_key(&Id::from_cell(changed_bounds)));
 		assert!(store.padded.contains_key(&Id::from_cell(distant_bounds)));
+	}
+
+	#[test]
+	fn development_overlap_is_xz_only() {
+		let terrain =
+			Aabb3d::from_min_max(Vec3::new(0.0, -200.0, 0.0), Vec3::new(100.0, -50.0, 100.0));
+		let sea = Aabb3d::from_min_max(Vec3::new(10.0, 0.0, 10.0), Vec3::new(20.0, 1.0, 20.0));
+		assert!(bounds_overlap_xz(terrain, sea));
+		assert!(!terrain.intersects(&sea));
 	}
 }

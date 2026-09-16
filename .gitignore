@@ -11,6 +11,7 @@ issues
 commits
 comments
 .nix-dev-profile*
+.nix-profile*
 dist
 packaging/*.local.md
 packaging/*.local.env

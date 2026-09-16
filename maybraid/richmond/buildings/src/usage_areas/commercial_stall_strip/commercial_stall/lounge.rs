@@ -7,9 +7,11 @@
 
 use lod::gen::LodSceneLevel;
 use procedural_common::NoiseParams;
+use richmond_building_components::furniture::FurnitureNode;
 use richmond_building_components::{BuildingComponents, LabelNode, LabelStyle, Layers};
 
 use crate::fit::{Confines, FillableRegions, Fit, FitError};
+use crate::usage_areas::furniture_util::{chairs_in_aabb, FurnitureFill};
 
 use super::label_util::label_filling_aabb;
 
@@ -17,12 +19,13 @@ use super::label_util::label_filling_aabb;
 #[derive(Debug, Clone, PartialEq)]
 pub struct Lounge {
 	pub stall_type: LabelNode,
+	pub seating: Vec<FurnitureFill>,
 }
 
 impl Fit for Lounge {
 	fn fit_to_confines(
 		confines: &Confines,
-		_noise: NoiseParams,
+		noise: NoiseParams,
 	) -> Result<(Self, FillableRegions), FitError> {
 		Ok((
 			Self {
@@ -32,6 +35,13 @@ impl Fit for Lounge {
 					&confines.bounds,
 					confines.roll,
 				),
+				seating: chairs_in_aabb(
+					&confines.bounds,
+					confines.roll,
+					noise,
+					LabelStyle::Gray,
+					"LoungeSeating",
+				),
 			},
 			FillableRegions::empty(),
 		))
@@ -40,7 +50,13 @@ impl Fit for Lounge {
 
 impl BuildingComponents for Lounge {
 	fn label_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<LabelNode> {
-		Layers::from_free(vec![self.stall_type.clone()])
+		let mut labels = vec![self.stall_type.clone()];
+		labels.extend(self.seating.iter().map(|fill| fill.label.clone()));
+		Layers::from_free(labels)
+	}
+
+	fn furniture_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<FurnitureNode> {
+		Layers::from_free(self.seating.iter().map(|fill| fill.furniture.clone()).collect())
 	}
 }
 
@@ -56,5 +72,17 @@ mod tests {
 			Confines::from_bounds(Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(0.5, 1.0, 0.5)));
 		let (lounge, _) = Lounge::fit_to_confines(&confines, NoiseParams::default()).unwrap();
 		assert_eq!(lounge.stall_type.text, "Lounge");
+		assert!(lounge.seating.is_empty());
+	}
+
+	#[test]
+	fn lounge_bay_gets_chairs() {
+		let confines =
+			Confines::from_bounds(Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(6.0, 3.2, 4.0)));
+		let (lounge, _) = Lounge::fit_to_confines(&confines, NoiseParams::default()).unwrap();
+		assert!(!lounge.seating.is_empty());
+		assert!(lounge.seating.iter().all(|fill| {
+			fill.furniture.geometry == richmond_building_components::FurnitureGeometry::Chair
+		}));
 	}
 }

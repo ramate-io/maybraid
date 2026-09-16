@@ -35,6 +35,7 @@ use bevy_math::bounding::Aabb3d;
 use bevy_math::{Vec2, Vec3};
 use lod::gen::LodSceneLevel;
 use procedural_common::{NoiseConfig, NoiseParams};
+use richmond_building_components::furniture::FurnitureNode;
 use richmond_building_components::panels::{PanelNode, PanelStyle};
 use richmond_building_components::{BuildingComponents, LabelNode, LabelStyle, Layers};
 
@@ -97,11 +98,13 @@ impl CommercialStallPlan {
 #[derive(Debug, Clone, PartialEq)]
 pub struct CommercialStall {
 	pub plan: CommercialStallPlan,
+	/// Bay the stall claimed — used to drop a residual chest in empty lounges.
+	pub confines: Confines,
 }
 
 impl CommercialStall {
-	pub fn from_plan(plan: CommercialStallPlan) -> Self {
-		Self { plan }
+	pub fn from_plan(plan: CommercialStallPlan, confines: Confines) -> Self {
+		Self { plan, confines }
 	}
 
 	pub fn interior(&self) -> &CommercialStallInterior {
@@ -116,7 +119,7 @@ impl Fit for CommercialStall {
 	) -> Result<(Self, FillableRegions), FitError> {
 		let params = CommercialStallParameterized::sample(confines, noise);
 		let (plan, regions) = CommercialStallPlan::from_parameterized(params, confines, noise)?;
-		Ok((Self::from_plan(plan), regions))
+		Ok((Self::from_plan(plan, confines.clone()), regions))
 	}
 }
 
@@ -132,6 +135,10 @@ impl BuildingComponents for CommercialStall {
 
 	fn label_nodes_for_level(&self, level: LodSceneLevel) -> Layers<LabelNode> {
 		self.plan.interior.label_nodes_for_level(level)
+	}
+
+	fn furniture_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FurnitureNode> {
+		self.plan.interior.furniture_nodes_for_level(level)
 	}
 }
 

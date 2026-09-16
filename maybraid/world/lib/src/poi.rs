@@ -207,7 +207,10 @@ fn queue_place(
 	let salience = place.salience.unwrap_or(place.label.default_salience());
 	state.pending_pois.push_back(PendingPoi {
 		target: PendingPoiTarget::Entity(entity),
-		poi: Poi::new(spatial_poi_id(INTERIOR_POI_SALT ^ place.label.salt(), translation), kind)
+		poi: Poi::new(
+			spatial_poi_id(INTERIOR_POI_SALT ^ place.label.salt() ^ entity.to_bits(), translation),
+			kind,
+		)
 			.with_arrival_radius(place.arrival_radius)
 			.with_salience(salience),
 		tier: PendingPoiTier::Local,
@@ -407,6 +410,18 @@ mod tests {
 		assert_ne!(
 			spatial_poi_id(INTERIOR_POI_SALT ^ DiscoverablePlaceLabel::House.salt(), at),
 			spatial_poi_id(INTERIOR_POI_SALT ^ DiscoverablePlaceLabel::Lounge.salt(), at)
+		);
+	}
+
+	#[test]
+	fn stacked_storeys_at_the_same_pose_get_distinct_interior_ids() {
+		let at = Vec3::new(20.0, 4.0, -8.0);
+		let salt = INTERIOR_POI_SALT ^ DiscoverablePlaceLabel::Storey.salt();
+		let first = Entity::from_bits(100);
+		let second = Entity::from_bits(200);
+		assert_ne!(
+			spatial_poi_id(salt ^ first.to_bits(), at),
+			spatial_poi_id(salt ^ second.to_bits(), at)
 		);
 	}
 

@@ -41,7 +41,7 @@ fn posed_kit(
 	with_optional_material(LodHostHelper::posed_scene_ref_tier(Some(scene), transform), material)
 }
 
-fn with_optional_material(
+pub(crate) fn with_optional_material(
 	scene: impl Scene + 'static,
 	material: Option<MaterialRef>,
 ) -> Box<dyn Scene> {

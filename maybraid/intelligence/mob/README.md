@@ -25,6 +25,7 @@ the app spawns the unparented body. See [ROSTER.md](ROSTER.md).
 - [`MobRoster`](src/roster.rs): personality spec, last pose, health, live `Entity`
 - [`Tether`](../tether) marker so members can leash / stalk the host
 - [`MobAffiliations`](src/roster.rs) and [`PoiInterests`](../poi): copied onto members at bind
+- [`MobKnowledge`](src/share.rs) + [`MobSharePolicy`](src/share.rs): pack-wide retained threat ids and semantic combat targets. Live High plants write first-hand findings up; the host fans missing ids down as `SHARED`. High cull keeps the board.
 - [`MobRespawn`](src/roster.rs): delay + replacement cap; corpses remain for four seconds by default, then death emits [`MobMemberNeeded`](src/roster.rs). Replacements use a weighted nearby POI, avoid immediately repeating one POI, and fall back to a 20–80 m ring around the host. Cull only clears the live pointer.
 - optional journey: [`install_mob_journeying`](src/host.rs) stamps [`RoutingIntelligenceUser`](../routing) so [`PoiGoal`](../poi) drives a coarse Fixed-layer corridor. [`MobTravel`](src/travel.rs) slides the host along those hops (including hop Y). Hosts are not [`movement_intelligence`](../movement/lib) users.
 - [`MobTetherLock`](src/lock.rs): after arrival, member tethers sit on the destination entity for the goal linger, then restore to the host. Combat/Evade still own NPC movement.
@@ -38,7 +39,8 @@ Live bodies carry [`MobSlot`](src/member.rs) and the host's [`MobId`](src/host.r
 High BSN stamps a [`RosterRef`](src/roster_ref.rs) stub instead of parenting the
 capsule. Fulfill spawns the body in world space; bind writes [`MemberOf`](src/member.rs)
 and `roster[slot].entity`. If the mixer is missing, it calls `Personality::install`
-with the host as tether subject.
+with the host as tether subject. A live board drains into the new plant as
+`SHARED` so culled-then-fulfilled mates re-enter an already alerted pack.
 
 The app spawns bodies. Journeying hosts plan corridors against Fixed colliders;
 this crate still does not spawn character controllers on the tether.

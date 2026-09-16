@@ -557,7 +557,11 @@ fn exterior_door(plan: &ILivableFloorPlan) -> Option<Opening> {
 		.iter()
 		.copied()
 		.map(|edge| {
-			let door = IFloor::edge_passage_opening(edge, 1.1, 2.15);
+			let door = IFloor::edge_passage_opening(
+				edge,
+				1.1 * richmond_buildings::DOOR_SIZE_SCALE,
+				2.15 * richmond_buildings::DOOR_SIZE_SCALE,
+			);
 			let overlaps = plan
 				.openings
 				.iter()

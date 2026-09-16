@@ -1,0 +1,97 @@
+//! Exploded kit pieces in unit-slot space.
+
+use material_ref::MaterialRef;
+use richmond_building_components::{AssetPath, Placement};
+
+use crate::assets;
+use crate::kit_space::{place_kit, BOX_KIT_TO_UNIT, LATCH_KIT_TO_UNIT, LEG_KIT_TO_UNIT};
+
+/// One kit piece: unit-slot slab + deferred paint.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PlacedPart {
+	pub kind: PartKind,
+	pub placement: Placement,
+	pub material: MaterialRef,
+}
+
+/// Authored furniture kit piece (matches `maybraid/art/furniture/`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum PartKind {
+	BedFrame,
+	Mattress,
+	Covers,
+	ChestTrunk,
+	ChestLid,
+	ChestLatch,
+	ChairLeg,
+	ChairSeat,
+	ChairBack,
+	CounterFooter,
+	CounterVolume,
+	CounterTop,
+}
+
+impl PartKind {
+	/// Destination GLB under `maybraid/assets`.
+	pub const fn asset_path(self) -> AssetPath {
+		match self {
+			Self::BedFrame => assets::BEDFRAME_001,
+			Self::Mattress => assets::MATTRESS_001,
+			Self::Covers => assets::COVERS_001,
+			Self::ChestTrunk => assets::CHEST_TRUNK_001,
+			Self::ChestLid => assets::CHEST_LID_001,
+			Self::ChestLatch => assets::CHEST_LATCH_001,
+			Self::ChairLeg => assets::CHAIR_LEG_001,
+			Self::ChairSeat => assets::CHAIR_SEAT_001,
+			Self::ChairBack => assets::CHAIR_BACK_001,
+			Self::CounterFooter => assets::COUNTER_FOOTER_001,
+			Self::CounterVolume => assets::COUNTER_VOLUME_001,
+			Self::CounterTop => assets::COUNTER_TOP_001,
+		}
+	}
+
+	/// Authored-kit → unit-slot map for this piece.
+	pub const fn kit_to_unit(self) -> Placement {
+		match self {
+			Self::ChairLeg => LEG_KIT_TO_UNIT,
+			Self::ChestLatch => LATCH_KIT_TO_UNIT,
+			_ => BOX_KIT_TO_UNIT,
+		}
+	}
+
+	/// Slot-local pose for this GLB: kit remap, then the unit-slot slab.
+	pub fn place_in_slot(self, slot: Placement, unit: Placement) -> Placement {
+		place_kit(slot, self.kit_to_unit(), unit)
+	}
+}
+
+/// Compose unit-slot parts under a stamped slot placement (yaw / scale / abutment).
+pub fn pose_parts(slot: Placement, parts: &[PlacedPart]) -> Vec<PlacedPart> {
+	parts
+		.iter()
+		.map(|part| PlacedPart {
+			kind: part.kind,
+			placement: part.kind.place_in_slot(slot, part.placement),
+			material: part.material.clone(),
+		})
+		.collect()
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn asset_paths_match_the_art_layout() -> anyhow::Result<()> {
+		if PartKind::Covers.asset_path().as_str() != "furniture/bed/covers/covers_001.glb" {
+			return Err(anyhow::anyhow!("covers path drifted from art/furniture"));
+		}
+		if PartKind::ChairLeg.asset_path().as_str() != "furniture/chair/legs/chair_leg_001.glb" {
+			return Err(anyhow::anyhow!("chair-leg path drifted from art/furniture"));
+		}
+		if PartKind::ChestLatch.asset_path().as_str() != "furniture/chest/latch/latch_001.glb" {
+			return Err(anyhow::anyhow!("latch path drifted from art/furniture"));
+		}
+		Ok(())
+	}
+}

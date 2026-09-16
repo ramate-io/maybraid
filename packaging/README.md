@@ -47,6 +47,16 @@ packaging/scripts/package-steamos.sh
 
 No OS code signing in these scripts. Archive provenance: [minisign/README.md](minisign/README.md).
 
+## CI
+
+[`.github/workflows/package.yml`](../.github/workflows/package.yml) packs unsigned
+builds on `main`, on a published GitHub Release, on `workflow_dispatch`, and
+when a commit message contains `ci-action::package`.
+
+`main` and token runs upload Actions artifacts (14 days). A published release
+attaches the same files to that GitHub Release. Version is
+`workspace.package.version` plus a short SHA, or the release tag.
+
 ## Overrides
 
 | Variable | Role |

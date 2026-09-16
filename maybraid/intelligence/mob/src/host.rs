@@ -7,6 +7,7 @@ use routing_intelligence::{RoutingIntelligenceUser, RoutingSettings};
 use tether_intelligence::Tether;
 
 use crate::roster::{MobAffiliations, MobInterests, MobRespawn, MobRoster, RosterMember};
+use crate::share::{MobKnowledge, MobSharePolicy};
 use crate::travel::MobTravel;
 
 const HOST_ROUTING_BANDS: [f32; 3] = [160.0, 80.0, 32.0];
@@ -101,6 +102,8 @@ pub fn install_mob(commands: &mut Commands, host: Entity, install: MobInstall) {
 		install.affiliations,
 		install.respawn,
 		MobInterests(interests.clone()),
+		MobKnowledge::default(),
+		MobSharePolicy::on(),
 		Tether,
 	));
 	if let Some(travel) = install.travel {

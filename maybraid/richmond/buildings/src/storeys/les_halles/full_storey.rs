@@ -6,6 +6,7 @@
 
 use lod::gen::LodSceneLevel;
 use procedural_common::NoiseParams;
+use richmond_building_components::furniture::FurnitureNode;
 use richmond_building_components::joints::JointNode;
 use richmond_building_components::labels::LabelNode;
 use richmond_building_components::panels::PanelNode;
@@ -63,6 +64,10 @@ impl BuildingComponents for LesHallesFullStorey {
 		self.floor_plan.joint_nodes_for_level(level)
 	}
 
+	fn furniture_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FurnitureNode> {
+		self.usage.furniture_nodes_for_level(level)
+	}
+
 	fn label_nodes_for_level(&self, level: LodSceneLevel) -> Layers<LabelNode> {
 		self.usage.label_nodes_for_level(level)
 	}
@@ -98,5 +103,48 @@ mod tests {
 		assert!(!storey.label_nodes_for_level(LodSceneLevel::High).flatten().is_empty());
 		let panels = storey.panel_nodes_for_level(LodSceneLevel::High);
 		assert!(!panels.is_empty());
+	}
+
+	#[test]
+	fn lounge_or_leftover_gallery_gets_a_chest() {
+		let leftover = Confines::from_bounds(Aabb3d::from_min_max(
+			Vec3::new(0.0, 0.0, 0.0),
+			Vec3::new(6.0, 3.2, 4.0),
+		));
+		let regions = crate::fit::FillableRegions {
+			within: vec![crate::fit::FillRegion::new(SpaceKind::ExternalSpace, leftover)],
+			atop: Vec::new(),
+		};
+		let (usage, _) = LesHallesCommercialUsage::paint(regions, NoiseParams::default()).unwrap();
+		assert!(!usage.stall_strips.is_empty() || !usage.residual_chests.is_empty());
+		assert!(
+			!usage.furniture_nodes_for_level(LodSceneLevel::High).flatten().is_empty(),
+			"gallery leftover should get stall counters / chairs or a residual chest"
+		);
+	}
+
+	#[test]
+	fn leftover_walkways_allocate_occasional_chests() {
+		let walk =
+			Confines::from_bounds(Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(6.0, 3.0, 4.0)));
+		let regions = crate::fit::FillableRegions {
+			within: vec![crate::fit::FillRegion::new(SpaceKind::Walkway, walk)],
+			atop: Vec::new(),
+		};
+		let mut any = false;
+		for seed in 0..24 {
+			let (usage, _) = LesHallesCommercialUsage::paint(
+				regions.clone(),
+				NoiseParams { seed, ..NoiseParams::default() },
+			)
+			.unwrap();
+			if usage.residual_chests.iter().any(|fill| {
+				fill.furniture.geometry == richmond_building_components::FurnitureGeometry::Chest
+			}) {
+				any = true;
+				break;
+			}
+		}
+		assert!(any, "walkway residuals should feed occasional chests into generate");
 	}
 }

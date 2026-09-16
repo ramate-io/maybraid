@@ -9,8 +9,8 @@
 //! stall uniquely owns ≥1 passage; runs that cannot host their own stall
 //! (including leading/trailing corner overhangs past the last door, or a
 //! `TooSmall` bay) are absorbed by extending the previous stall’s bounds.
-//! Soft-fail the whole strip if it is shorter than the minimum along length
-//! or has no passages.
+//! Soft-fail the whole strip if it is shorter than the minimum along length.
+//! A strip with no passages still gets one lounge stall so the bay is not a void.
 
 pub mod commercial_stall;
 
@@ -19,6 +19,7 @@ use bevy_math::Vec2;
 use bevy_math::Vec3;
 use lod::gen::LodSceneLevel;
 use procedural_common::{NoiseConfig, NoiseParams};
+use richmond_building_components::furniture::FurnitureNode;
 use richmond_building_components::panels::PanelNode;
 use richmond_building_components::{BuildingComponents, LabelNode, Layers};
 
@@ -82,7 +83,8 @@ impl CommercialStallStripPlan {
 
 		let passages = collect_passages_along(&confines.openings, along_x, min, along);
 		if passages.is_empty() {
-			return Err(FitError::TooSmall { reason: "no passage" });
+			let (stall, _) = CommercialStall::fit_to_confines(confines, noise)?;
+			return Ok(Self { parameterized: params, stalls: vec![stall] });
 		}
 
 		let min_bay = params.bay_width.clamp(MIN_STALL_ALONG, along.max(MIN_STALL_ALONG));
@@ -375,6 +377,14 @@ impl BuildingComponents for CommercialStallStrip {
 		}
 		out
 	}
+
+	fn furniture_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FurnitureNode> {
+		let mut out = Layers::new();
+		for stall in &self.plan.stalls {
+			out.extend(stall.furniture_nodes_for_level(level));
+		}
+		out
+	}
 }
 
 #[cfg(test)]
@@ -456,12 +466,21 @@ mod tests {
 	}
 
 	#[test]
-	fn without_passage_strip_fails() {
+	fn without_passage_strip_gets_a_lounge() {
 		let confines =
 			Confines::from_bounds(Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(12.0, 3.5, 5.0)));
-		let err =
-			CommercialStallStrip::fit_to_confines(&confines, NoiseParams::default()).unwrap_err();
-		assert!(matches!(err, FitError::TooSmall { reason } if reason.contains("passage")));
+		let (strip, _) =
+			CommercialStallStrip::fit_to_confines(&confines, NoiseParams::default()).unwrap();
+		assert_eq!(strip.stalls().len(), 1);
+		assert!(!strip.label_nodes_for_level(LodSceneLevel::High).flatten().is_empty());
+		assert!(
+			strip
+				.furniture_nodes_for_level(LodSceneLevel::High)
+				.flatten()
+				.iter()
+				.any(|node| node.geometry == richmond_building_components::FurnitureGeometry::Chair),
+			"lounge sitting should reach the strip chair collection"
+		);
 	}
 
 	#[test]

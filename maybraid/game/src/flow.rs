@@ -28,6 +28,7 @@ pub enum WorldPause {
 pub enum HomeRoute {
 	World { label: &'static str },
 	Characters,
+	Settings,
 	Unimplemented,
 }
 
@@ -36,9 +37,8 @@ impl HomeRoute {
 		match choice {
 			HomeMenuChoice::Discovery => Self::World { label: choice.label() },
 			HomeMenuChoice::Characters => Self::Characters,
-			HomeMenuChoice::Reliquary
-			| HomeMenuChoice::TrainingGround
-			| HomeMenuChoice::Settings => Self::Unimplemented,
+			HomeMenuChoice::Settings => Self::Settings,
+			HomeMenuChoice::Reliquary | HomeMenuChoice::TrainingGround => Self::Unimplemented,
 		}
 	}
 }
@@ -86,12 +86,16 @@ mod tests {
 	}
 
 	#[test]
-	fn training_and_settings_stay_on_home() {
+	fn training_stays_on_home() {
 		assert_eq!(
 			HomeRoute::from_choice(HomeMenuChoice::TrainingGround),
 			HomeRoute::Unimplemented
 		);
-		assert_eq!(HomeRoute::from_choice(HomeMenuChoice::Settings), HomeRoute::Unimplemented);
+	}
+
+	#[test]
+	fn settings_opens_the_shared_settings_screen() {
+		assert_eq!(HomeRoute::from_choice(HomeMenuChoice::Settings), HomeRoute::Settings);
 	}
 
 	#[test]
