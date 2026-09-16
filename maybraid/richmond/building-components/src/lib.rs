@@ -378,7 +378,6 @@ enum FlattenedKit {
 	Joint(JointNode),
 	Stair(StairNode),
 	Door(DoorNode),
-	Label(LabelNode),
 }
 
 impl FlattenedKit {
@@ -391,7 +390,6 @@ impl FlattenedKit {
 			Self::Joint(node) => Box::new(node.scene_with_level(lod_ref, level)),
 			Self::Stair(node) => Box::new(node.scene_with_level(lod_ref, level)),
 			Self::Door(node) => Box::new(node.scene_with_level(lod_ref, level)),
-			Self::Label(node) => Box::new(node.scene_with_level(lod_ref, level)),
 		}
 	}
 }
@@ -433,7 +431,7 @@ fn flattened_kits(building: &impl BuildingComponents, level: LodSceneLevel) -> V
 			.into_iter()
 			.map(FlattenedKit::Joint),
 	);
-	// Circulation stays readable on Medium. Labels are High-only.
+	// Circulation stays readable on Medium.
 	// Furniture presents on a separate 50 m host neighborhood, not this tree.
 	if matches!(level, LodSceneLevel::High | LodSceneLevel::Medium) {
 		kits.extend(
@@ -451,15 +449,7 @@ fn flattened_kits(building: &impl BuildingComponents, level: LodSceneLevel) -> V
 				.map(FlattenedKit::Door),
 		);
 	}
-	if matches!(level, LodSceneLevel::High) {
-		kits.extend(
-			building
-				.label_nodes_for_level(level)
-				.flatten()
-				.into_iter()
-				.map(FlattenedKit::Label),
-		);
-	}
+	// Label IR stays on the building for packers / tests. It is not drawn.
 	kits
 }
 
@@ -521,7 +511,6 @@ pub fn append_component_scenes(
 			FlattenedKit::Joint(node) => children.push(Box::new(node.host(lod_ref))),
 			FlattenedKit::Stair(node) => children.push(Box::new(node.host(lod_ref))),
 			FlattenedKit::Door(node) => children.push(Box::new(node.host(lod_ref))),
-			FlattenedKit::Label(node) => children.push(Box::new(node.host(lod_ref))),
 		}
 	}
 }

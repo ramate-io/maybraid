@@ -11,7 +11,6 @@
 mod camera;
 pub mod commands;
 mod control;
-mod furniture_hud;
 mod intelligence;
 mod material_lib;
 mod mobs;
@@ -243,10 +242,6 @@ impl Plugin for WorldPlugin {
 				ui::sync_mob_debug_pins.run_if(resource_equals(WorldMobHudEnabled(true))),
 				ui::draw_mob_debug_gizmos.run_if(resource_equals(WorldMobHudEnabled(true))),
 				ui::draw_npc_behavior_gizmos.run_if(resource_equals(WorldMobHudEnabled(true))),
-				furniture_hud::sync_furniture_debug_pins
-					.run_if(resource_equals(WorldMobHudEnabled(true))),
-				furniture_hud::draw_furniture_debug_gizmos
-					.run_if(resource_equals(WorldMobHudEnabled(true))),
 			),
 		);
 		if self.debug_chrome {

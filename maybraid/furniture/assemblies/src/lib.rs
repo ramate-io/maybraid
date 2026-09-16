@@ -15,6 +15,7 @@ pub mod bread;
 pub mod cell;
 pub mod chair;
 pub mod chest;
+pub mod colliders;
 pub mod cookware;
 pub mod counter;
 pub mod faucet;
@@ -41,6 +42,7 @@ pub use cell::{
 	FurnitureCellExtent, FURNITURE_CELL_SIZE, FURNITURE_GENERATE_RADIUS, FURNITURE_PRESENT_RADIUS,
 };
 pub use chair::{Chair, ChairParams};
+pub use colliders::{FurnitureWalkCollider, FurnitureWalkColliderPlugin};
 pub use chest::{Chest, ChestParams};
 pub use cookware::{Cookware, CookwareParams};
 pub use counter::{Counter, CounterParams};
