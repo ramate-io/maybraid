@@ -32,11 +32,27 @@ impl Default for DomeSettings {
 	}
 }
 
+/// Inner XZ haze. Vertex RGB stays white so [`apply_sky_mood`] can tint it.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct SkyWash;
+
 impl DomeSettings {
+	/// Opaque inverted shell. The field shader paints direction from local pos.
+	pub(crate) fn shell_mesh(self, radius: f32) -> Mesh {
+		self.sphere_mesh(radius, |_, _, _| [1.0, 1.0, 1.0, 1.0])
+	}
+
 	pub(crate) fn fade_sphere(self) -> Mesh {
+		let radius = self.sphere_radius_m;
+		self.sphere_mesh(radius, |x, y, z| {
+			let [_, _, _, alpha] = self.vertex_rgba(x, y, z);
+			[1.0, 1.0, 1.0, alpha]
+		})
+	}
+
+	fn sphere_mesh(self, radius: f32, mut rgba: impl FnMut(f32, f32, f32) -> [f32; 4]) -> Mesh {
 		let rings = 48u32;
 		let segs = 64u32;
-		let radius = self.sphere_radius_m;
 
 		let mut positions = Vec::new();
 		let mut normals = Vec::new();
@@ -56,7 +72,7 @@ impl DomeSettings {
 				positions.push([x, y, z]);
 				let len = (x * x + y * y + z * z).sqrt().max(1e-5);
 				normals.push([-x / len, -y / len, -z / len]);
-				colors.push(self.vertex_rgba(x, y, z));
+				colors.push(rgba(x, y, z));
 			}
 		}
 
@@ -120,7 +136,7 @@ fn lerp_linear(a: LinearRgba, b: LinearRgba, t: f32) -> LinearRgba {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::{DEFAULT_MAX_ALPHA, SKY_HORIZON};
+	use crate::{DEFAULT_MAX_ALPHA, SKY_HORIZON, SKY_ZENITH};
 
 	fn mesh_colors(mesh: &Mesh) -> anyhow::Result<&[[f32; 4]]> {
 		let values =
@@ -146,20 +162,20 @@ mod tests {
 		let bevy::mesh::VertexAttributeValues::Float32x3(positions) = positions else {
 			return Err(anyhow::anyhow!("expected xyz positions"));
 		};
-		let horizon = SKY_HORIZON.to_linear();
 		let mut saw_horizon = false;
 		for (pos, color) in positions.iter().zip(colors.iter()) {
 			let y = pos[1];
 			let xz = (pos[0] * pos[0] + pos[2] * pos[2]).sqrt();
 			if y.abs() < 80.0 && xz > 1_000.0 {
-				let dr = (color[0] - horizon.red).abs();
-				let dg = (color[1] - horizon.green).abs();
-				let db = (color[2] - horizon.blue).abs();
-				assert!(dr + dg + db < 0.12, "horizon vertex should match SKY_HORIZON");
+				assert!(color[3] > 0.15, "horizon wash should be visible");
 				saw_horizon = true;
 			}
 		}
 		assert!(saw_horizon, "expected a horizon-band vertex");
+		let horizon = SKY_HORIZON.to_linear();
+		let zenith = SKY_ZENITH.to_linear();
+		assert!(horizon.red > zenith.red, "horizon stays warmer than zenith");
+		assert!(zenith.blue > horizon.blue, "zenith stays cooler than horizon");
 		Ok(())
 	}
 }

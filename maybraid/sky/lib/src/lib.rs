@@ -1,22 +1,33 @@
-//! Distance-fade sky dome. An inverted sphere follows the camera so far
-//! terrain and forest wash toward a late-afternoon horizon. This is an
-//! aesthetic mask, not a cull clock.
+//! Distance-fade sky dome plus an outer Cosimo-like field.
+//!
+//! The inner sphere is an XZ wash, not a cull clock. The outer field owns
+//! zenith color, swirls, and stars. [`SkyClock`] drives palette and key pose.
 
+mod apply;
 mod celestial;
+mod clock;
 mod dome;
+mod field;
 mod shadows;
 
 use bevy::prelude::*;
 use std::f32::consts::PI;
 
+use apply::apply_sky_mood;
 use celestial::spawn_sky_celestial;
 use dome::DomeSettings;
+use field::{spawn_sky_field, SkyFieldMaterialPlugin};
 
 pub use celestial::{
-	SkyMoon, SkyStars, SkySunDisk, CELESTIAL_DISTANCE_FACTOR, MOON_COLOR, MOON_LIFT, MOON_RADIUS_M,
-	MOON_YAW_OFFSET, STAR_COLOR, STAR_COUNT, SUN_CORONA_COLOR, SUN_CORONA_RADIUS_M, SUN_DISK_COLOR,
-	SUN_DISK_RADIUS_M,
+	SkyFill, SkyMoon, SkySunDisk, CELESTIAL_DISTANCE_FACTOR, MOON_COLOR, MOON_LIFT, MOON_RADIUS_M,
+	MOON_YAW_OFFSET, SUN_CORONA_COLOR, SUN_CORONA_RADIUS_M, SUN_DISK_COLOR, SUN_DISK_RADIUS_M,
 };
+pub use clock::{
+	SkyClock, SkyCommand, SkyMood, DEFAULT_SKY_PERIOD_SECS, SKY_PHASE_DAWN, SKY_PHASE_DUSK,
+	SKY_PHASE_GOLDEN, SKY_PHASE_MORNING, SKY_PHASE_NIGHT, SKY_PHASE_NOON,
+};
+pub use dome::SkyWash;
+pub use field::{SkyField, SkyFieldMaterial, FIELD_RADIUS_FACTOR};
 pub use shadows::{ShadowQuality, SkySun};
 
 /// Start a light haze at this XZ radius (m).
@@ -28,14 +39,14 @@ pub const DEFAULT_SPHERE_RADIUS_M: f32 = 2_800.0;
 /// Peak wash. Stay well under 1 so ridges are not cut out by an opaque band.
 pub const DEFAULT_MAX_ALPHA: f32 = 0.32;
 
-/// Cooler, less saturated overhead. Vertex color near zenith.
-pub const SKY_ZENITH: Color = Color::hsla(214.0, 0.18, 0.52, 1.0);
+/// Cooler overhead. More chroma than the old dusty pale.
+pub const SKY_ZENITH: Color = Color::hsla(210.0, 0.42, 0.58, 1.0);
 /// Warm peach / wheat wash at the horizon band.
-pub const SKY_HORIZON: Color = Color::hsla(34.0, 0.55, 0.72, 1.0);
+pub const SKY_HORIZON: Color = Color::hsla(36.0, 0.62, 0.70, 1.0);
 /// Darker below-horizon ring so the shell does not glow under the camera.
-pub const SKY_NADIR: Color = Color::hsla(26.0, 0.22, 0.28, 1.0);
-/// Late-afternoon clear (the overhead hole). Not the old cyan.
-pub const SKY_CLEAR: Color = Color::hsla(48.0, 0.16, 0.80, 1.0);
+pub const SKY_NADIR: Color = Color::hsla(26.0, 0.28, 0.22, 1.0);
+/// Late-afternoon clear / hole fallback. Not the old cyan, not dust.
+pub const SKY_CLEAR: Color = Color::hsla(208.0, 0.38, 0.64, 1.0);
 /// Playground alias for [`SKY_CLEAR`].
 pub const SKY_BLUE: Color = SKY_CLEAR;
 
@@ -49,7 +60,7 @@ pub const FILL_ILLUMINANCE: f32 = 1_600.0;
 /// Lifted so Off-shadow tree wells do not go black.
 pub const AMBIENT_BRIGHTNESS: f32 = 620.0;
 
-/// Existing Discovery key pose (pitch / yaw). Not a clock.
+/// Existing Discovery key pose (pitch / yaw). Golden-hour default.
 pub const SUN_PITCH: f32 = -PI / 4.0;
 pub const SUN_YAW: f32 = PI / 4.0;
 
@@ -90,20 +101,23 @@ impl Plugin for SkyDomePlugin {
 			zenith: SKY_ZENITH,
 			nadir: SKY_NADIR,
 		};
-		app.insert_resource(ClearColor(self.clear))
+		app.add_plugins(SkyFieldMaterialPlugin)
+			.insert_resource(ClearColor(self.clear))
 			.insert_resource(settings)
 			.init_resource::<ShadowQuality>()
+			.init_resource::<SkyClock>()
 			.add_systems(
 				Startup,
 				(
 					spawn_sky_dome,
 					spawn_sky_lights,
 					spawn_sky_celestial,
+					spawn_sky_field,
 					shadows::apply_shadow_quality,
 				)
 					.chain(),
 			)
-			.add_systems(Update, follow_camera)
+			.add_systems(Update, (follow_camera, apply_sky_mood).chain())
 			.add_systems(
 				PostUpdate,
 				shadows::apply_shadow_quality.run_if(resource_changed::<ShadowQuality>),
@@ -116,13 +130,14 @@ fn spawn_sky_dome(
 	mut meshes: ResMut<Assets<Mesh>>,
 	mut materials: ResMut<Assets<StandardMaterial>>,
 	settings: Res<DomeSettings>,
+	clock: Res<SkyClock>,
 ) {
 	let root = commands
 		.spawn((SkyDome, Transform::IDENTITY, Visibility::Visible, Name::new("sky-dome")))
 		.id();
 	let mesh = meshes.add(settings.fade_sphere());
 	let material = materials.add(StandardMaterial {
-		base_color: Color::WHITE,
+		base_color: clock.sample().horizon,
 		unlit: true,
 		alpha_mode: AlphaMode::Blend,
 		cull_mode: None,
@@ -131,6 +146,7 @@ fn spawn_sky_dome(
 		..default()
 	});
 	commands.spawn((
+		SkyWash,
 		Mesh3d(mesh),
 		MeshMaterial3d(material),
 		Transform::IDENTITY,
@@ -153,24 +169,26 @@ fn follow_camera(
 	tf.rotation = Quat::IDENTITY;
 }
 
-fn spawn_sky_lights(mut commands: Commands, quality: Res<ShadowQuality>) {
-	commands.insert_resource(GlobalAmbientLight { brightness: AMBIENT_BRIGHTNESS, ..default() });
+fn spawn_sky_lights(mut commands: Commands, quality: Res<ShadowQuality>, clock: Res<SkyClock>) {
+	let mood = clock.sample();
+	commands.insert_resource(GlobalAmbientLight { brightness: mood.ambient, ..default() });
 	commands.insert_resource(quality.shadow_map());
 	commands.spawn((
 		SkySun,
 		DirectionalLight {
-			color: SUN_COLOR,
-			illuminance: SUN_ILLUMINANCE,
+			color: mood.sun_color,
+			illuminance: mood.sun_illuminance,
 			shadow_maps_enabled: quality.maps_enabled(),
 			..default()
 		},
 		quality.cascade_config(),
-		SkySun::pose(),
+		mood.sun_pose(),
 	));
 	commands.spawn((
+		SkyFill,
 		DirectionalLight {
-			color: FILL_COLOR,
-			illuminance: FILL_ILLUMINANCE,
+			color: mood.fill_color,
+			illuminance: mood.fill_illuminance,
 			shadow_maps_enabled: false,
 			..default()
 		},
@@ -188,6 +206,7 @@ mod tests {
 			.init_asset::<Mesh>()
 			.init_asset::<StandardMaterial>()
 			.insert_resource(quality)
+			.insert_resource(SkyClock::golden())
 			.add_plugins(SkyDomePlugin::default());
 		app.update();
 		app
@@ -234,6 +253,30 @@ mod tests {
 		let mut query = app.world_mut().query_filtered::<&DirectionalLight, With<SkySun>>();
 		let sun = query.single(app.world()).map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		assert!(!sun.shadow_maps_enabled);
+		Ok(())
+	}
+
+	#[test]
+	fn field_shell_spawns_on_the_dome() -> anyhow::Result<()> {
+		let mut app = sky_test_app(ShadowQuality::High);
+		let mut fields = app.world_mut().query_filtered::<&Transform, With<SkyField>>();
+		fields.single(app.world()).map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		Ok(())
+	}
+
+	#[test]
+	fn night_phase_hides_the_sun_disk() -> anyhow::Result<()> {
+		let mut app = sky_test_app(ShadowQuality::High);
+		app.insert_resource(SkyClock {
+			phase: SKY_PHASE_NIGHT,
+			period_secs: DEFAULT_SKY_PERIOD_SECS,
+			paused: true,
+		});
+		app.update();
+		let mut disks = app.world_mut().query_filtered::<&Visibility, With<SkySunDisk>>();
+		let visibility =
+			*disks.single(app.world()).map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert_eq!(visibility, Visibility::Hidden);
 		Ok(())
 	}
 }
