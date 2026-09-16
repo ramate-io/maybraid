@@ -36,8 +36,8 @@ pub use loading::{
 	LoadingScreenSystems, RequestShowLoading,
 };
 pub use settings::{
-	request_show_in_game_settings, InGameSettings, InGameSettingsChoice, InGameSettingsPlugin,
-	InGameSettingsScreen, InGameShadowQuality, RequestShowInGameSettings,
+	request_show_in_game_settings, InGamePixelCount, InGameSettings, InGameSettingsChoice,
+	InGameSettingsPlugin, InGameSettingsScreen, InGameShadowQuality, RequestShowInGameSettings,
 };
 pub use show::{despawn_menu_screens, take_menu_show_request};
 pub use spin_reveal::{
