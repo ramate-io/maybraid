@@ -1,53 +1,59 @@
-//! Sit-down pocket → cafe tables and chairs fitted into the packed box.
+//! Sit-down pocket → cafe tables and chairs tiled on the packed XZ.
 
 use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec3;
 use richmond_building_components::furniture::abutment::local_scale_for_yaw;
 use richmond_building_components::{FurnitureNode, FurnitureUsageNode, Placement};
 
-use crate::region::{along_is_x, along_span, depth_span, floor_height_aabb, stamp_make};
+use crate::region::{along_is_x, along_span, floor_height_aabb, stamp_make};
 
-const TABLE: Vec3 = Vec3::new(1.20, 0.75, 0.80);
-const CHAIR: Vec3 = Vec3::new(0.46, 0.82, 0.46);
-const CHAIR_GAP: f32 = 0.14;
-const CELL_ALONG: f32 = 2.5;
-const CELL_DEPTH: f32 = 2.3;
-const MAX_TABLES: usize = 4;
+const TABLE: Vec3 = Vec3::new(1.25, 1.00, 0.90);
+const CHAIR: Vec3 = Vec3::new(0.52, 1.10, 0.52);
+const CHAIR_GAP: f32 = 0.16;
+const CELL: f32 = 2.2;
+const MAX_TABLES: usize = 16;
 
 /// Expand a [`FurnitureUsage::BitesSeating`](richmond_building_components::FurnitureUsage::BitesSeating) pocket.
 pub struct BitesSeatingUsage;
 
 impl BitesSeatingUsage {
+	/// Expand a sit-down pocket carved from another usage leftover.
+	pub fn expand_aabb(region: &Aabb3d, host: &Aabb3d) -> Vec<FurnitureNode> {
+		let mut node = FurnitureUsageNode::bites_seating(Placement::IDENTITY);
+		node.stamp_region(region, host);
+		Self::expand(&node)
+	}
+
 	pub fn expand(node: &FurnitureUsageNode) -> Vec<FurnitureNode> {
 		let region = node.region_aabb();
-		let along_x = along_is_x(&region, node.abutment);
-		let along = along_span(&region, along_x);
-		let depth = depth_span(&region, along_x);
-		if along < 1.5 || depth < 1.5 {
+		let sx = region.max.x - region.min.x;
+		let sz = region.max.z - region.min.z;
+		if sx < 1.5 || sz < 1.5 {
 			return spare_chairs(&region, node);
 		}
 
-		let n_along = count_cells(along, CELL_ALONG, MAX_TABLES).max(1);
-		let n_depth = count_cells(depth, CELL_DEPTH, 2).max(1);
-		let mut n_along = n_along;
-		if n_along * n_depth > MAX_TABLES {
-			n_along = (MAX_TABLES / n_depth).max(1);
-		}
-		let cell_a = along / n_along as f32;
-		let cell_d = depth / n_depth as f32;
+		let n_x = count_cells(sx, CELL, 6).max(1);
+		let n_z = count_cells(sz, CELL, 6).max(1);
+		let (n_x, n_z) = clamp_grid(n_x, n_z, MAX_TABLES);
+		let cell_x = sx / n_x as f32;
+		let cell_z = sz / n_z as f32;
 
 		let mut out = Vec::new();
-		for j in 0..n_depth {
-			for i in 0..n_along {
-				let cell = cell_box(
-					&region,
-					along_x,
-					i as f32 * cell_a,
-					(i as f32 + 1.0) * cell_a,
-					j as f32 * cell_d,
-					(j as f32 + 1.0) * cell_d,
+		for jz in 0..n_z {
+			for ix in 0..n_x {
+				let cell = Aabb3d::from_min_max(
+					Vec3::new(
+						region.min.x + ix as f32 * cell_x,
+						region.min.y,
+						region.min.z + jz as f32 * cell_z,
+					),
+					Vec3::new(
+						region.min.x + (ix as f32 + 1.0) * cell_x,
+						region.max.y,
+						region.min.z + (jz as f32 + 1.0) * cell_z,
+					),
 				);
-				out.extend(table_set(&cell, &region, along_x));
+				out.extend(table_set(&cell, &region));
 			}
 		}
 		if out.is_empty() {
@@ -61,14 +67,22 @@ fn count_cells(span: f32, target: f32, max: usize) -> usize {
 	((span / target).floor() as usize).clamp(0, max)
 }
 
-fn table_set(cell: &Aabb3d, host: &Aabb3d, along_x: bool) -> Vec<FurnitureNode> {
+fn clamp_grid(n_x: usize, n_z: usize, max: usize) -> (usize, usize) {
+	if n_x * n_z <= max {
+		return (n_x, n_z);
+	}
+	let scale = (max as f32 / (n_x * n_z) as f32).sqrt();
+	let nx = ((n_x as f32 * scale).floor() as usize).max(1);
+	let nz = (max / nx).max(1);
+	(nx, nz)
+}
+
+fn table_set(cell: &Aabb3d, host: &Aabb3d) -> Vec<FurnitureNode> {
 	let c = (cell.min + cell.max) * 0.5;
-	let (hx, hz) =
-		if along_x { (TABLE.x * 0.5, TABLE.z * 0.5) } else { (TABLE.z * 0.5, TABLE.x * 0.5) };
 	let table = clamp_xz(
 		Aabb3d::from_min_max(
-			Vec3::new(c.x - hx, cell.min.y, c.z - hz),
-			Vec3::new(c.x + hx, cell.min.y + TABLE.y, c.z + hz),
+			Vec3::new(c.x - TABLE.x * 0.5, cell.min.y, c.z - TABLE.z * 0.5),
+			Vec3::new(c.x + TABLE.x * 0.5, cell.min.y + TABLE.y, c.z + TABLE.z * 0.5),
 		),
 		cell,
 	);
@@ -77,16 +91,14 @@ fn table_set(cell: &Aabb3d, host: &Aabb3d, along_x: bool) -> Vec<FurnitureNode> 
 	}
 	let mut out = vec![stamp_make(FurnitureNode::table, &table, host, None)];
 	let tc = (table.min + table.max) * 0.5;
-	let offset_z = (table.max.z - table.min.z) * 0.5 + CHAIR.z * 0.5 + CHAIR_GAP;
-	let offset_x = (table.max.x - table.min.x) * 0.5 + CHAIR.x * 0.5 + CHAIR_GAP;
-	let sides = if along_x {
-		[(0.0, -offset_z, 0.0_f32), (0.0, offset_z, std::f32::consts::PI)]
-	} else {
-		[
-			(-offset_x, 0.0, std::f32::consts::FRAC_PI_2),
-			(offset_x, 0.0, -std::f32::consts::FRAC_PI_2),
-		]
-	};
+	let ox = (table.max.x - table.min.x) * 0.5 + CHAIR.x * 0.5 + CHAIR_GAP;
+	let oz = (table.max.z - table.min.z) * 0.5 + CHAIR.z * 0.5 + CHAIR_GAP;
+	let sides = [
+		(0.0, -oz, 0.0_f32),
+		(0.0, oz, std::f32::consts::PI),
+		(-ox, 0.0, std::f32::consts::FRAC_PI_2),
+		(ox, 0.0, -std::f32::consts::FRAC_PI_2),
+	];
 	for (dx, dz, yaw) in sides {
 		let chair = Aabb3d::from_min_max(
 			Vec3::new(tc.x + dx - CHAIR.x * 0.5, cell.min.y, tc.z + dz - CHAIR.z * 0.5),
@@ -132,24 +144,10 @@ fn stamp_facing(
 	node
 }
 
-fn cell_box(region: &Aabb3d, along_x: bool, a0: f32, a1: f32, d0: f32, d1: f32) -> Aabb3d {
-	if along_x {
-		Aabb3d::from_min_max(
-			Vec3::new(region.min.x + a0, region.min.y, region.min.z + d0),
-			Vec3::new(region.min.x + a1, region.max.y, region.min.z + d1),
-		)
-	} else {
-		Aabb3d::from_min_max(
-			Vec3::new(region.min.x + d0, region.min.y, region.min.z + a0),
-			Vec3::new(region.min.x + d1, region.max.y, region.min.z + a1),
-		)
-	}
-}
-
 fn spare_chairs(region: &Aabb3d, node: &FurnitureUsageNode) -> Vec<FurnitureNode> {
 	let along_x = along_is_x(region, node.abutment);
 	let along = along_span(region, along_x);
-	let n = ((along / 1.1).floor() as usize).clamp(1, 3);
+	let n = ((along / 1.1).floor() as usize).clamp(1, 4);
 	let mut out = Vec::new();
 	for i in 0..n {
 		let t = (i as f32 + 0.5) / n as f32;
@@ -186,7 +184,7 @@ mod tests {
 	use richmond_building_components::{FurnitureGeometry, Placement};
 
 	fn seating_node(min: Vec3, max: Vec3) -> FurnitureUsageNode {
-		let host = Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(12.0, 3.5, 8.0));
+		let host = Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(16.0, 3.5, 12.0));
 		let box_ = Aabb3d::from_min_max(min, max);
 		let mut node = FurnitureUsageNode::bites_seating(Placement::IDENTITY);
 		node.stamp_region(&box_, &host);
@@ -199,8 +197,17 @@ mod tests {
 		let pieces = BitesSeatingUsage::expand(&node);
 		let tables = pieces.iter().filter(|n| n.geometry == FurnitureGeometry::Table).count();
 		let chairs = pieces.iter().filter(|n| n.geometry == FurnitureGeometry::Chair).count();
-		assert!((1..=MAX_TABLES).contains(&tables), "expected tables, got {tables}");
-		assert!(chairs >= 2, "expected chairs around tables, got {chairs}");
+		assert!(tables >= 2, "expected several tables, got {tables}");
+		assert!(chairs >= 4, "expected chairs around tables, got {chairs}");
+	}
+
+	#[test]
+	fn large_pocket_tiles_a_grid() {
+		let node = seating_node(Vec3::new(0.0, 0.0, 0.0), Vec3::new(12.0, 3.2, 8.0));
+		let pieces = BitesSeatingUsage::expand(&node);
+		let tables = pieces.iter().filter(|n| n.geometry == FurnitureGeometry::Table).count();
+		assert!(tables >= 8, "large seating should tile, got {tables}");
+		assert!(tables <= MAX_TABLES);
 	}
 
 	#[test]

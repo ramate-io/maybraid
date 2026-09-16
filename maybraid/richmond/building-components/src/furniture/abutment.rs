@@ -24,6 +24,16 @@ impl FurnitureAbutment {
 	/// Flush detection tolerance (metres), matched to bedroom wall-flush tests.
 	pub const FLUSH_EPS: f32 = 0.08;
 
+	/// The opposite host face.
+	pub const fn opposite(self) -> Self {
+		match self {
+			Self::NegX => Self::PosX,
+			Self::PosX => Self::NegX,
+			Self::NegZ => Self::PosZ,
+			Self::PosZ => Self::NegZ,
+		}
+	}
+
 	/// Yaw about \(+Y\) that aims kit \(+Z\) at this wall.
 	pub const fn facing_yaw(self) -> f32 {
 		match self {

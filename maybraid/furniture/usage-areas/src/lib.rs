@@ -10,6 +10,7 @@ pub mod bites_kitchen;
 pub mod bites_seating;
 pub mod expand;
 pub mod region;
+pub mod shelves;
 
 pub use bites_counter::BitesCounterUsage;
 pub use bites_kitchen::BitesKitchenUsage;
