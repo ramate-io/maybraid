@@ -15,10 +15,12 @@
 //! so the live bag can persist.
 //!
 //! In-range claim shows a Kenney outline Xbox **X** chip in world space,
-//! tinted Maybraid yellow, billboarded above the pile.
+//! tinted Maybraid yellow, billboarded above the pile, plus a screen-space
+//! `Pick up <name>` caption so the binding has a verb.
 
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value};
+use bevy::text::FontSize;
 use chico_vegetation_on_terrain_playground::Player as VegetationPlayer;
 use crozon_character_items::{
 	ClothingHost, Inventory, InventoryItem, InventorySlot, ItemRng, LootFraction, MaterialRefParams,
@@ -121,6 +123,10 @@ pub struct StashHaloAnchor(pub Vec3);
 #[derive(Component)]
 struct StashInteractPrompt;
 
+/// Screen-space action next to the chip (`Pick up <name>`).
+#[derive(Component)]
+struct StashInteractCaption;
+
 /// Kenney outline Xbox X used for pad interact (`PadButton::X`).
 pub const INTERACT_PAD_ICON: &str = "iconography/kenney/input-prompts/xbox_button_x_outline.png";
 
@@ -135,6 +141,7 @@ const HALO_INNER: f32 = 0.28;
 const HALO_OUTER: f32 = 0.46;
 const PROMPT_SIZE: f32 = 0.42;
 const PROMPT_ABOVE: f32 = 0.62;
+const PROMPT_CAPTION_GAP_PX: f32 = 22.0;
 const PROMPT_YELLOW: Color = Color::srgba(0.98, 0.86, 0.32, 1.0);
 const PROMPT_EMISSIVE: LinearRgba = LinearRgba::new(1.4, 1.05, 0.28, 1.0);
 
@@ -683,6 +690,47 @@ fn prompt_billboard(origin: Vec3, camera: Option<Vec3>) -> Transform {
 	transform
 }
 
+fn pickup_action_label(inventory: &Inventory) -> String {
+	match inventory.items.as_slice() {
+		[item] => format!("Pick up {}", item.name()),
+		items if !items.is_empty() => format!("Pick up {} items", items.len()),
+		_ => String::from("Pick up"),
+	}
+}
+
+fn spawn_stash_interact_caption(commands: &mut Commands) {
+	commands.spawn((
+		Name::new("stash-interact-caption"),
+		StashInteractCaption,
+		Text::new(""),
+		TextFont { font_size: FontSize::Px(16.0), ..default() },
+		TextColor(PROMPT_YELLOW),
+		TextShadow { offset: Vec2::new(1.0, 1.0), color: Color::srgba(0.0, 0.0, 0.0, 0.72) },
+		Node {
+			position_type: PositionType::Absolute,
+			left: Val::Px(0.0),
+			top: Val::Px(0.0),
+			..default()
+		},
+		Visibility::Hidden,
+		Pickable::IGNORE,
+		ZIndex(24),
+	));
+}
+
+fn project_prompt_caption(
+	camera: &Camera,
+	camera_transform: &GlobalTransform,
+	origin: Vec3,
+) -> Option<Vec2> {
+	let world = origin + Vec3::Y * PROMPT_ABOVE;
+	let ndc = camera.world_to_ndc(camera_transform, world)?;
+	if ndc.z <= 0.0 || ndc.z >= 1.0 {
+		return None;
+	}
+	camera.world_to_viewport(camera_transform, world).ok()
+}
+
 fn sync_stash_interact_prompt(
 	mut commands: Commands,
 	time: Res<Time>,
@@ -690,18 +738,23 @@ fn sync_stash_interact_prompt(
 	mut meshes: Option<ResMut<Assets<Mesh>>>,
 	mut materials: Option<ResMut<Assets<StandardMaterial>>>,
 	players: Query<&Transform, (With<VegetationPlayer>, Without<StashInteractPrompt>)>,
-	cameras: Query<&GlobalTransform, (With<Camera3d>, Without<StashInteractPrompt>)>,
+	cameras: Query<(&Camera, &GlobalTransform), (With<Camera3d>, Without<StashInteractPrompt>)>,
 	stashes: Query<
 		(Entity, &Transform, &InventoryUser, &StashPolicy),
 		(With<WorldStash>, Without<StashInteractPrompt>),
 	>,
 	anchors: Query<(Entity, &ChildOf, Option<&StashHaloAnchor>), With<StashDisplayedItem>>,
+	bags: Query<&Inventory>,
 	mut prompt: Query<
 		(&mut Transform, &mut Visibility),
 		(With<StashInteractPrompt>, Without<WorldStash>, Without<VegetationPlayer>),
 	>,
+	mut caption: Query<
+		(&mut Text, &mut Node, &mut Visibility),
+		(With<StashInteractCaption>, Without<StashInteractPrompt>),
+	>,
 ) {
-	let target = nearest_claim_point(players.iter(), stashes.iter(), anchors.iter());
+	let target = nearest_claim(players.iter(), stashes.iter(), anchors.iter());
 	if prompt.is_empty() {
 		let Some(assets) = assets.as_deref() else {
 			return;
@@ -715,18 +768,67 @@ fn sync_stash_interact_prompt(
 		spawn_stash_interact_prompt(&mut commands, assets, meshes, materials);
 		return;
 	}
-	let camera = cameras.iter().next().map(|transform| transform.translation());
+	if caption.is_empty() {
+		spawn_stash_interact_caption(&mut commands);
+	}
+	let camera_at = cameras.iter().next().map(|(_, transform)| transform.translation());
 	let pulse = 1.0 + 0.08 * (time.elapsed_secs() * 5.0).sin();
 	for (mut transform, mut visibility) in &mut prompt {
 		match target {
-			Some(origin) => {
+			Some(claim) => {
 				*visibility = Visibility::Visible;
-				*transform = prompt_billboard(origin, camera);
+				*transform = prompt_billboard(claim.at, camera_at);
 				transform.scale = Vec3::splat(pulse);
 			}
 			None => *visibility = Visibility::Hidden,
 		}
 	}
+	let label = target.and_then(|claim| bags.get(claim.bag).ok().map(pickup_action_label));
+	let camera = cameras.iter().next();
+	let screen = target.and_then(|claim| {
+		let (camera, camera_transform) = camera?;
+		project_prompt_caption(camera, camera_transform, claim.at)
+	});
+	for (mut text, mut node, mut visibility) in &mut caption {
+		match (target, label.as_deref()) {
+			(Some(_), Some(action)) => {
+				text.0 = action.to_string();
+				if let Some(screen) = screen {
+					node.left = Val::Px(screen.x + PROMPT_CAPTION_GAP_PX);
+					node.top = Val::Px(screen.y - 10.0);
+					*visibility = Visibility::Visible;
+				} else if camera.is_some() {
+					*visibility = Visibility::Hidden;
+				} else {
+					*visibility = Visibility::Visible;
+				}
+			}
+			_ => *visibility = Visibility::Hidden,
+		}
+	}
+}
+
+#[derive(Clone, Copy)]
+struct NearestClaim {
+	at: Vec3,
+	bag: Entity,
+}
+
+fn nearest_claim<'a>(
+	players: impl IntoIterator<Item = &'a Transform>,
+	stashes: impl IntoIterator<Item = (Entity, &'a Transform, &'a InventoryUser, &'a StashPolicy)>,
+	anchors: impl IntoIterator<Item = (Entity, &'a ChildOf, Option<&'a StashHaloAnchor>)>,
+) -> Option<NearestClaim> {
+	let listed: Vec<_> = stashes.into_iter().collect();
+	let anchors: Vec<_> = anchors.into_iter().collect();
+	players.into_iter().find_map(|transform| {
+		nearest_stash_in_radius(player_origin(transform), listed.iter().copied()).map(
+			|(stash, bag, _, at)| NearestClaim {
+				at: halo_world_point(at, stash, anchors.iter().copied()),
+				bag,
+			},
+		)
+	})
 }
 
 fn nearest_claim_point<'a>(
@@ -734,12 +836,7 @@ fn nearest_claim_point<'a>(
 	stashes: impl IntoIterator<Item = (Entity, &'a Transform, &'a InventoryUser, &'a StashPolicy)>,
 	anchors: impl IntoIterator<Item = (Entity, &'a ChildOf, Option<&'a StashHaloAnchor>)>,
 ) -> Option<Vec3> {
-	let listed: Vec<_> = stashes.into_iter().collect();
-	let anchors: Vec<_> = anchors.into_iter().collect();
-	players.into_iter().find_map(|transform| {
-		nearest_stash_in_radius(player_origin(transform), listed.iter().copied())
-			.map(|(stash, _, _, at)| halo_world_point(at, stash, anchors.iter().copied()))
-	})
+	nearest_claim(players, stashes, anchors).map(|claim| claim.at)
 }
 
 fn halo_world_point<'a>(
@@ -1470,10 +1567,27 @@ mod tests {
 	}
 
 	#[test]
+	fn pickup_action_names_a_single_item() {
+		let pants = one_garment();
+		assert_eq!(
+			pickup_action_label(&pants),
+			format!("Pick up {}", pants.items[0].name())
+		);
+		assert_eq!(pickup_action_label(&mixed_bag()), "Pick up 3 items");
+		assert_eq!(pickup_action_label(&Inventory::default()), "Pick up");
+	}
+
+	#[test]
 	fn interact_prompt_toggles_in_radius() -> anyhow::Result<()> {
 		let (mut world, _, stash) = claim_setup(Vec3::ZERO, Vec3::new(1.0, 0.0, 0.0))?;
 		world.init_resource::<Time>();
 		world.spawn((StashInteractPrompt, Transform::IDENTITY, Visibility::Hidden));
+		world.spawn((
+			StashInteractCaption,
+			Text::new(""),
+			Node::default(),
+			Visibility::Hidden,
+		));
 		world
 			.run_system_once(sync_stash_interact_prompt)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
@@ -1484,6 +1598,12 @@ mod tests {
 		assert_eq!(*visible, Visibility::Visible);
 		assert!((at.translation.xz() - Vec2::new(1.0, 0.0)).length() < 0.5);
 		assert!(at.translation.y > 0.4);
+		let (caption, caption_visible) = world
+			.query_filtered::<(&Text, &Visibility), With<StashInteractCaption>>()
+			.single(&world)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert_eq!(caption.0, "Pick up 3 items");
+		assert_eq!(*caption_visible, Visibility::Visible);
 
 		world.entity_mut(stash).insert(Transform::from_xyz(40.0, 0.0, 0.0));
 		world
@@ -1494,6 +1614,11 @@ mod tests {
 			.single(&world)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		assert_eq!(*hidden, Visibility::Hidden);
+		let caption_hidden = world
+			.query_filtered::<&Visibility, With<StashInteractCaption>>()
+			.single(&world)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert_eq!(*caption_hidden, Visibility::Hidden);
 		Ok(())
 	}
 
