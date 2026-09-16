@@ -13,10 +13,12 @@
 //! mob corpse lifetime (4 s). Persistent chests omit [`DespawnAfter`].
 //! Absorb never auto-equips. Claim and drop refresh [`WorldPlayerLoadout`]
 //! so the live bag can persist.
+//!
+//! In-range claim shows a Kenney outline Xbox **X** chip in world space,
+//! tinted Maybraid yellow, billboarded above the pile.
 
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value};
-use bevy::text::FontSize;
 use chico_vegetation_on_terrain_playground::Player as VegetationPlayer;
 use crozon_character_items::{
 	ClothingHost, Inventory, InventoryItem, InventorySlot, ItemRng, LootFraction, MaterialRefParams,
@@ -115,9 +117,15 @@ pub struct StashDisplayedItem {
 #[derive(Component, Clone, Copy, Debug, PartialEq)]
 pub struct StashHaloAnchor(pub Vec3);
 
-/// On-screen X / E prompt while a claimable stash is in radius.
+/// World-space interact chip (Kenney Xbox **X**) above the nearest claimable stash.
 #[derive(Component)]
 struct StashInteractPrompt;
+
+/// Kenney outline Xbox X used for pad interact (`PadButton::X`).
+pub const INTERACT_PAD_ICON: &str = "iconography/kenney/input-prompts/xbox_button_x_outline.png";
+
+/// Kenney outline keyboard E; kept next to the pad chip for the same binding.
+pub const INTERACT_KEY_ICON: &str = "iconography/kenney/input-prompts/keyboard_e_outline.png";
 
 /// Ground ring around the nearest claimable stash.
 #[derive(Component)]
@@ -125,6 +133,10 @@ struct StashClaimHalo;
 
 const HALO_INNER: f32 = 0.28;
 const HALO_OUTER: f32 = 0.46;
+const PROMPT_SIZE: f32 = 0.42;
+const PROMPT_ABOVE: f32 = 0.62;
+const PROMPT_YELLOW: Color = Color::srgba(0.98, 0.86, 0.32, 1.0);
+const PROMPT_EMISSIVE: LinearRgba = LinearRgba::new(1.4, 1.05, 0.28, 1.0);
 
 /// Bind-pose garment so stash clothing keeps recipe + palette.
 #[derive(Clone, PartialEq)]
@@ -155,25 +167,23 @@ pub struct WorldStashPlugin;
 impl Plugin for WorldStashPlugin {
 	fn build(&self, app: &mut App) {
 		add_character_components_host::<StashClothingPreview>(app);
-		app.init_resource::<WorldStashSettings>()
-			.add_systems(Startup, spawn_stash_interact_prompt)
-			.add_systems(
-				Update,
-				(
-					claim_nearby_stashes
-						.after(CharacterControlSystems)
-						.run_if(resource_equals(WorldGameplayEnabled(true))),
-					drop_player_inventory
-						.after(CharacterControlSystems)
-						.run_if(resource_equals(WorldGameplayEnabled(true))),
-					sync_stash_interact_prompt
-						.after(CharacterControlSystems)
-						.run_if(resource_equals(WorldGameplayEnabled(true))),
-					sync_stash_claim_halo
-						.after(CharacterControlSystems)
-						.run_if(resource_equals(WorldGameplayEnabled(true))),
-				),
-			);
+		app.init_resource::<WorldStashSettings>().add_systems(
+			Update,
+			(
+				claim_nearby_stashes
+					.after(CharacterControlSystems)
+					.run_if(resource_equals(WorldGameplayEnabled(true))),
+				drop_player_inventory
+					.after(CharacterControlSystems)
+					.run_if(resource_equals(WorldGameplayEnabled(true))),
+				sync_stash_interact_prompt
+					.after(CharacterControlSystems)
+					.run_if(resource_equals(WorldGameplayEnabled(true))),
+				sync_stash_claim_halo
+					.after(CharacterControlSystems)
+					.run_if(resource_equals(WorldGameplayEnabled(true))),
+			),
+		);
 		app.add_systems(PostUpdate, detach_downed_npc_loot.after(DamageSystems::Down));
 	}
 }
@@ -637,35 +647,85 @@ fn drop_player_inventory(
 	}
 }
 
-fn spawn_stash_interact_prompt(mut commands: Commands) {
+fn spawn_stash_interact_prompt(
+	commands: &mut Commands,
+	assets: &AssetServer,
+	meshes: &mut Assets<Mesh>,
+	materials: &mut Assets<StandardMaterial>,
+) {
+	let material = materials.add(StandardMaterial {
+		base_color: PROMPT_YELLOW,
+		base_color_texture: Some(assets.load(INTERACT_PAD_ICON)),
+		emissive: PROMPT_EMISSIVE,
+		alpha_mode: AlphaMode::Blend,
+		unlit: true,
+		cull_mode: None,
+		..default()
+	});
 	commands.spawn((
 		Name::new("stash-interact-prompt"),
 		StashInteractPrompt,
-		Node {
-			position_type: PositionType::Absolute,
-			bottom: Val::Px(48.0),
-			width: Val::Percent(100.0),
-			justify_content: JustifyContent::Center,
-			..default()
-		},
-		Text::new("X / E  Pick up"),
-		TextFont { font_size: FontSize::Px(22.0), ..default() },
-		TextColor(Color::srgba(0.95, 0.92, 0.82, 0.95)),
-		Pickable::IGNORE,
+		Mesh3d(meshes.add(Rectangle::new(PROMPT_SIZE, PROMPT_SIZE))),
+		MeshMaterial3d(material),
+		Transform::IDENTITY,
 		Visibility::Hidden,
 	));
 }
 
+fn prompt_billboard(origin: Vec3, camera: Option<Vec3>) -> Transform {
+	let mut transform = Transform::from_translation(origin + Vec3::Y * PROMPT_ABOVE);
+	if let Some(camera) = camera {
+		let away = origin - camera;
+		if away.length_squared() > 1e-6 {
+			transform.look_to(away, Vec3::Y);
+		}
+	}
+	transform
+}
+
 fn sync_stash_interact_prompt(
-	players: Query<&Transform, With<VegetationPlayer>>,
-	stashes: Query<(Entity, &Transform, &InventoryUser, &StashPolicy), With<WorldStash>>,
-	mut prompt: Query<&mut Visibility, With<StashInteractPrompt>>,
+	mut commands: Commands,
+	time: Res<Time>,
+	assets: Option<Res<AssetServer>>,
+	mut meshes: Option<ResMut<Assets<Mesh>>>,
+	mut materials: Option<ResMut<Assets<StandardMaterial>>>,
+	players: Query<&Transform, (With<VegetationPlayer>, Without<StashInteractPrompt>)>,
+	cameras: Query<&GlobalTransform, (With<Camera3d>, Without<StashInteractPrompt>)>,
+	stashes: Query<
+		(Entity, &Transform, &InventoryUser, &StashPolicy),
+		(With<WorldStash>, Without<StashInteractPrompt>),
+	>,
+	anchors: Query<(Entity, &ChildOf, Option<&StashHaloAnchor>), With<StashDisplayedItem>>,
+	mut prompt: Query<
+		(&mut Transform, &mut Visibility),
+		(With<StashInteractPrompt>, Without<WorldStash>, Without<VegetationPlayer>),
+	>,
 ) {
-	let in_range = players.iter().any(|transform| {
-		nearest_stash_in_radius(player_origin(transform), stashes.iter()).is_some()
-	});
-	for mut visibility in &mut prompt {
-		*visibility = if in_range { Visibility::Visible } else { Visibility::Hidden };
+	let target = nearest_claim_point(players.iter(), stashes.iter(), anchors.iter());
+	if prompt.is_empty() {
+		let Some(assets) = assets.as_deref() else {
+			return;
+		};
+		let Some(meshes) = meshes.as_mut() else {
+			return;
+		};
+		let Some(materials) = materials.as_mut() else {
+			return;
+		};
+		spawn_stash_interact_prompt(&mut commands, assets, meshes, materials);
+		return;
+	}
+	let camera = cameras.iter().next().map(|transform| transform.translation());
+	let pulse = 1.0 + 0.08 * (time.elapsed_secs() * 5.0).sin();
+	for (mut transform, mut visibility) in &mut prompt {
+		match target {
+			Some(origin) => {
+				*visibility = Visibility::Visible;
+				*transform = prompt_billboard(origin, camera);
+				transform.scale = Vec3::splat(pulse);
+			}
+			None => *visibility = Visibility::Hidden,
+		}
 	}
 }
 
@@ -1403,17 +1463,27 @@ mod tests {
 	}
 
 	#[test]
+	fn kenney_interact_icons_are_in_the_asset_tree() {
+		let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+		assert!(root.join(INTERACT_PAD_ICON).is_file());
+		assert!(root.join(INTERACT_KEY_ICON).is_file());
+	}
+
+	#[test]
 	fn interact_prompt_toggles_in_radius() -> anyhow::Result<()> {
 		let (mut world, _, stash) = claim_setup(Vec3::ZERO, Vec3::new(1.0, 0.0, 0.0))?;
-		world.spawn((StashInteractPrompt, Visibility::Hidden, Text::new("X / E  Pick up")));
+		world.init_resource::<Time>();
+		world.spawn((StashInteractPrompt, Transform::IDENTITY, Visibility::Hidden));
 		world
 			.run_system_once(sync_stash_interact_prompt)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		let visible = world
-			.query_filtered::<&Visibility, With<StashInteractPrompt>>()
+		let (visible, at) = world
+			.query_filtered::<(&Visibility, &Transform), With<StashInteractPrompt>>()
 			.single(&world)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		assert_eq!(*visible, Visibility::Visible);
+		assert!((at.translation.xz() - Vec2::new(1.0, 0.0)).length() < 0.5);
+		assert!(at.translation.y > 0.4);
 
 		world.entity_mut(stash).insert(Transform::from_xyz(40.0, 0.0, 0.0));
 		world
@@ -1425,6 +1495,19 @@ mod tests {
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		assert_eq!(*hidden, Visibility::Hidden);
 		Ok(())
+	}
+
+	#[test]
+	fn interact_prompt_faces_the_camera() {
+		let origin = Vec3::new(2.0, 1.0, 0.0);
+		let camera = Vec3::new(2.0, 1.5, 4.0);
+		let transform = prompt_billboard(origin, Some(camera));
+		let toward_camera = (camera - transform.translation).normalize();
+		assert!(
+			(-transform.forward()).dot(toward_camera) > 0.7,
+			"quad +Z (opposite forward) should face the camera"
+		);
+		assert!((transform.translation.y - (origin.y + PROMPT_ABOVE)).abs() < 1e-4);
 	}
 
 	fn one_garment() -> Inventory {
