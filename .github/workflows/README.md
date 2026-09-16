@@ -16,3 +16,6 @@ flakes, then `nix develop --command …` on `ubuntu-latest`.
 Reusable [`nix-command.yml`](nix-command.yml) is `workflow_call` only. Other
 workflows pass `command`, optional `nix_flake_path` (default `.`), and
 `runner`.
+
+Opt-in jobs (`ci-action::<name>` in the commit message) are indexed in
+[ci-actions/README.md](ci-actions/README.md).
