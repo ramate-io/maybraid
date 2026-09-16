@@ -13,11 +13,11 @@ pub use parameterized::{BitesStallParameterized, BitesStallPlan};
 
 use lod::gen::LodSceneLevel;
 use procedural_common::NoiseParams;
-use richmond_building_components::furniture::FurnitureNode;
+use richmond_building_components::furniture::{FurnitureUsage, FurnitureUsageNode};
 use richmond_building_components::{BuildingComponents, LabelNode, LabelStyle, Layers};
 
 use crate::fit::{Confines, FillableRegions, Fit, FitError};
-use crate::usage_areas::furniture_util::{furniture_fill, FurnitureFill};
+use crate::usage_areas::furniture_util::{furniture_usage_fill, FurnitureUsageFill};
 
 use super::label_util::label_filling_aabb;
 
@@ -25,8 +25,8 @@ use super::label_util::label_filling_aabb;
 pub struct BitesStall {
 	/// Higher-order type label covering the whole stall.
 	pub stall_type: LabelNode,
-	pub bites_counters: Vec<FurnitureFill>,
-	pub bites_kitchen: LabelNode,
+	pub bites_counters: Vec<FurnitureUsageFill>,
+	pub bites_kitchen: FurnitureUsageFill,
 }
 
 impl BitesStall {
@@ -37,13 +37,13 @@ impl BitesStall {
 			.counter_aabbs
 			.iter()
 			.map(|aabb| {
-				furniture_fill(
+				furniture_usage_fill(
 					style,
 					"BitesCounter",
+					FurnitureUsage::BitesCounter,
 					aabb,
 					host,
 					confines.roll,
-					FurnitureNode::counter,
 				)
 			})
 			.collect();
@@ -55,10 +55,12 @@ impl BitesStall {
 				confines.roll,
 			),
 			bites_counters,
-			bites_kitchen: label_filling_aabb(
+			bites_kitchen: furniture_usage_fill(
 				LabelStyle::Orange,
 				"BitesKitchen",
+				FurnitureUsage::BitesKitchen,
 				&plan.kitchen_aabb,
+				host,
 				confines.roll,
 			),
 		}
@@ -80,12 +82,14 @@ impl BuildingComponents for BitesStall {
 	fn label_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<LabelNode> {
 		let mut labels = vec![self.stall_type.clone()];
 		labels.extend(self.bites_counters.iter().map(|fill| fill.label.clone()));
-		labels.push(self.bites_kitchen.clone());
+		labels.push(self.bites_kitchen.label.clone());
 		Layers::from_free(labels)
 	}
 
-	fn furniture_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<FurnitureNode> {
-		Layers::from_free(self.bites_counters.iter().map(|fill| fill.furniture.clone()).collect())
+	fn furniture_usage_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<FurnitureUsageNode> {
+		let mut out: Vec<_> = self.bites_counters.iter().map(|fill| fill.usage.clone()).collect();
+		out.push(self.bites_kitchen.usage.clone());
+		Layers::from_free(out)
 	}
 }
 
@@ -140,13 +144,17 @@ mod tests {
 		assert_eq!(plan.counter_aabbs.len(), 2);
 		let stall = BitesStall::from_plan(plan, &confines);
 		assert_eq!(stall.stall_type.text, "BitesStall");
-		assert_eq!(stall.bites_kitchen.text, "BitesKitchen");
+		assert_eq!(stall.bites_kitchen.label.text, "BitesKitchen");
 		assert_eq!(stall.bites_counters.len(), 2);
 		assert!(stall.bites_counters.iter().all(|fill| {
 			fill.label.text == "BitesCounter"
-				&& fill.furniture.geometry
-					== richmond_building_components::FurnitureGeometry::Counter
+				&& fill.usage.kind == richmond_building_components::FurnitureUsage::BitesCounter
 		}));
+		assert_eq!(
+			stall.bites_kitchen.usage.kind,
+			richmond_building_components::FurnitureUsage::BitesKitchen
+		);
+		assert!(stall.furniture_nodes_for_level(LodSceneLevel::High).flatten().is_empty());
 	}
 
 	#[test]
@@ -155,9 +163,9 @@ mod tests {
 		let plan = BitesStallPlan::from_parameterized(both_counters(), &confines).unwrap();
 		let stall = BitesStall::from_plan(plan, &confines);
 		assert!(
-			stall.bites_kitchen.placement.scale.x >= 8.0,
+			stall.bites_kitchen.label.placement.scale.x >= 8.0,
 			"kitchen width {}",
-			stall.bites_kitchen.placement.scale.x
+			stall.bites_kitchen.label.placement.scale.x
 		);
 	}
 

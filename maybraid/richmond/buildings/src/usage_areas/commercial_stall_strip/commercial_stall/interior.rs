@@ -153,6 +153,19 @@ impl BuildingComponents for CommercialStallInterior {
 			Self::KnickKnack(_) | Self::Parts(_) | Self::PublicRestroom(_) => Layers::new(),
 		}
 	}
+
+	fn furniture_usage_nodes_for_level(
+		&self,
+		level: LodSceneLevel,
+	) -> Layers<richmond_building_components::FurnitureUsageNode> {
+		match self {
+			Self::Bites(s) => s.furniture_usage_nodes_for_level(level),
+			Self::BitesSitdown(s) => s.furniture_usage_nodes_for_level(level),
+			Self::MiniMart(s) => s.furniture_usage_nodes_for_level(level),
+			Self::Lounge(s) => s.furniture_usage_nodes_for_level(level),
+			Self::KnickKnack(_) | Self::Parts(_) | Self::PublicRestroom(_) => Layers::new(),
+		}
+	}
 }
 
 #[cfg(test)]

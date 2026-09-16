@@ -3,7 +3,9 @@
 use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::{Vec2, Vec3};
 use procedural_common::{aabb3_to_plan, NoiseConfig, NoiseParams, PlanAxes};
-use richmond_building_components::furniture::{FurnitureGeometry, FurnitureNode};
+use richmond_building_components::furniture::{
+	FurnitureGeometry, FurnitureNode, FurnitureUsage, FurnitureUsageNode,
+};
 use richmond_building_components::placed::Placement;
 use richmond_building_components::{LabelNode, LabelStyle};
 
@@ -34,6 +36,13 @@ pub struct FurnitureFill {
 	pub furniture: FurnitureNode,
 }
 
+/// Label + usage-region pair for one packed AABB (ensemble, not a single kit).
+#[derive(Debug, Clone, PartialEq)]
+pub struct FurnitureUsageFill {
+	pub label: LabelNode,
+	pub usage: FurnitureUsageNode,
+}
+
 /// Build a labeled furniture fill from a packed AABB versus the host volume.
 ///
 /// Stamps abutment, facing yaw, and finish seed from the committed box. Kit
@@ -56,6 +65,23 @@ pub fn furniture_fill(
 	};
 	furniture.stamp_host_slot(&slot, host);
 	FurnitureFill { label: label_filling_aabb(style, text, aabb, roll), furniture }
+}
+
+/// Build a labeled usage fill from a packed AABB versus the host volume.
+///
+/// The region stays storey-tall (kitchen leftover, passage band). Expanders
+/// carve 1 m stations and sit-on props; this does not stamp a kit.
+pub fn furniture_usage_fill(
+	style: LabelStyle,
+	text: &str,
+	kind: FurnitureUsage,
+	aabb: &Aabb3d,
+	host: &Aabb3d,
+	roll: f32,
+) -> FurnitureUsageFill {
+	let mut usage = FurnitureUsageNode::new(kind, Placement::IDENTITY);
+	usage.stamp_region(aabb, host);
+	FurnitureUsageFill { label: label_filling_aabb(style, text, aabb, roll), usage }
 }
 
 /// Sit `height` on the floor of `aabb`, keeping the XZ box.

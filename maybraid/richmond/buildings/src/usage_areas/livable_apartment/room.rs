@@ -109,6 +109,25 @@ impl ApartmentRoom {
 		}
 	}
 
+	pub(crate) fn furniture_usage_nodes_for_level(
+		&self,
+		level: LodSceneLevel,
+	) -> Layers<richmond_building_components::FurnitureUsageNode> {
+		match self {
+			Self::Entryway { .. } | Self::HouseholdCloset { .. } | Self::OpenHall { .. } => {
+				Layers::new()
+			}
+			Self::Bedroom(r) => r.furniture_usage_nodes_for_level(level),
+			Self::Living(r) => r.furniture_usage_nodes_for_level(level),
+			Self::Kitchen(r) => r.furniture_usage_nodes_for_level(level),
+			Self::Dining(r) => r.furniture_usage_nodes_for_level(level),
+			Self::Bathroom(r) => r.furniture_usage_nodes_for_level(level),
+			Self::HalfBath(r) => r.furniture_usage_nodes_for_level(level),
+			Self::Sitting(r) => r.furniture_usage_nodes_for_level(level),
+			Self::Study(r) => r.furniture_usage_nodes_for_level(level),
+		}
+	}
+
 	pub(crate) fn is_closed(&self) -> bool {
 		matches!(self, Self::Bedroom(_) | Self::Bathroom(_) | Self::HalfBath(_) | Self::Study(_))
 	}

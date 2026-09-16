@@ -68,6 +68,13 @@ impl BuildingComponents for LesHallesFullStorey {
 		self.usage.furniture_nodes_for_level(level)
 	}
 
+	fn furniture_usage_nodes_for_level(
+		&self,
+		level: LodSceneLevel,
+	) -> Layers<richmond_building_components::FurnitureUsageNode> {
+		self.usage.furniture_usage_nodes_for_level(level)
+	}
+
 	fn label_nodes_for_level(&self, level: LodSceneLevel) -> Layers<LabelNode> {
 		self.usage.label_nodes_for_level(level)
 	}
@@ -118,8 +125,9 @@ mod tests {
 		let (usage, _) = LesHallesCommercialUsage::paint(regions, NoiseParams::default()).unwrap();
 		assert!(!usage.stall_strips.is_empty() || !usage.residual_chests.is_empty());
 		assert!(
-			!usage.furniture_nodes_for_level(LodSceneLevel::High).flatten().is_empty(),
-			"gallery leftover should get stall counters / chairs or a residual chest"
+			!usage.furniture_nodes_for_level(LodSceneLevel::High).flatten().is_empty()
+				|| !usage.furniture_usage_nodes_for_level(LodSceneLevel::High).flatten().is_empty(),
+			"gallery leftover should get stall usage regions, chairs, or a residual chest"
 		);
 	}
 

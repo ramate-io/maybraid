@@ -385,6 +385,17 @@ impl BuildingComponents for CommercialStallStrip {
 		}
 		out
 	}
+
+	fn furniture_usage_nodes_for_level(
+		&self,
+		level: LodSceneLevel,
+	) -> Layers<richmond_building_components::FurnitureUsageNode> {
+		let mut out = Layers::new();
+		for stall in &self.plan.stalls {
+			out.extend(stall.furniture_usage_nodes_for_level(level));
+		}
+		out
+	}
 }
 
 #[cfg(test)]
