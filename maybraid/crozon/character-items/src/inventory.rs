@@ -59,6 +59,30 @@ impl InventorySlot {
 	}
 }
 
+/// How much of a bag becomes world loot: `numerator / denominator` of the
+/// items, with a remainder roll so the expectation is exact.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct LootFraction {
+	pub numerator: u32,
+	pub denominator: u32,
+}
+
+impl LootFraction {
+	pub const NONE: Self = Self { numerator: 0, denominator: 1 };
+	pub const ALL: Self = Self { numerator: 1, denominator: 1 };
+	pub const ONE_THIRD: Self = Self { numerator: 1, denominator: 3 };
+	pub const ONE_TWELFTH: Self = Self { numerator: 1, denominator: 12 };
+
+	pub const fn new(numerator: u32, denominator: u32) -> Self {
+		Self { numerator, denominator }
+	}
+
+	/// How many of `n` items this fraction keeps.
+	pub fn count(self, n: usize, rng: &mut ItemRng) -> usize {
+		rng.sample_fraction_count(n, self.numerator, self.denominator)
+	}
+}
+
 /// Recipe name plus palette[0] used to rebuild a clothing [`material_ref::MaterialRef`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct MaterialRefParams {
@@ -367,6 +391,60 @@ impl Inventory {
 		std::mem::take(self)
 	}
 
+	/// Drain a random subset of bag items as world loot.
+	///
+	/// Expected count is `items.len() * fraction`. A remainder roll keeps the
+	/// expectation exact (four items at 1/3 yield one, plus a 1-in-3 chance
+	/// of a second). Source selections that remain are remapped. The leftover
+	/// bag keeps the items that were not taken.
+	pub fn take_fraction(&mut self, rng: &mut ItemRng, fraction: LootFraction) -> Self {
+		let count = fraction.count(self.items.len(), rng);
+		self.take_count(rng, count)
+	}
+
+	fn take_count(&mut self, rng: &mut ItemRng, count: usize) -> Self {
+		if count == 0 || self.items.is_empty() {
+			return Self::default();
+		}
+		if count >= self.items.len() {
+			return self.take_all();
+		}
+		let mut keep = rng.choose_indices(self.items.len(), count);
+		keep.sort_unstable();
+		self.take_indices(&keep)
+	}
+
+	fn take_indices(&mut self, keep: &[usize]) -> Self {
+		let len = self.items.len();
+		let is_kept = |index: usize| keep.binary_search(&index).is_ok();
+		let clothing = std::mem::take(&mut self.clothing);
+		let weapons = std::mem::take(&mut self.weapons);
+		let skills = std::mem::take(&mut self.skills);
+		let mut taken_items = Vec::with_capacity(keep.len());
+		let mut remain_items = Vec::with_capacity(len.saturating_sub(keep.len()));
+		let mut taken_remap = vec![None; len];
+		let mut remain_remap = vec![None; len];
+		for (old, item) in std::mem::take(&mut self.items).into_iter().enumerate() {
+			if is_kept(old) {
+				taken_remap[old] = Some(taken_items.len());
+				taken_items.push(item);
+			} else {
+				remain_remap[old] = Some(remain_items.len());
+				remain_items.push(item);
+			}
+		}
+		self.items = remain_items;
+		self.clothing = remap_selected(&clothing, &remain_remap);
+		self.weapons = remap_selected(&weapons, &remain_remap);
+		self.skills = remap_selected(&skills, &remain_remap);
+		Self {
+			items: taken_items,
+			clothing: remap_selected(&clothing, &taken_remap),
+			weapons: remap_selected(&weapons, &taken_remap),
+			skills: remap_selected(&skills, &taken_remap),
+		}
+	}
+
 	/// Append `other.items` without auto-wearing or auto-queuing.
 	///
 	/// Incoming clothing / weapon selections are dropped. Existing selections
@@ -469,6 +547,46 @@ impl ItemRng {
 		}
 		Some(&values[self.gen_index(values.len())])
 	}
+
+	/// How many of `n` items a `numerator / denominator` drop keeps.
+	///
+	/// Remainder is an extra Bernoulli trial so expectation is exact.
+	pub fn sample_fraction_count(&mut self, n: usize, numerator: u32, denominator: u32) -> usize {
+		if n == 0 || numerator == 0 || denominator == 0 {
+			return 0;
+		}
+		if numerator >= denominator {
+			return n;
+		}
+		let product = n as u64 * u64::from(numerator);
+		let den = u64::from(denominator);
+		let base = (product / den) as usize;
+		let rem = (product % den) as u32;
+		if rem > 0 && self.in_range(0, denominator - 1) < rem {
+			base + 1
+		} else {
+			base
+		}
+	}
+
+	/// `count` distinct indices in `0..len`, in shuffled order.
+	pub fn choose_indices(&mut self, len: usize, count: usize) -> Vec<usize> {
+		let count = count.min(len);
+		let mut indices: Vec<usize> = (0..len).collect();
+		for index in 0..count {
+			let swap = index + self.gen_index(len - index);
+			indices.swap(index, swap);
+		}
+		indices.truncate(count);
+		indices
+	}
+}
+
+fn remap_selected(selected: &[usize], remap: &[Option<usize>]) -> Vec<usize> {
+	selected
+		.iter()
+		.filter_map(|&index| remap.get(index).copied().flatten())
+		.collect()
 }
 
 /// One random clothing item (mesh, look, color). Stats roll from identity.
@@ -845,5 +963,102 @@ mod tests {
 	#[test]
 	fn explode_empty_is_empty() {
 		assert!(Inventory::default().explode().is_empty());
+	}
+
+	fn mixed_three() -> Inventory {
+		Inventory {
+			items: vec![
+				InventoryItem::clothing(
+					ClothingMesh::Pants,
+					ClothingMaterial::Cloth,
+					ItemColor::Natural,
+				),
+				InventoryItem::firearm(FirearmMesh::Bullpup),
+				InventoryItem::clothing(
+					ClothingMesh::Robe,
+					ClothingMaterial::Cloth,
+					ItemColor::Cool,
+				),
+			],
+			clothing: vec![0],
+			weapons: vec![1],
+			skills: Vec::new(),
+		}
+	}
+
+	#[test]
+	fn one_third_of_three_items_is_exactly_one() {
+		let mut bag = mixed_three();
+		let taken = bag.take_fraction(&mut ItemRng::from_seed(7), LootFraction::ONE_THIRD);
+		assert_eq!(taken.items.len(), 1);
+		assert_eq!(bag.items.len(), 2);
+		assert_eq!(taken.items.len() + bag.items.len(), 3);
+	}
+
+	#[test]
+	fn one_twelfth_of_twelve_items_is_exactly_one() {
+		let items: Vec<_> = (0..12)
+			.map(|index| {
+				if index % 2 == 0 {
+					InventoryItem::firearm(FirearmMesh::Bullpup)
+				} else {
+					InventoryItem::clothing(
+						ClothingMesh::Pants,
+						ClothingMaterial::Cloth,
+						ItemColor::Natural,
+					)
+				}
+			})
+			.collect();
+		let mut bag = Inventory::with_all_worn(items);
+		let taken = bag.take_fraction(&mut ItemRng::from_seed(3), LootFraction::ONE_TWELFTH);
+		assert_eq!(taken.items.len(), 1);
+		assert_eq!(bag.items.len(), 11);
+	}
+
+	#[test]
+	fn take_fraction_is_seeded_and_remaps_selections() {
+		let selected = Inventory {
+			clothing: vec![0, 2],
+			weapons: vec![1],
+			..mixed_three()
+		};
+		let mut first = selected.clone();
+		let mut second = selected;
+		let taken_a = first.take_fraction(&mut ItemRng::from_seed(99), LootFraction::ONE_THIRD);
+		let taken_b = second.take_fraction(&mut ItemRng::from_seed(99), LootFraction::ONE_THIRD);
+		assert_eq!(taken_a, taken_b);
+		assert_eq!(first, second);
+		assert_eq!(taken_a.items.len(), 1);
+		let kept = &taken_a.items[0];
+		match kept.slot() {
+			InventorySlot::Clothing => assert_eq!(taken_a.clothing, vec![0]),
+			InventorySlot::Weapons => assert_eq!(taken_a.weapons, vec![0]),
+			InventorySlot::Skills => assert_eq!(taken_a.skills, vec![0]),
+		}
+		assert!(first.items.iter().all(|item| item != kept));
+	}
+
+	#[test]
+	fn none_takes_nothing_and_all_drains_the_bag() {
+		let mut none = mixed_three();
+		let taken = none.take_fraction(&mut ItemRng::from_seed(1), LootFraction::NONE);
+		assert!(taken.items.is_empty());
+		assert_eq!(none.items.len(), 3);
+		let mut all = mixed_three();
+		let taken = all.take_fraction(&mut ItemRng::from_seed(1), LootFraction::ALL);
+		assert_eq!(taken.items.len(), 3);
+		assert!(all.items.is_empty());
+	}
+
+	#[test]
+	fn remainder_roll_stays_near_the_expected_rate() {
+		let drops: usize = (0..240)
+			.map(|seed| ItemRng::from_seed(seed).sample_fraction_count(3, 1, 12))
+			.sum();
+		assert!(
+			(40..=80).contains(&drops),
+			"3 × 1/12 over 240 seeds should stay near 60, got {drops}"
+		);
 	}
 }
