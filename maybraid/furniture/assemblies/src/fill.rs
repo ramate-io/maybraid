@@ -12,6 +12,7 @@ use crate::counter::CounterParams;
 use crate::faucet::FaucetParams;
 use crate::food_display::FoodDisplayParams;
 use crate::fridge::FridgeParams;
+use crate::partition::PartitionParams;
 use crate::fruit::FruitParams;
 use crate::range::RangeParams;
 use crate::shelf::ShelfParams;
@@ -48,6 +49,7 @@ pub fn try_assembly(node: &FurnitureNode) -> Option<Assembly> {
 		FurnitureGeometry::Fridge => {
 			FridgeParams { finish_seed: seed, flush_back: flush }.build().assembly()
 		}
+		FurnitureGeometry::Partition => PartitionParams { finish_seed: seed }.build().assembly(),
 		_ => return None,
 	})
 }

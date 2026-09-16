@@ -119,6 +119,10 @@ impl FurnitureNode {
 		Self::placeholder(FurnitureGeometry::Cookware, placement)
 	}
 
+	pub fn partition(placement: Placement) -> Self {
+		Self::placeholder(FurnitureGeometry::Partition, placement)
+	}
+
 	pub fn with_abutment(mut self, abutment: FurnitureAbutment) -> Self {
 		self.abutment = Some(abutment);
 		self.placement.yaw = abutment.facing_yaw();

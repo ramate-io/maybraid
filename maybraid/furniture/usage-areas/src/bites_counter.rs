@@ -10,7 +10,7 @@ use crate::region::{
 	along_is_x, along_span, cut_from_wall, depth_span, floor_height_aabb, longest_wall,
 	sit_on_aabb, slice_along, stamp_make, wall_strip, COUNTER_SLOT_HEIGHT,
 };
-use crate::shelves::leftover_fill;
+use crate::shelves::{leftover_fill, LeftoverMood};
 
 /// Target station width along a service band (metres).
 const STATION: f32 = 1.4;
@@ -40,7 +40,7 @@ impl BitesCounterUsage {
 		};
 		let along = along_span(&service, along_is_x(&service, Some(wall)));
 		if along < 0.4 {
-			return leftover_fill(&region, &region, &[]);
+			return leftover_fill(&region, &region, &[], LeftoverMood::Hall);
 		}
 
 		let service_along_x = along_is_x(&service, Some(wall));
@@ -71,7 +71,7 @@ impl BitesCounterUsage {
 
 		if depth > SERVICE_MAX {
 			let back = cut_from_wall(&region, wall, SERVICE_DEPTH + LEFTOVER_GAP);
-			out.extend(leftover_fill(&back, &region, &[]));
+			out.extend(leftover_fill(&back, &region, &[], LeftoverMood::Hall));
 		}
 		out
 	}
@@ -218,9 +218,10 @@ mod tests {
 		}
 		let stocked = pieces.iter().any(|n| {
 			n.geometry == FurnitureGeometry::Shelf
+				|| n.geometry == FurnitureGeometry::Partition
 				|| n.geometry == FurnitureGeometry::Table
 				|| n.geometry == FurnitureGeometry::Chair
 		});
-		assert!(stocked, "deep leftover should get shelves or lounge");
+		assert!(stocked, "deep leftover should get partitions, shelves, or lounge");
 	}
 }

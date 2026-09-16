@@ -1,4 +1,4 @@
-//! Sit-down pocket → cafe tables and chairs tiled on the packed XZ.
+//! Sit-down pocket → communal tables with wide spacing.
 
 use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec3;
@@ -7,11 +7,12 @@ use richmond_building_components::{FurnitureNode, FurnitureUsageNode, Placement}
 
 use crate::region::{along_is_x, along_span, floor_height_aabb, stamp_make};
 
-const TABLE: Vec3 = Vec3::new(1.25, 1.00, 0.90);
+const COMMUNAL: Vec3 = Vec3::new(2.20, 1.00, 1.40);
+const CAFE: Vec3 = Vec3::new(1.25, 1.00, 0.90);
 const CHAIR: Vec3 = Vec3::new(0.52, 1.10, 0.52);
-const CHAIR_GAP: f32 = 0.16;
-const CELL: f32 = 2.2;
-const MAX_TABLES: usize = 16;
+const CHAIR_GAP: f32 = 0.20;
+const CELL: f32 = 3.8;
+const MAX_TABLES: usize = 8;
 
 /// Expand a [`FurnitureUsage::BitesSeating`](richmond_building_components::FurnitureUsage::BitesSeating) pocket.
 pub struct BitesSeatingUsage;
@@ -32,8 +33,8 @@ impl BitesSeatingUsage {
 			return spare_chairs(&region, node);
 		}
 
-		let n_x = count_cells(sx, CELL, 6).max(1);
-		let n_z = count_cells(sz, CELL, 6).max(1);
+		let n_x = count_cells(sx, CELL, 4).max(1);
+		let n_z = count_cells(sz, CELL, 4).max(1);
 		let (n_x, n_z) = clamp_grid(n_x, n_z, MAX_TABLES);
 		let cell_x = sx / n_x as f32;
 		let cell_z = sz / n_z as f32;
@@ -78,28 +79,47 @@ fn clamp_grid(n_x: usize, n_z: usize, max: usize) -> (usize, usize) {
 }
 
 fn table_set(cell: &Aabb3d, host: &Aabb3d) -> Vec<FurnitureNode> {
+	let communal = try_table(cell, host, COMMUNAL, true);
+	if !communal.is_empty() {
+		return communal;
+	}
+	try_table(cell, host, CAFE, false)
+}
+
+fn try_table(cell: &Aabb3d, host: &Aabb3d, size: Vec3, six_chairs: bool) -> Vec<FurnitureNode> {
 	let c = (cell.min + cell.max) * 0.5;
 	let table = clamp_xz(
 		Aabb3d::from_min_max(
-			Vec3::new(c.x - TABLE.x * 0.5, cell.min.y, c.z - TABLE.z * 0.5),
-			Vec3::new(c.x + TABLE.x * 0.5, cell.min.y + TABLE.y, c.z + TABLE.z * 0.5),
+			Vec3::new(c.x - size.x * 0.5, cell.min.y, c.z - size.z * 0.5),
+			Vec3::new(c.x + size.x * 0.5, cell.min.y + size.y, c.z + size.z * 0.5),
 		),
 		cell,
 	);
-	if (table.max.x - table.min.x) < 0.7 || (table.max.z - table.min.z) < 0.55 {
-		return spare_chairs(cell, &dummy_node());
+	if (table.max.x - table.min.x) < size.x * 0.72 || (table.max.z - table.min.z) < size.z * 0.72 {
+		return Vec::new();
 	}
 	let mut out = vec![stamp_make(FurnitureNode::table, &table, host, None)];
 	let tc = (table.min + table.max) * 0.5;
 	let ox = (table.max.x - table.min.x) * 0.5 + CHAIR.x * 0.5 + CHAIR_GAP;
 	let oz = (table.max.z - table.min.z) * 0.5 + CHAIR.z * 0.5 + CHAIR_GAP;
-	let sides = [
+	let mut seats = vec![
 		(0.0, -oz, 0.0_f32),
 		(0.0, oz, std::f32::consts::PI),
 		(-ox, 0.0, std::f32::consts::FRAC_PI_2),
 		(ox, 0.0, -std::f32::consts::FRAC_PI_2),
 	];
-	for (dx, dz, yaw) in sides {
+	if six_chairs {
+		let hx = (table.max.x - table.min.x) * 0.28;
+		seats = vec![
+			(-hx, -oz, 0.0),
+			(hx, -oz, 0.0),
+			(-hx, oz, std::f32::consts::PI),
+			(hx, oz, std::f32::consts::PI),
+			(-ox, 0.0, std::f32::consts::FRAC_PI_2),
+			(ox, 0.0, -std::f32::consts::FRAC_PI_2),
+		];
+	}
+	for (dx, dz, yaw) in seats {
 		let chair = Aabb3d::from_min_max(
 			Vec3::new(tc.x + dx - CHAIR.x * 0.5, cell.min.y, tc.z + dz - CHAIR.z * 0.5),
 			Vec3::new(tc.x + dx + CHAIR.x * 0.5, cell.min.y + CHAIR.y, tc.z + dz + CHAIR.z * 0.5),
@@ -112,12 +132,8 @@ fn table_set(cell: &Aabb3d, host: &Aabb3d) -> Vec<FurnitureNode> {
 	out
 }
 
-fn dummy_node() -> FurnitureUsageNode {
-	FurnitureUsageNode::bites_seating(Placement::IDENTITY)
-}
-
 fn clamp_xz(slot: Aabb3d, host: &Aabb3d) -> Aabb3d {
-	let pad = 0.06;
+	let pad = 0.10;
 	Aabb3d::from_min_max(
 		Vec3::new(slot.min.x.max(host.min.x + pad), slot.min.y, slot.min.z.max(host.min.z + pad)),
 		Vec3::new(slot.max.x.min(host.max.x - pad), slot.max.y, slot.max.z.min(host.max.z - pad)),
@@ -147,7 +163,7 @@ fn stamp_facing(
 fn spare_chairs(region: &Aabb3d, node: &FurnitureUsageNode) -> Vec<FurnitureNode> {
 	let along_x = along_is_x(region, node.abutment);
 	let along = along_span(region, along_x);
-	let n = ((along / 1.1).floor() as usize).clamp(1, 4);
+	let n = ((along / 1.4).floor() as usize).clamp(1, 3);
 	let mut out = Vec::new();
 	for i in 0..n {
 		let t = (i as f32 + 0.5) / n as f32;
@@ -192,22 +208,24 @@ mod tests {
 	}
 
 	#[test]
-	fn roomy_pocket_gets_tables_and_chairs() {
-		let node = seating_node(Vec3::new(0.0, 0.0, 0.0), Vec3::new(6.0, 3.2, 4.5));
+	fn roomy_pocket_gets_communal_tables() {
+		let node = seating_node(Vec3::new(0.0, 0.0, 0.0), Vec3::new(8.0, 3.2, 7.0));
 		let pieces = BitesSeatingUsage::expand(&node);
 		let tables = pieces.iter().filter(|n| n.geometry == FurnitureGeometry::Table).count();
 		let chairs = pieces.iter().filter(|n| n.geometry == FurnitureGeometry::Chair).count();
-		assert!(tables >= 2, "expected several tables, got {tables}");
-		assert!(chairs >= 4, "expected chairs around tables, got {chairs}");
+		assert!(tables >= 2, "expected a couple communal tables, got {tables}");
+		assert!(tables <= 4, "spacing should stay open, got {tables}");
+		assert!(chairs >= 8, "communal tables should seat several, got {chairs}");
 	}
 
 	#[test]
-	fn large_pocket_tiles_a_grid() {
+	fn large_pocket_stays_sparse() {
 		let node = seating_node(Vec3::new(0.0, 0.0, 0.0), Vec3::new(12.0, 3.2, 8.0));
 		let pieces = BitesSeatingUsage::expand(&node);
 		let tables = pieces.iter().filter(|n| n.geometry == FurnitureGeometry::Table).count();
-		assert!(tables >= 8, "large seating should tile, got {tables}");
-		assert!(tables <= MAX_TABLES);
+		assert!((2..=MAX_TABLES).contains(&tables), "large seating should stay sparse, got {tables}");
+		let chairs = pieces.iter().filter(|n| n.geometry == FurnitureGeometry::Chair).count();
+		assert!(chairs as f32 / tables as f32 >= 3.0, "more chairs per table, chairs {chairs} tables {tables}");
 	}
 
 	#[test]

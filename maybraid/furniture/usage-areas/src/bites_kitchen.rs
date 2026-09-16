@@ -9,7 +9,7 @@ use crate::region::{
 	sit_on_aabb, slice_along, stamp_make, stamp_make_yaw, unit, wall_strip, yaw_turns,
 	COUNTER_SLOT_HEIGHT,
 };
-use crate::shelves::leftover_fill;
+use crate::shelves::{leftover_fill, LeftoverMood};
 
 const RUN_DEPTH: f32 = 0.75;
 const RUN_PAD: f32 = 0.08;
@@ -110,7 +110,7 @@ impl BitesKitchenUsage {
 			keepouts.push(pad_xz(&slot, 0.15));
 		}
 
-		out.extend(leftover_fill(&interior, &region, &keepouts));
+		out.extend(leftover_fill(&interior, &region, &keepouts, LeftoverMood::Kitchen));
 		out
 	}
 }
@@ -273,6 +273,8 @@ mod tests {
 		assert!(got.contains(&FurnitureGeometry::Fridge), "fridge {got:?}");
 		assert!(got.contains(&FurnitureGeometry::Basin), "basin {got:?}");
 		assert!(got.contains(&FurnitureGeometry::Cookware), "cookware {got:?}");
+		let tables = pieces.iter().filter(|n| n.geometry == FurnitureGeometry::Table).count();
+		assert!(tables <= 1, "kitchen leftover should not become a dense cafe, got {tables}");
 		let fridge = pieces.iter().find(|n| n.geometry == FurnitureGeometry::Fridge).unwrap();
 		assert!(
 			fridge.placement.scale.y >= 2.2,

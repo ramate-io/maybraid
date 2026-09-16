@@ -41,6 +41,8 @@ pub enum Show {
 	Range(UnitShow),
 	/// Refrigerator.
 	Fridge(UnitShow),
+	/// Floor-to-ceiling slat partition.
+	Partition(UnitShow),
 	/// Richmond bedroom / kitchen / living packers plus authored extremes.
 	Gallery(GalleryShow),
 }
@@ -119,6 +121,10 @@ impl Show {
 			),
 			Self::Fridge(cmd) => (
 				PreviewSubject::Unit { geometry: FurnitureGeometry::Fridge, seed: cmd.seed },
+				cmd.transform.transform(),
+			),
+			Self::Partition(cmd) => (
+				PreviewSubject::Unit { geometry: FurnitureGeometry::Partition, seed: cmd.seed },
 				cmd.transform.transform(),
 			),
 			Self::Gallery(cmd) => (PreviewSubject::Gallery, cmd.transform.transform()),

@@ -25,6 +25,8 @@ pub enum FurnitureGeometry {
 	Fruit,
 	Bread,
 	Cookware,
+	/// Floor-to-ceiling ornamental screen (slat partition).
+	Partition,
 }
 
 impl FurnitureGeometry {
@@ -51,6 +53,7 @@ impl FurnitureGeometry {
 	/// | Fruit | red | `0.95, 0.22, 0.18, 1.0` |
 	/// | Bread | wheat | `0.90, 0.72, 0.32, 1.0` |
 	/// | Cookware | iron | `0.35, 0.38, 0.42, 1.0` |
+	/// | Partition | sage | `0.58, 0.52, 0.38, 1.0` |
 	pub fn wireframe_color(self) -> Color {
 		match self {
 			Self::Bed => Color::srgba(0.20, 0.55, 1.00, 1.0),
@@ -72,6 +75,7 @@ impl FurnitureGeometry {
 			Self::Fruit => Color::srgba(0.95, 0.22, 0.18, 1.0),
 			Self::Bread => Color::srgba(0.90, 0.72, 0.32, 1.0),
 			Self::Cookware => Color::srgba(0.35, 0.38, 0.42, 1.0),
+			Self::Partition => Color::srgba(0.58, 0.52, 0.38, 1.0),
 		}
 	}
 
@@ -97,11 +101,12 @@ impl FurnitureGeometry {
 			Self::Fruit => 0x6672_7574,
 			Self::Bread => 0x6272_6564,
 			Self::Cookware => 0x636f_6f6b,
+			Self::Partition => 0x7074_746e,
 		}
 	}
 
 	/// All kinds (for wireframe material registration).
-	pub const ALL: [Self; 19] = [
+	pub const ALL: [Self; 20] = [
 		Self::Bed,
 		Self::Wardrobe,
 		Self::Dresser,
@@ -121,5 +126,6 @@ impl FurnitureGeometry {
 		Self::Fruit,
 		Self::Bread,
 		Self::Cookware,
+		Self::Partition,
 	];
 }
