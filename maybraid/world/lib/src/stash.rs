@@ -14,9 +14,9 @@
 //! Absorb never auto-equips. Claim and drop refresh [`WorldPlayerLoadout`]
 //! so the live bag can persist.
 //!
-//! In-range claim shows a Kenney outline Xbox **X** chip in world space,
-//! tinted Maybraid yellow, billboarded above the pile, plus a screen-space
-//! `Pick up <name>` caption so the binding has a verb.
+//! In-range claim shows three concentric ground rings (yellow 1.5 m, green
+//! 0.75 m, blue 0.25 m) and a Kenney outline Xbox **X** chip on the player–
+//! item line, plus a screen-space `Pick up <name>` caption.
 
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value};
@@ -137,13 +137,23 @@ pub const INTERACT_KEY_ICON: &str = "iconography/kenney/input-prompts/keyboard_e
 #[derive(Component)]
 struct StashClaimHalo;
 
-const HALO_INNER: f32 = 0.28;
-const HALO_OUTER: f32 = 0.46;
+/// Was 0.18 m on the single-ring halo; concentric rings stay a bit thinner.
+const HALO_RING_WIDTH: f32 = 0.12;
+const HALO_YELLOW_RADIUS: f32 = 1.5;
+const HALO_GREEN_RADIUS: f32 = 0.75;
+const HALO_BLUE_RADIUS: f32 = 0.25;
 const PROMPT_SIZE: f32 = 0.42;
 const PROMPT_ABOVE: f32 = 0.62;
+const PROMPT_TOWARD_PLAYER: f32 = 0.85;
 const PROMPT_CAPTION_GAP_PX: f32 = 22.0;
 const PROMPT_YELLOW: Color = Color::srgba(0.98, 0.86, 0.32, 1.0);
 const PROMPT_EMISSIVE: LinearRgba = LinearRgba::new(1.4, 1.05, 0.28, 1.0);
+const HALO_YELLOW: Color = Color::srgba(0.98, 0.86, 0.32, 0.88);
+const HALO_YELLOW_EMISSIVE: LinearRgba = LinearRgba::new(1.4, 1.05, 0.28, 1.0);
+const HALO_GREEN: Color = Color::srgba(0.22, 0.82, 0.38, 0.88);
+const HALO_GREEN_EMISSIVE: LinearRgba = LinearRgba::new(0.22, 1.15, 0.38, 1.0);
+const HALO_BLUE: Color = Color::srgba(0.25, 0.48, 0.98, 0.88);
+const HALO_BLUE_EMISSIVE: LinearRgba = LinearRgba::new(0.28, 0.55, 1.35, 1.0);
 
 /// Bind-pose garment so stash clothing keeps recipe + palette.
 #[derive(Clone, PartialEq)]
@@ -679,10 +689,18 @@ fn spawn_stash_interact_prompt(
 	));
 }
 
-fn prompt_billboard(origin: Vec3, camera: Option<Vec3>) -> Transform {
-	let mut transform = Transform::from_translation(origin + Vec3::Y * PROMPT_ABOVE);
+fn prompt_world_point(item: Vec3, player: Vec3) -> Vec3 {
+	let delta = Vec3::new(player.x - item.x, 0.0, player.z - item.z);
+	let dist = delta.length();
+	let toward =
+		if dist > 1e-4 { delta / dist * PROMPT_TOWARD_PLAYER.min(dist * 0.5) } else { Vec3::ZERO };
+	item + toward + Vec3::Y * PROMPT_ABOVE
+}
+
+fn prompt_billboard(at: Vec3, camera: Option<Vec3>) -> Transform {
+	let mut transform = Transform::from_translation(at);
 	if let Some(camera) = camera {
-		let away = origin - camera;
+		let away = at - camera;
 		if away.length_squared() > 1e-6 {
 			transform.look_to(away, Vec3::Y);
 		}
@@ -721,9 +739,8 @@ fn spawn_stash_interact_caption(commands: &mut Commands) {
 fn project_prompt_caption(
 	camera: &Camera,
 	camera_transform: &GlobalTransform,
-	origin: Vec3,
+	world: Vec3,
 ) -> Option<Vec2> {
-	let world = origin + Vec3::Y * PROMPT_ABOVE;
 	let ndc = camera.world_to_ndc(camera_transform, world)?;
 	if ndc.z <= 0.0 || ndc.z >= 1.0 {
 		return None;
@@ -773,11 +790,12 @@ fn sync_stash_interact_prompt(
 	}
 	let camera_at = cameras.iter().next().map(|(_, transform)| transform.translation());
 	let pulse = 1.0 + 0.08 * (time.elapsed_secs() * 5.0).sin();
+	let prompt_at = target.map(|claim| prompt_world_point(claim.at, claim.player));
 	for (mut transform, mut visibility) in &mut prompt {
-		match target {
-			Some(claim) => {
+		match prompt_at {
+			Some(at) => {
 				*visibility = Visibility::Visible;
-				*transform = prompt_billboard(claim.at, camera_at);
+				*transform = prompt_billboard(at, camera_at);
 				transform.scale = Vec3::splat(pulse);
 			}
 			None => *visibility = Visibility::Hidden,
@@ -785,9 +803,9 @@ fn sync_stash_interact_prompt(
 	}
 	let label = target.and_then(|claim| bags.get(claim.bag).ok().map(pickup_action_label));
 	let camera = cameras.iter().next();
-	let screen = target.and_then(|claim| {
+	let screen = prompt_at.and_then(|at| {
 		let (camera, camera_transform) = camera?;
-		project_prompt_caption(camera, camera_transform, claim.at)
+		project_prompt_caption(camera, camera_transform, at)
 	});
 	for (mut text, mut node, mut visibility) in &mut caption {
 		match (target, label.as_deref()) {
@@ -811,6 +829,7 @@ fn sync_stash_interact_prompt(
 #[derive(Clone, Copy)]
 struct NearestClaim {
 	at: Vec3,
+	player: Vec3,
 	bag: Entity,
 }
 
@@ -822,12 +841,10 @@ fn nearest_claim<'a>(
 	let listed: Vec<_> = stashes.into_iter().collect();
 	let anchors: Vec<_> = anchors.into_iter().collect();
 	players.into_iter().find_map(|transform| {
-		nearest_stash_in_radius(player_origin(transform), listed.iter().copied()).map(
-			|(stash, bag, _, at)| NearestClaim {
-				at: halo_world_point(at, stash, anchors.iter().copied()),
-				bag,
-			},
-		)
+		let player = player_origin(transform);
+		nearest_stash_in_radius(player, listed.iter().copied()).map(|(stash, bag, _, at)| {
+			NearestClaim { at: halo_world_point(at, stash, anchors.iter().copied()), player, bag }
+		})
 	})
 }
 
@@ -900,26 +917,45 @@ fn sync_stash_claim_halo(
 	}
 }
 
+fn halo_ring_material(color: Color, emissive: LinearRgba) -> StandardMaterial {
+	StandardMaterial {
+		base_color: color,
+		emissive,
+		alpha_mode: AlphaMode::Blend,
+		unlit: true,
+		cull_mode: None,
+		..default()
+	}
+}
+
+fn halo_rings() -> [(f32, Color, LinearRgba); 3] {
+	[
+		(HALO_YELLOW_RADIUS, HALO_YELLOW, HALO_YELLOW_EMISSIVE),
+		(HALO_GREEN_RADIUS, HALO_GREEN, HALO_GREEN_EMISSIVE),
+		(HALO_BLUE_RADIUS, HALO_BLUE, HALO_BLUE_EMISSIVE),
+	]
+}
+
 fn spawn_stash_claim_halo(
 	commands: &mut Commands,
 	meshes: &mut Assets<Mesh>,
 	materials: &mut Assets<StandardMaterial>,
 ) {
-	commands.spawn((
-		Name::new("stash-claim-halo"),
-		StashClaimHalo,
-		Mesh3d(meshes.add(Annulus::new(HALO_INNER, HALO_OUTER))),
-		MeshMaterial3d(materials.add(StandardMaterial {
-			base_color: Color::srgba(0.98, 0.86, 0.32, 0.88),
-			emissive: LinearRgba::new(1.4, 1.05, 0.28, 1.0),
-			alpha_mode: AlphaMode::Blend,
-			unlit: true,
-			cull_mode: None,
-			..default()
-		})),
-		Transform::from_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
-		Visibility::Hidden,
-	));
+	commands
+		.spawn((
+			Name::new("stash-claim-halo"),
+			StashClaimHalo,
+			Transform::from_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
+			Visibility::Hidden,
+		))
+		.with_children(|halo| {
+			for (radius, color, emissive) in halo_rings() {
+				halo.spawn((
+					Mesh3d(meshes.add(Annulus::new(radius - HALO_RING_WIDTH, radius))),
+					MeshMaterial3d(materials.add(halo_ring_material(color, emissive))),
+				));
+			}
+		});
 }
 
 #[cfg(test)]
@@ -1569,10 +1605,7 @@ mod tests {
 	#[test]
 	fn pickup_action_names_a_single_item() {
 		let pants = one_garment();
-		assert_eq!(
-			pickup_action_label(&pants),
-			format!("Pick up {}", pants.items[0].name())
-		);
+		assert_eq!(pickup_action_label(&pants), format!("Pick up {}", pants.items[0].name()));
 		assert_eq!(pickup_action_label(&mixed_bag()), "Pick up 3 items");
 		assert_eq!(pickup_action_label(&Inventory::default()), "Pick up");
 	}
@@ -1582,12 +1615,7 @@ mod tests {
 		let (mut world, _, stash) = claim_setup(Vec3::ZERO, Vec3::new(1.0, 0.0, 0.0))?;
 		world.init_resource::<Time>();
 		world.spawn((StashInteractPrompt, Transform::IDENTITY, Visibility::Hidden));
-		world.spawn((
-			StashInteractCaption,
-			Text::new(""),
-			Node::default(),
-			Visibility::Hidden,
-		));
+		world.spawn((StashInteractCaption, Text::new(""), Node::default(), Visibility::Hidden));
 		world
 			.run_system_once(sync_stash_interact_prompt)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
@@ -1596,7 +1624,8 @@ mod tests {
 			.single(&world)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		assert_eq!(*visible, Visibility::Visible);
-		assert!((at.translation.xz() - Vec2::new(1.0, 0.0)).length() < 0.5);
+		assert!(at.translation.x > 0.0 && at.translation.x < 1.0);
+		assert!(at.translation.xz().length() < 1.0);
 		assert!(at.translation.y > 0.4);
 		let (caption, caption_visible) = world
 			.query_filtered::<(&Text, &Visibility), With<StashInteractCaption>>()
@@ -1623,16 +1652,42 @@ mod tests {
 	}
 
 	#[test]
+	fn interact_prompt_sits_between_player_and_item() {
+		let item = Vec3::new(2.0, 0.08, 0.0);
+		let player = Vec3::ZERO;
+		let at = prompt_world_point(item, player);
+		assert!(at.x > player.x && at.x < item.x);
+		assert!(at.z.abs() < 1e-4);
+		assert!((at.y - (item.y + PROMPT_ABOVE)).abs() < 1e-4);
+		let beside = prompt_world_point(item, item + Vec3::X * 0.4);
+		assert!((beside.x - (item.x + 0.2)).abs() < 1e-4);
+	}
+
+	#[test]
 	fn interact_prompt_faces_the_camera() {
 		let origin = Vec3::new(2.0, 1.0, 0.0);
 		let camera = Vec3::new(2.0, 1.5, 4.0);
-		let transform = prompt_billboard(origin, Some(camera));
+		let at = origin + Vec3::Y * PROMPT_ABOVE;
+		let transform = prompt_billboard(at, Some(camera));
 		let toward_camera = (camera - transform.translation).normalize();
 		assert!(
 			(-transform.forward()).dot(toward_camera) > 0.7,
 			"quad +Z (opposite forward) should face the camera"
 		);
-		assert!((transform.translation.y - (origin.y + PROMPT_ABOVE)).abs() < 1e-4);
+		assert!((transform.translation - at).length() < 1e-4);
+	}
+
+	#[test]
+	fn claim_halo_uses_three_thinner_rings() {
+		let rings = halo_rings();
+		assert_eq!(rings[0].0, 1.5);
+		assert_eq!(rings[1].0, 0.75);
+		assert_eq!(rings[2].0, 0.25);
+		assert_eq!(rings[0].1, HALO_YELLOW);
+		assert_eq!(rings[1].1, HALO_GREEN);
+		assert_eq!(rings[2].1, HALO_BLUE);
+		assert!(HALO_RING_WIDTH < 0.18);
+		assert!(HALO_BLUE_RADIUS > HALO_RING_WIDTH);
 	}
 
 	fn one_garment() -> Inventory {
