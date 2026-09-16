@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 use clap::Parser;
+use crozon_character_persist::SaveRoot;
 use maybraid::{assets_root, GamePlugin};
 use maybraid_input::PadHidPlugins;
 use maybraid_world::{
@@ -26,6 +27,7 @@ fn main() {
 
 	let assets_path = assets_root();
 	App::new()
+		.insert_resource(SaveRoot::discover())
 		.insert_resource(player_spawn_xz(start_at))
 		.add_plugins(
 			DefaultPlugins
