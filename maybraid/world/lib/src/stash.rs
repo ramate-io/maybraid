@@ -2,9 +2,12 @@
 //!
 //! One host type ([`WorldStash`]) holds a bag via [`InventoryUser`]. Claim is
 //! take-all on [`CharacterIntent::StartInteraction`] (pad **X**) inside
-//! [`StashPolicy::claim_radius`]. Death and player drop
-//! [`Inventory::explode`] into one stash per item so each piece is claimable
-//! on its own. Authored chests stay a single pile.
+//! [`StashPolicy::claim_radius`]. Death samples a mob-kind fraction of the
+//! bag ([`Inventory::take_fraction`]) then [`Inventory::explode`]s the kept
+//! pieces so each is claimable on its own. Raiders and Guards leave about one
+//! third, Brawlers about one twelfth, and other families drop nothing.
+//! Unmarked NPCs still drop the full bag. Player drops still explode
+//! everything. Authored chests stay a single pile.
 //!
 //! Loot TTL is [`StashPolicy::loot_secs`] (default 60 s), independent of
 //! mob corpse lifetime (4 s). Persistent chests omit [`DespawnAfter`].
@@ -16,7 +19,7 @@ use bevy::scene::prelude::{bsn, template_value};
 use bevy::text::FontSize;
 use chico_vegetation_on_terrain_playground::Player as VegetationPlayer;
 use crozon_character_items::{
-	ClothingHost, Inventory, InventoryItem, InventorySlot, MaterialRefParams,
+	ClothingHost, Inventory, InventoryItem, InventorySlot, ItemRng, LootFraction, MaterialRefParams,
 };
 use crozon_characters::{
 	add_character_components_host, character_bounds, CharacterComponents, ClothingLayer,
@@ -32,6 +35,9 @@ use lod::LodScene;
 use material_ref::{MaterialRef, MaterialRefRoot, PropagateToDescendants};
 use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
 use player::PlayerUse;
+
+use maybraid_mobs::MobKind;
+use mob_characters::CharacterBrains;
 
 use crate::control::WorldGameplayEnabled;
 use crate::weapon::{AppliedWorldPlayerLoadout, WorldPlayerLoadout};
@@ -469,7 +475,26 @@ fn despawn_displayed_items(commands: &mut Commands, displayed: &[Entity]) {
 	}
 }
 
-type DownedNpcLoot<'a> = (Entity, &'a Downed, Option<&'a InventoryUser>, Option<&'a FirearmUser>);
+type DownedNpcLoot<'a> = (
+	Entity,
+	&'a Downed,
+	Option<&'a InventoryUser>,
+	Option<&'a FirearmUser>,
+	Option<&'a MobKind>,
+	Option<&'a CharacterBrains>,
+);
+
+fn npc_loot_fraction(kind: Option<&MobKind>, brains: Option<&CharacterBrains>) -> LootFraction {
+	kind.map(|kind| kind.loot_fraction())
+		.or_else(|| brains.map(|brains| brains.loot_fraction()))
+		.unwrap_or(LootFraction::ALL)
+}
+
+fn npc_loot_seed(entity: Entity, downed: &Downed) -> u64 {
+	entity.to_bits()
+		^ u64::from(downed.point.x.to_bits())
+		^ (u64::from(downed.point.z.to_bits()) << 32)
+}
 
 fn detach_downed_npc_loot(
 	settings: Res<WorldStashSettings>,
@@ -479,10 +504,14 @@ fn detach_downed_npc_loot(
 	mut bags: Query<&mut Inventory>,
 ) {
 	let assets = assets.as_deref();
-	for (body, downed, user, firearm) in &downed {
-		let loot = user
-			.and_then(|user| bags.get_mut(user.bag).ok())
-			.map_or_else(Inventory::default, |mut bag| bag.take_all());
+	for (body, downed, user, firearm, kind, brains) in &downed {
+		let fraction = npc_loot_fraction(kind, brains);
+		let loot = user.and_then(|user| bags.get_mut(user.bag).ok()).map_or_else(
+			Inventory::default,
+			|mut bag| {
+				bag.take_fraction(&mut ItemRng::from_seed(npc_loot_seed(body, downed)), fraction)
+			},
+		);
 		if let Some(user) = user {
 			commands.entity(user.bag).try_despawn();
 			commands.entity(body).remove::<InventoryUser>();
@@ -876,6 +905,127 @@ mod tests {
 			assert!((despawn.remaining_secs() - DEFAULT_LOOT_SECS).abs() < 1e-3);
 			assert_ne!(*stash, body);
 		}
+		Ok(())
+	}
+
+	fn expected_npc_loot(
+		entity: Entity,
+		point: Vec3,
+		mut bag: Inventory,
+		fraction: LootFraction,
+	) -> Inventory {
+		let downed = Downed { source: None, point, at: 0.0 };
+		bag.take_fraction(&mut ItemRng::from_seed(npc_loot_seed(entity, &downed)), fraction)
+	}
+
+	fn spawn_downed_npc(
+		world: &mut World,
+		bag: Inventory,
+		kind: Option<MobKind>,
+		brains: Option<CharacterBrains>,
+		point: Vec3,
+	) -> Entity {
+		let bag_id = world.spawn(bag).id();
+		let mut entity = world.spawn((
+			Npc,
+			Transform::from_translation(point),
+			InventoryUser::carrying(bag_id),
+			Downed { source: None, point, at: 0.0 },
+		));
+		if let Some(kind) = kind {
+			entity.insert(kind);
+		}
+		if let Some(brains) = brains {
+			entity.insert(brains);
+		}
+		entity.id()
+	}
+
+	#[test]
+	fn raider_downed_drops_one_third() -> anyhow::Result<()> {
+		let mut world = World::new();
+		world.init_resource::<WorldStashSettings>();
+		let point = Vec3::new(2.0, 0.0, 1.0);
+		let bag = mixed_bag();
+		let body = spawn_downed_npc(
+			&mut world,
+			bag.clone(),
+			Some(MobKind::Raider),
+			Some(CharacterBrains::Roamer),
+			point,
+		);
+		let expected = expected_npc_loot(body, point, bag, LootFraction::ONE_THIRD);
+
+		world
+			.run_system_once(detach_downed_npc_loot)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+
+		assert_eq!(world.query::<&WorldStash>().iter(&world).count(), expected.items.len());
+		assert_eq!(expected.items.len(), 1);
+		Ok(())
+	}
+
+	#[test]
+	fn guard_downed_drops_one_third() -> anyhow::Result<()> {
+		let mut world = World::new();
+		world.init_resource::<WorldStashSettings>();
+		let point = Vec3::new(-1.0, 0.0, 3.0);
+		let bag = mixed_bag();
+		let body = spawn_downed_npc(&mut world, bag.clone(), Some(MobKind::Guard), None, point);
+		let expected = expected_npc_loot(body, point, bag, LootFraction::ONE_THIRD);
+
+		world
+			.run_system_once(detach_downed_npc_loot)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+
+		assert_eq!(world.query::<&WorldStash>().iter(&world).count(), expected.items.len());
+		assert_eq!(expected.items.len(), 1);
+		Ok(())
+	}
+
+	#[test]
+	fn brawler_downed_drops_one_twelfth() -> anyhow::Result<()> {
+		let mut world = World::new();
+		world.init_resource::<WorldStashSettings>();
+		let point = Vec3::new(0.0, 0.0, 5.0);
+		let bag = mixed_bag();
+		let body = spawn_downed_npc(&mut world, bag.clone(), Some(MobKind::Brawler), None, point);
+		let expected = expected_npc_loot(body, point, bag, LootFraction::ONE_TWELFTH);
+
+		world
+			.run_system_once(detach_downed_npc_loot)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+
+		assert_eq!(world.query::<&WorldStash>().iter(&world).count(), expected.items.len());
+		assert!(expected.items.len() <= 1);
+		Ok(())
+	}
+
+	#[test]
+	fn brains_set_loot_when_mob_kind_is_missing() -> anyhow::Result<()> {
+		let mut world = World::new();
+		world.init_resource::<WorldStashSettings>();
+		let point = Vec3::ZERO;
+		let bag = mixed_bag();
+		let body =
+			spawn_downed_npc(&mut world, bag.clone(), None, Some(CharacterBrains::Brawler), point);
+		let expected = expected_npc_loot(body, point, bag, LootFraction::ONE_TWELFTH);
+
+		world
+			.run_system_once(detach_downed_npc_loot)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+
+		assert_eq!(world.query::<&WorldStash>().iter(&world).count(), expected.items.len());
+		Ok(())
+	}
+
+	#[test]
+	fn unmarked_npc_still_drops_the_full_bag() -> anyhow::Result<()> {
+		assert_eq!(npc_loot_fraction(None, None), LootFraction::ALL);
+		assert_eq!(
+			npc_loot_fraction(Some(&MobKind::Raider), Some(&CharacterBrains::Roamer)),
+			LootFraction::ONE_THIRD
+		);
 		Ok(())
 	}
 

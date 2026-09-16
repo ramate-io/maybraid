@@ -1,4 +1,5 @@
 use bevy::prelude::Component;
+use crozon_character_items::LootFraction;
 use mob_characters::FromMobNumber;
 
 #[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
@@ -33,11 +34,36 @@ impl MobKind {
 			Self::Brawler => (6, 12),
 		}
 	}
+
+	/// Death loot kept from the bag. Combat families drop a fraction so
+	/// corpses do not carpet the world; other families drop nothing.
+	pub const fn loot_fraction(self) -> LootFraction {
+		match self {
+			Self::Raider | Self::Guard => LootFraction::ONE_THIRD,
+			Self::Brawler => LootFraction::ONE_TWELFTH,
+			Self::Herd | Self::Pack | Self::Pleb | Self::Rambles => LootFraction::NONE,
+		}
+	}
 }
 
 impl FromMobNumber for MobKind {
 	fn from_num(num: f32) -> Self {
 		let mixed = u64::from(num.to_bits()).wrapping_mul(0x9E37_79B9_7F4A_7C15);
 		Self::VALUES[(mixed as usize) % Self::VALUES.len()]
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn combat_families_drop_a_fraction_and_others_drop_nothing() {
+		assert_eq!(MobKind::Raider.loot_fraction(), LootFraction::ONE_THIRD);
+		assert_eq!(MobKind::Guard.loot_fraction(), LootFraction::ONE_THIRD);
+		assert_eq!(MobKind::Brawler.loot_fraction(), LootFraction::ONE_TWELFTH);
+		assert_eq!(MobKind::Pleb.loot_fraction(), LootFraction::NONE);
+		assert_eq!(MobKind::Herd.loot_fraction(), LootFraction::NONE);
+		assert_eq!(MobKind::Rambles.loot_fraction(), LootFraction::NONE);
 	}
 }
