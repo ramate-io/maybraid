@@ -3,14 +3,15 @@
 use bevy::prelude::*;
 use journeying_intelligence::JourneyingIntelligenceUser;
 use mob_intelligence::{
-	install_mob_routing, spawn_mob, Mob, MobIdAlloc, MobInstall, MobMemberBody, MobMemberNeeded,
-	MobRespawn, MobSlot, MobTetherLock, MobTravel, RosterMember,
+	install_mob_routing, install_prey_targeting, spawn_mob, MobIdAlloc, MobInstall, MobMemberBody,
+	MobMemberNeeded, MobRespawn, MobSlot, MobTravel, PreySubject, PreyTargetingIntelligence,
+	RosterMember,
 };
 use npc_intelligence::{NpcBody, Personality};
 use player::{spawn_npc, LocomotionCapsule, PlayerLook, CAPSULE_LENGTH, CAPSULE_RADIUS};
 use poi_intelligence::{
-	PoiGoal, PoiId, PoiIntelligenceUser, PoiInterest, PoiInterests, PoiKind, PoiKnowledge,
-	PoiLearningPolicy, PoiVisitPolicy, PoiVisitState,
+	PoiIntelligenceUser, PoiInterest, PoiInterests, PoiKind, PoiKnowledge, PoiLearningPolicy,
+	PoiVisitPolicy, PoiVisitState,
 };
 use spotting_intelligence::{InterestLayers, SpotBounds, SpotSubject};
 use std::f32::consts::TAU;
@@ -21,13 +22,7 @@ use crate::scene::{waypoint_xz, CAMP, FORAGE, GATE, JOURNEY_TILE, WAYPOINT};
 const GRAZER_GROUP: ThreatGroupId = ThreatGroupId::group(4);
 const HUNT_GROUP: ThreatGroupId = ThreatGroupId::group(3);
 const WILDLIFE: ThreatGroupId = ThreatGroupId::group(6);
-const PREY: PoiKind = PoiKind::new("mob-brain/prey");
-const PREY_POI: PoiId = PoiId(10_000);
-const HUNT_ARRIVAL: f32 = 12.0;
-/// Committed focus on the herd after arrival. Copy this order of magnitude;
-/// waypoint hops use [`HUNT_JOURNEY_LINGER`].
-const HUNT_LOCK_SECS: f32 = 45.0;
-const HUNT_BROWSE_SECS: f32 = 8.0;
+/// Waypoint hops stay shorter than the extracted hunt lock linger.
 const HUNT_JOURNEY_LINGER: f32 = 2.5;
 
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
@@ -251,8 +246,11 @@ pub fn spawn_packs(
 		}
 		let host = spawn_mob(commands, Transform::from_xyz(recipe.at.x, 0.0, recipe.at.y), install);
 		commands.entity(host).insert((Name::new(recipe.name), recipe.kind));
+		if recipe.kind == PackKind::Roam {
+			commands.entity(host).insert(PreySubject);
+		}
 		if recipe.kind == PackKind::Hunt {
-			commands.entity(host).insert(HuntNovelty::default());
+			install_prey_targeting(commands, host, PreyTargetingIntelligence::hunt_herd());
 		}
 		if recipe.journeys() {
 			stamp_journey(commands, host, id.0, recipe.journey_linger);
@@ -271,119 +269,6 @@ pub fn spawn_packs(
 		}
 	}
 	commands.insert_resource(visuals);
-}
-
-/// After a herd lock expires, pause chase so the host can journey and members
-/// can meander forage before the pack re-acquires.
-#[derive(Component, Clone, Copy, Debug)]
-pub(crate) struct HuntNovelty {
-	browse_until: f32,
-	chase_generation: u64,
-}
-
-impl Default for HuntNovelty {
-	fn default() -> Self {
-		Self { browse_until: 0.0, chase_generation: 1 }
-	}
-}
-
-impl HuntNovelty {
-	fn browsing(self, now: f32) -> bool {
-		self.browse_until > now
-	}
-}
-
-/// Hunt lock expiry starts a browse window. Waypoint locks during browse
-/// must not reset it.
-pub fn start_hunt_browse(
-	time: Res<Time>,
-	mut released: RemovedComponents<MobTetherLock>,
-	mut hunts: Query<&mut HuntNovelty>,
-) {
-	let now = time.elapsed_secs();
-	for entity in released.read() {
-		let Ok(mut novelty) = hunts.get_mut(entity) else {
-			continue;
-		};
-		if novelty.browsing(now) {
-			continue;
-		}
-		novelty.browse_until = now + HUNT_BROWSE_SECS;
-	}
-}
-
-/// Hunt host travels onto the herd. Arrival locks member tethers onto that host.
-/// After the lock expires, chase pauses so journeying / forage can run.
-pub fn hunt_tracks_herd(
-	time: Res<Time>,
-	mut commands: Commands,
-	hosts: Query<(Entity, &PackKind, &GlobalTransform), With<Mob>>,
-	mut hunts: Query<(Entity, Option<&MobTetherLock>, &mut HuntNovelty)>,
-	mut goals: Query<&mut PoiGoal>,
-) {
-	let Some((prey, prey_at)) = hosts.iter().find_map(|(entity, kind, transform)| {
-		(*kind == PackKind::Roam).then_some((entity, transform.translation()))
-	}) else {
-		return;
-	};
-	let now = time.elapsed_secs();
-	let at = Vec3::new(prey_at.x, 0.0, prey_at.z);
-	for (hunt, lock, mut novelty) in &mut hunts {
-		if lock.is_some() {
-			write_prey_goal(
-				&mut commands,
-				hunt,
-				&mut goals,
-				prey,
-				at,
-				now,
-				novelty.chase_generation,
-			);
-			continue;
-		}
-		if novelty.browsing(now) {
-			if goals.get(hunt).is_ok_and(|goal| goal.kind == PREY) {
-				commands.entity(hunt).remove::<PoiGoal>();
-			}
-			continue;
-		}
-		if novelty.browse_until > 0.0 {
-			novelty.chase_generation = novelty.chase_generation.saturating_add(1).max(1);
-			novelty.browse_until = 0.0;
-		}
-		write_prey_goal(&mut commands, hunt, &mut goals, prey, at, now, novelty.chase_generation);
-	}
-}
-
-fn write_prey_goal(
-	commands: &mut Commands,
-	hunt: Entity,
-	goals: &mut Query<&mut PoiGoal>,
-	prey: Entity,
-	at: Vec3,
-	now: f32,
-	generation: u64,
-) {
-	if let Ok(mut goal) = goals.get_mut(hunt) {
-		goal.generation = generation;
-		goal.target = PREY_POI;
-		goal.kind = PREY;
-		goal.poi_entity = Some(prey);
-		goal.location.point = at;
-		goal.location.radius = HUNT_ARRIVAL;
-		goal.linger_secs = HUNT_LOCK_SECS;
-		return;
-	}
-	commands.entity(hunt).insert(PoiGoal::new(
-		generation,
-		PREY_POI,
-		Some(prey),
-		PREY,
-		at,
-		HUNT_ARRIVAL,
-		now,
-		HUNT_LOCK_SECS,
-	));
 }
 
 fn stamp_journey(commands: &mut Commands, host: Entity, seed: u64, linger_secs: f32) {
@@ -608,10 +493,11 @@ mod tests {
 	#[test]
 	fn hunt_focus_linger_is_a_committed_lock() {
 		let hunt = recipes().into_iter().find(|recipe| recipe.kind == PackKind::Hunt).unwrap();
+		let targeting = PreyTargetingIntelligence::hunt_herd();
 		assert!((hunt.journey_linger - HUNT_JOURNEY_LINGER).abs() < 1e-4);
 		assert!(hunt.journeys());
-		assert!((HUNT_LOCK_SECS - 45.0).abs() < 1e-4);
-		assert!(HUNT_JOURNEY_LINGER < HUNT_LOCK_SECS);
+		assert!((targeting.duration - 45.0).abs() < 1e-4);
+		assert!(HUNT_JOURNEY_LINGER < targeting.duration);
 	}
 
 	#[test]

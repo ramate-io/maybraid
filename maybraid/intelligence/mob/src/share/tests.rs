@@ -234,6 +234,45 @@ fn damage_is_just_another_first_hand_bit() -> anyhow::Result<()> {
 		.and_then(|knowledge| knowledge.get(attacker_id))
 		.map(|known| known.sources);
 	anyhow::ensure!(second_sources == Some(ThreatSource::SHARED));
+	let board = app
+		.world()
+		.get::<MobKnowledge>(host)
+		.cloned()
+		.ok_or_else(|| anyhow::anyhow!("missing host board"))?;
+	let registry = app.world().resource::<ThreatRegistry>();
+	anyhow::ensure!(board.alerts(registry, attacker, ThreatSource::RECEIVED_DAMAGE));
+	anyhow::ensure!(!board.alerts(registry, attacker, ThreatSource::default()));
+	Ok(())
+}
+
+#[test]
+fn shared_bits_do_not_raise_an_alert() -> anyhow::Result<()> {
+	let mut world = World::new();
+	world.init_resource::<ThreatRegistry>();
+	let id = ThreatId(9);
+	let subject = world.spawn(ThreatSubject::new(id)).id();
+	let affiliations = Affiliations::with_self(id);
+	world.resource_mut::<ThreatRegistry>().upsert(
+		subject,
+		ThreatSubject::new(id),
+		&affiliations,
+		Vec3::ZERO,
+	)?;
+	let mut first_hand = MobKnowledge::default();
+	first_hand.adopt_finding(id, ThreatSource::RECEIVED_DAMAGE);
+	let mut shared_only = MobKnowledge::default();
+	shared_only.adopt_finding(id, ThreatSource::SHARED);
+	let registry = world.resource::<ThreatRegistry>();
+	anyhow::ensure!(first_hand.alerts(
+		registry,
+		subject,
+		ThreatSource::RECEIVED_DAMAGE | ThreatSource::RECEIVED_FIRE
+	));
+	anyhow::ensure!(!shared_only.alerts(
+		registry,
+		subject,
+		ThreatSource::RECEIVED_DAMAGE | ThreatSource::SHARED
+	));
 	Ok(())
 }
 

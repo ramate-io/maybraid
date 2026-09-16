@@ -27,7 +27,7 @@ use movement_intelligence::{
 use movement_intelligence_avian::AvianMovementSurface;
 use movement_realization::MovementRealizationPlugin;
 use npc_intelligence::NpcIntelligencePlugin;
-use packs::{hunt_tracks_herd, spawn_needed_members, spawn_packs, start_hunt_browse, PackKind};
+use packs::{spawn_needed_members, spawn_packs, PackKind};
 use player::{Npc, PlayerPlugin};
 use poi_intelligence::{PoiGoal, PoiIntelligencePlugin, PoiSystems};
 use routing_intelligence::RoutingPlugin;
@@ -125,10 +125,6 @@ impl Plugin for MobBrainPlaygroundPlugin {
 				(release_modifiers_on_focus_change.before(camera_controller), camera_controller),
 			)
 			.add_systems(Update, spawn_needed_members.after(MobSystems::Respawn))
-			.add_systems(
-				Update,
-				(start_hunt_browse, hunt_tracks_herd).chain().before(MobSystems::Travel),
-			)
 			.add_systems(Update, draw_debug_world)
 			.add_systems(Update, update_status_text);
 	}

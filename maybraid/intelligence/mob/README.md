@@ -29,6 +29,7 @@ the app spawns the unparented body. See [ROSTER.md](ROSTER.md).
 - [`MobRespawn`](src/roster.rs): delay + replacement cap; corpses remain for four seconds by default, then death emits [`MobMemberNeeded`](src/roster.rs). Replacements use a weighted nearby POI, avoid immediately repeating one POI, and fall back to a 20–80 m ring around the host. Cull only clears the live pointer.
 - optional journey: [`install_mob_journeying`](src/host.rs) stamps [`RoutingIntelligenceUser`](../routing) so [`PoiGoal`](../poi) drives a coarse Fixed-layer corridor. [`MobTravel`](src/travel.rs) slides the host along those hops (including hop Y). Hosts are not [`movement_intelligence`](../movement/lib) users.
 - [`MobTetherLock`](src/lock.rs): after arrival, member tethers sit on the destination entity for the goal linger, then restore to the host. Combat/Evade still own NPC movement.
+- [`PreyTargetingIntelligence`](src/prey.rs): grant policy over a live [`PreySubject`](src/prey.rs). Opportunity (subject inside `off_course_distance` of the **host**) or Alert (first-hand [`MobKnowledge`](src/share.rs) bits ∩ `engage`) calls [`begin_poi_goal`](../poi). Drive + [`MobTravel`](src/travel.rs) own the corridor. Drop the goal when the grant ends; the interrupted hop stays in knowledge and is not marked visited.
 
 Systems query the roster, not `With<Npc>` children. `npc-intelligence` stays
 LodScene-ignorant.

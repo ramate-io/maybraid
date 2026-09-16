@@ -15,6 +15,7 @@ use damage::{DamageSystems, DespawnAfter, Downed};
 use durham_terrain_models::{TerrainCellLayout, TerrainEntryStore};
 use firearm_user::FirearmUser;
 use firearms::WeaponTrigger;
+use maybraid_mobs::PreySubject;
 use mob_characters::{LOCAL_POI, URBAN_POI, VEGETATION_POI};
 use player::{CameraFollow, Player as MaybraidPlayer, PlayerUse};
 use poi_intelligence::{
@@ -191,6 +192,7 @@ fn queue_downed_world_player(
 			SpotSubject,
 			ThreatSubject,
 			Affiliations,
+			PreySubject,
 		)>();
 	}
 }

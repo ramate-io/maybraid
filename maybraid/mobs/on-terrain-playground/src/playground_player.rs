@@ -13,6 +13,7 @@ use durham_terrain_models::{
 use game_commands::command::TextEntryFocus;
 use lod_avian::PhysicsInteractionLayer;
 use maybraid_input::{PadButton, VirtualPad};
+use mob_intelligence::PreySubject;
 use player::{
 	ground_plane_for_wish, tick_jump, walkable_contact_normal, wish_on_ground, JumpWish, Jumping,
 	WalkableGround,
@@ -167,6 +168,7 @@ fn spawn_player(
 		.spawn((
 			Name::new("Player"),
 			Player,
+			PreySubject,
 			AwaitingTerrainSurface,
 			CharacterController,
 			Transform::from_translation(spawn),
