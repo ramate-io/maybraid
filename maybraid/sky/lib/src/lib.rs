@@ -19,8 +19,8 @@ use dome::{spawn_sky_wash, DomeSettings, SkyDomeMaterialPlugin};
 use field::{spawn_sky_field, SkyFieldMaterialPlugin};
 
 pub use celestial::{
-	SkyFill, SkyMoon, SkySunDisk, CELESTIAL_DISTANCE_FACTOR, MOON_COLOR, MOON_LIFT, MOON_RADIUS_M,
-	MOON_YAW_OFFSET, SUN_CORONA_COLOR, SUN_CORONA_RADIUS_M, SUN_DISK_COLOR, SUN_DISK_RADIUS_M,
+	SkyFill, SkyMoon, CELESTIAL_DISTANCE_FACTOR, MOON_COLOR, MOON_LIFT, MOON_RADIUS_M,
+	MOON_YAW_OFFSET,
 };
 pub use clock::{
 	SkyClock, SkyCommand, SkyMood, DEFAULT_SKY_PERIOD_SECS, SKY_PHASE_DAWN, SKY_PHASE_DUSK,
@@ -188,19 +188,26 @@ mod tests {
 	}
 
 	#[test]
-	fn sun_disk_tracks_the_key() -> anyhow::Result<()> {
+	fn field_sun_tracks_the_key() -> anyhow::Result<()> {
 		let mut app = sky_test_app(ShadowQuality::High);
 		let sun_dir = {
 			let mut suns = app.world_mut().query_filtered::<&Transform, With<SkySun>>();
 			let sun = *suns.single(app.world()).map_err(|error| anyhow::anyhow!("{error:?}"))?;
 			SkySun::disk_direction(&sun)
 		};
-		let disk_dir = {
-			let mut disks = app.world_mut().query_filtered::<&Transform, With<SkySunDisk>>();
-			let disk = disks.single(app.world()).map_err(|error| anyhow::anyhow!("{error:?}"))?;
-			disk.translation.normalize_or_zero()
+		let field_dir = {
+			let mut fields = app
+				.world_mut()
+				.query_filtered::<&MeshMaterial3d<SkyFieldMaterial>, With<SkyField>>();
+			let handle =
+				fields.single(app.world()).map_err(|error| anyhow::anyhow!("{error:?}"))?;
+			let materials = app.world().resource::<Assets<SkyFieldMaterial>>();
+			let material = materials
+				.get(&handle.0)
+				.ok_or_else(|| anyhow::anyhow!("missing field material"))?;
+			material.params.sun_dir.truncate()
 		};
-		assert!(sun_dir.dot(disk_dir) > 0.995, "disk={disk_dir} sun={sun_dir}");
+		assert!(sun_dir.dot(field_dir) > 0.995, "field={field_dir} sun={sun_dir}");
 		Ok(())
 	}
 
@@ -248,7 +255,7 @@ mod tests {
 	}
 
 	#[test]
-	fn night_phase_hides_the_sun_disk() -> anyhow::Result<()> {
+	fn night_phase_drops_the_shader_sun() -> anyhow::Result<()> {
 		let mut app = sky_test_app(ShadowQuality::High);
 		app.insert_resource(SkyClock {
 			phase: SKY_PHASE_NIGHT,
@@ -256,10 +263,14 @@ mod tests {
 			paused: true,
 		});
 		app.update();
-		let mut disks = app.world_mut().query_filtered::<&Visibility, With<SkySunDisk>>();
-		let visibility =
-			*disks.single(app.world()).map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		assert_eq!(visibility, Visibility::Hidden);
+		let mut fields = app
+			.world_mut()
+			.query_filtered::<&MeshMaterial3d<SkyFieldMaterial>, With<SkyField>>();
+		let handle = fields.single(app.world()).map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let materials = app.world().resource::<Assets<SkyFieldMaterial>>();
+		let material =
+			materials.get(&handle.0).ok_or_else(|| anyhow::anyhow!("missing field material"))?;
+		assert!(material.params.sun_dir.y < 0.0, "shader sun should sit below the horizon");
 		Ok(())
 	}
 }

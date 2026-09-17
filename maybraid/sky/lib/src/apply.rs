@@ -1,8 +1,8 @@
-//! Push [`SkyClock`] onto lights, blue dome, cosmos, disks, and distance fog.
+//! Push [`SkyClock`] onto lights, blue dome, cosmos, moon, and distance fog.
 
 use bevy::prelude::*;
 
-use crate::celestial::{SkyFill, SkyMoon, SkySunDisk, CELESTIAL_DISTANCE_FACTOR};
+use crate::celestial::{SkyFill, SkyMoon, CELESTIAL_DISTANCE_FACTOR};
 use crate::clock::SkyClock;
 use crate::dome::{DomeSettings, SkyDomeMaterial, SkyWash};
 use crate::field::{SkyField, SkyFieldMaterial};
@@ -13,10 +13,9 @@ pub(crate) fn apply_sky_mood(
 	mut clock: ResMut<SkyClock>,
 	settings: Res<DomeSettings>,
 	mut ambient: Option<ResMut<GlobalAmbientLight>>,
-	mut sun: Query<(&mut Transform, &mut DirectionalLight), (With<SkySun>, Without<SkySunDisk>)>,
+	mut sun: Query<(&mut Transform, &mut DirectionalLight), With<SkySun>>,
 	mut fill: Query<&mut DirectionalLight, (With<SkyFill>, Without<SkySun>)>,
-	mut disks: Query<(&mut Transform, &mut Visibility), (With<SkySunDisk>, Without<SkySun>)>,
-	mut moons: Query<&mut Transform, (With<SkyMoon>, Without<SkySun>, Without<SkySunDisk>)>,
+	mut moons: Query<&mut Transform, (With<SkyMoon>, Without<SkySun>)>,
 	field: Query<&MeshMaterial3d<SkyFieldMaterial>, With<SkyField>>,
 	mut field_mats: ResMut<Assets<SkyFieldMaterial>>,
 	wash: Query<&MeshMaterial3d<SkyDomeMaterial>, With<SkyWash>>,
@@ -42,12 +41,6 @@ pub(crate) fn apply_sky_mood(
 		light.illuminance = mood.fill_illuminance;
 	}
 
-	let disk_vis =
-		if mood.sun_above_horizon() { Visibility::Inherited } else { Visibility::Hidden };
-	for (mut transform, mut visibility) in &mut disks {
-		*transform = Transform::from_translation(SkySun::disk_offset(&pose, distance));
-		*visibility = disk_vis;
-	}
 	for mut transform in &mut moons {
 		*transform = Transform::from_translation(mood.moon_dir() * distance);
 	}

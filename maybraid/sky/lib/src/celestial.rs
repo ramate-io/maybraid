@@ -1,4 +1,4 @@
-//! Unlit sun disk and moon. Stars live on the outer field shader.
+//! Mesh moon. The sun is the Cosimo glint on the field shader.
 
 use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
@@ -7,20 +7,12 @@ use std::f32::consts::PI;
 use crate::dome::DomeSettings;
 use crate::SkySun;
 
-/// Just inside the dome so the disk does not clip the wash shell.
+/// Just inside the dome so the moon does not clip the wash shell.
 pub const CELESTIAL_DISTANCE_FACTOR: f32 = 0.82;
-pub const SUN_DISK_RADIUS_M: f32 = 55.0;
-pub const SUN_CORONA_RADIUS_M: f32 = 140.0;
 pub const MOON_RADIUS_M: f32 = 22.0;
 pub const MOON_YAW_OFFSET: f32 = 120.0 * PI / 180.0;
 pub const MOON_LIFT: f32 = 0.38;
-pub const SUN_DISK_COLOR: Color = Color::hsla(42.0, 0.55, 0.92, 1.0);
-pub const SUN_CORONA_COLOR: Color = Color::hsla(32.0, 0.70, 0.70, 1.0);
 pub const MOON_COLOR: Color = Color::hsla(215.0, 0.12, 0.78, 1.0);
-
-/// Visible sun disk. Local translation is the camera→sun axis.
-#[derive(Component, Debug, Clone, Copy)]
-pub struct SkySunDisk;
 
 /// Cooler, smaller companion opposite the key.
 #[derive(Component, Debug, Clone, Copy)]
@@ -56,27 +48,6 @@ pub(crate) fn spawn_sky_celestial(
 	let sun_dir = SkySun::disk_direction(sun);
 	let moon_dir = SkyMoon::direction_from_sun(sun_dir);
 
-	let disk = commands
-		.spawn((
-			Name::new("sky-sun-disk"),
-			SkySunDisk,
-			Mesh3d(meshes.add(Sphere::new(SUN_DISK_RADIUS_M))),
-			MeshMaterial3d(materials.add(unlit_opaque(SUN_DISK_COLOR))),
-			Transform::from_translation(SkySun::disk_offset(sun, distance)),
-			Visibility::Inherited,
-			NotShadowCaster,
-			ChildOf(parent),
-		))
-		.id();
-	commands.spawn((
-		Name::new("sky-sun-corona"),
-		Mesh3d(meshes.add(Sphere::new(SUN_CORONA_RADIUS_M))),
-		MeshMaterial3d(materials.add(unlit_add(SUN_CORONA_COLOR, 0.22))),
-		Transform::IDENTITY,
-		Visibility::Inherited,
-		NotShadowCaster,
-		ChildOf(disk),
-	));
 	commands.spawn((
 		Name::new("sky-moon"),
 		SkyMoon,
@@ -89,17 +60,6 @@ pub(crate) fn spawn_sky_celestial(
 	));
 }
 
-fn unlit_opaque(color: Color) -> StandardMaterial {
-	StandardMaterial {
-		base_color: color,
-		unlit: true,
-		alpha_mode: AlphaMode::Opaque,
-		cull_mode: None,
-		fog_enabled: false,
-		..default()
-	}
-}
-
 fn unlit_blend(color: Color, alpha: f32) -> StandardMaterial {
 	let mut linear = color.to_linear();
 	linear.alpha = alpha;
@@ -107,19 +67,6 @@ fn unlit_blend(color: Color, alpha: f32) -> StandardMaterial {
 		base_color: Color::from(linear),
 		unlit: true,
 		alpha_mode: AlphaMode::Blend,
-		cull_mode: None,
-		fog_enabled: false,
-		..default()
-	}
-}
-
-fn unlit_add(color: Color, alpha: f32) -> StandardMaterial {
-	let mut linear = color.to_linear();
-	linear.alpha = alpha;
-	StandardMaterial {
-		base_color: Color::from(linear),
-		unlit: true,
-		alpha_mode: AlphaMode::Add,
 		cull_mode: None,
 		fog_enabled: false,
 		..default()

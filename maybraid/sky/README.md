@@ -8,7 +8,9 @@ atmosphere: slow 3D fbm patches of blue and haze, with holes onto
 cosmos. Both shells sample view direction (no polar UV).
 
 The outer shell ([`field.wgsl`](lib/src/field.wgsl)) is Cosimo on the
-sphere: void, nebula, `pow` glints. Drift matches Cosimo (`t * 0.012`).
+sphere: void, nebula, `pow` glints, and the sun. Drift matches Cosimo
+(`t * 0.012`). There is no mesh sun disk — that sat in front of the
+shader halo and read as a dark pupil.
 
 The default clock is **paused at golden** (phase `0.62`, the authored
 −45°/45° amber key). `/sky play` or `MAYBRAID_SKY_PLAY=1` starts a 30
