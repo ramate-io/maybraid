@@ -14,7 +14,7 @@ struct SkyDomeParams {
     zenith: vec4<f32>,
     horizon: vec4<f32>,
     nadir: vec4<f32>,
-    // x day_weight, y peak_alpha, z unused, w phase
+    // x day_weight, y peak_alpha, z star_gain, w phase
     style: vec4<f32>,
 }
 
@@ -67,57 +67,61 @@ fn vertex(vertex_no_morph: Vertex) -> VertexOutput {
     return out;
 }
 
-fn hash12(p: vec2<f32>) -> f32 {
-    let p3 = fract(vec3<f32>(p.x, p.y, p.x) * vec3<f32>(0.1031, 0.1030, 0.0973));
-    let d = p3 + vec3<f32>(dot(p3, p3.yzx + 33.33));
+fn hash13(p: vec3<f32>) -> f32 {
+    let q = fract(p * 0.1031);
+    let d = q + vec3<f32>(dot(q, q.yzx + 33.33));
     return fract((d.x + d.y) * d.z);
 }
 
-fn value_noise(p: vec2<f32>) -> f32 {
+fn value_noise3(p: vec3<f32>) -> f32 {
     let i = floor(p);
     let f0 = fract(p);
     let f = f0 * f0 * f0 * (f0 * (f0 * 6.0 - 15.0) + 10.0);
-    let a = hash12(i);
-    let b = hash12(i + vec2<f32>(1.0, 0.0));
-    let c = hash12(i + vec2<f32>(0.0, 1.0));
-    let d = hash12(i + vec2<f32>(1.0, 1.0));
-    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+    let n000 = hash13(i);
+    let n100 = hash13(i + vec3<f32>(1.0, 0.0, 0.0));
+    let n010 = hash13(i + vec3<f32>(0.0, 1.0, 0.0));
+    let n110 = hash13(i + vec3<f32>(1.0, 1.0, 0.0));
+    let n001 = hash13(i + vec3<f32>(0.0, 0.0, 1.0));
+    let n101 = hash13(i + vec3<f32>(1.0, 0.0, 1.0));
+    let n011 = hash13(i + vec3<f32>(0.0, 1.0, 1.0));
+    let n111 = hash13(i + vec3<f32>(1.0, 1.0, 1.0));
+    let x00 = mix(n000, n100, f.x);
+    let x10 = mix(n010, n110, f.x);
+    let x01 = mix(n001, n101, f.x);
+    let x11 = mix(n011, n111, f.x);
+    return mix(mix(x00, x10, f.y), mix(x01, x11, f.y), f.z);
 }
 
-fn fbm(p: vec2<f32>) -> f32 {
-    return value_noise(p) * 0.5
-        + value_noise(p * 1.87) * 0.28
-        + value_noise(p * 3.41) * 0.15
-        + value_noise(p * 6.13) * 0.07;
+fn fbm3(p: vec3<f32>) -> f32 {
+    return value_noise3(p) * 0.50
+        + value_noise3(p * 1.87) * 0.28
+        + value_noise3(p * 3.41) * 0.15
+        + value_noise3(p * 6.13) * 0.07;
 }
 
-fn sky_uv(dir: vec3<f32>) -> vec2<f32> {
-    return vec2<f32>(atan2(dir.z, dir.x), dir.y);
+fn fbm2(p: vec2<f32>) -> f32 {
+    return fbm3(vec3<f32>(p.x, p.y, 1.7));
 }
 
-/// How much of the sky is atmosphere right now. Three slow clocks, not a sine.
-fn haze_cover(t: f32) -> f32 {
-    let a = fbm(vec2<f32>(t * 0.0065, 2.17));
-    let b = fbm(vec2<f32>(-t * 0.0042, 8.41));
-    let c = fbm(vec2<f32>(t * 0.0026 + 5.2, -t * 0.0031));
+fn haze_cover(t: f32, phase: f32) -> f32 {
+    let a = fbm2(vec2<f32>(t * 0.006 + phase * 3.0, 2.17));
+    let b = fbm2(vec2<f32>(-t * 0.004 + phase, 8.41));
+    let c = fbm2(vec2<f32>(t * 0.003 + 5.2, -t * 0.003 + phase * 2.0));
     return mix(0.22, 0.84, saturate(a * 0.50 + b * 0.32 + c * 0.18));
 }
 
-/// Large drifting islands: high = haze, low = blue.
 fn haze_island(dir: vec3<f32>, t: f32) -> f32 {
-    let p = sky_uv(dir) * 1.15;
-    let drift = vec2<f32>(t * 0.016, -t * 0.012);
-    let warp = fbm(p + drift);
-    let n = fbm(p * 1.2 + vec2<f32>(warp * 1.15, t * 0.009));
-    let n2 = fbm(p * 2.05 + vec2<f32>(-t * 0.014, warp));
+    let p = dir * 2.2 + vec3<f32>(t * 0.012, -t * 0.01, t * 0.008);
+    let warp = fbm3(p);
+    let n = fbm3(p * 1.15 + vec3<f32>(warp * 0.8, t * 0.009, -warp));
+    let n2 = fbm3(p * 1.8 + vec3<f32>(-t * 0.014, warp, t * 0.007));
     return saturate(n * 0.62 + n2 * 0.38);
 }
 
-/// Separate 4D field for cosmos holes so blue and haze can both open up.
 fn cosmos_hole(dir: vec3<f32>, t: f32) -> f32 {
-    let p = sky_uv(dir) * 1.05 + vec2<f32>(3.7, -1.4);
-    let n = fbm(p + vec2<f32>(t * 0.011, -t * 0.008));
-    let n2 = fbm(p * 1.7 + vec2<f32>(-t * 0.007, t * 0.013));
+    let p = dir * 1.9 + vec3<f32>(3.7, -1.4, t * 0.011);
+    let n = fbm3(p + vec3<f32>(t * 0.01, -t * 0.008, 0.6));
+    let n2 = fbm3(p * 1.5 + vec3<f32>(-t * 0.007, t * 0.012, 2.2));
     return saturate(n * 0.58 + n2 * 0.42);
 }
 
@@ -126,6 +130,7 @@ fn shade_dome(dir: vec3<f32>) -> vec4<f32> {
     let t = globals.time;
     let day = material.style.x;
     let peak = material.style.y;
+    let phase = material.style.w;
 
     var haze_col = material.horizon.xyz;
     if elev < 0.0 {
@@ -136,16 +141,13 @@ fn shade_dome(dir: vec3<f32>) -> vec4<f32> {
     let haze = smoothstep(0.32, 0.68, island);
     let rgb = mix(blue, haze_col, haze);
 
-    let cover = haze_cover(t);
+    let cover = haze_cover(t, phase);
     let hole = cosmos_hole(dir, t);
-    // Day thickens the dome; cover wanders how much of it is solid.
-    let presence = mix(0.10, 0.86, day) * mix(0.50, 1.0, cover);
-    // Holes open more at night; afternoon still punches islands of cosmos.
-    let open = smoothstep(mix(0.28, 0.48, day), mix(0.62, 0.86, day), hole);
-    var alpha = presence * (1.0 - open * mix(0.92, 0.62, day));
-    // Horizon keeps a band so ridges still wash, even through a hole.
+    let presence = mix(0.10, 0.72, day) * mix(0.50, 1.0, cover);
+    let open = smoothstep(mix(0.28, 0.42, day), mix(0.62, 0.82, day), hole);
+    var alpha = presence * (1.0 - open * mix(0.88, 0.58, day));
     let rim = smoothstep(0.38, -0.06, elev);
-    alpha = max(alpha, rim * mix(0.22, 0.55, day));
+    alpha = max(alpha, rim * mix(0.20, 0.50, day));
     alpha = saturate(alpha * peak);
 
     return vec4<f32>(rgb, alpha);

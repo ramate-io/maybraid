@@ -4,12 +4,11 @@ Blue / haze atmosphere over an opaque Cosimo field. An inverted sphere
 follows the camera. This is an aesthetic mask, not a cull clock.
 
 The inner shell ([`dome.wgsl`](lib/src/dome.wgsl)) is a blending
-atmosphere: 4D patches of blue and haze, with holes that open onto
-cosmos. Coverage drifts — not a uniform sine. Night thins the dome;
-afternoon thickens it but still punches islands of stars.
+atmosphere: slow 3D fbm patches of blue and haze, with holes onto
+cosmos. Both shells sample view direction (no polar UV).
 
-The outer shell ([`field.wgsl`](lib/src/field.wgsl)) is cosmos: void,
-nebula, glints. Day weight does not crush it.
+The outer shell ([`field.wgsl`](lib/src/field.wgsl)) is Cosimo on the
+sphere: void, nebula, `pow` glints. Drift matches Cosimo (`t * 0.012`).
 
 The default clock is **paused at golden** (phase `0.62`, the authored
 −45°/45° amber key). `/sky play` or `MAYBRAID_SKY_PLAY=1` starts a 30

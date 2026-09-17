@@ -54,7 +54,7 @@ pub struct SkyDomeParams {
 	pub zenith: Vec4,
 	pub horizon: Vec4,
 	pub nadir: Vec4,
-	/// `x` day weight, `y` peak alpha, `z` unused, `w` phase.
+	/// `x` day weight, `y` peak alpha, `z` star gain, `w` phase.
 	pub style: Vec4,
 }
 
@@ -71,7 +71,7 @@ impl SkyDomeMaterial {
 				zenith: color_vec4(mood.zenith),
 				horizon: color_vec4(mood.horizon),
 				nadir: color_vec4(mood.nadir),
-				style: Vec4::new(mood.day_weight, peak_alpha, 0.0, mood.phase),
+				style: Vec4::new(mood.day_weight, peak_alpha, mood.star_gain, mood.phase),
 			},
 		}
 	}

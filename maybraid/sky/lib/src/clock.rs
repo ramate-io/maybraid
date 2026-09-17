@@ -1,8 +1,8 @@
 //! Slow Discovery clock. Phase drives palette, key pose, and field gains.
 //!
 //! Default is paused at the golden-afternoon pose so play matches [#844](https://github.com/ramate-io/maybraid/issues/844).
-//! `/sky play` or `MAYBRAID_SKY_PLAY=1` starts a long cycle. The field shader
-//! still breathes at a fixed pose.
+//! `/sky play` or `MAYBRAID_SKY_PLAY=1` starts a long cycle. Shaders also
+//! drift on `globals.time` while a pose is paused.
 
 use bevy::prelude::*;
 
