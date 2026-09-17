@@ -1,6 +1,6 @@
 //---------------------------------------------------------
-// Cosmos backdrop. Opaque Cosimo field behind the blue dome.
-// Day does not crush this — the dome's alpha does.
+// Blue dome: 4D blue / haze patches with alpha holes.
+// Cosmos sits behind this shell.
 //---------------------------------------------------------
 
 #import bevy_pbr::{
@@ -10,18 +10,16 @@
     mesh_view_bindings::{view, globals},
 }
 
-struct SkyFieldParams {
+struct SkyDomeParams {
     zenith: vec4<f32>,
     horizon: vec4<f32>,
     nadir: vec4<f32>,
-    // x day_weight, y swirl_gain, z star_gain, w phase
+    // x day_weight, y peak_alpha, z unused, w phase
     style: vec4<f32>,
-    sun_dir: vec4<f32>,
-    moon_dir: vec4<f32>,
 }
 
 @group(#{MATERIAL_BIND_GROUP}) @binding(0)
-var<uniform> material: SkyFieldParams;
+var<uniform> material: SkyDomeParams;
 
 @vertex
 fn vertex(vertex_no_morph: Vertex) -> VertexOutput {
@@ -93,48 +91,68 @@ fn fbm(p: vec2<f32>) -> f32 {
         + value_noise(p * 6.13) * 0.07;
 }
 
-fn shade_cosmos(dir: vec3<f32>) -> vec3<f32> {
+fn sky_uv(dir: vec3<f32>) -> vec2<f32> {
+    return vec2<f32>(atan2(dir.z, dir.x), dir.y);
+}
+
+/// How much of the sky is atmosphere right now. Three slow clocks, not a sine.
+fn haze_cover(t: f32) -> f32 {
+    let a = fbm(vec2<f32>(t * 0.0065, 2.17));
+    let b = fbm(vec2<f32>(-t * 0.0042, 8.41));
+    let c = fbm(vec2<f32>(t * 0.0026 + 5.2, -t * 0.0031));
+    return mix(0.22, 0.84, saturate(a * 0.50 + b * 0.32 + c * 0.18));
+}
+
+/// Large drifting islands: high = haze, low = blue.
+fn haze_island(dir: vec3<f32>, t: f32) -> f32 {
+    let p = sky_uv(dir) * 1.15;
+    let drift = vec2<f32>(t * 0.016, -t * 0.012);
+    let warp = fbm(p + drift);
+    let n = fbm(p * 1.2 + vec2<f32>(warp * 1.15, t * 0.009));
+    let n2 = fbm(p * 2.05 + vec2<f32>(-t * 0.014, warp));
+    return saturate(n * 0.62 + n2 * 0.38);
+}
+
+/// Separate 4D field for cosmos holes so blue and haze can both open up.
+fn cosmos_hole(dir: vec3<f32>, t: f32) -> f32 {
+    let p = sky_uv(dir) * 1.05 + vec2<f32>(3.7, -1.4);
+    let n = fbm(p + vec2<f32>(t * 0.011, -t * 0.008));
+    let n2 = fbm(p * 1.7 + vec2<f32>(-t * 0.007, t * 0.013));
+    return saturate(n * 0.58 + n2 * 0.42);
+}
+
+fn shade_dome(dir: vec3<f32>) -> vec4<f32> {
+    let elev = dir.y;
     let t = globals.time;
-    let swirl_g = material.style.y;
-    let star_g = material.style.z;
-    let u = atan2(dir.z, dir.x);
-    let v = dir.y;
-    let p = vec2<f32>(u, v) * 2.4;
-    let n = fbm(p + vec2<f32>(t * 0.012, -t * 0.01));
-    let n2 = fbm(p * 2.05 + vec2<f32>(-t * 0.016, t * 0.014));
+    let day = material.style.x;
+    let peak = material.style.y;
 
-    let void_c = vec3<f32>(0.04, 0.02, 0.09);
-    let nebula = vec3<f32>(0.22, 0.06, 0.38);
-    let bloom = vec3<f32>(0.42, 0.16, 0.62);
-    var color = mix(void_c, nebula, n);
-    color = mix(color, bloom, smoothstep(0.55, 0.9, n2) * 0.42 * swirl_g);
+    var haze_col = material.horizon.xyz;
+    if elev < 0.0 {
+        haze_col = mix(material.horizon.xyz, material.nadir.xyz, saturate(-elev));
+    }
+    let blue = material.zenith.xyz;
+    let island = haze_island(dir, t);
+    let haze = smoothstep(0.32, 0.68, island);
+    let rgb = mix(blue, haze_col, haze);
 
-    let band = 0.5 + 0.5 * sin(u * 2.3 + v * 3.0 + t * 0.18 + n * 2.0);
-    let meridian = 0.5 + 0.5 * sin(u * 0.9 - v * 1.4 + t * 0.09);
-    color += vec3<f32>(0.55, 0.28, 0.72) * smoothstep(0.75, 1.0, band) * 0.16 * swirl_g;
-    color += vec3<f32>(0.35, 0.18, 0.55) * smoothstep(0.88, 1.0, meridian) * 0.10 * swirl_g;
+    let cover = haze_cover(t);
+    let hole = cosmos_hole(dir, t);
+    // Day thickens the dome; cover wanders how much of it is solid.
+    let presence = mix(0.10, 0.86, day) * mix(0.50, 1.0, cover);
+    // Holes open more at night; afternoon still punches islands of cosmos.
+    let open = smoothstep(mix(0.28, 0.48, day), mix(0.62, 0.86, day), hole);
+    var alpha = presence * (1.0 - open * mix(0.92, 0.62, day));
+    // Horizon keeps a band so ridges still wash, even through a hole.
+    let rim = smoothstep(0.38, -0.06, elev);
+    alpha = max(alpha, rim * mix(0.22, 0.55, day));
+    alpha = saturate(alpha * peak);
 
-    let glint = pow(saturate(n2), 12.0) * (0.5 + 0.5 * sin(t * 1.4 + n * 6.0));
-    let glint2 = pow(saturate(n), 14.0);
-    color += vec3<f32>(0.95, 0.82, 1.0) * glint * 0.70 * star_g;
-    color += vec3<f32>(0.70, 0.90, 1.0) * glint2 * 0.32 * star_g;
-
-    let sun = normalize(material.sun_dir.xyz + vec3<f32>(1e-5, 0.0, 0.0));
-    let sun_d = saturate(dot(dir, sun));
-    let sun_vis = smoothstep(-0.10, 0.04, sun.y);
-    color += vec3<f32>(1.0, 0.93, 0.68) * pow(sun_d, 720.0) * 2.4 * sun_vis;
-    color += vec3<f32>(1.0, 0.70, 0.32) * pow(sun_d, 28.0) * 0.58 * sun_vis;
-
-    let moon = normalize(material.moon_dir.xyz + vec3<f32>(1e-5, 0.0, 0.0));
-    let moon_d = saturate(dot(dir, moon));
-    color += vec3<f32>(0.78, 0.84, 0.96) * pow(moon_d, 260.0) * 1.35;
-    color += vec3<f32>(0.42, 0.50, 0.70) * pow(moon_d, 16.0) * 0.18;
-
-    return color;
+    return vec4<f32>(rgb, alpha);
 }
 
 @fragment
 fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     let dir = normalize(in.world_position.xyz - view.world_position.xyz);
-    return vec4<f32>(shade_cosmos(dir), 1.0);
+    return shade_dome(dir);
 }

@@ -309,8 +309,8 @@ fn keyframes() -> [SkyMood; 7] {
 			0.12,
 			-0.35,
 			0.42,
-			0.48,
-			0.28,
+			1.0,
+			1.0,
 		),
 		key(
 			SKY_PHASE_MORNING,
@@ -325,8 +325,8 @@ fn keyframes() -> [SkyMood; 7] {
 			0.55,
 			0.15,
 			0.86,
-			0.28,
-			0.08,
+			1.0,
+			1.0,
 		),
 		key(
 			SKY_PHASE_NOON,
@@ -341,8 +341,8 @@ fn keyframes() -> [SkyMood; 7] {
 			1.15,
 			yaw * 0.7,
 			1.0,
-			0.22,
-			0.04,
+			1.0,
+			1.0,
 		),
 		key(
 			SKY_PHASE_GOLDEN,
@@ -357,8 +357,8 @@ fn keyframes() -> [SkyMood; 7] {
 			-crate::SUN_PITCH,
 			yaw,
 			0.82,
-			0.40,
-			0.14,
+			1.0,
+			1.0,
 		),
 		key(
 			SKY_PHASE_DUSK,
@@ -373,8 +373,8 @@ fn keyframes() -> [SkyMood; 7] {
 			0.14,
 			1.05,
 			0.38,
-			0.58,
-			0.40,
+			1.0,
+			1.0,
 		),
 		key(
 			0.93,
@@ -428,6 +428,7 @@ mod tests {
 		assert!((mood.sun_azimuth - crate::SUN_YAW).abs() < 1e-3);
 		assert!((mood.sun_illuminance - crate::SUN_ILLUMINANCE).abs() < 1.0);
 		assert!(mood.day_weight > 0.7);
+		assert!(mood.star_gain > 0.9, "cosmos stays full; the dome covers it");
 		assert!(mood.sun_above_horizon());
 	}
 

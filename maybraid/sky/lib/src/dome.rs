@@ -1,20 +1,33 @@
-//! Inverted fade sphere. Vertex hue follows elevation; alpha follows XZ radius.
+//! Inner blue / haze dome. Fragment alpha opens onto the cosmos field.
 
-use bevy::asset::RenderAssetUsages;
-use bevy::mesh::{Indices, PrimitiveTopology};
+use bevy::asset::{embedded_asset, RenderAssetUsages};
+use bevy::light::NotShadowCaster;
+use bevy::mesh::{Indices, MeshVertexBufferLayoutRef, PrimitiveTopology};
+use bevy::pbr::{MaterialPipeline, MaterialPipelineKey};
 use bevy::prelude::*;
+use bevy::reflect::TypePath;
+use bevy::render::render_resource::{
+	AsBindGroup, RenderPipelineDescriptor, ShaderType, SpecializedMeshPipelineError,
+};
+use bevy::shader::ShaderRef;
 use std::f32::consts::PI;
 
+use crate::clock::SkyMood;
 use crate::{SKY_HORIZON, SKY_NADIR, SKY_ZENITH};
 
 #[derive(Resource, Clone, Copy)]
 pub(crate) struct DomeSettings {
+	#[allow(dead_code)]
 	pub inner_fade_m: f32,
+	#[allow(dead_code)]
 	pub outer_fade_m: f32,
 	pub sphere_radius_m: f32,
 	pub max_alpha: f32,
+	#[allow(dead_code)]
 	pub horizon: Color,
+	#[allow(dead_code)]
 	pub zenith: Color,
+	#[allow(dead_code)]
 	pub nadir: Color,
 }
 
@@ -32,31 +45,108 @@ impl Default for DomeSettings {
 	}
 }
 
-/// Inner XZ haze. Vertex RGB stays white so [`apply_sky_mood`] can tint it.
+/// Inner atmosphere shell. Cosmos shows through its alpha holes.
 #[derive(Component, Debug, Clone, Copy)]
 pub struct SkyWash;
 
+#[derive(Clone, Copy, Debug, ShaderType)]
+pub struct SkyDomeParams {
+	pub zenith: Vec4,
+	pub horizon: Vec4,
+	pub nadir: Vec4,
+	/// `x` day weight, `y` peak alpha, `z` unused, `w` phase.
+	pub style: Vec4,
+}
+
+#[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
+pub struct SkyDomeMaterial {
+	#[uniform(0)]
+	pub params: SkyDomeParams,
+}
+
+impl SkyDomeMaterial {
+	pub fn from_mood(mood: SkyMood, peak_alpha: f32) -> Self {
+		Self {
+			params: SkyDomeParams {
+				zenith: color_vec4(mood.zenith),
+				horizon: color_vec4(mood.horizon),
+				nadir: color_vec4(mood.nadir),
+				style: Vec4::new(mood.day_weight, peak_alpha, 0.0, mood.phase),
+			},
+		}
+	}
+
+	pub fn apply_mood(&mut self, mood: SkyMood, peak_alpha: f32) {
+		*self = Self::from_mood(mood, peak_alpha);
+	}
+}
+
+impl Default for SkyDomeMaterial {
+	fn default() -> Self {
+		Self::from_mood(crate::SkyClock::golden().sample(), crate::DEFAULT_MAX_ALPHA)
+	}
+}
+
+impl Material for SkyDomeMaterial {
+	fn vertex_shader() -> ShaderRef {
+		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "dome.wgsl").into()
+	}
+
+	fn fragment_shader() -> ShaderRef {
+		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "dome.wgsl").into()
+	}
+
+	fn alpha_mode(&self) -> AlphaMode {
+		AlphaMode::Blend
+	}
+
+	fn reads_view_transmission_texture(&self) -> bool {
+		false
+	}
+
+	fn enable_prepass() -> bool {
+		false
+	}
+
+	fn enable_shadows() -> bool {
+		false
+	}
+
+	fn specialize(
+		_pipeline: &MaterialPipeline,
+		descriptor: &mut RenderPipelineDescriptor,
+		_layout: &MeshVertexBufferLayoutRef,
+		_key: MaterialPipelineKey<Self>,
+	) -> Result<(), SpecializedMeshPipelineError> {
+		descriptor.primitive.cull_mode = None;
+		Ok(())
+	}
+}
+
+pub struct SkyDomeMaterialPlugin;
+
+impl Plugin for SkyDomeMaterialPlugin {
+	fn build(&self, app: &mut App) {
+		embedded_asset!(app, "dome.wgsl");
+		app.init_asset::<SkyDomeMaterial>();
+		if app.is_plugin_added::<bevy::render::RenderPlugin>() {
+			app.add_plugins(MaterialPlugin::<SkyDomeMaterial>::default());
+		}
+	}
+}
+
 impl DomeSettings {
-	/// Opaque inverted shell. The field shader paints direction from local pos.
+	/// Inverted shell. Both atmosphere and cosmos paint from view direction.
 	pub(crate) fn shell_mesh(self, radius: f32) -> Mesh {
-		self.sphere_mesh(radius, |_, _, _| [1.0, 1.0, 1.0, 1.0])
+		self.sphere_mesh(radius)
 	}
 
-	pub(crate) fn fade_sphere(self) -> Mesh {
-		let radius = self.sphere_radius_m;
-		self.sphere_mesh(radius, |x, y, z| {
-			let [_, _, _, alpha] = self.vertex_rgba(x, y, z);
-			[1.0, 1.0, 1.0, alpha]
-		})
-	}
-
-	fn sphere_mesh(self, radius: f32, mut rgba: impl FnMut(f32, f32, f32) -> [f32; 4]) -> Mesh {
+	fn sphere_mesh(self, radius: f32) -> Mesh {
 		let rings = 48u32;
 		let segs = 64u32;
 
 		let mut positions = Vec::new();
 		let mut normals = Vec::new();
-		let mut colors = Vec::new();
 		let mut indices = Vec::new();
 
 		for ring in 0..=rings {
@@ -72,7 +162,6 @@ impl DomeSettings {
 				positions.push([x, y, z]);
 				let len = (x * x + y * y + z * z).sqrt().max(1e-5);
 				normals.push([-x / len, -y / len, -z / len]);
-				colors.push(rgba(x, y, z));
 			}
 		}
 
@@ -88,94 +177,56 @@ impl DomeSettings {
 		let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default());
 		mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
 		mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
-		mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, colors);
 		mesh.insert_indices(Indices::U32(indices));
 		mesh
 	}
-
-	pub(crate) fn vertex_rgba(self, x: f32, y: f32, z: f32) -> [f32; 4] {
-		let xz = (x * x + z * z).sqrt();
-		let fade = smoothstep(self.inner_fade_m, self.outer_fade_m, xz);
-		let alpha = self.max_alpha * fade * fade;
-		let elevation = (y / self.sphere_radius_m).clamp(-1.0, 1.0);
-		let rgb = self.rgb_at_elevation(elevation);
-		[rgb.red, rgb.green, rgb.blue, alpha]
-	}
-
-	fn rgb_at_elevation(self, elevation: f32) -> LinearRgba {
-		if elevation >= 0.0 {
-			lerp_linear(
-				self.horizon.to_linear(),
-				self.zenith.to_linear(),
-				smoothstep(0.0, 1.0, elevation),
-			)
-		} else {
-			lerp_linear(
-				self.horizon.to_linear(),
-				self.nadir.to_linear(),
-				smoothstep(0.0, 1.0, -elevation),
-			)
-		}
-	}
 }
 
-fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
-	let t = ((x - edge0) / (edge1 - edge0)).clamp(0.0, 1.0);
-	t * t * (3.0 - 2.0 * t)
+pub(crate) fn spawn_sky_wash(
+	mut commands: Commands,
+	mut meshes: ResMut<Assets<Mesh>>,
+	mut materials: ResMut<Assets<SkyDomeMaterial>>,
+	settings: Res<DomeSettings>,
+	clock: Res<crate::SkyClock>,
+	dome: Query<Entity, With<crate::SkyDome>>,
+) {
+	let Ok(parent) = dome.single() else {
+		return;
+	};
+	let material = materials.add(SkyDomeMaterial::from_mood(clock.sample(), settings.max_alpha));
+	commands.spawn((
+		Name::new("sky-blue-dome"),
+		SkyWash,
+		Mesh3d(meshes.add(settings.shell_mesh(settings.sphere_radius_m))),
+		MeshMaterial3d(material),
+		Transform::IDENTITY,
+		Visibility::Inherited,
+		NotShadowCaster,
+		ChildOf(parent),
+	));
 }
 
-fn lerp_linear(a: LinearRgba, b: LinearRgba, t: f32) -> LinearRgba {
-	LinearRgba {
-		red: a.red + (b.red - a.red) * t,
-		green: a.green + (b.green - a.green) * t,
-		blue: a.blue + (b.blue - a.blue) * t,
-		alpha: a.alpha + (b.alpha - a.alpha) * t,
-	}
+fn color_vec4(color: Color) -> Vec4 {
+	let c = color.to_linear();
+	Vec4::new(c.red, c.green, c.blue, 1.0)
 }
 
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::{DEFAULT_MAX_ALPHA, SKY_HORIZON, SKY_ZENITH};
 
-	fn mesh_colors(mesh: &Mesh) -> anyhow::Result<&[[f32; 4]]> {
-		let values =
-			mesh.attribute(Mesh::ATTRIBUTE_COLOR).ok_or_else(|| anyhow::anyhow!("colors"))?;
-		match values {
-			bevy::mesh::VertexAttributeValues::Float32x4(colors) => Ok(colors),
-			_ => Err(anyhow::anyhow!("expected rgba colors")),
-		}
+	#[test]
+	fn blue_dome_blends_over_cosmos() {
+		let material = SkyDomeMaterial::default();
+		assert_eq!(material.alpha_mode(), AlphaMode::Blend);
+		assert!(material.params.style.y > 0.5, "peak alpha should be a real atmosphere");
 	}
 
 	#[test]
-	fn fade_sphere_stays_a_wash_not_a_wall() -> anyhow::Result<()> {
-		let settings = DomeSettings::default();
-		let mesh = settings.fade_sphere();
-		let colors = mesh_colors(&mesh)?;
-		assert!(colors.iter().any(|c| c[3] < 0.02), "near-axis vertices stay clear");
-		let peak = colors.iter().map(|c| c[3]).fold(0.0_f32, f32::max);
-		assert!(peak > 0.15 && peak <= DEFAULT_MAX_ALPHA + 1e-4, "peak={peak}");
-
-		let positions = mesh
-			.attribute(Mesh::ATTRIBUTE_POSITION)
-			.ok_or_else(|| anyhow::anyhow!("positions"))?;
-		let bevy::mesh::VertexAttributeValues::Float32x3(positions) = positions else {
-			return Err(anyhow::anyhow!("expected xyz positions"));
-		};
-		let mut saw_horizon = false;
-		for (pos, color) in positions.iter().zip(colors.iter()) {
-			let y = pos[1];
-			let xz = (pos[0] * pos[0] + pos[2] * pos[2]).sqrt();
-			if y.abs() < 80.0 && xz > 1_000.0 {
-				assert!(color[3] > 0.15, "horizon wash should be visible");
-				saw_horizon = true;
-			}
-		}
-		assert!(saw_horizon, "expected a horizon-band vertex");
+	fn horizon_stays_warmer_than_zenith() {
 		let horizon = SKY_HORIZON.to_linear();
 		let zenith = SKY_ZENITH.to_linear();
 		assert!(horizon.red > zenith.red, "horizon stays warmer than zenith");
 		assert!(zenith.blue > horizon.blue, "zenith stays cooler than horizon");
-		Ok(())
 	}
 }

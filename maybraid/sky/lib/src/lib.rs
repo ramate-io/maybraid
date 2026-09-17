@@ -1,7 +1,7 @@
-//! Distance-fade sky dome plus an outer Cosimo-like field.
+//! Blue / haze dome over an opaque Cosimo field.
 //!
-//! The inner sphere is an XZ wash, not a cull clock. The outer field owns
-//! zenith color, swirls, and stars. [`SkyClock`] drives palette and key pose.
+//! The inner shell is atmosphere: 4D blue and haze patches with alpha holes.
+//! The outer field is cosmos. [`SkyClock`] drives palette and key pose.
 
 mod apply;
 mod celestial;
@@ -15,7 +15,7 @@ use std::f32::consts::PI;
 
 use apply::apply_sky_mood;
 use celestial::spawn_sky_celestial;
-use dome::DomeSettings;
+use dome::{spawn_sky_wash, DomeSettings, SkyDomeMaterialPlugin};
 use field::{spawn_sky_field, SkyFieldMaterialPlugin};
 
 pub use celestial::{
@@ -26,7 +26,7 @@ pub use clock::{
 	SkyClock, SkyCommand, SkyMood, DEFAULT_SKY_PERIOD_SECS, SKY_PHASE_DAWN, SKY_PHASE_DUSK,
 	SKY_PHASE_GOLDEN, SKY_PHASE_MORNING, SKY_PHASE_NIGHT, SKY_PHASE_NOON,
 };
-pub use dome::SkyWash;
+pub use dome::{SkyDomeMaterial, SkyWash};
 pub use field::{SkyField, SkyFieldMaterial, FIELD_RADIUS_FACTOR};
 pub use shadows::{ShadowQuality, SkySun};
 
@@ -36,8 +36,8 @@ pub const DEFAULT_INNER_FADE_M: f32 = 350.0;
 pub const DEFAULT_OUTER_FADE_M: f32 = 1_200.0;
 /// Sphere mesh radius. Larger than the fade so the shell stays off the near ground.
 pub const DEFAULT_SPHERE_RADIUS_M: f32 = 2_800.0;
-/// Peak wash. Stay well under 1 so ridges are not cut out by an opaque band.
-pub const DEFAULT_MAX_ALPHA: f32 = 0.32;
+/// Peak atmosphere alpha. Holes still open onto cosmos.
+pub const DEFAULT_MAX_ALPHA: f32 = 0.78;
 
 /// Cooler overhead. More chroma than the old dusty pale.
 pub const SKY_ZENITH: Color = Color::hsla(210.0, 0.42, 0.58, 1.0);
@@ -101,7 +101,7 @@ impl Plugin for SkyDomePlugin {
 			zenith: SKY_ZENITH,
 			nadir: SKY_NADIR,
 		};
-		app.add_plugins(SkyFieldMaterialPlugin)
+		app.add_plugins((SkyDomeMaterialPlugin, SkyFieldMaterialPlugin))
 			.insert_resource(ClearColor(self.clear))
 			.insert_resource(settings)
 			.init_resource::<ShadowQuality>()
@@ -110,6 +110,7 @@ impl Plugin for SkyDomePlugin {
 				Startup,
 				(
 					spawn_sky_dome,
+					spawn_sky_wash,
 					spawn_sky_lights,
 					spawn_sky_celestial,
 					spawn_sky_field,
@@ -125,34 +126,8 @@ impl Plugin for SkyDomePlugin {
 	}
 }
 
-fn spawn_sky_dome(
-	mut commands: Commands,
-	mut meshes: ResMut<Assets<Mesh>>,
-	mut materials: ResMut<Assets<StandardMaterial>>,
-	settings: Res<DomeSettings>,
-	clock: Res<SkyClock>,
-) {
-	let root = commands
-		.spawn((SkyDome, Transform::IDENTITY, Visibility::Visible, Name::new("sky-dome")))
-		.id();
-	let mesh = meshes.add(settings.fade_sphere());
-	let material = materials.add(StandardMaterial {
-		base_color: clock.sample().horizon,
-		unlit: true,
-		alpha_mode: AlphaMode::Blend,
-		cull_mode: None,
-		// Geometry shaders apply DistanceFog; this dome is a separate XZ wash.
-		fog_enabled: false,
-		..default()
-	});
-	commands.spawn((
-		SkyWash,
-		Mesh3d(mesh),
-		MeshMaterial3d(material),
-		Transform::IDENTITY,
-		Visibility::Inherited,
-		ChildOf(root),
-	));
+fn spawn_sky_dome(mut commands: Commands) {
+	commands.spawn((SkyDome, Transform::IDENTITY, Visibility::Visible, Name::new("sky-dome")));
 }
 
 fn follow_camera(
@@ -261,6 +236,14 @@ mod tests {
 		let mut app = sky_test_app(ShadowQuality::High);
 		let mut fields = app.world_mut().query_filtered::<&Transform, With<SkyField>>();
 		fields.single(app.world()).map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		Ok(())
+	}
+
+	#[test]
+	fn blue_dome_spawns_on_the_root() -> anyhow::Result<()> {
+		let mut app = sky_test_app(ShadowQuality::High);
+		let mut wash = app.world_mut().query_filtered::<&Transform, With<SkyWash>>();
+		wash.single(app.world()).map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		Ok(())
 	}
 

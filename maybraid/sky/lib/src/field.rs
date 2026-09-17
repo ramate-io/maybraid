@@ -1,4 +1,4 @@
-//! Unlit Cosimo-like field on the outer follow-camera dome.
+//! Opaque Cosimo cosmos behind the blue dome.
 
 use bevy::{
 	asset::embedded_asset,
@@ -17,7 +17,7 @@ use crate::clock::SkyMood;
 
 pub const FIELD_RADIUS_FACTOR: f32 = 1.06;
 
-/// Camera-parented backdrop that owns zenith color, swirls, and star glints.
+/// Camera-parented cosmos. Atmosphere lives on the inner blue dome.
 #[derive(Component, Debug, Clone, Copy)]
 pub struct SkyField;
 

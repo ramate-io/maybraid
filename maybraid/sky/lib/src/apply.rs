@@ -1,10 +1,10 @@
-//! Push [`SkyClock`] onto lights, wash, field, disks, and distance fog.
+//! Push [`SkyClock`] onto lights, blue dome, cosmos, disks, and distance fog.
 
 use bevy::prelude::*;
 
 use crate::celestial::{SkyFill, SkyMoon, SkySunDisk, CELESTIAL_DISTANCE_FACTOR};
 use crate::clock::SkyClock;
-use crate::dome::{DomeSettings, SkyWash};
+use crate::dome::{DomeSettings, SkyDomeMaterial, SkyWash};
 use crate::field::{SkyField, SkyFieldMaterial};
 use crate::SkySun;
 
@@ -19,8 +19,8 @@ pub(crate) fn apply_sky_mood(
 	mut moons: Query<&mut Transform, (With<SkyMoon>, Without<SkySun>, Without<SkySunDisk>)>,
 	field: Query<&MeshMaterial3d<SkyFieldMaterial>, With<SkyField>>,
 	mut field_mats: ResMut<Assets<SkyFieldMaterial>>,
-	wash: Query<&MeshMaterial3d<StandardMaterial>, With<SkyWash>>,
-	mut wash_mats: ResMut<Assets<StandardMaterial>>,
+	wash: Query<&MeshMaterial3d<SkyDomeMaterial>, With<SkyWash>>,
+	mut wash_mats: ResMut<Assets<SkyDomeMaterial>>,
 	mut fog: Query<&mut DistanceFog>,
 ) {
 	clock.advance(time.delta_secs());
@@ -59,7 +59,7 @@ pub(crate) fn apply_sky_mood(
 	}
 	for handle in &wash {
 		if let Some(mut material) = wash_mats.get_mut(&handle.0) {
-			material.base_color = mood.horizon;
+			material.apply_mood(mood, settings.max_alpha);
 		}
 	}
 	for mut fog in &mut fog {
