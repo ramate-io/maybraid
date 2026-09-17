@@ -57,7 +57,7 @@ mod tests {
 	}
 
 	#[test]
-	fn still_maps_to_the_rest_clip() {
+	fn home_still_maps_to_still_clip() {
 		let still = AnimRef::from(ConceptAnimation::Still);
 		assert_eq!(still.clip.id(), AnimId::Still);
 		assert_eq!(still.clip, AnimClip::still());

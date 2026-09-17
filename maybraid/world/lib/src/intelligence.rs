@@ -393,6 +393,23 @@ mod tests {
 	}
 
 	#[test]
+	fn bake_in_frustum_ignore_at_ninety_stays_mid() {
+		let mut app = bake_app();
+		app.world_mut()
+			.spawn((VegetationPlayer, Transform::default(), GlobalTransform::default()));
+		let hip = 75_f32.to_radians();
+		spawn_look_camera(&mut app, Vec3::new(90.0, 1.6, 0.0), hip, hip);
+		let grazer = spawn_lod_plant(&mut app, Vec3::X * 90.0, ThreatTactic::Ignore, 0);
+
+		app.update();
+
+		assert_eq!(
+			app.world().get::<IntelligenceLod>(grazer).map(|lod| lod.band),
+			Some(IntelligenceBand::Mid)
+		);
+	}
+
+	#[test]
 	fn bake_hip_look_does_not_extend_near() {
 		let mut app = bake_app();
 		app.world_mut()

@@ -3326,6 +3326,7 @@ dependencies = [
 name = "firearm-user"
 version = "0.0.1"
 dependencies = [
+ "anyhow",
  "avian3d",
  "bevy",
  "crozon-character-items",
