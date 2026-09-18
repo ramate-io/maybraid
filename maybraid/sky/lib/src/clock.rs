@@ -14,7 +14,7 @@ pub const SKY_PHASE_NIGHT: f32 = 0.0;
 pub const SKY_PHASE_DAWN: f32 = 0.22;
 /// Clearer blue, sun climbing.
 pub const SKY_PHASE_MORNING: f32 = 0.32;
-/// High key, strongest blue.
+/// Overhead warm key, teal / green sky.
 pub const SKY_PHASE_NOON: f32 = 0.50;
 /// Authored Discovery pose (amber key, 45° elevation).
 pub const SKY_PHASE_GOLDEN: f32 = 0.62;
@@ -330,16 +330,16 @@ fn keyframes() -> [SkyMood; 7] {
 		),
 		key(
 			SKY_PHASE_NOON,
-			Color::hsla(206.0, 0.58, 0.55, 1.0),
-			Color::hsla(50.0, 0.34, 0.82, 1.0),
-			Color::hsla(38.0, 0.18, 0.30, 1.0),
-			Color::hsla(206.0, 0.48, 0.68, 1.0),
-			Color::hsla(48.0, 0.22, 0.90, 1.0),
-			9_400.0,
+			Color::hsla(182.0, 0.55, 0.50, 1.0),
+			Color::hsla(168.0, 0.32, 0.58, 1.0),
+			Color::hsla(150.0, 0.18, 0.22, 1.0),
+			Color::hsla(185.0, 0.50, 0.58, 1.0),
+			crate::SUN_COLOR,
+			8_500.0,
 			1_700.0,
-			700.0,
-			1.15,
-			yaw * 0.7,
+			660.0,
+			std::f32::consts::FRAC_PI_2,
+			0.0,
 			1.0,
 			1.0,
 			1.0,
@@ -433,12 +433,17 @@ mod tests {
 	}
 
 	#[test]
-	fn noon_is_higher_and_brighter_than_golden() {
+	fn noon_is_overhead_with_a_warm_key() {
 		let noon = SkyClock { phase: SKY_PHASE_NOON, ..SkyClock::golden() }.sample();
 		let golden = SkyClock { phase: SKY_PHASE_GOLDEN, ..SkyClock::golden() }.sample();
+		assert!((noon.sun_elevation - PI / 2.0).abs() < 1e-3);
+		assert!(noon.sun_azimuth.abs() < 1e-3);
 		assert!(noon.sun_elevation > golden.sun_elevation);
-		assert!(noon.sun_illuminance > golden.sun_illuminance);
 		assert!(noon.day_weight > golden.day_weight);
+		let sun = noon.sun_color.to_linear();
+		assert!(sun.red > sun.blue, "noon key stays warm, not a white lamp");
+		let zenith = noon.zenith.to_linear();
+		assert!(zenith.green > zenith.red && zenith.blue > zenith.red, "noon zenith stays teal");
 	}
 
 	#[test]

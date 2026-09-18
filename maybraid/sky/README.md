@@ -14,8 +14,9 @@ shader halo and read as a dark pupil.
 
 The default clock is **paused at golden** (phase `0.62`, the authored
 −45°/45° amber key). `/sky play` or `MAYBRAID_SKY_PLAY=1` starts a 30
-minute cycle. Presets: `dawn`, `morning`, `noon`, `golden`, `dusk`,
-`night`. Also `MAYBRAID_SKY_PHASE` and `MAYBRAID_SKY_RATE`.
+minute cycle. Presets: `dawn`, `morning`, `noon` (overhead, warm key,
+teal sky), `golden`, `dusk`, `night` (`0`). Also `MAYBRAID_SKY_PHASE`
+and `MAYBRAID_SKY_RATE`.
 
 ```text
 /sky status
