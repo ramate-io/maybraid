@@ -1,8 +1,9 @@
 //! Inner blue / haze dome. Fragment alpha opens onto the cosmos field.
 
-use bevy::asset::{embedded_asset, RenderAssetUsages};
+use bevy::asset::embedded_asset;
 use bevy::light::NotShadowCaster;
-use bevy::mesh::{Indices, MeshVertexBufferLayoutRef, PrimitiveTopology};
+use bevy::mesh::primitives::MeshBuilder;
+use bevy::mesh::{MeshVertexBufferLayoutRef, SphereKind, SphereMeshBuilder};
 use bevy::pbr::{MaterialPipeline, MaterialPipelineKey};
 use bevy::prelude::*;
 use bevy::reflect::TypePath;
@@ -10,7 +11,6 @@ use bevy::render::render_resource::{
 	AsBindGroup, RenderPipelineDescriptor, ShaderType, SpecializedMeshPipelineError,
 };
 use bevy::shader::ShaderRef;
-use std::f32::consts::PI;
 
 use crate::clock::SkyMood;
 use crate::{SKY_HORIZON, SKY_NADIR, SKY_ZENITH};
@@ -56,6 +56,8 @@ pub struct SkyDomeParams {
 	pub nadir: Vec4,
 	/// `x` day weight, `y` peak alpha, `z` star gain, `w` phase.
 	pub style: Vec4,
+	pub sun_dir: Vec4,
+	pub moon_dir: Vec4,
 }
 
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
@@ -72,6 +74,8 @@ impl SkyDomeMaterial {
 				horizon: color_vec4(mood.horizon),
 				nadir: color_vec4(mood.nadir),
 				style: Vec4::new(mood.day_weight, peak_alpha, mood.star_gain, mood.phase),
+				sun_dir: mood.sun_disk_dir().extend(0.0),
+				moon_dir: mood.moon_dir().extend(0.0),
 			},
 		}
 	}
@@ -142,43 +146,8 @@ impl DomeSettings {
 	}
 
 	fn sphere_mesh(self, radius: f32) -> Mesh {
-		let rings = 48u32;
-		let segs = 64u32;
-
-		let mut positions = Vec::new();
-		let mut normals = Vec::new();
-		let mut indices = Vec::new();
-
-		for ring in 0..=rings {
-			let v = ring as f32 / rings as f32;
-			let theta = v * PI;
-			let y = radius * theta.cos();
-			let ring_r = radius * theta.sin();
-			for seg in 0..=segs {
-				let u = seg as f32 / segs as f32;
-				let phi = u * 2.0 * PI;
-				let x = ring_r * phi.cos();
-				let z = ring_r * phi.sin();
-				positions.push([x, y, z]);
-				let len = (x * x + y * y + z * z).sqrt().max(1e-5);
-				normals.push([-x / len, -y / len, -z / len]);
-			}
-		}
-
-		let verts_per_ring = segs + 1;
-		for ring in 0..rings {
-			for seg in 0..segs {
-				let a = ring * verts_per_ring + seg;
-				let b = a + verts_per_ring;
-				indices.extend_from_slice(&[a, a + 1, b, a + 1, b + 1, b]);
-			}
-		}
-
-		let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default());
-		mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
-		mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
-		mesh.insert_indices(Indices::U32(indices));
-		mesh
+		// Ico has no UV-sphere pole. Noon looks straight up; a UV pole was a hole.
+		SphereMeshBuilder::new(radius, SphereKind::Ico { subdivisions: 4 }).build()
 	}
 }
 

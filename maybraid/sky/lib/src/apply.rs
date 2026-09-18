@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 
-use crate::celestial::{SkyFill, SkyMoon, CELESTIAL_DISTANCE_FACTOR};
+use crate::celestial::SkyFill;
 use crate::clock::SkyClock;
 use crate::dome::{DomeSettings, SkyDomeMaterial, SkyWash};
 use crate::field::{SkyField, SkyFieldMaterial};
@@ -15,7 +15,6 @@ pub(crate) fn apply_sky_mood(
 	mut ambient: Option<ResMut<GlobalAmbientLight>>,
 	mut sun: Query<(&mut Transform, &mut DirectionalLight), With<SkySun>>,
 	mut fill: Query<&mut DirectionalLight, (With<SkyFill>, Without<SkySun>)>,
-	mut moons: Query<&mut Transform, (With<SkyMoon>, Without<SkySun>)>,
 	field: Query<&MeshMaterial3d<SkyFieldMaterial>, With<SkyField>>,
 	mut field_mats: ResMut<Assets<SkyFieldMaterial>>,
 	wash: Query<&MeshMaterial3d<SkyDomeMaterial>, With<SkyWash>>,
@@ -25,7 +24,6 @@ pub(crate) fn apply_sky_mood(
 	clock.advance(time.delta_secs());
 	let mood = clock.sample();
 	let pose = mood.sun_pose();
-	let distance = settings.sphere_radius_m * CELESTIAL_DISTANCE_FACTOR;
 
 	if let Some(ambient) = ambient.as_mut() {
 		ambient.brightness = mood.ambient;
@@ -39,10 +37,6 @@ pub(crate) fn apply_sky_mood(
 	for mut light in &mut fill {
 		light.color = mood.fill_color;
 		light.illuminance = mood.fill_illuminance;
-	}
-
-	for mut transform in &mut moons {
-		*transform = Transform::from_translation(mood.moon_dir() * distance);
 	}
 
 	for handle in &field {

@@ -101,7 +101,44 @@ fn fbm3(p: vec3<f32>) -> f32 {
         + value_noise3(p * 6.13) * 0.07;
 }
 
-/// Cosimo `shade_cosmos`, sampled on the view sphere. Slow fbm, sparse pow glints.
+fn poster(n: f32, steps: f32) -> f32 {
+    return floor(saturate(n) * steps + 0.5) / steps;
+}
+
+fn flatten(n: f32) -> f32 {
+    return mix(n, poster(n, 6.0), 0.45);
+}
+
+fn celestial_dots(dir: vec3<f32>) -> vec3<f32> {
+    let s = value_noise3(dir * 72.0);
+    let s2 = value_noise3(dir * 80.0 + vec3<f32>(3.1, 1.4, 7.2));
+    let star = pow(saturate(s * s2), 10.0);
+    let p = value_noise3(dir * 11.0 + vec3<f32>(2.2, 5.1, 0.4));
+    let p2 = value_noise3(dir * 12.0 + vec3<f32>(8.0, 0.2, 4.0));
+    let planet = pow(saturate(p), 14.0) * step(0.55, p2);
+    var rgb = mix(vec3<f32>(0.96, 0.92, 1.0), vec3<f32>(0.72, 0.94, 1.0), step(0.5, s2)) * star;
+    rgb += mix(vec3<f32>(1.0, 0.68, 0.36), vec3<f32>(0.60, 0.78, 1.0), step(0.5, p2)) * planet * 0.9;
+    return rgb;
+}
+
+fn paper_body(
+    dir: vec3<f32>,
+    body: vec3<f32>,
+    core: f32,
+    mid: f32,
+    rim: f32,
+    core_c: vec3<f32>,
+    mid_c: vec3<f32>,
+    rim_c: vec3<f32>,
+) -> vec3<f32> {
+    let d = saturate(dot(dir, body));
+    let w = 0.0025;
+    var rgb = rim_c * smoothstep(rim - w, rim + w, d);
+    rgb = mix(rgb, mid_c, smoothstep(mid - w, mid + w, d));
+    rgb = mix(rgb, core_c, smoothstep(core - w, core + w, d));
+    return rgb;
+}
+
 fn shade_cosmos(dir: vec3<f32>) -> vec3<f32> {
     let t = globals.time;
     let swirl_g = material.style.y;
@@ -109,38 +146,44 @@ fn shade_cosmos(dir: vec3<f32>) -> vec3<f32> {
     let phase = material.style.w;
     let drift = vec3<f32>(t * 0.012, -t * 0.01, t * 0.008) + vec3<f32>(phase * 0.35, 0.0, 0.0);
 
-    let n = fbm3(dir * 4.6 + drift);
-    let n2 = fbm3(dir * 10.8 + vec3<f32>(-t * 0.016, t * 0.014, 0.4) + drift * 0.6);
-    let n3 = fbm3(dir * 6.8 + vec3<f32>(2.1, -t * 0.009, t * 0.011));
+    let n = flatten(fbm3(dir * 3.4 + drift));
+    let n2 = flatten(fbm3(dir * 8.2 + vec3<f32>(-t * 0.016, t * 0.014, 0.4) + drift * 0.6));
 
-    let void_c = vec3<f32>(0.04, 0.02, 0.09);
-    let nebula = vec3<f32>(0.22, 0.06, 0.38);
-    let bloom = vec3<f32>(0.42, 0.16, 0.62);
+    let void_c = vec3<f32>(0.05, 0.02, 0.12);
+    let nebula = vec3<f32>(0.28, 0.06, 0.48);
+    let bloom = vec3<f32>(0.52, 0.16, 0.72);
     var color = mix(void_c, nebula, n);
-    color = mix(color, bloom, smoothstep(0.55, 0.9, n2) * 0.42 * swirl_g);
+    color = mix(color, bloom, smoothstep(0.50, 0.78, n2) * 0.38 * swirl_g);
 
-    let band = 0.5 + 0.5 * sin(dir.x * 2.2 + dir.y * 3.1 + t * 0.35 + n * 2.0);
-    let meridian = 0.5 + 0.5 * sin(dir.z * 2.8 - dir.y * 1.6 + t * 0.2);
-    color += vec3<f32>(0.55, 0.28, 0.72) * smoothstep(0.75, 1.0, band) * 0.14 * swirl_g;
-    color += vec3<f32>(0.35, 0.18, 0.55) * smoothstep(0.88, 1.0, meridian) * 0.08 * swirl_g;
+    let band = smoothstep(0.72, 0.88, 0.5 + 0.5 * sin(dir.x * 2.2 + dir.y * 3.1 + t * 0.35));
+    color += vec3<f32>(0.62, 0.22, 0.78) * band * 0.12 * swirl_g;
 
-    let glint = pow(saturate(n2), 12.0) * (0.5 + 0.5 * sin(t * 1.4 + n * 6.0));
-    let glint2 = pow(saturate(n), 14.0);
-    let planet = pow(saturate(n3), 18.0);
-    color += vec3<f32>(0.95, 0.82, 1.0) * glint * 0.55 * star_g;
-    color += vec3<f32>(0.70, 0.90, 1.0) * glint2 * 0.25 * star_g;
-    color += vec3<f32>(0.92, 0.78, 0.55) * planet * 0.40 * star_g;
+    color += celestial_dots(dir) * star_g;
 
     let sun = normalize(material.sun_dir.xyz + vec3<f32>(1e-5, 0.0, 0.0));
-    let sun_d = saturate(dot(dir, sun));
-    let sun_vis = smoothstep(-0.10, 0.04, sun.y);
-    color += vec3<f32>(1.0, 0.93, 0.68) * pow(sun_d, 720.0) * 2.4 * sun_vis;
-    color += vec3<f32>(1.0, 0.70, 0.32) * pow(sun_d, 28.0) * 0.45 * sun_vis;
+    let sun_vis = smoothstep(-0.08, 0.04, sun.y);
+    color += paper_body(
+        dir,
+        sun,
+        0.9982,
+        0.9945,
+        0.9860,
+        vec3<f32>(1.0, 0.96, 0.72),
+        vec3<f32>(1.0, 0.82, 0.38),
+        vec3<f32>(1.0, 0.62, 0.22),
+    ) * sun_vis;
 
     let moon = normalize(material.moon_dir.xyz + vec3<f32>(1e-5, 0.0, 0.0));
-    let moon_d = saturate(dot(dir, moon));
-    color += vec3<f32>(0.78, 0.84, 0.96) * pow(moon_d, 260.0) * 1.1;
-    color += vec3<f32>(0.42, 0.50, 0.70) * pow(moon_d, 16.0) * 0.14;
+    color += paper_body(
+        dir,
+        moon,
+        0.9992,
+        0.9980,
+        0.9955,
+        vec3<f32>(0.92, 0.94, 1.0),
+        vec3<f32>(0.72, 0.80, 0.95),
+        vec3<f32>(0.48, 0.58, 0.82),
+    );
 
     return color;
 }

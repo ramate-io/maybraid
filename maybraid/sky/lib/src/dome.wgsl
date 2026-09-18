@@ -16,6 +16,8 @@ struct SkyDomeParams {
     nadir: vec4<f32>,
     // x day_weight, y peak_alpha, z star_gain, w phase
     style: vec4<f32>,
+    sun_dir: vec4<f32>,
+    moon_dir: vec4<f32>,
 }
 
 @group(#{MATERIAL_BIND_GROUP}) @binding(0)
@@ -106,23 +108,56 @@ fn fbm2(p: vec2<f32>) -> f32 {
 fn haze_cover(t: f32, phase: f32) -> f32 {
     let a = fbm2(vec2<f32>(t * 0.006 + phase * 3.0, 2.17));
     let b = fbm2(vec2<f32>(-t * 0.004 + phase, 8.41));
-    let c = fbm2(vec2<f32>(t * 0.003 + 5.2, -t * 0.003 + phase * 2.0));
-    return mix(0.22, 0.84, saturate(a * 0.50 + b * 0.32 + c * 0.18));
+    return mix(0.28, 0.78, smoothstep(0.32, 0.62, a * 0.6 + b * 0.4));
 }
 
 fn haze_island(dir: vec3<f32>, t: f32) -> f32 {
-    let p = dir * 2.2 + vec3<f32>(t * 0.012, -t * 0.01, t * 0.008);
+    let p = dir * 1.45 + vec3<f32>(t * 0.012, -t * 0.01, t * 0.008);
     let warp = fbm3(p);
-    let n = fbm3(p * 1.15 + vec3<f32>(warp * 0.8, t * 0.009, -warp));
-    let n2 = fbm3(p * 1.8 + vec3<f32>(-t * 0.014, warp, t * 0.007));
+    let n = fbm3(p * 1.1 + vec3<f32>(warp * 0.55, t * 0.009, -warp));
+    let n2 = fbm3(p * 1.45 + vec3<f32>(-t * 0.014, warp, t * 0.007));
     return saturate(n * 0.62 + n2 * 0.38);
 }
 
 fn cosmos_hole(dir: vec3<f32>, t: f32) -> f32 {
-    let p = dir * 1.9 + vec3<f32>(3.7, -1.4, t * 0.011);
+    let p = dir * 1.35 + vec3<f32>(3.7, -1.4, t * 0.011);
     let n = fbm3(p + vec3<f32>(t * 0.01, -t * 0.008, 0.6));
-    let n2 = fbm3(p * 1.5 + vec3<f32>(-t * 0.007, t * 0.012, 2.2));
+    let n2 = fbm3(p * 1.35 + vec3<f32>(-t * 0.007, t * 0.012, 2.2));
     return saturate(n * 0.58 + n2 * 0.42);
+}
+
+/// Sparse pinpoints. High freq + high threshold so they stay dots, not blotches.
+fn celestial_dots(dir: vec3<f32>) -> vec4<f32> {
+    let s = value_noise3(dir * 72.0);
+    let s2 = value_noise3(dir * 80.0 + vec3<f32>(3.1, 1.4, 7.2));
+    let star = pow(saturate(s * s2), 10.0);
+    let p = value_noise3(dir * 11.0 + vec3<f32>(2.2, 5.1, 0.4));
+    let p2 = value_noise3(dir * 12.0 + vec3<f32>(8.0, 0.2, 4.0));
+    let planet = pow(saturate(p), 14.0) * step(0.55, p2);
+    var rgb = mix(vec3<f32>(0.96, 0.92, 1.0), vec3<f32>(0.72, 0.94, 1.0), step(0.5, s2)) * star;
+    rgb += mix(vec3<f32>(1.0, 0.68, 0.36), vec3<f32>(0.60, 0.78, 1.0), step(0.5, p2)) * planet * 0.9;
+    let mask = step(0.35, max(star, planet));
+    return vec4<f32>(rgb, mask);
+}
+
+/// Flat paper sun: two rings + a disk. Narrow smoothstep so it is not a photo glow.
+fn paper_body(
+    dir: vec3<f32>,
+    body: vec3<f32>,
+    core: f32,
+    mid: f32,
+    rim: f32,
+    core_c: vec3<f32>,
+    mid_c: vec3<f32>,
+    rim_c: vec3<f32>,
+) -> vec4<f32> {
+    let d = saturate(dot(dir, body));
+    let w = 0.0025;
+    var rgb = rim_c * smoothstep(rim - w, rim + w, d);
+    rgb = mix(rgb, mid_c, smoothstep(mid - w, mid + w, d));
+    rgb = mix(rgb, core_c, smoothstep(core - w, core + w, d));
+    let mask = smoothstep(rim - w, rim + w, d);
+    return vec4<f32>(rgb, mask);
 }
 
 fn shade_dome(dir: vec3<f32>) -> vec4<f32> {
@@ -130,24 +165,63 @@ fn shade_dome(dir: vec3<f32>) -> vec4<f32> {
     let t = globals.time;
     let day = material.style.x;
     let peak = material.style.y;
+    let star_g = material.style.z;
     let phase = material.style.w;
+
+    let sun = normalize(material.sun_dir.xyz + vec3<f32>(1e-5, 0.0, 0.0));
+    let sun_body = paper_body(
+        dir,
+        sun,
+        0.9982,
+        0.9945,
+        0.9860,
+        vec3<f32>(1.0, 0.96, 0.72),
+        vec3<f32>(1.0, 0.82, 0.38),
+        vec3<f32>(1.0, 0.62, 0.22),
+    );
+    let sun_vis = smoothstep(-0.08, 0.04, sun.y);
+    if sun_body.a * sun_vis > 0.04 {
+        return vec4<f32>(sun_body.rgb, saturate(sun_body.a * sun_vis));
+    }
+
+    let moon = normalize(material.moon_dir.xyz + vec3<f32>(1e-5, 0.0, 0.0));
+    let moon_body = paper_body(
+        dir,
+        moon,
+        0.9992,
+        0.9980,
+        0.9955,
+        vec3<f32>(0.92, 0.94, 1.0),
+        vec3<f32>(0.72, 0.80, 0.95),
+        vec3<f32>(0.48, 0.58, 0.82),
+    );
+    if moon_body.a > 0.04 {
+        return vec4<f32>(moon_body.rgb, moon_body.a);
+    }
+
+    let dots = celestial_dots(dir);
+    if dots.a * star_g > 0.5 {
+        return vec4<f32>(dots.rgb, saturate(max(dots.r, max(dots.g, dots.b))));
+    }
 
     var haze_col = material.horizon.xyz;
     if elev < 0.0 {
-        haze_col = mix(material.horizon.xyz, material.nadir.xyz, saturate(-elev));
+        haze_col = mix(material.horizon.xyz, material.nadir.xyz, saturate(-elev * 1.4));
     }
     let blue = material.zenith.xyz;
     let island = haze_island(dir, t);
-    let haze = smoothstep(0.32, 0.68, island);
-    let rgb = mix(blue, haze_col, haze);
+    let haze = smoothstep(0.40, 0.64, island);
+    var rgb = mix(blue, haze_col, haze);
+    let stripe = smoothstep(0.18, 0.04, elev) * smoothstep(-0.10, 0.00, elev);
+    rgb = mix(rgb, haze_col, stripe * 0.55);
 
     let cover = haze_cover(t, phase);
     let hole = cosmos_hole(dir, t);
-    let presence = mix(0.10, 0.72, day) * mix(0.50, 1.0, cover);
-    let open = smoothstep(mix(0.28, 0.42, day), mix(0.62, 0.82, day), hole);
-    var alpha = presence * (1.0 - open * mix(0.88, 0.58, day));
-    let rim = smoothstep(0.38, -0.06, elev);
-    alpha = max(alpha, rim * mix(0.20, 0.50, day));
+    let presence = mix(0.10, 0.70, day) * mix(0.48, 1.0, cover);
+    let open = smoothstep(mix(0.38, 0.55, day), mix(0.62, 0.80, day), hole);
+    var alpha = presence * (1.0 - open * mix(0.88, 0.52, day));
+    let rim = smoothstep(0.22, -0.06, elev);
+    alpha = max(alpha, rim * mix(0.20, 0.48, day));
     alpha = saturate(alpha * peak);
 
     return vec4<f32>(rgb, alpha);

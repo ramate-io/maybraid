@@ -14,7 +14,6 @@ use bevy::prelude::*;
 use std::f32::consts::PI;
 
 use apply::apply_sky_mood;
-use celestial::spawn_sky_celestial;
 use dome::{spawn_sky_wash, DomeSettings, SkyDomeMaterialPlugin};
 use field::{spawn_sky_field, SkyFieldMaterialPlugin};
 
@@ -39,14 +38,14 @@ pub const DEFAULT_SPHERE_RADIUS_M: f32 = 2_800.0;
 /// Peak atmosphere alpha. Holes still open onto cosmos.
 pub const DEFAULT_MAX_ALPHA: f32 = 0.78;
 
-/// Cooler overhead. More chroma than the old dusty pale.
-pub const SKY_ZENITH: Color = Color::hsla(210.0, 0.42, 0.58, 1.0);
-/// Warm peach / wheat wash at the horizon band.
-pub const SKY_HORIZON: Color = Color::hsla(36.0, 0.62, 0.70, 1.0);
+/// Cooler overhead. Flat cartoon chroma.
+pub const SKY_ZENITH: Color = Color::hsla(210.0, 0.58, 0.54, 1.0);
+/// Warm peach wash at the horizon band.
+pub const SKY_HORIZON: Color = Color::hsla(32.0, 0.78, 0.64, 1.0);
 /// Darker below-horizon ring so the shell does not glow under the camera.
-pub const SKY_NADIR: Color = Color::hsla(26.0, 0.28, 0.22, 1.0);
-/// Late-afternoon clear / hole fallback. Not the old cyan, not dust.
-pub const SKY_CLEAR: Color = Color::hsla(208.0, 0.38, 0.64, 1.0);
+pub const SKY_NADIR: Color = Color::hsla(22.0, 0.36, 0.18, 1.0);
+/// Late-afternoon clear / hole fallback.
+pub const SKY_CLEAR: Color = Color::hsla(204.0, 0.52, 0.60, 1.0);
 /// Playground alias for [`SKY_CLEAR`].
 pub const SKY_BLUE: Color = SKY_CLEAR;
 
@@ -112,7 +111,6 @@ impl Plugin for SkyDomePlugin {
 					spawn_sky_dome,
 					spawn_sky_wash,
 					spawn_sky_lights,
-					spawn_sky_celestial,
 					spawn_sky_field,
 					shadows::apply_shadow_quality,
 				)
