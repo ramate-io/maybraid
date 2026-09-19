@@ -282,14 +282,14 @@ fn keyframes() -> [SkyMood; 7] {
 	[
 		key(
 			0.0,
-			Color::hsla(250.0, 0.62, 0.14, 1.0),
-			Color::hsla(262.0, 0.48, 0.10, 1.0),
-			Color::hsla(246.0, 0.28, 0.04, 1.0),
-			Color::hsla(248.0, 0.52, 0.12, 1.0),
+			Color::hsla(258.0, 0.70, 0.06, 1.0),
+			Color::hsla(268.0, 0.52, 0.05, 1.0),
+			Color::hsla(250.0, 0.30, 0.02, 1.0),
+			Color::hsla(256.0, 0.60, 0.05, 1.0),
 			Color::hsla(220.0, 0.22, 0.74, 1.0),
-			70.0,
-			400.0,
-			180.0,
+			40.0,
+			80.0,
+			40.0,
 			-0.18,
 			0.2,
 			0.04,
@@ -378,14 +378,14 @@ fn keyframes() -> [SkyMood; 7] {
 		),
 		key(
 			0.93,
-			Color::hsla(234.0, 0.46, 0.11, 1.0),
-			Color::hsla(250.0, 0.34, 0.09, 1.0),
-			Color::hsla(240.0, 0.20, 0.04, 1.0),
-			Color::hsla(234.0, 0.40, 0.09, 1.0),
+			Color::hsla(256.0, 0.64, 0.05, 1.0),
+			Color::hsla(262.0, 0.42, 0.04, 1.0),
+			Color::hsla(248.0, 0.26, 0.02, 1.0),
+			Color::hsla(254.0, 0.54, 0.04, 1.0),
 			Color::hsla(220.0, 0.16, 0.70, 1.0),
-			55.0,
-			350.0,
-			160.0,
+			30.0,
+			70.0,
+			35.0,
 			-0.22,
 			1.35,
 			0.05,
@@ -452,7 +452,11 @@ mod tests {
 		assert!(!night.sun_above_horizon());
 		assert!(night.day_weight < 0.15);
 		assert!(night.star_gain > 0.8);
-		assert!(night.sun_illuminance < 200.0);
+		assert!(night.sun_illuminance < 80.0);
+		assert!(night.fill_illuminance < 120.0);
+		assert!(night.ambient < 80.0);
+		let zenith = night.zenith.to_linear();
+		assert!(zenith.blue > zenith.red && zenith.red + zenith.green + zenith.blue < 0.25);
 	}
 
 	#[test]

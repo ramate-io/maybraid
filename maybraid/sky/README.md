@@ -14,8 +14,9 @@ flattened, with the same paper sun and moon. No mesh disks.
 The default clock is **paused at golden** (phase `0.62`, the authored
 −45°/45° amber key). `/sky play` or `MAYBRAID_SKY_PLAY=1` starts a 30
 minute cycle. Presets: `dawn`, `morning`, `noon` (overhead, warm key,
-teal sky), `golden`, `dusk`, `night` (`0`). Also `MAYBRAID_SKY_PHASE`
-and `MAYBRAID_SKY_RATE`.
+teal sky), `golden`, `dusk`, `night` (`0`, deep purple, dim lamps).
+Leaf and bump cards scale their fake daylight off ambient so they
+track the clock. Also `MAYBRAID_SKY_PHASE` and `MAYBRAID_SKY_RATE`.
 
 ```text
 /sky status
