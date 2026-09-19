@@ -9,7 +9,8 @@ atmosphere: soft-edged haze islands, sparse pinpoints, and a paper sun
 Both shells are icospheres.
 
 The outer shell ([`field.wgsl`](lib/src/field.wgsl)) is Cosimo halfway
-flattened, with the same paper sun and moon. No mesh disks.
+flattened. Paper sun and moon live only on the dome, and only for
+pixels near the disk. Haze is two octaves; stars are cell hashes.
 
 The default clock is **paused at golden** (phase `0.62`, the authored
 −45°/45° amber key). `/sky play` or `MAYBRAID_SKY_PLAY=1` starts a 30

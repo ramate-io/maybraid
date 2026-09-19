@@ -1,4 +1,7 @@
 //! Opaque Cosimo cosmos behind the blue dome.
+//!
+//! Sun and moon are uploaded so the clock can keep posing them, but the
+//! field shader does not draw them — the inner dome owns the disks.
 
 use bevy::{
 	asset::embedded_asset,
