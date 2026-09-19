@@ -2,12 +2,13 @@
 
 use bevy::prelude::*;
 
-use crate::controller::SkillMapFlick;
+use crate::controller::{skill_map_steer_held, SkillMapFlick};
 use crate::map::{render_layer, SkillMapId};
 use crate::tile_material::SkillMapTileAssets;
 use crate::user::{SkillMapHeld, SkillMapMember, SkillMapSteerLock, SkillMapUser};
 use crate::viewport::{map_view_extent, SkillMapViewportCamera};
 use crate::SkillMapEnabled;
+use maybraid_input::VirtualPad;
 
 pub const CURSOR_SPEED: f32 = 64.0;
 pub const WATER_LOCK_SECS: f32 = 2.0;
@@ -30,10 +31,12 @@ pub(crate) struct FlickBead {
 
 pub fn sync_skill_map_held(
 	enabled: Res<SkillMapEnabled>,
+	pad: Option<Res<VirtualPad>>,
 	mut users: Query<&mut SkillMapHeld, With<SkillMapUser>>,
 ) {
-	for mut held in &mut users {
-		held.0 = enabled.0;
+	let held = enabled.0 && pad.as_deref().is_some_and(skill_map_steer_held);
+	for mut slot in &mut users {
+		slot.0 = held;
 	}
 }
 
@@ -170,5 +173,31 @@ mod tests {
 		let region = Vec2::new(91.2, 91.2);
 		assert_eq!(flick_delta(Vec2::X, region, 0.1), Vec2::new(9.12, 0.0));
 		assert_eq!(flick_delta(Vec2::Y, region, 0.1), Vec2::new(0.0, 9.12));
+	}
+
+	#[test]
+	fn held_is_rb_while_the_map_is_on() {
+		use bevy::ecs::system::RunSystemOnce;
+		use maybraid_input::{PadButton, VirtualPad};
+
+		use crate::user::spawn_skill_maps;
+
+		let mut world = World::new();
+		world.init_resource::<SkillMapEnabled>();
+		let user = world.spawn_empty().id();
+		world
+			.run_system_once(move |mut commands: Commands| spawn_skill_maps(&mut commands, user))
+			.expect("spawn");
+		world.flush();
+		world.run_system_once(sync_skill_map_held).expect("held without pad");
+		assert!(!world.get::<SkillMapHeld>(user).expect("slot").0);
+
+		let mut pad = VirtualPad::default();
+		pad.begin_frame();
+		pad.hold_digital(PadButton::BumperFire);
+		pad.finish_digital();
+		world.insert_resource(pad);
+		world.run_system_once(sync_skill_map_held).expect("held with rb");
+		assert!(world.get::<SkillMapHeld>(user).expect("slot").0);
 	}
 }

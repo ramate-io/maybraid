@@ -4770,6 +4770,7 @@ dependencies = [
  "bevy_hanabi",
  "combat-targeting",
  "crozon-character-items",
+ "crozon-inventory-user",
  "damage",
  "evasion-intelligence",
  "lod-avian",
