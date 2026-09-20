@@ -46,7 +46,10 @@ pub use start::{
 	parse_xz_metres, player_spawn_xz, resolve_start_at, start_at_from_env, take_start_at_from_args,
 	START_AT_ENV,
 };
-pub use maybraid_sky::ShadowQuality;
+pub use maybraid_sky::{
+	ShadowQuality, SKY_BLUE, SKY_CLEAR, SKY_HORIZON, SKY_NADIR, SKY_ZENITH, SUN_COLOR,
+	SUN_ILLUMINANCE,
+};
 pub use ui::WorldMobHudEnabled;
 pub use vsync::{default_window_present_mode, RequestVsyncToggle, VSYNC_TOGGLE_KEY};
 pub use weapon::WorldPlayerLoadout;
