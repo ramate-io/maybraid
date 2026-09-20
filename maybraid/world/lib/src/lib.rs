@@ -47,8 +47,8 @@ pub use start::{
 	START_AT_ENV,
 };
 pub use maybraid_sky::{
-	ShadowQuality, SKY_BLUE, SKY_CLEAR, SKY_HORIZON, SKY_NADIR, SKY_ZENITH, SUN_COLOR,
-	SUN_ILLUMINANCE,
+	ShadowQuality, SkyClock, SkyCommand, SKY_BLUE, SKY_CLEAR, SKY_HORIZON, SKY_NADIR, SKY_ZENITH,
+	SUN_COLOR, SUN_ILLUMINANCE,
 };
 pub use ui::WorldMobHudEnabled;
 pub use vsync::{default_window_present_mode, RequestVsyncToggle, VSYNC_TOGGLE_KEY};
@@ -208,7 +208,7 @@ impl Plugin for WorldPlugin {
 			app.init_resource::<TextEntryFocus>();
 		}
 		app.add_systems(Startup, vsync::apply_startup_vsync)
-			.add_systems(Update, vsync::toggle_vsync)
+			.add_systems(Update, (vsync::toggle_vsync, commands::apply_sky_commands))
 			.add_systems(PostStartup, spawn_default_braidman)
 			.add_systems(PreUpdate, control::stamp_vegetation_motor_traction)
 			.add_systems(
