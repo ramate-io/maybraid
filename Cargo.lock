@@ -4747,6 +4747,7 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "bevy",
+ "crozon-character-items",
  "damage",
  "journeying-intelligence",
  "lod",

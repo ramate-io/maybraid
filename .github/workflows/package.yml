@@ -1,0 +1,132 @@
+# Unsigned game packages: Apple DMG, Windows zip, SteamOS tarball.
+# Artifacts on main / ci-action::package / workflow_dispatch.
+# GitHub Release assets only when a release is published.
+
+name: Package
+
+on:
+  push:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+concurrency:
+  group: package-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    if: >
+      github.event_name == 'release' ||
+      github.event_name == 'workflow_dispatch' ||
+      github.ref == 'refs/heads/main' ||
+      contains(github.event.head_commit.message, 'ci-action::package')
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            slug: macos-arm64
+          - os: windows-latest
+            slug: windows-x64
+          - os: ubuntu-22.04
+            slug: steamos-x64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 180
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version
+        id: ver
+        run: |
+          workspace_version=$(awk '
+            $0 == "[workspace.package]" { hit = 1; next }
+            hit && /^\[/ { exit }
+            hit && $1 == "version" {
+              gsub(/"/, "", $3)
+              print $3
+              exit
+            }
+          ' Cargo.toml)
+          if [ -z "$workspace_version" ]; then
+            echo "could not read workspace.package.version from Cargo.toml" >&2
+            exit 1
+          fi
+          if [ "${{ github.event_name }}" = "release" ]; then
+            v="${{ github.event.release.tag_name }}"
+            v="${v#v}"
+          else
+            v="${workspace_version}-${GITHUB_SHA::7}"
+          fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
+      - uses: DeterminateSystems/nix-installer-action@main
+        if: runner.os != 'Windows'
+
+      - name: Enable Nix Flakes
+        if: runner.os != 'Windows'
+        run: |
+          mkdir -p ~/.config/nix
+          echo "experimental-features = nix-command flakes" >> ~/.config/nix/nix.conf
+
+      - name: Package macOS
+        if: runner.os == 'macOS'
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: nix develop --command bash -lc 'packaging/scripts/package-macos.sh'
+
+      - name: Package SteamOS
+        if: runner.os == 'Linux'
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          nix develop --command bash -lc \
+            'cargo build -p maybraid --release && packaging/scripts/package-steamos.sh'
+
+      - uses: dtolnay/rust-toolchain@master
+        if: runner.os == 'Windows'
+        with:
+          toolchain: 1.95.0
+
+      - uses: Swatinem/rust-cache@v2
+        if: runner.os == 'Windows'
+        with:
+          key: package-${{ matrix.slug }}
+
+      - name: Package Windows
+        if: runner.os == 'Windows'
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          cargo build -p maybraid --release
+          packaging/scripts/package-windows.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: maybraid-${{ steps.ver.outputs.version }}-${{ matrix.slug }}
+          path: |
+            dist/*.dmg
+            dist/*.zip
+            dist/*.tar.xz
+          if-no-files-found: error
+          retention-days: 14
+
+  publish-release:
+    if: github.event_name == 'release'
+    needs: package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Attach to GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" artifacts/* --clobber

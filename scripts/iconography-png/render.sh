@@ -5,6 +5,9 @@
 #
 #   maybraid/art/iconography/foo.blend → maybraid/assets/iconography/foo.png
 #
+# Home-screen color bake (TEXT_YELLOW on MENU_CLEAR) is a sibling pass:
+#   scripts/iconography-home/render.sh
+#
 # Icons are authored in XZ, X/Z ∈ [−1, +1]. The render uses an orthographic
 # camera with scale 2.2 (10% margin) at (0, −10, 0), rotation (90°, 0, 0),
 # looking from −Y, 512×512, transparent PNG.

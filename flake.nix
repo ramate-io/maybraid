@@ -107,19 +107,17 @@
                 macos_blender="${macosBlenderApp}"
                 if [ ! -x "$macos_blender" ]; then
                   echo ""
-                  echo "❌ Blender not found at $macos_blender"
-                  echo "Install Blender 5.1.2 from https://www.blender.org/download/"
-                  exit 1
-                fi
-                blender_version="$("$macos_blender" --version 2>/dev/null | head -1 || true)"
-                if [ -z "$blender_version" ]; then
-                  echo ""
-                  echo "❌ Failed to run Blender at $macos_blender"
-                  exit 1
-                fi
-                if [[ ! "$blender_version" =~ ^Blender\ 5\.1\. ]]; then
-                  echo ""
-                  echo "⚠️  Blender 5.1.2 is preferred for .blend → .glb export (found: $blender_version)"
+                  echo "⚠️  Blender not found at $macos_blender"
+                  echo "   Install Blender 5.1.2 from https://www.blender.org/download/ for .blend export."
+                else
+                  blender_version="$("$macos_blender" --version 2>/dev/null | head -1 || true)"
+                  if [ -z "$blender_version" ]; then
+                    echo ""
+                    echo "⚠️  Failed to run Blender at $macos_blender"
+                  elif [[ ! "$blender_version" =~ ^Blender\ 5\.1\. ]]; then
+                    echo ""
+                    echo "⚠️  Blender 5.1.2 is preferred for .blend → .glb export (found: $blender_version)"
+                  fi
                 fi
               fi
 
