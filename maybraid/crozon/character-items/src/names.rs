@@ -109,9 +109,18 @@ impl ItemColor {
 			Self::Cool => &["Winter", "Blenchit", "Lone", "Alpine"],
 			Self::Dark => &["Dark", "Shadow", "Soot", "Umbral", "Wine"],
 			Self::Light => &["Pale", "Ivor", "Dawn", "Close"],
-			Self::Red => &["Bloody", "Red Tide", "Scarlet", "Burnlead", "Passionate", "T'dith"],
-			Self::Blue => &["Veinish", "Clostrono", "Cool", "Cerulean"],
-			Self::Green => &["Verdant", "Woodmake", "Ciling", "Zealousard"],
+			Self::Red => &[
+				"Bloody",
+				"Red Tide",
+				"Scarlet",
+				"Burnlead",
+				"Passionate",
+				"T'dith",
+				"Flame",
+				"Flemmend",
+			],
+			Self::Blue => &["Veinish", "Clostrono", "Cool", "Cerulean", "Tidal", "d'Tid"],
+			Self::Green => &["Verdant", "Woodmake", "Ciling", "Zealousard", "Estrine"],
 			Self::Gold => &["Aureate", "Sunlit", "Beam"],
 		}
 	}

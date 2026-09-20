@@ -4935,6 +4935,9 @@ dependencies = [
  "game-commands",
  "maybraid-menu-controller",
  "menu-components",
+ "serde",
+ "serde_json",
+ "tempfile",
 ]
 
 [[package]]
