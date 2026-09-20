@@ -1,6 +1,7 @@
 //! Capsule player, visual, and handoff slots for camera / pose drivers.
 
 mod body;
+mod buoyancy;
 mod contact;
 mod hit;
 mod identity;
@@ -19,6 +20,7 @@ pub use body::{
 	CharacterLocomotion, Grounded, JumpPhase, JumpWish, Jumping, MoveWish, PlayerControlSystems,
 	WalkableGround,
 };
+pub use buoyancy::{Buoyant, Wading, WaterRegime};
 pub use contact::{
 	motor_traction_bundle, register_motor_traction_physics, MotorTraction, MotorTractionHooks,
 };
@@ -94,6 +96,7 @@ impl Plugin for PlayerPlugin {
 				(
 					separation::apply_npc_soft_bump,
 					body::update_grounded,
+					buoyancy::apply_buoyancy,
 					body::apply_wish_movement,
 					body::apply_wish_jump,
 					body::advance_jump_phases,

@@ -36,7 +36,9 @@ use crate::terrain::marazion::{
 };
 use crate::terrain::presentation::{BootstrapTerrainPresentationAssets, TerrainPresentationAssets};
 use crate::terrain::{PreWatershedTerrain, Terrain};
-use crate::water::{BootstrapWaterPresentationAssets, Water, WaterPresentationAssets};
+use crate::water::{
+	BootstrapWaterPresentationAssets, ComposedWater, Water, WaterColumn, WaterPresentationAssets,
+};
 use avian3d::prelude::*;
 use bevy::ecs::system::SystemParam;
 use bevy::math::bounding::{Aabb3d, IntersectsVolume};
@@ -176,6 +178,38 @@ impl TerrainHeightSnapshot {
 	}
 }
 
+/// Cheap owned view of composed wet columns for buoyancy and placement.
+#[derive(Clone, Default)]
+pub struct WaterSurfaceSnapshot {
+	water: Arc<HashMap<Id, Arc<ComposedWater>>>,
+}
+
+impl WaterSurfaceSnapshot {
+	pub fn column(&self, layout: &TerrainCellLayout, x: f32, z: f32) -> Option<WaterColumn> {
+		for id in origin_cell_ids_at(layout, x, z) {
+			if let Some(sdf) = self.water.get(&id) {
+				return sdf.column_at(x, z);
+			}
+		}
+		None
+	}
+}
+
+fn origin_cell_ids_at(layout: &TerrainCellLayout, x: f32, z: f32) -> impl Iterator<Item = Id> + '_ {
+	std::iter::once(layout.cell_size)
+		.chain(layout.outer_rings.iter().map(|outer| outer.cell_size))
+		.chain(layout.stream_rings.iter().map(|ring| ring.cell_size))
+		.map(move |size| {
+			let size = size.max(1e-3);
+			Id::from_cell(cell_bounds(
+				(x / size).floor() as i32,
+				(z / size).floor() as i32,
+				size,
+				layout.vertical_half_extent,
+			))
+		})
+}
+
 impl TerrainEntryStore {
 	fn next_version(&mut self) -> Version {
 		self.next_version += 1;
@@ -228,6 +262,41 @@ impl TerrainEntryStore {
 					.collect(),
 			),
 		}
+	}
+
+	pub fn water_snapshot(&self) -> WaterSurfaceSnapshot {
+		WaterSurfaceSnapshot {
+			water: Arc::new(
+				self.water
+					.iter()
+					.map(|(id, entry)| (*id, Arc::new(entry.value.sdf.clone())))
+					.collect(),
+			),
+		}
+	}
+
+	/// Wet column at `(x, z)` when a covering water cell is stored.
+	pub fn water_column_at(
+		&self,
+		layout: &TerrainCellLayout,
+		x: f32,
+		z: f32,
+	) -> Option<WaterColumn> {
+		for id in origin_cell_ids_at(layout, x, z) {
+			if let Some(entry) = self.water.get(&id) {
+				return entry.value.column_at(x, z);
+			}
+		}
+		None
+	}
+
+	#[cfg(test)]
+	pub(crate) fn insert_water_for_test(&mut self, water: crate::water::Water) {
+		let bounds = water.cell;
+		let id = Id::from_cell(bounds);
+		let version = self.next_version();
+		self.water
+			.insert(id, StoredEntry { value: water, bounds, version, entity: None });
 	}
 
 	/// Composed terrain height (jersey + Marazion) at `(x, z)`, if that cell is stored.
@@ -466,6 +535,11 @@ impl<'w, 's> AvianTerrainIndex<'w, 's> {
 	/// Composed terrain height at `(x, z)` when the cell is in the store.
 	pub fn composed_height_at(&self, x: f32, z: f32) -> Option<f32> {
 		self.store.composed_height_at(&self.layout, x, z)
+	}
+
+	/// Wet column at `(x, z)` when a covering water cell is stored.
+	pub fn water_column_at(&self, x: f32, z: f32) -> Option<WaterColumn> {
+		self.store.water_column_at(&self.layout, x, z)
 	}
 }
 
