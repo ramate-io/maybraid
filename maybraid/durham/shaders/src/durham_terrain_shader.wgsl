@@ -3,7 +3,7 @@
 //---------------------------------------------------------
 #import bevy_pbr::{
     forward_io::VertexOutput,
-    mesh_view_bindings::view,
+    mesh_view_bindings::{view, lights},
     prepass_utils::prepass_depth,
     pbr_types::{PbrInput, pbr_input_new, STANDARD_MATERIAL_FLAGS_DOUBLE_SIDED_BIT},
     pbr_functions as fns,
@@ -235,7 +235,10 @@ fn fragment(
         mesh.position.xy,
     );
     let lit_mix = saturate(style_params.w);
-    let final_color = mix(unlit.rgb, toned.rgb, lit_mix);
+    // Unlit albedo is a daylight stamp. Scale it with ambient so night
+    // ground follows the key instead of staying readable at range.
+    let day = saturate((dot(lights.ambient_color.rgb, vec3<f32>(0.2126, 0.7152, 0.0722)) - 15.0) / 500.0);
+    let final_color = mix(unlit.rgb * mix(0.16, 1.0, day), toned.rgb, lit_mix);
 
     return vec4<f32>(final_color, 1.0);
 }

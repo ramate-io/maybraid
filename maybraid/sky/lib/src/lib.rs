@@ -49,15 +49,15 @@ pub const SKY_CLEAR: Color = Color::hsla(204.0, 0.52, 0.60, 1.0);
 /// Playground alias for [`SKY_CLEAR`].
 pub const SKY_BLUE: Color = SKY_CLEAR;
 
-/// Soft amber key. Not sodium orange.
-pub const SUN_COLOR: Color = Color::hsla(38.0, 0.38, 0.78, 1.0);
-/// Lower than the old 12 klux white key so mid-ground is not flash-lit.
-pub const SUN_ILLUMINANCE: f32 = 8_000.0;
+/// Warm orange / yellow key. Not a white noon lamp.
+pub const SUN_COLOR: Color = Color::hsla(42.0, 0.55, 0.80, 1.0);
+/// Golden stays just under noon so the authored pose is still bright.
+pub const SUN_ILLUMINANCE: f32 = 5_200.0;
 /// Cooler, dimmer fill so the key keeps a direction.
 pub const FILL_COLOR: Color = Color::hsla(218.0, 0.22, 0.70, 1.0);
-pub const FILL_ILLUMINANCE: f32 = 1_600.0;
+pub const FILL_ILLUMINANCE: f32 = 1_300.0;
 /// Lifted so Off-shadow tree wells do not go black.
-pub const AMBIENT_BRIGHTNESS: f32 = 620.0;
+pub const AMBIENT_BRIGHTNESS: f32 = 520.0;
 
 /// Existing Discovery key pose (pitch / yaw). Golden-hour default.
 pub const SUN_PITCH: f32 = -PI / 4.0;

@@ -52,7 +52,13 @@ pub(crate) fn apply_sky_mood(
 	for mut fog in &mut fog {
 		fog.color = mood.fog;
 		let mut sun_fog = mood.sun_color.to_linear();
-		sun_fog.alpha = 0.4;
+		sun_fog.alpha = 0.4 * mood.day_weight;
 		fog.directional_light_color = Color::from(sun_fog);
+		// Night pulls the far plane in so distant terrain does not stay readable.
+		let day = mood.day_weight;
+		fog.falloff = FogFalloff::Linear {
+			start: 180.0 + 520.0 * day,
+			end: 1_100.0 + 3_400.0 * day,
+		};
 	}
 }

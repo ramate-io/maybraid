@@ -354,7 +354,7 @@ fn fragment(
         let L = lights.directional_lights[0].direction_to_light;
         ndl = saturate(dot(n, L));
     }
-    // Ambient brightness is 620 at golden and ~40 at night. Scale the
+    // Ambient brightness is 520 at golden and ~20 at night. Scale the
     // cartoon sky bounce so foliage is not a daylight stamp after dark.
     let day = saturate((dot(lights.ambient_color.rgb, vec3<f32>(0.2126, 0.7152, 0.0722)) - 20.0) / 600.0);
     let sun = ndl * mix(0.22, 0.95, day) + mix(0.02, 0.14, day);

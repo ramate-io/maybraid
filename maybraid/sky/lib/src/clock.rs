@@ -282,14 +282,14 @@ fn keyframes() -> [SkyMood; 7] {
 	[
 		key(
 			0.0,
-			Color::hsla(258.0, 0.70, 0.06, 1.0),
-			Color::hsla(268.0, 0.52, 0.05, 1.0),
-			Color::hsla(250.0, 0.30, 0.02, 1.0),
-			Color::hsla(256.0, 0.60, 0.05, 1.0),
+			Color::hsla(258.0, 0.70, 0.03, 1.0),
+			Color::hsla(268.0, 0.52, 0.025, 1.0),
+			Color::hsla(250.0, 0.30, 0.01, 1.0),
+			Color::hsla(256.0, 0.60, 0.025, 1.0),
 			Color::hsla(220.0, 0.22, 0.74, 1.0),
+			20.0,
 			40.0,
-			80.0,
-			40.0,
+			20.0,
 			-0.18,
 			0.2,
 			0.04,
@@ -299,13 +299,13 @@ fn keyframes() -> [SkyMood; 7] {
 		key(
 			SKY_PHASE_DAWN,
 			Color::hsla(232.0, 0.52, 0.26, 1.0),
-			Color::hsla(12.0, 0.84, 0.58, 1.0),
+			Color::hsla(12.0, 0.84, 0.56, 1.0),
 			Color::hsla(8.0, 0.50, 0.14, 1.0),
 			Color::hsla(16.0, 0.58, 0.40, 1.0),
-			Color::hsla(22.0, 0.48, 0.78, 1.0),
-			1_800.0,
-			1_100.0,
-			400.0,
+			Color::hsla(22.0, 0.50, 0.74, 1.0),
+			1_600.0,
+			950.0,
+			360.0,
 			0.12,
 			-0.35,
 			0.42,
@@ -315,13 +315,13 @@ fn keyframes() -> [SkyMood; 7] {
 		key(
 			SKY_PHASE_MORNING,
 			Color::hsla(200.0, 0.64, 0.54, 1.0),
-			Color::hsla(38.0, 0.55, 0.70, 1.0),
-			Color::hsla(28.0, 0.28, 0.22, 1.0),
-			Color::hsla(198.0, 0.52, 0.64, 1.0),
-			Color::hsla(42.0, 0.28, 0.86, 1.0),
-			6_400.0,
-			1_400.0,
-			540.0,
+			Color::hsla(38.0, 0.55, 0.68, 1.0),
+			Color::hsla(28.0, 0.28, 0.20, 1.0),
+			Color::hsla(198.0, 0.52, 0.62, 1.0),
+			Color::hsla(40.0, 0.52, 0.80, 1.0),
+			3_800.0,
+			1_200.0,
+			480.0,
 			0.55,
 			0.15,
 			0.86,
@@ -335,9 +335,9 @@ fn keyframes() -> [SkyMood; 7] {
 			Color::hsla(148.0, 0.28, 0.18, 1.0),
 			Color::hsla(180.0, 0.62, 0.50, 1.0),
 			crate::SUN_COLOR,
-			8_500.0,
-			1_700.0,
-			660.0,
+			6_000.0,
+			1_400.0,
+			560.0,
 			std::f32::consts::FRAC_PI_2,
 			0.0,
 			1.0,
@@ -362,14 +362,14 @@ fn keyframes() -> [SkyMood; 7] {
 		),
 		key(
 			SKY_PHASE_DUSK,
-			Color::hsla(258.0, 0.48, 0.20, 1.0),
-			Color::hsla(14.0, 0.86, 0.52, 1.0),
+			Color::hsla(258.0, 0.48, 0.18, 1.0),
+			Color::hsla(14.0, 0.86, 0.50, 1.0),
 			Color::hsla(8.0, 0.50, 0.10, 1.0),
-			Color::hsla(16.0, 0.62, 0.30, 1.0),
-			Color::hsla(24.0, 0.50, 0.76, 1.0),
+			Color::hsla(16.0, 0.62, 0.28, 1.0),
+			Color::hsla(24.0, 0.52, 0.72, 1.0),
 			2_200.0,
-			900.0,
-			360.0,
+			850.0,
+			340.0,
 			0.14,
 			1.05,
 			0.38,
@@ -378,14 +378,14 @@ fn keyframes() -> [SkyMood; 7] {
 		),
 		key(
 			0.93,
-			Color::hsla(256.0, 0.64, 0.05, 1.0),
-			Color::hsla(262.0, 0.42, 0.04, 1.0),
-			Color::hsla(248.0, 0.26, 0.02, 1.0),
-			Color::hsla(254.0, 0.54, 0.04, 1.0),
+			Color::hsla(256.0, 0.64, 0.025, 1.0),
+			Color::hsla(262.0, 0.42, 0.02, 1.0),
+			Color::hsla(248.0, 0.26, 0.01, 1.0),
+			Color::hsla(254.0, 0.54, 0.02, 1.0),
 			Color::hsla(220.0, 0.16, 0.70, 1.0),
-			30.0,
-			70.0,
+			15.0,
 			35.0,
+			18.0,
 			-0.22,
 			1.35,
 			0.05,
@@ -444,6 +444,10 @@ mod tests {
 		assert!(sun.red > sun.blue, "noon key stays warm, not a white lamp");
 		let zenith = noon.zenith.to_linear();
 		assert!(zenith.green > zenith.red && zenith.blue > zenith.red, "noon zenith stays teal");
+		let dawn = SkyClock { phase: SKY_PHASE_DAWN, ..SkyClock::golden() }.sample();
+		assert!((dawn.sun_illuminance - 1_600.0).abs() < 1.0);
+		assert!((noon.sun_illuminance - 6_000.0).abs() < 1.0);
+		assert!(sun.red > sun.green && sun.green > sun.blue, "noon key is orange / yellow");
 	}
 
 	#[test]
@@ -452,9 +456,9 @@ mod tests {
 		assert!(!night.sun_above_horizon());
 		assert!(night.day_weight < 0.15);
 		assert!(night.star_gain > 0.8);
-		assert!(night.sun_illuminance < 80.0);
-		assert!(night.fill_illuminance < 120.0);
-		assert!(night.ambient < 80.0);
+		assert!(night.sun_illuminance < 30.0);
+		assert!(night.fill_illuminance < 50.0);
+		assert!(night.ambient < 30.0);
 		let zenith = night.zenith.to_linear();
 		assert!(zenith.blue > zenith.red && zenith.red + zenith.green + zenith.blue < 0.25);
 	}
