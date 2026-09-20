@@ -136,18 +136,23 @@ fn shade_cosmos(dir: vec3<f32>) -> vec3<f32> {
     let morph = t * 0.08;
 
     let n = flatten(fbm3(dir * 3.4 + crawl + vec3<f32>(0.0, 0.0, morph)));
-    let n2 = flatten(value_noise3(dir * 8.2 + crawl * 0.6 + vec3<f32>(-morph * 0.5, morph * 0.4, 0.4)));
 
     let day = material.style.x;
     let void_c = mix(vec3<f32>(0.012, 0.004, 0.04), vec3<f32>(0.05, 0.02, 0.12), day);
     let nebula = mix(vec3<f32>(0.07, 0.015, 0.16), vec3<f32>(0.28, 0.06, 0.48), day);
-    let bloom = mix(vec3<f32>(0.16, 0.04, 0.28), vec3<f32>(0.52, 0.16, 0.72), day);
     var color = mix(void_c, nebula, n);
-    color = mix(color, bloom, smoothstep(0.50, 0.78, n2) * 0.38 * swirl_g);
+
+    // Daytime dome covers most of this pass. Keep one FBM so holes are not
+    // flat; skip bloom + stars until night opens the atmosphere.
+    if day < 0.7 {
+        let n2 = flatten(value_noise3(dir * 8.2 + crawl * 0.6 + vec3<f32>(-morph * 0.5, morph * 0.4, 0.4)));
+        let bloom = mix(vec3<f32>(0.16, 0.04, 0.28), vec3<f32>(0.52, 0.16, 0.72), day);
+        color = mix(color, bloom, smoothstep(0.50, 0.78, n2) * 0.38 * swirl_g);
+        color += celestial_dots(dir, t) * star_g;
+    }
 
     let band = smoothstep(0.72, 0.88, 0.5 + 0.5 * sin(dir.x * 2.2 + dir.y * 3.1 + t * 0.35));
     color += mix(vec3<f32>(0.16, 0.05, 0.26), vec3<f32>(0.62, 0.22, 0.78), day) * band * 0.12 * swirl_g;
-    color += celestial_dots(dir, t) * star_g;
     return color;
 }
 

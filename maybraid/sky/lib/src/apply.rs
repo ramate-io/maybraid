@@ -1,4 +1,7 @@
 //! Push [`SkyClock`] onto lights, blue dome, cosmos, moon, and distance fog.
+//!
+//! A paused clock only writes when the phase or dome settings change, so
+//! golden-hour play does not dirty materials every frame.
 
 use bevy::prelude::*;
 
@@ -21,7 +24,13 @@ pub(crate) fn apply_sky_mood(
 	mut wash_mats: ResMut<Assets<SkyDomeMaterial>>,
 	mut fog: Query<&mut DistanceFog>,
 ) {
-	clock.advance(time.delta_secs());
+	if !clock.paused {
+		clock.advance(time.delta_secs());
+	}
+	if !clock.is_changed() && !settings.is_changed() {
+		return;
+	}
+
 	let mood = clock.sample();
 	let pose = mood.sun_pose();
 
@@ -39,16 +48,32 @@ pub(crate) fn apply_sky_mood(
 		light.illuminance = mood.fill_illuminance;
 	}
 
+	let field_params = SkyFieldMaterial::from_mood(mood).params;
 	for handle in &field {
+		let Some(current) = field_mats.get(&handle.0) else {
+			continue;
+		};
+		if current.params == field_params {
+			continue;
+		}
 		if let Some(mut material) = field_mats.get_mut(&handle.0) {
-			material.apply_mood(mood);
+			material.params = field_params;
 		}
 	}
+
+	let wash_params = SkyDomeMaterial::from_mood(mood, settings.max_alpha).params;
 	for handle in &wash {
+		let Some(current) = wash_mats.get(&handle.0) else {
+			continue;
+		};
+		if current.params == wash_params {
+			continue;
+		}
 		if let Some(mut material) = wash_mats.get_mut(&handle.0) {
-			material.apply_mood(mood, settings.max_alpha);
+			material.params = wash_params;
 		}
 	}
+
 	for mut fog in &mut fog {
 		fog.color = mood.fog;
 		let mut sun_fog = mood.sun_color.to_linear();

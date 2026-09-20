@@ -138,7 +138,12 @@ fn follow_camera(
 	let Ok(mut tf) = dome.single_mut() else {
 		return;
 	};
-	tf.translation = cam.translation();
+	let translation = cam.translation();
+	// ~1 cm. Standing still must not dirty the sky root every frame.
+	if tf.translation.distance_squared(translation) <= 1e-4 && tf.rotation == Quat::IDENTITY {
+		return;
+	}
+	tf.translation = translation;
 	tf.rotation = Quat::IDENTITY;
 }
 
@@ -183,6 +188,16 @@ mod tests {
 			.add_plugins(SkyDomePlugin::default());
 		app.update();
 		app
+	}
+
+	#[test]
+	fn paused_update_does_not_dirty_the_key() -> anyhow::Result<()> {
+		let mut app = sky_test_app(ShadowQuality::High);
+		app.update();
+		let mut lights = app.world_mut().query_filtered::<Ref<DirectionalLight>, With<SkySun>>();
+		let light = lights.single(app.world()).map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(!light.is_changed(), "paused golden must not rewrite the key every frame");
+		Ok(())
 	}
 
 	#[test]

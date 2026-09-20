@@ -24,7 +24,7 @@ pub const FIELD_RADIUS_FACTOR: f32 = 1.06;
 #[derive(Component, Debug, Clone, Copy)]
 pub struct SkyField;
 
-#[derive(Clone, Copy, Debug, ShaderType)]
+#[derive(Clone, Copy, Debug, PartialEq, ShaderType)]
 pub struct SkyFieldParams {
 	pub zenith: Vec4,
 	pub horizon: Vec4,

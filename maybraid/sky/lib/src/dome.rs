@@ -49,7 +49,7 @@ impl Default for DomeSettings {
 #[derive(Component, Debug, Clone, Copy)]
 pub struct SkyWash;
 
-#[derive(Clone, Copy, Debug, ShaderType)]
+#[derive(Clone, Copy, Debug, PartialEq, ShaderType)]
 pub struct SkyDomeParams {
 	pub zenith: Vec4,
 	pub horizon: Vec4,
