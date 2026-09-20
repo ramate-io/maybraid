@@ -15,8 +15,10 @@ just inside the dome; a smaller moon and sparse zenith stars are camera-
 parented and do not cast shadows. This is not a time-of-day clock.
 
 The sun's cascade shadows are [`ShadowQuality`](lib/src/shadows.rs): High
-(Bevy default, four maps to 150 m), Low (two maps to 60 m), or Off. The
-in-game Settings menu cycles that resource.
+(Bevy default, four maps to 150 m), Low (four maps to 60 m, 512²), or Off.
+Cascade count stays at four so cycling quality does not trip Bevy 0.19's
+stale per-thread visibility queues. The in-game Settings menu cycles that
+resource.
 
 ```bash
 # composed into the world playground

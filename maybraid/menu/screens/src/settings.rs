@@ -107,7 +107,7 @@ impl InGameSettingsChoice {
 	pub fn description(self) -> &'static str {
 		match self {
 			Self::Shadows => {
-				"Sun cascade shadows. High is four maps to 150 m. Low is two maps to 60 m. Off disables the sun's shadow maps."
+				"Sun cascade shadows. High is four maps to 150 m. Low is four maps to 60 m. Off disables the sun's shadow maps."
 			}
 			Self::MobHud => {
 				"Pins and colored poles on presented mob hosts. Use this to find where groups should stand."

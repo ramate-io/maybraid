@@ -67,6 +67,9 @@ cargo build -p maybraid --release
 ./target/release/maybraid
 ```
 
+> [!NOTE]
+> We will soon be adding a compatibility table with recommended settings by device. 
+
 ## Developers
 
 To use this repository, install [Determinate Systems Nix](https://determinate.systems/blog/determinate-nix-installer/). Then `cd` into the working directory for the repository and `nix develop`.
