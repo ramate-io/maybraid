@@ -18,6 +18,7 @@ const CHARACTERS_DIR: &str = "characters";
 const INVENTORIES_DIR: &str = "inventories";
 const POSITIONS_DIR: &str = "positions";
 const ACTIVE_FILE: &str = "active.json";
+const SETTINGS_FILE: &str = "settings.json";
 
 static ID_COUNTER: AtomicU64 = AtomicU64::new(1);
 
@@ -68,7 +69,8 @@ impl<'de> Deserialize<'de> for CharacterId {
 	}
 }
 
-/// Root of `characters/`, `inventories/`, and `positions/`.
+/// Root of `characters/`, `inventories/`, `positions/`, `active.json`, and
+/// machine-scoped `settings.json`.
 #[derive(Resource, Clone, Debug)]
 pub struct SaveRoot {
 	pub path: PathBuf,
@@ -125,6 +127,10 @@ impl SaveRoot {
 
 	pub fn active_path(&self) -> PathBuf {
 		self.path.join(ACTIVE_FILE)
+	}
+
+	pub fn settings_path(&self) -> PathBuf {
+		self.path.join(SETTINGS_FILE)
 	}
 
 	pub fn ensure_dirs(&self) -> io::Result<()> {
@@ -297,6 +303,13 @@ mod tests {
 		let id = CharacterId(7);
 		save_active(&root, id).expect("save");
 		assert_eq!(load_active(&root), Some(id));
+	}
+
+	#[test]
+	fn settings_file_sits_beside_active() {
+		let root = SaveRoot::at("saves");
+		assert_eq!(root.settings_path(), root.path.join("settings.json"));
+		assert_eq!(root.settings_path().parent(), root.active_path().parent());
 	}
 
 	#[test]

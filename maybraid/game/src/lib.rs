@@ -94,11 +94,14 @@ impl Plugin for GamePlugin {
 			.add_systems(
 				PostStartup,
 				(
-					boot_shell,
-					apply_shell_look,
-					attach_preview_camera.run_if(not(starting_discovery_at_override)),
-				)
-					.chain(),
+					(
+						boot_shell,
+						apply_shell_look,
+						attach_preview_camera.run_if(not(starting_discovery_at_override)),
+					)
+						.chain(),
+					sync_world_shadows,
+				),
 			)
 			.add_systems(
 				Update,
@@ -457,10 +460,7 @@ mod tests {
 	#[test]
 	fn pause_settings_copy_onto_the_sky_sun() -> anyhow::Result<()> {
 		let mut world = World::new();
-		world.insert_resource(InGameSettings {
-			mob_hud: false,
-			shadows: InGameShadowQuality::Low,
-		});
+		world.insert_resource(InGameSettings { mob_hud: false, shadows: InGameShadowQuality::Low });
 		world.insert_resource(ShadowQuality::High);
 		world
 			.run_system_once(sync_world_shadows)
