@@ -41,7 +41,8 @@ pub use short_text::{
 	emit_short_text_toggle_on_nav, observe_short_text_submit_button, restore_short_text_editing,
 	spawn_short_text_button, sync_short_text_cursors, sync_short_text_display, sync_short_text_ime,
 	sync_short_text_modal, sync_short_text_pad_focus, ActiveShortText, ShortTextChange,
-	ShortTextField, ShortTextKey, ShortTextModal, ShortTextPad, ShortTextToggle, ShortTextValue,
+	ShortTextField, ShortTextKey, ShortTextModal, ShortTextModalRoot, ShortTextPad,
+	ShortTextToggle, ShortTextValue,
 };
 pub use stepper::spawn_stepper;
 pub use swatch::{color_from_hex, spawn_swatch, spawn_swatch_row};

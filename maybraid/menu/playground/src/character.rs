@@ -29,6 +29,8 @@ use menu_screens::{
 	take_menu_show_request, MenuScreen, SpinRevealCurrent, SpinRevealItems, SpinRevealScreen,
 };
 
+use crate::leave_prompt::CharacterLeavePromptPlugin;
+
 const PANEL_WIDTH: f32 = 480.0;
 const PANEL_HEIGHT_PERCENT: f32 = 82.0;
 
@@ -154,6 +156,9 @@ impl Plugin for CharacterScreenPlugin {
 		if !app.is_plugin_added::<SkillMapTileMaterialPlugin>() {
 			app.add_plugins(SkillMapTileMaterialPlugin);
 		}
+		if !app.is_plugin_added::<CharacterLeavePromptPlugin>() {
+			app.add_plugins(CharacterLeavePromptPlugin);
+		}
 		app.init_resource::<CharacterMenuState>()
 			.init_resource::<CharacterUiSyncState>()
 			.init_resource::<OverlaySelectState>()
@@ -164,10 +169,7 @@ impl Plugin for CharacterScreenPlugin {
 			.add_observer(on_menu_activate)
 			.add_observer(on_menu_focus)
 			.add_observer(on_short_text_change)
-			.add_systems(
-				Update,
-				ensure_skill_map_menu_previews.before(CharacterHudSystems::Sync),
-			)
+			.add_systems(Update, ensure_skill_map_menu_previews.before(CharacterHudSystems::Sync))
 			.add_systems(
 				Update,
 				(

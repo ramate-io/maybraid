@@ -5,8 +5,8 @@
 //! keyboard types into the same visible line. Submit emits [`ShortTextChange`].
 
 use bevy::ecs::event::EntityEvent;
-use bevy::input::ButtonState;
 use bevy::input::keyboard::KeyboardInput;
+use bevy::input::ButtonState;
 use bevy::prelude::*;
 use bevy::text::{Justify, LineBreak, LineHeight, TextSpan};
 use bevy::window::{Ime, PrimaryWindow};
@@ -20,11 +20,11 @@ use crate::theme::{
 };
 use maybraid_input::{MenuNav, MenuNavImpulse, PadButton, VirtualPad};
 
-use super::HudFonts;
 use super::button::spawn_text_button;
 use super::display::menu_display_name;
 use super::hud_menu::{HudMenu, HudMenuIgnoresLock, HudMenuItem, HudOverlayMenu};
 use super::text::{spawn_cursor_slot_sized, spawn_hud_text};
+use super::HudFonts;
 
 /// IR / host key for a short-text field.
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
@@ -186,7 +186,11 @@ fn spawn_short_text_line(
 }
 
 fn row_value_display(value: &str) -> String {
-	if value.is_empty() { String::from("  —") } else { format!("  {value}") }
+	if value.is_empty() {
+		String::from("  —")
+	} else {
+		format!("  {value}")
+	}
 }
 
 fn modal_value_display(value: &str) -> String {
@@ -260,7 +264,10 @@ pub fn submit_short_text_modal(
 	commands.trigger(ShortTextToggle { entity: session.source, key: session.key, editing: false });
 }
 
-fn despawn_short_text_roots(roots: &Query<Entity, With<ShortTextModalRoot>>, commands: &mut Commands) {
+fn despawn_short_text_roots(
+	roots: &Query<Entity, With<ShortTextModalRoot>>,
+	commands: &mut Commands,
+) {
 	for entity in roots {
 		commands.entity(entity).try_despawn();
 	}
@@ -285,10 +292,7 @@ pub fn emit_short_text_submit_on_confirm(
 	submit_short_text_modal(&mut active, &mut modal, &mut fields, &roots, &mut commands);
 }
 
-pub fn observe_short_text_submit_button(
-	add: On<Add, ShortTextSubmit>,
-	mut commands: Commands,
-) {
+pub fn observe_short_text_submit_button(add: On<Add, ShortTextSubmit>, mut commands: Commands) {
 	commands.entity(add.entity).observe(on_short_text_submit_click);
 }
 
@@ -477,7 +481,13 @@ pub fn emit_short_text_pad_on_nav(
 		MenuNav::Select => {
 			impulse.propagate(false);
 			if pad_start_submits(pad_state.as_deref()) {
-				submit_short_text_modal(&mut active, &mut modal, &mut fields, &roots, &mut commands);
+				submit_short_text_modal(
+					&mut active,
+					&mut modal,
+					&mut fields,
+					&roots,
+					&mut commands,
+				);
 			} else {
 				activate_selected_pad_item(
 					pad,
@@ -574,7 +584,14 @@ pub fn emit_short_text_cancel_on_click(
 		return;
 	}
 	click.propagate(false);
-	cancel_short_text_modal(&mut active, &mut modal, &mut fields, &mut consumed, &roots, &mut commands);
+	cancel_short_text_modal(
+		&mut active,
+		&mut modal,
+		&mut fields,
+		&mut consumed,
+		&roots,
+		&mut commands,
+	);
 }
 
 pub fn capture_short_text_input(
@@ -1106,10 +1123,9 @@ pub fn sync_short_text_ime(
 #[cfg(test)]
 mod tests {
 	use super::{
-		ActiveShortText, ShortTextField, ShortTextModal, ShortTextModalRoot, ShortTextPadKey,
-		ShortTextSession,
 		apply_short_text_pad_key, cancel_short_text_modal, is_short_text_char, pad_letter_label,
-		push_short_text_char, submit_short_text_modal,
+		push_short_text_char, submit_short_text_modal, ActiveShortText, ShortTextField,
+		ShortTextModal, ShortTextModalRoot, ShortTextPadKey, ShortTextSession,
 	};
 	use crate::single_select::MenuBackConsumed;
 	use bevy::ecs::system::RunSystemOnce;
