@@ -24,7 +24,8 @@ use game_commands::ui::GameCommandStatusText;
 
 use crate::commands::RequestModeCharacter;
 use crate::player::{
-	Grounded, Jumping, MoveWish, Player, PlayerCapsule, PlaygroundMode, WalkableGround,
+	Grounded, Jumping, MoveWish, Player, PlayerCapsule, PlaygroundMode, VegetationPlayerMotor,
+	WalkableGround,
 };
 use avian3d::prelude::LinearVelocity;
 
@@ -199,6 +200,7 @@ fn should_request_character_mode(mode: PlaygroundMode) -> bool {
 /// Walk / run / jump on the body mailbox from player speed and grounded state.
 pub(crate) fn drive_player_locomotion(
 	mut commands: Commands,
+	motor: Res<VegetationPlayerMotor>,
 	time: Res<Time>,
 	players: Query<
 		(&LinearVelocity, &MoveWish, Has<Jumping>, Has<Grounded>, Option<&WalkableGround>),
@@ -211,6 +213,9 @@ pub(crate) fn drive_player_locomotion(
 	rigs: Query<&CharacterRig>,
 	anims: Query<&AnimRefRoot>,
 ) {
+	if !motor.0 {
+		return;
+	}
 	let Ok((velocity, wish, jumping, grounded, walkable)) = players.single() else {
 		return;
 	};

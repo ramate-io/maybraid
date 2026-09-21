@@ -11,7 +11,7 @@ use maybraid_world::{
 #[command(name = "maybraid", about = "Maybraid")]
 struct GameArgs {
 	/// Start Discovery at world XZ metres (`x,z` or `x,y,z`; y is ignored).
-	#[arg(long = "start-at", value_name = "X,Z")]
+	#[arg(long = "start-at", value_name = "X,Z", allow_hyphen_values = true)]
 	start_at: Option<String>,
 }
 
@@ -52,4 +52,22 @@ fn parse_start_at(raw: &str) -> bevy::math::Vec2 {
 		eprintln!("{error}");
 		std::process::exit(2);
 	})
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn start_at_accepts_negative_xz() {
+		let args = GameArgs::try_parse_from(["maybraid", "--start-at", "-1500,-600"]).unwrap();
+		assert_eq!(args.start_at.as_deref(), Some("-1500,-600"));
+		assert_eq!(parse_xz_metres("-1500,-600").unwrap(), bevy::math::Vec2::new(-1500.0, -600.0));
+	}
+
+	#[test]
+	fn start_at_equals_form_accepts_negatives() {
+		let args = GameArgs::try_parse_from(["maybraid", "--start-at=-1500,-600"]).unwrap();
+		assert_eq!(args.start_at.as_deref(), Some("-1500,-600"));
+	}
 }

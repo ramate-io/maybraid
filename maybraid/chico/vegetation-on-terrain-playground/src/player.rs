@@ -153,6 +153,18 @@ pub enum MovementAction {
 	Jump,
 }
 
+/// When false, this crate skips grounded / wish / jump on the capsule so a
+/// downstream motor (world player buoyancy) can own velocity. Snap and
+/// fall-respawn still run.
+#[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct VegetationPlayerMotor(pub bool);
+
+impl Default for VegetationPlayerMotor {
+	fn default() -> Self {
+		Self(true)
+	}
+}
+
 /// When false, a downstream controller writes [`MovementAction`] / [`MoveWish`].
 #[derive(Resource, Clone, Copy, Debug)]
 pub struct PadMovementEnabled(pub bool);
@@ -179,6 +191,7 @@ impl Plugin for PlayerPlugin {
 	fn build(&self, app: &mut App) {
 		app.init_resource::<PlaygroundMode>()
 			.init_resource::<PadMovementEnabled>()
+			.init_resource::<VegetationPlayerMotor>()
 			.init_resource::<CharacterCameraFollowEnabled>()
 			.init_resource::<CharacterLocomotion>()
 			.init_resource::<PlayerRespawn>()
@@ -460,6 +473,7 @@ fn keyboard_movement_input(
 
 fn update_grounded(
 	mode: Res<PlaygroundMode>,
+	motor: Res<VegetationPlayerMotor>,
 	mut commands: Commands,
 	mut query: Query<
 		(
@@ -473,7 +487,7 @@ fn update_grounded(
 		With<CharacterController>,
 	>,
 ) {
-	if *mode != PlaygroundMode::Character {
+	if !motor.0 || *mode != PlaygroundMode::Character {
 		return;
 	}
 
@@ -582,6 +596,7 @@ fn control_air_velocity(velocity: &mut LinearVelocity, wish: Vec3, accel: f32, d
 fn apply_character_movement(
 	mut commands: Commands,
 	mode: Res<PlaygroundMode>,
+	motor: Res<VegetationPlayerMotor>,
 	time: Res<Time>,
 	mut reader: MessageReader<MovementAction>,
 	mut controllers: Query<
@@ -600,7 +615,7 @@ fn apply_character_movement(
 		With<CharacterController>,
 	>,
 ) {
-	if *mode != PlaygroundMode::Character {
+	if !motor.0 || *mode != PlaygroundMode::Character {
 		for _ in reader.read() {}
 		return;
 	}
@@ -679,6 +694,11 @@ mod tests {
 		assert!(
 			(CharacterLocomotion::default().max_slope_angle - DEFAULT_MAX_SLOPE_ANGLE).abs() < 1e-6
 		);
+	}
+
+	#[test]
+	fn playground_motor_stays_on_by_default() {
+		assert!(VegetationPlayerMotor::default().0);
 	}
 
 	#[test]
