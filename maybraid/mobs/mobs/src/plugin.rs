@@ -193,7 +193,7 @@ fn spawn_needed_members(
 			continue;
 		};
 		let body = member.character.spawn(&mut commands, Transform::from_translation(request.pose));
-		commands.entity(body).insert((MobSlot(request.slot), request.id));
+		commands.entity(body).insert((MobSlot(request.slot), request.id, mob.mob.kind));
 	}
 }
 
@@ -288,6 +288,7 @@ mod tests {
 	use npc_intelligence::Personality;
 
 	use super::*;
+	use mob_characters::CharacterSceneRecipe;
 	use mob_intelligence::{MobId, MobMemberNeeded, MobRoster};
 
 	#[test]
@@ -340,6 +341,40 @@ mod tests {
 			.ok_or_else(|| anyhow::anyhow!("missing roster member after retry"))?;
 		assert!(!member.spawn_requested);
 		assert_eq!(member.respawn_at, Some(RESPAWN_RETRY_SECS));
+		Ok(())
+	}
+
+	#[test]
+	fn respawn_stamps_the_host_mob_kind_on_the_body() -> Result<()> {
+		let mut world = World::new();
+		world.init_resource::<Time>();
+		world.init_resource::<Messages<MobMemberNeeded>>();
+		let host = world
+			.spawn((
+				MobScene::of_kind(MobKind::Raider, 0.2),
+				Transform::default(),
+				LodSceneLevel::High,
+				MobRoster::new(vec![RosterMember::new(Personality::Assassin, Vec3::Y)]),
+			))
+			.id();
+		world.resource_mut::<Messages<MobMemberNeeded>>().write(MobMemberNeeded {
+			mob: host,
+			id: MobId(7),
+			slot: 0,
+			pose: Vec3::Y,
+		});
+
+		world
+			.run_system_once(spawn_needed_members)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+
+		let kind = world
+			.query::<(&MobKind, &CharacterSceneRecipe)>()
+			.iter(&world)
+			.map(|(kind, _)| *kind)
+			.next()
+			.ok_or_else(|| anyhow::anyhow!("respawned body missing mob kind"))?;
+		assert_eq!(kind, MobKind::Raider);
 		Ok(())
 	}
 

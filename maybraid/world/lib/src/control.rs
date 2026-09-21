@@ -11,7 +11,7 @@ use durham_terrain_models::{
 use game_commands::command::{CommandConsoleOutput, TextEntryFocus};
 use maybraid_character_controller::CharacterIntent;
 use maybraid_skill_map::SkillMapEnabled;
-use maybraid_sky::SkyDome;
+use maybraid_sky::{SkyDome, SKY_HORIZON};
 use player::MotorTraction;
 use player_camera::CameraController;
 
@@ -152,8 +152,8 @@ pub(crate) fn echo_character_intents(
 
 fn world_distance_fog() -> DistanceFog {
 	DistanceFog {
-		color: Color::srgba(0.55, 0.65, 0.72, 1.0),
-		directional_light_color: Color::srgba(1.0, 0.92, 0.78, 0.35),
+		color: SKY_HORIZON,
+		directional_light_color: Color::srgba(1.0, 0.86, 0.62, 0.4),
 		directional_light_exponent: 24.0,
 		falloff: FogFalloff::Linear { start: 700.0, end: 4500.0 },
 	}

@@ -4748,6 +4748,7 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "bevy",
+ "crozon-character-items",
  "damage",
  "journeying-intelligence",
  "lod",
@@ -4786,6 +4787,7 @@ dependencies = [
 name = "maybraid-sky"
 version = "0.0.1"
 dependencies = [
+ "anyhow",
  "bevy",
 ]
 
@@ -4936,6 +4938,9 @@ dependencies = [
  "game-commands",
  "maybraid-menu-controller",
  "menu-components",
+ "serde",
+ "serde_json",
+ "tempfile",
 ]
 
 [[package]]

@@ -255,9 +255,10 @@ fn fragment(
         let direction_to_light = lights.directional_lights[0].direction_to_light;
         ndl = saturate(dot(normal, direction_to_light));
     }
-    let sun = ndl * 0.95 + 0.14;
-    let sky = mix(0.38, 0.55, saturate(normal.y));
-    let sky_rgb = vec3<f32>(0.78, 0.88, 1.0);
+    let day = saturate((dot(lights.ambient_color.rgb, vec3<f32>(0.2126, 0.7152, 0.0722)) - 20.0) / 600.0);
+    let sun = ndl * mix(0.22, 0.95, day) + mix(0.02, 0.14, day);
+    let sky = mix(0.06, 0.38, day) + mix(0.04, 0.17, day) * saturate(normal.y);
+    let sky_rgb = mix(vec3<f32>(0.16, 0.08, 0.30), vec3<f32>(0.78, 0.88, 1.0), day);
     let lifted = albedo * sun + albedo * sky * sky_rgb;
     let fogged = with_distance_fog(
         vec4<f32>(lifted, 1.0),

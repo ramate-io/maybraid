@@ -9,6 +9,7 @@ use mob_intelligence::{ancestor_mob, MemberOf, Mob, MobId, MobSlot, RosterBindin
 use poi_intelligence::{NearbyPlace, AGENT_SEPARATION};
 
 use crate::plugin::MobSceneSystems;
+use crate::MobScene;
 
 pub type MemberRosterRef = RosterRef<CharacterSceneRecipe>;
 
@@ -36,7 +37,10 @@ fn fulfill_roster_refs(
 	stubs: Query<(Entity, &MemberRosterRef), Without<RosterBinding>>,
 	child_of: Query<&ChildOf>,
 	mobs: Query<(), With<Mob>>,
-	hosts: Query<(Entity, &MobId, &Transform, Option<&GlobalTransform>), With<Mob>>,
+	hosts: Query<
+		(Entity, &MobId, &Transform, Option<&GlobalTransform>, Option<&MobScene>),
+		With<Mob>,
+	>,
 	live: Query<(&MemberOf, &Transform)>,
 ) {
 	let mut placed: Vec<(Entity, Vec3)> = Vec::new();
@@ -44,7 +48,7 @@ fn fulfill_roster_refs(
 		let Some(host) = ancestor_mob(stub, &child_of, &mobs) else {
 			continue;
 		};
-		let Ok((host, id, transform, global)) = hosts.get(host) else {
+		let Ok((host, id, transform, global, scene)) = hosts.get(host) else {
 			continue;
 		};
 		let preferred = global
@@ -67,6 +71,9 @@ fn fulfill_roster_refs(
 		let at = Vec3::new(cleared.x, preferred.y, cleared.z);
 		let body = roster.recipe.spawn(&mut commands, Transform::from_translation(at));
 		commands.entity(body).insert((MobSlot(roster.slot), *id));
+		if let Some(kind) = scene.map(|scene| scene.mob.kind) {
+			commands.entity(body).insert(kind);
+		}
 		commands.entity(stub).insert(RosterBinding { body, host, slot: roster.slot });
 		placed.push((host, at));
 	}
@@ -122,6 +129,8 @@ mod tests {
 	use super::*;
 	use bevy::ecs::system::RunSystemOnce;
 	use std::sync::Arc;
+
+	use crate::MobKind;
 
 	fn host_and_stub(world: &mut World, offset: Vec3) -> (Entity, Entity) {
 		let recipe = Arc::new(CharacterSceneRecipe::default());
@@ -208,6 +217,31 @@ mod tests {
 		world.flush();
 		assert!(world.get_entity(body).is_ok());
 		assert_eq!(world.get::<MobId>(body), Some(&MobId(9)));
+	}
+
+	#[test]
+	fn fulfill_stamps_the_host_mob_kind_on_the_body() {
+		let mut world = World::new();
+		world.init_resource::<RosterStubBodies>();
+		let recipe = Arc::new(CharacterSceneRecipe::default());
+		let mut commands = world.commands();
+		let host = commands
+			.spawn((
+				Transform::from_xyz(10.0, 2.0, 4.0),
+				GlobalTransform::from_translation(Vec3::new(10.0, 2.0, 4.0)),
+				Mob::new(24.0),
+				MobId(9),
+				MobScene::of_kind(MobKind::Brawler, 1.0),
+			))
+			.id();
+		let stub = commands
+			.spawn((MemberRosterRef::new(Arc::clone(&recipe), 0, Vec3::X), ChildOf(host)))
+			.id();
+		world.flush();
+		world.run_system_once(fulfill_roster_refs).expect("fulfill");
+		world.flush();
+		let body = world.get::<RosterBinding>(stub).expect("binding").body;
+		assert_eq!(world.get::<MobKind>(body), Some(&MobKind::Brawler));
 	}
 
 	#[test]

@@ -14,6 +14,7 @@ use bevy::prelude::*;
 use crozon_character_playground::CameraController as PreviewCameraController;
 use maybraid_world::{
 	PlayerPhysicsEnabled, TerrainStreamingEnabled, WorldGameplayEnabled, WorldSceneryVisible,
+	SKY_CLEAR,
 };
 use menu_components::MENU_CLEAR;
 use menu_playground::CharacterScreen;
@@ -32,7 +33,6 @@ pub(crate) struct StashedWorldCamera {
 use crate::flow::{GameFlow, WorldPause};
 
 /// Durham / vegetation sky wash while the 3D camera is live.
-const WORLD_SKY: Color = Color::hsla(201.0, 0.69, 0.62, 1.0);
 const PREVIEW_EYE: Vec3 = Vec3::new(0.0, 1.6, 3.5);
 const PREVIEW_LOOK: Vec3 = Vec3::new(0.0, 1.0, 0.0);
 const WORLD_RENDER_LAYER: usize = 0;
@@ -166,7 +166,7 @@ pub(crate) fn apply_shell_look(
 	let flow = *flow.get();
 	let loading = flow == GameFlow::LoadingWorld;
 	let menu = matches!(flow, GameFlow::Home | GameFlow::Characters | GameFlow::LoadingWorld);
-	clear.0 = if menu { MENU_CLEAR } else { WORLD_SKY };
+	clear.0 = if menu { MENU_CLEAR } else { SKY_CLEAR };
 	let layers = camera_render_layers(flow);
 	for (entity, mut camera) in &mut world_cameras {
 		camera.is_active = !loading;

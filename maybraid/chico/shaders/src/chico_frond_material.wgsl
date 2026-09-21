@@ -297,7 +297,8 @@ fn fragment(
         wrap = saturate(dot(n, L) * 0.5 + 0.5);
         back = saturate(-dot(n, L));
     }
-    let lifted = lit_color.rgb + base_rgb * (0.16 + 0.22 * wrap + 0.28 * back);
+    let day = saturate((dot(lights.ambient_color.rgb, vec3<f32>(0.2126, 0.7152, 0.0722)) - 20.0) / 600.0);
+    let lifted = lit_color.rgb + base_rgb * (0.16 + 0.22 * wrap + 0.28 * back) * mix(0.08, 1.0, day);
     let fogged = with_distance_fog(
         vec4<f32>(lifted, 1.0),
         mesh.world_position.xyz,

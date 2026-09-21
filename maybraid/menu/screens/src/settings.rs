@@ -1,7 +1,11 @@
 //! In-game settings: pause-menu overlay for debug and user toggles.
 
+mod catalog;
+mod persist;
+
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, Scene};
+use crozon_character_persist::SaveRoot;
 use maybraid_menu_controller::MenuController;
 use menu_components::info::description::{set_description_for_menu, TextMenuDescription};
 use menu_components::single_select::republish_menu_activate;
@@ -10,10 +14,19 @@ use menu_components::{
 	screen_back_scene, set_brand_mode_title, BrandModeLine, BrandModeTitle, MenuFocus,
 	TextColumnAlign, TextColumnAnchor, TextCursorRow, TextMenuPlugin,
 };
+use serde::{Deserialize, Serialize};
 
 use crate::input::add_menu_input;
 use crate::show::take_menu_show_request;
 use crate::{GameMode, MenuScreen};
+
+pub use catalog::{
+	classify_host, seed_device_class, DeviceClass, DeviceType, HostProbe, PersistPolicy, Preference,
+};
+pub use persist::{
+	apply_seed, apply_shadows_env, load_machine_settings, parse_shadows_env, save_machine_settings,
+	QualitySeeded, ENV_SHADOWS,
+};
 
 /// Queue an in-game settings spawn (despawns any existing menu screen first).
 #[derive(Component, Debug, Default, Clone, Copy)]
@@ -25,11 +38,12 @@ pub struct InGameSettingsScreen;
 
 /// Sun cascade quality. The game copies this onto the sky sun
 /// (`maybraid_sky::ShadowQuality`) without a sky dependency here.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum InGameShadowQuality {
+	#[default]
 	Off,
 	Low,
-	#[default]
 	High,
 }
 
@@ -51,8 +65,10 @@ impl InGameShadowQuality {
 	}
 }
 
-/// Live pause-menu settings. The game copies [`Self::mob_hud`] onto the world
-/// HUD and [`Self::shadows`] onto the sky sun quality resource.
+/// Live pause-menu bag. Quality the player owns ([`Self::shadows`]) sits next to
+/// session chrome ([`Self::mob_hud`]). Persistence is a catalog projection, not
+/// this resource as-is. The game copies shadows onto the sky sun and HUD onto
+/// the world overlay.
 #[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct InGameSettings {
 	pub mob_hud: bool,
@@ -61,7 +77,7 @@ pub struct InGameSettings {
 
 impl Default for InGameSettings {
 	fn default() -> Self {
-		Self { mob_hud: false, shadows: InGameShadowQuality::High }
+		Self::from_device(seed_device_class())
 	}
 }
 
@@ -107,7 +123,7 @@ impl InGameSettingsChoice {
 	pub fn description(self) -> &'static str {
 		match self {
 			Self::Shadows => {
-				"Sun cascade shadows. High is four maps to 150 m. Low is two maps to 60 m. Off disables the sun's shadow maps."
+				"Sun cascade shadows. High is four maps to 150 m. Low is four maps to 60 m. Off disables the sun's shadow maps."
 			}
 			Self::MobHud => {
 				"Pins and colored poles on presented mob hosts. Use this to find where groups should stand."
@@ -164,7 +180,10 @@ impl Plugin for InGameSettingsPlugin {
 		add_menu_input(app);
 		app.init_resource::<GameMode>()
 			.init_resource::<InGameSettings>()
+			.init_resource::<persist::MachineSettings>()
 			.add_plugins(TextMenuPlugin::<InGameSettingsChoice>::default())
+			.add_systems(Startup, persist::seed_in_game_settings)
+			.add_systems(Last, persist::persist_machine_settings_on_exit)
 			.add_systems(
 				Update,
 				(
@@ -180,13 +199,22 @@ impl Plugin for InGameSettingsPlugin {
 fn apply_in_game_settings_choice(
 	mut choices: MessageReader<InGameSettingsChoice>,
 	mut settings: ResMut<InGameSettings>,
+	mut machine: ResMut<persist::MachineSettings>,
+	save_root: Option<Res<SaveRoot>>,
 	mut commands: Commands,
 ) {
 	let Some(choice) = choices.read().last().copied() else {
 		return;
 	};
 	match choice {
-		InGameSettingsChoice::Shadows => settings.shadows = settings.shadows.cycle(),
+		InGameSettingsChoice::Shadows => {
+			settings.shadows = settings.shadows.cycle();
+			persist::write_machine_shadows(
+				Some(&mut machine),
+				settings.shadows,
+				save_root.as_deref(),
+			);
+		}
 		InGameSettingsChoice::MobHud => settings.mob_hud = !settings.mob_hud,
 	}
 	request_show_in_game_settings(&mut commands);
@@ -261,14 +289,11 @@ mod tests {
 	}
 
 	#[test]
-	fn shadows_start_high_and_cycle() {
-		assert_eq!(InGameSettings::default().shadows, InGameShadowQuality::High);
+	fn shadows_start_off_and_cycle() {
+		assert_eq!(InGameSettings::default().shadows, InGameShadowQuality::Off);
 		assert_eq!(InGameShadowQuality::High.cycle(), InGameShadowQuality::Low);
 		assert_eq!(InGameShadowQuality::Low.cycle(), InGameShadowQuality::Off);
 		assert_eq!(InGameShadowQuality::Off.cycle(), InGameShadowQuality::High);
-		assert_eq!(
-			InGameSettings::default().state_label(InGameSettingsChoice::Shadows),
-			"High"
-		);
+		assert_eq!(InGameSettings::default().state_label(InGameSettingsChoice::Shadows), "Off");
 	}
 }
