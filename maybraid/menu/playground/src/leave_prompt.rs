@@ -33,6 +33,40 @@ pub struct CharacterLeavePrompt {
 	pub opened_this_frame: bool,
 }
 
+/// Character create/edit is covered by a name modal, catalog, or leave card.
+/// Start/Back that went down in that mode do not bubble onto the HUD after
+/// the popup closes — the same press must not open a leave prompt.
+#[derive(Resource, Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct CharacterModalMode {
+	pub active: bool,
+	start_from_modal: bool,
+	back_from_modal: bool,
+}
+
+impl CharacterModalMode {
+	pub fn blocks_leave(&self) -> bool {
+		self.active || self.start_from_modal || self.back_from_modal
+	}
+
+	pub fn tick(&mut self, active: bool, start_down: bool, back_down: bool) {
+		self.active = active;
+		self.start_from_modal = latch_modal_button(self.start_from_modal, active, start_down);
+		self.back_from_modal = latch_modal_button(self.back_from_modal, active, back_down);
+	}
+}
+
+/// Keep a modal's Start/Back until release so a late `just_pressed` cannot
+/// land on the HUD after submit closes the popup.
+pub fn latch_modal_button(armed: bool, modal: bool, down: bool) -> bool {
+	if !down {
+		false
+	} else if modal {
+		true
+	} else {
+		armed
+	}
+}
+
 impl CharacterLeavePrompt {
 	pub fn is_open(&self) -> bool {
 		self.kind.is_some()
@@ -64,11 +98,13 @@ pub struct CharacterLeavePromptPlugin;
 impl Plugin for CharacterLeavePromptPlugin {
 	fn build(&self, app: &mut App) {
 		app.init_resource::<CharacterLeavePrompt>()
+			.init_resource::<CharacterModalMode>()
 			.add_observer(on_leave_prompt_click)
 			.add_observer(on_leave_prompt_nav)
 			.add_systems(
 				Update,
-				intercept_character_leave_edges
+				(refresh_character_modal_mode, intercept_character_leave_edges)
+					.chain()
 					.in_set(TextMenuSystems::InputLock)
 					.after(clear_menu_back_consumed)
 					.after(emit_short_text_submit_on_confirm),
@@ -103,11 +139,30 @@ pub fn character_leave_edge(
 	None
 }
 
-fn intercept_character_leave_edges(
-	mut prompt: ResMut<CharacterLeavePrompt>,
-	mut consumed: ResMut<MenuBackConsumed>,
-	mut nav: ResMut<MenuNavPad>,
+fn character_screen_modal(
+	lock: bool,
+	overlay: bool,
+	modal_open: bool,
+	modal_dismissed: bool,
+	short_text_root: bool,
+	catalog: bool,
+	overlay_menu: bool,
+	leave_prompt: bool,
+) -> bool {
+	lock || overlay
+		|| modal_open
+		|| modal_dismissed
+		|| short_text_root
+		|| catalog
+		|| overlay_menu
+		|| leave_prompt
+}
+
+fn refresh_character_modal_mode(
+	mut mode: ResMut<CharacterModalMode>,
+	prompt: Res<CharacterLeavePrompt>,
 	pad: Option<Res<VirtualPad>>,
+	nav: Res<MenuNavPad>,
 	lock: Res<TextMenuInputLock>,
 	overlay: Res<ActiveOverlayKey>,
 	modal: Res<ShortTextModal>,
@@ -115,21 +170,39 @@ fn intercept_character_leave_edges(
 	short_text_roots: Query<(), With<ShortTextModalRoot>>,
 	catalogs: Query<(), With<OverlaySelectRoot>>,
 	overlay_menus: Query<(), (With<HudOverlayMenu>, Without<CharacterLeavePromptMenu>)>,
+) {
+	let active = !screens.is_empty()
+		&& character_screen_modal(
+			lock.0,
+			overlay.0.is_some(),
+			modal.is_open(),
+			modal.dismissed,
+			!short_text_roots.is_empty(),
+			!catalogs.is_empty(),
+			!overlay_menus.is_empty(),
+			prompt.is_open(),
+		);
+	let start_down = pad.as_deref().is_some_and(|pad| pad.pressed(PadButton::Start));
+	let back_down = pad.as_deref().is_some_and(|pad| pad.pressed(PadButton::B))
+		|| nav.just_pressed(MenuNav::Back);
+	mode.tick(active, start_down, back_down);
+}
+
+fn intercept_character_leave_edges(
+	mut prompt: ResMut<CharacterLeavePrompt>,
+	mut consumed: ResMut<MenuBackConsumed>,
+	mut nav: ResMut<MenuNavPad>,
+	pad: Option<Res<VirtualPad>>,
+	mode: Res<CharacterModalMode>,
+	screens: Query<(), With<CharacterScreen>>,
 	mut backs: MessageReader<ScreenBackPressed>,
 ) {
 	prompt.opened_this_frame = false;
 	let back_click = backs.read().next().is_some();
-	let popup_hold = lock.0
-		|| overlay.0.is_some()
-		|| modal.is_open()
-		|| modal.dismissed
-		|| !short_text_roots.is_empty()
-		|| !catalogs.is_empty()
-		|| !overlay_menus.is_empty();
 	let Some(kind) = character_leave_edge(
 		!screens.is_empty(),
-		popup_hold,
-		prompt.is_open(),
+		mode.blocks_leave(),
+		false,
 		pad.is_some_and(|pad| pad.just_pressed(PadButton::Start)),
 		back_click || nav.just_pressed(MenuNav::Back),
 	) else {
@@ -450,7 +523,10 @@ fn pointer_target(
 
 #[cfg(test)]
 mod tests {
-	use super::{character_leave_edge, CharacterLeaveKind};
+	use super::{
+		character_leave_edge, character_screen_modal, latch_modal_button, CharacterLeaveKind,
+		CharacterModalMode,
+	};
 
 	#[test]
 	fn start_on_the_main_screen_asks_to_save() {
@@ -479,6 +555,37 @@ mod tests {
 	fn start_wins_when_both_edges_land() {
 		assert_eq!(
 			character_leave_edge(true, false, false, true, true),
+			Some(CharacterLeaveKind::Save)
+		);
+	}
+
+	#[test]
+	fn name_modal_or_catalog_is_screen_modal_mode() {
+		assert!(character_screen_modal(false, false, true, false, false, false, false, false));
+		assert!(character_screen_modal(false, false, false, true, false, false, false, false));
+		assert!(character_screen_modal(false, false, false, false, true, false, false, false));
+		assert!(character_screen_modal(false, true, false, false, false, false, false, false));
+		assert!(character_screen_modal(false, false, false, false, false, true, false, false));
+		assert!(!character_screen_modal(false, false, false, false, false, false, false, false));
+	}
+
+	#[test]
+	fn start_from_a_modal_does_not_bubble_after_submit() {
+		assert!(latch_modal_button(false, true, true));
+		assert!(latch_modal_button(true, false, true));
+		assert!(!latch_modal_button(true, false, false));
+		assert!(!latch_modal_button(false, false, true));
+
+		let mut mode = CharacterModalMode::default();
+		mode.tick(true, true, false);
+		assert!(mode.blocks_leave());
+		mode.tick(false, true, false);
+		assert!(mode.blocks_leave());
+		assert_eq!(character_leave_edge(true, mode.blocks_leave(), false, true, false), None);
+		mode.tick(false, false, false);
+		assert!(!mode.blocks_leave());
+		assert_eq!(
+			character_leave_edge(true, mode.blocks_leave(), false, true, false),
 			Some(CharacterLeaveKind::Save)
 		);
 	}

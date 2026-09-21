@@ -15,7 +15,7 @@ pub use character::{
 };
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use game_commands::command::PendingStartupCommand;
-pub use leave_prompt::CharacterLeavePrompt;
+pub use leave_prompt::{CharacterLeavePrompt, CharacterModalMode};
 pub use preview::{CharacterPreviewLight, CharacterPreviewPlugin, CharacterPreviewRoot};
 pub use session::{
 	leave_character_editor, save_editing_character, ActiveCharacter, CharacterEditorReturn,
@@ -197,6 +197,7 @@ fn editor_back(
 	overlay: Res<ActiveOverlayKey>,
 	modal: Res<ShortTextModal>,
 	prompt: Res<CharacterLeavePrompt>,
+	mode: Res<CharacterModalMode>,
 	consumed: Res<MenuBackConsumed>,
 	mut backs: MessageReader<ScreenBackPressed>,
 	return_to: Option<Res<crate::CharacterEditorReturn>>,
@@ -209,7 +210,7 @@ fn editor_back(
 	if !consume_screen_back(
 		&nav,
 		&overlay,
-		modal.is_open() || prompt.is_open(),
+		modal.is_open() || prompt.is_open() || (!character.is_empty() && mode.blocks_leave()),
 		&consumed,
 		&mut backs,
 	) {

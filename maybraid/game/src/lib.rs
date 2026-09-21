@@ -28,8 +28,8 @@ use menu_components::{
 };
 use menu_playground::{
 	ActiveCharacter, CharacterEditBaseline, CharacterEditorReturn, CharacterLeavePrompt,
-	CharacterMenuState, CharacterPreviewPlugin, CharacterScreen, CharacterScreenPlugin,
-	CharacterSessionPlugin, EditingCharacter, RequestEditCharacter,
+	CharacterMenuState, CharacterModalMode, CharacterPreviewPlugin, CharacterScreen,
+	CharacterScreenPlugin, CharacterSessionPlugin, EditingCharacter, RequestEditCharacter,
 };
 use menu_screens::{
 	cancel_pending_create, request_show_gallery, request_show_home, request_show_in_game,
@@ -318,6 +318,7 @@ fn pause_menu_back(
 	overlay: Res<ActiveOverlayKey>,
 	modal: Res<ShortTextModal>,
 	prompt: Res<CharacterLeavePrompt>,
+	mode: Res<CharacterModalMode>,
 	consumed: Res<MenuBackConsumed>,
 	mut backs: MessageReader<ScreenBackPressed>,
 	settings: Query<(), With<InGameSettingsScreen>>,
@@ -329,7 +330,7 @@ fn pause_menu_back(
 	if !consume_screen_back(
 		nav.as_ref(),
 		&overlay,
-		modal.is_open() || prompt.is_open(),
+		modal.is_open() || prompt.is_open() || (!character.is_empty() && mode.blocks_leave()),
 		&consumed,
 		&mut backs,
 	) {
@@ -364,6 +365,7 @@ fn character_back(
 	overlay: Res<ActiveOverlayKey>,
 	modal: Res<ShortTextModal>,
 	prompt: Res<CharacterLeavePrompt>,
+	mode: Res<CharacterModalMode>,
 	consumed: Res<MenuBackConsumed>,
 	mut backs: MessageReader<ScreenBackPressed>,
 	character: Query<(), With<CharacterScreen>>,
@@ -373,7 +375,7 @@ fn character_back(
 	if !consume_screen_back(
 		nav.as_ref(),
 		&overlay,
-		modal.is_open() || prompt.is_open(),
+		modal.is_open() || prompt.is_open() || (!character.is_empty() && mode.blocks_leave()),
 		&consumed,
 		&mut backs,
 	) {
