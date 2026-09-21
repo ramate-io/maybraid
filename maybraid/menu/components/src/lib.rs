@@ -15,18 +15,19 @@ pub mod spin_reveal;
 pub mod theme;
 
 pub use controls::{
-	apply_hud_menu_nav, color_from_hex, menu_display_name, navigate_hud_menus, on_hud_scroll,
-	restore_short_text_editing, scroll_hud_selection_into_view, scroll_hud_viewport_on_nav,
-	select_hud_item_on_over, send_hud_scroll_events, spawn_asset_tile, spawn_block_label,
-	spawn_corner_action, spawn_cursor_slot, spawn_cursor_slot_sized, spawn_grid_catalog_tile,
-	spawn_group_label, spawn_header_line, spawn_hud_action, spawn_hud_plain, spawn_hud_text,
-	spawn_labeled_row, spawn_panel_title, spawn_scroll_pane, spawn_section_header,
-	spawn_short_text_button, spawn_stepper, spawn_swatch, spawn_swatch_row, spawn_text_button,
-	spawn_tile_grid, sync_hover_tiles, sync_hud_cursors, sync_hud_item_focus, sync_hud_scrollbars,
-	sync_tile_wrap, ActiveOverlayKey, ActiveShortText, CursorRow, HoverTile, HudFonts, HudMenu,
-	HudMenuIgnoresLock, HudMenuItem, HudOverlayMenu, HudScroll, HudScrollThumb, HudScrollTrack,
-	HudScrollViewport, OverlayHeader, OverlayHeaderKey, ShortTextChange, ShortTextField,
-	ShortTextKey, ShortTextModal, ShortTextPad, ShortTextToggle, ShortTextValue, SlotRank,
+	apply_hud_menu_nav, clear_short_text_dismissed, color_from_hex, menu_display_name,
+	navigate_hud_menus, on_hud_scroll, restore_short_text_editing, scroll_hud_selection_into_view,
+	scroll_hud_viewport_on_nav, select_hud_item_on_over, send_hud_scroll_events, spawn_asset_tile,
+	spawn_block_label, spawn_corner_action, spawn_cursor_slot, spawn_cursor_slot_sized,
+	spawn_grid_catalog_tile, spawn_group_label, spawn_header_line, spawn_hud_action,
+	spawn_hud_plain, spawn_hud_text, spawn_labeled_row, spawn_panel_title, spawn_scroll_pane,
+	spawn_section_header, spawn_short_text_button, spawn_stepper, spawn_swatch, spawn_swatch_row,
+	spawn_text_button, spawn_tile_grid, sync_hover_tiles, sync_hud_cursors, sync_hud_item_focus,
+	sync_hud_scrollbars, sync_tile_wrap, ActiveOverlayKey, ActiveShortText, CursorRow, HoverTile,
+	HudFonts, HudMenu, HudMenuIgnoresLock, HudMenuItem, HudOverlayMenu, HudScroll, HudScrollThumb,
+	HudScrollTrack, HudScrollViewport, OverlayHeader, OverlayHeaderKey, ShortTextChange,
+	ShortTextField, ShortTextKey, ShortTextModal, ShortTextPad, ShortTextToggle, ShortTextValue,
+	SlotRank,
 };
 pub use icons::{blink_animated_icons, spin_icons, AnimatedIcon, Icon, SpinningIcon};
 pub use info::{
@@ -85,7 +86,14 @@ impl Plugin for MenuComponentsPlugin {
 			.add_message::<ScreenBackPressed>()
 			.add_message::<ScreenEditPressed>()
 			.configure_sets(Update, TextMenuSystems::InputLock.before(TextMenuSystems::Navigate))
-			.add_systems(Update, clear_menu_back_consumed.in_set(TextMenuSystems::InputLock))
+			.add_systems(
+				Update,
+				(clear_menu_back_consumed, controls::emit_short_text_submit_on_confirm)
+					.chain()
+					.in_set(TextMenuSystems::InputLock),
+			)
+			.add_systems(Last, clear_short_text_dismissed)
+			.add_observer(controls::observe_short_text_submit_button)
 			.add_observer(select_text_menu_item_on_over)
 			.add_observer(select_hud_item_on_over)
 			.add_observer(apply_text_menu_nav)
@@ -123,13 +131,14 @@ impl Plugin for MenuComponentsPlugin {
 					controls::sync_short_text_display,
 					controls::sync_short_text_cursors,
 					controls::sync_short_text_ime,
-					controls::sync_short_text_modal,
 					controls::short_text::sync_short_text_pad_shift,
 					controls::short_text::sync_short_text_pad_focus,
 					controls::emit_short_text_pad_shortcuts,
 					controls::emit_short_text_toggle_on_enter,
 					controls::capture_short_text_input,
-				),
+					controls::sync_short_text_modal,
+				)
+					.after(TextMenuSystems::Navigate),
 			)
 			.add_systems(
 				Update,

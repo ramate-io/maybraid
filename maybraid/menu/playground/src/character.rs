@@ -691,6 +691,7 @@ fn on_short_text_change(
 	change: On<ShortTextChange>,
 	mut menu_state: ResMut<CharacterMenuState>,
 	mut ui_sync: ResMut<CharacterUiSyncState>,
+	baseline: Option<Res<CharacterEditBaseline>>,
 	screens: Query<Entity, With<CharacterScreen>>,
 ) {
 	if screens.is_empty() {
@@ -699,8 +700,11 @@ fn on_short_text_change(
 	if change.event().key != "Name" {
 		return;
 	}
-	menu_state.0.name = change.event().value.clone();
-	ui_sync.menu_dirty = true;
+	let previous = save_chrome(&menu_state.0, baseline.as_deref());
+	menu_state.bypass_change_detection().0.name = change.event().value.clone();
+	if save_chrome(&menu_state.0, baseline.as_deref()) != previous {
+		ui_sync.menu_dirty = true;
+	}
 }
 
 #[cfg(test)]
