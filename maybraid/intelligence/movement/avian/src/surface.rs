@@ -63,6 +63,7 @@ impl AvianMovementSurface<'_, '_> {
 			let Some((waypoints, fall)) = self.probe_walk(
 				from.point,
 				sample.location.point,
+				sample.location.radius,
 				ability,
 				budget.max_steps,
 				&filter,
@@ -218,6 +219,7 @@ impl AvianMovementSurface<'_, '_> {
 		&self,
 		from: Vec3,
 		to: Vec3,
+		arrival_radius: f32,
 		ability: &A,
 		max_steps: usize,
 		filter: &SpatialQueryFilter,
@@ -236,8 +238,8 @@ impl AvianMovementSurface<'_, '_> {
 		}
 		let dir = delta / len;
 		let perp = Vec3::new(-dir.z, 0.0, dir.x);
-		let step = ability.max_step().max(0.1);
-		for dist in [step * 4.0, step * 7.0, step * 10.5] {
+		let remaining = (len - arrival_radius.max(0.0)).max(0.0);
+		for dist in ability.walk_detour_offsets(remaining) {
 			for sign in [1.0, -1.0] {
 				let via = Vec3::new(
 					from.x + dir.x * (len * 0.45) + perp.x * dist * sign,
@@ -441,5 +443,138 @@ mod tests {
 		assert!((normalized_fall_risk(0.6, 1.2) - 0.5).abs() < 1e-4);
 		assert_eq!(normalized_fall_risk(2.0, 1.2), 1.0);
 		assert_eq!(normalized_fall_risk(0.0, 0.0), 0.0);
+	}
+}
+
+#[cfg(test)]
+mod physics_tests {
+	use super::*;
+	use avian3d::prelude::{Collider, PhysicsPlugins, RigidBody};
+	use bevy::ecs::system::RunSystemOnce;
+	use movement_intelligence::{
+		CandidateBudget, MovementAbility, MovementBody, MovementDriveResult, MovementIntelligence,
+		MovementObjective, WalkProbeBudget,
+	};
+
+	fn walk_app() -> App {
+		let mut app = App::new();
+		app.add_plugins((
+			MinimalPlugins,
+			TransformPlugin,
+			PhysicsPlugins::default(),
+			bevy::asset::AssetPlugin::default(),
+			bevy::mesh::MeshPlugin,
+		));
+		app.finish();
+		app
+	}
+
+	fn spawn_floor(app: &mut App) {
+		app.world_mut().spawn((
+			Transform::from_xyz(0.0, -0.1, 0.0),
+			RigidBody::Static,
+			Collider::cuboid(80.0, 0.2, 80.0),
+			PhysicsInteractionLayer::fixed_layers(),
+		));
+	}
+
+	fn spawn_slab(app: &mut App, at: Vec3, size: Vec3) {
+		app.world_mut().spawn((
+			Transform::from_translation(at),
+			RigidBody::Static,
+			Collider::cuboid(size.x, size.y, size.z),
+			PhysicsInteractionLayer::fixed_layers(),
+		));
+	}
+
+	fn reach_paths(
+		surface: AvianMovementSurface,
+		ability: MovementAbility,
+		from: Vec3,
+		to: Vec3,
+		radius: f32,
+		max_steps: usize,
+	) -> Vec<AvianColliderPath> {
+		let mut probes = WalkProbeBudget::unlimited();
+		surface.collider_paths(
+			MovementLocation::new(from, ability.agent_radius()),
+			&[],
+			&ability,
+			MovementObjective::Reach(MovementLocation::new(to, radius)),
+			CandidateBudget { max_candidates: 1, max_steps, horizon: 28.0 },
+			&mut probes,
+		)
+	}
+
+	#[test]
+	fn blocked_reach_uses_path_segment_via_when_steps_allow() -> anyhow::Result<()> {
+		let mut app = walk_app();
+		spawn_floor(&mut app);
+		spawn_slab(&mut app, Vec3::new(6.0, 0.6, 0.0), Vec3::new(0.3, 1.2, 2.0));
+		app.update();
+
+		let ability = MovementAbility::default();
+		let from = Vec3::new(0.0, ability.feet_below_origin, 0.0);
+		let to = Vec3::new(12.0, ability.feet_below_origin, 0.0);
+		let detour = app
+			.world_mut()
+			.run_system_once(move |surface: AvianMovementSurface| {
+				reach_paths(surface, ability, from, to, 0.5, 2)
+			})
+			.map_err(|err| anyhow::anyhow!("{err}"))?;
+		anyhow::ensure!(!detour.is_empty(), "expected a via around the slab");
+		let via = detour[0].points.first().copied().ok_or_else(|| anyhow::anyhow!("empty path"))?;
+		anyhow::ensure!(via.point.z.abs() > 3.0, "via should use path_segment, got {}", via.point);
+
+		let snapped = app
+			.world_mut()
+			.run_system_once(move |surface: AvianMovementSurface| {
+				reach_paths(surface, ability, from, to, 0.5, 1)
+			})
+			.map_err(|err| anyhow::anyhow!("{err}"))?;
+		anyhow::ensure!(snapped.is_empty(), "max_steps 1 must not detour");
+		Ok(())
+	}
+
+	#[test]
+	fn leftover_disk_reach_keeps_a_short_via() -> anyhow::Result<()> {
+		let ability = MovementAbility::default();
+		let from = Vec3::new(8.3, 0.0, 0.0);
+		let to = Vec3::ZERO;
+		let remaining = (from.xz().distance(to.xz()) - 8.0).max(0.0);
+		let offsets = ability.walk_detour_offsets(remaining);
+		anyhow::ensure!((offsets[0] - 1.0).abs() < 1e-4, "{offsets:?}");
+		anyhow::ensure!(offsets[0] < ability.path_segment);
+		Ok(())
+	}
+
+	#[test]
+	fn clear_reach_drive_is_a_unit_wish() -> anyhow::Result<()> {
+		let mut app = walk_app();
+		spawn_floor(&mut app);
+		app.update();
+
+		let ability = MovementAbility::default();
+		let from = Vec3::new(0.0, ability.feet_below_origin, 0.0);
+		let to = Vec3::new(12.0, ability.feet_below_origin, 0.0);
+		let result = app
+			.world_mut()
+			.run_system_once(move |surface: AvianMovementSurface| {
+				let paths = reach_paths(surface, ability, from, to, 0.5, 2);
+				let objective = MovementObjective::Reach(MovementLocation::new(to, 0.5));
+				let mut brain = MovementIntelligence::new(objective);
+				brain.ability = ability;
+				let candidate = brain.pick_best_candidate(paths.into_iter().map(Into::into))?;
+				brain.adopt_plan(candidate.steps);
+				Some(brain.drive(0.016, from))
+			})
+			.map_err(|err| anyhow::anyhow!("{err}"))?
+			.ok_or_else(|| anyhow::anyhow!("expected a walk plan"))?;
+		let MovementDriveResult::Wish(wish) = result else {
+			anyhow::bail!("expected Wish, got {result:?}");
+		};
+		anyhow::ensure!((wish.xz().length() - 1.0).abs() < 1e-3, "{wish}");
+		anyhow::ensure!(wish.x > 0.9, "{wish}");
+		Ok(())
 	}
 }

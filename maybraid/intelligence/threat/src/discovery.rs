@@ -173,7 +173,8 @@ pub fn discover_threats(
 		knowledge.reconcile_registry(&registry);
 		knowledge.maintain(&affiliations, user.policy, now);
 		user.next_forget_at = now + staggered_interval(FORGET_INTERVAL, entity, 2);
-		let candidates = registry.local(transform.translation(), user.policy.radius);
+		let candidates =
+			registry.local(transform.translation(), user.perception_radius(&knowledge));
 		let count = candidates.len();
 		let budget = band.scale_count(user.policy.candidates_per_scan).min(count);
 		let mut taken = 0;
@@ -229,9 +230,15 @@ fn forget_if_due(
 ///
 /// Only runs when knowledge changed this frame (scan, forget, or inbox).
 pub fn export_threat_spotting_hints(
-	mut recipients: Query<(&ThreatKnowledge, &mut SpottingUser), Changed<ThreatKnowledge>>,
+	mut recipients: Query<
+		(&ThreatKnowledge, Option<&mut ThreatIntelligenceUser>, &mut SpottingUser),
+		Changed<ThreatKnowledge>,
+	>,
 ) {
-	for (knowledge, mut spotting) in &mut recipients {
+	for (knowledge, user, mut spotting) in &mut recipients {
+		if let Some(mut user) = user {
+			user.apply_alert_spotting(knowledge, &mut spotting);
+		}
 		let active: HashSet<Entity> = knowledge.iter().filter_map(|known| known.entity).collect();
 		let retired: Vec<_> = spotting
 			.hints

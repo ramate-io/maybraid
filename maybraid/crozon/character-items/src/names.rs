@@ -54,24 +54,27 @@ impl ClothingMesh {
 	/// Nouns a rolled item of this mesh may be called.
 	pub const fn nouns(self) -> &'static [&'static str] {
 		match self {
-			Self::TankTop => &["Tank Top", "Tank", "Undershirt", "Singlet", "Vest"],
-			Self::Tunic => &["Tunic", "Smock", "Tabard", "Shift", "Blouse"],
-			Self::LongDress => &["Long Dress", "Gown", "Train", "Evening Dress", "Robe Dress"],
-			Self::ShortDress => &["Short Dress", "Frock", "Sundress", "Shift Dress", "Mini"],
-			Self::FittedCoat => &["Fitted Coat", "Coat", "Jacket", "Peacoat", "Blazer"],
-			Self::RobeCoat => &["Robe Coat", "Overrobe", "Mantle", "Cloak Coat", "Greatcoat"],
-			Self::Robe => &["Robe", "Vestment", "Wrap", "Kimono", "Cassock"],
-			Self::Pants => &["Pants", "Trousers", "Slacks", "Bottoms", "Breeches"],
-			Self::KneeHighBoots => {
-				&["Knee-High Boots", "Boots", "Stompers", "Waders", "High Boots"]
+			Self::TankTop => {
+				&["Shirt", "Vest", "Takt", "Itun", "Underhemd", "Hemlet", "Shortsuit", "Chestsuit"]
 			}
-			Self::HaremPants => &["Harem Pants", "Pants", "Pantaloons", "Sweats", "Joggers"],
-			Self::HaremPantsUpper => {
-				&["Harem Top", "Balloon Top", "Drop Crotch", "Peg Top", "Harem Rise"]
+			Self::Tunic => &[
+				"Stansuit", "Shirt", "Tunic", "Smock", "Tabard", "Shift", "Blouse", "Overkin",
+				"Helfslev", "Palu",
+			],
+			Self::LongDress => &["Dress", "Gown", "Torrean", "Idilist", "Foreme"],
+			Self::ShortDress => &["Dress", "Frock", "Sundress", "Foreme", "P'leme"],
+			Self::FittedCoat => {
+				&["Coat", "Jacket", "Peacoat", "P'cot", "Shell", "Rainshell", "Husk"]
 			}
-			Self::HaremPantsLowerWrap => {
-				&["Lower Wrap", "Ankle Wrap", "Leg Wraps", "Bindings", "Cuffs"]
+			Self::RobeCoat => &["Robe", "Overrobe", "Clerker", "Mantle", "Greatcoat", "Klark"],
+			Self::Robe => {
+				&["Robe", "Vestment", "Wrap", "Kilbright", "Cassock", "Raiment", "Shroud", "Shando"]
 			}
+			Self::Pants => &["Pants", "Trousers", "Slacks", "Botms", "Britches"],
+			Self::KneeHighBoots => &["Boots", "Waders", "Buckets", "Cronks"],
+			Self::HaremPants => &["Harems", "Pants", "Sarouel", "Wardshale"],
+			Self::HaremPantsUpper => &["Harems", "Pants", "Sarouel", "Wardshale"],
+			Self::HaremPantsLowerWrap => &["Wrap", "Bindings", "Cuffs"],
 		}
 	}
 }
@@ -80,13 +83,19 @@ impl ClothingMaterial {
 	/// Adjectives a rolled item of this look may be called.
 	pub const fn adjectives(self) -> &'static [&'static str] {
 		match self {
-			Self::SpaceSuit => &["Vacuum", "Orbital", "Pressurized", "Starfarer", "Sealed"],
-			Self::Tattered => &["Tattered", "Ragged", "Worn", "Threadbare", "Frayed"],
-			Self::Hawaiian => &["Tropical", "Floral", "Island", "Hibiscus", "Vacation"],
-			Self::Cloth => &["Cloth", "Woven", "Plain", "Humble", "Cotton"],
-			Self::Scales => &["Scaled", "Serpent", "Iridescent", "Draconic", "Plated"],
-			Self::WizardsVeins => &["Arcane", "Celestial", "Bearded", "Misty", "Runed"],
-			Self::Glitter => &["Glittering", "Sparkling", "Sequined", "Dazzling", "Shimmering"],
+			Self::SpaceSuit => {
+				&["Orbital", "Plstar", "Comlet", "Asterbis", "Nambulant", "Latex", "Sunk God's"]
+			}
+			Self::Tattered => {
+				&["Tattered", "Bristling", "Worn", "Holencone", "Distlekempt", "Monk's", "Prester"]
+			}
+			Self::Hawaiian => &["Isle", "Isthanish", "Hibiscus", "Suburban", "Okomo's"],
+			Self::Cloth => &["Plain", "Humble", "Cotton", "Shorn", "Listed", "Standard", "Lentish"],
+			Self::Scales => &["Serpent's", "Iridescent", "Draconic", "Plated", "Cymlic"],
+			Self::WizardsVeins => {
+				&["Celestial", "Bearded", "Gerunt", "Starmage", "Hidren", "Sacrihewn", "Unspoken"]
+			}
+			Self::Glitter => &["Mistite", "Pogem", "Int", "Celebride", "Sparkletone"],
 		}
 	}
 }
@@ -95,15 +104,24 @@ impl ItemColor {
 	/// Adjectives a rolled item of this color may be called.
 	pub const fn adjectives(self) -> &'static [&'static str] {
 		match self {
-			Self::Natural => &["Natural", "Bare", "Earth", "Undyed", "Raw"],
-			Self::Warm => &["Warm", "Amber", "Sunset", "Honeyed", "Bronze"],
-			Self::Cool => &["Cool", "Frost", "Slate", "Steel", "Winter"],
-			Self::Dark => &["Dark", "Shadow", "Midnight", "Soot", "Umbral"],
-			Self::Light => &["Light", "Pale", "Ivory", "Bleached", "Dawn"],
-			Self::Red => &["Red", "Crimson", "Bloody", "Red Tide", "Scarlet"],
-			Self::Blue => &["Blue", "Azure", "Cobalt", "Navy", "Cerulean"],
-			Self::Green => &["Green", "Verdant", "Moss", "Emerald", "Forest"],
-			Self::Gold => &["Gold", "Golden", "Auric", "Aureate", "Sunlit"],
+			Self::Natural => &["Undyed", "Naturist", "Red'irt", "Alakash"],
+			Self::Warm => &["Honeyed", "Flamelike", "Summergrass", "O'Red Yoeman"],
+			Self::Cool => &["Winter", "Blenchit", "Lone", "Alpine"],
+			Self::Dark => &["Dark", "Shadow", "Soot", "Umbral", "Wine"],
+			Self::Light => &["Pale", "Ivor", "Dawn", "Close"],
+			Self::Red => &[
+				"Bloody",
+				"Red Tide",
+				"Scarlet",
+				"Burnlead",
+				"Passionate",
+				"T'dith",
+				"Flame",
+				"Flemmend",
+			],
+			Self::Blue => &["Veinish", "Clostrono", "Cool", "Cerulean", "Tidal", "d'Tid"],
+			Self::Green => &["Verdant", "Woodmake", "Ciling", "Zealousard", "Estrine"],
+			Self::Gold => &["Aureate", "Sunlit", "Beam"],
 		}
 	}
 }

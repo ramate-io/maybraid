@@ -1,7 +1,11 @@
 use bevy::prelude::*;
+use combat_targeting::CombatTargetingSystems;
+use firearm_intelligence::FirearmIntelligenceSystems;
 use poi_intelligence::PoiSystems;
 use routing_intelligence::RoutingSystems;
 use tether_intelligence::TetherSystems;
+use threat_intelligence::{ThreatRegistry, ThreatSystems};
+use threat_management_intelligence::ThreatManagementSystems;
 
 use crate::bind::{bind_mob_members, propagate_mob_membership};
 use crate::host::MobIdAlloc;
@@ -11,6 +15,7 @@ use crate::lock::{
 	lock_mobs_on_poi_arrival,
 };
 use crate::roster::MobMemberNeeded;
+use crate::share::{share_mob_targets, share_mob_threats};
 use crate::travel::travel_mobs;
 
 /// Pack brain cadence. Bind runs before NPC mixers see a new plant.
@@ -18,6 +23,7 @@ use crate::travel::travel_mobs;
 pub enum MobSystems {
 	Bind,
 	Propagate,
+	Share,
 	Writeback,
 	Respawn,
 	Travel,
@@ -29,6 +35,7 @@ pub struct MobIntelligencePlugin;
 impl Plugin for MobIntelligencePlugin {
 	fn build(&self, app: &mut App) {
 		app.init_resource::<MobIdAlloc>()
+			.init_resource::<ThreatRegistry>()
 			.add_message::<MobMemberNeeded>()
 			.configure_sets(
 				Update,
@@ -49,12 +56,25 @@ impl Plugin for MobIntelligencePlugin {
 				// that set already runs before Plan, which would cycle.
 				MobSystems::Travel.after(RoutingSystems::Write),
 			)
+			.configure_sets(
+				Update,
+				MobSystems::Share
+					.after(ThreatSystems::Discover)
+					.after(MobSystems::Propagate)
+					.before(ThreatManagementSystems::Select)
+					.before(ThreatSystems::Export),
+			)
 			.add_systems(PostStartup, bind_mob_members)
 			.add_systems(
 				Update,
 				(
 					bind_mob_members.in_set(MobSystems::Bind),
 					propagate_mob_membership.in_set(MobSystems::Propagate),
+					share_mob_threats.in_set(MobSystems::Share),
+					share_mob_targets
+						.after(ThreatManagementSystems::Select)
+						.before(FirearmIntelligenceSystems::Spotting)
+						.before(CombatTargetingSystems::Rank),
 					(queue_downed_member_deaths, write_back_mob_roster)
 						.chain()
 						.in_set(MobSystems::Writeback),

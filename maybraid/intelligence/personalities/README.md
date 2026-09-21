@@ -43,3 +43,5 @@ six seconds at a reached POI; brawlers about two.
 
 Personalities keep their own spotting / discovery horizons (grazer ~40 m,
 assassin ~72 m). Closing distance is what flips Ignore → Evade or Combat.
+Received damage or a pack-shared finding stretches that horizon to the 200 m
+High ring so plants are not stuck knowing a sniper they cannot look at.

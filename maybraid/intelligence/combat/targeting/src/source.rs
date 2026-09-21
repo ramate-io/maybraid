@@ -12,13 +12,15 @@ impl TargetSource {
 	pub const ALLY: Self = Self(1 << 3);
 	pub const ENEMYSHIP: Self = Self(1 << 4);
 	pub const FIREARM: Self = Self(1 << 5);
+	pub const SHARED: Self = Self(1 << 6);
 	pub const ALL: Self = Self(
 		Self::OBJECTIVE.0
 			| Self::SPOTTING.0
 			| Self::RECEIVED_FIRE.0
 			| Self::ALLY.0
 			| Self::ENEMYSHIP.0
-			| Self::FIREARM.0,
+			| Self::FIREARM.0
+			| Self::SHARED.0,
 	);
 
 	pub const fn from_bits(bits: u8) -> Self {
@@ -113,6 +115,7 @@ mod tests {
 		sources.remove(TargetSource::SPOTTING);
 		assert_eq!(sources, TargetSource::OBJECTIVE);
 		assert_eq!((!TargetSource::OBJECTIVE).bits(), TargetSource::ALL.bits() ^ 1);
+		assert!(TargetSource::ALL.contains(TargetSource::SHARED));
 		Ok(())
 	}
 }

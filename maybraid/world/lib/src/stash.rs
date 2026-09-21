@@ -2,21 +2,28 @@
 //!
 //! One host type ([`WorldStash`]) holds a bag via [`InventoryUser`]. Claim is
 //! take-all on [`CharacterIntent::StartInteraction`] (pad **X**) inside
-//! [`StashPolicy::claim_radius`]. Death and player drop
-//! [`Inventory::explode`] into one stash per item so each piece is claimable
-//! on its own. Authored chests stay a single pile.
+//! [`StashPolicy::claim_radius`]. Death samples a mob-kind fraction of the
+//! bag ([`Inventory::take_fraction`]) then [`Inventory::explode`]s the kept
+//! pieces so each is claimable on its own. Raiders and Guards leave about one
+//! third, Brawlers about one twelfth, and other families drop nothing.
+//! Unmarked NPCs still drop the full bag. Player drops still explode
+//! everything. Authored chests stay a single pile.
 //!
 //! Loot TTL is [`StashPolicy::loot_secs`] (default 60 s), independent of
 //! mob corpse lifetime (4 s). Persistent chests omit [`DespawnAfter`].
 //! Absorb never auto-equips. Claim and drop refresh [`WorldPlayerLoadout`]
 //! so the live bag can persist.
+//!
+//! In-range claim shows three concentric ground rings (yellow 1.5 m, green
+//! 0.75 m, blue 0.25 m) and a Kenney outline Xbox **X** chip on the player–
+//! item line, plus a screen-space `Pick up <name>` caption.
 
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value};
 use bevy::text::FontSize;
 use chico_vegetation_on_terrain_playground::Player as VegetationPlayer;
 use crozon_character_items::{
-	ClothingHost, Inventory, InventoryItem, InventorySlot, MaterialRefParams,
+	ClothingHost, Inventory, InventoryItem, InventorySlot, ItemRng, LootFraction, MaterialRefParams,
 };
 use crozon_characters::{
 	add_character_components_host, character_bounds, CharacterComponents, ClothingLayer,
@@ -32,6 +39,9 @@ use lod::LodScene;
 use material_ref::{MaterialRef, MaterialRefRoot, PropagateToDescendants};
 use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
 use player::PlayerUse;
+
+use maybraid_mobs::MobKind;
+use mob_characters::CharacterBrains;
 
 use crate::control::WorldGameplayEnabled;
 use crate::weapon::{AppliedWorldPlayerLoadout, WorldPlayerLoadout};
@@ -109,16 +119,41 @@ pub struct StashDisplayedItem {
 #[derive(Component, Clone, Copy, Debug, PartialEq)]
 pub struct StashHaloAnchor(pub Vec3);
 
-/// On-screen X / E prompt while a claimable stash is in radius.
+/// World-space interact chip (Kenney Xbox **X**) above the nearest claimable stash.
 #[derive(Component)]
 struct StashInteractPrompt;
+
+/// Screen-space action next to the chip (`Pick up <name>`).
+#[derive(Component)]
+struct StashInteractCaption;
+
+/// Kenney outline Xbox X used for pad interact (`PadButton::X`).
+pub const INTERACT_PAD_ICON: &str = "iconography/kenney/input-prompts/xbox_button_x_outline.png";
+
+/// Kenney outline keyboard E; kept next to the pad chip for the same binding.
+pub const INTERACT_KEY_ICON: &str = "iconography/kenney/input-prompts/keyboard_e_outline.png";
 
 /// Ground ring around the nearest claimable stash.
 #[derive(Component)]
 struct StashClaimHalo;
 
-const HALO_INNER: f32 = 0.28;
-const HALO_OUTER: f32 = 0.46;
+/// Was 0.18 m on the single-ring halo; concentric rings stay a bit thinner.
+const HALO_RING_WIDTH: f32 = 0.12;
+const HALO_YELLOW_RADIUS: f32 = 1.5;
+const HALO_GREEN_RADIUS: f32 = 0.75;
+const HALO_BLUE_RADIUS: f32 = 0.25;
+const PROMPT_SIZE: f32 = 0.42;
+const PROMPT_ABOVE: f32 = 0.62;
+const PROMPT_TOWARD_PLAYER: f32 = 0.85;
+const PROMPT_CAPTION_GAP_PX: f32 = 22.0;
+const PROMPT_YELLOW: Color = Color::srgba(0.98, 0.86, 0.32, 1.0);
+const PROMPT_EMISSIVE: LinearRgba = LinearRgba::new(1.4, 1.05, 0.28, 1.0);
+const HALO_YELLOW: Color = Color::srgba(0.98, 0.86, 0.32, 0.88);
+const HALO_YELLOW_EMISSIVE: LinearRgba = LinearRgba::new(1.4, 1.05, 0.28, 1.0);
+const HALO_GREEN: Color = Color::srgba(0.22, 0.82, 0.38, 0.88);
+const HALO_GREEN_EMISSIVE: LinearRgba = LinearRgba::new(0.22, 1.15, 0.38, 1.0);
+const HALO_BLUE: Color = Color::srgba(0.25, 0.48, 0.98, 0.88);
+const HALO_BLUE_EMISSIVE: LinearRgba = LinearRgba::new(0.28, 0.55, 1.35, 1.0);
 
 /// Bind-pose garment so stash clothing keeps recipe + palette.
 #[derive(Clone, PartialEq)]
@@ -149,25 +184,23 @@ pub struct WorldStashPlugin;
 impl Plugin for WorldStashPlugin {
 	fn build(&self, app: &mut App) {
 		add_character_components_host::<StashClothingPreview>(app);
-		app.init_resource::<WorldStashSettings>()
-			.add_systems(Startup, spawn_stash_interact_prompt)
-			.add_systems(
-				Update,
-				(
-					claim_nearby_stashes
-						.after(CharacterControlSystems)
-						.run_if(resource_equals(WorldGameplayEnabled(true))),
-					drop_player_inventory
-						.after(CharacterControlSystems)
-						.run_if(resource_equals(WorldGameplayEnabled(true))),
-					sync_stash_interact_prompt
-						.after(CharacterControlSystems)
-						.run_if(resource_equals(WorldGameplayEnabled(true))),
-					sync_stash_claim_halo
-						.after(CharacterControlSystems)
-						.run_if(resource_equals(WorldGameplayEnabled(true))),
-				),
-			);
+		app.init_resource::<WorldStashSettings>().add_systems(
+			Update,
+			(
+				claim_nearby_stashes
+					.after(CharacterControlSystems)
+					.run_if(resource_equals(WorldGameplayEnabled(true))),
+				drop_player_inventory
+					.after(CharacterControlSystems)
+					.run_if(resource_equals(WorldGameplayEnabled(true))),
+				sync_stash_interact_prompt
+					.after(CharacterControlSystems)
+					.run_if(resource_equals(WorldGameplayEnabled(true))),
+				sync_stash_claim_halo
+					.after(CharacterControlSystems)
+					.run_if(resource_equals(WorldGameplayEnabled(true))),
+			),
+		);
 		app.add_systems(PostUpdate, detach_downed_npc_loot.after(DamageSystems::Down));
 	}
 }
@@ -469,7 +502,26 @@ fn despawn_displayed_items(commands: &mut Commands, displayed: &[Entity]) {
 	}
 }
 
-type DownedNpcLoot<'a> = (Entity, &'a Downed, Option<&'a InventoryUser>, Option<&'a FirearmUser>);
+type DownedNpcLoot<'a> = (
+	Entity,
+	&'a Downed,
+	Option<&'a InventoryUser>,
+	Option<&'a FirearmUser>,
+	Option<&'a MobKind>,
+	Option<&'a CharacterBrains>,
+);
+
+fn npc_loot_fraction(kind: Option<&MobKind>, brains: Option<&CharacterBrains>) -> LootFraction {
+	kind.map(|kind| kind.loot_fraction())
+		.or_else(|| brains.map(|brains| brains.loot_fraction()))
+		.unwrap_or(LootFraction::ALL)
+}
+
+fn npc_loot_seed(entity: Entity, downed: &Downed) -> u64 {
+	entity.to_bits()
+		^ u64::from(downed.point.x.to_bits())
+		^ (u64::from(downed.point.z.to_bits()) << 32)
+}
 
 fn detach_downed_npc_loot(
 	settings: Res<WorldStashSettings>,
@@ -479,10 +531,14 @@ fn detach_downed_npc_loot(
 	mut bags: Query<&mut Inventory>,
 ) {
 	let assets = assets.as_deref();
-	for (body, downed, user, firearm) in &downed {
-		let loot = user
-			.and_then(|user| bags.get_mut(user.bag).ok())
-			.map_or_else(Inventory::default, |mut bag| bag.take_all());
+	for (body, downed, user, firearm, kind, brains) in &downed {
+		let fraction = npc_loot_fraction(kind, brains);
+		let loot = user.and_then(|user| bags.get_mut(user.bag).ok()).map_or_else(
+			Inventory::default,
+			|mut bag| {
+				bag.take_fraction(&mut ItemRng::from_seed(npc_loot_seed(body, downed)), fraction)
+			},
+		);
 		if let Some(user) = user {
 			commands.entity(user.bag).try_despawn();
 			commands.entity(body).remove::<InventoryUser>();
@@ -608,36 +664,188 @@ fn drop_player_inventory(
 	}
 }
 
-fn spawn_stash_interact_prompt(mut commands: Commands) {
+fn spawn_stash_interact_prompt(
+	commands: &mut Commands,
+	assets: &AssetServer,
+	meshes: &mut Assets<Mesh>,
+	materials: &mut Assets<StandardMaterial>,
+) {
+	let material = materials.add(StandardMaterial {
+		base_color: PROMPT_YELLOW,
+		base_color_texture: Some(assets.load(INTERACT_PAD_ICON)),
+		emissive: PROMPT_EMISSIVE,
+		alpha_mode: AlphaMode::Blend,
+		unlit: true,
+		cull_mode: None,
+		..default()
+	});
 	commands.spawn((
 		Name::new("stash-interact-prompt"),
 		StashInteractPrompt,
-		Node {
-			position_type: PositionType::Absolute,
-			bottom: Val::Px(48.0),
-			width: Val::Percent(100.0),
-			justify_content: JustifyContent::Center,
-			..default()
-		},
-		Text::new("X / E  Pick up"),
-		TextFont { font_size: FontSize::Px(22.0), ..default() },
-		TextColor(Color::srgba(0.95, 0.92, 0.82, 0.95)),
-		Pickable::IGNORE,
+		Mesh3d(meshes.add(Rectangle::new(PROMPT_SIZE, PROMPT_SIZE))),
+		MeshMaterial3d(material),
+		Transform::IDENTITY,
 		Visibility::Hidden,
 	));
 }
 
-fn sync_stash_interact_prompt(
-	players: Query<&Transform, With<VegetationPlayer>>,
-	stashes: Query<(Entity, &Transform, &InventoryUser, &StashPolicy), With<WorldStash>>,
-	mut prompt: Query<&mut Visibility, With<StashInteractPrompt>>,
-) {
-	let in_range = players.iter().any(|transform| {
-		nearest_stash_in_radius(player_origin(transform), stashes.iter()).is_some()
-	});
-	for mut visibility in &mut prompt {
-		*visibility = if in_range { Visibility::Visible } else { Visibility::Hidden };
+fn prompt_world_point(item: Vec3, player: Vec3) -> Vec3 {
+	let delta = Vec3::new(player.x - item.x, 0.0, player.z - item.z);
+	let dist = delta.length();
+	let toward =
+		if dist > 1e-4 { delta / dist * PROMPT_TOWARD_PLAYER.min(dist * 0.5) } else { Vec3::ZERO };
+	item + toward + Vec3::Y * PROMPT_ABOVE
+}
+
+fn prompt_billboard(at: Vec3, camera: Option<Vec3>) -> Transform {
+	let mut transform = Transform::from_translation(at);
+	if let Some(camera) = camera {
+		let away = at - camera;
+		if away.length_squared() > 1e-6 {
+			transform.look_to(away, Vec3::Y);
+		}
 	}
+	transform
+}
+
+fn pickup_action_label(inventory: &Inventory) -> String {
+	match inventory.items.as_slice() {
+		[item] => format!("Pick up {}", item.name()),
+		items if !items.is_empty() => format!("Pick up {} items", items.len()),
+		_ => String::from("Pick up"),
+	}
+}
+
+fn spawn_stash_interact_caption(commands: &mut Commands) {
+	commands.spawn((
+		Name::new("stash-interact-caption"),
+		StashInteractCaption,
+		Text::new(""),
+		TextFont { font_size: FontSize::Px(16.0), ..default() },
+		TextColor(PROMPT_YELLOW),
+		TextShadow { offset: Vec2::new(1.0, 1.0), color: Color::srgba(0.0, 0.0, 0.0, 0.72) },
+		Node {
+			position_type: PositionType::Absolute,
+			left: Val::Px(0.0),
+			top: Val::Px(0.0),
+			..default()
+		},
+		Visibility::Hidden,
+		Pickable::IGNORE,
+		ZIndex(24),
+	));
+}
+
+fn project_prompt_caption(
+	camera: &Camera,
+	camera_transform: &GlobalTransform,
+	world: Vec3,
+) -> Option<Vec2> {
+	let ndc = camera.world_to_ndc(camera_transform, world)?;
+	if ndc.z <= 0.0 || ndc.z >= 1.0 {
+		return None;
+	}
+	camera.world_to_viewport(camera_transform, world).ok()
+}
+
+fn sync_stash_interact_prompt(
+	mut commands: Commands,
+	time: Res<Time>,
+	assets: Option<Res<AssetServer>>,
+	mut meshes: Option<ResMut<Assets<Mesh>>>,
+	mut materials: Option<ResMut<Assets<StandardMaterial>>>,
+	players: Query<&Transform, (With<VegetationPlayer>, Without<StashInteractPrompt>)>,
+	cameras: Query<(&Camera, &GlobalTransform), (With<Camera3d>, Without<StashInteractPrompt>)>,
+	stashes: Query<
+		(Entity, &Transform, &InventoryUser, &StashPolicy),
+		(With<WorldStash>, Without<StashInteractPrompt>),
+	>,
+	anchors: Query<(Entity, &ChildOf, Option<&StashHaloAnchor>), With<StashDisplayedItem>>,
+	bags: Query<&Inventory>,
+	mut prompt: Query<
+		(&mut Transform, &mut Visibility),
+		(With<StashInteractPrompt>, Without<WorldStash>, Without<VegetationPlayer>),
+	>,
+	mut caption: Query<
+		(&mut Text, &mut Node, &mut Visibility),
+		(With<StashInteractCaption>, Without<StashInteractPrompt>),
+	>,
+) {
+	let target = nearest_claim(players.iter(), stashes.iter(), anchors.iter());
+	if prompt.is_empty() {
+		let Some(assets) = assets.as_deref() else {
+			return;
+		};
+		let Some(meshes) = meshes.as_mut() else {
+			return;
+		};
+		let Some(materials) = materials.as_mut() else {
+			return;
+		};
+		spawn_stash_interact_prompt(&mut commands, assets, meshes, materials);
+		return;
+	}
+	if caption.is_empty() {
+		spawn_stash_interact_caption(&mut commands);
+	}
+	let camera_at = cameras.iter().next().map(|(_, transform)| transform.translation());
+	let pulse = 1.0 + 0.08 * (time.elapsed_secs() * 5.0).sin();
+	let prompt_at = target.map(|claim| prompt_world_point(claim.at, claim.player));
+	for (mut transform, mut visibility) in &mut prompt {
+		match prompt_at {
+			Some(at) => {
+				*visibility = Visibility::Visible;
+				*transform = prompt_billboard(at, camera_at);
+				transform.scale = Vec3::splat(pulse);
+			}
+			None => *visibility = Visibility::Hidden,
+		}
+	}
+	let label = target.and_then(|claim| bags.get(claim.bag).ok().map(pickup_action_label));
+	let camera = cameras.iter().next();
+	let screen = prompt_at.and_then(|at| {
+		let (camera, camera_transform) = camera?;
+		project_prompt_caption(camera, camera_transform, at)
+	});
+	for (mut text, mut node, mut visibility) in &mut caption {
+		match (target, label.as_deref()) {
+			(Some(_), Some(action)) => {
+				text.0 = action.to_string();
+				if let Some(screen) = screen {
+					node.left = Val::Px(screen.x + PROMPT_CAPTION_GAP_PX);
+					node.top = Val::Px(screen.y - 10.0);
+					*visibility = Visibility::Visible;
+				} else if camera.is_some() {
+					*visibility = Visibility::Hidden;
+				} else {
+					*visibility = Visibility::Visible;
+				}
+			}
+			_ => *visibility = Visibility::Hidden,
+		}
+	}
+}
+
+#[derive(Clone, Copy)]
+struct NearestClaim {
+	at: Vec3,
+	player: Vec3,
+	bag: Entity,
+}
+
+fn nearest_claim<'a>(
+	players: impl IntoIterator<Item = &'a Transform>,
+	stashes: impl IntoIterator<Item = (Entity, &'a Transform, &'a InventoryUser, &'a StashPolicy)>,
+	anchors: impl IntoIterator<Item = (Entity, &'a ChildOf, Option<&'a StashHaloAnchor>)>,
+) -> Option<NearestClaim> {
+	let listed: Vec<_> = stashes.into_iter().collect();
+	let anchors: Vec<_> = anchors.into_iter().collect();
+	players.into_iter().find_map(|transform| {
+		let player = player_origin(transform);
+		nearest_stash_in_radius(player, listed.iter().copied()).map(|(stash, bag, _, at)| {
+			NearestClaim { at: halo_world_point(at, stash, anchors.iter().copied()), player, bag }
+		})
+	})
 }
 
 fn nearest_claim_point<'a>(
@@ -645,12 +853,7 @@ fn nearest_claim_point<'a>(
 	stashes: impl IntoIterator<Item = (Entity, &'a Transform, &'a InventoryUser, &'a StashPolicy)>,
 	anchors: impl IntoIterator<Item = (Entity, &'a ChildOf, Option<&'a StashHaloAnchor>)>,
 ) -> Option<Vec3> {
-	let listed: Vec<_> = stashes.into_iter().collect();
-	let anchors: Vec<_> = anchors.into_iter().collect();
-	players.into_iter().find_map(|transform| {
-		nearest_stash_in_radius(player_origin(transform), listed.iter().copied())
-			.map(|(stash, _, _, at)| halo_world_point(at, stash, anchors.iter().copied()))
-	})
+	nearest_claim(players, stashes, anchors).map(|claim| claim.at)
 }
 
 fn halo_world_point<'a>(
@@ -714,26 +917,45 @@ fn sync_stash_claim_halo(
 	}
 }
 
+fn halo_ring_material(color: Color, emissive: LinearRgba) -> StandardMaterial {
+	StandardMaterial {
+		base_color: color,
+		emissive,
+		alpha_mode: AlphaMode::Blend,
+		unlit: true,
+		cull_mode: None,
+		..default()
+	}
+}
+
+fn halo_rings() -> [(f32, Color, LinearRgba); 3] {
+	[
+		(HALO_YELLOW_RADIUS, HALO_YELLOW, HALO_YELLOW_EMISSIVE),
+		(HALO_GREEN_RADIUS, HALO_GREEN, HALO_GREEN_EMISSIVE),
+		(HALO_BLUE_RADIUS, HALO_BLUE, HALO_BLUE_EMISSIVE),
+	]
+}
+
 fn spawn_stash_claim_halo(
 	commands: &mut Commands,
 	meshes: &mut Assets<Mesh>,
 	materials: &mut Assets<StandardMaterial>,
 ) {
-	commands.spawn((
-		Name::new("stash-claim-halo"),
-		StashClaimHalo,
-		Mesh3d(meshes.add(Annulus::new(HALO_INNER, HALO_OUTER))),
-		MeshMaterial3d(materials.add(StandardMaterial {
-			base_color: Color::srgba(0.98, 0.86, 0.32, 0.88),
-			emissive: LinearRgba::new(1.4, 1.05, 0.28, 1.0),
-			alpha_mode: AlphaMode::Blend,
-			unlit: true,
-			cull_mode: None,
-			..default()
-		})),
-		Transform::from_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
-		Visibility::Hidden,
-	));
+	commands
+		.spawn((
+			Name::new("stash-claim-halo"),
+			StashClaimHalo,
+			Transform::from_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
+			Visibility::Hidden,
+		))
+		.with_children(|halo| {
+			for (radius, color, emissive) in halo_rings() {
+				halo.spawn((
+					Mesh3d(meshes.add(Annulus::new(radius - HALO_RING_WIDTH, radius))),
+					MeshMaterial3d(materials.add(halo_ring_material(color, emissive))),
+				));
+			}
+		});
 }
 
 #[cfg(test)]
@@ -876,6 +1098,127 @@ mod tests {
 			assert!((despawn.remaining_secs() - DEFAULT_LOOT_SECS).abs() < 1e-3);
 			assert_ne!(*stash, body);
 		}
+		Ok(())
+	}
+
+	fn expected_npc_loot(
+		entity: Entity,
+		point: Vec3,
+		mut bag: Inventory,
+		fraction: LootFraction,
+	) -> Inventory {
+		let downed = Downed { source: None, point, at: 0.0 };
+		bag.take_fraction(&mut ItemRng::from_seed(npc_loot_seed(entity, &downed)), fraction)
+	}
+
+	fn spawn_downed_npc(
+		world: &mut World,
+		bag: Inventory,
+		kind: Option<MobKind>,
+		brains: Option<CharacterBrains>,
+		point: Vec3,
+	) -> Entity {
+		let bag_id = world.spawn(bag).id();
+		let mut entity = world.spawn((
+			Npc,
+			Transform::from_translation(point),
+			InventoryUser::carrying(bag_id),
+			Downed { source: None, point, at: 0.0 },
+		));
+		if let Some(kind) = kind {
+			entity.insert(kind);
+		}
+		if let Some(brains) = brains {
+			entity.insert(brains);
+		}
+		entity.id()
+	}
+
+	#[test]
+	fn raider_downed_drops_one_third() -> anyhow::Result<()> {
+		let mut world = World::new();
+		world.init_resource::<WorldStashSettings>();
+		let point = Vec3::new(2.0, 0.0, 1.0);
+		let bag = mixed_bag();
+		let body = spawn_downed_npc(
+			&mut world,
+			bag.clone(),
+			Some(MobKind::Raider),
+			Some(CharacterBrains::Roamer),
+			point,
+		);
+		let expected = expected_npc_loot(body, point, bag, LootFraction::ONE_THIRD);
+
+		world
+			.run_system_once(detach_downed_npc_loot)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+
+		assert_eq!(world.query::<&WorldStash>().iter(&world).count(), expected.items.len());
+		assert_eq!(expected.items.len(), 1);
+		Ok(())
+	}
+
+	#[test]
+	fn guard_downed_drops_one_third() -> anyhow::Result<()> {
+		let mut world = World::new();
+		world.init_resource::<WorldStashSettings>();
+		let point = Vec3::new(-1.0, 0.0, 3.0);
+		let bag = mixed_bag();
+		let body = spawn_downed_npc(&mut world, bag.clone(), Some(MobKind::Guard), None, point);
+		let expected = expected_npc_loot(body, point, bag, LootFraction::ONE_THIRD);
+
+		world
+			.run_system_once(detach_downed_npc_loot)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+
+		assert_eq!(world.query::<&WorldStash>().iter(&world).count(), expected.items.len());
+		assert_eq!(expected.items.len(), 1);
+		Ok(())
+	}
+
+	#[test]
+	fn brawler_downed_drops_one_twelfth() -> anyhow::Result<()> {
+		let mut world = World::new();
+		world.init_resource::<WorldStashSettings>();
+		let point = Vec3::new(0.0, 0.0, 5.0);
+		let bag = mixed_bag();
+		let body = spawn_downed_npc(&mut world, bag.clone(), Some(MobKind::Brawler), None, point);
+		let expected = expected_npc_loot(body, point, bag, LootFraction::ONE_TWELFTH);
+
+		world
+			.run_system_once(detach_downed_npc_loot)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+
+		assert_eq!(world.query::<&WorldStash>().iter(&world).count(), expected.items.len());
+		assert!(expected.items.len() <= 1);
+		Ok(())
+	}
+
+	#[test]
+	fn brains_set_loot_when_mob_kind_is_missing() -> anyhow::Result<()> {
+		let mut world = World::new();
+		world.init_resource::<WorldStashSettings>();
+		let point = Vec3::ZERO;
+		let bag = mixed_bag();
+		let body =
+			spawn_downed_npc(&mut world, bag.clone(), None, Some(CharacterBrains::Brawler), point);
+		let expected = expected_npc_loot(body, point, bag, LootFraction::ONE_TWELFTH);
+
+		world
+			.run_system_once(detach_downed_npc_loot)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+
+		assert_eq!(world.query::<&WorldStash>().iter(&world).count(), expected.items.len());
+		Ok(())
+	}
+
+	#[test]
+	fn unmarked_npc_still_drops_the_full_bag() -> anyhow::Result<()> {
+		assert_eq!(npc_loot_fraction(None, None), LootFraction::ALL);
+		assert_eq!(
+			npc_loot_fraction(Some(&MobKind::Raider), Some(&CharacterBrains::Roamer)),
+			LootFraction::ONE_THIRD
+		);
 		Ok(())
 	}
 
@@ -1253,17 +1596,43 @@ mod tests {
 	}
 
 	#[test]
+	fn kenney_interact_icons_are_in_the_asset_tree() {
+		let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+		assert!(root.join(INTERACT_PAD_ICON).is_file());
+		assert!(root.join(INTERACT_KEY_ICON).is_file());
+	}
+
+	#[test]
+	fn pickup_action_names_a_single_item() {
+		let pants = one_garment();
+		assert_eq!(pickup_action_label(&pants), format!("Pick up {}", pants.items[0].name()));
+		assert_eq!(pickup_action_label(&mixed_bag()), "Pick up 3 items");
+		assert_eq!(pickup_action_label(&Inventory::default()), "Pick up");
+	}
+
+	#[test]
 	fn interact_prompt_toggles_in_radius() -> anyhow::Result<()> {
 		let (mut world, _, stash) = claim_setup(Vec3::ZERO, Vec3::new(1.0, 0.0, 0.0))?;
-		world.spawn((StashInteractPrompt, Visibility::Hidden, Text::new("X / E  Pick up")));
+		world.init_resource::<Time>();
+		world.spawn((StashInteractPrompt, Transform::IDENTITY, Visibility::Hidden));
+		world.spawn((StashInteractCaption, Text::new(""), Node::default(), Visibility::Hidden));
 		world
 			.run_system_once(sync_stash_interact_prompt)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		let visible = world
-			.query_filtered::<&Visibility, With<StashInteractPrompt>>()
+		let (visible, at) = world
+			.query_filtered::<(&Visibility, &Transform), With<StashInteractPrompt>>()
 			.single(&world)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		assert_eq!(*visible, Visibility::Visible);
+		assert!(at.translation.x > 0.0 && at.translation.x < 1.0);
+		assert!(at.translation.xz().length() < 1.0);
+		assert!(at.translation.y > 0.4);
+		let (caption, caption_visible) = world
+			.query_filtered::<(&Text, &Visibility), With<StashInteractCaption>>()
+			.single(&world)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert_eq!(caption.0, "Pick up 3 items");
+		assert_eq!(*caption_visible, Visibility::Visible);
 
 		world.entity_mut(stash).insert(Transform::from_xyz(40.0, 0.0, 0.0));
 		world
@@ -1274,7 +1643,51 @@ mod tests {
 			.single(&world)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		assert_eq!(*hidden, Visibility::Hidden);
+		let caption_hidden = world
+			.query_filtered::<&Visibility, With<StashInteractCaption>>()
+			.single(&world)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert_eq!(*caption_hidden, Visibility::Hidden);
 		Ok(())
+	}
+
+	#[test]
+	fn interact_prompt_sits_between_player_and_item() {
+		let item = Vec3::new(2.0, 0.08, 0.0);
+		let player = Vec3::ZERO;
+		let at = prompt_world_point(item, player);
+		assert!(at.x > player.x && at.x < item.x);
+		assert!(at.z.abs() < 1e-4);
+		assert!((at.y - (item.y + PROMPT_ABOVE)).abs() < 1e-4);
+		let beside = prompt_world_point(item, item + Vec3::X * 0.4);
+		assert!((beside.x - (item.x + 0.2)).abs() < 1e-4);
+	}
+
+	#[test]
+	fn interact_prompt_faces_the_camera() {
+		let origin = Vec3::new(2.0, 1.0, 0.0);
+		let camera = Vec3::new(2.0, 1.5, 4.0);
+		let at = origin + Vec3::Y * PROMPT_ABOVE;
+		let transform = prompt_billboard(at, Some(camera));
+		let toward_camera = (camera - transform.translation).normalize();
+		assert!(
+			(-transform.forward()).dot(toward_camera) > 0.7,
+			"quad +Z (opposite forward) should face the camera"
+		);
+		assert!((transform.translation - at).length() < 1e-4);
+	}
+
+	#[test]
+	fn claim_halo_uses_three_thinner_rings() {
+		let rings = halo_rings();
+		assert_eq!(rings[0].0, 1.5);
+		assert_eq!(rings[1].0, 0.75);
+		assert_eq!(rings[2].0, 0.25);
+		assert_eq!(rings[0].1, HALO_YELLOW);
+		assert_eq!(rings[1].1, HALO_GREEN);
+		assert_eq!(rings[2].1, HALO_BLUE);
+		assert!(HALO_RING_WIDTH < 0.18);
+		assert!(HALO_BLUE_RADIUS > HALO_RING_WIDTH);
 	}
 
 	fn one_garment() -> Inventory {

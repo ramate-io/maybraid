@@ -4760,6 +4760,7 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "bevy",
+ "crozon-character-items",
  "damage",
  "journeying-intelligence",
  "lod",
@@ -4798,6 +4799,7 @@ dependencies = [
 name = "maybraid-sky"
 version = "0.0.1"
 dependencies = [
+ "anyhow",
  "bevy",
 ]
 
@@ -4948,6 +4950,9 @@ dependencies = [
  "game-commands",
  "maybraid-menu-controller",
  "menu-components",
+ "serde",
+ "serde_json",
+ "tempfile",
 ]
 
 [[package]]
@@ -5028,6 +5033,7 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "bevy",
+ "combat-targeting",
  "damage",
  "firearm-intelligence",
  "journeying-intelligence",
@@ -5035,8 +5041,10 @@ dependencies = [
  "npc-intelligence",
  "poi-intelligence",
  "routing-intelligence",
+ "spotting-intelligence",
  "tether-intelligence",
  "threat-intelligence",
+ "threat-intelligence-damage",
  "threat-management-intelligence",
 ]
 

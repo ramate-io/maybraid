@@ -1,6 +1,7 @@
 //! Reusable individual intelligence profiles assembled by `npc-intelligence`.
 
 use bevy::prelude::Component;
+use crozon_character_items::LootFraction;
 use npc_intelligence::Personality;
 use poi_intelligence::{PoiInterest, PoiInterests, PoiKind};
 
@@ -96,6 +97,20 @@ impl CharacterBrains {
 	pub const fn keep_tether_in_combat(self) -> bool {
 		false
 	}
+
+	/// Fallback death loot when a plant has no mob-family kind.
+	///
+	/// Matches the mob-family table: raiders and guards keep a third, brawlers
+	/// a twelfth, everyone else nothing.
+	pub const fn loot_fraction(self) -> LootFraction {
+		match self {
+			Self::Raider | Self::Guard => LootFraction::ONE_THIRD,
+			Self::Brawler => LootFraction::ONE_TWELFTH,
+			Self::Grazinger | Self::PackHunter | Self::Civilian | Self::Roamer => {
+				LootFraction::NONE
+			}
+		}
+	}
 }
 
 impl FromMobNumber for CharacterBrains {
@@ -122,5 +137,14 @@ mod tests {
 			local_guard.weight(LOCAL_POI).unwrap_or(0.0)
 				> local_guard.weight(URBAN_POI).unwrap_or(0.0)
 		);
+	}
+
+	#[test]
+	fn combat_brains_keep_the_mob_loot_table() {
+		assert_eq!(CharacterBrains::Raider.loot_fraction(), LootFraction::ONE_THIRD);
+		assert_eq!(CharacterBrains::Guard.loot_fraction(), LootFraction::ONE_THIRD);
+		assert_eq!(CharacterBrains::Brawler.loot_fraction(), LootFraction::ONE_TWELFTH);
+		assert_eq!(CharacterBrains::Civilian.loot_fraction(), LootFraction::NONE);
+		assert_eq!(CharacterBrains::Roamer.loot_fraction(), LootFraction::NONE);
 	}
 }
