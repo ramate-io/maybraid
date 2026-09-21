@@ -9,7 +9,12 @@ use chico_vegetation_on_terrain_playground::{
 };
 
 use clap::{Parser, Subcommand};
-use game_commands::command::{CommandScript, GameCommand};
+use game_commands::command::{CommandConsoleOutput, CommandScript, GameCommand};
+
+use maybraid_sky::{
+	SkyClock, SkyCommand, SKY_PHASE_DAWN, SKY_PHASE_DUSK, SKY_PHASE_GOLDEN, SKY_PHASE_MORNING,
+	SKY_PHASE_NIGHT, SKY_PHASE_NOON,
+};
 
 use crate::RequestVsyncToggle;
 
@@ -36,6 +41,9 @@ pub enum PlaygroundCommand {
 	},
 	#[command(subcommand)]
 	Stats(Stats),
+	/// Inspect or drive the Discovery sky clock.
+	#[command(subcommand)]
+	Sky(Sky),
 }
 
 #[derive(Clone, Subcommand)]
@@ -45,6 +53,29 @@ pub enum Mode {
 	Free,
 	/// Capsule or Crozon character with third-person camera (WASD move, Space jump).
 	Character,
+}
+
+#[derive(Clone, Subcommand)]
+#[command(rename_all = "kebab-case")]
+pub enum Sky {
+	/// Print phase, nearest preset, paused, and cycle length.
+	Status,
+	Dawn,
+	Morning,
+	Noon,
+	Golden,
+	Dusk,
+	Night,
+	/// Set phase in `0..1` (wraps). `0` midnight, `0.5` noon, `0.62` golden.
+	At {
+		phase: f32,
+	},
+	Pause,
+	Play,
+	/// Seconds per full day-night cycle.
+	Rate {
+		seconds: f32,
+	},
 }
 
 #[derive(Clone, Subcommand)]
@@ -83,6 +114,7 @@ impl PlaygroundCommand {
 				*console = format!("set-character {}: pending", species.label());
 			}
 			PlaygroundCommand::Stats(stats) => stats.react(commands, console),
+			PlaygroundCommand::Sky(sky) => sky.react(commands, console),
 		}
 	}
 
@@ -106,6 +138,32 @@ impl Mode {
 	}
 }
 
+impl Sky {
+	fn react(self, commands: &mut Commands, console: &mut String) {
+		let request = match self {
+			Self::Status => SkyCommand::Status,
+			Self::Dawn => SkyCommand::SetPhase(SKY_PHASE_DAWN),
+			Self::Morning => SkyCommand::SetPhase(SKY_PHASE_MORNING),
+			Self::Noon => SkyCommand::SetPhase(SKY_PHASE_NOON),
+			Self::Golden => SkyCommand::SetPhase(SKY_PHASE_GOLDEN),
+			Self::Dusk => SkyCommand::SetPhase(SKY_PHASE_DUSK),
+			Self::Night => SkyCommand::SetPhase(SKY_PHASE_NIGHT),
+			Self::At { phase } => SkyCommand::SetPhase(SkyClock::wrap_phase(phase)),
+			Self::Pause => SkyCommand::SetPaused(true),
+			Self::Play => SkyCommand::SetPaused(false),
+			Self::Rate { seconds } => SkyCommand::SetPeriod(seconds.max(1.0)),
+		};
+		*console = match &request {
+			SkyCommand::Status => "sky status: pending".into(),
+			SkyCommand::SetPhase(phase) => format!("sky phase={phase:.3}"),
+			SkyCommand::SetPaused(true) => "sky pause".into(),
+			SkyCommand::SetPaused(false) => "sky play".into(),
+			SkyCommand::SetPeriod(seconds) => format!("sky rate {seconds:.0}s"),
+		};
+		commands.spawn(request);
+	}
+}
+
 impl Stats {
 	fn react(self, commands: &mut Commands, console: &mut String) {
 		match self {
@@ -122,6 +180,26 @@ impl Stats {
 				*console = "stats vsync: toggling".into();
 			}
 		}
+	}
+}
+
+pub(crate) fn apply_sky_commands(
+	requests: Query<(Entity, &SkyCommand)>,
+	mut clock: ResMut<SkyClock>,
+	mut commands: Commands,
+	mut console: Option<ResMut<CommandConsoleOutput>>,
+) {
+	for (entity, request) in &requests {
+		match *request {
+			SkyCommand::Status => {}
+			SkyCommand::SetPhase(phase) => clock.phase = SkyClock::wrap_phase(phase),
+			SkyCommand::SetPaused(paused) => clock.paused = paused,
+			SkyCommand::SetPeriod(seconds) => clock.period_secs = seconds.max(1.0),
+		}
+		if let Some(console) = console.as_mut() {
+			console.0 = clock.status_line();
+		}
+		commands.entity(entity).despawn();
 	}
 }
 
@@ -147,6 +225,20 @@ mod tests {
 	fn parse_stats_vsync() {
 		let cmd = PlaygroundCommand::parse_line("stats vsync").unwrap();
 		assert!(matches!(cmd, PlaygroundCommand::Stats(Stats::Vsync)));
+	}
+
+	#[test]
+	fn parse_sky_presets() {
+		let noon = PlaygroundCommand::parse_line("sky noon").unwrap();
+		assert!(matches!(noon, PlaygroundCommand::Sky(Sky::Noon)));
+		let at = PlaygroundCommand::parse_line("sky at 0.35").unwrap();
+		assert!(
+			matches!(at, PlaygroundCommand::Sky(Sky::At { phase }) if (phase - 0.35).abs() < 1e-4)
+		);
+		let rate = PlaygroundCommand::parse_line("sky rate 1200").unwrap();
+		assert!(
+			matches!(rate, PlaygroundCommand::Sky(Sky::Rate { seconds }) if (seconds - 1200.0).abs() < 1e-3)
+		);
 	}
 
 	#[test]

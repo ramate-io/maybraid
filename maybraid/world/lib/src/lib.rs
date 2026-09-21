@@ -34,8 +34,8 @@ pub use intelligence::WorldIntelligencePlugin;
 pub use lod::LodJobCounter;
 pub use material_lib::{WorldMaterialLib, WorldMaterialRefPlugin};
 pub use maybraid_sky::{
-	ShadowQuality, SKY_BLUE, SKY_CLEAR, SKY_HORIZON, SKY_NADIR, SKY_ZENITH, SUN_COLOR,
-	SUN_ILLUMINANCE,
+	ShadowQuality, SkyClock, SkyCommand, SKY_BLUE, SKY_CLEAR, SKY_HORIZON, SKY_NADIR, SKY_ZENITH,
+	SUN_COLOR, SUN_ILLUMINANCE,
 };
 pub use mobs::WorldMobsPlugin;
 pub use player_camera::CameraPov;
@@ -212,7 +212,7 @@ impl Plugin for WorldPlugin {
 			app.init_resource::<TextEntryFocus>();
 		}
 		app.add_systems(Startup, vsync::apply_startup_vsync)
-			.add_systems(Update, vsync::toggle_vsync)
+			.add_systems(Update, (vsync::toggle_vsync, commands::apply_sky_commands))
 			.add_systems(PostStartup, spawn_default_braidman)
 			.add_systems(
 				PreUpdate,

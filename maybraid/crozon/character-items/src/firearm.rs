@@ -66,11 +66,13 @@ impl FirearmMesh {
 	/// Nouns a rolled item of this mesh may be called.
 	pub const fn nouns(self) -> &'static [&'static str] {
 		match self {
-			Self::Bullpup => &["Bullpup", "Carbine", "Short Rifle", "Compact", "Issue Rifle"],
-			Self::Silopup => &["Silopup", "Suppressor", "Quiet Rifle", "Hush Gun", "Whisper"],
-			Self::Reltor => &["Reltor", "Receiver", "Box Gun", "Service Rifle", "Latch Gun"],
-			Self::Samsonist => &["Samsonist", "Long Rifle", "Pike", "Reach Gun", "Lance"],
-			Self::Snailer => &["Snailer", "Coil Gun", "Helix", "Spiral", "Shell Gun"],
+			Self::Bullpup => {
+				&["Bullpup", "Carbine", "Short Rifle", "Compact", "Issue Rifle", "Son of Cropper"]
+			}
+			Self::Silopup => &["Silopup", "Whisper", "Lirdis", "Complicant", "Accomplice"],
+			Self::Reltor => &["Reltor", "Service Rifle", "Latch Gun", "Harper"],
+			Self::Samsonist => &["Samsonist", "Pike", "Reach Gun", "Lance", "Pylon"],
+			Self::Snailer => &["Snailer", "Coil Gun", "Wrap", "Cril"],
 		}
 	}
 
