@@ -15,8 +15,9 @@
 //! so the live bag can persist.
 //!
 //! In-range claim shows three concentric ground rings (yellow 1.5 m, green
-//! 0.75 m, blue 0.25 m) and a Kenney outline Xbox **X** chip on the player–
-//! item line, plus a screen-space `Pick up <name>` caption.
+//! 0.75 m, blue 0.25 m) and a Kenney outline interact chip on the player–item
+//! line (Xbox **X** when a gamepad is connected, keyboard **E** otherwise),
+//! plus a screen-space `Pick up <name>` caption.
 
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value};
@@ -119,9 +120,15 @@ pub struct StashDisplayedItem {
 #[derive(Component, Clone, Copy, Debug, PartialEq)]
 pub struct StashHaloAnchor(pub Vec3);
 
-/// World-space interact chip (Kenney Xbox **X**) above the nearest claimable stash.
+/// World-space interact chip above the nearest claimable stash.
 #[derive(Component)]
 struct StashInteractPrompt;
+
+/// Whether the chip shows [`INTERACT_PAD_ICON`] or [`INTERACT_KEY_ICON`].
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
+struct StashInteractPromptIcon {
+	pad: bool,
+}
 
 /// Screen-space action next to the chip (`Pick up <name>`).
 #[derive(Component)]
@@ -130,8 +137,12 @@ struct StashInteractCaption;
 /// Kenney outline Xbox X used for pad interact (`PadButton::X`).
 pub const INTERACT_PAD_ICON: &str = "iconography/kenney/input-prompts/xbox_button_x_outline.png";
 
-/// Kenney outline keyboard E; kept next to the pad chip for the same binding.
+/// Kenney outline keyboard E when no gamepad is connected.
 pub const INTERACT_KEY_ICON: &str = "iconography/kenney/input-prompts/keyboard_e_outline.png";
+
+fn stash_interact_icon(pad_connected: bool) -> &'static str {
+	if pad_connected { INTERACT_PAD_ICON } else { INTERACT_KEY_ICON }
+}
 
 /// Ground ring around the nearest claimable stash.
 #[derive(Component)]
@@ -669,10 +680,11 @@ fn spawn_stash_interact_prompt(
 	assets: &AssetServer,
 	meshes: &mut Assets<Mesh>,
 	materials: &mut Assets<StandardMaterial>,
+	pad_connected: bool,
 ) {
 	let material = materials.add(StandardMaterial {
 		base_color: PROMPT_YELLOW,
-		base_color_texture: Some(assets.load(INTERACT_PAD_ICON)),
+		base_color_texture: Some(assets.load(stash_interact_icon(pad_connected))),
 		emissive: PROMPT_EMISSIVE,
 		alpha_mode: AlphaMode::Blend,
 		unlit: true,
@@ -682,11 +694,33 @@ fn spawn_stash_interact_prompt(
 	commands.spawn((
 		Name::new("stash-interact-prompt"),
 		StashInteractPrompt,
+		StashInteractPromptIcon { pad: pad_connected },
 		Mesh3d(meshes.add(Rectangle::new(PROMPT_SIZE, PROMPT_SIZE))),
 		MeshMaterial3d(material),
 		Transform::IDENTITY,
 		Visibility::Hidden,
 	));
+}
+
+fn sync_stash_interact_prompt_icon(
+	pad_connected: bool,
+	assets: &AssetServer,
+	materials: &mut Assets<StandardMaterial>,
+	mut prompts: Query<
+		(&mut StashInteractPromptIcon, &MeshMaterial3d<StandardMaterial>),
+		With<StashInteractPrompt>,
+	>,
+) {
+	let icon = stash_interact_icon(pad_connected);
+	for (mut current, mesh_material) in &mut prompts {
+		if current.pad == pad_connected {
+			continue;
+		}
+		current.pad = pad_connected;
+		if let Some(mut material) = materials.get_mut(&mesh_material.0) {
+			material.base_color_texture = Some(assets.load(icon));
+		}
+	}
 }
 
 fn prompt_world_point(item: Vec3, player: Vec3) -> Vec3 {
@@ -754,6 +788,7 @@ fn sync_stash_interact_prompt(
 	assets: Option<Res<AssetServer>>,
 	mut meshes: Option<ResMut<Assets<Mesh>>>,
 	mut materials: Option<ResMut<Assets<StandardMaterial>>>,
+	gamepads: Query<&Gamepad>,
 	players: Query<&Transform, (With<VegetationPlayer>, Without<StashInteractPrompt>)>,
 	cameras: Query<(&Camera, &GlobalTransform), (With<Camera3d>, Without<StashInteractPrompt>)>,
 	stashes: Query<
@@ -766,11 +801,16 @@ fn sync_stash_interact_prompt(
 		(&mut Transform, &mut Visibility),
 		(With<StashInteractPrompt>, Without<WorldStash>, Without<VegetationPlayer>),
 	>,
+	prompt_icons: Query<
+		(&mut StashInteractPromptIcon, &MeshMaterial3d<StandardMaterial>),
+		With<StashInteractPrompt>,
+	>,
 	mut caption: Query<
 		(&mut Text, &mut Node, &mut Visibility),
 		(With<StashInteractCaption>, Without<StashInteractPrompt>),
 	>,
 ) {
+	let pad_connected = !gamepads.is_empty();
 	let target = nearest_claim(players.iter(), stashes.iter(), anchors.iter());
 	if prompt.is_empty() {
 		let Some(assets) = assets.as_deref() else {
@@ -782,8 +822,11 @@ fn sync_stash_interact_prompt(
 		let Some(materials) = materials.as_mut() else {
 			return;
 		};
-		spawn_stash_interact_prompt(&mut commands, assets, meshes, materials);
+		spawn_stash_interact_prompt(&mut commands, assets, meshes, materials, pad_connected);
 		return;
+	}
+	if let (Some(assets), Some(materials)) = (assets.as_deref(), materials.as_mut()) {
+		sync_stash_interact_prompt_icon(pad_connected, assets, materials, prompt_icons);
 	}
 	if caption.is_empty() {
 		spawn_stash_interact_caption(&mut commands);
@@ -1600,6 +1643,12 @@ mod tests {
 		let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
 		assert!(root.join(INTERACT_PAD_ICON).is_file());
 		assert!(root.join(INTERACT_KEY_ICON).is_file());
+	}
+
+	#[test]
+	fn interact_icon_prefers_pad_when_connected() {
+		assert_eq!(stash_interact_icon(true), INTERACT_PAD_ICON);
+		assert_eq!(stash_interact_icon(false), INTERACT_KEY_ICON);
 	}
 
 	#[test]
