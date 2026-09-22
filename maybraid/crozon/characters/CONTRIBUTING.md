@@ -41,7 +41,8 @@ knobs retune. [`CharacterComponentsPlugin`](src/plugin.rs) owns membership, bone
 map, socket/skin fulfill, and pose. The mailbox and terrain pitch live in
 [`crozon-character-motion`](../character-motion/README.md): host markers
 (`AnimateBones` / `AnimateEffects` / `ApplyTerrainPitch`) are synced from the
-shown LOD band and filter the expensive systems. Do not
+shown LOD band (and the look frustum for visible High Mid/Far plants) and filter
+the expensive systems. Do not
 grow a post-spawn prepare pass that copies materials or poses.
 
 Runtime world, mob, and player visuals spawn a **fixed assembly**

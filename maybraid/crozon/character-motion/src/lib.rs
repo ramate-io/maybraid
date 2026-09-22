@@ -3,7 +3,8 @@
 //! Recipes (`crozon-characters`) stamp host identity. This crate syncs host
 //! motion markers from the shown LOD band (or visual High when there is no
 //! [`lod::LodSceneHost`]), clamps mailbox work from plant
-//! [`intelligence_lod::IntelligenceLod`] (missing = Near), and realizes clips /
+//! [`intelligence_lod::IntelligenceLod`] (missing = Near; visible High plants
+//! keep mailbox writes even when thinking is Mid/Far), and realizes clips /
 //! pitch. See [README.md](../README.md).
 //!
 //! This crate does **not** implement [`lod::LodScene`] or species recipes.

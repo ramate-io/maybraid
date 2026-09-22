@@ -27,9 +27,9 @@ use menu_components::{
 	TextMenuSystems, MENU_CLEAR,
 };
 use menu_playground::{
-	ActiveCharacter, CharacterEditBaseline, CharacterEditorReturn, CharacterMenuState,
-	CharacterPreviewPlugin, CharacterScreen, CharacterScreenPlugin, CharacterSessionPlugin,
-	EditingCharacter, RequestEditCharacter,
+	ActiveCharacter, CharacterEditBaseline, CharacterEditorReturn, CharacterLeavePrompt,
+	CharacterMenuState, CharacterModalMode, CharacterPreviewPlugin, CharacterScreen,
+	CharacterScreenPlugin, CharacterSessionPlugin, EditingCharacter, RequestEditCharacter,
 };
 use menu_screens::{
 	cancel_pending_create, request_show_gallery, request_show_home, request_show_in_game,
@@ -317,6 +317,8 @@ fn pause_menu_back(
 	nav: Res<MenuNavPad>,
 	overlay: Res<ActiveOverlayKey>,
 	modal: Res<ShortTextModal>,
+	prompt: Res<CharacterLeavePrompt>,
+	mode: Res<CharacterModalMode>,
 	consumed: Res<MenuBackConsumed>,
 	mut backs: MessageReader<ScreenBackPressed>,
 	settings: Query<(), With<InGameSettingsScreen>>,
@@ -325,7 +327,13 @@ fn pause_menu_back(
 	if settings.is_empty() && character.is_empty() {
 		return;
 	}
-	if !consume_screen_back(nav.as_ref(), &overlay, modal.is_open(), &consumed, &mut backs) {
+	if !consume_screen_back(
+		nav.as_ref(),
+		&overlay,
+		modal.is_open() || prompt.is_open() || (!character.is_empty() && mode.blocks_leave()),
+		&consumed,
+		&mut backs,
+	) {
 		return;
 	}
 	commands.remove_resource::<CharacterEditorReturn>();
@@ -356,13 +364,21 @@ fn character_back(
 	nav: Res<MenuNavPad>,
 	overlay: Res<ActiveOverlayKey>,
 	modal: Res<ShortTextModal>,
+	prompt: Res<CharacterLeavePrompt>,
+	mode: Res<CharacterModalMode>,
 	consumed: Res<MenuBackConsumed>,
 	mut backs: MessageReader<ScreenBackPressed>,
 	character: Query<(), With<CharacterScreen>>,
 	spin: Query<(), With<SpinRevealScreen>>,
 	gallery: Query<(), With<GalleryScreen>>,
 ) {
-	if !consume_screen_back(nav.as_ref(), &overlay, modal.is_open(), &consumed, &mut backs) {
+	if !consume_screen_back(
+		nav.as_ref(),
+		&overlay,
+		modal.is_open() || prompt.is_open() || (!character.is_empty() && mode.blocks_leave()),
+		&consumed,
+		&mut backs,
+	) {
 		return;
 	}
 	if !character.is_empty() {
