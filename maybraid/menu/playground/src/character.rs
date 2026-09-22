@@ -29,6 +29,8 @@ use menu_screens::{
 	take_menu_show_request, MenuScreen, SpinRevealCurrent, SpinRevealItems, SpinRevealScreen,
 };
 
+use crate::leave_prompt::CharacterLeavePromptPlugin;
+
 const PANEL_WIDTH: f32 = 480.0;
 const PANEL_HEIGHT_PERCENT: f32 = 82.0;
 
@@ -154,6 +156,9 @@ impl Plugin for CharacterScreenPlugin {
 		if !app.is_plugin_added::<SkillMapTileMaterialPlugin>() {
 			app.add_plugins(SkillMapTileMaterialPlugin);
 		}
+		if !app.is_plugin_added::<CharacterLeavePromptPlugin>() {
+			app.add_plugins(CharacterLeavePromptPlugin);
+		}
 		app.init_resource::<CharacterMenuState>()
 			.init_resource::<CharacterUiSyncState>()
 			.init_resource::<OverlaySelectState>()
@@ -164,10 +169,7 @@ impl Plugin for CharacterScreenPlugin {
 			.add_observer(on_menu_activate)
 			.add_observer(on_menu_focus)
 			.add_observer(on_short_text_change)
-			.add_systems(
-				Update,
-				ensure_skill_map_menu_previews.before(CharacterHudSystems::Sync),
-			)
+			.add_systems(Update, ensure_skill_map_menu_previews.before(CharacterHudSystems::Sync))
 			.add_systems(
 				Update,
 				(
@@ -691,6 +693,7 @@ fn on_short_text_change(
 	change: On<ShortTextChange>,
 	mut menu_state: ResMut<CharacterMenuState>,
 	mut ui_sync: ResMut<CharacterUiSyncState>,
+	baseline: Option<Res<CharacterEditBaseline>>,
 	screens: Query<Entity, With<CharacterScreen>>,
 ) {
 	if screens.is_empty() {
@@ -699,8 +702,11 @@ fn on_short_text_change(
 	if change.event().key != "Name" {
 		return;
 	}
-	menu_state.0.name = change.event().value.clone();
-	ui_sync.menu_dirty = true;
+	let previous = save_chrome(&menu_state.0, baseline.as_deref());
+	menu_state.bypass_change_detection().0.name = change.event().value.clone();
+	if save_chrome(&menu_state.0, baseline.as_deref()) != previous {
+		ui_sync.menu_dirty = true;
+	}
 }
 
 #[cfg(test)]

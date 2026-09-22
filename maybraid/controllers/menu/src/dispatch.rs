@@ -41,6 +41,9 @@ pub fn dispatch_menu_nav(
 		}
 		return;
 	}
+	if modal.dismissed {
+		return;
+	}
 	if lock.0 {
 		return;
 	}

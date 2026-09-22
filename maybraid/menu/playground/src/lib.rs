@@ -2,6 +2,7 @@
 
 pub mod character;
 pub mod commands;
+mod leave_prompt;
 mod loading_demo;
 mod preview;
 mod session;
@@ -14,10 +15,11 @@ pub use character::{
 };
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use game_commands::command::PendingStartupCommand;
+pub use leave_prompt::{CharacterLeavePrompt, CharacterModalMode};
 pub use preview::{CharacterPreviewLight, CharacterPreviewPlugin, CharacterPreviewRoot};
 pub use session::{
-	save_editing_character, ActiveCharacter, CharacterEditorReturn, CharacterSession,
-	CharacterSessionPlugin, EditingCharacter, RequestEditCharacter,
+	leave_character_editor, save_editing_character, ActiveCharacter, CharacterEditorReturn,
+	CharacterSession, CharacterSessionPlugin, EditingCharacter, RequestEditCharacter,
 };
 pub use weapon_gallery::{request_show_weapons, WeaponGalleryPlugin, WeaponGalleryScreen};
 
@@ -194,6 +196,8 @@ fn editor_back(
 	nav: Res<MenuNavPad>,
 	overlay: Res<ActiveOverlayKey>,
 	modal: Res<ShortTextModal>,
+	prompt: Res<CharacterLeavePrompt>,
+	mode: Res<CharacterModalMode>,
 	consumed: Res<MenuBackConsumed>,
 	mut backs: MessageReader<ScreenBackPressed>,
 	return_to: Option<Res<crate::CharacterEditorReturn>>,
@@ -203,7 +207,13 @@ fn editor_back(
 	weapons: Query<(), With<WeaponGalleryScreen>>,
 	settings: Query<(), With<InGameSettingsScreen>>,
 ) {
-	if !consume_screen_back(&nav, &overlay, modal.is_open(), &consumed, &mut backs) {
+	if !consume_screen_back(
+		&nav,
+		&overlay,
+		modal.is_open() || prompt.is_open() || (!character.is_empty() && mode.blocks_leave()),
+		&consumed,
+		&mut backs,
+	) {
 		return;
 	}
 	if !settings.is_empty() {
@@ -212,12 +222,7 @@ fn editor_back(
 	}
 	if !character.is_empty() {
 		// Leave without writing; [`save_editing_character`] is Save-only.
-		if return_to.as_deref() == Some(&crate::CharacterEditorReturn::InGame) {
-			request_show_in_game(&mut commands);
-		} else {
-			request_show_gallery(&mut commands);
-		}
-		commands.remove_resource::<crate::CharacterEditorReturn>();
+		leave_character_editor(&mut commands, return_to.as_deref().copied());
 		return;
 	}
 	if !spin.is_empty() {

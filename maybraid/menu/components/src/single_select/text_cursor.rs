@@ -372,17 +372,17 @@ pub fn clear_menu_back_consumed(mut consumed: ResMut<MenuBackConsumed>) {
 	consumed.0 = false;
 }
 
-/// Click on [`ScreenBack`], or pad B, while no overlay / keypad / consumed Back
-/// is holding the edge.
+/// Click on [`ScreenBack`], or pad B, while no overlay / keypad / confirm
+/// prompt / consumed Back is holding the edge.
 pub fn consume_screen_back(
 	nav: &MenuNavPad,
 	overlay: &ActiveOverlayKey,
-	modal_open: bool,
+	hold: bool,
 	consumed: &MenuBackConsumed,
 	backs: &mut MessageReader<ScreenBackPressed>,
 ) -> bool {
 	let clicked = backs.read().next().is_some();
-	if overlay.0.is_some() || modal_open || consumed.0 {
+	if overlay.0.is_some() || hold || consumed.0 {
 		return false;
 	}
 	clicked || nav.just_pressed(MenuNav::Back)
