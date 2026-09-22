@@ -23,10 +23,28 @@ pub enum WorldPause {
 	Menu,
 }
 
+/// Which world mount is live. [`GameFlow::World`] is shared; this picks the scene.
+#[derive(Resource, Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
+pub enum PlaySession {
+	#[default]
+	None,
+	Discovery,
+	Training,
+}
+
+impl PlaySession {
+	pub fn label(self) -> &'static str {
+		match self {
+			Self::Discovery | Self::None => "Discovery",
+			Self::Training => "Training Ground",
+		}
+	}
+}
+
 /// What the executable does with a home-row pick.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HomeRoute {
-	World { label: &'static str },
+	World { session: PlaySession },
 	Characters,
 	Settings,
 	Unimplemented,
@@ -35,10 +53,11 @@ pub enum HomeRoute {
 impl HomeRoute {
 	pub fn from_choice(choice: HomeMenuChoice) -> Self {
 		match choice {
-			HomeMenuChoice::Discovery => Self::World { label: choice.label() },
+			HomeMenuChoice::Discovery => Self::World { session: PlaySession::Discovery },
+			HomeMenuChoice::TrainingGround => Self::World { session: PlaySession::Training },
 			HomeMenuChoice::Characters => Self::Characters,
 			HomeMenuChoice::Settings => Self::Settings,
-			HomeMenuChoice::Reliquary | HomeMenuChoice::TrainingGround => Self::Unimplemented,
+			HomeMenuChoice::Reliquary => Self::Unimplemented,
 		}
 	}
 }
@@ -71,7 +90,7 @@ mod tests {
 	fn discovery_enters_world() {
 		assert_eq!(
 			HomeRoute::from_choice(HomeMenuChoice::Discovery),
-			HomeRoute::World { label: "Discovery" }
+			HomeRoute::World { session: PlaySession::Discovery }
 		);
 	}
 
@@ -86,10 +105,10 @@ mod tests {
 	}
 
 	#[test]
-	fn training_stays_on_home() {
+	fn training_enters_the_arena() {
 		assert_eq!(
 			HomeRoute::from_choice(HomeMenuChoice::TrainingGround),
-			HomeRoute::Unimplemented
+			HomeRoute::World { session: PlaySession::Training }
 		);
 	}
 

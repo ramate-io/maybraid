@@ -19,37 +19,39 @@ mod pitch;
 mod player_lifecycle;
 mod player_position;
 mod poi;
-mod stash;
 mod start;
+mod stash;
+mod training;
 mod ui;
 mod vsync;
 mod weapon;
 
 pub use chico_vegetation_on_terrain_playground::{PlayerPhysicsEnabled, PlayerSpawnXz};
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
-pub use control::{WorldGameplayEnabled, WorldSceneryVisible, WorldSurfaceReady};
+pub use control::{WorldGameplayEnabled, WorldSceneryVisible, WorldSurfaceReady, WorldSurfaceSet};
 pub use durham_terrain_models::{terrain_streaming_enabled, TerrainStreamingEnabled};
 pub use game_commands::command::PendingStartupCommand;
 pub use intelligence::WorldIntelligencePlugin;
 pub use lod::LodJobCounter;
 pub use material_lib::{WorldMaterialLib, WorldMaterialRefPlugin};
+pub use maybraid_sky::{
+	ShadowQuality, SkyClock, SkyCommand, SKY_BLUE, SKY_CLEAR, SKY_HORIZON, SKY_NADIR, SKY_ZENITH,
+	SUN_COLOR, SUN_ILLUMINANCE,
+};
 pub use mobs::WorldMobsPlugin;
 pub use player_camera::CameraPov;
 pub use player_lifecycle::{WorldPlayerLifecyclePlugin, WorldPlayerRespawnConfig};
 pub use player_position::{PlayerPositionPlugin, PlayerPositionWaypoints};
 pub use poi::{WorldPoiDiscoveryBudget, WorldPoiPlugin, WorldPoiSystems};
-pub use stash::{
-	spawn_exploded_stashes, spawn_world_stash, StashDisplayedItem, StashPolicy, WorldStash,
-	WorldStashPlugin, WorldStashSettings, DEFAULT_CLAIM_RADIUS, DEFAULT_LOOT_SECS,
-};
 pub use start::{
 	parse_xz_metres, player_spawn_xz, resolve_start_at, start_at_from_env, take_start_at_from_args,
 	START_AT_ENV,
 };
-pub use maybraid_sky::{
-	ShadowQuality, SkyClock, SkyCommand, SKY_BLUE, SKY_CLEAR, SKY_HORIZON, SKY_NADIR, SKY_ZENITH,
-	SUN_COLOR, SUN_ILLUMINANCE,
+pub use stash::{
+	spawn_exploded_stashes, spawn_world_stash, StashDisplayedItem, StashPolicy, WorldStash,
+	WorldStashPlugin, WorldStashSettings, DEFAULT_CLAIM_RADIUS, DEFAULT_LOOT_SECS,
 };
+pub use training::TrainingGrounds;
 pub use ui::WorldMobHudEnabled;
 pub use vsync::{default_window_present_mode, RequestVsyncToggle, VSYNC_TOGGLE_KEY};
 pub use weapon::WorldPlayerLoadout;
@@ -184,6 +186,7 @@ impl Plugin for WorldPlugin {
 			.init_resource::<WorldGameplayEnabled>()
 			.init_resource::<WorldSurfaceReady>()
 			.init_resource::<WorldSceneryVisible>()
+			.init_resource::<training::TrainingGrounds>()
 			.insert_resource(WorldMobHudEnabled::from_debug_chrome(self.debug_chrome))
 			.insert_resource(Bullseye { inner: 50.0, outer: WORLD_BULLSEYE_OUTER_M })
 			.insert_resource(OpenLattice {
@@ -211,10 +214,21 @@ impl Plugin for WorldPlugin {
 			.add_systems(Update, (vsync::toggle_vsync, commands::apply_sky_commands))
 			.add_systems(PostStartup, spawn_default_braidman)
 			.add_systems(PreUpdate, control::stamp_vegetation_motor_traction)
+			.configure_sets(Update, control::WorldSurfaceSet)
 			.add_systems(
 				Update,
 				(
-					control::update_world_surface_ready,
+					(control::update_world_surface_ready, training::sync_arena_surface_ready)
+						.chain()
+						.in_set(control::WorldSurfaceSet),
+					(
+						training::apply_training_grounds,
+						training::clear_training_terrain_present,
+						training::seat_training_grounds,
+						training::sync_off_terrain_player,
+					)
+						.chain()
+						.before(PlayerControlSystems),
 					control::sync_world_scenery,
 					control::sync_skill_map_enabled.before(SkillMapSystems::Spawn),
 					control::apply_intents_to_movement

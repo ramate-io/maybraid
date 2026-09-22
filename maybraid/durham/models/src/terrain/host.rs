@@ -167,6 +167,17 @@ fn world_cell_layout() -> TerrainCellLayout {
 	layout
 }
 
+/// Playable Discovery rings (near / far / background).
+pub fn playable_world_cell_layout() -> TerrainCellLayout {
+	world_cell_layout()
+}
+
+/// Four 160 m cells on a side, fixed on the origin. Training presents this
+/// patch instead of the playable-world rings.
+pub fn training_grounds_cell_layout() -> TerrainCellLayout {
+	cell_layout(2)
+}
+
 fn layout_for(coverage: TerrainCoverage, terrain_radius: i32) -> TerrainCellLayout {
 	match coverage {
 		TerrainCoverage::FinePatch => cell_layout(terrain_radius),
@@ -264,16 +275,19 @@ impl Plugin for TerrainPlugin<Durham> {
 				.run_if(terrain_streaming_enabled)
 				.before(TerrainColliderSystems::QueueMeshes),
 		);
-		if self.present {
-			app.add_systems(
-				Update,
-				present_cells
-					.after(generate_cells)
-					.before(TerrainColliderSystems::QueueMeshes)
-					.run_if(terrain_streaming_enabled),
-			);
-		}
+		app.add_systems(
+			Update,
+			present_cells
+				.after(generate_cells)
+				.before(TerrainColliderSystems::QueueMeshes)
+				.run_if(terrain_streaming_enabled)
+				.run_if(terrain_present_enabled),
+		);
 	}
+}
+
+fn terrain_present_enabled(enabled: Res<TerrainPresentEnabled>) -> bool {
+	enabled.0
 }
 
 #[derive(Resource, Clone, Copy)]

@@ -3374,7 +3374,6 @@ dependencies = [
 name = "firing-range-playground"
 version = "0.0.1"
 dependencies = [
- "avian3d",
  "bevy",
  "clap",
  "combat-hud",
@@ -3390,6 +3389,7 @@ dependencies = [
  "fleeing-intelligence",
  "game-commands",
  "hiding-intelligence",
+ "les-halles-arena",
  "lod",
  "lod-avian",
  "lod-gimme",
@@ -3405,11 +3405,9 @@ dependencies = [
  "player",
  "player-camera",
  "poi-intelligence",
- "procedural-common",
  "richmond-building-components",
  "richmond-building-physics",
  "richmond-buildings",
- "richmond-developments",
  "spotting-intelligence",
  "spotting-intelligence-avian",
  "tether-intelligence",
@@ -4456,6 +4454,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
 
 [[package]]
+name = "les-halles-arena"
+version = "0.0.1"
+dependencies = [
+ "avian3d",
+ "bevy",
+ "firearms",
+ "lod-avian",
+ "movement-intelligence-richmond",
+ "player",
+ "procedural-common",
+ "richmond-building-components",
+ "richmond-building-physics",
+ "richmond-buildings",
+ "richmond-developments",
+]
+
+[[package]]
 name = "lewton"
 version = "0.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4691,6 +4706,7 @@ dependencies = [
  "crozon-character-playground",
  "crozon-characters",
  "crozon-inventory-user",
+ "les-halles-arena",
  "maybraid-character-controller",
  "maybraid-input",
  "maybraid-menu-controller",
@@ -4821,6 +4837,7 @@ dependencies = [
  "ground-avian",
  "hiding-intelligence",
  "intelligence-lod",
+ "les-halles-arena",
  "lod",
  "lod-avian",
  "lod-gimme",
@@ -4837,6 +4854,7 @@ dependencies = [
  "movement-intelligence",
  "movement-intelligence-avian",
  "movement-realization",
+ "npc-intelligence",
  "player",
  "player-camera",
  "poi-intelligence",

@@ -77,9 +77,16 @@ pub enum PlaygroundMode {
 #[derive(Component)]
 pub struct Player;
 
-/// Gravity off until composed height + a terrain trimesh exist.
-#[derive(Component)]
-pub(crate) struct AwaitingTerrainSurface;
+/// Gravity off until composed height and a terrain trimesh exist.
+#[derive(Component, Clone, Copy, Debug, Default)]
+pub struct AwaitingTerrainSurface;
+
+/// Stand on a local collider instead of streamed terrain.
+/// Fall recovery returns to [`Self::translation`].
+#[derive(Component, Clone, Copy, Debug)]
+pub struct OffTerrainAnchor {
+	pub translation: Vec3,
+}
 
 /// Delayed recovery for a player that falls below the streamed surface.
 #[derive(Resource, Debug, Clone, Copy, Default)]
@@ -299,16 +306,26 @@ pub(crate) fn snap_player_to_composed_surface(
 	store: Res<TerrainEntryStore>,
 	layout: Res<TerrainCellLayout>,
 	awaiting: Query<Entity, (With<Player>, With<AwaitingTerrainSurface>)>,
-	mut players: Query<(&mut Transform, &mut LinearVelocity, &mut GravityScale), With<Player>>,
+	mut players: Query<
+		(Entity, &mut Transform, &mut LinearVelocity, &mut GravityScale, Option<&OffTerrainAnchor>),
+		With<Player>,
+	>,
 	terrain_colliders: Query<&CascadeChunk, With<TerrainTrimeshCollider>>,
 ) {
-	let Ok((mut transform, mut velocity, mut gravity)) = players.single_mut() else {
+	let Ok((entity, mut transform, mut velocity, mut gravity, anchor)) = players.single_mut()
+	else {
 		return;
 	};
 
 	if !physics.0 {
 		gravity.0 = 0.0;
 		**velocity = Vec3::ZERO;
+		return;
+	}
+
+	if anchor.is_some() {
+		gravity.0 = PLAY_GRAVITY_SCALE;
+		commands.entity(entity).remove::<AwaitingTerrainSurface>();
 		return;
 	}
 
@@ -345,7 +362,7 @@ fn queue_fallen_player_respawn(
 	mut respawn: ResMut<PlayerRespawn>,
 	mut commands: Commands,
 	mut player: Query<
-		(Entity, &Transform, &mut LinearVelocity, &mut GravityScale),
+		(Entity, &Transform, &mut LinearVelocity, &mut GravityScale, Option<&OffTerrainAnchor>),
 		(With<Player>, Without<AwaitingTerrainSurface>),
 	>,
 	terrain_colliders: Query<&CascadeChunk, With<TerrainTrimeshCollider>>,
@@ -353,10 +370,18 @@ fn queue_fallen_player_respawn(
 	if !physics.0 || respawn.queued_at.is_some() {
 		return;
 	}
-	let Ok((entity, transform, mut velocity, mut gravity)) = player.single_mut() else {
+	let Ok((entity, transform, mut velocity, mut gravity, anchor)) = player.single_mut() else {
 		return;
 	};
 	let at = transform.translation;
+	if let Some(anchor) = anchor {
+		if at.y < anchor.translation.y - FALL_RESPAWN_DEPTH {
+			respawn.queued_at = Some(time.elapsed_secs() + FALL_RESPAWN_DELAY_SECS);
+			gravity.0 = 0.0;
+			**velocity = Vec3::ZERO;
+		}
+		return;
+	}
 	if !terrain_collider_covers_xz(at, terrain_colliders.iter()) {
 		gravity.0 = 0.0;
 		**velocity = Vec3::ZERO;
@@ -381,7 +406,10 @@ fn respawn_fallen_player(
 	layout: Res<TerrainCellLayout>,
 	base: Res<WorldBaseTerrain>,
 	mut respawn: ResMut<PlayerRespawn>,
-	mut player: Query<(&mut Transform, &mut LinearVelocity), With<Player>>,
+	mut player: Query<
+		(&mut Transform, &mut LinearVelocity, Option<&OffTerrainAnchor>),
+		With<Player>,
+	>,
 ) {
 	let Some(at) = respawn.queued_at else {
 		return;
@@ -389,10 +417,16 @@ fn respawn_fallen_player(
 	if time.elapsed_secs() < at {
 		return;
 	}
-	let Ok((mut transform, mut velocity)) = player.single_mut() else {
+	let Ok((mut transform, mut velocity, anchor)) = player.single_mut() else {
 		respawn.queued_at = None;
 		return;
 	};
+	if let Some(anchor) = anchor {
+		transform.translation = anchor.translation;
+		**velocity = Vec3::ZERO;
+		respawn.queued_at = None;
+		return;
+	}
 	let xz = transform.translation.xz();
 	let elevation = store
 		.composed_height_at(&layout, xz.x, xz.y)
@@ -596,6 +630,7 @@ fn apply_character_movement(
 			&mut LinearVelocity,
 			Has<Grounded>,
 			Option<&Jumping>,
+			Has<Player>,
 		),
 		With<CharacterController>,
 	>,
@@ -611,8 +646,19 @@ fn apply_character_movement(
 		jump_requested |= matches!(action, MovementAction::Jump);
 	}
 
-	for (entity, wish, hits, max_slope, walkable, accel, jump, mut velocity, grounded, jumping) in
-		&mut controllers
+	for (
+		entity,
+		wish,
+		hits,
+		max_slope,
+		walkable,
+		accel,
+		jump,
+		mut velocity,
+		grounded,
+		jumping,
+		is_player,
+	) in &mut controllers
 	{
 		if let Some(normal) = grounded_plane(hits, walkable, grounded) {
 			if jumping.is_none() {
@@ -623,7 +669,7 @@ fn apply_character_movement(
 		} else {
 			control_air_velocity(&mut velocity, wish.0, accel.0, dt);
 		}
-		if jump_requested && grounded {
+		if jump_requested && grounded && is_player {
 			velocity.y = jump.0;
 			commands.entity(entity).insert(Jumping { left_ground: false });
 		}

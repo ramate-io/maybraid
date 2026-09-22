@@ -18,8 +18,8 @@ use lod::presentation::{LodPresentKeepRegion, LodPresentRegion};
 use lod::{LodGeneratePlugin, LodGenerateRegionPlugin, LodPresentRegionPlugin, LodViewer};
 use procedural_common::NoiseParams;
 use richmond_development_models::{
-	BuiltDevelopment, DevelopmentCell, DevelopmentEntryStore, DevelopmentIndex,
-	PaddedStoreView, PaddedTerrainPresenter, TerrainWithPads,
+	BuiltDevelopment, DevelopmentCell, DevelopmentEntryStore, DevelopmentIndex, PaddedStoreView,
+	PaddedTerrainPresenter, TerrainWithPads,
 };
 use richmond_urbanization::{
 	SelectedUrbanization, UrbanDevelopmentKind, UrbanizationExtent, UrbanizationGenerateBullseye,

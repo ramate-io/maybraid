@@ -14,7 +14,6 @@ name = "firing-range"
 path = "src/main.rs"
 
 [dependencies]
-avian3d = { workspace = true }
 bevy = { workspace = true }
 clap = { workspace = true }
 combat-targeting = { workspace = true }
@@ -30,6 +29,7 @@ firearm-user = { workspace = true }
 firearms = { workspace = true }
 damage = { workspace = true }
 game-commands = { workspace = true }
+les-halles-arena = { workspace = true }
 lod = { workspace = true }
 lod-avian = { workspace = true }
 lod-gimme = { workspace = true }
@@ -46,11 +46,9 @@ meandering-intelligence = { workspace = true }
 tether-intelligence = { workspace = true }
 player = { workspace = true }
 player-camera = { workspace = true }
-procedural-common = { workspace = true }
 richmond-building-components = { workspace = true }
 richmond-building-physics = { workspace = true }
 richmond-buildings = { workspace = true }
-richmond-developments = { workspace = true }
 spotting-intelligence = { workspace = true }
 spotting-intelligence-avian = { workspace = true }
 threat-intelligence = { workspace = true }

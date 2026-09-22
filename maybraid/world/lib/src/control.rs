@@ -36,10 +36,16 @@ impl Default for WorldSceneryVisible {
 }
 
 /// Local spawn collider + composed height are ready for Discovery drop-in.
+/// Training sets this from the arena pad instead.
 #[derive(Resource, Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub struct WorldSurfaceReady(pub bool);
 
+/// Terrain column check, then the arena pad check. The shell unveils after this.
+#[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct WorldSurfaceSet;
+
 pub(crate) fn update_world_surface_ready(
+	streaming: Res<durham_terrain_models::TerrainStreamingEnabled>,
 	store: Res<TerrainEntryStore>,
 	layout: Res<TerrainCellLayout>,
 	spawn: Res<PlayerSpawnXz>,
@@ -47,6 +53,11 @@ pub(crate) fn update_world_surface_ready(
 	colliders: Query<&CascadeChunk, With<TerrainTrimeshCollider>>,
 	mut ready: ResMut<WorldSurfaceReady>,
 ) {
+	// Menu shells keep streaming off. Leave the ready bit alone so a training
+	// mount can unveil from the pad instead of a Durham column.
+	if !streaming.0 {
+		return;
+	}
 	let xz = discovery_xz(&spawn, &players, &layout);
 	let at = Vec3::new(xz.x, 0.0, xz.y);
 	ready.0 = terrain_collider_covers_xz(at, colliders.iter())

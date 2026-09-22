@@ -4,8 +4,9 @@ mod flow;
 mod load;
 mod paths;
 mod shell;
+mod training;
 
-pub use flow::{GameFlow, HomeRoute, PauseMenuRoute, WorldPause};
+pub use flow::{GameFlow, HomeRoute, PauseMenuRoute, PlaySession, WorldPause};
 pub use paths::assets_root;
 
 use crate::shell::{
@@ -21,6 +22,7 @@ use maybraid_menu_controller::MenuControllerPlugin;
 use maybraid_world::{
 	PlayerPhysicsEnabled, PlayerSpawnXz, ShadowQuality, TerrainStreamingEnabled,
 	WorldGameplayEnabled, WorldMobHudEnabled, WorldPlayerLoadout, WorldPlugin, WorldSceneryVisible,
+	WorldSurfaceSet,
 };
 use menu_components::{
 	consume_screen_back, ActiveOverlayKey, MenuBackConsumed, ScreenBackPressed, ShortTextModal,
@@ -48,6 +50,7 @@ impl Plugin for GamePlugin {
 			.insert_resource(TerrainStreamingEnabled(false))
 			.insert_resource(WorldSceneryVisible(false))
 			.insert_resource(ClearColor(MENU_CLEAR))
+			.init_resource::<PlaySession>()
 			.init_state::<GameFlow>()
 			.add_sub_state::<WorldPause>()
 			.add_plugins((
@@ -62,7 +65,12 @@ impl Plugin for GamePlugin {
 			))
 			.add_systems(
 				OnEnter(GameFlow::Home),
-				(enter_home, apply_shell_look, attach_preview_camera),
+				(
+					enter_home,
+					crate::training::clear_play_session,
+					apply_shell_look,
+					attach_preview_camera,
+				),
 			)
 			.add_systems(
 				OnEnter(GameFlow::Characters),
@@ -74,6 +82,8 @@ impl Plugin for GamePlugin {
 				(
 					enter_loading_world,
 					spawn_loading_backdrop,
+					crate::training::reset_surface_ready,
+					crate::training::spawn_training_arena,
 					apply_shell_look,
 					detach_preview_camera,
 					crate::load::arm_first_load,
@@ -109,6 +119,7 @@ impl Plugin for GamePlugin {
 					stamp_preview_render_layers,
 					crate::load::finish_world_loading
 						.run_if(in_state(GameFlow::LoadingWorld))
+						.after(WorldSurfaceSet)
 						.before(LoadingScreenSystems::Apply),
 					route_home_choice.run_if(in_state(GameFlow::Home)),
 					home_settings_back
@@ -142,11 +153,12 @@ fn boot_shell(
 	spawn: Res<PlayerSpawnXz>,
 	mut flow: ResMut<NextState<GameFlow>>,
 	mut mode: ResMut<GameMode>,
-	commands: Commands,
+	mut commands: Commands,
 	screens: Query<Entity, With<MenuScreen>>,
 ) {
 	if spawn.0.is_some() {
 		mode.label = String::from("Discovery");
+		commands.insert_resource(PlaySession::Discovery);
 		enter_loading_world(commands, screens);
 		flow.set(GameFlow::LoadingWorld);
 		return;
@@ -193,8 +205,9 @@ fn route_home_choice(
 		return;
 	};
 	match HomeRoute::from_choice(choice) {
-		HomeRoute::World { label } => {
-			mode.label = String::from(label);
+		HomeRoute::World { session } => {
+			commands.insert_resource(session);
+			mode.label = String::from(session.label());
 			flow.set(GameFlow::LoadingWorld);
 		}
 		HomeRoute::Characters => flow.set(GameFlow::Characters),
@@ -408,15 +421,61 @@ mod tests {
 	use menu_playground::ActiveCharacter;
 
 	use crate::{
-		assets_root, persist_changed_player_inventory, read_player_loadout, sync_world_shadows,
+		assets_root, load_active_player_loadout, persist_changed_player_inventory,
+		read_player_loadout, route_home_choice, sync_world_shadows, GameFlow, PlaySession,
 	};
 	use maybraid_world::{ShadowQuality, WorldPlayerLoadout};
-	use menu_screens::{InGameSettings, InGameShadowQuality};
+	use menu_screens::{GameMode, HomeMenuChoice, InGameSettings, InGameShadowQuality};
 
 	#[test]
 	fn crate_assets_contain_barlow() {
 		let font = assets_root().join("fonts/barlow/BarlowSemiCondensed-Regular.ttf");
 		assert!(font.is_file(), "expected Barlow at {}", font.display());
+	}
+
+	#[test]
+	fn training_loadout_uses_the_active_character() -> anyhow::Result<()> {
+		let dir = tempfile::tempdir()?;
+		let root = SaveRoot::at(dir.path());
+		let id = CharacterId(11);
+		let model = CharacterModel::new(id, "Trainee", CharacterAppearance::default());
+		let inventory = Inventory::default();
+		crozon_character_model_user::save(&root, &model)?;
+		crozon_inventory_user::save(&root, id, &inventory)?;
+
+		let mut world = World::new();
+		world.insert_resource(PlaySession::Training);
+		world.insert_resource(root);
+		world.insert_resource(ActiveCharacter { id });
+		world
+			.run_system_once(load_active_player_loadout)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let loadout = world
+			.get_resource::<WorldPlayerLoadout>()
+			.ok_or_else(|| anyhow::anyhow!("training enter did not insert a loadout"))?;
+		assert_eq!(loadout.key, id.to_hex());
+		assert_eq!(loadout.inventory, inventory);
+		Ok(())
+	}
+
+	#[test]
+	fn training_route_writes_the_session_before_loading() -> anyhow::Result<()> {
+		let mut world = World::new();
+		world.init_resource::<Messages<HomeMenuChoice>>();
+		world.write_message(HomeMenuChoice::TrainingGround);
+		world.insert_resource(NextState::<GameFlow>::Unchanged);
+		world.insert_resource(GameMode::default());
+		world.insert_resource(PlaySession::None);
+		world
+			.run_system_once(route_home_choice)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert_eq!(*world.resource::<PlaySession>(), PlaySession::Training);
+		assert_eq!(world.resource::<GameMode>().label, "Training Ground");
+		assert!(matches!(
+			world.resource::<NextState<GameFlow>>(),
+			NextState::Pending(GameFlow::LoadingWorld)
+		));
+		Ok(())
 	}
 
 	#[test]
