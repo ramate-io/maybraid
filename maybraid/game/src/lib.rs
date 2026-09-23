@@ -180,7 +180,7 @@ fn read_player_loadout(
 ) -> Result<WorldPlayerLoadout, crozon_character_persist::PersistError> {
 	let model = crozon_character_model_user::load(save_root, id)?;
 	let inventory = crozon_inventory_user::load(save_root, id)?;
-	Ok(WorldPlayerLoadout::new(id.to_hex(), model.appearance, inventory))
+	Ok(WorldPlayerLoadout::new(id.to_hex(), model.appearance, inventory).with_name(model.name))
 }
 
 fn route_home_choice(
@@ -270,11 +270,14 @@ fn sync_world_loadout_from_editor(
 	let Some(editing) = editing else {
 		return;
 	};
-	commands.insert_resource(WorldPlayerLoadout::new(
-		editing.id.to_hex(),
-		menu.0.appearance(),
-		menu.0.inventory.clone().unwrap_or_default(),
-	));
+	commands.insert_resource(
+		WorldPlayerLoadout::new(
+			editing.id.to_hex(),
+			menu.0.appearance(),
+			menu.0.inventory.clone().unwrap_or_default(),
+		)
+		.with_name(menu.0.saved_name()),
+	);
 }
 
 fn sync_world_mob_hud(settings: Res<InGameSettings>, mut hud: ResMut<WorldMobHudEnabled>) {
@@ -431,6 +434,7 @@ mod tests {
 
 		let loadout = read_player_loadout(&root, id)?;
 		assert_eq!(loadout.key, id.to_hex());
+		assert_eq!(loadout.name, "Active");
 		assert_eq!(loadout.inventory, inventory);
 		assert_eq!(loadout.appearance.species_id(), model.appearance.species_id());
 		Ok(())

@@ -1,8 +1,11 @@
 //! Reusable combat feedback for player health, outgoing hits, and incoming damage.
 
+mod vitals;
+
 use bevy::prelude::*;
 use damage::{DamageApplied, Downed, HeadshotBand, Health};
 use player::{LocomotionCapsule, Npc, Player};
+use vitals::{spawn_player_vitals, sync_player_vitals, vitals_fonts};
 
 const BAR_WIDTH: f32 = 240.0;
 const BAR_HEIGHT: f32 = 18.0;
@@ -25,17 +28,25 @@ pub struct CombatHudPlugin {
 	pub health_bars: bool,
 	pub hit_markers: bool,
 	pub directional_damage: bool,
+	/// Bottom-left name + pip bar. Independent of the top YOU/NPC [`health_bars`].
+	pub player_vitals: bool,
 }
 
 impl Default for CombatHudPlugin {
 	fn default() -> Self {
-		Self { health_bars: true, hit_markers: true, directional_damage: true }
+		Self {
+			health_bars: true,
+			hit_markers: true,
+			directional_damage: true,
+			player_vitals: false,
+		}
 	}
 }
 
 impl Plugin for CombatHudPlugin {
 	fn build(&self, app: &mut App) {
-		if !self.health_bars && !self.hit_markers && !self.directional_damage {
+		if !self.health_bars && !self.hit_markers && !self.directional_damage && !self.player_vitals
+		{
 			return;
 		}
 		app.insert_resource(CombatHudConfig(*self))
@@ -46,6 +57,9 @@ impl Plugin for CombatHudPlugin {
 				(ensure_world_health_bars, sync_health_hud, sync_world_health_bars)
 					.in_set(CombatHudSystems::Health),
 			);
+		}
+		if self.player_vitals {
+			app.add_systems(Update, sync_player_vitals.in_set(CombatHudSystems::Health));
 		}
 		if self.hit_markers {
 			app.add_systems(Update, update_hit_markers)
@@ -131,7 +145,11 @@ struct LiveTick {
 #[derive(Resource, Default)]
 struct DamageTicks([Option<LiveTick>; INDICATOR_COUNT]);
 
-fn spawn_combat_hud(mut commands: Commands, config: Res<CombatHudConfig>) {
+fn spawn_combat_hud(
+	mut commands: Commands,
+	config: Res<CombatHudConfig>,
+	asset_server: Option<Res<AssetServer>>,
+) {
 	commands
 		.spawn((
 			Name::new("combat-hud"),
@@ -153,6 +171,9 @@ fn spawn_combat_hud(mut commands: Commands, config: Res<CombatHudConfig>) {
 			}
 			if config.0.directional_damage {
 				spawn_directional_damage_ring(root);
+			}
+			if config.0.player_vitals {
+				spawn_player_vitals(root, &vitals_fonts(asset_server.as_deref()));
 			}
 		});
 }
@@ -721,7 +742,12 @@ mod tests {
 	fn categories_default_to_enabled() {
 		assert_eq!(
 			CombatHudPlugin::default(),
-			CombatHudPlugin { health_bars: true, hit_markers: true, directional_damage: true }
+			CombatHudPlugin {
+				health_bars: true,
+				hit_markers: true,
+				directional_damage: true,
+				player_vitals: false
+			}
 		);
 	}
 
@@ -736,6 +762,53 @@ mod tests {
 		assert_eq!(world.query::<&CombatHudRoot>().iter(world).count(), 1);
 		assert_eq!(world.query::<&HudBarFill>().iter(world).count(), 2);
 		assert_eq!(world.query::<&DamageTick>().iter(world).count(), INDICATOR_COUNT);
+		assert_eq!(world.query::<&vitals::PlayerVitalsRoot>().iter(world).count(), 0);
+	}
+
+	#[test]
+	fn player_vitals_spawn_name_and_pips() {
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins).add_plugins(CombatHudPlugin {
+			health_bars: false,
+			hit_markers: false,
+			directional_damage: false,
+			player_vitals: true,
+		});
+		app.update();
+		let world = app.world_mut();
+		assert_eq!(world.query::<&vitals::PlayerVitalsRoot>().iter(world).count(), 1);
+		assert_eq!(
+			world.query::<&vitals::PlayerVitalsPip>().iter(world).count(),
+			vitals::VITALS_PIPS
+		);
+	}
+
+	#[test]
+	fn player_vitals_follow_the_named_player() {
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins).add_plugins(CombatHudPlugin {
+			health_bars: false,
+			hit_markers: false,
+			directional_damage: false,
+			player_vitals: true,
+		});
+		app.update();
+		app.world_mut()
+			.spawn((Player, Health { current: 40.0, max: 100.0 }, Name::new("Ada")));
+		app.update();
+		let world = app.world_mut();
+		let name = world
+			.query::<&Text>()
+			.iter(world)
+			.find(|text| text.0 == "Ada")
+			.expect("character name");
+		assert_eq!(name.0, "Ada");
+		let lit = world
+			.query::<(&vitals::PlayerVitalsPip, &BackgroundColor)>()
+			.iter(world)
+			.filter(|(_, color)| color.0 == vitals::vitals_fill_color(0.4))
+			.count();
+		assert_eq!(lit, 4);
 	}
 
 	#[test]

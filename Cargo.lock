@@ -2492,6 +2492,7 @@ version = "0.0.1"
 dependencies = [
  "bevy",
  "damage",
+ "menu-components",
  "player",
 ]
 
