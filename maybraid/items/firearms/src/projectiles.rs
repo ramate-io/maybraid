@@ -2,13 +2,18 @@
 //!
 //! Lasers are visuals parented to the barrel (not a [`::projectiles::Flight`]).
 //! They grow to the first bore hit and despawn when the trigger is released.
+//! Every shot, and a laser while it is on, leaves a muzzle flash on that bone.
 
 use ::projectiles::{
 	spawn_flight, tick_flights, BoltSpec, BulletSpec, ProjectileContact, ProjectileSource,
 	ProjectileVisualCache, ProjectilesPlugin,
 };
+use std::collections::HashMap;
+
 use avian3d::prelude::{SpatialQuery, SpatialQueryFilter};
 use bevy::ecs::query::Has;
+use bevy::light::NotShadowCaster;
+use bevy::mesh::ConeAnchor;
 use bevy::prelude::*;
 use damage::{DamageSystems, Hit, HitPayload};
 use firearms_components::{BoneMap, FirearmHostSystems, FirearmMembers, FirearmRoot, RigRoot};
@@ -48,7 +53,7 @@ pub struct LaserSpec {
 
 impl Default for LaserSpec {
 	fn default() -> Self {
-		Self { radius: 0.035, max_length: 22.0, max_time: 0.7, color: Color::srgb(1.0, 0.18, 0.22) }
+		Self { radius: 0.07, max_length: 22.0, max_time: 0.7, color: Color::srgb(1.0, 0.18, 0.22) }
 	}
 }
 
@@ -139,12 +144,14 @@ impl Plugin for FirearmWeaponsPlugin {
 			app.add_plugins(bevy_hanabi::HanabiPlugin);
 		}
 		app.init_resource::<WeaponsArmed>()
+			.init_resource::<MuzzleFlashCache>()
 			.add_message::<WeaponFired>()
 			.add_systems(Startup, setup_impact_effects)
 			.add_systems(
 				PostUpdate,
 				(
 					fire_weapons.in_set(FirearmWeaponSystems::Fire),
+					tick_muzzle_flashes.after(FirearmWeaponSystems::Fire),
 					tick_lasers.after(FirearmWeaponSystems::Fire),
 					tick_laser_hits
 						.in_set(DamageSystems::Collect)
@@ -190,6 +197,118 @@ fn glow_material(color: Color) -> StandardMaterial {
 		emissive: LinearRgba::rgb(glow.red * 14.0, glow.green * 14.0, glow.blue * 14.0),
 		unlit: true,
 		..default()
+	}
+}
+
+const MUZZLE_FLASH_LIFE: f32 = 0.07;
+const MUZZLE_FLASH_RADIUS: f32 = 0.22;
+const MUZZLE_FLASH_LENGTH: f32 = 0.55;
+
+/// Cone along barrel +Y. Base sits on the muzzle; the tip points down the bore.
+#[derive(Component)]
+struct MuzzleFlash {
+	age: f32,
+	life: f32,
+	/// Hold a smaller glow until this laser beam is gone. `None` is a one-shot.
+	sustain_laser: Option<Entity>,
+}
+
+#[derive(Resource, Default)]
+pub(crate) struct MuzzleFlashCache {
+	mesh: Option<Handle<Mesh>>,
+	materials: HashMap<[u32; 4], Handle<StandardMaterial>>,
+}
+
+impl MuzzleFlashCache {
+	fn mesh_and_material(
+		&mut self,
+		meshes: &mut Assets<Mesh>,
+		materials: &mut Assets<StandardMaterial>,
+		color: Color,
+	) -> (Handle<Mesh>, Handle<StandardMaterial>) {
+		let mesh = self.mesh.get_or_insert_with(|| meshes.add(muzzle_flash_mesh())).clone();
+		let material = self
+			.materials
+			.entry(color_key(color))
+			.or_insert_with(|| materials.add(flash_material(color)))
+			.clone();
+		(mesh, material)
+	}
+}
+
+fn muzzle_flash_mesh() -> Mesh {
+	Cone::new(1.0, 1.0).mesh().resolution(14).anchor(ConeAnchor::Base).build()
+}
+
+fn color_key(color: Color) -> [u32; 4] {
+	let color = color.to_linear();
+	[color.red.to_bits(), color.green.to_bits(), color.blue.to_bits(), color.alpha.to_bits()]
+}
+
+fn flash_material(color: Color) -> StandardMaterial {
+	let glow = color.to_linear();
+	StandardMaterial {
+		base_color: Color::srgb(1.0, 0.96, 0.88),
+		emissive: LinearRgba::rgb(glow.red * 36.0, glow.green * 36.0, glow.blue * 36.0),
+		unlit: true,
+		cull_mode: None,
+		..default()
+	}
+}
+
+/// `(translation, scale)` in barrel space. Scale fades out; a sustained laser holds a glow.
+fn flash_local(age: f32, life: f32, sustain: bool) -> (Vec3, Vec3) {
+	let t = if life > 1e-6 { (age / life).clamp(0.0, 1.0) } else { 1.0 };
+	let fade = if sustain { 1.0 - 0.45 * t } else { 1.0 - t };
+	let radius = MUZZLE_FLASH_RADIUS * fade;
+	let length = MUZZLE_FLASH_LENGTH * fade;
+	(Vec3::Y * BARREL_REST_LENGTH, Vec3::new(radius, length, radius))
+}
+
+fn spawn_muzzle_flash(
+	commands: &mut Commands,
+	meshes: &mut Assets<Mesh>,
+	materials: &mut Assets<StandardMaterial>,
+	cache: &mut MuzzleFlashCache,
+	barrel: Entity,
+	color: Color,
+	sustain_laser: Option<Entity>,
+) {
+	let (mesh, material) = cache.mesh_and_material(meshes, materials, color);
+	let (translation, scale) = flash_local(0.0, MUZZLE_FLASH_LIFE, sustain_laser.is_some());
+	commands.spawn((
+		Name::new("muzzle-flash"),
+		ChildOf(barrel),
+		Transform { translation, rotation: Quat::IDENTITY, scale },
+		Visibility::default(),
+		Mesh3d(mesh),
+		MeshMaterial3d(material),
+		NotShadowCaster,
+		MuzzleFlash { age: 0.0, life: MUZZLE_FLASH_LIFE, sustain_laser },
+	));
+}
+
+fn tick_muzzle_flashes(
+	time: Res<Time>,
+	mut commands: Commands,
+	lasers: Query<(), With<LaserBeam>>,
+	mut flashes: Query<(Entity, &mut MuzzleFlash, &mut Transform)>,
+) {
+	let dt = time.delta_secs();
+	for (entity, mut flash, mut transform) in &mut flashes {
+		flash.age += dt;
+		let held = flash.sustain_laser.is_some_and(|laser| lasers.get(laser).is_ok());
+		if flash.sustain_laser.is_some() && !held {
+			commands.entity(entity).try_despawn();
+			continue;
+		}
+		if flash.sustain_laser.is_none() && flash.age >= flash.life {
+			commands.entity(entity).try_despawn();
+			continue;
+		}
+		let (translation, scale) = flash_local(flash.age, flash.life, held);
+		transform.translation = translation;
+		transform.scale = scale;
 	}
 }
 
@@ -257,7 +376,7 @@ fn laser_bore_hit(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn fire_weapons(
+pub(crate) fn fire_weapons(
 	mut commands: Commands,
 	time: Res<Time>,
 	armed: Res<WeaponsArmed>,
@@ -268,6 +387,7 @@ pub fn fire_weapons(
 	maps: Query<&BoneMap, With<RigRoot>>,
 	globals: Query<&GlobalTransform>,
 	lasers: Query<&LaserBeam>,
+	mut flashes: ResMut<MuzzleFlashCache>,
 	mut fired: MessageWriter<WeaponFired>,
 ) {
 	if !armed.0 {
@@ -293,14 +413,24 @@ pub fn fire_weapons(
 					continue;
 				}
 				if live.is_none() {
-					weapon.laser = Some(spawn_laser(
+					let laser = spawn_laser(
 						&mut commands,
 						&mut meshes,
 						&mut materials,
 						barrel,
 						spec,
 						source.copied(),
-					));
+					);
+					spawn_muzzle_flash(
+						&mut commands,
+						&mut meshes,
+						&mut materials,
+						&mut flashes,
+						barrel,
+						spec.color,
+						Some(laser),
+					);
+					weapon.laser = Some(laser);
 				} else {
 					weapon.laser = live;
 				}
@@ -315,7 +445,9 @@ pub fn fire_weapons(
 					&mut meshes,
 					&mut materials,
 					&mut projectile_visuals,
+					&mut flashes,
 					&mut weapon,
+					barrel,
 					global,
 					spec,
 					0.0,
@@ -339,7 +471,9 @@ pub fn fire_weapons(
 					&mut meshes,
 					&mut materials,
 					&mut projectile_visuals,
+					&mut flashes,
 					&mut weapon,
+					barrel,
 					global,
 					spec,
 					1.0,
@@ -363,7 +497,9 @@ fn try_fire_ballistic(
 	meshes: &mut Assets<Mesh>,
 	materials: &mut Assets<StandardMaterial>,
 	projectile_visuals: &mut ProjectileVisualCache,
+	flashes: &mut MuzzleFlashCache,
 	weapon: &mut Weapon,
+	barrel: Entity,
 	global: &GlobalTransform,
 	spec: impl IntoBallistic,
 	gravity: f32,
@@ -381,6 +517,7 @@ fn try_fire_ballistic(
 	weapon.cooldown = weapon.interval;
 	let (length, radius, speed, max_range, penetration, max_age, color) = spec.ballistic();
 	let (muzzle, dir) = muzzle_world(global);
+	spawn_muzzle_flash(commands, meshes, materials, flashes, barrel, color, None);
 	let projectile = spawn_flight(
 		commands,
 		meshes,
@@ -595,6 +732,17 @@ mod tests {
 			LaserSpec { max_length: 10.0, max_time: 1.0, radius: 0.1, ..LaserSpec::default() };
 		let (_t, scale) = laser_local(spec, 1.0, 4.0);
 		assert!((scale.y - 4.0).abs() < 1e-4);
+	}
+
+	#[test]
+	fn muzzle_flash_sits_on_the_barrel_tail() {
+		let (origin, scale) = flash_local(0.0, MUZZLE_FLASH_LIFE, false);
+		assert!((origin.y - BARREL_REST_LENGTH).abs() < 1e-4, "{}", origin.y);
+		assert!(scale.y > scale.x, "flash should reach down the bore");
+		let (_later, faded) = flash_local(MUZZLE_FLASH_LIFE, MUZZLE_FLASH_LIFE, false);
+		assert!(faded.x < 1e-4, "one-shot flash ends at zero");
+		let (_held, glow) = flash_local(MUZZLE_FLASH_LIFE * 4.0, MUZZLE_FLASH_LIFE, true);
+		assert!(glow.x > MUZZLE_FLASH_RADIUS * 0.5, "laser keeps a muzzle glow");
 	}
 
 	#[test]
