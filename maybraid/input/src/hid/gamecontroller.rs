@@ -140,9 +140,9 @@ fn sync_controller(
 		let name = controller_name(controller);
 		// SAFETY: live controller; `haptics` is nil when the OS has no rumble path.
 		let has_haptics = unsafe { controller.haptics() }.is_some();
-		info!("pad_rumble: connected name={name} entity={entity:?} haptics={has_haptics}");
+		debug!("pad_rumble: connected name={name} entity={entity:?} haptics={has_haptics}");
 		if name == "Controller" {
-			info!(
+			debug!(
 				"pad_rumble: generic 'Controller' name is usually USB Xbox; Apple rumble often only works over Bluetooth"
 			);
 		}
@@ -342,7 +342,7 @@ fn start_engine(controller: &GCController) -> Option<Retained<CHHapticEngine>> {
 			return None;
 		}
 	}
-	info!("pad_rumble: {name} haptic engine started");
+	debug!("pad_rumble: {name} haptic engine started");
 	Some(engine)
 }
 
@@ -354,7 +354,7 @@ fn create_engine(haptics: &GCDeviceHaptics) -> Option<Retained<CHHapticEngine>> 
 		unsafe { [("Handles", GCHapticsLocalityHandles), ("Default", GCHapticsLocalityDefault)] };
 	for (label, locality) in localities {
 		if let Some(engine) = create_engine_at(haptics, locality) {
-			info!("pad_rumble: engine locality={label}");
+			debug!("pad_rumble: engine locality={label}");
 			return Some(engine);
 		}
 		warn!("pad_rumble: createEngineWithLocality:{label} failed");

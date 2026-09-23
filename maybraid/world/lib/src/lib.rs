@@ -59,6 +59,7 @@ use chico_vegetation_on_terrain_playground::{
 	CharacterCameraFollowEnabled, CharacterLocomotion, CharacterSpecies, PadMovementEnabled,
 	PlayerControlSystems, PlaygroundConfig as VegetationPlaygroundConfig, PlaygroundDiag,
 	PlaygroundMode, PlaygroundTimingPlugin, RequestSetCharacter, VegetationOnTerrainPlugin,
+	VegetationPlayerMotor,
 };
 use combat_hud::CombatHudPlugin;
 use crozon_character_ragdoll::{CharacterRagdollPlugin, CharacterRagdollTargets};
@@ -72,7 +73,9 @@ use maybraid_character_controller::{CharacterControlSystems, CharacterController
 use maybraid_input::{VirtualPadConfig, VirtualPadPlugin};
 use maybraid_skill_map::{SkillMapPlugin, SkillMapSystems};
 use maybraid_sky::SkyDomePlugin;
-use player::{register_motor_traction_physics, PlayerPresentationPlugin};
+use player::{
+	register_motor_traction_physics, PlayerPlugin, PlayerPresentationPlugin, PlayerSystems,
+};
 use player_camera::{PlayerCameraPlugin, PlayerCameraSystems};
 use richmond_building_physics::BuildingWalkColliderPlugin;
 use richmond_developments_on_terrain_playground::{
@@ -110,7 +113,7 @@ const WORLD_TERRAIN_PITCH_GIZMOS: DrawTerrainPitchProbes = DrawTerrainPitchProbe
 pub struct WorldPlugin {
 	/// `/` console, debug gizmos, and FPS HUD.
 	pub debug_chrome: bool,
-	/// Throttled `[veg.timing]` FPS log ([`PlaygroundTimingPlugin`]).
+	/// Throttled `[timing]` FPS log ([`PlaygroundTimingPlugin`]).
 	pub fps_diag: bool,
 	/// Upper-left virtual-pad / command-intent dump.
 	pub input_debug_enabled: bool,
@@ -183,6 +186,7 @@ impl Plugin for WorldPlugin {
 			.add_plugins(WorldStashPlugin)
 			.add_plugins(PlayerPositionPlugin)
 			.insert_resource(PadMovementEnabled(false))
+			.insert_resource(VegetationPlayerMotor(false))
 			.insert_resource(CharacterCameraFollowEnabled(false))
 			.init_resource::<WorldGameplayEnabled>()
 			.init_resource::<WorldSurfaceReady>()
@@ -213,7 +217,10 @@ impl Plugin for WorldPlugin {
 		app.add_systems(Startup, vsync::apply_startup_vsync)
 			.add_systems(Update, (vsync::toggle_vsync, commands::apply_sky_commands))
 			.add_systems(PostStartup, spawn_default_braidman)
-			.add_systems(PreUpdate, control::stamp_vegetation_motor_traction)
+			.add_systems(
+				PreUpdate,
+				(control::stamp_vegetation_motor_traction, control::stamp_world_player_motor),
+			)
 			.add_systems(
 				Update,
 				(
@@ -222,6 +229,8 @@ impl Plugin for WorldPlugin {
 					control::sync_skill_map_enabled.before(SkillMapSystems::Spawn),
 					control::apply_intents_to_movement
 						.after(CharacterControlSystems)
+						.after(PlayerSystems::Intent)
+						.before(PlayerSystems::Body)
 						.before(PlayerControlSystems),
 				),
 			);
@@ -233,6 +242,12 @@ impl Plugin for WorldPlugin {
 				.after(CharacterMotionSystems::Anim)
 				.before(CharacterMotionSystems::Elevation),
 		);
+		// After [`PlayerCameraPlugin`]: that plugin adds Camera Body → Locomotion
+		// only when [`PlayerPlugin`] is already present, which cycles with
+		// Locomotion → Anim → Camera Body.
+		if !app.is_plugin_added::<PlayerPlugin>() {
+			app.add_plugins(PlayerPlugin);
+		}
 		app.add_systems(
 			Update,
 			(
@@ -320,5 +335,23 @@ mod tests {
 	#[test]
 	fn world_starts_with_skill_maps_gated() {
 		assert!(!maybraid_skill_map::SkillMapEnabled(false).0);
+	}
+
+	#[test]
+	fn late_player_locomotion_does_not_cycle_camera_body_after_anim() {
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins).configure_sets(
+			Update,
+			(
+				PlayerSystems::Locomotion
+					.after(PlayerSystems::Body)
+					.before(CharacterMotionSystems::Anim),
+				CharacterMotionSystems::Elevation.after(CharacterMotionSystems::Anim),
+				PlayerCameraSystems::Body
+					.after(CharacterMotionSystems::Anim)
+					.before(CharacterMotionSystems::Elevation),
+			),
+		);
+		app.update();
 	}
 }

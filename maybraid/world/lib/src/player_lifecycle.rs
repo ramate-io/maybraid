@@ -25,6 +25,7 @@ use richmond_development_models::DevelopmentEntryStore;
 use spotting_intelligence::SpotSubject;
 use threat_intelligence::{Affiliations, ThreatSubject};
 
+use crate::control::strip_world_player_motor;
 use crate::weapon::WorldPlayerAppearanceRequested;
 use crate::{WorldGameplayEnabled, WorldPlayerLoadout};
 
@@ -180,6 +181,7 @@ fn queue_downed_world_player(
 		if let Some(inventory) = inventory {
 			commands.entity(inventory.bag).try_despawn();
 		}
+		strip_world_player_motor(&mut commands, player);
 		commands.entity(player).remove::<(
 			VegetationPlayer,
 			MaybraidPlayer,

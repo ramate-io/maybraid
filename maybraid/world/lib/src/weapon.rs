@@ -76,9 +76,9 @@ type WorldPlayerVisual<'a> = (Entity, &'a ChildOf, Has<MaybraidPlayerVisual>);
 
 /// Give the world player its selected loadout once the Crozon visual exists.
 ///
-/// [`firearm_user`] fire/pose query [`MaybraidPlayer`] / [`PlayerLook`]. Those
-/// markers are not on the vegetation capsule, so stamp them here without the
-/// player-crate locomotion controller (world already drives that capsule).
+/// [`firearm_user`] fire/pose query [`MaybraidPlayer`] / [`PlayerLook`]. The
+/// player-crate locomotion controller is stamped in [`crate::control`] so
+/// column buoyancy runs; this only arms kit / identity once the visual exists.
 fn arm_world_player(
 	mut commands: Commands,
 	mode: Res<PlaygroundMode>,

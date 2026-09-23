@@ -83,7 +83,7 @@ pub enum Sky {
 pub enum Stats {
 	/// Mesh triangle counts plus foliage / stick / structural LOD probe hosts.
 	Mesh,
-	/// Toggle the `[veg.timing]` FPS log (and HUD when debug chrome is on).
+	/// Toggle the `[timing]` FPS log (and HUD when debug chrome is on).
 	Fps,
 	/// Toggle vsync (`AutoVsync` ↔ `Immediate`). Also `F8` / `MAYBRAID_VSYNC=off`.
 	Vsync,

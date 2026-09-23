@@ -11,10 +11,14 @@ use player::{CharacterController, Jumping};
 
 pub(crate) fn sync_suspend_terrain_pitch(
 	mut commands: Commands,
-	players: Query<(Entity, Has<VegetationJumping>), With<Player>>,
+	players: Query<(Entity, Has<VegetationJumping>, Has<Jumping>), With<Player>>,
 	npcs: Query<(Entity, Has<Jumping>), (With<CharacterController>, Without<Player>)>,
 ) {
-	for (entity, jumping) in players.iter().chain(npcs.iter()) {
+	for (entity, jumping) in players
+		.iter()
+		.map(|(entity, vegetation, player)| (entity, vegetation || player))
+		.chain(npcs.iter())
+	{
 		if jumping {
 			commands.entity(entity).insert(SuspendTerrainPitch);
 		} else {
