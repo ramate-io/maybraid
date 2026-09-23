@@ -68,6 +68,31 @@ pub const LEG_KIT_TO_UNIT: Placement = Placement {
 	scale: Vec3::new(2.5, 1.0, 2.5),
 };
 
+/// Fridge / wardrobe hinge door: authored \(X \in [0,1]\), thin \(Y\), \(Z \in [0,1]\).
+///
+/// After remap the hinge sits at the origin, the panel goes \(+X\), and depth
+/// is thin about \(Z=0\). Pin the hinge on the unit-cube floor / front
+/// (\(y=-0.5\), \(z=-0.5\)); \(X[0,1]\) fills half the slot width.
+pub const HINGE_KIT_TO_UNIT: Placement = Placement {
+	translation: Vec3::new(0.0, -0.5, -0.5),
+	yaw: 0.0,
+	pitch: 0.0,
+	roll: 0.0,
+	scale: Vec3::new(0.5, 1.0, 1.0),
+};
+
+/// Range oven door: authored \(X \in [-1,1]\), thin \(Y\), \(Z \in [0,1]\) up.
+///
+/// After remap this is a standing front panel. Pin the bottom-front hinge on
+/// the unit-cube front; keep authored depth (do not fatten \(Z\) to the slot).
+pub const RANGE_DOOR_KIT_TO_UNIT: Placement = Placement {
+	translation: Vec3::new(0.0, -0.5, -0.5),
+	yaw: 0.0,
+	pitch: 0.0,
+	roll: 0.0,
+	scale: Vec3::new(0.5, 1.0, 1.0),
+};
+
 /// Floor-origin slab in the unit slot cube: \(y\) from the floor (\(y=-0.5\))
 /// as height fractions; \(x,z\) scale in \([0,1]\) of the slot plan.
 ///

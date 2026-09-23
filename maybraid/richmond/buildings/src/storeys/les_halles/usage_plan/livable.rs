@@ -156,6 +156,17 @@ impl BuildingComponents for LesHallesLivableUsage {
 		out
 	}
 
+	fn furniture_usage_nodes_for_level(
+		&self,
+		level: LodSceneLevel,
+	) -> Layers<richmond_building_components::FurnitureUsageNode> {
+		let mut out = Layers::new();
+		for area in &self.areas {
+			out.extend(area.furniture_usage_nodes_for_level(level));
+		}
+		out
+	}
+
 	fn label_nodes_for_level(&self, level: LodSceneLevel) -> Layers<LabelNode> {
 		let mut out = Layers::new();
 		for area in &self.areas {

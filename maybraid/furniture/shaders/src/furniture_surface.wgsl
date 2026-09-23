@@ -232,21 +232,18 @@ fn lava_look(p: vec3<f32>) -> Look {
 
 fn cosmos_look(p: vec3<f32>) -> Look {
     let void_c = palette(0u);
-    let nebula = palette_or(1u, vec3<f32>(0.22, 0.06, 0.40));
-    let bloom = palette_or(2u, vec3<f32>(0.82, 0.48, 1.0));
+    let nebula = palette_or(1u, vec3<f32>(0.22, 0.06, 0.38));
+    let bloom = palette_or(2u, vec3<f32>(0.42, 0.16, 0.62));
     let t = globals.time;
     let n = fbm(p * 0.55 + vec3<f32>(t * 0.03, -t * 0.02, 0.0));
     let n2 = fbm(p * 1.25 + vec3<f32>(-t * 0.04, t * 0.03, 2.1));
     var tint = mix(void_c, nebula, n);
-    tint = mix(tint, bloom, smoothstep(0.55, 0.9, n2) * 0.48);
+    tint = mix(tint, bloom, smoothstep(0.55, 0.9, n2) * 0.42);
     let band = 0.5 + 0.5 * sin(p.x * 2.2 + p.y * 1.4 + t * 0.4 + n * 2.0);
-    tint += vec3<f32>(0.55, 0.28, 0.78) * smoothstep(0.75, 1.0, band) * 0.16;
-    let glint = pow(saturate(n2), 12.0) * (0.5 + 0.5 * sin(t * 1.55 + n * 8.0));
-    tint += vec3<f32>(0.95, 0.84, 1.0) * glint * 0.75;
-    let hy = fract(p.y * 1.65 + 0.12);
-    let strap = 1.0 - smoothstep(0.07, 0.13, abs(hy - 0.28));
-    tint = mix(tint, vec3<f32>(0.96, 0.74, 0.28), strap * 0.85);
-    return Look(tint, mix(0.58, 0.20, strap), strap * 0.72, mix(0.18, 0.46, strap));
+    tint += bloom * smoothstep(0.75, 1.0, band) * 0.12;
+    let glint = pow(saturate(n2), 14.0) * (0.5 + 0.5 * sin(t * 1.4 + n * 6.0));
+    tint += vec3<f32>(0.85, 0.78, 0.95) * glint * 0.32;
+    return Look(tint, 0.52, 0.04, 0.20);
 }
 
 fn scales_look(p: vec3<f32>) -> Look {

@@ -34,7 +34,8 @@ impl PreviewConfig {
 	pub fn status_label(&self) -> String {
 		match self.subject {
 			PreviewSubject::None => {
-				"preview: (none — `/show bed|chair|chest|counter|gallery`)".into()
+				"preview: (none — `/show bed|chair|chest|counter|food-display|fruit|range|gallery`)"
+					.into()
 			}
 			PreviewSubject::Unit { geometry, seed } => {
 				format!("preview: {geometry:?} seed={seed}")

@@ -413,7 +413,7 @@ fn play_pulse(
 		return;
 	}
 	let until = now + duration.as_secs_f32().max(0.08);
-	info!(
+	debug!(
 		"pad_rumble: {name} play ok duration={duration:?} intensity={haptic_intensity:.2} sharpness={sharpness:.2} live_until={until:.3}"
 	);
 	state.pulses.push(LivePulse { player: MainThreadRc(player), until });

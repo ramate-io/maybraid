@@ -66,6 +66,13 @@ impl BuildingComponents for LesHallesArcadeStorey {
 		self.usage.furniture_nodes_for_level(level)
 	}
 
+	fn furniture_usage_nodes_for_level(
+		&self,
+		level: LodSceneLevel,
+	) -> Layers<richmond_building_components::FurnitureUsageNode> {
+		self.usage.furniture_usage_nodes_for_level(level)
+	}
+
 	fn label_nodes_for_level(&self, level: LodSceneLevel) -> Layers<LabelNode> {
 		self.usage.label_nodes_for_level(level)
 	}

@@ -147,6 +147,17 @@ impl BuildingComponents for LivableApartment {
 		out
 	}
 
+	fn furniture_usage_nodes_for_level(
+		&self,
+		level: LodSceneLevel,
+	) -> Layers<richmond_building_components::FurnitureUsageNode> {
+		let mut out = Layers::new();
+		for room in &self.rooms {
+			out.extend(room.furniture_usage_nodes_for_level(level));
+		}
+		out
+	}
+
 	fn structural_lod(&self) -> Option<BuildingStructuralLodProbe> {
 		if self.cells.is_empty() {
 			return None;

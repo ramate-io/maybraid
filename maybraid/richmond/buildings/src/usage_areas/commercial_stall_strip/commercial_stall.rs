@@ -140,6 +140,13 @@ impl BuildingComponents for CommercialStall {
 	fn furniture_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FurnitureNode> {
 		self.plan.interior.furniture_nodes_for_level(level)
 	}
+
+	fn furniture_usage_nodes_for_level(
+		&self,
+		level: LodSceneLevel,
+	) -> Layers<richmond_building_components::FurnitureUsageNode> {
+		self.plan.interior.furniture_usage_nodes_for_level(level)
+	}
 }
 
 fn shell_walls(confines: &Confines) -> Vec<ClippedRectangularStrip> {

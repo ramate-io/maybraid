@@ -77,13 +77,13 @@ impl LesHallesUsagePlan for LesHallesCommercialUsage {
 						occasional_chest_in_confines(&stall.confines, noise, salt, 0.55)
 					}
 					CommercialStallInterior::Bites(bites) => occasional_chest_in_confines(
-						&confines_from_label(&bites.bites_kitchen, stall.confines.roll),
+						&confines_from_label(&bites.bites_kitchen.label, stall.confines.roll),
 						noise,
 						salt,
 						0.55,
 					),
 					CommercialStallInterior::BitesSitdown(bites) => occasional_chest_in_confines(
-						&confines_from_label(&bites.bites_kitchen, stall.confines.roll),
+						&confines_from_label(&bites.bites_kitchen.label, stall.confines.roll),
 						noise,
 						salt,
 						0.55,
@@ -123,6 +123,17 @@ impl BuildingComponents for LesHallesCommercialUsage {
 		out.extend(Layers::from_free(
 			self.residual_chests.iter().map(|fill| fill.furniture.clone()).collect(),
 		));
+		out
+	}
+
+	fn furniture_usage_nodes_for_level(
+		&self,
+		level: LodSceneLevel,
+	) -> Layers<richmond_building_components::FurnitureUsageNode> {
+		let mut out = Layers::new();
+		for strip in &self.stall_strips {
+			out.extend(strip.furniture_usage_nodes_for_level(level));
+		}
 		out
 	}
 

@@ -57,7 +57,7 @@ fn upsert(
 		return;
 	}
 	if let Err(error) = registry.upsert(entity, poi, position, local, global) {
-		warn!(
+		debug!(
 			"failed to index POI {entity} id={:?} at {position}: {error}",
 			poi.id
 		);
