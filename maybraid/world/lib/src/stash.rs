@@ -7,7 +7,8 @@
 //! pieces so each is claimable on its own. Raiders and Guards leave about one
 //! third, Brawlers about one twelfth, and other families drop nothing.
 //! Unmarked NPCs still drop the full bag. Player drops still explode
-//! everything. Authored chests stay a single pile.
+//! everything. A closed loot crate swings its lid open on X and ejects one
+//! ephemeral stash ([`crate::crate_loot`]); the crate restocks on its own clock.
 //!
 //! Loot TTL is [`StashPolicy::loot_secs`] (default 60 s), independent of
 //! mob corpse lifetime (4 s). Persistent chests omit [`DespawnAfter`].
@@ -199,23 +200,25 @@ pub struct WorldStashPlugin;
 impl Plugin for WorldStashPlugin {
 	fn build(&self, app: &mut App) {
 		add_character_components_host::<StashClothingPreview>(app);
-		app.init_resource::<WorldStashSettings>().add_systems(
-			Update,
-			(
-				claim_nearby_stashes
+		app.init_resource::<WorldStashSettings>()
+			.init_resource::<crate::crate_loot::CrateLoot>()
+			.add_systems(
+				Update,
+				(
+					(
+						crate::crate_loot::stamp_closed_lids,
+						claim_nearby_stashes,
+						crate::crate_loot::tick_lid_swings,
+						crate::crate_loot::sync_crate_lid_poses,
+					)
+						.chain(),
+					drop_player_inventory,
+					sync_stash_interact_prompt,
+					sync_stash_claim_halo,
+				)
 					.after(CharacterControlSystems)
 					.run_if(resource_equals(WorldGameplayEnabled(true))),
-				drop_player_inventory
-					.after(CharacterControlSystems)
-					.run_if(resource_equals(WorldGameplayEnabled(true))),
-				sync_stash_interact_prompt
-					.after(CharacterControlSystems)
-					.run_if(resource_equals(WorldGameplayEnabled(true))),
-				sync_stash_claim_halo
-					.after(CharacterControlSystems)
-					.run_if(resource_equals(WorldGameplayEnabled(true))),
-			),
-		);
+			);
 		app.add_systems(PostUpdate, detach_downed_npc_loot.after(DamageSystems::Down));
 	}
 }
@@ -576,14 +579,23 @@ fn xz_distance(a: Vec3, b: Vec3) -> f32 {
 	a.xz().distance(b.xz())
 }
 
-fn claim_nearby_stashes(
+pub(crate) fn claim_nearby_stashes(
 	mut intents: MessageReader<CharacterIntent>,
 	mut commands: Commands,
 	mut loadout: Option<ResMut<WorldPlayerLoadout>>,
+	time: Option<Res<Time>>,
+	mut crates: Option<ResMut<crate::crate_loot::CrateLoot>>,
 	players: Query<(Entity, &Transform, &InventoryUser), With<VegetationPlayer>>,
 	stashes: Query<(Entity, &Transform, &InventoryUser, &StashPolicy), With<WorldStash>>,
 	displayed: Query<(Entity, &ChildOf), With<StashDisplayedItem>>,
 	mut bags: Query<&mut Inventory>,
+	lids: Query<
+		(Entity, &furniture_assemblies::FurnitureKitPart, &GlobalTransform),
+		(With<crate::crate_loot::ClosedLid>, Without<crate::crate_loot::LidSwing>),
+	>,
+	parts: Query<(Entity, &furniture_assemblies::FurnitureKitPart, &GlobalTransform)>,
+	child_of: Query<&ChildOf>,
+	hosts: Query<&furniture_assemblies::PresentedFurnitureCellId>,
 ) {
 	if !intents.read().any(|intent| matches!(intent, CharacterIntent::StartInteraction)) {
 		return;
@@ -592,6 +604,18 @@ fn claim_nearby_stashes(
 		let origin = player_origin(player_transform);
 		let Some((stash, stash_bag, policy, _)) = nearest_stash_in_radius(origin, stashes.iter())
 		else {
+			if let (Some(time), Some(crates)) = (time.as_deref(), crates.as_deref_mut()) {
+				crate::crate_loot::open_nearest_crate(
+					origin,
+					time.elapsed_secs(),
+					&mut commands,
+					crates,
+					&lids,
+					&parts,
+					&child_of,
+					&hosts,
+				);
+			}
 			continue;
 		};
 		let Ok(mut source) = bags.get_mut(stash_bag) else {

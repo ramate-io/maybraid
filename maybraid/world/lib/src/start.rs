@@ -103,11 +103,9 @@ mod tests {
 
 	#[test]
 	fn take_start_at_space_form_accepts_negatives() {
-		let (start, rest) = take_start_at_from_args([
-			OsString::from("--start-at"),
-			OsString::from("-1500,-600"),
-		])
-		.unwrap();
+		let (start, rest) =
+			take_start_at_from_args([OsString::from("--start-at"), OsString::from("-1500,-600")])
+				.unwrap();
 		assert_eq!(start, Some(Vec2::new(-1500.0, -600.0)));
 		assert!(rest.is_empty());
 	}
