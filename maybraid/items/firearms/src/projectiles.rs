@@ -2,8 +2,9 @@
 //!
 //! Lasers are visuals parented to the barrel (not a [`::projectiles::Flight`]).
 //! They grow to the first bore hit and despawn when the trigger is released.
-//! Every shot leaves a white flame cone on that bone, with a small ember burst at the cone's tip.
-//! A laser keeps a smaller cone and a thin ember jet while the beam is on.
+//! Every shot shows a white flame cone on that bone, with a small ember burst at the cone's tip.
+//! The flash stays parented to the barrel and is hidden between shots. A laser keeps a smaller
+//! cone and a thin ember jet while the beam is on.
 
 use ::projectiles::{
 	spawn_flight, tick_flights, BoltSpec, BulletSpec, ProjectileContact, ProjectileSource,
@@ -11,16 +12,17 @@ use ::projectiles::{
 };
 
 use avian3d::prelude::{SpatialQuery, SpatialQueryFilter};
+use bevy::camera::visibility::VisibilitySystems;
 use bevy::ecs::query::Has;
 use bevy::light::NotShadowCaster;
 use bevy::mesh::ConeAnchor;
 use bevy::prelude::*;
 use bevy_hanabi::prelude::{
 	Attribute, ColorBlendMask, ColorBlendMode, ColorOverLifetimeModifier, EffectAsset,
-	EffectMaterial, ExprWriter, ImageSampleMapping, LinearDragModifier, OrientMode, OrientModifier,
-	ParticleEffect, ParticleTextureModifier, SetAttributeModifier, SetPositionSphereModifier,
-	SetVelocitySphereModifier, ShapeDimension, SimulationSpace, SizeOverLifetimeModifier,
-	SpawnerSettings,
+	EffectMaterial, EffectSpawner, ExprWriter, ImageSampleMapping, LinearDragModifier, OrientMode,
+	OrientModifier, ParticleEffect, ParticleTextureModifier, SetAttributeModifier,
+	SetPositionSphereModifier, SetVelocitySphereModifier, ShapeDimension, SimulationSpace,
+	SizeOverLifetimeModifier, SpawnerSettings,
 };
 use bevy_hanabi::Gradient;
 use damage::{DamageSystems, Hit, HitPayload};
@@ -167,9 +169,11 @@ impl Plugin for FirearmWeaponsPlugin {
 			.add_systems(
 				PostUpdate,
 				(
-					fire_weapons.in_set(FirearmWeaponSystems::Fire),
-					// Hanabi inserts `EffectSpawner` in this set. Despawn after that insert
-					// is applied, or the insert lands on an entity we already deleted.
+					fire_weapons
+						.in_set(FirearmWeaponSystems::Fire)
+						.before(VisibilitySystems::VisibilityPropagate),
+					// Show the flash before visibility propagates, then let Hanabi tick the
+					// reset spawner before this system considers hiding it again.
 					tick_muzzle_flashes
 						.after(FirearmWeaponSystems::Fire)
 						.after(bevy_hanabi::EffectSystems::TickSpawners),
@@ -235,17 +239,25 @@ const EMBER_SPEED: (f32, f32) = (7.0, 14.0);
 const EMBER_LIFE: (f32, f32) = (0.10, 0.20);
 const EMBER_DRAG: f32 = 2.0;
 
-/// Cone plus embers. A laser holds both until the beam is gone.
+/// Cone plus embers, kept on the barrel and shown only while a shot is playing.
 #[derive(Component)]
-struct MuzzleFlash {
+pub(crate) struct MuzzleFlash {
 	age: f32,
 	life: f32,
 	sustain_laser: Option<Entity>,
 }
 
+/// The flash entity parented to a barrel. One per gun, for the life of that bone.
+#[derive(Component)]
+pub(crate) struct MuzzleFlashMount(Entity);
+
 /// The fading cone. Kept off the flash root so ember sprites are not scaled with it.
 #[derive(Component)]
-struct MuzzleFlashCone;
+pub(crate) struct MuzzleFlashCone;
+
+/// The ember effect. Marker so a retrigger can reset its spawner without scaling it.
+#[derive(Component)]
+pub(crate) struct MuzzleFlashEmbers;
 
 /// Shared cone mesh, the white-flame material, and the small ember effects.
 #[derive(Resource)]
@@ -294,10 +306,12 @@ enum FlameKind {
 }
 
 fn flame_effect(kind: FlameKind) -> EffectAsset {
+	// The burst effect is reused. Capacity holds two plumes so a second shot can
+	// overlap particles that have not died yet.
 	let (name, capacity, spawner, spawn_radius, speed, life, size, drag) = match kind {
 		FlameKind::Burst => (
 			"muzzle-burst",
-			16_u32,
+			32_u32,
 			SpawnerSettings::once(12.0.into()),
 			0.06,
 			EMBER_SPEED,
@@ -380,10 +394,10 @@ fn ember_translation() -> Vec3 {
 
 fn spawn_muzzle_flash(
 	commands: &mut Commands,
-	effects: &mut MuzzleFlashEffects,
+	effects: &MuzzleFlashEffects,
 	barrel: Entity,
 	sustain_laser: Option<Entity>,
-) {
+) -> Entity {
 	let asset = if sustain_laser.is_some() { effects.jet.clone() } else { effects.burst.clone() };
 	let puff = effects.puff.clone();
 	let mesh = effects.cone.clone();
@@ -404,8 +418,6 @@ fn spawn_muzzle_flash(
 		Transform::from_scale(cone_scale(0.0, sustain)),
 		Visibility::Inherited,
 		Mesh3d(mesh),
-		// Resolved at spawn. A `MaterialRefRoot` would be fulfilled a frame later and
-		// can insert onto this cone after the flash has already been despawned.
 		MeshMaterial3d(material),
 		NotShadowCaster,
 		MuzzleFlashCone,
@@ -417,26 +429,93 @@ fn spawn_muzzle_flash(
 		Visibility::Inherited,
 		ParticleEffect::new(asset),
 		EffectMaterial { images: vec![puff] },
+		MuzzleFlashEmbers,
 	));
+	commands.entity(barrel).insert(MuzzleFlashMount(flash));
+	flash
+}
+
+fn ignite_muzzle_flash(
+	commands: &mut Commands,
+	effects: &MuzzleFlashEffects,
+	mounts: &Query<&MuzzleFlashMount>,
+	flashes: &mut Query<(&mut MuzzleFlash, &mut Visibility, &Children)>,
+	cones: &mut Query<&mut Transform, With<MuzzleFlashCone>>,
+	spawners: &mut Query<&mut EffectSpawner, With<MuzzleFlashEmbers>>,
+	barrel: Entity,
+	sustain_laser: Option<Entity>,
+) {
+	if let Ok(mount) = mounts.get(barrel) {
+		if show_muzzle_flash(mount.0, sustain_laser, flashes, cones, spawners) {
+			return;
+		}
+	}
+	spawn_muzzle_flash(commands, effects, barrel, sustain_laser);
+}
+
+fn show_muzzle_flash(
+	flash: Entity,
+	sustain_laser: Option<Entity>,
+	flashes: &mut Query<(&mut MuzzleFlash, &mut Visibility, &Children)>,
+	cones: &mut Query<&mut Transform, With<MuzzleFlashCone>>,
+	spawners: &mut Query<&mut EffectSpawner, With<MuzzleFlashEmbers>>,
+) -> bool {
+	let Ok((mut flash_state, mut visibility, children)) = flashes.get_mut(flash) else {
+		return false;
+	};
+	*visibility = Visibility::Visible;
+	flash_state.age = 0.0;
+	flash_state.sustain_laser = sustain_laser;
+	let sustain = sustain_laser.is_some();
+	for child in children.iter() {
+		if let Ok(mut transform) = cones.get_mut(child) {
+			transform.scale = cone_scale(0.0, sustain);
+		}
+		if let Ok(mut spawner) = spawners.get_mut(child) {
+			spawner.reset();
+		}
+	}
+	true
+}
+
+fn hide_muzzle_flash(
+	barrel: Entity,
+	mounts: &Query<&MuzzleFlashMount>,
+	flashes: &mut Query<(&mut MuzzleFlash, &mut Visibility, &Children)>,
+) {
+	let Ok(mount) = mounts.get(barrel) else {
+		return;
+	};
+	let Ok((_, mut visibility, _)) = flashes.get_mut(mount.0) else {
+		return;
+	};
+	*visibility = Visibility::Hidden;
+}
+
+/// A one-shot hides after its life. A laser hides once the beam entity is gone.
+fn muzzle_flash_finished(age: f32, life: f32, sustain: bool, laser_alive: bool) -> bool {
+	if sustain {
+		!laser_alive
+	} else {
+		age >= life
+	}
 }
 
 fn tick_muzzle_flashes(
 	time: Res<Time>,
-	mut commands: Commands,
 	lasers: Query<(), With<LaserBeam>>,
-	mut flashes: Query<(Entity, &mut MuzzleFlash, &Children)>,
+	mut flashes: Query<(&mut MuzzleFlash, &mut Visibility, &Children)>,
 	mut cones: Query<&mut Transform, With<MuzzleFlashCone>>,
 ) {
 	let dt = time.delta_secs();
-	for (entity, mut flash, children) in &mut flashes {
-		flash.age += dt;
-		let held = flash.sustain_laser.is_some_and(|laser| lasers.get(laser).is_ok());
-		if flash.sustain_laser.is_some() && !held {
-			commands.entity(entity).try_despawn();
+	for (mut flash, mut visibility, children) in &mut flashes {
+		if *visibility == Visibility::Hidden {
 			continue;
 		}
-		if flash.sustain_laser.is_none() && flash.age >= flash.life {
-			commands.entity(entity).try_despawn();
+		flash.age += dt;
+		let held = flash.sustain_laser.is_some_and(|laser| lasers.get(laser).is_ok());
+		if muzzle_flash_finished(flash.age, flash.life, flash.sustain_laser.is_some(), held) {
+			*visibility = Visibility::Hidden;
 			continue;
 		}
 		let scale = cone_scale(flash.age, held);
@@ -523,7 +602,11 @@ pub(crate) fn fire_weapons(
 	maps: Query<&BoneMap, With<RigRoot>>,
 	globals: Query<&GlobalTransform>,
 	lasers: Query<&LaserBeam>,
-	mut flashes: ResMut<MuzzleFlashEffects>,
+	flashes_assets: Res<MuzzleFlashEffects>,
+	mounts: Query<&MuzzleFlashMount>,
+	mut flashes: Query<(&mut MuzzleFlash, &mut Visibility, &Children)>,
+	mut cones: Query<&mut Transform, With<MuzzleFlashCone>>,
+	mut spawners: Query<&mut EffectSpawner, With<MuzzleFlashEmbers>>,
 	mut fired: MessageWriter<WeaponFired>,
 ) {
 	if !armed.0 {
@@ -542,6 +625,7 @@ pub(crate) fn fire_weapons(
 			ProjectileLoad::Laser(spec) => {
 				let live = weapon.laser.filter(|entity| lasers.get(*entity).is_ok());
 				if manual && !held {
+					hide_muzzle_flash(barrel, &mounts, &mut flashes);
 					if let Some(entity) = live {
 						commands.entity(entity).try_despawn();
 					}
@@ -557,7 +641,16 @@ pub(crate) fn fire_weapons(
 						spec,
 						source.copied(),
 					);
-					spawn_muzzle_flash(&mut commands, &mut flashes, barrel, Some(laser));
+					ignite_muzzle_flash(
+						&mut commands,
+						&flashes_assets,
+						&mounts,
+						&mut flashes,
+						&mut cones,
+						&mut spawners,
+						barrel,
+						Some(laser),
+					);
 					weapon.laser = Some(laser);
 				} else {
 					weapon.laser = live;
@@ -573,9 +666,7 @@ pub(crate) fn fire_weapons(
 					&mut meshes,
 					&mut materials,
 					&mut projectile_visuals,
-					&mut flashes,
 					&mut weapon,
-					barrel,
 					global,
 					spec,
 					0.0,
@@ -588,6 +679,16 @@ pub(crate) fn fire_weapons(
 				) {
 					continue;
 				}
+				ignite_muzzle_flash(
+					&mut commands,
+					&flashes_assets,
+					&mounts,
+					&mut flashes,
+					&mut cones,
+					&mut spawners,
+					barrel,
+					None,
+				);
 			}
 			ProjectileLoad::Bullet(spec) => {
 				if !allowed {
@@ -599,9 +700,7 @@ pub(crate) fn fire_weapons(
 					&mut meshes,
 					&mut materials,
 					&mut projectile_visuals,
-					&mut flashes,
 					&mut weapon,
-					barrel,
 					global,
 					spec,
 					1.0,
@@ -614,6 +713,16 @@ pub(crate) fn fire_weapons(
 				) {
 					continue;
 				}
+				ignite_muzzle_flash(
+					&mut commands,
+					&flashes_assets,
+					&mounts,
+					&mut flashes,
+					&mut cones,
+					&mut spawners,
+					barrel,
+					None,
+				);
 			}
 		}
 	}
@@ -625,9 +734,7 @@ fn try_fire_ballistic(
 	meshes: &mut Assets<Mesh>,
 	materials: &mut Assets<StandardMaterial>,
 	projectile_visuals: &mut ProjectileVisualCache,
-	flashes: &mut MuzzleFlashEffects,
 	weapon: &mut Weapon,
-	barrel: Entity,
 	global: &GlobalTransform,
 	spec: impl IntoBallistic,
 	gravity: f32,
@@ -645,7 +752,6 @@ fn try_fire_ballistic(
 	weapon.cooldown = weapon.interval;
 	let (length, radius, speed, max_range, penetration, max_age, color) = spec.ballistic();
 	let (muzzle, dir) = muzzle_world(global);
-	spawn_muzzle_flash(commands, flashes, barrel, None);
 	let projectile = spawn_flight(
 		commands,
 		meshes,
@@ -881,6 +987,14 @@ mod tests {
 		assert!(gone.x < 1e-4, "one-shot cone ends at zero");
 		let held = cone_scale(CONE_LIFE * 4.0, true);
 		assert!(held.x > MUZZLE_FLASH_RADIUS * 0.5, "laser keeps a muzzle cone");
+	}
+
+	#[test]
+	fn muzzle_flash_hides_after_the_plume_and_when_the_beam_ends() {
+		assert!(!muzzle_flash_finished(0.0, MUZZLE_FLASH_LIFE, false, false));
+		assert!(muzzle_flash_finished(MUZZLE_FLASH_LIFE, MUZZLE_FLASH_LIFE, false, false));
+		assert!(!muzzle_flash_finished(MUZZLE_FLASH_LIFE, MUZZLE_FLASH_LIFE, true, true));
+		assert!(muzzle_flash_finished(0.0, MUZZLE_FLASH_LIFE, true, false));
 	}
 
 	#[test]

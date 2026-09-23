@@ -2,7 +2,7 @@
 
 use avian3d::prelude::{SpatialQuery, SpatialQueryFilter};
 use bevy::light::NotShadowCaster;
-use bevy::mesh::{Indices, Mesh, PrimitiveTopology, VertexAttributeValues};
+use bevy::mesh::{Indices, Mesh, PrimitiveTopology};
 use bevy::prelude::*;
 use damage::DamageApplied;
 use firearms::{muzzle_world, BoneMap, FirearmMembers, FirearmRoot, RigRoot};
