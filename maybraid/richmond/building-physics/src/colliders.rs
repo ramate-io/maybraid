@@ -129,6 +129,11 @@ fn walk_shapes(building: &impl BuildingComponents) -> Vec<(Vec3, Quat, Collider)
 				shapes.push(shape);
 			}
 		}
+		for (translation, rotation, points) in node.inscribed_cap_walk_hulls() {
+			if let Some(shape) = hull_shape(WalkHull { translation, rotation, points }) {
+				shapes.push(shape);
+			}
+		}
 	}
 	for node in building.partition_nodes_for_level(level).flatten() {
 		if let Some(pose) = partition_cuboid(&node) {
@@ -285,6 +290,22 @@ mod tests {
 		assert_eq!(hull.points.len(), 6);
 		assert!(hull.points.iter().any(|p| (Vec2::new(p.x, p.z) - tri.c).length() < 1e-4));
 		assert!(Collider::convex_hull(hull.points).is_some());
+		Ok(())
+	}
+
+	#[test]
+	fn inscribed_square_cap_stamps_a_convex_walk_hull() -> anyhow::Result<()> {
+		use richmond_building_components::floors::{Floor, FloorNode};
+		let node = FloorNode::rough_stone(
+			Floor::circle_inscribed_square(),
+			Placement::new(Vec3::ZERO, 0.0).with_scale(Vec3::new(4.0, 0.2, 4.0)),
+		);
+		let hulls = node.inscribed_cap_walk_hulls();
+		assert_eq!(hulls.len(), 1);
+		let (translation, _rotation, points) = &hulls[0];
+		assert!(translation.length() < 1e-6);
+		assert!(points.iter().any(|p| (p.z - 4.0).abs() < 1e-3 && p.x.abs() < 1e-3));
+		assert!(Collider::convex_hull(points.clone()).is_some());
 		Ok(())
 	}
 

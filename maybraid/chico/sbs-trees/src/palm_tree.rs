@@ -4,8 +4,7 @@ use bevy::prelude::*;
 use chico_sbs_geometry::FrondCrownShape;
 use chico_sbs_geometry::{BallStickChain, Hysteresis};
 use chico_vegetation_components::{
-	chico_stick_material_ref, FoliageNode, FrondCollection, FrondRun, Placement, StickGeometry,
-	StickNode, StructuralLod,
+	FoliageNode, FrondCollection, FrondRun, Placement, StickGeometry, StickNode, StructuralLod,
 };
 
 /// Target fronds (runs) per [`FrondCollection`]. Batches stay small so UltraLow merge
@@ -166,28 +165,6 @@ pub(crate) fn crown_aabb_from_rings(rings: &[(Vec3, FrondCrownShape)]) -> (Vec3,
 		return (Vec3::splat(-0.5), Vec3::splat(0.5));
 	}
 	(min, max)
-}
-
-/// One cheap-ball column along the grown trunk (Low / UltraLow silhouette).
-///
-/// Tall palms have no mid-tree canopy, so a crown-only Low reads as a floating tuft.
-/// Kit \(+Y\) follows the base→tip chord so a slight Waialea arch still reads.
-pub(crate) fn trunk_proxy_node<C: Hysteresis>(
-	chain: &BallStickChain<C>,
-	height: f32,
-	base_radius: f32,
-) -> FoliageNode {
-	let start = chain.nodes.first().map(|n| n.position).unwrap_or(Vec3::ZERO);
-	let end = chain.nodes.last().map(|n| n.position).unwrap_or(Vec3::Y * height.max(1e-4));
-	let mid = (start + end) * 0.5;
-	let delta = end - start;
-	let half_len = (delta.length() * 0.5).max(height.max(1e-4) * 0.35);
-	let radius = base_radius.max(height.max(1e-4) * 0.02);
-	let mut placement = Placement::new(mid, 0.0).with_scale(Vec3::new(radius, half_len, radius));
-	if let Some(dir) = delta.try_normalize() {
-		placement = placement.with_rotation(Quat::from_rotation_arc(Vec3::Y, dir));
-	}
-	FoliageNode::cheap_ball(placement).with_material(chico_stick_material_ref())
 }
 
 /// All chain segments as trunk kits (date / Waialea columnar or arched trunks).

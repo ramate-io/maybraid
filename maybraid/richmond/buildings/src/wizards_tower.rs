@@ -149,12 +149,11 @@ impl WizardsTower {
 		let mut children: Vec<Box<dyn Scene>> = Vec::new();
 		for floor in &self.column.floors {
 			floor.emit_external_features(&mut children, lod_ref);
-			// Per-storey balls for slabs / lantern. Spire stairs come from Medium
-			// flatten (circulation), not a second High-only bake.
+			// Rooms and lantern. The deck comes from the Medium exterior flatten.
+			// Spire stairs come from that flatten too, not a second High-only bake.
 			floor.emit_internal_features(&mut children, lod_ref);
 		}
 		self.column.perch.emit_external_features(&mut children, lod_ref);
-		self.column.perch.emit_internal_features(&mut children, lod_ref);
 		scene_children(children)
 	}
 }
@@ -230,7 +229,6 @@ impl LodScene for WizardsTower {
 				}
 				let mut perch_children: Vec<Box<dyn Scene>> = Vec::new();
 				self.column.perch.emit_external_features(&mut perch_children, lod_ref);
-				self.column.perch.emit_internal_features(&mut perch_children, lod_ref);
 				chunks.push(SceneChunk::weighted(3, scene_children(perch_children)));
 				SceneChunk::chunks(chunks)
 			}
@@ -314,5 +312,18 @@ mod tests {
 		let low = tower.partition_nodes_for_level(LodSceneLevel::Low).len();
 		assert!(high > medium);
 		assert_eq!(low, 0);
+	}
+
+	#[test]
+	fn deck_stays_with_the_ring_wall_at_medium() {
+		let tower = tower();
+		let medium = tower.floor_nodes_for_level(LodSceneLevel::Medium).flatten();
+		let high = tower.floor_nodes_for_level(LodSceneLevel::High).flatten();
+		assert!(!medium.is_empty());
+		assert!(medium.iter().all(|node| {
+			node.confines == richmond_building_components::ParentConfines::External
+		}));
+		assert!(high.len() > medium.len());
+		assert!(tower.floor_nodes_for_level(LodSceneLevel::Low).is_empty());
 	}
 }

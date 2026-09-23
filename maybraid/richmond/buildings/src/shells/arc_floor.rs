@@ -206,7 +206,9 @@ impl BuildingComponents for ArcFloor {
 	}
 
 	fn floor_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FloorNode> {
-		if !matches!(level, LodSceneLevel::High) {
+		// Same band as the ring wall. High-only left a clear-color hole in the
+		// deck at Medium, and the inscribed-square caps only appeared up close.
+		if !matches!(level, LodSceneLevel::High | LodSceneLevel::Medium) {
 			return Layers::new();
 		}
 		let mut nodes = self.floor_nodes.clone();

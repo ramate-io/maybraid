@@ -299,23 +299,22 @@ fn fragment(
     let view_dist = mesh.view_dist;
     let cheese = view_dist < LEAF_MID_DIST;
 
-    // Noisy rim at every distance — Opaque ignores alpha, so far cards
-    // stay rectangular unless we discard. Hub stays solid (early-Z).
-    if (r > LEAF_RIM_CUT) {
-        discard;
-    }
-    let blot = 0.52 + 0.38 * value_noise_3d(local_pos * 2.4);
-    let rim_w = max(fwidth(r) * 2.0, 0.08);
-    let radial_alpha = smoothstep(0.0, rim_w, blot - r);
-    if (radial_alpha < 0.08) {
-        discard;
-    }
-
+    var radial_alpha = 1.0;
     var hole_alpha = 1.0;
     var tint_noise = 0.5;
 
     if (cheese) {
-        // Interior bites. Far skips this so isolated hubs stay cheap.
+        // Noisy rim + interior bites. Far skips both so cheap-ball hubs
+        // stay opaque (r > 0.92 was punching clear color through distant crowns).
+        if (r > LEAF_RIM_CUT) {
+            discard;
+        }
+        let blot = 0.52 + 0.38 * value_noise_3d(local_pos * 2.4);
+        let rim_w = max(fwidth(r) * 2.0, 0.08);
+        radial_alpha = smoothstep(0.0, rim_w, blot - r);
+        if (radial_alpha < 0.08) {
+            discard;
+        }
         let hole = fbm_3d_2(local_pos * 3.25) * 0.62 + value_noise_3d(local_pos * 8.5) * 0.38;
         let hub = 1.0 - smoothstep(0.22, 0.62, r);
         let threshold = mix(0.22, 0.52, 1.0 - hub);

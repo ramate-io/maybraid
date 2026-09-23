@@ -1,6 +1,7 @@
 //! Canopy leaf [`Material`] — object-space leafy breakup, vertex sway, split light.
 //!
-//! A noisy rim `discard` runs at every distance (Opaque ignores alpha).
+//! A noisy rim `discard` runs near/mid only (Opaque ignores alpha).
+//! Far cheap-ball hubs stay opaque so distant crowns do not punch to clear color.
 //! Interior holes are near/mid only (80 radii, remapped so 140 m is never near).
 //! Lambert + sky, plus fake canopy occlusion (inward faces / puff hubs).
 

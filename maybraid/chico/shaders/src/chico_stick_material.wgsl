@@ -5,7 +5,7 @@
 #import bevy_pbr::{
     forward_io::VertexOutput,
     mesh_view_bindings::view,
-    pbr_types::{PbrInput, pbr_input_new, STANDARD_MATERIAL_FLAGS_DOUBLE_SIDED_BIT},
+    pbr_types::{PbrInput, pbr_input_new},
     pbr_functions as fns,
     pbr_bindings,
 }
@@ -42,13 +42,11 @@ fn fragment(
 
     pbr_input.material.base_color = base_color;
 
-    let double_sided = (pbr_input.material.flags & STANDARD_MATERIAL_FLAGS_DOUBLE_SIDED_BIT) != 0u;
-
     pbr_input.frag_coord = mesh.position;
     pbr_input.world_position = mesh.world_position;
     pbr_input.world_normal = fns::prepare_world_normal(
         mesh.world_normal,
-        double_sided,
+        true,
         is_front,
     );
     pbr_input.is_orthographic = view.clip_from_view[3].w == 1.0;
