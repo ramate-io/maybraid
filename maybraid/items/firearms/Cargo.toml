@@ -19,6 +19,8 @@ projectiles = { workspace = true }
 damage = { workspace = true }
 lod-avian = { workspace = true }
 lod = { workspace = true }
+material-ref = { workspace = true }
+procedural-common = { workspace = true }
 scene-ref = { workspace = true }
 
 [lints]

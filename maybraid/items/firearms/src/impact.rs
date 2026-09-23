@@ -134,7 +134,7 @@ fn spark_effect() -> EffectAsset {
 		.render(OrientModifier::new(OrientMode::AlongVelocity))
 }
 
-fn puff_mask() -> Image {
+pub(crate) fn puff_mask() -> Image {
 	let n = PUFF_MASK_SIZE;
 	let mut data = vec![0u8; (n * n) as usize];
 	let c = (n as f32 - 1.0) * 0.5;

@@ -3355,6 +3355,8 @@ dependencies = [
  "firearms-components",
  "lod",
  "lod-avian",
+ "material-ref",
+ "procedural-common",
  "projectiles",
  "scene-ref",
 ]
