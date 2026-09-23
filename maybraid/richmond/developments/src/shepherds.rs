@@ -449,6 +449,13 @@ impl BuildingComponents for ShepherdsHouse {
 		house_layers!(self, level, furniture_nodes_for_level)
 	}
 
+	fn furniture_usage_nodes_for_level(
+		&self,
+		level: LodSceneLevel,
+	) -> Layers<richmond_building_components::FurnitureUsageNode> {
+		house_layers!(self, level, furniture_usage_nodes_for_level)
+	}
+
 	fn label_nodes_for_level(&self, level: LodSceneLevel) -> Layers<LabelNode> {
 		house_layers!(self, level, label_nodes_for_level)
 	}
@@ -520,6 +527,13 @@ impl BuildingComponents for ShepherdsHut {
 
 	fn furniture_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FurnitureNode> {
 		hut_layers!(self, level, furniture_nodes_for_level)
+	}
+
+	fn furniture_usage_nodes_for_level(
+		&self,
+		level: LodSceneLevel,
+	) -> Layers<richmond_building_components::FurnitureUsageNode> {
+		hut_layers!(self, level, furniture_usage_nodes_for_level)
 	}
 
 	fn label_nodes_for_level(&self, level: LodSceneLevel) -> Layers<LabelNode> {

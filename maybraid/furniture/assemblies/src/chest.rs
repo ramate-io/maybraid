@@ -1,6 +1,6 @@
 //! Chest: trunk, lid, and a metal latch on the trunk front.
 
-use crate::palette::{chest, metal};
+use crate::palette::{chest, hardware};
 use crate::Assembly;
 use furniture_components::{latch_slab, slab, PartKind, PlacedPart};
 use richmond_building_components::FurnitureGeometry;
@@ -47,7 +47,7 @@ impl Chest {
 				PlacedPart {
 					kind: PartKind::ChestLatch,
 					placement: latch_slab(0.22, 0.56, 0.74, 0.12),
-					material: metal(seed, 3),
+					material: hardware(seed, 3),
 				},
 			],
 		}
@@ -102,11 +102,10 @@ mod tests {
 	fn trunk_and_lid_share_the_chest_skin() -> anyhow::Result<()> {
 		let built = ChestParams::unit_from_num(3).build();
 		let want = match crate::palette::chest_kind(3) {
-			crate::palette::ChestKind::Ornate => furniture_shaders::RECIPE_FURNITURE_ORNATE,
-			crate::palette::ChestKind::Lava => furniture_shaders::RECIPE_FURNITURE_LAVA,
-			crate::palette::ChestKind::Cosmos => furniture_shaders::RECIPE_FURNITURE_COSMOS,
-			crate::palette::ChestKind::Scales => furniture_shaders::RECIPE_FURNITURE_SCALES,
 			crate::palette::ChestKind::Rockadder => furniture_shaders::RECIPE_FURNITURE_ROCKADDER,
+			crate::palette::ChestKind::Cosimo => furniture_shaders::RECIPE_FURNITURE_COSMOS,
+			crate::palette::ChestKind::Foliage => crate::palette::RECIPE_FOLIAGE,
+			crate::palette::ChestKind::Terrain => furniture_shaders::RECIPE_FURNITURE_MARBLE,
 		};
 		for part in built.parts.iter().filter(|p| p.kind != PartKind::ChestLatch) {
 			match &part.material.name {

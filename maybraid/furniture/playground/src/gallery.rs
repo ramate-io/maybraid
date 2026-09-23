@@ -272,23 +272,23 @@ pub fn authored_extreme_slots() -> Vec<GallerySlot> {
 			),
 		},
 		chest_skin_slot(
-			"chest-lava",
-			furniture_assemblies::palette::ChestKind::Lava,
+			"chest-rockadder",
+			furniture_assemblies::palette::ChestKind::Rockadder,
 			Vec3::new(5.0, 0.0, 18.0),
 		),
 		chest_skin_slot(
-			"chest-cosmos",
-			furniture_assemblies::palette::ChestKind::Cosmos,
+			"chest-cosimo",
+			furniture_assemblies::palette::ChestKind::Cosimo,
 			Vec3::new(7.4, 0.0, 18.0),
 		),
 		chest_skin_slot(
-			"chest-scales",
-			furniture_assemblies::palette::ChestKind::Scales,
+			"chest-foliage",
+			furniture_assemblies::palette::ChestKind::Foliage,
 			Vec3::new(9.8, 0.0, 18.0),
 		),
 		chest_skin_slot(
-			"chest-rockadder",
-			furniture_assemblies::palette::ChestKind::Rockadder,
+			"chest-terrain",
+			furniture_assemblies::palette::ChestKind::Terrain,
 			Vec3::new(12.2, 0.0, 18.0),
 		),
 	]
@@ -323,9 +323,22 @@ pub fn gallery_slots() -> anyhow::Result<Vec<GallerySlot>> {
 pub fn unit_slot(geometry: FurnitureGeometry, seed: u64) -> FurnitureNode {
 	let (make, size): (fn(Placement) -> FurnitureNode, Vec3) = match geometry {
 		FurnitureGeometry::Bed => (FurnitureNode::bed, Vec3::new(2.0, 0.55, 1.6)),
-		FurnitureGeometry::Chair => (FurnitureNode::chair, Vec3::new(0.5, 0.9, 0.5)),
+		FurnitureGeometry::Chair => (FurnitureNode::chair, Vec3::new(0.52, 1.10, 0.52)),
+		FurnitureGeometry::Table => (FurnitureNode::table, Vec3::new(2.20, 1.00, 1.40)),
 		FurnitureGeometry::Chest => (FurnitureNode::chest, Vec3::new(0.9, 0.7, 0.5)),
 		FurnitureGeometry::Counter => (FurnitureNode::counter, Vec3::new(1.8, 0.9, 0.6)),
+		FurnitureGeometry::FoodDisplay => {
+			(FurnitureNode::food_display, Vec3::new(0.70, 0.42, 0.50))
+		}
+		FurnitureGeometry::Fruit => (FurnitureNode::fruit, Vec3::new(0.28, 0.22, 0.28)),
+		FurnitureGeometry::Bread => (FurnitureNode::bread, Vec3::new(0.36, 0.18, 0.22)),
+		FurnitureGeometry::Cookware => (FurnitureNode::cookware, Vec3::new(0.54, 0.30, 0.54)),
+		FurnitureGeometry::Basin => (FurnitureNode::basin, Vec3::new(0.82, 0.32, 0.64)),
+		FurnitureGeometry::Faucet => (FurnitureNode::faucet, Vec3::new(0.24, 0.44, 0.22)),
+		FurnitureGeometry::Shelf => (FurnitureNode::shelf, Vec3::new(1.4, 0.40, 0.40)),
+		FurnitureGeometry::Range => (FurnitureNode::range, Vec3::new(1.10, 1.00, 0.75)),
+		FurnitureGeometry::Fridge => (FurnitureNode::fridge, Vec3::new(1.90, 2.50, 1.10)),
+		FurnitureGeometry::Partition => (FurnitureNode::partition, Vec3::new(2.60, 3.20, 0.22)),
 		_ => (FurnitureNode::bed, Vec3::ONE),
 	};
 	typical_slot(make, size, Vec3::ZERO, seed, Some(FurnitureAbutment::NegZ))
@@ -416,13 +429,13 @@ mod tests {
 	}
 
 	#[test]
-	fn authored_chests_include_lava_cosmos_scales_rockadder() -> anyhow::Result<()> {
+	fn authored_chests_include_rockadder_cosimo_foliage_terrain() -> anyhow::Result<()> {
 		let slots = authored_extreme_slots();
 		for (label, want) in [
-			("chest-lava", furniture_shaders::RECIPE_FURNITURE_LAVA),
-			("chest-cosmos", furniture_shaders::RECIPE_FURNITURE_COSMOS),
-			("chest-scales", furniture_shaders::RECIPE_FURNITURE_SCALES),
 			("chest-rockadder", furniture_shaders::RECIPE_FURNITURE_ROCKADDER),
+			("chest-cosimo", furniture_shaders::RECIPE_FURNITURE_COSMOS),
+			("chest-foliage", furniture_assemblies::palette::RECIPE_FOLIAGE),
+			("chest-terrain", furniture_shaders::RECIPE_FURNITURE_MARBLE),
 		] {
 			let slot = slots
 				.iter()

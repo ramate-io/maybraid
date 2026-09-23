@@ -40,7 +40,7 @@ impl Default for DurhamTerrainShader {
 	fn default() -> Self {
 		Self {
 			terrain_noise: DurhamTerrainNoiseUniform::default(),
-			style_params: Vec4::new(0.35, 2.0, 0.05, 0.5),
+			style_params: Vec4::new(0.35, 2.0, 0.05, 0.82),
 			base_color: Vec4::new(1.0, 1.0, 1.0, 1.0),
 		}
 	}
@@ -95,7 +95,7 @@ mod tests {
 		assert!((m.terrain_noise.regional_blend.x - 0.00015).abs() < 1e-8);
 		assert!((m.terrain_noise.regional_blend.y - 0.5).abs() < 1e-8);
 		assert!((m.style_params.x - 0.35).abs() < 1e-5);
-		assert!((m.style_params.w - 0.5).abs() < 1e-5);
+		assert!((m.style_params.w - 0.82).abs() < 1e-5);
 		assert!((m.base_color.x - 1.0).abs() < 1e-5);
 	}
 

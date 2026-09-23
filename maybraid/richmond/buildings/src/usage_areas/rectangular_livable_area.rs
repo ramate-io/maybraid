@@ -164,6 +164,24 @@ impl RectAreaRoom {
 			Self::Study(r) => r.furniture_nodes_for_level(level),
 		}
 	}
+
+	fn furniture_usage_nodes_for_level(
+		&self,
+		level: LodSceneLevel,
+	) -> Layers<richmond_building_components::FurnitureUsageNode> {
+		match self {
+			Self::OpenBand { .. } | Self::HouseholdCloset { .. } => Layers::new(),
+			Self::Bedroom(r) => r.furniture_usage_nodes_for_level(level),
+			Self::Living(r) => r.furniture_usage_nodes_for_level(level),
+			Self::Eating(r) => r.furniture_usage_nodes_for_level(level),
+			Self::Kitchen(r) => r.furniture_usage_nodes_for_level(level),
+			Self::Dining(r) => r.furniture_usage_nodes_for_level(level),
+			Self::Bathroom(r) => r.furniture_usage_nodes_for_level(level),
+			Self::HalfBath(r) => r.furniture_usage_nodes_for_level(level),
+			Self::Sitting(r) => r.furniture_usage_nodes_for_level(level),
+			Self::Study(r) => r.furniture_usage_nodes_for_level(level),
+		}
+	}
 }
 
 /// Fitted rectangular livable area (rooms + local hall bands + partitions).
@@ -282,6 +300,17 @@ impl BuildingComponents for RectangularLivableArea {
 		let mut out = Layers::new();
 		for room in &self.rooms {
 			out.extend(room.furniture_nodes_for_level(level));
+		}
+		out
+	}
+
+	fn furniture_usage_nodes_for_level(
+		&self,
+		level: LodSceneLevel,
+	) -> Layers<richmond_building_components::FurnitureUsageNode> {
+		let mut out = Layers::new();
+		for room in &self.rooms {
+			out.extend(room.furniture_usage_nodes_for_level(level));
 		}
 		out
 	}

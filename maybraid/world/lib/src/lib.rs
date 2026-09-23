@@ -11,7 +11,6 @@
 mod camera;
 pub mod commands;
 mod control;
-mod furniture_hud;
 mod intelligence;
 mod material_lib;
 mod mobs;
@@ -46,7 +45,10 @@ pub use start::{
 	parse_xz_metres, player_spawn_xz, resolve_start_at, start_at_from_env, take_start_at_from_args,
 	START_AT_ENV,
 };
-pub use maybraid_sky::ShadowQuality;
+pub use maybraid_sky::{
+	ShadowQuality, SkyClock, SkyCommand, SKY_BLUE, SKY_CLEAR, SKY_HORIZON, SKY_NADIR, SKY_ZENITH,
+	SUN_COLOR, SUN_ILLUMINANCE,
+};
 pub use ui::WorldMobHudEnabled;
 pub use vsync::{default_window_present_mode, RequestVsyncToggle, VSYNC_TOGGLE_KEY};
 pub use weapon::WorldPlayerLoadout;
@@ -205,7 +207,7 @@ impl Plugin for WorldPlugin {
 			app.init_resource::<TextEntryFocus>();
 		}
 		app.add_systems(Startup, vsync::apply_startup_vsync)
-			.add_systems(Update, vsync::toggle_vsync)
+			.add_systems(Update, (vsync::toggle_vsync, commands::apply_sky_commands))
 			.add_systems(PostStartup, spawn_default_braidman)
 			.add_systems(PreUpdate, control::stamp_vegetation_motor_traction)
 			.add_systems(
@@ -243,10 +245,6 @@ impl Plugin for WorldPlugin {
 				ui::sync_mob_debug_pins.run_if(resource_equals(WorldMobHudEnabled(true))),
 				ui::draw_mob_debug_gizmos.run_if(resource_equals(WorldMobHudEnabled(true))),
 				ui::draw_npc_behavior_gizmos.run_if(resource_equals(WorldMobHudEnabled(true))),
-				furniture_hud::sync_furniture_debug_pins
-					.run_if(resource_equals(WorldMobHudEnabled(true))),
-				furniture_hud::draw_furniture_debug_gizmos
-					.run_if(resource_equals(WorldMobHudEnabled(true))),
 			),
 		);
 		if self.debug_chrome {

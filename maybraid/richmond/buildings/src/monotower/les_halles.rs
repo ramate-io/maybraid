@@ -128,6 +128,17 @@ impl BuildingComponents for MixedUseLesHallesStorey {
 		}
 	}
 
+	fn furniture_usage_nodes_for_level(
+		&self,
+		level: LodSceneLevel,
+	) -> Layers<richmond_building_components::FurnitureUsageNode> {
+		match self {
+			Self::Livable { usage, .. } => usage.furniture_usage_nodes_for_level(level),
+			Self::Commercial { usage, .. } => usage.furniture_usage_nodes_for_level(level),
+			Self::Arcade { usage, .. } => usage.furniture_usage_nodes_for_level(level),
+		}
+	}
+
 	fn label_nodes_for_level(&self, level: LodSceneLevel) -> Layers<LabelNode> {
 		match self {
 			Self::Commercial { usage, .. } => usage.label_nodes_for_level(level),
@@ -281,6 +292,17 @@ impl BuildingComponents for MixedUseLesHallesMonotower {
 		let mut out = Layers::new();
 		for floor in &self.floors {
 			out.extend(floor.furniture_nodes_for_level(level));
+		}
+		out
+	}
+
+	fn furniture_usage_nodes_for_level(
+		&self,
+		level: LodSceneLevel,
+	) -> Layers<richmond_building_components::FurnitureUsageNode> {
+		let mut out = Layers::new();
+		for floor in &self.floors {
+			out.extend(floor.furniture_usage_nodes_for_level(level));
 		}
 		out
 	}

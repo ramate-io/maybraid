@@ -11,8 +11,8 @@ use crozon_inventory_user::{spawn_bag, InventoryUser, InventoryUserPlugin};
 use menu_components::info::description::{set_description_for_menu, TextMenuDescription};
 use menu_components::{MenuActivate, MenuObjectiveMarker, ScreenEditPressed};
 use menu_screens::{
-	request_show_create_character_id, request_show_gallery, CreateCharacterReady, GalleryChoice,
-	GalleryScreen, GalleryScreenPlugin,
+	request_show_create_character_id, request_show_gallery, request_show_in_game,
+	CreateCharacterReady, GalleryChoice, GalleryScreen, GalleryScreenPlugin,
 };
 
 use crate::character::{
@@ -112,9 +112,8 @@ fn spawn_session(
 	spawn_bag(commands, host, inventory);
 }
 
-/// Write appearance and inventory. Only the Save chrome calls this; Back
-/// returns to the gallery without writing, so name and clothing edits can be
-/// abandoned.
+/// Write appearance and inventory. The Save chrome and the Start leave
+/// prompt call this; Back / discard leave without writing.
 pub fn save_editing_character(
 	root: &SaveRoot,
 	id: CharacterId,
@@ -125,6 +124,16 @@ pub fn save_editing_character(
 	crozon_character_model_user::save(root, &model)?;
 	crozon_inventory_user::save(root, id, &inventory)?;
 	Ok(())
+}
+
+/// Close the editor without writing. Gallery is the default; pause-menu edits
+/// return in-game.
+pub fn leave_character_editor(commands: &mut Commands, return_to: Option<CharacterEditorReturn>) {
+	match return_to {
+		Some(CharacterEditorReturn::InGame) => request_show_in_game(commands),
+		_ => request_show_gallery(commands),
+	}
+	commands.remove_resource::<CharacterEditorReturn>();
 }
 
 pub fn set_active_character(commands: &mut Commands, root: &SaveRoot, id: CharacterId) {

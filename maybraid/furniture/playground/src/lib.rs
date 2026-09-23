@@ -4,6 +4,7 @@ pub mod camera;
 pub mod commands;
 mod gallery;
 mod ground;
+mod material_lib;
 mod preview;
 mod ui;
 
@@ -14,10 +15,10 @@ pub use preview::{PreviewConfig, PreviewSubject};
 
 use bevy::prelude::*;
 use furniture_assemblies::FurnitureAssembliesPlugin;
-use furniture_shaders::{FurnitureMaterialRefPlugin, FurnitureShadersPlugin};
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use ground::setup_ground;
 use lod_lazy_refs::LodLazyRefsPlugin;
+use material_lib::PlaygroundMaterialRefPlugin;
 use preview::present_preview;
 use richmond_building_components::FurnitureWireframePlugin;
 use scene_ref::SceneRefPlugin;
@@ -29,8 +30,7 @@ impl Plugin for FurniturePlaygroundPlugin {
 		app.init_resource::<PreviewConfig>().add_plugins((
 			SceneRefPlugin,
 			LodLazyRefsPlugin,
-			FurnitureShadersPlugin,
-			FurnitureMaterialRefPlugin,
+			PlaygroundMaterialRefPlugin,
 			FurnitureWireframePlugin,
 			FurnitureAssembliesPlugin,
 			GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()),

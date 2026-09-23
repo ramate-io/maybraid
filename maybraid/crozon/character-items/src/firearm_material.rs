@@ -43,10 +43,10 @@ impl FirearmMaterial {
 
 	pub const fn adjectives(self) -> &'static [&'static str] {
 		match self {
-			Self::WizardsVeins => &["Arcane", "Runed", "Veined", "Hexed", "Sigil"],
-			Self::Glitter => &["Glittering", "Sparkling", "Dazzling", "Sequined", "Shimmering"],
-			Self::Scales => &["Scaled", "Plated", "Serpent", "Iridescent", "Armored"],
-			Self::LavaVeins => &["Molten", "Igneous", "Magmatic", "Furnace", "Ember"],
+			Self::WizardsVeins => &["Gerund", "Starmage", "Sigil"],
+			Self::Glitter => &["Beacon", "Clastappal", "Sequined", "Shimmering"],
+			Self::Scales => &["Plated", "Oblisk", "Cylint"],
+			Self::LavaVeins => &["Furnaceheld", "'tilinforge", "Pelely"],
 			Self::BrushedMetal => &["Brushed", "Service", "Issue", "Machined", "Filed"],
 		}
 	}

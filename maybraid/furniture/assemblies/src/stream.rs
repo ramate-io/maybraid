@@ -23,6 +23,7 @@ use crate::cell::{
 	intersects_xz, world_slot, xz_radius_aabb, FurnitureCellExtent, FURNITURE_GENERATE_RADIUS,
 	FURNITURE_PRESENT_RADIUS,
 };
+use crate::colliders::FurnitureWalkColliderPlugin;
 use crate::host::{spawn_furniture_cell, FurnitureCell};
 
 /// One 50 m host begin / rebuild per frame so fulfill can drain kits.
@@ -130,6 +131,9 @@ fn world_slots_of(
 	for host in development.hosts() {
 		let transform = host.transform();
 		for node in host.furniture_nodes() {
+			out.push(world_slot(transform, node));
+		}
+		for node in furniture_usage_areas::expand_usages(host.furniture_usage_nodes()) {
 			out.push(world_slot(transform, node));
 		}
 	}
@@ -431,6 +435,9 @@ impl Plugin for FurnitureStreamPlugin {
 	fn build(&self, app: &mut App) {
 		if !app.is_plugin_added::<LodRefreshCorePlugin>() {
 			app.add_plugins(LodRefreshCorePlugin);
+		}
+		if !app.is_plugin_added::<FurnitureWalkColliderPlugin>() {
+			app.add_plugins(FurnitureWalkColliderPlugin);
 		}
 		app.init_resource::<FurnitureIndex>()
 			.init_resource::<FurniturePresenterState>()

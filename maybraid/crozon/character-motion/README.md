@@ -30,6 +30,7 @@ WASD / Space
 
 sync_motion_markers
   → shown LodLevelRoot (else desired / High; fixed assemblies have no host) → motion_policy
+  → clamp Mid/Far thinking LOD unless the look frustum is presenting the plant
   → insert/remove AnimateBones / AnimateEffects on body host
   → insert/remove ApplyTerrainPitch on character root
 

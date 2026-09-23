@@ -2,10 +2,18 @@
 
 mod flow;
 mod load;
+mod paths;
 mod shell;
 
 pub use flow::{GameFlow, HomeRoute, PauseMenuRoute, WorldPause};
+pub use paths::assets_root;
 
+use crate::shell::{
+	apply_pause_character_look, apply_shell_look, attach_preview_camera, despawn_loading_backdrop,
+	detach_preview_camera, enter_characters, enter_home, enter_loading_world, enter_world,
+	enter_world_menu, exit_world_menu, restore_stashed_world_camera, spawn_loading_backdrop,
+	stamp_preview_render_layers,
+};
 use bevy::prelude::*;
 use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
 use maybraid_input::MenuNavPad;
@@ -19,9 +27,9 @@ use menu_components::{
 	TextMenuSystems, MENU_CLEAR,
 };
 use menu_playground::{
-	ActiveCharacter, CharacterEditBaseline, CharacterEditorReturn, CharacterMenuState,
-	CharacterPreviewPlugin, CharacterScreen, CharacterScreenPlugin, CharacterSessionPlugin,
-	EditingCharacter, RequestEditCharacter,
+	ActiveCharacter, CharacterEditBaseline, CharacterEditorReturn, CharacterLeavePrompt,
+	CharacterMenuState, CharacterModalMode, CharacterPreviewPlugin, CharacterScreen,
+	CharacterScreenPlugin, CharacterSessionPlugin, EditingCharacter, RequestEditCharacter,
 };
 use menu_screens::{
 	cancel_pending_create, request_show_gallery, request_show_home, request_show_in_game,
@@ -29,19 +37,6 @@ use menu_screens::{
 	HomeScreenPlugin, InGameMenuChoice, InGameScreenPlugin, InGameSettings, InGameSettingsScreen,
 	InGameShadowQuality, LoadingScreenPlugin, LoadingScreenSystems, MenuScreen, SpinRevealScreen,
 };
-use std::path::{Path, PathBuf};
-
-use crate::shell::{
-	apply_pause_character_look, apply_shell_look, attach_preview_camera, despawn_loading_backdrop,
-	detach_preview_camera, enter_characters, enter_home, enter_loading_world, enter_world,
-	enter_world_menu, exit_world_menu, restore_stashed_world_camera, spawn_loading_backdrop,
-	stamp_preview_render_layers,
-};
-
-/// Crate-local asset directory (`maybraid/game/assets`).
-pub fn assets_root() -> PathBuf {
-	Path::new(env!("CARGO_MANIFEST_DIR")).join("assets")
-}
 
 pub struct GamePlugin;
 
@@ -99,11 +94,14 @@ impl Plugin for GamePlugin {
 			.add_systems(
 				PostStartup,
 				(
-					boot_shell,
-					apply_shell_look,
-					attach_preview_camera.run_if(not(starting_discovery_at_override)),
-				)
-					.chain(),
+					(
+						boot_shell,
+						apply_shell_look,
+						attach_preview_camera.run_if(not(starting_discovery_at_override)),
+					)
+						.chain(),
+					sync_world_shadows,
+				),
 			)
 			.add_systems(
 				Update,
@@ -319,6 +317,8 @@ fn pause_menu_back(
 	nav: Res<MenuNavPad>,
 	overlay: Res<ActiveOverlayKey>,
 	modal: Res<ShortTextModal>,
+	prompt: Res<CharacterLeavePrompt>,
+	mode: Res<CharacterModalMode>,
 	consumed: Res<MenuBackConsumed>,
 	mut backs: MessageReader<ScreenBackPressed>,
 	settings: Query<(), With<InGameSettingsScreen>>,
@@ -327,7 +327,13 @@ fn pause_menu_back(
 	if settings.is_empty() && character.is_empty() {
 		return;
 	}
-	if !consume_screen_back(nav.as_ref(), &overlay, modal.is_open(), &consumed, &mut backs) {
+	if !consume_screen_back(
+		nav.as_ref(),
+		&overlay,
+		modal.is_open() || prompt.is_open() || (!character.is_empty() && mode.blocks_leave()),
+		&consumed,
+		&mut backs,
+	) {
 		return;
 	}
 	commands.remove_resource::<CharacterEditorReturn>();
@@ -358,13 +364,21 @@ fn character_back(
 	nav: Res<MenuNavPad>,
 	overlay: Res<ActiveOverlayKey>,
 	modal: Res<ShortTextModal>,
+	prompt: Res<CharacterLeavePrompt>,
+	mode: Res<CharacterModalMode>,
 	consumed: Res<MenuBackConsumed>,
 	mut backs: MessageReader<ScreenBackPressed>,
 	character: Query<(), With<CharacterScreen>>,
 	spin: Query<(), With<SpinRevealScreen>>,
 	gallery: Query<(), With<GalleryScreen>>,
 ) {
-	if !consume_screen_back(nav.as_ref(), &overlay, modal.is_open(), &consumed, &mut backs) {
+	if !consume_screen_back(
+		nav.as_ref(),
+		&overlay,
+		modal.is_open() || prompt.is_open() || (!character.is_empty() && mode.blocks_leave()),
+		&consumed,
+		&mut backs,
+	) {
 		return;
 	}
 	if !character.is_empty() {
@@ -462,10 +476,7 @@ mod tests {
 	#[test]
 	fn pause_settings_copy_onto_the_sky_sun() -> anyhow::Result<()> {
 		let mut world = World::new();
-		world.insert_resource(InGameSettings {
-			mob_hud: false,
-			shadows: InGameShadowQuality::Low,
-		});
+		world.insert_resource(InGameSettings { mob_hud: false, shadows: InGameShadowQuality::Low });
 		world.insert_resource(ShadowQuality::High);
 		world
 			.run_system_once(sync_world_shadows)

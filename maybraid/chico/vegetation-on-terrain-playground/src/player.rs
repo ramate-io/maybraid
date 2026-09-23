@@ -4,9 +4,10 @@
 //! shape-cast grounded check, jump impulse), with walk direction relative to
 //! the camera yaw.
 
+use std::f32::consts::PI;
+
 use avian3d::prelude::*;
-use bevy::ecs::query::Has;
-use bevy::prelude::*;
+use bevy::{ecs::query::Has, prelude::*};
 use durham_terrain_models::{
 	terrain_collider_covers_xz, BaseTerrainNoise, CascadeChunk, TerrainCellLayout,
 	TerrainEntryStore, TerrainTrimeshCollider,
@@ -14,10 +15,8 @@ use durham_terrain_models::{
 use game_commands::command::TextEntryFocus;
 use lod_avian::PhysicsInteractionLayer;
 use maybraid_input::{PadButton, VirtualPad};
-use std::f32::consts::PI;
 
-use crate::camera::CameraController;
-use crate::WorldBaseTerrain;
+use crate::{camera::CameraController, WorldBaseTerrain};
 
 pub(crate) const CAPSULE_RADIUS: f32 = 0.4;
 pub(crate) const CAPSULE_LENGTH: f32 = 1.0;
@@ -39,8 +38,9 @@ const GROUND_SNAP_SPEED: f32 = 1.5;
 const PLAY_GRAVITY_SCALE: f32 = 1.25;
 /// Hold above base noise until composed height exists (`height_scale` is 500).
 const HOLD_ABOVE_BASE_FACTOR: f32 = 0.35;
-const FALL_RESPAWN_DEPTH: f32 = 40.0;
-const FALL_RESPAWN_DELAY_SECS: f32 = 0.75;
+/// Bedrock is `-4 * height_scale`. Recover only after falling through that floor.
+const VOID_FLOOR_MARGIN: f32 = 500.0;
+const VOID_RESPAWN_DELAY_SECS: f32 = 0.75;
 
 /// Camera-relative WASD wish on XZ. Zero when no move input.
 #[derive(Component, Default)]
@@ -81,7 +81,7 @@ pub struct Player;
 #[derive(Component)]
 pub(crate) struct AwaitingTerrainSurface;
 
-/// Delayed recovery for a player that falls below the streamed surface.
+/// Delayed recovery after falling through bedrock into the void.
 #[derive(Resource, Debug, Clone, Copy, Default)]
 pub struct PlayerRespawn {
 	queued_at: Option<f32>,
@@ -193,8 +193,8 @@ impl Plugin for PlayerPlugin {
 					update_grounded,
 					apply_character_movement,
 					follow_character_camera,
-					queue_fallen_player_respawn,
-					respawn_fallen_player,
+					queue_void_player_respawn,
+					recover_void_player,
 				)
 					.chain()
 					.in_set(PlayerControlSystems),
@@ -331,57 +331,50 @@ pub(crate) fn snap_player_to_composed_surface(
 			commands.entity(entity).remove::<AwaitingTerrainSurface>();
 		}
 	} else {
+		// Lost or not-yet-streamed column: freeze in place. Do not re-insert
+		// [`AwaitingTerrainSurface`] — that marker is first-drop only, and snap
+		// would teleport a released body back onto the heightfield sample.
 		gravity.0 = 0.0;
 		**velocity = Vec3::ZERO;
 	}
 }
 
-fn queue_fallen_player_respawn(
+fn void_floor_y(base: &BaseTerrainNoise) -> f32 {
+	-base.height_scale * 4.0 - VOID_FLOOR_MARGIN
+}
+
+fn queue_void_player_respawn(
 	time: Res<Time>,
 	physics: Res<PlayerPhysicsEnabled>,
+	base: Res<WorldBaseTerrain>,
+	mut respawn: ResMut<PlayerRespawn>,
+	mut player: Query<
+		(&Transform, &mut LinearVelocity, &mut GravityScale),
+		(With<Player>, Without<AwaitingTerrainSurface>),
+	>,
+) {
+	if !physics.0 || respawn.queued_at.is_some() {
+		return;
+	}
+	let Ok((transform, mut velocity, mut gravity)) = player.single_mut() else {
+		return;
+	};
+	if transform.translation.y >= void_floor_y(&base.0) {
+		return;
+	}
+	respawn.queued_at = Some(time.elapsed_secs() + VOID_RESPAWN_DELAY_SECS);
+	gravity.0 = 0.0;
+	**velocity = Vec3::ZERO;
+}
+
+fn recover_void_player(
+	time: Res<Time>,
 	store: Res<TerrainEntryStore>,
 	layout: Res<TerrainCellLayout>,
 	base: Res<WorldBaseTerrain>,
 	mut respawn: ResMut<PlayerRespawn>,
 	mut commands: Commands,
-	mut player: Query<
-		(Entity, &Transform, &mut LinearVelocity, &mut GravityScale),
-		(With<Player>, Without<AwaitingTerrainSurface>),
-	>,
-	terrain_colliders: Query<&CascadeChunk, With<TerrainTrimeshCollider>>,
-) {
-	if !physics.0 || respawn.queued_at.is_some() {
-		return;
-	}
-	let Ok((entity, transform, mut velocity, mut gravity)) = player.single_mut() else {
-		return;
-	};
-	let at = transform.translation;
-	if !terrain_collider_covers_xz(at, terrain_colliders.iter()) {
-		gravity.0 = 0.0;
-		**velocity = Vec3::ZERO;
-		commands.entity(entity).insert(AwaitingTerrainSurface);
-		return;
-	}
-	let surface = store
-		.composed_height_at(&layout, at.x, at.z)
-		.unwrap_or_else(|| holding_elevation(&base.0, at.x, at.z));
-	if at.y >= surface - FALL_RESPAWN_DEPTH {
-		return;
-	}
-	respawn.queued_at = Some(time.elapsed_secs() + FALL_RESPAWN_DELAY_SECS);
-	gravity.0 = 0.0;
-	**velocity = Vec3::ZERO;
-	commands.entity(entity).insert(AwaitingTerrainSurface);
-}
-
-fn respawn_fallen_player(
-	time: Res<Time>,
-	store: Res<TerrainEntryStore>,
-	layout: Res<TerrainCellLayout>,
-	base: Res<WorldBaseTerrain>,
-	mut respawn: ResMut<PlayerRespawn>,
-	mut player: Query<(&mut Transform, &mut LinearVelocity), With<Player>>,
+	mut player: Query<(Entity, &mut Transform, &mut LinearVelocity), With<Player>>,
 ) {
 	let Some(at) = respawn.queued_at else {
 		return;
@@ -389,7 +382,7 @@ fn respawn_fallen_player(
 	if time.elapsed_secs() < at {
 		return;
 	}
-	let Ok((mut transform, mut velocity)) = player.single_mut() else {
+	let Ok((entity, mut transform, mut velocity)) = player.single_mut() else {
 		respawn.queued_at = None;
 		return;
 	};
@@ -400,6 +393,8 @@ fn respawn_fallen_player(
 	transform.translation = player_spawn_point_at(xz, elevation);
 	**velocity = Vec3::ZERO;
 	respawn.queued_at = None;
+	// First-drop hold so snap waits for composed height + a collider column.
+	commands.entity(entity).insert(AwaitingTerrainSurface);
 }
 
 /// Reposition the player after terrain layout regeneration.
@@ -664,14 +659,93 @@ fn follow_character_camera(
 
 #[cfg(test)]
 mod tests {
-	use super::*;
+	use bevy::ecs::system::RunSystemOnce;
 	use durham_terrain_models::TerrainConfig;
+
+	use super::*;
 
 	#[test]
 	fn holding_elevation_sits_above_base_noise() {
 		let base = BaseTerrainNoise::from_config(&TerrainConfig::new(42));
 		let hold = holding_elevation(&base, 0.0, 0.0);
 		assert!(hold > base.height_at(0.0, 0.0) + 50.0);
+	}
+
+	#[test]
+	fn void_floor_sits_below_bedrock() {
+		let base = BaseTerrainNoise::from_config(&TerrainConfig::new(42));
+		assert_eq!(void_floor_y(&base), -base.height_scale * 4.0 - VOID_FLOOR_MARGIN);
+		assert!(void_floor_y(&base) < -2_000.0);
+	}
+
+	#[test]
+	fn canyon_depth_does_not_queue_void_recovery() -> anyhow::Result<()> {
+		let (mut world, player) = void_world(Vec3::new(0.0, 0.0, 0.0));
+		world
+			.run_system_once(queue_void_player_respawn)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+
+		assert!(world.resource::<PlayerRespawn>().queued_at.is_none());
+		assert!(world.get::<AwaitingTerrainSurface>(player).is_none());
+		assert_eq!(
+			world.get::<GravityScale>(player).map(|gravity| gravity.0),
+			Some(PLAY_GRAVITY_SCALE)
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn below_void_floor_queues_recovery_without_reawait() -> anyhow::Result<()> {
+		let (mut world, player) = void_world(Vec3::new(0.0, -2_600.0, 0.0));
+		world
+			.run_system_once(queue_void_player_respawn)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+
+		assert!(world.resource::<PlayerRespawn>().queued_at.is_some());
+		assert!(world.get::<AwaitingTerrainSurface>(player).is_none());
+		assert_eq!(world.get::<GravityScale>(player).map(|gravity| gravity.0), Some(0.0));
+		assert_eq!(
+			world.get::<LinearVelocity>(player).map(|velocity| velocity.0),
+			Some(Vec3::ZERO)
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn snap_freezes_released_player_without_teleport() -> anyhow::Result<()> {
+		let pose = Vec3::new(4.0, 12.0, -3.0);
+		let (mut world, player) = void_world(pose);
+		world
+			.run_system_once(snap_player_to_composed_surface)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+
+		assert_eq!(
+			world.get::<Transform>(player).map(|transform| transform.translation),
+			Some(pose)
+		);
+		assert!(world.get::<AwaitingTerrainSurface>(player).is_none());
+		assert_eq!(world.get::<GravityScale>(player).map(|gravity| gravity.0), Some(0.0));
+		Ok(())
+	}
+
+	#[test]
+	fn void_recovery_snaps_and_holds_for_first_drop() -> anyhow::Result<()> {
+		let (mut world, player) = void_world(Vec3::new(12.0, -2_600.0, -8.0));
+		world.resource_mut::<PlayerRespawn>().queued_at = Some(0.0);
+		world
+			.run_system_once(recover_void_player)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+
+		let base = &world.resource::<WorldBaseTerrain>().0;
+		let expected =
+			player_spawn_point_at(Vec2::new(12.0, -8.0), holding_elevation(base, 12.0, -8.0));
+		assert_eq!(
+			world.get::<Transform>(player).map(|transform| transform.translation),
+			Some(expected)
+		);
+		assert!(world.get::<AwaitingTerrainSurface>(player).is_some());
+		assert!(world.resource::<PlayerRespawn>().queued_at.is_none());
+		Ok(())
 	}
 
 	#[test]
@@ -726,5 +800,26 @@ mod tests {
 		let walkable = WalkableGround { normal };
 		assert_eq!(grounded_plane(&hits, &walkable, true), Some(normal));
 		assert_eq!(grounded_plane(&hits, &walkable, false), None);
+	}
+
+	fn void_world(translation: Vec3) -> (World, Entity) {
+		let mut world = World::new();
+		world.init_resource::<Time>();
+		world.insert_resource(PlayerPhysicsEnabled::default());
+		world.insert_resource(PlayerRespawn::default());
+		world.insert_resource(TerrainCellLayout::default());
+		world.insert_resource(TerrainEntryStore::default());
+		world.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(
+			&TerrainConfig::new(42),
+		)));
+		let player = world
+			.spawn((
+				Player,
+				Transform::from_translation(translation),
+				LinearVelocity(Vec3::Y * -20.0),
+				GravityScale(PLAY_GRAVITY_SCALE),
+			))
+			.id();
+		(world, player)
 	}
 }

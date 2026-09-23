@@ -4,6 +4,7 @@ Painted assemblies that fill Richmond [`FurnitureNode`](../richmond/building-com
 
 - [`components`](components/) — kit `AssetPath`s, Blender→engine remap, posed `SceneRef` + `MaterialRef`
 - [`assemblies`](assemblies/) — `FooParams` → `build()` → exploded parts
+- [`usage-areas`](usage-areas/) — packed usage regions (`BitesCounter`, `BitesKitchen`) → furniture ensembles
 - [`shaders`](shaders/) — BotW-warm `MaterialRef` recipes (wood, cloth, marble, ornate)
 - [`playground`](playground/) — isolated `/show` catalog (unit kits + Richmond slot gallery)
 
