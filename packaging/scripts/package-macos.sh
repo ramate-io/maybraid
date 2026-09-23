@@ -91,17 +91,78 @@ else
     echo "==> Unsigned (set SIGN_IDENTITY to Developer ID Application: …)"
 fi
 
+hdiutil_detach_maybraid() {
+    /usr/bin/hdiutil detach "/Volumes/Maybraid" -force 2>/dev/null || true
+    /usr/bin/hdiutil detach "Maybraid" -force 2>/dev/null || true
+}
+
+hdiutil_detach_dist_images() {
+    local info image_path dev
+    info="$(/usr/bin/hdiutil info 2>/dev/null || true)"
+    image_path=""
+    while IFS= read -r line; do
+        if [[ "$line" =~ ^[[:space:]]*image-path:[[:space:]]*(.+)$ ]]; then
+            image_path="${BASH_REMATCH[1]}"
+        elif [[ -n "$image_path" && "$line" =~ ^(/dev/disk[0-9]+) ]]; then
+            if [[ "$image_path" == "$DIST/"* ]]; then
+                dev="${BASH_REMATCH[1]}"
+                /usr/bin/hdiutil detach "$dev" -force 2>/dev/null \
+                    || /usr/bin/hdiutil detach "$image_path" -force 2>/dev/null \
+                    || true
+            fi
+            image_path=""
+        fi
+    done <<< "$info"
+}
+
+hdiutil_cleanup_before_retry() {
+    hdiutil_detach_maybraid
+    hdiutil_detach_dist_images
+    if [[ -f "$DMG" ]]; then
+        /usr/bin/hdiutil detach "$DMG" -force 2>/dev/null || true
+    fi
+    rm -f "$DMG"
+}
+
+hdiutil_busy_error() {
+    case "$1" in
+        *"Resource busy"*|*"Device busy"*|*"resource temporarily unavailable"*)
+            return 0
+            ;;
+    esac
+    return 1
+}
+
+create_udzo_dmg() {
+    local attempt output status max_attempts=5
+    sync
+    for (( attempt=1; attempt<=max_attempts; attempt++ )); do
+        output="$(/usr/bin/hdiutil create \
+            -volname "Maybraid" \
+            -srcfolder "$DMG_STAGE" \
+            -ov \
+            -format UDZO \
+            "$DMG" 2>&1)" && return 0
+        status=$?
+        if hdiutil_busy_error "$output" && (( attempt < max_attempts )); then
+            echo "hdiutil create busy (attempt ${attempt}/${max_attempts}), retrying..." >&2
+            printf '%s\n' "$output" >&2
+            hdiutil_cleanup_before_retry
+            sync
+            sleep $((attempt * 2))
+            continue
+        fi
+        printf '%s\n' "$output" >&2
+        return "$status"
+    done
+}
+
 echo "==> DMG"
 rm -rf "$DMG_STAGE"
 mkdir -p "$DMG_STAGE"
 /usr/bin/ditto "$APP" "$DMG_STAGE/Maybraid.app"
 ln -s /Applications "$DMG_STAGE/Applications"
-/usr/bin/hdiutil create \
-    -volname "Maybraid" \
-    -srcfolder "$DMG_STAGE" \
-    -ov \
-    -format UDZO \
-    "$DMG"
+create_udzo_dmg
 
 if [[ -n "${SIGN_IDENTITY:-}" ]]; then
     /usr/bin/codesign --timestamp --sign "$SIGN_IDENTITY" "$DMG"

@@ -40,7 +40,9 @@ pub use maybraid_sky::{
 pub use mobs::WorldMobsPlugin;
 pub use player_camera::CameraPov;
 pub use player_lifecycle::{WorldPlayerLifecyclePlugin, WorldPlayerRespawnConfig};
-pub use player_position::{PlayerPositionPlugin, PlayerPositionWaypoints};
+pub use player_position::{
+	resume_discovery_from_saved_waypoints, PlayerPositionPlugin, PlayerPositionWaypoints,
+};
 pub use poi::{WorldPoiDiscoveryBudget, WorldPoiPlugin, WorldPoiSystems};
 pub use start::{
 	parse_xz_metres, player_spawn_xz, resolve_start_at, start_at_from_env, take_start_at_from_args,
