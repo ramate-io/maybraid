@@ -19,9 +19,9 @@ use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
 use maybraid_input::MenuNavPad;
 use maybraid_menu_controller::MenuControllerPlugin;
 use maybraid_world::{
-	resume_discovery_from_saved_waypoints, PlayerPhysicsEnabled, PlayerSpawnXz, ShadowQuality,
-	TerrainStreamingEnabled, WorldGameplayEnabled, WorldMobHudEnabled, WorldPlayerLoadout,
-	WorldPlugin, WorldSceneryVisible,
+	resume_discovery_from_saved_waypoints, InventoryEditCameraFollow, PlayerPhysicsEnabled,
+	PlayerSpawnXz, ShadowQuality, TerrainStreamingEnabled, WorldGameplayEnabled,
+	WorldMobHudEnabled, WorldPlayerLoadout, WorldPlugin, WorldSceneryVisible,
 };
 use menu_components::{
 	consume_screen_back, ActiveOverlayKey, MenuBackConsumed, ScreenBackPressed, ShortTextModal,
@@ -45,6 +45,7 @@ impl Plugin for GamePlugin {
 	fn build(&self, app: &mut App) {
 		app.add_plugins(WorldPlugin::game())
 			.insert_resource(WorldGameplayEnabled(false))
+			.insert_resource(InventoryEditCameraFollow(false))
 			.insert_resource(PlayerPhysicsEnabled(false))
 			.insert_resource(TerrainStreamingEnabled(false))
 			.insert_resource(WorldSceneryVisible(false))
@@ -106,6 +107,7 @@ impl Plugin for GamePlugin {
 					sync_world_shadows,
 				),
 			)
+			.add_systems(PreUpdate, sync_inventory_edit_follow.run_if(in_state(WorldPause::Menu)))
 			.add_systems(
 				Update,
 				(
@@ -254,6 +256,15 @@ fn persist_changed_player_inventory(
 	}
 }
 
+fn sync_inventory_edit_follow(
+	character: Query<(), With<CharacterScreen>>,
+	return_to: Option<Res<CharacterEditorReturn>>,
+	mut follow: ResMut<InventoryEditCameraFollow>,
+) {
+	follow.0 = !character.is_empty()
+		&& return_to.is_some_and(|return_to| return_to.uses_live_world_player());
+}
+
 fn sync_world_loadout_from_editor(
 	baseline: Option<Res<CharacterEditBaseline>>,
 	editing: Option<Res<EditingCharacter>>,
@@ -261,18 +272,15 @@ fn sync_world_loadout_from_editor(
 	return_to: Option<Res<CharacterEditorReturn>>,
 	mut commands: Commands,
 ) {
-	let Some(baseline) = baseline else {
-		return;
-	};
-	if !baseline.is_changed() {
-		return;
-	}
-	if return_to.as_deref() != Some(&CharacterEditorReturn::InGame) {
+	if return_to.is_none_or(|return_to| !return_to.uses_live_world_player()) {
 		return;
 	}
 	let Some(editing) = editing else {
 		return;
 	};
+	if !menu.is_changed() && baseline.as_ref().is_none_or(|baseline| !baseline.is_changed()) {
+		return;
+	}
 	commands.insert_resource(
 		WorldPlayerLoadout::new(
 			editing.id.to_hex(),
@@ -414,9 +422,13 @@ mod tests {
 	use menu_playground::ActiveCharacter;
 
 	use crate::{
-		assets_root, persist_changed_player_inventory, read_player_loadout, sync_world_shadows,
+		assets_root, persist_changed_player_inventory, read_player_loadout,
+		sync_world_loadout_from_editor, sync_world_shadows,
 	};
 	use maybraid_world::{ShadowQuality, WorldPlayerLoadout};
+	use menu_playground::{
+		CharacterEditBaseline, CharacterEditorReturn, CharacterMenuState, EditingCharacter,
+	};
 	use menu_screens::{InGameSettings, InGameShadowQuality};
 
 	#[test]
@@ -477,6 +489,37 @@ mod tests {
 		assert_eq!(loaded.clothing, bag.clothing);
 		assert_eq!(loaded.weapons, bag.weapons);
 		assert_eq!(loaded.skills, bag.skills);
+		Ok(())
+	}
+
+	#[test]
+	fn in_game_editor_writes_live_loadout() -> anyhow::Result<()> {
+		let bag = Inventory::with_starter_outfit(vec![
+			InventoryItem::clothing(
+				ClothingMesh::Pants,
+				ClothingMaterial::Cloth,
+				ItemColor::Natural,
+			),
+			InventoryItem::firearm(FirearmMesh::Bullpup),
+		]);
+		let mut menu = CharacterMenuState::default();
+		menu.0.inventory = Some(bag.clone());
+		let mut world = World::new();
+		world.insert_resource(CharacterEditorReturn::InGame);
+		world.insert_resource(EditingCharacter { id: CharacterId(11) });
+		world.insert_resource(CharacterEditBaseline::capture(&menu.0));
+		world.insert_resource(menu);
+		world
+			.run_system_once(sync_world_loadout_from_editor)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+
+		let loadout = world
+			.get_resource::<WorldPlayerLoadout>()
+			.ok_or_else(|| anyhow::anyhow!("loadout"))?;
+		assert_eq!(
+			loadout.inventory.primary_weapon().and_then(InventoryItem::firearm_mesh),
+			Some(FirearmMesh::Bullpup)
+		);
 		Ok(())
 	}
 
