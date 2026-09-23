@@ -1,5 +1,6 @@
 //! Exploded kit pieces in unit-slot space.
 
+use bevy::prelude::Component;
 use material_ref::MaterialRef;
 use richmond_building_components::{AssetPath, Placement};
 
@@ -121,6 +122,23 @@ impl PartKind {
 	/// Slot-local pose for this GLB: kit remap, then the unit-slot slab.
 	pub fn place_in_slot(self, slot: Placement, unit: Placement) -> Placement {
 		place_kit(slot, self.kit_to_unit(), unit)
+	}
+}
+
+/// Stamped on a fulfilled kit piece so world code can find a chest lid or trunk
+/// after the furniture cell streams in.
+///
+/// [`Default`] exists so Bevy's scene template can patch a real part over it.
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FurnitureKitPart {
+	pub kind: PartKind,
+	pub finish_seed: u64,
+	pub slot: u32,
+}
+
+impl Default for FurnitureKitPart {
+	fn default() -> Self {
+		Self { kind: PartKind::ChestLid, finish_seed: 0, slot: 0 }
 	}
 }
 

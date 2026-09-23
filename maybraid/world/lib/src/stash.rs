@@ -7,7 +7,8 @@
 //! pieces so each is claimable on its own. Raiders and Guards leave about one
 //! third, Brawlers about one twelfth, and other families drop nothing.
 //! Unmarked NPCs still drop the full bag. Player drops still explode
-//! everything. Authored chests stay a single pile.
+//! everything. A closed loot crate swings its lid open on X and ejects one
+//! ephemeral stash ([`crate::crate_loot`]); the crate restocks on its own clock.
 //!
 //! Loot TTL is [`StashPolicy::loot_secs`] (default 60 s), independent of
 //! mob corpse lifetime (4 s). Persistent chests omit [`DespawnAfter`].
@@ -17,7 +18,8 @@
 //! In-range claim shows three concentric ground rings (yellow 1.5 m, green
 //! 0.75 m, blue 0.25 m) and a Kenney outline interact chip on the player–item
 //! line (Xbox **X** when a gamepad is connected, keyboard **E** otherwise),
-//! plus a screen-space `Pick up <name>` caption.
+//! plus a screen-space `Pick up <name>` caption. A closed loot crate uses the
+//! same rings and an `Open` caption when no stash is already in range.
 
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value};
@@ -199,23 +201,25 @@ pub struct WorldStashPlugin;
 impl Plugin for WorldStashPlugin {
 	fn build(&self, app: &mut App) {
 		add_character_components_host::<StashClothingPreview>(app);
-		app.init_resource::<WorldStashSettings>().add_systems(
-			Update,
-			(
-				claim_nearby_stashes
+		app.init_resource::<WorldStashSettings>()
+			.init_resource::<crate::crate_loot::CrateLoot>()
+			.add_systems(
+				Update,
+				(
+					(
+						crate::crate_loot::stamp_closed_lids,
+						claim_nearby_stashes,
+						crate::crate_loot::tick_lid_swings,
+						crate::crate_loot::sync_crate_lid_poses,
+					)
+						.chain(),
+					drop_player_inventory,
+					sync_stash_interact_prompt,
+					sync_stash_claim_halo,
+				)
 					.after(CharacterControlSystems)
 					.run_if(resource_equals(WorldGameplayEnabled(true))),
-				drop_player_inventory
-					.after(CharacterControlSystems)
-					.run_if(resource_equals(WorldGameplayEnabled(true))),
-				sync_stash_interact_prompt
-					.after(CharacterControlSystems)
-					.run_if(resource_equals(WorldGameplayEnabled(true))),
-				sync_stash_claim_halo
-					.after(CharacterControlSystems)
-					.run_if(resource_equals(WorldGameplayEnabled(true))),
-			),
-		);
+			);
 		app.add_systems(PostUpdate, detach_downed_npc_loot.after(DamageSystems::Down));
 	}
 }
@@ -576,14 +580,23 @@ fn xz_distance(a: Vec3, b: Vec3) -> f32 {
 	a.xz().distance(b.xz())
 }
 
-fn claim_nearby_stashes(
+pub(crate) fn claim_nearby_stashes(
 	mut intents: MessageReader<CharacterIntent>,
 	mut commands: Commands,
 	mut loadout: Option<ResMut<WorldPlayerLoadout>>,
+	time: Option<Res<Time>>,
+	mut crates: Option<ResMut<crate::crate_loot::CrateLoot>>,
 	players: Query<(Entity, &Transform, &InventoryUser), With<VegetationPlayer>>,
 	stashes: Query<(Entity, &Transform, &InventoryUser, &StashPolicy), With<WorldStash>>,
 	displayed: Query<(Entity, &ChildOf), With<StashDisplayedItem>>,
 	mut bags: Query<&mut Inventory>,
+	lids: Query<
+		(Entity, &furniture_assemblies::FurnitureKitPart, &GlobalTransform),
+		(With<crate::crate_loot::ClosedLid>, Without<crate::crate_loot::LidSwing>),
+	>,
+	parts: Query<(Entity, &furniture_assemblies::FurnitureKitPart, &GlobalTransform)>,
+	child_of: Query<&ChildOf>,
+	hosts: Query<&furniture_assemblies::PresentedFurnitureCellId>,
 ) {
 	if !intents.read().any(|intent| matches!(intent, CharacterIntent::StartInteraction)) {
 		return;
@@ -592,6 +605,18 @@ fn claim_nearby_stashes(
 		let origin = player_origin(player_transform);
 		let Some((stash, stash_bag, policy, _)) = nearest_stash_in_radius(origin, stashes.iter())
 		else {
+			if let (Some(time), Some(crates)) = (time.as_deref(), crates.as_deref_mut()) {
+				crate::crate_loot::open_nearest_crate(
+					origin,
+					time.elapsed_secs(),
+					&mut commands,
+					crates,
+					&lids,
+					&parts,
+					&child_of,
+					&hosts,
+				);
+			}
 			continue;
 		};
 		let Ok(mut source) = bags.get_mut(stash_bag) else {
@@ -800,6 +825,7 @@ fn sync_stash_interact_prompt(
 		(With<WorldStash>, Without<StashInteractPrompt>),
 	>,
 	anchors: Query<(Entity, &ChildOf, Option<&StashHaloAnchor>), With<StashDisplayedItem>>,
+	crates: crate::crate_loot::ClosedCrateQuery,
 	bags: Query<&Inventory>,
 	mut prompt: Query<
 		(&mut Transform, &mut Visibility),
@@ -815,7 +841,7 @@ fn sync_stash_interact_prompt(
 	>,
 ) {
 	let pad_connected = !gamepads.is_empty();
-	let target = nearest_claim(players.iter(), stashes.iter(), anchors.iter());
+	let target = nearest_interact(players.iter(), stashes.iter(), anchors.iter(), &crates);
 	if prompt.is_empty() {
 		let Some(assets) = assets.as_deref() else {
 			return;
@@ -848,7 +874,12 @@ fn sync_stash_interact_prompt(
 			None => *visibility = Visibility::Hidden,
 		}
 	}
-	let label = target.and_then(|claim| bags.get(claim.bag).ok().map(pickup_action_label));
+	let label = target.map(|claim| match claim.bag {
+		Some(bag) => {
+			bags.get(bag).ok().map(pickup_action_label).unwrap_or_else(|| "Pick up".into())
+		}
+		None => String::from("Open"),
+	});
 	let camera = cameras.iter().next();
 	let screen = prompt_at.and_then(|at| {
 		let (camera, camera_transform) = camera?;
@@ -877,7 +908,7 @@ fn sync_stash_interact_prompt(
 struct NearestClaim {
 	at: Vec3,
 	player: Vec3,
-	bag: Entity,
+	bag: Option<Entity>,
 }
 
 fn nearest_claim<'a>(
@@ -890,17 +921,29 @@ fn nearest_claim<'a>(
 	players.into_iter().find_map(|transform| {
 		let player = player_origin(transform);
 		nearest_stash_in_radius(player, listed.iter().copied()).map(|(stash, bag, _, at)| {
-			NearestClaim { at: halo_world_point(at, stash, anchors.iter().copied()), player, bag }
+			NearestClaim {
+				at: halo_world_point(at, stash, anchors.iter().copied()),
+				player,
+				bag: Some(bag),
+			}
 		})
 	})
 }
 
-fn nearest_claim_point<'a>(
+fn nearest_interact<'a>(
 	players: impl IntoIterator<Item = &'a Transform>,
 	stashes: impl IntoIterator<Item = (Entity, &'a Transform, &'a InventoryUser, &'a StashPolicy)>,
 	anchors: impl IntoIterator<Item = (Entity, &'a ChildOf, Option<&'a StashHaloAnchor>)>,
-) -> Option<Vec3> {
-	nearest_claim(players, stashes, anchors).map(|claim| claim.at)
+	crates: &crate::crate_loot::ClosedCrateQuery,
+) -> Option<NearestClaim> {
+	let players: Vec<_> = players.into_iter().collect();
+	if let Some(claim) = nearest_claim(players.iter().copied(), stashes, anchors) {
+		return Some(claim);
+	}
+	let transform = *players.first()?;
+	let player = player_origin(transform);
+	let at = crates.floor(player)?;
+	Some(NearestClaim { at, player, bag: None })
 }
 
 fn halo_world_point<'a>(
@@ -932,12 +975,14 @@ fn sync_stash_claim_halo(
 		(With<WorldStash>, Without<StashClaimHalo>),
 	>,
 	anchors: Query<(Entity, &ChildOf, Option<&StashHaloAnchor>), With<StashDisplayedItem>>,
+	crates: crate::crate_loot::ClosedCrateQuery,
 	mut halo: Query<
 		(&mut Transform, &mut Visibility),
 		(With<StashClaimHalo>, Without<WorldStash>, Without<VegetationPlayer>),
 	>,
 ) {
-	let target = nearest_claim_point(players.iter(), stashes.iter(), anchors.iter());
+	let target = nearest_interact(players.iter(), stashes.iter(), anchors.iter(), &crates)
+		.map(|claim| claim.at);
 	if halo.is_empty() {
 		let Some(meshes) = meshes.as_mut() else {
 			return;
@@ -1819,6 +1864,56 @@ mod tests {
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?
 			.translation;
 		assert!((far.xz() - Vec2::new(3.0, 0.0)).length() < 1e-3);
+		Ok(())
+	}
+
+	#[test]
+	fn claim_halo_marks_a_closed_crate() -> anyhow::Result<()> {
+		use crate::crate_loot::{ClosedLid, CrateLoot};
+		use furniture_assemblies::{FurnitureKitPart, PartKind, PresentedFurnitureCellId};
+		use lod::gen::Id;
+
+		let mut world = World::new();
+		world.init_resource::<Time>();
+		world.init_resource::<CrateLoot>();
+		let player_bag = world.spawn(Inventory::default()).id();
+		world.spawn((VegetationPlayer, Transform::IDENTITY, InventoryUser::carrying(player_bag)));
+		let at = Transform::from_xyz(2.0, 0.4, 0.0);
+		let host = world.spawn(PresentedFurnitureCellId(Id::Universal)).id();
+		world.spawn((
+			FurnitureKitPart { kind: PartKind::ChestLid, finish_seed: 1, slot: 0 },
+			ClosedLid(at),
+			at,
+			GlobalTransform::from(at),
+			ChildOf(host),
+		));
+		world.spawn((StashClaimHalo, Transform::IDENTITY, Visibility::Hidden));
+		world
+			.run_system_once(sync_stash_claim_halo)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let (transform, visibility) = world
+			.query_filtered::<(&Transform, &Visibility), With<StashClaimHalo>>()
+			.single(&world)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert_eq!(*visibility, Visibility::Visible);
+		assert!((transform.translation.xz() - Vec2::new(2.0, 0.0)).length() < 1e-3);
+
+		world
+			.run_system_once(spawn_stash_system(
+				Transform::from_xyz(1.0, 0.0, 0.0),
+				one_garment(),
+				StashPolicy::default(),
+			))
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		world
+			.run_system_once(sync_stash_claim_halo)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let on_stash = world
+			.query_filtered::<&Transform, With<StashClaimHalo>>()
+			.single(&world)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?
+			.translation;
+		assert!((on_stash.xz() - Vec2::new(1.0, 0.0)).length() < 1e-3);
 		Ok(())
 	}
 

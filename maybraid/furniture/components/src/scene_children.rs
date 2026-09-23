@@ -8,7 +8,7 @@ use lod::LodLazyPending;
 use material_ref::{MaterialRef, MaterialRefRoot, PropagateToDescendants};
 use richmond_building_components::{pose, scene_children, AssetPath};
 
-use crate::parts::PlacedPart;
+use crate::parts::{FurnitureKitPart, PlacedPart};
 
 /// Authored kit under a transform, with propagating [`MaterialRefRoot`].
 pub fn posed_kit(
@@ -26,6 +26,29 @@ pub fn posed_kit(
 	))];
 	bsn! {
 		template_value(transform)
+		Visibility::default()
+		Children [ {children} ]
+	}
+}
+
+/// [`posed_kit`] plus a [`FurnitureKitPart`] on the posed root (the transform world swings).
+pub fn posed_kit_part(
+	asset: AssetPath,
+	material: MaterialRef,
+	transform: Transform,
+	part: FurnitureKitPart,
+) -> impl Scene + 'static {
+	let children: Vec<Box<dyn Scene>> = vec![Box::new((
+		bsn! {
+			template_value(MaterialRefRoot(material))
+			PropagateToDescendants
+			LodLazyPending
+		},
+		asset.scene_ref().scene(),
+	))];
+	bsn! {
+		template_value(transform)
+		template_value(part)
 		Visibility::default()
 		Children [ {children} ]
 	}

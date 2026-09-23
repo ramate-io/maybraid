@@ -88,7 +88,8 @@ mod tests {
 
 	#[test]
 	fn partitions_and_counters_block_sit_ons_do_not() {
-		let partition = FurnitureNode::partition(Placement::IDENTITY.with_scale(Vec3::new(2.6, 3.2, 0.22)));
+		let partition =
+			FurnitureNode::partition(Placement::IDENTITY.with_scale(Vec3::new(2.6, 3.2, 0.22)));
 		let fruit = FurnitureNode::fruit(Placement::IDENTITY);
 		let shapes = walk_shapes(&[partition, fruit]);
 		assert_eq!(shapes.len(), 1);

@@ -1,4 +1,7 @@
 //! One-shot Hanabi bursts when a bolt or bullet first hits Fixed geometry.
+//!
+//! Spark and smoke particles, and the volume they spawn in, are three times
+//! the first version of this burst.
 
 use bevy::asset::RenderAssetUsages;
 use bevy::image::ImageSampler;
@@ -89,7 +92,7 @@ fn spark_effect() -> EffectAsset {
 	let writer = ExprWriter::new();
 	let init_pos = SetPositionSphereModifier {
 		center: writer.lit(Vec3::ZERO).expr(),
-		radius: writer.lit(0.03).expr(),
+		radius: writer.lit(0.09).expr(),
 		dimension: ShapeDimension::Volume,
 	};
 	let speed = writer.lit(3.).uniform(writer.lit(9.));
@@ -110,8 +113,8 @@ fn spark_effect() -> EffectAsset {
 	color.add_key(0.35, Vec4::new(0.3, 1.4, 1.6, 1.0));
 	color.add_key(1.0, Vec4::new(0.1, 0.2, 0.25, 0.0));
 	let mut size = Gradient::new();
-	size.add_key(0.0, Vec3::splat(0.045));
-	size.add_key(1.0, Vec3::splat(0.008));
+	size.add_key(0.0, Vec3::splat(0.135));
+	size.add_key(1.0, Vec3::splat(0.024));
 
 	EffectAsset::new(64, SpawnerSettings::once(28.0.into()), writer.finish())
 		.with_name("bolt-sparks")
@@ -131,7 +134,7 @@ fn spark_effect() -> EffectAsset {
 		.render(OrientModifier::new(OrientMode::AlongVelocity))
 }
 
-fn puff_mask() -> Image {
+pub(crate) fn puff_mask() -> Image {
 	let n = PUFF_MASK_SIZE;
 	let mut data = vec![0u8; (n * n) as usize];
 	let c = (n as f32 - 1.0) * 0.5;
@@ -160,7 +163,7 @@ fn smoke_effect() -> EffectAsset {
 	let writer = ExprWriter::new();
 	let init_pos = SetPositionSphereModifier {
 		center: writer.lit(Vec3::ZERO).expr(),
-		radius: writer.lit(0.04).expr(),
+		radius: writer.lit(0.12).expr(),
 		dimension: ShapeDimension::Volume,
 	};
 	let speed = writer.lit(0.12).uniform(writer.lit(0.45));
@@ -182,8 +185,8 @@ fn smoke_effect() -> EffectAsset {
 	color.add_key(0.35, Vec4::new(0.32, 0.34, 0.36, 0.18));
 	color.add_key(1.0, Vec4::new(0.18, 0.19, 0.2, 0.0));
 	let mut size = Gradient::new();
-	size.add_key(0.0, Vec3::splat(0.05));
-	size.add_key(1.0, Vec3::splat(0.13));
+	size.add_key(0.0, Vec3::splat(0.15));
+	size.add_key(1.0, Vec3::splat(0.39));
 
 	let mut module = writer.finish();
 	module.add_texture_slot("puff");

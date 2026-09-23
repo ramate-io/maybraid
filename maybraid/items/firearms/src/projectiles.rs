@@ -2,20 +2,41 @@
 //!
 //! Lasers are visuals parented to the barrel (not a [`::projectiles::Flight`]).
 //! They grow to the first bore hit and despawn when the trigger is released.
+//! Every shot shows a white flame cone on that bone, with a small ember burst at the cone's tip.
+//! The flash stays parented to the barrel and is hidden between shots. A laser keeps a smaller
+//! cone and a thin ember jet while the beam is on.
 
 use ::projectiles::{
 	spawn_flight, tick_flights, BoltSpec, BulletSpec, ProjectileContact, ProjectileSource,
 	ProjectileVisualCache, ProjectilesPlugin,
 };
+
 use avian3d::prelude::{SpatialQuery, SpatialQueryFilter};
+use bevy::camera::visibility::VisibilitySystems;
 use bevy::ecs::query::Has;
+use bevy::light::NotShadowCaster;
+use bevy::mesh::ConeAnchor;
 use bevy::prelude::*;
+use bevy_hanabi::prelude::{
+	Attribute, ColorBlendMask, ColorBlendMode, ColorOverLifetimeModifier, EffectAsset,
+	EffectMaterial, EffectSpawner, ExprWriter, ImageSampleMapping, LinearDragModifier, OrientMode,
+	OrientModifier, ParticleEffect, ParticleTextureModifier, SetAttributeModifier,
+	SetPositionSphereModifier, SetVelocitySphereModifier, ShapeDimension, SimulationSpace,
+	SizeOverLifetimeModifier, SpawnerSettings,
+};
+use bevy_hanabi::Gradient;
 use damage::{DamageSystems, Hit, HitPayload};
 use firearms_components::{BoneMap, FirearmHostSystems, FirearmMembers, FirearmRoot, RigRoot};
 use lod_avian::PhysicsInteractionLayer;
 
 use crate::cadence::{trigger_allows_fire, FireControl, WeaponFired, WeaponRecoil};
-use crate::impact::{setup_impact_effects, spawn_impact, tick_impact_bursts, ImpactEffects};
+use crate::impact::{
+	puff_mask, setup_impact_effects, spawn_impact, tick_impact_bursts, ImpactEffects,
+};
+use crate::muzzle_flame::{
+	init_muzzle_flame_caches, muzzle_flame_ref, resolve_muzzle_flame, MuzzleFlameMaterial,
+	MuzzleFlameMaterialPlugin, MuzzleFlameMaterialRefCache,
+};
 
 /// Authored rest length of the `barrel` bone (head → tail) in bone-local units.
 pub const BARREL_REST_LENGTH: f32 = 1.0;
@@ -48,7 +69,7 @@ pub struct LaserSpec {
 
 impl Default for LaserSpec {
 	fn default() -> Self {
-		Self { radius: 0.035, max_length: 22.0, max_time: 0.7, color: Color::srgb(1.0, 0.18, 0.22) }
+		Self { radius: 0.07, max_length: 22.0, max_time: 0.7, color: Color::srgb(1.0, 0.18, 0.22) }
 	}
 }
 
@@ -138,19 +159,30 @@ impl Plugin for FirearmWeaponsPlugin {
 		if !app.is_plugin_added::<bevy_hanabi::HanabiPlugin>() {
 			app.add_plugins(bevy_hanabi::HanabiPlugin);
 		}
+		init_muzzle_flame_caches(app);
+		if !app.is_plugin_added::<MuzzleFlameMaterialPlugin>() {
+			app.add_plugins(MuzzleFlameMaterialPlugin);
+		}
 		app.init_resource::<WeaponsArmed>()
 			.add_message::<WeaponFired>()
-			.add_systems(Startup, setup_impact_effects)
+			.add_systems(Startup, (setup_impact_effects, setup_muzzle_flash))
 			.add_systems(
 				PostUpdate,
 				(
-					fire_weapons.in_set(FirearmWeaponSystems::Fire),
+					fire_weapons
+						.in_set(FirearmWeaponSystems::Fire)
+						.before(VisibilitySystems::VisibilityPropagate),
+					// Show the flash before visibility propagates, then let Hanabi tick the
+					// reset spawner before this system considers hiding it again.
+					tick_muzzle_flashes
+						.after(FirearmWeaponSystems::Fire)
+						.after(bevy_hanabi::EffectSystems::TickSpawners),
 					tick_lasers.after(FirearmWeaponSystems::Fire),
 					tick_laser_hits
 						.in_set(DamageSystems::Collect)
 						.after(FirearmWeaponSystems::Fire),
 					spawn_impacts_from_contacts,
-					tick_impact_bursts,
+					tick_impact_bursts.after(bevy_hanabi::EffectSystems::TickSpawners),
 				)
 					.after(TransformSystems::Propagate)
 					.after(FirearmHostSystems::Pose)
@@ -190,6 +222,308 @@ fn glow_material(color: Color) -> StandardMaterial {
 		emissive: LinearRgba::rgb(glow.red * 14.0, glow.green * 14.0, glow.blue * 14.0),
 		unlit: true,
 		..default()
+	}
+}
+
+/// How long the cone takes to shrink away. The ember entity outlives the particles.
+const CONE_LIFE: f32 = 0.08;
+const MUZZLE_FLASH_LIFE: f32 = 0.28;
+const MUZZLE_FLASH_RADIUS: f32 = 0.22;
+const MUZZLE_FLASH_LENGTH: f32 = 0.55;
+/// Embers spawn here in the emitter's local space. The emitter sits on the cone tip.
+const EMBER_SPAWN_CENTER: Vec3 = Vec3::ZERO;
+/// Behind the tip on barrel -Y, so the cheap burst travels on down the bore (+Y).
+const FLAME_VELOCITY_CENTER: Vec3 = Vec3::new(0.0, -0.2, 0.0);
+/// One-shot plume. Long life and light drag so the burst clears the cone.
+const EMBER_SPEED: (f32, f32) = (7.0, 14.0);
+const EMBER_LIFE: (f32, f32) = (0.10, 0.20);
+const EMBER_DRAG: f32 = 2.0;
+
+/// Cone plus embers, kept on the barrel and shown only while a shot is playing.
+#[derive(Component)]
+pub(crate) struct MuzzleFlash {
+	age: f32,
+	life: f32,
+	sustain_laser: Option<Entity>,
+}
+
+/// The flash entity parented to a barrel. One per gun, for the life of that bone.
+#[derive(Component)]
+pub(crate) struct MuzzleFlashMount(Entity);
+
+/// The fading cone. Kept off the flash root so ember sprites are not scaled with it.
+#[derive(Component)]
+pub(crate) struct MuzzleFlashCone;
+
+/// The ember effect. Marker so a retrigger can reset its spawner without scaling it.
+#[derive(Component)]
+pub(crate) struct MuzzleFlashEmbers;
+
+/// Shared cone mesh, the white-flame material, and the small ember effects.
+#[derive(Resource)]
+pub(crate) struct MuzzleFlashEffects {
+	burst: Handle<EffectAsset>,
+	jet: Handle<EffectAsset>,
+	puff: Handle<Image>,
+	cone: Handle<Mesh>,
+	flame: Handle<MuzzleFlameMaterial>,
+}
+
+fn setup_muzzle_flash(
+	mut commands: Commands,
+	mut effects: ResMut<Assets<EffectAsset>>,
+	mut images: ResMut<Assets<Image>>,
+	mut meshes: ResMut<Assets<Mesh>>,
+	mut flame_materials: ResMut<Assets<MuzzleFlameMaterial>>,
+	mut flame_cache: ResMut<MuzzleFlameMaterialRefCache>,
+) {
+	let puff = images.add(puff_mask());
+	let flame = resolve_muzzle_flame(&mut flame_materials, &mut flame_cache, &muzzle_flame_ref());
+	commands.insert_resource(MuzzleFlashEffects {
+		burst: effects.add(flame_effect(FlameKind::Burst)),
+		jet: effects.add(flame_effect(FlameKind::Jet)),
+		puff,
+		cone: meshes.add(muzzle_flash_mesh()),
+		flame,
+	});
+}
+
+fn muzzle_flash_mesh() -> Mesh {
+	Cone::new(1.0, 1.0).mesh().resolution(12).anchor(ConeAnchor::Base).build()
+}
+
+/// Cone scale in flash-local space. The base stays at the origin; the tip points down the bore.
+fn cone_scale(age: f32, sustain: bool) -> Vec3 {
+	let t = if CONE_LIFE > 1e-6 { (age / CONE_LIFE).clamp(0.0, 1.0) } else { 1.0 };
+	let fade = if sustain { 1.0 - 0.45 * t } else { 1.0 - t };
+	Vec3::new(MUZZLE_FLASH_RADIUS * fade, MUZZLE_FLASH_LENGTH * fade, MUZZLE_FLASH_RADIUS * fade)
+}
+
+#[derive(Clone, Copy)]
+enum FlameKind {
+	Burst,
+	Jet,
+}
+
+fn flame_effect(kind: FlameKind) -> EffectAsset {
+	// The burst effect is reused. Capacity holds two plumes so a second shot can
+	// overlap particles that have not died yet.
+	let (name, capacity, spawner, spawn_radius, speed, life, size, drag) = match kind {
+		FlameKind::Burst => (
+			"muzzle-burst",
+			32_u32,
+			SpawnerSettings::once(12.0.into()),
+			0.06,
+			EMBER_SPEED,
+			EMBER_LIFE,
+			(0.045, 0.10, 0.16),
+			EMBER_DRAG,
+		),
+		FlameKind::Jet => (
+			"muzzle-jet",
+			12,
+			SpawnerSettings::rate(16.0.into()),
+			0.05,
+			(5.0, 10.0),
+			(0.08, 0.16),
+			(0.035, 0.07, 0.11),
+			2.2,
+		),
+	};
+	let writer = ExprWriter::new();
+	let init_pos = SetPositionSphereModifier {
+		center: writer.lit(EMBER_SPAWN_CENTER).expr(),
+		radius: writer.lit(spawn_radius).expr(),
+		dimension: ShapeDimension::Volume,
+	};
+	let speed = writer.lit(speed.0).uniform(writer.lit(speed.1));
+	let init_vel = SetVelocitySphereModifier {
+		center: writer.lit(FLAME_VELOCITY_CENTER).expr(),
+		speed: speed.expr(),
+	};
+	let init_age = SetAttributeModifier::new(Attribute::AGE, writer.lit(0.).expr());
+	let init_lifetime = SetAttributeModifier::new(
+		Attribute::LIFETIME,
+		writer.lit(life.0).uniform(writer.lit(life.1)).expr(),
+	);
+	let update_drag = LinearDragModifier::new(writer.lit(drag).expr());
+	let texture_slot = writer.lit(0u32).expr();
+
+	let mut color = Gradient::new();
+	color.add_key(0.0, Vec4::new(4.0, 3.2, 1.6, 1.0));
+	color.add_key(0.45, Vec4::new(2.0, 0.55, 0.08, 0.7));
+	color.add_key(1.0, Vec4::new(0.4, 0.05, 0.01, 0.0));
+	let mut size_gradient = Gradient::new();
+	size_gradient.add_key(0.0, Vec3::splat(size.0));
+	size_gradient.add_key(0.35, Vec3::splat(size.1));
+	size_gradient.add_key(1.0, Vec3::splat(size.2));
+
+	let mut module = writer.finish();
+	module.add_texture_slot("puff");
+
+	EffectAsset::new(capacity, spawner, module)
+		.with_name(name)
+		.with_simulation_space(SimulationSpace::Local)
+		.with_alpha_mode(bevy_hanabi::AlphaMode::Add)
+		.init(init_pos)
+		.init(init_vel)
+		.init(init_age)
+		.init(init_lifetime)
+		.update(update_drag)
+		.render(ParticleTextureModifier {
+			texture_slot,
+			sample_mapping: ImageSampleMapping::ModulateOpacityFromR,
+		})
+		.render(ColorOverLifetimeModifier {
+			gradient: color,
+			blend: ColorBlendMode::Overwrite,
+			mask: ColorBlendMask::RGBA,
+		})
+		.render(SizeOverLifetimeModifier { gradient: size_gradient, screen_space_size: false })
+		.render(OrientModifier::new(OrientMode::FaceCameraPosition))
+}
+
+fn muzzle_flash_translation() -> Vec3 {
+	Vec3::Y * BARREL_REST_LENGTH
+}
+
+/// Emitter at the cone tip. The unit cone's tip is local +Y, scaled by the flash length.
+fn ember_translation() -> Vec3 {
+	Vec3::Y * MUZZLE_FLASH_LENGTH
+}
+
+fn spawn_muzzle_flash(
+	commands: &mut Commands,
+	effects: &MuzzleFlashEffects,
+	barrel: Entity,
+	sustain_laser: Option<Entity>,
+) -> Entity {
+	let asset = if sustain_laser.is_some() { effects.jet.clone() } else { effects.burst.clone() };
+	let puff = effects.puff.clone();
+	let mesh = effects.cone.clone();
+	let material = effects.flame.clone();
+	let sustain = sustain_laser.is_some();
+	let flash = commands
+		.spawn((
+			Name::new("muzzle-flash"),
+			ChildOf(barrel),
+			Transform::from_translation(muzzle_flash_translation()),
+			Visibility::Visible,
+			MuzzleFlash { age: 0.0, life: MUZZLE_FLASH_LIFE, sustain_laser },
+		))
+		.id();
+	commands.spawn((
+		Name::new("muzzle-flash-cone"),
+		ChildOf(flash),
+		Transform::from_scale(cone_scale(0.0, sustain)),
+		Visibility::Inherited,
+		Mesh3d(mesh),
+		MeshMaterial3d(material),
+		NotShadowCaster,
+		MuzzleFlashCone,
+	));
+	commands.spawn((
+		Name::new("muzzle-flash-embers"),
+		ChildOf(flash),
+		Transform::from_translation(ember_translation()),
+		Visibility::Inherited,
+		ParticleEffect::new(asset),
+		EffectMaterial { images: vec![puff] },
+		MuzzleFlashEmbers,
+	));
+	commands.entity(barrel).insert(MuzzleFlashMount(flash));
+	flash
+}
+
+fn ignite_muzzle_flash(
+	commands: &mut Commands,
+	effects: &MuzzleFlashEffects,
+	mounts: &Query<&MuzzleFlashMount>,
+	flashes: &mut Query<(&mut MuzzleFlash, &mut Visibility, &Children)>,
+	cones: &mut Query<&mut Transform, With<MuzzleFlashCone>>,
+	spawners: &mut Query<&mut EffectSpawner, With<MuzzleFlashEmbers>>,
+	barrel: Entity,
+	sustain_laser: Option<Entity>,
+) {
+	if let Ok(mount) = mounts.get(barrel) {
+		if show_muzzle_flash(mount.0, sustain_laser, flashes, cones, spawners) {
+			return;
+		}
+	}
+	spawn_muzzle_flash(commands, effects, barrel, sustain_laser);
+}
+
+fn show_muzzle_flash(
+	flash: Entity,
+	sustain_laser: Option<Entity>,
+	flashes: &mut Query<(&mut MuzzleFlash, &mut Visibility, &Children)>,
+	cones: &mut Query<&mut Transform, With<MuzzleFlashCone>>,
+	spawners: &mut Query<&mut EffectSpawner, With<MuzzleFlashEmbers>>,
+) -> bool {
+	let Ok((mut flash_state, mut visibility, children)) = flashes.get_mut(flash) else {
+		return false;
+	};
+	*visibility = Visibility::Visible;
+	flash_state.age = 0.0;
+	flash_state.sustain_laser = sustain_laser;
+	let sustain = sustain_laser.is_some();
+	for child in children.iter() {
+		if let Ok(mut transform) = cones.get_mut(child) {
+			transform.scale = cone_scale(0.0, sustain);
+		}
+		if let Ok(mut spawner) = spawners.get_mut(child) {
+			spawner.reset();
+		}
+	}
+	true
+}
+
+fn hide_muzzle_flash(
+	barrel: Entity,
+	mounts: &Query<&MuzzleFlashMount>,
+	flashes: &mut Query<(&mut MuzzleFlash, &mut Visibility, &Children)>,
+) {
+	let Ok(mount) = mounts.get(barrel) else {
+		return;
+	};
+	let Ok((_, mut visibility, _)) = flashes.get_mut(mount.0) else {
+		return;
+	};
+	*visibility = Visibility::Hidden;
+}
+
+/// A one-shot hides after its life. A laser hides once the beam entity is gone.
+fn muzzle_flash_finished(age: f32, life: f32, sustain: bool, laser_alive: bool) -> bool {
+	if sustain {
+		!laser_alive
+	} else {
+		age >= life
+	}
+}
+
+fn tick_muzzle_flashes(
+	time: Res<Time>,
+	lasers: Query<(), With<LaserBeam>>,
+	mut flashes: Query<(&mut MuzzleFlash, &mut Visibility, &Children)>,
+	mut cones: Query<&mut Transform, With<MuzzleFlashCone>>,
+) {
+	let dt = time.delta_secs();
+	for (mut flash, mut visibility, children) in &mut flashes {
+		if *visibility == Visibility::Hidden {
+			continue;
+		}
+		flash.age += dt;
+		let held = flash.sustain_laser.is_some_and(|laser| lasers.get(laser).is_ok());
+		if muzzle_flash_finished(flash.age, flash.life, flash.sustain_laser.is_some(), held) {
+			*visibility = Visibility::Hidden;
+			continue;
+		}
+		let scale = cone_scale(flash.age, held);
+		for child in children.iter() {
+			if let Ok(mut transform) = cones.get_mut(child) {
+				transform.scale = scale;
+			}
+		}
 	}
 }
 
@@ -257,7 +591,7 @@ fn laser_bore_hit(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn fire_weapons(
+pub(crate) fn fire_weapons(
 	mut commands: Commands,
 	time: Res<Time>,
 	armed: Res<WeaponsArmed>,
@@ -268,6 +602,11 @@ pub fn fire_weapons(
 	maps: Query<&BoneMap, With<RigRoot>>,
 	globals: Query<&GlobalTransform>,
 	lasers: Query<&LaserBeam>,
+	flashes_assets: Res<MuzzleFlashEffects>,
+	mounts: Query<&MuzzleFlashMount>,
+	mut flashes: Query<(&mut MuzzleFlash, &mut Visibility, &Children)>,
+	mut cones: Query<&mut Transform, With<MuzzleFlashCone>>,
+	mut spawners: Query<&mut EffectSpawner, With<MuzzleFlashEmbers>>,
 	mut fired: MessageWriter<WeaponFired>,
 ) {
 	if !armed.0 {
@@ -286,6 +625,7 @@ pub fn fire_weapons(
 			ProjectileLoad::Laser(spec) => {
 				let live = weapon.laser.filter(|entity| lasers.get(*entity).is_ok());
 				if manual && !held {
+					hide_muzzle_flash(barrel, &mounts, &mut flashes);
 					if let Some(entity) = live {
 						commands.entity(entity).try_despawn();
 					}
@@ -293,14 +633,25 @@ pub fn fire_weapons(
 					continue;
 				}
 				if live.is_none() {
-					weapon.laser = Some(spawn_laser(
+					let laser = spawn_laser(
 						&mut commands,
 						&mut meshes,
 						&mut materials,
 						barrel,
 						spec,
 						source.copied(),
-					));
+					);
+					ignite_muzzle_flash(
+						&mut commands,
+						&flashes_assets,
+						&mounts,
+						&mut flashes,
+						&mut cones,
+						&mut spawners,
+						barrel,
+						Some(laser),
+					);
+					weapon.laser = Some(laser);
 				} else {
 					weapon.laser = live;
 				}
@@ -328,6 +679,16 @@ pub fn fire_weapons(
 				) {
 					continue;
 				}
+				ignite_muzzle_flash(
+					&mut commands,
+					&flashes_assets,
+					&mounts,
+					&mut flashes,
+					&mut cones,
+					&mut spawners,
+					barrel,
+					None,
+				);
 			}
 			ProjectileLoad::Bullet(spec) => {
 				if !allowed {
@@ -352,6 +713,16 @@ pub fn fire_weapons(
 				) {
 					continue;
 				}
+				ignite_muzzle_flash(
+					&mut commands,
+					&flashes_assets,
+					&mounts,
+					&mut flashes,
+					&mut cones,
+					&mut spawners,
+					barrel,
+					None,
+				);
 			}
 		}
 	}
@@ -595,6 +966,47 @@ mod tests {
 			LaserSpec { max_length: 10.0, max_time: 1.0, radius: 0.1, ..LaserSpec::default() };
 		let (_t, scale) = laser_local(spec, 1.0, 4.0);
 		assert!((scale.y - 4.0).abs() < 1e-4);
+	}
+
+	#[test]
+	fn muzzle_flash_sits_on_the_barrel_tail() {
+		let origin = muzzle_flash_translation();
+		assert!((origin.y - BARREL_REST_LENGTH).abs() < 1e-4, "{}", origin.y);
+		assert_eq!(origin.x, 0.0);
+		assert_eq!(origin.z, 0.0);
+		let tip = ember_translation();
+		assert!((tip.y - cone_scale(0.0, false).y).abs() < 1e-4, "embers leave the cone tip");
+		assert_eq!(EMBER_SPAWN_CENTER, Vec3::ZERO, "the burst is centered on that tip");
+	}
+
+	#[test]
+	fn cone_reaches_down_the_bore_then_fades() {
+		let full = cone_scale(0.0, false);
+		assert!(full.y > full.x, "cone should reach down the bore");
+		let gone = cone_scale(CONE_LIFE, false);
+		assert!(gone.x < 1e-4, "one-shot cone ends at zero");
+		let held = cone_scale(CONE_LIFE * 4.0, true);
+		assert!(held.x > MUZZLE_FLASH_RADIUS * 0.5, "laser keeps a muzzle cone");
+	}
+
+	#[test]
+	fn muzzle_flash_hides_after_the_plume_and_when_the_beam_ends() {
+		assert!(!muzzle_flash_finished(0.0, MUZZLE_FLASH_LIFE, false, false));
+		assert!(muzzle_flash_finished(MUZZLE_FLASH_LIFE, MUZZLE_FLASH_LIFE, false, false));
+		assert!(!muzzle_flash_finished(MUZZLE_FLASH_LIFE, MUZZLE_FLASH_LIFE, true, true));
+		assert!(muzzle_flash_finished(0.0, MUZZLE_FLASH_LIFE, true, false));
+	}
+
+	#[test]
+	fn flame_burst_travels_down_the_bore() {
+		assert!(FLAME_VELOCITY_CENTER.y < 0.0, "bias sits behind the tip");
+		assert_eq!(FLAME_VELOCITY_CENTER.x, 0.0);
+		assert_eq!(FLAME_VELOCITY_CENTER.z, 0.0);
+		let speed = (EMBER_SPEED.0 + EMBER_SPEED.1) * 0.5;
+		let life = (EMBER_LIFE.0 + EMBER_LIFE.1) * 0.5;
+		let reach = speed / EMBER_DRAG * (1.0 - (-EMBER_DRAG * life).exp());
+		assert!(reach > MUZZLE_FLASH_LENGTH, "embers travel past the cone, reach {reach}");
+		assert!(MUZZLE_FLASH_LIFE > EMBER_LIFE.1, "the flash outlives the plume");
 	}
 
 	#[test]

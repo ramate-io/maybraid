@@ -42,8 +42,8 @@ pub use cell::{
 	FurnitureCellExtent, FURNITURE_CELL_SIZE, FURNITURE_GENERATE_RADIUS, FURNITURE_PRESENT_RADIUS,
 };
 pub use chair::{Chair, ChairParams};
-pub use colliders::{FurnitureWalkCollider, FurnitureWalkColliderPlugin};
 pub use chest::{Chest, ChestParams};
+pub use colliders::{FurnitureWalkCollider, FurnitureWalkColliderPlugin};
 pub use cookware::{Cookware, CookwareParams};
 pub use counter::{Counter, CounterParams};
 pub use faucet::{Faucet, FaucetParams};
@@ -52,7 +52,8 @@ pub use food_display::{FoodDisplay, FoodDisplayParams};
 pub use fridge::{Fridge, FridgeParams};
 pub use fruit::{Fruit, FruitParams};
 pub use furniture_components::{
-	assembly_scene, pose_parts, posed_kit, PartKind, PlacedPart, BOX_KIT_TO_UNIT, LEG_KIT_TO_UNIT,
+	assembly_scene, pose_parts, posed_kit, posed_kit_part, FurnitureKitPart, PartKind, PlacedPart,
+	BOX_KIT_TO_UNIT, LEG_KIT_TO_UNIT,
 };
 pub use generation::{
 	collect_furniture_slots, generate_assemblies, generate_assemblies_from_nodes,
@@ -66,7 +67,7 @@ pub use range::{Range, RangeParams};
 pub use shelf::{Shelf, ShelfParams};
 pub use stream::{
 	FurnitureIndex, FurnitureLodChan, FurnitureRefresh, FurnitureStreamPlugin,
-	FurnitureStreamSystems,
+	FurnitureStreamSystems, PresentedFurnitureCellId,
 };
 pub use table::{Table, TableParams};
 

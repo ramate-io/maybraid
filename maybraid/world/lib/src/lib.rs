@@ -11,6 +11,7 @@
 mod camera;
 pub mod commands;
 mod control;
+mod crate_loot;
 mod intelligence;
 mod material_lib;
 mod mobs;

@@ -26,6 +26,11 @@ use crate::cell::{
 use crate::colliders::FurnitureWalkColliderPlugin;
 use crate::host::{spawn_furniture_cell, FurnitureCell};
 
+/// Cell id of a presented 50 m host. Crate restock keys off this, not the entity,
+/// because [`FurniturePresenterState::remove_stale`] despawns the host outside the present ring.
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PresentedFurnitureCellId(pub Id);
+
 /// One 50 m host begin / rebuild per frame so fulfill can drain kits.
 const FURNITURE_GENERATE_CELLS_PER_FRAME: usize = 1;
 const FURNITURE_PRESENT_CELLS_PER_FRAME: usize = 1;
@@ -417,6 +422,7 @@ fn present_furniture_cells(
 			state.pending_despawn.push_back(previous.entities);
 		}
 		let entity = spawn_furniture_cell(&mut commands, cell);
+		commands.entity(entity).insert(PresentedFurnitureCellId(id));
 		state
 			.presented
 			.insert(id, PresentedFurnitureCell { version, entities: vec![entity] });

@@ -8,6 +8,7 @@ pub mod cadence;
 pub mod concepts;
 pub mod impact;
 pub mod kit;
+pub mod muzzle_flame;
 pub mod parts;
 pub mod plugin;
 pub mod pose;
@@ -24,6 +25,10 @@ pub use firearms_components::{
 	RigPoseLayer, RigRoot, SocketRef, SocketRefApplied, SocketRefRoot, RECEIVER_LANDMARKS,
 };
 pub use kit::FirearmKit;
+pub use muzzle_flame::{
+	init_muzzle_flame_caches, MuzzleFlameMaterial, MuzzleFlameMaterialLib,
+	MuzzleFlameMaterialPlugin, MuzzleFlameMaterialRefCache, MUZZLE_FLAME_RECIPE,
+};
 pub use parts::{
 	fov_at_zoom, BarrelMesh, BodyMesh, GripMesh, KitBone, SightMesh, StockMesh, TriggerBoxMesh,
 	IRON_SIGHT_FOV,

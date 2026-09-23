@@ -24,7 +24,7 @@ impl Default for BoltSpec {
 	fn default() -> Self {
 		Self {
 			length: 0.55,
-			radius: 0.055,
+			radius: 0.11,
 			speed: 180.0,
 			max_range: 36.0,
 			max_age: 2.0,
