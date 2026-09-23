@@ -60,7 +60,7 @@ pub fn produce_keyboard(
 	if keyboard.pressed(KeyCode::KeyC) {
 		pad.hold_digital(PadButton::BumperFocus);
 	}
-	// V is RB. Skill maps read stick flicks, not a C+V chord.
+	// V is RB: hold to steer the skill map, then flick a stick.
 	if keyboard.pressed(KeyCode::KeyV) {
 		pad.hold_digital(PadButton::BumperFire);
 	}

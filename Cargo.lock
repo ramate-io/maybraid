@@ -2492,6 +2492,7 @@ version = "0.0.1"
 dependencies = [
  "bevy",
  "damage",
+ "menu-components",
  "player",
 ]
 
@@ -4784,6 +4785,7 @@ dependencies = [
  "bevy_hanabi",
  "combat-targeting",
  "crozon-character-items",
+ "crozon-inventory-user",
  "damage",
  "evasion-intelligence",
  "lod-avian",

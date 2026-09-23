@@ -141,7 +141,11 @@ pub const INTERACT_PAD_ICON: &str = "iconography/kenney/input-prompts/xbox_butto
 pub const INTERACT_KEY_ICON: &str = "iconography/kenney/input-prompts/keyboard_e_outline.png";
 
 fn stash_interact_icon(pad_connected: bool) -> &'static str {
-	if pad_connected { INTERACT_PAD_ICON } else { INTERACT_KEY_ICON }
+	if pad_connected {
+		INTERACT_PAD_ICON
+	} else {
+		INTERACT_KEY_ICON
+	}
 }
 
 /// Ground ring around the nearest claimable stash.

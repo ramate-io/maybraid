@@ -81,7 +81,11 @@ pub fn spawn_skill_map_catalog_preview(
 }
 
 /// Centered root [`ViewportNode`], same attach as the live corner map.
-pub fn spawn_skill_map_spin_reveal_hud(commands: &mut Commands, camera: Entity, size: f32) -> Entity {
+pub fn spawn_skill_map_spin_reveal_hud(
+	commands: &mut Commands,
+	camera: Entity,
+	size: f32,
+) -> Entity {
 	commands
 		.spawn((
 			Name::new("skill-map-spin-reveal-hud"),

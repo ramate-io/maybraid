@@ -32,9 +32,10 @@ pub use controls::{
 };
 pub use icons::{blink_animated_icons, spin_icons, AnimatedIcon, Icon, SpinningIcon};
 pub use info::{
-	set_brand_mode_title, set_description_for_menu, set_hint_for_menu, spawn_menu_objective,
-	BrandModeCorner, BrandModeLine, BrandModeTitle, MenuObjective, TextMenuDescription,
-	TextMenuHint, TextMenuHintLabel, BRAND_NAME,
+	set_brand_mode_title, set_description_for_menu, set_hint_for_menu, spawn_hud_text_card,
+	spawn_hud_text_card_label, spawn_menu_objective, BrandModeCorner, BrandModeLine,
+	BrandModeTitle, HudTextCard, MenuObjective, TextMenuDescription, TextMenuHint,
+	TextMenuHintLabel, BRAND_NAME, HUD_TEXT_CARD_FACE_PX,
 };
 pub use loading::{
 	set_loading_explainer, set_loading_progress, sync_loading_bar_fill, LoadingBarFill,

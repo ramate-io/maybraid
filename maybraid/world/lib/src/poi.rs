@@ -211,8 +211,8 @@ fn queue_place(
 			spatial_poi_id(INTERIOR_POI_SALT ^ place.label.salt() ^ entity.to_bits(), translation),
 			kind,
 		)
-			.with_arrival_radius(place.arrival_radius)
-			.with_salience(salience),
+		.with_arrival_radius(place.arrival_radius)
+		.with_salience(salience),
 		tier: PendingPoiTier::Local,
 	});
 }

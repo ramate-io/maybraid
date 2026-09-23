@@ -18,8 +18,8 @@ mod pitch;
 mod player_lifecycle;
 mod player_position;
 mod poi;
-mod stash;
 mod start;
+mod stash;
 mod ui;
 mod vsync;
 mod weapon;
@@ -32,22 +32,22 @@ pub use game_commands::command::PendingStartupCommand;
 pub use intelligence::WorldIntelligencePlugin;
 pub use lod::LodJobCounter;
 pub use material_lib::{WorldMaterialLib, WorldMaterialRefPlugin};
+pub use maybraid_sky::{
+	ShadowQuality, SkyClock, SkyCommand, SKY_BLUE, SKY_CLEAR, SKY_HORIZON, SKY_NADIR, SKY_ZENITH,
+	SUN_COLOR, SUN_ILLUMINANCE,
+};
 pub use mobs::WorldMobsPlugin;
 pub use player_camera::CameraPov;
 pub use player_lifecycle::{WorldPlayerLifecyclePlugin, WorldPlayerRespawnConfig};
 pub use player_position::{PlayerPositionPlugin, PlayerPositionWaypoints};
 pub use poi::{WorldPoiDiscoveryBudget, WorldPoiPlugin, WorldPoiSystems};
-pub use stash::{
-	spawn_exploded_stashes, spawn_world_stash, StashDisplayedItem, StashPolicy, WorldStash,
-	WorldStashPlugin, WorldStashSettings, DEFAULT_CLAIM_RADIUS, DEFAULT_LOOT_SECS,
-};
 pub use start::{
 	parse_xz_metres, player_spawn_xz, resolve_start_at, start_at_from_env, take_start_at_from_args,
 	START_AT_ENV,
 };
-pub use maybraid_sky::{
-	ShadowQuality, SkyClock, SkyCommand, SKY_BLUE, SKY_CLEAR, SKY_HORIZON, SKY_NADIR, SKY_ZENITH,
-	SUN_COLOR, SUN_ILLUMINANCE,
+pub use stash::{
+	spawn_exploded_stashes, spawn_world_stash, StashDisplayedItem, StashPolicy, WorldStash,
+	WorldStashPlugin, WorldStashSettings, DEFAULT_CLAIM_RADIUS, DEFAULT_LOOT_SECS,
 };
 pub use ui::WorldMobHudEnabled;
 pub use vsync::{default_window_present_mode, RequestVsyncToggle, VSYNC_TOGGLE_KEY};
@@ -94,8 +94,12 @@ const WORLD_BULLSEYE_OUTER_M: f32 = 2_000.0;
 /// Cull annulus starts beyond the present ring.
 const WORLD_LATTICE_EXCLUDE_M: f32 = 2_000.0;
 const WORLD_LATTICE_OUTER_M: f32 = 8_000.0;
-const WORLD_COMBAT_HUD: CombatHudPlugin =
-	CombatHudPlugin { health_bars: false, hit_markers: true, directional_damage: true };
+const WORLD_COMBAT_HUD: CombatHudPlugin = CombatHudPlugin {
+	health_bars: false,
+	hit_markers: true,
+	directional_damage: true,
+	player_vitals: true,
+};
 const WORLD_TERRAIN_PITCH_GIZMOS: DrawTerrainPitchProbes = DrawTerrainPitchProbes(false);
 
 /// Assembled world: Durham terrain, streamed forest, urbanization, sky dome, character.
@@ -299,6 +303,7 @@ mod tests {
 		assert!(!WORLD_COMBAT_HUD.health_bars);
 		assert!(WORLD_COMBAT_HUD.hit_markers);
 		assert!(WORLD_COMBAT_HUD.directional_damage);
+		assert!(WORLD_COMBAT_HUD.player_vitals);
 	}
 
 	#[test]

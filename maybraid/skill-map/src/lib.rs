@@ -1,6 +1,6 @@
 //! Discover skill maps: a 2D paradimension a [`SkillMapUser`] steers with stick
-//! flicks. Either stick; a hold is not a flick. Walks claim authored tiles that
-//! dispatch world effects.
+//! flicks while **RB** is held. Either stick; a hold is not a flick. Walks claim
+//! authored tiles that dispatch world effects.
 //!
 //! Stamp [`SkillMapUser`] on the live character (same install as
 //! [`firearm_user::FirearmUser`]). Pause / text-entry should clear
@@ -31,7 +31,7 @@ pub use burst::{
 	launch_vy, COSIMO_BURST_DAMAGE, COSIMO_BURST_RADIUS, COSIMO_LAUNCH_HEIGHT, ROCKADDER_DAMAGE,
 	ROCKADDER_RADIUS,
 };
-pub use controller::{SkillMapController, SkillMapFlick};
+pub use controller::{skill_map_steer_held, SkillMapController, SkillMapFlick};
 pub use effects::{
 	forget_chance, FIREBALL_COLOR, FIREBALL_GRAVITY, FIREBALL_RADIUS, FIREBALL_SPEED,
 };
@@ -40,12 +40,15 @@ pub use preview::{
 	spawn_skill_map_catalog_preview, spawn_skill_map_spin_reveal_hud, SkillMapCatalogPreview,
 	SkillMapMenuPreview, SkillMapSpinRevealHud, SkillMapSpinRevealHudView, CATALOG_PREVIEW_PX,
 };
-pub use viewport::{spawn_skill_map_view, Debraid, SkillMapViewport, SpawnedSkillMapView};
 pub use tile_material::{SkillMapTileAssets, SkillMapTileMaterialPlugin};
 pub use tiles::{classify_noise, TileKind};
 pub use user::{
 	spawn_skill_maps, spawn_skill_maps_with, MappedBy, SkillMapEquip, SkillMapHeld, SkillMapMember,
 	SkillMapSession, SkillMapSteerLock, SkillMapUser, SkillMapUserSettings,
+};
+pub use viewport::{
+	spawn_skill_map_view, Debraid, SkillMapViewport, SpawnedSkillMapView, SKILL_MAP_RB_ICON,
+	SKILL_MAP_RT_ICON, SKILL_MAP_Y_ICON,
 };
 
 /// When `false`, the map is hidden and claims / steering are ignored.
@@ -112,6 +115,7 @@ impl Plugin for SkillMapPlugin {
 					cursor::apply_flicks,
 					cursor::tick_flick_beads,
 					viewport::sync_viewport_chrome,
+					viewport::sync_firearm_chrome,
 					viewport::track_cursors,
 					viewport::tick_debraid,
 				)

@@ -97,7 +97,7 @@ impl SkillMapSteerLock {
 	}
 }
 
-/// True while this user is holding the skill-map chord.
+/// True while this user is holding **RB** and the map is enabled.
 #[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct SkillMapHeld(pub bool);
 
