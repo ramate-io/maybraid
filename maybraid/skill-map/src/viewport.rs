@@ -7,7 +7,10 @@ use bevy::render::render_resource::{TextureDimension, TextureFormat, TextureUsag
 use bevy::ui::widget::ViewportNode;
 use crozon_character_items::Inventory;
 use crozon_inventory_user::InventoryUser;
-use menu_components::{HudFonts, PANEL_BLOCK_FONT_SIZE, TEXT_YELLOW};
+use menu_components::{
+	spawn_hud_text_card, spawn_hud_text_card_label, HudFonts, HUD_TEXT_CARD_FACE_PX,
+	PANEL_BLOCK_FONT_SIZE, TEXT_YELLOW,
+};
 
 use crate::cursor::SkillMapCursor;
 use crate::map::{authored_map_from_spec, render_layer, AuthoredMap, SkillMapId};
@@ -31,15 +34,6 @@ const FRAME_INNER_RADIUS: f32 = FRAME_RADIUS - FRAME_BORDER;
 const LIVE_BORDER: Color = Color::srgb(1.0, 0.48, 0.08);
 const IDLE_BORDER: Color = Color::srgba(1.0, 0.86, 0.22, 0.42);
 const PROMPT_ICON_PX: f32 = 18.0;
-const HUD_FACE_PX: f32 = 13.0;
-const CHIP_PAD_X: f32 = 8.0;
-const CHIP_PAD_Y: f32 = 1.0;
-const CHIP_BORDER: f32 = 1.5;
-const CHIP_RADIUS: f32 = 8.0;
-const FIREARM_CARD_PAD_X: f32 = 8.0;
-const FIREARM_CARD_PAD_Y: f32 = 6.0;
-const FIREARM_CARD_FILL: Color = Color::srgba(0.52, 0.52, 0.56, 0.82);
-const FIREARM_CARD_STROKE: Color = Color::srgba(0.78, 0.78, 0.82, 0.9);
 
 /// Kenney outline Xbox **RB** (hold to steer the map).
 pub const SKILL_MAP_RB_ICON: &str = "iconography/kenney/input-prompts/xbox_rb_outline.png";
@@ -294,12 +288,14 @@ fn spawn_map_frame(
 						position_type: PositionType::Absolute,
 						top: Val::Px(8.0),
 						left: Val::Px(8.0),
+						right: Val::Px(8.0),
+						justify_content: JustifyContent::Center,
 						..default()
 					},
 					Pickable::IGNORE,
 				))
 				.with_children(|slot| {
-					spawn_name_chip(slot, fonts, caption, SkillMapLabel);
+					spawn_hud_text_card_label(slot, fonts, caption, SkillMapLabel);
 				});
 			frame
 				.spawn((
@@ -336,25 +332,22 @@ fn spawn_firearm_hud(
 				align_items: AlignItems::Center,
 				row_gap: Val::Px(6.0),
 				width: Val::Percent(100.0),
-				padding: UiRect::axes(Val::Px(FIREARM_CARD_PAD_X), Val::Px(FIREARM_CARD_PAD_Y)),
-				border: UiRect::all(Val::Px(CHIP_BORDER)),
-				border_radius: BorderRadius::all(Val::Px(CHIP_RADIUS)),
 				..default()
 			},
-			BackgroundColor(FIREARM_CARD_FILL),
-			BorderColor::all(FIREARM_CARD_STROKE),
 			Visibility::Hidden,
 			Pickable::IGNORE,
 		))
 		.with_children(|stack| {
-			stack.spawn((
-				SkillMapFirearmName,
-				member,
-				Text::new(""),
-				fonts.item(HUD_FACE_PX),
-				TextColor(TEXT_YELLOW),
-				Pickable::IGNORE,
-			));
+			spawn_hud_text_card(stack, (), |card| {
+				card.spawn((
+					SkillMapFirearmName,
+					member,
+					Text::new(""),
+					fonts.item(HUD_TEXT_CARD_FACE_PX),
+					TextColor(TEXT_YELLOW),
+					Pickable::IGNORE,
+				));
+			});
 			spawn_firearm_silhouette(stack);
 			stack
 				.spawn((
@@ -373,38 +366,6 @@ fn spawn_firearm_hud(
 		});
 }
 
-fn spawn_name_chip(
-	parent: &mut ChildSpawnerCommands,
-	fonts: &HudFonts,
-	caption: String,
-	extra: impl Bundle,
-) {
-	parent
-		.spawn((
-			Node {
-				padding: UiRect::axes(Val::Px(CHIP_PAD_X), Val::Px(CHIP_PAD_Y)),
-				border: UiRect::all(Val::Px(CHIP_BORDER)),
-				border_radius: BorderRadius::all(Val::Px(CHIP_RADIUS)),
-				justify_content: JustifyContent::Center,
-				align_items: AlignItems::Center,
-				flex_shrink: 0.0,
-				..default()
-			},
-			BorderColor::all(TEXT_YELLOW),
-			BackgroundColor(TEXT_YELLOW.with_alpha(0.14)),
-			Pickable::IGNORE,
-			extra,
-		))
-		.with_children(|chip| {
-			chip.spawn((
-				Text::new(caption),
-				fonts.item(HUD_FACE_PX),
-				TextColor(TEXT_YELLOW),
-				Pickable::IGNORE,
-			));
-		});
-}
-
 fn spawn_prompt_chip(
 	parent: &mut ChildSpawnerCommands,
 	fonts: &HudFonts,
@@ -412,35 +373,24 @@ fn spawn_prompt_chip(
 	icon: &'static str,
 	label: &str,
 ) {
-	parent
-		.spawn((
+	spawn_hud_text_card(parent, (), |card| {
+		card.spawn((
+			ImageNode { image: asset_server.load(icon), color: TEXT_YELLOW, ..default() },
 			Node {
-				flex_direction: FlexDirection::Row,
-				align_items: AlignItems::Center,
-				column_gap: Val::Px(4.0),
+				width: Val::Px(PROMPT_ICON_PX),
+				height: Val::Px(PROMPT_ICON_PX),
 				flex_shrink: 0.0,
 				..default()
 			},
 			Pickable::IGNORE,
-		))
-		.with_children(|row| {
-			row.spawn((
-				ImageNode { image: asset_server.load(icon), color: TEXT_YELLOW, ..default() },
-				Node {
-					width: Val::Px(PROMPT_ICON_PX),
-					height: Val::Px(PROMPT_ICON_PX),
-					flex_shrink: 0.0,
-					..default()
-				},
-				Pickable::IGNORE,
-			));
-			row.spawn((
-				Text::new(label),
-				fonts.item(HUD_FACE_PX),
-				TextColor(TEXT_YELLOW),
-				Pickable::IGNORE,
-			));
-		});
+		));
+		card.spawn((
+			Text::new(label),
+			fonts.item(HUD_TEXT_CARD_FACE_PX),
+			TextColor(TEXT_YELLOW),
+			Pickable::IGNORE,
+		));
+	});
 }
 
 fn spawn_firearm_silhouette(parent: &mut ChildSpawnerCommands) {
