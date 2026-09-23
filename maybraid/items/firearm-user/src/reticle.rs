@@ -2,6 +2,8 @@
 
 use avian3d::prelude::{SpatialQuery, SpatialQueryFilter};
 use bevy::light::NotShadowCaster;
+#[cfg(test)]
+use bevy::mesh::VertexAttributeValues;
 use bevy::mesh::{Indices, Mesh, PrimitiveTopology};
 use bevy::prelude::*;
 use damage::DamageApplied;
