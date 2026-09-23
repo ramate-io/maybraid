@@ -4,16 +4,17 @@ use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use chico_vegetation_on_terrain_playground::VegetationOnTerrainMaterialLib;
 use crozon_characters::material_lib::{init_crozon_material_caches, CrozonMaterialLib};
+use firearms::{init_muzzle_flame_caches, MuzzleFlameMaterialLib};
 use furniture_shaders::{init_furniture_material_caches, FurnitureMaterialLib};
 use material_ref::{material_ref_plugin_installed, MaterialLib, MaterialRef, MaterialRefPlugin};
 use richmond_building_shaders::{init_richmond_urban_material_caches, UrbanSurfaceMaterialLib};
 
 /// World-model lib: furniture kits, Crozon face / clothing, Richmond urban
-/// surfaces, then vegetation and Standard.
+/// surfaces, the muzzle flame, then vegetation and Standard.
 ///
 /// Furniture recipes (`furniture_wood`, …) must be claimed **before** urban
-/// `wood`. Urban recipes (`stucco`, `wood`, …) must be claimed **before**
-/// vegetation's [`StandardMaterial`] fallback.
+/// `wood`. Urban recipes (`stucco`, `wood`, …) and `muzzle_flame` must be claimed
+/// **before** vegetation's [`StandardMaterial`] fallback.
 ///
 /// Further domain libs (Durham recipes on [`MaterialRef`], sky) compose here.
 #[derive(SystemParam)]
@@ -21,6 +22,7 @@ pub struct WorldMaterialLib<'w> {
 	pub furniture: FurnitureMaterialLib<'w>,
 	pub crozon: CrozonMaterialLib<'w>,
 	pub urban: UrbanSurfaceMaterialLib<'w>,
+	pub muzzle: MuzzleFlameMaterialLib<'w>,
 	pub vegetation: VegetationOnTerrainMaterialLib<'w>,
 }
 
@@ -34,6 +36,7 @@ impl MaterialLib for WorldMaterialLib<'_> {
 		self.furniture.try_fulfill(entity, material_ref, commands)
 			|| self.crozon.try_fulfill(entity, material_ref, commands)
 			|| self.urban.try_fulfill(entity, material_ref, commands)
+			|| self.muzzle.try_fulfill(entity, material_ref, commands)
 			|| self.vegetation.try_fulfill(entity, material_ref, commands)
 	}
 
@@ -55,6 +58,7 @@ impl Plugin for WorldMaterialRefPlugin {
 		init_furniture_material_caches(app);
 		init_crozon_material_caches(app);
 		init_richmond_urban_material_caches(app);
+		init_muzzle_flame_caches(app);
 		if material_ref_plugin_installed(app) {
 			return;
 		}
@@ -69,6 +73,7 @@ mod tests {
 		ClothingShaderMaterialRefCache, FaceShaderMaterialRefCache,
 	};
 
+	use firearms::MuzzleFlameMaterialRefCache;
 	use furniture_shaders::FurnitureSurfaceMaterialRefCache;
 	use richmond_building_shaders::UrbanSurfaceMaterialRefCache;
 
@@ -82,5 +87,6 @@ mod tests {
 		assert!(app.world().contains_resource::<FaceShaderMaterialRefCache>());
 		assert!(app.world().contains_resource::<UrbanSurfaceMaterialRefCache>());
 		assert!(app.world().contains_resource::<FurnitureSurfaceMaterialRefCache>());
+		assert!(app.world().contains_resource::<MuzzleFlameMaterialRefCache>());
 	}
 }
