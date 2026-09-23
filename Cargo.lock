@@ -2492,6 +2492,7 @@ version = "0.0.1"
 dependencies = [
  "bevy",
  "damage",
+ "menu-components",
  "player",
 ]
 
@@ -3355,6 +3356,8 @@ dependencies = [
  "firearms-components",
  "lod",
  "lod-avian",
+ "material-ref",
+ "procedural-common",
  "projectiles",
  "scene-ref",
 ]
@@ -4827,6 +4830,7 @@ dependencies = [
  "bevy_hanabi",
  "combat-targeting",
  "crozon-character-items",
+ "crozon-inventory-user",
  "damage",
  "evasion-intelligence",
  "lod-avian",
@@ -6105,6 +6109,7 @@ dependencies = [
  "avian3d",
  "bevy",
  "crozon-characters",
+ "durham-terrain-models",
  "lod-avian",
  "maybraid-character-controller",
 ]

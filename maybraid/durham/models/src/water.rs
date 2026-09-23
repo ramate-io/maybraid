@@ -17,6 +17,7 @@
 //! fills are evaluated. [`Water`] reads [`Terrain::marazion_fills`] from that
 //! finished cell — never by regenerating leaves mid-compose.
 
+pub mod column;
 pub mod composed;
 pub mod plugin;
 pub mod presentation;
@@ -40,6 +41,7 @@ use marazion_watersheds::WaterFill;
 use render_item::mesh::handle::Cached;
 use sdf::Sdf;
 
+pub use column::WaterColumn;
 pub use composed::ComposedWater;
 pub use plugin::{register_water_plugin, WaterPlugin};
 pub use presentation::{
@@ -74,6 +76,11 @@ impl Water {
 	/// Union of stamp fills against this collector's composed heightfield.
 	pub fn water_distance_at(&self, p: Vec3) -> f32 {
 		self.sdf.distance(p)
+	}
+
+	/// Wet column at `(x, z)`, or `None` when this cell is dry there.
+	pub fn column_at(&self, x: f32, z: f32) -> Option<WaterColumn> {
+		self.sdf.column_at(x, z)
 	}
 
 	fn center(&self) -> Vec3 {
@@ -268,6 +275,19 @@ mod tests {
 		let level = stream_banded_level(&water, &viewer);
 		assert_eq!(level, LodSceneLevel::High);
 		assert!(!stream_banded_draws(&water, level));
+	}
+
+	#[test]
+	fn spawn_fill_does_not_mark_a_collider() {
+		use crate::terrain::TerrainColliderMeshSource;
+		use avian3d::prelude::Collider;
+
+		let mut app = App::new();
+		let water = water_at(Vec3::ZERO, far_ring());
+		let entity = water.spawn_fill(&mut app.world_mut().commands(), Transform::IDENTITY);
+		app.world_mut().flush();
+		assert!(app.world().get::<TerrainColliderMeshSource>(entity).is_none());
+		assert!(app.world().get::<Collider>(entity).is_none());
 	}
 
 	#[test]

@@ -5,7 +5,12 @@ use bevy::camera::{ClearColorConfig, RenderTarget};
 use bevy::prelude::*;
 use bevy::render::render_resource::{TextureDimension, TextureFormat, TextureUsages};
 use bevy::ui::widget::ViewportNode;
-use menu_components::{spawn_menu_objective, HudFonts, MenuObjective, PANEL_BLOCK_FONT_SIZE};
+use crozon_character_items::Inventory;
+use crozon_inventory_user::InventoryUser;
+use menu_components::{
+	spawn_hud_text_card, spawn_hud_text_card_label, HudFonts, HUD_TEXT_CARD_FACE_PX,
+	PANEL_BLOCK_FONT_SIZE, TEXT_YELLOW,
+};
 
 use crate::cursor::SkillMapCursor;
 use crate::map::{authored_map_from_spec, render_layer, AuthoredMap, SkillMapId};
@@ -28,6 +33,23 @@ const FRAME_RADIUS: f32 = 14.0;
 const FRAME_INNER_RADIUS: f32 = FRAME_RADIUS - FRAME_BORDER;
 const LIVE_BORDER: Color = Color::srgb(1.0, 0.48, 0.08);
 const IDLE_BORDER: Color = Color::srgba(1.0, 0.86, 0.22, 0.42);
+const PROMPT_ICON_PX: f32 = 18.0;
+const FIREARM_CARD_PAD_X: f32 = 8.0;
+const FIREARM_CARD_PAD_Y: f32 = 6.0;
+const FIREARM_CARD_BORDER: f32 = 1.5;
+const FIREARM_CARD_RADIUS: f32 = 8.0;
+const FIREARM_CARD_FILL: Color = Color::srgba(0.52, 0.52, 0.56, 0.82);
+const FIREARM_CARD_STROKE: Color = Color::srgba(0.78, 0.78, 0.82, 0.9);
+
+/// Kenney outline Xbox **RB** (hold to steer the map).
+pub const SKILL_MAP_RB_ICON: &str = "iconography/kenney/input-prompts/xbox_rb_outline.png";
+/// Kenney outline Xbox **RT** (fire the held gun).
+pub const SKILL_MAP_RT_ICON: &str = "iconography/kenney/input-prompts/xbox_rt_outline.png";
+/// Kenney outline Xbox **Y** (swap the held gun).
+pub const SKILL_MAP_Y_ICON: &str = "iconography/kenney/input-prompts/xbox_button_y_outline.png";
+
+#[derive(Component)]
+pub struct SkillMapHud;
 
 #[derive(Component)]
 pub struct SkillMapViewport;
@@ -37,6 +59,12 @@ pub struct SkillMapViewportCamera;
 
 #[derive(Component)]
 pub struct SkillMapLabel;
+
+#[derive(Component)]
+pub struct SkillMapFirearmHud;
+
+#[derive(Component)]
+pub struct SkillMapFirearmName;
 
 #[derive(Component)]
 pub struct Debraid {
@@ -73,6 +101,7 @@ pub fn present_skill_maps(
 			&mut commands,
 			&mut images,
 			&HudFonts::load(asset_server.as_ref()),
+			asset_server.as_ref(),
 			&tiles,
 			user,
 			mapping.maps,
@@ -152,6 +181,7 @@ fn spawn_one_map(
 	commands: &mut Commands,
 	images: &mut Assets<Image>,
 	fonts: &HudFonts,
+	asset_server: &AssetServer,
 	tiles: &SkillMapTileAssets,
 	user: Entity,
 	session: Entity,
@@ -177,10 +207,11 @@ fn spawn_one_map(
 
 	let bottom = VIEWPORT_INSET + stack_index as f32 * (VIEWPORT_PX + VIEWPORT_GAP);
 	let caption = format!("{} {:04X}", spec.label, spec.seed as u16);
-	let node = commands
+	let mut node = Entity::PLACEHOLDER;
+	commands
 		.spawn((
-			Name::new(format!("skill-map-viewport-{}", spec.label)),
-			SkillMapViewport,
+			Name::new(format!("skill-map-hud-{}", spec.label)),
+			SkillMapHud,
 			spec.id,
 			member,
 			Node {
@@ -188,51 +219,18 @@ fn spawn_one_map(
 				bottom: Val::Px(bottom),
 				right: Val::Px(VIEWPORT_INSET),
 				width: Val::Px(VIEWPORT_PX),
-				height: Val::Px(VIEWPORT_PX),
-				border: UiRect::all(Val::Px(FRAME_BORDER)),
-				border_radius: BorderRadius::all(Val::Px(FRAME_RADIUS)),
-				overflow: Overflow::clip(),
+				flex_direction: FlexDirection::Column,
+				align_items: AlignItems::Stretch,
+				row_gap: Val::Px(8.0),
 				..default()
 			},
-			BorderColor::all(IDLE_BORDER),
-			BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.12)),
 			Visibility::Hidden,
 			Pickable::IGNORE,
 		))
-		.with_children(|parent| {
-			parent.spawn((
-				ViewportNode::new(camera),
-				Node {
-					position_type: PositionType::Absolute,
-					left: Val::Px(FRAME_BORDER),
-					right: Val::Px(FRAME_BORDER),
-					top: Val::Px(FRAME_BORDER),
-					bottom: Val::Px(FRAME_BORDER),
-					border_radius: BorderRadius::all(Val::Px(FRAME_INNER_RADIUS)),
-					..default()
-				},
-				Pickable::IGNORE,
-			));
-			parent
-				.spawn((
-					Node {
-						position_type: PositionType::Absolute,
-						top: Val::Px(8.0),
-						left: Val::Px(8.0),
-						..default()
-					},
-					Pickable::IGNORE,
-				))
-				.with_children(|slot| {
-					spawn_menu_objective(
-						slot,
-						fonts,
-						MenuObjective::yellow(caption),
-						SkillMapLabel,
-					);
-				});
-		})
-		.id();
+		.with_children(|hud| {
+			spawn_firearm_hud(hud, fonts, asset_server, member);
+			node = spawn_map_frame(hud, fonts, asset_server, camera, spec, member, caption);
+		});
 
 	commands.spawn((
 		Name::new(format!("skill-map-cursor-{}", spec.label)),
@@ -249,20 +247,235 @@ fn spawn_one_map(
 	viewports.nodes.insert(spec.id, node);
 }
 
+fn spawn_map_frame(
+	parent: &mut ChildSpawnerCommands,
+	fonts: &HudFonts,
+	asset_server: &AssetServer,
+	camera: Entity,
+	spec: AuthoredMap,
+	member: SkillMapMember,
+	caption: String,
+) -> Entity {
+	parent
+		.spawn((
+			Name::new(format!("skill-map-viewport-{}", spec.label)),
+			SkillMapViewport,
+			spec.id,
+			member,
+			Node {
+				width: Val::Px(VIEWPORT_PX),
+				height: Val::Px(VIEWPORT_PX),
+				border: UiRect::all(Val::Px(FRAME_BORDER)),
+				border_radius: BorderRadius::all(Val::Px(FRAME_RADIUS)),
+				overflow: Overflow::clip(),
+				..default()
+			},
+			BorderColor::all(IDLE_BORDER),
+			BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.12)),
+			Pickable::IGNORE,
+		))
+		.with_children(|frame| {
+			frame.spawn((
+				ViewportNode::new(camera),
+				Node {
+					position_type: PositionType::Absolute,
+					left: Val::Px(FRAME_BORDER),
+					right: Val::Px(FRAME_BORDER),
+					top: Val::Px(FRAME_BORDER),
+					bottom: Val::Px(FRAME_BORDER),
+					border_radius: BorderRadius::all(Val::Px(FRAME_INNER_RADIUS)),
+					..default()
+				},
+				Pickable::IGNORE,
+			));
+			frame
+				.spawn((
+					Node {
+						position_type: PositionType::Absolute,
+						top: Val::Px(8.0),
+						left: Val::Px(8.0),
+						right: Val::Px(8.0),
+						justify_content: JustifyContent::Center,
+						..default()
+					},
+					Pickable::IGNORE,
+				))
+				.with_children(|slot| {
+					spawn_hud_text_card_label(slot, fonts, caption, SkillMapLabel);
+				});
+			frame
+				.spawn((
+					Node {
+						position_type: PositionType::Absolute,
+						bottom: Val::Px(8.0),
+						left: Val::Px(8.0),
+						right: Val::Px(8.0),
+						justify_content: JustifyContent::Center,
+						..default()
+					},
+					Pickable::IGNORE,
+				))
+				.with_children(|slot| {
+					spawn_prompt_chip(slot, fonts, asset_server, SKILL_MAP_RB_ICON, "Hold");
+				});
+		})
+		.id()
+}
+
+fn spawn_firearm_hud(
+	parent: &mut ChildSpawnerCommands,
+	fonts: &HudFonts,
+	asset_server: &AssetServer,
+	member: SkillMapMember,
+) {
+	parent
+		.spawn((
+			Name::new("skill-map-firearm-hud"),
+			SkillMapFirearmHud,
+			member,
+			Node {
+				flex_direction: FlexDirection::Column,
+				align_items: AlignItems::Center,
+				row_gap: Val::Px(6.0),
+				width: Val::Percent(100.0),
+				padding: UiRect::axes(Val::Px(FIREARM_CARD_PAD_X), Val::Px(FIREARM_CARD_PAD_Y)),
+				border: UiRect::all(Val::Px(FIREARM_CARD_BORDER)),
+				border_radius: BorderRadius::all(Val::Px(FIREARM_CARD_RADIUS)),
+				..default()
+			},
+			BackgroundColor(FIREARM_CARD_FILL),
+			BorderColor::all(FIREARM_CARD_STROKE),
+			Visibility::Hidden,
+			Pickable::IGNORE,
+		))
+		.with_children(|stack| {
+			spawn_hud_text_card(stack, (), |card| {
+				card.spawn((
+					SkillMapFirearmName,
+					member,
+					Text::new(""),
+					fonts.item(HUD_TEXT_CARD_FACE_PX),
+					TextColor(TEXT_YELLOW),
+					Pickable::IGNORE,
+				));
+			});
+			spawn_firearm_silhouette(stack);
+			stack
+				.spawn((
+					Node {
+						flex_direction: FlexDirection::Row,
+						align_items: AlignItems::Center,
+						column_gap: Val::Px(10.0),
+						..default()
+					},
+					Pickable::IGNORE,
+				))
+				.with_children(|row| {
+					spawn_prompt_chip(row, fonts, asset_server, SKILL_MAP_RT_ICON, "Fire");
+					spawn_prompt_chip(row, fonts, asset_server, SKILL_MAP_Y_ICON, "Switch");
+				});
+		});
+}
+
+fn spawn_prompt_chip(
+	parent: &mut ChildSpawnerCommands,
+	fonts: &HudFonts,
+	asset_server: &AssetServer,
+	icon: &'static str,
+	label: &str,
+) {
+	spawn_hud_text_card(parent, (), |card| {
+		card.spawn((
+			ImageNode { image: asset_server.load(icon), color: TEXT_YELLOW, ..default() },
+			Node {
+				width: Val::Px(PROMPT_ICON_PX),
+				height: Val::Px(PROMPT_ICON_PX),
+				flex_shrink: 0.0,
+				..default()
+			},
+			Pickable::IGNORE,
+		));
+		card.spawn((
+			Text::new(label),
+			fonts.item(HUD_TEXT_CARD_FACE_PX),
+			TextColor(TEXT_YELLOW),
+			Pickable::IGNORE,
+		));
+	});
+}
+
+fn spawn_firearm_silhouette(parent: &mut ChildSpawnerCommands) {
+	parent
+		.spawn((
+			Node {
+				width: Val::Px(96.0),
+				height: Val::Px(28.0),
+				flex_direction: FlexDirection::Row,
+				align_items: AlignItems::Center,
+				..default()
+			},
+			Pickable::IGNORE,
+		))
+		.with_children(|gun| {
+			gun.spawn((
+				Node {
+					width: Val::Px(14.0),
+					height: Val::Px(12.0),
+					margin: UiRect::right(Val::Px(2.0)),
+					..default()
+				},
+				BackgroundColor(TEXT_YELLOW),
+				Pickable::IGNORE,
+			));
+			gun.spawn((
+				Node {
+					flex_direction: FlexDirection::Column,
+					align_items: AlignItems::Center,
+					..default()
+				},
+				Pickable::IGNORE,
+			))
+			.with_children(|mid| {
+				mid.spawn((
+					Node { width: Val::Px(34.0), height: Val::Px(14.0), ..default() },
+					BackgroundColor(TEXT_YELLOW),
+					Pickable::IGNORE,
+				));
+				mid.spawn((
+					Node { width: Val::Px(8.0), height: Val::Px(11.0), ..default() },
+					BackgroundColor(TEXT_YELLOW),
+					Pickable::IGNORE,
+				));
+			});
+			gun.spawn((
+				Node {
+					width: Val::Px(40.0),
+					height: Val::Px(6.0),
+					margin: UiRect::left(Val::Px(1.0)),
+					..default()
+				},
+				BackgroundColor(TEXT_YELLOW),
+				Pickable::IGNORE,
+			));
+		});
+}
+
 pub fn sync_viewport_chrome(
 	enabled: Res<SkillMapEnabled>,
 	users: Query<(&SkillMapUser, &SkillMapHeld)>,
+	mut huds: Query<(&SkillMapMember, &mut Visibility), With<SkillMapHud>>,
 	mut nodes: Query<
-		(&SkillMapMember, &mut Visibility, &mut BorderColor, &mut BackgroundColor),
-		With<SkillMapViewport>,
+		(&SkillMapMember, &mut BorderColor, &mut BackgroundColor),
+		(With<SkillMapViewport>, Without<SkillMapHud>),
 	>,
 ) {
-	for (member, mut visibility, mut border, mut background) in &mut nodes {
-		if !enabled.0 {
-			*visibility = Visibility::Hidden;
-			continue;
-		}
-		*visibility = Visibility::Inherited;
+	for (_, mut visibility) in &mut huds {
+		*visibility = if enabled.0 { Visibility::Inherited } else { Visibility::Hidden };
+	}
+	if !enabled.0 {
+		return;
+	}
+	for (member, mut border, mut background) in &mut nodes {
 		let held = users.iter().any(|(user, held)| user.maps == member.session && held.0);
 		if held {
 			*border = BorderColor::all(LIVE_BORDER);
@@ -272,6 +485,31 @@ pub fn sync_viewport_chrome(
 			background.0 = Color::srgba(0.06, 0.05, 0.04, 0.45);
 		}
 	}
+}
+
+pub fn sync_firearm_chrome(
+	users: Query<(Entity, Option<&InventoryUser>), With<SkillMapUser>>,
+	bags: Query<&Inventory>,
+	mut blocks: Query<(&SkillMapMember, &mut Visibility), With<SkillMapFirearmHud>>,
+	mut names: Query<(&SkillMapMember, &mut Text), With<SkillMapFirearmName>>,
+) {
+	for (member, mut visibility) in &mut blocks {
+		let name = firearm_action_name(member.user, &users, &bags);
+		*visibility = if name.is_some() { Visibility::Inherited } else { Visibility::Hidden };
+	}
+	for (member, mut text) in &mut names {
+		text.0 = firearm_action_name(member.user, &users, &bags).unwrap_or_default();
+	}
+}
+
+fn firearm_action_name(
+	user: Entity,
+	users: &Query<(Entity, Option<&InventoryUser>), With<SkillMapUser>>,
+	bags: &Query<&Inventory>,
+) -> Option<String> {
+	let (_, inventory) = users.iter().find(|(entity, _)| *entity == user)?;
+	let bag = bags.get(inventory?.bag).ok()?;
+	Some(bag.primary_weapon()?.name())
 }
 
 type TrackedCameras<'w, 's> = Query<
@@ -331,9 +569,11 @@ pub fn spawn_debraid(
 				Pickable::IGNORE,
 			))
 			.with_children(|overlay| {
-				let font = fonts.map(|fonts| fonts.header(PANEL_BLOCK_FONT_SIZE)).unwrap_or(
-					TextFont { font_size: FontSize::Px(PANEL_BLOCK_FONT_SIZE), ..default() },
-				);
+				let font =
+					fonts.map(|fonts| fonts.header(PANEL_BLOCK_FONT_SIZE)).unwrap_or(TextFont {
+						font_size: FontSize::Px(PANEL_BLOCK_FONT_SIZE),
+						..default()
+					});
 				overlay.spawn((
 					Text::new("DEBRAID"),
 					font,
@@ -366,9 +606,29 @@ mod tests {
 	#[test]
 	fn chrome_and_track_queries_are_disjoint() {
 		let mut app = App::new();
-		app.add_plugins(MinimalPlugins)
-			.init_resource::<SkillMapEnabled>()
-			.add_systems(Update, (sync_viewport_chrome, track_cursors, tick_debraid));
+		app.add_plugins(MinimalPlugins).init_resource::<SkillMapEnabled>().add_systems(
+			Update,
+			(sync_viewport_chrome, sync_firearm_chrome, track_cursors, tick_debraid),
+		);
 		app.update();
+	}
+
+	#[test]
+	fn kenney_steer_and_fire_icons_are_in_the_asset_tree() {
+		let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../assets");
+		assert!(root.join(SKILL_MAP_RB_ICON).is_file());
+		assert!(root.join(SKILL_MAP_RT_ICON).is_file());
+		assert!(root.join(SKILL_MAP_Y_ICON).is_file());
+	}
+
+	#[test]
+	fn primary_weapon_label_is_the_hashed_name() {
+		use crozon_character_items::{FirearmMesh, Inventory, InventoryItem};
+
+		let mut bag = Inventory::default();
+		bag.items.push(InventoryItem::firearm(FirearmMesh::Bullpup));
+		bag.weapons.push(0);
+		assert_eq!(bag.primary_weapon().map(InventoryItem::name), Some(bag.items[0].name()));
+		assert!(bag.primary_weapon().is_some());
 	}
 }

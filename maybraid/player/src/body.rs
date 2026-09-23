@@ -372,7 +372,7 @@ pub fn wish_on_ground(wish: Vec3, ground_normal: Option<Vec3>) -> Vec3 {
 	Vec3::ZERO
 }
 
-fn move_toward(current: Vec3, target: Vec3, max_delta: f32) -> Vec3 {
+pub(crate) fn move_toward(current: Vec3, target: Vec3, max_delta: f32) -> Vec3 {
 	let delta = target - current;
 	if delta.length_squared() <= max_delta * max_delta {
 		target
@@ -388,25 +388,32 @@ fn control_ground_velocity(
 	accel: f32,
 	dt: f32,
 	ground_normal: Vec3,
+	max_speed: f32,
 ) {
 	let normal = ground_normal.normalize_or_zero();
 	if normal.length_squared() < 1e-8 {
-		control_air_velocity(velocity, wish, accel, dt);
+		control_air_velocity(velocity, wish, accel, dt, max_speed);
 		return;
 	}
 	let tangent = **velocity - normal * velocity.dot(normal);
-	let target = wish_on_ground(wish, Some(normal)) * MOVE_SPEED;
+	let target = wish_on_ground(wish, Some(normal)) * max_speed;
 	let rate = if target.length_squared() > 1e-8 { accel } else { MOVE_BRAKE };
 	**velocity = move_toward(tangent, target, rate * dt);
 }
 
-fn control_air_velocity(velocity: &mut LinearVelocity, wish: Vec3, accel: f32, dt: f32) {
+fn control_air_velocity(
+	velocity: &mut LinearVelocity,
+	wish: Vec3,
+	accel: f32,
+	dt: f32,
+	max_speed: f32,
+) {
 	let wish = Vec3::new(wish.x, 0.0, wish.z).normalize_or_zero();
 	if wish.length_squared() < 1e-8 {
 		return;
 	}
 	let horizontal = Vec3::new(velocity.x, 0.0, velocity.z);
-	let next = move_toward(horizontal, wish * MOVE_SPEED, accel * AIR_CONTROL * dt);
+	let next = move_toward(horizontal, wish * max_speed, accel * AIR_CONTROL * dt);
 	velocity.x = next.x;
 	velocity.z = next.z;
 }
@@ -423,23 +430,42 @@ pub(crate) fn apply_wish_movement(
 			&MovementAcceleration,
 			&mut LinearVelocity,
 			Has<Grounded>,
+			Has<crate::buoyancy::Buoyant>,
+			Has<crate::buoyancy::Wading>,
 			Option<&Jumping>,
 		),
 		With<CharacterController>,
 	>,
 ) {
 	let dt = time.delta_secs();
-	for (wish, hits, max_slope, walkable, accel, mut velocity, grounded, jumping) in
-		&mut controllers
+	for (
+		wish,
+		hits,
+		max_slope,
+		walkable,
+		accel,
+		mut velocity,
+		grounded,
+		buoyant,
+		wading,
+		jumping,
+	) in &mut controllers
 	{
+		let max_speed = if buoyant {
+			crate::buoyancy::swim_speed()
+		} else if wading {
+			crate::buoyancy::wade_speed()
+		} else {
+			MOVE_SPEED
+		};
 		let contact = walkable_ground_normal(hits, max_slope);
-		let airborne = jumping.is_some_and(Jumping::airborne);
+		let airborne = jumping.is_some_and(Jumping::airborne) || buoyant;
 		let ground =
 			ground_plane_for_wish(contact, walkable.map(|plane| plane.normal), grounded, airborne);
 		if let Some(normal) = ground {
-			control_ground_velocity(&mut velocity, wish.0, accel.0, dt, normal);
+			control_ground_velocity(&mut velocity, wish.0, accel.0, dt, normal, max_speed);
 		} else {
-			control_air_velocity(&mut velocity, wish.0, accel.0, dt);
+			control_air_velocity(&mut velocity, wish.0, accel.0, dt, max_speed);
 		}
 	}
 }
@@ -448,13 +474,13 @@ pub(crate) fn apply_wish_movement(
 pub(crate) fn apply_wish_jump(
 	mut commands: Commands,
 	mut controllers: Query<
-		(Entity, &LinearVelocity, Has<Grounded>),
+		(Entity, &LinearVelocity, Has<Grounded>, Option<&crate::buoyancy::Buoyant>),
 		(With<CharacterController>, With<JumpWish>, Without<Jumping>),
 	>,
 ) {
-	for (entity, velocity, grounded) in &mut controllers {
+	for (entity, velocity, grounded, buoyant) in &mut controllers {
 		commands.entity(entity).remove::<JumpWish>();
-		if grounded {
+		if grounded || buoyant.is_some_and(crate::buoyancy::Buoyant::can_surface_jump) {
 			let xz = Vec3::new(velocity.x, 0.0, velocity.z).length();
 			commands.entity(entity).insert(Jumping::start(xz));
 		}
@@ -465,13 +491,21 @@ pub(crate) fn advance_jump_phases(
 	mut commands: Commands,
 	time: Res<Time>,
 	mut controllers: Query<
-		(Entity, &JumpImpulse, &mut LinearVelocity, &mut Jumping, Has<Grounded>),
+		(
+			Entity,
+			&JumpImpulse,
+			&mut LinearVelocity,
+			&mut Jumping,
+			Has<Grounded>,
+			Option<&crate::buoyancy::Buoyant>,
+		),
 		With<CharacterController>,
 	>,
 ) {
 	let dt = time.delta_secs();
-	for (entity, impulse, mut velocity, mut jumping, grounded) in &mut controllers {
-		if tick_jump(&mut jumping, grounded, &mut velocity, impulse.0, dt) {
+	for (entity, impulse, mut velocity, mut jumping, grounded, buoyant) in &mut controllers {
+		let strength = crate::buoyancy::water_jump_impulse(impulse.0, buoyant).unwrap_or(impulse.0);
+		if tick_jump(&mut jumping, grounded, &mut velocity, strength, dt) {
 			commands.entity(entity).remove::<Jumping>();
 		}
 	}
@@ -492,7 +526,7 @@ mod tests {
 		let slope = 70.0_f32.to_radians();
 		// Hill rises in +X, so the normal tilts downhill (−X).
 		let normal = Vec3::new(-slope.sin(), slope.cos(), 0.0);
-		control_ground_velocity(&mut velocity, Vec3::X, MOVE_ACCEL, 1.0, normal);
+		control_ground_velocity(&mut velocity, Vec3::X, MOVE_ACCEL, 1.0, normal, MOVE_SPEED);
 		assert!(velocity.y > 0.0, "grounded drive must add uphill Y, got {}", velocity.y);
 		assert!(velocity.x > 0.0);
 		let tangent = velocity.0 - normal * velocity.0.dot(normal);
@@ -506,8 +540,8 @@ mod tests {
 		let mut uphill = LinearVelocity(Vec3::ZERO);
 		let mut downhill = LinearVelocity(Vec3::ZERO);
 
-		control_ground_velocity(&mut uphill, Vec3::X, MOVE_ACCEL, 1.0, normal);
-		control_ground_velocity(&mut downhill, Vec3::NEG_X, MOVE_ACCEL, 1.0, normal);
+		control_ground_velocity(&mut uphill, Vec3::X, MOVE_ACCEL, 1.0, normal, MOVE_SPEED);
+		control_ground_velocity(&mut downhill, Vec3::NEG_X, MOVE_ACCEL, 1.0, normal, MOVE_SPEED);
 
 		assert!((uphill.length() - MOVE_SPEED).abs() < 1e-4, "{uphill:?}");
 		assert!((downhill.length() - MOVE_SPEED).abs() < 1e-4, "{downhill:?}");
@@ -519,7 +553,14 @@ mod tests {
 		let mut velocity = LinearVelocity(Vec3::ZERO);
 		let slope = 45.0_f32.to_radians();
 		let normal = Vec3::new(-slope.sin(), slope.cos(), 0.0);
-		control_ground_velocity(&mut velocity, Vec3::new(1.0, 1.0, 0.0), MOVE_ACCEL, 1.0, normal);
+		control_ground_velocity(
+			&mut velocity,
+			Vec3::new(1.0, 1.0, 0.0),
+			MOVE_ACCEL,
+			1.0,
+			normal,
+			MOVE_SPEED,
+		);
 		assert!(velocity.y > 0.0, "XZ heading on the plane must add uphill Y, got {}", velocity.y);
 		let tangent = velocity.0 - normal * velocity.0.dot(normal);
 		assert!((tangent.length() - MOVE_SPEED).abs() < 1e-4, "{tangent:?}");
@@ -590,7 +631,7 @@ mod tests {
 	#[test]
 	fn airborne_wish_stays_xz() {
 		let mut velocity = LinearVelocity(Vec3::new(0.0, -5.0, 0.0));
-		control_air_velocity(&mut velocity, Vec3::new(1.0, 4.0, 0.0), MOVE_ACCEL, 1.0);
+		control_air_velocity(&mut velocity, Vec3::new(1.0, 4.0, 0.0), MOVE_ACCEL, 1.0, MOVE_SPEED);
 		assert!((velocity.y + 5.0).abs() < 1e-4);
 		assert!((velocity.x - MOVE_SPEED).abs() < 1e-4, "{velocity:?}");
 	}
@@ -614,8 +655,8 @@ mod tests {
 		let normal = Vec3::new(-slope.sin(), slope.cos(), 0.0);
 		let mut uphill = LinearVelocity(Vec3::ZERO);
 		let mut downhill = LinearVelocity(Vec3::ZERO);
-		control_ground_velocity(&mut uphill, Vec3::X, MOVE_ACCEL, 1.0, normal);
-		control_ground_velocity(&mut downhill, Vec3::NEG_X, MOVE_ACCEL, 1.0, normal);
+		control_ground_velocity(&mut uphill, Vec3::X, MOVE_ACCEL, 1.0, normal, MOVE_SPEED);
+		control_ground_velocity(&mut downhill, Vec3::NEG_X, MOVE_ACCEL, 1.0, normal, MOVE_SPEED);
 
 		assert!((uphill.length() - downhill.length()).abs() < 1e-5);
 		assert!(uphill.dot(normal).abs() < 1e-5, "{uphill:?}");
@@ -634,7 +675,7 @@ mod tests {
 		let mut velocity = LinearVelocity(Vec3::ZERO);
 		for _ in 0..120 {
 			velocity.0 += g_tangent * dt;
-			control_ground_velocity(&mut velocity, Vec3::ZERO, MOVE_ACCEL, dt, normal);
+			control_ground_velocity(&mut velocity, Vec3::ZERO, MOVE_ACCEL, dt, normal, MOVE_SPEED);
 		}
 		let tangent = velocity.0 - normal * velocity.0.dot(normal);
 		assert!(
@@ -648,10 +689,24 @@ mod tests {
 		let mut slow = LinearVelocity(Vec3::ZERO);
 		let mut fast = LinearVelocity(Vec3::ZERO);
 		for _ in 0..60 {
-			control_ground_velocity(&mut slow, Vec3::X, MOVE_ACCEL, 1.0 / 60.0, Vec3::Y);
+			control_ground_velocity(
+				&mut slow,
+				Vec3::X,
+				MOVE_ACCEL,
+				1.0 / 60.0,
+				Vec3::Y,
+				MOVE_SPEED,
+			);
 		}
 		for _ in 0..240 {
-			control_ground_velocity(&mut fast, Vec3::X, MOVE_ACCEL, 1.0 / 240.0, Vec3::Y);
+			control_ground_velocity(
+				&mut fast,
+				Vec3::X,
+				MOVE_ACCEL,
+				1.0 / 240.0,
+				Vec3::Y,
+				MOVE_SPEED,
+			);
 		}
 		assert!((slow.x - MOVE_SPEED).abs() < 1e-3, "{slow:?}");
 		assert!((fast.x - MOVE_SPEED).abs() < 1e-3, "{fast:?}");

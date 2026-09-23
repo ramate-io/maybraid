@@ -1,9 +1,10 @@
-//! Stick-flick detector. Either stick; a hold is not a flick. Emits [`SkillMapFlick`].
+//! Stick-flick detector. Either stick while **RB** is held; a hold is not a flick.
+//! Emits [`SkillMapFlick`].
 
 use bevy::prelude::*;
 use maybraid_input::analog::Deadzone;
 use maybraid_input::produce::gamepad::GamepadAxes;
-use maybraid_input::{VirtualPad, VirtualPadConfig};
+use maybraid_input::{PadButton, VirtualPad, VirtualPadConfig};
 
 use crate::SkillMapEnabled;
 
@@ -66,6 +67,11 @@ impl FlickLane {
 	}
 }
 
+/// True while the skill-map steer modifier is down (Xbox **RB** / keyboard **V**).
+pub fn skill_map_steer_held(pad: &VirtualPad) -> bool {
+	pad.pressed(PadButton::BumperFire)
+}
+
 /// Watches move and look sticks. One flick per sample, stronger stick wins if both land.
 #[derive(Resource, Clone, Debug, Default)]
 pub struct SkillMapController {
@@ -107,6 +113,10 @@ pub fn detect_skill_map_flicks(
 	let Some(pad) = pad else {
 		return;
 	};
+	if !skill_map_steer_held(&pad) {
+		controller.reset();
+		return;
+	}
 	let deadzone = config.map(|c| c.stick_deadzone).unwrap_or(Deadzone(0.15));
 	let mut look = Vec2::ZERO;
 	for gamepad in &gamepads {
@@ -156,6 +166,16 @@ mod tests {
 		assert!(controller.sample(0.0, Vec2::X, Vec2::ZERO).is_none());
 		assert!(controller.sample(0.3, Vec2::X, Vec2::ZERO).is_none());
 		assert!(controller.sample(0.35, Vec2::ZERO, Vec2::ZERO).is_none());
+	}
+
+	#[test]
+	fn rb_is_the_steer_hold() {
+		let mut pad = VirtualPad::default();
+		assert!(!skill_map_steer_held(&pad));
+		pad.begin_frame();
+		pad.hold_digital(PadButton::BumperFire);
+		pad.finish_digital();
+		assert!(skill_map_steer_held(&pad));
 	}
 
 	#[test]

@@ -40,6 +40,7 @@ pub use player::{
 	AwaitingTerrainSurface, CharacterCameraFollowEnabled, CharacterLocomotion, Jumping, MoveWish,
 	MovementAction, OffTerrainAnchor, PadMovementEnabled, Player, PlayerCapsule,
 	PlayerControlSystems, PlayerPhysicsEnabled, PlayerPlugin, PlayerSpawnXz, PlaygroundMode,
+	VegetationPlayerMotor,
 };
 
 use avian3d::prelude::LinearVelocity;

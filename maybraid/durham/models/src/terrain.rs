@@ -63,7 +63,10 @@ pub use host::{
 	TerrainPresentationDirty, TerrainStreamingEnabled, WorldBaseTerrain,
 	WORLD_FINE_HALF_EXTENT_CELLS, WORLD_OUTER_2X_ROWS, WORLD_OUTER_4X_ROWS,
 };
-pub use index::{AvianTerrainIndex, TerrainCellId, TerrainEntryStore, TerrainHeightSnapshot};
+pub use index::{
+	AvianTerrainIndex, TerrainCellId, TerrainEntryStore, TerrainHeightSnapshot,
+	WaterSurfaceSnapshot,
+};
 pub use jersey::{
 	CanyonHighPassControllerCell, CanyonHighPassControllerLayout, CanyonHighPassStampCell,
 	CanyonLowPassControllerCell, CanyonLowPassControllerLayout, CanyonLowPassStampCell,

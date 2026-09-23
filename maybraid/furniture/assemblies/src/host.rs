@@ -4,7 +4,7 @@ use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec3;
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, Scene};
-use furniture_components::{assembly_scene, posed_kit};
+use furniture_components::{posed_kit_part, FurnitureKitPart};
 use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_host_scene_pending;
 use lod::lod_ref::LodRef;
@@ -40,12 +40,24 @@ impl FurnitureCell {
 	}
 }
 
-fn furniture_kit_scene(node: &FurnitureNode) -> Box<dyn Scene> {
+fn furniture_kit_scene(node: &FurnitureNode, slot: u32) -> Box<dyn Scene> {
 	if let Some(parts) = posed_assembly(node) {
-		Box::new(assembly_scene(&parts))
+		Box::new(marked_assembly(&parts, node.finish_seed, slot))
 	} else {
 		furniture_wireframe_scene(node)
 	}
+}
+
+fn marked_assembly(
+	parts: &[furniture_components::PlacedPart],
+	finish_seed: u64,
+	slot: u32,
+) -> impl Scene + 'static {
+	let children: Vec<Box<dyn Scene>> = parts
+		.iter()
+		.map(|part| Box::new(furniture_part_scene(part, finish_seed, slot)) as Box<dyn Scene>)
+		.collect();
+	richmond_building_components::scene_children(children)
 }
 
 fn furniture_wireframe_scene(node: &FurnitureNode) -> Box<dyn Scene> {
@@ -60,8 +72,17 @@ fn furniture_wireframe_scene(node: &FurnitureNode) -> Box<dyn Scene> {
 	Box::new(node.scene_with_level(&lod_ref, LodSceneLevel::High))
 }
 
-fn furniture_part_scene(part: &furniture_components::PlacedPart) -> impl Scene + 'static {
-	posed_kit(part.kind.asset_path(), part.material.clone(), pose(part.placement))
+fn furniture_part_scene(
+	part: &furniture_components::PlacedPart,
+	finish_seed: u64,
+	slot: u32,
+) -> impl Scene + 'static {
+	posed_kit_part(
+		part.kind.asset_path(),
+		part.material.clone(),
+		pose(part.placement),
+		FurnitureKitPart { kind: part.kind, finish_seed, slot },
+	)
 }
 
 /// One fulfill quantum per painted GLB (or one wireframe kit).
@@ -80,7 +101,9 @@ fn furniture_cell_chunks(slots: Vec<FurnitureNode>) -> SceneChunk {
 	SceneChunk::lazy(estimate as u32 * kit_w, estimate, move || loop {
 		if let Some(current) = parts.as_ref() {
 			if part_index < current.len() {
-				let scene = furniture_part_scene(&current[part_index]);
+				let finish_seed = slots[slot_index].finish_seed;
+				let scene =
+					furniture_part_scene(&current[part_index], finish_seed, slot_index as u32);
 				part_index += 1;
 				return Some(SceneChunk::weighted(kit_w, scene));
 			}
@@ -123,8 +146,12 @@ impl LodScene for FurnitureCell {
 		if !matches!(level, LodSceneLevel::High) {
 			return Box::new(scene_children(Vec::new())) as Box<dyn Scene>;
 		}
-		let children: Vec<Box<dyn Scene>> =
-			self.slots.iter().map(|slot| furniture_kit_scene(slot)).collect();
+		let children: Vec<Box<dyn Scene>> = self
+			.slots
+			.iter()
+			.enumerate()
+			.map(|(slot, node)| furniture_kit_scene(node, slot as u32))
+			.collect();
 		Box::new(scene_children(children)) as Box<dyn Scene>
 	}
 

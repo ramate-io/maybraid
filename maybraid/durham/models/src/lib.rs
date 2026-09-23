@@ -30,11 +30,11 @@ pub use terrain::{
 	TerrainSdf, TerrainStoreView, TerrainStreamMarker, TerrainStreamPresenterState,
 	TerrainStreamRegionPresenter, TerrainStreamingEnabled, TerrainTrimeshCollider,
 	TerrainVisualHost, ValleyHighPassControllerLayout, ValleyLowPassControllerLayout,
-	ValleyStampCell, WorldBaseTerrain, MACRO_CELL_SIZE, TERRAIN_CELL_SIZE, TERRAIN_FRICTION,
-	WORLD_FINE_HALF_EXTENT_CELLS, WORLD_OUTER_2X_ROWS, WORLD_OUTER_4X_ROWS,
+	ValleyStampCell, WaterSurfaceSnapshot, WorldBaseTerrain, MACRO_CELL_SIZE, TERRAIN_CELL_SIZE,
+	TERRAIN_FRICTION, WORLD_FINE_HALF_EXTENT_CELLS, WORLD_OUTER_2X_ROWS, WORLD_OUTER_4X_ROWS,
 };
 pub use water::{
-	register_water_plugin, ComposedWater, PresentedWaterScene, Water, WaterPlugin,
+	register_water_plugin, ComposedWater, PresentedWaterScene, Water, WaterColumn, WaterPlugin,
 	WaterPresentationAssets, WaterPresenterState, WaterRegionPresenter, WaterStoreView,
 };
 

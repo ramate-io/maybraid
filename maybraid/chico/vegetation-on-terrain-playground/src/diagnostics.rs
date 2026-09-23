@@ -1,7 +1,7 @@
 //! Frame timing diagnostics for the vegetation-on-terrain playground.
 //!
 //! Toggle with env `CHICO_VEG_TERRAIN_DIAG` (comma-separated):
-//! - `fps` — throttled `[veg.timing]` FPS / frame_ms; playgrounds also show a HUD
+//! - `fps` — throttled `[timing]` FPS / frame_ms; playgrounds also show a HUD
 //! - `off` — disable (default when unset)
 //!
 //! The game shell inserts [`PlaygroundDiag`] `{ fps: true, hud: false }` so the
@@ -105,7 +105,7 @@ pub fn toggle_fps_logging(
 ) {
 	for entity in &requests {
 		diag.fps = !diag.fps;
-		let line = if diag.fps { "[veg.timing] fps on" } else { "[veg.timing] fps off" };
+		let line = if diag.fps { "[timing] fps on" } else { "[timing] fps off" };
 		if let Some(status) = status.as_mut() {
 			status.0 = line.into();
 		}
@@ -192,7 +192,7 @@ fn log_frame_timing(
 		.get(&FrameTimeDiagnosticsPlugin::FRAME_TIME)
 		.and_then(|d| d.smoothed())
 		.unwrap_or(f64::NAN);
-	eprintln!("[veg.timing] fps={fps:.1} frame_ms={frame_ms:.2}");
+	eprintln!("[timing] fps={fps:.1} frame_ms={frame_ms:.2}");
 }
 
 #[cfg(test)]

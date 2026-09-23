@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 use chico_vegetation_on_terrain_playground::{
-	MoveWish, MovementAction, Player, PlayerSpawnXz, PlaygroundMode,
+	MoveWish, MovementAction, Player, PlayerPhysicsEnabled, PlayerSpawnXz, PlaygroundMode,
 };
 use durham_terrain_models::{
 	terrain_collider_covers_xz, CascadeChunk, TerrainCellLayout, TerrainEntryStore,
@@ -12,7 +12,11 @@ use game_commands::command::{CommandConsoleOutput, TextEntryFocus};
 use maybraid_character_controller::CharacterIntent;
 use maybraid_skill_map::SkillMapEnabled;
 use maybraid_sky::{SkyDome, SKY_HORIZON};
-use player::MotorTraction;
+use player::{
+	apply_character_controller, Buoyant, CharacterController, JumpWish, Jumping, LocomotionCapsule,
+	MotorTraction, MoveWish as PlayerMoveWish, Player as MaybraidPlayer, PlayerCameraAim,
+	PlayerLook, PlayerYawOwner, Wading,
+};
 use player_camera::CameraController;
 
 /// When `false`, world movement / POV intents are ignored (menus, pause overlay).
@@ -92,15 +96,21 @@ pub(crate) fn apply_intents_to_movement(
 	mode: Res<PlaygroundMode>,
 	text_focus: Res<TextEntryFocus>,
 	gameplay: Res<WorldGameplayEnabled>,
+	mut commands: Commands,
 	mut intents: MessageReader<CharacterIntent>,
 	cameras: Query<&CameraController, With<Camera3d>>,
 	mut wishes: Query<&mut MoveWish, With<Player>>,
+	mut player_wishes: Query<(Entity, &mut PlayerMoveWish), With<CharacterController>>,
 	mut movement: MessageWriter<MovementAction>,
 ) {
 	if !gameplay.0 || *mode != PlaygroundMode::Character || text_focus.0 {
 		for _ in intents.read() {}
 		for mut wish in &mut wishes {
 			wish.0 = Vec3::ZERO;
+		}
+		for (entity, mut wish) in &mut player_wishes {
+			wish.0 = Vec3::ZERO;
+			commands.entity(entity).remove::<JumpWish>();
 		}
 		return;
 	}
@@ -129,6 +139,12 @@ pub(crate) fn apply_intents_to_movement(
 	};
 	for mut wish in &mut wishes {
 		wish.0 = wish_dir;
+	}
+	for (entity, mut wish) in &mut player_wishes {
+		wish.0 = wish_dir;
+		if jump {
+			commands.entity(entity).insert(JumpWish);
+		}
 	}
 
 	if move_stick != Vec2::ZERO {
@@ -202,6 +218,46 @@ pub(crate) fn stamp_vegetation_motor_traction(
 	}
 }
 
+/// Put the world player on the player-crate capsule motor so column buoyancy runs.
+pub(crate) fn stamp_world_player_motor(
+	physics: Res<PlayerPhysicsEnabled>,
+	mut commands: Commands,
+	missing: Query<Entity, (With<Player>, Without<CharacterController>)>,
+	present: Query<Entity, (With<Player>, With<CharacterController>)>,
+) {
+	if physics.0 {
+		for entity in &missing {
+			apply_world_player_motor(&mut commands, entity);
+		}
+	} else {
+		for entity in &present {
+			strip_world_player_motor(&mut commands, entity);
+		}
+	}
+}
+
+pub(crate) fn apply_world_player_motor(commands: &mut Commands, body: Entity) {
+	apply_character_controller(commands, body, LocomotionCapsule::HUMANOID);
+	commands.entity(body).insert((
+		MaybraidPlayer,
+		PlayerLook::default(),
+		PlayerCameraAim::default(),
+		PlayerYawOwner::Wish,
+	));
+}
+
+pub(crate) fn strip_world_player_motor(commands: &mut Commands, body: Entity) {
+	commands.entity(body).remove::<(
+		CharacterController,
+		PlayerMoveWish,
+		JumpWish,
+		Jumping,
+		player::Grounded,
+		Buoyant,
+		Wading,
+	)>();
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -225,5 +281,38 @@ mod tests {
 		assert!(WorldGameplayEnabled(true).0 && !TextEntryFocus(false).0);
 		assert!(!(WorldGameplayEnabled(false).0 && !TextEntryFocus(false).0));
 		assert!(!(WorldGameplayEnabled(true).0 && !TextEntryFocus(true).0));
+	}
+
+	#[test]
+	fn world_player_receives_player_crate_motor_when_physics_is_on() {
+		use bevy::ecs::system::RunSystemOnce;
+
+		let mut world = World::new();
+		world.insert_resource(PlayerPhysicsEnabled(true));
+		let player = world.spawn(Player).id();
+		world
+			.run_system_once(stamp_world_player_motor)
+			.expect("stamp world player motor");
+		assert!(world.get::<CharacterController>(player).is_some());
+		assert!(world.get::<LocomotionCapsule>(player).is_some());
+		assert!(world.get::<MaybraidPlayer>(player).is_some());
+		assert!(world.get::<PlayerMoveWish>(player).is_some());
+	}
+
+	#[test]
+	fn world_player_motor_is_stripped_when_physics_is_off() {
+		use bevy::ecs::system::RunSystemOnce;
+
+		let mut world = World::new();
+		world.insert_resource(PlayerPhysicsEnabled(false));
+		let player = world.spawn(Player).id();
+		apply_world_player_motor(&mut world.commands(), player);
+		world.flush();
+		assert!(world.get::<CharacterController>(player).is_some());
+		world
+			.run_system_once(stamp_world_player_motor)
+			.expect("strip world player motor");
+		assert!(world.get::<CharacterController>(player).is_none());
+		assert!(world.get::<PlayerMoveWish>(player).is_none());
 	}
 }

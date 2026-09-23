@@ -26,6 +26,7 @@ use crate::control::WorldGameplayEnabled;
 #[derive(Resource, Clone, Debug, PartialEq)]
 pub struct WorldPlayerLoadout {
 	pub key: String,
+	pub name: String,
 	pub appearance: CharacterAppearance,
 	pub inventory: Inventory,
 }
@@ -37,12 +38,21 @@ impl WorldPlayerLoadout {
 		inventory: Inventory,
 	) -> Self {
 		let appearance = appearance.with_inventory_clothing(&inventory);
-		Self { key: key.into(), appearance, inventory }
+		Self { key: key.into(), name: String::from("Player"), appearance, inventory }
+	}
+
+	/// Character display name shown on the vitals HUD. Empty input stays `"Player"`.
+	pub fn with_name(mut self, name: impl Into<String>) -> Self {
+		let name = name.into();
+		let trimmed = name.trim();
+		self.name = if trimmed.is_empty() { String::from("Player") } else { trimmed.to_string() };
+		self
 	}
 
 	/// Replace the bag and rebuild worn garments from the new wear list.
 	pub fn retarget_inventory(&mut self, inventory: Inventory) {
-		*self = Self::new(self.key.clone(), self.appearance.clone(), inventory);
+		let name = self.name.clone();
+		*self = Self::new(self.key.clone(), self.appearance.clone(), inventory).with_name(name);
 	}
 }
 
@@ -66,9 +76,9 @@ type WorldPlayerVisual<'a> = (Entity, &'a ChildOf, Has<MaybraidPlayerVisual>);
 
 /// Give the world player its selected loadout once the Crozon visual exists.
 ///
-/// [`firearm_user`] fire/pose query [`MaybraidPlayer`] / [`PlayerLook`]. Those
-/// markers are not on the vegetation capsule, so stamp them here without the
-/// player-crate locomotion controller (world already drives that capsule).
+/// [`firearm_user`] fire/pose query [`MaybraidPlayer`] / [`PlayerLook`]. The
+/// player-crate locomotion controller is stamped in [`crate::control`] so
+/// column buoyancy runs; this only arms kit / identity once the visual exists.
 fn arm_world_player(
 	mut commands: Commands,
 	mode: Res<PlaygroundMode>,
@@ -139,6 +149,7 @@ fn arm_world_player(
 		commands.entity(player).insert((
 			Health::from_max(f32::from(sheet.health.max(1))),
 			AppliedWorldPlayerLoadout(loadout.as_ref().clone()),
+			Name::new(loadout.name.clone()),
 		));
 		apply_character_mobility(
 			&mut commands,
@@ -338,7 +349,15 @@ mod tests {
 			),
 			InventoryItem::firearm(FirearmMesh::Reltor),
 		]);
-		let loadout = WorldPlayerLoadout::new("active", CharacterAppearance::default(), inventory);
+		let loadout = WorldPlayerLoadout::new("active", CharacterAppearance::default(), inventory)
+			.with_name("Ada");
+		assert_eq!(loadout.name, "Ada");
+		assert_eq!(
+			WorldPlayerLoadout::new("active", CharacterAppearance::default(), Inventory::default())
+				.with_name("  ")
+				.name,
+			"Player"
+		);
 		assert_eq!(
 			loadout.inventory.primary_weapon().and_then(InventoryItem::firearm_mesh),
 			Some(FirearmMesh::Reltor)
@@ -357,11 +376,10 @@ mod tests {
 		let mut world = World::new();
 		world.insert_resource(PlaygroundMode::Character);
 		world.insert_resource(WorldGameplayEnabled(true));
-		world.insert_resource(WorldPlayerLoadout::new(
-			"active",
-			CharacterAppearance::default(),
-			Inventory::default(),
-		));
+		world.insert_resource(
+			WorldPlayerLoadout::new("active", CharacterAppearance::default(), Inventory::default())
+				.with_name("Ada"),
+		);
 		let player = world.spawn((VegetationPlayer, WorldPlayerAppearanceRequested)).id();
 		world.spawn((VegetationPlayerVisual, CharacterRoot, ChildOf(player)));
 
@@ -372,6 +390,7 @@ mod tests {
 		assert_eq!(world.query::<&RequestSetCharacterAppearance>().iter(&world).count(), 0);
 		assert!(world.get::<WorldPlayerAppearanceRequested>(player).is_none());
 		assert!(world.get::<maybraid_skill_map::SkillMapUser>(player).is_some());
+		assert_eq!(world.get::<Name>(player).map(Name::as_str), Some("Ada"));
 		Ok(())
 	}
 
