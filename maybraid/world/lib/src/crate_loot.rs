@@ -5,6 +5,7 @@
 
 use std::collections::HashMap;
 
+use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use crozon_character_items::{random_starter_firearms, Inventory, ItemRng};
 use furniture_assemblies::{FurnitureKitPart, PartKind, PresentedFurnitureCellId};
@@ -50,12 +51,44 @@ pub(crate) struct CrateLoot {
 	crates: HashMap<CrateKey, CratePhase>,
 }
 
+/// Closed lids, packed so the claim systems stay under Bevy's system-param limit.
+#[derive(SystemParam)]
+pub(crate) struct ClosedCrateQuery<'w, 's> {
+	crates: Option<Res<'w, CrateLoot>>,
+	lids: Query<
+		'w,
+		's,
+		(Entity, &'static FurnitureKitPart, &'static GlobalTransform),
+		(With<ClosedLid>, Without<LidSwing>),
+	>,
+	parts: Query<'w, 's, (Entity, &'static FurnitureKitPart, &'static GlobalTransform)>,
+	child_of: Query<'w, 's, &'static ChildOf>,
+	hosts: Query<'w, 's, &'static PresentedFurnitureCellId>,
+}
+
+impl ClosedCrateQuery<'_, '_> {
+	pub(crate) fn floor(&self, origin: Vec3) -> Option<Vec3> {
+		let crates = self.crates.as_deref()?;
+		nearest_closed_crate_floor(
+			origin,
+			crates,
+			&self.lids,
+			&self.parts,
+			&self.child_of,
+			&self.hosts,
+		)
+	}
+}
+
 impl ClosedLid {
+	/// Pitch about the rear rim. The lid GLB is floor-origin (`Y ∈ [0, 1]`) with
+	/// plan `X,Z ∈ [-1, 1]`; kit `+Z` is the back, so the hinge is the floor
+	/// edge at local `(0, 0, 1)`.
 	fn swung(self, amount: f32) -> Transform {
 		let closed = self.0;
-		let rear = Vec3::new(0.0, 0.0, -closed.scale.z * 0.5);
+		let rear = Vec3::new(0.0, 0.0, closed.scale.z);
 		let hinge = closed.translation + closed.rotation * rear;
-		let swing = Quat::from_rotation_x(-amount.clamp(0.0, 1.0) * LID_OPEN);
+		let swing = Quat::from_rotation_x(amount.clamp(0.0, 1.0) * LID_OPEN);
 		let local = closed.translation - hinge;
 		Transform {
 			translation: hinge + closed.rotation * swing * local,
@@ -125,12 +158,15 @@ fn roll_crate_bag(finish_seed: u64) -> Inventory {
 		return Inventory::default();
 	}
 	let mut rng = ItemRng::from_seed(finish_seed);
-	Inventory {
+	let mut bag = Inventory {
 		items: random_starter_firearms(&mut rng, 1),
 		clothing: Vec::new(),
 		weapons: Vec::new(),
 		skills: Vec::new(),
-	}
+	};
+	// Queue the firearm so the ground pile renders. Claim absorb ignores the queue.
+	let _ = bag.toggle(0);
+	bag
 }
 
 fn restock_secs(finish_seed: u64) -> f32 {
@@ -162,11 +198,12 @@ pub(crate) fn open_nearest_crate(
 	child_of: &Query<&ChildOf>,
 	hosts: &Query<&PresentedFurnitureCellId>,
 ) {
-	let Some((lid, key, eject_origin)) =
-		nearest_closed_crate(origin, crates, lids, parts, child_of, hosts)
-	else {
+	let Some(hit) = nearest_closed_crate(origin, crates, lids, parts, child_of, hosts) else {
 		return;
 	};
+	let lid = hit.lid;
+	let key = hit.key;
+	let eject_origin = hit.eject_origin;
 	if !crates.start_open(key, now) {
 		return;
 	}
@@ -254,6 +291,28 @@ fn advance_swing(swing: &mut LidSwing, dt: f32) -> f32 {
 	swing.elapsed / swing.duration
 }
 
+struct ClosedCrateHit {
+	lid: Entity,
+	key: CrateKey,
+	floor: Vec3,
+	eject_origin: Vec3,
+}
+
+/// Ground point of the nearest closed stocked crate, for the claim rings.
+pub(crate) fn nearest_closed_crate_floor(
+	origin: Vec3,
+	crates: &CrateLoot,
+	lids: &Query<
+		(Entity, &FurnitureKitPart, &GlobalTransform),
+		(With<ClosedLid>, Without<LidSwing>),
+	>,
+	parts: &Query<(Entity, &FurnitureKitPart, &GlobalTransform)>,
+	child_of: &Query<&ChildOf>,
+	hosts: &Query<&PresentedFurnitureCellId>,
+) -> Option<Vec3> {
+	nearest_closed_crate(origin, crates, lids, parts, child_of, hosts).map(|hit| hit.floor)
+}
+
 fn nearest_closed_crate(
 	origin: Vec3,
 	crates: &CrateLoot,
@@ -264,8 +323,8 @@ fn nearest_closed_crate(
 	parts: &Query<(Entity, &FurnitureKitPart, &GlobalTransform)>,
 	child_of: &Query<&ChildOf>,
 	hosts: &Query<&PresentedFurnitureCellId>,
-) -> Option<(Entity, CrateKey, Vec3)> {
-	let mut best: Option<(Entity, CrateKey, Vec3, f32)> = None;
+) -> Option<ClosedCrateHit> {
+	let mut best: Option<(ClosedCrateHit, f32)> = None;
 	for (entity, part, global) in lids {
 		if part.kind != PartKind::ChestLid {
 			continue;
@@ -281,14 +340,18 @@ fn nearest_closed_crate(
 		if distance > DEFAULT_CLAIM_RADIUS {
 			continue;
 		}
-		if best.is_some_and(|(_, _, _, nearest)| distance >= nearest) {
+		if best.as_ref().is_some_and(|(_, nearest)| distance >= *nearest) {
 			continue;
 		}
 		let floor_y =
 			trunk_floor_y(key, parts, child_of, hosts).unwrap_or_else(|| global.translation().y);
-		best = Some((entity, key, eject_point(global, floor_y), distance));
+		let floor = Vec3::new(global.translation().x, floor_y, global.translation().z);
+		best = Some((
+			ClosedCrateHit { lid: entity, key, floor, eject_origin: eject_point(global, floor_y) },
+			distance,
+		));
 	}
-	best.map(|(entity, key, eject_origin, _)| (entity, key, eject_origin))
+	best.map(|(hit, _)| hit)
 }
 
 fn trunk_floor_y(
@@ -422,17 +485,33 @@ mod tests {
 	}
 
 	#[test]
-	fn closed_lid_is_unchanged_and_open_lid_pitches() {
+	fn open_lid_hinges_on_the_rear_rim() {
 		let closed = ClosedLid(Transform {
-			translation: Vec3::new(0.0, 0.78, 0.0),
+			translation: Vec3::new(0.0, 0.28, 0.0),
 			rotation: Quat::IDENTITY,
-			scale: Vec3::new(1.02, 0.22, 1.02),
+			scale: Vec3::new(0.51, 0.22, 0.51),
 		});
 		let shut = closed.swung(0.0);
 		assert!(shut.translation.distance(closed.0.translation) < 1e-4);
 		assert!(shut.rotation.angle_between(Quat::IDENTITY) < 1e-3);
 		let open = closed.swung(1.0);
 		assert!(open.rotation.angle_between(Quat::IDENTITY) > 1.0);
+		let rear = Vec3::new(0.0, 0.0, 1.0);
+		assert!(open.transform_point(rear).distance(closed.0.transform_point(rear)) < 1e-3);
+		let front = Vec3::new(0.0, 0.0, -1.0);
+		let front_open = open.transform_point(front);
+		assert!(front_open.y > closed.0.transform_point(front).y + closed.0.scale.z);
+		assert!(front_open.y > closed.0.translation.y);
+	}
+
+	#[test]
+	fn rolled_firearm_is_queued_for_display() {
+		let bag = roll_crate_bag(1);
+		assert_eq!(bag.items.len(), 1);
+		assert_eq!(bag.weapons, vec![0]);
+		let empty = roll_crate_bag(0);
+		assert!(empty.items.is_empty());
+		assert!(empty.weapons.is_empty());
 	}
 
 	#[test]
@@ -460,6 +539,7 @@ mod tests {
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		assert!(world.get::<LidSwing>(lid).is_none());
 		assert_eq!(world.query::<&WorldStash>().iter(&world).count(), 1);
+		assert_eq!(world.query::<&crate::stash::StashDisplayedItem>().iter(&world).count(), 1);
 		let open = world.get::<Transform>(lid).ok_or_else(|| anyhow::anyhow!("lid"))?;
 		assert!(open.rotation.angle_between(Quat::IDENTITY) > 1.0);
 
