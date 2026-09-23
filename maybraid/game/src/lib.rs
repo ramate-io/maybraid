@@ -19,8 +19,9 @@ use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
 use maybraid_input::MenuNavPad;
 use maybraid_menu_controller::MenuControllerPlugin;
 use maybraid_world::{
-	PlayerPhysicsEnabled, PlayerSpawnXz, ShadowQuality, TerrainStreamingEnabled,
-	WorldGameplayEnabled, WorldMobHudEnabled, WorldPlayerLoadout, WorldPlugin, WorldSceneryVisible,
+	resume_discovery_from_saved_waypoints, PlayerPhysicsEnabled, PlayerSpawnXz, ShadowQuality,
+	TerrainStreamingEnabled, WorldGameplayEnabled, WorldMobHudEnabled, WorldPlayerLoadout,
+	WorldPlugin, WorldSceneryVisible,
 };
 use menu_components::{
 	consume_screen_back, ActiveOverlayKey, MenuBackConsumed, ScreenBackPressed, ShortTextModal,
@@ -77,6 +78,8 @@ impl Plugin for GamePlugin {
 					apply_shell_look,
 					detach_preview_camera,
 					crate::load::arm_first_load,
+					load_active_player_loadout.before(resume_discovery_from_saved_waypoints),
+					resume_discovery_from_saved_waypoints,
 				),
 			)
 			.add_systems(
