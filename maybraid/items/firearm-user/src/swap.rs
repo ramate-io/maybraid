@@ -109,11 +109,8 @@ mod tests {
 		};
 		assert!((mid.dip() - 1.0).abs() < 1e-5);
 		assert!(mid.ready_to_swap());
-		let done = WeaponSwap {
-			elapsed: WEAPON_SWAP_SECS,
-			duration: WEAPON_SWAP_SECS,
-			swapped: true,
-		};
+		let done =
+			WeaponSwap { elapsed: WEAPON_SWAP_SECS, duration: WEAPON_SWAP_SECS, swapped: true };
 		assert!(done.dip().abs() < 1e-5);
 		assert!(done.finished());
 		assert!(!done.ready_to_swap());
@@ -128,12 +125,8 @@ mod tests {
 	#[test]
 	fn apply_to_lowers_the_bore() {
 		let mut transform = Transform::IDENTITY;
-		WeaponSwap {
-			elapsed: WEAPON_SWAP_SECS * 0.5,
-			duration: WEAPON_SWAP_SECS,
-			swapped: false,
-		}
-		.apply_to(&mut transform);
+		WeaponSwap { elapsed: WEAPON_SWAP_SECS * 0.5, duration: WEAPON_SWAP_SECS, swapped: false }
+			.apply_to(&mut transform);
 		assert!(transform.translation.y < 0.0);
 		assert!((transform.rotation * Vec3::Z).y < 0.0);
 	}
