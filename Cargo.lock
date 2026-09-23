@@ -3516,14 +3516,18 @@ name = "furniture-assemblies"
 version = "0.0.1"
 dependencies = [
  "anyhow",
+ "avian3d",
  "bevy",
  "furniture-components",
  "furniture-shaders",
+ "furniture-usage-areas",
  "lod",
+ "lod-avian",
  "lod-gimme",
  "material-ref",
  "procedural-common",
  "richmond-building-components",
+ "richmond-building-physics",
  "richmond-development-models",
 ]
 
@@ -3545,6 +3549,7 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "bevy",
+ "chico-vegetation-shaders",
  "clap",
  "furniture-assemblies",
  "furniture-shaders",
@@ -3564,6 +3569,14 @@ version = "0.0.1"
 dependencies = [
  "bevy",
  "material-ref",
+]
+
+[[package]]
+name = "furniture-usage-areas"
+version = "0.0.1"
+dependencies = [
+ "bevy",
+ "richmond-building-components",
 ]
 
 [[package]]
