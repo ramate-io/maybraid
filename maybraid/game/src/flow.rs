@@ -105,7 +105,7 @@ mod tests {
 	}
 
 	#[test]
-	fn training_enters_the_arena() {
+	fn training_enters_the_world() {
 		assert_eq!(
 			HomeRoute::from_choice(HomeMenuChoice::TrainingGround),
 			HomeRoute::World { session: PlaySession::Training }

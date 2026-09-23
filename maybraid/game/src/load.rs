@@ -195,7 +195,7 @@ mod tests {
 	}
 
 	#[test]
-	fn training_unveils_when_the_pad_is_ready_without_waiting_on_jobs() {
+	fn training_unveils_when_the_surface_is_ready_without_waiting_on_jobs() {
 		let gate = gate_at(0.0);
 		assert!(!unveil_ready(true, &gate, false, 400, 0.0));
 		assert!(unveil_ready(true, &gate, true, 400, 0.0));

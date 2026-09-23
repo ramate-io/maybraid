@@ -19,7 +19,6 @@ clap = { workspace = true }
 crozon-character-model-user = { workspace = true }
 crozon-character-playground = { workspace = true }
 crozon-inventory-user = { workspace = true }
-les-halles-arena = { workspace = true }
 maybraid-character-controller = { workspace = true }
 maybraid-input = { workspace = true }
 maybraid-menu-controller = { workspace = true }

@@ -3,12 +3,12 @@
 The actual Maybraid game.
 
 Starts on the home screen. Discovery enters the streamed world. Training Ground
-enters a small seed-fit Les Halles arena on a short terrain and vegetation
-patch, with a stone perimeter and a free-for-all roster. Characters opens the
-character screen. Reliquary is not
-wired yet. In world, Start (Enter on keyboard) overlays the in-game menu; Start
-again dismisses it. Leave on that menu returns home. Settings opens the same
-pause settings overlay (shadows, mob HUD); Back / Escape returns home.
+enters that same world, stands the saved character at a generated building, and
+closes a stone perimeter around it with two fixed free-for-all mobs. Characters
+opens the character screen. Reliquary is not wired yet. In world, Start (Enter
+on keyboard) overlays the in-game menu; Start again dismisses it. Leave on that
+menu returns home. Settings opens the same pause settings overlay (shadows, mob
+HUD); Back / Escape returns home.
 
 ```bash
 cargo run -p maybraid

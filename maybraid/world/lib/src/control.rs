@@ -40,7 +40,7 @@ impl Default for WorldSceneryVisible {
 #[derive(Resource, Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub struct WorldSurfaceReady(pub bool);
 
-/// Terrain column check, then the arena pad check. The shell unveils after this.
+/// Terrain column under the player. The shell unveils after this.
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct WorldSurfaceSet;
 
@@ -53,8 +53,8 @@ pub(crate) fn update_world_surface_ready(
 	colliders: Query<&CascadeChunk, With<TerrainTrimeshCollider>>,
 	mut ready: ResMut<WorldSurfaceReady>,
 ) {
-	// Menu shells keep streaming off. Leave the ready bit alone so a training
-	// mount can unveil from the pad instead of a Durham column.
+	// Menu shells keep streaming off. Leave the ready bit alone; training unveils
+	// from this same column once the grounds exist.
 	if !streaming.0 {
 		return;
 	}

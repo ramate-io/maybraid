@@ -7,7 +7,8 @@
 //! Async load-in follows [`efa73ad`](https://github.com/ramate-io/maybraid/commit/efa73adf):
 //! a `Camera2d` exists only during [`GameFlow::LoadingWorld`]. A persistent
 //! second camera would steal UI. Terrain streaming stays off on menu shells.
-//! Training streams a small patch; Discovery streams the playable world.
+//! Training and Discovery both stream the playable world. Training only marks
+//! [`TrainingGrounds`] so the session can add a perimeter and skip pose writes.
 
 use bevy::camera::visibility::RenderLayers;
 use bevy::camera::ClearColorConfig;
@@ -191,9 +192,9 @@ pub(crate) fn apply_shell_look(
 	for mut camera in &mut loading_cameras {
 		camera.is_active = loading;
 	}
-	// Menus keep Durham off. Training streams a small patch (see
-	// [`TrainingGrounds`]); Discovery streams the playable world. Sky and the
-	// player still follow [`WorldSceneryVisible`] once the world shell is up.
+	// Menus keep Durham off. Training and Discovery both stream the playable
+	// world. [`TrainingGrounds`] marks the session. Sky and the player still
+	// follow [`WorldSceneryVisible`] once the world shell is up.
 	streaming.0 = terrain_streaming_for_shell(flow);
 	grounds.0 = training_grounds_for_shell(flow, *session);
 	scenery.0 = flow == GameFlow::World;
@@ -281,7 +282,7 @@ mod tests {
 	}
 
 	#[test]
-	fn training_shell_streams_a_small_patch() -> anyhow::Result<()> {
+	fn training_shell_streams_the_playable_world() -> anyhow::Result<()> {
 		for flow in [GameFlow::LoadingWorld, GameFlow::World] {
 			assert!(terrain_streaming_for_shell(flow));
 			assert!(training_grounds_for_shell(flow, PlaySession::Training));

@@ -83,7 +83,6 @@ impl Plugin for GamePlugin {
 					enter_loading_world,
 					spawn_loading_backdrop,
 					crate::training::reset_surface_ready,
-					crate::training::spawn_training_arena,
 					apply_shell_look,
 					detach_preview_camera,
 					crate::load::arm_first_load,

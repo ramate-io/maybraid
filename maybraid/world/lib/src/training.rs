@@ -1,36 +1,27 @@
-//! Training Ground mount: a small terrain patch, a seated Les Halles pad, and
-//! a free-for-all roster around the stair mouth.
+//! Training Ground on the live world: two fixed mobs at a generated building,
+//! inside a terrain perimeter. The world streams stay as they are for Discovery.
 
-use avian3d::prelude::{Collider, LinearVelocity};
+use avian3d::prelude::LinearVelocity;
+use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use chico_vegetation_on_terrain_playground::{
 	holding_elevation, player_spawn_point_at, AwaitingTerrainSurface, OffTerrainAnchor,
-	Player as VegetationPlayer, PlaygroundConfig,
+	Player as VegetationPlayer,
 };
-use crozon_characters::species::braidman::BraidmanConfig;
-use crozon_characters::CharacterRecipe;
-use durham_terrain_models::{
-	playable_world_cell_layout, training_grounds_cell_layout, AvianTerrainIndex, TerrainCellLayout,
-	TerrainEntryStore, TerrainPresentEnabled, TerrainPresentPending, TerrainPresentationDirty,
-	TerrainPresenterState, WorldBaseTerrain,
-};
-use firearm_intelligence::FirearmEngagement;
-use firearm_user::{spawn_held_kit, FirearmUserSettings, LiveWeapon};
-use firearms::FirearmConcept;
-use les_halles_arena::{
-	spawn_training_perimeter, training_perimeter_samples, ArenaMount, ArenaPad, LesHallesSpawn,
-	TrainingArena,
-};
+use durham_terrain_models::{TerrainCellLayout, TerrainEntryStore, WorldBaseTerrain};
+use firearm_user::FirearmUser;
 use maybraid_mobs::{MobBrain, MobKind};
-use npc_intelligence::{NpcBody, NpcInstall, Personality};
-use player::{spawn_npc_visual, spawn_npc_with_hidden_capsule, LocomotionCapsule, PlayerLook};
+use mob_characters::{
+	CharacterBrains, CharacterBuild, CharacterInventory, CharacterSpecies, FromMobNumber,
+	MobCharacter,
+};
 use player_camera::CameraController;
-use richmond_building_physics::BuildingWalkCollider;
-use richmond_developments_on_terrain_playground::UrbanizationStreamingEnabled;
-use spotting_intelligence::{InterestLayers, SpotBounds, SpotSubject};
-use std::f32::consts::TAU;
+use procedural_common::Bounds2;
+use richmond_building_components::{building_bounds, spawn_building_components};
+use richmond_building_physics::{spawn_building_walk_colliders, BUILDING_FRICTION};
+use richmond_buildings::wall_demo::TerrainPerimeterWall;
+use richmond_development_models::{DevelopmentCell, DevelopmentEntryStore};
 use threat_intelligence::{ThreatId, ThreatSubject};
-use threat_management_intelligence::ThreatManagementIntelligence;
 
 use crate::WorldSurfaceReady;
 
@@ -38,24 +29,67 @@ use crate::WorldSurfaceReady;
 #[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct TrainingGrounds(pub bool);
 
-/// Origin height has been applied to the pad, the stack, and the perimeter.
+/// Wall, mobs, and their guns. Leave despawns these and leaves Discovery mobs alone.
+#[derive(Component, Clone, Copy, Debug, Default)]
+pub struct TrainingFixture;
+
+/// The grounds have been spawned for this enter. Cleared when the session ends.
 #[derive(Resource, Clone, Copy, Debug, Default)]
-pub(crate) struct TrainingSeated;
+pub struct TrainingPlaced;
 
-const FFA_NPCS: u16 = 6;
-const FFA_RING: f32 = 26.0;
+/// Player was moved onto the grounds, so Leave can park them back on the region.
+#[derive(Component, Clone, Copy, Debug, Default)]
+pub(crate) struct TrainingPlacement;
 
-/// While [`LesHallesSpawn`] is present, stand the player on that stair mouth.
-/// When the session drops the resource, park them back on the region center so
-/// the next Discovery enter is not left at the arena.
-pub(crate) fn sync_off_terrain_player(
-	spawn: Option<Res<LesHallesSpawn>>,
-	seated: Option<Res<TrainingSeated>>,
+const SEARCH_M: f32 = 1_600.0;
+const GROUNDS_MARGIN: f32 = 24.0;
+const WALL_STEP: f32 = 8.0;
+const WALL_CLEARANCE: f32 = 4.0;
+const STAND_PAST_PAD: f32 = 8.0;
+const STAND_INSET: f32 = 4.0;
+const MOB_SPACING: f32 = 6.0;
+
+/// Stable pair: different clothing seeds, armed profiles, and biped species.
+fn training_roster() -> [MobCharacter; 2] {
+	[
+		training_mob(0.17, CharacterInventory::Grunt, 0),
+		training_mob(0.83, CharacterInventory::Mercenary, 4),
+	]
+}
+
+fn training_mob(num: f32, inventory: CharacterInventory, species: usize) -> MobCharacter {
+	let bipeds = CharacterSpecies::BIPEDS;
+	MobCharacter {
+		num,
+		build: CharacterBuild::from_num(num),
+		species: bipeds[species % bipeds.len()],
+		inventory,
+		brains: CharacterBrains::Brawler,
+	}
+}
+
+/// Keep the unveil closed until the building, wall, and mobs exist.
+pub(crate) fn hold_training_until_placed(
+	grounds: Res<TrainingGrounds>,
+	placed: Option<Res<TrainingPlaced>>,
+	mut ready: ResMut<WorldSurfaceReady>,
+) {
+	if grounds.0 && placed.is_none() {
+		ready.0 = false;
+	}
+}
+
+/// Once a filled development is near the player, stand them on its terrace,
+/// spawn the roster, and close a stone strip around the pads.
+pub(crate) fn place_training_grounds(
+	grounds: Res<TrainingGrounds>,
+	placed: Option<Res<TrainingPlaced>>,
 	mut commands: Commands,
+	developments: Res<DevelopmentEntryStore>,
+	terrain: Res<TerrainEntryStore>,
 	layout: Res<TerrainCellLayout>,
-	base: Res<WorldBaseTerrain>,
 	mut players: Query<
-		(Entity, &mut Transform, &mut LinearVelocity, Has<OffTerrainAnchor>),
+		(Entity, &mut Transform, &mut LinearVelocity),
 		(With<VegetationPlayer>, Without<Camera3d>),
 	>,
 	mut cameras: Query<
@@ -63,322 +97,295 @@ pub(crate) fn sync_off_terrain_player(
 		(With<Camera3d>, Without<VegetationPlayer>),
 	>,
 ) {
-	if let Some(spawn) = spawn.as_deref().copied() {
-		for (entity, mut transform, mut velocity, anchored) in &mut players {
-			if !anchored {
-				transform.translation = spawn.player;
-				**velocity = Vec3::ZERO;
-				commands.entity(entity).insert(OffTerrainAnchor { translation: spawn.player });
-			}
-		}
-		// Keep the viewer on the grounds while the patch generates. Follow takes
-		// over once the pad is seated; until then the menu eye would stream
-		// terrain somewhere else and the seat would never see a height.
-		if seated.is_none() {
-			for (mut transform, mut camera) in &mut cameras {
-				camera.yaw = spawn.look_yaw;
-				transform.translation = spawn.player + Vec3::Y * 6.0;
-			}
-		}
+	if !grounds.0 || placed.is_some() {
 		return;
 	}
+	let Some(player_at) = players.iter_mut().next().map(|(_, transform, _)| transform.translation)
+	else {
+		return;
+	};
+	let Some(plan) = plan_grounds(&developments, &terrain, &layout, player_at) else {
+		snap_viewer(&mut cameras, player_at);
+		return;
+	};
 
-	for (entity, mut transform, mut velocity, anchored) in &mut players {
-		if !anchored {
-			continue;
-		}
-		let xz = layout.region_center_xz().xz();
-		let elevation = holding_elevation(&base.0, xz.x, xz.y);
-		transform.translation = player_spawn_point_at(xz, elevation);
+	for (mob, at) in training_roster().into_iter().zip(plan.mobs) {
+		let look = Vec3::new(plan.pad_center.x, at.y, plan.pad_center.y);
+		let entity = mob
+			.scene_recipe()
+			.spawn(&mut commands, Transform::from_translation(at).looking_at(look, Vec3::Y));
+		let id = ThreatId(entity.to_bits());
+		let affiliations = MobBrain::for_kind(MobKind::Brawler).affiliations.for_member(id);
+		commands
+			.entity(entity)
+			.insert((TrainingFixture, ThreatSubject::new(id), affiliations));
+	}
+
+	let hosts = spawn_building_components(
+		&mut commands,
+		&plan.wall,
+		Transform::IDENTITY,
+		building_bounds(&plan.wall),
+	);
+	for entity in hosts {
+		spawn_building_walk_colliders(&mut commands, entity, &plan.wall, BUILDING_FRICTION);
+		commands.entity(entity).insert(TrainingFixture);
+	}
+
+	let stand = plan.stand;
+	let look = Vec3::new(plan.pad_center.x, stand.y, plan.pad_center.y);
+	for (entity, mut transform, mut velocity) in &mut players {
+		*transform = Transform::from_translation(stand).looking_at(look, Vec3::Y);
 		**velocity = Vec3::ZERO;
-		commands.entity(entity).insert(AwaitingTerrainSurface);
+		commands.entity(entity).insert((AwaitingTerrainSurface, TrainingPlacement));
 		commands.entity(entity).remove::<OffTerrainAnchor>();
 	}
+	snap_viewer(&mut cameras, stand);
+	commands.insert_resource(TrainingPlaced);
+	info!(
+		target: "world.training",
+		"placed training grounds at ({:.1}, {:.1})",
+		stand.x, stand.z
+	);
 }
 
-/// Pad collider plus one building walk collider, or the pad alone when the fit failed.
-/// A terrain training mount also waits until the pad has been seated on the patch.
-pub(crate) fn sync_arena_surface_ready(
-	mount: Option<Res<ArenaMount>>,
-	grounds: Option<Res<TrainingGrounds>>,
-	seated: Option<Res<TrainingSeated>>,
-	pads: Query<(), (With<ArenaPad>, With<Collider>)>,
-	walks: Query<&ChildOf, With<BuildingWalkCollider>>,
-	arena: Query<(), With<TrainingArena>>,
-	mut ready: ResMut<WorldSurfaceReady>,
-) {
-	let Some(mount) = mount else {
-		return;
-	};
-	if grounds.is_some_and(|grounds| grounds.0) && seated.is_none() {
-		ready.0 = false;
-		return;
-	}
-	let pad = !pads.is_empty();
-	let walk = walks.iter().any(|child| arena.contains(child.parent()));
-	ready.0 = pad && (walk || mount.failed);
-}
-
-/// Shrink Durham and the forest to the training patch, and keep hopscotch off.
-/// Restores the playable rings when the shell clears [`TrainingGrounds`].
-pub(crate) fn apply_training_grounds(
+/// After Leave, put a moved player back on the region center. Waypoints stay gated
+/// on [`TrainingGrounds`], so this park is not written to `positions/{id}.json`.
+pub(crate) fn park_player_after_training(
 	grounds: Res<TrainingGrounds>,
-	mut active: Local<bool>,
-	mut saved_forest_radius: Local<Option<u32>>,
-	mut index: AvianTerrainIndex,
-	mut present: ResMut<TerrainPresentEnabled>,
-	mut dirty: ResMut<TerrainPresentationDirty>,
-	mut pending: ResMut<TerrainPresentPending>,
-	mut forest: Option<ResMut<PlaygroundConfig>>,
-	mut urban: Option<ResMut<UrbanizationStreamingEnabled>>,
-) {
-	if *active == grounds.0 {
-		return;
-	}
-	let enable = grounds.0;
-	*active = enable;
-	let layout = if enable { training_grounds_cell_layout() } else { playable_world_cell_layout() };
-	index.set_layout(layout);
-	present.0 = enable;
-	dirty.0 = true;
-	pending.0 = true;
-	if let Some(urban) = urban.as_deref_mut() {
-		urban.0 = !enable;
-	}
-	if let Some(config) = forest.as_deref_mut() {
-		if let Some(spec) = config.forest.as_mut() {
-			if enable {
-				if saved_forest_radius.is_none() {
-					*saved_forest_radius = Some(spec.stream_radius);
-				}
-				spec.stream_radius = 0;
-			} else if let Some(radius) = saved_forest_radius.take() {
-				spec.stream_radius = radius;
-			}
-		}
-	}
-}
-
-/// Drop raw training terrain meshes once present is turned back off.
-pub(crate) fn clear_training_terrain_present(
-	present: Res<TerrainPresentEnabled>,
-	mut was_present: Local<bool>,
 	mut commands: Commands,
-	mut state: ResMut<TerrainPresenterState>,
-) {
-	if *was_present && !present.0 {
-		state.clear(&mut commands);
-		commands.remove_resource::<TrainingSeated>();
-	}
-	*was_present = present.0;
-}
-
-/// Lift the pad and stack onto the origin's composed height, then close the
-/// grounds with a terrain-following wall and a free-for-all ring.
-pub(crate) fn seat_training_grounds(
-	mut commands: Commands,
-	grounds: Res<TrainingGrounds>,
-	seated: Option<Res<TrainingSeated>>,
-	spawn: Option<Res<LesHallesSpawn>>,
-	store: Res<TerrainEntryStore>,
 	layout: Res<TerrainCellLayout>,
-	mut arena: Query<&mut Transform, (With<TrainingArena>, Without<VegetationPlayer>)>,
+	base: Res<WorldBaseTerrain>,
 	mut players: Query<
-		(&mut Transform, Option<&mut OffTerrainAnchor>),
-		(With<VegetationPlayer>, Without<TrainingArena>),
+		(Entity, &mut Transform, &mut LinearVelocity),
+		(With<VegetationPlayer>, With<TrainingPlacement>, Without<Camera3d>),
 	>,
-	mut meshes: ResMut<Assets<Mesh>>,
-	mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-	if !grounds.0 || seated.is_some() {
+	if grounds.0 {
 		return;
 	}
-	let Some(spawn) = spawn.as_deref().copied() else {
-		return;
-	};
-	let samples = training_perimeter_samples();
-	let mut terrain_y = Vec::with_capacity(samples.len());
-	for xz in &samples {
-		let Some(y) = store.composed_height_at(&layout, xz.x, xz.y) else {
-			return;
-		};
-		terrain_y.push(y);
+	let xz = layout.region_center_xz().xz();
+	let elevation = holding_elevation(&base.0, xz.x, xz.y);
+	let at = player_spawn_point_at(xz, elevation);
+	for (entity, mut transform, mut velocity) in &mut players {
+		transform.translation = at;
+		**velocity = Vec3::ZERO;
+		commands.entity(entity).insert(AwaitingTerrainSurface);
+		commands.entity(entity).remove::<(TrainingPlacement, OffTerrainAnchor)>();
 	}
-	let Some(plaza) = store.composed_height_at(&layout, 0.0, 0.0) else {
-		return;
-	};
-
-	for mut transform in &mut arena {
-		transform.translation.y += plaza;
-	}
-	for (mut transform, anchor) in &mut players {
-		if let Some(mut anchor) = anchor {
-			transform.translation.y += plaza;
-			anchor.translation.y += plaza;
-		}
-	}
-	let mut seated_spawn = spawn;
-	seated_spawn.player.y += plaza;
-	seated_spawn.npc.y += plaza;
-	seated_spawn.floor_y[0] += plaza;
-	seated_spawn.floor_y[1] += plaza;
-	commands.insert_resource(seated_spawn);
-	spawn_training_perimeter(&mut commands, &terrain_y, plaza);
-	spawn_ffa_roster(&mut commands, &mut meshes, &mut materials, &seated_spawn);
-	commands.insert_resource(TrainingSeated);
 }
 
-fn spawn_ffa_roster(
-	commands: &mut Commands,
-	meshes: &mut Assets<Mesh>,
-	materials: &mut Assets<StandardMaterial>,
-	spawn: &LesHallesSpawn,
+/// Guns are world-posed, not parented. Tag them so Leave despawns the kit with the body.
+pub(crate) fn mark_training_guns(
+	mut commands: Commands,
+	mobs: Query<&FirearmUser, With<TrainingFixture>>,
+	guns: Query<(), Without<TrainingFixture>>,
 ) {
-	let hull = LocomotionCapsule::HUMANOID;
-	let appearance = BraidmanConfig::default_preview();
-	for index in 0..FFA_NPCS {
-		let theta = spawn.look_yaw + TAU * (index as f32 + 0.5) / FFA_NPCS as f32;
-		let translation = Vec3::new(
-			spawn.player.x + theta.sin() * FFA_RING,
-			spawn.floor_y[0],
-			spawn.player.z - theta.cos() * FFA_RING,
-		);
-		let npc = spawn_npc_with_hidden_capsule(
-			commands,
-			translation,
-			PlayerLook { yaw: theta + std::f32::consts::PI, ..default() },
-			meshes,
-			materials,
-		);
-		spawn_npc_visual(
-			commands,
-			npc,
-			CharacterRecipe::clothed(&appearance),
-			Quat::from_rotation_y(theta),
-		);
-		Personality::Brawler.install(
-			commands,
-			npc,
-			NpcInstall {
-				at: translation,
-				body: NpcBody {
-					agent_radius: hull.radius,
-					feet_below_origin: hull.half_height(),
-					eye_height: 1.45,
-				},
-				health: damage::Health::default(),
-				armed: true,
-				engagement: Some(FirearmEngagement::hold()),
-				threat_override: Some(ThreatManagementIntelligence::ffa()),
-				selection_salt: index as u64 + 1,
-				..NpcInstall::default()
-			},
-		);
-		let id = ThreatId(npc.to_bits());
-		let gun = spawn_held_kit(
-			commands,
-			npc,
-			FirearmUserSettings::default(),
-			FirearmConcept::Bullpup.kit(),
-			LiveWeapon::default(),
-		);
-		commands.entity(npc).insert((
-			TrainingArena,
-			ThreatSubject::new(id),
-			MobBrain::for_kind(MobKind::Brawler).affiliations.for_member(id),
-			SpotSubject::new(
-				InterestLayers::CHARACTER,
-				SpotBounds::capsule(hull.radius, hull.half_height()),
-			),
-		));
-		commands.entity(gun).insert(TrainingArena);
+	for user in &mobs {
+		if guns.get(user.held).is_ok() {
+			commands.entity(user.held).insert(TrainingFixture);
+		}
+	}
+}
+
+struct GroundsPlan {
+	wall: TerrainPerimeterWall,
+	pad_center: Vec2,
+	stand: Vec3,
+	mobs: [Vec3; 2],
+}
+
+fn plan_grounds(
+	developments: &DevelopmentEntryStore,
+	terrain: &TerrainEntryStore,
+	layout: &TerrainCellLayout,
+	player_at: Vec3,
+) -> Option<GroundsPlan> {
+	let region = Aabb3d::from_min_max(
+		Vec3::new(player_at.x - SEARCH_M, -2_000.0, player_at.z - SEARCH_M),
+		Vec3::new(player_at.x + SEARCH_M, 2_000.0, player_at.z + SEARCH_M),
+	);
+	let player_xz = player_at.xz();
+	let cell = developments.filled_cells_overlapping(region).into_iter().min_by(|a, b| {
+		let da = cell_center_xz(a).distance_squared(player_xz);
+		let db = cell_center_xz(b).distance_squared(player_xz);
+		da.total_cmp(&db)
+	})?;
+	let (pads, plaza) = pad_union(cell)?;
+	let wall_min = pads.min - Vec2::splat(GROUNDS_MARGIN);
+	let wall_max = pads.max + Vec2::splat(GROUNDS_MARGIN);
+	let samples = TerrainPerimeterWall::sample_rectangle(wall_min, wall_max, WALL_STEP);
+	if samples.len() < 4 {
+		return None;
+	}
+	let mut heights = Vec::with_capacity(samples.len());
+	for sample in &samples {
+		heights.push(terrain.composed_height_at(layout, sample.x, sample.y)?);
+	}
+	let stand_xz = Vec2::new(
+		(pads.max.x + STAND_PAST_PAD).min(wall_max.x - STAND_INSET),
+		pads.center().y.clamp(wall_min.y + STAND_INSET, wall_max.y - STAND_INSET),
+	);
+	let stand_y = terrain.composed_height_at(layout, stand_xz.x, stand_xz.y)?;
+	let mob_xz = [
+		clamp_inside(stand_xz + Vec2::new(0.0, MOB_SPACING), wall_min, wall_max),
+		clamp_inside(stand_xz - Vec2::new(0.0, MOB_SPACING), wall_min, wall_max),
+	];
+	let mobs = [
+		Vec3::new(
+			mob_xz[0].x,
+			terrain.composed_height_at(layout, mob_xz[0].x, mob_xz[0].y)?,
+			mob_xz[0].y,
+		),
+		Vec3::new(
+			mob_xz[1].x,
+			terrain.composed_height_at(layout, mob_xz[1].x, mob_xz[1].y)?,
+			mob_xz[1].y,
+		),
+	];
+	Some(GroundsPlan {
+		wall: TerrainPerimeterWall::from_samples(&samples, &heights, plaza, WALL_CLEARANCE),
+		pad_center: pads.center(),
+		stand: player_spawn_point_at(stand_xz, stand_y),
+		mobs,
+	})
+}
+
+fn pad_union(cell: &DevelopmentCell) -> Option<(Bounds2, f32)> {
+	let mut pads = cell.pads();
+	let first = pads.next()?;
+	let mut bounds = first.complex.bounds;
+	let mut plaza = first.height;
+	for pad in pads {
+		bounds.min = bounds.min.min(pad.complex.bounds.min);
+		bounds.max = bounds.max.max(pad.complex.bounds.max);
+		plaza = plaza.max(pad.height);
+	}
+	Some((bounds, plaza))
+}
+
+fn cell_center_xz(cell: &DevelopmentCell) -> Vec2 {
+	let min = Vec3::from(cell.cell.min);
+	let max = Vec3::from(cell.cell.max);
+	Vec2::new((min.x + max.x) * 0.5, (min.z + max.z) * 0.5)
+}
+
+fn clamp_inside(xz: Vec2, min: Vec2, max: Vec2) -> Vec2 {
+	Vec2::new(
+		xz.x.clamp(min.x + STAND_INSET, max.x - STAND_INSET),
+		xz.y.clamp(min.y + STAND_INSET, max.y - STAND_INSET),
+	)
+}
+
+fn snap_viewer(
+	cameras: &mut Query<
+		(&mut Transform, &mut CameraController),
+		(With<Camera3d>, Without<VegetationPlayer>),
+	>,
+	at: Vec3,
+) {
+	for (mut transform, mut controller) in cameras.iter_mut() {
+		transform.translation = at + Vec3::new(-12.0, 8.0, 10.0);
+		transform.look_at(at + Vec3::Y * 1.6, Vec3::Y);
+		let (yaw, pitch, _) = transform.rotation.to_euler(EulerRot::YXZ);
+		controller.yaw = yaw;
+		controller.pitch = pitch;
 	}
 }
 
 #[cfg(test)]
 mod tests {
+	use super::*;
 	use bevy::ecs::system::RunSystemOnce;
 	use durham_terrain_models::{BaseTerrainNoise, TerrainConfig};
-
-	use super::*;
+	use maybraid_mobs::player_affiliations;
 
 	#[test]
-	fn seating_queries_do_not_alias_transform() -> anyhow::Result<()> {
-		let mut world = World::new();
-		world.insert_resource(TrainingGrounds(false));
-		world.insert_resource(TerrainCellLayout::default());
-		world.insert_resource(TerrainEntryStore::default());
-		world.init_resource::<Assets<Mesh>>();
-		world.init_resource::<Assets<StandardMaterial>>();
-		world.spawn((TrainingArena, Transform::default()));
-		world.spawn((
-			VegetationPlayer,
-			Transform::default(),
-			OffTerrainAnchor { translation: Vec3::ZERO },
-		));
-		world
-			.run_system_once(seat_training_grounds)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		Ok(())
+	fn roster_is_two_armed_bipeds_with_different_kits() {
+		let roster = training_roster();
+		assert_eq!(roster.len(), 2);
+		let recipes = [roster[0].scene_recipe(), roster[1].scene_recipe()];
+		assert!(recipes[0].armed() && recipes[1].armed());
+		assert_ne!(recipes[0].num, recipes[1].num);
+		assert_ne!(recipes[0].inventory_profile, recipes[1].inventory_profile);
+		assert_eq!(recipes[0].brains, CharacterBrains::Brawler);
+		assert_eq!(recipes[1].brains, CharacterBrains::Brawler);
+		assert!(recipes[0].species.supports_inventory());
+		assert!(recipes[1].species.supports_inventory());
+		assert_ne!(recipes[0].species, recipes[1].species);
 	}
 
 	#[test]
-	fn viewer_snap_queries_do_not_alias_transform() -> anyhow::Result<()> {
+	fn brawler_pack_treats_the_world_player_as_hostile() {
+		let member = MobBrain::for_kind(MobKind::Brawler).affiliations.for_member(ThreatId(7));
+		let player = player_affiliations(ThreatId(1));
+		assert!(member.threat_weight(&player, 0.0) >= 1.0);
+	}
+
+	#[test]
+	fn hold_closes_unveil_until_the_grounds_exist() {
 		let mut world = World::new();
+		world.insert_resource(TrainingGrounds(true));
+		world.insert_resource(WorldSurfaceReady(true));
+		world.run_system_once(hold_training_until_placed).unwrap();
+		assert!(!world.resource::<WorldSurfaceReady>().0);
+
+		world.insert_resource(TrainingPlaced);
+		world.resource_mut::<WorldSurfaceReady>().0 = true;
+		world.run_system_once(hold_training_until_placed).unwrap();
+		assert!(world.resource::<WorldSurfaceReady>().0);
+
+		world.insert_resource(TrainingGrounds(false));
+		world.resource_mut::<WorldSurfaceReady>().0 = true;
+		world.run_system_once(hold_training_until_placed).unwrap();
+		assert!(world.resource::<WorldSurfaceReady>().0);
+	}
+
+	#[test]
+	fn place_waits_for_a_filled_cell_without_aliasing_transforms() -> anyhow::Result<()> {
+		let mut world = World::new();
+		world.insert_resource(TrainingGrounds(true));
+		world.insert_resource(DevelopmentEntryStore::default());
+		world.insert_resource(TerrainEntryStore::default());
 		world.insert_resource(TerrainCellLayout::default());
-		world.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(&TerrainConfig::new(
-			1,
-		))));
 		world.spawn((
 			VegetationPlayer,
-			Transform::default(),
+			Transform::from_xyz(4.0, 1.0, 4.0),
 			LinearVelocity::default(),
 		));
 		world.spawn((Camera3d::default(), Transform::default()));
 		world
-			.run_system_once(sync_off_terrain_player)
+			.run_system_once(place_training_grounds)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(world.get_resource::<TrainingPlaced>().is_none());
+		assert_eq!(world.query::<&TrainingFixture>().iter(&world).count(), 0);
 		Ok(())
 	}
 
 	#[test]
-	fn pad_and_walk_are_ready_without_a_terrain_column() -> anyhow::Result<()> {
+	fn leave_parks_a_moved_player_on_the_region() -> anyhow::Result<()> {
 		let mut world = World::new();
-		world.insert_resource(ArenaMount { floors: 2, failed: false });
-		world.insert_resource(WorldSurfaceReady(false));
-		let host = world.spawn(TrainingArena).id();
-		world.spawn((ArenaPad, Collider::cuboid(100.0, 0.2, 80.0), TrainingArena));
-		world.spawn((BuildingWalkCollider, ChildOf(host)));
+		world.insert_resource(TrainingGrounds(false));
+		world.insert_resource(TerrainCellLayout::default());
+		world.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(
+			&TerrainConfig::new(1),
+		)));
+		let entity = world
+			.spawn((
+				VegetationPlayer,
+				TrainingPlacement,
+				Transform::from_xyz(400.0, 12.0, -80.0),
+				LinearVelocity(Vec3::X),
+			))
+			.id();
 		world
-			.run_system_once(sync_arena_surface_ready)
+			.run_system_once(park_player_after_training)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		assert!(world.resource::<WorldSurfaceReady>().0);
-		Ok(())
-	}
-
-	#[test]
-	fn fit_failure_is_ready_on_the_pad_alone() -> anyhow::Result<()> {
-		let mut world = World::new();
-		world.insert_resource(ArenaMount { floors: 0, failed: true });
-		world.insert_resource(WorldSurfaceReady(false));
-		world.spawn((ArenaPad, Collider::cuboid(100.0, 0.2, 80.0)));
-		world
-			.run_system_once(sync_arena_surface_ready)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		assert!(world.resource::<WorldSurfaceReady>().0);
-		Ok(())
-	}
-
-	#[test]
-	fn missing_walk_collider_stays_unready() -> anyhow::Result<()> {
-		let mut world = World::new();
-		world.insert_resource(ArenaMount { floors: 2, failed: false });
-		world.insert_resource(WorldSurfaceReady(false));
-		world.spawn((ArenaPad, Collider::cuboid(100.0, 0.2, 80.0)));
-		world
-			.run_system_once(sync_arena_surface_ready)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		assert!(!world.resource::<WorldSurfaceReady>().0);
+		let transform = world.get::<Transform>(entity).unwrap();
+		let center = TerrainCellLayout::default().region_center_xz().xz();
+		assert!((transform.translation.xz() - center).length() < 1e-3);
+		assert!(world.get::<TrainingPlacement>(entity).is_none());
+		assert!(world.get::<AwaitingTerrainSurface>(entity).is_some());
 		Ok(())
 	}
 }

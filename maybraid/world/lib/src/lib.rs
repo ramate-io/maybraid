@@ -51,7 +51,7 @@ pub use stash::{
 	spawn_exploded_stashes, spawn_world_stash, StashDisplayedItem, StashPolicy, WorldStash,
 	WorldStashPlugin, WorldStashSettings, DEFAULT_CLAIM_RADIUS, DEFAULT_LOOT_SECS,
 };
-pub use training::TrainingGrounds;
+pub use training::{TrainingFixture, TrainingGrounds, TrainingPlaced};
 pub use ui::WorldMobHudEnabled;
 pub use vsync::{default_window_present_mode, RequestVsyncToggle, VSYNC_TOGGLE_KEY};
 pub use weapon::WorldPlayerLoadout;
@@ -75,6 +75,7 @@ use maybraid_character_controller::{CharacterControlSystems, CharacterController
 use maybraid_input::{VirtualPadConfig, VirtualPadPlugin};
 use maybraid_skill_map::{SkillMapPlugin, SkillMapSystems};
 use maybraid_sky::SkyDomePlugin;
+use mob_characters::CharacterSceneSystems;
 use player::{register_motor_traction_physics, PlayerPresentationPlugin};
 use player_camera::{PlayerCameraPlugin, PlayerCameraSystems};
 use richmond_building_physics::BuildingWalkColliderPlugin;
@@ -218,17 +219,14 @@ impl Plugin for WorldPlugin {
 			.add_systems(
 				Update,
 				(
-					(control::update_world_surface_ready, training::sync_arena_surface_ready)
+					(control::update_world_surface_ready, training::hold_training_until_placed)
 						.chain()
 						.in_set(control::WorldSurfaceSet),
-					(
-						training::apply_training_grounds,
-						training::clear_training_terrain_present,
-						training::seat_training_grounds,
-						training::sync_off_terrain_player,
-					)
+					(training::place_training_grounds, training::park_player_after_training)
 						.chain()
-						.before(PlayerControlSystems),
+						.before(PlayerControlSystems)
+						.before(PlayerCameraSystems::Look),
+					training::mark_training_guns.after(CharacterSceneSystems::Materialize),
 					control::sync_world_scenery,
 					control::sync_skill_map_enabled.before(SkillMapSystems::Spawn),
 					control::apply_intents_to_movement
