@@ -20,7 +20,6 @@ Authoring (bone-space meshes, slots, armature tree): [`maybraid/art/items/guns/R
 
 ```bash
 cargo run -p items-playground
-cargo run -p firing-range-playground
 ```
 
 Blender sources: [`maybraid/art/items/guns/`](../../art/items/guns/). Runtime GLBs: `maybraid/assets/items/guns/`.

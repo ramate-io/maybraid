@@ -4720,6 +4720,9 @@ dependencies = [
  "crozon-characters",
  "crozon-inventory-user",
  "maybraid-character-controller",
+ "maybraid-game-mode-discover",
+ "maybraid-game-mode-reliquary",
+ "maybraid-game-mode-training-ground",
  "maybraid-input",
  "maybraid-menu-controller",
  "maybraid-world",
@@ -4746,6 +4749,31 @@ dependencies = [
  "character-ui-menu",
  "maybraid-input",
  "menu-components",
+]
+
+[[package]]
+name = "maybraid-game-mode-discover"
+version = "0.0.1"
+dependencies = [
+ "bevy",
+]
+
+[[package]]
+name = "maybraid-game-mode-reliquary"
+version = "0.0.1"
+dependencies = [
+ "bevy",
+]
+
+[[package]]
+name = "maybraid-game-mode-training-ground"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "avian3d",
+ "bevy",
+ "chico-vegetation-on-terrain-playground",
+ "firing-range-playground",
 ]
 
 [[package]]

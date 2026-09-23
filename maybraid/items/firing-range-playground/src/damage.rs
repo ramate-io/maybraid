@@ -47,7 +47,7 @@ type DownedCombatants<'w, 's> = Query<
 	'w,
 	's,
 	(Entity, Option<&'static FirearmUser>, Has<Player>, Has<Npc>, Has<crate::session::Civilian>),
-	Added<::damage::Downed>,
+	(Added<::damage::Downed>, With<crate::session::FreeForAllBody>),
 >;
 
 pub(crate) fn queue_downed_respawns(
@@ -162,6 +162,7 @@ mod tests {
 			.world_mut()
 			.spawn((
 				Npc,
+				crate::session::FreeForAllBody,
 				::damage::Downed { source: None, point: Vec3::ZERO, at: 0.0 },
 				SpottingUser::default(),
 				SpotSubject::new(InterestLayers::CHARACTER, SpotBounds::capsule(0.4, 0.9)),

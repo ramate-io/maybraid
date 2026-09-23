@@ -3,10 +3,9 @@
 The actual Maybraid game.
 
 Starts on the home screen. Discovery enters the streamed world. Training Ground
-enters that same world, stands the saved character at a generated building, and
-closes a stone perimeter around it with two fixed free-for-all mobs. Characters
-opens the character screen. Reliquary is not wired yet. In world, Start (Enter
-on keyboard) overlays the in-game menu; Start again dismisses it. Leave on that
+runs the firing-range free-for-all inside this executable. Characters opens the
+character screen. Reliquary is not wired yet. In world, Start (Enter on
+keyboard) overlays the in-game menu; Start again dismisses it. Leave on that
 menu returns home. Settings opens the same pause settings overlay (shadows, mob
 HUD); Back / Escape returns home.
 

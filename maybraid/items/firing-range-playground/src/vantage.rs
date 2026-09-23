@@ -26,7 +26,7 @@ type LiveCombatants<'w, 's> = Query<
 	'w,
 	's,
 	(Entity, &'static LocomotionCapsule, Option<&'static SpotSubject>, Has<Civilian>),
-	(Or<(With<Player>, With<Npc>)>, Without<Downed>),
+	(Or<(With<Player>, With<Npc>)>, With<crate::session::FreeForAllBody>, Without<Downed>),
 >;
 
 /// Keep one semantic proxy per live body; spotting performs the broadphase.
@@ -52,7 +52,7 @@ type LiveThreatActors<'w, 's> = Query<
 		Has<ThreatIntelligenceUser>,
 		Has<ThreatKnowledge>,
 	),
-	(Or<(With<Player>, With<Npc>)>, Without<Downed>),
+	(Or<(With<Player>, With<Npc>)>, With<crate::session::FreeForAllBody>, Without<Downed>),
 >;
 
 /// Install stable identities and arena affiliations on each live actor.
@@ -123,9 +123,9 @@ pub(crate) fn seed_range_threat_observations(
 	time: Res<Time>,
 	recipients: Query<
 		(Entity, &Affiliations, &ThreatIntelligenceUser),
-		Added<ThreatIntelligenceUser>,
+		(Added<ThreatIntelligenceUser>, With<crate::session::FreeForAllBody>),
 	>,
-	subjects: Query<(Entity, &ThreatSubject, &Affiliations)>,
+	subjects: Query<(Entity, &ThreatSubject, &Affiliations), With<crate::session::FreeForAllBody>>,
 	mut observations: MessageWriter<ThreatObservation>,
 ) {
 	let now = time.elapsed_secs();
@@ -151,9 +151,12 @@ pub(crate) fn seed_range_threat_observations(
 pub(crate) fn note_civilian_received_fire(
 	time: Res<Time>,
 	mut fired: MessageReader<WeaponFired>,
-	shooters: Query<(&Transform, &ThreatSubject)>,
+	shooters: Query<(&Transform, &ThreatSubject), With<crate::session::FreeForAllBody>>,
 	mut observations: MessageWriter<ThreatObservation>,
-	mut civilians: Query<(Entity, &Transform, &mut EvasionIntelligenceUser), With<Civilian>>,
+	mut civilians: Query<
+		(Entity, &Transform, &mut EvasionIntelligenceUser),
+		(With<Civilian>, With<crate::session::FreeForAllBody>),
+	>,
 ) {
 	let now = time.elapsed_secs();
 	for event in fired.read() {
@@ -204,6 +207,7 @@ pub(crate) fn note_civilian_received_fire(
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::session::FreeForAllBody;
 	use bevy::ecs::system::RunSystemOnce;
 	use combat_targeting::{CombatTargeting, TargetSource};
 	use threat_intelligence::{ThreatIntelligencePlugin, ThreatSystems};
@@ -213,7 +217,7 @@ mod tests {
 	fn live_combatant_gets_one_character_subject() -> Result<(), bevy::ecs::system::RunSystemError>
 	{
 		let mut world = World::new();
-		let entity = world.spawn((Npc, LocomotionCapsule::HUMANOID)).id();
+		let entity = world.spawn((Npc, FreeForAllBody, LocomotionCapsule::HUMANOID)).id();
 		world.run_system_once(sync_combat_spot_subjects)?;
 		let subject = world.get::<SpotSubject>(entity);
 		assert!(subject.is_some_and(|subject| {
@@ -228,7 +232,7 @@ mod tests {
 	fn civilian_subject_is_not_a_combat_character() -> Result<(), bevy::ecs::system::RunSystemError>
 	{
 		let mut world = World::new();
-		let entity = world.spawn((Npc, Civilian, LocomotionCapsule::HUMANOID)).id();
+		let entity = world.spawn((Npc, Civilian, FreeForAllBody, LocomotionCapsule::HUMANOID)).id();
 		world.run_system_once(sync_combat_spot_subjects)?;
 		let subject = world.get::<SpotSubject>(entity);
 		assert!(subject.is_some_and(|subject| {
@@ -242,7 +246,7 @@ mod tests {
 	fn range_actor_setup_installs_self_affiliation_and_threat_memory(
 	) -> Result<(), bevy::ecs::system::RunSystemError> {
 		let mut world = World::new();
-		let observer = world.spawn((Npc, SpottingUser::default())).id();
+		let observer = world.spawn((Npc, FreeForAllBody, SpottingUser::default())).id();
 		world.run_system_once(sync_range_threat_actors)?;
 		let subject = world.get::<ThreatSubject>(observer).copied();
 		let affiliations = world.get::<Affiliations>(observer);
@@ -331,14 +335,17 @@ mod tests {
 			.world_mut()
 			.spawn((
 				Npc,
+				FreeForAllBody,
 				SpottingUser::default(),
 				CombatTargeting::default(),
 				ThreatManagementIntelligence::ffa(),
 				GlobalTransform::default(),
 			))
 			.id();
-		let opponent =
-			app.world_mut().spawn((Player, GlobalTransform::from_translation(Vec3::X))).id();
+		let opponent = app
+			.world_mut()
+			.spawn((Player, FreeForAllBody, GlobalTransform::from_translation(Vec3::X)))
+			.id();
 		app.update();
 		let observer_id = ThreatId(observer.to_bits());
 		let opponent_id = ThreatId(opponent.to_bits());

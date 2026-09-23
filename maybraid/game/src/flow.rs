@@ -1,6 +1,7 @@
 //! Title / characters / world routing for the Maybraid executable.
 
 use bevy::prelude::*;
+use maybraid_game_mode_reliquary::{self as reliquary, ReliquaryRoute};
 use menu_screens::{HomeMenuChoice, InGameMenuChoice};
 
 /// Which shell the executable is showing. World gameplay is only live in
@@ -57,7 +58,9 @@ impl HomeRoute {
 			HomeMenuChoice::TrainingGround => Self::World { session: PlaySession::Training },
 			HomeMenuChoice::Characters => Self::Characters,
 			HomeMenuChoice::Settings => Self::Settings,
-			HomeMenuChoice::Reliquary => Self::Unimplemented,
+			HomeMenuChoice::Reliquary => match reliquary::route() {
+				ReliquaryRoute::Unimplemented => Self::Unimplemented,
+			},
 		}
 	}
 }

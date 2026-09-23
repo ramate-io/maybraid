@@ -36,7 +36,6 @@ impl Default for WorldSceneryVisible {
 }
 
 /// Local spawn collider + composed height are ready for Discovery drop-in.
-/// Training sets this from the arena pad instead.
 #[derive(Resource, Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub struct WorldSurfaceReady(pub bool);
 

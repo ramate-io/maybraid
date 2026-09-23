@@ -54,6 +54,9 @@ impl Plugin for GamePlugin {
 			.init_state::<GameFlow>()
 			.add_sub_state::<WorldPause>()
 			.add_plugins((
+				maybraid_game_mode_discover::DiscoverPlugin,
+				maybraid_game_mode_reliquary::ReliquaryPlugin,
+				maybraid_game_mode_training_ground::TrainingGroundPlugin,
 				HomeScreenPlugin,
 				InGameScreenPlugin,
 				LoadingScreenPlugin,
@@ -70,7 +73,8 @@ impl Plugin for GamePlugin {
 					crate::training::clear_play_session,
 					apply_shell_look,
 					attach_preview_camera,
-				),
+				)
+					.chain(),
 			)
 			.add_systems(
 				OnEnter(GameFlow::Characters),

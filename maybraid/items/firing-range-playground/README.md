@@ -91,12 +91,6 @@ no return fire — so projectile contacts can be checked in isolation.
 capsule (amber), the query-only head capsule (cyan, Y-stretched), and the
 headshot plane (blue) so a miss on the crown is visible.
 
-```bash
-cargo run -p firing-range-playground
-cargo run -p firing-range-playground -- free-for-all --npcs 8
-cargo run -p firing-range-playground -- affa --combatants 4 --civilians 6
-cargo run -p firing-range-playground -- test-dummy
-cargo run -p firing-range-playground -- test-dummy --species spibmom
-```
+The standalone `firing-range` executable is retired. Free-for-all is entered from the Maybraid home row: Training Ground runs this roster inside `maybraid`.
 
-WASD / left stick move, mouse / right stick look, Space / A jump, click / RT fire. R3 toggles first person; right mouse / LT focuses through the optic FOV; middle mouse / left bumper / C ADS with iron FOV. `/` then `pause` / `resume` / `free-for-all` / `affa` / `duel` / `test-dummy --species spibmom`.
+WASD / left stick move, mouse / right stick look, Space / A jump, click / RT fire. R3 toggles first person; right mouse / LT focuses through the optic FOV; middle mouse / left bumper / C ADS with iron FOV.

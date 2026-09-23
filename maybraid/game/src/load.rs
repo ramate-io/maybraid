@@ -1,8 +1,10 @@
 //! First-load unveil: Discovery waits on spawn terrain and quiet LOD work.
-//! Training unveils once the arena pad is ready and does not wait on terrain jobs.
+//! Training unveils once the free-for-all roster is mounted and does not wait
+//! on terrain jobs.
 
 use crate::flow::{GameFlow, PlaySession};
 use bevy::prelude::*;
+use maybraid_game_mode_training_ground::FreeForAllMounted;
 use maybraid_world::{LodJobCounter, WorldSurfaceReady};
 use menu_screens::{request_loading_explainer, request_loading_progress};
 
@@ -112,7 +114,7 @@ pub(crate) fn loading_explainer(
 	active: u64,
 ) -> &'static str {
 	if training {
-		"Preparing the grounds…"
+		"Preparing the free-for-all…"
 	} else {
 		gate.explainer(ready, active)
 	}
@@ -130,24 +132,29 @@ pub(crate) fn finish_world_loading(
 	mut commands: Commands,
 	session: Res<PlaySession>,
 	ready: Res<WorldSurfaceReady>,
+	mounted: Option<Res<FreeForAllMounted>>,
 	jobs: Option<Res<LodJobCounter>>,
 	mut gate: Option<ResMut<FirstLoadGate>>,
 	time: Res<Time>,
 	mut flow: ResMut<NextState<GameFlow>>,
 ) {
 	let training = *session == PlaySession::Training;
+	let surface_ready = if training { mounted.is_some() } else { ready.0 };
 	let active = jobs.as_deref().map(LodJobCounter::active).unwrap_or(0);
 	let Some(gate) = gate.as_deref_mut() else {
-		if ready.0 {
+		if surface_ready {
 			flow.set(GameFlow::World);
 		}
 		return;
 	};
 	gate.observe(active);
 	let now = time.elapsed_secs();
-	request_loading_progress(&mut commands, gate.progress(ready.0, active));
-	request_loading_explainer(&mut commands, loading_explainer(training, gate, ready.0, active));
-	if unveil_ready(training, gate, ready.0, active, now) {
+	request_loading_progress(&mut commands, gate.progress(surface_ready, active));
+	request_loading_explainer(
+		&mut commands,
+		loading_explainer(training, gate, surface_ready, active),
+	);
+	if unveil_ready(training, gate, surface_ready, active, now) {
 		flow.set(GameFlow::World);
 	}
 }
@@ -200,7 +207,7 @@ mod tests {
 		assert!(!unveil_ready(true, &gate, false, 400, 0.0));
 		assert!(unveil_ready(true, &gate, true, 400, 0.0));
 		assert!(!unveil_ready(false, &gate, true, 0, 0.2));
-		assert_eq!(loading_explainer(true, &gate, false, 0), "Preparing the grounds…");
+		assert_eq!(loading_explainer(true, &gate, false, 0), "Preparing the free-for-all…");
 	}
 
 	#[test]

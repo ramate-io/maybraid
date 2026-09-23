@@ -1,7 +1,6 @@
-//! Fixed-envelope Les Halles arena shared by Training Ground and the firing range.
+//! Fixed-envelope Les Halles arena for the firing-range free-for-all.
 //!
-//! The footprint is 36×10×36 m. The playground keeps seed [`PLAYGROUND_SEED`] for
-//! reproducible benches. Training rolls a new seed on each enter.
+//! The footprint is 36×10×36 m. Training Ground mounts seed [`PLAYGROUND_SEED`].
 
 mod pad;
 
