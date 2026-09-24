@@ -12,10 +12,11 @@ use lod_avian::PhysicsInteractionLayer;
 use maybraid_input::{PadButton, VirtualPad};
 use player::{CameraFollow, Player};
 use player_camera::{
-	spawn_follow_camera, CameraController, CameraPov, FollowCamera, PlayerCameraSystems,
+	spawn_follow_camera, CameraController, CameraPov, CameraPovLocked, FollowCamera,
+	PlayerCameraSystems,
 };
 
-use crate::control::WorldGameplayEnabled;
+use crate::control::{InventoryEditCameraFollow, WorldGameplayEnabled};
 
 const CAMERA_COLLISION_RADIUS: f32 = 0.18;
 const CAMERA_COLLISION_SKIN: f32 = 0.08;
@@ -76,15 +77,37 @@ pub(crate) fn sync_camera_mode(
 	mut commands: Commands,
 	mode: Res<PlaygroundMode>,
 	gameplay: Res<WorldGameplayEnabled>,
+	inventory_edit: Option<Res<InventoryEditCameraFollow>>,
 	players: Query<(Entity, Has<CameraFollow>), (With<VegetationPlayer>, With<Player>)>,
 ) {
-	let follow = *mode == PlaygroundMode::Character && gameplay.0;
+	let follow = *mode == PlaygroundMode::Character
+		&& (gameplay.0 || inventory_edit.is_some_and(|edit| edit.0));
 	for (entity, following) in &players {
 		if follow && !following {
 			commands.entity(entity).insert(CameraFollow);
 		} else if !follow && following {
 			commands.entity(entity).remove::<CameraFollow>();
 		}
+	}
+}
+
+pub(crate) fn sync_inventory_edit_look(
+	edit: Res<InventoryEditCameraFollow>,
+	mut locked: Option<ResMut<CameraPovLocked>>,
+	mut cameras: Query<&mut CameraController, With<Camera3d>>,
+) {
+	if let Some(locked) = locked.as_deref_mut() {
+		if locked.0 != edit.0 {
+			locked.0 = edit.0;
+		}
+	}
+	if !edit.0 {
+		return;
+	}
+	for mut controller in &mut cameras {
+		controller.pov = CameraPov::ThirdPerson;
+		controller.focus = 0.0;
+		controller.ads = 0.0;
 	}
 }
 
@@ -197,7 +220,10 @@ fn camera_cast_travel(
 
 pub(crate) fn configure(app: &mut App) {
 	app.add_systems(Startup, spawn_world_camera)
-		.add_systems(Update, sync_camera_mode.before(PlayerCameraSystems::Look))
+		.add_systems(
+			Update,
+			(sync_camera_mode, sync_inventory_edit_look).before(PlayerCameraSystems::Look),
+		)
 		.add_systems(
 			Update,
 			obstruct_world_camera
@@ -243,5 +269,25 @@ mod tests {
 	#[test]
 	fn near_hit_does_not_cross_the_target() {
 		assert_eq!(camera_cast_travel(3.6, Some(0.05), 0.08, 0.12), 0.12);
+	}
+
+	#[test]
+	fn inventory_edit_keeps_follow_while_paused() -> anyhow::Result<()> {
+		use bevy::ecs::system::RunSystemOnce;
+		use chico_vegetation_on_terrain_playground::Player as VegetationPlayer;
+		use player::{CameraFollow, Player};
+
+		use crate::InventoryEditCameraFollow;
+
+		let mut world = World::new();
+		world.insert_resource(PlaygroundMode::Character);
+		world.insert_resource(WorldGameplayEnabled(false));
+		world.insert_resource(InventoryEditCameraFollow(true));
+		let player = world.spawn((VegetationPlayer, Player)).id();
+		world
+			.run_system_once(sync_camera_mode)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(world.get::<CameraFollow>(player).is_some());
+		Ok(())
 	}
 }
