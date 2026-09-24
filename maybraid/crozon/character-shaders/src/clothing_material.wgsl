@@ -6,7 +6,8 @@
 //
 // Looks stay matte and worn. Ribbing and a short-range implicit
 // POM (Durham solver, UV jacobian) sit on weave, seams, scales,
-// and brush grain. No silhouette or self-shadow ray.
+// and brush grain. Veins are UV-only so they do not shear under POM.
+// No silhouette or self-shadow ray.
 //---------------------------------------------------------
 
 #import bevy_pbr::{
@@ -278,9 +279,9 @@ fn hawaiian_look(base: vec3<f32>, uv: vec2<f32>) -> vec4<f32> {
     return vec4<f32>(tint, mix(cloth.w, 0.90, mark * 0.2));
 }
 
-fn wizards_veins_look(base: vec3<f32>, uv: vec2<f32>, local_pos: vec3<f32>) -> vec4<f32> {
+fn wizards_veins_look(base: vec3<f32>, uv: vec2<f32>) -> vec4<f32> {
     let cloth = cloth_look(base * 0.92, uv);
-    let n1 = fbm(vec3<f32>(uv * 4.2, local_pos.y * 1.4));
+    let n1 = fbm(vec3<f32>(uv * 4.2, 2.7));
     let ridge = 1.0 - abs(n1 * 2.0 - 1.0);
     let vein = pow(saturate(ridge * 1.08), 9.0);
     let mineral = mix(base, vec3<f32>(0.42, 0.52, 0.55), 0.35);
@@ -297,9 +298,9 @@ fn glitter_look(base: vec3<f32>, uv: vec2<f32>, n: vec3<f32>) -> vec4<f32> {
     return vec4<f32>(tint, mix(cloth.w, 0.70, flake));
 }
 
-fn lava_veins_look(base: vec3<f32>, uv: vec2<f32>, local_pos: vec3<f32>) -> vec4<f32> {
+fn lava_veins_look(base: vec3<f32>, uv: vec2<f32>) -> vec4<f32> {
     let cloth = cloth_look(base * 0.55, uv);
-    let n1 = fbm(vec3<f32>(uv * 4.4, local_pos.y * 1.6));
+    let n1 = fbm(vec3<f32>(uv * 4.4, 3.1));
     let ridge = 1.0 - abs(n1 * 2.0 - 1.0);
     let vein = pow(saturate(ridge * 1.1), 8.0);
     let ember = vec3<f32>(0.42, 0.16, 0.08);
@@ -398,18 +399,18 @@ fn metal_height(uv: vec2<f32>) -> f32 {
     return pow(abs(sin(grain * 3.14159)), 0.45);
 }
 
-fn vein_height(uv: vec2<f32>, local_y: f32) -> f32 {
-    let n1 = fbm(vec3<f32>(uv * 4.3, local_y * 1.5));
+fn vein_height(uv: vec2<f32>) -> f32 {
+    let n1 = fbm(vec3<f32>(uv * 4.3, 2.9));
     let ridge = 1.0 - abs(n1 * 2.0 - 1.0);
     return 1.0 - pow(saturate(ridge * 1.1), 8.0) * 0.55;
 }
 
-fn relief_height(uv: vec2<f32>, local_y: f32) -> f32 {
+fn relief_height(uv: vec2<f32>) -> f32 {
     switch material.kind {
         case KIND_SPACE_SUIT: { return suit_height(uv); }
         case KIND_SCALES: { return scale_height(uv); }
         case KIND_BRUSHED_METAL: { return metal_height(uv); }
-        case KIND_WIZARDS_VEINS, KIND_LAVA_VEINS: { return vein_height(uv, local_y); }
+        case KIND_WIZARDS_VEINS, KIND_LAVA_VEINS: { return vein_height(uv); }
         default: { return cloth_height(uv); }
     }
 }
@@ -456,11 +457,11 @@ struct ReliefHit {
     t: f32,
 }
 
-fn trace_relief(uv0: vec2<f32>, ray_uv: vec2<f32>, local_y: f32, style: ReliefStyle) -> ReliefHit {
+fn trace_relief(uv0: vec2<f32>, ray_uv: vec2<f32>, style: ReliefStyle) -> ReliefHit {
     let travel = length(ray_uv);
     let requested = ceil(travel / max(style.width_uv * 0.25, 1e-5));
     let steps = i32(clamp(requested, f32(POM_MIN_STEPS), f32(POM_MAX_STEPS)));
-    let h0 = relief_height(uv0, local_y);
+    let h0 = relief_height(uv0);
     if (h0 >= 0.995) {
         return ReliefHit(uv0, h0, 0.0);
     }
@@ -475,7 +476,7 @@ fn trace_relief(uv0: vec2<f32>, ray_uv: vec2<f32>, local_y: f32, style: ReliefSt
             break;
         }
         let t = f32(i) / f32(steps);
-        let f = relief_height(uv0 + ray_uv * t, local_y) - (1.0 - t);
+        let f = relief_height(uv0 + ray_uv * t) - (1.0 - t);
         if (f >= 0.0) {
             hi = t;
             f_hi = f;
@@ -487,7 +488,7 @@ fn trace_relief(uv0: vec2<f32>, ray_uv: vec2<f32>, local_y: f32, style: ReliefSt
 
     for (var i = 0; i < POM_REFINE_STEPS; i = i + 1) {
         let mid = 0.5 * (lo + hi);
-        let f = relief_height(uv0 + ray_uv * mid, local_y) - (1.0 - mid);
+        let f = relief_height(uv0 + ray_uv * mid) - (1.0 - mid);
         if (f >= 0.0) {
             hi = mid;
             f_hi = f;
@@ -500,15 +501,15 @@ fn trace_relief(uv0: vec2<f32>, ray_uv: vec2<f32>, local_y: f32, style: ReliefSt
     let fraction = clamp(-f_lo / max(f_hi - f_lo, 1e-7), 0.0, 1.0);
     let t = mix(lo, hi, fraction);
     let uv_hit = uv0 + ray_uv * t;
-    return ReliefHit(uv_hit, relief_height(uv_hit, local_y), t);
+    return ReliefHit(uv_hit, relief_height(uv_hit), t);
 }
 
-fn relief_gradient(uv: vec2<f32>, local_y: f32) -> vec2<f32> {
+fn relief_gradient(uv: vec2<f32>) -> vec2<f32> {
     let e = RELIEF_NORMAL_EPS_UV;
-    let dx = relief_height(uv + vec2<f32>(e, 0.0), local_y)
-        - relief_height(uv - vec2<f32>(e, 0.0), local_y);
-    let dy = relief_height(uv + vec2<f32>(0.0, e), local_y)
-        - relief_height(uv - vec2<f32>(0.0, e), local_y);
+    let dx = relief_height(uv + vec2<f32>(e, 0.0))
+        - relief_height(uv - vec2<f32>(e, 0.0));
+    let dy = relief_height(uv + vec2<f32>(0.0, e))
+        - relief_height(uv - vec2<f32>(0.0, e));
     return vec2<f32>(dx, dy) / (2.0 * e);
 }
 
@@ -523,10 +524,10 @@ fn kind_look(
         case KIND_SPACE_SUIT: { return space_suit_look(base, uv, n); }
         case KIND_TATTERED: { return tattered_look(base, uv, local_pos); }
         case KIND_HAWAIIAN: { return hawaiian_look(base, uv); }
-        case KIND_WIZARDS_VEINS: { return wizards_veins_look(base, uv, local_pos); }
+        case KIND_WIZARDS_VEINS: { return wizards_veins_look(base, uv); }
         case KIND_GLITTER: { return glitter_look(base, uv, n); }
         case KIND_SCALES: { return scales_look(base, uv, n); }
-        case KIND_LAVA_VEINS: { return lava_veins_look(base, uv, local_pos); }
+        case KIND_LAVA_VEINS: { return lava_veins_look(base, uv); }
         case KIND_BRUSHED_METAL: { return brushed_metal_look(base, uv, n); }
         default: { return cloth_look(base, uv); }
     }
@@ -545,15 +546,15 @@ fn kind_metallic(kind: u32) -> f32 {
     }
 }
 
-fn kind_emissive(kind: u32, uv: vec2<f32>, local_pos: vec3<f32>) -> vec3<f32> {
+fn kind_emissive(kind: u32, uv: vec2<f32>) -> vec3<f32> {
     if (kind == KIND_WIZARDS_VEINS) {
-        let n1 = fbm(vec3<f32>(uv * 4.2, local_pos.y * 1.4));
+        let n1 = fbm(vec3<f32>(uv * 4.2, 2.7));
         let ridge = 1.0 - abs(n1 * 2.0 - 1.0);
         let vein = pow(saturate(ridge * 1.08), 9.0);
         return vec3<f32>(0.10, 0.16, 0.18) * vein;
     }
     if (kind == KIND_LAVA_VEINS) {
-        let n1 = fbm(vec3<f32>(uv * 4.4, local_pos.y * 1.6));
+        let n1 = fbm(vec3<f32>(uv * 4.4, 3.1));
         let ridge = 1.0 - abs(n1 * 2.0 - 1.0);
         let vein = pow(saturate(ridge * 1.1), 8.0);
         return vec3<f32>(0.22, 0.06, 0.02) * vein;
@@ -591,7 +592,7 @@ fn fragment(
     let facing_w = smoothstep(0.04, 0.14, dot(N, V));
     let pom_w = pom_distance_w * resolution_w * facing_w;
 
-    let visual_h = relief_height(uv0, mesh.local_pos.y);
+    let visual_h = relief_height(uv0);
     let visual_cavity = mix(style.dark, 1.0, visual_h);
     var look = kind_look(material.kind, base, uv0, N, mesh.local_pos);
     look = vec4<f32>(look.xyz * mix(1.0, visual_cavity, facing_w * 0.65), look.w);
@@ -600,8 +601,8 @@ fn fragment(
     if (pom_w > 1e-4) {
         let ray_world = -V * (style.depth_m / max(dot(N, V), 0.08));
         let ray_uv = world_ray_to_uv(ray_world, P, uv0);
-        let hit = trace_relief(uv0, ray_uv, mesh.local_pos.y, style);
-        let g = relief_gradient(hit.uv, mesh.local_pos.y);
+        let hit = trace_relief(uv0, ray_uv, style);
+        let g = relief_gradient(hit.uv);
         let world_g = uv_gradient_to_world(g, P, uv0);
         let relief_n = normalize(N - style.depth_m * world_g);
         n = normalize(mix(N, relief_n, pom_w));
@@ -611,7 +612,7 @@ fn fragment(
         look = mix(look, vec4<f32>(hit_look.xyz * cavity, hit_look.w), pom_w);
     }
 
-    let emissive = kind_emissive(material.kind, uv0, mesh.local_pos);
+    let emissive = kind_emissive(material.kind, uv0);
 
     pbr_input.material.base_color = vec4<f32>(look.xyz, 1.0);
     pbr_input.material.perceptual_roughness = look.w;
