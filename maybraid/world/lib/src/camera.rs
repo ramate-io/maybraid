@@ -76,9 +76,12 @@ pub(crate) fn sync_camera_mode(
 	mut commands: Commands,
 	mode: Res<PlaygroundMode>,
 	gameplay: Res<WorldGameplayEnabled>,
+	grounds: Option<Res<crate::TrainingGrounds>>,
 	players: Query<(Entity, Has<CameraFollow>), (With<VegetationPlayer>, With<Player>)>,
 ) {
-	let follow = *mode == PlaygroundMode::Character && gameplay.0;
+	let follow = *mode == PlaygroundMode::Character
+		&& gameplay.0
+		&& !grounds.is_some_and(|grounds| grounds.0);
 	for (entity, following) in &players {
 		if follow && !following {
 			commands.entity(entity).insert(CameraFollow);

@@ -83,11 +83,12 @@ fn arm_world_player(
 	mut commands: Commands,
 	mode: Res<PlaygroundMode>,
 	gameplay: Res<WorldGameplayEnabled>,
+	grounds: Option<Res<crate::TrainingGrounds>>,
 	loadout: Option<Res<WorldPlayerLoadout>>,
 	players: Query<WorldPlayerEquipment<'_>, With<VegetationPlayer>>,
 	visuals: Query<WorldPlayerVisual<'_>, (With<VegetationPlayerVisual>, With<CharacterRoot>)>,
 ) {
-	if !gameplay.0 {
+	if !gameplay.0 || grounds.is_some_and(|grounds| grounds.0) {
 		return;
 	}
 	for (player, firearm_user, inventory_user, skill_map_user, applied, appearance_requested) in
@@ -391,6 +392,21 @@ mod tests {
 		assert!(world.get::<WorldPlayerAppearanceRequested>(player).is_none());
 		assert!(world.get::<maybraid_skill_map::SkillMapUser>(player).is_some());
 		assert_eq!(world.get::<Name>(player).map(Name::as_str), Some("Ada"));
+		Ok(())
+	}
+
+	#[test]
+	fn training_grounds_do_not_arm_the_streamed_body() -> anyhow::Result<()> {
+		let mut world = World::new();
+		world.insert_resource(PlaygroundMode::Character);
+		world.insert_resource(WorldGameplayEnabled(true));
+		world.insert_resource(crate::TrainingGrounds(true));
+		let player = world.spawn(VegetationPlayer).id();
+		world.spawn((VegetationPlayerVisual, CharacterRoot, ChildOf(player)));
+		world
+			.run_system_once(arm_world_player)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(world.get::<maybraid_skill_map::SkillMapUser>(player).is_none());
 		Ok(())
 	}
 

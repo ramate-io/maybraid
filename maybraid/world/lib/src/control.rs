@@ -100,7 +100,7 @@ pub(crate) fn apply_intents_to_movement(
 	mut intents: MessageReader<CharacterIntent>,
 	cameras: Query<&CameraController, With<Camera3d>>,
 	mut wishes: Query<&mut MoveWish, With<Player>>,
-	mut player_wishes: Query<(Entity, &mut PlayerMoveWish), With<CharacterController>>,
+	mut player_wishes: Query<(Entity, &mut PlayerMoveWish, Has<Player>), With<CharacterController>>,
 	mut movement: MessageWriter<MovementAction>,
 ) {
 	if !gameplay.0 || *mode != PlaygroundMode::Character || text_focus.0 {
@@ -108,7 +108,7 @@ pub(crate) fn apply_intents_to_movement(
 		for mut wish in &mut wishes {
 			wish.0 = Vec3::ZERO;
 		}
-		for (entity, mut wish) in &mut player_wishes {
+		for (entity, mut wish, _) in &mut player_wishes {
 			wish.0 = Vec3::ZERO;
 			commands.entity(entity).remove::<JumpWish>();
 		}
@@ -140,7 +140,12 @@ pub(crate) fn apply_intents_to_movement(
 	for mut wish in &mut wishes {
 		wish.0 = wish_dir;
 	}
-	for (entity, mut wish) in &mut player_wishes {
+	// Only the streamed vegetation body. Training Ground's free-for-all capsule
+	// is a foreign [`CharacterController`] that [`player`] already drove.
+	for (entity, mut wish, world_body) in &mut player_wishes {
+		if !world_body {
+			continue;
+		}
 		wish.0 = wish_dir;
 		if jump {
 			commands.entity(entity).insert(JumpWish);
@@ -261,6 +266,7 @@ pub(crate) fn strip_world_player_motor(commands: &mut Commands, body: Entity) {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use bevy::ecs::system::RunSystemOnce;
 	use durham_terrain_models::{terrain_collider_covers_xz, CascadeChunk};
 
 	#[test]
@@ -297,6 +303,38 @@ mod tests {
 		assert!(world.get::<LocomotionCapsule>(player).is_some());
 		assert!(world.get::<MaybraidPlayer>(player).is_some());
 		assert!(world.get::<PlayerMoveWish>(player).is_some());
+	}
+
+	#[test]
+	fn live_gameplay_does_not_drive_a_foreign_capsule() -> anyhow::Result<()> {
+		let mut world = World::new();
+		world.init_resource::<Messages<CharacterIntent>>();
+		world.init_resource::<Messages<MovementAction>>();
+		world.insert_resource(PlaygroundMode::Character);
+		world.insert_resource(TextEntryFocus(false));
+		world.insert_resource(WorldGameplayEnabled(true));
+		let body = world.spawn((CharacterController, PlayerMoveWish(Vec3::X))).id();
+		world
+			.run_system_once(apply_intents_to_movement)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert_eq!(world.get::<PlayerMoveWish>(body).map(|wish| wish.0), Some(Vec3::X));
+		Ok(())
+	}
+
+	#[test]
+	fn paused_gameplay_zeros_every_capsule_wish() -> anyhow::Result<()> {
+		let mut world = World::new();
+		world.init_resource::<Messages<CharacterIntent>>();
+		world.init_resource::<Messages<MovementAction>>();
+		world.insert_resource(PlaygroundMode::Character);
+		world.insert_resource(TextEntryFocus(false));
+		world.insert_resource(WorldGameplayEnabled(false));
+		let body = world.spawn((CharacterController, PlayerMoveWish(Vec3::X))).id();
+		world
+			.run_system_once(apply_intents_to_movement)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert_eq!(world.get::<PlayerMoveWish>(body).map(|wish| wish.0), Some(Vec3::ZERO));
+		Ok(())
 	}
 
 	#[test]

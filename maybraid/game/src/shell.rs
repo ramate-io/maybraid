@@ -160,14 +160,22 @@ pub(crate) fn training_grounds_for_shell(flow: GameFlow, session: PlaySession) -
 	terrain_streaming_for_shell(flow) && session == PlaySession::Training
 }
 
-fn discovery_playing(
+fn world_session_playing(
 	flow: GameFlow,
 	session: PlaySession,
 	pause: Option<&State<WorldPause>>,
 ) -> bool {
 	flow == GameFlow::World
-		&& session == PlaySession::Discovery
+		&& matches!(session, PlaySession::Discovery | PlaySession::Training)
 		&& pause.is_some_and(|pause| *pause.get() == WorldPause::Playing)
+}
+
+fn discovery_playing(
+	flow: GameFlow,
+	session: PlaySession,
+	pause: Option<&State<WorldPause>>,
+) -> bool {
+	session == PlaySession::Discovery && world_session_playing(flow, session, pause)
 }
 
 pub(crate) fn apply_shell_look(
@@ -207,16 +215,18 @@ pub(crate) fn apply_shell_look(
 	}
 	// Menus keep Durham off. Discovery streams the playable world. Training
 	// Ground leaves that stream off and runs the free-for-all instead.
-	// [`TrainingGrounds`] still blocks a Training pose write.
+	// [`TrainingGrounds`] still blocks a Training pose write. Gameplay is on
+	// while Training is playing so pad move is not swallowed; the world motor
+	// stays off so the parked Discovery body is not a second combatant.
 	let in_world_shell = terrain_streaming_for_shell(flow);
 	let training_session = training_grounds_for_shell(flow, *session);
 	streaming.0 = streams_terrain(*session == PlaySession::Discovery, in_world_shell);
 	grounds.0 = training_session;
 	training.0 = training_session;
 	scenery.0 = flow == GameFlow::World && *session != PlaySession::Training;
-	let playing = discovery_playing(flow, *session, pause.as_deref());
+	let playing = world_session_playing(flow, *session, pause.as_deref());
 	gameplay.0 = playing;
-	physics.0 = playing;
+	physics.0 = discovery_playing(flow, *session, pause.as_deref());
 }
 
 fn camera_render_layers(flow: GameFlow) -> RenderLayers {
@@ -277,7 +287,7 @@ mod tests {
 		apply_shell_look, camera_render_layers, terrain_streaming_for_shell,
 		training_grounds_for_shell, PREVIEW_RENDER_LAYER, WORLD_RENDER_LAYER,
 	};
-	use crate::flow::{GameFlow, PlaySession};
+	use crate::flow::{GameFlow, PlaySession, WorldPause};
 	use bevy::ecs::system::RunSystemOnce;
 	use bevy::prelude::*;
 	use maybraid_world::{
@@ -325,6 +335,29 @@ mod tests {
 		assert!(!terrain_streaming_for_shell(GameFlow::Home));
 		assert!(!training_grounds_for_shell(GameFlow::World, PlaySession::Discovery));
 		assert!(!training_grounds_for_shell(GameFlow::Home, PlaySession::Training));
+		Ok(())
+	}
+
+	#[test]
+	fn training_play_enables_gameplay_without_the_world_motor() -> anyhow::Result<()> {
+		let mut world = World::new();
+		world.insert_resource(State::new(GameFlow::World));
+		world.insert_resource(State::new(WorldPause::Playing));
+		world.insert_resource(PlaySession::Training);
+		world.insert_resource(ClearColor(MENU_CLEAR));
+		world.insert_resource(WorldGameplayEnabled(false));
+		world.insert_resource(PlayerPhysicsEnabled(false));
+		world.insert_resource(TerrainStreamingEnabled(true));
+		world.insert_resource(TrainingGrounds(false));
+		world.insert_resource(maybraid_game_mode_training_ground::TrainingGroundActive(false));
+		world.insert_resource(WorldSceneryVisible(true));
+		world
+			.run_system_once(apply_shell_look)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(world.resource::<WorldGameplayEnabled>().0);
+		assert!(!world.resource::<PlayerPhysicsEnabled>().0);
+		assert!(!world.resource::<TerrainStreamingEnabled>().0);
+		assert!(world.resource::<TrainingGrounds>().0);
 		Ok(())
 	}
 
