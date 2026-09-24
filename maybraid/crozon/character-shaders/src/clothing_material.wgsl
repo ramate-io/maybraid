@@ -250,9 +250,9 @@ fn space_suit_look(base: vec3<f32>, uv: vec2<f32>, _n: vec3<f32>) -> vec4<f32> {
 
 /// Worn cloth: same thread pattern, stained and frayed. Holes are discarded
 /// in the fragment entry (Opaque ignores alpha; helpers cannot punch through).
-fn tattered_look(base: vec3<f32>, uv: vec2<f32>, local_pos: vec3<f32>) -> vec4<f32> {
+fn tattered_look(base: vec3<f32>, uv: vec2<f32>) -> vec4<f32> {
     let cloth = cloth_look(base, uv);
-    let wear = fbm(vec3<f32>(uv * 5.2, local_pos.y * 2.2));
+    let wear = fbm(vec3<f32>(uv * 5.2, 2.2));
     let stain = value_noise_3d(vec3<f32>(uv * 3.6, 2.7));
     let dirt = mix(cloth.xyz, cloth.xyz * vec3<f32>(0.55, 0.50, 0.42), stain * 0.35);
     let fray = smoothstep(0.62, 0.84, wear);
@@ -518,11 +518,10 @@ fn kind_look(
     base: vec3<f32>,
     uv: vec2<f32>,
     n: vec3<f32>,
-    local_pos: vec3<f32>,
 ) -> vec4<f32> {
     switch kind {
         case KIND_SPACE_SUIT: { return space_suit_look(base, uv, n); }
-        case KIND_TATTERED: { return tattered_look(base, uv, local_pos); }
+        case KIND_TATTERED: { return tattered_look(base, uv); }
         case KIND_HAWAIIAN: { return hawaiian_look(base, uv); }
         case KIND_WIZARDS_VEINS: { return wizards_veins_look(base, uv); }
         case KIND_GLITTER: { return glitter_look(base, uv, n); }
@@ -594,7 +593,7 @@ fn fragment(
 
     let visual_h = relief_height(uv0);
     let visual_cavity = mix(style.dark, 1.0, visual_h);
-    var look = kind_look(material.kind, base, uv0, N, mesh.local_pos);
+    var look = kind_look(material.kind, base, uv0, N);
     look = vec4<f32>(look.xyz * mix(1.0, visual_cavity, facing_w * 0.65), look.w);
     var n = N;
 
@@ -607,7 +606,7 @@ fn fragment(
         let relief_n = normalize(N - style.depth_m * world_g);
         n = normalize(mix(N, relief_n, pom_w));
 
-        let hit_look = kind_look(material.kind, base, hit.uv, n, mesh.local_pos);
+        let hit_look = kind_look(material.kind, base, hit.uv, n);
         let cavity = mix(style.dark, 1.0, hit.height);
         look = mix(look, vec4<f32>(hit_look.xyz * cavity, hit_look.w), pom_w);
     }
