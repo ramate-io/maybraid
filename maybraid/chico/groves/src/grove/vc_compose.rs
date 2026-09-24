@@ -619,7 +619,7 @@ where
 	.flatten()
 }
 
-/// Frond collections from plant Low (shared star); cheap-ball trunks stay with the caller.
+/// Frond collections from plant Low (shared star). Trunk sticks come from the plant.
 pub fn placed_palm_low_fronds<T>(
 	plant: &T,
 	placement: Placement,

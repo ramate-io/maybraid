@@ -1,7 +1,14 @@
 //! Stick / bark [`Material`] — PBR with screen-space edge darkening (`edge_material` lineage).
 
 use bevy::{
-	asset::embedded_asset, prelude::*, reflect::TypePath, render::render_resource::AsBindGroup,
+	asset::embedded_asset,
+	mesh::MeshVertexBufferLayoutRef,
+	pbr::{MaterialPipeline, MaterialPipelineKey},
+	prelude::*,
+	reflect::TypePath,
+	render::render_resource::{
+		AsBindGroup, RenderPipelineDescriptor, SpecializedMeshPipelineError,
+	},
 	shader::ShaderRef,
 };
 
@@ -34,5 +41,17 @@ impl Material for ChicoStickMaterial {
 
 	fn alpha_mode(&self) -> AlphaMode {
 		AlphaMode::Opaque
+	}
+
+	fn specialize(
+		_pipeline: &MaterialPipeline,
+		descriptor: &mut RenderPipelineDescriptor,
+		_layout: &MeshVertexBufferLayoutRef,
+		_key: MaterialPipelineKey<Self>,
+	) -> Result<(), SpecializedMeshPipelineError> {
+		// Cheap-ball trunk / column proxies are open cards; Back cull showed
+		// clear color from the far side.
+		descriptor.primitive.cull_mode = None;
+		Ok(())
 	}
 }
