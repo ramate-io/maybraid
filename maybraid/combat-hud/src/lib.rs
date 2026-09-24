@@ -7,6 +7,16 @@ use damage::{DamageApplied, Downed, HeadshotBand, Health};
 use player::{LocomotionCapsule, Npc, Player};
 use vitals::{spawn_player_vitals, sync_player_vitals, vitals_fonts};
 
+/// When `false`, the player vitals plate stays hidden (pause / menu overlays).
+#[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CombatHudVisible(pub bool);
+
+impl Default for CombatHudVisible {
+	fn default() -> Self {
+		Self(true)
+	}
+}
+
 const BAR_WIDTH: f32 = 240.0;
 const BAR_HEIGHT: f32 = 18.0;
 const WORLD_BAR_WIDTH: f32 = 120.0;
@@ -50,6 +60,7 @@ impl Plugin for CombatHudPlugin {
 			return;
 		}
 		app.insert_resource(CombatHudConfig(*self))
+			.init_resource::<CombatHudVisible>()
 			.add_systems(Startup, spawn_combat_hud);
 		if self.health_bars {
 			app.init_resource::<CombatHudOpponentTotal>().add_systems(
@@ -781,6 +792,59 @@ mod tests {
 			world.query::<&vitals::PlayerVitalsPip>().iter(world).count(),
 			vitals::VITALS_PIPS
 		);
+	}
+
+	fn vitals_app() -> App {
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins).add_plugins(CombatHudPlugin {
+			health_bars: false,
+			hit_markers: false,
+			directional_damage: false,
+			player_vitals: true,
+		});
+		app
+	}
+
+	fn vitals_visibility(world: &mut World) -> anyhow::Result<Visibility> {
+		world
+			.query_filtered::<&Visibility, With<vitals::PlayerVitalsRoot>>()
+			.iter(world)
+			.next()
+			.copied()
+			.ok_or_else(|| anyhow::anyhow!("vitals root"))
+	}
+
+	#[test]
+	fn player_vitals_hide_when_the_hud_is_closed() -> anyhow::Result<()> {
+		let mut app = vitals_app();
+		app.update();
+		app.world_mut()
+			.spawn((Player, Health { current: 40.0, max: 100.0 }, Name::new("Ada")));
+		app.world_mut().insert_resource(CombatHudVisible(false));
+		app.update();
+		assert_eq!(vitals_visibility(app.world_mut())?, Visibility::Hidden);
+		Ok(())
+	}
+
+	#[test]
+	fn player_vitals_show_when_playing() -> anyhow::Result<()> {
+		let mut app = vitals_app();
+		app.update();
+		app.world_mut()
+			.spawn((Player, Health { current: 40.0, max: 100.0 }, Name::new("Ada")));
+		app.world_mut().insert_resource(CombatHudVisible(true));
+		app.update();
+		assert_eq!(vitals_visibility(app.world_mut())?, Visibility::Visible);
+		Ok(())
+	}
+
+	#[test]
+	fn player_vitals_stay_hidden_without_a_player() -> anyhow::Result<()> {
+		let mut app = vitals_app();
+		app.world_mut().insert_resource(CombatHudVisible(true));
+		app.update();
+		assert_eq!(vitals_visibility(app.world_mut())?, Visibility::Hidden);
+		Ok(())
 	}
 
 	#[test]

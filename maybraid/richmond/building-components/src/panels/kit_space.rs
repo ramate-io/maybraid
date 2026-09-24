@@ -87,6 +87,27 @@ pub fn tessellated_triangle_kit_hull(a: Vec2, b: Vec2, c: Vec2, scale: Vec3) -> 
 		.collect()
 }
 
+/// Inscribed-square half-extent as a fraction of the unit circle (kit README).
+pub const INSCRIBED_SQUARE_HALF: f32 = 0.7;
+
+/// Southern circle−square cap in centered floor kit space.
+///
+/// Unit circle \(X^2+Z^2\le 1\), square \(X,Z\in[\pm 0.7]\). The remaining \(+Z\)
+/// segment; four yaws fill a circular ring. Chord + arc samples, extruded
+/// \(\pm\) [`KIT_Y_HALF`], then scaled.
+pub fn circle_inscribed_square_kit_hull(scale: Vec3) -> Vec<Vec3> {
+	const ARC: u32 = 6;
+	let half = INSCRIBED_SQUARE_HALF.clamp(0.0, 0.999).acos();
+	let y = KIT_Y_HALF;
+	(0..=ARC)
+		.flat_map(|i| {
+			let t = -half + (2.0 * half) * (i as f32 / ARC as f32);
+			let xz = Vec2::new(t.sin(), t.cos());
+			[Vec3::new(xz.x, -y, xz.y) * scale, Vec3::new(xz.x, y, xz.y) * scale]
+		})
+		.collect()
+}
+
 /// Eight local corners of a scaled rectangle kit (origin at the eave / \(X{=}0,Z{=}0\)).
 pub fn rectangle_kit_hull(scale: Vec3) -> Vec<Vec3> {
 	let min = PANEL_KIT_MIN * scale;
@@ -124,6 +145,15 @@ mod tests {
 				"missing bottom corner {corner:?} in {pts:?}"
 			);
 		}
+	}
+
+	#[test]
+	fn inscribed_cap_hull_is_the_plus_z_segment() {
+		let pts = circle_inscribed_square_kit_hull(Vec3::ONE);
+		assert_eq!(pts.len(), 14);
+		assert!(pts.iter().any(|p| (p.z - 1.0).abs() < 1e-4 && p.x.abs() < 1e-4));
+		assert!(pts.iter().any(|p| (p.z - INSCRIBED_SQUARE_HALF).abs() < 1e-3));
+		assert!(pts.iter().all(|p| p.z >= INSCRIBED_SQUARE_HALF - 1e-3));
 	}
 
 	#[test]

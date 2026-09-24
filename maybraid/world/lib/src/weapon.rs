@@ -20,7 +20,7 @@ use player::{
 	PlayerUse, PlayerVisual as MaybraidPlayerVisual, PlayerYawOwner,
 };
 
-use crate::control::WorldGameplayEnabled;
+use crate::control::{InventoryEditCameraFollow, WorldGameplayEnabled};
 
 /// Persisted character appearance, worn clothing, stats, and primary weapon for world entry.
 #[derive(Resource, Clone, Debug, PartialEq)]
@@ -84,11 +84,14 @@ fn arm_world_player(
 	mode: Res<PlaygroundMode>,
 	gameplay: Res<WorldGameplayEnabled>,
 	grounds: Option<Res<crate::TrainingGrounds>>,
+	inventory_edit: Option<Res<InventoryEditCameraFollow>>,
 	loadout: Option<Res<WorldPlayerLoadout>>,
 	players: Query<WorldPlayerEquipment<'_>, With<VegetationPlayer>>,
 	visuals: Query<WorldPlayerVisual<'_>, (With<VegetationPlayerVisual>, With<CharacterRoot>)>,
 ) {
-	if !gameplay.0 || grounds.is_some_and(|grounds| grounds.0) {
+	if grounds.is_some_and(|grounds| grounds.0)
+		|| (!gameplay.0 && !inventory_edit.is_some_and(|edit| edit.0))
+	{
 		return;
 	}
 	for (player, firearm_user, inventory_user, skill_map_user, applied, appearance_requested) in
@@ -407,6 +410,27 @@ mod tests {
 			.run_system_once(arm_world_player)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		assert!(world.get::<maybraid_skill_map::SkillMapUser>(player).is_none());
+		Ok(())
+	}
+
+	#[test]
+	fn pause_inventory_edit_still_applies_loadout() -> anyhow::Result<()> {
+		use crate::InventoryEditCameraFollow;
+
+		let mut world = World::new();
+		world.insert_resource(PlaygroundMode::Character);
+		world.insert_resource(WorldGameplayEnabled(false));
+		world.insert_resource(InventoryEditCameraFollow(true));
+		world.insert_resource(
+			WorldPlayerLoadout::new("active", CharacterAppearance::default(), Inventory::default())
+				.with_name("Ada"),
+		);
+		let player = world.spawn(VegetationPlayer).id();
+		world.spawn((VegetationPlayerVisual, CharacterRoot, ChildOf(player)));
+		world
+			.run_system_once(arm_world_player)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert_eq!(world.get::<Name>(player).map(Name::as_str), Some("Ada"));
 		Ok(())
 	}
 

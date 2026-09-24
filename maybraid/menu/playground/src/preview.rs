@@ -33,7 +33,7 @@ use menu_screens::{
 };
 
 use crate::character::{CharacterMenuState, CharacterScreen};
-use crate::session::ActiveCharacter;
+use crate::session::{ActiveCharacter, CharacterEditorReturn};
 use crate::weapon_gallery::{RequestShowWeapons, WeaponGalleryScreen};
 
 #[derive(Component)]
@@ -116,6 +116,7 @@ fn sync_preview(
 	weapons: Query<Entity, With<WeaponGalleryScreen>>,
 	weapon_requests: Query<Entity, With<RequestShowWeapons>>,
 	menu_state: Res<CharacterMenuState>,
+	return_to: Option<Res<CharacterEditorReturn>>,
 	spin: Option<Res<SpinRevealCurrent>>,
 	active: Option<Res<ActiveCharacter>>,
 	save_root: Option<Res<SaveRoot>>,
@@ -124,6 +125,11 @@ fn sync_preview(
 	roots: Query<Entity, With<CharacterPreviewRoot>>,
 ) {
 	if !weapons.is_empty() || !weapon_requests.is_empty() {
+		clear_preview(&mut commands, &mut sync, &mut pending, &roots);
+		return;
+	}
+
+	if return_to.is_some_and(|return_to| return_to.uses_live_world_player()) {
 		clear_preview(&mut commands, &mut sync, &mut pending, &roots);
 		return;
 	}
@@ -398,9 +404,13 @@ fn stamp_preview_animation(
 }
 
 fn queue_preview_camera_focus(
+	return_to: Option<Res<CharacterEditorReturn>>,
 	mut events: MessageReader<CharacterMenuEvent<MenuEvent>>,
 	mut pending: ResMut<PendingCameraFocus>,
 ) {
+	if return_to.is_some_and(|return_to| return_to.uses_live_world_player()) {
+		return;
+	}
 	for event in events.read() {
 		if let CharacterMenuEvent::CameraFocus(focus) = event {
 			pending.focus = Some(*focus);
@@ -410,6 +420,7 @@ fn queue_preview_camera_focus(
 }
 
 fn apply_preview_camera_focus(
+	return_to: Option<Res<CharacterEditorReturn>>,
 	mut pending: ResMut<PendingCameraFocus>,
 	mut cameras: Query<
 		(&mut Transform, &mut CameraController, &mut Camera, &Projection),
@@ -424,7 +435,8 @@ fn apply_preview_camera_focus(
 	rigs: Query<(Entity, &CharacterRig, &BoneMap, &GlobalTransform)>,
 	transforms: Query<&GlobalTransform>,
 ) {
-	if !weapons.is_empty() {
+	if !weapons.is_empty() || return_to.is_some_and(|return_to| return_to.uses_live_world_player())
+	{
 		return;
 	}
 	let Some(focus) = pending.focus else {

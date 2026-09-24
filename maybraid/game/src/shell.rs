@@ -17,12 +17,13 @@ use crozon_character_playground::CameraController as PreviewCameraController;
 use maybraid_game_mode_discover::streams_terrain;
 use maybraid_game_mode_training_ground::TrainingGroundActive;
 use maybraid_world::{
-	PlayerPhysicsEnabled, TerrainStreamingEnabled, TrainingGrounds, WorldGameplayEnabled,
-	WorldSceneryVisible, SKY_CLEAR,
+	InventoryEditCameraFollow, PlayerPhysicsEnabled, TerrainStreamingEnabled, TrainingGrounds,
+	WorldGameplayEnabled, WorldSceneryVisible, SKY_CLEAR,
 };
 use menu_components::MENU_CLEAR;
-use menu_playground::CharacterScreen;
-use menu_playground::{CharacterPreviewLight, CharacterPreviewRoot};
+use menu_playground::{
+	CharacterEditorReturn, CharacterPreviewLight, CharacterPreviewRoot, CharacterScreen,
+};
 use menu_screens::{
 	despawn_menu_screens, request_show_gallery, request_show_home, request_show_in_game,
 	request_show_loading, MenuScreen,
@@ -87,8 +88,13 @@ pub(crate) fn enter_world_menu(mut commands: Commands) {
 	request_show_in_game(&mut commands);
 }
 
-pub(crate) fn exit_world_menu(mut commands: Commands, overlay: Query<Entity, With<MenuScreen>>) {
+pub(crate) fn exit_world_menu(
+	mut commands: Commands,
+	mut inventory_follow: ResMut<InventoryEditCameraFollow>,
+	overlay: Query<Entity, With<MenuScreen>>,
+) {
 	despawn_menu_screens(&mut commands, overlay);
+	inventory_follow.0 = false;
 	commands.remove_resource::<menu_playground::CharacterEditorReturn>();
 }
 
@@ -107,32 +113,38 @@ pub(crate) fn restore_stashed_world_camera(
 	commands.remove_resource::<StashedWorldCamera>();
 }
 
-/// Preview layers + eye while the pause menu is on the character page.
+/// World follow while the pause menu edits the live character; gallery preview otherwise.
 pub(crate) fn apply_pause_character_look(
 	mut commands: Commands,
 	character: Query<(), With<CharacterScreen>>,
+	return_to: Option<Res<CharacterEditorReturn>>,
 	stashed: Option<Res<StashedWorldCamera>>,
 	mut scenery: ResMut<WorldSceneryVisible>,
+	mut inventory_follow: ResMut<InventoryEditCameraFollow>,
 	mut cameras: Query<
 		(Entity, &mut Transform, Has<PreviewCameraController>),
 		(With<Camera3d>, Without<LoadingBackdropCamera>),
 	>,
 ) {
 	let editing = !character.is_empty();
-	scenery.0 = !editing;
-	let layers = if editing {
+	let in_game_edit =
+		editing && return_to.is_some_and(|return_to| return_to.uses_live_world_player());
+	let preview_edit = editing && !in_game_edit;
+	inventory_follow.0 = in_game_edit;
+	scenery.0 = !preview_edit;
+	let layers = if preview_edit {
 		RenderLayers::layer(PREVIEW_RENDER_LAYER)
 	} else {
 		RenderLayers::layer(WORLD_RENDER_LAYER)
 	};
-	if editing && stashed.is_none() {
+	if preview_edit && stashed.is_none() {
 		if let Some((_, transform, _)) = cameras.iter().next() {
 			commands.insert_resource(StashedWorldCamera { transform: *transform });
 		}
 	}
 	for (entity, mut transform, has_preview) in &mut cameras {
 		commands.entity(entity).insert(layers.clone());
-		if editing && !has_preview {
+		if preview_edit && !has_preview {
 			*transform = Transform::from_translation(PREVIEW_EYE).looking_at(PREVIEW_LOOK, Vec3::Y);
 			commands.entity(entity).insert(PreviewCameraController {
 				speed: 6.0,
@@ -140,14 +152,14 @@ pub(crate) fn apply_pause_character_look(
 				yaw: 0.0,
 				pitch: 0.0,
 			});
-		} else if !editing && has_preview {
+		} else if !preview_edit && has_preview {
 			if let Some(stashed) = stashed.as_ref() {
 				*transform = stashed.transform;
 			}
 			commands.entity(entity).remove::<PreviewCameraController>();
 		}
 	}
-	if !editing && stashed.is_some() {
+	if !preview_edit && stashed.is_some() {
 		commands.remove_resource::<StashedWorldCamera>();
 	}
 }
@@ -282,6 +294,7 @@ pub(crate) fn stamp_preview_render_layers(
 #[cfg(test)]
 mod tests {
 	use bevy::camera::visibility::RenderLayers;
+	use bevy::prelude::*;
 
 	use super::{
 		apply_shell_look, camera_render_layers, terrain_streaming_for_shell,
@@ -369,5 +382,60 @@ mod tests {
 			assert!(camera_render_layers(flow).intersects(&world));
 			assert!(!camera_render_layers(flow).intersects(&preview));
 		}
+	}
+
+	#[test]
+	fn in_game_character_edit_keeps_the_world_camera() -> anyhow::Result<()> {
+		use bevy::ecs::system::RunSystemOnce;
+		use crozon_character_playground::CameraController as PreviewCameraController;
+		use maybraid_world::{InventoryEditCameraFollow, WorldSceneryVisible};
+		use menu_playground::{CharacterEditorReturn, CharacterScreen};
+
+		use super::apply_pause_character_look;
+
+		let mut world = World::new();
+		world.insert_resource(WorldSceneryVisible(true));
+		world.insert_resource(InventoryEditCameraFollow(false));
+		world.insert_resource(CharacterEditorReturn::InGame);
+		world.spawn(CharacterScreen);
+		let camera = world.spawn((Camera3d::default(), Transform::default())).id();
+		world
+			.run_system_once(apply_pause_character_look)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+
+		assert!(world.resource::<WorldSceneryVisible>().0);
+		assert!(world.resource::<InventoryEditCameraFollow>().0);
+		assert!(world.get::<PreviewCameraController>(camera).is_none());
+		let layers = world.get::<RenderLayers>(camera).ok_or_else(|| anyhow::anyhow!("layers"))?;
+		assert!(layers.intersects(&RenderLayers::layer(WORLD_RENDER_LAYER)));
+		assert!(!layers.intersects(&RenderLayers::layer(PREVIEW_RENDER_LAYER)));
+		Ok(())
+	}
+
+	#[test]
+	fn gallery_character_edit_still_uses_preview_layers() -> anyhow::Result<()> {
+		use bevy::ecs::system::RunSystemOnce;
+		use crozon_character_playground::CameraController as PreviewCameraController;
+		use maybraid_world::{InventoryEditCameraFollow, WorldSceneryVisible};
+		use menu_playground::{CharacterEditorReturn, CharacterScreen};
+
+		use super::apply_pause_character_look;
+
+		let mut world = World::new();
+		world.insert_resource(WorldSceneryVisible(true));
+		world.insert_resource(InventoryEditCameraFollow(false));
+		world.insert_resource(CharacterEditorReturn::Gallery);
+		world.spawn(CharacterScreen);
+		let camera = world.spawn((Camera3d::default(), Transform::default())).id();
+		world
+			.run_system_once(apply_pause_character_look)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+
+		assert!(!world.resource::<WorldSceneryVisible>().0);
+		assert!(!world.resource::<InventoryEditCameraFollow>().0);
+		assert!(world.get::<PreviewCameraController>(camera).is_some());
+		let layers = world.get::<RenderLayers>(camera).ok_or_else(|| anyhow::anyhow!("layers"))?;
+		assert!(layers.intersects(&RenderLayers::layer(PREVIEW_RENDER_LAYER)));
+		Ok(())
 	}
 }

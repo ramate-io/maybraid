@@ -1,4 +1,7 @@
 //! Durham terrain material with world-space palette noise ([RFC-170 4.7](https://github.com/ramate-io/maybraid/issues/178)).
+//!
+//! The fragment shader also applies a cheap ridged-height POM crack layer
+//! within 50 m of the camera.
 
 mod band;
 mod noise_uniform;

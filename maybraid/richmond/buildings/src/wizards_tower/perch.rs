@@ -12,7 +12,7 @@ use richmond_building_components::floors::FloorNode;
 use richmond_building_components::partitions::PartitionStyle;
 use richmond_building_components::scene_children;
 use richmond_building_components::{
-	append_flattened_component_scenes, BuildingComponents, Layers, ParentConfines, PartitionNode,
+	append_flattened_component_scenes, BuildingComponents, Layers, PartitionNode,
 };
 
 use crate::arcs::{portal_ring_wall, PortalRingParams, PortalRingWall};
@@ -77,31 +77,6 @@ impl WizardsTowerPerch {
 		append_flattened_component_scenes(self, lod_ref, LodSceneLevel::Medium, children);
 	}
 
-	pub(crate) fn emit_internal_features(
-		&self,
-		children: &mut Vec<Box<dyn Scene>>,
-		lod_ref: &LodRef,
-	) {
-		for node in self.floor_nodes_for_level(LodSceneLevel::High).flatten() {
-			children.push(Box::new(node.scene_with_level(lod_ref, LodSceneLevel::High)));
-		}
-	}
-
-	fn storey_confine_center(&self) -> Vec3 {
-		let aabb = &self.constraints.aabb;
-		Vec3::from((aabb.min + aabb.max) * 0.5)
-	}
-
-	fn storey_confine_radius(&self) -> f32 {
-		let aabb = &self.constraints.aabb;
-		let extent = aabb.max - aabb.min;
-		(0.5 * extent.x.min(extent.z)).max(1e-4)
-	}
-
-	fn is_detail_level(level: LodSceneLevel) -> bool {
-		matches!(level, LodSceneLevel::High)
-	}
-
 	fn is_structure_level(level: LodSceneLevel) -> bool {
 		matches!(level, LodSceneLevel::High | LodSceneLevel::Medium)
 	}
@@ -121,18 +96,11 @@ impl BuildingComponents for WizardsTowerPerch {
 	}
 
 	fn floor_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FloorNode> {
-		if !Self::is_detail_level(level) {
+		if !Self::is_structure_level(level) {
 			return Layers::new();
 		}
-		let confines =
-			ParentConfines::internal(self.storey_confine_center(), self.storey_confine_radius());
-		Layers::from_free(
-			self.floor_caps
-				.iter()
-				.chain(self.floor_rects.iter())
-				.map(|n| n.clone().with_confines(confines))
-				.collect(),
-		)
+		// Exterior deck, same band as the ring wall. See `WizardsTowerFloor`.
+		Layers::from_free(self.floor_caps.iter().chain(self.floor_rects.iter()).cloned().collect())
 	}
 }
 
@@ -144,7 +112,6 @@ impl LodScene for WizardsTowerPerch {
 	fn scene_with_level(&self, lod_ref: &LodRef, _level: LodSceneLevel) -> impl Scene + 'static {
 		let mut children: Vec<Box<dyn Scene>> = Vec::new();
 		self.emit_external_features(&mut children, lod_ref);
-		self.emit_internal_features(&mut children, lod_ref);
 		scene_children(children)
 	}
 }
