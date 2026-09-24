@@ -6,8 +6,9 @@
 //
 // Looks stay matte and worn. Ribbing and a short-range implicit
 // POM (Durham solver, UV jacobian) sit on weave, seams, scales,
-// and brush grain. Veins are UV-only so they do not shear under POM.
-// No silhouette or self-shadow ray.
+// and brush grain. Albedo stays on mesh UV; the march only
+// shades cavity and tilts the normal. No silhouette or
+// self-shadow ray.
 //---------------------------------------------------------
 
 #import bevy_pbr::{
@@ -337,6 +338,7 @@ fn scales_look(base: vec3<f32>, uv: vec2<f32>, _n: vec3<f32>) -> vec4<f32> {
 
 //---------------------------------------------------------
 // Short-range UV POM. Height is 1 at the cloth face, 0 in grooves.
+// March for cavity and relief normal only — do not resample look.
 //---------------------------------------------------------
 
 struct ReliefStyle {
@@ -592,9 +594,8 @@ fn fragment(
     let pom_w = pom_distance_w * resolution_w * facing_w;
 
     let visual_h = relief_height(uv0);
-    let visual_cavity = mix(style.dark, 1.0, visual_h);
+    var cavity = mix(1.0, mix(style.dark, 1.0, visual_h), facing_w * 0.65);
     var look = kind_look(material.kind, base, uv0, N);
-    look = vec4<f32>(look.xyz * mix(1.0, visual_cavity, facing_w * 0.65), look.w);
     var n = N;
 
     if (pom_w > 1e-4) {
@@ -605,11 +606,10 @@ fn fragment(
         let world_g = uv_gradient_to_world(g, P, uv0);
         let relief_n = normalize(N - style.depth_m * world_g);
         n = normalize(mix(N, relief_n, pom_w));
-
-        let hit_look = kind_look(material.kind, base, hit.uv, n);
-        let cavity = mix(style.dark, 1.0, hit.height);
-        look = mix(look, vec4<f32>(hit_look.xyz * cavity, hit_look.w), pom_w);
+        cavity = mix(cavity, mix(style.dark, 1.0, hit.height), pom_w);
     }
+
+    look = vec4<f32>(look.xyz * cavity, look.w);
 
     let emissive = kind_emissive(material.kind, uv0);
 

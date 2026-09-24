@@ -2,7 +2,8 @@
 //!
 //! Looks are matte (ribbed cloth, quiet prints). A short-range UV POM
 //! matches the Durham implicit-surface solver on weave, seams, scales,
-//! and brush grain.
+//! and brush grain. Albedo stays on mesh UV; the march only shades
+//! cavity and tilts the normal.
 
 use bevy::{
 	asset::embedded_asset,
