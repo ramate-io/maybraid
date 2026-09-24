@@ -217,4 +217,31 @@ mod tests {
 		assert!(target < look);
 		assert!((clamp_look_yaw(look, target, max) - look).abs() < 1e-4);
 	}
+
+	#[test]
+	fn focus_intent_still_writes_controller_focus() {
+		let mut app = App::new();
+		app.init_resource::<ButtonInput<MouseButton>>()
+			.add_message::<CharacterIntent>()
+			.add_systems(Update, apply_look_intents);
+		let camera = app
+			.world_mut()
+			.spawn((
+				Camera3d::default(),
+				CameraController {
+					yaw: 0.0,
+					pitch: 0.0,
+					pov: CameraPov::ThirdPerson,
+					focus: 0.0,
+					ads: 0.0,
+					focus_blend: 0.0,
+				},
+				FollowCamera::default(),
+			))
+			.id();
+		app.world_mut().write_message(CharacterIntent::Focus(1.0));
+		app.update();
+		let focus = app.world().get::<CameraController>(camera).map(|controller| controller.focus);
+		assert_eq!(focus, Some(1.0));
+	}
 }
