@@ -1,5 +1,6 @@
 //---------------------------------------------------------
 // Durham terrain: PBR with world-space palette noise.
+// Near camera: cheap ridged-height POM for cracks / grit.
 //---------------------------------------------------------
 #import bevy_pbr::{
     forward_io::VertexOutput,
@@ -145,9 +146,9 @@ fn band_color(p: vec2<f32>, band: DurhamTerrainBand) -> vec3<f32> {
     return swatch_sample(t, band);
 }
 
-fn ground_color(world_position: vec3<f32>) -> vec3<f32> {
-    let p = world_position.xz + vec2<f32>(1298.0, 18229.0);
+const WORLD_COLOR_SHIFT: vec2<f32> = vec2<f32>(1298.0, 18229.0);
 
+fn ground_color_at(p: vec2<f32>) -> vec3<f32> {
     var acc = vec3<f32>(0.0);
     var wsum = 0.0;
 
@@ -160,6 +161,57 @@ fn ground_color(world_position: vec3<f32>) -> vec3<f32> {
     }
 
     return acc / max(wsum, 1e-6);
+}
+
+/// Cheap crack / roughness layer. Height 1 = plateau, 0 = crack floor.
+/// Applied only inside [`CRACK_RANGE_M`] of the camera.
+const CRACK_RANGE_M: f32 = 50.0;
+const CRACK_FREQ: f32 = 0.35;
+const CRACK_SEED: f32 = 71.0;
+const CRACK_SHARPNESS: f32 = 4.0;
+const CRACK_HEIGHT_SCALE: f32 = 0.25;
+const CRACK_DARK: f32 = 0.55;
+const CRACK_NORMAL_BLEND: f32 = 0.7;
+const CRACK_NORMAL_EPS: f32 = 0.2;
+const CRACK_POM_STEPS: i32 = 6;
+
+fn cheap_height(p: vec2<f32>) -> f32 {
+    let n = value_noise_2d(p * CRACK_FREQ, CRACK_SEED);
+    let ridge = 1.0 - abs(n * 2.0 - 1.0);
+    return pow(ridge, CRACK_SHARPNESS);
+}
+
+fn crack_weight(world_position: vec3<f32>) -> f32 {
+    let dist = length(world_position - view.world_position.xyz);
+    return smoothstep(CRACK_RANGE_M, CRACK_RANGE_M * 0.7, dist);
+}
+
+/// Linear POM in world XZ. Walks away from the camera into the height field.
+fn cheap_pom(p: vec2<f32>, view_xz: vec2<f32>, scale: f32) -> vec2<f32> {
+    let steps = f32(CRACK_POM_STEPS);
+    let step_z = 1.0 / steps;
+    let step_xz = view_xz * (scale / steps);
+    var uv = p;
+    var ray_z = 1.0;
+    var h = cheap_height(uv);
+
+    for (var i = 0; i < CRACK_POM_STEPS; i = i + 1) {
+        if (h >= ray_z) {
+            break;
+        }
+        uv = uv - step_xz;
+        ray_z = ray_z - step_z;
+        h = cheap_height(uv);
+    }
+
+    return uv;
+}
+
+fn cheap_micro_normal(p: vec2<f32>, h: f32, height_scale: f32) -> vec3<f32> {
+    let e = CRACK_NORMAL_EPS;
+    let d_hx = cheap_height(p + vec2<f32>(e, 0.0)) - h;
+    let d_hz = cheap_height(p + vec2<f32>(0.0, e)) - h;
+    return normalize(vec3<f32>(-d_hx, e / max(height_scale, 1e-4), -d_hz));
 }
 
 fn depth_at(pos: vec4<f32>) -> f32 {
@@ -185,14 +237,6 @@ fn fragment(
     mesh: VertexOutput
 ) -> @location(0) vec4<f32> {
     var pbr_input: PbrInput = pbr_input_new();
-    let palette = ground_color(mesh.world_position.xyz);
-    let ground = palette * base_color.rgb;
-
-    pbr_input.material.base_color = vec4<f32>(ground, base_color.a);
-    pbr_input.material.metallic = 0.0;
-    pbr_input.material.perceptual_roughness = 1.0;
-    pbr_input.frag_coord = mesh.position;
-    pbr_input.world_position = mesh.world_position;
 
     let double_sided =
         (pbr_input.material.flags & STANDARD_MATERIAL_FLAGS_DOUBLE_SIDED_BIT) != 0u;
@@ -210,11 +254,37 @@ fn fragment(
         vec3<f32>(0.0, 1.0, 0.0),
         soften,
     ));
-    pbr_input.world_normal = soft_n;
 
     pbr_input.is_orthographic = view.clip_from_view[3].w == 1.0;
-    pbr_input.N = soft_n;
-    pbr_input.V = fns::calculate_view(mesh.world_position, pbr_input.is_orthographic);
+    let V = fns::calculate_view(mesh.world_position, pbr_input.is_orthographic);
+
+    var p = mesh.world_position.xz + WORLD_COLOR_SHIFT;
+    var h = 1.0;
+    var n = soft_n;
+    let crack_w = crack_weight(mesh.world_position.xyz);
+
+    if (crack_w > 1e-4) {
+        let facing = max(dot(soft_n, V), 0.15);
+        let slope = saturate(soft_n.y);
+        let pom_scale = CRACK_HEIGHT_SCALE * slope * crack_w;
+        let view_tan = V - soft_n * dot(V, soft_n);
+        p = cheap_pom(p, view_tan.xz / facing, pom_scale);
+        h = cheap_height(p);
+        let micro_n = cheap_micro_normal(p, h, CRACK_HEIGHT_SCALE);
+        n = normalize(mix(soft_n, micro_n, CRACK_NORMAL_BLEND * crack_w * slope));
+    }
+
+    let palette = ground_color_at(p);
+    let ground = palette * base_color.rgb * mix(1.0, mix(CRACK_DARK, 1.0, h), crack_w);
+
+    pbr_input.material.base_color = vec4<f32>(ground, base_color.a);
+    pbr_input.material.metallic = 0.0;
+    pbr_input.material.perceptual_roughness = 1.0;
+    pbr_input.frag_coord = mesh.position;
+    pbr_input.world_position = mesh.world_position;
+    pbr_input.world_normal = n;
+    pbr_input.N = n;
+    pbr_input.V = V;
 
     let lit_color = fns::apply_pbr_lighting(pbr_input);
 
