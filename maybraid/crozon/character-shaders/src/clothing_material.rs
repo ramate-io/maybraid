@@ -1,4 +1,8 @@
 //! Clothing [`Material`] — [`MaterialRef`] bags plus a tiny vertex sway.
+//!
+//! Looks are matte (ribbed cloth, quiet prints). A short-range UV POM
+//! matches the Durham implicit-surface solver on weave, seams, scales,
+//! and brush grain.
 
 use bevy::{
 	asset::embedded_asset,
