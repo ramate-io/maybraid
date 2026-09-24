@@ -1,4 +1,7 @@
 //! Urban surface [`Material`] — [`MaterialRef`] bags plus a named recipe kind.
+//!
+//! The fragment shader adds implicit-surface POM (Durham terrain solver)
+//! against a per-kind height field in the dominant face plane.
 
 use bevy::{
 	asset::embedded_asset,
