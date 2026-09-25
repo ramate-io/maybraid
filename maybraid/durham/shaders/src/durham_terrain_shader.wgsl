@@ -334,8 +334,8 @@ fn grass_patch(p: vec2<f32>) -> f32 {
 // Half-length .075 + jitter .010 stays inside the .110 cell half-width.
 // Keep those bounds in mind when tuning cell size or blade width.
 fn grass_height(p: vec2<f32>) -> f32 {
-    let patch = grass_patch(p);
-    if (patch <= 0.0) { return 0.0; }
+    let g_patch = grass_patch(p);
+    if (g_patch <= 0.0) { return 0.0; }
     let q = p / GRASS_CELL_M;
     let cell = vec2<i32>(floor(q));
     let r0 = relief_random(cell, 811u);
@@ -355,7 +355,7 @@ fn grass_height(p: vec2<f32>) -> f32 {
     let lateral = 1.0 - smoothstep(0.0, width, abs(dot(local, across)));
     let rise = smoothstep(0.0, 0.45, t);
     let tip = 1.0 - smoothstep(0.72, 1.0, t);
-    return GRASS_HEIGHT_M * patch * mix(0.65, 1.0, r2) * rise * tip * lateral;
+    return GRASS_HEIGHT_M * g_patch * mix(0.65, 1.0, r2) * rise * tip * lateral;
 }
 
 struct GrassHit {
