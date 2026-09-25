@@ -1,17 +1,18 @@
-//! Training Ground is a seeded FinePatch of the Maybraid world, not Les Halles
-//! and not Discovery's moving rings.
+//! Training Ground is a seeded FinePatch of the Maybraid world, not Discovery's
+//! moving rings.
 //!
 //! While [`TrainingGrounds`] is set, Durham presents a four-cell origin window,
 //! hopscotch stays off, the forest shrinks to one grove tile, and a Training
-//! pose is not written.
+//! pose is not written. [`crate::training_plaza`] stamps one seeded Richmond
+//! development on that patch once the surface exists.
 
 use bevy::prelude::*;
 use chico_vegetation_on_terrain_playground::PlaygroundConfig;
 use durham_terrain_models::{
-	playable_world_cell_layout, retarget_presentation_assets, training_grounds_cell_layout,
 	TerrainCellLayout, TerrainCoverage, TerrainLayoutPinned, TerrainPresentEnabled,
 	TerrainPresentPending, TerrainPresentationAssets, TerrainPresentationDirty,
-	TerrainPresenterState, WORLD_FINE_HALF_EXTENT_CELLS,
+	TerrainPresenterState, WORLD_FINE_HALF_EXTENT_CELLS, playable_world_cell_layout,
+	retarget_presentation_assets, training_grounds_cell_layout,
 };
 use richmond_developments_on_terrain_playground::UrbanizationStreamingEnabled;
 

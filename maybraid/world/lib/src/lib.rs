@@ -22,6 +22,7 @@ mod poi;
 mod start;
 mod stash;
 mod training;
+mod training_plaza;
 mod ui;
 mod vsync;
 mod weapon;
@@ -57,6 +58,7 @@ pub use stash::{
 	WorldStashPlugin, WorldStashSettings, DEFAULT_CLAIM_RADIUS, DEFAULT_LOOT_SECS,
 };
 pub use training::TrainingGrounds;
+pub use training_plaza::TrainingPlazaMounted;
 pub use ui::WorldMobHudEnabled;
 pub use vsync::{default_window_present_mode, RequestVsyncToggle, VSYNC_TOGGLE_KEY};
 pub use weapon::WorldPlayerLoadout;
@@ -207,6 +209,10 @@ impl Plugin for WorldPlugin {
 					training::apply_training_grounds
 						.before(durham_terrain_models::TerrainFillSystems::Generate),
 					training::clear_training_terrain_present,
+					training_plaza::mount_training_plaza
+						.in_set(control::WorldSurfaceSet)
+						.after(control::update_world_surface_ready),
+					training_plaza::clear_training_plaza,
 				),
 			)
 			.insert_resource(WorldMobHudEnabled::from_debug_chrome(self.debug_chrome))

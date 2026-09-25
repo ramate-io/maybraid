@@ -1,10 +1,10 @@
 //! First-load unveil: Discovery waits on spawn terrain and quiet LOD work.
-//! Training unveils once the FinePatch surface is ready and does not wait on
-//! the playable-world job wave.
+//! Training unveils once the FinePatch surface and stamped development are ready and
+//! does not wait on the playable-world job wave.
 
 use crate::flow::{GameFlow, PlaySession};
 use bevy::prelude::*;
-use maybraid_world::{LodJobCounter, WorldSurfaceReady};
+use maybraid_world::{LodJobCounter, TrainingPlazaMounted, WorldSurfaceReady};
 use menu_screens::{request_loading_explainer, request_loading_progress};
 
 /// Remaining generate / present / pending-root tickets that still count as
@@ -119,13 +119,14 @@ pub(crate) fn finish_world_loading(
 	mut commands: Commands,
 	session: Res<PlaySession>,
 	ready: Res<WorldSurfaceReady>,
+	plaza: Option<Res<TrainingPlazaMounted>>,
 	jobs: Option<Res<LodJobCounter>>,
 	mut gate: Option<ResMut<FirstLoadGate>>,
 	time: Res<Time>,
 	mut flow: ResMut<NextState<GameFlow>>,
 ) {
 	let training = *session == PlaySession::Training;
-	let surface_ready = ready.0;
+	let surface_ready = if training { ready.0 && plaza.is_some() } else { ready.0 };
 	let active = jobs.as_deref().map(LodJobCounter::active).unwrap_or(0);
 	let Some(gate) = gate.as_deref_mut() else {
 		if surface_ready {
