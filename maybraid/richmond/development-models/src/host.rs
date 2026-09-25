@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 
+use bevy::math::bounding::Aabb3d;
 use bevy::prelude::{
 	bsn, template_value, Commands, CommandsSceneExt, Entity, Transform, Visibility,
 };
@@ -137,6 +138,27 @@ impl DevelopmentHost {
 			| Self::TempleSanctum(_, transform)
 			| Self::WizardsTower(_, transform)
 			| Self::SkybridgeHall(_, transform) => *transform,
+		}
+	}
+
+	/// Building-local bounds; compose with [`Self::transform`] for world space.
+	pub fn local_bounds(&self) -> Aabb3d {
+		match self {
+			Self::LesHallesStorey(building, _) => building_bounds(building.as_ref()),
+			Self::LesHallesStairwell(building, _) => building_bounds(building.as_ref()),
+			Self::LesHallesRoof(building, _) => building_bounds(building.as_ref()),
+			Self::ShepherdsHouse(building, _) => building_bounds(building.as_ref()),
+			Self::ShepherdsHut(building, _) => building_bounds(building.as_ref()),
+			Self::OldCityMarketTerrace(building, _) => building_bounds(building.as_ref()),
+			Self::RingFortCircularTower(building, _) => building_bounds(building.as_ref()),
+			Self::RingFortTrazaloidTower(building, _) => building_bounds(building.as_ref()),
+			Self::RingFortGalleryTerrace(building, _) => building_bounds(building.as_ref()),
+			Self::RingFortGalleryColonnade(building, _) => building_bounds(building.as_ref()),
+			Self::RingFortGalleryRoof(building, _) => building_bounds(building.as_ref()),
+			Self::SingleHighrise(building, _) => building_bounds(building.as_ref()),
+			Self::TempleSanctum(building, _) => building_bounds(building.as_ref()),
+			Self::WizardsTower(building, _) => building.scene_bounds(),
+			Self::SkybridgeHall(building, _) => building_bounds(building.as_ref()),
 		}
 	}
 

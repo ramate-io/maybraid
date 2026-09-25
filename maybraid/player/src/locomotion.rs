@@ -130,10 +130,10 @@ mod tests {
 
 	#[test]
 	fn running_leap_uses_leap_clip() {
-		let jump = Jumping::start(6.0);
+		let jump = Jumping::start(MOVE_SPEED);
 		assert!(jump.leaping);
 		assert_eq!(
-			locomotion_clip(RigSkeletonKind::Humanoid, Some(&jump), 6.0).id(),
+			locomotion_clip(RigSkeletonKind::Humanoid, Some(&jump), MOVE_SPEED).id(),
 			AnimClip::leap().id()
 		);
 		assert_eq!(

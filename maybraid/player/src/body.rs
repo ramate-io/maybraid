@@ -7,8 +7,8 @@ use crozon_characters::LocomotionCapsule;
 use lod_avian::PhysicsInteractionLayer;
 use std::f32::consts::PI;
 
-pub(crate) const JOG_SPEED: f32 = 4.0; // ≤ LEAP_SPEED, walk / slow-run clip
-pub(crate) const MOVE_SPEED: f32 = 7.0; // sprint; run clip
+pub(crate) const JOG_SPEED: f32 = 6.0; // ≤ LEAP_SPEED, walk / slow-run clip
+pub(crate) const MOVE_SPEED: f32 = 10.5; // sprint; run clip
 pub(crate) const MOVE_ACCEL: f32 = 40.0;
 /// Grounded idle brake toward rest along the walk plane (matches vegetation).
 pub(crate) const MOVE_BRAKE: f32 = 50.0;
@@ -89,7 +89,7 @@ pub struct Jumping {
 }
 
 /// Horizontal speed at which a jump is a running leap rather than a standing hop.
-pub const LEAP_SPEED: f32 = 5.0;
+pub const LEAP_SPEED: f32 = 7.5;
 const JUMP_TAKEOFF_DURATION: f32 = 0.14;
 const JUMP_LAND_DURATION: f32 = 0.24;
 const FAILED_HOP_SECONDS: f32 = 0.05;
@@ -362,6 +362,12 @@ pub fn ground_plane_for_wish(
 	None
 }
 
+/// Stick throttle carried by a wish's XZ length, capped at full deflection.
+/// NPC path wishes are unit length, so NPCs drive at the full cap.
+pub(crate) fn wish_throttle(wish: Vec3) -> f32 {
+	Vec2::new(wish.x, wish.z).length().min(1.0)
+}
+
 /// Unit drive for a movement wish. Compass heading on the contact plane.
 ///
 /// Wish Y is ignored so a raised waypoint cannot become a launch vector. No
@@ -408,7 +414,7 @@ fn control_ground_velocity(
 		return;
 	}
 	let tangent = **velocity - normal * velocity.dot(normal);
-	let target = wish_on_ground(wish, Some(normal)) * max_speed;
+	let target = wish_on_ground(wish, Some(normal)) * max_speed * wish_throttle(wish);
 	let rate = if target.length_squared() > 1e-8 { accel } else { MOVE_BRAKE };
 	**velocity = move_toward(tangent, target, rate * dt);
 }
@@ -420,12 +426,13 @@ fn control_air_velocity(
 	dt: f32,
 	max_speed: f32,
 ) {
+	let throttle = wish_throttle(wish);
 	let wish = Vec3::new(wish.x, 0.0, wish.z).normalize_or_zero();
 	if wish.length_squared() < 1e-8 {
 		return;
 	}
 	let horizontal = Vec3::new(velocity.x, 0.0, velocity.z);
-	let next = move_toward(horizontal, wish * max_speed, accel * AIR_CONTROL * dt);
+	let next = move_toward(horizontal, wish * max_speed * throttle, accel * AIR_CONTROL * dt);
 	velocity.x = next.x;
 	velocity.z = next.z;
 }
@@ -551,6 +558,16 @@ mod tests {
 	}
 
 	#[test]
+	fn half_stick_jogs_at_half_the_cap() {
+		let mut velocity = LinearVelocity(Vec3::ZERO);
+		control_ground_velocity(&mut velocity, Vec3::X * 0.5, MOVE_ACCEL, 1.0, Vec3::Y, JOG_SPEED);
+		assert!((velocity.x - JOG_SPEED * 0.5).abs() < 1e-4, "{velocity:?}");
+		let mut velocity = LinearVelocity(Vec3::ZERO);
+		control_ground_velocity(&mut velocity, Vec3::X * 3.0, MOVE_ACCEL, 1.0, Vec3::Y, JOG_SPEED);
+		assert!((velocity.x - JOG_SPEED).abs() < 1e-4, "over-unit wishes stay at the cap");
+	}
+
+	#[test]
 	fn sprint_ground_drive_saturates_at_move_speed() {
 		let mut velocity = LinearVelocity(Vec3::ZERO);
 		control_ground_velocity(&mut velocity, Vec3::X, MOVE_ACCEL, 1.0, Vec3::Y, MOVE_SPEED);
@@ -653,7 +670,7 @@ mod tests {
 
 	#[test]
 	fn leaving_the_ground_during_takeoff_launches() {
-		let mut jump = Jumping::start(6.0);
+		let mut jump = Jumping::start(MOVE_SPEED);
 		let mut velocity = Vec3::ZERO;
 		assert!(jump.leaping);
 		assert!(!tick_jump(&mut jump, false, &mut velocity, 8.0, 0.016));
@@ -695,7 +712,7 @@ mod tests {
 	#[test]
 	fn airborne_wish_stays_xz() {
 		let mut velocity = LinearVelocity(Vec3::new(0.0, -5.0, 0.0));
-		control_air_velocity(&mut velocity, Vec3::new(1.0, 4.0, 0.0), MOVE_ACCEL, 1.0, MOVE_SPEED);
+		control_air_velocity(&mut velocity, Vec3::new(1.0, 4.0, 0.0), MOVE_ACCEL, 2.0, MOVE_SPEED);
 		assert!((velocity.y + 5.0).abs() < 1e-4);
 		assert!((velocity.x - MOVE_SPEED).abs() < 1e-4, "{velocity:?}");
 	}

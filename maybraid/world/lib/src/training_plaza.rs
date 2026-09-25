@@ -20,7 +20,8 @@ use richmond_building_physics::{BUILDING_FRICTION, spawn_building_walk_colliders
 use richmond_buildings::wall_demo::TerrainPerimeterWall;
 use richmond_development_models::{
 	DEVELOPMENT_CELL_SIZE, DevelopmentCell, DevelopmentConfig, DevelopmentEntryStore,
-	DevelopmentFinish, DevelopmentHosts, DevelopmentKind, PadParams, TerrainWithPads,
+	DevelopmentFinish, DevelopmentHost, DevelopmentHosts, DevelopmentKind, PadParams,
+	TerrainWithPads,
 };
 
 use crate::PlayerSpawnXz;
@@ -36,14 +37,29 @@ const TRAINING_ARENA_MAX_HALF_M: f32 = 128.0;
 /// Flatten runs under the wall so its base never meets the ease slope.
 const TRAINING_COURTYARD_OVERHANG_M: f32 = 3.0;
 const TRAINING_COURTYARD_EASE_M: f32 = 24.0;
-/// Two brawler mobs flank the player along the courtyard band.
-const TRAINING_MOBS: usize = 2;
-/// Brawler rosters roll 6–12; Training keeps the floor so both mobs fit the band.
-const TRAINING_MOB_MEMBERS: usize = 6;
-const TRAINING_MEMBER_SPACING_M: f32 = 3.0;
-/// FFA player clearance: nearest brawler this far along the band.
+/// FFA headcount, split across one Brawler squad per development POI.
+const TRAINING_ROSTER: usize = 16;
+const TRAINING_MIN_SQUADS: usize = 2;
+const TRAINING_MAX_SQUADS: usize = 4;
+/// Sunflower scale: neighbours land ≳ 2.8 m apart, clear of agent separation.
+const TRAINING_SQUAD_SPREAD_M: f32 = 1.6;
+const GOLDEN_ANGLE: f32 = 2.399_963;
+/// Squads try rings from just off their POI's building outward.
+const TRAINING_POI_STANDOFF_M: f32 = 2.0;
+const TRAINING_RING_STEP_M: f32 = 3.0;
+const TRAINING_RING_STEPS: usize = 6;
+const TRAINING_RING_BEARINGS: usize = 24;
+/// Keeps capsules off building walls and the perimeter wall.
+const TRAINING_OBSTACLE_MARGIN_M: f32 = 1.5;
+/// Each squad starts as its own knot of fighting.
+const TRAINING_SQUAD_GAP_M: f32 = 8.0;
+/// FFA player clearance: nearest brawler this far from the seat.
 const TRAINING_PLAYER_CLEARANCE_M: f32 = 10.0;
 const TRAINING_MOB_SEED: f32 = 42.0;
+/// Seed stride for extra Brawler rolls when a squad outgrows its roster.
+const TRAINING_SPARE_ROLL: f32 = 100.0;
+/// Hosts sharing one POI (Les Halles storeys) merge within this.
+const TRAINING_POI_MERGE_M: f32 = 1.0;
 
 /// The development, roster, and wall have been stamped for this Training session.
 #[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -74,26 +90,117 @@ pub(crate) struct TrainingArena {
 	center: Vec2,
 	/// World-axis half extents of the wall rectangle.
 	half: Vec2,
+	/// Development footprint half extents, capped at the wall.
+	footprint: Vec2,
+	/// Courtyard band midline half extents, between the footprint and the wall.
+	band: Vec2,
 	plaza_y: f32,
 	player: Vec3,
 	mobs: Vec<TrainingMob>,
 }
 
-/// One brawler mob laid out along the courtyard band.
+/// Development building rects and POI anchors, in world XZ.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) struct TrainingSite {
+	obstacles: Vec<(Vec2, Vec2)>,
+	/// POI center and the rect of the building(s) it pins.
+	pois: Vec<(Vec2, (Vec2, Vec2))>,
+}
+
+impl TrainingSite {
+	/// Host rects are clipped to the development footprint: some storey
+	/// bounds overhang the pad by tens of metres.
+	fn of_hosts(hosts: &[DevelopmentHost], center: Vec2, footprint: Vec2) -> Self {
+		let (lo, hi) = (center - footprint, center + footprint);
+		let mut site = Self::default();
+		for host in hosts {
+			let transform = host.transform();
+			let (min, max) = Self::world_rect(&transform, host.local_bounds());
+			let (min, max) = (min.clamp(lo, hi), max.clamp(lo, hi));
+			if min.cmpge(max).any() {
+				continue;
+			}
+			site.obstacles.push((min, max));
+			if host.discoverable_place().is_some() {
+				site.add_poi(transform.translation.xz().clamp(min, max), (min, max));
+			}
+		}
+		site
+	}
+
+	/// One building covering `footprint`, with its POI at the center.
+	#[cfg(test)]
+	fn single(center: Vec2, footprint: Vec2) -> Self {
+		let rect = (center - footprint, center + footprint);
+		let mut site = Self { obstacles: vec![rect], pois: Vec::new() };
+		site.add_poi(center, rect);
+		site
+	}
+
+	fn add_poi(&mut self, at: Vec2, rect: (Vec2, Vec2)) {
+		match self.pois.iter_mut().find(|(poi, _)| poi.distance(at) < TRAINING_POI_MERGE_M) {
+			Some((_, (min, max))) => {
+				*min = min.min(rect.0);
+				*max = max.max(rect.1);
+			}
+			None => self.pois.push((at, rect)),
+		}
+	}
+
+	fn blocked(&self, at: Vec2) -> bool {
+		let margin = Vec2::splat(TRAINING_OBSTACLE_MARGIN_M);
+		self.obstacles
+			.iter()
+			.any(|(min, max)| at.cmpgt(*min - margin).all() && at.cmplt(*max + margin).all())
+	}
+
+	fn world_rect(transform: &Transform, bounds: Aabb3d) -> (Vec2, Vec2) {
+		let (lo, hi) = (Vec3::from(bounds.min), Vec3::from(bounds.max));
+		let mut min = Vec2::splat(f32::INFINITY);
+		let mut max = Vec2::splat(f32::NEG_INFINITY);
+		for (x, z) in [(lo.x, lo.z), (hi.x, lo.z), (lo.x, hi.z), (hi.x, hi.z)] {
+			let at = transform.transform_point(Vec3::new(x, 0.0, z)).xz();
+			min = min.min(at);
+			max = max.max(at);
+		}
+		(min, max)
+	}
+}
+
+/// One Brawler squad seated around a spot near a POI.
 #[derive(Clone, Debug, PartialEq)]
 struct TrainingMob {
-	/// Host on the plaza surface.
+	/// Host on the plaza surface, at the squad's seat.
 	host: Vec3,
 	/// Member feet XZ, in roster slot order.
 	members: Vec<Vec2>,
 }
 
 impl TrainingMob {
-	/// Brawler mob whose first members stand at [`Self::members`]. Brawler
+	fn sunflower(seat: Vec2, size: usize) -> Vec<Vec2> {
+		(0..size)
+			.map(|slot| {
+				let radius = TRAINING_SQUAD_SPREAD_M * (slot as f32 + 0.5).sqrt();
+				seat + Vec2::from_angle(slot as f32 * GOLDEN_ANGLE) * radius
+			})
+			.collect()
+	}
+
+	fn spread(size: usize) -> f32 {
+		TRAINING_SQUAD_SPREAD_M * (size.max(1) as f32 - 0.5).sqrt()
+	}
+
+	/// Brawler mob whose members stand at [`Self::members`]. Brawler
 	/// affiliations join and antagonize the FFA group, so members fight each
-	/// other, the other mob, and the player.
+	/// other, the other squads, and the player.
 	fn scene(&self, num: f32) -> MobScene {
 		let mut mob = Mob::of_kind(MobKind::Brawler, num);
+		let mut roll = 1.0;
+		while mob.roster.members.len() < self.members.len() {
+			let spare = Mob::of_kind(MobKind::Brawler, num + roll * TRAINING_SPARE_ROLL);
+			mob.roster.members.extend(spare.roster.members);
+			roll += 1.0;
+		}
 		mob.roster.members.truncate(self.members.len());
 		for (member, xz) in mob.roster.members.iter_mut().zip(&self.members) {
 			let offset = *xz - self.host.xz();
@@ -104,34 +211,149 @@ impl TrainingMob {
 }
 
 impl TrainingArena {
-	/// Arena around `footprint` (world-axis half extents). The player sits due
-	/// south on the band midline, and one brawler mob runs along the band on
-	/// either side from the FFA clearance outward.
+	/// Walled courtyard around `footprint` (world-axis half extents). The
+	/// player defaults to the south band midpoint until [`Self::with_roster`].
 	fn around(center: Vec2, footprint: Vec2, plaza_y: f32) -> Self {
 		let half = (footprint + Vec2::splat(TRAINING_ARENA_MARGIN_M))
 			.min(Vec2::splat(TRAINING_ARENA_MAX_HALF_M));
-		let band = (footprint.min(half) + half) * 0.5;
-		let on_band = |arc: f32| center + Self::midline_point(band, arc);
-		let player = on_band(0.0);
+		let footprint = footprint.min(half);
+		let band = (footprint + half) * 0.5;
+		let player = center + Self::midline_point(band, 0.0);
 		let player = Vec3::new(player.x, plaza_y + capsule_spawn_height(), player.y);
-		let mobs = (0..TRAINING_MOBS)
-			.map(|mob| {
-				let side = if mob % 2 == 0 { 1.0 } else { -1.0 };
-				let arcs: Vec<f32> = (0..TRAINING_MOB_MEMBERS)
-					.map(|slot| {
-						side * (TRAINING_PLAYER_CLEARANCE_M
-							+ slot as f32 * TRAINING_MEMBER_SPACING_M)
-					})
-					.collect();
-				let mid = arcs.iter().sum::<f32>() / arcs.len() as f32;
-				let host = on_band(mid);
-				TrainingMob {
-					host: Vec3::new(host.x, plaza_y, host.y),
-					members: arcs.into_iter().map(on_band).collect(),
-				}
+		Self { center, half, footprint, band, plaza_y, player, mobs: Vec::new() }
+	}
+
+	/// One Brawler squad per POI (2–4 squads, [`TRAINING_ROSTER`] in all),
+	/// each on the first open ring just outside its POI's building. A POI
+	/// that seats two squads puts the second on its far side. The player sits
+	/// at FFA clearance from the first squad.
+	fn with_roster(mut self, site: &TrainingSite) -> Self {
+		let fallback = [(self.center, (self.center, self.center))];
+		let pois = if site.pois.is_empty() { &fallback[..] } else { &site.pois[..] };
+		let squads = pois.len().clamp(TRAINING_MIN_SQUADS, TRAINING_MAX_SQUADS);
+		let mut player = None;
+		for squad in 0..squads {
+			let (poi, building) = pois[squad % pois.len()];
+			let bearing = std::f32::consts::PI * (squad / pois.len()) as f32;
+			let size = TRAINING_ROSTER / squads + usize::from(squad < TRAINING_ROSTER % squads);
+			let (seat, members) = self.seat_squad(site, poi, building, bearing, size, player);
+			self.mobs.push(TrainingMob { host: Vec3::new(seat.x, self.plaza_y, seat.y), members });
+			if player.is_none() {
+				player = Some(self.seat_player(site, poi));
+			}
+		}
+		if let Some(at) = player {
+			self.player = Vec3::new(at.x, self.plaza_y + capsule_spawn_height(), at.y);
+		}
+		self
+	}
+
+	fn seat_squad(
+		&self,
+		site: &TrainingSite,
+		poi: Vec2,
+		building: (Vec2, Vec2),
+		bearing: f32,
+		size: usize,
+		player: Option<Vec2>,
+	) -> (Vec2, Vec<Vec2>) {
+		let taken: Vec<Vec2> = self.mobs.iter().flat_map(|mob| mob.members.clone()).collect();
+		let fits = |seat: Vec2| {
+			let members = TrainingMob::sunflower(seat, size);
+			let clear = members.iter().all(|at| {
+				self.open(site, *at)
+					&& taken.iter().all(|other| at.distance(*other) >= TRAINING_SQUAD_GAP_M)
+					&& player.is_none_or(|p| at.distance(p) >= TRAINING_PLAYER_CLEARANCE_M)
+			});
+			clear.then_some((seat, members))
+		};
+		let standoff =
+			TRAINING_POI_STANDOFF_M + TRAINING_OBSTACLE_MARGIN_M + TrainingMob::spread(size);
+		Self::rect_rings(poi, building, standoff, bearing)
+			.chain(self.band_seats(poi))
+			.find_map(fits)
+			.unwrap_or_else(|| {
+				let seat = self.band_seats(poi).next().unwrap_or(poi);
+				(seat, TrainingMob::sunflower(seat, size))
+			})
+	}
+
+	/// Beside the first squad, along its ring, at FFA clearance from every member.
+	fn seat_player(&self, site: &TrainingSite, poi: Vec2) -> Vec2 {
+		let Some(squad) = self.mobs.first() else {
+			return self.player.xz();
+		};
+		let seat = squad.host.xz();
+		let outward = (seat - poi).to_angle() + std::f32::consts::FRAC_PI_2;
+		let ring = TRAINING_PLAYER_CLEARANCE_M + TrainingMob::spread(squad.members.len());
+		Self::rings(seat, ring, outward)
+			.find(|at| {
+				self.open(site, *at)
+					&& squad
+						.members
+						.iter()
+						.all(|member| member.distance(*at) >= TRAINING_PLAYER_CLEARANCE_M)
+			})
+			.unwrap_or(self.player.xz())
+	}
+
+	/// Ring seats around `center` from `radius` outward, fanning both ways
+	/// from `bearing`.
+	fn rings(center: Vec2, radius: f32, bearing: f32) -> impl Iterator<Item = Vec2> {
+		(0..TRAINING_RING_STEPS).flat_map(move |ring| {
+			let radius = radius + ring as f32 * TRAINING_RING_STEP_M;
+			Self::fan(bearing).map(move |dir| center + dir * radius)
+		})
+	}
+
+	/// Seats on `building` grown by `standoff` and then ring by ring, cast
+	/// from `poi` along bearings fanning both ways from `bearing`.
+	fn rect_rings(
+		poi: Vec2,
+		(min, max): (Vec2, Vec2),
+		standoff: f32,
+		bearing: f32,
+	) -> impl Iterator<Item = Vec2> {
+		(0..TRAINING_RING_STEPS).flat_map(move |ring| {
+			let grow = Vec2::splat(standoff + ring as f32 * TRAINING_RING_STEP_M);
+			let (lo, hi) = (min - grow, max + grow);
+			Self::fan(bearing).map(move |dir| {
+				let exit = |d: f32, p: f32, lo: f32, hi: f32| match d {
+					d if d > 1e-6 => (hi - p) / d,
+					d if d < -1e-6 => (lo - p) / d,
+					_ => f32::INFINITY,
+				};
+				let t = exit(dir.x, poi.x, lo.x, hi.x).min(exit(dir.y, poi.y, lo.y, hi.y));
+				poi + dir * t
+			})
+		})
+	}
+
+	fn fan(bearing: f32) -> impl Iterator<Item = Vec2> {
+		let step = std::f32::consts::TAU / TRAINING_RING_BEARINGS as f32;
+		(0..TRAINING_RING_BEARINGS as i32).map(move |fan| {
+			let turn = (fan + 1) / 2 * if fan % 2 == 0 { 1 } else { -1 };
+			Vec2::from_angle(bearing + turn as f32 * step)
+		})
+	}
+
+	/// Courtyard band midline seats, nearest `poi` first.
+	fn band_seats(&self, poi: Vec2) -> impl Iterator<Item = Vec2> {
+		let perimeter = 4.0 * (self.band.x + self.band.y);
+		let stations = (perimeter / TRAINING_RING_STEP_M).ceil().max(1.0) as usize;
+		let mut seats: Vec<Vec2> = (0..stations)
+			.map(|station| {
+				let arc = station as f32 * TRAINING_RING_STEP_M;
+				self.center + Self::midline_point(self.band, arc)
 			})
 			.collect();
-		Self { center, half, plaza_y, player, mobs }
+		seats.sort_by(|a, b| a.distance_squared(poi).total_cmp(&b.distance_squared(poi)));
+		seats.into_iter()
+	}
+
+	fn open(&self, site: &TrainingSite, at: Vec2) -> bool {
+		let inner = self.half - Vec2::splat(TRAINING_OBSTACLE_MARGIN_M);
+		(at - self.center).abs().cmplt(inner).all() && !site.blocked(at)
 	}
 
 	/// Walk `arc` metres counter-clockwise (seen from above, +X first) from
@@ -164,9 +386,15 @@ impl TrainingArena {
 		self.half + Vec2::splat(TRAINING_COURTYARD_OVERHANG_M)
 	}
 
+	/// Toward the nearest squad, so the fight starts on screen.
 	fn player_facing(&self) -> Vec3 {
-		let toward = Vec3::new(self.center.x - self.player.x, 0.0, self.center.y - self.player.z);
+		let target = self.mobs.first().map_or(self.center, |mob| mob.host.xz());
+		let toward = Vec3::new(target.x - self.player.x, 0.0, target.y - self.player.z);
 		toward.try_normalize().unwrap_or(Vec3::Z)
+	}
+
+	fn brawlers(&self) -> usize {
+		self.mobs.iter().map(|mob| mob.members.len()).sum()
 	}
 }
 
@@ -204,10 +432,19 @@ pub(crate) fn mount_training_plaza(
 		commands.insert_resource(TrainingPlazaMounted);
 		return;
 	};
-	info!(target: "world.training", "stamped {kind:?} on the Training patch");
+	let hosts = built.hosts();
+	let site = TrainingSite::of_hosts(&hosts, arena.center, arena.footprint);
+	let arena = arena.with_roster(&site);
+	info!(
+		target: "world.training",
+		"stamped {kind:?} on the Training patch: {} brawlers in {} squads around {} POIs",
+		arena.brawlers(),
+		arena.mobs.len(),
+		site.pois.len(),
+	);
 	let cell_id = Id::from_cell(filled.cell);
 	let terrain_ids = stamp_training_terrain(&mut commands, &store, &mut developments, &filled);
-	for host in built.hosts() {
+	for host in &hosts {
 		for entity in host.spawn(&mut commands) {
 			commands.entity(entity).insert(TrainingPlaza);
 		}
@@ -508,11 +745,32 @@ mod tests {
 			.flat_map(|mob| mob.members.iter().map(|xz| Vec3::new(xz.x, arena.plaza_y, xz.y)))
 	}
 
+	fn seated(center: Vec2, footprint: Vec2, plaza_y: f32) -> TrainingArena {
+		TrainingArena::around(center, footprint, plaza_y)
+			.with_roster(&TrainingSite::single(center, footprint))
+	}
+
+	/// Four huts spread over a 60 m pad, each with its own POI.
+	fn hamlet() -> (Vec2, TrainingSite) {
+		let footprint = Vec2::splat(30.0);
+		let mut site = TrainingSite::default();
+		for at in [(-18.0, -18.0), (18.0, -18.0), (-18.0, 18.0), (18.0, 18.0)].map(Vec2::from) {
+			let rect = (at - Vec2::splat(5.0), at + Vec2::splat(5.0));
+			site.obstacles.push(rect);
+			site.add_poi(at, rect);
+		}
+		(footprint, site)
+	}
+
+	fn nearest(from: Vec2, members: impl Iterator<Item = Vec2>) -> f32 {
+		members.map(|at| at.distance(from)).fold(f32::INFINITY, f32::min)
+	}
+
 	#[test]
 	fn everyone_spawns_inside_the_wall_and_outside_the_building() {
 		let footprint = Vec2::new(36.0, 28.0);
-		let arena = TrainingArena::around(Vec2::ZERO, footprint, 10.0);
-		assert_eq!(arena.mobs.len(), TRAINING_MOBS);
+		let arena = seated(Vec2::ZERO, footprint, 10.0);
+		assert_eq!(arena.brawlers(), TRAINING_ROSTER);
 		for at in std::iter::once(arena.player)
 			.chain(member_feet(&arena))
 			.chain(arena.mobs.iter().map(|mob| mob.host))
@@ -523,35 +781,77 @@ mod tests {
 	}
 
 	#[test]
-	fn brawler_mobs_flank_the_player_at_close_quarters() {
-		let arena = TrainingArena::around(Vec2::ZERO, Vec2::new(36.0, 36.0), 0.0);
-		let player = arena.player.with_y(0.0);
-		for mob in &arena.mobs {
-			let nearest = mob
-				.members
-				.iter()
-				.map(|xz| xz.distance(player.xz()))
-				.fold(f32::INFINITY, f32::min);
-			assert!(
-				(TRAINING_PLAYER_CLEARANCE_M - 1e-3..=14.0).contains(&nearest),
-				"nearest {nearest}"
-			);
-			for xz in &mob.members {
-				assert!(xz.distance(player.xz()) < 30.0, "{xz} is too far for close quarters");
+	fn one_poi_seats_two_squads_on_opposite_sides() {
+		let arena = seated(Vec2::ZERO, Vec2::splat(36.0), 0.0);
+		assert_eq!(arena.mobs.len(), TRAINING_MIN_SQUADS);
+		let (a, b) = (arena.mobs[0].host.xz(), arena.mobs[1].host.xz());
+		assert!(a.normalize().dot(b.normalize()) < -0.5, "squads at {a} and {b}");
+	}
+
+	#[test]
+	fn hamlet_seats_a_squad_beside_every_poi() {
+		let (footprint, site) = hamlet();
+		let arena = TrainingArena::around(Vec2::ZERO, footprint, 0.0).with_roster(&site);
+		assert_eq!(arena.mobs.len(), TRAINING_MAX_SQUADS);
+		assert!((12..=16).contains(&arena.brawlers()));
+		for (mob, (poi, (min, max))) in arena.mobs.iter().zip(&site.pois) {
+			let spread = TrainingMob::spread(mob.members.len());
+			let far = TRAINING_POI_STANDOFF_M
+				+ TRAINING_OBSTACLE_MARGIN_M
+				+ spread + TRAINING_RING_STEPS as f32 * TRAINING_RING_STEP_M;
+			let (mid, extent) = ((*min + *max) * 0.5, (*max - *min) * 0.5);
+			let off = ((mob.host.xz() - mid).abs() - extent).max(Vec2::ZERO);
+			assert!(off.length() <= far, "squad {} is {off} off POI {poi}'s building", mob.host);
+			for at in &mob.members {
+				assert!(arena.open(&site, *at), "{at} is in a building or the wall");
 			}
 		}
-		let east = arena.mobs[0].host.x - player.x;
-		let west = arena.mobs[1].host.x - player.x;
-		assert!(east > 0.0 && west < 0.0, "mobs should sit on either side: {east}, {west}");
+	}
+
+	#[test]
+	fn squads_keep_apart_and_the_player_is_at_close_quarters() {
+		let (footprint, site) = hamlet();
+		for arena in [
+			seated(Vec2::ZERO, Vec2::new(36.0, 28.0), 0.0),
+			TrainingArena::around(Vec2::ZERO, footprint, 0.0).with_roster(&site),
+		] {
+			for (i, a) in arena.mobs.iter().enumerate() {
+				for b in &arena.mobs[i + 1..] {
+					let gap = a.members.iter().map(|at| nearest(*at, b.members.iter().copied()));
+					let gap = gap.fold(f32::INFINITY, f32::min);
+					assert!(gap >= TRAINING_SQUAD_GAP_M - 1e-3, "squads overlap: {gap}");
+				}
+			}
+			let player = arena.player.xz();
+			let all = arena.mobs.iter().flat_map(|mob| mob.members.iter().copied());
+			let closest = nearest(player, all);
+			assert!(
+				(TRAINING_PLAYER_CLEARANCE_M - 1e-3..=20.0).contains(&closest),
+				"nearest brawler {closest}"
+			);
+			let first = nearest(player, arena.mobs[0].members.iter().copied());
+			assert!(first <= 20.0, "first squad {first} m away");
+			let toward = (arena.mobs[0].host.xz() - player).normalize();
+			assert!(arena.player_facing().xz().dot(toward) > 0.99, "player should face squad 0");
+		}
+	}
+
+	#[test]
+	fn scene_pads_a_squad_past_the_rolled_roster() {
+		let seat = Vec2::new(40.0, 0.0);
+		let members = TrainingMob::sunflower(seat, 14);
+		let mob = TrainingMob { host: Vec3::new(seat.x, 0.0, seat.y), members };
+		let scene = mob.scene(TRAINING_MOB_SEED);
+		assert_eq!(scene.mob.roster.members.len(), 14);
 	}
 
 	#[test]
 	fn mob_scene_seats_members_where_the_arena_planned() {
-		let arena = TrainingArena::around(Vec2::ZERO, Vec2::new(30.0, 30.0), 4.0);
+		let arena = seated(Vec2::ZERO, Vec2::new(30.0, 30.0), 4.0);
 		let mob = &arena.mobs[0];
 		let scene = mob.scene(TRAINING_MOB_SEED);
 		assert_eq!(scene.mob.kind, MobKind::Brawler);
-		assert_eq!(scene.mob.roster.members.len(), TRAINING_MOB_MEMBERS);
+		assert_eq!(scene.mob.roster.members.len(), mob.members.len());
 		for (member, xz) in scene.mob.roster.members.iter().zip(&mob.members) {
 			let feet = mob.host.xz() + member.offset.xz();
 			assert!(feet.distance(*xz) < 1e-3, "{feet} vs {xz}");
@@ -564,8 +864,7 @@ mod tests {
 	fn brawler_mobs_fight_each_other_and_the_player() {
 		use maybraid_mobs::player_affiliations;
 		use threat_intelligence::ThreatId;
-		let scene = TrainingArena::around(Vec2::ZERO, Vec2::splat(30.0), 0.0).mobs[0]
-			.scene(TRAINING_MOB_SEED);
+		let scene = seated(Vec2::ZERO, Vec2::splat(30.0), 0.0).mobs[0].scene(TRAINING_MOB_SEED);
 		let pack = &scene.mob.intelligence.affiliations;
 		let a = pack.for_member(ThreatId(1));
 		let b = pack.for_member(ThreatId(2));
@@ -577,9 +876,10 @@ mod tests {
 
 	#[test]
 	fn arena_stays_on_the_fine_patch_for_wide_developments() {
-		let arena = TrainingArena::around(Vec2::ZERO, Vec2::splat(120.0), 0.0);
+		let arena = seated(Vec2::ZERO, Vec2::splat(120.0), 0.0);
 		let reach = arena.courtyard_half() + Vec2::splat(TRAINING_COURTYARD_EASE_M);
 		assert!(reach.max_element() <= 160.0, "courtyard reach {reach}");
+		assert_eq!(arena.brawlers(), TRAINING_ROSTER);
 		for at in member_feet(&arena) {
 			assert!(inside(&arena, at));
 		}
@@ -604,6 +904,30 @@ mod tests {
 			let y = complex.modify_elevation(-15.0, sample.x, sample.y);
 			if (y - 20.0).abs() > 1e-3 {
 				return Err(format!("wall station {sample} sits at {y}, expected 20"));
+			}
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn les_halles_squads_stand_clear_of_its_buildings() -> Result<(), String> {
+		let cell = training_development_cell();
+		let config = DevelopmentConfig::from_world_seed(42);
+		let filled = DevelopmentCell::with_les_halles(cell, 20.0, &config);
+		let footprint = filled.footprint_half_extents().ok_or("footprint")?;
+		let built = filled.built(config.seed as i32).ok_or("built")?;
+		let arena = TrainingArena::around(Vec2::ZERO, footprint, 20.0);
+		let site = TrainingSite::of_hosts(&built.hosts(), arena.center, arena.footprint);
+		if site.pois.is_empty() {
+			return Err("Les Halles exposes no POI".into());
+		}
+		let arena = arena.with_roster(&site);
+		if arena.brawlers() != TRAINING_ROSTER {
+			return Err(format!("{} brawlers", arena.brawlers()));
+		}
+		for at in arena.mobs.iter().flat_map(|mob| mob.members.iter()).chain([&arena.player.xz()]) {
+			if !arena.open(&site, *at) {
+				return Err(format!("{at} is inside a building or the wall"));
 			}
 		}
 		Ok(())

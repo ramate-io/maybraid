@@ -146,7 +146,7 @@ pub(crate) fn apply_intents_to_movement(
 			let yaw = Quat::from_axis_angle(Vec3::Y, camera.yaw);
 			let forward = yaw * -Vec3::Z;
 			let right_dir = yaw * Vec3::X;
-			(right_dir * move_stick.x + forward * move_stick.y).normalize_or_zero()
+			(right_dir * move_stick.x + forward * move_stick.y).clamp_length_max(1.0)
 		} else {
 			Vec3::ZERO
 		}
