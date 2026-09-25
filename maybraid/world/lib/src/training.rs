@@ -4,17 +4,50 @@
 //! While [`TrainingGrounds`] is set, Durham presents a four-cell origin window,
 //! hopscotch stays off, the forest shrinks to one grove tile, and a Training
 //! pose is not written. [`crate::training_plaza`] stamps one seeded Richmond
-//! development onto that patch — pads first, then hosts — once the surface exists.
+//! development onto that patch — pads first, then hosts — once the whole
+//! window exists.
+//!
+//! Each session has one terrain collider owner. Discovery's is Richmond's
+//! urbanized presenter, which turning urbanization off tears down. Training's
+//! is Durham's raw FinePatch, except where Training's padded fills supersede
+//! it under the courtyard.
 
 use bevy::prelude::*;
 use chico_vegetation_on_terrain_playground::PlaygroundConfig;
 use durham_terrain_models::{
-	TerrainCellLayout, TerrainCoverage, TerrainLayoutPinned, TerrainPresentEnabled,
-	TerrainPresentPending, TerrainPresentationAssets, TerrainPresentationDirty,
-	TerrainPresenterState, WORLD_FINE_HALF_EXTENT_CELLS, playable_world_cell_layout,
-	retarget_presentation_assets, training_grounds_cell_layout,
+	TerrainCellLayout, TerrainColliderSystems, TerrainCoverage, TerrainFillSystems,
+	TerrainLayoutPinned, TerrainPresentEnabled, TerrainPresentPending, TerrainPresentationAssets,
+	TerrainPresentationDirty, TerrainPresenterState, WORLD_FINE_HALF_EXTENT_CELLS,
+	playable_world_cell_layout, retarget_presentation_assets, training_grounds_cell_layout,
 };
 use richmond_developments_on_terrain_playground::UrbanizationStreamingEnabled;
+
+use crate::control::{WorldSurfaceSet, update_world_surface_ready};
+use crate::training_plaza::{
+	clear_training_plaza, mount_training_plaza, promote_training_plaza,
+	supersede_training_raw_terrain,
+};
+
+/// Training Ground session: patch retarget, the stamped plaza, and the
+/// raw-to-padded hand-off under its courtyard.
+pub(crate) struct TrainingGroundPlugin;
+
+impl Plugin for TrainingGroundPlugin {
+	fn build(&self, app: &mut App) {
+		app.init_resource::<TrainingGrounds>().add_systems(
+			Update,
+			(
+				apply_training_grounds.before(TerrainFillSystems::Generate),
+				clear_training_terrain_present,
+				mount_training_plaza.in_set(WorldSurfaceSet).after(update_world_surface_ready),
+				(supersede_training_raw_terrain, promote_training_plaza)
+					.chain()
+					.after(TerrainColliderSystems::QueueMeshes),
+				clear_training_plaza,
+			),
+		);
+	}
+}
 
 /// Set by the game shell while Training Ground is the live session.
 #[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -165,6 +198,12 @@ mod tests {
 		assert!(fill.pin_layout);
 		assert!(!fill.urbanization);
 		assert_eq!(fill.forest_stream_radius, 0);
+	}
+
+	#[test]
+	fn plaza_waits_for_the_whole_patch() {
+		let store = durham_terrain_models::TerrainEntryStore::default();
+		assert!(!store.fills_layout(&training_grounds_cell_layout()));
 	}
 
 	#[test]

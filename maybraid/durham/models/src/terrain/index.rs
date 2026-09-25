@@ -2,7 +2,8 @@
 
 use crate::terrain::base_noise::BaseTerrainNoise;
 use crate::terrain::cell::{
-	cell_bounds, universal_bounds, BootstrapTerrainCellLayout, TerrainCellLayout,
+	cell_bounds, origin_cell_ids_for_layout, universal_bounds, BootstrapTerrainCellLayout,
+	TerrainCellLayout,
 };
 use crate::terrain::jersey::{
 	BootstrapCanyonHighPassControllerLayout, BootstrapCanyonLowPassControllerLayout,
@@ -43,7 +44,7 @@ use avian3d::prelude::*;
 use bevy::ecs::system::SystemParam;
 use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::prelude::*;
-use lod::gen::{Id, SpatialIndex, StorageStatus, TrackedId, Version};
+use lod::gen::{Id, OriginalId, SpatialIndex, StorageStatus, TrackedId, Version};
 use lod::lod_ref::LodRef;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -243,6 +244,14 @@ impl TerrainEntryStore {
 			.filter(|(_, entry)| region.intersects(&entry.bounds))
 			.map(|(id, _)| *id)
 			.collect()
+	}
+
+	/// Every origin cell of `layout`'s request window is stored. Generation
+	/// admits a few cells per frame, so a stamp read earlier misses the rest.
+	pub fn fills_layout(&self, layout: &TerrainCellLayout) -> bool {
+		origin_cell_ids_for_layout(layout, layout.request_region())
+			.into_iter()
+			.all(|OriginalId(id)| self.terrain.contains_key(&id))
 	}
 
 	pub fn water(&self, id: Id) -> Option<&Water> {

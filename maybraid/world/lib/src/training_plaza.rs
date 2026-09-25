@@ -6,8 +6,8 @@ use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use chico_vegetation_on_terrain_playground::{OffTerrainAnchor, Player};
 use durham_terrain_models::{
-	PresentedTerrainScene, TerrainCellLayout, TerrainEntryStore, TerrainTrimeshCollider,
-	WorldBaseTerrain,
+	PresentedTerrainScene, TerrainCellLayout, TerrainEntryStore, TerrainSuperseded,
+	TerrainTrimeshCollider, WorldBaseTerrain,
 };
 use lod::gen::Id;
 use maybraid_mobs::{Mob, MobKind, MobScene};
@@ -71,6 +71,12 @@ pub(crate) struct TrainingPlazaStamped {
 	cell_id: Id,
 	terrain_ids: Vec<Id>,
 	arena: TrainingArena,
+}
+
+impl TrainingPlazaStamped {
+	fn fills_ready(&self, cooked: usize) -> bool {
+		self.terrain_ids.is_empty() || cooked >= self.terrain_ids.len()
+	}
 }
 
 /// Stamped on Training fixtures so Leave can despawn them.
@@ -416,7 +422,9 @@ pub(crate) fn mount_training_plaza(
 	mut developments: ResMut<DevelopmentEntryStore>,
 	mut commands: Commands,
 ) {
-	if !grounds.0 || !ready.0 || mounted.is_some() || stamped.is_some() {
+	// A cell admitted after the stamp stays raw, unstamped hillside inside the courtyard.
+	let waiting = !grounds.0 || !ready.0 || !store.fills_layout(&layout);
+	if waiting || mounted.is_some() || stamped.is_some() {
 		return;
 	}
 	let cell = training_development_cell();
@@ -456,13 +464,40 @@ pub(crate) fn mount_training_plaza(
 	commands.insert_resource(TrainingPlazaStamped { cell_id, terrain_ids, arena });
 }
 
-/// Hide raw FinePatch cells once the pad-modulated meshes carry colliders.
+/// Once the padded fills carry colliders, every raw FinePatch cell they cover
+/// is hidden and superseded, including cells Durham re-presents later. A raw
+/// collider left under the courtyard is a second, unstamped floor.
+pub(crate) fn supersede_training_raw_terrain(
+	stamped: Option<Res<TrainingPlazaStamped>>,
+	ready_fills: Query<(), (With<TrainingPaddedFill>, With<TerrainTrimeshCollider>)>,
+	mut raw: Query<(Entity, &PresentedTerrainScene, &mut Visibility), Without<TerrainSuperseded>>,
+	mut commands: Commands,
+) {
+	let Some(stamped) = stamped else {
+		return;
+	};
+	if !stamped.fills_ready(ready_fills.iter().count()) {
+		return;
+	}
+	for (entity, presented, mut visibility) in &mut raw {
+		if !stamped.terrain_ids.contains(&presented.0) {
+			continue;
+		}
+		*visibility = Visibility::Hidden;
+		// The Durham strip runs in its own set; physics must not step with both floors.
+		commands
+			.entity(entity)
+			.insert(TerrainSuperseded)
+			.remove::<(Collider, RigidBody, TerrainTrimeshCollider)>();
+	}
+}
+
+/// Seat the roster and player once the padded fills carry colliders.
 pub(crate) fn promote_training_plaza(
 	grounds: Res<TrainingGrounds>,
 	stamped: Option<Res<TrainingPlazaStamped>>,
 	mounted: Option<Res<TrainingPlazaMounted>>,
 	ready_fills: Query<(), (With<TrainingPaddedFill>, With<TerrainTrimeshCollider>)>,
-	mut raw: Query<(Entity, &PresentedTerrainScene, &mut Visibility)>,
 	mut spawn_xz: ResMut<PlayerSpawnXz>,
 	mut commands: Commands,
 	player_ids: Query<Entity, With<Player>>,
@@ -481,15 +516,8 @@ pub(crate) fn promote_training_plaza(
 	let Some(stamped) = stamped else {
 		return;
 	};
-	if !stamped.terrain_ids.is_empty() && ready_fills.iter().count() < stamped.terrain_ids.len() {
+	if !stamped.fills_ready(ready_fills.iter().count()) {
 		return;
-	}
-	for (entity, presented, mut visibility) in &mut raw {
-		if !stamped.terrain_ids.contains(&presented.0) {
-			continue;
-		}
-		*visibility = Visibility::Hidden;
-		commands.entity(entity).remove::<(Collider, RigidBody, TerrainTrimeshCollider)>();
 	}
 	let arena = &stamped.arena;
 	spawn_xz.0 = Some(arena.player.xz());
@@ -520,9 +548,14 @@ pub(crate) fn clear_training_plaza(
 	brawler_hosts: Query<(), With<TrainingBrawler>>,
 	members: Query<(Entity, &MemberOf)>,
 	anchored: Query<Entity, (With<Player>, With<OffTerrainAnchor>)>,
+	mut superseded: Query<(Entity, &mut Visibility), With<TerrainSuperseded>>,
 ) {
 	if grounds.0 || (mounted.is_none() && stamped.is_none()) {
 		return;
+	}
+	for (entity, mut visibility) in &mut superseded {
+		*visibility = Visibility::Inherited;
+		commands.entity(entity).remove::<TerrainSuperseded>();
 	}
 	if let Some(stamped) = stamped.as_deref() {
 		developments.remove_cell(stamped.cell_id);
@@ -934,6 +967,37 @@ mod tests {
 	}
 
 	#[test]
+	fn raw_cells_under_the_courtyard_stop_colliding_once_the_pads_do()
+	-> Result<(), bevy::ecs::system::RunSystemError> {
+		use bevy::ecs::system::RunSystemOnce;
+		let covered = Id::from_cell(Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE));
+		let elsewhere = Id::from_cell(Aabb3d::from_min_max(Vec3::splat(500.0), Vec3::splat(501.0)));
+		let mut world = World::new();
+		world.insert_resource(TrainingPlazaStamped {
+			cell_id: covered,
+			terrain_ids: vec![covered],
+			arena: TrainingArena::around(Vec2::ZERO, Vec2::splat(30.0), 0.0),
+		});
+		let raw = world.spawn((PresentedTerrainScene(covered), Visibility::Inherited)).id();
+		let other = world.spawn((PresentedTerrainScene(elsewhere), Visibility::Inherited)).id();
+		let fill = world.spawn(TrainingPaddedFill).id();
+
+		world.run_system_once(supersede_training_raw_terrain)?;
+		assert!(world.get::<TerrainSuperseded>(raw).is_none(), "raw floors until pads cook");
+
+		world.entity_mut(fill).insert(TerrainTrimeshCollider);
+		world.run_system_once(supersede_training_raw_terrain)?;
+		assert!(world.get::<TerrainSuperseded>(raw).is_some());
+		assert_eq!(world.get::<Visibility>(raw), Some(&Visibility::Hidden));
+		assert!(world.get::<TerrainSuperseded>(other).is_none());
+
+		let respawned = world.spawn((PresentedTerrainScene(covered), Visibility::Inherited)).id();
+		world.run_system_once(supersede_training_raw_terrain)?;
+		assert!(world.get::<TerrainSuperseded>(respawned).is_some(), "re-presented raw cells too");
+		Ok(())
+	}
+
+	#[test]
 	fn leaving_training_drops_the_seat_anchor() -> Result<(), bevy::ecs::system::RunSystemError> {
 		use bevy::ecs::system::RunSystemOnce;
 		let mut world = World::new();
@@ -946,7 +1010,10 @@ mod tests {
 		let member = world.spawn(MemberOf { mob: host, slot: 0 }).id();
 		let stranger_host = world.spawn_empty().id();
 		let stranger = world.spawn(MemberOf { mob: stranger_host, slot: 0 }).id();
+		let raw = world.spawn((TerrainSuperseded, Visibility::Hidden)).id();
 		world.run_system_once(clear_training_plaza)?;
+		assert!(world.get::<TerrainSuperseded>(raw).is_none(), "raw cells get their floor back");
+		assert_eq!(world.get::<Visibility>(raw), Some(&Visibility::Inherited));
 		assert!(world.get::<OffTerrainAnchor>(player).is_none());
 		assert_eq!(world.resource::<PlayerSpawnXz>().0, None);
 		assert!(world.get_entity(host).is_err());

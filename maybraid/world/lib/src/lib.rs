@@ -202,21 +202,7 @@ impl Plugin for WorldPlugin {
 			.init_resource::<InventoryEditCameraFollow>()
 			.init_resource::<WorldSurfaceReady>()
 			.init_resource::<WorldSceneryVisible>()
-			.init_resource::<training::TrainingGrounds>()
-			.add_systems(
-				Update,
-				(
-					training::apply_training_grounds
-						.before(durham_terrain_models::TerrainFillSystems::Generate),
-					training::clear_training_terrain_present,
-					training_plaza::mount_training_plaza
-						.in_set(control::WorldSurfaceSet)
-						.after(control::update_world_surface_ready),
-					training_plaza::promote_training_plaza
-						.after(durham_terrain_models::TerrainColliderSystems::QueueMeshes),
-					training_plaza::clear_training_plaza,
-				),
-			)
+			.add_plugins(training::TrainingGroundPlugin)
 			.insert_resource(WorldMobHudEnabled::from_debug_chrome(self.debug_chrome))
 			.insert_resource(Bullseye { inner: 50.0, outer: WORLD_BULLSEYE_OUTER_M })
 			.insert_resource(OpenLattice {

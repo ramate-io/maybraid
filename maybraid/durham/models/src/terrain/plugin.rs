@@ -2,8 +2,8 @@
 
 use crate::terrain::cell::TerrainCellLayout;
 use crate::terrain::collider::{
-	queue_terrain_trimesh_colliders, TerrainColliderEpoch, TerrainColliderSystems,
-	TerrainFrictionConfig,
+	drop_superseded_terrain_colliders, queue_terrain_trimesh_colliders, TerrainColliderEpoch,
+	TerrainColliderSystems, TerrainFrictionConfig,
 };
 use crate::terrain::host::TerrainPresentEnabled;
 use crate::terrain::index::TerrainEntryStore;
@@ -70,7 +70,9 @@ impl Plugin for TerrainResourcesPlugin {
 			)
 			.add_systems(
 				Update,
-				queue_terrain_trimesh_colliders.in_set(TerrainColliderSystems::QueueMeshes),
+				(drop_superseded_terrain_colliders, queue_terrain_trimesh_colliders)
+					.chain()
+					.in_set(TerrainColliderSystems::QueueMeshes),
 			)
 			.add_systems(
 				PostUpdate,

@@ -54,7 +54,8 @@ pub use cell::{
 pub use chunk::cascade::CascadeChunk;
 pub use collider::{
 	terrain_collider_covers_xz, TerrainColliderEpoch, TerrainColliderMeshSource,
-	TerrainColliderSystems, TerrainFrictionConfig, TerrainTrimeshCollider, TERRAIN_FRICTION,
+	TerrainColliderSystems, TerrainFrictionConfig, TerrainSuperseded, TerrainTrimeshCollider,
+	TERRAIN_FRICTION,
 };
 pub use config::TerrainConfig;
 pub use host::{

@@ -271,20 +271,26 @@ impl Plugin for DevelopmentsOnTerrainPlugin {
 			Update,
 			FurnitureStreamSystems::Generate.after(generate_urbanization_developments),
 		);
+		// Stream and present still run while urbanization is off so a session
+		// that turns it off (Training) tears the urbanized terrain and hosts down
+		// instead of freezing them in place as a second terrain model.
 		app.add_systems(
 			Update,
 			(
 				sync_urbanization_pin,
 				stream_urbanization.before(LodGenerateSystems::Produce),
-				generate_urbanization_developments.after(LodGenerateSystems::Drain),
-				generate_urbanization_padded_terrain,
-				present_urbanization_hosts,
+				(
+					generate_urbanization_developments.after(LodGenerateSystems::Drain),
+					generate_urbanization_padded_terrain,
+					present_urbanization_hosts,
+				)
+					.chain()
+					.run_if(urbanization_streaming_enabled),
 				present_urbanization_padded_terrain,
 				sync_raw_terrain_replacements,
 			)
 				.chain()
 				.run_if(terrain_streaming_enabled)
-				.run_if(urbanization_streaming_enabled)
 				.before(LodPresentSystems::Produce)
 				.before(TerrainColliderSystems::QueueMeshes),
 		);
