@@ -18,6 +18,9 @@ target-speed motor as the vegetation capsule: 4 m/s jog / 7 m/s L3 sprint along
 the plane at 40 m/s² accel (50 m/s² idle brake), with 0.25× air control. A
 player [`Sprinting`](src/body.rs) marker (from `StartSprint` / `StopSprint`)
 selects the cap; left-trigger / RMB focus clears it. Iron ADS may stay on.
+[`CharacterStance`](src/stance.rs) squat / prone shrinks the motor hull through
+[`apply_locomotion_capsule`](src/body.rs), scales wish speed, and prefers held
+clips. Sprint stands first. **B** tap / hold writes the stance.
 Speed is framed in `dt`, not a per-frame multiply. Idle grounded motion brakes to rest along that
 plane so walkable grades do not slide when solver friction is zero.
 [`MotorTraction`](src/contact.rs) plus Avian

@@ -192,6 +192,25 @@ mod tests {
 	}
 
 	#[test]
+	fn windup_still_drops_the_armature() -> anyhow::Result<()> {
+		let mut rig = HumanoidV0Rig::imported();
+		let jump = default_jump();
+		let lengths = rig.segment_lengths();
+		let mid_windup = jump.timings(lengths).squat_descent_duration * 0.99;
+		let effects = jump.apply(&mut rig, mid_windup);
+		let Some(tf) = effects.r#move else {
+			return Err(anyhow::anyhow!("jump windup must keep Effects.move"));
+		};
+		if tf.translation.y >= 0.0 {
+			return Err(anyhow::anyhow!(
+				"windup drop should be negative Y, got {}",
+				tf.translation.y
+			));
+		}
+		Ok(())
+	}
+
+	#[test]
 	fn land_transition_blends_arms_from_fall() -> anyhow::Result<()> {
 		let mut rig = HumanoidV0Rig::imported();
 		crate::rigs::mix::seed_bind_pose(&mut rig);

@@ -1,10 +1,11 @@
-//! Move / jump / sprint from [`CharacterIntent`]. Look and use-item belong to other crates.
+//! Move / jump / sprint / stance from [`CharacterIntent`]. Look and use-item belong to other crates.
 
 use bevy::prelude::*;
 use maybraid_character_controller::CharacterIntent;
 
-use crate::body::{CharacterController, JumpWish, MoveWish, Sprinting};
+use crate::body::{CharacterController, JumpWish, Jumping, MoveWish, Sprinting};
 use crate::identity::{Player, PlayerLook};
+use crate::stance::{CharacterStance, StanceKind};
 
 const FOCUS_EPS: f32 = 1e-6;
 
@@ -13,7 +14,7 @@ pub(crate) fn apply_move_intents(
 	mut commands: Commands,
 	mut intents: MessageReader<CharacterIntent>,
 	mut wishes: Query<
-		(Entity, &mut MoveWish, &PlayerLook),
+		(Entity, &mut MoveWish, &PlayerLook, Option<&mut CharacterStance>, Option<&Jumping>),
 		(With<CharacterController>, With<Player>),
 	>,
 ) {
@@ -22,6 +23,8 @@ pub(crate) fn apply_move_intents(
 	let mut focusing = mouse.pressed(MouseButton::Right);
 	let mut start_sprint = false;
 	let mut stop_sprint = false;
+	let mut change_squat = false;
+	let mut change_prone = false;
 	for intent in intents.read() {
 		match *intent {
 			CharacterIntent::Move(value) => move_stick = value,
@@ -29,24 +32,62 @@ pub(crate) fn apply_move_intents(
 			CharacterIntent::Focus(value) if value > FOCUS_EPS => focusing = true,
 			CharacterIntent::StartSprint => start_sprint = true,
 			CharacterIntent::StopSprint => stop_sprint = true,
+			CharacterIntent::ChangeSquat => change_squat = true,
+			CharacterIntent::ChangeProne => change_prone = true,
 			_ => {}
 		}
 	}
 
-	for (entity, mut wish, look) in &mut wishes {
+	for (entity, mut wish, look, mut stance, jumping) in &mut wishes {
 		wish.0 = look_wish(look.yaw, move_stick);
+		let airborne = jumping.is_some_and(Jumping::airborne);
 		if jump {
 			commands.entity(entity).insert(JumpWish);
+		}
+		if !airborne && !start_sprint {
+			apply_stance_change(
+				entity,
+				stance.as_deref_mut(),
+				change_squat,
+				change_prone,
+				&mut commands,
+			);
 		}
 		if focusing {
 			commands.entity(entity).remove::<Sprinting>();
 		} else if start_sprint {
-			// Stance stand-up consumes this same insert once CharacterStance lands.
+			if let Some(stance) = stance.as_deref_mut() {
+				stance.stand();
+			} else {
+				commands.entity(entity).insert(CharacterStance::settled(StanceKind::Stand));
+			}
 			commands.entity(entity).insert(Sprinting);
 		} else if stop_sprint {
 			commands.entity(entity).remove::<Sprinting>();
 		}
 	}
+}
+
+fn apply_stance_change(
+	entity: Entity,
+	stance: Option<&mut CharacterStance>,
+	change_squat: bool,
+	change_prone: bool,
+	commands: &mut Commands,
+) {
+	if !change_squat && !change_prone {
+		return;
+	}
+	if let Some(stance) = stance {
+		if change_prone {
+			stance.change_prone();
+		} else {
+			stance.change_squat();
+		}
+		return;
+	}
+	let kind = if change_prone { StanceKind::Prone } else { StanceKind::Squat };
+	commands.entity(entity).insert(CharacterStance::settled(kind));
 }
 
 fn look_wish(yaw: f32, stick: Vec2) -> Vec3 {
@@ -71,7 +112,13 @@ mod tests {
 			.add_systems(Update, apply_move_intents);
 		let player = app
 			.world_mut()
-			.spawn((CharacterController, Player, MoveWish::default(), PlayerLook::default()))
+			.spawn((
+				CharacterController,
+				Player,
+				MoveWish::default(),
+				PlayerLook::default(),
+				CharacterStance::settled(StanceKind::Stand),
+			))
 			.id();
 		(app, player)
 	}
@@ -168,6 +215,61 @@ mod tests {
 		if app.world().get::<Sprinting>(player).is_some() {
 			return Err(anyhow!("RMB focus must drop Sprinting"));
 		}
+		Ok(())
+	}
+
+	#[test]
+	fn start_sprint_stands_and_stop_does_not_crouch() -> Result<()> {
+		let (mut app, player) = sprint_app();
+		app.world_mut()
+			.entity_mut(player)
+			.insert(CharacterStance::settled(StanceKind::Squat));
+		write_intents(&mut app, &[CharacterIntent::StartSprint]);
+		app.update();
+		let stance = app.world().get::<CharacterStance>(player).ok_or_else(|| anyhow!("stance"))?;
+		if stance.kind != StanceKind::Stand {
+			return Err(anyhow!("StartSprint should stand"));
+		}
+		if app.world().get::<Sprinting>(player).is_none() {
+			return Err(anyhow!("StartSprint should still grant Sprinting"));
+		}
+
+		write_intents(&mut app, &[CharacterIntent::StopSprint]);
+		app.update();
+		let stance = app.world().get::<CharacterStance>(player).ok_or_else(|| anyhow!("stance"))?;
+		if stance.kind != StanceKind::Stand {
+			return Err(anyhow!("StopSprint must not re-crouch"));
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn change_squat_toggles_and_prone_enters() -> Result<()> {
+		let (mut app, player) = sprint_app();
+		write_intents(&mut app, &[CharacterIntent::ChangeSquat]);
+		app.update();
+		assert_eq!(
+			app.world().get::<CharacterStance>(player).map(|stance| stance.kind),
+			Some(StanceKind::Squat)
+		);
+		write_intents(&mut app, &[CharacterIntent::ChangeSquat]);
+		app.update();
+		assert_eq!(
+			app.world().get::<CharacterStance>(player).map(|stance| stance.kind),
+			Some(StanceKind::Stand)
+		);
+		write_intents(&mut app, &[CharacterIntent::ChangeProne]);
+		app.update();
+		assert_eq!(
+			app.world().get::<CharacterStance>(player).map(|stance| stance.kind),
+			Some(StanceKind::Prone)
+		);
+		write_intents(&mut app, &[CharacterIntent::ChangeSquat]);
+		app.update();
+		assert_eq!(
+			app.world().get::<CharacterStance>(player).map(|stance| stance.kind),
+			Some(StanceKind::Squat)
+		);
 		Ok(())
 	}
 }

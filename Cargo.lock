@@ -6064,8 +6064,11 @@ dependencies = [
  "avian3d",
  "bevy",
  "crozon-characters",
+ "crozon-rigs",
+ "damage",
  "durham-terrain-models",
  "lod-avian",
+ "malo-animations",
  "maybraid-character-controller",
 ]
 

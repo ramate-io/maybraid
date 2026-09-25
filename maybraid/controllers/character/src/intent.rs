@@ -17,6 +17,10 @@ pub enum CharacterIntent {
 	StopSprint,
 	SwapPov,
 	Jump,
+	/// Tap **B** (release before the hold threshold). Toggles stand ↔ squat; prone steps to squat.
+	ChangeSquat,
+	/// Hold **B** across the stance threshold. Enters prone from stand or squat.
+	ChangeProne,
 	ExitInteraction,
 	StartInteraction,
 	/// Cycle the weapon queue (pad **Y** / keyboard **Y**).
@@ -42,6 +46,8 @@ impl CharacterIntent {
 			Self::StopSprint => "stop-sprint",
 			Self::SwapPov => "swap-pov",
 			Self::Jump => "jump",
+			Self::ChangeSquat => "change-squat",
+			Self::ChangeProne => "change-prone",
 			Self::ExitInteraction => "exit-interaction",
 			Self::StartInteraction => "start-interaction",
 			Self::SwapActive => "swap-active",

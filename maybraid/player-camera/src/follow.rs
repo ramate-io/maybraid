@@ -2,10 +2,14 @@
 
 use bevy::prelude::*;
 use bevy::transform::helper::TransformHelper;
+use crozon_characters::LocomotionCapsule;
 use crozon_characters::{
 	hide_socketed_parts, BoneMap, CharacterMembers, CharacterPartSlot, PartNode,
 };
-use player::{CameraFollow, PlayerCameraAim, PlayerCameraPose, PlayerLook, PlayerVisual};
+use player::{
+	CameraFollow, PlayerCameraAim, PlayerCameraPose, PlayerLook, PlayerVisual,
+	RestLocomotionCapsule,
+};
 
 use crate::look::{CameraController, CameraPov};
 use crate::FollowCamera;
@@ -13,7 +17,13 @@ use crate::FollowCamera;
 pub(crate) fn follow_character_camera(
 	time: Res<Time>,
 	players: Query<
-		(Entity, &PlayerCameraAim, &PlayerLook),
+		(
+			Entity,
+			&PlayerCameraAim,
+			&PlayerLook,
+			Option<&LocomotionCapsule>,
+			Option<&RestLocomotionCapsule>,
+		),
 		(With<CameraFollow>, Without<Camera3d>),
 	>,
 	visuals: Query<&CharacterMembers, With<PlayerVisual>>,
@@ -23,9 +33,10 @@ pub(crate) fn follow_character_camera(
 		Query<(&mut Transform, &mut CameraController, &FollowCamera), With<Camera3d>>,
 	)>,
 ) {
-	let Ok((player, aim, look)) = players.single() else {
+	let Ok((player, aim, look, live_hull, rest_hull)) = players.single() else {
 		return;
 	};
+	let height_scale = stance_height_scale(rest_hull, live_hull);
 	let current = transforms.p0();
 	let Ok(player) = current.compute_global_transform(player) else {
 		return;
@@ -52,10 +63,10 @@ pub(crate) fn follow_character_camera(
 
 	let mut pose = match controller.pov {
 		CameraPov::ThirdPerson => {
-			third_person_pose(player.translation(), yaw, look_rotation, follow)
+			third_person_pose(player.translation(), yaw, look_rotation, follow, height_scale)
 		}
 		CameraPov::FirstPerson => {
-			first_person_pose(player.translation(), head, look_rotation, follow)
+			first_person_pose(player.translation(), head, look_rotation, follow, height_scale)
 		}
 	};
 	if controller.pov == CameraPov::FirstPerson {
@@ -66,14 +77,31 @@ pub(crate) fn follow_character_camera(
 	*camera_transform = pose.transform();
 }
 
+fn stance_height_scale(
+	rest: Option<&RestLocomotionCapsule>,
+	live: Option<&LocomotionCapsule>,
+) -> f32 {
+	let Some(rest) = rest else {
+		return 1.0;
+	};
+	let Some(live) = live else {
+		return 1.0;
+	};
+	(live.half_height() / rest.0.half_height().max(1e-4)).clamp(0.15, 1.0)
+}
+
 fn third_person_pose(
 	player: Vec3,
 	yaw: Quat,
 	look_rotation: Quat,
 	follow: &FollowCamera,
+	height_scale: f32,
 ) -> PlayerCameraPose {
-	let offset = look_rotation * Vec3::new(0.0, 0.0, follow.distance) + Vec3::Y * follow.height;
-	let target = player + Vec3::Y * follow.look_height + yaw * Vec3::X * follow.shoulder_offset;
+	let offset = look_rotation * Vec3::new(0.0, 0.0, follow.distance)
+		+ Vec3::Y * follow.height * height_scale;
+	let target = player
+		+ Vec3::Y * follow.look_height * height_scale
+		+ yaw * Vec3::X * follow.shoulder_offset;
 	let mut pose = Transform::from_translation(target + offset);
 	pose.look_at(target, Vec3::Y);
 	PlayerCameraPose { translation: pose.translation, rotation: pose.rotation }
@@ -84,8 +112,10 @@ fn first_person_pose(
 	head: Option<Vec3>,
 	look_rotation: Quat,
 	follow: &FollowCamera,
+	height_scale: f32,
 ) -> PlayerCameraPose {
-	let head_translation = head.unwrap_or(player + Vec3::Y * (follow.height + follow.look_height));
+	let head_translation =
+		head.unwrap_or(player + Vec3::Y * (follow.height + follow.look_height) * height_scale);
 	PlayerCameraPose {
 		translation: head_translation + look_rotation * -Vec3::Z * follow.eye_forward,
 		rotation: look_rotation,

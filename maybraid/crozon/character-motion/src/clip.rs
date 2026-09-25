@@ -44,6 +44,8 @@ pub enum AnimId {
 	Soaring,
 	Flapping,
 	Jab,
+	Squat,
+	Prone,
 	LateralUndulation,
 	DorsoventralUndulation,
 }
@@ -64,6 +66,8 @@ impl AnimId {
 			Self::Soaring => 1.0,
 			Self::Flapping => 1.0,
 			Self::Jab => JAB_CYCLE_SPEED,
+			Self::Squat => 1.0,
+			Self::Prone => 1.0,
 			Self::LateralUndulation => 1.0,
 			Self::DorsoventralUndulation => 1.0,
 		}
@@ -197,6 +201,8 @@ pub enum AnimClip {
 	Soaring(Soaring),
 	Flapping(Flapping),
 	Jab(JabParams),
+	Squat,
+	Prone,
 	LateralUndulation(LateralUndulation),
 	DorsoventralUndulation(DorsoventralUndulation),
 }
@@ -217,6 +223,8 @@ impl AnimClip {
 			Self::Soaring(_) => AnimId::Soaring,
 			Self::Flapping(_) => AnimId::Flapping,
 			Self::Jab(_) => AnimId::Jab,
+			Self::Squat => AnimId::Squat,
+			Self::Prone => AnimId::Prone,
 			Self::LateralUndulation(_) => AnimId::LateralUndulation,
 			Self::DorsoventralUndulation(_) => AnimId::DorsoventralUndulation,
 		}
@@ -276,6 +284,14 @@ impl AnimClip {
 
 	pub fn jab() -> Self {
 		Self::Jab(JabParams::default())
+	}
+
+	pub fn squat() -> Self {
+		Self::Squat
+	}
+
+	pub fn prone() -> Self {
+		Self::Prone
 	}
 
 	pub fn lateral_undulation() -> Self {

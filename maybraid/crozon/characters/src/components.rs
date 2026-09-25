@@ -317,6 +317,33 @@ impl LocomotionCapsule {
 	pub fn headshot_min_local_y(self) -> f32 {
 		self.length * 0.5 + self.radius * 0.5
 	}
+
+	/// Squat: same radius, shorter vertical pill. `drop` from
+	/// `Squat::peak_vertical_drop(LegSegmentLengths)` so the top matches the pose.
+	pub fn squat(self, drop: f32) -> Self {
+		self.with_half_height((self.half_height() - drop.max(0.0)).max(self.radius))
+	}
+
+	/// Prone motor: Y-up stand-in (sphere / short pill) so CharacterController
+	/// and the NEG_Y shape caster stay valid. Height ≈ `2 * radius` (~0.8 m).
+	pub fn prone_motor(self) -> Self {
+		Self { length: 0.0, ..self }
+	}
+
+	/// Query hull along mesh +Z (nose). Same pattern as pronograde [`HitCapsule`].
+	pub fn prone_hit_capsule(self) -> HitCapsule {
+		let height = self.half_height() * 2.0;
+		HitCapsule {
+			radius: self.radius,
+			length: (height - 2.0 * self.radius).max(0.0),
+			along: 0.0,
+		}
+	}
+
+	/// Keep feet planted when the centered capsule changes half-height.
+	pub fn origin_delta(self, next: Self) -> Vec3 {
+		Vec3::new(0.0, next.half_height() - self.half_height(), 0.0)
+	}
 }
 
 impl Default for LocomotionCapsule {

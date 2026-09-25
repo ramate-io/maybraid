@@ -227,6 +227,8 @@ pub fn apply_character_controller(commands: &mut Commands, body: Entity, hull: L
 		MaxSlopeAngle(MAX_SLOPE_ANGLE),
 		MoveWish::default(),
 		WalkableGround::default(),
+		crate::stance::CharacterStance::settled(crate::stance::StanceKind::Stand),
+		crate::stance::RestLocomotionCapsule(hull),
 		Friction::ZERO.with_combine_rule(CoefficientCombine::Min),
 		Restitution::ZERO.with_combine_rule(CoefficientCombine::Min),
 		GravityScale(1.25),
@@ -445,6 +447,7 @@ pub(crate) fn apply_wish_movement(
 			Has<crate::buoyancy::Buoyant>,
 			Has<crate::buoyancy::Wading>,
 			Has<Sprinting>,
+			Option<&crate::stance::CharacterStance>,
 			Option<&Jumping>,
 		),
 		With<CharacterController>,
@@ -462,6 +465,7 @@ pub(crate) fn apply_wish_movement(
 		buoyant,
 		wading,
 		sprinting,
+		stance,
 		jumping,
 	) in &mut controllers
 	{
@@ -470,7 +474,7 @@ pub(crate) fn apply_wish_movement(
 		} else if wading {
 			crate::buoyancy::wade_speed()
 		} else {
-			move_cap(sprinting, 1.0)
+			move_cap(sprinting, stance.map(|stance| stance.speed_scale()).unwrap_or(1.0))
 		};
 		let contact = walkable_ground_normal(hits, max_slope);
 		let airborne = jumping.is_some_and(Jumping::airborne) || buoyant;
@@ -488,12 +492,24 @@ pub(crate) fn apply_wish_movement(
 pub(crate) fn apply_wish_jump(
 	mut commands: Commands,
 	mut controllers: Query<
-		(Entity, &LinearVelocity, Has<Grounded>, Option<&crate::buoyancy::Buoyant>),
+		(
+			Entity,
+			&LinearVelocity,
+			Has<Grounded>,
+			Option<&crate::buoyancy::Buoyant>,
+			Option<&mut crate::stance::CharacterStance>,
+		),
 		(With<CharacterController>, With<JumpWish>, Without<Jumping>),
 	>,
 ) {
-	for (entity, velocity, grounded, buoyant) in &mut controllers {
+	for (entity, velocity, grounded, buoyant, stance) in &mut controllers {
 		commands.entity(entity).remove::<JumpWish>();
+		if let Some(mut stance) = stance {
+			if stance.is_prone() {
+				stance.stand();
+				continue;
+			}
+		}
 		if grounded || buoyant.is_some_and(crate::buoyancy::Buoyant::can_surface_jump) {
 			let xz = Vec3::new(velocity.x, 0.0, velocity.z).length();
 			commands.entity(entity).insert(Jumping::start(xz));
@@ -555,6 +571,47 @@ mod tests {
 		let mut velocity = LinearVelocity(Vec3::ZERO);
 		control_ground_velocity(&mut velocity, Vec3::X, MOVE_ACCEL, 1.0, Vec3::Y, MOVE_SPEED);
 		assert!((velocity.x - MOVE_SPEED).abs() < 1e-4, "{velocity:?}");
+	}
+
+	#[test]
+	fn jump_from_squat_starts_and_prone_stands() -> anyhow::Result<()> {
+		use crate::stance::{CharacterStance, StanceKind};
+		use anyhow::anyhow;
+
+		let mut app = App::new();
+		app.add_systems(Update, apply_wish_jump);
+		let squat = app
+			.world_mut()
+			.spawn((
+				CharacterController,
+				CharacterStance::settled(StanceKind::Squat),
+				JumpWish,
+				Grounded,
+				LinearVelocity(Vec3::ZERO),
+			))
+			.id();
+		let prone = app
+			.world_mut()
+			.spawn((
+				CharacterController,
+				CharacterStance::settled(StanceKind::Prone),
+				JumpWish,
+				Grounded,
+				LinearVelocity(Vec3::ZERO),
+			))
+			.id();
+		app.update();
+		if app.world().get::<Jumping>(squat).is_none() {
+			return Err(anyhow!("grounded squat + JumpWish should start Jumping"));
+		}
+		if app.world().get::<Jumping>(prone).is_some() {
+			return Err(anyhow!("prone + JumpWish must not impulse"));
+		}
+		let stance = app.world().get::<CharacterStance>(prone).ok_or_else(|| anyhow!("stance"))?;
+		if stance.kind != StanceKind::Stand {
+			return Err(anyhow!("prone jump should stand first"));
+		}
+		Ok(())
 	}
 
 	#[test]

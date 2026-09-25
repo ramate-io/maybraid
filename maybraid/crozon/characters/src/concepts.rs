@@ -17,6 +17,8 @@ pub enum ConceptAnimation {
 	Soaring,
 	Flapping,
 	Jab,
+	Squat,
+	Prone,
 	LateralUndulation,
 	DorsoventralUndulation,
 }
@@ -35,6 +37,8 @@ impl ConceptAnimation {
 		Self::Soaring,
 		Self::Flapping,
 		Self::Jab,
+		Self::Squat,
+		Self::Prone,
 		Self::LateralUndulation,
 		Self::DorsoventralUndulation,
 	];
@@ -53,6 +57,8 @@ impl ConceptAnimation {
 			Self::Soaring => "soaring",
 			Self::Flapping => "flapping",
 			Self::Jab => "jab",
+			Self::Squat => "squat",
+			Self::Prone => "prone",
 			Self::LateralUndulation => "lateral-undulation",
 			Self::DorsoventralUndulation => "dorsoventral-undulation",
 		}

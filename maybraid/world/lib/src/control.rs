@@ -13,9 +13,9 @@ use maybraid_character_controller::CharacterIntent;
 use maybraid_skill_map::SkillMapEnabled;
 use maybraid_sky::{SkyDome, SKY_HORIZON};
 use player::{
-	apply_character_controller, Buoyant, CharacterController, JumpWish, Jumping, LocomotionCapsule,
-	MotorTraction, MoveWish as PlayerMoveWish, Player as MaybraidPlayer, PlayerCameraAim,
-	PlayerLook, PlayerYawOwner, Sprinting, Wading,
+	apply_character_controller, Buoyant, CharacterController, CharacterStance, JumpWish, Jumping,
+	LocomotionCapsule, MotorTraction, MoveWish as PlayerMoveWish, Player as MaybraidPlayer,
+	PlayerCameraAim, PlayerLook, PlayerYawOwner, RestLocomotionCapsule, Sprinting, Wading,
 };
 use player_camera::CameraController;
 
@@ -100,7 +100,7 @@ pub(crate) fn apply_intents_to_movement(
 		}
 		for (entity, mut wish) in &mut player_wishes {
 			wish.0 = Vec3::ZERO;
-			commands.entity(entity).remove::<(JumpWish, Sprinting)>();
+			commands.entity(entity).remove::<(JumpWish, Sprinting, CharacterStance)>();
 		}
 		return;
 	}
@@ -243,6 +243,8 @@ pub(crate) fn strip_world_player_motor(commands: &mut Commands, body: Entity) {
 		JumpWish,
 		Jumping,
 		Sprinting,
+		CharacterStance,
+		RestLocomotionCapsule,
 		player::Grounded,
 		Buoyant,
 		Wading,

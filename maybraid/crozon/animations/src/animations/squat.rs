@@ -15,6 +15,10 @@ pub struct Squat<Rig> {
 	pub ascent_speed: f32,
 	/// When true, progress clamps to one down-up cycle; when false, it wraps.
 	pub one_shot: bool,
+	/// Held stance: `progress` is depth (0 = stand, 1 = bottom), not a cycle.
+	pub held: bool,
+	/// Skip [`crate::Effects::move`] so physics can own the origin snap.
+	pub bones_only: bool,
 	/// Peak femur forward swing at full depth (radians).
 	pub femur_peak: f32,
 	/// Peak shin flex relative to femur at full depth (radians).
@@ -33,6 +37,11 @@ impl<Rig> Squat<Rig> {
 	/// One-shot down-up envelope with the given half-cycle speeds.
 	pub fn with_speeds(descent_speed: f32, ascent_speed: f32) -> Self {
 		Self { descent_speed, ascent_speed, one_shot: true, ..Self::default() }
+	}
+
+	/// Held stance pose. `progress` is squat depth; no armature `move`.
+	pub fn held() -> Self {
+		Self { held: true, bones_only: true, ..Self::default() }
 	}
 
 	/// Duration of one full down-up cycle in seconds.
@@ -79,6 +88,9 @@ impl<Rig> Squat<Rig> {
 
 	/// Squat depth: 0 at stand, 1 at deepest flex.
 	pub fn depth(&self, progress: f32) -> f32 {
+		if self.held {
+			return progress.clamp(0.0, 1.0);
+		}
 		let desc_d = self.descent_duration();
 		let asc_d = self.ascent_duration();
 		let t = self.envelope_time(progress);
@@ -117,6 +129,8 @@ impl<Rig> Default for Squat<Rig> {
 			descent_speed: 1.0,
 			ascent_speed: 1.0,
 			one_shot: false,
+			held: false,
+			bones_only: false,
 			femur_peak: -FRAC_PI_4,
 			shin_peak: FRAC_PI_2,
 			root_peak: ROOT_SQUAT_DEG.to_radians(),
@@ -170,6 +184,14 @@ mod tests {
 	fn deepest_squat_has_positive_drop() {
 		let squat = Squat::<()>::for_loop(1.0, 1.0);
 		assert!(squat.vertical_drop(0.5, LegSegmentLengths::default()) > 0.0);
+	}
+
+	#[test]
+	fn held_depth_is_progress() -> anyhow::Result<()> {
+		let squat = Squat::<()>::held();
+		assert!((squat.depth(0.0)).abs() < 1e-6);
+		assert!((squat.depth(1.0) - 1.0).abs() < 1e-6);
+		Ok(())
 	}
 
 	#[test]

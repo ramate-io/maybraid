@@ -16,6 +16,9 @@ impl<R: HumanoidRig> Animation<R> for Squat<R> {
 	}
 
 	fn effects_for(&self, rig: &R, progress: f32) -> Effects {
+		if self.bones_only {
+			return Effects::default();
+		}
 		let drop = self.vertical_drop(progress, rig.segment_lengths());
 		Effects {
 			r#move: (drop > f32::EPSILON)
@@ -65,6 +68,24 @@ mod tests {
 		assert!((right_femur.swing + FRAC_PI_4).abs() < 1e-5);
 		assert!((shin.flex - FRAC_PI_2).abs() < 1e-5);
 		assert!((root.swing - 15.0_f32.to_radians()).abs() < 1e-5);
+	}
+
+	#[test]
+	fn held_squat_has_no_armature_move() -> anyhow::Result<()> {
+		let mut rig = HumanoidV0Rig::imported();
+		let squat = Squat::<HumanoidV0Rig>::held();
+		let effects = squat.apply(&mut rig, 1.0);
+		if effects.r#move.is_some() {
+			return Err(anyhow::anyhow!("held squat must not Effects.move"));
+		}
+		let femur = rig
+			.pose()
+			.get(&rig.leg(Side::Left).femur.name)
+			.ok_or_else(|| anyhow::anyhow!("femur"))?;
+		if femur.swing.abs() < 0.2 {
+			return Err(anyhow::anyhow!("held squat should flex femurs"));
+		}
+		Ok(())
 	}
 
 	#[test]

@@ -66,6 +66,7 @@ type WorldPlayers<'w, 's> = Query<
 		Option<&'static SpotSubject>,
 		Option<&'static ThreatSubject>,
 		Option<&'static Affiliations>,
+		Option<&'static LocomotionCapsule>,
 	),
 	With<VegetationPlayer>,
 >;
@@ -290,12 +291,12 @@ fn bake_intelligence_lod(
 }
 
 fn sync_world_player_threat_actor(mut commands: Commands, players: WorldPlayers) {
-	let hull = LocomotionCapsule::HUMANOID;
-	let spot = SpotSubject::new(
-		InterestLayers::CHARACTER,
-		SpotBounds::capsule(hull.radius, hull.half_height()),
-	);
-	for (entity, current_spot, current_subject, current_affiliations) in &players {
+	for (entity, current_spot, current_subject, current_affiliations, hull) in &players {
+		let hull = hull.copied().unwrap_or(LocomotionCapsule::HUMANOID);
+		let spot = SpotSubject::new(
+			InterestLayers::CHARACTER,
+			SpotBounds::capsule(hull.radius, hull.half_height()),
+		);
 		let id = ThreatId(entity.to_bits());
 		let subject = ThreatSubject::new(id);
 		let mut entity_commands = commands.entity(entity);
