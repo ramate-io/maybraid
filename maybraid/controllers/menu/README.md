@@ -6,3 +6,6 @@ that are `TextMenu` / `HudMenu` are eligible. Overlay menus win over panels.
 
 Delivery is a [`MenuNavImpulse`] on the focused entity — not a broadcast to
 every child. Widgets apply the impulse; `MenuActivate` still bubbles up.
+
+**B** remains `MenuNav::Back`. Character stance also reads **B** (tap squat /
+hold prone) but only when no `MenuController` has focus.

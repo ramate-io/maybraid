@@ -18,3 +18,7 @@ impl PadGameplayEnabled {
 		self.0
 	}
 }
+
+/// When true, a focused menu owns **B** as Back. Character `collect` skips stance.
+#[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct MenuOwnsBack(pub bool);

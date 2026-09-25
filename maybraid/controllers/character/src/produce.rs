@@ -1,23 +1,33 @@
 //! [`VirtualPad`] → [`CharacterIntent`].
 
 use bevy::prelude::*;
-use maybraid_input::{PadButton, VirtualPad, VirtualPadConfig};
+use maybraid_input::{MenuOwnsBack, PadButton, PadGameplayEnabled, VirtualPad, VirtualPadConfig};
 
 use crate::intent::CharacterIntent;
 
 const ANALOG_EPS: f32 = 1e-6;
+const STANCE_HOLD_SECS: f32 = 0.35;
 
 pub fn produce_character_intents(
 	pad: Res<VirtualPad>,
 	config: Res<VirtualPadConfig>,
+	time: Res<Time>,
+	gameplay: Res<PadGameplayEnabled>,
+	menu_owns: Option<Res<MenuOwnsBack>>,
 	mut intents: MessageWriter<CharacterIntent>,
 ) {
-	for intent in collect(&pad, config.trigger_press_threshold) {
+	let stance_enabled = gameplay.is_enabled() && !menu_owns.is_some_and(|owns| owns.0);
+	for intent in collect(&pad, config.trigger_press_threshold, time.delta_secs(), stance_enabled) {
 		intents.write(intent);
 	}
 }
 
-pub fn collect(pad: &VirtualPad, trigger_threshold: f32) -> Vec<CharacterIntent> {
+pub fn collect(
+	pad: &VirtualPad,
+	trigger_threshold: f32,
+	dt: f32,
+	stance_enabled: bool,
+) -> Vec<CharacterIntent> {
 	let mut out = Vec::new();
 	if pad.move_stick.length_squared() > ANALOG_EPS {
 		out.push(CharacterIntent::Move(pad.move_stick));
@@ -47,8 +57,16 @@ pub fn collect(pad: &VirtualPad, trigger_threshold: f32) -> Vec<CharacterIntent>
 	if pad.just_pressed(PadButton::A) {
 		out.push(CharacterIntent::Jump);
 	}
-	if pad.just_pressed(PadButton::B) {
-		out.push(CharacterIntent::ExitInteraction);
+	if stance_enabled {
+		if pad.just_released(PadButton::B) && pad.hold_secs(PadButton::B) < STANCE_HOLD_SECS {
+			out.push(CharacterIntent::ChangeSquat);
+		}
+		if pad.pressed(PadButton::B)
+			&& pad.hold_secs(PadButton::B) >= STANCE_HOLD_SECS
+			&& pad.hold_secs(PadButton::B) - dt < STANCE_HOLD_SECS
+		{
+			out.push(CharacterIntent::ChangeProne);
+		}
 	}
 	if pad.just_pressed(PadButton::X) {
 		if pad.pressed(PadButton::TriggerFire) || pad.trigger_fire >= trigger_threshold {
@@ -85,6 +103,10 @@ mod tests {
 		pad.finish_digital();
 	}
 
+	fn intents(pad: &VirtualPad) -> Vec<CharacterIntent> {
+		collect(pad, 0.5, 0.0, true)
+	}
+
 	#[test]
 	fn move_and_look_are_analog() -> anyhow::Result<()> {
 		let mut pad = VirtualPad::default();
@@ -92,7 +114,7 @@ mod tests {
 		pad.add_move(Vec2::new(1.0, 0.0));
 		pad.add_look(Vec2::new(0.0, -0.5));
 		finish(&mut pad);
-		let intents = collect(&pad, 0.5);
+		let intents = intents(&pad);
 		assert_eq!(intents[0], CharacterIntent::Move(Vec2::new(1.0, 0.0)));
 		assert_eq!(intents[1], CharacterIntent::Look(Vec2::new(0.0, -0.5)));
 		Ok(())
@@ -104,16 +126,16 @@ mod tests {
 		pad.begin_frame();
 		pad.hold_digital(PadButton::StickClickMove);
 		finish(&mut pad);
-		assert_eq!(collect(&pad, 0.5), vec![CharacterIntent::StartSprint]);
+		assert_eq!(intents(&pad), vec![CharacterIntent::StartSprint]);
 
 		pad.begin_frame();
 		pad.hold_digital(PadButton::StickClickMove);
 		finish(&mut pad);
-		assert_eq!(collect(&pad, 0.5), vec![CharacterIntent::StartSprint]);
+		assert_eq!(intents(&pad), vec![CharacterIntent::StartSprint]);
 
 		pad.begin_frame();
 		finish(&mut pad);
-		assert_eq!(collect(&pad, 0.5), vec![CharacterIntent::StopSprint]);
+		assert_eq!(intents(&pad), vec![CharacterIntent::StopSprint]);
 		Ok(())
 	}
 
@@ -123,7 +145,7 @@ mod tests {
 		pad.begin_frame();
 		pad.hold_digital(PadButton::StickClickLook);
 		finish(&mut pad);
-		assert_eq!(collect(&pad, 0.5), vec![CharacterIntent::SwapPov]);
+		assert_eq!(intents(&pad), vec![CharacterIntent::SwapPov]);
 		Ok(())
 	}
 
@@ -138,10 +160,9 @@ mod tests {
 		pad.hold_digital(PadButton::Select);
 		finish(&mut pad);
 		assert_eq!(
-			collect(&pad, 0.5),
+			intents(&pad),
 			vec![
 				CharacterIntent::Jump,
-				CharacterIntent::ExitInteraction,
 				CharacterIntent::SwapActive,
 				CharacterIntent::InGameMenu,
 				CharacterIntent::Inventory,
@@ -151,12 +172,80 @@ mod tests {
 	}
 
 	#[test]
+	fn b_tap_is_change_squat_not_exit() -> anyhow::Result<()> {
+		let mut pad = VirtualPad::default();
+		pad.begin_frame();
+		pad.hold_digital(PadButton::B);
+		finish(&mut pad);
+		pad.tick_holds(0.1);
+		assert!(!intents(&pad).contains(&CharacterIntent::ChangeSquat));
+		assert!(!intents(&pad).contains(&CharacterIntent::ExitInteraction));
+
+		pad.begin_frame();
+		finish(&mut pad);
+		let collected = intents(&pad);
+		assert!(collected.contains(&CharacterIntent::ChangeSquat));
+		assert!(!collected.contains(&CharacterIntent::ChangeProne));
+		assert!(!collected.contains(&CharacterIntent::ExitInteraction));
+		Ok(())
+	}
+
+	#[test]
+	fn b_hold_is_change_prone_once() -> anyhow::Result<()> {
+		let mut pad = VirtualPad::default();
+		pad.begin_frame();
+		pad.hold_digital(PadButton::B);
+		finish(&mut pad);
+		pad.tick_holds(0.0);
+
+		pad.begin_frame();
+		pad.hold_digital(PadButton::B);
+		finish(&mut pad);
+		pad.tick_holds(0.2);
+		assert!(!collect(&pad, 0.5, 0.2, true).contains(&CharacterIntent::ChangeProne));
+
+		pad.begin_frame();
+		pad.hold_digital(PadButton::B);
+		finish(&mut pad);
+		pad.tick_holds(0.2);
+		let crossing = collect(&pad, 0.5, 0.2, true);
+		assert!(crossing.contains(&CharacterIntent::ChangeProne));
+		assert!(!crossing.contains(&CharacterIntent::ChangeSquat));
+
+		pad.begin_frame();
+		pad.hold_digital(PadButton::B);
+		finish(&mut pad);
+		pad.tick_holds(0.16);
+		assert!(!collect(&pad, 0.5, 0.16, true).contains(&CharacterIntent::ChangeProne));
+
+		pad.begin_frame();
+		finish(&mut pad);
+		let release = collect(&pad, 0.5, 0.16, true);
+		assert!(!release.contains(&CharacterIntent::ChangeSquat));
+		assert!(!release.contains(&CharacterIntent::ChangeProne));
+		Ok(())
+	}
+
+	#[test]
+	fn menu_or_disabled_pad_skips_stance() -> anyhow::Result<()> {
+		let mut pad = VirtualPad::default();
+		pad.begin_frame();
+		pad.hold_digital(PadButton::B);
+		finish(&mut pad);
+		pad.tick_holds(0.1);
+		pad.begin_frame();
+		finish(&mut pad);
+		assert!(collect(&pad, 0.5, 0.1, false).is_empty());
+		Ok(())
+	}
+
+	#[test]
 	fn x_without_rt_starts_interaction() -> anyhow::Result<()> {
 		let mut pad = VirtualPad::default();
 		pad.begin_frame();
 		pad.hold_digital(PadButton::X);
 		finish(&mut pad);
-		assert_eq!(collect(&pad, 0.5), vec![CharacterIntent::StartInteraction]);
+		assert_eq!(intents(&pad), vec![CharacterIntent::StartInteraction]);
 		Ok(())
 	}
 
@@ -168,7 +257,7 @@ mod tests {
 		pad.apply_trigger_digital(0.5);
 		pad.hold_digital(PadButton::X);
 		finish(&mut pad);
-		let intents = collect(&pad, 0.5);
+		let intents = intents(&pad);
 		assert!(intents.contains(&CharacterIntent::UseItem(0.9)));
 		assert!(intents.contains(&CharacterIntent::PowerUseItem));
 		assert!(!intents.contains(&CharacterIntent::StartInteraction));
@@ -181,7 +270,7 @@ mod tests {
 		pad.begin_frame();
 		pad.max_triggers(0.4, 0.0);
 		finish(&mut pad);
-		assert_eq!(collect(&pad, 0.5), vec![CharacterIntent::Focus(0.4)]);
+		assert_eq!(intents(&pad), vec![CharacterIntent::Focus(0.4)]);
 		Ok(())
 	}
 
@@ -191,7 +280,7 @@ mod tests {
 		pad.begin_frame();
 		pad.hold_digital(PadButton::BumperFocus);
 		finish(&mut pad);
-		assert_eq!(collect(&pad, 0.5), vec![CharacterIntent::Ads(1.0)]);
+		assert_eq!(intents(&pad), vec![CharacterIntent::Ads(1.0)]);
 		Ok(())
 	}
 
@@ -202,7 +291,7 @@ mod tests {
 		pad.hold_digital(PadButton::BumperFocus);
 		pad.hold_digital(PadButton::BumperFire);
 		finish(&mut pad);
-		assert_eq!(collect(&pad, 0.5), vec![CharacterIntent::Ads(1.0)]);
+		assert_eq!(intents(&pad), vec![CharacterIntent::Ads(1.0)]);
 		Ok(())
 	}
 
@@ -212,12 +301,12 @@ mod tests {
 		pad.begin_frame();
 		pad.hold_digital(PadButton::DpadRight);
 		finish(&mut pad);
-		assert_eq!(collect(&pad, 0.5), vec![CharacterIntent::CycleSkillMap(1)]);
+		assert_eq!(intents(&pad), vec![CharacterIntent::CycleSkillMap(1)]);
 
 		pad.begin_frame();
 		pad.hold_digital(PadButton::DpadLeft);
 		finish(&mut pad);
-		assert_eq!(collect(&pad, 0.5), vec![CharacterIntent::CycleSkillMap(-1)]);
+		assert_eq!(intents(&pad), vec![CharacterIntent::CycleSkillMap(-1)]);
 		Ok(())
 	}
 
@@ -230,7 +319,7 @@ mod tests {
 		pad.begin_frame();
 		pad.hold_digital(PadButton::DpadLeft);
 		finish(&mut pad);
-		assert!(!collect(&pad, 0.5).contains(&CharacterIntent::CycleSkillMap(-1)));
+		assert!(!intents(&pad).contains(&CharacterIntent::CycleSkillMap(-1)));
 		Ok(())
 	}
 }

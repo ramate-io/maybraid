@@ -19,7 +19,7 @@ pub fn ui_config() -> GameCommandUiConfig {
 		empty_console_text: "Console: `mode free`, `set-character`, `stats mesh`, `stats vsync`, `help`".into(),
 		root_background: Color::srgba(0.08, 0.16, 0.22, 0.82),
 		controls_hint:
-			"L-stick move — R-stick look — hold RB / V and flick a stick to throw the skill map — L3 / Shift sprint — R3 POV — A jump — LT optic — LB irons — D-Pad / [ ] cycle map — RT use — X / E pick up — Tab drop — RT+X power — / commands"
+			"L-stick move — R-stick look — hold RB / V and flick a stick to throw the skill map — L3 / Shift sprint — R3 POV — A jump — B tap squat / hold prone — LT optic — LB irons — D-Pad / [ ] cycle map — RT use — X / E pick up — Tab drop — RT+X power — / commands"
 				.into(),
 	}
 }

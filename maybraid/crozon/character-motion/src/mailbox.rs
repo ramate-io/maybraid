@@ -24,8 +24,8 @@ use intelligence_lod::{
 };
 use malo_animations::{
 	animations::{
-		Idle, Jab, QuadrupedIdle, QuadrupedLeap, QuadrupedRun, Tuck, TwoFootedTuckedFlip,
-		UprightLeap,
+		Idle, Jab, Prone, QuadrupedIdle, QuadrupedLeap, QuadrupedRun, Squat, Tuck,
+		TwoFootedTuckedFlip, UprightLeap,
 	},
 	Animation, Effects,
 };
@@ -587,6 +587,16 @@ fn sample_humanoid(
 			write_bones,
 			write_effects,
 		),
+		AnimClip::Squat => {
+			sample_split(&Squat::<HumanoidV0Rig>::held(), rig, progress, write_bones, write_effects)
+		}
+		AnimClip::Prone => sample_split(
+			&Prone::<HumanoidV0Rig>::default(),
+			rig,
+			progress,
+			write_bones,
+			write_effects,
+		),
 		AnimClip::Gallop(_)
 		| AnimClip::QuadrupedRun(_)
 		| AnimClip::LateralUndulation(_)
@@ -761,6 +771,51 @@ mod tests {
 			"Still should hang arms off T-pose rest 0, matching Idle::arm_hang {hang}, got {}",
 			humerus.flex
 		);
+	}
+
+	#[test]
+	fn stance_squat_has_no_root_move() -> anyhow::Result<()> {
+		use anyhow::anyhow;
+		use crozon_rigs::humanoid::HumanoidRig;
+		use crozon_rigs::Side;
+
+		let mut rig = HumanoidV0Rig::imported();
+		let effects = sample_humanoid(AnimClip::squat(), &mut rig, 1.0, true, true);
+		if effects.r#move.is_some() {
+			return Err(anyhow!("held squat must not Effects.move"));
+		}
+		let femur = rig
+			.pose()
+			.get(&rig.leg(Side::Left).femur.name)
+			.ok_or_else(|| anyhow!("left femur"))?;
+		if femur.swing.abs() < 0.2 {
+			return Err(anyhow!("held squat should flex femurs, got {}", femur.swing));
+		}
+		let pelvis = rig
+			.pose()
+			.get(&rig.leg(Side::Left).pelvis.name)
+			.ok_or_else(|| anyhow!("pelvis"))?;
+		if pelvis.twist.abs() < 0.2 {
+			return Err(anyhow!("held squat should crease the pelvis, got {}", pelvis.twist));
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn stance_prone_pitches_the_spine() -> anyhow::Result<()> {
+		use anyhow::anyhow;
+		use crozon_rigs::humanoid::HumanoidRig;
+
+		let mut rig = HumanoidV0Rig::imported();
+		let effects = sample_humanoid(AnimClip::prone(), &mut rig, 1.0, true, true);
+		if effects.r#move.is_some() {
+			return Err(anyhow!("held prone must not Effects.move"));
+		}
+		let root = rig.pose().get(&rig.spine().root.name).ok_or_else(|| anyhow!("root"))?;
+		if root.twist.abs() < 0.3 {
+			return Err(anyhow!("prone should pitch the spine, got twist {}", root.twist));
+		}
+		Ok(())
 	}
 
 	#[test]
