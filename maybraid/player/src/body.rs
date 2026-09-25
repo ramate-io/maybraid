@@ -7,7 +7,8 @@ use crozon_characters::LocomotionCapsule;
 use lod_avian::PhysicsInteractionLayer;
 use std::f32::consts::PI;
 
-pub(crate) const MOVE_SPEED: f32 = 7.0;
+pub(crate) const JOG_SPEED: f32 = 4.0; // ≤ LEAP_SPEED, walk / slow-run clip
+pub(crate) const MOVE_SPEED: f32 = 7.0; // sprint; run clip
 pub(crate) const MOVE_ACCEL: f32 = 40.0;
 /// Grounded idle brake toward rest along the walk plane (matches vegetation).
 pub(crate) const MOVE_BRAKE: f32 = 50.0;
@@ -56,6 +57,17 @@ impl Default for WalkableGround {
 #[derive(Component, Debug, Clone, Copy, Default)]
 #[component(storage = "SparseSet")]
 pub struct JumpWish;
+
+/// Player-granted sprint hold. Sparse, same storage idea as [`JumpWish`].
+#[derive(Component, Debug, Clone, Copy, Default)]
+#[component(storage = "SparseSet")]
+pub struct Sprinting;
+
+/// Stance-scaled wish cap. Sprint uses [`MOVE_SPEED`]; jog stays at [`JOG_SPEED`].
+pub(crate) fn move_cap(sprinting: bool, stance_scale: f32) -> f32 {
+	let base = if sprinting { MOVE_SPEED } else { JOG_SPEED };
+	base * stance_scale.max(0.0)
+}
 
 /// Takeoff (grounded) → air → land recovery.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -432,6 +444,7 @@ pub(crate) fn apply_wish_movement(
 			Has<Grounded>,
 			Has<crate::buoyancy::Buoyant>,
 			Has<crate::buoyancy::Wading>,
+			Has<Sprinting>,
 			Option<&Jumping>,
 		),
 		With<CharacterController>,
@@ -448,6 +461,7 @@ pub(crate) fn apply_wish_movement(
 		grounded,
 		buoyant,
 		wading,
+		sprinting,
 		jumping,
 	) in &mut controllers
 	{
@@ -456,7 +470,7 @@ pub(crate) fn apply_wish_movement(
 		} else if wading {
 			crate::buoyancy::wade_speed()
 		} else {
-			MOVE_SPEED
+			move_cap(sprinting, 1.0)
 		};
 		let contact = walkable_ground_normal(hits, max_slope);
 		let airborne = jumping.is_some_and(Jumping::airborne) || buoyant;
@@ -518,6 +532,56 @@ mod tests {
 	#[test]
 	fn default_locomotion_keeps_legacy_slope() {
 		assert!((CharacterLocomotion::default().max_slope_angle - MAX_SLOPE_ANGLE).abs() < 1e-6);
+	}
+
+	#[test]
+	fn move_cap_is_jog_or_sprint() {
+		assert!((move_cap(false, 1.0) - JOG_SPEED).abs() < 1e-6);
+		assert!(JOG_SPEED <= LEAP_SPEED);
+		assert!((move_cap(true, 1.0) - MOVE_SPEED).abs() < 1e-6);
+		assert!((move_cap(true, 0.5) - MOVE_SPEED * 0.5).abs() < 1e-6);
+	}
+
+	#[test]
+	fn jog_ground_drive_saturates_below_leap() {
+		let mut velocity = LinearVelocity(Vec3::ZERO);
+		control_ground_velocity(&mut velocity, Vec3::X, MOVE_ACCEL, 1.0, Vec3::Y, JOG_SPEED);
+		assert!((velocity.x - JOG_SPEED).abs() < 1e-4, "{velocity:?}");
+		assert!(velocity.x <= LEAP_SPEED);
+	}
+
+	#[test]
+	fn sprint_ground_drive_saturates_at_move_speed() {
+		let mut velocity = LinearVelocity(Vec3::ZERO);
+		control_ground_velocity(&mut velocity, Vec3::X, MOVE_ACCEL, 1.0, Vec3::Y, MOVE_SPEED);
+		assert!((velocity.x - MOVE_SPEED).abs() < 1e-4, "{velocity:?}");
+	}
+
+	#[test]
+	fn jump_from_sprint_speed_is_a_leap() -> anyhow::Result<()> {
+		use anyhow::anyhow;
+
+		let mut app = App::new();
+		app.add_systems(Update, apply_wish_jump);
+		let entity = app
+			.world_mut()
+			.spawn((
+				CharacterController,
+				Sprinting,
+				JumpWish,
+				Grounded,
+				LinearVelocity(Vec3::new(MOVE_SPEED, 0.0, 0.0)),
+			))
+			.id();
+		app.update();
+		let jumping = app
+			.world()
+			.get::<Jumping>(entity)
+			.ok_or_else(|| anyhow!("grounded JumpWish at sprint speed should start Jumping"))?;
+		if !jumping.leaping {
+			return Err(anyhow!("sprint takeoff must be a leap"));
+		}
+		Ok(())
 	}
 
 	#[test]
