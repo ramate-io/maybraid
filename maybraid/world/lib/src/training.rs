@@ -19,6 +19,7 @@
 
 use bevy::prelude::*;
 use chico_vegetation_on_terrain_playground::PlaygroundConfig;
+use combat_hud::CombatScore;
 use crozon_character_items::{random_starter_loadout, Inventory, ItemRng};
 use crozon_characters::species::{
 	braidman::BraidmanConfig, lero::LeroConfig, mygr::MygrConfig, tuberwaber::TuberwaberConfig,
@@ -61,6 +62,7 @@ impl Plugin for TrainingGroundPlugin {
 						.after(TerrainColliderSystems::QueueMeshes),
 					reseat_training_life.before(clear_training_plaza),
 					clear_training_plaza,
+					keep_training_score,
 				),
 			);
 	}
@@ -281,6 +283,24 @@ pub(crate) fn apply_training_grounds(
 	}
 }
 
+/// Each Training session keeps its own [`CombatScore`] across its rounds and
+/// lives; leaving drops it, which hides the score panel.
+pub(crate) fn keep_training_score(
+	grounds: Res<TrainingGrounds>,
+	mut kept: Local<bool>,
+	mut commands: Commands,
+) {
+	if grounds.0 == *kept {
+		return;
+	}
+	*kept = grounds.0;
+	if grounds.0 {
+		commands.insert_resource(CombatScore::default());
+	} else {
+		commands.remove_resource::<CombatScore>();
+	}
+}
+
 /// Drop raw training terrain meshes once present is turned back off.
 pub(crate) fn clear_training_terrain_present(
 	present: Res<TerrainPresentEnabled>,
@@ -358,6 +378,32 @@ mod tests {
 		system.run((), &mut world).map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		assert_eq!(*world.resource::<TerrainCellLayout>(), round.next().layout());
 		assert!(world.resource::<TerrainPresentationDirty>().0);
+		Ok(())
+	}
+
+	#[test]
+	fn each_training_session_keeps_a_fresh_score() -> anyhow::Result<()> {
+		let mut world = World::new();
+		world.insert_resource(TrainingGrounds(true));
+		let mut system = IntoSystem::into_system(keep_training_score);
+		system.initialize(&mut world);
+		let mut run = |world: &mut World| -> anyhow::Result<()> {
+			system.run((), world).map_err(|error| anyhow::anyhow!("{error:?}"))?;
+			world.flush();
+			Ok(())
+		};
+		run(&mut world)?;
+		world.resource_mut::<CombatScore>().record_down();
+		run(&mut world)?;
+		assert_eq!(world.resource::<CombatScore>().downs, 1, "a session keeps its tally");
+
+		world.insert_resource(TrainingGrounds(false));
+		run(&mut world)?;
+		assert!(world.get_resource::<CombatScore>().is_none(), "leaving drops the score");
+
+		world.insert_resource(TrainingGrounds(true));
+		run(&mut world)?;
+		assert_eq!(*world.resource::<CombatScore>(), CombatScore::default());
 		Ok(())
 	}
 

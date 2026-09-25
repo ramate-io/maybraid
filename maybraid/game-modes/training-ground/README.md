@@ -40,5 +40,13 @@ screen. A trainee's next life reseats on the arena's player seat. The pause
 menu's **Next round** row flips between your character and a random trainee
 for that next round.
 
+A score panel in the top-right corner keeps the session's tally across every
+round and life. It uses the hit-marker points: 1 for a hit, 2 for a headshot,
+and 5 more for a down. It also shows downs, deaths, the current streak (downs
+since the last death), and the best streak. Only the player's own hits count;
+Brawlers downing each other score nothing. The panel hides with the rest of
+the combat HUD while paused.
+
 Leave restores the playable-world fill, parks the player at the default spawn
-so Discovery resumes from its saved trail, and returns home.
+so Discovery resumes from its saved trail, and returns home. Leaving drops the
+score, and the next session starts from zero.

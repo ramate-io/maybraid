@@ -112,6 +112,7 @@ const WORLD_COMBAT_HUD: CombatHudPlugin = CombatHudPlugin {
 	hit_markers: true,
 	directional_damage: true,
 	player_vitals: true,
+	score: true,
 };
 const WORLD_TERRAIN_PITCH_GIZMOS: DrawTerrainPitchProbes = DrawTerrainPitchProbes(false);
 
