@@ -103,6 +103,7 @@ impl Plugin for PlayerPlugin {
 					body::apply_wish_jump,
 					stance::stand_when_airborne,
 					stance::apply_stance_hulls,
+					stance::sync_stance_pitch,
 					body::advance_jump_phases,
 				)
 					.chain()

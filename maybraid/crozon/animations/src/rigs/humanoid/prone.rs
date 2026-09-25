@@ -1,7 +1,9 @@
 use crozon_rigs::{humanoid::HumanoidRig, Side};
 
 use crate::animations::Prone;
-use crate::rigs::humanoid::apply::{apply_arm, apply_leg, apply_neck, apply_root};
+use crate::rigs::humanoid::apply::{
+	apply_arm, apply_hip_fold, apply_leg, apply_neck_twisted, apply_spine_pitch,
+};
 use crate::{Animation, Effects};
 
 impl<R: HumanoidRig> Animation<R> for Prone<R> {
@@ -10,9 +12,12 @@ impl<R: HumanoidRig> Animation<R> for Prone<R> {
 		let shin = self.shin_flex(progress);
 		apply_leg(rig, Side::Left, femur, shin);
 		apply_leg(rig, Side::Right, femur, shin);
-		apply_root(rig, self.root_swing(progress));
+		apply_hip_fold(rig, Side::Left, femur * 0.35);
+		apply_hip_fold(rig, Side::Right, femur * 0.35);
+		let pitch = self.spine_pitch(progress);
+		apply_spine_pitch(rig, pitch);
 		let neck = self.neck_swing(progress);
-		apply_neck(rig, neck, 0.0, neck, 0.0);
+		apply_neck_twisted(rig, 0.0, 0.0, neck, 0.0, 0.0, neck);
 		let hold = self.arm_hold(progress);
 		apply_arm(rig, Side::Left, 0.0, 0.0, 0.0, hold, hold);
 		apply_arm(rig, Side::Right, 0.0, 0.0, 0.0, hold, hold);
@@ -38,10 +43,20 @@ mod tests {
 			return Err(anyhow::anyhow!("held prone must not Effects.move"));
 		}
 		let root = rig.pose().get(&rig.spine().root.name).ok_or_else(|| anyhow::anyhow!("root"))?;
-		if root.swing.abs() < 0.5 {
+		if root.twist.abs() < 0.3 {
 			return Err(anyhow::anyhow!(
-				"spine should pitch toward horizontal, got {}",
-				root.swing
+				"root should pitch toward horizontal, got twist {}",
+				root.twist
+			));
+		}
+		let lumbar = rig
+			.pose()
+			.get(&rig.spine().lumbar.name)
+			.ok_or_else(|| anyhow::anyhow!("lumbar"))?;
+		if lumbar.twist.abs() < 0.2 {
+			return Err(anyhow::anyhow!(
+				"lumbar should share the fold, got twist {}",
+				lumbar.twist
 			));
 		}
 		Ok(())

@@ -1,7 +1,7 @@
 //! Player squat / prone. Hulls, speed, and clips derive from this plus the rest capsule.
 
 use bevy::prelude::*;
-use crozon_characters::LocomotionCapsule;
+use crozon_characters::{CharacterRoot, LocomotionCapsule, TerrainPitch};
 use crozon_rigs::humanoid::LegSegmentLengths;
 use damage::HeadshotBand;
 use malo_animations::animations::Squat;
@@ -65,7 +65,7 @@ impl CharacterStance {
 }
 
 pub fn squat_drop() -> f32 {
-	Squat::<()>::default().peak_vertical_drop(LegSegmentLengths::default())
+	Squat::<()>::held().peak_vertical_drop(LegSegmentLengths::default())
 }
 
 impl RestLocomotionCapsule {
@@ -97,11 +97,16 @@ pub(crate) fn apply_stance_hulls(
 			&mut Transform,
 			Option<&mut HeadshotBand>,
 		),
-		(With<CharacterController>, Changed<CharacterStance>),
+		With<CharacterController>,
 	>,
 ) {
 	for (entity, stance, rest, current, mut transform, band) in &mut bodies {
 		let next = rest.hull_for(stance.kind);
+		// Re-stamp / respawn can write a standing hull without changing stance.
+		// Reconcile every frame so squat/prone take effect again after that.
+		if *current == next {
+			continue;
+		}
 		transform.translation += current.origin_delta(next);
 		apply_locomotion_capsule(&mut commands, entity, next);
 		match stance.kind {
@@ -118,6 +123,31 @@ pub(crate) fn apply_stance_hulls(
 					band.min_local_y = min_local_y;
 				} else if (current.half_height() - current.radius).abs() < 1e-4 {
 					commands.entity(entity).insert(HeadshotBand { min_local_y, multiplier: 1.25 });
+				}
+			}
+		}
+	}
+}
+
+/// Prone uses a long wheelbase and full pitch weight so the visual follows slope.
+pub(crate) fn sync_stance_pitch(
+	stances: Query<(Entity, &CharacterStance, &RestLocomotionCapsule), With<CharacterController>>,
+	mut visuals: Query<(&mut TerrainPitch, &ChildOf), With<CharacterRoot>>,
+) {
+	for (body, stance, rest) in &stances {
+		for (mut pitch, child) in &mut visuals {
+			if child.parent() != body {
+				continue;
+			}
+			match stance.kind {
+				StanceKind::Prone => {
+					pitch.pitch_weight = 1.0;
+					pitch.half_span = rest.0.half_height().max(0.7);
+					pitch.support_locked = false;
+				}
+				StanceKind::Stand | StanceKind::Squat => {
+					pitch.pitch_weight = 0.4;
+					pitch.half_span = 0.22;
 				}
 			}
 		}
@@ -284,5 +314,81 @@ mod tests {
 			return Err(anyhow!("squat headshot Y must not stay at the standing 0.7 m"));
 		}
 		Ok(())
+	}
+
+	#[test]
+	fn restamp_keeps_a_live_squat() -> Result<()> {
+		let mut app = App::new();
+		app.add_systems(Update, apply_stance_hulls);
+		let body = app.world_mut().spawn(Transform::IDENTITY).id();
+		app.world_mut()
+			.run_system_once(move |mut commands: Commands| {
+				apply_character_controller(&mut commands, body, LocomotionCapsule::HUMANOID);
+			})
+			.map_err(|err| anyhow!("{err}"))?;
+		app.world_mut()
+			.entity_mut(body)
+			.insert(CharacterStance::settled(StanceKind::Squat));
+		app.update();
+		app.world_mut()
+			.run_system_once(move |mut commands: Commands| {
+				apply_character_controller(&mut commands, body, LocomotionCapsule::HUMANOID);
+			})
+			.map_err(|err| anyhow!("{err}"))?;
+		let stance = app.world().get::<CharacterStance>(body).ok_or_else(|| anyhow!("stance"))?;
+		if stance.kind != StanceKind::Squat {
+			return Err(anyhow!("re-stamp must not stand a live squat"));
+		}
+		app.update();
+		let live = app.world().get::<LocomotionCapsule>(body).ok_or_else(|| anyhow!("hull"))?;
+		let squat = LocomotionCapsule::HUMANOID.squat(squat_drop());
+		if (live.length - squat.length).abs() > 1e-5 {
+			return Err(anyhow!("re-stamp stand hull must be reconciled back to squat"));
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn prone_lengthens_terrain_pitch() -> Result<()> {
+		let mut app = App::new();
+		app.add_systems(Update, sync_stance_pitch);
+		let body = app.world_mut().spawn(Transform::IDENTITY).id();
+		app.world_mut()
+			.run_system_once(move |mut commands: Commands| {
+				apply_character_controller(&mut commands, body, LocomotionCapsule::HUMANOID);
+			})
+			.map_err(|err| anyhow!("{err}"))?;
+		app.world_mut()
+			.entity_mut(body)
+			.insert(CharacterStance::settled(StanceKind::Prone));
+		let visual = app
+			.world_mut()
+			.spawn((
+				CharacterRoot,
+				ChildOf(body),
+				TerrainPitch::new(crozon_characters::RigSkeletonKind::Humanoid, 0.22, 0.18),
+			))
+			.id();
+		app.update();
+		let pitch = app.world().get::<TerrainPitch>(visual).ok_or_else(|| anyhow!("pitch"))?;
+		if pitch.pitch_weight < 0.99 {
+			return Err(anyhow!("prone should use full pitch weight, got {}", pitch.pitch_weight));
+		}
+		if pitch.half_span < 0.69 {
+			return Err(anyhow!(
+				"prone should lengthen the pitch wheelbase, got {}",
+				pitch.half_span
+			));
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn held_squat_drops_more_than_jump_windup() {
+		let lengths = LegSegmentLengths::default();
+		assert!(
+			Squat::<()>::held().peak_vertical_drop(lengths)
+				> Squat::<()>::default().peak_vertical_drop(lengths)
+		);
 	}
 }

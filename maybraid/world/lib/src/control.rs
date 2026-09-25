@@ -15,7 +15,8 @@ use maybraid_sky::{SkyDome, SKY_HORIZON};
 use player::{
 	apply_character_controller, Buoyant, CharacterController, CharacterStance, JumpWish, Jumping,
 	LocomotionCapsule, MotorTraction, MoveWish as PlayerMoveWish, Player as MaybraidPlayer,
-	PlayerCameraAim, PlayerLook, PlayerYawOwner, RestLocomotionCapsule, Sprinting, Wading,
+	PlayerCameraAim, PlayerLook, PlayerYawOwner, RestLocomotionCapsule, Sprinting, StanceKind,
+	Wading,
 };
 use player_camera::CameraController;
 
@@ -100,7 +101,7 @@ pub(crate) fn apply_intents_to_movement(
 		}
 		for (entity, mut wish) in &mut player_wishes {
 			wish.0 = Vec3::ZERO;
-			commands.entity(entity).remove::<(JumpWish, Sprinting, CharacterStance)>();
+			commands.entity(entity).remove::<(JumpWish, Sprinting)>();
 		}
 		return;
 	}
@@ -213,14 +214,32 @@ pub(crate) fn stamp_world_player_motor(
 	physics: Res<PlayerPhysicsEnabled>,
 	mut commands: Commands,
 	missing: Query<Entity, (With<Player>, Without<CharacterController>)>,
-	present: Query<Entity, (With<Player>, With<CharacterController>)>,
+	present: Query<
+		(
+			Entity,
+			Option<&CharacterStance>,
+			Option<&RestLocomotionCapsule>,
+			Option<&LocomotionCapsule>,
+		),
+		(With<Player>, With<CharacterController>),
+	>,
 ) {
 	if physics.0 {
 		for entity in &missing {
 			apply_world_player_motor(&mut commands, entity);
 		}
+		for (entity, stance, rest, live) in &present {
+			if stance.is_none() {
+				commands.entity(entity).insert(CharacterStance::settled(StanceKind::Stand));
+			}
+			if rest.is_none() {
+				commands.entity(entity).insert(RestLocomotionCapsule(
+					live.copied().unwrap_or(LocomotionCapsule::HUMANOID),
+				));
+			}
+		}
 	} else {
-		for entity in &present {
+		for (entity, _, _, _) in &present {
 			strip_world_player_motor(&mut commands, entity);
 		}
 	}
@@ -307,5 +326,21 @@ mod tests {
 			.expect("strip world player motor");
 		assert!(world.get::<CharacterController>(player).is_none());
 		assert!(world.get::<PlayerMoveWish>(player).is_none());
+	}
+
+	#[test]
+	fn stamp_restores_stance_after_it_is_stripped() {
+		use bevy::ecs::system::RunSystemOnce;
+
+		let mut world = World::new();
+		world.insert_resource(PlayerPhysicsEnabled(true));
+		let player = world.spawn(Player).id();
+		apply_world_player_motor(&mut world.commands(), player);
+		world.flush();
+		world.entity_mut(player).remove::<CharacterStance>();
+		assert!(world.get::<CharacterStance>(player).is_none());
+		world.run_system_once(stamp_world_player_motor).expect("restore stance");
+		assert!(world.get::<CharacterStance>(player).is_some());
+		assert!(world.get::<RestLocomotionCapsule>(player).is_some());
 	}
 }

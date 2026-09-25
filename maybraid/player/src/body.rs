@@ -227,13 +227,16 @@ pub fn apply_character_controller(commands: &mut Commands, body: Entity, hull: L
 		MaxSlopeAngle(MAX_SLOPE_ANGLE),
 		MoveWish::default(),
 		WalkableGround::default(),
-		crate::stance::CharacterStance::settled(crate::stance::StanceKind::Stand),
 		crate::stance::RestLocomotionCapsule(hull),
 		Friction::ZERO.with_combine_rule(CoefficientCombine::Min),
 		Restitution::ZERO.with_combine_rule(CoefficientCombine::Min),
 		GravityScale(1.25),
 	));
 	commands.entity(body).insert(crate::contact::motor_traction_bundle());
+	// Respawn / re-stamp must not reset a live squat or prone.
+	commands
+		.entity(body)
+		.insert_if_new(crate::stance::CharacterStance::settled(crate::stance::StanceKind::Stand));
 	apply_locomotion_capsule(commands, body, hull);
 }
 

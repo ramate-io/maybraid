@@ -25,6 +25,8 @@ pub struct Squat<Rig> {
 	pub shin_peak: f32,
 	/// Peak root forward swing at full depth (radians).
 	pub root_peak: f32,
+	/// Held-stance pelvis fold (radians). Jump windup leaves this at 0.
+	pub hip_peak: f32,
 	_rig: PhantomData<Rig>,
 }
 
@@ -41,7 +43,15 @@ impl<Rig> Squat<Rig> {
 
 	/// Held stance pose. `progress` is squat depth; no armature `move`.
 	pub fn held() -> Self {
-		Self { held: true, bones_only: true, ..Self::default() }
+		Self {
+			held: true,
+			bones_only: true,
+			femur_peak: -1.35,
+			shin_peak: 1.85,
+			root_peak: 35.0_f32.to_radians(),
+			hip_peak: 0.85,
+			..Self::default()
+		}
 	}
 
 	/// Duration of one full down-up cycle in seconds.
@@ -118,6 +128,10 @@ impl<Rig> Squat<Rig> {
 		self.depth(progress) * self.root_peak
 	}
 
+	pub fn hip_fold(&self, progress: f32) -> f32 {
+		self.depth(progress) * self.hip_peak
+	}
+
 	pub fn vertical_drop(&self, progress: f32, lengths: LegSegmentLengths) -> f32 {
 		vertical_drop(self.femur_swing(progress), self.shin_flex(progress), lengths)
 	}
@@ -134,6 +148,7 @@ impl<Rig> Default for Squat<Rig> {
 			femur_peak: -FRAC_PI_4,
 			shin_peak: FRAC_PI_2,
 			root_peak: ROOT_SQUAT_DEG.to_radians(),
+			hip_peak: 0.0,
 			_rig: PhantomData,
 		}
 	}
@@ -191,6 +206,15 @@ mod tests {
 		let squat = Squat::<()>::held();
 		assert!((squat.depth(0.0)).abs() < 1e-6);
 		assert!((squat.depth(1.0) - 1.0).abs() < 1e-6);
+		Ok(())
+	}
+
+	#[test]
+	fn held_squat_folds_harder_than_jump_windup() -> anyhow::Result<()> {
+		let held = Squat::<()>::held();
+		let jump = Squat::<()>::default();
+		assert!(held.femur_peak.abs() > jump.femur_peak.abs());
+		assert!(held.hip_peak > jump.hip_peak);
 		Ok(())
 	}
 

@@ -4,8 +4,8 @@ use std::marker::PhantomData;
 /// Held prone pose. `progress` is settle depth (0 = stand, 1 = flat).
 #[derive(Debug, Clone, Copy)]
 pub struct Prone<Rig> {
-	/// Spine pitch toward horizontal at full depth (radians).
-	pub root_peak: f32,
+	/// Total sagittal spine pitch toward horizontal at full depth (radians).
+	pub spine_peak: f32,
 	/// Femur aft swing at full depth (radians).
 	pub femur_peak: f32,
 	/// Residual shin flex at full depth (radians).
@@ -22,8 +22,12 @@ impl<Rig> Prone<Rig> {
 		progress.clamp(0.0, 1.0)
 	}
 
+	pub fn spine_pitch(&self, progress: f32) -> f32 {
+		Self::depth(progress) * self.spine_peak
+	}
+
 	pub fn root_swing(&self, progress: f32) -> f32 {
-		Self::depth(progress) * self.root_peak
+		self.spine_pitch(progress)
 	}
 
 	pub fn femur_swing(&self, progress: f32) -> f32 {
@@ -46,7 +50,7 @@ impl<Rig> Prone<Rig> {
 impl<Rig> Default for Prone<Rig> {
 	fn default() -> Self {
 		Self {
-			root_peak: 70.0_f32.to_radians(),
+			spine_peak: FRAC_PI_2,
 			femur_peak: FRAC_PI_3,
 			shin_peak: 0.15,
 			neck_peak: -FRAC_PI_2 * 0.35,

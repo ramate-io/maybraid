@@ -253,6 +253,7 @@ fn respawn_world_player(
 		locomotion.as_ref(),
 		position,
 	);
+	crate::control::apply_world_player_motor(&mut commands, player);
 	if let Some(loadout) = loadout {
 		commands.entity(player).insert(WorldPlayerAppearanceRequested);
 		commands.spawn(RequestSetCharacterAppearance { appearance: loadout.appearance.clone() });

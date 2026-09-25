@@ -791,6 +791,30 @@ mod tests {
 		if femur.swing.abs() < 0.2 {
 			return Err(anyhow!("held squat should flex femurs, got {}", femur.swing));
 		}
+		let pelvis = rig
+			.pose()
+			.get(&rig.leg(Side::Left).pelvis.name)
+			.ok_or_else(|| anyhow!("pelvis"))?;
+		if pelvis.twist.abs() < 0.2 {
+			return Err(anyhow!("held squat should crease the pelvis, got {}", pelvis.twist));
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn stance_prone_pitches_the_spine() -> anyhow::Result<()> {
+		use anyhow::anyhow;
+		use crozon_rigs::humanoid::HumanoidRig;
+
+		let mut rig = HumanoidV0Rig::imported();
+		let effects = sample_humanoid(AnimClip::prone(), &mut rig, 1.0, true, true);
+		if effects.r#move.is_some() {
+			return Err(anyhow!("held prone must not Effects.move"));
+		}
+		let root = rig.pose().get(&rig.spine().root.name).ok_or_else(|| anyhow!("root"))?;
+		if root.twist.abs() < 0.3 {
+			return Err(anyhow!("prone should pitch the spine, got twist {}", root.twist));
+		}
 		Ok(())
 	}
 
