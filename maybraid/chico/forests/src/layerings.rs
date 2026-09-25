@@ -21,9 +21,9 @@ pub fn lush_jungle() -> ForestLayering {
 		kind: LayeringKind::LushJungle,
 		tufts: vec![
 			none(2.0),
-			grove(ForestGroveKind::TallGrass, 1.0),
+			/*grove(ForestGroveKind::TallGrass, 1.0),
 			grove(ForestGroveKind::WildGrass, 1.0),
-			grove(ForestGroveKind::TropicalTufts, 1.0),
+			grove(ForestGroveKind::TropicalTufts, 1.0),*/
 		],
 		understory: vec![
 			none(1.0),
@@ -56,9 +56,9 @@ pub fn riparian() -> ForestLayering {
 		kind: LayeringKind::Riparian,
 		tufts: vec![
 			none(1.5),
-			grove(ForestGroveKind::TallGrass, 1.0),
+			/*grove(ForestGroveKind::TallGrass, 1.0),
 			grove(ForestGroveKind::WildGrass, 1.0),
-			grove(ForestGroveKind::CommonTufts, 0.5),
+			grove(ForestGroveKind::CommonTufts, 0.5),*/
 		],
 		understory: vec![
 			none(1.5),
@@ -89,9 +89,9 @@ pub fn taiga() -> ForestLayering {
 		kind: LayeringKind::Taiga,
 		tufts: vec![
 			none(2.0),
-			grove(ForestGroveKind::CommonTufts, 1.0),
+			/* grove(ForestGroveKind::CommonTufts, 1.0),
 			grove(ForestGroveKind::TallGrass, 0.75),
-			grove(ForestGroveKind::WildGrass, 0.5),
+			grove(ForestGroveKind::WildGrass, 0.5), */
 		],
 		understory: vec![
 			none(5.0),
@@ -120,9 +120,9 @@ pub fn liams_summer() -> ForestLayering {
 		kind: LayeringKind::LiamsSummer,
 		tufts: vec![
 			none(1.0),
-			grove(ForestGroveKind::WildGrass, 1.5),
+			/*grove(ForestGroveKind::WildGrass, 1.5),
 			grove(ForestGroveKind::TropicalTufts, 1.5),
-			grove(ForestGroveKind::TallGrass, 0.75),
+			grove(ForestGroveKind::TallGrass, 0.75),*/
 		],
 		understory: vec![
 			none(0.75),
@@ -151,9 +151,9 @@ pub fn owls_desert() -> ForestLayering {
 		kind: LayeringKind::OwlsDesert,
 		tufts: vec![
 			none(16.0),
-			grove(ForestGroveKind::BushScrub, 1.0),
+			/*grove(ForestGroveKind::BushScrub, 1.0),
 			grove(ForestGroveKind::WildGrass, 0.35),
-			grove(ForestGroveKind::CommonTufts, 0.25),
+			grove(ForestGroveKind::CommonTufts, 0.25),*/
 		],
 		understory: vec![
 			none(16.0),
@@ -181,8 +181,8 @@ pub fn mi_robles() -> ForestLayering {
 		kind: LayeringKind::MiRobles,
 		tufts: vec![
 			none(3.0),
-			grove(ForestGroveKind::CommonTufts, 0.75),
-			grove(ForestGroveKind::WildGrass, 0.5),
+			/*grove(ForestGroveKind::CommonTufts, 0.75),
+			grove(ForestGroveKind::WildGrass, 0.5),*/
 		],
 		understory: vec![
 			none(5.0),
@@ -226,9 +226,9 @@ pub fn kumulipo() -> ForestLayering {
 		kind: LayeringKind::Kumulipo,
 		tufts: vec![
 			none(5.0),
-			grove(ForestGroveKind::TropicalTufts, 1.0),
+			/*grove(ForestGroveKind::TropicalTufts, 1.0),
 			grove(ForestGroveKind::WildGrass, 1.0),
-			grove(ForestGroveKind::CommonTufts, 0.5),
+			grove(ForestGroveKind::CommonTufts, 0.5),*/
 		],
 		understory: vec![
 			none(5.0),
@@ -253,8 +253,8 @@ pub fn waiguo() -> ForestLayering {
 		kind: LayeringKind::Waiguo,
 		tufts: vec![
 			none(2.0),
-			grove(ForestGroveKind::CommonTufts, 1.0),
-			grove(ForestGroveKind::TallGrass, 0.5),
+			/*grove(ForestGroveKind::CommonTufts, 1.0),
+			grove(ForestGroveKind::TallGrass, 0.5),*/
 		],
 		understory: vec![
 			none(1.5),
@@ -276,7 +276,7 @@ pub fn waiguo() -> ForestLayering {
 pub fn ag_town() -> ForestLayering {
 	ForestLayering {
 		kind: LayeringKind::AgTown,
-		tufts: vec![none(8.0), grove(ForestGroveKind::CommonTufts, 0.5)],
+		tufts: vec![none(8.0) /*grove(ForestGroveKind::CommonTufts, 0.5)*/],
 		understory: vec![
 			none(8.0),
 			grove(ForestGroveKind::LowBush, 0.35),
@@ -296,7 +296,7 @@ pub fn ag_town() -> ForestLayering {
 pub fn suns_barren() -> ForestLayering {
 	ForestLayering {
 		kind: LayeringKind::SunsBarren,
-		tufts: vec![none(64.0), grove(ForestGroveKind::CommonTufts, 0.25)],
+		tufts: vec![none(64.0) /*grove(ForestGroveKind::CommonTufts, 0.25)*/],
 		understory: vec![none(12.0)],
 		lower_canopy: vec![none(12.0)],
 		upper_canopy: vec![none(12.0)],
@@ -307,7 +307,7 @@ pub fn suns_barren() -> ForestLayering {
 pub fn temperate_holy() -> ForestLayering {
 	ForestLayering {
 		kind: LayeringKind::TemperateHoly,
-		tufts: vec![none(8.0), grove(ForestGroveKind::CommonTufts, 0.25)],
+		tufts: vec![none(8.0) /*grove(ForestGroveKind::CommonTufts, 0.25)*/],
 		understory: vec![none(8.0), grove(ForestGroveKind::LowBush, 0.25)],
 		lower_canopy: vec![none(1.0), grove(ForestGroveKind::TemperateLowerMassives, 2.0)],
 		upper_canopy: vec![
@@ -324,8 +324,8 @@ pub fn old_steppe() -> ForestLayering {
 		kind: LayeringKind::OldSteppe,
 		tufts: vec![
 			none(4.0),
-			grove(ForestGroveKind::TallGrass, 0.75),
-			grove(ForestGroveKind::WildGrass, 0.5),
+			/*grove(ForestGroveKind::TallGrass, 0.75),
+			grove(ForestGroveKind::WildGrass, 0.5),*/
 		],
 		understory: vec![none(8.0)],
 		lower_canopy: vec![none(8.0), grove(ForestGroveKind::ConiferSapling, 0.35)],
@@ -339,8 +339,8 @@ pub fn trap_thicket() -> ForestLayering {
 		kind: LayeringKind::TrapThicket,
 		tufts: vec![
 			none(2.0),
-			grove(ForestGroveKind::TropicalTufts, 1.0),
-			grove(ForestGroveKind::WildGrass, 0.75),
+			/*grove(ForestGroveKind::TropicalTufts, 1.0),
+			grove(ForestGroveKind::WildGrass, 0.75),*/
 		],
 		understory: vec![
 			none(0.75),
@@ -364,8 +364,8 @@ pub fn bush() -> ForestLayering {
 		kind: LayeringKind::Bush,
 		tufts: vec![
 			none(2.0),
-			grove(ForestGroveKind::BushScrub, 1.0),
-			grove(ForestGroveKind::WildGrass, 0.5),
+			/*grove(ForestGroveKind::BushScrub, 1.0),
+			grove(ForestGroveKind::WildGrass, 0.5),*/
 		],
 		understory: vec![
 			none(1.0),
@@ -390,8 +390,8 @@ pub fn old_nevada() -> ForestLayering {
 		kind: LayeringKind::OldNevada,
 		tufts: vec![
 			none(5.0),
-			grove(ForestGroveKind::BushScrub, 0.5),
-			grove(ForestGroveKind::WildGrass, 0.35),
+			/*grove(ForestGroveKind::BushScrub, 0.5),
+			grove(ForestGroveKind::WildGrass, 0.35),*/
 		],
 		understory: vec![none(8.0), grove(ForestGroveKind::SpottyBushes, 0.35)],
 		lower_canopy: vec![none(1.5), grove(ForestGroveKind::AridConiferSapling, 2.0)],
@@ -405,8 +405,8 @@ pub fn storybook() -> ForestLayering {
 		kind: LayeringKind::Storybook,
 		tufts: vec![
 			none(2.0),
-			grove(ForestGroveKind::WildGrass, 1.0),
-			grove(ForestGroveKind::CommonTufts, 0.75),
+			/*grove(ForestGroveKind::WildGrass, 1.0),
+			grove(ForestGroveKind::CommonTufts, 0.75),*/
 		],
 		understory: vec![
 			none(2.0),
@@ -435,8 +435,8 @@ pub fn meadowland() -> ForestLayering {
 		kind: LayeringKind::Meadowland,
 		tufts: vec![
 			none(3.0),
-			grove(ForestGroveKind::WildGrass, 1.0),
-			grove(ForestGroveKind::TallGrass, 0.75),
+			/*grove(ForestGroveKind::WildGrass, 1.0),
+			grove(ForestGroveKind::TallGrass, 0.75),*/
 		],
 		understory: vec![none(8.0), grove(ForestGroveKind::LowBush, 0.25)],
 		lower_canopy: vec![none(9.0)],
@@ -456,8 +456,8 @@ pub fn fruit_plains() -> ForestLayering {
 		kind: LayeringKind::FruitPlains,
 		tufts: vec![
 			none(4.0),
-			grove(ForestGroveKind::CommonTufts, 0.75),
-			grove(ForestGroveKind::WildGrass, 0.5),
+			/*grove(ForestGroveKind::CommonTufts, 0.75),
+			grove(ForestGroveKind::WildGrass, 0.5),*/
 		],
 		understory: vec![
 			none(6.0),
@@ -481,8 +481,8 @@ pub fn damas_edge() -> ForestLayering {
 		kind: LayeringKind::DamasEdge,
 		tufts: vec![
 			none(5.0),
-			grove(ForestGroveKind::BushScrub, 0.75),
-			grove(ForestGroveKind::TropicalTufts, 0.35),
+			/*grove(ForestGroveKind::BushScrub, 0.75),
+			grove(ForestGroveKind::TropicalTufts, 0.35),*/
 		],
 		understory: vec![
 			none(4.0),
@@ -510,8 +510,8 @@ pub fn open_tropics() -> ForestLayering {
 		kind: LayeringKind::OpenTropics,
 		tufts: vec![
 			none(4.0),
-			grove(ForestGroveKind::TropicalTufts, 0.75),
-			grove(ForestGroveKind::WildGrass, 0.5),
+			/*grove(ForestGroveKind::TropicalTufts, 0.75),
+			grove(ForestGroveKind::WildGrass, 0.5),*/
 		],
 		understory: vec![none(6.0), grove(ForestGroveKind::TropicalUndergrowth, 0.5)],
 		lower_canopy: vec![none(7.0), grove(ForestGroveKind::UnendingJungle, 0.35)],
@@ -525,9 +525,9 @@ pub fn west_maui() -> ForestLayering {
 		kind: LayeringKind::WestMaui,
 		tufts: vec![
 			none(1.0),
-			grove(ForestGroveKind::WildGrass, 2.0),
+			/*grove(ForestGroveKind::WildGrass, 2.0),
 			grove(ForestGroveKind::BushScrub, 2.0),
-			grove(ForestGroveKind::TropicalTufts, 2.0),
+			grove(ForestGroveKind::TropicalTufts, 2.0),*/
 		],
 		understory: vec![none(5.0)],
 		lower_canopy: vec![none(8.0)],
@@ -541,9 +541,9 @@ pub fn upper_park() -> ForestLayering {
 		kind: LayeringKind::UpperPark,
 		tufts: vec![
 			none(1.0),
-			grove(ForestGroveKind::WildGrass, 2.0),
+			/*grove(ForestGroveKind::WildGrass, 2.0),
 			grove(ForestGroveKind::BushScrub, 2.0),
-			grove(ForestGroveKind::CommonTufts, 0.5),
+			grove(ForestGroveKind::CommonTufts, 0.5),*/
 		],
 		understory: vec![
 			none(6.0),
@@ -561,8 +561,8 @@ pub fn steppe_down() -> ForestLayering {
 		kind: LayeringKind::SteppeDown,
 		tufts: vec![
 			none(1.0),
-			grove(ForestGroveKind::WildGrass, 2.0),
-			grove(ForestGroveKind::BushScrub, 2.0),
+			/*grove(ForestGroveKind::WildGrass, 2.0),
+			grove(ForestGroveKind::BushScrub, 2.0),*/
 		],
 		understory: vec![none(8.0)],
 		lower_canopy: vec![none(10.0)],
