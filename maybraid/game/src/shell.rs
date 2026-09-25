@@ -7,26 +7,27 @@
 //! Async load-in follows [`efa73ad`](https://github.com/ramate-io/maybraid/commit/efa73adf):
 //! a `Camera2d` exists only during [`GameFlow::LoadingWorld`]. A persistent
 //! second camera would steal UI. Terrain streaming stays off on menu shells.
-//! Discovery streams the playable world. Training Ground runs the free-for-all
-//! and marks [`TrainingGrounds`] so a Training pose is not written.
+//! Discovery streams the playable world. Training Ground pins a seeded FinePatch
+//! of that same stack and marks [`TrainingGrounds`] so a Training pose is not
+//! written.
 
-use bevy::camera::visibility::RenderLayers;
 use bevy::camera::ClearColorConfig;
+use bevy::camera::visibility::RenderLayers;
 use bevy::prelude::*;
 use crozon_character_playground::CameraController as PreviewCameraController;
 use maybraid_game_mode_discover::streams_terrain;
 use maybraid_game_mode_training_ground::TrainingGroundActive;
 use maybraid_world::{
-	InventoryEditCameraFollow, PlayerPhysicsEnabled, TerrainStreamingEnabled, TrainingGrounds,
-	WorldGameplayEnabled, WorldSceneryVisible, SKY_CLEAR,
+	InventoryEditCameraFollow, PlayerPhysicsEnabled, SKY_CLEAR, TerrainStreamingEnabled,
+	TrainingGrounds, WorldGameplayEnabled, WorldSceneryVisible,
 };
 use menu_components::MENU_CLEAR;
 use menu_playground::{
 	CharacterEditorReturn, CharacterPreviewLight, CharacterPreviewRoot, CharacterScreen,
 };
 use menu_screens::{
-	despawn_menu_screens, request_show_gallery, request_show_home, request_show_in_game,
-	request_show_loading, MenuScreen,
+	MenuScreen, despawn_menu_screens, request_show_gallery, request_show_home,
+	request_show_in_game, request_show_loading,
 };
 
 /// World camera pose stashed while the pause character editor uses the preview eye.
@@ -182,14 +183,6 @@ fn world_session_playing(
 		&& pause.is_some_and(|pause| *pause.get() == WorldPause::Playing)
 }
 
-fn discovery_playing(
-	flow: GameFlow,
-	session: PlaySession,
-	pause: Option<&State<WorldPause>>,
-) -> bool {
-	session == PlaySession::Discovery && world_session_playing(flow, session, pause)
-}
-
 pub(crate) fn apply_shell_look(
 	mut commands: Commands,
 	flow: Res<State<GameFlow>>,
@@ -225,20 +218,20 @@ pub(crate) fn apply_shell_look(
 	for mut camera in &mut loading_cameras {
 		camera.is_active = loading;
 	}
-	// Menus keep Durham off. Discovery streams the playable world. Training
-	// Ground leaves that stream off and runs the free-for-all instead.
-	// [`TrainingGrounds`] still blocks a Training pose write. Gameplay is on
-	// while Training is playing so pad move is not swallowed; the world motor
-	// stays off so the parked Discovery body is not a second combatant.
+	// Menus keep Durham off. Discovery streams the playable rings. Training
+	// Ground streams a pinned FinePatch of the same stack. [`TrainingGrounds`]
+	// still blocks a Training pose write. Gameplay and the world motor stay on
+	// while either session is playing.
 	let in_world_shell = terrain_streaming_for_shell(flow);
 	let training_session = training_grounds_for_shell(flow, *session);
-	streaming.0 = streams_terrain(*session == PlaySession::Discovery, in_world_shell);
+	streaming.0 =
+		streams_terrain(*session == PlaySession::Discovery, in_world_shell) || training_session;
 	grounds.0 = training_session;
 	training.0 = training_session;
-	scenery.0 = flow == GameFlow::World && *session != PlaySession::Training;
+	scenery.0 = flow == GameFlow::World;
 	let playing = world_session_playing(flow, *session, pause.as_deref());
 	gameplay.0 = playing;
-	physics.0 = discovery_playing(flow, *session, pause.as_deref());
+	physics.0 = playing;
 }
 
 fn camera_render_layers(flow: GameFlow) -> RenderLayers {
@@ -297,12 +290,11 @@ mod tests {
 	use bevy::prelude::*;
 
 	use super::{
-		apply_shell_look, camera_render_layers, terrain_streaming_for_shell,
-		training_grounds_for_shell, PREVIEW_RENDER_LAYER, WORLD_RENDER_LAYER,
+		PREVIEW_RENDER_LAYER, WORLD_RENDER_LAYER, apply_shell_look, camera_render_layers,
+		terrain_streaming_for_shell, training_grounds_for_shell,
 	};
 	use crate::flow::{GameFlow, PlaySession, WorldPause};
 	use bevy::ecs::system::RunSystemOnce;
-	use bevy::prelude::*;
 	use maybraid_world::{
 		PlayerPhysicsEnabled, TerrainStreamingEnabled, TrainingGrounds, WorldGameplayEnabled,
 		WorldSceneryVisible,
@@ -320,7 +312,7 @@ mod tests {
 	}
 
 	#[test]
-	fn training_shell_runs_free_for_all_without_the_world_stream() -> anyhow::Result<()> {
+	fn training_shell_streams_a_pinned_patch() -> anyhow::Result<()> {
 		for flow in [GameFlow::LoadingWorld, GameFlow::World] {
 			assert!(terrain_streaming_for_shell(flow));
 			assert!(training_grounds_for_shell(flow, PlaySession::Training));
@@ -329,19 +321,19 @@ mod tests {
 			world.insert_resource(PlaySession::Training);
 			world.insert_resource(ClearColor(MENU_CLEAR));
 			world.insert_resource(WorldGameplayEnabled(true));
-			world.insert_resource(PlayerPhysicsEnabled(true));
-			world.insert_resource(TerrainStreamingEnabled(true));
+			world.insert_resource(PlayerPhysicsEnabled(false));
+			world.insert_resource(TerrainStreamingEnabled(false));
 			world.insert_resource(TrainingGrounds(false));
 			world.insert_resource(maybraid_game_mode_training_ground::TrainingGroundActive(false));
-			world.insert_resource(WorldSceneryVisible(true));
+			world.insert_resource(WorldSceneryVisible(false));
 			world
 				.run_system_once(apply_shell_look)
 				.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-			assert!(!world.resource::<TerrainStreamingEnabled>().0);
+			assert!(world.resource::<TerrainStreamingEnabled>().0);
 			assert!(world.resource::<TrainingGrounds>().0);
 			assert!(world.resource::<maybraid_game_mode_training_ground::TrainingGroundActive>().0);
 			assert!(!world.resource::<WorldGameplayEnabled>().0);
-			assert!(!world.resource::<WorldSceneryVisible>().0);
+			assert_eq!(world.resource::<WorldSceneryVisible>().0, flow == GameFlow::World);
 		}
 		assert!(terrain_streaming_for_shell(GameFlow::LoadingWorld));
 		assert!(terrain_streaming_for_shell(GameFlow::World));
@@ -352,7 +344,7 @@ mod tests {
 	}
 
 	#[test]
-	fn training_play_enables_gameplay_without_the_world_motor() -> anyhow::Result<()> {
+	fn training_play_enables_the_world_motor() -> anyhow::Result<()> {
 		let mut world = World::new();
 		world.insert_resource(State::new(GameFlow::World));
 		world.insert_resource(State::new(WorldPause::Playing));
@@ -360,17 +352,18 @@ mod tests {
 		world.insert_resource(ClearColor(MENU_CLEAR));
 		world.insert_resource(WorldGameplayEnabled(false));
 		world.insert_resource(PlayerPhysicsEnabled(false));
-		world.insert_resource(TerrainStreamingEnabled(true));
+		world.insert_resource(TerrainStreamingEnabled(false));
 		world.insert_resource(TrainingGrounds(false));
 		world.insert_resource(maybraid_game_mode_training_ground::TrainingGroundActive(false));
-		world.insert_resource(WorldSceneryVisible(true));
+		world.insert_resource(WorldSceneryVisible(false));
 		world
 			.run_system_once(apply_shell_look)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		assert!(world.resource::<WorldGameplayEnabled>().0);
-		assert!(!world.resource::<PlayerPhysicsEnabled>().0);
-		assert!(!world.resource::<TerrainStreamingEnabled>().0);
+		assert!(world.resource::<PlayerPhysicsEnabled>().0);
+		assert!(world.resource::<TerrainStreamingEnabled>().0);
 		assert!(world.resource::<TrainingGrounds>().0);
+		assert!(world.resource::<WorldSceneryVisible>().0);
 		Ok(())
 	}
 

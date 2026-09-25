@@ -10,13 +10,7 @@ publish = { workspace = true }
 rust-version = { workspace = true }
 
 [dependencies]
-avian3d = { workspace = true }
 bevy = { workspace = true }
-chico-vegetation-on-terrain-playground = { workspace = true }
-firing-range-playground = { workspace = true }
-
-[dev-dependencies]
-anyhow = { workspace = true }
 
 [lints]
 workspace = true

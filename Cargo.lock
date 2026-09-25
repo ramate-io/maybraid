@@ -4773,11 +4773,7 @@ dependencies = [
 name = "maybraid-game-mode-training-ground"
 version = "0.0.1"
 dependencies = [
- "anyhow",
- "avian3d",
  "bevy",
- "chico-vegetation-on-terrain-playground",
- "firing-range-playground",
 ]
 
 [[package]]

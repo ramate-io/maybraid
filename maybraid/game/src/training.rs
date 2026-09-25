@@ -10,8 +10,9 @@ pub(crate) fn reset_surface_ready(mut ready: ResMut<WorldSurfaceReady>) {
 	ready.0 = false;
 }
 
-/// Leave / Home: drop the session. The training-ground plugin despawns the roster
-/// once [`crate::shell`] clears [`maybraid_game_mode_training_ground::TrainingGroundActive`].
+/// Leave / Home: drop the session. [`crate::shell`] then clears
+/// [`maybraid_game_mode_training_ground::TrainingGroundActive`] so the world
+/// fill restores the playable rings.
 pub(crate) fn clear_play_session(
 	mut session: ResMut<PlaySession>,
 	mut mode: ResMut<GameMode>,

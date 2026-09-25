@@ -1,10 +1,9 @@
 //! First-load unveil: Discovery waits on spawn terrain and quiet LOD work.
-//! Training unveils once the free-for-all roster is mounted and does not wait
-//! on terrain jobs.
+//! Training unveils once the FinePatch surface is ready and does not wait on
+//! the playable-world job wave.
 
 use crate::flow::{GameFlow, PlaySession};
 use bevy::prelude::*;
-use maybraid_game_mode_training_ground::FreeForAllMounted;
 use maybraid_world::{LodJobCounter, WorldSurfaceReady};
 use menu_screens::{request_loading_explainer, request_loading_progress};
 
@@ -64,22 +63,14 @@ impl FirstLoadGate {
 
 	pub fn progress(&self, ready: bool, active: u64) -> f32 {
 		let from_jobs = if self.peak == 0 {
-			if self.saw_work {
-				0.55
-			} else {
-				0.08
-			}
+			if self.saw_work { 0.55 } else { 0.08 }
 		} else {
 			(1.0 - (active as f32 / self.peak as f32)).clamp(0.08, 0.95)
 		};
 		if ready && self.saw_work && active <= UNVEIL_JOB_THRESHOLD {
 			return from_jobs.max(0.9);
 		}
-		if ready {
-			from_jobs.max(0.45)
-		} else {
-			from_jobs.min(0.4)
-		}
+		if ready { from_jobs.max(0.45) } else { from_jobs.min(0.4) }
 	}
 
 	pub fn explainer(&self, ready: bool, active: u64) -> &'static str {
@@ -100,11 +91,7 @@ pub(crate) fn unveil_ready(
 	active: u64,
 	now: f32,
 ) -> bool {
-	if training {
-		ready
-	} else {
-		gate.should_unveil(ready, active, now)
-	}
+	if training { ready } else { gate.should_unveil(ready, active, now) }
 }
 
 pub(crate) fn loading_explainer(
@@ -114,7 +101,7 @@ pub(crate) fn loading_explainer(
 	active: u64,
 ) -> &'static str {
 	if training {
-		"Preparing the free-for-all…"
+		if ready { "Almost ready…" } else { "Waiting for the ground…" }
 	} else {
 		gate.explainer(ready, active)
 	}
@@ -132,14 +119,13 @@ pub(crate) fn finish_world_loading(
 	mut commands: Commands,
 	session: Res<PlaySession>,
 	ready: Res<WorldSurfaceReady>,
-	mounted: Option<Res<FreeForAllMounted>>,
 	jobs: Option<Res<LodJobCounter>>,
 	mut gate: Option<ResMut<FirstLoadGate>>,
 	time: Res<Time>,
 	mut flow: ResMut<NextState<GameFlow>>,
 ) {
 	let training = *session == PlaySession::Training;
-	let surface_ready = if training { mounted.is_some() } else { ready.0 };
+	let surface_ready = ready.0;
 	let active = jobs.as_deref().map(LodJobCounter::active).unwrap_or(0);
 	let Some(gate) = gate.as_deref_mut() else {
 		if surface_ready {
@@ -207,7 +193,8 @@ mod tests {
 		assert!(!unveil_ready(true, &gate, false, 400, 0.0));
 		assert!(unveil_ready(true, &gate, true, 400, 0.0));
 		assert!(!unveil_ready(false, &gate, true, 0, 0.2));
-		assert_eq!(loading_explainer(true, &gate, false, 0), "Preparing the free-for-all…");
+		assert_eq!(loading_explainer(true, &gate, false, 0), "Waiting for the ground…");
+		assert_eq!(loading_explainer(true, &gate, true, 0), "Almost ready…");
 	}
 
 	#[test]

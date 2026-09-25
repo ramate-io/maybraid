@@ -4,7 +4,7 @@ use avian3d::prelude::{Collider, ShapeCastConfig, SpatialQuery, SpatialQueryFilt
 use bevy::core_pipeline::prepass::DepthPrepass;
 use bevy::prelude::*;
 use chico_vegetation_on_terrain_playground::{
-	player::holding_elevation, Player as VegetationPlayer, PlayerSpawnXz, PlaygroundMode,
+	Player as VegetationPlayer, PlayerSpawnXz, PlaygroundMode, player::holding_elevation,
 };
 use durham_terrain_models::WorldBaseTerrain;
 use game_commands::command::TextEntryFocus;
@@ -12,8 +12,8 @@ use lod_avian::PhysicsInteractionLayer;
 use maybraid_input::{PadButton, VirtualPad};
 use player::{CameraFollow, Player};
 use player_camera::{
-	spawn_follow_camera, CameraController, CameraPov, CameraPovLocked, FollowCamera,
-	PlayerCameraSystems,
+	CameraController, CameraPov, CameraPovLocked, FollowCamera, PlayerCameraSystems,
+	spawn_follow_camera,
 };
 
 use crate::control::{InventoryEditCameraFollow, WorldGameplayEnabled};
@@ -77,13 +77,11 @@ pub(crate) fn sync_camera_mode(
 	mut commands: Commands,
 	mode: Res<PlaygroundMode>,
 	gameplay: Res<WorldGameplayEnabled>,
-	grounds: Option<Res<crate::TrainingGrounds>>,
 	inventory_edit: Option<Res<InventoryEditCameraFollow>>,
 	players: Query<(Entity, Has<CameraFollow>), (With<VegetationPlayer>, With<Player>)>,
 ) {
 	let follow = *mode == PlaygroundMode::Character
-		&& (gameplay.0 || inventory_edit.is_some_and(|edit| edit.0))
-		&& !grounds.is_some_and(|grounds| grounds.0);
+		&& (gameplay.0 || inventory_edit.is_some_and(|edit| edit.0));
 	for (entity, following) in &players {
 		if follow && !following {
 			commands.entity(entity).insert(CameraFollow);

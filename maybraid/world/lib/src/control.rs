@@ -60,8 +60,8 @@ pub(crate) fn update_world_surface_ready(
 	colliders: Query<&CascadeChunk, With<TerrainTrimeshCollider>>,
 	mut ready: ResMut<WorldSurfaceReady>,
 ) {
-	// Menu shells keep streaming off. Leave the ready bit alone; training unveils
-	// from this same column once the grounds exist.
+	// Menu shells keep streaming off. Leave the ready bit alone; Training
+	// unveils from this same column once the FinePatch collider exists.
 	if !streaming.0 {
 		return;
 	}

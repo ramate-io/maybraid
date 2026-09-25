@@ -7,17 +7,17 @@ use chico_vegetation_on_terrain_playground::{
 };
 use crozon_character_items::{CharacterSheet, Inventory, InventoryItem};
 use crozon_characters::{CharacterAppearance, CharacterRoot};
-use crozon_inventory_user::{spawn_bag, InventoryUser};
+use crozon_inventory_user::{InventoryUser, spawn_bag};
 use damage::Health;
 use firearm_user::{
-	live_weapon_from_stats, spawn_held_firearm, spawn_held_kit, spawn_reticle, FirearmUser,
-	FirearmUserSettings, FirearmUserSystems, GeneratedFirearm, WeaponSwap,
+	FirearmUser, FirearmUserSettings, FirearmUserSystems, GeneratedFirearm, WeaponSwap,
+	live_weapon_from_stats, spawn_held_firearm, spawn_held_kit, spawn_reticle,
 };
 use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
-use maybraid_skill_map::{spawn_skill_maps, SkillMapEquip, SkillMapSystems};
+use maybraid_skill_map::{SkillMapEquip, SkillMapSystems, spawn_skill_maps};
 use player::{
-	apply_character_mobility, CameraFollow, Player as MaybraidPlayer, PlayerCameraAim, PlayerLook,
-	PlayerUse, PlayerVisual as MaybraidPlayerVisual, PlayerYawOwner,
+	CameraFollow, Player as MaybraidPlayer, PlayerCameraAim, PlayerLook, PlayerUse,
+	PlayerVisual as MaybraidPlayerVisual, PlayerYawOwner, apply_character_mobility,
 };
 
 use crate::control::{InventoryEditCameraFollow, WorldGameplayEnabled};
@@ -83,15 +83,12 @@ fn arm_world_player(
 	mut commands: Commands,
 	mode: Res<PlaygroundMode>,
 	gameplay: Res<WorldGameplayEnabled>,
-	grounds: Option<Res<crate::TrainingGrounds>>,
 	inventory_edit: Option<Res<InventoryEditCameraFollow>>,
 	loadout: Option<Res<WorldPlayerLoadout>>,
 	players: Query<WorldPlayerEquipment<'_>, With<VegetationPlayer>>,
 	visuals: Query<WorldPlayerVisual<'_>, (With<VegetationPlayerVisual>, With<CharacterRoot>)>,
 ) {
-	if grounds.is_some_and(|grounds| grounds.0)
-		|| (!gameplay.0 && !inventory_edit.is_some_and(|edit| edit.0))
-	{
+	if !gameplay.0 && !inventory_edit.is_some_and(|edit| edit.0) {
 		return;
 	}
 	for (player, firearm_user, inventory_user, skill_map_user, applied, appearance_requested) in
@@ -340,8 +337,8 @@ mod tests {
 	};
 	use crozon_characters::{CharacterAppearance, CharacterRoot};
 
-	use crate::weapon::{arm_world_player, WorldPlayerAppearanceRequested, WorldPlayerLoadout};
 	use crate::WorldGameplayEnabled;
+	use crate::weapon::{WorldPlayerAppearanceRequested, WorldPlayerLoadout, arm_world_player};
 
 	#[test]
 	fn world_loadout_keeps_primary_weapon_and_worn_clothing() {
@@ -395,21 +392,6 @@ mod tests {
 		assert!(world.get::<WorldPlayerAppearanceRequested>(player).is_none());
 		assert!(world.get::<maybraid_skill_map::SkillMapUser>(player).is_some());
 		assert_eq!(world.get::<Name>(player).map(Name::as_str), Some("Ada"));
-		Ok(())
-	}
-
-	#[test]
-	fn training_grounds_do_not_arm_the_streamed_body() -> anyhow::Result<()> {
-		let mut world = World::new();
-		world.insert_resource(PlaygroundMode::Character);
-		world.insert_resource(WorldGameplayEnabled(true));
-		world.insert_resource(crate::TrainingGrounds(true));
-		let player = world.spawn(VegetationPlayer).id();
-		world.spawn((VegetationPlayerVisual, CharacterRoot, ChildOf(player)));
-		world
-			.run_system_once(arm_world_player)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		assert!(world.get::<maybraid_skill_map::SkillMapUser>(player).is_none());
 		Ok(())
 	}
 
@@ -499,7 +481,7 @@ mod tests {
 	#[test]
 	fn y_swaps_the_queued_primary() -> anyhow::Result<()> {
 		use crozon_inventory_user::InventoryUser;
-		use firearm_user::{FirearmUser, WeaponSwap, WEAPON_SWAP_SECS};
+		use firearm_user::{FirearmUser, WEAPON_SWAP_SECS, WeaponSwap};
 
 		use crate::weapon::commit_weapon_swap;
 

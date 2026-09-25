@@ -9,8 +9,9 @@ pub mod water;
 pub use terrain::render::cascade_chunk_for_cell;
 pub use terrain::{
 	origin_cell_ids_for_layout, playable_world_cell_layout, register_terrain_plugin,
-	stream_banded_draws, stream_banded_level, stream_banded_scene, terrain_collider_covers_xz,
-	terrain_streaming_enabled, training_grounds_cell_layout, AvianTerrainIndex, BaseTerrainNoise,
+	retarget_presentation_assets, stream_banded_draws, stream_banded_level, stream_banded_scene,
+	terrain_collider_covers_xz, terrain_streaming_enabled, training_grounds_cell_layout,
+	AvianTerrainIndex, BaseTerrainNoise,
 	CanyonHighPassControllerLayout, CanyonLowPassControllerLayout, CanyonStampCell, CascadeChunk,
 	ComposedTerrain, Durham, JerseyControllerLayouts, JerseyStampConfigs, MacroCellLayout,
 	MarazionBandPass, MarazionLeafBounds, MarazionLeafKind, MarazionWatershedConfigs,
@@ -22,8 +23,9 @@ pub use terrain::{
 	RollingStampCell, StreamBandedLod, Terrain, TerrainBackground,
 	TerrainBackgroundRegionPresenter, TerrainCellId, TerrainCellLayout, TerrainCellRing,
 	TerrainColliderEpoch, TerrainColliderMeshSource, TerrainColliderSystems, TerrainConfig,
-	TerrainCoverage, TerrainEntryStore, TerrainFar, TerrainFarRegionPresenter,
-	TerrainFrictionConfig, TerrainHeightSnapshot, TerrainMeshBuilder, TerrainMeshLodBand,
+	TerrainCoverage, TerrainEntryStore, TerrainFar, TerrainFarRegionPresenter, TerrainFillSystems,
+	TerrainFrictionConfig, TerrainHeightSnapshot, TerrainLayoutPinned, TerrainMeshBuilder,
+	TerrainMeshLodBand,
 	TerrainNear, TerrainNearRegionPresenter, TerrainPlugin, TerrainPresentEnabled,
 	TerrainPresentPending, TerrainPresentationAssets, TerrainPresentationDirty,
 	TerrainPresenterState, TerrainRegionPresenter, TerrainRenderItem, TerrainResourcesPlugin,
