@@ -4991,6 +4991,7 @@ dependencies = [
 name = "menu-screens"
 version = "0.0.1"
 dependencies = [
+ "anyhow",
  "bevy",
  "crozon-character-items",
  "crozon-character-model-user",

@@ -11,7 +11,7 @@ pub use terrain::{
 	origin_cell_ids_for_layout, playable_world_cell_layout, register_terrain_plugin,
 	retarget_presentation_assets, stream_banded_draws, stream_banded_level, stream_banded_scene,
 	terrain_collider_covers_xz, terrain_streaming_enabled, training_grounds_cell_layout,
-	AvianTerrainIndex, BaseTerrainNoise,
+	training_grounds_cell_layout_at, AvianTerrainIndex, BaseTerrainNoise,
 	CanyonHighPassControllerLayout, CanyonLowPassControllerLayout, CanyonStampCell, CascadeChunk,
 	ComposedTerrain, Durham, JerseyControllerLayouts, JerseyStampConfigs, MacroCellLayout,
 	MarazionBandPass, MarazionLeafBounds, MarazionLeafKind, MarazionWatershedConfigs,

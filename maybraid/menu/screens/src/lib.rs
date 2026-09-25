@@ -15,6 +15,7 @@ pub mod loading;
 pub mod settings;
 pub mod show;
 pub mod spin_reveal;
+pub mod training;
 
 pub use create_character::{
 	cancel_pending_create, request_show_create_character, request_show_create_character_id,
@@ -26,8 +27,8 @@ pub use gallery::{
 pub use game_mode::GameMode;
 pub use home::{request_show_home, HomeMenuChoice, HomeScreen, HomeScreenPlugin, RequestShowHome};
 pub use in_game::{
-	request_show_in_game, request_show_in_game_with_mode, InGameMenuChoice, InGameScreen,
-	InGameScreenPlugin, RequestShowInGame,
+	request_show_in_game, request_show_in_game_at, request_show_in_game_with_mode,
+	InGameMenuChoice, InGameScreen, InGameScreenPlugin, RequestShowInGame,
 };
 pub use input::{add_menu_input, MenuInputPlugin};
 pub use loading::{
@@ -47,6 +48,10 @@ pub use spin_reveal::{
 	request_show_spin_reveal, RequestShowSpinReveal, SpinRevealChoice, SpinRevealCurrent,
 	SpinRevealFinished, SpinRevealItems, SpinRevealScreen, SpinRevealScreenPlugin,
 	SpinRevealSystems,
+};
+pub use training::{
+	request_show_training, RequestShowTraining, TrainingCharacterChoice, TrainingScreen,
+	TrainingScreenPlugin, TrainingSpawn,
 };
 
 /// Marker on every full-screen menu root so show-requests can replace each other.

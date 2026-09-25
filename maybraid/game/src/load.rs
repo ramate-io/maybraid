@@ -4,7 +4,7 @@
 
 use crate::flow::{GameFlow, PlaySession};
 use bevy::prelude::*;
-use maybraid_world::{LodJobCounter, TrainingPlazaMounted, WorldSurfaceReady};
+use maybraid_world::{LodJobCounter, TrainingPlazaMounted, TrainingRound, WorldSurfaceReady};
 use menu_screens::{request_loading_explainer, request_loading_progress};
 
 /// Remaining generate / present / pending-root tickets that still count as
@@ -120,13 +120,18 @@ pub(crate) fn finish_world_loading(
 	session: Res<PlaySession>,
 	ready: Res<WorldSurfaceReady>,
 	plaza: Option<Res<TrainingPlazaMounted>>,
+	round: Option<Res<TrainingRound>>,
 	jobs: Option<Res<LodJobCounter>>,
 	mut gate: Option<ResMut<FirstLoadGate>>,
 	time: Res<Time>,
 	mut flow: ResMut<NextState<GameFlow>>,
 ) {
 	let training = *session == PlaySession::Training;
-	let surface_ready = if training { ready.0 && plaza.is_some() } else { ready.0 };
+	let surface_ready = if training {
+		ready.0 && plaza_mounted_for(plaza.as_deref(), round.as_deref())
+	} else {
+		ready.0
+	};
 	let active = jobs.as_deref().map(LodJobCounter::active).unwrap_or(0);
 	let Some(gate) = gate.as_deref_mut() else {
 		if surface_ready {
@@ -146,9 +151,24 @@ pub(crate) fn finish_world_loading(
 	}
 }
 
+/// The previous round's plaza stays mounted until its teardown runs, so a
+/// round reload must not unveil on it.
+fn plaza_mounted_for(plaza: Option<&TrainingPlazaMounted>, round: Option<&TrainingRound>) -> bool {
+	plaza.is_some_and(|plaza| round.is_none_or(|round| plaza.0 == *round))
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	#[test]
+	fn a_round_reload_waits_for_its_own_plaza() {
+		let round = TrainingRound::new(1);
+		let next = round.next();
+		assert!(plaza_mounted_for(Some(&TrainingPlazaMounted(round)), Some(&round)));
+		assert!(!plaza_mounted_for(Some(&TrainingPlazaMounted(round)), Some(&next)));
+		assert!(!plaza_mounted_for(None, Some(&next)));
+	}
 
 	fn gate_at(entered_at: f32) -> FirstLoadGate {
 		FirstLoadGate::new(entered_at)

@@ -46,6 +46,8 @@ impl PlaySession {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HomeRoute {
 	World { session: PlaySession },
+	/// Pick who plays the Training rounds before loading.
+	TrainingSetup,
 	Characters,
 	Settings,
 	Unimplemented,
@@ -55,7 +57,7 @@ impl HomeRoute {
 	pub fn from_choice(choice: HomeMenuChoice) -> Self {
 		match choice {
 			HomeMenuChoice::Discovery => Self::World { session: PlaySession::Discovery },
-			HomeMenuChoice::TrainingGround => Self::World { session: PlaySession::Training },
+			HomeMenuChoice::TrainingGround => Self::TrainingSetup,
 			HomeMenuChoice::Characters => Self::Characters,
 			HomeMenuChoice::Settings => Self::Settings,
 			HomeMenuChoice::Reliquary => match reliquary::route() {
@@ -80,7 +82,10 @@ impl PauseMenuRoute {
 			InGameMenuChoice::Leave => Self::Leave,
 			InGameMenuChoice::Settings => Self::Settings,
 			InGameMenuChoice::Character => Self::Character,
-			InGameMenuChoice::Records | InGameMenuChoice::Help => Self::Stay,
+			// The pause screen flips the next round's mode itself.
+			InGameMenuChoice::NextRound | InGameMenuChoice::Records | InGameMenuChoice::Help => {
+				Self::Stay
+			}
 		}
 	}
 }
@@ -108,11 +113,12 @@ mod tests {
 	}
 
 	#[test]
-	fn training_enters_the_world() {
+	fn training_picks_a_character_mode_first() {
 		assert_eq!(
 			HomeRoute::from_choice(HomeMenuChoice::TrainingGround),
-			HomeRoute::World { session: PlaySession::Training }
+			HomeRoute::TrainingSetup
 		);
+		assert_eq!(PauseMenuRoute::from_choice(InGameMenuChoice::NextRound), PauseMenuRoute::Stay);
 	}
 
 	#[test]

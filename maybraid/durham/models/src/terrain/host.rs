@@ -186,7 +186,14 @@ pub fn playable_world_cell_layout() -> TerrainCellLayout {
 /// Four 160 m cells on a side, fixed on the origin. Training presents this
 /// patch instead of the playable-world rings.
 pub fn training_grounds_cell_layout() -> TerrainCellLayout {
-	cell_layout(2)
+	training_grounds_cell_layout_at(IVec2::ZERO)
+}
+
+/// [`training_grounds_cell_layout`] centered on the cell corner `center`.
+pub fn training_grounds_cell_layout_at(center: IVec2) -> TerrainCellLayout {
+	let mut layout = cell_layout(2);
+	layout.origin += center;
+	layout
 }
 
 fn layout_for(coverage: TerrainCoverage, terrain_radius: i32) -> TerrainCellLayout {
@@ -634,6 +641,17 @@ mod tests {
 		assert_eq!(layout.extents, UVec2::new(4, 4));
 		assert_eq!(layout.origin, IVec2::new(-2, -2));
 		assert!(!TerrainLayoutPinned::default().0);
+	}
+
+	#[test]
+	fn training_patch_centers_on_its_site() {
+		let site = IVec2::new(7, -3);
+		let layout = training_grounds_cell_layout_at(site);
+		assert_eq!(layout.origin, site - IVec2::splat(2));
+		assert_eq!(layout.extents, UVec2::new(4, 4));
+		let center = layout.region_center_xz();
+		assert!((center.x - 7.0 * layout.cell_size).abs() < 1e-3);
+		assert!((center.z + 3.0 * layout.cell_size).abs() < 1e-3);
 	}
 
 	#[test]

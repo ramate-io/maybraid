@@ -175,8 +175,13 @@ impl<E: Component + Copy + Default + Unpin + Send + Sync + 'static> TextCursorCo
 		header: impl Into<String>,
 		items: impl IntoIterator<Item = TextCursorRow<E>>,
 	) -> Self {
+		Self { header: Some(header.into()), ..Self::untitled_rows(items) }
+	}
+
+	/// [`Self::rows`] with no title above the first row.
+	pub fn untitled_rows(items: impl IntoIterator<Item = TextCursorRow<E>>) -> Self {
 		Self {
-			header: Some(header.into()),
+			header: None,
 			items: items.into_iter().collect(),
 			anchor: TextColumnAnchor::TopLeft,
 			align: TextColumnAlign::Start,
