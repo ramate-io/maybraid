@@ -34,6 +34,8 @@ use richmond_development_models::{DevelopmentEntryStore, DiscoverablePlace};
 use richmond_developments_on_terrain_playground::UrbanSetting;
 use richmond_urbanization::{UrbanizationExtent, UrbanizationIndex, UrbanizationKind};
 
+use crate::training::TrainingGrounds;
+
 const MOB_CELL_EXTENT: f32 = 400.0;
 const MOB_GENERATE_RADIUS: f32 = 3_000.0;
 const MOB_PRESENT_RADIUS: f32 = 1_000.0;
@@ -603,11 +605,31 @@ fn urban_leaf_arrival_radius(bounds: Aabb3d) -> f32 {
 	((bounds.max.x - bounds.min.x).min(bounds.max.z - bounds.min.z) * 0.25).clamp(8.0, 128.0)
 }
 
+/// Training owns its roster, so the world stream steps aside and drops any
+/// groups it already placed around the arena.
 fn stream_world_mobs(
 	camera: Query<&Transform, With<Camera3d>>,
+	grounds: Option<Res<TrainingGrounds>>,
 	mut stream: WorldMobStream,
+	mut presented: ResMut<WorldMobPresenterState>,
+	mut commands: Commands,
 	mut previous_cell: Local<Option<(i32, i32)>>,
 ) {
+	if grounds.is_some_and(|grounds| grounds.0) {
+		stream.generate.enabled = false;
+		stream.present.enabled = false;
+		stream.present_keep.region = None;
+		for id in presented.presented_ids() {
+			presented.remove(&mut commands, id);
+		}
+		while let Some(entities) = presented.pending_despawn.pop_front() {
+			for entity in entities {
+				commands.entity(entity).despawn();
+			}
+		}
+		*previous_cell = None;
+		return;
+	}
 	let Ok(camera) = camera.single() else {
 		return;
 	};

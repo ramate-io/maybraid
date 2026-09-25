@@ -4,7 +4,7 @@
 //! While [`TrainingGrounds`] is set, Durham presents a four-cell origin window,
 //! hopscotch stays off, the forest shrinks to one grove tile, and a Training
 //! pose is not written. [`crate::training_plaza`] stamps one seeded Richmond
-//! development on that patch once the surface exists.
+//! development onto that patch — pads first, then hosts — once the surface exists.
 
 use bevy::prelude::*;
 use chico_vegetation_on_terrain_playground::PlaygroundConfig;

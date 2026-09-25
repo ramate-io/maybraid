@@ -1,7 +1,7 @@
 //---------------------------------------------------------
 // Richmond urban surfaces: palette tint + named recipe kind.
 //
-// Kind: 0 stucco, 1 terracotta, 2 wood, 3 hay, 4 iron.
+// Kind: 0 stucco, 1 terracotta, 2 wood, 3 hay, 4 iron, 5 stone.
 //
 // Near: implicit-surface POM against a per-kind height field
 // sampled in the dominant face plane (walls and roofs).
@@ -35,6 +35,10 @@ const KIND_TERRACOTTA: u32 = 1u;
 const KIND_WOOD: u32 = 2u;
 const KIND_HAY: u32 = 3u;
 const KIND_IRON: u32 = 4u;
+const KIND_STONE: u32 = 5u;
+
+const STONE_COURSE_M: f32 = 0.46;
+const STONE_BLOCK_M: f32 = 0.92;
 
 fn hash13(p: vec3<f32>) -> f32 {
     let p3 = fract(p * vec3<f32>(0.1031, 0.1030, 0.0973));
@@ -171,6 +175,30 @@ fn iron_look(p: vec3<f32>) -> vec4<f32> {
     return vec4<f32>(tint, mix(roughness, saturate(scalar0()), step(1e-4, scalar0())));
 }
 
+/// `x` horizontal metres along the running bond, `y` metres up the course.
+fn stone_block_id(uv: vec2<f32>) -> vec2<f32> {
+    let row = floor(uv.y / STONE_COURSE_M);
+    let shift = fract(row * 0.5) * STONE_BLOCK_M + hash13(vec3<f32>(row, 7.0, 3.0)) * 0.18;
+    return vec2<f32>(floor((uv.x + shift) / STONE_BLOCK_M), row);
+}
+
+/// Set per fragment so looks share the relief grid's face-plane coordinates.
+var<private> look_domain: ReliefDomain;
+
+fn stone_look(p: vec3<f32>, world: vec3<f32>) -> vec4<f32> {
+    let base = palette_base();
+    let accent = palette_accent();
+    let id = stone_block_id(relief_uv(world, look_domain));
+    let block = hash13(vec3<f32>(id, 19.0));
+    let grain = fbm(p * mix(1.6, 3.2, saturate(scalar1())));
+    let lichen = smoothstep(0.58, 0.82, fbm(p * 0.35 + vec3<f32>(3.1, 0.0, 1.7)));
+    var tint = mix(base, accent, saturate(block * 0.7 + grain * 0.35));
+    tint *= 0.82 + 0.26 * value_noise_3d(p * 9.0);
+    tint = mix(tint, tint * vec3<f32>(0.78, 0.86, 0.72), lichen * saturate(scalar2()));
+    let roughness = mix(0.82, 0.96, grain);
+    return vec4<f32>(tint, mix(roughness, saturate(scalar0()), step(1e-4, scalar0())));
+}
+
 fn surface_look(world: vec3<f32>) -> vec4<f32> {
     let p = look_coord(world);
     switch material.kind {
@@ -178,6 +206,7 @@ fn surface_look(world: vec3<f32>) -> vec4<f32> {
         case KIND_WOOD: { return wood_look(p); }
         case KIND_HAY: { return hay_look(p); }
         case KIND_IRON: { return iron_look(p); }
+        case KIND_STONE: { return stone_look(p, world); }
         default: { return stucco_look(p); }
     }
 }
@@ -256,6 +285,9 @@ fn relief_style() -> ReliefStyle {
         case KIND_IRON: {
             return ReliefStyle(0.008, 0.018, 0.55);
         }
+        case KIND_STONE: {
+            return ReliefStyle(0.045, 0.030, 0.42);
+        }
         default: {
             return ReliefStyle(0.022, 0.016, 0.58);
         }
@@ -332,12 +364,30 @@ fn iron_height(uv: vec2<f32>, width_m: f32) -> f32 {
     return min(seam, pit);
 }
 
+/// Mortar joints recessed below pillowed, chiselled block faces.
+fn stone_height(uv: vec2<f32>, width_m: f32) -> f32 {
+    let id = stone_block_id(uv);
+    let row = id.y;
+    let shift = fract(row * 0.5) * STONE_BLOCK_M + hash13(vec3<f32>(row, 7.0, 3.0)) * 0.18;
+    let local = vec2<f32>(uv.x + shift - id.x * STONE_BLOCK_M, uv.y - row * STONE_COURSE_M);
+    let edge = min(
+        min(local.x, STONE_BLOCK_M - local.x),
+        min(local.y, STONE_COURSE_M - local.y),
+    );
+    let joint = smoothstep(0.0, width_m, edge);
+    let pillow = smoothstep(0.0, 0.12, edge);
+    let chisel = relief_random(vec2<i32>(floor(uv * 11.0)), 61u);
+    let face = mix(0.72, 1.0, pillow) - 0.1 * chisel;
+    return saturate(min(joint, face));
+}
+
 fn relief_height(uv: vec2<f32>, width_m: f32) -> f32 {
     switch material.kind {
         case KIND_TERRACOTTA: { return terracotta_height(uv, width_m); }
         case KIND_WOOD: { return wood_height(uv, width_m); }
         case KIND_HAY: { return hay_height(uv, width_m); }
         case KIND_IRON: { return iron_height(uv, width_m); }
+        case KIND_STONE: { return stone_height(uv, width_m); }
         default: { return stucco_height(uv, width_m); }
     }
 }
@@ -427,6 +477,7 @@ fn fragment(
     let N = normalize(pbr_input.world_normal);
     let V = pbr_input.V;
     let domain = relief_domain(N);
+    look_domain = domain;
     let uv0 = relief_uv(P, domain);
     let style = relief_style();
     let camera_distance = length(P - view.world_position.xyz);

@@ -1,5 +1,6 @@
 //! Stamp one filled development without urbanization occupancy.
 
+use bevy::math::Vec2;
 use bevy::math::bounding::Aabb3d;
 use durham_terrain_models::{TerrainCellLayout, TerrainEntryStore};
 use procedural_common::{NoiseParams, SeededHash};
@@ -10,8 +11,9 @@ use crate::archetype_generation::ArchetypeGenerator;
 use crate::artifact::BuiltDevelopment;
 use crate::commune::build_shepherds_commune;
 use crate::config::DevelopmentConfig;
-use crate::development::{DevelopmentCell, DevelopmentKind, cell_salt};
+use crate::development::{DevelopmentCell, DevelopmentContent, DevelopmentKind, cell_salt};
 use crate::les_halles::LesHallesDevelopment;
+use crate::pad::{PadComplex, PadParams};
 use crate::ring_fort::RingFortDevelopment;
 use crate::shepherds::{ShepherdsCommuneDevelopment, ShepherdsVillageDevelopment};
 use crate::village::build_shepherds_village;
@@ -96,6 +98,40 @@ impl DevelopmentCell {
 			| DevelopmentKind::WizardsTower
 			| DevelopmentKind::SkybridgeBazaar) => Self::with_archetype(cell, height, kind, config),
 		})
+	}
+
+	/// World-axis half extents of the yawed building confines.
+	pub fn footprint_half_extents(&self) -> Option<Vec2> {
+		let (extent, yaw) = match &self.content {
+			DevelopmentContent::LesHalles(content) => {
+				(content.confines_extent_xz, content.confines_yaw)
+			}
+			DevelopmentContent::RingFort(content) => {
+				(content.confines_extent_xz, content.confines_yaw)
+			}
+			DevelopmentContent::Archetype(content) => {
+				(content.confines_extent_xz, content.confines_yaw)
+			}
+			_ => return None,
+		};
+		let half = extent * 0.5;
+		let (sin, cos) = yaw.sin_cos();
+		let (sin, cos) = (sin.abs(), cos.abs());
+		Some(Vec2::new(cos * half.x + sin * half.y, sin * half.x + cos * half.y))
+	}
+
+	/// Replace a single-terrace pad with one axis-aligned terrace at the same
+	/// height. `None` for kinds whose pads sit at several heights.
+	pub fn with_courtyard(mut self, half_extents: Vec2, params: PadParams) -> Option<Self> {
+		let center = crate::pad::cell_center_xz(self.cell);
+		let pad = match &mut self.content {
+			DevelopmentContent::LesHalles(content) => &mut content.pad,
+			DevelopmentContent::RingFort(content) => &mut content.pad,
+			DevelopmentContent::Archetype(content) => &mut content.pad,
+			_ => return None,
+		};
+		pad.complex = PadComplex::building_skirt(center, half_extents, 0.0, pad.height, params);
+		Some(self)
 	}
 
 	/// Fit hosts for a filled cell. `seed` is the Richmond noise seed.
@@ -207,6 +243,27 @@ mod tests {
 			let config = DevelopmentConfig { seed, ..DevelopmentConfig::default() };
 			assert_ne!(DevelopmentKind::pick_filled(cell, &config), DevelopmentKind::Empty);
 		}
+	}
+
+	#[test]
+	fn courtyard_flattens_the_whole_arena_at_the_pad_height() -> Result<(), String> {
+		let cell = DevelopmentExtent::from_cell_index(0, 0).aabb();
+		let config = DevelopmentConfig { seed: 42, ..DevelopmentConfig::default() };
+		let filled = DevelopmentCell::with_les_halles(cell, 12.0, &config);
+		let footprint = filled.footprint_half_extents().ok_or("footprint")?;
+		let half = footprint + Vec2::splat(20.0);
+		let params = PadParams { berm: 0.0, ease: 16.0, round: 0.0 };
+		let walled = filled.with_courtyard(half, params).ok_or("courtyard")?;
+		let center = crate::pad::cell_center_xz(cell);
+		let complex = walled.pad_complexes().next().ok_or("pad")?;
+		for corner in [Vec2::new(1.0, 1.0), Vec2::new(-1.0, 1.0), Vec2::new(1.0, -1.0)] {
+			let p = center + corner * (half - Vec2::splat(0.5));
+			let y = complex.modify_elevation(-30.0, p.x, p.y);
+			if (y - 12.0).abs() > 1e-3 {
+				return Err(format!("corner {p} at {y}, expected 12"));
+			}
+		}
+		Ok(())
 	}
 
 	#[test]

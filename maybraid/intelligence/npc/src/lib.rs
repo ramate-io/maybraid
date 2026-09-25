@@ -9,8 +9,8 @@ mod plugin;
 mod user;
 
 pub use personality::{
-	CombatPersonality, EvadePersonality, NpcBody, NpcInstall, Personality, PersonalitySpec,
-	PersonalityTether,
+	CombatPersonality, EvadePersonality, NpcBody, NpcInstall, NpcInstallOverrides, Personality,
+	PersonalitySpec, PersonalityTether,
 };
 pub use plugin::{mix_npc_brains, NpcIntelligencePlugin, NpcIntelligenceSystems};
 pub use user::NpcIntelligence;

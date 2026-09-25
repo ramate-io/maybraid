@@ -137,6 +137,38 @@ impl Default for NpcInstall {
 	}
 }
 
+/// Arena overrides a scene materializer folds into its [`NpcInstall`].
+#[derive(Component, Clone, Debug, Default)]
+pub struct NpcInstallOverrides {
+	pub engagement: Option<FirearmEngagement>,
+	pub threat: Option<ThreatManagementIntelligence>,
+	pub spotting_range: Option<f32>,
+	pub discovery_radius: Option<f32>,
+}
+
+impl NpcInstallOverrides {
+	/// Free-for-all roster: everyone is a threat. Weapons start on hold so the
+	/// arena can release them together.
+	pub fn ffa(sight: f32) -> Self {
+		Self {
+			engagement: Some(FirearmEngagement::hold()),
+			threat: Some(ThreatManagementIntelligence::ffa()),
+			spotting_range: Some(sight),
+			discovery_radius: Some(sight),
+		}
+	}
+
+	pub fn apply(&self, install: NpcInstall) -> NpcInstall {
+		NpcInstall {
+			engagement: self.engagement.clone().or(install.engagement),
+			threat_override: self.threat.or(install.threat_override),
+			spotting_range: self.spotting_range.or(install.spotting_range),
+			discovery_radius: self.discovery_radius.or(install.discovery_radius),
+			..install
+		}
+	}
+}
+
 impl Personality {
 	pub fn spec(self) -> PersonalitySpec {
 		match self {

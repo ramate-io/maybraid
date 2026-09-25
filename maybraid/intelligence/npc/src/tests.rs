@@ -3,13 +3,16 @@
 use bevy::ecs::system::RunSystemOnce;
 use bevy::prelude::*;
 use combat_targeting::CombatTargeting;
-use firearm_intelligence::FirearmIntelligence;
+use firearm_intelligence::{FirearmEngagement, FirearmIntelligence, RulesOfEngagement};
 use meandering_intelligence::MeanderingIntelligenceUser;
 use poi_intelligence::{PoiGoal, PoiId, PoiKind};
 use tether_intelligence::{TetherIntelligenceUser, TetherMemory, TetherObjective};
 use threat_management_intelligence::{ThreatManagementIntelligence, ThreatTactic};
 
-use crate::{mix_npc_brains, NpcInstall, NpcIntelligence, NpcIntelligencePlugin, Personality};
+use crate::{
+	mix_npc_brains, NpcInstall, NpcInstallOverrides, NpcIntelligence, NpcIntelligencePlugin,
+	Personality,
+};
 
 fn dummy_goal() -> PoiGoal {
 	PoiGoal::new(1, PoiId(1), None, PoiKind::new("test/place"), Vec3::X, 1.0, 0.0, 0.0)
@@ -303,4 +306,23 @@ fn satisfied_tether_allows_meander_on_ignore() {
 		.get::<MeanderingIntelligenceUser>(npc)
 		.is_some_and(|user| user.enabled));
 	assert!(app.world().get::<PoiGoal>(npc).is_some());
+}
+
+#[test]
+fn ffa_overrides_install_hold_and_ffa_threat() {
+	let mut world = World::new();
+	let npc = world.spawn_empty().id();
+	let install = NpcInstallOverrides::ffa(80.0).apply(NpcInstall::default());
+	assert_eq!(install.spotting_range, Some(80.0));
+	assert_eq!(install.discovery_radius, Some(80.0));
+	Personality::Brawler.install(&mut world.commands(), npc, install);
+	world.flush();
+	assert_eq!(
+		world.get::<FirearmEngagement>(npc).map(|e| e.rules),
+		Some(RulesOfEngagement::Hold)
+	);
+	assert_eq!(
+		world.get::<ThreatManagementIntelligence>(npc).copied(),
+		Some(ThreatManagementIntelligence::ffa())
+	);
 }
