@@ -38,9 +38,31 @@ pub struct FollowCamera {
 	pub sight_fov: f32,
 	pub max_look_yaw: f32,
 	pub body_turn_rate: f32,
+	/// Radians of look per input unit at the hip-fire FOV.
 	pub sensitivity: f32,
 	pub near: f32,
 	pub far: f32,
+}
+
+impl FollowCamera {
+	pub fn hip_fov(&self, pov: CameraPov) -> f32 {
+		match pov {
+			CameraPov::ThirdPerson => self.third_person_fov,
+			CameraPov::FirstPerson => self.first_person_fov,
+		}
+	}
+
+	/// Sensitivity scaled by zoom (the focal-length ratio against the hip-fire
+	/// FOV), so a sight or optic moves the view the same share of the screen per
+	/// input as hip fire does.
+	pub fn look_sensitivity(&self, pov: CameraPov, fov: f32) -> f32 {
+		let hip = (0.5 * self.hip_fov(pov)).tan();
+		let zoomed = (0.5 * fov).tan();
+		if !(hip > 0.0 && zoomed > 0.0) {
+			return self.sensitivity;
+		}
+		self.sensitivity * (zoomed / hip).min(1.0)
+	}
 }
 
 impl Default for FollowCamera {

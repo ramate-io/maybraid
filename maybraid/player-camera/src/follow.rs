@@ -119,11 +119,10 @@ fn vertical_fov(
 	optic_zoom: bool,
 ) -> f32 {
 	let ads_fov = if optic_zoom { sight_fov.unwrap_or(follow.sight_fov) } else { follow.sight_fov };
+	let hip = follow.hip_fov(pov);
 	match pov {
-		CameraPov::ThirdPerson => follow.third_person_fov,
-		CameraPov::FirstPerson => {
-			follow.first_person_fov + (ads_fov - follow.first_person_fov) * focus_blend
-		}
+		CameraPov::ThirdPerson => hip,
+		CameraPov::FirstPerson => hip + (ads_fov - hip) * focus_blend,
 	}
 }
 
