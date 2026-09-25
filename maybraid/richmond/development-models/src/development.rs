@@ -399,7 +399,7 @@ impl DevelopmentCell {
 
 fn archetype_envelope(kind: DevelopmentKind) -> (f32, f32, f32, f32, bool) {
 	match kind {
-		DevelopmentKind::SingleHighrise => (34.0, 52.0, 48.0, 104.0, true),
+		DevelopmentKind::SingleHighrise => (42.5, 65.0, 48.0, 104.0, true),
 		DevelopmentKind::WizardsTower => (24.0, 42.0, 48.0, 104.0, true),
 		DevelopmentKind::TempleComplex => (130.0, 190.0, 48.0, 64.0, false),
 		DevelopmentKind::SkybridgeBazaar => (160.0, 220.0, 64.0, 96.0, false),

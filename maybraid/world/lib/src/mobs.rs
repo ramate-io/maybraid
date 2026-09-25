@@ -157,6 +157,14 @@ impl WorldMobIndex {
 		self.models_ready = true;
 	}
 
+	fn models_match(&self, forest: &ForestIndex, urbanization: &UrbanizationIndex) -> bool {
+		self.models_ready
+			&& self.forest_noise == forest.noise
+			&& self.forest_layering == forest.layering
+			&& self.urbanization_noise == urbanization.noise
+			&& self.urbanization_kind == urbanization.kind
+	}
+
 	fn selected_layers(&self, xz: Vec2) -> SelectedLayers {
 		let position = Vec3::new(xz.x, 0.0, xz.y);
 		let (ix, iz) = ForestExtent::cell_index_containing(position);
@@ -547,7 +555,7 @@ fn sync_world_mob_models(
 	urbanization: Res<UrbanizationIndex>,
 	mut mobs: ResMut<WorldMobIndex>,
 ) {
-	if !mobs.models_ready {
+	if !mobs.models_match(&forest, &urbanization) {
 		mobs.configure_from(&forest, &urbanization);
 	}
 }
@@ -845,6 +853,26 @@ mod tests {
 			assert!(xz.distance(Vec2::new(20.0, -8.0)) <= 6.0 + 1e-4);
 			assert_eq!(mob.transform.translation.y, 0.0);
 		}
+	}
+
+	#[test]
+	fn mob_models_follow_a_late_urbanization_pin() -> anyhow::Result<()> {
+		let mut app = App::new();
+		app.init_resource::<ForestIndex>()
+			.init_resource::<UrbanizationIndex>()
+			.init_resource::<WorldMobIndex>()
+			.add_systems(Update, sync_world_mob_models);
+		app.update();
+		let pinned = NoiseParams { frequency: 0.0005, ..default() };
+		app.world_mut().resource_mut::<UrbanizationIndex>().noise = pinned;
+		app.update();
+		let mobs = app
+			.world()
+			.get_resource::<WorldMobIndex>()
+			.ok_or_else(|| anyhow::anyhow!("mob index missing"))?;
+		assert!(mobs.models_ready);
+		assert_eq!(mobs.urbanization_noise, pinned);
+		Ok(())
 	}
 
 	#[test]

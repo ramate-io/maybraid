@@ -1,4 +1,5 @@
-//! Top-right running score: the hit-marker points, downs, deaths, and streak.
+//! Top-right running score: the hit-marker points, downs, deaths, and streak,
+//! plus the live enemy count when the mode keeps one.
 
 use bevy::prelude::*;
 use damage::{DamageApplied, HeadshotBand};
@@ -57,22 +58,36 @@ impl CombatScore {
 	}
 }
 
+/// Enemies still standing. The mode that fields them keeps this current; the
+/// score panel shows it while both it and a [`CombatScore`] exist.
+#[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct LiveEnemies(pub u32);
+
+impl LiveEnemies {
+	fn line(self) -> String {
+		format!("Enemies  {}", self.0)
+	}
+}
+
 #[derive(Component)]
 pub(crate) struct CombatScoreRoot;
 
 #[derive(Component, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum CombatScoreLine {
 	Headline,
+	Enemies,
 	Tally,
 	Streaks,
 }
 
 impl CombatScoreLine {
-	fn text(self, score: &CombatScore) -> String {
+	/// `None` hides the line.
+	fn text(self, score: &CombatScore, enemies: Option<LiveEnemies>) -> Option<String> {
 		match self {
-			Self::Headline => score.headline(),
-			Self::Tally => score.tally(),
-			Self::Streaks => score.streaks(),
+			Self::Headline => Some(score.headline()),
+			Self::Enemies => enemies.map(LiveEnemies::line),
+			Self::Tally => Some(score.tally()),
+			Self::Streaks => Some(score.streaks()),
 		}
 	}
 }
@@ -111,10 +126,16 @@ pub(crate) fn spawn_combat_score(parent: &mut ChildSpawnerCommands, fonts: &HudF
 					Pickable::IGNORE,
 				));
 			});
-			for line in [CombatScoreLine::Tally, CombatScoreLine::Streaks] {
+			for line in [CombatScoreLine::Enemies, CombatScoreLine::Tally, CombatScoreLine::Streaks]
+			{
+				let text = line.text(&score, None);
 				plate.spawn((
 					line,
-					Text::new(line.text(&score)),
+					Node {
+						display: if text.is_some() { Display::Flex } else { Display::None },
+						..default()
+					},
+					Text::new(text.unwrap_or_default()),
 					fonts.body(SCORE_LINE_PX),
 					TextColor(SCORE_LINE),
 					Pickable::IGNORE,
@@ -155,8 +176,9 @@ pub(crate) fn ingest_combat_score(
 pub(crate) fn sync_combat_score(
 	hud: Res<CombatHudVisible>,
 	score: Option<Res<CombatScore>>,
+	enemies: Option<Res<LiveEnemies>>,
 	mut roots: Query<&mut Visibility, With<CombatScoreRoot>>,
-	mut lines: Query<(&CombatScoreLine, &mut Text)>,
+	mut lines: Query<(&CombatScoreLine, &mut Text, &mut Node)>,
 ) {
 	let shown = hud.0 && score.is_some();
 	for mut visibility in &mut roots {
@@ -168,9 +190,14 @@ pub(crate) fn sync_combat_score(
 	let Some(score) = score.filter(|_| shown) else {
 		return;
 	};
-	for (line, mut text) in &mut lines {
-		let wanted = line.text(&score);
-		if text.0 != wanted {
+	let enemies = enemies.as_deref().copied();
+	for (line, mut text, mut node) in &mut lines {
+		let wanted = line.text(&score, enemies);
+		let display = if wanted.is_some() { Display::Flex } else { Display::None };
+		if node.display != display {
+			node.display = display;
+		}
+		if let Some(wanted) = wanted.filter(|wanted| text.0 != *wanted) {
 			text.0 = wanted;
 		}
 	}
@@ -196,5 +223,16 @@ mod tests {
 		assert_eq!(score.headline(), "Score  18");
 		assert_eq!(score.tally(), "Downs  3    Deaths  1");
 		assert_eq!(score.streaks(), "Streak  1    Best  2");
+	}
+
+	#[test]
+	fn the_enemy_line_shows_only_while_a_count_is_kept() {
+		let score = CombatScore::default();
+		assert_eq!(CombatScoreLine::Enemies.text(&score, None), None);
+		assert_eq!(
+			CombatScoreLine::Enemies.text(&score, Some(LiveEnemies(7))).as_deref(),
+			Some("Enemies  7")
+		);
+		assert!(CombatScoreLine::Tally.text(&score, None).is_some());
 	}
 }

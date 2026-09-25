@@ -209,7 +209,7 @@ impl ArchetypeGenerator {
 		let y = confines.bounds.min.y;
 		let extent = confines.footprint();
 		let spacing = (extent.x * 0.28).clamp(42.0, 60.0);
-		let tower_foot = Vec2::splat((spacing * 0.48).clamp(24.0, 30.0));
+		let tower_foot = Vec2::splat((spacing * 0.6).clamp(30.0, 37.5));
 		let root = Self::root_hash(cell, noise);
 		let tower_material =
 			DevelopmentFinish::pick_for_role(root, DevelopmentFinishRole::Highrise, false).wall;

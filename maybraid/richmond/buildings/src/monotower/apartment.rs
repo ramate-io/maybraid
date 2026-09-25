@@ -42,8 +42,9 @@ const PLAN_INSET: f32 = 0.84;
 const CIRCULAR_INSET: f32 = 0.42;
 const CIRCULAR_INSCRIBED_HALF: f32 = 0.7;
 const SHAFT_FRACTION: f32 = 0.1;
-const MIN_SHAFT_SIDE: f32 = 2.4;
-const MAX_SHAFT_SIDE: f32 = 4.0;
+const MIN_SHAFT_SIDE: f32 = 2.4 * 1.5;
+const MAX_SHAFT_SIDE: f32 = 4.0 * 1.5;
+const HIGHRISE_MIN_HALL_WIDTH: f32 = MIN_HALL_WIDTH * 1.2;
 const STAIR_TREAD_FILL: f32 = 0.55;
 const BRIDGE_PASSAGE_WIDTH: f32 = 2.4;
 const BRIDGE_PASSAGE_DEPTH: f32 = 0.7;
@@ -557,7 +558,7 @@ fn build_rectangular(
 	let shaft_slots =
 		vec![SingleHighriseShaftSlot { bounds: centered_bounds(center_xz, shaft_half) }];
 	let floor_plan = SingleHighriseFloorPlan::Rectangular { center_xz, footprint };
-	let hall_width = (shaft_half * 0.9).clamp(MIN_HALL_WIDTH, 3.0);
+	let hall_width = (shaft_half * 0.9).clamp(HIGHRISE_MIN_HALL_WIDTH, 3.0);
 	let mut storeys = Vec::with_capacity(storey_count);
 	for storey in 0..storey_count {
 		let y0 = confines.bounds.min.y + storey as f32 * STOREY_HEIGHT;
@@ -627,7 +628,8 @@ fn build_i_frame(
 		),
 	);
 	let empty = Confines::new(base_bounds, confines.roll, Openings::new());
-	let parameterized = IApartmentParameterized::sample(&empty, noise)?;
+	let parameterized = IApartmentParameterized::sample(&empty, noise)?
+		.with_minimums(HIGHRISE_MIN_HALL_WIDTH, MIN_SHAFT_SIDE);
 	let shaft_requests =
 		IApartmentFloorPlan::shaft_requests_for_primary_rects(&parameterized, &empty);
 	let shaft_probe_confines = Confines::new(base_bounds, confines.roll, shaft_requests);
@@ -701,7 +703,7 @@ fn circular_apartment_blocks(
 		match LivableApartments::from_confines_with(
 			&confines,
 			noise_for_cell(noise, index as i32),
-			LivableApartmentsOptions { hall_width: Some(MIN_HALL_WIDTH), targets: None },
+			LivableApartmentsOptions { hall_width: Some(HIGHRISE_MIN_HALL_WIDTH), targets: None },
 		) {
 			Ok((block, _)) => blocks.push(block),
 			Err(FitError::TooSmall { .. }) => {}
@@ -849,16 +851,20 @@ fn build_stairwells(
 	for storey in 0..storey_count.saturating_sub(1) {
 		for slot in slots {
 			let y0 = base_y + storey as f32 * STOREY_HEIGHT;
+			// Stacked wells share one walk face, so each arrival is the next
+			// well's run-in; only the top well needs its own landing. The hall
+			// ring reaches every shaft face, so the closed faces can be lined.
 			let well = WellAabb::from_plan(
 				Vec3::new(slot.bounds.min.x, y0, slot.bounds.min.y),
 				Vec3::new(slot.bounds.max.x, y0 + STOREY_HEIGHT, slot.bounds.max.y),
 				WellSide::PosX,
-				WellSide::NegX,
+				WellSide::PosX,
 				STAIR_TREAD_FILL,
 			);
 			stairwells.push(
 				ConnectingStairwell::from_well_kind(PanelStyle::RoughStonework, well, kind)
-					.with_upper_landing(storey + 2 == storey_count),
+					.with_upper_landing(storey + 2 == storey_count)
+					.with_shaft_walls(true),
 			);
 		}
 	}
@@ -1035,6 +1041,62 @@ mod tests {
 				let well = stair.well();
 				assert!((well.min().x - slot.bounds.min.x).abs() < 1e-3);
 				assert!((well.max().z - slot.bounds.max.y).abs() < 1e-3);
+			}
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn shafts_and_halls_meet_the_highrise_floors() -> anyhow::Result<()> {
+		for plan in [
+			SingleHighrisePlan::Circular,
+			SingleHighrisePlan::Rectangular,
+			SingleHighrisePlan::IFrame,
+		] {
+			let (highrise, _) = SingleHighrise::fit_with_plan(
+				&confines(Vec2::splat(44.0)),
+				NoiseParams::default(),
+				plan,
+			)?;
+			for slot in highrise.shaft_slots() {
+				let side = (slot.bounds.max - slot.bounds.min).min_element();
+				anyhow::ensure!(side >= MIN_SHAFT_SIDE - 1e-3, "{plan:?} shaft is {side:.2} m");
+			}
+			let floor_plan = &highrise.tower.floor_plan;
+			if let SingleHighriseFloorPlan::IFrame { parameterized, .. } = floor_plan {
+				anyhow::ensure!(parameterized.hall_width >= HIGHRISE_MIN_HALL_WIDTH - 1e-3);
+			}
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn every_stair_arrival_lands_on_the_next_run_in() -> anyhow::Result<()> {
+		for plan in [
+			SingleHighrisePlan::Circular,
+			SingleHighrisePlan::Rectangular,
+			SingleHighrisePlan::IFrame,
+		] {
+			let (highrise, _) = SingleHighrise::fit_with_plan(
+				&confines(Vec2::splat(44.0)),
+				NoiseParams::default(),
+				plan,
+			)?;
+			let slots = highrise.shaft_slots().len();
+			let wells = highrise.stairwells();
+			for (index, stair) in wells.iter().enumerate() {
+				let well = stair.well();
+				anyhow::ensure!(well.walk_on == well.walk_off, "{plan:?} well {index} crosses");
+				anyhow::ensure!(!stair.shaft_walls().is_empty(), "{plan:?} well {index} is open");
+				let Some(next) = wells.get(index + slots) else {
+					anyhow::ensure!(stair.upper_landing().is_some(), "{plan:?} top has no landing");
+					continue;
+				};
+				anyhow::ensure!(
+					next.well().walk_on == well.walk_off
+						&& (next.well().bottom_y() - well.top_y()).abs() < 1e-3,
+					"{plan:?} well {index} arrives where no run-in waits"
+				);
 			}
 		}
 		Ok(())

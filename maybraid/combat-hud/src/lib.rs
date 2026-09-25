@@ -9,7 +9,7 @@ use player::{LocomotionCapsule, Npc, Player};
 use score::{ingest_combat_score, spawn_combat_score, sync_combat_score};
 use vitals::{spawn_player_vitals, sync_player_vitals, vitals_fonts};
 
-pub use score::CombatScore;
+pub use score::{CombatScore, LiveEnemies};
 
 /// When `false`, the player vitals plate stays hidden (pause / menu overlays).
 #[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]

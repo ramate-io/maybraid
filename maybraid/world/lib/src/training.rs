@@ -19,26 +19,28 @@
 
 use bevy::prelude::*;
 use chico_vegetation_on_terrain_playground::PlaygroundConfig;
-use combat_hud::CombatScore;
+use combat_hud::{CombatScore, LiveEnemies};
 use crozon_character_items::{random_starter_loadout, Inventory, ItemRng};
 use crozon_characters::species::{
 	braidman::BraidmanConfig, lero::LeroConfig, mygr::MygrConfig, tuberwaber::TuberwaberConfig,
 	wumbus::WumbusConfig,
 };
 use crozon_characters::CharacterAppearance;
+use damage::{Downed, Health};
 use durham_terrain_models::{
 	TerrainCellLayout, TerrainColliderSystems, TerrainCoverage, TerrainFillSystems,
 	TerrainLayoutPinned, TerrainPresentEnabled, TerrainPresentPending, TerrainPresentationAssets,
 	TerrainPresentationDirty, TerrainPresenterState, WORLD_FINE_HALF_EXTENT_CELLS,
 	playable_world_cell_layout, retarget_presentation_assets, training_grounds_cell_layout_at,
 };
+use mob_intelligence::MemberOf;
 use richmond_developments_on_terrain_playground::UrbanizationStreamingEnabled;
 
 use crate::WorldPlayerLoadout;
 use crate::control::{WorldSurfaceSet, update_world_surface_ready};
 use crate::training_plaza::{
-	clear_training_plaza, mount_training_plaza, park_on_training_site, promote_training_plaza,
-	reseat_training_life, supersede_training_raw_terrain,
+	TrainingBrawler, clear_training_plaza, mount_training_plaza, park_on_training_site,
+	promote_training_plaza, reseat_training_life, supersede_training_raw_terrain,
 };
 
 /// Training Ground session: patch retarget, the stamped plaza, and the
@@ -63,6 +65,7 @@ impl Plugin for TrainingGroundPlugin {
 					reseat_training_life.before(clear_training_plaza),
 					clear_training_plaza,
 					keep_training_score,
+					count_training_enemies,
 				),
 			);
 	}
@@ -301,6 +304,34 @@ pub(crate) fn keep_training_score(
 	}
 }
 
+/// Keep [`LiveEnemies`] at the number of training fighters still standing. A
+/// downed fighter drops out until its squad respawns it.
+pub(crate) fn count_training_enemies(
+	grounds: Res<TrainingGrounds>,
+	live: Option<ResMut<LiveEnemies>>,
+	squads: Query<(), With<TrainingBrawler>>,
+	fighters: Query<(&MemberOf, &Health), Without<Downed>>,
+	mut commands: Commands,
+) {
+	if !grounds.0 {
+		if live.is_some() {
+			commands.remove_resource::<LiveEnemies>();
+		}
+		return;
+	}
+	let standing = fighters
+		.iter()
+		.filter(|(member, health)| squads.contains(member.mob) && !health.is_dead())
+		.count();
+	let count = LiveEnemies(u32::try_from(standing).unwrap_or(u32::MAX));
+	match live {
+		Some(mut live) => {
+			live.set_if_neq(count);
+		}
+		None => commands.insert_resource(count),
+	}
+}
+
 /// Drop raw training terrain meshes once present is turned back off.
 pub(crate) fn clear_training_terrain_present(
 	present: Res<TerrainPresentEnabled>,
@@ -404,6 +435,36 @@ mod tests {
 		world.insert_resource(TrainingGrounds(true));
 		run(&mut world)?;
 		assert_eq!(*world.resource::<CombatScore>(), CombatScore::default());
+		Ok(())
+	}
+
+	#[test]
+	fn the_enemy_count_follows_standing_training_fighters() -> anyhow::Result<()> {
+		let mut world = World::new();
+		world.insert_resource(TrainingGrounds(true));
+		let squad = world.spawn(TrainingBrawler).id();
+		let stranger = world.spawn_empty().id();
+		let fighter = |mob| (MemberOf { mob, slot: 0 }, Health::from_max(10.0));
+		let first = world.spawn(fighter(squad)).id();
+		world.spawn(fighter(squad));
+		world.spawn(fighter(stranger));
+		let mut system = IntoSystem::into_system(count_training_enemies);
+		system.initialize(&mut world);
+		let mut run = |world: &mut World| -> anyhow::Result<Option<u32>> {
+			system.run((), world).map_err(|error| anyhow::anyhow!("{error:?}"))?;
+			world.flush();
+			Ok(world.get_resource::<LiveEnemies>().map(|live| live.0))
+		};
+		assert_eq!(run(&mut world)?, Some(2), "only training squads count");
+
+		let mut first = world.entity_mut(first);
+		let mut health =
+			first.get_mut::<Health>().ok_or_else(|| anyhow::anyhow!("fighter lost health"))?;
+		health.apply_damage(10.0);
+		assert_eq!(run(&mut world)?, Some(1), "a dead fighter drops out");
+
+		world.insert_resource(TrainingGrounds(false));
+		assert_eq!(run(&mut world)?, None, "leaving hides the count");
 		Ok(())
 	}
 

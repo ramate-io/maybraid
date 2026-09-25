@@ -271,13 +271,20 @@ impl Plugin for DevelopmentsOnTerrainPlugin {
 			Update,
 			FurnitureStreamSystems::Generate.after(generate_urbanization_developments),
 		);
+		// The pin stays ungated: other readers of `UrbanizationIndex` (world mobs)
+		// select cells before terrain streaming starts, and must see the spec noise.
+		app.add_systems(
+			Update,
+			sync_urbanization_pin
+				.before(stream_urbanization)
+				.before(LodGenerateSystems::Produce),
+		);
 		// Stream and present still run while urbanization is off so a session
 		// that turns it off (Training) tears the urbanized terrain and hosts down
 		// instead of freezing them in place as a second terrain model.
 		app.add_systems(
 			Update,
 			(
-				sync_urbanization_pin,
 				stream_urbanization.before(LodGenerateSystems::Produce),
 				(
 					generate_urbanization_developments.after(LodGenerateSystems::Drain),
