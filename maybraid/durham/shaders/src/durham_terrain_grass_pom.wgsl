@@ -1,18 +1,16 @@
 //---------------------------------------------------------
-// Durham terrain: procedural crack POM plus dense, vibrant, wind-animated grass.
+// Durham terrain: procedural crack POM plus occasional raised grass patches.
 // Procedural recessed cracks with slope-aware, refined world-space POM.
 // Preserves original material bindings, palette, fog, and prepass outlines.
 // Color-only relief: no silhouette change, displaced depth, or self-shadow ray.
 // Local planar approximation; crossfades on cliffs and at grazing angles.
-// Dense grass uses two compact blade fields, time-driven bend, and turf LOD.
-// Regional density/color use one additional four-corner noise per height query.
-// POM distance matches cracks; footprint and grazing-angle fades still apply.
+// Grass adds a bounded near-camera march only around potential patches.
 // Finite stepping can miss very thin blade tips; no temporal jitter is used.
-// GRASS_FAR_COVERAGE and softened blade normals are artistic LOD approximations.
+// GRASS_FAR_COVERAGE is an artistic LOD approximation, not an exact filter.
 //---------------------------------------------------------
 #import bevy_pbr::{
     forward_io::VertexOutput,
-    mesh_view_bindings::{view, lights, globals},
+    mesh_view_bindings::{view, lights},
     prepass_utils::prepass_depth,
     pbr_types::{PbrInput, pbr_input_new, STANDARD_MATERIAL_FLAGS_DOUBLE_SIDED_BIT},
     pbr_functions as fns,
@@ -295,118 +293,69 @@ fn relief_gradient(p: vec2<f32>) -> vec2<f32> {
 }
 
 // --------------------------------------------------------
-// Dense stylized turf with two offset blade fields and root-fixed bending.
-// POM still cannot create a silhouette outside the terrain raster footprint.
-// All length values are metres. Two blades per 0.12m square (~139/m^2).
+// Sparse grass: a raised procedural height field, no textures/bindings.
+// These are tapered leaf-shaped ridges, not freestanding ribbon geometry.
+// All geometry remains within the terrain raster footprint/depth.
 const GRASS_PATCH_SCALE_M: f32 = 7.0;
-const GRASS_PATCH_LOW: f32 = 0.12;
-const GRASS_PATCH_HIGH: f32 = 0.30;
-// Broad regions: lush keeps the previous density, dry is almost bare.
-const GRASS_REGION_SCALE_M: f32 = 80.0;
-const GRASS_REGION_DRY: f32 = 0.28;
-const GRASS_REGION_LUSH: f32 = 0.72;
-const GRASS_DRY_THRESHOLD: f32 = 0.95;
-const GRASS_DRY_ROOT: vec3<f32> = vec3<f32>(0.13, 0.16, 0.025);
-const GRASS_DRY_MID: vec3<f32> = vec3<f32>(0.32, 0.38, 0.075);
-const GRASS_DRY_TIP: vec3<f32> = vec3<f32>(0.62, 0.62, 0.18);
-const GRASS_CELL_M: f32 = 0.12;
-const GRASS_HEIGHT_M: f32 = 0.095;
-const GRASS_TURF_HEIGHT_M: f32 = 0.010;
-const GRASS_HALF_WIDTH_M: f32 = 0.022;
-const GRASS_POM_START_M: f32 = CRACK_RANGE_START_M;
-const GRASS_POM_END_M: f32 = CRACK_RANGE_END_M;
-const GRASS_MIN_STEPS: i32 = 24;
-const GRASS_MAX_STEPS: i32 = 80;
-const GRASS_REFINE_STEPS: i32 = 5;
+const GRASS_PATCH_LOW: f32 = 0.62; // Raise both thresholds for fewer patches.
+const GRASS_PATCH_HIGH: f32 = 0.78;
+const GRASS_CELL_M: f32 = 0.22;
+const GRASS_HEIGHT_M: f32 = 0.14;
+const GRASS_HALF_WIDTH_M: f32 = 0.026;
+const GRASS_POM_START_M: f32 = 12.0;
+const GRASS_POM_END_M: f32 = 28.0;
+const GRASS_MIN_STEPS: i32 = 20;
+const GRASS_MAX_STEPS: i32 = 72;
+const GRASS_REFINE_STEPS: i32 = 4;
 const GRASS_RAY_DENOM_MIN: f32 = 0.10;
-const GRASS_NORMAL_EPS_M: f32 = 0.002;
-const GRASS_FAR_COVERAGE: f32 = 0.96;
-const GRASS_NORMAL_STRENGTH: f32 = 0.35;
-const GRASS_WIND_SPEED: f32 = 1.6;
-// Keep <= .009 for the compact support / cell-boundary guarantee below.
-const GRASS_SWAY_M: f32 = 0.009;
-const GRASS_WIND_COLOR: f32 = 0.12;
-// Linear RGB. Grass only inherits 15% of the material tint, avoiding brown turf.
-const GRASS_ROOT_COLOR: vec3<f32> = vec3<f32>(0.045, 0.23, 0.018);
-const GRASS_MID_COLOR: vec3<f32> = vec3<f32>(0.13, 0.48, 0.032);
-const GRASS_TIP_COLOR: vec3<f32> = vec3<f32>(0.38, 0.70, 0.085);
+const GRASS_NORMAL_EPS_M: f32 = 0.003;
+const GRASS_FAR_COVERAGE: f32 = 0.24;
+// Linear RGB; adjust to the game's terrain palette.
+const GRASS_ROOT_COLOR: vec3<f32> = vec3<f32>(0.035, 0.080, 0.018);
+const GRASS_TIP_COLOR: vec3<f32> = vec3<f32>(0.22, 0.32, 0.055);
 
-fn grass_value_noise(q: vec2<f32>, seed: u32) -> f32 {
+fn grass_patch_noise(p: vec2<f32>) -> f32 {
+    let q = p / GRASS_PATCH_SCALE_M;
     let cell = vec2<i32>(floor(q));
     let f = fract(q);
     let u = f * f * (3.0 - 2.0 * f);
-    let a = relief_random(cell, seed);
-    let b = relief_random(cell + vec2<i32>(1, 0), seed);
-    let c = relief_random(cell + vec2<i32>(0, 1), seed);
-    let d = relief_random(cell + vec2<i32>(1, 1), seed);
+    let a = relief_random(cell, 701u);
+    let b = relief_random(cell + vec2<i32>(1, 0), 701u);
+    let c = relief_random(cell + vec2<i32>(0, 1), 701u);
+    let d = relief_random(cell + vec2<i32>(1, 1), 701u);
     return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
 }
 
-fn grass_patch_noise(p: vec2<f32>) -> f32 {
-    return grass_value_noise(p / GRASS_PATCH_SCALE_M, 701u);
-}
-
-fn grass_region(p: vec2<f32>) -> f32 {
-    let moisture = grass_value_noise(p / GRASS_REGION_SCALE_M, 2719u);
-    return smoothstep(GRASS_REGION_DRY, GRASS_REGION_LUSH, moisture);
-}
-
-fn grass_threshold(lushness: f32) -> f32 {
-    return mix(GRASS_DRY_THRESHOLD, GRASS_PATCH_LOW, lushness);
-}
-
 fn grass_patch(p: vec2<f32>) -> f32 {
-    // Thresholding removes coverage, rather than making all dry grass short.
-    // Exact world-space evaluation also applies at each ray sample and normal.
-    let lower = grass_threshold(grass_region(p));
-    return smoothstep(lower, lower + GRASS_PATCH_HIGH - GRASS_PATCH_LOW,
-        grass_patch_noise(p));
+    return smoothstep(GRASS_PATCH_LOW, GRASS_PATCH_HIGH, grass_patch_noise(p));
 }
 
-// Traveling waves in world space. The mask and root positions never move.
-// Bevy globals.time supplies seconds; no new material binding required.
-fn grass_wind(p: vec2<f32>) -> f32 {
-    let time = globals.time * GRASS_WIND_SPEED;
-    let phase = dot(p, vec2<f32>(0.58, 0.34));
-    return 0.72 * sin(phase - time)
-         + 0.28 * sin(phase * 2.3 - time * 1.7);
-}
-
-// One compact curved blade. Neighbor-cell search is unnecessary: maximum
-// support radius sqrt(.047^2 + (.022+.009)^2) + .0029 < .060.
-// Do not increase width/length/sway beyond that bound without neighbor search.
-fn grass_blade_height(p: vec2<f32>, shift: vec2<f32>, seed: u32) -> f32 {
-    let q = (p + shift) / GRASS_CELL_M;
+// Compact support within each cell avoids a 3x3 blade-neighbor search.
+// Half-length .075 + jitter .010 stays inside the .110 cell half-width.
+// Keep those bounds in mind when tuning cell size or blade width.
+fn grass_height(p: vec2<f32>) -> f32 {
+    let patch = grass_patch(p);
+    if (patch <= 0.0) { return 0.0; }
+    let q = p / GRASS_CELL_M;
     let cell = vec2<i32>(floor(q));
-    let r0 = relief_random(cell, seed);
-    let r1 = relief_random(cell, seed + 12u);
-    let r2 = relief_random(cell, seed + 28u);
-    let center = (vec2<f32>(r1, r2) - vec2<f32>(0.5)) * 0.004;
+    let r0 = relief_random(cell, 811u);
+    let r1 = relief_random(cell, 823u);
+    let r2 = relief_random(cell, 839u);
+    let center = (vec2<f32>(r1, r2) - vec2<f32>(0.5)) * 0.020;
     let local = (fract(q) - vec2<f32>(0.5)) * GRASS_CELL_M - center;
+    // A fixed hash-derived direction: no camera-dependent basis or animation.
     let angle = r0 * 6.28318530718;
     let axis = vec2<f32>(cos(angle), sin(angle));
     let across = vec2<f32>(-axis.y, axis.x);
-    let half_length = mix(0.040, 0.047, r1);
-    let along = (dot(local, axis) + half_length) / (2.0 * half_length);
-    if (along <= 0.0 || along >= 1.0) { return 0.0; }
-    let root = (vec2<f32>(cell) + vec2<f32>(0.5)) * GRASS_CELL_M
-        - shift + center - axis * half_length;
-    let wind = grass_wind(root);
-    let bend = GRASS_SWAY_M * wind * along * along;
-    let width = GRASS_HALF_WIDTH_M * mix(1.0, 0.16, along);
-    let lateral = 1.0 - smoothstep(0.0, width, abs(dot(local, across) - bend));
-    let rise = smoothstep(0.0, 0.36, along);
-    let tip = 1.0 - smoothstep(0.70, 1.0, along);
-    return GRASS_HEIGHT_M * mix(0.70, 1.0, r2) * rise * tip * lateral;
-}
-
-fn grass_height(p: vec2<f32>) -> f32 {
-    let meadow = grass_patch(p);
-    if (meadow <= 0.0) { return 0.0; }
-    let a = grass_blade_height(p, vec2<f32>(0.0), 811u);
-    let b = grass_blade_height(p, vec2<f32>(0.061, 0.053), 1201u);
-    // Turf closes the brown gaps; blade relief rises above it.
-    return meadow * max(GRASS_TURF_HEIGHT_M, max(a, b));
+    let half_length = mix(0.055, 0.075, r1);
+    let t = (dot(local, axis) + half_length) / (2.0 * half_length);
+    if (t <= 0.0 || t >= 1.0) { return 0.0; }
+    // Leaf narrows to its tip. Smooth edges stabilize normals and intersections.
+    let width = GRASS_HALF_WIDTH_M * mix(1.0, 0.12, t);
+    let lateral = 1.0 - smoothstep(0.0, width, abs(dot(local, across)));
+    let rise = smoothstep(0.0, 0.45, t);
+    let tip = 1.0 - smoothstep(0.72, 1.0, t);
+    return GRASS_HEIGHT_M * patch * mix(0.65, 1.0, r2) * rise * tip * lateral;
 }
 
 struct GrassHit {
@@ -528,8 +477,7 @@ fn fragment(
     var ground = base_palette * base_color.rgb;
     var n = soft_n;
 
-    let turf_cover = grass_patch(relief_p) * smoothstep(0.40, 0.70, macro_n.y);
-    if (relief_w > 1e-4 && turf_cover < 0.98) {
+    if (relief_w > 1e-4) {
         let hit = trace_relief(relief_p, macro_n, V);
         let q = relief_p + hit.offset.xz;
         let gradient = relief_gradient(q);
@@ -548,67 +496,50 @@ fn fragment(
         ground = mix(ground, hit_ground, relief_w);
     }
 
-    // Persistent green underlayer, including gaps between resolved blades.
-    let grass_slope = smoothstep(0.40, 0.70, macro_n.y);
-    let regional_lushness = grass_region(relief_p);
-    let local_threshold = grass_threshold(regional_lushness);
-    let local_meadow_noise = grass_patch_noise(relief_p);
-    let grass_patch_w = smoothstep(local_threshold,
-        local_threshold + GRASS_PATCH_HIGH - GRASS_PATCH_LOW,
-        local_meadow_noise) * grass_slope;
-    let regional_mid = mix(GRASS_DRY_MID, GRASS_MID_COLOR, regional_lushness);
-    let regional_tip = mix(GRASS_DRY_TIP, GRASS_TIP_COLOR, regional_lushness);
-    let grass_tint = mix(vec3<f32>(1.0), base_color.rgb, 0.15);
-    let gust = grass_wind(relief_p);
-    // Fade travelling color bands when their wavelength becomes subpixel.
-    let gust_resolved = 1.0 - smoothstep(0.8, 2.0, footprint);
-    let grass_far_color = mix(regional_mid, regional_tip,
-        0.18 + GRASS_WIND_COLOR * gust * gust_resolved) * grass_tint;
+    // Grass LOD: world-anchored patch tint remains after blade POM fades.
+    // footprint was computed outside divergent control flow above.
+    let grass_slope = smoothstep(0.45, 0.75, macro_n.y);
+    let grass_patch_w = grass_patch(relief_p) * grass_slope;
+    let grass_far_color = mix(GRASS_ROOT_COLOR, GRASS_TIP_COLOR, 0.55) * base_color.rgb;
+    let bare_ground = ground;
+    let bare_n = n;
     ground = mix(ground, grass_far_color, grass_patch_w * GRASS_FAR_COVERAGE);
-    n = normalize(mix(n, soft_n, grass_patch_w * GRASS_FAR_COVERAGE));
-    var grass_roughness = mix(1.0, 0.90, grass_patch_w);
+    var grass_roughness = mix(1.0, 0.88, grass_patch_w * GRASS_FAR_COVERAGE);
 
     let grass_resolution = 1.0 - smoothstep(
-        GRASS_HALF_WIDTH_M * 0.6, GRASS_HALF_WIDTH_M * 1.8, footprint);
+        GRASS_HALF_WIDTH_M * 0.5, GRASS_HALF_WIDTH_M * 1.5, footprint);
     let grass_distance = 1.0 - smoothstep(
         GRASS_POM_START_M, GRASS_POM_END_M, length(P - view.world_position.xyz));
     let grass_facing = smoothstep(0.025, 0.10, dot(macro_n, V));
     let grass_pom_w = grass_resolution * grass_distance * grass_facing * grass_slope;
 
+    // Conservative patch rejection. Cubic value noise has a world-space
+    // gradient bound <= 1.5*sqrt(2)/scale. Include full ray reach so blades
+    // crossing patch edges are not clipped by a mask sampled only at P.
     let grass_reach = GRASS_HEIGHT_M * length(V.xz)
         / max(dot(macro_n, V), GRASS_RAY_DENOM_MIN);
-    // Conservative rejection includes variation of the regional threshold.
-    // Cubic value-noise gradient <= 1.5*sqrt(2); smoothstep slope <= 1.5.
-    let threshold_gradient_bound = (GRASS_DRY_THRESHOLD - GRASS_PATCH_LOW)
-        * 1.5 / (GRASS_REGION_LUSH - GRASS_REGION_DRY)
-        * 2.122 / GRASS_REGION_SCALE_M;
-    let meadow_upper_bound = local_meadow_noise - local_threshold
-        + grass_reach * (2.122 / GRASS_PATCH_SCALE_M + threshold_gradient_bound);
-    if (grass_pom_w > 1e-4 && meadow_upper_bound > 0.0) {
+    let patch_upper_bound = grass_patch_noise(relief_p)
+        + 2.122 * grass_reach / GRASS_PATCH_SCALE_M;
+    if (grass_pom_w > 1e-4 && patch_upper_bound > GRASS_PATCH_LOW) {
         let hit = trace_grass(relief_p, macro_n, V);
+        var detailed_ground = bare_ground;
+        var detailed_n = bare_n;
+        var detailed_roughness = 1.0;
         if (hit.found) {
             let q = relief_p + hit.offset.xz;
             let height_ratio = saturate(hit.height / GRASS_HEIGHT_M);
-            let cell_color = grass_patch_noise(q + vec2<f32>(43.1, 9.7));
-            let hit_lushness = grass_region(q);
-            let hit_root = mix(GRASS_DRY_ROOT, GRASS_ROOT_COLOR, hit_lushness);
-            let hit_mid = mix(GRASS_DRY_MID, GRASS_MID_COLOR, hit_lushness);
-            let hit_tip = mix(GRASS_DRY_TIP, GRASS_TIP_COLOR, hit_lushness);
-            let blade_color = mix(hit_mid * 0.78, hit_tip,
-                smoothstep(0.10, 0.85, height_ratio));
-            let root_shade = mix(hit_root, blade_color,
-                smoothstep(0.0, 0.14, height_ratio));
-            let detailed_ground = root_shade * grass_tint
-                * (0.92 + 0.16 * cell_color + 0.06 * grass_wind(q));
+            let blade_color = mix(GRASS_ROOT_COLOR, GRASS_TIP_COLOR, sqrt(height_ratio));
+            detailed_ground = blade_color * base_color.rgb;
             let gradient = grass_gradient(q);
             let compression = max(dot(macro_n, V), 0.0)
                 / max(dot(macro_n, V), GRASS_RAY_DENOM_MIN);
-            let detailed_n = normalize(soft_n - GRASS_NORMAL_STRENGTH * compression
+            detailed_n = normalize(soft_n - compression
                 * vec3<f32>(gradient.x, 0.0, gradient.y));
-            ground = mix(ground, detailed_ground, grass_pom_w);
-            n = normalize(mix(n, detailed_n, grass_pom_w));
-            grass_roughness = mix(grass_roughness, 0.90, grass_pom_w);
+            detailed_roughness = 0.88;
         }
+        ground = mix(ground, detailed_ground, grass_pom_w);
+        n = normalize(mix(n, detailed_n, grass_pom_w));
+        grass_roughness = mix(grass_roughness, detailed_roughness, grass_pom_w);
     }
 
     pbr_input.material.base_color = vec4<f32>(ground, base_color.a);
