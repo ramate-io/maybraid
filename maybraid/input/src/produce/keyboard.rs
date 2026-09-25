@@ -48,6 +48,9 @@ pub fn produce_keyboard(
 	if keyboard.pressed(KeyCode::Space) {
 		pad.hold_digital(PadButton::A);
 	}
+	if keyboard.any_pressed([KeyCode::ShiftLeft, KeyCode::ShiftRight]) {
+		pad.hold_digital(PadButton::StickClickMove);
+	}
 	if keyboard.pressed(KeyCode::Escape) || keyboard.pressed(KeyCode::KeyB) {
 		pad.hold_digital(PadButton::B);
 	}
@@ -91,6 +94,28 @@ pub fn produce_keyboard(
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	#[test]
+	fn shift_holds_l3() -> anyhow::Result<()> {
+		let mut app = App::new();
+		app.init_resource::<ButtonInput<KeyCode>>()
+			.init_resource::<VirtualPad>()
+			.add_message::<KeyboardInput>()
+			.add_systems(Update, produce_keyboard);
+		app.world_mut().resource_mut::<ButtonInput<KeyCode>>().press(KeyCode::ShiftLeft);
+		app.update();
+		assert!(app.world().resource::<VirtualPad>().digital_held(PadButton::StickClickMove));
+
+		app.world_mut()
+			.resource_mut::<ButtonInput<KeyCode>>()
+			.release(KeyCode::ShiftLeft);
+		app.world_mut()
+			.resource_mut::<ButtonInput<KeyCode>>()
+			.press(KeyCode::ShiftRight);
+		app.update();
+		assert!(app.world().resource::<VirtualPad>().digital_held(PadButton::StickClickMove));
+		Ok(())
+	}
 
 	#[test]
 	fn wasd_builds_unit_move() -> anyhow::Result<()> {

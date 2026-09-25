@@ -115,7 +115,8 @@ fn locomotion_clip(skeleton: RigSkeletonKind, jumping: Option<&Jumping>, speed: 
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::body::JumpPhase;
+	use crate::body::{JumpPhase, JOG_SPEED, MOVE_SPEED};
+	use crozon_characters::AnimId;
 
 	#[test]
 	fn standing_hop_uses_jump_clip() {
@@ -139,6 +140,12 @@ mod tests {
 			locomotion_clip(RigSkeletonKind::Quadruped, Some(&jump), 0.0).id(),
 			AnimClip::leap().id()
 		);
+	}
+
+	#[test]
+	fn clip_follows_the_cap() {
+		assert_eq!(locomotion_clip(RigSkeletonKind::Humanoid, None, JOG_SPEED).id(), AnimId::Walk);
+		assert_eq!(locomotion_clip(RigSkeletonKind::Humanoid, None, MOVE_SPEED).id(), AnimId::Run);
 	}
 
 	#[test]

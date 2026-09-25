@@ -115,15 +115,14 @@ pub(crate) fn spawn_player_vitals(parent: &mut ChildSpawnerCommands, fonts: &Hud
 }
 
 pub(crate) fn sync_player_vitals(
+	hud: Res<crate::CombatHudVisible>,
 	players: Query<(&Health, Option<&Name>), With<Player>>,
 	mut roots: Query<&mut Visibility, With<PlayerVitalsRoot>>,
 	mut names: Query<&mut Text, With<PlayerVitalsName>>,
 	mut pips: Query<(&PlayerVitalsPip, &mut BackgroundColor)>,
 ) {
-	let Some((health, name)) = players.iter().next() else {
-		for mut visibility in &mut roots {
-			*visibility = Visibility::Hidden;
-		}
+	let Some((health, name)) = players.iter().next().filter(|_| hud.0) else {
+		hide_vitals(&mut roots);
 		return;
 	};
 	let label = display_name(name.map(|name| name.as_str()));
@@ -139,6 +138,12 @@ pub(crate) fn sync_player_vitals(
 	}
 	for (pip, mut color) in &mut pips {
 		color.0 = if pip_lit(fraction, pip.0 as usize) { fill } else { PIP_EMPTY };
+	}
+}
+
+fn hide_vitals(roots: &mut Query<&mut Visibility, With<PlayerVitalsRoot>>) {
+	for mut visibility in roots {
+		*visibility = Visibility::Hidden;
 	}
 }
 

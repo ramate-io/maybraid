@@ -14,9 +14,11 @@ stays on the followed body). Insert [`CharacterLocomotion`](src/body.rs) before
 [`PlayerPlugin`] to cap the walkable slope (default ~81°; Durham uses ~70°).
 Grounded wish follows this frame's walkable contact plane so hillside
 heading is along the slope, not world XZ into the mesh. Walk is the same
-target-speed motor as the vegetation capsule: 7 m/s along the plane at 40 m/s²
-accel (50 m/s² idle brake), with 0.25× air control. Speed is framed in `dt`,
-not a per-frame multiply. Idle grounded motion brakes to rest along that
+target-speed motor as the vegetation capsule: 4 m/s jog / 7 m/s L3 sprint along
+the plane at 40 m/s² accel (50 m/s² idle brake), with 0.25× air control. A
+player [`Sprinting`](src/body.rs) marker (from `StartSprint` / `StopSprint`)
+selects the cap; left-trigger / RMB focus clears it. Iron ADS may stay on.
+Speed is framed in `dt`, not a per-frame multiply. Idle grounded motion brakes to rest along that
 plane so walkable grades do not slide when solver friction is zero.
 [`MotorTraction`](src/contact.rs) plus Avian
 [`MotorTractionHooks`](src/contact.rs) own that policy: floor materials keep

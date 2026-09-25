@@ -7,6 +7,10 @@ use maybraid_character_controller::CharacterIntent;
 use player::{CameraFollow, PlayerLook, PlayerVisual, PlayerYawOwner};
 use std::f32::consts::{FRAC_PI_2, PI};
 
+/// When `true`, [`CharacterIntent::SwapPov`] is ignored (in-game inventory edit).
+#[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct CameraPovLocked(pub bool);
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum CameraPov {
 	#[default]
@@ -37,6 +41,7 @@ pub struct CameraController {
 
 pub(crate) fn apply_look_intents(
 	mouse: Res<ButtonInput<MouseButton>>,
+	locked: Option<Res<CameraPovLocked>>,
 	mut intents: MessageReader<CharacterIntent>,
 	mut cameras: Query<(&mut CameraController, &FollowCamera), With<Camera3d>>,
 ) {
@@ -66,7 +71,7 @@ pub(crate) fn apply_look_intents(
 	if let Ok((mut controller, _)) = cameras.single_mut() {
 		controller.focus = focus.clamp(0.0, 1.0);
 		controller.ads = ads.clamp(0.0, 1.0);
-		if swap_pov {
+		if swap_pov && !locked.is_some_and(|locked| locked.0) {
 			controller.pov.toggle();
 		}
 	}
@@ -201,6 +206,45 @@ mod tests {
 	}
 
 	#[test]
+	fn locked_pov_ignores_swap() -> anyhow::Result<()> {
+		use bevy::ecs::system::RunSystemOnce;
+		use maybraid_character_controller::CharacterIntent;
+
+		let mut world = World::new();
+		world.init_resource::<ButtonInput<MouseButton>>();
+		world.init_resource::<Messages<CharacterIntent>>();
+		world.insert_resource(CameraPovLocked(true));
+		world.spawn((
+			Camera3d::default(),
+			FollowCamera::default(),
+			CameraController {
+				yaw: 0.0,
+				pitch: 0.0,
+				pov: CameraPov::ThirdPerson,
+				focus: 0.0,
+				ads: 0.0,
+				focus_blend: 0.0,
+			},
+		));
+		world
+			.run_system_once(|mut writer: MessageWriter<CharacterIntent>| {
+				writer.write(CharacterIntent::SwapPov);
+			})
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		world
+			.run_system_once(apply_look_intents)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let pov = world
+			.query::<&CameraController>()
+			.iter(&world)
+			.next()
+			.map(|controller| controller.pov)
+			.ok_or_else(|| anyhow::anyhow!("camera"))?;
+		assert_eq!(pov, CameraPov::ThirdPerson);
+		Ok(())
+	}
+
+	#[test]
 	fn body_stays_put_inside_look_cone() {
 		let max = FollowCamera::default().max_look_yaw;
 		let look = -FRAC_PI_2 + max * 0.5;
@@ -216,5 +260,32 @@ mod tests {
 		let target = follow_body_yaw(look, body, max);
 		assert!(target < look);
 		assert!((clamp_look_yaw(look, target, max) - look).abs() < 1e-4);
+	}
+
+	#[test]
+	fn focus_intent_still_writes_controller_focus() {
+		let mut app = App::new();
+		app.init_resource::<ButtonInput<MouseButton>>()
+			.add_message::<CharacterIntent>()
+			.add_systems(Update, apply_look_intents);
+		let camera = app
+			.world_mut()
+			.spawn((
+				Camera3d::default(),
+				CameraController {
+					yaw: 0.0,
+					pitch: 0.0,
+					pov: CameraPov::ThirdPerson,
+					focus: 0.0,
+					ads: 0.0,
+					focus_blend: 0.0,
+				},
+				FollowCamera::default(),
+			))
+			.id();
+		app.world_mut().write_message(CharacterIntent::Focus(1.0));
+		app.update();
+		let focus = app.world().get::<CameraController>(camera).map(|controller| controller.focus);
+		assert_eq!(focus, Some(1.0));
 	}
 }

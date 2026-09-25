@@ -35,7 +35,7 @@ pub fn collect(pad: &VirtualPad, trigger_threshold: f32) -> Vec<CharacterIntent>
 		out.push(CharacterIntent::UseItem(pad.trigger_fire));
 	}
 
-	if pad.just_pressed(PadButton::StickClickMove) {
+	if pad.pressed(PadButton::StickClickMove) {
 		out.push(CharacterIntent::StartSprint);
 	}
 	if pad.just_released(PadButton::StickClickMove) {
@@ -101,6 +101,11 @@ mod tests {
 	#[test]
 	fn l3_hold_is_sprint_edges() -> anyhow::Result<()> {
 		let mut pad = VirtualPad::default();
+		pad.begin_frame();
+		pad.hold_digital(PadButton::StickClickMove);
+		finish(&mut pad);
+		assert_eq!(collect(&pad, 0.5), vec![CharacterIntent::StartSprint]);
+
 		pad.begin_frame();
 		pad.hold_digital(PadButton::StickClickMove);
 		finish(&mut pad);

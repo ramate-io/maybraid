@@ -10,7 +10,7 @@ use player::{PlayerPlugin, PlayerPoseSystems, PlayerSystems};
 use std::f32::consts::FRAC_PI_2;
 
 pub use follow::{sync_camera_fov, sync_first_person_head_visibility};
-pub use look::{CameraController, CameraPov};
+pub use look::{CameraController, CameraPov, CameraPovLocked};
 
 /// Camera schedule. Item crates add aim writers to [`PlayerCameraSystems::Aim`].
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -68,39 +68,43 @@ pub struct PlayerCameraPlugin;
 
 impl Plugin for PlayerCameraPlugin {
 	fn build(&self, app: &mut App) {
-		app.configure_sets(
-			Update,
-			(
-				PlayerCameraSystems::Look
-					.after(CharacterControlSystems)
-					.before(PlayerSystems::Intent),
-				PlayerCameraSystems::Body
-					.after(PlayerCameraSystems::Look)
-					.before(PlayerPoseSystems::Item),
-				PlayerCameraSystems::Aim.after(PlayerPoseSystems::Overlay),
-				PlayerCameraSystems::Follow.after(PlayerCameraSystems::Aim),
-				PlayerCameraSystems::Apply.after(PlayerCameraSystems::Follow),
-			),
-		)
-		.add_systems(
-			Update,
-			(look::apply_look_intents, look::sync_player_look)
-				.chain()
-				.in_set(PlayerCameraSystems::Look),
-		)
-		.add_systems(
-			Update,
-			(look::sync_yaw_owner, look::turn_body_with_look)
-				.chain()
-				.in_set(PlayerCameraSystems::Body),
-		)
-		.add_systems(Update, follow::follow_character_camera.in_set(PlayerCameraSystems::Follow))
-		.add_systems(
-			Update,
-			(follow::sync_camera_fov, follow::sync_first_person_head_visibility)
-				.in_set(PlayerCameraSystems::Apply),
-		)
-		.add_systems(Update, release_modifiers_on_focus_change);
+		app.init_resource::<CameraPovLocked>()
+			.configure_sets(
+				Update,
+				(
+					PlayerCameraSystems::Look
+						.after(CharacterControlSystems)
+						.before(PlayerSystems::Intent),
+					PlayerCameraSystems::Body
+						.after(PlayerCameraSystems::Look)
+						.before(PlayerPoseSystems::Item),
+					PlayerCameraSystems::Aim.after(PlayerPoseSystems::Overlay),
+					PlayerCameraSystems::Follow.after(PlayerCameraSystems::Aim),
+					PlayerCameraSystems::Apply.after(PlayerCameraSystems::Follow),
+				),
+			)
+			.add_systems(
+				Update,
+				(look::apply_look_intents, look::sync_player_look)
+					.chain()
+					.in_set(PlayerCameraSystems::Look),
+			)
+			.add_systems(
+				Update,
+				(look::sync_yaw_owner, look::turn_body_with_look)
+					.chain()
+					.in_set(PlayerCameraSystems::Body),
+			)
+			.add_systems(
+				Update,
+				follow::follow_character_camera.in_set(PlayerCameraSystems::Follow),
+			)
+			.add_systems(
+				Update,
+				(follow::sync_camera_fov, follow::sync_first_person_head_visibility)
+					.in_set(PlayerCameraSystems::Apply),
+			)
+			.add_systems(Update, release_modifiers_on_focus_change);
 		if app.is_plugin_added::<PlayerPlugin>() {
 			app.configure_sets(Update, PlayerCameraSystems::Body.before(PlayerSystems::Locomotion));
 		}

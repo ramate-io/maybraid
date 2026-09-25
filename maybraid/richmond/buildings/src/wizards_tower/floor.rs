@@ -139,12 +139,14 @@ impl WizardsTowerFloor {
 		children: &mut Vec<Box<dyn Scene>>,
 		lod_ref: &LodRef,
 	) {
+		// The walking deck is exterior (see `floor_nodes_for_level`). Only rooms
+		// and the lantern wait for the close reveal.
 		let confines =
 			ParentConfines::internal(self.storey_confine_center(), self.storey_confine_radius());
-		for node in self.floor_nodes_for_level(LodSceneLevel::High).flatten() {
-			children.push(Box::new(node.scene_with_level(lod_ref, LodSceneLevel::High)));
-		}
 		for room in &self.rooms {
+			for node in room.floor_nodes_for_level(LodSceneLevel::High).flatten() {
+				children.push(Box::new(node.scene_with_level(lod_ref, LodSceneLevel::High)));
+			}
 			for node in room.partition_nodes_for_level(LodSceneLevel::High).flatten() {
 				children.push(Box::new(node.scene_with_level(lod_ref, LodSceneLevel::High)));
 			}
@@ -213,20 +215,20 @@ impl BuildingComponents for WizardsTowerFloor {
 	}
 
 	fn floor_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FloorNode> {
-		if !Self::is_detail_level(level) {
+		if !Self::is_structure_level(level) {
 			return Layers::new();
 		}
-		let confines =
-			ParentConfines::internal(self.storey_confine_center(), self.storey_confine_radius());
+		// Caps and rects are the exterior deck, same band as the ring wall.
+		// An Internal confine hid them until the camera was inside 5× radius,
+		// so Medium (and the outer High shell) was a stone ring with clear
+		// color where the inscribed-square caps should be.
 		let mut out = Layers::from_free(
-			self.floor_caps
-				.iter()
-				.chain(self.floor_rects.iter())
-				.map(|n| n.clone().with_confines(confines))
-				.collect(),
+			self.floor_caps.iter().chain(self.floor_rects.iter()).cloned().collect(),
 		);
-		for room in &self.rooms {
-			out.extend(room.floor_nodes_for_level(level));
+		if Self::is_detail_level(level) {
+			for room in &self.rooms {
+				out.extend(room.floor_nodes_for_level(level));
+			}
 		}
 		out
 	}

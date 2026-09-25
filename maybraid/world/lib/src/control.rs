@@ -15,13 +15,17 @@ use maybraid_sky::{SkyDome, SKY_HORIZON};
 use player::{
 	apply_character_controller, Buoyant, CharacterController, JumpWish, Jumping, LocomotionCapsule,
 	MotorTraction, MoveWish as PlayerMoveWish, Player as MaybraidPlayer, PlayerCameraAim,
-	PlayerLook, PlayerYawOwner, Wading,
+	PlayerLook, PlayerYawOwner, Sprinting, Wading,
 };
 use player_camera::CameraController;
 
 /// When `false`, world movement / POV intents are ignored (menus, pause overlay).
 #[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct WorldGameplayEnabled(pub bool);
+
+/// Keep third-person follow while the in-game inventory editor is open.
+#[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct InventoryEditCameraFollow(pub bool);
 
 impl Default for WorldGameplayEnabled {
 	fn default() -> Self {
@@ -71,6 +75,18 @@ fn discovery_xz(
 	layout.region_center_xz().xz()
 }
 
+pub(crate) fn sync_combat_hud_visible(
+	gameplay: Res<WorldGameplayEnabled>,
+	hud: Option<ResMut<combat_hud::CombatHudVisible>>,
+) {
+	let Some(mut hud) = hud else {
+		return;
+	};
+	if hud.0 != gameplay.0 {
+		hud.0 = gameplay.0;
+	}
+}
+
 pub(crate) fn sync_skill_map_enabled(
 	gameplay: Res<WorldGameplayEnabled>,
 	text_focus: Res<TextEntryFocus>,
@@ -100,7 +116,7 @@ pub(crate) fn apply_intents_to_movement(
 		}
 		for (entity, mut wish) in &mut player_wishes {
 			wish.0 = Vec3::ZERO;
-			commands.entity(entity).remove::<JumpWish>();
+			commands.entity(entity).remove::<(JumpWish, Sprinting)>();
 		}
 		return;
 	}
@@ -242,6 +258,7 @@ pub(crate) fn strip_world_player_motor(commands: &mut Commands, body: Entity) {
 		PlayerMoveWish,
 		JumpWish,
 		Jumping,
+		Sprinting,
 		player::Grounded,
 		Buoyant,
 		Wading,

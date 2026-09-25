@@ -12,6 +12,7 @@
 //! fulfill systems insert [`WorldAssetRoot`] when ready.
 
 mod fulfill;
+mod gltf_scale;
 mod handles;
 mod mirror;
 mod multi_merge;
@@ -20,6 +21,9 @@ mod world_asset;
 
 use bevy::prelude::{App, Plugin, Resource, Update};
 
+pub use gltf_scale::{
+	bake_odd_scales_in_world, bake_scale_sign, is_odd_negative_scale, scale_sign,
+};
 pub use handles::SceneRefHandles;
 pub use mirror::{mirror_mesh, mirror_transform};
 pub use multi_merge::{
@@ -146,6 +150,39 @@ mod tests {
 		let budget = SceneRefAdmitBudget::default();
 		assert_eq!(budget.per_frame, u32::MAX);
 		assert_eq!(budget.new_merge_meshes_per_frame, u32::MAX);
+	}
+
+	#[test]
+	fn odd_scale_is_three_negatives() {
+		assert!(is_odd_negative_scale(bevy::prelude::Vec3::new(-1.0, -0.2, -1.0)));
+		assert!(!is_odd_negative_scale(bevy::prelude::Vec3::new(-1.0, -0.2, 1.0)));
+		assert!(!is_odd_negative_scale(bevy::prelude::Vec3::ONE));
+	}
+
+	#[test]
+	fn bake_scale_sign_restores_front_winding() -> anyhow::Result<()> {
+		let mut mesh = Mesh::new(
+			PrimitiveTopology::TriangleList,
+			RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
+		);
+		mesh.insert_attribute(
+			Mesh::ATTRIBUTE_POSITION,
+			vec![[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+		);
+		mesh.insert_indices(Indices::U32(vec![0, 1, 2]));
+
+		let baked = bake_scale_sign(&mesh, bevy::prelude::Vec3::NEG_ONE);
+		match baked.indices() {
+			Some(Indices::U32(idx)) => assert_eq!(idx.as_slice(), &[0, 2, 1]),
+			other => anyhow::bail!("unexpected indices: {other:?}"),
+		}
+		let Some(VertexAttributeValues::Float32x3(positions)) =
+			baked.attribute(Mesh::ATTRIBUTE_POSITION)
+		else {
+			anyhow::bail!("expected positions");
+		};
+		assert!((positions[1][0] + 1.0).abs() < 1e-5);
+		Ok(())
 	}
 
 	#[test]

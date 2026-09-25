@@ -5,6 +5,7 @@ the current stick / trigger. Digital is a press or release edge. Chords are
 resolved here so consumers do not re-read the pad.
 
 `RightTrigger` + `X` is `PowerUseItem` and suppresses `StartInteraction`.
-L3 hold is sprint (press / release), R3 click swaps first / third person.
+L3 hold is sprint (`StartSprint` every hold frame, `StopSprint` on release).
+Shift maps to L3. R3 click swaps first / third person.
 LT is optic `Focus`; left bumper is iron `Ads`. Discover maps read stick
 flicks in `maybraid-skill-map`, not a bumper chord.
