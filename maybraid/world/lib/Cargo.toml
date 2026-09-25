@@ -48,6 +48,7 @@ player = { workspace = true }
 player-camera = { workspace = true }
 mob-characters = { workspace = true }
 mob-groups = { workspace = true }
+mob-intelligence = { workspace = true }
 meandering-intelligence = { workspace = true }
 movement-intelligence = { workspace = true }
 movement-intelligence-avian = { workspace = true }

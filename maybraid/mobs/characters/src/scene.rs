@@ -9,7 +9,7 @@ use damage::Health;
 use firearm_user::{live_weapon_from_stats, spawn_held_kit, FirearmUserSettings};
 use intelligence_lod::IntelligenceLod;
 use mob_intelligence::{MobMemberBody, MobSlot, MobSystems};
-use npc_intelligence::{NpcBody, NpcInstall, NpcInstallOverrides};
+use npc_intelligence::{NpcBody, NpcInstall};
 use player::{
 	apply_character_controller, apply_character_mobility, Npc, PlayerLook, PlayerYawOwner,
 };
@@ -127,17 +127,11 @@ pub enum CharacterSceneSystems {
 pub(crate) fn materialize_character_scenes(
 	mut commands: Commands,
 	scenes: Query<
-		(
-			Entity,
-			&CharacterSceneRecipe,
-			&Transform,
-			Has<MobSlot>,
-			Option<&NpcInstallOverrides>,
-		),
+		(Entity, &CharacterSceneRecipe, &Transform, Has<MobSlot>),
 		Added<CharacterSceneRecipe>,
 	>,
 ) {
-	for (body, recipe, transform, belongs_to_mob, overrides) in &scenes {
+	for (body, recipe, transform, belongs_to_mob) in &scenes {
 		let model = recipe.species.model(recipe.build, &recipe.inventory);
 		let hull = model.hull();
 		let npc_body = NpcBody {
@@ -193,20 +187,19 @@ pub(crate) fn materialize_character_scenes(
 			));
 		}
 		if !belongs_to_mob {
-			let install = NpcInstall {
-				at: transform.translation,
-				body: npc_body,
-				health,
-				armed: recipe.armed(),
-				poi_interests: recipe.brains.interests(),
-				keep_tether_in_combat: Some(recipe.brains.keep_tether_in_combat()),
-				..default()
-			};
-			let install = match overrides {
-				Some(overrides) => overrides.apply(install),
-				None => install,
-			};
-			recipe.brains.personality(recipe.armed()).install(&mut commands, body, install);
+			recipe.brains.personality(recipe.armed()).install(
+				&mut commands,
+				body,
+				NpcInstall {
+					at: transform.translation,
+					body: npc_body,
+					health,
+					armed: recipe.armed(),
+					poi_interests: recipe.brains.interests(),
+					keep_tether_in_combat: Some(recipe.brains.keep_tether_in_combat()),
+					..default()
+				},
+			);
 		}
 	}
 }

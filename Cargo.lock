@@ -4891,6 +4891,7 @@ dependencies = [
  "meandering-intelligence",
  "mob-characters",
  "mob-groups",
+ "mob-intelligence",
  "movement-intelligence",
  "movement-intelligence-avian",
  "movement-realization",

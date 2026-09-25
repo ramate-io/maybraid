@@ -214,7 +214,6 @@ impl Plugin for WorldPlugin {
 						.after(control::update_world_surface_ready),
 					training_plaza::promote_training_plaza
 						.after(durham_terrain_models::TerrainColliderSystems::QueueMeshes),
-					training_plaza::release_training_brawlers,
 					training_plaza::clear_training_plaza,
 				),
 			)

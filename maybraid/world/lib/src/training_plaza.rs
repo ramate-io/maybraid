@@ -9,13 +9,9 @@ use durham_terrain_models::{
 	PresentedTerrainScene, TerrainCellLayout, TerrainEntryStore, TerrainTrimeshCollider,
 	WorldBaseTerrain,
 };
-use firearm_intelligence::{FirearmEngagement, RulesOfEngagement};
-use firearms::WeaponFired;
 use lod::gen::Id;
-use mob_characters::{
-	CharacterBrains, CharacterBuild, CharacterInventory, CharacterSpecies, MobCharacter,
-};
-use npc_intelligence::NpcInstallOverrides;
+use maybraid_mobs::{Mob, MobKind, MobScene};
+use mob_intelligence::MemberOf;
 use player::capsule_spawn_height;
 use player_camera::FollowCamera;
 use procedural_common::SeededHash;
@@ -40,10 +36,14 @@ const TRAINING_ARENA_MAX_HALF_M: f32 = 128.0;
 /// Flatten runs under the wall so its base never meets the ease slope.
 const TRAINING_COURTYARD_OVERHANG_M: f32 = 3.0;
 const TRAINING_COURTYARD_EASE_M: f32 = 24.0;
-/// FFA roster size and spacing along the courtyard band.
-const TRAINING_ROSTER: usize = 6;
-const TRAINING_NEIGHBOR_M: f32 = 14.0;
-const TRAINING_SIGHT_M: f32 = 80.0;
+/// Two brawler mobs flank the player along the courtyard band.
+const TRAINING_MOBS: usize = 2;
+/// Brawler rosters roll 6–12; Training keeps the floor so both mobs fit the band.
+const TRAINING_MOB_MEMBERS: usize = 6;
+const TRAINING_MEMBER_SPACING_M: f32 = 3.0;
+/// FFA player clearance: nearest brawler this far along the band.
+const TRAINING_PLAYER_CLEARANCE_M: f32 = 10.0;
+const TRAINING_MOB_SEED: f32 = 42.0;
 
 /// The development, roster, and wall have been stamped for this Training session.
 #[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -61,6 +61,7 @@ pub(crate) struct TrainingPlazaStamped {
 #[derive(Component, Clone, Copy, Debug, Default)]
 pub(crate) struct TrainingPlaza;
 
+/// Training brawler mob host. Its members carry [`MemberOf`] back to it.
 #[derive(Component, Clone, Copy, Debug, Default)]
 pub(crate) struct TrainingBrawler;
 
@@ -75,32 +76,62 @@ pub(crate) struct TrainingArena {
 	half: Vec2,
 	plaza_y: f32,
 	player: Vec3,
-	/// `(translation, yaw)` per roster member.
-	npcs: Vec<(Vec3, f32)>,
+	mobs: Vec<TrainingMob>,
+}
+
+/// One brawler mob laid out along the courtyard band.
+#[derive(Clone, Debug, PartialEq)]
+struct TrainingMob {
+	/// Host on the plaza surface.
+	host: Vec3,
+	/// Member feet XZ, in roster slot order.
+	members: Vec<Vec2>,
+}
+
+impl TrainingMob {
+	/// Brawler mob whose first members stand at [`Self::members`]. Brawler
+	/// affiliations join and antagonize the FFA group, so members fight each
+	/// other, the other mob, and the player.
+	fn scene(&self, num: f32) -> MobScene {
+		let mut mob = Mob::of_kind(MobKind::Brawler, num);
+		mob.roster.members.truncate(self.members.len());
+		for (member, xz) in mob.roster.members.iter_mut().zip(&self.members) {
+			let offset = *xz - self.host.xz();
+			member.offset = Vec3::new(offset.x, member.offset.y, offset.y);
+		}
+		mob.into_scene()
+	}
 }
 
 impl TrainingArena {
-	/// Arena around `footprint` (world-axis half extents), seats on the band
-	/// midline: player due south, roster at FFA neighbor spacing either side.
+	/// Arena around `footprint` (world-axis half extents). The player sits due
+	/// south on the band midline, and one brawler mob runs along the band on
+	/// either side from the FFA clearance outward.
 	fn around(center: Vec2, footprint: Vec2, plaza_y: f32) -> Self {
 		let half = (footprint + Vec2::splat(TRAINING_ARENA_MARGIN_M))
 			.min(Vec2::splat(TRAINING_ARENA_MAX_HALF_M));
 		let band = (footprint.min(half) + half) * 0.5;
-		let y = plaza_y + capsule_spawn_height();
-		let seat = |arc: f32| {
-			let xz = center + Self::midline_point(band, arc);
-			Vec3::new(xz.x, y, xz.y)
-		};
-		let player = seat(0.0);
-		let npcs = (0..TRAINING_ROSTER)
-			.map(|slot| {
-				let rank = (slot / 2 + 1) as f32;
-				let side = if slot % 2 == 0 { 1.0 } else { -1.0 };
-				let at = seat(side * rank * TRAINING_NEIGHBOR_M);
-				(at, facing_yaw(at, player))
+		let on_band = |arc: f32| center + Self::midline_point(band, arc);
+		let player = on_band(0.0);
+		let player = Vec3::new(player.x, plaza_y + capsule_spawn_height(), player.y);
+		let mobs = (0..TRAINING_MOBS)
+			.map(|mob| {
+				let side = if mob % 2 == 0 { 1.0 } else { -1.0 };
+				let arcs: Vec<f32> = (0..TRAINING_MOB_MEMBERS)
+					.map(|slot| {
+						side * (TRAINING_PLAYER_CLEARANCE_M
+							+ slot as f32 * TRAINING_MEMBER_SPACING_M)
+					})
+					.collect();
+				let mid = arcs.iter().sum::<f32>() / arcs.len() as f32;
+				let host = on_band(mid);
+				TrainingMob {
+					host: Vec3::new(host.x, plaza_y, host.y),
+					members: arcs.into_iter().map(on_band).collect(),
+				}
 			})
 			.collect();
-		Self { center, half, plaza_y, player, npcs }
+		Self { center, half, plaza_y, player, mobs }
 	}
 
 	/// Walk `arc` metres counter-clockwise (seen from above, +X first) from
@@ -137,12 +168,6 @@ impl TrainingArena {
 		let toward = Vec3::new(self.center.x - self.player.x, 0.0, self.center.y - self.player.z);
 		toward.try_normalize().unwrap_or(Vec3::Z)
 	}
-}
-
-/// Bevy yaw that turns `-Z` toward `target`.
-fn facing_yaw(from: Vec3, target: Vec3) -> f32 {
-	let d = target - from;
-	(-d.x).atan2(-d.z)
 }
 
 /// 300 m cell centered on the FinePatch origin.
@@ -231,8 +256,11 @@ pub(crate) fn promote_training_plaza(
 	}
 	let arena = &stamped.arena;
 	spawn_xz.0 = Some(arena.player.xz());
-	for (slot, (at, yaw)) in arena.npcs.iter().enumerate() {
-		spawn_training_brawler(&mut commands, slot, *at, *yaw);
+	for (index, mob) in arena.mobs.iter().enumerate() {
+		let host = mob
+			.scene(TRAINING_MOB_SEED + index as f32)
+			.spawn(&mut commands, Transform::from_translation(mob.host));
+		commands.entity(host).insert(TrainingBrawler);
 	}
 	seat_player_at(&mut players, &mut cameras, arena.player, arena.player_facing());
 	// Terrain snap and void recovery sample the raw FinePatch, which is below
@@ -244,22 +272,6 @@ pub(crate) fn promote_training_plaza(
 	commands.insert_resource(TrainingPlazaMounted);
 }
 
-/// FFA bell: the roster holds fire until the player's first shot.
-pub(crate) fn release_training_brawlers(
-	players: Query<Entity, With<Player>>,
-	mut fired: MessageReader<WeaponFired>,
-	mut brawlers: Query<&mut FirearmEngagement, With<TrainingBrawler>>,
-) {
-	if !fired.read().any(|event| players.contains(event.shooter)) {
-		return;
-	}
-	for mut rules in &mut brawlers {
-		if rules.rules != RulesOfEngagement::WeaponsFree {
-			rules.set_rules(RulesOfEngagement::WeaponsFree);
-		}
-	}
-}
-
 pub(crate) fn clear_training_plaza(
 	grounds: Res<TrainingGrounds>,
 	mounted: Option<Res<TrainingPlazaMounted>>,
@@ -268,6 +280,8 @@ pub(crate) fn clear_training_plaza(
 	mut spawn_xz: ResMut<PlayerSpawnXz>,
 	mut commands: Commands,
 	fixtures: Query<Entity, Or<(With<TrainingPlaza>, With<TrainingBrawler>)>>,
+	brawler_hosts: Query<(), With<TrainingBrawler>>,
+	members: Query<(Entity, &MemberOf)>,
 	anchored: Query<Entity, (With<Player>, With<OffTerrainAnchor>)>,
 ) {
 	if grounds.0 || (mounted.is_none() && stamped.is_none()) {
@@ -275,6 +289,13 @@ pub(crate) fn clear_training_plaza(
 	}
 	if let Some(stamped) = stamped.as_deref() {
 		developments.remove_cell(stamped.cell_id);
+	}
+	// Respawned members are not tied to a roster stub, so dropping the host
+	// alone would strand them.
+	for (entity, member) in &members {
+		if brawler_hosts.contains(member.mob) {
+			commands.entity(entity).despawn();
+		}
 	}
 	for entity in &fixtures {
 		commands.entity(entity).despawn();
@@ -414,27 +435,6 @@ fn spawn_training_wall(
 	}
 }
 
-fn training_brawler(slot: usize) -> MobCharacter {
-	MobCharacter {
-		num: 42.0 + slot as f32,
-		build: CharacterBuild::Brawler,
-		species: CharacterSpecies::Braidman,
-		inventory: CharacterInventory::Grunt,
-		brains: CharacterBrains::Brawler,
-	}
-}
-
-fn spawn_training_brawler(commands: &mut Commands, slot: usize, at: Vec3, yaw: f32) {
-	let recipe = training_brawler(slot).scene_recipe();
-	let body = recipe.spawn(
-		commands,
-		Transform::from_translation(at).with_rotation(Quat::from_rotation_y(yaw)),
-	);
-	commands
-		.entity(body)
-		.insert((TrainingBrawler, NpcInstallOverrides::ffa(TRAINING_SIGHT_M)));
-}
-
 fn seat_player_at(
 	players: &mut Query<
 		(&mut Transform, &mut GlobalTransform, Option<&mut Position>, Option<&mut LinearVelocity>),
@@ -501,39 +501,78 @@ mod tests {
 		assert_ne!(kind, DevelopmentKind::Empty);
 	}
 
+	fn member_feet(arena: &TrainingArena) -> impl Iterator<Item = Vec3> + '_ {
+		arena
+			.mobs
+			.iter()
+			.flat_map(|mob| mob.members.iter().map(|xz| Vec3::new(xz.x, arena.plaza_y, xz.y)))
+	}
+
 	#[test]
 	fn everyone_spawns_inside_the_wall_and_outside_the_building() {
 		let footprint = Vec2::new(36.0, 28.0);
 		let arena = TrainingArena::around(Vec2::ZERO, footprint, 10.0);
-		assert_eq!(arena.npcs.len(), TRAINING_ROSTER);
-		for at in std::iter::once(arena.player).chain(arena.npcs.iter().map(|(at, _)| *at)) {
+		assert_eq!(arena.mobs.len(), TRAINING_MOBS);
+		for at in std::iter::once(arena.player)
+			.chain(member_feet(&arena))
+			.chain(arena.mobs.iter().map(|mob| mob.host))
+		{
 			assert!(inside(&arena, at), "{at} is outside the wall");
 			assert!(outside_footprint(Vec2::ZERO, footprint, at), "{at} is inside the building");
 		}
 	}
 
 	#[test]
-	fn roster_is_close_quarters_around_the_player() {
+	fn brawler_mobs_flank_the_player_at_close_quarters() {
 		let arena = TrainingArena::around(Vec2::ZERO, Vec2::new(36.0, 36.0), 0.0);
-		let nearest = arena
-			.npcs
-			.iter()
-			.map(|(at, _)| at.distance(arena.player))
-			.fold(f32::INFINITY, f32::min);
-		assert!((10.0..=TRAINING_NEIGHBOR_M + 1e-3).contains(&nearest), "nearest {nearest}");
-		for (at, _) in &arena.npcs {
-			assert!(at.distance(arena.player) < 60.0, "{at} is too far for close quarters");
+		let player = arena.player.with_y(0.0);
+		for mob in &arena.mobs {
+			let nearest = mob
+				.members
+				.iter()
+				.map(|xz| xz.distance(player.xz()))
+				.fold(f32::INFINITY, f32::min);
+			assert!(
+				(TRAINING_PLAYER_CLEARANCE_M - 1e-3..=14.0).contains(&nearest),
+				"nearest {nearest}"
+			);
+			for xz in &mob.members {
+				assert!(xz.distance(player.xz()) < 30.0, "{xz} is too far for close quarters");
+			}
+		}
+		let east = arena.mobs[0].host.x - player.x;
+		let west = arena.mobs[1].host.x - player.x;
+		assert!(east > 0.0 && west < 0.0, "mobs should sit on either side: {east}, {west}");
+	}
+
+	#[test]
+	fn mob_scene_seats_members_where_the_arena_planned() {
+		let arena = TrainingArena::around(Vec2::ZERO, Vec2::new(30.0, 30.0), 4.0);
+		let mob = &arena.mobs[0];
+		let scene = mob.scene(TRAINING_MOB_SEED);
+		assert_eq!(scene.mob.kind, MobKind::Brawler);
+		assert_eq!(scene.mob.roster.members.len(), TRAINING_MOB_MEMBERS);
+		for (member, xz) in scene.mob.roster.members.iter().zip(&mob.members) {
+			let feet = mob.host.xz() + member.offset.xz();
+			assert!(feet.distance(*xz) < 1e-3, "{feet} vs {xz}");
+			assert!(member.offset.y > 0.0);
+			assert!(member.character.armed());
 		}
 	}
 
 	#[test]
-	fn roster_faces_the_player() {
-		let arena = TrainingArena::around(Vec2::ZERO, Vec2::new(30.0, 30.0), 0.0);
-		for (at, yaw) in &arena.npcs {
-			let forward = Quat::from_rotation_y(*yaw) * Vec3::NEG_Z;
-			let toward = (arena.player - *at).with_y(0.0).normalize();
-			assert!(forward.dot(toward) > 0.99);
-		}
+	fn brawler_mobs_fight_each_other_and_the_player() {
+		use maybraid_mobs::player_affiliations;
+		use threat_intelligence::ThreatId;
+		let scene = TrainingArena::around(Vec2::ZERO, Vec2::splat(30.0), 0.0).mobs[0]
+			.scene(TRAINING_MOB_SEED);
+		let pack = &scene.mob.intelligence.affiliations;
+		let a = pack.for_member(ThreatId(1));
+		let b = pack.for_member(ThreatId(2));
+		let player = player_affiliations(ThreatId(3));
+		assert!(a.threat_weight(&b, 0.0) >= 1.0, "same-mob brawlers must be FFA");
+		assert!(a.threat_weight(&player, 0.0) >= 1.0);
+		assert!(player.threat_weight(&a, 0.0) >= 1.0);
 	}
 
 	#[test]
@@ -541,8 +580,8 @@ mod tests {
 		let arena = TrainingArena::around(Vec2::ZERO, Vec2::splat(120.0), 0.0);
 		let reach = arena.courtyard_half() + Vec2::splat(TRAINING_COURTYARD_EASE_M);
 		assert!(reach.max_element() <= 160.0, "courtyard reach {reach}");
-		for (at, _) in &arena.npcs {
-			assert!(inside(&arena, *at));
+		for at in member_feet(&arena) {
+			assert!(inside(&arena, at));
 		}
 	}
 
@@ -579,16 +618,16 @@ mod tests {
 		world.insert_resource(DevelopmentEntryStore::default());
 		world.insert_resource(PlayerSpawnXz(Some(Vec2::ONE)));
 		let player = world.spawn((Player, OffTerrainAnchor { translation: Vec3::Y })).id();
+		let host = world.spawn(TrainingBrawler).id();
+		let member = world.spawn(MemberOf { mob: host, slot: 0 }).id();
+		let stranger_host = world.spawn_empty().id();
+		let stranger = world.spawn(MemberOf { mob: stranger_host, slot: 0 }).id();
 		world.run_system_once(clear_training_plaza)?;
 		assert!(world.get::<OffTerrainAnchor>(player).is_none());
 		assert_eq!(world.resource::<PlayerSpawnXz>().0, None);
+		assert!(world.get_entity(host).is_err());
+		assert!(world.get_entity(member).is_err(), "respawned members must leave with the mob");
+		assert!(world.get_entity(stranger).is_ok());
 		Ok(())
-	}
-
-	#[test]
-	fn training_brawler_is_an_armed_braidman() {
-		let recipe = training_brawler(0).scene_recipe();
-		assert!(recipe.armed());
-		assert_eq!(recipe.brains, CharacterBrains::Brawler);
 	}
 }
