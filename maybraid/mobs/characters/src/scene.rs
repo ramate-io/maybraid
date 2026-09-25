@@ -243,4 +243,27 @@ mod tests {
 		assert!(recipe.armed());
 		assert!(recipe.sheet().health > CharacterSheet::BASE.health);
 	}
+
+	#[test]
+	fn player_scale_bipeds_are_the_bipeds_in_the_player_capsule_band() {
+		for species in CharacterSpecies::BIPEDS {
+			let capsule = MobCharacter {
+				num: 1.0,
+				build: CharacterBuild::Base,
+				species,
+				inventory: CharacterInventory::Grunt,
+				brains: CharacterBrains::Brawler,
+			}
+			.scene_recipe()
+			.locomotion_capsule();
+			let height = capsule.length + 2.0 * capsule.radius;
+			let in_band = (1.4..=2.1).contains(&height) && capsule.radius <= 0.5;
+			assert_eq!(
+				CharacterSpecies::PLAYER_SCALE_BIPEDS.contains(&species),
+				in_band,
+				"{species:?}: {height:.2} m tall, {:.2} m radius",
+				capsule.radius
+			);
+		}
+	}
 }

@@ -25,21 +25,36 @@ pub struct MobRosterRecipe {
 
 impl MobRosterRecipe {
 	pub fn from_kind(kind: MobKind, num: f32, leash: f32) -> Self {
+		Self::from_kind_among(kind, num, leash, &CharacterSpecies::VALUES)
+	}
+
+	/// [`Self::from_kind`] with members rolled only from `species`. Where the
+	/// family's own body plan (biped or quadruped) has no allowed species, it
+	/// falls back to the whole plan. The full [`CharacterSpecies::VALUES`] pool
+	/// rolls exactly the rosters [`Self::from_kind`] does.
+	pub fn from_kind_among(
+		kind: MobKind,
+		num: f32,
+		leash: f32,
+		species: &[CharacterSpecies],
+	) -> Self {
+		let pool = SpeciesPool(species);
 		let seed = mix(u64::from(num.to_bits()) ^ kind as u64);
 		let (min, max) = kind.count_range();
 		let count = min + pick(seed, max - min + 1);
-		let pack_species = pick_species(&CharacterSpecies::QUADRUPEDS, mix(seed ^ 0x0050_41CE));
+		let pack_species = pool.pick(&CharacterSpecies::QUADRUPEDS, mix(seed ^ 0x0050_41CE));
 		let ramble_bipeds = pick(seed ^ 0x02A6_B1E5, 2) == 0;
 		let guard_common = if pick(seed ^ 0x6A4D, 4) < 3 {
-			pick_species(&CharacterSpecies::BIPEDS, seed ^ 0xC011)
+			pool.pick(&CharacterSpecies::BIPEDS, seed ^ 0xC011)
 		} else {
-			pick_species(&CharacterSpecies::QUADRUPEDS, seed ^ 0xC011)
+			pool.pick(&CharacterSpecies::QUADRUPEDS, seed ^ 0xC011)
 		};
 		let mut members = Vec::with_capacity(count);
 		for slot in 0..count {
 			let lane = mix(seed ^ (slot as u64 + 1).wrapping_mul(0x9E37_79B9));
 			let member_num = num + slot as f32 * 0.754_877_7 + unit(lane);
-			let species = species_for(kind, lane, pack_species, guard_common, ramble_bipeds);
+			let species =
+				species_for(kind, lane, &pool, pack_species, guard_common, ramble_bipeds);
 			let brains = brains_for(kind, lane);
 			let inventory = inventory_for(kind, species, lane);
 			let build = build_for(member_num, lane);
@@ -65,6 +80,7 @@ impl MobRosterRecipe {
 fn species_for(
 	kind: MobKind,
 	lane: u64,
+	pool: &SpeciesPool<'_>,
 	pack_species: CharacterSpecies,
 	guard_common: CharacterSpecies,
 	ramble_bipeds: bool,
@@ -81,15 +97,29 @@ fn species_for(
 		} else {
 			&CharacterSpecies::QUADRUPEDS[..]
 		};
-		return pick_species(values, lane);
+		return pool.pick(values, lane);
 	}
 	let bipeds = matches!(kind, MobKind::Raider | MobKind::Brawler)
 		|| (kind == MobKind::Pleb && pick(lane ^ 0x91EB, 5) != 0)
 		|| (kind == MobKind::Rambles && ramble_bipeds);
 	if bipeds {
-		pick_species(&CharacterSpecies::BIPEDS, lane)
+		pool.pick(&CharacterSpecies::BIPEDS, lane)
 	} else {
-		pick_species(&CharacterSpecies::QUADRUPEDS, lane)
+		pool.pick(&CharacterSpecies::QUADRUPEDS, lane)
+	}
+}
+
+/// Species a roster may roll.
+struct SpeciesPool<'a>(&'a [CharacterSpecies]);
+
+impl SpeciesPool<'_> {
+	/// Pick from the allowed members of `values`, or from all of `values`
+	/// when none are allowed.
+	fn pick(&self, values: &[CharacterSpecies], lane: u64) -> CharacterSpecies {
+		let allowed: Vec<CharacterSpecies> =
+			values.iter().copied().filter(|species| self.0.contains(species)).collect();
+		let values = if allowed.is_empty() { values } else { &allowed[..] };
+		values[pick(lane, values.len())]
 	}
 }
 
@@ -157,10 +187,6 @@ fn build_for(num: f32, lane: u64) -> CharacterBuild {
 	}
 }
 
-fn pick_species(values: &[CharacterSpecies], lane: u64) -> CharacterSpecies {
-	values[pick(lane, values.len())]
-}
-
 fn disk_offset(slot: usize, count: usize, radius: f32, y: f32) -> Vec3 {
 	let fraction = (slot as f32 + 0.5) / count.max(1) as f32;
 	let r = radius * fraction.sqrt();
@@ -222,6 +248,39 @@ mod tests {
 			.fold(0.0_f32, f32::max);
 		assert!(farthest > leash * 0.45, "{farthest}");
 		assert!(farthest <= leash + 1e-3, "{farthest}");
+	}
+
+	#[test]
+	fn full_species_pool_rolls_the_default_roster() {
+		for kind in MobKind::VALUES {
+			for num in [0.5, 7.25, 41.0] {
+				assert_eq!(
+					MobRosterRecipe::from_kind_among(kind, num, 16.0, &CharacterSpecies::VALUES),
+					MobRosterRecipe::from_kind(kind, num, 16.0),
+				);
+			}
+		}
+	}
+
+	#[test]
+	fn brawlers_roll_only_from_their_pool() {
+		let pool = CharacterSpecies::PLAYER_SCALE_BIPEDS;
+		for num in 0..24 {
+			let roster =
+				MobRosterRecipe::from_kind_among(MobKind::Brawler, num as f32, 14.0, &pool);
+			assert!(roster.members.iter().all(|member| pool.contains(&member.character.species)));
+		}
+	}
+
+	#[test]
+	fn a_pool_without_the_body_plan_falls_back_to_the_plan() {
+		let roster = MobRosterRecipe::from_kind_among(
+			MobKind::Pack,
+			8.5,
+			18.0,
+			&CharacterSpecies::PLAYER_SCALE_BIPEDS,
+		);
+		assert!(roster.members.iter().all(|member| member.character.species.is_quadruped()));
 	}
 
 	#[test]

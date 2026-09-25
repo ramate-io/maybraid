@@ -71,6 +71,17 @@ impl CharacterSpecies {
 		Self::Wumbus,
 	];
 
+	/// Bipeds that read at the player's scale: 1.4–2.1 m locomotion capsule,
+	/// at most 0.5 m radius. Close-quarters modes draw fighters from these.
+	pub const PLAYER_SCALE_BIPEDS: [Self; 6] = [
+		Self::Braidman,
+		Self::Brokker,
+		Self::Lero,
+		Self::Mygr,
+		Self::Tuberwaber,
+		Self::Wumbus,
+	];
+
 	pub const QUADRUPEDS: [Self; 8] = [
 		Self::Brenal,
 		Self::Caole,

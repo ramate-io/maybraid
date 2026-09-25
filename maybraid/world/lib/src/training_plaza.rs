@@ -11,6 +11,7 @@ use durham_terrain_models::{
 };
 use lod::gen::Id;
 use maybraid_mobs::{Mob, MobKind, MobScene};
+use mob_characters::CharacterSpecies;
 use mob_intelligence::MemberOf;
 use player::capsule_spawn_height;
 use player_camera::FollowCamera;
@@ -58,6 +59,7 @@ const TRAINING_PLAYER_CLEARANCE_M: f32 = 10.0;
 const TRAINING_MOB_SEED: f32 = 42.0;
 /// Seed stride for extra Brawler rolls when a squad outgrows its roster.
 const TRAINING_SPARE_ROLL: f32 = 100.0;
+const TRAINING_SPECIES: [CharacterSpecies; 6] = CharacterSpecies::PLAYER_SCALE_BIPEDS;
 /// Hosts sharing one POI (Les Halles storeys) merge within this.
 const TRAINING_POI_MERGE_M: f32 = 1.0;
 
@@ -198,12 +200,14 @@ impl TrainingMob {
 
 	/// Brawler mob whose members stand at [`Self::members`]. Brawler
 	/// affiliations join and antagonize the FFA group, so members fight each
-	/// other, the other squads, and the player.
+	/// other, the other squads, and the player. Members are player-scale
+	/// bipeds so every fighter reads at close quarters.
 	fn scene(&self, num: f32) -> MobScene {
-		let mut mob = Mob::of_kind(MobKind::Brawler, num);
+		let brawlers = |num| Mob::of_kind_among(MobKind::Brawler, num, &TRAINING_SPECIES);
+		let mut mob = brawlers(num);
 		let mut roll = 1.0;
 		while mob.roster.members.len() < self.members.len() {
-			let spare = Mob::of_kind(MobKind::Brawler, num + roll * TRAINING_SPARE_ROLL);
+			let spare = brawlers(num + roll * TRAINING_SPARE_ROLL);
 			mob.roster.members.extend(spare.roster.members);
 			roll += 1.0;
 		}
@@ -876,6 +880,12 @@ mod tests {
 		let mob = TrainingMob { host: Vec3::new(seat.x, 0.0, seat.y), members };
 		let scene = mob.scene(TRAINING_MOB_SEED);
 		assert_eq!(scene.mob.roster.members.len(), 14);
+		assert!(scene
+			.mob
+			.roster
+			.members
+			.iter()
+			.all(|member| TRAINING_SPECIES.contains(&member.character.species)));
 	}
 
 	#[test]

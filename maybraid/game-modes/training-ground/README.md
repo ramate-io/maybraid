@@ -12,7 +12,9 @@ one floor.
 Sixteen Brawlers stand in two to four squads, each just outside the building
 of a development POI. The player spawns 10 m from the nearest squad, facing
 it. Brawlers belong to the FFA group and are hostile to it, so they fight the
-player, the other squads, and their own packmates from the first frame. World
+player, the other squads, and their own packmates from the first frame. Every
+fighter is a player-scale biped (`CharacterSpecies::PLAYER_SCALE_BIPEDS`), so
+none are too tiny or too large to read in close combat. World
 mob streaming and hopscotch are off while Training is live; turning hopscotch
 off also removes any urbanized Discovery terrain and buildings. A Training pose
 is not written.
