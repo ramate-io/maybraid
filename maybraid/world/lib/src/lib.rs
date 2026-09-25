@@ -27,7 +27,9 @@ mod weapon;
 
 pub use chico_vegetation_on_terrain_playground::{PlayerPhysicsEnabled, PlayerSpawnXz};
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
-pub use control::{WorldGameplayEnabled, WorldSceneryVisible, WorldSurfaceReady};
+pub use control::{
+	InventoryEditCameraFollow, WorldGameplayEnabled, WorldSceneryVisible, WorldSurfaceReady,
+};
 pub use durham_terrain_models::{terrain_streaming_enabled, TerrainStreamingEnabled};
 pub use game_commands::command::PendingStartupCommand;
 pub use intelligence::WorldIntelligencePlugin;
@@ -38,7 +40,7 @@ pub use maybraid_sky::{
 	SUN_COLOR, SUN_ILLUMINANCE,
 };
 pub use mobs::WorldMobsPlugin;
-pub use player_camera::CameraPov;
+pub use player_camera::{CameraPov, CameraPovLocked};
 pub use player_lifecycle::{WorldPlayerLifecyclePlugin, WorldPlayerRespawnConfig};
 pub use player_position::{
 	resume_discovery_from_saved_waypoints, PlayerPositionPlugin, PlayerPositionWaypoints,
@@ -192,6 +194,7 @@ impl Plugin for WorldPlugin {
 			.insert_resource(VegetationPlayerMotor(false))
 			.insert_resource(CharacterCameraFollowEnabled(false))
 			.init_resource::<WorldGameplayEnabled>()
+			.init_resource::<InventoryEditCameraFollow>()
 			.init_resource::<WorldSurfaceReady>()
 			.init_resource::<WorldSceneryVisible>()
 			.insert_resource(WorldMobHudEnabled::from_debug_chrome(self.debug_chrome))
@@ -229,6 +232,7 @@ impl Plugin for WorldPlugin {
 				(
 					control::update_world_surface_ready,
 					control::sync_world_scenery,
+					control::sync_combat_hud_visible,
 					control::sync_skill_map_enabled.before(SkillMapSystems::Spawn),
 					control::apply_intents_to_movement
 						.after(CharacterControlSystems)

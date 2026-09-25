@@ -43,6 +43,13 @@ pub enum CharacterEditorReturn {
 	InGame,
 }
 
+impl CharacterEditorReturn {
+	/// Pause-menu edit shows the live world player instead of a preview mesh.
+	pub fn uses_live_world_player(self) -> bool {
+		matches!(self, Self::InGame)
+	}
+}
+
 /// Open the saved-character editor. `inventory` overrides the disk bag so the
 /// in-game pause menu can edit the live loadout.
 #[derive(Message, Clone, Debug)]
@@ -404,5 +411,11 @@ mod tests {
 		assert!(!gallery_select_opens_edit(None, id));
 		assert!(!gallery_select_opens_edit(Some(CharacterId(1)), id));
 		assert!(gallery_select_opens_edit(Some(id), id));
+	}
+
+	#[test]
+	fn in_game_return_uses_the_live_world_player() {
+		assert!(super::CharacterEditorReturn::InGame.uses_live_world_player());
+		assert!(!super::CharacterEditorReturn::Gallery.uses_live_world_player());
 	}
 }

@@ -85,6 +85,25 @@ impl FloorNode {
 			})
 			.collect()
 	}
+
+	/// Walk prisms for circle−inscribed-square caps (local hull + pose).
+	pub fn inscribed_cap_walk_hulls(&self) -> Vec<(Vec3, Quat, Vec<Vec3>)> {
+		self.geometry
+			.placed_kits_for_style(self.style, self.placement)
+			.into_iter()
+			.filter_map(|piece| match piece.geom {
+				FloorKit::CircleInscribedSquare => {
+					let p = piece.placement;
+					Some((
+						p.translation,
+						p.rotation(),
+						crate::panels::circle_inscribed_square_kit_hull(p.scale),
+					))
+				}
+				_ => None,
+			})
+			.collect()
+	}
 }
 
 impl LodScene for FloorNode {

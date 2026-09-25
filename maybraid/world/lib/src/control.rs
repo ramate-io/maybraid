@@ -24,6 +24,10 @@ use player_camera::CameraController;
 #[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct WorldGameplayEnabled(pub bool);
 
+/// Keep third-person follow while the in-game inventory editor is open.
+#[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct InventoryEditCameraFollow(pub bool);
+
 impl Default for WorldGameplayEnabled {
 	fn default() -> Self {
 		Self(true)
@@ -70,6 +74,18 @@ fn discovery_xz(
 		return player.translation.xz();
 	}
 	layout.region_center_xz().xz()
+}
+
+pub(crate) fn sync_combat_hud_visible(
+	gameplay: Res<WorldGameplayEnabled>,
+	hud: Option<ResMut<combat_hud::CombatHudVisible>>,
+) {
+	let Some(mut hud) = hud else {
+		return;
+	};
+	if hud.0 != gameplay.0 {
+		hud.0 = gameplay.0;
+	}
 }
 
 pub(crate) fn sync_skill_map_enabled(
