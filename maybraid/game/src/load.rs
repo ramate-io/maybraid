@@ -151,10 +151,10 @@ pub(crate) fn finish_world_loading(
 	}
 }
 
-/// The previous round's plaza stays mounted until its teardown runs, so a
-/// round reload must not unveil on it.
+/// The previous map's plaza stays mounted until its teardown runs, so a new
+/// map must not unveil on it. A new life on the same map unveils on the live one.
 fn plaza_mounted_for(plaza: Option<&TrainingPlazaMounted>, round: Option<&TrainingRound>) -> bool {
-	plaza.is_some_and(|plaza| round.is_none_or(|round| plaza.0 == *round))
+	plaza.is_some_and(|plaza| round.is_none_or(|round| plaza.serves(*round)))
 }
 
 #[cfg(test)]
@@ -168,6 +168,7 @@ mod tests {
 		assert!(plaza_mounted_for(Some(&TrainingPlazaMounted(round)), Some(&round)));
 		assert!(!plaza_mounted_for(Some(&TrainingPlazaMounted(round)), Some(&next)));
 		assert!(!plaza_mounted_for(None, Some(&next)));
+		assert!(plaza_mounted_for(Some(&TrainingPlazaMounted(round)), Some(&round.next_life())));
 	}
 
 	fn gate_at(entered_at: f32) -> FirstLoadGate {

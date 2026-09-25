@@ -1,6 +1,7 @@
 //! One seeded Richmond development on the Training FinePatch, walled into a
-//! flat courtyard arena with an FFA roster inside. Each [`TrainingRound`]
-//! stamps its own site, development, and roster.
+//! flat courtyard arena with an FFA roster inside. Each [`TrainingMap`]
+//! stamps its own site, development, and roster; its later lives respawn
+//! on the same plaza.
 
 use avian3d::prelude::{Collider, LinearVelocity, Position, RigidBody};
 use bevy::math::bounding::Aabb3d;
@@ -29,7 +30,7 @@ use richmond_development_models::{
 
 use crate::PlayerSpawnXz;
 use crate::control::WorldSurfaceReady;
-use crate::training::{TrainingGrounds, TrainingRound};
+use crate::training::{TrainingGrounds, TrainingMap, TrainingRound};
 
 const TRAINING_WALL_STEP_M: f32 = 8.0;
 const TRAINING_WALL_HEIGHT_M: f32 = 20.0;
@@ -64,10 +65,17 @@ const TRAINING_SPECIES: [CharacterSpecies; 6] = CharacterSpecies::PLAYER_SCALE_B
 /// Hosts sharing one POI (Les Halles storeys) merge within this.
 const TRAINING_POI_MERGE_M: f32 = 1.0;
 
-/// The development, roster, and wall have been stamped for this round. Also
-/// set, with nothing stamped, once every site the round tried fit no development.
+/// The development, roster, and wall have been stamped for this round's map.
+/// Also set, with nothing stamped, once every site the round tried fit no
+/// development.
 #[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TrainingPlazaMounted(pub TrainingRound);
+
+impl TrainingPlazaMounted {
+	pub fn serves(&self, round: TrainingRound) -> bool {
+		self.0.map() == round.map()
+	}
+}
 
 /// Pads are composed; unveil waits until the stamped FinePatch colliders exist.
 #[derive(Resource, Debug)]
@@ -494,7 +502,7 @@ pub(crate) fn park_on_training_site(
 	grounds: Res<TrainingGrounds>,
 	round: Res<TrainingRound>,
 	base: Res<WorldBaseTerrain>,
-	mut parked: Local<Option<TrainingRound>>,
+	mut parked: Local<Option<TrainingMap>>,
 	mut spawn_xz: ResMut<PlayerSpawnXz>,
 	mut players: Query<
 		(&mut Transform, &mut GlobalTransform, Option<&mut Position>, Option<&mut LinearVelocity>),
@@ -509,7 +517,7 @@ pub(crate) fn park_on_training_site(
 		*parked = None;
 		return;
 	}
-	if *parked == Some(*round) {
+	if *parked == Some(round.map()) {
 		return;
 	}
 	let center = round.layout().region_center_xz().xz();
@@ -519,7 +527,39 @@ pub(crate) fn park_on_training_site(
 	}
 	let at = player_spawn_point_at(center, holding_elevation(&base.0, center.x, center.y));
 	seat_player_at(&mut players, &mut cameras, at, Vec3::Z);
-	*parked = Some(*round);
+	*parked = Some(round.map());
+}
+
+/// A body respawned onto the live plaza (a new life on the same map) takes
+/// the arena seat and its anchor.
+pub(crate) fn reseat_training_life(
+	grounds: Res<TrainingGrounds>,
+	round: Res<TrainingRound>,
+	mounted: Option<Res<TrainingPlazaMounted>>,
+	stamped: Option<Res<TrainingPlazaStamped>>,
+	mut commands: Commands,
+	unanchored: Query<Entity, (With<Player>, Without<OffTerrainAnchor>)>,
+	mut players: Query<
+		(&mut Transform, &mut GlobalTransform, Option<&mut Position>, Option<&mut LinearVelocity>),
+		With<Player>,
+	>,
+	mut cameras: Query<
+		(&mut Transform, &mut GlobalTransform, &FollowCamera),
+		(With<Camera3d>, Without<Player>),
+	>,
+) {
+	if !grounds.0 || !mounted.is_some_and(|mounted| mounted.serves(*round)) {
+		return;
+	}
+	let Some(stamped) = stamped else {
+		return;
+	};
+	let Ok(player) = unanchored.single() else {
+		return;
+	};
+	let arena = &stamped.arena;
+	seat_player_at(&mut players, &mut cameras, arena.player, arena.player_facing());
+	commands.entity(player).insert(OffTerrainAnchor { translation: arena.player });
 }
 
 /// Once the padded fills carry colliders, every raw FinePatch cell they cover
@@ -595,7 +635,7 @@ pub(crate) fn promote_training_plaza(
 	commands.insert_resource(TrainingPlazaMounted(stamped.round));
 }
 
-/// Tear the plaza down when Training ends or the round moves on. Leaving
+/// Tear the plaza down when Training ends or the round moves to a new map. Leaving
 /// parks the player on Discovery's default spawn, so Discovery resumes the
 /// character's saved trail instead of starting at the last Training site.
 pub(crate) fn clear_training_plaza(
@@ -621,7 +661,7 @@ pub(crate) fn clear_training_plaza(
 		(With<Camera3d>, Without<Player>),
 	>,
 ) {
-	let stale = |of: TrainingRound| !grounds.0 || of != *round;
+	let stale = |of: TrainingRound| !grounds.0 || of.map() != round.map();
 	let mounted_stale = mounted.as_deref().is_some_and(|mounted| stale(mounted.0));
 	let stamped_stale = stamped.as_deref().is_some_and(|stamped| stale(stamped.round));
 	if !mounted_stale && !stamped_stale {
@@ -1142,6 +1182,49 @@ mod tests {
 		let host = world.spawn(TrainingBrawler).id();
 		world.run_system_once(clear_training_plaza)?;
 		assert!(world.get_entity(host).is_ok(), "the live round keeps its plaza");
+
+		world.insert_resource(round.next().next_life());
+		world.run_system_once(clear_training_plaza)?;
+		assert!(world.get_entity(host).is_ok(), "a new life keeps the map's plaza");
+		Ok(())
+	}
+
+	#[test]
+	fn a_new_life_takes_the_arena_seat() -> Result<(), bevy::ecs::system::RunSystemError> {
+		use bevy::ecs::system::RunSystemOnce;
+		let round = TrainingRound::new(13);
+		let mut world = plaza_world(true, round.next_life());
+		let arena = TrainingArena::around(Vec2::new(40.0, -20.0), Vec2::splat(30.0), 6.0)
+			.with_roster(&TrainingSite::single(Vec2::new(40.0, -20.0), Vec2::splat(30.0)));
+		let seat = arena.player;
+		world.insert_resource(TrainingPlazaMounted(round));
+		world.insert_resource(TrainingPlazaStamped {
+			round,
+			cell_id: Id::from_cell(Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE)),
+			terrain_ids: Vec::new(),
+			arena,
+		});
+		let transform = Transform::from_translation(Vec3::new(0.0, 90.0, 0.0));
+		let body = world.spawn((Player, transform, GlobalTransform::from(transform))).id();
+		world.run_system_once(reseat_training_life)?;
+		assert_eq!(world.get::<Transform>(body).map(|t| t.translation), Some(seat));
+		assert_eq!(world.get::<OffTerrainAnchor>(body).map(|a| a.translation), Some(seat));
+
+		let moved = Vec3::new(1.0, 2.0, 3.0);
+		if let Some(mut at) = world.get_mut::<Transform>(body) {
+			at.translation = moved;
+		}
+		world.run_system_once(reseat_training_life)?;
+		assert_eq!(world.get::<Transform>(body).map(|t| t.translation), Some(moved));
+
+		world.entity_mut(body).remove::<OffTerrainAnchor>();
+		world.insert_resource(round.next());
+		world.run_system_once(reseat_training_life)?;
+		assert_eq!(
+			world.get::<Transform>(body).map(|t| t.translation),
+			Some(moved),
+			"a new map seats through its own promote"
+		);
 		Ok(())
 	}
 

@@ -57,7 +57,7 @@ pub use stash::{
 	spawn_exploded_stashes, spawn_world_stash, StashDisplayedItem, StashPolicy, WorldStash,
 	WorldStashPlugin, WorldStashSettings, DEFAULT_CLAIM_RADIUS, DEFAULT_LOOT_SECS,
 };
-pub use training::{TrainingGrounds, TrainingRound, TrainingRoundAdvanced};
+pub use training::{TrainingGrounds, TrainingLifeEnded, TrainingMap, TrainingRound};
 pub use training_plaza::TrainingPlazaMounted;
 pub use ui::WorldMobHudEnabled;
 pub use vsync::{default_window_present_mode, RequestVsyncToggle, VSYNC_TOGGLE_KEY};

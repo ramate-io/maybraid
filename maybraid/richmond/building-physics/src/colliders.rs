@@ -15,7 +15,9 @@ use richmond_building_components::panels::{
 	rectangle_kit_hull, right_triangle_kit_hull, tessellated_triangle_kit_hull,
 	to_centered_rect_placement, PanelGeometry, PANEL_KIT_MAX, PANEL_KIT_MIN,
 };
-use richmond_building_components::partitions::{PartitionGeometry, PANEL_Y_HALF};
+use richmond_building_components::partitions::{
+	PartitionGeometry, PartitionTile, PANEL_Y_HALF, SLICE_KIT_HEIGHT,
+};
 use richmond_building_components::placed::Placement;
 use richmond_building_components::{BuildingComponents, FloorNode, PanelNode, PartitionNode};
 
@@ -139,6 +141,7 @@ fn walk_shapes(building: &impl BuildingComponents) -> Vec<(Vec3, Quat, Collider)
 		if let Some(pose) = partition_cuboid(&node) {
 			shapes.push(cuboid_shape(pose));
 		}
+		shapes.extend(arc_partition_cuboids(&node).into_iter().map(cuboid_shape));
 	}
 	for node in building.stair_nodes_for_level(level).flatten() {
 		for (translation, rotation, size) in node.walk_ramps() {
@@ -236,6 +239,63 @@ fn partition_cuboid(node: &PartitionNode) -> Option<CuboidPose> {
 	}
 }
 
+/// Radial band of the rough-stone arc kits (unit ring; meshes span about 0.86–1.13).
+const ARC_KIT_INNER: f32 = 0.87;
+const ARC_KIT_OUTER: f32 = 1.12;
+/// Chord width. At 15° a chord strays under 1% of the radius from the ring.
+const ARC_CHORD_DEGREES: f32 = 15.0;
+
+/// Chord cuboids along each placed arc kit, so ring walls (Wizard's Tower,
+/// Ring Fort towers) block like the meshes. Door and window clips are gaps in
+/// the solid sweeps, so they stay open.
+fn arc_partition_cuboids(node: &PartitionNode) -> Vec<CuboidPose> {
+	let height = match node.geometry {
+		PartitionGeometry::Arc(_) => 1.0,
+		PartitionGeometry::SliceArc(_) => SLICE_KIT_HEIGHT,
+		_ => return Vec::new(),
+	};
+	let mut out = Vec::new();
+	for tile in node.geometry.placed_tiles_for_style(node.style, node.placement) {
+		let degrees = match tile.geom {
+			PartitionTile::Arc180 | PartitionTile::SliceArc180 => 180.0,
+			PartitionTile::Arc90 | PartitionTile::SliceArc90 => 90.0,
+			PartitionTile::Arc15 | PartitionTile::SliceArc15 => 15.0,
+			_ => continue,
+		};
+		out.extend(arc_kit_chords(tile.placement, degrees, height));
+	}
+	out
+}
+
+/// Kits sit on local +X and sweep toward +Z: kit angle θ is the direction
+/// (cos θ, 0, sin θ).
+fn arc_kit_chords(placement: Placement, degrees: f32, height: f32) -> Vec<CuboidPose> {
+	let chords = (degrees / ARC_CHORD_DEGREES).ceil().max(1.0) as usize;
+	let step = degrees.to_radians() / chords as f32;
+	let rotation = placement.rotation();
+	let scale = placement.scale;
+	(0..chords)
+		.map(|chord| {
+			let mid = (chord as f32 + 0.5) * step;
+			let (sin, cos) = mid.sin_cos();
+			let radial = Vec3::new(cos, 0.0, sin);
+			let tangent = Vec3::new(-sin, 0.0, cos) * scale;
+			let length = 2.0 * ARC_KIT_OUTER * (0.5 * step).sin();
+			let center =
+				radial * (0.5 * (ARC_KIT_INNER + ARC_KIT_OUTER)) + Vec3::Y * (0.5 * height);
+			CuboidPose {
+				translation: placement.translation + rotation * (center * scale),
+				rotation: rotation * Quat::from_rotation_y(f32::atan2(-tangent.z, tangent.x)),
+				size: Vec3::new(
+					length * tangent.length(),
+					height * scale.y.abs(),
+					(ARC_KIT_OUTER - ARC_KIT_INNER) * (radial * scale).length(),
+				),
+			}
+		})
+		.collect()
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -306,6 +366,52 @@ mod tests {
 		assert!(translation.length() < 1e-6);
 		assert!(points.iter().any(|p| (p.z - 4.0).abs() < 1e-3 && p.x.abs() < 1e-3));
 		assert!(Collider::convex_hull(points.clone()).is_some());
+		Ok(())
+	}
+
+	fn in_cuboid(pose: &CuboidPose, at: Vec3) -> bool {
+		let local = pose.rotation.inverse() * (at - pose.translation);
+		local.abs().cmple(pose.size * 0.5 + Vec3::splat(1e-3)).all()
+	}
+
+	fn ring_node(geometry: PartitionGeometry, yaw: f32) -> PartitionNode {
+		PartitionNode::new(
+			richmond_building_components::partitions::PartitionStyle::RoughStonework,
+			geometry,
+			Placement::new(Vec3::new(5.0, 2.0, -3.0), yaw).with_scale(Vec3::new(10.0, 4.0, 10.0)),
+		)
+	}
+
+	#[test]
+	fn a_full_ring_wall_blocks_all_the_way_round() -> anyhow::Result<()> {
+		let node = ring_node(PartitionGeometry::arc(360.0), 0.3);
+		let chords = arc_partition_cuboids(&node);
+		assert!(!chords.is_empty());
+		for step in 0..72 {
+			let angle = (step as f32 * 5.0).to_radians();
+			let at = Vec3::new(5.0, 4.0, -3.0) + Vec3::new(angle.cos(), 0.0, angle.sin()) * 10.0;
+			assert!(chords.iter().any(|pose| in_cuboid(pose, at)), "{at} is open");
+		}
+		let inside = Vec3::new(5.0, 4.0, -3.0) + Vec3::X * 7.0;
+		assert!(chords.iter().all(|pose| !in_cuboid(pose, inside)), "the floor stays walkable");
+		Ok(())
+	}
+
+	#[test]
+	fn an_arc_collides_where_its_kit_sweeps() -> anyhow::Result<()> {
+		use richmond_building_components::arc_ring_dir;
+		let yaw = 1.0;
+		let chords = arc_partition_cuboids(&ring_node(PartitionGeometry::arc(15.0), yaw));
+		let at = |yaw: f32| {
+			let dir = arc_ring_dir(yaw);
+			Vec3::new(5.0 + 10.0 * dir.x, 3.0, -3.0 + 10.0 * dir.y)
+		};
+		let start = (Quat::from_rotation_y(yaw) * Vec3::X).xz();
+		assert!((start - arc_ring_dir(yaw)).length() < 1e-4, "yaw places the kit start");
+		assert!(chords.iter().any(|pose| in_cuboid(pose, at(yaw - 7.5_f32.to_radians()))));
+		assert!(chords.iter().all(|pose| !in_cuboid(pose, at(yaw + 7.5_f32.to_radians()))));
+		let slice = arc_partition_cuboids(&ring_node(PartitionGeometry::slice_arc(15.0), yaw));
+		assert!(slice.iter().all(|pose| (pose.size.y - SLICE_KIT_HEIGHT * 4.0).abs() < 1e-4));
 		Ok(())
 	}
 

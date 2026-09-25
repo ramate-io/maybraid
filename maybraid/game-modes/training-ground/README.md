@@ -7,8 +7,10 @@ or Wumbus) with a random starter loadout. It is never saved. Its bag does not
 reach the active character's files, and the pause menu's Character editor is
 locked while one plays.
 
-Every session starts on a fresh seed, and every respawn in Training is a new
-round on the next seed. The round's seed picks:
+Every session starts on a fresh seed. A respawn as your character is a new
+round on the next seed, so it lands on a new map. A respawn as a random trainee
+keeps the map, with its development, wall, and the Brawlers still standing,
+and only rolls the next trainee. The seed picks:
 
 - the site: a pinned FinePatch of the Durham / Chico / Richmond stack (four
   160 m cells) centered within 48 cells of the origin. The site is rerolled
@@ -16,7 +18,8 @@ round on the next seed. The round's seed picks:
 - the single-terrace Richmond development, its kind and layout, and the wall
   finish;
 - the Brawler rosters;
-- the trainee, when the round plays one.
+- the trainee, when the round plays one, together with how many lives have
+  been played on the map.
 
 The development sits inside a flat courtyard that is composed onto the
 FinePatch mesh. A level 20 m wall encloses the courtyard. The development is
@@ -33,8 +36,9 @@ hopscotch are off while Training is live; turning hopscotch off also removes
 any urbanized Discovery terrain and buildings. A Training pose is not written.
 
 A death runs the usual glaze, then the next round loads in behind the loading
-screen. The pause menu's **Next round** row flips between your character and a
-random trainee for that next round.
+screen. A trainee's next life reseats on the arena's player seat. The pause
+menu's **Next round** row flips between your character and a random trainee
+for that next round.
 
 Leave restores the playable-world fill, parks the player at the default spawn
 so Discovery resumes from its saved trail, and returns home.

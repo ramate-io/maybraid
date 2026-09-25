@@ -7,8 +7,10 @@
 //! stamps one seeded Richmond development onto that patch — pads first, then
 //! hosts — once the whole window exists.
 //!
-//! Every life is its own round. A Training respawn advances [`TrainingRound`],
-//! which moves the patch, tears the plaza down, and stamps the next one.
+//! A Training respawn ends the life with [`TrainingLifeEnded`], and the shell
+//! advances [`TrainingRound`]. A new round moves the patch, tears the plaza
+//! down, and stamps the next one. A new life on the same map keeps the plaza
+//! and only rolls the next trainee.
 //!
 //! Each session has one terrain collider owner. Discovery's is Richmond's
 //! urbanized presenter, which turning urbanization off tears down. Training's
@@ -35,7 +37,7 @@ use crate::WorldPlayerLoadout;
 use crate::control::{WorldSurfaceSet, update_world_surface_ready};
 use crate::training_plaza::{
 	clear_training_plaza, mount_training_plaza, park_on_training_site, promote_training_plaza,
-	supersede_training_raw_terrain,
+	reseat_training_life, supersede_training_raw_terrain,
 };
 
 /// Training Ground session: patch retarget, the stamped plaza, and the
@@ -46,7 +48,7 @@ impl Plugin for TrainingGroundPlugin {
 	fn build(&self, app: &mut App) {
 		app.init_resource::<TrainingGrounds>()
 			.init_resource::<TrainingRound>()
-			.add_message::<TrainingRoundAdvanced>()
+			.add_message::<TrainingLifeEnded>()
 			.add_systems(
 				Update,
 				(
@@ -57,6 +59,7 @@ impl Plugin for TrainingGroundPlugin {
 					(supersede_training_raw_terrain, promote_training_plaza)
 						.chain()
 						.after(TerrainColliderSystems::QueueMeshes),
+					reseat_training_life.before(clear_training_plaza),
 					clear_training_plaza,
 				),
 			);
@@ -81,13 +84,22 @@ const TRAINING_MOB_SALT: u64 = 0x0B_5EED;
 const TRAINING_TRAINEE_SALT: u64 = 0x7EA1_4EE5;
 const TRAINING_NEXT_SALT: u64 = 0x9E37_79B9_7F4A_7C15;
 
-/// One Training life. The shell rolls the first from entropy, and each
-/// Training respawn advances to [`Self::next`], so every life gets a fresh
-/// site, development, roster, and trainee.
+/// One Training life. The shell rolls the first from entropy. A respawn
+/// advances to [`Self::next`] (a fresh site, development, roster, and
+/// trainee) or [`Self::next_life`] (the next trainee on the same map).
 #[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TrainingRound {
 	pub seed: u64,
 	/// Sites already tried for this seed. A site that fits no development rerolls.
+	site_attempt: u32,
+	/// Lives played on this map.
+	life: u32,
+}
+
+/// What a round stamps. Every life on the same map shares it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TrainingMap {
+	seed: u64,
 	site_attempt: u32,
 }
 
@@ -99,7 +111,7 @@ impl Default for TrainingRound {
 
 impl TrainingRound {
 	pub const fn new(seed: u64) -> Self {
-		Self { seed, site_attempt: 0 }
+		Self { seed, site_attempt: 0, life: 0 }
 	}
 
 	pub fn from_entropy() -> Self {
@@ -110,9 +122,18 @@ impl TrainingRound {
 		Self::new(mix(nanos))
 	}
 
-	/// The round after this life.
+	/// A new map after this life.
 	pub fn next(self) -> Self {
 		Self::new(self.lane(TRAINING_NEXT_SALT))
+	}
+
+	/// The next life on this map.
+	pub fn next_life(self) -> Self {
+		Self { life: self.life.wrapping_add(1), ..self }
+	}
+
+	pub fn map(self) -> TrainingMap {
+		TrainingMap { seed: self.seed, site_attempt: self.site_attempt }
 	}
 
 	pub(crate) fn reroll_site(self) -> Self {
@@ -146,7 +167,8 @@ impl TrainingRound {
 
 	/// A player-scale playable species in a rolled starter loadout. Never saved.
 	pub fn trainee(self) -> WorldPlayerLoadout {
-		let mut rng = ItemRng::from_seed(self.lane(TRAINING_TRAINEE_SALT));
+		let life = u64::from(self.life).rotate_left(23);
+		let mut rng = ItemRng::from_seed(self.lane(TRAINING_TRAINEE_SALT ^ life));
 		let appearance = match rng.gen_index(5) {
 			0 => CharacterAppearance::Braidman(BraidmanConfig::default_preview()),
 			1 => CharacterAppearance::Lero(LeroConfig::default_preview()),
@@ -155,8 +177,8 @@ impl TrainingRound {
 			_ => CharacterAppearance::Wumbus(WumbusConfig::default_preview()),
 		};
 		let inventory = Inventory::with_starter_outfit(random_starter_loadout(&mut rng));
-		WorldPlayerLoadout::new(format!("trainee-{:016x}", self.seed), appearance, inventory)
-			.with_name("Trainee")
+		let key = format!("trainee-{:016x}-{}", self.seed, self.life);
+		WorldPlayerLoadout::new(key, appearance, inventory).with_name("Trainee")
 	}
 
 	fn lane(self, salt: u64) -> u64 {
@@ -164,10 +186,10 @@ impl TrainingRound {
 	}
 }
 
-/// A Training respawn advanced the round. The shell reloads the patch behind
-/// the loading screen.
+/// A Training body respawned. The shell advances [`TrainingRound`] and loads
+/// the next life in behind the loading screen.
 #[derive(Message, Clone, Copy, Debug, PartialEq, Eq)]
-pub struct TrainingRoundAdvanced(pub TrainingRound);
+pub struct TrainingLifeEnded;
 
 fn mix(value: u64) -> u64 {
 	let mut value = value.wrapping_add(0x9E37_79B9_7F4A_7C15);
@@ -215,7 +237,7 @@ impl TrainingFill {
 }
 
 /// Shrink Durham and the forest to the round's patch, and keep hopscotch off.
-/// A new round (or site reroll) moves the patch. Restores the playable rings
+/// A new map (or site reroll) moves the patch. Restores the playable rings
 /// when the shell clears [`TrainingGrounds`].
 ///
 /// Runs in [`Update`] before generate so [`OnEnter`] shell look (after
@@ -223,7 +245,7 @@ impl TrainingFill {
 pub(crate) fn apply_training_grounds(
 	grounds: Res<TrainingGrounds>,
 	round: Res<TrainingRound>,
-	mut applied: Local<Option<TrainingRound>>,
+	mut applied: Local<Option<TrainingMap>>,
 	mut layout: ResMut<TerrainCellLayout>,
 	mut coverage: ResMut<TerrainCoverage>,
 	mut present: ResMut<TerrainPresentEnabled>,
@@ -235,10 +257,10 @@ pub(crate) fn apply_training_grounds(
 	mut urban: Option<ResMut<UrbanizationStreamingEnabled>>,
 ) {
 	let target = grounds.0.then_some(*round);
-	if *applied == target {
+	if *applied == target.map(TrainingRound::map) {
 		return;
 	}
-	*applied = target;
+	*applied = target.map(TrainingRound::map);
 	let fill = TrainingFill::for_session(target);
 	*layout = fill.layout.clone();
 	*coverage = fill.coverage;
@@ -328,6 +350,10 @@ mod tests {
 		system.run((), &mut world).map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		assert!(!world.resource::<TerrainPresentationDirty>().0, "same round stays put");
 
+		world.insert_resource(round.next_life());
+		system.run((), &mut world).map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(!world.resource::<TerrainPresentationDirty>().0, "a new life keeps the map");
+
 		world.insert_resource(round.next());
 		system.run((), &mut world).map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		assert_eq!(*world.resource::<TerrainCellLayout>(), round.next().layout());
@@ -409,5 +435,23 @@ mod tests {
 		assert!(species.iter().all(|id| player_scale.contains(id)), "{species:?}");
 		assert!(species.len() > 2, "trainees should vary across rounds: {species:?}");
 		assert_eq!(TrainingRound::new(5).trainee(), TrainingRound::new(5).trainee());
+	}
+
+	#[test]
+	fn a_new_life_keeps_the_map_and_rolls_a_new_trainee() {
+		let round = TrainingRound::new(77).reroll_site();
+		let life = round.next_life();
+		assert_eq!(life.map(), round.map());
+		assert_eq!(life.site(), round.site());
+		assert_eq!(life.development_seed(), round.development_seed());
+		assert_eq!(life.mob_seed(), round.mob_seed());
+		assert_ne!(life.trainee().key, round.trainee().key);
+		let lives: std::collections::HashSet<_> =
+			std::iter::successors(Some(round), |round| Some(round.next_life()))
+				.take(12)
+				.map(|life| format!("{:?}", life.trainee().appearance))
+				.collect();
+		assert!(lives.len() > 2, "lives on one map should vary the trainee");
+		assert_ne!(round.next().map(), round.map());
 	}
 }

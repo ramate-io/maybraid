@@ -26,7 +26,7 @@ use spotting_intelligence::SpotSubject;
 use threat_intelligence::{Affiliations, ThreatSubject};
 
 use crate::control::strip_world_player_motor;
-use crate::training::{TrainingGrounds, TrainingRound, TrainingRoundAdvanced};
+use crate::training::{TrainingGrounds, TrainingLifeEnded};
 use crate::weapon::WorldPlayerAppearanceRequested;
 use crate::{WorldGameplayEnabled, WorldPlayerLoadout};
 
@@ -198,8 +198,8 @@ fn queue_downed_world_player(
 	}
 }
 
-/// Discovery respawns near a POI. A Training respawn is the next round: the
-/// body is replaced where it fell and the round moves on to a new site.
+/// Discovery respawns near a POI. A Training respawn ends the life: the body
+/// is replaced where it fell until the shell's next round seats it.
 #[allow(clippy::too_many_arguments)]
 fn respawn_world_player(
 	time: Res<Time>,
@@ -209,8 +209,8 @@ fn respawn_world_player(
 	loadout: Option<Res<WorldPlayerLoadout>>,
 	locomotion: Res<CharacterLocomotion>,
 	surface: WorldPlayerSurface,
-	training: (Option<Res<TrainingGrounds>>, Option<ResMut<TrainingRound>>),
-	mut advanced: MessageWriter<TrainingRoundAdvanced>,
+	grounds: Option<Res<TrainingGrounds>>,
+	mut ended: MessageWriter<TrainingLifeEnded>,
 	live_player: Query<(), With<VegetationPlayer>>,
 	mut state: ResMut<WorldPlayerRespawnState>,
 	mut commands: Commands,
@@ -235,32 +235,26 @@ fn respawn_world_player(
 	let seed = pending.seed;
 	state.pending = None;
 
-	let (grounds, round) = training;
-	let next_round = round.filter(|_| grounds.is_some_and(|grounds| grounds.0));
-	let training_respawn = next_round.is_some();
-	let position = match next_round {
-		Some(mut round) => {
-			*round = round.next();
-			advanced.write(TrainingRoundAdvanced(*round));
-			player_position_above_surface(death_at)
+	let training_respawn = grounds.is_some_and(|grounds| grounds.0);
+	let position = if training_respawn {
+		ended.write(TrainingLifeEnded);
+		player_position_above_surface(death_at)
+	} else {
+		let placed = registry.place_nearby(
+			death_at,
+			config.nearby_query(),
+			&config.interests,
+			state.last_poi,
+			seed,
+			config.fallback,
+		);
+		let mut surface_point = placed.position;
+		let terrain_y = surface.surface_height(surface_point.xz());
+		if terrain_y.is_finite() {
+			surface_point.y = terrain_y;
 		}
-		None => {
-			let placed = registry.place_nearby(
-				death_at,
-				config.nearby_query(),
-				&config.interests,
-				state.last_poi,
-				seed,
-				config.fallback,
-			);
-			let mut surface_point = placed.position;
-			let terrain_y = surface.surface_height(surface_point.xz());
-			if terrain_y.is_finite() {
-				surface_point.y = terrain_y;
-			}
-			state.last_poi = placed.poi;
-			player_position_above_surface(surface_point)
-		}
+		state.last_poi = placed.poi;
+		player_position_above_surface(surface_point)
 	};
 
 	let player = spawn_player_body(
@@ -271,7 +265,7 @@ fn respawn_world_player(
 		position,
 	);
 	if let Some(loadout) = loadout {
-		// The next round may swap the loadout (a new trainee) before the body
+		// The next life may swap the loadout (a new trainee) before the body
 		// arms, so a Training body leaves its appearance to the armed loadout.
 		if !training_respawn {
 			commands.entity(player).insert(WorldPlayerAppearanceRequested);
@@ -401,7 +395,7 @@ mod tests {
 	}
 
 	#[test]
-	fn a_training_respawn_is_the_next_round() -> anyhow::Result<()> {
+	fn a_training_respawn_ends_the_life() -> anyhow::Result<()> {
 		let mut world = World::new();
 		world.insert_resource(WorldPlayerRespawnConfig { delay_secs: 0.0, ..default() });
 		world.insert_resource(WorldPlayerRespawnState {
@@ -426,29 +420,24 @@ mod tests {
 		));
 		world.init_resource::<Assets<Mesh>>();
 		world.init_resource::<Assets<StandardMaterial>>();
-		world.init_resource::<Messages<TrainingRoundAdvanced>>();
+		world.init_resource::<Messages<TrainingLifeEnded>>();
 		world.insert_resource(TrainingGrounds(true));
-		world.insert_resource(TrainingRound::new(9));
-		world.insert_resource(TrainingRound::new(9).trainee());
+		world.insert_resource(crate::TrainingRound::new(9).trainee());
 
 		world
 			.run_system_once(respawn_world_player)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 
-		let next = TrainingRound::new(9).next();
-		assert_eq!(*world.resource::<TrainingRound>(), next);
-		let advanced: Vec<_> = world
-			.resource_mut::<Messages<TrainingRoundAdvanced>>()
-			.drain()
-			.collect();
-		assert_eq!(advanced, vec![TrainingRoundAdvanced(next)]);
+		let ended: Vec<_> =
+			world.resource_mut::<Messages<TrainingLifeEnded>>().drain().collect();
+		assert_eq!(ended, vec![TrainingLifeEnded]);
 		let mut bodies = world.query_filtered::<
 			(&Transform, Has<WorldPlayerAppearanceRequested>),
 			With<VegetationPlayer>,
 		>();
 		let (body, requested) = bodies.single(&world)?;
 		assert_eq!(body.translation.xz(), Vec2::new(3.0, 5.0));
-		assert!(!requested, "the next round's loadout dresses the body");
+		assert!(!requested, "the next life's loadout dresses the body");
 		assert!(world.resource::<WorldPlayerRespawnState>().pending.is_none());
 		Ok(())
 	}

@@ -1,8 +1,9 @@
 //! Training Ground setup: who plays the rounds.
 //!
-//! Every Training respawn is a new seeded round. [`TrainingSpawn`] holds the
-//! character mode for the round being played and for the next one, which the
-//! pause menu can flip mid-session.
+//! Every Training respawn is a new round: a new seeded map for your character,
+//! or a new trainee on the same map. [`TrainingSpawn`] holds the character mode
+//! for the round being played and for the next one, which the pause menu can
+//! flip mid-session.
 
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, Scene};
@@ -47,9 +48,11 @@ impl TrainingCharacterChoice {
 
 	pub fn description(self) -> &'static str {
 		match self {
-			Self::Active => "Train as your active character. What they pick up is saved.",
+			Self::Active => {
+				"Train as your active character on a new map every round. What they pick up is saved."
+			}
 			Self::Random => {
-				"Train as a new random character every round. Try loadouts you have not built. Nothing is saved."
+				"Stay on one map and respawn as a new random character. Try loadouts you have not built. Nothing is saved."
 			}
 		}
 	}

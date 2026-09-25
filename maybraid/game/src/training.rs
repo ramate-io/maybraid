@@ -2,10 +2,11 @@
 //!
 //! A session starts on a fresh [`TrainingRound`]. Each respawn advances the
 //! round and loads it in behind the loading screen, where [`TrainingSpawn::next`]
-//! becomes the round's character mode.
+//! becomes the round's character mode. A random trainee's next life stays on
+//! the same map; your own character's moves to a new one.
 
 use bevy::prelude::*;
-use maybraid_world::{TrainingRound, TrainingRoundAdvanced, WorldPlayerLoadout, WorldSurfaceReady};
+use maybraid_world::{TrainingLifeEnded, TrainingRound, WorldPlayerLoadout, WorldSurfaceReady};
 use menu_screens::{GameMode, TrainingCharacterChoice, TrainingSpawn};
 
 use crate::flow::{GameFlow, PlaySession};
@@ -32,11 +33,22 @@ pub(crate) fn start_training_session(
 }
 
 pub(crate) fn reload_training_round(
-	mut advanced: MessageReader<TrainingRoundAdvanced>,
+	mut ended: MessageReader<TrainingLifeEnded>,
+	spawn: Option<Res<TrainingSpawn>>,
+	mut round: ResMut<TrainingRound>,
 	mut flow: ResMut<NextState<GameFlow>>,
 ) {
-	if advanced.read().last().is_some() {
-		flow.set(GameFlow::LoadingWorld);
+	if ended.read().last().is_none() {
+		return;
+	}
+	*round = next_training_round(spawn.as_deref(), *round);
+	flow.set(GameFlow::LoadingWorld);
+}
+
+fn next_training_round(spawn: Option<&TrainingSpawn>, round: TrainingRound) -> TrainingRound {
+	match spawn.map(|spawn| spawn.next) {
+		Some(TrainingCharacterChoice::Random) => round.next_life(),
+		_ => round.next(),
 	}
 }
 
@@ -123,12 +135,15 @@ mod tests {
 		Ok(())
 	}
 
-	#[test]
-	fn an_advanced_round_loads_in_again() -> anyhow::Result<()> {
+	fn ended_life(next: TrainingCharacterChoice) -> anyhow::Result<TrainingRound> {
 		let mut world = World::new();
-		world.init_resource::<Messages<TrainingRoundAdvanced>>();
-		world.write_message(TrainingRoundAdvanced(TrainingRound::new(3)));
+		world.init_resource::<Messages<TrainingLifeEnded>>();
+		world.write_message(TrainingLifeEnded);
 		world.insert_resource(NextState::<GameFlow>::Unchanged);
+		world.insert_resource(TrainingRound::new(3));
+		let mut spawn = TrainingSpawn::new(TrainingCharacterChoice::Random);
+		spawn.next = next;
+		world.insert_resource(spawn);
 		world
 			.run_system_once(reload_training_round)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
@@ -136,6 +151,23 @@ mod tests {
 			world.resource::<NextState<GameFlow>>(),
 			NextState::Pending(GameFlow::LoadingWorld)
 		));
+		Ok(*world.resource::<TrainingRound>())
+	}
+
+	#[test]
+	fn a_random_trainee_respawns_on_the_same_map() -> anyhow::Result<()> {
+		let round = TrainingRound::new(3);
+		let next = ended_life(TrainingCharacterChoice::Random)?;
+		assert_eq!(next, round.next_life());
+		assert_eq!(next.map(), round.map());
+		assert_ne!(next.trainee(), round.trainee());
+		Ok(())
+	}
+
+	#[test]
+	fn your_character_respawns_on_a_new_map() -> anyhow::Result<()> {
+		let next = ended_life(TrainingCharacterChoice::Active)?;
+		assert_eq!(next, TrainingRound::new(3).next());
 		Ok(())
 	}
 
