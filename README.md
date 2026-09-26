@@ -70,6 +70,44 @@ cargo build -p maybraid --release
 > [!NOTE]
 > We will soon be adding a compatibility table with recommended settings by device. 
 
+### Expected FPS
+
+| Memory / GPU Configuration | Expected FPS |
+|---|---:|
+| ~8 GB integrated memory | ~20–30 FPS |
+| ~16 GB integrated memory | ~40 FPS |
+| ~24 GB integrated memory | ~60 FPS |
+| ~32 GB integrated memory | ~60+ FPS |
+| ~8 GB system RAM + 4–6 GB discrete VRAM | ~40 FPS |
+| ~16 GB system RAM + 6–8 GB discrete VRAM | ~60 FPS |
+| ~32 GB system RAM + 8+ GB discrete VRAM | ~60+ FPS |
+
+> Discrete-GPU figures are rough extrapolations. Actual performance will depend substantially on GPU architecture, memory bandwidth, CPU performance, and drivers.
+
+### Recommended Settings
+
+| Available Memory | Shadows |
+|---|---|
+| 16 GB | Off |
+| 24 GB | Medium |
+| 32 GB+ | High |
+
+### Memory Usage
+
+| Platform | Memory Usage | Status |
+|---|---:|---|
+| Apple Silicon | ~8 GB | Play-tested |
+| Intel x86_64 (inc. SteamOS) | ~8 GB | Expected |
+| Windows | ~8 GB | Expected |
+
+### Test Status
+
+| Platform | Play Tested | Benchmarked |
+|---|---|---|
+| Apple Silicon | Yes | Yes |
+| Intel x86_64 (inc. SteamOS) | No | No |
+| Windows | No | No |
+
 ## Developers
 
 To use this repository, install [Determinate Systems Nix](https://determinate.systems/blog/determinate-nix-installer/). Then `cd` into the working directory for the repository and `nix develop`.
