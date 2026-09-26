@@ -281,6 +281,7 @@ fn respawn_world_player(
 		locomotion.as_ref(),
 		position,
 	);
+	crate::control::apply_world_player_motor(&mut commands, player);
 	if let Some(loadout) = loadout {
 		// The next life may swap the loadout (a new trainee) before the body
 		// arms, so a Training body leaves its appearance to the armed loadout.

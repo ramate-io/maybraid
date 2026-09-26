@@ -21,7 +21,8 @@ impl Plugin for MenuControllerPlugin {
 		if !app.is_plugin_added::<MenuComponentsPlugin>() {
 			app.add_plugins(MenuComponentsPlugin);
 		}
-		app.insert_resource(KeyboardMenuNav(false))
+		app.init_resource::<maybraid_input::MenuOwnsBack>()
+			.insert_resource(KeyboardMenuNav(false))
 			.add_systems(PreUpdate, sync_pad_from_menu_lock.before(VirtualPadSystems::Produce));
 		app.add_systems(
 			Update,

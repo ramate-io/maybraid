@@ -9,6 +9,7 @@ use crozon_characters::{
 
 use crate::body::{CharacterController, Jumping, MoveWish, LEAP_SPEED};
 use crate::identity::PlayerYawOwner;
+use crate::stance::{CharacterStance, StanceKind};
 
 const WALK_SPEED: f32 = 1.0;
 
@@ -33,16 +34,20 @@ pub(crate) fn face_wish_yaw(
 
 pub fn drive_player_locomotion(
 	mut commands: Commands,
-	controllers: Query<(&LinearVelocity, &MoveWish, Option<&Jumping>), With<CharacterController>>,
+	controllers: Query<
+		(&LinearVelocity, &MoveWish, Option<&Jumping>, Option<&CharacterStance>),
+		With<CharacterController>,
+	>,
 	visuals: Query<(&CharacterMembers, &ChildOf), With<CharacterRoot>>,
 	rigs: Query<&CharacterRig>,
 	anims: Query<&AnimRefRoot>,
 ) {
 	for (members, child_of) in &visuals {
-		let Ok((velocity, _wish, jumping)) = controllers.get(child_of.parent()) else {
+		let Ok((velocity, _wish, jumping, stance)) = controllers.get(child_of.parent()) else {
 			continue;
 		};
 		let speed = Vec3::new(velocity.x, 0.0, velocity.z).length();
+		let kind = stance.map(|stance| stance.kind).unwrap_or(StanceKind::Stand);
 		for member in members.iter() {
 			let Ok(rig) = rigs.get(member) else {
 				continue;
@@ -50,7 +55,7 @@ pub fn drive_player_locomotion(
 			if rig.role != CharacterRigRole::Body {
 				continue;
 			}
-			let clip = locomotion_clip(rig.skeleton, jumping, speed);
+			let clip = locomotion_clip(rig.skeleton, jumping, kind, speed);
 			let desired = AnimRef::new(clip);
 			let needs = match anims.get(member) {
 				Ok(root) => root.0 != desired,
@@ -67,6 +72,10 @@ pub fn drive_player_locomotion(
 					JumpParams::default().elapsed_from_phase(phase)
 				};
 				commands.entity(member).insert(AnimProgress(progress));
+			} else if matches!(kind, StanceKind::Squat | StanceKind::Prone) {
+				commands
+					.entity(member)
+					.insert(AnimProgress(stance.map(|s| s.blend).unwrap_or(1.0)));
 			} else {
 				commands.entity(member).remove::<AnimProgress>();
 			}
@@ -74,19 +83,32 @@ pub fn drive_player_locomotion(
 	}
 }
 
-fn locomotion_clip(skeleton: RigSkeletonKind, jumping: Option<&Jumping>, speed: f32) -> AnimClip {
+fn locomotion_clip(
+	skeleton: RigSkeletonKind,
+	jumping: Option<&Jumping>,
+	stance: StanceKind,
+	speed: f32,
+) -> AnimClip {
 	match skeleton {
 		RigSkeletonKind::Humanoid | RigSkeletonKind::Neck => {
 			if jumping.is_some_and(|jump| jump.leaping) {
 				AnimClip::leap()
 			} else if jumping.is_some() {
 				AnimClip::jump()
-			} else if speed > LEAP_SPEED {
-				AnimClip::run()
-			} else if speed > WALK_SPEED {
-				AnimClip::walk()
 			} else {
-				AnimClip::still()
+				match stance {
+					StanceKind::Prone => AnimClip::prone(),
+					StanceKind::Squat => AnimClip::squat(),
+					StanceKind::Stand => {
+						if speed > LEAP_SPEED {
+							AnimClip::run()
+						} else if speed > WALK_SPEED {
+							AnimClip::walk()
+						} else {
+							AnimClip::still()
+						}
+					}
+				}
 			}
 		}
 		RigSkeletonKind::Quadruped => {
@@ -123,7 +145,7 @@ mod tests {
 		let jump = Jumping::start(0.0);
 		assert!(!jump.leaping);
 		assert_eq!(
-			locomotion_clip(RigSkeletonKind::Humanoid, Some(&jump), 0.0).id(),
+			locomotion_clip(RigSkeletonKind::Humanoid, Some(&jump), StanceKind::Stand, 0.0).id(),
 			AnimClip::jump().id()
 		);
 	}
@@ -133,19 +155,26 @@ mod tests {
 		let jump = Jumping::start(MOVE_SPEED);
 		assert!(jump.leaping);
 		assert_eq!(
-			locomotion_clip(RigSkeletonKind::Humanoid, Some(&jump), MOVE_SPEED).id(),
+			locomotion_clip(RigSkeletonKind::Humanoid, Some(&jump), StanceKind::Stand, MOVE_SPEED)
+				.id(),
 			AnimClip::leap().id()
 		);
 		assert_eq!(
-			locomotion_clip(RigSkeletonKind::Quadruped, Some(&jump), 0.0).id(),
+			locomotion_clip(RigSkeletonKind::Quadruped, Some(&jump), StanceKind::Stand, 0.0).id(),
 			AnimClip::leap().id()
 		);
 	}
 
 	#[test]
 	fn clip_follows_the_cap() {
-		assert_eq!(locomotion_clip(RigSkeletonKind::Humanoid, None, JOG_SPEED).id(), AnimId::Walk);
-		assert_eq!(locomotion_clip(RigSkeletonKind::Humanoid, None, MOVE_SPEED).id(), AnimId::Run);
+		assert_eq!(
+			locomotion_clip(RigSkeletonKind::Humanoid, None, StanceKind::Stand, JOG_SPEED).id(),
+			AnimId::Walk
+		);
+		assert_eq!(
+			locomotion_clip(RigSkeletonKind::Humanoid, None, StanceKind::Stand, MOVE_SPEED).id(),
+			AnimId::Run
+		);
 	}
 
 	#[test]
@@ -153,7 +182,28 @@ mod tests {
 		let mut jump = Jumping::start(0.0);
 		jump.phase = JumpPhase::Land;
 		assert_eq!(
-			locomotion_clip(RigSkeletonKind::Humanoid, Some(&jump), 0.0).id(),
+			locomotion_clip(RigSkeletonKind::Humanoid, Some(&jump), StanceKind::Squat, 0.0).id(),
+			AnimClip::jump().id()
+		);
+	}
+
+	#[test]
+	fn stance_clips_win_over_still_walk() {
+		assert_eq!(
+			locomotion_clip(RigSkeletonKind::Humanoid, None, StanceKind::Squat, 0.0).id(),
+			AnimId::Squat
+		);
+		assert_eq!(
+			locomotion_clip(RigSkeletonKind::Humanoid, None, StanceKind::Prone, 0.0).id(),
+			AnimId::Prone
+		);
+		assert_eq!(
+			locomotion_clip(RigSkeletonKind::Humanoid, None, StanceKind::Stand, 0.0).id(),
+			AnimId::Still
+		);
+		let jump = Jumping::start(0.0);
+		assert_eq!(
+			locomotion_clip(RigSkeletonKind::Humanoid, Some(&jump), StanceKind::Squat, 0.0).id(),
 			AnimClip::jump().id()
 		);
 	}

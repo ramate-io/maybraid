@@ -9,6 +9,7 @@ mod intent;
 mod locomotion;
 mod separation;
 mod spawn;
+mod stance;
 
 use bevy::prelude::*;
 use crozon_characters::CharacterMotionSystems;
@@ -38,6 +39,7 @@ pub use spawn::{
 	spawn_player_with_hidden_capsule, spawn_player_with_hull, LocomotionCapsule, CAPSULE_LENGTH,
 	CAPSULE_RADIUS,
 };
+pub use stance::{CharacterStance, RestLocomotionCapsule, StanceKind};
 
 /// Capsule physics and move/jump intents.
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -99,6 +101,9 @@ impl Plugin for PlayerPlugin {
 					buoyancy::apply_buoyancy,
 					body::apply_wish_movement,
 					body::apply_wish_jump,
+					stance::stand_when_airborne,
+					stance::apply_stance_hulls,
+					stance::sync_stance_pitch,
 					body::advance_jump_phases,
 				)
 					.chain()

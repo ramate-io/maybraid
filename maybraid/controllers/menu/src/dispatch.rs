@@ -1,7 +1,7 @@
 //! `MenuNavPad` → [`MenuNavImpulse`] on the focused menu.
 
 use bevy::prelude::*;
-use maybraid_input::{MenuNavImpulse, MenuNavPad};
+use maybraid_input::{MenuNavImpulse, MenuNavPad, MenuOwnsBack};
 use menu_components::{
 	HudMenu, HudOverlayMenu, ShortTextModal, ShortTextPad, TextMenu, TextMenuInputLock,
 };
@@ -14,11 +14,15 @@ pub fn refresh_menu_focus(
 	hud_menus: Query<Entity, (With<HudMenu>, Without<HudOverlayMenu>)>,
 	text_menus: Query<Entity, With<TextMenu>>,
 	mut controllers: Query<(Entity, &mut MenuController)>,
+	mut menu_owns: ResMut<MenuOwnsBack>,
 ) {
+	let mut focused = false;
 	for (root, mut controller) in &mut controllers {
 		controller.focus =
 			MenuController::resolve(root, &children, &overlays, &hud_menus, &text_menus);
+		focused |= controller.focus.is_some();
 	}
+	menu_owns.0 = focused;
 }
 
 pub fn dispatch_menu_nav(
