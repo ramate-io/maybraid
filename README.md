@@ -67,8 +67,24 @@ cargo build -p maybraid --release
 ./target/release/maybraid
 ```
 
-> [!NOTE]
-> We will soon be adding a compatibility table with recommended settings by device. 
+> [!WARNING]
+> We are currently shipping unsigned binaries. Check the instructions for how to load the game for your operating system.
+>
+> **MacOS**
+> 1. Drag the downloaded .dmg file into the Applications folder, replacing any existing Maybraid application.
+> 2. Open Terminal and enter the following command to allow the game to run:
+> ```shell
+> xattr -d com.apple.quarantine /Applications/Maybraid.app
+> ```
+> 3. Open the Maybraid application from the Applications folder.
+>
+> **Windows**
+> 1. Drag the downloaded .exe file into the desired location.
+> 2. Open the Maybraid application from the desired location.
+>
+> **Linux**
+> 1. Drag the downloaded .AppImage file into the desired location.
+> 2. Open the Maybraid application from the desired location.
 
 ### Expected FPS
 
