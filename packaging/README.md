@@ -51,7 +51,9 @@ No OS code signing in these scripts. Archive provenance: [minisign/README.md](mi
 
 [`.github/workflows/package.yml`](../.github/workflows/package.yml) packs unsigned
 builds on `main`, on a published GitHub Release, on `workflow_dispatch`, and
-when a commit message contains `ci-action::package`.
+when a commit message contains `ci-action::package`. Tag pushes are not a
+trigger: publishing a release already fires `release`, and a same-ref tag
+`push` used to cancel that run before assets were uploaded.
 
 `main` and token runs upload Actions artifacts (14 days). A published release
 attaches the same files to that GitHub Release. Version is

@@ -16,7 +16,7 @@ use crozon_characters::{
 
 use crate::{
 	event::{AssetValue, CharacterField, MenuEvent, SwatchValue},
-	focus::{CHUPRI_BODY_FOCUS, EYE_FOCUS, HEAD_ROOT_FOCUS, MOUTH_FOCUS},
+	focus::{CHUPRI_BODY_FOCUS, TINY_EYE_FOCUS, TINY_HEAD_ROOT_FOCUS, TINY_MOUTH_FOCUS},
 	shared::{AnimationMenu, ClothingMenu, HairMenu},
 };
 
@@ -50,15 +50,15 @@ impl From<&ChupriConfig> for ChupriMenu {
 				"Head",
 				ChupriHeadMenu {
 					head: AssetSingleSelect::new(ChupriHeadMesh::Meerkat)
-						.with_camera_focus(HEAD_ROOT_FOCUS),
+						.with_camera_focus(TINY_HEAD_ROOT_FOCUS),
 					plumage: SwatchSingleSelect::new(config.colors.plumage),
 				},
 			),
 			head_features: Section::new(
 				"Head & Features",
 				ChupriHeadFeaturesMenu {
-					eye: AssetSingleSelect::new(config.eye).with_camera_focus(EYE_FOCUS),
-					beak: AssetSingleSelect::new(config.beak).with_camera_focus(MOUTH_FOCUS),
+					eye: AssetSingleSelect::new(config.eye).with_camera_focus(TINY_EYE_FOCUS),
+					beak: AssetSingleSelect::new(config.beak).with_camera_focus(TINY_MOUTH_FOCUS),
 					eye_color: SwatchSingleSelect::new(config.colors.eyes),
 					beak_color: SwatchSingleSelect::new(config.colors.beak),
 				},
@@ -66,7 +66,7 @@ impl From<&ChupriConfig> for ChupriMenu {
 			hair: Section::new(
 				"Hair",
 				// Crest tint follows plumage; HairMenu still stores a color for round-trip.
-				HairMenu::new(config.hair, config.colors.hair, HEAD_ROOT_FOCUS),
+				HairMenu::new(config.hair, config.colors.hair, TINY_HEAD_ROOT_FOCUS),
 			),
 			clothing: Section::new(
 				"Clothing",

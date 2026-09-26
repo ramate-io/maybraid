@@ -16,7 +16,7 @@ use crozon_characters::{
 
 use crate::{
 	event::{AssetValue, CharacterField, MenuEvent, SwatchValue},
-	focus::{EYE_FOCUS, HEAD_ROOT_FOCUS, SMALL_BIRD_BODY_FOCUS},
+	focus::{SMALL_BIRD_BODY_FOCUS, SMALL_BIRD_EYE_FOCUS, SMALL_BIRD_HEAD_ROOT_FOCUS},
 	shared::{AnimationMenu, ClothingMenu, HairMenu},
 };
 
@@ -50,14 +50,14 @@ impl From<&KallerConfig> for KallerMenu {
 				"Head",
 				KallerHeadMenu {
 					head: AssetSingleSelect::new(KallerHeadMesh::Meerkat)
-						.with_camera_focus(HEAD_ROOT_FOCUS),
+						.with_camera_focus(SMALL_BIRD_HEAD_ROOT_FOCUS),
 					plumage: SwatchSingleSelect::new(config.colors.plumage),
 				},
 			),
 			head_features: Section::new(
 				"Head & Features",
 				KallerHeadFeaturesMenu {
-					eye: AssetSingleSelect::new(config.eye).with_camera_focus(EYE_FOCUS),
+					eye: AssetSingleSelect::new(config.eye).with_camera_focus(SMALL_BIRD_EYE_FOCUS),
 					eye_color: SwatchSingleSelect::new(config.colors.eyes),
 					snout_color: SwatchSingleSelect::new(config.colors.snout),
 					crown_color: SwatchSingleSelect::new(config.colors.crown),
@@ -65,7 +65,7 @@ impl From<&KallerConfig> for KallerMenu {
 			),
 			hair: Section::new(
 				"Hair",
-				HairMenu::new(config.hair, config.colors.hair, HEAD_ROOT_FOCUS),
+				HairMenu::new(config.hair, config.colors.hair, SMALL_BIRD_HEAD_ROOT_FOCUS),
 			),
 			clothing: Section::new(
 				"Clothing",
