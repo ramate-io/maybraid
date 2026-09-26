@@ -1,18 +1,24 @@
 # Unsigned game packages: Apple DMG, Windows zip, SteamOS tarball.
 # Artifacts on main / ci-action::package / workflow_dispatch.
 # GitHub Release assets only when a release is published.
+#
+# Push is branch-only so creating a tag does not start a second run that
+# shares a ref with `release` and cancels the upload (v0.1.0-playtest-001).
+# Concurrency is also keyed by event so a later push cannot cancel a release.
 
 name: Package
 
 on:
   push:
+    branches:
+      - '**'
   release:
     types: [published]
   workflow_dispatch:
 
 concurrency:
-  group: package-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: package-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'release' }}
 
 permissions:
   contents: write
