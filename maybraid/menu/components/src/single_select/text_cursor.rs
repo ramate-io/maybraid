@@ -313,7 +313,7 @@ impl<E: Component + Copy + Default + Unpin + Send + Sync + 'static> ButtonWithSu
 				None,
 				true,
 			),
-			Box::new(subtext_caption_scene(self.subtext)),
+			Box::new(subtext_caption_scene(self.subtext, TextColumnAlign::Start)),
 		];
 		let node = self.anchor.node(TextColumnAlign::Start);
 		bsn! {
@@ -453,20 +453,29 @@ where
 		row.objective_visible,
 	)];
 	if let Some(subtext) = row.subtext {
-		children.push(Box::new(subtext_caption_scene(subtext)));
+		children.push(Box::new(subtext_caption_scene(subtext, align)));
 	}
+	let align_items = align.items();
 	bsn! {
 		Node {
 			flex_direction: FlexDirection::Column,
-			align_items: AlignItems::Start,
+			align_items: align_items,
 		}
 		Pickable::IGNORE
 		Children [ {children} ]
 	}
 }
 
-fn subtext_caption_scene(subtext: String) -> impl Scene + 'static {
-	let margin = UiRect { left: Val::Px(CURSOR_ICON_SIZE + CURSOR_ICON_GAP), ..default() };
+/// Under a Start title the caption skips the cursor gutter; a centered title
+/// hangs its gutter outside the row, so the caption centers with no indent.
+fn subtext_caption_scene(subtext: String, align: TextColumnAlign) -> impl Scene + 'static {
+	let margin = match align {
+		TextColumnAlign::Start => {
+			UiRect { left: Val::Px(CURSOR_ICON_SIZE + CURSOR_ICON_GAP), ..default() }
+		}
+		TextColumnAlign::Center => UiRect::default(),
+	};
+	let justify = align.text_justify();
 	bsn! {
 		Node {
 			margin: margin,
@@ -479,7 +488,7 @@ fn subtext_caption_scene(subtext: String) -> impl Scene + 'static {
 				font_size: px(DESCRIPTION_FONT_SIZE),
 			}
 			TextColor(TEXT_YELLOW_FAINT)
-			TextLayout::new(Justify::Left, bevy::text::LineBreak::NoWrap)
+			TextLayout::new(justify, bevy::text::LineBreak::NoWrap)
 			Pickable::IGNORE
 		)]
 	}
