@@ -50,8 +50,8 @@ pub use spin_reveal::{
 	SpinRevealSystems,
 };
 pub use training::{
-	request_show_training, RequestShowTraining, TrainingCharacterChoice, TrainingScreen,
-	TrainingScreenPlugin, TrainingSpawn,
+	request_show_training, RequestShowTraining, TrainingCharacterChoice, TrainingEnemyMarkers,
+	TrainingScreen, TrainingScreenPlugin, TrainingSpawn,
 };
 
 /// Marker on every full-screen menu root so show-requests can replace each other.

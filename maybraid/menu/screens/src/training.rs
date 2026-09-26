@@ -84,6 +84,31 @@ impl TrainingSpawn {
 	}
 }
 
+/// Screen-space dots over standing Training enemies. Flipped from the Training
+/// pause menu; kept across sessions.
+#[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TrainingEnemyMarkers(pub bool);
+
+impl Default for TrainingEnemyMarkers {
+	fn default() -> Self {
+		Self(true)
+	}
+}
+
+impl TrainingEnemyMarkers {
+	pub fn label(self) -> &'static str {
+		if self.0 {
+			"On"
+		} else {
+			"Off"
+		}
+	}
+
+	pub fn toggled(self) -> Self {
+		Self(!self.0)
+	}
+}
+
 impl TrainingScreen {
 	pub fn scene() -> impl Scene + 'static {
 		let rows = TrainingCharacterChoice::ALL
@@ -124,6 +149,7 @@ impl Plugin for TrainingScreenPlugin {
 	fn build(&self, app: &mut App) {
 		add_menu_input(app);
 		app.add_plugins(TextMenuPlugin::<TrainingCharacterChoice>::default())
+			.init_resource::<TrainingEnemyMarkers>()
 			.add_systems(Update, apply_show_training);
 	}
 }

@@ -49,6 +49,11 @@ count shows how many Brawlers are standing right now. A downed Brawler drops
 out of it until its squad respawns it. The panel hides with the rest of the
 combat HUD while paused.
 
+A red dot floats over every standing Brawler. As with the mob HUD's pins, a
+Brawler off screen pins its dot to the nearest screen edge, ringed in white.
+So a squad beyond the wall, or under the floor, still shows where it is. The
+dots hide while paused, too.
+
 Leave restores the playable-world fill, parks the player at the default spawn
 so Discovery resumes from its saved trail, and returns home. Leaving drops the
 score, and the next session starts from zero.

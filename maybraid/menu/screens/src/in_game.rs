@@ -13,7 +13,7 @@ use menu_components::{
 use crate::input::add_menu_input;
 use crate::settings::InGameSettingsPlugin;
 use crate::show::take_menu_show_request;
-use crate::training::{TrainingCharacterChoice, TrainingSpawn};
+use crate::training::{TrainingCharacterChoice, TrainingEnemyMarkers, TrainingSpawn};
 use crate::{GameMode, MenuScreen};
 
 /// Queue an in-game menu spawn (despawns any existing menu screen first).
@@ -39,6 +39,8 @@ pub enum InGameMenuChoice {
 	Character,
 	/// Training only: flips [`TrainingSpawn::next`].
 	NextRound,
+	/// Training only: flips [`TrainingEnemyMarkers`].
+	EnemyMarkers,
 	Records,
 	Help,
 	Settings,
@@ -46,9 +48,10 @@ pub enum InGameMenuChoice {
 }
 
 impl InGameMenuChoice {
-	pub const ALL: [Self; 6] = [
+	pub const ALL: [Self; 7] = [
 		Self::Character,
 		Self::NextRound,
+		Self::EnemyMarkers,
 		Self::Records,
 		Self::Help,
 		Self::Settings,
@@ -59,6 +62,7 @@ impl InGameMenuChoice {
 		match self {
 			Self::Character => "Character",
 			Self::NextRound => "Next round",
+			Self::EnemyMarkers => "Enemy markers",
 			Self::Records => "Records",
 			Self::Help => "Help",
 			Self::Settings => "Settings",
@@ -68,14 +72,18 @@ impl InGameMenuChoice {
 
 	/// Pause rows for the session. A random trainee is never saved, so its
 	/// Character editor is locked.
-	pub fn rows(training: Option<TrainingSpawn>) -> Vec<TextCursorRow<Self>> {
+	pub fn rows(
+		training: Option<TrainingSpawn>,
+		markers: TrainingEnemyMarkers,
+	) -> Vec<TextCursorRow<Self>> {
 		Self::ALL
 			.into_iter()
 			.filter_map(|choice| {
 				let row = TextCursorRow::new(choice.label(), choice);
 				match (choice, training) {
-					(Self::NextRound, None) => None,
+					(Self::NextRound | Self::EnemyMarkers, None) => None,
 					(Self::NextRound, Some(spawn)) => Some(row.with_subtext(spawn.next.label())),
+					(Self::EnemyMarkers, Some(_)) => Some(row.with_subtext(markers.label())),
 					(Self::Character, Some(spawn))
 						if spawn.current == TrainingCharacterChoice::Random =>
 					{
@@ -92,9 +100,10 @@ impl InGameScreen {
 	pub fn scene(
 		mode: &GameMode,
 		training: Option<TrainingSpawn>,
+		markers: TrainingEnemyMarkers,
 		selected: Option<InGameMenuChoice>,
 	) -> impl Scene + 'static {
-		let rows = InGameMenuChoice::rows(training);
+		let rows = InGameMenuChoice::rows(training, markers);
 		let selected = selected
 			.and_then(|selected| rows.iter().position(|row| row.action == selected))
 			.unwrap_or(0);
@@ -144,13 +153,31 @@ impl Plugin for InGameScreenPlugin {
 	fn build(&self, app: &mut App) {
 		add_menu_input(app);
 		app.init_resource::<GameMode>()
+			.init_resource::<TrainingEnemyMarkers>()
 			.add_plugins(TextMenuPlugin::<InGameMenuChoice>::default())
 			.add_plugins(InGameSettingsPlugin)
 			.add_systems(
 				Update,
-				((toggle_next_training_round, apply_show_in_game).chain(), sync_in_game_brand),
+				(
+					(toggle_next_training_round, toggle_training_enemy_markers, apply_show_in_game)
+						.chain(),
+					sync_in_game_brand,
+				),
 			);
 	}
+}
+
+fn toggle_training_enemy_markers(
+	mut choices: MessageReader<InGameMenuChoice>,
+	spawn: Option<Res<TrainingSpawn>>,
+	mut markers: ResMut<TrainingEnemyMarkers>,
+	mut commands: Commands,
+) {
+	if choices.read().last() != Some(&InGameMenuChoice::EnemyMarkers) || spawn.is_none() {
+		return;
+	}
+	*markers = markers.toggled();
+	request_show_in_game_at(&mut commands, InGameMenuChoice::EnemyMarkers);
 }
 
 fn toggle_next_training_round(
@@ -174,6 +201,7 @@ fn apply_show_in_game(
 	existing: Query<Entity, With<MenuScreen>>,
 	mut mode: ResMut<GameMode>,
 	training: Option<Res<TrainingSpawn>>,
+	markers: Res<TrainingEnemyMarkers>,
 ) {
 	let Some((_, request)) = requests.iter().last() else {
 		return;
@@ -186,7 +214,12 @@ fn apply_show_in_game(
 	{
 		return;
 	}
-	commands.spawn_scene(InGameScreen::scene(&mode, training.as_deref().copied(), selected));
+	commands.spawn_scene(InGameScreen::scene(
+		&mode,
+		training.as_deref().copied(),
+		*markers,
+		selected,
+	));
 }
 
 fn sync_in_game_brand(
@@ -222,24 +255,53 @@ mod tests {
 
 	#[test]
 	fn next_round_is_a_training_row() {
-		let discovery = InGameMenuChoice::rows(None);
+		let markers = TrainingEnemyMarkers::default();
+		let discovery = InGameMenuChoice::rows(None, markers);
 		assert!(!actions(&discovery).contains(&InGameMenuChoice::NextRound));
+		assert!(!actions(&discovery).contains(&InGameMenuChoice::EnemyMarkers));
 		assert!(discovery.iter().all(|row| !row.locked));
 
 		let spawn = TrainingSpawn {
 			next: TrainingCharacterChoice::Random,
 			current: TrainingCharacterChoice::Active,
 		};
-		let training = InGameMenuChoice::rows(Some(spawn));
+		let training = InGameMenuChoice::rows(Some(spawn), markers);
 		assert_eq!(actions(&training), InGameMenuChoice::ALL.to_vec());
 		assert_eq!(training[1].subtext.as_deref(), Some("Random trainee"));
+		assert_eq!(training[2].subtext.as_deref(), Some("On"));
 		assert!(!training[0].locked, "an active character keeps its editor");
+
+		let hidden = InGameMenuChoice::rows(Some(spawn), TrainingEnemyMarkers(false));
+		assert_eq!(hidden[2].subtext.as_deref(), Some("Off"));
+	}
+
+	#[test]
+	fn enemy_markers_toggle_only_in_training_and_keep_the_cursor() -> anyhow::Result<()> {
+		let mut world = World::new();
+		world.init_resource::<Messages<InGameMenuChoice>>();
+		world.init_resource::<TrainingEnemyMarkers>();
+		world.write_message(InGameMenuChoice::EnemyMarkers);
+		world
+			.run_system_once(toggle_training_enemy_markers)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(world.resource::<TrainingEnemyMarkers>().0, "Discovery leaves the markers alone");
+
+		world.insert_resource(TrainingSpawn::new(TrainingCharacterChoice::Active));
+		world.write_message(InGameMenuChoice::EnemyMarkers);
+		world
+			.run_system_once(toggle_training_enemy_markers)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(!world.resource::<TrainingEnemyMarkers>().0);
+		let mut requests = world.query::<&RequestShowInGame>();
+		let request = requests.single(&world)?;
+		assert_eq!(request.selected, Some(InGameMenuChoice::EnemyMarkers));
+		Ok(())
 	}
 
 	#[test]
 	fn a_trainee_has_no_character_editor() {
 		let spawn = TrainingSpawn::new(TrainingCharacterChoice::Random);
-		let rows = InGameMenuChoice::rows(Some(spawn));
+		let rows = InGameMenuChoice::rows(Some(spawn), TrainingEnemyMarkers::default());
 		assert_eq!(rows[0].action, InGameMenuChoice::Character);
 		assert!(rows[0].locked);
 	}

@@ -21,8 +21,9 @@ use maybraid_input::MenuNavPad;
 use maybraid_menu_controller::MenuControllerPlugin;
 use maybraid_world::{
 	resume_discovery_from_saved_waypoints, InventoryEditCameraFollow, PlayerPhysicsEnabled,
-	PlayerSpawnXz, ShadowQuality, TerrainStreamingEnabled, TrainingRound, WorldGameplayEnabled,
-	WorldMobHudEnabled, WorldPlayerLoadout, WorldPlugin, WorldSceneryVisible, WorldSurfaceSet,
+	PlayerSpawnXz, ShadowQuality, TerrainStreamingEnabled, TrainingEnemyMarkersEnabled,
+	TrainingRound, WorldGameplayEnabled, WorldMobHudEnabled, WorldPlayerLoadout, WorldPlugin,
+	WorldSceneryVisible, WorldSurfaceSet,
 };
 use menu_components::{
 	consume_screen_back, ActiveOverlayKey, MenuBackConsumed, ScreenBackPressed, ShortTextModal,
@@ -38,8 +39,8 @@ use menu_screens::{
 	request_show_in_game_settings, request_show_training, CreateCharacterPlugin, GalleryScreen,
 	GameMode, HomeMenuChoice, HomeScreenPlugin, InGameMenuChoice, InGameScreenPlugin,
 	InGameSettings, InGameSettingsScreen, InGameShadowQuality, LoadingScreenPlugin,
-	LoadingScreenSystems, MenuScreen, SpinRevealScreen, TrainingScreen, TrainingScreenPlugin,
-	TrainingSpawn,
+	LoadingScreenSystems, MenuScreen, SpinRevealScreen, TrainingEnemyMarkers, TrainingScreen,
+	TrainingScreenPlugin, TrainingSpawn,
 };
 
 pub struct GamePlugin;
@@ -143,6 +144,7 @@ impl Plugin for GamePlugin {
 					sync_world_loadout_from_editor.run_if(in_state(WorldPause::Menu)),
 					persist_changed_player_inventory,
 					sync_world_mob_hud,
+					sync_training_enemy_markers,
 					sync_world_shadows,
 					pause_menu_back
 						.after(TextMenuSystems::Navigate)
@@ -339,6 +341,13 @@ fn sync_world_mob_hud(settings: Res<InGameSettings>, mut hud: ResMut<WorldMobHud
 	if hud.0 != settings.mob_hud {
 		hud.0 = settings.mob_hud;
 	}
+}
+
+fn sync_training_enemy_markers(
+	markers: Res<TrainingEnemyMarkers>,
+	mut enabled: ResMut<TrainingEnemyMarkersEnabled>,
+) {
+	enabled.set_if_neq(TrainingEnemyMarkersEnabled(markers.0));
 }
 
 fn sync_world_shadows(settings: Res<InGameSettings>, mut quality: ResMut<ShadowQuality>) {

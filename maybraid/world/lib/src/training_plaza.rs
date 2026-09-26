@@ -566,11 +566,15 @@ pub(crate) fn reseat_training_life(
 /// is hidden and superseded, including cells Durham re-presents later. A raw
 /// collider left under the courtyard is a second, unstamped floor.
 pub(crate) fn supersede_training_raw_terrain(
+	grounds: Res<TrainingGrounds>,
 	stamped: Option<Res<TrainingPlazaStamped>>,
 	ready_fills: Query<(), (With<TrainingPaddedFill>, With<TerrainTrimeshCollider>)>,
 	mut raw: Query<(Entity, &PresentedTerrainScene, &mut Visibility), Without<TerrainSuperseded>>,
 	mut commands: Commands,
 ) {
+	if !grounds.0 {
+		return;
+	}
 	let Some(stamped) = stamped else {
 		return;
 	};
@@ -583,10 +587,11 @@ pub(crate) fn supersede_training_raw_terrain(
 		}
 		*visibility = Visibility::Hidden;
 		// The Durham strip runs in its own set; physics must not step with both floors.
+		// Durham may despawn the raw cell in the same frame.
 		commands
 			.entity(entity)
-			.insert(TerrainSuperseded)
-			.remove::<(Collider, RigidBody, TerrainTrimeshCollider)>();
+			.try_insert(TerrainSuperseded)
+			.try_remove::<(Collider, RigidBody, TerrainTrimeshCollider)>();
 	}
 }
 
@@ -667,9 +672,12 @@ pub(crate) fn clear_training_plaza(
 	if !mounted_stale && !stamped_stale {
 		return;
 	}
+	// Leaving also resets Durham's layout, which despawns raw cells in the same
+	// frame, and fixtures nest under one another; every teardown command must
+	// tolerate a target already gone.
 	for (entity, mut visibility) in &mut superseded {
 		*visibility = Visibility::Inherited;
-		commands.entity(entity).remove::<TerrainSuperseded>();
+		commands.entity(entity).try_remove::<TerrainSuperseded>();
 	}
 	if let Some(stamped) = stamped.as_deref() {
 		developments.remove_cell(stamped.cell_id);
@@ -678,14 +686,14 @@ pub(crate) fn clear_training_plaza(
 	// alone would strand them.
 	for (entity, member) in &members {
 		if brawler_hosts.contains(member.mob) {
-			commands.entity(entity).despawn();
+			commands.entity(entity).try_despawn();
 		}
 	}
 	for entity in &fixtures {
-		commands.entity(entity).despawn();
+		commands.entity(entity).try_despawn();
 	}
 	for player in &anchored {
-		commands.entity(player).remove::<OffTerrainAnchor>();
+		commands.entity(player).try_remove::<OffTerrainAnchor>();
 	}
 	commands.remove_resource::<TrainingPlazaStamped>();
 	commands.remove_resource::<TrainingPlazaMounted>();
@@ -1114,6 +1122,7 @@ mod tests {
 		let covered = Id::from_cell(Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE));
 		let elsewhere = Id::from_cell(Aabb3d::from_min_max(Vec3::splat(500.0), Vec3::splat(501.0)));
 		let mut world = World::new();
+		world.insert_resource(TrainingGrounds(true));
 		world.insert_resource(TrainingPlazaStamped {
 			round: TrainingRound::default(),
 			cell_id: covered,
@@ -1265,6 +1274,59 @@ mod tests {
 		assert!(world.get_entity(host).is_err());
 		assert!(world.get_entity(member).is_err(), "respawned members must leave with the mob");
 		assert!(world.get_entity(stranger).is_ok());
+		Ok(())
+	}
+
+	#[derive(Component)]
+	struct DoomedThisFrame;
+
+	fn despawn_doomed(doomed: Query<Entity, With<DoomedThisFrame>>, mut commands: Commands) {
+		for entity in &doomed {
+			commands.entity(entity).despawn();
+		}
+	}
+
+	#[test]
+	fn leaving_tolerates_targets_despawned_in_the_same_frame() -> anyhow::Result<()> {
+		let round = TrainingRound::default();
+		let mut world = plaza_world(false, round);
+		world.insert_resource(TrainingPlazaMounted(round));
+		let player = seated_player(&mut world, Vec3::new(4_000.0, 12.0, -2_000.0));
+		world.entity_mut(player).insert(DoomedThisFrame);
+		let host = world.spawn((TrainingBrawler, DoomedThisFrame)).id();
+		let member = world.spawn((MemberOf { mob: host, slot: 0 }, ChildOf(host))).id();
+		let raw = world.spawn((TerrainSuperseded, Visibility::Hidden, DoomedThisFrame)).id();
+
+		// Both systems see the targets alive; the despawns apply first.
+		let mut schedule = Schedule::default();
+		schedule.add_systems((despawn_doomed, clear_training_plaza).chain_ignore_deferred());
+		schedule.run(&mut world);
+
+		for entity in [player, host, member, raw] {
+			assert!(world.get_entity(entity).is_err());
+		}
+		assert!(world.get_resource::<TrainingPlazaMounted>().is_none());
+		Ok(())
+	}
+
+	#[test]
+	fn supersede_stands_down_once_training_ends() -> anyhow::Result<()> {
+		use bevy::ecs::system::RunSystemOnce;
+		let covered = Id::from_cell(Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE));
+		let mut world = World::new();
+		world.insert_resource(TrainingGrounds(false));
+		world.insert_resource(TrainingPlazaStamped {
+			round: TrainingRound::default(),
+			cell_id: covered,
+			terrain_ids: vec![covered],
+			arena: TrainingArena::around(Vec2::ZERO, Vec2::splat(30.0), 0.0),
+		});
+		world.spawn((TrainingPaddedFill, TerrainTrimeshCollider));
+		let raw = world.spawn((PresentedTerrainScene(covered), Visibility::Inherited)).id();
+		world
+			.run_system_once(supersede_training_raw_terrain)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(world.get::<TerrainSuperseded>(raw).is_none());
 		Ok(())
 	}
 }

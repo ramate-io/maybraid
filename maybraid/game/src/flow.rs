@@ -82,10 +82,11 @@ impl PauseMenuRoute {
 			InGameMenuChoice::Leave => Self::Leave,
 			InGameMenuChoice::Settings => Self::Settings,
 			InGameMenuChoice::Character => Self::Character,
-			// The pause screen flips the next round's mode itself.
-			InGameMenuChoice::NextRound | InGameMenuChoice::Records | InGameMenuChoice::Help => {
-				Self::Stay
-			}
+			// The pause screen flips the next round's mode and the markers itself.
+			InGameMenuChoice::NextRound
+			| InGameMenuChoice::EnemyMarkers
+			| InGameMenuChoice::Records
+			| InGameMenuChoice::Help => Self::Stay,
 		}
 	}
 }

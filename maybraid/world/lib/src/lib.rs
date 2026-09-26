@@ -22,6 +22,7 @@ mod poi;
 mod start;
 mod stash;
 mod training;
+mod training_markers;
 mod training_plaza;
 mod ui;
 mod vsync;
@@ -58,6 +59,7 @@ pub use stash::{
 	WorldStashPlugin, WorldStashSettings, DEFAULT_CLAIM_RADIUS, DEFAULT_LOOT_SECS,
 };
 pub use training::{TrainingGrounds, TrainingLifeEnded, TrainingMap, TrainingRound};
+pub use training_markers::TrainingEnemyMarkersEnabled;
 pub use training_plaza::TrainingPlazaMounted;
 pub use ui::WorldMobHudEnabled;
 pub use vsync::{default_window_present_mode, RequestVsyncToggle, VSYNC_TOGGLE_KEY};

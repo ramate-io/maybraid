@@ -38,6 +38,7 @@ use richmond_developments_on_terrain_playground::UrbanizationStreamingEnabled;
 
 use crate::WorldPlayerLoadout;
 use crate::control::{WorldSurfaceSet, update_world_surface_ready};
+use crate::training_markers::{TrainingEnemyMarkersEnabled, sync_training_enemy_markers};
 use crate::training_plaza::{
 	TrainingBrawler, clear_training_plaza, mount_training_plaza, park_on_training_site,
 	promote_training_plaza, reseat_training_life, supersede_training_raw_terrain,
@@ -51,6 +52,7 @@ impl Plugin for TrainingGroundPlugin {
 	fn build(&self, app: &mut App) {
 		app.init_resource::<TrainingGrounds>()
 			.init_resource::<TrainingRound>()
+			.init_resource::<TrainingEnemyMarkersEnabled>()
 			.add_message::<TrainingLifeEnded>()
 			.add_systems(
 				Update,
@@ -62,12 +64,16 @@ impl Plugin for TrainingGroundPlugin {
 					(supersede_training_raw_terrain, promote_training_plaza)
 						.chain()
 						.after(TerrainColliderSystems::QueueMeshes),
-					reseat_training_life.before(clear_training_plaza),
-					clear_training_plaza,
+					reseat_training_life,
 					keep_training_score,
 					count_training_enemies,
+					sync_training_enemy_markers,
 				),
-			);
+			)
+			// Mob, threat, and combat systems queue plain inserts on squad hosts
+			// and members all through Update and PostUpdate; tearing them down any
+			// earlier in the frame panics those commands.
+			.add_systems(Last, clear_training_plaza);
 	}
 }
 
