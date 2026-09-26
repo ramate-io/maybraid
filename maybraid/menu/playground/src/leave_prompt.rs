@@ -22,7 +22,15 @@ use crate::session::{
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CharacterLeaveKind {
 	Save,
+	/// The last Save confirm could not write; confirming retries.
+	SaveFailed,
 	Discard,
+}
+
+impl CharacterLeaveKind {
+	pub fn saves(self) -> bool {
+		matches!(self, Self::Save | Self::SaveFailed)
+	}
 }
 
 /// Open confirm card on the character editor. Empty while the HUD is idle.
@@ -210,7 +218,7 @@ fn intercept_character_leave_edges(
 	};
 	prompt.open(kind);
 	match kind {
-		CharacterLeaveKind::Save => {
+		CharacterLeaveKind::Save | CharacterLeaveKind::SaveFailed => {
 			nav.events.retain(|event| *event != MenuNav::Select);
 		}
 		CharacterLeaveKind::Discard => {
@@ -350,6 +358,7 @@ fn spawn_leave_prompt(
 fn prompt_copy(kind: CharacterLeaveKind) -> (&'static str, &'static str) {
 	match kind {
 		CharacterLeaveKind::Save => ("Save and exit?", "Save"),
+		CharacterLeaveKind::SaveFailed => ("Couldn't save. Try again?", "Retry"),
 		CharacterLeaveKind::Discard => ("Exit without saving?", "Exit"),
 	}
 }
@@ -479,13 +488,19 @@ fn apply_leave_prompt(
 	let Some(kind) = prompt.kind else {
 		return;
 	};
-	if kind == CharacterLeaveKind::Save {
+	if kind.saves() {
 		let Some(editing) = editing else {
 			warn!("save character: no editing id");
+			prompt.kind = Some(CharacterLeaveKind::SaveFailed);
 			return;
 		};
 		if let Err(error) = save_editing_character(save_root, editing.id, &menu_state.0) {
-			warn!("failed to save character {}: {error}", editing.id.to_hex());
+			warn!(
+				"failed to save character {} under {}: {error}",
+				editing.id.to_hex(),
+				save_root.path.display()
+			);
+			prompt.kind = Some(CharacterLeaveKind::SaveFailed);
 			return;
 		}
 		set_active_character(commands, save_root, editing.id);

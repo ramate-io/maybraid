@@ -27,4 +27,15 @@ impl CameraFocus {
 	) -> Self {
 		Self { rig, socket, camera_offset, look_at_offset }
 	}
+
+	/// Same framing for a creature shrunk (or grown) by `factor` overall.
+	pub const fn scaled(self, factor: f32) -> Self {
+		let camera = self.camera_offset;
+		let look = self.look_at_offset;
+		Self {
+			camera_offset: Vec3::new(camera.x * factor, camera.y * factor, camera.z * factor),
+			look_at_offset: Vec3::new(look.x * factor, look.y * factor, look.z * factor),
+			..self
+		}
+	}
 }

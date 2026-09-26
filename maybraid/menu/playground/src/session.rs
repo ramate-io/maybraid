@@ -72,8 +72,10 @@ impl Plugin for CharacterSessionPlugin {
 		if !app.is_plugin_added::<GalleryScreenPlugin>() {
 			app.add_plugins(GalleryScreenPlugin);
 		}
-		app.insert_resource(SaveRoot::workspace())
-			.add_message::<RequestEditCharacter>()
+		if !app.world().contains_resource::<SaveRoot>() {
+			app.insert_resource(SaveRoot::workspace());
+		}
+		app.add_message::<RequestEditCharacter>()
 			.add_observer(on_save_character)
 			.add_systems(Startup, load_active_character)
 			.add_systems(
@@ -402,8 +404,43 @@ fn gallery_select_opens_edit(active: Option<CharacterId>, picked: CharacterId) -
 
 #[cfg(test)]
 mod tests {
-	use super::gallery_select_opens_edit;
-	use crozon_character_persist::CharacterId;
+	use super::{gallery_select_opens_edit, save_editing_character, CharacterSessionPlugin};
+	use crate::character::CharacterMenuState;
+	use bevy::prelude::*;
+	use crozon_character_items::{random_starter_loadout, ItemRng};
+	use crozon_character_persist::{CharacterId, SaveRoot};
+
+	fn scratch_root() -> SaveRoot {
+		let dir =
+			std::env::temp_dir().join(format!("maybraid-session-{}", CharacterId::new().to_hex()));
+		SaveRoot::at(dir)
+	}
+
+	#[test]
+	fn session_plugin_keeps_a_discovered_save_root() -> Result<(), Box<dyn std::error::Error>> {
+		let root = scratch_root();
+		let mut app = App::new();
+		app.insert_resource(root.clone()).add_plugins(CharacterSessionPlugin);
+		let kept = app.world().get_resource::<SaveRoot>().ok_or("no save root")?;
+		assert_eq!(kept.path, root.path);
+		Ok(())
+	}
+
+	#[test]
+	fn a_freshly_created_character_saves_and_loads() -> Result<(), Box<dyn std::error::Error>> {
+		let root = scratch_root();
+		for seed in 1..=16 {
+			let items = random_starter_loadout(&mut ItemRng::from_seed(seed));
+			let menu = CharacterMenuState::for_create(items);
+			let id = CharacterId::new();
+			save_editing_character(&root, id, &menu.0)?;
+			let model = crozon_character_model_user::load(&root, id)?;
+			assert_eq!(model.id, id);
+			crozon_inventory_user::load(&root, id)?;
+		}
+		std::fs::remove_dir_all(&root.path)?;
+		Ok(())
+	}
 
 	#[test]
 	fn second_select_on_the_active_row_is_edit() {

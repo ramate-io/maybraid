@@ -16,7 +16,9 @@ use crozon_characters::{
 
 use crate::{
 	event::{AssetValue, CharacterField, MenuEvent, SwatchValue},
-	focus::{EYE_FOCUS, HEAD_ROOT_FOCUS, MOUTH_FOCUS, SMALL_BIRD_BODY_FOCUS},
+	focus::{
+		KAPPLER_EYE_FOCUS, KAPPLER_HEAD_ROOT_FOCUS, KAPPLER_MOUTH_FOCUS, SMALL_BIRD_BODY_FOCUS,
+	},
 	shared::{AnimationMenu, ClothingMenu, HairMenu},
 };
 
@@ -50,22 +52,23 @@ impl From<&KapplerConfig> for KapplerMenu {
 				"Head",
 				KapplerHeadMenu {
 					head: AssetSingleSelect::new(KapplerHeadMesh::Meerkat)
-						.with_camera_focus(HEAD_ROOT_FOCUS),
+						.with_camera_focus(KAPPLER_HEAD_ROOT_FOCUS),
 					plumage: SwatchSingleSelect::new(config.colors.plumage),
 				},
 			),
 			head_features: Section::new(
 				"Head & Features",
 				KapplerHeadFeaturesMenu {
-					eye: AssetSingleSelect::new(config.eye).with_camera_focus(EYE_FOCUS),
-					beak: AssetSingleSelect::new(config.beak).with_camera_focus(MOUTH_FOCUS),
+					eye: AssetSingleSelect::new(config.eye).with_camera_focus(KAPPLER_EYE_FOCUS),
+					beak: AssetSingleSelect::new(config.beak)
+						.with_camera_focus(KAPPLER_MOUTH_FOCUS),
 					eye_color: SwatchSingleSelect::new(config.colors.eyes),
 					beak_color: SwatchSingleSelect::new(config.colors.beak),
 				},
 			),
 			hair: Section::new(
 				"Hair",
-				HairMenu::new(config.hair, config.colors.hair, HEAD_ROOT_FOCUS),
+				HairMenu::new(config.hair, config.colors.hair, KAPPLER_HEAD_ROOT_FOCUS),
 			),
 			clothing: Section::new(
 				"Clothing",
