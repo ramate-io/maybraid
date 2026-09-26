@@ -1,11 +1,15 @@
 //! Reusable combat feedback for player health, outgoing hits, and incoming damage.
 
+mod score;
 mod vitals;
 
 use bevy::prelude::*;
 use damage::{DamageApplied, Downed, HeadshotBand, Health};
 use player::{LocomotionCapsule, Npc, Player};
+use score::{ingest_combat_score, spawn_combat_score, sync_combat_score};
 use vitals::{spawn_player_vitals, sync_player_vitals, vitals_fonts};
+
+pub use score::{CombatScore, LiveEnemies};
 
 /// When `false`, the player vitals plate stays hidden (pause / menu overlays).
 #[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
@@ -40,6 +44,8 @@ pub struct CombatHudPlugin {
 	pub directional_damage: bool,
 	/// Bottom-left name + pip bar. Independent of the top YOU/NPC [`health_bars`].
 	pub player_vitals: bool,
+	/// Top-right running score, shown while a [`CombatScore`] exists.
+	pub score: bool,
 }
 
 impl Default for CombatHudPlugin {
@@ -49,14 +55,19 @@ impl Default for CombatHudPlugin {
 			hit_markers: true,
 			directional_damage: true,
 			player_vitals: false,
+			score: false,
 		}
 	}
 }
 
 impl Plugin for CombatHudPlugin {
 	fn build(&self, app: &mut App) {
-		if !self.health_bars && !self.hit_markers && !self.directional_damage && !self.player_vitals
-		{
+		let any = self.health_bars
+			|| self.hit_markers
+			|| self.directional_damage
+			|| self.player_vitals
+			|| self.score;
+		if !any {
 			return;
 		}
 		app.insert_resource(CombatHudConfig(*self))
@@ -71,6 +82,15 @@ impl Plugin for CombatHudPlugin {
 		}
 		if self.player_vitals {
 			app.add_systems(Update, sync_player_vitals.in_set(CombatHudSystems::Health));
+		}
+		if self.score {
+			app.add_systems(Update, sync_combat_score.in_set(CombatHudSystems::Health))
+				.add_systems(
+					PostUpdate,
+					ingest_combat_score
+						.after(damage::DamageSystems::Apply)
+						.before(damage::DamageSystems::Down),
+				);
 		}
 		if self.hit_markers {
 			app.add_systems(Update, update_hit_markers)
@@ -183,8 +203,12 @@ fn spawn_combat_hud(
 			if config.0.directional_damage {
 				spawn_directional_damage_ring(root);
 			}
+			let fonts = vitals_fonts(asset_server.as_deref());
 			if config.0.player_vitals {
-				spawn_player_vitals(root, &vitals_fonts(asset_server.as_deref()));
+				spawn_player_vitals(root, &fonts);
+			}
+			if config.0.score {
+				spawn_combat_score(root, &fonts);
 			}
 		});
 }
@@ -584,18 +608,20 @@ fn ingest_hit_markers(
 		if hit.source != Some(player) {
 			continue;
 		}
-		let points = targets
-			.get(hit.target)
-			.ok()
-			.filter(|(transform, band)| {
-				band.is_some_and(|band| band.contains(transform, hit.point))
-			})
-			.map_or(HIT_POINTS, |_| HEAD_POINTS);
+		let points = hit_points(targets.get(hit.target).ok(), hit.point);
 		spawn_hit_marker(&mut commands, hud, hit.point, now, points);
 		if hit.remaining <= 0.0 {
 			spawn_hit_marker(&mut commands, hud, hit.point + Vec3::Y * 0.16, now, DOWN_POINTS);
 		}
 	}
+}
+
+/// Headshot points inside the target's [`HeadshotBand`], hit points elsewhere.
+fn hit_points(target: Option<(&GlobalTransform, Option<&HeadshotBand>)>, point: Vec3) -> u8 {
+	let head = target.is_some_and(|(transform, band)| {
+		band.is_some_and(|band| band.contains(transform, point))
+	});
+	if head { HEAD_POINTS } else { HIT_POINTS }
 }
 
 fn spawn_hit_marker(commands: &mut Commands, hud: Entity, world: Vec3, born: f32, points: u8) {
@@ -757,7 +783,8 @@ mod tests {
 				health_bars: true,
 				hit_markers: true,
 				directional_damage: true,
-				player_vitals: false
+				player_vitals: false,
+				score: false,
 			}
 		);
 	}
@@ -784,6 +811,7 @@ mod tests {
 			hit_markers: false,
 			directional_damage: false,
 			player_vitals: true,
+			score: false,
 		});
 		app.update();
 		let world = app.world_mut();
@@ -801,6 +829,7 @@ mod tests {
 			hit_markers: false,
 			directional_damage: false,
 			player_vitals: true,
+			score: false,
 		});
 		app
 	}
@@ -855,6 +884,7 @@ mod tests {
 			hit_markers: false,
 			directional_damage: false,
 			player_vitals: true,
+			score: false,
 		});
 		app.update();
 		app.world_mut()
@@ -883,6 +913,78 @@ mod tests {
 		let offset = indicator_offset(incoming_yaw(&camera, Vec3::NEG_Z * 8.0), 100.0);
 		assert!(offset.y < -90.0, "{offset:?}");
 		assert!(offset.x.abs() < 8.0, "{offset:?}");
+	}
+
+	fn score_app() -> App {
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins).add_message::<DamageApplied>().add_plugins(
+			CombatHudPlugin {
+				health_bars: false,
+				hit_markers: false,
+				directional_damage: false,
+				player_vitals: false,
+				score: true,
+			},
+		);
+		app.update();
+		app
+	}
+
+	fn applied(target: Entity, source: Option<Entity>, remaining: f32) -> DamageApplied {
+		DamageApplied { target, source, amount: 10.0, remaining, point: Vec3::ZERO }
+	}
+
+	#[test]
+	fn score_counts_the_players_hits_downs_and_deaths() -> anyhow::Result<()> {
+		let mut app = score_app();
+		app.world_mut().insert_resource(CombatScore::default());
+		let player = app.world_mut().spawn(Player).id();
+		let brawler = app.world_mut().spawn(GlobalTransform::default()).id();
+		let rival = app.world_mut().spawn(GlobalTransform::default()).id();
+		for hit in [
+			applied(brawler, Some(player), 20.0),
+			applied(brawler, Some(player), 0.0),
+			applied(rival, Some(brawler), 0.0),
+			applied(player, Some(rival), 0.0),
+		] {
+			app.world_mut().write_message(hit);
+		}
+		app.update();
+		let score = *app.world().resource::<CombatScore>();
+		assert_eq!(score.points, u32::from(2 * HIT_POINTS + DOWN_POINTS));
+		assert_eq!((score.downs, score.deaths), (1, 1));
+		assert_eq!((score.streak, score.best_streak), (0, 1));
+
+		app.update();
+		let world = app.world_mut();
+		let shown = world
+			.query_filtered::<&Visibility, With<score::CombatScoreRoot>>()
+			.iter(world)
+			.next()
+			.copied()
+			.ok_or_else(|| anyhow::anyhow!("score root"))?;
+		assert_eq!(shown, Visibility::Visible);
+		assert!(world.query::<&Text>().iter(world).any(|text| text.0 == "Score  7"));
+		Ok(())
+	}
+
+	#[test]
+	fn score_stays_hidden_and_idle_without_a_tally() -> anyhow::Result<()> {
+		let mut app = score_app();
+		let player = app.world_mut().spawn(Player).id();
+		let brawler = app.world_mut().spawn(GlobalTransform::default()).id();
+		app.world_mut().write_message(applied(brawler, Some(player), 0.0));
+		app.update();
+		let world = app.world_mut();
+		assert!(world.get_resource::<CombatScore>().is_none());
+		let shown = world
+			.query_filtered::<&Visibility, With<score::CombatScoreRoot>>()
+			.iter(world)
+			.next()
+			.copied()
+			.ok_or_else(|| anyhow::anyhow!("score root"))?;
+		assert_eq!(shown, Visibility::Hidden);
+		Ok(())
 	}
 
 	#[test]

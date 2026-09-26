@@ -8,7 +8,7 @@ use bevy::scene::prelude::{bsn, template_value, Scene};
 use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
 use lod::{cull_non_adjacent_bands, SceneChunk};
-use mob_characters::FromMobNumber;
+use mob_characters::{CharacterSpecies, FromMobNumber};
 
 use crate::roster_ref::MemberRosterRef;
 use crate::{MobBrain, MobKind, MobMemberRecipe, MobRosterRecipe};
@@ -31,8 +31,14 @@ impl Mob {
 	}
 
 	pub fn of_kind(kind: MobKind, num: f32) -> Self {
+		Self::of_kind_among(kind, num, &CharacterSpecies::VALUES)
+	}
+
+	/// [`Self::of_kind`] rolling members only from `species`
+	/// (see [`MobRosterRecipe::from_kind_among`]).
+	pub fn of_kind_among(kind: MobKind, num: f32, species: &[CharacterSpecies]) -> Self {
 		let intelligence = MobBrain::for_kind(kind);
-		let roster = MobRosterRecipe::from_kind(kind, num, intelligence.leash);
+		let roster = MobRosterRecipe::from_kind_among(kind, num, intelligence.leash, species);
 		Self { num, kind, roster, intelligence }
 	}
 

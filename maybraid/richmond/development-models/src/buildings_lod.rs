@@ -12,6 +12,7 @@ use richmond_building_components::{
 	ComponentsOnly, DoorNode, FloorNode, FurnitureNode, JointNode, LabelNode, PanelNode,
 	PartitionNode, RoofNode, StairNode,
 };
+use richmond_buildings::wall_demo::TerrainPerimeterWall;
 use richmond_buildings::wizards_tower::WizardsTower;
 use richmond_buildings::{
 	ConnectingStairwell, MixedUseLesHallesStorey, PitchedRoof, RectangularPitchedRoofComplex,
@@ -113,6 +114,8 @@ impl Plugin for DevelopmentsBuildingsLodPlugin {
 		gimme_host!(app, FurnitureNode);
 		gimme_host!(app, LabelNode);
 		gimme_host!(app, ComponentsOnly<Arc<MixedUseLesHallesStorey>>);
+		gimme_host!(app, ComponentsOnly<MixedUseLesHallesStorey>);
+		gimme_host!(app, ComponentsOnly<TerrainPerimeterWall>);
 		gimme_host!(app, ComponentsOnly<ConnectingStairwell>);
 		gimme_host!(app, ComponentsOnly<PitchedRoof>);
 		gimme_host!(app, ComponentsOnly<Arc<ShepherdsHouse>>);

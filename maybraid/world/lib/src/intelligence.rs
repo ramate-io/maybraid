@@ -25,6 +25,7 @@ use movement_intelligence::{
 };
 use movement_intelligence_avian::AvianMovementSurface;
 use movement_realization::MovementRealizationPlugin;
+use npc_intelligence::NpcIntelligencePlugin;
 use player::LocomotionCapsule;
 use player::PlayerCameraAim;
 use player_camera::{CameraController, CameraPov, FollowCamera};
@@ -120,6 +121,9 @@ impl Plugin for WorldIntelligencePlugin {
 		}
 		if !app.is_plugin_added::<MovementRealizationPlugin>() {
 			app.add_plugins(MovementRealizationPlugin);
+		}
+		if !app.is_plugin_added::<NpcIntelligencePlugin>() {
+			app.add_plugins(NpcIntelligencePlugin);
 		}
 		app.add_systems(Update, sync_world_player_threat_actor.in_set(ThreatSystems::Prepare))
 			.configure_sets(

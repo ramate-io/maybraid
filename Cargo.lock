@@ -3378,7 +3378,6 @@ dependencies = [
 name = "firing-range-playground"
 version = "0.0.1"
 dependencies = [
- "avian3d",
  "bevy",
  "clap",
  "combat-hud",
@@ -3394,6 +3393,7 @@ dependencies = [
  "fleeing-intelligence",
  "game-commands",
  "hiding-intelligence",
+ "les-halles-arena",
  "lod",
  "lod-avian",
  "lod-gimme",
@@ -3409,11 +3409,9 @@ dependencies = [
  "player",
  "player-camera",
  "poi-intelligence",
- "procedural-common",
  "richmond-building-components",
  "richmond-building-physics",
  "richmond-buildings",
- "richmond-developments",
  "spotting-intelligence",
  "spotting-intelligence-avian",
  "tether-intelligence",
@@ -4473,6 +4471,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
 
 [[package]]
+name = "les-halles-arena"
+version = "0.0.1"
+dependencies = [
+ "avian3d",
+ "bevy",
+ "firearms",
+ "lod-avian",
+ "movement-intelligence-richmond",
+ "player",
+ "procedural-common",
+ "richmond-building-components",
+ "richmond-building-physics",
+ "richmond-buildings",
+ "richmond-developments",
+]
+
+[[package]]
 name = "lewton"
 version = "0.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4709,6 +4724,9 @@ dependencies = [
  "crozon-characters",
  "crozon-inventory-user",
  "maybraid-character-controller",
+ "maybraid-game-mode-discover",
+ "maybraid-game-mode-reliquary",
+ "maybraid-game-mode-training-ground",
  "maybraid-input",
  "maybraid-menu-controller",
  "maybraid-world",
@@ -4735,6 +4753,27 @@ dependencies = [
  "character-ui-menu",
  "maybraid-input",
  "menu-components",
+]
+
+[[package]]
+name = "maybraid-game-mode-discover"
+version = "0.0.1"
+dependencies = [
+ "bevy",
+]
+
+[[package]]
+name = "maybraid-game-mode-reliquary"
+version = "0.0.1"
+dependencies = [
+ "bevy",
+]
+
+[[package]]
+name = "maybraid-game-mode-training-ground"
+version = "0.0.1"
+dependencies = [
+ "bevy",
 ]
 
 [[package]]
@@ -4852,9 +4891,11 @@ dependencies = [
  "meandering-intelligence",
  "mob-characters",
  "mob-groups",
+ "mob-intelligence",
  "movement-intelligence",
  "movement-intelligence-avian",
  "movement-realization",
+ "npc-intelligence",
  "player",
  "player-camera",
  "poi-intelligence",
@@ -4862,6 +4903,7 @@ dependencies = [
  "richmond-building-components",
  "richmond-building-physics",
  "richmond-building-shaders",
+ "richmond-buildings",
  "richmond-development-models",
  "richmond-developments-on-terrain-playground",
  "richmond-urbanization",
@@ -4949,6 +4991,7 @@ dependencies = [
 name = "menu-screens"
 version = "0.0.1"
 dependencies = [
+ "anyhow",
  "bevy",
  "crozon-character-items",
  "crozon-character-model-user",

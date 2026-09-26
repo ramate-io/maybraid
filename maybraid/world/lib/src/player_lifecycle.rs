@@ -26,6 +26,7 @@ use spotting_intelligence::SpotSubject;
 use threat_intelligence::{Affiliations, ThreatSubject};
 
 use crate::control::strip_world_player_motor;
+use crate::training::{TrainingGrounds, TrainingLifeEnded};
 use crate::weapon::WorldPlayerAppearanceRequested;
 use crate::{WorldGameplayEnabled, WorldPlayerLoadout};
 
@@ -61,6 +62,16 @@ struct PendingPlayerRespawn {
 	timer: Timer,
 	death_at: Vec3,
 	seed: u64,
+	training: bool,
+}
+
+impl PendingPlayerRespawn {
+	/// A Training death whose session has since ended. Its body replaces the
+	/// dead one at once, so the Leave teardown and the next session's resume
+	/// have a player to seat.
+	fn abandoned(&self, training_now: bool) -> bool {
+		self.training && !training_now
+	}
 }
 
 #[derive(Resource, Default)]
@@ -158,6 +169,7 @@ fn sync_player_death_glaze(
 
 fn queue_downed_world_player(
 	config: Res<WorldPlayerRespawnConfig>,
+	grounds: Option<Res<TrainingGrounds>>,
 	mut state: ResMut<WorldPlayerRespawnState>,
 	mut commands: Commands,
 	mut players: Query<DownedWorldPlayer<'_>, (With<VegetationPlayer>, Added<Downed>)>,
@@ -170,6 +182,7 @@ fn queue_downed_world_player(
 			timer: Timer::from_seconds(config.delay_secs.max(0.0), TimerMode::Once),
 			death_at: transform.translation,
 			seed,
+			training: grounds.as_deref().is_some_and(|grounds| grounds.0),
 		});
 		velocity.0 = Vec3::ZERO;
 		if let Some(firearm) = firearm {
@@ -197,6 +210,9 @@ fn queue_downed_world_player(
 	}
 }
 
+/// Discovery respawns near a POI. A Training respawn ends the life: the body
+/// is replaced where it fell until the shell's next round seats it. Leaving
+/// Training mid-respawn replaces it at once and ends nothing.
 #[allow(clippy::too_many_arguments)]
 fn respawn_world_player(
 	time: Res<Time>,
@@ -206,13 +222,18 @@ fn respawn_world_player(
 	loadout: Option<Res<WorldPlayerLoadout>>,
 	locomotion: Res<CharacterLocomotion>,
 	surface: WorldPlayerSurface,
+	grounds: Option<Res<TrainingGrounds>>,
+	mut ended: MessageWriter<TrainingLifeEnded>,
 	live_player: Query<(), With<VegetationPlayer>>,
 	mut state: ResMut<WorldPlayerRespawnState>,
 	mut commands: Commands,
 	mut meshes: ResMut<Assets<Mesh>>,
 	mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-	if !gameplay.0 {
+	let training_now = grounds.is_some_and(|grounds| grounds.0);
+	let abandoned =
+		state.pending.as_ref().is_some_and(|pending| pending.abandoned(training_now));
+	if !gameplay.0 && !abandoned {
 		return;
 	}
 	if !live_player.is_empty() {
@@ -223,28 +244,35 @@ fn respawn_world_player(
 		return;
 	};
 	pending.timer.tick(time.delta());
-	if !pending.timer.is_finished() {
+	if !pending.timer.is_finished() && !abandoned {
 		return;
 	}
 	let death_at = pending.death_at;
 	let seed = pending.seed;
-
-	let placed = registry.place_nearby(
-		death_at,
-		config.nearby_query(),
-		&config.interests,
-		state.last_poi,
-		seed,
-		config.fallback,
-	);
-	let mut surface_point = placed.position;
-	let terrain_y = surface.surface_height(surface_point.xz());
-	if terrain_y.is_finite() {
-		surface_point.y = terrain_y;
-	}
-	let position = player_position_above_surface(surface_point);
-	state.last_poi = placed.poi;
 	state.pending = None;
+
+	let position = if training_now || abandoned {
+		if training_now {
+			ended.write(TrainingLifeEnded);
+		}
+		player_position_above_surface(death_at)
+	} else {
+		let placed = registry.place_nearby(
+			death_at,
+			config.nearby_query(),
+			&config.interests,
+			state.last_poi,
+			seed,
+			config.fallback,
+		);
+		let mut surface_point = placed.position;
+		let terrain_y = surface.surface_height(surface_point.xz());
+		if terrain_y.is_finite() {
+			surface_point.y = terrain_y;
+		}
+		state.last_poi = placed.poi;
+		player_position_above_surface(surface_point)
+	};
 
 	let player = spawn_player_body(
 		&mut commands,
@@ -255,7 +283,11 @@ fn respawn_world_player(
 	);
 	crate::control::apply_world_player_motor(&mut commands, player);
 	if let Some(loadout) = loadout {
-		commands.entity(player).insert(WorldPlayerAppearanceRequested);
+		// The next life may swap the loadout (a new trainee) before the body
+		// arms, so a Training body leaves its appearance to the armed loadout.
+		if !training_now {
+			commands.entity(player).insert(WorldPlayerAppearanceRequested);
+		}
 		commands.spawn(RequestSetCharacterAppearance { appearance: loadout.appearance.clone() });
 	} else {
 		commands.spawn(RequestSetCharacter { species: CharacterSpecies::Braidman });
@@ -377,6 +409,83 @@ mod tests {
 		assert!(!world.entities().contains(bag));
 		let pending = &world.resource::<WorldPlayerRespawnState>().pending;
 		assert!(pending.is_some());
+		Ok(())
+	}
+
+	fn respawn_world(timer_secs: f32, gameplay: bool, grounds: bool) -> World {
+		let mut world = World::new();
+		world.insert_resource(WorldPlayerRespawnConfig { delay_secs: timer_secs, ..default() });
+		world.insert_resource(WorldPlayerRespawnState {
+			pending: Some(PendingPlayerRespawn {
+				timer: Timer::from_seconds(timer_secs, TimerMode::Once),
+				death_at: Vec3::new(3.0, 4.0, 5.0),
+				seed: 7,
+				training: true,
+			}),
+			..default()
+		});
+		world.insert_resource(Time::<()>::default());
+		world.insert_resource(WorldGameplayEnabled(gameplay));
+		world.init_resource::<PoiRegistry>();
+		world.init_resource::<CharacterLocomotion>();
+		world.init_resource::<TerrainEntryStore>();
+		world.init_resource::<TerrainCellLayout>();
+		world.init_resource::<DevelopmentEntryStore>();
+		world.insert_resource(WorldBaseTerrain(
+			durham_terrain_models::BaseTerrainNoise::from_config(
+				&durham_terrain_models::TerrainConfig::new(42),
+			),
+		));
+		world.init_resource::<Assets<Mesh>>();
+		world.init_resource::<Assets<StandardMaterial>>();
+		world.init_resource::<Messages<TrainingLifeEnded>>();
+		world.insert_resource(TrainingGrounds(grounds));
+		world.insert_resource(crate::TrainingRound::new(9).trainee());
+		world
+	}
+
+	#[test]
+	fn a_training_respawn_ends_the_life() -> anyhow::Result<()> {
+		let mut world = respawn_world(0.0, true, true);
+		world
+			.run_system_once(respawn_world_player)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+
+		let ended: Vec<_> =
+			world.resource_mut::<Messages<TrainingLifeEnded>>().drain().collect();
+		assert_eq!(ended, vec![TrainingLifeEnded]);
+		let mut bodies = world.query_filtered::<
+			(&Transform, Has<WorldPlayerAppearanceRequested>),
+			With<VegetationPlayer>,
+		>();
+		let (body, requested) = bodies.single(&world)?;
+		assert_eq!(body.translation.xz(), Vec2::new(3.0, 5.0));
+		assert!(!requested, "the next life's loadout dresses the body");
+		assert!(world.resource::<WorldPlayerRespawnState>().pending.is_none());
+		Ok(())
+	}
+
+	#[test]
+	fn leaving_training_mid_respawn_replaces_the_body_at_once() -> anyhow::Result<()> {
+		let mut world = respawn_world(4.0, false, true);
+		world
+			.run_system_once(respawn_world_player)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(
+			world.resource::<WorldPlayerRespawnState>().pending.is_some(),
+			"a paused Training death keeps waiting"
+		);
+
+		world.insert_resource(TrainingGrounds(false));
+		world
+			.run_system_once(respawn_world_player)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let ended: Vec<_> =
+			world.resource_mut::<Messages<TrainingLifeEnded>>().drain().collect();
+		assert!(ended.is_empty(), "leaving ends no life");
+		let mut bodies = world.query_filtered::<(), With<VegetationPlayer>>();
+		assert_eq!(bodies.iter(&world).count(), 1);
+		assert!(world.resource::<WorldPlayerRespawnState>().pending.is_none(), "glaze clears");
 		Ok(())
 	}
 }

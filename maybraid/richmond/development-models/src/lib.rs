@@ -34,6 +34,7 @@ pub mod ring_fort;
 pub mod scatter;
 pub mod shepherds;
 mod shepherds_fit;
+mod stamp;
 pub mod village;
 
 pub use archetype_generation::PlacedDevelopment;

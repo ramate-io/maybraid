@@ -19,7 +19,9 @@ use crate::openings::{
 use crate::shells::ortho::EPS;
 use crate::shells::{IFloor, IFloorParams, IFloorPlanRect, IFloorSlab};
 
-use super::parameterized::{IApartmentParameterized, MIN_CENTRAL_DEPTH, MIN_STOREY_HEIGHT};
+use super::parameterized::{
+	IApartmentParameterized, MIN_CENTRAL_DEPTH, MIN_POCKET_SHAFT_SIDE, MIN_STOREY_HEIGHT,
+};
 use super::SCOPE;
 
 /// Keep shaft volumes clear of IFloor wall strips (panel thickness + jamb margin).
@@ -77,7 +79,7 @@ impl IApartmentFloorPlan {
 
 		let mut openings = confines.openings.clone();
 		let (shaft_bounds, shaft_slots, shaft_inbound) =
-			map_inbound_shafts(&mut openings, &primary_rects, height, y0, params.shaft_side);
+			map_inbound_shafts(&mut openings, &primary_rects, height, y0, &params);
 
 		// Authored shaft volumes (slab cuts) for each active pocket.
 		for (i, shaft) in shaft_bounds.iter().enumerate() {
@@ -262,7 +264,7 @@ fn map_inbound_shafts(
 	primary_rects: &[IFloorPlanRect],
 	height: f32,
 	y0: f32,
-	shaft_side: f32,
+	params: &IApartmentParameterized,
 ) -> (Vec<Aabb3d>, Vec<usize>, Vec<Vec<OpeningId>>) {
 	use std::collections::BTreeMap;
 
@@ -290,7 +292,8 @@ fn map_inbound_shafts(
 			continue;
 		};
 		let slot = rect_i * 9 + pocket_i;
-		let shaft = shaft_aabb_at_pocket(&pockets[pocket_i], y0, height, shaft_side);
+		let shaft =
+			shaft_aabb_at_pocket(&primary_rects[rect_i], &pockets[pocket_i], y0, height, params);
 		openings.insert(id.clone(), Opening::new(shaft, OpeningLabel::Shaft));
 		by_slot.entry(slot).or_default().push(id);
 		slot_bounds.entry(slot).or_insert(shaft);
@@ -386,16 +389,35 @@ fn best_pocket(request: &Aabb3d, pockets: &[Aabb2d]) -> Option<usize> {
 	Some(best_i)
 }
 
-fn shaft_aabb_at_pocket(pocket: &Aabb2d, y0: f32, height: f32, shaft_side: f32) -> Aabb3d {
-	let cx = (pocket.min.x + pocket.max.x) * 0.5;
-	let cz = (pocket.min.y + pocket.max.y) * 0.5;
+fn shaft_aabb_at_pocket(
+	rect: &IFloorPlanRect,
+	pocket: &Aabb2d,
+	y0: f32,
+	height: f32,
+	params: &IApartmentParameterized,
+) -> Aabb3d {
+	let mut cx = (pocket.min.x + pocket.max.x) * 0.5;
+	let mut cz = (pocket.min.y + pocket.max.y) * 0.5;
 	let pw = (pocket.max.x - pocket.min.x).max(EPS);
 	let pd = (pocket.max.y - pocket.min.y).max(EPS);
 	// Inset from pocket edges so boundary pockets never sit on / punch outer walls.
 	let clear = SHAFT_WALL_CLEARANCE.min(pw * 0.35).min(pd * 0.35);
-	let max_half_x = ((pw * 0.5) - clear).max(0.35);
-	let max_half_z = ((pd * 0.5) - clear).max(0.35);
-	let half = (shaft_side * 0.5).max(0.6).min(max_half_x).min(max_half_z);
+	let floor_half = MIN_POCKET_SHAFT_SIDE * 0.5;
+	let max_half_x = ((pw * 0.5) - clear).max(floor_half);
+	let max_half_z = ((pd * 0.5) - clear).max(floor_half);
+	let pocket_half = (params.shaft_side * 0.5).max(0.6).min(max_half_x).min(max_half_z);
+	// A kept floor may outgrow the pocket, but never the rect's wall clearance.
+	let room_x = ((rect.max_x - rect.min_x) * 0.5 - SHAFT_WALL_CLEARANCE).max(pocket_half);
+	let room_z = ((rect.max_z - rect.min_z) * 0.5 - SHAFT_WALL_CLEARANCE).max(pocket_half);
+	let half = pocket_half.max(params.min_shaft_side * 0.5).min(room_x).min(room_z);
+	if half > pocket_half + EPS {
+		let slide = |c: f32, lo: f32, hi: f32| {
+			let (lo, hi) = (lo + SHAFT_WALL_CLEARANCE + half, hi - SHAFT_WALL_CLEARANCE - half);
+			if lo <= hi { c.clamp(lo, hi) } else { (lo + hi) * 0.5 }
+		};
+		cx = slide(cx, rect.min_x, rect.max_x);
+		cz = slide(cz, rect.min_z, rect.max_z);
+	}
 	Aabb3d::from_min_max(
 		Vec3::new(cx - half, y0, cz - half),
 		Vec3::new(cx + half, y0 + height.max(EPS), cz + half),

@@ -32,16 +32,18 @@ use commands::{
 	RequestDevelopmentFocus, RequestLikelihood, RequestMeshStats, RequestRebuild, RequestSeed,
 	RequestTerrainRadius,
 };
-use furniture_assemblies::{FurnitureAssembliesPlugin, FurnitureStreamPlugin, FurnitureStreamSystems};
-use furniture_shaders::FurnitureShadersPlugin;
 use durham_terrain::shaders::{DurhamTerrainShader, DurhamTerrainShaderPlugin, RefractionWater};
 use durham_terrain_models::{
-	AvianTerrainIndex, BaseTerrainNoise, ComposedWater, DurhamTerrainModelsPlugin,
-	JerseyStampConfigs, MarazionWatershedConfigs, Terrain, TerrainCellLayout,
-	TerrainColliderSystems, TerrainConfig, TerrainEntryStore, TerrainMeshBuilder,
-	TerrainMeshLodBand, TerrainPresentationAssets, Water, WaterPresentationAssets,
-	WaterRegionPresenter, WaterStoreView,
+	terrain_streaming_enabled, AvianTerrainIndex, BaseTerrainNoise, ComposedWater,
+	DurhamTerrainModelsPlugin, JerseyStampConfigs, MarazionWatershedConfigs, Terrain,
+	TerrainCellLayout, TerrainColliderSystems, TerrainConfig, TerrainEntryStore,
+	TerrainMeshBuilder, TerrainMeshLodBand, TerrainPresentationAssets, TerrainStreamingEnabled,
+	Water, WaterPresentationAssets, WaterRegionPresenter, WaterStoreView,
 };
+use furniture_assemblies::{
+	FurnitureAssembliesPlugin, FurnitureStreamPlugin, FurnitureStreamSystems,
+};
+use furniture_shaders::FurnitureShadersPlugin;
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use game_commands::ui::{GameCommandDrawerConfig, GameCommandStatusText};
 use hosts::{spawn_development_hosts, DevelopmentHostRoot};
@@ -61,6 +63,21 @@ use urbanization_stream::{
 	present_urbanization_hosts, present_urbanization_padded_terrain, sync_raw_terrain_replacements,
 	UrbanizationPaddedTerrainState,
 };
+
+/// When false, hopscotch stays off even if Durham streaming is on.
+/// Training uses this so the grounds stay a grove instead of a city.
+#[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct UrbanizationStreamingEnabled(pub bool);
+
+impl Default for UrbanizationStreamingEnabled {
+	fn default() -> Self {
+		Self(true)
+	}
+}
+
+pub fn urbanization_streaming_enabled(enabled: Res<UrbanizationStreamingEnabled>) -> bool {
+	enabled.0
+}
 
 const DEFAULT_TERRAIN_RADIUS: i32 = 2;
 /// Occupancy fill for the playground: high enough that Empty does not dominate.
@@ -243,23 +260,44 @@ impl Plugin for DevelopmentsOnTerrainPlugin {
 			);
 		}
 
+		if !app.world().contains_resource::<TerrainStreamingEnabled>() {
+			app.init_resource::<TerrainStreamingEnabled>();
+		}
+		if !app.world().contains_resource::<UrbanizationStreamingEnabled>() {
+			app.init_resource::<UrbanizationStreamingEnabled>();
+		}
 		#[allow(private_interfaces)]
 		app.configure_sets(
 			Update,
 			FurnitureStreamSystems::Generate.after(generate_urbanization_developments),
 		);
+		// The pin stays ungated: other readers of `UrbanizationIndex` (world mobs)
+		// select cells before terrain streaming starts, and must see the spec noise.
+		app.add_systems(
+			Update,
+			sync_urbanization_pin
+				.before(stream_urbanization)
+				.before(LodGenerateSystems::Produce),
+		);
+		// Stream and present still run while urbanization is off so a session
+		// that turns it off (Training) tears the urbanized terrain and hosts down
+		// instead of freezing them in place as a second terrain model.
 		app.add_systems(
 			Update,
 			(
-				sync_urbanization_pin,
 				stream_urbanization.before(LodGenerateSystems::Produce),
-				generate_urbanization_developments.after(LodGenerateSystems::Drain),
-				generate_urbanization_padded_terrain,
-				present_urbanization_hosts,
+				(
+					generate_urbanization_developments.after(LodGenerateSystems::Drain),
+					generate_urbanization_padded_terrain,
+					present_urbanization_hosts,
+				)
+					.chain()
+					.run_if(urbanization_streaming_enabled),
 				present_urbanization_padded_terrain,
 				sync_raw_terrain_replacements,
 			)
 				.chain()
+				.run_if(terrain_streaming_enabled)
 				.before(LodPresentSystems::Produce)
 				.before(TerrainColliderSystems::QueueMeshes),
 		);

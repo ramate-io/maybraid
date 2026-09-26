@@ -43,7 +43,7 @@ pub(crate) fn apply_look_intents(
 	mouse: Res<ButtonInput<MouseButton>>,
 	locked: Option<Res<CameraPovLocked>>,
 	mut intents: MessageReader<CharacterIntent>,
-	mut cameras: Query<(&mut CameraController, &FollowCamera), With<Camera3d>>,
+	mut cameras: Query<(&mut CameraController, &FollowCamera, Option<&Projection>), With<Camera3d>>,
 ) {
 	let mut focus = f32::from(mouse.pressed(MouseButton::Right));
 	let mut ads = f32::from(mouse.pressed(MouseButton::Middle));
@@ -52,9 +52,14 @@ pub(crate) fn apply_look_intents(
 	for intent in intents.read() {
 		match *intent {
 			CharacterIntent::Look(value) => {
-				if let Ok((mut controller, follow)) = cameras.single_mut() {
-					controller.yaw -= value.x * follow.sensitivity;
-					controller.pitch -= value.y * follow.sensitivity;
+				if let Ok((mut controller, follow, projection)) = cameras.single_mut() {
+					let fov = match projection {
+						Some(Projection::Perspective(perspective)) => perspective.fov,
+						_ => follow.hip_fov(controller.pov),
+					};
+					let sensitivity = follow.look_sensitivity(controller.pov, fov);
+					controller.yaw -= value.x * sensitivity;
+					controller.pitch -= value.y * sensitivity;
 					controller.pitch = controller.pitch.clamp(-FRAC_PI_2 + 0.1, FRAC_PI_2 - 0.1);
 				}
 			}
@@ -68,7 +73,7 @@ pub(crate) fn apply_look_intents(
 	if skill_map {
 		ads = 0.0;
 	}
-	if let Ok((mut controller, _)) = cameras.single_mut() {
+	if let Ok((mut controller, _, _)) = cameras.single_mut() {
 		controller.focus = focus.clamp(0.0, 1.0);
 		controller.ads = ads.clamp(0.0, 1.0);
 		if swap_pov && !locked.is_some_and(|locked| locked.0) {
@@ -260,6 +265,44 @@ mod tests {
 		let target = follow_body_yaw(look, body, max);
 		assert!(target < look);
 		assert!((clamp_look_yaw(look, target, max) - look).abs() < 1e-4);
+	}
+
+	fn yaw_after_look(pov: CameraPov, fov: f32) -> anyhow::Result<f32> {
+		use bevy::ecs::system::RunSystemOnce;
+		let mut world = World::new();
+		world.init_resource::<ButtonInput<MouseButton>>();
+		world.init_resource::<Messages<CharacterIntent>>();
+		world.spawn((
+			Camera3d::default(),
+			FollowCamera::default(),
+			Projection::Perspective(PerspectiveProjection { fov, ..default() }),
+			CameraController { yaw: 0.0, pitch: 0.0, pov, focus: 0.0, ads: 0.0, focus_blend: 0.0 },
+		));
+		world.write_message(CharacterIntent::Look(Vec2::X));
+		world
+			.run_system_once(apply_look_intents)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		world
+			.query::<&CameraController>()
+			.iter(&world)
+			.next()
+			.map(|controller| -controller.yaw)
+			.ok_or_else(|| anyhow::anyhow!("camera"))
+	}
+
+	#[test]
+	fn aiming_down_sights_slows_look_by_the_zoom() -> anyhow::Result<()> {
+		let follow = FollowCamera::default();
+		let hip = yaw_after_look(CameraPov::FirstPerson, follow.first_person_fov)?;
+		assert!((hip - follow.sensitivity).abs() < 1e-6, "hip fire keeps the base sensitivity");
+		let sight = yaw_after_look(CameraPov::FirstPerson, follow.sight_fov)?;
+		let zoom = (0.5 * follow.sight_fov).tan() / (0.5 * follow.first_person_fov).tan();
+		assert!((sight - follow.sensitivity * zoom).abs() < 1e-6, "{sight} vs {zoom}");
+		let optic = yaw_after_look(CameraPov::FirstPerson, 18.0_f32.to_radians())?;
+		assert!(optic < sight, "a magnified optic turns slower than iron sights");
+		let orbit = yaw_after_look(CameraPov::ThirdPerson, follow.third_person_fov)?;
+		assert!((orbit - follow.sensitivity).abs() < 1e-6, "third person is unchanged");
+		Ok(())
 	}
 
 	#[test]

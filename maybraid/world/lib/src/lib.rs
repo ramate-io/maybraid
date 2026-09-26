@@ -21,6 +21,9 @@ mod player_position;
 mod poi;
 mod start;
 mod stash;
+mod training;
+mod training_markers;
+mod training_plaza;
 mod ui;
 mod vsync;
 mod weapon;
@@ -29,6 +32,7 @@ pub use chico_vegetation_on_terrain_playground::{PlayerPhysicsEnabled, PlayerSpa
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use control::{
 	InventoryEditCameraFollow, WorldGameplayEnabled, WorldSceneryVisible, WorldSurfaceReady,
+	WorldSurfaceSet,
 };
 pub use durham_terrain_models::{terrain_streaming_enabled, TerrainStreamingEnabled};
 pub use game_commands::command::PendingStartupCommand;
@@ -54,6 +58,9 @@ pub use stash::{
 	spawn_exploded_stashes, spawn_world_stash, StashDisplayedItem, StashPolicy, WorldStash,
 	WorldStashPlugin, WorldStashSettings, DEFAULT_CLAIM_RADIUS, DEFAULT_LOOT_SECS,
 };
+pub use training::{TrainingGrounds, TrainingLifeEnded, TrainingMap, TrainingRound};
+pub use training_markers::TrainingEnemyMarkersEnabled;
+pub use training_plaza::TrainingPlazaMounted;
 pub use ui::WorldMobHudEnabled;
 pub use vsync::{default_window_present_mode, RequestVsyncToggle, VSYNC_TOGGLE_KEY};
 pub use weapon::WorldPlayerLoadout;
@@ -107,6 +114,7 @@ const WORLD_COMBAT_HUD: CombatHudPlugin = CombatHudPlugin {
 	hit_markers: true,
 	directional_damage: true,
 	player_vitals: true,
+	score: true,
 };
 const WORLD_TERRAIN_PITCH_GIZMOS: DrawTerrainPitchProbes = DrawTerrainPitchProbes(false);
 
@@ -197,6 +205,7 @@ impl Plugin for WorldPlugin {
 			.init_resource::<InventoryEditCameraFollow>()
 			.init_resource::<WorldSurfaceReady>()
 			.init_resource::<WorldSceneryVisible>()
+			.add_plugins(training::TrainingGroundPlugin)
 			.insert_resource(WorldMobHudEnabled::from_debug_chrome(self.debug_chrome))
 			.insert_resource(Bullseye { inner: 50.0, outer: WORLD_BULLSEYE_OUTER_M })
 			.insert_resource(OpenLattice {
@@ -227,10 +236,11 @@ impl Plugin for WorldPlugin {
 				PreUpdate,
 				(control::stamp_vegetation_motor_traction, control::stamp_world_player_motor),
 			)
+			.configure_sets(Update, control::WorldSurfaceSet)
 			.add_systems(
 				Update,
 				(
-					control::update_world_surface_ready,
+					control::update_world_surface_ready.in_set(control::WorldSurfaceSet),
 					control::sync_world_scenery,
 					control::sync_combat_hud_visible,
 					control::sync_skill_map_enabled.before(SkillMapSystems::Spawn),

@@ -6,10 +6,10 @@ use std::time::Duration;
 use avian3d::prelude::{LinearVelocity, Position};
 use bevy::prelude::*;
 use bevy::time::common_conditions::on_timer;
-use chico_vegetation_on_terrain_playground::player::{holding_elevation, player_spawn_point_at};
 use chico_vegetation_on_terrain_playground::Player;
+use chico_vegetation_on_terrain_playground::player::{holding_elevation, player_spawn_point_at};
 use crozon_character_persist::{CharacterId, PersistError, SaveRoot};
-use durham_terrain_models::{terrain_streaming_enabled, TerrainCellLayout, WorldBaseTerrain};
+use durham_terrain_models::{TerrainCellLayout, WorldBaseTerrain, terrain_streaming_enabled};
 use player_camera::FollowCamera;
 use serde::{Deserialize, Serialize};
 
@@ -96,6 +96,7 @@ pub fn resume_discovery_from_saved_waypoints(
 	spawn: Res<PlayerSpawnXz>,
 	save_root: Res<SaveRoot>,
 	loadout: Option<Res<WorldPlayerLoadout>>,
+	grounds: Option<Res<crate::TrainingGrounds>>,
 	layout: Res<TerrainCellLayout>,
 	base: Res<WorldBaseTerrain>,
 	mut waypoints: ResMut<PlayerPositionWaypoints>,
@@ -109,6 +110,9 @@ pub fn resume_discovery_from_saved_waypoints(
 	>,
 ) {
 	if spawn.0.is_some() {
+		return;
+	}
+	if grounds.is_some_and(|grounds| grounds.0) {
 		return;
 	}
 	let Some(id) = current_character_id(loadout.as_deref()) else {
@@ -214,12 +218,13 @@ fn log_player_position(players: Query<&Transform, With<Player>>) {
 
 fn retain_player_waypoints(
 	streaming: Res<durham_terrain_models::TerrainStreamingEnabled>,
+	grounds: Option<Res<crate::TrainingGrounds>>,
 	save_root: Res<SaveRoot>,
 	loadout: Option<Res<WorldPlayerLoadout>>,
 	players: Query<&Transform, With<Player>>,
 	mut waypoints: ResMut<PlayerPositionWaypoints>,
 ) {
-	if !streaming.0 {
+	if !streaming.0 || grounds.is_some_and(|grounds| grounds.0) {
 		return;
 	}
 	let Ok(transform) = players.single() else {
@@ -305,6 +310,8 @@ fn save_waypoints(
 
 #[cfg(test)]
 mod tests {
+	use bevy::ecs::system::RunSystemOnce;
+
 	use super::*;
 
 	#[test]
@@ -319,6 +326,59 @@ mod tests {
 		assert_eq!(positions.len(), 5);
 		assert_eq!(positions[0].x, 600.0);
 		assert_eq!(positions[4].x, 3000.0);
+	}
+
+	#[test]
+	fn training_grounds_do_not_persist_a_pose() -> anyhow::Result<()> {
+		let dir = tempfile::tempdir()?;
+		let root = SaveRoot::at(dir.path());
+		let id = CharacterId(7);
+		let mut world = World::new();
+		world.insert_resource(root.clone());
+		world.insert_resource(durham_terrain_models::TerrainStreamingEnabled(true));
+		world.insert_resource(crate::TrainingGrounds(true));
+		world.insert_resource(PlayerPositionWaypoints::default());
+		world.insert_resource(crate::WorldPlayerLoadout::new(
+			id.to_hex(),
+			crozon_characters::CharacterAppearance::default(),
+			crozon_character_items::Inventory::default(),
+		));
+		world.spawn((
+			chico_vegetation_on_terrain_playground::Player,
+			Transform::from_xyz(3.0, 4.0, 5.0),
+		));
+		world
+			.run_system_once(retain_player_waypoints)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(!root.position_path(id).exists());
+		assert!(world.resource::<PlayerPositionWaypoints>().positions.is_empty());
+		Ok(())
+	}
+
+	#[test]
+	fn streaming_off_does_not_persist_a_pose() -> anyhow::Result<()> {
+		let dir = tempfile::tempdir()?;
+		let root = SaveRoot::at(dir.path());
+		let id = CharacterId(9);
+		let mut world = World::new();
+		world.insert_resource(root.clone());
+		world.insert_resource(durham_terrain_models::TerrainStreamingEnabled(false));
+		world.insert_resource(PlayerPositionWaypoints::default());
+		world.insert_resource(crate::WorldPlayerLoadout::new(
+			id.to_hex(),
+			crozon_characters::CharacterAppearance::default(),
+			crozon_character_items::Inventory::default(),
+		));
+		world.spawn((
+			chico_vegetation_on_terrain_playground::Player,
+			Transform::from_xyz(3.0, 4.0, 5.0),
+		));
+		world
+			.run_system_once(retain_player_waypoints)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(!root.position_path(id).exists());
+		assert!(world.resource::<PlayerPositionWaypoints>().positions.is_empty());
+		Ok(())
 	}
 
 	#[test]

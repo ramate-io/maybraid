@@ -36,10 +36,11 @@ pub use game_commands::command::PendingStartupCommand;
 pub use groves::{DurhamGroveSample, OwnedDurhamTerrain, StoredDurhamTerrain};
 pub use material_lib::{VegetationOnTerrainMaterialLib, VegetationOnTerrainMaterialRefPlugin};
 pub use player::{
-	player_position_above_surface, spawn_player_body, CharacterCameraFollowEnabled,
-	CharacterLocomotion, Jumping, MoveWish, MovementAction, PadMovementEnabled, Player,
-	PlayerCapsule, PlayerControlSystems, PlayerPhysicsEnabled, PlayerPlugin, PlayerSpawnXz,
-	PlaygroundMode, VegetationPlayerMotor,
+	holding_elevation, player_position_above_surface, player_spawn_point_at, spawn_player_body,
+	AwaitingTerrainSurface, CharacterCameraFollowEnabled, CharacterLocomotion, Jumping, MoveWish,
+	MovementAction, OffTerrainAnchor, PadMovementEnabled, Player, PlayerCapsule,
+	PlayerControlSystems, PlayerPhysicsEnabled, PlayerPlugin, PlayerSpawnXz, PlaygroundMode,
+	VegetationPlayerMotor,
 };
 
 use avian3d::prelude::LinearVelocity;
@@ -75,7 +76,7 @@ use groves::{spawn_tiled_groves, GroveRoot};
 use lod::{LodGenerateSystems, LodPresentSystems, LodSceneHost};
 use maybraid_input::{PadGameplayEnabled, VirtualPadPlugin, VirtualPadSystems};
 use pitch::{apply_avian_terrain_pitch, sync_suspend_terrain_pitch};
-use player::{respawn_player_on_layout, snap_player_to_composed_surface, AwaitingTerrainSurface};
+use player::{respawn_player_on_layout, snap_player_to_composed_surface};
 
 const DEFAULT_TERRAIN_RADIUS: i32 = 2;
 const DEFAULT_TILE_RADIUS: i32 = 1;

@@ -122,6 +122,7 @@ impl CrateLoot {
 		true
 	}
 
+	#[cfg(test)]
 	fn restock_at(&self, key: CrateKey) -> Option<f32> {
 		match self.crates.get(&key) {
 			Some(CratePhase::Opening { restock_at, .. } | CratePhase::Open { restock_at }) => {

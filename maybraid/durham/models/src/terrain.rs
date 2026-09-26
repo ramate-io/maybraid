@@ -54,13 +54,17 @@ pub use cell::{
 pub use chunk::cascade::CascadeChunk;
 pub use collider::{
 	terrain_collider_covers_xz, TerrainColliderEpoch, TerrainColliderMeshSource,
-	TerrainColliderSystems, TerrainFrictionConfig, TerrainTrimeshCollider, TERRAIN_FRICTION,
+	TerrainColliderSystems, TerrainFrictionConfig, TerrainSuperseded, TerrainTrimeshCollider,
+	TERRAIN_FRICTION,
 };
 pub use config::TerrainConfig;
 pub use host::{
-	terrain_streaming_enabled, Durham, TerrainCoverage, TerrainPlugin, TerrainPresentEnabled,
-	TerrainPresentPending, TerrainPresentationDirty, TerrainStreamingEnabled, WorldBaseTerrain,
-	WORLD_FINE_HALF_EXTENT_CELLS, WORLD_OUTER_2X_ROWS, WORLD_OUTER_4X_ROWS,
+	playable_world_cell_layout, retarget_presentation_assets, terrain_streaming_enabled,
+	training_grounds_cell_layout, training_grounds_cell_layout_at, Durham, TerrainCoverage,
+	TerrainFillSystems, TerrainLayoutPinned,
+	TerrainPlugin, TerrainPresentEnabled, TerrainPresentPending, TerrainPresentationDirty,
+	TerrainStreamingEnabled,
+	WorldBaseTerrain, WORLD_FINE_HALF_EXTENT_CELLS, WORLD_OUTER_2X_ROWS, WORLD_OUTER_4X_ROWS,
 };
 pub use index::{
 	AvianTerrainIndex, TerrainCellId, TerrainEntryStore, TerrainHeightSnapshot,

@@ -1,8 +1,10 @@
-//! First-load unveil: wait until spawn terrain is ready and LOD work is quiet.
+//! First-load unveil: Discovery waits on spawn terrain and quiet LOD work.
+//! Training unveils once the FinePatch surface and stamped development are ready and
+//! does not wait on the playable-world job wave.
 
-use crate::flow::GameFlow;
+use crate::flow::{GameFlow, PlaySession};
 use bevy::prelude::*;
-use maybraid_world::{LodJobCounter, WorldSurfaceReady};
+use maybraid_world::{LodJobCounter, TrainingPlazaMounted, TrainingRound, WorldSurfaceReady};
 use menu_screens::{request_loading_explainer, request_loading_progress};
 
 /// Remaining generate / present / pending-root tickets that still count as
@@ -61,22 +63,14 @@ impl FirstLoadGate {
 
 	pub fn progress(&self, ready: bool, active: u64) -> f32 {
 		let from_jobs = if self.peak == 0 {
-			if self.saw_work {
-				0.55
-			} else {
-				0.08
-			}
+			if self.saw_work { 0.55 } else { 0.08 }
 		} else {
 			(1.0 - (active as f32 / self.peak as f32)).clamp(0.08, 0.95)
 		};
 		if ready && self.saw_work && active <= UNVEIL_JOB_THRESHOLD {
 			return from_jobs.max(0.9);
 		}
-		if ready {
-			from_jobs.max(0.45)
-		} else {
-			from_jobs.min(0.4)
-		}
+		if ready { from_jobs.max(0.45) } else { from_jobs.min(0.4) }
 	}
 
 	pub fn explainer(&self, ready: bool, active: u64) -> &'static str {
@@ -90,6 +84,29 @@ impl FirstLoadGate {
 	}
 }
 
+pub(crate) fn unveil_ready(
+	training: bool,
+	gate: &FirstLoadGate,
+	ready: bool,
+	active: u64,
+	now: f32,
+) -> bool {
+	if training { ready } else { gate.should_unveil(ready, active, now) }
+}
+
+pub(crate) fn loading_explainer(
+	training: bool,
+	gate: &FirstLoadGate,
+	ready: bool,
+	active: u64,
+) -> &'static str {
+	if training {
+		if ready { "Almost ready…" } else { "Waiting for the ground…" }
+	} else {
+		gate.explainer(ready, active)
+	}
+}
+
 pub(crate) fn arm_first_load(mut commands: Commands, time: Res<Time>) {
 	commands.insert_resource(FirstLoadGate::new(time.elapsed_secs()));
 }
@@ -100,30 +117,59 @@ pub(crate) fn disarm_first_load(mut commands: Commands) {
 
 pub(crate) fn finish_world_loading(
 	mut commands: Commands,
+	session: Res<PlaySession>,
 	ready: Res<WorldSurfaceReady>,
+	plaza: Option<Res<TrainingPlazaMounted>>,
+	round: Option<Res<TrainingRound>>,
 	jobs: Option<Res<LodJobCounter>>,
 	mut gate: Option<ResMut<FirstLoadGate>>,
 	time: Res<Time>,
 	mut flow: ResMut<NextState<GameFlow>>,
 ) {
+	let training = *session == PlaySession::Training;
+	let surface_ready = if training {
+		ready.0 && plaza_mounted_for(plaza.as_deref(), round.as_deref())
+	} else {
+		ready.0
+	};
 	let active = jobs.as_deref().map(LodJobCounter::active).unwrap_or(0);
 	let Some(gate) = gate.as_deref_mut() else {
-		if ready.0 {
+		if surface_ready {
 			flow.set(GameFlow::World);
 		}
 		return;
 	};
 	gate.observe(active);
-	request_loading_progress(&mut commands, gate.progress(ready.0, active));
-	request_loading_explainer(&mut commands, gate.explainer(ready.0, active));
-	if gate.should_unveil(ready.0, active, time.elapsed_secs()) {
+	let now = time.elapsed_secs();
+	request_loading_progress(&mut commands, gate.progress(surface_ready, active));
+	request_loading_explainer(
+		&mut commands,
+		loading_explainer(training, gate, surface_ready, active),
+	);
+	if unveil_ready(training, gate, surface_ready, active, now) {
 		flow.set(GameFlow::World);
 	}
+}
+
+/// The previous map's plaza stays mounted until its teardown runs, so a new
+/// map must not unveil on it. A new life on the same map unveils on the live one.
+fn plaza_mounted_for(plaza: Option<&TrainingPlazaMounted>, round: Option<&TrainingRound>) -> bool {
+	plaza.is_some_and(|plaza| round.is_none_or(|round| plaza.serves(*round)))
 }
 
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	#[test]
+	fn a_round_reload_waits_for_its_own_plaza() {
+		let round = TrainingRound::new(1);
+		let next = round.next();
+		assert!(plaza_mounted_for(Some(&TrainingPlazaMounted(round)), Some(&round)));
+		assert!(!plaza_mounted_for(Some(&TrainingPlazaMounted(round)), Some(&next)));
+		assert!(!plaza_mounted_for(None, Some(&next)));
+		assert!(plaza_mounted_for(Some(&TrainingPlazaMounted(round)), Some(&round.next_life())));
+	}
 
 	fn gate_at(entered_at: f32) -> FirstLoadGate {
 		FirstLoadGate::new(entered_at)
@@ -161,6 +207,16 @@ mod tests {
 		gate.observe(400);
 		assert!(!gate.should_unveil(false, 400, UNVEIL_TIMEOUT_SECS));
 		assert!(gate.should_unveil(true, 400, UNVEIL_TIMEOUT_SECS));
+	}
+
+	#[test]
+	fn training_unveils_when_the_surface_is_ready_without_waiting_on_jobs() {
+		let gate = gate_at(0.0);
+		assert!(!unveil_ready(true, &gate, false, 400, 0.0));
+		assert!(unveil_ready(true, &gate, true, 400, 0.0));
+		assert!(!unveil_ready(false, &gate, true, 0, 0.2));
+		assert_eq!(loading_explainer(true, &gate, false, 0), "Waiting for the ground…");
+		assert_eq!(loading_explainer(true, &gate, true, 0), "Almost ready…");
 	}
 
 	#[test]

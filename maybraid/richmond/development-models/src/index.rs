@@ -63,6 +63,23 @@ impl DevelopmentEntryStore {
 		self.cells.get(&id).map(|e| &e.value)
 	}
 
+	/// Record one authored cell so [`Self::merged_pad_complex`] can grade terrain.
+	pub fn insert_cell(&mut self, id: Id, cell: DevelopmentCell) {
+		let bounds = cell.cell;
+		self.mark_development_change(id, &cell);
+		let version = self.stamp();
+		self.cells.insert(id, StoredEntry { value: cell, bounds, version });
+	}
+
+	/// Drop a cell inserted by [`Self::insert_cell`].
+	pub fn remove_cell(&mut self, id: Id) {
+		self.unindex_development_pads(id);
+		self.cells.remove(&id);
+		if let Ok(mut cache) = self.merged_pads.write() {
+			cache.clear();
+		}
+	}
+
 	pub fn filled_cells_overlapping(&self, region: Aabb3d) -> Vec<&DevelopmentCell> {
 		self.cells
 			.values()
@@ -440,6 +457,27 @@ mod tests {
 		assert_eq!(merged.pads.len(), 2);
 		assert!((merged.modify_elevation(0.0, 50.0, 50.0) - 12.0).abs() < 1e-5);
 		assert!((merged.modify_elevation(7.0, 500.0, 500.0) - 7.0).abs() < 1e-5);
+		Ok(())
+	}
+
+	#[test]
+	fn insert_cell_registers_pads_for_merge() -> Result<()> {
+		let mut store = DevelopmentEntryStore::default();
+		let config = DevelopmentConfig::default();
+		let bounds = Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(100.0, 100.0, 100.0));
+		let id = Id::from_cell(bounds);
+		store.insert_cell(id, DevelopmentCell::with_les_halles(bounds, 18.0, &config));
+		let merged = store.merged_pad_complex(bounds);
+		anyhow::ensure!(
+			(merged.modify_elevation(0.0, 50.0, 50.0) - 18.0).abs() < 1e-5,
+			"inserted pad should flatten the terrace"
+		);
+		store.remove_cell(id);
+		let cleared = store.merged_pad_complex(bounds);
+		anyhow::ensure!(
+			(cleared.modify_elevation(4.0, 50.0, 50.0) - 4.0).abs() < 1e-5,
+			"removed pad should leave raw height"
+		);
 		Ok(())
 	}
 

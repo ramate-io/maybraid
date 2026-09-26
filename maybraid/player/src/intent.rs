@@ -97,7 +97,7 @@ fn look_wish(yaw: f32, stick: Vec2) -> Vec3 {
 	let yaw = Quat::from_axis_angle(Vec3::Y, yaw);
 	let forward = yaw * -Vec3::Z;
 	let right = yaw * Vec3::X;
-	(right * stick.x + forward * stick.y).normalize_or_zero()
+	(right * stick.x + forward * stick.y).clamp_length_max(1.0)
 }
 
 #[cfg(test)]
@@ -137,6 +137,8 @@ mod tests {
 		let right = look_wish(0.0, Vec2::X);
 		assert!((right.x - 1.0).abs() < 1e-4, "{right}");
 		assert!(right.y.abs() < 1e-6);
+		let half = look_wish(0.0, Vec2::Y * 0.5);
+		assert!((half.length() - 0.5).abs() < 1e-4, "stick magnitude is the throttle: {half}");
 	}
 
 	#[test]

@@ -7,14 +7,14 @@ use menu_components::{
 };
 use player::Player;
 
-const VITALS_INSET: f32 = 16.0;
+pub(crate) const VITALS_INSET: f32 = 16.0;
 const VITALS_WIDTH: f32 = 228.0;
-const PLATE_PAD_X: f32 = 8.0;
-const PLATE_PAD_Y: f32 = 6.0;
-const PLATE_BORDER: f32 = 1.5;
-const PLATE_RADIUS: f32 = 8.0;
-const PLATE_FILL: Color = Color::srgba(0.52, 0.52, 0.56, 0.82);
-const PLATE_STROKE: Color = Color::srgba(0.78, 0.78, 0.82, 0.9);
+pub(crate) const PLATE_PAD_X: f32 = 8.0;
+pub(crate) const PLATE_PAD_Y: f32 = 6.0;
+pub(crate) const PLATE_BORDER: f32 = 1.5;
+pub(crate) const PLATE_RADIUS: f32 = 8.0;
+pub(crate) const PLATE_FILL: Color = Color::srgba(0.52, 0.52, 0.56, 0.82);
+pub(crate) const PLATE_STROKE: Color = Color::srgba(0.78, 0.78, 0.82, 0.9);
 const WELL_FILL: Color = Color::srgb(0.10, 0.11, 0.13);
 const WELL_STROKE: Color = Color::srgba(0.08, 0.08, 0.10, 0.95);
 const PIP_EMPTY: Color = Color::srgb(0.18, 0.19, 0.22);

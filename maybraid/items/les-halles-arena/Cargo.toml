@@ -1,0 +1,26 @@
+[package]
+name = "les-halles-arena"
+version = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+authors = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
+publish = { workspace = true }
+rust-version = { workspace = true }
+
+[dependencies]
+avian3d = { workspace = true }
+bevy = { workspace = true }
+firearms = { workspace = true }
+lod-avian = { workspace = true }
+movement-intelligence-richmond = { workspace = true }
+player = { workspace = true }
+procedural-common = { workspace = true }
+richmond-building-components = { workspace = true }
+richmond-building-physics = { workspace = true }
+richmond-buildings = { workspace = true }
+richmond-developments = { workspace = true }
+
+[lints]
+workspace = true

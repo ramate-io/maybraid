@@ -85,6 +85,9 @@ members = [
   "maybraid/world/playground",
   "maybraid/skill-map",
   "maybraid/game",
+  "maybraid/game-modes/discover",
+  "maybraid/game-modes/reliquary",
+  "maybraid/game-modes/training-ground",
   "maybraid/input",
   "maybraid/combat-hud",
   "maybraid/player",
@@ -101,6 +104,7 @@ members = [
   "maybraid/items/firearm-user",
   "maybraid/items/playground",
   "maybraid/items/firing-range-playground",
+  "maybraid/items/les-halles-arena",
 
   "maybraid/intelligence/lod",
   "maybraid/intelligence/movement/lib",
@@ -360,6 +364,10 @@ poi-playground = { path = "maybraid/intelligence/poi-playground" }
 routing-playground = { path = "maybraid/intelligence/routing-playground" }
 items-playground = { path = "maybraid/items/playground" }
 firing-range-playground = { path = "maybraid/items/firing-range-playground" }
+maybraid-game-mode-discover = { path = "maybraid/game-modes/discover" }
+maybraid-game-mode-reliquary = { path = "maybraid/game-modes/reliquary" }
+maybraid-game-mode-training-ground = { path = "maybraid/game-modes/training-ground" }
+les-halles-arena = { path = "maybraid/items/les-halles-arena" }
 
 gimme-core = { path = "maybraid/gimme/core" }
 gimme-gen = { path = "maybraid/gimme/gen" }

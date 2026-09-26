@@ -29,6 +29,9 @@ pub struct IApartmentParameterized {
 	pub windows: Vec<BaySpec>,
 	/// Preferred shaft footprint side length (meters), clamped to the 9-pocket.
 	pub shaft_side: f32,
+	/// Shaft side kept even where the 9-pocket clamp is tighter (meters); the
+	/// shaft then slides inward to stay clear of its host rect's walls.
+	pub min_shaft_side: f32,
 	/// Corridor clear width (meters) for inter-rect passages and HallsToShafts.
 	pub hall_width: f32,
 }
@@ -43,6 +46,8 @@ pub const MIN_CENTRAL_DEPTH: f32 = 2.5;
 
 pub const MIN_SHAFT_SIDE: f32 = 2.0;
 pub const MAX_SHAFT_SIDE: f32 = 5.0;
+/// Smallest shaft the 9-pocket clamp leaves by default.
+pub const MIN_POCKET_SHAFT_SIDE: f32 = 0.7;
 
 const SALT_STEM: f32 = 1.0;
 const SALT_FLANGE_T: f32 = 2.0;
@@ -135,8 +140,18 @@ impl IApartmentParameterized {
 			opening_density,
 			windows,
 			shaft_side,
+			min_shaft_side: MIN_POCKET_SHAFT_SIDE,
 			hall_width,
 		})
+	}
+
+	/// Raise the corridor width and the kept shaft side to a typology's
+	/// floors (meters). Larger sampled values stay as sampled.
+	pub fn with_minimums(mut self, hall_width: f32, shaft_side: f32) -> Self {
+		self.hall_width = self.hall_width.max(hall_width);
+		self.shaft_side = self.shaft_side.max(shaft_side);
+		self.min_shaft_side = self.min_shaft_side.max(shaft_side);
+		self
 	}
 
 	pub fn has_top_flange(&self) -> bool {

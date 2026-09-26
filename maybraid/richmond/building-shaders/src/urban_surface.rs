@@ -20,12 +20,14 @@ pub const RECIPE_TERRACOTTA: &str = "terracotta";
 pub const RECIPE_WOOD: &str = "wood";
 pub const RECIPE_HAY: &str = "hay";
 pub const RECIPE_IRON: &str = "iron";
+pub const RECIPE_STONE: &str = "stone";
 
 pub const KIND_STUCCO: u32 = 0;
 pub const KIND_TERRACOTTA: u32 = 1;
 pub const KIND_WOOD: u32 = 2;
 pub const KIND_HAY: u32 = 3;
 pub const KIND_IRON: u32 = 4;
+pub const KIND_STONE: u32 = 5;
 
 const SCALAR_VEC4S: usize = MATERIAL_SCALAR_FLOATS / 4;
 const DEFAULT_STUCCO_COLOR: Vec4 = Vec4::new(0.78, 0.72, 0.62, 1.0);
@@ -48,6 +50,8 @@ pub enum UrbanSurfaceKind {
 	Wood,
 	Hay,
 	Iron,
+	/// Coursed ashlar blocks with recessed mortar joints.
+	Stone,
 }
 
 impl UrbanSurfaceKind {
@@ -58,6 +62,7 @@ impl UrbanSurfaceKind {
 			Self::Wood => KIND_WOOD,
 			Self::Hay => KIND_HAY,
 			Self::Iron => KIND_IRON,
+			Self::Stone => KIND_STONE,
 		}
 	}
 
@@ -67,6 +72,7 @@ impl UrbanSurfaceKind {
 			RECIPE_WOOD => Self::Wood,
 			RECIPE_HAY => Self::Hay,
 			RECIPE_IRON => Self::Iron,
+			RECIPE_STONE => Self::Stone,
 			_ => Self::Stucco,
 		}
 	}
@@ -171,7 +177,10 @@ impl Material for UrbanSurfaceMaterial {
 
 /// Named recipes claimed by [`crate::RichmondUrbanMaterialLib`].
 pub fn is_urban_surface_recipe(name: &str) -> bool {
-	matches!(name, RECIPE_STUCCO | RECIPE_TERRACOTTA | RECIPE_WOOD | RECIPE_HAY | RECIPE_IRON)
+	matches!(
+		name,
+		RECIPE_STUCCO | RECIPE_TERRACOTTA | RECIPE_WOOD | RECIPE_HAY | RECIPE_IRON | RECIPE_STONE
+	)
 }
 
 #[cfg(test)]
@@ -193,5 +202,12 @@ mod tests {
 		assert_eq!(material.params.rasters[0][0], Vec4::new(1.0, 1.0, 1.0, 0.0));
 		assert!(is_urban_surface_recipe(RECIPE_STUCCO));
 		assert!(!is_urban_surface_recipe("clothing_cloth"));
+	}
+
+	#[test]
+	fn stone_recipe_packs_its_own_kind() {
+		let material = UrbanSurfaceMaterial::from_material_ref(&MaterialRef::named(RECIPE_STONE));
+		assert_eq!(material.params.kind, KIND_STONE);
+		assert!(is_urban_surface_recipe(RECIPE_STONE));
 	}
 }

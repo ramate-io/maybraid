@@ -4,7 +4,7 @@ use bevy::prelude::Color;
 use material_ref::MaterialRef;
 use procedural_common::{NoiseParams, SeededHash};
 use richmond_building_shaders::{
-	RECIPE_HAY, RECIPE_IRON, RECIPE_STUCCO, RECIPE_TERRACOTTA, RECIPE_WOOD,
+	RECIPE_HAY, RECIPE_IRON, RECIPE_STONE, RECIPE_STUCCO, RECIPE_TERRACOTTA, RECIPE_WOOD,
 };
 
 /// Architectural role used to select a stable family of wall and roof finishes.
@@ -169,6 +169,19 @@ impl DevelopmentFinish {
 			0.76,
 		);
 		Self { wall, roof }
+	}
+
+	/// Weathered grey-buff ashlar for curtain walls and ramparts.
+	pub fn rampart_stone(hash: SeededHash) -> MaterialRef {
+		custom_recipe_material(
+			RECIPE_STONE,
+			hash,
+			151,
+			[(0.46, 0.44, 0.40), (0.60, 0.56, 0.48)],
+			[(0.30, 0.29, 0.27), (0.52, 0.47, 0.38)],
+			[0.0, 0.55, 0.45],
+			0.35,
+		)
 	}
 
 	fn pick_default_urban(hash: SeededHash) -> Self {

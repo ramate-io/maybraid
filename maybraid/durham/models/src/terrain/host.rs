@@ -73,6 +73,17 @@ pub enum TerrainCoverage {
 	PlayableWorld,
 }
 
+/// When true, [`generate_cells`] keeps the current origin instead of recentering
+/// on the viewer. Training Ground pins a seeded FinePatch this way.
+#[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct TerrainLayoutPinned(pub bool);
+
+/// Durham fill. Session retargets run before [`Self::Generate`].
+#[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum TerrainFillSystems {
+	Generate,
+}
+
 /// Base noise used for camera height before (and alongside) generation.
 #[derive(Resource)]
 pub struct WorldBaseTerrain(pub BaseTerrainNoise);
@@ -167,6 +178,24 @@ fn world_cell_layout() -> TerrainCellLayout {
 	layout
 }
 
+/// Playable Discovery rings (near / far / background).
+pub fn playable_world_cell_layout() -> TerrainCellLayout {
+	world_cell_layout()
+}
+
+/// Four 160 m cells on a side, fixed on the origin. Training presents this
+/// patch instead of the playable-world rings.
+pub fn training_grounds_cell_layout() -> TerrainCellLayout {
+	training_grounds_cell_layout_at(IVec2::ZERO)
+}
+
+/// [`training_grounds_cell_layout`] centered on the cell corner `center`.
+pub fn training_grounds_cell_layout_at(center: IVec2) -> TerrainCellLayout {
+	let mut layout = cell_layout(2);
+	layout.origin += center;
+	layout
+}
+
 fn layout_for(coverage: TerrainCoverage, terrain_radius: i32) -> TerrainCellLayout {
 	match coverage {
 		TerrainCoverage::FinePatch => cell_layout(terrain_radius),
@@ -179,6 +208,27 @@ fn lod_bands_for(coverage: TerrainCoverage, terrain_radius: i32) -> Vec<TerrainM
 		TerrainCoverage::FinePatch => playground_lod_bands(terrain_radius),
 		TerrainCoverage::PlayableWorld => world_lod_bands(),
 	}
+}
+
+/// Point presentation assets at a coverage after a live session retarget.
+pub fn retarget_presentation_assets(
+	assets: &mut TerrainPresentationAssets,
+	coverage: TerrainCoverage,
+	terrain_radius: i32,
+) {
+	let (macro_seam_half_extents, macro_cell_min_size, macro_res_2) = match coverage {
+		TerrainCoverage::FinePatch => (Vec::new(), None, None),
+		TerrainCoverage::PlayableWorld => (
+			vec![WORLD_TERRAIN_NEAR_RADIUS_M, WORLD_TERRAIN_FAR_RADIUS_M],
+			Some(2.0 * TERRAIN_CELL_SIZE),
+			Some(3),
+		),
+	};
+	assets.lod_bands = lod_bands_for(coverage, terrain_radius);
+	assets.fine_grid_max_radius = Some(terrain_radius);
+	assets.macro_seam_half_extents = macro_seam_half_extents;
+	assets.macro_cell_min_size = macro_cell_min_size;
+	assets.macro_res_2 = macro_res_2;
 }
 
 /// Streamed terrain stack for model `M` (currently [`Durham`]).
@@ -254,6 +304,7 @@ impl Plugin for TerrainPlugin<Durham> {
 		.insert_resource(TerrainPresentEnabled(self.present))
 		.init_resource::<TerrainPresentPending>()
 		.init_resource::<TerrainStreamingEnabled>()
+		.init_resource::<TerrainLayoutPinned>()
 		.init_resource::<TerrainStreamPresenterState<TerrainNear>>()
 		.init_resource::<TerrainStreamPresenterState<TerrainFar>>()
 		.init_resource::<TerrainStreamPresenterState<TerrainBackground>>()
@@ -261,19 +312,23 @@ impl Plugin for TerrainPlugin<Durham> {
 		.add_systems(
 			Update,
 			generate_cells
+				.in_set(TerrainFillSystems::Generate)
 				.run_if(terrain_streaming_enabled)
 				.before(TerrainColliderSystems::QueueMeshes),
 		);
-		if self.present {
-			app.add_systems(
-				Update,
-				present_cells
-					.after(generate_cells)
-					.before(TerrainColliderSystems::QueueMeshes)
-					.run_if(terrain_streaming_enabled),
-			);
-		}
+		app.add_systems(
+			Update,
+			present_cells
+				.after(generate_cells)
+				.before(TerrainColliderSystems::QueueMeshes)
+				.run_if(terrain_streaming_enabled)
+				.run_if(terrain_present_enabled),
+		);
 	}
+}
+
+fn terrain_present_enabled(enabled: Res<TerrainPresentEnabled>) -> bool {
+	enabled.0
 }
 
 #[derive(Resource, Clone, Copy)]
@@ -341,6 +396,7 @@ fn generate_cells(
 	mut world_base: ResMut<WorldBaseTerrain>,
 	mut epoch: ResMut<TerrainColliderEpoch>,
 	mut mesh_budget: ResMut<MeshFulfillBudget<TerrainMeshBuilder>>,
+	pinned: Res<TerrainLayoutPinned>,
 	mut window_filled: Local<bool>,
 	lod_viewers: Query<&GlobalTransform, With<LodViewer>>,
 	cameras: Query<&GlobalTransform, With<Camera3d>>,
@@ -356,11 +412,13 @@ fn generate_cells(
 	let viewer = viewer_xz(&lod_viewers, &cameras);
 	if let Some(xz) = viewer {
 		mesh_budget.prefer_xz = Some(xz);
-		let mut layout = index.layout().clone();
-		if layout.recenter_on_xz(xz) {
-			index.set_layout(layout);
-			pending.0 = true;
-			*window_filled = false;
+		if !pinned.0 {
+			let mut layout = index.layout().clone();
+			if layout.recenter_on_xz(xz) {
+				index.set_layout(layout);
+				pending.0 = true;
+				*window_filled = false;
+			}
 		}
 	}
 
@@ -574,5 +632,45 @@ mod tests {
 	fn playable_world_disables_raw_presentation() {
 		assert!(!TerrainPlugin::<Durham>::playable_world().present);
 		assert!(TerrainPlugin::<Durham>::fine_patch(2).present);
+	}
+
+	#[test]
+	fn training_patch_is_a_pinned_four_cell_fine_grid() {
+		let layout = training_grounds_cell_layout();
+		assert!(!layout.is_streamed());
+		assert_eq!(layout.extents, UVec2::new(4, 4));
+		assert_eq!(layout.origin, IVec2::new(-2, -2));
+		assert!(!TerrainLayoutPinned::default().0);
+	}
+
+	#[test]
+	fn training_patch_centers_on_its_site() {
+		let site = IVec2::new(7, -3);
+		let layout = training_grounds_cell_layout_at(site);
+		assert_eq!(layout.origin, site - IVec2::splat(2));
+		assert_eq!(layout.extents, UVec2::new(4, 4));
+		let center = layout.region_center_xz();
+		assert!((center.x - 7.0 * layout.cell_size).abs() < 1e-3);
+		assert!((center.z + 3.0 * layout.cell_size).abs() < 1e-3);
+	}
+
+	#[test]
+	fn retarget_clears_playable_macro_bands_on_a_fine_patch() {
+		let mut assets = TerrainPresentationAssets {
+			config: TerrainConfig::new(42),
+			material: Handle::default(),
+			lod_bands: world_lod_bands(),
+			outer_add_walls: true,
+			fine_grid_max_radius: Some(WORLD_FINE_HALF_EXTENT_CELLS),
+			macro_seam_half_extents: vec![WORLD_TERRAIN_NEAR_RADIUS_M],
+			macro_cell_min_size: Some(2.0 * TERRAIN_CELL_SIZE),
+			macro_res_2: Some(3),
+		};
+		retarget_presentation_assets(&mut assets, TerrainCoverage::FinePatch, 2);
+		assert_eq!(assets.lod_bands, playground_lod_bands(2));
+		assert_eq!(assets.fine_grid_max_radius, Some(2));
+		assert!(assets.macro_seam_half_extents.is_empty());
+		assert!(assets.macro_cell_min_size.is_none());
+		assert!(assets.macro_res_2.is_none());
 	}
 }

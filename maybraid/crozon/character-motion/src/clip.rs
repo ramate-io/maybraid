@@ -13,8 +13,8 @@ use malo_animations::animations::{
 	DEFAULT_LANDING_SQUAT_SPEED, DEFAULT_PRE_SQUAT_SPEED, DEFAULT_SPRING_DURATION, TAKEOFF_END,
 };
 
-const RUN_CYCLE_SPEED: f32 = 1.4;
-const WALK_CYCLE_SPEED: f32 = 0.9;
+const RUN_CYCLE_SPEED: f32 = 1.68;
+const WALK_CYCLE_SPEED: f32 = 1.08;
 /// Slow rest cycle so a crowd idle is a sway, not a march.
 pub const IDLE_CYCLE_SPEED: f32 = 0.2;
 const GALLOP_CYCLE_SPEED: f32 = 0.35;

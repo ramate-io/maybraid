@@ -2,11 +2,13 @@
 
 The actual Maybraid game.
 
-Starts on the home screen. Discovery and Reliquary enter the world playground.
-Characters opens the character screen. In world, Start (Enter on keyboard)
-overlays the in-game menu; Start again dismisses it. Leave on that menu returns
-home. Training Ground is not wired yet. Settings opens the same pause
-settings overlay (shadows, mob HUD); Back / Escape returns home.
+Starts on the home screen. Discovery enters the streamed world. Training Ground
+seats the saved character at a seeded Richmond development on a pinned FinePatch
+of that same stack. Characters opens the
+character screen. Reliquary is not wired yet. In world, Start (Enter on
+keyboard) overlays the in-game menu; Start again dismisses it. Leave on that
+menu returns home. Settings opens the same pause settings overlay (shadows, mob
+HUD); Back / Escape returns home.
 
 ```bash
 cargo run -p maybraid

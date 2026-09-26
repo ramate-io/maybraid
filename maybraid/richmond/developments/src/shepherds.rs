@@ -22,6 +22,7 @@ use richmond_buildings::{
 	ILivableFloorPlan, ILivableParameterized, ILivableStorey, Opening, OpeningId, OpeningLabel,
 	Openings, Overhang, RectFloor, RectFloorParams, RectFloorSide, RectFloorSlab,
 	RectangularPitchedRoofComplex, RectangularPitchedRoofComplexParams, StairwellKind, WellAabb,
+	MIN_HALL_WIDTH, MIN_POCKET_SHAFT_SIDE,
 };
 
 use crate::connected::ConnectedDevelopment;
@@ -31,8 +32,11 @@ pub const HOUSE_MIN_FOOTPRINT: f32 = 12.0;
 pub const HOUSE_MAX_FOOTPRINT: f32 = 24.0;
 pub const HUT_MIN_FOOTPRINT: f32 = 4.0;
 pub const HUT_MAX_FOOTPRINT: f32 = 8.0;
-pub const HOUSE_STOREY_HEIGHT: f32 = 3.0;
+pub const HOUSE_STOREY_HEIGHT: f32 = 3.0 * 1.3;
 pub const HUT_HEIGHT: f32 = 2.8;
+/// House corridors and stair shafts run wider than the shared I-frame floors.
+pub const HOUSE_MIN_HALL_WIDTH: f32 = MIN_HALL_WIDTH * 1.2;
+pub const HOUSE_MIN_SHAFT_SIDE: f32 = MIN_POCKET_SHAFT_SIDE * 2.0;
 
 const SALT_STOREYS: f32 = 71.0;
 const SALT_WALL_STYLE: f32 = 73.0;
@@ -116,7 +120,8 @@ impl Fit for ShepherdsHouse {
 			Vec3::new(confines.bounds.max.x, y0 + HOUSE_STOREY_HEIGHT, confines.bounds.max.z),
 		);
 		let base_empty = Confines::new(base_bounds, confines.roll, Openings::new());
-		let mut params = ILivableParameterized::sample(&base_empty, noise)?;
+		let mut params = ILivableParameterized::sample(&base_empty, noise)?
+			.with_minimums(HOUSE_MIN_HALL_WIDTH, HOUSE_MIN_SHAFT_SIDE);
 		// I-frame family only: preserve sampled I/T/L/Z variants, but reject the
 		// sampler's small plain-stem tail.
 		if !params.has_top_flange() && !params.has_bottom_flange() {
@@ -129,7 +134,10 @@ impl Fit for ShepherdsHouse {
 			.ok_or(FitError::TooSmall { reason: "shepherds_house_door_edge" })?;
 
 		let shaft_openings = if storey_count == 2 {
-			one_shaft(ILivableFloorPlan::shaft_requests_for_primary_rects(&params, &base_empty))
+			roomiest_shaft(
+				ILivableFloorPlan::shaft_requests_for_primary_rects(&params, &base_empty),
+				&provisional,
+			)
 		} else {
 			Openings::new()
 		};
@@ -558,8 +566,21 @@ impl BuildingComponents for ShepherdsHut {
 	}
 }
 
-fn one_shaft(openings: Openings) -> Openings {
-	let Some((id, opening)) = openings.iter().min_by_key(|(id, _)| id.as_str()) else {
+/// Keep the one shaft request whose host rect has the longest short side, so
+/// the stair lands in the wing with room for [`HOUSE_MIN_SHAFT_SIDE`].
+fn roomiest_shaft(openings: Openings, plan: &ILivableFloorPlan) -> Openings {
+	let room = |opening: &Opening| {
+		let center = (Vec3::from(opening.bounds.min) + Vec3::from(opening.bounds.max)) * 0.5;
+		plan.primary_rects
+			.iter()
+			.filter(|r| (r.min_x..=r.max_x).contains(&center.x))
+			.filter(|r| (r.min_z..=r.max_z).contains(&center.z))
+			.map(|r| r.width().min(r.depth()))
+			.fold(0.0_f32, f32::max)
+	};
+	let Some((id, opening)) = openings.iter().max_by(|(a_id, a), (b_id, b)| {
+		room(a).total_cmp(&room(b)).then_with(|| b_id.as_str().cmp(a_id.as_str()))
+	}) else {
 		return Openings::new();
 	};
 	Openings::new().with(id.clone(), opening.clone())
@@ -640,7 +661,10 @@ mod tests {
 
 	fn confines(footprint: Vec2) -> Confines {
 		Confines::new(
-			Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(footprint.x, 6.0, footprint.y)),
+			Aabb3d::from_min_max(
+				Vec3::ZERO,
+				Vec3::new(footprint.x, 2.0 * HOUSE_STOREY_HEIGHT, footprint.y),
+			),
 			0.0,
 			Openings::new(),
 		)
@@ -683,6 +707,39 @@ mod tests {
 		}
 		assert!(one_storey > two_storey, "70/30 sampling should favor one-storey houses");
 		assert!(two_storey > 0, "sample should still contain two-storey houses");
+	}
+
+	#[test]
+	fn houses_keep_wide_halls_tall_storeys_and_roomy_shafts() -> anyhow::Result<()> {
+		let mut stairs = 0;
+		for foot in [16.0, 20.0, 24.0] {
+			for seed in 0..24 {
+				let noise = NoiseParams { seed, ..NoiseParams::default() };
+				let (house, _) =
+					ShepherdsHouse::fit_to_confines(&confines(Vec2::splat(foot)), noise)?;
+				let plan = &house.storeys[0].floor_plan;
+				anyhow::ensure!(plan.hall_width >= HOUSE_MIN_HALL_WIDTH - 1e-3);
+				anyhow::ensure!((plan.storey_height - HOUSE_STOREY_HEIGHT).abs() < 1e-3);
+				let Some(shaft) = plan.shaft_bounds.first() else { continue };
+				stairs += 1;
+				let side = (shaft.max.x - shaft.min.x).min(shaft.max.z - shaft.min.z);
+				anyhow::ensure!(
+					side >= HOUSE_MIN_SHAFT_SIDE - 1e-3,
+					"{foot} m house seed {seed} shaft is only {side:.2} m"
+				);
+				anyhow::ensure!(
+					plan.primary_rects.iter().any(|rect| {
+						shaft.min.x >= rect.min_x
+							&& shaft.max.x <= rect.max_x
+							&& shaft.min.z >= rect.min_z
+							&& shaft.max.z <= rect.max_z
+					}),
+					"{foot} m house seed {seed} shaft leaves its rect"
+				);
+			}
+		}
+		anyhow::ensure!(stairs > 0, "the sample should include two-storey houses");
+		Ok(())
 	}
 
 	#[test]

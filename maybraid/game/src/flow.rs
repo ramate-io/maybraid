@@ -1,6 +1,7 @@
 //! Title / characters / world routing for the Maybraid executable.
 
 use bevy::prelude::*;
+use maybraid_game_mode_reliquary::{self as reliquary, ReliquaryRoute};
 use menu_screens::{HomeMenuChoice, InGameMenuChoice};
 
 /// Which shell the executable is showing. World gameplay is only live in
@@ -23,10 +24,30 @@ pub enum WorldPause {
 	Menu,
 }
 
+/// Which world mount is live. [`GameFlow::World`] is shared; this picks the scene.
+#[derive(Resource, Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
+pub enum PlaySession {
+	#[default]
+	None,
+	Discovery,
+	Training,
+}
+
+impl PlaySession {
+	pub fn label(self) -> &'static str {
+		match self {
+			Self::Discovery | Self::None => "Discovery",
+			Self::Training => "Training Ground",
+		}
+	}
+}
+
 /// What the executable does with a home-row pick.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HomeRoute {
-	World { label: &'static str },
+	World { session: PlaySession },
+	/// Pick who plays the Training rounds before loading.
+	TrainingSetup,
 	Characters,
 	Settings,
 	Unimplemented,
@@ -35,10 +56,13 @@ pub enum HomeRoute {
 impl HomeRoute {
 	pub fn from_choice(choice: HomeMenuChoice) -> Self {
 		match choice {
-			HomeMenuChoice::Discovery => Self::World { label: choice.label() },
+			HomeMenuChoice::Discovery => Self::World { session: PlaySession::Discovery },
+			HomeMenuChoice::TrainingGround => Self::TrainingSetup,
 			HomeMenuChoice::Characters => Self::Characters,
 			HomeMenuChoice::Settings => Self::Settings,
-			HomeMenuChoice::Reliquary | HomeMenuChoice::TrainingGround => Self::Unimplemented,
+			HomeMenuChoice::Reliquary => match reliquary::route() {
+				ReliquaryRoute::Unimplemented => Self::Unimplemented,
+			},
 		}
 	}
 }
@@ -58,7 +82,11 @@ impl PauseMenuRoute {
 			InGameMenuChoice::Leave => Self::Leave,
 			InGameMenuChoice::Settings => Self::Settings,
 			InGameMenuChoice::Character => Self::Character,
-			InGameMenuChoice::Records | InGameMenuChoice::Help => Self::Stay,
+			// The pause screen flips the next round's mode and the markers itself.
+			InGameMenuChoice::NextRound
+			| InGameMenuChoice::EnemyMarkers
+			| InGameMenuChoice::Records
+			| InGameMenuChoice::Help => Self::Stay,
 		}
 	}
 }
@@ -71,7 +99,7 @@ mod tests {
 	fn discovery_enters_world() {
 		assert_eq!(
 			HomeRoute::from_choice(HomeMenuChoice::Discovery),
-			HomeRoute::World { label: "Discovery" }
+			HomeRoute::World { session: PlaySession::Discovery }
 		);
 	}
 
@@ -86,11 +114,12 @@ mod tests {
 	}
 
 	#[test]
-	fn training_stays_on_home() {
+	fn training_picks_a_character_mode_first() {
 		assert_eq!(
 			HomeRoute::from_choice(HomeMenuChoice::TrainingGround),
-			HomeRoute::Unimplemented
+			HomeRoute::TrainingSetup
 		);
+		assert_eq!(PauseMenuRoute::from_choice(InGameMenuChoice::NextRound), PauseMenuRoute::Stay);
 	}
 
 	#[test]

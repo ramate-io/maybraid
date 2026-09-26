@@ -8,7 +8,10 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
-use durham_terrain_models::{PresentedTerrainScene, TerrainCellLayout};
+use durham_terrain_models::{
+	PresentedTerrainScene, TerrainCellLayout, TerrainColliderMeshSource, TerrainSuperseded,
+	TerrainTrimeshCollider,
+};
 use lod::gen::{
 	GeneratingSpatialIndex, Id, LodGenerateBudget, LodGenerateKeepRegion, LodGenerateQueue,
 	LodGenerateRegion, MaterializeStatus, SpatialIndex, StorageStatus, Version,
@@ -18,8 +21,8 @@ use lod::presentation::{LodPresentKeepRegion, LodPresentRegion};
 use lod::{LodGeneratePlugin, LodGenerateRegionPlugin, LodPresentRegionPlugin, LodViewer};
 use procedural_common::NoiseParams;
 use richmond_development_models::{
-	BuiltDevelopment, DevelopmentCell, DevelopmentEntryStore, DevelopmentIndex,
-	PaddedStoreView, PaddedTerrainPresenter, TerrainWithPads,
+	BuiltDevelopment, DevelopmentCell, DevelopmentEntryStore, DevelopmentIndex, PaddedStoreView,
+	PaddedTerrainPresenter, PresentedPaddedTerrainScene, TerrainWithPads,
 };
 use richmond_urbanization::{
 	SelectedUrbanization, UrbanDevelopmentKind, UrbanizationExtent, UrbanizationGenerateBullseye,
@@ -28,6 +31,7 @@ use richmond_urbanization::{
 };
 
 use crate::hosts::spawn_tagged_host_entities;
+use crate::UrbanizationStreamingEnabled;
 
 /// Default present ring multiplier (`1` → 1 km present / 3 km generate).
 pub const DEFAULT_URBANIZATION_STREAM_RADIUS: u32 = 1;
@@ -118,6 +122,9 @@ pub struct UrbanizationPresenterState {
 #[derive(Resource, Default)]
 pub struct UrbanizationPaddedTerrainState {
 	wanted: HashSet<Id>,
+	/// Raw ids this stream superseded. Only these are handed back, so raw
+	/// cells another owner hid (Training's courtyard) stay hidden.
+	replaced: HashSet<Id>,
 }
 
 /// Type-erased anchor for one presented urban setting.
@@ -279,15 +286,19 @@ impl UrbanizationStreamLod<'_> {
 }
 
 /// Drive urbanization bullseyes from [`crate::PlaygroundConfig::urbanization`].
+/// Disabling [`UrbanizationStreamingEnabled`] tears the stream down like an
+/// absent spec.
 pub fn stream_urbanization(
 	mut commands: Commands,
 	config: Res<crate::PlaygroundConfig>,
+	enabled: Res<UrbanizationStreamingEnabled>,
 	camera: Query<&Transform, With<Camera3d>>,
 	mut lod: UrbanizationStreamLod,
 	mut last_key: Local<Option<String>>,
 ) {
 	let cam = camera.single().ok().map(|t| t.translation);
-	lod.apply_spec(&mut commands, config.urbanization.as_ref(), cam, &mut last_key);
+	let spec = config.urbanization.as_ref().filter(|_| enabled.0);
+	lod.apply_spec(&mut commands, spec, cam, &mut last_key);
 }
 
 /// Bounded leaf generate on the 1 km urbanization keep. Height GET miss
@@ -506,9 +517,11 @@ pub fn generate_urbanization_padded_terrain(
 }
 
 /// Present padded replacements for the urbanization keep and cull stale cells.
+/// With urbanization off every padded cell is culled.
 #[allow(private_interfaces)]
 pub fn present_urbanization_padded_terrain(
 	config: Res<crate::PlaygroundConfig>,
+	enabled: Res<UrbanizationStreamingEnabled>,
 	keep: Res<LodPresentKeepRegion<UrbanizationLodChan>>,
 	layout: Res<TerrainCellLayout>,
 	store: Res<DevelopmentEntryStore>,
@@ -518,8 +531,8 @@ pub fn present_urbanization_padded_terrain(
 	cameras: Query<&GlobalTransform, With<Camera3d>>,
 	mut last: Local<Option<PaddedTerrainTickKey>>,
 ) {
-	let Some(region) =
-		pad_visual_region(&layout, keep.region).filter(|_| config.urbanization.is_some())
+	let Some(region) = pad_visual_region(&layout, keep.region)
+		.filter(|_| config.urbanization.is_some() && enabled.0)
 	else {
 		if last.is_some() || !state.wanted.is_empty() {
 			state.wanted.clear();
@@ -563,19 +576,42 @@ pub fn present_urbanization_padded_terrain(
 	*last = Some(key);
 }
 
-/// Hide raw Durham visual roots while their padded replacements are active.
-/// Collision lives on the padded fill scene itself.
+/// Hand a raw Durham cell to its padded replacement once that fill can bear
+/// weight: hide the raw mesh and supersede its collider. Until then the raw
+/// cell stays the floor, so there is never a frame with no collider.
 pub fn sync_raw_terrain_replacements(
-	state: Res<UrbanizationPaddedTerrainState>,
-	mut raw_roots: Query<(&PresentedTerrainScene, &mut Visibility)>,
+	mut commands: Commands,
+	mut state: ResMut<UrbanizationPaddedTerrainState>,
+	padded: Query<(
+		&PresentedPaddedTerrainScene,
+		Has<TerrainTrimeshCollider>,
+		Has<TerrainColliderMeshSource>,
+	)>,
+	mut raw_roots: Query<(Entity, &PresentedTerrainScene, &mut Visibility, Has<TerrainSuperseded>)>,
 ) {
-	for (presented, mut visibility) in &mut raw_roots {
-		let replaced = state.wanted.contains(&presented.0);
-		let desired = if replaced { Visibility::Hidden } else { Visibility::Inherited };
-		if *visibility != desired {
-			*visibility = desired;
+	let ready: HashSet<Id> = padded
+		.iter()
+		.filter(|(scene, cooked, collides)| {
+			state.wanted.contains(&scene.0) && (*cooked || !*collides)
+		})
+		.map(|(scene, _, _)| scene.0)
+		.collect();
+	for (entity, presented, mut visibility, superseded) in &mut raw_roots {
+		if ready.contains(&presented.0) {
+			if *visibility != Visibility::Hidden {
+				*visibility = Visibility::Hidden;
+			}
+			if !superseded {
+				commands.entity(entity).insert(TerrainSuperseded);
+			}
+		} else if state.replaced.contains(&presented.0) {
+			*visibility = Visibility::Inherited;
+			if superseded {
+				commands.entity(entity).remove::<TerrainSuperseded>();
+			}
 		}
 	}
+	state.replaced = ready;
 }
 
 #[cfg(test)]
@@ -608,6 +644,57 @@ mod tests {
 		let (present, generate) = stream_radii_m(DEFAULT_URBANIZATION_STREAM_RADIUS);
 		assert!((present - DEVELOPMENT_PRESENT_RADIUS_M).abs() < 1e-3);
 		assert!((generate - DEVELOPMENT_GENERATE_RADIUS_M).abs() < 1e-3);
+		Ok(())
+	}
+
+	#[test]
+	fn raw_cell_hands_its_floor_to_a_cooked_padded_replacement() -> Result<()> {
+		use bevy::ecs::system::RunSystemOnce;
+		use bevy::math::bounding::Aabb3d;
+		let id = Id::from_cell(Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE));
+		let mut world = World::new();
+		world.insert_resource(UrbanizationPaddedTerrainState {
+			wanted: HashSet::from([id]),
+			replaced: HashSet::new(),
+		});
+		let raw = world.spawn((PresentedTerrainScene(id), Visibility::Inherited)).id();
+		let padded = world.spawn((PresentedPaddedTerrainScene(id), TerrainColliderMeshSource)).id();
+		let run = |world: &mut World| {
+			world
+				.run_system_once(sync_raw_terrain_replacements)
+				.map_err(|error| anyhow::anyhow!("{error:?}"))
+		};
+
+		run(&mut world)?;
+		assert!(world.get::<TerrainSuperseded>(raw).is_none(), "uncooked pads cannot bear weight");
+		assert_eq!(world.get::<Visibility>(raw), Some(&Visibility::Inherited));
+
+		world.entity_mut(padded).insert(TerrainTrimeshCollider);
+		run(&mut world)?;
+		assert!(world.get::<TerrainSuperseded>(raw).is_some(), "raw floor stays under pads");
+		assert_eq!(world.get::<Visibility>(raw), Some(&Visibility::Hidden));
+
+		world.resource_mut::<UrbanizationPaddedTerrainState>().wanted.clear();
+		run(&mut world)?;
+		assert!(world.get::<TerrainSuperseded>(raw).is_none(), "raw cell collides again");
+		assert_eq!(world.get::<Visibility>(raw), Some(&Visibility::Inherited));
+		Ok(())
+	}
+
+	#[test]
+	fn raw_cells_another_owner_superseded_stay_superseded() -> Result<()> {
+		use bevy::ecs::system::RunSystemOnce;
+		use bevy::math::bounding::Aabb3d;
+		let id = Id::from_cell(Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE));
+		let mut world = World::new();
+		world.init_resource::<UrbanizationPaddedTerrainState>();
+		let raw =
+			world.spawn((PresentedTerrainScene(id), Visibility::Hidden, TerrainSuperseded)).id();
+		world
+			.run_system_once(sync_raw_terrain_replacements)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(world.get::<TerrainSuperseded>(raw).is_some());
+		assert_eq!(world.get::<Visibility>(raw), Some(&Visibility::Hidden));
 		Ok(())
 	}
 
