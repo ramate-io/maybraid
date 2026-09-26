@@ -67,8 +67,62 @@ cargo build -p maybraid --release
 ./target/release/maybraid
 ```
 
-> [!NOTE]
-> We will soon be adding a compatibility table with recommended settings by device. 
+> [!WARNING]
+> We are currently shipping unsigned binaries. Check the instructions for how to load the game for your operating system.
+>
+> **MacOS**
+> 1. Drag the downloaded .dmg file into the Applications folder, replacing any existing Maybraid application.
+> 2. Open Terminal and enter the following command to allow the game to run:
+> ```shell
+> xattr -d com.apple.quarantine /Applications/Maybraid.app
+> ```
+> 3. Open the Maybraid application from the Applications folder.
+>
+> **Windows**
+> 1. Drag the downloaded .exe file into the desired location.
+> 2. Open the Maybraid application from the desired location.
+>
+> **Linux**
+> 1. Drag the downloaded .AppImage file into the desired location.
+> 2. Open the Maybraid application from the desired location.
+
+### Expected FPS
+
+| Memory / GPU Configuration | Expected FPS |
+|---|---:|
+| ~8 GB integrated memory | ~20–30 FPS |
+| ~16 GB integrated memory | ~40 FPS |
+| ~24 GB integrated memory | ~60 FPS |
+| ~32 GB integrated memory | ~60+ FPS |
+| ~8 GB system RAM + 4–6 GB discrete VRAM | ~40 FPS |
+| ~16 GB system RAM + 6–8 GB discrete VRAM | ~60 FPS |
+| ~32 GB system RAM + 8+ GB discrete VRAM | ~60+ FPS |
+
+> Discrete-GPU figures are rough extrapolations. Actual performance will depend substantially on GPU architecture, memory bandwidth, CPU performance, and drivers.
+
+### Recommended Settings
+
+| Available Memory | Shadows |
+|---|---|
+| 16 GB | Off |
+| 24 GB | Medium |
+| 32 GB+ | High |
+
+### Memory Usage
+
+| Platform | Memory Usage | Status |
+|---|---:|---|
+| Apple Silicon | ~8 GB | Play-tested |
+| Intel x86_64 (inc. SteamOS) | ~8 GB | Expected |
+| Windows | ~8 GB | Expected |
+
+### Test Status
+
+| Platform | Play Tested | Benchmarked |
+|---|---|---|
+| Apple Silicon | Yes | Yes |
+| Intel x86_64 (inc. SteamOS) | No | No |
+| Windows | No | No |
 
 ## Developers
 

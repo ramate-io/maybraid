@@ -150,14 +150,14 @@ members = [
 ]
 
 [workspace.package]
-version = "0.0.1"
+version = "0.1.0"
 edition = "2021"
-license = "MIT OR Apache-2.0"
-authors = ["Movement Labs"]
-repository = "www.github.com/ramate-io/wctp"
-homepage = "www.github.com/ramate-io/wctp"
+license = "LICENSE.md" 
+authors = ["Ramate LLC"]
+repository = "www.github.com/ramate-io/maybraid"
+homepage = "www.github.com/ramate-io/maybraid"
 publish = false
-rust-version = "1.85.0"
+rust-version = "1.95.0"
 
 
 [workspace.dependencies]
@@ -215,7 +215,7 @@ gloo-timers = { version = "0.2" }
 chrono = { version = "0.4.41" }
 reqwest = { version = "0.12", features = ["json"] }
 base64 = "0.22"
-bevy = { version = "0.19.0" }
+bevy = { version = "0.19.1" }
 bevy_hanabi = { version = "0.19", default-features = false, features = ["3d"] }
 js-sys = "0.3"
 log = "0.4"
