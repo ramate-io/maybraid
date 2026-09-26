@@ -70,6 +70,7 @@ struct PendingCameraFocus {
 	/// Garment reveals have no rig; offsets are world space around the origin.
 	world_space: bool,
 	orbit: PreviewOrbit,
+	waiting: Option<FocusWait>,
 }
 
 impl PendingCameraFocus {
@@ -162,6 +163,19 @@ impl FocusFrame {
 	}
 }
 
+/// Why a rig focus has not framed yet.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum FocusWait {
+	/// No preview rig with the focus role.
+	Rig,
+	/// The socket bone has not been mapped on this rig yet.
+	Socket(Entity),
+	/// This rig's proportional pose has not been written yet.
+	Pose(Entity),
+	/// This rig is not parented onto its socket yet.
+	Attach(Entity),
+}
+
 type FocusRigs<'w, 's> = Query<
 	'w,
 	's,
@@ -187,30 +201,38 @@ struct FocusRigScene<'w, 's> {
 }
 
 impl FocusRigScene<'_, '_> {
-	/// `None` until the focus rig and every rig above it are posed and
+	/// Waits until the focus rig and every rig above it are posed and
 	/// socketed, so a head focus never frames a head still parked at the
 	/// character origin.
-	fn resolve(&self, focus: CameraFocus) -> Option<FocusFrame> {
+	fn resolve(&self, focus: CameraFocus) -> Result<FocusFrame, FocusWait> {
 		let role = match focus.rig {
 			FocusRig::Body => CharacterRigRole::Body,
 			FocusRig::Head => CharacterRigRole::Head,
 		};
 		for members in &self.roots {
-			let Some((rig, bones)) = members.iter().find_map(|member| {
-				let (rig, bones, ..) = self.rigs.get(member).ok()?;
-				(rig.role == role).then_some((member, bones))
+			let Some((rig, bones, posed)) = members.iter().find_map(|member| {
+				let (rig, bones, _, _, posed, ..) = self.rigs.get(member).ok()?;
+				(rig.role == role).then_some((member, bones, posed))
 			}) else {
 				continue;
 			};
-			let anchor = match focus.socket {
-				"root" => rig,
-				socket => bones.by_name.get(socket).copied().unwrap_or(rig),
+			let anchor = match (focus.socket, bones.by_name.get(focus.socket)) {
+				("root", _) => rig,
+				(_, Some(bone)) => *bone,
+				(_, None) if posed => rig,
+				(_, None) => return Err(FocusWait::Socket(rig)),
 			};
 			let rest = self.rest_rotations(members);
 			let rotation = self.rest_rotation(anchor, &rest)?;
-			return Some(FocusFrame::socketed(anchor, rotation, focus));
+			return Ok(FocusFrame::socketed(anchor, rotation, focus));
 		}
-		None
+		Err(FocusWait::Rig)
+	}
+
+	/// Head armatures carry none of the humanoid landmark bones, so the rigs
+	/// pose pass never marks them; they have no proportional pose to wait on.
+	fn awaits_pose(role: CharacterRigRole, posed: bool) -> bool {
+		!posed && role != CharacterRigRole::Head
 	}
 
 	/// Bind rotation with the proportional pose offset, keyed by bone entity.
@@ -229,13 +251,20 @@ impl FocusRigScene<'_, '_> {
 		rest
 	}
 
-	fn rest_rotation(&self, entity: Entity, rest: &HashMap<Entity, Quat>) -> Option<Quat> {
+	fn rest_rotation(
+		&self,
+		entity: Entity,
+		rest: &HashMap<Entity, Quat>,
+	) -> Result<Quat, FocusWait> {
 		let mut rotation = Quat::IDENTITY;
 		let mut current = Some(entity);
 		while let Some(entity) = current {
-			if let Ok((_, _, _, _, posed, socketed, fulfilled)) = self.rigs.get(entity) {
-				if !posed || (socketed && !fulfilled) {
-					return None;
+			if let Ok((rig, _, _, _, posed, socketed, fulfilled)) = self.rigs.get(entity) {
+				if Self::awaits_pose(rig.role, posed) {
+					return Err(FocusWait::Pose(entity));
+				}
+				if socketed && !fulfilled {
+					return Err(FocusWait::Attach(entity));
 				}
 			}
 			let local = match rest.get(&entity) {
@@ -245,7 +274,7 @@ impl FocusRigScene<'_, '_> {
 			rotation = local * rotation;
 			current = self.parents.get(entity).ok().map(ChildOf::parent);
 		}
-		Some(rotation.normalize())
+		Ok(rotation.normalize())
 	}
 }
 
@@ -668,11 +697,18 @@ fn apply_preview_camera_focus(
 	} else if pending.world_space {
 		FocusFrame::world(focus.camera_offset, focus.look_at_offset)
 	} else {
-		let Some(frame) = scene.resolve(focus) else {
-			return;
-		};
-		frame
+		match scene.resolve(focus) {
+			Ok(frame) => frame,
+			Err(wait) => {
+				if pending.waiting != Some(wait) {
+					debug!("preview focus {:?}/{} waiting: {wait:?}", focus.rig, focus.socket);
+					pending.waiting = Some(wait);
+				}
+				return;
+			}
+		}
 	};
+	pending.waiting = None;
 	let Some((target, look_at)) = frame.place(&mut pending.orbit, &scene.transforms) else {
 		pending.frame = None;
 		return;
@@ -778,55 +814,85 @@ mod tests {
 		assert!(pending.frame.is_none());
 	}
 
-	fn resolve_eye(scene: FocusRigScene) -> Option<FocusFrame> {
+	fn resolve_eye(scene: FocusRigScene) -> Result<FocusFrame, FocusWait> {
 		scene.resolve(EYE_FOCUS)
 	}
 
-	fn rig(role: CharacterRigRole, bone: &str, entity: Entity) -> impl Bundle {
+	/// `posed` mirrors the rigs pose pass: bind rotations and the marker land
+	/// together, and head armatures never get either.
+	fn rig(role: CharacterRigRole, bone: &str, entity: Entity, posed: bool) -> impl Bundle {
 		let mut bind = RigBindScales::default();
-		bind.rotations.insert(bone.to_string(), Quat::IDENTITY);
+		if posed {
+			bind.rotations.insert(bone.to_string(), Quat::IDENTITY);
+		}
 		(
 			CharacterRig { role, ..default() },
 			BoneMap { by_name: [(bone.to_string(), entity)].into_iter().collect() },
 			bind,
 			ActiveRigPose::default(),
-			ResolvedPoseApplied,
 		)
+	}
+
+	struct Fixture {
+		world: World,
+		body: Entity,
+		neck: Entity,
+		head: Entity,
+		eye: Entity,
+	}
+
+	impl Fixture {
+		fn new() -> Self {
+			use crozon_characters::MemberOf;
+
+			let mut world = World::new();
+			let root = world.spawn((CharacterPreviewRoot, Transform::IDENTITY)).id();
+			let neck = world.spawn(Transform::from_xyz(0.0, 1.5, 0.0)).id();
+			let body = world
+				.spawn((rig(CharacterRigRole::Body, "neck", neck, true), MemberOf(root)))
+				.id();
+			world.entity_mut(body).insert(ChildOf(root));
+			world.entity_mut(neck).insert(ChildOf(body));
+			let eye = world.spawn(Transform::from_xyz(0.03, 0.1, 0.1)).id();
+			let head = world
+				.spawn((
+					rig(CharacterRigRole::Head, "eye_socket.L", eye, false),
+					MemberOf(root),
+					SocketRefRoot::default(),
+					ChildOf(root),
+				))
+				.id();
+			world.entity_mut(eye).insert(ChildOf(head));
+			Self { world, body, neck, head, eye }
+		}
+
+		fn resolve(&mut self) -> Result<Result<FocusFrame, FocusWait>, String> {
+			use bevy::ecs::system::RunSystemOnce;
+			self.world.run_system_once(resolve_eye).map_err(|error| format!("{error:?}"))
+		}
 	}
 
 	#[test]
 	fn head_focus_waits_for_the_socket_and_ignores_the_clip(
 	) -> Result<(), Box<dyn std::error::Error>> {
-		use bevy::ecs::system::RunSystemOnce;
-		use crozon_characters::MemberOf;
+		let mut fixture = Fixture::new();
+		fixture.world.entity_mut(fixture.body).insert(ResolvedPoseApplied);
+		assert_eq!(fixture.resolve()?, Err(FocusWait::Attach(fixture.head)));
 
-		let mut world = World::new();
-		let root = world.spawn((CharacterPreviewRoot, Transform::IDENTITY)).id();
-		let neck = world.spawn(Transform::from_xyz(0.0, 1.5, 0.0)).id();
-		let body = world.spawn((rig(CharacterRigRole::Body, "neck", neck), MemberOf(root))).id();
-		world.entity_mut(body).insert(ChildOf(root));
-		world.entity_mut(neck).insert(ChildOf(body));
-		let eye = world.spawn(Transform::from_xyz(0.03, 0.1, 0.1)).id();
-		let head = world
-			.spawn((
-				rig(CharacterRigRole::Head, "eye_socket.L", eye),
-				MemberOf(root),
-				SocketRefRoot::default(),
-				ChildOf(root),
-			))
-			.id();
-		world.entity_mut(eye).insert(ChildOf(head));
-
-		let resolve = |world: &mut World| {
-			world.run_system_once(resolve_eye).map_err(|error| format!("{error:?}"))
-		};
-		assert_eq!(resolve(&mut world)?, None, "head is still parked at the root");
-
-		world.entity_mut(head).insert((ChildOf(neck), SocketRefApplied));
-		world.entity_mut(eye).insert(Transform::from_rotation(Quat::from_rotation_y(1.0)));
-		let frame = resolve(&mut world)?.ok_or("socketed head should resolve")?;
-		assert_eq!(frame.anchor, Some(eye));
+		fixture.world.entity_mut(fixture.head).insert((ChildOf(fixture.neck), SocketRefApplied));
+		let clip = Transform::from_xyz(0.0, 1.5, 0.0).with_rotation(Quat::from_rotation_y(1.0));
+		fixture.world.entity_mut(fixture.neck).insert(clip);
+		let frame = fixture.resolve()?.map_err(|wait| format!("{wait:?}"))?;
+		assert_eq!(frame.anchor, Some(fixture.eye));
 		assert!(frame.camera_delta.abs_diff_eq(EYE_FOCUS.camera_offset, EPS));
+		Ok(())
+	}
+
+	#[test]
+	fn head_focus_waits_for_the_body_pose() -> Result<(), Box<dyn std::error::Error>> {
+		let mut fixture = Fixture::new();
+		fixture.world.entity_mut(fixture.head).insert((ChildOf(fixture.neck), SocketRefApplied));
+		assert_eq!(fixture.resolve()?, Err(FocusWait::Pose(fixture.body)));
 		Ok(())
 	}
 
