@@ -13,6 +13,7 @@ pub mod parts;
 pub mod plugin;
 pub mod pose;
 pub mod projectiles;
+pub mod sound;
 
 pub use ::projectiles::{BoltSpec, BulletSpec, Flight, PenetrationCost, ProjectileSource};
 pub use cadence::{Cadence, FireControl, WeaponFired, WeaponRecoil};
@@ -39,6 +40,7 @@ pub use projectiles::{
 	muzzle_world, FireOnTrigger, FirearmWeaponSystems, FirearmWeaponsPlugin, LaserBeam, LaserSpec,
 	ProjectileLoad, Weapon, WeaponTrigger, WeaponsArmed, BARREL_REST_LENGTH,
 };
+pub use sound::{FirearmFireSounds, WET_LASER_FIRE};
 
 /// Config → inner [`FirearmComponents`] recipe.
 ///

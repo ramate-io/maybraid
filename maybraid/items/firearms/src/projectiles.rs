@@ -14,6 +14,7 @@ use ::projectiles::{
 use avian3d::prelude::{SpatialQuery, SpatialQueryFilter};
 use bevy::camera::visibility::VisibilitySystems;
 use bevy::ecs::query::Has;
+use bevy::ecs::system::SystemParam;
 use bevy::light::NotShadowCaster;
 use bevy::mesh::ConeAnchor;
 use bevy::prelude::*;
@@ -37,6 +38,7 @@ use crate::muzzle_flame::{
 	init_muzzle_flame_caches, muzzle_flame_ref, resolve_muzzle_flame, MuzzleFlameMaterial,
 	MuzzleFlameMaterialPlugin, MuzzleFlameMaterialRefCache,
 };
+use crate::sound::{setup_fire_sounds, FirearmFireSounds};
 
 /// Authored rest length of the `barrel` bone (head → tail) in bone-local units.
 pub const BARREL_REST_LENGTH: f32 = 1.0;
@@ -165,7 +167,7 @@ impl Plugin for FirearmWeaponsPlugin {
 		}
 		app.init_resource::<WeaponsArmed>()
 			.add_message::<WeaponFired>()
-			.add_systems(Startup, (setup_impact_effects, setup_muzzle_flash))
+			.add_systems(Startup, (setup_impact_effects, setup_muzzle_flash, setup_fire_sounds))
 			.add_systems(
 				PostUpdate,
 				(
@@ -267,6 +269,27 @@ pub(crate) struct MuzzleFlashEffects {
 	puff: Handle<Image>,
 	cone: Handle<Mesh>,
 	flame: Handle<MuzzleFlameMaterial>,
+}
+
+/// Flash assets plus the optional fire clip. Bundled so `fire_weapons` stays a system.
+#[derive(SystemParam)]
+pub(crate) struct WeaponFx<'w> {
+	flashes: Res<'w, MuzzleFlashEffects>,
+	sounds: Option<Res<'w, FirearmFireSounds>>,
+}
+
+impl WeaponFx<'_> {
+	fn play_shot(&self, commands: &mut Commands) {
+		if let Some(sounds) = self.sounds.as_deref() {
+			sounds.play_shot(commands);
+		}
+	}
+
+	fn loop_laser(&self, commands: &mut Commands, laser: Entity) {
+		if let Some(sounds) = self.sounds.as_deref() {
+			sounds.loop_on(commands, laser);
+		}
+	}
 }
 
 fn setup_muzzle_flash(
@@ -602,7 +625,7 @@ pub(crate) fn fire_weapons(
 	maps: Query<&BoneMap, With<RigRoot>>,
 	globals: Query<&GlobalTransform>,
 	lasers: Query<&LaserBeam>,
-	flashes_assets: Res<MuzzleFlashEffects>,
+	fx: WeaponFx,
 	mounts: Query<&MuzzleFlashMount>,
 	mut flashes: Query<(&mut MuzzleFlash, &mut Visibility, &Children)>,
 	mut cones: Query<&mut Transform, With<MuzzleFlashCone>>,
@@ -641,9 +664,10 @@ pub(crate) fn fire_weapons(
 						spec,
 						source.copied(),
 					);
+					fx.loop_laser(&mut commands, laser);
 					ignite_muzzle_flash(
 						&mut commands,
-						&flashes_assets,
+						&fx.flashes,
 						&mounts,
 						&mut flashes,
 						&mut cones,
@@ -679,9 +703,10 @@ pub(crate) fn fire_weapons(
 				) {
 					continue;
 				}
+				fx.play_shot(&mut commands);
 				ignite_muzzle_flash(
 					&mut commands,
-					&flashes_assets,
+					&fx.flashes,
 					&mounts,
 					&mut flashes,
 					&mut cones,
@@ -713,9 +738,10 @@ pub(crate) fn fire_weapons(
 				) {
 					continue;
 				}
+				fx.play_shot(&mut commands);
 				ignite_muzzle_flash(
 					&mut commands,
-					&flashes_assets,
+					&fx.flashes,
 					&mounts,
 					&mut flashes,
 					&mut cones,
