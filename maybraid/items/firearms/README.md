@@ -22,4 +22,4 @@ Authoring (bone-space meshes, slots, armature tree): [`maybraid/art/items/guns/R
 cargo run -p items-playground
 ```
 
-Blender sources: [`maybraid/art/items/guns/`](../../art/items/guns/). Runtime GLBs: `maybraid/assets/items/guns/`.
+Blender sources: [`maybraid/art/items/guns/`](../../art/items/guns/). Runtime GLBs: `maybraid/assets/items/guns/`. Firearm SFX sources: [`maybraid/art/sound-effects/weapons/firearms/`](../../art/sound-effects/weapons/firearms/). Runtime WAVs: `maybraid/assets/sound-effects/weapons/firearms/`.

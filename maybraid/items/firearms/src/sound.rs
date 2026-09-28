@@ -15,15 +15,17 @@ use bevy::prelude::*;
 use firearms_components::AssetPath;
 
 /// Energy report at the muzzle.
-pub const WEAPON_FIRE: AssetPath = AssetPath::new("sound-effects/weapons__fire__wet_laser_001.wav");
+pub const WEAPON_FIRE: AssetPath =
+	AssetPath::new("sound-effects/weapons/firearms/fire__wet_lazer_001.wav");
 /// Percussive layer fired with [`WEAPON_FIRE`].
 pub const WEAPON_HAMMER: AssetPath =
-	AssetPath::new("sound-effects/weapons__hammer__lazer_hammer_fizz_001.wav");
+	AssetPath::new("sound-effects/weapons/firearms/hammer__lazer_001.wav");
 /// Seamless flight loop on a bolt or bullet.
-pub const WEAPON_FIZZ: AssetPath = AssetPath::new("sound-effects/weapons__fiz__lazer_fizz_001.wav");
+pub const WEAPON_FIZZ: AssetPath =
+	AssetPath::new("sound-effects/weapons/firearms/fizz__lazer_001.wav");
 /// One-shot when a bolt or bullet first crosses a collider.
 pub const WEAPON_IMPACT: AssetPath =
-	AssetPath::new("sound-effects/weapons__impact__lazer_impact_001.wav");
+	AssetPath::new("sound-effects/weapons/firearms/impact__lazer_001.wav");
 
 pub const FIRE_VOLUME: f32 = 0.8;
 pub const HAMMER_VOLUME: f32 = 1.0;
