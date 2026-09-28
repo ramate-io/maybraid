@@ -41,7 +41,8 @@ pub use projectiles::{
 	ProjectileLoad, Weapon, WeaponTrigger, WeaponsArmed, BARREL_REST_LENGTH,
 };
 pub use sound::{
-	FirearmFireSounds, FIRE_LISTENER_GAP, FIRE_SPATIAL_SCALE, LASER_MUZZLE_LOCAL, WET_LASER_FIRE,
+	FirearmFireSounds, FlightAttenuation, FlightFizz, FIRE_LISTENER_GAP, FIRE_SPATIAL_SCALE,
+	FIZZ_SPATIAL_SCALE, LASER_MUZZLE_LOCAL, LAZER_FIZZ, WET_LASER_FIRE,
 };
 
 /// Config → inner [`FirearmComponents`] recipe.

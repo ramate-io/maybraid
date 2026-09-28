@@ -1,11 +1,14 @@
-//! Shared fire clip for every [`crate::Weapon`].
+//! Firearm shot, beam, and in-flight clips.
 //!
-//! Bolts and bullets play a one-shot at the muzzle. A laser keeps the same clip
-//! looping on a child of the beam so the sound dies with the beam. Both use
-//! Bevy spatial audio: stereo pan plus inverse-square falloff from the follow
-//! camera's [`SpatialListener`].
+//! Bolts and bullets play a muzzle one-shot, then a looping fizz child follows
+//! the flight until it despawns. A laser loops the fire clip on the beam. Bevy
+//! spatial audio supplies stereo pan. Flight loudness is a distance curve on
+//! [`SpatialAudioSink`], not rodio's inverse-square.
 
-use bevy::audio::{AudioPlayer, AudioSource, PlaybackSettings, SpatialScale, Volume};
+use bevy::audio::{
+	AudioPlayer, AudioSinkPlayback, AudioSource, PlaybackSettings, SpatialAudioSink, SpatialScale,
+	Volume,
+};
 use bevy::prelude::*;
 
 use firearms_components::AssetPath;
@@ -14,10 +17,17 @@ use firearms_components::AssetPath;
 pub const WET_LASER_FIRE: AssetPath =
 	AssetPath::new("sound-effects/weapons__wet_laser__wet_laser_001.wav");
 
+/// Short seamless flight loop under `maybraid/assets`.
+pub const LAZER_FIZZ: AssetPath = AssetPath::new("sound-effects/lazer_fizz_001.wav");
+
 const FIRE_VOLUME: f32 = 0.8;
+const FIZZ_VOLUME: f32 = 0.55;
 /// Compresses world meters so a 3.6 m follow boom stays at full volume and a
 /// 20 m flanker is about a quarter. Rodio clamps `1 / dist²` at 1 scaled unit.
 pub const FIRE_SPATIAL_SCALE: SpatialScale = SpatialScale::new(0.02);
+/// Keeps rodio's `1 / dist²` clamped through [`FlightAttenuation::silent`] so
+/// the authored meter curve owns loudness. Pan is scale-invariant.
+pub const FIZZ_SPATIAL_SCALE: SpatialScale = SpatialScale::new(0.01);
 /// Virtual ear spacing. Slightly wider than a human head so left/right still
 /// reads at follow-camera range. Panning uses this gap, not the spatial scale.
 pub const FIRE_LISTENER_GAP: f32 = 0.4;
@@ -25,15 +35,72 @@ pub const FIRE_LISTENER_GAP: f32 = 0.4;
 /// local −0.5 Y sits on the muzzle.
 pub const LASER_MUZZLE_LOCAL: Vec3 = Vec3::new(0.0, -0.5, 0.0);
 
-/// Loaded fire clip. Missing this resource is a silent no-op.
+/// Looping fizz emitter parented to a bolt or bullet.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct FlightFizz;
+
+/// Listener-distance gain for an in-flight emitter. Not a function of clip time.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct FlightAttenuation {
+	pub near: f32,
+	pub mid: f32,
+	pub far: f32,
+	pub silent: f32,
+	pub mid_gain: f32,
+	pub far_gain: f32,
+}
+
+impl FlightAttenuation {
+	/// Full to 5 m, quieter at 20 m, very quiet at 50 m, inaudible at 100 m.
+	pub const FIREARM: Self =
+		Self { near: 5.0, mid: 20.0, far: 50.0, silent: 100.0, mid_gain: 0.35, far_gain: 0.08 };
+
+	pub fn gain(self, distance: f32) -> f32 {
+		let distance = distance.max(0.0);
+		if distance <= self.near {
+			1.0
+		} else if distance <= self.mid {
+			Self::lerp(1.0, self.mid_gain, Self::unit(self.near, self.mid, distance))
+		} else if distance <= self.far {
+			Self::lerp(self.mid_gain, self.far_gain, Self::unit(self.mid, self.far, distance))
+		} else if distance <= self.silent {
+			Self::lerp(self.far_gain, 0.0, Self::unit(self.far, self.silent, distance))
+		} else {
+			0.0
+		}
+	}
+
+	pub fn volume(self, distance: f32) -> Volume {
+		Volume::Linear(FIZZ_VOLUME * self.gain(distance))
+	}
+
+	fn unit(start: f32, end: f32, value: f32) -> f32 {
+		let span = end - start;
+		if span.abs() < 1e-6 {
+			0.0
+		} else {
+			((value - start) / span).clamp(0.0, 1.0)
+		}
+	}
+
+	fn lerp(start: f32, end: f32, t: f32) -> f32 {
+		start + (end - start) * t
+	}
+}
+
+/// Loaded fire and flight clips. Missing this resource is a silent no-op.
 #[derive(Resource, Clone)]
 pub struct FirearmFireSounds {
 	pub wet_laser: Handle<AudioSource>,
+	pub lazer_fizz: Handle<AudioSource>,
 }
 
 impl FirearmFireSounds {
 	pub fn load(asset_server: &AssetServer) -> Self {
-		Self { wet_laser: asset_server.load(WET_LASER_FIRE.as_str()) }
+		Self {
+			wet_laser: asset_server.load(WET_LASER_FIRE.as_str()),
+			lazer_fizz: asset_server.load(LAZER_FIZZ.as_str()),
+		}
 	}
 
 	pub fn listener() -> SpatialListener {
@@ -52,6 +119,13 @@ impl FirearmFireSounds {
 			.with_volume(Volume::Linear(FIRE_VOLUME))
 			.with_spatial(true)
 			.with_spatial_scale(FIRE_SPATIAL_SCALE)
+	}
+
+	pub fn fizz_settings() -> PlaybackSettings {
+		PlaybackSettings::LOOP
+			.with_volume(Volume::Linear(FIZZ_VOLUME))
+			.with_spatial(true)
+			.with_spatial_scale(FIZZ_SPATIAL_SCALE)
 	}
 
 	pub fn play_at(
@@ -76,6 +150,17 @@ impl FirearmFireSounds {
 
 	pub fn loop_on(&self, commands: &mut Commands, laser: Entity) {
 		self.play_at(commands, laser, LASER_MUZZLE_LOCAL, Self::laser_settings());
+	}
+
+	pub fn loop_fizz(&self, commands: &mut Commands, projectile: Entity) {
+		commands.spawn((
+			Name::new("projectile-fizz"),
+			ChildOf(projectile),
+			Transform::IDENTITY,
+			FlightFizz,
+			AudioPlayer::new(self.lazer_fizz.clone()),
+			Self::fizz_settings(),
+		));
 	}
 }
 
@@ -111,34 +196,53 @@ pub(crate) fn ensure_camera_spatial_listener(
 	commands.entity(camera).insert(FirearmFireSounds::listener());
 }
 
+/// Loudness from listener distance. A pass-by gets louder, then quieter.
+pub(crate) fn attenuate_flight_fizz(
+	listeners: Query<&GlobalTransform, With<SpatialListener>>,
+	mut emitters: Query<(&GlobalTransform, &mut SpatialAudioSink), With<FlightFizz>>,
+) {
+	let Some(listener) = listeners.iter().next() else {
+		return;
+	};
+	let ear = listener.translation();
+	let curve = FlightAttenuation::FIREARM;
+	for (transform, mut sink) in &mut emitters {
+		sink.set_volume(curve.volume(transform.translation().distance(ear)));
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
 	use bevy::audio::PlaybackMode;
 	use std::path::Path;
 
-	#[test]
-	fn wet_laser_clip_is_in_assets() {
-		let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-			.join("../../assets")
-			.join(WET_LASER_FIRE.as_str());
-		assert!(path.is_file(), "{}", path.display());
+	fn asset_exists(path: AssetPath) {
+		let file = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets").join(path.as_str());
+		assert!(file.is_file(), "{}", file.display());
 	}
 
 	#[test]
-	fn ballistic_shot_despawns_and_laser_loops() {
+	fn authored_clips_are_in_assets() {
+		asset_exists(WET_LASER_FIRE);
+		asset_exists(LAZER_FIZZ);
+	}
+
+	#[test]
+	fn ballistic_shot_despawns_and_loops_loop() {
 		assert!(matches!(FirearmFireSounds::shot_settings().mode, PlaybackMode::Despawn));
 		assert!(matches!(FirearmFireSounds::laser_settings().mode, PlaybackMode::Loop));
+		assert!(matches!(FirearmFireSounds::fizz_settings().mode, PlaybackMode::Loop));
 	}
 
 	#[test]
 	fn fire_clips_are_spatial() {
 		let shot = FirearmFireSounds::shot_settings();
 		let laser = FirearmFireSounds::laser_settings();
-		assert!(shot.spatial);
-		assert!(laser.spatial);
+		let fizz = FirearmFireSounds::fizz_settings();
+		assert!(shot.spatial && laser.spatial && fizz.spatial);
 		assert_eq!(shot.spatial_scale.map(|scale| scale.0), Some(FIRE_SPATIAL_SCALE.0));
-		assert_eq!(laser.spatial_scale.map(|scale| scale.0), Some(FIRE_SPATIAL_SCALE.0));
+		assert_eq!(fizz.spatial_scale.map(|scale| scale.0), Some(FIZZ_SPATIAL_SCALE.0));
 	}
 
 	#[test]
@@ -157,6 +261,18 @@ mod tests {
 			(listener.right_ear_offset.x - listener.left_ear_offset.x - FIRE_LISTENER_GAP).abs()
 				< 1e-5
 		);
+	}
+
+	#[test]
+	fn flight_gain_follows_listener_distance_not_time() {
+		let curve = FlightAttenuation::FIREARM;
+		assert!((curve.gain(0.0) - 1.0).abs() < 1e-5);
+		assert!((curve.gain(5.0) - 1.0).abs() < 1e-5);
+		assert!((curve.gain(20.0) - curve.mid_gain).abs() < 1e-5);
+		assert!((curve.gain(50.0) - curve.far_gain).abs() < 1e-5);
+		assert!(curve.gain(100.0) < 1e-5);
+		assert!(curve.gain(12.5) > curve.gain(20.0));
+		assert!(curve.gain(20.0) > curve.gain(50.0));
 	}
 
 	#[test]

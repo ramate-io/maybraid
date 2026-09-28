@@ -38,7 +38,9 @@ use crate::muzzle_flame::{
 	init_muzzle_flame_caches, muzzle_flame_ref, resolve_muzzle_flame, MuzzleFlameMaterial,
 	MuzzleFlameMaterialPlugin, MuzzleFlameMaterialRefCache,
 };
-use crate::sound::{ensure_camera_spatial_listener, setup_fire_sounds, FirearmFireSounds};
+use crate::sound::{
+	attenuate_flight_fizz, ensure_camera_spatial_listener, setup_fire_sounds, FirearmFireSounds,
+};
 
 /// Authored rest length of the `barrel` bone (head → tail) in bone-local units.
 pub const BARREL_REST_LENGTH: f32 = 1.0;
@@ -184,6 +186,7 @@ impl Plugin for FirearmWeaponsPlugin {
 					tick_laser_hits
 						.in_set(DamageSystems::Collect)
 						.after(FirearmWeaponSystems::Fire),
+					attenuate_flight_fizz.after(FirearmWeaponSystems::Fire),
 					spawn_impacts_from_contacts,
 					tick_impact_bursts.after(bevy_hanabi::EffectSystems::TickSpawners),
 				)
@@ -289,6 +292,12 @@ impl WeaponFx<'_> {
 	fn loop_laser(&self, commands: &mut Commands, laser: Entity) {
 		if let Some(sounds) = self.sounds.as_deref() {
 			sounds.loop_on(commands, laser);
+		}
+	}
+
+	fn loop_fizz(&self, commands: &mut Commands, projectile: Entity) {
+		if let Some(sounds) = self.sounds.as_deref() {
+			sounds.loop_fizz(commands, projectile);
 		}
 	}
 }
@@ -686,7 +695,7 @@ pub(crate) fn fire_weapons(
 					weapon.cooldown -= dt;
 					continue;
 				}
-				if !try_fire_ballistic(
+				let Some(projectile) = try_fire_ballistic(
 					&mut commands,
 					&mut meshes,
 					&mut materials,
@@ -701,10 +710,11 @@ pub(crate) fn fire_weapons(
 					recoil,
 					control.as_deref_mut(),
 					&mut fired,
-				) {
+				) else {
 					continue;
-				}
+				};
 				fx.play_shot(&mut commands, barrel);
+				fx.loop_fizz(&mut commands, projectile);
 				ignite_muzzle_flash(
 					&mut commands,
 					&fx.flashes,
@@ -721,7 +731,7 @@ pub(crate) fn fire_weapons(
 					weapon.cooldown -= dt;
 					continue;
 				}
-				if !try_fire_ballistic(
+				let Some(projectile) = try_fire_ballistic(
 					&mut commands,
 					&mut meshes,
 					&mut materials,
@@ -736,10 +746,11 @@ pub(crate) fn fire_weapons(
 					recoil,
 					control.as_deref_mut(),
 					&mut fired,
-				) {
+				) else {
 					continue;
-				}
+				};
 				fx.play_shot(&mut commands, barrel);
+				fx.loop_fizz(&mut commands, projectile);
 				ignite_muzzle_flash(
 					&mut commands,
 					&fx.flashes,
@@ -771,10 +782,10 @@ fn try_fire_ballistic(
 	recoil: Option<&WeaponRecoil>,
 	control: Option<&mut FireControl>,
 	fired: &mut MessageWriter<WeaponFired>,
-) -> bool {
+) -> Option<Entity> {
 	weapon.cooldown -= dt;
 	if weapon.cooldown > 0.0 {
-		return false;
+		return None;
 	}
 	weapon.cooldown = weapon.interval;
 	let (length, radius, speed, max_range, penetration, max_age, color) = spec.ballistic();
@@ -808,7 +819,7 @@ fn try_fire_ballistic(
 	if let Some(source) = source {
 		fired.write(WeaponFired { shooter: source.0, recoil: kick });
 	}
-	true
+	Some(projectile)
 }
 
 trait IntoBallistic {
