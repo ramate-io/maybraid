@@ -3,16 +3,29 @@
 //! Fire and hammer are muzzle one-shots on every pull. Bolts and bullets then
 //! carry a looping fizz until the flight despawns; a hit plays a world-space
 //! impact. A laser loops fire on the beam and plays hammer once when it starts.
-//! Each layer has its own volume and spatial scale. Bevy supplies stereo pan.
-//! Fizz and impact loudness also use a listener-distance curve.
+//! Each layer has its own volume and spatial radius.
+//!
+//! Playback is an [`oddio::SpatialScene`]: ITD, ILD, 1/r, Doppler, and
+//! propagation delay. Bevy [`SpatialListener`] is the ear pose only.
 
-use bevy::audio::{
-	AudioPlayer, AudioSinkPlayback, AudioSource, PlaybackSettings, SpatialAudioSink, SpatialScale,
-	Volume,
-};
+mod scene;
+
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
+
+use bevy::audio::AudioSource;
 use bevy::prelude::*;
+use oddio::{Cycle, FixedGain, Frames, FramesSignal, Gain, Sample};
 
 use firearms_components::AssetPath;
+
+use scene::{amplitude_to_db, clip_frames, decode_wav_mono, Stoppable};
+
+pub use scene::OddioScene;
+pub(crate) use scene::{
+	attenuate_flight_fizz, despawn_finished_oddio_voices, preferred_sample_format, setup_oddio_scene,
+	sync_oddio_listener, sync_oddio_voices, MOTION_TELEPORT_M,
+};
 
 /// Energy report at the muzzle.
 pub const WEAPON_FIRE: AssetPath =
@@ -31,15 +44,18 @@ pub const FIRE_VOLUME: f32 = 0.8;
 pub const HAMMER_VOLUME: f32 = 1.0;
 pub const FIZZ_VOLUME: f32 = 0.65;
 pub const IMPACT_VOLUME: f32 = 1.0;
-/// Rodio clamps `1 / dist²` at 1 scaled unit. Smaller scale = the layer carries farther.
-pub const FIRE_SPATIAL_SCALE: SpatialScale = SpatialScale::new(0.05);
-pub const HAMMER_SPATIAL_SCALE: SpatialScale = SpatialScale::new(0.1);
-/// Keeps rodio's falloff from stacking on [`FlightAttenuation`] until the curve's
-/// far band. Pan is scale-invariant.
-pub const FIZZ_SPATIAL_SCALE: SpatialScale = SpatialScale::new(0.4);
-pub const IMPACT_SPATIAL_SCALE: SpatialScale = SpatialScale::new(0.2);
-/// Virtual ear spacing. Slightly wider than a human head so left/right still
-/// reads at follow-camera range. Panning uses this gap, not the spatial scale.
+/// Inverse of the oddio zero-attenuation radius (meters). Same numbers as the
+/// old Bevy `SpatialScale`: smaller scale = the layer carries farther.
+pub const FIRE_SPATIAL_SCALE: f32 = 0.05;
+pub const HAMMER_SPATIAL_SCALE: f32 = 0.1;
+pub const FIZZ_SPATIAL_SCALE: f32 = 0.4;
+pub const IMPACT_SPATIAL_SCALE: f32 = 0.2;
+pub const FIRE_SPATIAL_RADIUS: f32 = 1.0 / FIRE_SPATIAL_SCALE;
+pub const HAMMER_SPATIAL_RADIUS: f32 = 1.0 / HAMMER_SPATIAL_SCALE;
+pub const FIZZ_SPATIAL_RADIUS: f32 = 1.0 / FIZZ_SPATIAL_SCALE;
+pub const IMPACT_SPATIAL_RADIUS: f32 = 1.0 / IMPACT_SPATIAL_SCALE;
+/// Virtual ear spacing for the Bevy listener marker. Oddio uses its own head
+/// radius; this only keeps [`SpatialListener`] constructible.
 pub const FIRE_LISTENER_GAP: f32 = 0.4;
 /// Laser mesh is a cylinder centered on the beam. Parent scale.y is length, so
 /// local −0.5 Y sits on the muzzle.
@@ -48,6 +64,27 @@ pub const LASER_MUZZLE_LOCAL: Vec3 = Vec3::new(0.0, -0.5, 0.0);
 /// Looping fizz emitter parented to a bolt or bullet.
 #[derive(Component, Clone, Copy, Debug)]
 pub struct FlightFizz;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum FirearmClipKind {
+	Fire,
+	Hammer,
+	Fizz,
+	Impact,
+}
+
+/// Play this layer once [`AudioSource`] bytes are decoded.
+#[derive(Component, Debug)]
+pub(crate) struct PendingFirearmClip {
+	kind: FirearmClipKind,
+	parent: Option<Entity>,
+	local: Vec3,
+	world: Vec3,
+	volume: f32,
+	radius: f32,
+	looped: bool,
+	fizz: bool,
+}
 
 /// Listener-distance gain for an in-flight emitter. Not a function of clip time.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -80,12 +117,8 @@ impl FlightAttenuation {
 		}
 	}
 
-	pub fn volume(self, distance: f32) -> Volume {
-		self.volume_at(FIZZ_VOLUME, distance)
-	}
-
-	pub fn volume_at(self, peak: f32, distance: f32) -> Volume {
-		Volume::Linear(peak * self.gain(distance))
+	pub fn amplitude_at(self, peak: f32, distance: f32) -> f32 {
+		peak * self.gain(distance)
 	}
 
 	fn unit(start: f32, end: f32, value: f32) -> f32 {
@@ -103,12 +136,16 @@ impl FlightAttenuation {
 }
 
 /// Loaded fire, hammer, fizz, and impact clips. Missing this resource is a silent no-op.
-#[derive(Resource, Clone)]
+#[derive(Resource)]
 pub struct FirearmFireSounds {
 	pub fire: Handle<AudioSource>,
 	pub hammer: Handle<AudioSource>,
 	pub fizz: Handle<AudioSource>,
 	pub impact: Handle<AudioSource>,
+	decoded_fire: Option<Arc<Frames<Sample>>>,
+	decoded_hammer: Option<Arc<Frames<Sample>>>,
+	decoded_fizz: Option<Arc<Frames<Sample>>>,
+	decoded_impact: Option<Arc<Frames<Sample>>>,
 }
 
 impl FirearmFireSounds {
@@ -118,6 +155,10 @@ impl FirearmFireSounds {
 			hammer: asset_server.load(WEAPON_HAMMER.as_str()),
 			fizz: asset_server.load(WEAPON_FIZZ.as_str()),
 			impact: asset_server.load(WEAPON_IMPACT.as_str()),
+			decoded_fire: None,
+			decoded_hammer: None,
+			decoded_fizz: None,
+			decoded_impact: None,
 		}
 	}
 
@@ -125,115 +166,297 @@ impl FirearmFireSounds {
 		SpatialListener::new(FIRE_LISTENER_GAP)
 	}
 
-	pub fn shot_settings() -> PlaybackSettings {
-		PlaybackSettings::DESPAWN
-			.with_volume(Volume::Linear(FIRE_VOLUME))
-			.with_spatial(true)
-			.with_spatial_scale(FIRE_SPATIAL_SCALE)
+	fn fire_frames(&mut self, sources: &Assets<AudioSource>) -> Option<Arc<Frames<Sample>>> {
+		clip_frames(&self.fire, sources, &mut self.decoded_fire)
 	}
 
-	pub fn hammer_settings() -> PlaybackSettings {
-		PlaybackSettings::DESPAWN
-			.with_volume(Volume::Linear(HAMMER_VOLUME))
-			.with_spatial(true)
-			.with_spatial_scale(HAMMER_SPATIAL_SCALE)
+	fn hammer_frames(&mut self, sources: &Assets<AudioSource>) -> Option<Arc<Frames<Sample>>> {
+		clip_frames(&self.hammer, sources, &mut self.decoded_hammer)
 	}
 
-	pub fn laser_settings() -> PlaybackSettings {
-		PlaybackSettings::LOOP
-			.with_volume(Volume::Linear(FIRE_VOLUME))
-			.with_spatial(true)
-			.with_spatial_scale(FIRE_SPATIAL_SCALE)
+	fn fizz_frames(&mut self, sources: &Assets<AudioSource>) -> Option<Arc<Frames<Sample>>> {
+		clip_frames(&self.fizz, sources, &mut self.decoded_fizz)
 	}
 
-	pub fn fizz_settings() -> PlaybackSettings {
-		PlaybackSettings::LOOP
-			.with_volume(Volume::Linear(FIZZ_VOLUME))
-			.with_spatial(true)
-			.with_spatial_scale(FIZZ_SPATIAL_SCALE)
+	fn impact_frames(&mut self, sources: &Assets<AudioSource>) -> Option<Arc<Frames<Sample>>> {
+		clip_frames(&self.impact, sources, &mut self.decoded_impact)
 	}
 
-	pub fn impact_settings(volume: Volume) -> PlaybackSettings {
-		PlaybackSettings::DESPAWN
-			.with_volume(volume)
-			.with_spatial(true)
-			.with_spatial_scale(IMPACT_SPATIAL_SCALE)
+	fn frames_for(
+		&mut self,
+		kind: FirearmClipKind,
+		sources: &Assets<AudioSource>,
+	) -> Option<Arc<Frames<Sample>>> {
+		match kind {
+			FirearmClipKind::Fire => self.fire_frames(sources),
+			FirearmClipKind::Hammer => self.hammer_frames(sources),
+			FirearmClipKind::Fizz => self.fizz_frames(sources),
+			FirearmClipKind::Impact => self.impact_frames(sources),
+		}
 	}
 
-	pub fn play_at(
-		&self,
+	fn queue_clip(
 		commands: &mut Commands,
-		name: &'static str,
-		clip: Handle<AudioSource>,
-		parent: Entity,
+		kind: FirearmClipKind,
+		parent: Option<Entity>,
 		local: Vec3,
-		settings: PlaybackSettings,
+		world: Vec3,
+		volume: f32,
+		radius: f32,
+		looped: bool,
+		fizz: bool,
 	) {
 		commands.spawn((
+			Name::new("pending-firearm-clip"),
+			PendingFirearmClip { kind, parent, local, world, volume, radius, looped, fizz },
+		));
+	}
+
+	fn play_or_queue_oneshot(
+		&mut self,
+		commands: &mut Commands,
+		sources: &Assets<AudioSource>,
+		scene: &OddioScene,
+		listener: &GlobalTransform,
+		kind: FirearmClipKind,
+		name: &'static str,
+		parent: Option<Entity>,
+		local: Vec3,
+		world: Vec3,
+		volume: f32,
+		radius: f32,
+	) {
+		match self.frames_for(kind, sources) {
+			Some(frames) => self.spawn_oneshot(
+				commands, scene, listener, name, frames, parent, local, world, volume, radius,
+			),
+			None => Self::queue_clip(commands, kind, parent, local, world, volume, radius, false, false),
+		}
+	}
+
+	fn play_or_queue_loop(
+		&mut self,
+		commands: &mut Commands,
+		sources: &Assets<AudioSource>,
+		scene: &OddioScene,
+		listener: &GlobalTransform,
+		kind: FirearmClipKind,
+		name: &'static str,
+		parent: Entity,
+		local: Vec3,
+		world: Vec3,
+		volume: f32,
+		radius: f32,
+		fizz: bool,
+	) {
+		match self.frames_for(kind, sources) {
+			Some(frames) => self.spawn_loop(
+				commands, scene, listener, name, frames, parent, local, world, volume, radius, fizz,
+			),
+			None => Self::queue_clip(
+				commands, kind, Some(parent), local, world, volume, radius, true, fizz,
+			),
+		}
+	}
+
+	fn spawn_oneshot(
+		&self,
+		commands: &mut Commands,
+		scene: &OddioScene,
+		listener: &GlobalTransform,
+		name: &'static str,
+		frames: Arc<Frames<Sample>>,
+		parent: Option<Entity>,
+		local: Vec3,
+		world: Vec3,
+		volume: f32,
+		radius: f32,
+	) {
+		let stop = Arc::new(AtomicBool::new(false));
+		let signal = Stoppable::new(
+			FixedGain::new(FramesSignal::from(frames), amplitude_to_db(volume)),
+			stop.clone(),
+		);
+		let Some(spatial) = scene.play_seek(signal, OddioScene::options(world, listener, radius))
+		else {
+			return;
+		};
+		let mut entity = commands.spawn((
+			Name::new(name),
+			Transform::from_translation(local),
+			OddioScene::voice(spatial, stop, None, world, true),
+		));
+		if let Some(parent) = parent {
+			entity.insert(ChildOf(parent));
+		}
+	}
+
+	fn spawn_loop(
+		&self,
+		commands: &mut Commands,
+		scene: &OddioScene,
+		listener: &GlobalTransform,
+		name: &'static str,
+		frames: Arc<Frames<Sample>>,
+		parent: Entity,
+		local: Vec3,
+		world: Vec3,
+		volume: f32,
+		radius: f32,
+		fizz: bool,
+	) {
+		let stop = Arc::new(AtomicBool::new(false));
+		let (mut gain_control, gain) =
+			Gain::new(Stoppable::new(Cycle::new(frames), stop.clone()));
+		gain_control.set_amplitude_ratio(volume);
+		let Some(spatial) =
+			scene.play_buffered(gain, OddioScene::options(world, listener, radius))
+		else {
+			return;
+		};
+		let mut entity = commands.spawn((
 			Name::new(name),
 			ChildOf(parent),
 			Transform::from_translation(local),
-			AudioPlayer::new(clip),
-			settings,
+			OddioScene::voice(spatial, stop, Some(gain_control), world, false),
 		));
+		if fizz {
+			entity.insert(FlightFizz);
+		}
 	}
 
-	pub fn play_shot(&self, commands: &mut Commands, barrel: Entity, muzzle_local: Vec3) {
-		self.play_at(
+	pub fn play_shot(
+		&mut self,
+		commands: &mut Commands,
+		sources: &Assets<AudioSource>,
+		scene: &OddioScene,
+		listener: &GlobalTransform,
+		barrel: Entity,
+		muzzle_local: Vec3,
+		world: Vec3,
+	) {
+		self.play_or_queue_oneshot(
 			commands,
+			sources,
+			scene,
+			listener,
+			FirearmClipKind::Fire,
 			"firearm-fire",
-			self.fire.clone(),
-			barrel,
+			Some(barrel),
 			muzzle_local,
-			Self::shot_settings(),
+			world,
+			FIRE_VOLUME,
+			FIRE_SPATIAL_RADIUS,
 		);
-		self.play_at(
+		self.play_or_queue_oneshot(
 			commands,
+			sources,
+			scene,
+			listener,
+			FirearmClipKind::Hammer,
 			"firearm-hammer",
-			self.hammer.clone(),
-			barrel,
+			Some(barrel),
 			muzzle_local,
-			Self::hammer_settings(),
+			world,
+			HAMMER_VOLUME,
+			HAMMER_SPATIAL_RADIUS,
 		);
 	}
 
-	pub fn loop_on(&self, commands: &mut Commands, laser: Entity) {
-		self.play_at(
+	pub fn loop_on(
+		&mut self,
+		commands: &mut Commands,
+		sources: &Assets<AudioSource>,
+		scene: &OddioScene,
+		listener: &GlobalTransform,
+		laser: Entity,
+		world: Vec3,
+	) {
+		self.play_or_queue_loop(
 			commands,
+			sources,
+			scene,
+			listener,
+			FirearmClipKind::Fire,
 			"firearm-fire",
-			self.fire.clone(),
 			laser,
 			LASER_MUZZLE_LOCAL,
-			Self::laser_settings(),
+			world,
+			FIRE_VOLUME,
+			FIRE_SPATIAL_RADIUS,
+			false,
 		);
-		self.play_at(
+		self.play_or_queue_oneshot(
 			commands,
+			sources,
+			scene,
+			listener,
+			FirearmClipKind::Hammer,
 			"firearm-hammer",
-			self.hammer.clone(),
-			laser,
+			Some(laser),
 			LASER_MUZZLE_LOCAL,
-			Self::hammer_settings(),
+			world,
+			HAMMER_VOLUME,
+			HAMMER_SPATIAL_RADIUS,
 		);
 	}
 
-	pub fn loop_fizz(&self, commands: &mut Commands, projectile: Entity) {
-		commands.spawn((
-			Name::new("projectile-fizz"),
-			ChildOf(projectile),
-			Transform::IDENTITY,
-			FlightFizz,
-			AudioPlayer::new(self.fizz.clone()),
-			Self::fizz_settings(),
-		));
+	pub fn loop_fizz(
+		&mut self,
+		commands: &mut Commands,
+		sources: &Assets<AudioSource>,
+		scene: &OddioScene,
+		listener: &GlobalTransform,
+		projectile: Entity,
+		world: Vec3,
+	) {
+		self.play_or_queue_loop(
+			commands,
+			sources,
+			scene,
+			listener,
+			FirearmClipKind::Fizz,
+			"projectile-fizz",
+			projectile,
+			Vec3::ZERO,
+			world,
+			FIZZ_VOLUME,
+			FIZZ_SPATIAL_RADIUS,
+			true,
+		);
 	}
 
-	pub fn play_impact(&self, commands: &mut Commands, point: Vec3, distance: f32) {
-		commands.spawn((
-			Name::new("projectile-impact"),
-			Transform::from_translation(point),
-			AudioPlayer::new(self.impact.clone()),
-			Self::impact_settings(FlightAttenuation::FIREARM.volume_at(IMPACT_VOLUME, distance)),
-		));
+	pub fn play_impact(
+		&mut self,
+		commands: &mut Commands,
+		sources: &Assets<AudioSource>,
+		scene: &OddioScene,
+		listener: &GlobalTransform,
+		point: Vec3,
+		distance: f32,
+	) {
+		self.play_or_queue_oneshot(
+			commands,
+			sources,
+			scene,
+			listener,
+			FirearmClipKind::Impact,
+			"projectile-impact",
+			None,
+			point,
+			point,
+			FlightAttenuation::FIREARM.amplitude_at(IMPACT_VOLUME, distance),
+			IMPACT_SPATIAL_RADIUS,
+		);
+	}
+
+	fn clip_name(kind: FirearmClipKind) -> &'static str {
+		match kind {
+			FirearmClipKind::Fire => "firearm-fire",
+			FirearmClipKind::Hammer => "firearm-hammer",
+			FirearmClipKind::Fizz => "projectile-fizz",
+			FirearmClipKind::Impact => "projectile-impact",
+		}
 	}
 }
 
@@ -269,25 +492,74 @@ pub(crate) fn ensure_camera_spatial_listener(
 	commands.entity(camera).insert(FirearmFireSounds::listener());
 }
 
-/// Loudness from listener distance. A pass-by gets louder, then quieter.
-pub(crate) fn attenuate_flight_fizz(
+pub(crate) fn flush_pending_firearm_clips(
+	mut commands: Commands,
+	mut sounds: Option<ResMut<FirearmFireSounds>>,
+	sources: Res<Assets<AudioSource>>,
+	scene: Option<Res<OddioScene>>,
 	listeners: Query<&GlobalTransform, With<SpatialListener>>,
-	mut emitters: Query<(&GlobalTransform, &mut SpatialAudioSink), With<FlightFizz>>,
+	globals: Query<&GlobalTransform>,
+	pending: Query<(Entity, &PendingFirearmClip)>,
 ) {
-	let Some(listener) = listeners.iter().next() else {
+	let (Some(sounds), Some(scene), Some(listener)) =
+		(sounds.as_deref_mut(), scene.as_deref(), listeners.iter().next())
+	else {
 		return;
 	};
-	let ear = listener.translation();
-	let curve = FlightAttenuation::FIREARM;
-	for (transform, mut sink) in &mut emitters {
-		sink.set_volume(curve.volume(transform.translation().distance(ear)));
+	for (entity, pending) in &pending {
+		if let Some(parent) = pending.parent {
+			if globals.get(parent).is_err() {
+				commands.entity(entity).try_despawn();
+				continue;
+			}
+		}
+		let Some(frames) = sounds.frames_for(pending.kind, &sources) else {
+			continue;
+		};
+		let world = pending
+			.parent
+			.and_then(|parent| globals.get(parent).ok())
+			.map(|global| global.transform_point(pending.local))
+			.unwrap_or(pending.world);
+		if pending.looped {
+			let Some(parent) = pending.parent else {
+				commands.entity(entity).try_despawn();
+				continue;
+			};
+			sounds.spawn_loop(
+				&mut commands,
+				scene,
+				listener,
+				FirearmFireSounds::clip_name(pending.kind),
+				frames,
+				parent,
+				pending.local,
+				world,
+				pending.volume,
+				pending.radius,
+				pending.fizz,
+			);
+		} else {
+			sounds.spawn_oneshot(
+				&mut commands,
+				scene,
+				listener,
+				FirearmFireSounds::clip_name(pending.kind),
+				frames,
+				pending.parent,
+				pending.local,
+				world,
+				pending.volume,
+				pending.radius,
+			);
+		}
+		commands.entity(entity).try_despawn();
 	}
 }
 
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use bevy::audio::PlaybackMode;
 	use std::path::Path;
 
 	fn asset_exists(path: AssetPath) {
@@ -304,29 +576,14 @@ mod tests {
 	}
 
 	#[test]
-	fn ballistic_shot_despawns_and_loops_loop() {
-		assert!(matches!(FirearmFireSounds::shot_settings().mode, PlaybackMode::Despawn));
-		assert!(matches!(FirearmFireSounds::hammer_settings().mode, PlaybackMode::Despawn));
-		assert!(matches!(FirearmFireSounds::laser_settings().mode, PlaybackMode::Loop));
-		assert!(matches!(FirearmFireSounds::fizz_settings().mode, PlaybackMode::Loop));
-		assert!(matches!(
-			FirearmFireSounds::impact_settings(Volume::Linear(1.0)).mode,
-			PlaybackMode::Despawn
-		));
-	}
-
-	#[test]
-	fn each_layer_has_its_own_spatial_scale() {
-		let shot = FirearmFireSounds::shot_settings();
-		let hammer = FirearmFireSounds::hammer_settings();
-		let laser = FirearmFireSounds::laser_settings();
-		let fizz = FirearmFireSounds::fizz_settings();
-		let impact = FirearmFireSounds::impact_settings(Volume::Linear(1.0));
-		assert!(shot.spatial && hammer.spatial && laser.spatial && fizz.spatial && impact.spatial);
-		assert_eq!(shot.spatial_scale.map(|scale| scale.0), Some(FIRE_SPATIAL_SCALE.0));
-		assert_eq!(hammer.spatial_scale.map(|scale| scale.0), Some(HAMMER_SPATIAL_SCALE.0));
-		assert_eq!(fizz.spatial_scale.map(|scale| scale.0), Some(FIZZ_SPATIAL_SCALE.0));
-		assert_eq!(impact.spatial_scale.map(|scale| scale.0), Some(IMPACT_SPATIAL_SCALE.0));
+	fn each_layer_has_its_own_spatial_radius() {
+		assert!((FIRE_SPATIAL_RADIUS - 1.0 / FIRE_SPATIAL_SCALE).abs() < 1e-5);
+		assert!((HAMMER_SPATIAL_RADIUS - 1.0 / HAMMER_SPATIAL_SCALE).abs() < 1e-5);
+		assert!((FIZZ_SPATIAL_RADIUS - 1.0 / FIZZ_SPATIAL_SCALE).abs() < 1e-5);
+		assert!((IMPACT_SPATIAL_RADIUS - 1.0 / IMPACT_SPATIAL_SCALE).abs() < 1e-5);
+		assert!(FIRE_SPATIAL_RADIUS > HAMMER_SPATIAL_RADIUS);
+		assert!(HAMMER_SPATIAL_RADIUS > IMPACT_SPATIAL_RADIUS);
+		assert!(IMPACT_SPATIAL_RADIUS > FIZZ_SPATIAL_RADIUS);
 	}
 
 	#[test]
@@ -357,9 +614,52 @@ mod tests {
 		assert!(curve.gain(100.0) < 1e-5);
 		assert!(curve.gain(12.5) > curve.gain(20.0));
 		assert!(curve.gain(20.0) > curve.gain(50.0));
-		let near = curve.volume_at(IMPACT_VOLUME, 0.0);
-		let far = curve.volume_at(IMPACT_VOLUME, 50.0);
-		assert!(near.to_linear() > far.to_linear());
+		assert!(curve.amplitude_at(IMPACT_VOLUME, 0.0) > curve.amplitude_at(IMPACT_VOLUME, 50.0));
+	}
+
+	#[test]
+	fn prefers_f32_stereo_then_i16() {
+		use cpal::SampleFormat;
+		assert!(matches!(
+			preferred_sample_format(Some((SampleFormat::I16, 2)), &[(SampleFormat::F32, 2)]),
+			Some(SampleFormat::F32)
+		));
+		assert!(matches!(
+			preferred_sample_format(Some((SampleFormat::I16, 2)), &[]),
+			Some(SampleFormat::I16)
+		));
+		assert!(preferred_sample_format(Some((SampleFormat::F32, 1)), &[(SampleFormat::I16, 1)]).is_none());
+	}
+
+	#[test]
+	fn far_jump_is_a_teleport() {
+		assert!(!super::scene::OddioVoice::motion_discontinuity(Vec3::ZERO, Vec3::X * 3.0));
+		assert!(super::scene::OddioVoice::motion_discontinuity(
+			Vec3::ZERO,
+			Vec3::X * (MOTION_TELEPORT_M + 1.0)
+		));
+	}
+
+	#[test]
+	fn silent_amplitude_is_very_quiet_db() {
+		assert!(amplitude_to_db(1.0).abs() < 1e-5);
+		assert!(amplitude_to_db(0.0) <= -80.0);
+		assert!(amplitude_to_db(0.5) < 0.0);
+	}
+
+	#[test]
+	fn ieee_float_wav_decodes_to_mono_frames() {
+		let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+			.join("../../assets")
+			.join(WEAPON_FIRE.as_str());
+		let bytes = match std::fs::read(&path) {
+			Ok(bytes) => bytes,
+			Err(_) => {
+				assert!(path.is_file(), "{}", path.display());
+				return;
+			}
+		};
+		assert!(decode_wav_mono(&bytes).is_some(), "decode {}", path.display());
 	}
 
 	#[test]

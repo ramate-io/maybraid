@@ -17,6 +17,7 @@ use bevy::ecs::query::Has;
 use bevy::ecs::system::SystemParam;
 use bevy::light::NotShadowCaster;
 use bevy::mesh::ConeAnchor;
+use bevy::audio::AudioSource;
 use bevy::prelude::*;
 use bevy_hanabi::prelude::{
 	Attribute, ColorBlendMask, ColorBlendMode, ColorOverLifetimeModifier, EffectAsset,
@@ -39,7 +40,10 @@ use crate::muzzle_flame::{
 	MuzzleFlameMaterialPlugin, MuzzleFlameMaterialRefCache,
 };
 use crate::sound::{
-	attenuate_flight_fizz, ensure_camera_spatial_listener, setup_fire_sounds, FirearmFireSounds,
+	attenuate_flight_fizz, despawn_finished_oddio_voices, ensure_camera_spatial_listener,
+	flush_pending_firearm_clips, setup_fire_sounds, setup_oddio_scene, sync_oddio_listener,
+	sync_oddio_voices, FirearmFireSounds,
+	OddioScene,
 };
 
 /// Authored rest length of the `barrel` bone (head → tail) in bone-local units.
@@ -169,7 +173,10 @@ impl Plugin for FirearmWeaponsPlugin {
 		}
 		app.init_resource::<WeaponsArmed>()
 			.add_message::<WeaponFired>()
-			.add_systems(Startup, (setup_impact_effects, setup_muzzle_flash, setup_fire_sounds))
+			.add_systems(
+				Startup,
+				(setup_oddio_scene, setup_impact_effects, setup_muzzle_flash, setup_fire_sounds),
+			)
 			.add_systems(Update, ensure_camera_spatial_listener)
 			.add_systems(
 				PostUpdate,
@@ -186,7 +193,11 @@ impl Plugin for FirearmWeaponsPlugin {
 					tick_laser_hits
 						.in_set(DamageSystems::Collect)
 						.after(FirearmWeaponSystems::Fire),
+					sync_oddio_listener.after(FirearmWeaponSystems::Fire),
+					flush_pending_firearm_clips.after(FirearmWeaponSystems::Fire),
+					sync_oddio_voices.after(FirearmWeaponSystems::Fire),
 					attenuate_flight_fizz.after(FirearmWeaponSystems::Fire),
+					despawn_finished_oddio_voices.after(FirearmWeaponSystems::Fire),
 					spawn_impacts_from_contacts,
 					tick_impact_bursts.after(bevy_hanabi::EffectSystems::TickSpawners),
 				)
@@ -277,28 +288,48 @@ pub(crate) struct MuzzleFlashEffects {
 
 /// Flash assets plus the optional fire clip. Bundled so `fire_weapons` stays a system.
 #[derive(SystemParam)]
-pub(crate) struct WeaponFx<'w> {
+pub(crate) struct WeaponFx<'w, 's> {
 	flashes: Res<'w, MuzzleFlashEffects>,
-	sounds: Option<Res<'w, FirearmFireSounds>>,
+	sounds: Option<ResMut<'w, FirearmFireSounds>>,
+	sources: Res<'w, Assets<AudioSource>>,
+	scene: Option<Res<'w, OddioScene>>,
+	listeners: Query<'w, 's, &'static GlobalTransform, With<SpatialListener>>,
 }
 
-impl WeaponFx<'_> {
-	fn play_shot(&self, commands: &mut Commands, barrel: Entity) {
-		if let Some(sounds) = self.sounds.as_deref() {
-			sounds.play_shot(commands, barrel, Vec3::Y * BARREL_REST_LENGTH);
-		}
+impl WeaponFx<'_, '_> {
+	fn play_shot(&mut self, commands: &mut Commands, barrel: Entity, world: Vec3) {
+		let (Some(sounds), Some(scene), Some(listener)) =
+			(self.sounds.as_deref_mut(), self.scene.as_deref(), self.listeners.iter().next())
+		else {
+			return;
+		};
+		sounds.play_shot(
+			commands,
+			&self.sources,
+			scene,
+			listener,
+			barrel,
+			Vec3::Y * BARREL_REST_LENGTH,
+			world,
+		);
 	}
 
-	fn loop_laser(&self, commands: &mut Commands, laser: Entity) {
-		if let Some(sounds) = self.sounds.as_deref() {
-			sounds.loop_on(commands, laser);
-		}
+	fn loop_laser(&mut self, commands: &mut Commands, laser: Entity, world: Vec3) {
+		let (Some(sounds), Some(scene), Some(listener)) =
+			(self.sounds.as_deref_mut(), self.scene.as_deref(), self.listeners.iter().next())
+		else {
+			return;
+		};
+		sounds.loop_on(commands, &self.sources, scene, listener, laser, world);
 	}
 
-	fn loop_fizz(&self, commands: &mut Commands, projectile: Entity) {
-		if let Some(sounds) = self.sounds.as_deref() {
-			sounds.loop_fizz(commands, projectile);
-		}
+	fn loop_fizz(&mut self, commands: &mut Commands, projectile: Entity, world: Vec3) {
+		let (Some(sounds), Some(scene), Some(listener)) =
+			(self.sounds.as_deref_mut(), self.scene.as_deref(), self.listeners.iter().next())
+		else {
+			return;
+		};
+		sounds.loop_fizz(commands, &self.sources, scene, listener, projectile, world);
 	}
 }
 
@@ -635,7 +666,7 @@ pub(crate) fn fire_weapons(
 	maps: Query<&BoneMap, With<RigRoot>>,
 	globals: Query<&GlobalTransform>,
 	lasers: Query<&LaserBeam>,
-	fx: WeaponFx,
+	mut fx: WeaponFx,
 	mounts: Query<&MuzzleFlashMount>,
 	mut flashes: Query<(&mut MuzzleFlash, &mut Visibility, &Children)>,
 	mut cones: Query<&mut Transform, With<MuzzleFlashCone>>,
@@ -674,7 +705,7 @@ pub(crate) fn fire_weapons(
 						spec,
 						source.copied(),
 					);
-					fx.loop_laser(&mut commands, laser);
+					fx.loop_laser(&mut commands, laser, muzzle_world(global).0);
 					ignite_muzzle_flash(
 						&mut commands,
 						&fx.flashes,
@@ -713,8 +744,8 @@ pub(crate) fn fire_weapons(
 				) else {
 					continue;
 				};
-				fx.play_shot(&mut commands, barrel);
-				fx.loop_fizz(&mut commands, projectile);
+				fx.play_shot(&mut commands, barrel, muzzle_world(global).0);
+				fx.loop_fizz(&mut commands, projectile, muzzle_world(global).0);
 				ignite_muzzle_flash(
 					&mut commands,
 					&fx.flashes,
@@ -749,8 +780,8 @@ pub(crate) fn fire_weapons(
 				) else {
 					continue;
 				};
-				fx.play_shot(&mut commands, barrel);
-				fx.loop_fizz(&mut commands, projectile);
+				fx.play_shot(&mut commands, barrel, muzzle_world(global).0);
+				fx.loop_fizz(&mut commands, projectile, muzzle_world(global).0);
 				ignite_muzzle_flash(
 					&mut commands,
 					&fx.flashes,
@@ -961,19 +992,25 @@ pub fn tick_lasers(
 fn spawn_impacts_from_contacts(
 	mut contacts: MessageReader<ProjectileContact>,
 	effects: Option<Res<ImpactEffects>>,
-	sounds: Option<Res<FirearmFireSounds>>,
+	mut sounds: Option<ResMut<FirearmFireSounds>>,
+	sources: Res<Assets<AudioSource>>,
+	scene: Option<Res<OddioScene>>,
 	listeners: Query<&GlobalTransform, With<SpatialListener>>,
 	mut commands: Commands,
 ) {
-	let ear = listeners.iter().next().map(|listener| listener.translation());
+	let listener = listeners.iter().next();
+	let ear = listener.map(|listener| listener.translation());
 	for contact in contacts.read() {
 		if let Some(effects) = effects.as_deref() {
 			spawn_impact(&mut commands, effects, contact.point, contact.normal);
 		}
-		if let Some(sounds) = sounds.as_deref() {
-			let distance = ear.map(|ear| contact.point.distance(ear)).unwrap_or(0.0);
-			sounds.play_impact(&mut commands, contact.point, distance);
-		}
+		let (Some(sounds), Some(scene), Some(listener)) =
+			(sounds.as_deref_mut(), scene.as_deref(), listener)
+		else {
+			continue;
+		};
+		let distance = ear.map(|ear| contact.point.distance(ear)).unwrap_or(0.0);
+		sounds.play_impact(&mut commands, &sources, scene, listener, contact.point, distance);
 	}
 }
 

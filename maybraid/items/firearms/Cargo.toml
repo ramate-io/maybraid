@@ -14,7 +14,11 @@ avian3d = { workspace = true }
 bevy = { workspace = true, features = ["wav"] }
 bevy_hanabi = { workspace = true }
 clap = { workspace = true }
+cpal = { workspace = true }
 firearms-components = { workspace = true }
+hound = { workspace = true }
+mint = { workspace = true }
+oddio = { workspace = true }
 projectiles = { workspace = true }
 damage = { workspace = true }
 lod-avian = { workspace = true }
