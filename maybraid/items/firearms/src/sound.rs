@@ -3,7 +3,8 @@
 //! Fire and hammer are muzzle one-shots on every pull. Bolts and bullets then
 //! carry a looping fizz until the flight despawns; a hit plays a world-space
 //! impact. A laser loops fire on the beam and plays hammer once when it starts.
-//! Each layer has its own volume and spatial radius.
+//! Each layer has its own volume and spatial radius. Distance is oddio's
+//! `radius / max(distance, radius)`; we do not apply a second falloff curve.
 //!
 //! Playback is an [`oddio::SpatialScene`]: ITD, ILD, 1/r, Doppler, and
 //! propagation delay. Bevy [`SpatialListener`] is the ear pose only.
@@ -15,7 +16,7 @@ use std::sync::Arc;
 
 use bevy::audio::AudioSource;
 use bevy::prelude::*;
-use oddio::{Cycle, FixedGain, Frames, FramesSignal, Gain, Sample};
+use oddio::{Cycle, FixedGain, Frames, FramesSignal, Sample};
 
 use firearms_components::AssetPath;
 
@@ -23,8 +24,8 @@ use scene::{amplitude_to_db, clip_frames, decode_wav_mono, Stoppable};
 
 pub use scene::OddioScene;
 pub(crate) use scene::{
-	attenuate_flight_fizz, despawn_finished_oddio_voices, preferred_sample_format, setup_oddio_scene,
-	sync_oddio_listener, sync_oddio_voices, MOTION_TELEPORT_M,
+	despawn_finished_oddio_voices, preferred_sample_format, setup_oddio_scene, sync_oddio_listener,
+	sync_oddio_voices, MOTION_TELEPORT_M,
 };
 
 /// Energy report at the muzzle.
@@ -40,15 +41,15 @@ pub const WEAPON_FIZZ: AssetPath =
 pub const WEAPON_IMPACT: AssetPath =
 	AssetPath::new("sound-effects/weapons/firearms/impact__lazer_001.wav");
 
-pub const FIRE_VOLUME: f32 = 0.8;
+pub const FIRE_VOLUME: f32 = 0.7;
 pub const HAMMER_VOLUME: f32 = 1.0;
-pub const FIZZ_VOLUME: f32 = 0.65;
-pub const IMPACT_VOLUME: f32 = 1.0;
+pub const FIZZ_VOLUME: f32 = 1.3;
+pub const IMPACT_VOLUME: f32 = 0.8;
 /// Inverse of the oddio zero-attenuation radius (meters). Same numbers as the
 /// old Bevy `SpatialScale`: smaller scale = the layer carries farther.
 pub const FIRE_SPATIAL_SCALE: f32 = 0.05;
 pub const HAMMER_SPATIAL_SCALE: f32 = 0.1;
-pub const FIZZ_SPATIAL_SCALE: f32 = 0.4;
+pub const FIZZ_SPATIAL_SCALE: f32 = 0.2;
 pub const IMPACT_SPATIAL_SCALE: f32 = 0.2;
 pub const FIRE_SPATIAL_RADIUS: f32 = 1.0 / FIRE_SPATIAL_SCALE;
 pub const HAMMER_SPATIAL_RADIUS: f32 = 1.0 / HAMMER_SPATIAL_SCALE;
@@ -84,55 +85,6 @@ pub(crate) struct PendingFirearmClip {
 	radius: f32,
 	looped: bool,
 	fizz: bool,
-}
-
-/// Listener-distance gain for an in-flight emitter. Not a function of clip time.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct FlightAttenuation {
-	pub near: f32,
-	pub mid: f32,
-	pub far: f32,
-	pub silent: f32,
-	pub mid_gain: f32,
-	pub far_gain: f32,
-}
-
-impl FlightAttenuation {
-	/// Full to 5 m, quieter at 20 m, very quiet at 50 m, inaudible at 100 m.
-	pub const FIREARM: Self =
-		Self { near: 5.0, mid: 20.0, far: 50.0, silent: 100.0, mid_gain: 0.35, far_gain: 0.08 };
-
-	pub fn gain(self, distance: f32) -> f32 {
-		let distance = distance.max(0.0);
-		if distance <= self.near {
-			1.0
-		} else if distance <= self.mid {
-			Self::lerp(1.0, self.mid_gain, Self::unit(self.near, self.mid, distance))
-		} else if distance <= self.far {
-			Self::lerp(self.mid_gain, self.far_gain, Self::unit(self.mid, self.far, distance))
-		} else if distance <= self.silent {
-			Self::lerp(self.far_gain, 0.0, Self::unit(self.far, self.silent, distance))
-		} else {
-			0.0
-		}
-	}
-
-	pub fn amplitude_at(self, peak: f32, distance: f32) -> f32 {
-		peak * self.gain(distance)
-	}
-
-	fn unit(start: f32, end: f32, value: f32) -> f32 {
-		let span = end - start;
-		if span.abs() < 1e-6 {
-			0.0
-		} else {
-			((value - start) / span).clamp(0.0, 1.0)
-		}
-	}
-
-	fn lerp(start: f32, end: f32, t: f32) -> f32 {
-		start + (end - start) * t
-	}
 }
 
 /// Loaded fire, hammer, fizz, and impact clips. Missing this resource is a silent no-op.
@@ -230,7 +182,9 @@ impl FirearmFireSounds {
 			Some(frames) => self.spawn_oneshot(
 				commands, scene, listener, name, frames, parent, local, world, volume, radius,
 			),
-			None => Self::queue_clip(commands, kind, parent, local, world, volume, radius, false, false),
+			None => {
+				Self::queue_clip(commands, kind, parent, local, world, volume, radius, false, false)
+			}
 		}
 	}
 
@@ -254,7 +208,15 @@ impl FirearmFireSounds {
 				commands, scene, listener, name, frames, parent, local, world, volume, radius, fizz,
 			),
 			None => Self::queue_clip(
-				commands, kind, Some(parent), local, world, volume, radius, true, fizz,
+				commands,
+				kind,
+				Some(parent),
+				local,
+				world,
+				volume,
+				radius,
+				true,
+				fizz,
 			),
 		}
 	}
@@ -284,7 +246,7 @@ impl FirearmFireSounds {
 		let mut entity = commands.spawn((
 			Name::new(name),
 			Transform::from_translation(local),
-			OddioScene::voice(spatial, stop, None, world, true),
+			OddioScene::voice(spatial, stop, world, true),
 		));
 		if let Some(parent) = parent {
 			entity.insert(ChildOf(parent));
@@ -306,11 +268,11 @@ impl FirearmFireSounds {
 		fizz: bool,
 	) {
 		let stop = Arc::new(AtomicBool::new(false));
-		let (mut gain_control, gain) =
-			Gain::new(Stoppable::new(Cycle::new(frames), stop.clone()));
-		gain_control.set_amplitude_ratio(volume);
-		let Some(spatial) =
-			scene.play_buffered(gain, OddioScene::options(world, listener, radius))
+		let signal = Stoppable::new(
+			FixedGain::new(Cycle::new(frames), amplitude_to_db(volume)),
+			stop.clone(),
+		);
+		let Some(spatial) = scene.play_seek(signal, OddioScene::options(world, listener, radius))
 		else {
 			return;
 		};
@@ -318,7 +280,7 @@ impl FirearmFireSounds {
 			Name::new(name),
 			ChildOf(parent),
 			Transform::from_translation(local),
-			OddioScene::voice(spatial, stop, Some(gain_control), world, false),
+			OddioScene::voice(spatial, stop, world, false),
 		));
 		if fizz {
 			entity.insert(FlightFizz);
@@ -433,7 +395,6 @@ impl FirearmFireSounds {
 		scene: &OddioScene,
 		listener: &GlobalTransform,
 		point: Vec3,
-		distance: f32,
 	) {
 		self.play_or_queue_oneshot(
 			commands,
@@ -445,7 +406,7 @@ impl FirearmFireSounds {
 			None,
 			point,
 			point,
-			FlightAttenuation::FIREARM.amplitude_at(IMPACT_VOLUME, distance),
+			IMPACT_VOLUME,
 			IMPACT_SPATIAL_RADIUS,
 		);
 	}
@@ -605,19 +566,6 @@ mod tests {
 	}
 
 	#[test]
-	fn flight_gain_follows_listener_distance_not_time() {
-		let curve = FlightAttenuation::FIREARM;
-		assert!((curve.gain(0.0) - 1.0).abs() < 1e-5);
-		assert!((curve.gain(5.0) - 1.0).abs() < 1e-5);
-		assert!((curve.gain(20.0) - curve.mid_gain).abs() < 1e-5);
-		assert!((curve.gain(50.0) - curve.far_gain).abs() < 1e-5);
-		assert!(curve.gain(100.0) < 1e-5);
-		assert!(curve.gain(12.5) > curve.gain(20.0));
-		assert!(curve.gain(20.0) > curve.gain(50.0));
-		assert!(curve.amplitude_at(IMPACT_VOLUME, 0.0) > curve.amplitude_at(IMPACT_VOLUME, 50.0));
-	}
-
-	#[test]
 	fn prefers_f32_stereo_then_i16() {
 		use cpal::SampleFormat;
 		assert!(matches!(
@@ -628,7 +576,8 @@ mod tests {
 			preferred_sample_format(Some((SampleFormat::I16, 2)), &[]),
 			Some(SampleFormat::I16)
 		));
-		assert!(preferred_sample_format(Some((SampleFormat::F32, 1)), &[(SampleFormat::I16, 1)]).is_none());
+		assert!(preferred_sample_format(Some((SampleFormat::F32, 1)), &[(SampleFormat::I16, 1)])
+			.is_none());
 	}
 
 	#[test]

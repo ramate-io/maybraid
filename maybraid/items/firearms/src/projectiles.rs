@@ -40,8 +40,8 @@ use crate::muzzle_flame::{
 	MuzzleFlameMaterialPlugin, MuzzleFlameMaterialRefCache,
 };
 use crate::sound::{
-	attenuate_flight_fizz, despawn_finished_oddio_voices, ensure_camera_spatial_listener,
-	flush_pending_firearm_clips, setup_fire_sounds, setup_oddio_scene, sync_oddio_listener,
+	despawn_finished_oddio_voices, ensure_camera_spatial_listener, flush_pending_firearm_clips,
+	setup_fire_sounds, setup_oddio_scene, sync_oddio_listener,
 	sync_oddio_voices, FirearmFireSounds,
 	OddioScene,
 };
@@ -196,7 +196,6 @@ impl Plugin for FirearmWeaponsPlugin {
 					sync_oddio_listener.after(FirearmWeaponSystems::Fire),
 					flush_pending_firearm_clips.after(FirearmWeaponSystems::Fire),
 					sync_oddio_voices.after(FirearmWeaponSystems::Fire),
-					attenuate_flight_fizz.after(FirearmWeaponSystems::Fire),
 					despawn_finished_oddio_voices.after(FirearmWeaponSystems::Fire),
 					spawn_impacts_from_contacts,
 					tick_impact_bursts.after(bevy_hanabi::EffectSystems::TickSpawners),
@@ -999,7 +998,6 @@ fn spawn_impacts_from_contacts(
 	mut commands: Commands,
 ) {
 	let listener = listeners.iter().next();
-	let ear = listener.map(|listener| listener.translation());
 	for contact in contacts.read() {
 		if let Some(effects) = effects.as_deref() {
 			spawn_impact(&mut commands, effects, contact.point, contact.normal);
@@ -1009,8 +1007,7 @@ fn spawn_impacts_from_contacts(
 		else {
 			continue;
 		};
-		let distance = ear.map(|ear| contact.point.distance(ear)).unwrap_or(0.0);
-		sounds.play_impact(&mut commands, &sources, scene, listener, contact.point, distance);
+		sounds.play_impact(&mut commands, &sources, scene, listener, contact.point);
 	}
 }
 

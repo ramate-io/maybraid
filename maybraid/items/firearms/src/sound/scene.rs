@@ -13,9 +13,7 @@ use bevy::audio::AudioSource;
 use bevy::prelude::*;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::SampleFormat;
-use oddio::{Frames, GainControl, Sample, Seek, Signal, Spatial, SpatialOptions, SpatialScene};
-
-use crate::sound::FlightFizz;
+use oddio::{Frames, Sample, Seek, Signal, Spatial, SpatialOptions, SpatialScene};
 
 /// Shared oddio mixer. Missing this resource is a silent no-op.
 #[derive(Resource)]
@@ -35,7 +33,6 @@ struct ListenerMotion {
 pub(crate) struct OddioVoice {
 	spatial: Spatial,
 	stop: Arc<AtomicBool>,
-	gain: Option<GainControl>,
 	last_world: Option<Vec3>,
 	/// False on the spawn frame so we do not `set_motion` from a stale GT.
 	follow_transform: bool,
@@ -153,17 +150,6 @@ impl OddioScene {
 		self.control.lock().ok().map(|mut control| control.play(signal, options))
 	}
 
-	pub fn play_buffered<S: Signal<Frame = Sample> + Send + 'static>(
-		&self,
-		signal: S,
-		options: SpatialOptions,
-	) -> Option<Spatial> {
-		let rate = self.sample_rate;
-		self.control.lock().ok().map(|mut control| {
-			control.play_buffered(signal, options, 120.0, rate, 0.1)
-		})
-	}
-
 	pub fn options(world: Vec3, listener: &GlobalTransform, radius: f32) -> SpatialOptions {
 		let rel = world - listener.translation();
 		SpatialOptions { position: point3(rel), velocity: [0.0, 0.0, 0.0].into(), radius }
@@ -172,14 +158,12 @@ impl OddioScene {
 	pub(crate) fn voice(
 		spatial: Spatial,
 		stop: Arc<AtomicBool>,
-		gain: Option<GainControl>,
 		world: Vec3,
 		despawn_when_done: bool,
 	) -> OddioVoice {
 		OddioVoice {
 			spatial,
 			stop,
-			gain,
 			last_world: Some(world),
 			follow_transform: false,
 			despawn_when_done,
@@ -263,23 +247,6 @@ pub(crate) fn despawn_finished_oddio_voices(
 		if voice.despawn_when_done && voice.spatial.is_finished() {
 			commands.entity(entity).try_despawn();
 		}
-	}
-}
-
-pub(crate) fn attenuate_flight_fizz(
-	listeners: Query<&GlobalTransform, With<SpatialListener>>,
-	mut emitters: Query<(&GlobalTransform, &mut OddioVoice), With<FlightFizz>>,
-) {
-	let Some(listener) = listeners.iter().next() else {
-		return;
-	};
-	let ear = listener.translation();
-	let curve = crate::sound::FlightAttenuation::FIREARM;
-	for (transform, mut voice) in &mut emitters {
-		let Some(gain) = voice.gain.as_mut() else {
-			continue;
-		};
-		gain.set_amplitude_ratio(curve.gain(transform.translation().distance(ear)) * crate::sound::FIZZ_VOLUME);
 	}
 }
 
