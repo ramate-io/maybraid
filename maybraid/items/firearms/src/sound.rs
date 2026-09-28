@@ -1,9 +1,10 @@
 //! Firearm shot, beam, and in-flight clips.
 //!
 //! Bolts and bullets play a muzzle one-shot, then a looping fizz child follows
-//! the flight until it despawns. A laser loops the fire clip on the beam. Bevy
-//! spatial audio supplies stereo pan. Flight loudness is a distance curve on
-//! [`SpatialAudioSink`], not rodio's inverse-square.
+//! the flight until it despawns. A hit plays a world-space impact one-shot.
+//! A laser loops the fire clip on the beam. Bevy spatial audio supplies stereo
+//! pan. Flight and impact loudness use a listener-distance curve, not rodio's
+//! inverse-square.
 
 use bevy::audio::{
 	AudioPlayer, AudioSinkPlayback, AudioSource, PlaybackSettings, SpatialAudioSink, SpatialScale,
@@ -20,14 +21,21 @@ pub const WET_LASER_FIRE: AssetPath =
 /// Short seamless flight loop under `maybraid/assets`.
 pub const LAZER_FIZZ: AssetPath = AssetPath::new("sound-effects/lazer_fizz_001.wav");
 
-const FIRE_VOLUME: f32 = 0.8;
+/// One-shot when a bolt or bullet first crosses a collider.
+pub const LAZER_IMPACT_FIZZ: AssetPath = AssetPath::new("sound-effects/lazer_impact_fizz_001.wav");
+
+const FIRE_VOLUME: f32 = 1.4;
 const FIZZ_VOLUME: f32 = 0.55;
+const IMPACT_VOLUME: f32 = 0.7;
 /// Compresses world meters so a 3.6 m follow boom stays at full volume and a
 /// 20 m flanker is about a quarter. Rodio clamps `1 / dist²` at 1 scaled unit.
-pub const FIRE_SPATIAL_SCALE: SpatialScale = SpatialScale::new(0.02);
+pub const FIRE_SPATIAL_SCALE: SpatialScale = SpatialScale::new(0.1);
 /// Keeps rodio's `1 / dist²` clamped through [`FlightAttenuation::silent`] so
 /// the authored meter curve owns loudness. Pan is scale-invariant.
-pub const FIZZ_SPATIAL_SCALE: SpatialScale = SpatialScale::new(0.01);
+pub const FIZZ_SPATIAL_SCALE: SpatialScale = SpatialScale::new(0.5);
+/// Same remap for the impact one-shot. Independent of the flight loop so a
+/// hit can fall off faster or carry farther without retuning the fizz.
+pub const IMPACT_SPATIAL_SCALE: SpatialScale = SpatialScale::new(0.25);
 /// Virtual ear spacing. Slightly wider than a human head so left/right still
 /// reads at follow-camera range. Panning uses this gap, not the spatial scale.
 pub const FIRE_LISTENER_GAP: f32 = 0.4;
@@ -71,7 +79,11 @@ impl FlightAttenuation {
 	}
 
 	pub fn volume(self, distance: f32) -> Volume {
-		Volume::Linear(FIZZ_VOLUME * self.gain(distance))
+		self.volume_at(FIZZ_VOLUME, distance)
+	}
+
+	pub fn volume_at(self, peak: f32, distance: f32) -> Volume {
+		Volume::Linear(peak * self.gain(distance))
 	}
 
 	fn unit(start: f32, end: f32, value: f32) -> f32 {
@@ -93,6 +105,7 @@ impl FlightAttenuation {
 pub struct FirearmFireSounds {
 	pub wet_laser: Handle<AudioSource>,
 	pub lazer_fizz: Handle<AudioSource>,
+	pub lazer_impact: Handle<AudioSource>,
 }
 
 impl FirearmFireSounds {
@@ -100,6 +113,7 @@ impl FirearmFireSounds {
 		Self {
 			wet_laser: asset_server.load(WET_LASER_FIRE.as_str()),
 			lazer_fizz: asset_server.load(LAZER_FIZZ.as_str()),
+			lazer_impact: asset_server.load(LAZER_IMPACT_FIZZ.as_str()),
 		}
 	}
 
@@ -126,6 +140,13 @@ impl FirearmFireSounds {
 			.with_volume(Volume::Linear(FIZZ_VOLUME))
 			.with_spatial(true)
 			.with_spatial_scale(FIZZ_SPATIAL_SCALE)
+	}
+
+	pub fn impact_settings(volume: Volume) -> PlaybackSettings {
+		PlaybackSettings::DESPAWN
+			.with_volume(volume)
+			.with_spatial(true)
+			.with_spatial_scale(IMPACT_SPATIAL_SCALE)
 	}
 
 	pub fn play_at(
@@ -160,6 +181,15 @@ impl FirearmFireSounds {
 			FlightFizz,
 			AudioPlayer::new(self.lazer_fizz.clone()),
 			Self::fizz_settings(),
+		));
+	}
+
+	pub fn play_impact(&self, commands: &mut Commands, point: Vec3, distance: f32) {
+		commands.spawn((
+			Name::new("projectile-impact"),
+			Transform::from_translation(point),
+			AudioPlayer::new(self.lazer_impact.clone()),
+			Self::impact_settings(FlightAttenuation::FIREARM.volume_at(IMPACT_VOLUME, distance)),
 		));
 	}
 }
@@ -226,6 +256,7 @@ mod tests {
 	fn authored_clips_are_in_assets() {
 		asset_exists(WET_LASER_FIRE);
 		asset_exists(LAZER_FIZZ);
+		asset_exists(LAZER_IMPACT_FIZZ);
 	}
 
 	#[test]
@@ -233,6 +264,10 @@ mod tests {
 		assert!(matches!(FirearmFireSounds::shot_settings().mode, PlaybackMode::Despawn));
 		assert!(matches!(FirearmFireSounds::laser_settings().mode, PlaybackMode::Loop));
 		assert!(matches!(FirearmFireSounds::fizz_settings().mode, PlaybackMode::Loop));
+		assert!(matches!(
+			FirearmFireSounds::impact_settings(Volume::Linear(1.0)).mode,
+			PlaybackMode::Despawn
+		));
 	}
 
 	#[test]
@@ -243,6 +278,9 @@ mod tests {
 		assert!(shot.spatial && laser.spatial && fizz.spatial);
 		assert_eq!(shot.spatial_scale.map(|scale| scale.0), Some(FIRE_SPATIAL_SCALE.0));
 		assert_eq!(fizz.spatial_scale.map(|scale| scale.0), Some(FIZZ_SPATIAL_SCALE.0));
+		let impact = FirearmFireSounds::impact_settings(Volume::Linear(1.0));
+		assert!(impact.spatial);
+		assert_eq!(impact.spatial_scale.map(|scale| scale.0), Some(IMPACT_SPATIAL_SCALE.0));
 	}
 
 	#[test]
@@ -273,6 +311,9 @@ mod tests {
 		assert!(curve.gain(100.0) < 1e-5);
 		assert!(curve.gain(12.5) > curve.gain(20.0));
 		assert!(curve.gain(20.0) > curve.gain(50.0));
+		let near = curve.volume_at(IMPACT_VOLUME, 0.0);
+		let far = curve.volume_at(IMPACT_VOLUME, 50.0);
+		assert!(near.to_linear() > far.to_linear());
 	}
 
 	#[test]

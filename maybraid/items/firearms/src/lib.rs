@@ -42,7 +42,8 @@ pub use projectiles::{
 };
 pub use sound::{
 	FirearmFireSounds, FlightAttenuation, FlightFizz, FIRE_LISTENER_GAP, FIRE_SPATIAL_SCALE,
-	FIZZ_SPATIAL_SCALE, LASER_MUZZLE_LOCAL, LAZER_FIZZ, WET_LASER_FIRE,
+	FIZZ_SPATIAL_SCALE, IMPACT_SPATIAL_SCALE, LASER_MUZZLE_LOCAL, LAZER_FIZZ, LAZER_IMPACT_FIZZ,
+	WET_LASER_FIRE,
 };
 
 /// Config → inner [`FirearmComponents`] recipe.

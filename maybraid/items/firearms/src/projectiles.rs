@@ -961,14 +961,19 @@ pub fn tick_lasers(
 fn spawn_impacts_from_contacts(
 	mut contacts: MessageReader<ProjectileContact>,
 	effects: Option<Res<ImpactEffects>>,
+	sounds: Option<Res<FirearmFireSounds>>,
+	listeners: Query<&GlobalTransform, With<SpatialListener>>,
 	mut commands: Commands,
 ) {
-	let Some(effects) = effects else {
-		for _ in contacts.read() {}
-		return;
-	};
+	let ear = listeners.iter().next().map(|listener| listener.translation());
 	for contact in contacts.read() {
-		spawn_impact(&mut commands, &effects, contact.point, contact.normal);
+		if let Some(effects) = effects.as_deref() {
+			spawn_impact(&mut commands, effects, contact.point, contact.normal);
+		}
+		if let Some(sounds) = sounds.as_deref() {
+			let distance = ear.map(|ear| contact.point.distance(ear)).unwrap_or(0.0);
+			sounds.play_impact(&mut commands, contact.point, distance);
+		}
 	}
 }
 
