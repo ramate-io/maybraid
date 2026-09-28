@@ -12,12 +12,12 @@ use firearms_components::AssetPath;
 
 /// Authored wet-laser bip under `maybraid/assets`.
 pub const WET_LASER_FIRE: AssetPath =
-	AssetPath::new("sound-effects/weapons__wet_laser__wet_laser_002.wav");
+	AssetPath::new("sound-effects/weapons__wet_laser__wet_laser_001.wav");
 
 const FIRE_VOLUME: f32 = 0.8;
 /// Compresses world meters so a 3.6 m follow boom stays at full volume and a
 /// 20 m flanker is about a quarter. Rodio clamps `1 / dist²` at 1 scaled unit.
-pub const FIRE_SPATIAL_SCALE: SpatialScale = SpatialScale::new(0.1);
+pub const FIRE_SPATIAL_SCALE: SpatialScale = SpatialScale::new(0.02);
 /// Virtual ear spacing. Slightly wider than a human head so left/right still
 /// reads at follow-camera range. Panning uses this gap, not the spatial scale.
 pub const FIRE_LISTENER_GAP: f32 = 0.4;
