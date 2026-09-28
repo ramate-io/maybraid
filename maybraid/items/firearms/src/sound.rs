@@ -26,16 +26,16 @@ pub const WEAPON_IMPACT: AssetPath =
 	AssetPath::new("sound-effects/weapons__impact__lazer_impact_001.wav");
 
 pub const FIRE_VOLUME: f32 = 0.8;
-pub const HAMMER_VOLUME: f32 = 1.2;
+pub const HAMMER_VOLUME: f32 = 1.0;
 pub const FIZZ_VOLUME: f32 = 0.65;
-pub const IMPACT_VOLUME: f32 = 1.2;
+pub const IMPACT_VOLUME: f32 = 1.0;
 /// Rodio clamps `1 / dist²` at 1 scaled unit. Smaller scale = the layer carries farther.
-pub const FIRE_SPATIAL_SCALE: SpatialScale = SpatialScale::new(0.25);
-pub const HAMMER_SPATIAL_SCALE: SpatialScale = SpatialScale::new(0.2);
+pub const FIRE_SPATIAL_SCALE: SpatialScale = SpatialScale::new(0.05);
+pub const HAMMER_SPATIAL_SCALE: SpatialScale = SpatialScale::new(0.1);
 /// Keeps rodio's falloff from stacking on [`FlightAttenuation`] until the curve's
 /// far band. Pan is scale-invariant.
 pub const FIZZ_SPATIAL_SCALE: SpatialScale = SpatialScale::new(0.4);
-pub const IMPACT_SPATIAL_SCALE: SpatialScale = SpatialScale::new(0.3);
+pub const IMPACT_SPATIAL_SCALE: SpatialScale = SpatialScale::new(0.2);
 /// Virtual ear spacing. Slightly wider than a human head so left/right still
 /// reads at follow-camera range. Panning uses this gap, not the spatial scale.
 pub const FIRE_LISTENER_GAP: f32 = 0.4;
