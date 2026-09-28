@@ -1,10 +1,10 @@
-//! Firearm shot, beam, and in-flight clips.
+//! Four-layer firearm SFX: fire, hammer, fizz, and impact.
 //!
-//! Bolts and bullets play a muzzle one-shot, then a looping fizz child follows
-//! the flight until it despawns. A hit plays a world-space impact one-shot.
-//! A laser loops the fire clip on the beam. Bevy spatial audio supplies stereo
-//! pan. Flight and impact loudness use a listener-distance curve, not rodio's
-//! inverse-square.
+//! Fire and hammer are muzzle one-shots on every pull. Bolts and bullets then
+//! carry a looping fizz until the flight despawns; a hit plays a world-space
+//! impact. A laser loops fire on the beam and plays hammer once when it starts.
+//! Each layer has its own volume and spatial scale. Bevy supplies stereo pan.
+//! Fizz and impact loudness also use a listener-distance curve.
 
 use bevy::audio::{
 	AudioPlayer, AudioSinkPlayback, AudioSource, PlaybackSettings, SpatialAudioSink, SpatialScale,
@@ -14,28 +14,28 @@ use bevy::prelude::*;
 
 use firearms_components::AssetPath;
 
-/// Authored wet-laser bip under `maybraid/assets`.
-pub const WET_LASER_FIRE: AssetPath =
-	AssetPath::new("sound-effects/weapons__wet_laser__wet_laser_001.wav");
-
-/// Short seamless flight loop under `maybraid/assets`.
-pub const LAZER_FIZZ: AssetPath = AssetPath::new("sound-effects/lazer_fizz_001.wav");
-
+/// Energy report at the muzzle.
+pub const WEAPON_FIRE: AssetPath = AssetPath::new("sound-effects/weapons__fire__wet_laser_001.wav");
+/// Percussive layer fired with [`WEAPON_FIRE`].
+pub const WEAPON_HAMMER: AssetPath =
+	AssetPath::new("sound-effects/weapons__hammer__lazer_hammer_fizz_001.wav");
+/// Seamless flight loop on a bolt or bullet.
+pub const WEAPON_FIZZ: AssetPath = AssetPath::new("sound-effects/weapons__fiz__lazer_fizz_001.wav");
 /// One-shot when a bolt or bullet first crosses a collider.
-pub const LAZER_IMPACT_FIZZ: AssetPath = AssetPath::new("sound-effects/lazer_impact_fizz_001.wav");
+pub const WEAPON_IMPACT: AssetPath =
+	AssetPath::new("sound-effects/weapons__impact__lazer_impact_001.wav");
 
-const FIRE_VOLUME: f32 = 1.4;
-const FIZZ_VOLUME: f32 = 0.55;
-const IMPACT_VOLUME: f32 = 0.7;
-/// Compresses world meters so a 3.6 m follow boom stays at full volume and a
-/// 20 m flanker is about a quarter. Rodio clamps `1 / dist²` at 1 scaled unit.
-pub const FIRE_SPATIAL_SCALE: SpatialScale = SpatialScale::new(0.1);
-/// Keeps rodio's `1 / dist²` clamped through [`FlightAttenuation::silent`] so
-/// the authored meter curve owns loudness. Pan is scale-invariant.
-pub const FIZZ_SPATIAL_SCALE: SpatialScale = SpatialScale::new(0.5);
-/// Same remap for the impact one-shot. Independent of the flight loop so a
-/// hit can fall off faster or carry farther without retuning the fizz.
-pub const IMPACT_SPATIAL_SCALE: SpatialScale = SpatialScale::new(0.25);
+pub const FIRE_VOLUME: f32 = 1.5;
+pub const HAMMER_VOLUME: f32 = 1.2;
+pub const FIZZ_VOLUME: f32 = 0.55;
+pub const IMPACT_VOLUME: f32 = 2.0;
+/// Rodio clamps `1 / dist²` at 1 scaled unit. Smaller scale = the layer carries farther.
+pub const FIRE_SPATIAL_SCALE: SpatialScale = SpatialScale::new(0.3);
+pub const HAMMER_SPATIAL_SCALE: SpatialScale = SpatialScale::new(0.3);
+/// Keeps rodio's falloff from stacking on [`FlightAttenuation`] until the curve's
+/// far band. Pan is scale-invariant.
+pub const FIZZ_SPATIAL_SCALE: SpatialScale = SpatialScale::new(0.3);
+pub const IMPACT_SPATIAL_SCALE: SpatialScale = SpatialScale::new(0.3);
 /// Virtual ear spacing. Slightly wider than a human head so left/right still
 /// reads at follow-camera range. Panning uses this gap, not the spatial scale.
 pub const FIRE_LISTENER_GAP: f32 = 0.4;
@@ -100,20 +100,22 @@ impl FlightAttenuation {
 	}
 }
 
-/// Loaded fire and flight clips. Missing this resource is a silent no-op.
+/// Loaded fire, hammer, fizz, and impact clips. Missing this resource is a silent no-op.
 #[derive(Resource, Clone)]
 pub struct FirearmFireSounds {
-	pub wet_laser: Handle<AudioSource>,
-	pub lazer_fizz: Handle<AudioSource>,
-	pub lazer_impact: Handle<AudioSource>,
+	pub fire: Handle<AudioSource>,
+	pub hammer: Handle<AudioSource>,
+	pub fizz: Handle<AudioSource>,
+	pub impact: Handle<AudioSource>,
 }
 
 impl FirearmFireSounds {
 	pub fn load(asset_server: &AssetServer) -> Self {
 		Self {
-			wet_laser: asset_server.load(WET_LASER_FIRE.as_str()),
-			lazer_fizz: asset_server.load(LAZER_FIZZ.as_str()),
-			lazer_impact: asset_server.load(LAZER_IMPACT_FIZZ.as_str()),
+			fire: asset_server.load(WEAPON_FIRE.as_str()),
+			hammer: asset_server.load(WEAPON_HAMMER.as_str()),
+			fizz: asset_server.load(WEAPON_FIZZ.as_str()),
+			impact: asset_server.load(WEAPON_IMPACT.as_str()),
 		}
 	}
 
@@ -126,6 +128,13 @@ impl FirearmFireSounds {
 			.with_volume(Volume::Linear(FIRE_VOLUME))
 			.with_spatial(true)
 			.with_spatial_scale(FIRE_SPATIAL_SCALE)
+	}
+
+	pub fn hammer_settings() -> PlaybackSettings {
+		PlaybackSettings::DESPAWN
+			.with_volume(Volume::Linear(HAMMER_VOLUME))
+			.with_spatial(true)
+			.with_spatial_scale(HAMMER_SPATIAL_SCALE)
 	}
 
 	pub fn laser_settings() -> PlaybackSettings {
@@ -152,25 +161,57 @@ impl FirearmFireSounds {
 	pub fn play_at(
 		&self,
 		commands: &mut Commands,
+		name: &'static str,
+		clip: Handle<AudioSource>,
 		parent: Entity,
 		local: Vec3,
 		settings: PlaybackSettings,
 	) {
 		commands.spawn((
-			Name::new("firearm-fire"),
+			Name::new(name),
 			ChildOf(parent),
 			Transform::from_translation(local),
-			AudioPlayer::new(self.wet_laser.clone()),
+			AudioPlayer::new(clip),
 			settings,
 		));
 	}
 
 	pub fn play_shot(&self, commands: &mut Commands, barrel: Entity, muzzle_local: Vec3) {
-		self.play_at(commands, barrel, muzzle_local, Self::shot_settings());
+		self.play_at(
+			commands,
+			"firearm-fire",
+			self.fire.clone(),
+			barrel,
+			muzzle_local,
+			Self::shot_settings(),
+		);
+		self.play_at(
+			commands,
+			"firearm-hammer",
+			self.hammer.clone(),
+			barrel,
+			muzzle_local,
+			Self::hammer_settings(),
+		);
 	}
 
 	pub fn loop_on(&self, commands: &mut Commands, laser: Entity) {
-		self.play_at(commands, laser, LASER_MUZZLE_LOCAL, Self::laser_settings());
+		self.play_at(
+			commands,
+			"firearm-fire",
+			self.fire.clone(),
+			laser,
+			LASER_MUZZLE_LOCAL,
+			Self::laser_settings(),
+		);
+		self.play_at(
+			commands,
+			"firearm-hammer",
+			self.hammer.clone(),
+			laser,
+			LASER_MUZZLE_LOCAL,
+			Self::hammer_settings(),
+		);
 	}
 
 	pub fn loop_fizz(&self, commands: &mut Commands, projectile: Entity) {
@@ -179,7 +220,7 @@ impl FirearmFireSounds {
 			ChildOf(projectile),
 			Transform::IDENTITY,
 			FlightFizz,
-			AudioPlayer::new(self.lazer_fizz.clone()),
+			AudioPlayer::new(self.fizz.clone()),
 			Self::fizz_settings(),
 		));
 	}
@@ -188,7 +229,7 @@ impl FirearmFireSounds {
 		commands.spawn((
 			Name::new("projectile-impact"),
 			Transform::from_translation(point),
-			AudioPlayer::new(self.lazer_impact.clone()),
+			AudioPlayer::new(self.impact.clone()),
 			Self::impact_settings(FlightAttenuation::FIREARM.volume_at(IMPACT_VOLUME, distance)),
 		));
 	}
@@ -254,14 +295,16 @@ mod tests {
 
 	#[test]
 	fn authored_clips_are_in_assets() {
-		asset_exists(WET_LASER_FIRE);
-		asset_exists(LAZER_FIZZ);
-		asset_exists(LAZER_IMPACT_FIZZ);
+		asset_exists(WEAPON_FIRE);
+		asset_exists(WEAPON_HAMMER);
+		asset_exists(WEAPON_FIZZ);
+		asset_exists(WEAPON_IMPACT);
 	}
 
 	#[test]
 	fn ballistic_shot_despawns_and_loops_loop() {
 		assert!(matches!(FirearmFireSounds::shot_settings().mode, PlaybackMode::Despawn));
+		assert!(matches!(FirearmFireSounds::hammer_settings().mode, PlaybackMode::Despawn));
 		assert!(matches!(FirearmFireSounds::laser_settings().mode, PlaybackMode::Loop));
 		assert!(matches!(FirearmFireSounds::fizz_settings().mode, PlaybackMode::Loop));
 		assert!(matches!(
@@ -271,15 +314,16 @@ mod tests {
 	}
 
 	#[test]
-	fn fire_clips_are_spatial() {
+	fn each_layer_has_its_own_spatial_scale() {
 		let shot = FirearmFireSounds::shot_settings();
+		let hammer = FirearmFireSounds::hammer_settings();
 		let laser = FirearmFireSounds::laser_settings();
 		let fizz = FirearmFireSounds::fizz_settings();
-		assert!(shot.spatial && laser.spatial && fizz.spatial);
-		assert_eq!(shot.spatial_scale.map(|scale| scale.0), Some(FIRE_SPATIAL_SCALE.0));
-		assert_eq!(fizz.spatial_scale.map(|scale| scale.0), Some(FIZZ_SPATIAL_SCALE.0));
 		let impact = FirearmFireSounds::impact_settings(Volume::Linear(1.0));
-		assert!(impact.spatial);
+		assert!(shot.spatial && hammer.spatial && laser.spatial && fizz.spatial && impact.spatial);
+		assert_eq!(shot.spatial_scale.map(|scale| scale.0), Some(FIRE_SPATIAL_SCALE.0));
+		assert_eq!(hammer.spatial_scale.map(|scale| scale.0), Some(HAMMER_SPATIAL_SCALE.0));
+		assert_eq!(fizz.spatial_scale.map(|scale| scale.0), Some(FIZZ_SPATIAL_SCALE.0));
 		assert_eq!(impact.spatial_scale.map(|scale| scale.0), Some(IMPACT_SPATIAL_SCALE.0));
 	}
 
