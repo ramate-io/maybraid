@@ -40,7 +40,9 @@ pub use projectiles::{
 	muzzle_world, FireOnTrigger, FirearmWeaponSystems, FirearmWeaponsPlugin, LaserBeam, LaserSpec,
 	ProjectileLoad, Weapon, WeaponTrigger, WeaponsArmed, BARREL_REST_LENGTH,
 };
-pub use sound::{FirearmFireSounds, WET_LASER_FIRE};
+pub use sound::{
+	FirearmFireSounds, FIRE_LISTENER_GAP, FIRE_SPATIAL_SCALE, LASER_MUZZLE_LOCAL, WET_LASER_FIRE,
+};
 
 /// Config → inner [`FirearmComponents`] recipe.
 ///

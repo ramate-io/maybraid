@@ -3,6 +3,8 @@
 Follow camera, POV toggle, look cone, and FOV. Knobs live on
 [`FollowCamera`](src/lib.rs) (defaults match the firing-range orbit). Runtime
 yaw / pitch / POV / focus live on [`CameraController`](src/look.rs).
+[`spawn_follow_camera`](src/lib.rs) also installs a `SpatialListener` so firearm
+shots can pan and fall off with distance.
 
 Reads [`PlayerLook`](../player/README.md) slots on the followed body; writes look
 back so item users never query `Camera3d`.

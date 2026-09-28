@@ -38,7 +38,7 @@ use crate::muzzle_flame::{
 	init_muzzle_flame_caches, muzzle_flame_ref, resolve_muzzle_flame, MuzzleFlameMaterial,
 	MuzzleFlameMaterialPlugin, MuzzleFlameMaterialRefCache,
 };
-use crate::sound::{setup_fire_sounds, FirearmFireSounds};
+use crate::sound::{ensure_camera_spatial_listener, setup_fire_sounds, FirearmFireSounds};
 
 /// Authored rest length of the `barrel` bone (head → tail) in bone-local units.
 pub const BARREL_REST_LENGTH: f32 = 1.0;
@@ -168,6 +168,7 @@ impl Plugin for FirearmWeaponsPlugin {
 		app.init_resource::<WeaponsArmed>()
 			.add_message::<WeaponFired>()
 			.add_systems(Startup, (setup_impact_effects, setup_muzzle_flash, setup_fire_sounds))
+			.add_systems(Update, ensure_camera_spatial_listener)
 			.add_systems(
 				PostUpdate,
 				(
@@ -279,9 +280,9 @@ pub(crate) struct WeaponFx<'w> {
 }
 
 impl WeaponFx<'_> {
-	fn play_shot(&self, commands: &mut Commands) {
+	fn play_shot(&self, commands: &mut Commands, barrel: Entity) {
 		if let Some(sounds) = self.sounds.as_deref() {
-			sounds.play_shot(commands);
+			sounds.play_shot(commands, barrel, Vec3::Y * BARREL_REST_LENGTH);
 		}
 	}
 
@@ -703,7 +704,7 @@ pub(crate) fn fire_weapons(
 				) {
 					continue;
 				}
-				fx.play_shot(&mut commands);
+				fx.play_shot(&mut commands, barrel);
 				ignite_muzzle_flash(
 					&mut commands,
 					&fx.flashes,
@@ -738,7 +739,7 @@ pub(crate) fn fire_weapons(
 				) {
 					continue;
 				}
-				fx.play_shot(&mut commands);
+				fx.play_shot(&mut commands, barrel);
 				ignite_muzzle_flash(
 					&mut commands,
 					&fx.flashes,
