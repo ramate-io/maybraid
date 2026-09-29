@@ -8,7 +8,11 @@ impl<G: UrbanModel> Plugin for MobGenerationPlugin<G> {
 	fn build(&self, app: &mut App) {
 		// MobGroupsPlugin (drop the is_plugin_added guard)
 		// WorldMobIndex -> MobIndex, MobGenerateBullseye, MobPresentBullseye
-		// LodGenerateBudget::<MobLodChan>::new(16)
+		// LodGenerateBudget::<MobLodChan>: init or take from layer config —
+		//   do not insert. Today's WorldMobsPlugin still inserts 16 (mobs
+		//   inherited the global). Last-insert-wins is now per channel.
+		//   When this layer owns registration, drop the insert so the
+		//   assembler can set the budget before or after the plugin.
 		// LodGenerateRegionPlugin<MobGenerateBullseye, With<LodViewer>, MobLodChan>
 		// LodGeneratePlugin<WorldMobCell, WorldMobIndex, MobLodChan, With<LodViewer>>
 		// LodPresentRegionPlugin<MobPresentBullseye, With<LodViewer>, MobLodChan>

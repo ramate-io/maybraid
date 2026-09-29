@@ -12,14 +12,22 @@ impl Plugin for VegetationGenerationPlugin {
 	fn build(&self, app: &mut App) {
 		// Forest:
 		//   ForestIndex, ForestGenerateBullseye, ForestPresentBullseye,
-		//   LodGenerateBudget::<ForestLodChan>::new(16)
+		//   LodGenerateBudget::<ForestLodChan>: init or take from
+		//     VegetationLayerConfig — do not insert. Today's
+		//     register_forest_lod still inserts 16; WorldPlugin inserts 16
+		//     again so the world value is explicit. Last-insert-wins is now
+		//     per channel. When this layer owns registration, drop the
+		//     insert so the assembler can set the budget before or after.
 		//   LodGenerateRegionPlugin<ForestGenerateBullseye, With<LodViewer>, ForestLodChan>
 		//   LodGeneratePlugin<ChicoGrove, ForestIndex, ForestLodChan, With<LodViewer>>
 		//   LodPresentRegionPlugin<ForestPresentBullseye, With<LodViewer>, ForestLodChan>
 		//     (present regions are keep bookkeeping; the presenter plugins are in presentation)
 		//
 		// Bump-outs: same split for CanopyBumpOut / MediumCanopyBumpOut
-		//   (BumpOutLodChan / MediumBumpOutLodChan, generate budget 16).
+		//   (BumpOutLodChan / MediumBumpOutLodChan). Same rule: init or
+		//   take from layer config, do not insert. Today's
+		//   register_bump_out_lod inserts 16 on both (they inherited
+		//   forest's global 16). World also inserts 16 on both.
 		//
 		// Streams (today in VegetationOnTerrainPlugin, non-commands branch):
 		//   stream_durham_forest.before(LodGenerateSystems::Produce).before(LodPresentSystems::Produce)

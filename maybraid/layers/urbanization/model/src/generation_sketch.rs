@@ -26,7 +26,12 @@ where
 		// register_urbanization_lod (urbanization_stream.rs:91), minus the
 		// presenter state (-> UrbanizationPresentationPlugin):
 		//   UrbanizationIndex, Urbanization{Generate,Present}Bullseye,
-		//   LodGenerateBudget::<UrbanizationLodChan>::new(16)   // world-effective; standalone playground is 8
+		//   LodGenerateBudget::<UrbanizationLodChan>: init or take from
+		//     UrbanizationLayerConfig — do not insert. Today's helper still
+		//     inserts 8 (standalone playground). WorldPlugin inserts 16 after
+		//     the playground plugin; last-insert-wins is now per channel.
+		//     When this layer owns registration, drop the insert so the
+		//     assembler can set 8 or 16 before or after the plugin.
 		//   LodGenerateRegionPlugin / LodGeneratePlugin<SelectedUrbanization, UrbanizationIndex, ..>
 		//   LodPresentRegionPlugin<UrbanizationPresentBullseye, ..>
 		//     The present-keep region is what generate_urbanization_developments

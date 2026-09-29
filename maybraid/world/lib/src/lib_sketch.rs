@@ -22,7 +22,11 @@ impl Plugin for WorldPlugin {
 			VegetationPresentationPlugin::<Ground>::default(),
 			MobPresentationPlugin::<Ground>::default(),
 		))
-		// Budgets that used to be implied by plugin insertion order:
+		// Assembler-owned generate budgets (world-effective 16 on every
+		// channel). Keep these even where today's helpers also insert 16:
+		// once #886 / #887 / #888 init instead of insert, these lines are
+		// the only source. Insert after the layer plugins (or before —
+		// init_resource will not overwrite).
 		.insert_resource(LodGenerateBudget::<ForestLodChan>::new(16))
 		.insert_resource(LodGenerateBudget::<UrbanizationLodChan>::new(16))
 		.insert_resource(LodGenerateBudget::<MobLodChan>::new(16))
