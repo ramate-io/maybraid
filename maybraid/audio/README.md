@@ -21,6 +21,8 @@ oddio graph → CPAL
 - **Flinch:** [`FlinchProfile`](src/flinch.rs) on a character names a
   [`GruntStyle`](src/flinch.rs). Damage picks a numbered variant noisily and
   plays a world-fixed `Voices` one-shot.
+- **Weather:** [`maybraid-weather`](../weather/) places quiet, wide-radius
+  breeze loops and gust one-shots on the `Ambience` bus.
 - **Spatial:** [`SpatialOneShot`](src/spatial.rs) is world-fixed.
   [`SpatialEmitter`](src/spatial.rs) follows an entity with
   [`AudioVelocity`](src/spatial.rs) from simulation, not inferred Δtransform.
