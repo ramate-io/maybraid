@@ -13,6 +13,7 @@ pub mod parts;
 pub mod plugin;
 pub mod pose;
 pub mod projectiles;
+pub mod sound;
 
 pub use ::projectiles::{BoltSpec, BulletSpec, Flight, PenetrationCost, ProjectileSource};
 pub use cadence::{Cadence, FireControl, WeaponFired, WeaponRecoil};
@@ -38,6 +39,12 @@ pub use pose::{aim_plus_x, BoneFit, FirearmPose};
 pub use projectiles::{
 	muzzle_world, FireOnTrigger, FirearmWeaponSystems, FirearmWeaponsPlugin, LaserBeam, LaserSpec,
 	ProjectileLoad, Weapon, WeaponTrigger, WeaponsArmed, BARREL_REST_LENGTH,
+};
+pub use sound::{
+	FirearmFireSounds, FlightFizz, FIRE_LISTENER_GAP, FIRE_SPATIAL_RADIUS, FIRE_SPATIAL_SCALE,
+	FIRE_VOLUME, FIZZ_SPATIAL_RADIUS, FIZZ_SPATIAL_SCALE, FIZZ_VOLUME, HAMMER_SPATIAL_RADIUS,
+	HAMMER_SPATIAL_SCALE, HAMMER_VOLUME, IMPACT_SPATIAL_RADIUS, IMPACT_SPATIAL_SCALE, IMPACT_VOLUME,
+	LASER_MUZZLE_LOCAL, WEAPON_FIRE, WEAPON_FIZZ, WEAPON_HAMMER, WEAPON_IMPACT,
 };
 
 /// Config → inner [`FirearmComponents`] recipe.

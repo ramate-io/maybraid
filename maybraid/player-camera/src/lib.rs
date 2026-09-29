@@ -133,6 +133,10 @@ impl Plugin for PlayerCameraPlugin {
 	}
 }
 
+/// Virtual ear spacing for Bevy spatial gunfire. Matches the firearms clip
+/// (`0.4`): slightly wider than a human head so left/right still reads.
+const SPATIAL_LISTENER_GAP: f32 = 0.4;
+
 pub fn spawn_follow_camera(commands: &mut Commands) -> Entity {
 	let follow = FollowCamera::default();
 	let yaw = -FRAC_PI_2;
@@ -141,6 +145,7 @@ pub fn spawn_follow_camera(commands: &mut Commands) -> Entity {
 		.spawn((
 			Camera3d::default(),
 			lod::LodViewer,
+			SpatialListener::new(SPATIAL_LISTENER_GAP),
 			follow,
 			Transform::from_translation(Vec3::new(
 				-follow.distance,
@@ -192,6 +197,21 @@ mod tests {
 	use super::*;
 	use crozon_characters::CharacterMotionSystems;
 	use maybraid_character_controller::CharacterIntent;
+
+	#[test]
+	fn follow_camera_carries_a_spatial_listener() {
+		let mut world = World::new();
+		let camera = spawn_follow_camera(&mut world.commands());
+		world.flush();
+		let listener = world.get::<SpatialListener>(camera).cloned();
+		assert!(listener.is_some());
+		if let Some(listener) = listener {
+			assert!(
+				(listener.right_ear_offset.x - listener.left_ear_offset.x - SPATIAL_LISTENER_GAP)
+					.abs() < 1e-5
+			);
+		}
+	}
 
 	#[test]
 	fn presentation_only_camera_allows_world_body_after_animation() {
