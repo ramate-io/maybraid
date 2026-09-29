@@ -5,7 +5,7 @@ use bevy::prelude::*;
 use crozon_characters::AnimId;
 use maybraid_audio::{Audio, AudioClip, AudioSystems, Mixer, MovementSounds, MovementState};
 
-use crate::body::{CharacterController, Grounded, Jumping, LEAP_SPEED};
+use crate::body::{CharacterController, Grounded, JumpPhase, Jumping, LEAP_SPEED};
 use crate::locomotion::WALK_SPEED;
 use crate::stance::{CharacterStance, StanceKind};
 use crate::{Npc, Player};
@@ -52,7 +52,7 @@ pub(crate) fn play_footsteps(
 	for (_entity, transform, velocity, mut gait, grounded, jumping, stance) in &mut bodies {
 		let speed = Vec3::new(velocity.x, 0.0, velocity.z).length();
 		let rate = footstep_rate(grounded.is_some(), jumping, stance, speed);
-		let steps = gait.take_steps(rate, dt);
+		let steps = gait.take_steps(rate, dt) + jump_plants(jumping, &mut gait);
 		if steps == 0 {
 			continue;
 		}
@@ -69,6 +69,25 @@ pub(crate) fn play_footsteps(
 			);
 		}
 	}
+}
+
+/// One plant on jump/leap start, one on land. Air and a failed hop stay quiet.
+pub(crate) fn jump_plants(jumping: Option<&Jumping>, state: &mut MovementState) -> u32 {
+	let Some(jump) = jumping else {
+		state.takeoff_planted = false;
+		state.land_planted = false;
+		return 0;
+	};
+	let mut steps = 0;
+	if !state.takeoff_planted {
+		state.takeoff_planted = true;
+		steps += 1;
+	}
+	if jump.phase == JumpPhase::Land && !state.land_planted {
+		state.land_planted = true;
+		steps += 1;
+	}
+	steps
 }
 
 /// Two plants per walk/run cycle. Air, stance, and idle stay quiet.
@@ -117,6 +136,25 @@ mod tests {
 		assert!(
 			(footstep_rate(true, None, None, 9.0) - AnimId::Run.default_speed() * 2.0).abs() < 1e-5
 		);
+	}
+
+	#[test]
+	fn jump_and_leap_plant_on_takeoff_and_land() {
+		let mut state = MovementState::seeded(4);
+		let mut hop = Jumping::start(0.0);
+		assert_eq!(jump_plants(Some(&hop), &mut state), 1);
+		assert_eq!(jump_plants(Some(&hop), &mut state), 0);
+		hop.phase = JumpPhase::Land;
+		assert_eq!(jump_plants(Some(&hop), &mut state), 1);
+		assert_eq!(jump_plants(None, &mut state), 0);
+		let mut leap = Jumping::start(9.0);
+		assert!(leap.leaping);
+		assert_eq!(jump_plants(Some(&leap), &mut state), 1);
+		leap.phase = JumpPhase::Air;
+		assert_eq!(jump_plants(Some(&leap), &mut state), 0);
+		leap.phase = JumpPhase::Land;
+		assert_eq!(jump_plants(Some(&leap), &mut state), 1);
+		assert_eq!(jump_plants(Some(&leap), &mut state), 0);
 	}
 
 	#[test]

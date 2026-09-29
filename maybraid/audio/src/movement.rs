@@ -12,7 +12,7 @@ use crate::spatial::SpatialOneShot;
 /// Inverse of the oddio zero-attenuation radius (meters).
 pub const FOOTSTEP_SPATIAL_SCALE: f32 = 0.4;
 pub const FOOTSTEP_SPATIAL_RADIUS: f32 = 1.0 / FOOTSTEP_SPATIAL_SCALE;
-pub const FOOTSTEP_VOLUME: f32 = 1.6;
+pub const FOOTSTEP_VOLUME: f32 = 0.8;
 pub const CHANGE_ITEM_SPATIAL_SCALE: f32 = 0.45;
 pub const CHANGE_ITEM_SPATIAL_RADIUS: f32 = 1.0 / CHANGE_ITEM_SPATIAL_SCALE;
 pub const CHANGE_ITEM_VOLUME: f32 = 1.4;
@@ -53,6 +53,10 @@ pub struct MovementState {
 	pub phase: f32,
 	pub noise: u64,
 	pub last_foot: Option<u8>,
+	/// Already planted the takeoff of the current jump / leap.
+	pub takeoff_planted: bool,
+	/// Already planted the land of the current jump / leap.
+	pub land_planted: bool,
 }
 
 impl MovementState {
@@ -61,6 +65,8 @@ impl MovementState {
 			phase: 0.0,
 			noise: if seed == 0 { 0x9E37_79B9_7F4A_7C15 } else { seed },
 			last_foot: None,
+			takeoff_planted: false,
+			land_planted: false,
 		}
 	}
 
