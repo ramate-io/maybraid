@@ -8,8 +8,6 @@ use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::prelude::*;
 use bevy::time::common_conditions::on_timer;
 use chico_forests::{ForestExtent, ForestIndex, LayeringKind, SelectedLayers};
-use chico_vegetation_on_terrain_playground::WorldBaseTerrain;
-use durham_terrain_models::{TerrainCellLayout, TerrainEntryStore};
 use lod::gen::{
 	GenerationScheme, Id, LodGenerateKeepRegion, LodGenerateRegion, OriginalId, SpatialIndex,
 	StorageStatus, TrackedId, Version,
@@ -33,8 +31,10 @@ use procedural_common::NoiseParams;
 use richmond_development_models::{DevelopmentEntryStore, DiscoverablePlace};
 use richmond_developments_on_terrain_playground::UrbanSetting;
 use richmond_urbanization::{UrbanizationExtent, UrbanizationIndex, UrbanizationKind};
+use terrain_layer_model::TerrainView;
 
 use crate::training::TrainingGrounds;
+use crate::Ground;
 
 const MOB_CELL_EXTENT: f32 = 400.0;
 const MOB_GENERATE_RADIUS: f32 = 3_000.0;
@@ -425,32 +425,10 @@ impl WorldMobPresenterState {
 }
 
 #[derive(SystemParam)]
-struct WorldMobSurface<'w> {
-	terrain: Res<'w, TerrainEntryStore>,
-	layout: Res<'w, TerrainCellLayout>,
-	base: Res<'w, WorldBaseTerrain>,
-	developments: Res<'w, DevelopmentEntryStore>,
-}
-
-impl WorldMobSurface<'_> {
-	fn surface_height(&self, xz: Vec2) -> f32 {
-		let raw = self
-			.terrain
-			.composed_height_at(&self.layout, xz.x, xz.y)
-			.unwrap_or_else(|| self.base.0.height_at(xz.x, xz.y));
-		let probe = Aabb3d::from_min_max(
-			Vec3::new(xz.x - 0.5, -10_000.0, xz.y - 0.5),
-			Vec3::new(xz.x + 0.5, 10_000.0, xz.y + 0.5),
-		);
-		self.developments.merged_pad_complex(probe).modify_elevation(raw, xz.x, xz.y)
-	}
-}
-
-#[derive(SystemParam)]
 struct WorldMobPresenter<'w, 's> {
 	commands: Commands<'w, 's>,
 	state: ResMut<'w, WorldMobPresenterState>,
-	surface: WorldMobSurface<'w>,
+	surface: TerrainView<'w, 's, Ground>,
 }
 
 impl RegionPresenter<WorldMobCell, WorldMobIndex> for WorldMobPresenter<'_, '_> {
@@ -489,7 +467,7 @@ impl RegionPresenter<WorldMobCell, WorldMobIndex> for WorldMobPresenter<'_, '_> 
 			for placed in &group.mobs {
 				let mut transform = placed.transform;
 				let xz = Vec2::new(transform.translation.x, transform.translation.z);
-				transform.translation.y = self.surface.surface_height(xz);
+				transform.translation.y = self.surface.height_or_fallback(xz);
 				let mob = placed.scene.spawn(&mut self.commands, transform);
 				self.commands.entity(mob).insert(ChildOf(group_root));
 			}
@@ -657,12 +635,12 @@ fn stream_world_mobs(
 }
 
 fn fit_world_mob_hosts_to_surface(
-	surface: WorldMobSurface,
+	surface: TerrainView<Ground>,
 	mut hosts: Query<&mut Transform, (With<MobScene>, Changed<Transform>)>,
 ) {
 	for mut transform in &mut hosts {
 		let xz = Vec2::new(transform.translation.x, transform.translation.z);
-		let y = surface.surface_height(xz);
+		let y = surface.height_or_fallback(xz);
 		if y.is_finite() && (transform.translation.y - y).abs() > 1e-3 {
 			transform.translation.y = y;
 		}

@@ -74,13 +74,13 @@ threat-intelligence-damage = { workspace = true }
 threat-management-intelligence = { workspace = true }
 terrain-layer-model = { workspace = true }
 terrain-layer-presentation = { workspace = true }
+urbanization-layer-model = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
 mob-layer-model = { workspace = true }
 mob-layer-presentation = { workspace = true }
 tempfile = { workspace = true }
-urbanization-layer-model = { workspace = true }
 urbanization-layer-presentation = { workspace = true }
 vegetation-layer-model = { workspace = true }
 vegetation-layer-presentation = { workspace = true }

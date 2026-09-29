@@ -1,18 +1,14 @@
 //! Downed world-player retirement and POI-based replacement.
 
 use avian3d::prelude::LinearVelocity;
-use bevy::ecs::system::SystemParam;
-use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use chico_vegetation_on_terrain_playground::{
 	player_position_above_surface, spawn_player_body, CharacterLocomotion, CharacterSpecies,
 	MoveWish, Player as VegetationPlayer, RequestSetCharacter, RequestSetCharacterAppearance,
-	WorldBaseTerrain,
 };
 use crozon_character_ragdoll::CharacterRagdollSystems;
 use crozon_inventory_user::InventoryUser;
 use damage::{DamageSystems, DespawnAfter, Downed};
-use durham_terrain_models::{TerrainCellLayout, TerrainEntryStore};
 use firearm_user::FirearmUser;
 use firearms::WeaponTrigger;
 use mob_characters::{LOCAL_POI, URBAN_POI, VEGETATION_POI};
@@ -21,14 +17,14 @@ use poi_intelligence::{
 	mix_seed, NearbyFallback, NearbyQuery, PoiId, PoiInterest, PoiInterests, PoiRegistry,
 	PoiSystems, DEFAULT_NEARBY_RADIUS,
 };
-use richmond_development_models::DevelopmentEntryStore;
 use spotting_intelligence::SpotSubject;
+use terrain_layer_model::TerrainView;
 use threat_intelligence::{Affiliations, ThreatSubject};
 
 use crate::control::strip_world_player_motor;
 use crate::training::{TrainingGrounds, TrainingLifeEnded};
 use crate::weapon::WorldPlayerAppearanceRequested;
-use crate::{WorldGameplayEnabled, WorldPlayerLoadout};
+use crate::{Ground, WorldGameplayEnabled, WorldPlayerLoadout};
 
 /// World-player downed duration, nearby POI scan, and replacement interests.
 #[derive(Resource, Clone, Debug, PartialEq)]
@@ -83,28 +79,6 @@ struct WorldPlayerRespawnState {
 
 #[derive(Component)]
 struct PlayerDeathGlaze;
-
-#[derive(SystemParam)]
-struct WorldPlayerSurface<'w> {
-	terrain: Res<'w, TerrainEntryStore>,
-	layout: Res<'w, TerrainCellLayout>,
-	base: Res<'w, WorldBaseTerrain>,
-	developments: Res<'w, DevelopmentEntryStore>,
-}
-
-impl WorldPlayerSurface<'_> {
-	fn surface_height(&self, xz: Vec2) -> f32 {
-		let raw = self
-			.terrain
-			.composed_height_at(&self.layout, xz.x, xz.y)
-			.unwrap_or_else(|| self.base.0.height_at(xz.x, xz.y));
-		let probe = Aabb3d::from_min_max(
-			Vec3::new(xz.x - 0.5, -10_000.0, xz.y - 0.5),
-			Vec3::new(xz.x + 0.5, 10_000.0, xz.y + 0.5),
-		);
-		self.developments.merged_pad_complex(probe).modify_elevation(raw, xz.x, xz.y)
-	}
-}
 
 type DownedWorldPlayer<'a> = (
 	Entity,
@@ -221,7 +195,7 @@ fn respawn_world_player(
 	registry: Res<PoiRegistry>,
 	loadout: Option<Res<WorldPlayerLoadout>>,
 	locomotion: Res<CharacterLocomotion>,
-	surface: WorldPlayerSurface,
+	surface: TerrainView<Ground>,
 	grounds: Option<Res<TrainingGrounds>>,
 	mut ended: MessageWriter<TrainingLifeEnded>,
 	live_player: Query<(), With<VegetationPlayer>>,
@@ -231,8 +205,7 @@ fn respawn_world_player(
 	mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
 	let training_now = grounds.is_some_and(|grounds| grounds.0);
-	let abandoned =
-		state.pending.as_ref().is_some_and(|pending| pending.abandoned(training_now));
+	let abandoned = state.pending.as_ref().is_some_and(|pending| pending.abandoned(training_now));
 	if !gameplay.0 && !abandoned {
 		return;
 	}
@@ -266,7 +239,7 @@ fn respawn_world_player(
 			config.fallback,
 		);
 		let mut surface_point = placed.position;
-		let terrain_y = surface.surface_height(surface_point.xz());
+		let terrain_y = surface.height_or_fallback(surface_point.xz());
 		if terrain_y.is_finite() {
 			surface_point.y = terrain_y;
 		}
@@ -327,6 +300,10 @@ fn respawn_seed(generation: u64, death_at: Vec3) -> u64 {
 mod tests {
 	use super::*;
 	use bevy::ecs::system::RunSystemOnce;
+	use chico_vegetation_on_terrain_playground::WorldBaseTerrain;
+	use durham_terrain_models::{TerrainCellLayout, TerrainEntryStore};
+	use richmond_development_models::DevelopmentEntryStore;
+	use richmond_urbanization::UrbanizationIndex;
 
 	#[test]
 	fn fallback_respawn_moves_away_from_the_death_point() {
@@ -431,6 +408,7 @@ mod tests {
 		world.init_resource::<TerrainEntryStore>();
 		world.init_resource::<TerrainCellLayout>();
 		world.init_resource::<DevelopmentEntryStore>();
+		world.init_resource::<UrbanizationIndex>();
 		world.insert_resource(WorldBaseTerrain(
 			durham_terrain_models::BaseTerrainNoise::from_config(
 				&durham_terrain_models::TerrainConfig::new(42),
@@ -451,13 +429,11 @@ mod tests {
 			.run_system_once(respawn_world_player)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 
-		let ended: Vec<_> =
-			world.resource_mut::<Messages<TrainingLifeEnded>>().drain().collect();
+		let ended: Vec<_> = world.resource_mut::<Messages<TrainingLifeEnded>>().drain().collect();
 		assert_eq!(ended, vec![TrainingLifeEnded]);
-		let mut bodies = world.query_filtered::<
-			(&Transform, Has<WorldPlayerAppearanceRequested>),
-			With<VegetationPlayer>,
-		>();
+		let mut bodies = world
+			.query_filtered::<(&Transform, Has<WorldPlayerAppearanceRequested>), With<VegetationPlayer>>(
+			);
 		let (body, requested) = bodies.single(&world)?;
 		assert_eq!(body.translation.xz(), Vec2::new(3.0, 5.0));
 		assert!(!requested, "the next life's loadout dresses the body");
@@ -480,8 +456,7 @@ mod tests {
 		world
 			.run_system_once(respawn_world_player)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		let ended: Vec<_> =
-			world.resource_mut::<Messages<TrainingLifeEnded>>().drain().collect();
+		let ended: Vec<_> = world.resource_mut::<Messages<TrainingLifeEnded>>().drain().collect();
 		assert!(ended.is_empty(), "leaving ends no life");
 		let mut bodies = world.query_filtered::<(), With<VegetationPlayer>>();
 		assert_eq!(bodies.iter(&world).count(), 1);

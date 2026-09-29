@@ -4,12 +4,13 @@
 //! on the same plaza.
 
 use avian3d::prelude::{Collider, LinearVelocity, Position, RigidBody};
+use bevy::ecs::system::ParamSet;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use chico_vegetation_on_terrain_playground::player::{holding_elevation, player_spawn_point_at};
 use chico_vegetation_on_terrain_playground::{OffTerrainAnchor, Player};
 use durham_terrain_models::{
-	PresentedTerrainScene, TerrainCellLayout, TerrainEntryStore, TerrainSuperseded,
+	Durham, PresentedTerrainScene, TerrainCellLayout, TerrainEntryStore, TerrainSuperseded,
 	TerrainTrimeshCollider, WorldBaseTerrain,
 };
 use lod::gen::Id;
@@ -20,17 +21,17 @@ use player::capsule_spawn_height;
 use player_camera::FollowCamera;
 use procedural_common::SeededHash;
 use richmond_building_components::{building_bounds, spawn_building_components};
-use richmond_building_physics::{BUILDING_FRICTION, spawn_building_walk_colliders};
+use richmond_building_physics::{spawn_building_walk_colliders, BUILDING_FRICTION};
 use richmond_buildings::wall_demo::TerrainPerimeterWall;
 use richmond_development_models::{
-	DEVELOPMENT_CELL_SIZE, DevelopmentCell, DevelopmentConfig, DevelopmentEntryStore,
-	DevelopmentFinish, DevelopmentHost, DevelopmentHosts, DevelopmentKind, PadParams,
-	TerrainWithPads,
+	DevelopmentCell, DevelopmentConfig, DevelopmentEntryStore, DevelopmentFinish, DevelopmentHost,
+	DevelopmentHosts, DevelopmentKind, PadParams, TerrainWithPads, DEVELOPMENT_CELL_SIZE,
 };
+use terrain_layer_model::{OnTerrain, TerrainView};
 
-use crate::PlayerSpawnXz;
 use crate::control::WorldSurfaceReady;
 use crate::training::{TrainingGrounds, TrainingMap, TrainingRound};
+use crate::{Ground, PlayerSpawnXz};
 
 const TRAINING_WALL_STEP_M: f32 = 8.0;
 const TRAINING_WALL_HEIGHT_M: f32 = 20.0;
@@ -258,7 +259,8 @@ impl TrainingArena {
 			let bearing = std::f32::consts::PI * (squad / pois.len()) as f32;
 			let size = TRAINING_ROSTER / squads + usize::from(squad < TRAINING_ROSTER % squads);
 			let (seat, members) = self.seat_squad(site, poi, building, bearing, size, player);
-			self.mobs.push(TrainingMob { host: Vec3::new(seat.x, self.plaza_y, seat.y), members });
+			self.mobs
+				.push(TrainingMob { host: Vec3::new(seat.x, self.plaza_y, seat.y), members });
 			if player.is_none() {
 				player = Some(self.seat_player(site, poi));
 			}
@@ -430,35 +432,40 @@ fn training_development_cell(center: Vec2) -> Aabb3d {
 
 /// Fit the round's Richmond development once the FinePatch collider exists.
 /// A site that fits none rerolls to another site for the same round.
+#[allow(clippy::type_complexity)]
 pub(crate) fn mount_training_plaza(
 	grounds: Res<TrainingGrounds>,
 	mut round: ResMut<TrainingRound>,
 	ready: Res<WorldSurfaceReady>,
 	mounted: Option<Res<TrainingPlazaMounted>>,
 	stamped: Option<Res<TrainingPlazaStamped>>,
-	store: Res<TerrainEntryStore>,
-	layout: Res<TerrainCellLayout>,
-	base: Res<WorldBaseTerrain>,
-	mut developments: ResMut<DevelopmentEntryStore>,
+	mut access: ParamSet<(
+		(Res<TerrainEntryStore>, Res<TerrainCellLayout>, ResMut<DevelopmentEntryStore>),
+		TerrainView<OnTerrain<Durham>>,
+		TerrainView<Ground>,
+	)>,
 	mut commands: Commands,
 ) {
 	// A cell admitted after the stamp stays raw, unstamped hillside inside the courtyard.
-	let waiting = !grounds.0
-		|| !ready.0
-		|| *layout != round.layout()
-		|| !store.fills_layout(&layout);
+	let waiting = {
+		let (store, layout, _) = access.p0();
+		!grounds.0 || !ready.0 || *layout != round.layout() || !store.fills_layout(&layout)
+	};
 	if waiting || mounted.is_some() || stamped.is_some() {
 		return;
 	}
-	let center = layout.region_center_xz().xz();
+	let center = {
+		let (_, layout, _) = access.p0();
+		layout.region_center_xz().xz()
+	};
 	let cell = training_development_cell(center);
-	let plaza_y = store
-		.composed_height_at(&layout, center.x, center.y)
-		.unwrap_or_else(|| base.0.height_at(center.x, center.y));
+	let plaza_y = access.p1().height_or_fallback(center);
 	let config = DevelopmentConfig::from_world_seed(round.development_seed());
-	let Some((kind, filled, built, arena)) =
+	let fitted = {
+		let (store, layout, _) = access.p0();
 		stamp_training_development(&store, &layout, cell, &config, plaza_y)
-	else {
+	};
+	let Some((kind, filled, built, arena)) = fitted else {
 		let site = round.site();
 		if round.site_exhausted() {
 			warn!(target: "world.training", "no Richmond development fitted at site {site}");
@@ -482,13 +489,16 @@ pub(crate) fn mount_training_plaza(
 		site.pois.len(),
 	);
 	let cell_id = Id::from_cell(filled.cell);
-	let terrain_ids = stamp_training_terrain(&mut commands, &store, &mut developments, &filled);
+	let terrain_ids = {
+		let (store, _, mut developments) = access.p0();
+		stamp_training_terrain(&mut commands, &store, &mut developments, &filled)
+	};
 	for host in &hosts {
 		for entity in host.spawn(&mut commands) {
 			commands.entity(entity).insert(TrainingPlaza);
 		}
 	}
-	spawn_training_wall(&mut commands, &store, &developments, &layout, &base, &arena, config.seed);
+	spawn_training_wall(&mut commands, &access.p2(), &arena, config.seed);
 	if terrain_ids.is_empty() {
 		warn!(target: "world.training", "no FinePatch cells overlapped the development pads");
 	}
@@ -588,10 +598,11 @@ pub(crate) fn supersede_training_raw_terrain(
 		*visibility = Visibility::Hidden;
 		// The Durham strip runs in its own set; physics must not step with both floors.
 		// Durham may despawn the raw cell in the same frame.
-		commands
-			.entity(entity)
-			.try_insert(TerrainSuperseded)
-			.try_remove::<(Collider, RigidBody, TerrainTrimeshCollider)>();
+		commands.entity(entity).try_insert(TerrainSuperseded).try_remove::<(
+			Collider,
+			RigidBody,
+			TerrainTrimeshCollider,
+		)>();
 	}
 }
 
@@ -786,30 +797,9 @@ fn pad_influence_region(filled: &DevelopmentCell) -> Option<Aabb3d> {
 	})
 }
 
-fn stamped_height(
-	store: &TerrainEntryStore,
-	developments: &DevelopmentEntryStore,
-	layout: &TerrainCellLayout,
-	base: &WorldBaseTerrain,
-	x: f32,
-	z: f32,
-) -> f32 {
-	let raw = store
-		.composed_height_at(layout, x, z)
-		.unwrap_or_else(|| base.0.height_at(x, z));
-	let probe = Aabb3d::from_min_max(
-		Vec3::new(x - 0.5, -10_000.0, z - 0.5),
-		Vec3::new(x + 0.5, 10_000.0, z + 0.5),
-	);
-	developments.merged_pad_complex(probe).modify_elevation(raw, x, z)
-}
-
 fn spawn_training_wall(
 	commands: &mut Commands,
-	store: &TerrainEntryStore,
-	developments: &DevelopmentEntryStore,
-	layout: &TerrainCellLayout,
-	base: &WorldBaseTerrain,
+	ground: &TerrainView<Ground>,
 	arena: &TrainingArena,
 	seed: u32,
 ) {
@@ -817,7 +807,7 @@ fn spawn_training_wall(
 	let samples = TerrainPerimeterWall::sample_rectangle(min, max, TRAINING_WALL_STEP_M);
 	let terrain_y: Vec<f32> = samples
 		.iter()
-		.map(|sample| stamped_height(store, developments, layout, base, sample.x, sample.y))
+		.map(|sample| ground.height_or_fallback(Vec2::new(sample.x, sample.y)))
 		.collect();
 	let wall = TerrainPerimeterWall::from_samples(
 		&samples,
@@ -1116,8 +1106,8 @@ mod tests {
 	}
 
 	#[test]
-	fn raw_cells_under_the_courtyard_stop_colliding_once_the_pads_do()
-	-> Result<(), bevy::ecs::system::RunSystemError> {
+	fn raw_cells_under_the_courtyard_stop_colliding_once_the_pads_do(
+	) -> Result<(), bevy::ecs::system::RunSystemError> {
 		use bevy::ecs::system::RunSystemOnce;
 		let covered = Id::from_cell(Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE));
 		let elsewhere = Id::from_cell(Aabb3d::from_min_max(Vec3::splat(500.0), Vec3::splat(501.0)));
@@ -1238,8 +1228,7 @@ mod tests {
 	}
 
 	#[test]
-	fn a_new_round_parks_the_player_on_its_site() -> Result<(), bevy::ecs::system::RunSystemError>
-	{
+	fn a_new_round_parks_the_player_on_its_site() -> Result<(), bevy::ecs::system::RunSystemError> {
 		use bevy::ecs::system::RunSystemOnce;
 		let round = TrainingRound::new(21);
 		let mut world = plaza_world(true, round);

@@ -46,6 +46,7 @@ use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::prelude::*;
 use lod::gen::{Id, OriginalId, SpatialIndex, StorageStatus, TrackedId, Version};
 use lod::lod_ref::LodRef;
+use render_item::sdf::cpu_shot::WallFaces;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -306,6 +307,37 @@ impl TerrainEntryStore {
 		let version = self.next_version();
 		self.water
 			.insert(id, StoredEntry { value: water, bounds, version, entity: None });
+	}
+
+	/// Store one origin cell whose SDF is `base` with no jersey / hydro ops.
+	///
+	/// Bounds match [`Self::composed_height_at`]'s lookup for `(ix, iz)` on `layout`.
+	pub fn insert_base_terrain_for_test(
+		&mut self,
+		layout: &TerrainCellLayout,
+		ix: i32,
+		iz: i32,
+		base: BaseTerrainNoise,
+	) {
+		let cell = cell_bounds(ix, iz, layout.cell_size, layout.vertical_half_extent);
+		let sdf = Arc::new(Terrain::compose_sdf(&base, &[]));
+		let terrain = Terrain {
+			cell,
+			base,
+			modulations: Vec::new(),
+			jersey_leaves: Vec::new(),
+			marazion_leaves: Vec::new(),
+			marazion_fills: Vec::new(),
+			sdf,
+			material: Handle::default(),
+			res_2: 0,
+			stream_ring: None,
+			wall_faces: WallFaces::NONE,
+		};
+		let id = Id::from_cell(cell);
+		let version = self.next_version();
+		self.terrain
+			.insert(id, StoredEntry { value: terrain, bounds: cell, version, entity: None });
 	}
 
 	/// Composed terrain height (jersey + Marazion) at `(x, z)`, if that cell is stored.

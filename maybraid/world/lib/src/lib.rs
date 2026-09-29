@@ -100,6 +100,10 @@ use richmond_developments_on_terrain_playground::{
 use richmond_urbanization::UrbanizationLodChan;
 use terrain_layer_model::{BaseTerrainGenerationPlugin, OnTerrain};
 use terrain_layer_presentation::TerrainPresentationPlugin;
+use urbanization_layer_model::Urbanization;
+
+/// Playable ground: Durham, then urbanization pads.
+pub type Ground = Urbanization<OnTerrain<Durham>>;
 
 /// Steepest slope the controlled character can drive uphill.
 const WORLD_MAX_SLOPE_ANGLE: f32 = 70.0_f32.to_radians();
