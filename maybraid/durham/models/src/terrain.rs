@@ -62,8 +62,8 @@ pub use config::TerrainConfig;
 pub use host::{
 	playable_world_cell_layout, retarget_presentation_assets, terrain_streaming_enabled,
 	training_grounds_cell_layout, training_grounds_cell_layout_at, Durham, TerrainCoverage,
-	TerrainFillSystems, TerrainLayoutPinned, TerrainPlugin, TerrainPresentEnabled,
-	TerrainPresentPending, TerrainPresentationDirty, TerrainStreamingEnabled, WorldBaseTerrain,
+	TerrainFillSystems, TerrainLayoutPinned, TerrainPresentEnabled, TerrainPresentPending,
+	TerrainPresentationDirty, TerrainStreamingEnabled, WorldBaseTerrain,
 	WORLD_FINE_HALF_EXTENT_CELLS, WORLD_OUTER_2X_ROWS, WORLD_OUTER_4X_ROWS,
 };
 pub use index::{
@@ -93,7 +93,7 @@ pub use jersey::{
 	RollingLowPassStampCell as RollingStampCell, ValleyLowPassStampCell as ValleyStampCell,
 };
 pub use jersey_modulation::ComposedElevationOp;
-pub use layer::{DurhamHeightSnapshot, DurhamRead, DurhamTerrainConfig};
+pub use layer::{DurhamCellPresenter, DurhamHeightSnapshot, DurhamRead, DurhamTerrainConfig};
 pub use marazion::{
 	MarazionBandPass, MarazionLeafBounds, MarazionLeafKind, MarazionPocketWater,
 	MarazionPocketWatersHighPass, MarazionPocketWatersLowPass, MarazionWatershedConfigs,

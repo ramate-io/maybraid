@@ -3,16 +3,17 @@
 use bevy::ecs::system::{SystemParam, SystemParamItem};
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
-use durham_terrain::shaders::DurhamTerrainShader;
 use lod::gen::Id;
 use terrain_layer_model::{
-	BaseTerrainGenerationPlugin, HeightField, RequireLayer, TerrainCell, TerrainGeneration,
-	TerrainModel,
+	BaseTerrainGenerationPlugin, HeightField, OnTerrain, RequireLayer, TerrainCell,
+	TerrainGeneration, TerrainModel,
 };
+use terrain_layer_presentation::TerrainPresenter;
 
 use crate::terrain::cell::TerrainCellLayout;
 use crate::terrain::host::{
-	Durham, TerrainCoverage, TerrainPlugin, WorldBaseTerrain, WORLD_FINE_HALF_EXTENT_CELLS,
+	install_durham_generation, install_durham_presentation, Durham, TerrainCoverage,
+	WorldBaseTerrain, WORLD_FINE_HALF_EXTENT_CELLS,
 };
 use crate::terrain::index::{TerrainEntryStore, TerrainHeightSnapshot};
 use crate::terrain::{Terrain, TerrainMeshBuilder};
@@ -40,7 +41,6 @@ impl HeightField for DurhamHeightSnapshot {
 
 impl TerrainCell for Terrain {
 	type Mesh = TerrainMeshBuilder;
-	type Material = DurhamTerrainShader;
 
 	fn bounds(&self) -> Aabb3d {
 		self.cell
@@ -48,10 +48,6 @@ impl TerrainCell for Terrain {
 
 	fn mesh_builder(&self) -> TerrainMeshBuilder {
 		Terrain::mesh_builder(self)
-	}
-
-	fn material(&self) -> Handle<DurhamTerrainShader> {
-		self.material.clone()
 	}
 
 	fn chunk_pose(&self) -> Transform {
@@ -118,20 +114,30 @@ impl DurhamTerrainConfig {
 			terrain_radius: terrain_radius.max(1),
 		}
 	}
+
+	/// Raw meshes at startup. A fine patch starts on; the playable world starts
+	/// off and Training toggles [`TerrainPresentEnabled`] at runtime.
+	pub fn raw_present(self) -> bool {
+		matches!(self.coverage, TerrainCoverage::FinePatch)
+	}
 }
 
 impl TerrainGeneration for Durham {
 	type Config = DurhamTerrainConfig;
 
-	/// Still the full [`TerrainPlugin`] with raw present off. Splitting its
-	/// generate half out is the terrain layer issue; callers already see the
-	/// final plugin type.
 	fn install_generation(app: &mut App, config: &DurhamTerrainConfig) {
-		let mut plugin = TerrainPlugin::<Durham>::fine_patch(config.terrain_radius);
-		plugin.seed = config.seed;
-		plugin.coverage = config.coverage;
-		plugin.present = false;
-		app.add_plugins(plugin);
+		install_durham_generation(app, config.seed, config.coverage, config.terrain_radius);
+	}
+}
+
+/// Raw Durham cells. Training toggles [`crate::TerrainPresentEnabled`].
+pub struct DurhamCellPresenter;
+
+impl TerrainPresenter for DurhamCellPresenter {
+	type Model = OnTerrain<Durham>;
+
+	fn install(app: &mut App) {
+		install_durham_presentation(app);
 	}
 }
 
@@ -143,6 +149,7 @@ mod tests {
 	use super::*;
 	use crate::terrain::base_noise::BaseTerrainNoise;
 	use crate::terrain::config::TerrainConfig;
+	use crate::terrain::host::TerrainPresentEnabled;
 
 	fn empty_durham_world() -> World {
 		let mut world = World::new();
@@ -167,5 +174,16 @@ mod tests {
 			.cell_ids_overlapping(Aabb3d::new(Vec3::ZERO, Vec3::splat(1_000.0)))
 			.is_empty());
 		Ok(())
+	}
+
+	#[test]
+	fn playable_world_disables_raw_presentation() {
+		assert!(!DurhamTerrainConfig::playable_world().raw_present());
+	}
+
+	#[test]
+	fn fine_patch_raw_presentation_defaults_on() {
+		assert!(DurhamTerrainConfig::fine_patch(2).raw_present());
+		assert!(TerrainPresentEnabled::default().0);
 	}
 }

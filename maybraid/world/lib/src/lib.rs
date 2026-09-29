@@ -4,7 +4,8 @@
 //! selection generate. Canopy bump-outs occupy the 1–5 km present keep and
 //! clone Durham fine-cell mesh handles. Vegetation LOD bullseye / lattice
 //! cover the grove fill ring. Urbanization hopscotch streams at the same
-//! 1 km / 3 km rings without re-registering Durham (`TerrainPlugin` owns terrain).
+//! 1 km / 3 km rings without re-registering Durham (base terrain generation owns
+//! the fill; raw present is a separate plugin, off until Training).
 //! Painted furniture is a generate pass over Richmond High slots, presented as
 //! flattened 50 m cell hosts in a neighborhood around the camera.
 
@@ -77,7 +78,9 @@ use chico_vegetation_on_terrain_playground::{
 use combat_hud::CombatHudPlugin;
 use crozon_character_ragdoll::{CharacterRagdollPlugin, CharacterRagdollTargets};
 use crozon_characters::{CharacterMotionSystems, DrawTerrainPitchProbes};
-use durham_terrain_models::{Durham, TerrainFrictionConfig, TerrainPlugin};
+use durham_terrain_models::{
+	Durham, DurhamCellPresenter, DurhamTerrainConfig, TerrainFrictionConfig, TerrainPresentEnabled,
+};
 use furniture_shaders::FurnitureShadersPlugin;
 use game_commands::command::{GameCommandPlugin, TextEntryFocus};
 use game_commands::ui::GameCommandDrawerConfig;
@@ -95,6 +98,8 @@ use richmond_developments_on_terrain_playground::{
 	DevelopmentsOnTerrainPlugin, PlaygroundConfig as DevelopmentsPlaygroundConfig,
 };
 use richmond_urbanization::UrbanizationLodChan;
+use terrain_layer_model::BaseTerrainGenerationPlugin;
+use terrain_layer_presentation::TerrainPresentationPlugin;
 
 /// Steepest slope the controlled character can drive uphill.
 const WORLD_MAX_SLOPE_ANGLE: f32 = 70.0_f32.to_radians();
@@ -162,7 +167,11 @@ impl Plugin for WorldPlugin {
 			.insert_resource(WORLD_TERRAIN_PITCH_GIZMOS)
 			.add_plugins(FurnitureShadersPlugin)
 			.add_plugins(WorldMaterialRefPlugin)
-			.add_plugins(TerrainPlugin::<Durham>::playable_world())
+			.add_plugins(BaseTerrainGenerationPlugin::<Durham>::new(
+				DurhamTerrainConfig::playable_world(),
+			))
+			.add_plugins(TerrainPresentationPlugin::<DurhamCellPresenter>::default())
+			.insert_resource(TerrainPresentEnabled(false))
 			.add_plugins(VirtualPadPlugin::new(VirtualPadConfig {
 				debug_overlay: self.input_debug_enabled,
 				..default()
@@ -182,7 +191,7 @@ impl Plugin for WorldPlugin {
 			})
 			.insert_resource(CharacterRagdollTargets { players: true, npcs: true, unmarked: false })
 			.add_plugins(CharacterRagdollPlugin)
-			// Urbanization stream only — `TerrainPlugin` already owns Durham / TerrainEntryStore.
+			// Urbanization stream only — base terrain generation already owns Durham.
 			.add_plugins(DevelopmentsOnTerrainPlugin {
 				config: DevelopmentsPlaygroundConfig::world_defaults(),
 				commands: false,

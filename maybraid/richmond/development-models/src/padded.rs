@@ -121,7 +121,6 @@ impl TerrainWithPads {
 
 impl TerrainCell for TerrainWithPads {
 	type Mesh = TerrainMeshBuilder;
-	type Material = DurhamTerrainShader;
 
 	fn bounds(&self) -> Aabb3d {
 		self.cell
@@ -129,10 +128,6 @@ impl TerrainCell for TerrainWithPads {
 
 	fn mesh_builder(&self) -> TerrainMeshBuilder {
 		TerrainWithPads::mesh_builder(self)
-	}
-
-	fn material(&self) -> Handle<DurhamTerrainShader> {
-		self.material.clone()
 	}
 
 	fn chunk_pose(&self) -> Transform {
