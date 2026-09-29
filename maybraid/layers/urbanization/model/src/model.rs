@@ -11,7 +11,7 @@ use richmond_development_models::{
 	DevelopmentEntryStore, PadComplex, PaddedStoreView, TerrainWithPads,
 };
 use richmond_urbanization::UrbanizationIndex;
-use terrain_layer_model::{HeightField, RequireLayer, TerrainModel, TerrainPresentation};
+use terrain_layer_model::{HeightField, RequireLayer, TerrainModel};
 
 use crate::generation::UrbanizationGenerationPlugin;
 use crate::pads::PadComposable;
@@ -96,20 +96,5 @@ where
 	fn require_generation(app: &App) {
 		M::require_generation(app);
 		app.require_layer::<UrbanizationGenerationPlugin<M>, Self>();
-	}
-}
-
-/// Placeholder so `TerrainPresentationPlugin<Urbanization<_>>` still type-checks.
-/// The padded presenter moves here in #886; this body does not install it.
-impl<M> TerrainPresentation for Urbanization<M>
-where
-	M: TerrainModel,
-	M::Cell: PadComposable<Padded = TerrainWithPads>,
-{
-	fn install_presentation(_app: &mut App) {
-		todo!(
-			"TerrainPresentation for Urbanization is #886 \
-			 (present_urbanization_padded_terrain)"
-		)
 	}
 }

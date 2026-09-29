@@ -1,19 +1,19 @@
 use std::collections::HashMap;
 
 use bevy::app::App;
-use bevy::ecs::system::{Res, SystemParam, SystemParamItem, SystemState};
+use bevy::ecs::system::{Res, SystemParam, SystemParamItem};
 use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::math::{Vec2, Vec3};
-use bevy::prelude::{Resource, World};
+use bevy::prelude::Resource;
 use bevy::transform::components::Transform;
 use lod::gen::Id;
-
-use crate::{
+use terrain_layer_model::{
 	BaseTerrainGenerationPlugin, HeightField, OnTerrain, RequireLayer, TerrainCell,
-	TerrainGeneration, TerrainModel, TerrainView,
+	TerrainGeneration, TerrainModel,
 };
 
-/// Flat test model: stored cells carry a constant height; fallback is configured.
+use crate::{TerrainPresentationPlugin, TerrainPresenter};
+
 struct Flat;
 
 #[derive(Clone)]
@@ -55,18 +55,6 @@ impl TerrainCell for FlatCell {
 struct FlatStore {
 	cells: HashMap<Id, FlatCell>,
 	fallback: f32,
-}
-
-impl FlatStore {
-	fn insert(&mut self, min: Vec2, size: f32, height: f32) -> Id {
-		let bounds = Aabb3d::from_min_max(
-			Vec3::new(min.x, -1.0, min.y),
-			Vec3::new(min.x + size, 1.0, min.y + size),
-		);
-		let id = Id::from_cell(bounds);
-		self.cells.insert(id, FlatCell { bounds, height });
-		id
-	}
 }
 
 #[derive(Clone)]
@@ -137,48 +125,34 @@ impl TerrainGeneration for Flat {
 	}
 }
 
-fn world_with_one_cell() -> (World, Id) {
-	let mut world = World::new();
-	let mut store = FlatStore { fallback: -3.0, ..FlatStore::default() };
-	let id = store.insert(Vec2::ZERO, 10.0, 7.0);
-	world.insert_resource(store);
-	(world, id)
+#[derive(Resource)]
+struct FlatPresentInstalled;
+
+struct FlatPresenter;
+
+impl TerrainPresenter for FlatPresenter {
+	type Model = OnTerrain<Flat>;
+
+	fn install(app: &mut App) {
+		app.insert_resource(FlatPresentInstalled);
+	}
 }
 
 #[test]
-fn view_reads_stored_cells_and_opts_into_fallback() -> anyhow::Result<()> {
-	let (mut world, id) = world_with_one_cell();
-	let mut state = SystemState::<TerrainView<Flat>>::new(&mut world);
-	let view = state.get(&world)?;
-
-	assert_eq!(view.height_at(Vec2::new(5.0, 5.0)), Some(7.0));
-	assert_eq!(view.height_at(Vec2::new(50.0, 5.0)), None);
-	assert_eq!(view.height_or_fallback(Vec2::new(50.0, 5.0)), -3.0);
-	assert_eq!(view.cell(id).map(TerrainCell::mesh_builder), Some(7.0));
-
-	let region = Aabb3d::from_min_max(Vec3::new(-1.0, -1.0, -1.0), Vec3::new(1.0, 1.0, 1.0));
-	assert_eq!(view.cell_ids_overlapping(region), vec![id]);
-	assert_eq!(view.snapshot(region).height_at(Vec2::new(1.0, 1.0)), Some(7.0));
-	Ok(())
-}
-
-#[test]
-fn on_terrain_is_transparent() -> anyhow::Result<()> {
-	let (mut world, id) = world_with_one_cell();
-	let mut state = SystemState::<TerrainView<OnTerrain<Flat>>>::new(&mut world);
-	let view = state.get(&world)?;
-
-	assert_eq!(view.height_at(Vec2::new(5.0, 5.0)), Some(7.0));
-	assert_eq!(view.height_or_fallback(Vec2::new(50.0, 5.0)), -3.0);
-	assert!(view.cell(id).is_some());
-	Ok(())
-}
-
-#[test]
-fn base_generation_installs_model() {
+fn presenter_installs_and_finish_requires_generation() {
 	let mut app = App::new();
-	app.add_plugins(BaseTerrainGenerationPlugin::<Flat>::new(2.5));
+	app.add_plugins(BaseTerrainGenerationPlugin::<Flat>::new(2.5))
+		.add_plugins(TerrainPresentationPlugin::<FlatPresenter>::default());
 	app.finish();
 
 	assert_eq!(app.world().get_resource::<FlatStore>().map(|store| store.fallback), Some(2.5));
+	assert!(app.world().contains_resource::<FlatPresentInstalled>());
+}
+
+#[test]
+#[should_panic(expected = "requires terrain_layer_model::generation::BaseTerrainGenerationPlugin")]
+fn presentation_without_generation_names_the_missing_plugin() {
+	let mut app = App::new();
+	app.add_plugins(TerrainPresentationPlugin::<FlatPresenter>::default());
+	app.finish();
 }

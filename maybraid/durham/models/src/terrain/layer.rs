@@ -3,12 +3,12 @@
 use bevy::ecs::system::{SystemParam, SystemParamItem};
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
-use durham_terrain::shaders::DurhamTerrainShader;
 use lod::gen::Id;
 use terrain_layer_model::{
-	BaseTerrainGenerationPlugin, HeightField, RequireLayer, TerrainCell, TerrainGeneration,
-	TerrainModel, TerrainPresentation,
+	BaseTerrainGenerationPlugin, HeightField, OnTerrain, RequireLayer, TerrainCell,
+	TerrainGeneration, TerrainModel,
 };
+use terrain_layer_presentation::TerrainPresenter;
 
 use crate::terrain::cell::TerrainCellLayout;
 use crate::terrain::host::{
@@ -41,7 +41,6 @@ impl HeightField for DurhamHeightSnapshot {
 
 impl TerrainCell for Terrain {
 	type Mesh = TerrainMeshBuilder;
-	type Material = DurhamTerrainShader;
 
 	fn bounds(&self) -> Aabb3d {
 		self.cell
@@ -49,10 +48,6 @@ impl TerrainCell for Terrain {
 
 	fn mesh_builder(&self) -> TerrainMeshBuilder {
 		Terrain::mesh_builder(self)
-	}
-
-	fn material(&self) -> Handle<DurhamTerrainShader> {
-		self.material.clone()
 	}
 
 	fn chunk_pose(&self) -> Transform {
@@ -135,8 +130,13 @@ impl TerrainGeneration for Durham {
 	}
 }
 
-impl TerrainPresentation for Durham {
-	fn install_presentation(app: &mut App) {
+/// Raw Durham cells. Training toggles [`crate::TerrainPresentEnabled`].
+pub struct DurhamCellPresenter;
+
+impl TerrainPresenter for DurhamCellPresenter {
+	type Model = OnTerrain<Durham>;
+
+	fn install(app: &mut App) {
 		install_durham_presentation(app);
 	}
 }

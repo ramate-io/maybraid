@@ -5,10 +5,9 @@
 //! render-only at `res_2 = 4` and `3`. Far / Background holes inset so Medium
 //! overlaps the next-finer High rim. Generation admits a bounded number of
 //! missing origin ids per frame. Playable visuals come from the urbanized
-//! presenter. Generation runs on every coverage. Raw present is Durham's
-//! [`terrain_layer_model::TerrainPresentation`] hook, gated by
-//! [`TerrainPresentEnabled`] (off for the playable world, on for a fine patch,
-//! toggled by Training).
+//! presenter. Generation runs on every coverage. Raw present is
+//! [`crate::DurhamCellPresenter`], gated by [`TerrainPresentEnabled`] (off for
+//! the playable world, on for a fine patch, toggled by Training).
 
 use bevy::math::{IVec2, UVec2};
 use bevy::prelude::*;
@@ -96,7 +95,8 @@ pub struct TerrainPresentationDirty(pub bool);
 /// seed raw [`crate::terrain::Terrain::scene`] colliders.
 ///
 /// [`Default`] is on, matching a fine-patch host. The playable world inserts
-/// `false` after raw present is installed; Training toggles the flag.
+/// `false` after [`crate::DurhamCellPresenter`] is installed; Training toggles
+/// the flag.
 #[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TerrainPresentEnabled(pub bool);
 
@@ -287,11 +287,11 @@ pub(crate) fn install_durham_generation(
 	);
 }
 
-/// Raw Durham present: the gate, the three stream presenter states, and
-/// [`present_cells`]. The gate starts on ([`TerrainPresentEnabled::default`]);
-/// hosts that want it off overwrite the resource after this runs.
+/// Raw Durham present: the three stream presenter states and [`present_cells`].
+/// [`TerrainPresentEnabled`] is initialized here if missing;
+/// [`crate::TerrainResourcesPlugin`] already defaults it on.
 pub(crate) fn install_durham_presentation(app: &mut App) {
-	app.insert_resource(TerrainPresentEnabled::default())
+	app.init_resource::<TerrainPresentEnabled>()
 		.init_resource::<TerrainStreamPresenterState<TerrainNear>>()
 		.init_resource::<TerrainStreamPresenterState<TerrainFar>>()
 		.init_resource::<TerrainStreamPresenterState<TerrainBackground>>()

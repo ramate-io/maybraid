@@ -4,8 +4,6 @@
 //! `WorldPlugin::build`'s terrain / vegetation / urbanization / mobs block for it
 //! and deletes the playground plugins from the world's dependency list.
 
-type Ground = Urbanization<OnTerrain<Durham>>;
-
 impl Plugin for WorldPlugin {
 	fn build(&self, app: &mut App) {
 		// ... unchanged prelude (motor traction, resources, FurnitureShadersPlugin,
@@ -17,17 +15,14 @@ impl Plugin for WorldPlugin {
 			// Raw Durham present. The running world inserts
 			// `TerrainPresentEnabled(false)` after this (playable coverage) and
 			// Training toggles the flag. Not the padded presenter.
-			TerrainPresentationPlugin::<OnTerrain<Durham>>::default(),
+			TerrainPresentationPlugin::<DurhamCellPresenter>::default(),
 			UrbanizationGenerationPlugin::<OnTerrain<Durham>>::default(),
 			VegetationGenerationPlugin,
-			MobGenerationPlugin::<Ground>::default(),
-			// Padded cells. `Urbanization`'s `install_presentation` is still
-			// `todo!` until #886; unifying both presenters behind `TerrainCell`
-			// is a follow-up after that.
-			TerrainPresentationPlugin::<Ground>::default(),
-			UrbanizationPresentationPlugin::<Ground>::default(),
-			VegetationPresentationPlugin::<Ground>::default(),
-			MobPresentationPlugin::<Ground>::default(),
+			MobGenerationPlugin::<Urbanization<OnTerrain<Durham>>>::default(),
+			// #886 adds TerrainPresentationPlugin::<PaddedCellPresenter<OnTerrain<Durham>>>
+			UrbanizationPresentationPlugin::<Urbanization<OnTerrain<Durham>>>::default(),
+			VegetationPresentationPlugin::<Urbanization<OnTerrain<Durham>>>::default(),
+			MobPresentationPlugin::<Urbanization<OnTerrain<Durham>>>::default(),
 		))
 		// Budgets that used to be implied by plugin insertion order (budget_sketch.rs):
 		.insert_resource(LodGenerateBudget::<ForestLodChan>::new(16))
@@ -61,6 +56,8 @@ impl Plugin for WorldPlugin {
 // ── Done when ───────────────────────────────────────────────────────────────
 //
 // - `rg 'VegetationOnTerrainPlugin|DevelopmentsOnTerrainPlugin|TerrainPlugin::<Durham>' maybraid/world` is empty.
-// - `WorldMobSurface` / `WorldPlayerSurface` are gone (TerrainView<Ground>).
+// - `WorldMobSurface` / `WorldPlayerSurface` are gone
+//   (`TerrainView<Urbanization<OnTerrain<Durham>>>`; the pad-free plaza probe
+//   is `TerrainView<OnTerrain<Durham>>`).
 // - `tests/layer_wiring.rs` is replaced by a test that builds WorldPlugin's
 //   layer stack in a headless App and runs `finish` (requirements satisfied).

@@ -78,7 +78,7 @@ use combat_hud::CombatHudPlugin;
 use crozon_character_ragdoll::{CharacterRagdollPlugin, CharacterRagdollTargets};
 use crozon_characters::{CharacterMotionSystems, DrawTerrainPitchProbes};
 use durham_terrain_models::{
-	Durham, DurhamTerrainConfig, TerrainFrictionConfig, TerrainPresentEnabled,
+	Durham, DurhamCellPresenter, DurhamTerrainConfig, TerrainFrictionConfig, TerrainPresentEnabled,
 };
 use furniture_shaders::FurnitureShadersPlugin;
 use game_commands::command::{GameCommandPlugin, TextEntryFocus};
@@ -96,7 +96,7 @@ use richmond_building_physics::BuildingWalkColliderPlugin;
 use richmond_developments_on_terrain_playground::{
 	DevelopmentsOnTerrainPlugin, PlaygroundConfig as DevelopmentsPlaygroundConfig,
 };
-use terrain_layer_model::{BaseTerrainGenerationPlugin, OnTerrain};
+use terrain_layer_model::BaseTerrainGenerationPlugin;
 use terrain_layer_presentation::TerrainPresentationPlugin;
 
 /// Steepest slope the controlled character can drive uphill.
@@ -168,10 +168,8 @@ impl Plugin for WorldPlugin {
 			.add_plugins(BaseTerrainGenerationPlugin::<Durham>::new(
 				DurhamTerrainConfig::playable_world(),
 			))
-			.add_plugins(TerrainPresentationPlugin::<OnTerrain<Durham>>::default())
-			.insert_resource(TerrainPresentEnabled(
-				DurhamTerrainConfig::playable_world().raw_present(),
-			))
+			.add_plugins(TerrainPresentationPlugin::<DurhamCellPresenter>::default())
+			.insert_resource(TerrainPresentEnabled(false))
 			.add_plugins(VirtualPadPlugin::new(VirtualPadConfig {
 				debug_overlay: self.input_debug_enabled,
 				..default()

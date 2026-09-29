@@ -1,11 +1,9 @@
 //! [`TerrainModel`] and the per-cell / owned-sample traits it names.
 
 use bevy::app::App;
-use bevy::asset::Handle;
 use bevy::ecs::system::{ReadOnlySystemParam, SystemParamItem};
 use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec2;
-use bevy::pbr::Material;
 use bevy::transform::components::Transform;
 use lod::gen::Id;
 
@@ -20,13 +18,9 @@ pub trait TerrainCell: Send + Sync + 'static {
 	/// Mesh identity shared by the fill and overlays such as canopy bump-outs.
 	type Mesh: Clone + Send + Sync + 'static;
 
-	type Material: Material;
-
 	fn bounds(&self) -> Aabb3d;
 
 	fn mesh_builder(&self) -> Self::Mesh;
-
-	fn material(&self) -> Handle<Self::Material>;
 
 	/// World pose for [`Self::mesh_builder`] vertices.
 	fn chunk_pose(&self) -> Transform;

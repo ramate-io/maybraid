@@ -3160,6 +3160,7 @@ dependencies = [
  "sdf",
  "terrain-chunk-ref",
  "terrain-layer-model",
+ "terrain-layer-presentation",
  "visual-geometry-core",
 ]
 
@@ -7421,6 +7422,7 @@ name = "terrain-layer-presentation"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "lod",
  "terrain-layer-model",
 ]
 

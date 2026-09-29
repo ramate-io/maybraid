@@ -9,7 +9,6 @@ use bevy::math::Vec2;
 use lod::gen::Id;
 
 use crate::model::TerrainModel;
-use crate::presentation::TerrainPresentation;
 
 /// The solid-ground surface of model `T`, as opposed to its other outputs (water).
 ///
@@ -44,11 +43,5 @@ impl<T: TerrainModel> TerrainModel for OnTerrain<T> {
 
 	fn require_generation(app: &App) {
 		T::require_generation(app);
-	}
-}
-
-impl<T: TerrainPresentation> TerrainPresentation for OnTerrain<T> {
-	fn install_presentation(app: &mut App) {
-		T::install_presentation(app);
 	}
 }

@@ -6,21 +6,19 @@
 //! of those resources, and [`TerrainView`] is what systems take.
 //!
 //! Generation plugins are typed by the model they read. Presentation plugins are
-//! typed by the finished model they draw on. Every layer plugin checks the stack
-//! beneath it in [`Plugin::finish`](bevy::app::Plugin::finish) through
+//! typed by a presenter in a presentation crate. Every layer plugin checks the
+//! stack beneath it in [`Plugin::finish`](bevy::app::Plugin::finish) through
 //! [`TerrainModel::require_generation`] instead of adding other layers itself.
 
 mod generation;
 mod model;
 mod on_terrain;
-mod presentation;
 mod require;
 mod view;
 
 pub use generation::{BaseTerrainGenerationPlugin, TerrainGeneration};
 pub use model::{HeightField, TerrainCell, TerrainModel};
 pub use on_terrain::OnTerrain;
-pub use presentation::TerrainPresentation;
 pub use require::RequireLayer;
 pub use view::TerrainView;
 

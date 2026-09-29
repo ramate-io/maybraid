@@ -1,7 +1,8 @@
 //! SKETCH — not in the build. `UrbanizationPresentationPlugin<G: UrbanModel>`.
 //!
 //! Building hosts, furniture, and building walk colliders for built developments.
-//! Padded terrain cells are NOT here: they are `TerrainPresentationPlugin<G>`.
+//! This crate also owns `PaddedCellPresenter<M>` (#886), installed as
+//! `TerrainPresentationPlugin<PaddedCellPresenter<OnTerrain<Durham>>>`.
 
 impl<G: UrbanModel> Plugin for UrbanizationPresentationPlugin<G> {
 	fn build(&self, app: &mut App) {
