@@ -2,8 +2,9 @@
 //!
 //! The runnable playground binary is retired; see `maybraid/PLAYGROUNDS.md`.
 //! Character / camera stay on [`VegetationHostPlugin`]. Terrain fill is
-//! [`TerrainPlugin`](durham_terrain_models::TerrainPlugin) for
-//! [`Durham`](durham_terrain_models::Durham).
+//! `BaseTerrainGenerationPlugin<Durham>`. Raw present, when this plugin owns
+//! terrain and the coverage shows it, is
+//! `TerrainPresentationPlugin<OnTerrain<Durham>>`.
 
 mod bump_out;
 pub mod camera;
@@ -63,9 +64,9 @@ use commands::{
 };
 use crozon_characters::{CharacterHostsPlugin, CharacterMotionSystems};
 use durham_terrain_models::{
-	terrain_streaming_enabled, Durham, TerrainCellLayout, TerrainEntryStore, TerrainMeshLodBand,
-	TerrainPlugin, TerrainPresentPending, TerrainPresentationAssets, TerrainPresentationDirty,
-	TerrainStreamingEnabled, TERRAIN_CELL_SIZE,
+	terrain_streaming_enabled, Durham, DurhamTerrainConfig, TerrainCellLayout, TerrainEntryStore,
+	TerrainMeshLodBand, TerrainPresentEnabled, TerrainPresentPending, TerrainPresentationAssets,
+	TerrainPresentationDirty, TerrainStreamingEnabled, TERRAIN_CELL_SIZE,
 };
 use forest::stream_durham_forest;
 use game_commands::command::{
@@ -77,6 +78,8 @@ use lod::{LodGenerateSystems, LodPresentSystems, LodSceneHost};
 use maybraid_input::{PadGameplayEnabled, VirtualPadPlugin, VirtualPadSystems};
 use pitch::{apply_avian_terrain_pitch, sync_suspend_terrain_pitch};
 use player::{respawn_player_on_layout, snap_player_to_composed_surface};
+use terrain_layer_model::{BaseTerrainGenerationPlugin, OnTerrain};
+use terrain_layer_presentation::TerrainPresentationPlugin;
 
 const DEFAULT_TERRAIN_RADIUS: i32 = 2;
 const DEFAULT_TILE_RADIUS: i32 = 1;
@@ -200,7 +203,7 @@ pub struct VegetationOnTerrainPlugin {
 	/// Register Avian terrain pitch apply + player jump suspend.
 	/// World sets this false and owns pitch for NPCs as well as the player.
 	pub register_terrain_pitch: bool,
-	/// When false, the caller owns [`TerrainPlugin`] for [`Durham`].
+	/// When false, the caller owns Durham generation and raw present.
 	pub own_terrain: bool,
 }
 
@@ -223,12 +226,17 @@ impl Plugin for VegetationOnTerrainPlugin {
 		let playground = self.config.clone();
 
 		if self.own_terrain {
-			app.add_plugins(match playground.coverage {
+			let config = match playground.coverage {
 				TerrainCoverage::FinePatch => {
-					TerrainPlugin::<Durham>::fine_patch(playground.terrain_radius)
+					DurhamTerrainConfig::fine_patch(playground.terrain_radius)
 				}
-				TerrainCoverage::PlayableWorld => TerrainPlugin::<Durham>::playable_world(),
-			});
+				TerrainCoverage::PlayableWorld => DurhamTerrainConfig::playable_world(),
+			};
+			app.add_plugins(BaseTerrainGenerationPlugin::<Durham>::new(config));
+			if config.raw_present() {
+				app.add_plugins(TerrainPresentationPlugin::<OnTerrain<Durham>>::default());
+			}
+			app.insert_resource(TerrainPresentEnabled(config.raw_present()));
 		}
 		app.add_plugins(ChicoBumpOutPlugin);
 		if self.commands {

@@ -1,12 +1,14 @@
-//! [`TerrainPresentationPlugin`]: fills, materials, and walk colliders for a model's cells.
+//! [`TerrainPresentationPlugin`]: installs a model's own cell presentation.
 
 use std::marker::PhantomData;
 
 use bevy::app::{App, Plugin};
-use terrain_layer_model::TerrainModel;
+use terrain_layer_model::TerrainPresentation;
 
-/// Presents the stored cells of model `M`, e.g. raw Durham for
-/// `OnTerrain<Durham>` or padded cells for `Urbanization<OnTerrain<Durham>>`.
+/// Presents model `M` by calling [`TerrainPresentation::install_presentation`].
+///
+/// Raw Durham is `TerrainPresentationPlugin<OnTerrain<Durham>>`. Padded cells
+/// (`Urbanization<_>`) are a later impl of the same hook.
 pub struct TerrainPresentationPlugin<M>(PhantomData<fn() -> M>);
 
 impl<M> Default for TerrainPresentationPlugin<M> {
@@ -15,9 +17,9 @@ impl<M> Default for TerrainPresentationPlugin<M> {
 	}
 }
 
-impl<M: TerrainModel> Plugin for TerrainPresentationPlugin<M> {
-	fn build(&self, _app: &mut App) {
-		todo!("TerrainPresentationPlugin: fill from maybraid/layers/terrain/presentation/src/lib_sketch.rs")
+impl<M: TerrainPresentation> Plugin for TerrainPresentationPlugin<M> {
+	fn build(&self, app: &mut App) {
+		M::install_presentation(app);
 	}
 
 	fn finish(&self, app: &mut App) {

@@ -13,6 +13,8 @@ rust-version = { workspace = true }
 bevy = { workspace = true }
 durham-terrain = { workspace = true }
 durham-terrain-models = { workspace = true }
+terrain-layer-model = { workspace = true }
+terrain-layer-presentation = { workspace = true }
 chico-groves = { workspace = true, features = ["render"] }
 chico-forests = { workspace = true }
 chico-vegetation-components = { workspace = true }

@@ -12,7 +12,7 @@ use lod::gen::Id;
 
 use crate::{
 	BaseTerrainGenerationPlugin, HeightField, OnTerrain, RequireLayer, TerrainCell,
-	TerrainGeneration, TerrainModel, TerrainView,
+	TerrainGeneration, TerrainModel, TerrainPresentation, TerrainView,
 };
 
 /// Flat test model: stored cells carry a constant height; fallback is configured.
@@ -144,11 +144,22 @@ impl TerrainGeneration for Flat {
 	}
 }
 
+#[derive(Resource)]
+struct FlatPresentInstalled;
+
+impl TerrainPresentation for Flat {
+	fn install_presentation(app: &mut App) {
+		app.insert_resource(FlatPresentInstalled);
+	}
+}
+
 /// Stand-in presentation plugin that checks its stack like real layers do.
 struct FlatPresentationPlugin<M>(std::marker::PhantomData<fn() -> M>);
 
-impl<M: TerrainModel> Plugin for FlatPresentationPlugin<M> {
-	fn build(&self, _app: &mut App) {}
+impl<M: TerrainPresentation> Plugin for FlatPresentationPlugin<M> {
+	fn build(&self, app: &mut App) {
+		M::install_presentation(app);
+	}
 
 	fn finish(&self, app: &mut App) {
 		M::require_generation(app);
@@ -200,6 +211,7 @@ fn base_generation_installs_model_and_satisfies_requirements() {
 	app.finish();
 
 	assert_eq!(app.world().get_resource::<FlatStore>().map(|store| store.fallback), Some(2.5));
+	assert!(app.world().contains_resource::<FlatPresentInstalled>());
 }
 
 #[test]

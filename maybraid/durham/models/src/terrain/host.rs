@@ -5,10 +5,10 @@
 //! render-only at `res_2 = 4` and `3`. Far / Background holes inset so Medium
 //! overlaps the next-finer High rim. Generation admits a bounded number of
 //! missing origin ids per frame. Playable visuals come from the urbanized
-//! presenter. This plugin generates Durham on every coverage; raw present is
-//! FinePatch-only (`present: true`).
-
-use std::marker::PhantomData;
+//! presenter. Generation runs on every coverage. Raw present is Durham's
+//! [`terrain_layer_model::TerrainPresentation`] hook, gated by
+//! [`TerrainPresentEnabled`] (off for the playable world, on for a fine patch,
+//! toggled by Training).
 
 use bevy::math::{IVec2, UVec2};
 use bevy::prelude::*;
@@ -92,8 +92,11 @@ pub struct WorldBaseTerrain(pub BaseTerrainNoise);
 #[derive(Resource)]
 pub struct TerrainPresentationDirty(pub bool);
 
-/// When false, Durham generate runs but this plugin does not present raw
-/// terrain or seed raw [`crate::terrain::Terrain::scene`] colliders.
+/// When false, Durham generate runs but raw present does not draw terrain or
+/// seed raw [`crate::terrain::Terrain::scene`] colliders.
+///
+/// [`Default`] is on, matching a fine-patch host. The playable world inserts
+/// `false` after raw present is installed; Training toggles the flag.
 #[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TerrainPresentEnabled(pub bool);
 
@@ -231,92 +234,68 @@ pub fn retarget_presentation_assets(
 	assets.macro_res_2 = macro_res_2;
 }
 
-/// Streamed terrain stack for model `M` (currently [`Durham`]).
-pub struct TerrainPlugin<M> {
-	_marker: PhantomData<fn() -> M>,
-	pub seed: u32,
-	pub coverage: TerrainCoverage,
-	pub terrain_radius: i32,
-	/// Raw Durham present + raw collider seed. Playable world leaves this off
-	/// so urbanized terrain is the only presented model.
-	pub present: bool,
+/// Generation half of the old Durham terrain plugin: models, shaders, mesh
+/// caches, layout, and [`generate_cells`].
+///
+/// `setup_presentation_assets` stays here. The terrain index reads
+/// [`TerrainPresentationAssets`] and [`WaterPresentationAssets`] while filling
+/// cells, and Training retargets the terrain assets even when raw present is off.
+pub(crate) fn install_durham_generation(
+	app: &mut App,
+	seed: u32,
+	coverage: TerrainCoverage,
+	terrain_radius: i32,
+) {
+	let config = TerrainConfig::new(seed);
+	let base = BaseTerrainNoise::from_config(&config);
+	let terrain_radius = terrain_radius.max(1);
+
+	if !app.is_plugin_added::<VisualGeometryCorePlugin>() {
+		app.add_plugins(VisualGeometryCorePlugin);
+	}
+	if !app.is_plugin_added::<DurhamTerrainModelsPlugin>() {
+		app.add_plugins(DurhamTerrainModelsPlugin);
+	}
+	if !app.is_plugin_added::<DurhamTerrainShaderPlugin>() {
+		app.add_plugins(DurhamTerrainShaderPlugin);
+	}
+	install_enforced_mesh_cache::<TerrainMeshBuilder, DurhamTerrainShader>(app);
+	share_terrain_chunk_refs::<TerrainMeshBuilder>(app, false);
+	install_enforced_mesh_cache::<ComposedWater, RefractionWater>(app);
+
+	let layout = layout_for(coverage, terrain_radius);
+	app.insert_resource(
+		MeshFulfillBudget::<TerrainMeshBuilder>::new(8, 16, 256)
+			.with_prefer_xz(layout.region_center_xz()),
+	)
+	.insert_resource(config)
+	.insert_resource(WorldBaseTerrain(base))
+	.insert_resource(coverage)
+	.insert_resource(layout)
+	.insert_resource(TerrainFillParams { coverage, terrain_radius })
+	.insert_resource(TerrainPresentationDirty(true))
+	.init_resource::<TerrainPresentPending>()
+	.init_resource::<TerrainStreamingEnabled>()
+	.init_resource::<TerrainLayoutPinned>()
+	.add_systems(Startup, setup_presentation_assets)
+	.add_systems(
+		Update,
+		generate_cells
+			.in_set(TerrainFillSystems::Generate)
+			.run_if(terrain_streaming_enabled)
+			.before(TerrainColliderSystems::QueueMeshes),
+	);
 }
 
-impl TerrainPlugin<Durham> {
-	pub fn fine_patch(terrain_radius: i32) -> Self {
-		Self {
-			_marker: PhantomData,
-			seed: 42,
-			coverage: TerrainCoverage::FinePatch,
-			terrain_radius: terrain_radius.max(1),
-			present: true,
-		}
-	}
-
-	pub fn playable_world() -> Self {
-		Self {
-			_marker: PhantomData,
-			seed: 42,
-			coverage: TerrainCoverage::PlayableWorld,
-			terrain_radius: WORLD_FINE_HALF_EXTENT_CELLS,
-			present: false,
-		}
-	}
-}
-
-impl Default for TerrainPlugin<Durham> {
-	fn default() -> Self {
-		Self::fine_patch(2)
-	}
-}
-
-impl Plugin for TerrainPlugin<Durham> {
-	fn build(&self, app: &mut App) {
-		let config = TerrainConfig::new(self.seed);
-		let base = BaseTerrainNoise::from_config(&config);
-		let coverage = self.coverage;
-		let terrain_radius = self.terrain_radius.max(1);
-
-		if !app.is_plugin_added::<VisualGeometryCorePlugin>() {
-			app.add_plugins(VisualGeometryCorePlugin);
-		}
-		if !app.is_plugin_added::<DurhamTerrainModelsPlugin>() {
-			app.add_plugins(DurhamTerrainModelsPlugin);
-		}
-		if !app.is_plugin_added::<DurhamTerrainShaderPlugin>() {
-			app.add_plugins(DurhamTerrainShaderPlugin);
-		}
-		install_enforced_mesh_cache::<TerrainMeshBuilder, DurhamTerrainShader>(app);
-		share_terrain_chunk_refs::<TerrainMeshBuilder>(app, false);
-		install_enforced_mesh_cache::<ComposedWater, RefractionWater>(app);
-
-		let layout = layout_for(coverage, terrain_radius);
-		app.insert_resource(
-			MeshFulfillBudget::<TerrainMeshBuilder>::new(8, 16, 256)
-				.with_prefer_xz(layout.region_center_xz()),
-		)
-		.insert_resource(config)
-		.insert_resource(WorldBaseTerrain(base))
-		.insert_resource(coverage)
-		.insert_resource(layout)
-		.insert_resource(TerrainFillParams { coverage, terrain_radius })
-		.insert_resource(TerrainPresentationDirty(true))
-		.insert_resource(TerrainPresentEnabled(self.present))
-		.init_resource::<TerrainPresentPending>()
-		.init_resource::<TerrainStreamingEnabled>()
-		.init_resource::<TerrainLayoutPinned>()
+/// Raw Durham present: the gate, the three stream presenter states, and
+/// [`present_cells`]. The gate starts on ([`TerrainPresentEnabled::default`]);
+/// hosts that want it off overwrite the resource after this runs.
+pub(crate) fn install_durham_presentation(app: &mut App) {
+	app.insert_resource(TerrainPresentEnabled::default())
 		.init_resource::<TerrainStreamPresenterState<TerrainNear>>()
 		.init_resource::<TerrainStreamPresenterState<TerrainFar>>()
 		.init_resource::<TerrainStreamPresenterState<TerrainBackground>>()
-		.add_systems(Startup, setup_presentation_assets)
 		.add_systems(
-			Update,
-			generate_cells
-				.in_set(TerrainFillSystems::Generate)
-				.run_if(terrain_streaming_enabled)
-				.before(TerrainColliderSystems::QueueMeshes),
-		);
-		app.add_systems(
 			Update,
 			present_cells
 				.after(generate_cells)
@@ -324,7 +303,6 @@ impl Plugin for TerrainPlugin<Durham> {
 				.run_if(terrain_streaming_enabled)
 				.run_if(terrain_present_enabled),
 		);
-	}
 }
 
 fn terrain_present_enabled(enabled: Res<TerrainPresentEnabled>) -> bool {
@@ -626,12 +604,6 @@ mod tests {
 		assert!(!layout.is_outermost_stream_ring(layout.stream_rings[0]));
 		assert!(!layout.is_outermost_stream_ring(layout.stream_rings[1]));
 		assert!(layout.is_outermost_stream_ring(layout.stream_rings[2]));
-	}
-
-	#[test]
-	fn playable_world_disables_raw_presentation() {
-		assert!(!TerrainPlugin::<Durham>::playable_world().present);
-		assert!(TerrainPlugin::<Durham>::fine_patch(2).present);
 	}
 
 	#[test]

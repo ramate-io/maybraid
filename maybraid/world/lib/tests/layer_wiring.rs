@@ -1,6 +1,7 @@
 //! The layered world stack type-checks as one `Plugins` tuple.
 //!
-//! Named, not added: layer builds stay `todo!()` until each layer issue lands.
+//! Named, not added: unfinished layer builds stay `todo!()` until their issue lands.
+//! Raw Durham presentation is live (`TerrainPresentationPlugin::<OnTerrain<Durham>>`).
 //! Once `playable_world()` assembles this stack, this test can go.
 
 use bevy::app::Plugins;
@@ -22,6 +23,7 @@ fn is_plugin_stack<M>(_: impl Plugins<M>) {}
 fn layered_world_stack_type_checks() {
 	is_plugin_stack((
 		BaseTerrainGenerationPlugin::<Durham>::new(DurhamTerrainConfig::playable_world()),
+		TerrainPresentationPlugin::<OnTerrain<Durham>>::default(),
 		UrbanizationGenerationPlugin::<OnTerrain<Durham>>::default(),
 		VegetationGenerationPlugin,
 		MobGenerationPlugin::<Ground>::default(),

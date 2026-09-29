@@ -2370,6 +2370,8 @@ dependencies = [
  "procedural-common",
  "render-item",
  "terrain-chunk-ref",
+ "terrain-layer-model",
+ "terrain-layer-presentation",
 ]
 
 [[package]]

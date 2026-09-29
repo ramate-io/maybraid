@@ -14,9 +14,16 @@ impl Plugin for WorldPlugin {
 
 		app.add_plugins((
 			BaseTerrainGenerationPlugin::<Durham>::new(DurhamTerrainConfig::playable_world()),
+			// Raw Durham present. The running world inserts
+			// `TerrainPresentEnabled(false)` after this (playable coverage) and
+			// Training toggles the flag. Not the padded presenter.
+			TerrainPresentationPlugin::<OnTerrain<Durham>>::default(),
 			UrbanizationGenerationPlugin::<OnTerrain<Durham>>::default(),
 			VegetationGenerationPlugin,
 			MobGenerationPlugin::<Ground>::default(),
+			// Padded cells. `Urbanization`'s `install_presentation` is still
+			// `todo!` until #886; unifying both presenters behind `TerrainCell`
+			// is a follow-up after that.
 			TerrainPresentationPlugin::<Ground>::default(),
 			UrbanizationPresentationPlugin::<Ground>::default(),
 			VegetationPresentationPlugin::<Ground>::default(),
