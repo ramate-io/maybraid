@@ -28,6 +28,7 @@ members = [
   "maybraid/controllers/menu",
   "maybraid/controllers/character",
 
+  "maybraid/audio",
   "maybraid/scene-ref",
   "maybraid/material-ref",
   "maybraid/terrain-chunk-ref",
@@ -277,6 +278,7 @@ menu-playground = { path = "maybraid/menu/playground" }
 maybraid-menu-controller = { path = "maybraid/controllers/menu" }
 maybraid-character-controller = { path = "maybraid/controllers/character" }
 
+maybraid-audio = { path = "maybraid/audio" }
 scene-ref = { path = "maybraid/scene-ref" }
 visual-geometry-core = { path = "maybraid/visual-geometry-core" }
 material-ref = { path = "maybraid/material-ref" }

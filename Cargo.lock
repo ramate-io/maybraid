@@ -3480,15 +3480,12 @@ dependencies = [
  "bevy",
  "bevy_hanabi",
  "clap",
- "cpal 0.15.3",
  "damage",
  "firearms-components",
- "hound",
  "lod",
  "lod-avian",
  "material-ref",
- "mint",
- "oddio",
+ "maybraid-audio",
  "procedural-common",
  "projectiles",
  "scene-ref",
@@ -4877,6 +4874,19 @@ dependencies = [
  "menu-playground",
  "menu-screens",
  "tempfile",
+]
+
+[[package]]
+name = "maybraid-audio"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "cpal 0.15.3",
+ "hound",
+ "mint",
+ "oddio",
+ "thiserror 1.0.69",
+ "tracing",
 ]
 
 [[package]]
@@ -7010,7 +7020,6 @@ checksum = "d0a536bb79db59098ef71a4dd4246c02eb87b316deceb1b68e0cde7167ec01eb"
 dependencies = [
  "cpal 0.17.1",
  "dasp_sample",
- "hound",
  "lewton",
  "num-rational",
  "thiserror 2.0.16",

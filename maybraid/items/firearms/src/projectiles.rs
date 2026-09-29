@@ -7,8 +7,8 @@
 //! cone and a thin ember jet while the beam is on.
 
 use ::projectiles::{
-	spawn_flight, tick_flights, BoltSpec, BulletSpec, ProjectileContact, ProjectileSource,
-	ProjectileVisualCache, ProjectilesPlugin,
+	BoltSpec, BulletSpec, ProjectileContact, ProjectileSource, ProjectileVisualCache,
+	ProjectilesPlugin, spawn_flight, tick_flights,
 };
 
 use avian3d::prelude::{SpatialQuery, SpatialQueryFilter};
@@ -17,8 +17,8 @@ use bevy::ecs::query::Has;
 use bevy::ecs::system::SystemParam;
 use bevy::light::NotShadowCaster;
 use bevy::mesh::ConeAnchor;
-use bevy::audio::AudioSource;
 use bevy::prelude::*;
+use bevy_hanabi::Gradient;
 use bevy_hanabi::prelude::{
 	Attribute, ColorBlendMask, ColorBlendMode, ColorOverLifetimeModifier, EffectAsset,
 	EffectMaterial, EffectSpawner, ExprWriter, ImageSampleMapping, LinearDragModifier, OrientMode,
@@ -26,24 +26,22 @@ use bevy_hanabi::prelude::{
 	SetPositionSphereModifier, SetVelocitySphereModifier, ShapeDimension, SimulationSpace,
 	SizeOverLifetimeModifier, SpawnerSettings,
 };
-use bevy_hanabi::Gradient;
 use damage::{DamageSystems, Hit, HitPayload};
 use firearms_components::{BoneMap, FirearmHostSystems, FirearmMembers, FirearmRoot, RigRoot};
 use lod_avian::PhysicsInteractionLayer;
+use maybraid_audio::{Audio, AudioClip, AudioPlugin, AudioSystems, Mixer};
 
-use crate::cadence::{trigger_allows_fire, FireControl, WeaponFired, WeaponRecoil};
+use crate::cadence::{FireControl, WeaponFired, WeaponRecoil, trigger_allows_fire};
 use crate::impact::{
-	puff_mask, setup_impact_effects, spawn_impact, tick_impact_bursts, ImpactEffects,
+	ImpactEffects, puff_mask, setup_impact_effects, spawn_impact, tick_impact_bursts,
 };
 use crate::muzzle_flame::{
-	init_muzzle_flame_caches, muzzle_flame_ref, resolve_muzzle_flame, MuzzleFlameMaterial,
-	MuzzleFlameMaterialPlugin, MuzzleFlameMaterialRefCache,
+	MuzzleFlameMaterial, MuzzleFlameMaterialPlugin, MuzzleFlameMaterialRefCache,
+	init_muzzle_flame_caches, muzzle_flame_ref, resolve_muzzle_flame,
 };
 use crate::sound::{
-	despawn_finished_oddio_voices, ensure_camera_spatial_listener, flush_pending_firearm_clips,
-	setup_fire_sounds, setup_oddio_scene, sync_oddio_listener,
-	sync_oddio_voices, FirearmFireSounds,
-	OddioScene,
+	FirearmFireSounds, copy_flight_audio_velocity, ensure_camera_spatial_listener,
+	setup_fire_sounds,
 };
 
 /// Authored rest length of the `barrel` bone (head → tail) in bone-local units.
@@ -171,12 +169,12 @@ impl Plugin for FirearmWeaponsPlugin {
 		if !app.is_plugin_added::<MuzzleFlameMaterialPlugin>() {
 			app.add_plugins(MuzzleFlameMaterialPlugin);
 		}
+		if !app.is_plugin_added::<AudioPlugin>() {
+			app.add_plugins(AudioPlugin);
+		}
 		app.init_resource::<WeaponsArmed>()
 			.add_message::<WeaponFired>()
-			.add_systems(
-				Startup,
-				(setup_oddio_scene, setup_impact_effects, setup_muzzle_flash, setup_fire_sounds),
-			)
+			.add_systems(Startup, (setup_impact_effects, setup_muzzle_flash, setup_fire_sounds))
 			.add_systems(Update, ensure_camera_spatial_listener)
 			.add_systems(
 				PostUpdate,
@@ -193,16 +191,14 @@ impl Plugin for FirearmWeaponsPlugin {
 					tick_laser_hits
 						.in_set(DamageSystems::Collect)
 						.after(FirearmWeaponSystems::Fire),
-					sync_oddio_listener.after(FirearmWeaponSystems::Fire),
-					flush_pending_firearm_clips.after(FirearmWeaponSystems::Fire),
-					sync_oddio_voices.after(FirearmWeaponSystems::Fire),
-					despawn_finished_oddio_voices.after(FirearmWeaponSystems::Fire),
+					copy_flight_audio_velocity.after(FirearmWeaponSystems::Fire),
 					spawn_impacts_from_contacts,
 					tick_impact_bursts.after(bevy_hanabi::EffectSystems::TickSpawners),
 				)
 					.after(TransformSystems::Propagate)
 					.after(FirearmHostSystems::Pose)
-					.after(tick_flights),
+					.after(tick_flights)
+					.before(AudioSystems::Sync),
 			);
 	}
 }
@@ -290,45 +286,53 @@ pub(crate) struct MuzzleFlashEffects {
 pub(crate) struct WeaponFx<'w, 's> {
 	flashes: Res<'w, MuzzleFlashEffects>,
 	sounds: Option<ResMut<'w, FirearmFireSounds>>,
-	sources: Res<'w, Assets<AudioSource>>,
-	scene: Option<Res<'w, OddioScene>>,
+	clips: Res<'w, Assets<AudioClip>>,
+	audio: Option<Res<'w, Audio>>,
+	mixer: ResMut<'w, Mixer>,
 	listeners: Query<'w, 's, &'static GlobalTransform, With<SpatialListener>>,
 }
 
 impl WeaponFx<'_, '_> {
-	fn play_shot(&mut self, commands: &mut Commands, barrel: Entity, world: Vec3) {
-		let (Some(sounds), Some(scene), Some(listener)) =
-			(self.sounds.as_deref_mut(), self.scene.as_deref(), self.listeners.iter().next())
+	fn play_shot(&mut self, commands: &mut Commands, world: Vec3, player: bool) {
+		let (Some(sounds), Some(audio), Some(listener)) =
+			(self.sounds.as_deref_mut(), self.audio.as_deref(), self.listeners.iter().next())
 		else {
 			return;
 		};
-		sounds.play_shot(
+		sounds.play_shot(commands, &self.clips, audio, &mut self.mixer, listener, world, player);
+	}
+
+	fn loop_laser(&mut self, commands: &mut Commands, laser: Entity, world: Vec3, player: bool) {
+		let (Some(sounds), Some(audio), Some(listener)) =
+			(self.sounds.as_deref_mut(), self.audio.as_deref(), self.listeners.iter().next())
+		else {
+			return;
+		};
+		sounds.loop_on(commands, &self.clips, audio, &mut self.mixer, listener, laser, world, player);
+	}
+
+	fn loop_fizz(
+		&mut self,
+		commands: &mut Commands,
+		projectile: Entity,
+		world: Vec3,
+		velocity: Vec3,
+	) {
+		let (Some(sounds), Some(audio), Some(listener)) =
+			(self.sounds.as_deref_mut(), self.audio.as_deref(), self.listeners.iter().next())
+		else {
+			return;
+		};
+		sounds.loop_fizz(
 			commands,
-			&self.sources,
-			scene,
+			&self.clips,
+			audio,
+			&self.mixer,
 			listener,
-			barrel,
-			Vec3::Y * BARREL_REST_LENGTH,
+			projectile,
 			world,
+			velocity,
 		);
-	}
-
-	fn loop_laser(&mut self, commands: &mut Commands, laser: Entity, world: Vec3) {
-		let (Some(sounds), Some(scene), Some(listener)) =
-			(self.sounds.as_deref_mut(), self.scene.as_deref(), self.listeners.iter().next())
-		else {
-			return;
-		};
-		sounds.loop_on(commands, &self.sources, scene, listener, laser, world);
-	}
-
-	fn loop_fizz(&mut self, commands: &mut Commands, projectile: Entity, world: Vec3) {
-		let (Some(sounds), Some(scene), Some(listener)) =
-			(self.sounds.as_deref_mut(), self.scene.as_deref(), self.listeners.iter().next())
-		else {
-			return;
-		};
-		sounds.loop_fizz(commands, &self.sources, scene, listener, projectile, world);
 	}
 }
 
@@ -557,11 +561,7 @@ fn hide_muzzle_flash(
 
 /// A one-shot hides after its life. A laser hides once the beam entity is gone.
 fn muzzle_flash_finished(age: f32, life: f32, sustain: bool, laser_alive: bool) -> bool {
-	if sustain {
-		!laser_alive
-	} else {
-		age >= life
-	}
+	if sustain { !laser_alive } else { age >= life }
 }
 
 fn tick_muzzle_flashes(
@@ -704,7 +704,7 @@ pub(crate) fn fire_weapons(
 						spec,
 						source.copied(),
 					);
-					fx.loop_laser(&mut commands, laser, muzzle_world(global).0);
+					fx.loop_laser(&mut commands, laser, muzzle_world(global).0, manual);
 					ignite_muzzle_flash(
 						&mut commands,
 						&fx.flashes,
@@ -743,8 +743,9 @@ pub(crate) fn fire_weapons(
 				) else {
 					continue;
 				};
-				fx.play_shot(&mut commands, barrel, muzzle_world(global).0);
-				fx.loop_fizz(&mut commands, projectile, muzzle_world(global).0);
+				let (muzzle, dir) = muzzle_world(global);
+				fx.play_shot(&mut commands, muzzle, manual);
+				fx.loop_fizz(&mut commands, projectile, muzzle, dir * spec.speed);
 				ignite_muzzle_flash(
 					&mut commands,
 					&fx.flashes,
@@ -779,8 +780,9 @@ pub(crate) fn fire_weapons(
 				) else {
 					continue;
 				};
-				fx.play_shot(&mut commands, barrel, muzzle_world(global).0);
-				fx.loop_fizz(&mut commands, projectile, muzzle_world(global).0);
+				let (muzzle, dir) = muzzle_world(global);
+				fx.play_shot(&mut commands, muzzle, manual);
+				fx.loop_fizz(&mut commands, projectile, muzzle, dir * spec.speed);
 				ignite_muzzle_flash(
 					&mut commands,
 					&fx.flashes,
@@ -992,8 +994,9 @@ fn spawn_impacts_from_contacts(
 	mut contacts: MessageReader<ProjectileContact>,
 	effects: Option<Res<ImpactEffects>>,
 	mut sounds: Option<ResMut<FirearmFireSounds>>,
-	sources: Res<Assets<AudioSource>>,
-	scene: Option<Res<OddioScene>>,
+	clips: Res<Assets<AudioClip>>,
+	audio: Option<Res<Audio>>,
+	mut mixer: ResMut<Mixer>,
 	listeners: Query<&GlobalTransform, With<SpatialListener>>,
 	mut commands: Commands,
 ) {
@@ -1002,12 +1005,12 @@ fn spawn_impacts_from_contacts(
 		if let Some(effects) = effects.as_deref() {
 			spawn_impact(&mut commands, effects, contact.point, contact.normal);
 		}
-		let (Some(sounds), Some(scene), Some(listener)) =
-			(sounds.as_deref_mut(), scene.as_deref(), listener)
+		let (Some(sounds), Some(audio), Some(listener)) =
+			(sounds.as_deref_mut(), audio.as_deref(), listener)
 		else {
 			continue;
 		};
-		sounds.play_impact(&mut commands, &sources, scene, listener, contact.point);
+		sounds.play_impact(&mut commands, &clips, audio, &mut mixer, listener, contact.point);
 	}
 }
 

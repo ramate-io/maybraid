@@ -11,14 +11,11 @@ rust-version = { workspace = true }
 
 [dependencies]
 avian3d = { workspace = true }
-bevy = { workspace = true, features = ["wav"] }
+bevy = { workspace = true }
 bevy_hanabi = { workspace = true }
 clap = { workspace = true }
-cpal = { workspace = true }
 firearms-components = { workspace = true }
-hound = { workspace = true }
-mint = { workspace = true }
-oddio = { workspace = true }
+maybraid-audio = { workspace = true }
 projectiles = { workspace = true }
 damage = { workspace = true }
 lod-avian = { workspace = true }
