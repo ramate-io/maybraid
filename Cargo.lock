@@ -3157,6 +3157,7 @@ dependencies = [
  "render-item",
  "sdf",
  "terrain-chunk-ref",
+ "terrain-layer-model",
  "visual-geometry-core",
 ]
 
@@ -4926,6 +4927,8 @@ dependencies = [
  "mob-characters",
  "mob-groups",
  "mob-intelligence",
+ "mob-layer-model",
+ "mob-layer-presentation",
  "movement-intelligence",
  "movement-intelligence-avian",
  "movement-realization",
@@ -4946,10 +4949,16 @@ dependencies = [
  "serde_json",
  "spotting-intelligence",
  "tempfile",
+ "terrain-layer-model",
+ "terrain-layer-presentation",
  "tether-intelligence",
  "threat-intelligence",
  "threat-intelligence-damage",
  "threat-management-intelligence",
+ "urbanization-layer-model",
+ "urbanization-layer-presentation",
+ "vegetation-layer-model",
+ "vegetation-layer-presentation",
 ]
 
 [[package]]
@@ -5129,6 +5138,26 @@ dependencies = [
  "threat-intelligence",
  "threat-intelligence-damage",
  "threat-management-intelligence",
+]
+
+[[package]]
+name = "mob-layer-model"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "terrain-layer-model",
+ "urbanization-layer-model",
+ "vegetation-layer-model",
+]
+
+[[package]]
+name = "mob-layer-presentation"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "mob-layer-model",
+ "terrain-layer-model",
+ "urbanization-layer-model",
 ]
 
 [[package]]
@@ -6748,6 +6777,7 @@ dependencies = [
  "richmond-developments",
  "richmond-urbanization",
  "scene-ref",
+ "terrain-layer-model",
 ]
 
 [[package]]
@@ -7376,6 +7406,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "terrain-layer-model"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "lod",
+]
+
+[[package]]
+name = "terrain-layer-presentation"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "terrain-layer-model",
+]
+
+[[package]]
 name = "tether-intelligence"
 version = "0.1.0"
 dependencies = [
@@ -7750,6 +7797,28 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ebc1c04c71510c7f702b52b7c350734c9ff1295c464a03335b00bb84fc54f853"
 
 [[package]]
+name = "urbanization-layer-model"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "durham-terrain-models",
+ "lod",
+ "richmond-development-models",
+ "richmond-urbanization",
+ "terrain-layer-model",
+]
+
+[[package]]
+name = "urbanization-layer-presentation"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "terrain-layer-model",
+ "urbanization-layer-model",
+]
+
+[[package]]
 name = "utf8_iter"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7795,6 +7864,22 @@ name = "vec_map"
 version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f1bddf1187be692e79c5ffeab891132dfb0f236ed36a43c7ed39f1165ee20191"
+
+[[package]]
+name = "vegetation-layer-model"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+]
+
+[[package]]
+name = "vegetation-layer-presentation"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "terrain-layer-model",
+ "vegetation-layer-model",
+]
 
 [[package]]
 name = "version_check"
