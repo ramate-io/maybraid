@@ -5002,6 +5002,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "maybraid-weather"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "maybraid-audio",
+]
+
+[[package]]
 name = "maybraid-world"
 version = "0.1.0"
 dependencies = [
@@ -5041,6 +5049,7 @@ dependencies = [
  "maybraid-mobs",
  "maybraid-skill-map",
  "maybraid-sky",
+ "maybraid-weather",
  "meandering-intelligence",
  "mob-characters",
  "mob-groups",
