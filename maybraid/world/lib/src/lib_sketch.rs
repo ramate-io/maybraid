@@ -12,17 +12,15 @@ impl Plugin for WorldPlugin {
 
 		app.add_plugins((
 			BaseTerrainGenerationPlugin::<Durham>::new(DurhamTerrainConfig::playable_world()),
-			// Raw Durham present. The running world inserts
-			// `TerrainPresentEnabled(false)` after this (playable coverage) and
-			// Training toggles the flag. Not the padded presenter.
-			TerrainPresentationPlugin::<DurhamCellPresenter>::default(),
 			UrbanizationGenerationPlugin::<OnTerrain<Durham>>::default(),
 			VegetationGenerationPlugin,
 			MobGenerationPlugin::<Urbanization<OnTerrain<Durham>>>::default(),
-			// #886 adds TerrainPresentationPlugin::<PaddedCellPresenter<OnTerrain<Durham>>>
+			// #886: TerrainPresentationPlugin::<Urbanization<OnTerrain<Durham>>, PaddedCells>
 			UrbanizationPresentationPlugin::<Urbanization<OnTerrain<Durham>>>::default(),
 			VegetationPresentationPlugin::<Urbanization<OnTerrain<Durham>>>::default(),
 			MobPresentationPlugin::<Urbanization<OnTerrain<Durham>>>::default(),
+			// Training only: raw Durham, gated off in the open world.
+			TerrainPresentationPlugin::<OnTerrain<Durham>, DurhamCells>::default(),
 		))
 		// Budgets that used to be implied by plugin insertion order (budget_sketch.rs):
 		.insert_resource(LodGenerateBudget::<ForestLodChan>::new(16))
@@ -31,8 +29,8 @@ impl Plugin for WorldPlugin {
 		.insert_resource(LodGenerateBudget::<BumpOutLodChan>::new(16))
 		.insert_resource(LodGenerateBudget::<MediumBumpOutLodChan>::new(16))
 		// Layer configs that used to ride on playground configs:
-		.insert_resource(UrbanizationLayerConfig::world_defaults())   // from DevelopmentsPlaygroundConfig::world_defaults()
-		.insert_resource(VegetationLayerConfig::world_defaults());    // from VegetationPlaygroundConfig::world_defaults()
+		.insert_resource(UrbanizationLayerConfig::world_defaults()) // from DevelopmentsPlaygroundConfig::world_defaults()
+		.insert_resource(VegetationLayerConfig::world_defaults()); // from VegetationPlaygroundConfig::world_defaults()
 
 		// Training: set MobStreamSuspended from TrainingGrounds (mobs/model sketch).
 

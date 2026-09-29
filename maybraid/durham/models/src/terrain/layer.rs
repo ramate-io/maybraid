@@ -131,11 +131,9 @@ impl TerrainGeneration for Durham {
 }
 
 /// Raw Durham cells. Training toggles [`crate::TerrainPresentEnabled`].
-pub struct DurhamCellPresenter;
+pub struct DurhamCells;
 
-impl TerrainPresenter for DurhamCellPresenter {
-	type Model = OnTerrain<Durham>;
-
+impl TerrainPresenter<OnTerrain<Durham>> for DurhamCells {
 	fn install(app: &mut App) {
 		install_durham_presentation(app);
 	}

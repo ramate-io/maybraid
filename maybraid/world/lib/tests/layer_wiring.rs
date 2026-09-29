@@ -1,11 +1,12 @@
 //! The layered world stack type-checks as one `Plugins` tuple.
 //!
 //! Named, not added: unfinished layer builds stay `todo!()` until their issue lands.
-//! Raw Durham presentation is live (`TerrainPresentationPlugin::<DurhamCellPresenter>`).
+//! Raw Durham presentation is live
+//! (`TerrainPresentationPlugin::<OnTerrain<Durham>, DurhamCells>`).
 //! Once the world assembles this stack, this test can go.
 
 use bevy::app::Plugins;
-use durham_terrain_models::{Durham, DurhamCellPresenter, DurhamTerrainConfig};
+use durham_terrain_models::{Durham, DurhamCells, DurhamTerrainConfig};
 use mob_layer_model::MobGenerationPlugin;
 use mob_layer_presentation::MobPresentationPlugin;
 use terrain_layer_model::{BaseTerrainGenerationPlugin, OnTerrain};
@@ -21,13 +22,14 @@ fn is_plugin_stack<M>(_: impl Plugins<M>) {}
 fn layered_world_stack_type_checks() {
 	is_plugin_stack((
 		BaseTerrainGenerationPlugin::<Durham>::new(DurhamTerrainConfig::playable_world()),
-		TerrainPresentationPlugin::<DurhamCellPresenter>::default(),
 		UrbanizationGenerationPlugin::<OnTerrain<Durham>>::default(),
 		VegetationGenerationPlugin,
 		MobGenerationPlugin::<Urbanization<OnTerrain<Durham>>>::default(),
-		// #886 adds TerrainPresentationPlugin::<PaddedCellPresenter<OnTerrain<Durham>>>
+		// #886: TerrainPresentationPlugin::<Urbanization<OnTerrain<Durham>>, PaddedCells>
 		UrbanizationPresentationPlugin::<Urbanization<OnTerrain<Durham>>>::default(),
 		VegetationPresentationPlugin::<Urbanization<OnTerrain<Durham>>>::default(),
 		MobPresentationPlugin::<Urbanization<OnTerrain<Durham>>>::default(),
+		// Training only: raw Durham, gated off in the open world.
+		TerrainPresentationPlugin::<OnTerrain<Durham>, DurhamCells>::default(),
 	));
 }

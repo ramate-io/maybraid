@@ -6,7 +6,7 @@
 //! overlaps the next-finer High rim. Generation admits a bounded number of
 //! missing origin ids per frame. Playable visuals come from the urbanized
 //! presenter. Generation runs on every coverage. Raw present is
-//! [`crate::DurhamCellPresenter`], gated by [`TerrainPresentEnabled`] (off for
+//! [`crate::DurhamCells`], gated by [`TerrainPresentEnabled`] (off for
 //! the playable world, on for a fine patch, toggled by Training).
 
 use bevy::math::{IVec2, UVec2};
@@ -95,7 +95,7 @@ pub struct TerrainPresentationDirty(pub bool);
 /// seed raw [`crate::terrain::Terrain::scene`] colliders.
 ///
 /// [`Default`] is on, matching a fine-patch host. The playable world inserts
-/// `false` after [`crate::DurhamCellPresenter`] is installed; Training toggles
+/// `false` after [`crate::DurhamCells`] is installed; Training toggles
 /// the flag.
 #[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TerrainPresentEnabled(pub bool);
