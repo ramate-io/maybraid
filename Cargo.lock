@@ -3466,6 +3466,7 @@ dependencies = [
  "lod",
  "lod-avian",
  "material-ref",
+ "maybraid-audio",
  "maybraid-character-controller",
  "maybraid-input",
  "player",

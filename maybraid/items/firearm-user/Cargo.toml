@@ -20,6 +20,7 @@ firearms = { workspace = true }
 lod = { workspace = true }
 lod-avian = { workspace = true }
 material-ref = { workspace = true }
+maybraid-audio = { workspace = true }
 maybraid-character-controller = { workspace = true }
 maybraid-input = { workspace = true }
 player = { workspace = true }

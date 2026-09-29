@@ -21,6 +21,9 @@ oddio graph → CPAL
 - **Flinch:** [`FlinchProfile`](src/flinch.rs) on a character names a
   [`GruntStyle`](src/flinch.rs). Damage picks a numbered variant noisily and
   plays a world-fixed `Voices` one-shot.
+- **Movement:** [`MovementSounds`](src/movement.rs) plays footstep and
+  change-item one-shots on `Voices`. Gait cadence follows the walk/run clip
+  rates (two plants per cycle).
 - **Weather:** [`maybraid-weather`](../weather/) places quiet, wide-radius
   breeze loops and gust one-shots on the `Ambience` bus.
 - **Spatial:** [`SpatialOneShot`](src/spatial.rs) is world-fixed.
