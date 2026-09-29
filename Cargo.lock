@@ -6823,6 +6823,10 @@ dependencies = [
  "richmond-developments",
  "richmond-urbanization",
  "terrain-chunk-ref",
+ "terrain-layer-model",
+ "terrain-layer-presentation",
+ "urbanization-layer-model",
+ "urbanization-layer-presentation",
 ]
 
 [[package]]
@@ -7808,6 +7812,7 @@ dependencies = [
  "bevy",
  "durham-terrain-models",
  "lod",
+ "procedural-common",
  "richmond-development-models",
  "richmond-urbanization",
  "terrain-layer-model",
@@ -7817,8 +7822,17 @@ dependencies = [
 name = "urbanization-layer-presentation"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "bevy",
+ "durham-terrain-models",
+ "furniture-assemblies",
+ "furniture-shaders",
+ "lod",
+ "richmond-building-physics",
+ "richmond-development-models",
+ "richmond-urbanization",
  "terrain-layer-model",
+ "terrain-layer-presentation",
  "urbanization-layer-model",
 ]
 

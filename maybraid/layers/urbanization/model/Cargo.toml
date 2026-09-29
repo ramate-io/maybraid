@@ -13,6 +13,7 @@ rust-version = { workspace = true }
 bevy = { workspace = true }
 durham-terrain-models = { workspace = true }
 lod = { workspace = true }
+procedural-common = { workspace = true }
 richmond-development-models = { workspace = true }
 richmond-urbanization = { workspace = true }
 terrain-layer-model = { workspace = true }

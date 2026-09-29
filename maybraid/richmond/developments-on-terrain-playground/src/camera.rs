@@ -17,7 +17,7 @@ pub struct CameraController {
 pub fn setup_camera(
 	mut commands: Commands,
 	layout: Res<TerrainCellLayout>,
-	world_base: Res<crate::WorldBaseTerrain>,
+	world_base: Res<durham_terrain_models::WorldBaseTerrain>,
 ) {
 	let look_at = camera_look_at(&layout, &world_base.0);
 	let camera_pos = look_at + Vec3::new(0.0, layout.cell_size * 4.0, layout.cell_size * 6.0);

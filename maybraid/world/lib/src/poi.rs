@@ -12,7 +12,7 @@ use poi_intelligence::{
 	GlobalPoi, LocalPoi, Poi, PoiId, PoiIntelligencePlugin, PoiKind, PoiRegistry, PoiSystems,
 };
 use richmond_development_models::{DiscoverablePlace, DiscoverablePlaceLabel};
-use richmond_developments_on_terrain_playground::UrbanSetting;
+use urbanization_layer_presentation::UrbanSetting;
 
 const LOCAL_VEGETATION_TILE: f32 = 48.0;
 const VEGETATION_POI_SALT: u64 = 0x7665_6765_7461_7469;

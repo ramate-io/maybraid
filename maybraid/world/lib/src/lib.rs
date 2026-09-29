@@ -93,13 +93,13 @@ use player::{
 	register_motor_traction_physics, PlayerPlugin, PlayerPresentationPlugin, PlayerSystems,
 };
 use player_camera::{PlayerCameraPlugin, PlayerCameraSystems};
-use richmond_building_physics::BuildingWalkColliderPlugin;
-use richmond_developments_on_terrain_playground::{
-	DevelopmentsOnTerrainPlugin, PlaygroundConfig as DevelopmentsPlaygroundConfig,
-};
-use richmond_urbanization::UrbanizationLodChan;
+use richmond_developments_on_terrain_playground::DevelopmentsOnTerrainPlugin;
 use terrain_layer_model::{BaseTerrainGenerationPlugin, OnTerrain};
 use terrain_layer_presentation::TerrainPresentationPlugin;
+use urbanization_layer_model::{
+	Urbanization, UrbanizationGenerationPlugin, UrbanizationLayerConfig,
+};
+use urbanization_layer_presentation::{PaddedCells, UrbanizationPresentationPlugin};
 
 /// Steepest slope the controlled character can drive uphill.
 const WORLD_MAX_SLOPE_ANGLE: f32 = 70.0_f32.to_radians();
@@ -191,23 +191,31 @@ impl Plugin for WorldPlugin {
 			})
 			.insert_resource(CharacterRagdollTargets { players: true, npcs: true, unmarked: false })
 			.add_plugins(CharacterRagdollPlugin)
-			// Urbanization stream only — base terrain generation already owns Durham.
+			.add_plugins(UrbanizationGenerationPlugin::<OnTerrain<Durham>>::new(
+				UrbanizationLayerConfig::world_defaults(),
+			))
+			.add_plugins(
+				TerrainPresentationPlugin::<Urbanization<OnTerrain<Durham>>, PaddedCells>::default(
+				),
+			)
+			.add_plugins(
+				UrbanizationPresentationPlugin::<Urbanization<OnTerrain<Durham>>>::default(),
+			)
+			// Development forest / bump-out LOD until #887. Urbanization systems
+			// come from the layer plugins above.
 			.add_plugins(DevelopmentsOnTerrainPlugin {
-				config: DevelopmentsPlaygroundConfig::world_defaults(),
 				commands: false,
 				own_terrain: false,
 				register_development_forest_lod: true,
+				..Default::default()
 			})
 			// Effective generate budgets before this change were last-insert-wins:
 			// urbanization inserted 8, then forest inserted 16, and mobs / bump-outs
-			// inherited 16. Channel the resources and keep those assembled numbers.
+			// inherited 16. Urbanization's 16 now comes from
+			// `UrbanizationLayerConfig::world_defaults()`.
 			.insert_resource(LodGenerateBudget::<ForestLodChan>::new(16))
-			.insert_resource(LodGenerateBudget::<UrbanizationLodChan>::new(16))
 			.insert_resource(LodGenerateBudget::<BumpOutLodChan>::new(16))
 			.insert_resource(LodGenerateBudget::<MediumBumpOutLodChan>::new(16));
-		if !app.is_plugin_added::<BuildingWalkColliderPlugin>() {
-			app.add_plugins(BuildingWalkColliderPlugin);
-		}
 		app.add_plugins(WorldMobsPlugin)
 			.add_plugins(WorldIntelligencePlugin)
 			.add_plugins(SkillMapPlugin)

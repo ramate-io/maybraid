@@ -257,6 +257,11 @@ impl DevelopmentEntryStore {
 		self.developments.get(&id).map(|e| &e.value)
 	}
 
+	/// Built development plus its store version, for present-time host refresh.
+	pub fn built_at(&self, id: Id) -> Option<(&BuiltDevelopment, Version)> {
+		self.developments.get(&id).map(|e| (&e.value, e.version))
+	}
+
 	/// Built developments whose stored bounds overlap `region` on XZ.
 	pub fn developments_overlapping(&self, region: Aabb3d) -> Vec<&BuiltDevelopment> {
 		self.developments_overlapping_tracked(region)

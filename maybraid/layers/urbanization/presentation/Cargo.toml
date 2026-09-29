@@ -11,8 +11,19 @@ rust-version = { workspace = true }
 
 [dependencies]
 bevy = { workspace = true }
+durham-terrain-models = { workspace = true }
+furniture-assemblies = { workspace = true }
+furniture-shaders = { workspace = true }
+lod = { workspace = true }
+richmond-building-physics = { workspace = true }
+richmond-development-models = { workspace = true }
+richmond-urbanization = { workspace = true }
 terrain-layer-model = { workspace = true }
+terrain-layer-presentation = { workspace = true }
 urbanization-layer-model = { workspace = true }
+
+[dev-dependencies]
+anyhow = { workspace = true }
 
 [lints]
 workspace = true

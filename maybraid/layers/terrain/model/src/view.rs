@@ -10,7 +10,8 @@ use crate::model::TerrainModel;
 /// Read access to model `M`, e.g. `TerrainView<Urbanization<OnTerrain<Durham>>>`.
 #[derive(SystemParam)]
 pub struct TerrainView<'w, 's, M: TerrainModel> {
-	read: StaticSystemParam<'w, 's, <M as TerrainModel>::Read>,
+	/// Model resources. Layer traits (`UrbanModel`, …) take this borrow.
+	pub read: StaticSystemParam<'w, 's, <M as TerrainModel>::Read>,
 }
 
 impl<M: TerrainModel> TerrainView<'_, '_, M> {

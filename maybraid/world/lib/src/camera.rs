@@ -4,7 +4,7 @@ use avian3d::prelude::{Collider, ShapeCastConfig, SpatialQuery, SpatialQueryFilt
 use bevy::core_pipeline::prepass::DepthPrepass;
 use bevy::prelude::*;
 use chico_vegetation_on_terrain_playground::{
-	Player as VegetationPlayer, PlayerSpawnXz, PlaygroundMode, player::holding_elevation,
+	player::holding_elevation, Player as VegetationPlayer, PlayerSpawnXz, PlaygroundMode,
 };
 use durham_terrain_models::WorldBaseTerrain;
 use game_commands::command::TextEntryFocus;
@@ -12,8 +12,8 @@ use lod_avian::PhysicsInteractionLayer;
 use maybraid_input::{PadButton, VirtualPad};
 use player::{CameraFollow, Player};
 use player_camera::{
-	CameraController, CameraPov, CameraPovLocked, FollowCamera, PlayerCameraSystems,
-	spawn_follow_camera,
+	spawn_follow_camera, CameraController, CameraPov, CameraPovLocked, FollowCamera,
+	PlayerCameraSystems,
 };
 
 use crate::control::{InventoryEditCameraFollow, WorldGameplayEnabled};

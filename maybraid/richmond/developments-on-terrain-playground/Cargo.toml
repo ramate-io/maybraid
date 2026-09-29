@@ -36,6 +36,10 @@ richmond-development-models = { workspace = true }
 richmond-developments = { workspace = true }
 richmond-urbanization = { workspace = true }
 terrain-chunk-ref = { workspace = true }
+terrain-layer-model = { workspace = true }
+terrain-layer-presentation = { workspace = true }
+urbanization-layer-model = { workspace = true }
+urbanization-layer-presentation = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }

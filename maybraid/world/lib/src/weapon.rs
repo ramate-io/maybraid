@@ -7,17 +7,17 @@ use chico_vegetation_on_terrain_playground::{
 };
 use crozon_character_items::{CharacterSheet, Inventory, InventoryItem};
 use crozon_characters::{CharacterAppearance, CharacterRoot};
-use crozon_inventory_user::{InventoryUser, spawn_bag};
+use crozon_inventory_user::{spawn_bag, InventoryUser};
 use damage::Health;
 use firearm_user::{
-	FirearmUser, FirearmUserSettings, FirearmUserSystems, GeneratedFirearm, WeaponSwap,
-	live_weapon_from_stats, spawn_held_firearm, spawn_held_kit, spawn_reticle,
+	live_weapon_from_stats, spawn_held_firearm, spawn_held_kit, spawn_reticle, FirearmUser,
+	FirearmUserSettings, FirearmUserSystems, GeneratedFirearm, WeaponSwap,
 };
 use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
-use maybraid_skill_map::{SkillMapEquip, SkillMapSystems, spawn_skill_maps};
+use maybraid_skill_map::{spawn_skill_maps, SkillMapEquip, SkillMapSystems};
 use player::{
-	CameraFollow, Player as MaybraidPlayer, PlayerCameraAim, PlayerLook, PlayerUse,
-	PlayerVisual as MaybraidPlayerVisual, PlayerYawOwner, apply_character_mobility,
+	apply_character_mobility, CameraFollow, Player as MaybraidPlayer, PlayerCameraAim, PlayerLook,
+	PlayerUse, PlayerVisual as MaybraidPlayerVisual, PlayerYawOwner,
 };
 
 use crate::control::{InventoryEditCameraFollow, WorldGameplayEnabled};
@@ -337,8 +337,8 @@ mod tests {
 	};
 	use crozon_characters::{CharacterAppearance, CharacterRoot};
 
+	use crate::weapon::{arm_world_player, WorldPlayerAppearanceRequested, WorldPlayerLoadout};
 	use crate::WorldGameplayEnabled;
-	use crate::weapon::{WorldPlayerAppearanceRequested, WorldPlayerLoadout, arm_world_player};
 
 	#[test]
 	fn world_loadout_keeps_primary_weapon_and_worn_clothing() {
@@ -481,7 +481,7 @@ mod tests {
 	#[test]
 	fn y_swaps_the_queued_primary() -> anyhow::Result<()> {
 		use crozon_inventory_user::InventoryUser;
-		use firearm_user::{FirearmUser, WEAPON_SWAP_SECS, WeaponSwap};
+		use firearm_user::{FirearmUser, WeaponSwap, WEAPON_SWAP_SECS};
 
 		use crate::weapon::commit_weapon_swap;
 

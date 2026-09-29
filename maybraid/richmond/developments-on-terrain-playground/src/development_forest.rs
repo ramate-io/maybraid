@@ -10,10 +10,11 @@ use chico_groves::{GroveHeightModulation, ModulatedGroveSample};
 use chico_vegetation_on_terrain_playground::{
 	DurhamGroveSample, OwnedDurhamTerrain, WorldBaseTerrain,
 };
-use lod::gen::{GeneratingSpatialIndex, GenerationScheme, Id, OriginalId, Version};
+use lod::gen::{Id, Version};
 use lod::lod_ref::LodRef;
 use lod::presentation::RegionPresenter;
-use richmond_development_models::{DevelopmentCell, DevelopmentIndex, PadComplex};
+use richmond_development_models::{DevelopmentIndex, PadComplex};
+use urbanization_layer_model::prepare_development_cells;
 
 #[derive(Clone)]
 struct DevelopmentPadModulation(PadComplex);
@@ -41,17 +42,7 @@ impl RegionPresenter<ChicoGrove, ForestIndex> for DevelopmentForestPresenter<'_,
 
 	fn handle(&mut self, id: Id, version: Version, grove: &ChicoGrove, lod_ref: &LodRef) {
 		let bounds = grove.aabb();
-		let ids = <DevelopmentCell as GenerationScheme<DevelopmentIndex<'_>>>::original_ids_for(
-			&mut self.development,
-			bounds,
-		);
-		for OriginalId(development_id) in ids {
-			let _ = GeneratingSpatialIndex::<DevelopmentCell>::get_or_generate(
-				&mut self.development,
-				development_id,
-				lod_ref,
-			);
-		}
+		prepare_development_cells(&mut self.development, bounds, lod_ref);
 
 		let pads = self.development.store.merged_pad_complex(bounds);
 		let terrain = DurhamGroveSample::from_terrain(OwnedDurhamTerrain::from_store(

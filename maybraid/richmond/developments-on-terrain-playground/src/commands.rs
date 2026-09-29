@@ -3,52 +3,15 @@
 use std::ffi::OsString;
 
 use bevy::prelude::*;
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{Parser, Subcommand};
 use game_commands::command::{CommandScript, GameCommand};
-use richmond_development_models::DevelopmentConfig;
 
 pub const PLAYGROUND_CLI_NAME: &str = "richmond-developments-on-terrain";
 pub type Script = CommandScript<PlaygroundCommand>;
+pub use urbanization_layer_model::DevelopmentFocus;
 
-/// Development distribution preset for startup and in-game focus commands.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
-#[value(rename_all = "kebab-case")]
-pub enum DevelopmentFocus {
-	All,
-	LesHalles,
-	ShepherdsVillage,
-	ShepherdsCommune,
-	RingFort,
-	TempleComplex,
-	SingleHighrise,
-	SuburbanHomes,
-	WizardsTower,
-	SkybridgeBazaar,
-	OldCityMarket,
-}
-
-impl DevelopmentFocus {
-	pub fn apply(self, config: &mut DevelopmentConfig) {
-		let selected = if self == Self::All { None } else { Some(self) };
-		config.les_halles_weight = weight(selected, Self::LesHalles);
-		config.shepherds_village_weight = weight(selected, Self::ShepherdsVillage);
-		config.shepherds_commune_weight = weight(selected, Self::ShepherdsCommune);
-		config.ring_fort_weight = weight(selected, Self::RingFort);
-		config.temple_complex_weight = weight(selected, Self::TempleComplex);
-		config.single_highrise_weight = weight(selected, Self::SingleHighrise);
-		config.suburban_homes_weight = weight(selected, Self::SuburbanHomes);
-		config.wizards_tower_weight = weight(selected, Self::WizardsTower);
-		config.skybridge_bazaar_weight = weight(selected, Self::SkybridgeBazaar);
-		config.old_city_market_weight = weight(selected, Self::OldCityMarket);
-	}
-}
-
-fn weight(selected: Option<DevelopmentFocus>, kind: DevelopmentFocus) -> f32 {
-	match selected {
-		None => 1.0,
-		Some(selected) if selected == kind => 1.0,
-		Some(_) => 0.0,
-	}
+fn parse_development_focus(name: &str) -> Result<DevelopmentFocus, String> {
+	DevelopmentFocus::from_kebab(name).ok_or_else(|| format!("unknown development focus `{name}`"))
 }
 
 /// Startup-only options plus the existing optional startup command.
@@ -83,7 +46,7 @@ pub enum PlaygroundCommand {
 	},
 	/// Give one development type all distribution weight (`all` restores defaults).
 	FocusDevelopment {
-		#[arg(value_enum)]
+		#[arg(value_parser = parse_development_focus)]
 		development: DevelopmentFocus,
 	},
 	/// Rebuild pads and developments without changing the seed.
@@ -169,16 +132,6 @@ impl PlaygroundCommand {
 	}
 }
 
-impl std::fmt::Display for DevelopmentFocus {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		let value = self
-			.to_possible_value()
-			.map(|value| value.get_name().to_owned())
-			.unwrap_or_else(|| "unknown".to_owned());
-		f.write_str(&value)
-	}
-}
-
 fn take_focus_development(tail: &mut Vec<OsString>) -> Result<Option<DevelopmentFocus>, String> {
 	let mut found = None;
 	let mut index = 0;
@@ -203,10 +156,7 @@ fn take_focus_development(tail: &mut Vec<OsString>) -> Result<Option<Development
 					tail.remove(index).to_string_lossy().into_owned()
 				}
 			};
-			found = Some(
-				DevelopmentFocus::from_str(&raw, true)
-					.map_err(|_| format!("unknown development focus `{raw}`"))?,
-			);
+			found = Some(parse_development_focus(&raw)?);
 			continue;
 		}
 		index += 1;
@@ -289,6 +239,7 @@ mod tests {
 
 	#[test]
 	fn focus_assigns_exclusive_weight() {
+		use richmond_development_models::DevelopmentConfig;
 		let mut config = DevelopmentConfig::default();
 		DevelopmentFocus::TempleComplex.apply(&mut config);
 		assert_eq!(config.temple_complex_weight, 1.0);

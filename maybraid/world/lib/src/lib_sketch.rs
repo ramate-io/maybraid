@@ -12,10 +12,12 @@ impl Plugin for WorldPlugin {
 
 		app.add_plugins((
 			BaseTerrainGenerationPlugin::<Durham>::new(DurhamTerrainConfig::playable_world()),
-			UrbanizationGenerationPlugin::<OnTerrain<Durham>>::default(),
+			UrbanizationGenerationPlugin::<OnTerrain<Durham>>::new(
+				UrbanizationLayerConfig::world_defaults(),
+			),
 			VegetationGenerationPlugin,
 			MobGenerationPlugin::<Urbanization<OnTerrain<Durham>>>::default(),
-			// #886: TerrainPresentationPlugin::<Urbanization<OnTerrain<Durham>>, PaddedCells>
+			TerrainPresentationPlugin::<Urbanization<OnTerrain<Durham>>, PaddedCells>::default(),
 			UrbanizationPresentationPlugin::<Urbanization<OnTerrain<Durham>>>::default(),
 			VegetationPresentationPlugin::<Urbanization<OnTerrain<Durham>>>::default(),
 			MobPresentationPlugin::<Urbanization<OnTerrain<Durham>>>::default(),
@@ -23,17 +25,16 @@ impl Plugin for WorldPlugin {
 			TerrainPresentationPlugin::<OnTerrain<Durham>, DurhamCells>::default(),
 		))
 		// Assembler-owned generate budgets (world-effective 16 on every
-		// channel). Keep these even where today's helpers also insert 16:
-		// once #886 / #887 / #888 init instead of insert, these lines are
-		// the only source. Insert after the layer plugins (or before —
-		// init_resource will not overwrite).
+		// channel). Urbanization's 16 is already in
+		// `UrbanizationLayerConfig::world_defaults()`. Keep these even where
+		// today's helpers also insert 16: once #887 / #888 init instead of
+		// insert, these lines are the only source. Insert after the layer
+		// plugins (or before — init_resource will not overwrite).
 		.insert_resource(LodGenerateBudget::<ForestLodChan>::new(16))
-		.insert_resource(LodGenerateBudget::<UrbanizationLodChan>::new(16))
 		.insert_resource(LodGenerateBudget::<MobLodChan>::new(16))
 		.insert_resource(LodGenerateBudget::<BumpOutLodChan>::new(16))
 		.insert_resource(LodGenerateBudget::<MediumBumpOutLodChan>::new(16))
 		// Layer configs that used to ride on playground configs:
-		.insert_resource(UrbanizationLayerConfig::world_defaults()) // from DevelopmentsPlaygroundConfig::world_defaults()
 		.insert_resource(VegetationLayerConfig::world_defaults()); // from VegetationPlaygroundConfig::world_defaults()
 
 		// Training: set MobStreamSuspended from TrainingGrounds (mobs/model sketch).
@@ -49,7 +50,7 @@ impl Plugin for WorldPlugin {
 //     CharacterCameraFollowEnabled, CharacterLocomotion, CharacterSpecies,
 //     PadMovementEnabled, PlayerControlSystems, PlaygroundDiag, PlaygroundMode,
 //     PlaygroundTimingPlugin, RequestSetCharacter, VegetationPlayerMotor, WorldBaseTerrain}
-//   richmond_developments_on_terrain_playground::UrbanSetting
+//   urbanization_layer_presentation::UrbanSetting (moved in #886)
 //
 // Terrain/vegetation/urbanization items move with their layers. Character /
 // player / diag items are not layer concerns; leave them for a separate cleanup
