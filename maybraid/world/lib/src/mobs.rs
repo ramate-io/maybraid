@@ -31,10 +31,11 @@ use procedural_common::NoiseParams;
 use richmond_development_models::{DevelopmentEntryStore, DiscoverablePlace};
 use richmond_developments_on_terrain_playground::UrbanSetting;
 use richmond_urbanization::{UrbanizationExtent, UrbanizationIndex, UrbanizationKind};
-use terrain_layer_model::TerrainView;
+use durham_terrain_models::Durham;
+use terrain_layer_model::{OnTerrain, TerrainView};
+use urbanization_layer_model::Urbanization;
 
 use crate::training::TrainingGrounds;
-use crate::Ground;
 
 const MOB_CELL_EXTENT: f32 = 400.0;
 const MOB_GENERATE_RADIUS: f32 = 3_000.0;
@@ -428,7 +429,7 @@ impl WorldMobPresenterState {
 struct WorldMobPresenter<'w, 's> {
 	commands: Commands<'w, 's>,
 	state: ResMut<'w, WorldMobPresenterState>,
-	surface: TerrainView<'w, 's, Ground>,
+	surface: TerrainView<'w, 's, Urbanization<OnTerrain<Durham>>>,
 }
 
 impl RegionPresenter<WorldMobCell, WorldMobIndex> for WorldMobPresenter<'_, '_> {
@@ -635,7 +636,7 @@ fn stream_world_mobs(
 }
 
 fn fit_world_mob_hosts_to_surface(
-	surface: TerrainView<Ground>,
+	surface: TerrainView<Urbanization<OnTerrain<Durham>>>,
 	mut hosts: Query<&mut Transform, (With<MobScene>, Changed<Transform>)>,
 ) {
 	for mut transform in &mut hosts {

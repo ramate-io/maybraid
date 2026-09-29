@@ -21,17 +21,19 @@ use player::capsule_spawn_height;
 use player_camera::FollowCamera;
 use procedural_common::SeededHash;
 use richmond_building_components::{building_bounds, spawn_building_components};
-use richmond_building_physics::{spawn_building_walk_colliders, BUILDING_FRICTION};
+use richmond_building_physics::{BUILDING_FRICTION, spawn_building_walk_colliders};
 use richmond_buildings::wall_demo::TerrainPerimeterWall;
 use richmond_development_models::{
-	DevelopmentCell, DevelopmentConfig, DevelopmentEntryStore, DevelopmentFinish, DevelopmentHost,
-	DevelopmentHosts, DevelopmentKind, PadParams, TerrainWithPads, DEVELOPMENT_CELL_SIZE,
+	DEVELOPMENT_CELL_SIZE, DevelopmentCell, DevelopmentConfig, DevelopmentEntryStore,
+	DevelopmentFinish, DevelopmentHost, DevelopmentHosts, DevelopmentKind, PadParams,
+	TerrainWithPads,
 };
 use terrain_layer_model::{OnTerrain, TerrainView};
+use urbanization_layer_model::Urbanization;
 
+use crate::PlayerSpawnXz;
 use crate::control::WorldSurfaceReady;
 use crate::training::{TrainingGrounds, TrainingMap, TrainingRound};
-use crate::{Ground, PlayerSpawnXz};
 
 const TRAINING_WALL_STEP_M: f32 = 8.0;
 const TRAINING_WALL_HEIGHT_M: f32 = 20.0;
@@ -259,8 +261,7 @@ impl TrainingArena {
 			let bearing = std::f32::consts::PI * (squad / pois.len()) as f32;
 			let size = TRAINING_ROSTER / squads + usize::from(squad < TRAINING_ROSTER % squads);
 			let (seat, members) = self.seat_squad(site, poi, building, bearing, size, player);
-			self.mobs
-				.push(TrainingMob { host: Vec3::new(seat.x, self.plaza_y, seat.y), members });
+			self.mobs.push(TrainingMob { host: Vec3::new(seat.x, self.plaza_y, seat.y), members });
 			if player.is_none() {
 				player = Some(self.seat_player(site, poi));
 			}
@@ -442,7 +443,7 @@ pub(crate) fn mount_training_plaza(
 	mut access: ParamSet<(
 		(Res<TerrainEntryStore>, Res<TerrainCellLayout>, ResMut<DevelopmentEntryStore>),
 		TerrainView<OnTerrain<Durham>>,
-		TerrainView<Ground>,
+		TerrainView<Urbanization<OnTerrain<Durham>>>,
 	)>,
 	mut commands: Commands,
 ) {
@@ -598,11 +599,10 @@ pub(crate) fn supersede_training_raw_terrain(
 		*visibility = Visibility::Hidden;
 		// The Durham strip runs in its own set; physics must not step with both floors.
 		// Durham may despawn the raw cell in the same frame.
-		commands.entity(entity).try_insert(TerrainSuperseded).try_remove::<(
-			Collider,
-			RigidBody,
-			TerrainTrimeshCollider,
-		)>();
+		commands
+			.entity(entity)
+			.try_insert(TerrainSuperseded)
+			.try_remove::<(Collider, RigidBody, TerrainTrimeshCollider)>();
 	}
 }
 
@@ -799,7 +799,7 @@ fn pad_influence_region(filled: &DevelopmentCell) -> Option<Aabb3d> {
 
 fn spawn_training_wall(
 	commands: &mut Commands,
-	ground: &TerrainView<Ground>,
+	ground: &TerrainView<Urbanization<OnTerrain<Durham>>>,
 	arena: &TrainingArena,
 	seed: u32,
 ) {
@@ -1106,8 +1106,8 @@ mod tests {
 	}
 
 	#[test]
-	fn raw_cells_under_the_courtyard_stop_colliding_once_the_pads_do(
-	) -> Result<(), bevy::ecs::system::RunSystemError> {
+	fn raw_cells_under_the_courtyard_stop_colliding_once_the_pads_do()
+	-> Result<(), bevy::ecs::system::RunSystemError> {
 		use bevy::ecs::system::RunSystemOnce;
 		let covered = Id::from_cell(Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE));
 		let elsewhere = Id::from_cell(Aabb3d::from_min_max(Vec3::splat(500.0), Vec3::splat(501.0)));
@@ -1228,7 +1228,8 @@ mod tests {
 	}
 
 	#[test]
-	fn a_new_round_parks_the_player_on_its_site() -> Result<(), bevy::ecs::system::RunSystemError> {
+	fn a_new_round_parks_the_player_on_its_site() -> Result<(), bevy::ecs::system::RunSystemError>
+	{
 		use bevy::ecs::system::RunSystemOnce;
 		let round = TrainingRound::new(21);
 		let mut world = plaza_world(true, round);

@@ -1,4 +1,5 @@
-//! Parity: the retired world surface formula equals [`TerrainView<Ground>`].
+//! Parity: the retired world surface formula equals
+//! [`TerrainView<Urbanization<OnTerrain<Durham>>>`].
 
 use bevy::ecs::system::SystemState;
 use bevy::math::bounding::Aabb3d;
@@ -7,12 +8,12 @@ use bevy::prelude::World;
 use durham_terrain_models::{
 	BaseTerrainNoise, Durham, TerrainCellLayout, TerrainConfig, TerrainEntryStore, WorldBaseTerrain,
 };
-use maybraid_world::Ground;
 use richmond_development_models::{
 	pad::PadStage, DevelopmentCell, DevelopmentConfig, DevelopmentEntryStore,
 };
 use richmond_urbanization::UrbanizationIndex;
 use terrain_layer_model::{OnTerrain, TerrainView};
+use urbanization_layer_model::Urbanization;
 
 fn old_ground_height(
 	store: &TerrainEntryStore,
@@ -98,12 +99,13 @@ fn terrain_view_ground_matches_the_retired_world_formula() -> anyhow::Result<()>
 	};
 
 	{
-		let mut ground = SystemState::<TerrainView<Ground>>::new(&mut world);
+		let mut ground =
+			SystemState::<TerrainView<Urbanization<OnTerrain<Durham>>>>::new(&mut world);
 		let view = ground.get(&world)?;
 		for (xz, want) in expected {
 			anyhow::ensure!(
 				view.height_or_fallback(xz) == want,
-				"Ground at {xz:?}: view {} != old {want}",
+				"composed surface at {xz:?}: view {} != old {want}",
 				view.height_or_fallback(xz)
 			);
 		}

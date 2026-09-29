@@ -312,6 +312,8 @@ impl TerrainEntryStore {
 	/// Store one origin cell whose SDF is `base` with no jersey / hydro ops.
 	///
 	/// Bounds match [`Self::composed_height_at`]'s lookup for `(ix, iz)` on `layout`.
+	/// Only for composed-surface parity tests — not a production insert path.
+	#[doc(hidden)]
 	pub fn insert_base_terrain_for_test(
 		&mut self,
 		layout: &TerrainCellLayout,

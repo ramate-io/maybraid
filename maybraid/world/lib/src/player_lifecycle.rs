@@ -9,6 +9,7 @@ use chico_vegetation_on_terrain_playground::{
 use crozon_character_ragdoll::CharacterRagdollSystems;
 use crozon_inventory_user::InventoryUser;
 use damage::{DamageSystems, DespawnAfter, Downed};
+use durham_terrain_models::Durham;
 use firearm_user::FirearmUser;
 use firearms::WeaponTrigger;
 use mob_characters::{LOCAL_POI, URBAN_POI, VEGETATION_POI};
@@ -18,13 +19,14 @@ use poi_intelligence::{
 	PoiSystems, DEFAULT_NEARBY_RADIUS,
 };
 use spotting_intelligence::SpotSubject;
-use terrain_layer_model::TerrainView;
+use terrain_layer_model::{OnTerrain, TerrainView};
 use threat_intelligence::{Affiliations, ThreatSubject};
+use urbanization_layer_model::Urbanization;
 
 use crate::control::strip_world_player_motor;
 use crate::training::{TrainingGrounds, TrainingLifeEnded};
 use crate::weapon::WorldPlayerAppearanceRequested;
-use crate::{Ground, WorldGameplayEnabled, WorldPlayerLoadout};
+use crate::{WorldGameplayEnabled, WorldPlayerLoadout};
 
 /// World-player downed duration, nearby POI scan, and replacement interests.
 #[derive(Resource, Clone, Debug, PartialEq)]
@@ -195,7 +197,7 @@ fn respawn_world_player(
 	registry: Res<PoiRegistry>,
 	loadout: Option<Res<WorldPlayerLoadout>>,
 	locomotion: Res<CharacterLocomotion>,
-	surface: TerrainView<Ground>,
+	surface: TerrainView<Urbanization<OnTerrain<Durham>>>,
 	grounds: Option<Res<TrainingGrounds>>,
 	mut ended: MessageWriter<TrainingLifeEnded>,
 	live_player: Query<(), With<VegetationPlayer>>,
@@ -205,7 +207,8 @@ fn respawn_world_player(
 	mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
 	let training_now = grounds.is_some_and(|grounds| grounds.0);
-	let abandoned = state.pending.as_ref().is_some_and(|pending| pending.abandoned(training_now));
+	let abandoned =
+		state.pending.as_ref().is_some_and(|pending| pending.abandoned(training_now));
 	if !gameplay.0 && !abandoned {
 		return;
 	}
@@ -429,11 +432,13 @@ mod tests {
 			.run_system_once(respawn_world_player)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 
-		let ended: Vec<_> = world.resource_mut::<Messages<TrainingLifeEnded>>().drain().collect();
+		let ended: Vec<_> =
+			world.resource_mut::<Messages<TrainingLifeEnded>>().drain().collect();
 		assert_eq!(ended, vec![TrainingLifeEnded]);
-		let mut bodies = world
-			.query_filtered::<(&Transform, Has<WorldPlayerAppearanceRequested>), With<VegetationPlayer>>(
-			);
+		let mut bodies = world.query_filtered::<
+			(&Transform, Has<WorldPlayerAppearanceRequested>),
+			With<VegetationPlayer>,
+		>();
 		let (body, requested) = bodies.single(&world)?;
 		assert_eq!(body.translation.xz(), Vec2::new(3.0, 5.0));
 		assert!(!requested, "the next life's loadout dresses the body");
@@ -456,7 +461,8 @@ mod tests {
 		world
 			.run_system_once(respawn_world_player)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		let ended: Vec<_> = world.resource_mut::<Messages<TrainingLifeEnded>>().drain().collect();
+		let ended: Vec<_> =
+			world.resource_mut::<Messages<TrainingLifeEnded>>().drain().collect();
 		assert!(ended.is_empty(), "leaving ends no life");
 		let mut bodies = world.query_filtered::<(), With<VegetationPlayer>>();
 		assert_eq!(bodies.iter(&world).count(), 1);
