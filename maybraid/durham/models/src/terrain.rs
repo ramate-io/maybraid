@@ -93,7 +93,7 @@ pub use jersey::{
 	RollingLowPassStampCell as RollingStampCell, ValleyLowPassStampCell as ValleyStampCell,
 };
 pub use jersey_modulation::ComposedElevationOp;
-pub use layer::{DurhamCellPresenter, DurhamHeightSnapshot, DurhamRead, DurhamTerrainConfig};
+pub use layer::{DurhamCells, DurhamHeightSnapshot, DurhamRead, DurhamTerrainConfig};
 pub use marazion::{
 	MarazionBandPass, MarazionLeafBounds, MarazionLeafKind, MarazionPocketWater,
 	MarazionPocketWatersHighPass, MarazionPocketWatersLowPass, MarazionWatershedConfigs,

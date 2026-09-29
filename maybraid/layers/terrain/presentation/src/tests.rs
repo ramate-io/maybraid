@@ -130,9 +130,7 @@ struct FlatPresentInstalled;
 
 struct FlatPresenter;
 
-impl TerrainPresenter for FlatPresenter {
-	type Model = OnTerrain<Flat>;
-
+impl TerrainPresenter<OnTerrain<Flat>> for FlatPresenter {
 	fn install(app: &mut App) {
 		app.insert_resource(FlatPresentInstalled);
 	}
@@ -142,7 +140,7 @@ impl TerrainPresenter for FlatPresenter {
 fn presenter_installs_and_finish_requires_generation() {
 	let mut app = App::new();
 	app.add_plugins(BaseTerrainGenerationPlugin::<Flat>::new(2.5))
-		.add_plugins(TerrainPresentationPlugin::<FlatPresenter>::default());
+		.add_plugins(TerrainPresentationPlugin::<OnTerrain<Flat>, FlatPresenter>::default());
 	app.finish();
 
 	assert_eq!(app.world().get_resource::<FlatStore>().map(|store| store.fallback), Some(2.5));
@@ -153,6 +151,6 @@ fn presenter_installs_and_finish_requires_generation() {
 #[should_panic(expected = "requires terrain_layer_model::generation::BaseTerrainGenerationPlugin")]
 fn presentation_without_generation_names_the_missing_plugin() {
 	let mut app = App::new();
-	app.add_plugins(TerrainPresentationPlugin::<FlatPresenter>::default());
+	app.add_plugins(TerrainPresentationPlugin::<OnTerrain<Flat>, FlatPresenter>::default());
 	app.finish();
 }

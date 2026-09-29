@@ -4,7 +4,7 @@
 //! Character / camera stay on [`VegetationHostPlugin`]. Terrain fill is
 //! `BaseTerrainGenerationPlugin<Durham>`. Raw present, when this plugin owns
 //! terrain and the coverage shows it, is
-//! `TerrainPresentationPlugin<DurhamCellPresenter>`.
+//! `TerrainPresentationPlugin<OnTerrain<Durham>, DurhamCells>`.
 
 mod bump_out;
 pub mod camera;
@@ -64,7 +64,7 @@ use commands::{
 };
 use crozon_characters::{CharacterHostsPlugin, CharacterMotionSystems};
 use durham_terrain_models::{
-	terrain_streaming_enabled, Durham, DurhamCellPresenter, DurhamTerrainConfig, TerrainCellLayout,
+	terrain_streaming_enabled, Durham, DurhamCells, DurhamTerrainConfig, TerrainCellLayout,
 	TerrainEntryStore, TerrainMeshLodBand, TerrainPresentEnabled, TerrainPresentPending,
 	TerrainPresentationAssets, TerrainPresentationDirty, TerrainStreamingEnabled,
 	TERRAIN_CELL_SIZE,
@@ -79,7 +79,7 @@ use lod::{LodGenerateSystems, LodPresentSystems, LodSceneHost};
 use maybraid_input::{PadGameplayEnabled, VirtualPadPlugin, VirtualPadSystems};
 use pitch::{apply_avian_terrain_pitch, sync_suspend_terrain_pitch};
 use player::{respawn_player_on_layout, snap_player_to_composed_surface};
-use terrain_layer_model::BaseTerrainGenerationPlugin;
+use terrain_layer_model::{BaseTerrainGenerationPlugin, OnTerrain};
 use terrain_layer_presentation::TerrainPresentationPlugin;
 
 const DEFAULT_TERRAIN_RADIUS: i32 = 2;
@@ -235,7 +235,9 @@ impl Plugin for VegetationOnTerrainPlugin {
 			};
 			app.add_plugins(BaseTerrainGenerationPlugin::<Durham>::new(config));
 			if config.raw_present() {
-				app.add_plugins(TerrainPresentationPlugin::<DurhamCellPresenter>::default());
+				app.add_plugins(
+					TerrainPresentationPlugin::<OnTerrain<Durham>, DurhamCells>::default(),
+				);
 			}
 			app.insert_resource(TerrainPresentEnabled(config.raw_present()));
 		}
