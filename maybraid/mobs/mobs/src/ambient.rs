@@ -8,7 +8,7 @@ use maybraid_audio::{
 
 use crate::MobKind;
 
-pub const HERD_NEAR: f32 = 26.0;
+pub const HERD_NEAR: f32 = 60.0;
 const GRUNT_GAP_MIN: f32 = 6.0;
 const GRUNT_GAP_MAX: f32 = 14.0;
 
@@ -148,8 +148,8 @@ mod tests {
 	use super::*;
 
 	#[test]
-	fn herd_near_is_wider_than_a_capsule() {
-		assert!(HERD_NEAR > 8.0);
+	fn herd_near_is_sixty_metres() {
+		assert!((HERD_NEAR - 60.0).abs() < 1e-5);
 	}
 
 	#[test]

@@ -9,10 +9,10 @@ use crate::flinch::pick_variant;
 use crate::mixer::{AudioBus, Mixer};
 use crate::spatial::SpatialOneShot;
 
-pub const BIRDSONG_SPATIAL_SCALE: f32 = 0.02;
+pub const BIRDSONG_SPATIAL_SCALE: f32 = 0.1;
 pub const BIRDSONG_SPATIAL_RADIUS: f32 = 1.0 / BIRDSONG_SPATIAL_SCALE;
-pub const BIRDSONG_VOLUME: f32 = 0.5;
-pub const HERD_GRUNT_SPATIAL_SCALE: f32 = 0.05;
+pub const BIRDSONG_VOLUME: f32 = 0.2;
+pub const HERD_GRUNT_SPATIAL_SCALE: f32 = 1.0 / 65.0;
 pub const HERD_GRUNT_SPATIAL_RADIUS: f32 = 1.0 / HERD_GRUNT_SPATIAL_SCALE;
 pub const HERD_GRUNT_VOLUME: f32 = 1.1;
 pub const HERD_WAIL_SPATIAL_SCALE: f32 = 0.04;
