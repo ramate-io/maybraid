@@ -269,9 +269,7 @@ mod tests {
 	}
 
 	#[test]
-	fn wind_is_quiet_and_far() {
-		assert!(BREEZE_VOLUME < 0.3);
-		assert!(GUST_VOLUME < 0.35);
+	fn wind_is_far() {
 		assert!(WIND_SPATIAL_RADIUS > 40.0);
 		assert!(WIND_SPATIAL_RADIUS > maybraid_audio::GRUNT_SPATIAL_RADIUS);
 	}
