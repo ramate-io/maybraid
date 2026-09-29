@@ -9,9 +9,9 @@ use crate::mixer::{AudioBus, Mixer};
 use crate::spatial::SpatialOneShot;
 
 /// Inverse of the oddio zero-attenuation radius (meters).
-pub const GRUNT_SPATIAL_SCALE: f32 = 0.1;
+pub const GRUNT_SPATIAL_SCALE: f32 = 0.5;
 pub const GRUNT_SPATIAL_RADIUS: f32 = 1.0 / GRUNT_SPATIAL_SCALE;
-pub const GRUNT_VOLUME: f32 = 1.0;
+pub const GRUNT_VOLUME: f32 = 3.0;
 
 /// Authored grunt family. Variants are `{slug}_{index:03}.wav`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
@@ -147,7 +147,11 @@ pub fn pick_variant(count: usize, last: Option<usize>, noise: &mut u64) -> usize
 	match last.filter(|last| *last < count) {
 		Some(last) => {
 			let skip = (mixed as usize) % (count - 1);
-			if skip < last { skip } else { skip + 1 }
+			if skip < last {
+				skip
+			} else {
+				skip + 1
+			}
 		}
 		None => (mixed as usize) % count,
 	}

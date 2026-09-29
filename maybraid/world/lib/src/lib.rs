@@ -85,6 +85,7 @@ use maybraid_character_controller::{CharacterControlSystems, CharacterController
 use maybraid_input::{VirtualPadConfig, VirtualPadPlugin};
 use maybraid_skill_map::{SkillMapPlugin, SkillMapSystems};
 use maybraid_sky::SkyDomePlugin;
+use maybraid_weather::WeatherPlugin;
 use player::{
 	register_motor_traction_physics, PlayerPlugin, PlayerPresentationPlugin, PlayerSystems,
 };
@@ -192,6 +193,7 @@ impl Plugin for WorldPlugin {
 		}
 		app.add_plugins(WorldMobsPlugin)
 			.add_plugins(WorldIntelligencePlugin)
+			.add_plugins(WeatherPlugin)
 			.add_plugins(SkillMapPlugin)
 			.insert_resource(maybraid_skill_map::SkillMapEnabled(false))
 			.add_plugins(WorldPoiPlugin)
