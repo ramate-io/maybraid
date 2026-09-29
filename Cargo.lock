@@ -5006,6 +5006,7 @@ name = "maybraid-weather"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "bevy_hanabi",
  "maybraid-audio",
 ]
 
