@@ -1,6 +1,7 @@
 //! Lower the held kit, then raise the next one, while a swap is in flight.
 
 use bevy::prelude::*;
+use maybraid_audio::{Audio, AudioClip, Mixer, MovementSounds};
 
 use crate::pose::HeldFirearm;
 use crate::FirearmUser;
@@ -91,6 +92,33 @@ pub fn clear_finished_weapon_swaps(mut commands: Commands, swaps: Query<(Entity,
 		if swap.finished() {
 			commands.entity(entity).remove::<WeaponSwap>();
 		}
+	}
+}
+
+/// Rustle when the holster / raise window starts.
+pub fn play_change_item(
+	mut commands: Commands,
+	started: Query<&GlobalTransform, Added<WeaponSwap>>,
+	clips: Res<Assets<AudioClip>>,
+	audio: Option<Res<Audio>>,
+	sounds: Option<Res<MovementSounds>>,
+	mixer: Option<ResMut<Mixer>>,
+	listeners: Query<&GlobalTransform, With<SpatialListener>>,
+) {
+	let (Some(audio), Some(sounds), Some(mut mixer), Some(listener)) =
+		(audio.as_deref(), sounds.as_deref(), mixer, listeners.iter().next())
+	else {
+		return;
+	};
+	for transform in &started {
+		sounds.play_change_item(
+			&mut commands,
+			&clips,
+			audio,
+			&mut mixer,
+			listener,
+			transform.translation(),
+		);
 	}
 }
 

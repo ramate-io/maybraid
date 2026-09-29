@@ -11,7 +11,7 @@ use crate::body::{CharacterController, Jumping, MoveWish, LEAP_SPEED};
 use crate::identity::PlayerYawOwner;
 use crate::stance::{CharacterStance, StanceKind};
 
-const WALK_SPEED: f32 = 1.0;
+pub(crate) const WALK_SPEED: f32 = 1.0;
 
 pub(crate) fn face_wish_yaw(
 	time: Res<Time>,

@@ -8,6 +8,7 @@ mod hit;
 mod identity;
 mod intent;
 mod locomotion;
+mod movement;
 mod separation;
 mod spawn;
 mod stance;
@@ -126,6 +127,7 @@ impl Plugin for PlayerPlugin {
 					.in_set(PlayerSystems::Locomotion),
 			);
 		flinch::configure_flinch(app);
+		movement::configure_movement(app);
 	}
 }
 
