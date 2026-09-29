@@ -2,6 +2,7 @@
 
 pub mod asset;
 pub mod backend;
+pub mod flinch;
 pub mod mixer;
 pub mod spatial;
 
@@ -9,6 +10,10 @@ use bevy::prelude::*;
 
 pub use asset::{AudioClip, AudioClipError, decode_wav_mono};
 pub use backend::{Audio, preferred_sample_format};
+pub use flinch::{
+	FlinchProfile, FlinchSounds, FlinchState, GRUNT_SPATIAL_RADIUS, GRUNT_SPATIAL_SCALE,
+	GRUNT_VOLUME, GruntStyle, pick_variant,
+};
 pub use mixer::{AudioBus, Mixer};
 pub use spatial::{
 	AudioVelocity, FIRE_LISTENER_GAP, SpatialEmitter, SpatialOneShot, SpatialVoice, amplitude_to_db,
@@ -35,7 +40,7 @@ impl Plugin for AudioPlugin {
 					.chain()
 					.after(TransformSystems::Propagate),
 			)
-			.add_systems(Startup, setup_audio)
+			.add_systems(Startup, (setup_audio, flinch::setup_flinch_sounds))
 			.add_systems(PostUpdate, mixer::tick_mixer.in_set(AudioSystems::Mix))
 			.add_systems(
 				PostUpdate,

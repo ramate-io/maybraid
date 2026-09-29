@@ -19,6 +19,7 @@ firearm-user = { workspace = true }
 firearms = { workspace = true }
 intelligence-lod = { workspace = true }
 lod = { workspace = true }
+maybraid-audio = { workspace = true }
 mob-intelligence = { workspace = true }
 npc-intelligence = { workspace = true }
 player = { workspace = true }

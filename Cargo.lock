@@ -5223,6 +5223,7 @@ dependencies = [
  "firearms",
  "intelligence-lod",
  "lod",
+ "maybraid-audio",
  "mob-intelligence",
  "npc-intelligence",
  "player",
@@ -6387,6 +6388,7 @@ dependencies = [
  "durham-terrain-models",
  "lod-avian",
  "malo-animations",
+ "maybraid-audio",
  "maybraid-character-controller",
 ]
 

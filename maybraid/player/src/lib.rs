@@ -3,6 +3,7 @@
 mod body;
 mod buoyancy;
 mod contact;
+mod flinch;
 mod hit;
 mod identity;
 mod intent;
@@ -124,6 +125,7 @@ impl Plugin for PlayerPlugin {
 					.chain()
 					.in_set(PlayerSystems::Locomotion),
 			);
+		flinch::configure_flinch(app);
 	}
 }
 

@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 
-const BUS_COUNT: usize = 6;
+const BUS_COUNT: usize = 7;
 
 /// Mix groups. [`AudioBus::Master`] scales every other bus.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -13,11 +13,19 @@ pub enum AudioBus {
 	Impacts = 3,
 	Ambience = 4,
 	Ui = 5,
+	Voices = 6,
 }
 
 impl AudioBus {
-	pub const ALL: [Self; BUS_COUNT] =
-		[Self::Master, Self::PlayerWeapon, Self::Weapons, Self::Impacts, Self::Ambience, Self::Ui];
+	pub const ALL: [Self; BUS_COUNT] = [
+		Self::Master,
+		Self::PlayerWeapon,
+		Self::Weapons,
+		Self::Impacts,
+		Self::Ambience,
+		Self::Ui,
+		Self::Voices,
+	];
 
 	fn index(self) -> usize {
 		self as usize

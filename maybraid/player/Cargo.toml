@@ -18,6 +18,7 @@ damage = { workspace = true }
 durham-terrain-models = { workspace = true }
 lod-avian = { workspace = true }
 malo-animations = { workspace = true }
+maybraid-audio = { workspace = true }
 maybraid-character-controller = { workspace = true }
 
 [dev-dependencies]

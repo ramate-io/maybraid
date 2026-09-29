@@ -3,6 +3,7 @@
 use bevy::prelude::*;
 use crozon_character_items::{Inventory, InventoryItem};
 use crozon_characters::{
+	CharacterRecipe, LocomotionCapsule,
 	species::{
 		braidman::BraidmanConfig, brenal::BrenalConfig, brodler::BrodlerConfig,
 		brokker::BrokkerConfig, caole::CaoleConfig, chupri::ChupriConfig, claber::ClaberConfig,
@@ -12,12 +13,12 @@ use crozon_characters::{
 		tapp::TappConfig, thumplus::ThumplusConfig, tipple::TippleConfig, topple::ToppleConfig,
 		tuberwaber::TuberwaberConfig, wumbus::WumbusConfig, ylter::YilterConfig,
 	},
-	CharacterRecipe, LocomotionCapsule,
 };
+use maybraid_audio::{FlinchProfile, GruntStyle};
 use player::spawn_npc_visual;
 
-use crate::number::{index, FromMobNumber};
 use crate::CharacterBuild;
+use crate::number::{FromMobNumber, index};
 
 #[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum CharacterSpecies {
@@ -73,14 +74,8 @@ impl CharacterSpecies {
 
 	/// Bipeds that read at the player's scale: 1.4–2.1 m locomotion capsule,
 	/// at most 0.5 m radius. Close-quarters modes draw fighters from these.
-	pub const PLAYER_SCALE_BIPEDS: [Self; 6] = [
-		Self::Braidman,
-		Self::Brokker,
-		Self::Lero,
-		Self::Mygr,
-		Self::Tuberwaber,
-		Self::Wumbus,
-	];
+	pub const PLAYER_SCALE_BIPEDS: [Self; 6] =
+		[Self::Braidman, Self::Brokker, Self::Lero, Self::Mygr, Self::Tuberwaber, Self::Wumbus];
 
 	pub const QUADRUPEDS: [Self; 8] = [
 		Self::Brenal,
@@ -157,6 +152,12 @@ impl CharacterSpecies {
 
 	pub const fn supports_inventory(self) -> bool {
 		self.is_biped()
+	}
+
+	/// Vocal flinch used when this species takes damage.
+	pub const fn flinch_profile(self) -> FlinchProfile {
+		let _ = self;
+		FlinchProfile::new(GruntStyle::Man)
 	}
 
 	pub(crate) fn model(self, build: CharacterBuild, inventory: &Inventory) -> CharacterModel {
@@ -298,6 +299,13 @@ character_models!(
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	#[test]
+	fn every_species_has_a_man_flinch_until_more_styles_exist() {
+		for species in CharacterSpecies::VALUES {
+			assert_eq!(species.flinch_profile().grunt, GruntStyle::Man);
+		}
+	}
 
 	#[test]
 	fn generated_species_exclude_fish() {
