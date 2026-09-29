@@ -1,7 +1,7 @@
 //! Stamp one filled development without urbanization occupancy.
 
-use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec2;
+use bevy::math::bounding::Aabb3d;
 use durham_terrain_models::{TerrainCellLayout, TerrainEntryStore};
 use procedural_common::{NoiseParams, SeededHash};
 use richmond_buildings::Fit;
@@ -11,7 +11,7 @@ use crate::archetype_generation::ArchetypeGenerator;
 use crate::artifact::BuiltDevelopment;
 use crate::commune::build_shepherds_commune;
 use crate::config::DevelopmentConfig;
-use crate::development::{cell_salt, DevelopmentCell, DevelopmentContent, DevelopmentKind};
+use crate::development::{DevelopmentCell, DevelopmentContent, DevelopmentKind, cell_salt};
 use crate::les_halles::LesHallesDevelopment;
 use crate::pad::{PadComplex, PadParams};
 use crate::ring_fort::RingFortDevelopment;

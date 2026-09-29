@@ -55,7 +55,6 @@ fn main() {
 		.add_plugins(DevelopmentsOnTerrainPlugin {
 			config: playground,
 			commands: true,
-			own_terrain: false,
 			register_development_forest_lod: false,
 		})
 		.run();

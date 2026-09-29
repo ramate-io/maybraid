@@ -30,6 +30,12 @@ Last commit that still contained the trees below: [`9a9a74c6901ed4d7799a4e87d16f
 - **Did:** Small Durham fine-grid patch for iterating Chico groves on real ground. `/grove <kind>` tiled one grove type; `/forest` streamed the same generate/present/cull path as SBS, grown on Durham height. Character / free-look, canopy bump-outs, mesh stats.
 - **Replacement:** [`maybraid-world-playground`](world/playground/) (`cargo run -p maybraid-world-playground`). The crate remains as a library (`VegetationOnTerrainPlugin`) for `maybraid-world`, Richmond developments-on-terrain, and mobs until that host API lives on world itself.
 
+### `maybraid/richmond/developments-on-terrain-playground` (catalog-batch mode)
+
+- **Last commit:** [`6925f413a28b1cc8e6a17f3f94e3922c37b92e66`](https://github.com/ramate-io/maybraid/commit/6925f413a28b1cc8e6a17f3f94e3922c37b92e66)
+- **Did:** `own_terrain: true` filled a FinePatch all at once (Durham shaders + `generate_terrain`, no `BaseTerrainGenerationPlugin`). With a development focus it used the 300 m occupancy lattice instead of hopscotch leaves, then batch-spawned hosts. `urbanization: None` was the default.
+- **Replacement:** The crate and binary stay. The binary is a stream assembler: `BaseTerrainGenerationPlugin::<Durham>::new(DurhamTerrainConfig::fine_patch(r))`, `DurhamCells`, and the urbanization layer plugins. Catalog-batch cannot satisfy urbanization `finish` without becoming that streamed FinePatch. Restore the batch path from `6925f413` if the lattice-without-hopscotch catalog is needed again.
+
 ### `playgrounds/terrain` (`terrain-playground`)
 
 - **Last commit:** [`9a9a74c6901ed4d7799a4e87d16f74d7dd3b9e47`](https://github.com/ramate-io/maybraid/commit/9a9a74c6901ed4d7799a4e87d16f74d7dd3b9e47)

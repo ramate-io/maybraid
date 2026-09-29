@@ -8,7 +8,6 @@ use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::prelude::*;
 use bevy::time::common_conditions::on_timer;
 use chico_forests::{ForestExtent, ForestIndex, LayeringKind, SelectedLayers};
-use durham_terrain_models::Durham;
 use lod::gen::{
 	GenerationScheme, Id, LodGenerateKeepRegion, LodGenerateRegion, OriginalId, SpatialIndex,
 	StorageStatus, TrackedId, Version,
@@ -30,10 +29,11 @@ use mob_groups::{
 };
 use procedural_common::NoiseParams;
 use richmond_development_models::{DevelopmentEntryStore, DiscoverablePlace};
+use urbanization_layer_presentation::UrbanSetting;
 use richmond_urbanization::{UrbanizationExtent, UrbanizationIndex, UrbanizationKind};
+use durham_terrain_models::Durham;
 use terrain_layer_model::{OnTerrain, TerrainView};
 use urbanization_layer_model::Urbanization;
-use urbanization_layer_presentation::UrbanSetting;
 
 use crate::training::TrainingGrounds;
 

@@ -85,8 +85,13 @@ impl TrainingEnemyMarker {
 	}
 }
 
-type MarkerParts<'a> =
-	(Entity, &'a TrainingEnemyMarker, &'a mut Node, &'a mut BorderColor, &'a mut Visibility);
+type MarkerParts<'a> = (
+	Entity,
+	&'a TrainingEnemyMarker,
+	&'a mut Node,
+	&'a mut BorderColor,
+	&'a mut Visibility,
+);
 
 /// One dot per standing member of a Training Brawler squad. A downed or dead
 /// fighter loses its dot; leaving Training, or turning markers off, drops the
@@ -175,11 +180,7 @@ mod tests {
 	}
 
 	fn markers(world: &mut World) -> Vec<Entity> {
-		world
-			.query::<&TrainingEnemyMarker>()
-			.iter(world)
-			.map(|marker| marker.target)
-			.collect()
+		world.query::<&TrainingEnemyMarker>().iter(world).map(|marker| marker.target).collect()
 	}
 
 	#[test]
@@ -228,8 +229,9 @@ mod tests {
 		world.insert_resource(TrainingGrounds(true));
 		let squad = world.spawn(TrainingBrawler).id();
 		let stranger = world.spawn_empty().id();
-		let fighter =
-			|mob| (MemberOf { mob, slot: 0 }, Health::from_max(10.0), GlobalTransform::IDENTITY);
+		let fighter = |mob| {
+			(MemberOf { mob, slot: 0 }, Health::from_max(10.0), GlobalTransform::IDENTITY)
+		};
 		let standing = world.spawn(fighter(squad)).id();
 		let down = Downed { source: None, point: Vec3::ZERO, at: 0.0 };
 		let downed = world.spawn((fighter(squad), down)).id();

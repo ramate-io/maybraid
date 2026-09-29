@@ -6,10 +6,10 @@ use std::time::Duration;
 use avian3d::prelude::{LinearVelocity, Position};
 use bevy::prelude::*;
 use bevy::time::common_conditions::on_timer;
-use chico_vegetation_on_terrain_playground::player::{holding_elevation, player_spawn_point_at};
 use chico_vegetation_on_terrain_playground::Player;
+use chico_vegetation_on_terrain_playground::player::{holding_elevation, player_spawn_point_at};
 use crozon_character_persist::{CharacterId, PersistError, SaveRoot};
-use durham_terrain_models::{terrain_streaming_enabled, TerrainCellLayout, WorldBaseTerrain};
+use durham_terrain_models::{TerrainCellLayout, WorldBaseTerrain, terrain_streaming_enabled};
 use player_camera::FollowCamera;
 use serde::{Deserialize, Serialize};
 

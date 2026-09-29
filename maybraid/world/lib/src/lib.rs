@@ -205,7 +205,6 @@ impl Plugin for WorldPlugin {
 			// come from the layer plugins above.
 			.add_plugins(DevelopmentsOnTerrainPlugin {
 				commands: false,
-				own_terrain: false,
 				register_development_forest_lod: true,
 				..Default::default()
 			})

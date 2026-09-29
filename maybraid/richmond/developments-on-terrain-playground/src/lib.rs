@@ -62,9 +62,6 @@ pub struct DevelopmentsOnTerrainPlugin {
 	pub config: PlaygroundConfig,
 	/// When false, the caller owns the command drawer / CLI.
 	pub commands: bool,
-	/// Unused: Durham is `BaseTerrainGenerationPlugin`. Kept so existing
-	/// struct literals (`own_terrain: false`) still compile.
-	pub own_terrain: bool,
 	/// Register the development-pad-aware forest presenter.
 	pub register_development_forest_lod: bool,
 }
@@ -74,7 +71,6 @@ impl Default for DevelopmentsOnTerrainPlugin {
 		Self {
 			config: PlaygroundConfig::default(),
 			commands: true,
-			own_terrain: true,
 			register_development_forest_lod: false,
 		}
 	}

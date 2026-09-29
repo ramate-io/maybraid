@@ -28,21 +28,21 @@ use crozon_characters::species::{
 use crozon_characters::CharacterAppearance;
 use damage::{Downed, Health};
 use durham_terrain_models::{
-	playable_world_cell_layout, retarget_presentation_assets, training_grounds_cell_layout_at,
 	TerrainCellLayout, TerrainColliderSystems, TerrainCoverage, TerrainFillSystems,
 	TerrainLayoutPinned, TerrainPresentEnabled, TerrainPresentPending, TerrainPresentationAssets,
 	TerrainPresentationDirty, TerrainPresenterState, WORLD_FINE_HALF_EXTENT_CELLS,
+	playable_world_cell_layout, retarget_presentation_assets, training_grounds_cell_layout_at,
 };
 use mob_intelligence::MemberOf;
 use urbanization_layer_model::UrbanizationStreamingEnabled;
 
-use crate::control::{update_world_surface_ready, WorldSurfaceSet};
-use crate::training_markers::{sync_training_enemy_markers, TrainingEnemyMarkersEnabled};
-use crate::training_plaza::{
-	clear_training_plaza, mount_training_plaza, park_on_training_site, promote_training_plaza,
-	reseat_training_life, supersede_training_raw_terrain, TrainingBrawler,
-};
 use crate::WorldPlayerLoadout;
+use crate::control::{WorldSurfaceSet, update_world_surface_ready};
+use crate::training_markers::{TrainingEnemyMarkersEnabled, sync_training_enemy_markers};
+use crate::training_plaza::{
+	TrainingBrawler, clear_training_plaza, mount_training_plaza, park_on_training_site,
+	promote_training_plaza, reseat_training_life, supersede_training_raw_terrain,
+};
 
 /// Training Ground session: patch retarget, the stamped plaza, and the
 /// raw-to-padded hand-off under its courtyard.
@@ -354,7 +354,7 @@ pub(crate) fn clear_training_terrain_present(
 #[cfg(test)]
 mod tests {
 	use bevy::ecs::system::RunSystemOnce;
-	use durham_terrain_models::{training_grounds_cell_layout, TerrainConfig};
+	use durham_terrain_models::{TerrainConfig, training_grounds_cell_layout};
 
 	use super::*;
 
@@ -464,9 +464,8 @@ mod tests {
 		assert_eq!(run(&mut world)?, Some(2), "only training squads count");
 
 		let mut first = world.entity_mut(first);
-		let mut health = first
-			.get_mut::<Health>()
-			.ok_or_else(|| anyhow::anyhow!("fighter lost health"))?;
+		let mut health =
+			first.get_mut::<Health>().ok_or_else(|| anyhow::anyhow!("fighter lost health"))?;
 		health.apply_damage(10.0);
 		assert_eq!(run(&mut world)?, Some(1), "a dead fighter drops out");
 
