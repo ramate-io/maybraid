@@ -11,8 +11,8 @@ pub const BREEZE_CLIP: &str = "sound-effects/environment/wind/breeze_001.wav";
 pub const GUST_CLIP: &str = "sound-effects/environment/wind/gust_001.wav";
 
 /// Quiet bed; radius stays wide so the loop still reads off-camera.
-pub const BREEZE_VOLUME: f32 = 0.18;
-pub const GUST_VOLUME: f32 = 0.24;
+pub const BREEZE_VOLUME: f32 = 1.2;
+pub const GUST_VOLUME: f32 = 1.0;
 pub const WIND_SPATIAL_SCALE: f32 = 0.02;
 pub const WIND_SPATIAL_RADIUS: f32 = 1.0 / WIND_SPATIAL_SCALE;
 pub const BREEZE_LIFE_MIN: f32 = 10.0;
