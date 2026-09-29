@@ -24,7 +24,8 @@ oddio graph → CPAL
 - **Movement:** [`MovementSounds`](src/movement.rs) plays footstep and
   change-item one-shots on `Voices`. Gait cadence follows the walk/run clip
   rates (two plants per cycle). Jump and leap plant once on takeoff and once
-  on land.
+  on land, with inhale / exhale on those edges. A grounded sprint cycles the
+  same breaths at the authored clip lengths.
 - **Weather:** [`maybraid-weather`](../weather/) places quiet, wide-radius
   breeze loops and gust one-shots on the `Ambience` bus.
 - **Spatial:** [`SpatialOneShot`](src/spatial.rs) is world-fixed.

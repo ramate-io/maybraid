@@ -3,9 +3,11 @@
 use avian3d::prelude::LinearVelocity;
 use bevy::prelude::*;
 use crozon_characters::AnimId;
-use maybraid_audio::{Audio, AudioClip, AudioSystems, Mixer, MovementSounds, MovementState};
+use maybraid_audio::{
+	Audio, AudioClip, AudioSystems, Mixer, MovementClip, MovementSounds, MovementState,
+};
 
-use crate::body::{CharacterController, Grounded, JumpPhase, Jumping, LEAP_SPEED};
+use crate::body::{CharacterController, Grounded, JumpPhase, Jumping, Sprinting, LEAP_SPEED};
 use crate::locomotion::WALK_SPEED;
 use crate::stance::{CharacterStance, StanceKind};
 use crate::{Npc, Player};
@@ -33,6 +35,7 @@ pub(crate) fn play_footsteps(
 			&mut MovementState,
 			Option<&Grounded>,
 			Option<&Jumping>,
+			Option<&Sprinting>,
 			Option<&CharacterStance>,
 		),
 		With<CharacterController>,
@@ -49,13 +52,21 @@ pub(crate) fn play_footsteps(
 		return;
 	};
 	let dt = time.delta_secs();
-	for (_entity, transform, velocity, mut gait, grounded, jumping, stance) in &mut bodies {
+	for (_entity, transform, velocity, mut gait, grounded, jumping, sprinting, stance) in
+		&mut bodies
+	{
 		let speed = Vec3::new(velocity.x, 0.0, velocity.z).length();
 		let rate = footstep_rate(grounded.is_some(), jumping, stance, speed);
-		let steps = gait.take_steps(rate, dt) + jump_plants(jumping, &mut gait);
-		if steps == 0 {
-			continue;
-		}
+		let foley = jump_foley(jumping, &mut gait);
+		let steps = gait.take_steps(rate, dt) + foley.steps;
+		let sprint_breath = if jumping.is_some() {
+			None
+		} else {
+			gait.take_sprint_breath(
+				sprint_breathing(sprinting.is_some(), grounded.is_some(), jumping, speed),
+				dt,
+			)
+		};
 		let point = transform.translation();
 		for _ in 0..steps {
 			sounds.play_footstep(
@@ -68,26 +79,70 @@ pub(crate) fn play_footsteps(
 				point,
 			);
 		}
+		if foley.inhale {
+			sounds.play_breath(
+				&mut commands,
+				MovementClip::Inhale,
+				&clips,
+				audio,
+				&mut mixer,
+				listener,
+				point,
+			);
+		}
+		if foley.exhale {
+			sounds.play_breath(
+				&mut commands,
+				MovementClip::Exhale,
+				&clips,
+				audio,
+				&mut mixer,
+				listener,
+				point,
+			);
+		}
+		if let Some(breath) = sprint_breath {
+			sounds.play_breath(&mut commands, breath, &clips, audio, &mut mixer, listener, point);
+		}
 	}
 }
 
-/// One plant on jump/leap start, one on land. Air and a failed hop stay quiet.
-pub(crate) fn jump_plants(jumping: Option<&Jumping>, state: &mut MovementState) -> u32 {
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct JumpFoley {
+	pub steps: u32,
+	pub inhale: bool,
+	pub exhale: bool,
+}
+
+/// One plant plus inhale on takeoff, one plant plus exhale on land.
+pub(crate) fn jump_foley(jumping: Option<&Jumping>, state: &mut MovementState) -> JumpFoley {
 	let Some(jump) = jumping else {
 		state.takeoff_planted = false;
 		state.land_planted = false;
-		return 0;
+		return JumpFoley::default();
 	};
-	let mut steps = 0;
+	let mut foley = JumpFoley::default();
 	if !state.takeoff_planted {
 		state.takeoff_planted = true;
-		steps += 1;
+		foley.steps += 1;
+		foley.inhale = true;
 	}
 	if jump.phase == JumpPhase::Land && !state.land_planted {
 		state.land_planted = true;
-		steps += 1;
+		foley.steps += 1;
+		foley.exhale = true;
 	}
-	steps
+	foley
+}
+
+/// Sprint breath only while the hold is live, grounded, and actually moving.
+pub(crate) fn sprint_breathing(
+	sprinting: bool,
+	grounded: bool,
+	jumping: Option<&Jumping>,
+	speed: f32,
+) -> bool {
+	sprinting && grounded && jumping.is_none() && speed > WALK_SPEED
 }
 
 /// Two plants per walk/run cycle. Air, stance, and idle stay quiet.
@@ -142,19 +197,41 @@ mod tests {
 	fn jump_and_leap_plant_on_takeoff_and_land() {
 		let mut state = MovementState::seeded(4);
 		let mut hop = Jumping::start(0.0);
-		assert_eq!(jump_plants(Some(&hop), &mut state), 1);
-		assert_eq!(jump_plants(Some(&hop), &mut state), 0);
+		assert_eq!(
+			jump_foley(Some(&hop), &mut state),
+			JumpFoley { steps: 1, inhale: true, exhale: false }
+		);
+		assert_eq!(jump_foley(Some(&hop), &mut state), JumpFoley::default());
 		hop.phase = JumpPhase::Land;
-		assert_eq!(jump_plants(Some(&hop), &mut state), 1);
-		assert_eq!(jump_plants(None, &mut state), 0);
+		assert_eq!(
+			jump_foley(Some(&hop), &mut state),
+			JumpFoley { steps: 1, inhale: false, exhale: true }
+		);
+		assert_eq!(jump_foley(None, &mut state), JumpFoley::default());
 		let mut leap = Jumping::start(9.0);
 		assert!(leap.leaping);
-		assert_eq!(jump_plants(Some(&leap), &mut state), 1);
+		assert_eq!(
+			jump_foley(Some(&leap), &mut state),
+			JumpFoley { steps: 1, inhale: true, exhale: false }
+		);
 		leap.phase = JumpPhase::Air;
-		assert_eq!(jump_plants(Some(&leap), &mut state), 0);
+		assert_eq!(jump_foley(Some(&leap), &mut state), JumpFoley::default());
 		leap.phase = JumpPhase::Land;
-		assert_eq!(jump_plants(Some(&leap), &mut state), 1);
-		assert_eq!(jump_plants(Some(&leap), &mut state), 0);
+		assert_eq!(
+			jump_foley(Some(&leap), &mut state),
+			JumpFoley { steps: 1, inhale: false, exhale: true }
+		);
+		assert_eq!(jump_foley(Some(&leap), &mut state), JumpFoley::default());
+	}
+
+	#[test]
+	fn sprint_breath_needs_a_live_grounded_run() {
+		assert!(sprint_breathing(true, true, None, 3.0));
+		assert!(!sprint_breathing(false, true, None, 9.0));
+		assert!(!sprint_breathing(true, false, None, 9.0));
+		assert!(!sprint_breathing(true, true, None, 0.4));
+		let jump = Jumping::start(0.0);
+		assert!(!sprint_breathing(true, true, Some(&jump), 9.0));
 	}
 
 	#[test]

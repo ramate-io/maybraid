@@ -6,8 +6,8 @@ use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use bevy::prelude::*;
-use cpal::SampleFormat;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+use cpal::SampleFormat;
 use oddio::{Sample, Seek, Signal, Spatial, SpatialOptions, SpatialScene};
 
 /// Game-thread handle to the mixer. Dropping it stops the output thread.
@@ -239,10 +239,8 @@ mod tests {
 
 	#[test]
 	fn rejects_six_channel_as_stereo() {
-		assert!(
-			preferred_sample_format(Some((SampleFormat::F32, 6)), &[(SampleFormat::F32, 6)])
-				.is_none()
-		);
+		assert!(preferred_sample_format(Some((SampleFormat::F32, 6)), &[(SampleFormat::F32, 6)])
+			.is_none());
 		assert!(matches!(
 			preferred_sample_format(Some((SampleFormat::F32, 6)), &[(SampleFormat::F32, 2)]),
 			Some(SampleFormat::F32)
