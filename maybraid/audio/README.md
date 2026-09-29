@@ -16,8 +16,11 @@ oddio graph → CPAL
 - **Assets:** [`AudioClip`](src/asset.rs) decodes mono WAV on load. Stereo spatial
   files error instead of averaging (Logic phase/ensemble would cancel).
 - **Mixer:** [`AudioBus`](src/mixer.rs) (`Master`, `PlayerWeapon`, `Weapons`,
-  `Impacts`, `Ambience`, `Ui`) plus short ducks. A player-weapon one-shot ducks
-  ambience (−4 dB / 120 ms) and world weapons (−2 dB / 80 ms).
+  `Impacts`, `Ambience`, `Ui`, `Voices`) plus short ducks. A player-weapon
+  one-shot ducks ambience (−4 dB / 120 ms) and world weapons (−2 dB / 80 ms).
+- **Flinch:** [`FlinchProfile`](src/flinch.rs) on a character names a
+  [`GruntStyle`](src/flinch.rs). Damage picks a numbered variant noisily and
+  plays a world-fixed `Voices` one-shot.
 - **Spatial:** [`SpatialOneShot`](src/spatial.rs) is world-fixed.
   [`SpatialEmitter`](src/spatial.rs) follows an entity with
   [`AudioVelocity`](src/spatial.rs) from simulation, not inferred Δtransform.

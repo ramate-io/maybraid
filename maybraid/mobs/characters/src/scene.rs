@@ -6,12 +6,12 @@ use bevy::prelude::*;
 use crozon_character_items::{CharacterSheet, Inventory, InventoryItem};
 use crozon_inventory_user::spawn_bag;
 use damage::Health;
-use firearm_user::{live_weapon_from_stats, spawn_held_kit, FirearmUserSettings};
+use firearm_user::{FirearmUserSettings, live_weapon_from_stats, spawn_held_kit};
 use intelligence_lod::IntelligenceLod;
 use mob_intelligence::{MobMemberBody, MobSlot, MobSystems};
 use npc_intelligence::{NpcBody, NpcInstall};
 use player::{
-	apply_character_controller, apply_character_mobility, Npc, PlayerLook, PlayerYawOwner,
+	Npc, PlayerLook, PlayerYawOwner, apply_character_controller, apply_character_mobility,
 };
 use routing_intelligence::{RoutingIntelligenceUser, RoutingSettings};
 use spotting_intelligence::{InterestLayers, SpotBounds, SpotSubject};
@@ -163,6 +163,7 @@ pub(crate) fn materialize_character_scenes(
 				SpotBounds::capsule(hull.radius, hull.half_height()),
 			),
 			health,
+			recipe.species.flinch_profile(),
 		));
 		spawn_bag(&mut commands, body, recipe.inventory.clone());
 		model.spawn_visual(&mut commands, body, Quat::from_rotation_y(FRAC_PI_2));
