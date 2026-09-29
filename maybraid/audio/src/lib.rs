@@ -1,5 +1,6 @@
 //! Shared oddio + CPAL backend. Gameplay plays clips; this crate owns the device.
 
+pub mod ambient;
 pub mod asset;
 pub mod backend;
 pub mod flinch;
@@ -9,6 +10,11 @@ pub mod spatial;
 
 use bevy::prelude::*;
 
+pub use ambient::{
+	AmbientClip, AmbientPick, AmbientSounds, BIRDSONG_SPATIAL_RADIUS, BIRDSONG_SPATIAL_SCALE,
+	BIRDSONG_VOLUME, HERD_GRUNT_SPATIAL_RADIUS, HERD_GRUNT_SPATIAL_SCALE, HERD_GRUNT_VOLUME,
+	HERD_WAIL_SPATIAL_RADIUS, HERD_WAIL_SPATIAL_SCALE, HERD_WAIL_VOLUME,
+};
 pub use asset::{decode_wav_mono, AudioClip, AudioClipError};
 pub use backend::{preferred_sample_format, Audio};
 pub use flinch::{
@@ -49,7 +55,12 @@ impl Plugin for AudioPlugin {
 			)
 			.add_systems(
 				Startup,
-				(setup_audio, flinch::setup_flinch_sounds, movement::setup_movement_sounds),
+				(
+					setup_audio,
+					flinch::setup_flinch_sounds,
+					movement::setup_movement_sounds,
+					ambient::setup_ambient_sounds,
+				),
 			)
 			.add_systems(PostUpdate, mixer::tick_mixer.in_set(AudioSystems::Mix))
 			.add_systems(

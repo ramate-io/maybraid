@@ -11,9 +11,9 @@ pub const BREEZE_CLIP: &str = "sound-effects/environment/wind/breeze_001.wav";
 pub const GUST_CLIP: &str = "sound-effects/environment/wind/gust_001.wav";
 
 /// Quiet bed; radius stays wide so the loop still reads off-camera.
-pub const BREEZE_VOLUME: f32 = 1.2;
-pub const GUST_VOLUME: f32 = 1.0;
-pub const WIND_SPATIAL_SCALE: f32 = 0.02;
+pub const BREEZE_VOLUME: f32 = 0.5;
+pub const GUST_VOLUME: f32 = 0.2;
+pub const WIND_SPATIAL_SCALE: f32 = 0.2;
 pub const WIND_SPATIAL_RADIUS: f32 = 1.0 / WIND_SPATIAL_SCALE;
 pub const BREEZE_LIFE_MIN: f32 = 10.0;
 pub const BREEZE_LIFE_MAX: f32 = 15.0;
@@ -210,11 +210,11 @@ pub fn point_near_listener(origin: Vec3, noise: &mut u64) -> Vec3 {
 	origin + Vec3::new(angle.cos() * dist, 0.6, angle.sin() * dist)
 }
 
-fn lerp(min: f32, max: f32, t: f32) -> f32 {
+pub(crate) fn lerp(min: f32, max: f32, t: f32) -> f32 {
 	min + (max - min) * t
 }
 
-fn unit(noise: &mut u64) -> f32 {
+pub(crate) fn unit(noise: &mut u64) -> f32 {
 	(next_u64(noise) >> 11) as f32 / ((1u64 << 53) as f32)
 }
 

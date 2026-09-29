@@ -26,6 +26,10 @@ oddio graph → CPAL
   rates (two plants per cycle). Jump and leap plant once on takeoff and once
   on land, with inhale / exhale on those edges. A grounded sprint cycles the
   same breaths at the authored clip lengths.
+- **Ambient:** [`AmbientSounds`](src/ambient.rs) catalogs birdsong (Ambience)
+  plus herd grunt / wail (Voices). Weather places most birdsong 20 m+ out;
+  mobs play grunts when a herd is within 60 m and a wail when a member starts
+  fleeing.
 - **Weather:** [`maybraid-weather`](../weather/) places quiet, wide-radius
   breeze loops and gust one-shots on the `Ambience` bus.
 - **Spatial:** [`SpatialOneShot`](src/spatial.rs) is world-fixed.

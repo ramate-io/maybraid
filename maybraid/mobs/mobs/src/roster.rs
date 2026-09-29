@@ -53,8 +53,7 @@ impl MobRosterRecipe {
 		for slot in 0..count {
 			let lane = mix(seed ^ (slot as u64 + 1).wrapping_mul(0x9E37_79B9));
 			let member_num = num + slot as f32 * 0.754_877_7 + unit(lane);
-			let species =
-				species_for(kind, lane, &pool, pack_species, guard_common, ramble_bipeds);
+			let species = species_for(kind, lane, &pool, pack_species, guard_common, ramble_bipeds);
 			let brains = brains_for(kind, lane);
 			let inventory = inventory_for(kind, species, lane);
 			let build = build_for(member_num, lane);
