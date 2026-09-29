@@ -210,11 +210,11 @@ pub fn point_near_listener(origin: Vec3, noise: &mut u64) -> Vec3 {
 	origin + Vec3::new(angle.cos() * dist, 0.6, angle.sin() * dist)
 }
 
-fn lerp(min: f32, max: f32, t: f32) -> f32 {
+pub(crate) fn lerp(min: f32, max: f32, t: f32) -> f32 {
 	min + (max - min) * t
 }
 
-fn unit(noise: &mut u64) -> f32 {
+pub(crate) fn unit(noise: &mut u64) -> f32 {
 	(next_u64(noise) >> 11) as f32 / ((1u64 << 53) as f32)
 }
 

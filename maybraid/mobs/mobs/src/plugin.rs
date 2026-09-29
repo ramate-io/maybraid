@@ -125,6 +125,7 @@ impl Plugin for MobScenesPlugin {
 		)
 		.add_systems(Update, sync_mob_scene_centers.in_set(MobSceneSystems::Center));
 		crate::roster_ref::configure_roster_ref_systems(app);
+		crate::ambient::configure_herd_ambient(app);
 	}
 }
 

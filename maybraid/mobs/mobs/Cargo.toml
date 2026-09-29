@@ -13,7 +13,9 @@ rust-version = { workspace = true }
 bevy = { workspace = true }
 crozon-character-items = { workspace = true }
 damage = { workspace = true }
+fleeing-intelligence = { workspace = true }
 journeying-intelligence = { workspace = true }
+maybraid-audio = { workspace = true }
 lod = { workspace = true }
 mob-characters = { workspace = true }
 mob-intelligence = { workspace = true }

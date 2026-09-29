@@ -37,6 +37,11 @@ impl FleeingUser {
 	pub fn objective(&self, threat: Vec3) -> MovementObjective {
 		MovementObjective::FleeFrom(MovementLocation::new(threat, self.settings.radius.max(0.5)))
 	}
+
+	/// True while this user is writing a flee objective.
+	pub fn is_driving(&self) -> bool {
+		self.driving
+	}
 }
 
 impl Default for FleeingUser {
