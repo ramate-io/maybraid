@@ -26,7 +26,7 @@ where
 		// register_urbanization_lod (urbanization_stream.rs:91), minus the
 		// presenter state (-> UrbanizationPresentationPlugin):
 		//   UrbanizationIndex, Urbanization{Generate,Present}Bullseye,
-		//   LodGenerateBudget::<UrbanizationLodChan>::new(16)   // see budget_sketch.rs
+		//   LodGenerateBudget::<UrbanizationLodChan>::new(16)   // world-effective; standalone playground is 8
 		//   LodGenerateRegionPlugin / LodGeneratePlugin<SelectedUrbanization, UrbanizationIndex, ..>
 		//   LodPresentRegionPlugin<UrbanizationPresentBullseye, ..>
 		//     The present-keep region is what generate_urbanization_developments

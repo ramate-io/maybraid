@@ -84,7 +84,7 @@ where
 {
 	app.init_resource::<ForestIndex>()
 		.init_resource::<ForestPresenterState>()
-		.insert_resource(LodGenerateBudget { ids_per_frame: 16 })
+		.insert_resource(LodGenerateBudget::<ForestLodChan>::new(16))
 		.add_plugins(LodGenerateRegionPlugin::<
 			ForestGenerateBullseye,
 			With<LodViewer>,

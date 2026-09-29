@@ -18,10 +18,10 @@ use lod::lod_ref::LodRef;
 use lod::presentation::{LodPresentKeepRegion, LodPresentRegion, RegionPresenter};
 use lod::scene::{LodRefreshRegions, LodRefreshRegionsStatus};
 use lod::{
-	update_lod_host_levels, LodGeneratePlugin, LodGenerateRegionPlugin, LodGenerateSystems,
-	LodNode, LodNodePose, LodPresentCullPlugin, LodPresentPlugin, LodPresentRegionPlugin,
-	LodPresentSystems, LodRefreshDomain, LodRefreshSystems, LodSceneRefreshAabb,
-	LodSceneRefreshRegion, LodSceneRefreshRegionPlugin, LodViewer,
+	update_lod_host_levels, LodGenerateBudget, LodGeneratePlugin, LodGenerateRegionPlugin,
+	LodGenerateSystems, LodNode, LodNodePose, LodPresentCullPlugin, LodPresentPlugin,
+	LodPresentRegionPlugin, LodPresentSystems, LodRefreshDomain, LodRefreshSystems,
+	LodSceneRefreshAabb, LodSceneRefreshRegion, LodSceneRefreshRegionPlugin, LodViewer,
 };
 use lod_gimme::GimmeLodSceneRefreshPlugin;
 use maybraid_mobs::{MobLodRefreshMode, MobScene, MobSceneSystems};
@@ -713,6 +713,7 @@ impl Plugin for WorldMobsPlugin {
 			.init_resource::<WorldMobPresenterState>()
 			.init_resource::<MobGenerateBullseye>()
 			.init_resource::<MobPresentBullseye>()
+			.insert_resource(LodGenerateBudget::<MobLodChan>::new(16))
 			.add_plugins(LodGenerateRegionPlugin::<
 				MobGenerateBullseye,
 				With<LodViewer>,

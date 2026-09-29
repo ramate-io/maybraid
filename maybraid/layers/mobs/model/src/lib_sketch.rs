@@ -8,7 +8,7 @@ impl<G: UrbanModel> Plugin for MobGenerationPlugin<G> {
 	fn build(&self, app: &mut App) {
 		// MobGroupsPlugin (drop the is_plugin_added guard)
 		// WorldMobIndex -> MobIndex, MobGenerateBullseye, MobPresentBullseye
-		// LodGenerateBudget::<MobLodChan>::new(16)          // see budget_sketch.rs
+		// LodGenerateBudget::<MobLodChan>::new(16)
 		// LodGenerateRegionPlugin<MobGenerateBullseye, With<LodViewer>, MobLodChan>
 		// LodGeneratePlugin<WorldMobCell, WorldMobIndex, MobLodChan, With<LodViewer>>
 		// LodPresentRegionPlugin<MobPresentBullseye, With<LodViewer>, MobLodChan>

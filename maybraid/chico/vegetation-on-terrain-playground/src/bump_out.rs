@@ -29,8 +29,9 @@ use lod::gen::{
 use lod::lod_ref::LodRef;
 use lod::presentation::{LodPresentKeepRegion, LodPresentQueue, LodPresentRegion, RegionPresenter};
 use lod::{
-	hide_lod_tree, LodGeneratePlugin, LodGenerateRegionPlugin, LodGenerateSystems,
-	LodPresentCullPlugin, LodPresentPlugin, LodPresentRegionPlugin, LodPresentSystems, LodViewer,
+	hide_lod_tree, LodGenerateBudget, LodGeneratePlugin, LodGenerateRegionPlugin,
+	LodGenerateSystems, LodPresentCullPlugin, LodPresentPlugin, LodPresentRegionPlugin,
+	LodPresentSystems, LodViewer,
 };
 use lod_cascade::Chunk;
 use procedural_common::NoiseParams;
@@ -234,6 +235,8 @@ where
 {
 	app.init_resource::<CanopyBumpOutPresenterState>()
 		.init_resource::<MediumCanopyBumpOutPresenterState>()
+		.insert_resource(LodGenerateBudget::<BumpOutLodChan>::new(16))
+		.insert_resource(LodGenerateBudget::<MediumBumpOutLodChan>::new(16))
 		.add_plugins(LodGenerateRegionPlugin::<
 			BumpOutGenerateBullseye,
 			With<LodViewer>,

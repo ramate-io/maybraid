@@ -22,7 +22,7 @@ impl Plugin for WorldPlugin {
 			VegetationPresentationPlugin::<Ground>::default(),
 			MobPresentationPlugin::<Ground>::default(),
 		))
-		// Budgets that used to be implied by plugin insertion order (budget_sketch.rs):
+		// Budgets that used to be implied by plugin insertion order:
 		.insert_resource(LodGenerateBudget::<ForestLodChan>::new(16))
 		.insert_resource(LodGenerateBudget::<UrbanizationLodChan>::new(16))
 		.insert_resource(LodGenerateBudget::<MobLodChan>::new(16))

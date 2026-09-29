@@ -93,7 +93,7 @@ pub fn register_urbanization_lod(app: &mut App) {
 		.init_resource::<UrbanizationPresenterState>()
 		.init_resource::<UrbanizationGenerateBullseye>()
 		.init_resource::<UrbanizationPresentBullseye>()
-		.insert_resource(LodGenerateBudget { ids_per_frame: 8 })
+		.insert_resource(LodGenerateBudget::<UrbanizationLodChan>::new(8))
 		.add_plugins(LodGenerateRegionPlugin::<
 			UrbanizationGenerateBullseye,
 			With<LodViewer>,
@@ -307,7 +307,7 @@ pub fn generate_urbanization_developments(
 	config: Res<crate::PlaygroundConfig>,
 	keep: Res<LodPresentKeepRegion<UrbanizationLodChan>>,
 	mut development: DevelopmentIndex,
-	budget: Res<LodGenerateBudget>,
+	budget: Res<LodGenerateBudget<UrbanizationLodChan>>,
 ) {
 	if config.urbanization.is_none() {
 		return;

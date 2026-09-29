@@ -51,17 +51,26 @@ impl<M: Send + Sync + 'static> LodPresentCullRegion<M> {
 	}
 }
 
-/// How many ids each present drain may handle per frame.
+/// How many ids each present drain may handle per frame for channel `C`.
 ///
-/// Independent of generation and scene fulfillment.
+/// Independent of generation and scene fulfillment. Each channel has its
+/// own resource, so assemblers set a value without last-insert-wins.
 #[derive(Resource, Debug, Clone, Copy, PartialEq, Eq)]
-pub struct LodPresentBudget {
+pub struct LodPresentBudget<C> {
 	pub ids_per_frame: u32,
+	_chan: PhantomData<fn() -> C>,
 }
 
-impl Default for LodPresentBudget {
+impl<C> LodPresentBudget<C> {
+	pub const fn new(ids_per_frame: u32) -> Self {
+		Self { ids_per_frame, _chan: PhantomData }
+	}
+}
+
+impl<C> Default for LodPresentBudget<C> {
+	/// Same default as the old global.
 	fn default() -> Self {
-		Self { ids_per_frame: 1 }
+		Self::new(1)
 	}
 }
 
@@ -237,8 +246,7 @@ impl Plugin for LodPresentSetsPlugin {
 			app.add_plugins(LodNodePlugin);
 		}
 		ensure_lod_job_counter(app);
-		app.init_resource::<LodPresentBudget>()
-			.init_resource::<LodPresentTimeBudget>()
+		app.init_resource::<LodPresentTimeBudget>()
 			.init_resource::<LodPresentCullBudget>()
 			.configure_sets(
 				Update,
@@ -292,7 +300,7 @@ pub fn drain_lod_present<T, S, Pr, M, F>(
 	presenter: StaticSystemParam<Pr>,
 	index: Res<S>,
 	mut queue: ResMut<LodPresentQueue<T>>,
-	budget: Res<LodPresentBudget>,
+	budget: Res<LodPresentBudget<M>>,
 	time_budget: Res<LodPresentTimeBudget>,
 	jobs: Res<LodJobCounter>,
 	mut regions: MessageReader<LodPresentRegion<M>>,
@@ -626,7 +634,7 @@ where
 {
 	fn build(&self, app: &mut App) {
 		ensure_present_sets(app);
-		app.init_resource::<LodPresentBudget>()
+		app.init_resource::<LodPresentBudget<M>>()
 			.init_resource::<LodPresentTimeBudget>()
 			.init_resource::<LodPresentQueue<T>>()
 			.init_resource::<LodPresentKeepRegion<M>>()

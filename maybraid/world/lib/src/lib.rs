@@ -67,6 +67,7 @@ pub use weapon::WorldPlayerLoadout;
 
 use avian3d::prelude::{CoefficientCombine, Friction};
 use bevy::prelude::*;
+use chico_forests::{BumpOutLodChan, ForestLodChan, MediumBumpOutLodChan};
 use chico_vegetation_on_terrain_playground::{
 	CharacterCameraFollowEnabled, CharacterLocomotion, CharacterSpecies, PadMovementEnabled,
 	PlayerControlSystems, PlaygroundConfig as VegetationPlaygroundConfig, PlaygroundDiag,
@@ -80,7 +81,7 @@ use durham_terrain_models::{Durham, TerrainFrictionConfig, TerrainPlugin};
 use furniture_shaders::FurnitureShadersPlugin;
 use game_commands::command::{GameCommandPlugin, TextEntryFocus};
 use game_commands::ui::GameCommandDrawerConfig;
-use lod::{Bullseye, OpenLattice};
+use lod::{Bullseye, LodGenerateBudget, OpenLattice};
 use maybraid_character_controller::{CharacterControlSystems, CharacterControllerPlugin};
 use maybraid_input::{VirtualPadConfig, VirtualPadPlugin};
 use maybraid_skill_map::{SkillMapPlugin, SkillMapSystems};
@@ -93,6 +94,7 @@ use richmond_building_physics::BuildingWalkColliderPlugin;
 use richmond_developments_on_terrain_playground::{
 	DevelopmentsOnTerrainPlugin, PlaygroundConfig as DevelopmentsPlaygroundConfig,
 };
+use richmond_urbanization::UrbanizationLodChan;
 
 /// Steepest slope the controlled character can drive uphill.
 const WORLD_MAX_SLOPE_ANGLE: f32 = 70.0_f32.to_radians();
@@ -186,7 +188,14 @@ impl Plugin for WorldPlugin {
 				commands: false,
 				own_terrain: false,
 				register_development_forest_lod: true,
-			});
+			})
+			// Effective generate budgets before this change were last-insert-wins:
+			// urbanization inserted 8, then forest inserted 16, and mobs / bump-outs
+			// inherited 16. Channel the resources and keep those assembled numbers.
+			.insert_resource(LodGenerateBudget::<ForestLodChan>::new(16))
+			.insert_resource(LodGenerateBudget::<UrbanizationLodChan>::new(16))
+			.insert_resource(LodGenerateBudget::<BumpOutLodChan>::new(16))
+			.insert_resource(LodGenerateBudget::<MediumBumpOutLodChan>::new(16));
 		if !app.is_plugin_added::<BuildingWalkColliderPlugin>() {
 			app.add_plugins(BuildingWalkColliderPlugin);
 		}
