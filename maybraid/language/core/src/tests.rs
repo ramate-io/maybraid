@@ -9,7 +9,7 @@ use crate::grammar::SurfaceGrammar;
 use crate::graph::{InMemoryLexicalGraph, LexicalContextGraph};
 use crate::lexicalizer::{CompositionalLexicalizer, Lexicalizer, RootHeavyLexicalizer};
 use crate::marshall::{ConceptMarshaller, DefaultMarshaller};
-use crate::output::LanguageOutput;
+use crate::output::LexicalOutput;
 use crate::poc::{poc_universe, PocLexicon};
 use crate::profile::Profile;
 use crate::utterance::{SemanticValue, Utterance};
@@ -47,10 +47,10 @@ fn lex() -> anyhow::Result<(crate::WordNetConceptUniverse, PocLexicon)> {
 fn render_pair(
 	utterance: Utterance,
 	universe: &impl ConceptUniverse,
-) -> (LanguageOutput, InMemoryLexicalGraph, LanguageOutput, InMemoryLexicalGraph) {
+) -> (LexicalOutput, InMemoryLexicalGraph, LexicalOutput, InMemoryLexicalGraph) {
 	let profile = Profile::neutral();
 	let mut graph_a = InMemoryLexicalGraph::new();
-	let out_a = LanguageOutput::render(
+	let out_a = LexicalOutput::render(
 		utterance.clone(),
 		&CompositionalLexicalizer::default(),
 		universe,
@@ -58,7 +58,7 @@ fn render_pair(
 		&profile,
 	);
 	let mut graph_b = InMemoryLexicalGraph::new();
-	let out_b = LanguageOutput::render(
+	let out_b = LexicalOutput::render(
 		utterance,
 		&RootHeavyLexicalizer::default(),
 		universe,
@@ -272,7 +272,7 @@ fn surface_grammar_formats_an_ipa_sentence() -> anyhow::Result<()> {
 	let mary_a = out_a.realization_of(lex.mary).context("mary A")?.term.ipa.as_str();
 	let ga = SurfaceGrammar::compositional();
 	assert_eq!(
-		a.to_string(),
+		a.ipa().to_string(),
 		format!("/{john_a} {give_a} {book_a} {} {mary_a}/", ga.particles.recipient)
 	);
 	let john_b = out_b.realization_of(lex.john).context("john B")?.term.ipa.as_str();
@@ -281,11 +281,19 @@ fn surface_grammar_formats_an_ipa_sentence() -> anyhow::Result<()> {
 	let mary_b = out_b.realization_of(lex.mary).context("mary B")?.term.ipa.as_str();
 	let gb = SurfaceGrammar::root_heavy();
 	assert_eq!(
-		b.to_string(),
+		b.ipa().to_string(),
 		format!("/{john_b} {book_b} {} {mary_b} {give_b}/", gb.particles.recipient)
 	);
-	assert!(!a.to_string().is_ascii(), "language A sentence should use Unicode IPA: {a}");
-	assert!(!b.to_string().is_ascii(), "language B sentence should use Unicode IPA: {b}");
+	assert!(
+		!a.ipa().to_string().is_ascii(),
+		"language A sentence should use Unicode IPA: {}",
+		a.ipa()
+	);
+	assert!(
+		!b.ipa().to_string().is_ascii(),
+		"language B sentence should use Unicode IPA: {}",
+		b.ipa()
+	);
 	Ok(())
 }
 
@@ -294,7 +302,7 @@ fn surface_grammar_binds_relative_clauses_without_repeating_the_head() -> anyhow
 	let (universe, lex) = lex()?;
 	let (out_a, _, _, _) =
 		render_pair(Utterance::john_gave_the_book_to_mary_the_witch(&lex), &universe);
-	let sentence = out_a.realize(SurfaceGrammar::compositional()).to_string();
+	let sentence = out_a.realize(SurfaceGrammar::compositional()).ipa().to_string();
 	let mary = out_a.realization_of(lex.mary).context("mary")?.term.ipa.as_str();
 	let witch = out_a.realization_of(lex.witch).context("witch")?.term.ipa.as_str();
 	let helper = out_a.realization_of(lex.helper).context("helper")?.term.ipa.as_str();

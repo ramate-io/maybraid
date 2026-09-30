@@ -1,4 +1,4 @@
-//! Language output retains the semantic graph plus base lexical terms.
+//! Lexical output retains the semantic graph plus base lexical terms.
 
 use std::collections::HashMap;
 use std::fmt::Write as _;
@@ -17,14 +17,14 @@ pub struct ResolvedConcept {
 	pub realization: LexicalRealization,
 }
 
-/// Semantic graph plus per-use base terms. Syntax/morphology come later.
+/// Semantic graph plus per-use base terms. Grammar has not run yet.
 #[derive(Clone, Debug)]
-pub struct LanguageOutput {
+pub struct LexicalOutput {
 	pub utterance: Utterance,
 	pub lexicalizations: Vec<ResolvedConcept>,
 }
 
-impl LanguageOutput {
+impl LexicalOutput {
 	pub fn render(
 		utterance: Utterance,
 		lexicalizer: &impl Lexicalizer,

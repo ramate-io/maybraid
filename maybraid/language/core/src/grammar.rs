@@ -1,16 +1,39 @@
 //! Stub surface linearizer.
 //!
 //! This is not a grammar core. It has no agreement, case, conjugation, or
-//! sandhi. It only orders already-chosen base terms so a lexicalized utterance
-//! can be printed as one IPA string.
+//! sandhi. It only orders already-chosen base terms into a
+//! [`GrammaticalOutput`]. [`IpaUtterance`] is the phonemic view of that output.
 
 use crate::marshall::SemanticNode;
-use crate::output::LanguageOutput;
+use crate::output::LexicalOutput;
 use crate::utterance::{
 	Clause, ClauseId, Number, Referent, ReferentId, SemanticRole, SemanticValue,
 };
 
-/// One linearized utterance, formatted as `/word word word/`.
+/// Linearized grammatical form. Morphology and a fuller grammar can extend this.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GrammaticalOutput {
+	pub words: Vec<String>,
+}
+
+impl GrammaticalOutput {
+	pub fn new(words: Vec<String>) -> Self {
+		Self { words }
+	}
+
+	/// Phonemic rendering of this linearization.
+	pub fn ipa(&self) -> IpaUtterance {
+		IpaUtterance::from(self)
+	}
+}
+
+impl std::fmt::Display for GrammaticalOutput {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.write_str(&self.words.join(" "))
+	}
+}
+
+/// `/word word word/` view of a [`GrammaticalOutput`].
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct IpaUtterance {
 	pub words: Vec<String>,
@@ -19,6 +42,12 @@ pub struct IpaUtterance {
 impl IpaUtterance {
 	pub fn new(words: Vec<String>) -> Self {
 		Self { words }
+	}
+}
+
+impl From<&GrammaticalOutput> for IpaUtterance {
+	fn from(output: &GrammaticalOutput) -> Self {
+		Self { words: output.words.clone() }
 	}
 }
 
@@ -98,7 +127,7 @@ impl SurfaceGrammar {
 		}
 	}
 
-	pub fn realize(self, output: &LanguageOutput) -> IpaUtterance {
+	pub fn realize(self, output: &LexicalOutput) -> GrammaticalOutput {
 		let mut words = Vec::new();
 		for (index, root) in output.utterance.roots.iter().enumerate() {
 			if index > 0 {
@@ -106,13 +135,13 @@ impl SurfaceGrammar {
 			}
 			self.emit_clause(&mut words, output, *root, None);
 		}
-		IpaUtterance::new(words)
+		GrammaticalOutput::new(words)
 	}
 
 	fn emit_clause(
 		&self,
 		words: &mut Vec<String>,
-		output: &LanguageOutput,
+		output: &LexicalOutput,
 		clause_id: ClauseId,
 		bound: Option<ReferentId>,
 	) {
@@ -144,7 +173,7 @@ impl SurfaceGrammar {
 		&self,
 		subject: &mut Vec<String>,
 		complements: &mut Vec<String>,
-		output: &LanguageOutput,
+		output: &LexicalOutput,
 		clause: &Clause,
 		bound: Option<ReferentId>,
 	) {
@@ -181,7 +210,7 @@ impl SurfaceGrammar {
 	fn emit_value(
 		&self,
 		words: &mut Vec<String>,
-		output: &LanguageOutput,
+		output: &LexicalOutput,
 		value: SemanticValue,
 		bound: Option<ReferentId>,
 	) {
@@ -199,7 +228,7 @@ impl SurfaceGrammar {
 	fn emit_referent(
 		&self,
 		words: &mut Vec<String>,
-		output: &LanguageOutput,
+		output: &LexicalOutput,
 		referent_id: ReferentId,
 	) {
 		let Some(referent) = output.utterance.referents.get(referent_id) else {
@@ -237,7 +266,7 @@ impl SurfaceGrammar {
 	fn emit_noun_phrase(
 		&self,
 		words: &mut Vec<String>,
-		output: &LanguageOutput,
+		output: &LexicalOutput,
 		referent_id: ReferentId,
 		referent: &Referent,
 	) {
@@ -266,8 +295,8 @@ impl SurfaceGrammar {
 	}
 }
 
-impl LanguageOutput {
-	pub fn realize(&self, grammar: SurfaceGrammar) -> IpaUtterance {
+impl LexicalOutput {
+	pub fn realize(&self, grammar: SurfaceGrammar) -> GrammaticalOutput {
 		grammar.realize(self)
 	}
 

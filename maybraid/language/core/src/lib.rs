@@ -3,7 +3,7 @@
 //! Base lexicon layer for procedurally lexicalizing structured semantics.
 //!
 //! ```text
-//! Utterance -> Concepts -> Lexical Context -> Candidates -> Base Terms -> LanguageOutput
+//! Utterance -> Concepts -> Lexical Context -> Candidates -> Base Terms -> LexicalOutput
 //! ```
 //!
 //! This crate implements the [semantic utterance → procedural lexicon
@@ -35,7 +35,8 @@ pub use concept::{
 };
 pub use error::LanguageError;
 pub use grammar::{
-	ClauseOrder, IpaUtterance, ModifierPlacement, RelativePlacement, RoleParticles, SurfaceGrammar,
+	ClauseOrder, GrammaticalOutput, IpaUtterance, ModifierPlacement, RelativePlacement,
+	RoleParticles, SurfaceGrammar,
 };
 pub use graph::{
 	ConceptEdge, GraphDelta, InMemoryLexicalGraph, LexicalContextGraph, LexicalContextGraphMut,
@@ -46,7 +47,7 @@ pub use lexicalizer::{
 	Lexicalizer, RootHeavyLexicalizer, GENERATOR_VERSION,
 };
 pub use marshall::{ConceptMarshaller, ConceptUse, DefaultMarshaller, SemanticNode};
-pub use output::{LanguageOutput, ResolvedConcept};
+pub use output::{LexicalOutput, ResolvedConcept};
 pub use poc::{poc_universe, PocLexicon};
 pub use profile::{Profile, Register};
 pub use term::{Ipa, Term, TermId, Usage};

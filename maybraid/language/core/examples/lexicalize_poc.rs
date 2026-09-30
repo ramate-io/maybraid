@@ -2,7 +2,7 @@
 //! utterances through both POC lexicalizers.
 
 use maybraid_language_core::{
-	poc_universe, CompositionalLexicalizer, InMemoryLexicalGraph, LanguageOutput, PocLexicon,
+	poc_universe, CompositionalLexicalizer, InMemoryLexicalGraph, LexicalOutput, PocLexicon,
 	Profile, RootHeavyLexicalizer, SurfaceGrammar, Utterance,
 };
 
@@ -50,9 +50,9 @@ fn print_language(
 ) {
 	let mut graph = InMemoryLexicalGraph::new();
 	let output =
-		LanguageOutput::render(utterance, lexicalizer, universe, &mut graph, &Profile::neutral());
+		LexicalOutput::render(utterance, lexicalizer, universe, &mut graph, &Profile::neutral());
 	println!("{title}");
-	println!("  {}", output.realize(grammar));
+	println!("  {}", output.realize(grammar).ipa());
 	println!();
 	print!("{}", output.debug_report("  lexicon", universe, &graph));
 }
