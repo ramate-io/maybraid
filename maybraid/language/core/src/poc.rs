@@ -124,7 +124,7 @@ impl Utterance {
 	}
 }
 
-/// Default POC universe: bundled WordNet extract plus John/Mary proper names.
+/// Default POC universe: full WordNet 3.1 plus John/Mary proper names.
 pub fn poc_universe() -> Result<WordNetConceptUniverse, LanguageError> {
 	Ok(WordNetConceptUniverse::bundled()?.with_proper_names(["John", "Mary"]))
 }

@@ -1,6 +1,6 @@
 //! WordNet-backed [`ConceptUniverse`].
 //!
-//! Reads canonical Princeton `index.*` / `data.*` files. WordNet remains
+//! Reads the full Princeton `dict` via [`wordnet_db`]. WordNet remains
 //! external semantic context: languages import only the neighborhood they need.
 //!
 //! WordNet 3.1 data is included under [`WORDNET_LICENSE`]. Princeton University
@@ -21,8 +21,8 @@ mod dict;
 
 pub use dict::{bundled_dict_dir, WordNetDict};
 
-/// Princeton WordNet 3.1 license text shipped with the bundled extract.
-pub const WORDNET_LICENSE: &str = include_str!("../wordnet/LICENSE-WORDNET");
+/// Princeton WordNet 3.1 license text shipped with the asset dictionary.
+pub const WORDNET_LICENSE: &str = include_str!("../../../assets/language/wordnet/LICENSE-WORDNET");
 
 /// WordNet citation suitable for project attribution.
 pub const WORDNET_CITATION: &str =

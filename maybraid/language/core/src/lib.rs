@@ -11,8 +11,9 @@
 //! [`grammar`] linearizer can print a formatted IPA string; agreement, case,
 //! and historical evolution remain out of scope.
 //!
-//! WordNet 3.1 is the initial English concept universe. The bundled extract and
-//! [`wordnet::WORDNET_LICENSE`] reproduce Princeton's license as required.
+//! WordNet 3.1 is the initial English concept universe. The full dictionary
+//! lives under `assets/language/wordnet`; [`wordnet::WORDNET_LICENSE`]
+//! reproduces Princeton's license as required.
 //! Princeton University does not endorse this project. See
 //! [`wordnet::WORDNET_CITATION`].
 
