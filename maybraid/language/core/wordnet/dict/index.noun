@@ -1,0 +1,1746 @@
+  WordNet 3.1 extract for maybraid-language-core. See ../LICENSE-WORDNET.
+  Copyright 2011 by Princeton University. All rights reserved.
+aar n 1 2 @ #p 1 0 09208961  
+aare n 1 2 @ #p 1 0 09208961  
+aare_river n 1 2 @ #p 1 0 09208961  
+abator n 1 2 @ + 1 0 09773382  
+abel n 1 2 @ ; 1 0 09610392  
+abjurer n 1 2 @ + 1 0 09773872  
+abomination n 1 2 @ + 1 0 09776292  
+aboriginal n 1 3 @ ~ + 1 0 09643964  
+aborigine n 1 3 @ ~ + 1 1 09643964  
+abstainer n 1 3 @ ~ + 1 0 09777275  
+abstinent n 1 3 @ ~ + 1 0 09777275  
+accomplice n 1 2 @ ~ 1 1 09780399  
+acheron n 1 4 @ #p + ; 1 0 09209606  
+achiever n 1 4 ! @ ~ + 1 0 09782244  
+acquaintance n 1 4 ! @ ~ + 1 1 09783207  
+acquirer n 1 3 @ ~ + 1 0 09783624  
+active n 1 2 @ + 1 1 09784323  
+actor n 1 3 @ ~ + 1 1 09786620  
+actor's_assistant n 1 1 @ 1 0 10052807  
+adam n 1 2 @ ; 1 1 09609728  
+adige n 1 2 @ #p 1 0 09210640  
+adjudicator n 1 3 @ ~ + 1 0 09789059  
+admirer n 1 3 @ ~ + 1 1 09791087  
+adonis n 1 4 @ #m %m ; 1 1 10308625  
+adoptee n 1 2 @ + 1 0 09791753  
+adult n 1 5 ! @ ~ %p + 1 1 09628463  
+adult_female n 1 3 @ ~ %p 1 0 10807146  
+adult_female_body n 1 3 @ #p %p 1 0 05227400  
+adult_male n 1 3 @ ~ %p 1 0 10306910  
+adult_male_body n 1 3 @ #p %p 1 0 05227580  
+adventurer n 2 3 @ ~ + 2 1 09629201 10092496  
+adversary n 1 2 @ ~ 1 1 09792668  
+advisee n 1 2 @ + 1 0 09793590  
+advocate n 1 4 @ ~ + ; 1 1 09794206  
+advocator n 1 3 @ ~ + 1 0 09794206  
+aegospotami n 1 2 @ #p 1 0 09211791  
+aegospotamos n 1 2 @ #p 1 0 09211791  
+affiant n 1 1 @ 1 0 09795702  
+african n 1 3 @ ~ + 1 0 09657682  
+african-american n 1 3 @ ~ + 1 0 09659490  
+aggregator n 1 3 @ ~ + 1 0 09956078  
+agnostic n 1 2 @ + 1 0 09798565  
+aide n 1 3 @ ~ ; 1 1 09799690  
+air_flow n 1 1 @ 1 0 07421201  
+aircraft_carrier n 1 2 @ %p 1 1 02690031  
+aire n 1 2 @ #p 1 0 09214585  
+aire_river n 1 2 @ #p 1 0 09214585  
+airflow n 1 1 @ 1 1 07421201  
+alabama n 1 5 @ #m #p %p - 1 1 09214753  
+alabama_river n 1 2 @ #p 1 0 09214753  
+albino n 1 2 @ + 1 0 09801091  
+album n 1 2 @ ~ 1 1 02697938  
+alcohol n 1 3 @ ~ + 1 1 14732881  
+allayer n 1 2 @ + 1 0 10537942  
+allegheny n 1 2 @ #p 1 0 09215851  
+allegheny_river n 1 2 @ #p 1 0 09215851  
+alp n 1 1 @ 1 0 09216583  
+amateur n 1 4 ! @ ~ + 1 1 09806026  
+amazon n 2 4 @ #m #p ; 2 0 09806734 09218250  
+amazon_river n 1 2 @ #p 1 0 09218250  
+amerindian n 1 3 @ ~ - 1 0 09664887  
+ammonia n 1 3 @ ~ + 1 0 14768019  
+ammonia_water n 1 1 @ 1 0 14768019  
+ammonium_hydroxide n 1 1 @ 1 0 14768019  
+amur n 1 2 @ #p 1 0 09218981  
+amur_river n 1 2 @ #p 1 0 09218981  
+anachronism n 1 2 @ + 1 1 09629903  
+anatomy n 1 5 @ ~ #p + - 1 1 05224424  
+ancient n 1 2 @ + 1 0 09812582  
+angara n 1 2 @ #p 1 0 09220310  
+angara_river n 1 2 @ #p 1 0 09220310  
+anomaly n 1 4 @ ~ + ; 1 0 09629719  
+antagonist n 1 4 ! @ ~ + 1 1 09792668  
+anti n 1 1 @ 1 0 09816250  
+anti-american n 1 2 @ + 1 0 09816415  
+antifreeze n 1 2 @ ~ 1 0 14790543  
+apalachicola n 1 2 @ #p 1 0 09223527  
+apalachicola_river n 1 2 @ #p 1 0 09223527  
+ape n 1 3 @ ~ + 1 1 09983941  
+aper n 1 3 @ ~ + 1 0 09983941  
+applicant n 1 3 @ ~ + 1 1 09630310  
+applied_scientist n 1 2 @ ~ 1 0 09638837  
+applier n 1 3 @ ~ + 1 0 09630310  
+appointee n 1 3 @ ~ + 1 1 09630660  
+appointment n 1 4 @ ~ %m ; 1 1 09630660  
+appointment_book n 1 1 @ 1 0 06427692  
+appointment_calendar n 1 1 @ 1 0 06427692  
+appreciator n 1 3 @ ~ + 1 0 09821868  
+apprehender n 2 2 @ + 2 0 10259779 09820525  
+aquarius n 1 3 @ #p ; 1 0 09772973  
+araguaia n 1 2 @ #p 1 0 09225688  
+araguaia_river n 1 2 @ #p 1 0 09225688  
+araguaya n 1 2 @ #p 1 0 09225688  
+araguaya_river n 1 2 @ #p 1 0 09225688  
+aras n 1 2 @ #p 1 0 09226095  
+arauca n 1 2 @ #p 1 0 09226359  
+araxes n 1 2 @ #p 1 0 09226095  
+archaist n 1 2 @ + 1 0 09823653  
+archer n 1 3 @ ~ ; 1 0 09772679  
+areopagus n 1 3 @ #p %m 1 0 08803595  
+argun n 1 2 @ #p 1 0 09228778  
+argun_river n 1 2 @ #p 1 0 09228778  
+aries n 1 3 @ #p ; 1 0 09771577  
+arkansas n 1 4 @ #m #p %p 1 1 09229263  
+arkansas_river n 1 2 @ #p 1 0 09229263  
+arno n 1 2 @ #p 1 0 09229581  
+arno_river n 1 2 @ #p 1 0 09229581  
+arrogator n 1 2 @ + 1 0 09829769  
+art n 1 6 @ ~ #p + ; - 1 1 07011408  
+artwork n 1 3 @ ~ #p 1 0 07011408  
+assessee n 1 2 @ + 1 0 09834481  
+assimilator n 1 3 @ ~ + 1 0 10271476  
+assistant n 1 3 @ ~ + 1 1 09835195  
+assortment n 1 3 @ ~ + 1 1 01014654  
+asthmatic n 1 1 @ 1 0 09836941  
+atomic_number_1 n 1 3 @ ~ #s 1 0 14664612  
+atomic_number_8 n 1 3 @ ~ #s 1 0 14672278  
+attack_aircraft_carrier n 1 2 @ %p 1 1 02690031  
+attempter n 1 2 @ + 1 0 10748650  
+attendant n 1 3 @ ~ + 1 1 09841233  
+attender n 1 4 @ ~ #m + 1 0 09841233  
+authority n 2 4 @ ~ = ; 2 2 09844011 06423235  
+autodidact n 1 2 @ + 1 0 09844815  
+automaton n 1 3 @ ~ + 1 0 09844921  
+auxiliary n 1 3 @ ~ + 1 1 09799690  
+avon n 2 2 @ #p 2 0 09235058 09234851  
+b-girl n 1 1 @ 1 0 09871838  
+baboo n 1 1 @ 1 0 09846648  
+babu n 1 1 @ 1 0 09846648  
+baby n 1 3 @ ~ + 1 1 09938012  
+baby_boomer n 1 2 @ #m 1 0 09847649  
+baby_buster n 1 1 @ 1 0 09847846  
+bachelor n 1 2 @ + 1 1 09849169  
+bachelor_girl n 1 1 @ 1 0 09849326  
+bachelorette n 1 1 @ 1 0 09849326  
+back n 1 8 ! @ ~ #m #p %p + ; 1 1 02843848  
+backbone n 1 5 @ ~ #p %p ; 1 1 04285118  
+backflow n 1 2 @ ~ 1 0 07420950  
+backflowing n 1 2 @ ~ 1 0 07420950  
+backwater n 1 1 @ 1 0 09235267  
+bad_guy n 1 2 ! @ 1 1 09851102  
+bad_person n 1 3 ! @ ~ 1 0 09851208  
+baggage n 1 3 @ ~ %p 1 1 09851816  
+balance n 1 6 ! @ ~ #p + ; 1 1 09772396  
+baldhead n 1 1 @ 1 0 09853256  
+baldpate n 1 1 @ 1 0 09853256  
+baldy n 1 1 @ 1 0 09853256  
+balker n 1 3 @ ~ + 1 0 09853385  
+ball-breaker n 1 1 @ 1 0 09853646  
+ball-buster n 1 1 @ 1 0 09853646  
+bar_girl n 1 1 @ 1 0 09871838  
+bas_bleu n 1 1 @ 1 0 09881005  
+bat_boy n 1 2 @ ; 1 0 09862831  
+bath_water n 1 1 @ 1 0 14797948  
+bather n 1 3 @ ~ + 1 1 09862990  
+battler n 1 3 @ ~ + 1 0 09958771  
+baulker n 1 3 @ ~ + 1 0 09853385  
+bawd n 1 3 @ ~ + 1 0 10505025  
+bay n 1 6 @ ~ #m #p %p + 1 1 09238571  
+beard n 1 5 @ ~ #p %p + 1 1 09864809  
+bearer n 1 2 @ + 1 1 09917148  
+beau n 2 2 @ ~ 2 1 09890770 10010564  
+beauty n 1 5 ! @ ~ = + 1 1 10633512  
+bedfellow n 1 1 @ 1 0 09865673  
+beguiler n 1 3 @ ~ + 1 0 09929832  
+beholder n 1 3 @ ~ + 1 0 09649777  
+being n 1 8 ! @ ~ %s %p = + - 1 1 00004475  
+belligerent n 1 3 @ ~ + 1 0 09958771  
+belongings n 1 3 @ ~ + 1 0 13265007  
+ben n 1 2 @ ; 1 0 09241548  
+bend n 1 5 @ ~ #p + ; 1 1 02832880  
+bereaved n 1 1 @ 1 0 09869865  
+bereaved_person n 1 1 @ 1 0 09869865  
+best n 1 3 ! @ + 1 1 09870573  
+bestiary n 1 1 @ 1 0 06424253  
+bestower n 1 2 @ ~ 1 0 10045455  
+beverage n 1 2 @ ~ 1 1 07897775  
+bey n 1 1 @ 1 0 09871697  
+big_sioux_river n 1 2 @ #p 1 0 09243481  
+bighorn n 1 3 @ #m #p 1 0 09242953  
+bighorn_river n 1 2 @ #p 1 0 09242953  
+bilge n 1 4 @ ~ #p + 1 0 15084364  
+bilge_water n 1 1 @ 1 0 15084364  
+binary_compound n 1 2 @ ~ 1 0 14643012  
+binding n 1 4 @ ~ #p + 1 1 02843848  
+birth n 1 5 ! @ ~ #p + 1 1 09876077  
+birthing_coach n 1 1 @ 1 0 10260721  
+biter n 1 3 @ ~ + 1 1 09877258  
+black n 1 5 ! @ ~ + ; 1 1 09659490  
+black_hills n 1 3 @ #p %p 1 0 09162715  
+blogger n 1 1 @ 1 0 09879821  
+blond n 1 2 @ ~ 1 0 09879912  
+blonde n 1 2 @ ~ 1 1 09879912  
+bluecoat n 1 1 @ 1 0 09880693  
+bluestocking n 1 1 @ 1 1 09881005  
+bod n 1 3 @ ~ #p 1 0 05224424  
+body_of_water n 1 5 @ ~ #p %s ; 1 1 09248053  
+bodybuilder n 1 1 @ 1 1 09882251  
+bomber n 1 5 @ ~ %p + ; 1 1 09883942  
+book n 2 8 @ ~ #p %m %p + ; - 2 2 06422547 02873453  
+book_binding n 1 3 @ ~ #p 1 0 02843848  
+book_of_facts n 1 2 @ ~ 1 0 06429241  
+booklet n 1 3 @ ~ + 1 0 06425532  
+boomer n 1 2 @ #m 1 0 09847649  
+boy n 1 4 ! @ ~ + 1 1 09890332  
+boyfriend n 1 1 @ 1 0 09890770  
+bozo n 1 1 @ 1 0 10172934  
+brahmaputra n 1 2 @ #p 1 0 09251051  
+brahmaputra_river n 1 2 @ #p 1 0 09251051  
+branch n 1 5 @ ~ #p %p + 1 1 09251231  
+brazos n 1 2 @ #p 1 0 09251526  
+brazos_river n 1 2 @ #p 1 0 09251526  
+breed's_hill n 1 2 @ #p 1 0 09118935  
+bridesmaid n 1 2 @ #m 1 0 09894328  
+brine n 1 4 @ ~ %s + 1 0 15033414  
+briny n 1 4 @ #p %p + 1 0 09368829  
+broad n 1 1 @ 1 0 09895129  
+brochure n 1 2 @ ~ 1 0 06425532  
+brook n 1 2 @ ~ 1 1 09252316  
+brooklet n 1 1 @ 1 0 09252548  
+bruiser n 1 2 @ + 1 0 09898168  
+brunet n 1 1 @ 1 0 09897322  
+brunette n 1 1 @ 1 0 09897322  
+build n 1 3 @ ~ #p 1 1 05224424  
+bull n 2 7 ! @ ~ #p %p + ; 2 2 09898168 09771712  
+bull_run n 1 3 @ #p ; 1 0 09174555  
+bullfighter n 1 2 @ ~ 1 0 09855548  
+buster n 3 2 @ + 3 0 10103127 09902904 09847846  
+butte n 1 3 @ #p ; 1 0 09253109  
+cain n 1 2 @ ; 1 0 09610169  
+caloosahatchee n 1 2 @ #p 1 0 09254268  
+caloosahatchee_river n 1 2 @ #p 1 0 09254268  
+calvary n 1 2 @ #p 1 0 08814071  
+cam n 1 3 @ ~ #p 1 0 09254494  
+cam_river n 1 2 @ #p 1 0 09254494  
+canadian n 1 5 @ ~ #m #p + 1 0 09254797  
+canadian_river n 1 2 @ #p 1 0 09254797  
+cancer n 1 7 @ ~ #m #p %m + ; 1 1 09771988  
+candidate n 1 2 @ ~ 1 1 09910201  
+canton_river n 1 2 @ #p 1 0 09506470  
+cape_fear_river n 1 2 @ #p 1 0 09257398  
+capital n 1 5 @ ~ #p %m + 1 1 07297634  
+capitalist n 1 4 @ ~ + ; 1 1 09632262  
+capitol_hill n 1 2 @ #p 1 0 09093847  
+capricorn n 1 3 @ #p ; 1 0 09772829  
+captor n 1 3 ! @ ~ 1 1 09632591  
+capturer n 1 3 @ ~ + 1 0 09632591  
+car_transporter n 1 1 @ 1 0 04481270  
+carrier n 4 5 @ ~ %p + ; 4 4 09917148 02973559 02690031 08074469  
+carrottop n 1 1 @ 1 0 10533416  
+carry n 1 3 @ ~ + 1 1 00319561  
+cartoon n 1 4 @ ~ #p + 1 1 06793517  
+case n 2 6 @ ~ #m #p + ; 2 2 09918344 10688105  
+cashier n 1 1 @ 1 0 09918741  
+castrate n 1 2 @ + 1 0 10086259  
+cat n 2 5 @ ~ #m + ; 2 1 10172934 09919605  
+cat's-paw n 1 1 @ 1 0 10229217  
+catalog n 1 3 @ ~ + 1 1 06427849  
+catalogue n 1 3 @ ~ + 1 1 06427849  
+catechism n 1 3 @ + ; 1 0 06424414  
+categorisation n 3 2 @ ~ 3 0 07955878 05740701 01014654  
+categorization n 3 3 @ ~ + 3 0 07955878 05740701 01014654  
+category n 1 4 @ ~ %m + 1 1 08014145  
+caucasian n 1 3 @ ~ + 1 0 09660255  
+causal_agency n 1 2 @ ~ 1 0 00007347  
+causal_agent n 1 2 @ ~ 1 0 00007347  
+cause n 1 4 @ ~ + ; 1 1 00007347  
+celebrant n 1 3 @ ~ + 1 1 09922407  
+celebrater n 1 2 @ ~ 1 0 09922407  
+celebrator n 1 3 @ ~ + 1 0 09922407  
+censor n 1 2 @ + 1 0 09923389  
+chameleon n 1 3 @ ~ #m 1 0 09925902  
+chang n 1 2 @ #p 1 0 09504653  
+chang_jiang n 1 2 @ #p 1 0 09504653  
+change_of_location n 1 2 @ ~ 1 0 07325733  
+changer n 1 4 @ ~ #p + 1 0 09632901  
+changjiang n 1 2 @ #p 1 0 09504653  
+channel n 2 5 @ ~ %p + ; 2 2 06270551 09264153  
+chao_phraya n 1 2 @ #p 1 0 09264618  
+characteristic n 1 5 @ ~ #p + ; 1 1 05858316  
+chari n 1 2 @ #p 1 0 09454313  
+chari_river n 1 2 @ #p 1 0 09454313  
+charles n 1 3 @ #p + 1 0 09264943  
+charles_river n 1 2 @ #p 1 0 09264943  
+charmer n 1 3 @ ~ + 1 0 09929832  
+chassis n 1 3 @ ~ #p 1 0 05224424  
+chattahoochee n 1 2 @ #p 1 0 09265420  
+chattahoochee_river n 1 2 @ #p 1 0 09265420  
+cheviot_hills n 1 2 @ #p 1 0 08814696  
+cheviots n 1 2 @ #p 1 0 08814696  
+chief_assistant n 1 1 @ 1 0 10550684  
+child n 1 6 ! @ ~ #m %p + 1 1 09938012  
+chooser n 1 1 @ 1 0 10451389  
+chu_kiang n 1 2 @ #p 1 0 09506470  
+chutzpanik n 1 2 @ ; 1 0 09941131  
+cimarron n 1 3 @ #m #p 1 0 09267878  
+cimarron_river n 1 2 @ #p 1 0 09267878  
+cinderella n 1 1 @ 1 0 09942721  
+circe n 1 2 @ ; 1 0 09517114  
+class n 4 8 @ ~ #m #p %m %p + ; 4 4 08014145 07990472 08256729 08120743  
+classification n 3 4 ! @ ~ + 3 2 01014654 07955878 05740701  
+classifier n 1 2 @ + 1 1 09946320  
+clinch_river n 1 2 @ #p 1 0 09269566  
+closer n 1 4 @ ~ + ; 1 0 09949922  
+clotheshorse n 1 2 @ ~ 1 1 10010564  
+cloud_seeder n 1 1 @ 1 0 10595038  
+clumsy_person n 1 2 @ ~ 1 0 09950725  
+clyde n 1 2 @ #p 1 0 09270848  
+coadjutor n 1 1 @ 1 0 09633123  
+cocotte n 1 2 @ ~ 1 0 10505025  
+cocytus n 1 3 @ #p ; 1 0 09271630  
+coddler n 1 2 @ + 1 0 10415089  
+coffee-table_book n 1 1 @ 1 0 03068121  
+collection n 1 3 @ ~ + 1 1 06603723  
+collector n 1 5 @ ~ #p + ; 1 1 09956078  
+color-blind_person n 1 2 @ ~ 1 0 09633285  
+colorado n 2 3 @ #p %p 2 1 09272922 09272324  
+colorado_river n 2 2 @ #p 2 0 09272922 09272324  
+columbia n 1 3 @ #m #p 1 0 09273584  
+columbia_river n 1 2 @ #p 1 0 09273584  
+combatant n 1 3 @ ~ + 1 0 09958771  
+comforter n 1 3 @ ~ + 1 0 10537942  
+common_carrier n 1 2 @ ~ 1 0 08074469  
+common_man n 1 2 @ ~ 1 1 09633435  
+common_person n 1 2 @ ~ 1 0 09633435  
+commoner n 1 2 @ ~ 1 1 09633435  
+communicator n 1 3 @ ~ + 1 0 09633690  
+compartmentalisation n 1 3 @ ~ + 1 0 01014654  
+compartmentalization n 1 3 @ ~ + 1 0 01014654  
+compeer n 1 3 @ ~ #m 1 0 09649426  
+compendium n 1 3 @ ~ + 1 0 06603723  
+complexifier n 1 2 @ + 1 0 09966606  
+compulsive n 1 3 @ ~ + 1 1 09969936  
+computer_user n 1 2 @ ~ 1 0 09970753  
+confederate n 1 3 @ ~ + 1 1 09780399  
+conferrer n 1 2 @ ~ 1 0 10045455  
+confluence n 1 3 @ + ; 1 0 08560197  
+congo n 1 4 @ #p %m %p 1 1 09274984  
+congo_river n 1 2 @ #p 1 0 09274984  
+connecticut n 1 3 @ #p %p 1 1 09275179  
+connecticut_river n 1 2 @ #p 1 0 09275179  
+contemplative n 1 1 @ 1 0 09979794  
+contents n 1 2 @ #p 1 0 06501650  
+contestant n 2 2 @ ~ 2 1 09636221 10037746  
+contriver n 1 3 @ ~ + 1 0 10457939  
+controller n 1 3 @ ~ + 1 1 10544727  
+controversialist n 1 2 @ ~ 1 0 09638495  
+convert n 1 3 @ ~ + 1 1 09981893  
+conveyance n 1 5 @ ~ %p + ; 1 0 00316812  
+conveyer n 1 5 @ ~ #p + ; 1 0 03105548  
+conveyer_belt n 1 4 @ ~ #p ; 1 0 03105548  
+conveyor n 1 5 @ ~ #p + ; 1 1 03105548  
+conveyor_belt n 1 4 @ ~ #p ; 1 0 03105548  
+coosa n 1 2 @ #p 1 0 09278827  
+coosa_river n 1 2 @ #p 1 0 09278827  
+copybook n 1 1 @ 1 0 06427565  
+copycat n 1 2 @ ~ 1 0 09983941  
+coquette n 1 2 @ + 1 1 09984664  
+cotswold_hills n 1 2 @ #p 1 0 08814559  
+cotswolds n 1 2 @ #p 1 0 08814559  
+counter n 1 6 @ ~ #p %p + ; 1 1 09989021  
+counterterrorist n 1 1 @ 1 0 09989618  
+course n 1 5 @ ~ #p %p + 1 1 08393816  
+cover n 1 4 @ ~ #p + 1 1 02843848  
+coward n 1 3 @ ~ + 1 1 09637077  
+crab n 1 6 @ ~ #m #p + ; 1 1 09771988  
+crawler n 1 4 @ ~ #m + 1 0 09995649  
+creator n 1 3 @ ~ + 1 1 09637345  
+creature n 1 7 @ ~ #m %s %p + - 1 1 09995959  
+creditor n 1 4 ! @ ~ + 1 0 09996258  
+creek n 1 2 @ ~ 1 1 09252316  
+creeper n 1 4 @ ~ #m + 1 1 09995649  
+cripple n 1 3 @ ~ + 1 1 09998419  
+crocodile_river n 1 2 @ #p 1 0 09362418  
+cross-dresser n 1 2 @ + 1 0 10745683  
+crossing n 1 5 @ ~ #p + ; 1 1 09306529  
+cumberland n 1 2 @ #p 1 0 09284044  
+cumberland_river n 1 2 @ #p 1 0 09284044  
+curiosa n 1 2 @ ; 1 0 06423396  
+current n 2 2 @ ~ 2 2 07421365 08478606  
+curve n 1 6 ! @ ~ #p + ; 1 1 02832880  
+cyprian n 1 4 @ ~ #m + 1 0 10505025  
+dame n 1 2 @ ~ 1 1 10008828  
+danau n 1 2 @ #p 1 0 09285993  
+dancer n 1 3 @ ~ + 1 1 10009953  
+dandy n 1 3 @ ~ + 1 0 10010564  
+danube n 1 2 @ #p 1 0 09285993  
+danube_river n 1 2 @ #p 1 0 09285993  
+darling n 1 4 @ ~ #p + 1 1 09286385  
+darling_river n 1 2 @ #p 1 0 09286385  
+das_kapital n 1 1 @ 1 0 07297634  
+dead_person n 1 3 @ ~ #m 1 1 10014481  
+dead_soul n 1 3 @ ~ #m 1 0 10014481  
+deaf_person n 1 3 @ ~ #m 1 0 10016019  
+deb n 1 1 @ 1 0 10017372  
+debaser n 1 3 @ ~ + 1 0 10016750  
+debitor n 1 2 @ ~ 1 0 10017160  
+debtor n 1 3 ! @ ~ 1 0 10017160  
+debutante n 1 1 @ 1 0 10017372  
+deceased n 1 3 @ ~ #m 1 1 10014481  
+deceased_person n 1 3 @ ~ #m 1 0 10014481  
+decedent n 1 4 @ ~ #m + 1 1 10014481  
+defecator n 1 2 @ + 1 0 10019527  
+degrader n 1 2 @ ~ 1 0 10016750  
+delaware n 1 3 @ #p %p 1 1 09287022  
+delaware_river n 1 2 @ #p 1 1 09287022  
+delayer n 1 2 @ ~ 1 0 10020209  
+delilah n 1 2 @ ; 1 0 10075218  
+deliverer n 1 3 @ ~ + 1 0 10020651  
+demander n 1 2 @ + 1 1 10021240  
+demerara n 1 2 @ #p 1 0 09288040  
+denizen n 1 2 @ ~ 1 0 09643248  
+dental_assistant n 1 1 @ 1 0 10023444  
+departed n 1 4 @ ~ #m + 1 0 10014481  
+deputy n 1 4 @ ~ + ; 1 1 10024942  
+detroit_river n 1 2 @ #p 1 0 09288958  
+deviser n 1 3 @ ~ + 1 0 10457939  
+diamond_dust n 1 3 @ #p %s 1 0 11529795  
+dieter n 1 2 @ + 1 0 10032031  
+differentiator n 1 2 @ + 1 0 10032560  
+discharge n 1 3 @ ~ + 1 1 07422377  
+discriminator n 1 2 @ + 1 0 10032560  
+disentangler n 1 1 @ 1 0 10036672  
+dish n 1 5 @ ~ #p %p + 1 1 10633512  
+dishwater n 1 1 @ 1 1 14861021  
+disputant n 1 3 @ ~ + 1 0 09638495  
+dissenter n 1 3 @ ~ + 1 1 10037746  
+dissident n 1 3 @ ~ + 1 0 10037746  
+distillate n 1 2 @ + 1 0 14861130  
+distillation n 1 2 @ + 1 1 14861130  
+distilled_water n 1 1 @ 1 1 14861428  
+divider n 1 3 @ ~ + 1 0 10039613  
+division n 1 8 @ ~ #m #p %m %p + ; 1 1 08256729  
+divorced_man n 1 1 @ 1 0 10163858  
+divorcee n 1 3 @ ~ + 1 0 10040091  
+dnieper n 1 2 @ #p 1 0 09291142  
+dnieper_river n 1 2 @ #p 1 0 09291142  
+doer n 1 3 @ ~ + 1 0 09786620  
+domestic_partner n 1 2 @ ~ 1 0 10044087  
+dominatrix n 1 1 @ 1 0 10044509  
+don n 1 3 @ #p ; 1 1 09291684  
+don_river n 1 2 @ #p 1 0 09291684  
+donna n 1 2 @ ; 1 0 10045360  
+donor n 1 3 @ ~ ; 1 1 10045455  
+doormat n 1 2 @ ~ 1 0 10791304  
+double n 1 4 @ ~ #p + 1 1 10046971  
+doubter n 1 3 @ ~ + 1 0 09798565  
+doula n 1 1 @ 1 0 10260721  
+dresser n 2 4 @ ~ %p + 2 1 10052950 10052807  
+dribble n 1 4 @ ~ + ; 1 0 07447159  
+dribbler n 1 2 @ + 1 0 10053388  
+drink n 2 4 @ ~ + ; 2 2 07897775 09293414  
+drinkable n 1 2 @ ~ 1 0 07897775  
+drip n 1 4 @ ~ + ; 1 0 07447159  
+drippage n 1 1 @ 1 0 07422059  
+dripping n 1 1 @ 1 0 07422059  
+driveller n 1 2 @ + 1 0 10053388  
+drooler n 1 2 @ + 1 0 10053388  
+drug_user n 1 2 @ ~ 1 0 10055991  
+dude n 2 2 @ ~ 2 0 10103127 10010564  
+dupe n 1 3 @ ~ + 1 0 10772148  
+dweller n 1 3 @ ~ + 1 1 09643248  
+dyslectic n 1 1 @ 1 0 10060414  
+dyslexic n 1 1 @ 1 0 10060414  
+earth's_surface n 1 4 @ ~ #p %p 1 1 09474647  
+ebb n 1 3 @ #p + 1 0 07416747  
+ebro n 1 2 @ #p 1 0 09294321  
+ebro_river n 1 2 @ #p 1 0 09294321  
+eccentric n 1 2 @ ~ 1 1 10062653  
+eccentric_person n 1 2 @ ~ 1 0 10062653  
+ectomorph n 1 1 @ 1 0 10064490  
+effecter n 1 2 @ + 1 0 10066335  
+effector n 1 4 ! @ %p + 1 0 10066335  
+ejaculator n 1 2 @ + 1 0 10067925  
+ejector n 1 3 @ #p + 1 0 10405770  
+elbe n 1 2 @ #p 1 0 09294464  
+elbe_river n 1 2 @ #p 1 0 09294464  
+elevation n 1 5 @ ~ %p + ; 1 1 09389214  
+elizabeth_river n 1 2 @ #p 1 0 09295501  
+elizabethan n 1 2 @ + 1 1 10070520  
+embayment n 1 3 @ ~ #p 1 0 09238571  
+emission n 1 3 @ ~ + 1 1 07448468  
+emotional_person n 1 3 ! @ ~ 1 0 10072651  
+emulator n 1 3 @ ~ + 1 0 09983941  
+enchantress n 2 1 @ 2 0 10075218 10075105  
+endomorph n 1 2 @ ~ 1 0 10075538  
+enforcer n 1 2 @ + 1 0 10181460  
+engineer n 1 3 @ ~ + 1 1 09638837  
+enjoyer n 1 2 @ + 1 0 10078219  
+enrollee n 1 3 @ ~ + 1 1 10078970  
+entertainer n 1 3 @ ~ + 1 1 09639952  
+equal n 1 4 @ ~ #m + 1 1 09649426  
+erewhon n 1 1 @ 1 0 07297770  
+ergun_he n 1 2 @ #p 1 0 09228778  
+eristic n 1 3 @ ~ + 1 0 09638495  
+esq n 1 2 @ ; 1 0 10083853  
+esquire n 1 2 @ ; 1 0 10083853  
+essayer n 1 2 @ + 1 0 10748650  
+estuary n 1 4 @ ~ #p + 1 1 09297406  
+ethnic n 1 1 @ 1 0 10085354  
+eunuch n 1 1 @ 1 0 10086259  
+euphrates n 1 2 @ #p 1 0 09297645  
+euphrates_river n 1 2 @ #p 1 0 09297645  
+eve n 1 4 @ ~ %p ; 1 1 09609918  
+event_planner n 1 2 @ ; 1 0 10087407  
+ex n 2 2 @ #m 2 0 10213850 10040258  
+ex-boyfriend n 1 1 @ 1 0 09891046  
+ex-husband n 1 1 @ 1 1 10213850  
+ex-wife n 1 1 @ 1 0 10040258  
+excuser n 1 2 @ + 1 0 10418998  
+expectorator n 1 3 @ ~ + 1 0 10656272  
+experimenter n 1 3 @ ~ + 1 1 09640726  
+expert n 1 2 @ ~ 1 1 09640897  
+explorer n 1 3 @ ~ + 1 1 10092496  
+exponent n 1 3 @ ~ + 1 0 09794206  
+extravert n 1 3 @ + ; 1 0 10094629  
+extrovert n 1 3 ! @ ; 1 0 10094629  
+eyeful n 1 1 @ 1 0 10094851  
+face n 1 7 @ ~ #m #p %p + ; 1 1 09641987  
+facilitator n 1 2 @ + 1 0 10095481  
+facing_pages n 1 3 @ ~ #p 1 0 06268608  
+faddist n 1 3 @ ~ + 1 0 10095687  
+fair_sex n 1 2 @ #m 1 0 08494645  
+faller n 1 3 @ ~ + 1 0 10096558  
+falls n 1 3 @ ~ #p 1 0 09498422  
+family n 1 6 @ ~ #m %m + ; 1 1 08014145  
+fancy_woman n 2 2 @ ~ 2 0 10505025 10343410  
+fashion_model n 1 2 @ ~ 1 0 10310901  
+fashion_plate n 1 2 @ ~ 1 0 10010564  
+fastener n 1 3 @ ~ + 1 0 10100106  
+father-figure n 1 1 @ 1 0 10101611  
+father_figure n 1 2 @ ~ 1 0 10101439  
+father_surrogate n 1 2 @ ~ 1 0 10101439  
+feature n 2 5 @ ~ #p + ; 2 2 05858316 05609513  
+fellow n 2 4 @ ~ #p + 2 2 10103127 09890770  
+female n 1 5 ! @ ~ %p + 1 1 09642198  
+female_person n 1 3 @ ~ %p 1 0 09642198  
+femme_fatale n 1 1 @ 1 0 10075218  
+fiduciary n 1 3 @ ~ + 1 0 10105843  
+fighter n 1 4 @ ~ + ; 1 1 09958771  
+figure n 1 6 ! @ ~ #p + - 1 1 05224424  
+fille n 1 2 @ ~ 1 0 10149362  
+first-rater n 1 1 @ 1 0 10113165  
+fish n 1 6 @ ~ #m %p + ; 1 1 09773123  
+flake n 2 6 @ ~ #s #p %s + 2 0 11529484 10062653  
+flattop n 1 2 @ %p 1 0 02690031  
+fleer n 1 2 @ + 1 0 10134739  
+flesh n 1 5 @ ~ #p %s + 1 1 05224424  
+flint n 1 4 @ ~ #p + 1 1 09304451  
+flint_river n 1 2 @ #p 1 0 09304451  
+flirt n 1 2 @ + 1 0 09984664  
+flodden n 1 3 @ #p ; 1 0 08904740  
+flow n 4 3 @ ~ + 4 4 07420493 00330053 14029377 08478606  
+flow_of_air n 1 1 @ 1 0 07421201  
+flowage n 1 2 @ + 1 0 09305440  
+flower_girl n 1 2 @ #m 1 0 10117611  
+flowing n 1 3 @ ~ + 1 1 07420493  
+fluid n 1 3 @ ~ + 1 1 14964038  
+flush n 1 3 @ ~ + 1 1 07454170  
+flux n 1 4 @ ~ + ; 1 1 07422570  
+fluxion n 1 2 @ + 1 0 07422570  
+folder n 1 3 @ ~ + 1 0 06425532  
+folio n 1 3 @ ~ #p 1 0 03382091  
+follower n 1 4 ! @ ~ + 1 1 10119144  
+foot_soldier n 1 2 @ ~ 1 1 10689430  
+foothill n 1 1 @ 1 0 09306311  
+fop n 1 2 @ ~ 1 0 10010564  
+ford n 1 4 @ ~ #p + 1 0 09306529  
+fore_edge n 1 2 @ #p 1 0 03387379  
+foredge n 1 2 @ #p 1 0 03387379  
+forerunner n 1 2 @ ~ 1 1 09650305  
+forgiver n 1 2 @ + 1 0 10418998  
+form n 2 8 @ ~ #m #p %p = + ; 2 2 05847533 05224424  
+format n 1 5 @ ~ #p + ; 1 0 04684742  
+formulary n 1 2 @ ; 1 0 06423526  
+forth n 1 2 @ #p 1 0 09307339  
+forth_river n 1 2 @ #p 1 0 09307339  
+fountain n 1 2 @ ~ 1 1 03392772  
+fox_river n 1 2 @ #p 1 0 09308034  
+frame n 1 6 @ ~ #p %p + ; 1 1 05224424  
+free_agent n 1 3 @ ~ ; 1 0 10129431  
+free_spirit n 1 2 @ ~ 1 0 10129431  
+freewheeler n 1 3 @ ~ + 1 1 10129431  
+fresh_water n 1 3 ! @ ~ 1 0 15033893  
+freshet n 1 1 @ 1 0 07421737  
+freshwater n 1 2 @ ~ 1 0 15033893  
+friend n 2 5 ! @ ~ #m + 2 2 10132360 09783207  
+frontage n 1 4 @ ~ + ; 1 1 05131200  
+frost_mist n 1 3 @ #p %s 1 0 11529795  
+frost_snow n 1 3 @ #p %s 1 0 11529795  
+fugitive n 1 2 @ ~ 1 1 10134739  
+gainer n 2 2 @ + 2 0 10137396 10137168  
+gallant n 1 3 @ ~ + 1 1 10010564  
+galoot n 1 1 @ 1 0 10137958  
+gambler n 1 3 @ ~ + 1 1 10138501  
+gan_jiang n 1 2 @ #p 1 0 09309749  
+ganges n 1 2 @ #p 1 0 09309536  
+ganges_river n 1 2 @ #p 1 0 09309536  
+garonne n 1 2 @ #p 1 0 09310030  
+garonne_river n 1 2 @ #p 1 0 09310030  
+gatekeeper n 1 2 @ ~ 1 0 10141785  
+gatherer n 1 4 @ ~ + ; 1 0 10141957  
+gay n 1 3 @ ~ + 1 0 10202544  
+geek n 1 2 @ ~ 1 0 10062653  
+geezer n 1 3 @ + ; 1 0 10143248  
+geisha n 1 1 @ 1 0 10142395  
+geisha_girl n 1 1 @ 1 0 10142395  
+gem n 1 3 @ ~ #p 1 1 10241326  
+gemini n 1 4 @ #p %m ; 1 0 09771850  
+gentile n 1 3 @ ~ + 1 0 09698566  
+gentleman n 1 3 @ ~ + 1 1 10146810  
+gentlewoman n 1 2 @ ~ 1 0 10008828  
+gift n 1 3 @ ~ + 1 1 01088005  
+gila n 1 2 @ #p 1 0 09311852  
+gila_river n 1 2 @ #p 1 0 09311852  
+gipsy n 1 2 @ ~ 1 0 09642482  
+girl n 3 4 ! @ ~ + 3 3 10149362 10150206 10149967  
+girl_friday n 1 1 @ 1 0 10150104  
+girlfriend n 2 1 @ 2 2 10150397 10150206  
+giver n 1 3 @ ~ + 1 1 10045455  
+giving n 2 3 @ ~ + 2 1 01088005 00091599  
+goat n 1 5 @ ~ #m %p ; 1 1 09772829  
+gold_digger n 1 2 @ ~ 1 0 10155803  
+golden_boy n 1 1 @ 1 0 10809055  
+golgotha n 1 2 @ #p 1 0 08814071  
+good_guy n 1 2 ! @ 1 1 10157889  
+good_person n 1 3 ! @ ~ 1 1 10158287  
+grand_river n 1 2 @ #p 1 0 09314091  
+granter n 1 4 ! @ ~ + 1 0 10163245  
+graphics n 1 3 @ ~ #p 1 0 07011408  
+grass_widow n 1 2 @ ~ 1 0 10040091  
+grass_widower n 1 1 @ 1 0 10163858  
+gravida n 1 2 @ ~ 1 0 10164358  
+graybeard n 1 2 @ ~ 1 1 10395205  
+green n 1 5 @ ~ #m #p + 1 1 09316972  
+green_river n 1 2 @ #p 1 0 09316972  
+greeter n 1 2 @ + 1 0 10166447  
+greybeard n 1 2 @ ~ 1 0 10395205  
+grinner n 1 2 @ + 1 0 10166782  
+groaner n 1 2 @ + 1 0 10167139  
+ground_water n 1 1 @ 1 1 14871673  
+grownup n 1 4 @ ~ %p + 1 1 09628463  
+grume n 1 2 @ + 1 0 14963801  
+grunter n 1 6 @ ~ #m %s %p + 1 0 10168956  
+guesser n 1 2 @ + 1 0 10170314  
+guinea_pig n 1 1 @ 1 0 10688105  
+gulf n 1 3 @ ~ #p 1 1 09319027  
+gush n 1 3 @ ~ + 1 0 07454170  
+guy n 1 4 @ #p + ; 1 1 10172934  
+gypsy n 1 2 @ ~ 1 0 09642482  
+h n 1 6 @ ~ #m #s %p ; 1 0 14664612  
+h2o n 1 4 @ ~ #s %s 1 0 14869913  
+habitant n 1 2 @ ~ 1 0 09643248  
+ham n 1 4 @ ~ + ; 1 1 10177815  
+hammock n 1 2 @ ~ 1 0 09349568  
+handicapped_person n 1 2 @ ~ 1 0 10178349  
+hard_water n 1 2 ! @ 1 0 14929573  
+hardback n 1 2 @ + 1 0 03497492  
+hardcover n 1 2 @ + 1 0 03497492  
+harlot n 1 2 @ ~ 1 0 10505025  
+hatchet_man n 1 1 @ 1 0 10181460  
+hater n 1 3 @ ~ + 1 1 10181787  
+have n 1 3 @ ~ + 1 0 10548806  
+he-man n 1 1 @ 1 0 10685026  
+headstream n 1 2 @ ~ 1 0 09325033  
+hebrew n 1 5 @ ~ #m + - 1 1 09700747  
+heilong n 1 2 @ #p 1 0 09218981  
+heilong_jiang n 1 2 @ #p 1 0 09218981  
+help n 1 3 @ ~ + 1 1 09835195  
+helper n 1 3 @ ~ + 1 1 09835195  
+heroine n 1 2 @ ~ 1 1 10193081  
+herr n 1 2 @ ; 1 0 10193442  
+heterosexual n 1 2 @ + 1 0 10193566  
+heterosexual_person n 1 1 @ 1 0 10193566  
+high_sea n 1 3 ! @ #p 1 1 09325710  
+hill n 1 6 @ ~ #p %p + ; 1 1 09325914  
+hillock n 1 2 @ ~ 1 1 09349568  
+hillside n 1 3 @ ~ #p 1 1 09326434  
+holding n 1 3 @ ~ + 1 1 13265007  
+holy_water n 1 1 @ 1 0 14870687  
+hombre n 1 1 @ 1 0 10172934  
+homo n 1 5 @ ~ #m %p - 1 0 10202544  
+homophile n 1 2 @ ~ 1 0 10202544  
+homosexual n 1 3 @ ~ + 1 1 10202544  
+homunculus n 1 1 @ 1 0 10202776  
+hooray_henry n 1 2 @ ; 1 0 10204441  
+hope n 1 4 ! @ ~ + 1 1 10204565  
+hoper n 1 2 @ + 1 0 10204767  
+houri n 1 2 @ ; 1 0 10388227  
+housatonic n 1 2 @ #p 1 0 09328937  
+housatonic_river n 1 2 @ #p 1 0 09328937  
+housefather n 1 1 @ 1 0 10207988  
+huang_he n 1 2 @ #p 1 0 09329163  
+huddler n 1 3 @ #m + 1 0 10210364  
+hudson n 1 2 @ #p 1 1 09329746  
+hudson_river n 1 2 @ #p 1 1 09329746  
+hugger n 1 2 @ + 1 0 10210620  
+human_body n 1 3 @ ~ #p 1 1 05224424  
+hummock n 1 2 @ ~ 1 0 09349568  
+hunk n 1 2 @ ~ 1 0 10212458  
+hwang_ho n 1 2 @ #p 1 0 09329163  
+hydrogen n 1 4 @ ~ #s + 1 1 14664612  
+hydrosphere n 1 3 @ #p %p 1 0 09330808  
+ice n 1 8 @ ~ #s #p %s %p + ; 1 1 14939335  
+ice_crystal n 1 3 @ #p %s 1 0 11529795  
+ice_needle n 1 3 @ #p %s 1 0 11529795  
+ijssel n 1 2 @ #p 1 0 09332572  
+ijssel_river n 1 2 @ #p 1 0 09332572  
+illinois_river n 1 2 @ #p 1 0 09333220  
+image n 1 5 @ ~ + ; - 1 1 10046971  
+imitator n 1 3 @ ~ + 1 0 09983941  
+immune n 1 2 @ ~ 1 0 10219402  
+impression n 1 4 @ ~ + ; 1 1 06602491  
+inamorata n 1 1 @ 1 0 10221704  
+inamorato n 1 1 @ 1 0 10221844  
+indigen n 1 2 @ ~ 1 0 09643964  
+indigene n 1 2 @ ~ 1 0 09643964  
+indigirka n 1 2 @ #p 1 0 09334616  
+indigirka_river n 1 2 @ #p 1 0 09334616  
+individual n 1 5 @ ~ #m %p + 1 1 00007846  
+individualist n 1 3 @ ~ + 1 1 09642994  
+indus n 1 2 @ #p 1 0 09335137  
+indus_river n 1 2 @ #p 1 0 09335137  
+indweller n 1 3 @ ~ + 1 0 09643248  
+inexperienced_person n 1 2 @ ~ 1 1 09644529  
+inhabitant n 1 3 @ ~ + 1 1 09643248  
+ink n 1 3 @ ~ + 1 1 14941786  
+inlet n 1 3 @ ~ #p 1 1 09336622  
+innocent n 1 2 @ ~ 1 0 09644529  
+instrument n 1 4 @ ~ + ; 1 1 10229217  
+insured n 1 1 @ 1 0 10229489  
+insured_person n 1 1 @ 1 0 10229489  
+intellect n 1 4 @ ~ = + 1 1 09644715  
+intellectual n 1 2 @ ~ 1 1 09644715  
+international_waters n 1 3 ! @ #p 1 0 09325710  
+interpreter n 1 4 @ ~ + ; 1 1 10232450  
+introvert n 1 4 ! @ + ; 1 0 10233099  
+iron_man n 1 2 @ ; 1 0 10236230  
+ironman n 1 2 @ ; 1 0 10236230  
+ironside n 1 1 @ 1 0 10236509  
+irrawaddy n 1 1 @ 1 0 09338776  
+irrawaddy_river n 1 1 @ 1 0 09338776  
+irtish n 1 2 @ #p 1 0 09338972  
+irtish_river n 1 2 @ #p 1 0 09338972  
+irtysh n 1 2 @ #p 1 0 09338972  
+irtysh_river n 1 2 @ #p 1 0 09338972  
+isere n 1 2 @ #p 1 0 09339218  
+isere_river n 1 2 @ #p 1 0 09339218  
+israelite n 1 3 @ ~ #m 1 0 09700747  
+james n 2 4 @ #m #p ; 2 0 09344086 09343891  
+james_river n 2 2 @ #p 2 0 09344086 09343891  
+japheth n 1 2 @ ; 1 0 10239448  
+jat n 1 1 @ 1 0 10239549  
+jet n 1 4 @ ~ %p + 1 1 03392772  
+jew n 1 4 @ ~ #m + 1 1 09700747  
+jewel n 1 3 @ ~ + 1 1 10241326  
+jezebel n 1 1 @ 1 0 10241840  
+jilt n 1 2 @ + 1 0 10241929  
+jordan n 1 7 @ #m #p %m %p + - 1 0 09344807  
+jordan_river n 1 2 @ #p 1 0 09344807  
+journal n 1 2 @ ~ 1 1 03607775  
+jumper n 1 4 @ ~ %p ; 1 0 10246663  
+junior n 1 2 @ + 1 1 10246936  
+juvenile n 1 5 ! @ ~ %p + 1 0 09645219  
+juvenile_person n 1 3 @ ~ %p 1 0 09645219  
+kan_river n 1 2 @ #p 1 0 09309749  
+kanawha n 1 2 @ #p 1 0 09345991  
+kanawha_river n 1 2 @ #p 1 0 09345991  
+kansas n 1 3 @ #p %p 1 1 09346376  
+kansas_river n 1 2 @ #p 1 0 09346376  
+kasai n 1 2 @ #p 1 0 09347380  
+kasai_river n 1 2 @ #p 1 0 09347380  
+kaw_river n 1 2 @ #p 1 0 09346376  
+kept_woman n 1 2 @ ~ 1 0 10343410  
+killer n 1 4 @ ~ #m + 1 1 10250784  
+kind n 1 2 @ ~ 1 1 05847533  
+kink n 1 3 @ + ; 1 0 10256539  
+kissimmee n 1 2 @ #p 1 0 09349045  
+kissimmee_river n 1 2 @ #p 1 0 09349045  
+klamath n 1 2 @ #p 1 0 09349373  
+klamath_river n 1 2 @ #p 1 0 09349373  
+kneeler n 1 2 @ + 1 0 10257969  
+knocker n 1 6 @ ~ #p %p + ; 1 0 10259458  
+knockout n 1 3 @ ~ + 1 0 10633512  
+knoll n 1 2 @ ~ 1 1 09349568  
+knower n 1 2 @ + 1 0 10259779  
+kook n 1 2 @ + 1 0 10260211  
+kura n 1 2 @ #p 1 0 09351054  
+kura_river n 1 2 @ #p 1 0 09351054  
+labor_coach n 1 1 @ 1 0 10260721  
+lady n 2 5 ! @ ~ #m ; 2 2 10262834 10008828  
+lady_friend n 1 1 @ 1 0 10150206  
+lady_of_pleasure n 1 2 @ ~ 1 0 10505025  
+lake n 1 4 @ ~ %p - 1 1 09351810  
+large_person n 1 2 @ ~ 1 0 10266741  
+latin n 1 4 @ ~ + - 1 1 10267577  
+laugher n 1 3 @ ~ + 1 0 10268573  
+leader n 1 4 ! @ ~ + 1 1 09646208  
+leaflet n 1 4 @ ~ #p + 1 1 06425532  
+learner n 1 3 @ ~ + 1 1 10271476  
+left-hander n 1 1 @ 1 1 10272819  
+lefty n 1 1 @ 1 1 10272819  
+lehigh_river n 1 2 @ #p 1 0 09360437  
+lena n 1 2 @ #p 1 0 09360592  
+lena_river n 1 2 @ #p 1 0 09360592  
+leo n 1 4 @ #p %m ; 1 0 09772126  
+lethe n 1 3 @ #p ; 1 0 09361359  
+libra n 1 3 @ #p ; 1 0 09772396  
+lieutenant n 1 4 @ ~ + ; 1 1 10024942  
+life n 1 5 @ ~ %p = + 1 1 10280403  
+lightning_rod n 1 1 @ 1 0 10281880  
+limewater n 1 2 @ #s 1 0 14961231  
+limpopo n 1 2 @ #p 1 0 09362418  
+line n 1 6 @ ~ #p %p + ; 1 1 08393816  
+lineament n 1 3 @ ~ #p 1 0 05609513  
+linguist n 1 3 @ ~ + 1 1 10283916  
+lion n 1 6 @ ~ #m %p + ; 1 1 09772126  
+liquid n 2 3 @ ~ + 2 2 14964524 14964238  
+liquor n 1 2 @ ~ 1 1 14965368  
+literate n 1 2 @ ~ 1 0 10286025  
+literate_person n 1 2 @ ~ 1 0 10286025  
+little_bighorn n 1 3 @ #p ; 1 0 09363109  
+little_bighorn_river n 1 2 @ #p 1 0 09363109  
+little_horn n 1 2 @ #p 1 0 09363109  
+little_missouri n 1 2 @ #p 1 0 09363550  
+little_missouri_river n 1 2 @ #p 1 0 09363550  
+little_sioux_river n 1 2 @ #p 1 0 09363841  
+little_wabash n 1 2 @ #p 1 0 09364051  
+little_wabash_river n 1 2 @ #p 1 0 09364051  
+liver n 1 5 @ ~ #p %p + 1 1 10287996  
+locomotion n 2 3 @ ~ + 2 0 04780835 00283971  
+loire n 1 2 @ #p 1 0 09365843  
+loire_river n 1 2 @ #p 1 0 09365843  
+longer n 1 2 @ + 1 0 10290575  
+look-alike n 1 2 @ ~ 1 0 10046971  
+looker n 1 3 @ ~ + 1 0 10633512  
+loose_cannon n 1 1 @ 1 0 10291222  
+loved_one n 1 1 @ 1 0 09646098  
+lover n 1 4 @ ~ #m + 1 1 09645472  
+lower_tunguska n 1 2 @ #p 1 0 09486492  
+lulu n 1 1 @ 1 0 10633512  
+ma'am n 1 2 @ ~ 1 1 10008828  
+machine n 1 5 @ ~ %p + - 1 1 10298363  
+macho-man n 1 1 @ 1 0 10685026  
+mackenzie n 1 2 @ #p 1 0 09367760  
+mackenzie_river n 1 2 @ #p 1 0 09367760  
+madam n 1 2 @ ~ 1 1 10008828  
+madeira n 1 3 @ ~ #p 1 0 09368024  
+madeira_river n 1 2 @ #p 1 0 09368024  
+maenad n 2 2 @ ; 2 0 10299731 09806831  
+mag n 1 3 @ ~ %p 1 0 06607555  
+magazine n 1 4 @ ~ #p %p 1 1 06607555  
+magdalena n 1 2 @ #p 1 0 09368162  
+magdalena_river n 1 2 @ #p 1 0 09368162  
+magician n 1 3 @ ~ + 1 1 10645222  
+maid_of_honor n 1 2 @ #m 1 0 09894328  
+mailer n 1 3 @ ~ + 1 0 10302617  
+maimer n 1 2 @ + 1 0 10361686  
+main n 1 4 @ ~ #p %p 1 0 09368829  
+malcontent n 1 3 @ ~ + 1 0 10304662  
+male n 1 6 ! @ ~ #p %p + 1 1 09647338  
+male_person n 1 3 @ ~ %p 1 0 09647338  
+man n 2 10 ! @ ~ #m #p %m %p + ; - 2 2 10306910 10308700  
+man's_body n 1 3 @ #p %p 1 0 05227580  
+man_friday n 1 1 @ 1 0 10550684  
+man_jack n 1 1 @ 1 0 10311391  
+manakin n 1 3 @ ~ #m 1 0 10310901  
+mangler n 1 2 @ + 1 0 10361686  
+manikin n 1 2 @ ~ 1 0 10310901  
+manipulator n 1 3 @ ~ + 1 0 10310771  
+mannequin n 1 2 @ ~ 1 0 10310901  
+mannikin n 1 2 @ ~ 1 0 10310901  
+mantrap n 1 1 @ 1 1 10633512  
+married n 1 2 @ + 1 0 10315480  
+married_woman n 1 2 @ ~ 1 0 10800308  
+masturbator n 1 3 @ ~ + 1 0 10319367  
+match n 1 5 @ ~ #m %p + 1 1 09649426  
+materfamilias n 1 1 @ 1 0 10322243  
+material_body n 1 3 @ ~ #p 1 0 05224424  
+matriarch n 2 1 @ 2 1 10322243 10322367  
+matron n 1 2 @ + 1 1 10322853  
+meander n 1 4 @ ~ #p + 1 0 09372545  
+measurer n 1 3 @ ~ + 1 0 10324050  
+mediocrity n 1 2 @ + 1 1 10588623  
+medium n 1 5 @ ~ + ; - 1 1 14924039  
+meeting n 1 4 @ ~ + ; 1 1 08560197  
+mekong n 1 2 @ #p 1 1 09373421  
+mekong_river n 1 2 @ #p 1 1 09373421  
+meltwater n 1 1 @ 1 0 14974194  
+merrimack n 1 2 @ #p 1 0 09374544  
+merrimack_river n 1 2 @ #p 1 0 09374544  
+mesomorph n 1 2 @ + 1 0 10330570  
+mestiza n 1 2 @ ; 1 0 10331328  
+mestizo n 1 2 @ ; 1 0 10331490  
+methuselah n 1 3 @ ~ ; 1 0 10395205  
+meuse n 1 4 @ #p %p ; 1 0 09376334  
+meuse_river n 1 4 @ #p %p ; 1 0 09376334  
+mid-water n 1 1 @ 1 0 09377505  
+middle-aged_man n 1 2 @ ~ 1 0 10333712  
+middlebrow n 1 2 @ ; 1 0 10333840  
+midstream n 1 2 @ #p 1 0 09377408  
+milk n 1 5 @ ~ #p %s + 1 1 09377677  
+milk_river n 1 2 @ #p 1 0 09377677  
+minx n 1 1 @ 1 0 09984664  
+miracle_man n 1 1 @ 1 0 10341412  
+miracle_worker n 1 1 @ 1 0 10341412  
+misfit n 1 2 @ ~ 1 0 10341896  
+misogamist n 1 2 @ + 1 0 10342204  
+miss n 1 3 @ ~ + 1 1 10149362  
+mississippi n 1 5 @ #m #p %p - 1 1 09378977  
+mississippi_river n 1 2 @ #p 1 1 09378977  
+missouri n 1 4 @ #m #p %p 1 1 09379217  
+missouri_river n 1 2 @ #p 1 0 09379217  
+missy n 1 2 @ ~ 1 0 10149362  
+mistress n 1 2 @ ~ 1 1 10343410  
+mixed-blood n 1 2 @ ~ 1 0 10343657  
+mobile n 1 3 ! @ #p 1 0 09379536  
+mobile_river n 1 2 @ #p 1 0 09379536  
+model n 2 3 @ ~ + 2 2 10344226 10310901  
+modern n 1 3 ! @ + 1 1 10346217  
+modifier n 1 4 @ ~ #p + 1 1 09632901  
+mohawk_river n 1 2 @ #p 1 0 09379826  
+mollycoddler n 1 2 @ + 1 0 10415089  
+money_dealer n 1 2 @ ~ 1 0 09648150  
+money_handler n 1 2 @ ~ 1 0 09648150  
+monitrice n 1 1 @ 1 0 10260721  
+monolingual n 1 1 @ 1 0 10348654  
+monongahela n 1 2 @ #p 1 0 09380477  
+monongahela_river n 1 2 @ #p 1 0 09380477  
+monsieur n 1 1 @ 1 1 10349388  
+moreau_river n 1 2 @ #p 1 0 09382047  
+mortal n 1 5 @ ~ #m %p + 1 1 00007846  
+mother_figure n 1 1 @ 1 0 10352757  
+mother_hen n 1 1 @ 1 0 10352878  
+motion n 2 5 ! @ ~ = + 2 2 07324399 00280679  
+motive_power n 1 1 @ 1 0 04780835  
+motivity n 1 2 @ + 1 0 04780835  
+mound n 1 6 @ ~ #m #p + ; 1 1 09349568  
+mount n 1 5 @ ~ #p %p + 1 1 09382700  
+mountain n 1 4 @ ~ %p + 1 1 09382700  
+mountain_climber n 1 2 @ ~ 1 0 10354280  
+mountain_peak n 1 3 @ ~ #p 1 0 09383019  
+mountaineer n 1 3 @ ~ + 1 0 10354280  
+mountainside n 1 2 @ #p 1 1 09384414  
+mouse n 1 4 @ ~ %p + 1 1 10355276  
+move n 1 4 @ ~ + ; 1 1 00280679  
+movement n 2 5 @ ~ #p + ; 2 2 00280679 07324399  
+mover n 1 4 @ ~ + ; 1 1 10355644  
+mover_and_shaker n 1 1 @ 1 0 10605384  
+muliebrity n 1 2 @ ~ 1 0 14449119  
+murray n 1 2 @ #p 1 0 09386317  
+murray_river n 1 2 @ #p 1 0 09386317  
+murrumbidgee n 1 2 @ #p 1 0 09386517  
+murrumbidgee_river n 1 2 @ #p 1 0 09386517  
+muscle-builder n 1 1 @ 1 0 09882251  
+muscle_builder n 1 1 @ 1 0 09882251  
+musclebuilder n 1 1 @ 1 0 09882251  
+muscleman n 1 1 @ 1 1 09882251  
+mutilator n 1 2 @ + 1 0 10361686  
+namer n 1 2 @ + 1 0 10364505  
+namesake n 1 1 @ 1 1 10364653  
+namoi n 1 2 @ #p 1 0 09387675  
+namoi_river n 1 2 @ #p 1 0 09387675  
+nan n 1 4 @ ~ #p ; 1 0 09387851  
+nan_river n 1 2 @ #p 1 0 09387851  
+nanny n 1 3 @ ~ %p 1 0 10364831  
+national n 1 4 @ ~ #m + 1 1 09648571  
+native n 2 3 @ ~ + 2 1 09643964 09644402  
+native_american n 1 3 @ ~ - 1 0 09664887  
+natural_elevation n 1 4 ! @ ~ %p 1 0 09389214  
+neckar n 1 2 @ #p 1 0 09390724  
+neckar_river n 1 2 @ #p 1 0 09390724  
+necromancer n 1 3 @ ~ + 1 0 10645222  
+needer n 1 1 @ 1 0 10785693  
+neglecter n 1 2 @ + 1 0 10371356  
+negro n 1 3 @ ~ ; 1 1 09659490  
+negroid n 1 3 @ ~ ; 1 0 09659490  
+neighbor n 1 2 @ + 1 1 10372030  
+neighbour n 1 2 @ + 1 0 10372030  
+neosho n 1 2 @ #p 1 0 09391376  
+neosho_river n 1 2 @ #p 1 0 09391376  
+neutral n 1 3 @ ~ + 1 0 10374841  
+neva n 1 2 @ #p 1 0 09392755  
+neva_river n 1 2 @ #p 1 0 09392755  
+new_edition n 1 1 @ 1 1 06281194  
+new_river n 1 2 @ #p 1 0 09393079  
+niagara n 1 3 @ #p %p 1 0 09393463  
+niagara_river n 1 3 @ #p %p 1 0 09393463  
+niger n 1 5 @ #p %m %p + 1 0 09394062  
+niger_river n 1 2 @ #p 1 0 09394062  
+nile n 1 3 @ #p + 1 0 09394271  
+nile_river n 1 2 @ #p 1 0 09394271  
+nilgiri_hills n 1 2 @ #p 1 0 08925942  
+niobrara n 1 2 @ #p 1 0 09394727  
+niobrara_river n 1 2 @ #p 1 0 09394727  
+noncompliant n 1 2 @ ~ 1 0 09853385  
+nondescript n 1 2 @ + 1 0 10380759  
+nondrinker n 1 3 ! @ ~ 1 0 09777275  
+nonmember n 1 2 ! @ 1 0 10327733  
+nonparticipant n 1 1 @ 1 0 10380995  
+nonpartisan n 1 3 ! @ + 1 0 10381089  
+nonpartizan n 1 1 @ 1 0 10381089  
+nonperson n 1 1 @ 1 0 10381224  
+nonreligious_person n 1 3 ! @ ~ 1 0 09648959  
+nonresident n 1 2 ! @ 1 0 10381702  
+nonsmoker n 1 2 ! @ 1 0 10382018  
+nontextual_matter n 1 3 @ ~ #p 1 0 07011408  
+nonworker n 1 3 ! @ ~ 1 0 09649219  
+north_platte n 1 2 @ #p 1 0 09396627  
+north_platte_river n 1 2 @ #p 1 0 09396627  
+notebook n 1 2 @ ~ 1 1 06427062  
+novel n 1 3 @ ~ + 1 1 03838605  
+nude n 1 3 @ ~ + 1 1 10385098  
+nude_person n 1 2 @ ~ 1 0 10385098  
+nullipara n 1 2 @ ; 1 0 10385844  
+nurse n 1 4 @ ~ #m + 1 1 10364831  
+nursemaid n 1 2 @ ~ 1 0 10364831  
+nurser n 1 2 @ + 1 0 10387108  
+nymph n 1 3 @ ~ ; 1 1 10388227  
+nymphet n 1 1 @ 1 0 10388323  
+o n 1 4 @ ~ #m #s 1 1 14672278  
+ob n 1 4 @ ~ #p - 1 0 09398803  
+ob_river n 1 2 @ #p 1 0 09398803  
+objector n 1 3 @ ~ + 1 0 10037746  
+observer n 1 3 @ ~ + 1 1 09649777  
+occultist n 1 3 @ ~ + 1 0 10390080  
+ocean n 1 5 @ ~ #p + - 1 1 09399110  
+odd_fellow n 1 1 @ 1 0 10260211  
+odd_fish n 1 1 @ 1 0 10260211  
+odd_man_out n 1 1 @ 1 0 10260211  
+oddball n 1 2 @ ~ 1 0 10062653  
+oder n 1 2 @ #p 1 0 09399891  
+oder_river n 1 2 @ #p 1 0 09399891  
+offing n 1 2 @ #p 1 0 09400037  
+ohio n 1 3 @ #p %p 1 1 09400227  
+ohio_river n 1 2 @ #p 1 0 09400227  
+old_boy n 1 1 @ 1 1 10394913  
+old_man n 2 5 @ ~ #m #s ; 2 2 10395205 10394913  
+old_woman n 1 3 @ ~ #m 1 1 10396720  
+onanist n 1 3 @ ~ + 1 0 10319367  
+ooze n 1 3 @ ~ + 1 0 07446719  
+oozing n 1 3 @ ~ + 1 0 07446719  
+opener n 1 3 @ ~ + 1 1 10757088  
+opponent n 1 3 @ ~ + 1 1 09792668  
+opposer n 1 3 @ ~ + 1 0 09792668  
+optimist n 1 4 ! @ ~ + 1 0 10399825  
+orange n 1 7 @ ~ #m #p %s %p + 1 1 09402617  
+orange_river n 1 2 @ #p 1 0 09402617  
+order_book n 1 1 @ 1 0 03859108  
+organism n 1 6 @ ~ %s %p + - 1 1 00004475  
+orinoco n 1 2 @ #p 1 1 09402850  
+orinoco_river n 1 2 @ #p 1 0 09402850  
+orphan n 1 2 @ + 1 1 10404195  
+osage n 1 2 @ #p 1 0 09403211  
+osage_river n 1 2 @ #p 1 0 09403211  
+ostrich n 1 2 @ #m 1 0 10405406  
+ottawa n 1 2 @ #p 1 0 09403500  
+ottawa_river n 1 2 @ #p 1 0 09403500  
+ouachita n 1 2 @ #p 1 0 09403729  
+ouachita_river n 1 2 @ #p 1 0 09403729  
+ouse n 1 2 @ #p 1 0 09403960  
+ouse_river n 1 2 @ #p 1 0 09403960  
+ouster n 1 4 @ ~ + ; 1 0 10405770  
+outaouais n 1 2 @ #p 1 0 09403500  
+outcaste n 1 2 @ + 1 0 10406214  
+outdoorsman n 1 2 @ ~ 1 0 10406317  
+outpouring n 2 2 @ ~ 2 0 07454170 07422377  
+overflow n 1 3 @ ~ + 1 1 07421872  
+overspill n 1 1 @ 1 0 07421872  
+owner n 1 4 @ ~ + ; 1 1 10409097  
+oxygen n 1 4 @ ~ #s + 1 1 14672278  
+palatine n 1 4 @ #p + ; 1 0 08815264  
+pamperer n 1 2 @ + 1 0 10415089  
+pamphlet n 1 3 @ ~ + 1 1 06425532  
+pansexual n 1 1 @ 1 0 10416161  
+paper-back_book n 1 2 @ ~ 1 0 03892129  
+paperback n 1 3 @ ~ + 1 1 03892129  
+paperback_book n 1 2 @ ~ 1 0 03892129  
+parana n 1 3 @ #p %p 1 0 09407814  
+parana_river n 1 3 @ #p %p 1 0 09407814  
+paraprofessional n 1 2 @ ~ 1 0 10418323  
+pardoner n 1 3 @ ~ + 1 0 10418998  
+parnahiba n 1 2 @ #p 1 0 09408309  
+parnaiba n 1 2 @ #p 1 0 09408309  
+partner n 1 4 @ ~ #m + 1 1 10422162  
+party n 1 5 @ ~ #m + ; 1 1 10422569  
+passer n 1 5 @ #m %m + ; 1 0 10424295  
+paterfamilias n 1 1 @ 1 0 10426510  
+patriarch n 1 3 @ ~ + 1 0 10426510  
+pawn n 1 3 @ + ; 1 0 10229217  
+peach n 1 5 @ #m #p %p + 1 0 10633512  
+pearl_river n 2 2 @ #p 2 0 09506470 09410773  
+pecos n 1 2 @ #p 1 0 09411014  
+pecos_river n 1 2 @ #p 1 0 09411014  
+pee_dee n 1 2 @ #p 1 0 09411211  
+pee_dee_river n 1 2 @ #p 1 0 09411211  
+peer n 1 4 @ ~ #m ; 1 1 09649426  
+pennine_chain n 1 2 @ #p 1 0 08814865  
+pennines n 1 2 @ #p 1 0 08814865  
+penobscot n 1 2 @ #p 1 0 09412494  
+penobscot_river n 1 2 @ #p 1 0 09412494  
+people n 1 6 @ ~ #m %m + ; 1 1 07958392  
+perceiver n 1 3 @ ~ + 1 0 09649777  
+percher n 1 3 @ #m + 1 0 09650205  
+percipient n 1 2 @ ~ 1 0 09649777  
+periodical n 1 3 @ ~ + 1 1 06605500  
+person n 1 5 @ ~ #m %p + 1 1 00007846  
+person_of_color n 1 3 @ ~ ; 1 0 09659294  
+person_of_colour n 1 3 @ ~ ; 1 0 09659294  
+persona_non_grata n 1 2 @ ~ 1 0 09654317  
+personage n 1 2 @ ~ 1 1 10437427  
+personality n 1 5 @ ~ #p %p + 1 1 04624919  
+personhood n 1 2 @ + 1 0 04626138  
+personification n 1 3 @ ~ + 1 1 10437846  
+perspiration n 1 4 @ ~ %s + 1 1 05413094  
+perspirer n 1 1 @ 1 0 10438480  
+peter_pan n 1 1 @ 1 0 10439530  
+pharmacopeia n 1 2 @ ; 1 0 06423526  
+philanderer n 1 3 @ ~ + 1 0 10808758  
+philosopher n 1 4 @ ~ + ; 1 1 10445710  
+phrase_book n 1 1 @ 1 0 06428095  
+physical_body n 1 3 @ ~ #p 1 0 05224424  
+physique n 1 3 @ ~ #p 1 1 05224424  
+picker n 1 2 @ + 1 0 10451389  
+picture_book n 1 2 @ ~ 1 1 03937889  
+piece_of_work n 1 2 @ ~ 1 0 04606723  
+ping n 1 3 @ #p + 1 0 09415400  
+ping_river n 1 2 @ #p 1 0 09415400  
+pisces n 1 5 @ #m #p %m ; 1 1 09773123  
+pisser n 1 3 @ ~ + 1 0 10455483  
+planner n 1 3 @ ~ + 1 1 10457939  
+platte n 1 2 @ #p 1 0 09418485  
+platte_river n 1 2 @ #p 1 0 09418485  
+playbook n 1 1 @ 1 0 06428241  
+player n 1 4 @ ~ #m + 1 1 10460154  
+po n 1 3 @ ~ #p 1 0 09419025  
+po_river n 1 2 @ #p 1 0 09419025  
+polyglot n 1 3 @ ~ + 1 0 10283916  
+polynya n 1 1 @ 1 0 09420143  
+ponce n 1 3 @ ~ ; 1 0 10472308  
+pool n 1 4 @ ~ %p + 1 1 09420482  
+pop-up n 1 2 @ ; 1 0 06424903  
+pop-up_book n 1 1 @ 1 0 06424903  
+poser n 1 3 @ ~ + 1 0 10344226  
+posseman n 1 2 @ #m 1 1 10475957  
+possessor n 1 3 @ ~ + 1 0 10409097  
+posturer n 1 1 @ 1 0 10477343  
+potable n 1 3 @ ~ + 1 0 07897775  
+potomac n 1 2 @ #p 1 0 09421092  
+potomac_river n 1 2 @ #p 1 0 09421092  
+poudrin n 1 3 @ #p %s 1 0 11529795  
+powder_monkey n 1 1 @ 1 0 10480846  
+powderer n 1 2 @ + 1 0 10480735  
+prayer_book n 1 2 @ ~ 1 0 06428589  
+prayerbook n 1 2 @ ~ 1 0 06428589  
+precursor n 1 3 @ ~ ; 1 0 09650305  
+presenter n 1 3 @ ~ + 1 0 10045455  
+preserver n 1 3 @ ~ + 1 0 10486484  
+prickteaser n 1 1 @ 1 0 09984664  
+primitive n 1 3 @ ~ + 1 0 09650650  
+primitive_person n 1 2 @ ~ 1 0 09650650  
+printing n 1 5 @ ~ + ; - 1 1 06602491  
+product n 1 4 @ ~ #p + 1 1 04014270  
+production n 1 5 @ ~ %p + ; 1 1 04014270  
+prompter n 1 3 @ ~ + 1 0 10501999  
+property n 1 3 @ ~ #p 1 1 13265007  
+proponent n 1 3 @ ~ + 1 1 09794206  
+propositus n 1 1 @ 1 0 10504324  
+prospect n 1 3 @ ~ + 1 1 09910201  
+prostitute n 1 3 @ ~ + 1 1 10505025  
+protester n 1 3 @ ~ + 1 0 10037746  
+public_relations_person n 1 2 @ ~ 1 0 10510550  
+publication n 1 5 @ ~ %p + - 1 1 06601855  
+puddle n 1 3 @ ~ + 1 0 09420482  
+pursuer n 1 3 @ ~ + 1 1 10514752  
+purus n 1 2 @ #p 1 0 09424215  
+purus_river n 1 2 @ #p 1 0 09424215  
+pussycat n 1 1 @ 1 0 10515560  
+pyroligneous_acid n 1 1 @ 1 0 14887477  
+quarter n 1 6 @ ~ #p %p + ; 1 1 10518284  
+queer_bird n 1 1 @ 1 0 10260211  
+queer_duck n 1 1 @ 1 0 10260211  
+quester n 1 3 @ ~ + 1 0 10595231  
+quitter n 1 3 @ ~ + 1 0 10521631  
+radical n 1 4 @ ~ #p ; 1 1 10523045  
+ram n 1 5 @ ~ %p + ; 1 1 09771577  
+rapid n 1 2 @ #p 1 0 09428274  
+rappahannock n 1 2 @ #p 1 0 09428393  
+rappahannock_river n 1 2 @ #p 1 0 09428393  
+rara_avis n 1 1 @ 1 0 10527285  
+rare_bird n 1 1 @ 1 0 10527285  
+ravisher n 1 2 @ + 1 0 10633512  
+read n 1 2 @ + 1 0 06602346  
+realist n 1 3 @ ~ + 1 1 10529198  
+reassignment n 1 3 @ ~ + 1 0 00733374  
+recess n 1 4 @ ~ #p + 1 0 09336622  
+recoverer n 1 3 @ ~ + 1 0 10542352  
+rectifier n 1 3 @ ~ + 1 1 10532575  
+red n 1 4 @ ~ #p + 1 1 09428827  
+red-header n 1 1 @ 1 0 10533416  
+red_river n 1 2 @ #p 1 1 09428827  
+redhead n 1 2 @ #m 1 0 10533416  
+redheader n 1 1 @ 1 1 10533416  
+reference n 2 4 @ ~ + ; 2 2 06429241 07273332  
+reference_book n 1 2 @ ~ 1 0 06429241  
+reference_work n 1 2 @ ~ 1 0 06429241  
+reflux n 1 3 @ ~ #p 1 0 07416747  
+registrant n 1 2 @ + 1 1 10536285  
+reissue n 1 2 @ + 1 1 06280961  
+relation n 1 6 @ ~ #m %p + ; 1 1 10255246  
+relative n 1 3 @ ~ #m 1 1 10255246  
+reliever n 1 3 @ ~ + 1 0 10537942  
+religious_person n 1 3 ! @ ~ 1 0 09651570  
+repeater n 1 4 @ ~ + ; 1 0 10541063  
+reprint n 1 2 @ + 1 1 06280961  
+reprinting n 1 2 @ + 1 0 06280961  
+republican n 1 4 @ #m #p + 1 1 09430510  
+republican_river n 1 2 @ #p 1 0 09430510  
+republication n 1 3 @ + ; 1 0 07273632  
+rescuer n 1 3 @ ~ + 1 0 10542352  
+resister n 1 3 @ ~ + 1 0 09792668  
+rester n 1 3 @ ~ + 1 0 10544566  
+restrainer n 1 3 @ ~ + 1 0 10544727  
+revenant n 1 1 @ 1 0 10546109  
+review_copy n 1 1 @ 1 0 06429649  
+rhein n 1 2 @ #p 1 0 09431418  
+rhine n 1 2 @ #p 1 0 09431418  
+rhine_river n 1 2 @ #p 1 0 09431418  
+rhone n 1 2 @ #p 1 0 09431855  
+rhone_river n 1 2 @ #p 1 0 09431855  
+rich_person n 1 2 @ ~ 1 0 10548806  
+right-hand_man n 1 1 @ 1 0 10550684  
+right-hander n 1 2 @ ; 1 1 10550534  
+right_hander n 1 1 @ 1 0 10550534  
+righthander n 1 1 @ 1 0 10550534  
+rill n 1 1 @ 1 0 09438816  
+rio_bravo n 1 2 @ #p 1 0 09433602  
+rio_grande n 1 2 @ #p 1 0 09433602  
+riser n 1 4 @ ~ #p + 1 0 10552133  
+river n 1 5 @ ~ #p %p - 1 1 09434308  
+river_acheron n 1 3 @ #p ; 1 0 09209606  
+river_adige n 1 2 @ #p 1 0 09210640  
+river_aire n 1 2 @ #p 1 0 09214585  
+river_arno n 1 2 @ #p 1 0 09229581  
+river_avon n 2 2 @ #p 2 0 09235058 09234851  
+river_cam n 1 2 @ #p 1 0 09254494  
+river_cocytus n 1 3 @ #p ; 1 0 09271630  
+river_kasai n 1 2 @ #p 1 0 09347380  
+river_lethe n 1 3 @ #p ; 1 0 09361359  
+river_severn n 1 2 @ #p 1 0 09453675  
+river_styx n 1 3 @ #p ; 1 0 09472922  
+river_thames n 1 2 @ #p 1 0 09480150  
+river_trent n 1 2 @ #p 1 0 09484645  
+river_tyne n 1 2 @ #p 1 0 09487935  
+rivulet n 1 1 @ 1 1 09438816  
+romanticist n 1 3 ! @ + 1 0 10599128  
+romper n 1 2 @ + 1 0 10557711  
+roundhead n 1 1 @ 1 0 10560213  
+ruhr n 1 2 @ #p 1 0 09440438  
+ruhr_river n 1 2 @ #p 1 0 09440438  
+ruler n 1 3 @ ~ + 1 1 10560786  
+run n 2 4 @ ~ + ; 2 2 09438816 07422377  
+runaway n 1 2 @ + 1 1 10134739  
+runnel n 1 1 @ 1 0 09438816  
+running_head n 1 3 @ ~ #p 1 0 06356501  
+running_headline n 1 3 @ ~ #p 1 0 06356501  
+runoff n 1 2 @ + 1 1 07421872  
+rush n 1 5 @ ~ #m + ; 1 1 07454840  
+rusher n 1 3 @ + ; 1 0 10563352  
+russian_river n 1 2 @ #p 1 0 09440937  
+saale n 1 2 @ #p 1 0 09441047  
+saale_river n 1 2 @ #p 1 0 09441047  
+sabine n 1 3 @ #m #p 1 1 09441209  
+sabine_river n 1 2 @ #p 1 0 09441209  
+sacramento_river n 1 2 @ #p 1 0 09441507  
+sagittarius n 1 5 @ #m #p %m ; 1 0 09772679  
+saint_francis n 1 3 @ #p ; 1 0 09442159  
+saint_francis_river n 1 2 @ #p 1 0 09442159  
+saint_john n 1 3 @ #p ; 1 0 09442414  
+saint_john_river n 1 2 @ #p 1 0 09442414  
+saint_johns n 1 2 @ #p 1 0 09442661  
+saint_johns_river n 1 2 @ #p 1 0 09442661  
+saint_lawrence n 1 3 @ #p ; 1 0 09442908  
+saint_lawrence_river n 1 2 @ #p 1 0 09442908  
+salmon n 1 5 @ ~ #m #p %p 1 1 09443301  
+salmon_river n 1 2 @ #p 1 0 09443301  
+saltwater n 1 4 ! @ ~ %s 1 1 15033414  
+saluter n 1 2 @ + 1 0 10166447  
+sambre n 1 2 @ #p 1 0 09444069  
+sambre_river n 1 2 @ #p 1 0 09444069  
+samson n 1 2 @ ; 1 0 09898168  
+san_joaquin_river n 1 2 @ #p 1 0 09445629  
+san_juan_hill n 1 2 @ #p 1 0 09445990  
+sao_francisco n 1 2 @ #p 1 0 09446495  
+saone n 1 2 @ #p 1 0 09446632  
+saone_river n 1 2 @ #p 1 0 09446632  
+savannah n 1 2 @ #p 1 1 09447743  
+savannah_river n 1 2 @ #p 1 0 09447743  
+saver n 1 3 @ ~ + 1 1 10542352  
+scheldt n 1 2 @ #p 1 0 09448713  
+scheldt_river n 1 2 @ #p 1 0 09448713  
+scholar n 1 3 @ ~ + 1 1 10271476  
+school_text n 1 2 @ ~ 1 1 06426015  
+schoolbook n 1 2 @ ~ 1 0 06426015  
+scientist n 1 3 @ ~ + 1 1 10580065  
+scorpio n 1 4 @ #p %m ; 1 0 09772535  
+scorpion n 1 3 @ #m ; 1 0 09772535  
+scourge n 1 2 @ + 1 1 10722264  
+scrag n 1 4 @ ~ #p + 1 0 10728446  
+scrapper n 1 3 @ ~ + 1 0 09958771  
+scratcher n 1 3 @ ~ + 1 0 10583139  
+sea n 1 4 @ ~ #p %p 1 1 09449666  
+seamount n 1 2 @ ~ 1 0 09450630  
+searcher n 1 3 @ ~ + 1 0 10595231  
+seawater n 1 3 @ ~ %s 1 1 15033414  
+second-rater n 1 1 @ 1 0 10588623  
+secretarial_assistant n 1 2 @ ~ 1 0 10589188  
+secretary n 1 3 @ ~ + 1 1 10589188  
+seeder n 1 2 @ + 1 0 10595038  
+seeker n 1 2 @ ~ 1 1 10595231  
+seepage n 1 3 @ ~ + 1 1 07446719  
+segregate n 1 1 @ 1 0 10595667  
+seine n 1 4 @ ~ #p + 1 0 09452656  
+seine_river n 1 2 @ #p 1 0 09452656  
+selector n 1 4 @ ~ %p + 1 0 10451389  
+self n 1 2 @ ~ 1 1 09628155  
+senhor n 1 1 @ 1 0 10598404  
+sensualist n 1 3 @ ~ + 1 0 09652434  
+sentimentalist n 1 2 @ + 1 1 10599128  
+seth n 1 2 @ ; 1 0 09610584  
+seven_hills_of_rome n 1 3 @ #p %p 1 0 08815106  
+seven_seas n 1 1 @ 1 0 09453519  
+severn n 2 2 @ #p 2 0 09453894 09453675  
+severn_river n 2 2 @ #p 2 0 09453894 09453675  
+sex_object n 1 1 @ 1 0 10604305  
+sex_symbol n 1 1 @ 1 0 10604529  
+seyhan n 1 2 @ #p 1 0 09454037  
+seyhan_river n 1 2 @ #p 1 0 09454037  
+shaker n 1 4 @ ~ #m + 1 0 10605384  
+shallow n 1 2 @ + 1 0 09456038  
+shape n 1 5 @ ~ #p = + 1 1 05224424  
+shari n 1 2 @ #p 1 0 09454313  
+shari_river n 1 2 @ #p 1 0 09454313  
+shaver n 1 4 @ ~ %p + 1 0 10606311  
+sheep_dip n 1 1 @ 1 0 15063746  
+sheik n 1 3 @ ~ + 1 0 10010564  
+shem n 1 2 @ ; 1 0 10608268  
+shenandoah_river n 1 2 @ #p 1 0 09454648  
+shiksa n 1 2 @ ; 1 0 10608651  
+shikse n 1 2 @ ; 1 0 10608651  
+shitter n 1 2 @ + 1 0 10019527  
+shoal n 1 3 @ %m + 1 0 09456038  
+shore n 1 5 @ ~ %p + ; 1 1 09456346  
+showman n 1 2 @ ~ 1 0 10613451  
+sidesman n 1 2 @ ; 1 0 10615756  
+signatory n 1 2 @ ~ 1 0 10616642  
+signature n 1 5 @ ~ #p %p + 1 1 06266618  
+signer n 1 3 @ ~ + 1 0 10616642  
+significant_other n 1 2 @ ~ 1 0 10044087  
+signior n 1 1 @ 1 0 10617153  
+signor n 1 1 @ 1 0 10617153  
+signore n 1 1 @ 1 1 10617421  
+simple n 1 3 @ ~ ; 1 0 10618762  
+simpleton n 1 2 @ ~ 1 0 10618762  
+sion n 1 5 @ #p %m %p - 1 0 08814203  
+sir n 1 2 @ ; 1 1 10620859  
+siren n 1 3 @ ~ #m 1 0 10075218  
+six-footer n 1 1 @ 1 0 10623588  
+sketch n 1 4 @ ~ #p + 1 1 06793517  
+sketch_block n 1 1 @ 1 0 04234432  
+sketch_pad n 1 1 @ 1 1 04234432  
+sketchbook n 1 1 @ 1 0 04234432  
+skidder n 1 3 @ ~ + 1 0 10624496  
+skin n 1 7 @ ~ #m #p %s %p + 1 1 09853256  
+skin_and_bones n 1 2 @ ~ 1 0 10728446  
+skinhead n 1 2 @ #m 1 0 09853256  
+slav n 1 4 @ ~ #m + 1 0 09696262  
+slave n 2 3 @ ~ + 2 2 10628841 10629202  
+slayer n 1 3 @ ~ + 1 0 10250784  
+sleepyhead n 1 1 @ 1 0 10631057  
+slider n 1 4 @ ~ #m + 1 0 10624496  
+slipper n 1 2 @ ~ 1 1 10624496  
+slobberer n 1 2 @ + 1 0 10053388  
+sloucher n 1 2 @ + 1 0 10632319  
+slush n 1 2 @ + 1 0 15067875  
+small_person n 1 2 @ ~ 1 0 10633021  
+smasher n 2 3 @ ~ + 2 0 10633741 10633512  
+smiler n 1 5 @ ~ #p + ; 1 0 10633879  
+smotherer n 1 2 @ + 1 0 10675662  
+snake n 1 6 @ ~ #m #p %p + 1 1 09461458  
+snake_oil n 1 2 @ ; 1 1 15068146  
+snake_river n 1 3 @ #p %p 1 0 09461458  
+sneezer n 1 2 @ + 1 0 10636094  
+sniffer n 1 2 @ + 1 0 10636186  
+sniffler n 1 1 @ 1 0 10636295  
+sniveler n 1 1 @ 1 0 10636295  
+snow_mist n 1 3 @ #p %s 1 0 11529795  
+snowflake n 1 5 @ #m #s #p %s 1 0 11529484  
+snuffer n 1 2 @ + 1 1 10637420  
+snuffler n 1 2 @ + 1 0 10637523  
+social_class n 1 4 @ ~ #m #p 1 1 07990472  
+social_dancer n 1 2 @ ~ 1 0 10009953  
+socialiser n 1 2 @ + 1 0 10639008  
+socializer n 1 2 @ + 1 0 10639008  
+socio-economic_class n 1 4 @ ~ #m #p 1 0 07990472  
+sod n 1 4 @ ~ + ; 1 1 10172934  
+soft-cover n 1 2 @ ~ 1 0 03892129  
+soft-cover_book n 1 2 @ ~ 1 0 03892129  
+soft_water n 1 2 ! @ 1 0 15071283  
+softback n 1 2 @ ~ 1 0 03892129  
+softback_book n 1 2 @ ~ 1 0 03892129  
+soma n 1 4 @ ~ #m #p 1 0 05224424  
+somebody n 1 4 @ ~ #m %p 1 0 00007846  
+someone n 1 4 @ ~ #m %p 1 1 00007846  
+songbook n 1 2 @ ~ 1 0 06429789  
+sorcerer n 1 2 @ ~ 1 0 10645222  
+sorceress n 1 2 @ ~ 1 0 10645902  
+sort n 3 3 @ ~ + 3 3 05847533 10646084 13579899  
+sorter n 2 3 @ ~ + 2 0 10646229 04268226  
+sorting n 3 3 @ ~ + 3 0 13579899 05740701 01018774  
+soul n 1 4 @ ~ #m %p 1 1 00007846  
+sound n 1 6 ! @ ~ #p + ; 1 1 09463090  
+sounding_board n 1 4 @ #p %p ; 1 0 10646711  
+source n 1 5 ! @ ~ + ; 1 1 07273332  
+south_platte n 1 2 @ #p 1 0 09464629  
+south_platte_river n 1 2 @ #p 1 0 09464629  
+southpaw n 1 1 @ 1 1 10272819  
+spate n 2 2 @ ~ 2 0 07454840 07421737  
+sphinx n 1 2 @ ; 1 0 10655186  
+spine n 1 5 @ ~ #p %p + 1 1 04285118  
+spitter n 1 2 @ + 1 0 10656272  
+spoiler n 1 4 @ ~ + ; 1 0 10415089  
+sport n 1 5 @ ~ + ; - 1 1 10658445  
+sporting_lady n 1 2 @ ~ 1 0 10505025  
+spousal_equivalent n 1 2 @ ~ 1 0 10044087  
+spouse_equivalent n 1 2 @ ~ 1 0 10044087  
+sprawler n 1 2 @ + 1 0 10660366  
+spread n 1 4 @ ~ #p + 1 1 06268608  
+spread_head n 1 3 @ ~ #p 1 0 06268608  
+spreadhead n 1 3 @ ~ #p 1 0 06268608  
+spring_water n 1 1 @ 1 0 14871673  
+spurner n 1 2 @ + 1 0 10660949  
+squint-eye n 1 1 @ 1 0 10663166  
+squinter n 1 2 @ + 1 0 10663166  
+squirmer n 1 2 @ + 1 0 10800912  
+st._francis n 1 4 @ #p + ; 1 0 09442159  
+st._francis_river n 1 2 @ #p 1 0 09442159  
+st._john n 1 3 @ #p ; 1 0 09442414  
+st._john_river n 1 2 @ #p 1 0 09442414  
+st._johns n 1 2 @ #p 1 0 09442661  
+st._johns_river n 1 2 @ #p 1 0 09442661  
+st._lawrence n 1 3 @ #p ; 1 0 09442908  
+st._lawrence_river n 1 2 @ #p 1 0 09442908  
+stiff n 1 3 @ ~ ; 1 1 10675559  
+stifler n 1 2 @ + 1 0 10675662  
+stigmatic n 1 2 @ + 1 0 10675927  
+stigmatist n 1 2 @ + 1 0 10675927  
+stony_tunguska n 1 2 @ #p 1 0 09486677  
+stooper n 1 2 @ + 1 0 10679201  
+storybook n 1 1 @ 1 0 06425102  
+straight n 1 3 @ ~ + 1 0 10193566  
+straight_person n 1 1 @ 1 0 10193566  
+stranger n 1 3 ! @ ~ 1 1 10680655  
+strapper n 1 1 @ 1 0 09898168  
+stratum n 1 6 @ ~ #m #p + ; 1 1 07990472  
+stream n 5 4 @ ~ %p + 5 5 09471510 08478606 00330053 14029377 07421365  
+streamlet n 1 2 @ + 1 0 09438816  
+struggler n 1 2 @ + 1 0 10684741  
+stud n 1 4 @ #p + - 1 0 10685026  
+stunner n 1 2 @ + 1 0 10633512  
+styx n 1 3 @ #p ; 1 0 09472922  
+subject n 2 6 @ ~ #m #p + ; 2 2 10688105 09648571  
+subordinate n 1 3 @ ~ + 1 1 10689430  
+subsidiary n 1 3 @ ~ + 1 0 10689430  
+substance_abuser n 1 2 @ ~ 1 0 10055991  
+succeeder n 1 3 @ ~ + 1 0 09782244  
+success n 1 4 ! @ ~ = 1 1 09782244  
+sudor n 1 2 @ %s 1 0 05413094  
+sun_river n 1 2 @ #p 1 0 09473702  
+supernatant n 1 2 @ + 1 0 09474233  
+supernumerary n 1 2 @ + 1 0 10696121  
+supporter n 1 3 @ ~ + 1 1 09835195  
+surface n 1 5 @ ~ #p %p + 1 1 09474647  
+surge n 1 3 @ ~ + 1 1 07454840  
+surinam_river n 1 2 @ #p 1 0 09474994  
+suriname_river n 1 2 @ #p 1 0 09474994  
+surrenderer n 1 2 @ + 1 0 10699445  
+survivalist n 1 1 @ 1 0 10700357  
+survivor n 1 2 @ + 1 1 10700507  
+suspect n 1 4 @ ~ + ; 1 1 10700830  
+susquehanna n 1 2 @ #p 1 0 09475147  
+susquehanna_river n 1 2 @ #p 1 0 09475147  
+swain n 1 1 @ 1 0 09890770  
+swayer n 1 2 @ ~ 1 0 10560786  
+sweat n 1 4 @ ~ %s + 1 1 05413094  
+sweater n 1 4 @ ~ %p + 1 1 10438480  
+sweetheart n 1 2 @ ~ 1 1 10633512  
+swell n 1 2 @ ~ 1 1 10010564  
+sylph n 1 1 @ 1 0 10704881  
+table_of_contents n 1 2 @ #p 1 0 06501650  
+tagger n 2 2 @ ~ 2 0 10708471 10708307  
+tagus n 1 2 @ #p 1 0 09476696  
+tagus_river n 1 2 @ #p 1 0 09476696  
+tallapoosa n 1 2 @ #p 1 0 09477017  
+tallapoosa_river n 1 2 @ #p 1 0 09477017  
+tap_water n 1 1 @ 1 0 07952417  
+tapper n 1 2 @ + 1 0 10711096  
+tart n 1 4 @ ~ + ; 1 0 10505025  
+tarzan n 1 1 @ 1 0 10711586  
+taurus n 1 4 @ #p %m ; 1 0 09771712  
+tear n 1 5 @ ~ #p %s + 1 1 05412667  
+teardrop n 1 3 @ #p %s 1 0 05412667  
+tease n 1 2 @ + 1 1 09984664  
+technologist n 1 3 @ ~ + 1 0 09638837  
+tempter n 1 2 @ + 1 0 10719401  
+temptress n 1 1 @ 1 0 10075218  
+tender n 1 3 @ ~ + 1 0 09841233  
+tennessee n 1 5 @ #m #p %p - 1 1 09478770  
+tennessee_river n 1 2 @ #p 1 0 09478770  
+termer n 1 1 @ 1 0 10721816  
+territorial_waters n 1 4 ! @ ~ #p 1 0 09479744  
+terror n 1 3 @ ~ + 1 1 10722264  
+testate n 1 3 @ ~ + 1 0 10722985  
+testator n 1 2 @ ~ 1 0 10722985  
+tevere n 1 1 @ 1 0 09480981  
+text n 2 5 @ ~ #p %p + 2 1 06399623 06426015  
+text_edition n 1 3 ! @ ~ 1 0 06426015  
+textbook n 1 2 @ ~ 1 0 06426015  
+textual_matter n 1 4 @ ~ #p %p 1 0 06399623  
+thames n 1 2 @ #p 1 0 09480150  
+thames_river n 1 2 @ #p 1 0 09480150  
+thaumaturge n 1 2 @ ~ 1 0 10645222  
+thaumaturgist n 1 2 @ ~ 1 0 10645222  
+the_hill n 1 2 @ #p 1 0 09093847  
+theater_prompter n 1 1 @ 1 0 10501999  
+thin_person n 1 3 ! @ ~ 1 0 10728446  
+thing n 1 2 @ ~ 1 1 00002452  
+third-rater n 1 1 @ 1 0 10728905  
+thirster n 1 1 @ 1 0 10290575  
+threat n 1 2 @ ~ 1 1 10722264  
+thrower n 1 3 @ ~ + 1 0 10729178  
+tiber n 1 1 @ 1 0 09480981  
+tidal_river n 1 2 @ #p 1 0 09481209  
+tidal_stream n 1 2 @ #p 1 0 09481209  
+tidewater_river n 1 2 @ #p 1 0 09481209  
+tidewater_stream n 1 2 @ #p 1 0 09481209  
+tiger n 1 3 @ ~ #m 1 1 10730281  
+tigris n 1 2 @ #p 1 0 09481921  
+tigris_river n 1 2 @ #p 1 0 09481921  
+tip_sheet n 1 2 @ ~ 1 0 06608001  
+tocantins n 1 2 @ #p 1 0 09482523  
+tocantins_river n 1 2 @ #p 1 0 09482523  
+tombigbee n 1 2 @ #p 1 0 09482687  
+tombigbee_river n 1 2 @ #p 1 0 09482687  
+tome n 1 1 @ 1 0 06425222  
+topper n 1 2 @ + 1 0 09870573  
+tor n 1 1 @ 1 0 09483109  
+toreador n 1 2 @ ~ 1 0 09855548  
+totemist n 1 2 @ #m 1 0 10737110  
+toter n 1 2 @ + 1 1 09917148  
+toucher n 1 2 @ + 1 0 10737238  
+trade_book n 1 2 @ ~ 1 0 06423993  
+trade_edition n 1 3 ! @ ~ 1 0 06423993  
+transexual n 2 1 @ 2 0 10745529 10745370  
+transfer n 3 4 @ ~ %p + 3 3 00316812 10744008 00202520  
+transferee n 1 2 @ ; 1 0 10744008  
+transference n 1 4 @ ~ + ; 1 0 00202520  
+transferer n 1 3 @ ~ + 1 0 10744335  
+transferral n 1 4 @ ~ %p + 1 0 00316812  
+transferrer n 1 3 @ ~ + 1 0 10744335  
+transgendered n 1 1 @ 1 0 10745529  
+transmission n 1 6 @ ~ #p %p + - 1 1 06261911  
+transmission_channel n 1 1 @ 1 0 06270551  
+transport n 1 6 @ ~ #p %p + - 1 1 00316812  
+transportation n 1 6 @ ~ #p %p + - 1 1 00316812  
+transporter n 2 5 @ ~ #p + ; 2 0 04481270 03105548  
+transsexual n 2 2 @ + 2 0 10745529 10745370  
+transvestite n 1 2 @ + 1 0 10745683  
+travel n 2 3 @ ~ + 2 2 07325733 00283971  
+traveler n 1 3 @ ~ + 1 1 09652940  
+traveller n 1 3 @ ~ + 1 1 09652940  
+trent n 1 2 @ #p 1 0 09484645  
+trent_river n 1 2 @ #p 1 0 09484645  
+trickle n 1 3 @ ~ + 1 0 07447159  
+trier n 1 3 @ + ; 1 0 10748650  
+trinity_river n 1 2 @ #p 1 0 09485179  
+tunguska n 3 2 @ #p 3 0 09486677 09486492 09220310  
+turner n 1 4 @ ~ #m + 1 0 10753007  
+twin n 1 5 @ ~ #p + ; 1 1 09771850  
+tyne n 1 2 @ #p 1 0 09487935  
+tyne_river n 1 2 @ #p 1 0 09487935  
+tyrant n 1 3 @ ~ + 1 1 10755221  
+ugly_duckling n 1 1 @ 1 0 10755509  
+underboss n 1 1 @ 1 0 10293135  
+underling n 1 2 @ ~ 1 1 10689430  
+undoer n 1 3 @ ~ + 1 0 10757088  
+unfastener n 1 2 @ + 1 0 10757088  
+unfortunate n 1 3 @ ~ + 1 1 09653829  
+unfortunate_person n 1 2 @ ~ 1 0 09653829  
+unmarried_man n 1 1 @ 1 0 09849169  
+unmarried_woman n 1 2 @ ~ 1 0 10759169  
+unperson n 1 1 @ 1 0 10381224  
+unraveler n 1 2 @ + 1 0 10036672  
+unraveller n 1 2 @ + 1 0 10036672  
+unskilled_person n 1 2 @ ~ 1 0 09655462  
+untier n 1 2 @ + 1 0 10757088  
+unusual_person n 1 2 @ ~ 1 0 09629719  
+unwelcome_person n 1 2 @ ~ 1 0 09654317  
+upper_avon n 1 2 @ #p 1 0 09234851  
+upper_avon_river n 1 2 @ #p 1 0 09234851  
+upper_tunguska n 1 2 @ #p 1 0 09220310  
+upsurge n 1 2 @ ~ 1 0 07454840  
+urinator n 1 3 @ ~ + 1 0 10455483  
+uruguay_river n 1 2 @ #p 1 0 09491051  
+user n 2 3 @ ~ + 2 2 10761247 10055991  
+utopia n 1 3 ! @ + 1 1 07297903  
+vamp n 1 3 @ #p + 1 0 09984664  
+vamper n 1 2 @ + 1 0 09984664  
+vanisher n 1 2 @ + 1 0 10766014  
+variety n 1 5 @ ~ #p = ; 1 1 05847533  
+venturer n 1 3 @ ~ + 1 0 09629201  
+versant n 1 2 @ #p 1 0 09384414  
+vestal n 1 2 @ + 1 0 10768472  
+vetluga n 1 2 @ #p 1 0 09494611  
+vetluga_river n 1 2 @ #p 1 0 09494611  
+victim n 1 3 @ ~ + 1 1 10772148  
+victorian n 1 2 @ + 1 0 10772729  
+virago n 1 1 @ 1 0 09806734  
+virgin n 1 3 @ + ; 1 1 09772258  
+virgo n 1 4 @ #p %m ; 1 0 09772258  
+visionary n 1 3 @ ~ + 1 0 10776309  
+vistula n 1 2 @ #p 1 0 09495265  
+vistula_river n 1 2 @ #p 1 0 09495265  
+visually_impaired_person n 1 2 @ ~ 1 0 10777293  
+voider n 1 3 @ #p + 1 0 10019527  
+volcano n 1 5 @ ~ %p + - 1 1 09495727  
+volga n 1 2 @ #p 1 0 09496369  
+volga_river n 1 2 @ #p 1 0 09496369  
+volkhov n 1 2 @ #p 1 0 09496527  
+volkhov_river n 1 2 @ #p 1 0 09496527  
+volta n 1 2 @ #p 1 0 09496688  
+volume n 2 6 @ ~ #m %p = + 2 2 02873453 06425309  
+wabash n 1 2 @ #p 1 0 09496938  
+wabash_river n 1 2 @ #p 1 0 09496938  
+wac n 1 1 @ 1 0 10781630  
+waiter n 1 3 @ ~ + 1 1 10783393  
+waker n 1 2 @ + 1 0 10783546  
+walk-in n 1 2 @ + 1 0 10783964  
+wanter n 1 2 @ + 1 0 10785693  
+ward n 1 5 @ ~ #p %p + 1 1 10786688  
+warrior n 1 3 @ ~ + 1 1 10788253  
+watcher n 1 4 @ ~ #m + 1 1 10789450  
+water n 3 8 @ ~ #s #p %s %p + ; 3 3 14869913 09248053 07951744  
+water_bearer n 1 2 @ ; 1 0 09772973  
+water_boy n 1 1 @ 1 0 10789977  
+water_ice n 1 4 @ ~ #s %s 1 0 14939335  
+water_of_crystallisation n 1 1 @ 1 0 15118703  
+water_of_crystallization n 1 1 @ 1 0 15118703  
+water_of_hydration n 1 1 @ 1 0 15118703  
+water_system n 1 3 @ #p %p 1 0 09499141  
+watercourse n 2 3 @ ~ %p 2 0 09498309 09471510  
+waterer n 1 2 @ + 1 0 10789977  
+waterfall n 1 3 @ ~ #p 1 1 09498422  
+waterway n 1 2 @ ~ 1 1 09499461  
+wave n 1 5 @ ~ %p + ; 1 1 10790734  
+weakling n 1 2 @ ~ 1 0 10791304  
+wealthy_person n 1 2 @ ~ 1 0 10548806  
+weasel n 1 3 @ ~ #m 1 0 10791658  
+weight_gainer n 1 1 @ 1 0 10137396  
+welcomer n 1 2 @ + 1 0 10166447  
+well_water n 1 1 @ 1 0 14871673  
+weser n 1 2 @ #p 1 0 09500848  
+weser_river n 1 2 @ #p 1 0 09500848  
+whipper-in n 1 1 @ 1 0 10796555  
+white n 2 6 ! @ ~ #p + ; 2 2 09660255 09501485  
+white_man n 1 2 @ ~ 1 1 09661981  
+white_person n 1 2 @ ~ 1 0 09660255  
+white_river n 1 2 @ #p 1 0 09501485  
+white_woman n 1 1 @ 1 0 09662109  
+whore n 1 3 @ ~ + 1 1 10505025  
+widow n 1 3 @ ~ + 1 1 10799960  
+widow_woman n 1 2 @ ~ 1 0 10799960  
+widower n 1 1 @ 1 1 10800182  
+widowman n 1 1 @ 1 0 10800182  
+wife n 1 4 ! @ ~ + 1 1 10800308  
+wiggler n 1 3 @ #m + 1 0 10800912  
+wight n 1 2 @ #p 1 0 09995959  
+willamette n 1 2 @ #p 1 0 09502765  
+willamette_river n 1 2 @ #p 1 0 09502765  
+winker n 1 2 @ + 1 0 10803215  
+winner n 1 4 ! @ ~ + 1 1 09782244  
+wisconsin n 1 3 @ #p %p 1 0 09503686  
+wisconsin_river n 1 2 @ #p 1 0 09503686  
+witch n 1 4 @ ~ #m + 1 1 10075105  
+withholder n 1 3 ! @ + 1 0 10805371  
+witness n 1 4 @ ~ + ; 1 1 10806193  
+wizard n 1 3 @ ~ + 1 1 10645222  
+woman n 2 7 ! @ ~ #m %p + ; 2 2 10807146 08494645  
+woman's_body n 1 3 @ #p %p 1 0 05227400  
+woman_of_the_street n 1 2 @ ~ 1 0 10505025  
+womanhood n 3 3 @ #m + 3 0 14449119 08494645 00607121  
+womaniser n 1 3 @ ~ + 1 0 10808758  
+womanizer n 1 3 @ ~ + 1 0 10808758  
+wonder_boy n 1 1 @ 1 0 10809055  
+wonder_woman n 1 1 @ 1 0 10809460  
+wood_vinegar n 1 1 @ 1 0 14887477  
+work n 1 5 @ ~ %p + ; 1 1 04606723  
+workbook n 1 1 @ 1 0 06427434  
+worker n 2 5 ! @ ~ #m + 2 2 09655706 09786620  
+working_girl n 1 2 @ ~ 1 1 10505025  
+worldling n 1 1 @ 1 0 10811530  
+wriggler n 1 3 @ #m + 1 0 10800912  
+wuss n 1 2 @ ~ 1 0 10791304  
+yalu n 1 3 @ #p ; 1 0 09504415  
+yalu_river n 1 3 @ #p ; 1 0 09504415  
+yangtze n 1 2 @ #p 1 0 09504653  
+yangtze_kiang n 1 2 @ #p 1 0 09504653  
+yangtze_river n 1 2 @ #p 1 0 09504653  
+yawner n 1 2 @ + 1 0 10822797  
+yazoo n 1 2 @ #p 1 0 09504884  
+yazoo_river n 1 2 @ #p 1 0 09504884  
+yearbook n 1 2 @ ~ 1 0 07297202  
+yearner n 1 2 @ + 1 0 10290575  
+yellow_river n 1 2 @ #p 1 0 09329163  
+yellowstone n 1 2 @ #p 1 0 09505261  
+yellowstone_river n 1 2 @ #p 1 0 09505261  
+yenisei n 1 2 @ #p 1 0 09505460  
+yenisei_river n 1 2 @ #p 1 0 09505460  
+yenisey n 1 2 @ #p 1 0 09505460  
+yenisey_river n 1 2 @ #p 1 0 09505460  
+yielder n 1 2 @ + 1 0 10699445  
+young_buck n 1 1 @ 1 0 10823891  
+young_lady n 1 2 @ ~ 1 1 10149362  
+young_man n 1 1 @ 1 1 10823891  
+young_woman n 1 2 @ ~ 1 1 10149362  
+yukon n 1 3 @ #p %p 1 0 09506046  
+yukon_river n 1 2 @ #p 1 0 09506046  
+zaire_river n 1 2 @ #p 1 0 09274984  
+zambezi n 1 3 @ #p %p 1 0 09506259  
+zambezi_river n 1 3 @ #p %p 1 0 09506259  
+zhu_jiang n 1 2 @ #p 1 0 09506470  
+zion n 1 5 @ #p %m %p - 1 0 08814203  
+zombi n 1 3 @ %s ; 1 0 09844921  
+zombie n 1 3 @ %s ; 1 1 09844921  

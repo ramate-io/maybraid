@@ -4943,6 +4943,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "maybraid-language-core"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "slotmap",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "maybraid-menu-controller"
 version = "0.1.0"
 dependencies = [

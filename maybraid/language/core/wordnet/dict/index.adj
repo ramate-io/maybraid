@@ -1,0 +1,20 @@
+  WordNet 3.1 extract for maybraid-language-core. See ../LICENSE-WORDNET.
+  Copyright 2011 by Princeton University. All rights reserved.
+adjunct a 1 2 & + 1 0 00796805  
+assistant a 1 2 & + 1 1 00796805  
+classificatory a 1 2 \ + 1 1 03030315  
+cragged a 1 1 & 1 0 02248234  
+craggy a 1 1 & 1 1 02248234  
+feminine a 1 5 ! & ^ + ; 1 1 01488294  
+hilly a 1 2 & + 1 0 02248234  
+locomotive a 1 2 \ + 1 0 03005956  
+locomotor a 1 1 \ 1 0 03005956  
+male a 1 6 ! & ^ = + ; 1 1 01486984  
+manful a 2 3 & ^ + 2 0 01479138 01486984  
+manlike a 2 2 & ^ 2 0 01479138 01486984  
+manly a 2 4 ! & ^ + 2 0 01479138 01486984  
+mortal a 1 5 ! & ^ + ; 1 1 01562007  
+mountainous a 2 2 & + 2 2 02248234 01222173  
+virile a 1 2 & + 1 1 01486984  
+watery a 2 2 & + 2 2 02562029 02270121  
+womanly a 1 3 ! & + 1 0 01488294  
