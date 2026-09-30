@@ -17,7 +17,7 @@ use urbanization_layer_model::{
 	Urbanization, UrbanizationGenerationPlugin, UrbanizationLayerConfig,
 };
 use urbanization_layer_presentation::{PaddedCells, UrbanizationPresentationPlugin};
-use vegetation_layer_model::VegetationGenerationPlugin;
+use vegetation_layer_model::{VegetationGenerationPlugin, VegetationLayerConfig};
 use vegetation_layer_presentation::VegetationPresentationPlugin;
 
 fn is_plugin_stack<M>(_: impl Plugins<M>) {}
@@ -29,7 +29,7 @@ fn layered_world_stack_type_checks() {
 		UrbanizationGenerationPlugin::<OnTerrain<Durham>>::new(
 			UrbanizationLayerConfig::world_defaults(),
 		),
-		VegetationGenerationPlugin,
+		VegetationGenerationPlugin::new(VegetationLayerConfig::world_defaults()),
 		MobGenerationPlugin::<Urbanization<OnTerrain<Durham>>>::default(),
 		TerrainPresentationPlugin::<Urbanization<OnTerrain<Durham>>, PaddedCells>::default(),
 		UrbanizationPresentationPlugin::<Urbanization<OnTerrain<Durham>>>::default(),

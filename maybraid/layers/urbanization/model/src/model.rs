@@ -7,14 +7,17 @@ use bevy::math::bounding::Aabb3d;
 use bevy::math::{Vec2, Vec3};
 use bevy::prelude::App;
 use lod::gen::{Id, SpatialIndex, TrackedId};
+use lod::lod_ref::LodRef;
+use durham_terrain_models::TerrainMeshBuilder;
 use richmond_development_models::{
-	DevelopmentEntryStore, PadComplex, PaddedStoreView, TerrainWithPads,
+	DevelopmentEntryStore, DevelopmentIndex, PadComplex, PaddedStoreView, TerrainWithPads,
 };
 use richmond_urbanization::UrbanizationIndex;
-use terrain_layer_model::{HeightField, RequireLayer, TerrainModel};
+use terrain_layer_model::{HeightField, RequireLayer, TerrainCell, TerrainModel};
 
 use crate::generation::UrbanizationGenerationPlugin;
 use crate::pads::PadComposable;
+use crate::stream::prepare_development_cells;
 
 /// Model `M` after urbanization: pads composed into its surface, developments on it.
 pub struct Urbanization<M>(PhantomData<fn() -> M>);
@@ -44,20 +47,41 @@ pub struct UrbanSnapshot<S> {
 	pads: PadComplex,
 }
 
+impl<S> UrbanSnapshot<S> {
+	pub fn new(inner: S, pads: PadComplex) -> Self {
+		Self { inner, pads }
+	}
+}
+
 impl<S: HeightField> HeightField for UrbanSnapshot<S> {
 	fn height_at(&self, xz: Vec2) -> Option<f32> {
 		self.inner.height_at(xz).map(|raw| self.pads.modify_elevation(raw, xz.x, xz.y))
+	}
+
+	fn fallback_height_at(&self, xz: Vec2) -> f32 {
+		let raw = self.inner.fallback_height_at(xz);
+		self.pads.modify_elevation(raw, xz.x, xz.y)
 	}
 }
 
 impl<M> TerrainModel for Urbanization<M>
 where
 	M: TerrainModel,
-	M::Cell: PadComposable<Padded = TerrainWithPads>,
+	M::Cell: PadComposable<Padded = TerrainWithPads> + TerrainCell<Mesh = TerrainMeshBuilder>,
 {
 	type Cell = TerrainWithPads;
 	type Read = UrbanRead<'static, 'static, M>;
 	type Snapshot = UrbanSnapshot<M::Snapshot>;
+	type Prepare = DevelopmentIndex<'static>;
+
+	/// #720 wart: generate development cells for `bounds` before the grove sample.
+	fn prepare(
+		prepare: &mut SystemParamItem<'_, '_, Self::Prepare>,
+		bounds: Aabb3d,
+		lod_ref: &LodRef,
+	) {
+		prepare_development_cells(prepare, bounds, lod_ref);
+	}
 
 	/// Inner height with pad elevation ops, the formula world player and mobs
 	/// copy today. Padded cell SDFs agree when fresh; they are for meshing.
@@ -86,11 +110,32 @@ where
 		read.developments.padded(id)
 	}
 
-	fn snapshot(read: &SystemParamItem<'_, '_, Self::Read>, region: Aabb3d) -> Self::Snapshot {
-		UrbanSnapshot {
-			inner: M::snapshot(&read.inner, region),
-			pads: read.developments.merged_pad_complex(region),
+	/// Padded cell when its size passes `overlay_size_tolerance`, else the inner
+	/// model's raw cell (`fine_terrain_for` / `medium_terrain_for`).
+	fn overlay_cell<'a>(
+		read: &'a SystemParamItem<'_, '_, Self::Read>,
+		bounds: Aabb3d,
+		target_size: f32,
+		overlay_size_tolerance: Option<f32>,
+	) -> Option<&'a dyn TerrainCell<Mesh = TerrainMeshBuilder>> {
+		if let Some(padded) = read.developments.padded_terrain_for(bounds) {
+			let size = padded.bounds().max.x - padded.bounds().min.x;
+			let accept = match overlay_size_tolerance {
+				None => true,
+				Some(tolerance) => (size - target_size).abs() < tolerance,
+			};
+			if accept {
+				return Some(padded);
+			}
 		}
+		M::overlay_cell(&read.inner, bounds, target_size, overlay_size_tolerance)
+	}
+
+	fn snapshot(read: &SystemParamItem<'_, '_, Self::Read>, region: Aabb3d) -> Self::Snapshot {
+		UrbanSnapshot::new(
+			M::snapshot(&read.inner, region),
+			read.developments.merged_pad_complex(region),
+		)
 	}
 
 	fn require_generation(app: &App) {

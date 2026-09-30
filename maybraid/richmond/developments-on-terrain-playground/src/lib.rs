@@ -1,28 +1,20 @@
 //! Richmond's complete development catalog on Durham terrain.
 //!
 //! Urbanization generate / present lives in `urbanization-layer-model` and
-//! `urbanization-layer-presentation`. This crate is playground chrome (camera,
-//! commands, UI) plus development-forest LOD until #887.
+//! `urbanization-layer-presentation`. Vegetation lives in the vegetation layer
+//! plugins. This crate is playground chrome (camera, commands, UI).
 
 pub mod camera;
 pub mod commands;
-mod development_bump_out;
-mod development_forest;
 mod ui;
 
 pub use camera::CameraController;
 pub use commands::{DevelopmentFocus, PlaygroundCommand, PlaygroundStartup, PLAYGROUND_CLI_NAME};
-pub use development_bump_out::{
-	DevelopmentCanopyBumpOutPresenter, DevelopmentMediumCanopyBumpOutPresenter,
-};
-pub use development_forest::DevelopmentForestPresenter;
 pub use game_commands::command::PendingStartupCommand;
 
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use camera::{camera_controller, release_modifiers_on_focus_change, setup_camera};
-use chico_forests::register_forest_lod;
-use chico_vegetation_on_terrain_playground::register_bump_out_lod;
 use commands::{
 	RequestDevelopmentFocus, RequestLikelihood, RequestMeshStats, RequestRebuild, RequestSeed,
 	RequestTerrainRadius,
@@ -57,35 +49,21 @@ impl Default for PlaygroundConfig {
 /// Richmond developments on Durham terrain.
 ///
 /// Assemblers add the urbanization layer plugins. This plugin keeps camera,
-/// commands, UI, and the development-pad-aware forest presenter.
+/// commands, and UI.
 pub struct DevelopmentsOnTerrainPlugin {
 	pub config: PlaygroundConfig,
 	/// When false, the caller owns the command drawer / CLI.
 	pub commands: bool,
-	/// Register the development-pad-aware forest presenter.
-	pub register_development_forest_lod: bool,
 }
 
 impl Default for DevelopmentsOnTerrainPlugin {
 	fn default() -> Self {
-		Self {
-			config: PlaygroundConfig::default(),
-			commands: true,
-			register_development_forest_lod: false,
-		}
+		Self { config: PlaygroundConfig::default(), commands: true }
 	}
 }
 
 impl Plugin for DevelopmentsOnTerrainPlugin {
 	fn build(&self, app: &mut App) {
-		if self.register_development_forest_lod {
-			register_forest_lod::<DevelopmentForestPresenter>(app);
-			register_bump_out_lod::<
-				DevelopmentCanopyBumpOutPresenter,
-				DevelopmentMediumCanopyBumpOutPresenter,
-			>(app);
-		}
-
 		if self.commands {
 			app.add_plugins(
 				GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config())

@@ -1,6 +1,8 @@
 use bevy::prelude::*;
 use game_commands::ui::{GameCommandStatusText, GameCommandUiConfig};
 
+use vegetation_layer_model::VegetationLayerConfig;
+
 use crate::{GroveKind, PlaygroundConfig};
 
 pub fn ui_config() -> GameCommandUiConfig {
@@ -16,19 +18,20 @@ pub fn ui_config() -> GameCommandUiConfig {
 
 pub(crate) fn sync_command_status_text(
 	config: Res<PlaygroundConfig>,
+	vegetation: Res<VegetationLayerConfig>,
 	mut status: ResMut<GameCommandStatusText>,
 	mut last: Local<Option<(GroveKind, i32, u32, i32, Option<String>)>>,
 ) {
 	// Keep `stats mesh` (and other one-shot status) until config changes.
 	let extent_bits = config.grove_extent_xz.to_bits();
-	let forest_key = config.forest.map(|spec| spec.key());
+	let forest_key = vegetation.forest.map(|spec| spec.key());
 	let key =
 		(config.grove, config.terrain_radius, extent_bits, config.tile_radius, forest_key.clone());
 	if *last == Some(key.clone()) {
 		return;
 	}
 	*last = Some(key);
-	status.0 = match &config.forest {
+	status.0 = match &vegetation.forest {
 		Some(spec) => {
 			let layering = spec.layering.map(|k| k.as_kebab()).unwrap_or("hopscotch");
 			format!(

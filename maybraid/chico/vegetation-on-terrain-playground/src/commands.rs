@@ -1,9 +1,10 @@
 //! In-game clap commands for vegetation-on-terrain.
 
 use bevy::prelude::*;
+use chico_forests::parse_layering_kind;
 use chico_forests::LayeringKind;
-use chico_forests::{
-	parse_layering_kind, ForestStreamSpec, DEFAULT_FOREST_NOISE, DEFAULT_FOREST_STREAM_RADIUS,
+use vegetation_layer_model::{
+	ForestStreamSpec, DEFAULT_FOREST_NOISE, DEFAULT_FOREST_STREAM_RADIUS,
 };
 use clap::{Parser, Subcommand, ValueEnum};
 use game_commands::command::{CommandScript, GameCommand};

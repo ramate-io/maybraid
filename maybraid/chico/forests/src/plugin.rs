@@ -1,19 +1,13 @@
 //! Bevy plugins: vegetation view stack plus forest generate / present / cull.
 
-use std::marker::PhantomData;
-
-use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use chico_vegetation_components::VegetationProceduralPlugin;
 use chico_vegetation_shaders::{
 	init_chico_material_caches, ChicoMaterialRefPlugin, ChicoVegetationShadersPlugin,
 };
-use lod::presentation::RegionPresenter;
 use scene_ref::SceneRefPlugin;
 
-use crate::stream::register_forest_lod;
 use crate::view::VegetationLodRefreshPlugin;
-use crate::{ChicoGrove, ForestIndex};
 
 /// Shaders, kit caches, and Avian LOD refresh for forest / grove hosts.
 pub struct VegetationViewPlugin;
@@ -49,25 +43,17 @@ pub fn register_vegetation_view(app: &mut App) {
 	}
 }
 
-/// Generate + present [`ChicoGrove`]. Does not drive keep regions; the host
-/// still calls [`crate::ForestStreamLod::apply_spec`].
-pub struct ForestPlugin<Pr> {
-	_marker: PhantomData<fn() -> Pr>,
-}
+/// Shaders and kit caches. Forest LOD lives in the vegetation layer plugins.
+pub struct ForestPlugin;
 
-impl<Pr> Default for ForestPlugin<Pr> {
+impl Default for ForestPlugin {
 	fn default() -> Self {
-		Self { _marker: PhantomData }
+		Self
 	}
 }
 
-impl<Pr> Plugin for ForestPlugin<Pr>
-where
-	Pr: SystemParam + 'static,
-	for<'w, 's> Pr::Item<'w, 's>: RegionPresenter<ChicoGrove, ForestIndex>,
-{
+impl Plugin for ForestPlugin {
 	fn build(&self, app: &mut App) {
 		register_vegetation_view(app);
-		register_forest_lod::<Pr>(app);
 	}
 }

@@ -379,9 +379,9 @@ pub fn generate_urbanization_padded_terrain(
 	});
 }
 
-/// #720 wart: `DevelopmentForestPresenter` generates [`DevelopmentCell`]s at
-/// present time. Call this named urbanization-generation entry point instead of
-/// reaching into Richmond. Removing the present-time generate belongs to
+/// #720 wart: grove present generates [`DevelopmentCell`]s before sampling.
+/// Call this named urbanization-generation entry point instead of reaching
+/// into Richmond. Removing the present-time generate belongs to
 /// <https://github.com/ramate-io/maybraid/issues/720>.
 pub fn prepare_development_cells(
 	development: &mut DevelopmentIndex,

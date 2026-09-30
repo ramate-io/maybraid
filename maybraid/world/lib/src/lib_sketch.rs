@@ -15,7 +15,7 @@ impl Plugin for WorldPlugin {
 			UrbanizationGenerationPlugin::<OnTerrain<Durham>>::new(
 				UrbanizationLayerConfig::world_defaults(),
 			),
-			VegetationGenerationPlugin,
+			VegetationGenerationPlugin::new(VegetationLayerConfig::world_defaults()),
 			MobGenerationPlugin::<Urbanization<OnTerrain<Durham>>>::default(),
 			TerrainPresentationPlugin::<Urbanization<OnTerrain<Durham>>, PaddedCells>::default(),
 			UrbanizationPresentationPlugin::<Urbanization<OnTerrain<Durham>>>::default(),
@@ -24,18 +24,9 @@ impl Plugin for WorldPlugin {
 			// Training only: raw Durham, gated off in the open world.
 			TerrainPresentationPlugin::<OnTerrain<Durham>, DurhamCells>::default(),
 		))
-		// Assembler-owned generate budgets (world-effective 16 on every
-		// channel). Urbanization's 16 is already in
-		// `UrbanizationLayerConfig::world_defaults()`. Keep these even where
-		// today's helpers also insert 16: once #887 / #888 init instead of
-		// insert, these lines are the only source. Insert after the layer
-		// plugins (or before — init_resource will not overwrite).
-		.insert_resource(LodGenerateBudget::<ForestLodChan>::new(16))
-		.insert_resource(LodGenerateBudget::<MobLodChan>::new(16))
-		.insert_resource(LodGenerateBudget::<BumpOutLodChan>::new(16))
-		.insert_resource(LodGenerateBudget::<MediumBumpOutLodChan>::new(16))
-		// Layer configs that used to ride on playground configs:
-		.insert_resource(VegetationLayerConfig::world_defaults()); // from VegetationPlaygroundConfig::world_defaults()
+		// Mob generate budget stays here until #888. Forest and bump-out budgets
+		// come from `VegetationLayerConfig` inside `VegetationGenerationPlugin`.
+		.insert_resource(LodGenerateBudget::<MobLodChan>::new(16));
 
 		// Training: set MobStreamSuspended from TrainingGrounds (mobs/model sketch).
 
@@ -58,7 +49,7 @@ impl Plugin for WorldPlugin {
 //
 // ── Done when ───────────────────────────────────────────────────────────────
 //
-// - `rg 'VegetationOnTerrainPlugin|DevelopmentsOnTerrainPlugin|TerrainPlugin::<Durham>' maybraid/world` is empty.
+// - playground vegetation / development plugins and `TerrainPlugin::<Durham>` are gone from the world.
 // - `WorldMobSurface` / `WorldPlayerSurface` are gone
 //   (`TerrainView<Urbanization<OnTerrain<Durham>>>`; the pad-free plaza probe
 //   is `TerrainView<OnTerrain<Durham>>`).

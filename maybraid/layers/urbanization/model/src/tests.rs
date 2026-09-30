@@ -8,7 +8,7 @@ use durham_terrain_models::{
 };
 use richmond_development_models::DevelopmentEntryStore;
 use richmond_urbanization::UrbanizationIndex;
-use terrain_layer_model::{OnTerrain, TerrainModel, TerrainView};
+use terrain_layer_model::{HeightField, OnTerrain, TerrainModel, TerrainView};
 
 use crate::Urbanization;
 
@@ -121,4 +121,163 @@ fn urbanization_generation_without_base_names_the_missing_plugin() {
 	// `build` installs Richmond plugins that need a full Bevy app. `finish`
 	// is the requirement check the assemblers actually run.
 	UrbanizationGenerationPlugin::<OnTerrain<Durham>>::default().finish(&mut App::new());
+}
+
+struct FlatHeight(f32);
+
+impl HeightField for FlatHeight {
+	fn height_at(&self, _xz: Vec2) -> Option<f32> {
+		Some(self.0)
+	}
+
+	fn fallback_height_at(&self, _xz: Vec2) -> f32 {
+		self.0
+	}
+}
+
+#[test]
+fn pad_modulation_sets_exact_terrace_and_preserves_base_outside() -> anyhow::Result<()> {
+	use crate::UrbanSnapshot;
+	use richmond_development_models::{PadComplex, PadParams};
+
+	let pad = PadComplex::building_skirt(Vec2::ZERO, Vec2::splat(10.0), 0.0, 12.0, PadParams::default());
+	let snapshot = UrbanSnapshot::new(FlatHeight(3.0), pad);
+	let terrace = snapshot.height_at(Vec2::ZERO).ok_or_else(|| anyhow::anyhow!("terrace"))?;
+	let outside = snapshot
+		.height_at(Vec2::new(1_000.0, 1_000.0))
+		.ok_or_else(|| anyhow::anyhow!("outside"))?;
+	assert!((terrace - 12.0).abs() < 1e-5);
+	assert!((outside - 3.0).abs() < 1e-5);
+	Ok(())
+}
+
+#[derive(bevy::prelude::Resource)]
+struct OverlayPadSpec {
+	source: lod::gen::Id,
+	bounds: Aabb3d,
+	res_2: u8,
+}
+
+fn insert_overlay_pad(
+	mut index: richmond_development_models::DevelopmentIndex,
+	spec: bevy::prelude::Res<OverlayPadSpec>,
+) {
+	use bevy::prelude::{Entity, Transform};
+	use lod::gen::{Id, SpatialIndex};
+	use lod::lod_ref::LodRef;
+	use richmond_development_models::{PadComplex, TerrainWithPads};
+	use terrain_layer_model::TerrainCell;
+
+	let Some(terrain) = index.terrain.terrain(spec.source) else {
+		return;
+	};
+	let mut padded = TerrainWithPads::compose(terrain, std::iter::empty::<&PadComplex>());
+	padded.cell = spec.bounds;
+	padded.res_2 = spec.res_2;
+	let bounds = padded.bounds();
+	let id = Id::from_cell(bounds);
+	let transform = Transform::IDENTITY;
+	let lod_ref = LodRef {
+		entity: Entity::PLACEHOLDER,
+		previous_transform: &transform,
+		current_transform: &transform,
+		bounds: &bounds,
+	};
+	SpatialIndex::<TerrainWithPads>::insert(&mut index, id, padded, bounds, &lod_ref);
+}
+
+fn overlay_width_res(
+	world: &mut World,
+	query: Aabb3d,
+	target: f32,
+	tolerance: Option<f32>,
+) -> anyhow::Result<(f32, u8)> {
+	let mut state = SystemState::<TerrainView<UrbanizedDurham>>::new(world);
+	let view = state.get(world)?;
+	let cell = view
+		.overlay_cell(query, target, tolerance)
+		.ok_or_else(|| anyhow::anyhow!("overlay cell"))?;
+	let width = cell.bounds().max.x - cell.bounds().min.x;
+	Ok((width, cell.res_2()))
+}
+
+#[test]
+fn overlay_cell_prefers_a_padded_cell_then_falls_back_by_size() -> anyhow::Result<()> {
+	use bevy::ecs::system::RunSystemOnce;
+	use durham_terrain_models::TERRAIN_CELL_SIZE;
+	use richmond_development_models::DevelopmentConfig;
+
+	let mut world = empty_urbanized_world();
+	world.insert_resource(DevelopmentConfig::default());
+	let base = BaseTerrainNoise::from_config(&TerrainConfig::new(42));
+	let fine = TerrainCellLayout::default();
+	let medium = TerrainCellLayout {
+		cell_size: 2.0 * TERRAIN_CELL_SIZE,
+		..TerrainCellLayout::default()
+	};
+	{
+		let mut store = world.resource_mut::<TerrainEntryStore>();
+		store.insert_base_terrain_for_test(&fine, 0, 0, base.clone());
+		store.insert_base_terrain_for_test(&medium, 0, 0, base);
+	}
+	let query = Aabb3d::from_min_max(Vec3::new(1.0, -10.0, 1.0), Vec3::new(20.0, 10.0, 20.0));
+	let (source, fine_bounds, medium_bounds) = {
+		let store = world.resource::<TerrainEntryStore>();
+		let mut source = None;
+		let mut fine_bounds = None;
+		let mut medium_bounds = None;
+		for id in store.terrain_ids_overlapping(query) {
+			let Some(terrain) = store.terrain(id) else {
+				continue;
+			};
+			let width = terrain.cell.max.x - terrain.cell.min.x;
+			if (width - TERRAIN_CELL_SIZE).abs() < 1.0 {
+				source = Some(id);
+				fine_bounds = Some(terrain.cell);
+			}
+			if (width - 2.0 * TERRAIN_CELL_SIZE).abs() < 1.0 {
+				medium_bounds = Some(terrain.cell);
+			}
+		}
+		(
+			source.ok_or_else(|| anyhow::anyhow!("fine source"))?,
+			fine_bounds.ok_or_else(|| anyhow::anyhow!("fine bounds"))?,
+			medium_bounds.ok_or_else(|| anyhow::anyhow!("medium bounds"))?,
+		)
+	};
+
+	let run = |world: &mut World| {
+		world
+			.run_system_once(insert_overlay_pad)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))
+	};
+
+	// Urbanized fine: any padded size wins.
+	world.insert_resource(OverlayPadSpec { source, bounds: medium_bounds, res_2: 9 });
+	run(&mut world)?;
+	let (width, res) = overlay_width_res(&mut world, query, TERRAIN_CELL_SIZE, None)?;
+	assert!((width - 2.0 * TERRAIN_CELL_SIZE).abs() < 1e-3);
+	assert_eq!(res, 9);
+
+	// Padded absent: best-sized raw cell.
+	world.resource_mut::<DevelopmentEntryStore>().clear();
+	let (width, res) = overlay_width_res(&mut world, query, TERRAIN_CELL_SIZE, None)?;
+	assert!((width - TERRAIN_CELL_SIZE).abs() < 1e-3);
+	assert_eq!(res, 0);
+
+	// Urbanized medium rejects a padded cell of the wrong size.
+	world.insert_resource(OverlayPadSpec { source, bounds: fine_bounds, res_2: 9 });
+	run(&mut world)?;
+	let (width, res) = overlay_width_res(&mut world, query, 2.0 * TERRAIN_CELL_SIZE, Some(1e-2))?;
+	assert!((width - 2.0 * TERRAIN_CELL_SIZE).abs() < 1e-3);
+	assert_eq!(res, 0);
+
+	// Urbanized medium accepts a padded cell within 1e-2 of the medium width.
+	world.resource_mut::<DevelopmentEntryStore>().clear();
+	world.insert_resource(OverlayPadSpec { source, bounds: medium_bounds, res_2: 9 });
+	run(&mut world)?;
+	let (width, res) = overlay_width_res(&mut world, query, 2.0 * TERRAIN_CELL_SIZE, Some(1e-2))?;
+	assert!((width - 2.0 * TERRAIN_CELL_SIZE).abs() < 1e-3);
+	assert_eq!(res, 9);
+	Ok(())
 }

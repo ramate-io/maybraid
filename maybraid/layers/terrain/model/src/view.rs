@@ -5,7 +5,7 @@ use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec2;
 use lod::gen::Id;
 
-use crate::model::TerrainModel;
+use crate::model::{TerrainCell, TerrainModel};
 
 /// Read access to model `M`, e.g. `TerrainView<Urbanization<OnTerrain<Durham>>>`.
 #[derive(SystemParam)]
@@ -31,6 +31,16 @@ impl<M: TerrainModel> TerrainView<'_, '_, M> {
 
 	pub fn cell(&self, id: Id) -> Option<&M::Cell> {
 		M::cell(&self.read, id)
+	}
+
+	/// See [`TerrainModel::overlay_cell`].
+	pub fn overlay_cell(
+		&self,
+		bounds: Aabb3d,
+		target_size: f32,
+		overlay_size_tolerance: Option<f32>,
+	) -> Option<&dyn TerrainCell<Mesh = <M::Cell as TerrainCell>::Mesh>> {
+		M::overlay_cell(&self.read, bounds, target_size, overlay_size_tolerance)
 	}
 
 	pub fn snapshot(&self, region: Aabb3d) -> M::Snapshot {

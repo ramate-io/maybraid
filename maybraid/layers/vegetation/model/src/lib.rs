@@ -3,14 +3,13 @@
 //! Vegetation generation reads no terrain, so it is untyped. Terrain enters at
 //! presentation through `VegetationPresentationPlugin<G>`.
 
-use bevy::app::{App, Plugin};
+mod config;
+mod generation;
+mod stream;
 
-/// Forest / grove / bump-out selection into `ForestIndex`. No grow, no hosts.
-#[derive(Default)]
-pub struct VegetationGenerationPlugin;
-
-impl Plugin for VegetationGenerationPlugin {
-	fn build(&self, _app: &mut App) {
-		todo!("VegetationGenerationPlugin: fill from maybraid/layers/vegetation/model/src/lib_sketch.rs")
-	}
-}
+pub use config::{ForestStreamSpec, VegetationLayerConfig};
+pub use generation::{VegetationGenerationPlugin, VegetationGenerationSystems};
+pub use stream::{
+	stream_canopy_bump_outs, stream_forest, stream_radii_m, DEFAULT_FOREST_NOISE,
+	DEFAULT_FOREST_STREAM_RADIUS,
+};

@@ -52,10 +52,6 @@ fn main() {
 			TerrainPresentationPlugin::<Urbanization<OnTerrain<Durham>>, PaddedCells>::default(),
 		)
 		.add_plugins(UrbanizationPresentationPlugin::<Urbanization<OnTerrain<Durham>>>::default())
-		.add_plugins(DevelopmentsOnTerrainPlugin {
-			config: playground,
-			commands: true,
-			register_development_forest_lod: false,
-		})
+		.add_plugins(DevelopmentsOnTerrainPlugin { config: playground, commands: true })
 		.run();
 }

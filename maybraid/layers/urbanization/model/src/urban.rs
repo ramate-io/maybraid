@@ -5,7 +5,8 @@ use bevy::math::bounding::Aabb3d;
 use lod::gen::{Id, SpatialIndex, Version};
 use richmond_development_models::{BuiltDevelopment, DevelopmentCell, PadComplex, TerrainWithPads};
 use richmond_urbanization::{DevelopmentLeaf, SelectedUrbanization};
-use terrain_layer_model::TerrainModel;
+use durham_terrain_models::TerrainMeshBuilder;
+use terrain_layer_model::{TerrainCell, TerrainModel};
 
 use crate::model::Urbanization;
 use crate::pads::PadComposable;
@@ -61,7 +62,7 @@ pub trait UrbanModel: TerrainModel {
 impl<M> UrbanModel for Urbanization<M>
 where
 	M: TerrainModel,
-	M::Cell: PadComposable<Padded = TerrainWithPads>,
+	M::Cell: PadComposable<Padded = TerrainWithPads> + TerrainCell<Mesh = TerrainMeshBuilder>,
 {
 	fn pads(read: &SystemParamItem<'_, '_, Self::Read>, region: Aabb3d) -> PadComplex {
 		read.developments.merged_pad_complex(region)

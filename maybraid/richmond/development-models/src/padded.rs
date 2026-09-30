@@ -137,6 +137,10 @@ impl TerrainCell for TerrainWithPads {
 	fn seeds_collision(&self) -> bool {
 		TerrainWithPads::seeds_collision(self)
 	}
+
+	fn res_2(&self) -> u8 {
+		self.res_2
+	}
 }
 
 impl StreamBandedLod for TerrainWithPads {

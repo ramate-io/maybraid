@@ -7,6 +7,7 @@ use bevy::math::{Vec2, Vec3};
 use bevy::prelude::Resource;
 use bevy::transform::components::Transform;
 use lod::gen::Id;
+use lod::lod_ref::LodRef;
 use terrain_layer_model::{
 	BaseTerrainGenerationPlugin, HeightField, OnTerrain, RequireLayer, TerrainCell,
 	TerrainGeneration, TerrainModel,
@@ -49,6 +50,10 @@ impl TerrainCell for FlatCell {
 	fn seeds_collision(&self) -> bool {
 		true
 	}
+
+	fn res_2(&self) -> u8 {
+		0
+	}
 }
 
 #[derive(Resource, Default)]
@@ -58,11 +63,18 @@ struct FlatStore {
 }
 
 #[derive(Clone)]
-struct FlatSnapshot(Vec<FlatCell>);
+struct FlatSnapshot {
+	cells: Vec<FlatCell>,
+	fallback: f32,
+}
 
 impl HeightField for FlatSnapshot {
 	fn height_at(&self, xz: Vec2) -> Option<f32> {
-		self.0.iter().find(|cell| cell.contains_xz(xz)).map(|cell| cell.height)
+		self.cells.iter().find(|cell| cell.contains_xz(xz)).map(|cell| cell.height)
+	}
+
+	fn fallback_height_at(&self, _xz: Vec2) -> f32 {
+		self.fallback
 	}
 }
 
@@ -75,6 +87,14 @@ impl TerrainModel for Flat {
 	type Cell = FlatCell;
 	type Read = FlatRead<'static>;
 	type Snapshot = FlatSnapshot;
+	type Prepare = ();
+
+	fn prepare(
+		_prepare: &mut SystemParamItem<'_, '_, Self::Prepare>,
+		_bounds: Aabb3d,
+		_lod_ref: &LodRef,
+	) {
+	}
 
 	fn height_at(read: &SystemParamItem<'_, '_, Self::Read>, xz: Vec2) -> Option<f32> {
 		read.store
@@ -101,15 +121,26 @@ impl TerrainModel for Flat {
 		read.store.cells.get(&id)
 	}
 
+	fn overlay_cell<'a>(
+		_read: &'a SystemParamItem<'_, '_, Self::Read>,
+		_bounds: Aabb3d,
+		_target_size: f32,
+		_overlay_size_tolerance: Option<f32>,
+	) -> Option<&'a dyn TerrainCell<Mesh = f32>> {
+		None
+	}
+
 	fn snapshot(read: &SystemParamItem<'_, '_, Self::Read>, region: Aabb3d) -> FlatSnapshot {
-		FlatSnapshot(
-			read.store
+		FlatSnapshot {
+			cells: read
+				.store
 				.cells
 				.values()
 				.filter(|cell| region.intersects(&cell.bounds))
 				.cloned()
 				.collect(),
-		)
+			fallback: read.store.fallback,
+		}
 	}
 
 	fn require_generation(app: &App) {

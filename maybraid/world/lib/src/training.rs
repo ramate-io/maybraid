@@ -19,6 +19,7 @@
 
 use bevy::prelude::*;
 use chico_vegetation_on_terrain_playground::PlaygroundConfig;
+use vegetation_layer_model::VegetationLayerConfig;
 use combat_hud::{CombatScore, LiveEnemies};
 use crozon_character_items::{random_starter_loadout, Inventory, ItemRng};
 use crozon_characters::species::{
@@ -81,7 +82,7 @@ impl Plugin for TrainingGroundPlugin {
 #[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct TrainingGrounds(pub bool);
 
-/// Forest stream radius used by [`PlaygroundConfig::world_defaults`].
+/// Forest stream radius used by [`VegetationLayerConfig::world_defaults`].
 const WORLD_FOREST_STREAM_RADIUS: u32 = 1;
 /// Half-extent of the training patch layout.
 const TRAINING_FINE_HALF_EXTENT_CELLS: i32 = 2;
@@ -264,7 +265,8 @@ pub(crate) fn apply_training_grounds(
 	mut dirty: ResMut<TerrainPresentationDirty>,
 	mut pending: ResMut<TerrainPresentPending>,
 	mut assets: ResMut<TerrainPresentationAssets>,
-	mut forest: Option<ResMut<PlaygroundConfig>>,
+	mut playground: Option<ResMut<PlaygroundConfig>>,
+	mut vegetation: Option<ResMut<VegetationLayerConfig>>,
 	mut urban: Option<ResMut<UrbanizationStreamingEnabled>>,
 ) {
 	let target = grounds.0.then_some(*round);
@@ -283,10 +285,12 @@ pub(crate) fn apply_training_grounds(
 	if let Some(urban) = urban.as_deref_mut() {
 		urban.0 = fill.urbanization;
 	}
-	if let Some(config) = forest.as_deref_mut() {
+	if let Some(config) = vegetation.as_deref_mut() {
 		if let Some(spec) = config.forest.as_mut() {
 			spec.stream_radius = fill.forest_stream_radius;
 		}
+	}
+	if let Some(config) = playground.as_deref_mut() {
 		config.coverage = fill.coverage;
 		config.terrain_radius = fill.terrain_radius;
 	}

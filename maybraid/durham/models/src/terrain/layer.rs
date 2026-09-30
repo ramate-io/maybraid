@@ -4,6 +4,7 @@ use bevy::ecs::system::{SystemParam, SystemParamItem};
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use lod::gen::Id;
+use lod::lod_ref::LodRef;
 use terrain_layer_model::{
 	BaseTerrainGenerationPlugin, HeightField, OnTerrain, RequireLayer, TerrainCell,
 	TerrainGeneration, TerrainModel,
@@ -27,15 +28,23 @@ pub struct DurhamRead<'w> {
 }
 
 /// Owned composed heights for grove grow. Shares cell SDFs by `Arc`.
+///
+/// `fallback` is the base-noise clone grove samples use where no cell is stored
+/// (the old owned Durham grove sample carried the same clone).
 #[derive(Clone)]
 pub struct DurhamHeightSnapshot {
 	terrain: TerrainHeightSnapshot,
 	layout: TerrainCellLayout,
+	fallback: crate::terrain::base_noise::BaseTerrainNoise,
 }
 
 impl HeightField for DurhamHeightSnapshot {
 	fn height_at(&self, xz: Vec2) -> Option<f32> {
 		self.terrain.composed_height_at(&self.layout, xz.x, xz.y)
+	}
+
+	fn fallback_height_at(&self, xz: Vec2) -> f32 {
+		self.fallback.height_at(xz.x, xz.y)
 	}
 }
 
@@ -57,12 +66,24 @@ impl TerrainCell for Terrain {
 	fn seeds_collision(&self) -> bool {
 		Terrain::seeds_collision(self)
 	}
+
+	fn res_2(&self) -> u8 {
+		self.res_2
+	}
 }
 
 impl TerrainModel for Durham {
 	type Cell = Terrain;
 	type Read = DurhamRead<'static>;
 	type Snapshot = DurhamHeightSnapshot;
+	type Prepare = ();
+
+	fn prepare(
+		_prepare: &mut SystemParamItem<'_, '_, Self::Prepare>,
+		_bounds: Aabb3d,
+		_lod_ref: &LodRef,
+	) {
+	}
 
 	fn height_at(read: &SystemParamItem<'_, '_, Self::Read>, xz: Vec2) -> Option<f32> {
 		read.store.composed_height_at(&read.layout, xz.x, xz.y)
@@ -80,14 +101,64 @@ impl TerrainModel for Durham {
 		read.store.terrain(id)
 	}
 
+	/// Best-sized raw cell. Durham has no padded replacement, so
+	/// `overlay_size_tolerance` is unused.
+	fn overlay_cell<'a>(
+		read: &'a SystemParamItem<'_, '_, Self::Read>,
+		bounds: Aabb3d,
+		target_size: f32,
+		_overlay_size_tolerance: Option<f32>,
+	) -> Option<&'a dyn TerrainCell<Mesh = TerrainMeshBuilder>> {
+		raw_cell_for_size(read, bounds, target_size).map(|terrain| terrain as _)
+	}
+
 	/// Whole-store snapshot (cheap `Arc` clones), matching today's grove grow.
 	fn snapshot(read: &SystemParamItem<'_, '_, Self::Read>, _region: Aabb3d) -> Self::Snapshot {
-		DurhamHeightSnapshot { terrain: read.store.height_snapshot(), layout: read.layout.clone() }
+		DurhamHeightSnapshot {
+			terrain: read.store.height_snapshot(),
+			layout: read.layout.clone(),
+			fallback: read.base.0.clone(),
+		}
 	}
 
 	fn require_generation(app: &App) {
 		app.require_layer::<BaseTerrainGenerationPlugin<Durham>, Durham>();
 	}
+}
+
+/// Width band of the old `fine_terrain_for` / `medium_terrain_for` helpers.
+const RAW_CELL_SIZE_BAND: f32 = 0.25;
+
+fn raw_cell_for_size<'a>(
+	read: &'a SystemParamItem<'_, '_, DurhamRead<'static>>,
+	bounds: Aabb3d,
+	target_size: f32,
+) -> Option<&'a Terrain> {
+	let mut best: Option<(f32, &'a Terrain)> = None;
+	for id in read.store.terrain_ids_overlapping(bounds) {
+		let Some(terrain) = read.store.terrain(id) else {
+			continue;
+		};
+		let cell = terrain.bounds();
+		let size = (cell.max.x - cell.min.x).max(1e-3);
+		if (size - target_size).abs() > target_size * RAW_CELL_SIZE_BAND {
+			continue;
+		}
+		let overlap = xz_overlap_area(bounds, cell);
+		if overlap <= 1e-3 {
+			continue;
+		}
+		if best.is_none_or(|(best_overlap, _)| overlap > best_overlap) {
+			best = Some((overlap, terrain));
+		}
+	}
+	best.map(|(_, terrain)| terrain)
+}
+
+fn xz_overlap_area(a: Aabb3d, b: Aabb3d) -> f32 {
+	let x = (a.max.x.min(b.max.x) - a.min.x.max(b.min.x)).max(0.0);
+	let z = (a.max.z.min(b.max.z) - a.min.z.max(b.min.z)).max(0.0);
+	x * z
 }
 
 /// Seed and coverage for `BaseTerrainGenerationPlugin<Durham>`.
@@ -183,5 +254,37 @@ mod tests {
 	fn fine_patch_raw_presentation_defaults_on() {
 		assert!(DurhamTerrainConfig::fine_patch(2).raw_present());
 		assert!(TerrainPresentEnabled::default().0);
+	}
+
+	#[test]
+	fn overlay_cell_picks_the_best_sized_raw_cell() -> anyhow::Result<()> {
+		use crate::terrain::TERRAIN_CELL_SIZE;
+
+		let mut world = empty_durham_world();
+		let base = BaseTerrainNoise::from_config(&TerrainConfig::new(42));
+		let fine = TerrainCellLayout::default();
+		let medium = TerrainCellLayout {
+			cell_size: 2.0 * TERRAIN_CELL_SIZE,
+			..TerrainCellLayout::default()
+		};
+		{
+			let mut store = world.resource_mut::<TerrainEntryStore>();
+			store.insert_base_terrain_for_test(&fine, 0, 0, base.clone());
+			store.insert_base_terrain_for_test(&medium, 0, 0, base);
+		}
+		let query = Aabb3d::from_min_max(Vec3::new(1.0, -10.0, 1.0), Vec3::new(20.0, 10.0, 20.0));
+		let mut state = SystemState::<TerrainView<OnTerrain<Durham>>>::new(&mut world);
+		let view = state.get(&world)?;
+		let fine_cell = view
+			.overlay_cell(query, TERRAIN_CELL_SIZE, None)
+			.ok_or_else(|| anyhow::anyhow!("fine cell"))?;
+		let medium_cell = view
+			.overlay_cell(query, 2.0 * TERRAIN_CELL_SIZE, Some(1e-2))
+			.ok_or_else(|| anyhow::anyhow!("medium cell"))?;
+		let fine_width = fine_cell.bounds().max.x - fine_cell.bounds().min.x;
+		let medium_width = medium_cell.bounds().max.x - medium_cell.bounds().min.x;
+		assert!((fine_width - TERRAIN_CELL_SIZE).abs() < 1e-3);
+		assert!((medium_width - 2.0 * TERRAIN_CELL_SIZE).abs() < 1e-3);
+		Ok(())
 	}
 }

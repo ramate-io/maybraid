@@ -68,7 +68,6 @@ pub use weapon::WorldPlayerLoadout;
 
 use avian3d::prelude::{CoefficientCombine, Friction};
 use bevy::prelude::*;
-use chico_forests::{BumpOutLodChan, ForestLodChan, MediumBumpOutLodChan};
 use chico_vegetation_on_terrain_playground::{
 	CharacterCameraFollowEnabled, CharacterLocomotion, CharacterSpecies, PadMovementEnabled,
 	PlayerControlSystems, PlaygroundConfig as VegetationPlaygroundConfig, PlaygroundDiag,
@@ -84,7 +83,7 @@ use durham_terrain_models::{
 use furniture_shaders::FurnitureShadersPlugin;
 use game_commands::command::{GameCommandPlugin, TextEntryFocus};
 use game_commands::ui::GameCommandDrawerConfig;
-use lod::{Bullseye, LodGenerateBudget, OpenLattice};
+use lod::{Bullseye, OpenLattice};
 use maybraid_character_controller::{CharacterControlSystems, CharacterControllerPlugin};
 use maybraid_input::{VirtualPadConfig, VirtualPadPlugin};
 use maybraid_skill_map::{SkillMapPlugin, SkillMapSystems};
@@ -93,13 +92,14 @@ use player::{
 	register_motor_traction_physics, PlayerPlugin, PlayerPresentationPlugin, PlayerSystems,
 };
 use player_camera::{PlayerCameraPlugin, PlayerCameraSystems};
-use richmond_developments_on_terrain_playground::DevelopmentsOnTerrainPlugin;
 use terrain_layer_model::{BaseTerrainGenerationPlugin, OnTerrain};
 use terrain_layer_presentation::TerrainPresentationPlugin;
 use urbanization_layer_model::{
 	Urbanization, UrbanizationGenerationPlugin, UrbanizationLayerConfig,
 };
 use urbanization_layer_presentation::{PaddedCells, UrbanizationPresentationPlugin};
+use vegetation_layer_model::{VegetationGenerationPlugin, VegetationLayerConfig};
+use vegetation_layer_presentation::VegetationPresentationPlugin;
 
 /// Steepest slope the controlled character can drive uphill.
 const WORLD_MAX_SLOPE_ANGLE: f32 = 70.0_f32.to_radians();
@@ -183,8 +183,6 @@ impl Plugin for WorldPlugin {
 			.add_plugins(VegetationOnTerrainPlugin {
 				config: VegetationPlaygroundConfig::world_defaults(),
 				commands: false,
-				register_forest_lod: false,
-				register_bump_out_lod: false,
 				register_camera: false,
 				register_terrain_pitch: false,
 				own_terrain: false,
@@ -201,20 +199,10 @@ impl Plugin for WorldPlugin {
 			.add_plugins(
 				UrbanizationPresentationPlugin::<Urbanization<OnTerrain<Durham>>>::default(),
 			)
-			// Development forest / bump-out LOD until #887. Urbanization systems
-			// come from the layer plugins above.
-			.add_plugins(DevelopmentsOnTerrainPlugin {
-				commands: false,
-				register_development_forest_lod: true,
-				..Default::default()
-			})
-			// Effective generate budgets before this change were last-insert-wins:
-			// urbanization inserted 8, then forest inserted 16, and mobs / bump-outs
-			// inherited 16. Urbanization's 16 now comes from
-			// `UrbanizationLayerConfig::world_defaults()`.
-			.insert_resource(LodGenerateBudget::<ForestLodChan>::new(16))
-			.insert_resource(LodGenerateBudget::<BumpOutLodChan>::new(16))
-			.insert_resource(LodGenerateBudget::<MediumBumpOutLodChan>::new(16));
+			.add_plugins(VegetationGenerationPlugin::new(VegetationLayerConfig::world_defaults()))
+			.add_plugins(
+				VegetationPresentationPlugin::<Urbanization<OnTerrain<Durham>>>::default(),
+			);
 		app.add_plugins(WorldMobsPlugin)
 			.add_plugins(WorldIntelligencePlugin)
 			.add_plugins(SkillMapPlugin)

@@ -2350,11 +2350,9 @@ dependencies = [
  "anyhow",
  "avian3d",
  "bevy",
- "chico-bumpout",
  "chico-forests",
  "chico-groves",
  "chico-vegetation-components",
- "chico-vegetation-shaders",
  "clap",
  "crozon-characters",
  "durham-terrain",
@@ -2363,15 +2361,12 @@ dependencies = [
  "ground-avian",
  "lod",
  "lod-avian",
- "lod-cascade",
  "log",
- "material-ref",
  "maybraid-input",
  "procedural-common",
- "render-item",
- "terrain-chunk-ref",
  "terrain-layer-model",
  "terrain-layer-presentation",
+ "vegetation-layer-model",
 ]
 
 [[package]]
@@ -4945,7 +4940,6 @@ dependencies = [
  "richmond-building-shaders",
  "richmond-buildings",
  "richmond-development-models",
- "richmond-developments-on-terrain-playground",
  "richmond-urbanization",
  "routing-intelligence",
  "serde",
@@ -6803,9 +6797,6 @@ dependencies = [
  "anyhow",
  "avian3d",
  "bevy",
- "chico-forests",
- "chico-groves",
- "chico-vegetation-on-terrain-playground",
  "clap",
  "durham-terrain",
  "durham-terrain-models",
@@ -6813,16 +6804,13 @@ dependencies = [
  "furniture-shaders",
  "game-commands",
  "lod",
- "lod-cascade",
  "log",
  "procedural-common",
- "render-item",
  "richmond-building-components",
  "richmond-buildings",
  "richmond-development-models",
  "richmond-developments",
  "richmond-urbanization",
- "terrain-chunk-ref",
  "terrain-layer-model",
  "terrain-layer-presentation",
  "urbanization-layer-model",
@@ -7887,15 +7875,35 @@ checksum = "f1bddf1187be692e79c5ffeab891132dfb0f236ed36a43c7ed39f1165ee20191"
 name = "vegetation-layer-model"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "bevy",
+ "chico-forests",
+ "durham-terrain-models",
+ "lod",
+ "procedural-common",
 ]
 
 [[package]]
 name = "vegetation-layer-presentation"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "bevy",
+ "chico-bumpout",
+ "chico-forests",
+ "chico-groves",
+ "chico-vegetation-shaders",
+ "durham-terrain-models",
+ "lod",
+ "lod-cascade",
+ "material-ref",
+ "procedural-common",
+ "render-item",
+ "richmond-development-models",
+ "richmond-urbanization",
+ "terrain-chunk-ref",
  "terrain-layer-model",
+ "urbanization-layer-model",
  "vegetation-layer-model",
 ]
 

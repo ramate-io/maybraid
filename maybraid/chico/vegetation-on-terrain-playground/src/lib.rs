@@ -6,36 +6,24 @@
 //! terrain and the coverage shows it, is
 //! `TerrainPresentationPlugin<OnTerrain<Durham>, DurhamCells>`.
 
-mod bump_out;
 pub mod camera;
 pub mod character;
 pub mod commands;
 pub mod diagnostics;
-mod forest;
 mod groves;
-mod material_lib;
 mod pitch;
 pub mod player;
 mod ui;
 
-pub use bump_out::{
-	bump_out_from_cell, bump_out_noise, fine_terrain_for, medium_terrain_for,
-	register_bump_out_lod, terrain_chunk_ref, CanopyBumpOutPresenterState,
-	DurhamCanopyBumpOutPresenter, DurhamMediumCanopyBumpOutPresenter,
-	MediumCanopyBumpOutPresenterState, WorldTerrainBuilder,
-};
 pub use camera::CameraController;
 pub use character::{
 	CharacterSpecies, PlayerVisual, RequestSetCharacter, RequestSetCharacterAppearance,
 };
-pub use chico_forests::ForestStreamSpec;
 pub use commands::{GroveKind, PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use diagnostics::{PlaygroundDiag, PlaygroundTimingPlugin, RequestFpsToggle};
 pub use durham_terrain_models::{TerrainCoverage, WorldBaseTerrain, WORLD_FINE_HALF_EXTENT_CELLS};
-pub use forest::DurhamForestPresenter;
 pub use game_commands::command::PendingStartupCommand;
 pub use groves::{DurhamGroveSample, OwnedDurhamTerrain, StoredDurhamTerrain};
-pub use material_lib::{VegetationOnTerrainMaterialLib, VegetationOnTerrainMaterialRefPlugin};
 pub use player::{
 	holding_elevation, player_position_above_surface, player_spawn_point_at, spawn_player_body,
 	AwaitingTerrainSurface, CharacterCameraFollowEnabled, CharacterLocomotion, Jumping, MoveWish,
@@ -48,14 +36,12 @@ use avian3d::prelude::LinearVelocity;
 use bevy::camera::visibility::VisibilitySystems;
 use bevy::math::{IVec2, UVec2};
 use bevy::prelude::*;
-use bump_out::stream_canopy_bump_outs;
 use camera::{
 	camera_controller, refocus_camera_on_elevation, release_modifiers_on_focus_change,
 	setup_camera, surface_or_hold,
 };
 use character::{apply_set_character, drive_player_locomotion};
-use chico_bumpout::ChicoBumpOutPlugin;
-use chico_forests::{register_forest_lod, register_vegetation_view, stream_radii_m};
+use chico_forests::FOREST_CAMERA_SPEED;
 use chico_groves::DEFAULT_GROVE_EXTENT_XZ;
 use chico_vegetation_components::{FoliageLodProbe, StickLodProbe};
 use commands::{
@@ -69,13 +55,13 @@ use durham_terrain_models::{
 	TerrainPresentationAssets, TerrainPresentationDirty, TerrainStreamingEnabled,
 	TERRAIN_CELL_SIZE,
 };
-use forest::stream_durham_forest;
 use game_commands::command::{
 	capture_command_line_input, GameCommandPlugin, TextEntryBlocked, TextEntryFocus,
 };
 use game_commands::ui::{GameCommandDrawerConfig, GameCommandStatusText};
 use groves::{spawn_tiled_groves, GroveRoot};
-use lod::{LodGenerateSystems, LodPresentSystems, LodSceneHost};
+use lod::LodSceneHost;
+use vegetation_layer_model::{stream_radii_m, VegetationGenerationSystems, VegetationLayerConfig};
 use maybraid_input::{PadGameplayEnabled, VirtualPadPlugin, VirtualPadSystems};
 use pitch::{apply_avian_terrain_pitch, sync_suspend_terrain_pitch};
 use player::{respawn_player_on_layout, snap_player_to_composed_surface};
@@ -109,8 +95,6 @@ pub struct PlaygroundConfig {
 	pub terrain_radius: i32,
 	pub grove_extent_xz: f32,
 	pub tile_radius: i32,
-	/// `Some` streams the forest and skips tiled groves.
-	pub forest: Option<ForestStreamSpec>,
 	pub coverage: TerrainCoverage,
 }
 
@@ -121,21 +105,20 @@ impl Default for PlaygroundConfig {
 			terrain_radius: DEFAULT_TERRAIN_RADIUS,
 			grove_extent_xz: DEFAULT_GROVE_EXTENT_XZ,
 			tile_radius: DEFAULT_TILE_RADIUS,
-			forest: None,
 			coverage: TerrainCoverage::FinePatch,
 		}
 	}
 }
 
 impl PlaygroundConfig {
-	/// Terrain + forest at playable present / generate extents.
+	/// Terrain at playable present / generate extents. The forest stream lives on
+	/// [`VegetationLayerConfig::world_defaults`].
 	pub fn world_defaults() -> Self {
 		Self {
 			grove: commands::GroveKind::MonsterGrass,
 			terrain_radius: WORLD_FINE_HALF_EXTENT_CELLS,
 			grove_extent_xz: DEFAULT_GROVE_EXTENT_XZ,
 			tile_radius: DEFAULT_TILE_RADIUS,
-			forest: Some(ForestStreamSpec { stream_radius: 1, ..ForestStreamSpec::default() }),
 			coverage: TerrainCoverage::PlayableWorld,
 		}
 	}
@@ -194,10 +177,6 @@ pub struct VegetationOnTerrainPlugin {
 	pub config: PlaygroundConfig,
 	/// When false, the caller owns the command drawer / CLI.
 	pub commands: bool,
-	/// Register the plain Durham-backed forest presenter.
-	pub register_forest_lod: bool,
-	/// Register the plain Durham-backed canopy bump-out presenter.
-	pub register_bump_out_lod: bool,
 	/// Spawn and drive the playground fly/follow camera.
 	/// Composed applications can disable this and own the sole gameplay camera.
 	pub register_camera: bool,
@@ -213,8 +192,6 @@ impl Default for VegetationOnTerrainPlugin {
 		Self {
 			config: PlaygroundConfig::default(),
 			commands: true,
-			register_forest_lod: true,
-			register_bump_out_lod: true,
 			register_camera: true,
 			register_terrain_pitch: true,
 			own_terrain: true,
@@ -241,7 +218,6 @@ impl Plugin for VegetationOnTerrainPlugin {
 			}
 			app.insert_resource(TerrainPresentEnabled(config.raw_present()));
 		}
-		app.add_plugins(ChicoBumpOutPlugin);
 		if self.commands {
 			app.add_plugins(
 				GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config())
@@ -250,18 +226,6 @@ impl Plugin for VegetationOnTerrainPlugin {
 						toggle_keys: vec![KeyCode::F1, KeyCode::KeyY],
 						..default()
 					}),
-			);
-		}
-		register_vegetation_view(app);
-		if !app.is_plugin_added::<VegetationOnTerrainMaterialRefPlugin>() {
-			app.add_plugins(VegetationOnTerrainMaterialRefPlugin);
-		}
-		if self.register_forest_lod {
-			register_forest_lod::<DurhamForestPresenter>(app);
-		}
-		if self.register_bump_out_lod {
-			register_bump_out_lod::<DurhamCanopyBumpOutPresenter, DurhamMediumCanopyBumpOutPresenter>(
-				app,
 			);
 		}
 		if !app.is_plugin_added::<VegetationHostPlugin>() {
@@ -275,17 +239,13 @@ impl Plugin for VegetationOnTerrainPlugin {
 			app.add_systems(
 				Update,
 				(
-					apply_commands.after(capture_command_line_input::<PlaygroundCommand>),
+					apply_commands
+						.after(capture_command_line_input::<PlaygroundCommand>)
+						.before(VegetationGenerationSystems),
 					spawn_groves.after(apply_commands).run_if(terrain_streaming_enabled),
-					stream_durham_forest
+					sync_forest_camera_speed
 						.after(apply_commands)
-						.before(LodGenerateSystems::Produce)
-						.before(LodPresentSystems::Produce)
-						.run_if(terrain_streaming_enabled),
-					stream_canopy_bump_outs
-						.after(stream_durham_forest)
-						.before(LodGenerateSystems::Produce)
-						.before(LodPresentSystems::Produce)
+						.before(VegetationGenerationSystems)
 						.run_if(terrain_streaming_enabled),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 				),
@@ -295,14 +255,8 @@ impl Plugin for VegetationOnTerrainPlugin {
 				Update,
 				(
 					spawn_groves.run_if(terrain_streaming_enabled),
-					stream_durham_forest
-						.before(LodGenerateSystems::Produce)
-						.before(LodPresentSystems::Produce)
-						.run_if(terrain_streaming_enabled),
-					stream_canopy_bump_outs
-						.after(stream_durham_forest)
-						.before(LodGenerateSystems::Produce)
-						.before(LodPresentSystems::Produce)
+					sync_forest_camera_speed
+						.before(VegetationGenerationSystems)
 						.run_if(terrain_streaming_enabled),
 				),
 			);
@@ -379,6 +333,7 @@ fn apply_mesh_stats(
 fn apply_commands(
 	mut commands: Commands,
 	mut playground: ResMut<PlaygroundConfig>,
+	mut vegetation: ResMut<VegetationLayerConfig>,
 	mut layout: ResMut<TerrainCellLayout>,
 	mut terrain_assets: ResMut<TerrainPresentationAssets>,
 	mut terrain_dirty: ResMut<TerrainPresentationDirty>,
@@ -393,14 +348,14 @@ fn apply_commands(
 ) {
 	for (entity, request) in &grove {
 		playground.grove = request.0;
-		playground.forest = None;
+		vegetation.forest = None;
 		groves_dirty.0 = true;
 		ui::write_status(&mut status, format!("grove {}", request.0.label()));
 		commands.entity(entity).despawn();
 	}
 	for (entity, request) in &forest {
 		let spec = request.0;
-		playground.forest = Some(spec);
+		vegetation.forest = Some(spec);
 		if playground.coverage == TerrainCoverage::FinePatch {
 			let (_, generate_m) = stream_radii_m(spec.stream_radius);
 			let needed = terrain_cells_for_generate_m(generate_m).max(1);
@@ -497,6 +452,7 @@ fn apply_mode_commands(
 fn spawn_groves(
 	mut commands: Commands,
 	config: Res<PlaygroundConfig>,
+	vegetation: Res<VegetationLayerConfig>,
 	store: Res<TerrainEntryStore>,
 	layout: Res<TerrainCellLayout>,
 	base: Res<WorldBaseTerrain>,
@@ -513,7 +469,7 @@ fn spawn_groves(
 		commands.entity(entity).despawn();
 	}
 
-	if config.forest.is_some() {
+	if vegetation.forest.is_some() {
 		debug!("forest stream on; tiled groves cleared");
 		dirty.0 = false;
 		return;
@@ -528,6 +484,24 @@ fn spawn_groves(
 		config.tile_radius
 	);
 	dirty.0 = false;
+}
+
+const PATCH_CAMERA_SPEED: f32 = 40.0;
+
+/// Edge-triggered fly-camera speed. The generation stream used to set this;
+/// cameras stay playground chrome.
+fn sync_forest_camera_speed(
+	config: Res<VegetationLayerConfig>,
+	mut controller: Query<&mut CameraController, With<Camera3d>>,
+	mut forest_camera: Local<bool>,
+) {
+	let armed = config.forest.is_some();
+	if armed != *forest_camera {
+		if let Ok(mut ctrl) = controller.single_mut() {
+			ctrl.speed = if armed { FOREST_CAMERA_SPEED } else { PATCH_CAMERA_SPEED };
+		}
+		*forest_camera = armed;
+	}
 }
 
 fn sync_pad_gameplay(
@@ -546,13 +520,6 @@ mod tests {
 	use bevy::ecs::system::RunSystemOnce;
 	use durham_terrain_models::{BaseTerrainNoise, TerrainConfig};
 	use player::AwaitingTerrainSurface;
-
-	#[test]
-	fn world_defaults_keep_grove_fill_at_one_kilometre() {
-		let spec = PlaygroundConfig::world_defaults().forest.expect("forest on");
-		assert_eq!(spec.stream_radius, 1);
-		assert_eq!(stream_radii_m(1), (1_000.0, 3_000.0));
-	}
 
 	#[test]
 	fn appearance_attach_in_character_mode_does_not_await_layout_center() -> anyhow::Result<()> {
