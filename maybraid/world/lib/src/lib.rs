@@ -27,6 +27,7 @@ mod training_plaza;
 mod ui;
 mod vsync;
 mod weapon;
+mod world_layers;
 
 pub use chico_vegetation_on_terrain_playground::{PlayerPhysicsEnabled, PlayerSpawnXz};
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
@@ -63,6 +64,7 @@ pub use training_plaza::TrainingPlazaMounted;
 pub use ui::WorldMobHudEnabled;
 pub use vsync::{default_window_present_mode, RequestVsyncToggle, VSYNC_TOGGLE_KEY};
 pub use weapon::WorldPlayerLoadout;
+pub use world_layers::WorldLayersPlugin;
 
 use avian3d::prelude::{CoefficientCombine, Friction};
 use bevy::prelude::*;
@@ -74,9 +76,7 @@ use chico_vegetation_on_terrain_playground::{
 use combat_hud::CombatHudPlugin;
 use crozon_character_ragdoll::{CharacterRagdollPlugin, CharacterRagdollTargets};
 use crozon_characters::{CharacterMotionSystems, DrawTerrainPitchProbes};
-use durham_terrain_models::{
-	Durham, DurhamCells, DurhamTerrainConfig, TerrainFrictionConfig, TerrainPresentEnabled,
-};
+use durham_terrain_models::TerrainFrictionConfig;
 use furniture_shaders::FurnitureShadersPlugin;
 use game_commands::command::{GameCommandPlugin, TextEntryFocus};
 use game_commands::ui::GameCommandDrawerConfig;
@@ -89,16 +89,6 @@ use player::{
 	register_motor_traction_physics, PlayerPlugin, PlayerPresentationPlugin, PlayerSystems,
 };
 use player_camera::{PlayerCameraPlugin, PlayerCameraSystems};
-use mob_layer_model::{MobGenerationPlugin, MobLayerConfig};
-use mob_layer_presentation::MobPresentationPlugin;
-use terrain_layer_model::{BaseTerrainGenerationPlugin, OnTerrain};
-use terrain_layer_presentation::TerrainPresentationPlugin;
-use urbanization_layer_model::{
-	Urbanization, UrbanizationGenerationPlugin, UrbanizationLayerConfig,
-};
-use urbanization_layer_presentation::{PaddedCells, UrbanizationPresentationPlugin};
-use vegetation_layer_model::{VegetationGenerationPlugin, VegetationLayerConfig};
-use vegetation_layer_presentation::VegetationPresentationPlugin;
 
 /// Steepest slope the controlled character can drive uphill.
 const WORLD_MAX_SLOPE_ANGLE: f32 = 70.0_f32.to_radians();
@@ -166,11 +156,6 @@ impl Plugin for WorldPlugin {
 			.insert_resource(WORLD_TERRAIN_PITCH_GIZMOS)
 			.add_plugins(FurnitureShadersPlugin)
 			.add_plugins(WorldMaterialRefPlugin)
-			.add_plugins(BaseTerrainGenerationPlugin::<Durham>::new(
-				DurhamTerrainConfig::playable_world(),
-			))
-			.add_plugins(TerrainPresentationPlugin::<OnTerrain<Durham>, DurhamCells>::default())
-			.insert_resource(TerrainPresentEnabled(false))
 			.add_plugins(VirtualPadPlugin::new(VirtualPadConfig {
 				debug_overlay: self.input_debug_enabled,
 				..default()
@@ -183,24 +168,7 @@ impl Plugin for WorldPlugin {
 			.add_plugins(MeshStatsPlugin)
 			.insert_resource(CharacterRagdollTargets { players: true, npcs: true, unmarked: false })
 			.add_plugins(CharacterRagdollPlugin)
-			.add_plugins(UrbanizationGenerationPlugin::<OnTerrain<Durham>>::new(
-				UrbanizationLayerConfig::world_defaults(),
-			))
-			.add_plugins(
-				TerrainPresentationPlugin::<Urbanization<OnTerrain<Durham>>, PaddedCells>::default(
-				),
-			)
-			.add_plugins(
-				UrbanizationPresentationPlugin::<Urbanization<OnTerrain<Durham>>>::default(),
-			)
-			.add_plugins(VegetationGenerationPlugin::new(VegetationLayerConfig::world_defaults()))
-			.add_plugins(
-				VegetationPresentationPlugin::<Urbanization<OnTerrain<Durham>>>::default(),
-			)
-			.add_plugins(MobGenerationPlugin::<Urbanization<OnTerrain<Durham>>>::new(
-				MobLayerConfig::world_defaults(),
-			))
-			.add_plugins(MobPresentationPlugin::<Urbanization<OnTerrain<Durham>>>::default())
+			.add_plugins(WorldLayersPlugin)
 			.add_plugins(WorldIntelligencePlugin)
 			.add_plugins(SkillMapPlugin)
 			.insert_resource(maybraid_skill_map::SkillMapEnabled(false))
