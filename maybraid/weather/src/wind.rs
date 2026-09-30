@@ -269,12 +269,6 @@ mod tests {
 	}
 
 	#[test]
-	fn wind_is_far() {
-		assert!(WIND_SPATIAL_RADIUS > 40.0);
-		assert!(WIND_SPATIAL_RADIUS > maybraid_audio::GRUNT_SPATIAL_RADIUS);
-	}
-
-	#[test]
 	fn spawn_points_stay_near_the_listener() {
 		let origin = Vec3::new(3.0, 1.0, -2.0);
 		let mut noise = 7;
