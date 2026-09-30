@@ -73,9 +73,9 @@ pub(crate) fn training_trainee(
 	round.map(|round| round.trainee())
 }
 
-/// Leave / Home: drop the session. [`crate::shell`] then clears
-/// [`maybraid_game_mode_training_ground::TrainingGroundActive`] so the world
-/// fill restores the playable rings.
+/// Leave / Home: drop the session. [`crate::shell`] then requests
+/// [`maybraid_world::WorldMode::Discovery`] so the world fill restores the
+/// playable rings.
 pub(crate) fn clear_play_session(
 	mut commands: Commands,
 	mut session: ResMut<PlaySession>,

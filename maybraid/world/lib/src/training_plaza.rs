@@ -33,7 +33,8 @@ use urbanization_layer_model::Urbanization;
 
 use crate::PlayerSpawnXz;
 use crate::control::WorldSurfaceReady;
-use crate::training::{TrainingGrounds, TrainingMap, TrainingRound};
+use crate::WorldMode;
+use crate::training::{TrainingMap, TrainingRound};
 
 const TRAINING_WALL_STEP_M: f32 = 8.0;
 const TRAINING_WALL_HEIGHT_M: f32 = 20.0;
@@ -435,7 +436,7 @@ fn training_development_cell(center: Vec2) -> Aabb3d {
 /// A site that fits none rerolls to another site for the same round.
 #[allow(clippy::type_complexity)]
 pub(crate) fn mount_training_plaza(
-	grounds: Res<TrainingGrounds>,
+	mode: Res<State<WorldMode>>,
 	mut round: ResMut<TrainingRound>,
 	ready: Res<WorldSurfaceReady>,
 	mounted: Option<Res<TrainingPlazaMounted>>,
@@ -450,7 +451,10 @@ pub(crate) fn mount_training_plaza(
 	// A cell admitted after the stamp stays raw, unstamped hillside inside the courtyard.
 	let waiting = {
 		let (store, layout, _) = access.p0();
-		!grounds.0 || !ready.0 || *layout != round.layout() || !store.fills_layout(&layout)
+		!mode.get().is_training()
+			|| !ready.0
+			|| *layout != round.layout()
+			|| !store.fills_layout(&layout)
 	};
 	if waiting || mounted.is_some() || stamped.is_some() {
 		return;
@@ -496,7 +500,7 @@ pub(crate) fn mount_training_plaza(
 	};
 	for host in &hosts {
 		for entity in host.spawn(&mut commands) {
-			commands.entity(entity).insert(TrainingPlaza);
+			commands.entity(entity).insert((TrainingPlaza, DespawnOnExit(WorldMode::Training)));
 		}
 	}
 	spawn_training_wall(&mut commands, &access.p2(), &arena, config.seed);
@@ -510,7 +514,7 @@ pub(crate) fn mount_training_plaza(
 /// while the patch streams, so the camera, vegetation, and LOD follow it. A
 /// body still being respawned is parked once it exists.
 pub(crate) fn park_on_training_site(
-	grounds: Res<TrainingGrounds>,
+	mode: Res<State<WorldMode>>,
 	round: Res<TrainingRound>,
 	base: Res<WorldBaseTerrain>,
 	mut parked: Local<Option<TrainingMap>>,
@@ -524,7 +528,7 @@ pub(crate) fn park_on_training_site(
 		(With<Camera3d>, Without<Player>),
 	>,
 ) {
-	if !grounds.0 {
+	if !mode.get().is_training() {
 		*parked = None;
 		return;
 	}
@@ -544,7 +548,7 @@ pub(crate) fn park_on_training_site(
 /// A body respawned onto the live plaza (a new life on the same map) takes
 /// the arena seat and its anchor.
 pub(crate) fn reseat_training_life(
-	grounds: Res<TrainingGrounds>,
+	mode: Res<State<WorldMode>>,
 	round: Res<TrainingRound>,
 	mounted: Option<Res<TrainingPlazaMounted>>,
 	stamped: Option<Res<TrainingPlazaStamped>>,
@@ -559,7 +563,7 @@ pub(crate) fn reseat_training_life(
 		(With<Camera3d>, Without<Player>),
 	>,
 ) {
-	if !grounds.0 || !mounted.is_some_and(|mounted| mounted.serves(*round)) {
+	if !mode.get().is_training() || !mounted.is_some_and(|mounted| mounted.serves(*round)) {
 		return;
 	}
 	let Some(stamped) = stamped else {
@@ -577,13 +581,13 @@ pub(crate) fn reseat_training_life(
 /// is hidden and superseded, including cells Durham re-presents later. A raw
 /// collider left under the courtyard is a second, unstamped floor.
 pub(crate) fn supersede_training_raw_terrain(
-	grounds: Res<TrainingGrounds>,
+	mode: Res<State<WorldMode>>,
 	stamped: Option<Res<TrainingPlazaStamped>>,
 	ready_fills: Query<(), (With<TrainingPaddedFill>, With<TerrainTrimeshCollider>)>,
 	mut raw: Query<(Entity, &PresentedTerrainScene, &mut Visibility), Without<TerrainSuperseded>>,
 	mut commands: Commands,
 ) {
-	if !grounds.0 {
+	if !mode.get().is_training() {
 		return;
 	}
 	let Some(stamped) = stamped else {
@@ -608,7 +612,7 @@ pub(crate) fn supersede_training_raw_terrain(
 
 /// Seat the roster and player once the padded fills carry colliders.
 pub(crate) fn promote_training_plaza(
-	grounds: Res<TrainingGrounds>,
+	mode: Res<State<WorldMode>>,
 	stamped: Option<Res<TrainingPlazaStamped>>,
 	mounted: Option<Res<TrainingPlazaMounted>>,
 	ready_fills: Query<(), (With<TrainingPaddedFill>, With<TerrainTrimeshCollider>)>,
@@ -624,7 +628,7 @@ pub(crate) fn promote_training_plaza(
 		(With<Camera3d>, Without<Player>),
 	>,
 ) {
-	if !grounds.0 || mounted.is_some() {
+	if !mode.get().is_training() || mounted.is_some() {
 		return;
 	}
 	let Some(stamped) = stamped else {
@@ -639,7 +643,7 @@ pub(crate) fn promote_training_plaza(
 		let host = mob
 			.scene(stamped.round.mob_seed() + index as f32)
 			.spawn(&mut commands, Transform::from_translation(mob.host));
-		commands.entity(host).insert(TrainingBrawler);
+		commands.entity(host).insert((TrainingBrawler, DespawnOnExit(WorldMode::Training)));
 	}
 	seat_player_at(&mut players, &mut cameras, arena.player, arena.player_facing());
 	// Terrain snap and void recovery sample the raw FinePatch, which is below
@@ -655,7 +659,7 @@ pub(crate) fn promote_training_plaza(
 /// parks the player on Discovery's default spawn, so Discovery resumes the
 /// character's saved trail instead of starting at the last Training site.
 pub(crate) fn clear_training_plaza(
-	grounds: Res<TrainingGrounds>,
+	mode: Res<State<WorldMode>>,
 	round: Res<TrainingRound>,
 	base: Res<WorldBaseTerrain>,
 	mounted: Option<Res<TrainingPlazaMounted>>,
@@ -677,7 +681,8 @@ pub(crate) fn clear_training_plaza(
 		(With<Camera3d>, Without<Player>),
 	>,
 ) {
-	let stale = |of: TrainingRound| !grounds.0 || of.map() != round.map();
+	let live = mode.get().is_training();
+	let stale = |of: TrainingRound| !live || of.map() != round.map();
 	let mounted_stale = mounted.as_deref().is_some_and(|mounted| stale(mounted.0));
 	let stamped_stale = stamped.as_deref().is_some_and(|stamped| stale(stamped.round));
 	if !mounted_stale && !stamped_stale {
@@ -708,7 +713,7 @@ pub(crate) fn clear_training_plaza(
 	}
 	commands.remove_resource::<TrainingPlazaStamped>();
 	commands.remove_resource::<TrainingPlazaMounted>();
-	if grounds.0 {
+	if live {
 		return;
 	}
 	spawn_xz.0 = None;
@@ -777,6 +782,7 @@ fn stamp_training_terrain(
 			Name::new("Training padded terrain"),
 			TrainingPlaza,
 			TrainingPaddedFill,
+			DespawnOnExit(WorldMode::Training),
 		));
 		stamped.push(id);
 	}
@@ -819,7 +825,7 @@ fn spawn_training_wall(
 	let bounds = building_bounds(&wall);
 	for entity in spawn_building_components(commands, &wall, Transform::IDENTITY, bounds) {
 		spawn_building_walk_colliders(commands, entity, &wall, BUILDING_FRICTION);
-		commands.entity(entity).insert(TrainingPlaza);
+		commands.entity(entity).insert((TrainingPlaza, DespawnOnExit(WorldMode::Training)));
 	}
 }
 
@@ -1112,7 +1118,7 @@ mod tests {
 		let covered = Id::from_cell(Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE));
 		let elsewhere = Id::from_cell(Aabb3d::from_min_max(Vec3::splat(500.0), Vec3::splat(501.0)));
 		let mut world = World::new();
-		world.insert_resource(TrainingGrounds(true));
+		world.insert_resource(State::new(WorldMode::Training));
 		world.insert_resource(TrainingPlazaStamped {
 			round: TrainingRound::default(),
 			cell_id: covered,
@@ -1140,7 +1146,11 @@ mod tests {
 
 	fn plaza_world(grounds: bool, round: TrainingRound) -> World {
 		let mut world = World::new();
-		world.insert_resource(TrainingGrounds(grounds));
+		world.insert_resource(State::new(if grounds {
+			WorldMode::Training
+		} else {
+			WorldMode::Discovery
+		}));
 		world.insert_resource(round);
 		world.insert_resource(base_terrain());
 		world.insert_resource(DevelopmentEntryStore::default());
@@ -1304,7 +1314,7 @@ mod tests {
 		use bevy::ecs::system::RunSystemOnce;
 		let covered = Id::from_cell(Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE));
 		let mut world = World::new();
-		world.insert_resource(TrainingGrounds(false));
+		world.insert_resource(State::new(WorldMode::Discovery));
 		world.insert_resource(TrainingPlazaStamped {
 			round: TrainingRound::default(),
 			cell_id: covered,

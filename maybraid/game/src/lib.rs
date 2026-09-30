@@ -92,7 +92,7 @@ impl Plugin for GamePlugin {
 					enter_loading_world,
 					spawn_loading_backdrop,
 					crate::training::reset_surface_ready,
-					apply_shell_look,
+					apply_shell_look.before(resume_discovery_from_saved_waypoints),
 					detach_preview_camera,
 					crate::load::arm_first_load,
 					crate::training::begin_training_round.before(load_active_player_loadout),

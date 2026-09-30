@@ -10,8 +10,8 @@ pub use terrain::render::cascade_chunk_for_cell;
 pub use terrain::{
 	origin_cell_ids_for_layout, playable_world_cell_layout, register_terrain_plugin,
 	retarget_presentation_assets, stream_banded_draws, stream_banded_level, stream_banded_scene,
-	terrain_collider_covers_xz, terrain_streaming_enabled, training_grounds_cell_layout,
-	training_grounds_cell_layout_at, AvianTerrainIndex, BaseTerrainNoise,
+	fine_patch_cell_layout, terrain_collider_covers_xz, terrain_streaming_enabled,
+	AvianTerrainIndex, BaseTerrainNoise,
 	CanyonHighPassControllerLayout, CanyonLowPassControllerLayout, CanyonStampCell, CascadeChunk,
 	ComposedTerrain, Durham, DurhamCells, DurhamHeightSnapshot, DurhamRead, DurhamTerrainConfig,
 	JerseyControllerLayouts, JerseyStampConfigs, MacroCellLayout, MarazionBandPass,

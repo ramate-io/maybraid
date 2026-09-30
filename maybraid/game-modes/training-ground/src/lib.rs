@@ -1,19 +1,19 @@
 //! Training Ground is a seeded FinePatch of the Maybraid world.
 //!
-//! The shell sets [`TrainingGroundActive`]. [`maybraid_world::TrainingGrounds`]
-//! retargets Durham, the forest, and hopscotch. A Training pose is not written.
+//! The shell requests Training on the world's mode. This plugin is the mode
+//! marker; sources register here in later issues.
 
 use bevy::prelude::*;
 
-/// The game shell sets this while Training Ground is the live world session.
-#[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct TrainingGroundActive(pub bool);
+/// Marker so the executable loads this mode beside the others.
+#[derive(Resource, Clone, Copy, Debug, Default)]
+pub struct TrainingGroundMode;
 
 pub struct TrainingGroundPlugin;
 
 impl Plugin for TrainingGroundPlugin {
 	fn build(&self, app: &mut App) {
-		app.init_resource::<TrainingGroundActive>();
+		app.init_resource::<TrainingGroundMode>();
 	}
 }
 
@@ -22,9 +22,9 @@ mod tests {
 	use super::*;
 
 	#[test]
-	fn plugin_starts_inactive() {
+	fn plugin_inserts_its_marker() {
 		let mut app = App::new();
 		app.add_plugins(TrainingGroundPlugin);
-		assert!(!app.world().resource::<TrainingGroundActive>().0);
+		assert!(app.world().get_resource::<TrainingGroundMode>().is_some());
 	}
 }

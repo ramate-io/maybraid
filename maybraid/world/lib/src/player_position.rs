@@ -13,6 +13,7 @@ use durham_terrain_models::{TerrainCellLayout, WorldBaseTerrain, terrain_streami
 use player_camera::FollowCamera;
 use serde::{Deserialize, Serialize};
 
+use crate::world_mode::{WorldMode, WorldModeSet};
 use crate::{PlayerSpawnXz, WorldPlayerLoadout};
 
 const LOG_INTERVAL: Duration = Duration::from_secs(10);
@@ -53,7 +54,8 @@ impl Plugin for PlayerPositionPlugin {
 					.run_if(terrain_streaming_enabled)
 					.run_if(on_timer(LOG_INTERVAL)),
 			)
-				.chain(),
+				.chain()
+				.after(WorldModeSet),
 		);
 	}
 }
@@ -96,7 +98,8 @@ pub fn resume_discovery_from_saved_waypoints(
 	spawn: Res<PlayerSpawnXz>,
 	save_root: Res<SaveRoot>,
 	loadout: Option<Res<WorldPlayerLoadout>>,
-	grounds: Option<Res<crate::TrainingGrounds>>,
+	mode: Option<Res<State<WorldMode>>>,
+	next_mode: Option<Res<NextState<WorldMode>>>,
 	layout: Res<TerrainCellLayout>,
 	base: Res<WorldBaseTerrain>,
 	mut waypoints: ResMut<PlayerPositionWaypoints>,
@@ -112,7 +115,7 @@ pub fn resume_discovery_from_saved_waypoints(
 	if spawn.0.is_some() {
 		return;
 	}
-	if grounds.is_some_and(|grounds| grounds.0) {
+	if training_requested(mode.as_deref(), next_mode.as_deref()) {
 		return;
 	}
 	let Some(id) = current_character_id(loadout.as_deref()) else {
@@ -202,6 +205,21 @@ fn trim_trailing_default_spawn(positions: &mut Vec<Vec3>, default_spawn: Vec3) -
 	trimmed
 }
 
+/// Training requested this frame, including a [`NextState`] the shell set in
+/// the same `OnEnter` before [`WorldMode`] itself has transitioned.
+fn training_requested(
+	mode: Option<&State<WorldMode>>,
+	next: Option<&NextState<WorldMode>>,
+) -> bool {
+	match next {
+		Some(
+			NextState::Pending(WorldMode::Training) | NextState::PendingIfNeq(WorldMode::Training),
+		) => true,
+		Some(NextState::Pending(_) | NextState::PendingIfNeq(_)) => false,
+		Some(NextState::Unchanged) | None => mode.is_some_and(|mode| mode.get().is_training()),
+	}
+}
+
 fn park_camera_on_player(player: Vec3, follow: &FollowCamera) -> Transform {
 	let look = player + Vec3::Y * follow.look_height;
 	let eye = look + Vec3::new(-follow.distance, follow.height, 0.0);
@@ -218,13 +236,13 @@ fn log_player_position(players: Query<&Transform, With<Player>>) {
 
 fn retain_player_waypoints(
 	streaming: Res<durham_terrain_models::TerrainStreamingEnabled>,
-	grounds: Option<Res<crate::TrainingGrounds>>,
+	mode: Option<Res<State<WorldMode>>>,
 	save_root: Res<SaveRoot>,
 	loadout: Option<Res<WorldPlayerLoadout>>,
 	players: Query<&Transform, With<Player>>,
 	mut waypoints: ResMut<PlayerPositionWaypoints>,
 ) {
-	if !streaming.0 || grounds.is_some_and(|grounds| grounds.0) {
+	if !streaming.0 || mode.is_some_and(|mode| mode.get().is_training()) {
 		return;
 	}
 	let Ok(transform) = players.single() else {
@@ -336,7 +354,7 @@ mod tests {
 		let mut world = World::new();
 		world.insert_resource(root.clone());
 		world.insert_resource(durham_terrain_models::TerrainStreamingEnabled(true));
-		world.insert_resource(crate::TrainingGrounds(true));
+		world.insert_resource(State::new(WorldMode::Training));
 		world.insert_resource(PlayerPositionWaypoints::default());
 		world.insert_resource(crate::WorldPlayerLoadout::new(
 			id.to_hex(),

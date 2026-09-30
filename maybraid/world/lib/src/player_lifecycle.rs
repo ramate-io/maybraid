@@ -24,7 +24,8 @@ use threat_intelligence::{Affiliations, ThreatSubject};
 use urbanization_layer_model::Urbanization;
 
 use crate::control::strip_world_player_motor;
-use crate::training::{TrainingGrounds, TrainingLifeEnded};
+use crate::training::TrainingLifeEnded;
+use crate::world_mode::{WorldMode, WorldModeSet};
 use crate::weapon::WorldPlayerAppearanceRequested;
 use crate::{WorldGameplayEnabled, WorldPlayerLoadout};
 
@@ -103,7 +104,10 @@ impl Plugin for WorldPlayerLifecyclePlugin {
 					.after(DamageSystems::Down)
 					.after(CharacterRagdollSystems::Handoff),
 			)
-			.add_systems(Update, respawn_world_player.after(PoiSystems::Index))
+			.add_systems(
+				Update,
+				respawn_world_player.after(PoiSystems::Index).after(WorldModeSet),
+			)
 			.add_systems(Update, sync_player_death_glaze.after(respawn_world_player));
 	}
 }
@@ -145,7 +149,7 @@ fn sync_player_death_glaze(
 
 fn queue_downed_world_player(
 	config: Res<WorldPlayerRespawnConfig>,
-	grounds: Option<Res<TrainingGrounds>>,
+	mode: Option<Res<State<WorldMode>>>,
 	mut state: ResMut<WorldPlayerRespawnState>,
 	mut commands: Commands,
 	mut players: Query<DownedWorldPlayer<'_>, (With<VegetationPlayer>, Added<Downed>)>,
@@ -158,7 +162,7 @@ fn queue_downed_world_player(
 			timer: Timer::from_seconds(config.delay_secs.max(0.0), TimerMode::Once),
 			death_at: transform.translation,
 			seed,
-			training: grounds.as_deref().is_some_and(|grounds| grounds.0),
+			training: mode.as_deref().is_some_and(|mode| mode.get().is_training()),
 		});
 		velocity.0 = Vec3::ZERO;
 		if let Some(firearm) = firearm {
@@ -198,7 +202,7 @@ fn respawn_world_player(
 	loadout: Option<Res<WorldPlayerLoadout>>,
 	locomotion: Res<CharacterLocomotion>,
 	surface: TerrainView<Urbanization<OnTerrain<Durham>>>,
-	grounds: Option<Res<TrainingGrounds>>,
+	mode: Option<Res<State<WorldMode>>>,
 	mut ended: MessageWriter<TrainingLifeEnded>,
 	live_player: Query<(), With<VegetationPlayer>>,
 	mut state: ResMut<WorldPlayerRespawnState>,
@@ -206,7 +210,7 @@ fn respawn_world_player(
 	mut meshes: ResMut<Assets<Mesh>>,
 	mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-	let training_now = grounds.is_some_and(|grounds| grounds.0);
+	let training_now = mode.is_some_and(|mode| mode.get().is_training());
 	let abandoned =
 		state.pending.as_ref().is_some_and(|pending| pending.abandoned(training_now));
 	if !gameplay.0 && !abandoned {
@@ -420,7 +424,11 @@ mod tests {
 		world.init_resource::<Assets<Mesh>>();
 		world.init_resource::<Assets<StandardMaterial>>();
 		world.init_resource::<Messages<TrainingLifeEnded>>();
-		world.insert_resource(TrainingGrounds(grounds));
+		world.insert_resource(State::new(if grounds {
+			WorldMode::Training
+		} else {
+			WorldMode::Discovery
+		}));
 		world.insert_resource(crate::TrainingRound::new(9).trainee());
 		world
 	}
@@ -457,7 +465,7 @@ mod tests {
 			"a paused Training death keeps waiting"
 		);
 
-		world.insert_resource(TrainingGrounds(false));
+		world.insert_resource(State::new(WorldMode::Discovery));
 		world
 			.run_system_once(respawn_world_player)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;

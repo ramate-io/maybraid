@@ -1,11 +1,11 @@
 //! Training Ground is a seeded FinePatch of the Maybraid world, not Discovery's
 //! moving rings.
 //!
-//! While [`TrainingGrounds`] is set, Durham presents a four-cell window pinned
-//! on the [`TrainingRound`] site, hopscotch stays off, the forest shrinks to one
-//! grove tile, and a Training pose is not written. [`crate::training_plaza`]
-//! stamps one seeded Richmond development onto that patch — pads first, then
-//! hosts — once the whole window exists.
+//! While [`crate::WorldMode::Training`] is active, Durham presents a four-cell
+//! window pinned on the [`TrainingRound`] site, hopscotch stays off, the forest
+//! shrinks to one grove tile, and a Training pose is not written.
+//! [`crate::training_plaza`] stamps one seeded Richmond development onto that
+//! patch — pads first, then hosts — once the whole window exists.
 //!
 //! A Training respawn ends the life with [`TrainingLifeEnded`], and the shell
 //! advances [`TrainingRound`]. A new round moves the patch, tears the plaza
@@ -30,7 +30,7 @@ use durham_terrain_models::{
 	TerrainCellLayout, TerrainColliderSystems, TerrainCoverage, TerrainFillSystems,
 	TerrainLayoutPinned, TerrainPresentEnabled, TerrainPresentPending, TerrainPresentationAssets,
 	TerrainPresentationDirty, TerrainPresenterState, WORLD_FINE_HALF_EXTENT_CELLS,
-	playable_world_cell_layout, retarget_presentation_assets, training_grounds_cell_layout_at,
+	fine_patch_cell_layout, playable_world_cell_layout, retarget_presentation_assets,
 };
 use mob_intelligence::MemberOf;
 use mob_layer_model::{MobGenerationSystems, MobStreamSuspended};
@@ -39,6 +39,7 @@ use vegetation_layer_model::VegetationLayerConfig;
 
 use crate::WorldPlayerLoadout;
 use crate::control::{WorldSurfaceSet, update_world_surface_ready};
+use crate::world_mode::{WorldMode, WorldModeSet, apply_pending_world_mode};
 use crate::training_markers::{TrainingEnemyMarkersEnabled, sync_training_enemy_markers};
 use crate::training_plaza::{
 	TrainingBrawler, clear_training_plaza, mount_training_plaza, park_on_training_site,
@@ -51,47 +52,59 @@ pub(crate) struct TrainingGroundPlugin;
 
 impl Plugin for TrainingGroundPlugin {
 	fn build(&self, app: &mut App) {
-		app.init_resource::<TrainingGrounds>()
+		app.init_state::<WorldMode>()
 			.init_resource::<TrainingRound>()
+			.init_resource::<AppliedTrainingMap>()
 			.init_resource::<TrainingEnemyMarkersEnabled>()
-			.add_message::<TrainingLifeEnded>()
-			.add_systems(Update, sync_mob_stream_suspended.before(MobGenerationSystems))
-			.add_systems(
-				Update,
-				(
-					apply_training_grounds.before(TerrainFillSystems::Generate),
-					park_on_training_site.after(apply_training_grounds),
-					clear_training_terrain_present,
-					mount_training_plaza.in_set(WorldSurfaceSet).after(update_world_surface_ready),
-					(supersede_training_raw_terrain, promote_training_plaza)
-						.chain()
-						.after(TerrainColliderSystems::QueueMeshes),
-					reseat_training_life,
-					keep_training_score,
-					count_training_enemies,
-					sync_training_enemy_markers,
-				),
+			.add_message::<TrainingLifeEnded>();
+		register_world_mode_transitions(app);
+		app.add_systems(
+			Update,
+			(
+				park_on_training_site.after(retarget_training_map),
+				clear_training_terrain_present,
+				mount_training_plaza.in_set(WorldSurfaceSet).after(update_world_surface_ready),
+				(supersede_training_raw_terrain, promote_training_plaza)
+					.chain()
+					.after(TerrainColliderSystems::QueueMeshes),
+				reseat_training_life,
+				count_training_enemies,
+				sync_training_enemy_markers,
 			)
-			// Mob, threat, and combat systems queue plain inserts on squad hosts
-			// and members all through Update and PostUpdate; tearing them down any
-			// earlier in the frame panics those commands.
-			.add_systems(Last, clear_training_plaza);
+				.after(WorldModeSet),
+		)
+		// Mob, threat, and combat systems queue plain inserts on squad hosts
+		// and members all through Update and PostUpdate; tearing them down any
+		// earlier in the frame panics those commands.
+		.add_systems(Last, clear_training_plaza);
 	}
 }
 
-/// Set by the game shell while Training Ground is the live session.
-#[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct TrainingGrounds(pub bool);
+/// The map whose fill is currently applied. `None` is Discovery's rings.
+#[derive(Resource, Default)]
+struct AppliedTrainingMap(Option<TrainingMap>);
 
-/// Copy [`TrainingGrounds`] into [`MobStreamSuspended`] every frame.
-///
-/// `TrainingGrounds` is written only in state transitions and `PostStartup`, so
-/// this matches what the mob stream read today.
-fn sync_mob_stream_suspended(
-	grounds: Res<TrainingGrounds>,
-	mut suspended: ResMut<MobStreamSuspended>,
-) {
-	suspended.0 = grounds.0;
+/// Mode transitions and the same-frame flush. Plaza systems stay on the plugin
+/// so a headless transition test can register this without the rest of the stack.
+fn register_world_mode_transitions(app: &mut App) {
+	app.configure_sets(
+		Update,
+		WorldModeSet.before(TerrainFillSystems::Generate).before(MobGenerationSystems),
+	);
+	app.add_systems(Update, apply_pending_world_mode.in_set(WorldModeSet))
+		.add_systems(
+			Update,
+			retarget_training_map
+				.run_if(in_state(WorldMode::Training))
+				.after(WorldModeSet)
+				.before(TerrainFillSystems::Generate),
+		)
+		.add_systems(OnEnter(WorldMode::Training), (enter_training, open_training_score))
+		.add_systems(
+			OnTransition { exited: WorldMode::Training, entered: WorldMode::Discovery },
+			return_to_discovery,
+		)
+		.add_systems(OnExit(WorldMode::Training), close_training_score);
 }
 
 /// Forest stream radius used by [`VegetationLayerConfig::world_defaults`].
@@ -177,7 +190,8 @@ impl TrainingRound {
 	}
 
 	pub fn layout(self) -> TerrainCellLayout {
-		training_grounds_cell_layout_at(self.site())
+		let half = TRAINING_FINE_HALF_EXTENT_CELLS;
+		fine_patch_cell_layout(half, self.site() - IVec2::splat(half))
 	}
 
 	pub fn development_seed(self) -> u32 {
@@ -260,16 +274,14 @@ impl TrainingFill {
 	}
 }
 
-/// Shrink Durham and the forest to the round's patch, and keep hopscotch off.
-/// A new map (or site reroll) moves the patch. Restores the playable rings
-/// when the shell clears [`TrainingGrounds`].
+/// Entering Training pins the round's patch and suspends the mob stream.
 ///
-/// Runs in [`Update`] before generate so [`OnEnter`] shell look (after
-/// [`PreUpdate`]) retargets the fill on the same frame.
-pub(crate) fn apply_training_grounds(
-	grounds: Res<TrainingGrounds>,
+/// Runs from `OnEnter`, which the same-frame flush applies before generate.
+/// Startup stays in Discovery, so this does not retarget the first frame.
+fn enter_training(
 	round: Res<TrainingRound>,
-	mut applied: Local<Option<TrainingMap>>,
+	mut applied: ResMut<AppliedTrainingMap>,
+	mut suspended: ResMut<MobStreamSuspended>,
 	mut layout: ResMut<TerrainCellLayout>,
 	mut coverage: ResMut<TerrainCoverage>,
 	mut present: ResMut<TerrainPresentEnabled>,
@@ -280,23 +292,112 @@ pub(crate) fn apply_training_grounds(
 	mut vegetation: Option<ResMut<VegetationLayerConfig>>,
 	mut urban: Option<ResMut<UrbanizationStreamingEnabled>>,
 ) {
-	let target = grounds.0.then_some(*round);
-	if *applied == target.map(TrainingRound::map) {
+	applied.0 = Some(round.map());
+	suspended.0 = true;
+	write_session_fill(
+		Some(*round),
+		&mut layout,
+		&mut coverage,
+		&mut present,
+		&mut pinned,
+		&mut dirty,
+		&mut pending,
+		&mut assets,
+		vegetation.as_deref_mut(),
+		urban.as_deref_mut(),
+	);
+}
+
+/// Discovery's rings, after Training. `OnTransition` does not run for the
+/// initial enter of Discovery, so startup leaves Durham's own dirty flag alone.
+fn return_to_discovery(
+	mut applied: ResMut<AppliedTrainingMap>,
+	mut suspended: ResMut<MobStreamSuspended>,
+	mut layout: ResMut<TerrainCellLayout>,
+	mut coverage: ResMut<TerrainCoverage>,
+	mut present: ResMut<TerrainPresentEnabled>,
+	mut pinned: ResMut<TerrainLayoutPinned>,
+	mut dirty: ResMut<TerrainPresentationDirty>,
+	mut pending: ResMut<TerrainPresentPending>,
+	mut assets: ResMut<TerrainPresentationAssets>,
+	mut vegetation: Option<ResMut<VegetationLayerConfig>>,
+	mut urban: Option<ResMut<UrbanizationStreamingEnabled>>,
+) {
+	applied.0 = None;
+	suspended.0 = false;
+	write_session_fill(
+		None,
+		&mut layout,
+		&mut coverage,
+		&mut present,
+		&mut pinned,
+		&mut dirty,
+		&mut pending,
+		&mut assets,
+		vegetation.as_deref_mut(),
+		urban.as_deref_mut(),
+	);
+}
+
+/// A new [`TrainingRound`] map while Training stays active. A new life keeps
+/// the map, so the patch does not move. `NextState::set` of the current mode
+/// would exit and enter Training; the shell uses `set_if_neq` instead, and this
+/// path moves the patch without that exit.
+fn retarget_training_map(
+	round: Res<TrainingRound>,
+	mut applied: ResMut<AppliedTrainingMap>,
+	mut layout: ResMut<TerrainCellLayout>,
+	mut coverage: ResMut<TerrainCoverage>,
+	mut present: ResMut<TerrainPresentEnabled>,
+	mut pinned: ResMut<TerrainLayoutPinned>,
+	mut dirty: ResMut<TerrainPresentationDirty>,
+	mut pending: ResMut<TerrainPresentPending>,
+	mut assets: ResMut<TerrainPresentationAssets>,
+	mut vegetation: Option<ResMut<VegetationLayerConfig>>,
+	mut urban: Option<ResMut<UrbanizationStreamingEnabled>>,
+) {
+	if applied.0 == Some(round.map()) {
 		return;
 	}
-	*applied = target.map(TrainingRound::map);
-	let fill = TrainingFill::for_session(target);
+	applied.0 = Some(round.map());
+	write_session_fill(
+		Some(*round),
+		&mut layout,
+		&mut coverage,
+		&mut present,
+		&mut pinned,
+		&mut dirty,
+		&mut pending,
+		&mut assets,
+		vegetation.as_deref_mut(),
+		urban.as_deref_mut(),
+	);
+}
+
+fn write_session_fill(
+	round: Option<TrainingRound>,
+	layout: &mut TerrainCellLayout,
+	coverage: &mut TerrainCoverage,
+	present: &mut TerrainPresentEnabled,
+	pinned: &mut TerrainLayoutPinned,
+	dirty: &mut TerrainPresentationDirty,
+	pending: &mut TerrainPresentPending,
+	assets: &mut TerrainPresentationAssets,
+	vegetation: Option<&mut VegetationLayerConfig>,
+	urban: Option<&mut UrbanizationStreamingEnabled>,
+) {
+	let fill = TrainingFill::for_session(round);
 	*layout = fill.layout.clone();
 	*coverage = fill.coverage;
 	present.0 = fill.present;
 	pinned.0 = fill.pin_layout;
 	dirty.0 = true;
 	pending.0 = true;
-	retarget_presentation_assets(&mut assets, fill.coverage, fill.terrain_radius);
-	if let Some(urban) = urban.as_deref_mut() {
+	retarget_presentation_assets(assets, fill.coverage, fill.terrain_radius);
+	if let Some(urban) = urban {
 		urban.0 = fill.urbanization;
 	}
-	if let Some(config) = vegetation.as_deref_mut() {
+	if let Some(config) = vegetation {
 		if let Some(spec) = config.forest.as_mut() {
 			spec.stream_radius = fill.forest_stream_radius;
 		}
@@ -305,32 +406,24 @@ pub(crate) fn apply_training_grounds(
 
 /// Each Training session keeps its own [`CombatScore`] across its rounds and
 /// lives; leaving drops it, which hides the score panel.
-pub(crate) fn keep_training_score(
-	grounds: Res<TrainingGrounds>,
-	mut kept: Local<bool>,
-	mut commands: Commands,
-) {
-	if grounds.0 == *kept {
-		return;
-	}
-	*kept = grounds.0;
-	if grounds.0 {
-		commands.insert_resource(CombatScore::default());
-	} else {
-		commands.remove_resource::<CombatScore>();
-	}
+fn open_training_score(mut commands: Commands) {
+	commands.insert_resource(CombatScore::default());
+}
+
+fn close_training_score(mut commands: Commands) {
+	commands.remove_resource::<CombatScore>();
 }
 
 /// Keep [`LiveEnemies`] at the number of training fighters still standing. A
 /// downed fighter drops out until its squad respawns it.
 pub(crate) fn count_training_enemies(
-	grounds: Res<TrainingGrounds>,
+	mode: Res<State<WorldMode>>,
 	live: Option<ResMut<LiveEnemies>>,
 	squads: Query<(), With<TrainingBrawler>>,
 	fighters: Query<(&MemberOf, &Health), Without<Downed>>,
 	mut commands: Commands,
 ) {
-	if !grounds.0 {
+	if !mode.get().is_training() {
 		if live.is_some() {
 			commands.remove_resource::<LiveEnemies>();
 		}
@@ -365,14 +458,20 @@ pub(crate) fn clear_training_terrain_present(
 #[cfg(test)]
 mod tests {
 	use bevy::ecs::system::RunSystemOnce;
-	use durham_terrain_models::{TerrainConfig, training_grounds_cell_layout};
+	use bevy::state::app::StatesPlugin;
+	use durham_terrain_models::TerrainConfig;
+	use urbanization_layer_model::UrbanizationStreamingEnabled;
+	use vegetation_layer_model::VegetationLayerConfig;
 
 	use super::*;
 
 	fn training_world(round: TrainingRound) -> World {
 		let mut world = World::new();
-		world.insert_resource(TrainingGrounds(true));
 		world.insert_resource(round);
+		world.init_resource::<AppliedTrainingMap>();
+		world.insert_resource(MobStreamSuspended(false));
+		world.insert_resource(VegetationLayerConfig::world_defaults());
+		world.insert_resource(UrbanizationStreamingEnabled(true));
 		world.insert_resource(playable_world_cell_layout());
 		world.insert_resource(TerrainCoverage::PlayableWorld);
 		world.insert_resource(TerrainPresentEnabled(false));
@@ -392,18 +491,44 @@ mod tests {
 		world
 	}
 
+	fn forest_radius(world: &World) -> Option<u32> {
+		world.resource::<VegetationLayerConfig>().forest.map(|spec| spec.stream_radius)
+	}
+
 	#[test]
-	fn apply_training_grounds_pins_the_round_site() -> anyhow::Result<()> {
+	fn entering_training_pins_the_round_site() -> anyhow::Result<()> {
 		let round = TrainingRound::new(7);
 		let mut world = training_world(round);
-		world
-			.run_system_once(apply_training_grounds)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		world.run_system_once(enter_training).map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		assert_eq!(*world.resource::<TerrainCellLayout>(), round.layout());
 		assert_eq!(*world.resource::<TerrainCoverage>(), TerrainCoverage::FinePatch);
 		assert!(world.resource::<TerrainPresentEnabled>().0);
 		assert!(world.resource::<TerrainLayoutPinned>().0);
 		assert!(world.resource::<TerrainPresentationDirty>().0);
+		assert!(world.resource::<TerrainPresentPending>().0);
+		assert!(world.resource::<MobStreamSuspended>().0);
+		assert!(!world.resource::<UrbanizationStreamingEnabled>().0);
+		assert_eq!(forest_radius(&world), Some(0));
+		Ok(())
+	}
+
+	#[test]
+	fn returning_to_discovery_restores_the_playable_rings() -> anyhow::Result<()> {
+		let round = TrainingRound::new(7);
+		let mut world = training_world(round);
+		world.run_system_once(enter_training).map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		world.resource_mut::<TerrainPresentationDirty>().0 = false;
+		world
+			.run_system_once(return_to_discovery)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert_eq!(*world.resource::<TerrainCellLayout>(), playable_world_cell_layout());
+		assert_eq!(*world.resource::<TerrainCoverage>(), TerrainCoverage::PlayableWorld);
+		assert!(!world.resource::<TerrainPresentEnabled>().0);
+		assert!(!world.resource::<TerrainLayoutPinned>().0);
+		assert!(world.resource::<TerrainPresentationDirty>().0);
+		assert!(!world.resource::<MobStreamSuspended>().0);
+		assert!(world.resource::<UrbanizationStreamingEnabled>().0);
+		assert_eq!(forest_radius(&world), Some(WORLD_FOREST_STREAM_RADIUS));
 		Ok(())
 	}
 
@@ -411,46 +536,128 @@ mod tests {
 	fn a_new_round_moves_the_patch() -> anyhow::Result<()> {
 		let round = TrainingRound::new(7);
 		let mut world = training_world(round);
-		let mut system = IntoSystem::into_system(apply_training_grounds);
-		system.initialize(&mut world);
-		system.run((), &mut world).map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		world.run_system_once(enter_training).map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		world.resource_mut::<TerrainPresentationDirty>().0 = false;
-		system.run((), &mut world).map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		world
+			.run_system_once(retarget_training_map)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		assert!(!world.resource::<TerrainPresentationDirty>().0, "same round stays put");
 
 		world.insert_resource(round.next_life());
-		system.run((), &mut world).map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		world
+			.run_system_once(retarget_training_map)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		assert!(!world.resource::<TerrainPresentationDirty>().0, "a new life keeps the map");
+		assert_eq!(*world.resource::<TerrainCellLayout>(), round.layout());
 
 		world.insert_resource(round.next());
-		system.run((), &mut world).map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		world
+			.run_system_once(retarget_training_map)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		assert_eq!(*world.resource::<TerrainCellLayout>(), round.next().layout());
 		assert!(world.resource::<TerrainPresentationDirty>().0);
+		Ok(())
+	}
+
+	#[derive(States, Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
+	enum ShellFlow {
+		#[default]
+		Home,
+		Loading,
+	}
+
+	fn request_shell_mode(flow: Res<State<ShellFlow>>, mut next: ResMut<NextState<WorldMode>>) {
+		let mode = match *flow.get() {
+			ShellFlow::Home => WorldMode::Discovery,
+			ShellFlow::Loading => WorldMode::Training,
+		};
+		NextState::set_if_neq(&mut next, mode);
+	}
+
+	#[test]
+	fn a_shell_enter_retargets_on_that_update_and_startup_does_not() -> anyhow::Result<()> {
+		let round = TrainingRound::new(7);
+		let mut app = App::new();
+		app.add_plugins((MinimalPlugins, StatesPlugin));
+		app.init_state::<WorldMode>();
+		app.init_state::<ShellFlow>();
+		app.insert_resource(round);
+		app.init_resource::<AppliedTrainingMap>();
+		app.insert_resource(MobStreamSuspended(false));
+		app.insert_resource(VegetationLayerConfig::world_defaults());
+		app.insert_resource(UrbanizationStreamingEnabled(true));
+		app.insert_resource(playable_world_cell_layout());
+		app.insert_resource(TerrainCoverage::PlayableWorld);
+		app.insert_resource(TerrainPresentEnabled(false));
+		app.insert_resource(TerrainLayoutPinned(false));
+		app.insert_resource(TerrainPresentationDirty(false));
+		app.insert_resource(TerrainPresentPending(false));
+		app.insert_resource(TerrainPresentationAssets {
+			config: TerrainConfig::new(42),
+			material: Handle::default(),
+			lod_bands: Vec::new(),
+			outer_add_walls: true,
+			fine_grid_max_radius: Some(WORLD_FINE_HALF_EXTENT_CELLS),
+			macro_seam_half_extents: Vec::new(),
+			macro_cell_min_size: None,
+			macro_res_2: None,
+		});
+		register_world_mode_transitions(&mut app);
+		app.add_systems(OnEnter(ShellFlow::Home), request_shell_mode);
+		app.add_systems(OnEnter(ShellFlow::Loading), request_shell_mode);
+		app.update();
+		assert!(
+			!app.world().resource::<TerrainPresentationDirty>().0,
+			"the initial Discovery state does not retarget"
+		);
+		assert_eq!(*app.world().resource::<TerrainCoverage>(), TerrainCoverage::PlayableWorld);
+		assert_eq!(forest_radius(app.world()), Some(WORLD_FOREST_STREAM_RADIUS));
+
+		app.world_mut().resource_mut::<NextState<ShellFlow>>().set(ShellFlow::Loading);
+		app.update();
+		assert_eq!(*app.world().resource::<State<WorldMode>>().get(), WorldMode::Training);
+		assert_eq!(*app.world().resource::<TerrainCellLayout>(), round.layout());
+		assert_eq!(*app.world().resource::<TerrainCoverage>(), TerrainCoverage::FinePatch);
+		assert_eq!(forest_radius(app.world()), Some(0));
+		assert!(app.world().resource::<TerrainPresentationDirty>().0);
+
+		app.world_mut().resource_mut::<TerrainPresentationDirty>().0 = false;
+		app.insert_resource(round.next_life());
+		app.update();
+		assert!(
+			!app.world().resource::<TerrainPresentationDirty>().0,
+			"a new life on the same map does not move the patch"
+		);
+
+		app.insert_resource(round.next());
+		app.update();
+		assert_eq!(*app.world().resource::<TerrainCellLayout>(), round.next().layout());
+		assert!(app.world().resource::<TerrainPresentationDirty>().0);
+
+		app.world_mut().resource_mut::<NextState<ShellFlow>>().set(ShellFlow::Home);
+		app.update();
+		assert_eq!(*app.world().resource::<State<WorldMode>>().get(), WorldMode::Discovery);
+		assert_eq!(*app.world().resource::<TerrainCellLayout>(), playable_world_cell_layout());
+		assert_eq!(forest_radius(app.world()), Some(WORLD_FOREST_STREAM_RADIUS));
 		Ok(())
 	}
 
 	#[test]
 	fn each_training_session_keeps_a_fresh_score() -> anyhow::Result<()> {
 		let mut world = World::new();
-		world.insert_resource(TrainingGrounds(true));
-		let mut system = IntoSystem::into_system(keep_training_score);
-		system.initialize(&mut world);
-		let mut run = |world: &mut World| -> anyhow::Result<()> {
-			system.run((), world).map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let run = |world: &mut World, system: fn(Commands)| -> anyhow::Result<()> {
+			world.run_system_once(system).map_err(|error| anyhow::anyhow!("{error:?}"))?;
 			world.flush();
 			Ok(())
 		};
-		run(&mut world)?;
+		run(&mut world, open_training_score)?;
 		world.resource_mut::<CombatScore>().record_down();
-		run(&mut world)?;
 		assert_eq!(world.resource::<CombatScore>().downs, 1, "a session keeps its tally");
 
-		world.insert_resource(TrainingGrounds(false));
-		run(&mut world)?;
+		run(&mut world, close_training_score)?;
 		assert!(world.get_resource::<CombatScore>().is_none(), "leaving drops the score");
 
-		world.insert_resource(TrainingGrounds(true));
-		run(&mut world)?;
+		run(&mut world, open_training_score)?;
 		assert_eq!(*world.resource::<CombatScore>(), CombatScore::default());
 		Ok(())
 	}
@@ -458,7 +665,7 @@ mod tests {
 	#[test]
 	fn the_enemy_count_follows_standing_training_fighters() -> anyhow::Result<()> {
 		let mut world = World::new();
-		world.insert_resource(TrainingGrounds(true));
+		world.insert_resource(State::new(WorldMode::Training));
 		let squad = world.spawn(TrainingBrawler).id();
 		let stranger = world.spawn_empty().id();
 		let fighter = |mob| (MemberOf { mob, slot: 0 }, Health::from_max(10.0));
@@ -480,7 +687,7 @@ mod tests {
 		health.apply_damage(10.0);
 		assert_eq!(run(&mut world)?, Some(1), "a dead fighter drops out");
 
-		world.insert_resource(TrainingGrounds(false));
+		world.insert_resource(State::new(WorldMode::Discovery));
 		assert_eq!(run(&mut world)?, None, "leaving hides the count");
 		Ok(())
 	}
@@ -489,7 +696,13 @@ mod tests {
 	fn training_fill_is_a_pinned_raw_fine_patch() {
 		let round = TrainingRound::new(3);
 		let fill = TrainingFill::for_session(Some(round));
-		assert_eq!(fill.layout, training_grounds_cell_layout_at(round.site()));
+		assert_eq!(
+			fill.layout,
+			fine_patch_cell_layout(
+				TRAINING_FINE_HALF_EXTENT_CELLS,
+				round.site() - IVec2::splat(TRAINING_FINE_HALF_EXTENT_CELLS),
+			),
+		);
 		assert_eq!(fill.coverage, TerrainCoverage::FinePatch);
 		assert!(fill.present);
 		assert!(fill.pin_layout);
@@ -500,7 +713,9 @@ mod tests {
 	#[test]
 	fn plaza_waits_for_the_whole_patch() {
 		let store = durham_terrain_models::TerrainEntryStore::default();
-		assert!(!store.fills_layout(&training_grounds_cell_layout()));
+		let origin = IVec2::splat(-TRAINING_FINE_HALF_EXTENT_CELLS);
+		let patch = fine_patch_cell_layout(TRAINING_FINE_HALF_EXTENT_CELLS, origin);
+		assert!(!store.fills_layout(&patch));
 	}
 
 	#[test]

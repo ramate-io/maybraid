@@ -60,8 +60,8 @@ pub use collider::{
 };
 pub use config::TerrainConfig;
 pub use host::{
-	playable_world_cell_layout, retarget_presentation_assets, terrain_streaming_enabled,
-	training_grounds_cell_layout, training_grounds_cell_layout_at, Durham, TerrainCoverage,
+	fine_patch_cell_layout, playable_world_cell_layout, retarget_presentation_assets,
+	terrain_streaming_enabled, Durham, TerrainCoverage,
 	TerrainFillSystems, TerrainLayoutPinned, TerrainPresentEnabled, TerrainPresentPending,
 	TerrainPresentationDirty, TerrainStreamingEnabled, WorldBaseTerrain,
 	WORLD_FINE_HALF_EXTENT_CELLS, WORLD_OUTER_2X_ROWS, WORLD_OUTER_4X_ROWS,

@@ -7,7 +7,7 @@
 //! missing origin ids per frame. Playable visuals come from the urbanized
 //! presenter. Generation runs on every coverage. Raw present is
 //! [`crate::DurhamCells`], gated by [`TerrainPresentEnabled`] (off for
-//! the playable world, on for a fine patch, toggled by Training).
+//! the playable world, on for a fine patch).
 
 use bevy::math::{IVec2, UVec2};
 use bevy::prelude::*;
@@ -73,7 +73,7 @@ pub enum TerrainCoverage {
 }
 
 /// When true, [`generate_cells`] keeps the current origin instead of recentering
-/// on the viewer. Training Ground pins a seeded FinePatch this way.
+/// on the viewer. A pinned fine patch uses this so the window stays put.
 #[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct TerrainLayoutPinned(pub bool);
 
@@ -186,16 +186,13 @@ pub fn playable_world_cell_layout() -> TerrainCellLayout {
 	world_cell_layout()
 }
 
-/// Four 160 m cells on a side, fixed on the origin. Training presents this
-/// patch instead of the playable-world rings.
-pub fn training_grounds_cell_layout() -> TerrainCellLayout {
-	training_grounds_cell_layout_at(IVec2::ZERO)
-}
-
-/// [`training_grounds_cell_layout`] centered on the cell corner `center`.
-pub fn training_grounds_cell_layout_at(center: IVec2) -> TerrainCellLayout {
-	let mut layout = cell_layout(2);
-	layout.origin += center;
+/// Fine-only grid, `half_extent` cells on each side of `origin`.
+///
+/// `origin` is the minimum cell corner. Extents are `2 * half_extent` on each
+/// axis (at least one cell). No stream rings.
+pub fn fine_patch_cell_layout(half_extent: i32, origin: IVec2) -> TerrainCellLayout {
+	let mut layout = cell_layout(half_extent);
+	layout.origin = origin;
 	layout
 }
 
@@ -239,7 +236,7 @@ pub fn retarget_presentation_assets(
 ///
 /// `setup_presentation_assets` stays here. The terrain index reads
 /// [`TerrainPresentationAssets`] and [`WaterPresentationAssets`] while filling
-/// cells, and Training retargets the terrain assets even when raw present is off.
+/// cells, and a live session retargets the terrain assets even when raw present is off.
 pub(crate) fn install_durham_generation(
 	app: &mut App,
 	seed: u32,
@@ -607,8 +604,8 @@ mod tests {
 	}
 
 	#[test]
-	fn training_patch_is_a_pinned_four_cell_fine_grid() {
-		let layout = training_grounds_cell_layout();
+	fn fine_patch_is_a_four_cell_grid_when_unpinned() {
+		let layout = fine_patch_cell_layout(2, IVec2::new(-2, -2));
 		assert!(!layout.is_streamed());
 		assert_eq!(layout.extents, UVec2::new(4, 4));
 		assert_eq!(layout.origin, IVec2::new(-2, -2));
@@ -616,14 +613,14 @@ mod tests {
 	}
 
 	#[test]
-	fn training_patch_centers_on_its_site() {
-		let site = IVec2::new(7, -3);
-		let layout = training_grounds_cell_layout_at(site);
-		assert_eq!(layout.origin, site - IVec2::splat(2));
+	fn fine_patch_sits_on_its_origin() {
+		let origin = IVec2::new(5, -5);
+		let layout = fine_patch_cell_layout(2, origin);
+		assert_eq!(layout.origin, origin);
 		assert_eq!(layout.extents, UVec2::new(4, 4));
 		let center = layout.region_center_xz();
-		assert!((center.x - 7.0 * layout.cell_size).abs() < 1e-3);
-		assert!((center.z + 3.0 * layout.cell_size).abs() < 1e-3);
+		assert!((center.x - (origin.x + 2) as f32 * layout.cell_size).abs() < 1e-3);
+		assert!((center.z - (origin.y + 2) as f32 * layout.cell_size).abs() < 1e-3);
 	}
 
 	#[test]

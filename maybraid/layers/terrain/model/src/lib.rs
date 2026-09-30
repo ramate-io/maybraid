@@ -14,12 +14,14 @@ mod generation;
 mod model;
 mod on_terrain;
 mod require;
+mod source;
 mod view;
 
 pub use generation::{BaseTerrainGenerationPlugin, TerrainGeneration};
 pub use model::{HeightField, TerrainCell, TerrainModel};
 pub use on_terrain::OnTerrain;
 pub use require::RequireLayer;
+pub use source::{LayerSource, SourceSystems};
 pub use view::TerrainView;
 
 #[cfg(test)]
