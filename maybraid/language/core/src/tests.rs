@@ -5,6 +5,7 @@ use anyhow::{anyhow, Context};
 use crate::concept::{
 	Concept, ConceptId, ConceptRelation, ConceptUniverse, EnglishSenseLookup, NeighborhoodRequest,
 };
+use crate::grammar::SurfaceGrammar;
 use crate::graph::{InMemoryLexicalGraph, LexicalContextGraph};
 use crate::lexicalizer::{CompositionalLexicalizer, Lexicalizer, RootHeavyLexicalizer};
 use crate::marshall::{ConceptMarshaller, DefaultMarshaller};
@@ -256,6 +257,51 @@ fn register_can_change_resolution_without_changing_semantics() -> anyhow::Result
 	} else {
 		return Err(anyhow!("formal register should still see neighborhood donors"));
 	}
+	Ok(())
+}
+
+#[test]
+fn surface_grammar_formats_an_ipa_sentence() -> anyhow::Result<()> {
+	let (universe, lex) = lex()?;
+	let (out_a, _, out_b, _) = render_pair(Utterance::john_gave_the_book_to_mary(&lex), &universe);
+	let a = out_a.realize(SurfaceGrammar::compositional());
+	let b = out_b.realize(SurfaceGrammar::root_heavy());
+	let john_a = out_a.realization_of(lex.john).context("john A")?.term.ipa.as_str();
+	let give_a = out_a.realization_of(lex.give).context("give A")?.term.ipa.as_str();
+	let book_a = out_a.realization_of(lex.book).context("book A")?.term.ipa.as_str();
+	let mary_a = out_a.realization_of(lex.mary).context("mary A")?.term.ipa.as_str();
+	assert_eq!(a.to_string(), format!("/{john_a} {give_a} {book_a} ta {mary_a}/"));
+	let john_b = out_b.realization_of(lex.john).context("john B")?.term.ipa.as_str();
+	let give_b = out_b.realization_of(lex.give).context("give B")?.term.ipa.as_str();
+	let book_b = out_b.realization_of(lex.book).context("book B")?.term.ipa.as_str();
+	let mary_b = out_b.realization_of(lex.mary).context("mary B")?.term.ipa.as_str();
+	assert_eq!(b.to_string(), format!("/{john_b} {book_b} su {mary_b} {give_b}/"));
+	Ok(())
+}
+
+#[test]
+fn surface_grammar_binds_relative_clauses_without_repeating_the_head() -> anyhow::Result<()> {
+	let (universe, lex) = lex()?;
+	let (out_a, _, _, _) =
+		render_pair(Utterance::john_gave_the_book_to_mary_the_witch(&lex), &universe);
+	let sentence = out_a.realize(SurfaceGrammar::compositional()).to_string();
+	let mary = out_a.realization_of(lex.mary).context("mary")?.term.ipa.as_str();
+	let witch = out_a.realization_of(lex.witch).context("witch")?.term.ipa.as_str();
+	let helper = out_a.realization_of(lex.helper).context("helper")?.term.ipa.as_str();
+	assert!(sentence.starts_with('/'), "{sentence}");
+	assert!(sentence.ends_with('/'), "{sentence}");
+	assert!(sentence.contains(" | "), "{sentence}");
+	assert!(
+		sentence.contains(" mi/") || sentence.contains(" mi "),
+		"{sentence}"
+	);
+	assert_eq!(
+		sentence.matches(mary).count(),
+		1,
+		"relative 'who' should bind Mary, not repeat her: {sentence}"
+	);
+	assert!(sentence.contains(witch), "{sentence}");
+	assert!(sentence.contains(helper), "{sentence}");
 	Ok(())
 }
 

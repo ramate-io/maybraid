@@ -7,8 +7,9 @@
 //! ```
 //!
 //! This crate implements the [semantic utterance → procedural lexicon
-//! POC](https://github.com/ramate-io/maybraid/issues/897). Grammar, word order,
-//! and historical evolution are out of scope.
+//! POC](https://github.com/ramate-io/maybraid/issues/897). A tiny
+//! [`grammar`] linearizer can print a formatted IPA string; agreement, case,
+//! and historical evolution remain out of scope.
 //!
 //! WordNet 3.1 is the initial English concept universe. The bundled extract and
 //! [`wordnet::WORDNET_LICENSE`] reproduce Princeton's license as required.
@@ -17,6 +18,7 @@
 
 pub mod concept;
 pub mod error;
+pub mod grammar;
 pub mod graph;
 pub mod lexicalizer;
 pub mod marshall;
@@ -32,6 +34,9 @@ pub use concept::{
 	Pos, RelationKind,
 };
 pub use error::LanguageError;
+pub use grammar::{
+	ClauseOrder, IpaUtterance, ModifierPlacement, RelativePlacement, RoleParticles, SurfaceGrammar,
+};
 pub use graph::{
 	ConceptEdge, GraphDelta, InMemoryLexicalGraph, LexicalContextGraph, LexicalContextGraphMut,
 	LexicalEdge, LexicalUpdate,

@@ -3,7 +3,7 @@
 
 use maybraid_language_core::{
 	poc_universe, CompositionalLexicalizer, InMemoryLexicalGraph, LanguageOutput, PocLexicon,
-	Profile, RootHeavyLexicalizer, Utterance,
+	Profile, RootHeavyLexicalizer, SurfaceGrammar, Utterance,
 };
 
 fn main() -> Result<(), maybraid_language_core::LanguageError> {
@@ -26,12 +26,14 @@ fn main() -> Result<(), maybraid_language_core::LanguageError> {
 		print_language(
 			"LANGUAGE A — compositional",
 			&CompositionalLexicalizer::default(),
+			SurfaceGrammar::compositional(),
 			utterance.clone(),
 			&universe,
 		);
 		print_language(
 			"LANGUAGE B — root-heavy",
 			&RootHeavyLexicalizer::default(),
+			SurfaceGrammar::root_heavy(),
 			utterance,
 			&universe,
 		);
@@ -42,11 +44,15 @@ fn main() -> Result<(), maybraid_language_core::LanguageError> {
 fn print_language(
 	title: &str,
 	lexicalizer: &impl maybraid_language_core::Lexicalizer,
+	grammar: SurfaceGrammar,
 	utterance: Utterance,
 	universe: &impl maybraid_language_core::ConceptUniverse,
 ) {
 	let mut graph = InMemoryLexicalGraph::new();
 	let output =
 		LanguageOutput::render(utterance, lexicalizer, universe, &mut graph, &Profile::neutral());
-	print!("{}", output.debug_report(title, universe, &graph));
+	println!("{title}");
+	println!("  {}", output.realize(grammar));
+	println!();
+	print!("{}", output.debug_report("  lexicon", universe, &graph));
 }
