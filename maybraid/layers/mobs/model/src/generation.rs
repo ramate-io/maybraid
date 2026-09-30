@@ -47,8 +47,7 @@ impl<G> Default for MobGenerationPlugin<G> {
 
 impl<G: UrbanModel> Plugin for MobGenerationPlugin<G> {
 	fn build(&self, app: &mut App) {
-		app.insert_resource(self.config.clone())
-			.init_resource::<MobIndex>()
+		app.init_resource::<MobIndex>()
 			.init_resource::<MobGenerateBullseye>()
 			.init_resource::<MobPresentBullseye>()
 			.init_resource::<MobStreamSuspended>()

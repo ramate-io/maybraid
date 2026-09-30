@@ -2,12 +2,12 @@
 
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
-use vegetation_layer_presentation::VegetationOnTerrainMaterialLib;
 use crozon_characters::material_lib::{init_crozon_material_caches, CrozonMaterialLib};
 use firearms::{init_muzzle_flame_caches, MuzzleFlameMaterialLib};
 use furniture_shaders::{init_furniture_material_caches, FurnitureMaterialLib};
 use material_ref::{material_ref_plugin_installed, MaterialLib, MaterialRef, MaterialRefPlugin};
 use richmond_building_shaders::{init_richmond_urban_material_caches, UrbanSurfaceMaterialLib};
+use vegetation_layer_presentation::VegetationOnTerrainMaterialLib;
 
 /// World-model lib: furniture kits, Crozon face / clothing, Richmond urban
 /// surfaces, the muzzle flame, then vegetation and Standard.
@@ -47,10 +47,11 @@ impl MaterialLib for WorldMaterialLib<'_> {
 
 /// Installs [`WorldMaterialLib`] as the single [`MaterialRefPlugin`] for Maybraid World.
 ///
-/// Add this before [`vegetation_layer_presentation::VegetationPresentationPlugin`] so
-/// the nested vegetation material plugin skips installing a second [`MaterialRefPlugin`]. [`crozon_characters::material_lib::CrozonMaterialRefPlugin`]
-/// and [`richmond_building_shaders::RichmondUrbanMaterialRefPlugin`] also skip; face / urban
-/// recipes are claimed here.
+/// Add this before [`vegetation_layer_presentation::VegetationPresentationPlugin`]
+/// so the nested vegetation material plugin skips installing a second
+/// [`MaterialRefPlugin`]. [`crozon_characters::material_lib::CrozonMaterialRefPlugin`]
+/// and [`richmond_building_shaders::RichmondUrbanMaterialRefPlugin`] also skip;
+/// face / urban recipes are claimed here.
 pub struct WorldMaterialRefPlugin;
 
 impl Plugin for WorldMaterialRefPlugin {

@@ -67,10 +67,9 @@ pub use weapon::WorldPlayerLoadout;
 use avian3d::prelude::{CoefficientCombine, Friction};
 use bevy::prelude::*;
 use chico_vegetation_on_terrain_playground::{
-	CharacterCameraFollowEnabled, CharacterLocomotion, CharacterSpecies, PadMovementEnabled,
-	PlayerControlSystems, PlaygroundConfig as VegetationPlaygroundConfig, PlaygroundDiag,
-	PlaygroundMode, PlaygroundTimingPlugin, RequestSetCharacter, VegetationOnTerrainPlugin,
-	VegetationPlayerMotor,
+	CharacterCameraFollowEnabled, CharacterLocomotion, CharacterSpecies, MeshStatsPlugin,
+	PadMovementEnabled, PlayerControlSystems, PlaygroundDiag, PlaygroundMode,
+	PlaygroundTimingPlugin, RequestSetCharacter, VegetationHostPlugin, VegetationPlayerMotor,
 };
 use combat_hud::CombatHudPlugin;
 use crozon_character_ragdoll::{CharacterRagdollPlugin, CharacterRagdollTargets};
@@ -90,6 +89,8 @@ use player::{
 	register_motor_traction_physics, PlayerPlugin, PlayerPresentationPlugin, PlayerSystems,
 };
 use player_camera::{PlayerCameraPlugin, PlayerCameraSystems};
+use mob_layer_model::{MobGenerationPlugin, MobLayerConfig};
+use mob_layer_presentation::MobPresentationPlugin;
 use terrain_layer_model::{BaseTerrainGenerationPlugin, OnTerrain};
 use terrain_layer_presentation::TerrainPresentationPlugin;
 use urbanization_layer_model::{
@@ -98,8 +99,6 @@ use urbanization_layer_model::{
 use urbanization_layer_presentation::{PaddedCells, UrbanizationPresentationPlugin};
 use vegetation_layer_model::{VegetationGenerationPlugin, VegetationLayerConfig};
 use vegetation_layer_presentation::VegetationPresentationPlugin;
-use mob_layer_model::{MobGenerationPlugin, MobLayerConfig};
-use mob_layer_presentation::MobPresentationPlugin;
 
 /// Steepest slope the controlled character can drive uphill.
 const WORLD_MAX_SLOPE_ANGLE: f32 = 70.0_f32.to_radians();
@@ -180,13 +179,8 @@ impl Plugin for WorldPlugin {
 			.add_plugins(PlayerPresentationPlugin)
 			.add_plugins(PlayerCameraPlugin)
 			.add_plugins(WORLD_COMBAT_HUD)
-			.add_plugins(VegetationOnTerrainPlugin {
-				config: VegetationPlaygroundConfig::world_defaults(),
-				commands: false,
-				register_camera: false,
-				register_terrain_pitch: false,
-				own_terrain: false,
-			})
+			.add_plugins(VegetationHostPlugin { register_camera: false })
+			.add_plugins(MeshStatsPlugin)
 			.insert_resource(CharacterRagdollTargets { players: true, npcs: true, unmarked: false })
 			.add_plugins(CharacterRagdollPlugin)
 			.add_plugins(UrbanizationGenerationPlugin::<OnTerrain<Durham>>::new(

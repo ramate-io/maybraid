@@ -4,9 +4,9 @@ use bevy::ecs::system::{ParamSet, SystemParam};
 use bevy::prelude::*;
 use chico_forests::ForestIndex;
 use lod::gen::{LodGenerateKeepRegion, LodGenerateRegion};
+use lod::lod_ref::LodRef;
 use lod::presentation::{LodPresentKeepRegion, LodPresentRegion};
 use lod::scene::{LodRefreshRegions, LodRefreshRegionsStatus};
-use lod::lod_ref::LodRef;
 use mob_groups::MobPlantHost;
 use richmond_development_models::DiscoverablePlace;
 use terrain_layer_model::TerrainView;
@@ -24,8 +24,8 @@ pub struct MobStreamSuspended(pub bool);
 
 #[derive(Resource, Clone, Copy, Debug, PartialEq)]
 pub struct MobGenerateBullseye {
-	pub radius_m: f32,
-	pub enabled: bool,
+	pub(crate) radius_m: f32,
+	pub(crate) enabled: bool,
 }
 
 impl Default for MobGenerateBullseye {
@@ -42,8 +42,8 @@ impl LodRefreshRegions for MobGenerateBullseye {
 
 #[derive(Resource, Clone, Copy, Debug, PartialEq)]
 pub struct MobPresentBullseye {
-	pub radius_m: f32,
-	pub enabled: bool,
+	pub(crate) radius_m: f32,
+	pub(crate) enabled: bool,
 }
 
 impl Default for MobPresentBullseye {
@@ -79,12 +79,12 @@ pub struct MobLodChan;
 
 #[derive(SystemParam)]
 pub struct MobStream<'w> {
-	pub generate: ResMut<'w, MobGenerateBullseye>,
-	pub present: ResMut<'w, MobPresentBullseye>,
+	pub(crate) generate: ResMut<'w, MobGenerateBullseye>,
+	pub(crate) present: ResMut<'w, MobPresentBullseye>,
 	generate_regions: MessageWriter<'w, LodGenerateRegion<MobLodChan>>,
 	present_regions: MessageWriter<'w, LodPresentRegion<MobLodChan>>,
-	pub generate_keep: ResMut<'w, LodGenerateKeepRegion<MobLodChan>>,
-	pub present_keep: ResMut<'w, LodPresentKeepRegion<MobLodChan>>,
+	pub(crate) generate_keep: ResMut<'w, LodGenerateKeepRegion<MobLodChan>>,
+	pub(crate) present_keep: ResMut<'w, LodPresentKeepRegion<MobLodChan>>,
 }
 
 pub fn sync_mob_models<G: UrbanModel>(

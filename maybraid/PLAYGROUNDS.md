@@ -28,7 +28,7 @@ Last commit that still contained the trees below: [`9a9a74c6901ed4d7799a4e87d16f
 
 - **Last commit:** [`9a9a74c6901ed4d7799a4e87d16f74d7dd3b9e47`](https://github.com/ramate-io/maybraid/commit/9a9a74c6901ed4d7799a4e87d16f74d7dd3b9e47)
 - **Did:** Small Durham fine-grid patch for iterating Chico groves on real ground. `/grove <kind>` tiled one grove type; `/forest` streamed the same generate/present/cull path as SBS, grown on Durham height. Character / free-look, canopy bump-outs, mesh stats.
-- **Replacement:** [`maybraid-world-playground`](world/playground/) (`cargo run -p maybraid-world-playground`). The crate remains as a library (`VegetationOnTerrainPlugin`) for `maybraid-world`, Richmond developments-on-terrain, and mobs until that host API lives on world itself.
+- **Replacement:** [`maybraid-world-playground`](world/playground/) (`cargo run -p maybraid-world-playground`). The crate is now only the character/player host and diagnostics library for `maybraid-world`. Richmond and mobs no longer use it.
 
 ### `maybraid/richmond/developments-on-terrain-playground` (catalog-batch mode)
 

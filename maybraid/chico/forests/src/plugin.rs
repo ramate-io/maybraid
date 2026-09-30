@@ -42,18 +42,3 @@ pub fn register_vegetation_view(app: &mut App) {
 		app.add_plugins(VegetationViewPlugin);
 	}
 }
-
-/// Shaders and kit caches. Forest LOD lives in the vegetation layer plugins.
-pub struct ForestPlugin;
-
-impl Default for ForestPlugin {
-	fn default() -> Self {
-		Self
-	}
-}
-
-impl Plugin for ForestPlugin {
-	fn build(&self, app: &mut App) {
-		register_vegetation_view(app);
-	}
-}

@@ -1,13 +1,6 @@
-//! The layered world stack type-checks as one `Plugins` tuple.
-//!
-//! Named, not added: unfinished layer builds stay `todo!()` until their issue lands.
-//! Raw Durham presentation is live
-//! (`TerrainPresentationPlugin::<OnTerrain<Durham>, DurhamCells>`).
-//! Padded urbanized presentation is live
-//! (`TerrainPresentationPlugin::<Urbanization<OnTerrain<Durham>>, PaddedCells>`).
-//! Once the world assembles this stack, this test can go.
+//! The world's nine layer plugins satisfy every `finish` requirement headless.
 
-use bevy::app::Plugins;
+use bevy::prelude::{App, AssetPlugin, MinimalPlugins};
 use durham_terrain_models::{Durham, DurhamCells, DurhamTerrainConfig};
 use mob_layer_model::{MobGenerationPlugin, MobLayerConfig};
 use mob_layer_presentation::MobPresentationPlugin;
@@ -20,24 +13,26 @@ use urbanization_layer_presentation::{PaddedCells, UrbanizationPresentationPlugi
 use vegetation_layer_model::{VegetationGenerationPlugin, VegetationLayerConfig};
 use vegetation_layer_presentation::VegetationPresentationPlugin;
 
-fn is_plugin_stack<M>(_: impl Plugins<M>) {}
-
 #[test]
-fn layered_world_stack_type_checks() {
-	is_plugin_stack((
-		BaseTerrainGenerationPlugin::<Durham>::new(DurhamTerrainConfig::playable_world()),
-		UrbanizationGenerationPlugin::<OnTerrain<Durham>>::new(
-			UrbanizationLayerConfig::world_defaults(),
-		),
-		VegetationGenerationPlugin::new(VegetationLayerConfig::world_defaults()),
-		MobGenerationPlugin::<Urbanization<OnTerrain<Durham>>>::new(
-			MobLayerConfig::world_defaults(),
-		),
-		TerrainPresentationPlugin::<Urbanization<OnTerrain<Durham>>, PaddedCells>::default(),
-		UrbanizationPresentationPlugin::<Urbanization<OnTerrain<Durham>>>::default(),
-		VegetationPresentationPlugin::<Urbanization<OnTerrain<Durham>>>::default(),
-		MobPresentationPlugin::<Urbanization<OnTerrain<Durham>>>::default(),
-		// Training only: raw Durham, gated off in the open world.
-		TerrainPresentationPlugin::<OnTerrain<Durham>, DurhamCells>::default(),
+fn layered_world_stack_finishes_headless() {
+	let mut app = App::new();
+	app.add_plugins((MinimalPlugins, AssetPlugin::default()));
+	app.add_plugins(BaseTerrainGenerationPlugin::<Durham>::new(
+		DurhamTerrainConfig::playable_world(),
 	));
+	app.add_plugins(UrbanizationGenerationPlugin::<OnTerrain<Durham>>::new(
+		UrbanizationLayerConfig::world_defaults(),
+	));
+	app.add_plugins(VegetationGenerationPlugin::new(VegetationLayerConfig::world_defaults()));
+	app.add_plugins(MobGenerationPlugin::<Urbanization<OnTerrain<Durham>>>::new(
+		MobLayerConfig::world_defaults(),
+	));
+	app.add_plugins(
+		TerrainPresentationPlugin::<Urbanization<OnTerrain<Durham>>, PaddedCells>::default(),
+	);
+	app.add_plugins(UrbanizationPresentationPlugin::<Urbanization<OnTerrain<Durham>>>::default());
+	app.add_plugins(VegetationPresentationPlugin::<Urbanization<OnTerrain<Durham>>>::default());
+	app.add_plugins(MobPresentationPlugin::<Urbanization<OnTerrain<Durham>>>::default());
+	app.add_plugins(TerrainPresentationPlugin::<OnTerrain<Durham>, DurhamCells>::default());
+	app.finish();
 }

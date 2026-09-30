@@ -8,8 +8,7 @@ use crate::stream::{configure_stream_systems, register_bump_out_generate, regist
 
 /// Systems that arm forest and bump-out keep regions.
 ///
-/// Playground `apply_commands` orders `.before(VegetationGenerationSystems)`,
-/// which is today's `.after(apply_commands)` on the streams.
+/// Callers that edit the layer config order `.before` this set.
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct VegetationGenerationSystems;
 

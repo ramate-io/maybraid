@@ -2350,23 +2350,14 @@ dependencies = [
  "anyhow",
  "avian3d",
  "bevy",
- "chico-forests",
- "chico-groves",
  "chico-vegetation-components",
  "clap",
  "crozon-characters",
- "durham-terrain",
  "durham-terrain-models",
  "game-commands",
- "ground-avian",
  "lod",
  "lod-avian",
- "log",
  "maybraid-input",
- "procedural-common",
- "terrain-layer-model",
- "terrain-layer-presentation",
- "vegetation-layer-model",
 ]
 
 [[package]]

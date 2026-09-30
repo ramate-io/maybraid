@@ -18,8 +18,6 @@
 //! it under the courtyard.
 
 use bevy::prelude::*;
-use chico_vegetation_on_terrain_playground::PlaygroundConfig;
-use vegetation_layer_model::VegetationLayerConfig;
 use combat_hud::{CombatScore, LiveEnemies};
 use crozon_character_items::{random_starter_loadout, Inventory, ItemRng};
 use crozon_characters::species::{
@@ -37,6 +35,7 @@ use durham_terrain_models::{
 use mob_intelligence::MemberOf;
 use mob_layer_model::{MobGenerationSystems, MobStreamSuspended};
 use urbanization_layer_model::UrbanizationStreamingEnabled;
+use vegetation_layer_model::VegetationLayerConfig;
 
 use crate::WorldPlayerLoadout;
 use crate::control::{WorldSurfaceSet, update_world_surface_ready};
@@ -56,10 +55,7 @@ impl Plugin for TrainingGroundPlugin {
 			.init_resource::<TrainingRound>()
 			.init_resource::<TrainingEnemyMarkersEnabled>()
 			.add_message::<TrainingLifeEnded>()
-			.add_systems(
-				Update,
-				sync_mob_stream_suspended.before(MobGenerationSystems),
-			)
+			.add_systems(Update, sync_mob_stream_suspended.before(MobGenerationSystems))
 			.add_systems(
 				Update,
 				(
@@ -281,7 +277,6 @@ pub(crate) fn apply_training_grounds(
 	mut dirty: ResMut<TerrainPresentationDirty>,
 	mut pending: ResMut<TerrainPresentPending>,
 	mut assets: ResMut<TerrainPresentationAssets>,
-	mut playground: Option<ResMut<PlaygroundConfig>>,
 	mut vegetation: Option<ResMut<VegetationLayerConfig>>,
 	mut urban: Option<ResMut<UrbanizationStreamingEnabled>>,
 ) {
@@ -305,10 +300,6 @@ pub(crate) fn apply_training_grounds(
 		if let Some(spec) = config.forest.as_mut() {
 			spec.stream_radius = fill.forest_stream_radius;
 		}
-	}
-	if let Some(config) = playground.as_deref_mut() {
-		config.coverage = fill.coverage;
-		config.terrain_radius = fill.terrain_radius;
 	}
 }
 

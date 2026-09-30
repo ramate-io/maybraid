@@ -110,10 +110,10 @@ pub struct MobIndex {
 	cells: HashMap<Id, StoredMobCell>,
 	forest_noise: NoiseParams,
 	forest_layering: Option<LayeringKind>,
-	pub urbanization_noise: NoiseParams,
-	pub urbanization_kind: Option<UrbanizationKind>,
-	pub models_ready: bool,
-	pub plant_hosts: Vec<MobPlantHost>,
+	pub(crate) urbanization_noise: NoiseParams,
+	pub(crate) urbanization_kind: Option<UrbanizationKind>,
+	pub(crate) models_ready: bool,
+	pub(crate) plant_hosts: Vec<MobPlantHost>,
 }
 
 impl MobIndex {

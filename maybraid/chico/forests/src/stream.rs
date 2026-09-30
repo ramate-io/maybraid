@@ -4,9 +4,6 @@
 
 use crate::LayeringKind;
 
-/// Camera speed used while a forest stream is armed.
-pub const FOREST_CAMERA_SPEED: f32 = 80.0;
-
 /// Clap parser for a well-known layering kebab name.
 pub fn parse_layering_kind(name: &str) -> Result<LayeringKind, String> {
 	LayeringKind::from_kebab(name).ok_or_else(|| {

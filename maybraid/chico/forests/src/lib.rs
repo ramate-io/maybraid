@@ -59,10 +59,10 @@ pub use kind::{
 	WeightedGrove, TUFT_DROP_MIN_HEIGHT_M,
 };
 pub use layer::{select_layers, throw_layer};
-pub use plugin::{register_vegetation_view, ForestPlugin, VegetationViewPlugin};
-pub use present::{FlatForestPresenter, ForestPresenterState};
+pub use plugin::{register_vegetation_view, VegetationViewPlugin};
+pub use present::ForestPresenterState;
 pub use recipe::{ForestGroveRecipe, WORLD_FOREST_TREE_VARIANTS};
-pub use stream::{parse_layering_kind, FOREST_CAMERA_SPEED};
+pub use stream::parse_layering_kind;
 pub use view::{
 	VegetationBullseye, VegetationCull, VegetationLodRefreshPlugin, VegetationRefresh,
 	VegetationSpotlight,

@@ -59,11 +59,52 @@ fn retire_despawns_presented_roots_and_pending_while_suspended() -> anyhow::Resu
 }
 
 #[test]
-fn presentation_inserts_indexed_refresh_mode() {
+fn presentation_inserts_indexed_refresh_mode() -> anyhow::Result<()> {
+	use bevy::ecs::system::IntoSystem;
+	use bevy::prelude::{System, Update, With};
+	use lod::{cull_lod_level_roots, update_lod_host_levels, LodViewer};
+	use maybraid_mobs::MobScene;
+
 	let mut app = App::new();
 	app.add_plugins((MinimalPlugins, AssetPlugin::default()));
 	MobPresentationPlugin::<Urbanized>::default().build(&mut app);
+	let mut ids = Vec::new();
+	let mut inspect_error = None;
+	app.world_mut().schedule_scope(Update, |world, schedule| {
+		if let Err(error) = schedule.initialize(world) {
+			inspect_error = Some(anyhow::anyhow!("{error:?}"));
+			return;
+		}
+		match schedule.systems() {
+			Ok(systems) => ids.extend(systems.map(|(_, system)| system.system_type())),
+			Err(error) => inspect_error = Some(anyhow::anyhow!("{error:?}")),
+		}
+	});
+	if let Some(error) = inspect_error {
+		return Err(error);
+	}
+	let cull_id = IntoSystem::into_system(
+		cull_lod_level_roots::<MobScene, (), With<LodViewer>>,
+	)
+	.system_type();
+	let update_id = IntoSystem::into_system(
+		update_lod_host_levels::<MobScene, (), With<LodViewer>>,
+	)
+	.system_type();
+	let culls = ids.iter().filter(|id| **id == cull_id).count();
+	let host_levels = ids.iter().filter(|id| **id == update_id).count();
+	// Gimme's default refresh registers one full-scan cull. MobScenes FullScan
+	// would add a second cull plus a second `update_lod_host_levels`.
+	anyhow::ensure!(
+		culls <= 1,
+		"MobScenes Indexed must not add a second cull_lod_level_roots, got {culls}"
+	);
+	anyhow::ensure!(
+		host_levels == 1,
+		"indexed refresh must register one update_lod_host_levels, got {host_levels}"
+	);
 	assert_eq!(*app.world().resource::<MobLodRefreshMode>(), MobLodRefreshMode::Indexed);
+	Ok(())
 }
 
 #[test]

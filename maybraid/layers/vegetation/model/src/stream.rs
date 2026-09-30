@@ -272,7 +272,7 @@ pub fn stream_canopy_bump_outs(
 
 /// Both streams sit in [`VegetationGenerationSystems`], before generate and
 /// present produce. Bump-outs run after the forest stream. Callers that edit
-/// the layer config (playground `apply_commands`) order `.before` this set.
+/// the layer config order `.before` this set.
 pub fn configure_stream_systems(app: &mut App) {
 	app.add_systems(
 		Update,
