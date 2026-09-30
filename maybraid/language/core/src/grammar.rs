@@ -39,11 +39,11 @@ pub struct RoleParticles {
 
 impl RoleParticles {
 	pub fn compositional() -> Self {
-		Self { recipient: "ta", source: "ka", goal: "na", plural: "mi" }
+		Self { recipient: "tʰə", source: "kə", goal: "ŋə", plural: "ɲi" }
 	}
 
 	pub fn root_heavy() -> Self {
-		Self { recipient: "su", source: "fe", goal: "go", plural: "ri" }
+		Self { recipient: "ʔu", source: "ħe", goal: "ɡo", plural: "riː" }
 	}
 }
 

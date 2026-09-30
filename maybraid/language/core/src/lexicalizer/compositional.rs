@@ -219,7 +219,7 @@ fn is_compact_gloss(gloss: &str) -> bool {
 }
 
 fn donor_score(candidate: &LexicalCandidate) -> f32 {
-	let compactness = if candidate.term.ipa.as_str().len() <= 4 { 0.25 } else { 0.0 };
+	let compactness = if candidate.term.ipa.as_str().chars().count() <= 6 { 0.25 } else { 0.0 };
 	let relation_bias = match candidate.relation {
 		RelationKind::Hypernym | RelationKind::PartOf => 0.2,
 		RelationKind::Associated | RelationKind::Synonym => 0.15,

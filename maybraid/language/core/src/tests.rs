@@ -270,12 +270,22 @@ fn surface_grammar_formats_an_ipa_sentence() -> anyhow::Result<()> {
 	let give_a = out_a.realization_of(lex.give).context("give A")?.term.ipa.as_str();
 	let book_a = out_a.realization_of(lex.book).context("book A")?.term.ipa.as_str();
 	let mary_a = out_a.realization_of(lex.mary).context("mary A")?.term.ipa.as_str();
-	assert_eq!(a.to_string(), format!("/{john_a} {give_a} {book_a} ta {mary_a}/"));
+	let ga = SurfaceGrammar::compositional();
+	assert_eq!(
+		a.to_string(),
+		format!("/{john_a} {give_a} {book_a} {} {mary_a}/", ga.particles.recipient)
+	);
 	let john_b = out_b.realization_of(lex.john).context("john B")?.term.ipa.as_str();
 	let give_b = out_b.realization_of(lex.give).context("give B")?.term.ipa.as_str();
 	let book_b = out_b.realization_of(lex.book).context("book B")?.term.ipa.as_str();
 	let mary_b = out_b.realization_of(lex.mary).context("mary B")?.term.ipa.as_str();
-	assert_eq!(b.to_string(), format!("/{john_b} {book_b} su {mary_b} {give_b}/"));
+	let gb = SurfaceGrammar::root_heavy();
+	assert_eq!(
+		b.to_string(),
+		format!("/{john_b} {book_b} {} {mary_b} {give_b}/", gb.particles.recipient)
+	);
+	assert!(!a.to_string().is_ascii(), "language A sentence should use Unicode IPA: {a}");
+	assert!(!b.to_string().is_ascii(), "language B sentence should use Unicode IPA: {b}");
 	Ok(())
 }
 
@@ -291,8 +301,9 @@ fn surface_grammar_binds_relative_clauses_without_repeating_the_head() -> anyhow
 	assert!(sentence.starts_with('/'), "{sentence}");
 	assert!(sentence.ends_with('/'), "{sentence}");
 	assert!(sentence.contains(" | "), "{sentence}");
+	let plural = SurfaceGrammar::compositional().particles.plural;
 	assert!(
-		sentence.contains(" mi/") || sentence.contains(" mi "),
+		sentence.contains(&format!(" {plural}/")) || sentence.contains(&format!(" {plural} ")),
 		"{sentence}"
 	);
 	assert_eq!(

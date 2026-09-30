@@ -19,7 +19,7 @@ impl Term {
 	}
 }
 
-/// IPA string. A later phonology issue may replace this with structured phones.
+/// Unicode IPA. A later phonology issue may replace this with structured phones.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Ipa(pub String);
 
