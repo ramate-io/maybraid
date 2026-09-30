@@ -16,19 +16,19 @@ impl Plugin for WorldPlugin {
 				UrbanizationLayerConfig::world_defaults(),
 			),
 			VegetationGenerationPlugin::new(VegetationLayerConfig::world_defaults()),
-			MobGenerationPlugin::<Urbanization<OnTerrain<Durham>>>::default(),
+			MobGenerationPlugin::<Urbanization<OnTerrain<Durham>>>::new(
+				MobLayerConfig::world_defaults(),
+			),
 			TerrainPresentationPlugin::<Urbanization<OnTerrain<Durham>>, PaddedCells>::default(),
 			UrbanizationPresentationPlugin::<Urbanization<OnTerrain<Durham>>>::default(),
 			VegetationPresentationPlugin::<Urbanization<OnTerrain<Durham>>>::default(),
 			MobPresentationPlugin::<Urbanization<OnTerrain<Durham>>>::default(),
 			// Training only: raw Durham, gated off in the open world.
 			TerrainPresentationPlugin::<OnTerrain<Durham>, DurhamCells>::default(),
-		))
-		// Mob generate budget stays here until #888. Forest and bump-out budgets
-		// come from `VegetationLayerConfig` inside `VegetationGenerationPlugin`.
-		.insert_resource(LodGenerateBudget::<MobLodChan>::new(16));
+		));
 
-		// Training: set MobStreamSuspended from TrainingGrounds (mobs/model sketch).
+		// Training: `sync_mob_stream_suspended` copies TrainingGrounds into
+		// MobStreamSuspended every frame, before MobGenerationSystems.
 
 		// ... unchanged remainder (intelligence, skill map, POI, lifecycle, stash,
 		//     position, training, sky, chrome, systems) ...
@@ -41,7 +41,7 @@ impl Plugin for WorldPlugin {
 //     CharacterCameraFollowEnabled, CharacterLocomotion, CharacterSpecies,
 //     PadMovementEnabled, PlayerControlSystems, PlaygroundDiag, PlaygroundMode,
 //     PlaygroundTimingPlugin, RequestSetCharacter, VegetationPlayerMotor, WorldBaseTerrain}
-//   urbanization_layer_presentation::UrbanSetting (moved in #886)
+//   urbanization_layer_model::UrbanSetting (moved in #888 from presentation)
 //
 // Terrain/vegetation/urbanization items move with their layers. Character /
 // player / diag items are not layer concerns; leave them for a separate cleanup

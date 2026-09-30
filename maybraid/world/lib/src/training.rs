@@ -35,6 +35,7 @@ use durham_terrain_models::{
 	playable_world_cell_layout, retarget_presentation_assets, training_grounds_cell_layout_at,
 };
 use mob_intelligence::MemberOf;
+use mob_layer_model::{MobGenerationSystems, MobStreamSuspended};
 use urbanization_layer_model::UrbanizationStreamingEnabled;
 
 use crate::WorldPlayerLoadout;
@@ -55,6 +56,10 @@ impl Plugin for TrainingGroundPlugin {
 			.init_resource::<TrainingRound>()
 			.init_resource::<TrainingEnemyMarkersEnabled>()
 			.add_message::<TrainingLifeEnded>()
+			.add_systems(
+				Update,
+				sync_mob_stream_suspended.before(MobGenerationSystems),
+			)
 			.add_systems(
 				Update,
 				(
@@ -81,6 +86,17 @@ impl Plugin for TrainingGroundPlugin {
 /// Set by the game shell while Training Ground is the live session.
 #[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct TrainingGrounds(pub bool);
+
+/// Copy [`TrainingGrounds`] into [`MobStreamSuspended`] every frame.
+///
+/// `TrainingGrounds` is written only in state transitions and `PostStartup`, so
+/// this matches what the mob stream read today.
+fn sync_mob_stream_suspended(
+	grounds: Res<TrainingGrounds>,
+	mut suspended: ResMut<MobStreamSuspended>,
+) {
+	suspended.0 = grounds.0;
+}
 
 /// Forest stream radius used by [`VegetationLayerConfig::world_defaults`].
 const WORLD_FOREST_STREAM_RADIUS: u32 = 1;

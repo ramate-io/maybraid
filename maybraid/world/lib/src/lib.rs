@@ -15,7 +15,6 @@ mod control;
 mod crate_loot;
 mod intelligence;
 mod material_lib;
-mod mobs;
 mod pitch;
 mod player_lifecycle;
 mod player_position;
@@ -44,7 +43,6 @@ pub use maybraid_sky::{
 	ShadowQuality, SkyClock, SkyCommand, SKY_BLUE, SKY_CLEAR, SKY_HORIZON, SKY_NADIR, SKY_ZENITH,
 	SUN_COLOR, SUN_ILLUMINANCE,
 };
-pub use mobs::WorldMobsPlugin;
 pub use player_camera::{CameraPov, CameraPovLocked};
 pub use player_lifecycle::{WorldPlayerLifecyclePlugin, WorldPlayerRespawnConfig};
 pub use player_position::{
@@ -100,6 +98,8 @@ use urbanization_layer_model::{
 use urbanization_layer_presentation::{PaddedCells, UrbanizationPresentationPlugin};
 use vegetation_layer_model::{VegetationGenerationPlugin, VegetationLayerConfig};
 use vegetation_layer_presentation::VegetationPresentationPlugin;
+use mob_layer_model::{MobGenerationPlugin, MobLayerConfig};
+use mob_layer_presentation::MobPresentationPlugin;
 
 /// Steepest slope the controlled character can drive uphill.
 const WORLD_MAX_SLOPE_ANGLE: f32 = 70.0_f32.to_radians();
@@ -202,8 +202,11 @@ impl Plugin for WorldPlugin {
 			.add_plugins(VegetationGenerationPlugin::new(VegetationLayerConfig::world_defaults()))
 			.add_plugins(
 				VegetationPresentationPlugin::<Urbanization<OnTerrain<Durham>>>::default(),
-			);
-		app.add_plugins(WorldMobsPlugin)
+			)
+			.add_plugins(MobGenerationPlugin::<Urbanization<OnTerrain<Durham>>>::new(
+				MobLayerConfig::world_defaults(),
+			))
+			.add_plugins(MobPresentationPlugin::<Urbanization<OnTerrain<Durham>>>::default())
 			.add_plugins(WorldIntelligencePlugin)
 			.add_plugins(SkillMapPlugin)
 			.insert_resource(maybraid_skill_map::SkillMapEnabled(false))

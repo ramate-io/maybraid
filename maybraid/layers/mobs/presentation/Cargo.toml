@@ -11,9 +11,17 @@ rust-version = { workspace = true }
 
 [dependencies]
 bevy = { workspace = true }
+lod = { workspace = true }
+lod-gimme = { workspace = true }
+maybraid-mobs = { workspace = true }
+mob-groups = { workspace = true }
 mob-layer-model = { workspace = true }
 terrain-layer-model = { workspace = true }
 urbanization-layer-model = { workspace = true }
+
+[dev-dependencies]
+anyhow = { workspace = true }
+durham-terrain-models = { workspace = true }
 
 [lints]
 workspace = true

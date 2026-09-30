@@ -3,9 +3,27 @@
 use std::marker::PhantomData;
 
 use bevy::app::{App, Plugin};
-use mob_layer_model::MobGenerationPlugin;
+use bevy::prelude::*;
+use bevy::time::common_conditions::on_timer;
+use lod::{
+	update_lod_host_levels, LodGenerateSystems, LodPresentCullPlugin, LodPresentPlugin,
+	LodPresentSystems, LodRefreshSystems, LodSceneRefreshRegionPlugin, LodViewer,
+};
+use lod_gimme::GimmeLodSceneRefreshPlugin;
+use maybraid_mobs::{MobLodRefreshMode, MobScene, MobSceneSystems};
+use mob_groups::MobGroupsPlugin;
+use mob_layer_model::{
+	MobCell, MobGenerationPlugin, MobGenerationSystems, MobIndex, MobLodChan,
+};
 use terrain_layer_model::RequireLayer;
 use urbanization_layer_model::UrbanModel;
+
+mod present;
+
+use present::{
+	fit_mob_hosts_to_surface, pulse_mob_high_lod, retire_mob_presenters, MobHighLodChan,
+	MobHighLodRegion, MobPresenter, MobPresenterState,
+};
 
 /// Presents generated mob groups on ground `G`.
 ///
@@ -20,13 +38,62 @@ impl<G> Default for MobPresentationPlugin<G> {
 }
 
 impl<G: UrbanModel> Plugin for MobPresentationPlugin<G> {
-	fn build(&self, _app: &mut App) {
-		todo!(
-			"MobPresentationPlugin: fill from maybraid/layers/mobs/presentation/src/lib_sketch.rs"
-		)
+	fn build(&self, app: &mut App) {
+		app.insert_resource(MobLodRefreshMode::Indexed);
+		app.add_plugins(MobGroupsPlugin);
+		app.init_resource::<MobPresenterState>()
+			.add_plugins(LodPresentPlugin::<
+				MobCell,
+				MobIndex,
+				MobPresenter<'_, '_, G>,
+				MobLodChan,
+				With<LodViewer>,
+			>::default())
+			.add_plugins(LodPresentCullPlugin::<
+				MobCell,
+				MobIndex,
+				MobPresenter<'_, '_, G>,
+				MobLodChan,
+			>::default())
+			.add_plugins(LodSceneRefreshRegionPlugin::<
+				MobHighLodRegion,
+				With<LodViewer>,
+				MobHighLodChan,
+			>::default())
+			.add_plugins(GimmeLodSceneRefreshPlugin::<
+				MobScene,
+				MobHighLodChan,
+				With<LodViewer>,
+			>::default())
+			.configure_sets(Update, LodPresentSystems::Produce.after(LodGenerateSystems::Drain))
+			.add_systems(
+				Update,
+				retire_mob_presenters
+					.after(MobGenerationSystems)
+					.before(LodPresentSystems::Produce),
+			)
+			.add_systems(
+				Update,
+				fit_mob_hosts_to_surface::<G>.in_set(MobSceneSystems::Surface),
+			)
+			.add_systems(
+				Update,
+				pulse_mob_high_lod
+					.run_if(on_timer(present::MOB_HIGH_LOD_REFRESH_INTERVAL))
+					.in_set(LodRefreshSystems::ProduceRegions),
+			)
+			.add_systems(
+				Update,
+				update_lod_host_levels::<MobScene, (), With<LodViewer>>
+					.run_if(on_timer(present::MOB_HIGH_LOD_RECONCILE_INTERVAL))
+					.in_set(LodRefreshSystems::UpdateLevels),
+			);
 	}
 
 	fn finish(&self, app: &mut App) {
 		app.require_layer::<MobGenerationPlugin<G>, Self>();
 	}
 }
+
+#[cfg(test)]
+mod tests;

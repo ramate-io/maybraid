@@ -9,7 +9,7 @@
 
 use bevy::app::Plugins;
 use durham_terrain_models::{Durham, DurhamCells, DurhamTerrainConfig};
-use mob_layer_model::MobGenerationPlugin;
+use mob_layer_model::{MobGenerationPlugin, MobLayerConfig};
 use mob_layer_presentation::MobPresentationPlugin;
 use terrain_layer_model::{BaseTerrainGenerationPlugin, OnTerrain};
 use terrain_layer_presentation::TerrainPresentationPlugin;
@@ -30,7 +30,9 @@ fn layered_world_stack_type_checks() {
 			UrbanizationLayerConfig::world_defaults(),
 		),
 		VegetationGenerationPlugin::new(VegetationLayerConfig::world_defaults()),
-		MobGenerationPlugin::<Urbanization<OnTerrain<Durham>>>::default(),
+		MobGenerationPlugin::<Urbanization<OnTerrain<Durham>>>::new(
+			MobLayerConfig::world_defaults(),
+		),
 		TerrainPresentationPlugin::<Urbanization<OnTerrain<Durham>>, PaddedCells>::default(),
 		UrbanizationPresentationPlugin::<Urbanization<OnTerrain<Durham>>>::default(),
 		VegetationPresentationPlugin::<Urbanization<OnTerrain<Durham>>>::default(),

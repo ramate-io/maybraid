@@ -37,7 +37,6 @@ intelligence-lod = { workspace = true }
 log = { workspace = true }
 lod = { workspace = true }
 lod-avian = { workspace = true }
-lod-gimme = { workspace = true }
 material-ref = { workspace = true }
 maybraid-character-controller = { workspace = true }
 maybraid-input = { workspace = true }
@@ -47,8 +46,9 @@ maybraid-mobs = { workspace = true }
 player = { workspace = true }
 player-camera = { workspace = true }
 mob-characters = { workspace = true }
-mob-groups = { workspace = true }
 mob-intelligence = { workspace = true }
+mob-layer-model = { workspace = true }
+mob-layer-presentation = { workspace = true }
 meandering-intelligence = { workspace = true }
 movement-intelligence = { workspace = true }
 movement-intelligence-avian = { workspace = true }
@@ -80,8 +80,6 @@ vegetation-layer-presentation = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
-mob-layer-model = { workspace = true }
-mob-layer-presentation = { workspace = true }
 tempfile = { workspace = true }
 
 [lints]

@@ -4913,7 +4913,6 @@ dependencies = [
  "intelligence-lod",
  "lod",
  "lod-avian",
- "lod-gimme",
  "log",
  "material-ref",
  "maybraid-character-controller",
@@ -4923,7 +4922,6 @@ dependencies = [
  "maybraid-sky",
  "meandering-intelligence",
  "mob-characters",
- "mob-groups",
  "mob-intelligence",
  "mob-layer-model",
  "mob-layer-presentation",
@@ -5141,7 +5139,17 @@ dependencies = [
 name = "mob-layer-model"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "bevy",
+ "chico-forests",
+ "durham-terrain-models",
+ "lod",
+ "maybraid-mobs",
+ "mob-groups",
+ "procedural-common",
+ "render-item",
+ "richmond-development-models",
+ "richmond-urbanization",
  "terrain-layer-model",
  "urbanization-layer-model",
  "vegetation-layer-model",
@@ -5151,7 +5159,13 @@ dependencies = [
 name = "mob-layer-presentation"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "bevy",
+ "durham-terrain-models",
+ "lod",
+ "lod-gimme",
+ "maybraid-mobs",
+ "mob-groups",
  "mob-layer-model",
  "terrain-layer-model",
  "urbanization-layer-model",

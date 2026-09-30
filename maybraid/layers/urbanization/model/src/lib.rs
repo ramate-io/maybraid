@@ -10,6 +10,7 @@ mod config;
 mod generation;
 mod model;
 mod pads;
+mod setting;
 mod stream;
 mod urban;
 
@@ -17,6 +18,7 @@ pub use config::{DevelopmentFocus, UrbanizationLayerConfig, PLAYGROUND_LIKELIHOO
 pub use generation::{UrbanizationGenerationPlugin, UrbanizationGenerationSystems};
 pub use model::{UrbanRead, UrbanSnapshot, Urbanization};
 pub use pads::PadComposable;
+pub use setting::UrbanSetting;
 pub use stream::{
 	generate_urbanization_developments, generate_urbanization_padded_terrain,
 	parse_urbanization_kind, prepare_development_cells, stream_radii_m, stream_urbanization,

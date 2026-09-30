@@ -1,10 +1,13 @@
 //! [`UrbanModel`]: the urban artifacts consumers bound on instead of Richmond stores.
 
-use bevy::ecs::system::SystemParamItem;
+use bevy::ecs::system::{ResMut, SystemParam, SystemParamItem};
 use bevy::math::bounding::Aabb3d;
 use lod::gen::{Id, SpatialIndex, Version};
+use procedural_common::NoiseParams;
 use richmond_development_models::{BuiltDevelopment, DevelopmentCell, PadComplex, TerrainWithPads};
-use richmond_urbanization::{DevelopmentLeaf, SelectedUrbanization};
+use richmond_urbanization::{
+	DevelopmentLeaf, SelectedUrbanization, UrbanizationExtent, UrbanizationIndex, UrbanizationKind,
+};
 use durham_terrain_models::TerrainMeshBuilder;
 use terrain_layer_model::{TerrainCell, TerrainModel};
 
@@ -13,7 +16,9 @@ use crate::pads::PadComposable;
 
 /// A terrain model that also carries urbanization: pads, leaves, and developments.
 ///
-/// All accessors are GET-only over what urbanization generation stored.
+/// Read accessors are GET-only over what urbanization generation stored.
+/// [`Self::ensure_selected`] is the named write hook mob generation uses today
+/// ([#720](https://github.com/ramate-io/maybraid/issues/720)).
 pub trait UrbanModel: TerrainModel {
 	/// Pads merged over `region`.
 	fn pads(read: &SystemParamItem<'_, '_, Self::Read>, region: Aabb3d) -> PadComplex;
@@ -57,6 +62,18 @@ pub trait UrbanModel: TerrainModel {
 		read: &'a SystemParamItem<'_, '_, Self::Read>,
 		id: Id,
 	) -> Option<(&'a BuiltDevelopment, Version)>;
+
+	/// Selection noise and pinned kind copied onto the mob index.
+	fn urbanization_selection(
+		read: &SystemParamItem<'_, '_, Self::Read>,
+	) -> (NoiseParams, Option<UrbanizationKind>);
+
+	/// Write access for [`Self::ensure_selected`].
+	type Select: SystemParam + 'static;
+
+	/// Cross-layer write kept for [#720](https://github.com/ramate-io/maybraid/issues/720):
+	/// mob generation selects urbanization cells over its generate keep.
+	fn ensure_selected(select: &mut SystemParamItem<'_, '_, Self::Select>, region: Aabb3d);
 }
 
 impl<M> UrbanModel for Urbanization<M>
@@ -118,5 +135,23 @@ where
 		id: Id,
 	) -> Option<(&'a BuiltDevelopment, Version)> {
 		read.developments.built_at(id)
+	}
+
+	fn urbanization_selection(
+		read: &SystemParamItem<'_, '_, Self::Read>,
+	) -> (NoiseParams, Option<UrbanizationKind>) {
+		(read.urbanization.noise, read.urbanization.kind)
+	}
+
+	type Select = ResMut<'static, UrbanizationIndex>;
+
+	fn ensure_selected(select: &mut SystemParamItem<'_, '_, Self::Select>, region: Aabb3d) {
+		// Today's code passes `mobs.urbanization_noise`, which `sync_mob_models`
+		// sets equal to `index.noise` earlier in the same chain, so the result
+		// is identical.
+		let noise = select.noise;
+		for extent in UrbanizationExtent::cells_overlapping(region) {
+			select.ensure_selected(extent, noise);
+		}
 	}
 }

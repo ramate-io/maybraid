@@ -20,7 +20,7 @@ use richmond_building_physics::BuildingWalkColliderPlugin;
 use richmond_urbanization::{UrbanDevelopmentKind, UrbanizationLodChan};
 use terrain_layer_model::TerrainView;
 use urbanization_layer_model::{
-	generate_urbanization_developments, UrbanModel, UrbanizationGenerationSystems,
+	generate_urbanization_developments, UrbanModel, UrbanSetting, UrbanizationGenerationSystems,
 	UrbanizationLayerConfig, UrbanizationStreamingEnabled,
 };
 
@@ -32,16 +32,6 @@ pub use padded::{
 	present_urbanization_padded_terrain, sync_raw_terrain_replacements, PaddedCells,
 	UrbanizationPaddedTerrainState,
 };
-
-/// Type-erased anchor for one presented urban setting.
-///
-/// The world layer turns this into a global POI without coupling Richmond
-/// generation or presentation to a particular intelligence implementation.
-#[derive(Component, Clone, Copy, Debug, PartialEq)]
-pub struct UrbanSetting {
-	pub id: Id,
-	pub arrival_radius: f32,
-}
 
 #[derive(Resource, Default)]
 pub struct UrbanizationPresenterState {
