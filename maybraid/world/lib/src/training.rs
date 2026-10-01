@@ -33,16 +33,17 @@ use durham_terrain_models::{
 	fine_patch_cell_layout, playable_world_cell_layout, retarget_presentation_assets,
 };
 use mob_intelligence::MemberOf;
-use mob_layer_model::{MobGenerationSystems, MobStreamSuspended};
+use mob_layer_model::MobStreamSuspended;
 use urbanization_layer_model::UrbanizationStreamingEnabled;
 use vegetation_layer_model::VegetationLayerConfig;
 
 use crate::WorldPlayerLoadout;
 use crate::control::{WorldSurfaceSet, update_world_surface_ready};
-use crate::world_mode::{WorldMode, WorldModeSet, apply_pending_world_mode};
+use crate::world_mode::WorldMode;
 use crate::training_markers::{TrainingEnemyMarkersEnabled, sync_training_enemy_markers};
 use crate::training_plaza::{
-	TrainingBrawler, clear_training_plaza, mount_training_plaza, park_on_training_site,
+	TrainingBrawler, clear_training_plaza, mount_training_plaza,
+	park_on_training_site,
 	promote_training_plaza, reseat_training_life, supersede_training_raw_terrain,
 };
 
@@ -52,8 +53,7 @@ pub(crate) struct TrainingGroundPlugin;
 
 impl Plugin for TrainingGroundPlugin {
 	fn build(&self, app: &mut App) {
-		app.init_state::<WorldMode>()
-			.init_resource::<TrainingRound>()
+		app.init_resource::<TrainingRound>()
 			.init_resource::<AppliedTrainingMap>()
 			.init_resource::<TrainingEnemyMarkersEnabled>()
 			.add_message::<TrainingLifeEnded>();
@@ -70,8 +70,7 @@ impl Plugin for TrainingGroundPlugin {
 				reseat_training_life,
 				count_training_enemies,
 				sync_training_enemy_markers,
-			)
-				.after(WorldModeSet),
+			),
 		)
 		// Mob, threat, and combat systems queue plain inserts on squad hosts
 		// and members all through Update and PostUpdate; tearing them down any
@@ -84,27 +83,21 @@ impl Plugin for TrainingGroundPlugin {
 #[derive(Resource, Default)]
 struct AppliedTrainingMap(Option<TrainingMap>);
 
-/// Mode transitions and the same-frame flush. Plaza systems stay on the plugin
-/// so a headless transition test can register this without the rest of the stack.
+/// Mode transitions. Plaza systems stay on the plugin so a headless transition
+/// test can register this without the rest of the stack.
 fn register_world_mode_transitions(app: &mut App) {
-	app.configure_sets(
+	app.add_systems(
 		Update,
-		WorldModeSet.before(TerrainFillSystems::Generate).before(MobGenerationSystems),
-	);
-	app.add_systems(Update, apply_pending_world_mode.in_set(WorldModeSet))
-		.add_systems(
-			Update,
-			retarget_training_map
-				.run_if(in_state(WorldMode::Training))
-				.after(WorldModeSet)
-				.before(TerrainFillSystems::Generate),
-		)
-		.add_systems(OnEnter(WorldMode::Training), (enter_training, open_training_score))
-		.add_systems(
-			OnTransition { exited: WorldMode::Training, entered: WorldMode::Discovery },
-			return_to_discovery,
-		)
-		.add_systems(OnExit(WorldMode::Training), close_training_score);
+		retarget_training_map
+			.run_if(in_state(WorldMode::Training))
+			.before(TerrainFillSystems::Generate),
+	)
+	.add_systems(OnEnter(WorldMode::Training), (enter_training, open_training_score))
+	.add_systems(
+		OnTransition { exited: WorldMode::Training, entered: WorldMode::Discovery },
+		return_to_discovery,
+	)
+	.add_systems(OnExit(WorldMode::Training), close_training_score);
 }
 
 /// Forest stream radius used by [`VegetationLayerConfig::world_defaults`].
@@ -276,7 +269,7 @@ impl TrainingFill {
 
 /// Entering Training pins the round's patch and suspends the mob stream.
 ///
-/// Runs from `OnEnter`, which the same-frame flush applies before generate.
+/// `OnEnter` runs in `StateTransition`, before [`TerrainFillSystems::Generate`].
 /// Startup stays in Discovery, so this does not retarget the first frame.
 fn enter_training(
 	round: Res<TrainingRound>,
@@ -459,10 +452,14 @@ pub(crate) fn clear_training_terrain_present(
 mod tests {
 	use bevy::ecs::system::RunSystemOnce;
 	use bevy::state::app::StatesPlugin;
-	use durham_terrain_models::TerrainConfig;
+	use durham_terrain_models::{BaseTerrainNoise, TerrainConfig, WorldBaseTerrain};
+	use richmond_development_models::DevelopmentEntryStore;
 	use urbanization_layer_model::UrbanizationStreamingEnabled;
 	use vegetation_layer_model::VegetationLayerConfig;
 
+	use crate::PlayerSpawnXz;
+	use crate::training_plaza::TrainingPlazaMounted;
+	use crate::world_mode::WorldModePlugin;
 	use super::*;
 
 	fn training_world(round: TrainingRound) -> World {
@@ -566,20 +563,59 @@ mod tests {
 		Loading,
 	}
 
-	fn request_shell_mode(flow: Res<State<ShellFlow>>, mut next: ResMut<NextState<WorldMode>>) {
-		let mode = match *flow.get() {
-			ShellFlow::Home => WorldMode::Discovery,
-			ShellFlow::Loading => WorldMode::Training,
-		};
-		NextState::set_if_neq(&mut next, mode);
+	#[derive(Resource, Clone, Copy)]
+	struct ShellHop {
+		flow: ShellFlow,
+		mode: WorldMode,
+	}
+
+	fn route_shell(
+		hop: Res<ShellHop>,
+		mut flow: ResMut<NextState<ShellFlow>>,
+		mut mode: ResMut<NextState<WorldMode>>,
+	) {
+		flow.set(hop.flow);
+		NextState::set_if_neq(&mut mode, hop.mode);
+	}
+
+	fn hop(app: &mut App, flow: ShellFlow, mode: WorldMode) -> anyhow::Result<()> {
+		app.insert_resource(ShellHop { flow, mode });
+		app.world_mut()
+			.run_system_once(route_shell)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		app.update();
+		Ok(())
+	}
+
+	#[derive(Resource, Default)]
+	struct ModeSeenOnLoading(Option<WorldMode>);
+
+	fn note_mode_on_loading(mode: Res<State<WorldMode>>, mut seen: ResMut<ModeSeenOnLoading>) {
+		seen.0 = Some(*mode.get());
+	}
+
+	#[derive(Resource, Default)]
+	struct TrainingExits(u32);
+
+	fn count_training_exit(mut exits: ResMut<TrainingExits>) {
+		exits.0 += 1;
+	}
+
+	#[derive(Resource, Default)]
+	struct SquadSeenInPostUpdate(bool);
+
+	fn note_squad_before_last(
+		squads: Query<(), With<TrainingBrawler>>,
+		mut seen: ResMut<SquadSeenInPostUpdate>,
+	) {
+		seen.0 = !squads.is_empty();
 	}
 
 	#[test]
 	fn a_shell_enter_retargets_on_that_update_and_startup_does_not() -> anyhow::Result<()> {
 		let round = TrainingRound::new(7);
 		let mut app = App::new();
-		app.add_plugins((MinimalPlugins, StatesPlugin));
-		app.init_state::<WorldMode>();
+		app.add_plugins((MinimalPlugins, StatesPlugin, WorldModePlugin));
 		app.init_state::<ShellFlow>();
 		app.insert_resource(round);
 		app.init_resource::<AppliedTrainingMap>();
@@ -603,8 +639,18 @@ mod tests {
 			macro_res_2: None,
 		});
 		register_world_mode_transitions(&mut app);
-		app.add_systems(OnEnter(ShellFlow::Home), request_shell_mode);
-		app.add_systems(OnEnter(ShellFlow::Loading), request_shell_mode);
+		app.init_resource::<ModeSeenOnLoading>();
+		app.init_resource::<TrainingExits>();
+		app.init_resource::<SquadSeenInPostUpdate>();
+		app.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(
+			&TerrainConfig::new(42),
+		)));
+		app.insert_resource(DevelopmentEntryStore::default());
+		app.insert_resource(PlayerSpawnXz(None));
+		app.add_systems(OnEnter(ShellFlow::Loading), note_mode_on_loading);
+		app.add_systems(OnExit(WorldMode::Training), count_training_exit);
+		app.add_systems(PostUpdate, note_squad_before_last);
+		app.add_systems(Last, clear_training_plaza);
 		app.update();
 		assert!(
 			!app.world().resource::<TerrainPresentationDirty>().0,
@@ -612,33 +658,51 @@ mod tests {
 		);
 		assert_eq!(*app.world().resource::<TerrainCoverage>(), TerrainCoverage::PlayableWorld);
 		assert_eq!(forest_radius(app.world()), Some(WORLD_FOREST_STREAM_RADIUS));
+		assert!(app.world().resource::<ModeSeenOnLoading>().0.is_none());
+		assert_eq!(app.world().resource::<TrainingExits>().0, 0);
 
-		app.world_mut().resource_mut::<NextState<ShellFlow>>().set(ShellFlow::Loading);
-		app.update();
+		hop(&mut app, ShellFlow::Loading, WorldMode::Training)?;
+		assert_eq!(app.world().resource::<ModeSeenOnLoading>().0, Some(WorldMode::Training));
 		assert_eq!(*app.world().resource::<State<WorldMode>>().get(), WorldMode::Training);
 		assert_eq!(*app.world().resource::<TerrainCellLayout>(), round.layout());
 		assert_eq!(*app.world().resource::<TerrainCoverage>(), TerrainCoverage::FinePatch);
 		assert_eq!(forest_radius(app.world()), Some(0));
 		assert!(app.world().resource::<TerrainPresentationDirty>().0);
+		assert!(app.world().get_resource::<CombatScore>().is_some());
+		assert_eq!(app.world().resource::<TrainingExits>().0, 0);
 
 		app.world_mut().resource_mut::<TerrainPresentationDirty>().0 = false;
 		app.insert_resource(round.next_life());
-		app.update();
+		hop(&mut app, ShellFlow::Loading, WorldMode::Training)?;
 		assert!(
 			!app.world().resource::<TerrainPresentationDirty>().0,
 			"a new life on the same map does not move the patch"
 		);
+		assert_eq!(app.world().resource::<TrainingExits>().0, 0);
+		assert!(app.world().get_resource::<CombatScore>().is_some());
 
+		app.world_mut().resource_mut::<TerrainPresentationDirty>().0 = false;
 		app.insert_resource(round.next());
-		app.update();
+		app.insert_resource(TrainingPlazaMounted(round));
+		let squad = app.world_mut().spawn(TrainingBrawler).id();
+		hop(&mut app, ShellFlow::Loading, WorldMode::Training)?;
 		assert_eq!(*app.world().resource::<TerrainCellLayout>(), round.next().layout());
 		assert!(app.world().resource::<TerrainPresentationDirty>().0);
+		assert_eq!(app.world().resource::<TrainingExits>().0, 0);
+		assert!(app.world().resource::<SquadSeenInPostUpdate>().0);
+		assert!(app.world().get_entity(squad).is_err(), "a new map tears the squad down in Last");
 
-		app.world_mut().resource_mut::<NextState<ShellFlow>>().set(ShellFlow::Home);
-		app.update();
+		let current = *app.world().resource::<TrainingRound>();
+		app.insert_resource(TrainingPlazaMounted(current));
+		let squad = app.world_mut().spawn(TrainingBrawler).id();
+		hop(&mut app, ShellFlow::Home, WorldMode::Discovery)?;
 		assert_eq!(*app.world().resource::<State<WorldMode>>().get(), WorldMode::Discovery);
 		assert_eq!(*app.world().resource::<TerrainCellLayout>(), playable_world_cell_layout());
 		assert_eq!(forest_radius(app.world()), Some(WORLD_FOREST_STREAM_RADIUS));
+		assert_eq!(app.world().resource::<TrainingExits>().0, 1);
+		assert!(app.world().get_resource::<CombatScore>().is_none());
+		assert!(app.world().resource::<SquadSeenInPostUpdate>().0);
+		assert!(app.world().get_entity(squad).is_err(), "leaving despawns the squad in Last");
 		Ok(())
 	}
 
@@ -696,13 +760,14 @@ mod tests {
 	fn training_fill_is_a_pinned_raw_fine_patch() {
 		let round = TrainingRound::new(3);
 		let fill = TrainingFill::for_session(Some(round));
-		assert_eq!(
-			fill.layout,
-			fine_patch_cell_layout(
-				TRAINING_FINE_HALF_EXTENT_CELLS,
-				round.site() - IVec2::splat(TRAINING_FINE_HALF_EXTENT_CELLS),
-			),
-		);
+		let layout = &fill.layout;
+		let site = round.site();
+		let center = layout.region_center_xz();
+		let cell = layout.cell_size;
+		assert!((center.x - site.x as f32 * cell).abs() < 1e-3);
+		assert!((center.z - site.y as f32 * cell).abs() < 1e-3);
+		let side = (2 * TRAINING_FINE_HALF_EXTENT_CELLS) as u32;
+		assert_eq!(layout.extents, UVec2::new(side, side));
 		assert_eq!(fill.coverage, TerrainCoverage::FinePatch);
 		assert!(fill.present);
 		assert!(fill.pin_layout);

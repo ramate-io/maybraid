@@ -10,10 +10,10 @@ pub use flow::{GameFlow, HomeRoute, PauseMenuRoute, PlaySession, WorldPause};
 pub use paths::assets_root;
 
 use crate::shell::{
-	apply_pause_character_look, apply_shell_look, attach_preview_camera, despawn_loading_backdrop,
-	detach_preview_camera, enter_characters, enter_home, enter_loading_world, enter_world,
-	enter_world_menu, exit_world_menu, restore_stashed_world_camera, spawn_loading_backdrop,
-	stamp_preview_render_layers,
+	ShellRoute, apply_pause_character_look, apply_shell_look, attach_preview_camera,
+	despawn_loading_backdrop, detach_preview_camera, enter_characters, enter_home,
+	enter_loading_world, enter_world, enter_world_menu, exit_world_menu,
+	restore_stashed_world_camera, spawn_loading_backdrop, stamp_preview_render_layers,
 };
 use bevy::prelude::*;
 use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
@@ -92,7 +92,7 @@ impl Plugin for GamePlugin {
 					enter_loading_world,
 					spawn_loading_backdrop,
 					crate::training::reset_surface_ready,
-					apply_shell_look.before(resume_discovery_from_saved_waypoints),
+					apply_shell_look,
 					detach_preview_camera,
 					crate::load::arm_first_load,
 					crate::training::begin_training_round.before(load_active_player_loadout),
@@ -166,7 +166,7 @@ fn starting_discovery_at_override(spawn: Res<PlayerSpawnXz>) -> bool {
 
 fn boot_shell(
 	spawn: Res<PlayerSpawnXz>,
-	mut flow: ResMut<NextState<GameFlow>>,
+	mut route: ShellRoute,
 	mut mode: ResMut<GameMode>,
 	mut commands: Commands,
 	screens: Query<Entity, With<MenuScreen>>,
@@ -175,7 +175,7 @@ fn boot_shell(
 		mode.label = String::from("Discovery");
 		commands.insert_resource(PlaySession::Discovery);
 		enter_loading_world(commands, screens);
-		flow.set(GameFlow::LoadingWorld);
+		route.enter(GameFlow::LoadingWorld, PlaySession::Discovery);
 		return;
 	}
 	enter_home(commands);
@@ -221,7 +221,8 @@ fn read_player_loadout(
 
 fn route_home_choice(
 	mut choices: MessageReader<HomeMenuChoice>,
-	mut flow: ResMut<NextState<GameFlow>>,
+	session: Res<PlaySession>,
+	mut route: ShellRoute,
 	mut mode: ResMut<GameMode>,
 	mut commands: Commands,
 ) {
@@ -232,10 +233,10 @@ fn route_home_choice(
 		HomeRoute::World { session } => {
 			commands.insert_resource(session);
 			mode.label = String::from(session.label());
-			flow.set(GameFlow::LoadingWorld);
+			route.enter(GameFlow::LoadingWorld, session);
 		}
 		HomeRoute::TrainingSetup => request_show_training(&mut commands),
-		HomeRoute::Characters => flow.set(GameFlow::Characters),
+		HomeRoute::Characters => route.enter(GameFlow::Characters, *session),
 		HomeRoute::Settings => request_show_in_game_settings(&mut commands),
 		HomeRoute::Unimplemented => {}
 	}
@@ -243,7 +244,8 @@ fn route_home_choice(
 
 fn route_in_game_choice(
 	mut choices: MessageReader<InGameMenuChoice>,
-	mut flow: ResMut<NextState<GameFlow>>,
+	session: Res<PlaySession>,
+	mut route: ShellRoute,
 	mut commands: Commands,
 	mut edits: MessageWriter<RequestEditCharacter>,
 	active: Option<Res<ActiveCharacter>>,
@@ -253,7 +255,7 @@ fn route_in_game_choice(
 		return;
 	};
 	match PauseMenuRoute::from_choice(choice) {
-		PauseMenuRoute::Leave => flow.set(GameFlow::Home),
+		PauseMenuRoute::Leave => route.enter(GameFlow::Home, *session),
 		PauseMenuRoute::Settings => request_show_in_game_settings(&mut commands),
 		PauseMenuRoute::Character => {
 			let Some(active) = active else {
@@ -426,7 +428,8 @@ fn toggle_world_pause(
 }
 
 fn character_back(
-	mut flow: ResMut<NextState<GameFlow>>,
+	session: Res<PlaySession>,
+	mut route: ShellRoute,
 	mut commands: Commands,
 	nav: Res<MenuNavPad>,
 	overlay: Res<ActiveOverlayKey>,
@@ -458,7 +461,7 @@ fn character_back(
 		return;
 	}
 	if !gallery.is_empty() {
-		flow.set(GameFlow::Home);
+		route.enter(GameFlow::Home, *session);
 	}
 }
 
@@ -524,7 +527,9 @@ mod tests {
 		let mut world = World::new();
 		world.init_resource::<Messages<HomeMenuChoice>>();
 		world.write_message(HomeMenuChoice::TrainingGround);
+		world.insert_resource(State::new(GameFlow::Home));
 		world.insert_resource(NextState::<GameFlow>::Unchanged);
+		world.insert_resource(NextState::<maybraid_world::WorldMode>::Unchanged);
 		world.insert_resource(GameMode::default());
 		world.insert_resource(PlaySession::None);
 		world

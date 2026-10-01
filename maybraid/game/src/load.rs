@@ -3,6 +3,7 @@
 //! does not wait on the playable-world job wave.
 
 use crate::flow::{GameFlow, PlaySession};
+use crate::shell::ShellRoute;
 use bevy::prelude::*;
 use maybraid_world::{LodJobCounter, TrainingPlazaMounted, TrainingRound, WorldSurfaceReady};
 use menu_screens::{request_loading_explainer, request_loading_progress};
@@ -124,7 +125,7 @@ pub(crate) fn finish_world_loading(
 	jobs: Option<Res<LodJobCounter>>,
 	mut gate: Option<ResMut<FirstLoadGate>>,
 	time: Res<Time>,
-	mut flow: ResMut<NextState<GameFlow>>,
+	mut route: ShellRoute,
 ) {
 	let training = *session == PlaySession::Training;
 	let surface_ready = if training {
@@ -135,7 +136,7 @@ pub(crate) fn finish_world_loading(
 	let active = jobs.as_deref().map(LodJobCounter::active).unwrap_or(0);
 	let Some(gate) = gate.as_deref_mut() else {
 		if surface_ready {
-			flow.set(GameFlow::World);
+			route.enter(GameFlow::World, *session);
 		}
 		return;
 	};
@@ -147,7 +148,7 @@ pub(crate) fn finish_world_loading(
 		loading_explainer(training, gate, surface_ready, active),
 	);
 	if unveil_ready(training, gate, surface_ready, active, now) {
-		flow.set(GameFlow::World);
+		route.enter(GameFlow::World, *session);
 	}
 }
 
@@ -217,6 +218,33 @@ mod tests {
 		assert!(!unveil_ready(false, &gate, true, 0, 0.2));
 		assert_eq!(loading_explainer(true, &gate, false, 0), "Waiting for the ground…");
 		assert_eq!(loading_explainer(true, &gate, true, 0), "Almost ready…");
+	}
+
+	#[test]
+	fn a_ready_training_surface_requests_world_without_leaving_training() -> anyhow::Result<()> {
+		use bevy::ecs::system::RunSystemOnce;
+		use maybraid_world::WorldMode;
+		let round = TrainingRound::new(1);
+		let mut world = World::new();
+		world.insert_resource(State::new(GameFlow::LoadingWorld));
+		world.insert_resource(NextState::<GameFlow>::Unchanged);
+		world.insert_resource(NextState::<WorldMode>::Unchanged);
+		world.insert_resource(PlaySession::Training);
+		world.insert_resource(WorldSurfaceReady(true));
+		world.insert_resource(TrainingPlazaMounted(round));
+		world.insert_resource(round);
+		world.init_resource::<Time>();
+		world
+			.run_system_once(finish_world_loading)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let flow = world.resource::<NextState<GameFlow>>();
+		let mode = world.resource::<NextState<WorldMode>>();
+		let flow_ok = matches!(flow, NextState::Pending(GameFlow::World));
+		let mode_ok = matches!(mode, NextState::PendingIfNeq(WorldMode::Training));
+		if !flow_ok || !mode_ok {
+			return Err(anyhow::anyhow!("unveil requested flow {flow:?} mode {mode:?}"));
+		}
+		Ok(())
 	}
 
 	#[test]

@@ -186,10 +186,10 @@ pub fn playable_world_cell_layout() -> TerrainCellLayout {
 	world_cell_layout()
 }
 
-/// Fine-only grid, `half_extent` cells on each side of `origin`.
+/// Fine-only grid whose minimum corner is `origin`.
 ///
-/// `origin` is the minimum cell corner. Extents are `2 * half_extent` on each
-/// axis (at least one cell). No stream rings.
+/// Extents are `2 * half_extent` cells on each axis (at least one cell).
+/// No stream rings.
 pub fn fine_patch_cell_layout(half_extent: i32, origin: IVec2) -> TerrainCellLayout {
 	let mut layout = cell_layout(half_extent);
 	layout.origin = origin;
@@ -604,7 +604,7 @@ mod tests {
 	}
 
 	#[test]
-	fn fine_patch_is_a_four_cell_grid_when_unpinned() {
+	fn fine_patch_is_a_four_cell_grid() {
 		let layout = fine_patch_cell_layout(2, IVec2::new(-2, -2));
 		assert!(!layout.is_streamed());
 		assert_eq!(layout.extents, UVec2::new(4, 4));

@@ -643,7 +643,7 @@ pub(crate) fn promote_training_plaza(
 		let host = mob
 			.scene(stamped.round.mob_seed() + index as f32)
 			.spawn(&mut commands, Transform::from_translation(mob.host));
-		commands.entity(host).insert((TrainingBrawler, DespawnOnExit(WorldMode::Training)));
+		commands.entity(host).insert(TrainingBrawler);
 	}
 	seat_player_at(&mut players, &mut cameras, arena.player, arena.player_facing());
 	// Terrain snap and void recovery sample the raw FinePatch, which is below

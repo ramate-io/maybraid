@@ -170,6 +170,7 @@ impl Plugin for WorldPlugin {
 			.add_plugins(MeshStatsPlugin)
 			.insert_resource(CharacterRagdollTargets { players: true, npcs: true, unmarked: false })
 			.add_plugins(CharacterRagdollPlugin)
+			.add_plugins(world_mode::WorldModePlugin)
 			.add_plugins(WorldLayersPlugin)
 			.add_plugins(WorldIntelligencePlugin)
 			.add_plugins(SkillMapPlugin)

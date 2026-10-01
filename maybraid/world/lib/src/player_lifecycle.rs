@@ -25,7 +25,7 @@ use urbanization_layer_model::Urbanization;
 
 use crate::control::strip_world_player_motor;
 use crate::training::TrainingLifeEnded;
-use crate::world_mode::{WorldMode, WorldModeSet};
+use crate::world_mode::WorldMode;
 use crate::weapon::WorldPlayerAppearanceRequested;
 use crate::{WorldGameplayEnabled, WorldPlayerLoadout};
 
@@ -106,7 +106,7 @@ impl Plugin for WorldPlayerLifecyclePlugin {
 			)
 			.add_systems(
 				Update,
-				respawn_world_player.after(PoiSystems::Index).after(WorldModeSet),
+				respawn_world_player.after(PoiSystems::Index),
 			)
 			.add_systems(Update, sync_player_death_glaze.after(respawn_world_player));
 	}

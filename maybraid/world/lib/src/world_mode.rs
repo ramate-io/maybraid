@@ -9,7 +9,7 @@
 use bevy::prelude::*;
 use terrain_layer_model::{LayerSource, SourceSystems};
 
-/// Live world session. The shell writes [`NextState<WorldMode>`]; layer flags
+/// Live world session. The shell requests this with its flow; layer flags
 /// follow the transition.
 #[derive(States, Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
 pub enum WorldMode {
@@ -26,26 +26,13 @@ impl WorldMode {
 	}
 }
 
-/// Applies a [`NextState<WorldMode>`] queued during this frame's
-/// [`StateTransition`] before the rest of [`Update`].
-///
-/// `StateTransition` runs after `PreUpdate` and applies every state before any
-/// `OnEnter`. The shell sets `NextState<WorldMode>` from `OnEnter` of its own
-/// flow, which is already past `WorldMode`'s apply for this pass. Running the
-/// schedule again at the start of `Update` applies that pending mode before
-/// terrain generate and the mob stream, the same frame the shell used to write
-/// its flags.
-#[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub(crate) struct WorldModeSet;
+/// Initializes [`WorldMode`] to [`WorldMode::Discovery`].
+pub(crate) struct WorldModePlugin;
 
-pub(crate) fn apply_pending_world_mode(world: &mut World) {
-	let pending = world
-		.get_resource::<NextState<WorldMode>>()
-		.is_some_and(|next| !matches!(next, NextState::Unchanged));
-	if !pending {
-		return;
+impl Plugin for WorldModePlugin {
+	fn build(&self, app: &mut App) {
+		app.init_state::<WorldMode>();
 	}
-	let _ = world.try_run_schedule(StateTransition);
 }
 
 /// `app.add_world_source::<S>(mode)` installs `S`, runs [`SourceSystems<S>`] only
