@@ -2,7 +2,7 @@
 //! generated and then presented.
 
 use bevy::prelude::*;
-use durham_terrain_models::{Durham, DurhamCells, DurhamTerrainConfig};
+use durham_terrain_models::{Durham, DurhamTerrainConfig};
 use maybraid_game_mode_discover::Discovery;
 use maybraid_game_mode_training_ground::{TrainingGround, TRAINING_FINE_HALF_EXTENT_CELLS};
 use mob_layer_model::{MobGenerationPlugin, MobLayerConfig};
@@ -31,20 +31,15 @@ impl Plugin for WorldLayersPlugin {
 				BaseTerrainGenerationPlugin::<Discovery, Durham>::new(
 					DurhamTerrainConfig::playable_world(),
 				),
-				UrbanizationGenerationPlugin::<OnTerrain<Durham>>::new(
+				UrbanizationGenerationPlugin::<Discovery, OnTerrain<Durham>>::new(
 					UrbanizationLayerConfig::world_defaults(),
 				),
 				VegetationGenerationPlugin::new(VegetationLayerConfig::world_defaults()),
 				MobGenerationPlugin::<Urbanization<OnTerrain<Durham>>>::new(
 					MobLayerConfig::world_defaults(),
 				),
-				TerrainPresentationPlugin::<
-					Discovery,
-					Urbanization<OnTerrain<Durham>>,
-					PaddedCells,
-				>::default(),
-				UrbanizationPresentationPlugin::<Discovery, Urbanization<OnTerrain<Durham>>>::default(
-				),
+				TerrainPresentationPlugin::<Discovery, Urbanization<OnTerrain<Durham>>, PaddedCells>::default(),
+				UrbanizationPresentationPlugin::<Discovery, Urbanization<OnTerrain<Durham>>>::default(),
 				VegetationPresentationPlugin::<Discovery, Urbanization<OnTerrain<Durham>>>::default(),
 				MobPresentationPlugin::<Discovery, Urbanization<OnTerrain<Durham>>>::default(),
 			),
@@ -53,8 +48,18 @@ impl Plugin for WorldLayersPlugin {
 				BaseTerrainGenerationPlugin::<TrainingGround, Durham>::new(
 					DurhamTerrainConfig::fine_patch(TRAINING_FINE_HALF_EXTENT_CELLS),
 				),
-				TerrainPresentationPlugin::<TrainingGround, OnTerrain<Durham>, DurhamCells>::default(
+				UrbanizationGenerationPlugin::<TrainingGround, OnTerrain<Durham>>::new(
+					UrbanizationLayerConfig::shared_world(),
 				),
+				TerrainPresentationPlugin::<
+					TrainingGround,
+					Urbanization<OnTerrain<Durham>>,
+					PaddedCells,
+				>::default(),
+				UrbanizationPresentationPlugin::<
+					TrainingGround,
+					Urbanization<OnTerrain<Durham>>,
+				>::default(),
 				VegetationPresentationPlugin::<
 					TrainingGround,
 					Urbanization<OnTerrain<Durham>>,

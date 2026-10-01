@@ -14,16 +14,15 @@ use furniture_assemblies::{
 };
 use furniture_shaders::FurnitureShadersPlugin;
 use lod::gen::{Id, Version};
-use lod::presentation::LodPresentKeepRegion;
 use lod::LodPresentSystems;
 use richmond_building_physics::BuildingWalkColliderPlugin;
-use richmond_urbanization::{UrbanDevelopmentKind, UrbanizationLodChan};
+use durham_terrain_models::TerrainCellLayout;
 use terrain_layer_model::{
 	subscribe_mode, GenerationMode, ModeSubscription, TerrainView,
 };
 use urbanization_layer_model::{
-	generate_urbanization_developments, UrbanModel, UrbanSetting, UrbanizationGenerationSystems,
-	UrbanizationLayerConfig,
+	urbanization_host_region, UrbanizationLayerRegion, UrbanizationStoreSystems, UrbanModel,
+	UrbanSetting, UrbanizationGenerationSystems,
 };
 
 mod hosts;
@@ -134,41 +133,30 @@ pub struct UrbanizationHosts;
 /// still sits after [`UrbanizationGenerationSystems`] and before padded present.
 pub fn present_urbanization_hosts<G: UrbanModel>(
 	mut commands: Commands,
-	config: Res<UrbanizationLayerConfig>,
 	subscription: ModeSubscription<(G, UrbanizationHosts)>,
-	keep: Res<LodPresentKeepRegion<UrbanizationLodChan>>,
+	layer: Res<UrbanizationLayerRegion>,
+	layout: Res<TerrainCellLayout>,
 	view: TerrainView<G>,
 	mut state: ResMut<UrbanizationPresenterState>,
 ) {
-	let spec = config.urbanization.as_ref().filter(|_| subscription.active());
-	if spec.is_none() {
+	if !subscription.active() {
 		state.clear(&mut commands);
 		return;
 	}
-	let Some(region) = keep.region else {
+	let Some(region) = urbanization_host_region(&layout, layer.region) else {
 		return;
 	};
 
-	let urbanization_ids = G::urbanization_cell_ids(&view.read, region);
 	let mut wanted = HashSet::new();
-	for id in urbanization_ids {
-		let Some(selected) = G::urbanization_cell(&view.read, id) else {
+	for (id, version, built) in G::built_overlapping(&view.read, region) {
+		let Some(cell) = G::development_cell(&view.read, id) else {
 			continue;
 		};
-		for leaf in &selected.leaves {
-			if leaf.kind == UrbanDevelopmentKind::Empty {
-				continue;
-			}
-			let leaf_id = leaf.id();
-			let Some(cell) = G::development_cell(&view.read, leaf_id) else {
-				continue;
-			};
-			let Some((built, version)) = G::built_at(&view.read, leaf_id) else {
-				continue;
-			};
-			state.present_leaf(&mut commands, leaf_id, version, cell, built, leaf.bounds);
-			wanted.insert(leaf_id);
+		if !cell.is_filled() {
+			continue;
 		}
+		state.present_leaf(&mut commands, id, version, cell, built, cell.cell);
+		wanted.insert(id);
 	}
 	state.remove_stale(&mut commands, &wanted);
 }
@@ -212,7 +200,7 @@ impl<G: UrbanModel> Plugin for UrbanizationPresentationCore<G> {
 		#[allow(private_interfaces)]
 		app.configure_sets(
 			Update,
-			FurnitureStreamSystems::Generate.after(generate_urbanization_developments),
+			FurnitureStreamSystems::Generate.after(UrbanizationStoreSystems),
 		);
 		app.add_systems(
 			Update,

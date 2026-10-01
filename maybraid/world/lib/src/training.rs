@@ -4,19 +4,17 @@
 //! While [`TrainingGround`](maybraid_game_mode_training_ground::TrainingGround) is
 //! active, hopscotch stays off, the forest shrinks to one grove tile, and a
 //! Training pose is not written. Terrain layout lives on each mode's
-//! [`terrain_layer_model::BaseTerrainScheme`].
-//! [`crate::training_plaza`] stamps one seeded Richmond development onto that
-//! patch — pads first, then hosts — once the whole window exists.
+//! [`terrain_layer_model::BaseTerrainScheme`]. Training's urbanization scheme
+//! stamps one seeded Richmond development; [`crate::training_plaza`] raises
+//! the wall and seats the roster once padded colliders exist.
 //!
 //! A Training respawn ends the life with [`TrainingLifeEnded`], and the shell
 //! advances [`TrainingRound`]. A new round moves the patch, tears the plaza
 //! down, and stamps the next one. A new life on the same map keeps the plaza
 //! and only rolls the next trainee.
 //!
-//! Each session has one terrain collider owner. Discovery's is Richmond's
-//! urbanized presenter, which turning urbanization off tears down. Training's
-//! is Durham's raw FinePatch, except where Training's padded fills supersede
-//! it under the courtyard.
+//! Each session has one terrain collider owner: the padded urbanization
+//! presenter. Training does not present raw [`durham_terrain_models::DurhamCells`].
 
 use bevy::prelude::*;
 use combat_hud::{CombatScore, LiveEnemies};
@@ -33,7 +31,6 @@ use maybraid_game_mode_training_ground::{TrainingGround, TrainingRound};
 use mob_intelligence::MemberOf;
 use mob_layer_model::MobStreamSuspended;
 use terrain_layer_model::ActiveGenerationMode;
-use urbanization_layer_model::UrbanizationStreamingEnabled;
 use vegetation_layer_model::VegetationLayerConfig;
 
 use crate::WorldPlayerLoadout;
@@ -41,11 +38,10 @@ use crate::control::{WorldSurfaceSet, update_world_surface_ready};
 use crate::training_markers::{TrainingEnemyMarkersEnabled, sync_training_enemy_markers};
 use crate::training_plaza::{
 	TrainingBrawler, clear_training_plaza, mount_training_plaza, park_on_training_site,
-	promote_training_plaza, reseat_training_life, supersede_training_raw_terrain,
+	promote_training_plaza, reseat_training_life,
 };
 
-/// Training Ground session: patch retarget, the stamped plaza, and the
-/// raw-to-padded hand-off under its courtyard.
+/// Training Ground session: patch retarget and the walled plaza.
 pub(crate) struct TrainingGroundPlugin;
 
 impl Plugin for TrainingGroundPlugin {
@@ -59,9 +55,7 @@ impl Plugin for TrainingGroundPlugin {
 			(
 				park_on_training_site,
 				mount_training_plaza.in_set(WorldSurfaceSet).after(update_world_surface_ready),
-				(supersede_training_raw_terrain, promote_training_plaza)
-					.chain()
-					.after(TerrainColliderSystems::QueueMeshes),
+				promote_training_plaza.after(TerrainColliderSystems::QueueMeshes),
 				reseat_training_life,
 				count_training_enemies,
 				sync_training_enemy_markers,
@@ -114,10 +108,9 @@ pub fn training_trainee(round: TrainingRound) -> WorldPlayerLoadout {
 	WorldPlayerLoadout::new(key, appearance, inventory).with_name("Trainee")
 }
 
-/// Urbanization and forest stream for a Training / Discovery session.
+/// Forest stream for a Training / Discovery session.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TrainingFill {
-	pub urbanization: bool,
 	pub forest_stream_radius: u32,
 }
 
@@ -125,14 +118,8 @@ impl TrainingFill {
 	/// Training's grove for `round`, or Discovery's playable stream for `None`.
 	pub fn for_session(round: Option<TrainingRound>) -> Self {
 		match round {
-			Some(_) => Self {
-				urbanization: false,
-				forest_stream_radius: 0,
-			},
-			None => Self {
-				urbanization: true,
-				forest_stream_radius: WORLD_FOREST_STREAM_RADIUS,
-			},
+			Some(_) => Self { forest_stream_radius: 0 },
+			None => Self { forest_stream_radius: WORLD_FOREST_STREAM_RADIUS },
 		}
 	}
 }
@@ -142,31 +129,22 @@ fn enter_training(
 	round: Res<TrainingRound>,
 	mut suspended: ResMut<MobStreamSuspended>,
 	mut vegetation: Option<ResMut<VegetationLayerConfig>>,
-	mut urban: Option<ResMut<UrbanizationStreamingEnabled>>,
 ) {
 	suspended.0 = true;
-	write_session_fill(Some(*round), vegetation.as_deref_mut(), urban.as_deref_mut());
+	write_session_fill(Some(*round), vegetation.as_deref_mut());
 }
 
 /// Discovery's urbanization and forest, after Training.
 fn return_to_discovery(
 	mut suspended: ResMut<MobStreamSuspended>,
 	mut vegetation: Option<ResMut<VegetationLayerConfig>>,
-	mut urban: Option<ResMut<UrbanizationStreamingEnabled>>,
 ) {
 	suspended.0 = false;
-	write_session_fill(None, vegetation.as_deref_mut(), urban.as_deref_mut());
+	write_session_fill(None, vegetation.as_deref_mut());
 }
 
-fn write_session_fill(
-	round: Option<TrainingRound>,
-	vegetation: Option<&mut VegetationLayerConfig>,
-	urban: Option<&mut UrbanizationStreamingEnabled>,
-) {
+fn write_session_fill(round: Option<TrainingRound>, vegetation: Option<&mut VegetationLayerConfig>) {
 	let fill = TrainingFill::for_session(round);
-	if let Some(urban) = urban {
-		urban.0 = fill.urbanization;
-	}
 	if let Some(config) = vegetation {
 		if let Some(spec) = config.forest.as_mut() {
 			spec.stream_radius = fill.forest_stream_radius;
@@ -224,7 +202,6 @@ mod tests {
 	};
 	use maybraid_game_mode_training_ground::TRAINING_FINE_HALF_EXTENT_CELLS;
 	use richmond_development_models::DevelopmentEntryStore;
-	use urbanization_layer_model::UrbanizationStreamingEnabled;
 	use vegetation_layer_model::VegetationLayerConfig;
 
 	use crate::PlayerSpawnXz;
@@ -237,7 +214,6 @@ mod tests {
 		world.insert_resource(round);
 		world.insert_resource(MobStreamSuspended(false));
 		world.insert_resource(VegetationLayerConfig::world_defaults());
-		world.insert_resource(UrbanizationStreamingEnabled(true));
 		world
 	}
 
@@ -246,18 +222,17 @@ mod tests {
 	}
 
 	#[test]
-	fn entering_training_shrinks_urbanization_and_forest() -> anyhow::Result<()> {
+	fn entering_training_shrinks_the_forest() -> anyhow::Result<()> {
 		let round = TrainingRound::new(7);
 		let mut world = training_world(round);
 		world.run_system_once(enter_training).map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		anyhow::ensure!(world.resource::<MobStreamSuspended>().0);
-		anyhow::ensure!(!world.resource::<UrbanizationStreamingEnabled>().0);
 		anyhow::ensure!(forest_radius(&world) == Some(0));
 		Ok(())
 	}
 
 	#[test]
-	fn returning_to_discovery_restores_urbanization_and_forest() -> anyhow::Result<()> {
+	fn returning_to_discovery_restores_the_forest() -> anyhow::Result<()> {
 		let round = TrainingRound::new(7);
 		let mut world = training_world(round);
 		world.run_system_once(enter_training).map_err(|error| anyhow::anyhow!("{error:?}"))?;
@@ -265,7 +240,6 @@ mod tests {
 			.run_system_once(return_to_discovery)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		anyhow::ensure!(!world.resource::<MobStreamSuspended>().0);
-		anyhow::ensure!(world.resource::<UrbanizationStreamingEnabled>().0);
 		anyhow::ensure!(forest_radius(&world) == Some(WORLD_FOREST_STREAM_RADIUS));
 		Ok(())
 	}
@@ -349,7 +323,6 @@ mod tests {
 		app.insert_resource(round);
 		app.insert_resource(MobStreamSuspended(false));
 		app.insert_resource(VegetationLayerConfig::world_defaults());
-		app.insert_resource(UrbanizationStreamingEnabled(true));
 		app.insert_resource(playable_world_cell_layout());
 		app.insert_resource(TerrainCoverage::PlayableWorld);
 		app.insert_resource(TerrainLayoutPinned(false));
@@ -487,9 +460,8 @@ mod tests {
 	}
 
 	#[test]
-	fn training_fill_shrinks_urbanization_and_forest() {
+	fn training_fill_shrinks_the_forest() {
 		let fill = TrainingFill::for_session(Some(TrainingRound::new(3)));
-		assert!(!fill.urbanization);
 		assert_eq!(fill.forest_stream_radius, 0);
 	}
 
@@ -502,9 +474,8 @@ mod tests {
 	}
 
 	#[test]
-	fn discovery_fill_restores_urbanization_and_forest() {
+	fn discovery_fill_restores_the_forest() {
 		let fill = TrainingFill::for_session(None);
-		assert!(fill.urbanization);
 		assert_eq!(fill.forest_stream_radius, WORLD_FOREST_STREAM_RADIUS);
 	}
 

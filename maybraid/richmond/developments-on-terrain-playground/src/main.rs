@@ -16,9 +16,16 @@ impl GenerationMode for PlaygroundMode {}
 impl BaseTerrainScheme<Durham> for PlaygroundMode {
 	fn install(_app: &mut App, _config: &DurhamTerrainConfig) {}
 }
+
+impl UrbanizationScheme<OnTerrain<Durham>> for PlaygroundMode {
+	fn install(app: &mut App, config: &UrbanizationLayerConfig) {
+		install_urbanization_stream::<PlaygroundMode>(app, config);
+	}
+}
 use terrain_layer_presentation::TerrainPresentationPlugin;
 use urbanization_layer_model::{
-	Urbanization, UrbanizationGenerationPlugin, UrbanizationLayerConfig, UrbanizationStreamSpec,
+	install_urbanization_stream, Urbanization, UrbanizationGenerationPlugin, UrbanizationLayerConfig,
+	UrbanizationScheme, UrbanizationStreamSpec,
 };
 use urbanization_layer_presentation::{PaddedCells, UrbanizationPresentationPlugin};
 
@@ -60,7 +67,7 @@ fn main() {
 		.add_plugins(
 			TerrainPresentationPlugin::<PlaygroundMode, OnTerrain<Durham>, DurhamCells>::default(),
 		)
-		.add_plugins(UrbanizationGenerationPlugin::<OnTerrain<Durham>>::new(urban))
+		.add_plugins(UrbanizationGenerationPlugin::<PlaygroundMode, OnTerrain<Durham>>::new(urban))
 		.add_plugins(TerrainPresentationPlugin::<
 			PlaygroundMode,
 			Urbanization<OnTerrain<Durham>>,

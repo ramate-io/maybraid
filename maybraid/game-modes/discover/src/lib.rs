@@ -8,7 +8,10 @@ use durham_terrain_models::{
 	Durham, DurhamTerrainConfig, TerrainRetarget, playable_world_cell_layout,
 };
 use terrain_layer_model::{
-	ActiveGenerationMode, BaseTerrainModeConfig, BaseTerrainScheme, GenerationMode,
+	ActiveGenerationMode, BaseTerrainModeConfig, BaseTerrainScheme, GenerationMode, OnTerrain,
+};
+use urbanization_layer_model::{
+	install_urbanization_stream, UrbanizationLayerConfig, UrbanizationScheme,
 };
 
 pub const LABEL: &str = "Discovery";
@@ -29,6 +32,12 @@ impl BaseTerrainScheme<Durham> for Discovery {
 			OnEnter(ActiveGenerationMode::of::<Discovery>()),
 			restore_playable_world,
 		);
+	}
+}
+
+impl UrbanizationScheme<OnTerrain<Durham>> for Discovery {
+	fn install(app: &mut App, config: &UrbanizationLayerConfig) {
+		install_urbanization_stream::<Discovery>(app, config);
 	}
 }
 

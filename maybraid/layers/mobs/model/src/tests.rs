@@ -386,6 +386,17 @@ impl urbanization_layer_model::UrbanModel for Silent {
 		Vec::new()
 	}
 
+	fn built_overlapping<'a>(
+		_read: &'a bevy::ecs::system::SystemParamItem<'_, '_, Self::Read>,
+		_region: Aabb3d,
+	) -> Vec<(
+		Id,
+		lod::gen::Version,
+		&'a richmond_development_models::BuiltDevelopment,
+	)> {
+		Vec::new()
+	}
+
 	fn urbanization_cell_ids(
 		_read: &bevy::ecs::system::SystemParamItem<'_, '_, Self::Read>,
 		_region: Aabb3d,

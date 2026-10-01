@@ -10,17 +10,15 @@ use durham_terrain_models::{
 };
 use lod::gen::{Id, SpatialIndex};
 use lod::lod_ref::LodRef;
-use lod::presentation::LodPresentKeepRegion;
 use lod::{LodPresentSystems, LodViewer};
 use richmond_development_models::{
 	DevelopmentEntryStore, PaddedStoreView, PaddedTerrainPresenter, PresentedPaddedTerrainScene,
 	TerrainWithPads,
 };
-use richmond_urbanization::UrbanizationLodChan;
 use terrain_layer_model::{ModeSubscription, TerrainModel};
 use terrain_layer_presentation::TerrainPresenter;
 use urbanization_layer_model::{
-	Urbanization, UrbanizationGenerationSystems, UrbanizationLayerConfig,
+	urbanization_visual_region, Urbanization, UrbanizationGenerationSystems, UrbanizationLayerRegion,
 };
 
 /// Tick key for the padded presenter's `Local` (same fields as generate).
@@ -29,7 +27,6 @@ struct PaddedTerrainTickKey {
 	region: Aabb3d,
 	store_rev: u64,
 	terrain_rev: u64,
-	urban: bool,
 	viewer: Option<(i32, i32)>,
 }
 
@@ -42,13 +39,6 @@ fn quantize_viewer_xz(translation: Vec3) -> (i32, i32) {
 	)
 }
 
-fn pad_visual_region(layout: &TerrainCellLayout, urban_keep: Option<Aabb3d>) -> Option<Aabb3d> {
-	if layout.is_streamed() {
-		Some(layout.presentation_region())
-	} else {
-		urban_keep
-	}
-}
 
 /// Padded terrain ids replacing raw Durham presentation roots this frame.
 #[derive(Resource, Default)]
@@ -82,12 +72,11 @@ where
 }
 
 /// Present padded replacements for the urbanization keep and cull stale cells.
-/// With urbanization off every padded cell is culled.
+/// An inactive subscription culls every padded cell.
 #[allow(clippy::too_many_arguments, private_interfaces)]
 pub fn present_urbanization_padded_terrain<M>(
-	config: Res<UrbanizationLayerConfig>,
 	subscription: ModeSubscription<(Urbanization<M>, PaddedCells)>,
-	keep: Res<LodPresentKeepRegion<UrbanizationLodChan>>,
+	layer: Res<UrbanizationLayerRegion>,
 	layout: Res<TerrainCellLayout>,
 	store: Res<DevelopmentEntryStore>,
 	mut presenter: PaddedTerrainPresenter,
@@ -99,8 +88,7 @@ pub fn present_urbanization_padded_terrain<M>(
 	M: TerrainModel,
 	Urbanization<M>: TerrainModel,
 {
-	let Some(region) = pad_visual_region(&layout, keep.region)
-		.filter(|_| config.urbanization.is_some() && subscription.active())
+	let Some(region) = urbanization_visual_region(&layout, layer.region).filter(|_| subscription.active())
 	else {
 		if last.is_some() || !state.wanted.is_empty() {
 			state.wanted.clear();
@@ -122,7 +110,6 @@ pub fn present_urbanization_padded_terrain<M>(
 		region,
 		store_rev: store.membership_revision(),
 		terrain_rev: presenter.terrain_membership_revision(),
-		urban: true,
 		viewer: Some(quantize_viewer_xz(viewer.translation)),
 	};
 	if last.as_ref() == Some(&key) {

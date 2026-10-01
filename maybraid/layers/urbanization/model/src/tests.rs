@@ -1,7 +1,7 @@
 use bevy::app::{App, Plugin};
 use bevy::ecs::system::SystemState;
 use bevy::math::bounding::Aabb3d;
-use bevy::math::{Vec2, Vec3};
+use bevy::math::{IVec2, Vec2, Vec3};
 use bevy::prelude::World;
 use durham_terrain_models::{
 	BaseTerrainNoise, Durham, DurhamTerrainConfig, TerrainCellLayout, TerrainConfig,
@@ -20,6 +20,10 @@ impl GenerationMode for TestMode {}
 
 impl BaseTerrainScheme<Durham> for TestMode {
 	fn install(_app: &mut App, _config: &DurhamTerrainConfig) {}
+}
+
+impl crate::UrbanizationScheme<OnTerrain<Durham>> for TestMode {
+	fn install(_app: &mut App, _config: &crate::UrbanizationLayerConfig) {}
 }
 
 use crate::Urbanization;
@@ -132,7 +136,7 @@ fn urbanization_generation_without_base_names_the_missing_plugin() {
 
 	// `build` installs Richmond plugins that need a full Bevy app. `finish`
 	// is the requirement check the assemblers actually run.
-	UrbanizationGenerationPlugin::<OnTerrain<Durham>>::default().finish(&mut App::new());
+	UrbanizationGenerationPlugin::<TestMode, OnTerrain<Durham>>::default().finish(&mut App::new());
 }
 
 #[test]
@@ -299,5 +303,216 @@ fn overlay_cell_prefers_a_padded_cell_then_falls_back_by_size() -> anyhow::Resul
 	let (width, res) = overlay_width_res(&mut world, query, 2.0 * TERRAIN_CELL_SIZE, Some(1e-2))?;
 	assert!((width - 2.0 * TERRAIN_CELL_SIZE).abs() < 1e-3);
 	assert_eq!(res, 9);
+	Ok(())
+}
+
+#[test]
+fn empty_keep_draws_a_fine_patch_from_the_layout() -> anyhow::Result<()> {
+	use durham_terrain_models::fine_patch_cell_layout;
+	use crate::{urbanization_host_region, urbanization_visual_region};
+
+	let layout = fine_patch_cell_layout(2, IVec2::ZERO);
+	let visual = urbanization_visual_region(&layout, None)
+		.ok_or_else(|| anyhow::anyhow!("visual region"))?;
+	let host = urbanization_host_region(&layout, None)
+		.ok_or_else(|| anyhow::anyhow!("host region"))?;
+	anyhow::ensure!(visual == layout.presentation_region());
+	anyhow::ensure!(host == layout.presentation_region());
+	Ok(())
+}
+
+#[test]
+fn host_region_covers_every_leaf_of_selected_cells() -> anyhow::Result<()> {
+	use std::collections::HashSet;
+
+	use bevy::ecs::system::RunSystemOnce;
+	use lod::gen::{Id, SpatialIndex};
+	use lod::presentation::LodPresentKeepRegion;
+	use procedural_common::NoiseParams;
+	use bevy::math::bounding::IntersectsVolume;
+	use richmond_urbanization::{
+		SelectedUrbanization, UrbanDevelopmentKind, UrbanizationExtent, UrbanizationIndex,
+		UrbanizationKind, UrbanizationLodChan,
+	};
+
+	use crate::{write_urbanization_host_region, UrbanizationLayerRegion};
+
+	let extent = UrbanizationExtent::default_cell();
+	let keep = Aabb3d::from_min_max(
+		Vec3::new(-10.0, 0.0, -10.0),
+		Vec3::new(10.0, 1.0, 10.0),
+	);
+	anyhow::ensure!(
+		keep.intersects(&extent.aabb()),
+		"the keep must overlap the urbanization cell"
+	);
+
+	let mut world = World::new();
+	world.insert_resource(UrbanizationLayerRegion::default());
+	world.insert_resource({
+		let mut keep_region = LodPresentKeepRegion::<UrbanizationLodChan>::default();
+		keep_region.region = Some(keep);
+		keep_region
+	});
+	world.insert_resource(UrbanizationIndex::default());
+	world.resource_mut::<UrbanizationIndex>().kind = Some(UrbanizationKind::MixedAgeCity);
+	world.resource_mut::<UrbanizationIndex>().ensure_selected(extent, NoiseParams::default());
+
+	let selected = world
+		.resource::<UrbanizationIndex>()
+		.get(extent.id())
+		.cloned()
+		.ok_or_else(|| anyhow::anyhow!("selected cell"))?;
+	let old: HashSet<Id> = selected
+		.leaves
+		.iter()
+		.filter(|leaf| leaf.kind != UrbanDevelopmentKind::Empty)
+		.map(richmond_urbanization::DevelopmentLeaf::id)
+		.collect();
+	anyhow::ensure!(!old.is_empty(), "hopscotch produced no filled leaves");
+	let outside_keep = selected.leaves.iter().any(|leaf| {
+		leaf.kind != UrbanDevelopmentKind::Empty && !keep.intersects(&leaf.bounds)
+	});
+	anyhow::ensure!(
+		outside_keep,
+		"this fixture needs a filled leaf that sits outside the keep"
+	);
+
+	world
+		.run_system_once(write_urbanization_host_region)
+		.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+	let host = world
+		.resource::<UrbanizationLayerRegion>()
+		.region
+		.ok_or_else(|| anyhow::anyhow!("host region"))?;
+	anyhow::ensure!(host == extent.aabb(), "the stream writes the selected cell");
+
+	let index = world.resource::<UrbanizationIndex>();
+	let new: HashSet<Id> = SpatialIndex::<SelectedUrbanization>::tracked_ids_for(&*index, host)
+		.into_iter()
+		.filter_map(|tracked| index.get(tracked.0))
+		.flat_map(|selected| selected.leaves.iter())
+		.filter(|leaf| leaf.kind != UrbanDevelopmentKind::Empty)
+		.map(richmond_urbanization::DevelopmentLeaf::id)
+		.collect();
+	anyhow::ensure!(old == new, "hosts present the same leaf ids as the old walk");
+	Ok(())
+}
+
+struct StreamMode;
+struct OtherMode;
+
+impl GenerationMode for StreamMode {}
+impl GenerationMode for OtherMode {}
+
+impl BaseTerrainScheme<Durham> for StreamMode {
+	fn install(_app: &mut App, _config: &DurhamTerrainConfig) {}
+}
+
+impl BaseTerrainScheme<Durham> for OtherMode {
+	fn install(_app: &mut App, _config: &DurhamTerrainConfig) {}
+}
+
+impl crate::UrbanizationScheme<OnTerrain<Durham>> for StreamMode {
+	fn install(_app: &mut App, _config: &crate::UrbanizationLayerConfig) {}
+}
+
+impl crate::UrbanizationScheme<OnTerrain<Durham>> for OtherMode {
+	fn install(_app: &mut App, _config: &crate::UrbanizationLayerConfig) {}
+}
+
+#[test]
+fn leaving_a_stream_mode_clears_then_reentering_streams_again() -> anyhow::Result<()> {
+	use bevy::camera::Camera3d;
+	use bevy::ecs::message::Messages;
+	use bevy::ecs::system::RunSystemOnce;
+	use bevy::prelude::{MinimalPlugins, NextState, OnExit, Transform};
+	use bevy::state::app::StatesPlugin;
+	use lod::gen::{Id, LodGenerateRegion};
+	use richmond_development_models::{DevelopmentCell, DevelopmentConfig, DevelopmentEntryStore};
+	use richmond_urbanization::{UrbanizationExtent, UrbanizationIndex, UrbanizationLodChan};
+	use crate::generation::clear_urbanization_mode;
+	use crate::stream::register_urbanization_lod_generate;
+	use crate::{
+		stream_urbanization, UrbanizationLayerConfig, UrbanizationLayerRegion, UrbanizationModeConfig,
+		UrbanizationStreamKey, UrbanizationStreamSpec,
+	};
+	use terrain_layer_model::{ActiveGenerationMode, GenerationModePlugin};
+
+	let spec = UrbanizationStreamSpec::default();
+	let mut app = App::new();
+	app.add_plugins((MinimalPlugins, StatesPlugin));
+	app.add_plugins((
+		GenerationModePlugin::<StreamMode>::initial(),
+		GenerationModePlugin::<OtherMode>::default(),
+	));
+	register_urbanization_lod_generate(&mut app, 16);
+	app.insert_resource(UrbanizationModeConfig::<StreamMode>::new(
+		UrbanizationLayerConfig::world_defaults(),
+	));
+	app.init_resource::<UrbanizationStreamKey>();
+	app.init_resource::<UrbanizationLayerRegion>();
+	app.init_resource::<DevelopmentEntryStore>();
+	app.init_resource::<DevelopmentConfig>();
+	app.add_systems(
+		OnExit(ActiveGenerationMode::of::<StreamMode>()),
+		clear_urbanization_mode,
+	);
+	app.add_systems(
+		OnExit(ActiveGenerationMode::of::<OtherMode>()),
+		clear_urbanization_mode,
+	);
+	app.world_mut()
+		.spawn((Camera3d::default(), Transform::from_xyz(0.0, 8.0, 0.0)));
+
+	let bounds = Aabb3d::from_min_max(
+		Vec3::new(4_000.0, 0.0, 4_000.0),
+		Vec3::new(4_080.0, 1.0, 4_080.0),
+	);
+	let streamed_id = Id::from_cell(bounds);
+	app.world_mut()
+		.resource_mut::<DevelopmentEntryStore>()
+		.insert_cell(streamed_id, DevelopmentCell::empty(bounds));
+	let extent = UrbanizationExtent::default_cell();
+	app.world_mut()
+		.resource_mut::<UrbanizationIndex>()
+		.ensure_selected(extent, spec.noise);
+	let selected = extent.id();
+	app.world_mut().insert_resource(UrbanizationStreamKey(Some(spec.key())));
+
+	app.update();
+	anyhow::ensure!(app.world().resource::<DevelopmentEntryStore>().cell(streamed_id).is_some());
+
+	app.world_mut()
+		.resource_mut::<NextState<ActiveGenerationMode>>()
+		.set(ActiveGenerationMode::of::<OtherMode>());
+	app.update();
+	anyhow::ensure!(
+		app.world().resource::<DevelopmentEntryStore>().cell(streamed_id).is_none(),
+		"the other mode holds no streamed development"
+	);
+	anyhow::ensure!(
+		app.world().resource::<UrbanizationIndex>().get(selected).is_none(),
+		"the other mode holds no hopscotch selection"
+	);
+	anyhow::ensure!(app.world().resource::<UrbanizationStreamKey>().0.is_none());
+
+	app.world_mut()
+		.resource_mut::<NextState<ActiveGenerationMode>>()
+		.set(ActiveGenerationMode::of::<StreamMode>());
+	app.update();
+	app.world_mut()
+		.run_system_once(stream_urbanization::<StreamMode>)
+		.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+	anyhow::ensure!(
+		app.world().resource::<UrbanizationStreamKey>().0.as_ref() == Some(&spec.key()),
+		"re-entering stores the spec key again"
+	);
+	let regions = app
+		.world()
+		.resource::<Messages<LodGenerateRegion<UrbanizationLodChan>>>()
+		.iter_current_update_messages()
+		.count();
+	anyhow::ensure!(regions == 1, "re-entering emits a generate region, got {regions}");
 	Ok(())
 }

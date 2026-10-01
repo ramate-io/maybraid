@@ -12,7 +12,10 @@ rust-version = { workspace = true }
 [dependencies]
 bevy = { workspace = true }
 durham-terrain-models = { workspace = true }
+lod = { workspace = true }
+richmond-development-models = { workspace = true }
 terrain-layer-model = { workspace = true }
+urbanization-layer-model = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }

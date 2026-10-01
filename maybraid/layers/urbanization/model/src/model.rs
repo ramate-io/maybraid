@@ -15,7 +15,6 @@ use richmond_development_models::{
 use richmond_urbanization::UrbanizationIndex;
 use terrain_layer_model::{HeightField, RequireLayer, TerrainCell, TerrainModel};
 
-use crate::generation::UrbanizationGenerationPlugin;
 use crate::pads::PadComposable;
 use crate::stream::prepare_development_cells;
 
@@ -140,6 +139,6 @@ where
 
 	fn require_generation(app: &App) {
 		M::require_generation(app);
-		app.require_layer::<UrbanizationGenerationPlugin<M>, Self>();
+		app.require_layer::<crate::generation::UrbanizationGenerationCore<M>, Self>();
 	}
 }

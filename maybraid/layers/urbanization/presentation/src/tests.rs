@@ -92,6 +92,10 @@ impl BaseTerrainScheme<Durham> for TestMode {
 	fn install(_app: &mut App, _config: &DurhamTerrainConfig) {}
 }
 
+impl urbanization_layer_model::UrbanizationScheme<OnTerrain<Durham>> for TestMode {
+	fn install(_app: &mut App, _config: &UrbanizationLayerConfig) {}
+}
+
 #[test]
 fn urbanization_layers_finish_with_base_generation() {
 	// Adding Durham / Richmond plugins to a bare `App` needs a render world
@@ -101,7 +105,9 @@ fn urbanization_layers_finish_with_base_generation() {
 	let _stack = (
 		GenerationModePlugin::<TestMode>::initial(),
 		BaseTerrainGenerationPlugin::<TestMode, Durham>::new(DurhamTerrainConfig::fine_patch(2)),
-		UrbanizationGenerationPlugin::<OnTerrain<Durham>>::new(UrbanizationLayerConfig::default()),
+		UrbanizationGenerationPlugin::<TestMode, OnTerrain<Durham>>::new(
+			UrbanizationLayerConfig::default(),
+		),
 		TerrainPresentationPlugin::<TestMode, Urbanization<OnTerrain<Durham>>, PaddedCells>::default(),
 		UrbanizationPresentationPlugin::<TestMode, Urbanization<OnTerrain<Durham>>>::default(),
 	);
@@ -112,7 +118,7 @@ fn urbanization_layers_finish_with_base_generation() {
 fn urbanization_layers_without_base_generation_name_the_missing_plugin() {
 	// `build` installs Richmond / furniture plugins that need a full Bevy app.
 	// `finish` is the requirement check the assemblers actually run.
-	UrbanizationGenerationPlugin::<OnTerrain<Durham>>::default().finish(&mut App::new());
+	UrbanizationGenerationPlugin::<TestMode, OnTerrain<Durham>>::default().finish(&mut App::new());
 }
 
 struct OtherMode;
@@ -213,5 +219,60 @@ fn two_modes_install_the_core_once() -> anyhow::Result<()> {
 	let hosts = app.world().resource::<ModeSubscribers<(Urbanized, UrbanizationHosts)>>();
 	anyhow::ensure!(hosts.contains::<TestMode>());
 	anyhow::ensure!(hosts.contains::<OtherMode>());
+	Ok(())
+}
+
+#[test]
+fn hosts_walk_a_stored_development_with_no_hopscotch() -> anyhow::Result<()> {
+	use durham_terrain_models::{
+		fine_patch_cell_layout, BaseTerrainNoise, TerrainConfig, TerrainEntryStore,
+		WorldBaseTerrain,
+	};
+	use richmond_development_models::{DevelopmentCell, DevelopmentConfig, DevelopmentEntryStore};
+	use richmond_urbanization::UrbanizationIndex;
+	use urbanization_layer_model::{
+		urbanization_host_region, UrbanModel, UrbanizationLayerRegion,
+	};
+
+	let mut world = World::new();
+	world.insert_resource(UrbanizationLayerRegion::default());
+	let layout = fine_patch_cell_layout(2, bevy::math::IVec2::ZERO);
+	world.insert_resource(layout.clone());
+	world.insert_resource(TerrainEntryStore::default());
+	world.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(
+		&TerrainConfig::new(42),
+	)));
+	world.insert_resource(UrbanizationIndex::default());
+	world.insert_resource(DevelopmentEntryStore::default());
+
+	let cell = Aabb3d::from_min_max(Vec3::new(-20.0, 0.0, -20.0), Vec3::new(20.0, 1.0, 20.0));
+	let config = DevelopmentConfig::from_world_seed(42);
+	let filled = DevelopmentCell::with_les_halles(cell, 12.0, &config);
+	let built = filled
+		.built(config.seed as i32)
+		.ok_or_else(|| anyhow::anyhow!("les halles built"))?;
+	let id = Id::from_cell(filled.cell);
+	{
+		let mut store = world.resource_mut::<DevelopmentEntryStore>();
+		store.insert_cell(id, filled);
+		store.insert_built(id, built, cell);
+	}
+
+	let region = urbanization_host_region(&layout, None)
+		.ok_or_else(|| anyhow::anyhow!("fine-patch host region"))?;
+	let mut state = SystemState::<terrain_layer_model::TerrainView<Urbanized>>::new(&mut world);
+	let view = state.get(&world).map_err(|error| anyhow::anyhow!("{error:?}"))?;
+	let ids: Vec<_> = Urbanized::built_overlapping(&view.read, region)
+		.into_iter()
+		.map(|(id, _, _)| id)
+		.collect();
+	anyhow::ensure!(
+		ids.contains(&id),
+		"hosts walk a stored development with no hopscotch selection"
+	);
+	anyhow::ensure!(
+		Urbanized::urbanization_cell_ids(&view.read, region).is_empty(),
+		"no hopscotch cells are selected"
+	);
 	Ok(())
 }

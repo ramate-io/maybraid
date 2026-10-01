@@ -1,20 +1,21 @@
 //! [`UrbanizationGenerationPlugin`]: urbanization cells, pads, and padded cells over `M`.
 
+use std::any::type_name;
 use std::marker::PhantomData;
 
 use bevy::app::{App, Plugin};
+use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use durham_terrain_models::{terrain_streaming_enabled, TerrainColliderSystems};
-use lod::{LodGenerateSystems, LodPresentSystems};
-use richmond_development_models::RichmondDevelopmentModelsPlugin;
-use terrain_layer_model::TerrainModel;
+use lod::LodPresentSystems;
+use richmond_development_models::{DevelopmentEntryStore, RichmondDevelopmentModelsPlugin};
+use terrain_layer_model::{ActiveGenerationMode, GenerationMode, TerrainModel};
 
-use crate::config::UrbanizationLayerConfig;
+use crate::config::{UrbanizationLayerConfig, UrbanizationSharedConfig};
 use crate::model::Urbanization;
 use crate::stream::{
-	generate_urbanization_developments, generate_urbanization_padded_terrain,
-	register_urbanization_lod_generate, stream_urbanization, sync_urbanization_pin,
-	urbanization_streaming_enabled, UrbanizationStreamingEnabled,
+	clear_urbanization_stream, generate_urbanization_padded_terrain, UrbanizationStreamKey,
+	UrbanizationStreamLod,
 };
 
 /// Systems that write urbanization / development / padded-cell storage.
@@ -24,73 +25,162 @@ use crate::stream::{
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct UrbanizationGenerationSystems;
 
-/// Generates urbanization over model `M` and makes `Urbanization<M>` available.
-///
-/// Reads `M` (pad heights sample the inner surface, never pads). Writes
-/// urbanization cells, development cells, built developments, and padded cells.
-pub struct UrbanizationGenerationPlugin<M> {
-	pub config: UrbanizationLayerConfig,
+/// Scheme store writes finish here. Shared padding runs after this set.
+#[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct UrbanizationStoreSystems;
+
+/// A mode's urbanization writes for model `M`.
+pub trait UrbanizationScheme<M: TerrainModel>: GenerationMode {
+	fn install(app: &mut App, config: &UrbanizationLayerConfig);
+}
+
+/// Shared install for `Urbanization<M>`, added once.
+pub struct UrbanizationGenerationCore<M> {
+	pub shared: UrbanizationSharedConfig,
 	_marker: PhantomData<fn() -> M>,
 }
 
-impl<M> UrbanizationGenerationPlugin<M> {
+impl<M> Plugin for UrbanizationGenerationCore<M>
+where
+	M: TerrainModel + Send + Sync + 'static,
+	Urbanization<M>: TerrainModel,
+{
+	fn build(&self, app: &mut App) {
+		app.add_plugins(RichmondDevelopmentModelsPlugin)
+			.insert_resource(InstalledUrbanizationShared::<M>(
+				self.shared.clone(),
+				PhantomData,
+			))
+			.insert_resource(self.shared.development.clone())
+			.init_resource::<UrbanizationLayerRegion>()
+			.init_resource::<UrbanizationStreamKey>()
+			.configure_sets(
+				Update,
+				UrbanizationStoreSystems
+					.in_set(UrbanizationGenerationSystems)
+					.run_if(terrain_streaming_enabled),
+			)
+			.add_systems(
+				Update,
+				generate_urbanization_padded_terrain
+					.in_set(UrbanizationGenerationSystems)
+					.after(UrbanizationStoreSystems)
+					.run_if(terrain_streaming_enabled)
+					.before(LodPresentSystems::Produce)
+					.before(TerrainColliderSystems::QueueMeshes),
+			);
+	}
+}
+
+#[derive(Resource)]
+struct InstalledUrbanizationShared<M: Send + Sync + 'static>(
+	UrbanizationSharedConfig,
+	PhantomData<fn() -> M>,
+);
+
+/// Per-mode config the scheme systems read.
+#[derive(Resource, Clone)]
+pub struct UrbanizationModeConfig<Mode: GenerationMode> {
+	pub config: UrbanizationLayerConfig,
+	_mode: PhantomData<fn() -> Mode>,
+}
+
+impl<Mode: GenerationMode> UrbanizationModeConfig<Mode> {
+	pub fn new(config: UrbanizationLayerConfig) -> Self {
+		Self { config, _mode: PhantomData }
+	}
+}
+
+/// Region schemes write and padding / hosts read.
+#[derive(Resource, Clone, Copy, Debug, Default, PartialEq)]
+pub struct UrbanizationLayerRegion {
+	pub region: Option<Aabb3d>,
+}
+
+/// Generation for model `M` in `Mode`.
+pub struct UrbanizationGenerationPlugin<Mode, M>
+where
+	Mode: UrbanizationScheme<M>,
+	M: TerrainModel,
+{
+	pub config: UrbanizationLayerConfig,
+	_marker: PhantomData<fn() -> (Mode, M)>,
+}
+
+impl<Mode, M> UrbanizationGenerationPlugin<Mode, M>
+where
+	Mode: UrbanizationScheme<M>,
+	M: TerrainModel,
+{
 	pub fn new(config: UrbanizationLayerConfig) -> Self {
 		Self { config, _marker: PhantomData }
 	}
 }
 
-impl<M> Default for UrbanizationGenerationPlugin<M> {
+impl<Mode, M> Default for UrbanizationGenerationPlugin<Mode, M>
+where
+	Mode: UrbanizationScheme<M>,
+	M: TerrainModel,
+{
 	fn default() -> Self {
 		Self::new(UrbanizationLayerConfig::default())
 	}
 }
 
-impl<M> Plugin for UrbanizationGenerationPlugin<M>
+impl<Mode, M> Plugin for UrbanizationGenerationPlugin<Mode, M>
 where
+	Mode: UrbanizationScheme<M>,
 	M: TerrainModel,
 	Urbanization<M>: TerrainModel,
 {
 	fn build(&self, app: &mut App) {
-		let development_config = self.config.development_config();
-		app.add_plugins(RichmondDevelopmentModelsPlugin)
-			.insert_resource(self.config.clone())
-			.insert_resource(development_config);
-		if !app.world().contains_resource::<UrbanizationStreamingEnabled>() {
-			app.init_resource::<UrbanizationStreamingEnabled>();
+		let Some(state) = app.world().get_resource::<State<ActiveGenerationMode>>() else {
+			panic!(
+				"UrbanizationGenerationPlugin<{}, {}> requires GenerationModePlugin first",
+				Mode::name(),
+				type_name::<M>()
+			);
+		};
+		if state.get().is::<Mode>() && !app.is_plugin_added::<UrbanizationGenerationCore<M>>() {
+			app.add_plugins(UrbanizationGenerationCore::<M> {
+				shared: self.config.shared_config(),
+				_marker: PhantomData,
+			});
 		}
-		register_urbanization_lod_generate(app, self.config.generate_budget);
-
-		// The pin stays ungated: other readers of `UrbanizationIndex` (world mobs)
-		// select cells before terrain streaming starts, and must see the spec noise.
+		app.insert_resource(UrbanizationModeConfig::<Mode>::new(self.config.clone()));
 		app.add_systems(
-			Update,
-			sync_urbanization_pin
-				.in_set(UrbanizationGenerationSystems)
-				.before(stream_urbanization)
-				.before(LodGenerateSystems::Produce),
+			OnExit(ActiveGenerationMode::of::<Mode>()),
+			clear_urbanization_mode,
 		);
-		// Stream still runs while urbanization is off so a session that turns
-		// it off tears generate state down instead of freezing it.
-		app.add_systems(
-			Update,
-			(
-				stream_urbanization.before(LodGenerateSystems::Produce),
-				(
-					generate_urbanization_developments.after(LodGenerateSystems::Drain),
-					generate_urbanization_padded_terrain,
-				)
-					.chain()
-					.run_if(urbanization_streaming_enabled),
-			)
-				.chain()
-				.in_set(UrbanizationGenerationSystems)
-				.run_if(terrain_streaming_enabled)
-				.before(LodPresentSystems::Produce)
-				.before(TerrainColliderSystems::QueueMeshes),
-		);
+		Mode::install(app, &self.config);
 	}
 
 	fn finish(&self, app: &mut App) {
 		M::require_generation(app);
+		let Some(installed) = app.world().get_resource::<InstalledUrbanizationShared<M>>() else {
+			panic!(
+				"the initial generation mode never registered UrbanizationGenerationPlugin for {}",
+				type_name::<M>()
+			);
+		};
+		let shared = self.config.shared_config();
+		if installed.0 != shared {
+			panic!(
+				"UrbanizationGenerationPlugin shared config disagrees for {}: {:?} vs {shared:?}",
+				type_name::<M>(),
+				installed.0
+			);
+		}
 	}
+}
+
+pub(crate) fn clear_urbanization_mode(
+	mut store: ResMut<DevelopmentEntryStore>,
+	mut layer: ResMut<UrbanizationLayerRegion>,
+	key: Option<ResMut<UrbanizationStreamKey>>,
+	lod: Option<UrbanizationStreamLod>,
+) {
+	store.clear();
+	layer.region = None;
+	clear_urbanization_stream(None, key, lod);
 }

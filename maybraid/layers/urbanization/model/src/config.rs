@@ -122,6 +122,23 @@ impl UrbanizationLayerConfig {
 		}
 	}
 
+	/// Shared generate budget and development knobs, no hopscotch spec.
+	pub fn shared_world() -> Self {
+		Self {
+			urbanization: None,
+			focus_urbanization: None,
+			focus_development: None,
+			generate_budget: 16,
+		}
+	}
+
+	pub fn shared_config(&self) -> UrbanizationSharedConfig {
+		UrbanizationSharedConfig {
+			generate_budget: self.generate_budget,
+			development: self.development_config(),
+		}
+	}
+
 	pub fn development_config(&self) -> DevelopmentConfig {
 		let mut development = DevelopmentConfig {
 			likelihood: PLAYGROUND_LIKELIHOOD,
@@ -136,4 +153,11 @@ impl UrbanizationLayerConfig {
 		}
 		development
 	}
+}
+
+/// Generate budget and [`DevelopmentConfig`] every mode must agree on.
+#[derive(Clone, Debug, PartialEq)]
+pub struct UrbanizationSharedConfig {
+	pub generate_budget: u32,
+	pub development: DevelopmentConfig,
 }

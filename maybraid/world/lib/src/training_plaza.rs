@@ -3,16 +3,12 @@
 //! stamps its own site, development, and roster; its later lives respawn
 //! on the same plaza.
 
-use avian3d::prelude::{Collider, LinearVelocity, Position, RigidBody};
-use bevy::ecs::system::ParamSet;
+use avian3d::prelude::{LinearVelocity, Position};
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use chico_vegetation_on_terrain_playground::player::{holding_elevation, player_spawn_point_at};
 use chico_vegetation_on_terrain_playground::{OffTerrainAnchor, Player};
-use durham_terrain_models::{
-	Durham, PresentedTerrainScene, TerrainCellLayout, TerrainEntryStore, TerrainSuperseded,
-	TerrainTrimeshCollider, WorldBaseTerrain,
-};
+use durham_terrain_models::{Durham, TerrainSuperseded, TerrainTrimeshCollider, WorldBaseTerrain};
 use lod::gen::Id;
 use maybraid_mobs::{Mob, MobKind, MobScene};
 use mob_characters::CharacterSpecies;
@@ -24,28 +20,22 @@ use richmond_building_components::{building_bounds, spawn_building_components};
 use richmond_building_physics::{BUILDING_FRICTION, spawn_building_walk_colliders};
 use richmond_buildings::wall_demo::TerrainPerimeterWall;
 use richmond_development_models::{
-	DEVELOPMENT_CELL_SIZE, DevelopmentCell, DevelopmentConfig, DevelopmentEntryStore,
-	DevelopmentFinish, DevelopmentHost, DevelopmentHosts, DevelopmentKind, PadParams,
-	TerrainWithPads,
+	DevelopmentEntryStore, DevelopmentFinish, DevelopmentHost, DevelopmentHosts,
+	PresentedPaddedTerrainScene,
 };
 use terrain_layer_model::{OnTerrain, TerrainView};
 use urbanization_layer_model::Urbanization;
 
-use maybraid_game_mode_training_ground::{TrainingGround, TrainingMap, TrainingRound};
+use maybraid_game_mode_training_ground::{
+	TrainingGround, TrainingMap, TrainingPlazaStamped, TrainingStampSettled, TrainingRound,
+	TRAINING_ARENA_MARGIN_M, TRAINING_ARENA_MAX_HALF_M, TRAINING_COURTYARD_OVERHANG_M,
+};
 use terrain_layer_model::ActiveGenerationMode;
 
 use crate::PlayerSpawnXz;
-use crate::control::WorldSurfaceReady;
 
 const TRAINING_WALL_STEP_M: f32 = 8.0;
 const TRAINING_WALL_HEIGHT_M: f32 = 20.0;
-/// Courtyard band between the building footprint and the wall.
-const TRAINING_ARENA_MARGIN_M: f32 = 16.0;
-/// Keeps the courtyard plus its ease inside the 320 m FinePatch.
-const TRAINING_ARENA_MAX_HALF_M: f32 = 128.0;
-/// Flatten runs under the wall so its base never meets the ease slope.
-const TRAINING_COURTYARD_OVERHANG_M: f32 = 3.0;
-const TRAINING_COURTYARD_EASE_M: f32 = 24.0;
 /// FFA headcount, split across one Brawler squad per development POI.
 const TRAINING_ROSTER: usize = 16;
 const TRAINING_MIN_SQUADS: usize = 2;
@@ -82,19 +72,11 @@ impl TrainingPlazaMounted {
 	}
 }
 
-/// Pads are composed; unveil waits until the stamped FinePatch colliders exist.
+/// Wall and roster computed from the scheme's stamp.
 #[derive(Resource, Debug)]
-pub(crate) struct TrainingPlazaStamped {
-	round: TrainingRound,
+pub(crate) struct TrainingPlazaPlan {
 	cell_id: Id,
-	terrain_ids: Vec<Id>,
 	arena: TrainingArena,
-}
-
-impl TrainingPlazaStamped {
-	fn fills_ready(&self, cooked: usize) -> bool {
-		self.terrain_ids.is_empty() || cooked >= self.terrain_ids.len()
-	}
 }
 
 /// Stamped on Training fixtures so Leave can despawn them.
@@ -104,9 +86,6 @@ pub(crate) struct TrainingPlaza;
 /// Training brawler mob host. Its members carry [`MemberOf`] back to it.
 #[derive(Component, Clone, Copy, Debug, Default)]
 pub(crate) struct TrainingBrawler;
-
-#[derive(Component, Clone, Copy, Debug, Default)]
-pub(crate) struct TrainingPaddedFill;
 
 /// Walled courtyard around the development and the seats inside it.
 #[derive(Clone, Debug, PartialEq)]
@@ -408,6 +387,7 @@ impl TrainingArena {
 		(self.center - self.half, self.center + self.half)
 	}
 
+	#[allow(dead_code)]
 	fn courtyard_half(&self) -> Vec2 {
 		self.half + Vec2::splat(TRAINING_COURTYARD_OVERHANG_M)
 	}
@@ -424,91 +404,46 @@ impl TrainingArena {
 	}
 }
 
-/// 300 m cell centered on the FinePatch.
-fn training_development_cell(center: Vec2) -> Aabb3d {
-	let half = DEVELOPMENT_CELL_SIZE * 0.5;
-	Aabb3d::from_min_max(
-		Vec3::new(center.x - half, 0.0, center.y - half),
-		Vec3::new(center.x + half, 1.0, center.y + half),
-	)
+fn arena_from_stamp(stamped: &TrainingPlazaStamped) -> TrainingArena {
+	TrainingArena::around(stamped.center(), stamped.footprint(), stamped.plaza_y())
 }
 
-/// Fit the round's Richmond development once the FinePatch collider exists.
-/// A site that fits none rerolls to another site for the same round.
-#[allow(clippy::type_complexity)]
+/// Raise the courtyard wall once the urbanization scheme has recorded a stamp.
 pub(crate) fn mount_training_plaza(
 	mode: Res<State<ActiveGenerationMode>>,
-	mut round: ResMut<TrainingRound>,
-	ready: Res<WorldSurfaceReady>,
-	mounted: Option<Res<TrainingPlazaMounted>>,
+	round: Res<TrainingRound>,
 	stamped: Option<Res<TrainingPlazaStamped>>,
-	mut access: ParamSet<(
-		(Res<TerrainEntryStore>, Res<TerrainCellLayout>, ResMut<DevelopmentEntryStore>),
-		TerrainView<OnTerrain<Durham>>,
-		TerrainView<Urbanization<OnTerrain<Durham>>>,
-	)>,
+	plan: Option<Res<TrainingPlazaPlan>>,
+	store: Res<DevelopmentEntryStore>,
+	ground: TerrainView<Urbanization<OnTerrain<Durham>>>,
 	mut commands: Commands,
 ) {
-	// A cell admitted after the stamp stays raw, unstamped hillside inside the courtyard.
-	let waiting = {
-		let (store, layout, _) = access.p0();
-		!mode.get().is::<TrainingGround>()
-			|| !ready.0
-			|| *layout != round.layout()
-			|| !store.fills_layout(&layout)
-	};
-	if waiting || mounted.is_some() || stamped.is_some() {
+	if !mode.get().is::<TrainingGround>() {
 		return;
 	}
-	let center = {
-		let (_, layout, _) = access.p0();
-		layout.region_center_xz().xz()
+	let Some(stamped) = stamped.as_deref() else {
+		return;
 	};
-	let cell = training_development_cell(center);
-	let plaza_y = access.p1().height_or_fallback(center);
-	let config = DevelopmentConfig::from_world_seed(round.development_seed());
-	let fitted = {
-		let (store, layout, _) = access.p0();
-		stamp_training_development(&store, &layout, cell, &config, plaza_y)
-	};
-	let Some((kind, filled, built, arena)) = fitted else {
-		let site = round.site();
-		if round.site_exhausted() {
-			warn!(target: "world.training", "no Richmond development fitted at site {site}");
-			commands.insert_resource(TrainingPlazaMounted(*round));
-		} else {
-			info!(target: "world.training", "no development fitted at site {site}; rerolling");
-			*round = round.reroll_site();
-		}
+	if stamped.round().map() != round.map() || plan.is_some_and(|plan| plan.cell_id == stamped.cell_id()) {
+		return;
+	}
+	let Some((built, _)) = store.built_at(stamped.cell_id()) else {
 		return;
 	};
 	let hosts = built.hosts();
-	let site = TrainingSite::of_hosts(&hosts, arena.center, arena.footprint);
-	let arena = arena.with_roster(&site);
+	let site = TrainingSite::of_hosts(&hosts, stamped.center(), stamped.footprint());
+	let arena = arena_from_stamp(stamped).with_roster(&site);
 	info!(
 		target: "world.training",
-		"stamped {kind:?} at site {} (seed {:016x}): {} brawlers in {} squads around {} POIs",
+		"walled stamp at site {} (seed {:016x}): {} brawlers in {} squads around {} POIs",
 		round.site(),
 		round.seed,
 		arena.brawlers(),
 		arena.mobs.len(),
 		site.pois.len(),
 	);
-	let cell_id = Id::from_cell(filled.cell);
-	let terrain_ids = {
-		let (store, _, mut developments) = access.p0();
-		stamp_training_terrain(&mut commands, &store, &mut developments, &filled)
-	};
-	for host in &hosts {
-		for entity in host.spawn(&mut commands) {
-			commands.entity(entity).insert((TrainingPlaza, DespawnOnExit(ActiveGenerationMode::of::<TrainingGround>())));
-		}
-	}
-	spawn_training_wall(&mut commands, &access.p2(), &arena, config.seed);
-	if terrain_ids.is_empty() {
-		warn!(target: "world.training", "no FinePatch cells overlapped the development pads");
-	}
-	commands.insert_resource(TrainingPlazaStamped { round: *round, cell_id, terrain_ids, arena });
+	spawn_training_wall(&mut commands, &ground, &arena, round.development_seed());
+	commands.insert_resource(TrainingPlazaPlan { cell_id: stamped.cell_id(), arena });
 }
 
 /// Point the surface probe at a new round's site and move the player there
@@ -552,7 +487,7 @@ pub(crate) fn reseat_training_life(
 	mode: Res<State<ActiveGenerationMode>>,
 	round: Res<TrainingRound>,
 	mounted: Option<Res<TrainingPlazaMounted>>,
-	stamped: Option<Res<TrainingPlazaStamped>>,
+	plan: Option<Res<TrainingPlazaPlan>>,
 	mut commands: Commands,
 	unanchored: Query<Entity, (With<Player>, Without<OffTerrainAnchor>)>,
 	mut players: Query<
@@ -567,56 +502,24 @@ pub(crate) fn reseat_training_life(
 	if !mode.get().is::<TrainingGround>() || !mounted.is_some_and(|mounted| mounted.serves(*round)) {
 		return;
 	}
-	let Some(stamped) = stamped else {
+	let Some(plan) = plan else {
 		return;
 	};
 	let Ok(player) = unanchored.single() else {
 		return;
 	};
-	let arena = &stamped.arena;
+	let arena = &plan.arena;
 	seat_player_at(&mut players, &mut cameras, arena.player, arena.player_facing());
 	commands.entity(player).insert(OffTerrainAnchor { translation: arena.player });
 }
 
-/// Once the padded fills carry colliders, every raw FinePatch cell they cover
-/// is hidden and superseded, including cells Durham re-presents later. A raw
-/// collider left under the courtyard is a second, unstamped floor.
-pub(crate) fn supersede_training_raw_terrain(
-	mode: Res<State<ActiveGenerationMode>>,
-	stamped: Option<Res<TrainingPlazaStamped>>,
-	ready_fills: Query<(), (With<TrainingPaddedFill>, With<TerrainTrimeshCollider>)>,
-	mut raw: Query<(Entity, &PresentedTerrainScene, &mut Visibility), Without<TerrainSuperseded>>,
-	mut commands: Commands,
-) {
-	if !mode.get().is::<TrainingGround>() {
-		return;
-	}
-	let Some(stamped) = stamped else {
-		return;
-	};
-	if !stamped.fills_ready(ready_fills.iter().count()) {
-		return;
-	}
-	for (entity, presented, mut visibility) in &mut raw {
-		if !stamped.terrain_ids.contains(&presented.0) {
-			continue;
-		}
-		*visibility = Visibility::Hidden;
-		// The Durham strip runs in its own set; physics must not step with both floors.
-		// Durham may despawn the raw cell in the same frame.
-		commands
-			.entity(entity)
-			.try_insert(TerrainSuperseded)
-			.try_remove::<(Collider, RigidBody, TerrainTrimeshCollider)>();
-	}
-}
-
-/// Seat the roster and player once the padded fills carry colliders.
+/// Seat the roster and player once padded colliders exist over the stamp.
 pub(crate) fn promote_training_plaza(
 	mode: Res<State<ActiveGenerationMode>>,
 	stamped: Option<Res<TrainingPlazaStamped>>,
+	plan: Option<Res<TrainingPlazaPlan>>,
 	mounted: Option<Res<TrainingPlazaMounted>>,
-	ready_fills: Query<(), (With<TrainingPaddedFill>, With<TerrainTrimeshCollider>)>,
+	ready_pads: Query<&PresentedPaddedTerrainScene, With<TerrainTrimeshCollider>>,
 	mut spawn_xz: ResMut<PlayerSpawnXz>,
 	mut commands: Commands,
 	player_ids: Query<Entity, With<Player>>,
@@ -632,17 +535,21 @@ pub(crate) fn promote_training_plaza(
 	if !mode.get().is::<TrainingGround>() || mounted.is_some() {
 		return;
 	}
-	let Some(stamped) = stamped else {
+	let Some(stamped) = stamped.as_deref() else {
 		return;
 	};
-	if !stamped.fills_ready(ready_fills.iter().count()) {
+	let Some(plan) = plan.as_deref() else {
+		return;
+	};
+	let cooked = ready_pads.iter().filter(|scene| stamped.terrain_ids().contains(&scene.0)).count();
+	if !stamped.fills_ready(cooked) {
 		return;
 	}
-	let arena = &stamped.arena;
+	let arena = &plan.arena;
 	spawn_xz.0 = Some(arena.player.xz());
 	for (index, mob) in arena.mobs.iter().enumerate() {
 		let host = mob
-			.scene(stamped.round.mob_seed() + index as f32)
+			.scene(stamped.round().mob_seed() + index as f32)
 			.spawn(&mut commands, Transform::from_translation(mob.host));
 		commands.entity(host).insert(TrainingBrawler);
 	}
@@ -653,7 +560,7 @@ pub(crate) fn promote_training_plaza(
 	for player in &player_ids {
 		commands.entity(player).insert(OffTerrainAnchor { translation: arena.player });
 	}
-	commands.insert_resource(TrainingPlazaMounted(stamped.round));
+	commands.insert_resource(TrainingPlazaMounted(stamped.round()));
 }
 
 /// Tear the plaza down when Training ends or the round moves to a new map. Leaving
@@ -665,7 +572,6 @@ pub(crate) fn clear_training_plaza(
 	base: Res<WorldBaseTerrain>,
 	mounted: Option<Res<TrainingPlazaMounted>>,
 	stamped: Option<Res<TrainingPlazaStamped>>,
-	mut developments: ResMut<DevelopmentEntryStore>,
 	mut spawn_xz: ResMut<PlayerSpawnXz>,
 	mut commands: Commands,
 	fixtures: Query<Entity, Or<(With<TrainingPlaza>, With<TrainingBrawler>)>>,
@@ -685,7 +591,7 @@ pub(crate) fn clear_training_plaza(
 	let live = mode.get().is::<TrainingGround>();
 	let stale = |of: TrainingRound| !live || of.map() != round.map();
 	let mounted_stale = mounted.as_deref().is_some_and(|mounted| stale(mounted.0));
-	let stamped_stale = stamped.as_deref().is_some_and(|stamped| stale(stamped.round));
+	let stamped_stale = stamped.as_deref().is_some_and(|stamped| stale(stamped.round()));
 	if !mounted_stale && !stamped_stale {
 		return;
 	}
@@ -695,9 +601,6 @@ pub(crate) fn clear_training_plaza(
 	for (entity, mut visibility) in &mut superseded {
 		*visibility = Visibility::Inherited;
 		commands.entity(entity).try_remove::<TerrainSuperseded>();
-	}
-	if let Some(stamped) = stamped.as_deref() {
-		developments.remove_cell(stamped.cell_id);
 	}
 	// Respawned members are not tied to a roster stub, so dropping the host
 	// alone would strand them.
@@ -713,6 +616,8 @@ pub(crate) fn clear_training_plaza(
 		commands.entity(player).try_remove::<OffTerrainAnchor>();
 	}
 	commands.remove_resource::<TrainingPlazaStamped>();
+	commands.remove_resource::<TrainingStampSettled>();
+	commands.remove_resource::<TrainingPlazaPlan>();
 	commands.remove_resource::<TrainingPlazaMounted>();
 	if live {
 		return;
@@ -721,87 +626,6 @@ pub(crate) fn clear_training_plaza(
 	let home = Vec2::ZERO;
 	let at = player_spawn_point_at(home, holding_elevation(&base.0, home.x, home.y));
 	seat_player_at(&mut players, &mut cameras, at, Vec3::Z);
-}
-
-/// First single-terrace kind from the seeded pick onward, re-padded as one
-/// flat walled courtyard. Multi-terrace kinds cannot share a level arena.
-fn stamp_training_development(
-	store: &TerrainEntryStore,
-	layout: &TerrainCellLayout,
-	cell: Aabb3d,
-	config: &DevelopmentConfig,
-	height: f32,
-) -> Option<(
-	DevelopmentKind,
-	DevelopmentCell,
-	richmond_development_models::BuiltDevelopment,
-	TrainingArena,
-)> {
-	let preferred = DevelopmentKind::pick_filled(cell, config);
-	let start = DevelopmentKind::FILLED.iter().position(|kind| *kind == preferred).unwrap_or(0);
-	let count = DevelopmentKind::FILLED.len();
-	for kind in (0..count).map(|i| DevelopmentKind::FILLED[(start + i) % count]) {
-		let Some(filled) = DevelopmentCell::fill(store, layout, cell, kind, config, height) else {
-			continue;
-		};
-		let Some(footprint) = filled.footprint_half_extents() else {
-			continue;
-		};
-		let center = Vec2::new((cell.min.x + cell.max.x) * 0.5, (cell.min.z + cell.max.z) * 0.5);
-		let arena = TrainingArena::around(center, footprint, height);
-		let params = PadParams { berm: 0.0, ease: TRAINING_COURTYARD_EASE_M, round: 0.0 };
-		let Some(walled) = filled.with_courtyard(arena.courtyard_half(), params) else {
-			continue;
-		};
-		let Some(built) = walled.built(config.seed as i32) else {
-			continue;
-		};
-		return Some((kind, walled, built, arena));
-	}
-	None
-}
-
-fn stamp_training_terrain(
-	commands: &mut Commands,
-	terrain_store: &TerrainEntryStore,
-	developments: &mut DevelopmentEntryStore,
-	filled: &DevelopmentCell,
-) -> Vec<Id> {
-	developments.insert_cell(Id::from_cell(filled.cell), filled.clone());
-	let Some(region) = pad_influence_region(filled) else {
-		return Vec::new();
-	};
-	let pads: Vec<_> = filled.pad_complexes().cloned().collect();
-	let mut stamped = Vec::new();
-	for id in terrain_store.terrain_ids_overlapping(region) {
-		let Some(terrain) = terrain_store.terrain(id) else {
-			continue;
-		};
-		let padded = TerrainWithPads::compose(terrain, pads.iter());
-		let entity = padded.spawn_fill(commands, Visibility::Inherited, true);
-		commands.entity(entity).insert((
-			Name::new("Training padded terrain"),
-			TrainingPlaza,
-			TrainingPaddedFill,
-			DespawnOnExit(ActiveGenerationMode::of::<TrainingGround>()),
-		));
-		stamped.push(id);
-	}
-	stamped
-}
-
-fn pad_influence_region(filled: &DevelopmentCell) -> Option<Aabb3d> {
-	let mut min = Vec2::splat(f32::INFINITY);
-	let mut max = Vec2::splat(f32::NEG_INFINITY);
-	let mut any = false;
-	for pad in filled.pad_complexes() {
-		min = min.min(pad.bounds.min);
-		max = max.max(pad.bounds.max);
-		any = true;
-	}
-	any.then(|| {
-		Aabb3d::from_min_max(Vec3::new(min.x, -10_000.0, min.y), Vec3::new(max.x, 10_000.0, max.y))
-	})
 }
 
 fn spawn_training_wall(
@@ -869,6 +693,12 @@ fn seat_player_at(
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use maybraid_game_mode_training_ground::{
+		pad_influence_region, training_development_cell, TRAINING_COURTYARD_EASE_M,
+	};
+	use richmond_development_models::{
+		DEVELOPMENT_CELL_SIZE, DevelopmentCell, DevelopmentConfig, DevelopmentKind, PadParams,
+	};
 
 	fn inside(arena: &TrainingArena, at: Vec3) -> bool {
 		let (min, max) = arena.wall_rect();
@@ -1112,39 +942,6 @@ mod tests {
 		Ok(())
 	}
 
-	#[test]
-	fn raw_cells_under_the_courtyard_stop_colliding_once_the_pads_do()
-	-> Result<(), bevy::ecs::system::RunSystemError> {
-		use bevy::ecs::system::RunSystemOnce;
-		let covered = Id::from_cell(Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE));
-		let elsewhere = Id::from_cell(Aabb3d::from_min_max(Vec3::splat(500.0), Vec3::splat(501.0)));
-		let mut world = World::new();
-		world.insert_resource(State::new(ActiveGenerationMode::of::<TrainingGround>()));
-		world.insert_resource(TrainingPlazaStamped {
-			round: TrainingRound::default(),
-			cell_id: covered,
-			terrain_ids: vec![covered],
-			arena: TrainingArena::around(Vec2::ZERO, Vec2::splat(30.0), 0.0),
-		});
-		let raw = world.spawn((PresentedTerrainScene(covered), Visibility::Inherited)).id();
-		let other = world.spawn((PresentedTerrainScene(elsewhere), Visibility::Inherited)).id();
-		let fill = world.spawn(TrainingPaddedFill).id();
-
-		world.run_system_once(supersede_training_raw_terrain)?;
-		assert!(world.get::<TerrainSuperseded>(raw).is_none(), "raw floors until pads cook");
-
-		world.entity_mut(fill).insert(TerrainTrimeshCollider);
-		world.run_system_once(supersede_training_raw_terrain)?;
-		assert!(world.get::<TerrainSuperseded>(raw).is_some());
-		assert_eq!(world.get::<Visibility>(raw), Some(&Visibility::Hidden));
-		assert!(world.get::<TerrainSuperseded>(other).is_none());
-
-		let respawned = world.spawn((PresentedTerrainScene(covered), Visibility::Inherited)).id();
-		world.run_system_once(supersede_training_raw_terrain)?;
-		assert!(world.get::<TerrainSuperseded>(respawned).is_some(), "re-presented raw cells too");
-		Ok(())
-	}
-
 	fn plaza_world(grounds: bool, round: TrainingRound) -> World {
 		let mut world = World::new();
 		world.insert_resource(State::new(if grounds {
@@ -1208,10 +1005,8 @@ mod tests {
 			.with_roster(&TrainingSite::single(Vec2::new(40.0, -20.0), Vec2::splat(30.0)));
 		let seat = arena.player;
 		world.insert_resource(TrainingPlazaMounted(round));
-		world.insert_resource(TrainingPlazaStamped {
-			round,
+		world.insert_resource(TrainingPlazaPlan {
 			cell_id: Id::from_cell(Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE)),
-			terrain_ids: Vec::new(),
 			arena,
 		});
 		let transform = Transform::from_translation(Vec3::new(0.0, 90.0, 0.0));
@@ -1310,26 +1105,4 @@ mod tests {
 		Ok(())
 	}
 
-	#[test]
-	fn supersede_stands_down_once_training_ends() -> anyhow::Result<()> {
-		use bevy::ecs::system::RunSystemOnce;
-		let covered = Id::from_cell(Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE));
-		let mut world = World::new();
-		world.insert_resource(State::new(ActiveGenerationMode::of::<
-			maybraid_game_mode_discover::Discovery,
-		>()));
-		world.insert_resource(TrainingPlazaStamped {
-			round: TrainingRound::default(),
-			cell_id: covered,
-			terrain_ids: vec![covered],
-			arena: TrainingArena::around(Vec2::ZERO, Vec2::splat(30.0), 0.0),
-		});
-		world.spawn((TrainingPaddedFill, TerrainTrimeshCollider));
-		let raw = world.spawn((PresentedTerrainScene(covered), Visibility::Inherited)).id();
-		world
-			.run_system_once(supersede_training_raw_terrain)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		assert!(world.get::<TerrainSuperseded>(raw).is_none());
-		Ok(())
-	}
 }

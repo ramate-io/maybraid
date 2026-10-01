@@ -40,7 +40,7 @@ impl ActiveGenerationMode {
 		matches!(self, Self::Mode { id, .. } if id == TypeId::of::<M>())
 	}
 
-	pub fn type_id(self) -> Option<TypeId> {
+	pub fn mode_id(self) -> Option<TypeId> {
 		match self {
 			Self::Mode { id, .. } => Some(id),
 			Self::None => None,

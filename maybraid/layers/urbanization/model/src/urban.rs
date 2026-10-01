@@ -41,6 +41,13 @@ pub trait UrbanModel: TerrainModel {
 		region: Aabb3d,
 	) -> Vec<&'a BuiltDevelopment>;
 
+	/// Built developments overlapping `region`, with the store id and version
+	/// host presentation uses.
+	fn built_overlapping<'a>(
+		read: &'a SystemParamItem<'_, '_, Self::Read>,
+		region: Aabb3d,
+	) -> Vec<(Id, Version, &'a BuiltDevelopment)>;
+
 	/// Urbanization cell ids overlapping `region` (the present-hosts walk).
 	fn urbanization_cell_ids(read: &SystemParamItem<'_, '_, Self::Read>, region: Aabb3d)
 		-> Vec<Id>;
@@ -104,6 +111,13 @@ where
 		region: Aabb3d,
 	) -> Vec<&'a BuiltDevelopment> {
 		read.developments.developments_overlapping(region)
+	}
+
+	fn built_overlapping<'a>(
+		read: &'a SystemParamItem<'_, '_, Self::Read>,
+		region: Aabb3d,
+	) -> Vec<(Id, Version, &'a BuiltDevelopment)> {
+		read.developments.developments_overlapping_tracked(region)
 	}
 
 	fn urbanization_cell_ids(

@@ -11,8 +11,14 @@ use terrain_layer_model::{
 };
 
 mod round;
+mod urbanization;
 
 pub use round::{TrainingMap, TrainingRound, TRAINING_FINE_HALF_EXTENT_CELLS};
+pub use urbanization::{
+	pad_influence_region, terrain_ids_under_pads, training_development_cell, TrainingPlazaStamped,
+	TrainingStampSettled, TRAINING_ARENA_MARGIN_M, TRAINING_ARENA_MAX_HALF_M,
+	TRAINING_COURTYARD_EASE_M, TRAINING_COURTYARD_OVERHANG_M,
+};
 
 /// Pinned FinePatch generation. Layers take this as a plugin parameter.
 pub struct TrainingGround;

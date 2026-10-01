@@ -4788,6 +4788,7 @@ dependencies = [
  "bevy",
  "durham-terrain-models",
  "terrain-layer-model",
+ "urbanization-layer-model",
 ]
 
 [[package]]
@@ -4804,7 +4805,10 @@ dependencies = [
  "anyhow",
  "bevy",
  "durham-terrain-models",
+ "lod",
+ "richmond-development-models",
  "terrain-layer-model",
+ "urbanization-layer-model",
 ]
 
 [[package]]

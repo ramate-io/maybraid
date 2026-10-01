@@ -26,6 +26,9 @@ use richmond_urbanization::{
 };
 
 use crate::config::UrbanizationLayerConfig;
+use crate::generation::UrbanizationLayerRegion;
+use crate::generation::UrbanizationModeConfig;
+use terrain_layer_model::GenerationMode;
 
 /// Default present ring multiplier (`1` → 1 km present / 3 km generate).
 pub const DEFAULT_URBANIZATION_STREAM_RADIUS: u32 = 1;
@@ -33,20 +36,9 @@ pub const DEFAULT_URBANIZATION_STREAM_RADIUS: u32 = 1;
 /// Hopscotch default so neighboring 1600 m cells stay related.
 pub const DEFAULT_URBANIZATION_NOISE: &str = "1337,0.0005,1,1";
 
-/// When false, hopscotch stays off even if Durham streaming is on.
-/// A session that wants no city sets this so hopscotch stays off.
-#[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
-pub struct UrbanizationStreamingEnabled(pub bool);
-
-impl Default for UrbanizationStreamingEnabled {
-	fn default() -> Self {
-		Self(true)
-	}
-}
-
-pub fn urbanization_streaming_enabled(enabled: Res<UrbanizationStreamingEnabled>) -> bool {
-	enabled.0
-}
+/// Stream spec fingerprint. A resource so leaving a mode can clear it.
+#[derive(Resource, Default, Debug, Clone, PartialEq, Eq)]
+pub struct UrbanizationStreamKey(pub Option<String>);
 
 /// Clap parser for a well-known urbanization kebab name.
 pub fn parse_urbanization_kind(name: &str) -> Result<UrbanizationKind, String> {
@@ -122,6 +114,66 @@ pub fn register_urbanization_lod_generate(app: &mut App, generate_budget: u32) {
 		>::default());
 }
 
+/// Hopscotch stream for a mode that owns a spec.
+pub fn install_urbanization_stream<Mode: GenerationMode>(
+	app: &mut App,
+	config: &UrbanizationLayerConfig,
+) {
+	use crate::generation::{UrbanizationGenerationSystems, UrbanizationStoreSystems};
+	use durham_terrain_models::terrain_streaming_enabled;
+	use durham_terrain_models::TerrainColliderSystems;
+	use lod::LodGenerateSystems;
+	use lod::LodPresentSystems;
+	use terrain_layer_model::GenerationModeSystems;
+
+	register_urbanization_lod_generate(app, config.generate_budget);
+	app.add_systems(
+		Update,
+		(
+			sync_urbanization_pin::<Mode>
+				.before(LodGenerateSystems::Produce)
+				.before(UrbanizationStoreSystems),
+			stream_urbanization::<Mode>
+				.before(LodGenerateSystems::Produce)
+				.before(UrbanizationStoreSystems),
+			generate_urbanization_developments::<Mode>
+				.after(LodGenerateSystems::Drain)
+				.before(UrbanizationStoreSystems),
+			write_urbanization_host_region
+				.in_set(UrbanizationStoreSystems),
+		)
+			.in_set(GenerationModeSystems::<Mode>::default())
+			.in_set(UrbanizationGenerationSystems)
+			.run_if(terrain_streaming_enabled)
+			.before(LodPresentSystems::Produce)
+			.before(TerrainColliderSystems::QueueMeshes),
+	);
+}
+
+/// Union of selected urbanization cells overlapping the present keep.
+pub fn write_urbanization_host_region(
+	keep: Res<LodPresentKeepRegion<UrbanizationLodChan>>,
+	index: Res<UrbanizationIndex>,
+	mut layer: ResMut<UrbanizationLayerRegion>,
+) {
+	let Some(keep) = keep.region else {
+		layer.region = None;
+		return;
+	};
+	let mut region: Option<Aabb3d> = None;
+	for tracked in SpatialIndex::<SelectedUrbanization>::tracked_ids_for(&*index, keep) {
+		let Some(selected) = index.get(tracked.0) else {
+			continue;
+		};
+		let cell = selected.extent.aabb();
+		region = Some(match region {
+			None => cell,
+			Some(acc) => Aabb3d::from_min_max(acc.min.min(cell.min), acc.max.max(cell.max)),
+		});
+	}
+	layer.region = region.or(Some(keep));
+}
+
 /// Keep / queue / bullseye resources the stream system drives.
 ///
 /// Presenter teardown lives in urbanization presentation so this crate does
@@ -187,47 +239,60 @@ impl UrbanizationStreamLod<'_> {
 	}
 }
 
-pub fn sync_urbanization_pin(
-	config: Res<UrbanizationLayerConfig>,
+pub fn sync_urbanization_pin<Mode: GenerationMode>(
+	config: Res<UrbanizationModeConfig<Mode>>,
 	mut urbanization: ResMut<UrbanizationIndex>,
 	mut development: ResMut<DevelopmentConfig>,
 ) {
-	if let Some(spec) = config.urbanization.as_ref() {
-		urbanization.kind = spec.kind.or(config.focus_urbanization);
+	if let Some(spec) = config.config.urbanization.as_ref() {
+		urbanization.kind = spec.kind.or(config.config.focus_urbanization);
 		urbanization.noise = spec.noise;
 		development.use_urbanization = true;
 		development.seed = spec.noise.seed.max(0) as u32;
-	} else if let Some(kind) = config.focus_urbanization {
+	} else if let Some(kind) = config.config.focus_urbanization {
 		urbanization.kind = Some(kind);
 		development.use_urbanization = true;
 	}
 }
 
-/// Drive urbanization bullseyes from [`UrbanizationLayerConfig::urbanization`].
-/// Disabling [`UrbanizationStreamingEnabled`] tears the stream down like an
-/// absent spec.
-pub fn stream_urbanization(
-	config: Res<UrbanizationLayerConfig>,
-	enabled: Res<UrbanizationStreamingEnabled>,
+/// Drive urbanization bullseyes from the mode's hopscotch spec.
+pub fn stream_urbanization<Mode: GenerationMode>(
+	config: Res<UrbanizationModeConfig<Mode>>,
 	camera: Query<&Transform, With<Camera3d>>,
 	mut lod: UrbanizationStreamLod,
-	mut last_key: Local<Option<String>>,
+	mut last_key: ResMut<UrbanizationStreamKey>,
 ) {
 	let cam = camera.single().ok().map(|t| t.translation);
-	let spec = config.urbanization.as_ref().filter(|_| enabled.0);
-	lod.apply_spec(spec, cam, &mut last_key);
+	lod.apply_spec(config.config.urbanization.as_ref(), cam, &mut last_key.0);
+}
+
+/// Tear stream LOD and the spec key down so the next mode can refill.
+pub fn clear_urbanization_stream(
+	index: Option<ResMut<UrbanizationIndex>>,
+	key: Option<ResMut<UrbanizationStreamKey>>,
+	lod: Option<UrbanizationStreamLod>,
+) {
+	if let Some(mut key) = key {
+		key.0 = None;
+	}
+	if let Some(mut lod) = lod {
+		let mut last = None;
+		lod.apply_spec(None, None, &mut last);
+	} else if let Some(mut index) = index {
+		index.clear();
+	}
 }
 
 /// Bounded leaf generate on the 1 km urbanization keep. Height GET miss
 /// leaves the leaf `NotTracked` so the next frame retries.
 #[allow(clippy::collapsible_if)]
-pub fn generate_urbanization_developments(
-	config: Res<UrbanizationLayerConfig>,
+pub fn generate_urbanization_developments<Mode: GenerationMode>(
+	config: Res<UrbanizationModeConfig<Mode>>,
 	keep: Res<LodPresentKeepRegion<UrbanizationLodChan>>,
 	mut development: DevelopmentIndex,
 	budget: Res<LodGenerateBudget<UrbanizationLodChan>>,
 ) {
-	if config.urbanization.is_none() {
+	if config.config.urbanization.is_none() {
 		return;
 	}
 	let Some(region) = keep.region else {
@@ -236,7 +301,7 @@ pub fn generate_urbanization_developments(
 
 	let noise = development.config().urbanization_noise();
 	development.urbanization.noise = noise;
-	if let Some(spec) = config.urbanization.as_ref() {
+	if let Some(spec) = config.config.urbanization.as_ref() {
 		development.urbanization.kind = spec.kind;
 	}
 
@@ -306,15 +371,31 @@ pub fn generate_urbanization_developments(
 	}
 }
 
-pub(crate) fn pad_visual_region(
+/// Visual region for padding. Streamed layouts use Durham's presentation
+/// ring; a pinned patch uses the scheme region or the layout.
+pub fn urbanization_visual_region(
 	layout: &TerrainCellLayout,
-	urban_keep: Option<Aabb3d>,
+	layer_region: Option<Aabb3d>,
 ) -> Option<Aabb3d> {
 	if layout.is_streamed() {
 		Some(layout.presentation_region())
 	} else {
-		urban_keep
+		Some(layer_region.unwrap_or_else(|| layout.presentation_region()))
 	}
+}
+
+/// Host region: the scheme's write, or the layout on a pinned patch.
+pub fn urbanization_host_region(
+	layout: &TerrainCellLayout,
+	layer_region: Option<Aabb3d>,
+) -> Option<Aabb3d> {
+	layer_region.or_else(|| {
+		if layout.is_streamed() {
+			None
+		} else {
+			Some(layout.presentation_region())
+		}
+	})
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -322,7 +403,6 @@ pub(crate) struct PaddedTerrainTickKey {
 	pub(crate) region: Aabb3d,
 	pub(crate) store_rev: u64,
 	pub(crate) terrain_rev: u64,
-	pub(crate) urban: bool,
 	pub(crate) viewer: Option<(i32, i32)>,
 }
 
@@ -331,17 +411,12 @@ pub(crate) struct PaddedTerrainTickKey {
 /// Pads sample the inner terrain store (`M`), never `Urbanization<M>`.
 #[allow(private_interfaces)]
 pub fn generate_urbanization_padded_terrain(
-	config: Res<UrbanizationLayerConfig>,
-	keep: Res<LodPresentKeepRegion<UrbanizationLodChan>>,
+	layer: Res<UrbanizationLayerRegion>,
 	layout: Res<TerrainCellLayout>,
 	mut development: DevelopmentIndex,
 	mut last: Local<Option<PaddedTerrainTickKey>>,
 ) {
-	if config.urbanization.is_none() {
-		*last = None;
-		return;
-	}
-	let Some(region) = pad_visual_region(&layout, keep.region) else {
+	let Some(region) = urbanization_visual_region(&layout, layer.region) else {
 		*last = None;
 		return;
 	};
@@ -350,7 +425,6 @@ pub fn generate_urbanization_padded_terrain(
 		region,
 		store_rev: development.store.membership_revision(),
 		terrain_rev: development.terrain_store().membership_revision(),
-		urban: true,
 		viewer: None,
 	};
 	if removed == 0 && last.as_ref() == Some(&key) {
@@ -374,7 +448,6 @@ pub fn generate_urbanization_padded_terrain(
 		region,
 		store_rev: development.store.membership_revision(),
 		terrain_rev: development.terrain_store().membership_revision(),
-		urban: true,
 		viewer: None,
 	});
 }

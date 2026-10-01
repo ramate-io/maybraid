@@ -44,7 +44,7 @@ fn subscribed<K: Send + Sync + 'static>(
 	subscribers: Option<&ModeSubscribers<K>>,
 	mode: Option<&State<ActiveGenerationMode>>,
 ) -> bool {
-	let Some(id) = mode.and_then(|mode| mode.get().type_id()) else {
+	let Some(id) = mode.and_then(|mode| mode.get().mode_id()) else {
 		return false;
 	};
 	subscribers.is_some_and(|subscribers| subscribers.modes.contains(&id))
