@@ -3,9 +3,11 @@
 
 use bevy::prelude::*;
 use durham_terrain_models::{Durham, DurhamCells, DurhamTerrainConfig, TerrainPresentEnabled};
+use maybraid_game_mode_discover::Discovery;
+use maybraid_game_mode_training_ground::TrainingGround;
 use mob_layer_model::{MobGenerationPlugin, MobLayerConfig};
 use mob_layer_presentation::MobPresentationPlugin;
-use terrain_layer_model::{BaseTerrainGenerationPlugin, OnTerrain};
+use terrain_layer_model::{BaseTerrainGenerationPlugin, GenerationModePlugin, OnTerrain};
 use terrain_layer_presentation::TerrainPresentationPlugin;
 use urbanization_layer_model::{
 	Urbanization, UrbanizationGenerationPlugin, UrbanizationLayerConfig,
@@ -24,6 +26,10 @@ pub struct WorldLayersPlugin;
 impl Plugin for WorldLayersPlugin {
 	fn build(&self, app: &mut App) {
 		app.add_plugins((
+			GenerationModePlugin::<Discovery>::initial(),
+			GenerationModePlugin::<TrainingGround>::default(),
+		))
+		.add_plugins((
 			BaseTerrainGenerationPlugin::<Durham>::new(DurhamTerrainConfig::playable_world()),
 			// Training only: raw Durham, gated off in the open world.
 			TerrainPresentationPlugin::<OnTerrain<Durham>, DurhamCells>::default(),

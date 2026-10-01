@@ -1,9 +1,10 @@
 //! Training Ground is a seeded FinePatch of the Maybraid world, not Discovery's
 //! moving rings.
 //!
-//! While [`crate::WorldMode::Training`] is active, Durham presents a four-cell
-//! window pinned on the [`TrainingRound`] site, hopscotch stays off, the forest
-//! shrinks to one grove tile, and a Training pose is not written.
+//! While [`TrainingGround`](maybraid_game_mode_training_ground::TrainingGround) is
+//! active, Durham presents a four-cell window pinned on the [`TrainingRound`] site,
+//! hopscotch stays off, the forest shrinks to one grove tile, and a Training pose
+//! is not written.
 //! [`crate::training_plaza`] stamps one seeded Richmond development onto that
 //! patch — pads first, then hosts — once the whole window exists.
 //!
@@ -29,11 +30,16 @@ use damage::{Downed, Health};
 use durham_terrain_models::{
 	TerrainCellLayout, TerrainColliderSystems, TerrainCoverage, TerrainFillSystems,
 	TerrainLayoutPinned, TerrainPresentEnabled, TerrainPresentPending, TerrainPresentationAssets,
-	TerrainPresentationDirty, TerrainPresenterState, WORLD_FINE_HALF_EXTENT_CELLS,
-	fine_patch_cell_layout, playable_world_cell_layout, retarget_presentation_assets,
+	TerrainPresentationDirty, 	TerrainPresenterState, WORLD_FINE_HALF_EXTENT_CELLS,
+	playable_world_cell_layout, retarget_presentation_assets,
+};
+use maybraid_game_mode_discover::Discovery;
+use maybraid_game_mode_training_ground::{
+	TrainingGround, TrainingMap, TrainingRound, TRAINING_FINE_HALF_EXTENT_CELLS,
 };
 use mob_intelligence::MemberOf;
 use mob_layer_model::MobStreamSuspended;
+use terrain_layer_model::{in_generation_mode, ActiveGenerationMode};
 use urbanization_layer_model::UrbanizationStreamingEnabled;
 use vegetation_layer_model::VegetationLayerConfig;
 
@@ -44,7 +50,6 @@ use crate::training_plaza::{
 	TrainingBrawler, clear_training_plaza, mount_training_plaza, park_on_training_site,
 	promote_training_plaza, reseat_training_life, supersede_training_raw_terrain,
 };
-use crate::world_mode::WorldMode;
 
 /// Training Ground session: patch retarget, the stamped plaza, and the
 /// raw-to-padded hand-off under its courtyard.
@@ -56,7 +61,7 @@ impl Plugin for TrainingGroundPlugin {
 			.init_resource::<AppliedTrainingMap>()
 			.init_resource::<TrainingEnemyMarkersEnabled>()
 			.add_message::<TrainingLifeEnded>();
-		register_world_mode_transitions(app);
+		register_generation_mode_transitions(app);
 		app.add_systems(
 			Update,
 			(
@@ -84,148 +89,48 @@ struct AppliedTrainingMap(Option<TrainingMap>);
 
 /// Mode transitions. Plaza systems stay on the plugin so a headless transition
 /// test can register this without the rest of the stack.
-fn register_world_mode_transitions(app: &mut App) {
+fn register_generation_mode_transitions(app: &mut App) {
 	app.add_systems(
 		Update,
 		retarget_training_map
-			.run_if(in_state(WorldMode::Training))
+			.run_if(in_generation_mode::<TrainingGround>())
 			.before(TerrainFillSystems::Generate),
 	)
-	.add_systems(OnEnter(WorldMode::Training), (enter_training, open_training_score))
 	.add_systems(
-		OnTransition { exited: WorldMode::Training, entered: WorldMode::Discovery },
+		OnEnter(ActiveGenerationMode::of::<TrainingGround>()),
+		(enter_training, open_training_score),
+	)
+	.add_systems(
+		OnTransition {
+			exited: ActiveGenerationMode::of::<TrainingGround>(),
+			entered: ActiveGenerationMode::of::<Discovery>(),
+		},
 		return_to_discovery,
 	)
-	.add_systems(OnExit(WorldMode::Training), close_training_score);
+	.add_systems(OnExit(ActiveGenerationMode::of::<TrainingGround>()), close_training_score);
 }
 
 /// Forest stream radius used by [`VegetationLayerConfig::world_defaults`].
 const WORLD_FOREST_STREAM_RADIUS: u32 = 1;
-/// Half-extent of the training patch layout.
-const TRAINING_FINE_HALF_EXTENT_CELLS: i32 = 2;
-/// Sites land within this many 160 m cells of the world origin on each axis.
-const TRAINING_SITE_RANGE_CELLS: i32 = 48;
-/// Sites tried per round before Training gives up on stamping a development.
-const TRAINING_SITE_ATTEMPTS: u32 = 8;
-const TRAINING_SITE_SALT: u64 = 0x51_7E5A_17E5;
-const TRAINING_DEVELOPMENT_SALT: u64 = 0xDE7E_10A5;
-const TRAINING_MOB_SALT: u64 = 0x0B_5EED;
-const TRAINING_TRAINEE_SALT: u64 = 0x7EA1_4EE5;
-const TRAINING_NEXT_SALT: u64 = 0x9E37_79B9_7F4A_7C15;
-
-/// One Training life. The shell rolls the first from entropy. A respawn
-/// advances to [`Self::next`] (a fresh site, development, roster, and
-/// trainee) or [`Self::next_life`] (the next trainee on the same map).
-#[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
-pub struct TrainingRound {
-	pub seed: u64,
-	/// Sites already tried for this seed. A site that fits no development rerolls.
-	site_attempt: u32,
-	/// Lives played on this map.
-	life: u32,
-}
-
-/// What a round stamps. Every life on the same map shares it.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct TrainingMap {
-	seed: u64,
-	site_attempt: u32,
-}
-
-impl Default for TrainingRound {
-	fn default() -> Self {
-		Self::new(42)
-	}
-}
-
-impl TrainingRound {
-	pub const fn new(seed: u64) -> Self {
-		Self { seed, site_attempt: 0, life: 0 }
-	}
-
-	pub fn from_entropy() -> Self {
-		let nanos = std::time::SystemTime::now()
-			.duration_since(std::time::UNIX_EPOCH)
-			.map(|elapsed| elapsed.as_nanos() as u64)
-			.unwrap_or(0);
-		Self::new(mix(nanos))
-	}
-
-	/// A new map after this life.
-	pub fn next(self) -> Self {
-		Self::new(self.lane(TRAINING_NEXT_SALT))
-	}
-
-	/// The next life on this map.
-	pub fn next_life(self) -> Self {
-		Self { life: self.life.wrapping_add(1), ..self }
-	}
-
-	pub fn map(self) -> TrainingMap {
-		TrainingMap { seed: self.seed, site_attempt: self.site_attempt }
-	}
-
-	pub(crate) fn reroll_site(self) -> Self {
-		Self { site_attempt: self.site_attempt + 1, ..self }
-	}
-
-	pub(crate) fn site_exhausted(self) -> bool {
-		self.site_attempt + 1 >= TRAINING_SITE_ATTEMPTS
-	}
-
-	/// Cell corner the patch centers on.
-	pub fn site(self) -> IVec2 {
-		let lane = self.lane(TRAINING_SITE_SALT ^ u64::from(self.site_attempt).rotate_left(17));
-		let span = (2 * TRAINING_SITE_RANGE_CELLS + 1) as u64;
-		let axis = |bits: u64| (bits % span) as i32 - TRAINING_SITE_RANGE_CELLS;
-		IVec2::new(axis(lane), axis(lane >> 32))
-	}
-
-	pub fn layout(self) -> TerrainCellLayout {
-		let half = TRAINING_FINE_HALF_EXTENT_CELLS;
-		fine_patch_cell_layout(half, self.site() - IVec2::splat(half))
-	}
-
-	pub fn development_seed(self) -> u32 {
-		self.lane(TRAINING_DEVELOPMENT_SALT) as u32
-	}
-
-	/// Mob number for the first squad. 24 bits, so every squad offset stays exact.
-	pub fn mob_seed(self) -> f32 {
-		(self.lane(TRAINING_MOB_SALT) >> 40) as f32
-	}
-
-	/// A player-scale playable species in a rolled starter loadout. Never saved.
-	pub fn trainee(self) -> WorldPlayerLoadout {
-		let life = u64::from(self.life).rotate_left(23);
-		let mut rng = ItemRng::from_seed(self.lane(TRAINING_TRAINEE_SALT ^ life));
-		let appearance = match rng.gen_index(5) {
-			0 => CharacterAppearance::Braidman(BraidmanConfig::default_preview()),
-			1 => CharacterAppearance::Lero(LeroConfig::default_preview()),
-			2 => CharacterAppearance::Mygr(MygrConfig::default_preview()),
-			3 => CharacterAppearance::Tuberwaber(TuberwaberConfig::default_preview()),
-			_ => CharacterAppearance::Wumbus(WumbusConfig::default_preview()),
-		};
-		let inventory = Inventory::with_starter_outfit(random_starter_loadout(&mut rng));
-		let key = format!("trainee-{:016x}-{}", self.seed, self.life);
-		WorldPlayerLoadout::new(key, appearance, inventory).with_name("Trainee")
-	}
-
-	fn lane(self, salt: u64) -> u64 {
-		mix(self.seed ^ salt)
-	}
-}
 
 /// A Training body respawned. The shell advances [`TrainingRound`] and loads
 /// the next life in behind the loading screen.
 #[derive(Message, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TrainingLifeEnded;
 
-fn mix(value: u64) -> u64 {
-	let mut value = value.wrapping_add(0x9E37_79B9_7F4A_7C15);
-	value = (value ^ (value >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
-	value = (value ^ (value >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
-	value ^ (value >> 31)
+/// A player-scale playable species in a rolled starter loadout. Never saved.
+pub fn training_trainee(round: TrainingRound) -> WorldPlayerLoadout {
+	let mut rng = ItemRng::from_seed(round.trainee_seed());
+	let appearance = match rng.gen_index(5) {
+		0 => CharacterAppearance::Braidman(BraidmanConfig::default_preview()),
+		1 => CharacterAppearance::Lero(LeroConfig::default_preview()),
+		2 => CharacterAppearance::Mygr(MygrConfig::default_preview()),
+		3 => CharacterAppearance::Tuberwaber(TuberwaberConfig::default_preview()),
+		_ => CharacterAppearance::Wumbus(WumbusConfig::default_preview()),
+	};
+	let inventory = Inventory::with_starter_outfit(random_starter_loadout(&mut rng));
+	let key = format!("trainee-{:016x}-{}", round.seed, round.life());
+	WorldPlayerLoadout::new(key, appearance, inventory).with_name("Trainee")
 }
 
 /// What the world fill should be for a Training / Discovery session.
@@ -409,13 +314,13 @@ fn close_training_score(mut commands: Commands) {
 /// Keep [`LiveEnemies`] at the number of training fighters still standing. A
 /// downed fighter drops out until its squad respawns it.
 pub(crate) fn count_training_enemies(
-	mode: Res<State<WorldMode>>,
+	mode: Res<State<ActiveGenerationMode>>,
 	live: Option<ResMut<LiveEnemies>>,
 	squads: Query<(), With<TrainingBrawler>>,
 	fighters: Query<(&MemberOf, &Health), Without<Downed>>,
 	mut commands: Commands,
 ) {
-	if !mode.get().is_training() {
+	if !mode.get().is::<TrainingGround>() {
 		if live.is_some() {
 			commands.remove_resource::<LiveEnemies>();
 		}
@@ -451,14 +356,16 @@ pub(crate) fn clear_training_terrain_present(
 mod tests {
 	use bevy::ecs::system::RunSystemOnce;
 	use bevy::state::app::StatesPlugin;
-	use durham_terrain_models::{BaseTerrainNoise, TerrainConfig, WorldBaseTerrain};
+	use durham_terrain_models::{
+		fine_patch_cell_layout, BaseTerrainNoise, TerrainConfig, WorldBaseTerrain,
+	};
 	use richmond_development_models::DevelopmentEntryStore;
 	use urbanization_layer_model::UrbanizationStreamingEnabled;
 	use vegetation_layer_model::VegetationLayerConfig;
 
 	use crate::PlayerSpawnXz;
 	use crate::training_plaza::TrainingPlazaMounted;
-	use crate::world_mode::WorldModePlugin;
+	use terrain_layer_model::GenerationModePlugin;
 	use super::*;
 
 	fn training_world(round: TrainingRound) -> World {
@@ -565,19 +472,19 @@ mod tests {
 	#[derive(Resource, Clone, Copy)]
 	struct ShellHop {
 		flow: ShellFlow,
-		mode: WorldMode,
+		mode: ActiveGenerationMode,
 	}
 
 	fn route_shell(
 		hop: Res<ShellHop>,
 		mut flow: ResMut<NextState<ShellFlow>>,
-		mut mode: ResMut<NextState<WorldMode>>,
+		mut mode: ResMut<NextState<ActiveGenerationMode>>,
 	) {
 		flow.set(hop.flow);
 		NextState::set_if_neq(&mut mode, hop.mode);
 	}
 
-	fn hop(app: &mut App, flow: ShellFlow, mode: WorldMode) -> anyhow::Result<()> {
+	fn hop(app: &mut App, flow: ShellFlow, mode: ActiveGenerationMode) -> anyhow::Result<()> {
 		app.insert_resource(ShellHop { flow, mode });
 		app.world_mut()
 			.run_system_once(route_shell)
@@ -587,9 +494,12 @@ mod tests {
 	}
 
 	#[derive(Resource, Default)]
-	struct ModeSeenOnLoading(Option<WorldMode>);
+	struct ModeSeenOnLoading(Option<ActiveGenerationMode>);
 
-	fn note_mode_on_loading(mode: Res<State<WorldMode>>, mut seen: ResMut<ModeSeenOnLoading>) {
+	fn note_mode_on_loading(
+		mode: Res<State<ActiveGenerationMode>>,
+		mut seen: ResMut<ModeSeenOnLoading>,
+	) {
 		seen.0 = Some(*mode.get());
 	}
 
@@ -614,7 +524,12 @@ mod tests {
 	fn a_shell_enter_retargets_on_that_update_and_startup_does_not() -> anyhow::Result<()> {
 		let round = TrainingRound::new(7);
 		let mut app = App::new();
-		app.add_plugins((MinimalPlugins, StatesPlugin, WorldModePlugin));
+		app.add_plugins((
+			MinimalPlugins,
+			StatesPlugin,
+			GenerationModePlugin::<Discovery>::initial(),
+			GenerationModePlugin::<TrainingGround>::default(),
+		));
 		app.init_state::<ShellFlow>();
 		app.insert_resource(round);
 		app.init_resource::<AppliedTrainingMap>();
@@ -637,7 +552,7 @@ mod tests {
 			macro_cell_min_size: None,
 			macro_res_2: None,
 		});
-		register_world_mode_transitions(&mut app);
+		register_generation_mode_transitions(&mut app);
 		app.init_resource::<ModeSeenOnLoading>();
 		app.init_resource::<TrainingExits>();
 		app.init_resource::<SquadSeenInPostUpdate>();
@@ -647,7 +562,7 @@ mod tests {
 		app.insert_resource(DevelopmentEntryStore::default());
 		app.insert_resource(PlayerSpawnXz(None));
 		app.add_systems(OnEnter(ShellFlow::Loading), note_mode_on_loading);
-		app.add_systems(OnExit(WorldMode::Training), count_training_exit);
+		app.add_systems(OnExit(ActiveGenerationMode::of::<TrainingGround>()), count_training_exit);
 		app.add_systems(PostUpdate, note_squad_before_last);
 		app.add_systems(Last, clear_training_plaza);
 		app.update();
@@ -660,9 +575,12 @@ mod tests {
 		assert!(app.world().resource::<ModeSeenOnLoading>().0.is_none());
 		assert_eq!(app.world().resource::<TrainingExits>().0, 0);
 
-		hop(&mut app, ShellFlow::Loading, WorldMode::Training)?;
-		assert_eq!(app.world().resource::<ModeSeenOnLoading>().0, Some(WorldMode::Training));
-		assert_eq!(*app.world().resource::<State<WorldMode>>().get(), WorldMode::Training);
+		hop(&mut app, ShellFlow::Loading, ActiveGenerationMode::of::<TrainingGround>())?;
+		assert_eq!(
+			app.world().resource::<ModeSeenOnLoading>().0,
+			Some(ActiveGenerationMode::of::<TrainingGround>())
+		);
+		assert!(app.world().resource::<State<ActiveGenerationMode>>().get().is::<TrainingGround>());
 		assert_eq!(*app.world().resource::<TerrainCellLayout>(), round.layout());
 		assert_eq!(*app.world().resource::<TerrainCoverage>(), TerrainCoverage::FinePatch);
 		assert_eq!(forest_radius(app.world()), Some(0));
@@ -672,7 +590,7 @@ mod tests {
 
 		app.world_mut().resource_mut::<TerrainPresentationDirty>().0 = false;
 		app.insert_resource(round.next_life());
-		hop(&mut app, ShellFlow::Loading, WorldMode::Training)?;
+		hop(&mut app, ShellFlow::Loading, ActiveGenerationMode::of::<TrainingGround>())?;
 		assert!(
 			!app.world().resource::<TerrainPresentationDirty>().0,
 			"a new life on the same map does not move the patch"
@@ -684,7 +602,7 @@ mod tests {
 		app.insert_resource(round.next());
 		app.insert_resource(TrainingPlazaMounted(round));
 		let squad = app.world_mut().spawn(TrainingBrawler).id();
-		hop(&mut app, ShellFlow::Loading, WorldMode::Training)?;
+		hop(&mut app, ShellFlow::Loading, ActiveGenerationMode::of::<TrainingGround>())?;
 		assert_eq!(*app.world().resource::<TerrainCellLayout>(), round.next().layout());
 		assert!(app.world().resource::<TerrainPresentationDirty>().0);
 		assert_eq!(app.world().resource::<TrainingExits>().0, 0);
@@ -694,8 +612,8 @@ mod tests {
 		let current = *app.world().resource::<TrainingRound>();
 		app.insert_resource(TrainingPlazaMounted(current));
 		let squad = app.world_mut().spawn(TrainingBrawler).id();
-		hop(&mut app, ShellFlow::Home, WorldMode::Discovery)?;
-		assert_eq!(*app.world().resource::<State<WorldMode>>().get(), WorldMode::Discovery);
+		hop(&mut app, ShellFlow::Home, ActiveGenerationMode::of::<Discovery>())?;
+		assert!(app.world().resource::<State<ActiveGenerationMode>>().get().is::<Discovery>());
 		assert_eq!(*app.world().resource::<TerrainCellLayout>(), playable_world_cell_layout());
 		assert_eq!(forest_radius(app.world()), Some(WORLD_FOREST_STREAM_RADIUS));
 		assert_eq!(app.world().resource::<TrainingExits>().0, 1);
@@ -728,7 +646,7 @@ mod tests {
 	#[test]
 	fn the_enemy_count_follows_standing_training_fighters() -> anyhow::Result<()> {
 		let mut world = World::new();
-		world.insert_resource(State::new(WorldMode::Training));
+		world.insert_resource(State::new(ActiveGenerationMode::of::<TrainingGround>()));
 		let squad = world.spawn(TrainingBrawler).id();
 		let stranger = world.spawn_empty().id();
 		let fighter = |mob| (MemberOf { mob, slot: 0 }, Health::from_max(10.0));
@@ -750,7 +668,7 @@ mod tests {
 		health.apply_damage(10.0);
 		assert_eq!(run(&mut world)?, Some(1), "a dead fighter drops out");
 
-		world.insert_resource(State::new(WorldMode::Discovery));
+		world.insert_resource(State::new(ActiveGenerationMode::of::<Discovery>()));
 		assert_eq!(run(&mut world)?, None, "leaving hides the count");
 		Ok(())
 	}
@@ -794,39 +712,9 @@ mod tests {
 	}
 
 	#[test]
-	fn rounds_are_reproducible_and_move_on() {
-		let round = TrainingRound::new(1234);
-		assert_eq!(round.next(), TrainingRound::new(1234).next());
-		assert_ne!(round.next().seed, round.seed);
-		let sites: std::collections::HashSet<IVec2> =
-			std::iter::successors(Some(round), |round| Some(round.next()))
-				.take(16)
-				.map(TrainingRound::site)
-				.collect();
-		assert!(sites.len() > 8, "sixteen lives should not share a handful of sites");
-		for site in sites {
-			assert!(site.abs().max_element() <= TRAINING_SITE_RANGE_CELLS);
-		}
-	}
-
-	#[test]
-	fn site_rerolls_keep_the_seed_and_stop() {
-		let mut round = TrainingRound::new(99);
-		let first = round.site();
-		round = round.reroll_site();
-		assert_eq!(round.seed, 99);
-		assert_ne!(round.site(), first);
-		let tries = std::iter::successors(Some(TrainingRound::new(99)), |round| {
-			(!round.site_exhausted()).then(|| round.reroll_site())
-		})
-		.count();
-		assert_eq!(tries as u32, TRAINING_SITE_ATTEMPTS);
-	}
-
-	#[test]
 	fn trainees_are_player_scale_and_never_a_saved_character() {
 		let species: std::collections::HashSet<&str> = (0..40)
-			.map(|seed| TrainingRound::new(seed).trainee())
+			.map(|seed| training_trainee(TrainingRound::new(seed)))
 			.inspect(|trainee| {
 				assert!(trainee.key.starts_with("trainee-"));
 				assert!(crozon_character_persist::CharacterId::from_hex(&trainee.key).is_none());
@@ -837,7 +725,10 @@ mod tests {
 		let player_scale = ["braidman", "lero", "mygr", "tuberwaber", "wumbus"];
 		assert!(species.iter().all(|id| player_scale.contains(id)), "{species:?}");
 		assert!(species.len() > 2, "trainees should vary across rounds: {species:?}");
-		assert_eq!(TrainingRound::new(5).trainee(), TrainingRound::new(5).trainee());
+		assert_eq!(
+			training_trainee(TrainingRound::new(5)),
+			training_trainee(TrainingRound::new(5))
+		);
 	}
 
 	#[test]
@@ -848,11 +739,11 @@ mod tests {
 		assert_eq!(life.site(), round.site());
 		assert_eq!(life.development_seed(), round.development_seed());
 		assert_eq!(life.mob_seed(), round.mob_seed());
-		assert_ne!(life.trainee().key, round.trainee().key);
+		assert_ne!(training_trainee(life).key, training_trainee(round).key);
 		let lives: std::collections::HashSet<_> =
 			std::iter::successors(Some(round), |round| Some(round.next_life()))
 				.take(12)
-				.map(|life| format!("{:?}", life.trainee().appearance))
+				.map(|life| format!("{:?}", training_trainee(life).appearance))
 				.collect();
 		assert!(lives.len() > 2, "lives on one map should vary the trainee");
 		assert_ne!(round.next().map(), round.map());

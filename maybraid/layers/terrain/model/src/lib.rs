@@ -11,17 +11,20 @@
 //! [`TerrainModel::require_generation`] instead of adding other layers itself.
 
 mod generation;
+mod generation_mode;
 mod model;
 mod on_terrain;
 mod require;
-mod source;
 mod view;
 
 pub use generation::{BaseTerrainGenerationPlugin, TerrainGeneration};
+pub use generation_mode::{
+	in_generation_mode, ActiveGenerationMode, GenerationMode, GenerationModePlugin,
+	GenerationModeSystems,
+};
 pub use model::{HeightField, TerrainCell, TerrainModel};
 pub use on_terrain::OnTerrain;
 pub use require::RequireLayer;
-pub use source::{LayerSource, SourceSystems};
 pub use view::TerrainView;
 
 #[cfg(test)]

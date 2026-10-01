@@ -5,7 +5,8 @@
 use crate::flow::{GameFlow, PlaySession};
 use crate::shell::ShellRoute;
 use bevy::prelude::*;
-use maybraid_world::{LodJobCounter, TrainingPlazaMounted, TrainingRound, WorldSurfaceReady};
+use maybraid_game_mode_training_ground::TrainingRound;
+use maybraid_world::{LodJobCounter, TrainingPlazaMounted, WorldSurfaceReady};
 use menu_screens::{request_loading_explainer, request_loading_progress};
 
 /// Remaining generate / present / pending-root tickets that still count as
@@ -223,11 +224,12 @@ mod tests {
 	#[test]
 	fn a_ready_training_surface_requests_world_without_leaving_training() -> anyhow::Result<()> {
 		use bevy::ecs::system::RunSystemOnce;
-		use maybraid_world::WorldMode;
+		use maybraid_game_mode_training_ground::TrainingGround;
+		use terrain_layer_model::ActiveGenerationMode;
 		let round = TrainingRound::new(1);
 		let mut world = World::new();
 		world.insert_resource(NextState::<GameFlow>::Unchanged);
-		world.insert_resource(NextState::<WorldMode>::Unchanged);
+		world.insert_resource(NextState::<ActiveGenerationMode>::Unchanged);
 		world.insert_resource(PlaySession::Training);
 		world.insert_resource(WorldSurfaceReady(true));
 		world.insert_resource(TrainingPlazaMounted(round));
@@ -237,9 +239,9 @@ mod tests {
 			.run_system_once(finish_world_loading)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		let flow = world.resource::<NextState<GameFlow>>();
-		let mode = world.resource::<NextState<WorldMode>>();
+		let mode = world.resource::<NextState<ActiveGenerationMode>>();
 		let flow_ok = matches!(flow, NextState::Pending(GameFlow::World));
-		let mode_ok = matches!(mode, NextState::PendingIfNeq(WorldMode::Training));
+		let mode_ok = matches!(mode, NextState::PendingIfNeq(mode) if mode.is::<TrainingGround>());
 		if !flow_ok || !mode_ok {
 			return Err(anyhow::anyhow!("unveil requested flow {flow:?} mode {mode:?}"));
 		}

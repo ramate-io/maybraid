@@ -6,7 +6,8 @@
 //! the same map; your own character's moves to a new one.
 
 use bevy::prelude::*;
-use maybraid_world::{TrainingLifeEnded, TrainingRound, WorldPlayerLoadout, WorldSurfaceReady};
+use maybraid_game_mode_training_ground::TrainingRound;
+use maybraid_world::{TrainingLifeEnded, WorldPlayerLoadout, WorldSurfaceReady};
 use menu_screens::{GameMode, TrainingCharacterChoice, TrainingSpawn};
 
 use crate::flow::{GameFlow, PlaySession};
@@ -72,7 +73,7 @@ pub(crate) fn training_trainee(
 	if spawn?.current != TrainingCharacterChoice::Random {
 		return None;
 	}
-	round.map(|round| round.trainee())
+	round.map(|round| maybraid_world::training_trainee(*round))
 }
 
 /// Leave / Home: drop the session.
@@ -92,11 +93,12 @@ pub(crate) fn clear_play_session(
 mod tests {
 	use super::*;
 	use bevy::ecs::system::RunSystemOnce;
-	use maybraid_world::WorldMode;
+	use maybraid_game_mode_training_ground::TrainingGround;
+	use terrain_layer_model::ActiveGenerationMode;
 
 	fn shell_states(world: &mut World) {
 		world.insert_resource(NextState::<GameFlow>::Unchanged);
-		world.insert_resource(NextState::<WorldMode>::Unchanged);
+		world.insert_resource(NextState::<ActiveGenerationMode>::Unchanged);
 	}
 
 	#[test]
@@ -139,8 +141,8 @@ mod tests {
 			NextState::Pending(GameFlow::LoadingWorld)
 		));
 		assert!(matches!(
-			world.resource::<NextState<WorldMode>>(),
-			NextState::PendingIfNeq(WorldMode::Training)
+			world.resource::<NextState<ActiveGenerationMode>>(),
+			NextState::PendingIfNeq(mode) if mode.is::<TrainingGround>()
 		));
 		Ok(())
 	}
@@ -163,8 +165,8 @@ mod tests {
 			NextState::Pending(GameFlow::LoadingWorld)
 		));
 		assert!(matches!(
-			world.resource::<NextState<WorldMode>>(),
-			NextState::PendingIfNeq(WorldMode::Training)
+			world.resource::<NextState<ActiveGenerationMode>>(),
+			NextState::PendingIfNeq(mode) if mode.is::<TrainingGround>()
 		));
 		Ok(*world.resource::<TrainingRound>())
 	}
@@ -175,7 +177,10 @@ mod tests {
 		let next = ended_life(TrainingCharacterChoice::Random)?;
 		assert_eq!(next, round.next_life());
 		assert_eq!(next.map(), round.map());
-		assert_ne!(next.trainee(), round.trainee());
+		assert_ne!(
+			maybraid_world::training_trainee(next),
+			maybraid_world::training_trainee(round)
+		);
 		Ok(())
 	}
 
@@ -193,7 +198,7 @@ mod tests {
 		let active = TrainingSpawn::new(TrainingCharacterChoice::Active);
 		assert_eq!(
 			training_trainee(PlaySession::Training, Some(&random), Some(&round)),
-			Some(round.trainee())
+			Some(maybraid_world::training_trainee(round))
 		);
 		assert_eq!(training_trainee(PlaySession::Training, Some(&active), Some(&round)), None);
 		assert_eq!(training_trainee(PlaySession::Discovery, Some(&random), Some(&round)), None);

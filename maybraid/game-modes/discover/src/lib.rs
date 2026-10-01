@@ -3,7 +3,7 @@
 //! The game shell still owns cameras, loading, and pause. This crate is the
 //! session those systems ask when the home row enters Discovery.
 
-use bevy::prelude::*;
+use terrain_layer_model::GenerationMode;
 
 pub const LABEL: &str = "Discovery";
 
@@ -12,17 +12,10 @@ pub fn streams_terrain(session_is_discovery: bool, in_world_shell: bool) -> bool
 	session_is_discovery && in_world_shell
 }
 
-/// Marker so the executable loads this mode beside the others.
-#[derive(Resource, Clone, Copy, Debug, Default)]
-pub struct DiscoverMode;
+/// Playable-world generation. Layers take this as a plugin parameter.
+pub struct Discovery;
 
-pub struct DiscoverPlugin;
-
-impl Plugin for DiscoverPlugin {
-	fn build(&self, app: &mut App) {
-		app.init_resource::<DiscoverMode>();
-	}
-}
+impl GenerationMode for Discovery {}
 
 #[cfg(test)]
 mod tests {

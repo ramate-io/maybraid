@@ -8,19 +8,21 @@
 //! a `Camera2d` exists only during [`GameFlow::LoadingWorld`]. A persistent
 //! second camera would steal UI. Terrain streaming stays off on menu shells.
 //! Discovery streams the playable world. A Training session requests
-//! [`maybraid_world::WorldMode::Training`] together with the flow, so a
-//! Training pose is not written.
+//! [`TrainingGround`](maybraid_game_mode_training_ground::TrainingGround)
+//! together with the flow, so a Training pose is not written.
 
 use bevy::camera::ClearColorConfig;
 use bevy::camera::visibility::RenderLayers;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use crozon_character_playground::CameraController as PreviewCameraController;
-use maybraid_game_mode_discover::streams_terrain;
+use maybraid_game_mode_discover::{streams_terrain, Discovery};
+use maybraid_game_mode_training_ground::TrainingGround;
 use maybraid_world::{
 	InventoryEditCameraFollow, PlayerPhysicsEnabled, SKY_CLEAR, TerrainStreamingEnabled,
-	WorldGameplayEnabled, WorldMode, WorldSceneryVisible,
+	WorldGameplayEnabled, WorldSceneryVisible,
 };
+use terrain_layer_model::ActiveGenerationMode;
 use menu_components::MENU_CLEAR;
 use menu_playground::{
 	CharacterEditorReturn, CharacterPreviewLight, CharacterPreviewRoot, CharacterScreen,
@@ -169,15 +171,15 @@ pub(crate) fn terrain_streaming_for_shell(flow: GameFlow) -> bool {
 	matches!(flow, GameFlow::LoadingWorld | GameFlow::World)
 }
 
-pub(crate) fn world_mode_for_shell(flow: GameFlow, session: PlaySession) -> WorldMode {
+pub(crate) fn world_mode_for_shell(flow: GameFlow, session: PlaySession) -> ActiveGenerationMode {
 	if terrain_streaming_for_shell(flow) && session == PlaySession::Training {
-		WorldMode::Training
+		ActiveGenerationMode::of::<TrainingGround>()
 	} else {
-		WorldMode::Discovery
+		ActiveGenerationMode::of::<Discovery>()
 	}
 }
 
-/// Requests a shell flow and the [`WorldMode`] that session implies.
+/// Requests a shell flow and the [`ActiveGenerationMode`] that session implies.
 ///
 /// The mode uses `set_if_neq`: Bevy 0.19 runs `OnExit` and `OnEnter` when
 /// `set` repeats the current state, which would tear down a live plaza on a
@@ -185,7 +187,7 @@ pub(crate) fn world_mode_for_shell(flow: GameFlow, session: PlaySession) -> Worl
 #[derive(SystemParam)]
 pub(crate) struct ShellRoute<'w> {
 	flow: ResMut<'w, NextState<GameFlow>>,
-	mode: ResMut<'w, NextState<WorldMode>>,
+	mode: ResMut<'w, NextState<ActiveGenerationMode>>,
 }
 
 impl ShellRoute<'_> {
@@ -242,7 +244,7 @@ pub(crate) fn apply_shell_look(
 	// Ground streams a pinned FinePatch of the same stack. Gameplay and the
 	// world motor stay on while either session is playing.
 	let in_world_shell = terrain_streaming_for_shell(flow);
-	let training_session = world_mode_for_shell(flow, *session).is_training();
+	let training_session = world_mode_for_shell(flow, *session).is::<TrainingGround>();
 	streaming.0 =
 		streams_terrain(*session == PlaySession::Discovery, in_world_shell) || training_session;
 	scenery.0 = flow == GameFlow::World;
@@ -312,10 +314,12 @@ mod tests {
 	};
 	use crate::flow::{GameFlow, PlaySession, WorldPause};
 	use bevy::ecs::system::RunSystemOnce;
+	use maybraid_game_mode_discover::Discovery;
+	use maybraid_game_mode_training_ground::TrainingGround;
 	use maybraid_world::{
-		PlayerPhysicsEnabled, TerrainStreamingEnabled, WorldGameplayEnabled, WorldMode,
-		WorldSceneryVisible,
+		PlayerPhysicsEnabled, TerrainStreamingEnabled, WorldGameplayEnabled, WorldSceneryVisible,
 	};
+	use terrain_layer_model::ActiveGenerationMode;
 	use menu_components::MENU_CLEAR;
 
 	#[test]
@@ -336,12 +340,12 @@ mod tests {
 	fn a_route_requests_the_flow_and_the_mode_together() -> anyhow::Result<()> {
 		let mut world = World::new();
 		world.insert_resource(NextState::<GameFlow>::Unchanged);
-		world.insert_resource(NextState::<WorldMode>::Unchanged);
+		world.insert_resource(NextState::<ActiveGenerationMode>::Unchanged);
 		world.run_system_once(enter_training).map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		let flow = world.resource::<NextState<GameFlow>>();
-		let mode = world.resource::<NextState<WorldMode>>();
+		let mode = world.resource::<NextState<ActiveGenerationMode>>();
 		let flow_ok = matches!(flow, NextState::Pending(GameFlow::LoadingWorld));
-		let mode_ok = matches!(mode, NextState::PendingIfNeq(WorldMode::Training));
+		let mode_ok = matches!(mode, NextState::PendingIfNeq(mode) if mode.is::<TrainingGround>());
 		if !flow_ok || !mode_ok {
 			return Err(anyhow::anyhow!("route requested flow {flow:?} mode {mode:?}"));
 		}
@@ -352,7 +356,10 @@ mod tests {
 	fn training_shell_streams_in_the_world_shell() -> anyhow::Result<()> {
 		for flow in [GameFlow::LoadingWorld, GameFlow::World] {
 			assert!(terrain_streaming_for_shell(flow));
-			assert_eq!(world_mode_for_shell(flow, PlaySession::Training), WorldMode::Training);
+			assert_eq!(
+				world_mode_for_shell(flow, PlaySession::Training),
+				ActiveGenerationMode::of::<TrainingGround>()
+			);
 			let mut world = World::new();
 			world.insert_resource(State::new(flow));
 			world.insert_resource(PlaySession::Training);
@@ -373,11 +380,11 @@ mod tests {
 		assert!(!terrain_streaming_for_shell(GameFlow::Home));
 		assert_eq!(
 			world_mode_for_shell(GameFlow::World, PlaySession::Discovery),
-			WorldMode::Discovery
+			ActiveGenerationMode::of::<Discovery>()
 		);
 		assert_eq!(
 			world_mode_for_shell(GameFlow::Home, PlaySession::Training),
-			WorldMode::Discovery
+			ActiveGenerationMode::of::<Discovery>()
 		);
 		Ok(())
 	}

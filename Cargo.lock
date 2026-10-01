@@ -4758,6 +4758,7 @@ dependencies = [
  "menu-playground",
  "menu-screens",
  "tempfile",
+ "terrain-layer-model",
 ]
 
 [[package]]
@@ -4784,6 +4785,7 @@ name = "maybraid-game-mode-discover"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "terrain-layer-model",
 ]
 
 [[package]]
@@ -4798,6 +4800,8 @@ name = "maybraid-game-mode-training-ground"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "durham-terrain-models",
+ "terrain-layer-model",
 ]
 
 [[package]]
@@ -4907,6 +4911,8 @@ dependencies = [
  "log",
  "material-ref",
  "maybraid-character-controller",
+ "maybraid-game-mode-discover",
+ "maybraid-game-mode-training-ground",
  "maybraid-input",
  "maybraid-mobs",
  "maybraid-skill-map",

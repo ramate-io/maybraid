@@ -19,10 +19,11 @@ use bevy::prelude::*;
 use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
 use maybraid_input::MenuNavPad;
 use maybraid_menu_controller::MenuControllerPlugin;
+use maybraid_game_mode_training_ground::TrainingRound;
 use maybraid_world::{
 	resume_discovery_from_saved_waypoints, InventoryEditCameraFollow, PlayerPhysicsEnabled,
 	PlayerSpawnXz, ShadowQuality, TerrainStreamingEnabled, TrainingEnemyMarkersEnabled,
-	TrainingRound, WorldGameplayEnabled, WorldMobHudEnabled, WorldPlayerLoadout, WorldPlugin,
+	WorldGameplayEnabled, WorldMobHudEnabled, WorldPlayerLoadout, WorldPlugin,
 	WorldSceneryVisible, WorldSurfaceSet,
 };
 use menu_components::{
@@ -58,9 +59,7 @@ impl Plugin for GamePlugin {
 			.init_state::<GameFlow>()
 			.add_sub_state::<WorldPause>()
 			.add_plugins((
-				maybraid_game_mode_discover::DiscoverPlugin,
 				maybraid_game_mode_reliquary::ReliquaryPlugin,
-				maybraid_game_mode_training_ground::TrainingGroundPlugin,
 				HomeScreenPlugin,
 				TrainingScreenPlugin,
 				InGameScreenPlugin,
@@ -482,7 +481,8 @@ mod tests {
 		read_player_loadout, route_home_choice, sync_world_loadout_from_editor, sync_world_shadows,
 		GameFlow, PlaySession,
 	};
-	use maybraid_world::{ShadowQuality, TrainingRound, WorldPlayerLoadout};
+	use maybraid_game_mode_training_ground::TrainingRound;
+	use maybraid_world::{ShadowQuality, WorldPlayerLoadout};
 	use menu_playground::{
 		CharacterEditBaseline, CharacterEditorReturn, CharacterMenuState, EditingCharacter,
 	};
@@ -528,7 +528,7 @@ mod tests {
 		world.init_resource::<Messages<HomeMenuChoice>>();
 		world.write_message(HomeMenuChoice::TrainingGround);
 		world.insert_resource(NextState::<GameFlow>::Unchanged);
-		world.insert_resource(NextState::<maybraid_world::WorldMode>::Unchanged);
+		world.insert_resource(NextState::<terrain_layer_model::ActiveGenerationMode>::Unchanged);
 		world.insert_resource(GameMode::default());
 		world.insert_resource(PlaySession::None);
 		world
@@ -554,7 +554,10 @@ mod tests {
 		world
 			.run_system_once(load_active_player_loadout)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		assert_eq!(world.get_resource::<WorldPlayerLoadout>(), Some(&round.trainee()));
+		assert_eq!(
+			world.get_resource::<WorldPlayerLoadout>(),
+			Some(&maybraid_world::training_trainee(round))
+		);
 		Ok(())
 	}
 
@@ -565,7 +568,7 @@ mod tests {
 		let id = CharacterId(7);
 		crozon_inventory_user::save(&root, id, &Inventory::default())?;
 
-		let trainee = TrainingRound::new(3).trainee();
+		let trainee = maybraid_world::training_trainee(TrainingRound::new(3));
 		assert!(!trainee.inventory.items.is_empty());
 		let mut world = World::new();
 		world.insert_resource(root.clone());

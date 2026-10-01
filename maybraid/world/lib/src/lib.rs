@@ -28,7 +28,6 @@ mod ui;
 mod vsync;
 mod weapon;
 mod world_layers;
-mod world_mode;
 
 pub use chico_vegetation_on_terrain_playground::{PlayerPhysicsEnabled, PlayerSpawnXz};
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
@@ -59,8 +58,7 @@ pub use stash::{
 	spawn_exploded_stashes, spawn_world_stash, StashDisplayedItem, StashPolicy, WorldStash,
 	WorldStashPlugin, WorldStashSettings, DEFAULT_CLAIM_RADIUS, DEFAULT_LOOT_SECS,
 };
-pub use training::{TrainingLifeEnded, TrainingMap, TrainingRound};
-pub use world_mode::{WorldMode, WorldSourceAppExt};
+pub use training::{training_trainee, TrainingLifeEnded};
 pub use training_markers::TrainingEnemyMarkersEnabled;
 pub use training_plaza::TrainingPlazaMounted;
 pub use ui::WorldMobHudEnabled;
@@ -170,7 +168,6 @@ impl Plugin for WorldPlugin {
 			.add_plugins(MeshStatsPlugin)
 			.insert_resource(CharacterRagdollTargets { players: true, npcs: true, unmarked: false })
 			.add_plugins(CharacterRagdollPlugin)
-			.add_plugins(world_mode::WorldModePlugin)
 			.add_plugins(WorldLayersPlugin)
 			.add_plugins(WorldIntelligencePlugin)
 			.add_plugins(SkillMapPlugin)

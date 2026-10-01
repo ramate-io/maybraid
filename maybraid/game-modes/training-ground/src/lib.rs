@@ -1,30 +1,15 @@
 //! Training Ground is a seeded FinePatch of the Maybraid world.
 //!
-//! The shell requests Training on the world's mode. This plugin is the mode
-//! marker; sources register here in later issues.
+//! The shell requests this mode on [`terrain_layer_model::ActiveGenerationMode`].
+//! Later children implement layer schemes on [`TrainingGround`].
 
-use bevy::prelude::*;
+use terrain_layer_model::GenerationMode;
 
-/// Marker so the executable loads this mode beside the others.
-#[derive(Resource, Clone, Copy, Debug, Default)]
-pub struct TrainingGroundMode;
+mod round;
 
-pub struct TrainingGroundPlugin;
+pub use round::{TrainingMap, TrainingRound, TRAINING_FINE_HALF_EXTENT_CELLS};
 
-impl Plugin for TrainingGroundPlugin {
-	fn build(&self, app: &mut App) {
-		app.init_resource::<TrainingGroundMode>();
-	}
-}
+/// Pinned FinePatch generation. Layers take this as a plugin parameter.
+pub struct TrainingGround;
 
-#[cfg(test)]
-mod tests {
-	use super::*;
-
-	#[test]
-	fn plugin_inserts_its_marker() {
-		let mut app = App::new();
-		app.add_plugins(TrainingGroundPlugin);
-		assert!(app.world().get_resource::<TrainingGroundMode>().is_some());
-	}
-}
+impl GenerationMode for TrainingGround {}
