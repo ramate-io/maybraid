@@ -5,10 +5,16 @@ Development GGUF files for [`maybraid-language-mistral`](../../../language/mistr
 The default CLI path is:
 
 ```text
+assets/models/qwen3-0.6b-q4.gguf
+```
+
+If that file is missing, the loader falls back to the existing 1.7B Q4 asset:
+
+```text
 assets/models/qwen3-1.7b-q4.gguf
 ```
 
-GGUF files are gitignored. Fetch the Unsloth Qwen3 1.7B Q4_K_M weights with:
+GGUF files are gitignored. Fetch the Unsloth Qwen3 0.6B Q4_K_M weights with:
 
 ```bash
 ./bin/download-qwen3-gguf.sh
@@ -21,7 +27,7 @@ On macOS the language crates enable Metal so Qwen runs on the GPU. Force CPU wit
 
 `maybraid-language` enables mistral.rs load and throughput logs. `RUST_LOG`
 overrides the default `info` filter; `MISTRALRS_DEBUG=1` raises it to `debug`.
-Parse is capped at 256 tokens and respond at 128 so generation cannot fill the
-Qwen3 40960-token context.
+Respond generation is capped at 128 tokens so it cannot fill the Qwen3
+40960-token context. Qwen emits English only; UDPipe owns the parse.
 
 Qwen3 is used under its own license from Alibaba. This project does not embed the weights.

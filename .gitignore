@@ -19,3 +19,4 @@ packaging/identity.local.md
 .DS_Store
 *.logicx
 *.gguf
+*.udpipe

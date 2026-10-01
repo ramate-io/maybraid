@@ -4,16 +4,22 @@ use std::env;
 use std::path::PathBuf;
 
 /// Default development asset. Not embedded; resolve it from disk.
-pub const BUNDLED_MODEL_FILE: &str = "qwen3-1.7b-q4.gguf";
+pub const BUNDLED_MODEL_FILE: &str = "qwen3-0.6b-q4.gguf";
+pub const LEGACY_MODEL_FILE: &str = "qwen3-1.7b-q4.gguf";
 
 /// Path to the vendored Qwen GGUF used when callers omit `--model-path`.
 pub fn bundled_model_path() -> PathBuf {
 	if let Ok(path) = env::var("MAYBRAID_QWEN_GGUF") {
 		return PathBuf::from(path);
 	}
-	PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-		.join("../../assets/models")
-		.join(BUNDLED_MODEL_FILE)
+	let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets/models");
+	let preferred = dir.join(BUNDLED_MODEL_FILE);
+	let legacy = dir.join(LEGACY_MODEL_FILE);
+	if preferred.is_file() || !legacy.is_file() {
+		preferred
+	} else {
+		legacy
+	}
 }
 
 /// How the model is located and how each task samples.

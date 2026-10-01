@@ -255,7 +255,7 @@ checksum = "c86cd1c51b95d71dde52bca69ed225008f6ff4c8cc825b08042aa1ef823e1980"
 dependencies = [
  "anstyle",
  "memchr",
- "unicode-width 0.2.2",
+ "unicode-width",
 ]
 
 [[package]]
@@ -2973,7 +2973,7 @@ checksum = "fe6d2e5af09e8c8ad56c969f2157a3d4238cebc7c55f0a517728c38f7b200f81"
 dependencies = [
  "serde",
  "termcolor",
- "unicode-width 0.1.14",
+ "unicode-width",
 ]
 
 [[package]]
@@ -2984,7 +2984,7 @@ checksum = "af491d569909a7e4dee0ad7db7f5341fef5c614d5b8ec8cf765732aba3cff681"
 dependencies = [
  "serde",
  "termcolor",
- "unicode-width 0.1.14",
+ "unicode-width",
 ]
 
 [[package]]
@@ -3071,7 +3071,7 @@ dependencies = [
  "encode_unicode",
  "libc",
  "once_cell",
- "unicode-width 0.2.2",
+ "unicode-width",
  "windows-sys 0.59.0",
 ]
 
@@ -3083,7 +3083,7 @@ checksum = "e96a4956774c13c126a8b5af4daa79384f4d826534c95a02d76afb39e2ab64e3"
 dependencies = [
  "encode_unicode",
  "libc",
- "unicode-width 0.2.2",
+ "unicode-width",
  "windows-sys 0.61.0",
 ]
 
@@ -5225,7 +5225,7 @@ version = "0.2.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cfe4fbac503b8d1f88e6676011885f34b7174f46e59956bba534ba83abded4df"
 dependencies = [
- "unicode-width 0.2.2",
+ "unicode-width",
 ]
 
 [[package]]
@@ -5680,7 +5680,7 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.21",
  "tokio",
- "ureq",
+ "ureq 2.12.1",
  "windows-sys 0.60.2",
 ]
 
@@ -5714,7 +5714,7 @@ dependencies = [
  "html5ever 0.38.0",
  "tendril 0.5.1",
  "thiserror 2.0.21",
- "unicode-width 0.2.2",
+ "unicode-width",
 ]
 
 [[package]]
@@ -6089,7 +6089,7 @@ dependencies = [
  "console 0.15.11",
  "number_prefix",
  "portable-atomic",
- "unicode-width 0.2.2",
+ "unicode-width",
  "web-time",
 ]
 
@@ -6102,7 +6102,7 @@ dependencies = [
  "console 0.16.6",
  "portable-atomic",
  "rayon",
- "unicode-width 0.2.2",
+ "unicode-width",
  "unit-prefix",
  "web-time",
 ]
@@ -6926,6 +6926,7 @@ dependencies = [
  "anyhow",
  "slotmap",
  "thiserror 1.0.69",
+ "udpipe-rs",
  "wordnet-db",
  "wordnet-types",
 ]
@@ -12204,6 +12205,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8c1ae7cc0fdb8b842d65d127cb981574b0d2b249b74d1c7a2986863dc134f71"
 
 [[package]]
+name = "udpipe-rs"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9a8f34a036b145a2d253613c2742c836f79c9d5f9c2220f03931762224d23452"
+dependencies = [
+ "cc",
+ "ureq 3.4.2",
+]
+
+[[package]]
 name = "ug"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -12286,12 +12297,6 @@ checksum = "f6ccf251212114b54433ec949fd6a7841275f9ada20dddd2f29e9ceea4501493"
 
 [[package]]
 name = "unicode-width"
-version = "0.1.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7dd6e30e90baa6f72411720665d41d89b9a3d039dc45b8faea1ddd07f617f6af"
-
-[[package]]
-name = "unicode-width"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b4ac048d71ede7ee76d585517add45da530660ef4390e49b098733c6e897f254"
@@ -12340,6 +12345,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "ureq"
+version = "3.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9a7ac20be9b7726e0bbdbf974c059676d9acb1cd414961f570a4e8231cacd7fc"
+dependencies = [
+ "base64 0.23.1",
+ "flate2",
+ "log",
+ "percent-encoding",
+ "rustls",
+ "rustls-pki-types",
+ "ureq-proto",
+ "utf8-zero",
+ "webpki-roots 1.0.9",
+]
+
+[[package]]
+name = "ureq-proto"
+version = "0.6.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f86fd172ccca569e458f61b6bdd6220965a9ef36e672a6852953b51a0e1583be"
+dependencies = [
+ "base64 0.23.1",
+ "http",
+ "httparse",
+ "log",
+]
+
+[[package]]
 name = "url"
 version = "2.5.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -12362,6 +12396,12 @@ name = "utf-8"
 version = "0.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "09cc8ee72d2a9becf2f2febe0205bbed8fc6615b7cb429ad062dc7b7ddd036a9"
+
+[[package]]
+name = "utf8-zero"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b8c0a043c9540bae7c578c88f91dda8bd82e59ae27c21baca69c8b191aaf5a6e"
 
 [[package]]
 name = "utf8_iter"

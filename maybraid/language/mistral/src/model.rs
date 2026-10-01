@@ -1,23 +1,18 @@
-//! Load Qwen once and reuse it for parse and respond.
+//! Load Qwen once and reuse it for English responses.
 
 use std::path::Path;
 
-use maybraid_language_core::{ConceptUniverse, Utterance};
-use mistralrs::{
-	Constraint, DeviceMapSetting, GgufModelBuilder, Model, RequestBuilder, TextMessageRole,
-};
+use mistralrs::{DeviceMapSetting, GgufModelBuilder, Model, RequestBuilder, TextMessageRole};
 use serde_json::Value;
 
-use crate::config::{MistralLanguageConfig, ParseGenerationConfig, ResponseGenerationConfig};
+use crate::config::{MistralLanguageConfig, ResponseGenerationConfig};
 use crate::device::InferenceDevice;
 use crate::error::MistralLanguageError;
-use crate::prompt::{ParsePrompt, RespondPrompt};
-use crate::schema::GeneratedUtterance;
+use crate::prompt::RespondPrompt;
 
 /// Loaded `mistral.rs` model. Callers retain this across requests.
 pub struct MistralLanguageModel {
 	model: Model,
-	parse: ParseGenerationConfig,
 	respond: ResponseGenerationConfig,
 }
 
@@ -65,42 +60,7 @@ impl MistralLanguageModel {
 			.build()
 			.await
 			.map_err(|error| MistralLanguageError::load(&path, error))?;
-		Ok(Self { model, parse: config.parse, respond: config.respond })
-	}
-
-	/// Structured English → [`GeneratedUtterance`].
-	pub async fn parse_generated(
-		&self,
-		english: &str,
-	) -> Result<GeneratedUtterance, MistralLanguageError> {
-		let request = RequestBuilder::new()
-			.add_message(TextMessageRole::System, ParsePrompt::SYSTEM)
-			.add_message(TextMessageRole::User, ParsePrompt::user(english))
-			.set_sampler_temperature(f64::from(self.parse.temperature))
-			.set_sampler_max_len(self.parse.max_len)
-			.set_constraint(Constraint::JsonSchema(GeneratedUtterance::json_schema()))
-			.enable_thinking(false);
-		let content = self.complete(request).await?;
-		let json = extract_json(&content);
-		GeneratedUtterance::from_json(json).map_err(|error| {
-			MistralLanguageError::invalid_output(format!("{error}; raw={json}"))
-		})
-	}
-
-	/// Issue API: parse into overlay concept IDs hashed from English terms.
-	pub async fn parse_utterance(&self, english: &str) -> Result<Utterance, MistralLanguageError> {
-		let generated = self.parse_generated(english).await?;
-		generated.into_overlay_utterance().map_err(|error| with_generated(error, &generated))
-	}
-
-	/// Parse and resolve labels through a shared concept universe.
-	pub async fn parse_utterance_in(
-		&self,
-		english: &str,
-		universe: &impl ConceptUniverse,
-	) -> Result<Utterance, MistralLanguageError> {
-		let generated = self.parse_generated(english).await?;
-		generated.into_utterance(universe).map_err(|error| with_generated(error, &generated))
+		Ok(Self { model, respond: config.respond })
 	}
 
 	pub async fn respond(
@@ -133,34 +93,5 @@ impl MistralLanguageModel {
 			.and_then(|choice| choice.message.content)
 			.filter(|content| !content.trim().is_empty())
 			.ok_or_else(|| MistralLanguageError::inference("model returned no content"))
-	}
-}
-
-fn with_generated(
-	error: MistralLanguageError,
-	generated: &GeneratedUtterance,
-) -> MistralLanguageError {
-	let Ok(raw) = serde_json::to_string(generated) else {
-		return error;
-	};
-	let detail = match error {
-		MistralLanguageError::InvalidOutput(detail) => detail,
-		other => other.to_string(),
-	};
-	MistralLanguageError::invalid_output(format!("{detail}; generated={raw}"))
-}
-
-fn extract_json(content: &str) -> &str {
-	let trimmed = content.trim();
-	let Some(start) = trimmed.find('{') else {
-		return trimmed;
-	};
-	let Some(end) = trimmed.rfind('}') else {
-		return trimmed;
-	};
-	if end < start {
-		trimmed
-	} else {
-		&trimmed[start..=end]
 	}
 }

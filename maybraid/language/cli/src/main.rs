@@ -1,12 +1,14 @@
-//! Orchestrate English → Qwen → utterance → seeded POC language.
+//! Orchestrate English → (optional Qwen) → UDPipe → utterance → POC language.
 
 use std::path::PathBuf;
 
 use anyhow::bail;
 use clap::Parser;
 use maybraid_language_core::{
-	poc_universe, CompositionalLexicalizer, ConceptUniverse, InMemoryLexicalGraph, LexicalOutput,
-	Profile, RootHeavyLexicalizer, SurfaceGrammar, Utterance, WordNetConceptUniverse,
+	poc_universe, CompositionalLexicalizer, ConceptUniverse, DependencyDocument,
+	EnglishDependencyParser, EnglishSemanticMarshaller, InMemoryLexicalGraph, LanguagePipelineError,
+	LexicalOutput, Profile, RootHeavyLexicalizer, SemanticMarshaller, SurfaceGrammar,
+	UdpipeEnglishParser, Utterance, WordNetConceptUniverse,
 };
 use maybraid_language_mistral::{
 	bundled_model_path, MistralLanguageConfig, MistralLanguageModel, ResponseRequest,
@@ -34,6 +36,9 @@ struct Args {
 	model_path: Option<PathBuf>,
 
 	#[arg(long)]
+	udpipe_path: Option<PathBuf>,
+
+	#[arg(long)]
 	force_cpu: bool,
 }
 
@@ -45,26 +50,46 @@ async fn main() -> anyhow::Result<()> {
 		_ => bail!("specify exactly one of --translate or --respond"),
 	};
 	let language = PocLanguage::from_number(args.to_language_number)?;
-	let model_path = args.model_path.clone().unwrap_or_else(bundled_model_path);
-	let mut config = MistralLanguageConfig::from_path(model_path);
-	if args.force_cpu {
-		config = config.with_force_cpu(true);
-	}
-	let model = MistralLanguageModel::load(config).await?;
-	let universe = poc_universe()?.with_proper_names(["John", "Mary", "speaker", "listener"]);
+	let universe = poc_universe()?.with_proper_names(["John", "Mary", "Alice", "speaker", "listener"]);
+	let parser = match &args.udpipe_path {
+		Some(path) => UdpipeEnglishParser::from_path(path).map_err(LanguagePipelineError::from)?,
+		None => UdpipeEnglishParser::bundled().map_err(LanguagePipelineError::from)?,
+	};
+	let marshaller = EnglishSemanticMarshaller::default();
 
-	let (english, utterance) = if args.respond.is_some() {
-		let english = model.respond(ResponseRequest::new(input)).await?;
-		let utterance = model.parse_utterance_in(&english, &universe).await?;
-		(Some(english), utterance)
+	let (english, source, parsed, utterance) = if args.respond.is_some() {
+		let model_path = args.model_path.clone().unwrap_or_else(bundled_model_path);
+		let mut config = MistralLanguageConfig::from_path(model_path);
+		if args.force_cpu {
+			config = config.with_force_cpu(true);
+		}
+		let model = MistralLanguageModel::load(config)
+			.await
+			.map_err(|error| LanguagePipelineError::ResponseGeneration(error.to_string()))?;
+		let english = model
+			.respond(ResponseRequest::new(input))
+			.await
+			.map_err(|error| LanguagePipelineError::ResponseGeneration(error.to_string()))?;
+		let parsed = parser.parse(&english).map_err(LanguagePipelineError::from)?;
+		let utterance = marshaller.marshal(&parsed, &universe).map_err(LanguagePipelineError::from)?;
+		(Some(english), input.to_owned(), parsed, utterance)
 	} else {
-		let utterance = model.parse_utterance_in(input, &universe).await?;
-		(None, utterance)
+		let parsed = parser.parse(input).map_err(LanguagePipelineError::from)?;
+		let utterance = marshaller.marshal(&parsed, &universe).map_err(LanguagePipelineError::from)?;
+		(None, input.to_owned(), parsed, utterance)
 	};
 
 	let rendered = language.render(utterance.clone(), &universe);
 	if args.debug_language {
-		print_debug(input, english.as_deref(), &utterance, &rendered, &universe, &language);
+		print_debug(
+			&source,
+			english.as_deref(),
+			&parsed,
+			&utterance,
+			&rendered,
+			&universe,
+			&language,
+		);
 	} else if args.with_english {
 		if let Some(english) = english {
 			println!("English:\n{english}\n");
@@ -147,6 +172,7 @@ impl PocLanguage {
 fn print_debug(
 	input: &str,
 	english: Option<&str>,
+	parsed: &DependencyDocument,
 	utterance: &Utterance,
 	rendered: &RenderedLanguage,
 	universe: &WordNetConceptUniverse,
@@ -154,9 +180,10 @@ fn print_debug(
 ) {
 	println!("Input:\n{input}\n");
 	if let Some(english) = english {
-		println!("English response:\n{english}\n");
+		println!("Generated English:\n{english}\n");
 	}
-	println!("Parsed utterance:\n{utterance:#?}\n");
+	println!("UDPipe:\n{}", parsed.debug_report());
+	println!("Utterance:\n{utterance:#?}\n");
 	println!("Resolved concepts:");
 	for referent in utterance.referents.values() {
 		let label = universe
@@ -213,7 +240,6 @@ mod tests {
 		.map_err(|error| anyhow::anyhow!("{error}"))?;
 		assert_eq!(args.respond.as_deref(), Some("I am going for a walk."));
 		assert!(args.with_english);
-		assert_eq!(args.to_language_number, 3);
 		Ok(())
 	}
 

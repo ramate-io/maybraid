@@ -1,10 +1,9 @@
 //! Local Qwen integration for [`maybraid_language_core`].
 //!
-//! This crate owns `mistral.rs`, GGUF loading, prompts, and structured
-//! English → [`GeneratedUtterance`] conversion. The language crate stays
-//! independent of any LLM runtime.
+//! This crate owns `mistral.rs` and English response generation. Semantic
+//! parse lives in [`maybraid_language_core`] via UDPipe.
 //!
-//! See [#903](https://github.com/ramate-io/maybraid/issues/903).
+//! See [#911](https://github.com/ramate-io/maybraid/issues/911).
 
 pub mod config;
 mod convert;

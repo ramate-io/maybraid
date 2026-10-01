@@ -113,10 +113,17 @@
                 export CPPFLAGS="-I/opt/homebrew/opt/zlib/include''${CPPFLAGS:+ $CPPFLAGS}"
 
                 # mistral.rs Metal kernel precompile needs `xcrun metal`.
-                # Nix apple-sdk sets DEVELOPER_DIR to a store SDK that has
-                # no Metal compiler; prefer full Xcode when it is installed.
+                # udpipe-rs compiles vendored C++ through Nix `clang++`, which
+                # does not add `-isysroot` on its own and then cannot find
+                # libc++ headers (`<cstring>`, `<cstddef>`). Prefer full Xcode
+                # over the Nix apple-sdk, which also lacks `metal`.
                 if [ -d /Applications/Xcode.app/Contents/Developer ]; then
                   export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+                  if sdkroot="$(xcrun --sdk macosx --show-sdk-path 2>/dev/null)" && [ -d "$sdkroot" ]; then
+                    export SDKROOT="$sdkroot"
+                    export CFLAGS="-isysroot $sdkroot''${CFLAGS:+ $CFLAGS}"
+                    export CXXFLAGS="-isysroot $sdkroot -stdlib=libc++''${CXXFLAGS:+ $CXXFLAGS}"
+                  fi
                 fi
 
                 macos_blender="${macosBlenderApp}"

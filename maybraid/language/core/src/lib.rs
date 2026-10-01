@@ -24,9 +24,12 @@ pub mod graph;
 pub mod lexicalizer;
 pub mod marshall;
 pub mod output;
+pub mod parse;
 pub mod poc;
 pub mod profile;
+pub mod semantic;
 pub mod term;
+pub mod udpipe;
 pub mod utterance;
 pub mod wordnet;
 
@@ -34,7 +37,7 @@ pub use concept::{
 	Concept, ConceptId, ConceptRelation, ConceptUniverse, EnglishSenseLookup, NeighborhoodRequest,
 	Pos, RelationKind,
 };
-pub use error::LanguageError;
+pub use error::{LanguageError, LanguagePipelineError};
 pub use grammar::{
 	ClauseOrder, GrammaticalOutput, IpaUtterance, ModifierPlacement, RelativePlacement,
 	RoleParticles, SurfaceGrammar,
@@ -48,6 +51,14 @@ pub use lexicalizer::{
 	Lexicalizer, RootHeavyLexicalizer, GENERATOR_VERSION,
 };
 pub use marshall::{ConceptMarshaller, ConceptUse, DefaultMarshaller, SemanticNode};
+pub use parse::{
+	DependencyDocument, DependencyRelation, DependencySentence, DependencyToken,
+	EnglishDependencyParser, MorphFeatures, TokenId, UniversalPos,
+};
+pub use semantic::{
+	EnglishSemanticMarshaller, PredicateFrame, PredicateFrameLexicon, RoleMapping, SemanticMarshaller,
+};
+pub use udpipe::{bundled_udpipe_path, UdpipeEnglishParser, BUNDLED_UDPIPE_FILE};
 pub use output::{LexicalOutput, ResolvedConcept};
 pub use poc::{poc_universe, PocLexicon};
 pub use profile::{Profile, Register};

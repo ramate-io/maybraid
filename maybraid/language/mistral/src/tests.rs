@@ -3,10 +3,10 @@ use maybraid_language_core::ConceptUniverse;
 
 use crate::config::{
 	bundled_model_path, ParseGenerationConfig, ResponseGenerationConfig, BUNDLED_MODEL_FILE,
-	PARSE_MAX_LEN, RESPOND_MAX_LEN,
+	LEGACY_MODEL_FILE, PARSE_MAX_LEN, RESPOND_MAX_LEN,
 };
 use crate::device::InferenceDevice;
-use crate::prompt::{ParsePrompt, RespondPrompt};
+use crate::prompt::RespondPrompt;
 use crate::schema::{
 	GeneratedClause, GeneratedReferent, GeneratedUtterance, MAX_CLAUSES, MAX_REFERENTS, MAX_ROOTS,
 };
@@ -33,8 +33,8 @@ const ISSUE_EXAMPLE: &str = r#"
 fn bundled_model_path_points_at_the_shared_asset() {
 	let path = bundled_model_path();
 	assert!(
-		path.ends_with(BUNDLED_MODEL_FILE),
-		"bundled path should end with {BUNDLED_MODEL_FILE}, got {}",
+		path.ends_with(BUNDLED_MODEL_FILE) || path.ends_with(LEGACY_MODEL_FILE),
+		"bundled path should end with {BUNDLED_MODEL_FILE} or {LEGACY_MODEL_FILE}, got {}",
 		path.display()
 	);
 	assert!(
@@ -42,13 +42,6 @@ fn bundled_model_path_points_at_the_shared_asset() {
 		"bundled path should live under assets/models, got {}",
 		path.display()
 	);
-}
-
-#[test]
-fn parse_prompt_embeds_the_sentence() {
-	let prompt = ParsePrompt::user("I am going for a walk.");
-	assert!(prompt.contains("I am going for a walk."));
-	assert!(prompt.contains("semantic schema"));
 }
 
 #[test]
