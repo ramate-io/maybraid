@@ -22,7 +22,6 @@ use maybraid_world::{
 	InventoryEditCameraFollow, PlayerPhysicsEnabled, SKY_CLEAR, TerrainStreamingEnabled,
 	WorldGameplayEnabled, WorldSceneryVisible,
 };
-use terrain_layer_model::ActiveGenerationMode;
 use menu_components::MENU_CLEAR;
 use menu_playground::{
 	CharacterEditorReturn, CharacterPreviewLight, CharacterPreviewRoot, CharacterScreen,
@@ -31,6 +30,7 @@ use menu_screens::{
 	MenuScreen, despawn_menu_screens, request_show_gallery, request_show_home,
 	request_show_in_game, request_show_loading,
 };
+use terrain_layer_model::ActiveGenerationMode;
 
 /// World camera pose stashed while the pause character editor uses the preview eye.
 #[derive(Resource, Clone, Copy, Debug)]
@@ -171,7 +171,7 @@ pub(crate) fn terrain_streaming_for_shell(flow: GameFlow) -> bool {
 	matches!(flow, GameFlow::LoadingWorld | GameFlow::World)
 }
 
-pub(crate) fn world_mode_for_shell(flow: GameFlow, session: PlaySession) -> ActiveGenerationMode {
+pub(crate) fn generation_mode_for_shell(flow: GameFlow, session: PlaySession) -> ActiveGenerationMode {
 	if terrain_streaming_for_shell(flow) && session == PlaySession::Training {
 		ActiveGenerationMode::of::<TrainingGround>()
 	} else {
@@ -193,7 +193,7 @@ pub(crate) struct ShellRoute<'w> {
 impl ShellRoute<'_> {
 	pub(crate) fn enter(&mut self, flow: GameFlow, session: PlaySession) {
 		self.flow.set(flow);
-		NextState::set_if_neq(&mut self.mode, world_mode_for_shell(flow, session));
+		NextState::set_if_neq(&mut self.mode, generation_mode_for_shell(flow, session));
 	}
 }
 
@@ -244,7 +244,7 @@ pub(crate) fn apply_shell_look(
 	// Ground streams a pinned FinePatch of the same stack. Gameplay and the
 	// world motor stay on while either session is playing.
 	let in_world_shell = terrain_streaming_for_shell(flow);
-	let training_session = world_mode_for_shell(flow, *session).is::<TrainingGround>();
+	let training_session = generation_mode_for_shell(flow, *session).is::<TrainingGround>();
 	streaming.0 =
 		streams_terrain(*session == PlaySession::Discovery, in_world_shell) || training_session;
 	scenery.0 = flow == GameFlow::World;
@@ -310,7 +310,7 @@ mod tests {
 
 	use super::{
 		PREVIEW_RENDER_LAYER, WORLD_RENDER_LAYER, ShellRoute, apply_shell_look,
-		camera_render_layers, terrain_streaming_for_shell, world_mode_for_shell,
+		camera_render_layers, generation_mode_for_shell, terrain_streaming_for_shell,
 	};
 	use crate::flow::{GameFlow, PlaySession, WorldPause};
 	use bevy::ecs::system::RunSystemOnce;
@@ -319,8 +319,8 @@ mod tests {
 	use maybraid_world::{
 		PlayerPhysicsEnabled, TerrainStreamingEnabled, WorldGameplayEnabled, WorldSceneryVisible,
 	};
-	use terrain_layer_model::ActiveGenerationMode;
 	use menu_components::MENU_CLEAR;
+	use terrain_layer_model::ActiveGenerationMode;
 
 	#[test]
 	fn menu_camera_sees_preview_only() {
@@ -357,7 +357,7 @@ mod tests {
 		for flow in [GameFlow::LoadingWorld, GameFlow::World] {
 			assert!(terrain_streaming_for_shell(flow));
 			assert_eq!(
-				world_mode_for_shell(flow, PlaySession::Training),
+				generation_mode_for_shell(flow, PlaySession::Training),
 				ActiveGenerationMode::of::<TrainingGround>()
 			);
 			let mut world = World::new();
@@ -379,11 +379,11 @@ mod tests {
 		assert!(terrain_streaming_for_shell(GameFlow::World));
 		assert!(!terrain_streaming_for_shell(GameFlow::Home));
 		assert_eq!(
-			world_mode_for_shell(GameFlow::World, PlaySession::Discovery),
+			generation_mode_for_shell(GameFlow::World, PlaySession::Discovery),
 			ActiveGenerationMode::of::<Discovery>()
 		);
 		assert_eq!(
-			world_mode_for_shell(GameFlow::Home, PlaySession::Training),
+			generation_mode_for_shell(GameFlow::Home, PlaySession::Training),
 			ActiveGenerationMode::of::<Discovery>()
 		);
 		Ok(())

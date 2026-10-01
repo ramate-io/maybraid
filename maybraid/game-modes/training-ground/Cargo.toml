@@ -14,5 +14,8 @@ bevy = { workspace = true }
 durham-terrain-models = { workspace = true }
 terrain-layer-model = { workspace = true }
 
+[dev-dependencies]
+anyhow = { workspace = true }
+
 [lints]
 workspace = true

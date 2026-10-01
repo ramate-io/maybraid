@@ -10,7 +10,8 @@ use lod::gen::Id;
 use lod::lod_ref::LodRef;
 
 use crate::{
-	BaseTerrainGenerationPlugin, HeightField, OnTerrain, RequireLayer, TerrainCell,
+	BaseTerrainGenerationCore, BaseTerrainGenerationPlugin, BaseTerrainScheme, GenerationMode,
+	GenerationModePlugin, HeightField, OnTerrain, RequireLayer, TerrainCell,
 	TerrainGeneration, TerrainModel, TerrainView,
 };
 
@@ -173,16 +174,27 @@ impl TerrainModel for Flat {
 	}
 
 	fn require_generation(app: &App) {
-		app.require_layer::<BaseTerrainGenerationPlugin<Flat>, Flat>();
+		app.require_layer::<BaseTerrainGenerationCore<Flat>, Flat>();
 	}
 }
 
 impl TerrainGeneration for Flat {
 	type Config = f32;
+	type SharedConfig = ();
+
+	fn shared_config(_config: &f32) {}
 
 	fn install_generation(app: &mut App, config: &f32) {
 		app.insert_resource(FlatStore { cells: HashMap::new(), fallback: *config });
 	}
+}
+
+struct TestMode;
+
+impl GenerationMode for TestMode {}
+
+impl BaseTerrainScheme<Flat> for TestMode {
+	fn install(_app: &mut App, _config: &f32) {}
 }
 
 fn world_with_one_cell() -> (World, Id) {
@@ -225,7 +237,10 @@ fn on_terrain_is_transparent() -> anyhow::Result<()> {
 #[test]
 fn base_generation_installs_model() {
 	let mut app = App::new();
-	app.add_plugins(BaseTerrainGenerationPlugin::<Flat>::new(2.5));
+	app.add_plugins((
+		GenerationModePlugin::<TestMode>::initial(),
+		BaseTerrainGenerationPlugin::<TestMode, Flat>::new(2.5),
+	));
 	app.finish();
 
 	assert_eq!(app.world().get_resource::<FlatStore>().map(|store| store.fallback), Some(2.5));

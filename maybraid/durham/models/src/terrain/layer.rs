@@ -6,7 +6,7 @@ use bevy::prelude::*;
 use lod::gen::Id;
 use lod::lod_ref::LodRef;
 use terrain_layer_model::{
-	BaseTerrainGenerationPlugin, HeightField, OnTerrain, RequireLayer, TerrainCell,
+	BaseTerrainGenerationCore, HeightField, OnTerrain, RequireLayer, TerrainCell,
 	TerrainGeneration, TerrainModel,
 };
 use terrain_layer_presentation::TerrainPresenter;
@@ -122,7 +122,7 @@ impl TerrainModel for Durham {
 	}
 
 	fn require_generation(app: &App) {
-		app.require_layer::<BaseTerrainGenerationPlugin<Durham>, Durham>();
+		app.require_layer::<BaseTerrainGenerationCore<Durham>, Durham>();
 	}
 }
 
@@ -161,7 +161,7 @@ fn xz_overlap_area(a: Aabb3d, b: Aabb3d) -> f32 {
 	x * z
 }
 
-/// Seed and coverage for `BaseTerrainGenerationPlugin<Durham>`.
+/// Seed is shared across modes; coverage and radius are per mode.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct DurhamTerrainConfig {
 	pub seed: u32,
@@ -187,7 +187,7 @@ impl DurhamTerrainConfig {
 	}
 
 	/// Raw meshes at startup. A fine patch starts on; the playable world starts
-	/// off and Training toggles [`TerrainPresentEnabled`] at runtime.
+	/// off. The active mode's scheme toggles [`TerrainPresentEnabled`] later.
 	pub fn raw_present(self) -> bool {
 		matches!(self.coverage, TerrainCoverage::FinePatch)
 	}
@@ -195,13 +195,18 @@ impl DurhamTerrainConfig {
 
 impl TerrainGeneration for Durham {
 	type Config = DurhamTerrainConfig;
+	type SharedConfig = u32;
+
+	fn shared_config(config: &Self::Config) -> u32 {
+		config.seed
+	}
 
 	fn install_generation(app: &mut App, config: &DurhamTerrainConfig) {
 		install_durham_generation(app, config.seed, config.coverage, config.terrain_radius);
 	}
 }
 
-/// Raw Durham cells. Training toggles [`crate::TerrainPresentEnabled`].
+/// Raw Durham cells. [`crate::TerrainPresentEnabled`] gates the presenter.
 pub struct DurhamCells;
 
 impl TerrainPresenter<OnTerrain<Durham>> for DurhamCells {

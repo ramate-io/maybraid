@@ -26,7 +26,7 @@ pub use terrain::{
 	TerrainColliderSystems, TerrainConfig, TerrainCoverage, TerrainEntryStore, TerrainFar,
 	TerrainFarRegionPresenter, TerrainFillSystems, TerrainFrictionConfig, TerrainHeightSnapshot,
 	TerrainLayoutPinned, TerrainMeshBuilder, TerrainMeshLodBand, TerrainNear,
-	TerrainNearRegionPresenter, TerrainPresentEnabled, TerrainPresentPending,
+	TerrainNearRegionPresenter, TerrainPresentEnabled, TerrainPresentPending, TerrainRetarget,
 	TerrainPresentationAssets, TerrainPresentationDirty, TerrainPresenterState,
 	TerrainRegionPresenter, TerrainRenderItem, TerrainResourcesPlugin, TerrainSdf,
 	TerrainStoreView, TerrainStreamMarker, TerrainStreamPresenterState,

@@ -9,6 +9,7 @@
 //! [`crate::DurhamCells`], gated by [`TerrainPresentEnabled`] (off for
 //! the playable world, on for a fine patch).
 
+use bevy::ecs::system::SystemParam;
 use bevy::math::{IVec2, UVec2};
 use bevy::prelude::*;
 use durham_terrain::shaders::{DurhamTerrainShader, DurhamTerrainShaderPlugin, RefractionWater};
@@ -77,7 +78,7 @@ pub enum TerrainCoverage {
 #[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct TerrainLayoutPinned(pub bool);
 
-/// Durham fill. Session retargets run before [`Self::Generate`].
+/// Durham fill. Layout retargets run before [`Self::Generate`].
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum TerrainFillSystems {
 	Generate,
@@ -88,15 +89,14 @@ pub enum TerrainFillSystems {
 pub struct WorldBaseTerrain(pub BaseTerrainNoise);
 
 /// When true, fill should clear and rebuild (playground radius / seed commands).
-#[derive(Resource)]
+#[derive(Resource, Default)]
 pub struct TerrainPresentationDirty(pub bool);
 
 /// When false, Durham generate runs but raw present does not draw terrain or
 /// seed raw [`crate::terrain::Terrain::scene`] colliders.
 ///
-/// [`Default`] is on, matching a fine-patch host. The playable world inserts
-/// `false` after [`crate::DurhamCells`] is installed; Training toggles
-/// the flag.
+/// [`Default`] is on, matching a fine-patch host. The playable world starts
+/// off; the active mode's scheme writes the flag.
 #[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TerrainPresentEnabled(pub bool);
 
@@ -181,7 +181,7 @@ fn world_cell_layout() -> TerrainCellLayout {
 	layout
 }
 
-/// Playable Discovery rings (near / far / background).
+/// Playable-world rings (near / far / background).
 pub fn playable_world_cell_layout() -> TerrainCellLayout {
 	world_cell_layout()
 }
@@ -231,6 +231,46 @@ pub fn retarget_presentation_assets(
 	assets.macro_res_2 = macro_res_2;
 }
 
+/// Layout, coverage, pin, dirty, pending, and presentation assets for a retarget.
+///
+/// Assets are created on Startup; a first-frame enter can run before they exist.
+#[derive(SystemParam)]
+pub struct TerrainRetarget<'w> {
+	layout: ResMut<'w, TerrainCellLayout>,
+	coverage: ResMut<'w, TerrainCoverage>,
+	pinned: ResMut<'w, TerrainLayoutPinned>,
+	dirty: ResMut<'w, TerrainPresentationDirty>,
+	pending: ResMut<'w, TerrainPresentPending>,
+	assets: Option<ResMut<'w, TerrainPresentationAssets>>,
+}
+
+impl TerrainRetarget<'_> {
+	pub fn coverage(&self) -> TerrainCoverage {
+		*self.coverage
+	}
+
+	pub fn layout(&self) -> &TerrainCellLayout {
+		&self.layout
+	}
+
+	pub fn apply(
+		&mut self,
+		layout: TerrainCellLayout,
+		coverage: TerrainCoverage,
+		terrain_radius: i32,
+		pin: bool,
+	) {
+		*self.layout = layout;
+		*self.coverage = coverage;
+		self.pinned.0 = pin;
+		self.dirty.0 = true;
+		self.pending.0 = true;
+		if let Some(assets) = self.assets.as_mut() {
+			retarget_presentation_assets(assets, coverage, terrain_radius);
+		}
+	}
+}
+
 /// Generation half of the old Durham terrain plugin: models, shaders, mesh
 /// caches, layout, and [`generate_cells`].
 ///
@@ -270,7 +310,8 @@ pub(crate) fn install_durham_generation(
 	.insert_resource(coverage)
 	.insert_resource(layout)
 	.insert_resource(TerrainFillParams { coverage, terrain_radius })
-	.insert_resource(TerrainPresentationDirty(true))
+	.insert_resource(TerrainPresentEnabled(matches!(coverage, TerrainCoverage::FinePatch)))
+	.init_resource::<TerrainPresentationDirty>()
 	.init_resource::<TerrainPresentPending>()
 	.init_resource::<TerrainStreamingEnabled>()
 	.init_resource::<TerrainLayoutPinned>()

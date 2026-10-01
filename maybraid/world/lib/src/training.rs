@@ -2,9 +2,9 @@
 //! moving rings.
 //!
 //! While [`TrainingGround`](maybraid_game_mode_training_ground::TrainingGround) is
-//! active, Durham presents a four-cell window pinned on the [`TrainingRound`] site,
-//! hopscotch stays off, the forest shrinks to one grove tile, and a Training pose
-//! is not written.
+//! active, hopscotch stays off, the forest shrinks to one grove tile, and a
+//! Training pose is not written. Terrain layout lives on each mode's
+//! [`terrain_layer_model::BaseTerrainScheme`].
 //! [`crate::training_plaza`] stamps one seeded Richmond development onto that
 //! patch — pads first, then hosts — once the whole window exists.
 //!
@@ -28,18 +28,13 @@ use crozon_characters::species::{
 use crozon_characters::CharacterAppearance;
 use damage::{Downed, Health};
 use durham_terrain_models::{
-	TerrainCellLayout, TerrainColliderSystems, TerrainCoverage, TerrainFillSystems,
-	TerrainLayoutPinned, TerrainPresentEnabled, TerrainPresentPending, TerrainPresentationAssets,
-	TerrainPresentationDirty, 	TerrainPresenterState, WORLD_FINE_HALF_EXTENT_CELLS,
-	playable_world_cell_layout, retarget_presentation_assets,
+	TerrainColliderSystems, TerrainPresentEnabled, TerrainPresenterState,
 };
 use maybraid_game_mode_discover::Discovery;
-use maybraid_game_mode_training_ground::{
-	TrainingGround, TrainingMap, TrainingRound, TRAINING_FINE_HALF_EXTENT_CELLS,
-};
+use maybraid_game_mode_training_ground::{TrainingGround, TrainingRound};
 use mob_intelligence::MemberOf;
 use mob_layer_model::MobStreamSuspended;
-use terrain_layer_model::{in_generation_mode, ActiveGenerationMode};
+use terrain_layer_model::ActiveGenerationMode;
 use urbanization_layer_model::UrbanizationStreamingEnabled;
 use vegetation_layer_model::VegetationLayerConfig;
 
@@ -58,14 +53,13 @@ pub(crate) struct TrainingGroundPlugin;
 impl Plugin for TrainingGroundPlugin {
 	fn build(&self, app: &mut App) {
 		app.init_resource::<TrainingRound>()
-			.init_resource::<AppliedTrainingMap>()
 			.init_resource::<TrainingEnemyMarkersEnabled>()
 			.add_message::<TrainingLifeEnded>();
 		register_generation_mode_transitions(app);
 		app.add_systems(
 			Update,
 			(
-				park_on_training_site.after(retarget_training_map),
+				park_on_training_site,
 				clear_training_terrain_present,
 				mount_training_plaza.in_set(WorldSurfaceSet).after(update_world_surface_ready),
 				(supersede_training_raw_terrain, promote_training_plaza)
@@ -83,20 +77,10 @@ impl Plugin for TrainingGroundPlugin {
 	}
 }
 
-/// The map whose fill is currently applied. `None` is Discovery's rings.
-#[derive(Resource, Default)]
-struct AppliedTrainingMap(Option<TrainingMap>);
-
 /// Mode transitions. Plaza systems stay on the plugin so a headless transition
 /// test can register this without the rest of the stack.
 fn register_generation_mode_transitions(app: &mut App) {
 	app.add_systems(
-		Update,
-		retarget_training_map
-			.run_if(in_generation_mode::<TrainingGround>())
-			.before(TerrainFillSystems::Generate),
-	)
-	.add_systems(
 		OnEnter(ActiveGenerationMode::of::<TrainingGround>()),
 		(enter_training, open_training_score),
 	)
@@ -133,37 +117,22 @@ pub fn training_trainee(round: TrainingRound) -> WorldPlayerLoadout {
 	WorldPlayerLoadout::new(key, appearance, inventory).with_name("Trainee")
 }
 
-/// What the world fill should be for a Training / Discovery session.
+/// Urbanization and forest stream for a Training / Discovery session.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TrainingFill {
-	pub layout: TerrainCellLayout,
-	pub coverage: TerrainCoverage,
-	pub terrain_radius: i32,
-	pub present: bool,
-	pub pin_layout: bool,
 	pub urbanization: bool,
 	pub forest_stream_radius: u32,
 }
 
 impl TrainingFill {
-	/// Training's patch for `round`, or Discovery's playable rings for `None`.
+	/// Training's grove for `round`, or Discovery's playable stream for `None`.
 	pub fn for_session(round: Option<TrainingRound>) -> Self {
 		match round {
-			Some(round) => Self {
-				layout: round.layout(),
-				coverage: TerrainCoverage::FinePatch,
-				terrain_radius: TRAINING_FINE_HALF_EXTENT_CELLS,
-				present: true,
-				pin_layout: true,
+			Some(_) => Self {
 				urbanization: false,
 				forest_stream_radius: 0,
 			},
 			None => Self {
-				layout: playable_world_cell_layout(),
-				coverage: TerrainCoverage::PlayableWorld,
-				terrain_radius: WORLD_FINE_HALF_EXTENT_CELLS,
-				present: false,
-				pin_layout: false,
 				urbanization: true,
 				forest_stream_radius: WORLD_FOREST_STREAM_RADIUS,
 			},
@@ -171,126 +140,33 @@ impl TrainingFill {
 	}
 }
 
-/// Entering Training pins the round's patch and suspends the mob stream.
-///
-/// `OnEnter` runs in `StateTransition`, before [`TerrainFillSystems::Generate`].
-/// Startup stays in Discovery, so this does not retarget the first frame.
+/// Entering Training suspends the mob stream and shrinks urbanization / forest.
 fn enter_training(
 	round: Res<TrainingRound>,
-	mut applied: ResMut<AppliedTrainingMap>,
 	mut suspended: ResMut<MobStreamSuspended>,
-	mut layout: ResMut<TerrainCellLayout>,
-	mut coverage: ResMut<TerrainCoverage>,
-	mut present: ResMut<TerrainPresentEnabled>,
-	mut pinned: ResMut<TerrainLayoutPinned>,
-	mut dirty: ResMut<TerrainPresentationDirty>,
-	mut pending: ResMut<TerrainPresentPending>,
-	mut assets: ResMut<TerrainPresentationAssets>,
 	mut vegetation: Option<ResMut<VegetationLayerConfig>>,
 	mut urban: Option<ResMut<UrbanizationStreamingEnabled>>,
 ) {
-	applied.0 = Some(round.map());
 	suspended.0 = true;
-	write_session_fill(
-		Some(*round),
-		&mut layout,
-		&mut coverage,
-		&mut present,
-		&mut pinned,
-		&mut dirty,
-		&mut pending,
-		&mut assets,
-		vegetation.as_deref_mut(),
-		urban.as_deref_mut(),
-	);
+	write_session_fill(Some(*round), vegetation.as_deref_mut(), urban.as_deref_mut());
 }
 
-/// Discovery's rings, after Training. `OnTransition` does not run for the
-/// initial enter of Discovery, so startup leaves Durham's own dirty flag alone.
+/// Discovery's urbanization and forest, after Training.
 fn return_to_discovery(
-	mut applied: ResMut<AppliedTrainingMap>,
 	mut suspended: ResMut<MobStreamSuspended>,
-	mut layout: ResMut<TerrainCellLayout>,
-	mut coverage: ResMut<TerrainCoverage>,
-	mut present: ResMut<TerrainPresentEnabled>,
-	mut pinned: ResMut<TerrainLayoutPinned>,
-	mut dirty: ResMut<TerrainPresentationDirty>,
-	mut pending: ResMut<TerrainPresentPending>,
-	mut assets: ResMut<TerrainPresentationAssets>,
 	mut vegetation: Option<ResMut<VegetationLayerConfig>>,
 	mut urban: Option<ResMut<UrbanizationStreamingEnabled>>,
 ) {
-	applied.0 = None;
 	suspended.0 = false;
-	write_session_fill(
-		None,
-		&mut layout,
-		&mut coverage,
-		&mut present,
-		&mut pinned,
-		&mut dirty,
-		&mut pending,
-		&mut assets,
-		vegetation.as_deref_mut(),
-		urban.as_deref_mut(),
-	);
-}
-
-/// A new [`TrainingRound`] map while Training stays active. A new life keeps
-/// the map, so the patch does not move. `NextState::set` of the current mode
-/// would exit and enter Training; the shell uses `set_if_neq` instead, and this
-/// path moves the patch without that exit.
-fn retarget_training_map(
-	round: Res<TrainingRound>,
-	mut applied: ResMut<AppliedTrainingMap>,
-	mut layout: ResMut<TerrainCellLayout>,
-	mut coverage: ResMut<TerrainCoverage>,
-	mut present: ResMut<TerrainPresentEnabled>,
-	mut pinned: ResMut<TerrainLayoutPinned>,
-	mut dirty: ResMut<TerrainPresentationDirty>,
-	mut pending: ResMut<TerrainPresentPending>,
-	mut assets: ResMut<TerrainPresentationAssets>,
-	mut vegetation: Option<ResMut<VegetationLayerConfig>>,
-	mut urban: Option<ResMut<UrbanizationStreamingEnabled>>,
-) {
-	if applied.0 == Some(round.map()) {
-		return;
-	}
-	applied.0 = Some(round.map());
-	write_session_fill(
-		Some(*round),
-		&mut layout,
-		&mut coverage,
-		&mut present,
-		&mut pinned,
-		&mut dirty,
-		&mut pending,
-		&mut assets,
-		vegetation.as_deref_mut(),
-		urban.as_deref_mut(),
-	);
+	write_session_fill(None, vegetation.as_deref_mut(), urban.as_deref_mut());
 }
 
 fn write_session_fill(
 	round: Option<TrainingRound>,
-	layout: &mut TerrainCellLayout,
-	coverage: &mut TerrainCoverage,
-	present: &mut TerrainPresentEnabled,
-	pinned: &mut TerrainLayoutPinned,
-	dirty: &mut TerrainPresentationDirty,
-	pending: &mut TerrainPresentPending,
-	assets: &mut TerrainPresentationAssets,
 	vegetation: Option<&mut VegetationLayerConfig>,
 	urban: Option<&mut UrbanizationStreamingEnabled>,
 ) {
 	let fill = TrainingFill::for_session(round);
-	*layout = fill.layout.clone();
-	*coverage = fill.coverage;
-	present.0 = fill.present;
-	pinned.0 = fill.pin_layout;
-	dirty.0 = true;
-	pending.0 = true;
-	retarget_presentation_assets(assets, fill.coverage, fill.terrain_radius);
 	if let Some(urban) = urban {
 		urban.0 = fill.urbanization;
 	}
@@ -357,40 +233,27 @@ mod tests {
 	use bevy::ecs::system::RunSystemOnce;
 	use bevy::state::app::StatesPlugin;
 	use durham_terrain_models::{
-		fine_patch_cell_layout, BaseTerrainNoise, TerrainConfig, WorldBaseTerrain,
+		fine_patch_cell_layout, playable_world_cell_layout, BaseTerrainNoise,
+		DurhamTerrainConfig, TerrainCellLayout, TerrainConfig, TerrainCoverage,
+		TerrainLayoutPinned, TerrainPresentPending, TerrainPresentationAssets,
+		TerrainPresentationDirty, WorldBaseTerrain, WORLD_FINE_HALF_EXTENT_CELLS,
 	};
+	use maybraid_game_mode_training_ground::TRAINING_FINE_HALF_EXTENT_CELLS;
 	use richmond_development_models::DevelopmentEntryStore;
 	use urbanization_layer_model::UrbanizationStreamingEnabled;
 	use vegetation_layer_model::VegetationLayerConfig;
 
 	use crate::PlayerSpawnXz;
 	use crate::training_plaza::TrainingPlazaMounted;
-	use terrain_layer_model::GenerationModePlugin;
+	use terrain_layer_model::{BaseTerrainScheme, GenerationModePlugin};
 	use super::*;
 
 	fn training_world(round: TrainingRound) -> World {
 		let mut world = World::new();
 		world.insert_resource(round);
-		world.init_resource::<AppliedTrainingMap>();
 		world.insert_resource(MobStreamSuspended(false));
 		world.insert_resource(VegetationLayerConfig::world_defaults());
 		world.insert_resource(UrbanizationStreamingEnabled(true));
-		world.insert_resource(playable_world_cell_layout());
-		world.insert_resource(TerrainCoverage::PlayableWorld);
-		world.insert_resource(TerrainPresentEnabled(false));
-		world.insert_resource(TerrainLayoutPinned(false));
-		world.insert_resource(TerrainPresentationDirty(false));
-		world.insert_resource(TerrainPresentPending(false));
-		world.insert_resource(TerrainPresentationAssets {
-			config: TerrainConfig::new(42),
-			material: Handle::default(),
-			lod_bands: Vec::new(),
-			outer_add_walls: true,
-			fine_grid_max_radius: Some(WORLD_FINE_HALF_EXTENT_CELLS),
-			macro_seam_half_extents: Vec::new(),
-			macro_cell_min_size: None,
-			macro_res_2: None,
-		});
 		world
 	}
 
@@ -399,66 +262,27 @@ mod tests {
 	}
 
 	#[test]
-	fn entering_training_pins_the_round_site() -> anyhow::Result<()> {
+	fn entering_training_shrinks_urbanization_and_forest() -> anyhow::Result<()> {
 		let round = TrainingRound::new(7);
 		let mut world = training_world(round);
 		world.run_system_once(enter_training).map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		assert_eq!(*world.resource::<TerrainCellLayout>(), round.layout());
-		assert_eq!(*world.resource::<TerrainCoverage>(), TerrainCoverage::FinePatch);
-		assert!(world.resource::<TerrainPresentEnabled>().0);
-		assert!(world.resource::<TerrainLayoutPinned>().0);
-		assert!(world.resource::<TerrainPresentationDirty>().0);
-		assert!(world.resource::<TerrainPresentPending>().0);
-		assert!(world.resource::<MobStreamSuspended>().0);
-		assert!(!world.resource::<UrbanizationStreamingEnabled>().0);
-		assert_eq!(forest_radius(&world), Some(0));
+		anyhow::ensure!(world.resource::<MobStreamSuspended>().0);
+		anyhow::ensure!(!world.resource::<UrbanizationStreamingEnabled>().0);
+		anyhow::ensure!(forest_radius(&world) == Some(0));
 		Ok(())
 	}
 
 	#[test]
-	fn returning_to_discovery_restores_the_playable_rings() -> anyhow::Result<()> {
+	fn returning_to_discovery_restores_urbanization_and_forest() -> anyhow::Result<()> {
 		let round = TrainingRound::new(7);
 		let mut world = training_world(round);
 		world.run_system_once(enter_training).map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		world.resource_mut::<TerrainPresentationDirty>().0 = false;
 		world
 			.run_system_once(return_to_discovery)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		assert_eq!(*world.resource::<TerrainCellLayout>(), playable_world_cell_layout());
-		assert_eq!(*world.resource::<TerrainCoverage>(), TerrainCoverage::PlayableWorld);
-		assert!(!world.resource::<TerrainPresentEnabled>().0);
-		assert!(!world.resource::<TerrainLayoutPinned>().0);
-		assert!(world.resource::<TerrainPresentationDirty>().0);
-		assert!(!world.resource::<MobStreamSuspended>().0);
-		assert!(world.resource::<UrbanizationStreamingEnabled>().0);
-		assert_eq!(forest_radius(&world), Some(WORLD_FOREST_STREAM_RADIUS));
-		Ok(())
-	}
-
-	#[test]
-	fn a_new_round_moves_the_patch() -> anyhow::Result<()> {
-		let round = TrainingRound::new(7);
-		let mut world = training_world(round);
-		world.run_system_once(enter_training).map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		world.resource_mut::<TerrainPresentationDirty>().0 = false;
-		world
-			.run_system_once(retarget_training_map)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		assert!(!world.resource::<TerrainPresentationDirty>().0, "same round stays put");
-
-		world.insert_resource(round.next_life());
-		world
-			.run_system_once(retarget_training_map)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		assert!(!world.resource::<TerrainPresentationDirty>().0, "a new life keeps the map");
-		assert_eq!(*world.resource::<TerrainCellLayout>(), round.layout());
-
-		world.insert_resource(round.next());
-		world
-			.run_system_once(retarget_training_map)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		assert_eq!(*world.resource::<TerrainCellLayout>(), round.next().layout());
-		assert!(world.resource::<TerrainPresentationDirty>().0);
+		anyhow::ensure!(!world.resource::<MobStreamSuspended>().0);
+		anyhow::ensure!(world.resource::<UrbanizationStreamingEnabled>().0);
+		anyhow::ensure!(forest_radius(&world) == Some(WORLD_FOREST_STREAM_RADIUS));
 		Ok(())
 	}
 
@@ -530,9 +354,14 @@ mod tests {
 			GenerationModePlugin::<Discovery>::initial(),
 			GenerationModePlugin::<TrainingGround>::default(),
 		));
+		// Durham `install_generation` needs a render world (`Messages`).
+		Discovery::install(&mut app, &DurhamTerrainConfig::playable_world());
+		TrainingGround::install(
+			&mut app,
+			&DurhamTerrainConfig::fine_patch(TRAINING_FINE_HALF_EXTENT_CELLS),
+		);
 		app.init_state::<ShellFlow>();
 		app.insert_resource(round);
-		app.init_resource::<AppliedTrainingMap>();
 		app.insert_resource(MobStreamSuspended(false));
 		app.insert_resource(VegetationLayerConfig::world_defaults());
 		app.insert_resource(UrbanizationStreamingEnabled(true));
@@ -674,20 +503,8 @@ mod tests {
 	}
 
 	#[test]
-	fn training_fill_is_a_pinned_raw_fine_patch() {
-		let round = TrainingRound::new(3);
-		let fill = TrainingFill::for_session(Some(round));
-		let layout = &fill.layout;
-		let site = round.site();
-		let center = layout.region_center_xz();
-		let cell = layout.cell_size;
-		assert!((center.x - site.x as f32 * cell).abs() < 1e-3);
-		assert!((center.z - site.y as f32 * cell).abs() < 1e-3);
-		let side = (2 * TRAINING_FINE_HALF_EXTENT_CELLS) as u32;
-		assert_eq!(layout.extents, UVec2::new(side, side));
-		assert_eq!(fill.coverage, TerrainCoverage::FinePatch);
-		assert!(fill.present);
-		assert!(fill.pin_layout);
+	fn training_fill_shrinks_urbanization_and_forest() {
+		let fill = TrainingFill::for_session(Some(TrainingRound::new(3)));
 		assert!(!fill.urbanization);
 		assert_eq!(fill.forest_stream_radius, 0);
 	}
@@ -701,12 +518,8 @@ mod tests {
 	}
 
 	#[test]
-	fn discovery_fill_restores_the_playable_rings() {
+	fn discovery_fill_restores_urbanization_and_forest() {
 		let fill = TrainingFill::for_session(None);
-		assert_eq!(fill.layout, playable_world_cell_layout());
-		assert_eq!(fill.coverage, TerrainCoverage::PlayableWorld);
-		assert!(!fill.present);
-		assert!(!fill.pin_layout);
 		assert!(fill.urbanization);
 		assert_eq!(fill.forest_stream_radius, WORLD_FOREST_STREAM_RADIUS);
 	}

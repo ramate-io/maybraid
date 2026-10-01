@@ -5,7 +5,17 @@ use durham_terrain_models::{Durham, DurhamCells, DurhamTerrainConfig};
 use richmond_developments_on_terrain_playground::{
 	DevelopmentsOnTerrainPlugin, PendingStartupCommand, PlaygroundCommand, PlaygroundConfig,
 };
-use terrain_layer_model::{BaseTerrainGenerationPlugin, OnTerrain};
+use terrain_layer_model::{
+	BaseTerrainGenerationPlugin, BaseTerrainScheme, GenerationMode, GenerationModePlugin, OnTerrain,
+};
+
+struct PlaygroundMode;
+
+impl GenerationMode for PlaygroundMode {}
+
+impl BaseTerrainScheme<Durham> for PlaygroundMode {
+	fn install(_app: &mut App, _config: &DurhamTerrainConfig) {}
+}
 use terrain_layer_presentation::TerrainPresentationPlugin;
 use urbanization_layer_model::{
 	Urbanization, UrbanizationGenerationPlugin, UrbanizationLayerConfig, UrbanizationStreamSpec,
@@ -43,9 +53,10 @@ fn main() {
 				.set(AssetPlugin { file_path: assets_path.to_string_lossy().into(), ..default() }),
 		)
 		.insert_resource(PendingStartupCommand(startup.command))
-		.add_plugins(BaseTerrainGenerationPlugin::<Durham>::new(DurhamTerrainConfig::fine_patch(
-			playground.terrain_radius,
-		)))
+		.add_plugins(GenerationModePlugin::<PlaygroundMode>::initial())
+		.add_plugins(BaseTerrainGenerationPlugin::<PlaygroundMode, Durham>::new(
+			DurhamTerrainConfig::fine_patch(playground.terrain_radius),
+		))
 		.add_plugins(TerrainPresentationPlugin::<OnTerrain<Durham>, DurhamCells>::default())
 		.add_plugins(UrbanizationGenerationPlugin::<OnTerrain<Durham>>::new(urban))
 		.add_plugins(

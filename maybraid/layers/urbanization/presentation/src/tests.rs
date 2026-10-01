@@ -10,7 +10,9 @@ use durham_terrain_models::{
 };
 use lod::gen::Id;
 use richmond_development_models::PresentedPaddedTerrainScene;
-use terrain_layer_model::{BaseTerrainGenerationPlugin, OnTerrain};
+use terrain_layer_model::{
+	BaseTerrainGenerationPlugin, BaseTerrainScheme, GenerationMode, GenerationModePlugin, OnTerrain,
+};
 use terrain_layer_presentation::TerrainPresentationPlugin;
 use urbanization_layer_model::{
 	Urbanization, UrbanizationGenerationPlugin, UrbanizationLayerConfig,
@@ -79,6 +81,14 @@ fn padded_viewer_quant_is_stable_inside_cell() -> anyhow::Result<()> {
 	Ok(())
 }
 
+struct TestMode;
+
+impl GenerationMode for TestMode {}
+
+impl BaseTerrainScheme<Durham> for TestMode {
+	fn install(_app: &mut App, _config: &DurhamTerrainConfig) {}
+}
+
 #[test]
 fn urbanization_layers_finish_with_base_generation() {
 	// Adding Durham / Richmond plugins to a bare `App` needs a render world
@@ -86,7 +96,8 @@ fn urbanization_layers_finish_with_base_generation() {
 	// that app. `finish` without those plugins is the should-panic sibling;
 	// this locks the stack types the assemblers add.
 	let _stack = (
-		BaseTerrainGenerationPlugin::<Durham>::new(DurhamTerrainConfig::fine_patch(2)),
+		GenerationModePlugin::<TestMode>::initial(),
+		BaseTerrainGenerationPlugin::<TestMode, Durham>::new(DurhamTerrainConfig::fine_patch(2)),
 		UrbanizationGenerationPlugin::<OnTerrain<Durham>>::new(UrbanizationLayerConfig::default()),
 		TerrainPresentationPlugin::<Urbanization<OnTerrain<Durham>>, PaddedCells>::default(),
 		UrbanizationPresentationPlugin::<Urbanization<OnTerrain<Durham>>>::default(),
@@ -94,7 +105,7 @@ fn urbanization_layers_finish_with_base_generation() {
 }
 
 #[test]
-#[should_panic(expected = "requires terrain_layer_model::generation::BaseTerrainGenerationPlugin")]
+#[should_panic(expected = "requires terrain_layer_model::generation::BaseTerrainGenerationCore")]
 fn urbanization_layers_without_base_generation_name_the_missing_plugin() {
 	// `build` installs Richmond / furniture plugins that need a full Bevy app.
 	// `finish` is the requirement check the assemblers actually run.

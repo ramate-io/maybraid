@@ -17,7 +17,9 @@ mod on_terrain;
 mod require;
 mod view;
 
-pub use generation::{BaseTerrainGenerationPlugin, TerrainGeneration};
+pub use generation::{
+	BaseTerrainGenerationCore, BaseTerrainGenerationPlugin, BaseTerrainScheme, TerrainGeneration,
+};
 pub use generation_mode::{
 	in_generation_mode, ActiveGenerationMode, GenerationMode, GenerationModePlugin,
 	GenerationModeSystems,

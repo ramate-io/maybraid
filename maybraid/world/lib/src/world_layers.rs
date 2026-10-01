@@ -2,9 +2,9 @@
 //! generated and then presented.
 
 use bevy::prelude::*;
-use durham_terrain_models::{Durham, DurhamCells, DurhamTerrainConfig, TerrainPresentEnabled};
+use durham_terrain_models::{Durham, DurhamCells, DurhamTerrainConfig};
 use maybraid_game_mode_discover::Discovery;
-use maybraid_game_mode_training_ground::TrainingGround;
+use maybraid_game_mode_training_ground::{TrainingGround, TRAINING_FINE_HALF_EXTENT_CELLS};
 use mob_layer_model::{MobGenerationPlugin, MobLayerConfig};
 use mob_layer_presentation::MobPresentationPlugin;
 use terrain_layer_model::{BaseTerrainGenerationPlugin, GenerationModePlugin, OnTerrain};
@@ -28,9 +28,12 @@ impl Plugin for WorldLayersPlugin {
 		app.add_plugins((
 			GenerationModePlugin::<Discovery>::initial(),
 			GenerationModePlugin::<TrainingGround>::default(),
-		))
-		.add_plugins((
-			BaseTerrainGenerationPlugin::<Durham>::new(DurhamTerrainConfig::playable_world()),
+			BaseTerrainGenerationPlugin::<Discovery, Durham>::new(
+				DurhamTerrainConfig::playable_world(),
+			),
+			BaseTerrainGenerationPlugin::<TrainingGround, Durham>::new(
+				DurhamTerrainConfig::fine_patch(TRAINING_FINE_HALF_EXTENT_CELLS),
+			),
 			// Training only: raw Durham, gated off in the open world.
 			TerrainPresentationPlugin::<OnTerrain<Durham>, DurhamCells>::default(),
 			UrbanizationGenerationPlugin::<OnTerrain<Durham>>::new(
@@ -44,7 +47,6 @@ impl Plugin for WorldLayersPlugin {
 				MobLayerConfig::world_defaults(),
 			),
 			MobPresentationPlugin::<Urbanization<OnTerrain<Durham>>>::default(),
-		))
-		.insert_resource(TerrainPresentEnabled(false));
+		));
 	}
 }

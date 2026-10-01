@@ -2,7 +2,7 @@
 //!
 //! The runnable playground binary is retired; see `maybraid/PLAYGROUNDS.md`.
 //! Character / camera stay on [`VegetationHostPlugin`]. Mesh stats stay on
-//! [`MeshStatsPlugin`]. Terrain fill is `BaseTerrainGenerationPlugin<Durham>`.
+//! [`MeshStatsPlugin`]. Terrain fill is `BaseTerrainGenerationPlugin<Mode, Durham>`.
 
 pub mod camera;
 pub mod character;

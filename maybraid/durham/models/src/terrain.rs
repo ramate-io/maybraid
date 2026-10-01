@@ -63,7 +63,7 @@ pub use host::{
 	fine_patch_cell_layout, playable_world_cell_layout, retarget_presentation_assets,
 	terrain_streaming_enabled, Durham, TerrainCoverage,
 	TerrainFillSystems, TerrainLayoutPinned, TerrainPresentEnabled, TerrainPresentPending,
-	TerrainPresentationDirty, TerrainStreamingEnabled, WorldBaseTerrain,
+	TerrainPresentationDirty, TerrainRetarget, TerrainStreamingEnabled, WorldBaseTerrain,
 	WORLD_FINE_HALF_EXTENT_CELLS, WORLD_OUTER_2X_ROWS, WORLD_OUTER_4X_ROWS,
 };
 pub use index::{

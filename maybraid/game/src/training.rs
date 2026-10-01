@@ -62,7 +62,7 @@ pub(crate) fn begin_training_round(spawn: Option<ResMut<TrainingSpawn>>) {
 }
 
 /// The round's trainee when this Training round plays a random character.
-pub(crate) fn training_trainee(
+pub(crate) fn session_trainee(
 	session: PlaySession,
 	spawn: Option<&TrainingSpawn>,
 	round: Option<&TrainingRound>,
@@ -197,12 +197,12 @@ mod tests {
 		let random = TrainingSpawn::new(TrainingCharacterChoice::Random);
 		let active = TrainingSpawn::new(TrainingCharacterChoice::Active);
 		assert_eq!(
-			training_trainee(PlaySession::Training, Some(&random), Some(&round)),
+			session_trainee(PlaySession::Training, Some(&random), Some(&round)),
 			Some(maybraid_world::training_trainee(round))
 		);
-		assert_eq!(training_trainee(PlaySession::Training, Some(&active), Some(&round)), None);
-		assert_eq!(training_trainee(PlaySession::Discovery, Some(&random), Some(&round)), None);
-		assert_eq!(training_trainee(PlaySession::Training, None, Some(&round)), None);
+		assert_eq!(session_trainee(PlaySession::Training, Some(&active), Some(&round)), None);
+		assert_eq!(session_trainee(PlaySession::Discovery, Some(&random), Some(&round)), None);
+		assert_eq!(session_trainee(PlaySession::Training, None, Some(&round)), None);
 	}
 
 	#[test]

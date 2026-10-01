@@ -4,11 +4,23 @@ use bevy::math::bounding::Aabb3d;
 use bevy::math::{Vec2, Vec3};
 use bevy::prelude::World;
 use durham_terrain_models::{
-	BaseTerrainNoise, Durham, TerrainCellLayout, TerrainConfig, TerrainEntryStore, WorldBaseTerrain,
+	BaseTerrainNoise, Durham, DurhamTerrainConfig, TerrainCellLayout, TerrainConfig,
+	TerrainEntryStore, WorldBaseTerrain,
 };
 use richmond_development_models::DevelopmentEntryStore;
 use richmond_urbanization::UrbanizationIndex;
-use terrain_layer_model::{HeightField, OnTerrain, TerrainModel, TerrainView};
+use terrain_layer_model::{
+	BaseTerrainGenerationPlugin, BaseTerrainScheme, GenerationMode, GenerationModePlugin,
+	HeightField, OnTerrain, TerrainModel, TerrainView,
+};
+
+struct TestMode;
+
+impl GenerationMode for TestMode {}
+
+impl BaseTerrainScheme<Durham> for TestMode {
+	fn install(_app: &mut App, _config: &DurhamTerrainConfig) {}
+}
 
 use crate::Urbanization;
 
@@ -40,7 +52,7 @@ fn without_pads_urbanization_reads_the_inner_surface() -> anyhow::Result<()> {
 }
 
 #[test]
-#[should_panic(expected = "requires terrain_layer_model::generation::BaseTerrainGenerationPlugin")]
+#[should_panic(expected = "requires terrain_layer_model::generation::BaseTerrainGenerationCore")]
 fn requirements_recurse_to_the_base_terrain() {
 	UrbanizedDurham::require_generation(&App::new());
 }
@@ -112,7 +124,7 @@ fn world_defaults_enable_urbanization_stream_at_budget_16() {
 }
 
 #[test]
-#[should_panic(expected = "requires terrain_layer_model::generation::BaseTerrainGenerationPlugin")]
+#[should_panic(expected = "requires terrain_layer_model::generation::BaseTerrainGenerationCore")]
 fn urbanization_generation_without_base_names_the_missing_plugin() {
 	use crate::UrbanizationGenerationPlugin;
 	use durham_terrain_models::Durham;
@@ -121,6 +133,14 @@ fn urbanization_generation_without_base_names_the_missing_plugin() {
 	// `build` installs Richmond plugins that need a full Bevy app. `finish`
 	// is the requirement check the assemblers actually run.
 	UrbanizationGenerationPlugin::<OnTerrain<Durham>>::default().finish(&mut App::new());
+}
+
+#[test]
+fn urbanization_stack_names_the_local_mode() {
+	let _stack = (
+		GenerationModePlugin::<TestMode>::initial(),
+		BaseTerrainGenerationPlugin::<TestMode, Durham>::new(DurhamTerrainConfig::fine_patch(2)),
+	);
 }
 
 struct FlatHeight(f32);

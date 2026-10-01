@@ -17,9 +17,9 @@ use crate::shell::{
 };
 use bevy::prelude::*;
 use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
+use maybraid_game_mode_training_ground::TrainingRound;
 use maybraid_input::MenuNavPad;
 use maybraid_menu_controller::MenuControllerPlugin;
-use maybraid_game_mode_training_ground::TrainingRound;
 use maybraid_world::{
 	resume_discovery_from_saved_waypoints, InventoryEditCameraFollow, PlayerPhysicsEnabled,
 	PlayerSpawnXz, ShadowQuality, TerrainStreamingEnabled, TrainingEnemyMarkersEnabled,
@@ -190,7 +190,7 @@ fn load_active_player_loadout(
 ) {
 	commands.remove_resource::<WorldPlayerLoadout>();
 	if let Some(trainee) =
-		crate::training::training_trainee(*session, spawn.as_deref(), round.as_deref())
+		crate::training::session_trainee(*session, spawn.as_deref(), round.as_deref())
 	{
 		commands.insert_resource(trainee);
 		return;

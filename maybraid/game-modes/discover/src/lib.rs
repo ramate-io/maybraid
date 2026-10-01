@@ -3,7 +3,12 @@
 //! The game shell still owns cameras, loading, and pause. This crate is the
 //! session those systems ask when the home row enters Discovery.
 
-use terrain_layer_model::GenerationMode;
+use bevy::prelude::*;
+use durham_terrain_models::{
+	Durham, DurhamTerrainConfig, TerrainCoverage, TerrainPresentEnabled, TerrainRetarget,
+	WORLD_FINE_HALF_EXTENT_CELLS, playable_world_cell_layout,
+};
+use terrain_layer_model::{ActiveGenerationMode, BaseTerrainScheme, GenerationMode};
 
 pub const LABEL: &str = "Discovery";
 
@@ -17,14 +22,99 @@ pub struct Discovery;
 
 impl GenerationMode for Discovery {}
 
+impl BaseTerrainScheme<Durham> for Discovery {
+	fn install(app: &mut App, _config: &DurhamTerrainConfig) {
+		app.add_systems(
+			OnEnter(ActiveGenerationMode::of::<Discovery>()),
+			restore_playable_world,
+		);
+	}
+}
+
+fn restore_playable_world(mut terrain: TerrainRetarget, mut present: ResMut<TerrainPresentEnabled>) {
+	if terrain.coverage() == TerrainCoverage::PlayableWorld {
+		return;
+	}
+	terrain.apply(
+		playable_world_cell_layout(),
+		TerrainCoverage::PlayableWorld,
+		WORLD_FINE_HALF_EXTENT_CELLS,
+		false,
+	);
+	present.0 = false;
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use bevy::ecs::system::RunSystemOnce;
+	use durham_terrain_models::{
+		TerrainCellLayout, TerrainConfig, TerrainLayoutPinned, TerrainPresentPending,
+		TerrainPresentationAssets, TerrainPresentationDirty,
+	};
+
+	fn playable_assets() -> TerrainPresentationAssets {
+		TerrainPresentationAssets {
+			config: TerrainConfig::new(42),
+			material: Handle::default(),
+			lod_bands: Vec::new(),
+			outer_add_walls: true,
+			fine_grid_max_radius: Some(WORLD_FINE_HALF_EXTENT_CELLS),
+			macro_seam_half_extents: Vec::new(),
+			macro_cell_min_size: None,
+			macro_res_2: None,
+		}
+	}
+
+	fn world_with(coverage: TerrainCoverage, layout: TerrainCellLayout) -> World {
+		let mut world = World::new();
+		world.insert_resource(layout);
+		world.insert_resource(coverage);
+		world.insert_resource(TerrainPresentEnabled(coverage == TerrainCoverage::FinePatch));
+		world.insert_resource(TerrainLayoutPinned(coverage == TerrainCoverage::FinePatch));
+		world.insert_resource(TerrainPresentationDirty(false));
+		world.insert_resource(TerrainPresentPending(false));
+		world.insert_resource(playable_assets());
+		world
+	}
 
 	#[test]
-	fn discovery_streams_only_inside_the_world_shell() {
-		assert!(streams_terrain(true, true));
-		assert!(!streams_terrain(true, false));
-		assert!(!streams_terrain(false, true));
+	fn already_playable_coverage_is_a_noop() -> anyhow::Result<()> {
+		let mut world = world_with(TerrainCoverage::PlayableWorld, playable_world_cell_layout());
+		world
+			.run_system_once(restore_playable_world)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		anyhow::ensure!(!world.resource::<TerrainPresentationDirty>().0);
+		anyhow::ensure!(!world.resource::<TerrainPresentPending>().0);
+		anyhow::ensure!(!world.resource::<TerrainLayoutPinned>().0);
+		anyhow::ensure!(!world.resource::<TerrainPresentEnabled>().0);
+		anyhow::ensure!(*world.resource::<TerrainCellLayout>() == playable_world_cell_layout());
+		Ok(())
+	}
+
+	#[test]
+	fn leaving_a_fine_patch_restores_the_playable_rings() -> anyhow::Result<()> {
+		let mut world = world_with(
+			TerrainCoverage::FinePatch,
+			durham_terrain_models::fine_patch_cell_layout(2, IVec2::ZERO),
+		);
+		world
+			.run_system_once(restore_playable_world)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		anyhow::ensure!(*world.resource::<TerrainCellLayout>() == playable_world_cell_layout());
+		anyhow::ensure!(*world.resource::<TerrainCoverage>() == TerrainCoverage::PlayableWorld);
+		anyhow::ensure!(!world.resource::<TerrainPresentEnabled>().0);
+		anyhow::ensure!(!world.resource::<TerrainLayoutPinned>().0);
+		anyhow::ensure!(world.resource::<TerrainPresentationDirty>().0);
+		anyhow::ensure!(world.resource::<TerrainPresentPending>().0);
+		Ok(())
+	}
+
+	#[test]
+	fn discovery_streams_only_inside_the_world_shell() -> anyhow::Result<()> {
+		anyhow::ensure!(streams_terrain(true, true));
+		anyhow::ensure!(!streams_terrain(true, false));
+		anyhow::ensure!(!streams_terrain(false, true));
+		Ok(())
 	}
 }

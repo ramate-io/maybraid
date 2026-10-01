@@ -4784,7 +4784,9 @@ dependencies = [
 name = "maybraid-game-mode-discover"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "bevy",
+ "durham-terrain-models",
  "terrain-layer-model",
 ]
 
@@ -4799,6 +4801,7 @@ dependencies = [
 name = "maybraid-game-mode-training-ground"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "bevy",
  "durham-terrain-models",
  "terrain-layer-model",

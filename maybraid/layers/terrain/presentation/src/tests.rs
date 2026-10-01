@@ -9,8 +9,9 @@ use bevy::transform::components::Transform;
 use lod::gen::Id;
 use lod::lod_ref::LodRef;
 use terrain_layer_model::{
-	BaseTerrainGenerationPlugin, HeightField, OnTerrain, RequireLayer, TerrainCell,
-	TerrainGeneration, TerrainModel,
+	BaseTerrainGenerationCore, BaseTerrainGenerationPlugin, BaseTerrainScheme, GenerationMode,
+	GenerationModePlugin, HeightField, OnTerrain, RequireLayer, TerrainCell, TerrainGeneration,
+	TerrainModel,
 };
 
 use crate::{TerrainPresentationPlugin, TerrainPresenter};
@@ -144,16 +145,27 @@ impl TerrainModel for Flat {
 	}
 
 	fn require_generation(app: &App) {
-		app.require_layer::<BaseTerrainGenerationPlugin<Flat>, Flat>();
+		app.require_layer::<BaseTerrainGenerationCore<Flat>, Flat>();
 	}
 }
 
 impl TerrainGeneration for Flat {
 	type Config = f32;
+	type SharedConfig = ();
+
+	fn shared_config(_config: &f32) {}
 
 	fn install_generation(app: &mut App, config: &f32) {
 		app.insert_resource(FlatStore { cells: HashMap::new(), fallback: *config });
 	}
+}
+
+struct TestMode;
+
+impl GenerationMode for TestMode {}
+
+impl BaseTerrainScheme<Flat> for TestMode {
+	fn install(_app: &mut App, _config: &f32) {}
 }
 
 #[derive(Resource)]
@@ -170,7 +182,10 @@ impl TerrainPresenter<OnTerrain<Flat>> for FlatPresenter {
 #[test]
 fn presenter_installs_and_finish_requires_generation() {
 	let mut app = App::new();
-	app.add_plugins(BaseTerrainGenerationPlugin::<Flat>::new(2.5))
+	app.add_plugins((
+		GenerationModePlugin::<TestMode>::initial(),
+		BaseTerrainGenerationPlugin::<TestMode, Flat>::new(2.5),
+	))
 		.add_plugins(TerrainPresentationPlugin::<OnTerrain<Flat>, FlatPresenter>::default());
 	app.finish();
 
@@ -179,7 +194,7 @@ fn presenter_installs_and_finish_requires_generation() {
 }
 
 #[test]
-#[should_panic(expected = "requires terrain_layer_model::generation::BaseTerrainGenerationPlugin")]
+#[should_panic(expected = "requires terrain_layer_model::generation::BaseTerrainGenerationCore")]
 fn presentation_without_generation_names_the_missing_plugin() {
 	let mut app = App::new();
 	app.add_plugins(TerrainPresentationPlugin::<OnTerrain<Flat>, FlatPresenter>::default());
