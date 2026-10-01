@@ -1,7 +1,8 @@
-use bevy::ecs::system::SystemState;
+use bevy::ecs::system::{RunSystemOnce, SystemState};
 use bevy::math::bounding::Aabb3d;
 use bevy::math::{Vec2, Vec3};
-use bevy::prelude::{App, Plugin, World};
+use bevy::prelude::{App, MinimalPlugins, NextState, Plugin, World};
+use bevy::state::app::StatesPlugin;
 use chico_groves::{GroveHeightModulation, GroveTerrain, GroveWorldSample, ModulatedGroveSample};
 use durham_terrain_models::{
 	BaseTerrainNoise, Durham, TerrainCellLayout, TerrainConfig, TerrainEntryStore,
@@ -10,10 +11,15 @@ use durham_terrain_models::{
 use lod::gen::Id;
 use richmond_development_models::{DevelopmentCell, DevelopmentConfig, DevelopmentEntryStore, PadComplex};
 use richmond_urbanization::UrbanizationIndex;
-use terrain_layer_model::{HeightField, OnTerrain, TerrainModel, TerrainView};
+use terrain_layer_model::{
+	subscribe_mode, ActiveGenerationMode, GenerationMode, GenerationModePlugin, HeightField,
+	ModeSubscribers, ModeSubscription, OnTerrain, TerrainModel, TerrainView,
+};
 use urbanization_layer_model::Urbanization;
 
-use crate::{GroundGroveSample, VegetationPresentationPlugin};
+use crate::{
+	retire_vegetation_presenters, GroundGroveSample, VegetationPresent, VegetationPresentationPlugin,
+};
 
 type Urbanized = Urbanization<OnTerrain<Durham>>;
 
@@ -324,7 +330,99 @@ impl TerrainModel for Silent {
 #[test]
 #[should_panic(expected = "VegetationGenerationPlugin")]
 fn presentation_without_generation_names_the_missing_plugin() {
-	VegetationPresentationPlugin::<Silent>::default().finish(&mut App::new());
+	VegetationPresentationPlugin::<SilentMode, Silent>::default().finish(&mut App::new());
+}
+
+struct SilentMode;
+
+impl GenerationMode for SilentMode {}
+
+struct OtherMode;
+
+impl GenerationMode for OtherMode {}
+
+#[test]
+fn losing_subscription_retires_and_returning_presents() -> anyhow::Result<()> {
+	use chico_forests::ForestPresenterState;
+	use vegetation_layer_model::VegetationLayerConfig;
+
+	let mut app = App::new();
+	app.add_plugins((
+		MinimalPlugins,
+		StatesPlugin,
+		GenerationModePlugin::<SilentMode>::initial(),
+		GenerationModePlugin::<OtherMode>::default(),
+	));
+	subscribe_mode::<(Silent, VegetationPresent), SilentMode>(&mut app);
+	app.insert_resource(VegetationLayerConfig::world_defaults());
+	app.init_resource::<ForestPresenterState>();
+	app.init_resource::<crate::present::CanopyBumpOutPresenterState>();
+	app.init_resource::<crate::present::MediumCanopyBumpOutPresenterState>();
+	app.update();
+	app.world_mut()
+		.run_system_once(retire_vegetation_presenters::<Silent>)
+		.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+	{
+		let mut state =
+			SystemState::<ModeSubscription<(Silent, VegetationPresent)>>::new(app.world_mut());
+		anyhow::ensure!(
+			state.get(app.world()).map_err(|error| anyhow::anyhow!("{error:?}"))?.active(),
+			"subscribed mode presents"
+		);
+	}
+
+	app.world_mut()
+		.resource_mut::<NextState<ActiveGenerationMode>>()
+		.set(ActiveGenerationMode::of::<OtherMode>());
+	app.update();
+	app.world_mut()
+		.run_system_once(retire_vegetation_presenters::<Silent>)
+		.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+	{
+		let mut state =
+			SystemState::<ModeSubscription<(Silent, VegetationPresent)>>::new(app.world_mut());
+		anyhow::ensure!(
+			!state.get(app.world()).map_err(|error| anyhow::anyhow!("{error:?}"))?.active(),
+			"unsubscribed mode retires"
+		);
+	}
+
+	app.world_mut()
+		.resource_mut::<NextState<ActiveGenerationMode>>()
+		.set(ActiveGenerationMode::of::<SilentMode>());
+	app.update();
+	app.world_mut()
+		.run_system_once(retire_vegetation_presenters::<Silent>)
+		.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+	{
+		let mut state =
+			SystemState::<ModeSubscription<(Silent, VegetationPresent)>>::new(app.world_mut());
+		anyhow::ensure!(
+			state.get(app.world()).map_err(|error| anyhow::anyhow!("{error:?}"))?.active(),
+			"return presents again"
+		);
+	}
+	Ok(())
+}
+
+#[test]
+fn two_modes_install_the_core_once() -> anyhow::Result<()> {
+	let mut app = App::new();
+	app.add_plugins((MinimalPlugins, bevy::prelude::AssetPlugin::default(), StatesPlugin));
+	app.add_plugins((
+		GenerationModePlugin::<SilentMode>::initial(),
+		GenerationModePlugin::<OtherMode>::default(),
+		VegetationPresentationPlugin::<SilentMode, Silent>::default(),
+		VegetationPresentationPlugin::<OtherMode, Silent>::default(),
+	));
+	anyhow::ensure!(
+		app.is_plugin_added::<crate::VegetationPresentationCore<Silent>>(),
+		"core is installed"
+	);
+	let subscribers = app.world().resource::<ModeSubscribers<(Silent, VegetationPresent)>>();
+	anyhow::ensure!(subscribers.contains::<SilentMode>());
+	anyhow::ensure!(subscribers.contains::<OtherMode>());
+	Ok(())
 }
 
 #[test]

@@ -47,14 +47,18 @@ impl<T: TerrainGeneration> Plugin for BaseTerrainGenerationCore<T> {
 #[derive(Resource)]
 struct InstalledBaseTerrainShared<T: TerrainGeneration>(T::SharedConfig);
 
-#[derive(Resource)]
-struct PendingBaseTerrainShared<T: TerrainGeneration> {
-	shared: Vec<T::SharedConfig>,
+/// Per-mode config the scheme systems read.
+#[derive(Resource, Clone)]
+pub struct BaseTerrainModeConfig<Mode: GenerationMode, T: TerrainGeneration> {
+	pub config: T::Config,
+	_mode: PhantomData<fn() -> Mode>,
 }
 
-/// Set when the initial mode's plugin supplies `T`'s startup config.
-#[derive(Resource)]
-struct BaseTerrainStartupInstalled<T: TerrainGeneration>(PhantomData<T>);
+impl<Mode: GenerationMode, T: TerrainGeneration> BaseTerrainModeConfig<Mode, T> {
+	pub fn new(config: T::Config) -> Self {
+		Self { config, _mode: PhantomData }
+	}
+}
 
 /// Generation for base model `T` in `Mode`.
 pub struct BaseTerrainGenerationPlugin<Mode, T>
@@ -89,52 +93,31 @@ where
 				type_name::<T>()
 			);
 		};
-		let startup = state.get().is::<Mode>();
-		let shared = T::shared_config(&self.config);
-		if let Some(installed) = app.world().get_resource::<InstalledBaseTerrainShared<T>>() {
-			require_shared_agrees::<T>(&installed.0, &shared);
-		} else if startup {
-			require_pending_agrees::<T>(app, &shared);
+		if state.get().is::<Mode>() && !app.is_plugin_added::<BaseTerrainGenerationCore<T>>() {
 			T::install_generation(app, &self.config);
-			app.add_plugins(BaseTerrainGenerationCore::<T> { shared: shared.clone() })
-				.insert_resource(BaseTerrainStartupInstalled::<T>(PhantomData));
-			app.world_mut().remove_resource::<PendingBaseTerrainShared<T>>();
-		} else {
-			app.world_mut()
-				.get_resource_or_insert_with(|| PendingBaseTerrainShared::<T> {
-					shared: Vec::new(),
-				})
-				.shared
-				.push(shared);
+			app.add_plugins(BaseTerrainGenerationCore::<T> {
+				shared: T::shared_config(&self.config),
+			});
 		}
+		app.insert_resource(BaseTerrainModeConfig::<Mode, T>::new(self.config.clone()));
 		Mode::install(app, &self.config);
 	}
 
 	fn finish(&self, app: &mut App) {
-		if !app.world().contains_resource::<BaseTerrainStartupInstalled<T>>() {
+		let Some(installed) = app.world().get_resource::<InstalledBaseTerrainShared<T>>() else {
 			panic!(
 				"the initial generation mode never registered BaseTerrainGenerationPlugin for {}",
 				type_name::<T>()
 			);
+		};
+		let shared = T::shared_config(&self.config);
+		if installed.0 != shared {
+			panic!(
+				"BaseTerrainGenerationPlugin shared config disagrees for {}: {:?} vs {shared:?}",
+				type_name::<T>(),
+				installed.0
+			);
 		}
-	}
-}
-
-fn require_shared_agrees<T: TerrainGeneration>(installed: &T::SharedConfig, shared: &T::SharedConfig) {
-	if installed != shared {
-		panic!(
-			"BaseTerrainGenerationPlugin shared config disagrees for {}: {installed:?} vs {shared:?}",
-			type_name::<T>()
-		);
-	}
-}
-
-fn require_pending_agrees<T: TerrainGeneration>(app: &App, shared: &T::SharedConfig) {
-	let Some(pending) = app.world().get_resource::<PendingBaseTerrainShared<T>>() else {
-		return;
-	};
-	for other in &pending.shared {
-		require_shared_agrees::<T>(other, shared);
 	}
 }
 
@@ -358,6 +341,7 @@ mod tests {
 				BaseTerrainGenerationPlugin::<Alpha, Stub>::new(alpha_config(3.0)),
 				BaseTerrainGenerationPlugin::<Beta, Stub>::new(StubConfig { seed: 2, layout: 9.0 }),
 			));
+			app.finish();
 		}));
 		anyhow::ensure!(failed.is_err(), "disagreeing seeds must fail loudly");
 		Ok(())

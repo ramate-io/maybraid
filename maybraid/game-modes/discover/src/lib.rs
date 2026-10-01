@@ -5,10 +5,11 @@
 
 use bevy::prelude::*;
 use durham_terrain_models::{
-	Durham, DurhamTerrainConfig, TerrainCoverage, TerrainPresentEnabled, TerrainRetarget,
-	WORLD_FINE_HALF_EXTENT_CELLS, playable_world_cell_layout,
+	Durham, DurhamTerrainConfig, TerrainRetarget, playable_world_cell_layout,
 };
-use terrain_layer_model::{ActiveGenerationMode, BaseTerrainScheme, GenerationMode};
+use terrain_layer_model::{
+	ActiveGenerationMode, BaseTerrainModeConfig, BaseTerrainScheme, GenerationMode,
+};
 
 pub const LABEL: &str = "Discovery";
 
@@ -31,17 +32,19 @@ impl BaseTerrainScheme<Durham> for Discovery {
 	}
 }
 
-fn restore_playable_world(mut terrain: TerrainRetarget, mut present: ResMut<TerrainPresentEnabled>) {
-	if terrain.coverage() == TerrainCoverage::PlayableWorld {
+fn restore_playable_world(
+	config: Res<BaseTerrainModeConfig<Discovery, Durham>>,
+	mut terrain: TerrainRetarget,
+) {
+	if terrain.coverage() == config.config.coverage {
 		return;
 	}
 	terrain.apply(
 		playable_world_cell_layout(),
-		TerrainCoverage::PlayableWorld,
-		WORLD_FINE_HALF_EXTENT_CELLS,
+		config.config.coverage,
+		config.config.terrain_radius,
 		false,
 	);
-	present.0 = false;
 }
 
 #[cfg(test)]
@@ -49,8 +52,9 @@ mod tests {
 	use super::*;
 	use bevy::ecs::system::RunSystemOnce;
 	use durham_terrain_models::{
-		TerrainCellLayout, TerrainConfig, TerrainLayoutPinned, TerrainPresentPending,
-		TerrainPresentationAssets, TerrainPresentationDirty,
+		TerrainCellLayout, TerrainConfig, TerrainCoverage, TerrainLayoutPinned,
+		TerrainPresentPending, TerrainPresentationAssets, TerrainPresentationDirty,
+		WORLD_FINE_HALF_EXTENT_CELLS,
 	};
 
 	fn playable_assets() -> TerrainPresentationAssets {
@@ -68,9 +72,11 @@ mod tests {
 
 	fn world_with(coverage: TerrainCoverage, layout: TerrainCellLayout) -> World {
 		let mut world = World::new();
+		world.insert_resource(BaseTerrainModeConfig::<Discovery, Durham>::new(
+			DurhamTerrainConfig::playable_world(),
+		));
 		world.insert_resource(layout);
 		world.insert_resource(coverage);
-		world.insert_resource(TerrainPresentEnabled(coverage == TerrainCoverage::FinePatch));
 		world.insert_resource(TerrainLayoutPinned(coverage == TerrainCoverage::FinePatch));
 		world.insert_resource(TerrainPresentationDirty(false));
 		world.insert_resource(TerrainPresentPending(false));
@@ -87,7 +93,6 @@ mod tests {
 		anyhow::ensure!(!world.resource::<TerrainPresentationDirty>().0);
 		anyhow::ensure!(!world.resource::<TerrainPresentPending>().0);
 		anyhow::ensure!(!world.resource::<TerrainLayoutPinned>().0);
-		anyhow::ensure!(!world.resource::<TerrainPresentEnabled>().0);
 		anyhow::ensure!(*world.resource::<TerrainCellLayout>() == playable_world_cell_layout());
 		Ok(())
 	}
@@ -103,7 +108,6 @@ mod tests {
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		anyhow::ensure!(*world.resource::<TerrainCellLayout>() == playable_world_cell_layout());
 		anyhow::ensure!(*world.resource::<TerrainCoverage>() == TerrainCoverage::PlayableWorld);
-		anyhow::ensure!(!world.resource::<TerrainPresentEnabled>().0);
 		anyhow::ensure!(!world.resource::<TerrainLayoutPinned>().0);
 		anyhow::ensure!(world.resource::<TerrainPresentationDirty>().0);
 		anyhow::ensure!(world.resource::<TerrainPresentPending>().0);

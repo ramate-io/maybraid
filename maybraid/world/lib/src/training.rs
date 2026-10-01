@@ -27,9 +27,7 @@ use crozon_characters::species::{
 };
 use crozon_characters::CharacterAppearance;
 use damage::{Downed, Health};
-use durham_terrain_models::{
-	TerrainColliderSystems, TerrainPresentEnabled, TerrainPresenterState,
-};
+use durham_terrain_models::TerrainColliderSystems;
 use maybraid_game_mode_discover::Discovery;
 use maybraid_game_mode_training_ground::{TrainingGround, TrainingRound};
 use mob_intelligence::MemberOf;
@@ -60,7 +58,6 @@ impl Plugin for TrainingGroundPlugin {
 			Update,
 			(
 				park_on_training_site,
-				clear_training_terrain_present,
 				mount_training_plaza.in_set(WorldSurfaceSet).after(update_world_surface_ready),
 				(supersede_training_raw_terrain, promote_training_plaza)
 					.chain()
@@ -215,25 +212,12 @@ pub(crate) fn count_training_enemies(
 	}
 }
 
-/// Drop raw training terrain meshes once present is turned back off.
-pub(crate) fn clear_training_terrain_present(
-	present: Res<TerrainPresentEnabled>,
-	mut was_present: Local<bool>,
-	mut commands: Commands,
-	mut state: ResMut<TerrainPresenterState>,
-) {
-	if *was_present && !present.0 {
-		state.clear(&mut commands);
-	}
-	*was_present = present.0;
-}
-
 #[cfg(test)]
 mod tests {
 	use bevy::ecs::system::RunSystemOnce;
 	use bevy::state::app::StatesPlugin;
 	use durham_terrain_models::{
-		fine_patch_cell_layout, playable_world_cell_layout, BaseTerrainNoise,
+		fine_patch_cell_layout, playable_world_cell_layout, BaseTerrainNoise, Durham,
 		DurhamTerrainConfig, TerrainCellLayout, TerrainConfig, TerrainCoverage,
 		TerrainLayoutPinned, TerrainPresentPending, TerrainPresentationAssets,
 		TerrainPresentationDirty, WorldBaseTerrain, WORLD_FINE_HALF_EXTENT_CELLS,
@@ -245,7 +229,7 @@ mod tests {
 
 	use crate::PlayerSpawnXz;
 	use crate::training_plaza::TrainingPlazaMounted;
-	use terrain_layer_model::{BaseTerrainScheme, GenerationModePlugin};
+	use terrain_layer_model::{BaseTerrainModeConfig, BaseTerrainScheme, GenerationModePlugin};
 	use super::*;
 
 	fn training_world(round: TrainingRound) -> World {
@@ -355,11 +339,12 @@ mod tests {
 			GenerationModePlugin::<TrainingGround>::default(),
 		));
 		// Durham `install_generation` needs a render world (`Messages`).
-		Discovery::install(&mut app, &DurhamTerrainConfig::playable_world());
-		TrainingGround::install(
-			&mut app,
-			&DurhamTerrainConfig::fine_patch(TRAINING_FINE_HALF_EXTENT_CELLS),
-		);
+		let playable = DurhamTerrainConfig::playable_world();
+		let training = DurhamTerrainConfig::fine_patch(TRAINING_FINE_HALF_EXTENT_CELLS);
+		Discovery::install(&mut app, &playable);
+		TrainingGround::install(&mut app, &training);
+		app.insert_resource(BaseTerrainModeConfig::<Discovery, Durham>::new(playable));
+		app.insert_resource(BaseTerrainModeConfig::<TrainingGround, Durham>::new(training));
 		app.init_state::<ShellFlow>();
 		app.insert_resource(round);
 		app.insert_resource(MobStreamSuspended(false));
@@ -367,7 +352,6 @@ mod tests {
 		app.insert_resource(UrbanizationStreamingEnabled(true));
 		app.insert_resource(playable_world_cell_layout());
 		app.insert_resource(TerrainCoverage::PlayableWorld);
-		app.insert_resource(TerrainPresentEnabled(false));
 		app.insert_resource(TerrainLayoutPinned(false));
 		app.insert_resource(TerrainPresentationDirty(false));
 		app.insert_resource(TerrainPresentPending(false));

@@ -1,17 +1,20 @@
 use bevy::app::{App, Plugin};
-use bevy::prelude::{AssetPlugin, MinimalPlugins, World};
+use bevy::prelude::{AssetPlugin, MinimalPlugins, NextState};
+use bevy::state::app::StatesPlugin;
 use durham_terrain_models::Durham;
 use lod::gen::Id;
 use maybraid_mobs::{DEFAULT_MOB_HIGH_RADIUS, MobLodRefreshMode};
-use mob_layer_model::MobStreamSuspended;
-use terrain_layer_model::OnTerrain;
+use terrain_layer_model::{
+	subscribe_mode, ActiveGenerationMode, GenerationMode, GenerationModePlugin, ModeSubscribers,
+	OnTerrain,
+};
 use urbanization_layer_model::Urbanization;
 
 use crate::present::{
 	retire_mob_presenters, MobCellRoot, MobHighLodRegion, MobPresenterState,
 	MOB_HIGH_LOD_REFRESH_RADIUS,
 };
-use crate::MobPresentationPlugin;
+use crate::{MobPresent, MobPresentationPlugin};
 
 type Urbanized = Urbanization<OnTerrain<Durham>>;
 
@@ -35,26 +38,53 @@ fn high_lod_refresh_keeps_margin_around_the_high_band() {
 	assert!(MOB_HIGH_LOD_REFRESH_RADIUS > DEFAULT_MOB_HIGH_RADIUS);
 }
 
+struct TestMode;
+
+impl GenerationMode for TestMode {}
+
+struct OtherMode;
+
+impl GenerationMode for OtherMode {}
+
 #[test]
-fn retire_despawns_presented_roots_and_pending_while_suspended() -> anyhow::Result<()> {
+fn retire_despawns_presented_roots_and_pending_while_unsubscribed() -> anyhow::Result<()> {
 	use bevy::ecs::system::RunSystemOnce;
 
-	let mut world = World::new();
-	world.insert_resource(MobStreamSuspended(true));
-	world.init_resource::<MobPresenterState>();
-	let root = world.spawn(MobCellRoot).id();
-	let pending = world.spawn_empty().id();
+	let mut app = App::new();
+	app.add_plugins((
+		MinimalPlugins,
+		StatesPlugin,
+		GenerationModePlugin::<TestMode>::initial(),
+		GenerationModePlugin::<OtherMode>::default(),
+	));
+	subscribe_mode::<(Urbanized, MobPresent), TestMode>(&mut app);
+	app.init_resource::<MobPresenterState>();
+	let root = app.world_mut().spawn(MobCellRoot).id();
+	let pending = app.world_mut().spawn_empty().id();
 	let id = Id::from_cell(bevy::math::bounding::Aabb3d::from_min_max(
 		bevy::math::Vec3::ZERO,
 		bevy::math::Vec3::ONE,
 	));
-	world.resource_mut::<MobPresenterState>().insert_presented(id, vec![root]);
-	world.resource_mut::<MobPresenterState>().push_pending(vec![pending]);
-	world
-		.run_system_once(retire_mob_presenters)
+	app.world_mut().resource_mut::<MobPresenterState>().insert_presented(id, vec![root]);
+	app.world_mut().resource_mut::<MobPresenterState>().push_pending(vec![pending]);
+	app.update();
+	app.world_mut()
+		.run_system_once(retire_mob_presenters::<Urbanized>)
 		.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-	anyhow::ensure!(world.get_entity(root).is_err(), "presented root should despawn");
-	anyhow::ensure!(world.get_entity(pending).is_err(), "pending entity should despawn");
+	anyhow::ensure!(
+		app.world().get_entity(root).is_ok(),
+		"subscribed mode keeps presented roots"
+	);
+
+	app.world_mut()
+		.resource_mut::<NextState<ActiveGenerationMode>>()
+		.set(ActiveGenerationMode::of::<OtherMode>());
+	app.update();
+	app.world_mut()
+		.run_system_once(retire_mob_presenters::<Urbanized>)
+		.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+	anyhow::ensure!(app.world().get_entity(root).is_err(), "presented root should despawn");
+	anyhow::ensure!(app.world().get_entity(pending).is_err(), "pending entity should despawn");
 	Ok(())
 }
 
@@ -67,7 +97,7 @@ fn presentation_inserts_indexed_refresh_mode() -> anyhow::Result<()> {
 
 	let mut app = App::new();
 	app.add_plugins((MinimalPlugins, AssetPlugin::default()));
-	MobPresentationPlugin::<Urbanized>::default().build(&mut app);
+	MobPresentationPlugin::<TestMode, Urbanized>::default().build(&mut app);
 	let mut ids = Vec::new();
 	let mut inspect_error = None;
 	app.world_mut().schedule_scope(Update, |world, schedule| {
@@ -110,5 +140,25 @@ fn presentation_inserts_indexed_refresh_mode() -> anyhow::Result<()> {
 #[test]
 #[should_panic(expected = "MobGenerationPlugin")]
 fn presentation_without_generation_names_the_missing_plugin() {
-	MobPresentationPlugin::<Urbanized>::default().finish(&mut App::new());
+	MobPresentationPlugin::<TestMode, Urbanized>::default().finish(&mut App::new());
+}
+
+#[test]
+fn two_modes_install_the_core_once() -> anyhow::Result<()> {
+	let mut app = App::new();
+	app.add_plugins((MinimalPlugins, AssetPlugin::default(), StatesPlugin));
+	app.add_plugins((
+		GenerationModePlugin::<TestMode>::initial(),
+		GenerationModePlugin::<OtherMode>::default(),
+		MobPresentationPlugin::<TestMode, Urbanized>::default(),
+		MobPresentationPlugin::<OtherMode, Urbanized>::default(),
+	));
+	anyhow::ensure!(
+		app.is_plugin_added::<crate::MobPresentationCore<Urbanized>>(),
+		"core is installed"
+	);
+	let subscribers = app.world().resource::<ModeSubscribers<(Urbanized, MobPresent)>>();
+	anyhow::ensure!(subscribers.contains::<TestMode>());
+	anyhow::ensure!(subscribers.contains::<OtherMode>());
+	Ok(())
 }

@@ -15,15 +15,18 @@ mod generation_mode;
 mod model;
 mod on_terrain;
 mod require;
+mod subscription;
 mod view;
 
 pub use generation::{
-	BaseTerrainGenerationCore, BaseTerrainGenerationPlugin, BaseTerrainScheme, TerrainGeneration,
+	BaseTerrainGenerationCore, BaseTerrainGenerationPlugin, BaseTerrainModeConfig,
+	BaseTerrainScheme, TerrainGeneration,
 };
 pub use generation_mode::{
 	in_generation_mode, ActiveGenerationMode, GenerationMode, GenerationModePlugin,
 	GenerationModeSystems,
 };
+pub use subscription::{mode_subscribed, subscribe_mode, ModeSubscribers, ModeSubscription};
 pub use model::{HeightField, TerrainCell, TerrainModel};
 pub use on_terrain::OnTerrain;
 pub use require::RequireLayer;

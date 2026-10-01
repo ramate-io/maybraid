@@ -26,27 +26,40 @@ pub struct WorldLayersPlugin;
 impl Plugin for WorldLayersPlugin {
 	fn build(&self, app: &mut App) {
 		app.add_plugins((
-			GenerationModePlugin::<Discovery>::initial(),
-			GenerationModePlugin::<TrainingGround>::default(),
-			BaseTerrainGenerationPlugin::<Discovery, Durham>::new(
-				DurhamTerrainConfig::playable_world(),
+			(
+				GenerationModePlugin::<Discovery>::initial(),
+				BaseTerrainGenerationPlugin::<Discovery, Durham>::new(
+					DurhamTerrainConfig::playable_world(),
+				),
+				UrbanizationGenerationPlugin::<OnTerrain<Durham>>::new(
+					UrbanizationLayerConfig::world_defaults(),
+				),
+				VegetationGenerationPlugin::new(VegetationLayerConfig::world_defaults()),
+				MobGenerationPlugin::<Urbanization<OnTerrain<Durham>>>::new(
+					MobLayerConfig::world_defaults(),
+				),
+				TerrainPresentationPlugin::<
+					Discovery,
+					Urbanization<OnTerrain<Durham>>,
+					PaddedCells,
+				>::default(),
+				UrbanizationPresentationPlugin::<Discovery, Urbanization<OnTerrain<Durham>>>::default(
+				),
+				VegetationPresentationPlugin::<Discovery, Urbanization<OnTerrain<Durham>>>::default(),
+				MobPresentationPlugin::<Discovery, Urbanization<OnTerrain<Durham>>>::default(),
 			),
-			BaseTerrainGenerationPlugin::<TrainingGround, Durham>::new(
-				DurhamTerrainConfig::fine_patch(TRAINING_FINE_HALF_EXTENT_CELLS),
+			(
+				GenerationModePlugin::<TrainingGround>::default(),
+				BaseTerrainGenerationPlugin::<TrainingGround, Durham>::new(
+					DurhamTerrainConfig::fine_patch(TRAINING_FINE_HALF_EXTENT_CELLS),
+				),
+				TerrainPresentationPlugin::<TrainingGround, OnTerrain<Durham>, DurhamCells>::default(
+				),
+				VegetationPresentationPlugin::<
+					TrainingGround,
+					Urbanization<OnTerrain<Durham>>,
+				>::default(),
 			),
-			// Training only: raw Durham, gated off in the open world.
-			TerrainPresentationPlugin::<OnTerrain<Durham>, DurhamCells>::default(),
-			UrbanizationGenerationPlugin::<OnTerrain<Durham>>::new(
-				UrbanizationLayerConfig::world_defaults(),
-			),
-			TerrainPresentationPlugin::<Urbanization<OnTerrain<Durham>>, PaddedCells>::default(),
-			UrbanizationPresentationPlugin::<Urbanization<OnTerrain<Durham>>>::default(),
-			VegetationGenerationPlugin::new(VegetationLayerConfig::world_defaults()),
-			VegetationPresentationPlugin::<Urbanization<OnTerrain<Durham>>>::default(),
-			MobGenerationPlugin::<Urbanization<OnTerrain<Durham>>>::new(
-				MobLayerConfig::world_defaults(),
-			),
-			MobPresentationPlugin::<Urbanization<OnTerrain<Durham>>>::default(),
 		));
 	}
 }

@@ -57,12 +57,19 @@ fn main() {
 		.add_plugins(BaseTerrainGenerationPlugin::<PlaygroundMode, Durham>::new(
 			DurhamTerrainConfig::fine_patch(playground.terrain_radius),
 		))
-		.add_plugins(TerrainPresentationPlugin::<OnTerrain<Durham>, DurhamCells>::default())
-		.add_plugins(UrbanizationGenerationPlugin::<OnTerrain<Durham>>::new(urban))
 		.add_plugins(
-			TerrainPresentationPlugin::<Urbanization<OnTerrain<Durham>>, PaddedCells>::default(),
+			TerrainPresentationPlugin::<PlaygroundMode, OnTerrain<Durham>, DurhamCells>::default(),
 		)
-		.add_plugins(UrbanizationPresentationPlugin::<Urbanization<OnTerrain<Durham>>>::default())
+		.add_plugins(UrbanizationGenerationPlugin::<OnTerrain<Durham>>::new(urban))
+		.add_plugins(TerrainPresentationPlugin::<
+			PlaygroundMode,
+			Urbanization<OnTerrain<Durham>>,
+			PaddedCells,
+		>::default())
+		.add_plugins(
+			UrbanizationPresentationPlugin::<PlaygroundMode, Urbanization<OnTerrain<Durham>>>::default(
+			),
+		)
 		.add_plugins(DevelopmentsOnTerrainPlugin { config: playground, commands: true })
 		.run();
 }

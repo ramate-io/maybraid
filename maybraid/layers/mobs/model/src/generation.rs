@@ -22,7 +22,7 @@ use crate::stream::{
 
 /// Systems that arm mob keep regions and sync selection models.
 ///
-/// Training copies [`MobStreamSuspended`] `.before` this set.
+/// Session fill writes [`MobStreamSuspended`] `.before` this set.
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct MobGenerationSystems;
 

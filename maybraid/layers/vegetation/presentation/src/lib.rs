@@ -13,7 +13,7 @@ use durham_terrain_models::terrain_streaming_enabled;
 use lod::{
 	LodGenerateSystems, LodPresentCullPlugin, LodPresentPlugin, LodPresentSystems, LodViewer,
 };
-use terrain_layer_model::{RequireLayer, TerrainModel};
+use terrain_layer_model::{subscribe_mode, GenerationMode, RequireLayer, TerrainModel};
 use vegetation_layer_model::{VegetationGenerationPlugin, VegetationGenerationSystems};
 
 mod material;
@@ -27,17 +27,29 @@ pub use present::{
 
 use present::{CanopyBumpOutPresenterState, MediumCanopyBumpOutPresenterState};
 
-/// Presents generated vegetation on ground `G`. Pads reach groves through
-/// `G`'s height (`Urbanization<…>` already composes them), not a special case.
-pub struct VegetationPresentationPlugin<G>(PhantomData<fn() -> G>);
+/// Marker for vegetation-presenter subscriptions on ground `G`.
+pub struct VegetationPresent;
 
-impl<G> Default for VegetationPresentationPlugin<G> {
+/// Presents generated vegetation on ground `G` while `Mode` is subscribed.
+/// Pads reach groves through `G`'s height (`Urbanization<…>` already composes
+/// them), not a special case.
+pub struct VegetationPresentationPlugin<Mode, G>(PhantomData<fn() -> (Mode, G)>);
+
+impl<Mode, G> Default for VegetationPresentationPlugin<Mode, G> {
 	fn default() -> Self {
 		Self(PhantomData)
 	}
 }
 
-impl<G: TerrainModel> Plugin for VegetationPresentationPlugin<G>
+pub struct VegetationPresentationCore<G>(PhantomData<fn() -> G>);
+
+impl<G> Default for VegetationPresentationCore<G> {
+	fn default() -> Self {
+		Self(PhantomData)
+	}
+}
+
+impl<G: TerrainModel> Plugin for VegetationPresentationCore<G>
 where
 	G::Snapshot: Clone + Send + Sync,
 	G::Cell: terrain_layer_model::TerrainCell<Mesh = durham_terrain_models::TerrainMeshBuilder>,
@@ -95,16 +107,29 @@ where
 			.configure_sets(Update, LodPresentSystems::Produce.after(LodGenerateSystems::Drain))
 			.add_systems(
 				Update,
-				retire_vegetation_presenters
+				retire_vegetation_presenters::<G>
 					.after(VegetationGenerationSystems)
 					.before(LodPresentSystems::Produce)
 					.run_if(terrain_streaming_enabled),
 			);
 	}
+}
+
+impl<Mode: GenerationMode, G: TerrainModel> Plugin for VegetationPresentationPlugin<Mode, G>
+where
+	G::Snapshot: Clone + Send + Sync,
+	G::Cell: terrain_layer_model::TerrainCell<Mesh = durham_terrain_models::TerrainMeshBuilder>,
+{
+	fn build(&self, app: &mut App) {
+		subscribe_mode::<(G, VegetationPresent), Mode>(app);
+		if !app.is_plugin_added::<VegetationPresentationCore<G>>() {
+			app.add_plugins(VegetationPresentationCore::<G>::default());
+		}
+	}
 
 	fn finish(&self, app: &mut App) {
 		G::require_generation(app);
-		app.require_layer::<VegetationGenerationPlugin, Self>();
+		app.require_layer::<VegetationGenerationPlugin, VegetationPresentationCore<G>>();
 	}
 }
 

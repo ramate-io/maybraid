@@ -6,15 +6,14 @@ use bevy::prelude::*;
 use lod::gen::Id;
 use lod::lod_ref::LodRef;
 use terrain_layer_model::{
-	BaseTerrainGenerationCore, HeightField, OnTerrain, RequireLayer, TerrainCell,
+	BaseTerrainGenerationCore, HeightField, RequireLayer, TerrainCell,
 	TerrainGeneration, TerrainModel,
 };
-use terrain_layer_presentation::TerrainPresenter;
 
 use crate::terrain::cell::TerrainCellLayout;
 use crate::terrain::host::{
-	install_durham_generation, install_durham_presentation, Durham, TerrainCoverage,
-	WorldBaseTerrain, WORLD_FINE_HALF_EXTENT_CELLS,
+	install_durham_generation, Durham, TerrainCoverage, WorldBaseTerrain,
+	WORLD_FINE_HALF_EXTENT_CELLS,
 };
 use crate::terrain::index::{TerrainEntryStore, TerrainHeightSnapshot};
 use crate::terrain::{Terrain, TerrainMeshBuilder};
@@ -186,11 +185,6 @@ impl DurhamTerrainConfig {
 		}
 	}
 
-	/// Raw meshes at startup. A fine patch starts on; the playable world starts
-	/// off. The active mode's scheme toggles [`TerrainPresentEnabled`] later.
-	pub fn raw_present(self) -> bool {
-		matches!(self.coverage, TerrainCoverage::FinePatch)
-	}
 }
 
 impl TerrainGeneration for Durham {
@@ -206,14 +200,6 @@ impl TerrainGeneration for Durham {
 	}
 }
 
-/// Raw Durham cells. [`crate::TerrainPresentEnabled`] gates the presenter.
-pub struct DurhamCells;
-
-impl TerrainPresenter<OnTerrain<Durham>> for DurhamCells {
-	fn install(app: &mut App) {
-		install_durham_presentation(app);
-	}
-}
 
 #[cfg(test)]
 mod tests {
@@ -223,7 +209,6 @@ mod tests {
 	use super::*;
 	use crate::terrain::base_noise::BaseTerrainNoise;
 	use crate::terrain::config::TerrainConfig;
-	use crate::terrain::host::TerrainPresentEnabled;
 
 	fn empty_durham_world() -> World {
 		let mut world = World::new();
@@ -248,17 +233,6 @@ mod tests {
 			.cell_ids_overlapping(Aabb3d::new(Vec3::ZERO, Vec3::splat(1_000.0)))
 			.is_empty());
 		Ok(())
-	}
-
-	#[test]
-	fn playable_world_disables_raw_presentation() {
-		assert!(!DurhamTerrainConfig::playable_world().raw_present());
-	}
-
-	#[test]
-	fn fine_patch_raw_presentation_defaults_on() {
-		assert!(DurhamTerrainConfig::fine_patch(2).raw_present());
-		assert!(TerrainPresentEnabled::default().0);
 	}
 
 	#[test]

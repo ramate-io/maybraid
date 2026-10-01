@@ -61,8 +61,8 @@ pub use collider::{
 pub use config::TerrainConfig;
 pub use host::{
 	fine_patch_cell_layout, playable_world_cell_layout, retarget_presentation_assets,
-	terrain_streaming_enabled, Durham, TerrainCoverage,
-	TerrainFillSystems, TerrainLayoutPinned, TerrainPresentEnabled, TerrainPresentPending,
+	terrain_streaming_enabled, Durham, DurhamCells, TerrainCoverage,
+	TerrainFillSystems, TerrainLayoutPinned, TerrainPresentPending,
 	TerrainPresentationDirty, TerrainRetarget, TerrainStreamingEnabled, WorldBaseTerrain,
 	WORLD_FINE_HALF_EXTENT_CELLS, WORLD_OUTER_2X_ROWS, WORLD_OUTER_4X_ROWS,
 };
@@ -93,7 +93,7 @@ pub use jersey::{
 	RollingLowPassStampCell as RollingStampCell, ValleyLowPassStampCell as ValleyStampCell,
 };
 pub use jersey_modulation::ComposedElevationOp;
-pub use layer::{DurhamCells, DurhamHeightSnapshot, DurhamRead, DurhamTerrainConfig};
+pub use layer::{DurhamHeightSnapshot, DurhamRead, DurhamTerrainConfig};
 pub use marazion::{
 	MarazionBandPass, MarazionLeafBounds, MarazionLeafKind, MarazionPocketWater,
 	MarazionPocketWatersHighPass, MarazionPocketWatersLowPass, MarazionWatershedConfigs,

@@ -1,7 +1,7 @@
 //! [`VegetationGenerationPlugin`]: forest, grove, and bump-out recipes.
 //!
 //! Vegetation generation reads no terrain, so it is untyped. Terrain enters at
-//! presentation through `VegetationPresentationPlugin<G>`.
+//! presentation through `VegetationPresentationPlugin<Mode, G>`.
 
 mod config;
 mod generation;

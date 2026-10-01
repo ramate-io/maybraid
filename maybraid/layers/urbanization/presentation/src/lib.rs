@@ -18,10 +18,12 @@ use lod::presentation::LodPresentKeepRegion;
 use lod::LodPresentSystems;
 use richmond_building_physics::BuildingWalkColliderPlugin;
 use richmond_urbanization::{UrbanDevelopmentKind, UrbanizationLodChan};
-use terrain_layer_model::TerrainView;
+use terrain_layer_model::{
+	subscribe_mode, GenerationMode, ModeSubscription, TerrainView,
+};
 use urbanization_layer_model::{
 	generate_urbanization_developments, UrbanModel, UrbanSetting, UrbanizationGenerationSystems,
-	UrbanizationLayerConfig, UrbanizationStreamingEnabled,
+	UrbanizationLayerConfig,
 };
 
 mod hosts;
@@ -121,21 +123,24 @@ impl UrbanizationPresenterState {
 	}
 }
 
+/// Marker for host-presenter subscriptions on ground `G`.
+pub struct UrbanizationHosts;
+
 /// GET-only host spawn for leaves that already have a built development.
 ///
 /// Host teardown when the stream is off used to live in `stream_urbanization`
 /// (`UrbanizationStreamLod` held presenter state). Clearing here keeps that
-/// Training teardown without putting despawn in the model crate. The system
+/// teardown without putting despawn in the model crate. The system
 /// still sits after [`UrbanizationGenerationSystems`] and before padded present.
 pub fn present_urbanization_hosts<G: UrbanModel>(
 	mut commands: Commands,
 	config: Res<UrbanizationLayerConfig>,
-	enabled: Res<UrbanizationStreamingEnabled>,
+	subscription: ModeSubscription<(G, UrbanizationHosts)>,
 	keep: Res<LodPresentKeepRegion<UrbanizationLodChan>>,
 	view: TerrainView<G>,
 	mut state: ResMut<UrbanizationPresenterState>,
 ) {
-	let spec = config.urbanization.as_ref().filter(|_| enabled.0);
+	let spec = config.urbanization.as_ref().filter(|_| subscription.active());
 	if spec.is_none() {
 		state.clear(&mut commands);
 		return;
@@ -172,16 +177,24 @@ pub fn present_urbanization_hosts<G: UrbanModel>(
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct UrbanizationHostPresent;
 
-/// Presents the built developments of urbanized model `G`.
-pub struct UrbanizationPresentationPlugin<G>(PhantomData<fn() -> G>);
+/// Presents the built developments of urbanized model `G` while `Mode` is subscribed.
+pub struct UrbanizationPresentationPlugin<Mode, G>(PhantomData<fn() -> (Mode, G)>);
 
-impl<G> Default for UrbanizationPresentationPlugin<G> {
+impl<Mode, G> Default for UrbanizationPresentationPlugin<Mode, G> {
 	fn default() -> Self {
 		Self(PhantomData)
 	}
 }
 
-impl<G: UrbanModel> Plugin for UrbanizationPresentationPlugin<G> {
+pub struct UrbanizationPresentationCore<G>(PhantomData<fn() -> G>);
+
+impl<G> Default for UrbanizationPresentationCore<G> {
+	fn default() -> Self {
+		Self(PhantomData)
+	}
+}
+
+impl<G: UrbanModel> Plugin for UrbanizationPresentationCore<G> {
 	fn build(&self, app: &mut App) {
 		if !app.is_plugin_added::<FurnitureShadersPlugin>() {
 			app.add_plugins(FurnitureShadersPlugin);
@@ -201,10 +214,6 @@ impl<G: UrbanModel> Plugin for UrbanizationPresentationPlugin<G> {
 			Update,
 			FurnitureStreamSystems::Generate.after(generate_urbanization_developments),
 		);
-		// Host present stays after generation and before padded present / raw
-		// sync. It is not gated on `urbanization_streaming_enabled` so Training
-		// turning hopscotch off still despawns hosts (that clear used to live
-		// on `stream_urbanization` next to presenter state).
 		app.add_systems(
 			Update,
 			present_urbanization_hosts::<G>
@@ -214,6 +223,15 @@ impl<G: UrbanModel> Plugin for UrbanizationPresentationPlugin<G> {
 				.before(LodPresentSystems::Produce)
 				.before(TerrainColliderSystems::QueueMeshes),
 		);
+	}
+}
+
+impl<Mode: GenerationMode, G: UrbanModel> Plugin for UrbanizationPresentationPlugin<Mode, G> {
+	fn build(&self, app: &mut App) {
+		subscribe_mode::<(G, UrbanizationHosts), Mode>(app);
+		if !app.is_plugin_added::<UrbanizationPresentationCore<G>>() {
+			app.add_plugins(UrbanizationPresentationCore::<G>::default());
+		}
 	}
 
 	fn finish(&self, app: &mut App) {

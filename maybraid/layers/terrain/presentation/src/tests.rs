@@ -4,14 +4,15 @@ use bevy::app::App;
 use bevy::ecs::system::{Res, SystemParam, SystemParamItem};
 use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::math::{Vec2, Vec3};
-use bevy::prelude::Resource;
+use bevy::prelude::{Local, MinimalPlugins, NextState, ResMut, Resource, Update};
+use bevy::state::app::StatesPlugin;
 use bevy::transform::components::Transform;
 use lod::gen::Id;
 use lod::lod_ref::LodRef;
 use terrain_layer_model::{
-	BaseTerrainGenerationCore, BaseTerrainGenerationPlugin, BaseTerrainScheme, GenerationMode,
-	GenerationModePlugin, HeightField, OnTerrain, RequireLayer, TerrainCell, TerrainGeneration,
-	TerrainModel,
+	subscribe_mode, ActiveGenerationMode, BaseTerrainGenerationCore, BaseTerrainGenerationPlugin,
+	BaseTerrainScheme, GenerationMode, GenerationModePlugin, HeightField, ModeSubscription,
+	OnTerrain, RequireLayer, TerrainCell, TerrainGeneration, TerrainModel,
 };
 
 use crate::{TerrainPresentationPlugin, TerrainPresenter};
@@ -171,13 +172,24 @@ impl BaseTerrainScheme<Flat> for TestMode {
 #[derive(Resource)]
 struct FlatPresentInstalled;
 
+#[derive(Resource, Default)]
+struct InstallCount(u32);
+
 struct FlatPresenter;
 
 impl TerrainPresenter<OnTerrain<Flat>> for FlatPresenter {
 	fn install(app: &mut App) {
+		{
+			let mut count = app.world_mut().get_resource_or_insert_with(InstallCount::default);
+			count.0 += 1;
+		}
 		app.insert_resource(FlatPresentInstalled);
 	}
 }
+
+struct OtherMode;
+
+impl GenerationMode for OtherMode {}
 
 #[test]
 fn presenter_installs_and_finish_requires_generation() {
@@ -186,7 +198,7 @@ fn presenter_installs_and_finish_requires_generation() {
 		GenerationModePlugin::<TestMode>::initial(),
 		BaseTerrainGenerationPlugin::<TestMode, Flat>::new(2.5),
 	))
-		.add_plugins(TerrainPresentationPlugin::<OnTerrain<Flat>, FlatPresenter>::default());
+		.add_plugins(TerrainPresentationPlugin::<TestMode, OnTerrain<Flat>, FlatPresenter>::default());
 	app.finish();
 
 	assert_eq!(app.world().get_resource::<FlatStore>().map(|store| store.fallback), Some(2.5));
@@ -197,6 +209,67 @@ fn presenter_installs_and_finish_requires_generation() {
 #[should_panic(expected = "requires terrain_layer_model::generation::BaseTerrainGenerationCore")]
 fn presentation_without_generation_names_the_missing_plugin() {
 	let mut app = App::new();
-	app.add_plugins(TerrainPresentationPlugin::<OnTerrain<Flat>, FlatPresenter>::default());
+	app.add_plugins(TerrainPresentationPlugin::<TestMode, OnTerrain<Flat>, FlatPresenter>::default());
 	app.finish();
+}
+
+#[test]
+fn two_modes_install_the_core_once() -> anyhow::Result<()> {
+	let mut app = App::new();
+	app.add_plugins((
+		GenerationModePlugin::<TestMode>::initial(),
+		GenerationModePlugin::<OtherMode>::default(),
+		BaseTerrainGenerationPlugin::<TestMode, Flat>::new(2.5),
+		TerrainPresentationPlugin::<TestMode, OnTerrain<Flat>, FlatPresenter>::default(),
+		TerrainPresentationPlugin::<OtherMode, OnTerrain<Flat>, FlatPresenter>::default(),
+	));
+	app.finish();
+	let count = app.world().resource::<InstallCount>().0;
+	anyhow::ensure!(count == 1, "core install ran {count} times");
+	Ok(())
+}
+
+#[derive(Resource)]
+struct Shown(bool);
+
+fn sync_shown(
+	subscription: ModeSubscription<(OnTerrain<Flat>, FlatPresenter)>,
+	mut was: Local<bool>,
+	mut shown: ResMut<Shown>,
+) {
+	if *was && !subscription.active() {
+		shown.0 = false;
+	} else if subscription.active() {
+		shown.0 = true;
+	}
+	*was = subscription.active();
+}
+
+#[test]
+fn losing_subscription_clears_and_returning_presents() -> anyhow::Result<()> {
+	let mut app = App::new();
+	app.add_plugins((
+		MinimalPlugins,
+		StatesPlugin,
+		GenerationModePlugin::<TestMode>::initial(),
+		GenerationModePlugin::<OtherMode>::default(),
+	));
+	subscribe_mode::<(OnTerrain<Flat>, FlatPresenter), TestMode>(&mut app);
+	app.insert_resource(Shown(false));
+	app.add_systems(Update, sync_shown);
+	app.update();
+	anyhow::ensure!(app.world().resource::<Shown>().0, "subscribed mode presents");
+
+	app.world_mut()
+		.resource_mut::<NextState<ActiveGenerationMode>>()
+		.set(ActiveGenerationMode::of::<OtherMode>());
+	app.update();
+	anyhow::ensure!(!app.world().resource::<Shown>().0, "unsubscribed mode retires");
+
+	app.world_mut()
+		.resource_mut::<NextState<ActiveGenerationMode>>()
+		.set(ActiveGenerationMode::of::<TestMode>());
+	app.update();
+	anyhow::ensure!(app.world().resource::<Shown>().0, "return presents again");
+	Ok(())
 }

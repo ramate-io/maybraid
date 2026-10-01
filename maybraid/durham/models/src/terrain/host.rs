@@ -6,8 +6,7 @@
 //! overlaps the next-finer High rim. Generation admits a bounded number of
 //! missing origin ids per frame. Playable visuals come from the urbanized
 //! presenter. Generation runs on every coverage. Raw present is
-//! [`crate::DurhamCells`], gated by [`TerrainPresentEnabled`] (off for
-//! the playable world, on for a fine patch).
+//! [`crate::DurhamCells`], gated by the presenter subscription.
 
 use bevy::ecs::system::SystemParam;
 use bevy::math::{IVec2, UVec2};
@@ -32,13 +31,24 @@ use crate::terrain::config::TerrainConfig;
 use crate::terrain::index::AvianTerrainIndex;
 use crate::terrain::presentation::{
 	TerrainBackground, TerrainFar, TerrainMeshLodBand, TerrainNear, TerrainPresentationAssets,
-	TerrainRegionPresenter, TerrainStoreView, TerrainStreamPresenterState,
+	TerrainPresenterState, TerrainRegionPresenter, TerrainStoreView, TerrainStreamPresenterState,
 };
+use terrain_layer_model::{mode_subscribed, ModeSubscription, OnTerrain};
+use terrain_layer_presentation::TerrainPresenter;
 use crate::water::{ComposedWater, Water, WaterPresentationAssets};
 use crate::{DurhamTerrainModelsPlugin, Terrain, TerrainMeshBuilder};
 
 /// Composed Durham SDF / CpuShot terrain model.
 pub struct Durham;
+
+/// Raw Durham cells. Present while a mode is subscribed to `(OnTerrain<Durham>, Self)`.
+pub struct DurhamCells;
+
+impl TerrainPresenter<OnTerrain<Durham>> for DurhamCells {
+	fn install(app: &mut App) {
+		install_durham_presentation(app);
+	}
+}
 
 /// Near-stream High half-extent (8 × 160 m = 1.28 km).
 pub const WORLD_FINE_HALF_EXTENT_CELLS: i32 = 8;
@@ -91,20 +101,6 @@ pub struct WorldBaseTerrain(pub BaseTerrainNoise);
 /// When true, fill should clear and rebuild (playground radius / seed commands).
 #[derive(Resource, Default)]
 pub struct TerrainPresentationDirty(pub bool);
-
-/// When false, Durham generate runs but raw present does not draw terrain or
-/// seed raw [`crate::terrain::Terrain::scene`] colliders.
-///
-/// [`Default`] is on, matching a fine-patch host. The playable world starts
-/// off; the active mode's scheme writes the flag.
-#[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
-pub struct TerrainPresentEnabled(pub bool);
-
-impl Default for TerrainPresentEnabled {
-	fn default() -> Self {
-		Self(true)
-	}
-}
 
 /// Whether terrain fill and dependent vegetation streams may advance.
 ///
@@ -310,7 +306,6 @@ pub(crate) fn install_durham_generation(
 	.insert_resource(coverage)
 	.insert_resource(layout)
 	.insert_resource(TerrainFillParams { coverage, terrain_radius })
-	.insert_resource(TerrainPresentEnabled(matches!(coverage, TerrainCoverage::FinePatch)))
 	.init_resource::<TerrainPresentationDirty>()
 	.init_resource::<TerrainPresentPending>()
 	.init_resource::<TerrainStreamingEnabled>()
@@ -326,10 +321,8 @@ pub(crate) fn install_durham_generation(
 }
 
 /// Raw Durham present: the three stream presenter states and [`present_cells`].
-/// [`TerrainPresentEnabled`] is initialized here if missing;
-/// [`crate::TerrainResourcesPlugin`] already defaults it on.
 pub(crate) fn install_durham_presentation(app: &mut App) {
-	app.init_resource::<TerrainPresentEnabled>()
+	app.init_resource::<TerrainPresenterState>()
 		.init_resource::<TerrainStreamPresenterState<TerrainNear>>()
 		.init_resource::<TerrainStreamPresenterState<TerrainFar>>()
 		.init_resource::<TerrainStreamPresenterState<TerrainBackground>>()
@@ -339,12 +332,21 @@ pub(crate) fn install_durham_presentation(app: &mut App) {
 				.after(generate_cells)
 				.before(TerrainColliderSystems::QueueMeshes)
 				.run_if(terrain_streaming_enabled)
-				.run_if(terrain_present_enabled),
-		);
+				.run_if(mode_subscribed::<(OnTerrain<Durham>, DurhamCells)>()),
+		)
+		.add_systems(Update, clear_unsubscribed_terrain_present);
 }
 
-fn terrain_present_enabled(enabled: Res<TerrainPresentEnabled>) -> bool {
-	enabled.0
+fn clear_unsubscribed_terrain_present(
+	subscription: ModeSubscription<(OnTerrain<Durham>, DurhamCells)>,
+	mut was_subscribed: Local<bool>,
+	mut commands: Commands,
+	mut state: ResMut<TerrainPresenterState>,
+) {
+	if *was_subscribed && !subscription.active() {
+		state.clear(&mut commands);
+	}
+	*was_subscribed = subscription.active();
 }
 
 #[derive(Resource, Clone, Copy)]

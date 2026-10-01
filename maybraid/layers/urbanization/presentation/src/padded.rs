@@ -17,11 +17,10 @@ use richmond_development_models::{
 	TerrainWithPads,
 };
 use richmond_urbanization::UrbanizationLodChan;
-use terrain_layer_model::TerrainModel;
+use terrain_layer_model::{ModeSubscription, TerrainModel};
 use terrain_layer_presentation::TerrainPresenter;
 use urbanization_layer_model::{
 	Urbanization, UrbanizationGenerationSystems, UrbanizationLayerConfig,
-	UrbanizationStreamingEnabled,
 };
 
 /// Tick key for the padded presenter's `Local` (same fields as generate).
@@ -56,7 +55,7 @@ fn pad_visual_region(layout: &TerrainCellLayout, urban_keep: Option<Aabb3d>) -> 
 pub struct UrbanizationPaddedTerrainState {
 	pub(crate) wanted: HashSet<Id>,
 	/// Raw ids this stream superseded. Only these are handed back, so raw
-	/// cells another owner hid (Training's courtyard) stay hidden.
+	/// cells another owner hid stay hidden.
 	pub(crate) replaced: HashSet<Id>,
 }
 
@@ -71,7 +70,7 @@ where
 	fn install(app: &mut App) {
 		app.init_resource::<UrbanizationPaddedTerrainState>().add_systems(
 			Update,
-			(present_urbanization_padded_terrain, sync_raw_terrain_replacements)
+			(present_urbanization_padded_terrain::<M>, sync_raw_terrain_replacements)
 				.chain()
 				.after(UrbanizationGenerationSystems)
 				.after(crate::UrbanizationHostPresent)
@@ -85,9 +84,9 @@ where
 /// Present padded replacements for the urbanization keep and cull stale cells.
 /// With urbanization off every padded cell is culled.
 #[allow(clippy::too_many_arguments, private_interfaces)]
-pub fn present_urbanization_padded_terrain(
+pub fn present_urbanization_padded_terrain<M>(
 	config: Res<UrbanizationLayerConfig>,
-	enabled: Res<UrbanizationStreamingEnabled>,
+	subscription: ModeSubscription<(Urbanization<M>, PaddedCells)>,
 	keep: Res<LodPresentKeepRegion<UrbanizationLodChan>>,
 	layout: Res<TerrainCellLayout>,
 	store: Res<DevelopmentEntryStore>,
@@ -96,9 +95,12 @@ pub fn present_urbanization_padded_terrain(
 	lod_viewers: Query<&GlobalTransform, With<LodViewer>>,
 	cameras: Query<&GlobalTransform, With<Camera3d>>,
 	mut last: Local<Option<PaddedTerrainTickKey>>,
-) {
+) where
+	M: TerrainModel,
+	Urbanization<M>: TerrainModel,
+{
 	let Some(region) = pad_visual_region(&layout, keep.region)
-		.filter(|_| config.urbanization.is_some() && enabled.0)
+		.filter(|_| config.urbanization.is_some() && subscription.active())
 	else {
 		if last.is_some() || !state.wanted.is_empty() {
 			state.wanted.clear();

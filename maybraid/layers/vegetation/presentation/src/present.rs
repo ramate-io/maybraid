@@ -22,8 +22,10 @@ use procedural_common::NoiseParams;
 use render_item::mesh::IdentifiedMesh;
 use render_item::NormalizeChunk;
 use terrain_chunk_ref::{TerrainChunkKey, TerrainChunkRef};
-use terrain_layer_model::{HeightField, TerrainCell, TerrainModel, TerrainView};
+use terrain_layer_model::{HeightField, ModeSubscription, TerrainCell, TerrainModel, TerrainView};
 use vegetation_layer_model::VegetationLayerConfig;
+
+use crate::VegetationPresent;
 
 /// Urbanized medium bump-outs accept a padded cell only this close to
 /// [`MEDIUM_BUMP_OUT_CELL_XZ`]. Fine bump-outs pass `None` and take any size.
@@ -368,20 +370,29 @@ pub fn bump_out_noise(forest: &NoiseParams) -> NoiseParams {
 	}
 }
 
-/// Clear presenter hosts when the forest spec is absent or its key changes.
+/// Clear presenter hosts when the forest spec is absent, its key changes, or
+/// the active mode is not subscribed.
 ///
 /// The generation stream used to clear these inside `apply_spec`. Keeping the
 /// clear here means the model crate does not despawn. It still runs after
 /// [`VegetationGenerationSystems`](vegetation_layer_model::VegetationGenerationSystems)
 /// and before present produce, under `terrain_streaming_enabled`.
-pub fn retire_vegetation_presenters(
+pub fn retire_vegetation_presenters<G: TerrainModel>(
 	mut commands: Commands,
 	config: Res<VegetationLayerConfig>,
+	subscription: ModeSubscription<(G, VegetationPresent)>,
 	mut forest: ResMut<ForestPresenterState>,
 	mut bump_outs: ResMut<CanopyBumpOutPresenterState>,
 	mut medium: ResMut<MediumCanopyBumpOutPresenterState>,
 	mut last_key: Local<Option<String>>,
 ) {
+	if !subscription.active() {
+		forest.clear(&mut commands);
+		bump_outs.clear(&mut commands);
+		medium.clear(&mut commands);
+		last_key.take();
+		return;
+	}
 	let Some(spec) = config.forest.as_ref() else {
 		forest.clear(&mut commands);
 		bump_outs.clear(&mut commands);

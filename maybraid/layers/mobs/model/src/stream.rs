@@ -18,7 +18,7 @@ use crate::index::{urban_leaf_arrival_radius, xz_radius_aabb, MobCellExtent, Mob
 pub const MOB_GENERATE_RADIUS: f32 = 3_000.0;
 pub const MOB_PRESENT_RADIUS: f32 = 1_000.0;
 
-/// Training owns its roster, so the world stream steps aside.
+/// A session that owns its own roster sets this so the world stream steps aside.
 #[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct MobStreamSuspended(pub bool);
 
@@ -149,7 +149,7 @@ pub fn sync_mob_plant_hosts<G: UrbanModel>(
 	mobs.plant_hosts = hosts;
 }
 
-/// Training owns its roster, so the world stream steps aside.
+/// A session that owns its own roster sets this so the world stream steps aside.
 ///
 /// When suspended, generation keeps today's generation half: disable both
 /// bullseyes, set `present_keep.region = None`, reset `previous_cell`, and

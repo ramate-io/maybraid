@@ -15,7 +15,7 @@ use mob_groups::MobGroupsPlugin;
 use mob_layer_model::{
 	MobCell, MobGenerationPlugin, MobGenerationSystems, MobIndex, MobLodChan,
 };
-use terrain_layer_model::RequireLayer;
+use terrain_layer_model::{subscribe_mode, GenerationMode, RequireLayer};
 use urbanization_layer_model::UrbanModel;
 
 mod present;
@@ -25,19 +25,30 @@ use present::{
 	MobHighLodRegion, MobPresenter, MobPresenterState,
 };
 
-/// Presents generated mob groups on ground `G`.
+/// Marker for mob-presenter subscriptions on ground `G`.
+pub struct MobPresent;
+
+/// Presents generated mob groups on ground `G` while `Mode` is subscribed.
 ///
 /// Bound on [`UrbanModel`] only because mob generation needs urbanization today.
 /// Presentation itself reads nothing but `G`'s height.
-pub struct MobPresentationPlugin<G>(PhantomData<fn() -> G>);
+pub struct MobPresentationPlugin<Mode, G>(PhantomData<fn() -> (Mode, G)>);
 
-impl<G> Default for MobPresentationPlugin<G> {
+impl<Mode, G> Default for MobPresentationPlugin<Mode, G> {
 	fn default() -> Self {
 		Self(PhantomData)
 	}
 }
 
-impl<G: UrbanModel> Plugin for MobPresentationPlugin<G> {
+pub struct MobPresentationCore<G>(PhantomData<fn() -> G>);
+
+impl<G> Default for MobPresentationCore<G> {
+	fn default() -> Self {
+		Self(PhantomData)
+	}
+}
+
+impl<G: UrbanModel> Plugin for MobPresentationCore<G> {
 	fn build(&self, app: &mut App) {
 		app.insert_resource(MobLodRefreshMode::Indexed);
 		app.add_plugins(MobGroupsPlugin);
@@ -68,7 +79,7 @@ impl<G: UrbanModel> Plugin for MobPresentationPlugin<G> {
 			.configure_sets(Update, LodPresentSystems::Produce.after(LodGenerateSystems::Drain))
 			.add_systems(
 				Update,
-				retire_mob_presenters
+				retire_mob_presenters::<G>
 					.after(MobGenerationSystems)
 					.before(LodPresentSystems::Produce),
 			)
@@ -89,9 +100,18 @@ impl<G: UrbanModel> Plugin for MobPresentationPlugin<G> {
 					.in_set(LodRefreshSystems::UpdateLevels),
 			);
 	}
+}
+
+impl<Mode: GenerationMode, G: UrbanModel> Plugin for MobPresentationPlugin<Mode, G> {
+	fn build(&self, app: &mut App) {
+		subscribe_mode::<(G, MobPresent), Mode>(app);
+		if !app.is_plugin_added::<MobPresentationCore<G>>() {
+			app.add_plugins(MobPresentationCore::<G>::default());
+		}
+	}
 
 	fn finish(&self, app: &mut App) {
-		app.require_layer::<MobGenerationPlugin<G>, Self>();
+		app.require_layer::<MobGenerationPlugin<G>, MobPresentationCore<G>>();
 	}
 }
 

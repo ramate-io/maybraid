@@ -34,7 +34,7 @@ pub const DEFAULT_URBANIZATION_STREAM_RADIUS: u32 = 1;
 pub const DEFAULT_URBANIZATION_NOISE: &str = "1337,0.0005,1,1";
 
 /// When false, hopscotch stays off even if Durham streaming is on.
-/// Training uses this so the grounds stay a grove instead of a city.
+/// A session that wants no city sets this so hopscotch stays off.
 #[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct UrbanizationStreamingEnabled(pub bool);
 

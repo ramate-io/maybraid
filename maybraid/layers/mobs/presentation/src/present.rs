@@ -1,4 +1,4 @@
-//! Mob cell presenter, surface fit, High LOD pulse, and Training teardown.
+//! Mob cell presenter, surface fit, High LOD pulse, and unsubscribed teardown.
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::time::Duration;
@@ -14,9 +14,11 @@ use lod::{
 	LodNode, LodNodePose, LodRefreshDomain, LodSceneRefreshAabb, LodSceneRefreshRegion, LodViewer,
 };
 use maybraid_mobs::MobScene;
-use mob_layer_model::{MobCell, MobIndex, MobStreamSuspended};
-use terrain_layer_model::TerrainView;
+use mob_layer_model::{MobCell, MobIndex};
+use terrain_layer_model::{ModeSubscription, TerrainView};
 use urbanization_layer_model::UrbanModel;
+
+use crate::MobPresent;
 
 /// Half-extent of the High produce cube. Sized a margin past the 200 m High sphere.
 pub const MOB_HIGH_LOD_REFRESH_RADIUS: f32 = 250.0;
@@ -209,17 +211,17 @@ pub fn pulse_mob_high_lod(
 	}
 }
 
-/// While [`MobStreamSuspended`] is true, remove every presented cell and drain
-/// `pending_despawn`, every frame, exactly as the generation stream did.
+/// While the active mode is not subscribed, remove every presented cell and
+/// drain `pending_despawn`, every frame, exactly as the generation stream did.
 ///
 /// Ordered `.after(MobGenerationSystems).before(LodPresentSystems::Produce)`.
 /// No present-state system runs in that window, so the frame timing matches today.
-pub fn retire_mob_presenters(
-	suspended: Res<MobStreamSuspended>,
+pub fn retire_mob_presenters<G: UrbanModel>(
+	subscription: ModeSubscription<(G, MobPresent)>,
 	mut presented: ResMut<MobPresenterState>,
 	mut commands: Commands,
 ) {
-	if !suspended.0 {
+	if subscription.active() {
 		return;
 	}
 	for id in presented.presented_ids() {

@@ -70,7 +70,7 @@ where
 				.before(LodGenerateSystems::Produce),
 		);
 		// Stream still runs while urbanization is off so a session that turns
-		// it off (Training) tears generate state down instead of freezing it.
+		// it off tears generate state down instead of freezing it.
 		app.add_systems(
 			Update,
 			(

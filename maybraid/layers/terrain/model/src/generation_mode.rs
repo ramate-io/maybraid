@@ -39,6 +39,13 @@ impl ActiveGenerationMode {
 	pub fn is<M: GenerationMode>(self) -> bool {
 		matches!(self, Self::Mode { id, .. } if id == TypeId::of::<M>())
 	}
+
+	pub fn type_id(self) -> Option<TypeId> {
+		match self {
+			Self::Mode { id, .. } => Some(id),
+			Self::None => None,
+		}
+	}
 }
 
 impl PartialEq for ActiveGenerationMode {

@@ -7427,6 +7427,7 @@ dependencies = [
 name = "terrain-layer-presentation"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "bevy",
  "lod",
  "terrain-layer-model",

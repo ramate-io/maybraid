@@ -1,9 +1,11 @@
 use std::collections::HashSet;
 
 use bevy::app::{App, Plugin};
+use bevy::ecs::system::SystemState;
 use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec3;
-use bevy::prelude::{Visibility, World};
+use bevy::prelude::{AssetPlugin, MinimalPlugins, NextState, Visibility, World};
+use bevy::state::app::StatesPlugin;
 use durham_terrain_models::{
 	Durham, DurhamTerrainConfig, PresentedTerrainScene, TerrainColliderMeshSource,
 	TerrainSuperseded, TerrainTrimeshCollider,
@@ -11,7 +13,8 @@ use durham_terrain_models::{
 use lod::gen::Id;
 use richmond_development_models::PresentedPaddedTerrainScene;
 use terrain_layer_model::{
-	BaseTerrainGenerationPlugin, BaseTerrainScheme, GenerationMode, GenerationModePlugin, OnTerrain,
+	subscribe_mode, ActiveGenerationMode, BaseTerrainGenerationPlugin, BaseTerrainScheme,
+	GenerationMode, GenerationModePlugin, ModeSubscribers, ModeSubscription, OnTerrain,
 };
 use terrain_layer_presentation::TerrainPresentationPlugin;
 use urbanization_layer_model::{
@@ -19,7 +22,7 @@ use urbanization_layer_model::{
 };
 
 use crate::{
-	sync_raw_terrain_replacements, PaddedCells, UrbanizationPaddedTerrainState,
+	sync_raw_terrain_replacements, PaddedCells, UrbanizationHosts, UrbanizationPaddedTerrainState,
 	UrbanizationPresentationPlugin,
 };
 
@@ -99,8 +102,8 @@ fn urbanization_layers_finish_with_base_generation() {
 		GenerationModePlugin::<TestMode>::initial(),
 		BaseTerrainGenerationPlugin::<TestMode, Durham>::new(DurhamTerrainConfig::fine_patch(2)),
 		UrbanizationGenerationPlugin::<OnTerrain<Durham>>::new(UrbanizationLayerConfig::default()),
-		TerrainPresentationPlugin::<Urbanization<OnTerrain<Durham>>, PaddedCells>::default(),
-		UrbanizationPresentationPlugin::<Urbanization<OnTerrain<Durham>>>::default(),
+		TerrainPresentationPlugin::<TestMode, Urbanization<OnTerrain<Durham>>, PaddedCells>::default(),
+		UrbanizationPresentationPlugin::<TestMode, Urbanization<OnTerrain<Durham>>>::default(),
 	);
 }
 
@@ -110,4 +113,105 @@ fn urbanization_layers_without_base_generation_name_the_missing_plugin() {
 	// `build` installs Richmond / furniture plugins that need a full Bevy app.
 	// `finish` is the requirement check the assemblers actually run.
 	UrbanizationGenerationPlugin::<OnTerrain<Durham>>::default().finish(&mut App::new());
+}
+
+struct OtherMode;
+
+impl GenerationMode for OtherMode {}
+
+type Urbanized = Urbanization<OnTerrain<Durham>>;
+
+fn subscribed_app() -> App {
+	let mut app = App::new();
+	app.add_plugins((
+		MinimalPlugins,
+		StatesPlugin,
+		GenerationModePlugin::<TestMode>::initial(),
+		GenerationModePlugin::<OtherMode>::default(),
+	));
+	subscribe_mode::<(Urbanized, UrbanizationHosts), TestMode>(&mut app);
+	subscribe_mode::<(Urbanized, PaddedCells), TestMode>(&mut app);
+	app
+}
+
+#[test]
+fn losing_subscription_is_inactive_and_returning_is_active() -> anyhow::Result<()> {
+	let mut app = subscribed_app();
+	app.update();
+	{
+		let mut state = SystemState::<ModeSubscription<(Urbanized, UrbanizationHosts)>>::new(
+			app.world_mut(),
+		);
+		anyhow::ensure!(
+			state.get(app.world()).map_err(|error| anyhow::anyhow!("{error:?}"))?.active(),
+			"hosts follow the subscribed mode"
+		);
+	}
+	{
+		let mut state = SystemState::<ModeSubscription<(Urbanized, PaddedCells)>>::new(
+			app.world_mut(),
+		);
+		anyhow::ensure!(
+			state.get(app.world()).map_err(|error| anyhow::anyhow!("{error:?}"))?.active(),
+			"padded follows the subscribed mode"
+		);
+	}
+
+	app.world_mut()
+		.resource_mut::<NextState<ActiveGenerationMode>>()
+		.set(ActiveGenerationMode::of::<OtherMode>());
+	app.update();
+	{
+		let mut state = SystemState::<ModeSubscription<(Urbanized, UrbanizationHosts)>>::new(
+			app.world_mut(),
+		);
+		anyhow::ensure!(
+			!state.get(app.world()).map_err(|error| anyhow::anyhow!("{error:?}"))?.active(),
+			"unsubscribed mode retires hosts"
+		);
+	}
+	{
+		let mut state = SystemState::<ModeSubscription<(Urbanized, PaddedCells)>>::new(
+			app.world_mut(),
+		);
+		anyhow::ensure!(
+			!state.get(app.world()).map_err(|error| anyhow::anyhow!("{error:?}"))?.active(),
+			"unsubscribed mode culls padded"
+		);
+	}
+
+	app.world_mut()
+		.resource_mut::<NextState<ActiveGenerationMode>>()
+		.set(ActiveGenerationMode::of::<TestMode>());
+	app.update();
+	{
+		let mut state = SystemState::<ModeSubscription<(Urbanized, UrbanizationHosts)>>::new(
+			app.world_mut(),
+		);
+		anyhow::ensure!(
+			state.get(app.world()).map_err(|error| anyhow::anyhow!("{error:?}"))?.active(),
+			"return presents hosts again"
+		);
+	}
+	Ok(())
+}
+
+#[test]
+fn two_modes_install_the_core_once() -> anyhow::Result<()> {
+	let mut app = App::new();
+	app.add_plugins((MinimalPlugins, AssetPlugin::default(), StatesPlugin));
+	app.add_plugins((
+		GenerationModePlugin::<TestMode>::initial(),
+		GenerationModePlugin::<OtherMode>::default(),
+		UrbanizationPresentationPlugin::<TestMode, Urbanized>::default(),
+		UrbanizationPresentationPlugin::<OtherMode, Urbanized>::default(),
+	));
+	anyhow::ensure!(
+		app.is_plugin_added::<crate::UrbanizationPresentationCore<Urbanized>>(),
+		"core is installed"
+	);
+	let hosts = app.world().resource::<ModeSubscribers<(Urbanized, UrbanizationHosts)>>();
+	anyhow::ensure!(hosts.contains::<TestMode>());
+	anyhow::ensure!(hosts.contains::<OtherMode>());
+	Ok(())
 }
