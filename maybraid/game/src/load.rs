@@ -226,7 +226,6 @@ mod tests {
 		use maybraid_world::WorldMode;
 		let round = TrainingRound::new(1);
 		let mut world = World::new();
-		world.insert_resource(State::new(GameFlow::LoadingWorld));
 		world.insert_resource(NextState::<GameFlow>::Unchanged);
 		world.insert_resource(NextState::<WorldMode>::Unchanged);
 		world.insert_resource(PlaySession::Training);

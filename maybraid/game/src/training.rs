@@ -75,20 +75,17 @@ pub(crate) fn training_trainee(
 	round.map(|round| round.trainee())
 }
 
-/// Leave / Home: drop the session and request Discovery for the flow already
-/// in effect. A new life does not come through here.
+/// Leave / Home: drop the session.
 pub(crate) fn clear_play_session(
 	mut commands: Commands,
 	mut session: ResMut<PlaySession>,
 	mut mode: ResMut<GameMode>,
 	mut ready: ResMut<WorldSurfaceReady>,
-	mut route: ShellRoute,
 ) {
 	ready.0 = false;
 	*session = PlaySession::None;
 	mode.label = String::from(PlaySession::Discovery.label());
 	commands.remove_resource::<TrainingSpawn>();
-	route.keep_flow(*session);
 }
 
 #[cfg(test)]
@@ -97,8 +94,7 @@ mod tests {
 	use bevy::ecs::system::RunSystemOnce;
 	use maybraid_world::WorldMode;
 
-	fn shell_states(world: &mut World, flow: GameFlow) {
-		world.insert_resource(State::new(flow));
+	fn shell_states(world: &mut World) {
 		world.insert_resource(NextState::<GameFlow>::Unchanged);
 		world.insert_resource(NextState::<WorldMode>::Unchanged);
 	}
@@ -106,7 +102,6 @@ mod tests {
 	#[test]
 	fn leave_drops_the_fixtures_and_the_session() -> anyhow::Result<()> {
 		let mut world = World::new();
-		shell_states(&mut world, GameFlow::Home);
 		world.insert_resource(PlaySession::Training);
 		world.insert_resource(GameMode::new("Training Ground"));
 		world.insert_resource(WorldSurfaceReady(true));
@@ -118,14 +113,6 @@ mod tests {
 		assert_eq!(world.resource::<GameMode>().label, "Discovery");
 		assert!(!world.resource::<WorldSurfaceReady>().0);
 		assert!(world.get_resource::<TrainingSpawn>().is_none());
-		assert!(matches!(
-			world.resource::<NextState<GameFlow>>(),
-			NextState::Unchanged
-		));
-		assert!(matches!(
-			world.resource::<NextState<WorldMode>>(),
-			NextState::PendingIfNeq(WorldMode::Discovery)
-		));
 		Ok(())
 	}
 
@@ -134,7 +121,7 @@ mod tests {
 		let mut world = World::new();
 		world.init_resource::<Messages<TrainingCharacterChoice>>();
 		world.write_message(TrainingCharacterChoice::Random);
-		shell_states(&mut world, GameFlow::Home);
+		shell_states(&mut world);
 		world.insert_resource(GameMode::default());
 		world.insert_resource(PlaySession::None);
 		world
@@ -162,7 +149,7 @@ mod tests {
 		let mut world = World::new();
 		world.init_resource::<Messages<TrainingLifeEnded>>();
 		world.write_message(TrainingLifeEnded);
-		shell_states(&mut world, GameFlow::World);
+		shell_states(&mut world);
 		world.insert_resource(PlaySession::Training);
 		world.insert_resource(TrainingRound::new(3));
 		let mut spawn = TrainingSpawn::new(TrainingCharacterChoice::Random);

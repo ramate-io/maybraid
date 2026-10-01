@@ -39,13 +39,12 @@ use vegetation_layer_model::VegetationLayerConfig;
 
 use crate::WorldPlayerLoadout;
 use crate::control::{WorldSurfaceSet, update_world_surface_ready};
-use crate::world_mode::WorldMode;
 use crate::training_markers::{TrainingEnemyMarkersEnabled, sync_training_enemy_markers};
 use crate::training_plaza::{
-	TrainingBrawler, clear_training_plaza, mount_training_plaza,
-	park_on_training_site,
+	TrainingBrawler, clear_training_plaza, mount_training_plaza, park_on_training_site,
 	promote_training_plaza, reseat_training_life, supersede_training_raw_terrain,
 };
+use crate::world_mode::WorldMode;
 
 /// Training Ground session: patch retarget, the stamped plaza, and the
 /// raw-to-padded hand-off under its courtyard.

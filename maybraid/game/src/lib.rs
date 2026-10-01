@@ -221,7 +221,7 @@ fn read_player_loadout(
 
 fn route_home_choice(
 	mut choices: MessageReader<HomeMenuChoice>,
-	session: Res<PlaySession>,
+	current: Res<PlaySession>,
 	mut route: ShellRoute,
 	mut mode: ResMut<GameMode>,
 	mut commands: Commands,
@@ -236,7 +236,7 @@ fn route_home_choice(
 			route.enter(GameFlow::LoadingWorld, session);
 		}
 		HomeRoute::TrainingSetup => request_show_training(&mut commands),
-		HomeRoute::Characters => route.enter(GameFlow::Characters, *session),
+		HomeRoute::Characters => route.enter(GameFlow::Characters, *current),
 		HomeRoute::Settings => request_show_in_game_settings(&mut commands),
 		HomeRoute::Unimplemented => {}
 	}
@@ -527,7 +527,6 @@ mod tests {
 		let mut world = World::new();
 		world.init_resource::<Messages<HomeMenuChoice>>();
 		world.write_message(HomeMenuChoice::TrainingGround);
-		world.insert_resource(State::new(GameFlow::Home));
 		world.insert_resource(NextState::<GameFlow>::Unchanged);
 		world.insert_resource(NextState::<maybraid_world::WorldMode>::Unchanged);
 		world.insert_resource(GameMode::default());

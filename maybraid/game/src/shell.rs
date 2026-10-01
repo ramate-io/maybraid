@@ -179,38 +179,19 @@ pub(crate) fn world_mode_for_shell(flow: GameFlow, session: PlaySession) -> Worl
 
 /// Requests a shell flow and the [`WorldMode`] that session implies.
 ///
-/// [`Self::enter`] writes both transitions. [`Self::keep_flow`] writes only the
-/// mode, for a route that changes [`PlaySession`] and leaves the flow where it
-/// is. The mode uses `set_if_neq`: Bevy 0.19 runs `OnExit` and `OnEnter` when
+/// The mode uses `set_if_neq`: Bevy 0.19 runs `OnExit` and `OnEnter` when
 /// `set` repeats the current state, which would tear down a live plaza on a
 /// new life and on Loading → World.
 #[derive(SystemParam)]
 pub(crate) struct ShellRoute<'w> {
 	flow: ResMut<'w, NextState<GameFlow>>,
 	mode: ResMut<'w, NextState<WorldMode>>,
-	live: Res<'w, State<GameFlow>>,
 }
 
 impl ShellRoute<'_> {
 	pub(crate) fn enter(&mut self, flow: GameFlow, session: PlaySession) {
 		self.flow.set(flow);
-		self.request_mode(flow, session);
-	}
-
-	pub(crate) fn keep_flow(&mut self, session: PlaySession) {
-		let flow = flow_in_effect(&self.flow, *self.live.get());
-		self.request_mode(flow, session);
-	}
-
-	fn request_mode(&mut self, flow: GameFlow, session: PlaySession) {
 		NextState::set_if_neq(&mut self.mode, world_mode_for_shell(flow, session));
-	}
-}
-
-fn flow_in_effect(next: &NextState<GameFlow>, live: GameFlow) -> GameFlow {
-	match next {
-		NextState::Pending(flow) | NextState::PendingIfNeq(flow) => *flow,
-		NextState::Unchanged => live,
 	}
 }
 
@@ -351,14 +332,9 @@ mod tests {
 		route.enter(GameFlow::LoadingWorld, PlaySession::Training);
 	}
 
-	fn keep_discovery(mut route: ShellRoute) {
-		route.keep_flow(PlaySession::None);
-	}
-
 	#[test]
 	fn a_route_requests_the_flow_and_the_mode_together() -> anyhow::Result<()> {
 		let mut world = World::new();
-		world.insert_resource(State::new(GameFlow::Home));
 		world.insert_resource(NextState::<GameFlow>::Unchanged);
 		world.insert_resource(NextState::<WorldMode>::Unchanged);
 		world.run_system_once(enter_training).map_err(|error| anyhow::anyhow!("{error:?}"))?;
@@ -373,31 +349,10 @@ mod tests {
 	}
 
 	#[test]
-	fn a_session_change_keeps_the_flow_and_updates_the_mode() -> anyhow::Result<()> {
-		let mut world = World::new();
-		world.insert_resource(State::new(GameFlow::World));
-		world.insert_resource(NextState::<GameFlow>::Unchanged);
-		world.insert_resource(NextState::<WorldMode>::Unchanged);
-		world.run_system_once(keep_discovery).map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		let flow = world.resource::<NextState<GameFlow>>();
-		let mode = world.resource::<NextState<WorldMode>>();
-		let flow_ok = matches!(flow, NextState::Unchanged);
-		let mode_ok = matches!(mode, NextState::PendingIfNeq(WorldMode::Discovery));
-		if !flow_ok || !mode_ok {
-			return Err(anyhow::anyhow!("session change left flow {flow:?} mode {mode:?}"));
-		}
-		Ok(())
-	}
-
-	#[test]
 	fn training_shell_streams_in_the_world_shell() -> anyhow::Result<()> {
 		for flow in [GameFlow::LoadingWorld, GameFlow::World] {
-			if !terrain_streaming_for_shell(flow) {
-				return Err(anyhow::anyhow!("{flow:?} should stream"));
-			}
-			if world_mode_for_shell(flow, PlaySession::Training) != WorldMode::Training {
-				return Err(anyhow::anyhow!("{flow:?} with Training is not Training mode"));
-			}
+			assert!(terrain_streaming_for_shell(flow));
+			assert_eq!(world_mode_for_shell(flow, PlaySession::Training), WorldMode::Training);
 			let mut world = World::new();
 			world.insert_resource(State::new(flow));
 			world.insert_resource(PlaySession::Training);
@@ -409,15 +364,9 @@ mod tests {
 			world
 				.run_system_once(apply_shell_look)
 				.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-			if !world.resource::<TerrainStreamingEnabled>().0 {
-				return Err(anyhow::anyhow!("training shell left streaming off"));
-			}
-			if world.resource::<WorldGameplayEnabled>().0 {
-				return Err(anyhow::anyhow!("loading/world look enabled gameplay without pause"));
-			}
-			if world.resource::<WorldSceneryVisible>().0 != (flow == GameFlow::World) {
-				return Err(anyhow::anyhow!("scenery did not follow {flow:?}"));
-			}
+			assert!(world.resource::<TerrainStreamingEnabled>().0);
+			assert!(!world.resource::<WorldGameplayEnabled>().0);
+			assert_eq!(world.resource::<WorldSceneryVisible>().0, flow == GameFlow::World);
 		}
 		assert!(terrain_streaming_for_shell(GameFlow::LoadingWorld));
 		assert!(terrain_streaming_for_shell(GameFlow::World));
