@@ -93,6 +93,14 @@
 
             LD_LIBRARY_PATH = "${pkgs.stdenv.cc.cc.lib}/lib/";
 
+            # rustc's Darwin target always passes `-liconv`. The Nix `cc`
+            # wrapper does not reliably inject `libiconv` into rustc's own
+            # link line (and Xcode `DEVELOPER_DIR` can hide the SDK copy).
+            RUSTFLAGS = pkgs.lib.optionalString pkgs.stdenv.isDarwin
+              "-L native=${pkgs.libiconv}/lib";
+            LIBRARY_PATH = pkgs.lib.optionalString pkgs.stdenv.isDarwin
+              "${pkgs.libiconv}/lib";
+
             shellHook = ''
               #!/usr/bin/env ${pkgs.bash}
 
@@ -101,8 +109,15 @@
               # Export linker flags if on Darwin (macOS)
               if [[ "${pkgs.stdenv.hostPlatform.system}" =~ "darwin" ]]; then
                 export MACOSX_DEPLOYMENT_TARGET=$(sw_vers -productVersion)
-                export LDFLAGS="-L/opt/homebrew/opt/zlib/lib"
-                export CPPFLAGS="-I/opt/homebrew/opt/zlib/include"
+                export LDFLAGS="-L${pkgs.libiconv}/lib -L/opt/homebrew/opt/zlib/lib''${LDFLAGS:+ $LDFLAGS}"
+                export CPPFLAGS="-I/opt/homebrew/opt/zlib/include''${CPPFLAGS:+ $CPPFLAGS}"
+
+                # mistral.rs Metal kernel precompile needs `xcrun metal`.
+                # Nix apple-sdk sets DEVELOPER_DIR to a store SDK that has
+                # no Metal compiler; prefer full Xcode when it is installed.
+                if [ -d /Applications/Xcode.app/Contents/Developer ]; then
+                  export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+                fi
 
                 macos_blender="${macosBlenderApp}"
                 if [ ! -x "$macos_blender" ]; then

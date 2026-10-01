@@ -1,0 +1,166 @@
+//! Load Qwen once and reuse it for parse and respond.
+
+use std::path::Path;
+
+use maybraid_language_core::{ConceptUniverse, Utterance};
+use mistralrs::{
+	Constraint, DeviceMapSetting, GgufModelBuilder, Model, RequestBuilder, TextMessageRole,
+};
+use serde_json::Value;
+
+use crate::config::{MistralLanguageConfig, ParseGenerationConfig, ResponseGenerationConfig};
+use crate::device::InferenceDevice;
+use crate::error::MistralLanguageError;
+use crate::prompt::{ParsePrompt, RespondPrompt};
+use crate::schema::GeneratedUtterance;
+
+/// Loaded `mistral.rs` model. Callers retain this across requests.
+pub struct MistralLanguageModel {
+	model: Model,
+	parse: ParseGenerationConfig,
+	respond: ResponseGenerationConfig,
+}
+
+/// English response request. Context is a bounded JSON blob, never ECS handles.
+#[derive(Clone, Debug)]
+pub struct ResponseRequest<'a> {
+	pub input: &'a str,
+	pub context: Value,
+}
+
+impl<'a> ResponseRequest<'a> {
+	pub fn new(input: &'a str) -> Self {
+		Self { input, context: RespondPrompt::empty_context() }
+	}
+
+	pub fn with_context(mut self, context: Value) -> Self {
+		self.context = context;
+		self
+	}
+}
+
+impl MistralLanguageModel {
+	pub async fn load(config: MistralLanguageConfig) -> Result<Self, MistralLanguageError> {
+		let path = config.model_path;
+		if !path.is_file() {
+			return Err(MistralLanguageError::ModelMissing { path });
+		}
+		let file_name = path
+			.file_name()
+			.and_then(|name| name.to_str())
+			.ok_or_else(|| {
+				MistralLanguageError::load(&path, "model path is not a utf-8 file name")
+			})?
+			.to_owned();
+		let dir = path.parent().unwrap_or_else(|| Path::new("."));
+		// Auto device mapping treats macOS CPU as 0MB and refuses a 1.7B Q4.
+		// Dummy mapping loads onto the selected GPU (or CPU) instead.
+		// https://github.com/EricLBuehler/mistral.rs/issues/2078
+		let device = InferenceDevice::select(config.force_cpu)?;
+		let model = GgufModelBuilder::new(dir.display().to_string(), vec![file_name])
+			.with_device(device)
+			.with_device_mapping(DeviceMapSetting::dummy())
+			.with_logging()
+			.with_throughput_logging()
+			.build()
+			.await
+			.map_err(|error| MistralLanguageError::load(&path, error))?;
+		Ok(Self { model, parse: config.parse, respond: config.respond })
+	}
+
+	/// Structured English → [`GeneratedUtterance`].
+	pub async fn parse_generated(
+		&self,
+		english: &str,
+	) -> Result<GeneratedUtterance, MistralLanguageError> {
+		let request = RequestBuilder::new()
+			.add_message(TextMessageRole::System, ParsePrompt::SYSTEM)
+			.add_message(TextMessageRole::User, ParsePrompt::user(english))
+			.set_sampler_temperature(f64::from(self.parse.temperature))
+			.set_sampler_max_len(self.parse.max_len)
+			.set_constraint(Constraint::JsonSchema(GeneratedUtterance::json_schema()))
+			.enable_thinking(false);
+		let content = self.complete(request).await?;
+		let json = extract_json(&content);
+		GeneratedUtterance::from_json(json).map_err(|error| {
+			MistralLanguageError::invalid_output(format!("{error}; raw={json}"))
+		})
+	}
+
+	/// Issue API: parse into overlay concept IDs hashed from English terms.
+	pub async fn parse_utterance(&self, english: &str) -> Result<Utterance, MistralLanguageError> {
+		let generated = self.parse_generated(english).await?;
+		generated.into_overlay_utterance().map_err(|error| with_generated(error, &generated))
+	}
+
+	/// Parse and resolve labels through a shared concept universe.
+	pub async fn parse_utterance_in(
+		&self,
+		english: &str,
+		universe: &impl ConceptUniverse,
+	) -> Result<Utterance, MistralLanguageError> {
+		let generated = self.parse_generated(english).await?;
+		generated.into_utterance(universe).map_err(|error| with_generated(error, &generated))
+	}
+
+	pub async fn respond(
+		&self,
+		request: ResponseRequest<'_>,
+	) -> Result<String, MistralLanguageError> {
+		let builder = RequestBuilder::new()
+			.add_message(TextMessageRole::System, RespondPrompt::SYSTEM)
+			.add_message(
+				TextMessageRole::User,
+				RespondPrompt::user(request.input, &request.context),
+			)
+			.set_sampler_temperature(f64::from(self.respond.temperature))
+			.set_sampler_topp(f64::from(self.respond.top_p))
+			.set_sampler_max_len(self.respond.max_len)
+			.enable_thinking(false);
+		self.complete(builder).await
+	}
+
+	async fn complete(&self, request: RequestBuilder) -> Result<String, MistralLanguageError> {
+		let response = self
+			.model
+			.send_chat_request(request)
+			.await
+			.map_err(MistralLanguageError::inference)?;
+		response
+			.choices
+			.into_iter()
+			.next()
+			.and_then(|choice| choice.message.content)
+			.filter(|content| !content.trim().is_empty())
+			.ok_or_else(|| MistralLanguageError::inference("model returned no content"))
+	}
+}
+
+fn with_generated(
+	error: MistralLanguageError,
+	generated: &GeneratedUtterance,
+) -> MistralLanguageError {
+	let Ok(raw) = serde_json::to_string(generated) else {
+		return error;
+	};
+	let detail = match error {
+		MistralLanguageError::InvalidOutput(detail) => detail,
+		other => other.to_string(),
+	};
+	MistralLanguageError::invalid_output(format!("{detail}; generated={raw}"))
+}
+
+fn extract_json(content: &str) -> &str {
+	let trimmed = content.trim();
+	let Some(start) = trimmed.find('{') else {
+		return trimmed;
+	};
+	let Some(end) = trimmed.rfind('}') else {
+		return trimmed;
+	};
+	if end < start {
+		trimmed
+	} else {
+		&trimmed[start..=end]
+	}
+}
