@@ -4,7 +4,6 @@ use std::time::Duration;
 
 use bevy::prelude::*;
 use bevy::time::common_conditions::on_timer;
-use world_player::Player as VegetationPlayer;
 use characters::CharacterMotionSystems;
 use evasion_intelligence::{EvasionPlugin, EvasionSystems};
 use firearm_intelligence::{FirearmIntelligencePlugin, FirearmIntelligenceSystems};
@@ -18,8 +17,8 @@ use intelligence_lod::{
 	LOOK_APPLY_FOV_INSET, LOOK_FOV_INSET,
 };
 use lod::LodViewer;
-use mob_scenes::player_affiliations;
 use meandering_intelligence::MeanderingIntelligencePlugin;
+use mob_scenes::player_affiliations;
 use movement_intelligence::{
 	CandidateBudget, MovementIntelligenceLimits, MovementIntelligencePlugin,
 };
@@ -43,6 +42,7 @@ use threat_intelligence_damage::ThreatIntelligenceDamagePlugin;
 use threat_management_intelligence::{
 	ThreatManagementIntelligence, ThreatManagementPlugin, ThreatTactic,
 };
+use world_player::Player as VegetationPlayer;
 
 const INTELLIGENCE_LOD_REFRESH_INTERVAL: Duration = Duration::from_millis(250);
 

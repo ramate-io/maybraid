@@ -3,11 +3,6 @@
 use avian3d::prelude::PhysicsPlugins;
 use avian3d::schedule::PhysicsSchedulePlugin;
 use bevy::prelude::*;
-use lod::{
-	Bullseye, LodChunkFulfillBudget, LodCullRegionCursor, LodRefreshCorePlugin,
-	LodSceneCullRegionPlugin, LodSceneRefreshRegionPlugin, OpenLattice, Spotlight,
-};
-use lod_gimme::{GimmeLodSceneCullPlugin, GimmeLodSceneRefreshPlugin};
 use building_components::{
 	ComponentsOnly, DoorNode, FloorNode, FurnitureNode, JointNode, LabelNode, PanelNode,
 	PartitionNode, RoofNode, StairNode,
@@ -17,11 +12,16 @@ use buildings::wizards_tower::WizardsTower;
 use buildings::{
 	ConnectingStairwell, MixedUseLesHallesStorey, PitchedRoof, RectangularPitchedRoofComplex,
 };
+use lod::{
+	Bullseye, LodChunkFulfillBudget, LodCullRegionCursor, LodRefreshCorePlugin,
+	LodSceneCullRegionPlugin, LodSceneRefreshRegionPlugin, OpenLattice, Spotlight,
+};
+use lod_gimme::{GimmeLodSceneCullPlugin, GimmeLodSceneRefreshPlugin};
+use std::sync::Arc;
 use urbanization_developments::{
 	CircularTower, GalleryColonnade, GalleryTerrace, ShepherdsHouse, ShepherdsHut, SingleHighrise,
 	Skybridge as SkybridgeHall, TempleSanctum, TrazaloidTower,
 };
-use std::sync::Arc;
 
 /// Shared produce domain for bullseye and spotlight building refresh.
 #[derive(Debug, Clone, Copy, Default)]

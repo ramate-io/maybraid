@@ -17,10 +17,8 @@ use crate::padded::TerrainWithPads;
 /// Ground Richmond generates against. Owned here; implemented for [`OnTerrain<Durham>`].
 pub trait RichmondGround:
 	TerrainModel<
-		Cell: Clone
-			+ PadComposable<Padded = TerrainWithPads>
-			+ TerrainCell<Mesh = TerrainMeshBuilder>,
-	>
+	Cell: Clone + PadComposable<Padded = TerrainWithPads> + TerrainCell<Mesh = TerrainMeshBuilder>,
+>
 {
 	type GroundRead: ReadOnlySystemParam + 'static;
 
@@ -53,10 +51,7 @@ pub trait RichmondGround:
 		bounds: Bounds2,
 	) -> bool;
 
-	fn water<'a>(
-		read: &'a SystemParamItem<'_, '_, Self::GroundRead>,
-		id: Id,
-	) -> Option<&'a Water>;
+	fn water<'a>(read: &'a SystemParamItem<'_, '_, Self::GroundRead>, id: Id) -> Option<&'a Water>;
 
 	fn water_version(read: &SystemParamItem<'_, '_, Self::GroundRead>, id: Id) -> Option<Version>;
 }
@@ -120,10 +115,7 @@ impl RichmondGround for OnTerrain<Durham> {
 		false
 	}
 
-	fn water<'a>(
-		read: &'a SystemParamItem<'_, '_, Self::GroundRead>,
-		id: Id,
-	) -> Option<&'a Water> {
+	fn water<'a>(read: &'a SystemParamItem<'_, '_, Self::GroundRead>, id: Id) -> Option<&'a Water> {
 		read.store.water(id)
 	}
 

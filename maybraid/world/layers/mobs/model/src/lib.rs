@@ -1,16 +1,18 @@
-//! [`MobGenerationPlugin`]: which mob groups exist where, over urbanized ground `G`.
+//! Mobs as a layer over a [`MobModel`].
+//!
+//! [`Mobs<B>`] is `B::Ground` with the same heights. Storage stays in the model
+//! crate; this crate only declares the contract.
 
-mod config;
 mod generation;
-mod index;
-mod stream;
+mod mob;
+mod model;
 
-pub use config::MobLayerConfig;
 pub use generation::{
-	MobGenerationCore, MobGenerationPlugin, MobGenerationSystems, MobModeConfig, MobScheme,
+	MobGeneration, MobGenerationCore, MobGenerationPlugin, MobGenerationSystems, MobModeConfig,
+	MobScheme,
 };
-pub use index::{MobCell, MobCellExtent, MobIndex};
-pub use stream::{install_mob_grid_stream, MobCellWrites, MobLodChan};
+pub use mob::{MobCellPresented, MobModel};
+pub use model::Mobs;
 
 #[cfg(test)]
 mod tests;

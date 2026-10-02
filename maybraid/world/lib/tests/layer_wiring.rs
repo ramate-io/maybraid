@@ -1,16 +1,17 @@
 //! The world's layer stack satisfies every `finish` requirement headless.
 
+use barking::Barking;
 use bevy::prelude::{App, AssetPlugin, MinimalPlugins};
+use chico::Chico;
 use durham::{Durham, DurhamCells};
+use layer_stack::ModeSubscribers;
 use maybraid_game_mode_discover::Discovery;
 use maybraid_game_mode_training_ground::TrainingGround;
 use maybraid_world::WorldLayersPlugin;
-use mob_layer_model::MobGenerationCore;
+use mob_layer_model::{MobGenerationCore, Mobs};
 use mob_layer_presentation::MobPresent;
 use terrain_layer_model::OnTerrain;
-use layer_stack::ModeSubscribers;
 use terrain_layer_presentation::TerrainPresentationCore;
-use chico::Chico;
 use urbanization_layer_model::Urbanization;
 use urbanization_layer_presentation::{PaddedCells, UrbanizationHosts};
 use vegetation_layer_model::Vegetation;
@@ -19,6 +20,7 @@ use vegetation_layer_presentation::VegetationPresent;
 type Urbanized = Urbanization<richmond::Richmond<OnTerrain<Durham>>>;
 type Forested = Chico<Urbanized>;
 type Vegetated = Vegetation<Forested>;
+type Inhabited = Mobs<Barking<Vegetated>>;
 
 #[test]
 fn layered_world_stack_finishes_headless() -> anyhow::Result<()> {
@@ -39,11 +41,11 @@ fn layered_world_stack_finishes_headless() -> anyhow::Result<()> {
 	anyhow::ensure!(vegetation.contains::<Discovery>());
 	anyhow::ensure!(vegetation.contains::<TrainingGround>());
 
-	let mobs = app.world().resource::<ModeSubscribers<(Vegetated, MobPresent)>>();
+	let mobs = app.world().resource::<ModeSubscribers<(Inhabited, MobPresent)>>();
 	anyhow::ensure!(mobs.contains::<Discovery>());
 	anyhow::ensure!(mobs.contains::<TrainingGround>());
 	anyhow::ensure!(
-		app.is_plugin_added::<MobGenerationCore<Vegetated>>(),
+		app.is_plugin_added::<MobGenerationCore<Barking<Vegetated>>>(),
 		"both mob generation plugins share one core"
 	);
 

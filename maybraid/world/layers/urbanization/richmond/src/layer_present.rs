@@ -7,23 +7,21 @@ use bevy::prelude::*;
 use durham::{
 	PresentedTerrainScene, TerrainColliderMeshSource, TerrainSuperseded, TerrainTrimeshCollider,
 };
-use layer_stack::LodPresentGateSync;
-use lod::gen::{Id, SpatialIndex, Version};
-use lod::lod_ref::LodRef;
-use lod::{LodPresentGate, LodPresentSystems, LodViewer};
 use furniture_assemblies::{
 	FurnitureAssembliesPlugin, FurnitureStreamPlugin, FurnitureStreamSystems,
 };
 use furniture_shaders::FurnitureShadersPlugin;
+use layer_stack::LodPresentGateSync;
+use lod::gen::{Id, SpatialIndex, Version};
+use lod::lod_ref::LodRef;
+use lod::{LodPresentGate, LodPresentSystems, LodViewer};
 use terrain_layer_model::{terrain_streaming, TerrainExtent, TerrainLayerSystems};
 use urbanization_layer_model::UrbanizationStoreSystems;
 use urbanization_layer_model::{
 	urbanization_host_region, urbanization_visual_region, UrbanSetting, Urbanization,
 	UrbanizationGenerationSystems, UrbanizationLayerRegion,
 };
-use urbanization_layer_presentation::{
-	PaddedCells, UrbanizationHosts, UrbanizationPresentation,
-};
+use urbanization_layer_presentation::{PaddedCells, UrbanizationHosts, UrbanizationPresentation};
 
 use crate::development::DevelopmentCell;
 use crate::ground::RichmondGround;

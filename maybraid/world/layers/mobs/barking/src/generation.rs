@@ -1,8 +1,8 @@
 //! Environment-weighted group selection over 400 m generation bounds.
 
 use bevy::prelude::*;
-use mob_scenes::{MobKind, MobScene};
 use mob_characters::FromMobNumber;
+use mob_scenes::{MobKind, MobScene};
 
 pub const DEFAULT_GROUP_EXTENT: f32 = 400.0;
 /// Same agent disk as High fulfill / death replace ([#738](https://github.com/ramate-io/maybraid/issues/738)).

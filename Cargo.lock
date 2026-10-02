@@ -659,8 +659,22 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bevy",
+ "chico",
+ "durham",
+ "layer-stack",
+ "lod",
+ "lod-gimme",
  "mob-characters",
+ "mob-intelligence",
+ "mob-layer-model",
+ "mob-layer-presentation",
  "mob-scenes",
+ "procedural-common",
+ "richmond",
+ "terrain-layer-model",
+ "urbanization-cells",
+ "urbanization-layer-model",
+ "vegetation-layer-model",
 ]
 
 [[package]]
@@ -6919,6 +6933,7 @@ name = "maybraid-game-mode-discover"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "barking",
  "bevy",
  "chico",
  "durham",
@@ -7072,6 +7087,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "avian3d",
+ "barking",
  "bevy",
  "building-components",
  "building-physics",
@@ -7645,20 +7661,10 @@ name = "mob-layer-model"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "barking",
  "bevy",
- "chico",
- "durham",
  "layer-stack",
  "lod",
- "mob-scenes",
- "procedural-common",
- "render-item",
- "richmond",
  "terrain-layer-model",
- "urbanization-cells",
- "urbanization-layer-model",
- "vegetation-layer-model",
 ]
 
 [[package]]
@@ -7666,21 +7672,12 @@ name = "mob-layer-presentation"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "barking",
  "bevy",
- "chico",
- "durham",
  "layer-stack",
  "lod",
- "lod-gimme",
  "mob-intelligence",
  "mob-layer-model",
- "mob-scenes",
- "richmond",
  "terrain-layer-model",
- "urbanization-cells",
- "urbanization-layer-model",
- "vegetation-layer-model",
 ]
 
 [[package]]

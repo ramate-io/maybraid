@@ -6,10 +6,6 @@ use bevy::math::bounding::Aabb3d;
 use bevy::prelude::{
 	bsn, template_value, Commands, CommandsSceneExt, Entity, Transform, Visibility,
 };
-use lod::gen::LodScene;
-use lod::lod_host_scene_pending;
-use lod::lod_ref::LodRef;
-use lod::LodSceneLevel;
 use building_components::{
 	building_bounds, spawn_building_components, BuildingComponents, FurnitureNode,
 	FurnitureUsageNode,
@@ -19,6 +15,10 @@ use buildings::wizards_tower::WizardsTower;
 use buildings::{
 	ConnectingStairwell, MixedUseLesHallesStorey, PitchedRoof, RectangularPitchedRoofComplex,
 };
+use lod::gen::LodScene;
+use lod::lod_host_scene_pending;
+use lod::lod_ref::LodRef;
+use lod::LodSceneLevel;
 use urbanization_developments::{
 	CircularTower, GalleryColonnade, GalleryTerrace, MixedUseLesHallesHost, OldCityMarketTerrace,
 	RingFortHost, ShepherdsBuilding, ShepherdsHouse, ShepherdsHut, SingleHighrise, Skybridge,
@@ -271,13 +271,7 @@ pub trait DevelopmentHosts {
 }
 
 impl furniture_assemblies::FurnitureSlotSource for BuiltDevelopment {
-	fn furniture_hosts(
-		&self,
-	) -> Vec<(
-		Transform,
-		Vec<FurnitureNode>,
-		Vec<FurnitureUsageNode>,
-	)> {
+	fn furniture_hosts(&self) -> Vec<(Transform, Vec<FurnitureNode>, Vec<FurnitureUsageNode>)> {
 		self.hosts()
 			.into_iter()
 			.map(|host| (host.transform(), host.furniture_nodes(), host.furniture_usage_nodes()))
@@ -488,8 +482,8 @@ fn stamp_walk_colliders(
 mod tests {
 	use bevy::math::bounding::Aabb3d;
 	use bevy::math::{Vec2, Vec3};
-	use procedural_common::NoiseParams;
 	use buildings::{Confines, Fit};
+	use procedural_common::NoiseParams;
 	use urbanization_developments::PlacedBuilding;
 
 	use super::{DevelopmentHost, DevelopmentHosts};

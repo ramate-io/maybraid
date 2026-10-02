@@ -426,10 +426,10 @@ mod tests {
 	use super::*;
 	use crate::stash::WorldStash;
 	use bevy::ecs::system::RunSystemOnce;
-	use world_player::Player as VegetationPlayer;
 	use character_inventory_user::InventoryUser;
 	use maybraid_character_controller::CharacterIntent;
 	use std::time::Duration;
+	use world_player::Player as VegetationPlayer;
 
 	use crate::stash::claim_nearby_stashes;
 

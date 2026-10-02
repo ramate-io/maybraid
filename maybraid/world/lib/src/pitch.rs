@@ -2,12 +2,12 @@
 
 use bevy::ecs::query::Has;
 use bevy::prelude::*;
-use world_player::{Jumping as VegetationJumping, Player};
 use characters::{
 	apply_terrain_pitch, ApplyTerrainPitch, CharacterHeading, SuspendTerrainPitch, TerrainPitch,
 };
 use ground_avian::AvianElevationProbe;
 use player::{CharacterController, Jumping};
+use world_player::{Jumping as VegetationJumping, Player};
 
 pub(crate) fn sync_suspend_terrain_pitch(
 	mut commands: Commands,

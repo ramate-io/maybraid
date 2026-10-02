@@ -1,8 +1,6 @@
 //! Idempotent plugin for Richmond development models.
 
 use bevy::prelude::*;
-use lod::LodRefreshSystems;
-use lod_lazy_refs::LodLazyRefsPlugin;
 use building_components::{
 	apply_parent_confines, FurnitureWireframePlugin, LabelNode, LabelWireframePlugin,
 	MassingSilhouettePlugin,
@@ -10,6 +8,8 @@ use building_components::{
 use building_physics::BuildingWalkColliderPlugin;
 use building_shaders::{BuildingShadersPlugin, UrbanMaterialRefPlugin};
 use buildings::wizards_tower::TowerSilhouettePlugin;
+use lod::LodRefreshSystems;
+use lod_lazy_refs::LodLazyRefsPlugin;
 use scene_ref::SceneRefPlugin;
 
 use urbanization_cells::UrbanizationIndex;

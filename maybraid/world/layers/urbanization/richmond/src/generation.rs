@@ -2,12 +2,12 @@
 
 use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec3;
+use buildings::Fit;
 use lod::gen::{GeneratingSpatialIndex, GenerationScheme, Id, OriginalId, SpatialIndex};
 use lod::lod_ref::LodRef;
 use procedural_common::NoiseParams;
-use buildings::Fit;
-use urbanization_developments::PlacedBuilding;
 use urbanization_cells::{UrbanDevelopmentKind, UrbanizationExtent};
+use urbanization_developments::PlacedBuilding;
 
 use crate::archetype_generation::ArchetypeGenerator;
 use crate::artifact::BuiltDevelopment;

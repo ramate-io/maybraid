@@ -3,15 +3,14 @@
 //! The game shell still owns cameras, loading, and pause. This crate is the
 //! session those systems ask when the home row enters Discovery.
 
+use barking::{install_mob_grid_stream, Barking, BarkingConfig};
 use bevy::prelude::*;
-use durham::{
-	Durham, DurhamTerrainConfig, TerrainRetarget, playable_world_cell_layout,
-};
 use chico::{install_vegetation_stream, Chico, ChicoConfig};
-use mob_layer_model::{install_mob_grid_stream, MobLayerConfig, MobScheme};
-use terrain_layer_model::{BaseTerrainModeConfig, BaseTerrainScheme, OnTerrain};
+use durham::{playable_world_cell_layout, Durham, DurhamTerrainConfig, TerrainRetarget};
 use layer_stack::{ActiveGenerationMode, GenerationMode};
+use mob_layer_model::MobScheme;
 use richmond::{install_urbanization_stream, Richmond, RichmondConfig};
+use terrain_layer_model::{BaseTerrainModeConfig, BaseTerrainScheme, OnTerrain};
 use urbanization_layer_model::{Urbanization, UrbanizationScheme};
 use vegetation_layer_model::{Vegetation, VegetationScheme};
 
@@ -29,10 +28,7 @@ impl GenerationMode for Discovery {}
 
 impl BaseTerrainScheme<Durham> for Discovery {
 	fn install(app: &mut App, _config: &DurhamTerrainConfig) {
-		app.add_systems(
-			OnEnter(ActiveGenerationMode::of::<Discovery>()),
-			restore_playable_world,
-		);
+		app.add_systems(OnEnter(ActiveGenerationMode::of::<Discovery>()), restore_playable_world);
 	}
 }
 
@@ -50,8 +46,10 @@ impl VegetationScheme<Chico<Urbanization<Richmond<OnTerrain<Durham>>>>> for Disc
 	}
 }
 
-impl MobScheme<Vegetation<Chico<Urbanization<Richmond<OnTerrain<Durham>>>>>> for Discovery {
-	fn install(app: &mut App, _config: &MobLayerConfig) {
+impl MobScheme<Barking<Vegetation<Chico<Urbanization<Richmond<OnTerrain<Durham>>>>>>>
+	for Discovery
+{
+	fn install(app: &mut App, _config: &BarkingConfig) {
 		install_mob_grid_stream::<Discovery>(app);
 	}
 }
@@ -123,10 +121,8 @@ mod tests {
 
 	#[test]
 	fn leaving_a_fine_patch_restores_the_playable_rings() -> anyhow::Result<()> {
-		let mut world = world_with(
-			TerrainCoverage::FinePatch,
-			durham::fine_patch_cell_layout(2, IVec2::ZERO),
-		);
+		let mut world =
+			world_with(TerrainCoverage::FinePatch, durham::fine_patch_cell_layout(2, IVec2::ZERO));
 		world
 			.run_system_once(restore_playable_world)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;

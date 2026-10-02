@@ -4,20 +4,32 @@ use std::collections::HashMap;
 
 use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::prelude::*;
-use chico::{ForestExtent, ForestIndex, LayeringKind, SelectedLayers};
-use lod::gen::{
-	GenerationScheme, Id, OriginalId, SpatialIndex, StorageStatus, TrackedId, Version,
-};
+use chico::LayeringKind;
+use lod::gen::{GenerationScheme, Id, OriginalId, SpatialIndex, StorageStatus, TrackedId, Version};
 use lod::lod_ref::LodRef;
-use barking::{
-	GroupKind, MobEnvironmentSample, MobGroup, MobPlantHost, MobWorldHosts, MobWorldSample,
-};
 use procedural_common::NoiseParams;
 use urbanization_cells::UrbanizationKind;
+
+use crate::generation::{
+	GroupKind, MobEnvironmentSample, MobGroup, MobPlantHost, MobWorldHosts, MobWorldSample,
+};
+#[cfg(test)]
+use crate::sample::{chico_layers_at, richmond_kind_at};
 
 pub const MOB_CELL_EXTENT: f32 = 400.0;
 pub const MOB_WORLD_SEED: u64 = 42;
 pub const MOB_CELL_OCCUPANCY_PERCENT: u64 = 35;
+
+pub(crate) type ForestLayersAt = fn(NoiseParams, Option<LayeringKind>, Vec2) -> u8;
+pub(crate) type UrbanKindAt = fn(NoiseParams, Option<UrbanizationKind>, Vec2) -> UrbanizationKind;
+
+fn idle_layers(_noise: NoiseParams, _layering: Option<LayeringKind>, _xz: Vec2) -> u8 {
+	0
+}
+
+fn idle_kind(_noise: NoiseParams, pinned: Option<UrbanizationKind>, _xz: Vec2) -> UrbanizationKind {
+	pinned.unwrap_or(UrbanizationKind::None)
+}
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct MobCellExtent {
@@ -104,7 +116,7 @@ struct StoredMobCell {
 	version: Version,
 }
 
-#[derive(Resource, Clone, Default)]
+#[derive(Resource, Clone)]
 pub struct MobIndex {
 	next_version: u64,
 	cells: HashMap<Id, StoredMobCell>,
@@ -112,14 +124,38 @@ pub struct MobIndex {
 	forest_layering: Option<LayeringKind>,
 	pub(crate) urbanization_noise: NoiseParams,
 	pub(crate) urbanization_kind: Option<UrbanizationKind>,
+	layers_at: ForestLayersAt,
+	kind_at: UrbanKindAt,
 	pub(crate) models_ready: bool,
 	pub(crate) plant_hosts: Vec<MobPlantHost>,
+}
+
+impl Default for MobIndex {
+	fn default() -> Self {
+		Self {
+			next_version: 0,
+			cells: HashMap::new(),
+			forest_noise: NoiseParams::default(),
+			forest_layering: None,
+			urbanization_noise: NoiseParams::default(),
+			urbanization_kind: None,
+			layers_at: idle_layers,
+			kind_at: idle_kind,
+			models_ready: false,
+			plant_hosts: Vec::new(),
+		}
+	}
 }
 
 impl MobIndex {
 	#[cfg(test)]
 	pub(crate) fn ready() -> Self {
-		Self { models_ready: true, ..Self::default() }
+		Self {
+			models_ready: true,
+			layers_at: chico_layers_at,
+			kind_at: richmond_kind_at,
+			..Self::default()
+		}
 	}
 
 	#[cfg(test)]
@@ -128,6 +164,8 @@ impl MobIndex {
 			models_ready: true,
 			urbanization_kind: Some(UrbanizationKind::Frontier),
 			plant_hosts,
+			layers_at: chico_layers_at,
+			kind_at: richmond_kind_at,
 			..Self::default()
 		}
 	}
@@ -137,16 +175,21 @@ impl MobIndex {
 		Version(self.next_version)
 	}
 
-	pub fn configure_from(
+	pub(crate) fn configure_from(
 		&mut self,
-		forest: &ForestIndex,
+		forest_noise: NoiseParams,
+		forest_layering: Option<LayeringKind>,
 		urbanization_noise: NoiseParams,
 		urbanization_kind: Option<UrbanizationKind>,
+		layers_at: ForestLayersAt,
+		kind_at: UrbanKindAt,
 	) {
-		self.forest_noise = forest.noise;
-		self.forest_layering = forest.layering;
+		self.forest_noise = forest_noise;
+		self.forest_layering = forest_layering;
 		self.urbanization_noise = urbanization_noise;
 		self.urbanization_kind = urbanization_kind;
+		self.layers_at = layers_at;
+		self.kind_at = kind_at;
 		self.models_ready = true;
 	}
 
@@ -182,39 +225,26 @@ impl MobIndex {
 		self.cells.is_empty()
 	}
 
-	pub fn models_match(
+	pub(crate) fn models_match(
 		&self,
-		forest: &ForestIndex,
+		forest_noise: NoiseParams,
+		forest_layering: Option<LayeringKind>,
 		urbanization_noise: NoiseParams,
 		urbanization_kind: Option<UrbanizationKind>,
 	) -> bool {
 		self.models_ready
-			&& self.forest_noise == forest.noise
-			&& self.forest_layering == forest.layering
+			&& self.forest_noise == forest_noise
+			&& self.forest_layering == forest_layering
 			&& self.urbanization_noise == urbanization_noise
 			&& self.urbanization_kind == urbanization_kind
 	}
 
-	fn selected_layers(&self, xz: Vec2) -> SelectedLayers {
-		let position = Vec3::new(xz.x, 0.0, xz.y);
-		let (ix, iz) = ForestExtent::cell_index_containing(position);
-		let extent = ForestExtent::from_cell_index(ix, iz);
-		match self.forest_layering {
-			Some(layering) => layering.layering().typical_layers(),
-			None => chico::select_cell(extent, self.forest_noise),
-		}
+	fn vegetation_at(&self, xz: Vec2) -> f32 {
+		(self.layers_at)(self.forest_noise, self.forest_layering, xz) as f32 / 4.0
 	}
 
 	fn urbanization_kind_at(&self, xz: Vec2) -> UrbanizationKind {
-		if let Some(kind) = self.urbanization_kind {
-			return kind;
-		}
-		let position = Vec3::new(xz.x, 0.0, xz.y);
-		let (ix, iz) = urbanization_cells::UrbanizationExtent::cell_index_containing(position);
-		urbanization_cells::select_kind(
-			urbanization_cells::UrbanizationExtent::from_cell_index(ix, iz),
-			self.urbanization_noise,
-		)
+		(self.kind_at)(self.urbanization_noise, self.urbanization_kind, xz)
 	}
 
 	fn group_kind_at(&self, xz: Vec2, seed: u64) -> GroupKind {
@@ -237,12 +267,7 @@ impl MobIndex {
 
 impl MobWorldSample for MobIndex {
 	fn sample_mobs(&self, xz: Vec2) -> MobEnvironmentSample {
-		let layers = self.selected_layers(xz);
-		let vegetation = [layers.tufts, layers.understory, layers.lower_canopy, layers.upper_canopy]
-			.into_iter()
-			.filter(Option::is_some)
-			.count() as f32
-			/ 4.0;
+		let vegetation = self.vegetation_at(xz);
 		let urbanization = match self.urbanization_kind_at(xz) {
 			UrbanizationKind::None => 0.0,
 			UrbanizationKind::RuralLife => 0.2,

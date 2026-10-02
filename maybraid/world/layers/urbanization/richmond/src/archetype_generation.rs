@@ -3,10 +3,10 @@
 use bevy::math::bounding::{Aabb2d, Aabb3d};
 use bevy::math::{Vec2, Vec3};
 use bevy::transform::components::Transform;
-use procedural_common::{Bounds2, NoiseParams, SeededHash};
 use buildings::{
 	CardinalFace, Confines, ConnectingHall, Fit, MappedOpening, MappedOpeningQuad, Openings,
 };
+use procedural_common::{Bounds2, NoiseParams, SeededHash};
 use urbanization_developments::{
 	PlacedBuilding, SingleHighrise, Skybridge, SkybridgeBazaar, SolitaryWizardsTower,
 	SuburbanHomes, TempleComplex, TempleSanctum,
@@ -471,8 +471,8 @@ impl ArchetypeGenerator {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use lod::gen::LodSceneLevel;
 	use building_components::BuildingComponents;
+	use lod::gen::LodSceneLevel;
 	use urbanization_developments::{ShepherdsBuilding, ShepherdsFinish};
 
 	fn cell() -> Aabb3d {

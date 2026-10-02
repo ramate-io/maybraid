@@ -4,14 +4,14 @@ use bevy::ecs::system::ParamSet;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use durham::{Durham, TerrainCellLayout, TerrainEntryStore};
+use layer_stack::{ActiveGenerationMode, GenerationModeSystems};
 use lod::gen::Id;
+use richmond::Richmond;
 use richmond::{
-	DEVELOPMENT_CELL_SIZE, DevelopmentCell, DevelopmentConfig, DevelopmentEntryStore,
-	DevelopmentKind, PadParams, RichmondGroundView,
+	DevelopmentCell, DevelopmentConfig, DevelopmentEntryStore, DevelopmentKind, PadParams,
+	RichmondGroundView, DEVELOPMENT_CELL_SIZE,
 };
 use terrain_layer_model::{OnTerrain, TerrainView};
-use layer_stack::{ActiveGenerationMode, GenerationModeSystems};
-use richmond::Richmond;
 use urbanization_layer_model::{
 	UrbanizationLayerRegion, UrbanizationScheme, UrbanizationStoreSystems,
 };
@@ -96,10 +96,7 @@ impl UrbanizationScheme<Richmond<OnTerrain<Durham>>> for TrainingGround {
 				.in_set(GenerationModeSystems::<TrainingGround>::default())
 				.in_set(UrbanizationStoreSystems),
 		);
-		app.add_systems(
-			OnExit(ActiveGenerationMode::of::<TrainingGround>()),
-			clear_training_stamp,
-		);
+		app.add_systems(OnExit(ActiveGenerationMode::of::<TrainingGround>()), clear_training_stamp);
 	}
 }
 
@@ -242,8 +239,7 @@ fn stamp_training_development(
 	cell: Aabb3d,
 	config: &DevelopmentConfig,
 	height: f32,
-) -> Option<(DevelopmentKind, DevelopmentCell, richmond::BuiltDevelopment, TrainingCourtyard)>
-{
+) -> Option<(DevelopmentKind, DevelopmentCell, richmond::BuiltDevelopment, TrainingCourtyard)> {
 	let preferred = DevelopmentKind::pick_filled(cell, config);
 	let start = DevelopmentKind::FILLED.iter().position(|kind| *kind == preferred).unwrap_or(0);
 	let count = DevelopmentKind::FILLED.len();
@@ -306,12 +302,10 @@ mod tests {
 		BaseTerrainNoise, Durham, TerrainCellLayout, TerrainConfig, TerrainEntryStore,
 		WorldBaseTerrain,
 	};
+	use layer_stack::{ActiveGenerationMode, GenerationMode, GenerationModePlugin};
 	use lod::gen::Id;
-	use richmond::{
-		DEVELOPMENT_CELL_SIZE, DevelopmentCell, DevelopmentEntryStore,
-	};
-	use terrain_layer_model::{OnTerrain};
-use layer_stack::{ActiveGenerationMode, GenerationMode, GenerationModePlugin};
+	use richmond::{DevelopmentCell, DevelopmentEntryStore, DEVELOPMENT_CELL_SIZE};
+	use terrain_layer_model::OnTerrain;
 	use urbanization_layer_model::{UrbanizationLayerRegion, UrbanizationScheme};
 
 	use super::{
@@ -395,7 +389,10 @@ use layer_stack::{ActiveGenerationMode, GenerationMode, GenerationModePlugin};
 		{
 			let store = world.resource::<DevelopmentEntryStore>();
 			anyhow::ensure!(store.cell(cell_id).is_some(), "stamp inserts the development cell");
-			anyhow::ensure!(store.built_at(cell_id).is_some(), "stamp inserts the built development");
+			anyhow::ensure!(
+				store.built_at(cell_id).is_some(),
+				"stamp inserts the built development"
+			);
 			anyhow::ensure!(store.cell(other_id).is_some(), "pre-existing cell stays");
 		}
 		let revision = world.resource::<DevelopmentEntryStore>().membership_revision();
@@ -432,7 +429,8 @@ use layer_stack::{ActiveGenerationMode, GenerationMode, GenerationModePlugin};
 		anyhow::ensure!(new_id != cell_id, "the new map stamps a different cell");
 		let restamped = world.resource::<DevelopmentEntryStore>().membership_revision();
 		run_stamp(&mut world)?;
-		let stamped_again = world.get_resource::<TrainingPlazaStamped>().map(TrainingPlazaStamped::cell_id);
+		let stamped_again =
+			world.get_resource::<TrainingPlazaStamped>().map(TrainingPlazaStamped::cell_id);
 		let revision_again = world.resource::<DevelopmentEntryStore>().membership_revision();
 		anyhow::ensure!(
 			stamped_again == Some(new_id) && revision_again == restamped,
@@ -462,9 +460,9 @@ use layer_stack::{ActiveGenerationMode, GenerationMode, GenerationModePlugin};
 		app.insert_resource(TrainingRound::new(42));
 		app.insert_resource(TerrainEntryStore::default());
 		app.insert_resource(TerrainCellLayout::default());
-		app.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(
-			&TerrainConfig::new(42),
-		)));
+		app.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(&TerrainConfig::new(
+			42,
+		))));
 		app.insert_resource(DevelopmentEntryStore::default());
 		app.insert_resource(UrbanizationLayerRegion::default());
 

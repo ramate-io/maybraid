@@ -14,9 +14,7 @@ use durham::{
 	TerrainConfig, TerrainEntryStore, TerrainSuperseded, TerrainTrimeshCollider, WorldBaseTerrain,
 	TERRAIN_CELL_SIZE,
 };
-use layer_stack::{
-	ActiveGenerationMode, GenerationMode, GenerationModePlugin,
-};
+use layer_stack::{ActiveGenerationMode, GenerationMode, GenerationModePlugin};
 use lod::gen::{Id, LodGenerateBudget, LodGenerateRegion, SpatialIndex};
 use lod::lod_ref::LodRef;
 use lod::presentation::LodPresentKeepRegion;
@@ -34,7 +32,9 @@ use urbanization_layer_model::{
 	UrbanizationGenerationCore, UrbanizationGenerationPlugin, UrbanizationLayerRegion,
 	UrbanizationModeConfig, UrbanizationScheme,
 };
-use urbanization_layer_presentation::{PaddedCells, UrbanizationHosts, UrbanizationPresentationPlugin};
+use urbanization_layer_presentation::{
+	PaddedCells, UrbanizationHosts, UrbanizationPresentationPlugin,
+};
 
 use crate::index::DevelopmentIndex;
 use crate::layer::Richmond;
@@ -47,13 +47,11 @@ use crate::layer_present::{
 	UrbanizationPaddedTerrainState, UrbanizationPresenterState,
 };
 use crate::layer_stream::{
-	parse_urbanization_kind, register_urbanization_lod_generate, stream_radii_m, stream_urbanization,
-	write_urbanization_host_region, UrbanizationStreamKey,
+	parse_urbanization_kind, register_urbanization_lod_generate, stream_radii_m,
+	stream_urbanization, write_urbanization_host_region, UrbanizationStreamKey,
 };
 use crate::padded::{PresentedPaddedTerrainScene, TerrainWithPads};
-use crate::{
-	DevelopmentCell, DevelopmentConfig, DevelopmentEntryStore, PadComplex, PadParams,
-};
+use crate::{DevelopmentCell, DevelopmentConfig, DevelopmentEntryStore, PadComplex, PadParams};
 
 struct TestMode;
 
@@ -158,7 +156,8 @@ fn world_defaults_enable_urbanization_stream_at_budget_16() -> anyhow::Result<()
 	let config = RichmondConfig::world_defaults();
 	anyhow::ensure!(config.urbanization.is_some());
 	anyhow::ensure!(
-		config.urbanization.map(|spec| spec.stream_radius) == Some(DEFAULT_URBANIZATION_STREAM_RADIUS)
+		config.urbanization.map(|spec| spec.stream_radius)
+			== Some(DEFAULT_URBANIZATION_STREAM_RADIUS)
 	);
 	anyhow::ensure!(config.generate_budget == 16);
 	anyhow::ensure!(RichmondConfig::default().generate_budget == 8);
@@ -193,8 +192,7 @@ fn stream_applies_focus_when_the_spec_kind_is_open() -> anyhow::Result<()> {
 		config,
 	));
 	app.init_resource::<UrbanizationStreamKey>();
-	app.world_mut()
-		.spawn((Camera3d::default(), Transform::from_xyz(0.0, 8.0, 0.0)));
+	app.world_mut().spawn((Camera3d::default(), Transform::from_xyz(0.0, 8.0, 0.0)));
 
 	app.world_mut()
 		.run_system_once(stream_urbanization::<TestMode, OnTerrain<Durham>>)
@@ -232,11 +230,10 @@ impl HeightField for FlatHeight {
 
 #[test]
 fn pad_modulation_sets_exact_terrace_and_preserves_base_outside() -> anyhow::Result<()> {
-	let pad = PadComplex::building_skirt(Vec2::ZERO, Vec2::splat(10.0), 0.0, 12.0, PadParams::default());
+	let pad =
+		PadComplex::building_skirt(Vec2::ZERO, Vec2::splat(10.0), 0.0, 12.0, PadParams::default());
 	let snapshot = UrbanSnapshot::new(FlatHeight(3.0), pad);
-	let terrace = snapshot
-		.height_at(Vec2::ZERO)
-		.ok_or_else(|| anyhow::anyhow!("terrace"))?;
+	let terrace = snapshot.height_at(Vec2::ZERO).ok_or_else(|| anyhow::anyhow!("terrace"))?;
 	let outside = snapshot
 		.height_at(Vec2::new(1_000.0, 1_000.0))
 		.ok_or_else(|| anyhow::anyhow!("outside"))?;
@@ -256,8 +253,8 @@ fn insert_overlay_pad(
 	mut index: DevelopmentIndex<OnTerrain<Durham>>,
 	spec: bevy::prelude::Res<OverlayPadSpec>,
 ) {
-	use terrain_layer_model::TerrainCell;
 	use crate::ground::RichmondGround;
+	use terrain_layer_model::TerrainCell;
 
 	let Some(terrain) = OnTerrain::<Durham>::stored_cell(&index.ground, spec.source) else {
 		return;
@@ -298,10 +295,8 @@ fn overlay_cell_prefers_a_padded_cell_then_falls_back_by_size() -> anyhow::Resul
 	world.insert_resource(DevelopmentConfig::default());
 	let base = BaseTerrainNoise::from_config(&TerrainConfig::new(42));
 	let fine = TerrainCellLayout::default();
-	let medium = TerrainCellLayout {
-		cell_size: 2.0 * TERRAIN_CELL_SIZE,
-		..TerrainCellLayout::default()
-	};
+	let medium =
+		TerrainCellLayout { cell_size: 2.0 * TERRAIN_CELL_SIZE, ..TerrainCellLayout::default() };
 	{
 		let mut store = world.resource_mut::<TerrainEntryStore>();
 		store.insert_base_terrain_for_test(&fine, 0, 0, base.clone());
@@ -369,10 +364,7 @@ fn overlay_cell_prefers_a_padded_cell_then_falls_back_by_size() -> anyhow::Resul
 fn host_region_covers_every_leaf_of_selected_cells() -> anyhow::Result<()> {
 	let extent = UrbanizationExtent::default_cell();
 	let keep = Aabb3d::from_min_max(Vec3::new(-10.0, 0.0, -10.0), Vec3::new(10.0, 1.0, 10.0));
-	anyhow::ensure!(
-		keep.intersects(&extent.aabb()),
-		"the keep must overlap the urbanization cell"
-	);
+	anyhow::ensure!(keep.intersects(&extent.aabb()), "the keep must overlap the urbanization cell");
 
 	let mut world = World::new();
 	world.insert_resource(UrbanizationLayerRegion::default());
@@ -399,13 +391,11 @@ fn host_region_covers_every_leaf_of_selected_cells() -> anyhow::Result<()> {
 		.map(DevelopmentLeaf::id)
 		.collect();
 	anyhow::ensure!(!old.is_empty(), "hopscotch produced no filled leaves");
-	let outside_keep = selected.leaves.iter().any(|leaf| {
-		leaf.kind != UrbanDevelopmentKind::Empty && !keep.intersects(&leaf.bounds)
-	});
-	anyhow::ensure!(
-		outside_keep,
-		"this fixture needs a filled leaf that sits outside the keep"
-	);
+	let outside_keep = selected
+		.leaves
+		.iter()
+		.any(|leaf| leaf.kind != UrbanDevelopmentKind::Empty && !keep.intersects(&leaf.bounds));
+	anyhow::ensure!(outside_keep, "this fixture needs a filled leaf that sits outside the keep");
 
 	world
 		.run_system_once(write_urbanization_host_region)
@@ -447,21 +437,16 @@ fn leaving_a_stream_mode_clears_then_reentering_streams_again() -> anyhow::Resul
 	app.init_resource::<UrbanizationLayerRegion>();
 	app.init_resource::<DevelopmentEntryStore>();
 	app.init_resource::<DevelopmentConfig>();
-	app.add_systems(
-		OnExit(ActiveGenerationMode::of::<StreamMode>()),
-		|world: &mut World| Richmond::<OnTerrain<Durham>>::clear_generation(world),
-	);
-	app.add_systems(
-		OnExit(ActiveGenerationMode::of::<OtherMode>()),
-		|world: &mut World| Richmond::<OnTerrain<Durham>>::clear_generation(world),
-	);
-	app.world_mut()
-		.spawn((Camera3d::default(), Transform::from_xyz(0.0, 8.0, 0.0)));
+	app.add_systems(OnExit(ActiveGenerationMode::of::<StreamMode>()), |world: &mut World| {
+		Richmond::<OnTerrain<Durham>>::clear_generation(world)
+	});
+	app.add_systems(OnExit(ActiveGenerationMode::of::<OtherMode>()), |world: &mut World| {
+		Richmond::<OnTerrain<Durham>>::clear_generation(world)
+	});
+	app.world_mut().spawn((Camera3d::default(), Transform::from_xyz(0.0, 8.0, 0.0)));
 
-	let bounds = Aabb3d::from_min_max(
-		Vec3::new(4_000.0, 0.0, 4_000.0),
-		Vec3::new(4_080.0, 1.0, 4_080.0),
-	);
+	let bounds =
+		Aabb3d::from_min_max(Vec3::new(4_000.0, 0.0, 4_000.0), Vec3::new(4_080.0, 1.0, 4_080.0));
 	let streamed_id = Id::from_cell(bounds);
 	app.world_mut()
 		.resource_mut::<DevelopmentEntryStore>()
@@ -524,10 +509,7 @@ fn different_budgets_build_and_apply_on_enter() -> anyhow::Result<()> {
 			RichmondConfig::world_defaults(),
 		),
 		UrbanizationGenerationPlugin::<OtherMode, Richmond<OnTerrain<Durham>>>::new(
-			RichmondConfig {
-				generate_budget: 8,
-				..RichmondConfig::shared_world()
-			},
+			RichmondConfig { generate_budget: 8, ..RichmondConfig::shared_world() },
 		),
 	));
 	app.insert_resource(TerrainStreaming::<Durham>::new(false));
@@ -537,10 +519,7 @@ fn different_budgets_build_and_apply_on_enter() -> anyhow::Result<()> {
 		&RichmondConfig::world_defaults(),
 	);
 	anyhow::ensure!(
-		app.world()
-			.resource::<LodGenerateBudget<UrbanizationLodChan>>()
-			.ids_per_frame
-			== 16,
+		app.world().resource::<LodGenerateBudget<UrbanizationLodChan>>().ids_per_frame == 16,
 		"initial generate budget"
 	);
 	anyhow::ensure!(
@@ -550,16 +529,10 @@ fn different_budgets_build_and_apply_on_enter() -> anyhow::Result<()> {
 
 	Richmond::<OnTerrain<Durham>>::apply_generation(
 		app.world_mut(),
-		&RichmondConfig {
-			generate_budget: 8,
-			..RichmondConfig::shared_world()
-		},
+		&RichmondConfig { generate_budget: 8, ..RichmondConfig::shared_world() },
 	);
 	anyhow::ensure!(
-		app.world()
-			.resource::<LodGenerateBudget<UrbanizationLodChan>>()
-			.ids_per_frame
-			== 8,
+		app.world().resource::<LodGenerateBudget<UrbanizationLodChan>>().ids_per_frame == 8,
 		"other mode budget"
 	);
 	Ok(())
@@ -608,7 +581,10 @@ fn raw_cell_hands_its_floor_to_a_cooked_padded_replacement() -> anyhow::Result<(
 	};
 
 	run(&mut world)?;
-	anyhow::ensure!(world.get::<TerrainSuperseded>(raw).is_none(), "uncooked pads cannot bear weight");
+	anyhow::ensure!(
+		world.get::<TerrainSuperseded>(raw).is_none(),
+		"uncooked pads cannot bear weight"
+	);
 	anyhow::ensure!(world.get::<Visibility>(raw) == Some(&Visibility::Inherited));
 
 	world.entity_mut(padded).insert(TerrainTrimeshCollider);
@@ -662,10 +638,7 @@ fn padded_ready_does_not_claim_another_owners_raw_cell() -> anyhow::Result<()> {
 	};
 
 	run(&mut world)?;
-	anyhow::ensure!(
-		world.get::<TerrainSuperseded>(raw).is_some(),
-		"another owner's hide stays"
-	);
+	anyhow::ensure!(world.get::<TerrainSuperseded>(raw).is_some(), "another owner's hide stays");
 	anyhow::ensure!(
 		!world.resource::<UrbanizationPaddedTerrainState>().replaced.contains(&id),
 		"ready must not claim a cell this stream did not hide"
@@ -712,9 +685,7 @@ fn streamed_hosts_leave_when_the_layer_region_is_gone() -> anyhow::Result<()> {
 		playable_world_cell_layout().presentation_region(),
 	));
 	app.insert_resource(TerrainEntryStore::default());
-	app.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(
-		&TerrainConfig::new(42),
-	)));
+	app.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(&TerrainConfig::new(42))));
 	app.insert_resource(UrbanizationIndex::default());
 	app.insert_resource(DevelopmentEntryStore::default());
 	app.init_resource::<UrbanizationPresenterState>();
@@ -748,9 +719,7 @@ fn hosts_walk_a_stored_development_with_no_hopscotch() -> anyhow::Result<()> {
 	let layout = fine_patch_cell_layout(2, bevy::math::IVec2::ZERO);
 	world.insert_resource(layout.clone());
 	world.insert_resource(TerrainEntryStore::default());
-	world.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(
-		&TerrainConfig::new(42),
-	)));
+	world.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(&TerrainConfig::new(42))));
 	world.insert_resource(UrbanizationIndex::default());
 	world.insert_resource(DevelopmentEntryStore::default());
 
@@ -778,12 +747,16 @@ fn hosts_walk_a_stored_development_with_no_hopscotch() -> anyhow::Result<()> {
 		.into_iter()
 		.map(|(id, _, _)| id)
 		.collect();
+	drop(state);
 	anyhow::ensure!(
 		ids.contains(&id),
 		"hosts walk a stored development with no hopscotch selection"
 	);
 	anyhow::ensure!(
-		Urbanized::urbanization_leaves(&view.read, region).is_empty(),
+		world
+			.resource::<UrbanizationIndex>()
+			.filled_leaves_overlapping(region)
+			.is_empty(),
 		"no hopscotch cells are selected"
 	);
 	Ok(())

@@ -8,11 +8,9 @@ use bevy::prelude::World;
 use durham::{
 	BaseTerrainNoise, Durham, TerrainCellLayout, TerrainConfig, TerrainEntryStore, WorldBaseTerrain,
 };
-use richmond::{
-	pad::PadStage, DevelopmentCell, DevelopmentConfig, DevelopmentEntryStore,
-};
-use urbanization_cells::UrbanizationIndex;
+use richmond::{pad::PadStage, DevelopmentCell, DevelopmentConfig, DevelopmentEntryStore};
 use terrain_layer_model::{OnTerrain, TerrainView};
+use urbanization_cells::UrbanizationIndex;
 use urbanization_layer_model::Urbanization;
 
 fn old_ground_height(
@@ -32,10 +30,7 @@ fn old_ground_height(
 	developments.merged_pad_complex(probe).modify_elevation(raw, xz.x, xz.y)
 }
 
-fn first_classified(
-	pad: &richmond::PadComplex,
-	stage: PadStage,
-) -> Option<Vec2> {
+fn first_classified(pad: &richmond::PadComplex, stage: PadStage) -> Option<Vec2> {
 	let mid = (pad.bounds.min + pad.bounds.max) * 0.5;
 	let span = (pad.bounds.max.x - pad.bounds.min.x).max(1.0);
 	(0..=80).map(|i| mid.x - span * 0.5 + span * i as f32 / 80.0).find_map(|x| {
@@ -99,8 +94,9 @@ fn terrain_view_ground_matches_the_retired_world_formula() -> anyhow::Result<()>
 	};
 
 	{
-		let mut ground =
-			SystemState::<TerrainView<Urbanization<richmond::Richmond<OnTerrain<Durham>>>>>::new(&mut world);
+		let mut ground = SystemState::<
+			TerrainView<Urbanization<richmond::Richmond<OnTerrain<Durham>>>>,
+		>::new(&mut world);
 		let view = ground.get(&world)?;
 		for (xz, want) in expected {
 			anyhow::ensure!(

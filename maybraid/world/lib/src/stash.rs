@@ -24,7 +24,7 @@
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value};
 use bevy::text::FontSize;
-use world_player::Player as VegetationPlayer;
+use character_inventory_user::{spawn_bag, InventoryUser};
 use character_items::{
 	ClothingHost, Inventory, InventoryItem, InventorySlot, ItemRng, LootFraction, MaterialRefParams,
 };
@@ -32,7 +32,6 @@ use characters::{
 	add_character_components_host, character_bounds, CharacterComponents, ClothingLayer,
 	ComponentsOnly, Layers, PartNode,
 };
-use character_inventory_user::{spawn_bag, InventoryUser};
 use damage::{DamageSystems, DespawnAfter, Downed};
 use firearm_user::{held_scale_from_bounds, FirearmUser, FirearmUserSettings, GeneratedFirearm};
 use firearms::{firearm_bounds, spawn_firearm_components};
@@ -42,9 +41,10 @@ use lod::LodScene;
 use material_ref::{MaterialRef, MaterialRefRoot, PropagateToDescendants};
 use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
 use player::PlayerUse;
+use world_player::Player as VegetationPlayer;
 
-use mob_scenes::MobKind;
 use mob_characters::CharacterBrains;
+use mob_scenes::MobKind;
 
 use crate::control::WorldGameplayEnabled;
 use crate::weapon::{AppliedWorldPlayerLoadout, WorldPlayerLoadout};
@@ -1054,14 +1054,12 @@ fn spawn_stash_claim_halo(
 mod tests {
 	use super::*;
 	use bevy::ecs::system::RunSystemOnce;
-	use world_player::Player as VegetationPlayer;
-	use character_items::{
-		ClothingMaterial, ClothingMesh, FirearmMesh, InventoryItem, ItemColor,
-	};
+	use character_items::{ClothingMaterial, ClothingMesh, FirearmMesh, InventoryItem, ItemColor};
 	use damage::tick_queued_despawns;
 	use firearm_user::held_scale_from_bounds;
 	use material_ref::MaterialId;
 	use player::Npc;
+	use world_player::Player as VegetationPlayer;
 
 	fn mixed_bag() -> Inventory {
 		Inventory {

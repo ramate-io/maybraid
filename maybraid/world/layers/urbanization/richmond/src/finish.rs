@@ -1,11 +1,11 @@
 //! Per-cell urban finish: wall / roof [`MaterialRef`] recipes and palettes.
 
 use bevy::prelude::Color;
-use material_ref::MaterialRef;
-use procedural_common::{NoiseParams, SeededHash};
 use building_shaders::{
 	RECIPE_HAY, RECIPE_IRON, RECIPE_STONE, RECIPE_STUCCO, RECIPE_TERRACOTTA, RECIPE_WOOD,
 };
+use material_ref::MaterialRef;
+use procedural_common::{NoiseParams, SeededHash};
 
 /// Architectural role used to select a stable family of wall and roof finishes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -436,8 +436,8 @@ fn srgb(rgb: (f32, f32, f32)) -> Color {
 mod tests {
 	use std::collections::BTreeSet;
 
-	use material_ref::{MaterialId, MaterialRef};
 	use building_shaders::is_urban_surface_recipe;
+	use material_ref::{MaterialId, MaterialRef};
 
 	use super::*;
 

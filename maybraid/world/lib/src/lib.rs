@@ -29,14 +29,12 @@ mod vsync;
 mod weapon;
 mod world_layers;
 
-pub use world_player::{PlayerPhysicsEnabled, PlayerSpawnXz};
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use control::{
 	InventoryEditCameraFollow, WorldGameplayEnabled, WorldSceneryVisible, WorldSurfaceReady,
 	WorldSurfaceSet,
 };
 pub use durham::Durham;
-pub use terrain_layer_model::{terrain_streaming, TerrainStreaming};
 pub use game_commands::command::PendingStartupCommand;
 pub use intelligence::WorldIntelligencePlugin;
 pub use lod::LodJobCounter;
@@ -59,6 +57,7 @@ pub use stash::{
 	spawn_exploded_stashes, spawn_world_stash, StashDisplayedItem, StashPolicy, WorldStash,
 	WorldStashPlugin, WorldStashSettings, DEFAULT_CLAIM_RADIUS, DEFAULT_LOOT_SECS,
 };
+pub use terrain_layer_model::{terrain_streaming, TerrainStreaming};
 pub use training::{training_trainee, TrainingLifeEnded};
 pub use training_markers::TrainingEnemyMarkersEnabled;
 pub use training_plaza::TrainingPlazaMounted;
@@ -66,17 +65,13 @@ pub use ui::WorldMobHudEnabled;
 pub use vsync::{default_window_present_mode, RequestVsyncToggle, VSYNC_TOGGLE_KEY};
 pub use weapon::WorldPlayerLoadout;
 pub use world_layers::WorldLayersPlugin;
+pub use world_player::{PlayerPhysicsEnabled, PlayerSpawnXz};
 
 use avian3d::prelude::{CoefficientCombine, Friction};
 use bevy::prelude::*;
-use world_player::{
-	CharacterCameraFollowEnabled, CharacterLocomotion, CharacterSpecies, MeshStatsPlugin,
-	PadMovementEnabled, PlayerControlSystems, PlaygroundDiag, PlaygroundMode,
-	PlaygroundTimingPlugin, RequestSetCharacter, VegetationHostPlugin, VegetationPlayerMotor,
-};
-use combat_hud::CombatHudPlugin;
 use character_ragdoll::{CharacterRagdollPlugin, CharacterRagdollTargets};
 use characters::{CharacterMotionSystems, DrawTerrainPitchProbes};
+use combat_hud::CombatHudPlugin;
 use durham::TerrainFrictionConfig;
 use furniture_shaders::FurnitureShadersPlugin;
 use game_commands::command::{GameCommandPlugin, TextEntryFocus};
@@ -91,6 +86,11 @@ use player::{
 	register_motor_traction_physics, PlayerPlugin, PlayerPresentationPlugin, PlayerSystems,
 };
 use player_camera::{PlayerCameraPlugin, PlayerCameraSystems};
+use world_player::{
+	CharacterCameraFollowEnabled, CharacterLocomotion, CharacterSpecies, MeshStatsPlugin,
+	PadMovementEnabled, PlayerControlSystems, PlaygroundDiag, PlaygroundMode,
+	PlaygroundTimingPlugin, RequestSetCharacter, VegetationHostPlugin, VegetationPlayerMotor,
+};
 
 /// Steepest slope the controlled character can drive uphill.
 const WORLD_MAX_SLOPE_ANGLE: f32 = 70.0_f32.to_radians();

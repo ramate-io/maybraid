@@ -4,9 +4,9 @@ use std::sync::Arc;
 
 use bevy::math::bounding::Aabb3d;
 use bevy::math::{Vec2, Vec3};
-use procedural_common::{NoiseParams, SeededHash};
 use building_components::panels::PanelStyle;
 use buildings::{Confines, Fit, Openings};
+use procedural_common::{NoiseParams, SeededHash};
 use urbanization_developments::{
 	ShepherdsBuilding, ShepherdsFinish, ShepherdsHouse, ShepherdsHut, ShepherdsVillageBuilding,
 	HOUSE_MAX_FOOTPRINT, HOUSE_MIN_FOOTPRINT, HOUSE_STOREY_HEIGHT, HUT_HEIGHT, HUT_MAX_FOOTPRINT,

@@ -7,9 +7,9 @@
 use bevy::prelude::*;
 use chico::{install_vegetation_stream, Chico, ChicoConfig};
 use durham::{Durham, DurhamTerrainConfig, TerrainFillSystems, TerrainRetarget};
-use terrain_layer_model::{BaseTerrainModeConfig, BaseTerrainScheme, OnTerrain};
 use layer_stack::{GenerationMode, GenerationModeSystems};
 use richmond::Richmond;
+use terrain_layer_model::{BaseTerrainModeConfig, BaseTerrainScheme, OnTerrain};
 use urbanization_layer_model::Urbanization;
 use vegetation_layer_model::VegetationScheme;
 
@@ -60,12 +60,7 @@ fn apply_training_patch(
 	if terrain.coverage() == config.config.coverage && terrain.layout() == &round.layout() {
 		return;
 	}
-	terrain.apply(
-		round.layout(),
-		config.config.coverage,
-		config.config.terrain_radius,
-		true,
-	);
+	terrain.apply(round.layout(), config.config.coverage, config.config.terrain_radius, true);
 }
 
 #[cfg(test)]
@@ -73,9 +68,9 @@ mod tests {
 	use super::*;
 	use bevy::ecs::system::RunSystemOnce;
 	use durham::{
-		TerrainCellLayout, TerrainConfig, TerrainCoverage, TerrainLayoutPinned,
-		TerrainPresentPending, TerrainPresentationAssets, TerrainPresentationDirty,
-		playable_world_cell_layout, WORLD_FINE_HALF_EXTENT_CELLS,
+		playable_world_cell_layout, TerrainCellLayout, TerrainConfig, TerrainCoverage,
+		TerrainLayoutPinned, TerrainPresentPending, TerrainPresentationAssets,
+		TerrainPresentationDirty, WORLD_FINE_HALF_EXTENT_CELLS,
 	};
 
 	fn assets() -> TerrainPresentationAssets {
@@ -133,10 +128,7 @@ mod tests {
 		world
 			.run_system_once(apply_training_patch)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		anyhow::ensure!(
-			!world.resource::<TerrainPresentationDirty>().0,
-			"same round stays put"
-		);
+		anyhow::ensure!(!world.resource::<TerrainPresentationDirty>().0, "same round stays put");
 
 		world.insert_resource(round.next_life());
 		world

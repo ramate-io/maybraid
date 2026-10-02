@@ -4,23 +4,23 @@
 
 use avian3d::prelude::{LinearVelocity, Position};
 use bevy::prelude::*;
-use world_player::player::{holding_elevation, player_spawn_point_at};
-use world_player::{OffTerrainAnchor, Player};
+use building_components::{building_bounds, spawn_building_components};
+use building_physics::{spawn_building_walk_colliders, BUILDING_FRICTION};
+use buildings::wall_demo::TerrainPerimeterWall;
 use durham::{Durham, TerrainTrimeshCollider, WorldBaseTerrain};
 use lod::gen::Id;
 use player_camera::FollowCamera;
 use procedural_common::SeededHash;
-use building_components::{building_bounds, spawn_building_components};
-use building_physics::{BUILDING_FRICTION, spawn_building_walk_colliders};
-use buildings::wall_demo::TerrainPerimeterWall;
 use richmond::{DevelopmentFinish, PresentedPaddedTerrainScene, Richmond};
 use terrain_layer_model::{OnTerrain, TerrainView};
 use urbanization_layer_model::Urbanization;
+use world_player::player::{holding_elevation, player_spawn_point_at};
+use world_player::{OffTerrainAnchor, Player};
 
+use layer_stack::ActiveGenerationMode;
 use maybraid_game_mode_training_ground::{
 	TrainingGround, TrainingMap, TrainingPlazaStamped, TrainingRosterSeat, TrainingRound,
 };
-use layer_stack::ActiveGenerationMode;
 
 use crate::PlayerSpawnXz;
 
@@ -64,7 +64,9 @@ pub(crate) fn mount_training_plaza(
 	let Some(stamped) = stamped.as_deref() else {
 		return;
 	};
-	if stamped.round().map() != round.map() || wall.is_some_and(|wall| wall.cell_id == stamped.cell_id()) {
+	if stamped.round().map() != round.map()
+		|| wall.is_some_and(|wall| wall.cell_id == stamped.cell_id())
+	{
 		return;
 	}
 	info!(
@@ -130,7 +132,8 @@ pub(crate) fn reseat_training_life(
 		(With<Camera3d>, Without<Player>),
 	>,
 ) {
-	if !mode.get().is::<TrainingGround>() || !mounted.is_some_and(|mounted| mounted.serves(*round)) {
+	if !mode.get().is::<TrainingGround>() || !mounted.is_some_and(|mounted| mounted.serves(*round))
+	{
 		return;
 	}
 	let Some(seat) = seat else {
@@ -172,7 +175,10 @@ pub(crate) fn promote_training_plaza(
 	let Some(seat) = seat.as_deref() else {
 		return;
 	};
-	let cooked = ready_pads.iter().filter(|scene| stamped.terrain_ids().contains(&scene.0)).count();
+	let cooked = ready_pads
+		.iter()
+		.filter(|scene| stamped.terrain_ids().contains(&scene.0))
+		.count();
 	if !stamped.fills_ready(cooked) {
 		return;
 	}
@@ -255,7 +261,9 @@ fn spawn_training_wall(
 	let bounds = building_bounds(&wall);
 	for entity in spawn_building_components(commands, &wall, Transform::IDENTITY, bounds) {
 		spawn_building_walk_colliders(commands, entity, &wall, BUILDING_FRICTION);
-		commands.entity(entity).insert((TrainingPlaza, DespawnOnExit(ActiveGenerationMode::of::<TrainingGround>())));
+		commands
+			.entity(entity)
+			.insert((TrainingPlaza, DespawnOnExit(ActiveGenerationMode::of::<TrainingGround>())));
 	}
 }
 
@@ -303,7 +311,7 @@ mod tests {
 		TRAINING_ARENA_MAX_HALF_M, TRAINING_COURTYARD_EASE_M, TRAINING_COURTYARD_OVERHANG_M,
 	};
 	use richmond::{
-		DEVELOPMENT_CELL_SIZE, DevelopmentCell, DevelopmentConfig, DevelopmentKind, PadParams,
+		DevelopmentCell, DevelopmentConfig, DevelopmentKind, PadParams, DEVELOPMENT_CELL_SIZE,
 	};
 
 	fn base_terrain() -> WorldBaseTerrain {
@@ -345,9 +353,8 @@ mod tests {
 		let cell = training_development_cell(Vec2::ZERO);
 		let config = DevelopmentConfig::from_world_seed(42);
 		let filled = DevelopmentCell::with_les_halles(cell, 20.0, &config);
-		let footprint = filled
-			.footprint_half_extents()
-			.ok_or_else(|| anyhow::anyhow!("footprint"))?;
+		let footprint =
+			filled.footprint_half_extents().ok_or_else(|| anyhow::anyhow!("footprint"))?;
 		let half = (footprint + Vec2::splat(TRAINING_ARENA_MARGIN_M))
 			.min(Vec2::splat(TRAINING_ARENA_MAX_HALF_M));
 		let courtyard_half = half + Vec2::splat(TRAINING_COURTYARD_OVERHANG_M);
@@ -355,10 +362,7 @@ mod tests {
 		let walled = filled
 			.with_courtyard(courtyard_half, params)
 			.ok_or_else(|| anyhow::anyhow!("courtyard"))?;
-		let complex = walled
-			.pad_complexes()
-			.next()
-			.ok_or_else(|| anyhow::anyhow!("pad"))?;
+		let complex = walled.pad_complexes().next().ok_or_else(|| anyhow::anyhow!("pad"))?;
 		let (min, max) = (-half, half);
 		for sample in TerrainPerimeterWall::sample_rectangle(min, max, TRAINING_WALL_STEP_M) {
 			let y = complex.modify_elevation(-15.0, sample.x, sample.y);
@@ -442,9 +446,7 @@ mod tests {
 			.run_system_once(reseat_training_life)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		anyhow::ensure!(world.get::<Transform>(body).map(|t| t.translation) == Some(seat));
-		anyhow::ensure!(
-			world.get::<OffTerrainAnchor>(body).map(|a| a.translation) == Some(seat)
-		);
+		anyhow::ensure!(world.get::<OffTerrainAnchor>(body).map(|a| a.translation) == Some(seat));
 
 		let moved = Vec3::new(1.0, 2.0, 3.0);
 		if let Some(mut at) = world.get_mut::<Transform>(body) {

@@ -1,9 +1,6 @@
 //! Apply [`CharacterIntent`] to the vegetation capsule / camera-relative wish.
 
 use bevy::prelude::*;
-use world_player::{
-	MoveWish, MovementAction, Player, PlayerPhysicsEnabled, PlayerSpawnXz, PlaygroundMode,
-};
 use durham::{
 	terrain_collider_covers_xz, CascadeChunk, TerrainCellLayout, TerrainEntryStore,
 	TerrainTrimeshCollider,
@@ -19,6 +16,9 @@ use player::{
 	Wading,
 };
 use player_camera::CameraController;
+use world_player::{
+	MoveWish, MovementAction, Player, PlayerPhysicsEnabled, PlayerSpawnXz, PlaygroundMode,
+};
 
 /// When `false`, world movement / POV intents are ignored (menus, pause overlay).
 #[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]

@@ -8,16 +8,14 @@ use layer_stack::{
 	subscribe_mode, ActiveGenerationMode, GenerationMode, GenerationModePlugin, ModeSubscribers,
 	ModeSubscription,
 };
-use lod::gen::Id;
+use lod::gen::{Id, Version};
 use lod::lod_ref::LodRef;
 use terrain_layer_model::{HeightField, TerrainCell, TerrainModel};
-use urbanization_layer_model::{
-	PadOps, Urbanization, UrbanizationGeneration, UrbanizationModel,
-};
+use urbanization_layer_model::{PadOps, Urbanization, UrbanizationGeneration, UrbanizationModel};
 
 use crate::{
-	UrbanizationHosts, UrbanizationPresentation, UrbanizationPresentationCore,
-	UrbanizationPresentationPlugin, PaddedCells,
+	PaddedCells, UrbanizationHosts, UrbanizationPresentation, UrbanizationPresentationCore,
+	UrbanizationPresentationPlugin,
 };
 
 struct TestMode;
@@ -121,6 +119,7 @@ impl UrbanizationModel for SilentUrban {
 	type Ground = SilentGround;
 	type Pads = SilentPads;
 	type Surface = SilentCell;
+	type Built = ();
 	type Read = ();
 	type Prepare = ();
 
@@ -148,6 +147,17 @@ impl UrbanizationModel for SilentUrban {
 		_bounds: Aabb3d,
 	) -> Option<&'a SilentCell> {
 		None
+	}
+
+	fn built<'a>(_read: &'a SystemParamItem<'_, '_, Self::Read>, _region: Aabb3d) -> Vec<&'a ()> {
+		Vec::new()
+	}
+
+	fn built_overlapping<'a>(
+		_read: &'a SystemParamItem<'_, '_, Self::Read>,
+		_region: Aabb3d,
+	) -> Vec<(Id, Version, &'a ())> {
+		Vec::new()
 	}
 
 	fn prepare(
@@ -180,8 +190,7 @@ impl UrbanizationPresentation for SilentUrban {
 #[test]
 fn presentation_without_generation_names_the_missing_plugin() {
 	let result = std::panic::catch_unwind(|| {
-		UrbanizationPresentationPlugin::<TestMode, SilentUrban>::default()
-			.finish(&mut App::new());
+		UrbanizationPresentationPlugin::<TestMode, SilentUrban>::default().finish(&mut App::new());
 	});
 	let message = match result {
 		Ok(()) => "plugin finish returned".to_string(),
@@ -221,18 +230,16 @@ fn losing_subscription_is_inactive_and_returning_is_active() -> anyhow::Result<(
 	let mut app = subscribed_app();
 	app.update();
 	{
-		let mut state = SystemState::<ModeSubscription<(Stacked, UrbanizationHosts)>>::new(
-			app.world_mut(),
-		);
+		let mut state =
+			SystemState::<ModeSubscription<(Stacked, UrbanizationHosts)>>::new(app.world_mut());
 		anyhow::ensure!(
 			state.get(app.world()).map_err(|error| anyhow::anyhow!("{error:?}"))?.active(),
 			"hosts follow the subscribed mode"
 		);
 	}
 	{
-		let mut state = SystemState::<ModeSubscription<(Stacked, PaddedCells)>>::new(
-			app.world_mut(),
-		);
+		let mut state =
+			SystemState::<ModeSubscription<(Stacked, PaddedCells)>>::new(app.world_mut());
 		anyhow::ensure!(
 			state.get(app.world()).map_err(|error| anyhow::anyhow!("{error:?}"))?.active(),
 			"padded follows the subscribed mode"
@@ -244,9 +251,8 @@ fn losing_subscription_is_inactive_and_returning_is_active() -> anyhow::Result<(
 		.set(ActiveGenerationMode::of::<OtherMode>());
 	app.update();
 	{
-		let mut state = SystemState::<ModeSubscription<(Stacked, UrbanizationHosts)>>::new(
-			app.world_mut(),
-		);
+		let mut state =
+			SystemState::<ModeSubscription<(Stacked, UrbanizationHosts)>>::new(app.world_mut());
 		anyhow::ensure!(
 			!state.get(app.world()).map_err(|error| anyhow::anyhow!("{error:?}"))?.active(),
 			"unsubscribed mode retires hosts"
@@ -258,9 +264,8 @@ fn losing_subscription_is_inactive_and_returning_is_active() -> anyhow::Result<(
 		.set(ActiveGenerationMode::of::<TestMode>());
 	app.update();
 	{
-		let mut state = SystemState::<ModeSubscription<(Stacked, UrbanizationHosts)>>::new(
-			app.world_mut(),
-		);
+		let mut state =
+			SystemState::<ModeSubscription<(Stacked, UrbanizationHosts)>>::new(app.world_mut());
 		anyhow::ensure!(
 			state.get(app.world()).map_err(|error| anyhow::anyhow!("{error:?}"))?.active(),
 			"return presents hosts again"

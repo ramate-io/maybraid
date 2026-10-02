@@ -97,8 +97,8 @@ mod tests {
 	use super::*;
 	use bevy::math::{Vec2, Vec3};
 	use buildings::Fit;
-	use urbanization_developments::{ShepherdsBuilding, ShepherdsHut, ShepherdsVillageBuilding};
 	use std::sync::Arc;
+	use urbanization_developments::{ShepherdsBuilding, ShepherdsHut, ShepherdsVillageBuilding};
 
 	use crate::shepherds_fit::shepherds_recipe;
 

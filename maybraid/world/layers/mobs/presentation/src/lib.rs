@@ -1,120 +1,72 @@
-//! [`MobPresentationPlugin`]: mob hosts grounded on `G`, surface fit, High LOD.
+//! [`MobPresentationPlugin`]: hosts, group roots, and surface fit through the model.
+//!
+//! The `Last` despawn of hosts and [`mob_intelligence::MemberOf`] members stays here.
 
 use std::marker::PhantomData;
 
 use bevy::app::{App, Plugin};
-use bevy::prelude::*;
-use bevy::time::common_conditions::on_timer;
-use lod::{
-	update_lod_host_levels, LodGenerateSystems, LodPresentCullPlugin, LodPresentPlugin,
-	LodPresentSystems, LodRefreshSystems, LodSceneRefreshRegionPlugin, LodViewer,
-};
-use lod_gimme::GimmeLodSceneRefreshPlugin;
-use mob_scenes::{MobLodRefreshMode, MobScene, MobSceneSystems};
-use barking::MobGroupsPlugin;
-use mob_layer_model::{MobCell, MobGenerationCore, MobIndex, MobLodChan};
-use layer_stack::{install_lod_present_gate, subscribe_mode, GenerationMode, RequireLayer};
+use layer_stack::{install_lod_present_gate, subscribe_mode, GenerationMode};
+use mob_layer_model::{MobGeneration, Mobs};
 use terrain_layer_model::TerrainModel;
-use vegetation_layer_model::Vegetation;
 
 mod present;
 
-use present::{
-	fit_mob_hosts_to_surface, pulse_mob_high_lod, MobHighLodChan, MobHighLodRegion, MobPresenter,
-	MobPresenterState,
-};
+pub use present::{install_mob_cell_teardown, MobPresenterState, PresentedMobCell};
 
-pub use present::PresentedMobCell;
-
-/// Marker for mob-presenter subscriptions on ground `G`.
+/// Marker for mob-presenter subscriptions on [`Mobs<B>`].
 pub struct MobPresent;
 
-/// Presents generated mob groups on ground `G` while `Mode` is subscribed.
-///
-/// Presentation itself reads nothing but `G`'s height.
-pub struct MobPresentationPlugin<Mode, G>(PhantomData<fn() -> (Mode, G)>);
+/// Spawn placed scenes, group roots, and fit them to the ground.
+pub trait MobPresentation: MobGeneration {
+	/// Channel whose [`lod::LodPresentGate`] this layer opens and closes.
+	type Channel: Send + Sync + 'static;
 
-impl<Mode, G> Default for MobPresentationPlugin<Mode, G> {
+	fn install_presentation(app: &mut App);
+}
+
+/// Presents generated mobs of model `B` while `Mode` is subscribed.
+pub struct MobPresentationPlugin<Mode, B>(PhantomData<fn() -> (Mode, B)>);
+
+impl<Mode, B> Default for MobPresentationPlugin<Mode, B> {
 	fn default() -> Self {
 		Self(PhantomData)
 	}
 }
 
-pub struct MobPresentationCore<G>(PhantomData<fn() -> G>);
+pub struct MobPresentationCore<B>(PhantomData<fn() -> B>);
 
-impl<G> Default for MobPresentationCore<G> {
+impl<B> Default for MobPresentationCore<B> {
 	fn default() -> Self {
 		Self(PhantomData)
 	}
 }
 
-impl<G: TerrainModel> Plugin for MobPresentationCore<G> {
-	fn build(&self, app: &mut App) {
-		// Indexed must be visible when MobScenesPlugin builds. Guarding
-		// MobGroupsPlugin would hide an assembler that already added groups
-		// under FullScan.
-		app.insert_resource(MobLodRefreshMode::Indexed);
-		app.add_plugins(MobGroupsPlugin);
-		app.init_resource::<MobPresenterState>()
-			.add_plugins(LodPresentPlugin::<
-				MobCell,
-				MobIndex,
-				MobPresenter<'_, '_, G>,
-				MobLodChan,
-				With<LodViewer>,
-			>::default())
-			.add_plugins(LodPresentCullPlugin::<
-				MobCell,
-				MobIndex,
-				MobPresenter<'_, '_, G>,
-				MobLodChan,
-			>::default())
-			.add_plugins(LodSceneRefreshRegionPlugin::<
-				MobHighLodRegion,
-				With<LodViewer>,
-				MobHighLodChan,
-			>::default())
-			.add_plugins(GimmeLodSceneRefreshPlugin::<
-				MobScene,
-				MobHighLodChan,
-				With<LodViewer>,
-			>::default())
-			.configure_sets(Update, LodPresentSystems::Produce.after(LodGenerateSystems::Drain));
-		present::install_mob_cell_teardown(app);
-		app.add_systems(
-			Update,
-			fit_mob_hosts_to_surface::<G>.in_set(MobSceneSystems::Surface),
-		)
-		.add_systems(
-			Update,
-			pulse_mob_high_lod
-				.run_if(on_timer(present::MOB_HIGH_LOD_REFRESH_INTERVAL))
-				.in_set(LodRefreshSystems::ProduceRegions),
-		)
-		.add_systems(
-			Update,
-			update_lod_host_levels::<MobScene, (), With<LodViewer>>
-				.run_if(on_timer(present::MOB_HIGH_LOD_RECONCILE_INTERVAL))
-				.in_set(LodRefreshSystems::UpdateLevels),
-		);
-	}
-}
-
-impl<Mode: GenerationMode, V> Plugin for MobPresentationPlugin<Mode, Vegetation<V>>
+impl<B: MobPresentation> Plugin for MobPresentationCore<B>
 where
-	Vegetation<V>: TerrainModel,
-	MobGenerationCore<Vegetation<V>>: Plugin,
+	Mobs<B>: TerrainModel,
 {
 	fn build(&self, app: &mut App) {
-		subscribe_mode::<(Vegetation<V>, MobPresent), Mode>(app);
-		install_lod_present_gate::<(Vegetation<V>, MobPresent), MobLodChan>(app);
-		if !app.is_plugin_added::<MobPresentationCore<Vegetation<V>>>() {
-			app.add_plugins(MobPresentationCore::<Vegetation<V>>::default());
+		B::install_presentation(app);
+		install_mob_cell_teardown(app);
+	}
+}
+
+impl<Mode, B> Plugin for MobPresentationPlugin<Mode, B>
+where
+	Mode: GenerationMode,
+	B: MobPresentation,
+	Mobs<B>: TerrainModel,
+{
+	fn build(&self, app: &mut App) {
+		subscribe_mode::<(Mobs<B>, MobPresent), Mode>(app);
+		install_lod_present_gate::<(Mobs<B>, MobPresent), B::Channel>(app);
+		if !app.is_plugin_added::<MobPresentationCore<B>>() {
+			app.add_plugins(MobPresentationCore::<B>::default());
 		}
 	}
 
 	fn finish(&self, app: &mut App) {
-		app.require_layer::<MobGenerationCore<Vegetation<V>>, MobPresentationCore<Vegetation<V>>>();
+		Mobs::<B>::require_generation(app);
 	}
 }
 

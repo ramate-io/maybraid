@@ -1,12 +1,8 @@
 //! Slim world-playground commands. Forest + terrain extents are baked in.
 
 use bevy::prelude::*;
-use world_player::commands::{
-	RequestMeshStats, RequestModeCharacter, RequestModeFree,
-};
-use world_player::{
-	CharacterSpecies, RequestFpsToggle, RequestSetCharacter,
-};
+use world_player::commands::{RequestMeshStats, RequestModeCharacter, RequestModeFree};
+use world_player::{CharacterSpecies, RequestFpsToggle, RequestSetCharacter};
 
 use clap::{Parser, Subcommand};
 use game_commands::command::{CommandConsoleOutput, CommandScript, GameCommand};

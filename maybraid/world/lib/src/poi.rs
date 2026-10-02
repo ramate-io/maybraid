@@ -5,7 +5,6 @@ use std::hash::{Hash, Hasher};
 
 use bevy::prelude::*;
 use chico::ChicoGroveHost;
-use vegetation_components::VegetationInstance;
 use lod::LodScene;
 use mob_characters::{LOCAL_POI, SALOON_POI, URBAN_POI, VEGETATION_POI};
 use poi_intelligence::{
@@ -13,6 +12,7 @@ use poi_intelligence::{
 };
 use richmond::{DiscoverablePlace, DiscoverablePlaceLabel};
 use urbanization_layer_model::UrbanSetting;
+use vegetation_components::VegetationInstance;
 
 const LOCAL_VEGETATION_TILE: f32 = 48.0;
 const VEGETATION_POI_SALT: u64 = 0x7665_6765_7461_7469;

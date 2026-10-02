@@ -2,12 +2,12 @@
 
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
+use building_shaders::{init_urban_material_caches, UrbanSurfaceMaterialLib};
 use characters::material_lib::{init_character_material_caches, CharacterMaterialLib};
+use chico::VegetationOnTerrainMaterialLib;
 use firearms::{init_muzzle_flame_caches, MuzzleFlameMaterialLib};
 use furniture_shaders::{init_furniture_material_caches, FurnitureMaterialLib};
 use material_ref::{material_ref_plugin_installed, MaterialLib, MaterialRef, MaterialRefPlugin};
-use building_shaders::{init_urban_material_caches, UrbanSurfaceMaterialLib};
-use chico::VegetationOnTerrainMaterialLib;
 
 /// World-model lib: furniture kits, character face / clothing, Richmond urban
 /// surfaces, the muzzle flame, then vegetation and Standard.
@@ -70,13 +70,11 @@ impl Plugin for WorldMaterialRefPlugin {
 #[cfg(test)]
 mod tests {
 	use bevy::prelude::*;
-	use characters::material_lib::{
-		ClothingShaderMaterialRefCache, FaceShaderMaterialRefCache,
-	};
+	use characters::material_lib::{ClothingShaderMaterialRefCache, FaceShaderMaterialRefCache};
 
+	use building_shaders::UrbanSurfaceMaterialRefCache;
 	use firearms::MuzzleFlameMaterialRefCache;
 	use furniture_shaders::FurnitureSurfaceMaterialRefCache;
-	use building_shaders::UrbanSurfaceMaterialRefCache;
 
 	use crate::material_lib::WorldMaterialRefPlugin;
 

@@ -2,12 +2,8 @@
 
 use avian3d::prelude::LinearVelocity;
 use bevy::prelude::*;
-use world_player::{
-	player_position_above_surface, spawn_player_body, CharacterLocomotion, CharacterSpecies,
-	MoveWish, Player as VegetationPlayer, RequestSetCharacter, RequestSetCharacterAppearance,
-};
-use character_ragdoll::CharacterRagdollSystems;
 use character_inventory_user::InventoryUser;
+use character_ragdoll::CharacterRagdollSystems;
 use damage::{DamageSystems, DespawnAfter, Downed};
 use durham::Durham;
 use firearm_user::FirearmUser;
@@ -22,9 +18,13 @@ use spotting_intelligence::SpotSubject;
 use terrain_layer_model::{OnTerrain, TerrainView};
 use threat_intelligence::{Affiliations, ThreatSubject};
 use urbanization_layer_model::Urbanization;
+use world_player::{
+	player_position_above_surface, spawn_player_body, CharacterLocomotion, CharacterSpecies,
+	MoveWish, Player as VegetationPlayer, RequestSetCharacter, RequestSetCharacterAppearance,
+};
 
-use maybraid_game_mode_training_ground::TrainingGround;
 use layer_stack::ActiveGenerationMode;
+use maybraid_game_mode_training_ground::TrainingGround;
 
 use crate::control::strip_world_player_motor;
 use crate::training::TrainingLifeEnded;
@@ -106,10 +106,7 @@ impl Plugin for WorldPlayerLifecyclePlugin {
 					.after(DamageSystems::Down)
 					.after(CharacterRagdollSystems::Handoff),
 			)
-			.add_systems(
-				Update,
-				respawn_world_player.after(PoiSystems::Index),
-			)
+			.add_systems(Update, respawn_world_player.after(PoiSystems::Index))
 			.add_systems(Update, sync_player_death_glaze.after(respawn_world_player));
 	}
 }
@@ -213,8 +210,7 @@ fn respawn_world_player(
 	mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
 	let training_now = mode.is_some_and(|mode| mode.get().is::<TrainingGround>());
-	let abandoned =
-		state.pending.as_ref().is_some_and(|pending| pending.abandoned(training_now));
+	let abandoned = state.pending.as_ref().is_some_and(|pending| pending.abandoned(training_now));
 	if !gameplay.0 && !abandoned {
 		return;
 	}
@@ -309,10 +305,10 @@ fn respawn_seed(generation: u64, death_at: Vec3) -> u64 {
 mod tests {
 	use super::*;
 	use bevy::ecs::system::RunSystemOnce;
-	use world_player::WorldBaseTerrain;
 	use durham::{TerrainCellLayout, TerrainEntryStore};
 	use richmond::DevelopmentEntryStore;
 	use urbanization_cells::UrbanizationIndex;
+	use world_player::WorldBaseTerrain;
 
 	#[test]
 	fn fallback_respawn_moves_away_from_the_death_point() {
@@ -418,11 +414,9 @@ mod tests {
 		world.init_resource::<TerrainCellLayout>();
 		world.init_resource::<DevelopmentEntryStore>();
 		world.init_resource::<UrbanizationIndex>();
-		world.insert_resource(WorldBaseTerrain(
-			durham::BaseTerrainNoise::from_config(
-				&durham::TerrainConfig::new(42),
-			),
-		));
+		world.insert_resource(WorldBaseTerrain(durham::BaseTerrainNoise::from_config(
+			&durham::TerrainConfig::new(42),
+		)));
 		world.init_resource::<Assets<Mesh>>();
 		world.init_resource::<Assets<StandardMaterial>>();
 		world.init_resource::<Messages<TrainingLifeEnded>>();
@@ -444,13 +438,11 @@ mod tests {
 			.run_system_once(respawn_world_player)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 
-		let ended: Vec<_> =
-			world.resource_mut::<Messages<TrainingLifeEnded>>().drain().collect();
+		let ended: Vec<_> = world.resource_mut::<Messages<TrainingLifeEnded>>().drain().collect();
 		assert_eq!(ended, vec![TrainingLifeEnded]);
-		let mut bodies = world.query_filtered::<
-			(&Transform, Has<WorldPlayerAppearanceRequested>),
-			With<VegetationPlayer>,
-		>();
+		let mut bodies = world
+			.query_filtered::<(&Transform, Has<WorldPlayerAppearanceRequested>), With<VegetationPlayer>>(
+			);
 		let (body, requested) = bodies.single(&world)?;
 		assert_eq!(body.translation.xz(), Vec2::new(3.0, 5.0));
 		assert!(!requested, "the next life's loadout dresses the body");
@@ -475,8 +467,7 @@ mod tests {
 		world
 			.run_system_once(respawn_world_player)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		let ended: Vec<_> =
-			world.resource_mut::<Messages<TrainingLifeEnded>>().drain().collect();
+		let ended: Vec<_> = world.resource_mut::<Messages<TrainingLifeEnded>>().drain().collect();
 		assert!(ended.is_empty(), "leaving ends no life");
 		let mut bodies = world.query_filtered::<(), With<VegetationPlayer>>();
 		assert_eq!(bodies.iter(&world).count(), 1);

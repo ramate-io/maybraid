@@ -17,26 +17,26 @@
 //! presenter. Training does not present raw [`durham::DurhamCells`].
 
 use bevy::prelude::*;
-use combat_hud::{CombatScore, LiveEnemies};
 use character_items::{random_starter_loadout, Inventory, ItemRng};
 use characters::species::{
 	braidman::BraidmanConfig, lero::LeroConfig, mygr::MygrConfig, tuberwaber::TuberwaberConfig,
 	wumbus::WumbusConfig,
 };
 use characters::CharacterAppearance;
+use combat_hud::{CombatScore, LiveEnemies};
 use damage::{Downed, Health};
 use durham::TerrainColliderSystems;
+use layer_stack::ActiveGenerationMode;
 use maybraid_game_mode_training_ground::{TrainingBrawler, TrainingGround, TrainingRound};
 use mob_intelligence::MemberOf;
-use layer_stack::ActiveGenerationMode;
 
-use crate::WorldPlayerLoadout;
-use crate::control::{WorldSurfaceSet, update_world_surface_ready};
-use crate::training_markers::{TrainingEnemyMarkersEnabled, sync_training_enemy_markers};
+use crate::control::{update_world_surface_ready, WorldSurfaceSet};
+use crate::training_markers::{sync_training_enemy_markers, TrainingEnemyMarkersEnabled};
 use crate::training_plaza::{
 	clear_training_plaza, mount_training_plaza, park_on_training_site, promote_training_plaza,
 	reseat_training_life,
 };
+use crate::WorldPlayerLoadout;
 
 /// Training Ground session: patch retarget and the walled plaza.
 pub(crate) struct TrainingGroundPlugin;
@@ -67,11 +67,8 @@ impl Plugin for TrainingGroundPlugin {
 /// Mode transitions. Plaza systems stay on the plugin so a headless transition
 /// test can register this without the rest of the stack.
 fn register_generation_mode_transitions(app: &mut App) {
-	app.add_systems(
-		OnEnter(ActiveGenerationMode::of::<TrainingGround>()),
-		open_training_score,
-	)
-	.add_systems(OnExit(ActiveGenerationMode::of::<TrainingGround>()), close_training_score);
+	app.add_systems(OnEnter(ActiveGenerationMode::of::<TrainingGround>()), open_training_score)
+		.add_systems(OnExit(ActiveGenerationMode::of::<TrainingGround>()), close_training_score);
 }
 
 /// A Training body respawned. The shell advances [`TrainingRound`] and loads
@@ -145,12 +142,12 @@ mod tests {
 	use maybraid_game_mode_training_ground::TRAINING_FINE_HALF_EXTENT_CELLS;
 	use richmond::DevelopmentEntryStore;
 
-	use crate::PlayerSpawnXz;
+	use super::*;
 	use crate::training_plaza::TrainingPlazaMounted;
+	use crate::PlayerSpawnXz;
+	use layer_stack::GenerationModePlugin;
 	use maybraid_game_mode_discover::Discovery;
 	use terrain_layer_model::{BaseTerrainModeConfig, BaseTerrainScheme};
-use layer_stack::GenerationModePlugin;
-	use super::*;
 
 	#[derive(States, Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
 	enum ShellFlow {
@@ -237,9 +234,9 @@ use layer_stack::GenerationModePlugin;
 		register_generation_mode_transitions(&mut app);
 		app.init_resource::<ModeSeenOnLoading>();
 		app.init_resource::<TrainingExits>();
-		app.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(
-			&TerrainConfig::new(42),
-		)));
+		app.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(&TerrainConfig::new(
+			42,
+		))));
 		app.insert_resource(DevelopmentEntryStore::default());
 		app.insert_resource(PlayerSpawnXz(None));
 		app.add_systems(OnEnter(ShellFlow::Loading), note_mode_on_loading);
@@ -259,7 +256,11 @@ use layer_stack::GenerationModePlugin;
 			app.world().resource::<ModeSeenOnLoading>().0,
 			Some(ActiveGenerationMode::of::<TrainingGround>())
 		);
-		assert!(app.world().resource::<State<ActiveGenerationMode>>().get().is::<TrainingGround>());
+		assert!(app
+			.world()
+			.resource::<State<ActiveGenerationMode>>()
+			.get()
+			.is::<TrainingGround>());
 		assert_eq!(*app.world().resource::<TerrainCellLayout>(), round.layout());
 		assert_eq!(*app.world().resource::<TerrainCoverage>(), TerrainCoverage::FinePatch);
 		assert!(app.world().resource::<TerrainPresentationDirty>().0);
@@ -338,8 +339,9 @@ use layer_stack::GenerationModePlugin;
 		assert_eq!(run(&mut world)?, Some(2), "only training squads count");
 
 		let mut first = world.entity_mut(first);
-		let mut health =
-			first.get_mut::<Health>().ok_or_else(|| anyhow::anyhow!("fighter lost health"))?;
+		let mut health = first
+			.get_mut::<Health>()
+			.ok_or_else(|| anyhow::anyhow!("fighter lost health"))?;
 		health.apply_damage(10.0);
 		assert_eq!(run(&mut world)?, Some(1), "a dead fighter drops out");
 

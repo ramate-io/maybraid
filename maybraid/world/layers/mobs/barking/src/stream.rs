@@ -1,22 +1,18 @@
 //! Mob generate / present-keep bullseyes and the camera stream.
 
-use bevy::ecs::system::{ParamSet, SystemParam};
+use bevy::ecs::system::{ParamSet, StaticSystemParam, SystemParam};
 use bevy::prelude::*;
-use chico::ForestIndex;
-use lod::gen::{
-	Id, LodGenerateKeepRegion, LodGenerateQueue, LodGenerateRegion, LodGenerated,
-};
+use lod::gen::{Id, LodGenerateKeepRegion, LodGenerateQueue, LodGenerateRegion, LodGenerated};
 use lod::lod_ref::LodRef;
 use lod::presentation::{LodPresentKeepRegion, LodPresentRegion};
 use lod::scene::{LodRefreshRegions, LodRefreshRegionsStatus};
-use barking::MobPlantHost;
-use procedural_common::NoiseParams;
-use richmond::DiscoverablePlace;
+use mob_layer_model::MobGenerationSystems;
 use terrain_layer_model::TerrainView;
-use urbanization_cells::UrbanizationKind;
-use urbanization_layer_model::{UrbanModel, UrbanSetting};
 
-use crate::index::{urban_leaf_arrival_radius, xz_radius_aabb, MobCell, MobCellExtent, MobIndex};
+use crate::index::{xz_radius_aabb, MobCell, MobCellExtent, MobIndex};
+use crate::sample::{
+	DiscoverablePlaces, ForestSelection, PlantHosts, SelectUrbanization, UrbanSelection,
+};
 
 /// Present / generate rings the world stream used (1 km / 3 km).
 pub const MOB_GENERATE_RADIUS: f32 = 3_000.0;
@@ -101,67 +97,52 @@ impl MobCellWrites<'_> {
 	}
 }
 
-pub fn sync_mob_models<G: UrbanModel<Selection = NoiseParams, Kind = UrbanizationKind>>(
-	forest: Res<ForestIndex>,
+pub fn sync_mob_models<V, G>(
+	forest: StaticSystemParam<V::Read>,
 	view: TerrainView<G>,
 	mut mobs: ResMut<MobIndex>,
-) {
-	let (urbanization_noise, urbanization_kind) = G::urbanization_selection(&view.read);
-	if !mobs.models_match(&forest, urbanization_noise, urbanization_kind) {
-		mobs.configure_from(&forest, urbanization_noise, urbanization_kind);
+) where
+	V: ForestSelection,
+	G: UrbanSelection,
+{
+	let (forest_noise, forest_layering) = V::pick(&forest);
+	let (urbanization_noise, urbanization_kind) = G::selection(&view.read);
+	if !mobs.models_match(forest_noise, forest_layering, urbanization_noise, urbanization_kind) {
+		mobs.configure_from(
+			forest_noise,
+			forest_layering,
+			urbanization_noise,
+			urbanization_kind,
+			V::layers_at,
+			G::kind_at,
+		);
 	}
 }
 
 /// Collect plant hosts from urbanization leaves, development cells, then
-/// presentation-spawned [`UrbanSetting`] / [`DiscoverablePlace`] entities.
+/// presentation-spawned settings and discoverable places.
 ///
 /// Generation reads entities that presentation spawns.
-pub fn sync_mob_plant_hosts<G: UrbanModel>(
+///
+/// `ensure_selected` is the #720 cross-layer write into Richmond's urbanization index.
+pub fn sync_mob_plant_hosts<G>(
 	generate_keep: Res<LodGenerateKeepRegion<MobLodChan>>,
 	mut access: ParamSet<(G::Select, TerrainView<G>)>,
-	settings: Query<(&UrbanSetting, &GlobalTransform)>,
-	places: Query<(&DiscoverablePlace, &GlobalTransform)>,
+	places: StaticSystemParam<G::Places>,
 	mut mobs: ResMut<MobIndex>,
-) {
+) where
+	G: PlantHosts + SelectUrbanization + DiscoverablePlaces,
+{
 	if !mobs.models_ready {
 		return;
 	}
 	let region = generate_keep.region.unwrap_or(xz_radius_aabb(Vec3::ZERO, MOB_GENERATE_RADIUS));
 	G::ensure_selected(&mut access.p0(), region);
-	let view = access.p1();
-	let mut hosts = Vec::new();
-	for leaf in G::urbanization_leaves(&view.read, region) {
-		let bounds = G::leaf_bounds(leaf);
-		hosts.push(MobPlantHost {
-			xz: Vec2::new(
-				(bounds.min.x + bounds.max.x) * 0.5,
-				(bounds.min.z + bounds.max.z) * 0.5,
-			),
-			arrival_radius: urban_leaf_arrival_radius(bounds),
-		});
-	}
-	for cell in G::development_cells(&view.read, region) {
-		let bounds = G::cell_bounds(cell);
-		hosts.push(MobPlantHost {
-			xz: Vec2::new(
-				(bounds.min.x + bounds.max.x) * 0.5,
-				(bounds.min.z + bounds.max.z) * 0.5,
-			),
-			arrival_radius: urban_leaf_arrival_radius(bounds),
-		});
-	}
-	for (setting, transform) in &settings {
-		hosts.push(MobPlantHost {
-			xz: transform.translation().xz(),
-			arrival_radius: setting.arrival_radius,
-		});
-	}
-	for (place, transform) in &places {
-		hosts.push(MobPlantHost {
-			xz: transform.translation().xz(),
-			arrival_radius: place.arrival_radius,
-		});
-	}
+	let mut hosts = {
+		let view = access.p1();
+		G::plant_hosts(&view.read, region)
+	};
+	hosts.extend(G::places(&places));
 	mobs.plant_hosts = hosts;
 }
 
@@ -226,11 +207,8 @@ fn clear_mob_generate(
 
 /// Grid stream for a mode that owns hopscotch cells.
 pub fn install_mob_grid_stream<Mode: layer_stack::GenerationMode>(app: &mut App) {
-	use lod::LodGenerateSystems;
-	use lod::LodPresentSystems;
 	use layer_stack::{ActiveGenerationMode, GenerationModeSystems};
-
-	use crate::generation::MobGenerationSystems;
+	use lod::{LodGenerateSystems, LodPresentSystems};
 
 	app.init_resource::<MobGenerateStreamCell>();
 	app.add_systems(
@@ -241,8 +219,5 @@ pub fn install_mob_grid_stream<Mode: layer_stack::GenerationMode>(app: &mut App)
 			.before(LodGenerateSystems::Produce)
 			.before(LodPresentSystems::Produce),
 	);
-	app.add_systems(
-		OnExit(ActiveGenerationMode::of::<Mode>()),
-		clear_mob_generate,
-	);
+	app.add_systems(OnExit(ActiveGenerationMode::of::<Mode>()), clear_mob_generate);
 }

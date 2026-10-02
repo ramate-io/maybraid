@@ -54,6 +54,7 @@ pub use cell::{
 	DEFAULT_SPATIAL_CORRELATION, DEVELOPMENT_CELL_SIZE, LES_HALLES_MAX_FOOTPRINT, PAD_BERM,
 	PAD_EDGE_EASE, PAD_ROUND, RING_FORT_MAX_FOOTPRINT, RING_FORT_MIN_FOOTPRINT,
 };
+pub use compose::PadComposable;
 pub use config::DevelopmentConfig;
 pub use development::{
 	select_kind, ArchetypeCell, DevelopmentCell, DevelopmentContent, DevelopmentKind,
@@ -61,6 +62,7 @@ pub use development::{
 	ShepherdsVillageCell,
 };
 pub use finish::{DevelopmentFinish, DevelopmentFinishRole};
+pub use ground::{RichmondGround, RichmondGroundView};
 pub use host::{DevelopmentHost, DevelopmentHosts};
 pub use hydro::{
 	composed_height_at, composed_height_upper_on_rect, hydro_overlaps_xz, terrain_hydro_overlaps,
@@ -69,6 +71,20 @@ pub use index::{
 	BuiltDevelopmentStoreView, DevelopmentCellStoreView, DevelopmentEntryStore, DevelopmentIndex,
 	PaddedStoreView,
 };
+pub use layer::Richmond;
+pub use layer_config::{
+	DevelopmentFocus, RichmondConfig, UrbanizationStreamSpec, DEFAULT_URBANIZATION_NOISE,
+	DEFAULT_URBANIZATION_STREAM_RADIUS, PLAYGROUND_LIKELIHOOD,
+};
+pub use layer_present::{
+	present_richmond_hosts, spawn_development_hosts, spawn_tagged_host_entities,
+	sync_raw_terrain_replacements, DevelopmentHostRoot, UrbanizationPaddedTerrainState,
+	UrbanizationPresenterState,
+};
+pub use layer_stream::{
+	install_urbanization_stream, parse_urbanization_kind, stream_radii_m, UrbanizationStreamKey,
+	UrbanizationStreamLod,
+};
 pub use les_halles::LesHallesDevelopment;
 pub use pad::{
 	cell_bounds2, nodes_from_graded_polyline, PadComplex, PadNode, PadParams, PadPrimitive,
@@ -76,22 +92,6 @@ pub use pad::{
 };
 pub use padded::{PresentedPaddedTerrainScene, TerrainWithPads};
 pub use place::{DiscoverablePlace, DiscoverablePlaceLabel, InteriorArea};
-pub use compose::PadComposable;
-pub use ground::{RichmondGround, RichmondGroundView};
-pub use layer::Richmond;
-pub use layer_config::{
-	DevelopmentFocus, RichmondConfig, UrbanizationStreamSpec, DEFAULT_URBANIZATION_NOISE,
-	DEFAULT_URBANIZATION_STREAM_RADIUS, PLAYGROUND_LIKELIHOOD,
-};
-pub use layer_present::{
-	present_richmond_hosts, spawn_development_hosts,
-	spawn_tagged_host_entities, sync_raw_terrain_replacements, DevelopmentHostRoot,
-	UrbanizationPaddedTerrainState, UrbanizationPresenterState,
-};
-pub use layer_stream::{
-	install_urbanization_stream, parse_urbanization_kind, stream_radii_m, UrbanizationStreamKey,
-	UrbanizationStreamLod,
-};
 pub use plugin::{register_richmond_plugin, RichmondDevelopmentModelsPlugin};
 pub use presentation::{PaddedTerrainPresenter, PaddedTerrainPresenterState};
 pub use ring_fort::RingFortDevelopment;

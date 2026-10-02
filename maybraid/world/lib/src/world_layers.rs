@@ -1,25 +1,28 @@
 //! The world's layer stack: terrain, urbanization, vegetation, and mobs, each
 //! generated and then presented.
 
+use barking::{Barking, BarkingConfig};
 use bevy::prelude::*;
+use chico::{Chico, ChicoConfig};
 use durham::{Durham, DurhamTerrainConfig};
+use layer_stack::GenerationModePlugin;
 use maybraid_game_mode_discover::Discovery;
 use maybraid_game_mode_training_ground::{TrainingGround, TRAINING_FINE_HALF_EXTENT_CELLS};
-use mob_layer_model::{MobGenerationPlugin, MobLayerConfig};
+use mob_layer_model::{MobGenerationPlugin, Mobs};
 use mob_layer_presentation::MobPresentationPlugin;
 use richmond::{Richmond, RichmondConfig};
 use terrain_layer_model::{BaseTerrainGenerationPlugin, OnTerrain};
-use layer_stack::GenerationModePlugin;
 use terrain_layer_presentation::TerrainPresentationPlugin;
 use urbanization_layer_model::{Urbanization, UrbanizationGenerationPlugin};
 use urbanization_layer_presentation::{PaddedCells, UrbanizationPresentationPlugin};
-use chico::{Chico, ChicoConfig};
 use vegetation_layer_model::{Vegetation, VegetationGenerationPlugin};
 use vegetation_layer_presentation::VegetationPresentationPlugin;
 
 type Urbanized = Urbanization<Richmond<OnTerrain<Durham>>>;
 type Forested = Chico<Urbanized>;
 type Vegetated = Vegetation<Forested>;
+#[allow(dead_code)]
+type Inhabited = Mobs<Barking<Vegetated>>;
 
 /// Every world layer at world defaults.
 ///
@@ -40,11 +43,13 @@ impl Plugin for WorldLayersPlugin {
 					RichmondConfig::world_defaults(),
 				),
 				VegetationGenerationPlugin::<Discovery, Forested>::new(ChicoConfig::world_defaults()),
-				MobGenerationPlugin::<Discovery, Vegetated>::new(MobLayerConfig::world_defaults()),
+				MobGenerationPlugin::<Discovery, Barking<Vegetated>>::new(
+					BarkingConfig::world_defaults(),
+				),
 				TerrainPresentationPlugin::<Discovery, Urbanized, PaddedCells>::default(),
 				UrbanizationPresentationPlugin::<Discovery, Richmond<OnTerrain<Durham>>>::default(),
 				VegetationPresentationPlugin::<Discovery, Forested>::default(),
-				MobPresentationPlugin::<Discovery, Vegetated>::default(),
+				MobPresentationPlugin::<Discovery, Barking<Vegetated>>::default(),
 			),
 			(
 				GenerationModePlugin::<TrainingGround>::default(),
@@ -55,14 +60,16 @@ impl Plugin for WorldLayersPlugin {
 					RichmondConfig::shared_world(),
 				),
 				VegetationGenerationPlugin::<TrainingGround, Forested>::new(ChicoConfig::grove()),
-				MobGenerationPlugin::<TrainingGround, Vegetated>::new(MobLayerConfig::world_defaults()),
+				MobGenerationPlugin::<TrainingGround, Barking<Vegetated>>::new(
+					BarkingConfig::world_defaults(),
+				),
 				TerrainPresentationPlugin::<TrainingGround, Urbanized, PaddedCells>::default(),
 				UrbanizationPresentationPlugin::<
 					TrainingGround,
 					Richmond<OnTerrain<Durham>>,
 				>::default(),
 				VegetationPresentationPlugin::<TrainingGround, Forested>::default(),
-				MobPresentationPlugin::<TrainingGround, Vegetated>::default(),
+				MobPresentationPlugin::<TrainingGround, Barking<Vegetated>>::default(),
 			),
 		));
 	}

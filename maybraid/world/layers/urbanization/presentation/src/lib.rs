@@ -6,8 +6,8 @@
 use std::marker::PhantomData;
 
 use bevy::app::{App, Plugin};
-use lod::LodPresentGate;
 use layer_stack::{install_lod_present_gate, subscribe_mode, GenerationMode};
+use lod::LodPresentGate;
 use terrain_layer_model::TerrainModel;
 use terrain_layer_presentation::TerrainPresenter;
 use urbanization_layer_model::{Urbanization, UrbanizationGeneration};
@@ -68,9 +68,10 @@ where
 {
 	fn build(&self, app: &mut App) {
 		subscribe_mode::<(Urbanization<U>, UrbanizationHosts), Mode>(app);
-		install_lod_present_gate::<(Urbanization<U>, UrbanizationHosts), (Urbanization<U>, UrbanizationHosts)>(
-			app,
-		);
+		install_lod_present_gate::<
+			(Urbanization<U>, UrbanizationHosts),
+			(Urbanization<U>, UrbanizationHosts),
+		>(app);
 		if !app.is_plugin_added::<UrbanizationPresentationCore<U>>() {
 			app.add_plugins(UrbanizationPresentationCore::<U>::default());
 		}

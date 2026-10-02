@@ -1,24 +1,25 @@
 //! Training fields its FFA roster as one mob cell on the courtyard.
 
+use barking::{
+	Barking, BarkingConfig, GroupKind, MobCell, MobCellExtent, MobCellWrites, MobEnvironmentSample,
+	MobGroup, PlacedMob,
+};
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use characters::LocomotionCapsule;
+use chico::Chico;
 use durham::{Durham, TerrainTrimeshCollider};
+use layer_stack::{ActiveGenerationMode, GenerationModeSystems};
 use lod::gen::Id;
 use lod::{LodGenerateSystems, LodPresentSystems};
-use mob_scenes::{Mob, MobKind, MobScene};
 use mob_characters::CharacterSpecies;
-use barking::{GroupKind, MobEnvironmentSample, MobGroup, PlacedMob};
-use mob_layer_model::{
-	MobCell, MobCellExtent, MobCellWrites, MobGenerationSystems, MobLayerConfig, MobScheme,
-};
+use mob_layer_model::{MobGenerationSystems, MobScheme};
 use mob_layer_presentation::PresentedMobCell;
-use chico::Chico;
+use mob_scenes::{Mob, MobKind, MobScene};
 use richmond::{
 	DevelopmentEntryStore, DevelopmentHost, DevelopmentHosts, PresentedPaddedTerrainScene, Richmond,
 };
-use terrain_layer_model::{OnTerrain};
-use layer_stack::{ActiveGenerationMode, GenerationModeSystems};
+use terrain_layer_model::OnTerrain;
 use urbanization_layer_model::Urbanization;
 use vegetation_layer_model::Vegetation;
 
@@ -187,7 +188,8 @@ impl TrainingArena {
 		let footprint = footprint.min(half);
 		let band = (footprint + half) * 0.5;
 		let player = center + Self::midline_point(band, 0.0);
-		let player = Vec3::new(player.x, plaza_y + LocomotionCapsule::HUMANOID.spawn_height(), player.y);
+		let player =
+			Vec3::new(player.x, plaza_y + LocomotionCapsule::HUMANOID.spawn_height(), player.y);
 		Self { center, half, footprint, band, plaza_y, player, mobs: Vec::new() }
 	}
 
@@ -201,13 +203,15 @@ impl TrainingArena {
 			let bearing = std::f32::consts::PI * (squad / pois.len()) as f32;
 			let size = TRAINING_ROSTER / squads + usize::from(squad < TRAINING_ROSTER % squads);
 			let (seat, members) = self.seat_squad(site, poi, building, bearing, size, player);
-			self.mobs.push(TrainingMob { host: Vec3::new(seat.x, self.plaza_y, seat.y), members });
+			self.mobs
+				.push(TrainingMob { host: Vec3::new(seat.x, self.plaza_y, seat.y), members });
 			if player.is_none() {
 				player = Some(self.seat_player(site, poi));
 			}
 		}
 		if let Some(at) = player {
-			self.player = Vec3::new(at.x, self.plaza_y + LocomotionCapsule::HUMANOID.spawn_height(), at.y);
+			self.player =
+				Vec3::new(at.x, self.plaza_y + LocomotionCapsule::HUMANOID.spawn_height(), at.y);
 		}
 		self
 	}
@@ -346,7 +350,8 @@ impl TrainingArena {
 	}
 
 	fn mob_cell(&self, seed: f32) -> MobCell {
-		let (ix, iz) = MobCellExtent::cell_index_containing(Vec3::new(self.center.x, 0.0, self.center.y));
+		let (ix, iz) =
+			MobCellExtent::cell_index_containing(Vec3::new(self.center.x, 0.0, self.center.y));
 		let extent = MobCellExtent::from_cell_index(ix, iz);
 		let groups = self
 			.mobs
@@ -368,8 +373,10 @@ impl TrainingArena {
 	}
 }
 
-impl MobScheme<Vegetation<Chico<Urbanization<Richmond<OnTerrain<Durham>>>>>> for TrainingGround {
-	fn install(app: &mut App, _config: &MobLayerConfig) {
+impl MobScheme<Barking<Vegetation<Chico<Urbanization<Richmond<OnTerrain<Durham>>>>>>>
+	for TrainingGround
+{
+	fn install(app: &mut App, _config: &BarkingConfig) {
 		app.add_systems(
 			Update,
 			write_training_roster
@@ -430,7 +437,10 @@ fn write_training_roster(
 	let Some((built, _)) = store.built_at(stamped.cell_id()) else {
 		return;
 	};
-	let cooked = ready_pads.iter().filter(|scene| stamped.terrain_ids().contains(&scene.0)).count();
+	let cooked = ready_pads
+		.iter()
+		.filter(|scene| stamped.terrain_ids().contains(&scene.0))
+		.count();
 	if !stamped.fills_ready(cooked) {
 		return;
 	}
@@ -465,15 +475,15 @@ fn tag_training_brawlers(
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use barking::MobIndex;
 	use bevy::ecs::message::Messages;
 	use bevy::ecs::system::RunSystemOnce;
 	use bevy::prelude::{App, MessageReader, MinimalPlugins, NextState, World};
 	use bevy::state::app::StatesPlugin;
+	use layer_stack::{GenerationMode, GenerationModePlugin};
 	use lod::gen::{LodGenerated, SpatialIndex};
-	use mob_layer_model::MobIndex;
 	use mob_scenes::player_affiliations;
 	use richmond::{DevelopmentCell, DevelopmentConfig};
-	use layer_stack::{GenerationMode, GenerationModePlugin};
 	use threat_intelligence::ThreatId;
 
 	use crate::{training_development_cell, TrainingRound, TRAINING_COURTYARD_EASE_M};
@@ -671,9 +681,8 @@ mod tests {
 		let cell = training_development_cell(Vec2::ZERO);
 		let config = DevelopmentConfig::from_world_seed(42);
 		let filled = DevelopmentCell::with_les_halles(cell, 20.0, &config);
-		let footprint = filled
-			.footprint_half_extents()
-			.ok_or_else(|| anyhow::anyhow!("footprint"))?;
+		let footprint =
+			filled.footprint_half_extents().ok_or_else(|| anyhow::anyhow!("footprint"))?;
 		let built = filled.built(config.seed as i32).ok_or_else(|| anyhow::anyhow!("built"))?;
 		let arena = TrainingArena::around(Vec2::ZERO, footprint, 20.0);
 		let site = TrainingSite::of_hosts(&built.hosts(), arena.center, arena.footprint);
@@ -688,7 +697,15 @@ mod tests {
 
 	fn stamp_for(round: TrainingRound, center: Vec2, footprint: Vec2) -> TrainingPlazaStamped {
 		let cell = training_development_cell(center);
-		TrainingPlazaStamped::new(round, Id::from_cell(cell), Vec::new(), center, footprint + Vec2::splat(16.0), footprint, 4.0)
+		TrainingPlazaStamped::new(
+			round,
+			Id::from_cell(cell),
+			Vec::new(),
+			center,
+			footprint + Vec2::splat(16.0),
+			footprint,
+			4.0,
+		)
 	}
 
 	fn roster_world(round: TrainingRound, center: Vec2, footprint: Vec2) -> anyhow::Result<World> {
@@ -765,9 +782,7 @@ mod tests {
 		world
 			.run_system_once(write_training_roster)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		let first = world
-			.resource::<TrainingRoster>()
-			.mob_id;
+		let first = world.resource::<TrainingRoster>().mob_id;
 		world.insert_resource(stamp_for(round.next_life(), Vec2::ZERO, Vec2::splat(36.0)));
 		world
 			.run_system_once(write_training_roster)
@@ -782,9 +797,8 @@ mod tests {
 		let next_cell = training_development_cell(next_center);
 		let config = DevelopmentConfig::from_world_seed(next.development_seed());
 		let filled = DevelopmentCell::with_les_halles(next_cell, 4.0, &config);
-		let built = filled
-			.built(config.seed as i32)
-			.ok_or_else(|| anyhow::anyhow!("next built"))?;
+		let built =
+			filled.built(config.seed as i32).ok_or_else(|| anyhow::anyhow!("next built"))?;
 		let next_id = Id::from_cell(next_cell);
 		{
 			let mut store = world.resource_mut::<DevelopmentEntryStore>();
@@ -813,17 +827,13 @@ mod tests {
 			GenerationModePlugin::<OtherMode>::default(),
 		));
 		<TrainingGround as MobScheme<
-			Vegetation<Chico<Urbanization<Richmond<OnTerrain<Durham>>>>>,
-		>>::install(
-			&mut app,
-			&MobLayerConfig::default(),
-		);
+			Barking<Vegetation<Chico<Urbanization<Richmond<OnTerrain<Durham>>>>>>,
+		>>::install(&mut app, &BarkingConfig::default());
 		app.init_resource::<Messages<LodGenerated<MobCell>>>();
 		let round = TrainingRound::new(42);
 		let mut src = roster_world(round, Vec2::ZERO, Vec2::splat(36.0))?;
 		app.insert_resource(
-			src.remove_resource::<MobIndex>()
-				.ok_or_else(|| anyhow::anyhow!("mob index"))?,
+			src.remove_resource::<MobIndex>().ok_or_else(|| anyhow::anyhow!("mob index"))?,
 		);
 		app.insert_resource(
 			src.remove_resource::<DevelopmentEntryStore>()
@@ -858,10 +868,12 @@ mod tests {
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		let mob_id = world.resource::<TrainingRoster>().mob_id;
 		let host = world.spawn(PresentedMobCell(mob_id)).id();
-		let stranger = world.spawn(PresentedMobCell(Id::from_cell(Aabb3d::from_min_max(
-			Vec3::splat(9_000.0),
-			Vec3::splat(9_001.0),
-		)))).id();
+		let stranger = world
+			.spawn(PresentedMobCell(Id::from_cell(Aabb3d::from_min_max(
+				Vec3::splat(9_000.0),
+				Vec3::splat(9_001.0),
+			))))
+			.id();
 		world
 			.run_system_once(tag_training_brawlers)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;

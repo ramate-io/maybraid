@@ -4,7 +4,7 @@ use bevy::math::bounding::Aabb3d;
 use bevy::math::{Vec2, Vec3};
 use bevy::prelude::{Resource, World};
 use layer_stack::{GenerationMode, RequireLayer};
-use lod::gen::Id;
+use lod::gen::{Id, Version};
 use lod::lod_ref::LodRef;
 use terrain_layer_model::{
 	terrain_streaming, BaseTerrainGenerationCore, HeightField, TerrainCell, TerrainContract,
@@ -159,6 +159,7 @@ impl UrbanizationModel for StubUrban {
 	type Ground = StubGround;
 	type Pads = StubPads;
 	type Surface = StubPadded;
+	type Built = ();
 	type Read = Res<'static, UrbanStore>;
 	type Prepare = ();
 
@@ -190,6 +191,17 @@ impl UrbanizationModel for StubUrban {
 		_bounds: Aabb3d,
 	) -> Option<&'a StubPadded> {
 		read.padded.as_ref()
+	}
+
+	fn built<'a>(_read: &'a SystemParamItem<'_, '_, Self::Read>, _region: Aabb3d) -> Vec<&'a ()> {
+		Vec::new()
+	}
+
+	fn built_overlapping<'a>(
+		_read: &'a SystemParamItem<'_, '_, Self::Read>,
+		_region: Aabb3d,
+	) -> Vec<(Id, Version, &'a ())> {
+		Vec::new()
 	}
 
 	fn prepare(
@@ -227,9 +239,7 @@ fn empty_world() -> World {
 #[test]
 fn stub_pads_apply_to_heights() -> anyhow::Result<()> {
 	let snapshot = UrbanSnapshot::new(GroundField(3.0), StubPads { delta: 9.0 });
-	let terrace = snapshot
-		.height_at(Vec2::ZERO)
-		.ok_or_else(|| anyhow::anyhow!("terrace"))?;
+	let terrace = snapshot.height_at(Vec2::ZERO).ok_or_else(|| anyhow::anyhow!("terrace"))?;
 	anyhow::ensure!((terrace - 12.0).abs() < 1e-5);
 	Ok(())
 }
@@ -238,12 +248,10 @@ fn stub_pads_apply_to_heights() -> anyhow::Result<()> {
 fn overlays_prefer_stub_padded_cells() -> anyhow::Result<()> {
 	let mut world = empty_world();
 	world.resource_mut::<GroundStore>().fallback = 1.0;
-	world.resource_mut::<GroundStore>().cell = Some(StubRaw {
-		bounds: Aabb3d::from_min_max(Vec3::ZERO, Vec3::splat(40.0)),
-	});
-	world.resource_mut::<UrbanStore>().padded = Some(StubPadded {
-		bounds: Aabb3d::from_min_max(Vec3::ZERO, Vec3::splat(40.0)),
-	});
+	world.resource_mut::<GroundStore>().cell =
+		Some(StubRaw { bounds: Aabb3d::from_min_max(Vec3::ZERO, Vec3::splat(40.0)) });
+	world.resource_mut::<UrbanStore>().padded =
+		Some(StubPadded { bounds: Aabb3d::from_min_max(Vec3::ZERO, Vec3::splat(40.0)) });
 	let mut state = SystemState::<TerrainView<Stacked>>::new(&mut world);
 	let view = state.get(&world).map_err(|error| anyhow::anyhow!("{error:?}"))?;
 	let cell = Stacked::overlay_cell(
@@ -264,7 +272,9 @@ fn requirements_recurse_to_the_ground() {
 }
 
 #[test]
-#[should_panic(expected = "requires urbanization_layer_model::generation::UrbanizationGenerationCore")]
+#[should_panic(
+	expected = "requires urbanization_layer_model::generation::UrbanizationGenerationCore"
+)]
 fn requirements_name_the_urbanization_core() {
 	let mut app = App::new();
 	app.add_plugins(BaseTerrainGenerationCore::<StubGround>::default());
@@ -291,10 +301,7 @@ fn wrappers_read_the_ground_contract_the_same_update() -> anyhow::Result<()> {
 	app.add_systems(Update, note_contract.run_if(terrain_streaming::<Stacked>));
 
 	app.update();
-	anyhow::ensure!(
-		app.world().resource::<Seen>().0.is_none(),
-		"streaming off skips the reader"
-	);
+	anyhow::ensure!(app.world().resource::<Seen>().0.is_none(), "streaming off skips the reader");
 
 	app.world_mut().resource_mut::<TerrainStreaming<StubGround>>().enabled = true;
 	let next = Aabb3d::from_min_max(Vec3::splat(-4.0), Vec3::splat(4.0));
@@ -311,16 +318,20 @@ fn empty_keep_draws_a_fine_patch_from_the_layout() -> anyhow::Result<()> {
 
 	struct Stub;
 
-	let region = Aabb3d::from_min_max(Vec3::new(-320.0, -80.0, -320.0), Vec3::new(320.0, 80.0, 320.0));
+	let region =
+		Aabb3d::from_min_max(Vec3::new(-320.0, -80.0, -320.0), Vec3::new(320.0, 80.0, 320.0));
 	let extent = TerrainExtent::<Stub>::pinned(region);
 	let visual = urbanization_visual_region(&extent, None)
 		.ok_or_else(|| anyhow::anyhow!("visual region"))?;
-	let host = urbanization_host_region(&extent, None)
-		.ok_or_else(|| anyhow::anyhow!("host region"))?;
+	let host =
+		urbanization_host_region(&extent, None).ok_or_else(|| anyhow::anyhow!("host region"))?;
 	anyhow::ensure!(visual == region);
 	anyhow::ensure!(host == region);
 
-	let ring = Aabb3d::from_min_max(Vec3::new(-1_000.0, -80.0, -1_000.0), Vec3::new(1_000.0, 80.0, 1_000.0));
+	let ring = Aabb3d::from_min_max(
+		Vec3::new(-1_000.0, -80.0, -1_000.0),
+		Vec3::new(1_000.0, 80.0, 1_000.0),
+	);
 	let streamed = TerrainExtent::<Stub>::streamed(ring);
 	let layer = Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE);
 	anyhow::ensure!(

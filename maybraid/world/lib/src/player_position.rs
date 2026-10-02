@@ -6,16 +6,16 @@ use std::time::Duration;
 use avian3d::prelude::{LinearVelocity, Position};
 use bevy::prelude::*;
 use bevy::time::common_conditions::on_timer;
-use world_player::Player;
-use world_player::player::{holding_elevation, player_spawn_point_at};
 use character_persist::{CharacterId, PersistError, SaveRoot};
 use durham::{Durham, TerrainCellLayout, WorldBaseTerrain};
-use terrain_layer_model::{terrain_streaming, TerrainStreaming};
 use player_camera::FollowCamera;
 use serde::{Deserialize, Serialize};
+use terrain_layer_model::{terrain_streaming, TerrainStreaming};
+use world_player::player::{holding_elevation, player_spawn_point_at};
+use world_player::Player;
 
-use maybraid_game_mode_training_ground::TrainingGround;
 use layer_stack::ActiveGenerationMode;
+use maybraid_game_mode_training_ground::TrainingGround;
 
 use crate::{PlayerSpawnXz, WorldPlayerLoadout};
 
@@ -347,10 +347,7 @@ mod tests {
 			characters::CharacterAppearance::default(),
 			character_items::Inventory::default(),
 		));
-		world.spawn((
-			world_player::Player,
-			Transform::from_xyz(3.0, 4.0, 5.0),
-		));
+		world.spawn((world_player::Player, Transform::from_xyz(3.0, 4.0, 5.0)));
 		world
 			.run_system_once(retain_player_waypoints)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
@@ -373,10 +370,7 @@ mod tests {
 			characters::CharacterAppearance::default(),
 			character_items::Inventory::default(),
 		));
-		world.spawn((
-			world_player::Player,
-			Transform::from_xyz(3.0, 4.0, 5.0),
-		));
+		world.spawn((world_player::Player, Transform::from_xyz(3.0, 4.0, 5.0)));
 		world
 			.run_system_once(retain_player_waypoints)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;

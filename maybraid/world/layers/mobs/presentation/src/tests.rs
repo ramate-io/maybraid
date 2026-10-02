@@ -1,42 +1,28 @@
 use bevy::app::{App, Plugin};
-use bevy::prelude::{AssetPlugin, MinimalPlugins, NextState};
-use bevy::state::app::StatesPlugin;
-use durham::Durham;
-use lod::gen::Id;
-use mob_scenes::{DEFAULT_MOB_HIGH_RADIUS, MobLodRefreshMode};
-use terrain_layer_model::{OnTerrain};
-use layer_stack::{subscribe_mode, ActiveGenerationMode, GenerationMode, GenerationModePlugin, ModeSubscribers};
-use chico::Chico;
-use urbanization_layer_model::Urbanization;
-use vegetation_layer_model::Vegetation;
-
-use crate::present::{
-	MobCellRoot, MobHighLodRegion, MobPresenterState, PresentedMobCell, MOB_HIGH_LOD_REFRESH_RADIUS,
+use bevy::ecs::message::{MessageReader, MessageWriter};
+use bevy::ecs::system::{ResMut, RunSystemOnce, SystemParam, SystemParamItem};
+use bevy::math::bounding::Aabb3d;
+use bevy::math::{Vec2, Vec3};
+use bevy::prelude::{
+	AssetPlugin, Commands, Component, MinimalPlugins, NextState, PostUpdate, Query, Resource,
+	Update, With, World,
 };
-use crate::{MobPresent, MobPresentationPlugin};
+use bevy::state::app::StatesPlugin;
+use layer_stack::{
+	subscribe_mode, ActiveGenerationMode, GenerationMode, GenerationModePlugin, ModeSubscribers,
+	ModeSubscription,
+};
+use lod::gen::{Id, LodGenerated, Version};
+use lod::lod_ref::LodRef;
+use mob_intelligence::MemberOf;
+use mob_layer_model::{
+	MobCellPresented, MobGeneration, MobGenerationCore, MobGenerationPlugin, MobModel, MobScheme,
+	Mobs,
+};
+use terrain_layer_model::{BaseTerrainGenerationCore, HeightField, TerrainCell, TerrainModel};
 
-type Urbanized = Urbanization<richmond::Richmond<OnTerrain<Durham>>>;
-type Vegetated = Vegetation<Chico<Urbanized>>;
-
-#[test]
-fn high_lod_index_region_follows_the_viewer_in_three_dimensions() {
-	let center = bevy::math::Vec3::new(10.0, 120.0, -20.0);
-	let region = MobHighLodRegion::region_at(center);
-	assert_eq!(
-		bevy::math::Vec3::from(region.min),
-		center - bevy::math::Vec3::splat(MOB_HIGH_LOD_REFRESH_RADIUS)
-	);
-	assert_eq!(
-		bevy::math::Vec3::from(region.max),
-		center + bevy::math::Vec3::splat(MOB_HIGH_LOD_REFRESH_RADIUS)
-	);
-}
-
-#[test]
-fn high_lod_refresh_keeps_margin_around_the_high_band() {
-	assert_eq!(MOB_HIGH_LOD_REFRESH_RADIUS, 250.0);
-	assert!(MOB_HIGH_LOD_REFRESH_RADIUS > DEFAULT_MOB_HIGH_RADIUS);
-}
+use crate::present::MobPresenterState;
+use crate::{MobPresent, MobPresentation, MobPresentationCore, MobPresentationPlugin};
 
 struct TestMode;
 
@@ -46,86 +32,268 @@ struct OtherMode;
 
 impl GenerationMode for OtherMode {}
 
-#[test]
-fn retire_despawns_presented_roots_and_pending_while_unsubscribed() -> anyhow::Result<()> {
-	let mut app = present_app();
-	subscribe_mode::<(Urbanized, MobPresent), TestMode>(&mut app);
-	let root = app.world_mut().spawn(MobCellRoot).id();
-	let pending = app.world_mut().spawn_empty().id();
-	let id = Id::from_cell(bevy::math::bounding::Aabb3d::from_min_max(
-		bevy::math::Vec3::ZERO,
-		bevy::math::Vec3::ONE,
-	));
-	app.world_mut().resource_mut::<MobPresenterState>().insert_presented(id, vec![root]);
-	app.world_mut().resource_mut::<MobPresenterState>().push_pending(vec![pending]);
-	app.update();
-	anyhow::ensure!(
-		app.world().get_entity(root).is_ok(),
-		"subscribed mode keeps presented roots"
-	);
+struct SilentGround;
 
-	app.world_mut()
-		.resource_mut::<NextState<ActiveGenerationMode>>()
-		.set(ActiveGenerationMode::of::<OtherMode>());
-	app.update();
-	anyhow::ensure!(app.world().get_entity(root).is_err(), "Last drain despawns the root");
-	anyhow::ensure!(app.world().get_entity(pending).is_err(), "Last drain despawns pending");
-	Ok(())
-}
+#[derive(Clone)]
+struct SilentField;
 
-#[test]
-fn presentation_inserts_indexed_refresh_mode() -> anyhow::Result<()> {
-	use bevy::ecs::system::IntoSystem;
-	use bevy::prelude::{System, Update, With};
-	use lod::{cull_lod_level_roots, update_lod_host_levels, LodViewer};
-	use mob_scenes::MobScene;
-
-	let mut app = App::new();
-	app.add_plugins((MinimalPlugins, AssetPlugin::default()));
-	MobPresentationPlugin::<TestMode, Vegetated>::default().build(&mut app);
-	let mut ids = Vec::new();
-	let mut inspect_error = None;
-	app.world_mut().schedule_scope(Update, |world, schedule| {
-		if let Err(error) = schedule.initialize(world) {
-			inspect_error = Some(anyhow::anyhow!("{error:?}"));
-			return;
-		}
-		match schedule.systems() {
-			Ok(systems) => ids.extend(systems.map(|(_, system)| system.system_type())),
-			Err(error) => inspect_error = Some(anyhow::anyhow!("{error:?}")),
-		}
-	});
-	if let Some(error) = inspect_error {
-		return Err(error);
+impl HeightField for SilentField {
+	fn height_at(&self, _xz: Vec2) -> Option<f32> {
+		None
 	}
-	let cull_id = IntoSystem::into_system(
-		cull_lod_level_roots::<MobScene, (), With<LodViewer>>,
-	)
-	.system_type();
-	let update_id = IntoSystem::into_system(
-		update_lod_host_levels::<MobScene, (), With<LodViewer>>,
-	)
-	.system_type();
-	let culls = ids.iter().filter(|id| **id == cull_id).count();
-	let host_levels = ids.iter().filter(|id| **id == update_id).count();
-	// Gimme's default refresh registers one full-scan cull. MobScenes FullScan
-	// would add a second cull plus a second `update_lod_host_levels`.
-	anyhow::ensure!(
-		culls <= 1,
-		"MobScenes Indexed must not add a second cull_lod_level_roots, got {culls}"
-	);
-	anyhow::ensure!(
-		host_levels == 1,
-		"indexed refresh must register one update_lod_host_levels, got {host_levels}"
-	);
-	assert_eq!(*app.world().resource::<MobLodRefreshMode>(), MobLodRefreshMode::Indexed);
-	Ok(())
+	fn fallback_height_at(&self, _xz: Vec2) -> f32 {
+		0.0
+	}
+}
+
+struct SilentCell;
+
+impl TerrainCell for SilentCell {
+	type Mesh = ();
+	fn bounds(&self) -> Aabb3d {
+		Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE)
+	}
+	fn mesh_builder(&self) {}
+	fn chunk_pose(&self) -> bevy::prelude::Transform {
+		bevy::prelude::Transform::IDENTITY
+	}
+	fn seeds_collision(&self) -> bool {
+		false
+	}
+	fn res_2(&self) -> u8 {
+		0
+	}
+}
+
+impl TerrainModel for SilentGround {
+	type Base = Self;
+	type Cell = SilentCell;
+	type Read = ();
+	type Snapshot = SilentField;
+	type Prepare = ();
+
+	fn prepare(
+		_prepare: &mut SystemParamItem<'_, '_, Self::Prepare>,
+		_bounds: Aabb3d,
+		_lod_ref: &LodRef,
+	) {
+	}
+
+	fn height_at(_read: &SystemParamItem<'_, '_, Self::Read>, _xz: Vec2) -> Option<f32> {
+		None
+	}
+
+	fn fallback_height_at(_read: &SystemParamItem<'_, '_, Self::Read>, _xz: Vec2) -> f32 {
+		0.0
+	}
+
+	fn overlay_cell<'a>(
+		_read: &'a SystemParamItem<'_, '_, Self::Read>,
+		_bounds: Aabb3d,
+		_target_size: f32,
+		_overlay_size_tolerance: Option<f32>,
+	) -> Option<&'a dyn TerrainCell<Mesh = ()>> {
+		None
+	}
+
+	fn snapshot(_read: &SystemParamItem<'_, '_, Self::Read>, _region: Aabb3d) -> SilentField {
+		SilentField
+	}
+
+	fn require_generation(app: &App) {
+		layer_stack::RequireLayer::require_layer::<
+			terrain_layer_model::BaseTerrainGenerationCore<Self>,
+			Self,
+		>(app);
+	}
+}
+
+impl terrain_layer_model::TerrainGeneration for SilentGround {
+	type Config = ();
+	fn install_generation(_app: &mut App) {}
+	fn apply_generation(_world: &mut World, _config: &()) {}
+}
+
+#[derive(Clone, Copy, Debug)]
+struct StubCell {
+	id: Id,
+}
+
+#[derive(Resource, Default)]
+struct StubStore {
+	cells: Vec<Id>,
+}
+
+#[derive(SystemParam)]
+struct StubWrites<'w> {
+	store: ResMut<'w, StubStore>,
+	generated: MessageWriter<'w, LodGenerated<StubCell>>,
+}
+
+impl StubWrites<'_> {
+	fn insert(&mut self, cell: StubCell) {
+		self.store.cells.push(cell.id);
+		self.generated.write(LodGenerated::new(cell.id));
+	}
+}
+
+struct StubMob;
+
+impl MobModel for StubMob {
+	type Ground = SilentGround;
+	type Cell = StubCell;
+	type Writes = StubWrites<'static>;
+
+	fn require_generation(app: &App) {
+		layer_stack::RequireLayer::require_layer::<MobGenerationCore<Self>, Mobs<Self>>(app);
+	}
+}
+
+impl MobGeneration for StubMob {
+	type Config = ();
+
+	fn install_generation(app: &mut App) {
+		app.init_resource::<StubStore>();
+		app.add_message::<LodGenerated<StubCell>>();
+	}
+
+	fn apply_generation(_world: &mut World, _config: &()) {}
+
+	fn clear_generation(world: &mut World) {
+		world.resource_mut::<StubStore>().cells.clear();
+	}
+}
+
+impl MobPresentation for StubMob {
+	type Channel = StubMob;
+
+	fn install_presentation(app: &mut App) {
+		app.add_message::<MobCellPresented>();
+		app.add_systems(Update, present_announced);
+	}
+}
+
+impl MobScheme<StubMob> for TestMode {
+	fn install(_app: &mut App, _config: &()) {}
+}
+
+impl MobScheme<StubMob> for OtherMode {
+	fn install(_app: &mut App, _config: &()) {}
+}
+
+fn present_announced(
+	mut announced: MessageReader<LodGenerated<StubCell>>,
+	mut commands: Commands,
+	mut state: ResMut<MobPresenterState>,
+	mut presented: MessageWriter<MobCellPresented>,
+) {
+	for message in announced.read() {
+		let host = commands.spawn_empty().id();
+		state.remember(message.id, Version(1), vec![host]);
+		presented.write(MobCellPresented { id: message.id, hosts: vec![host] });
+	}
+}
+
+type Stacked = Mobs<StubMob>;
+
+fn panic_message(result: Result<(), Box<dyn std::any::Any + Send>>) -> String {
+	match result {
+		Ok(()) => "plugin finish returned".to_string(),
+		Err(payload) => payload
+			.downcast_ref::<String>()
+			.cloned()
+			.or_else(|| payload.downcast_ref::<&str>().map(|text| (*text).to_string()))
+			.unwrap_or_else(|| "non-string panic".to_string()),
+	}
 }
 
 #[test]
-#[should_panic(expected = "MobGenerationCore")]
-fn presentation_without_generation_names_the_missing_plugin() {
-	MobPresentationPlugin::<TestMode, Vegetated>::default().finish(&mut App::new());
+fn presentation_without_generation_names_the_missing_ground() {
+	let message = panic_message(std::panic::catch_unwind(|| {
+		MobPresentationPlugin::<TestMode, StubMob>::default().finish(&mut App::new());
+	}));
+	assert!(
+		message.contains("BaseTerrainGenerationCore"),
+		"finish names the missing ground core, got {message}"
+	);
+}
+
+#[test]
+fn announced_writes_present_hosts() -> anyhow::Result<()> {
+	let mut app = App::new();
+	app.add_plugins((
+		MinimalPlugins,
+		StatesPlugin,
+		GenerationModePlugin::<TestMode>::initial(),
+		BaseTerrainGenerationCore::<SilentGround>::default(),
+		MobGenerationPlugin::<TestMode, StubMob>::default(),
+		MobPresentationPlugin::<TestMode, StubMob>::default(),
+	));
+	let id = Id::from_cell(Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE));
+	app.world_mut()
+		.run_system_once(move |mut cells: StubWrites| cells.insert(StubCell { id }))
+		.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+	app.update();
+	anyhow::ensure!(
+		app.world().resource::<MobPresenterState>().presents(id),
+		"the announced cell is presented"
+	);
+	let hosts = app
+		.world_mut()
+		.run_system_once(|mut reader: MessageReader<MobCellPresented>| {
+			reader
+				.read()
+				.map(|message| (message.id, message.hosts.clone()))
+				.collect::<Vec<_>>()
+		})
+		.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+	anyhow::ensure!(hosts.len() == 1 && hosts[0].0 == id, "presented-hosts hook names the cell");
+	anyhow::ensure!(hosts[0].1.len() == 1, "the hook lists the spawned host");
+	Ok(())
+}
+
+#[derive(Resource, Default)]
+struct SquadSeenInPostUpdate(bool);
+
+#[derive(Component)]
+struct HostMark;
+
+fn note_squad_before_last(
+	hosts: Query<(), With<HostMark>>,
+	members: Query<(), With<MemberOf>>,
+	mut seen: ResMut<SquadSeenInPostUpdate>,
+) {
+	seen.0 = !hosts.is_empty() && !members.is_empty();
+}
+
+#[test]
+fn teardown_retires_hosts_and_members_after_post_update() -> anyhow::Result<()> {
+	let mut app = App::new();
+	app.add_plugins((MinimalPlugins, StatesPlugin));
+	crate::install_mob_cell_teardown(&mut app);
+	app.init_resource::<SquadSeenInPostUpdate>();
+	app.add_systems(PostUpdate, note_squad_before_last);
+	let id = Id::from_cell(Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE));
+	let host = app.world_mut().spawn(HostMark).id();
+	let member = app.world_mut().spawn(MemberOf { mob: host, slot: 0 }).id();
+	app.world_mut()
+		.resource_mut::<MobPresenterState>()
+		.remember(id, Version(1), vec![host]);
+	app.update();
+	anyhow::ensure!(
+		app.world().get_entity(host).is_ok(),
+		"a remembered host stays until it is queued"
+	);
+
+	app.world_mut().resource_mut::<MobPresenterState>().queue_remove(id);
+	app.update();
+	anyhow::ensure!(
+		app.world().resource::<SquadSeenInPostUpdate>().0,
+		"hosts and members survive PostUpdate on the retire frame"
+	);
+	anyhow::ensure!(app.world().get_entity(host).is_err(), "Last drain despawns the host");
+	anyhow::ensure!(app.world().get_entity(member).is_err(), "Last drain despawns the member");
+	Ok(())
 }
 
 #[test]
@@ -135,20 +303,20 @@ fn two_modes_install_the_core_once() -> anyhow::Result<()> {
 	app.add_plugins((
 		GenerationModePlugin::<TestMode>::initial(),
 		GenerationModePlugin::<OtherMode>::default(),
-		MobPresentationPlugin::<TestMode, Vegetated>::default(),
-		MobPresentationPlugin::<OtherMode, Vegetated>::default(),
+		MobPresentationPlugin::<TestMode, StubMob>::default(),
+		MobPresentationPlugin::<OtherMode, StubMob>::default(),
 	));
-	anyhow::ensure!(
-		app.is_plugin_added::<crate::MobPresentationCore<Vegetated>>(),
-		"core is installed"
-	);
-	let subscribers = app.world().resource::<ModeSubscribers<(Vegetated, MobPresent)>>();
+	anyhow::ensure!(app.is_plugin_added::<MobPresentationCore<StubMob>>(), "core is installed");
+	let subscribers = app.world().resource::<ModeSubscribers<(Stacked, MobPresent)>>();
 	anyhow::ensure!(subscribers.contains::<TestMode>());
 	anyhow::ensure!(subscribers.contains::<OtherMode>());
 	Ok(())
 }
 
-fn teardown_app() -> App {
+#[test]
+fn losing_subscription_is_inactive_and_returning_is_active() -> anyhow::Result<()> {
+	use bevy::ecs::system::SystemState;
+
 	let mut app = App::new();
 	app.add_plugins((
 		MinimalPlugins,
@@ -156,272 +324,39 @@ fn teardown_app() -> App {
 		GenerationModePlugin::<TestMode>::initial(),
 		GenerationModePlugin::<OtherMode>::default(),
 	));
-	crate::present::install_mob_cell_teardown(&mut app);
-	app
-}
-
-fn present_app() -> App {
-	use durham::{
-		BaseTerrainNoise, TerrainCellLayout, TerrainConfig, TerrainEntryStore, WorldBaseTerrain,
-	};
-	use lod::{LodPresentCullPlugin, LodPresentPlugin, LodViewer};
-	use mob_layer_model::{MobIndex, MobLodChan};
-	use richmond::DevelopmentEntryStore;
-	use urbanization_cells::UrbanizationIndex;
-
-	use crate::present::MobPresenter;
-
-	let mut app = teardown_app();
-	layer_stack::install_lod_present_gate::<(Urbanized, MobPresent), MobLodChan>(&mut app);
-	app.add_plugins((
-		AssetPlugin::default(),
-		LodPresentPlugin::<
-			mob_layer_model::MobCell,
-			MobIndex,
-			MobPresenter<'_, '_, Urbanized>,
-			MobLodChan,
-			bevy::prelude::With<LodViewer>,
-		>::default(),
-		LodPresentCullPlugin::<
-			mob_layer_model::MobCell,
-			MobIndex,
-			MobPresenter<'_, '_, Urbanized>,
-			MobLodChan,
-		>::default(),
-	));
-	app.add_systems(
-		bevy::prelude::OnExit(ActiveGenerationMode::of::<TestMode>()),
-		|mut index: bevy::prelude::ResMut<MobIndex>| index.clear(),
-	);
-	app.add_systems(
-		bevy::prelude::OnExit(ActiveGenerationMode::of::<OtherMode>()),
-		|mut index: bevy::prelude::ResMut<MobIndex>| index.clear(),
-	);
-	app.insert_resource(TerrainEntryStore::default());
-	app.insert_resource(TerrainCellLayout::default());
-	app.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(
-		&TerrainConfig::new(42),
-	)));
-	app.insert_resource(DevelopmentEntryStore::default());
-	app.insert_resource(UrbanizationIndex::default());
-	app.init_resource::<MobIndex>();
-	app
-}
-
-fn cover_origin_keep(app: &mut App) {
-	use bevy::math::bounding::Aabb3d;
-	use bevy::math::Vec3;
-	use lod::presentation::LodPresentKeepRegion;
-	use mob_layer_model::MobLodChan;
-
-	app.insert_resource({
-		let mut keep = LodPresentKeepRegion::<MobLodChan>::default();
-		keep.region = Some(Aabb3d::from_min_max(
-			Vec3::new(-2_000.0, -1_000.0, -2_000.0),
-			Vec3::new(2_000.0, 1_000.0, 2_000.0),
-		));
-		keep
-	});
-}
-
-fn spawn_viewer(app: &mut App) {
-	use bevy::prelude::Transform;
-	use lod::lod_ref::{LodNode, LodNodePose};
-	use lod::LodViewer;
-
-	app.world_mut().spawn((
-		LodViewer,
-		LodNode,
-		LodNodePose::default(),
-		Transform::IDENTITY,
-	));
-}
-
-#[derive(bevy::prelude::Resource, Default)]
-struct SquadSeenInPostUpdate(bool);
-
-fn note_squad_before_last(
-	roots: bevy::prelude::Query<(), bevy::prelude::With<MobCellRoot>>,
-	members: bevy::prelude::Query<(), bevy::prelude::With<mob_intelligence::MemberOf>>,
-	mut seen: bevy::prelude::ResMut<SquadSeenInPostUpdate>,
-) {
-	seen.0 = !roots.is_empty() && !members.is_empty();
-}
-
-fn spawn_presented_squad(app: &mut App) -> (Id, bevy::prelude::Entity, bevy::prelude::Entity, bevy::prelude::Entity, bevy::prelude::Entity) {
-	use bevy::prelude::ChildOf;
-	use mob_intelligence::MemberOf;
-
-	let id = Id::from_cell(bevy::math::bounding::Aabb3d::from_min_max(
-		bevy::math::Vec3::ZERO,
-		bevy::math::Vec3::ONE,
-	));
-	let root = app.world_mut().spawn(MobCellRoot).id();
-	let host = app.world_mut().spawn((PresentedMobCell(id), ChildOf(root))).id();
-	let member = app.world_mut().spawn(MemberOf { mob: host, slot: 0 }).id();
-	let respawned = app.world_mut().spawn(MemberOf { mob: host, slot: 1 }).id();
-	app.world_mut()
-		.resource_mut::<MobPresenterState>()
-		.insert_presented(id, vec![root, host]);
-	(id, root, host, member, respawned)
-}
-
-#[test]
-fn retired_hosts_and_members_survive_post_update_then_leave_in_last() -> anyhow::Result<()> {
-	use bevy::prelude::PostUpdate;
-
-	let mut app = present_app();
-	subscribe_mode::<(Urbanized, MobPresent), TestMode>(&mut app);
-	cover_origin_keep(&mut app);
-	app.init_resource::<SquadSeenInPostUpdate>();
-	app.add_systems(PostUpdate, note_squad_before_last);
+	subscribe_mode::<(Stacked, MobPresent), TestMode>(&mut app);
 	app.update();
-
-	let (_id, root, host, member, respawned) = spawn_presented_squad(&mut app);
+	{
+		let mut state =
+			SystemState::<ModeSubscription<(Stacked, MobPresent)>>::new(app.world_mut());
+		anyhow::ensure!(
+			state.get(app.world()).map_err(|error| anyhow::anyhow!("{error:?}"))?.active(),
+			"subscribed mode presents"
+		);
+	}
 	app.world_mut()
 		.resource_mut::<NextState<ActiveGenerationMode>>()
 		.set(ActiveGenerationMode::of::<OtherMode>());
 	app.update();
-
-	anyhow::ensure!(
-		app.world().resource::<SquadSeenInPostUpdate>().0,
-		"hosts and members survive PostUpdate on the exit frame"
-	);
-	anyhow::ensure!(app.world().get_entity(root).is_err(), "Last drain despawns the cell root");
-	anyhow::ensure!(app.world().get_entity(host).is_err(), "Last drain despawns the host");
-	anyhow::ensure!(app.world().get_entity(member).is_err(), "Last drain despawns the member");
-	anyhow::ensure!(
-		app.world().get_entity(respawned).is_err(),
-		"Last drain despawns a respawned member"
-	);
-	Ok(())
-}
-
-#[test]
-fn announced_cell_presents_after_the_first_keep_scan() -> anyhow::Result<()> {
-	use bevy::ecs::system::RunSystemOnce;
-	use mob_layer_model::{MobCell, MobCellExtent, MobCellWrites};
-
-	let mut app = present_app();
-	subscribe_mode::<(Urbanized, MobPresent), TestMode>(&mut app);
-	cover_origin_keep(&mut app);
-	spawn_viewer(&mut app);
-	app.update();
-	anyhow::ensure!(
-		!app.world().resource::<MobPresenterState>().presents(MobCellExtent::from_cell_index(0, 0).id()),
-		"the first keep scan finds nothing before the cell exists"
-	);
-
-	let extent = MobCellExtent::from_cell_index(0, 0);
-	let id = app
-		.world_mut()
-		.run_system_once(move |mut cells: MobCellWrites| {
-			cells.insert(MobCell { extent, groups: Vec::new() })
-		})
-		.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-	app.update();
-	anyhow::ensure!(
-		app.world().resource::<MobPresenterState>().presents(id),
-		"MobCellWrites::insert announces so the presenter can enqueue the cell"
-	);
-	let spawned = app
-		.world_mut()
-		.run_system_once(|roots: bevy::prelude::Query<&MobCellRoot>| !roots.is_empty())
-		.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-	anyhow::ensure!(spawned, "the real presenter spawned the announced cell");
-	Ok(())
-}
-
-#[test]
-fn presented_cells_leave_when_the_subscribed_mode_changes() -> anyhow::Result<()> {
-	use bevy::prelude::PostUpdate;
-
-	let mut app = present_app();
-	subscribe_mode::<(Urbanized, MobPresent), TestMode>(&mut app);
-	subscribe_mode::<(Urbanized, MobPresent), OtherMode>(&mut app);
-	cover_origin_keep(&mut app);
-	app.init_resource::<SquadSeenInPostUpdate>();
-	app.add_systems(PostUpdate, note_squad_before_last);
-	app.update();
-
-	let (_id, root, host, member, respawned) = spawn_presented_squad(&mut app);
+	{
+		let mut state =
+			SystemState::<ModeSubscription<(Stacked, MobPresent)>>::new(app.world_mut());
+		anyhow::ensure!(
+			!state.get(app.world()).map_err(|error| anyhow::anyhow!("{error:?}"))?.active(),
+			"unsubscribed mode retires"
+		);
+	}
 	app.world_mut()
 		.resource_mut::<NextState<ActiveGenerationMode>>()
-		.set(ActiveGenerationMode::of::<OtherMode>());
+		.set(ActiveGenerationMode::of::<TestMode>());
 	app.update();
-
-	anyhow::ensure!(
-		app.world().resource::<SquadSeenInPostUpdate>().0,
-		"hosts and members survive PostUpdate on the exit frame"
-	);
-	anyhow::ensure!(app.world().get_entity(root).is_err(), "Last drain despawns the cell root");
-	anyhow::ensure!(app.world().get_entity(host).is_err(), "Last drain despawns the host");
-	anyhow::ensure!(app.world().get_entity(member).is_err(), "Last drain despawns the member");
-	anyhow::ensure!(
-		app.world().get_entity(respawned).is_err(),
-		"Last drain despawns a respawned member"
-	);
-	Ok(())
-}
-
-fn write_cell_in_other_mode(mut cells: mob_layer_model::MobCellWrites) {
-	use mob_layer_model::{MobCell, MobCellExtent};
-
-	cells.insert(MobCell { extent: MobCellExtent::from_cell_index(1, 0), groups: Vec::new() });
-}
-
-#[test]
-fn a_cell_written_on_the_entering_frame_still_presents() -> anyhow::Result<()> {
-	use bevy::ecs::system::RunSystemOnce;
-	use bevy::prelude::{IntoScheduleConfigs, Update};
-	use mob_layer_model::{
-		MobCell, MobCellExtent, MobCellWrites, MobGenerationSystems,
-	};
-	use lod::LodPresentSystems;
-	use layer_stack::in_generation_mode;
-
-	let mut app = present_app();
-	subscribe_mode::<(Urbanized, MobPresent), TestMode>(&mut app);
-	subscribe_mode::<(Urbanized, MobPresent), OtherMode>(&mut app);
-	cover_origin_keep(&mut app);
-	spawn_viewer(&mut app);
-	app.add_systems(
-		Update,
-		write_cell_in_other_mode
-			.run_if(in_generation_mode::<OtherMode>())
-			.in_set(MobGenerationSystems)
-			.before(LodPresentSystems::Produce),
-	);
-	app.update();
-
-	let leaving = app
-		.world_mut()
-		.run_system_once(|mut cells: MobCellWrites| {
-			cells.insert(MobCell {
-				extent: MobCellExtent::from_cell_index(0, 0),
-				groups: Vec::new(),
-			})
-		})
-		.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-	app.update();
-	anyhow::ensure!(
-		app.world().resource::<MobPresenterState>().presents(leaving),
-		"the leaving mode's cell is presented before the switch"
-	);
-
-	app.world_mut()
-		.resource_mut::<NextState<ActiveGenerationMode>>()
-		.set(ActiveGenerationMode::of::<OtherMode>());
-	app.update();
-
-	let entering = MobCellExtent::from_cell_index(1, 0).id();
-	anyhow::ensure!(
-		!app.world().resource::<MobPresenterState>().presents(leaving),
-		"the leaving cell is retired on the switch"
-	);
-	anyhow::ensure!(
-		app.world().resource::<MobPresenterState>().presents(entering),
-		"a cell written on the entering frame presents after the retire"
-	);
+	{
+		let mut state =
+			SystemState::<ModeSubscription<(Stacked, MobPresent)>>::new(app.world_mut());
+		anyhow::ensure!(
+			state.get(app.world()).map_err(|error| anyhow::anyhow!("{error:?}"))?.active(),
+			"return presents again"
+		);
+	}
 	Ok(())
 }

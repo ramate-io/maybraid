@@ -5,7 +5,6 @@ use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec3;
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value, Scene};
-use terrain_shaders::TerrainShader;
 use durham::terrain::ElevationModulation;
 use durham::{
 	cascade_chunk_for_cell, stream_banded_level, ComposedTerrain, StreamBandedLod, Terrain,
@@ -17,6 +16,7 @@ use render_item::mesh::handle::Cached;
 use render_item::sdf::cpu_shot::{CpuShotBuilder, WallFaces};
 use std::sync::Arc;
 use terrain_layer_model::TerrainCell;
+use terrain_shaders::TerrainShader;
 
 use crate::pad::PadComplex;
 
@@ -180,9 +180,7 @@ pub struct PresentedPaddedTerrainScene(pub Id);
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use durham::{
-		stream_banded_draws, stream_banded_level, TerrainSdf, TERRAIN_CELL_SIZE,
-	};
+	use durham::{stream_banded_draws, stream_banded_level, TerrainSdf, TERRAIN_CELL_SIZE};
 	use lod::LodSceneLevel;
 
 	fn far_ring() -> TerrainCellRing {

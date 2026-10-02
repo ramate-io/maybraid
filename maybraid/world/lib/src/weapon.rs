@@ -1,23 +1,23 @@
 //! Starter held kit for the vegetation player capsule.
 
 use bevy::prelude::*;
+use character_inventory_user::{spawn_bag, InventoryUser};
+use character_items::{CharacterSheet, Inventory, InventoryItem};
+use characters::{CharacterAppearance, CharacterRoot};
+use damage::Health;
+use firearm_user::{
+	live_weapon_from_stats, spawn_held_firearm, spawn_held_kit, spawn_reticle, FirearmUser,
+	FirearmUserSettings, FirearmUserSystems, GeneratedFirearm, WeaponSwap,
+};
+use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
+use maybraid_skill_map::{spawn_skill_maps, SkillMapEquip, SkillMapSystems};
+use player::{
+	apply_character_mobility, CameraFollow, Player as MaybraidPlayer, PlayerCameraAim, PlayerLook,
+	PlayerUse, PlayerVisual as MaybraidPlayerVisual, PlayerYawOwner,
+};
 use world_player::{
 	CharacterSpecies, Player as VegetationPlayer, PlayerVisual as VegetationPlayerVisual,
 	PlaygroundMode, RequestSetCharacter, RequestSetCharacterAppearance,
-};
-use character_items::{CharacterSheet, Inventory, InventoryItem};
-use characters::{CharacterAppearance, CharacterRoot};
-use character_inventory_user::{InventoryUser, spawn_bag};
-use damage::Health;
-use firearm_user::{
-	FirearmUser, FirearmUserSettings, FirearmUserSystems, GeneratedFirearm, WeaponSwap,
-	live_weapon_from_stats, spawn_held_firearm, spawn_held_kit, spawn_reticle,
-};
-use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
-use maybraid_skill_map::{SkillMapEquip, SkillMapSystems, spawn_skill_maps};
-use player::{
-	CameraFollow, Player as MaybraidPlayer, PlayerCameraAim, PlayerLook, PlayerUse,
-	PlayerVisual as MaybraidPlayerVisual, PlayerYawOwner, apply_character_mobility,
 };
 
 use crate::control::{InventoryEditCameraFollow, WorldGameplayEnabled};
@@ -328,17 +328,17 @@ pub(crate) fn configure(app: &mut App) {
 mod tests {
 	use bevy::ecs::system::RunSystemOnce;
 	use bevy::prelude::*;
-	use world_player::{
-		Player as VegetationPlayer, PlayerVisual as VegetationPlayerVisual, PlaygroundMode,
-		RequestSetCharacterAppearance,
-	};
 	use character_items::{
 		ClothingMaterial, ClothingMesh, FirearmMesh, Inventory, InventoryItem, ItemColor,
 	};
 	use characters::{CharacterAppearance, CharacterRoot};
+	use world_player::{
+		Player as VegetationPlayer, PlayerVisual as VegetationPlayerVisual, PlaygroundMode,
+		RequestSetCharacterAppearance,
+	};
 
+	use crate::weapon::{arm_world_player, WorldPlayerAppearanceRequested, WorldPlayerLoadout};
 	use crate::WorldGameplayEnabled;
-	use crate::weapon::{WorldPlayerAppearanceRequested, WorldPlayerLoadout, arm_world_player};
 
 	#[test]
 	fn world_loadout_keeps_primary_weapon_and_worn_clothing() {
@@ -481,7 +481,7 @@ mod tests {
 	#[test]
 	fn y_swaps_the_queued_primary() -> anyhow::Result<()> {
 		use character_inventory_user::InventoryUser;
-		use firearm_user::{FirearmUser, WEAPON_SWAP_SECS, WeaponSwap};
+		use firearm_user::{FirearmUser, WeaponSwap, WEAPON_SWAP_SECS};
 
 		use crate::weapon::commit_weapon_swap;
 
@@ -527,8 +527,8 @@ mod tests {
 
 	#[test]
 	fn dpad_cycles_the_presented_skill_map() -> anyhow::Result<()> {
-		use character_items::{SkillMapKind, SkillMapSpec};
 		use character_inventory_user::InventoryUser;
+		use character_items::{SkillMapKind, SkillMapSpec};
 		use maybraid_character_controller::CharacterIntent;
 		use maybraid_skill_map::SkillMapEquip;
 

@@ -117,14 +117,8 @@ where
 			app.add_plugins(UrbanizationGenerationCore::<U>::default());
 		}
 		app.insert_resource(UrbanizationModeConfig::<Mode, U>::new(self.config.clone()));
-		app.add_systems(
-			OnEnter(ActiveGenerationMode::of::<Mode>()),
-			apply_urbanization::<Mode, U>,
-		);
-		app.add_systems(
-			OnExit(ActiveGenerationMode::of::<Mode>()),
-			clear_urbanization::<U>,
-		);
+		app.add_systems(OnEnter(ActiveGenerationMode::of::<Mode>()), apply_urbanization::<Mode, U>);
+		app.add_systems(OnExit(ActiveGenerationMode::of::<Mode>()), clear_urbanization::<U>);
 		Mode::install(app, &self.config);
 	}
 
