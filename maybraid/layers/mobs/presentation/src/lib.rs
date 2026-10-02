@@ -21,11 +21,13 @@ use urbanization_layer_model::UrbanModel;
 mod present;
 
 use present::{
-	drain_retired_mob_cells, fit_mob_hosts_to_surface, pulse_mob_high_lod, retire_mob_presenters,
-	MobHighLodChan, MobHighLodRegion, MobPresenter, MobPresenterState,
+	fit_mob_hosts_to_surface, pulse_mob_high_lod, retire_mob_presenters, MobHighLodChan,
+	MobHighLodRegion, MobPresenter,
 };
 
-pub use present::PresentedMobCell;
+pub use present::{
+	drain_retired_mob_cells, retire_mob_cells_on_mode_change, MobPresenterState, PresentedMobCell,
+};
 
 /// Marker for mob-presenter subscriptions on ground `G`.
 pub struct MobPresent;
@@ -81,7 +83,10 @@ impl<G: UrbanModel> Plugin for MobPresentationCore<G> {
 			.configure_sets(Update, LodPresentSystems::Produce.after(LodGenerateSystems::Drain))
 			.add_systems(
 				Update,
-				retire_mob_presenters::<G>
+				(
+					retire_mob_presenters::<G>,
+					retire_mob_cells_on_mode_change,
+				)
 					.after(MobGenerationSystems)
 					.before(LodPresentSystems::Produce),
 			)

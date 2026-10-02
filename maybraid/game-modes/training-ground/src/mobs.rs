@@ -4,14 +4,13 @@ use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use crozon_characters::LocomotionCapsule;
 use durham_terrain_models::{Durham, TerrainTrimeshCollider};
-use lod::gen::{Id, LodGenerated};
+use lod::gen::Id;
 use lod::{LodGenerateSystems, LodPresentSystems};
 use maybraid_mobs::{Mob, MobKind, MobScene};
 use mob_characters::CharacterSpecies;
 use mob_groups::{GroupKind, MobEnvironmentSample, MobGroup, PlacedMob};
 use mob_layer_model::{
-	announce_mob_cell, MobCell, MobCellExtent, MobGenerationSystems, MobIndex, MobLayerConfig,
-	MobScheme,
+	MobCell, MobCellExtent, MobCellWrites, MobGenerationSystems, MobLayerConfig, MobScheme,
 };
 use mob_layer_presentation::PresentedMobCell;
 use richmond_development_models::{
@@ -370,7 +369,6 @@ impl TrainingArena {
 
 impl MobScheme<Urbanization<OnTerrain<Durham>>> for TrainingGround {
 	fn install(app: &mut App, _config: &MobLayerConfig) {
-		app.add_message::<LodGenerated<MobCell>>();
 		app.add_systems(
 			Update,
 			write_training_roster
@@ -394,11 +392,11 @@ impl MobScheme<Urbanization<OnTerrain<Durham>>> for TrainingGround {
 
 fn clear_training_roster(
 	written: Option<Res<TrainingRoster>>,
-	mut index: ResMut<MobIndex>,
+	mut cells: MobCellWrites,
 	mut commands: Commands,
 ) {
 	if let Some(written) = written {
-		index.remove_cell(written.mob_id);
+		cells.remove(written.mob_id);
 	}
 	commands.remove_resource::<TrainingRoster>();
 	commands.remove_resource::<TrainingRosterSeat>();
@@ -409,13 +407,12 @@ fn write_training_roster(
 	written: Option<Res<TrainingRoster>>,
 	store: Res<DevelopmentEntryStore>,
 	ready_pads: Query<&PresentedPaddedTerrainScene, With<TerrainTrimeshCollider>>,
-	mut index: ResMut<MobIndex>,
-	mut generated: MessageWriter<LodGenerated<MobCell>>,
+	mut cells: MobCellWrites,
 	mut commands: Commands,
 ) {
 	let Some(stamped) = stamped.as_deref() else {
 		if let Some(written) = written.as_deref() {
-			index.remove_cell(written.mob_id);
+			cells.remove(written.mob_id);
 			commands.remove_resource::<TrainingRoster>();
 			commands.remove_resource::<TrainingRosterSeat>();
 		}
@@ -425,7 +422,7 @@ fn write_training_roster(
 		if written.map == stamped.round().map() {
 			return;
 		}
-		index.remove_cell(written.mob_id);
+		cells.remove(written.mob_id);
 		commands.remove_resource::<TrainingRoster>();
 		commands.remove_resource::<TrainingRosterSeat>();
 	}
@@ -441,8 +438,7 @@ fn write_training_roster(
 	let arena = TrainingArena::around(stamped.center(), stamped.footprint(), stamped.plaza_y())
 		.with_roster(&site);
 	let cell = arena.mob_cell(stamped.round().mob_seed());
-	let mob_id = index.insert_cell(cell);
-	announce_mob_cell(mob_id, &mut generated);
+	let mob_id = cells.insert(cell);
 	commands.insert_resource(TrainingRosterSeat {
 		player: arena.player,
 		facing: arena.player_facing(),
@@ -468,10 +464,12 @@ fn tag_training_brawlers(
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use bevy::ecs::message::Messages;
 	use bevy::ecs::system::RunSystemOnce;
-	use bevy::prelude::{App, MinimalPlugins, NextState, World};
+	use bevy::prelude::{App, MessageReader, MinimalPlugins, NextState, World};
 	use bevy::state::app::StatesPlugin;
-	use lod::gen::SpatialIndex;
+	use lod::gen::{LodGenerated, SpatialIndex};
+	use mob_layer_model::MobIndex;
 	use maybraid_mobs::player_affiliations;
 	use richmond_development_models::{DevelopmentCell, DevelopmentConfig};
 	use terrain_layer_model::{GenerationMode, GenerationModePlugin};
@@ -817,6 +815,7 @@ mod tests {
 			&mut app,
 			&MobLayerConfig::default(),
 		);
+		app.init_resource::<Messages<LodGenerated<MobCell>>>();
 		let round = TrainingRound::new(42);
 		let mut src = roster_world(round, Vec2::ZERO, Vec2::splat(36.0))?;
 		app.insert_resource(
@@ -845,6 +844,97 @@ mod tests {
 			"leaving Training drops the roster cell"
 		);
 		anyhow::ensure!(app.world().get_resource::<TrainingRoster>().is_none());
+		Ok(())
+	}
+
+	#[test]
+	fn training_brawlers_leave_when_returning_to_the_other_mode() -> anyhow::Result<()> {
+		use bevy::prelude::{IntoScheduleConfigs, Last, PostUpdate, Update};
+		use lod::LodPresentSystems;
+		use mob_intelligence::MemberOf;
+		use mob_layer_model::MobGenerationSystems;
+		use mob_layer_presentation::{
+			drain_retired_mob_cells, retire_mob_cells_on_mode_change, MobPresent, MobPresenterState,
+		};
+		use terrain_layer_model::subscribe_mode;
+
+		#[derive(bevy::prelude::Resource, Default)]
+		struct BrawlersSeenInPostUpdate(bool);
+
+		let mut app = App::new();
+		app.add_plugins((
+			MinimalPlugins,
+			StatesPlugin,
+			GenerationModePlugin::<TrainingGround>::initial(),
+			GenerationModePlugin::<OtherMode>::default(),
+		));
+		subscribe_mode::<(Urbanization<OnTerrain<Durham>>, MobPresent), TrainingGround>(&mut app);
+		subscribe_mode::<(Urbanization<OnTerrain<Durham>>, MobPresent), OtherMode>(&mut app);
+		app.init_resource::<MobPresenterState>();
+		app.init_resource::<BrawlersSeenInPostUpdate>();
+		app.init_resource::<Messages<LodGenerated<MobCell>>>();
+		app.add_systems(
+			Update,
+			retire_mob_cells_on_mode_change
+				.after(MobGenerationSystems)
+				.before(LodPresentSystems::Produce),
+		);
+		app.add_systems(
+			PostUpdate,
+			|brawlers: bevy::prelude::Query<(), bevy::prelude::With<TrainingBrawler>>,
+			 members: bevy::prelude::Query<(), bevy::prelude::With<MemberOf>>,
+			 mut seen: bevy::prelude::ResMut<BrawlersSeenInPostUpdate>| {
+				seen.0 = !brawlers.is_empty() && !members.is_empty();
+			},
+		);
+		app.add_systems(Last, drain_retired_mob_cells);
+		app.update();
+
+		let mut src = roster_world(TrainingRound::new(42), Vec2::ZERO, Vec2::splat(36.0))?;
+		app.insert_resource(
+			src.remove_resource::<MobIndex>()
+				.ok_or_else(|| anyhow::anyhow!("mob index"))?,
+		);
+		app.insert_resource(
+			src.remove_resource::<DevelopmentEntryStore>()
+				.ok_or_else(|| anyhow::anyhow!("developments"))?,
+		);
+		app.insert_resource(
+			src.remove_resource::<TrainingPlazaStamped>()
+				.ok_or_else(|| anyhow::anyhow!("stamp"))?,
+		);
+		app.world_mut()
+			.run_system_once(write_training_roster)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let mob_id = app.world().resource::<TrainingRoster>().mob_id;
+		let host = app.world_mut().spawn(PresentedMobCell(mob_id)).id();
+		let member = app.world_mut().spawn(MemberOf { mob: host, slot: 0 }).id();
+		app.world_mut()
+			.run_system_once(tag_training_brawlers)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		app.world_mut()
+			.resource_mut::<MobPresenterState>()
+			.insert_presented(mob_id, vec![host]);
+
+		anyhow::ensure!(app.world().get::<TrainingBrawler>(host).is_some());
+
+		app.world_mut()
+			.resource_mut::<NextState<ActiveGenerationMode>>()
+			.set(ActiveGenerationMode::of::<OtherMode>());
+		app.update();
+
+		anyhow::ensure!(
+			app.world().resource::<BrawlersSeenInPostUpdate>().0,
+			"brawler hosts and members survive PostUpdate on the exit frame"
+		);
+		anyhow::ensure!(
+			app.world().get_entity(host).is_err(),
+			"Last drain despawns the TrainingBrawler host"
+		);
+		anyhow::ensure!(
+			app.world().get_entity(member).is_err(),
+			"Last drain despawns the TrainingBrawler member"
+		);
 		Ok(())
 	}
 

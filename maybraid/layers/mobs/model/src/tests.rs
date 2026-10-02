@@ -530,28 +530,30 @@ fn leaving_a_mode_clears_the_index() -> anyhow::Result<()> {
 }
 
 #[test]
-fn announce_mob_cell_writes_lod_generated() -> anyhow::Result<()> {
+fn mob_cell_writes_insert_announces() -> anyhow::Result<()> {
 	use bevy::ecs::message::Messages;
 	use bevy::ecs::system::RunSystemOnce;
-	use bevy::prelude::{MessageReader, MessageWriter};
+	use bevy::prelude::MessageReader;
 	use lod::gen::LodGenerated;
 
-	use crate::announce_mob_cell;
+	use crate::MobCellWrites;
 
 	let mut world = World::new();
 	world.init_resource::<Messages<LodGenerated<MobCell>>>();
-	let id = MobCellExtent::from_cell_index(0, 0).id();
-	world
-		.run_system_once(move |mut generated: MessageWriter<LodGenerated<MobCell>>| {
-			announce_mob_cell(id, &mut generated);
+	world.insert_resource(MobIndex::default());
+	let extent = MobCellExtent::from_cell_index(0, 0);
+	let id = world
+		.run_system_once(move |mut cells: MobCellWrites| {
+			cells.insert(MobCell { extent, groups: Vec::new() })
 		})
 		.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+	anyhow::ensure!(world.resource::<MobIndex>().get(id).is_some(), "insert stores the cell");
 	let announced = world
 		.run_system_once(|mut reader: MessageReader<LodGenerated<MobCell>>| {
 			reader.read().map(|message| message.id).collect::<Vec<_>>()
 		})
 		.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-	anyhow::ensure!(announced == vec![id], "announce writes LodGenerated for the cell");
+	anyhow::ensure!(announced == vec![id], "insert announces LodGenerated for the cell");
 	Ok(())
 }
 

@@ -150,9 +150,9 @@ impl MobIndex {
 		self.models_ready = true;
 	}
 
-	/// Write one cell the scheme owns. Call [`crate::announce_mob_cell`] so
-	/// the presenter enqueues it; membership only drives stale removal.
-	pub fn insert_cell(&mut self, cell: MobCell) -> Id {
+	/// Write one cell the scheme owns. [`crate::MobCellWrites::insert`]
+	/// announces it; membership only drives stale removal.
+	pub(crate) fn insert_cell(&mut self, cell: MobCell) -> Id {
 		let id = cell.extent.id();
 		let bounds = cell.extent.aabb();
 		let version = self.next_version();
@@ -161,7 +161,7 @@ impl MobIndex {
 	}
 
 	/// Drop one cell the scheme owns. Bumps membership so presenters retire it.
-	pub fn remove_cell(&mut self, id: Id) -> Option<MobCell> {
+	pub(crate) fn remove_cell(&mut self, id: Id) -> Option<MobCell> {
 		let removed = self.cells.remove(&id).map(|entry| entry.value);
 		if removed.is_some() {
 			let _ = self.next_version();

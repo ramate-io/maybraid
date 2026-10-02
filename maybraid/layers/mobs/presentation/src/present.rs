@@ -16,7 +16,7 @@ use lod::{
 use maybraid_mobs::MobScene;
 use mob_intelligence::MemberOf;
 use mob_layer_model::{MobCell, MobIndex};
-use terrain_layer_model::{ModeSubscription, TerrainView};
+use terrain_layer_model::{ActiveGenerationMode, ModeSubscription, TerrainView};
 use urbanization_layer_model::UrbanModel;
 
 use crate::MobPresent;
@@ -91,8 +91,7 @@ impl MobPresenterState {
 		self.presented.contains_key(&id)
 	}
 
-	#[cfg(test)]
-	pub(crate) fn insert_presented(&mut self, id: Id, entities: Vec<Entity>) {
+	pub fn insert_presented(&mut self, id: Id, entities: Vec<Entity>) {
 		self.presented.insert(
 			id,
 			PresentedCell { version: Version(1), entities, hidden: false },
@@ -213,6 +212,23 @@ pub fn pulse_mob_high_lod(
 	if let Some(region) = union {
 		refresh.write(LodSceneRefreshRegion::new(region));
 		bus.write(LodSceneRefreshAabb { region, domain: LodRefreshDomain::of::<MobHighLodChan>() });
+	}
+}
+
+/// Queue every presented cell when the active generation mode changes.
+///
+/// Both modes may subscribe, so [`retire_mob_presenters`] does not run.
+/// Ordered `.after(MobGenerationSystems).before(LodPresentSystems::Produce)`
+/// so a cell written on the entering frame presents after this retire.
+pub fn retire_mob_cells_on_mode_change(
+	mode: Res<State<ActiveGenerationMode>>,
+	mut presented: ResMut<MobPresenterState>,
+) {
+	if !mode.is_changed() {
+		return;
+	}
+	for id in presented.presented_ids() {
+		presented.queue_remove(id);
 	}
 }
 

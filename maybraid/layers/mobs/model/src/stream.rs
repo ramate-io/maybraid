@@ -1,6 +1,6 @@
 //! Mob generate / present-keep bullseyes and the camera stream.
 
-use bevy::ecs::system::ParamSet;
+use bevy::ecs::system::{ParamSet, SystemParam};
 use bevy::prelude::*;
 use chico_forests::ForestIndex;
 use lod::gen::{
@@ -79,10 +79,24 @@ pub struct MobLodChan;
 #[derive(Resource, Default)]
 pub(crate) struct MobGenerateStreamCell(Option<(i32, i32)>);
 
-/// Tell the presenter a scheme-owned cell is ready. Membership alone only
-/// drives stale removal.
-pub fn announce_mob_cell(id: Id, generated: &mut MessageWriter<LodGenerated<MobCell>>) {
-	generated.write(LodGenerated::new(id));
+/// Scheme-owned writes. [`Self::insert`] stores the cell and announces it;
+/// membership alone only drives stale removal.
+#[derive(SystemParam)]
+pub struct MobCellWrites<'w> {
+	index: ResMut<'w, MobIndex>,
+	generated: MessageWriter<'w, LodGenerated<MobCell>>,
+}
+
+impl MobCellWrites<'_> {
+	pub fn insert(&mut self, cell: MobCell) -> Id {
+		let id = self.index.insert_cell(cell);
+		self.generated.write(LodGenerated::new(id));
+		id
+	}
+
+	pub fn remove(&mut self, id: Id) -> Option<MobCell> {
+		self.index.remove_cell(id)
+	}
 }
 
 pub fn sync_mob_models<G: UrbanModel>(

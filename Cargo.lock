@@ -4811,6 +4811,7 @@ dependencies = [
  "maybraid-mobs",
  "mob-characters",
  "mob-groups",
+ "mob-intelligence",
  "mob-layer-model",
  "mob-layer-presentation",
  "richmond-development-models",
