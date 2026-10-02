@@ -14,7 +14,7 @@ use lod::{
 	LodGenerateSystems, LodPresentCullPlugin, LodPresentPlugin, LodPresentSystems, LodViewer,
 };
 use terrain_layer_model::{subscribe_mode, GenerationMode, RequireLayer, TerrainModel};
-use vegetation_layer_model::{VegetationGenerationPlugin, VegetationGenerationSystems};
+use vegetation_layer_model::{VegetationGenerationCore, VegetationGenerationSystems};
 
 mod material;
 mod present;
@@ -129,7 +129,7 @@ where
 
 	fn finish(&self, app: &mut App) {
 		G::require_generation(app);
-		app.require_layer::<VegetationGenerationPlugin, VegetationPresentationCore<G>>();
+		app.require_layer::<VegetationGenerationCore, VegetationPresentationCore<G>>();
 	}
 }
 

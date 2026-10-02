@@ -217,7 +217,7 @@ impl Clone for OwnedDurham {
 }
 
 /// Ground whose `require_generation` is a no-op, so `finish` can name
-/// [`VegetationGenerationPlugin`](vegetation_layer_model::VegetationGenerationPlugin)
+/// [`VegetationGenerationCore`](vegetation_layer_model::VegetationGenerationCore)
 /// without booting Durham.
 struct Silent;
 
@@ -328,7 +328,7 @@ impl TerrainModel for Silent {
 }
 
 #[test]
-#[should_panic(expected = "VegetationGenerationPlugin")]
+#[should_panic(expected = "VegetationGenerationCore")]
 fn presentation_without_generation_names_the_missing_plugin() {
 	VegetationPresentationPlugin::<SilentMode, Silent>::default().finish(&mut App::new());
 }

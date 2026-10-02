@@ -271,7 +271,7 @@ fn hosts_walk_a_stored_development_with_no_hopscotch() -> anyhow::Result<()> {
 		"hosts walk a stored development with no hopscotch selection"
 	);
 	anyhow::ensure!(
-		Urbanized::urbanization_cell_ids(&view.read, region).is_empty(),
+		Urbanized::urbanization_leaves(&view.read, region).is_empty(),
 		"no hopscotch cells are selected"
 	);
 	Ok(())

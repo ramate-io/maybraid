@@ -68,6 +68,14 @@ impl VegetationLayerConfig {
 			..Self::default()
 		}
 	}
+
+	/// Forest on at radius 0 (one grove extent), generate budgets 16.
+	pub fn grove() -> Self {
+		Self {
+			forest: Some(ForestStreamSpec { stream_radius: 0, ..ForestStreamSpec::default() }),
+			..Self::world_defaults()
+		}
+	}
 }
 
 #[cfg(test)]
@@ -87,6 +95,20 @@ mod tests {
 		assert_eq!(VegetationLayerConfig::default().bump_out_budget, 16);
 		assert_eq!(VegetationLayerConfig::default().medium_bump_out_budget, 16);
 		assert_eq!(VegetationLayerConfig::world_defaults().forest_budget, 16);
+		Ok(())
+	}
+
+	#[test]
+	fn grove_keeps_one_extent() -> anyhow::Result<()> {
+		let spec = VegetationLayerConfig::grove()
+			.forest
+			.ok_or_else(|| anyhow::anyhow!("forest on"))?;
+		anyhow::ensure!(spec.stream_radius == 0, "grove stream radius is 0");
+		anyhow::ensure!(
+			VegetationLayerConfig::grove().forest_budget
+				== VegetationLayerConfig::world_defaults().forest_budget,
+			"grove keeps the shared budgets"
+		);
 		Ok(())
 	}
 

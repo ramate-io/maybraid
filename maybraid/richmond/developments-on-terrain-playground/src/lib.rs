@@ -20,14 +20,34 @@ use commands::{
 	RequestTerrainRadius,
 };
 use durham_terrain_models::{
-	JerseyStampConfigs, MarazionWatershedConfigs, TerrainCellLayout, TerrainConfig,
-	TerrainMeshLodBand, TerrainPresentationAssets, TerrainPresentationDirty, WorldBaseTerrain,
+	Durham, DurhamTerrainConfig, JerseyStampConfigs, MarazionWatershedConfigs, TerrainCellLayout,
+	TerrainConfig, TerrainMeshLodBand, TerrainPresentationAssets, TerrainPresentationDirty,
+	WorldBaseTerrain,
 };
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use game_commands::ui::{GameCommandDrawerConfig, GameCommandStatusText};
 use richmond_development_models::DevelopmentConfig;
 use std::f32::consts::PI;
-use urbanization_layer_model::{DevelopmentFocus as LayerFocus, UrbanizationLayerConfig};
+use terrain_layer_model::{BaseTerrainScheme, GenerationMode, OnTerrain};
+use urbanization_layer_model::{
+	install_urbanization_stream, DevelopmentFocus as LayerFocus, UrbanizationLayerConfig,
+	UrbanizationModeConfig, UrbanizationScheme,
+};
+
+/// Standalone playground generation mode.
+pub struct PlaygroundMode;
+
+impl GenerationMode for PlaygroundMode {}
+
+impl BaseTerrainScheme<Durham> for PlaygroundMode {
+	fn install(_app: &mut App, _config: &DurhamTerrainConfig) {}
+}
+
+impl UrbanizationScheme<OnTerrain<Durham>> for PlaygroundMode {
+	fn install(app: &mut App, config: &UrbanizationLayerConfig) {
+		install_urbanization_stream::<PlaygroundMode>(app, config);
+	}
+}
 
 const DEFAULT_TERRAIN_RADIUS: i32 = 2;
 
@@ -113,7 +133,7 @@ struct ApplyCommandStores<'w> {
 	marazion: ResMut<'w, MarazionWatershedConfigs>,
 	world_base: ResMut<'w, WorldBaseTerrain>,
 	development: ResMut<'w, DevelopmentConfig>,
-	urban: ResMut<'w, UrbanizationLayerConfig>,
+	urban: ResMut<'w, UrbanizationModeConfig<PlaygroundMode>>,
 	dirty: ResMut<'w, TerrainPresentationDirty>,
 	status: ResMut<'w, GameCommandStatusText>,
 }
@@ -159,9 +179,9 @@ fn apply_commands(
 	}
 	for (entity, request) in &focuses {
 		request.0.apply(development);
-		urban.focus_development = (request.0 != LayerFocus::All).then_some(request.0);
+		urban.config.focus_development = (request.0 != LayerFocus::All).then_some(request.0);
 		development.use_urbanization =
-			urban.urbanization.is_some() || urban.focus_development.is_none();
+			urban.config.urbanization.is_some() || urban.config.focus_development.is_none();
 		dirty.0 = true;
 		status.0 = format!("focus-development {} (regen)", request.0);
 		commands.entity(entity).despawn();
@@ -253,5 +273,50 @@ mod tests {
 	#[test]
 	fn default_cell_size_is_naturescapes() {
 		assert!((TERRAIN_CELL_SIZE - 160.0).abs() < 1e-3);
+	}
+
+	#[test]
+	fn focus_command_edits_the_mode_config() -> anyhow::Result<()> {
+		use bevy::ecs::system::RunSystemOnce;
+		use durham_terrain_models::BaseTerrainNoise;
+		use urbanization_layer_model::DevelopmentFocus;
+
+		let mut app = App::new();
+		app.insert_resource(PlaygroundConfig::default());
+		app.insert_resource(TerrainCellLayout::default());
+		app.insert_resource(TerrainPresentationAssets {
+			config: TerrainConfig::new(42),
+			material: Handle::default(),
+			lod_bands: Vec::new(),
+			outer_add_walls: true,
+			fine_grid_max_radius: Some(DEFAULT_TERRAIN_RADIUS),
+			macro_seam_half_extents: Vec::new(),
+			macro_cell_min_size: None,
+			macro_res_2: None,
+		});
+		app.insert_resource(TerrainConfig::new(42));
+		app.insert_resource(JerseyStampConfigs::from_world_seed(42));
+		app.insert_resource(MarazionWatershedConfigs::default());
+		app.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(
+			&TerrainConfig::new(42),
+		)));
+		app.insert_resource(DevelopmentConfig::default());
+		app.insert_resource(UrbanizationModeConfig::<PlaygroundMode>::new(
+			UrbanizationLayerConfig::default(),
+		));
+		app.insert_resource(TerrainPresentationDirty(false));
+		app.insert_resource(GameCommandStatusText::default());
+		app.world_mut()
+			.spawn(RequestDevelopmentFocus(DevelopmentFocus::LesHalles));
+		app.world_mut()
+			.run_system_once(apply_commands)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let urban = app.world().resource::<UrbanizationModeConfig<PlaygroundMode>>();
+		anyhow::ensure!(
+			urban.config.focus_development == Some(DevelopmentFocus::LesHalles),
+			"focus command writes the playground mode config, got {:?}",
+			urban.config.focus_development
+		);
+		Ok(())
 	}
 }

@@ -34,14 +34,29 @@ impl Plugin for WorldLayersPlugin {
 				UrbanizationGenerationPlugin::<Discovery, OnTerrain<Durham>>::new(
 					UrbanizationLayerConfig::world_defaults(),
 				),
-				VegetationGenerationPlugin::new(VegetationLayerConfig::world_defaults()),
+				VegetationGenerationPlugin::<Discovery>::new(
+					VegetationLayerConfig::world_defaults(),
+				),
 				MobGenerationPlugin::<Urbanization<OnTerrain<Durham>>>::new(
 					MobLayerConfig::world_defaults(),
 				),
-				TerrainPresentationPlugin::<Discovery, Urbanization<OnTerrain<Durham>>, PaddedCells>::default(),
-				UrbanizationPresentationPlugin::<Discovery, Urbanization<OnTerrain<Durham>>>::default(),
-				VegetationPresentationPlugin::<Discovery, Urbanization<OnTerrain<Durham>>>::default(),
-				MobPresentationPlugin::<Discovery, Urbanization<OnTerrain<Durham>>>::default(),
+				TerrainPresentationPlugin::<
+					Discovery,
+					Urbanization<OnTerrain<Durham>>,
+					PaddedCells,
+				>::default(),
+				UrbanizationPresentationPlugin::<
+					Discovery,
+					Urbanization<OnTerrain<Durham>>,
+				>::default(),
+				VegetationPresentationPlugin::<
+					Discovery,
+					Urbanization<OnTerrain<Durham>>,
+				>::default(),
+				MobPresentationPlugin::<
+					Discovery,
+					Urbanization<OnTerrain<Durham>>,
+				>::default(),
 			),
 			(
 				GenerationModePlugin::<TrainingGround>::default(),
@@ -50,6 +65,9 @@ impl Plugin for WorldLayersPlugin {
 				),
 				UrbanizationGenerationPlugin::<TrainingGround, OnTerrain<Durham>>::new(
 					UrbanizationLayerConfig::shared_world(),
+				),
+				VegetationGenerationPlugin::<TrainingGround>::new(
+					VegetationLayerConfig::grove(),
 				),
 				TerrainPresentationPlugin::<
 					TrainingGround,

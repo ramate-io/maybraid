@@ -127,12 +127,20 @@ pub fn install_urbanization_stream<Mode: GenerationMode>(
 	use terrain_layer_model::GenerationModeSystems;
 
 	register_urbanization_lod_generate(app, config.generate_budget);
+	// Mob readers of UrbanizationIndex select cells before terrain streaming starts.
+	app.add_systems(
+		Update,
+		sync_urbanization_pin::<Mode>
+			.in_set(GenerationModeSystems::<Mode>::default())
+			.in_set(UrbanizationGenerationSystems)
+			.before(LodGenerateSystems::Produce)
+			.before(UrbanizationStoreSystems)
+			.before(LodPresentSystems::Produce)
+			.before(TerrainColliderSystems::QueueMeshes),
+	);
 	app.add_systems(
 		Update,
 		(
-			sync_urbanization_pin::<Mode>
-				.before(LodGenerateSystems::Produce)
-				.before(UrbanizationStoreSystems),
 			stream_urbanization::<Mode>
 				.before(LodGenerateSystems::Produce)
 				.before(UrbanizationStoreSystems),

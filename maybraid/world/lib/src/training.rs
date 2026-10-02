@@ -2,11 +2,11 @@
 //! moving rings.
 //!
 //! While [`TrainingGround`](maybraid_game_mode_training_ground::TrainingGround) is
-//! active, hopscotch stays off, the forest shrinks to one grove tile, and a
-//! Training pose is not written. Terrain layout lives on each mode's
-//! [`terrain_layer_model::BaseTerrainScheme`]. Training's urbanization scheme
-//! stamps one seeded Richmond development; [`crate::training_plaza`] raises
-//! the wall and seats the roster once padded colliders exist.
+//! active, hopscotch stays off and a Training pose is not written. Terrain
+//! layout lives on each mode's [`terrain_layer_model::BaseTerrainScheme`].
+//! Training's urbanization scheme stamps one seeded Richmond development;
+//! [`crate::training_plaza`] raises the wall and seats the roster once padded
+//! colliders exist.
 //!
 //! A Training respawn ends the life with [`TrainingLifeEnded`], and the shell
 //! advances [`TrainingRound`]. A new round moves the patch, tears the plaza
@@ -31,7 +31,6 @@ use maybraid_game_mode_training_ground::{TrainingGround, TrainingRound};
 use mob_intelligence::MemberOf;
 use mob_layer_model::MobStreamSuspended;
 use terrain_layer_model::ActiveGenerationMode;
-use vegetation_layer_model::VegetationLayerConfig;
 
 use crate::WorldPlayerLoadout;
 use crate::control::{WorldSurfaceSet, update_world_surface_ready};
@@ -85,9 +84,6 @@ fn register_generation_mode_transitions(app: &mut App) {
 	.add_systems(OnExit(ActiveGenerationMode::of::<TrainingGround>()), close_training_score);
 }
 
-/// Forest stream radius used by [`VegetationLayerConfig::world_defaults`].
-const WORLD_FOREST_STREAM_RADIUS: u32 = 1;
-
 /// A Training body respawned. The shell advances [`TrainingRound`] and loads
 /// the next life in behind the loading screen.
 #[derive(Message, Clone, Copy, Debug, PartialEq, Eq)]
@@ -108,48 +104,14 @@ pub fn training_trainee(round: TrainingRound) -> WorldPlayerLoadout {
 	WorldPlayerLoadout::new(key, appearance, inventory).with_name("Trainee")
 }
 
-/// Forest stream for a Training / Discovery session.
-#[derive(Clone, Debug, PartialEq)]
-pub struct TrainingFill {
-	pub forest_stream_radius: u32,
-}
-
-impl TrainingFill {
-	/// Training's grove for `round`, or Discovery's playable stream for `None`.
-	pub fn for_session(round: Option<TrainingRound>) -> Self {
-		match round {
-			Some(_) => Self { forest_stream_radius: 0 },
-			None => Self { forest_stream_radius: WORLD_FOREST_STREAM_RADIUS },
-		}
-	}
-}
-
-/// Entering Training suspends the mob stream and shrinks urbanization / forest.
-fn enter_training(
-	round: Res<TrainingRound>,
-	mut suspended: ResMut<MobStreamSuspended>,
-	mut vegetation: Option<ResMut<VegetationLayerConfig>>,
-) {
+/// Entering Training suspends the mob stream until [#909](https://github.com/ramate-io/maybraid/issues/909).
+fn enter_training(mut suspended: ResMut<MobStreamSuspended>) {
 	suspended.0 = true;
-	write_session_fill(Some(*round), vegetation.as_deref_mut());
 }
 
-/// Discovery's urbanization and forest, after Training.
-fn return_to_discovery(
-	mut suspended: ResMut<MobStreamSuspended>,
-	mut vegetation: Option<ResMut<VegetationLayerConfig>>,
-) {
+/// Discovery's mob stream, after Training.
+fn return_to_discovery(mut suspended: ResMut<MobStreamSuspended>) {
 	suspended.0 = false;
-	write_session_fill(None, vegetation.as_deref_mut());
-}
-
-fn write_session_fill(round: Option<TrainingRound>, vegetation: Option<&mut VegetationLayerConfig>) {
-	let fill = TrainingFill::for_session(round);
-	if let Some(config) = vegetation {
-		if let Some(spec) = config.forest.as_mut() {
-			spec.stream_radius = fill.forest_stream_radius;
-		}
-	}
 }
 
 /// Each Training session keeps its own [`CombatScore`] across its rounds and
@@ -202,45 +164,34 @@ mod tests {
 	};
 	use maybraid_game_mode_training_ground::TRAINING_FINE_HALF_EXTENT_CELLS;
 	use richmond_development_models::DevelopmentEntryStore;
-	use vegetation_layer_model::VegetationLayerConfig;
 
 	use crate::PlayerSpawnXz;
 	use crate::training_plaza::TrainingPlazaMounted;
 	use terrain_layer_model::{BaseTerrainModeConfig, BaseTerrainScheme, GenerationModePlugin};
 	use super::*;
 
-	fn training_world(round: TrainingRound) -> World {
+	fn training_world() -> World {
 		let mut world = World::new();
-		world.insert_resource(round);
 		world.insert_resource(MobStreamSuspended(false));
-		world.insert_resource(VegetationLayerConfig::world_defaults());
 		world
 	}
 
-	fn forest_radius(world: &World) -> Option<u32> {
-		world.resource::<VegetationLayerConfig>().forest.map(|spec| spec.stream_radius)
-	}
-
 	#[test]
-	fn entering_training_shrinks_the_forest() -> anyhow::Result<()> {
-		let round = TrainingRound::new(7);
-		let mut world = training_world(round);
+	fn entering_training_suspends_the_mob_stream() -> anyhow::Result<()> {
+		let mut world = training_world();
 		world.run_system_once(enter_training).map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		anyhow::ensure!(world.resource::<MobStreamSuspended>().0);
-		anyhow::ensure!(forest_radius(&world) == Some(0));
 		Ok(())
 	}
 
 	#[test]
-	fn returning_to_discovery_restores_the_forest() -> anyhow::Result<()> {
-		let round = TrainingRound::new(7);
-		let mut world = training_world(round);
+	fn returning_to_discovery_resumes_the_mob_stream() -> anyhow::Result<()> {
+		let mut world = training_world();
 		world.run_system_once(enter_training).map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		world
 			.run_system_once(return_to_discovery)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		anyhow::ensure!(!world.resource::<MobStreamSuspended>().0);
-		anyhow::ensure!(forest_radius(&world) == Some(WORLD_FOREST_STREAM_RADIUS));
 		Ok(())
 	}
 
@@ -322,7 +273,6 @@ mod tests {
 		app.init_state::<ShellFlow>();
 		app.insert_resource(round);
 		app.insert_resource(MobStreamSuspended(false));
-		app.insert_resource(VegetationLayerConfig::world_defaults());
 		app.insert_resource(playable_world_cell_layout());
 		app.insert_resource(TerrainCoverage::PlayableWorld);
 		app.insert_resource(TerrainLayoutPinned(false));
@@ -357,7 +307,6 @@ mod tests {
 			"the initial Discovery state does not retarget"
 		);
 		assert_eq!(*app.world().resource::<TerrainCoverage>(), TerrainCoverage::PlayableWorld);
-		assert_eq!(forest_radius(app.world()), Some(WORLD_FOREST_STREAM_RADIUS));
 		assert!(app.world().resource::<ModeSeenOnLoading>().0.is_none());
 		assert_eq!(app.world().resource::<TrainingExits>().0, 0);
 
@@ -369,7 +318,6 @@ mod tests {
 		assert!(app.world().resource::<State<ActiveGenerationMode>>().get().is::<TrainingGround>());
 		assert_eq!(*app.world().resource::<TerrainCellLayout>(), round.layout());
 		assert_eq!(*app.world().resource::<TerrainCoverage>(), TerrainCoverage::FinePatch);
-		assert_eq!(forest_radius(app.world()), Some(0));
 		assert!(app.world().resource::<TerrainPresentationDirty>().0);
 		assert!(app.world().get_resource::<CombatScore>().is_some());
 		assert_eq!(app.world().resource::<TrainingExits>().0, 0);
@@ -401,7 +349,6 @@ mod tests {
 		hop(&mut app, ShellFlow::Home, ActiveGenerationMode::of::<Discovery>())?;
 		assert!(app.world().resource::<State<ActiveGenerationMode>>().get().is::<Discovery>());
 		assert_eq!(*app.world().resource::<TerrainCellLayout>(), playable_world_cell_layout());
-		assert_eq!(forest_radius(app.world()), Some(WORLD_FOREST_STREAM_RADIUS));
 		assert_eq!(app.world().resource::<TrainingExits>().0, 1);
 		assert!(app.world().get_resource::<CombatScore>().is_none());
 		assert!(app.world().resource::<SquadSeenInPostUpdate>().0);
@@ -460,23 +407,11 @@ mod tests {
 	}
 
 	#[test]
-	fn training_fill_shrinks_the_forest() {
-		let fill = TrainingFill::for_session(Some(TrainingRound::new(3)));
-		assert_eq!(fill.forest_stream_radius, 0);
-	}
-
-	#[test]
 	fn plaza_waits_for_the_whole_patch() {
 		let store = durham_terrain_models::TerrainEntryStore::default();
 		let origin = IVec2::splat(-TRAINING_FINE_HALF_EXTENT_CELLS);
 		let patch = fine_patch_cell_layout(TRAINING_FINE_HALF_EXTENT_CELLS, origin);
 		assert!(!store.fills_layout(&patch));
-	}
-
-	#[test]
-	fn discovery_fill_restores_the_forest() {
-		let fill = TrainingFill::for_session(None);
-		assert_eq!(fill.forest_stream_radius, WORLD_FOREST_STREAM_RADIUS);
 	}
 
 	#[test]

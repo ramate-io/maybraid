@@ -11,7 +11,7 @@ use lod::{
 };
 use terrain_layer_model::RequireLayer;
 use urbanization_layer_model::UrbanModel;
-use vegetation_layer_model::VegetationGenerationPlugin;
+use vegetation_layer_model::VegetationGenerationCore;
 
 use crate::config::MobLayerConfig;
 use crate::index::{MobCell, MobIndex};
@@ -85,6 +85,6 @@ impl<G: UrbanModel> Plugin for MobGenerationPlugin<G> {
 
 	fn finish(&self, app: &mut App) {
 		G::require_generation(app);
-		app.require_layer::<VegetationGenerationPlugin, Self>();
+		app.require_layer::<VegetationGenerationCore, Self>();
 	}
 }

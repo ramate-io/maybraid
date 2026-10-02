@@ -4,28 +4,14 @@ use bevy::prelude::*;
 use durham_terrain_models::{Durham, DurhamCells, DurhamTerrainConfig};
 use richmond_developments_on_terrain_playground::{
 	DevelopmentsOnTerrainPlugin, PendingStartupCommand, PlaygroundCommand, PlaygroundConfig,
+	PlaygroundMode,
 };
 use terrain_layer_model::{
-	BaseTerrainGenerationPlugin, BaseTerrainScheme, GenerationMode, GenerationModePlugin, OnTerrain,
+	BaseTerrainGenerationPlugin, GenerationModePlugin, OnTerrain,
 };
-
-struct PlaygroundMode;
-
-impl GenerationMode for PlaygroundMode {}
-
-impl BaseTerrainScheme<Durham> for PlaygroundMode {
-	fn install(_app: &mut App, _config: &DurhamTerrainConfig) {}
-}
-
-impl UrbanizationScheme<OnTerrain<Durham>> for PlaygroundMode {
-	fn install(app: &mut App, config: &UrbanizationLayerConfig) {
-		install_urbanization_stream::<PlaygroundMode>(app, config);
-	}
-}
 use terrain_layer_presentation::TerrainPresentationPlugin;
 use urbanization_layer_model::{
-	install_urbanization_stream, Urbanization, UrbanizationGenerationPlugin, UrbanizationLayerConfig,
-	UrbanizationScheme, UrbanizationStreamSpec,
+	Urbanization, UrbanizationGenerationPlugin, UrbanizationLayerConfig, UrbanizationStreamSpec,
 };
 use urbanization_layer_presentation::{PaddedCells, UrbanizationPresentationPlugin};
 

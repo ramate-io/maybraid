@@ -15,6 +15,7 @@ chico-forests = { workspace = true }
 durham-terrain-models = { workspace = true }
 lod = { workspace = true }
 procedural-common = { workspace = true }
+terrain-layer-model = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }

@@ -8,7 +8,7 @@ use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use chico_vegetation_on_terrain_playground::player::{holding_elevation, player_spawn_point_at};
 use chico_vegetation_on_terrain_playground::{OffTerrainAnchor, Player};
-use durham_terrain_models::{Durham, TerrainSuperseded, TerrainTrimeshCollider, WorldBaseTerrain};
+use durham_terrain_models::{Durham, TerrainTrimeshCollider, WorldBaseTerrain};
 use lod::gen::Id;
 use maybraid_mobs::{Mob, MobKind, MobScene};
 use mob_characters::CharacterSpecies;
@@ -27,7 +27,7 @@ use terrain_layer_model::{OnTerrain, TerrainView};
 use urbanization_layer_model::Urbanization;
 
 use maybraid_game_mode_training_ground::{
-	TrainingGround, TrainingMap, TrainingPlazaStamped, TrainingStampSettled, TrainingRound,
+	TrainingGround, TrainingMap, TrainingPlazaStamped, TrainingRound,
 	TRAINING_ARENA_MARGIN_M, TRAINING_ARENA_MAX_HALF_M, TRAINING_COURTYARD_OVERHANG_M,
 };
 use terrain_layer_model::ActiveGenerationMode;
@@ -571,14 +571,12 @@ pub(crate) fn clear_training_plaza(
 	round: Res<TrainingRound>,
 	base: Res<WorldBaseTerrain>,
 	mounted: Option<Res<TrainingPlazaMounted>>,
-	stamped: Option<Res<TrainingPlazaStamped>>,
 	mut spawn_xz: ResMut<PlayerSpawnXz>,
 	mut commands: Commands,
 	fixtures: Query<Entity, Or<(With<TrainingPlaza>, With<TrainingBrawler>)>>,
 	brawler_hosts: Query<(), With<TrainingBrawler>>,
 	members: Query<(Entity, &MemberOf)>,
 	anchored: Query<Entity, (With<Player>, With<OffTerrainAnchor>)>,
-	mut superseded: Query<(Entity, &mut Visibility), With<TerrainSuperseded>>,
 	mut players: Query<
 		(&mut Transform, &mut GlobalTransform, Option<&mut Position>, Option<&mut LinearVelocity>),
 		With<Player>,
@@ -591,17 +589,11 @@ pub(crate) fn clear_training_plaza(
 	let live = mode.get().is::<TrainingGround>();
 	let stale = |of: TrainingRound| !live || of.map() != round.map();
 	let mounted_stale = mounted.as_deref().is_some_and(|mounted| stale(mounted.0));
-	let stamped_stale = stamped.as_deref().is_some_and(|stamped| stale(stamped.round()));
-	if !mounted_stale && !stamped_stale {
+	if !mounted_stale {
 		return;
 	}
-	// Leaving also resets Durham's layout, which despawns raw cells in the same
-	// frame, and fixtures nest under one another; every teardown command must
-	// tolerate a target already gone.
-	for (entity, mut visibility) in &mut superseded {
-		*visibility = Visibility::Inherited;
-		commands.entity(entity).try_remove::<TerrainSuperseded>();
-	}
+	// Fixtures nest under one another; every teardown command must tolerate a
+	// target already gone.
 	// Respawned members are not tied to a roster stub, so dropping the host
 	// alone would strand them.
 	for (entity, member) in &members {
@@ -615,8 +607,6 @@ pub(crate) fn clear_training_plaza(
 	for player in &anchored {
 		commands.entity(player).try_remove::<OffTerrainAnchor>();
 	}
-	commands.remove_resource::<TrainingPlazaStamped>();
-	commands.remove_resource::<TrainingStampSettled>();
 	commands.remove_resource::<TrainingPlazaPlan>();
 	commands.remove_resource::<TrainingPlazaMounted>();
 	if live {
@@ -1059,10 +1049,7 @@ mod tests {
 		let member = world.spawn(MemberOf { mob: host, slot: 0 }).id();
 		let stranger_host = world.spawn_empty().id();
 		let stranger = world.spawn(MemberOf { mob: stranger_host, slot: 0 }).id();
-		let raw = world.spawn((TerrainSuperseded, Visibility::Hidden)).id();
 		world.run_system_once(clear_training_plaza)?;
-		assert!(world.get::<TerrainSuperseded>(raw).is_none(), "raw cells get their floor back");
-		assert_eq!(world.get::<Visibility>(raw), Some(&Visibility::Inherited));
 		assert!(world.get::<OffTerrainAnchor>(player).is_none());
 		assert_eq!(world.resource::<PlayerSpawnXz>().0, None);
 		let home = world.get::<Transform>(player).map(|t| t.translation.xz());
@@ -1091,14 +1078,13 @@ mod tests {
 		world.entity_mut(player).insert(DoomedThisFrame);
 		let host = world.spawn((TrainingBrawler, DoomedThisFrame)).id();
 		let member = world.spawn((MemberOf { mob: host, slot: 0 }, ChildOf(host))).id();
-		let raw = world.spawn((TerrainSuperseded, Visibility::Hidden, DoomedThisFrame)).id();
 
 		// Both systems see the targets alive; the despawns apply first.
 		let mut schedule = Schedule::default();
 		schedule.add_systems((despawn_doomed, clear_training_plaza).chain_ignore_deferred());
 		schedule.run(&mut world);
 
-		for entity in [player, host, member, raw] {
+		for entity in [player, host, member] {
 			assert!(world.get_entity(entity).is_err());
 		}
 		assert!(world.get_resource::<TrainingPlazaMounted>().is_none());

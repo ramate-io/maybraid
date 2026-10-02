@@ -7900,6 +7900,7 @@ dependencies = [
  "durham-terrain-models",
  "lod",
  "procedural-common",
+ "terrain-layer-model",
 ]
 
 [[package]]

@@ -8,7 +8,10 @@ mod generation;
 mod stream;
 
 pub use config::{ForestStreamSpec, VegetationLayerConfig};
-pub use generation::{VegetationGenerationPlugin, VegetationGenerationSystems};
+pub use generation::{
+	VegetationGenerationCore, VegetationGenerationPlugin, VegetationGenerationSystems,
+	VegetationModeConfig,
+};
 pub use stream::{
 	stream_canopy_bump_outs, stream_forest, stream_radii_m, DEFAULT_FOREST_NOISE,
 	DEFAULT_FOREST_STREAM_RADIUS,

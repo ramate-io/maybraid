@@ -10,7 +10,7 @@ use richmond_development_models::{
 	DevelopmentKind, PadParams,
 };
 use terrain_layer_model::{
-	GenerationModeSystems, OnTerrain, TerrainView,
+	ActiveGenerationMode, GenerationModeSystems, OnTerrain, TerrainView,
 };
 use urbanization_layer_model::{
 	UrbanizationLayerConfig, UrbanizationLayerRegion, UrbanizationScheme, UrbanizationStoreSystems,
@@ -96,13 +96,22 @@ impl UrbanizationScheme<OnTerrain<Durham>> for TrainingGround {
 				.in_set(GenerationModeSystems::<TrainingGround>::default())
 				.in_set(UrbanizationStoreSystems),
 		);
+		app.add_systems(
+			OnExit(ActiveGenerationMode::of::<TrainingGround>()),
+			clear_training_stamp,
+		);
 	}
+}
+
+fn clear_training_stamp(mut commands: Commands) {
+	commands.remove_resource::<TrainingPlazaStamped>();
+	commands.remove_resource::<TrainingStampSettled>();
 }
 
 /// Fit the round's development once the FinePatch is stored.
 ///
-/// A new map drops the previous cell here. `clear_training_plaza` drops that
-/// same id from [`TrainingPlazaStamped`] on `Last`, so the two removals name one cell.
+/// A new map drops the previous cell and stamp here. Leaving Training drops
+/// the stamp on [`OnExit`], so a later enter on the same map stamps again.
 /// A new life keeps the map, so this returns while the stamp resource is still current.
 #[allow(clippy::type_complexity)]
 fn stamp_training_urbanization(
@@ -127,6 +136,8 @@ fn stamp_training_urbanization(
 			developments.remove_cell(id);
 			let _ = developments.invalidate_dirty_padded();
 			layer.region = None;
+			commands.remove_resource::<TrainingPlazaStamped>();
+			commands.remove_resource::<TrainingStampSettled>();
 		}
 		return;
 	}
@@ -287,21 +298,30 @@ mod tests {
 	use bevy::ecs::system::RunSystemOnce;
 	use bevy::math::bounding::Aabb3d;
 	use bevy::math::{Vec2, Vec3};
-	use bevy::prelude::World;
+	use bevy::prelude::{App, MinimalPlugins, NextState, World};
+	use bevy::state::app::StatesPlugin;
 	use durham_terrain_models::{
-		BaseTerrainNoise, TerrainCellLayout, TerrainConfig, TerrainEntryStore, WorldBaseTerrain,
+		BaseTerrainNoise, Durham, TerrainCellLayout, TerrainConfig, TerrainEntryStore,
+		WorldBaseTerrain,
 	};
 	use lod::gen::Id;
 	use richmond_development_models::{
 		DEVELOPMENT_CELL_SIZE, DevelopmentCell, DevelopmentEntryStore,
 	};
-	use urbanization_layer_model::UrbanizationLayerRegion;
+	use terrain_layer_model::{
+		ActiveGenerationMode, GenerationMode, GenerationModePlugin, OnTerrain,
+	};
+	use urbanization_layer_model::{UrbanizationLayerConfig, UrbanizationLayerRegion, UrbanizationScheme};
 
 	use super::{
 		pad_influence_region, stamp_training_urbanization, training_development_cell,
 		TrainingPlazaStamped, TrainingStampSettled,
 	};
-	use crate::TrainingRound;
+	use crate::{TrainingGround, TrainingRound};
+
+	struct OtherMode;
+
+	impl GenerationMode for OtherMode {}
 
 	fn run_stamp(world: &mut World) -> anyhow::Result<()> {
 		world
@@ -397,14 +417,16 @@ mod tests {
 		run_stamp(&mut world)?;
 		anyhow::ensure!(
 			world.resource::<DevelopmentEntryStore>().cell(cell_id).is_none(),
-			"a new map removes the previous cell before the stamp resource is dropped"
+			"a new map removes the previous cell"
 		);
 		anyhow::ensure!(
-			world.resource::<TrainingPlazaStamped>().cell_id() == cell_id,
-			"the stamp resource stays until teardown clears it"
+			world.get_resource::<TrainingPlazaStamped>().is_none(),
+			"a new map drops the stamp so the next pass can restamp"
 		);
-		world.remove_resource::<TrainingPlazaStamped>();
-		world.remove_resource::<TrainingStampSettled>();
+		anyhow::ensure!(
+			world.get_resource::<TrainingStampSettled>().is_none(),
+			"a new map drops the settled marker"
+		);
 		let new_id = stamp_until_fitted(&mut world)?;
 		anyhow::ensure!(new_id != cell_id, "the new map stamps a different cell");
 		let restamped = world.resource::<DevelopmentEntryStore>().membership_revision();
@@ -420,6 +442,64 @@ mod tests {
 		let store = world.resource::<DevelopmentEntryStore>();
 		anyhow::ensure!(store.cell(new_id).is_none(), "leaving Training leaves the store empty");
 		anyhow::ensure!(store.built_at(new_id).is_none(), "leaving drops the built development");
+		Ok(())
+	}
+
+	#[test]
+	fn leaving_and_reentering_the_same_map_restamps() -> anyhow::Result<()> {
+		let mut app = App::new();
+		app.add_plugins((
+			MinimalPlugins,
+			StatesPlugin,
+			GenerationModePlugin::<TrainingGround>::initial(),
+			GenerationModePlugin::<OtherMode>::default(),
+		));
+		<TrainingGround as UrbanizationScheme<OnTerrain<Durham>>>::install(
+			&mut app,
+			&UrbanizationLayerConfig::default(),
+		);
+		app.insert_resource(TrainingRound::new(42));
+		app.insert_resource(TerrainEntryStore::default());
+		app.insert_resource(TerrainCellLayout::default());
+		app.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(
+			&TerrainConfig::new(42),
+		)));
+		app.insert_resource(DevelopmentEntryStore::default());
+		app.insert_resource(UrbanizationLayerRegion::default());
+
+		let cell_id = stamp_until_fitted(app.world_mut())?;
+		anyhow::ensure!(
+			app.world().resource::<DevelopmentEntryStore>().cell(cell_id).is_some(),
+			"the first enter stamps a courtyard"
+		);
+
+		app.world_mut()
+			.resource_mut::<NextState<ActiveGenerationMode>>()
+			.set(ActiveGenerationMode::of::<OtherMode>());
+		app.update();
+		anyhow::ensure!(
+			app.world().get_resource::<TrainingPlazaStamped>().is_none(),
+			"leaving Training drops the stamp"
+		);
+		anyhow::ensure!(
+			app.world().get_resource::<TrainingStampSettled>().is_none(),
+			"leaving Training drops the settled marker"
+		);
+		app.world_mut().resource_mut::<DevelopmentEntryStore>().clear();
+
+		app.world_mut()
+			.resource_mut::<NextState<ActiveGenerationMode>>()
+			.set(ActiveGenerationMode::of::<TrainingGround>());
+		app.update();
+		let restamped = stamp_until_fitted(app.world_mut())?;
+		anyhow::ensure!(
+			app.world().get_resource::<TrainingPlazaStamped>().is_some(),
+			"re-entering the same map stamps again"
+		);
+		anyhow::ensure!(
+			app.world().resource::<DevelopmentEntryStore>().cell(restamped).is_some(),
+			"the courtyard development is stored again"
+		);
 		Ok(())
 	}
 

@@ -241,7 +241,7 @@ fn suspended_stream_disables_bullseyes_and_clears_present_keep() -> anyhow::Resu
 }
 
 #[test]
-#[should_panic(expected = "VegetationGenerationPlugin")]
+#[should_panic(expected = "VegetationGenerationCore")]
 fn generation_without_vegetation_names_the_missing_plugin() {
 	MobGenerationPlugin::<Silent>::default().finish(&mut App::new());
 }
@@ -397,31 +397,10 @@ impl urbanization_layer_model::UrbanModel for Silent {
 		Vec::new()
 	}
 
-	fn urbanization_cell_ids(
-		_read: &bevy::ecs::system::SystemParamItem<'_, '_, Self::Read>,
-		_region: Aabb3d,
-	) -> Vec<Id> {
-		Vec::new()
-	}
-
-	fn urbanization_cell<'a>(
-		_read: &'a bevy::ecs::system::SystemParamItem<'_, '_, Self::Read>,
-		_id: Id,
-	) -> Option<&'a SelectedUrbanization> {
-		None
-	}
-
 	fn development_cell<'a>(
 		_read: &'a bevy::ecs::system::SystemParamItem<'_, '_, Self::Read>,
 		_id: Id,
 	) -> Option<&'a richmond_development_models::DevelopmentCell> {
-		None
-	}
-
-	fn built_at<'a>(
-		_read: &'a bevy::ecs::system::SystemParamItem<'_, '_, Self::Read>,
-		_id: Id,
-	) -> Option<(&'a richmond_development_models::BuiltDevelopment, lod::gen::Version)> {
 		None
 	}
 
