@@ -204,7 +204,7 @@ impl EnglishSemanticMarshaller {
 				}
 			}
 			for dependent in sentence.children(predicate.id) {
-				if is_universal_quantifier(dependent) {
+				if is_universal_quantifier(dependent) && !is_core_argument(dependent) {
 					if let Some(subject) =
 						sentence.children(predicate.id).find(|child| child.relation.is("nsubj"))
 					{
@@ -304,12 +304,10 @@ impl EnglishSemanticMarshaller {
 			return Ok(*id);
 		}
 		if is_relative_pronoun(token) {
-			if let Some(head) = token.head.and_then(|id| sentence.token(id)) {
-				if head.relation.base() == "acl" {
-					if let Some(noun) = head.head.and_then(|id| sentence.token(id)) {
-						return self.ensure_referent(noun, sentence, universe, utterance, referents);
-					}
-				}
+			if let Some(antecedent) = relative_antecedent(token, sentence) {
+				let id = self.ensure_referent(antecedent, sentence, universe, utterance, referents)?;
+				referents.insert(token.id, id);
+				return Ok(id);
 			}
 		}
 		let lemma = referent_lemma(token);
@@ -331,7 +329,7 @@ impl EnglishSemanticMarshaller {
 				}
 			}
 		}
-		if is_universal_quantified(token, sentence) {
+		if is_universal_quantifier(token) || is_universal_quantified(token, sentence) {
 			referent.number = Number::Many;
 		}
 		let id = utterance.add_referent(referent);
@@ -442,11 +440,12 @@ fn argument_head<'a>(
 	sentence: &'a DependencySentence,
 ) -> Option<&'a DependencyToken> {
 	if is_nominal(dependent)
+		|| is_universal_quantifier(dependent)
 		|| matches!(dependent.pos, UniversalPos::Adverb | UniversalPos::Adjective)
 	{
 		return Some(dependent);
 	}
-	sentence.children(dependent.id).find(|child| is_nominal(child))
+	sentence.children(dependent.id).find(|child| is_nominal(child) || is_universal_quantifier(child))
 }
 
 fn is_universal_quantifier(token: &DependencyToken) -> bool {
@@ -516,7 +515,30 @@ fn is_nominal(token: &DependencyToken) -> bool {
 }
 
 fn is_relative_pronoun(token: &DependencyToken) -> bool {
+	if token.relation.is("mark") || token.relation.is("det") {
+		return false;
+	}
 	matches!(normalize_lemma(&token.lemma).as_str(), "who" | "that" | "which" | "whom")
+}
+
+fn relative_antecedent<'a>(
+	token: &DependencyToken,
+	sentence: &'a DependencySentence,
+) -> Option<&'a DependencyToken> {
+	let head = token.head.and_then(|id| sentence.token(id))?;
+	if head.relation.base() == "acl" {
+		if let Some(noun) = head.head.and_then(|id| sentence.token(id)) {
+			if noun.id != token.id {
+				return Some(noun);
+			}
+		}
+	}
+	sentence.children(head.id).find(|sibling| {
+		sibling.id != token.id
+			&& is_core_argument(sibling)
+			&& !is_relative_pronoun(sibling)
+			&& (is_nominal(sibling) || is_universal_quantifier(sibling))
+	})
 }
 
 fn is_aux(token: &DependencyToken) -> bool {
@@ -722,8 +744,8 @@ fn referent_lemma(token: &DependencyToken) -> String {
 		"i" | "me" | "we" | "us" | "myself" => "speaker".to_owned(),
 		"you" => "listener".to_owned(),
 		"he" | "him" | "his" | "she" | "her" | "they" | "them" | "their" | "himself"
-		| "herself" | "themselves" => "person".to_owned(),
-		"it" | "its" | "itself" => "thing".to_owned(),
+		| "herself" | "themselves" | "who" | "whom" => "person".to_owned(),
+		"it" | "its" | "itself" | "that" | "which" | "all" | "both" | "every" => "thing".to_owned(),
 		other => other.to_owned(),
 	}
 }
@@ -789,8 +811,10 @@ fn resolve_concept(
 		}
 		"you" | "listener" => vec!["listener".to_owned(), "person".to_owned()],
 		"he" | "him" | "his" | "she" | "her" | "they" | "them" | "their" | "himself"
-		| "herself" | "themselves" | "person" => vec!["person".to_owned()],
-		"it" | "its" | "itself" | "thing" => vec!["thing".to_owned()],
+		| "herself" | "themselves" | "who" | "whom" | "person" => vec!["person".to_owned()],
+		"it" | "its" | "itself" | "that" | "which" | "all" | "both" | "every" | "thing" => {
+			vec!["thing".to_owned()]
+		}
 		other => {
 			let mut aliases = vec![other.to_owned()];
 			if let Some(word) = cardinal_word(other) {
@@ -1323,6 +1347,63 @@ mod tests {
 		assert!(has_role(&utterance, SemanticRole::Time));
 		assert!(has_role(&utterance, SemanticRole::Theme));
 		assert!(has_role(&utterance, SemanticRole::Goal));
+		Ok(())
+	}
+
+	#[test]
+	fn all_that_was_given_binds_that_to_all() -> Result<(), LanguageError> {
+		let doc = sentence(vec![
+			tok(1, "All", "all", UniversalPos::Determiner, 4, "nsubj:pass", ""),
+			tok(2, "that", "that", UniversalPos::Pronoun, 4, "nsubj:pass", ""),
+			tok(3, "was", "be", UniversalPos::Auxiliary, 4, "aux:pass", "Tense=Past"),
+			tok(4, "given", "give", UniversalPos::Verb, 0, "root", "Voice=Pass"),
+		]);
+		let utterance = EnglishSemanticMarshaller::default().marshal(&doc, &universe()?)?;
+		assert_eq!(utterance.referents.len(), 1);
+		assert!(has_role(&utterance, SemanticRole::Theme));
+		assert_eq!(first_clause(&utterance)?.arguments.len(), 1);
+		Ok(())
+	}
+
+	#[test]
+	fn all_that_was_given_is_gone_keeps_the_relative() -> Result<(), LanguageError> {
+		let doc = sentence(vec![
+			tok(1, "All", "all", UniversalPos::Determiner, 6, "nsubj", ""),
+			tok(2, "that", "that", UniversalPos::Pronoun, 4, "nsubj:pass", ""),
+			tok(3, "was", "be", UniversalPos::Auxiliary, 4, "aux:pass", "Tense=Past"),
+			tok(4, "given", "give", UniversalPos::Verb, 1, "acl:relcl", "Voice=Pass"),
+			tok(5, "is", "be", UniversalPos::Auxiliary, 6, "cop", "Tense=Pres"),
+			tok(6, "gone", "gone", UniversalPos::Adjective, 0, "root", ""),
+		]);
+		let utterance = EnglishSemanticMarshaller::default().marshal(&doc, &universe()?)?;
+		assert!(has_role(&utterance, SemanticRole::Theme));
+		assert!(has_role(&utterance, SemanticRole::Classification));
+		assert!(utterance.referents.values().any(|referent| !referent.relative_clauses.is_empty()));
+		assert_eq!(utterance.clauses.len(), 2);
+		Ok(())
+	}
+
+	#[test]
+	fn live_udpipe_all_that_was_given() -> Result<(), LanguageError> {
+		let Ok(parser) = crate::udpipe::UdpipeEnglishParser::bundled() else {
+			return Ok(());
+		};
+		let marshaller = EnglishSemanticMarshaller::default();
+		for text in ["All that was given", "All that was given is gone."] {
+			let document = crate::parse::EnglishDependencyParser::parse(&parser, text)?;
+			let utterance = marshaller.marshal(&document, &universe_for(&document)?)?;
+			assert!(
+				!utterance.roots.is_empty(),
+				"{text} produced no roots:\n{}",
+				document.debug_report()
+			);
+			assert!(
+				has_role(&utterance, SemanticRole::Theme)
+					|| has_role(&utterance, SemanticRole::Classification),
+				"{text} dropped its arguments:\n{}\n{utterance:#?}",
+				document.debug_report()
+			);
+		}
 		Ok(())
 	}
 
