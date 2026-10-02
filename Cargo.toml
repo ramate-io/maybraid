@@ -151,6 +151,9 @@ members = [
   "maybraid/gimme/gen",
 
   "maybraid/language/core",
+  "maybraid/language/grammars",
+  "maybraid/language/mistral",
+  "maybraid/language/cli",
 
   # general utilities
   ## sdf
@@ -400,7 +403,12 @@ gimme-core = { path = "maybraid/gimme/core" }
 gimme-gen = { path = "maybraid/gimme/gen" }
 
 maybraid-language-core = { path = "maybraid/language/core" }
+maybraid-language-grammars = { path = "maybraid/language/grammars" }
+maybraid-language-mistral = { path = "maybraid/language/mistral" }
+maybraid-language = { path = "maybraid/language/cli" }
+mistralrs = "0.8.1"
 slotmap = "1.0"
+udpipe-rs = "0.2"
 wordnet-db = "0.1.3"
 wordnet-types = "0.1.3"
 

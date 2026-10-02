@@ -15,6 +15,7 @@ default = []
 [dependencies]
 slotmap = { workspace = true }
 thiserror = { workspace = true }
+udpipe-rs = { workspace = true }
 wordnet-db = { workspace = true }
 wordnet-types = { workspace = true }
 

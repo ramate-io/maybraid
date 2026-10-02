@@ -93,6 +93,14 @@
 
             LD_LIBRARY_PATH = "${pkgs.stdenv.cc.cc.lib}/lib/";
 
+            # rustc's Darwin target always passes `-liconv`. The Nix `cc`
+            # wrapper does not reliably inject `libiconv` into rustc's own
+            # link line (and Xcode `DEVELOPER_DIR` can hide the SDK copy).
+            RUSTFLAGS = pkgs.lib.optionalString pkgs.stdenv.isDarwin
+              "-L native=${pkgs.libiconv}/lib";
+            LIBRARY_PATH = pkgs.lib.optionalString pkgs.stdenv.isDarwin
+              "${pkgs.libiconv}/lib";
+
             shellHook = ''
               #!/usr/bin/env ${pkgs.bash}
 
@@ -101,8 +109,22 @@
               # Export linker flags if on Darwin (macOS)
               if [[ "${pkgs.stdenv.hostPlatform.system}" =~ "darwin" ]]; then
                 export MACOSX_DEPLOYMENT_TARGET=$(sw_vers -productVersion)
-                export LDFLAGS="-L/opt/homebrew/opt/zlib/lib"
-                export CPPFLAGS="-I/opt/homebrew/opt/zlib/include"
+                export LDFLAGS="-L${pkgs.libiconv}/lib -L/opt/homebrew/opt/zlib/lib''${LDFLAGS:+ $LDFLAGS}"
+                export CPPFLAGS="-I/opt/homebrew/opt/zlib/include''${CPPFLAGS:+ $CPPFLAGS}"
+
+                # mistral.rs Metal kernel precompile needs `xcrun metal`.
+                # udpipe-rs compiles vendored C++ through Nix `clang++`, which
+                # does not add `-isysroot` on its own and then cannot find
+                # libc++ headers (`<cstring>`, `<cstddef>`). Prefer full Xcode
+                # over the Nix apple-sdk, which also lacks `metal`.
+                if [ -d /Applications/Xcode.app/Contents/Developer ]; then
+                  export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+                  if sdkroot="$(xcrun --sdk macosx --show-sdk-path 2>/dev/null)" && [ -d "$sdkroot" ]; then
+                    export SDKROOT="$sdkroot"
+                    export CFLAGS="-isysroot $sdkroot''${CFLAGS:+ $CFLAGS}"
+                    export CXXFLAGS="-isysroot $sdkroot -stdlib=libc++''${CXXFLAGS:+ $CXXFLAGS}"
+                  fi
+                fi
 
                 macos_blender="${macosBlenderApp}"
                 if [ ! -x "$macos_blender" ]; then
