@@ -30,6 +30,7 @@ menu-components = { workspace = true }
 menu-playground = { workspace = true }
 menu-screens = { workspace = true }
 crozon-character-persist = { workspace = true }
+terrain-layer-model = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }

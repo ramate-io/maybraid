@@ -1,217 +1,89 @@
 //! Richmond's complete development catalog on Durham terrain.
+//!
+//! Urbanization generate / present lives in `urbanization-layer-model` and
+//! `urbanization-layer-presentation`. Vegetation lives in the vegetation layer
+//! plugins. This crate is playground chrome (camera, commands, UI).
 
 pub mod camera;
 pub mod commands;
-mod development_bump_out;
-mod development_forest;
-mod hosts;
 mod ui;
-pub mod urbanization_stream;
 
 pub use camera::CameraController;
 pub use commands::{DevelopmentFocus, PlaygroundCommand, PlaygroundStartup, PLAYGROUND_CLI_NAME};
-pub use development_bump_out::{
-	DevelopmentCanopyBumpOutPresenter, DevelopmentMediumCanopyBumpOutPresenter,
-};
-pub use development_forest::DevelopmentForestPresenter;
 pub use game_commands::command::PendingStartupCommand;
-pub use urbanization_stream::{
-	parse_urbanization_kind, register_urbanization_lod, stream_radii_m, stream_urbanization,
-	UrbanSetting, UrbanizationStreamSpec, DEFAULT_URBANIZATION_NOISE,
-	DEFAULT_URBANIZATION_STREAM_RADIUS,
-};
 
-use bevy::math::{IVec2, UVec2};
+use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
-use camera::{
-	camera_controller, refocus_camera_on_layout, release_modifiers_on_focus_change, setup_camera,
-};
-use chico_forests::register_forest_lod;
-use chico_vegetation_on_terrain_playground::register_bump_out_lod;
+use camera::{camera_controller, release_modifiers_on_focus_change, setup_camera};
 use commands::{
 	RequestDevelopmentFocus, RequestLikelihood, RequestMeshStats, RequestRebuild, RequestSeed,
 	RequestTerrainRadius,
 };
-use durham_terrain::shaders::{DurhamTerrainShader, DurhamTerrainShaderPlugin, RefractionWater};
 use durham_terrain_models::{
-	terrain_streaming_enabled, AvianTerrainIndex, BaseTerrainNoise, ComposedWater,
-	DurhamTerrainModelsPlugin, JerseyStampConfigs, MarazionWatershedConfigs, Terrain,
-	TerrainCellLayout, TerrainColliderSystems, TerrainConfig, TerrainEntryStore,
-	TerrainMeshBuilder, TerrainMeshLodBand, TerrainPresentationAssets, TerrainStreamingEnabled,
-	Water, WaterPresentationAssets, WaterRegionPresenter, WaterStoreView,
+	Durham, DurhamTerrainConfig, JerseyStampConfigs, MarazionWatershedConfigs, TerrainCellLayout,
+	TerrainConfig, TerrainMeshLodBand, TerrainPresentationAssets, TerrainPresentationDirty,
+	WorldBaseTerrain,
 };
-use furniture_assemblies::{
-	FurnitureAssembliesPlugin, FurnitureStreamPlugin, FurnitureStreamSystems,
-};
-use furniture_shaders::FurnitureShadersPlugin;
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use game_commands::ui::{GameCommandDrawerConfig, GameCommandStatusText};
-use hosts::{spawn_development_hosts, DevelopmentHostRoot};
-use lod::gen::{GeneratingSpatialIndex, RegionPresenter, SpatialIndex};
-use lod::lod_ref::LodRef;
-use lod::{LodGenerateSystems, LodPresentSystems};
-use render_item::mesh::handle::EnforceCachingPlugin;
-use richmond_development_models::{
-	BuiltDevelopment, BuiltDevelopmentStoreView, DevelopmentCell, DevelopmentConfig,
-	DevelopmentEntryStore, DevelopmentIndex, PaddedStoreView, PaddedTerrainPresenter,
-	RichmondDevelopmentModelsPlugin, TerrainWithPads,
-};
-use richmond_urbanization::UrbanizationKind;
+use richmond_development_models::DevelopmentConfig;
 use std::f32::consts::PI;
-use urbanization_stream::{
-	generate_urbanization_developments, generate_urbanization_padded_terrain,
-	present_urbanization_hosts, present_urbanization_padded_terrain, sync_raw_terrain_replacements,
-	UrbanizationPaddedTerrainState,
+use terrain_layer_model::{BaseTerrainScheme, GenerationMode, OnTerrain};
+use urbanization_layer_model::{
+	install_urbanization_stream, DevelopmentFocus as LayerFocus, UrbanizationLayerConfig,
+	UrbanizationModeConfig, UrbanizationScheme,
 };
 
-/// When false, hopscotch stays off even if Durham streaming is on.
-/// Training uses this so the grounds stay a grove instead of a city.
-#[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
-pub struct UrbanizationStreamingEnabled(pub bool);
+/// Standalone playground generation mode.
+pub struct PlaygroundMode;
 
-impl Default for UrbanizationStreamingEnabled {
-	fn default() -> Self {
-		Self(true)
+impl GenerationMode for PlaygroundMode {}
+
+impl BaseTerrainScheme<Durham> for PlaygroundMode {
+	fn install(_app: &mut App, _config: &DurhamTerrainConfig) {}
+}
+
+impl UrbanizationScheme<OnTerrain<Durham>> for PlaygroundMode {
+	fn install(app: &mut App, config: &UrbanizationLayerConfig) {
+		install_urbanization_stream::<PlaygroundMode>(app, config);
 	}
 }
 
-pub fn urbanization_streaming_enabled(enabled: Res<UrbanizationStreamingEnabled>) -> bool {
-	enabled.0
-}
-
 const DEFAULT_TERRAIN_RADIUS: i32 = 2;
-/// Occupancy fill for the playground: high enough that Empty does not dominate.
-const PLAYGROUND_LIKELIHOOD: f32 = 0.9;
 
 fn playground_lod_bands(half_extent: i32) -> Vec<TerrainMeshLodBand> {
 	vec![TerrainMeshLodBand { max_radius_cells: half_extent.max(1), res_2: 5 }]
 }
 
-fn cell_layout(half_extent: i32) -> TerrainCellLayout {
-	let r = half_extent.max(1);
-	let n = (2 * r) as u32;
-	TerrainCellLayout {
-		origin: IVec2::new(-r, -r),
-		extents: UVec2::new(n, n),
-		outer_rings: Vec::new(),
-		..TerrainCellLayout::default()
-	}
-}
-
-#[derive(Resource)]
-pub struct WorldBaseTerrain(pub BaseTerrainNoise);
-
 #[derive(Resource, Clone)]
 pub struct PlaygroundConfig {
 	pub terrain_radius: i32,
-	pub focus_development: Option<DevelopmentFocus>,
-	/// Pin an urbanization kind (Hopscotch bypass), forest layering parallel.
-	pub focus_urbanization: Option<UrbanizationKind>,
-	/// When set, stream urbanization LOD around the camera instead of batch-filling the patch.
-	pub urbanization: Option<UrbanizationStreamSpec>,
 }
 
 impl Default for PlaygroundConfig {
 	fn default() -> Self {
-		Self {
-			terrain_radius: DEFAULT_TERRAIN_RADIUS,
-			focus_development: None,
-			focus_urbanization: None,
-			urbanization: None,
-		}
+		Self { terrain_radius: DEFAULT_TERRAIN_RADIUS }
 	}
 }
-
-impl PlaygroundConfig {
-	/// Stream urbanization at forest-like 1 km / 3 km rings (world assembly).
-	pub fn world_defaults() -> Self {
-		Self {
-			terrain_radius: DEFAULT_TERRAIN_RADIUS,
-			focus_development: None,
-			focus_urbanization: None,
-			urbanization: Some(UrbanizationStreamSpec::default()),
-		}
-	}
-}
-
-#[derive(Resource)]
-struct TerrainPresentationDirty(bool);
-
-#[derive(Resource, Default)]
-struct DevelopmentsGeneratePending(bool);
-
-#[derive(Resource, Default)]
-struct TerrainPresentPending(bool);
-
-#[derive(Resource, Default)]
-struct HostsDirty(bool);
 
 /// Richmond developments on Durham terrain.
 ///
-/// Set [`Self::own_terrain`] to `false` when Durham / [`TerrainEntryStore`] are
-/// already owned (e.g. by vegetation-on-terrain in maybraid-world).
+/// Assemblers add the urbanization layer plugins. This plugin keeps camera,
+/// commands, and UI.
 pub struct DevelopmentsOnTerrainPlugin {
 	pub config: PlaygroundConfig,
 	/// When false, the caller owns the command drawer / CLI.
 	pub commands: bool,
-	/// When false, skip Durham terrain plugins and patch generate/present.
-	pub own_terrain: bool,
-	/// Register the development-pad-aware forest presenter.
-	pub register_development_forest_lod: bool,
 }
 
 impl Default for DevelopmentsOnTerrainPlugin {
 	fn default() -> Self {
-		Self {
-			config: PlaygroundConfig::default(),
-			commands: true,
-			own_terrain: true,
-			register_development_forest_lod: false,
-		}
+		Self { config: PlaygroundConfig::default(), commands: true }
 	}
 }
 
 impl Plugin for DevelopmentsOnTerrainPlugin {
 	fn build(&self, app: &mut App) {
-		let playground = self.config.clone();
-		let mut development_config = DevelopmentConfig {
-			likelihood: PLAYGROUND_LIKELIHOOD,
-			// Legacy focus weights need the 300 m lattice; otherwise use urbanization leaves.
-			use_urbanization: playground.focus_development.is_none(),
-			..DevelopmentConfig::from_world_seed(42)
-		};
-		if let Some(focus) = playground.focus_development {
-			focus.apply(&mut development_config);
-		}
-
-		if self.own_terrain {
-			app.add_plugins(DurhamTerrainModelsPlugin)
-				.add_plugins(DurhamTerrainShaderPlugin)
-				.add_plugins(
-					EnforceCachingPlugin::<TerrainMeshBuilder, DurhamTerrainShader>::default(),
-				)
-				.add_plugins(EnforceCachingPlugin::<ComposedWater, RefractionWater>::default());
-		}
-
-		app.add_plugins(RichmondDevelopmentModelsPlugin);
-		if !app.is_plugin_added::<FurnitureShadersPlugin>() {
-			app.add_plugins(FurnitureShadersPlugin);
-		}
-		if !app.is_plugin_added::<FurnitureAssembliesPlugin>() {
-			app.add_plugins(FurnitureAssembliesPlugin);
-		}
-		if !app.is_plugin_added::<FurnitureStreamPlugin>() {
-			app.add_plugins(FurnitureStreamPlugin);
-		}
-		register_urbanization_lod(app);
-		if self.register_development_forest_lod {
-			register_forest_lod::<DevelopmentForestPresenter>(app);
-			register_bump_out_lod::<
-				DevelopmentCanopyBumpOutPresenter,
-				DevelopmentMediumCanopyBumpOutPresenter,
-			>(app);
-		}
-
 		if self.commands {
 			app.add_plugins(
 				GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config())
@@ -221,102 +93,21 @@ impl Plugin for DevelopmentsOnTerrainPlugin {
 						..default()
 					}),
 			);
+			app.insert_resource(ClearColor(Color::hsla(201.0, 0.69, 0.62, 1.0)))
+				.add_systems(Startup, (setup_camera, setup_lighting))
+				.add_systems(
+					Update,
+					(
+						release_modifiers_on_focus_change.before(camera_controller),
+						camera_controller,
+						apply_commands.after(capture_command_line_input::<PlaygroundCommand>),
+						apply_mesh_stats,
+						ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
+					),
+				);
 		}
 
-		app.insert_resource(ClearColor(Color::hsla(201.0, 0.69, 0.62, 1.0)))
-			.insert_resource(playground.clone())
-			.insert_resource(development_config)
-			.init_resource::<DevelopmentsGeneratePending>()
-			.init_resource::<TerrainPresentPending>()
-			.init_resource::<HostsDirty>()
-			.init_resource::<UrbanizationPaddedTerrainState>();
-
-		if self.own_terrain {
-			let config = TerrainConfig::new(42);
-			let base = BaseTerrainNoise::from_config(&config);
-			let layout = cell_layout(playground.terrain_radius);
-			app.insert_resource(config.clone())
-				.insert_resource(WorldBaseTerrain(base))
-				.insert_resource(layout)
-				.insert_resource(TerrainPresentationDirty(true))
-				.add_systems(Startup, (setup_camera, setup_lighting, setup_presentation_assets));
-		}
-
-		if self.own_terrain {
-			app.configure_sets(Update, FurnitureStreamSystems::Generate.after(spawn_hosts));
-			app.add_systems(
-				Update,
-				(
-					release_modifiers_on_focus_change.before(camera_controller),
-					camera_controller,
-					apply_commands.after(capture_command_line_input::<PlaygroundCommand>),
-					generate_terrain.after(apply_commands),
-					generate_developments.after(generate_terrain),
-					present_cells.after(generate_developments),
-					spawn_hosts.after(present_cells),
-					apply_mesh_stats.after(present_cells),
-					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
-				),
-			);
-		}
-
-		if !app.world().contains_resource::<TerrainStreamingEnabled>() {
-			app.init_resource::<TerrainStreamingEnabled>();
-		}
-		if !app.world().contains_resource::<UrbanizationStreamingEnabled>() {
-			app.init_resource::<UrbanizationStreamingEnabled>();
-		}
-		#[allow(private_interfaces)]
-		app.configure_sets(
-			Update,
-			FurnitureStreamSystems::Generate.after(generate_urbanization_developments),
-		);
-		// The pin stays ungated: other readers of `UrbanizationIndex` (world mobs)
-		// select cells before terrain streaming starts, and must see the spec noise.
-		app.add_systems(
-			Update,
-			sync_urbanization_pin
-				.before(stream_urbanization)
-				.before(LodGenerateSystems::Produce),
-		);
-		// Stream and present still run while urbanization is off so a session
-		// that turns it off (Training) tears the urbanized terrain and hosts down
-		// instead of freezing them in place as a second terrain model.
-		app.add_systems(
-			Update,
-			(
-				stream_urbanization.before(LodGenerateSystems::Produce),
-				(
-					generate_urbanization_developments.after(LodGenerateSystems::Drain),
-					generate_urbanization_padded_terrain,
-					present_urbanization_hosts,
-				)
-					.chain()
-					.run_if(urbanization_streaming_enabled),
-				present_urbanization_padded_terrain,
-				sync_raw_terrain_replacements,
-			)
-				.chain()
-				.run_if(terrain_streaming_enabled)
-				.before(LodPresentSystems::Produce)
-				.before(TerrainColliderSystems::QueueMeshes),
-		);
-	}
-}
-
-fn sync_urbanization_pin(
-	playground: Res<PlaygroundConfig>,
-	mut urbanization: ResMut<richmond_urbanization::UrbanizationIndex>,
-	mut development: ResMut<DevelopmentConfig>,
-) {
-	if let Some(spec) = playground.urbanization.as_ref() {
-		urbanization.kind = spec.kind.or(playground.focus_urbanization);
-		urbanization.noise = spec.noise;
-		development.use_urbanization = true;
-		development.seed = spec.noise.seed.max(0) as u32;
-	} else if let Some(kind) = playground.focus_urbanization {
-		urbanization.kind = Some(kind);
-		development.use_urbanization = true;
+		app.insert_resource(self.config.clone());
 	}
 }
 
@@ -332,54 +123,49 @@ fn setup_lighting(mut commands: Commands) {
 	));
 }
 
-fn setup_presentation_assets(
-	mut commands: Commands,
-	mut terrain_materials: ResMut<Assets<DurhamTerrainShader>>,
-	mut water_materials: ResMut<Assets<RefractionWater>>,
-	config: Res<TerrainConfig>,
-	playground: Res<PlaygroundConfig>,
-) {
-	let material = terrain_materials.add(DurhamTerrainShader::default());
-	commands.insert_resource(TerrainPresentationAssets {
-		config: config.clone(),
-		material,
-		lod_bands: playground_lod_bands(playground.terrain_radius),
-		outer_add_walls: true,
-		fine_grid_max_radius: Some(playground.terrain_radius),
-		macro_seam_half_extents: Vec::new(),
-		macro_cell_min_size: None,
-		macro_res_2: None,
-	});
-	commands.insert_resource(WaterPresentationAssets {
-		material: water_materials.add(RefractionWater::default()),
-	});
+#[derive(SystemParam)]
+struct ApplyCommandStores<'w> {
+	playground: ResMut<'w, PlaygroundConfig>,
+	layout: ResMut<'w, TerrainCellLayout>,
+	assets: ResMut<'w, TerrainPresentationAssets>,
+	config: ResMut<'w, TerrainConfig>,
+	jersey: ResMut<'w, JerseyStampConfigs>,
+	marazion: ResMut<'w, MarazionWatershedConfigs>,
+	world_base: ResMut<'w, WorldBaseTerrain>,
+	development: ResMut<'w, DevelopmentConfig>,
+	urban: ResMut<'w, UrbanizationModeConfig<PlaygroundMode>>,
+	dirty: ResMut<'w, TerrainPresentationDirty>,
+	status: ResMut<'w, GameCommandStatusText>,
 }
 
-#[allow(clippy::too_many_arguments)]
 fn apply_commands(
 	mut commands: Commands,
-	mut playground: ResMut<PlaygroundConfig>,
-	mut layout: ResMut<TerrainCellLayout>,
-	mut assets: ResMut<TerrainPresentationAssets>,
-	mut config: ResMut<TerrainConfig>,
-	mut jersey: ResMut<JerseyStampConfigs>,
-	mut marazion: ResMut<MarazionWatershedConfigs>,
-	mut world_base: ResMut<WorldBaseTerrain>,
-	mut development: ResMut<DevelopmentConfig>,
-	mut dirty: ResMut<TerrainPresentationDirty>,
-	mut status: ResMut<GameCommandStatusText>,
+	mut stores: ApplyCommandStores,
 	seeds: Query<(Entity, &RequestSeed)>,
 	likelihoods: Query<(Entity, &RequestLikelihood)>,
 	focuses: Query<(Entity, &RequestDevelopmentFocus)>,
 	radii: Query<(Entity, &RequestTerrainRadius)>,
 	rebuild: Query<Entity, With<RequestRebuild>>,
 ) {
+	let ApplyCommandStores {
+		playground,
+		layout,
+		assets,
+		config,
+		jersey,
+		marazion,
+		world_base,
+		development,
+		urban,
+		dirty,
+		status,
+	} = &mut stores;
 	for (entity, request) in &seeds {
 		config.seed = request.0;
 		assets.config.seed = request.0;
-		*jersey = JerseyStampConfigs::from_world_seed(request.0);
-		*marazion = MarazionWatershedConfigs::default().with_seed(request.0);
-		world_base.0 = BaseTerrainNoise::from_config(&config);
+		**jersey = JerseyStampConfigs::from_world_seed(request.0);
+		**marazion = MarazionWatershedConfigs::default().with_seed(request.0);
+		world_base.0 = durham_terrain_models::BaseTerrainNoise::from_config(config);
 		development.seed = request.0;
 		dirty.0 = true;
 		status.0 = format!("seed {} (regen)", request.0);
@@ -392,9 +178,10 @@ fn apply_commands(
 		commands.entity(entity).despawn();
 	}
 	for (entity, request) in &focuses {
-		request.0.apply(&mut development);
-		playground.focus_development = (request.0 != DevelopmentFocus::All).then_some(request.0);
-		development.use_urbanization = playground.focus_development.is_none();
+		request.0.apply(development);
+		urban.config.focus_development = (request.0 != LayerFocus::All).then_some(request.0);
+		development.use_urbanization =
+			urban.config.urbanization.is_some() || urban.config.focus_development.is_none();
 		dirty.0 = true;
 		status.0 = format!("focus-development {} (regen)", request.0);
 		commands.entity(entity).despawn();
@@ -402,7 +189,12 @@ fn apply_commands(
 	for (entity, request) in &radii {
 		let cells = request.0.max(1);
 		playground.terrain_radius = cells;
-		*layout = cell_layout(cells);
+		let r = cells.max(1);
+		let n = (2 * r) as u32;
+		layout.origin = bevy::math::IVec2::new(-r, -r);
+		layout.extents = bevy::math::UVec2::new(n, n);
+		layout.outer_rings.clear();
+		layout.stream_rings.clear();
 		assets.lod_bands = playground_lod_bands(cells);
 		assets.fine_grid_max_radius = Some(cells);
 		dirty.0 = true;
@@ -414,193 +206,6 @@ fn apply_commands(
 		status.0 = "rebuild".into();
 		commands.entity(entity).despawn();
 	}
-}
-
-fn generate_terrain(
-	mut terrain_index: AvianTerrainIndex,
-	mut dirty: ResMut<TerrainPresentationDirty>,
-	mut pending_dev: ResMut<DevelopmentsGeneratePending>,
-	mut world_base: ResMut<WorldBaseTerrain>,
-	mut cameras: Query<(&mut Transform, &mut CameraController), With<Camera3d>>,
-	playground: Res<PlaygroundConfig>,
-) {
-	if !dirty.0 {
-		return;
-	}
-
-	terrain_index.clear();
-
-	let layout = terrain_index.layout().clone();
-	let region = layout.request_region();
-	let identity = Transform::IDENTITY;
-	let lod_ref = LodRef {
-		entity: Entity::PLACEHOLDER,
-		previous_transform: &identity,
-		current_transform: &identity,
-		bounds: &region,
-	};
-
-	let terrains = GeneratingSpatialIndex::<Terrain>::get_or_generate_region(
-		&mut terrain_index,
-		region,
-		&lod_ref,
-	);
-	let waters = GeneratingSpatialIndex::<Water>::get_or_generate_region(
-		&mut terrain_index,
-		region,
-		&lod_ref,
-	);
-	info!("generated terrain_cells={} water_cells={}", terrains.len(), waters.len());
-
-	if let Some(base) = terrain_index.base_noise() {
-		world_base.0 = base.clone();
-	}
-
-	if let Ok((mut transform, mut controller)) = cameras.single_mut() {
-		refocus_camera_on_layout(&layout, &world_base.0, &mut transform, &mut controller);
-	}
-
-	dirty.0 = false;
-	// Stream mode owns development generation via urbanization LOD.
-	if playground.urbanization.is_none() {
-		pending_dev.0 = true;
-	}
-}
-
-fn generate_developments(
-	mut development_index: DevelopmentIndex,
-	mut pending_dev: ResMut<DevelopmentsGeneratePending>,
-	mut pending: ResMut<TerrainPresentPending>,
-	mut hosts_dirty: ResMut<HostsDirty>,
-	playground: Res<PlaygroundConfig>,
-) {
-	if !pending_dev.0 || playground.urbanization.is_some() {
-		return;
-	}
-
-	development_index.clear();
-	if let Some(kind) = playground.focus_urbanization {
-		development_index.urbanization.kind = Some(kind);
-	}
-	development_index.urbanization.noise = development_index.config().urbanization_noise();
-
-	let layout = development_index.layout().clone();
-	let region = layout.request_region();
-	let identity = Transform::IDENTITY;
-	let lod_ref = LodRef {
-		entity: Entity::PLACEHOLDER,
-		previous_transform: &identity,
-		current_transform: &identity,
-		bounds: &region,
-	};
-
-	let cells = GeneratingSpatialIndex::<DevelopmentCell>::get_or_generate_region(
-		&mut development_index,
-		region,
-		&lod_ref,
-	);
-	let padded = GeneratingSpatialIndex::<TerrainWithPads>::get_or_generate_region(
-		&mut development_index,
-		region,
-		&lod_ref,
-	);
-	let developments = GeneratingSpatialIndex::<BuiltDevelopment>::get_or_generate_region(
-		&mut development_index,
-		region,
-		&lod_ref,
-	);
-	info!(
-		"generated development_cells={} padded={} developments={}",
-		cells.len(),
-		padded.len(),
-		developments.len(),
-	);
-
-	pending_dev.0 = false;
-	pending.0 = true;
-	hosts_dirty.0 = true;
-}
-
-fn present_cells(
-	mut padded_presenter: PaddedTerrainPresenter,
-	mut water_presenter: WaterRegionPresenter,
-	terrain_store: Res<TerrainEntryStore>,
-	dev_store: Res<DevelopmentEntryStore>,
-	layout: Res<TerrainCellLayout>,
-	mut pending: ResMut<TerrainPresentPending>,
-) {
-	if !pending.0 {
-		return;
-	}
-
-	padded_presenter.clear_presented();
-	water_presenter.clear_presented();
-
-	let region = layout.request_region();
-	let identity = Transform::IDENTITY;
-	let lod_ref = LodRef {
-		entity: Entity::PLACEHOLDER,
-		previous_transform: &identity,
-		current_transform: &identity,
-		bounds: &region,
-	};
-
-	let padded_view = PaddedStoreView::new(&dev_store);
-	RegionPresenter::<TerrainWithPads, _>::present(
-		&mut padded_presenter,
-		&padded_view,
-		region,
-		&lod_ref,
-	);
-	let padded_wanted = SpatialIndex::<TerrainWithPads>::tracked_ids_for(&padded_view, region)
-		.into_iter()
-		.map(|tracked| tracked.0)
-		.collect();
-	padded_presenter.remove_stale(&padded_wanted);
-
-	let water_view = WaterStoreView::new(&terrain_store, &layout);
-	RegionPresenter::<Water, _>::present(&mut water_presenter, &water_view, region, &lod_ref);
-	let water_wanted = SpatialIndex::<Water>::tracked_ids_for(&water_view, region)
-		.into_iter()
-		.map(|tracked| tracked.0)
-		.collect();
-	water_presenter.remove_stale(&water_wanted);
-
-	pending.0 = false;
-}
-
-fn spawn_hosts(
-	mut commands: Commands,
-	store: Res<DevelopmentEntryStore>,
-	layout: Res<TerrainCellLayout>,
-	mut dirty: ResMut<HostsDirty>,
-	pending: Res<TerrainPresentPending>,
-	terrain_dirty: Res<TerrainPresentationDirty>,
-	roots: Query<Entity, With<DevelopmentHostRoot>>,
-	playground: Res<PlaygroundConfig>,
-) {
-	if playground.urbanization.is_some() {
-		return;
-	}
-	if !dirty.0 || pending.0 || terrain_dirty.0 {
-		return;
-	}
-
-	for entity in &roots {
-		commands.entity(entity).despawn();
-	}
-
-	let region = layout.request_region();
-	let view = BuiltDevelopmentStoreView::new(&store);
-	let mut n = 0usize;
-	for tracked in SpatialIndex::<BuiltDevelopment>::tracked_ids_for(&view, region) {
-		let Some(dev) = SpatialIndex::<BuiltDevelopment>::get(&view, tracked.0) else {
-			continue;
-		};
-		n += spawn_development_hosts(&mut commands, dev);
-	}
-	info!("spawned {n} development host roots");
-	dirty.0 = false;
 }
 
 fn apply_mesh_stats(
@@ -645,7 +250,18 @@ fn apply_mesh_stats(
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use durham_terrain_models::{origin_cell_ids_for_layout, TERRAIN_CELL_SIZE};
+	use bevy::math::{IVec2, UVec2};
+	use durham_terrain_models::{origin_cell_ids_for_layout, TerrainCellLayout, TERRAIN_CELL_SIZE};
+
+	fn cell_layout(half_extent: i32) -> TerrainCellLayout {
+		let r = half_extent.max(1);
+		TerrainCellLayout {
+			origin: IVec2::new(-r, -r),
+			extents: UVec2::new((2 * r) as u32, (2 * r) as u32),
+			outer_rings: Vec::new(),
+			..TerrainCellLayout::default()
+		}
+	}
 
 	#[test]
 	fn default_patch_is_two_cell_radius() {
@@ -660,12 +276,47 @@ mod tests {
 	}
 
 	#[test]
-	fn world_defaults_enable_urbanization_stream() {
-		let config = PlaygroundConfig::world_defaults();
-		assert!(config.urbanization.is_some());
-		assert_eq!(
-			config.urbanization.map(|s| s.stream_radius),
-			Some(DEFAULT_URBANIZATION_STREAM_RADIUS)
+	fn focus_command_edits_the_mode_config() -> anyhow::Result<()> {
+		use bevy::ecs::system::RunSystemOnce;
+		use durham_terrain_models::BaseTerrainNoise;
+		use urbanization_layer_model::DevelopmentFocus;
+
+		let mut app = App::new();
+		app.insert_resource(PlaygroundConfig::default());
+		app.insert_resource(TerrainCellLayout::default());
+		app.insert_resource(TerrainPresentationAssets {
+			config: TerrainConfig::new(42),
+			material: Handle::default(),
+			lod_bands: Vec::new(),
+			outer_add_walls: true,
+			fine_grid_max_radius: Some(DEFAULT_TERRAIN_RADIUS),
+			macro_seam_half_extents: Vec::new(),
+			macro_cell_min_size: None,
+			macro_res_2: None,
+		});
+		app.insert_resource(TerrainConfig::new(42));
+		app.insert_resource(JerseyStampConfigs::from_world_seed(42));
+		app.insert_resource(MarazionWatershedConfigs::default());
+		app.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(
+			&TerrainConfig::new(42),
+		)));
+		app.insert_resource(DevelopmentConfig::default());
+		app.insert_resource(UrbanizationModeConfig::<PlaygroundMode>::new(
+			UrbanizationLayerConfig::default(),
+		));
+		app.insert_resource(TerrainPresentationDirty(false));
+		app.insert_resource(GameCommandStatusText::default());
+		app.world_mut()
+			.spawn(RequestDevelopmentFocus(DevelopmentFocus::LesHalles));
+		app.world_mut()
+			.run_system_once(apply_commands)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let urban = app.world().resource::<UrbanizationModeConfig<PlaygroundMode>>();
+		anyhow::ensure!(
+			urban.config.focus_development == Some(DevelopmentFocus::LesHalles),
+			"focus command writes the playground mode config, got {:?}",
+			urban.config.focus_development
 		);
+		Ok(())
 	}
 }

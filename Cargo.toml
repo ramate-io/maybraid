@@ -42,6 +42,15 @@ members = [
   "maybraid/durham/jersey",
   "maybraid/durham/marazion",
 
+  "maybraid/layers/terrain/model",
+  "maybraid/layers/terrain/presentation",
+  "maybraid/layers/urbanization/model",
+  "maybraid/layers/urbanization/presentation",
+  "maybraid/layers/vegetation/model",
+  "maybraid/layers/vegetation/presentation",
+  "maybraid/layers/mobs/model",
+  "maybraid/layers/mobs/presentation",
+
   "maybraid/lod/lib",
   "maybraid/lod/avian",
   "maybraid/lod/gimme",
@@ -287,8 +296,16 @@ scene-ref = { path = "maybraid/scene-ref" }
 visual-geometry-core = { path = "maybraid/visual-geometry-core" }
 material-ref = { path = "maybraid/material-ref" }
 terrain-chunk-ref = { path = "maybraid/terrain-chunk-ref" }
-
 avian3d = "0.7"
+
+terrain-layer-model = { path = "maybraid/layers/terrain/model" }
+terrain-layer-presentation = { path = "maybraid/layers/terrain/presentation" }
+urbanization-layer-model = { path = "maybraid/layers/urbanization/model" }
+urbanization-layer-presentation = { path = "maybraid/layers/urbanization/presentation" }
+vegetation-layer-model = { path = "maybraid/layers/vegetation/model" }
+vegetation-layer-presentation = { path = "maybraid/layers/vegetation/presentation" }
+mob-layer-model = { path = "maybraid/layers/mobs/model" }
+mob-layer-presentation = { path = "maybraid/layers/mobs/presentation" }
 
 lod = { path = "maybraid/lod/lib" }
 lod-avian = { path = "maybraid/lod/avian" }

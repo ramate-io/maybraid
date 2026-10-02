@@ -5,11 +5,10 @@
 //! render-only at `res_2 = 4` and `3`. Far / Background holes inset so Medium
 //! overlaps the next-finer High rim. Generation admits a bounded number of
 //! missing origin ids per frame. Playable visuals come from the urbanized
-//! presenter. This plugin generates Durham on every coverage; raw present is
-//! FinePatch-only (`present: true`).
+//! presenter. Generation runs on every coverage. Raw present is
+//! [`crate::DurhamCells`], gated by the presenter subscription.
 
-use std::marker::PhantomData;
-
+use bevy::ecs::system::SystemParam;
 use bevy::math::{IVec2, UVec2};
 use bevy::prelude::*;
 use durham_terrain::shaders::{DurhamTerrainShader, DurhamTerrainShaderPlugin, RefractionWater};
@@ -32,13 +31,24 @@ use crate::terrain::config::TerrainConfig;
 use crate::terrain::index::AvianTerrainIndex;
 use crate::terrain::presentation::{
 	TerrainBackground, TerrainFar, TerrainMeshLodBand, TerrainNear, TerrainPresentationAssets,
-	TerrainRegionPresenter, TerrainStoreView, TerrainStreamPresenterState,
+	TerrainPresenterState, TerrainRegionPresenter, TerrainStoreView, TerrainStreamPresenterState,
 };
+use terrain_layer_model::{mode_subscribed, ModeSubscription, OnTerrain};
+use terrain_layer_presentation::TerrainPresenter;
 use crate::water::{ComposedWater, Water, WaterPresentationAssets};
 use crate::{DurhamTerrainModelsPlugin, Terrain, TerrainMeshBuilder};
 
 /// Composed Durham SDF / CpuShot terrain model.
 pub struct Durham;
+
+/// Raw Durham cells. Present while a mode is subscribed to `(OnTerrain<Durham>, Self)`.
+pub struct DurhamCells;
+
+impl TerrainPresenter<OnTerrain<Durham>> for DurhamCells {
+	fn install(app: &mut App) {
+		install_durham_presentation(app);
+	}
+}
 
 /// Near-stream High half-extent (8 × 160 m = 1.28 km).
 pub const WORLD_FINE_HALF_EXTENT_CELLS: i32 = 8;
@@ -74,11 +84,11 @@ pub enum TerrainCoverage {
 }
 
 /// When true, [`generate_cells`] keeps the current origin instead of recentering
-/// on the viewer. Training Ground pins a seeded FinePatch this way.
+/// on the viewer. A pinned fine patch uses this so the window stays put.
 #[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct TerrainLayoutPinned(pub bool);
 
-/// Durham fill. Session retargets run before [`Self::Generate`].
+/// Durham fill. Layout retargets run before [`Self::Generate`].
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum TerrainFillSystems {
 	Generate,
@@ -89,19 +99,8 @@ pub enum TerrainFillSystems {
 pub struct WorldBaseTerrain(pub BaseTerrainNoise);
 
 /// When true, fill should clear and rebuild (playground radius / seed commands).
-#[derive(Resource)]
+#[derive(Resource, Default)]
 pub struct TerrainPresentationDirty(pub bool);
-
-/// When false, Durham generate runs but this plugin does not present raw
-/// terrain or seed raw [`crate::terrain::Terrain::scene`] colliders.
-#[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
-pub struct TerrainPresentEnabled(pub bool);
-
-impl Default for TerrainPresentEnabled {
-	fn default() -> Self {
-		Self(true)
-	}
-}
 
 /// Whether terrain fill and dependent vegetation streams may advance.
 ///
@@ -178,21 +177,18 @@ fn world_cell_layout() -> TerrainCellLayout {
 	layout
 }
 
-/// Playable Discovery rings (near / far / background).
+/// Playable-world rings (near / far / background).
 pub fn playable_world_cell_layout() -> TerrainCellLayout {
 	world_cell_layout()
 }
 
-/// Four 160 m cells on a side, fixed on the origin. Training presents this
-/// patch instead of the playable-world rings.
-pub fn training_grounds_cell_layout() -> TerrainCellLayout {
-	training_grounds_cell_layout_at(IVec2::ZERO)
-}
-
-/// [`training_grounds_cell_layout`] centered on the cell corner `center`.
-pub fn training_grounds_cell_layout_at(center: IVec2) -> TerrainCellLayout {
-	let mut layout = cell_layout(2);
-	layout.origin += center;
+/// Fine-only grid whose minimum corner is `origin`.
+///
+/// Extents are `2 * half_extent` cells on each axis (at least one cell).
+/// No stream rings.
+pub fn fine_patch_cell_layout(half_extent: i32, origin: IVec2) -> TerrainCellLayout {
+	let mut layout = cell_layout(half_extent);
+	layout.origin = origin;
 	layout
 }
 
@@ -231,104 +227,126 @@ pub fn retarget_presentation_assets(
 	assets.macro_res_2 = macro_res_2;
 }
 
-/// Streamed terrain stack for model `M` (currently [`Durham`]).
-pub struct TerrainPlugin<M> {
-	_marker: PhantomData<fn() -> M>,
-	pub seed: u32,
-	pub coverage: TerrainCoverage,
-	pub terrain_radius: i32,
-	/// Raw Durham present + raw collider seed. Playable world leaves this off
-	/// so urbanized terrain is the only presented model.
-	pub present: bool,
+/// Layout, coverage, pin, dirty, pending, and presentation assets for a retarget.
+///
+/// Assets are created on Startup; a first-frame enter can run before they exist.
+#[derive(SystemParam)]
+pub struct TerrainRetarget<'w> {
+	layout: ResMut<'w, TerrainCellLayout>,
+	coverage: ResMut<'w, TerrainCoverage>,
+	pinned: ResMut<'w, TerrainLayoutPinned>,
+	dirty: ResMut<'w, TerrainPresentationDirty>,
+	pending: ResMut<'w, TerrainPresentPending>,
+	assets: Option<ResMut<'w, TerrainPresentationAssets>>,
 }
 
-impl TerrainPlugin<Durham> {
-	pub fn fine_patch(terrain_radius: i32) -> Self {
-		Self {
-			_marker: PhantomData,
-			seed: 42,
-			coverage: TerrainCoverage::FinePatch,
-			terrain_radius: terrain_radius.max(1),
-			present: true,
-		}
+impl TerrainRetarget<'_> {
+	pub fn coverage(&self) -> TerrainCoverage {
+		*self.coverage
 	}
 
-	pub fn playable_world() -> Self {
-		Self {
-			_marker: PhantomData,
-			seed: 42,
-			coverage: TerrainCoverage::PlayableWorld,
-			terrain_radius: WORLD_FINE_HALF_EXTENT_CELLS,
-			present: false,
+	pub fn layout(&self) -> &TerrainCellLayout {
+		&self.layout
+	}
+
+	pub fn apply(
+		&mut self,
+		layout: TerrainCellLayout,
+		coverage: TerrainCoverage,
+		terrain_radius: i32,
+		pin: bool,
+	) {
+		*self.layout = layout;
+		*self.coverage = coverage;
+		self.pinned.0 = pin;
+		self.dirty.0 = true;
+		self.pending.0 = true;
+		if let Some(assets) = self.assets.as_mut() {
+			retarget_presentation_assets(assets, coverage, terrain_radius);
 		}
 	}
 }
 
-impl Default for TerrainPlugin<Durham> {
-	fn default() -> Self {
-		Self::fine_patch(2)
+/// Generation half of the old Durham terrain plugin: models, shaders, mesh
+/// caches, layout, and [`generate_cells`].
+///
+/// `setup_presentation_assets` stays here. The terrain index reads
+/// [`TerrainPresentationAssets`] and [`WaterPresentationAssets`] while filling
+/// cells, and a live session retargets the terrain assets even when raw present is off.
+pub(crate) fn install_durham_generation(
+	app: &mut App,
+	seed: u32,
+	coverage: TerrainCoverage,
+	terrain_radius: i32,
+) {
+	let config = TerrainConfig::new(seed);
+	let base = BaseTerrainNoise::from_config(&config);
+	let terrain_radius = terrain_radius.max(1);
+
+	if !app.is_plugin_added::<VisualGeometryCorePlugin>() {
+		app.add_plugins(VisualGeometryCorePlugin);
 	}
+	if !app.is_plugin_added::<DurhamTerrainModelsPlugin>() {
+		app.add_plugins(DurhamTerrainModelsPlugin);
+	}
+	if !app.is_plugin_added::<DurhamTerrainShaderPlugin>() {
+		app.add_plugins(DurhamTerrainShaderPlugin);
+	}
+	install_enforced_mesh_cache::<TerrainMeshBuilder, DurhamTerrainShader>(app);
+	share_terrain_chunk_refs::<TerrainMeshBuilder>(app, false);
+	install_enforced_mesh_cache::<ComposedWater, RefractionWater>(app);
+
+	let layout = layout_for(coverage, terrain_radius);
+	app.insert_resource(
+		MeshFulfillBudget::<TerrainMeshBuilder>::new(8, 16, 256)
+			.with_prefer_xz(layout.region_center_xz()),
+	)
+	.insert_resource(config)
+	.insert_resource(WorldBaseTerrain(base))
+	.insert_resource(coverage)
+	.insert_resource(layout)
+	.insert_resource(TerrainFillParams { coverage, terrain_radius })
+	.init_resource::<TerrainPresentationDirty>()
+	.init_resource::<TerrainPresentPending>()
+	.init_resource::<TerrainStreamingEnabled>()
+	.init_resource::<TerrainLayoutPinned>()
+	.add_systems(Startup, setup_presentation_assets)
+	.add_systems(
+		Update,
+		generate_cells
+			.in_set(TerrainFillSystems::Generate)
+			.run_if(terrain_streaming_enabled)
+			.before(TerrainColliderSystems::QueueMeshes),
+	);
 }
 
-impl Plugin for TerrainPlugin<Durham> {
-	fn build(&self, app: &mut App) {
-		let config = TerrainConfig::new(self.seed);
-		let base = BaseTerrainNoise::from_config(&config);
-		let coverage = self.coverage;
-		let terrain_radius = self.terrain_radius.max(1);
-
-		if !app.is_plugin_added::<VisualGeometryCorePlugin>() {
-			app.add_plugins(VisualGeometryCorePlugin);
-		}
-		if !app.is_plugin_added::<DurhamTerrainModelsPlugin>() {
-			app.add_plugins(DurhamTerrainModelsPlugin);
-		}
-		if !app.is_plugin_added::<DurhamTerrainShaderPlugin>() {
-			app.add_plugins(DurhamTerrainShaderPlugin);
-		}
-		install_enforced_mesh_cache::<TerrainMeshBuilder, DurhamTerrainShader>(app);
-		share_terrain_chunk_refs::<TerrainMeshBuilder>(app, false);
-		install_enforced_mesh_cache::<ComposedWater, RefractionWater>(app);
-
-		let layout = layout_for(coverage, terrain_radius);
-		app.insert_resource(
-			MeshFulfillBudget::<TerrainMeshBuilder>::new(8, 16, 256)
-				.with_prefer_xz(layout.region_center_xz()),
-		)
-		.insert_resource(config)
-		.insert_resource(WorldBaseTerrain(base))
-		.insert_resource(coverage)
-		.insert_resource(layout)
-		.insert_resource(TerrainFillParams { coverage, terrain_radius })
-		.insert_resource(TerrainPresentationDirty(true))
-		.insert_resource(TerrainPresentEnabled(self.present))
-		.init_resource::<TerrainPresentPending>()
-		.init_resource::<TerrainStreamingEnabled>()
-		.init_resource::<TerrainLayoutPinned>()
+/// Raw Durham present: the three stream presenter states and [`present_cells`].
+pub(crate) fn install_durham_presentation(app: &mut App) {
+	app.init_resource::<TerrainPresenterState>()
 		.init_resource::<TerrainStreamPresenterState<TerrainNear>>()
 		.init_resource::<TerrainStreamPresenterState<TerrainFar>>()
 		.init_resource::<TerrainStreamPresenterState<TerrainBackground>>()
-		.add_systems(Startup, setup_presentation_assets)
 		.add_systems(
-			Update,
-			generate_cells
-				.in_set(TerrainFillSystems::Generate)
-				.run_if(terrain_streaming_enabled)
-				.before(TerrainColliderSystems::QueueMeshes),
-		);
-		app.add_systems(
 			Update,
 			present_cells
 				.after(generate_cells)
 				.before(TerrainColliderSystems::QueueMeshes)
 				.run_if(terrain_streaming_enabled)
-				.run_if(terrain_present_enabled),
-		);
-	}
+				.run_if(mode_subscribed::<(OnTerrain<Durham>, DurhamCells)>()),
+		)
+		.add_systems(Update, clear_unsubscribed_terrain_present);
 }
 
-fn terrain_present_enabled(enabled: Res<TerrainPresentEnabled>) -> bool {
-	enabled.0
+fn clear_unsubscribed_terrain_present(
+	subscription: ModeSubscription<(OnTerrain<Durham>, DurhamCells)>,
+	mut was_subscribed: Local<bool>,
+	mut commands: Commands,
+	mut state: ResMut<TerrainPresenterState>,
+) {
+	if *was_subscribed && !subscription.active() {
+		state.clear(&mut commands);
+	}
+	*was_subscribed = subscription.active();
 }
 
 #[derive(Resource, Clone, Copy)]
@@ -629,14 +647,8 @@ mod tests {
 	}
 
 	#[test]
-	fn playable_world_disables_raw_presentation() {
-		assert!(!TerrainPlugin::<Durham>::playable_world().present);
-		assert!(TerrainPlugin::<Durham>::fine_patch(2).present);
-	}
-
-	#[test]
-	fn training_patch_is_a_pinned_four_cell_fine_grid() {
-		let layout = training_grounds_cell_layout();
+	fn fine_patch_is_a_four_cell_grid() {
+		let layout = fine_patch_cell_layout(2, IVec2::new(-2, -2));
 		assert!(!layout.is_streamed());
 		assert_eq!(layout.extents, UVec2::new(4, 4));
 		assert_eq!(layout.origin, IVec2::new(-2, -2));
@@ -644,14 +656,14 @@ mod tests {
 	}
 
 	#[test]
-	fn training_patch_centers_on_its_site() {
-		let site = IVec2::new(7, -3);
-		let layout = training_grounds_cell_layout_at(site);
-		assert_eq!(layout.origin, site - IVec2::splat(2));
+	fn fine_patch_sits_on_its_origin() {
+		let origin = IVec2::new(5, -5);
+		let layout = fine_patch_cell_layout(2, origin);
+		assert_eq!(layout.origin, origin);
 		assert_eq!(layout.extents, UVec2::new(4, 4));
 		let center = layout.region_center_xz();
-		assert!((center.x - 7.0 * layout.cell_size).abs() < 1e-3);
-		assert!((center.z + 3.0 * layout.cell_size).abs() < 1e-3);
+		assert!((center.x - (origin.x + 2) as f32 * layout.cell_size).abs() < 1e-3);
+		assert!((center.z - (origin.y + 2) as f32 * layout.cell_size).abs() < 1e-3);
 	}
 
 	#[test]

@@ -25,6 +25,8 @@ comproc = { workspace = true }
 noise = { workspace = true }
 log = { workspace = true }
 terrain-chunk-ref = { workspace = true }
+terrain-layer-model = { workspace = true }
+terrain-layer-presentation = { workspace = true }
 visual-geometry-core = { workspace = true }
 
 [dev-dependencies]

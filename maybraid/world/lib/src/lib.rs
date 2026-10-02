@@ -4,7 +4,8 @@
 //! selection generate. Canopy bump-outs occupy the 1–5 km present keep and
 //! clone Durham fine-cell mesh handles. Vegetation LOD bullseye / lattice
 //! cover the grove fill ring. Urbanization hopscotch streams at the same
-//! 1 km / 3 km rings without re-registering Durham (`TerrainPlugin` owns terrain).
+//! 1 km / 3 km rings without re-registering Durham (base terrain generation owns
+//! the fill; raw present is a separate plugin, off until Training).
 //! Painted furniture is a generate pass over Richmond High slots, presented as
 //! flattened 50 m cell hosts in a neighborhood around the camera.
 
@@ -14,7 +15,6 @@ mod control;
 mod crate_loot;
 mod intelligence;
 mod material_lib;
-mod mobs;
 mod pitch;
 mod player_lifecycle;
 mod player_position;
@@ -27,6 +27,7 @@ mod training_plaza;
 mod ui;
 mod vsync;
 mod weapon;
+mod world_layers;
 
 pub use chico_vegetation_on_terrain_playground::{PlayerPhysicsEnabled, PlayerSpawnXz};
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
@@ -43,7 +44,6 @@ pub use maybraid_sky::{
 	ShadowQuality, SkyClock, SkyCommand, SKY_BLUE, SKY_CLEAR, SKY_HORIZON, SKY_NADIR, SKY_ZENITH,
 	SUN_COLOR, SUN_ILLUMINANCE,
 };
-pub use mobs::WorldMobsPlugin;
 pub use player_camera::{CameraPov, CameraPovLocked};
 pub use player_lifecycle::{WorldPlayerLifecyclePlugin, WorldPlayerRespawnConfig};
 pub use player_position::{
@@ -58,25 +58,25 @@ pub use stash::{
 	spawn_exploded_stashes, spawn_world_stash, StashDisplayedItem, StashPolicy, WorldStash,
 	WorldStashPlugin, WorldStashSettings, DEFAULT_CLAIM_RADIUS, DEFAULT_LOOT_SECS,
 };
-pub use training::{TrainingGrounds, TrainingLifeEnded, TrainingMap, TrainingRound};
+pub use training::{training_trainee, TrainingLifeEnded};
 pub use training_markers::TrainingEnemyMarkersEnabled;
 pub use training_plaza::TrainingPlazaMounted;
 pub use ui::WorldMobHudEnabled;
 pub use vsync::{default_window_present_mode, RequestVsyncToggle, VSYNC_TOGGLE_KEY};
 pub use weapon::WorldPlayerLoadout;
+pub use world_layers::WorldLayersPlugin;
 
 use avian3d::prelude::{CoefficientCombine, Friction};
 use bevy::prelude::*;
 use chico_vegetation_on_terrain_playground::{
-	CharacterCameraFollowEnabled, CharacterLocomotion, CharacterSpecies, PadMovementEnabled,
-	PlayerControlSystems, PlaygroundConfig as VegetationPlaygroundConfig, PlaygroundDiag,
-	PlaygroundMode, PlaygroundTimingPlugin, RequestSetCharacter, VegetationOnTerrainPlugin,
-	VegetationPlayerMotor,
+	CharacterCameraFollowEnabled, CharacterLocomotion, CharacterSpecies, MeshStatsPlugin,
+	PadMovementEnabled, PlayerControlSystems, PlaygroundDiag, PlaygroundMode,
+	PlaygroundTimingPlugin, RequestSetCharacter, VegetationHostPlugin, VegetationPlayerMotor,
 };
 use combat_hud::CombatHudPlugin;
 use crozon_character_ragdoll::{CharacterRagdollPlugin, CharacterRagdollTargets};
 use crozon_characters::{CharacterMotionSystems, DrawTerrainPitchProbes};
-use durham_terrain_models::{Durham, TerrainFrictionConfig, TerrainPlugin};
+use durham_terrain_models::TerrainFrictionConfig;
 use furniture_shaders::FurnitureShadersPlugin;
 use game_commands::command::{GameCommandPlugin, TextEntryFocus};
 use game_commands::ui::GameCommandDrawerConfig;
@@ -90,10 +90,6 @@ use player::{
 	register_motor_traction_physics, PlayerPlugin, PlayerPresentationPlugin, PlayerSystems,
 };
 use player_camera::{PlayerCameraPlugin, PlayerCameraSystems};
-use richmond_building_physics::BuildingWalkColliderPlugin;
-use richmond_developments_on_terrain_playground::{
-	DevelopmentsOnTerrainPlugin, PlaygroundConfig as DevelopmentsPlaygroundConfig,
-};
 
 /// Steepest slope the controlled character can drive uphill.
 const WORLD_MAX_SLOPE_ANGLE: f32 = 70.0_f32.to_radians();
@@ -161,7 +157,6 @@ impl Plugin for WorldPlugin {
 			.insert_resource(WORLD_TERRAIN_PITCH_GIZMOS)
 			.add_plugins(FurnitureShadersPlugin)
 			.add_plugins(WorldMaterialRefPlugin)
-			.add_plugins(TerrainPlugin::<Durham>::playable_world())
 			.add_plugins(VirtualPadPlugin::new(VirtualPadConfig {
 				debug_overlay: self.input_debug_enabled,
 				..default()
@@ -170,28 +165,11 @@ impl Plugin for WorldPlugin {
 			.add_plugins(PlayerPresentationPlugin)
 			.add_plugins(PlayerCameraPlugin)
 			.add_plugins(WORLD_COMBAT_HUD)
-			.add_plugins(VegetationOnTerrainPlugin {
-				config: VegetationPlaygroundConfig::world_defaults(),
-				commands: false,
-				register_forest_lod: false,
-				register_bump_out_lod: false,
-				register_camera: false,
-				register_terrain_pitch: false,
-				own_terrain: false,
-			})
+			.add_plugins(VegetationHostPlugin { register_camera: false })
+			.add_plugins(MeshStatsPlugin)
 			.insert_resource(CharacterRagdollTargets { players: true, npcs: true, unmarked: false })
 			.add_plugins(CharacterRagdollPlugin)
-			// Urbanization stream only — `TerrainPlugin` already owns Durham / TerrainEntryStore.
-			.add_plugins(DevelopmentsOnTerrainPlugin {
-				config: DevelopmentsPlaygroundConfig::world_defaults(),
-				commands: false,
-				own_terrain: false,
-				register_development_forest_lod: true,
-			});
-		if !app.is_plugin_added::<BuildingWalkColliderPlugin>() {
-			app.add_plugins(BuildingWalkColliderPlugin);
-		}
-		app.add_plugins(WorldMobsPlugin)
+			.add_plugins(WorldLayersPlugin)
 			.add_plugins(WorldIntelligencePlugin)
 			.add_plugins(WeatherPlugin)
 			.add_plugins(SkillMapPlugin)

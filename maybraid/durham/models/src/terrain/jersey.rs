@@ -20,7 +20,7 @@
 //!
 //! Modules:
 //! - [`configs`] — universal dual-band cut + stamp + likelihood params
-//! - [`shared`] — offset grids, cut helpers, leaf discovery, occupancy
+//! - [`shared`] — offset grids, cut helpers, leaf lookup, occupancy
 //! - [`plateau`] / [`massif`] / [`canyon`] / [`pocket_water`] / [`rolling`] /
 //!   [`valley`] — independent family stacks
 

@@ -5,7 +5,6 @@ use crate::terrain::collider::{
 	drop_superseded_terrain_colliders, queue_terrain_trimesh_colliders, TerrainColliderEpoch,
 	TerrainColliderSystems, TerrainFrictionConfig,
 };
-use crate::terrain::host::TerrainPresentEnabled;
 use crate::terrain::index::TerrainEntryStore;
 use crate::terrain::jersey::{JerseyControllerLayouts, JerseyStampConfigs};
 use crate::terrain::marazion::{
@@ -46,7 +45,6 @@ impl Plugin for TerrainResourcesPlugin {
 		let pre_pocket_low = bootstrap_pre_pocket_low_pass_layout(&marazion);
 		let pre_pocket_high = bootstrap_pre_pocket_high_pass_layout(&marazion);
 		app.init_resource::<TerrainEntryStore>()
-			.init_resource::<TerrainPresentEnabled>()
 			.init_resource::<TerrainCellLayout>()
 			.init_resource::<JerseyStampConfigs>()
 			.init_resource::<JerseyControllerLayouts>()

@@ -2389,26 +2389,14 @@ dependencies = [
  "anyhow",
  "avian3d",
  "bevy",
- "chico-bumpout",
- "chico-forests",
- "chico-groves",
  "chico-vegetation-components",
- "chico-vegetation-shaders",
  "clap",
  "crozon-characters",
- "durham-terrain",
  "durham-terrain-models",
  "game-commands",
- "ground-avian",
  "lod",
  "lod-avian",
- "lod-cascade",
- "log",
- "material-ref",
  "maybraid-input",
- "procedural-common",
- "render-item",
- "terrain-chunk-ref",
 ]
 
 [[package]]
@@ -3250,6 +3238,8 @@ dependencies = [
  "render-item",
  "sdf",
  "terrain-chunk-ref",
+ "terrain-layer-model",
+ "terrain-layer-presentation",
  "visual-geometry-core",
 ]
 
@@ -4875,6 +4865,7 @@ dependencies = [
  "menu-playground",
  "menu-screens",
  "tempfile",
+ "terrain-layer-model",
 ]
 
 [[package]]
@@ -4913,7 +4904,12 @@ dependencies = [
 name = "maybraid-game-mode-discover"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "bevy",
+ "durham-terrain-models",
+ "mob-layer-model",
+ "terrain-layer-model",
+ "urbanization-layer-model",
 ]
 
 [[package]]
@@ -4927,7 +4923,20 @@ dependencies = [
 name = "maybraid-game-mode-training-ground"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "bevy",
+ "crozon-characters",
+ "durham-terrain-models",
+ "lod",
+ "maybraid-mobs",
+ "mob-characters",
+ "mob-groups",
+ "mob-layer-model",
+ "mob-layer-presentation",
+ "richmond-development-models",
+ "terrain-layer-model",
+ "threat-intelligence",
+ "urbanization-layer-model",
 ]
 
 [[package]]
@@ -5055,10 +5064,11 @@ dependencies = [
  "intelligence-lod",
  "lod",
  "lod-avian",
- "lod-gimme",
  "log",
  "material-ref",
  "maybraid-character-controller",
+ "maybraid-game-mode-discover",
+ "maybraid-game-mode-training-ground",
  "maybraid-input",
  "maybraid-mobs",
  "maybraid-skill-map",
@@ -5066,8 +5076,9 @@ dependencies = [
  "maybraid-weather",
  "meandering-intelligence",
  "mob-characters",
- "mob-groups",
  "mob-intelligence",
+ "mob-layer-model",
+ "mob-layer-presentation",
  "movement-intelligence",
  "movement-intelligence-avian",
  "movement-realization",
@@ -5081,17 +5092,22 @@ dependencies = [
  "richmond-building-shaders",
  "richmond-buildings",
  "richmond-development-models",
- "richmond-developments-on-terrain-playground",
  "richmond-urbanization",
  "routing-intelligence",
  "serde",
  "serde_json",
  "spotting-intelligence",
  "tempfile",
+ "terrain-layer-model",
+ "terrain-layer-presentation",
  "tether-intelligence",
  "threat-intelligence",
  "threat-intelligence-damage",
  "threat-management-intelligence",
+ "urbanization-layer-model",
+ "urbanization-layer-presentation",
+ "vegetation-layer-model",
+ "vegetation-layer-presentation",
 ]
 
 [[package]]
@@ -5284,6 +5300,45 @@ dependencies = [
  "threat-intelligence",
  "threat-intelligence-damage",
  "threat-management-intelligence",
+]
+
+[[package]]
+name = "mob-layer-model"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "chico-forests",
+ "durham-terrain-models",
+ "lod",
+ "maybraid-mobs",
+ "mob-groups",
+ "procedural-common",
+ "render-item",
+ "richmond-development-models",
+ "richmond-urbanization",
+ "terrain-layer-model",
+ "urbanization-layer-model",
+ "vegetation-layer-model",
+]
+
+[[package]]
+name = "mob-layer-presentation"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "durham-terrain-models",
+ "lod",
+ "lod-gimme",
+ "maybraid-mobs",
+ "mob-groups",
+ "mob-intelligence",
+ "mob-layer-model",
+ "richmond-development-models",
+ "richmond-urbanization",
+ "terrain-layer-model",
+ "urbanization-layer-model",
 ]
 
 [[package]]
@@ -6969,6 +7024,7 @@ dependencies = [
  "richmond-developments",
  "richmond-urbanization",
  "scene-ref",
+ "terrain-layer-model",
 ]
 
 [[package]]
@@ -6991,9 +7047,6 @@ dependencies = [
  "anyhow",
  "avian3d",
  "bevy",
- "chico-forests",
- "chico-groves",
- "chico-vegetation-on-terrain-playground",
  "clap",
  "durham-terrain",
  "durham-terrain-models",
@@ -7001,16 +7054,17 @@ dependencies = [
  "furniture-shaders",
  "game-commands",
  "lod",
- "lod-cascade",
  "log",
  "procedural-common",
- "render-item",
  "richmond-building-components",
  "richmond-buildings",
  "richmond-development-models",
  "richmond-developments",
  "richmond-urbanization",
- "terrain-chunk-ref",
+ "terrain-layer-model",
+ "terrain-layer-presentation",
+ "urbanization-layer-model",
+ "urbanization-layer-presentation",
 ]
 
 [[package]]
@@ -7603,6 +7657,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "terrain-layer-model"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "lod",
+]
+
+[[package]]
+name = "terrain-layer-presentation"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "lod",
+ "terrain-layer-model",
+]
+
+[[package]]
 name = "tether-intelligence"
 version = "0.1.0"
 dependencies = [
@@ -7977,6 +8050,38 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ebc1c04c71510c7f702b52b7c350734c9ff1295c464a03335b00bb84fc54f853"
 
 [[package]]
+name = "urbanization-layer-model"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "durham-terrain-models",
+ "lod",
+ "procedural-common",
+ "richmond-development-models",
+ "richmond-urbanization",
+ "terrain-layer-model",
+]
+
+[[package]]
+name = "urbanization-layer-presentation"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "durham-terrain-models",
+ "furniture-assemblies",
+ "furniture-shaders",
+ "lod",
+ "richmond-building-physics",
+ "richmond-development-models",
+ "richmond-urbanization",
+ "terrain-layer-model",
+ "terrain-layer-presentation",
+ "urbanization-layer-model",
+]
+
+[[package]]
 name = "utf8_iter"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8022,6 +8127,43 @@ name = "vec_map"
 version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f1bddf1187be692e79c5ffeab891132dfb0f236ed36a43c7ed39f1165ee20191"
+
+[[package]]
+name = "vegetation-layer-model"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "chico-forests",
+ "durham-terrain-models",
+ "lod",
+ "procedural-common",
+ "terrain-layer-model",
+]
+
+[[package]]
+name = "vegetation-layer-presentation"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "chico-bumpout",
+ "chico-forests",
+ "chico-groves",
+ "chico-vegetation-shaders",
+ "durham-terrain-models",
+ "lod",
+ "lod-cascade",
+ "material-ref",
+ "procedural-common",
+ "render-item",
+ "richmond-development-models",
+ "richmond-urbanization",
+ "terrain-chunk-ref",
+ "terrain-layer-model",
+ "urbanization-layer-model",
+ "vegetation-layer-model",
+]
 
 [[package]]
 name = "version_check"
