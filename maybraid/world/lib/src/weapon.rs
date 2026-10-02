@@ -1,7 +1,7 @@
 //! Starter held kit for the vegetation player capsule.
 
 use bevy::prelude::*;
-use chico_vegetation_on_terrain_playground::{
+use world_player::{
 	CharacterSpecies, Player as VegetationPlayer, PlayerVisual as VegetationPlayerVisual,
 	PlaygroundMode, RequestSetCharacter, RequestSetCharacterAppearance,
 };
@@ -328,7 +328,7 @@ pub(crate) fn configure(app: &mut App) {
 mod tests {
 	use bevy::ecs::system::RunSystemOnce;
 	use bevy::prelude::*;
-	use chico_vegetation_on_terrain_playground::{
+	use world_player::{
 		Player as VegetationPlayer, PlayerVisual as VegetationPlayerVisual, PlaygroundMode,
 		RequestSetCharacterAppearance,
 	};

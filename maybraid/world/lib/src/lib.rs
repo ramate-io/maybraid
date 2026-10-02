@@ -29,13 +29,13 @@ mod vsync;
 mod weapon;
 mod world_layers;
 
-pub use chico_vegetation_on_terrain_playground::{PlayerPhysicsEnabled, PlayerSpawnXz};
+pub use world_player::{PlayerPhysicsEnabled, PlayerSpawnXz};
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use control::{
 	InventoryEditCameraFollow, WorldGameplayEnabled, WorldSceneryVisible, WorldSurfaceReady,
 	WorldSurfaceSet,
 };
-pub use durham_terrain_models::{terrain_streaming_enabled, TerrainStreamingEnabled};
+pub use durham::{terrain_streaming_enabled, TerrainStreamingEnabled};
 pub use game_commands::command::PendingStartupCommand;
 pub use intelligence::WorldIntelligencePlugin;
 pub use lod::LodJobCounter;
@@ -68,7 +68,7 @@ pub use world_layers::WorldLayersPlugin;
 
 use avian3d::prelude::{CoefficientCombine, Friction};
 use bevy::prelude::*;
-use chico_vegetation_on_terrain_playground::{
+use world_player::{
 	CharacterCameraFollowEnabled, CharacterLocomotion, CharacterSpecies, MeshStatsPlugin,
 	PadMovementEnabled, PlayerControlSystems, PlaygroundDiag, PlaygroundMode,
 	PlaygroundTimingPlugin, RequestSetCharacter, VegetationHostPlugin, VegetationPlayerMotor,
@@ -76,7 +76,7 @@ use chico_vegetation_on_terrain_playground::{
 use combat_hud::CombatHudPlugin;
 use crozon_character_ragdoll::{CharacterRagdollPlugin, CharacterRagdollTargets};
 use crozon_characters::{CharacterMotionSystems, DrawTerrainPitchProbes};
-use durham_terrain_models::TerrainFrictionConfig;
+use durham::TerrainFrictionConfig;
 use furniture_shaders::FurnitureShadersPlugin;
 use game_commands::command::{GameCommandPlugin, TextEntryFocus};
 use game_commands::ui::GameCommandDrawerConfig;

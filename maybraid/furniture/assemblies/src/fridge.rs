@@ -3,7 +3,7 @@
 use crate::palette::{enamel, hardware};
 use crate::Assembly;
 use furniture_components::{run_slab, slab, PartKind, PlacedPart};
-use richmond_building_components::FurnitureGeometry;
+use building_components::FurnitureGeometry;
 use std::f32::consts::PI;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

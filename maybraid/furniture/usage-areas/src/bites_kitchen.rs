@@ -2,7 +2,7 @@
 
 use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec3;
-use richmond_building_components::{FurnitureAbutment, FurnitureNode, FurnitureUsageNode};
+use building_components::{FurnitureAbutment, FurnitureNode, FurnitureUsageNode};
 
 use crate::region::{
 	along_is_x, along_span, cut_from_wall, depth_span, floor_height_aabb, longest_wall,
@@ -22,7 +22,7 @@ const BASIN: Vec3 = Vec3::new(0.82, 0.32, 0.64);
 const FAUCET: Vec3 = Vec3::new(0.24, 0.44, 0.22);
 const COOKWARE: Vec3 = Vec3::new(0.42, 0.26, 0.42);
 
-/// Expand a [`FurnitureUsage::BitesKitchen`](richmond_building_components::FurnitureUsage::BitesKitchen) remainder.
+/// Expand a [`FurnitureUsage::BitesKitchen`](building_components::FurnitureUsage::BitesKitchen) remainder.
 pub struct BitesKitchenUsage;
 
 impl BitesKitchenUsage {
@@ -227,7 +227,7 @@ fn leftover_chest(region: &Aabb3d, node: &FurnitureUsageNode) -> Vec<FurnitureNo
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use richmond_building_components::{FurnitureGeometry, Placement};
+	use building_components::{FurnitureGeometry, Placement};
 
 	fn kitchen_node(min: Vec3, max: Vec3) -> FurnitureUsageNode {
 		let host = Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(10.0, 3.5, 8.0));

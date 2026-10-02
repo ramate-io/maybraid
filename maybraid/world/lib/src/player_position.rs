@@ -6,15 +6,15 @@ use std::time::Duration;
 use avian3d::prelude::{LinearVelocity, Position};
 use bevy::prelude::*;
 use bevy::time::common_conditions::on_timer;
-use chico_vegetation_on_terrain_playground::Player;
-use chico_vegetation_on_terrain_playground::player::{holding_elevation, player_spawn_point_at};
+use world_player::Player;
+use world_player::player::{holding_elevation, player_spawn_point_at};
 use crozon_character_persist::{CharacterId, PersistError, SaveRoot};
-use durham_terrain_models::{TerrainCellLayout, WorldBaseTerrain, terrain_streaming_enabled};
+use durham::{TerrainCellLayout, WorldBaseTerrain, terrain_streaming_enabled};
 use player_camera::FollowCamera;
 use serde::{Deserialize, Serialize};
 
 use maybraid_game_mode_training_ground::TrainingGround;
-use terrain_layer_model::ActiveGenerationMode;
+use layer_stack::ActiveGenerationMode;
 
 use crate::{PlayerSpawnXz, WorldPlayerLoadout};
 
@@ -220,7 +220,7 @@ fn log_player_position(players: Query<&Transform, With<Player>>) {
 }
 
 fn retain_player_waypoints(
-	streaming: Res<durham_terrain_models::TerrainStreamingEnabled>,
+	streaming: Res<durham::TerrainStreamingEnabled>,
 	mode: Option<Res<State<ActiveGenerationMode>>>,
 	save_root: Res<SaveRoot>,
 	loadout: Option<Res<WorldPlayerLoadout>>,
@@ -338,7 +338,7 @@ mod tests {
 		let id = CharacterId(7);
 		let mut world = World::new();
 		world.insert_resource(root.clone());
-		world.insert_resource(durham_terrain_models::TerrainStreamingEnabled(true));
+		world.insert_resource(durham::TerrainStreamingEnabled(true));
 		world.insert_resource(State::new(ActiveGenerationMode::of::<TrainingGround>()));
 		world.insert_resource(PlayerPositionWaypoints::default());
 		world.insert_resource(crate::WorldPlayerLoadout::new(
@@ -347,7 +347,7 @@ mod tests {
 			crozon_character_items::Inventory::default(),
 		));
 		world.spawn((
-			chico_vegetation_on_terrain_playground::Player,
+			world_player::Player,
 			Transform::from_xyz(3.0, 4.0, 5.0),
 		));
 		world
@@ -365,7 +365,7 @@ mod tests {
 		let id = CharacterId(9);
 		let mut world = World::new();
 		world.insert_resource(root.clone());
-		world.insert_resource(durham_terrain_models::TerrainStreamingEnabled(false));
+		world.insert_resource(durham::TerrainStreamingEnabled(false));
 		world.insert_resource(PlayerPositionWaypoints::default());
 		world.insert_resource(crate::WorldPlayerLoadout::new(
 			id.to_hex(),
@@ -373,7 +373,7 @@ mod tests {
 			crozon_character_items::Inventory::default(),
 		));
 		world.spawn((
-			chico_vegetation_on_terrain_playground::Player,
+			world_player::Player,
 			Transform::from_xyz(3.0, 4.0, 5.0),
 		));
 		world

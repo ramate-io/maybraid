@@ -17,7 +17,7 @@
 //! `kit_to_unit.compose_child(unit)` before applying the slot placement.
 
 use bevy::math::Vec3;
-use richmond_building_components::Placement;
+use building_components::Placement;
 
 /// Authored box kit after remap: plan \(X,Z \in [-1, 1]\), \(Y \in [0, 1]\).
 pub const BOX_KIT_MIN: Vec3 = Vec3::new(-1.0, 0.0, -1.0);

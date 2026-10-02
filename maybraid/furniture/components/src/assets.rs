@@ -4,7 +4,7 @@
 //! in `maybraid/art/furniture/` (skip `.blend1`). Export scene 0 into these
 //! paths. Authored space is documented in [`crate::kit_space`].
 
-use richmond_building_components::AssetPath;
+use building_components::AssetPath;
 
 /// Bed frame kit (`X,Y \in [-1,1]\), \(Z \in [0,1]\)` in Blender).
 pub const BEDFRAME_001: AssetPath = AssetPath::new("furniture/bed/bedframe/bedframe_001.glb");

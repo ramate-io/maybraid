@@ -6,7 +6,7 @@ use std::f32::consts::{FRAC_PI_2, PI};
 use crate::palette::{carcass, lacquer, mix_seed};
 use crate::Assembly;
 use furniture_components::{shift, slab, PartKind, PlacedPart};
-use richmond_building_components::FurnitureGeometry;
+use building_components::FurnitureGeometry;
 
 const TOP_Y0: f32 = 0.88;
 const APRON_Y0: f32 = 0.76;

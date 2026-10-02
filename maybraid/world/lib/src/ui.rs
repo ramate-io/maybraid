@@ -3,7 +3,7 @@ use bevy::text::FontSize;
 use damage::Downed;
 use evasion_intelligence::{EvasionActuator, EvasionIntelligenceUser};
 use game_commands::ui::{GameCommandStatusText, GameCommandUiConfig};
-use maybraid_mobs::{MobKind, MobScene, DEFAULT_MOB_HIGH_RADIUS};
+use mob_scenes::{MobKind, MobScene, DEFAULT_MOB_HIGH_RADIUS};
 use player::Npc;
 use threat_management_intelligence::{ThreatManagementIntelligence, ThreatTactic};
 

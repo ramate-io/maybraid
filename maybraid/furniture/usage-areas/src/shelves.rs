@@ -2,7 +2,7 @@
 
 use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec3;
-use richmond_building_components::{FurnitureAbutment, FurnitureNode};
+use building_components::{FurnitureAbutment, FurnitureNode};
 
 use crate::bites_seating::BitesSeatingUsage;
 use crate::region::{floor_height_aabb, stamp_make};
@@ -237,7 +237,7 @@ fn clamp_grid(n_x: usize, n_z: usize, max: usize) -> (usize, usize) {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use richmond_building_components::FurnitureGeometry;
+	use building_components::FurnitureGeometry;
 
 	#[test]
 	fn huge_hall_tiles_aisles_not_one_row() {

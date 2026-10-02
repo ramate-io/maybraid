@@ -1,6 +1,6 @@
 //! Map a stamped Richmond slot to a painted assembly, when a kit exists.
 
-use richmond_building_components::{FurnitureGeometry, FurnitureNode};
+use building_components::{FurnitureGeometry, FurnitureNode};
 
 use crate::basin::BasinParams;
 use crate::bed::BedParams;
@@ -61,9 +61,9 @@ pub fn posed_assembly(node: &FurnitureNode) -> Option<Vec<PlacedPart>> {
 }
 
 /// Thin wall just past the kit \(+Z\) face (already aimed at [`FurnitureNode::abutment`]).
-pub fn abutment_wall(node: &FurnitureNode) -> Option<richmond_building_components::Placement> {
+pub fn abutment_wall(node: &FurnitureNode) -> Option<building_components::Placement> {
 	node.abutment?;
-	Some(node.placement.compose_child(richmond_building_components::Placement {
+	Some(node.placement.compose_child(building_components::Placement {
 		translation: bevy::math::Vec3::new(0.0, 0.0, 0.52),
 		yaw: 0.0,
 		pitch: 0.0,
@@ -75,7 +75,7 @@ pub fn abutment_wall(node: &FurnitureNode) -> Option<richmond_building_component
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use richmond_building_components::{FurnitureAbutment, Placement};
+	use building_components::{FurnitureAbutment, Placement};
 
 	#[test]
 	fn painted_kinds_fill_and_others_do_not() -> anyhow::Result<()> {

@@ -2,7 +2,7 @@
 
 use bevy::ecs::query::Has;
 use bevy::prelude::*;
-use chico_vegetation_on_terrain_playground::{Jumping as VegetationJumping, Player};
+use world_player::{Jumping as VegetationJumping, Player};
 use crozon_characters::{
 	apply_terrain_pitch, ApplyTerrainPitch, CharacterHeading, SuspendTerrainPitch, TerrainPitch,
 };

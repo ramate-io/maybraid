@@ -10,11 +10,11 @@ use movement_intelligence_richmond::{
 	circulation_from_stairwell, circulation_from_storey, CirculationStairwell,
 };
 use procedural_common::NoiseParams;
-use richmond_building_components::{building_bounds, spawn_building_components};
-use richmond_building_physics::{spawn_building_walk_colliders, BUILDING_FRICTION};
-use richmond_buildings::wall_demo::TerrainPerimeterWall;
-use richmond_buildings::{Confines, Fit, FitError, Openings};
-use richmond_developments::MixedUseLesHallesDevelopment;
+use building_components::{building_bounds, spawn_building_components};
+use building_physics::{spawn_building_walk_colliders, BUILDING_FRICTION};
+use buildings::wall_demo::TerrainPerimeterWall;
+use buildings::{Confines, Fit, FitError, Openings};
+use urbanization_developments::MixedUseLesHallesDevelopment;
 
 pub use pad::{spawn_pad, ArenaPad};
 

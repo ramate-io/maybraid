@@ -15,8 +15,8 @@ path = "src/main.rs"
 
 [dependencies]
 bevy = { workspace = true }
-durham-terrain = { workspace = true }
-durham-terrain-models = { workspace = true }
+terrain-shaders = { workspace = true }
+durham = { workspace = true }
 crozon-characters = { workspace = true }
 ground-avian = { workspace = true }
 lod = { workspace = true }

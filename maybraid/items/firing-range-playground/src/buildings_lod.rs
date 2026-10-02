@@ -7,11 +7,11 @@ use lod::{
 };
 use lod_gimme::{GimmeLodSceneCullPlugin, GimmeLodSceneRefreshPlugin};
 use player::register_motor_traction_physics;
-use richmond_building_components::{
+use building_components::{
 	ComponentsOnly, DoorNode, FloorNode, FurnitureNode, JointNode, LabelNode, PanelNode,
 	PartitionNode, RoofNode, StairNode,
 };
-use richmond_buildings::{ConnectingStairwell, MixedUseLesHallesStorey, PitchedRoof};
+use buildings::{ConnectingStairwell, MixedUseLesHallesStorey, PitchedRoof};
 
 /// Shared produce domain for bullseye and spotlight building refresh.
 #[derive(Debug, Clone, Copy, Default)]

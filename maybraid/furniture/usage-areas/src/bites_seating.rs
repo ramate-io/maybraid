@@ -2,8 +2,8 @@
 
 use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec3;
-use richmond_building_components::furniture::abutment::local_scale_for_yaw;
-use richmond_building_components::{FurnitureNode, FurnitureUsageNode, Placement};
+use building_components::furniture::abutment::local_scale_for_yaw;
+use building_components::{FurnitureNode, FurnitureUsageNode, Placement};
 
 use crate::region::{along_is_x, along_span, floor_height_aabb, stamp_make};
 
@@ -14,7 +14,7 @@ const CHAIR_GAP: f32 = 0.20;
 const CELL: f32 = 3.8;
 const MAX_TABLES: usize = 8;
 
-/// Expand a [`FurnitureUsage::BitesSeating`](richmond_building_components::FurnitureUsage::BitesSeating) pocket.
+/// Expand a [`FurnitureUsage::BitesSeating`](building_components::FurnitureUsage::BitesSeating) pocket.
 pub struct BitesSeatingUsage;
 
 impl BitesSeatingUsage {
@@ -197,7 +197,7 @@ fn spare_chairs(region: &Aabb3d, node: &FurnitureUsageNode) -> Vec<FurnitureNode
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use richmond_building_components::{FurnitureGeometry, Placement};
+	use building_components::{FurnitureGeometry, Placement};
 
 	fn seating_node(min: Vec3, max: Vec3) -> FurnitureUsageNode {
 		let host = Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(16.0, 3.5, 12.0));

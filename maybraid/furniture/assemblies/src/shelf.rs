@@ -3,7 +3,7 @@
 use crate::palette::carcass;
 use crate::Assembly;
 use furniture_components::{run_slab, PartKind, PlacedPart};
-use richmond_building_components::FurnitureGeometry;
+use building_components::FurnitureGeometry;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ShelfParams {

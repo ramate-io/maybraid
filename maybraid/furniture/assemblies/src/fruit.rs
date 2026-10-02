@@ -3,7 +3,7 @@
 use crate::palette::{mix_seed, produce};
 use crate::Assembly;
 use furniture_components::{slab, PartKind, PlacedPart};
-use richmond_building_components::FurnitureGeometry;
+use building_components::FurnitureGeometry;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct FruitParams {

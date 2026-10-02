@@ -9,7 +9,7 @@ use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_host_scene_pending;
 use lod::lod_ref::LodRef;
 use lod::SceneChunk;
-use richmond_building_components::{
+use building_components::{
 	pose, scene_children, FurnitureNode, FLATTENED_KIT_CHUNK_WEIGHT,
 };
 
@@ -57,7 +57,7 @@ fn marked_assembly(
 		.iter()
 		.map(|part| Box::new(furniture_part_scene(part, finish_seed, slot)) as Box<dyn Scene>)
 		.collect();
-	richmond_building_components::scene_children(children)
+	building_components::scene_children(children)
 }
 
 fn furniture_wireframe_scene(node: &FurnitureNode) -> Box<dyn Scene> {
@@ -199,7 +199,7 @@ pub fn spawn_furniture_cell(commands: &mut Commands, cell: FurnitureCell) -> Ent
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use richmond_building_components::Placement;
+	use building_components::Placement;
 
 	fn lod_ref<'a>(tf: &'a Transform, bounds: &'a Aabb3d) -> LodRef<'a> {
 		LodRef {

@@ -28,7 +28,7 @@ use crate::player::{
 };
 use crate::WorldBaseTerrain;
 use avian3d::prelude::LinearVelocity;
-use durham_terrain_models::{TerrainCellLayout, TerrainEntryStore};
+use durham::{TerrainCellLayout, TerrainEntryStore};
 
 const WALK_SPEED: f32 = 1.0;
 const RUN_SPEED: f32 = 5.0;

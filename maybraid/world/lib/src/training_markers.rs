@@ -7,7 +7,7 @@ use damage::{Downed, Health};
 use mob_intelligence::MemberOf;
 
 use maybraid_game_mode_training_ground::{TrainingBrawler, TrainingGround};
-use terrain_layer_model::ActiveGenerationMode;
+use layer_stack::ActiveGenerationMode;
 use crate::ui::project_mob_pin;
 
 const MARKER_PX: f32 = 10.0;

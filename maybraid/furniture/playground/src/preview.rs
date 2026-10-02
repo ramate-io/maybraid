@@ -4,7 +4,7 @@ use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value};
 use furniture_assemblies::{filled_slots_scene, FurnitureKitMeshes};
 use game_commands::ui::GameCommandStatusText;
-use richmond_building_components::FurnitureGeometry;
+use building_components::FurnitureGeometry;
 
 use crate::gallery::{gallery_slots, unit_slot};
 

@@ -17,7 +17,7 @@ use lod::{
 	LodSceneRefreshRegionPlugin,
 };
 use lod_gimme::GimmeLodSceneRefreshPlugin;
-use richmond_development_models::{BuiltDevelopment, DevelopmentEntryStore, DevelopmentHosts};
+use richmond::{BuiltDevelopment, DevelopmentEntryStore, DevelopmentHosts};
 
 use crate::cell::{
 	intersects_xz, world_slot, xz_radius_aabb, FurnitureCellExtent, FURNITURE_GENERATE_RADIUS,
@@ -58,7 +58,7 @@ struct StoredFurnitureCell {
 
 struct CachedDevelopmentSlots {
 	version: Version,
-	slots: Vec<richmond_building_components::FurnitureNode>,
+	slots: Vec<building_components::FurnitureNode>,
 }
 
 /// Generated 50 m furniture cells plus the current world-space slot list.
@@ -66,7 +66,7 @@ struct CachedDevelopmentSlots {
 pub struct FurnitureIndex {
 	next_version: u64,
 	cells: HashMap<Id, StoredFurnitureCell>,
-	slots: Vec<richmond_building_components::FurnitureNode>,
+	slots: Vec<building_components::FurnitureNode>,
 	development_slots: HashMap<Id, CachedDevelopmentSlots>,
 	slots_fingerprint: Vec<(Id, Version)>,
 	slots_region_cell: Option<(i32, i32)>,
@@ -131,7 +131,7 @@ impl FurnitureIndex {
 
 fn world_slots_of(
 	development: &BuiltDevelopment,
-) -> Vec<richmond_building_components::FurnitureNode> {
+) -> Vec<building_components::FurnitureNode> {
 	let mut out = Vec::new();
 	for host in development.hosts() {
 		let transform = host.transform();
@@ -146,8 +146,8 @@ fn world_slots_of(
 }
 
 fn slots_match(
-	left: &[richmond_building_components::FurnitureNode],
-	right: &[richmond_building_components::FurnitureNode],
+	left: &[building_components::FurnitureNode],
+	right: &[building_components::FurnitureNode],
 ) -> bool {
 	left.len() == right.len()
 		&& left.iter().zip(right).all(|(a, b)| {
@@ -485,17 +485,17 @@ impl Plugin for FurnitureStreamPlugin {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use richmond_building_components::Placement;
+	use building_components::Placement;
 
 	#[test]
 	fn matching_slots_ignore_finish_seed() {
-		let a = richmond_building_components::FurnitureNode::chair(Placement::IDENTITY)
+		let a = building_components::FurnitureNode::chair(Placement::IDENTITY)
 			.with_finish_seed(1);
-		let b = richmond_building_components::FurnitureNode::chair(Placement::IDENTITY)
+		let b = building_components::FurnitureNode::chair(Placement::IDENTITY)
 			.with_finish_seed(9);
 		assert!(slots_match(&[a.clone()], &[b]));
 		let moved =
-			richmond_building_components::FurnitureNode::chair(Placement::new(Vec3::X, 0.0));
+			building_components::FurnitureNode::chair(Placement::new(Vec3::X, 0.0));
 		assert!(!slots_match(&[a], &[moved]));
 	}
 
@@ -504,10 +504,10 @@ mod tests {
 		let mut index = FurnitureIndex::default();
 		index
 			.slots
-			.push(richmond_building_components::FurnitureNode::chest(Placement::IDENTITY));
+			.push(building_components::FurnitureNode::chest(Placement::IDENTITY));
 		index
 			.slots
-			.push(richmond_building_components::FurnitureNode::chair(Placement::new(
+			.push(building_components::FurnitureNode::chair(Placement::new(
 				Vec3::new(60.0, 0.0, 0.0),
 				0.0,
 			)));
@@ -520,7 +520,7 @@ mod tests {
 	fn tracked_ids_find_cells_below_sea_level() {
 		let mut index = FurnitureIndex::default();
 		let extent = FurnitureCellExtent::from_cell_index(18, 36);
-		let slot = richmond_building_components::FurnitureNode::chair(Placement::new(
+		let slot = building_components::FurnitureNode::chair(Placement::new(
 			Vec3::new(extent.center().x, -141.0, extent.center().z),
 			0.0,
 		));

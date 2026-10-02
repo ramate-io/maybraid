@@ -2,7 +2,7 @@
 
 use furniture_usage_areas::expand_usages;
 use lod::LodSceneLevel;
-use richmond_building_components::{BuildingComponents, FurnitureNode};
+use building_components::{BuildingComponents, FurnitureNode};
 
 use crate::fill::try_assembly;
 use crate::Assembly;
@@ -38,7 +38,7 @@ pub fn generate_assemblies_from_nodes(
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use richmond_building_components::{FurnitureGeometry, FurnitureUsageNode, Layers, Placement};
+	use building_components::{FurnitureGeometry, FurnitureUsageNode, Layers, Placement};
 
 	struct PackedRoom;
 

@@ -53,10 +53,10 @@ use player::{
 	spawn_player_with_hidden_capsule, Npc, Player, PlayerLook, PlayerPlugin,
 };
 use player_camera::{spawn_follow_camera, PlayerCameraPlugin};
-use richmond_building_components::{
+use building_components::{
 	apply_parent_confines, FurnitureWireframePlugin, LabelWireframePlugin,
 };
-use richmond_building_physics::BuildingWalkColliderPlugin;
+use building_physics::BuildingWalkColliderPlugin;
 use session::{AppliedSession, Civilian, LoadoutRng, RangeMode, RangeSession};
 use spotting_intelligence::SpottingSystems;
 use threat_intelligence::{ThreatIntelligencePlugin, ThreatSystems};

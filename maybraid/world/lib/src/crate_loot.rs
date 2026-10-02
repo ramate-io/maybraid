@@ -426,7 +426,7 @@ mod tests {
 	use super::*;
 	use crate::stash::WorldStash;
 	use bevy::ecs::system::RunSystemOnce;
-	use chico_vegetation_on_terrain_playground::Player as VegetationPlayer;
+	use world_player::Player as VegetationPlayer;
 	use crozon_inventory_user::InventoryUser;
 	use maybraid_character_controller::CharacterIntent;
 	use std::time::Duration;

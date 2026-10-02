@@ -1,6 +1,6 @@
 //! Dispatch a usage node to the matching expander.
 
-use richmond_building_components::{FurnitureNode, FurnitureUsage, FurnitureUsageNode};
+use building_components::{FurnitureNode, FurnitureUsage, FurnitureUsageNode};
 
 use crate::bites_counter::BitesCounterUsage;
 use crate::bites_kitchen::BitesKitchenUsage;
@@ -25,7 +25,7 @@ mod tests {
 	use super::*;
 	use bevy::math::bounding::Aabb3d;
 	use bevy::math::Vec3;
-	use richmond_building_components::{FurnitureGeometry, Placement};
+	use building_components::{FurnitureGeometry, Placement};
 
 	#[test]
 	fn dispatch_covers_both_kinds() {

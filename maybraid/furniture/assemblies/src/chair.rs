@@ -5,7 +5,7 @@ use bevy::math::Vec3;
 use crate::palette::{carcass, cloth};
 use crate::Assembly;
 use furniture_components::{shift, slab, PartKind, PlacedPart};
-use richmond_building_components::FurnitureGeometry;
+use building_components::FurnitureGeometry;
 
 /// Seat band height in the unit slot (fractions of slot height).
 pub const SEAT_Y0: f32 = 0.42;
@@ -86,7 +86,7 @@ impl Chair {
 mod tests {
 	use super::*;
 	use furniture_components::pose_parts;
-	use richmond_building_components::{FurnitureAbutment, FurnitureNode, Placement};
+	use building_components::{FurnitureAbutment, FurnitureNode, Placement};
 
 	#[test]
 	fn back_sits_on_the_seat_band() -> anyhow::Result<()> {

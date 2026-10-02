@@ -528,7 +528,7 @@ mod tests {
 		world.init_resource::<Messages<HomeMenuChoice>>();
 		world.write_message(HomeMenuChoice::TrainingGround);
 		world.insert_resource(NextState::<GameFlow>::Unchanged);
-		world.insert_resource(NextState::<terrain_layer_model::ActiveGenerationMode>::Unchanged);
+		world.insert_resource(NextState::<layer_stack::ActiveGenerationMode>::Unchanged);
 		world.insert_resource(GameMode::default());
 		world.insert_resource(PlaySession::None);
 		world

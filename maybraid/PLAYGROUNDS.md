@@ -1,6 +1,6 @@
 # Playgrounds
 
-A playground is a **single-layer** developer app next to the crate it inspects (`richmond-buildings-playground`, `furniture-playground`, `durham-terrain-models-playground`, …). Assembled world — Durham terrain, streamed forest, urbanization, character — lives in [`maybraid-world`](world/) and runs as [`maybraid-world-playground`](world/playground/).
+A playground is a **single-layer** developer app next to the crate it inspects (`buildings-playground`, `furniture-playground`, `durham-playground`, …). Assembled world — Durham terrain, streamed forest, urbanization, character — lives in [`maybraid-world`](world/) and runs as [`maybraid-world-playground`](world/playground/).
 
 Do not keep a second assembled-world app. Parameters and streaming knobs belong on `WorldPlugin` / `maybraid-world`, not on a parallel vegetation-on-terrain binary.
 
@@ -18,10 +18,10 @@ If the crate is also a **library** used by world or another host, retire the **b
 
 Last commit that still contained the trees below: [`9a9a74c6901ed4d7799a4e87d16f74d7dd3b9e47`](https://github.com/ramate-io/maybraid/commit/9a9a74c6901ed4d7799a4e87d16f74d7dd3b9e47).
 
-### `maybraid/chico/sbs-trees-playground`
+### `maybraid/world/layers/vegetation/sbs-trees-playground`
 
 - **Last commit:** [`9a9a74c6901ed4d7799a4e87d16f74d7dd3b9e47`](https://github.com/ramate-io/maybraid/commit/9a9a74c6901ed4d7799a4e87d16f74d7dd3b9e47)
-- **Did:** Isolated `/show` plants and tiled groves (`vast-orchards`, `monster-grass-plains`, …), plus a leftover flat-ground `/forest` streamer. Forest generate / present / vegetation LOD view now live in `chico-forests`.
+- **Did:** Isolated `/show` plants and tiled groves (`vast-orchards`, `monster-grass-plains`, …), plus a leftover flat-ground `/forest` streamer. Forest generate / present / vegetation LOD view now live in `chico`.
 - **Replacement:** [`maybraid-world-playground`](world/playground/) for streamed forest on Durham. Isolated plant `/show` is not hosted anywhere; restore this crate if that catalog is needed again.
 
 ### `maybraid/chico/vegetation-on-terrain-playground` (binary)
@@ -30,7 +30,7 @@ Last commit that still contained the trees below: [`9a9a74c6901ed4d7799a4e87d16f
 - **Did:** Small Durham fine-grid patch for iterating Chico groves on real ground. `/grove <kind>` tiled one grove type; `/forest` streamed the same generate/present/cull path as SBS, grown on Durham height. Character / free-look, canopy bump-outs, mesh stats.
 - **Replacement:** [`maybraid-world-playground`](world/playground/) (`cargo run -p maybraid-world-playground`). The crate is now only the character/player host and diagnostics library for `maybraid-world`. Richmond and mobs no longer use it.
 
-### `maybraid/richmond/developments-on-terrain-playground` (catalog-batch mode)
+### `maybraid/world/layers/urbanization/richmond-playground` (catalog-batch mode)
 
 - **Last commit:** [`6925f413a28b1cc8e6a17f3f94e3922c37b92e66`](https://github.com/ramate-io/maybraid/commit/6925f413a28b1cc8e6a17f3f94e3922c37b92e66)
 - **Did:** `own_terrain: true` filled a FinePatch all at once (Durham shaders + `generate_terrain`, no `BaseTerrainGenerationPlugin`). With a development focus it used the 300 m occupancy lattice instead of hopscotch leaves, then batch-spawned hosts. `urbanization: None` was the default.

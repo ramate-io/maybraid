@@ -1,10 +1,10 @@
 //! Slim world-playground commands. Forest + terrain extents are baked in.
 
 use bevy::prelude::*;
-use chico_vegetation_on_terrain_playground::commands::{
+use world_player::commands::{
 	RequestMeshStats, RequestModeCharacter, RequestModeFree,
 };
-use chico_vegetation_on_terrain_playground::{
+use world_player::{
 	CharacterSpecies, RequestFpsToggle, RequestSetCharacter,
 };
 

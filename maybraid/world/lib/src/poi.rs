@@ -4,14 +4,14 @@ use std::collections::{hash_map::DefaultHasher, HashMap, HashSet, VecDeque};
 use std::hash::{Hash, Hasher};
 
 use bevy::prelude::*;
-use chico_forests::ChicoGroveHost;
-use chico_vegetation_components::VegetationInstance;
+use chico::ChicoGroveHost;
+use vegetation_components::VegetationInstance;
 use lod::LodScene;
 use mob_characters::{LOCAL_POI, SALOON_POI, URBAN_POI, VEGETATION_POI};
 use poi_intelligence::{
 	GlobalPoi, LocalPoi, Poi, PoiId, PoiIntelligencePlugin, PoiKind, PoiRegistry, PoiSystems,
 };
-use richmond_development_models::{DiscoverablePlace, DiscoverablePlaceLabel};
+use richmond::{DiscoverablePlace, DiscoverablePlaceLabel};
 use urbanization_layer_model::UrbanSetting;
 
 const LOCAL_VEGETATION_TILE: f32 = 48.0;

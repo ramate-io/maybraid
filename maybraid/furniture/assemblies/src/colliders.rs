@@ -4,8 +4,8 @@ use avian3d::prelude::{Collider, RigidBody};
 use bevy::prelude::*;
 use lod::LodSceneHost;
 use lod_avian::PhysicsInteractionLayer;
-use richmond_building_components::{FurnitureGeometry, FurnitureNode};
-use richmond_building_physics::BUILDING_FRICTION;
+use building_components::{FurnitureGeometry, FurnitureNode};
+use building_physics::BUILDING_FRICTION;
 
 use crate::host::FurnitureCell;
 
@@ -84,7 +84,7 @@ fn slot_shape(node: &FurnitureNode) -> (Vec3, Quat, Collider) {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use richmond_building_components::Placement;
+	use building_components::Placement;
 
 	#[test]
 	fn partitions_and_counters_block_sit_ons_do_not() {

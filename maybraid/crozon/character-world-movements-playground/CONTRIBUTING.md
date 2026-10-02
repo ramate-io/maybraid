@@ -5,7 +5,7 @@ grounding) on real ground. Visual pitch samples **Avian colliders**
 (`ground-avian`), not the Durham heightfield. Concepts sliders stay in
 [`character-concepts-playground`](../character-concepts-playground/). The large
 terrain viewer stays in
-[`durham/models-playground`](../../durham/models-playground/).
+[`durham/models-playground`](../../world/layers/terrain/durham/models-playground/).
 Motion dataflow: [`crozon-character-motion`](../character-motion/README.md).
 
 ## Layout

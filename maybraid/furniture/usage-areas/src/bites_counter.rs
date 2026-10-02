@@ -4,7 +4,7 @@
 //! leftover as stock / lounge instead of stretching the counter through the room.
 
 use bevy::math::Vec3;
-use richmond_building_components::{FurnitureAbutment, FurnitureNode, FurnitureUsageNode};
+use building_components::{FurnitureAbutment, FurnitureNode, FurnitureUsageNode};
 
 use crate::region::{
 	along_is_x, along_span, cut_from_wall, depth_span, floor_height_aabb, longest_wall,
@@ -24,7 +24,7 @@ const SERVICE_DEPTH: f32 = 0.85;
 const SERVICE_MAX: f32 = 1.15;
 const LEFTOVER_GAP: f32 = 0.35;
 
-/// Expand a [`FurnitureUsage::BitesCounter`](richmond_building_components::FurnitureUsage::BitesCounter) band.
+/// Expand a [`FurnitureUsage::BitesCounter`](building_components::FurnitureUsage::BitesCounter) band.
 pub struct BitesCounterUsage;
 
 impl BitesCounterUsage {
@@ -135,7 +135,7 @@ fn sit_ons_on(
 mod tests {
 	use super::*;
 	use bevy::math::bounding::Aabb3d;
-	use richmond_building_components::{FurnitureGeometry, FurnitureUsageNode, Placement};
+	use building_components::{FurnitureGeometry, FurnitureUsageNode, Placement};
 	use std::f32::consts::PI;
 
 	fn band_node(min: Vec3, max: Vec3) -> FurnitureUsageNode {

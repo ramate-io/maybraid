@@ -42,9 +42,9 @@ meandering-intelligence = { workspace = true }
 tether-intelligence = { workspace = true }
 player = { workspace = true }
 player-camera = { workspace = true }
-richmond-building-components = { workspace = true }
-richmond-building-physics = { workspace = true }
-richmond-buildings = { workspace = true }
+building-components = { workspace = true }
+building-physics = { workspace = true }
+buildings = { workspace = true }
 spotting-intelligence = { workspace = true }
 spotting-intelligence-avian = { workspace = true }
 threat-intelligence = { workspace = true }

@@ -2,8 +2,8 @@
 
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
-use chico_vegetation_shaders::{
-	init_chico_material_caches, ChicoMaterialLib, ChicoVegetationShadersPlugin,
+use vegetation_shaders::{
+	init_vegetation_material_caches, VegetationMaterialLib, VegetationShadersPlugin,
 };
 use furniture_shaders::{
 	init_furniture_material_caches, FurnitureMaterialLib, FurnitureShadersPlugin,
@@ -17,7 +17,7 @@ use material_ref::{
 #[derive(SystemParam)]
 pub struct PlaygroundMaterialLib<'w> {
 	pub furniture: FurnitureMaterialLib<'w>,
-	pub chico: ChicoMaterialLib<'w>,
+	pub chico: VegetationMaterialLib<'w>,
 	pub standard: StandardMaterialLib<'w>,
 }
 
@@ -43,9 +43,9 @@ pub struct PlaygroundMaterialRefPlugin;
 
 impl Plugin for PlaygroundMaterialRefPlugin {
 	fn build(&self, app: &mut App) {
-		app.add_plugins((FurnitureShadersPlugin, ChicoVegetationShadersPlugin));
+		app.add_plugins((FurnitureShadersPlugin, VegetationShadersPlugin));
 		init_furniture_material_caches(app);
-		init_chico_material_caches(app);
+		init_vegetation_material_caches(app);
 		app.init_resource::<StandardMaterialRefCache>();
 		if material_ref_plugin_installed(app) {
 			return;

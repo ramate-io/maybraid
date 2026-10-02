@@ -13,7 +13,7 @@ rust-version = { workspace = true }
 bevy = { workspace = true }
 lod = { workspace = true }
 material-ref = { workspace = true }
-richmond-building-components = { workspace = true }
+building-components = { workspace = true }
 scene-ref = { workspace = true }
 
 [dev-dependencies]

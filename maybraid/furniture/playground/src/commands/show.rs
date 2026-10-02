@@ -4,7 +4,7 @@ pub mod transform;
 
 use bevy::prelude::*;
 use clap::{Args, Subcommand};
-use richmond_building_components::FurnitureGeometry;
+use building_components::FurnitureGeometry;
 
 use crate::preview::{PreviewConfig, PreviewSubject};
 

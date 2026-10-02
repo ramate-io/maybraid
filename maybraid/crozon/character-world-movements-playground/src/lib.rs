@@ -23,8 +23,8 @@ use character::{
 };
 use commands::{RequestModeCharacter, RequestModeFree};
 use crozon_characters::{CharacterHostsPlugin, CharacterMotionSystems, LocomotionCapsule};
-use durham_terrain::shaders::{DurhamTerrainShader, DurhamTerrainShaderPlugin, RefractionWater};
-use durham_terrain_models::{
+use terrain_shaders::{TerrainShader, TerrainShaderPlugin, RefractionWater};
+use durham::{
 	AvianTerrainIndex, BaseTerrainNoise, ComposedWater, DurhamTerrainModelsPlugin, Terrain,
 	TerrainCellLayout, TerrainConfig, TerrainEntryStore, TerrainMeshBuilder, TerrainMeshLodBand,
 	TerrainPresentationAssets, TerrainRegionPresenter, TerrainStoreView, Water,
@@ -74,8 +74,8 @@ impl Plugin for CharacterWorldMovementsPlaygroundPlugin {
 		let base = BaseTerrainNoise::from_config(&config);
 
 		app.add_plugins(DurhamTerrainModelsPlugin)
-			.add_plugins(DurhamTerrainShaderPlugin)
-			.add_plugins(EnforceCachingPlugin::<TerrainMeshBuilder, DurhamTerrainShader>::default())
+			.add_plugins(TerrainShaderPlugin)
+			.add_plugins(EnforceCachingPlugin::<TerrainMeshBuilder, TerrainShader>::default())
 			.add_plugins(EnforceCachingPlugin::<ComposedWater, RefractionWater>::default())
 			.add_plugins(
 				GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config())
@@ -130,11 +130,11 @@ fn setup_lighting(mut commands: Commands) {
 
 fn setup_presentation_assets(
 	mut commands: Commands,
-	mut terrain_materials: ResMut<Assets<DurhamTerrainShader>>,
+	mut terrain_materials: ResMut<Assets<TerrainShader>>,
 	mut water_materials: ResMut<Assets<RefractionWater>>,
 	config: Res<TerrainConfig>,
 ) {
-	let material = terrain_materials.add(DurhamTerrainShader::default());
+	let material = terrain_materials.add(TerrainShader::default());
 	commands.insert_resource(TerrainPresentationAssets {
 		config: config.clone(),
 		material,

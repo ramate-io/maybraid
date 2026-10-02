@@ -24,7 +24,7 @@
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value};
 use bevy::text::FontSize;
-use chico_vegetation_on_terrain_playground::Player as VegetationPlayer;
+use world_player::Player as VegetationPlayer;
 use crozon_character_items::{
 	ClothingHost, Inventory, InventoryItem, InventorySlot, ItemRng, LootFraction, MaterialRefParams,
 };
@@ -43,7 +43,7 @@ use material_ref::{MaterialRef, MaterialRefRoot, PropagateToDescendants};
 use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
 use player::PlayerUse;
 
-use maybraid_mobs::MobKind;
+use mob_scenes::MobKind;
 use mob_characters::CharacterBrains;
 
 use crate::control::WorldGameplayEnabled;
@@ -1054,7 +1054,7 @@ fn spawn_stash_claim_halo(
 mod tests {
 	use super::*;
 	use bevy::ecs::system::RunSystemOnce;
-	use chico_vegetation_on_terrain_playground::Player as VegetationPlayer;
+	use world_player::Player as VegetationPlayer;
 	use crozon_character_items::{
 		ClothingMaterial, ClothingMesh, FirearmMesh, InventoryItem, ItemColor,
 	};

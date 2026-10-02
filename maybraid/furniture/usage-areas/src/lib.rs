@@ -1,4 +1,4 @@
-//! Expand Richmond [`FurnitureUsageNode`](richmond_building_components::FurnitureUsageNode)
+//! Expand Richmond [`FurnitureUsageNode`](building_components::FurnitureUsageNode)
 //! regions into furniture ensembles.
 //!
 //! Parallel to [`furniture-assemblies`](https://github.com/ramate-io/maybraid): Richmond

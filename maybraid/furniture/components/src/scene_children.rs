@@ -6,7 +6,7 @@ use bevy::prelude::{Children, Transform, Visibility};
 use bevy::scene::prelude::{bsn, template_value, Scene};
 use lod::LodLazyPending;
 use material_ref::{MaterialRef, MaterialRefRoot, PropagateToDescendants};
-use richmond_building_components::{pose, scene_children, AssetPath};
+use building_components::{pose, scene_children, AssetPath};
 
 use crate::parts::{FurnitureKitPart, PlacedPart};
 

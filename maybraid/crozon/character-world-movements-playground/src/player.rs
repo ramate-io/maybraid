@@ -3,7 +3,7 @@
 use avian3d::prelude::*;
 use bevy::ecs::query::Has;
 use bevy::prelude::*;
-use durham_terrain_models::TerrainCellLayout;
+use durham::TerrainCellLayout;
 use game_commands::command::TextEntryFocus;
 use lod_avian::PhysicsInteractionLayer;
 use std::f32::consts::PI;

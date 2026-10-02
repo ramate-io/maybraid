@@ -1,0 +1,32 @@
+[package]
+name = "maybraid-game-mode-training-ground"
+version = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+authors = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
+publish = { workspace = true }
+rust-version = { workspace = true }
+
+[dependencies]
+layer-stack = { workspace = true }
+bevy = { workspace = true }
+crozon-characters = { workspace = true }
+durham = { workspace = true }
+lod = { workspace = true }
+mob-scenes = { workspace = true }
+mob-characters = { workspace = true }
+barking = { workspace = true }
+mob-layer-model = { workspace = true }
+mob-layer-presentation = { workspace = true }
+richmond = { workspace = true }
+terrain-layer-model = { workspace = true }
+urbanization-layer-model = { workspace = true }
+
+[dev-dependencies]
+anyhow = { workspace = true }
+threat-intelligence = { workspace = true }
+
+[lints]
+workspace = true

@@ -14,7 +14,7 @@
 //! and only rolls the next trainee.
 //!
 //! Each session has one terrain collider owner: the padded urbanization
-//! presenter. Training does not present raw [`durham_terrain_models::DurhamCells`].
+//! presenter. Training does not present raw [`durham::DurhamCells`].
 
 use bevy::prelude::*;
 use combat_hud::{CombatScore, LiveEnemies};
@@ -25,10 +25,10 @@ use crozon_characters::species::{
 };
 use crozon_characters::CharacterAppearance;
 use damage::{Downed, Health};
-use durham_terrain_models::TerrainColliderSystems;
+use durham::TerrainColliderSystems;
 use maybraid_game_mode_training_ground::{TrainingBrawler, TrainingGround, TrainingRound};
 use mob_intelligence::MemberOf;
-use terrain_layer_model::ActiveGenerationMode;
+use layer_stack::ActiveGenerationMode;
 
 use crate::WorldPlayerLoadout;
 use crate::control::{WorldSurfaceSet, update_world_surface_ready};
@@ -136,19 +136,20 @@ pub(crate) fn count_training_enemies(
 mod tests {
 	use bevy::ecs::system::RunSystemOnce;
 	use bevy::state::app::StatesPlugin;
-	use durham_terrain_models::{
+	use durham::{
 		fine_patch_cell_layout, playable_world_cell_layout, BaseTerrainNoise, Durham,
 		DurhamTerrainConfig, TerrainCellLayout, TerrainConfig, TerrainCoverage,
 		TerrainLayoutPinned, TerrainPresentPending, TerrainPresentationAssets,
 		TerrainPresentationDirty, WorldBaseTerrain, WORLD_FINE_HALF_EXTENT_CELLS,
 	};
 	use maybraid_game_mode_training_ground::TRAINING_FINE_HALF_EXTENT_CELLS;
-	use richmond_development_models::DevelopmentEntryStore;
+	use richmond::DevelopmentEntryStore;
 
 	use crate::PlayerSpawnXz;
 	use crate::training_plaza::TrainingPlazaMounted;
 	use maybraid_game_mode_discover::Discovery;
-	use terrain_layer_model::{BaseTerrainModeConfig, BaseTerrainScheme, GenerationModePlugin};
+	use terrain_layer_model::{BaseTerrainModeConfig, BaseTerrainScheme};
+use layer_stack::GenerationModePlugin;
 	use super::*;
 
 	#[derive(States, Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
@@ -349,7 +350,7 @@ mod tests {
 
 	#[test]
 	fn plaza_waits_for_the_whole_patch() {
-		let store = durham_terrain_models::TerrainEntryStore::default();
+		let store = durham::TerrainEntryStore::default();
 		let origin = IVec2::splat(-TRAINING_FINE_HALF_EXTENT_CELLS);
 		let patch = fine_patch_cell_layout(TRAINING_FINE_HALF_EXTENT_CELLS, origin);
 		assert!(!store.fills_layout(&patch));

@@ -94,7 +94,7 @@ mod tests {
 	use super::*;
 	use bevy::ecs::system::RunSystemOnce;
 	use maybraid_game_mode_training_ground::TrainingGround;
-	use terrain_layer_model::ActiveGenerationMode;
+	use layer_stack::ActiveGenerationMode;
 
 	fn shell_states(world: &mut World) {
 		world.insert_resource(NextState::<GameFlow>::Unchanged);

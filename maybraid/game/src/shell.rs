@@ -30,7 +30,7 @@ use menu_screens::{
 	MenuScreen, despawn_menu_screens, request_show_gallery, request_show_home,
 	request_show_in_game, request_show_loading,
 };
-use terrain_layer_model::ActiveGenerationMode;
+use layer_stack::ActiveGenerationMode;
 
 /// World camera pose stashed while the pause character editor uses the preview eye.
 #[derive(Resource, Clone, Copy, Debug)]
@@ -320,7 +320,7 @@ mod tests {
 		PlayerPhysicsEnabled, TerrainStreamingEnabled, WorldGameplayEnabled, WorldSceneryVisible,
 	};
 	use menu_components::MENU_CLEAR;
-	use terrain_layer_model::ActiveGenerationMode;
+	use layer_stack::ActiveGenerationMode;
 
 	#[test]
 	fn menu_camera_sees_preview_only() {

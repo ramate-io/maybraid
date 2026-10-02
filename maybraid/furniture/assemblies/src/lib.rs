@@ -1,4 +1,4 @@
-//! Painted furniture assemblies fitted into Richmond [`FurnitureNode`](richmond_building_components::FurnitureNode) slots.
+//! Painted furniture assemblies fitted into Richmond [`FurnitureNode`](building_components::FurnitureNode) slots.
 //!
 //! Chico-shaped: `FooParams` → `params.build()` → `Foo`. [`unit_from_num`](bed::BedParams::unit_from_num)
 //! keys the palette only. Parts explode for [`material_ref::MaterialRef`] paint
@@ -71,7 +71,7 @@ pub use stream::{
 };
 pub use table::{Table, TableParams};
 
-use richmond_building_components::FurnitureGeometry;
+use building_components::FurnitureGeometry;
 
 /// Built assembly: topology is seed-invariant; [`MaterialRef`](material_ref::MaterialRef) is not.
 #[derive(Clone, Debug, PartialEq)]

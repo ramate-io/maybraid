@@ -225,7 +225,7 @@ mod tests {
 	fn a_ready_training_surface_requests_world_without_leaving_training() -> anyhow::Result<()> {
 		use bevy::ecs::system::RunSystemOnce;
 		use maybraid_game_mode_training_ground::TrainingGround;
-		use terrain_layer_model::ActiveGenerationMode;
+		use layer_stack::ActiveGenerationMode;
 		let round = TrainingRound::new(1);
 		let mut world = World::new();
 		world.insert_resource(NextState::<GameFlow>::Unchanged);

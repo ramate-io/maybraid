@@ -2,14 +2,14 @@
 
 use avian3d::prelude::LinearVelocity;
 use bevy::prelude::*;
-use chico_vegetation_on_terrain_playground::{
+use world_player::{
 	player_position_above_surface, spawn_player_body, CharacterLocomotion, CharacterSpecies,
 	MoveWish, Player as VegetationPlayer, RequestSetCharacter, RequestSetCharacterAppearance,
 };
 use crozon_character_ragdoll::CharacterRagdollSystems;
 use crozon_inventory_user::InventoryUser;
 use damage::{DamageSystems, DespawnAfter, Downed};
-use durham_terrain_models::Durham;
+use durham::Durham;
 use firearm_user::FirearmUser;
 use firearms::WeaponTrigger;
 use mob_characters::{LOCAL_POI, URBAN_POI, VEGETATION_POI};
@@ -24,7 +24,7 @@ use threat_intelligence::{Affiliations, ThreatSubject};
 use urbanization_layer_model::Urbanization;
 
 use maybraid_game_mode_training_ground::TrainingGround;
-use terrain_layer_model::ActiveGenerationMode;
+use layer_stack::ActiveGenerationMode;
 
 use crate::control::strip_world_player_motor;
 use crate::training::TrainingLifeEnded;
@@ -309,10 +309,10 @@ fn respawn_seed(generation: u64, death_at: Vec3) -> u64 {
 mod tests {
 	use super::*;
 	use bevy::ecs::system::RunSystemOnce;
-	use chico_vegetation_on_terrain_playground::WorldBaseTerrain;
-	use durham_terrain_models::{TerrainCellLayout, TerrainEntryStore};
-	use richmond_development_models::DevelopmentEntryStore;
-	use richmond_urbanization::UrbanizationIndex;
+	use world_player::WorldBaseTerrain;
+	use durham::{TerrainCellLayout, TerrainEntryStore};
+	use richmond::DevelopmentEntryStore;
+	use urbanization_cells::UrbanizationIndex;
 
 	#[test]
 	fn fallback_respawn_moves_away_from_the_death_point() {
@@ -419,8 +419,8 @@ mod tests {
 		world.init_resource::<DevelopmentEntryStore>();
 		world.init_resource::<UrbanizationIndex>();
 		world.insert_resource(WorldBaseTerrain(
-			durham_terrain_models::BaseTerrainNoise::from_config(
-				&durham_terrain_models::TerrainConfig::new(42),
+			durham::BaseTerrainNoise::from_config(
+				&durham::TerrainConfig::new(42),
 			),
 		));
 		world.init_resource::<Assets<Mesh>>();

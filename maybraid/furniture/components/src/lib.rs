@@ -1,7 +1,7 @@
 //! Reusable furniture scene components: kit paths, slot remap, posed GLBs.
 //!
 //! Parallel to Chico vegetation-components:
-//! Richmond [`AssetPath`](richmond_building_components::AssetPath) + [`Placement`](richmond_building_components::Placement)
+//! Richmond [`AssetPath`](building_components::AssetPath) + [`Placement`](building_components::Placement)
 //! → one [`scene_ref::SceneRef`] per part, painted with [`material_ref::MaterialRef`].
 //! Assemblies (`furniture-assemblies`) explode Richmond slots into [`PlacedPart`]s.
 //!

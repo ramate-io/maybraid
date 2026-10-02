@@ -1,10 +1,10 @@
 //! Apply [`CharacterIntent`] to the vegetation capsule / camera-relative wish.
 
 use bevy::prelude::*;
-use chico_vegetation_on_terrain_playground::{
+use world_player::{
 	MoveWish, MovementAction, Player, PlayerPhysicsEnabled, PlayerSpawnXz, PlaygroundMode,
 };
-use durham_terrain_models::{
+use durham::{
 	terrain_collider_covers_xz, CascadeChunk, TerrainCellLayout, TerrainEntryStore,
 	TerrainTrimeshCollider,
 };
@@ -53,7 +53,7 @@ pub struct WorldSurfaceReady(pub bool);
 pub struct WorldSurfaceSet;
 
 pub(crate) fn update_world_surface_ready(
-	streaming: Res<durham_terrain_models::TerrainStreamingEnabled>,
+	streaming: Res<durham::TerrainStreamingEnabled>,
 	store: Res<TerrainEntryStore>,
 	layout: Res<TerrainCellLayout>,
 	spawn: Res<PlayerSpawnXz>,
@@ -305,7 +305,7 @@ pub(crate) fn strip_world_player_motor(commands: &mut Commands, body: Entity) {
 mod tests {
 	use super::*;
 	use bevy::ecs::system::RunSystemOnce;
-	use durham_terrain_models::{terrain_collider_covers_xz, CascadeChunk};
+	use durham::{terrain_collider_covers_xz, CascadeChunk};
 
 	#[test]
 	fn surface_ready_requires_local_column() {

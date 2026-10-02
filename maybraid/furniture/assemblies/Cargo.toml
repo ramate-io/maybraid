@@ -19,9 +19,9 @@ lod = { workspace = true }
 lod-avian = { workspace = true }
 lod-gimme = { workspace = true }
 procedural-common = { workspace = true }
-richmond-building-components = { workspace = true }
-richmond-building-physics = { workspace = true }
-richmond-development-models = { workspace = true }
+building-components = { workspace = true }
+building-physics = { workspace = true }
+richmond = { workspace = true }
 furniture-usage-areas = { workspace = true }
 
 [dev-dependencies]

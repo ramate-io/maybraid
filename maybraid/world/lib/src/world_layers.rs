@@ -2,12 +2,13 @@
 //! generated and then presented.
 
 use bevy::prelude::*;
-use durham_terrain_models::{Durham, DurhamTerrainConfig};
+use durham::{Durham, DurhamTerrainConfig};
 use maybraid_game_mode_discover::Discovery;
 use maybraid_game_mode_training_ground::{TrainingGround, TRAINING_FINE_HALF_EXTENT_CELLS};
 use mob_layer_model::{MobGenerationPlugin, MobLayerConfig};
 use mob_layer_presentation::MobPresentationPlugin;
-use terrain_layer_model::{BaseTerrainGenerationPlugin, GenerationModePlugin, OnTerrain};
+use terrain_layer_model::{BaseTerrainGenerationPlugin, OnTerrain};
+use layer_stack::GenerationModePlugin;
 use terrain_layer_presentation::TerrainPresentationPlugin;
 use urbanization_layer_model::{
 	Urbanization, UrbanizationGenerationPlugin, UrbanizationLayerConfig,

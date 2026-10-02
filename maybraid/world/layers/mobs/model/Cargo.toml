@@ -1,0 +1,32 @@
+[package]
+name = "mob-layer-model"
+version = { workspace = true }
+edition  = { workspace = true }
+license  = { workspace = true }
+authors = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
+publish = { workspace = true }
+rust-version = { workspace = true }
+
+[dependencies]
+layer-stack = { workspace = true }
+bevy = { workspace = true }
+chico = { workspace = true }
+lod = { workspace = true }
+barking = { workspace = true }
+procedural-common = { workspace = true }
+richmond = { workspace = true }
+urbanization-cells = { workspace = true }
+terrain-layer-model = { workspace = true }
+urbanization-layer-model = { workspace = true }
+vegetation-layer-model = { workspace = true }
+
+[dev-dependencies]
+anyhow = { workspace = true }
+durham = { workspace = true }
+mob-scenes = { workspace = true }
+render-item = { workspace = true }
+
+[lints]
+workspace = true

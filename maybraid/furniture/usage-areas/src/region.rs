@@ -2,7 +2,7 @@
 
 use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec3;
-use richmond_building_components::{FurnitureAbutment, FurnitureNode, Placement};
+use building_components::{FurnitureAbutment, FurnitureNode, Placement};
 
 /// Packed counter AABBs are often storey-tall; the kit is one world unit high.
 pub const COUNTER_SLOT_HEIGHT: f32 = 1.0;

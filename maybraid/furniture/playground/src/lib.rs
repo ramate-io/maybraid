@@ -20,7 +20,7 @@ use ground::setup_ground;
 use lod_lazy_refs::LodLazyRefsPlugin;
 use material_lib::PlaygroundMaterialRefPlugin;
 use preview::present_preview;
-use richmond_building_components::FurnitureWireframePlugin;
+use building_components::FurnitureWireframePlugin;
 use scene_ref::SceneRefPlugin;
 
 pub struct FurniturePlaygroundPlugin;

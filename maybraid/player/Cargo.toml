@@ -15,7 +15,7 @@ bevy = { workspace = true }
 crozon-characters = { workspace = true }
 crozon-rigs = { workspace = true }
 damage = { workspace = true }
-durham-terrain-models = { workspace = true }
+durham = { workspace = true }
 lod-avian = { workspace = true }
 malo-animations = { workspace = true }
 maybraid-audio = { workspace = true }

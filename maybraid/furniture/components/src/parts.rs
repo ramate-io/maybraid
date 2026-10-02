@@ -2,7 +2,7 @@
 
 use bevy::prelude::Component;
 use material_ref::MaterialRef;
-use richmond_building_components::{AssetPath, Placement};
+use building_components::{AssetPath, Placement};
 
 use crate::assets;
 use crate::kit_space::{

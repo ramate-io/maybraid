@@ -2,7 +2,7 @@
 
 use bevy::scene::Scene;
 use furniture_components::assembly_scene;
-use richmond_building_components::{
+use building_components::{
 	pose, scene_children, wireframe_box_with_handles, FurnitureNode,
 };
 
@@ -11,7 +11,7 @@ use crate::plugin::FurnitureKitMeshes;
 
 /// Slot wireframe + painted GLB parts + optional abutment wall.
 pub fn filled_slot_scene(node: &FurnitureNode, kits: &FurnitureKitMeshes) -> impl Scene + 'static {
-	use richmond_building_components::furniture::FurnitureWireframeAssets;
+	use building_components::furniture::FurnitureWireframeAssets;
 
 	let mut children: Vec<Box<dyn Scene>> = vec![Box::new(wireframe_box_with_handles(
 		FurnitureWireframeAssets::unit_cube(),

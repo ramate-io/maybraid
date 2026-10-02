@@ -4,10 +4,10 @@ use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec3;
 use lod::gen::LodSceneLevel;
 use procedural_common::NoiseParams;
-use richmond_building_components::{
+use building_components::{
 	BuildingComponents, FurnitureAbutment, FurnitureGeometry, FurnitureNode, Placement,
 };
-use richmond_buildings::{
+use buildings::{
 	CommonBedroom, CommonBedroomParameterized, Confines, Kitchen, KitchenCounterLayout,
 	KitchenParameterized, LivingRoom, LivingRoomParameterized, Opening, OpeningId, Openings,
 };
@@ -348,7 +348,7 @@ pub fn unit_slot(geometry: FurnitureGeometry, seed: u64) -> FurnitureNode {
 mod tests {
 	use super::*;
 	use furniture_assemblies::{try_assembly, PartKind};
-	use richmond_building_components::FurnitureAbutment;
+	use building_components::FurnitureAbutment;
 
 	#[test]
 	fn richmond_rooms_emit_expected_kinds() -> anyhow::Result<()> {

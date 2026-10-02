@@ -4,16 +4,16 @@
 
 use avian3d::prelude::{LinearVelocity, Position};
 use bevy::prelude::*;
-use chico_vegetation_on_terrain_playground::player::{holding_elevation, player_spawn_point_at};
-use chico_vegetation_on_terrain_playground::{OffTerrainAnchor, Player};
-use durham_terrain_models::{Durham, TerrainTrimeshCollider, WorldBaseTerrain};
+use world_player::player::{holding_elevation, player_spawn_point_at};
+use world_player::{OffTerrainAnchor, Player};
+use durham::{Durham, TerrainTrimeshCollider, WorldBaseTerrain};
 use lod::gen::Id;
 use player_camera::FollowCamera;
 use procedural_common::SeededHash;
-use richmond_building_components::{building_bounds, spawn_building_components};
-use richmond_building_physics::{BUILDING_FRICTION, spawn_building_walk_colliders};
-use richmond_buildings::wall_demo::TerrainPerimeterWall;
-use richmond_development_models::{
+use building_components::{building_bounds, spawn_building_components};
+use building_physics::{BUILDING_FRICTION, spawn_building_walk_colliders};
+use buildings::wall_demo::TerrainPerimeterWall;
+use richmond::{
 	DevelopmentFinish, PresentedPaddedTerrainScene,
 };
 use terrain_layer_model::{OnTerrain, TerrainView};
@@ -22,7 +22,7 @@ use urbanization_layer_model::Urbanization;
 use maybraid_game_mode_training_ground::{
 	TrainingGround, TrainingMap, TrainingPlazaStamped, TrainingRosterSeat, TrainingRound,
 };
-use terrain_layer_model::ActiveGenerationMode;
+use layer_stack::ActiveGenerationMode;
 
 use crate::PlayerSpawnXz;
 
@@ -304,12 +304,12 @@ mod tests {
 		pad_influence_region, training_development_cell, TRAINING_ARENA_MARGIN_M,
 		TRAINING_ARENA_MAX_HALF_M, TRAINING_COURTYARD_EASE_M, TRAINING_COURTYARD_OVERHANG_M,
 	};
-	use richmond_development_models::{
+	use richmond::{
 		DEVELOPMENT_CELL_SIZE, DevelopmentCell, DevelopmentConfig, DevelopmentKind, PadParams,
 	};
 
 	fn base_terrain() -> WorldBaseTerrain {
-		use durham_terrain_models::{BaseTerrainNoise, TerrainConfig};
+		use durham::{BaseTerrainNoise, TerrainConfig};
 		WorldBaseTerrain(BaseTerrainNoise::from_config(&TerrainConfig::new(42)))
 	}
 

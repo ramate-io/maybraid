@@ -2,7 +2,7 @@
 
 use bevy::prelude::{ChildOf, Commands, CommandsSceneExt, Component, Entity};
 use furniture_components::assembly_scene;
-use richmond_building_components::FurnitureNode;
+use building_components::FurnitureNode;
 
 use crate::fill::posed_assembly;
 

@@ -16,7 +16,7 @@ path = "src/main.rs"
 [dependencies]
 anyhow = { workspace = true }
 bevy = { workspace = true }
-chico-vegetation-shaders = { workspace = true }
+vegetation-shaders = { workspace = true }
 clap = { workspace = true }
 furniture-assemblies = { workspace = true }
 furniture-shaders = { workspace = true }
@@ -25,8 +25,8 @@ material-ref = { workspace = true }
 lod = { workspace = true }
 lod-lazy-refs = { workspace = true }
 procedural-common = { workspace = true }
-richmond-building-components = { workspace = true }
-richmond-buildings = { workspace = true }
+building-components = { workspace = true }
+buildings = { workspace = true }
 scene-ref = { workspace = true }
 
 [lints]

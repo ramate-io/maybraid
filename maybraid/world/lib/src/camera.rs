@@ -3,10 +3,10 @@
 use avian3d::prelude::{Collider, ShapeCastConfig, SpatialQuery, SpatialQueryFilter};
 use bevy::core_pipeline::prepass::DepthPrepass;
 use bevy::prelude::*;
-use chico_vegetation_on_terrain_playground::{
+use world_player::{
 	Player as VegetationPlayer, PlayerSpawnXz, PlaygroundMode, player::holding_elevation,
 };
-use durham_terrain_models::WorldBaseTerrain;
+use durham::WorldBaseTerrain;
 use game_commands::command::TextEntryFocus;
 use lod_avian::PhysicsInteractionLayer;
 use maybraid_input::{PadButton, VirtualPad};
@@ -247,7 +247,7 @@ mod tests {
 	#[test]
 	fn world_camera_setup_spawns_one_shared_gameplay_camera() {
 		let mut app = App::new();
-		app.init_resource::<chico_vegetation_on_terrain_playground::PlayerSpawnXz>();
+		app.init_resource::<world_player::PlayerSpawnXz>();
 		app.add_systems(Startup, spawn_world_camera);
 		app.update();
 		let mut cameras = app
@@ -274,7 +274,7 @@ mod tests {
 	#[test]
 	fn inventory_edit_keeps_follow_while_paused() -> anyhow::Result<()> {
 		use bevy::ecs::system::RunSystemOnce;
-		use chico_vegetation_on_terrain_playground::Player as VegetationPlayer;
+		use world_player::Player as VegetationPlayer;
 		use player::{CameraFollow, Player};
 
 		use crate::InventoryEditCameraFollow;
