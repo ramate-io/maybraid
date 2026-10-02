@@ -83,6 +83,7 @@ struct FlatRead<'w> {
 }
 
 impl TerrainModel for Flat {
+	type Base = Self;
 	type Cell = FlatCell;
 	type Read = FlatRead<'static>;
 	type Snapshot = FlatSnapshot;

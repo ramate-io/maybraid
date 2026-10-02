@@ -272,6 +272,7 @@ impl HeightField for SilentSnapshot {
 }
 
 impl TerrainModel for Silent {
+	type Base = Self;
 	type Cell = SilentCell;
 	type Read = ();
 	type Snapshot = SilentSnapshot;

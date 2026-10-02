@@ -9,7 +9,7 @@ use std::marker::PhantomData;
 use bevy::app::{App, Plugin};
 use bevy::prelude::*;
 use terrain_layer_model::{
-	terrain_streaming, TerrainContractForward, TerrainExtent, TerrainLayerSystems,
+	terrain_streaming, TerrainExtent, TerrainLayerSystems,
 };
 use furniture_assemblies::{
 	FurnitureAssembliesPlugin, FurnitureStreamPlugin, FurnitureStreamSystems,
@@ -142,7 +142,7 @@ pub fn present_urbanization_hosts<G: UrbanModel>(
 	mut commands: Commands,
 	gate: Res<LodPresentGate<(G, UrbanizationHosts)>>,
 	layer: Res<UrbanizationLayerRegion>,
-	extent: Res<TerrainExtent<G>>,
+	extent: Res<TerrainExtent<G::Base>>,
 	view: TerrainView<G>,
 	mut state: ResMut<UrbanizationPresenterState>,
 ) {
@@ -219,11 +219,10 @@ impl<G: UrbanModel> Plugin for UrbanizationPresentationCore<G> {
 			present_urbanization_hosts::<G>
 				.in_set(UrbanizationHostPresent)
 				.after(UrbanizationGenerationSystems)
-				.after(TerrainContractForward::Outer)
 				.after(LodPresentGateSync)
 				.run_if(terrain_streaming::<G>)
 				.before(LodPresentSystems::Produce)
-				.before(TerrainLayerSystems::<G>::QueueColliders),
+				.before(TerrainLayerSystems::<G::Base>::QueueColliders),
 		);
 	}
 }

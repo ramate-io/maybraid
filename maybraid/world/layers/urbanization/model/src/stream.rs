@@ -28,7 +28,7 @@ use crate::config::UrbanizationLayerConfig;
 use crate::generation::UrbanizationLayerRegion;
 use crate::generation::UrbanizationModeConfig;
 use layer_stack::GenerationMode;
-use terrain_layer_model::{terrain_streaming, TerrainExtent, TerrainLayerSystems};
+use terrain_layer_model::{terrain_streaming, TerrainExtent, TerrainLayerSystems, TerrainModel};
 
 /// Default present ring multiplier (`1` → 1 km present / 3 km generate).
 pub const DEFAULT_URBANIZATION_STREAM_RADIUS: u32 = 1;
@@ -122,7 +122,7 @@ pub fn register_urbanization_lod_generate(app: &mut App) {
 }
 
 /// Hopscotch stream for a mode that owns a spec.
-pub fn install_urbanization_stream<Mode: GenerationMode, M: Send + Sync + 'static>(app: &mut App) {
+pub fn install_urbanization_stream<Mode: GenerationMode, M: TerrainModel>(app: &mut App) {
 	use crate::generation::{UrbanizationGenerationSystems, UrbanizationStoreSystems};
 	use lod::LodGenerateSystems;
 	use lod::LodPresentSystems;
@@ -138,7 +138,7 @@ pub fn install_urbanization_stream<Mode: GenerationMode, M: Send + Sync + 'stati
 			.before(LodGenerateSystems::Produce)
 			.before(UrbanizationStoreSystems)
 			.before(LodPresentSystems::Produce)
-			.before(TerrainLayerSystems::<M>::QueueColliders),
+			.before(TerrainLayerSystems::<M::Base>::QueueColliders),
 	);
 	app.add_systems(
 		Update,
@@ -156,7 +156,7 @@ pub fn install_urbanization_stream<Mode: GenerationMode, M: Send + Sync + 'stati
 			.in_set(UrbanizationGenerationSystems)
 			.run_if(terrain_streaming::<M>)
 			.before(LodPresentSystems::Produce)
-			.before(TerrainLayerSystems::<M>::QueueColliders),
+			.before(TerrainLayerSystems::<M::Base>::QueueColliders),
 	);
 }
 
@@ -418,9 +418,9 @@ pub(crate) struct PaddedTerrainTickKey {
 ///
 /// Pads sample the inner terrain store (`M`), never `Urbanization<M>`.
 #[allow(private_interfaces)]
-pub fn generate_urbanization_padded_terrain<M: Send + Sync + 'static>(
+pub fn generate_urbanization_padded_terrain<M: TerrainModel>(
 	layer: Res<UrbanizationLayerRegion>,
-	extent: Res<TerrainExtent<M>>,
+	extent: Res<TerrainExtent<M::Base>>,
 	mut development: DevelopmentIndex,
 	mut last: Local<Option<PaddedTerrainTickKey>>,
 ) {

@@ -339,6 +339,7 @@ impl terrain_layer_model::HeightField for SilentSnapshot {
 }
 
 impl terrain_layer_model::TerrainModel for Silent {
+	type Base = Self;
 	type Cell = SilentCell;
 	type Read = ();
 	type Snapshot = SilentSnapshot;

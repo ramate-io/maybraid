@@ -50,6 +50,12 @@ pub trait TerrainCell: Send + Sync + 'static {
 /// [`Self::fallback_height_at`] explicitly (see
 /// [`TerrainView::height_or_fallback`](crate::TerrainView::height_or_fallback)).
 pub trait TerrainModel: Send + Sync + 'static {
+	/// Model that owns the terrain contract resources.
+	///
+	/// Wrappers name their inner model's [`Self::Base`] so readers share one
+	/// `TerrainStreaming` / `TerrainExtent` / collider set.
+	type Base: Send + Sync + 'static;
+
 	/// Per-cell artifact this model's generation stores.
 	type Cell: TerrainCell;
 

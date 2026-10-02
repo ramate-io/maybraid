@@ -8,10 +8,7 @@ use bevy::prelude::*;
 use lod::gen::LodGenerateBudget;
 use lod::LodPresentSystems;
 use richmond::{register_richmond_plugin, DevelopmentConfig, DevelopmentEntryStore};
-use terrain_layer_model::{
-	install_terrain_contract_forward, terrain_streaming, TerrainContractForward,
-	TerrainLayerSystems, TerrainModel,
-};
+use terrain_layer_model::{terrain_streaming, TerrainLayerSystems, TerrainModel};
 use layer_stack::{ActiveGenerationMode, GenerationMode};
 use urbanization_cells::UrbanizationLodChan;
 
@@ -58,14 +55,10 @@ where
 			.init_resource::<LodGenerateBudget<UrbanizationLodChan>>()
 			.init_resource::<UrbanizationLayerRegion>()
 			.init_resource::<UrbanizationStreamKey>();
-		install_terrain_contract_forward::<M, Urbanization<M>>(
-			app,
-			TerrainContractForward::Outer,
-		);
 		app.configure_sets(
 				Update,
 				(
-					UrbanizationGenerationSystems.after(TerrainContractForward::Inner),
+					UrbanizationGenerationSystems,
 					UrbanizationStoreSystems
 						.in_set(UrbanizationGenerationSystems)
 						.run_if(terrain_streaming::<M>),
@@ -78,7 +71,7 @@ where
 					.after(UrbanizationStoreSystems)
 					.run_if(terrain_streaming::<M>)
 					.before(LodPresentSystems::Produce)
-					.before(TerrainLayerSystems::<M>::QueueColliders),
+					.before(TerrainLayerSystems::<M::Base>::QueueColliders),
 			);
 	}
 }

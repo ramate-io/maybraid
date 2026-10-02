@@ -34,7 +34,7 @@ use crate::terrain::presentation::{
 	TerrainPresenterState, TerrainRegionPresenter, TerrainStoreView, TerrainStreamPresenterState,
 };
 use terrain_layer_model::{
-	terrain_streaming, OnTerrain, TerrainContractForward, TerrainExtent, TerrainLayerSystems,
+	terrain_streaming, OnTerrain, TerrainExtent, TerrainLayerSystems,
 	TerrainStreaming,
 };
 use layer_stack::{mode_subscribed, LodPresentGateSync};
@@ -310,8 +310,7 @@ pub(crate) fn install_durham_generation(app: &mut App) {
 	.add_systems(
 		Update,
 		write_durham_extent
-			.after(TerrainFillSystems::Generate)
-			.before(TerrainContractForward::Inner),
+			.after(TerrainFillSystems::Generate),
 	)
 	.add_systems(
 		Update,

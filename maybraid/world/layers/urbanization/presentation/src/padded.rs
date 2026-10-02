@@ -16,7 +16,7 @@ use richmond::{
 };
 use layer_stack::LodPresentGateSync;
 use terrain_layer_model::{
-	terrain_streaming, TerrainContractForward, TerrainExtent, TerrainLayerSystems, TerrainModel,
+	terrain_streaming, TerrainExtent, TerrainLayerSystems, TerrainModel,
 };
 use terrain_layer_presentation::TerrainPresenter;
 use urbanization_layer_model::{
@@ -68,11 +68,10 @@ where
 				.chain()
 				.after(UrbanizationGenerationSystems)
 				.after(crate::UrbanizationHostPresent)
-				.after(TerrainContractForward::Inner)
 				.after(LodPresentGateSync)
 				.run_if(terrain_streaming::<M>)
 				.before(LodPresentSystems::Produce)
-				.before(TerrainLayerSystems::<M>::QueueColliders),
+				.before(TerrainLayerSystems::<M::Base>::QueueColliders),
 		);
 	}
 }
@@ -83,7 +82,7 @@ where
 pub fn present_urbanization_padded_terrain<M>(
 	gate: Res<LodPresentGate<(Urbanization<M>, PaddedCells)>>,
 	layer: Res<UrbanizationLayerRegion>,
-	extent: Res<TerrainExtent<M>>,
+	extent: Res<TerrainExtent<M::Base>>,
 	store: Res<DevelopmentEntryStore>,
 	mut presenter: PaddedTerrainPresenter,
 	mut state: ResMut<UrbanizationPaddedTerrainState>,

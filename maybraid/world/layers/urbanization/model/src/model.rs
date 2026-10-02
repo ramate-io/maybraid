@@ -69,6 +69,7 @@ where
 	M: TerrainModel,
 	M::Cell: PadComposable<Padded = TerrainWithPads> + TerrainCell<Mesh = TerrainMeshBuilder>,
 {
+	type Base = M::Base;
 	type Cell = TerrainWithPads;
 	type Read = UrbanRead<'static, 'static, M>;
 	type Snapshot = UrbanSnapshot<M::Snapshot>;

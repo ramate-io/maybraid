@@ -10,7 +10,7 @@ use chico::{
 	DEFAULT_FOREST_GROVE_TILE_XZ, GROVE_GENERATE_RADIUS_M, GROVE_PRESENT_RADIUS_M,
 	MEDIUM_BUMP_OUT_ANCHOR_STEP_M, MEDIUM_BUMP_OUT_OUTER_RADIUS_M,
 };
-use terrain_layer_model::{terrain_streaming, TerrainContractForward};
+use terrain_layer_model::{terrain_streaming, TerrainModel};
 use lod::gen::{LodGenerateBudget, LodGenerateKeepRegion, LodGenerateQueue, LodGenerateRegion};
 use lod::presentation::{LodPresentKeepRegion, LodPresentQueue, LodPresentRegion};
 use lod::{
@@ -289,14 +289,13 @@ pub(crate) fn clear_vegetation_stream(
 }
 
 /// Forest and bump-out streams for `Mode`, reading [`VegetationModeConfig`].
-pub fn install_vegetation_stream<Mode: GenerationMode, M: Send + Sync + 'static>(app: &mut App) {
+pub fn install_vegetation_stream<Mode: GenerationMode, M: TerrainModel>(app: &mut App) {
 	app.add_systems(
 		Update,
 		stream_vegetation::<Mode>
 			.in_set(GenerationModeSystems::<Mode>::default())
 			.in_set(VegetationGenerationSystems)
 			.run_if(terrain_streaming::<M>)
-			.after(TerrainContractForward::Outer)
 			.before(LodGenerateSystems::Produce)
 			.before(LodPresentSystems::Produce),
 	);

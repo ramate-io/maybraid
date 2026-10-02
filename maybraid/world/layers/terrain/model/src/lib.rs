@@ -17,8 +17,8 @@ mod on_terrain;
 mod view;
 
 pub use contract::{
-	forward_terrain_contract, install_terrain_contract_forward, terrain_streaming, TerrainContractForward,
-	TerrainExtent, TerrainExtentKind, TerrainLayerSystems, TerrainStreaming,
+	terrain_streaming, TerrainContract, TerrainExtent, TerrainExtentKind, TerrainLayerSystems,
+	TerrainStreaming,
 };
 pub use generation::{
 	BaseTerrainGenerationCore, BaseTerrainGenerationPlugin, BaseTerrainModeConfig,

@@ -70,6 +70,7 @@ impl TerrainCell for Terrain {
 }
 
 impl TerrainModel for Durham {
+	type Base = Durham;
 	type Cell = Terrain;
 	type Read = DurhamRead<'static>;
 	type Snapshot = DurhamHeightSnapshot;

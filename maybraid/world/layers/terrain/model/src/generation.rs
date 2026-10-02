@@ -6,11 +6,8 @@ use bevy::app::{App, Plugin};
 use bevy::prelude::*;
 
 use layer_stack::{ActiveGenerationMode, GenerationMode};
-use crate::contract::{
-	install_terrain_contract_forward, TerrainContractForward, TerrainExtent, TerrainStreaming,
-};
+use crate::contract::{TerrainExtent, TerrainStreaming};
 use crate::model::TerrainModel;
-use crate::on_terrain::OnTerrain;
 
 /// A model with its own generation stack (the bottom of the wiring diagram).
 ///
@@ -45,13 +42,8 @@ impl<T: TerrainGeneration> Default for BaseTerrainGenerationCore<T> {
 
 impl<T: TerrainGeneration> Plugin for BaseTerrainGenerationCore<T> {
 	fn build(&self, app: &mut App) {
-		app.init_resource::<TerrainStreaming<T>>()
-			.init_resource::<TerrainExtent<T>>()
-			.configure_sets(
-				Update,
-				(TerrainContractForward::Inner, TerrainContractForward::Outer).chain(),
-			);
-		install_terrain_contract_forward::<T, OnTerrain<T>>(app, TerrainContractForward::Inner);
+		app.init_resource::<TerrainStreaming<T::Base>>()
+			.init_resource::<TerrainExtent<T::Base>>();
 	}
 }
 
@@ -183,6 +175,7 @@ mod tests {
 	}
 
 	impl TerrainModel for Stub {
+		type Base = Self;
 		type Cell = f32;
 		type Read = StubRead<'static>;
 		type Snapshot = f32;
@@ -351,6 +344,49 @@ mod tests {
 			"beta plugin first still started from alpha: {:?}",
 			live(&beta_first)
 		);
+		Ok(())
+	}
+
+	#[test]
+	fn wrappers_read_the_base_contract_the_same_update() -> anyhow::Result<()> {
+		use bevy::math::bounding::Aabb3d;
+		use bevy::math::Vec3;
+		use crate::contract::TerrainContract;
+		use crate::on_terrain::OnTerrain;
+		use crate::{terrain_streaming, TerrainExtent, TerrainStreaming};
+
+		type Stacked = OnTerrain<OnTerrain<Stub>>;
+
+		#[derive(Resource, Default)]
+		struct Seen(Option<(bool, Aabb3d)>);
+
+		fn note_contract(contract: TerrainContract<Stacked>, mut seen: ResMut<Seen>) {
+			seen.0 = Some((contract.streaming.enabled, contract.extent.presentation_region()));
+		}
+
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins);
+		app.insert_resource(TerrainStreaming::<Stub>::new(false));
+		let first = Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE);
+		app.insert_resource(TerrainExtent::<Stub>::pinned(first));
+		app.init_resource::<Seen>();
+		app.add_systems(
+			Update,
+			note_contract.run_if(terrain_streaming::<Stacked>),
+		);
+
+		app.update();
+		anyhow::ensure!(
+			app.world().resource::<Seen>().0.is_none(),
+			"streaming off skips the reader"
+		);
+
+		app.world_mut().resource_mut::<TerrainStreaming<Stub>>().enabled = true;
+		let next = Aabb3d::from_min_max(Vec3::splat(-4.0), Vec3::splat(4.0));
+		*app.world_mut().resource_mut::<TerrainExtent<Stub>>() = TerrainExtent::streamed(next);
+		app.update();
+		let seen = app.world().resource::<Seen>().0;
+		anyhow::ensure!(seen == Some((true, next)), "wrapper sees the base write: {seen:?}");
 		Ok(())
 	}
 }

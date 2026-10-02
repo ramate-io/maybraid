@@ -139,7 +139,7 @@ fn streamed_hosts_leave_when_the_layer_region_is_gone() -> anyhow::Result<()> {
 	let mut app = subscribed_app();
 	app.insert_resource(UrbanizationLayerRegion::default());
 	app.insert_resource(playable_world_cell_layout());
-	app.insert_resource(terrain_layer_model::TerrainExtent::<Urbanized>::streamed(
+	app.insert_resource(terrain_layer_model::TerrainExtent::<Durham>::streamed(
 		playable_world_cell_layout().presentation_region(),
 	));
 	app.insert_resource(TerrainEntryStore::default());
@@ -347,7 +347,7 @@ fn hosts_walk_a_stored_development_with_no_hopscotch() -> anyhow::Result<()> {
 	}
 
 	let region = urbanization_host_region(
-		&terrain_layer_model::TerrainExtent::<Urbanized>::pinned(layout.presentation_region()),
+		&terrain_layer_model::TerrainExtent::<Durham>::pinned(layout.presentation_region()),
 		None,
 	)
 		.ok_or_else(|| anyhow::anyhow!("fine-patch host region"))?;

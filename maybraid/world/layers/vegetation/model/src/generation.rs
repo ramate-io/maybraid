@@ -7,6 +7,7 @@ use bevy::prelude::*;
 use chico::{BumpOutLodChan, ForestLodChan, MediumBumpOutLodChan};
 use layer_stack::{ActiveGenerationMode, GenerationMode};
 use lod::gen::LodGenerateBudget;
+use terrain_layer_model::TerrainModel;
 
 use crate::config::VegetationLayerConfig;
 use crate::stream::{
@@ -62,19 +63,19 @@ pub struct VegetationGenerationPlugin<Mode: GenerationMode, M> {
 	_marker: PhantomData<fn() -> (Mode, M)>,
 }
 
-impl<Mode: GenerationMode, M: Send + Sync + 'static> VegetationGenerationPlugin<Mode, M> {
+impl<Mode: GenerationMode, M: TerrainModel> VegetationGenerationPlugin<Mode, M> {
 	pub fn new(config: VegetationLayerConfig) -> Self {
 		Self { config, _marker: PhantomData }
 	}
 }
 
-impl<Mode: GenerationMode, M: Send + Sync + 'static> Default for VegetationGenerationPlugin<Mode, M> {
+impl<Mode: GenerationMode, M: TerrainModel> Default for VegetationGenerationPlugin<Mode, M> {
 	fn default() -> Self {
 		Self::new(VegetationLayerConfig::default())
 	}
 }
 
-impl<Mode: GenerationMode, M: Send + Sync + 'static> Plugin for VegetationGenerationPlugin<Mode, M> {
+impl<Mode: GenerationMode, M: TerrainModel> Plugin for VegetationGenerationPlugin<Mode, M> {
 	fn build(&self, app: &mut App) {
 		if !app.is_plugin_added::<VegetationGenerationCore>() {
 			app.add_plugins(VegetationGenerationCore);
@@ -107,7 +108,7 @@ mod tests {
 	use chico::ForestLodChan;
 	use layer_stack::{ActiveGenerationMode, GenerationMode, GenerationModePlugin};
 	use lod::gen::LodGenerateBudget;
-	use terrain_layer_model::TerrainStreaming;
+	use terrain_layer_model::{HeightField, TerrainCell, TerrainModel, TerrainStreaming};
 
 	use super::{VegetationGenerationCore, VegetationGenerationPlugin, VegetationModeConfig};
 	use crate::config::VegetationLayerConfig;
@@ -121,6 +122,101 @@ mod tests {
 	impl GenerationMode for Beta {}
 
 	struct Ground;
+
+	struct GroundCell;
+
+	impl TerrainCell for GroundCell {
+		type Mesh = ();
+		fn bounds(&self) -> bevy::math::bounding::Aabb3d {
+			bevy::math::bounding::Aabb3d::from_min_max(
+				bevy::math::Vec3::ZERO,
+				bevy::math::Vec3::ONE,
+			)
+		}
+		fn mesh_builder(&self) -> () {}
+		fn chunk_pose(&self) -> bevy::prelude::Transform {
+			bevy::prelude::Transform::IDENTITY
+		}
+		fn seeds_collision(&self) -> bool {
+			false
+		}
+		fn res_2(&self) -> u8 {
+			0
+		}
+	}
+
+	#[derive(Clone)]
+	struct GroundField;
+
+	impl HeightField for GroundField {
+		fn height_at(&self, _xz: bevy::math::Vec2) -> Option<f32> {
+			None
+		}
+		fn fallback_height_at(&self, _xz: bevy::math::Vec2) -> f32 {
+			0.0
+		}
+	}
+
+	impl TerrainModel for Ground {
+		type Base = Self;
+		type Cell = GroundCell;
+		type Read = ();
+		type Snapshot = GroundField;
+		type Prepare = ();
+
+		fn prepare(
+			_prepare: &mut bevy::ecs::system::SystemParamItem<'_, '_, Self::Prepare>,
+			_bounds: bevy::math::bounding::Aabb3d,
+			_lod_ref: &lod::lod_ref::LodRef,
+		) {
+		}
+
+		fn height_at(
+			_read: &bevy::ecs::system::SystemParamItem<'_, '_, Self::Read>,
+			_xz: bevy::math::Vec2,
+		) -> Option<f32> {
+			None
+		}
+
+		fn fallback_height_at(
+			_read: &bevy::ecs::system::SystemParamItem<'_, '_, Self::Read>,
+			_xz: bevy::math::Vec2,
+		) -> f32 {
+			0.0
+		}
+
+		fn cell_ids_overlapping(
+			_read: &bevy::ecs::system::SystemParamItem<'_, '_, Self::Read>,
+			_region: bevy::math::bounding::Aabb3d,
+		) -> Vec<lod::gen::Id> {
+			Vec::new()
+		}
+
+		fn cell<'a>(
+			_read: &'a bevy::ecs::system::SystemParamItem<'_, '_, Self::Read>,
+			_id: lod::gen::Id,
+		) -> Option<&'a GroundCell> {
+			None
+		}
+
+		fn overlay_cell<'a>(
+			_read: &'a bevy::ecs::system::SystemParamItem<'_, '_, Self::Read>,
+			_bounds: bevy::math::bounding::Aabb3d,
+			_target_size: f32,
+			_overlay_size_tolerance: Option<f32>,
+		) -> Option<&'a dyn TerrainCell<Mesh = ()>> {
+			None
+		}
+
+		fn snapshot(
+			_read: &bevy::ecs::system::SystemParamItem<'_, '_, Self::Read>,
+			_region: bevy::math::bounding::Aabb3d,
+		) -> GroundField {
+			GroundField
+		}
+
+		fn require_generation(_app: &App) {}
+	}
 
 	fn forest_radius<Mode: GenerationMode>(app: &App) -> Option<u32> {
 		app.world()

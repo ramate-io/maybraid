@@ -18,6 +18,7 @@ use crate::model::{TerrainCell, TerrainModel};
 pub struct OnTerrain<T>(PhantomData<fn() -> T>);
 
 impl<T: TerrainModel> TerrainModel for OnTerrain<T> {
+	type Base = T::Base;
 	type Cell = T::Cell;
 	type Read = T::Read;
 	type Snapshot = T::Snapshot;

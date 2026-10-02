@@ -667,3 +667,128 @@ fn plugin_order_does_not_matter() -> anyhow::Result<()> {
 	);
 	Ok(())
 }
+
+#[test]
+fn wrappers_read_the_base_contract_the_same_update() -> anyhow::Result<()> {
+	use bevy::ecs::system::SystemParamItem;
+	use bevy::prelude::{
+		App, IntoScheduleConfigs, MinimalPlugins, ResMut, Resource, Update,
+	};
+	use durham::{Terrain, TerrainMeshBuilder};
+	use lod::gen::Id;
+	use lod::lod_ref::LodRef;
+	use terrain_layer_model::{
+		terrain_streaming, HeightField, TerrainCell, TerrainContract, TerrainExtent, TerrainModel,
+		TerrainStreaming,
+	};
+
+	struct Stub;
+
+	#[derive(Clone)]
+	struct SilentField;
+
+	impl HeightField for SilentField {
+		fn height_at(&self, _xz: Vec2) -> Option<f32> {
+			None
+		}
+
+		fn fallback_height_at(&self, _xz: Vec2) -> f32 {
+			0.0
+		}
+	}
+
+	impl TerrainModel for Stub {
+		type Base = Self;
+		type Cell = Terrain;
+		type Read = ();
+		type Snapshot = SilentField;
+		type Prepare = ();
+
+		fn prepare(
+			_prepare: &mut SystemParamItem<'_, '_, Self::Prepare>,
+			_bounds: Aabb3d,
+			_lod_ref: &LodRef,
+		) {
+		}
+
+		fn height_at(
+			_read: &SystemParamItem<'_, '_, Self::Read>,
+			_xz: Vec2,
+		) -> Option<f32> {
+			None
+		}
+
+		fn fallback_height_at(
+			_read: &SystemParamItem<'_, '_, Self::Read>,
+			_xz: Vec2,
+		) -> f32 {
+			0.0
+		}
+
+		fn cell_ids_overlapping(
+			_read: &SystemParamItem<'_, '_, Self::Read>,
+			_region: Aabb3d,
+		) -> Vec<Id> {
+			Vec::new()
+		}
+
+		fn cell<'a>(
+			_read: &'a SystemParamItem<'_, '_, Self::Read>,
+			_id: Id,
+		) -> Option<&'a Terrain> {
+			None
+		}
+
+		fn overlay_cell<'a>(
+			_read: &'a SystemParamItem<'_, '_, Self::Read>,
+			_bounds: Aabb3d,
+			_target_size: f32,
+			_overlay_size_tolerance: Option<f32>,
+		) -> Option<&'a dyn TerrainCell<Mesh = TerrainMeshBuilder>> {
+			None
+		}
+
+		fn snapshot(
+			_read: &SystemParamItem<'_, '_, Self::Read>,
+			_region: Aabb3d,
+		) -> SilentField {
+			SilentField
+		}
+
+		fn require_generation(_app: &bevy::prelude::App) {}
+	}
+
+	type Stacked = Urbanization<OnTerrain<Stub>>;
+
+	#[derive(Resource, Default)]
+	struct Seen(Option<(bool, Aabb3d)>);
+
+	fn note_contract(contract: TerrainContract<Stacked>, mut seen: ResMut<Seen>) {
+		seen.0 = Some((contract.streaming.enabled, contract.extent.presentation_region()));
+	}
+
+	let mut app = App::new();
+	app.add_plugins(MinimalPlugins);
+	app.insert_resource(TerrainStreaming::<Stub>::new(false));
+	let first = Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE);
+	app.insert_resource(TerrainExtent::<Stub>::pinned(first));
+	app.init_resource::<Seen>();
+	app.add_systems(
+		Update,
+		note_contract.run_if(terrain_streaming::<Stacked>),
+	);
+
+	app.update();
+	anyhow::ensure!(
+		app.world().resource::<Seen>().0.is_none(),
+		"streaming off skips the reader"
+	);
+
+	app.world_mut().resource_mut::<TerrainStreaming<Stub>>().enabled = true;
+	let next = Aabb3d::from_min_max(Vec3::splat(-4.0), Vec3::splat(4.0));
+	*app.world_mut().resource_mut::<TerrainExtent<Stub>>() = TerrainExtent::streamed(next);
+	app.update();
+	let seen = app.world().resource::<Seen>().0;
+	anyhow::ensure!(seen == Some((true, next)), "wrapper sees the base write: {seen:?}");
+	Ok(())
+}
