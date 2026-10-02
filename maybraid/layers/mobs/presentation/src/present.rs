@@ -11,11 +11,12 @@ use lod::lod_ref::LodRef;
 use lod::presentation::RegionPresenter;
 use lod::scene::{LodRefreshRegions, LodRefreshRegionsStatus};
 use lod::{
-	LodNode, LodNodePose, LodRefreshDomain, LodSceneRefreshAabb, LodSceneRefreshRegion, LodViewer,
+	LodNode, LodNodePose, LodPresentSystems, LodRefreshDomain, LodSceneRefreshAabb,
+	LodSceneRefreshRegion, LodViewer,
 };
 use maybraid_mobs::MobScene;
 use mob_intelligence::MemberOf;
-use mob_layer_model::{MobCell, MobIndex};
+use mob_layer_model::{MobCell, MobGenerationSystems, MobIndex};
 use terrain_layer_model::{ActiveGenerationMode, ModeSubscription, TerrainView};
 use urbanization_layer_model::UrbanModel;
 
@@ -50,7 +51,7 @@ impl LodRefreshRegions for MobHighLodRegion {
 }
 
 #[derive(Resource, Default)]
-pub struct MobPresenterState {
+pub(crate) struct MobPresenterState {
 	presented: HashMap<Id, PresentedCell>,
 	pending_despawn: VecDeque<Vec<Entity>>,
 }
@@ -91,7 +92,8 @@ impl MobPresenterState {
 		self.presented.contains_key(&id)
 	}
 
-	pub fn insert_presented(&mut self, id: Id, entities: Vec<Entity>) {
+	#[cfg(test)]
+	pub(crate) fn insert_presented(&mut self, id: Id, entities: Vec<Entity>) {
 		self.presented.insert(
 			id,
 			PresentedCell { version: Version(1), entities, hidden: false },
@@ -215,12 +217,24 @@ pub fn pulse_mob_high_lod(
 	}
 }
 
+/// Teardown registration [`crate::MobPresentationCore`] uses. Tests call this
+/// instead of adding the plugins that pull physics and scenes.
+pub(crate) fn install_mob_cell_teardown<G: UrbanModel>(app: &mut App) {
+	app.init_resource::<MobPresenterState>().add_systems(
+		Update,
+		(retire_mob_presenters::<G>, retire_mob_cells_on_mode_change)
+			.after(MobGenerationSystems)
+			.before(LodPresentSystems::Produce),
+	)
+	.add_systems(Last, drain_retired_mob_cells);
+}
+
 /// Queue every presented cell when the active generation mode changes.
 ///
 /// Both modes may subscribe, so [`retire_mob_presenters`] does not run.
 /// Ordered `.after(MobGenerationSystems).before(LodPresentSystems::Produce)`
 /// so a cell written on the entering frame presents after this retire.
-pub fn retire_mob_cells_on_mode_change(
+pub(crate) fn retire_mob_cells_on_mode_change(
 	mode: Res<State<ActiveGenerationMode>>,
 	mut presented: ResMut<MobPresenterState>,
 ) {
@@ -237,7 +251,7 @@ pub fn retire_mob_cells_on_mode_change(
 ///
 /// Ordered `.after(MobGenerationSystems).before(LodPresentSystems::Produce)`.
 /// No present-state system runs in that window, so the frame timing matches today.
-pub fn retire_mob_presenters<G: UrbanModel>(
+pub(crate) fn retire_mob_presenters<G: UrbanModel>(
 	subscription: ModeSubscription<(G, MobPresent)>,
 	mut presented: ResMut<MobPresenterState>,
 ) {
@@ -251,7 +265,7 @@ pub fn retire_mob_presenters<G: UrbanModel>(
 
 /// Combat, threat, and mob systems queue inserts on hosts and members through
 /// `PostUpdate`. Despawn in `Last` so those commands still find their targets.
-pub fn drain_retired_mob_cells(
+pub(crate) fn drain_retired_mob_cells(
 	mut presented: ResMut<MobPresenterState>,
 	members: Query<(Entity, &MemberOf)>,
 	mut commands: Commands,

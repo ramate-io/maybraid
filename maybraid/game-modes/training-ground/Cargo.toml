@@ -25,7 +25,6 @@ urbanization-layer-model = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
-mob-intelligence = { workspace = true }
 threat-intelligence = { workspace = true }
 
 [lints]

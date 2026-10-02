@@ -12,22 +12,18 @@ use lod::{
 use lod_gimme::GimmeLodSceneRefreshPlugin;
 use maybraid_mobs::{MobLodRefreshMode, MobScene, MobSceneSystems};
 use mob_groups::MobGroupsPlugin;
-use mob_layer_model::{
-	MobCell, MobGenerationCore, MobGenerationSystems, MobIndex, MobLodChan,
-};
+use mob_layer_model::{MobCell, MobGenerationCore, MobIndex, MobLodChan};
 use terrain_layer_model::{subscribe_mode, GenerationMode, RequireLayer};
 use urbanization_layer_model::UrbanModel;
 
 mod present;
 
 use present::{
-	fit_mob_hosts_to_surface, pulse_mob_high_lod, retire_mob_presenters, MobHighLodChan,
-	MobHighLodRegion, MobPresenter,
+	fit_mob_hosts_to_surface, pulse_mob_high_lod, MobHighLodChan, MobHighLodRegion, MobPresenter,
+	MobPresenterState,
 };
 
-pub use present::{
-	drain_retired_mob_cells, retire_mob_cells_on_mode_change, MobPresenterState, PresentedMobCell,
-};
+pub use present::PresentedMobCell;
 
 /// Marker for mob-presenter subscriptions on ground `G`.
 pub struct MobPresent;
@@ -80,33 +76,24 @@ impl<G: UrbanModel> Plugin for MobPresentationCore<G> {
 				MobHighLodChan,
 				With<LodViewer>,
 			>::default())
-			.configure_sets(Update, LodPresentSystems::Produce.after(LodGenerateSystems::Drain))
-			.add_systems(
-				Update,
-				(
-					retire_mob_presenters::<G>,
-					retire_mob_cells_on_mode_change,
-				)
-					.after(MobGenerationSystems)
-					.before(LodPresentSystems::Produce),
-			)
-			.add_systems(Last, drain_retired_mob_cells)
-			.add_systems(
-				Update,
-				fit_mob_hosts_to_surface::<G>.in_set(MobSceneSystems::Surface),
-			)
-			.add_systems(
-				Update,
-				pulse_mob_high_lod
-					.run_if(on_timer(present::MOB_HIGH_LOD_REFRESH_INTERVAL))
-					.in_set(LodRefreshSystems::ProduceRegions),
-			)
-			.add_systems(
-				Update,
-				update_lod_host_levels::<MobScene, (), With<LodViewer>>
-					.run_if(on_timer(present::MOB_HIGH_LOD_RECONCILE_INTERVAL))
-					.in_set(LodRefreshSystems::UpdateLevels),
-			);
+			.configure_sets(Update, LodPresentSystems::Produce.after(LodGenerateSystems::Drain));
+		present::install_mob_cell_teardown::<G>(app);
+		app.add_systems(
+			Update,
+			fit_mob_hosts_to_surface::<G>.in_set(MobSceneSystems::Surface),
+		)
+		.add_systems(
+			Update,
+			pulse_mob_high_lod
+				.run_if(on_timer(present::MOB_HIGH_LOD_REFRESH_INTERVAL))
+				.in_set(LodRefreshSystems::ProduceRegions),
+		)
+		.add_systems(
+			Update,
+			update_lod_host_levels::<MobScene, (), With<LodViewer>>
+				.run_if(on_timer(present::MOB_HIGH_LOD_RECONCILE_INTERVAL))
+				.in_set(LodRefreshSystems::UpdateLevels),
+		);
 	}
 }
 

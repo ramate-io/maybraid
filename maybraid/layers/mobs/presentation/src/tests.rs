@@ -174,6 +174,81 @@ fn two_modes_install_the_core_once() -> anyhow::Result<()> {
 	Ok(())
 }
 
+fn teardown_app() -> App {
+	let mut app = App::new();
+	app.add_plugins((
+		MinimalPlugins,
+		StatesPlugin,
+		GenerationModePlugin::<TestMode>::initial(),
+		GenerationModePlugin::<OtherMode>::default(),
+	));
+	crate::present::install_mob_cell_teardown::<Urbanized>(&mut app);
+	app
+}
+
+fn present_app() -> App {
+	use durham_terrain_models::{
+		BaseTerrainNoise, TerrainCellLayout, TerrainConfig, TerrainEntryStore, WorldBaseTerrain,
+	};
+	use lod::LodPresentPlugin;
+	use lod::LodViewer;
+	use mob_layer_model::{MobIndex, MobLodChan};
+	use richmond_development_models::DevelopmentEntryStore;
+	use richmond_urbanization::UrbanizationIndex;
+
+	use crate::present::MobPresenter;
+
+	let mut app = teardown_app();
+	app.add_plugins((
+		AssetPlugin::default(),
+		LodPresentPlugin::<
+			mob_layer_model::MobCell,
+			MobIndex,
+			MobPresenter<'_, '_, Urbanized>,
+			MobLodChan,
+			bevy::prelude::With<LodViewer>,
+		>::default(),
+	));
+	app.insert_resource(TerrainEntryStore::default());
+	app.insert_resource(TerrainCellLayout::default());
+	app.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(
+		&TerrainConfig::new(42),
+	)));
+	app.insert_resource(DevelopmentEntryStore::default());
+	app.insert_resource(UrbanizationIndex::default());
+	app.init_resource::<MobIndex>();
+	app
+}
+
+fn cover_origin_keep(app: &mut App) {
+	use bevy::math::bounding::Aabb3d;
+	use bevy::math::Vec3;
+	use lod::presentation::LodPresentKeepRegion;
+	use mob_layer_model::MobLodChan;
+
+	app.insert_resource({
+		let mut keep = LodPresentKeepRegion::<MobLodChan>::default();
+		keep.region = Some(Aabb3d::from_min_max(
+			Vec3::new(-2_000.0, -1_000.0, -2_000.0),
+			Vec3::new(2_000.0, 1_000.0, 2_000.0),
+		));
+		keep
+	});
+}
+
+fn spawn_viewer(app: &mut App) {
+	use bevy::prelude::Transform;
+	use lod::lod_ref::{LodNode, LodNodePose};
+	use lod::LodViewer;
+
+	app.world_mut().spawn((
+		LodViewer,
+		LodNode,
+		LodNodePose::default(),
+		Transform::IDENTITY,
+	));
+}
+
 #[derive(bevy::prelude::Resource, Default)]
 struct SquadSeenInPostUpdate(bool);
 
@@ -185,22 +260,10 @@ fn note_squad_before_last(
 	seen.0 = !roots.is_empty() && !members.is_empty();
 }
 
-#[test]
-fn retired_hosts_and_members_survive_post_update_then_leave_in_last() -> anyhow::Result<()> {
-	use bevy::prelude::{ChildOf, Last, PostUpdate, Update};
-	use lod::gen::Id;
+fn spawn_presented_squad(app: &mut App) -> (Id, bevy::prelude::Entity, bevy::prelude::Entity, bevy::prelude::Entity, bevy::prelude::Entity) {
+	use bevy::prelude::ChildOf;
 	use mob_intelligence::MemberOf;
 
-	let mut app = App::new();
-	app.add_plugins((
-		MinimalPlugins,
-		StatesPlugin,
-		GenerationModePlugin::<TestMode>::initial(),
-		GenerationModePlugin::<OtherMode>::default(),
-	));
-	subscribe_mode::<(Urbanized, MobPresent), TestMode>(&mut app);
-	app.init_resource::<MobPresenterState>();
-	app.init_resource::<SquadSeenInPostUpdate>();
 	let id = Id::from_cell(bevy::math::bounding::Aabb3d::from_min_max(
 		bevy::math::Vec3::ZERO,
 		bevy::math::Vec3::ONE,
@@ -212,10 +275,20 @@ fn retired_hosts_and_members_survive_post_update_then_leave_in_last() -> anyhow:
 	app.world_mut()
 		.resource_mut::<MobPresenterState>()
 		.insert_presented(id, vec![root, host]);
-	app.add_systems(Update, retire_mob_presenters::<Urbanized>);
-	app.add_systems(PostUpdate, note_squad_before_last);
-	app.add_systems(Last, drain_retired_mob_cells);
+	(id, root, host, member, respawned)
+}
 
+#[test]
+fn retired_hosts_and_members_survive_post_update_then_leave_in_last() -> anyhow::Result<()> {
+	use bevy::prelude::PostUpdate;
+
+	let mut app = teardown_app();
+	subscribe_mode::<(Urbanized, MobPresent), TestMode>(&mut app);
+	app.init_resource::<SquadSeenInPostUpdate>();
+	app.add_systems(PostUpdate, note_squad_before_last);
+	app.update();
+
+	let (_id, root, host, member, respawned) = spawn_presented_squad(&mut app);
 	app.world_mut()
 		.resource_mut::<NextState<ActiveGenerationMode>>()
 		.set(ActiveGenerationMode::of::<OtherMode>());
@@ -238,60 +311,12 @@ fn retired_hosts_and_members_survive_post_update_then_leave_in_last() -> anyhow:
 #[test]
 fn announced_cell_presents_after_the_first_keep_scan() -> anyhow::Result<()> {
 	use bevy::ecs::system::RunSystemOnce;
-	use bevy::math::bounding::Aabb3d;
-	use bevy::math::Vec3;
-	use bevy::prelude::{AssetPlugin, Transform};
-	use durham_terrain_models::{
-		BaseTerrainNoise, TerrainCellLayout, TerrainConfig, TerrainEntryStore, WorldBaseTerrain,
-	};
-	use lod::lod_ref::{LodNode, LodNodePose};
-	use lod::presentation::LodPresentKeepRegion;
-	use lod::{LodPresentPlugin, LodViewer};
-	use mob_layer_model::{MobCell, MobCellExtent, MobCellWrites, MobIndex, MobLodChan};
-	use richmond_development_models::DevelopmentEntryStore;
-	use richmond_urbanization::UrbanizationIndex;
+	use mob_layer_model::{MobCell, MobCellExtent, MobCellWrites};
 
-	use crate::present::MobPresenter;
-
-	let mut app = App::new();
-	app.add_plugins((
-		MinimalPlugins,
-		AssetPlugin::default(),
-		StatesPlugin,
-		GenerationModePlugin::<TestMode>::initial(),
-		GenerationModePlugin::<OtherMode>::default(),
-		LodPresentPlugin::<
-			mob_layer_model::MobCell,
-			MobIndex,
-			MobPresenter<'_, '_, Urbanized>,
-			MobLodChan,
-			bevy::prelude::With<LodViewer>,
-		>::default(),
-	));
+	let mut app = present_app();
 	subscribe_mode::<(Urbanized, MobPresent), TestMode>(&mut app);
-	app.init_resource::<MobPresenterState>();
-	app.insert_resource(TerrainEntryStore::default());
-	app.insert_resource(TerrainCellLayout::default());
-	app.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(
-		&TerrainConfig::new(42),
-	)));
-	app.insert_resource(DevelopmentEntryStore::default());
-	app.insert_resource(UrbanizationIndex::default());
-	app.insert_resource(MobIndex::default());
-	app.insert_resource({
-		let mut keep = LodPresentKeepRegion::<MobLodChan>::default();
-		keep.region = Some(Aabb3d::from_min_max(
-			Vec3::new(-2_000.0, -1_000.0, -2_000.0),
-			Vec3::new(2_000.0, 1_000.0, 2_000.0),
-		));
-		keep
-	});
-	app.world_mut().spawn((
-		LodViewer,
-		LodNode,
-		LodNodePose::default(),
-		Transform::IDENTITY,
-	));
+	cover_origin_keep(&mut app);
+	spawn_viewer(&mut app);
 	app.update();
 	anyhow::ensure!(
 		!app.world().resource::<MobPresenterState>().presents(MobCellExtent::from_cell_index(0, 0).id()),
@@ -320,46 +345,16 @@ fn announced_cell_presents_after_the_first_keep_scan() -> anyhow::Result<()> {
 
 #[test]
 fn presented_cells_leave_when_the_subscribed_mode_changes() -> anyhow::Result<()> {
-	use bevy::prelude::{ChildOf, IntoScheduleConfigs, Last, PostUpdate, Update};
-	use lod::LodPresentSystems;
-	use mob_intelligence::MemberOf;
-	use mob_layer_model::MobGenerationSystems;
+	use bevy::prelude::PostUpdate;
 
-	use crate::present::retire_mob_cells_on_mode_change;
-
-	let mut app = App::new();
-	app.add_plugins((
-		MinimalPlugins,
-		StatesPlugin,
-		GenerationModePlugin::<TestMode>::initial(),
-		GenerationModePlugin::<OtherMode>::default(),
-	));
+	let mut app = teardown_app();
 	subscribe_mode::<(Urbanized, MobPresent), TestMode>(&mut app);
 	subscribe_mode::<(Urbanized, MobPresent), OtherMode>(&mut app);
-	app.init_resource::<MobPresenterState>();
 	app.init_resource::<SquadSeenInPostUpdate>();
-	app.add_systems(
-		Update,
-		retire_mob_cells_on_mode_change
-			.after(MobGenerationSystems)
-			.before(LodPresentSystems::Produce),
-	);
 	app.add_systems(PostUpdate, note_squad_before_last);
-	app.add_systems(Last, drain_retired_mob_cells);
 	app.update();
 
-	let id = Id::from_cell(bevy::math::bounding::Aabb3d::from_min_max(
-		bevy::math::Vec3::ZERO,
-		bevy::math::Vec3::ONE,
-	));
-	let root = app.world_mut().spawn(MobCellRoot).id();
-	let host = app.world_mut().spawn((PresentedMobCell(id), ChildOf(root))).id();
-	let member = app.world_mut().spawn(MemberOf { mob: host, slot: 0 }).id();
-	let respawned = app.world_mut().spawn(MemberOf { mob: host, slot: 1 }).id();
-	app.world_mut()
-		.resource_mut::<MobPresenterState>()
-		.insert_presented(id, vec![root, host]);
-
+	let (_id, root, host, member, respawned) = spawn_presented_squad(&mut app);
 	app.world_mut()
 		.resource_mut::<NextState<ActiveGenerationMode>>()
 		.set(ActiveGenerationMode::of::<OtherMode>());
@@ -388,64 +383,18 @@ fn write_cell_in_other_mode(mut cells: mob_layer_model::MobCellWrites) {
 #[test]
 fn a_cell_written_on_the_entering_frame_still_presents() -> anyhow::Result<()> {
 	use bevy::ecs::system::RunSystemOnce;
-	use bevy::math::bounding::Aabb3d;
-	use bevy::math::Vec3;
-	use bevy::prelude::{AssetPlugin, IntoScheduleConfigs, Last, Transform, Update};
-	use durham_terrain_models::{
-		BaseTerrainNoise, TerrainCellLayout, TerrainConfig, TerrainEntryStore, WorldBaseTerrain,
-	};
-	use lod::lod_ref::{LodNode, LodNodePose};
-	use lod::presentation::LodPresentKeepRegion;
-	use lod::{LodPresentPlugin, LodPresentSystems, LodViewer};
+	use bevy::prelude::{IntoScheduleConfigs, Update};
 	use mob_layer_model::{
-		MobCell, MobCellExtent, MobCellWrites, MobGenerationSystems, MobIndex, MobLodChan,
+		MobCell, MobCellExtent, MobCellWrites, MobGenerationSystems,
 	};
-	use richmond_development_models::DevelopmentEntryStore;
-	use richmond_urbanization::UrbanizationIndex;
+	use lod::LodPresentSystems;
 	use terrain_layer_model::in_generation_mode;
 
-	use crate::present::{retire_mob_cells_on_mode_change, MobPresenter};
-
-	let mut app = App::new();
-	app.add_plugins((
-		MinimalPlugins,
-		AssetPlugin::default(),
-		StatesPlugin,
-		GenerationModePlugin::<TestMode>::initial(),
-		GenerationModePlugin::<OtherMode>::default(),
-		LodPresentPlugin::<
-			mob_layer_model::MobCell,
-			MobIndex,
-			MobPresenter<'_, '_, Urbanized>,
-			MobLodChan,
-			bevy::prelude::With<LodViewer>,
-		>::default(),
-	));
+	let mut app = present_app();
 	subscribe_mode::<(Urbanized, MobPresent), TestMode>(&mut app);
 	subscribe_mode::<(Urbanized, MobPresent), OtherMode>(&mut app);
-	app.init_resource::<MobPresenterState>();
-	app.insert_resource(TerrainEntryStore::default());
-	app.insert_resource(TerrainCellLayout::default());
-	app.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(
-		&TerrainConfig::new(42),
-	)));
-	app.insert_resource(DevelopmentEntryStore::default());
-	app.insert_resource(UrbanizationIndex::default());
-	app.insert_resource(MobIndex::default());
-	app.insert_resource({
-		let mut keep = LodPresentKeepRegion::<MobLodChan>::default();
-		keep.region = Some(Aabb3d::from_min_max(
-			Vec3::new(-2_000.0, -1_000.0, -2_000.0),
-			Vec3::new(2_000.0, 1_000.0, 2_000.0),
-		));
-		keep
-	});
-	app.world_mut().spawn((
-		LodViewer,
-		LodNode,
-		LodNodePose::default(),
-		Transform::IDENTITY,
-	));
+	cover_origin_keep(&mut app);
+	spawn_viewer(&mut app);
 	app.add_systems(
 		Update,
 		write_cell_in_other_mode
@@ -453,13 +402,6 @@ fn a_cell_written_on_the_entering_frame_still_presents() -> anyhow::Result<()> {
 			.in_set(MobGenerationSystems)
 			.before(LodPresentSystems::Produce),
 	);
-	app.add_systems(
-		Update,
-		retire_mob_cells_on_mode_change
-			.after(MobGenerationSystems)
-			.before(LodPresentSystems::Produce),
-	);
-	app.add_systems(Last, drain_retired_mob_cells);
 	app.update();
 
 	let leaving = app
