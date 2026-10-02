@@ -1,4 +1,4 @@
-//! Chico vegetation shaders: reusable Bevy [`Material`] types with embedded WGSL.
+//! Vegetation shaders: reusable Bevy [`Material`] types with embedded WGSL.
 //!
 //! - [`StickMaterial`] — edge-accent PBR (from `playgrounds/objects/assets/shaders/edge_material.wgsl`).
 //! - [`LeafMaterial`] — object-space leafy breakup + vertex sway + split light.
@@ -20,7 +20,7 @@ mod stick_material;
 mod material_lib;
 
 pub use bump_out_material::{
-	BumpOutMaterial, BumpOutMaterialPlugin, BumpOutUniform, CHICO_BUMP_OUT_MATERIAL,
+	BumpOutMaterial, BumpOutMaterialPlugin, BumpOutUniform, BUMP_OUT_MATERIAL,
 	RASTER_AVERAGE_HEIGHT, RASTER_BITE_SIZE, RASTER_BITE_SIZE_DEVIATION, RASTER_DENSITY,
 	RASTER_HEIGHT_DEVIATION,
 };

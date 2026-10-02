@@ -3,7 +3,7 @@
 use bevy::ecs::query::Has;
 use bevy::prelude::*;
 use world_player::{Jumping as VegetationJumping, Player};
-use crozon_characters::{
+use characters::{
 	apply_terrain_pitch, ApplyTerrainPitch, CharacterHeading, SuspendTerrainPitch, TerrainPitch,
 };
 use ground_avian::AvianElevationProbe;

@@ -22,7 +22,7 @@ use commands::{
 	PendingCellLayoutPatch, RequestCellShow, RequestMeshStats, RequestModeCharacter,
 	RequestModeFree, RequestSeed,
 };
-use crozon_characters::{CharacterHostsPlugin, CharacterMotionSystems};
+use characters::{CharacterHostsPlugin, CharacterMotionSystems};
 use debug_bounds::{setup_cell_location_hud, update_cell_location_hud, PlaygroundDebugOverlay};
 use terrain_shaders::{TerrainShader, TerrainShaderPlugin, RefractionWater};
 use durham::{

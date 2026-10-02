@@ -5,10 +5,10 @@ use std::f32::consts::FRAC_PI_2;
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, Scene};
 use camera_controls::look::CameraLookEnabled;
-use crozon_character_items::{random_gallery_firearms, FirearmSpec, ItemRng};
-use crozon_character_playground::CameraController;
-use crozon_characters::species::braidman::BraidmanConfig;
-use crozon_characters::{
+use character_items::{random_gallery_firearms, FirearmSpec, ItemRng};
+use characters_playground::CameraController;
+use characters::species::braidman::BraidmanConfig;
+use characters::{
 	character_bounds, CharacterMotionSystems, CharacterRecipe, ComponentsOnly,
 };
 use firearm_user::{

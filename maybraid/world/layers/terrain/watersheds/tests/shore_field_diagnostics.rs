@@ -2,7 +2,7 @@
 //!
 //! Run:
 //! ```text
-//! cargo test -p marazion-watersheds --test shore_field_diagnostics -- --nocapture
+//! cargo test -p terrain-watersheds --test shore_field_diagnostics -- --nocapture
 //! ```
 //! Writes [`PLOT_REL`] next to this crate's `Cargo.toml`.
 //!
@@ -26,7 +26,7 @@ use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
 
-/// SVG written beside `maybraid/durham/marazion/Cargo.toml`.
+/// SVG written beside `maybraid/world/layers/terrain/watersheds/Cargo.toml`.
 const PLOT_REL: &str = "shore_field_diagnostics.svg";
 
 fn plot_path() -> PathBuf {

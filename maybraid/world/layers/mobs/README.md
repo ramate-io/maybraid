@@ -20,10 +20,10 @@ Groups may put multiple mobs over the same area. We typically use large `400m` c
 
 ## Implementation
 
-- [`characters`](characters/) provides `MobCharacter<Build, Species, Inventory, Brains>`,
+- [`characters/generated`](characters/generated/) provides `MobCharacter<Build, Species, Inventory, Brains>`,
   the resolved `CharacterSceneRecipe`, and `MobCharacterScenesPlugin`. A scene plant
   becomes the physical NPC controller, its real inventory bag and selected firearm,
-  the personality intelligence users, and a nested Crozon character-model LodScene.
+  the personality intelligence users, and a nested character-model LodScene.
 - [`scenes`](scenes/) provides `Mob<Roster, Intelligence>` and the resolved `MobScene`
   semantic LodScene. Its always-on host owns roster, affiliations, POI/journey,
   travel, hunt, tether-lock, and respawn intelligence. Only High emits character

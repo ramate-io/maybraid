@@ -8,7 +8,7 @@ use bevy::prelude::*;
 use bevy::time::common_conditions::on_timer;
 use world_player::Player;
 use world_player::player::{holding_elevation, player_spawn_point_at};
-use crozon_character_persist::{CharacterId, PersistError, SaveRoot};
+use character_persist::{CharacterId, PersistError, SaveRoot};
 use durham::{TerrainCellLayout, WorldBaseTerrain, terrain_streaming_enabled};
 use player_camera::FollowCamera;
 use serde::{Deserialize, Serialize};
@@ -343,8 +343,8 @@ mod tests {
 		world.insert_resource(PlayerPositionWaypoints::default());
 		world.insert_resource(crate::WorldPlayerLoadout::new(
 			id.to_hex(),
-			crozon_characters::CharacterAppearance::default(),
-			crozon_character_items::Inventory::default(),
+			characters::CharacterAppearance::default(),
+			character_items::Inventory::default(),
 		));
 		world.spawn((
 			world_player::Player,
@@ -369,8 +369,8 @@ mod tests {
 		world.insert_resource(PlayerPositionWaypoints::default());
 		world.insert_resource(crate::WorldPlayerLoadout::new(
 			id.to_hex(),
-			crozon_characters::CharacterAppearance::default(),
-			crozon_character_items::Inventory::default(),
+			characters::CharacterAppearance::default(),
+			character_items::Inventory::default(),
 		));
 		world.spawn((
 			world_player::Player,

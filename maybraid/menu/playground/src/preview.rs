@@ -8,14 +8,14 @@ use bevy::prelude::*;
 use bevy::scene::prelude::bsn;
 use bevy::window::PrimaryWindow;
 use character_ui_menu::{CameraFocus, FocusRig};
-use crozon_character_items::{ClothingHost, ClothingMesh, FirearmSpec, InventoryItem, ItemColor};
-use crozon_character_persist::SaveRoot;
-use crozon_character_playground::CameraController;
-use crozon_character_ui_menus::{
+use character_items::{ClothingHost, ClothingMesh, FirearmSpec, InventoryItem, ItemColor};
+use character_persist::SaveRoot;
+use characters_playground::CameraController;
+use character_creation_menus::{
 	spin_reveal_firearm_focus, spin_reveal_focus, CharacterField, CharacterMenu, ConceptSpecies,
 	MenuEvent, BODY_FOCUS,
 };
-use crozon_characters::{
+use characters::{
 	add_character_components_host, character_bounds, ActiveRigPose, AnimRef, AnimRefRoot,
 	ApplyTerrainPitch, BoneMap, CharacterComponents, CharacterHostSystems, CharacterMembers,
 	CharacterRecipe, CharacterRig, CharacterRigRole, ClothingLayer, ComponentsOnly, Layers,
@@ -302,7 +302,7 @@ impl Plugin for CharacterPreviewPlugin {
 					stamp_preview_animation
 						.after(sync_preview)
 						.after(CharacterHostSystems::Membership)
-						.before(crozon_characters::CharacterMotionSystems::Anim),
+						.before(characters::CharacterMotionSystems::Anim),
 					queue_preview_camera_focus,
 					steer_preview_orbit.after(queue_preview_camera_focus),
 				),
@@ -460,10 +460,10 @@ fn clear_preview(
 
 fn menu_for_saved(
 	root: &SaveRoot,
-	id: crozon_character_persist::CharacterId,
+	id: character_persist::CharacterId,
 ) -> Option<CharacterMenu> {
-	let model = crozon_character_model_user::load(root, id).ok()?;
-	let inventory = crozon_inventory_user::load(root, id).ok()?;
+	let model = character_model_user::load(root, id).ok()?;
+	let inventory = character_inventory_user::load(root, id).ok()?;
 	Some(CharacterMenu::for_saved(model.name, &model.appearance, inventory))
 }
 
@@ -765,7 +765,7 @@ fn offset_camera_into_display_pane(
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crozon_character_ui_menus::focus::{EYE_FOCUS, HEAD_ROOT_FOCUS};
+	use character_creation_menus::focus::{EYE_FOCUS, HEAD_ROOT_FOCUS};
 
 	const EPS: f32 = 1e-4;
 
@@ -843,7 +843,7 @@ mod tests {
 
 	impl Fixture {
 		fn new() -> Self {
-			use crozon_characters::MemberOf;
+			use characters::MemberOf;
 
 			let mut world = World::new();
 			let root = world.spawn((CharacterPreviewRoot, Transform::IDENTITY)).id();

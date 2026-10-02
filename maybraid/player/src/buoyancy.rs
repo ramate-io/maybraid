@@ -4,7 +4,7 @@ use crate::body::{CharacterController, Grounded, Jumping, MOVE_SPEED};
 use avian3d::prelude::{Gravity, GravityScale, LinearVelocity};
 use bevy::ecs::query::Has;
 use bevy::prelude::*;
-use crozon_characters::LocomotionCapsule;
+use characters::LocomotionCapsule;
 use durham::{TerrainCellLayout, TerrainEntryStore, WaterColumn};
 
 /// Draft as a fraction of hull height (head out).

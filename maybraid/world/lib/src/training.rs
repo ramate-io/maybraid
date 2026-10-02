@@ -18,12 +18,12 @@
 
 use bevy::prelude::*;
 use combat_hud::{CombatScore, LiveEnemies};
-use crozon_character_items::{random_starter_loadout, Inventory, ItemRng};
-use crozon_characters::species::{
+use character_items::{random_starter_loadout, Inventory, ItemRng};
+use characters::species::{
 	braidman::BraidmanConfig, lero::LeroConfig, mygr::MygrConfig, tuberwaber::TuberwaberConfig,
 	wumbus::WumbusConfig,
 };
-use crozon_characters::CharacterAppearance;
+use characters::CharacterAppearance;
 use damage::{Downed, Health};
 use durham::TerrainColliderSystems;
 use maybraid_game_mode_training_ground::{TrainingBrawler, TrainingGround, TrainingRound};
@@ -362,7 +362,7 @@ use layer_stack::GenerationModePlugin;
 			.map(|seed| training_trainee(TrainingRound::new(seed)))
 			.inspect(|trainee| {
 				assert!(trainee.key.starts_with("trainee-"));
-				assert!(crozon_character_persist::CharacterId::from_hex(&trainee.key).is_none());
+				assert!(character_persist::CharacterId::from_hex(&trainee.key).is_none());
 				assert!(trainee.inventory.primary_weapon().is_some());
 			})
 			.map(|trainee| trainee.appearance.species_id())

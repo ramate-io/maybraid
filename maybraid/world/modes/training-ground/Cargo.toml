@@ -12,7 +12,7 @@ rust-version = { workspace = true }
 [dependencies]
 layer-stack = { workspace = true }
 bevy = { workspace = true }
-crozon-characters = { workspace = true }
+characters = { workspace = true }
 durham = { workspace = true }
 lod = { workspace = true }
 mob-scenes = { workspace = true }

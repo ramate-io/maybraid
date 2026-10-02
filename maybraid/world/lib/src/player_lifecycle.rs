@@ -6,8 +6,8 @@ use world_player::{
 	player_position_above_surface, spawn_player_body, CharacterLocomotion, CharacterSpecies,
 	MoveWish, Player as VegetationPlayer, RequestSetCharacter, RequestSetCharacterAppearance,
 };
-use crozon_character_ragdoll::CharacterRagdollSystems;
-use crozon_inventory_user::InventoryUser;
+use character_ragdoll::CharacterRagdollSystems;
+use character_inventory_user::InventoryUser;
 use damage::{DamageSystems, DespawnAfter, Downed};
 use durham::Durham;
 use firearm_user::FirearmUser;

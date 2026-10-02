@@ -5,9 +5,9 @@ use world_player::{
 	CharacterSpecies, Player as VegetationPlayer, PlayerVisual as VegetationPlayerVisual,
 	PlaygroundMode, RequestSetCharacter, RequestSetCharacterAppearance,
 };
-use crozon_character_items::{CharacterSheet, Inventory, InventoryItem};
-use crozon_characters::{CharacterAppearance, CharacterRoot};
-use crozon_inventory_user::{InventoryUser, spawn_bag};
+use character_items::{CharacterSheet, Inventory, InventoryItem};
+use characters::{CharacterAppearance, CharacterRoot};
+use character_inventory_user::{InventoryUser, spawn_bag};
 use damage::Health;
 use firearm_user::{
 	FirearmUser, FirearmUserSettings, FirearmUserSystems, GeneratedFirearm, WeaponSwap,
@@ -74,7 +74,7 @@ type WorldPlayerEquipment<'a> = (
 
 type WorldPlayerVisual<'a> = (Entity, &'a ChildOf, Has<MaybraidPlayerVisual>);
 
-/// Give the world player its selected loadout once the Crozon visual exists.
+/// Give the world player its selected loadout once the character visual exists.
 ///
 /// [`firearm_user`] fire/pose query [`MaybraidPlayer`] / [`PlayerLook`]. The
 /// player-crate locomotion controller is stamped in [`crate::control`] so
@@ -332,10 +332,10 @@ mod tests {
 		Player as VegetationPlayer, PlayerVisual as VegetationPlayerVisual, PlaygroundMode,
 		RequestSetCharacterAppearance,
 	};
-	use crozon_character_items::{
+	use character_items::{
 		ClothingMaterial, ClothingMesh, FirearmMesh, Inventory, InventoryItem, ItemColor,
 	};
-	use crozon_characters::{CharacterAppearance, CharacterRoot};
+	use characters::{CharacterAppearance, CharacterRoot};
 
 	use crate::WorldGameplayEnabled;
 	use crate::weapon::{WorldPlayerAppearanceRequested, WorldPlayerLoadout, arm_world_player};
@@ -429,7 +429,7 @@ mod tests {
 	}
 
 	fn two_map_bag() -> Inventory {
-		use crozon_character_items::{SkillMapKind, SkillMapSpec};
+		use character_items::{SkillMapKind, SkillMapSpec};
 
 		Inventory {
 			items: vec![
@@ -444,7 +444,7 @@ mod tests {
 
 	#[test]
 	fn y_starts_a_swap_without_changing_the_kit() -> anyhow::Result<()> {
-		use crozon_inventory_user::InventoryUser;
+		use character_inventory_user::InventoryUser;
 		use firearm_user::{FirearmUser, WeaponSwap};
 		use maybraid_character_controller::CharacterIntent;
 
@@ -480,7 +480,7 @@ mod tests {
 
 	#[test]
 	fn y_swaps_the_queued_primary() -> anyhow::Result<()> {
-		use crozon_inventory_user::InventoryUser;
+		use character_inventory_user::InventoryUser;
 		use firearm_user::{FirearmUser, WEAPON_SWAP_SECS, WeaponSwap};
 
 		use crate::weapon::commit_weapon_swap;
@@ -527,8 +527,8 @@ mod tests {
 
 	#[test]
 	fn dpad_cycles_the_presented_skill_map() -> anyhow::Result<()> {
-		use crozon_character_items::{SkillMapKind, SkillMapSpec};
-		use crozon_inventory_user::InventoryUser;
+		use character_items::{SkillMapKind, SkillMapSpec};
+		use character_inventory_user::InventoryUser;
 		use maybraid_character_controller::CharacterIntent;
 		use maybraid_skill_map::SkillMapEquip;
 

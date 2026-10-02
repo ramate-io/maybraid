@@ -11,7 +11,7 @@ mod swap;
 mod weapon;
 
 use bevy::prelude::*;
-use crozon_characters::CharacterMotionSystems;
+use characters::CharacterMotionSystems;
 use damage::DamageSystems;
 use firearms::{add_firearm_components_host, FirearmWeaponSystems};
 use maybraid_audio::AudioSystems;

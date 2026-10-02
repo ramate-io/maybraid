@@ -3,7 +3,7 @@
 //!
 //! Parallel to [`furniture-assemblies`](https://github.com/ramate-io/maybraid): Richmond
 //! packs labels + region AABBs; this crate fills those boxes with kit slots.
-//! It depends on [`richmond-building-components`] only — not `richmond-buildings`.
+//! It depends on [`building-components`] only — not `buildings`.
 
 pub mod bites_counter;
 pub mod bites_kitchen;

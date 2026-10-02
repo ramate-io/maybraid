@@ -1,4 +1,4 @@
-//! Capsule player + third-person character mode for the mob-on-terrain playground.
+//! Capsule player + third-person character mode for the barking-playground playground.
 //!
 //! Movement logic follows Avian's `dynamic_character_3d` example (dynamic body,
 //! shape-cast grounded check, jump impulse), with walk direction relative to

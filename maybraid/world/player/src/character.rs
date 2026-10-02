@@ -1,10 +1,10 @@
-//! Crozon character visual on the terrain player (replaces the capsule mesh).
+//! character visual on the terrain player (replaces the capsule mesh).
 
 use bevy::ecs::query::Has;
 use bevy::ecs::relationship::RelationshipTarget;
 use bevy::prelude::*;
 use clap::ValueEnum;
-use crozon_characters::{
+use characters::{
 	spawn_fixed_character_assembly,
 	species::{
 		braidman::BraidmanConfig, brenal::BrenalConfig, brodler::BrodlerConfig,

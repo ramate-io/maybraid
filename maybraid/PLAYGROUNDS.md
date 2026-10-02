@@ -24,7 +24,7 @@ Last commit that still contained the trees below: [`9a9a74c6901ed4d7799a4e87d16f
 - **Did:** Isolated `/show` plants and tiled groves (`vast-orchards`, `monster-grass-plains`, …), plus a leftover flat-ground `/forest` streamer. Forest generate / present / vegetation LOD view now live in `chico`.
 - **Replacement:** [`maybraid-world-playground`](world/playground/) for streamed forest on Durham. Isolated plant `/show` is not hosted anywhere; restore this crate if that catalog is needed again.
 
-### `maybraid/chico/vegetation-on-terrain-playground` (binary)
+### `maybraid/world/player` (binary)
 
 - **Last commit:** [`9a9a74c6901ed4d7799a4e87d16f74d7dd3b9e47`](https://github.com/ramate-io/maybraid/commit/9a9a74c6901ed4d7799a4e87d16f74d7dd3b9e47)
 - **Did:** Small Durham fine-grid patch for iterating Chico groves on real ground. `/grove <kind>` tiled one grove type; `/forest` streamed the same generate/present/cull path as SBS, grown on Durham height. Character / free-look, canopy bump-outs, mesh stats.

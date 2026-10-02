@@ -1,5 +1,5 @@
 use bevy::prelude::Color;
-use vegetation_shaders::CHICO_BUMP_OUT_MATERIAL;
+use vegetation_shaders::BUMP_OUT_MATERIAL;
 use material_ref::{MaterialRef, MATERIAL_RASTER_SAMPLES, MATERIAL_RASTER_WIDTH};
 
 pub use vegetation_shaders::{
@@ -56,7 +56,7 @@ impl BumpOutNeighborhood {
 		palette: impl IntoIterator<Item = Color>,
 		noise: procedural_common::NoiseParams,
 	) -> MaterialRef {
-		MaterialRef::named(CHICO_BUMP_OUT_MATERIAL)
+		MaterialRef::named(BUMP_OUT_MATERIAL)
 			.with_palette(palette)
 			.with_noise(noise)
 			.with_raster(RASTER_DENSITY, self.densities)

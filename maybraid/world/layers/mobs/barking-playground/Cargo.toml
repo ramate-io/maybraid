@@ -10,14 +10,14 @@ publish = { workspace = true }
 rust-version = { workspace = true }
 
 [[bin]]
-name = "mob-on-terrain"
+name = "barking-playground"
 path = "src/main.rs"
 
 [dependencies]
 avian3d = { workspace = true }
 bevy = { workspace = true }
 clap = { workspace = true }
-crozon-characters = { workspace = true }
+characters = { workspace = true }
 terrain-shaders = { workspace = true }
 durham = { workspace = true }
 ground-avian = { workspace = true }

@@ -2,13 +2,13 @@
 
 use bevy::prelude::*;
 use bevy::transform::helper::TransformHelper;
-use crozon_characters::{
+use characters::{
 	AnimBone, AnimMailbox, AnimateBones, BoneMap, CharacterMembers, CharacterRoot, SuspendAnimation,
 };
-use crozon_rigs::articulation::{TwoBoneAim, BONE_LENGTH_AXIS};
-use crozon_rigs::humanoid::HumanoidRig;
-use crozon_rigs::rigs::humanoid_v0::HumanoidV0Rig;
-use crozon_rigs::{Name, Side};
+use character_rigs::articulation::{TwoBoneAim, BONE_LENGTH_AXIS};
+use character_rigs::humanoid::HumanoidRig;
+use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
+use character_rigs::{Name, Side};
 use firearms::{FirearmMembers, FirearmRoot};
 
 use crate::pose::HeldFirearm;
@@ -502,8 +502,8 @@ mod tests {
 	}
 
 	fn insert_arm_pose(rig: &mut HumanoidV0Rig, name: &str, transform: Transform, flex: f32) {
-		rig.pose.insert(crozon_rigs::BonePose {
-			name: crozon_rigs::Name::from(name),
+		rig.pose.insert(character_rigs::BonePose {
+			name: character_rigs::Name::from(name),
 			transform,
 			swing: 0.0,
 			flex,
@@ -523,10 +523,10 @@ mod tests {
 		use std::collections::HashMap;
 
 		use crate::{FirearmUser, FirearmUserSettings};
-		use crozon_characters::{
+		use characters::{
 			AnimMailbox, AnimateBones, CharacterHeading, CharacterRoot, MemberOf,
 		};
-		use crozon_rigs::Name as RigName;
+		use character_rigs::Name as RigName;
 		use firearms::FirearmRoot;
 		use player::PlayerLook;
 

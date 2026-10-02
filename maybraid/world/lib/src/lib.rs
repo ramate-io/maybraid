@@ -74,8 +74,8 @@ use world_player::{
 	PlaygroundTimingPlugin, RequestSetCharacter, VegetationHostPlugin, VegetationPlayerMotor,
 };
 use combat_hud::CombatHudPlugin;
-use crozon_character_ragdoll::{CharacterRagdollPlugin, CharacterRagdollTargets};
-use crozon_characters::{CharacterMotionSystems, DrawTerrainPitchProbes};
+use character_ragdoll::{CharacterRagdollPlugin, CharacterRagdollTargets};
+use characters::{CharacterMotionSystems, DrawTerrainPitchProbes};
 use durham::TerrainFrictionConfig;
 use furniture_shaders::FurnitureShadersPlugin;
 use game_commands::command::{GameCommandPlugin, TextEntryFocus};

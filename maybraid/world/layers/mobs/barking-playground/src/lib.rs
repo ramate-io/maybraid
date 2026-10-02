@@ -30,7 +30,7 @@ use camera::{
 	setup_camera, surface_or_hold,
 };
 use commands::{RequestModeCharacter, RequestModeFree};
-use crozon_characters::CharacterMotionSystems;
+use characters::CharacterMotionSystems;
 use terrain_shaders::{TerrainShader, TerrainShaderPlugin, RefractionWater};
 use durham::{
 	AvianTerrainIndex, BaseTerrainNoise, ComposedWater, DurhamTerrainModelsPlugin, Terrain,

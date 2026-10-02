@@ -5,7 +5,7 @@ use std::time::Duration;
 use bevy::prelude::*;
 use bevy::time::common_conditions::on_timer;
 use world_player::Player as VegetationPlayer;
-use crozon_characters::CharacterMotionSystems;
+use characters::CharacterMotionSystems;
 use evasion_intelligence::{EvasionPlugin, EvasionSystems};
 use firearm_intelligence::{FirearmIntelligencePlugin, FirearmIntelligenceSystems};
 use firearm_user::FirearmUserPlugin;

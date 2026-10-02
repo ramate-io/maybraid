@@ -2,14 +2,14 @@
 
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
-use crozon_characters::material_lib::{init_crozon_material_caches, CrozonMaterialLib};
+use characters::material_lib::{init_character_material_caches, CharacterMaterialLib};
 use firearms::{init_muzzle_flame_caches, MuzzleFlameMaterialLib};
 use furniture_shaders::{init_furniture_material_caches, FurnitureMaterialLib};
 use material_ref::{material_ref_plugin_installed, MaterialLib, MaterialRef, MaterialRefPlugin};
 use building_shaders::{init_urban_material_caches, UrbanSurfaceMaterialLib};
 use vegetation_layer_presentation::VegetationOnTerrainMaterialLib;
 
-/// World-model lib: furniture kits, Crozon face / clothing, Richmond urban
+/// World-model lib: furniture kits, character face / clothing, Richmond urban
 /// surfaces, the muzzle flame, then vegetation and Standard.
 ///
 /// Furniture recipes (`furniture_wood`, …) must be claimed **before** urban
@@ -20,7 +20,7 @@ use vegetation_layer_presentation::VegetationOnTerrainMaterialLib;
 #[derive(SystemParam)]
 pub struct WorldMaterialLib<'w> {
 	pub furniture: FurnitureMaterialLib<'w>,
-	pub crozon: CrozonMaterialLib<'w>,
+	pub character: CharacterMaterialLib<'w>,
 	pub urban: UrbanSurfaceMaterialLib<'w>,
 	pub muzzle: MuzzleFlameMaterialLib<'w>,
 	pub vegetation: VegetationOnTerrainMaterialLib<'w>,
@@ -34,7 +34,7 @@ impl MaterialLib for WorldMaterialLib<'_> {
 		commands: &mut Commands,
 	) -> bool {
 		self.furniture.try_fulfill(entity, material_ref, commands)
-			|| self.crozon.try_fulfill(entity, material_ref, commands)
+			|| self.character.try_fulfill(entity, material_ref, commands)
 			|| self.urban.try_fulfill(entity, material_ref, commands)
 			|| self.muzzle.try_fulfill(entity, material_ref, commands)
 			|| self.vegetation.try_fulfill(entity, material_ref, commands)
@@ -49,7 +49,7 @@ impl MaterialLib for WorldMaterialLib<'_> {
 ///
 /// Add this before [`vegetation_layer_presentation::VegetationPresentationPlugin`]
 /// so the nested vegetation material plugin skips installing a second
-/// [`MaterialRefPlugin`]. [`crozon_characters::material_lib::CrozonMaterialRefPlugin`]
+/// [`MaterialRefPlugin`]. [`characters::material_lib::CharacterMaterialRefPlugin`]
 /// and [`building_shaders::UrbanMaterialRefPlugin`] also skip;
 /// face / urban recipes are claimed here.
 pub struct WorldMaterialRefPlugin;
@@ -57,7 +57,7 @@ pub struct WorldMaterialRefPlugin;
 impl Plugin for WorldMaterialRefPlugin {
 	fn build(&self, app: &mut App) {
 		init_furniture_material_caches(app);
-		init_crozon_material_caches(app);
+		init_character_material_caches(app);
 		init_urban_material_caches(app);
 		init_muzzle_flame_caches(app);
 		if material_ref_plugin_installed(app) {
@@ -70,7 +70,7 @@ impl Plugin for WorldMaterialRefPlugin {
 #[cfg(test)]
 mod tests {
 	use bevy::prelude::*;
-	use crozon_characters::material_lib::{
+	use characters::material_lib::{
 		ClothingShaderMaterialRefCache, FaceShaderMaterialRefCache,
 	};
 

@@ -17,9 +17,9 @@ combat-hud = { workspace = true }
 evasion-intelligence = { workspace = true }
 fleeing-intelligence = { workspace = true }
 hiding-intelligence = { workspace = true }
-crozon-character-items = { workspace = true }
-crozon-character-ragdoll = { workspace = true }
-crozon-characters = { workspace = true }
+character-items = { workspace = true }
+character-ragdoll = { workspace = true }
+characters = { workspace = true }
 firearm-intelligence = { workspace = true }
 firearm-user = { workspace = true }
 firearms = { workspace = true }

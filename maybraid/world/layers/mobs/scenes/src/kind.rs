@@ -1,5 +1,5 @@
 use bevy::prelude::Component;
-use crozon_character_items::LootFraction;
+use character_items::LootFraction;
 use mob_characters::FromMobNumber;
 
 #[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]

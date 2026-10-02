@@ -15,7 +15,7 @@ use bevy::camera::ClearColorConfig;
 use bevy::camera::visibility::RenderLayers;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
-use crozon_character_playground::CameraController as PreviewCameraController;
+use characters_playground::CameraController as PreviewCameraController;
 use maybraid_game_mode_discover::{streams_terrain, Discovery};
 use maybraid_game_mode_training_ground::TrainingGround;
 use maybraid_world::{
@@ -423,7 +423,7 @@ mod tests {
 	#[test]
 	fn in_game_character_edit_keeps_the_world_camera() -> anyhow::Result<()> {
 		use bevy::ecs::system::RunSystemOnce;
-		use crozon_character_playground::CameraController as PreviewCameraController;
+		use characters_playground::CameraController as PreviewCameraController;
 		use maybraid_world::{InventoryEditCameraFollow, WorldSceneryVisible};
 		use menu_playground::{CharacterEditorReturn, CharacterScreen};
 
@@ -451,7 +451,7 @@ mod tests {
 	#[test]
 	fn gallery_character_edit_still_uses_preview_layers() -> anyhow::Result<()> {
 		use bevy::ecs::system::RunSystemOnce;
-		use crozon_character_playground::CameraController as PreviewCameraController;
+		use characters_playground::CameraController as PreviewCameraController;
 		use maybraid_world::{InventoryEditCameraFollow, WorldSceneryVisible};
 		use menu_playground::{CharacterEditorReturn, CharacterScreen};
 

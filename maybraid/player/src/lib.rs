@@ -14,7 +14,7 @@ mod spawn;
 mod stance;
 
 use bevy::prelude::*;
-use crozon_characters::CharacterMotionSystems;
+use characters::CharacterMotionSystems;
 use maybraid_character_controller::CharacterControlSystems;
 
 pub use body::{
@@ -27,7 +27,7 @@ pub use buoyancy::{Buoyant, Wading, WaterRegime};
 pub use contact::{
 	motor_traction_bundle, register_motor_traction_physics, MotorTraction, MotorTractionHooks,
 };
-pub use crozon_characters::{HeadCapsule, HitCapsule};
+pub use characters::{HeadCapsule, HitCapsule};
 pub use hit::HitVolume;
 pub use identity::{
 	CameraFollow, Npc, Player, PlayerCameraAim, PlayerCameraPose, PlayerCapsule, PlayerLook,

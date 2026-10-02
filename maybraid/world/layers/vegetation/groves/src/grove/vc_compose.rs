@@ -796,16 +796,16 @@ mod tests {
 	#[test]
 	fn frond_palette_uses_chico_frond_recipe() {
 		use crate::grove::{PaletteMix, PaletteSlot};
-		use vegetation_components::CHICO_FROND_MATERIAL;
+		use vegetation_components::FROND_MATERIAL;
 		use material_ref::MaterialId;
 
 		let named = frond_material_from_palette(None, 0);
-		assert_eq!(named.name, MaterialId::named(CHICO_FROND_MATERIAL));
+		assert_eq!(named.name, MaterialId::named(FROND_MATERIAL));
 		assert!(named.palette.is_empty());
 
 		const MIX: PaletteMix = PaletteMix::new(&[PaletteSlot::new("palm_green", "palm_green")]);
 		let tinted = frond_material_from_palette(Some(MIX), 3);
-		assert_eq!(tinted.name, MaterialId::named(CHICO_FROND_MATERIAL));
+		assert_eq!(tinted.name, MaterialId::named(FROND_MATERIAL));
 		assert_eq!(tinted.palette.len(), 1);
 	}
 }

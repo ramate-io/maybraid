@@ -1,10 +1,10 @@
-//! [`MaterialLib`] for Chico vegetation shaders: leaf / stick / frond recipes only.
+//! [`MaterialLib`] for vegetation shaders: leaf / stick / frond recipes only.
 
 use bevy::ecs::system::SystemParam;
 use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
 use vegetation_components::{
-	CHICO_FROND_MATERIAL, CHICO_LEAF_MATERIAL, CHICO_STICK_MATERIAL,
+	FROND_MATERIAL, LEAF_MATERIAL, STICK_MATERIAL,
 };
 use material_ref::{
 	MaterialId, MaterialLib, MaterialRef, MaterialRefCache, MaterialRefKey, MaterialRefPlugin,
@@ -81,7 +81,7 @@ impl MaterialLib for VegetationMaterialLib<'_> {
 		commands: &mut Commands,
 	) -> bool {
 		match &material_ref.name {
-			MaterialId::Name(name) if name == CHICO_LEAF_MATERIAL => {
+			MaterialId::Name(name) if name == LEAF_MATERIAL => {
 				let handle = self.resolve_leaf(material_ref);
 				commands
 					.entity(entity)
@@ -90,7 +90,7 @@ impl MaterialLib for VegetationMaterialLib<'_> {
 					.insert(NotShadowCaster);
 				true
 			}
-			MaterialId::Name(name) if name == CHICO_STICK_MATERIAL => {
+			MaterialId::Name(name) if name == STICK_MATERIAL => {
 				let handle = self.resolve_stick(material_ref);
 				commands
 					.entity(entity)
@@ -99,7 +99,7 @@ impl MaterialLib for VegetationMaterialLib<'_> {
 					.insert(NotShadowCaster);
 				true
 			}
-			MaterialId::Name(name) if name == CHICO_FROND_MATERIAL => {
+			MaterialId::Name(name) if name == FROND_MATERIAL => {
 				let handle = self.resolve_frond(material_ref);
 				commands
 					.entity(entity)

@@ -3,7 +3,7 @@
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use combat_targeting::{CombatContact, CombatTargeting};
-use crozon_characters::{CharacterHeading, CharacterRoot};
+use characters::{CharacterHeading, CharacterRoot};
 use firearm_user::FirearmUser;
 use firearms::{
 	muzzle_world, BoneMap, Cadence, FireControl, FirearmMembers, ProjectileLoad, RigRoot, Weapon,

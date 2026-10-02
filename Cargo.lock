@@ -505,8 +505,8 @@ dependencies = [
  "anyhow",
  "avian3d",
  "bevy",
+ "characters",
  "clap",
- "crozon-characters",
  "durham",
  "evasion-intelligence",
  "firearm-intelligence",
@@ -2363,10 +2363,204 @@ dependencies = [
 ]
 
 [[package]]
+name = "character-animations"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "character-rigs",
+ "clap",
+ "game-commands",
+ "log",
+]
+
+[[package]]
+name = "character-concepts-playground"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "bevy-character-ui-menu-renderer",
+ "camera-controls",
+ "character-animations",
+ "character-creation-menus",
+ "character-items",
+ "character-rigs",
+ "character-ui-menu",
+ "characters",
+ "characters-playground",
+ "clap",
+ "game-commands",
+ "lod",
+ "material-ref",
+ "scene-ref",
+]
+
+[[package]]
+name = "character-creation-menus"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "bevy-character-ui-menu-renderer",
+ "bevy_math",
+ "character-items",
+ "character-ui-menu",
+ "characters",
+]
+
+[[package]]
+name = "character-inventory-user"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "character-items",
+ "character-persist",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "character-items"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "bevy_math",
+ "character-ui-menu",
+ "clap",
+ "serde",
+]
+
+[[package]]
+name = "character-model-user"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "character-items",
+ "character-persist",
+ "characters",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "character-motion"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "character-animations",
+ "character-rigs",
+ "ground",
+ "intelligence-lod",
+ "lod",
+ "rigs",
+]
+
+[[package]]
+name = "character-persist"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "character-ragdoll"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "avian3d",
+ "bevy",
+ "character-motion",
+ "character-rigs",
+ "characters",
+ "damage",
+ "lod-avian",
+ "player",
+ "rigs",
+]
+
+[[package]]
+name = "character-rigs"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "clap",
+ "game-commands",
+ "log",
+ "rigs",
+]
+
+[[package]]
+name = "character-shaders"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "material-ref",
+]
+
+[[package]]
 name = "character-ui-menu"
 version = "0.1.0"
 dependencies = [
  "bevy_math",
+]
+
+[[package]]
+name = "character-world-movements-playground"
+version = "0.1.0"
+dependencies = [
+ "avian3d",
+ "bevy",
+ "characters",
+ "chunk",
+ "clap",
+ "durham",
+ "game-commands",
+ "ground-avian",
+ "lod",
+ "lod-avian",
+ "log",
+ "render-item",
+ "terrain-shaders",
+]
+
+[[package]]
+name = "characters"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "bevy_math",
+ "character-items",
+ "character-motion",
+ "character-rigs",
+ "character-shaders",
+ "character-ui-menu",
+ "clap",
+ "lod",
+ "material-ref",
+ "rigs",
+ "scene-ref",
+ "serde",
+]
+
+[[package]]
+name = "characters-playground"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "camera-controls",
+ "character-animations",
+ "character-rigs",
+ "clap",
+ "game-commands",
+ "log",
 ]
 
 [[package]]
@@ -2888,188 +3082,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d0a5c400df2834b80a4c3327b3aad3a4c4cd4de0629063962b03235697506a28"
 
 [[package]]
-name = "crozon-character-concepts-playground"
-version = "0.1.0"
-dependencies = [
- "bevy",
- "bevy-character-ui-menu-renderer",
- "camera-controls",
- "character-ui-menu",
- "clap",
- "crozon-character-items",
- "crozon-character-playground",
- "crozon-character-ui-menus",
- "crozon-characters",
- "crozon-rigs",
- "game-commands",
- "lod",
- "malo-animations",
- "material-ref",
- "scene-ref",
-]
-
-[[package]]
-name = "crozon-character-items"
-version = "0.1.0"
-dependencies = [
- "bevy",
- "bevy_math",
- "character-ui-menu",
- "clap",
- "serde",
-]
-
-[[package]]
-name = "crozon-character-model-user"
-version = "0.1.0"
-dependencies = [
- "bevy",
- "crozon-character-items",
- "crozon-character-persist",
- "crozon-characters",
- "serde",
- "serde_json",
- "tempfile",
-]
-
-[[package]]
-name = "crozon-character-motion"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bevy",
- "crozon-rigs",
- "ground",
- "intelligence-lod",
- "lod",
- "malo-animations",
- "rigs",
-]
-
-[[package]]
-name = "crozon-character-persist"
-version = "0.1.0"
-dependencies = [
- "bevy",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "crozon-character-playground"
-version = "0.1.0"
-dependencies = [
- "bevy",
- "camera-controls",
- "clap",
- "crozon-rigs",
- "game-commands",
- "log",
- "malo-animations",
-]
-
-[[package]]
-name = "crozon-character-ragdoll"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "avian3d",
- "bevy",
- "crozon-character-motion",
- "crozon-characters",
- "crozon-rigs",
- "damage",
- "lod-avian",
- "player",
- "rigs",
-]
-
-[[package]]
-name = "crozon-character-shaders"
-version = "0.1.0"
-dependencies = [
- "bevy",
- "material-ref",
-]
-
-[[package]]
-name = "crozon-character-ui-menus"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bevy",
- "bevy-character-ui-menu-renderer",
- "bevy_math",
- "character-ui-menu",
- "crozon-character-items",
- "crozon-characters",
-]
-
-[[package]]
-name = "crozon-character-world-movements-playground"
-version = "0.1.0"
-dependencies = [
- "avian3d",
- "bevy",
- "chunk",
- "clap",
- "crozon-characters",
- "durham",
- "game-commands",
- "ground-avian",
- "lod",
- "lod-avian",
- "log",
- "render-item",
- "terrain-shaders",
-]
-
-[[package]]
-name = "crozon-characters"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bevy",
- "bevy_math",
- "character-ui-menu",
- "clap",
- "crozon-character-items",
- "crozon-character-motion",
- "crozon-character-shaders",
- "crozon-rigs",
- "lod",
- "material-ref",
- "rigs",
- "scene-ref",
- "serde",
-]
-
-[[package]]
-name = "crozon-inventory-user"
-version = "0.1.0"
-dependencies = [
- "bevy",
- "crozon-character-items",
- "crozon-character-persist",
- "serde",
- "serde_json",
- "tempfile",
-]
-
-[[package]]
-name = "crozon-rigs"
-version = "0.1.0"
-dependencies = [
- "bevy",
- "clap",
- "game-commands",
- "log",
- "rigs",
-]
-
-[[package]]
 name = "crunchy"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3235,9 +3247,9 @@ version = "0.1.0"
 dependencies = [
  "avian3d",
  "bevy",
+ "characters",
  "chunk",
  "clap",
- "crozon-characters",
  "durham",
  "game-commands",
  "ground-avian",
@@ -3407,8 +3419,8 @@ dependencies = [
  "anyhow",
  "avian3d",
  "bevy",
+ "characters",
  "combat-targeting",
- "crozon-characters",
  "damage",
  "firearm-user",
  "firearms",
@@ -3427,9 +3439,9 @@ dependencies = [
  "anyhow",
  "avian3d",
  "bevy",
- "crozon-character-items",
- "crozon-characters",
- "crozon-rigs",
+ "character-items",
+ "character-rigs",
+ "characters",
  "damage",
  "firearms",
  "lod",
@@ -3480,12 +3492,12 @@ dependencies = [
  "building-components",
  "building-physics",
  "buildings",
+ "character-items",
+ "character-ragdoll",
+ "characters",
  "clap",
  "combat-hud",
  "combat-targeting",
- "crozon-character-items",
- "crozon-character-ragdoll",
- "crozon-characters",
  "damage",
  "evasion-intelligence",
  "firearm-intelligence",
@@ -4780,18 +4792,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "malo-animations"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bevy",
- "clap",
- "crozon-rigs",
- "game-commands",
- "log",
-]
-
-[[package]]
 name = "matchers"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4815,13 +4815,13 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bevy",
+ "character-inventory-user",
+ "character-items",
+ "character-model-user",
+ "character-persist",
+ "characters",
+ "characters-playground",
  "clap",
- "crozon-character-items",
- "crozon-character-model-user",
- "crozon-character-persist",
- "crozon-character-playground",
- "crozon-characters",
- "crozon-inventory-user",
  "layer-stack",
  "maybraid-character-controller",
  "maybraid-game-mode-discover",
@@ -4895,7 +4895,7 @@ dependencies = [
  "anyhow",
  "barking",
  "bevy",
- "crozon-characters",
+ "characters",
  "durham",
  "layer-stack",
  "lod",
@@ -4950,9 +4950,9 @@ dependencies = [
  "avian3d",
  "bevy",
  "bevy_hanabi",
+ "character-inventory-user",
+ "character-items",
  "combat-targeting",
- "crozon-character-items",
- "crozon-inventory-user",
  "damage",
  "evasion-intelligence",
  "lod-avian",
@@ -4992,14 +4992,14 @@ dependencies = [
  "building-physics",
  "building-shaders",
  "buildings",
+ "character-inventory-user",
+ "character-items",
+ "character-persist",
+ "character-ragdoll",
+ "characters",
  "chico",
  "clap",
  "combat-hud",
- "crozon-character-items",
- "crozon-character-persist",
- "crozon-character-ragdoll",
- "crozon-characters",
- "crozon-inventory-user",
  "damage",
  "durham",
  "evasion-intelligence",
@@ -5107,15 +5107,15 @@ version = "0.1.0"
 dependencies = [
  "bevy",
  "camera-controls",
+ "character-creation-menus",
+ "character-inventory-user",
+ "character-items",
+ "character-model-user",
+ "character-persist",
  "character-ui-menu",
+ "characters",
+ "characters-playground",
  "clap",
- "crozon-character-items",
- "crozon-character-model-user",
- "crozon-character-persist",
- "crozon-character-playground",
- "crozon-character-ui-menus",
- "crozon-characters",
- "crozon-inventory-user",
  "firearm-user",
  "firearms-components",
  "game-commands",
@@ -5135,9 +5135,9 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bevy",
- "crozon-character-items",
- "crozon-character-model-user",
- "crozon-character-persist",
+ "character-items",
+ "character-model-user",
+ "character-persist",
  "game-commands",
  "maybraid-menu-controller",
  "menu-components",
@@ -5204,9 +5204,9 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bevy",
- "crozon-character-items",
- "crozon-characters",
- "crozon-inventory-user",
+ "character-inventory-user",
+ "character-items",
+ "characters",
  "damage",
  "firearm-user",
  "firearms",
@@ -5289,7 +5289,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bevy",
- "crozon-character-items",
+ "character-items",
  "damage",
  "fleeing-intelligence",
  "journeying-intelligence",
@@ -6379,12 +6379,12 @@ dependencies = [
  "anyhow",
  "avian3d",
  "bevy",
- "crozon-characters",
- "crozon-rigs",
+ "character-animations",
+ "character-rigs",
+ "characters",
  "damage",
  "durham",
  "lod-avian",
- "malo-animations",
  "maybraid-audio",
  "maybraid-character-controller",
 ]
@@ -6395,7 +6395,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bevy",
- "crozon-characters",
+ "characters",
  "lod",
  "maybraid-character-controller",
  "player",
@@ -9191,8 +9191,8 @@ dependencies = [
  "anyhow",
  "avian3d",
  "bevy",
+ "characters",
  "clap",
- "crozon-characters",
  "durham",
  "game-commands",
  "lod",

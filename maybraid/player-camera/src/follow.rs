@@ -2,8 +2,8 @@
 
 use bevy::prelude::*;
 use bevy::transform::helper::TransformHelper;
-use crozon_characters::LocomotionCapsule;
-use crozon_characters::{
+use characters::LocomotionCapsule;
+use characters::{
 	hide_socketed_parts, BoneMap, CharacterMembers, CharacterPartSlot, PartNode,
 };
 use player::{

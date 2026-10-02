@@ -10,7 +10,7 @@ publish = { workspace = true }
 rust-version = { workspace = true }
 
 [[bin]]
-name = "urbanization-developments-on-terrain"
+name = "richmond-playground"
 path = "src/main.rs"
 
 [dependencies]

@@ -2,7 +2,7 @@
 
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
-use crozon_characters::LocomotionCapsule;
+use characters::LocomotionCapsule;
 use durham::{Durham, TerrainTrimeshCollider};
 use lod::gen::Id;
 use lod::{LodGenerateSystems, LodPresentSystems};

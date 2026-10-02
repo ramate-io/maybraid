@@ -12,7 +12,7 @@ Lower-order crates are named by what they do (`terrain-shaders`, `building-compo
 
 Assets that belong to a named model may keep that name. RFC directory names stay.
 
-Early implementations such as [Crozon](./crozon/) still use a proper name for the character stack.
+Character crates live under [`world/layers/mobs/characters/`](./world/layers/mobs/characters/) and are named by what they do. Character UI menus live under [`menu/`](./menu/).
 
 ### `-models` Crates
 

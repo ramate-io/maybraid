@@ -31,7 +31,7 @@ pub use lod_host::{
 };
 pub use materials::{
 	frond_material_ref, leaf_material_ref, stick_material_ref,
-	CHICO_FROND_MATERIAL, CHICO_LEAF_MATERIAL, CHICO_STICK_MATERIAL,
+	FROND_MATERIAL, LEAF_MATERIAL, STICK_MATERIAL,
 };
 pub use placed::Placement;
 pub use placed_vegetation::{PlacedVegetation, VegetationInstance};
@@ -717,7 +717,7 @@ mod tests {
 		let merged = FoliageNode::merge_canopy_proxies(nodes);
 		assert_eq!(merged.len(), 2);
 		let names: Vec<_> = merged.iter().map(|n| n.material.name.clone()).collect();
-		assert!(names.contains(&material_ref::MaterialId::named(CHICO_STICK_MATERIAL)));
-		assert!(names.contains(&material_ref::MaterialId::named(CHICO_LEAF_MATERIAL)));
+		assert!(names.contains(&material_ref::MaterialId::named(STICK_MATERIAL)));
+		assert!(names.contains(&material_ref::MaterialId::named(LEAF_MATERIAL)));
 	}
 }

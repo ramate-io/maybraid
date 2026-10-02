@@ -3,7 +3,7 @@
 use bevy::ecs::system::SystemParam;
 use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
-use vegetation_shaders::{BumpOutMaterial, CHICO_BUMP_OUT_MATERIAL};
+use vegetation_shaders::{BumpOutMaterial, BUMP_OUT_MATERIAL};
 use material_ref::{
 	MaterialId, MaterialLib, MaterialRef, MaterialRefCache, MaterialRefKey, MaterialRefPlugin,
 	StandardMaterialLib, StandardMaterialRefCache,
@@ -44,7 +44,7 @@ impl MaterialLib for BumpOutMaterialLib<'_> {
 		commands: &mut Commands,
 	) -> bool {
 		match &material_ref.name {
-			MaterialId::Name(name) if name == CHICO_BUMP_OUT_MATERIAL => {
+			MaterialId::Name(name) if name == BUMP_OUT_MATERIAL => {
 				let handle = self.resolve(material_ref);
 				commands
 					.entity(entity)

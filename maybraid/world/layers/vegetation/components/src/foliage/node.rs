@@ -190,12 +190,12 @@ impl FoliageNode {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::materials::{frond_material_ref, CHICO_FROND_MATERIAL};
+	use crate::materials::{frond_material_ref, FROND_MATERIAL};
 	use material_ref::MaterialId;
 
 	#[test]
 	fn frond_constructors_use_chico_frond_material() {
-		let expected = MaterialId::named(CHICO_FROND_MATERIAL);
+		let expected = MaterialId::named(FROND_MATERIAL);
 		assert_eq!(
 			FoliageNode::straight_frond_segment(Placement::IDENTITY).material.name,
 			expected

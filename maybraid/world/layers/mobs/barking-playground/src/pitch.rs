@@ -2,7 +2,7 @@
 
 use bevy::ecs::query::Has;
 use bevy::prelude::*;
-use crozon_characters::{
+use characters::{
 	apply_terrain_pitch, ApplyTerrainPitch, CharacterHeading, SuspendTerrainPitch, TerrainPitch,
 };
 use ground_avian::AvianElevationProbe;

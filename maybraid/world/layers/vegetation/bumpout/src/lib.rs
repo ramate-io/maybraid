@@ -17,7 +17,7 @@ use vegetation_shaders::BumpOutMaterialPlugin;
 
 pub use bump_out::BumpOut;
 pub use vegetation_shaders::{
-	BumpOutMaterial, BumpOutUniform, CHICO_BUMP_OUT_MATERIAL, RASTER_AVERAGE_HEIGHT,
+	BumpOutMaterial, BumpOutUniform, BUMP_OUT_MATERIAL, RASTER_AVERAGE_HEIGHT,
 	RASTER_BITE_SIZE, RASTER_BITE_SIZE_DEVIATION, RASTER_DENSITY, RASTER_HEIGHT_DEVIATION,
 };
 pub use material::{

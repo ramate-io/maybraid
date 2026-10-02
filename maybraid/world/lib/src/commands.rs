@@ -35,7 +35,7 @@ pub enum PlaygroundCommand {
 	/// Switch between free-look fly camera and third-person character control.
 	#[command(subcommand)]
 	Mode(Mode),
-	/// Replace the capsule with a Crozon character (default preview recipe).
+	/// Replace the capsule with a character (default preview recipe).
 	SetCharacter {
 		species: CharacterSpecies,
 	},
@@ -51,7 +51,7 @@ pub enum PlaygroundCommand {
 pub enum Mode {
 	/// Free-look fly camera (WASD + mouse, Space/Shift vertical).
 	Free,
-	/// Capsule or Crozon character with third-person camera (WASD move, Space jump).
+	/// Capsule or character with third-person camera (WASD move, Space jump).
 	Character,
 }
 

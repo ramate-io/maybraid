@@ -18,7 +18,7 @@ use material_ref::{
 };
 
 /// Named recipe resolved to [`BumpOutMaterial`] by domain / composed material libs.
-pub const CHICO_BUMP_OUT_MATERIAL: &str = "chico_bump_out";
+pub const BUMP_OUT_MATERIAL: &str = "chico_bump_out";
 
 /// Shader channel: neighborhood density.
 pub const RASTER_DENSITY: usize = 0;
@@ -116,7 +116,7 @@ impl BumpOutUniform {
 
 impl Default for BumpOutUniform {
 	fn default() -> Self {
-		Self::from_material_ref(&MaterialRef::named(CHICO_BUMP_OUT_MATERIAL))
+		Self::from_material_ref(&MaterialRef::named(BUMP_OUT_MATERIAL))
 	}
 }
 

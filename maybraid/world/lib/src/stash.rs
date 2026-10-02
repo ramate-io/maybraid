@@ -25,14 +25,14 @@ use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value};
 use bevy::text::FontSize;
 use world_player::Player as VegetationPlayer;
-use crozon_character_items::{
+use character_items::{
 	ClothingHost, Inventory, InventoryItem, InventorySlot, ItemRng, LootFraction, MaterialRefParams,
 };
-use crozon_characters::{
+use characters::{
 	add_character_components_host, character_bounds, CharacterComponents, ClothingLayer,
 	ComponentsOnly, Layers, PartNode,
 };
-use crozon_inventory_user::{spawn_bag, InventoryUser};
+use character_inventory_user::{spawn_bag, InventoryUser};
 use damage::{DamageSystems, DespawnAfter, Downed};
 use firearm_user::{held_scale_from_bounds, FirearmUser, FirearmUserSettings, GeneratedFirearm};
 use firearms::{firearm_bounds, spawn_firearm_components};
@@ -182,8 +182,8 @@ impl Default for StashClothingPreview {
 	fn default() -> Self {
 		Self {
 			layer: ClothingLayer::new(
-				crozon_character_items::ClothingMesh::TankTop,
-				crozon_character_items::ItemColor::Natural,
+				character_items::ClothingMesh::TankTop,
+				character_items::ItemColor::Natural,
 				ClothingHost::HUMANOID,
 			),
 		}
@@ -1055,7 +1055,7 @@ mod tests {
 	use super::*;
 	use bevy::ecs::system::RunSystemOnce;
 	use world_player::Player as VegetationPlayer;
-	use crozon_character_items::{
+	use character_items::{
 		ClothingMaterial, ClothingMesh, FirearmMesh, InventoryItem, ItemColor,
 	};
 	use damage::tick_queued_despawns;
@@ -1523,7 +1523,7 @@ mod tests {
 	#[test]
 	fn claim_updates_world_player_loadout() -> anyhow::Result<()> {
 		use crate::weapon::WorldPlayerLoadout;
-		use crozon_characters::CharacterAppearance;
+		use characters::CharacterAppearance;
 
 		let (mut world, player, stash) = claim_setup(Vec3::ZERO, Vec3::new(1.0, 0.0, 0.0))?;
 		world.insert_resource(WorldPlayerLoadout::new(
@@ -1551,7 +1551,7 @@ mod tests {
 	#[test]
 	fn drop_clears_world_player_loadout() -> anyhow::Result<()> {
 		use crate::weapon::WorldPlayerLoadout;
-		use crozon_characters::CharacterAppearance;
+		use characters::CharacterAppearance;
 
 		let mut world = World::new();
 		world.init_resource::<WorldStashSettings>();

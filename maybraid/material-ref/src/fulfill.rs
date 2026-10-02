@@ -127,7 +127,7 @@ fn propagating_material_ref(
 
 /// Shared invalidate / fulfill schedule labels. [`invalidate_changed_material_ref_roots`]
 /// is not generic and is installed once, even when several [`MaterialRefPlugin`]`<L>`
-/// instances share the app (Chico + Crozon characters).
+/// instances share the app (Chico + characters).
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum MaterialRefSystems {
 	Invalidate,

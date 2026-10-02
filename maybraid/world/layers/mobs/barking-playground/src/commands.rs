@@ -1,15 +1,15 @@
-//! In-game clap commands for the mob-on-terrain playground.
+//! In-game clap commands for the barking-playground playground.
 
 use bevy::prelude::*;
 use clap::{Parser, Subcommand};
 use game_commands::command::{CommandScript, GameCommand};
 
-pub const PLAYGROUND_CLI_NAME: &str = "mob-on-terrain";
+pub const PLAYGROUND_CLI_NAME: &str = "barking-playground";
 pub type Script = CommandScript<PlaygroundCommand>;
 
 #[derive(Clone, Parser, Component)]
 #[command(
-	name = "mob-on-terrain",
+	name = "barking-playground",
 	version,
 	about = "Short authored mobs on a Durham patch (in-game after `/` or process argv)",
 	rename_all = "kebab-case",

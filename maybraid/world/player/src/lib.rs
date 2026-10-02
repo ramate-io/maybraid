@@ -36,7 +36,7 @@ use camera::{
 	setup_camera, surface_or_hold,
 };
 use character::{apply_set_character, drive_player_locomotion};
-use crozon_characters::{CharacterHostsPlugin, CharacterMotionSystems};
+use characters::{CharacterHostsPlugin, CharacterMotionSystems};
 use durham::{TerrainCellLayout, TerrainEntryStore};
 use game_commands::command::{TextEntryBlocked, TextEntryFocus};
 use game_commands::ui::GameCommandStatusText;

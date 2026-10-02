@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
-use crozon_character_items::{random_starter_firearms, Inventory, ItemRng};
+use character_items::{random_starter_firearms, Inventory, ItemRng};
 use furniture_assemblies::{FurnitureKitPart, PartKind, PresentedFurnitureCellId};
 use lod::gen::Id;
 
@@ -427,7 +427,7 @@ mod tests {
 	use crate::stash::WorldStash;
 	use bevy::ecs::system::RunSystemOnce;
 	use world_player::Player as VegetationPlayer;
-	use crozon_inventory_user::InventoryUser;
+	use character_inventory_user::InventoryUser;
 	use maybraid_character_controller::CharacterIntent;
 	use std::time::Duration;
 
@@ -574,7 +574,7 @@ mod tests {
 	#[test]
 	fn a_nearer_stash_wins_the_press() -> anyhow::Result<()> {
 		use crate::stash::{spawn_world_stash, StashPolicy};
-		use crozon_character_items::{FirearmMesh, InventoryItem};
+		use character_items::{FirearmMesh, InventoryItem};
 
 		let mut world = World::new();
 		ready(&mut world);

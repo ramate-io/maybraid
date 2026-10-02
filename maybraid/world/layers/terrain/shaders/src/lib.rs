@@ -1,4 +1,4 @@
-//! Durham terrain shaders: reusable Bevy materials and embedded WGSL for Maybraid terrain work.
+//! Terrain shaders: reusable Bevy materials and embedded WGSL for Maybraid terrain work.
 
 mod terrain_shader;
 mod refraction_water;

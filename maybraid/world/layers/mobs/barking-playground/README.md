@@ -28,10 +28,10 @@ is a neighboring cell. Yellow spheres are `GlobalPoi` forage; smaller
 blue/green markers are `LocalPoi` snacks inside the meander radius.
 
 ```bash
-cargo run -p mob-on-terrain-playground --release
-cargo run -p mob-on-terrain-playground --release -- pack
-cargo run -p mob-on-terrain-playground --release -- both
-cargo run -p mob-on-terrain-playground --release -- hars-ylter
+cargo run -p barking-playground --release
+cargo run -p barking-playground --release -- pack
+cargo run -p barking-playground --release -- both
+cargo run -p barking-playground --release -- hars-ylter
 ```
 
 Fly camera is the default: **WASD**, mouse look, **Space** up / **Shift** down.

@@ -1,6 +1,6 @@
-# Contributing to `richmond-buildings`
+# Contributing to `buildings`
 
-Higher-order building procedures on top of [`richmond-building-components`](../building-components/).
+Higher-order building procedures on top of [`building-components`](../building-components/).
 For Richmond-wide IR / LOD rules, see [../CONTRIBUTING.md](../CONTRIBUTING.md).
 
 This guide walks the **Les Halles storey** pattern as a template for
