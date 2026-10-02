@@ -1,50 +1,26 @@
-//! Urbanization as a terrain model: `Urbanization<M>` is model `M` with
-//! development pads composed in, plus the urban artifacts built on it.
+//! Urbanization as a layer over a [`UrbanizationModel`].
 //!
-//! Storage stays in Richmond's [`DevelopmentEntryStore`](richmond::DevelopmentEntryStore)
-//! and [`UrbanizationIndex`](urbanization_cells::UrbanizationIndex); this
-//! crate only declares the contract over them. [`UrbanizationGenerationPlugin`]
-//! lives here because it is what brings `Urbanization<M>` into existence.
+//! [`Urbanization<U>`] is `U::Ground` with pads composed in, plus the urban
+//! artifacts `U` stores. Storage stays in the model crate; this crate only
+//! declares the contract.
 
-mod config;
 mod generation;
 mod model;
 mod pads;
+mod region;
 mod setting;
-mod stream;
 mod urban;
 
-pub use config::{
-	DevelopmentFocus, UrbanizationLayerConfig, PLAYGROUND_LIKELIHOOD,
-};
 pub use generation::{
-	UrbanizationGenerationCore, UrbanizationGenerationPlugin, UrbanizationGenerationSystems,
-	UrbanizationLayerRegion, UrbanizationModeConfig, UrbanizationScheme,
-	UrbanizationStoreSystems,
+	UrbanizationGeneration, UrbanizationGenerationCore, UrbanizationGenerationPlugin,
+	UrbanizationGenerationSystems, UrbanizationLayerRegion, UrbanizationModeConfig,
+	UrbanizationScheme, UrbanizationStoreSystems,
 };
 pub use model::{UrbanRead, UrbanSnapshot, Urbanization};
-pub use pads::PadComposable;
+pub use pads::PadOps;
+pub use region::{urbanization_host_region, urbanization_visual_region};
 pub use setting::UrbanSetting;
-pub use stream::{
-	clear_urbanization_stream,
-	generate_urbanization_developments,
-	generate_urbanization_padded_terrain,
-	install_urbanization_stream,
-	parse_urbanization_kind,
-	prepare_development_cells,
-	stream_radii_m,
-	stream_urbanization,
-	sync_urbanization_pin,
-	urbanization_host_region,
-	urbanization_visual_region,
-	write_urbanization_host_region,
-	UrbanizationStreamKey,
-	UrbanizationStreamLod,
-	UrbanizationStreamSpec,
-	DEFAULT_URBANIZATION_NOISE,
-	DEFAULT_URBANIZATION_STREAM_RADIUS,
-};
-pub use urban::UrbanModel;
+pub use urban::{UrbanModel, UrbanizationModel};
 
 #[cfg(test)]
 mod tests;

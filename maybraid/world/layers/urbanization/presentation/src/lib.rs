@@ -1,243 +1,83 @@
-//! [`UrbanizationPresentationPlugin`]: building hosts, building LOD, walk colliders.
+//! [`UrbanizationPresentationPlugin`]: hosts and padded cells through the model.
 //!
-//! [`PaddedCells`] presents padded replacements for `Urbanization<M>` through
+//! [`PaddedCells`] presents padded replacements for [`Urbanization<U>`] through
 //! [`TerrainPresentationPlugin`](terrain_layer_presentation::TerrainPresentationPlugin).
 
-use std::collections::{HashMap, HashSet, VecDeque};
 use std::marker::PhantomData;
 
 use bevy::app::{App, Plugin};
-use bevy::prelude::*;
-use terrain_layer_model::{
-	terrain_streaming, TerrainExtent, TerrainLayerSystems,
-};
-use furniture_assemblies::{
-	FurnitureAssembliesPlugin, FurnitureStreamPlugin, FurnitureStreamSystems,
-};
-use furniture_shaders::FurnitureShadersPlugin;
-use lod::gen::{Id, Version};
-use lod::{LodPresentGate, LodPresentSystems};
-use building_physics::BuildingWalkColliderPlugin;
-use terrain_layer_model::TerrainView;
-use layer_stack::{
-	install_lod_present_gate, subscribe_mode, GenerationMode, LodPresentGateSync,
-};
-use urbanization_layer_model::{
-	urbanization_host_region, UrbanizationLayerRegion, UrbanizationStoreSystems, UrbanModel,
-	UrbanSetting, UrbanizationGenerationSystems,
-};
+use lod::LodPresentGate;
+use layer_stack::{install_lod_present_gate, subscribe_mode, GenerationMode};
+use terrain_layer_model::TerrainModel;
+use terrain_layer_presentation::TerrainPresenter;
+use urbanization_layer_model::{Urbanization, UrbanizationGeneration};
 
-mod hosts;
-mod padded;
+/// Host spawn and padded-cell presentation for urbanization model `U`.
+pub trait UrbanizationPresentation: UrbanizationGeneration {
+	fn install_hosts(app: &mut App);
 
-pub use hosts::{spawn_development_hosts, spawn_tagged_host_entities, DevelopmentHostRoot};
-pub use padded::{
-	present_urbanization_padded_terrain, sync_raw_terrain_replacements, PaddedCells,
-	UrbanizationPaddedTerrainState,
-};
-
-#[derive(Resource, Default)]
-pub struct UrbanizationPresenterState {
-	presented: HashMap<Id, PresentedUrbanization>,
-	pending_despawn: VecDeque<Vec<Entity>>,
+	fn install_padded_cells(app: &mut App);
 }
 
-struct PresentedUrbanization {
-	version: Version,
-	entities: Vec<Entity>,
-}
-
-impl UrbanizationPresenterState {
-	pub fn clear(&mut self, commands: &mut Commands) {
-		for presented in self.presented.values() {
-			for entity in &presented.entities {
-				commands.entity(*entity).despawn();
-			}
-		}
-		self.presented.clear();
-		for entities in self.pending_despawn.drain(..) {
-			for entity in entities {
-				commands.entity(entity).despawn();
-			}
-		}
-	}
-
-	fn retire(&mut self, id: Id) -> Option<PresentedUrbanization> {
-		self.presented.remove(&id)
-	}
-
-	pub fn presented_version(&self, id: Id) -> Option<Version> {
-		self.presented.get(&id).map(|entry| entry.version)
-	}
-
-	pub fn presented_ids(&self) -> Vec<Id> {
-		self.presented.keys().copied().collect()
-	}
-
-	#[cfg(test)]
-	pub(crate) fn insert_presented_for_test(&mut self, id: Id, entities: Vec<Entity>) {
-		self.presented.insert(id, PresentedUrbanization { version: Version(1), entities });
-	}
-
-	pub fn remove_stale(&mut self, commands: &mut Commands, wanted: &HashSet<Id>) {
-		let stale: Vec<Id> =
-			self.presented.keys().copied().filter(|id| !wanted.contains(id)).collect();
-		for id in stale {
-			if let Some(entry) = self.presented.remove(&id) {
-				self.pending_despawn.push_back(entry.entities);
-			}
-		}
-		while let Some(entities) = self.pending_despawn.pop_front() {
-			for entity in entities {
-				commands.entity(entity).despawn();
-			}
-		}
-	}
-
-	/// Spawn hosts for one filled leaf that already has a built development.
-	pub fn present_leaf(
-		&mut self,
-		commands: &mut Commands,
-		leaf_id: Id,
-		version: Version,
-		cell: &richmond::DevelopmentCell,
-		built: &richmond::BuiltDevelopment,
-		leaf_bounds: bevy::math::bounding::Aabb3d,
-	) {
-		if self.presented_version(leaf_id) == Some(version) {
-			return;
-		}
-		if let Some(previous) = self.retire(leaf_id) {
-			self.pending_despawn.push_back(previous.entities);
-		}
-
-		let center = (leaf_bounds.min + leaf_bounds.max) * 0.5;
-		let elevation = cell.pads().next().map(|pad| pad.height).unwrap_or(center.y);
-		let arrival_radius = ((leaf_bounds.max.x - leaf_bounds.min.x)
-			.min(leaf_bounds.max.z - leaf_bounds.min.z)
-			* 0.25)
-			.clamp(8.0, 128.0);
-		let mut entities = vec![commands
-			.spawn((
-				Name::new("urban-setting"),
-				UrbanSetting { id: leaf_id, arrival_radius },
-				Transform::from_xyz(center.x, elevation, center.z),
-			))
-			.id()];
-		entities.extend(hosts::spawn_tagged_host_entities(commands, built));
-		self.presented.insert(leaf_id, PresentedUrbanization { version, entities });
-	}
-}
-
-/// Marker for host-presenter subscriptions on ground `G`.
+/// Marker for host-presenter subscriptions on [`Urbanization<U>`].
 pub struct UrbanizationHosts;
 
-/// GET-only host spawn for leaves that already have a built development.
-///
-/// Host teardown when the stream is off used to live in `stream_urbanization`
-/// (`UrbanizationStreamLod` held presenter state). Clearing here keeps that
-/// teardown without putting despawn in the model crate. The system
-/// still sits after [`UrbanizationGenerationSystems`] and before padded present.
-pub fn present_urbanization_hosts<G: UrbanModel>(
-	mut commands: Commands,
-	gate: Res<LodPresentGate<(G, UrbanizationHosts)>>,
-	layer: Res<UrbanizationLayerRegion>,
-	extent: Res<TerrainExtent<G::Base>>,
-	view: TerrainView<G>,
-	mut state: ResMut<UrbanizationPresenterState>,
-) {
-	if gate.is_changed() && !gate.open {
-		state.clear(&mut commands);
-		return;
-	}
-	if !gate.open {
-		return;
-	}
-	let Some(region) = urbanization_host_region(&*extent, layer.region) else {
-		state.clear(&mut commands);
-		return;
-	};
+/// Presents padded replacements for [`Urbanization<U>`].
+pub struct PaddedCells;
 
-	let mut wanted = HashSet::new();
-	for (id, version, built) in G::built_overlapping(&view.read, region) {
-		let Some(cell) = G::development_cell(&view.read, id) else {
-			continue;
-		};
-		if !cell.is_filled() {
-			continue;
-		}
-		state.present_leaf(&mut commands, id, version, cell, built, cell.cell);
-		wanted.insert(id);
+impl<U: UrbanizationPresentation> TerrainPresenter<Urbanization<U>> for PaddedCells
+where
+	Urbanization<U>: terrain_layer_model::TerrainModel,
+{
+	fn install(app: &mut App) {
+		U::install_padded_cells(app);
 	}
-	state.remove_stale(&mut commands, &wanted);
 }
 
-/// Host present, so padded present / raw sync can order after it.
-#[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub(crate) struct UrbanizationHostPresent;
+/// Presents the built developments of model `U` while `Mode` is subscribed.
+pub struct UrbanizationPresentationPlugin<Mode, U>(PhantomData<fn() -> (Mode, U)>);
 
-/// Presents the built developments of urbanized model `G` while `Mode` is subscribed.
-pub struct UrbanizationPresentationPlugin<Mode, G>(PhantomData<fn() -> (Mode, G)>);
-
-impl<Mode, G> Default for UrbanizationPresentationPlugin<Mode, G> {
+impl<Mode, U> Default for UrbanizationPresentationPlugin<Mode, U> {
 	fn default() -> Self {
 		Self(PhantomData)
 	}
 }
 
-pub struct UrbanizationPresentationCore<G>(PhantomData<fn() -> G>);
+pub struct UrbanizationPresentationCore<U>(PhantomData<fn() -> U>);
 
-impl<G> Default for UrbanizationPresentationCore<G> {
+impl<U> Default for UrbanizationPresentationCore<U> {
 	fn default() -> Self {
 		Self(PhantomData)
 	}
 }
 
-impl<G: UrbanModel> Plugin for UrbanizationPresentationCore<G> {
+impl<U: UrbanizationPresentation> Plugin for UrbanizationPresentationCore<U>
+where
+	Urbanization<U>: terrain_layer_model::TerrainModel,
+{
 	fn build(&self, app: &mut App) {
-		if !app.is_plugin_added::<FurnitureShadersPlugin>() {
-			app.add_plugins(FurnitureShadersPlugin);
-		}
-		if !app.is_plugin_added::<FurnitureAssembliesPlugin>() {
-			app.add_plugins(FurnitureAssembliesPlugin);
-		}
-		if !app.is_plugin_added::<FurnitureStreamPlugin>() {
-			app.add_plugins(FurnitureStreamPlugin);
-		}
-		if !app.is_plugin_added::<BuildingWalkColliderPlugin>() {
-			app.add_plugins(BuildingWalkColliderPlugin);
-		}
-		app.init_resource::<UrbanizationPresenterState>()
-			.init_resource::<LodPresentGate<(G, UrbanizationHosts)>>();
-		#[allow(private_interfaces)]
-		app.configure_sets(
-			Update,
-			FurnitureStreamSystems::Generate.after(UrbanizationStoreSystems),
-		);
-		app.add_systems(
-			Update,
-			present_urbanization_hosts::<G>
-				.in_set(UrbanizationHostPresent)
-				.after(UrbanizationGenerationSystems)
-				.after(LodPresentGateSync)
-				.run_if(terrain_streaming::<G>)
-				.before(LodPresentSystems::Produce)
-				.before(TerrainLayerSystems::<G::Base>::QueueColliders),
-		);
+		U::install_hosts(app);
+		app.init_resource::<LodPresentGate<(Urbanization<U>, UrbanizationHosts)>>();
 	}
 }
 
-impl<Mode: GenerationMode, G: UrbanModel> Plugin for UrbanizationPresentationPlugin<Mode, G> {
+impl<Mode: GenerationMode, U: UrbanizationPresentation> Plugin
+	for UrbanizationPresentationPlugin<Mode, U>
+where
+	Urbanization<U>: terrain_layer_model::TerrainModel,
+{
 	fn build(&self, app: &mut App) {
-		subscribe_mode::<(G, UrbanizationHosts), Mode>(app);
-		install_lod_present_gate::<(G, UrbanizationHosts), (G, UrbanizationHosts)>(app);
-		if !app.is_plugin_added::<UrbanizationPresentationCore<G>>() {
-			app.add_plugins(UrbanizationPresentationCore::<G>::default());
+		subscribe_mode::<(Urbanization<U>, UrbanizationHosts), Mode>(app);
+		install_lod_present_gate::<(Urbanization<U>, UrbanizationHosts), (Urbanization<U>, UrbanizationHosts)>(
+			app,
+		);
+		if !app.is_plugin_added::<UrbanizationPresentationCore<U>>() {
+			app.add_plugins(UrbanizationPresentationCore::<U>::default());
 		}
 	}
 
 	fn finish(&self, app: &mut App) {
-		G::require_generation(app);
+		Urbanization::<U>::require_generation(app);
 	}
 }
 

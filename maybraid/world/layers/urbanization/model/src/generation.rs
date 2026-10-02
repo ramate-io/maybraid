@@ -1,25 +1,16 @@
-//! [`UrbanizationGenerationPlugin`]: urbanization cells, pads, and padded cells over `M`.
+//! [`UrbanizationGenerationPlugin`]: config-free install plus a per-mode config.
 
 use std::marker::PhantomData;
 
 use bevy::app::{App, Plugin};
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
-use lod::gen::LodGenerateBudget;
-use lod::LodPresentSystems;
-use richmond::{register_richmond_plugin, DevelopmentConfig, DevelopmentEntryStore};
-use terrain_layer_model::{terrain_streaming, TerrainLayerSystems, TerrainModel};
 use layer_stack::{ActiveGenerationMode, GenerationMode};
-use urbanization_cells::UrbanizationLodChan;
+use terrain_layer_model::{terrain_streaming, TerrainModel};
 
-use crate::config::UrbanizationLayerConfig;
-use crate::model::Urbanization;
-use crate::stream::{
-	clear_urbanization_stream, generate_urbanization_padded_terrain, UrbanizationStreamKey,
-	UrbanizationStreamLod,
-};
+use crate::urban::UrbanizationModel;
 
-/// Systems that write urbanization / development / padded-cell storage.
+/// Systems that write urbanization storage.
 ///
 /// Presentation orders `.after(UrbanizationGenerationSystems)` so the split
 /// chain matches today's single `.chain()`.
@@ -30,62 +21,56 @@ pub struct UrbanizationGenerationSystems;
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct UrbanizationStoreSystems;
 
-/// A mode's urbanization writes for model `M`.
-pub trait UrbanizationScheme<M: TerrainModel>: GenerationMode {
-	fn install(app: &mut App, config: &UrbanizationLayerConfig);
+/// A model with its own urbanization generation stack.
+pub trait UrbanizationGeneration: UrbanizationModel {
+	type Config: Clone + Send + Sync + 'static;
+
+	fn install_generation(app: &mut App);
+
+	fn apply_generation(world: &mut World, config: &Self::Config);
+
+	fn clear_generation(world: &mut World);
 }
 
-/// Shared install for `Urbanization<M>`, added once.
-pub struct UrbanizationGenerationCore<M>(PhantomData<fn() -> M>);
+/// A mode's urbanization writes for model `U`.
+pub trait UrbanizationScheme<U: UrbanizationGeneration>: GenerationMode {
+	fn install(app: &mut App, config: &U::Config);
+}
 
-impl<M> Default for UrbanizationGenerationCore<M> {
+/// Shared install for `U`, added once.
+pub struct UrbanizationGenerationCore<U>(PhantomData<fn() -> U>);
+
+impl<U> Default for UrbanizationGenerationCore<U> {
 	fn default() -> Self {
 		Self(PhantomData)
 	}
 }
 
-impl<M> Plugin for UrbanizationGenerationCore<M>
-where
-	M: TerrainModel + Send + Sync + 'static,
-	Urbanization<M>: TerrainModel,
-{
+impl<U: UrbanizationGeneration> Plugin for UrbanizationGenerationCore<U> {
 	fn build(&self, app: &mut App) {
-		register_richmond_plugin(app);
-		app.init_resource::<DevelopmentConfig>()
-			.init_resource::<LodGenerateBudget<UrbanizationLodChan>>()
-			.init_resource::<UrbanizationLayerRegion>()
-			.init_resource::<UrbanizationStreamKey>();
+		U::install_generation(app);
 		app.configure_sets(
-				Update,
-				(
-					UrbanizationGenerationSystems,
-					UrbanizationStoreSystems
-						.in_set(UrbanizationGenerationSystems)
-						.run_if(terrain_streaming::<M>),
-				),
-			)
-			.add_systems(
-				Update,
-				generate_urbanization_padded_terrain::<M>
+			Update,
+			(
+				UrbanizationGenerationSystems,
+				UrbanizationStoreSystems
 					.in_set(UrbanizationGenerationSystems)
-					.after(UrbanizationStoreSystems)
-					.run_if(terrain_streaming::<M>)
-					.before(LodPresentSystems::Produce)
-					.before(TerrainLayerSystems::<M::Base>::QueueColliders),
-			);
+					.run_if(terrain_streaming::<U::Ground>),
+			),
+		);
 	}
 }
 
-/// Per-mode config the scheme systems read.
+/// Per-mode config the scheme systems read, keyed by the urbanization model.
 #[derive(Resource, Clone)]
-pub struct UrbanizationModeConfig<Mode: GenerationMode> {
-	pub config: UrbanizationLayerConfig,
-	_mode: PhantomData<fn() -> Mode>,
+pub struct UrbanizationModeConfig<Mode: GenerationMode, U: UrbanizationGeneration> {
+	pub config: U::Config,
+	_marker: PhantomData<fn() -> (Mode, U)>,
 }
 
-impl<Mode: GenerationMode> UrbanizationModeConfig<Mode> {
-	pub fn new(config: UrbanizationLayerConfig) -> Self {
-		Self { config, _mode: PhantomData }
+impl<Mode: GenerationMode, U: UrbanizationGeneration> UrbanizationModeConfig<Mode, U> {
+	pub fn new(config: U::Config) -> Self {
+		Self { config, _marker: PhantomData }
 	}
 }
 
@@ -95,79 +80,72 @@ pub struct UrbanizationLayerRegion {
 	pub region: Option<Aabb3d>,
 }
 
-/// Generation for model `M` in `Mode`.
-pub struct UrbanizationGenerationPlugin<Mode, M>
+/// Generation for model `U` in `Mode`.
+pub struct UrbanizationGenerationPlugin<Mode, U>
 where
-	Mode: UrbanizationScheme<M>,
-	M: TerrainModel,
+	Mode: UrbanizationScheme<U>,
+	U: UrbanizationGeneration,
 {
-	pub config: UrbanizationLayerConfig,
-	_marker: PhantomData<fn() -> (Mode, M)>,
+	pub config: U::Config,
+	_marker: PhantomData<fn() -> (Mode, U)>,
 }
 
-impl<Mode, M> UrbanizationGenerationPlugin<Mode, M>
+impl<Mode, U> UrbanizationGenerationPlugin<Mode, U>
 where
-	Mode: UrbanizationScheme<M>,
-	M: TerrainModel,
+	Mode: UrbanizationScheme<U>,
+	U: UrbanizationGeneration,
 {
-	pub fn new(config: UrbanizationLayerConfig) -> Self {
+	pub fn new(config: U::Config) -> Self {
 		Self { config, _marker: PhantomData }
 	}
 }
 
-impl<Mode, M> Default for UrbanizationGenerationPlugin<Mode, M>
+impl<Mode, U> Default for UrbanizationGenerationPlugin<Mode, U>
 where
-	Mode: UrbanizationScheme<M>,
-	M: TerrainModel,
+	Mode: UrbanizationScheme<U>,
+	U: UrbanizationGeneration,
+	U::Config: Default,
 {
 	fn default() -> Self {
-		Self::new(UrbanizationLayerConfig::default())
+		Self::new(U::Config::default())
 	}
 }
 
-impl<Mode, M> Plugin for UrbanizationGenerationPlugin<Mode, M>
+impl<Mode, U> Plugin for UrbanizationGenerationPlugin<Mode, U>
 where
-	Mode: UrbanizationScheme<M>,
-	M: TerrainModel,
-	Urbanization<M>: TerrainModel,
+	Mode: UrbanizationScheme<U>,
+	U: UrbanizationGeneration,
 {
 	fn build(&self, app: &mut App) {
-		if !app.is_plugin_added::<UrbanizationGenerationCore<M>>() {
-			app.add_plugins(UrbanizationGenerationCore::<M>::default());
+		if !app.is_plugin_added::<UrbanizationGenerationCore<U>>() {
+			app.add_plugins(UrbanizationGenerationCore::<U>::default());
 		}
-		app.insert_resource(UrbanizationModeConfig::<Mode>::new(self.config.clone()));
+		app.insert_resource(UrbanizationModeConfig::<Mode, U>::new(self.config.clone()));
 		app.add_systems(
 			OnEnter(ActiveGenerationMode::of::<Mode>()),
-			apply_urbanization_mode::<Mode>,
+			apply_urbanization::<Mode, U>,
 		);
 		app.add_systems(
 			OnExit(ActiveGenerationMode::of::<Mode>()),
-			clear_urbanization_mode,
+			clear_urbanization::<U>,
 		);
 		Mode::install(app, &self.config);
 	}
 
 	fn finish(&self, app: &mut App) {
-		M::require_generation(app);
+		U::Ground::require_generation(app);
 	}
 }
 
-pub(crate) fn apply_urbanization_mode<Mode: GenerationMode>(
-	mode: Res<UrbanizationModeConfig<Mode>>,
-	mut development: ResMut<DevelopmentConfig>,
-	mut budget: ResMut<LodGenerateBudget<UrbanizationLodChan>>,
-) {
-	*development = mode.config.development_config();
-	*budget = LodGenerateBudget::new(mode.config.generate_budget);
+fn apply_urbanization<Mode, U>(world: &mut World)
+where
+	Mode: GenerationMode,
+	U: UrbanizationGeneration,
+{
+	let config = world.resource::<UrbanizationModeConfig<Mode, U>>().config.clone();
+	U::apply_generation(world, &config);
 }
 
-pub(crate) fn clear_urbanization_mode(
-	mut store: ResMut<DevelopmentEntryStore>,
-	mut layer: ResMut<UrbanizationLayerRegion>,
-	key: Option<ResMut<UrbanizationStreamKey>>,
-	lod: Option<UrbanizationStreamLod>,
-) {
-	store.clear();
-	layer.region = None;
-	clear_urbanization_stream(None, key, lod);
+fn clear_urbanization<U: UrbanizationGeneration>(world: &mut World) {
+	U::clear_generation(world);
 }

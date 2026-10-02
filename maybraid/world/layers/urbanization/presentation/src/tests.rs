@@ -1,219 +1,277 @@
-use std::collections::HashSet;
-
 use bevy::app::{App, Plugin};
-use bevy::ecs::system::SystemState;
+use bevy::ecs::system::{SystemParamItem, SystemState};
 use bevy::math::bounding::Aabb3d;
-use bevy::math::Vec3;
-use bevy::prelude::{AssetPlugin, MinimalPlugins, NextState, Visibility, World};
+use bevy::math::Vec2;
+use bevy::prelude::{AssetPlugin, MinimalPlugins, NextState, World};
 use bevy::state::app::StatesPlugin;
-use durham::{
-	Durham, DurhamTerrainConfig, PresentedTerrainScene, TerrainColliderMeshSource,
-	TerrainSuperseded, TerrainTrimeshCollider,
+use layer_stack::{
+	subscribe_mode, ActiveGenerationMode, GenerationMode, GenerationModePlugin, ModeSubscribers,
+	ModeSubscription,
 };
 use lod::gen::Id;
-use richmond::PresentedPaddedTerrainScene;
-use terrain_layer_model::{BaseTerrainGenerationPlugin, BaseTerrainScheme, OnTerrain};
-use layer_stack::{subscribe_mode, ActiveGenerationMode, GenerationMode, GenerationModePlugin, ModeSubscribers, ModeSubscription};
-use terrain_layer_presentation::TerrainPresentationPlugin;
+use lod::lod_ref::LodRef;
+use terrain_layer_model::{HeightField, TerrainCell, TerrainModel};
 use urbanization_layer_model::{
-	Urbanization, UrbanizationGenerationPlugin, UrbanizationLayerConfig, UrbanizationLayerRegion,
+	PadOps, Urbanization, UrbanizationGeneration, UrbanizationModel,
 };
 
 use crate::{
-	sync_raw_terrain_replacements, PaddedCells, UrbanizationHosts, UrbanizationPaddedTerrainState,
-	UrbanizationPresentationPlugin,
+	UrbanizationHosts, UrbanizationPresentation, UrbanizationPresentationCore,
+	UrbanizationPresentationPlugin, PaddedCells,
 };
-
-#[test]
-fn raw_cell_hands_its_floor_to_a_cooked_padded_replacement() -> anyhow::Result<()> {
-	use bevy::ecs::system::RunSystemOnce;
-	let id = Id::from_cell(Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE));
-	let mut world = World::new();
-	world.insert_resource(UrbanizationPaddedTerrainState {
-		wanted: HashSet::from([id]),
-		replaced: HashSet::new(),
-	});
-	let raw = world.spawn((PresentedTerrainScene(id), Visibility::Inherited)).id();
-	let padded = world.spawn((PresentedPaddedTerrainScene(id), TerrainColliderMeshSource)).id();
-	let run = |world: &mut World| {
-		world
-			.run_system_once(sync_raw_terrain_replacements)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))
-	};
-
-	run(&mut world)?;
-	assert!(world.get::<TerrainSuperseded>(raw).is_none(), "uncooked pads cannot bear weight");
-	assert_eq!(world.get::<Visibility>(raw), Some(&Visibility::Inherited));
-
-	world.entity_mut(padded).insert(TerrainTrimeshCollider);
-	run(&mut world)?;
-	assert!(world.get::<TerrainSuperseded>(raw).is_some(), "raw floor stays under pads");
-	assert_eq!(world.get::<Visibility>(raw), Some(&Visibility::Hidden));
-
-	world.resource_mut::<UrbanizationPaddedTerrainState>().wanted.clear();
-	run(&mut world)?;
-	assert!(world.get::<TerrainSuperseded>(raw).is_none(), "raw cell collides again");
-	assert_eq!(world.get::<Visibility>(raw), Some(&Visibility::Inherited));
-	Ok(())
-}
-
-#[test]
-fn raw_cells_another_owner_superseded_stay_superseded() -> anyhow::Result<()> {
-	use bevy::ecs::system::RunSystemOnce;
-	let id = Id::from_cell(Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE));
-	let mut world = World::new();
-	world.init_resource::<UrbanizationPaddedTerrainState>();
-	let raw = world
-		.spawn((PresentedTerrainScene(id), Visibility::Hidden, TerrainSuperseded))
-		.id();
-	world
-		.run_system_once(sync_raw_terrain_replacements)
-		.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-	assert!(world.get::<TerrainSuperseded>(raw).is_some());
-	assert_eq!(world.get::<Visibility>(raw), Some(&Visibility::Hidden));
-	Ok(())
-}
-
-#[test]
-fn padded_ready_does_not_claim_another_owners_raw_cell() -> anyhow::Result<()> {
-	use bevy::ecs::system::RunSystemOnce;
-	let id = Id::from_cell(Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE));
-	let mut world = World::new();
-	world.insert_resource(UrbanizationPaddedTerrainState {
-		wanted: HashSet::from([id]),
-		replaced: HashSet::new(),
-	});
-	let raw = world
-		.spawn((PresentedTerrainScene(id), Visibility::Hidden, TerrainSuperseded))
-		.id();
-	world.spawn((
-		PresentedPaddedTerrainScene(id),
-		TerrainColliderMeshSource,
-		TerrainTrimeshCollider,
-	));
-	let run = |world: &mut World| {
-		world
-			.run_system_once(sync_raw_terrain_replacements)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))
-	};
-
-	run(&mut world)?;
-	anyhow::ensure!(
-		world.get::<TerrainSuperseded>(raw).is_some(),
-		"another owner's hide stays"
-	);
-	anyhow::ensure!(
-		!world.resource::<UrbanizationPaddedTerrainState>().replaced.contains(&id),
-		"ready must not claim a cell this stream did not hide"
-	);
-
-	world.resource_mut::<UrbanizationPaddedTerrainState>().wanted.clear();
-	run(&mut world)?;
-	anyhow::ensure!(
-		world.get::<TerrainSuperseded>(raw).is_some(),
-		"releasing a cell we never owned must not unhide it"
-	);
-	assert_eq!(world.get::<Visibility>(raw), Some(&Visibility::Hidden));
-	Ok(())
-}
-
-#[test]
-fn padded_viewer_quant_is_stable_inside_cell() -> anyhow::Result<()> {
-	use crate::padded::quantize_viewer_xz_for_test;
-	assert_eq!(quantize_viewer_xz_for_test(Vec3::new(0.1, 12.0, 7.9)), (0, 0));
-	assert_eq!(quantize_viewer_xz_for_test(Vec3::new(8.0, 0.0, -0.1)), (1, -1));
-	Ok(())
-}
-
-#[test]
-fn streamed_hosts_leave_when_the_layer_region_is_gone() -> anyhow::Result<()> {
-	use bevy::ecs::system::RunSystemOnce;
-	use durham::{
-		playable_world_cell_layout, BaseTerrainNoise, TerrainConfig, TerrainEntryStore,
-		WorldBaseTerrain,
-	};
-	use richmond::DevelopmentEntryStore;
-	use urbanization_cells::UrbanizationIndex;
-	use crate::{present_urbanization_hosts, UrbanizationPresenterState};
-
-	let mut app = subscribed_app();
-	app.insert_resource(UrbanizationLayerRegion::default());
-	app.insert_resource(playable_world_cell_layout());
-	app.insert_resource(terrain_layer_model::TerrainExtent::<Durham>::streamed(
-		playable_world_cell_layout().presentation_region(),
-	));
-	app.insert_resource(TerrainEntryStore::default());
-	app.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(
-		&TerrainConfig::new(42),
-	)));
-	app.insert_resource(UrbanizationIndex::default());
-	app.insert_resource(DevelopmentEntryStore::default());
-	app.init_resource::<UrbanizationPresenterState>();
-	app.init_resource::<lod::LodPresentGate<(Urbanized, UrbanizationHosts)>>();
-
-	let id = Id::from_cell(Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE));
-	let host = app.world_mut().spawn_empty().id();
-	app.world_mut()
-		.resource_mut::<UrbanizationPresenterState>()
-		.insert_presented_for_test(id, vec![host]);
-	anyhow::ensure!(
-		app.world().resource::<UrbanizationPresenterState>().presented_ids() == [id],
-		"seed host"
-	);
-
-	app.world_mut()
-		.run_system_once(present_urbanization_hosts::<Urbanized>)
-		.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-	anyhow::ensure!(
-		app.world().resource::<UrbanizationPresenterState>().presented_ids().is_empty(),
-		"streamed layout with no layer region clears hosts"
-	);
-	anyhow::ensure!(app.world().get_entity(host).is_err(), "host entity leaves");
-	Ok(())
-}
 
 struct TestMode;
 
 impl GenerationMode for TestMode {}
 
-impl BaseTerrainScheme<Durham> for TestMode {
-	fn install(_app: &mut App, _config: &DurhamTerrainConfig) {}
+struct SilentGround;
+
+#[derive(Clone)]
+struct SilentField;
+
+impl HeightField for SilentField {
+	fn height_at(&self, _xz: Vec2) -> Option<f32> {
+		None
+	}
+	fn fallback_height_at(&self, _xz: Vec2) -> f32 {
+		0.0
+	}
 }
 
-impl urbanization_layer_model::UrbanizationScheme<OnTerrain<Durham>> for TestMode {
-	fn install(_app: &mut App, _config: &UrbanizationLayerConfig) {}
+struct SilentCell;
+
+impl TerrainCell for SilentCell {
+	type Mesh = ();
+	fn bounds(&self) -> Aabb3d {
+		Aabb3d::from_min_max(bevy::math::Vec3::ZERO, bevy::math::Vec3::ONE)
+	}
+	fn mesh_builder(&self) {}
+	fn chunk_pose(&self) -> bevy::prelude::Transform {
+		bevy::prelude::Transform::IDENTITY
+	}
+	fn seeds_collision(&self) -> bool {
+		false
+	}
+	fn res_2(&self) -> u8 {
+		0
+	}
+}
+
+impl TerrainModel for SilentGround {
+	type Base = Self;
+	type Cell = SilentCell;
+	type Read = ();
+	type Snapshot = SilentField;
+	type Prepare = ();
+
+	fn prepare(
+		_prepare: &mut SystemParamItem<'_, '_, Self::Prepare>,
+		_bounds: Aabb3d,
+		_lod_ref: &LodRef,
+	) {
+	}
+
+	fn height_at(_read: &SystemParamItem<'_, '_, Self::Read>, _xz: Vec2) -> Option<f32> {
+		None
+	}
+
+	fn fallback_height_at(_read: &SystemParamItem<'_, '_, Self::Read>, _xz: Vec2) -> f32 {
+		0.0
+	}
+
+	fn cell_ids_overlapping(
+		_read: &SystemParamItem<'_, '_, Self::Read>,
+		_region: Aabb3d,
+	) -> Vec<Id> {
+		Vec::new()
+	}
+
+	fn cell<'a>(
+		_read: &'a SystemParamItem<'_, '_, Self::Read>,
+		_id: Id,
+	) -> Option<&'a SilentCell> {
+		None
+	}
+
+	fn overlay_cell<'a>(
+		_read: &'a SystemParamItem<'_, '_, Self::Read>,
+		_bounds: Aabb3d,
+		_target_size: f32,
+		_overlay_size_tolerance: Option<f32>,
+	) -> Option<&'a dyn TerrainCell<Mesh = ()>> {
+		None
+	}
+
+	fn snapshot(_read: &SystemParamItem<'_, '_, Self::Read>, _region: Aabb3d) -> SilentField {
+		SilentField
+	}
+
+	fn require_generation(app: &App) {
+		layer_stack::RequireLayer::require_layer::<
+			terrain_layer_model::BaseTerrainGenerationCore<Self>,
+			Self,
+		>(app);
+	}
+}
+
+impl terrain_layer_model::TerrainGeneration for SilentGround {
+	type Config = ();
+	fn install_generation(_app: &mut App) {}
+	fn apply_generation(_world: &mut World, _config: &()) {}
+}
+
+#[derive(Clone, Copy, Default)]
+struct SilentPads;
+
+impl PadOps for SilentPads {
+	fn modify_elevation(&self, height: f32, _x: f32, _z: f32) -> f32 {
+		height
+	}
+}
+
+struct SilentUrban;
+
+impl UrbanizationModel for SilentUrban {
+	type Ground = SilentGround;
+	type Leaf = ();
+	type Cell = ();
+	type Built = ();
+	type Pads = SilentPads;
+	type Kind = ();
+	type Selection = ();
+	type Surface = SilentCell;
+	type Read = ();
+	type Select = ();
+	type Prepare = ();
+
+	fn pads(_read: &SystemParamItem<'_, '_, Self::Read>, _region: Aabb3d) -> SilentPads {
+		SilentPads
+	}
+
+	fn pads_at(_read: &SystemParamItem<'_, '_, Self::Read>, _xz: Vec2) -> SilentPads {
+		SilentPads
+	}
+
+	fn surface<'a>(
+		_read: &'a SystemParamItem<'_, '_, Self::Read>,
+		_id: Id,
+	) -> Option<&'a SilentCell> {
+		None
+	}
+
+	fn surface_ids(_read: &SystemParamItem<'_, '_, Self::Read>, _region: Aabb3d) -> Vec<Id> {
+		Vec::new()
+	}
+
+	fn overlay_surface<'a>(
+		_read: &'a SystemParamItem<'_, '_, Self::Read>,
+		_bounds: Aabb3d,
+	) -> Option<&'a SilentCell> {
+		None
+	}
+
+	fn urbanization_leaves<'a>(
+		_read: &'a SystemParamItem<'_, '_, Self::Read>,
+		_region: Aabb3d,
+	) -> Vec<&'a ()> {
+		Vec::new()
+	}
+
+	fn development_cells<'a>(
+		_read: &'a SystemParamItem<'_, '_, Self::Read>,
+		_region: Aabb3d,
+	) -> Vec<&'a ()> {
+		Vec::new()
+	}
+
+	fn built<'a>(_read: &'a SystemParamItem<'_, '_, Self::Read>, _region: Aabb3d) -> Vec<&'a ()> {
+		Vec::new()
+	}
+
+	fn built_overlapping<'a>(
+		_read: &'a SystemParamItem<'_, '_, Self::Read>,
+		_region: Aabb3d,
+	) -> Vec<(Id, lod::gen::Version, &'a ())> {
+		Vec::new()
+	}
+
+	fn development_cell<'a>(
+		_read: &'a SystemParamItem<'_, '_, Self::Read>,
+		_id: Id,
+	) -> Option<&'a ()> {
+		None
+	}
+
+	fn urbanization_selection(_read: &SystemParamItem<'_, '_, Self::Read>) -> ((), Option<()>) {
+		((), None)
+	}
+
+	fn leaf_bounds(_leaf: &()) -> Aabb3d {
+		Aabb3d::from_min_max(bevy::math::Vec3::ZERO, bevy::math::Vec3::ONE)
+	}
+
+	fn cell_bounds(_cell: &()) -> Aabb3d {
+		Aabb3d::from_min_max(bevy::math::Vec3::ZERO, bevy::math::Vec3::ONE)
+	}
+
+	fn ensure_selected(
+		_select: &mut SystemParamItem<'_, '_, Self::Select>,
+		_region: Aabb3d,
+	) {
+	}
+
+	fn prepare(
+		_prepare: &mut SystemParamItem<'_, '_, Self::Prepare>,
+		_bounds: Aabb3d,
+		_lod_ref: &LodRef,
+	) {
+	}
+
+	fn require_generation(app: &App) {
+		layer_stack::RequireLayer::require_layer::<
+			urbanization_layer_model::UrbanizationGenerationCore<Self>,
+			Urbanization<Self>,
+		>(app);
+	}
+}
+
+impl UrbanizationGeneration for SilentUrban {
+	type Config = ();
+	fn install_generation(_app: &mut App) {}
+	fn apply_generation(_world: &mut World, _config: &()) {}
+	fn clear_generation(_world: &mut World) {}
+}
+
+impl UrbanizationPresentation for SilentUrban {
+	fn install_hosts(_app: &mut App) {}
+	fn install_padded_cells(_app: &mut App) {}
 }
 
 #[test]
-fn urbanization_layers_finish_with_base_generation() {
-	// Adding Durham / Richmond plugins to a bare `App` needs a render world
-	// (shaders, `MaterialPlugin`). Assemblers (world, playground binary) are
-	// that app. `finish` without those plugins is the should-panic sibling;
-	// this locks the stack types the assemblers add.
-	let _stack = (
-		GenerationModePlugin::<TestMode>::initial(),
-		BaseTerrainGenerationPlugin::<TestMode, Durham>::new(DurhamTerrainConfig::fine_patch(2)),
-		UrbanizationGenerationPlugin::<TestMode, OnTerrain<Durham>>::new(
-			UrbanizationLayerConfig::default(),
-		),
-		TerrainPresentationPlugin::<TestMode, Urbanization<OnTerrain<Durham>>, PaddedCells>::default(),
-		UrbanizationPresentationPlugin::<TestMode, Urbanization<OnTerrain<Durham>>>::default(),
+fn presentation_without_generation_names_the_missing_plugin() {
+	let result = std::panic::catch_unwind(|| {
+		UrbanizationPresentationPlugin::<TestMode, SilentUrban>::default()
+			.finish(&mut App::new());
+	});
+	let message = match result {
+		Ok(()) => "plugin finish returned".to_string(),
+		Err(payload) => payload
+			.downcast_ref::<String>()
+			.cloned()
+			.or_else(|| payload.downcast_ref::<&str>().map(|s| (*s).to_string()))
+			.unwrap_or_else(|| "non-string panic".to_string()),
+	};
+	assert!(
+		message.contains("BaseTerrainGenerationCore"),
+		"finish names the missing ground core, got {message}"
 	);
-}
-
-#[test]
-#[should_panic(expected = "requires terrain_layer_model::generation::BaseTerrainGenerationCore")]
-fn urbanization_layers_without_base_generation_name_the_missing_plugin() {
-	// `build` installs Richmond / furniture plugins that need a full Bevy app.
-	// `finish` is the requirement check the assemblers actually run.
-	UrbanizationGenerationPlugin::<TestMode, OnTerrain<Durham>>::default().finish(&mut App::new());
 }
 
 struct OtherMode;
 
 impl GenerationMode for OtherMode {}
 
-type Urbanized = Urbanization<OnTerrain<Durham>>;
+type Stacked = Urbanization<SilentUrban>;
 
 fn subscribed_app() -> App {
 	let mut app = App::new();
@@ -223,8 +281,8 @@ fn subscribed_app() -> App {
 		GenerationModePlugin::<TestMode>::initial(),
 		GenerationModePlugin::<OtherMode>::default(),
 	));
-	subscribe_mode::<(Urbanized, UrbanizationHosts), TestMode>(&mut app);
-	subscribe_mode::<(Urbanized, PaddedCells), TestMode>(&mut app);
+	subscribe_mode::<(Stacked, UrbanizationHosts), TestMode>(&mut app);
+	subscribe_mode::<(Stacked, PaddedCells), TestMode>(&mut app);
 	app
 }
 
@@ -233,7 +291,7 @@ fn losing_subscription_is_inactive_and_returning_is_active() -> anyhow::Result<(
 	let mut app = subscribed_app();
 	app.update();
 	{
-		let mut state = SystemState::<ModeSubscription<(Urbanized, UrbanizationHosts)>>::new(
+		let mut state = SystemState::<ModeSubscription<(Stacked, UrbanizationHosts)>>::new(
 			app.world_mut(),
 		);
 		anyhow::ensure!(
@@ -242,7 +300,7 @@ fn losing_subscription_is_inactive_and_returning_is_active() -> anyhow::Result<(
 		);
 	}
 	{
-		let mut state = SystemState::<ModeSubscription<(Urbanized, PaddedCells)>>::new(
+		let mut state = SystemState::<ModeSubscription<(Stacked, PaddedCells)>>::new(
 			app.world_mut(),
 		);
 		anyhow::ensure!(
@@ -256,21 +314,12 @@ fn losing_subscription_is_inactive_and_returning_is_active() -> anyhow::Result<(
 		.set(ActiveGenerationMode::of::<OtherMode>());
 	app.update();
 	{
-		let mut state = SystemState::<ModeSubscription<(Urbanized, UrbanizationHosts)>>::new(
+		let mut state = SystemState::<ModeSubscription<(Stacked, UrbanizationHosts)>>::new(
 			app.world_mut(),
 		);
 		anyhow::ensure!(
 			!state.get(app.world()).map_err(|error| anyhow::anyhow!("{error:?}"))?.active(),
 			"unsubscribed mode retires hosts"
-		);
-	}
-	{
-		let mut state = SystemState::<ModeSubscription<(Urbanized, PaddedCells)>>::new(
-			app.world_mut(),
-		);
-		anyhow::ensure!(
-			!state.get(app.world()).map_err(|error| anyhow::anyhow!("{error:?}"))?.active(),
-			"unsubscribed mode culls padded"
 		);
 	}
 
@@ -279,7 +328,7 @@ fn losing_subscription_is_inactive_and_returning_is_active() -> anyhow::Result<(
 		.set(ActiveGenerationMode::of::<TestMode>());
 	app.update();
 	{
-		let mut state = SystemState::<ModeSubscription<(Urbanized, UrbanizationHosts)>>::new(
+		let mut state = SystemState::<ModeSubscription<(Stacked, UrbanizationHosts)>>::new(
 			app.world_mut(),
 		);
 		anyhow::ensure!(
@@ -297,73 +346,15 @@ fn two_modes_install_the_core_once() -> anyhow::Result<()> {
 	app.add_plugins((
 		GenerationModePlugin::<TestMode>::initial(),
 		GenerationModePlugin::<OtherMode>::default(),
-		UrbanizationPresentationPlugin::<TestMode, Urbanized>::default(),
-		UrbanizationPresentationPlugin::<OtherMode, Urbanized>::default(),
+		UrbanizationPresentationPlugin::<TestMode, SilentUrban>::default(),
+		UrbanizationPresentationPlugin::<OtherMode, SilentUrban>::default(),
 	));
 	anyhow::ensure!(
-		app.is_plugin_added::<crate::UrbanizationPresentationCore<Urbanized>>(),
+		app.is_plugin_added::<UrbanizationPresentationCore<SilentUrban>>(),
 		"core is installed"
 	);
-	let hosts = app.world().resource::<ModeSubscribers<(Urbanized, UrbanizationHosts)>>();
+	let hosts = app.world().resource::<ModeSubscribers<(Stacked, UrbanizationHosts)>>();
 	anyhow::ensure!(hosts.contains::<TestMode>());
 	anyhow::ensure!(hosts.contains::<OtherMode>());
-	Ok(())
-}
-
-#[test]
-fn hosts_walk_a_stored_development_with_no_hopscotch() -> anyhow::Result<()> {
-	use durham::{
-		fine_patch_cell_layout, BaseTerrainNoise, TerrainConfig, TerrainEntryStore,
-		WorldBaseTerrain,
-	};
-	use richmond::{DevelopmentCell, DevelopmentConfig, DevelopmentEntryStore};
-	use urbanization_cells::UrbanizationIndex;
-	use urbanization_layer_model::{
-		urbanization_host_region, UrbanModel, UrbanizationLayerRegion,
-	};
-
-	let mut world = World::new();
-	world.insert_resource(UrbanizationLayerRegion::default());
-	let layout = fine_patch_cell_layout(2, bevy::math::IVec2::ZERO);
-	world.insert_resource(layout.clone());
-	world.insert_resource(TerrainEntryStore::default());
-	world.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(
-		&TerrainConfig::new(42),
-	)));
-	world.insert_resource(UrbanizationIndex::default());
-	world.insert_resource(DevelopmentEntryStore::default());
-
-	let cell = Aabb3d::from_min_max(Vec3::new(-20.0, 0.0, -20.0), Vec3::new(20.0, 1.0, 20.0));
-	let config = DevelopmentConfig::from_world_seed(42);
-	let filled = DevelopmentCell::with_les_halles(cell, 12.0, &config);
-	let built = filled
-		.built(config.seed as i32)
-		.ok_or_else(|| anyhow::anyhow!("les halles built"))?;
-	let id = Id::from_cell(filled.cell);
-	{
-		let mut store = world.resource_mut::<DevelopmentEntryStore>();
-		store.insert_cell(id, filled);
-		store.insert_built(id, built, cell);
-	}
-
-	let region = urbanization_host_region(
-		&terrain_layer_model::TerrainExtent::<Durham>::pinned(layout.presentation_region()),
-		None,
-	)
-		.ok_or_else(|| anyhow::anyhow!("fine-patch host region"))?;
-	let mut state = SystemState::<terrain_layer_model::TerrainView<Urbanized>>::new(&mut world);
-	let view = state.get(&world).map_err(|error| anyhow::anyhow!("{error:?}"))?;
-	let ids: Vec<_> = Urbanized::built_overlapping(&view.read, region)
-		.into_iter()
-		.map(|(id, _, _)| id)
-		.collect();
-	anyhow::ensure!(
-		ids.contains(&id),
-		"hosts walk a stored development with no hopscotch selection"
-	);
-	anyhow::ensure!(
-		Urbanized::urbanization_leaves(&view.read, region).is_empty(),
-		"no hopscotch cells are selected"
-	);
 	Ok(())
 }

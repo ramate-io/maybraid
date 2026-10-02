@@ -1,131 +1,142 @@
-//! [`UrbanModel`]: the urban artifacts consumers bound on instead of Richmond stores.
+//! [`UrbanizationModel`] and the consumer-facing [`UrbanModel`] bound.
 
-use bevy::ecs::system::{ResMut, SystemParam, SystemParamItem};
+use bevy::app::App;
+use bevy::ecs::system::{ReadOnlySystemParam, SystemParam, SystemParamItem};
 use bevy::math::bounding::Aabb3d;
+use bevy::math::Vec2;
 use lod::gen::{Id, Version};
-use procedural_common::NoiseParams;
-use richmond::{BuiltDevelopment, DevelopmentCell, PadComplex, TerrainWithPads};
-use urbanization_cells::{
-	DevelopmentLeaf, UrbanizationExtent, UrbanizationIndex, UrbanizationKind,
-};
-use durham::TerrainMeshBuilder;
+use lod::lod_ref::LodRef;
 use terrain_layer_model::{TerrainCell, TerrainModel};
 
-use crate::model::Urbanization;
-use crate::pads::PadComposable;
+use crate::pads::PadOps;
 
-/// A terrain model that also carries urbanization: pads, leaves, and developments.
+/// Named urbanization over a ground model.
 ///
-/// Read accessors are GET-only over what urbanization generation stored.
-/// [`Self::ensure_selected`] is the named write hook mob generation uses today
-/// ([#720](https://github.com/ramate-io/maybraid/issues/720)).
-pub trait UrbanModel: TerrainModel {
-	/// Pads merged over `region`.
-	fn pads(read: &SystemParamItem<'_, '_, Self::Read>, region: Aabb3d) -> PadComplex;
+/// Associated types are the artifacts current consumers read. Methods are the
+/// GET-only accessors those consumers call plus the writes [`UrbanModel`]
+/// already exposed (`ensure_selected`, `#720` prepare).
+pub trait UrbanizationModel: Send + Sync + 'static {
+	type Ground: TerrainModel;
+	type Leaf: Send + Sync + 'static;
+	type Cell: Send + Sync + 'static;
+	type Built: Send + Sync + 'static;
+	type Pads: PadOps + Clone + Send + Sync + 'static;
+	type Kind: Copy + Send + Sync + 'static;
+	type Selection: Clone + PartialEq + Send + Sync + 'static;
+	/// Composed fill stored as [`crate::Urbanization<Self>`]'s [`TerrainModel::Cell`].
+	type Surface: TerrainCell;
+	type Read: ReadOnlySystemParam + 'static;
+	type Select: SystemParam + 'static;
+	type Prepare: SystemParam + 'static;
 
-	/// Non-empty urbanization guillotine leaves intersecting `region`.
+	fn pads(read: &SystemParamItem<'_, '_, Self::Read>, region: Aabb3d) -> Self::Pads;
+
+	fn pads_at(read: &SystemParamItem<'_, '_, Self::Read>, xz: Vec2) -> Self::Pads;
+
+	fn surface<'a>(
+		read: &'a SystemParamItem<'_, '_, Self::Read>,
+		id: Id,
+	) -> Option<&'a Self::Surface>;
+
+	fn surface_ids(read: &SystemParamItem<'_, '_, Self::Read>, region: Aabb3d) -> Vec<Id>;
+
+	fn overlay_surface<'a>(
+		read: &'a SystemParamItem<'_, '_, Self::Read>,
+		bounds: Aabb3d,
+	) -> Option<&'a Self::Surface>;
+
 	fn urbanization_leaves<'a>(
 		read: &'a SystemParamItem<'_, '_, Self::Read>,
 		region: Aabb3d,
-	) -> Vec<&'a DevelopmentLeaf>;
+	) -> Vec<&'a Self::Leaf>;
 
-	/// Stored development cells (pads + selection) overlapping `region`.
 	fn development_cells<'a>(
 		read: &'a SystemParamItem<'_, '_, Self::Read>,
 		region: Aabb3d,
-	) -> Vec<&'a DevelopmentCell>;
+	) -> Vec<&'a Self::Cell>;
 
-	/// Built developments (building hosts, places) overlapping `region`.
 	fn built<'a>(
 		read: &'a SystemParamItem<'_, '_, Self::Read>,
 		region: Aabb3d,
-	) -> Vec<&'a BuiltDevelopment>;
+	) -> Vec<&'a Self::Built>;
 
-	/// Built developments overlapping `region`, with the store id and version
-	/// host presentation uses.
 	fn built_overlapping<'a>(
 		read: &'a SystemParamItem<'_, '_, Self::Read>,
 		region: Aabb3d,
-	) -> Vec<(Id, Version, &'a BuiltDevelopment)>;
+	) -> Vec<(Id, Version, &'a Self::Built)>;
 
-	/// Development cell by urbanization leaf id.
 	fn development_cell<'a>(
 		read: &'a SystemParamItem<'_, '_, Self::Read>,
 		id: Id,
-	) -> Option<&'a DevelopmentCell>;
+	) -> Option<&'a Self::Cell>;
 
-	/// Selection noise and pinned kind copied onto the mob index.
 	fn urbanization_selection(
 		read: &SystemParamItem<'_, '_, Self::Read>,
-	) -> (NoiseParams, Option<UrbanizationKind>);
+	) -> (Self::Selection, Option<Self::Kind>);
 
-	/// Write access for [`Self::ensure_selected`].
-	type Select: SystemParam + 'static;
+	fn leaf_bounds(leaf: &Self::Leaf) -> Aabb3d;
 
-	/// Cross-layer write kept for [#720](https://github.com/ramate-io/maybraid/issues/720):
-	/// mob generation selects urbanization cells over its generate keep.
+	fn cell_bounds(cell: &Self::Cell) -> Aabb3d;
+
 	fn ensure_selected(select: &mut SystemParamItem<'_, '_, Self::Select>, region: Aabb3d);
+
+	fn prepare(
+		prepare: &mut SystemParamItem<'_, '_, Self::Prepare>,
+		bounds: Aabb3d,
+		lod_ref: &LodRef,
+	);
+
+	fn require_generation(app: &App);
 }
 
-impl<M> UrbanModel for Urbanization<M>
-where
-	M: TerrainModel,
-	M::Cell: PadComposable<Padded = TerrainWithPads> + TerrainCell<Mesh = TerrainMeshBuilder>,
-{
-	fn pads(read: &SystemParamItem<'_, '_, Self::Read>, region: Aabb3d) -> PadComplex {
-		read.developments.merged_pad_complex(region)
-	}
+/// Terrain model that also carries urbanization artifacts.
+///
+/// Read accessors are GET-only. [`Self::ensure_selected`] is the named write
+/// hook mob generation uses today
+/// ([#720](https://github.com/ramate-io/maybraid/issues/720)).
+pub trait UrbanModel: TerrainModel {
+	type Leaf: Send + Sync + 'static;
+	type Cell: Send + Sync + 'static;
+	type Built: Send + Sync + 'static;
+	type Pads: PadOps;
+	type Kind: Copy + Send + Sync + 'static;
+	type Selection: Clone + PartialEq + Send + Sync + 'static;
+	type Select: SystemParam + 'static;
+
+	fn pads(read: &SystemParamItem<'_, '_, Self::Read>, region: Aabb3d) -> Self::Pads;
 
 	fn urbanization_leaves<'a>(
 		read: &'a SystemParamItem<'_, '_, Self::Read>,
 		region: Aabb3d,
-	) -> Vec<&'a DevelopmentLeaf> {
-		read.urbanization.filled_leaves_overlapping(region)
-	}
+	) -> Vec<&'a Self::Leaf>;
 
 	fn development_cells<'a>(
 		read: &'a SystemParamItem<'_, '_, Self::Read>,
 		region: Aabb3d,
-	) -> Vec<&'a DevelopmentCell> {
-		read.developments.filled_cells_overlapping(region)
-	}
+	) -> Vec<&'a <Self as UrbanModel>::Cell>;
 
 	fn built<'a>(
 		read: &'a SystemParamItem<'_, '_, Self::Read>,
 		region: Aabb3d,
-	) -> Vec<&'a BuiltDevelopment> {
-		read.developments.developments_overlapping(region)
-	}
+	) -> Vec<&'a Self::Built>;
 
 	fn built_overlapping<'a>(
 		read: &'a SystemParamItem<'_, '_, Self::Read>,
 		region: Aabb3d,
-	) -> Vec<(Id, Version, &'a BuiltDevelopment)> {
-		read.developments.developments_overlapping_tracked(region)
-	}
+	) -> Vec<(Id, Version, &'a Self::Built)>;
 
 	fn development_cell<'a>(
 		read: &'a SystemParamItem<'_, '_, Self::Read>,
 		id: Id,
-	) -> Option<&'a DevelopmentCell> {
-		read.developments.cell(id)
-	}
+	) -> Option<&'a <Self as UrbanModel>::Cell>;
 
 	fn urbanization_selection(
 		read: &SystemParamItem<'_, '_, Self::Read>,
-	) -> (NoiseParams, Option<UrbanizationKind>) {
-		(read.urbanization.noise, read.urbanization.kind)
-	}
+	) -> (Self::Selection, Option<Self::Kind>);
 
-	type Select = ResMut<'static, UrbanizationIndex>;
+	fn leaf_bounds(leaf: &Self::Leaf) -> Aabb3d;
 
-	fn ensure_selected(select: &mut SystemParamItem<'_, '_, Self::Select>, region: Aabb3d) {
-		// Today's code passes `mobs.urbanization_noise`, which `sync_mob_models`
-		// sets equal to `index.noise` earlier in the same chain, so the result
-		// is identical.
-		let noise = select.noise;
-		for extent in UrbanizationExtent::cells_overlapping(region) {
-			select.ensure_selected(extent, noise);
-		}
-	}
+	fn cell_bounds(cell: &<Self as UrbanModel>::Cell) -> Aabb3d;
+
+	fn ensure_selected(select: &mut SystemParamItem<'_, '_, Self::Select>, region: Aabb3d);
 }

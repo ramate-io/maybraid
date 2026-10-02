@@ -12,13 +12,7 @@ rust-version = { workspace = true }
 [dependencies]
 layer-stack = { workspace = true }
 bevy = { workspace = true }
-durham = { workspace = true }
-furniture-assemblies = { workspace = true }
-furniture-shaders = { workspace = true }
 lod = { workspace = true }
-building-physics = { workspace = true }
-richmond = { workspace = true }
-urbanization-cells = { workspace = true }
 terrain-layer-model = { workspace = true }
 terrain-layer-presentation = { workspace = true }
 urbanization-layer-model = { workspace = true }

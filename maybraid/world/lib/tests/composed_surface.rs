@@ -1,5 +1,5 @@
 //! Parity: the retired world surface formula equals
-//! [`TerrainView<Urbanization<OnTerrain<Durham>>>`].
+//! [`TerrainView<Urbanization<Richmond<OnTerrain<Durham>>>>`].
 
 use bevy::ecs::system::SystemState;
 use bevy::math::bounding::Aabb3d;
@@ -100,7 +100,7 @@ fn terrain_view_ground_matches_the_retired_world_formula() -> anyhow::Result<()>
 
 	{
 		let mut ground =
-			SystemState::<TerrainView<Urbanization<OnTerrain<Durham>>>>::new(&mut world);
+			SystemState::<TerrainView<Urbanization<richmond::Richmond<OnTerrain<Durham>>>>>::new(&mut world);
 		let view = ground.get(&world)?;
 		for (xz, want) in expected {
 			anyhow::ensure!(

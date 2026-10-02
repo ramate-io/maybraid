@@ -13,7 +13,7 @@ use crate::present::{
 };
 use crate::{MobPresent, MobPresentationPlugin};
 
-type Urbanized = Urbanization<OnTerrain<Durham>>;
+type Urbanized = Urbanization<richmond::Richmond<OnTerrain<Durham>>>;
 
 #[test]
 fn high_lod_index_region_follows_the_viewer_in_three_dimensions() {

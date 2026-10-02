@@ -100,7 +100,10 @@ impl<G: UrbanModel> Plugin for MobPresentationCore<G> {
 	}
 }
 
-impl<Mode: GenerationMode, G: UrbanModel> Plugin for MobPresentationPlugin<Mode, G> {
+impl<Mode: GenerationMode, G: UrbanModel> Plugin for MobPresentationPlugin<Mode, G>
+where
+	MobGenerationCore<G>: Plugin,
+{
 	fn build(&self, app: &mut App) {
 		subscribe_mode::<(G, MobPresent), Mode>(app);
 		install_lod_present_gate::<(G, MobPresent), MobLodChan>(app);

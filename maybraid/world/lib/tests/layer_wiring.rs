@@ -14,7 +14,7 @@ use urbanization_layer_model::Urbanization;
 use urbanization_layer_presentation::{PaddedCells, UrbanizationHosts};
 use vegetation_layer_presentation::VegetationPresent;
 
-type Urbanized = Urbanization<OnTerrain<Durham>>;
+type Urbanized = Urbanization<richmond::Richmond<OnTerrain<Durham>>>;
 
 #[test]
 fn layered_world_stack_finishes_headless() -> anyhow::Result<()> {

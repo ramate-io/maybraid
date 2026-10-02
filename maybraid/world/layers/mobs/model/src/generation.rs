@@ -10,6 +10,8 @@ use lod::{
 	LodPresentSystems, LodViewer,
 };
 use layer_stack::{ActiveGenerationMode, GenerationMode, RequireLayer};
+use procedural_common::NoiseParams;
+use urbanization_cells::UrbanizationKind;
 use urbanization_layer_model::UrbanModel;
 use vegetation_layer_model::VegetationGenerationCore;
 
@@ -27,7 +29,7 @@ use crate::stream::{
 pub struct MobGenerationSystems;
 
 /// A mode's mob writes for ground `G`.
-pub trait MobScheme<G: UrbanModel>: GenerationMode {
+pub trait MobScheme<G: UrbanModel<Selection = NoiseParams, Kind = UrbanizationKind>>: GenerationMode {
 	fn install(app: &mut App, config: &MobLayerConfig);
 }
 
@@ -40,7 +42,7 @@ impl<G> Default for MobGenerationCore<G> {
 	}
 }
 
-impl<G: UrbanModel> Plugin for MobGenerationCore<G> {
+impl<G: UrbanModel<Selection = NoiseParams, Kind = UrbanizationKind>> Plugin for MobGenerationCore<G> {
 	fn build(&self, app: &mut App) {
 		app.init_resource::<MobIndex>()
 			.init_resource::<MobGenerateBullseye>()
@@ -105,7 +107,7 @@ fn apply_mob_mode<Mode: GenerationMode>(
 pub struct MobGenerationPlugin<Mode, G>
 where
 	Mode: MobScheme<G>,
-	G: UrbanModel,
+	G: UrbanModel<Selection = NoiseParams, Kind = UrbanizationKind>,
 {
 	pub config: MobLayerConfig,
 	_marker: PhantomData<fn() -> (Mode, G)>,
@@ -114,7 +116,7 @@ where
 impl<Mode, G> MobGenerationPlugin<Mode, G>
 where
 	Mode: MobScheme<G>,
-	G: UrbanModel,
+	G: UrbanModel<Selection = NoiseParams, Kind = UrbanizationKind>,
 {
 	pub fn new(config: MobLayerConfig) -> Self {
 		Self { config, _marker: PhantomData }
@@ -124,7 +126,7 @@ where
 impl<Mode, G> Default for MobGenerationPlugin<Mode, G>
 where
 	Mode: MobScheme<G>,
-	G: UrbanModel,
+	G: UrbanModel<Selection = NoiseParams, Kind = UrbanizationKind>,
 {
 	fn default() -> Self {
 		Self::new(MobLayerConfig::default())
@@ -134,7 +136,7 @@ where
 impl<Mode, G> Plugin for MobGenerationPlugin<Mode, G>
 where
 	Mode: MobScheme<G>,
-	G: UrbanModel,
+	G: UrbanModel<Selection = NoiseParams, Kind = UrbanizationKind>,
 {
 	fn build(&self, app: &mut App) {
 		if !app.is_plugin_added::<MobGenerationCore<G>>() {

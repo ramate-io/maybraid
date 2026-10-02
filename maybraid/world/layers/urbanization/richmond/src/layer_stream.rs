@@ -1,40 +1,40 @@
-//! Urbanization generate / stream glue (forest_stream parallel).
-//!
-//! Registers LOD generate for [`SelectedUrbanization`] and a present-keep
-//! bullseye. The present-keep region is a generation input: development
-//! build reads it. Presenter state lives in urbanization presentation.
+//! Richmond hopscotch stream and development generate.
 
 use bevy::ecs::system::SystemParam;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
+use layer_stack::{GenerationMode, GenerationModeSystems};
 use lod::gen::{
 	GeneratingSpatialIndex, Id, LodGenerateBudget, LodGenerateKeepRegion, LodGenerateQueue,
 	LodGenerateRegion, MaterializeStatus, SpatialIndex, StorageStatus,
 };
 use lod::lod_ref::LodRef;
 use lod::presentation::{LodPresentKeepRegion, LodPresentRegion};
-use lod::{LodGeneratePlugin, LodGenerateRegionPlugin, LodPresentRegionPlugin, LodViewer};
-use procedural_common::NoiseParams;
-use richmond::{
-	BuiltDevelopment, DevelopmentCell, DevelopmentConfig, DevelopmentIndex, TerrainWithPads,
+use lod::{
+	LodGeneratePlugin, LodGenerateRegionPlugin, LodGenerateSystems, LodPresentRegionPlugin,
+	LodPresentSystems, LodViewer,
 };
+use terrain_layer_model::{terrain_streaming, TerrainExtent, TerrainLayerSystems, TerrainModel};
 use urbanization_cells::{
 	SelectedUrbanization, UrbanDevelopmentKind, UrbanizationExtent, UrbanizationGenerateBullseye,
 	UrbanizationIndex, UrbanizationKind, UrbanizationLodChan, UrbanizationPresentBullseye,
 	DEFAULT_URBANIZATION_EXTENT_XZ, DEVELOPMENT_GENERATE_RADIUS_M, DEVELOPMENT_PRESENT_RADIUS_M,
 };
+use urbanization_layer_model::{
+	urbanization_visual_region, UrbanizationGenerationSystems, UrbanizationLayerRegion,
+	UrbanizationModeConfig, UrbanizationStoreSystems,
+};
 
-use crate::config::UrbanizationLayerConfig;
-use crate::generation::UrbanizationLayerRegion;
-use crate::generation::UrbanizationModeConfig;
-use layer_stack::GenerationMode;
-use terrain_layer_model::{terrain_streaming, TerrainExtent, TerrainLayerSystems, TerrainModel};
-
-/// Default present ring multiplier (`1` → 1 km present / 3 km generate).
-pub const DEFAULT_URBANIZATION_STREAM_RADIUS: u32 = 1;
-
-/// Hopscotch default so neighboring 1600 m cells stay related.
-pub const DEFAULT_URBANIZATION_NOISE: &str = "1337,0.0005,1,1";
+use crate::compose::PadComposable;
+use crate::config::DevelopmentConfig;
+use crate::development::DevelopmentCell;
+use crate::index::{DevelopmentEntryStore, DevelopmentIndex};
+use crate::layer::Richmond;
+use crate::layer_config::{focused_spec, RichmondConfig, UrbanizationStreamSpec};
+use crate::padded::TerrainWithPads;
+use crate::BuiltDevelopment;
+use durham::TerrainMeshBuilder;
+use terrain_layer_model::TerrainCell;
 
 /// Stream spec fingerprint. A resource so leaving a mode can clear it.
 #[derive(Resource, Default, Debug, Clone, PartialEq, Eq)]
@@ -48,45 +48,6 @@ pub fn parse_urbanization_kind(name: &str) -> Result<UrbanizationKind, String> {
 	})
 }
 
-/// Live urbanization-stream knobs (noise / ring / pinned kind).
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct UrbanizationStreamSpec {
-	pub noise: NoiseParams,
-	pub stream_radius: u32,
-	pub kind: Option<UrbanizationKind>,
-}
-
-impl Default for UrbanizationStreamSpec {
-	fn default() -> Self {
-		Self {
-			noise: NoiseParams {
-				seed: 1337,
-				frequency: 0.0005,
-				amplitude: 1.0,
-				octaves: 1,
-				..default()
-			},
-			stream_radius: DEFAULT_URBANIZATION_STREAM_RADIUS,
-			kind: None,
-		}
-	}
-}
-
-impl UrbanizationStreamSpec {
-	pub fn key(self) -> String {
-		let kind_key = self.kind.map(UrbanizationKind::as_kebab).unwrap_or("hopscotch");
-		format!("urbanization:{kind_key}|{:?}|r={}", self.noise, self.stream_radius)
-	}
-}
-
-/// Spec the stream and pin write: `focus_urbanization` fills an open kind.
-fn focused_spec(config: &UrbanizationLayerConfig) -> Option<UrbanizationStreamSpec> {
-	config.urbanization.map(|mut spec| {
-		spec.kind = spec.kind.or(config.focus_urbanization);
-		spec
-	})
-}
-
 /// Present / generate metric radii for a stream-radius multiplier.
 pub fn stream_radii_m(stream_radius: u32) -> (f32, f32) {
 	if stream_radius == 0 {
@@ -97,8 +58,6 @@ pub fn stream_radii_m(stream_radius: u32) -> (f32, f32) {
 }
 
 /// Generate + present-keep plugins for [`SelectedUrbanization`].
-///
-/// Presenter state is installed by urbanization presentation.
 pub fn register_urbanization_lod_generate(app: &mut App) {
 	app.init_resource::<UrbanizationIndex>()
 		.init_resource::<UrbanizationGenerateBullseye>()
@@ -122,41 +81,39 @@ pub fn register_urbanization_lod_generate(app: &mut App) {
 }
 
 /// Hopscotch stream for a mode that owns a spec.
-pub fn install_urbanization_stream<Mode: GenerationMode, M: TerrainModel>(app: &mut App) {
-	use crate::generation::{UrbanizationGenerationSystems, UrbanizationStoreSystems};
-	use lod::LodGenerateSystems;
-	use lod::LodPresentSystems;
-	use layer_stack::GenerationModeSystems;
-
+pub fn install_urbanization_stream<Mode, G>(app: &mut App)
+where
+	Mode: GenerationMode,
+	G: TerrainModel,
+	G::Cell: PadComposable<Padded = TerrainWithPads> + TerrainCell<Mesh = TerrainMeshBuilder>,
+{
 	register_urbanization_lod_generate(app);
-	// Mob readers of UrbanizationIndex select cells before terrain streaming starts.
 	app.add_systems(
 		Update,
-		sync_urbanization_pin::<Mode>
+		sync_urbanization_pin::<Mode, G>
 			.in_set(GenerationModeSystems::<Mode>::default())
 			.in_set(UrbanizationGenerationSystems)
 			.before(LodGenerateSystems::Produce)
 			.before(UrbanizationStoreSystems)
 			.before(LodPresentSystems::Produce)
-			.before(TerrainLayerSystems::<M::Base>::QueueColliders),
+			.before(TerrainLayerSystems::<G::Base>::QueueColliders),
 	);
 	app.add_systems(
 		Update,
 		(
-			stream_urbanization::<Mode>
+			stream_urbanization::<Mode, G>
 				.before(LodGenerateSystems::Produce)
 				.before(UrbanizationStoreSystems),
-			generate_urbanization_developments::<Mode>
+			generate_urbanization_developments::<Mode, G>
 				.after(LodGenerateSystems::Drain)
 				.before(UrbanizationStoreSystems),
-			write_urbanization_host_region
-				.in_set(UrbanizationStoreSystems),
+			write_urbanization_host_region.in_set(UrbanizationStoreSystems),
 		)
 			.in_set(GenerationModeSystems::<Mode>::default())
 			.in_set(UrbanizationGenerationSystems)
-			.run_if(terrain_streaming::<M>)
+			.run_if(terrain_streaming::<G>)
 			.before(LodPresentSystems::Produce)
-			.before(TerrainLayerSystems::<M::Base>::QueueColliders),
+			.before(TerrainLayerSystems::<G::Base>::QueueColliders),
 	);
 }
 
@@ -185,9 +142,6 @@ pub fn write_urbanization_host_region(
 }
 
 /// Keep / queue / bullseye resources the stream system drives.
-///
-/// Presenter teardown lives in urbanization presentation so this crate does
-/// not despawn hosts.
 #[derive(SystemParam)]
 pub struct UrbanizationStreamLod<'w> {
 	index: ResMut<'w, UrbanizationIndex>,
@@ -201,7 +155,6 @@ pub struct UrbanizationStreamLod<'w> {
 }
 
 impl UrbanizationStreamLod<'_> {
-	/// Enable or tear down the urbanization stream from an optional spec and camera.
 	pub fn apply_spec(
 		&mut self,
 		spec: Option<&UrbanizationStreamSpec>,
@@ -249,11 +202,13 @@ impl UrbanizationStreamLod<'_> {
 	}
 }
 
-pub fn sync_urbanization_pin<Mode: GenerationMode>(
-	config: Res<UrbanizationModeConfig<Mode>>,
+pub fn sync_urbanization_pin<Mode: GenerationMode, G: TerrainModel>(
+	config: Res<UrbanizationModeConfig<Mode, Richmond<G>>>,
 	mut urbanization: ResMut<UrbanizationIndex>,
 	mut development: ResMut<DevelopmentConfig>,
-) {
+) where
+	G::Cell: PadComposable<Padded = TerrainWithPads> + TerrainCell<Mesh = TerrainMeshBuilder>,
+{
 	if let Some(spec) = focused_spec(&config.config) {
 		urbanization.kind = spec.kind;
 		urbanization.noise = spec.noise;
@@ -265,43 +220,52 @@ pub fn sync_urbanization_pin<Mode: GenerationMode>(
 	}
 }
 
-/// Drive urbanization bullseyes from the mode's hopscotch spec.
-pub fn stream_urbanization<Mode: GenerationMode>(
-	config: Res<UrbanizationModeConfig<Mode>>,
+pub fn stream_urbanization<Mode: GenerationMode, G: TerrainModel>(
+	config: Res<UrbanizationModeConfig<Mode, Richmond<G>>>,
 	camera: Query<&Transform, With<Camera3d>>,
 	mut lod: UrbanizationStreamLod,
 	mut last_key: ResMut<UrbanizationStreamKey>,
-) {
+) where
+	G::Cell: PadComposable<Padded = TerrainWithPads> + TerrainCell<Mesh = TerrainMeshBuilder>,
+{
 	let cam = camera.single().ok().map(|t| t.translation);
 	lod.apply_spec(focused_spec(&config.config).as_ref(), cam, &mut last_key.0);
 }
 
-/// Tear stream LOD and the spec key down so the next mode can refill.
-pub fn clear_urbanization_stream(
-	index: Option<ResMut<UrbanizationIndex>>,
-	key: Option<ResMut<UrbanizationStreamKey>>,
-	lod: Option<UrbanizationStreamLod>,
-) {
-	if let Some(mut key) = key {
+pub fn clear_urbanization_stream_world(world: &mut World) {
+	if let Some(mut key) = world.get_resource_mut::<UrbanizationStreamKey>() {
 		key.0 = None;
 	}
-	if let Some(mut lod) = lod {
-		let mut last = None;
-		lod.apply_spec(None, None, &mut last);
-	} else if let Some(mut index) = index {
+	if let Some(mut generate) = world.get_resource_mut::<UrbanizationGenerateBullseye>() {
+		generate.enabled = false;
+	}
+	if let Some(mut present) = world.get_resource_mut::<UrbanizationPresentBullseye>() {
+		present.enabled = false;
+	}
+	if let Some(mut keep) = world.get_resource_mut::<LodGenerateKeepRegion<UrbanizationLodChan>>() {
+		keep.region = None;
+	}
+	if let Some(mut keep) = world.get_resource_mut::<LodPresentKeepRegion<UrbanizationLodChan>>() {
+		keep.region = None;
+	}
+	if let Some(mut index) = world.get_resource_mut::<UrbanizationIndex>() {
 		index.clear();
+	}
+	if let Some(mut queue) = world.get_resource_mut::<LodGenerateQueue<SelectedUrbanization>>() {
+		queue.clear();
 	}
 }
 
-/// Bounded leaf generate on the 1 km urbanization keep. Height GET miss
-/// leaves the leaf `NotTracked` so the next frame retries.
+/// Bounded leaf generate on the 1 km urbanization keep.
 #[allow(clippy::collapsible_if)]
-pub fn generate_urbanization_developments<Mode: GenerationMode>(
-	config: Res<UrbanizationModeConfig<Mode>>,
+pub fn generate_urbanization_developments<Mode: GenerationMode, G: TerrainModel>(
+	config: Res<UrbanizationModeConfig<Mode, Richmond<G>>>,
 	keep: Res<LodPresentKeepRegion<UrbanizationLodChan>>,
 	mut development: DevelopmentIndex,
 	budget: Res<LodGenerateBudget<UrbanizationLodChan>>,
-) {
+) where
+	G::Cell: PadComposable<Padded = TerrainWithPads> + TerrainCell<Mesh = TerrainMeshBuilder>,
+{
 	if config.config.urbanization.is_none() {
 		return;
 	}
@@ -381,46 +345,18 @@ pub fn generate_urbanization_developments<Mode: GenerationMode>(
 	}
 }
 
-/// Visual region for padding. Streamed extents use the presentation ring; a
-/// pinned patch uses the scheme region or the extent.
-pub fn urbanization_visual_region<M: Send + Sync + 'static>(
-	extent: &TerrainExtent<M>,
-	layer_region: Option<Aabb3d>,
-) -> Option<Aabb3d> {
-	if extent.is_streamed() {
-		Some(extent.presentation_region())
-	} else {
-		Some(layer_region.unwrap_or_else(|| extent.presentation_region()))
-	}
-}
-
-/// Host region: the scheme's write, or the extent on a pinned patch.
-pub fn urbanization_host_region<M: Send + Sync + 'static>(
-	extent: &TerrainExtent<M>,
-	layer_region: Option<Aabb3d>,
-) -> Option<Aabb3d> {
-	if extent.is_streamed() {
-		layer_region
-	} else {
-		Some(layer_region.unwrap_or_else(|| extent.presentation_region()))
-	}
-}
-
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct PaddedTerrainTickKey {
-	pub(crate) region: Aabb3d,
-	pub(crate) store_rev: u64,
-	pub(crate) terrain_rev: u64,
-	pub(crate) viewer: Option<(i32, i32)>,
+	region: Aabb3d,
+	store_rev: u64,
+	terrain_rev: u64,
+	viewer: Option<(i32, i32)>,
 }
 
-/// Compose pads only for Durham cells that are already stored.
-///
-/// Pads sample the inner terrain store (`M`), never `Urbanization<M>`.
-#[allow(private_interfaces)]
-pub fn generate_urbanization_padded_terrain<M: TerrainModel>(
+/// Compose pads only for stored ground cells.
+pub(crate) fn generate_richmond_padded_terrain<G: TerrainModel>(
 	layer: Res<UrbanizationLayerRegion>,
-	extent: Res<TerrainExtent<M::Base>>,
+	extent: Res<TerrainExtent<G::Base>>,
 	mut development: DevelopmentIndex,
 	mut last: Local<Option<PaddedTerrainTickKey>>,
 ) {
@@ -460,25 +396,43 @@ pub fn generate_urbanization_padded_terrain<M: TerrainModel>(
 	});
 }
 
-/// #720 wart: grove present generates [`DevelopmentCell`]s before sampling.
-/// Call this named urbanization-generation entry point instead of reaching
-/// into Richmond. Removing the present-time generate belongs to
-/// <https://github.com/ramate-io/maybraid/issues/720>.
-pub fn prepare_development_cells(
-	development: &mut DevelopmentIndex,
-	bounds: Aabb3d,
-	lod_ref: &LodRef,
-) {
-	use lod::gen::{GenerationScheme, OriginalId};
-	let ids = <DevelopmentCell as GenerationScheme<DevelopmentIndex<'_>>>::original_ids_for(
-		development,
-		bounds,
-	);
-	for OriginalId(development_id) in ids {
-		let _ = GeneratingSpatialIndex::<DevelopmentCell>::get_or_generate(
-			development,
-			development_id,
-			lod_ref,
+impl<G> urbanization_layer_model::UrbanizationGeneration for Richmond<G>
+where
+	G: TerrainModel,
+	G::Cell: PadComposable<Padded = TerrainWithPads> + TerrainCell<Mesh = TerrainMeshBuilder>,
+{
+	type Config = RichmondConfig;
+
+	fn install_generation(app: &mut App) {
+		crate::plugin::register_richmond_plugin(app);
+		app.init_resource::<DevelopmentConfig>()
+			.init_resource::<LodGenerateBudget<UrbanizationLodChan>>()
+			.init_resource::<UrbanizationLayerRegion>()
+			.init_resource::<UrbanizationStreamKey>();
+		app.add_systems(
+			Update,
+			generate_richmond_padded_terrain::<G>
+				.in_set(UrbanizationGenerationSystems)
+				.after(UrbanizationStoreSystems)
+				.run_if(terrain_streaming::<G>)
+				.before(LodPresentSystems::Produce)
+				.before(TerrainLayerSystems::<G::Base>::QueueColliders),
 		);
+	}
+
+	fn apply_generation(world: &mut World, config: &RichmondConfig) {
+		*world.resource_mut::<DevelopmentConfig>() = config.development_config();
+		*world.resource_mut::<LodGenerateBudget<UrbanizationLodChan>>() =
+			LodGenerateBudget::new(config.generate_budget);
+	}
+
+	fn clear_generation(world: &mut World) {
+		if let Some(mut store) = world.get_resource_mut::<DevelopmentEntryStore>() {
+			store.clear();
+		}
+		if let Some(mut layer) = world.get_resource_mut::<UrbanizationLayerRegion>() {
+			layer.region = None;
+		}
+		clear_urbanization_stream_world(world);
 	}
 }

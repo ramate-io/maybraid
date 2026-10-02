@@ -1,21 +1,6 @@
-//! [`PadComposable`]: inner cells that development pads can be composed into.
+//! Elevation ops urbanization applies over a ground height.
 
-use durham::Terrain;
-use richmond::{PadComplex, TerrainWithPads};
-use terrain_layer_model::TerrainCell;
-
-/// An inner model's cell that accepts pad elevation ops.
-pub trait PadComposable: TerrainCell {
-	/// The composed cell stored for `Urbanization<M>`.
-	type Padded: TerrainCell;
-
-	fn compose_pads(&self, pads: &PadComplex) -> Self::Padded;
-}
-
-impl PadComposable for Terrain {
-	type Padded = TerrainWithPads;
-
-	fn compose_pads(&self, pads: &PadComplex) -> TerrainWithPads {
-		TerrainWithPads::compose(self, std::iter::once(pads))
-	}
+/// Pads that rewrite a ground sample.
+pub trait PadOps {
+	fn modify_elevation(&self, height: f32, x: f32, z: f32) -> f32;
 }

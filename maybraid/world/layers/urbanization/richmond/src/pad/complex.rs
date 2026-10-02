@@ -109,6 +109,12 @@ impl PadComplex {
 	}
 }
 
+impl urbanization_layer_model::PadOps for PadComplex {
+	fn modify_elevation(&self, height: f32, x: f32, z: f32) -> f32 {
+		PadComplex::modify_elevation(self, height, x, z)
+	}
+}
+
 impl ElevationModulation for PadComplex {
 	fn modify_elevation(
 		&self,

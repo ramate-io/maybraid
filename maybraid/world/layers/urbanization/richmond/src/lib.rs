@@ -15,6 +15,7 @@ pub mod artifact;
 pub mod buildings_lod;
 pub mod cell;
 pub mod commune;
+pub mod compose;
 pub mod config;
 pub mod connectivity;
 pub mod development;
@@ -23,6 +24,10 @@ pub mod generation;
 pub mod host;
 pub mod hydro;
 pub mod index;
+pub mod layer;
+pub mod layer_config;
+pub mod layer_present;
+pub mod layer_stream;
 pub mod les_halles;
 pub mod market;
 pub mod pad;
@@ -70,8 +75,26 @@ pub use pad::{
 };
 pub use padded::{PresentedPaddedTerrainScene, TerrainWithPads};
 pub use place::{DiscoverablePlace, DiscoverablePlaceLabel, InteriorArea};
+pub use compose::PadComposable;
+pub use layer::Richmond;
+pub use layer_config::{
+	DevelopmentFocus, RichmondConfig, UrbanizationStreamSpec, DEFAULT_URBANIZATION_NOISE,
+	DEFAULT_URBANIZATION_STREAM_RADIUS, PLAYGROUND_LIKELIHOOD,
+};
+pub use layer_present::{
+	present_richmond_hosts, spawn_development_hosts,
+	spawn_tagged_host_entities, sync_raw_terrain_replacements, DevelopmentHostRoot,
+	UrbanizationPaddedTerrainState, UrbanizationPresenterState,
+};
+pub use layer_stream::{
+	install_urbanization_stream, parse_urbanization_kind, stream_radii_m, UrbanizationStreamKey,
+	UrbanizationStreamLod,
+};
 pub use plugin::{register_richmond_plugin, RichmondDevelopmentModelsPlugin};
 pub use presentation::{PaddedTerrainPresenter, PaddedTerrainPresenterState};
 pub use ring_fort::RingFortDevelopment;
 pub use scatter::{bounds_intersect, ScatterCandidate, ScatterChoice, ScatterPlan, ScatterRecipe};
 pub use shepherds::{ShepherdsCommuneDevelopment, ShepherdsVillageDevelopment};
+
+#[cfg(test)]
+mod layer_tests;

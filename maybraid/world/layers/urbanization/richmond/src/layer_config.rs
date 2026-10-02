@@ -1,13 +1,19 @@
-//! Layer knobs the playground's `PlaygroundConfig` used to carry for this layer.
+//! Per-mode knobs for [`crate::Richmond`].
 
 use bevy::prelude::*;
-use richmond::DevelopmentConfig;
+use procedural_common::NoiseParams;
 use urbanization_cells::UrbanizationKind;
 
-use crate::stream::UrbanizationStreamSpec;
+use crate::config::DevelopmentConfig;
 
 /// Occupancy fill used by both the world and the developments playground.
 pub const PLAYGROUND_LIKELIHOOD: f32 = 0.9;
+
+/// Default present ring multiplier (`1` → 1 km present / 3 km generate).
+pub const DEFAULT_URBANIZATION_STREAM_RADIUS: u32 = 1;
+
+/// Hopscotch default so neighboring 1600 m cells stay related.
+pub const DEFAULT_URBANIZATION_NOISE: &str = "1337,0.0005,1,1";
 
 /// Exclusive development-archetype focus (playground `/focus-development`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -88,19 +94,50 @@ fn weight(selected: Option<DevelopmentFocus>, kind: DevelopmentFocus) -> f32 {
 	}
 }
 
+/// Live urbanization-stream knobs (noise / ring / pinned kind).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct UrbanizationStreamSpec {
+	pub noise: NoiseParams,
+	pub stream_radius: u32,
+	pub kind: Option<UrbanizationKind>,
+}
+
+impl Default for UrbanizationStreamSpec {
+	fn default() -> Self {
+		Self {
+			noise: NoiseParams {
+				seed: 1337,
+				frequency: 0.0005,
+				amplitude: 1.0,
+				octaves: 1,
+				..default()
+			},
+			stream_radius: DEFAULT_URBANIZATION_STREAM_RADIUS,
+			kind: None,
+		}
+	}
+}
+
+impl UrbanizationStreamSpec {
+	pub fn key(self) -> String {
+		let kind_key = self.kind.map(UrbanizationKind::as_kebab).unwrap_or("hopscotch");
+		format!("urbanization:{kind_key}|{:?}|r={}", self.noise, self.stream_radius)
+	}
+}
+
 /// Stream spec, focus pins, and the urbanization generate budget.
 ///
 /// `world_defaults()` is 16 (assembled world). [`Default`] is 8 (standalone
 /// playground), matching the table in [#883](https://github.com/ramate-io/maybraid/issues/883).
 #[derive(Resource, Clone, Debug, PartialEq)]
-pub struct UrbanizationLayerConfig {
+pub struct RichmondConfig {
 	pub urbanization: Option<UrbanizationStreamSpec>,
 	pub focus_urbanization: Option<UrbanizationKind>,
 	pub focus_development: Option<DevelopmentFocus>,
 	pub generate_budget: u32,
 }
 
-impl Default for UrbanizationLayerConfig {
+impl Default for RichmondConfig {
 	fn default() -> Self {
 		Self {
 			urbanization: None,
@@ -111,7 +148,7 @@ impl Default for UrbanizationLayerConfig {
 	}
 }
 
-impl UrbanizationLayerConfig {
+impl RichmondConfig {
 	/// Hopscotch at 1 km / 3 km rings, generate budget 16.
 	pub fn world_defaults() -> Self {
 		Self {
@@ -148,3 +185,10 @@ impl UrbanizationLayerConfig {
 	}
 }
 
+/// Spec the stream and pin write: `focus_urbanization` fills an open kind.
+pub fn focused_spec(config: &RichmondConfig) -> Option<UrbanizationStreamSpec> {
+	config.urbanization.map(|mut spec| {
+		spec.kind = spec.kind.or(config.focus_urbanization);
+		spec
+	})
+}

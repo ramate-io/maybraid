@@ -14,7 +14,7 @@ use mob_layer_model::{
 };
 use mob_layer_presentation::PresentedMobCell;
 use richmond::{
-	DevelopmentEntryStore, DevelopmentHost, DevelopmentHosts, PresentedPaddedTerrainScene,
+	DevelopmentEntryStore, DevelopmentHost, DevelopmentHosts, PresentedPaddedTerrainScene, Richmond,
 };
 use terrain_layer_model::{OnTerrain};
 use layer_stack::{ActiveGenerationMode, GenerationModeSystems};
@@ -366,7 +366,7 @@ impl TrainingArena {
 	}
 }
 
-impl MobScheme<Urbanization<OnTerrain<Durham>>> for TrainingGround {
+impl MobScheme<Urbanization<Richmond<OnTerrain<Durham>>>> for TrainingGround {
 	fn install(app: &mut App, _config: &MobLayerConfig) {
 		app.add_systems(
 			Update,
@@ -810,7 +810,7 @@ mod tests {
 			GenerationModePlugin::<TrainingGround>::initial(),
 			GenerationModePlugin::<OtherMode>::default(),
 		));
-		<TrainingGround as MobScheme<Urbanization<OnTerrain<Durham>>>>::install(
+		<TrainingGround as MobScheme<Urbanization<Richmond<OnTerrain<Durham>>>>>::install(
 			&mut app,
 			&MobLayerConfig::default(),
 		);

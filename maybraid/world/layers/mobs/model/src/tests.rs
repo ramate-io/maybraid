@@ -26,7 +26,7 @@ use crate::stream::{
 };
 use crate::{MobGenerationPlugin, MobLayerConfig, MobScheme};
 
-type Urbanized = Urbanization<OnTerrain<Durham>>;
+type Urbanized = Urbanization<richmond::Richmond<OnTerrain<Durham>>>;
 
 fn insert_urbanized_resources(world: &mut World) {
 	world.insert_resource(TerrainEntryStore::default());
@@ -401,6 +401,14 @@ impl terrain_layer_model::TerrainModel for Silent {
 }
 
 impl urbanization_layer_model::UrbanModel for Silent {
+	type Leaf = DevelopmentLeaf;
+	type Cell = richmond::DevelopmentCell;
+	type Built = richmond::BuiltDevelopment;
+	type Pads = richmond::PadComplex;
+	type Kind = UrbanizationKind;
+	type Selection = NoiseParams;
+	type Select = ();
+
 	fn pads(
 		_read: &bevy::ecs::system::SystemParamItem<'_, '_, Self::Read>,
 		_region: Aabb3d,
@@ -456,7 +464,13 @@ impl urbanization_layer_model::UrbanModel for Silent {
 		(NoiseParams::default(), None)
 	}
 
-	type Select = ();
+	fn leaf_bounds(leaf: &DevelopmentLeaf) -> Aabb3d {
+		leaf.bounds
+	}
+
+	fn cell_bounds(cell: &richmond::DevelopmentCell) -> Aabb3d {
+		cell.cell
+	}
 
 	fn ensure_selected(
 		_select: &mut bevy::ecs::system::SystemParamItem<'_, '_, Self::Select>,

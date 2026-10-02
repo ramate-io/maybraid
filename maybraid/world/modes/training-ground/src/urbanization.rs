@@ -11,8 +11,9 @@ use richmond::{
 };
 use terrain_layer_model::{OnTerrain, TerrainView};
 use layer_stack::{ActiveGenerationMode, GenerationModeSystems};
+use richmond::Richmond;
 use urbanization_layer_model::{
-	UrbanizationLayerConfig, UrbanizationLayerRegion, UrbanizationScheme, UrbanizationStoreSystems,
+	UrbanizationLayerRegion, UrbanizationScheme, UrbanizationStoreSystems,
 };
 
 use crate::{TrainingGround, TrainingMap, TrainingRound};
@@ -87,8 +88,8 @@ impl TrainingPlazaStamped {
 #[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TrainingStampSettled(pub TrainingMap);
 
-impl UrbanizationScheme<OnTerrain<Durham>> for TrainingGround {
-	fn install(app: &mut App, _config: &UrbanizationLayerConfig) {
+impl UrbanizationScheme<Richmond<OnTerrain<Durham>>> for TrainingGround {
+	fn install(app: &mut App, _config: &richmond::RichmondConfig) {
 		app.add_systems(
 			Update,
 			stamp_training_urbanization
@@ -309,7 +310,7 @@ mod tests {
 	};
 	use terrain_layer_model::{OnTerrain};
 use layer_stack::{ActiveGenerationMode, GenerationMode, GenerationModePlugin};
-	use urbanization_layer_model::{UrbanizationLayerConfig, UrbanizationLayerRegion, UrbanizationScheme};
+	use urbanization_layer_model::{UrbanizationLayerRegion, UrbanizationScheme};
 
 	use super::{
 		pad_influence_region, stamp_training_urbanization, training_development_cell,
@@ -452,9 +453,9 @@ use layer_stack::{ActiveGenerationMode, GenerationMode, GenerationModePlugin};
 			GenerationModePlugin::<TrainingGround>::initial(),
 			GenerationModePlugin::<OtherMode>::default(),
 		));
-		<TrainingGround as UrbanizationScheme<OnTerrain<Durham>>>::install(
+		<TrainingGround as UrbanizationScheme<richmond::Richmond<OnTerrain<Durham>>>>::install(
 			&mut app,
-			&UrbanizationLayerConfig::default(),
+			&richmond::RichmondConfig::default(),
 		);
 		app.insert_resource(TrainingRound::new(42));
 		app.insert_resource(TerrainEntryStore::default());

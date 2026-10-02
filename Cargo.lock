@@ -4792,6 +4792,7 @@ dependencies = [
  "material-ref",
  "procedural-common",
  "richmond",
+ "urbanization-layer-model",
 ]
 
 [[package]]
@@ -6909,6 +6910,7 @@ dependencies = [
  "durham",
  "layer-stack",
  "mob-layer-model",
+ "richmond",
  "terrain-layer-model",
  "urbanization-layer-model",
 ]
@@ -9965,6 +9967,7 @@ dependencies = [
  "building-shaders",
  "buildings",
  "durham",
+ "layer-stack",
  "lod",
  "lod-avian",
  "lod-gimme",
@@ -9979,6 +9982,8 @@ dependencies = [
  "terrain-watersheds",
  "urbanization-cells",
  "urbanization-developments",
+ "urbanization-layer-model",
+ "urbanization-layer-presentation",
 ]
 
 [[package]]
@@ -12403,13 +12408,9 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bevy",
- "durham",
  "layer-stack",
  "lod",
- "procedural-common",
- "richmond",
  "terrain-layer-model",
- "urbanization-cells",
 ]
 
 [[package]]
@@ -12418,16 +12419,10 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bevy",
- "building-physics",
- "durham",
- "furniture-assemblies",
- "furniture-shaders",
  "layer-stack",
  "lod",
- "richmond",
  "terrain-layer-model",
  "terrain-layer-presentation",
- "urbanization-cells",
  "urbanization-layer-model",
 ]
 

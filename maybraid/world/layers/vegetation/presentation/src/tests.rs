@@ -26,7 +26,7 @@ use urbanization_layer_model::Urbanization;
 
 use crate::{GroundGroveSample, VegetationPresent, VegetationPresentationPlugin};
 
-type Urbanized = Urbanization<OnTerrain<Durham>>;
+type Urbanized = Urbanization<richmond::Richmond<OnTerrain<Durham>>>;
 
 /// Pre-move `OwnedDurhamTerrain`: stored height, else base noise.
 struct OwnedDurham {

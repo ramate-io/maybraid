@@ -10,8 +10,10 @@ use lod::lod_ref::LodRef;
 use lod::presentation::{LodPresentKeepRegion, LodPresentRegion};
 use lod::scene::{LodRefreshRegions, LodRefreshRegionsStatus};
 use barking::MobPlantHost;
+use procedural_common::NoiseParams;
 use richmond::DiscoverablePlace;
 use terrain_layer_model::TerrainView;
+use urbanization_cells::UrbanizationKind;
 use urbanization_layer_model::{UrbanModel, UrbanSetting};
 
 use crate::index::{urban_leaf_arrival_radius, xz_radius_aabb, MobCell, MobCellExtent, MobIndex};
@@ -99,7 +101,7 @@ impl MobCellWrites<'_> {
 	}
 }
 
-pub fn sync_mob_models<G: UrbanModel>(
+pub fn sync_mob_models<G: UrbanModel<Selection = NoiseParams, Kind = UrbanizationKind>>(
 	forest: Res<ForestIndex>,
 	view: TerrainView<G>,
 	mut mobs: ResMut<MobIndex>,
@@ -129,21 +131,23 @@ pub fn sync_mob_plant_hosts<G: UrbanModel>(
 	let view = access.p1();
 	let mut hosts = Vec::new();
 	for leaf in G::urbanization_leaves(&view.read, region) {
+		let bounds = G::leaf_bounds(leaf);
 		hosts.push(MobPlantHost {
 			xz: Vec2::new(
-				(leaf.bounds.min.x + leaf.bounds.max.x) * 0.5,
-				(leaf.bounds.min.z + leaf.bounds.max.z) * 0.5,
+				(bounds.min.x + bounds.max.x) * 0.5,
+				(bounds.min.z + bounds.max.z) * 0.5,
 			),
-			arrival_radius: urban_leaf_arrival_radius(leaf.bounds),
+			arrival_radius: urban_leaf_arrival_radius(bounds),
 		});
 	}
 	for cell in G::development_cells(&view.read, region) {
+		let bounds = G::cell_bounds(cell);
 		hosts.push(MobPlantHost {
 			xz: Vec2::new(
-				(cell.cell.min.x + cell.cell.max.x) * 0.5,
-				(cell.cell.min.z + cell.cell.max.z) * 0.5,
+				(bounds.min.x + bounds.max.x) * 0.5,
+				(bounds.min.z + bounds.max.z) * 0.5,
 			),
-			arrival_radius: urban_leaf_arrival_radius(cell.cell),
+			arrival_radius: urban_leaf_arrival_radius(bounds),
 		});
 	}
 	for (setting, transform) in &settings {

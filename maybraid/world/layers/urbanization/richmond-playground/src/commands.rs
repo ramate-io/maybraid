@@ -8,7 +8,7 @@ use game_commands::command::{CommandScript, GameCommand};
 
 pub const PLAYGROUND_CLI_NAME: &str = "richmond-developments-on-terrain";
 pub type Script = CommandScript<PlaygroundCommand>;
-pub use urbanization_layer_model::DevelopmentFocus;
+pub use richmond::DevelopmentFocus;
 
 fn parse_development_focus(name: &str) -> Result<DevelopmentFocus, String> {
 	DevelopmentFocus::from_kebab(name).ok_or_else(|| format!("unknown development focus `{name}`"))

@@ -13,9 +13,7 @@ use procedural_common::SeededHash;
 use building_components::{building_bounds, spawn_building_components};
 use building_physics::{BUILDING_FRICTION, spawn_building_walk_colliders};
 use buildings::wall_demo::TerrainPerimeterWall;
-use richmond::{
-	DevelopmentFinish, PresentedPaddedTerrainScene,
-};
+use richmond::{DevelopmentFinish, PresentedPaddedTerrainScene, Richmond};
 use terrain_layer_model::{OnTerrain, TerrainView};
 use urbanization_layer_model::Urbanization;
 
@@ -57,7 +55,7 @@ pub(crate) fn mount_training_plaza(
 	round: Res<TrainingRound>,
 	stamped: Option<Res<TrainingPlazaStamped>>,
 	wall: Option<Res<TrainingPlazaWall>>,
-	ground: TerrainView<Urbanization<OnTerrain<Durham>>>,
+	ground: TerrainView<Urbanization<Richmond<OnTerrain<Durham>>>>,
 	mut commands: Commands,
 ) {
 	if !mode.get().is::<TrainingGround>() {
@@ -237,7 +235,7 @@ pub(crate) fn clear_training_plaza(
 
 fn spawn_training_wall(
 	commands: &mut Commands,
-	ground: &TerrainView<Urbanization<OnTerrain<Durham>>>,
+	ground: &TerrainView<Urbanization<Richmond<OnTerrain<Durham>>>>,
 	stamped: &TrainingPlazaStamped,
 	seed: u32,
 ) {

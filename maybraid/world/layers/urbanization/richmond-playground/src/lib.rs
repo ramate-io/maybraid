@@ -30,10 +30,10 @@ use richmond::DevelopmentConfig;
 use std::f32::consts::PI;
 use terrain_layer_model::{BaseTerrainScheme, OnTerrain};
 use layer_stack::GenerationMode;
-use urbanization_layer_model::{
-	install_urbanization_stream, DevelopmentFocus as LayerFocus, UrbanizationLayerConfig,
-	UrbanizationModeConfig, UrbanizationScheme,
+use richmond::{
+	install_urbanization_stream, DevelopmentFocus as LayerFocus, Richmond, RichmondConfig,
 };
+use urbanization_layer_model::{UrbanizationModeConfig, UrbanizationScheme};
 
 /// Standalone playground generation mode.
 pub struct PlaygroundMode;
@@ -44,8 +44,8 @@ impl BaseTerrainScheme<Durham> for PlaygroundMode {
 	fn install(_app: &mut App, _config: &DurhamTerrainConfig) {}
 }
 
-impl UrbanizationScheme<OnTerrain<Durham>> for PlaygroundMode {
-	fn install(app: &mut App, _config: &UrbanizationLayerConfig) {
+impl UrbanizationScheme<Richmond<OnTerrain<Durham>>> for PlaygroundMode {
+	fn install(app: &mut App, _config: &RichmondConfig) {
 		install_urbanization_stream::<PlaygroundMode, OnTerrain<Durham>>(app);
 	}
 }
@@ -134,7 +134,7 @@ struct ApplyCommandStores<'w> {
 	marazion: ResMut<'w, WatershedConfigs>,
 	world_base: ResMut<'w, WorldBaseTerrain>,
 	development: ResMut<'w, DevelopmentConfig>,
-	urban: ResMut<'w, UrbanizationModeConfig<PlaygroundMode>>,
+	urban: ResMut<'w, UrbanizationModeConfig<PlaygroundMode, Richmond<OnTerrain<Durham>>>>,
 	dirty: ResMut<'w, TerrainPresentationDirty>,
 	status: ResMut<'w, GameCommandStatusText>,
 }
@@ -280,7 +280,7 @@ mod tests {
 	fn focus_command_edits_the_mode_config() -> anyhow::Result<()> {
 		use bevy::ecs::system::RunSystemOnce;
 		use durham::BaseTerrainNoise;
-		use urbanization_layer_model::DevelopmentFocus;
+		use richmond::DevelopmentFocus;
 
 		let mut app = App::new();
 		app.insert_resource(PlaygroundConfig::default());
@@ -302,9 +302,10 @@ mod tests {
 			&TerrainConfig::new(42),
 		)));
 		app.insert_resource(DevelopmentConfig::default());
-		app.insert_resource(UrbanizationModeConfig::<PlaygroundMode>::new(
-			UrbanizationLayerConfig::default(),
-		));
+		app.insert_resource(UrbanizationModeConfig::<
+			PlaygroundMode,
+			Richmond<OnTerrain<Durham>>,
+		>::new(RichmondConfig::default()));
 		app.insert_resource(TerrainPresentationDirty(false));
 		app.insert_resource(GameCommandStatusText::default());
 		app.world_mut()
@@ -312,7 +313,9 @@ mod tests {
 		app.world_mut()
 			.run_system_once(apply_commands)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		let urban = app.world().resource::<UrbanizationModeConfig<PlaygroundMode>>();
+		let urban = app
+			.world()
+			.resource::<UrbanizationModeConfig<PlaygroundMode, Richmond<OnTerrain<Durham>>>>();
 		anyhow::ensure!(
 			urban.config.focus_development == Some(DevelopmentFocus::LesHalles),
 			"focus command writes the playground mode config, got {:?}",

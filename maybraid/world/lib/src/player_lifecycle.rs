@@ -203,7 +203,7 @@ fn respawn_world_player(
 	registry: Res<PoiRegistry>,
 	loadout: Option<Res<WorldPlayerLoadout>>,
 	locomotion: Res<CharacterLocomotion>,
-	surface: TerrainView<Urbanization<OnTerrain<Durham>>>,
+	surface: TerrainView<Urbanization<richmond::Richmond<OnTerrain<Durham>>>>,
 	mode: Option<Res<State<ActiveGenerationMode>>>,
 	mut ended: MessageWriter<TrainingLifeEnded>,
 	live_player: Query<(), With<VegetationPlayer>>,

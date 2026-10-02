@@ -14,6 +14,7 @@ layer-stack = { workspace = true }
 bevy = { workspace = true }
 durham = { workspace = true }
 mob-layer-model = { workspace = true }
+richmond = { workspace = true }
 terrain-layer-model = { workspace = true }
 urbanization-layer-model = { workspace = true }
 

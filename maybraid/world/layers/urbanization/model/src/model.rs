@@ -1,61 +1,50 @@
-//! [`Urbanization`] marker and its [`TerrainModel`] impl.
+//! [`Urbanization`] wrapper and its [`TerrainModel`] / [`UrbanModel`] impls.
 
 use std::marker::PhantomData;
 
-use bevy::ecs::system::{Res, StaticSystemParam, SystemParam, SystemParamItem};
+use bevy::ecs::system::{StaticSystemParam, SystemParam, SystemParamItem};
 use bevy::math::bounding::Aabb3d;
-use bevy::math::{Vec2, Vec3};
+use bevy::math::Vec2;
 use bevy::prelude::App;
-use durham::TerrainMeshBuilder;
-use lod::gen::{Id, SpatialIndex, TrackedId};
+use lod::gen::Id;
 use lod::lod_ref::LodRef;
-use richmond::{
-	DevelopmentEntryStore, DevelopmentIndex, PadComplex, PaddedStoreView, TerrainWithPads,
-};
-use urbanization_cells::UrbanizationIndex;
 use terrain_layer_model::{HeightField, TerrainCell, TerrainModel};
-use layer_stack::RequireLayer;
 
-use crate::pads::PadComposable;
-use crate::stream::prepare_development_cells;
+use crate::pads::PadOps;
+use crate::urban::{UrbanModel, UrbanizationModel};
 
-/// Model `M` after urbanization: pads composed into its surface, developments on it.
-pub struct Urbanization<M>(PhantomData<fn() -> M>);
+/// Model `U` after urbanization: pads composed into `U::Ground`, urban artifacts on it.
+pub struct Urbanization<U>(PhantomData<fn() -> U>);
 
-/// Resources behind `Urbanization<M>`'s [`TerrainModel::Read`].
+/// Ground read plus the urbanization model's own resources.
 #[derive(SystemParam)]
-pub struct UrbanRead<'w, 's, M: TerrainModel> {
-	pub(crate) inner: StaticSystemParam<'w, 's, <M as TerrainModel>::Read>,
-	pub(crate) developments: Res<'w, DevelopmentEntryStore>,
-	pub(crate) urbanization: Res<'w, UrbanizationIndex>,
-}
-
-impl<M: TerrainModel> UrbanRead<'_, '_, M> {
-	/// Merged pads under one XZ point (the probe world player / mobs use today).
-	pub(crate) fn pads_at(&self, xz: Vec2) -> PadComplex {
-		self.developments.merged_pad_complex(Aabb3d::from_min_max(
-			Vec3::new(xz.x - 0.5, -10_000.0, xz.y - 0.5),
-			Vec3::new(xz.x + 0.5, 10_000.0, xz.y + 0.5),
-		))
-	}
+pub struct UrbanRead<'w, 's, U: UrbanizationModel> {
+	pub(crate) ground: StaticSystemParam<
+		'w,
+		's,
+		<<U as UrbanizationModel>::Ground as TerrainModel>::Read,
+	>,
+	pub(crate) urban: StaticSystemParam<'w, 's, <U as UrbanizationModel>::Read>,
 }
 
 /// Inner snapshot plus the pads merged over the snapshot region.
 #[derive(Clone)]
-pub struct UrbanSnapshot<S> {
+pub struct UrbanSnapshot<S, P> {
 	inner: S,
-	pads: PadComplex,
+	pads: P,
 }
 
-impl<S> UrbanSnapshot<S> {
-	pub fn new(inner: S, pads: PadComplex) -> Self {
+impl<S, P> UrbanSnapshot<S, P> {
+	pub fn new(inner: S, pads: P) -> Self {
 		Self { inner, pads }
 	}
 }
 
-impl<S: HeightField> HeightField for UrbanSnapshot<S> {
+impl<S: HeightField, P: PadOps> HeightField for UrbanSnapshot<S, P> {
 	fn height_at(&self, xz: Vec2) -> Option<f32> {
-		self.inner.height_at(xz).map(|raw| self.pads.modify_elevation(raw, xz.x, xz.y))
+		self.inner
+			.height_at(xz)
+			.map(|raw| self.pads.modify_elevation(raw, xz.x, xz.y))
 	}
 
 	fn fallback_height_at(&self, xz: Vec2) -> f32 {
@@ -64,16 +53,17 @@ impl<S: HeightField> HeightField for UrbanSnapshot<S> {
 	}
 }
 
-impl<M> TerrainModel for Urbanization<M>
+impl<U> TerrainModel for Urbanization<U>
 where
-	M: TerrainModel,
-	M::Cell: PadComposable<Padded = TerrainWithPads> + TerrainCell<Mesh = TerrainMeshBuilder>,
+	U: UrbanizationModel,
+	<U::Ground as TerrainModel>::Cell:
+		TerrainCell<Mesh = <U::Surface as TerrainCell>::Mesh>,
 {
-	type Base = M::Base;
-	type Cell = TerrainWithPads;
-	type Read = UrbanRead<'static, 'static, M>;
-	type Snapshot = UrbanSnapshot<M::Snapshot>;
-	type Prepare = DevelopmentIndex<'static>;
+	type Base = <U::Ground as TerrainModel>::Base;
+	type Cell = U::Surface;
+	type Read = UrbanRead<'static, 'static, U>;
+	type Snapshot = UrbanSnapshot<<U::Ground as TerrainModel>::Snapshot, U::Pads>;
+	type Prepare = U::Prepare;
 
 	/// #720 wart: generate development cells for `bounds` before the grove sample.
 	fn prepare(
@@ -81,45 +71,39 @@ where
 		bounds: Aabb3d,
 		lod_ref: &LodRef,
 	) {
-		prepare_development_cells(prepare, bounds, lod_ref);
+		U::prepare(prepare, bounds, lod_ref);
 	}
 
-	/// Inner height with pad elevation ops, the formula world player and mobs
-	/// copy today. Padded cell SDFs agree when fresh; they are for meshing.
 	fn height_at(read: &SystemParamItem<'_, '_, Self::Read>, xz: Vec2) -> Option<f32> {
-		let raw = M::height_at(&read.inner, xz)?;
-		Some(read.pads_at(xz).modify_elevation(raw, xz.x, xz.y))
+		let raw = U::Ground::height_at(&read.ground, xz)?;
+		Some(U::pads_at(&read.urban, xz).modify_elevation(raw, xz.x, xz.y))
 	}
 
 	fn fallback_height_at(read: &SystemParamItem<'_, '_, Self::Read>, xz: Vec2) -> f32 {
-		let raw = M::fallback_height_at(&read.inner, xz);
-		read.pads_at(xz).modify_elevation(raw, xz.x, xz.y)
+		let raw = U::Ground::fallback_height_at(&read.ground, xz);
+		U::pads_at(&read.urban, xz).modify_elevation(raw, xz.x, xz.y)
 	}
 
 	fn cell_ids_overlapping(read: &SystemParamItem<'_, '_, Self::Read>, region: Aabb3d) -> Vec<Id> {
-		PaddedStoreView::new(&read.developments)
-			.tracked_ids_for(region)
-			.into_iter()
-			.map(|TrackedId(id)| id)
-			.collect()
+		U::surface_ids(&read.urban, region)
 	}
 
 	fn cell<'a>(
 		read: &'a SystemParamItem<'_, '_, Self::Read>,
 		id: Id,
-	) -> Option<&'a TerrainWithPads> {
-		read.developments.padded(id)
+	) -> Option<&'a Self::Cell> {
+		U::surface(&read.urban, id)
 	}
 
-	/// Padded cell when its size passes `overlay_size_tolerance`, else the inner
-	/// model's raw cell (`fine_terrain_for` / `medium_terrain_for`).
+	/// Padded cell when its size passes `overlay_size_tolerance`, else the
+	/// inner model's raw cell.
 	fn overlay_cell<'a>(
 		read: &'a SystemParamItem<'_, '_, Self::Read>,
 		bounds: Aabb3d,
 		target_size: f32,
 		overlay_size_tolerance: Option<f32>,
-	) -> Option<&'a dyn TerrainCell<Mesh = TerrainMeshBuilder>> {
-		if let Some(padded) = read.developments.padded_terrain_for(bounds) {
+	) -> Option<&'a dyn TerrainCell<Mesh = <Self::Cell as TerrainCell>::Mesh>> {
+		if let Some(padded) = U::overlay_surface(&read.urban, bounds) {
 			let size = padded.bounds().max.x - padded.bounds().min.x;
 			let accept = match overlay_size_tolerance {
 				None => true,
@@ -129,18 +113,90 @@ where
 				return Some(padded);
 			}
 		}
-		M::overlay_cell(&read.inner, bounds, target_size, overlay_size_tolerance)
+		U::Ground::overlay_cell(&read.ground, bounds, target_size, overlay_size_tolerance)
 	}
 
 	fn snapshot(read: &SystemParamItem<'_, '_, Self::Read>, region: Aabb3d) -> Self::Snapshot {
 		UrbanSnapshot::new(
-			M::snapshot(&read.inner, region),
-			read.developments.merged_pad_complex(region),
+			U::Ground::snapshot(&read.ground, region),
+			U::pads(&read.urban, region),
 		)
 	}
 
 	fn require_generation(app: &App) {
-		M::require_generation(app);
-		app.require_layer::<crate::generation::UrbanizationGenerationCore<M>, Self>();
+		U::Ground::require_generation(app);
+		U::require_generation(app);
+	}
+}
+
+impl<U> UrbanModel for Urbanization<U>
+where
+	U: UrbanizationModel,
+	<U::Ground as TerrainModel>::Cell:
+		TerrainCell<Mesh = <U::Surface as TerrainCell>::Mesh>,
+{
+	type Leaf = U::Leaf;
+	type Cell = U::Cell;
+	type Built = U::Built;
+	type Pads = U::Pads;
+	type Kind = U::Kind;
+	type Selection = U::Selection;
+	type Select = U::Select;
+
+	fn pads(read: &SystemParamItem<'_, '_, Self::Read>, region: Aabb3d) -> Self::Pads {
+		U::pads(&read.urban, region)
+	}
+
+	fn urbanization_leaves<'a>(
+		read: &'a SystemParamItem<'_, '_, Self::Read>,
+		region: Aabb3d,
+	) -> Vec<&'a Self::Leaf> {
+		U::urbanization_leaves(&read.urban, region)
+	}
+
+	fn development_cells<'a>(
+		read: &'a SystemParamItem<'_, '_, Self::Read>,
+		region: Aabb3d,
+	) -> Vec<&'a <Self as UrbanModel>::Cell> {
+		U::development_cells(&read.urban, region)
+	}
+
+	fn built<'a>(
+		read: &'a SystemParamItem<'_, '_, Self::Read>,
+		region: Aabb3d,
+	) -> Vec<&'a Self::Built> {
+		U::built(&read.urban, region)
+	}
+
+	fn built_overlapping<'a>(
+		read: &'a SystemParamItem<'_, '_, Self::Read>,
+		region: Aabb3d,
+	) -> Vec<(Id, lod::gen::Version, &'a Self::Built)> {
+		U::built_overlapping(&read.urban, region)
+	}
+
+	fn development_cell<'a>(
+		read: &'a SystemParamItem<'_, '_, Self::Read>,
+		id: Id,
+	) -> Option<&'a <Self as UrbanModel>::Cell> {
+		U::development_cell(&read.urban, id)
+	}
+
+	fn urbanization_selection(
+		read: &SystemParamItem<'_, '_, Self::Read>,
+	) -> (Self::Selection, Option<Self::Kind>) {
+		U::urbanization_selection(&read.urban)
+	}
+
+	fn leaf_bounds(leaf: &Self::Leaf) -> Aabb3d {
+		U::leaf_bounds(leaf)
+	}
+
+	fn cell_bounds(cell: &<Self as UrbanModel>::Cell) -> Aabb3d {
+		U::cell_bounds(cell)
+	}
+
+	fn ensure_selected(select: &mut SystemParamItem<'_, '_, Self::Select>, region: Aabb3d) {
+		U::ensure_selected(select, region);
 	}
 }
