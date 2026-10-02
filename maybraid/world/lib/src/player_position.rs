@@ -13,6 +13,9 @@ use durham_terrain_models::{TerrainCellLayout, WorldBaseTerrain, terrain_streami
 use player_camera::FollowCamera;
 use serde::{Deserialize, Serialize};
 
+use maybraid_game_mode_training_ground::TrainingGround;
+use terrain_layer_model::ActiveGenerationMode;
+
 use crate::{PlayerSpawnXz, WorldPlayerLoadout};
 
 const LOG_INTERVAL: Duration = Duration::from_secs(10);
@@ -96,7 +99,7 @@ pub fn resume_discovery_from_saved_waypoints(
 	spawn: Res<PlayerSpawnXz>,
 	save_root: Res<SaveRoot>,
 	loadout: Option<Res<WorldPlayerLoadout>>,
-	grounds: Option<Res<crate::TrainingGrounds>>,
+	mode: Option<Res<State<ActiveGenerationMode>>>,
 	layout: Res<TerrainCellLayout>,
 	base: Res<WorldBaseTerrain>,
 	mut waypoints: ResMut<PlayerPositionWaypoints>,
@@ -112,7 +115,7 @@ pub fn resume_discovery_from_saved_waypoints(
 	if spawn.0.is_some() {
 		return;
 	}
-	if grounds.is_some_and(|grounds| grounds.0) {
+	if mode.as_deref().is_some_and(|mode| mode.get().is::<TrainingGround>()) {
 		return;
 	}
 	let Some(id) = current_character_id(loadout.as_deref()) else {
@@ -218,13 +221,13 @@ fn log_player_position(players: Query<&Transform, With<Player>>) {
 
 fn retain_player_waypoints(
 	streaming: Res<durham_terrain_models::TerrainStreamingEnabled>,
-	grounds: Option<Res<crate::TrainingGrounds>>,
+	mode: Option<Res<State<ActiveGenerationMode>>>,
 	save_root: Res<SaveRoot>,
 	loadout: Option<Res<WorldPlayerLoadout>>,
 	players: Query<&Transform, With<Player>>,
 	mut waypoints: ResMut<PlayerPositionWaypoints>,
 ) {
-	if !streaming.0 || grounds.is_some_and(|grounds| grounds.0) {
+	if !streaming.0 || mode.is_some_and(|mode| mode.get().is::<TrainingGround>()) {
 		return;
 	}
 	let Ok(transform) = players.single() else {
@@ -336,7 +339,7 @@ mod tests {
 		let mut world = World::new();
 		world.insert_resource(root.clone());
 		world.insert_resource(durham_terrain_models::TerrainStreamingEnabled(true));
-		world.insert_resource(crate::TrainingGrounds(true));
+		world.insert_resource(State::new(ActiveGenerationMode::of::<TrainingGround>()));
 		world.insert_resource(PlayerPositionWaypoints::default());
 		world.insert_resource(crate::WorldPlayerLoadout::new(
 			id.to_hex(),

@@ -546,7 +546,7 @@ mod tests {
 		app.add_plugins(MinimalPlugins)
 			.insert_resource(index)
 			.insert_resource(GrovePresentLog::default())
-			.insert_resource(LodPresentBudget { ids_per_frame: 1 })
+			.insert_resource(LodPresentBudget::<ForestLodChan>::new(1))
 			.insert_resource({
 				let mut keep = LodPresentKeepRegion::<ForestLodChan>::default();
 				keep.region = Some(bounds);

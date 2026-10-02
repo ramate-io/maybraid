@@ -50,17 +50,27 @@ impl<T: Send + Sync + 'static> LodGenerated<T> {
 	}
 }
 
-/// How many origin ids each generate drain may materialize per frame.
+/// How many origin ids each generate drain may materialize per frame
+/// for channel `C`.
 ///
-/// Independent of scene and presentation.
+/// Independent of scene and presentation. Each channel has its own
+/// resource, so assemblers set a value without last-insert-wins.
 #[derive(Resource, Debug, Clone, Copy, PartialEq, Eq)]
-pub struct LodGenerateBudget {
+pub struct LodGenerateBudget<C> {
 	pub ids_per_frame: u32,
+	_chan: PhantomData<fn() -> C>,
 }
 
-impl Default for LodGenerateBudget {
+impl<C> LodGenerateBudget<C> {
+	pub const fn new(ids_per_frame: u32) -> Self {
+		Self { ids_per_frame, _chan: PhantomData }
+	}
+}
+
+impl<C> Default for LodGenerateBudget<C> {
+	/// Same default as the old global.
 	fn default() -> Self {
-		Self { ids_per_frame: 1 }
+		Self::new(1)
 	}
 }
 
@@ -209,14 +219,12 @@ impl Plugin for LodGenerateSetsPlugin {
 			app.add_plugins(LodNodePlugin);
 		}
 		ensure_lod_job_counter(app);
-		app.init_resource::<LodGenerateBudget>()
-			.init_resource::<LodGenerateTimeBudget>()
-			.configure_sets(
-				Update,
-				(LodGenerateSystems::Produce, LodGenerateSystems::Drain)
-					.chain()
-					.after(LodNodeSystems::Track),
-			);
+		app.init_resource::<LodGenerateTimeBudget>().configure_sets(
+			Update,
+			(LodGenerateSystems::Produce, LodGenerateSystems::Drain)
+				.chain()
+				.after(LodNodeSystems::Track),
+		);
 	}
 }
 
@@ -257,7 +265,7 @@ pub fn produce_lod_generate_regions<P, F, M>(
 pub fn drain_lod_generate<T, S, M, F>(
 	mut index: ResMut<S>,
 	mut queue: ResMut<LodGenerateQueue<T>>,
-	budget: Res<LodGenerateBudget>,
+	budget: Res<LodGenerateBudget<M>>,
 	time_budget: Res<LodGenerateTimeBudget>,
 	jobs: Res<LodJobCounter>,
 	mut regions: MessageReader<LodGenerateRegion<M>>,
@@ -468,7 +476,7 @@ where
 {
 	fn build(&self, app: &mut App) {
 		ensure_generate_sets(app);
-		app.init_resource::<LodGenerateBudget>()
+		app.init_resource::<LodGenerateBudget<M>>()
 			.init_resource::<LodGenerateTimeBudget>()
 			.init_resource::<LodGenerateQueue<T>>()
 			.init_resource::<LodGenerateKeepRegion<M>>()

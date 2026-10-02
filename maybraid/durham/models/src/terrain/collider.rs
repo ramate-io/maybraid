@@ -16,8 +16,8 @@ use lod_avian::PhysicsInteractionLayer;
 /// `Friction::ZERO` + `Min` (Avian dynamic-character default), otherwise the
 /// capsule ice-skates on the trimesh.
 ///
-/// Playgrounds override via [`TerrainFrictionConfig`] (inserted before
-/// [`crate::terrain::TerrainPlugin`]); [`queue_terrain_trimesh_colliders`] reads
+/// Playgrounds override via [`TerrainFrictionConfig`] (inserted before Durham
+/// generation); [`queue_terrain_trimesh_colliders`] reads
 /// that resource, not this constant, when both exist.
 pub const TERRAIN_FRICTION: Friction = Friction {
 	dynamic_coefficient: 0.75,

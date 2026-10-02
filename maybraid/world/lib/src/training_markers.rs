@@ -6,8 +6,8 @@ use combat_hud::CombatHudVisible;
 use damage::{Downed, Health};
 use mob_intelligence::MemberOf;
 
-use crate::training::TrainingGrounds;
-use crate::training_plaza::TrainingBrawler;
+use maybraid_game_mode_training_ground::{TrainingBrawler, TrainingGround};
+use terrain_layer_model::ActiveGenerationMode;
 use crate::ui::project_mob_pin;
 
 const MARKER_PX: f32 = 10.0;
@@ -98,7 +98,7 @@ type MarkerParts<'a> = (
 /// whole layer.
 pub(crate) fn sync_training_enemy_markers(
 	mut commands: Commands,
-	grounds: Res<TrainingGrounds>,
+	mode: Res<State<ActiveGenerationMode>>,
 	enabled: Option<Res<TrainingEnemyMarkersEnabled>>,
 	hud: Option<Res<CombatHudVisible>>,
 	camera: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
@@ -110,7 +110,7 @@ pub(crate) fn sync_training_enemy_markers(
 	fighters: Query<(Entity, &MemberOf, &Health, &GlobalTransform), Without<Downed>>,
 	mut markers: Query<MarkerParts<'_>, Without<TrainingEnemyMarkers>>,
 ) {
-	if !grounds.0 || enabled.is_some_and(|enabled| !enabled.0) {
+	if !mode.get().is::<TrainingGround>() || enabled.is_some_and(|enabled| !enabled.0) {
 		for (root, _) in &roots {
 			commands.entity(root).try_despawn();
 		}
@@ -186,14 +186,16 @@ mod tests {
 	#[test]
 	fn the_marker_layer_lives_only_while_training() -> anyhow::Result<()> {
 		let mut world = World::new();
-		world.insert_resource(TrainingGrounds(true));
+		world.insert_resource(State::new(ActiveGenerationMode::of::<TrainingGround>()));
 		let mut system = IntoSystem::into_system(sync_training_enemy_markers);
 		system.initialize(&mut world);
 		run(&mut world, &mut system)?;
 		let roots = world.query_filtered::<(), With<TrainingEnemyMarkers>>().iter(&world).count();
 		assert_eq!(roots, 1);
 
-		world.insert_resource(TrainingGrounds(false));
+		world.insert_resource(State::new(ActiveGenerationMode::of::<
+			maybraid_game_mode_discover::Discovery,
+		>()));
 		run(&mut world, &mut system)?;
 		let roots = world.query_filtered::<(), With<TrainingEnemyMarkers>>().iter(&world).count();
 		assert_eq!(roots, 0);
@@ -203,7 +205,7 @@ mod tests {
 	#[test]
 	fn turning_markers_off_drops_the_layer() -> anyhow::Result<()> {
 		let mut world = World::new();
-		world.insert_resource(TrainingGrounds(true));
+		world.insert_resource(State::new(ActiveGenerationMode::of::<TrainingGround>()));
 		world.insert_resource(TrainingEnemyMarkersEnabled(true));
 		let mut system = IntoSystem::into_system(sync_training_enemy_markers);
 		system.initialize(&mut world);
@@ -226,7 +228,7 @@ mod tests {
 	#[test]
 	fn downed_and_foreign_fighters_lose_their_dots() -> anyhow::Result<()> {
 		let mut world = World::new();
-		world.insert_resource(TrainingGrounds(true));
+		world.insert_resource(State::new(ActiveGenerationMode::of::<TrainingGround>()));
 		let squad = world.spawn(TrainingBrawler).id();
 		let stranger = world.spawn_empty().id();
 		let fighter = |mob| {

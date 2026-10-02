@@ -1,18 +1,15 @@
 //! Downed world-player retirement and POI-based replacement.
 
 use avian3d::prelude::LinearVelocity;
-use bevy::ecs::system::SystemParam;
-use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use chico_vegetation_on_terrain_playground::{
 	player_position_above_surface, spawn_player_body, CharacterLocomotion, CharacterSpecies,
 	MoveWish, Player as VegetationPlayer, RequestSetCharacter, RequestSetCharacterAppearance,
-	WorldBaseTerrain,
 };
 use crozon_character_ragdoll::CharacterRagdollSystems;
 use crozon_inventory_user::InventoryUser;
 use damage::{DamageSystems, DespawnAfter, Downed};
-use durham_terrain_models::{TerrainCellLayout, TerrainEntryStore};
+use durham_terrain_models::Durham;
 use firearm_user::FirearmUser;
 use firearms::WeaponTrigger;
 use mob_characters::{LOCAL_POI, URBAN_POI, VEGETATION_POI};
@@ -21,12 +18,16 @@ use poi_intelligence::{
 	mix_seed, NearbyFallback, NearbyQuery, PoiId, PoiInterest, PoiInterests, PoiRegistry,
 	PoiSystems, DEFAULT_NEARBY_RADIUS,
 };
-use richmond_development_models::DevelopmentEntryStore;
 use spotting_intelligence::SpotSubject;
+use terrain_layer_model::{OnTerrain, TerrainView};
 use threat_intelligence::{Affiliations, ThreatSubject};
+use urbanization_layer_model::Urbanization;
+
+use maybraid_game_mode_training_ground::TrainingGround;
+use terrain_layer_model::ActiveGenerationMode;
 
 use crate::control::strip_world_player_motor;
-use crate::training::{TrainingGrounds, TrainingLifeEnded};
+use crate::training::TrainingLifeEnded;
 use crate::weapon::WorldPlayerAppearanceRequested;
 use crate::{WorldGameplayEnabled, WorldPlayerLoadout};
 
@@ -84,28 +85,6 @@ struct WorldPlayerRespawnState {
 #[derive(Component)]
 struct PlayerDeathGlaze;
 
-#[derive(SystemParam)]
-struct WorldPlayerSurface<'w> {
-	terrain: Res<'w, TerrainEntryStore>,
-	layout: Res<'w, TerrainCellLayout>,
-	base: Res<'w, WorldBaseTerrain>,
-	developments: Res<'w, DevelopmentEntryStore>,
-}
-
-impl WorldPlayerSurface<'_> {
-	fn surface_height(&self, xz: Vec2) -> f32 {
-		let raw = self
-			.terrain
-			.composed_height_at(&self.layout, xz.x, xz.y)
-			.unwrap_or_else(|| self.base.0.height_at(xz.x, xz.y));
-		let probe = Aabb3d::from_min_max(
-			Vec3::new(xz.x - 0.5, -10_000.0, xz.y - 0.5),
-			Vec3::new(xz.x + 0.5, 10_000.0, xz.y + 0.5),
-		);
-		self.developments.merged_pad_complex(probe).modify_elevation(raw, xz.x, xz.y)
-	}
-}
-
 type DownedWorldPlayer<'a> = (
 	Entity,
 	&'a Transform,
@@ -127,7 +106,10 @@ impl Plugin for WorldPlayerLifecyclePlugin {
 					.after(DamageSystems::Down)
 					.after(CharacterRagdollSystems::Handoff),
 			)
-			.add_systems(Update, respawn_world_player.after(PoiSystems::Index))
+			.add_systems(
+				Update,
+				respawn_world_player.after(PoiSystems::Index),
+			)
 			.add_systems(Update, sync_player_death_glaze.after(respawn_world_player));
 	}
 }
@@ -169,7 +151,7 @@ fn sync_player_death_glaze(
 
 fn queue_downed_world_player(
 	config: Res<WorldPlayerRespawnConfig>,
-	grounds: Option<Res<TrainingGrounds>>,
+	mode: Option<Res<State<ActiveGenerationMode>>>,
 	mut state: ResMut<WorldPlayerRespawnState>,
 	mut commands: Commands,
 	mut players: Query<DownedWorldPlayer<'_>, (With<VegetationPlayer>, Added<Downed>)>,
@@ -182,7 +164,7 @@ fn queue_downed_world_player(
 			timer: Timer::from_seconds(config.delay_secs.max(0.0), TimerMode::Once),
 			death_at: transform.translation,
 			seed,
-			training: grounds.as_deref().is_some_and(|grounds| grounds.0),
+			training: mode.as_deref().is_some_and(|mode| mode.get().is::<TrainingGround>()),
 		});
 		velocity.0 = Vec3::ZERO;
 		if let Some(firearm) = firearm {
@@ -221,8 +203,8 @@ fn respawn_world_player(
 	registry: Res<PoiRegistry>,
 	loadout: Option<Res<WorldPlayerLoadout>>,
 	locomotion: Res<CharacterLocomotion>,
-	surface: WorldPlayerSurface,
-	grounds: Option<Res<TrainingGrounds>>,
+	surface: TerrainView<Urbanization<OnTerrain<Durham>>>,
+	mode: Option<Res<State<ActiveGenerationMode>>>,
 	mut ended: MessageWriter<TrainingLifeEnded>,
 	live_player: Query<(), With<VegetationPlayer>>,
 	mut state: ResMut<WorldPlayerRespawnState>,
@@ -230,7 +212,7 @@ fn respawn_world_player(
 	mut meshes: ResMut<Assets<Mesh>>,
 	mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-	let training_now = grounds.is_some_and(|grounds| grounds.0);
+	let training_now = mode.is_some_and(|mode| mode.get().is::<TrainingGround>());
 	let abandoned =
 		state.pending.as_ref().is_some_and(|pending| pending.abandoned(training_now));
 	if !gameplay.0 && !abandoned {
@@ -266,7 +248,7 @@ fn respawn_world_player(
 			config.fallback,
 		);
 		let mut surface_point = placed.position;
-		let terrain_y = surface.surface_height(surface_point.xz());
+		let terrain_y = surface.height_or_fallback(surface_point.xz());
 		if terrain_y.is_finite() {
 			surface_point.y = terrain_y;
 		}
@@ -327,6 +309,10 @@ fn respawn_seed(generation: u64, death_at: Vec3) -> u64 {
 mod tests {
 	use super::*;
 	use bevy::ecs::system::RunSystemOnce;
+	use chico_vegetation_on_terrain_playground::WorldBaseTerrain;
+	use durham_terrain_models::{TerrainCellLayout, TerrainEntryStore};
+	use richmond_development_models::DevelopmentEntryStore;
+	use richmond_urbanization::UrbanizationIndex;
 
 	#[test]
 	fn fallback_respawn_moves_away_from_the_death_point() {
@@ -431,6 +417,7 @@ mod tests {
 		world.init_resource::<TerrainEntryStore>();
 		world.init_resource::<TerrainCellLayout>();
 		world.init_resource::<DevelopmentEntryStore>();
+		world.init_resource::<UrbanizationIndex>();
 		world.insert_resource(WorldBaseTerrain(
 			durham_terrain_models::BaseTerrainNoise::from_config(
 				&durham_terrain_models::TerrainConfig::new(42),
@@ -439,8 +426,14 @@ mod tests {
 		world.init_resource::<Assets<Mesh>>();
 		world.init_resource::<Assets<StandardMaterial>>();
 		world.init_resource::<Messages<TrainingLifeEnded>>();
-		world.insert_resource(TrainingGrounds(grounds));
-		world.insert_resource(crate::TrainingRound::new(9).trainee());
+		world.insert_resource(State::new(if grounds {
+			ActiveGenerationMode::of::<TrainingGround>()
+		} else {
+			ActiveGenerationMode::of::<maybraid_game_mode_discover::Discovery>()
+		}));
+		world.insert_resource(crate::training_trainee(
+			maybraid_game_mode_training_ground::TrainingRound::new(9),
+		));
 		world
 	}
 
@@ -476,7 +469,9 @@ mod tests {
 			"a paused Training death keeps waiting"
 		);
 
-		world.insert_resource(TrainingGrounds(false));
+		world.insert_resource(State::new(ActiveGenerationMode::of::<
+			maybraid_game_mode_discover::Discovery,
+		>()));
 		world
 			.run_system_once(respawn_world_player)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;

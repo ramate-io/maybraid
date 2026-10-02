@@ -6,13 +6,6 @@ use richmond_development_models::DevelopmentHosts;
 #[derive(Component)]
 pub struct DevelopmentHostRoot;
 
-pub fn spawn_development_hosts(
-	commands: &mut Commands,
-	development: &impl DevelopmentHosts,
-) -> usize {
-	spawn_tagged_host_entities(commands, development).len()
-}
-
 /// Spawn each host and tag [`DevelopmentHostRoot`]. Furniture presents on its
 /// own 50 m cell hosts — do not parent kits here.
 pub fn spawn_tagged_host_entities(
@@ -27,4 +20,11 @@ pub fn spawn_tagged_host_entities(
 		}
 	}
 	spawned
+}
+
+pub fn spawn_development_hosts(
+	commands: &mut Commands,
+	development: &impl DevelopmentHosts,
+) -> usize {
+	spawn_tagged_host_entities(commands, development).len()
 }

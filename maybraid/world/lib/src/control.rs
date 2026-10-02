@@ -62,7 +62,7 @@ pub(crate) fn update_world_surface_ready(
 	mut ready: ResMut<WorldSurfaceReady>,
 ) {
 	// Menu shells keep streaming off. Leave the ready bit alone; Training
-	// unveils from this same column once the FinePatch collider exists.
+	// unveils from this same column once a padded FinePatch collider exists.
 	if !streaming.0 {
 		return;
 	}

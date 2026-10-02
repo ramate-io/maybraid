@@ -6,7 +6,7 @@
 /// `origin_offset`), guillotine preferred leaf range (`cell_size: (min, max)`),
 /// and cut seed (via [`crate::terrain::jersey::configs::JerseyStampConfigs`]).
 /// Leaf identities are not stored: stamp `build_with_id` down-levels `Id` to
-/// cell bounds. Discovery walks that band's controllers only.
+/// cell bounds. The playable-world stream walks that band's controllers only.
 ///
 /// `config_family` / `config_band` select e.g. `configs.massif.low_pass`.
 ///

@@ -16,6 +16,7 @@ use lod::lod_ref::LodRef;
 use render_item::mesh::handle::Cached;
 use render_item::sdf::cpu_shot::{CpuShotBuilder, WallFaces};
 use std::sync::Arc;
+use terrain_layer_model::TerrainCell;
 
 use crate::pad::PadComplex;
 
@@ -115,6 +116,30 @@ impl TerrainWithPads {
 			template(move |_ctx| Ok(Cached::new(builder.clone())))
 			MeshMaterial3d::<DurhamTerrainShader>({material.clone()})
 		}
+	}
+}
+
+impl TerrainCell for TerrainWithPads {
+	type Mesh = TerrainMeshBuilder;
+
+	fn bounds(&self) -> Aabb3d {
+		self.cell
+	}
+
+	fn mesh_builder(&self) -> TerrainMeshBuilder {
+		TerrainWithPads::mesh_builder(self)
+	}
+
+	fn chunk_pose(&self) -> Transform {
+		TerrainWithPads::chunk_pose(self)
+	}
+
+	fn seeds_collision(&self) -> bool {
+		TerrainWithPads::seeds_collision(self)
+	}
+
+	fn res_2(&self) -> u8 {
+		self.res_2
 	}
 }
 

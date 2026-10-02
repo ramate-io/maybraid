@@ -48,6 +48,7 @@ impl DevelopmentEntryStore {
 		self.pad_cells.clear();
 		self.pad_cells_by_development.clear();
 		self.merged_pads.write().expect("pad cache").clear();
+		self.next_version += 1;
 	}
 
 	fn stamp(&mut self) -> Version {
@@ -71,10 +72,30 @@ impl DevelopmentEntryStore {
 		self.cells.insert(id, StoredEntry { value: cell, bounds, version });
 	}
 
-	/// Drop a cell inserted by [`Self::insert_cell`].
+	/// Store a built development under `id`, using `bounds` for overlap queries.
+	///
+	/// [`Self::built_at`] reads the version this stamps. Insert the cell first
+	/// when pads should grade the same id.
+	pub fn insert_built(&mut self, id: Id, built: BuiltDevelopment, bounds: Aabb3d) {
+		let version = self.stamp();
+		self.developments.insert(id, StoredEntry { value: built, bounds, version });
+	}
+
+	/// Drop a cell inserted by [`Self::insert_cell`], its built development,
+	/// and mark pad regions dirty so padded terrain is evicted.
 	pub fn remove_cell(&mut self, id: Id) {
+		if let Some(entry) = self.cells.get(&id) {
+			self.dirty_pad_regions.extend(
+				entry
+					.value
+					.pad_complexes()
+					.filter(|complex| !complex.is_empty())
+					.map(|complex| complex.bounds),
+			);
+		}
 		self.unindex_development_pads(id);
 		self.cells.remove(&id);
+		self.developments.remove(&id);
 		if let Ok(mut cache) = self.merged_pads.write() {
 			cache.clear();
 		}
@@ -255,6 +276,11 @@ impl DevelopmentEntryStore {
 
 	pub fn development(&self, id: Id) -> Option<&BuiltDevelopment> {
 		self.developments.get(&id).map(|e| &e.value)
+	}
+
+	/// Built development plus its store version, for present-time host refresh.
+	pub fn built_at(&self, id: Id) -> Option<(&BuiltDevelopment, Version)> {
+		self.developments.get(&id).map(|e| (&e.value, e.version))
 	}
 
 	/// Built developments whose stored bounds overlap `region` on XZ.

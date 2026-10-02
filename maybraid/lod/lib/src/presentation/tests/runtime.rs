@@ -111,7 +111,7 @@ fn independent_present_drains_each_receive_the_configured_budget() -> Result<()>
 	app.add_plugins(MinimalPlugins)
 		.insert_resource(index)
 		.insert_resource(RecordingPresenter::default())
-		.insert_resource(LodPresentBudget { ids_per_frame: 1 })
+		.insert_resource(LodPresentBudget::<PresentChan>::new(1))
 		.insert_resource(LodPresentTimeBudget {
 			time_per_frame: std::time::Duration::ZERO,
 			..default()
@@ -154,7 +154,7 @@ fn drain_present_picks_up_keep_region_without_a_new_message() -> Result<()> {
 	app.add_plugins(MinimalPlugins)
 		.insert_resource(index)
 		.insert_resource(RecordingPresenter::default())
-		.insert_resource(LodPresentBudget { ids_per_frame: 1 })
+		.insert_resource(LodPresentBudget::<PresentChan>::new(1))
 		.insert_resource({
 			let mut keep = LodPresentKeepRegion::<PresentChan>::default();
 			keep.region = Some(cell(2.0));
@@ -190,7 +190,7 @@ fn moving_keep_region_does_not_create_present_scan_work_without_an_impulse() -> 
 	app.add_plugins(MinimalPlugins)
 		.insert_resource(index)
 		.insert_resource(RecordingPresenter::default())
-		.insert_resource(LodPresentBudget { ids_per_frame: 8 })
+		.insert_resource(LodPresentBudget::<PresentChan>::new(8))
 		.insert_resource(LodPresentTimeBudget {
 			time_per_frame: std::time::Duration::ZERO,
 			..default()
@@ -243,7 +243,7 @@ fn drain_present_drops_pending_outside_keep_slack() -> Result<()> {
 	app.add_plugins(MinimalPlugins)
 		.insert_resource(index)
 		.insert_resource(RecordingPresenter::default())
-		.insert_resource(LodPresentBudget { ids_per_frame: 1 })
+		.insert_resource(LodPresentBudget::<PresentChan>::new(1))
 		.insert_resource({
 			let mut keep = LodPresentKeepRegion::<PresentChan>::default();
 			keep.region = Some(near);
@@ -286,7 +286,7 @@ fn drain_present_keeps_pending_inside_tile_cross_slack() -> Result<()> {
 	app.add_plugins(MinimalPlugins)
 		.insert_resource(index)
 		.insert_resource(RecordingPresenter::default())
-		.insert_resource(LodPresentBudget { ids_per_frame: 1 })
+		.insert_resource(LodPresentBudget::<PresentChan>::new(1))
 		.insert_resource({
 			let mut keep_r = LodPresentKeepRegion::<PresentChan>::default();
 			keep_r.region = Some(keep);
@@ -384,7 +384,7 @@ fn drain_present_drains_remaining_queue_without_a_keep_rescan() -> Result<()> {
 	app.add_plugins(MinimalPlugins)
 		.insert_resource(index)
 		.insert_resource(RecordingPresenter::default())
-		.insert_resource(LodPresentBudget { ids_per_frame: 1 })
+		.insert_resource(LodPresentBudget::<PresentChan>::new(1))
 		.insert_resource({
 			let mut keep = LodPresentKeepRegion::<PresentChan>::default();
 			keep.region = Some(span(0.0, 4.0));
@@ -420,7 +420,7 @@ fn drain_present_picks_up_generated_id_without_a_region_message() -> Result<()> 
 	app.add_plugins(MinimalPlugins)
 		.insert_resource(index)
 		.insert_resource(RecordingPresenter::default())
-		.insert_resource(LodPresentBudget { ids_per_frame: 1 })
+		.insert_resource(LodPresentBudget::<PresentChan>::new(1))
 		.insert_resource({
 			let mut keep = LodPresentKeepRegion::<PresentChan>::default();
 			keep.region = Some(span(0.0, 4.0));

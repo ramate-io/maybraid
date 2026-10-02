@@ -10,19 +10,20 @@ pub use flow::{GameFlow, HomeRoute, PauseMenuRoute, PlaySession, WorldPause};
 pub use paths::assets_root;
 
 use crate::shell::{
-	apply_pause_character_look, apply_shell_look, attach_preview_camera, despawn_loading_backdrop,
-	detach_preview_camera, enter_characters, enter_home, enter_loading_world, enter_world,
-	enter_world_menu, exit_world_menu, restore_stashed_world_camera, spawn_loading_backdrop,
-	stamp_preview_render_layers,
+	ShellRoute, apply_pause_character_look, apply_shell_look, attach_preview_camera,
+	despawn_loading_backdrop, detach_preview_camera, enter_characters, enter_home,
+	enter_loading_world, enter_world, enter_world_menu, exit_world_menu,
+	restore_stashed_world_camera, spawn_loading_backdrop, stamp_preview_render_layers,
 };
 use bevy::prelude::*;
 use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
+use maybraid_game_mode_training_ground::TrainingRound;
 use maybraid_input::MenuNavPad;
 use maybraid_menu_controller::MenuControllerPlugin;
 use maybraid_world::{
 	resume_discovery_from_saved_waypoints, InventoryEditCameraFollow, PlayerPhysicsEnabled,
 	PlayerSpawnXz, ShadowQuality, TerrainStreamingEnabled, TrainingEnemyMarkersEnabled,
-	TrainingRound, WorldGameplayEnabled, WorldMobHudEnabled, WorldPlayerLoadout, WorldPlugin,
+	WorldGameplayEnabled, WorldMobHudEnabled, WorldPlayerLoadout, WorldPlugin,
 	WorldSceneryVisible, WorldSurfaceSet,
 };
 use menu_components::{
@@ -58,9 +59,7 @@ impl Plugin for GamePlugin {
 			.init_state::<GameFlow>()
 			.add_sub_state::<WorldPause>()
 			.add_plugins((
-				maybraid_game_mode_discover::DiscoverPlugin,
 				maybraid_game_mode_reliquary::ReliquaryPlugin,
-				maybraid_game_mode_training_ground::TrainingGroundPlugin,
 				HomeScreenPlugin,
 				TrainingScreenPlugin,
 				InGameScreenPlugin,
@@ -166,7 +165,7 @@ fn starting_discovery_at_override(spawn: Res<PlayerSpawnXz>) -> bool {
 
 fn boot_shell(
 	spawn: Res<PlayerSpawnXz>,
-	mut flow: ResMut<NextState<GameFlow>>,
+	mut route: ShellRoute,
 	mut mode: ResMut<GameMode>,
 	mut commands: Commands,
 	screens: Query<Entity, With<MenuScreen>>,
@@ -175,7 +174,7 @@ fn boot_shell(
 		mode.label = String::from("Discovery");
 		commands.insert_resource(PlaySession::Discovery);
 		enter_loading_world(commands, screens);
-		flow.set(GameFlow::LoadingWorld);
+		route.enter(GameFlow::LoadingWorld, PlaySession::Discovery);
 		return;
 	}
 	enter_home(commands);
@@ -191,7 +190,7 @@ fn load_active_player_loadout(
 ) {
 	commands.remove_resource::<WorldPlayerLoadout>();
 	if let Some(trainee) =
-		crate::training::training_trainee(*session, spawn.as_deref(), round.as_deref())
+		crate::training::session_trainee(*session, spawn.as_deref(), round.as_deref())
 	{
 		commands.insert_resource(trainee);
 		return;
@@ -221,7 +220,8 @@ fn read_player_loadout(
 
 fn route_home_choice(
 	mut choices: MessageReader<HomeMenuChoice>,
-	mut flow: ResMut<NextState<GameFlow>>,
+	current: Res<PlaySession>,
+	mut route: ShellRoute,
 	mut mode: ResMut<GameMode>,
 	mut commands: Commands,
 ) {
@@ -232,10 +232,10 @@ fn route_home_choice(
 		HomeRoute::World { session } => {
 			commands.insert_resource(session);
 			mode.label = String::from(session.label());
-			flow.set(GameFlow::LoadingWorld);
+			route.enter(GameFlow::LoadingWorld, session);
 		}
 		HomeRoute::TrainingSetup => request_show_training(&mut commands),
-		HomeRoute::Characters => flow.set(GameFlow::Characters),
+		HomeRoute::Characters => route.enter(GameFlow::Characters, *current),
 		HomeRoute::Settings => request_show_in_game_settings(&mut commands),
 		HomeRoute::Unimplemented => {}
 	}
@@ -243,7 +243,8 @@ fn route_home_choice(
 
 fn route_in_game_choice(
 	mut choices: MessageReader<InGameMenuChoice>,
-	mut flow: ResMut<NextState<GameFlow>>,
+	session: Res<PlaySession>,
+	mut route: ShellRoute,
 	mut commands: Commands,
 	mut edits: MessageWriter<RequestEditCharacter>,
 	active: Option<Res<ActiveCharacter>>,
@@ -253,7 +254,7 @@ fn route_in_game_choice(
 		return;
 	};
 	match PauseMenuRoute::from_choice(choice) {
-		PauseMenuRoute::Leave => flow.set(GameFlow::Home),
+		PauseMenuRoute::Leave => route.enter(GameFlow::Home, *session),
 		PauseMenuRoute::Settings => request_show_in_game_settings(&mut commands),
 		PauseMenuRoute::Character => {
 			let Some(active) = active else {
@@ -426,7 +427,8 @@ fn toggle_world_pause(
 }
 
 fn character_back(
-	mut flow: ResMut<NextState<GameFlow>>,
+	session: Res<PlaySession>,
+	mut route: ShellRoute,
 	mut commands: Commands,
 	nav: Res<MenuNavPad>,
 	overlay: Res<ActiveOverlayKey>,
@@ -458,7 +460,7 @@ fn character_back(
 		return;
 	}
 	if !gallery.is_empty() {
-		flow.set(GameFlow::Home);
+		route.enter(GameFlow::Home, *session);
 	}
 }
 
@@ -479,7 +481,8 @@ mod tests {
 		read_player_loadout, route_home_choice, sync_world_loadout_from_editor, sync_world_shadows,
 		GameFlow, PlaySession,
 	};
-	use maybraid_world::{ShadowQuality, TrainingRound, WorldPlayerLoadout};
+	use maybraid_game_mode_training_ground::TrainingRound;
+	use maybraid_world::{ShadowQuality, WorldPlayerLoadout};
 	use menu_playground::{
 		CharacterEditBaseline, CharacterEditorReturn, CharacterMenuState, EditingCharacter,
 	};
@@ -525,6 +528,7 @@ mod tests {
 		world.init_resource::<Messages<HomeMenuChoice>>();
 		world.write_message(HomeMenuChoice::TrainingGround);
 		world.insert_resource(NextState::<GameFlow>::Unchanged);
+		world.insert_resource(NextState::<terrain_layer_model::ActiveGenerationMode>::Unchanged);
 		world.insert_resource(GameMode::default());
 		world.insert_resource(PlaySession::None);
 		world
@@ -550,7 +554,10 @@ mod tests {
 		world
 			.run_system_once(load_active_player_loadout)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		assert_eq!(world.get_resource::<WorldPlayerLoadout>(), Some(&round.trainee()));
+		assert_eq!(
+			world.get_resource::<WorldPlayerLoadout>(),
+			Some(&maybraid_world::training_trainee(round))
+		);
 		Ok(())
 	}
 
@@ -561,7 +568,7 @@ mod tests {
 		let id = CharacterId(7);
 		crozon_inventory_user::save(&root, id, &Inventory::default())?;
 
-		let trainee = TrainingRound::new(3).trainee();
+		let trainee = maybraid_world::training_trainee(TrainingRound::new(3));
 		assert!(!trainee.inventory.items.is_empty());
 		let mut world = World::new();
 		world.insert_resource(root.clone());

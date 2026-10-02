@@ -2,7 +2,6 @@
 
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use bevy::ecs::system::SystemParam;
 use bevy::log::info_span;
 use bevy::prelude::*;
 use bevy::tasks::{AsyncComputeTaskPool, Task};
@@ -11,12 +10,9 @@ use chico_vegetation_components::spawn_lod_scene_host_with_lod_ref;
 use futures::FutureExt;
 use lod::gen::{Id, SpatialIndex, Version};
 use lod::lod_ref::LodRef;
-use lod::presentation::RegionPresenter;
 use lod::{hide_lod_tree, LodScene};
 
-use crate::{
-	forest_world_sample, ChicoGrove, ChicoGroveHost, ForestGroveTile, ForestIndex, ForestLayer,
-};
+use crate::{ChicoGrove, ChicoGroveHost, ForestGroveTile, ForestIndex, ForestLayer};
 
 const MAX_GROVE_GROWTH_TASKS: usize = 4;
 const GROVE_HOSTS_PER_QUANTUM: usize = 1;
@@ -281,55 +277,6 @@ fn spawn_forest_grove_tile(
 	lod_ref: &LodRef,
 ) -> Vec<Entity> {
 	spawn_grove_host(commands, &ChicoGroveHost::new(tile.clone(), layer), lod_ref)
-}
-
-/// Flat-ground presenter. Does not stamp playground-only markers such as `ShowRoot`.
-#[derive(SystemParam)]
-pub struct FlatForestPresenter<'w, 's> {
-	commands: Commands<'w, 's>,
-	state: ResMut<'w, ForestPresenterState>,
-}
-
-impl RegionPresenter<ChicoGrove, ForestIndex> for FlatForestPresenter<'_, '_> {
-	fn presented_version(&self, id: Id) -> Option<Version> {
-		self.state.presented_version(id)
-	}
-
-	fn handle(&mut self, id: Id, version: Version, grove: &ChicoGrove, lod_ref: &LodRef) {
-		self.state.present_with_world(
-			&mut self.commands,
-			id,
-			version,
-			grove,
-			lod_ref,
-			forest_world_sample(),
-		);
-	}
-
-	fn hide(&mut self, id: Id) {
-		self.state.hide(&mut self.commands, id);
-	}
-
-	fn is_hidden(&self, id: Id) -> bool {
-		self.state.is_hidden(id)
-	}
-
-	fn presented_ids(&self) -> Vec<Id> {
-		self.state.presented_ids()
-	}
-
-	fn remove_stale(&mut self, wanted: &HashSet<Id>) {
-		self.state.remove_stale(&mut self.commands, wanted);
-	}
-
-	fn cull(
-		&mut self,
-		spatial_index: &ForestIndex,
-		keep: &HashSet<Id>,
-		despawn_budget: u32,
-	) -> u32 {
-		self.state.cull(&mut self.commands, spatial_index, keep, despawn_budget)
-	}
 }
 
 #[cfg(test)]

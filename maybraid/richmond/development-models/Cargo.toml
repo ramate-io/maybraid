@@ -30,6 +30,7 @@ richmond-developments = { workspace = true }
 richmond-urbanization = { workspace = true }
 material-ref = { workspace = true }
 scene-ref = { workspace = true }
+terrain-layer-model = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
