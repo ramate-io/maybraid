@@ -151,13 +151,18 @@ pub fn sync_raw_terrain_replacements(
 		})
 		.map(|(scene, _, _)| scene.0)
 		.collect();
+	let mut now_replaced = HashSet::new();
 	for (entity, presented, mut visibility, superseded) in &mut raw_roots {
 		if ready.contains(&presented.0) {
-			if *visibility != Visibility::Hidden {
-				*visibility = Visibility::Hidden;
-			}
-			if !superseded {
-				commands.entity(entity).insert(TerrainSuperseded);
+			let ours = state.replaced.contains(&presented.0);
+			if ours || *visibility != Visibility::Hidden {
+				if *visibility != Visibility::Hidden {
+					*visibility = Visibility::Hidden;
+				}
+				if !superseded {
+					commands.entity(entity).insert(TerrainSuperseded);
+				}
+				now_replaced.insert(presented.0);
 			}
 		} else if state.replaced.contains(&presented.0) {
 			*visibility = Visibility::Inherited;
@@ -166,7 +171,7 @@ pub fn sync_raw_terrain_replacements(
 			}
 		}
 	}
-	state.replaced = ready;
+	state.replaced = now_replaced;
 }
 
 #[cfg(test)]

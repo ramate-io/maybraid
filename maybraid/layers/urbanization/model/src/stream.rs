@@ -79,6 +79,14 @@ impl UrbanizationStreamSpec {
 	}
 }
 
+/// Spec the stream and pin write: `focus_urbanization` fills an open kind.
+fn focused_spec(config: &UrbanizationLayerConfig) -> Option<UrbanizationStreamSpec> {
+	config.urbanization.map(|mut spec| {
+		spec.kind = spec.kind.or(config.focus_urbanization);
+		spec
+	})
+}
+
 /// Present / generate metric radii for a stream-radius multiplier.
 pub fn stream_radii_m(stream_radius: u32) -> (f32, f32) {
 	if stream_radius == 0 {
@@ -252,8 +260,8 @@ pub fn sync_urbanization_pin<Mode: GenerationMode>(
 	mut urbanization: ResMut<UrbanizationIndex>,
 	mut development: ResMut<DevelopmentConfig>,
 ) {
-	if let Some(spec) = config.config.urbanization.as_ref() {
-		urbanization.kind = spec.kind.or(config.config.focus_urbanization);
+	if let Some(spec) = focused_spec(&config.config) {
+		urbanization.kind = spec.kind;
 		urbanization.noise = spec.noise;
 		development.use_urbanization = true;
 		development.seed = spec.noise.seed.max(0) as u32;
@@ -271,7 +279,7 @@ pub fn stream_urbanization<Mode: GenerationMode>(
 	mut last_key: ResMut<UrbanizationStreamKey>,
 ) {
 	let cam = camera.single().ok().map(|t| t.translation);
-	lod.apply_spec(config.config.urbanization.as_ref(), cam, &mut last_key.0);
+	lod.apply_spec(focused_spec(&config.config).as_ref(), cam, &mut last_key.0);
 }
 
 /// Tear stream LOD and the spec key down so the next mode can refill.
@@ -309,7 +317,7 @@ pub fn generate_urbanization_developments<Mode: GenerationMode>(
 
 	let noise = development.config().urbanization_noise();
 	development.urbanization.noise = noise;
-	if let Some(spec) = config.config.urbanization.as_ref() {
+	if let Some(spec) = focused_spec(&config.config) {
 		development.urbanization.kind = spec.kind;
 	}
 

@@ -50,6 +50,9 @@ impl<G> Default for MobPresentationCore<G> {
 
 impl<G: UrbanModel> Plugin for MobPresentationCore<G> {
 	fn build(&self, app: &mut App) {
+		// Indexed must be visible when MobScenesPlugin builds. Guarding
+		// MobGroupsPlugin would hide an assembler that already added groups
+		// under FullScan.
 		app.insert_resource(MobLodRefreshMode::Indexed);
 		app.add_plugins(MobGroupsPlugin);
 		app.init_resource::<MobPresenterState>()

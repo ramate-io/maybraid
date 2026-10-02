@@ -234,6 +234,10 @@ mod tests {
 			assert_eq!(startup.focus_development, Some(expected), "{name}");
 			assert!(startup.command.is_none(), "{name}");
 		}
+		let mixed = PlaygroundCommand::parse_startup_tail(vec![
+			"--focus-development=Old-City-Market".into(),
+		])?;
+		assert_eq!(mixed.focus_development, Some(DevelopmentFocus::OldCityMarket));
 		Ok(())
 	}
 

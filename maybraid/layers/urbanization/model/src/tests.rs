@@ -128,6 +128,54 @@ fn world_defaults_enable_urbanization_stream_at_budget_16() {
 }
 
 #[test]
+fn development_focus_from_kebab_is_case_insensitive() -> anyhow::Result<()> {
+	use crate::DevelopmentFocus;
+
+	anyhow::ensure!(DevelopmentFocus::from_kebab("Old-City-Market") == Some(DevelopmentFocus::OldCityMarket));
+	anyhow::ensure!(DevelopmentFocus::from_kebab("  LES-HALLES  ") == Some(DevelopmentFocus::LesHalles));
+	Ok(())
+}
+
+#[test]
+fn stream_applies_focus_when_the_spec_kind_is_open() -> anyhow::Result<()> {
+	use bevy::camera::Camera3d;
+	use bevy::ecs::system::RunSystemOnce;
+	use bevy::prelude::{MinimalPlugins, Transform};
+	use bevy::state::app::StatesPlugin;
+	use richmond_urbanization::{UrbanizationIndex, UrbanizationKind};
+	use crate::{
+		stream_urbanization, UrbanizationLayerConfig, UrbanizationModeConfig, UrbanizationStreamKey,
+	};
+	use crate::stream::register_urbanization_lod_generate;
+	use terrain_layer_model::GenerationModePlugin;
+
+	let mut config = UrbanizationLayerConfig::world_defaults();
+	config.focus_urbanization = Some(UrbanizationKind::Frontier);
+	anyhow::ensure!(
+		config.urbanization.as_ref().is_some_and(|spec| spec.kind.is_none()),
+		"world defaults leave kind open"
+	);
+
+	let mut app = App::new();
+	app.add_plugins((MinimalPlugins, StatesPlugin));
+	app.add_plugins(GenerationModePlugin::<TestMode>::initial());
+	register_urbanization_lod_generate(&mut app, 16);
+	app.insert_resource(UrbanizationModeConfig::<TestMode>::new(config));
+	app.init_resource::<UrbanizationStreamKey>();
+	app.world_mut()
+		.spawn((Camera3d::default(), Transform::from_xyz(0.0, 8.0, 0.0)));
+
+	app.world_mut()
+		.run_system_once(stream_urbanization::<TestMode>)
+		.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+	anyhow::ensure!(
+		app.world().resource::<UrbanizationIndex>().kind == Some(UrbanizationKind::Frontier),
+		"apply_spec must keep the focused kind"
+	);
+	Ok(())
+}
+
+#[test]
 #[should_panic(expected = "requires terrain_layer_model::generation::BaseTerrainGenerationCore")]
 fn urbanization_generation_without_base_names_the_missing_plugin() {
 	use crate::UrbanizationGenerationPlugin;

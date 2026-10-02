@@ -72,6 +72,11 @@ impl UrbanizationPresenterState {
 		self.presented.keys().copied().collect()
 	}
 
+	#[cfg(test)]
+	pub(crate) fn insert_presented_for_test(&mut self, id: Id, entities: Vec<Entity>) {
+		self.presented.insert(id, PresentedUrbanization { version: Version(1), entities });
+	}
+
 	pub fn remove_stale(&mut self, commands: &mut Commands, wanted: &HashSet<Id>) {
 		let stale: Vec<Id> =
 			self.presented.keys().copied().filter(|id| !wanted.contains(id)).collect();
@@ -144,6 +149,7 @@ pub fn present_urbanization_hosts<G: UrbanModel>(
 		return;
 	}
 	let Some(region) = urbanization_host_region(&layout, layer.region) else {
+		state.clear(&mut commands);
 		return;
 	};
 

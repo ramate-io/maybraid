@@ -57,7 +57,7 @@ impl DevelopmentFocus {
 	}
 
 	pub fn from_kebab(name: &str) -> Option<Self> {
-		Some(match name {
+		Some(match name.trim().to_ascii_lowercase().as_str() {
 			"all" => Self::All,
 			"les-halles" => Self::LesHalles,
 			"shepherds-village" => Self::ShepherdsVillage,

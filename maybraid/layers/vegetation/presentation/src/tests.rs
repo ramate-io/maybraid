@@ -343,7 +343,8 @@ impl GenerationMode for OtherMode {}
 
 #[test]
 fn losing_subscription_retires_and_returning_presents() -> anyhow::Result<()> {
-	use chico_forests::ForestPresenterState;
+	use chico_forests::{ForestLodChan, ForestPresentBullseye, ForestPresenterState};
+	use lod::presentation::LodPresentKeepRegion;
 	use vegetation_layer_model::VegetationLayerConfig;
 
 	let mut app = App::new();
@@ -358,6 +359,10 @@ fn losing_subscription_retires_and_returning_presents() -> anyhow::Result<()> {
 	app.init_resource::<ForestPresenterState>();
 	app.init_resource::<crate::present::CanopyBumpOutPresenterState>();
 	app.init_resource::<crate::present::MediumCanopyBumpOutPresenterState>();
+	app.insert_resource(ForestPresentBullseye { radius_m: 1_000.0, enabled: true });
+	app.init_resource::<LodPresentKeepRegion<ForestLodChan>>();
+	app.world_mut().resource_mut::<LodPresentKeepRegion<ForestLodChan>>().region =
+		Some(Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE));
 	app.update();
 	app.world_mut()
 		.run_system_once(retire_vegetation_presenters::<Silent>)
@@ -386,6 +391,14 @@ fn losing_subscription_retires_and_returning_presents() -> anyhow::Result<()> {
 			"unsubscribed mode retires"
 		);
 	}
+	anyhow::ensure!(
+		!app.world().resource::<ForestPresentBullseye>().enabled,
+		"unsubscribed present bullseye cannot feed Produce"
+	);
+	anyhow::ensure!(
+		app.world().resource::<LodPresentKeepRegion<ForestLodChan>>().region.is_none(),
+		"unsubscribed keep cannot feed Produce"
+	);
 
 	app.world_mut()
 		.resource_mut::<NextState<ActiveGenerationMode>>()

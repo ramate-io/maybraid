@@ -8,14 +8,15 @@ use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use chico_bumpout::{BumpOut, BumpOutNeighborhood, BumpOutStyle};
 use chico_forests::{
-	CanopyBumpOut, ChicoGrove, ForestIndex, ForestPresenterState, MediumCanopyBumpOut,
-	MEDIUM_BUMP_OUT_CELL_XZ,
+	BumpOutLodChan, BumpOutPresentBullseye, CanopyBumpOut, ChicoGrove, ForestIndex,
+	ForestLodChan, ForestPresentBullseye, ForestPresenterState, MediumBumpOutLodChan,
+	MediumCanopyBumpOut, MEDIUM_BUMP_OUT_CELL_XZ,
 };
 use chico_groves::GroveWorldSample;
 use durham_terrain_models::{cascade_chunk_for_cell, TerrainMeshBuilder, TERRAIN_CELL_SIZE};
 use lod::gen::{Id, SpatialIndex, Version};
 use lod::lod_ref::LodRef;
-use lod::presentation::RegionPresenter;
+use lod::presentation::{LodPresentKeepRegion, LodPresentQueue, RegionPresenter};
 use lod::hide_lod_tree;
 use lod_cascade::Chunk;
 use procedural_common::NoiseParams;
@@ -377,6 +378,10 @@ pub fn bump_out_noise(forest: &NoiseParams) -> NoiseParams {
 /// clear here means the model crate does not despawn. It still runs after
 /// [`VegetationGenerationSystems`](vegetation_layer_model::VegetationGenerationSystems)
 /// and before present produce, under `terrain_streaming_enabled`.
+///
+/// While unsubscribed, present bullseyes, keep regions, and queues are also
+/// dropped so `LodPresentSystems::Produce` cannot respawn the hosts.
+#[allow(clippy::too_many_arguments)]
 pub fn retire_vegetation_presenters<G: TerrainModel>(
 	mut commands: Commands,
 	config: Res<VegetationLayerConfig>,
@@ -384,6 +389,14 @@ pub fn retire_vegetation_presenters<G: TerrainModel>(
 	mut forest: ResMut<ForestPresenterState>,
 	mut bump_outs: ResMut<CanopyBumpOutPresenterState>,
 	mut medium: ResMut<MediumCanopyBumpOutPresenterState>,
+	forest_present: Option<ResMut<ForestPresentBullseye>>,
+	bump_present: Option<ResMut<BumpOutPresentBullseye>>,
+	forest_keep: Option<ResMut<LodPresentKeepRegion<ForestLodChan>>>,
+	bump_keep: Option<ResMut<LodPresentKeepRegion<BumpOutLodChan>>>,
+	medium_keep: Option<ResMut<LodPresentKeepRegion<MediumBumpOutLodChan>>>,
+	forest_queue: Option<ResMut<LodPresentQueue<ChicoGrove>>>,
+	bump_queue: Option<ResMut<LodPresentQueue<CanopyBumpOut>>>,
+	medium_queue: Option<ResMut<LodPresentQueue<MediumCanopyBumpOut>>>,
 	mut last_key: Local<Option<String>>,
 ) {
 	if !subscription.active() {
@@ -391,6 +404,30 @@ pub fn retire_vegetation_presenters<G: TerrainModel>(
 		bump_outs.clear(&mut commands);
 		medium.clear(&mut commands);
 		last_key.take();
+		if let Some(mut bullseye) = forest_present {
+			bullseye.enabled = false;
+		}
+		if let Some(mut bullseye) = bump_present {
+			bullseye.enabled = false;
+		}
+		if let Some(mut keep) = forest_keep {
+			keep.region = None;
+		}
+		if let Some(mut keep) = bump_keep {
+			keep.region = None;
+		}
+		if let Some(mut keep) = medium_keep {
+			keep.region = None;
+		}
+		if let Some(mut queue) = forest_queue {
+			queue.clear();
+		}
+		if let Some(mut queue) = bump_queue {
+			queue.clear();
+		}
+		if let Some(mut queue) = medium_queue {
+			queue.clear();
+		}
 		return;
 	}
 	let Some(spec) = config.forest.as_ref() else {

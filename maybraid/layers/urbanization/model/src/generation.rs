@@ -8,7 +8,9 @@ use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use durham_terrain_models::{terrain_streaming_enabled, TerrainColliderSystems};
 use lod::LodPresentSystems;
-use richmond_development_models::{DevelopmentEntryStore, RichmondDevelopmentModelsPlugin};
+use richmond_development_models::{
+	register_richmond_development_models_plugin, DevelopmentEntryStore,
+};
 use terrain_layer_model::{ActiveGenerationMode, GenerationMode, TerrainModel};
 
 use crate::config::{UrbanizationLayerConfig, UrbanizationSharedConfig};
@@ -46,29 +48,29 @@ where
 	Urbanization<M>: TerrainModel,
 {
 	fn build(&self, app: &mut App) {
-		app.add_plugins(RichmondDevelopmentModelsPlugin)
-			.insert_resource(InstalledUrbanizationShared::<M>(
-				self.shared.clone(),
-				PhantomData,
-			))
-			.insert_resource(self.shared.development.clone())
-			.init_resource::<UrbanizationLayerRegion>()
-			.init_resource::<UrbanizationStreamKey>()
-			.configure_sets(
-				Update,
-				UrbanizationStoreSystems
-					.in_set(UrbanizationGenerationSystems)
-					.run_if(terrain_streaming_enabled),
-			)
-			.add_systems(
-				Update,
-				generate_urbanization_padded_terrain
-					.in_set(UrbanizationGenerationSystems)
-					.after(UrbanizationStoreSystems)
-					.run_if(terrain_streaming_enabled)
-					.before(LodPresentSystems::Produce)
-					.before(TerrainColliderSystems::QueueMeshes),
-			);
+		register_richmond_development_models_plugin(app);
+		app.insert_resource(InstalledUrbanizationShared::<M>(
+			self.shared.clone(),
+			PhantomData,
+		))
+		.insert_resource(self.shared.development.clone())
+		.init_resource::<UrbanizationLayerRegion>()
+		.init_resource::<UrbanizationStreamKey>()
+		.configure_sets(
+			Update,
+			UrbanizationStoreSystems
+				.in_set(UrbanizationGenerationSystems)
+				.run_if(terrain_streaming_enabled),
+		)
+		.add_systems(
+			Update,
+			generate_urbanization_padded_terrain
+				.in_set(UrbanizationGenerationSystems)
+				.after(UrbanizationStoreSystems)
+				.run_if(terrain_streaming_enabled)
+				.before(LodPresentSystems::Produce)
+				.before(TerrainColliderSystems::QueueMeshes),
+		);
 	}
 }
 

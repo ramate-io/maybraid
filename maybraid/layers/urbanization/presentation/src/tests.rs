@@ -18,7 +18,7 @@ use terrain_layer_model::{
 };
 use terrain_layer_presentation::TerrainPresentationPlugin;
 use urbanization_layer_model::{
-	Urbanization, UrbanizationGenerationPlugin, UrbanizationLayerConfig,
+	Urbanization, UrbanizationGenerationPlugin, UrbanizationLayerConfig, UrbanizationLayerRegion,
 };
 
 use crate::{
@@ -77,10 +77,96 @@ fn raw_cells_another_owner_superseded_stay_superseded() -> anyhow::Result<()> {
 }
 
 #[test]
+fn padded_ready_does_not_claim_another_owners_raw_cell() -> anyhow::Result<()> {
+	use bevy::ecs::system::RunSystemOnce;
+	let id = Id::from_cell(Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE));
+	let mut world = World::new();
+	world.insert_resource(UrbanizationPaddedTerrainState {
+		wanted: HashSet::from([id]),
+		replaced: HashSet::new(),
+	});
+	let raw = world
+		.spawn((PresentedTerrainScene(id), Visibility::Hidden, TerrainSuperseded))
+		.id();
+	world.spawn((
+		PresentedPaddedTerrainScene(id),
+		TerrainColliderMeshSource,
+		TerrainTrimeshCollider,
+	));
+	let run = |world: &mut World| {
+		world
+			.run_system_once(sync_raw_terrain_replacements)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))
+	};
+
+	run(&mut world)?;
+	anyhow::ensure!(
+		world.get::<TerrainSuperseded>(raw).is_some(),
+		"another owner's hide stays"
+	);
+	anyhow::ensure!(
+		!world.resource::<UrbanizationPaddedTerrainState>().replaced.contains(&id),
+		"ready must not claim a cell this stream did not hide"
+	);
+
+	world.resource_mut::<UrbanizationPaddedTerrainState>().wanted.clear();
+	run(&mut world)?;
+	anyhow::ensure!(
+		world.get::<TerrainSuperseded>(raw).is_some(),
+		"releasing a cell we never owned must not unhide it"
+	);
+	assert_eq!(world.get::<Visibility>(raw), Some(&Visibility::Hidden));
+	Ok(())
+}
+
+#[test]
 fn padded_viewer_quant_is_stable_inside_cell() -> anyhow::Result<()> {
 	use crate::padded::quantize_viewer_xz_for_test;
 	assert_eq!(quantize_viewer_xz_for_test(Vec3::new(0.1, 12.0, 7.9)), (0, 0));
 	assert_eq!(quantize_viewer_xz_for_test(Vec3::new(8.0, 0.0, -0.1)), (1, -1));
+	Ok(())
+}
+
+#[test]
+fn streamed_hosts_leave_when_the_layer_region_is_gone() -> anyhow::Result<()> {
+	use bevy::ecs::system::RunSystemOnce;
+	use durham_terrain_models::{
+		playable_world_cell_layout, BaseTerrainNoise, TerrainConfig, TerrainEntryStore,
+		WorldBaseTerrain,
+	};
+	use richmond_development_models::DevelopmentEntryStore;
+	use richmond_urbanization::UrbanizationIndex;
+	use crate::{present_urbanization_hosts, UrbanizationPresenterState};
+
+	let mut app = subscribed_app();
+	app.insert_resource(UrbanizationLayerRegion::default());
+	app.insert_resource(playable_world_cell_layout());
+	app.insert_resource(TerrainEntryStore::default());
+	app.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(
+		&TerrainConfig::new(42),
+	)));
+	app.insert_resource(UrbanizationIndex::default());
+	app.insert_resource(DevelopmentEntryStore::default());
+	app.init_resource::<UrbanizationPresenterState>();
+
+	let id = Id::from_cell(Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE));
+	let host = app.world_mut().spawn_empty().id();
+	app.world_mut()
+		.resource_mut::<UrbanizationPresenterState>()
+		.insert_presented_for_test(id, vec![host]);
+	anyhow::ensure!(
+		app.world().resource::<UrbanizationPresenterState>().presented_ids() == [id],
+		"seed host"
+	);
+
+	app.world_mut()
+		.run_system_once(present_urbanization_hosts::<Urbanized>)
+		.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+	anyhow::ensure!(
+		app.world().resource::<UrbanizationPresenterState>().presented_ids().is_empty(),
+		"streamed layout with no layer region clears hosts"
+	);
+	anyhow::ensure!(app.world().get_entity(host).is_err(), "host entity leaves");
 	Ok(())
 }
 
