@@ -10,9 +10,11 @@ use crate::graph::{InMemoryLexicalGraph, LexicalContextGraph};
 use crate::lexicalizer::{CompositionalLexicalizer, Lexicalizer, RootHeavyLexicalizer};
 use crate::marshall::{ConceptMarshaller, DefaultMarshaller};
 use crate::output::LexicalOutput;
+use crate::parse::EnglishDependencyParser;
 use crate::poc::{poc_universe, PocLexicon};
 use crate::profile::Profile;
-use crate::utterance::{SemanticValue, Utterance};
+use crate::semantic::{EnglishSemanticMarshaller, SemanticMarshaller};
+use crate::utterance::{Polarity, SemanticValue, Utterance};
 
 struct CountingUniverse<U> {
 	inner: U,
@@ -84,6 +86,51 @@ fn wordnet_resolves_lemmas_to_synsets_not_strings() -> anyhow::Result<()> {
 		.map(|c| c.primary_gloss().to_owned())
 		.collect();
 	assert!(glosses.iter().any(|g| g == "give"));
+	Ok(())
+}
+
+#[test]
+fn wordnet_reduces_inflected_verbs_to_citation_forms() -> anyhow::Result<()> {
+	let universe = poc_universe()?;
+	let strikes = universe.resolve_english("strikes");
+	assert!(
+		!strikes.is_empty(),
+		"strikes should reduce to WordNet strike"
+	);
+	let glosses: Vec<_> = strikes
+		.iter()
+		.filter_map(|id| universe.concept(*id))
+		.map(|c| c.primary_gloss().to_owned())
+		.collect();
+	assert!(glosses.iter().any(|g| g == "strike"));
+	assert!(
+		universe
+			.resolve_english("gives")
+			.iter()
+			.filter_map(|id| universe.concept(*id))
+			.any(|concept| concept.primary_gloss() == "give")
+	);
+	assert!(
+		universe
+			.resolve_english("struck")
+			.iter()
+			.filter_map(|id| universe.concept(*id))
+			.any(|concept| concept.primary_gloss() == "strike")
+	);
+	assert!(
+		universe
+			.resolve_english("children")
+			.iter()
+			.filter_map(|id| universe.concept(*id))
+			.any(|concept| concept.primary_gloss() == "child")
+	);
+	assert!(
+		universe
+			.resolve_english("went")
+			.iter()
+			.filter_map(|id| universe.concept(*id))
+			.any(|concept| concept.primary_gloss() == "go")
+	);
 	Ok(())
 }
 
@@ -321,6 +368,62 @@ fn surface_grammar_binds_relative_clauses_without_repeating_the_head() -> anyhow
 	);
 	assert!(sentence.contains(witch), "{sentence}");
 	assert!(sentence.contains(helper), "{sentence}");
+	Ok(())
+}
+
+#[test]
+fn surface_grammar_emits_a_negation_particle() -> anyhow::Result<()> {
+	let (universe, lex) = lex()?;
+	let affirmative = Utterance::john_gave_the_book_to_mary(&lex);
+	let mut negative = affirmative.clone();
+	let root = negative.roots[0];
+	negative.clauses[root].polarity = Polarity::Negative;
+	let (out_yes, _, _, _) = render_pair(affirmative, &universe);
+	let (out_no, _, _, _) = render_pair(negative, &universe);
+	let grammar = SurfaceGrammar::compositional();
+	let yes = out_yes.realize(grammar).ipa().to_string();
+	let no = out_no.realize(grammar).ipa().to_string();
+	assert_ne!(yes, no, "negation must change the IPA string");
+	assert!(
+		no.contains(grammar.particles.negative),
+		"negative clause should carry {negative}: {no}",
+		negative = grammar.particles.negative
+	);
+	assert!(
+		!yes.split_whitespace().any(|word| word == grammar.particles.negative),
+		"affirmative clause should omit the particle: {yes}"
+	);
+	Ok(())
+}
+
+#[test]
+fn live_translate_negation_changes_ipa() -> anyhow::Result<()> {
+	let Ok(parser) = crate::udpipe::UdpipeEnglishParser::bundled() else {
+		return Ok(());
+	};
+	let universe = poc_universe()?.with_proper_names(["John", "Mary", "Alice", "speaker", "listener"]);
+	let marshaller = EnglishSemanticMarshaller::default();
+	let grammar = SurfaceGrammar::compositional();
+	let realize = |text: &str| -> anyhow::Result<String> {
+		let document = parser.parse(text)?;
+		let utterance = marshaller.marshal(&document, &universe)?;
+		let (output, _, _, _) = render_pair(utterance, &universe);
+		Ok(output.realize(grammar).ipa().to_string())
+	};
+	let negative = realize("I don't know.")?;
+	let emphatic = realize("I do know.")?;
+	let full = realize("I do not know.")?;
+	assert_ne!(negative, emphatic, "don't vs do: {negative} vs {emphatic}");
+	assert_eq!(negative, full, "n't and not should realize the same polarity");
+	assert!(
+		negative.contains(grammar.particles.negative),
+		"expected {} in {negative}",
+		grammar.particles.negative
+	);
+	assert!(
+		!emphatic.split_whitespace().any(|word| word == grammar.particles.negative),
+		"affirmative should omit the particle: {emphatic}"
+	);
 	Ok(())
 }
 

@@ -18,6 +18,7 @@ use crate::concept::{
 use crate::error::LanguageError;
 
 mod dict;
+mod morphy;
 
 pub use dict::{bundled_dict_dir, WordNetDict};
 
@@ -87,6 +88,28 @@ impl WordNetConceptUniverse {
 		self
 	}
 
+	/// Register surface labels (numerals, leftover names) without a person edge.
+	pub fn with_labels<I, S>(mut self, names: I) -> Self
+	where
+		I: IntoIterator<Item = S>,
+		S: AsRef<str>,
+	{
+		for name in names {
+			let key = normalize_lemma(name.as_ref());
+			if key.is_empty() {
+				continue;
+			}
+			let id = ConceptId::overlay(proper_name_tag(&key));
+			self.proper_names.entry(key.clone()).or_insert(id);
+			self.overlay_glosses.entry(id).or_insert_with(|| vec![key]);
+		}
+		self
+	}
+
+	pub fn with_document_overlays(self, document: &crate::parse::DependencyDocument) -> Self {
+		self.with_proper_names(document.proper_nouns()).with_labels(document.numerals())
+	}
+
 	fn install_classified_as(&mut self) {
 		let id = ConceptId::overlay(CLASSIFIED_AS_TAG);
 		self.overlay_glosses
@@ -133,7 +156,7 @@ impl ConceptUniverse for WordNetConceptUniverse {
 		if lemma == "be" || lemma == "classified_as" {
 			ids.push(self.classified_as());
 		}
-		ids.extend(self.dict.resolve_lemma(&lemma));
+		ids.extend(self.dict.resolve_form(&lemma));
 		ids
 	}
 
