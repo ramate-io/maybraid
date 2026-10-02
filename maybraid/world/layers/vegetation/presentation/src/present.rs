@@ -24,8 +24,8 @@ use render_item::mesh::IdentifiedMesh;
 use render_item::NormalizeChunk;
 use terrain_chunk_ref::{TerrainChunkKey, TerrainChunkRef};
 use terrain_layer_model::{HeightField, TerrainCell, TerrainModel, TerrainView};
-use layer_stack::ModeSubscription;
-use vegetation_layer_model::VegetationLayerConfig;
+use layer_stack::{ActiveGenerationMode, GenerationMode, ModeSubscription};
+use vegetation_layer_model::VegetationModeConfig;
 
 use crate::VegetationPresent;
 
@@ -383,9 +383,10 @@ pub fn bump_out_noise(forest: &NoiseParams) -> NoiseParams {
 /// While unsubscribed, present bullseyes, keep regions, and queues are also
 /// dropped so `LodPresentSystems::Produce` cannot respawn the hosts.
 #[allow(clippy::too_many_arguments)]
-pub fn retire_vegetation_presenters<G: TerrainModel>(
+pub fn retire_vegetation_presenters<Mode: GenerationMode, G: TerrainModel>(
 	mut commands: Commands,
-	config: Res<VegetationLayerConfig>,
+	config: Res<VegetationModeConfig<Mode>>,
+	mode: Res<State<ActiveGenerationMode>>,
 	subscription: ModeSubscription<(G, VegetationPresent)>,
 	mut forest: ResMut<ForestPresenterState>,
 	mut bump_outs: ResMut<CanopyBumpOutPresenterState>,
@@ -431,7 +432,10 @@ pub fn retire_vegetation_presenters<G: TerrainModel>(
 		}
 		return;
 	}
-	let Some(spec) = config.forest.as_ref() else {
+	if !mode.get().is::<Mode>() {
+		return;
+	}
+	let Some(spec) = config.config.forest.as_ref() else {
 		forest.clear(&mut commands);
 		bump_outs.clear(&mut commands);
 		medium.clear(&mut commands);

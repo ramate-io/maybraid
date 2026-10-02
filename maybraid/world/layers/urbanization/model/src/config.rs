@@ -122,20 +122,13 @@ impl UrbanizationLayerConfig {
 		}
 	}
 
-	/// Shared generate budget and development knobs, no hopscotch spec.
+	/// Training's hopscotch-off config: same generate budget, no stream spec.
 	pub fn shared_world() -> Self {
 		Self {
 			urbanization: None,
 			focus_urbanization: None,
 			focus_development: None,
 			generate_budget: 16,
-		}
-	}
-
-	pub fn shared_config(&self) -> UrbanizationSharedConfig {
-		UrbanizationSharedConfig {
-			generate_budget: self.generate_budget,
-			development: self.development_config(),
 		}
 	}
 
@@ -155,9 +148,3 @@ impl UrbanizationLayerConfig {
 	}
 }
 
-/// Generate budget and [`DevelopmentConfig`] every mode must agree on.
-#[derive(Clone, Debug, PartialEq)]
-pub struct UrbanizationSharedConfig {
-	pub generate_budget: u32,
-	pub development: DevelopmentConfig,
-}

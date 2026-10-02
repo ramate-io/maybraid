@@ -193,13 +193,6 @@ pub fn fine_patch_cell_layout(half_extent: i32, origin: IVec2) -> TerrainCellLay
 	layout
 }
 
-fn layout_for(coverage: TerrainCoverage, terrain_radius: i32) -> TerrainCellLayout {
-	match coverage {
-		TerrainCoverage::FinePatch => cell_layout(terrain_radius),
-		TerrainCoverage::PlayableWorld => world_cell_layout(),
-	}
-}
-
 fn lod_bands_for(coverage: TerrainCoverage, terrain_radius: i32) -> Vec<TerrainMeshLodBand> {
 	match coverage {
 		TerrainCoverage::FinePatch => playground_lod_bands(terrain_radius),
@@ -274,16 +267,7 @@ impl TerrainRetarget<'_> {
 /// `setup_presentation_assets` stays here. The terrain index reads
 /// [`TerrainPresentationAssets`] and [`WaterPresentationAssets`] while filling
 /// cells, and a live session retargets the terrain assets even when raw present is off.
-pub(crate) fn install_durham_generation(
-	app: &mut App,
-	seed: u32,
-	coverage: TerrainCoverage,
-	terrain_radius: i32,
-) {
-	let config = TerrainConfig::new(seed);
-	let base = BaseTerrainNoise::from_config(&config);
-	let terrain_radius = terrain_radius.max(1);
-
+pub(crate) fn install_durham_generation(app: &mut App) {
 	if !app.is_plugin_added::<VisualGeometryCorePlugin>() {
 		app.add_plugins(VisualGeometryCorePlugin);
 	}
@@ -297,16 +281,21 @@ pub(crate) fn install_durham_generation(
 	share_terrain_chunk_refs::<TerrainMeshBuilder>(app, false);
 	install_enforced_mesh_cache::<ComposedWater, RefractionWater>(app);
 
-	let layout = layout_for(coverage, terrain_radius);
+	let layout = TerrainCellLayout::default();
+	let config = TerrainConfig::new(0);
+	let base = BaseTerrainNoise::from_config(&config);
 	app.insert_resource(
 		MeshFulfillBudget::<TerrainMeshBuilder>::new(8, 16, 256)
 			.with_prefer_xz(layout.region_center_xz()),
 	)
 	.insert_resource(config)
 	.insert_resource(WorldBaseTerrain(base))
-	.insert_resource(coverage)
+	.init_resource::<TerrainCoverage>()
 	.insert_resource(layout)
-	.insert_resource(TerrainFillParams { coverage, terrain_radius })
+	.insert_resource(TerrainFillParams {
+		coverage: TerrainCoverage::default(),
+		terrain_radius: 1,
+	})
 	.init_resource::<TerrainPresentationDirty>()
 	.init_resource::<TerrainPresentPending>()
 	.init_resource::<TerrainStreamingEnabled>()
@@ -319,6 +308,35 @@ pub(crate) fn install_durham_generation(
 			.run_if(terrain_streaming_enabled)
 			.before(TerrainColliderSystems::QueueMeshes),
 	);
+}
+
+/// Apply a mode's seed, coverage, and radius. A seed change rebuilds stores
+/// the way a retarget does.
+pub(crate) fn apply_durham_generation(world: &mut World, config: &crate::DurhamTerrainConfig) {
+	let terrain_radius = config.terrain_radius.max(1);
+	let seed_changed = world
+		.get_resource::<TerrainConfig>()
+		.is_none_or(|live| live.seed != config.seed);
+	if seed_changed {
+		let terrain = TerrainConfig::new(config.seed);
+		let base = BaseTerrainNoise::from_config(&terrain);
+		world.insert_resource(WorldBaseTerrain(base));
+		world.insert_resource(crate::TerrainEntryStore::default());
+		if let Some(mut dirty) = world.get_resource_mut::<TerrainPresentationDirty>() {
+			dirty.0 = true;
+		}
+		if let Some(mut pending) = world.get_resource_mut::<TerrainPresentPending>() {
+			pending.0 = true;
+		}
+		if let Some(mut assets) = world.get_resource_mut::<TerrainPresentationAssets>() {
+			assets.config = terrain.clone();
+		}
+		world.insert_resource(terrain);
+	}
+	world.insert_resource(TerrainFillParams {
+		coverage: config.coverage,
+		terrain_radius,
+	});
 }
 
 /// Raw Durham present: the three stream presenter states and [`present_cells`].

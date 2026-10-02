@@ -7,7 +7,7 @@ mod stream;
 
 pub use config::MobLayerConfig;
 pub use generation::{
-	MobGenerationCore, MobGenerationPlugin, MobGenerationSystems, MobScheme,
+	MobGenerationCore, MobGenerationPlugin, MobGenerationSystems, MobModeConfig, MobScheme,
 };
 pub use index::{MobCell, MobCellExtent, MobIndex};
 pub use stream::{install_mob_grid_stream, MobCellWrites, MobLodChan};

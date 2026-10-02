@@ -1,6 +1,6 @@
 //! Frame timing diagnostics for the vegetation-on-terrain playground.
 //!
-//! Toggle with env `CHICO_VEG_TERRAIN_DIAG` (comma-separated):
+//! Toggle with env `WORLD_TERRAIN_DIAG` (comma-separated):
 //! - `fps` — throttled `[timing]` FPS / frame_ms; playgrounds also show a HUD
 //! - `off` — disable (default when unset)
 //!
@@ -9,8 +9,8 @@
 //!
 //! Examples:
 //! ```text
-//! CHICO_VEG_TERRAIN_DIAG=fps
-//! CHICO_VEG_TERRAIN_DIAG=off   # default
+//! WORLD_TERRAIN_DIAG=fps
+//! WORLD_TERRAIN_DIAG=off   # default
 //! ```
 
 use std::time::Duration;
@@ -25,10 +25,10 @@ use lod::LodSceneHost;
 use crate::commands::RequestMeshStats;
 use crate::ui;
 
-const ENV_DIAG: &str = "CHICO_VEG_TERRAIN_DIAG";
+const ENV_DIAG: &str = "WORLD_TERRAIN_DIAG";
 const LOG_INTERVAL: Duration = Duration::from_secs(1);
 
-/// Parsed [`CHICO_VEG_TERRAIN_DIAG`] flags.
+/// Parsed [`WORLD_TERRAIN_DIAG`] flags.
 #[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PlaygroundDiag {
 	pub fps: bool,

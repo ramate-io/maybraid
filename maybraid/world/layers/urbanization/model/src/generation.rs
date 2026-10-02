@@ -1,20 +1,19 @@
 //! [`UrbanizationGenerationPlugin`]: urbanization cells, pads, and padded cells over `M`.
 
-use std::any::type_name;
 use std::marker::PhantomData;
 
 use bevy::app::{App, Plugin};
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use durham::{terrain_streaming_enabled, TerrainColliderSystems};
+use lod::gen::LodGenerateBudget;
 use lod::LodPresentSystems;
-use richmond::{
-	register_richmond_plugin, DevelopmentEntryStore,
-};
+use richmond::{register_richmond_plugin, DevelopmentConfig, DevelopmentEntryStore};
 use terrain_layer_model::TerrainModel;
 use layer_stack::{ActiveGenerationMode, GenerationMode};
+use urbanization_cells::UrbanizationLodChan;
 
-use crate::config::{UrbanizationLayerConfig, UrbanizationSharedConfig};
+use crate::config::UrbanizationLayerConfig;
 use crate::model::Urbanization;
 use crate::stream::{
 	clear_urbanization_stream, generate_urbanization_padded_terrain, UrbanizationStreamKey,
@@ -38,9 +37,12 @@ pub trait UrbanizationScheme<M: TerrainModel>: GenerationMode {
 }
 
 /// Shared install for `Urbanization<M>`, added once.
-pub struct UrbanizationGenerationCore<M> {
-	pub shared: UrbanizationSharedConfig,
-	_marker: PhantomData<fn() -> M>,
+pub struct UrbanizationGenerationCore<M>(PhantomData<fn() -> M>);
+
+impl<M> Default for UrbanizationGenerationCore<M> {
+	fn default() -> Self {
+		Self(PhantomData)
+	}
 }
 
 impl<M> Plugin for UrbanizationGenerationCore<M>
@@ -50,36 +52,27 @@ where
 {
 	fn build(&self, app: &mut App) {
 		register_richmond_plugin(app);
-		app.insert_resource(InstalledUrbanizationShared::<M>(
-			self.shared.clone(),
-			PhantomData,
-		))
-		.insert_resource(self.shared.development.clone())
-		.init_resource::<UrbanizationLayerRegion>()
-		.init_resource::<UrbanizationStreamKey>()
-		.configure_sets(
-			Update,
-			UrbanizationStoreSystems
-				.in_set(UrbanizationGenerationSystems)
-				.run_if(terrain_streaming_enabled),
-		)
-		.add_systems(
-			Update,
-			generate_urbanization_padded_terrain
-				.in_set(UrbanizationGenerationSystems)
-				.after(UrbanizationStoreSystems)
-				.run_if(terrain_streaming_enabled)
-				.before(LodPresentSystems::Produce)
-				.before(TerrainColliderSystems::QueueMeshes),
-		);
+		app.init_resource::<DevelopmentConfig>()
+			.init_resource::<LodGenerateBudget<UrbanizationLodChan>>()
+			.init_resource::<UrbanizationLayerRegion>()
+			.init_resource::<UrbanizationStreamKey>()
+			.configure_sets(
+				Update,
+				UrbanizationStoreSystems
+					.in_set(UrbanizationGenerationSystems)
+					.run_if(terrain_streaming_enabled),
+			)
+			.add_systems(
+				Update,
+				generate_urbanization_padded_terrain
+					.in_set(UrbanizationGenerationSystems)
+					.after(UrbanizationStoreSystems)
+					.run_if(terrain_streaming_enabled)
+					.before(LodPresentSystems::Produce)
+					.before(TerrainColliderSystems::QueueMeshes),
+			);
 	}
 }
-
-#[derive(Resource)]
-struct InstalledUrbanizationShared<M: Send + Sync + 'static>(
-	UrbanizationSharedConfig,
-	PhantomData<fn() -> M>,
-);
 
 /// Per-mode config the scheme systems read.
 #[derive(Resource, Clone)]
@@ -137,20 +130,14 @@ where
 	Urbanization<M>: TerrainModel,
 {
 	fn build(&self, app: &mut App) {
-		let Some(state) = app.world().get_resource::<State<ActiveGenerationMode>>() else {
-			panic!(
-				"UrbanizationGenerationPlugin<{}, {}> requires GenerationModePlugin first",
-				Mode::name(),
-				type_name::<M>()
-			);
-		};
-		if state.get().is::<Mode>() && !app.is_plugin_added::<UrbanizationGenerationCore<M>>() {
-			app.add_plugins(UrbanizationGenerationCore::<M> {
-				shared: self.config.shared_config(),
-				_marker: PhantomData,
-			});
+		if !app.is_plugin_added::<UrbanizationGenerationCore<M>>() {
+			app.add_plugins(UrbanizationGenerationCore::<M>::default());
 		}
 		app.insert_resource(UrbanizationModeConfig::<Mode>::new(self.config.clone()));
+		app.add_systems(
+			OnEnter(ActiveGenerationMode::of::<Mode>()),
+			apply_urbanization_mode::<Mode>,
+		);
 		app.add_systems(
 			OnExit(ActiveGenerationMode::of::<Mode>()),
 			clear_urbanization_mode,
@@ -160,21 +147,16 @@ where
 
 	fn finish(&self, app: &mut App) {
 		M::require_generation(app);
-		let Some(installed) = app.world().get_resource::<InstalledUrbanizationShared<M>>() else {
-			panic!(
-				"the initial generation mode never registered UrbanizationGenerationPlugin for {}",
-				type_name::<M>()
-			);
-		};
-		let shared = self.config.shared_config();
-		if installed.0 != shared {
-			panic!(
-				"UrbanizationGenerationPlugin shared config disagrees for {}: {:?} vs {shared:?}",
-				type_name::<M>(),
-				installed.0
-			);
-		}
 	}
+}
+
+pub(crate) fn apply_urbanization_mode<Mode: GenerationMode>(
+	mode: Res<UrbanizationModeConfig<Mode>>,
+	mut development: ResMut<DevelopmentConfig>,
+	mut budget: ResMut<LodGenerateBudget<UrbanizationLodChan>>,
+) {
+	*development = mode.config.development_config();
+	*budget = LodGenerateBudget::new(mode.config.generate_budget);
 }
 
 pub(crate) fn clear_urbanization_mode(

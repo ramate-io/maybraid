@@ -4,10 +4,12 @@ use std::marker::PhantomData;
 
 use bevy::app::{App, Plugin};
 use bevy::prelude::*;
+use chico::{BumpOutLodChan, ForestLodChan, MediumBumpOutLodChan};
 use layer_stack::{ActiveGenerationMode, GenerationMode};
+use lod::gen::LodGenerateBudget;
 
 use crate::config::VegetationLayerConfig;
-use crate::stream::{configure_stream_systems, register_bump_out_generate, register_forest_generate};
+use crate::stream::{install_vegetation_stream, register_bump_out_generate, register_forest_generate};
 
 /// Systems that arm forest and bump-out keep regions.
 ///
@@ -16,42 +18,16 @@ use crate::stream::{configure_stream_systems, register_bump_out_generate, regist
 pub struct VegetationGenerationSystems;
 
 /// Shared forest / bump-out generate registration, added once.
-pub struct VegetationGenerationCore {
-	config: VegetationLayerConfig,
-}
+pub struct VegetationGenerationCore;
 
 impl Plugin for VegetationGenerationCore {
 	fn build(&self, app: &mut App) {
-		app.insert_resource(self.config.clone())
-			.insert_resource(InstalledVegetationBudgets::from(&self.config));
-		register_forest_generate(app, self.config.forest_budget);
-		register_bump_out_generate(
-			app,
-			self.config.bump_out_budget,
-			self.config.medium_bump_out_budget,
-		);
-		configure_stream_systems(app);
+		register_forest_generate(app);
+		register_bump_out_generate(app);
 	}
 }
 
-#[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
-struct InstalledVegetationBudgets {
-	forest_budget: u32,
-	bump_out_budget: u32,
-	medium_bump_out_budget: u32,
-}
-
-impl From<&VegetationLayerConfig> for InstalledVegetationBudgets {
-	fn from(config: &VegetationLayerConfig) -> Self {
-		Self {
-			forest_budget: config.forest_budget,
-			bump_out_budget: config.bump_out_budget,
-			medium_bump_out_budget: config.medium_bump_out_budget,
-		}
-	}
-}
-
-/// Per-mode forest spec written into [`VegetationLayerConfig`] on enter.
+/// Per-mode forest spec and budgets the stream systems read.
 #[derive(Resource, Clone)]
 pub struct VegetationModeConfig<Mode: GenerationMode> {
 	pub config: VegetationLayerConfig,
@@ -64,19 +40,18 @@ impl<Mode: GenerationMode> VegetationModeConfig<Mode> {
 	}
 }
 
-/// Writes this mode's forest spec when it differs from the live config.
 fn apply_vegetation_mode<Mode: GenerationMode>(
 	mode: Res<VegetationModeConfig<Mode>>,
-	mut layer: ResMut<VegetationLayerConfig>,
+	mut forest: ResMut<LodGenerateBudget<ForestLodChan>>,
+	mut bump_out: ResMut<LodGenerateBudget<BumpOutLodChan>>,
+	mut medium: ResMut<LodGenerateBudget<MediumBumpOutLodChan>>,
 ) {
-	if layer.forest != mode.config.forest {
-		layer.forest = mode.config.forest;
-	}
+	*forest = LodGenerateBudget::new(mode.config.forest_budget);
+	*bump_out = LodGenerateBudget::new(mode.config.bump_out_budget);
+	*medium = LodGenerateBudget::new(mode.config.medium_bump_out_budget);
 }
 
 /// Forest / grove / bump-out selection for `Mode`. No grow, no hosts, no terrain.
-///
-/// Budgets are shared. The forest spec is per mode.
 pub struct VegetationGenerationPlugin<Mode: GenerationMode> {
 	pub config: VegetationLayerConfig,
 	_mode: PhantomData<fn() -> Mode>,
@@ -96,32 +71,15 @@ impl<Mode: GenerationMode> Default for VegetationGenerationPlugin<Mode> {
 
 impl<Mode: GenerationMode> Plugin for VegetationGenerationPlugin<Mode> {
 	fn build(&self, app: &mut App) {
-		let Some(state) = app.world().get_resource::<State<ActiveGenerationMode>>() else {
-			panic!(
-				"VegetationGenerationPlugin<{}> requires GenerationModePlugin first",
-				Mode::name()
-			);
-		};
-		if state.get().is::<Mode>() && !app.is_plugin_added::<VegetationGenerationCore>() {
-			app.add_plugins(VegetationGenerationCore { config: self.config.clone() });
+		if !app.is_plugin_added::<VegetationGenerationCore>() {
+			app.add_plugins(VegetationGenerationCore);
 		}
 		app.insert_resource(VegetationModeConfig::<Mode>::new(self.config.clone()));
 		app.add_systems(
 			OnEnter(ActiveGenerationMode::of::<Mode>()),
 			apply_vegetation_mode::<Mode>,
 		);
-	}
-
-	fn finish(&self, app: &mut App) {
-		let Some(installed) = app.world().get_resource::<InstalledVegetationBudgets>() else {
-			panic!("the initial generation mode never registered VegetationGenerationPlugin");
-		};
-		let budgets = InstalledVegetationBudgets::from(&self.config);
-		if *installed != budgets {
-			panic!(
-				"VegetationGenerationPlugin shared config disagrees: {installed:?} vs {budgets:?}"
-			);
-		}
+		install_vegetation_stream::<Mode>(app);
 	}
 }
 
@@ -129,10 +87,12 @@ impl<Mode: GenerationMode> Plugin for VegetationGenerationPlugin<Mode> {
 mod tests {
 	use bevy::prelude::{App, AssetPlugin, MinimalPlugins, NextState};
 	use bevy::state::app::StatesPlugin;
+	use chico::ForestLodChan;
 	use durham::TerrainStreamingEnabled;
 	use layer_stack::{ActiveGenerationMode, GenerationMode, GenerationModePlugin};
+	use lod::gen::LodGenerateBudget;
 
-	use super::{VegetationGenerationCore, VegetationGenerationPlugin};
+	use super::{VegetationGenerationCore, VegetationGenerationPlugin, VegetationModeConfig};
 	use crate::config::VegetationLayerConfig;
 
 	struct Alpha;
@@ -143,10 +103,10 @@ mod tests {
 
 	impl GenerationMode for Beta {}
 
-	fn forest_radius(app: &App) -> Option<u32> {
+	fn forest_radius<Mode: GenerationMode>(app: &App) -> Option<u32> {
 		app.world()
-			.get_resource::<VegetationLayerConfig>()
-			.and_then(|config| config.forest)
+			.get_resource::<VegetationModeConfig<Mode>>()
+			.and_then(|config| config.config.forest)
 			.map(|spec| spec.stream_radius)
 	}
 
@@ -158,7 +118,7 @@ mod tests {
 		Ok(())
 	}
 
-	fn vegetation_app() -> App {
+	fn vegetation_app(alpha: VegetationLayerConfig, beta: VegetationLayerConfig) -> App {
 		let mut app = App::new();
 		app.add_plugins((
 			MinimalPlugins,
@@ -166,8 +126,8 @@ mod tests {
 			StatesPlugin,
 			GenerationModePlugin::<Alpha>::initial(),
 			GenerationModePlugin::<Beta>::default(),
-			VegetationGenerationPlugin::<Alpha>::new(VegetationLayerConfig::world_defaults()),
-			VegetationGenerationPlugin::<Beta>::new(VegetationLayerConfig::grove()),
+			VegetationGenerationPlugin::<Alpha>::new(alpha),
+			VegetationGenerationPlugin::<Beta>::new(beta),
 		));
 		app.insert_resource(TerrainStreamingEnabled(false));
 		app.finish();
@@ -175,80 +135,97 @@ mod tests {
 	}
 
 	#[test]
-	fn two_modes_install_the_shared_part_once() -> anyhow::Result<()> {
-		let mut app = App::new();
-		app.add_plugins((
-			MinimalPlugins,
-			AssetPlugin::default(),
-			StatesPlugin,
-			GenerationModePlugin::<Alpha>::initial(),
-			GenerationModePlugin::<Beta>::default(),
-			VegetationGenerationPlugin::<Alpha>::new(VegetationLayerConfig::world_defaults()),
-			VegetationGenerationPlugin::<Beta>::new(VegetationLayerConfig::grove()),
-		));
-		app.finish();
+	fn different_budgets_build_and_apply_on_enter() -> anyhow::Result<()> {
+		let mut beta = VegetationLayerConfig::grove();
+		beta.forest_budget = 32;
+		beta.bump_out_budget = 8;
+		beta.medium_bump_out_budget = 4;
+		let mut app = vegetation_app(VegetationLayerConfig::world_defaults(), beta);
+		app.update();
 		anyhow::ensure!(
-			app.is_plugin_added::<VegetationGenerationCore>(),
-			"shared generate registration is installed"
+			app.world().resource::<LodGenerateBudget<ForestLodChan>>().ids_per_frame == 16,
+			"initial forest budget"
+		);
+
+		hop(&mut app, ActiveGenerationMode::of::<Beta>())?;
+		anyhow::ensure!(
+			app.world().resource::<LodGenerateBudget<ForestLodChan>>().ids_per_frame == 32,
+			"beta forest budget"
+		);
+		anyhow::ensure!(
+			app.world()
+				.resource::<LodGenerateBudget<chico::BumpOutLodChan>>()
+				.ids_per_frame
+				== 8,
+			"beta bump-out budget"
+		);
+
+		hop(&mut app, ActiveGenerationMode::of::<Alpha>())?;
+		anyhow::ensure!(
+			app.world().resource::<LodGenerateBudget<ForestLodChan>>().ids_per_frame == 16,
+			"return restores forest budget"
 		);
 		Ok(())
 	}
 
 	#[test]
-	fn a_disagreeing_budget_fails() -> anyhow::Result<()> {
-		let failed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-			let mut app = App::new();
-			app.add_plugins((
-				MinimalPlugins,
-				AssetPlugin::default(),
-				StatesPlugin,
-				GenerationModePlugin::<Alpha>::initial(),
-				GenerationModePlugin::<Beta>::default(),
-				VegetationGenerationPlugin::<Alpha>::new(VegetationLayerConfig::world_defaults()),
-				VegetationGenerationPlugin::<Beta>::new(VegetationLayerConfig {
-					forest_budget: 32,
-					..VegetationLayerConfig::grove()
-				}),
-			));
-			app.finish();
-		}));
-		anyhow::ensure!(failed.is_err(), "disagreeing budgets must fail loudly");
-		Ok(())
-	}
-
-	#[test]
-	fn startup_leaves_the_initial_spec_untouched() -> anyhow::Result<()> {
-		let mut app = vegetation_app();
-		let before = app
-			.world()
-			.get_resource::<VegetationLayerConfig>()
-			.cloned()
-			.ok_or_else(|| anyhow::anyhow!("layer config"))?;
-		app.update();
-		let after = app
-			.world()
-			.get_resource::<VegetationLayerConfig>()
-			.cloned()
-			.ok_or_else(|| anyhow::anyhow!("layer config after startup"))?;
-		anyhow::ensure!(after == before, "startup OnEnter does not rewrite the spec");
+	fn plugin_order_does_not_matter() -> anyhow::Result<()> {
+		let mut generation_first = App::new();
+		generation_first.add_plugins((
+			MinimalPlugins,
+			AssetPlugin::default(),
+			StatesPlugin,
+			VegetationGenerationPlugin::<Beta>::new(VegetationLayerConfig::grove()),
+			VegetationGenerationPlugin::<Alpha>::new(VegetationLayerConfig::world_defaults()),
+			GenerationModePlugin::<Alpha>::initial(),
+			GenerationModePlugin::<Beta>::default(),
+		));
+		generation_first.insert_resource(TerrainStreamingEnabled(false));
+		generation_first.finish();
+		generation_first.update();
 		anyhow::ensure!(
-			after.forest.map(|spec| spec.stream_radius) == Some(1),
-			"initial mode keeps stream radius 1"
+			generation_first.is_plugin_added::<VegetationGenerationCore>(),
+			"core is installed"
+		);
+		anyhow::ensure!(
+			forest_radius::<Alpha>(&generation_first) == Some(1),
+			"alpha keeps radius 1"
+		);
+
+		let mut beta_first = App::new();
+		beta_first.add_plugins((
+			MinimalPlugins,
+			AssetPlugin::default(),
+			StatesPlugin,
+			GenerationModePlugin::<Alpha>::initial(),
+			GenerationModePlugin::<Beta>::default(),
+			VegetationGenerationPlugin::<Beta>::new(VegetationLayerConfig::grove()),
+			VegetationGenerationPlugin::<Alpha>::new(VegetationLayerConfig::world_defaults()),
+		));
+		beta_first.insert_resource(TerrainStreamingEnabled(false));
+		beta_first.finish();
+		beta_first.update();
+		anyhow::ensure!(
+			forest_radius::<Alpha>(&beta_first) == Some(1),
+			"beta plugin first still started from alpha"
 		);
 		Ok(())
 	}
 
 	#[test]
 	fn hopping_modes_writes_each_forest_spec() -> anyhow::Result<()> {
-		let mut app = vegetation_app();
+		let mut app = vegetation_app(
+			VegetationLayerConfig::world_defaults(),
+			VegetationLayerConfig::grove(),
+		);
 		app.update();
-		anyhow::ensure!(forest_radius(&app) == Some(1), "initial mode is radius 1");
+		anyhow::ensure!(forest_radius::<Alpha>(&app) == Some(1), "initial mode is radius 1");
 
 		hop(&mut app, ActiveGenerationMode::of::<Beta>())?;
-		anyhow::ensure!(forest_radius(&app) == Some(0), "grove mode is radius 0");
+		anyhow::ensure!(forest_radius::<Beta>(&app) == Some(0), "grove mode is radius 0");
 
 		hop(&mut app, ActiveGenerationMode::of::<Alpha>())?;
-		anyhow::ensure!(forest_radius(&app) == Some(1), "return restores radius 1");
+		anyhow::ensure!(forest_radius::<Alpha>(&app) == Some(1), "return restores radius 1");
 		Ok(())
 	}
 }

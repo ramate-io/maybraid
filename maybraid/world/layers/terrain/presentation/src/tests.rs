@@ -4,7 +4,7 @@ use bevy::app::App;
 use bevy::ecs::system::{Res, SystemParam, SystemParamItem};
 use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::math::{Vec2, Vec3};
-use bevy::prelude::{Local, MinimalPlugins, NextState, ResMut, Resource, Update};
+use bevy::prelude::{Local, MinimalPlugins, NextState, ResMut, Resource, Update, World};
 use bevy::state::app::StatesPlugin;
 use bevy::transform::components::Transform;
 use lod::gen::Id;
@@ -149,12 +149,13 @@ impl TerrainModel for Flat {
 
 impl TerrainGeneration for Flat {
 	type Config = f32;
-	type SharedConfig = ();
 
-	fn shared_config(_config: &f32) {}
+	fn install_generation(app: &mut App) {
+		app.init_resource::<FlatStore>();
+	}
 
-	fn install_generation(app: &mut App, config: &f32) {
-		app.insert_resource(FlatStore { cells: HashMap::new(), fallback: *config });
+	fn apply_generation(world: &mut World, config: &f32) {
+		world.resource_mut::<FlatStore>().fallback = *config;
 	}
 }
 
@@ -197,6 +198,7 @@ fn presenter_installs_and_finish_requires_generation() {
 	))
 		.add_plugins(TerrainPresentationPlugin::<TestMode, OnTerrain<Flat>, FlatPresenter>::default());
 	app.finish();
+	app.update();
 
 	assert_eq!(app.world().get_resource::<FlatStore>().map(|store| store.fallback), Some(2.5));
 	assert!(app.world().contains_resource::<FlatPresentInstalled>());

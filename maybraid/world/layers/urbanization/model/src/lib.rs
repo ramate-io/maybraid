@@ -15,7 +15,7 @@ mod stream;
 mod urban;
 
 pub use config::{
-	DevelopmentFocus, UrbanizationLayerConfig, UrbanizationSharedConfig, PLAYGROUND_LIKELIHOOD,
+	DevelopmentFocus, UrbanizationLayerConfig, PLAYGROUND_LIKELIHOOD,
 };
 pub use generation::{
 	UrbanizationGenerationCore, UrbanizationGenerationPlugin, UrbanizationGenerationSystems,

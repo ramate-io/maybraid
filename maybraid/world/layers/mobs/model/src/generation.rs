@@ -1,6 +1,5 @@
 //! [`MobGenerationPlugin`]: which mob groups exist where, over urbanized ground `G`.
 
-use std::any::type_name;
 use std::marker::PhantomData;
 
 use bevy::app::{App, Plugin};
@@ -33,9 +32,12 @@ pub trait MobScheme<G: UrbanModel>: GenerationMode {
 }
 
 /// Shared install for mobs on `G`, added once.
-pub struct MobGenerationCore<G> {
-	budget: u32,
-	_marker: PhantomData<fn() -> G>,
+pub struct MobGenerationCore<G>(PhantomData<fn() -> G>);
+
+impl<G> Default for MobGenerationCore<G> {
+	fn default() -> Self {
+		Self(PhantomData)
+	}
 }
 
 impl<G: UrbanModel> Plugin for MobGenerationCore<G> {
@@ -43,8 +45,7 @@ impl<G: UrbanModel> Plugin for MobGenerationCore<G> {
 		app.init_resource::<MobIndex>()
 			.init_resource::<MobGenerateBullseye>()
 			.init_resource::<MobPresentBullseye>()
-			.insert_resource(InstalledMobBudget(self.budget))
-			.insert_resource(LodGenerateBudget::<MobLodChan>::new(self.budget))
+			.init_resource::<LodGenerateBudget<MobLodChan>>()
 			.add_plugins(LodGenerateRegionPlugin::<
 				MobGenerateBullseye,
 				With<LodViewer>,
@@ -80,8 +81,25 @@ impl<G: UrbanModel> Plugin for MobGenerationCore<G> {
 	}
 }
 
-#[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
-struct InstalledMobBudget(u32);
+/// Per-mode mob budget applied on enter.
+#[derive(Resource, Clone)]
+pub struct MobModeConfig<Mode: GenerationMode> {
+	pub config: MobLayerConfig,
+	_mode: PhantomData<fn() -> Mode>,
+}
+
+impl<Mode: GenerationMode> MobModeConfig<Mode> {
+	pub fn new(config: MobLayerConfig) -> Self {
+		Self { config, _mode: PhantomData }
+	}
+}
+
+fn apply_mob_mode<Mode: GenerationMode>(
+	mode: Res<MobModeConfig<Mode>>,
+	mut budget: ResMut<LodGenerateBudget<MobLodChan>>,
+) {
+	*budget = LodGenerateBudget::new(mode.config.generate_budget);
+}
 
 /// Generation for ground `G` in `Mode`.
 pub struct MobGenerationPlugin<Mode, G>
@@ -119,19 +137,14 @@ where
 	G: UrbanModel,
 {
 	fn build(&self, app: &mut App) {
-		let Some(state) = app.world().get_resource::<State<ActiveGenerationMode>>() else {
-			panic!(
-				"MobGenerationPlugin<{}, {}> requires GenerationModePlugin first",
-				Mode::name(),
-				type_name::<G>()
-			);
-		};
-		if state.get().is::<Mode>() && !app.is_plugin_added::<MobGenerationCore<G>>() {
-			app.add_plugins(MobGenerationCore::<G> {
-				budget: self.config.generate_budget,
-				_marker: PhantomData,
-			});
+		if !app.is_plugin_added::<MobGenerationCore<G>>() {
+			app.add_plugins(MobGenerationCore::<G>::default());
 		}
+		app.insert_resource(MobModeConfig::<Mode>::new(self.config.clone()));
+		app.add_systems(
+			OnEnter(ActiveGenerationMode::of::<Mode>()),
+			apply_mob_mode::<Mode>,
+		);
 		app.add_systems(OnExit(ActiveGenerationMode::of::<Mode>()), clear_mob_index);
 		Mode::install(app, &self.config);
 	}
@@ -139,20 +152,6 @@ where
 	fn finish(&self, app: &mut App) {
 		G::require_generation(app);
 		app.require_layer::<VegetationGenerationCore, Self>();
-		let Some(installed) = app.world().get_resource::<InstalledMobBudget>() else {
-			panic!(
-				"the initial generation mode never registered MobGenerationPlugin for {}",
-				type_name::<G>()
-			);
-		};
-		if installed.0 != self.config.generate_budget {
-			panic!(
-				"MobGenerationPlugin shared config disagrees for {}: {} vs {}",
-				type_name::<G>(),
-				installed.0,
-				self.config.generate_budget
-			);
-		}
 	}
 }
 

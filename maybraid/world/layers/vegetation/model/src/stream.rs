@@ -18,8 +18,9 @@ use lod::{
 	LodPresentSystems, LodViewer,
 };
 
-use crate::config::{ForestStreamSpec, VegetationLayerConfig};
-use crate::generation::VegetationGenerationSystems;
+use crate::config::ForestStreamSpec;
+use crate::generation::{VegetationGenerationSystems, VegetationModeConfig};
+use layer_stack::{GenerationMode, GenerationModeSystems};
 
 /// Default present ring multiplier (`1` → 1 km grove present / 3 km generate).
 pub const DEFAULT_FOREST_STREAM_RADIUS: u32 = 1;
@@ -37,10 +38,10 @@ pub fn stream_radii_m(stream_radius: u32) -> (f32, f32) {
 }
 
 /// Generate half of the old `register_forest_lod`. Present plugins stay in
-/// vegetation presentation. The budget comes from [`VegetationLayerConfig`].
-pub fn register_forest_generate(app: &mut App, generate_budget: u32) {
+/// vegetation presentation. Each mode writes [`LodGenerateBudget`] on enter.
+pub fn register_forest_generate(app: &mut App) {
 	app.init_resource::<ForestIndex>()
-		.insert_resource(LodGenerateBudget::<ForestLodChan>::new(generate_budget))
+		.init_resource::<LodGenerateBudget<ForestLodChan>>()
 		.init_resource::<LodPresentQueue<ChicoGrove>>()
 		.add_plugins(LodGenerateRegionPlugin::<
 			ForestGenerateBullseye,
@@ -62,9 +63,9 @@ pub fn register_forest_generate(app: &mut App, generate_budget: u32) {
 }
 
 /// Generate half of the old `register_bump_out_lod`.
-pub fn register_bump_out_generate(app: &mut App, bump_out_budget: u32, medium_budget: u32) {
-	app.insert_resource(LodGenerateBudget::<BumpOutLodChan>::new(bump_out_budget))
-		.insert_resource(LodGenerateBudget::<MediumBumpOutLodChan>::new(medium_budget))
+pub fn register_bump_out_generate(app: &mut App) {
+	app.init_resource::<LodGenerateBudget<BumpOutLodChan>>()
+		.init_resource::<LodGenerateBudget<MediumBumpOutLodChan>>()
 		.init_resource::<LodPresentQueue<CanopyBumpOut>>()
 		.init_resource::<LodPresentQueue<MediumCanopyBumpOut>>()
 		.init_resource::<LodPresentKeepRegion<MediumBumpOutLodChan>>()
@@ -244,18 +245,18 @@ impl BumpOutStreamLod<'_> {
 	}
 }
 
-pub fn stream_forest(
-	config: Res<VegetationLayerConfig>,
+pub fn stream_forest<Mode: GenerationMode>(
+	config: Res<VegetationModeConfig<Mode>>,
 	camera: Query<&Transform, With<Camera3d>>,
 	mut lod: ForestStreamLod,
 	mut last_key: Local<Option<String>>,
 ) {
 	let cam = camera.single().ok().map(|t| t.translation);
-	lod.apply_spec(config.forest.as_ref(), cam, &mut last_key);
+	lod.apply_spec(config.config.forest.as_ref(), cam, &mut last_key);
 }
 
-pub fn stream_canopy_bump_outs(
-	config: Res<VegetationLayerConfig>,
+pub fn stream_canopy_bump_outs<Mode: GenerationMode>(
+	config: Res<VegetationModeConfig<Mode>>,
 	camera: Query<&Transform, With<Camera3d>>,
 	mut lod: BumpOutStreamLod,
 	mut last_key: Local<Option<String>>,
@@ -263,23 +264,22 @@ pub fn stream_canopy_bump_outs(
 ) {
 	let cam = camera.single().ok().map(|t| t.translation);
 	lod.apply_spec(
-		config.forest.as_ref(),
+		config.config.forest.as_ref(),
 		cam,
 		&mut last_key,
 		&mut last_medium_region,
 	);
 }
 
-/// Both streams sit in [`VegetationGenerationSystems`], before generate and
-/// present produce. Bump-outs run after the forest stream. Callers that edit
-/// the layer config order `.before` this set.
-pub fn configure_stream_systems(app: &mut App) {
+/// Forest and bump-out streams for `Mode`, reading [`VegetationModeConfig`].
+pub fn install_vegetation_stream<Mode: GenerationMode>(app: &mut App) {
 	app.add_systems(
 		Update,
 		(
-			stream_forest,
-			stream_canopy_bump_outs.after(stream_forest),
+			stream_forest::<Mode>,
+			stream_canopy_bump_outs::<Mode>.after(stream_forest::<Mode>),
 		)
+			.in_set(GenerationModeSystems::<Mode>::default())
 			.in_set(VegetationGenerationSystems)
 			.run_if(terrain_streaming_enabled)
 			.before(LodGenerateSystems::Produce)

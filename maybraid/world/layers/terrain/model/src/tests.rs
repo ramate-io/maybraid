@@ -177,12 +177,13 @@ impl TerrainModel for Flat {
 
 impl TerrainGeneration for Flat {
 	type Config = f32;
-	type SharedConfig = ();
 
-	fn shared_config(_config: &f32) {}
+	fn install_generation(app: &mut App) {
+		app.init_resource::<FlatStore>();
+	}
 
-	fn install_generation(app: &mut App, config: &f32) {
-		app.insert_resource(FlatStore { cells: HashMap::new(), fallback: *config });
+	fn apply_generation(world: &mut World, config: &f32) {
+		world.resource_mut::<FlatStore>().fallback = *config;
 	}
 }
 
@@ -239,6 +240,7 @@ fn base_generation_installs_model() {
 		BaseTerrainGenerationPlugin::<TestMode, Flat>::new(2.5),
 	));
 	app.finish();
+	app.update();
 
 	assert_eq!(app.world().get_resource::<FlatStore>().map(|store| store.fallback), Some(2.5));
 }

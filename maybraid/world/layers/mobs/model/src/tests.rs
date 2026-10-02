@@ -627,29 +627,75 @@ fn grid_stream_resumes_after_another_mode() -> anyhow::Result<()> {
 }
 
 #[test]
-fn disagreeing_budgets_name_the_conflict() -> anyhow::Result<()> {
+fn different_budgets_build_and_apply_on_enter() -> anyhow::Result<()> {
+	use bevy::prelude::{AssetPlugin, MinimalPlugins, NextState};
+	use bevy::state::app::StatesPlugin;
+	use durham::TerrainStreamingEnabled;
+	use layer_stack::{ActiveGenerationMode, GenerationModePlugin};
+	use lod::gen::LodGenerateBudget;
+	use vegetation_layer_model::VegetationGenerationPlugin;
+
+	use crate::MobLodChan;
+
+	let mut app = App::new();
+	app.add_plugins((
+		MinimalPlugins,
+		AssetPlugin::default(),
+		StatesPlugin,
+		GenerationModePlugin::<SilentMode>::initial(),
+		GenerationModePlugin::<OtherMode>::default(),
+		VegetationGenerationPlugin::<SilentMode>::default(),
+		VegetationGenerationPlugin::<OtherMode>::default(),
+		MobGenerationPlugin::<SilentMode, Silent>::new(MobLayerConfig::world_defaults()),
+		MobGenerationPlugin::<OtherMode, Silent>::new(MobLayerConfig { generate_budget: 8 }),
+	));
+	app.insert_resource(TerrainStreamingEnabled(false));
+	app.init_resource::<ForestIndex>();
+	app.finish();
+	app.update();
+	anyhow::ensure!(
+		app.world().resource::<LodGenerateBudget<MobLodChan>>().ids_per_frame == 16,
+		"initial budget"
+	);
+
+	app.world_mut()
+		.resource_mut::<NextState<ActiveGenerationMode>>()
+		.set(ActiveGenerationMode::of::<OtherMode>());
+	app.update();
+	anyhow::ensure!(
+		app.world().resource::<LodGenerateBudget<MobLodChan>>().ids_per_frame == 8,
+		"other mode budget"
+	);
+	Ok(())
+}
+
+#[test]
+fn plugin_order_does_not_matter() -> anyhow::Result<()> {
 	use bevy::prelude::{AssetPlugin, MinimalPlugins};
 	use bevy::state::app::StatesPlugin;
 	use durham::TerrainStreamingEnabled;
 	use layer_stack::GenerationModePlugin;
 	use vegetation_layer_model::VegetationGenerationPlugin;
 
-	let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-		let mut app = App::new();
-		app.add_plugins((
-			MinimalPlugins,
-			AssetPlugin::default(),
-			StatesPlugin,
-			GenerationModePlugin::<SilentMode>::initial(),
-			GenerationModePlugin::<OtherMode>::default(),
-			VegetationGenerationPlugin::<SilentMode>::default(),
-			VegetationGenerationPlugin::<OtherMode>::default(),
-			MobGenerationPlugin::<SilentMode, Silent>::new(MobLayerConfig::world_defaults()),
-			MobGenerationPlugin::<OtherMode, Silent>::new(MobLayerConfig { generate_budget: 8 }),
-		));
-		app.insert_resource(TerrainStreamingEnabled(false));
-		app.finish();
-	}));
-	anyhow::ensure!(result.is_err(), "mismatched budgets must panic");
+	let mut app = App::new();
+	app.add_plugins((
+		MinimalPlugins,
+		AssetPlugin::default(),
+		StatesPlugin,
+		MobGenerationPlugin::<OtherMode, Silent>::new(MobLayerConfig { generate_budget: 8 }),
+		MobGenerationPlugin::<SilentMode, Silent>::new(MobLayerConfig::world_defaults()),
+		VegetationGenerationPlugin::<SilentMode>::default(),
+		VegetationGenerationPlugin::<OtherMode>::default(),
+		GenerationModePlugin::<SilentMode>::initial(),
+		GenerationModePlugin::<OtherMode>::default(),
+	));
+	app.insert_resource(TerrainStreamingEnabled(false));
+	app.init_resource::<ForestIndex>();
+	app.finish();
+	app.update();
+	anyhow::ensure!(
+		app.is_plugin_added::<crate::MobGenerationCore<Silent>>(),
+		"core is installed"
+	);
 	Ok(())
 }

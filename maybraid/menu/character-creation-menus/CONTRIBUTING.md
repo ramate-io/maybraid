@@ -18,7 +18,7 @@ To expose a new clothing mesh in both species:
    Menu thumbnails always use this catalog path. Body garments also have host-fit
    GLBs at `clothes/body/{body_stem}/{file_stem}.glb` from
    `scripts/clothes-fit/fit.sh`; blend-export must not overwrite those.
-2. In `maybraid/crozon/character-items/src/clothing.rs`:
+2. In `maybraid/world/layers/mobs/characters/items/src/clothing.rs`:
    - Add a `CLOTHING_*` path constant for the file.
    - Add a variant to `ClothingMesh`.
    - Append it to `ClothingMesh::VALUES`.

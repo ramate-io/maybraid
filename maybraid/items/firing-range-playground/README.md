@@ -23,7 +23,7 @@ the muzzle, and holds the trigger after the first on-target acquire;
 `trigger_happiness` is only the delay before that first pull.
 Projectile sweeps include both fixed geometry and animated character capsules.
 Collider size comes from the character recipe
-[`LocomotionCapsule`](../../crozon/characters/src/components.rs) (Braidman is
+[`LocomotionCapsule`](../../world/layers/mobs/characters/lib/src/components.rs) (Braidman is
 the 0.4 / 1.0 humanoid hull). Walk uses the shared player
 [`MotorTraction`](../../player/src/contact.rs) contact hooks so Les Halles
 floors keep grip for props without dragging the capsule. Each character starts with 100 health and takes 25 damage per bolt contact
@@ -49,7 +49,7 @@ takes a shot. Player death (or switching mode) resets that ceasefire.
 
 `free-for-all` is a generated-loadout benchmark: one rolled player (starter
 clothing plus one gallery-style firearm from
-[`character-items`](../../crozon/character-items)) and `--npcs` rolled
+[`character-items`](../../world/layers/mobs/characters/items)) and `--npcs` rolled
 NPCs spread around the pad and on the upper storey. Each NPC discovers a
 bounded set of character subjects inside an 80 m perception envelope. The live
 enemyship roster supplies explicit spotting hints, while Avian broadphase can

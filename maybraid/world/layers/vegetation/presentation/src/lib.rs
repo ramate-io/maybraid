@@ -105,14 +105,7 @@ where
 				GroundMediumCanopyBumpOutPresenter<G>,
 				MediumBumpOutLodChan,
 			>::default())
-			.configure_sets(Update, LodPresentSystems::Produce.after(LodGenerateSystems::Drain))
-			.add_systems(
-				Update,
-				retire_vegetation_presenters::<G>
-					.after(VegetationGenerationSystems)
-					.before(LodPresentSystems::Produce)
-					.run_if(terrain_streaming_enabled),
-			);
+			.configure_sets(Update, LodPresentSystems::Produce.after(LodGenerateSystems::Drain));
 	}
 }
 
@@ -126,6 +119,13 @@ where
 		if !app.is_plugin_added::<VegetationPresentationCore<G>>() {
 			app.add_plugins(VegetationPresentationCore::<G>::default());
 		}
+		app.add_systems(
+			Update,
+			retire_vegetation_presenters::<Mode, G>
+				.after(VegetationGenerationSystems)
+				.before(LodPresentSystems::Produce)
+				.run_if(terrain_streaming_enabled),
+		);
 	}
 
 	fn finish(&self, app: &mut App) {

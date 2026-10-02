@@ -10,7 +10,7 @@ use layer_stack::{RequireLayer};
 
 use crate::terrain::cell::TerrainCellLayout;
 use crate::terrain::host::{
-	install_durham_generation, Durham, TerrainCoverage, WorldBaseTerrain,
+	apply_durham_generation, install_durham_generation, Durham, TerrainCoverage, WorldBaseTerrain,
 	WORLD_FINE_HALF_EXTENT_CELLS,
 };
 use crate::terrain::index::{TerrainEntryStore, TerrainHeightSnapshot};
@@ -158,7 +158,7 @@ fn xz_overlap_area(a: Aabb3d, b: Aabb3d) -> f32 {
 	x * z
 }
 
-/// Seed is shared across modes; coverage and radius are per mode.
+/// Per-mode Durham fill: seed, coverage, and fine-grid radius.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct DurhamTerrainConfig {
 	pub seed: u32,
@@ -187,14 +187,13 @@ impl DurhamTerrainConfig {
 
 impl TerrainGeneration for Durham {
 	type Config = DurhamTerrainConfig;
-	type SharedConfig = u32;
 
-	fn shared_config(config: &Self::Config) -> u32 {
-		config.seed
+	fn install_generation(app: &mut App) {
+		install_durham_generation(app);
 	}
 
-	fn install_generation(app: &mut App, config: &DurhamTerrainConfig) {
-		install_durham_generation(app, config.seed, config.coverage, config.terrain_radius);
+	fn apply_generation(world: &mut World, config: &DurhamTerrainConfig) {
+		apply_durham_generation(world, config);
 	}
 }
 

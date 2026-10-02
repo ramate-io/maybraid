@@ -5,7 +5,7 @@ Assembled world runs [`maybraid-world-playground`](../playground/). This
 crate is no longer a standalone binary; restore the retired app from
 [PLAYGROUNDS.md](../../PLAYGROUNDS.md).
 
-Forest stream knobs live on `VegetationLayerConfig`. Mode, mesh stats, and
+Forest stream knobs live on each mode's `VegetationLayerConfig`. Mode, mesh stats, and
 character attach stay here until they move to a non-playground crate.
 
 ## Verify

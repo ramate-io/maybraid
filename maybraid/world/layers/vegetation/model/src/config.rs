@@ -107,7 +107,7 @@ mod tests {
 		anyhow::ensure!(
 			VegetationLayerConfig::grove().forest_budget
 				== VegetationLayerConfig::world_defaults().forest_budget,
-			"grove keeps the shared budgets"
+			"grove keeps the same budgets"
 		);
 		Ok(())
 	}

@@ -815,9 +815,9 @@ This lets the current rig-slider system remain simple while leaving room for fea
 > [!WARNING]
 > When implementing these characters always stop and report if a given asset is missing.
 
-Asset paths in this section use the shorthand `assets/…` (linked to [`maybraid/assets/characters/`](../../assets/characters/)). At runtime, load them as `characters/…` under the `maybraid/assets` root (same convention as [`crozon/playground`](../playground/src/character.rs)).
+Asset paths in this section use the shorthand `assets/…` (linked to [`maybraid/assets/characters/`](../../assets/characters/)). At runtime, load them as `characters/…` under the `maybraid/assets` root (same convention as [`characters-playground`](../playground/src/character.rs)).
 
-Definitions and resolution logic belong in [`crozon/characters`](../characters/); the concepts screen wires them through [`crozon/character-concepts-playground`](../character-concepts-playground/).
+Definitions and resolution logic belong in [`characters`](./); the concepts screen wires them through [`character-concepts-playground`](../../../../menu/character-concepts-playground/).
 
 ## Assembly
 
@@ -871,7 +871,7 @@ Resolution order (see [Stage 1](#stage-1-menu-state-to-resolved-character-config
 Two layers:
 
 * **User-facing sliders** — what the concepts screen exposes (grouped by body, head, feature, etc.).
-* **Rig sliders** — underlying `Slidable` bone effects in `crozon/rigs`; one user slider may drive one or more rig sliders, and each effect composes with the bind pose.
+* **Rig sliders** — underlying `Slidable` bone effects in `character-rigs`; one user slider may drive one or more rig sliders, and each effect composes with the bind pose.
 
 When the same label appears at head and feature scope, they compose rather than override:
 
@@ -995,7 +995,7 @@ Gender and build presets below adjust the same body rig sliders as percent offse
     - **Fitted Coat:** `FittedCoat` `Mesh` in [`assets/clothes/fitted_coat.glb`](../../assets/characters/clothes/body/fitted_coat.glb).
     - **Robe Coat:** `RobeCoat` `Mesh` in [`assets/clothes/robe_coat.glb`](../../assets/characters/clothes/body/robe_coat.glb).
     - **Robe:** `Robe` `Mesh` in [`assets/clothes/robe.glb`](../../assets/characters/clothes/body/robe.glb).
-- **Animations:** walk, run, two-footed jump, tucked flip (humanoid-compatible; see [`crozon/animations`](../animations/)).
+- **Animations:** walk, run, two-footed jump, tucked flip (humanoid-compatible; see [`character-animations`](../animations/)).
 - **Genders:** (percent offsets on body rig sliders after species baseline)
     - **Male:**
         - Increase shoulder width by 5%.

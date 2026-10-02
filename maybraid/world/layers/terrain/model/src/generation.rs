@@ -1,7 +1,5 @@
 //! Base of the stack: models that own a generation pipeline.
 
-use std::any::type_name;
-use std::fmt::Debug;
 use std::marker::PhantomData;
 
 use bevy::app::{App, Plugin};
@@ -16,13 +14,12 @@ use crate::model::TerrainModel;
 /// generation plugins are typed by the model they read instead.
 pub trait TerrainGeneration: TerrainModel {
 	type Config: Clone + Send + Sync + 'static;
-	/// The part of [`Self::Config`] every mode must agree on.
-	type SharedConfig: Clone + PartialEq + Debug + Send + Sync + 'static;
-
-	fn shared_config(config: &Self::Config) -> Self::SharedConfig;
 
 	/// Register the model's stores, layout, and generate systems. No presentation.
-	fn install_generation(app: &mut App, config: &Self::Config);
+	fn install_generation(app: &mut App);
+
+	/// Apply this mode's config. A seed change rebuilds stores the way a retarget does.
+	fn apply_generation(world: &mut World, config: &Self::Config);
 }
 
 /// A mode's layout writes for base model `T`. Per-frame systems go in
@@ -34,18 +31,17 @@ pub trait BaseTerrainScheme<T: TerrainGeneration>: GenerationMode {
 
 /// Shared install for `T`, added once. [`TerrainModel::require_generation`]
 /// names this instead of a mode-specific plugin.
-pub struct BaseTerrainGenerationCore<T: TerrainGeneration> {
-	pub shared: T::SharedConfig,
-}
+pub struct BaseTerrainGenerationCore<T: TerrainGeneration>(PhantomData<fn() -> T>);
 
-impl<T: TerrainGeneration> Plugin for BaseTerrainGenerationCore<T> {
-	fn build(&self, app: &mut App) {
-		app.insert_resource(InstalledBaseTerrainShared::<T>(self.shared.clone()));
+impl<T: TerrainGeneration> Default for BaseTerrainGenerationCore<T> {
+	fn default() -> Self {
+		Self(PhantomData)
 	}
 }
 
-#[derive(Resource)]
-struct InstalledBaseTerrainShared<T: TerrainGeneration>(T::SharedConfig);
+impl<T: TerrainGeneration> Plugin for BaseTerrainGenerationCore<T> {
+	fn build(&self, _app: &mut App) {}
+}
 
 /// Per-mode config the scheme systems read.
 #[derive(Resource, Clone)]
@@ -86,39 +82,26 @@ where
 	T: TerrainGeneration,
 {
 	fn build(&self, app: &mut App) {
-		let Some(state) = app.world().get_resource::<State<ActiveGenerationMode>>() else {
-			panic!(
-				"BaseTerrainGenerationPlugin<{}, {}> requires GenerationModePlugin first",
-				Mode::name(),
-				type_name::<T>()
-			);
-		};
-		if state.get().is::<Mode>() && !app.is_plugin_added::<BaseTerrainGenerationCore<T>>() {
-			T::install_generation(app, &self.config);
-			app.add_plugins(BaseTerrainGenerationCore::<T> {
-				shared: T::shared_config(&self.config),
-			});
+		if !app.is_plugin_added::<BaseTerrainGenerationCore<T>>() {
+			T::install_generation(app);
+			app.add_plugins(BaseTerrainGenerationCore::<T>::default());
 		}
 		app.insert_resource(BaseTerrainModeConfig::<Mode, T>::new(self.config.clone()));
+		app.add_systems(
+			OnEnter(ActiveGenerationMode::of::<Mode>()),
+			apply_base_terrain::<Mode, T>,
+		);
 		Mode::install(app, &self.config);
 	}
+}
 
-	fn finish(&self, app: &mut App) {
-		let Some(installed) = app.world().get_resource::<InstalledBaseTerrainShared<T>>() else {
-			panic!(
-				"the initial generation mode never registered BaseTerrainGenerationPlugin for {}",
-				type_name::<T>()
-			);
-		};
-		let shared = T::shared_config(&self.config);
-		if installed.0 != shared {
-			panic!(
-				"BaseTerrainGenerationPlugin shared config disagrees for {}: {:?} vs {shared:?}",
-				type_name::<T>(),
-				installed.0
-			);
-		}
-	}
+fn apply_base_terrain<Mode, T>(world: &mut World)
+where
+	Mode: GenerationMode,
+	T: TerrainGeneration,
+{
+	let config = world.resource::<BaseTerrainModeConfig<Mode, T>>().config.clone();
+	T::apply_generation(world, &config);
 }
 
 #[cfg(test)]
@@ -126,8 +109,9 @@ mod tests {
 	use super::*;
 	use layer_stack::GenerationModePlugin;
 	use crate::{HeightField, TerrainCell, TerrainModel};
-use layer_stack::RequireLayer;
+	use layer_stack::RequireLayer;
 	use bevy::ecs::system::{SystemParam, SystemParamItem};
+	use bevy::prelude::NextState;
 	use bevy::math::bounding::Aabb3d;
 	use bevy::math::{Vec2, Vec3};
 	use bevy::state::app::StatesPlugin;
@@ -144,6 +128,8 @@ use layer_stack::RequireLayer;
 	#[derive(Resource, Default)]
 	struct StubStore {
 		installs: u32,
+		applies: u32,
+		seed: u32,
 		fallback: f32,
 	}
 
@@ -245,16 +231,19 @@ use layer_stack::RequireLayer;
 
 	impl TerrainGeneration for Stub {
 		type Config = StubConfig;
-		type SharedConfig = u32;
 
-		fn shared_config(config: &Self::Config) -> u32 {
-			config.seed
-		}
-
-		fn install_generation(app: &mut App, config: &Self::Config) {
+		fn install_generation(app: &mut App) {
 			let mut store = app.world_mut().get_resource_or_insert_with(StubStore::default);
 			store.installs += 1;
+		}
+
+		fn apply_generation(world: &mut World, config: &Self::Config) {
+			let mut store = world.resource_mut::<StubStore>();
+			if store.seed != config.seed {
+				store.seed = config.seed;
+			}
 			store.fallback = config.layout;
+			store.applies += 1;
 		}
 	}
 
@@ -266,116 +255,90 @@ use layer_stack::RequireLayer;
 		fn install(_app: &mut App, _config: &StubConfig) {}
 	}
 
-	fn alpha_config(layout: f32) -> StubConfig {
-		StubConfig { seed: 1, layout }
+	fn alpha_config() -> StubConfig {
+		StubConfig { seed: 1, layout: 3.0 }
 	}
 
-	fn beta_config(layout: f32) -> StubConfig {
-		StubConfig { seed: 1, layout }
+	fn beta_config() -> StubConfig {
+		StubConfig { seed: 2, layout: 9.0 }
+	}
+
+	fn hop(app: &mut App, mode: ActiveGenerationMode) {
+		app.world_mut()
+			.resource_mut::<NextState<ActiveGenerationMode>>()
+			.set(mode);
+		app.update();
+	}
+
+	fn live(app: &App) -> (u32, f32) {
+		let store = app.world().resource::<StubStore>();
+		(store.seed, store.fallback)
 	}
 
 	#[test]
-	fn two_modes_install_the_shared_part_once() -> anyhow::Result<()> {
+	fn different_seeds_build_and_apply_on_enter() -> anyhow::Result<()> {
 		let mut app = App::new();
 		app.add_plugins((
 			MinimalPlugins,
 			StatesPlugin,
 			GenerationModePlugin::<Alpha>::initial(),
 			GenerationModePlugin::<Beta>::default(),
-			BaseTerrainGenerationPlugin::<Alpha, Stub>::new(alpha_config(3.0)),
-			BaseTerrainGenerationPlugin::<Beta, Stub>::new(beta_config(9.0)),
+			BaseTerrainGenerationPlugin::<Alpha, Stub>::new(alpha_config()),
+			BaseTerrainGenerationPlugin::<Beta, Stub>::new(beta_config()),
 		));
 		app.finish();
 		let store = app.world().resource::<StubStore>();
 		anyhow::ensure!(store.installs == 1, "shared install ran {}", store.installs);
-		anyhow::ensure!(
-			store.fallback == 3.0,
-			"startup used the initial mode, fallback {}",
-			store.fallback
-		);
+		app.update();
+		anyhow::ensure!(live(&app) == (1, 3.0), "initial mode applied {:?}", live(&app));
+
+		hop(&mut app, ActiveGenerationMode::of::<Beta>());
+		anyhow::ensure!(live(&app) == (2, 9.0), "beta seed and layout {:?}", live(&app));
+
+		hop(&mut app, ActiveGenerationMode::of::<Alpha>());
+		anyhow::ensure!(live(&app) == (1, 3.0), "return restores {:?}", live(&app));
 		Ok(())
 	}
 
 	#[test]
-	fn startup_uses_the_initial_mode_in_either_plugin_order() -> anyhow::Result<()> {
-		let mut after_beta = App::new();
-		after_beta.add_plugins((
+	fn plugin_order_does_not_matter() -> anyhow::Result<()> {
+		let mut generation_first = App::new();
+		generation_first.add_plugins((
+			MinimalPlugins,
+			StatesPlugin,
+			BaseTerrainGenerationPlugin::<Beta, Stub>::new(beta_config()),
+			BaseTerrainGenerationPlugin::<Alpha, Stub>::new(alpha_config()),
+			GenerationModePlugin::<Alpha>::initial(),
+			GenerationModePlugin::<Beta>::default(),
+		));
+		generation_first.finish();
+		generation_first.update();
+		anyhow::ensure!(
+			live(&generation_first) == (1, 3.0),
+			"generation before mode still started from alpha: {:?}",
+			live(&generation_first)
+		);
+		anyhow::ensure!(
+			generation_first.is_plugin_added::<BaseTerrainGenerationCore<Stub>>(),
+			"core is installed"
+		);
+
+		let mut beta_first = App::new();
+		beta_first.add_plugins((
 			MinimalPlugins,
 			StatesPlugin,
 			GenerationModePlugin::<Alpha>::initial(),
 			GenerationModePlugin::<Beta>::default(),
-			BaseTerrainGenerationPlugin::<Beta, Stub>::new(beta_config(9.0)),
-			BaseTerrainGenerationPlugin::<Alpha, Stub>::new(alpha_config(3.0)),
+			BaseTerrainGenerationPlugin::<Beta, Stub>::new(beta_config()),
+			BaseTerrainGenerationPlugin::<Alpha, Stub>::new(alpha_config()),
 		));
-		after_beta.finish();
+		beta_first.finish();
+		beta_first.update();
 		anyhow::ensure!(
-			after_beta.world().resource::<StubStore>().fallback == 3.0,
-			"beta first still started from alpha"
+			live(&beta_first) == (1, 3.0),
+			"beta plugin first still started from alpha: {:?}",
+			live(&beta_first)
 		);
-
-		let mut after_alpha = App::new();
-		after_alpha.add_plugins((
-			MinimalPlugins,
-			StatesPlugin,
-			GenerationModePlugin::<Alpha>::initial(),
-			GenerationModePlugin::<Beta>::default(),
-			BaseTerrainGenerationPlugin::<Alpha, Stub>::new(alpha_config(3.0)),
-			BaseTerrainGenerationPlugin::<Beta, Stub>::new(beta_config(9.0)),
-		));
-		after_alpha.finish();
-		anyhow::ensure!(
-			after_alpha.world().resource::<StubStore>().fallback == 3.0,
-			"alpha first started from alpha"
-		);
-		Ok(())
-	}
-
-	#[test]
-	fn a_disagreeing_shared_config_fails() -> anyhow::Result<()> {
-		let failed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-			let mut app = App::new();
-			app.add_plugins((
-				MinimalPlugins,
-				StatesPlugin,
-				GenerationModePlugin::<Alpha>::initial(),
-				GenerationModePlugin::<Beta>::default(),
-				BaseTerrainGenerationPlugin::<Alpha, Stub>::new(alpha_config(3.0)),
-				BaseTerrainGenerationPlugin::<Beta, Stub>::new(StubConfig { seed: 2, layout: 9.0 }),
-			));
-			app.finish();
-		}));
-		anyhow::ensure!(failed.is_err(), "disagreeing seeds must fail loudly");
-		Ok(())
-	}
-
-	#[test]
-	fn missing_generation_mode_plugin_fails_at_build() -> anyhow::Result<()> {
-		let failed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-			let mut app = App::new();
-			app.add_plugins((
-				MinimalPlugins,
-				StatesPlugin,
-				BaseTerrainGenerationPlugin::<Alpha, Stub>::new(alpha_config(3.0)),
-			));
-		}));
-		anyhow::ensure!(failed.is_err(), "base terrain requires GenerationModePlugin first");
-		Ok(())
-	}
-
-	#[test]
-	fn an_initial_mode_without_base_terrain_fails_in_finish() -> anyhow::Result<()> {
-		let failed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-			let mut app = App::new();
-			app.add_plugins((
-				MinimalPlugins,
-				StatesPlugin,
-				GenerationModePlugin::<Alpha>::initial(),
-				GenerationModePlugin::<Beta>::default(),
-				BaseTerrainGenerationPlugin::<Beta, Stub>::new(beta_config(9.0)),
-			));
-			app.finish();
-		}));
-		anyhow::ensure!(failed.is_err(), "finish must require the initial mode's plugin");
 		Ok(())
 	}
 }

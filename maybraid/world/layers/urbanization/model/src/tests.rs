@@ -562,3 +562,93 @@ fn leaving_a_stream_mode_clears_then_reentering_streams_again() -> anyhow::Resul
 	anyhow::ensure!(regions == 1, "re-entering emits a generate region, got {regions}");
 	Ok(())
 }
+
+#[test]
+fn different_budgets_build_and_apply_on_enter() -> anyhow::Result<()> {
+	use bevy::ecs::system::RunSystemOnce;
+	use bevy::prelude::{AssetPlugin, MinimalPlugins};
+	use bevy::state::app::StatesPlugin;
+	use lod::gen::LodGenerateBudget;
+	use richmond::DevelopmentConfig;
+	use urbanization_cells::UrbanizationLodChan;
+
+	use crate::{UrbanizationGenerationPlugin, UrbanizationLayerConfig};
+	use terrain_layer_model::BaseTerrainGenerationCore;
+
+	let mut app = App::new();
+	app.add_plugins((
+		MinimalPlugins,
+		AssetPlugin::default(),
+		StatesPlugin,
+		GenerationModePlugin::<StreamMode>::initial(),
+		GenerationModePlugin::<OtherMode>::default(),
+		BaseTerrainGenerationCore::<Durham>::default(),
+		UrbanizationGenerationPlugin::<StreamMode, OnTerrain<Durham>>::new(
+			UrbanizationLayerConfig::world_defaults(),
+		),
+		UrbanizationGenerationPlugin::<OtherMode, OnTerrain<Durham>>::new(UrbanizationLayerConfig {
+			generate_budget: 8,
+			..UrbanizationLayerConfig::shared_world()
+		}),
+	));
+	app.insert_resource(durham::TerrainStreamingEnabled(false));
+	app.finish();
+	app.world_mut()
+		.run_system_once(crate::generation::apply_urbanization_mode::<StreamMode>)
+		.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+	anyhow::ensure!(
+		app.world()
+			.resource::<LodGenerateBudget<UrbanizationLodChan>>()
+			.ids_per_frame
+			== 16,
+		"initial generate budget"
+	);
+	anyhow::ensure!(
+		app.world().resource::<DevelopmentConfig>().likelihood == crate::PLAYGROUND_LIKELIHOOD,
+		"initial development config"
+	);
+
+	app.world_mut()
+		.run_system_once(crate::generation::apply_urbanization_mode::<OtherMode>)
+		.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+	anyhow::ensure!(
+		app.world()
+			.resource::<LodGenerateBudget<UrbanizationLodChan>>()
+			.ids_per_frame
+			== 8,
+		"other mode budget"
+	);
+	Ok(())
+}
+
+#[test]
+fn plugin_order_does_not_matter() -> anyhow::Result<()> {
+	use bevy::prelude::{AssetPlugin, MinimalPlugins};
+	use bevy::state::app::StatesPlugin;
+
+	use crate::{UrbanizationGenerationCore, UrbanizationGenerationPlugin, UrbanizationLayerConfig};
+	use terrain_layer_model::BaseTerrainGenerationCore;
+
+	let mut app = App::new();
+	app.add_plugins((
+		MinimalPlugins,
+		AssetPlugin::default(),
+		StatesPlugin,
+		UrbanizationGenerationPlugin::<OtherMode, OnTerrain<Durham>>::new(
+			UrbanizationLayerConfig::shared_world(),
+		),
+		UrbanizationGenerationPlugin::<StreamMode, OnTerrain<Durham>>::new(
+			UrbanizationLayerConfig::world_defaults(),
+		),
+		BaseTerrainGenerationCore::<Durham>::default(),
+		GenerationModePlugin::<StreamMode>::initial(),
+		GenerationModePlugin::<OtherMode>::default(),
+	));
+	app.insert_resource(durham::TerrainStreamingEnabled(false));
+	app.finish();
+	anyhow::ensure!(
+		app.is_plugin_added::<UrbanizationGenerationCore<OnTerrain<Durham>>>(),
+		"core is installed"
+	);
+	Ok(())
+}

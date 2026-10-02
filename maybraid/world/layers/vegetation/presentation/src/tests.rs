@@ -343,7 +343,7 @@ impl GenerationMode for OtherMode {}
 fn losing_subscription_retires_and_returning_presents() -> anyhow::Result<()> {
 	use chico::{ForestLodChan, ForestPresentBullseye, ForestPresenterState};
 	use lod::presentation::LodPresentKeepRegion;
-	use vegetation_layer_model::VegetationLayerConfig;
+	use vegetation_layer_model::{VegetationLayerConfig, VegetationModeConfig};
 
 	let mut app = App::new();
 	app.add_plugins((
@@ -353,7 +353,9 @@ fn losing_subscription_retires_and_returning_presents() -> anyhow::Result<()> {
 		GenerationModePlugin::<OtherMode>::default(),
 	));
 	subscribe_mode::<(Silent, VegetationPresent), SilentMode>(&mut app);
-	app.insert_resource(VegetationLayerConfig::world_defaults());
+	app.insert_resource(VegetationModeConfig::<SilentMode>::new(
+		VegetationLayerConfig::world_defaults(),
+	));
 	app.init_resource::<ForestPresenterState>();
 	app.init_resource::<crate::present::CanopyBumpOutPresenterState>();
 	app.init_resource::<crate::present::MediumCanopyBumpOutPresenterState>();
@@ -363,7 +365,7 @@ fn losing_subscription_retires_and_returning_presents() -> anyhow::Result<()> {
 		Some(Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE));
 	app.update();
 	app.world_mut()
-		.run_system_once(retire_vegetation_presenters::<Silent>)
+		.run_system_once(retire_vegetation_presenters::<SilentMode, Silent>)
 		.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 	{
 		let mut state =
@@ -379,7 +381,7 @@ fn losing_subscription_retires_and_returning_presents() -> anyhow::Result<()> {
 		.set(ActiveGenerationMode::of::<OtherMode>());
 	app.update();
 	app.world_mut()
-		.run_system_once(retire_vegetation_presenters::<Silent>)
+		.run_system_once(retire_vegetation_presenters::<SilentMode, Silent>)
 		.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 	{
 		let mut state =
@@ -403,7 +405,7 @@ fn losing_subscription_retires_and_returning_presents() -> anyhow::Result<()> {
 		.set(ActiveGenerationMode::of::<SilentMode>());
 	app.update();
 	app.world_mut()
-		.run_system_once(retire_vegetation_presenters::<Silent>)
+		.run_system_once(retire_vegetation_presenters::<SilentMode, Silent>)
 		.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 	{
 		let mut state =

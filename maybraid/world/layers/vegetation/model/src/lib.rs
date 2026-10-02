@@ -13,6 +13,6 @@ pub use generation::{
 	VegetationModeConfig,
 };
 pub use stream::{
-	stream_canopy_bump_outs, stream_forest, stream_radii_m, DEFAULT_FOREST_NOISE,
-	DEFAULT_FOREST_STREAM_RADIUS,
+	install_vegetation_stream, stream_canopy_bump_outs, stream_forest, stream_radii_m,
+	DEFAULT_FOREST_NOISE, DEFAULT_FOREST_STREAM_RADIUS,
 };
