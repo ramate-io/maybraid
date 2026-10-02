@@ -7,8 +7,10 @@ pub struct Profile {
 }
 
 impl Profile {
+	pub const NEUTRAL: Self = Self { register: Register::Neutral };
+
 	pub fn neutral() -> Self {
-		Self { register: Register::Neutral }
+		Self::NEUTRAL
 	}
 
 	pub fn formal() -> Self {

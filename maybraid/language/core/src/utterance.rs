@@ -17,6 +17,7 @@ pub struct Utterance {
 	pub referents: SlotMap<ReferentId, Referent>,
 	pub clauses: SlotMap<ClauseId, Clause>,
 	pub roots: Vec<ClauseId>,
+	pub information: InformationStructure,
 }
 
 impl Utterance {
@@ -35,6 +36,29 @@ impl Utterance {
 	pub fn push_root(&mut self, clause: ClauseId) {
 		self.roots.push(clause);
 	}
+
+	pub fn with_topic(mut self, referent: ReferentId) -> Self {
+		self.information.topic = Some(referent);
+		self
+	}
+
+	pub fn with_focus(mut self, focus: FocusTarget) -> Self {
+		self.information.focus = Some(focus);
+		self
+	}
+}
+
+/// Discourse-level topic/focus. Realization is a grammatical decision.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct InformationStructure {
+	pub topic: Option<ReferentId>,
+	pub focus: Option<FocusTarget>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FocusTarget {
+	Referent(ReferentId),
+	Predicate(ClauseId),
 }
 
 /// Predication with semantic-role arguments.
@@ -74,6 +98,15 @@ impl Clause {
 		self.polarity = Polarity::Negative;
 		self
 	}
+
+	pub fn interrogative(mut self) -> Self {
+		self.mood = Mood::Interrogative;
+		self
+	}
+
+	pub fn has_role(&self, role: SemanticRole) -> bool {
+		self.arguments.iter().any(|argument| argument.role == role)
+	}
 }
 
 /// Role-bearing argument of a clause.
@@ -96,6 +129,7 @@ pub struct Referent {
 	pub concept: ConceptId,
 	pub definiteness: Definiteness,
 	pub number: Number,
+	pub person: Person,
 	pub modifiers: Vec<Modifier>,
 	pub relative_clauses: Vec<ClauseId>,
 }
@@ -106,6 +140,7 @@ impl Referent {
 			concept,
 			definiteness: Definiteness::Indefinite,
 			number: Number::Singular,
+			person: Person::Unspecified,
 			modifiers: Vec::new(),
 			relative_clauses: Vec::new(),
 		}
@@ -123,6 +158,26 @@ impl Referent {
 
 	pub fn many(mut self) -> Self {
 		self.number = Number::Many;
+		self
+	}
+
+	pub fn plural(mut self) -> Self {
+		self.number = Number::Plural;
+		self
+	}
+
+	pub fn first_person(mut self) -> Self {
+		self.person = Person::First;
+		self
+	}
+
+	pub fn second_person(mut self) -> Self {
+		self.person = Person::Second;
+		self
+	}
+
+	pub fn third_person(mut self) -> Self {
+		self.person = Person::Third;
 		self
 	}
 
@@ -201,6 +256,15 @@ pub enum Definiteness {
 	Indefinite,
 	Generic,
 	Proper,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
+pub enum Person {
+	First,
+	Second,
+	Third,
+	#[default]
+	Unspecified,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]

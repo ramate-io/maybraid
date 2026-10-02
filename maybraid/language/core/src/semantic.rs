@@ -8,7 +8,7 @@ use crate::parse::{
 	DependencyDocument, DependencySentence, DependencyToken, TokenId, UniversalPos,
 };
 use crate::utterance::{
-	Aspect, Clause, Definiteness, Modifier, Mood, Number, Polarity, Referent, ReferentId,
+	Aspect, Clause, Definiteness, Modifier, Mood, Number, Person, Polarity, Referent, ReferentId,
 	SemanticRole, SemanticValue, Tense, Utterance,
 };
 use crate::wordnet::normalize_lemma;
@@ -322,6 +322,7 @@ impl EnglishSemanticMarshaller {
 		let mut referent = Referent::new(concept);
 		referent.definiteness = definiteness_of(token, sentence);
 		referent.number = number_of(token, sentence);
+		referent.person = person_of(token);
 		for child in sentence.children(token.id) {
 			if child.relation.is("amod") {
 				if let Ok(modifier) = resolve_concept(universe, &child.lemma, Some(Pos::Adjective)) {
@@ -776,6 +777,20 @@ fn definiteness_of(token: &DependencyToken, sentence: &DependencySentence) -> De
 		Definiteness::Definite
 	} else {
 		Definiteness::Indefinite
+	}
+}
+
+fn person_of(token: &DependencyToken) -> Person {
+	match token.features.get("Person") {
+		Some("1") => Person::First,
+		Some("2") => Person::Second,
+		Some("3") => Person::Third,
+		_ => match token.lemma.to_ascii_lowercase().as_str() {
+			"i" | "me" | "we" | "us" | "myself" => Person::First,
+			"you" => Person::Second,
+			"he" | "him" | "she" | "her" | "they" | "them" => Person::Third,
+			_ => Person::Unspecified,
+		},
 	}
 }
 

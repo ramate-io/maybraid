@@ -6932,6 +6932,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "maybraid-language-grammars"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "maybraid-language-core",
+]
+
+[[package]]
 name = "maybraid-language-mistral"
 version = "0.1.0"
 dependencies = [
