@@ -6,9 +6,11 @@ mod index;
 mod stream;
 
 pub use config::MobLayerConfig;
-pub use generation::{MobGenerationPlugin, MobGenerationSystems};
-pub use index::{MobCell, MobIndex};
-pub use stream::{MobLodChan, MobStreamSuspended};
+pub use generation::{
+	MobGenerationCore, MobGenerationPlugin, MobGenerationSystems, MobScheme,
+};
+pub use index::{MobCell, MobCellExtent, MobIndex};
+pub use stream::{install_mob_grid_stream, MobLodChan};
 
 #[cfg(test)]
 mod tests;

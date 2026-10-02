@@ -4787,6 +4787,7 @@ dependencies = [
  "anyhow",
  "bevy",
  "durham-terrain-models",
+ "mob-layer-model",
  "terrain-layer-model",
  "urbanization-layer-model",
 ]
@@ -4804,10 +4805,17 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bevy",
+ "crozon-characters",
  "durham-terrain-models",
  "lod",
+ "maybraid-mobs",
+ "mob-characters",
+ "mob-groups",
+ "mob-layer-model",
+ "mob-layer-presentation",
  "richmond-development-models",
  "terrain-layer-model",
+ "threat-intelligence",
  "urbanization-layer-model",
 ]
 
@@ -5170,6 +5178,7 @@ dependencies = [
  "lod-gimme",
  "maybraid-mobs",
  "mob-groups",
+ "mob-intelligence",
  "mob-layer-model",
  "terrain-layer-model",
  "urbanization-layer-model",

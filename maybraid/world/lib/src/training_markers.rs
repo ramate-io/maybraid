@@ -6,10 +6,8 @@ use combat_hud::CombatHudVisible;
 use damage::{Downed, Health};
 use mob_intelligence::MemberOf;
 
-use maybraid_game_mode_training_ground::TrainingGround;
+use maybraid_game_mode_training_ground::{TrainingBrawler, TrainingGround};
 use terrain_layer_model::ActiveGenerationMode;
-
-use crate::training_plaza::TrainingBrawler;
 use crate::ui::project_mob_pin;
 
 const MARKER_PX: f32 = 10.0;

@@ -10,8 +10,9 @@ use durham_terrain_models::{
 use terrain_layer_model::{
 	ActiveGenerationMode, BaseTerrainModeConfig, BaseTerrainScheme, GenerationMode, OnTerrain,
 };
+use mob_layer_model::{install_mob_grid_stream, MobLayerConfig, MobScheme};
 use urbanization_layer_model::{
-	install_urbanization_stream, UrbanizationLayerConfig, UrbanizationScheme,
+	install_urbanization_stream, Urbanization, UrbanizationLayerConfig, UrbanizationScheme,
 };
 
 pub const LABEL: &str = "Discovery";
@@ -38,6 +39,12 @@ impl BaseTerrainScheme<Durham> for Discovery {
 impl UrbanizationScheme<OnTerrain<Durham>> for Discovery {
 	fn install(app: &mut App, config: &UrbanizationLayerConfig) {
 		install_urbanization_stream::<Discovery>(app, config);
+	}
+}
+
+impl MobScheme<Urbanization<OnTerrain<Durham>>> for Discovery {
+	fn install(app: &mut App, _config: &MobLayerConfig) {
+		install_mob_grid_stream::<Discovery>(app);
 	}
 }
 

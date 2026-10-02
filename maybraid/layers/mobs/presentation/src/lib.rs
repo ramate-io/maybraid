@@ -13,7 +13,7 @@ use lod_gimme::GimmeLodSceneRefreshPlugin;
 use maybraid_mobs::{MobLodRefreshMode, MobScene, MobSceneSystems};
 use mob_groups::MobGroupsPlugin;
 use mob_layer_model::{
-	MobCell, MobGenerationPlugin, MobGenerationSystems, MobIndex, MobLodChan,
+	MobCell, MobGenerationCore, MobGenerationSystems, MobIndex, MobLodChan,
 };
 use terrain_layer_model::{subscribe_mode, GenerationMode, RequireLayer};
 use urbanization_layer_model::UrbanModel;
@@ -21,9 +21,11 @@ use urbanization_layer_model::UrbanModel;
 mod present;
 
 use present::{
-	fit_mob_hosts_to_surface, pulse_mob_high_lod, retire_mob_presenters, MobHighLodChan,
-	MobHighLodRegion, MobPresenter, MobPresenterState,
+	drain_retired_mob_cells, fit_mob_hosts_to_surface, pulse_mob_high_lod, retire_mob_presenters,
+	MobHighLodChan, MobHighLodRegion, MobPresenter, MobPresenterState,
 };
+
+pub use present::PresentedMobCell;
 
 /// Marker for mob-presenter subscriptions on ground `G`.
 pub struct MobPresent;
@@ -83,6 +85,7 @@ impl<G: UrbanModel> Plugin for MobPresentationCore<G> {
 					.after(MobGenerationSystems)
 					.before(LodPresentSystems::Produce),
 			)
+			.add_systems(Last, drain_retired_mob_cells)
 			.add_systems(
 				Update,
 				fit_mob_hosts_to_surface::<G>.in_set(MobSceneSystems::Surface),
@@ -111,7 +114,7 @@ impl<Mode: GenerationMode, G: UrbanModel> Plugin for MobPresentationPlugin<Mode,
 	}
 
 	fn finish(&self, app: &mut App) {
-		app.require_layer::<MobGenerationPlugin<G>, MobPresentationCore<G>>();
+		app.require_layer::<MobGenerationCore<G>, MobPresentationCore<G>>();
 	}
 }
 

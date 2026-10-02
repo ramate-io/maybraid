@@ -37,7 +37,7 @@ impl Plugin for WorldLayersPlugin {
 				VegetationGenerationPlugin::<Discovery>::new(
 					VegetationLayerConfig::world_defaults(),
 				),
-				MobGenerationPlugin::<Urbanization<OnTerrain<Durham>>>::new(
+				MobGenerationPlugin::<Discovery, Urbanization<OnTerrain<Durham>>>::new(
 					MobLayerConfig::world_defaults(),
 				),
 				TerrainPresentationPlugin::<
@@ -69,6 +69,9 @@ impl Plugin for WorldLayersPlugin {
 				VegetationGenerationPlugin::<TrainingGround>::new(
 					VegetationLayerConfig::grove(),
 				),
+				MobGenerationPlugin::<TrainingGround, Urbanization<OnTerrain<Durham>>>::new(
+					MobLayerConfig::world_defaults(),
+				),
 				TerrainPresentationPlugin::<
 					TrainingGround,
 					Urbanization<OnTerrain<Durham>>,
@@ -79,6 +82,10 @@ impl Plugin for WorldLayersPlugin {
 					Urbanization<OnTerrain<Durham>>,
 				>::default(),
 				VegetationPresentationPlugin::<
+					TrainingGround,
+					Urbanization<OnTerrain<Durham>>,
+				>::default(),
+				MobPresentationPlugin::<
 					TrainingGround,
 					Urbanization<OnTerrain<Durham>>,
 				>::default(),

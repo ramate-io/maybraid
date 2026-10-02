@@ -150,6 +150,37 @@ impl MobIndex {
 		self.models_ready = true;
 	}
 
+	/// Write one cell the scheme owns. Bumps membership so presenters see it.
+	pub fn insert_cell(&mut self, cell: MobCell) -> Id {
+		let id = cell.extent.id();
+		let bounds = cell.extent.aabb();
+		let version = self.next_version();
+		self.cells.insert(id, StoredMobCell { value: cell, bounds, version });
+		id
+	}
+
+	/// Drop one cell the scheme owns. Bumps membership so presenters retire it.
+	pub fn remove_cell(&mut self, id: Id) -> Option<MobCell> {
+		let removed = self.cells.remove(&id).map(|entry| entry.value);
+		if removed.is_some() {
+			let _ = self.next_version();
+		}
+		removed
+	}
+
+	/// Drop every cell. Bumps membership when the index was not already empty.
+	pub fn clear(&mut self) {
+		if self.cells.is_empty() {
+			return;
+		}
+		self.cells.clear();
+		let _ = self.next_version();
+	}
+
+	pub fn is_empty(&self) -> bool {
+		self.cells.is_empty()
+	}
+
 	pub fn models_match(
 		&self,
 		forest: &ForestIndex,

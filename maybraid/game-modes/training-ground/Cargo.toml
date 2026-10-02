@@ -11,14 +11,21 @@ rust-version = { workspace = true }
 
 [dependencies]
 bevy = { workspace = true }
+crozon-characters = { workspace = true }
 durham-terrain-models = { workspace = true }
 lod = { workspace = true }
+maybraid-mobs = { workspace = true }
+mob-characters = { workspace = true }
+mob-groups = { workspace = true }
+mob-layer-model = { workspace = true }
+mob-layer-presentation = { workspace = true }
 richmond-development-models = { workspace = true }
 terrain-layer-model = { workspace = true }
 urbanization-layer-model = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
+threat-intelligence = { workspace = true }
 
 [lints]
 workspace = true

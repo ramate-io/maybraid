@@ -21,10 +21,10 @@ use urbanization_layer_model::{Urbanization, UrbanSetting};
 
 use crate::index::{urban_leaf_arrival_radius, MobCell, MobCellExtent, MobIndex};
 use crate::stream::{
-	stream_mobs, sync_mob_models, sync_mob_plant_hosts, MobGenerateBullseye, MobLodChan,
-	MobPresentBullseye, MobStreamSuspended,
+	stream_mob_generate, stream_mob_present, sync_mob_models, sync_mob_plant_hosts,
+	MobGenerateBullseye, MobLodChan, MobPresentBullseye,
 };
-use crate::MobGenerationPlugin;
+use crate::{MobGenerationPlugin, MobLayerConfig, MobScheme};
 
 type Urbanized = Urbanization<OnTerrain<Durham>>;
 
@@ -219,31 +219,75 @@ fn plant_hosts_follow_leaves_cells_settings_then_places() -> anyhow::Result<()> 
 }
 
 #[test]
-fn suspended_stream_disables_bullseyes_and_clears_present_keep() -> anyhow::Result<()> {
+fn present_stream_follows_the_viewer_without_generate() -> anyhow::Result<()> {
+	use bevy::prelude::{Camera3d, Transform};
+
 	let mut app = App::new();
-	app.insert_resource(MobStreamSuspended(true));
 	app.init_resource::<MobGenerateBullseye>();
 	app.init_resource::<MobPresentBullseye>();
 	app.init_resource::<lod::gen::LodGenerateKeepRegion<MobLodChan>>();
 	app.init_resource::<LodPresentKeepRegion<MobLodChan>>();
 	app.add_message::<lod::gen::LodGenerateRegion<MobLodChan>>()
 		.add_message::<lod::presentation::LodPresentRegion<MobLodChan>>()
-		.add_systems(bevy::prelude::Update, stream_mobs);
-	app.world_mut()
-		.resource_mut::<LodPresentKeepRegion<MobLodChan>>()
-		.region = Some(Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE));
+		.add_systems(bevy::prelude::Update, stream_mob_present);
+	app.world_mut().spawn((Camera3d::default(), Transform::from_xyz(50.0, 0.0, -20.0)));
 	app.update();
 
-	assert!(!app.world().resource::<MobGenerateBullseye>().enabled);
-	assert!(!app.world().resource::<MobPresentBullseye>().enabled);
-	assert!(app.world().resource::<LodPresentKeepRegion<MobLodChan>>().region.is_none());
+	anyhow::ensure!(app.world().resource::<MobPresentBullseye>().enabled);
+	anyhow::ensure!(
+		app.world().resource::<LodPresentKeepRegion<MobLodChan>>().region.is_some(),
+		"present keep follows the viewer"
+	);
+	anyhow::ensure!(
+		app.world().resource::<lod::gen::LodGenerateKeepRegion<MobLodChan>>().region.is_none(),
+		"present stream does not arm generate"
+	);
+	Ok(())
+}
+
+#[test]
+fn generate_stream_arms_the_grid() -> anyhow::Result<()> {
+	use bevy::prelude::{Camera3d, Transform};
+
+	let mut app = App::new();
+	app.init_resource::<MobGenerateBullseye>();
+	app.init_resource::<lod::gen::LodGenerateKeepRegion<MobLodChan>>();
+	app.add_message::<lod::gen::LodGenerateRegion<MobLodChan>>()
+		.add_systems(bevy::prelude::Update, stream_mob_generate);
+	app.world_mut().spawn((Camera3d::default(), Transform::from_xyz(50.0, 0.0, -20.0)));
+	app.update();
+
+	anyhow::ensure!(app.world().resource::<MobGenerateBullseye>().enabled);
+	anyhow::ensure!(
+		app.world().resource::<lod::gen::LodGenerateKeepRegion<MobLodChan>>().region.is_some(),
+		"generate keep follows the viewer"
+	);
+	Ok(())
+}
+
+#[test]
+fn insert_and_remove_one_cell() -> anyhow::Result<()> {
+	let mut index = MobIndex::ready();
+	let extent = MobCellExtent::from_cell_index(0, 0);
+	let id = index.insert_cell(MobCell { extent, groups: Vec::new() });
+	anyhow::ensure!(index.get(id).is_some(), "insert stores the cell");
+	anyhow::ensure!(index.remove_cell(id).is_some(), "remove returns the cell");
+	anyhow::ensure!(index.is_empty(), "remove drops the cell");
 	Ok(())
 }
 
 #[test]
 #[should_panic(expected = "VegetationGenerationCore")]
 fn generation_without_vegetation_names_the_missing_plugin() {
-	MobGenerationPlugin::<Silent>::default().finish(&mut App::new());
+	MobGenerationPlugin::<SilentMode, Silent>::default().finish(&mut App::new());
+}
+
+struct SilentMode;
+
+impl terrain_layer_model::GenerationMode for SilentMode {}
+
+impl MobScheme<Silent> for SilentMode {
+	fn install(_app: &mut App, _config: &MobLayerConfig) {}
 }
 
 struct Silent;
@@ -417,4 +461,144 @@ impl urbanization_layer_model::UrbanModel for Silent {
 		_region: Aabb3d,
 	) {
 	}
+}
+
+struct OtherMode;
+
+impl terrain_layer_model::GenerationMode for OtherMode {}
+
+impl MobScheme<Silent> for OtherMode {
+	fn install(_app: &mut App, _config: &MobLayerConfig) {}
+}
+
+fn plugin_app() -> App {
+	use bevy::prelude::{AssetPlugin, MinimalPlugins};
+	use bevy::state::app::StatesPlugin;
+	use durham_terrain_models::TerrainStreamingEnabled;
+	use terrain_layer_model::GenerationModePlugin;
+	use vegetation_layer_model::VegetationGenerationPlugin;
+
+	let mut app = App::new();
+	app.add_plugins((
+		MinimalPlugins,
+		AssetPlugin::default(),
+		StatesPlugin,
+		GenerationModePlugin::<SilentMode>::initial(),
+		GenerationModePlugin::<OtherMode>::default(),
+		VegetationGenerationPlugin::<SilentMode>::default(),
+		VegetationGenerationPlugin::<OtherMode>::default(),
+		MobGenerationPlugin::<SilentMode, Silent>::new(MobLayerConfig::world_defaults()),
+		MobGenerationPlugin::<OtherMode, Silent>::new(MobLayerConfig::world_defaults()),
+	));
+	app.insert_resource(TerrainStreamingEnabled(false));
+	app.init_resource::<ForestIndex>();
+	app
+}
+
+#[test]
+fn two_modes_install_the_core_once() -> anyhow::Result<()> {
+	let mut app = plugin_app();
+	app.finish();
+	anyhow::ensure!(
+		app.is_plugin_added::<crate::MobGenerationCore<Silent>>(),
+		"core is installed once"
+	);
+	Ok(())
+}
+
+#[test]
+fn leaving_a_mode_clears_the_index() -> anyhow::Result<()> {
+	use bevy::prelude::NextState;
+	use terrain_layer_model::ActiveGenerationMode;
+
+	let mut app = plugin_app();
+	app.finish();
+	let extent = MobCellExtent::from_cell_index(0, 0);
+	app.world_mut()
+		.resource_mut::<MobIndex>()
+		.insert_cell(MobCell { extent, groups: Vec::new() });
+	app.world_mut()
+		.resource_mut::<NextState<ActiveGenerationMode>>()
+		.set(ActiveGenerationMode::of::<OtherMode>());
+	app.update();
+	anyhow::ensure!(
+		app.world().resource::<MobIndex>().is_empty(),
+		"OnExit clears every mob cell"
+	);
+	Ok(())
+}
+
+#[test]
+fn grid_stream_resumes_after_another_mode() -> anyhow::Result<()> {
+	use bevy::prelude::{AssetPlugin, Camera3d, MinimalPlugins, NextState, Transform};
+	use bevy::state::app::StatesPlugin;
+	use crate::stream::{install_mob_grid_stream, MobGenerateBullseye};
+	use terrain_layer_model::{ActiveGenerationMode, GenerationModePlugin};
+
+	let mut app = App::new();
+	app.add_plugins((
+		MinimalPlugins,
+		AssetPlugin::default(),
+		StatesPlugin,
+		GenerationModePlugin::<SilentMode>::initial(),
+		GenerationModePlugin::<OtherMode>::default(),
+	));
+	app.init_resource::<MobGenerateBullseye>();
+	app.init_resource::<lod::gen::LodGenerateKeepRegion<MobLodChan>>();
+	app.add_message::<lod::gen::LodGenerateRegion<MobLodChan>>();
+	install_mob_grid_stream::<SilentMode>(&mut app);
+	app.world_mut().spawn((Camera3d::default(), Transform::from_xyz(50.0, 0.0, -20.0)));
+	app.update();
+	anyhow::ensure!(
+		app.world().resource::<lod::gen::LodGenerateKeepRegion<MobLodChan>>().region.is_some(),
+		"grid generate keep follows the viewer"
+	);
+
+	app.world_mut()
+		.resource_mut::<NextState<ActiveGenerationMode>>()
+		.set(ActiveGenerationMode::of::<OtherMode>());
+	app.update();
+	anyhow::ensure!(
+		app.world().resource::<lod::gen::LodGenerateKeepRegion<MobLodChan>>().region.is_none(),
+		"leaving the grid mode drops generate keep"
+	);
+	anyhow::ensure!(!app.world().resource::<MobGenerateBullseye>().enabled);
+
+	app.world_mut()
+		.resource_mut::<NextState<ActiveGenerationMode>>()
+		.set(ActiveGenerationMode::of::<SilentMode>());
+	app.update();
+	anyhow::ensure!(
+		app.world().resource::<lod::gen::LodGenerateKeepRegion<MobLodChan>>().region.is_some(),
+		"re-entering the grid mode arms generate again"
+	);
+	Ok(())
+}
+
+#[test]
+fn disagreeing_budgets_name_the_conflict() -> anyhow::Result<()> {
+	use bevy::prelude::{AssetPlugin, MinimalPlugins};
+	use bevy::state::app::StatesPlugin;
+	use durham_terrain_models::TerrainStreamingEnabled;
+	use terrain_layer_model::GenerationModePlugin;
+	use vegetation_layer_model::VegetationGenerationPlugin;
+
+	let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+		let mut app = App::new();
+		app.add_plugins((
+			MinimalPlugins,
+			AssetPlugin::default(),
+			StatesPlugin,
+			GenerationModePlugin::<SilentMode>::initial(),
+			GenerationModePlugin::<OtherMode>::default(),
+			VegetationGenerationPlugin::<SilentMode>::default(),
+			VegetationGenerationPlugin::<OtherMode>::default(),
+			MobGenerationPlugin::<SilentMode, Silent>::new(MobLayerConfig::world_defaults()),
+			MobGenerationPlugin::<OtherMode, Silent>::new(MobLayerConfig { generate_budget: 8 }),
+		));
+		app.insert_resource(TerrainStreamingEnabled(false));
+		app.finish();
+	}));
+	anyhow::ensure!(result.is_err(), "mismatched budgets must panic");
+	Ok(())
 }

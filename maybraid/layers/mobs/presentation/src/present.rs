@@ -14,6 +14,7 @@ use lod::{
 	LodNode, LodNodePose, LodRefreshDomain, LodSceneRefreshAabb, LodSceneRefreshRegion, LodViewer,
 };
 use maybraid_mobs::MobScene;
+use mob_intelligence::MemberOf;
 use mob_layer_model::{MobCell, MobIndex};
 use terrain_layer_model::{ModeSubscription, TerrainView};
 use urbanization_layer_model::UrbanModel;
@@ -50,15 +51,19 @@ impl LodRefreshRegions for MobHighLodRegion {
 
 #[derive(Resource, Default)]
 pub struct MobPresenterState {
-	presented: HashMap<Id, PresentedMobCell>,
+	presented: HashMap<Id, PresentedCell>,
 	pending_despawn: VecDeque<Vec<Entity>>,
 }
 
-pub struct PresentedMobCell {
+struct PresentedCell {
 	version: Version,
 	entities: Vec<Entity>,
 	hidden: bool,
 }
+
+/// Host the presenter spawned for this generated cell.
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PresentedMobCell(pub Id);
 
 #[derive(Component, Clone, Copy, Debug)]
 pub struct MobCellRoot;
@@ -67,15 +72,13 @@ pub struct MobCellRoot;
 pub struct MobGroupRoot;
 
 impl MobPresenterState {
-	fn retire(&mut self, id: Id) -> Option<PresentedMobCell> {
+	fn retire(&mut self, id: Id) -> Option<PresentedCell> {
 		self.presented.remove(&id)
 	}
 
-	fn remove(&mut self, commands: &mut Commands, id: Id) {
+	fn queue_remove(&mut self, id: Id) {
 		if let Some(presented) = self.presented.remove(&id) {
-			for entity in presented.entities {
-				commands.entity(entity).despawn();
-			}
+			self.pending_despawn.push_back(presented.entities);
 		}
 	}
 
@@ -87,7 +90,7 @@ impl MobPresenterState {
 	pub(crate) fn insert_presented(&mut self, id: Id, entities: Vec<Entity>) {
 		self.presented.insert(
 			id,
-			PresentedMobCell { version: Version(1), entities, hidden: false },
+			PresentedCell { version: Version(1), entities, hidden: false },
 		);
 	}
 
@@ -142,12 +145,12 @@ impl<G: UrbanModel> RegionPresenter<MobCell, MobIndex> for MobPresenter<'_, '_, 
 				let xz = Vec2::new(transform.translation.x, transform.translation.z);
 				transform.translation.y = self.surface.height_or_fallback(xz);
 				let mob = placed.scene.spawn(&mut self.commands, transform);
-				self.commands.entity(mob).insert(ChildOf(group_root));
+				self.commands.entity(mob).insert((ChildOf(group_root), PresentedMobCell(id)));
 			}
 		}
 		self.state
 			.presented
-			.insert(id, PresentedMobCell { version, entities: vec![cell_root], hidden: false });
+			.insert(id, PresentedCell { version, entities: vec![cell_root], hidden: false });
 	}
 
 	fn hide(&mut self, id: Id) {
@@ -175,12 +178,7 @@ impl<G: UrbanModel> RegionPresenter<MobCell, MobIndex> for MobPresenter<'_, '_, 
 			.filter(|id| !wanted.contains(id))
 			.collect();
 		for id in stale {
-			self.state.remove(&mut self.commands, id);
-		}
-		while let Some(entities) = self.state.pending_despawn.pop_front() {
-			for entity in entities {
-				self.commands.entity(entity).despawn();
-			}
+			self.state.queue_remove(id);
 		}
 	}
 }
@@ -219,17 +217,49 @@ pub fn pulse_mob_high_lod(
 pub fn retire_mob_presenters<G: UrbanModel>(
 	subscription: ModeSubscription<(G, MobPresent)>,
 	mut presented: ResMut<MobPresenterState>,
-	mut commands: Commands,
 ) {
 	if subscription.active() {
 		return;
 	}
 	for id in presented.presented_ids() {
-		presented.remove(&mut commands, id);
+		presented.queue_remove(id);
 	}
-	while let Some(entities) = presented.pending_despawn.pop_front() {
-		for entity in entities {
-			commands.entity(entity).despawn();
+}
+
+/// Combat, threat, and mob systems queue inserts on hosts and members through
+/// `PostUpdate`. Despawn in `Last` so those commands still find their targets.
+pub fn drain_retired_mob_cells(
+	mut presented: ResMut<MobPresenterState>,
+	hosts: Query<(Entity, &PresentedMobCell)>,
+	members: Query<(Entity, &MemberOf)>,
+	child_of: Query<&ChildOf>,
+	mut commands: Commands,
+) {
+	while let Some(roots) = presented.pending_despawn.pop_front() {
+		let mut doomed = roots;
+		for (host, _) in &hosts {
+			if doomed.iter().any(|root| under(*root, host, &child_of)) {
+				doomed.push(host);
+			}
+		}
+		for (entity, member) in &members {
+			if doomed.contains(&member.mob) {
+				commands.entity(entity).try_despawn();
+			}
+		}
+		for entity in doomed {
+			commands.entity(entity).try_despawn();
 		}
 	}
+}
+
+fn under(root: Entity, entity: Entity, child_of: &Query<&ChildOf>) -> bool {
+	let mut current = Some(entity);
+	while let Some(entity) = current {
+		if entity == root {
+			return true;
+		}
+		current = child_of.get(entity).ok().map(ChildOf::parent);
+	}
+	false
 }

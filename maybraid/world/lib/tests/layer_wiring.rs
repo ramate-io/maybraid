@@ -5,6 +5,7 @@ use durham_terrain_models::{Durham, DurhamCells};
 use maybraid_game_mode_discover::Discovery;
 use maybraid_game_mode_training_ground::TrainingGround;
 use maybraid_world::WorldLayersPlugin;
+use mob_layer_model::MobGenerationCore;
 use mob_layer_presentation::MobPresent;
 use terrain_layer_model::{ModeSubscribers, OnTerrain};
 use terrain_layer_presentation::TerrainPresentationCore;
@@ -35,7 +36,11 @@ fn layered_world_stack_finishes_headless() -> anyhow::Result<()> {
 
 	let mobs = app.world().resource::<ModeSubscribers<(Urbanized, MobPresent)>>();
 	anyhow::ensure!(mobs.contains::<Discovery>());
-	anyhow::ensure!(!mobs.contains::<TrainingGround>());
+	anyhow::ensure!(mobs.contains::<TrainingGround>());
+	anyhow::ensure!(
+		app.is_plugin_added::<MobGenerationCore<Urbanized>>(),
+		"both mob generation plugins share one core"
+	);
 
 	anyhow::ensure!(
 		app.world()

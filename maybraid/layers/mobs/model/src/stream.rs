@@ -1,6 +1,6 @@
 //! Mob generate / present-keep bullseyes and the camera stream.
 
-use bevy::ecs::system::{ParamSet, SystemParam};
+use bevy::ecs::system::ParamSet;
 use bevy::prelude::*;
 use chico_forests::ForestIndex;
 use lod::gen::{LodGenerateKeepRegion, LodGenerateRegion};
@@ -17,10 +17,6 @@ use crate::index::{urban_leaf_arrival_radius, xz_radius_aabb, MobCellExtent, Mob
 /// Present / generate rings the world stream used (1 km / 3 km).
 pub const MOB_GENERATE_RADIUS: f32 = 3_000.0;
 pub const MOB_PRESENT_RADIUS: f32 = 1_000.0;
-
-/// A session that owns its own roster sets this so the world stream steps aside.
-#[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct MobStreamSuspended(pub bool);
 
 #[derive(Resource, Clone, Copy, Debug, PartialEq)]
 pub struct MobGenerateBullseye {
@@ -76,16 +72,6 @@ fn refresh_status(enabled: bool, radius: f32, lod_ref: &LodRef) -> LodRefreshReg
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct MobLodChan;
-
-#[derive(SystemParam)]
-pub struct MobStream<'w> {
-	pub(crate) generate: ResMut<'w, MobGenerateBullseye>,
-	pub(crate) present: ResMut<'w, MobPresentBullseye>,
-	generate_regions: MessageWriter<'w, LodGenerateRegion<MobLodChan>>,
-	present_regions: MessageWriter<'w, LodPresentRegion<MobLodChan>>,
-	pub(crate) generate_keep: ResMut<'w, LodGenerateKeepRegion<MobLodChan>>,
-	pub(crate) present_keep: ResMut<'w, LodPresentKeepRegion<MobLodChan>>,
-}
 
 pub fn sync_mob_models<G: UrbanModel>(
 	forest: Res<ForestIndex>,
@@ -149,38 +135,77 @@ pub fn sync_mob_plant_hosts<G: UrbanModel>(
 	mobs.plant_hosts = hosts;
 }
 
-/// A session that owns its own roster sets this so the world stream steps aside.
-///
-/// When suspended, generation keeps today's generation half: disable both
-/// bullseyes, set `present_keep.region = None`, reset `previous_cell`, and
-/// return. Presenter clears live in presentation.
-pub fn stream_mobs(
+/// Present keep follows the viewer in every mode so a written cell inside
+/// the present radius presents.
+pub fn stream_mob_present(
 	camera: Query<&Transform, With<Camera3d>>,
-	suspended: Res<MobStreamSuspended>,
-	mut stream: MobStream,
+	mut present: ResMut<MobPresentBullseye>,
+	mut present_regions: MessageWriter<LodPresentRegion<MobLodChan>>,
+	mut present_keep: ResMut<LodPresentKeepRegion<MobLodChan>>,
 	mut previous_cell: Local<Option<(i32, i32)>>,
 ) {
-	if suspended.0 {
-		stream.generate.enabled = false;
-		stream.present.enabled = false;
-		stream.present_keep.region = None;
-		*previous_cell = None;
-		return;
-	}
 	let Ok(camera) = camera.single() else {
 		return;
 	};
-	stream.generate.enabled = true;
-	stream.present.enabled = true;
-	let generate = xz_radius_aabb(camera.translation, MOB_GENERATE_RADIUS);
-	let present = xz_radius_aabb(camera.translation, MOB_PRESENT_RADIUS);
-	stream.generate_keep.region = Some(generate);
-	stream.present_keep.region = Some(present);
+	present.enabled = true;
+	let present_aabb = xz_radius_aabb(camera.translation, MOB_PRESENT_RADIUS);
+	present_keep.region = Some(present_aabb);
 	let current = MobCellExtent::cell_index_containing(camera.translation);
 	if previous_cell.as_ref() == Some(&current) {
 		return;
 	}
-	stream.generate_regions.write(LodGenerateRegion::new(generate));
-	stream.present_regions.write(LodPresentRegion::new(present));
+	present_regions.write(LodPresentRegion::new(present_aabb));
 	*previous_cell = Some(current);
+}
+
+/// Generate keep and grid-cell re-arm. A grid scheme installs this.
+pub fn stream_mob_generate(
+	camera: Query<&Transform, With<Camera3d>>,
+	mut generate: ResMut<MobGenerateBullseye>,
+	mut generate_regions: MessageWriter<LodGenerateRegion<MobLodChan>>,
+	mut generate_keep: ResMut<LodGenerateKeepRegion<MobLodChan>>,
+	mut previous_cell: Local<Option<(i32, i32)>>,
+) {
+	let Ok(camera) = camera.single() else {
+		return;
+	};
+	generate.enabled = true;
+	let generate_aabb = xz_radius_aabb(camera.translation, MOB_GENERATE_RADIUS);
+	generate_keep.region = Some(generate_aabb);
+	let current = MobCellExtent::cell_index_containing(camera.translation);
+	if previous_cell.as_ref() == Some(&current) {
+		return;
+	}
+	generate_regions.write(LodGenerateRegion::new(generate_aabb));
+	*previous_cell = Some(current);
+}
+
+fn clear_mob_generate(
+	mut generate: ResMut<MobGenerateBullseye>,
+	mut generate_keep: ResMut<LodGenerateKeepRegion<MobLodChan>>,
+) {
+	generate.enabled = false;
+	generate_keep.region = None;
+}
+
+/// Grid stream for a mode that owns hopscotch cells.
+pub fn install_mob_grid_stream<Mode: terrain_layer_model::GenerationMode>(app: &mut App) {
+	use lod::LodGenerateSystems;
+	use lod::LodPresentSystems;
+	use terrain_layer_model::{ActiveGenerationMode, GenerationModeSystems};
+
+	use crate::generation::MobGenerationSystems;
+
+	app.add_systems(
+		Update,
+		stream_mob_generate
+			.in_set(GenerationModeSystems::<Mode>::default())
+			.in_set(MobGenerationSystems)
+			.before(LodGenerateSystems::Produce)
+			.before(LodPresentSystems::Produce),
+	);
+	app.add_systems(
+		OnExit(ActiveGenerationMode::of::<Mode>()),
+		clear_mob_generate,
+	);
 }

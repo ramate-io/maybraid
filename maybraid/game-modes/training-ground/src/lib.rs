@@ -10,9 +10,11 @@ use terrain_layer_model::{
 	BaseTerrainModeConfig, BaseTerrainScheme, GenerationMode, GenerationModeSystems,
 };
 
+mod mobs;
 mod round;
 mod urbanization;
 
+pub use mobs::{TrainingBrawler, TrainingRosterSeat};
 pub use round::{TrainingMap, TrainingRound, TRAINING_FINE_HALF_EXTENT_CELLS};
 pub use urbanization::{
 	pad_influence_region, terrain_ids_under_pads, training_development_cell, TrainingPlazaStamped,

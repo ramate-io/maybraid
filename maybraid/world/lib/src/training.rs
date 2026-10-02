@@ -5,8 +5,8 @@
 //! active, hopscotch stays off and a Training pose is not written. Terrain
 //! layout lives on each mode's [`terrain_layer_model::BaseTerrainScheme`].
 //! Training's urbanization scheme stamps one seeded Richmond development;
-//! [`crate::training_plaza`] raises the wall and seats the roster once padded
-//! colliders exist.
+//! [`crate::training_plaza`] raises the wall and seats the player once padded
+//! colliders exist. The training crate writes the roster as one mob cell.
 //!
 //! A Training respawn ends the life with [`TrainingLifeEnded`], and the shell
 //! advances [`TrainingRound`]. A new round moves the patch, tears the plaza
@@ -26,18 +26,16 @@ use crozon_characters::species::{
 use crozon_characters::CharacterAppearance;
 use damage::{Downed, Health};
 use durham_terrain_models::TerrainColliderSystems;
-use maybraid_game_mode_discover::Discovery;
-use maybraid_game_mode_training_ground::{TrainingGround, TrainingRound};
+use maybraid_game_mode_training_ground::{TrainingBrawler, TrainingGround, TrainingRound};
 use mob_intelligence::MemberOf;
-use mob_layer_model::MobStreamSuspended;
 use terrain_layer_model::ActiveGenerationMode;
 
 use crate::WorldPlayerLoadout;
 use crate::control::{WorldSurfaceSet, update_world_surface_ready};
 use crate::training_markers::{TrainingEnemyMarkersEnabled, sync_training_enemy_markers};
 use crate::training_plaza::{
-	TrainingBrawler, clear_training_plaza, mount_training_plaza, park_on_training_site,
-	promote_training_plaza, reseat_training_life,
+	clear_training_plaza, mount_training_plaza, park_on_training_site, promote_training_plaza,
+	reseat_training_life,
 };
 
 /// Training Ground session: patch retarget and the walled plaza.
@@ -60,9 +58,8 @@ impl Plugin for TrainingGroundPlugin {
 				sync_training_enemy_markers,
 			),
 		)
-		// Mob, threat, and combat systems queue plain inserts on squad hosts
-		// and members all through Update and PostUpdate; tearing them down any
-		// earlier in the frame panics those commands.
+		// Wall fixtures and the player anchor tear down in Last so combat
+		// commands queued through PostUpdate still find their targets.
 		.add_systems(Last, clear_training_plaza);
 	}
 }
@@ -72,14 +69,7 @@ impl Plugin for TrainingGroundPlugin {
 fn register_generation_mode_transitions(app: &mut App) {
 	app.add_systems(
 		OnEnter(ActiveGenerationMode::of::<TrainingGround>()),
-		(enter_training, open_training_score),
-	)
-	.add_systems(
-		OnTransition {
-			exited: ActiveGenerationMode::of::<TrainingGround>(),
-			entered: ActiveGenerationMode::of::<Discovery>(),
-		},
-		return_to_discovery,
+		open_training_score,
 	)
 	.add_systems(OnExit(ActiveGenerationMode::of::<TrainingGround>()), close_training_score);
 }
@@ -102,16 +92,6 @@ pub fn training_trainee(round: TrainingRound) -> WorldPlayerLoadout {
 	let inventory = Inventory::with_starter_outfit(random_starter_loadout(&mut rng));
 	let key = format!("trainee-{:016x}-{}", round.seed, round.life());
 	WorldPlayerLoadout::new(key, appearance, inventory).with_name("Trainee")
-}
-
-/// Entering Training suspends the mob stream until [#909](https://github.com/ramate-io/maybraid/issues/909).
-fn enter_training(mut suspended: ResMut<MobStreamSuspended>) {
-	suspended.0 = true;
-}
-
-/// Discovery's mob stream, after Training.
-fn return_to_discovery(mut suspended: ResMut<MobStreamSuspended>) {
-	suspended.0 = false;
 }
 
 /// Each Training session keeps its own [`CombatScore`] across its rounds and
@@ -167,33 +147,9 @@ mod tests {
 
 	use crate::PlayerSpawnXz;
 	use crate::training_plaza::TrainingPlazaMounted;
+	use maybraid_game_mode_discover::Discovery;
 	use terrain_layer_model::{BaseTerrainModeConfig, BaseTerrainScheme, GenerationModePlugin};
 	use super::*;
-
-	fn training_world() -> World {
-		let mut world = World::new();
-		world.insert_resource(MobStreamSuspended(false));
-		world
-	}
-
-	#[test]
-	fn entering_training_suspends_the_mob_stream() -> anyhow::Result<()> {
-		let mut world = training_world();
-		world.run_system_once(enter_training).map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		anyhow::ensure!(world.resource::<MobStreamSuspended>().0);
-		Ok(())
-	}
-
-	#[test]
-	fn returning_to_discovery_resumes_the_mob_stream() -> anyhow::Result<()> {
-		let mut world = training_world();
-		world.run_system_once(enter_training).map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		world
-			.run_system_once(return_to_discovery)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		anyhow::ensure!(!world.resource::<MobStreamSuspended>().0);
-		Ok(())
-	}
 
 	#[derive(States, Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
 	enum ShellFlow {
@@ -243,16 +199,6 @@ mod tests {
 		exits.0 += 1;
 	}
 
-	#[derive(Resource, Default)]
-	struct SquadSeenInPostUpdate(bool);
-
-	fn note_squad_before_last(
-		squads: Query<(), With<TrainingBrawler>>,
-		mut seen: ResMut<SquadSeenInPostUpdate>,
-	) {
-		seen.0 = !squads.is_empty();
-	}
-
 	#[test]
 	fn a_shell_enter_retargets_on_that_update_and_startup_does_not() -> anyhow::Result<()> {
 		let round = TrainingRound::new(7);
@@ -272,7 +218,6 @@ mod tests {
 		app.insert_resource(BaseTerrainModeConfig::<TrainingGround, Durham>::new(training));
 		app.init_state::<ShellFlow>();
 		app.insert_resource(round);
-		app.insert_resource(MobStreamSuspended(false));
 		app.insert_resource(playable_world_cell_layout());
 		app.insert_resource(TerrainCoverage::PlayableWorld);
 		app.insert_resource(TerrainLayoutPinned(false));
@@ -291,7 +236,6 @@ mod tests {
 		register_generation_mode_transitions(&mut app);
 		app.init_resource::<ModeSeenOnLoading>();
 		app.init_resource::<TrainingExits>();
-		app.init_resource::<SquadSeenInPostUpdate>();
 		app.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(
 			&TerrainConfig::new(42),
 		)));
@@ -299,7 +243,6 @@ mod tests {
 		app.insert_resource(PlayerSpawnXz(None));
 		app.add_systems(OnEnter(ShellFlow::Loading), note_mode_on_loading);
 		app.add_systems(OnExit(ActiveGenerationMode::of::<TrainingGround>()), count_training_exit);
-		app.add_systems(PostUpdate, note_squad_before_last);
 		app.add_systems(Last, clear_training_plaza);
 		app.update();
 		assert!(
@@ -335,24 +278,22 @@ mod tests {
 		app.world_mut().resource_mut::<TerrainPresentationDirty>().0 = false;
 		app.insert_resource(round.next());
 		app.insert_resource(TrainingPlazaMounted(round));
-		let squad = app.world_mut().spawn(TrainingBrawler).id();
+		let wall = app.world_mut().spawn(crate::training_plaza::TrainingPlaza).id();
 		hop(&mut app, ShellFlow::Loading, ActiveGenerationMode::of::<TrainingGround>())?;
 		assert_eq!(*app.world().resource::<TerrainCellLayout>(), round.next().layout());
 		assert!(app.world().resource::<TerrainPresentationDirty>().0);
 		assert_eq!(app.world().resource::<TrainingExits>().0, 0);
-		assert!(app.world().resource::<SquadSeenInPostUpdate>().0);
-		assert!(app.world().get_entity(squad).is_err(), "a new map tears the squad down in Last");
+		assert!(app.world().get_entity(wall).is_err(), "a new map tears the wall down in Last");
 
 		let current = *app.world().resource::<TrainingRound>();
 		app.insert_resource(TrainingPlazaMounted(current));
-		let squad = app.world_mut().spawn(TrainingBrawler).id();
+		let wall = app.world_mut().spawn(crate::training_plaza::TrainingPlaza).id();
 		hop(&mut app, ShellFlow::Home, ActiveGenerationMode::of::<Discovery>())?;
 		assert!(app.world().resource::<State<ActiveGenerationMode>>().get().is::<Discovery>());
 		assert_eq!(*app.world().resource::<TerrainCellLayout>(), playable_world_cell_layout());
 		assert_eq!(app.world().resource::<TrainingExits>().0, 1);
 		assert!(app.world().get_resource::<CombatScore>().is_none());
-		assert!(app.world().resource::<SquadSeenInPostUpdate>().0);
-		assert!(app.world().get_entity(squad).is_err(), "leaving despawns the squad in Last");
+		assert!(app.world().get_entity(wall).is_err(), "leaving despawns the wall in Last");
 		Ok(())
 	}
 

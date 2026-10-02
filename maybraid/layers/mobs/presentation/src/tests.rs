@@ -11,8 +11,8 @@ use terrain_layer_model::{
 use urbanization_layer_model::Urbanization;
 
 use crate::present::{
-	retire_mob_presenters, MobCellRoot, MobHighLodRegion, MobPresenterState,
-	MOB_HIGH_LOD_REFRESH_RADIUS,
+	drain_retired_mob_cells, retire_mob_presenters, MobCellRoot, MobHighLodRegion,
+	MobPresenterState, PresentedMobCell, MOB_HIGH_LOD_REFRESH_RADIUS,
 };
 use crate::{MobPresent, MobPresentationPlugin};
 
@@ -83,8 +83,19 @@ fn retire_despawns_presented_roots_and_pending_while_unsubscribed() -> anyhow::R
 	app.world_mut()
 		.run_system_once(retire_mob_presenters::<Urbanized>)
 		.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-	anyhow::ensure!(app.world().get_entity(root).is_err(), "presented root should despawn");
-	anyhow::ensure!(app.world().get_entity(pending).is_err(), "pending entity should despawn");
+	anyhow::ensure!(
+		app.world().get_entity(root).is_ok(),
+		"retire queues; the root lives through Update"
+	);
+	anyhow::ensure!(
+		app.world().get_entity(pending).is_ok(),
+		"pending stays until Last"
+	);
+	app.world_mut()
+		.run_system_once(drain_retired_mob_cells)
+		.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+	anyhow::ensure!(app.world().get_entity(root).is_err(), "Last drain despawns the root");
+	anyhow::ensure!(app.world().get_entity(pending).is_err(), "Last drain despawns pending");
 	Ok(())
 }
 
@@ -138,7 +149,7 @@ fn presentation_inserts_indexed_refresh_mode() -> anyhow::Result<()> {
 }
 
 #[test]
-#[should_panic(expected = "MobGenerationPlugin")]
+#[should_panic(expected = "MobGenerationCore")]
 fn presentation_without_generation_names_the_missing_plugin() {
 	MobPresentationPlugin::<TestMode, Urbanized>::default().finish(&mut App::new());
 }
@@ -160,5 +171,64 @@ fn two_modes_install_the_core_once() -> anyhow::Result<()> {
 	let subscribers = app.world().resource::<ModeSubscribers<(Urbanized, MobPresent)>>();
 	anyhow::ensure!(subscribers.contains::<TestMode>());
 	anyhow::ensure!(subscribers.contains::<OtherMode>());
+	Ok(())
+}
+
+#[derive(bevy::prelude::Resource, Default)]
+struct SquadSeenInPostUpdate(bool);
+
+fn note_squad_before_last(
+	roots: bevy::prelude::Query<(), bevy::prelude::With<MobCellRoot>>,
+	members: bevy::prelude::Query<(), bevy::prelude::With<mob_intelligence::MemberOf>>,
+	mut seen: bevy::prelude::ResMut<SquadSeenInPostUpdate>,
+) {
+	seen.0 = !roots.is_empty() && !members.is_empty();
+}
+
+#[test]
+fn retired_hosts_and_members_survive_post_update_then_leave_in_last() -> anyhow::Result<()> {
+	use bevy::prelude::{ChildOf, Last, PostUpdate, Update};
+	use lod::gen::Id;
+	use mob_intelligence::MemberOf;
+
+	let mut app = App::new();
+	app.add_plugins((
+		MinimalPlugins,
+		StatesPlugin,
+		GenerationModePlugin::<TestMode>::initial(),
+		GenerationModePlugin::<OtherMode>::default(),
+	));
+	subscribe_mode::<(Urbanized, MobPresent), TestMode>(&mut app);
+	app.init_resource::<MobPresenterState>();
+	app.init_resource::<SquadSeenInPostUpdate>();
+	let id = Id::from_cell(bevy::math::bounding::Aabb3d::from_min_max(
+		bevy::math::Vec3::ZERO,
+		bevy::math::Vec3::ONE,
+	));
+	let root = app.world_mut().spawn(MobCellRoot).id();
+	let host = app.world_mut().spawn((PresentedMobCell(id), ChildOf(root))).id();
+	let member = app.world_mut().spawn(MemberOf { mob: host, slot: 0 }).id();
+	let respawned = app.world_mut().spawn(MemberOf { mob: host, slot: 1 }).id();
+	app.world_mut().resource_mut::<MobPresenterState>().insert_presented(id, vec![root]);
+	app.add_systems(Update, retire_mob_presenters::<Urbanized>);
+	app.add_systems(PostUpdate, note_squad_before_last);
+	app.add_systems(Last, drain_retired_mob_cells);
+
+	app.world_mut()
+		.resource_mut::<NextState<ActiveGenerationMode>>()
+		.set(ActiveGenerationMode::of::<OtherMode>());
+	app.update();
+
+	anyhow::ensure!(
+		app.world().resource::<SquadSeenInPostUpdate>().0,
+		"hosts and members survive PostUpdate on the exit frame"
+	);
+	anyhow::ensure!(app.world().get_entity(root).is_err(), "Last drain despawns the cell root");
+	anyhow::ensure!(app.world().get_entity(host).is_err(), "Last drain despawns the host");
+	anyhow::ensure!(app.world().get_entity(member).is_err(), "Last drain despawns the member");
+	anyhow::ensure!(
+		app.world().get_entity(respawned).is_err(),
+		"Last drain despawns a respawned member"
+	);
 	Ok(())
 }
