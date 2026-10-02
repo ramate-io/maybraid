@@ -53,7 +53,7 @@ pub struct WorldSurfaceReady(pub bool);
 pub struct WorldSurfaceSet;
 
 pub(crate) fn update_world_surface_ready(
-	streaming: Res<durham::TerrainStreamingEnabled>,
+	streaming: Res<terrain_layer_model::TerrainStreaming<durham::Durham>>,
 	store: Res<TerrainEntryStore>,
 	layout: Res<TerrainCellLayout>,
 	spawn: Res<PlayerSpawnXz>,
@@ -63,7 +63,7 @@ pub(crate) fn update_world_surface_ready(
 ) {
 	// Menu shells keep streaming off. Leave the ready bit alone; Training
 	// unveils from this same column once a padded FinePatch collider exists.
-	if !streaming.0 {
+	if !streaming.enabled {
 		return;
 	}
 	let xz = discovery_xz(&spawn, &players, &layout);

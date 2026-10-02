@@ -70,7 +70,13 @@ impl Plugin for TerrainResourcesPlugin {
 				Update,
 				(drop_superseded_terrain_colliders, queue_terrain_trimesh_colliders)
 					.chain()
-					.in_set(TerrainColliderSystems::QueueMeshes),
+					.in_set(TerrainColliderSystems::QueueMeshes)
+					.in_set(terrain_layer_model::TerrainLayerSystems::<crate::Durham>::QueueColliders)
+					.in_set(
+						terrain_layer_model::TerrainLayerSystems::<
+							terrain_layer_model::OnTerrain<crate::Durham>,
+						>::QueueColliders,
+					),
 			)
 			.add_systems(
 				PostUpdate,

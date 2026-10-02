@@ -1,23 +1,30 @@
-use bevy::ecs::system::{RunSystemOnce, SystemState};
+use std::collections::HashSet;
+
+use bevy::ecs::system::{SystemParam, SystemState};
 use bevy::math::bounding::Aabb3d;
 use bevy::math::{Vec2, Vec3};
 use bevy::prelude::{App, MinimalPlugins, NextState, Plugin, World};
 use bevy::state::app::StatesPlugin;
+use chico::{ChicoGrove, ForestIndex, ForestLodChan, ForestPresenterState};
 use vegetation_groves::{GroveHeightModulation, GroveTerrain, GroveWorldSample, ModulatedGroveSample};
 use durham::{
 	BaseTerrainNoise, Durham, TerrainCellLayout, TerrainConfig, TerrainEntryStore,
 	TerrainHeightSnapshot, WorldBaseTerrain, TERRAIN_CELL_SIZE,
 };
-use lod::gen::Id;
+use lod::gen::{Id, Version};
+use lod::lod_ref::LodRef;
+use lod::presentation::RegionPresenter;
+use lod::{LodPresentCullPlugin, LodPresentGate, LodPresentKeepRegion, LodPresentPlugin};
 use richmond::{DevelopmentCell, DevelopmentConfig, DevelopmentEntryStore, PadComplex};
 use urbanization_cells::UrbanizationIndex;
 use terrain_layer_model::{HeightField, OnTerrain, TerrainModel, TerrainView};
-use layer_stack::{subscribe_mode, ActiveGenerationMode, GenerationMode, GenerationModePlugin, ModeSubscribers, ModeSubscription};
+use layer_stack::{
+	install_lod_present_gate, subscribe_mode, ActiveGenerationMode, GenerationMode,
+	GenerationModePlugin, ModeSubscribers, ModeSubscription,
+};
 use urbanization_layer_model::Urbanization;
 
-use crate::{
-	retire_vegetation_presenters, GroundGroveSample, VegetationPresent, VegetationPresentationPlugin,
-};
+use crate::{GroundGroveSample, VegetationPresent, VegetationPresentationPlugin};
 
 type Urbanized = Urbanization<OnTerrain<Durham>>;
 
@@ -339,12 +346,39 @@ struct OtherMode;
 
 impl GenerationMode for OtherMode {}
 
-#[test]
-fn losing_subscription_retires_and_returning_presents() -> anyhow::Result<()> {
-	use chico::{ForestLodChan, ForestPresentBullseye, ForestPresenterState};
-	use lod::presentation::LodPresentKeepRegion;
-	use vegetation_layer_model::{VegetationLayerConfig, VegetationModeConfig};
+#[derive(SystemParam)]
+struct ForestStateParam<'w, 's> {
+	commands: bevy::prelude::Commands<'w, 's>,
+	state: bevy::prelude::ResMut<'w, ForestPresenterState>,
+}
 
+impl RegionPresenter<ChicoGrove, ForestIndex> for ForestStateParam<'_, '_> {
+	fn presented_version(&self, id: Id) -> Option<Version> {
+		self.state.presented_version(id)
+	}
+
+	fn handle(&mut self, id: Id, _version: Version, _grove: &ChicoGrove, _lod_ref: &LodRef) {
+		self.state.insert_presented(id, Vec::new());
+	}
+
+	fn hide(&mut self, id: Id) {
+		self.state.hide(&mut self.commands, id);
+	}
+
+	fn is_hidden(&self, id: Id) -> bool {
+		self.state.is_hidden(id)
+	}
+
+	fn presented_ids(&self) -> Vec<Id> {
+		self.state.presented_ids()
+	}
+
+	fn remove_stale(&mut self, wanted: &HashSet<Id>) {
+		self.state.remove_stale(&mut self.commands, wanted);
+	}
+}
+
+fn forest_present_app(both: bool) -> (App, Id) {
 	let mut app = App::new();
 	app.add_plugins((
 		MinimalPlugins,
@@ -353,20 +387,43 @@ fn losing_subscription_retires_and_returning_presents() -> anyhow::Result<()> {
 		GenerationModePlugin::<OtherMode>::default(),
 	));
 	subscribe_mode::<(Silent, VegetationPresent), SilentMode>(&mut app);
-	app.insert_resource(VegetationModeConfig::<SilentMode>::new(
-		VegetationLayerConfig::world_defaults(),
-	));
+	if both {
+		subscribe_mode::<(Silent, VegetationPresent), OtherMode>(&mut app);
+	}
+	install_lod_present_gate::<(Silent, VegetationPresent), ForestLodChan>(&mut app);
 	app.init_resource::<ForestPresenterState>();
-	app.init_resource::<crate::present::CanopyBumpOutPresenterState>();
-	app.init_resource::<crate::present::MediumCanopyBumpOutPresenterState>();
-	app.insert_resource(ForestPresentBullseye { radius_m: 1_000.0, enabled: true });
-	app.init_resource::<LodPresentKeepRegion<ForestLodChan>>();
-	app.world_mut().resource_mut::<LodPresentKeepRegion<ForestLodChan>>().region =
-		Some(Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE));
-	app.update();
+	app.init_resource::<ForestIndex>();
+	app.insert_resource({
+		let mut keep = LodPresentKeepRegion::<ForestLodChan>::default();
+		keep.region = Some(Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE));
+		keep
+	});
+	app.add_plugins((
+		LodPresentPlugin::<
+			ChicoGrove,
+			ForestIndex,
+			ForestStateParam,
+			ForestLodChan,
+		>::default(),
+		LodPresentCullPlugin::<
+			ChicoGrove,
+			ForestIndex,
+			ForestStateParam,
+			ForestLodChan,
+		>::default(),
+	));
+	let id = Id::from_cell(Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE));
+	let host = app.world_mut().spawn_empty().id();
 	app.world_mut()
-		.run_system_once(retire_vegetation_presenters::<SilentMode, Silent>)
-		.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		.resource_mut::<ForestPresenterState>()
+		.insert_presented(id, vec![host]);
+	(app, id)
+}
+
+#[test]
+fn losing_subscription_retires_and_returning_presents() -> anyhow::Result<()> {
+	let (mut app, id) = forest_present_app(false);
+	app.update();
 	{
 		let mut state =
 			SystemState::<ModeSubscription<(Silent, VegetationPresent)>>::new(app.world_mut());
@@ -375,14 +432,18 @@ fn losing_subscription_retires_and_returning_presents() -> anyhow::Result<()> {
 			"subscribed mode presents"
 		);
 	}
+	anyhow::ensure!(
+		!app.world().resource::<ForestPresenterState>().presents(id),
+		"an id missing from the index is stale"
+	);
 
+	app.world_mut()
+		.resource_mut::<ForestPresenterState>()
+		.insert_presented(id, Vec::new());
 	app.world_mut()
 		.resource_mut::<NextState<ActiveGenerationMode>>()
 		.set(ActiveGenerationMode::of::<OtherMode>());
 	app.update();
-	app.world_mut()
-		.run_system_once(retire_vegetation_presenters::<SilentMode, Silent>)
-		.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 	{
 		let mut state =
 			SystemState::<ModeSubscription<(Silent, VegetationPresent)>>::new(app.world_mut());
@@ -392,21 +453,22 @@ fn losing_subscription_retires_and_returning_presents() -> anyhow::Result<()> {
 		);
 	}
 	anyhow::ensure!(
-		!app.world().resource::<ForestPresentBullseye>().enabled,
-		"unsubscribed present bullseye cannot feed Produce"
+		!app.world().resource::<LodPresentGate<ForestLodChan>>().open,
+		"subscription closes the present gate"
 	);
 	anyhow::ensure!(
 		app.world().resource::<LodPresentKeepRegion<ForestLodChan>>().region.is_none(),
 		"unsubscribed keep cannot feed Produce"
+	);
+	anyhow::ensure!(
+		!app.world().resource::<ForestPresenterState>().presents(id),
+		"closing the gate retires presented groves"
 	);
 
 	app.world_mut()
 		.resource_mut::<NextState<ActiveGenerationMode>>()
 		.set(ActiveGenerationMode::of::<SilentMode>());
 	app.update();
-	app.world_mut()
-		.run_system_once(retire_vegetation_presenters::<SilentMode, Silent>)
-		.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 	{
 		let mut state =
 			SystemState::<ModeSubscription<(Silent, VegetationPresent)>>::new(app.world_mut());
@@ -415,6 +477,34 @@ fn losing_subscription_retires_and_returning_presents() -> anyhow::Result<()> {
 			"return presents again"
 		);
 	}
+	anyhow::ensure!(
+		app.world().resource::<LodPresentGate<ForestLodChan>>().open,
+		"return opens the present gate"
+	);
+	Ok(())
+}
+
+#[test]
+fn hop_out_and_back_does_not_keep_the_other_mode_presenters() -> anyhow::Result<()> {
+	let (mut app, id) = forest_present_app(true);
+	app.update();
+	anyhow::ensure!(
+		!app.world().resource::<ForestPresenterState>().presents(id),
+		"OnExit-empty index retires the leaving mode's presenter"
+	);
+
+	app.world_mut()
+		.resource_mut::<NextState<ActiveGenerationMode>>()
+		.set(ActiveGenerationMode::of::<OtherMode>());
+	app.update();
+	app.world_mut()
+		.resource_mut::<NextState<ActiveGenerationMode>>()
+		.set(ActiveGenerationMode::of::<SilentMode>());
+	app.update();
+	anyhow::ensure!(
+		!app.world().resource::<ForestPresenterState>().presents(id),
+		"hop back does not restore the other mode's presenter"
+	);
 	Ok(())
 }
 

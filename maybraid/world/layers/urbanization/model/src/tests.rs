@@ -1,7 +1,7 @@
 use bevy::app::{App, Plugin};
 use bevy::ecs::system::SystemState;
 use bevy::math::bounding::Aabb3d;
-use bevy::math::{IVec2, Vec2, Vec3};
+use bevy::math::{Vec2, Vec3};
 use bevy::prelude::World;
 use durham::{
 	BaseTerrainNoise, Durham, DurhamTerrainConfig, TerrainCellLayout, TerrainConfig,
@@ -354,16 +354,31 @@ fn overlay_cell_prefers_a_padded_cell_then_falls_back_by_size() -> anyhow::Resul
 
 #[test]
 fn empty_keep_draws_a_fine_patch_from_the_layout() -> anyhow::Result<()> {
-	use durham::fine_patch_cell_layout;
 	use crate::{urbanization_host_region, urbanization_visual_region};
+	use terrain_layer_model::TerrainExtent;
 
-	let layout = fine_patch_cell_layout(2, IVec2::ZERO);
-	let visual = urbanization_visual_region(&layout, None)
+	struct Stub;
+
+	let region = Aabb3d::from_min_max(Vec3::new(-320.0, -80.0, -320.0), Vec3::new(320.0, 80.0, 320.0));
+	let extent = TerrainExtent::<Stub>::pinned(region);
+	let visual = urbanization_visual_region(&extent, None)
 		.ok_or_else(|| anyhow::anyhow!("visual region"))?;
-	let host = urbanization_host_region(&layout, None)
+	let host = urbanization_host_region(&extent, None)
 		.ok_or_else(|| anyhow::anyhow!("host region"))?;
-	anyhow::ensure!(visual == layout.presentation_region());
-	anyhow::ensure!(host == layout.presentation_region());
+	anyhow::ensure!(visual == region);
+	anyhow::ensure!(host == region);
+
+	let ring = Aabb3d::from_min_max(Vec3::new(-1_000.0, -80.0, -1_000.0), Vec3::new(1_000.0, 80.0, 1_000.0));
+	let streamed = TerrainExtent::<Stub>::streamed(ring);
+	let layer = Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE);
+	anyhow::ensure!(
+		urbanization_visual_region(&streamed, Some(layer)) == Some(ring),
+		"streamed visual is the presentation ring"
+	);
+	anyhow::ensure!(
+		urbanization_host_region(&streamed, None).is_none(),
+		"streamed host waits for the scheme write"
+	);
 	Ok(())
 }
 
@@ -591,7 +606,7 @@ fn different_budgets_build_and_apply_on_enter() -> anyhow::Result<()> {
 			..UrbanizationLayerConfig::shared_world()
 		}),
 	));
-	app.insert_resource(durham::TerrainStreamingEnabled(false));
+	app.insert_resource(terrain_layer_model::TerrainStreaming::<Durham>::new(false));
 	app.finish();
 	app.world_mut()
 		.run_system_once(crate::generation::apply_urbanization_mode::<StreamMode>)
@@ -644,7 +659,7 @@ fn plugin_order_does_not_matter() -> anyhow::Result<()> {
 		GenerationModePlugin::<StreamMode>::initial(),
 		GenerationModePlugin::<OtherMode>::default(),
 	));
-	app.insert_resource(durham::TerrainStreamingEnabled(false));
+	app.insert_resource(terrain_layer_model::TerrainStreaming::<Durham>::new(false));
 	app.finish();
 	anyhow::ensure!(
 		app.is_plugin_added::<UrbanizationGenerationCore<OnTerrain<Durham>>>(),

@@ -1,4 +1,4 @@
-//! Mob cell presenter, surface fit, High LOD pulse, and unsubscribed teardown.
+//! Mob cell presenter, surface fit, High LOD pulse, and Last-schedule despawn.
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::time::Duration;
@@ -11,17 +11,13 @@ use lod::lod_ref::LodRef;
 use lod::presentation::RegionPresenter;
 use lod::scene::{LodRefreshRegions, LodRefreshRegionsStatus};
 use lod::{
-	LodNode, LodNodePose, LodPresentSystems, LodRefreshDomain, LodSceneRefreshAabb,
-	LodSceneRefreshRegion, LodViewer,
+	LodNode, LodNodePose, LodRefreshDomain, LodSceneRefreshAabb, LodSceneRefreshRegion, LodViewer,
 };
 use mob_scenes::MobScene;
 use mob_intelligence::MemberOf;
-use mob_layer_model::{MobCell, MobGenerationSystems, MobIndex};
+use mob_layer_model::{MobCell, MobIndex};
 use terrain_layer_model::TerrainView;
-use layer_stack::{ActiveGenerationMode, ModeSubscription};
 use urbanization_layer_model::UrbanModel;
-
-use crate::MobPresent;
 
 /// Half-extent of the High produce cube. Sized a margin past the 200 m High sphere.
 pub const MOB_HIGH_LOD_REFRESH_RADIUS: f32 = 250.0;
@@ -218,50 +214,11 @@ pub fn pulse_mob_high_lod(
 	}
 }
 
-/// Teardown registration [`crate::MobPresentationCore`] uses. Tests call this
+/// Last-schedule despawn [`crate::MobPresentationCore`] uses. Tests call this
 /// instead of adding the plugins that pull physics and scenes.
-pub(crate) fn install_mob_cell_teardown<G: UrbanModel>(app: &mut App) {
-	app.init_resource::<MobPresenterState>().add_systems(
-		Update,
-		(retire_mob_presenters::<G>, retire_mob_cells_on_mode_change)
-			.after(MobGenerationSystems)
-			.before(LodPresentSystems::Produce),
-	)
-	.add_systems(Last, drain_retired_mob_cells);
-}
-
-/// Queue every presented cell when the active generation mode changes.
-///
-/// Both modes may subscribe, so [`retire_mob_presenters`] does not run.
-/// Ordered `.after(MobGenerationSystems).before(LodPresentSystems::Produce)`
-/// so a cell written on the entering frame presents after this retire.
-pub(crate) fn retire_mob_cells_on_mode_change(
-	mode: Res<State<ActiveGenerationMode>>,
-	mut presented: ResMut<MobPresenterState>,
-) {
-	if !mode.is_changed() {
-		return;
-	}
-	for id in presented.presented_ids() {
-		presented.queue_remove(id);
-	}
-}
-
-/// While the active mode is not subscribed, remove every presented cell and
-/// drain `pending_despawn`, every frame, exactly as the generation stream did.
-///
-/// Ordered `.after(MobGenerationSystems).before(LodPresentSystems::Produce)`.
-/// No present-state system runs in that window, so the frame timing matches today.
-pub(crate) fn retire_mob_presenters<G: UrbanModel>(
-	subscription: ModeSubscription<(G, MobPresent)>,
-	mut presented: ResMut<MobPresenterState>,
-) {
-	if subscription.active() {
-		return;
-	}
-	for id in presented.presented_ids() {
-		presented.queue_remove(id);
-	}
+pub(crate) fn install_mob_cell_teardown(app: &mut App) {
+	app.init_resource::<MobPresenterState>()
+		.add_systems(Last, drain_retired_mob_cells);
 }
 
 /// Combat, threat, and mob systems queue inserts on hosts and members through

@@ -6472,6 +6472,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bevy",
+ "lod",
 ]
 
 [[package]]
@@ -12679,10 +12680,10 @@ dependencies = [
  "anyhow",
  "bevy",
  "chico",
- "durham",
  "layer-stack",
  "lod",
  "procedural-common",
+ "terrain-layer-model",
 ]
 
 [[package]]

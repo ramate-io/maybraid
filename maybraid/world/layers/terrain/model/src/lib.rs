@@ -10,11 +10,16 @@
 //! stack beneath it in [`Plugin::finish`](bevy::app::Plugin::finish) through
 //! [`TerrainModel::require_generation`] instead of adding other layers itself.
 
+mod contract;
 mod generation;
 mod model;
 mod on_terrain;
 mod view;
 
+pub use contract::{
+	forward_terrain_contract, install_terrain_contract_forward, terrain_streaming, TerrainContractForward,
+	TerrainExtent, TerrainExtentKind, TerrainLayerSystems, TerrainStreaming,
+};
 pub use generation::{
 	BaseTerrainGenerationCore, BaseTerrainGenerationPlugin, BaseTerrainModeConfig,
 	BaseTerrainScheme, TerrainGeneration,

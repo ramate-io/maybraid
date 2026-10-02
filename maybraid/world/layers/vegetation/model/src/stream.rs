@@ -10,7 +10,7 @@ use chico::{
 	DEFAULT_FOREST_GROVE_TILE_XZ, GROVE_GENERATE_RADIUS_M, GROVE_PRESENT_RADIUS_M,
 	MEDIUM_BUMP_OUT_ANCHOR_STEP_M, MEDIUM_BUMP_OUT_OUTER_RADIUS_M,
 };
-use durham::terrain_streaming_enabled;
+use terrain_layer_model::{terrain_streaming, TerrainContractForward};
 use lod::gen::{LodGenerateBudget, LodGenerateKeepRegion, LodGenerateQueue, LodGenerateRegion};
 use lod::presentation::{LodPresentKeepRegion, LodPresentQueue, LodPresentRegion};
 use lod::{
@@ -249,32 +249,6 @@ impl BumpOutStreamLod<'_> {
 	}
 }
 
-pub fn stream_forest<Mode: GenerationMode>(
-	config: Res<VegetationModeConfig<Mode>>,
-	camera: Query<&Transform, With<Camera3d>>,
-	mut lod: ForestStreamLod,
-	mut last_key: ResMut<VegetationStreamKey>,
-) {
-	let cam = camera.single().ok().map(|t| t.translation);
-	lod.apply_spec(config.config.forest.as_ref(), cam, &mut last_key.0);
-}
-
-pub fn stream_canopy_bump_outs<Mode: GenerationMode>(
-	config: Res<VegetationModeConfig<Mode>>,
-	camera: Query<&Transform, With<Camera3d>>,
-	mut lod: BumpOutStreamLod,
-	mut last_key: ResMut<VegetationStreamKey>,
-	mut last_medium_region: Local<Option<Aabb3d>>,
-) {
-	let cam = camera.single().ok().map(|t| t.translation);
-	lod.apply_spec(
-		config.config.forest.as_ref(),
-		cam,
-		&mut last_key.0,
-		&mut last_medium_region,
-	);
-}
-
 /// Forest and bump-out streams share one key. Snapshot it once so the second
 /// apply still sees the cleared value after a hop.
 pub fn stream_vegetation<Mode: GenerationMode>(
@@ -295,8 +269,7 @@ pub fn stream_vegetation<Mode: GenerationMode>(
 }
 
 /// Tear stream LOD and the spec key down so the next mode can refill.
-pub fn clear_vegetation_stream(
-	index: Option<ResMut<ForestIndex>>,
+pub(crate) fn clear_vegetation_stream(
 	key: Option<ResMut<VegetationStreamKey>>,
 	forest: Option<ForestStreamLod>,
 	bump_outs: Option<BumpOutStreamLod>,
@@ -307,8 +280,6 @@ pub fn clear_vegetation_stream(
 	if let Some(mut lod) = forest {
 		let mut last = None;
 		lod.apply_spec(None, None, &mut last);
-	} else if let Some(mut index) = index {
-		index.clear();
 	}
 	if let Some(mut lod) = bump_outs {
 		let mut last = None;
@@ -318,13 +289,14 @@ pub fn clear_vegetation_stream(
 }
 
 /// Forest and bump-out streams for `Mode`, reading [`VegetationModeConfig`].
-pub fn install_vegetation_stream<Mode: GenerationMode>(app: &mut App) {
+pub fn install_vegetation_stream<Mode: GenerationMode, M: Send + Sync + 'static>(app: &mut App) {
 	app.add_systems(
 		Update,
 		stream_vegetation::<Mode>
 			.in_set(GenerationModeSystems::<Mode>::default())
 			.in_set(VegetationGenerationSystems)
-			.run_if(terrain_streaming_enabled)
+			.run_if(terrain_streaming::<M>)
+			.after(TerrainContractForward::Outer)
 			.before(LodGenerateSystems::Produce)
 			.before(LodPresentSystems::Produce),
 	);

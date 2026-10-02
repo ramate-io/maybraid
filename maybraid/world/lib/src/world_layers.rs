@@ -35,7 +35,7 @@ impl Plugin for WorldLayersPlugin {
 				UrbanizationGenerationPlugin::<Discovery, OnTerrain<Durham>>::new(
 					UrbanizationLayerConfig::world_defaults(),
 				),
-				VegetationGenerationPlugin::<Discovery>::new(
+				VegetationGenerationPlugin::<Discovery, Urbanization<OnTerrain<Durham>>>::new(
 					VegetationLayerConfig::world_defaults(),
 				),
 				MobGenerationPlugin::<Discovery, Urbanization<OnTerrain<Durham>>>::new(
@@ -67,7 +67,7 @@ impl Plugin for WorldLayersPlugin {
 				UrbanizationGenerationPlugin::<TrainingGround, OnTerrain<Durham>>::new(
 					UrbanizationLayerConfig::shared_world(),
 				),
-				VegetationGenerationPlugin::<TrainingGround>::new(
+				VegetationGenerationPlugin::<TrainingGround, Urbanization<OnTerrain<Durham>>>::new(
 					VegetationLayerConfig::grove(),
 				),
 				MobGenerationPlugin::<TrainingGround, Urbanization<OnTerrain<Durham>>>::new(

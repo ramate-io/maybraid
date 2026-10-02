@@ -13,7 +13,7 @@ use lod_gimme::GimmeLodSceneRefreshPlugin;
 use mob_scenes::{MobLodRefreshMode, MobScene, MobSceneSystems};
 use barking::MobGroupsPlugin;
 use mob_layer_model::{MobCell, MobGenerationCore, MobIndex, MobLodChan};
-use layer_stack::{subscribe_mode, GenerationMode, RequireLayer};
+use layer_stack::{install_lod_present_gate, subscribe_mode, GenerationMode, RequireLayer};
 use urbanization_layer_model::UrbanModel;
 
 mod present;
@@ -80,7 +80,7 @@ impl<G: UrbanModel> Plugin for MobPresentationCore<G> {
 				With<LodViewer>,
 			>::default())
 			.configure_sets(Update, LodPresentSystems::Produce.after(LodGenerateSystems::Drain));
-		present::install_mob_cell_teardown::<G>(app);
+		present::install_mob_cell_teardown(app);
 		app.add_systems(
 			Update,
 			fit_mob_hosts_to_surface::<G>.in_set(MobSceneSystems::Surface),
@@ -103,6 +103,7 @@ impl<G: UrbanModel> Plugin for MobPresentationCore<G> {
 impl<Mode: GenerationMode, G: UrbanModel> Plugin for MobPresentationPlugin<Mode, G> {
 	fn build(&self, app: &mut App) {
 		subscribe_mode::<(G, MobPresent), Mode>(app);
+		install_lod_present_gate::<(G, MobPresent), MobLodChan>(app);
 		if !app.is_plugin_added::<MobPresentationCore<G>>() {
 			app.add_plugins(MobPresentationCore::<G>::default());
 		}

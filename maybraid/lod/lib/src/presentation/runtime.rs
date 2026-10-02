@@ -147,6 +147,11 @@ impl<T> LodPresentQueue<T> {
 		self.reset_scan = true;
 	}
 
+	/// Re-arm the keep-region scan on the next drain.
+	pub fn reset_scan(&mut self) {
+		self.reset_scan = true;
+	}
+
 	fn enqueue_back(&mut self, id: Id) -> bool {
 		if !self.pending_ids.insert(id) {
 			return false;
@@ -191,6 +196,84 @@ impl<T> LodPresentQueue<T> {
 		self.scan_regions.retain(|region| regions_overlap_xz(*region, live));
 		before.saturating_sub(self.pending.len()) as u64
 	}
+}
+
+/// Whether channel `C` may produce, scan, or present.
+///
+/// Default is open. Closing retires presented ids; region, scan, and produce
+/// systems no-op while it is closed.
+#[derive(Resource, Debug)]
+pub struct LodPresentGate<C: Send + Sync + 'static> {
+	pub open: bool,
+	_c: PhantomData<fn() -> C>,
+}
+
+impl<C: Send + Sync + 'static> Clone for LodPresentGate<C> {
+	fn clone(&self) -> Self {
+		*self
+	}
+}
+
+impl<C: Send + Sync + 'static> Copy for LodPresentGate<C> {}
+
+impl<C: Send + Sync + 'static> Default for LodPresentGate<C> {
+	fn default() -> Self {
+		Self { open: true, _c: PhantomData }
+	}
+}
+
+impl<C: Send + Sync + 'static> LodPresentGate<C> {
+	pub fn new(open: bool) -> Self {
+		Self { open, _c: PhantomData }
+	}
+}
+
+/// Run condition: [`LodPresentGate<C>`] is missing or open.
+pub fn lod_present_gate_open<C: Send + Sync + 'static>(
+	gate: Option<Res<LodPresentGate<C>>>,
+) -> bool {
+	gate.is_none_or(|gate| gate.open)
+}
+
+/// Close edge: drop keep, queue, and every presented id. Open edge: re-arm scan.
+pub fn apply_lod_present_gate<C, T, S, Pr>(
+	gate: Option<Res<LodPresentGate<C>>>,
+	presenter: StaticSystemParam<Pr>,
+	mut keep: ResMut<LodPresentKeepRegion<C>>,
+	mut queue: ResMut<LodPresentQueue<T>>,
+	mut was_open: Local<Option<bool>>,
+) where
+	C: Send + Sync + 'static,
+	T: Send + Sync + 'static,
+	S: Resource + SpatialIndex<T>,
+	Pr: SystemParam + 'static,
+	for<'w, 's> Pr::Item<'w, 's>: RegionPresenter<T, S>,
+{
+	let open = gate.is_none_or(|gate| gate.open);
+	let edge = match *was_open {
+		None => {
+			*was_open = Some(open);
+			if open {
+				return;
+			}
+			false
+		}
+		Some(was) => {
+			*was_open = Some(open);
+			was != open
+		}
+	};
+	if !edge && open {
+		return;
+	}
+	if !open {
+		keep.region = None;
+		queue.clear();
+		let mut presenter = presenter.into_inner();
+		presenter.remove_stale(&HashSet::new());
+		return;
+	}
+	queue.reset_scan();
 }
 
 /// Last present-ring AABB for this channel (cull `keep` set).
@@ -265,6 +348,7 @@ impl Plugin for LodPresentSetsPlugin {
 /// Read pose-changed drivers, emit newly entered [`LodPresentRegion<M>`]
 /// strips, and record the full keep AABB.
 pub fn produce_lod_present_regions<P, F, M>(
+	gate: Option<Res<LodPresentGate<M>>>,
 	producer: Res<P>,
 	nodes: Query<
 		(Entity, &LodNodePose, Option<&LodNodeBounds>),
@@ -278,6 +362,9 @@ pub fn produce_lod_present_regions<P, F, M>(
 	F: QueryFilter + 'static,
 	M: Send + Sync + 'static,
 {
+	if !lod_present_gate_open(gate) {
+		return;
+	}
 	if nodes.is_empty() {
 		return;
 	}
@@ -297,6 +384,7 @@ pub fn produce_lod_present_regions<P, F, M>(
 
 /// Enqueue tracked ids that need handle, then present a budgeted slice.
 pub fn drain_lod_present<T, S, Pr, M, F>(
+	gate: Option<Res<LodPresentGate<M>>>,
 	presenter: StaticSystemParam<Pr>,
 	index: Res<S>,
 	mut queue: ResMut<LodPresentQueue<T>>,
@@ -317,6 +405,9 @@ pub fn drain_lod_present<T, S, Pr, M, F>(
 	M: Send + Sync + 'static,
 	F: QueryFilter + 'static,
 {
+	if !lod_present_gate_open(gate) {
+		return;
+	}
 	let started = Instant::now();
 	let mut presenter = presenter.into_inner();
 	let scan_was_reset = queue.take_scan_reset();
@@ -480,6 +571,7 @@ fn regions_overlap_xz(a: Aabb3d, b: Aabb3d) -> bool {
 
 /// Emit optional [`LodPresentCullRegion<M>`] tiles via strategy `P`. Drain ignores them.
 pub fn produce_lod_present_cull_regions<P, F, M>(
+	gate: Option<Res<LodPresentGate<M>>>,
 	producer: Res<P>,
 	mut cursor: ResMut<LodPresentCullCursor>,
 	nodes: Query<(Entity, &LodNodePose, Option<&LodNodeBounds>), (With<LodNode>, F)>,
@@ -489,6 +581,9 @@ pub fn produce_lod_present_cull_regions<P, F, M>(
 	F: QueryFilter + 'static,
 	M: Send + Sync + 'static,
 {
+	if !lod_present_gate_open(gate) {
+		return;
+	}
 	if nodes.is_empty() {
 		return;
 	}
@@ -539,6 +634,7 @@ where
 /// changes; a `0` revision always rebuilds.
 #[allow(private_interfaces)]
 pub fn drain_lod_present_cull<T, S, Pr, M>(
+	gate: Option<Res<LodPresentGate<M>>>,
 	presenter: StaticSystemParam<Pr>,
 	index: Res<S>,
 	keep: Res<LodPresentKeepRegion<M>>,
@@ -551,6 +647,9 @@ pub fn drain_lod_present_cull<T, S, Pr, M>(
 	for<'w, 's> Pr::Item<'w, 's>: RegionPresenter<T, S>,
 	M: Send + Sync + 'static,
 {
+	if !lod_present_gate_open(gate) {
+		return;
+	}
 	let Some(keep_region) = keep.live_region() else {
 		return;
 	};
@@ -590,6 +689,7 @@ where
 		ensure_present_sets(app);
 		app.init_resource::<P>()
 			.init_resource::<LodPresentKeepRegion<M>>()
+			.init_resource::<LodPresentGate<M>>()
 			.add_message::<LodPresentRegion<M>>()
 			.add_systems(
 				Update,
@@ -638,11 +738,15 @@ where
 			.init_resource::<LodPresentTimeBudget>()
 			.init_resource::<LodPresentQueue<T>>()
 			.init_resource::<LodPresentKeepRegion<M>>()
+			.init_resource::<LodPresentGate<M>>()
 			.add_message::<LodPresentRegion<M>>()
 			.add_message::<LodGenerated<T>>()
 			.add_systems(
 				Update,
-				drain_lod_present::<T, S, Pr, M, F>.in_set(LodPresentSystems::Drain),
+				(
+					apply_lod_present_gate::<M, T, S, Pr>.in_set(LodPresentSystems::Produce),
+					drain_lod_present::<T, S, Pr, M, F>.in_set(LodPresentSystems::Drain),
+				),
 			);
 	}
 }
@@ -678,6 +782,7 @@ where
 		ensure_present_sets(app);
 		app.init_resource::<P>()
 			.init_resource::<LodPresentCullCursor>()
+			.init_resource::<LodPresentGate<M>>()
 			.add_message::<LodPresentCullRegion<M>>()
 			.add_systems(
 				Update,
@@ -721,6 +826,7 @@ where
 		ensure_present_sets(app);
 		app.init_resource::<LodPresentCullBudget>()
 			.init_resource::<LodPresentKeepRegion<M>>()
+			.init_resource::<LodPresentGate<M>>()
 			.add_systems(
 				Update,
 				drain_lod_present_cull::<T, S, Pr, M>.in_set(LodPresentSystems::Cull),

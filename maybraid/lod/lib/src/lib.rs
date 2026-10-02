@@ -32,10 +32,11 @@ pub use lod_ref::{
 	LodRequest,
 };
 pub use presentation::{
-	drain_lod_present, drain_lod_present_cull, produce_lod_present_cull_regions,
-	produce_lod_present_regions, LodPresentBudget, LodPresentCullBudget, LodPresentCullCursor,
-	LodPresentCullPlugin, LodPresentCullRegion, LodPresentCullRegionPlugin, LodPresentKeepRegion,
-	LodPresentPlugin, LodPresentQueue, LodPresentRegion, LodPresentRegionPlugin, LodPresentSystems,
+	apply_lod_present_gate, drain_lod_present, drain_lod_present_cull, lod_present_gate_open,
+	produce_lod_present_cull_regions, produce_lod_present_regions, LodPresentBudget,
+	LodPresentCullBudget, LodPresentCullCursor, LodPresentCullPlugin, LodPresentCullRegion,
+	LodPresentCullRegionPlugin, LodPresentGate, LodPresentKeepRegion, LodPresentPlugin,
+	LodPresentQueue, LodPresentRegion, LodPresentRegionPlugin, LodPresentSystems,
 	LodPresentTimeBudget, RegionPresenter,
 };
 pub use scene::{

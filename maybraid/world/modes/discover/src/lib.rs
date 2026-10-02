@@ -36,8 +36,8 @@ impl BaseTerrainScheme<Durham> for Discovery {
 }
 
 impl UrbanizationScheme<OnTerrain<Durham>> for Discovery {
-	fn install(app: &mut App, config: &UrbanizationLayerConfig) {
-		install_urbanization_stream::<Discovery>(app, config);
+	fn install(app: &mut App, _config: &UrbanizationLayerConfig) {
+		install_urbanization_stream::<Discovery, OnTerrain<Durham>>(app);
 	}
 }
 

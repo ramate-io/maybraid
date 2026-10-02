@@ -9,21 +9,20 @@ use chico::{
 	register_vegetation_view, BumpOutLodChan, CanopyBumpOut, ChicoGrove, ForestIndex, ForestLodChan,
 	MediumBumpOutLodChan, MediumCanopyBumpOut,
 };
-use durham::terrain_streaming_enabled;
 use lod::{
 	LodGenerateSystems, LodPresentCullPlugin, LodPresentPlugin, LodPresentSystems, LodViewer,
 };
 use terrain_layer_model::TerrainModel;
-use layer_stack::{subscribe_mode, GenerationMode, RequireLayer};
-use vegetation_layer_model::{VegetationGenerationCore, VegetationGenerationSystems};
+use layer_stack::{install_lod_present_gate, subscribe_mode, GenerationMode, RequireLayer};
+use vegetation_layer_model::VegetationGenerationCore;
 
 mod material;
 mod present;
 
 pub use material::{VegetationOnTerrainMaterialLib, VegetationOnTerrainMaterialRefPlugin};
 pub use present::{
-	bump_out_from_cell, bump_out_noise, retire_vegetation_presenters, GroundCanopyBumpOutPresenter,
-	GroundForestPresenter, GroundGroveSample, GroundMediumCanopyBumpOutPresenter,
+	bump_out_from_cell, bump_out_noise, GroundCanopyBumpOutPresenter, GroundForestPresenter,
+	GroundGroveSample, GroundMediumCanopyBumpOutPresenter,
 };
 
 use present::{CanopyBumpOutPresenterState, MediumCanopyBumpOutPresenterState};
@@ -116,16 +115,12 @@ where
 {
 	fn build(&self, app: &mut App) {
 		subscribe_mode::<(G, VegetationPresent), Mode>(app);
+		install_lod_present_gate::<(G, VegetationPresent), ForestLodChan>(app);
+		install_lod_present_gate::<(G, VegetationPresent), BumpOutLodChan>(app);
+		install_lod_present_gate::<(G, VegetationPresent), MediumBumpOutLodChan>(app);
 		if !app.is_plugin_added::<VegetationPresentationCore<G>>() {
 			app.add_plugins(VegetationPresentationCore::<G>::default());
 		}
-		app.add_systems(
-			Update,
-			retire_vegetation_presenters::<Mode, G>
-				.after(VegetationGenerationSystems)
-				.before(LodPresentSystems::Produce)
-				.run_if(terrain_streaming_enabled),
-		);
 	}
 
 	fn finish(&self, app: &mut App) {

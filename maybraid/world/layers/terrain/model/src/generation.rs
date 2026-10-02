@@ -6,7 +6,11 @@ use bevy::app::{App, Plugin};
 use bevy::prelude::*;
 
 use layer_stack::{ActiveGenerationMode, GenerationMode};
+use crate::contract::{
+	install_terrain_contract_forward, TerrainContractForward, TerrainExtent, TerrainStreaming,
+};
 use crate::model::TerrainModel;
+use crate::on_terrain::OnTerrain;
 
 /// A model with its own generation stack (the bottom of the wiring diagram).
 ///
@@ -40,7 +44,15 @@ impl<T: TerrainGeneration> Default for BaseTerrainGenerationCore<T> {
 }
 
 impl<T: TerrainGeneration> Plugin for BaseTerrainGenerationCore<T> {
-	fn build(&self, _app: &mut App) {}
+	fn build(&self, app: &mut App) {
+		app.init_resource::<TerrainStreaming<T>>()
+			.init_resource::<TerrainExtent<T>>()
+			.configure_sets(
+				Update,
+				(TerrainContractForward::Inner, TerrainContractForward::Outer).chain(),
+			);
+		install_terrain_contract_forward::<T, OnTerrain<T>>(app, TerrainContractForward::Inner);
+	}
 }
 
 /// Per-mode config the scheme systems read.

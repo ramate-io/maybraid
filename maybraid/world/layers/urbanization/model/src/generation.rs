@@ -5,11 +5,13 @@ use std::marker::PhantomData;
 use bevy::app::{App, Plugin};
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
-use durham::{terrain_streaming_enabled, TerrainColliderSystems};
 use lod::gen::LodGenerateBudget;
 use lod::LodPresentSystems;
 use richmond::{register_richmond_plugin, DevelopmentConfig, DevelopmentEntryStore};
-use terrain_layer_model::TerrainModel;
+use terrain_layer_model::{
+	install_terrain_contract_forward, terrain_streaming, TerrainContractForward,
+	TerrainLayerSystems, TerrainModel,
+};
 use layer_stack::{ActiveGenerationMode, GenerationMode};
 use urbanization_cells::UrbanizationLodChan;
 
@@ -55,21 +57,28 @@ where
 		app.init_resource::<DevelopmentConfig>()
 			.init_resource::<LodGenerateBudget<UrbanizationLodChan>>()
 			.init_resource::<UrbanizationLayerRegion>()
-			.init_resource::<UrbanizationStreamKey>()
-			.configure_sets(
+			.init_resource::<UrbanizationStreamKey>();
+		install_terrain_contract_forward::<M, Urbanization<M>>(
+			app,
+			TerrainContractForward::Outer,
+		);
+		app.configure_sets(
 				Update,
-				UrbanizationStoreSystems
-					.in_set(UrbanizationGenerationSystems)
-					.run_if(terrain_streaming_enabled),
+				(
+					UrbanizationGenerationSystems.after(TerrainContractForward::Inner),
+					UrbanizationStoreSystems
+						.in_set(UrbanizationGenerationSystems)
+						.run_if(terrain_streaming::<M>),
+				),
 			)
 			.add_systems(
 				Update,
-				generate_urbanization_padded_terrain
+				generate_urbanization_padded_terrain::<M>
 					.in_set(UrbanizationGenerationSystems)
 					.after(UrbanizationStoreSystems)
-					.run_if(terrain_streaming_enabled)
+					.run_if(terrain_streaming::<M>)
 					.before(LodPresentSystems::Produce)
-					.before(TerrainColliderSystems::QueueMeshes),
+					.before(TerrainLayerSystems::<M>::QueueColliders),
 			);
 	}
 }

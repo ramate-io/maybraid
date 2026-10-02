@@ -35,7 +35,8 @@ pub use control::{
 	InventoryEditCameraFollow, WorldGameplayEnabled, WorldSceneryVisible, WorldSurfaceReady,
 	WorldSurfaceSet,
 };
-pub use durham::{terrain_streaming_enabled, TerrainStreamingEnabled};
+pub use durham::Durham;
+pub use terrain_layer_model::{terrain_streaming, TerrainStreaming};
 pub use game_commands::command::PendingStartupCommand;
 pub use intelligence::WorldIntelligencePlugin;
 pub use lod::LodJobCounter;

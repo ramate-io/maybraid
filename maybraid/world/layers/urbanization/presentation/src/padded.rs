@@ -5,18 +5,19 @@ use std::collections::HashSet;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use durham::{
-	terrain_streaming_enabled, PresentedTerrainScene, TerrainCellLayout, TerrainColliderMeshSource,
-	TerrainColliderSystems, TerrainSuperseded, TerrainTrimeshCollider,
+	PresentedTerrainScene, TerrainColliderMeshSource, TerrainSuperseded, TerrainTrimeshCollider,
 };
 use lod::gen::{Id, SpatialIndex};
 use lod::lod_ref::LodRef;
-use lod::{LodPresentSystems, LodViewer};
+use lod::{LodPresentGate, LodPresentSystems, LodViewer};
 use richmond::{
 	DevelopmentEntryStore, PaddedStoreView, PaddedTerrainPresenter, PresentedPaddedTerrainScene,
 	TerrainWithPads,
 };
-use terrain_layer_model::TerrainModel;
-use layer_stack::ModeSubscription;
+use layer_stack::LodPresentGateSync;
+use terrain_layer_model::{
+	terrain_streaming, TerrainContractForward, TerrainExtent, TerrainLayerSystems, TerrainModel,
+};
 use terrain_layer_presentation::TerrainPresenter;
 use urbanization_layer_model::{
 	urbanization_visual_region, Urbanization, UrbanizationGenerationSystems, UrbanizationLayerRegion,
@@ -59,15 +60,19 @@ where
 	Urbanization<M>: TerrainModel,
 {
 	fn install(app: &mut App) {
-		app.init_resource::<UrbanizationPaddedTerrainState>().add_systems(
+		app.init_resource::<UrbanizationPaddedTerrainState>()
+			.init_resource::<LodPresentGate<(Urbanization<M>, PaddedCells)>>()
+			.add_systems(
 			Update,
 			(present_urbanization_padded_terrain::<M>, sync_raw_terrain_replacements)
 				.chain()
 				.after(UrbanizationGenerationSystems)
 				.after(crate::UrbanizationHostPresent)
-				.run_if(terrain_streaming_enabled)
+				.after(TerrainContractForward::Inner)
+				.after(LodPresentGateSync)
+				.run_if(terrain_streaming::<M>)
 				.before(LodPresentSystems::Produce)
-				.before(TerrainColliderSystems::QueueMeshes),
+				.before(TerrainLayerSystems::<M>::QueueColliders),
 		);
 	}
 }
@@ -76,9 +81,9 @@ where
 /// An inactive subscription culls every padded cell.
 #[allow(clippy::too_many_arguments, private_interfaces)]
 pub fn present_urbanization_padded_terrain<M>(
-	subscription: ModeSubscription<(Urbanization<M>, PaddedCells)>,
+	gate: Res<LodPresentGate<(Urbanization<M>, PaddedCells)>>,
 	layer: Res<UrbanizationLayerRegion>,
-	layout: Res<TerrainCellLayout>,
+	extent: Res<TerrainExtent<M>>,
 	store: Res<DevelopmentEntryStore>,
 	mut presenter: PaddedTerrainPresenter,
 	mut state: ResMut<UrbanizationPaddedTerrainState>,
@@ -89,7 +94,7 @@ pub fn present_urbanization_padded_terrain<M>(
 	M: TerrainModel,
 	Urbanization<M>: TerrainModel,
 {
-	let Some(region) = urbanization_visual_region(&layout, layer.region).filter(|_| subscription.active())
+	let Some(region) = urbanization_visual_region(&*extent, layer.region).filter(|_| gate.open)
 	else {
 		if last.is_some() || !state.wanted.is_empty() {
 			state.wanted.clear();

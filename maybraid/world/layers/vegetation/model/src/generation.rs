@@ -55,25 +55,26 @@ fn apply_vegetation_mode<Mode: GenerationMode>(
 	*medium = LodGenerateBudget::new(mode.config.medium_bump_out_budget);
 }
 
-/// Forest / grove / bump-out selection for `Mode`. No grow, no hosts, no terrain.
-pub struct VegetationGenerationPlugin<Mode: GenerationMode> {
+/// Forest / grove / bump-out selection for `Mode`. No grow, no hosts.
+/// `M` is the ground whose [`terrain_streaming`](terrain_layer_model::terrain_streaming) gates the stream.
+pub struct VegetationGenerationPlugin<Mode: GenerationMode, M> {
 	pub config: VegetationLayerConfig,
-	_mode: PhantomData<fn() -> Mode>,
+	_marker: PhantomData<fn() -> (Mode, M)>,
 }
 
-impl<Mode: GenerationMode> VegetationGenerationPlugin<Mode> {
+impl<Mode: GenerationMode, M: Send + Sync + 'static> VegetationGenerationPlugin<Mode, M> {
 	pub fn new(config: VegetationLayerConfig) -> Self {
-		Self { config, _mode: PhantomData }
+		Self { config, _marker: PhantomData }
 	}
 }
 
-impl<Mode: GenerationMode> Default for VegetationGenerationPlugin<Mode> {
+impl<Mode: GenerationMode, M: Send + Sync + 'static> Default for VegetationGenerationPlugin<Mode, M> {
 	fn default() -> Self {
 		Self::new(VegetationLayerConfig::default())
 	}
 }
 
-impl<Mode: GenerationMode> Plugin for VegetationGenerationPlugin<Mode> {
+impl<Mode: GenerationMode, M: Send + Sync + 'static> Plugin for VegetationGenerationPlugin<Mode, M> {
 	fn build(&self, app: &mut App) {
 		if !app.is_plugin_added::<VegetationGenerationCore>() {
 			app.add_plugins(VegetationGenerationCore);
@@ -87,7 +88,7 @@ impl<Mode: GenerationMode> Plugin for VegetationGenerationPlugin<Mode> {
 			OnExit(ActiveGenerationMode::of::<Mode>()),
 			clear_vegetation_mode,
 		);
-		install_vegetation_stream::<Mode>(app);
+		install_vegetation_stream::<Mode, M>(app);
 	}
 }
 
@@ -96,7 +97,7 @@ fn clear_vegetation_mode(
 	forest: Option<crate::stream::ForestStreamLod>,
 	bump_outs: Option<crate::stream::BumpOutStreamLod>,
 ) {
-	clear_vegetation_stream(None, key, forest, bump_outs);
+	clear_vegetation_stream(key, forest, bump_outs);
 }
 
 #[cfg(test)]
@@ -104,9 +105,9 @@ mod tests {
 	use bevy::prelude::{App, AssetPlugin, MinimalPlugins, NextState};
 	use bevy::state::app::StatesPlugin;
 	use chico::ForestLodChan;
-	use durham::TerrainStreamingEnabled;
 	use layer_stack::{ActiveGenerationMode, GenerationMode, GenerationModePlugin};
 	use lod::gen::LodGenerateBudget;
+	use terrain_layer_model::TerrainStreaming;
 
 	use super::{VegetationGenerationCore, VegetationGenerationPlugin, VegetationModeConfig};
 	use crate::config::VegetationLayerConfig;
@@ -118,6 +119,8 @@ mod tests {
 	struct Beta;
 
 	impl GenerationMode for Beta {}
+
+	struct Ground;
 
 	fn forest_radius<Mode: GenerationMode>(app: &App) -> Option<u32> {
 		app.world()
@@ -142,10 +145,10 @@ mod tests {
 			StatesPlugin,
 			GenerationModePlugin::<Alpha>::initial(),
 			GenerationModePlugin::<Beta>::default(),
-			VegetationGenerationPlugin::<Alpha>::new(alpha),
-			VegetationGenerationPlugin::<Beta>::new(beta),
+			VegetationGenerationPlugin::<Alpha, Ground>::new(alpha),
+			VegetationGenerationPlugin::<Beta, Ground>::new(beta),
 		));
-		app.insert_resource(TerrainStreamingEnabled(false));
+		app.insert_resource(TerrainStreaming::<Ground>::new(false));
 		app.finish();
 		app
 	}
@@ -191,12 +194,12 @@ mod tests {
 			MinimalPlugins,
 			AssetPlugin::default(),
 			StatesPlugin,
-			VegetationGenerationPlugin::<Beta>::new(VegetationLayerConfig::grove()),
-			VegetationGenerationPlugin::<Alpha>::new(VegetationLayerConfig::world_defaults()),
+			VegetationGenerationPlugin::<Beta, Ground>::new(VegetationLayerConfig::grove()),
+			VegetationGenerationPlugin::<Alpha, Ground>::new(VegetationLayerConfig::world_defaults()),
 			GenerationModePlugin::<Alpha>::initial(),
 			GenerationModePlugin::<Beta>::default(),
 		));
-		generation_first.insert_resource(TerrainStreamingEnabled(false));
+		generation_first.insert_resource(TerrainStreaming::<Ground>::new(false));
 		generation_first.finish();
 		generation_first.update();
 		anyhow::ensure!(
@@ -215,10 +218,10 @@ mod tests {
 			StatesPlugin,
 			GenerationModePlugin::<Alpha>::initial(),
 			GenerationModePlugin::<Beta>::default(),
-			VegetationGenerationPlugin::<Beta>::new(VegetationLayerConfig::grove()),
-			VegetationGenerationPlugin::<Alpha>::new(VegetationLayerConfig::world_defaults()),
+			VegetationGenerationPlugin::<Beta, Ground>::new(VegetationLayerConfig::grove()),
+			VegetationGenerationPlugin::<Alpha, Ground>::new(VegetationLayerConfig::world_defaults()),
 		));
-		beta_first.insert_resource(TerrainStreamingEnabled(false));
+		beta_first.insert_resource(TerrainStreaming::<Ground>::new(false));
 		beta_first.finish();
 		beta_first.update();
 		anyhow::ensure!(

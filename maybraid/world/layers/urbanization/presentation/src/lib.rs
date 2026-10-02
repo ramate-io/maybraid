@@ -8,17 +8,20 @@ use std::marker::PhantomData;
 
 use bevy::app::{App, Plugin};
 use bevy::prelude::*;
-use durham::{terrain_streaming_enabled, TerrainColliderSystems};
+use terrain_layer_model::{
+	terrain_streaming, TerrainContractForward, TerrainExtent, TerrainLayerSystems,
+};
 use furniture_assemblies::{
 	FurnitureAssembliesPlugin, FurnitureStreamPlugin, FurnitureStreamSystems,
 };
 use furniture_shaders::FurnitureShadersPlugin;
 use lod::gen::{Id, Version};
-use lod::LodPresentSystems;
+use lod::{LodPresentGate, LodPresentSystems};
 use building_physics::BuildingWalkColliderPlugin;
-use durham::TerrainCellLayout;
-use terrain_layer_model::{TerrainView};
-use layer_stack::{subscribe_mode, GenerationMode, ModeSubscription};
+use terrain_layer_model::TerrainView;
+use layer_stack::{
+	install_lod_present_gate, subscribe_mode, GenerationMode, LodPresentGateSync,
+};
 use urbanization_layer_model::{
 	urbanization_host_region, UrbanizationLayerRegion, UrbanizationStoreSystems, UrbanModel,
 	UrbanSetting, UrbanizationGenerationSystems,
@@ -137,17 +140,20 @@ pub struct UrbanizationHosts;
 /// still sits after [`UrbanizationGenerationSystems`] and before padded present.
 pub fn present_urbanization_hosts<G: UrbanModel>(
 	mut commands: Commands,
-	subscription: ModeSubscription<(G, UrbanizationHosts)>,
+	gate: Res<LodPresentGate<(G, UrbanizationHosts)>>,
 	layer: Res<UrbanizationLayerRegion>,
-	layout: Res<TerrainCellLayout>,
+	extent: Res<TerrainExtent<G>>,
 	view: TerrainView<G>,
 	mut state: ResMut<UrbanizationPresenterState>,
 ) {
-	if !subscription.active() {
+	if gate.is_changed() && !gate.open {
 		state.clear(&mut commands);
 		return;
 	}
-	let Some(region) = urbanization_host_region(&layout, layer.region) else {
+	if !gate.open {
+		return;
+	}
+	let Some(region) = urbanization_host_region(&*extent, layer.region) else {
 		state.clear(&mut commands);
 		return;
 	};
@@ -201,7 +207,8 @@ impl<G: UrbanModel> Plugin for UrbanizationPresentationCore<G> {
 		if !app.is_plugin_added::<BuildingWalkColliderPlugin>() {
 			app.add_plugins(BuildingWalkColliderPlugin);
 		}
-		app.init_resource::<UrbanizationPresenterState>();
+		app.init_resource::<UrbanizationPresenterState>()
+			.init_resource::<LodPresentGate<(G, UrbanizationHosts)>>();
 		#[allow(private_interfaces)]
 		app.configure_sets(
 			Update,
@@ -212,9 +219,11 @@ impl<G: UrbanModel> Plugin for UrbanizationPresentationCore<G> {
 			present_urbanization_hosts::<G>
 				.in_set(UrbanizationHostPresent)
 				.after(UrbanizationGenerationSystems)
-				.run_if(terrain_streaming_enabled)
+				.after(TerrainContractForward::Outer)
+				.after(LodPresentGateSync)
+				.run_if(terrain_streaming::<G>)
 				.before(LodPresentSystems::Produce)
-				.before(TerrainColliderSystems::QueueMeshes),
+				.before(TerrainLayerSystems::<G>::QueueColliders),
 		);
 	}
 }
@@ -222,6 +231,7 @@ impl<G: UrbanModel> Plugin for UrbanizationPresentationCore<G> {
 impl<Mode: GenerationMode, G: UrbanModel> Plugin for UrbanizationPresentationPlugin<Mode, G> {
 	fn build(&self, app: &mut App) {
 		subscribe_mode::<(G, UrbanizationHosts), Mode>(app);
+		install_lod_present_gate::<(G, UrbanizationHosts), (G, UrbanizationHosts)>(app);
 		if !app.is_plugin_added::<UrbanizationPresentationCore<G>>() {
 			app.add_plugins(UrbanizationPresentationCore::<G>::default());
 		}

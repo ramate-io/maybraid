@@ -45,8 +45,8 @@ impl BaseTerrainScheme<Durham> for PlaygroundMode {
 }
 
 impl UrbanizationScheme<OnTerrain<Durham>> for PlaygroundMode {
-	fn install(app: &mut App, config: &UrbanizationLayerConfig) {
-		install_urbanization_stream::<PlaygroundMode>(app, config);
+	fn install(app: &mut App, _config: &UrbanizationLayerConfig) {
+		install_urbanization_stream::<PlaygroundMode, OnTerrain<Durham>>(app);
 	}
 }
 

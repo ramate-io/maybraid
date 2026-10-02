@@ -8,15 +8,14 @@ use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use vegetation_bumpout::{BumpOut, BumpOutNeighborhood, BumpOutStyle};
 use chico::{
-	BumpOutLodChan, BumpOutPresentBullseye, CanopyBumpOut, ChicoGrove, ForestIndex,
-	ForestLodChan, ForestPresentBullseye, ForestPresenterState, MediumBumpOutLodChan,
-	MediumCanopyBumpOut, MEDIUM_BUMP_OUT_CELL_XZ,
+	CanopyBumpOut, ChicoGrove, ForestIndex, ForestPresenterState, MediumCanopyBumpOut,
+	MEDIUM_BUMP_OUT_CELL_XZ,
 };
 use vegetation_groves::GroveWorldSample;
 use durham::{cascade_chunk_for_cell, TerrainMeshBuilder, TERRAIN_CELL_SIZE};
 use lod::gen::{Id, SpatialIndex, Version};
 use lod::lod_ref::LodRef;
-use lod::presentation::{LodPresentKeepRegion, LodPresentQueue, RegionPresenter};
+use lod::presentation::RegionPresenter;
 use lod::hide_lod_tree;
 use lod_cascade::Chunk;
 use procedural_common::NoiseParams;
@@ -24,10 +23,6 @@ use render_item::mesh::IdentifiedMesh;
 use render_item::NormalizeChunk;
 use terrain_chunk_ref::{TerrainChunkKey, TerrainChunkRef};
 use terrain_layer_model::{HeightField, TerrainCell, TerrainModel, TerrainView};
-use layer_stack::{ActiveGenerationMode, GenerationMode, ModeSubscription};
-use vegetation_layer_model::VegetationModeConfig;
-
-use crate::VegetationPresent;
 
 /// Urbanized medium bump-outs accept a padded cell only this close to
 /// [`MEDIUM_BUMP_OUT_CELL_XZ`]. Fine bump-outs pass `None` and take any size.
@@ -372,81 +367,3 @@ pub fn bump_out_noise(forest: &NoiseParams) -> NoiseParams {
 	}
 }
 
-/// Clear presenter hosts when the forest spec is absent, its key changes, or
-/// the active mode is not subscribed.
-///
-/// The generation stream used to clear these inside `apply_spec`. Keeping the
-/// clear here means the model crate does not despawn. It still runs after
-/// [`VegetationGenerationSystems`](vegetation_layer_model::VegetationGenerationSystems)
-/// and before present produce, under `terrain_streaming_enabled`.
-///
-/// While unsubscribed, present bullseyes, keep regions, and queues are also
-/// dropped so `LodPresentSystems::Produce` cannot respawn the hosts.
-#[allow(clippy::too_many_arguments)]
-pub fn retire_vegetation_presenters<Mode: GenerationMode, G: TerrainModel>(
-	mut commands: Commands,
-	config: Res<VegetationModeConfig<Mode>>,
-	mode: Res<State<ActiveGenerationMode>>,
-	subscription: ModeSubscription<(G, VegetationPresent)>,
-	mut forest: ResMut<ForestPresenterState>,
-	mut bump_outs: ResMut<CanopyBumpOutPresenterState>,
-	mut medium: ResMut<MediumCanopyBumpOutPresenterState>,
-	forest_present: Option<ResMut<ForestPresentBullseye>>,
-	bump_present: Option<ResMut<BumpOutPresentBullseye>>,
-	forest_keep: Option<ResMut<LodPresentKeepRegion<ForestLodChan>>>,
-	bump_keep: Option<ResMut<LodPresentKeepRegion<BumpOutLodChan>>>,
-	medium_keep: Option<ResMut<LodPresentKeepRegion<MediumBumpOutLodChan>>>,
-	forest_queue: Option<ResMut<LodPresentQueue<ChicoGrove>>>,
-	bump_queue: Option<ResMut<LodPresentQueue<CanopyBumpOut>>>,
-	medium_queue: Option<ResMut<LodPresentQueue<MediumCanopyBumpOut>>>,
-	mut last_key: Local<Option<String>>,
-) {
-	if !subscription.active() {
-		forest.clear(&mut commands);
-		bump_outs.clear(&mut commands);
-		medium.clear(&mut commands);
-		last_key.take();
-		if let Some(mut bullseye) = forest_present {
-			bullseye.enabled = false;
-		}
-		if let Some(mut bullseye) = bump_present {
-			bullseye.enabled = false;
-		}
-		if let Some(mut keep) = forest_keep {
-			keep.region = None;
-		}
-		if let Some(mut keep) = bump_keep {
-			keep.region = None;
-		}
-		if let Some(mut keep) = medium_keep {
-			keep.region = None;
-		}
-		if let Some(mut queue) = forest_queue {
-			queue.clear();
-		}
-		if let Some(mut queue) = bump_queue {
-			queue.clear();
-		}
-		if let Some(mut queue) = medium_queue {
-			queue.clear();
-		}
-		return;
-	}
-	if !mode.get().is::<Mode>() {
-		return;
-	}
-	let Some(spec) = config.config.forest.as_ref() else {
-		forest.clear(&mut commands);
-		bump_outs.clear(&mut commands);
-		medium.clear(&mut commands);
-		last_key.take();
-		return;
-	};
-	let key = spec.key();
-	if last_key.as_ref() != Some(&key) {
-		forest.clear(&mut commands);
-		bump_outs.clear(&mut commands);
-		medium.clear(&mut commands);
-		*last_key = Some(key);
-	}
-}

@@ -19,7 +19,7 @@ use characters_playground::CameraController as PreviewCameraController;
 use maybraid_game_mode_discover::{streams_terrain, Discovery};
 use maybraid_game_mode_training_ground::TrainingGround;
 use maybraid_world::{
-	InventoryEditCameraFollow, PlayerPhysicsEnabled, SKY_CLEAR, TerrainStreamingEnabled,
+	Durham, InventoryEditCameraFollow, PlayerPhysicsEnabled, SKY_CLEAR, TerrainStreaming,
 	WorldGameplayEnabled, WorldSceneryVisible,
 };
 use menu_components::MENU_CLEAR;
@@ -220,7 +220,7 @@ pub(crate) fn apply_shell_look(
 	mut loading_cameras: Query<&mut Camera, (With<LoadingBackdropCamera>, Without<Camera3d>)>,
 	mut gameplay: ResMut<WorldGameplayEnabled>,
 	mut physics: ResMut<PlayerPhysicsEnabled>,
-	mut streaming: ResMut<TerrainStreamingEnabled>,
+	mut streaming: ResMut<TerrainStreaming<Durham>>,
 	mut scenery: ResMut<WorldSceneryVisible>,
 ) {
 	let flow = *flow.get();
@@ -245,7 +245,7 @@ pub(crate) fn apply_shell_look(
 	// world motor stay on while either session is playing.
 	let in_world_shell = terrain_streaming_for_shell(flow);
 	let training_session = generation_mode_for_shell(flow, *session).is::<TrainingGround>();
-	streaming.0 =
+	streaming.enabled =
 		streams_terrain(*session == PlaySession::Discovery, in_world_shell) || training_session;
 	scenery.0 = flow == GameFlow::World;
 	let playing = world_session_playing(flow, *session, pause.as_deref());
@@ -317,7 +317,7 @@ mod tests {
 	use maybraid_game_mode_discover::Discovery;
 	use maybraid_game_mode_training_ground::TrainingGround;
 	use maybraid_world::{
-		PlayerPhysicsEnabled, TerrainStreamingEnabled, WorldGameplayEnabled, WorldSceneryVisible,
+		Durham, PlayerPhysicsEnabled, TerrainStreaming, WorldGameplayEnabled, WorldSceneryVisible,
 	};
 	use menu_components::MENU_CLEAR;
 	use layer_stack::ActiveGenerationMode;
@@ -366,12 +366,12 @@ mod tests {
 			world.insert_resource(ClearColor(MENU_CLEAR));
 			world.insert_resource(WorldGameplayEnabled(true));
 			world.insert_resource(PlayerPhysicsEnabled(false));
-			world.insert_resource(TerrainStreamingEnabled(false));
+			world.insert_resource(TerrainStreaming::<Durham>::new(false));
 			world.insert_resource(WorldSceneryVisible(false));
 			world
 				.run_system_once(apply_shell_look)
 				.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-			assert!(world.resource::<TerrainStreamingEnabled>().0);
+			anyhow::ensure!(world.resource::<TerrainStreaming<Durham>>().enabled);
 			assert!(!world.resource::<WorldGameplayEnabled>().0);
 			assert_eq!(world.resource::<WorldSceneryVisible>().0, flow == GameFlow::World);
 		}
@@ -398,14 +398,14 @@ mod tests {
 		world.insert_resource(ClearColor(MENU_CLEAR));
 		world.insert_resource(WorldGameplayEnabled(false));
 		world.insert_resource(PlayerPhysicsEnabled(false));
-		world.insert_resource(TerrainStreamingEnabled(false));
+		world.insert_resource(TerrainStreaming::<Durham>::new(false));
 		world.insert_resource(WorldSceneryVisible(false));
 		world
 			.run_system_once(apply_shell_look)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		assert!(world.resource::<WorldGameplayEnabled>().0);
 		assert!(world.resource::<PlayerPhysicsEnabled>().0);
-		assert!(world.resource::<TerrainStreamingEnabled>().0);
+		anyhow::ensure!(world.resource::<TerrainStreaming<Durham>>().enabled);
 		assert!(world.resource::<WorldSceneryVisible>().0);
 		Ok(())
 	}

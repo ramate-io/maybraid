@@ -9,7 +9,8 @@ use bevy::time::common_conditions::on_timer;
 use world_player::Player;
 use world_player::player::{holding_elevation, player_spawn_point_at};
 use character_persist::{CharacterId, PersistError, SaveRoot};
-use durham::{TerrainCellLayout, WorldBaseTerrain, terrain_streaming_enabled};
+use durham::{Durham, TerrainCellLayout, WorldBaseTerrain};
+use terrain_layer_model::{terrain_streaming, TerrainStreaming};
 use player_camera::FollowCamera;
 use serde::{Deserialize, Serialize};
 
@@ -53,7 +54,7 @@ impl Plugin for PlayerPositionPlugin {
 				sync_waypoints_for_character,
 				retain_player_waypoints,
 				log_player_position
-					.run_if(terrain_streaming_enabled)
+					.run_if(terrain_streaming::<Durham>)
 					.run_if(on_timer(LOG_INTERVAL)),
 			)
 				.chain(),
@@ -220,14 +221,14 @@ fn log_player_position(players: Query<&Transform, With<Player>>) {
 }
 
 fn retain_player_waypoints(
-	streaming: Res<durham::TerrainStreamingEnabled>,
+	streaming: Res<TerrainStreaming<Durham>>,
 	mode: Option<Res<State<ActiveGenerationMode>>>,
 	save_root: Res<SaveRoot>,
 	loadout: Option<Res<WorldPlayerLoadout>>,
 	players: Query<&Transform, With<Player>>,
 	mut waypoints: ResMut<PlayerPositionWaypoints>,
 ) {
-	if !streaming.0 || mode.is_some_and(|mode| mode.get().is::<TrainingGround>()) {
+	if !streaming.enabled || mode.is_some_and(|mode| mode.get().is::<TrainingGround>()) {
 		return;
 	}
 	let Ok(transform) = players.single() else {
@@ -338,7 +339,7 @@ mod tests {
 		let id = CharacterId(7);
 		let mut world = World::new();
 		world.insert_resource(root.clone());
-		world.insert_resource(durham::TerrainStreamingEnabled(true));
+		world.insert_resource(TerrainStreaming::<Durham>::new(true));
 		world.insert_resource(State::new(ActiveGenerationMode::of::<TrainingGround>()));
 		world.insert_resource(PlayerPositionWaypoints::default());
 		world.insert_resource(crate::WorldPlayerLoadout::new(
@@ -365,7 +366,7 @@ mod tests {
 		let id = CharacterId(9);
 		let mut world = World::new();
 		world.insert_resource(root.clone());
-		world.insert_resource(durham::TerrainStreamingEnabled(false));
+		world.insert_resource(TerrainStreaming::<Durham>::new(false));
 		world.insert_resource(PlayerPositionWaypoints::default());
 		world.insert_resource(crate::WorldPlayerLoadout::new(
 			id.to_hex(),

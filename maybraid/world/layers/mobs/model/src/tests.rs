@@ -475,8 +475,8 @@ impl MobScheme<Silent> for OtherMode {
 fn plugin_app() -> App {
 	use bevy::prelude::{AssetPlugin, MinimalPlugins};
 	use bevy::state::app::StatesPlugin;
-	use durham::TerrainStreamingEnabled;
 	use layer_stack::GenerationModePlugin;
+	use terrain_layer_model::TerrainStreaming;
 	use vegetation_layer_model::VegetationGenerationPlugin;
 
 	let mut app = App::new();
@@ -486,12 +486,12 @@ fn plugin_app() -> App {
 		StatesPlugin,
 		GenerationModePlugin::<SilentMode>::initial(),
 		GenerationModePlugin::<OtherMode>::default(),
-		VegetationGenerationPlugin::<SilentMode>::default(),
-		VegetationGenerationPlugin::<OtherMode>::default(),
+		VegetationGenerationPlugin::<SilentMode, Silent>::default(),
+		VegetationGenerationPlugin::<OtherMode, Silent>::default(),
 		MobGenerationPlugin::<SilentMode, Silent>::new(MobLayerConfig::world_defaults()),
 		MobGenerationPlugin::<OtherMode, Silent>::new(MobLayerConfig::world_defaults()),
 	));
-	app.insert_resource(TerrainStreamingEnabled(false));
+	app.insert_resource(TerrainStreaming::<Silent>::new(false));
 	app.init_resource::<ForestIndex>();
 	app
 }
@@ -630,9 +630,9 @@ fn grid_stream_resumes_after_another_mode() -> anyhow::Result<()> {
 fn different_budgets_build_and_apply_on_enter() -> anyhow::Result<()> {
 	use bevy::prelude::{AssetPlugin, MinimalPlugins, NextState};
 	use bevy::state::app::StatesPlugin;
-	use durham::TerrainStreamingEnabled;
 	use layer_stack::{ActiveGenerationMode, GenerationModePlugin};
 	use lod::gen::LodGenerateBudget;
+	use terrain_layer_model::TerrainStreaming;
 	use vegetation_layer_model::VegetationGenerationPlugin;
 
 	use crate::MobLodChan;
@@ -644,12 +644,12 @@ fn different_budgets_build_and_apply_on_enter() -> anyhow::Result<()> {
 		StatesPlugin,
 		GenerationModePlugin::<SilentMode>::initial(),
 		GenerationModePlugin::<OtherMode>::default(),
-		VegetationGenerationPlugin::<SilentMode>::default(),
-		VegetationGenerationPlugin::<OtherMode>::default(),
+		VegetationGenerationPlugin::<SilentMode, Silent>::default(),
+		VegetationGenerationPlugin::<OtherMode, Silent>::default(),
 		MobGenerationPlugin::<SilentMode, Silent>::new(MobLayerConfig::world_defaults()),
 		MobGenerationPlugin::<OtherMode, Silent>::new(MobLayerConfig { generate_budget: 8 }),
 	));
-	app.insert_resource(TerrainStreamingEnabled(false));
+	app.insert_resource(TerrainStreaming::<Silent>::new(false));
 	app.init_resource::<ForestIndex>();
 	app.finish();
 	app.update();
@@ -673,8 +673,8 @@ fn different_budgets_build_and_apply_on_enter() -> anyhow::Result<()> {
 fn plugin_order_does_not_matter() -> anyhow::Result<()> {
 	use bevy::prelude::{AssetPlugin, MinimalPlugins};
 	use bevy::state::app::StatesPlugin;
-	use durham::TerrainStreamingEnabled;
 	use layer_stack::GenerationModePlugin;
+	use terrain_layer_model::TerrainStreaming;
 	use vegetation_layer_model::VegetationGenerationPlugin;
 
 	let mut app = App::new();
@@ -684,12 +684,12 @@ fn plugin_order_does_not_matter() -> anyhow::Result<()> {
 		StatesPlugin,
 		MobGenerationPlugin::<OtherMode, Silent>::new(MobLayerConfig { generate_budget: 8 }),
 		MobGenerationPlugin::<SilentMode, Silent>::new(MobLayerConfig::world_defaults()),
-		VegetationGenerationPlugin::<SilentMode>::default(),
-		VegetationGenerationPlugin::<OtherMode>::default(),
+		VegetationGenerationPlugin::<SilentMode, Silent>::default(),
+		VegetationGenerationPlugin::<OtherMode, Silent>::default(),
 		GenerationModePlugin::<SilentMode>::initial(),
 		GenerationModePlugin::<OtherMode>::default(),
 	));
-	app.insert_resource(TerrainStreamingEnabled(false));
+	app.insert_resource(TerrainStreaming::<Silent>::new(false));
 	app.init_resource::<ForestIndex>();
 	app.finish();
 	app.update();

@@ -33,8 +33,12 @@ use crate::terrain::presentation::{
 	TerrainBackground, TerrainFar, TerrainMeshLodBand, TerrainNear, TerrainPresentationAssets,
 	TerrainPresenterState, TerrainRegionPresenter, TerrainStoreView, TerrainStreamPresenterState,
 };
-use terrain_layer_model::OnTerrain;
-use layer_stack::{mode_subscribed, ModeSubscription};
+use terrain_layer_model::{
+	terrain_streaming, OnTerrain, TerrainContractForward, TerrainExtent, TerrainLayerSystems,
+	TerrainStreaming,
+};
+use layer_stack::{mode_subscribed, LodPresentGateSync};
+use lod::LodPresentGate;
 use terrain_layer_presentation::TerrainPresenter;
 use crate::water::{ComposedWater, Water, WaterPresentationAssets};
 use crate::{DurhamTerrainModelsPlugin, Terrain, TerrainMeshBuilder};
@@ -103,21 +107,22 @@ pub struct WorldBaseTerrain(pub BaseTerrainNoise);
 #[derive(Resource, Default)]
 pub struct TerrainPresentationDirty(pub bool);
 
-/// Whether terrain fill and dependent vegetation streams may advance.
-///
-/// Playgrounds default this on. The game shell keeps it off on Home / Characters
-/// so the menu does not eagerly build the world.
-#[derive(Resource, Clone, Copy, Debug)]
-pub struct TerrainStreamingEnabled(pub bool);
-
-impl Default for TerrainStreamingEnabled {
-	fn default() -> Self {
-		Self(true)
+fn extent_from_layout<M: Send + Sync + 'static>(layout: &TerrainCellLayout) -> TerrainExtent<M> {
+	if layout.is_streamed() {
+		TerrainExtent::streamed(layout.presentation_region())
+	} else {
+		TerrainExtent::pinned(layout.presentation_region())
 	}
 }
 
-pub fn terrain_streaming_enabled(enabled: Res<TerrainStreamingEnabled>) -> bool {
-	enabled.0
+fn write_durham_extent(
+	layout: Res<TerrainCellLayout>,
+	mut extent: ResMut<TerrainExtent<Durham>>,
+) {
+	if !layout.is_changed() {
+		return;
+	}
+	*extent = extent_from_layout::<Durham>(&layout);
 }
 
 /// When true, fill meshes have generated and present is still owed.
@@ -298,15 +303,23 @@ pub(crate) fn install_durham_generation(app: &mut App) {
 	})
 	.init_resource::<TerrainPresentationDirty>()
 	.init_resource::<TerrainPresentPending>()
-	.init_resource::<TerrainStreamingEnabled>()
+	.init_resource::<TerrainStreaming<Durham>>()
+	.init_resource::<TerrainExtent<Durham>>()
 	.init_resource::<TerrainLayoutPinned>()
 	.add_systems(Startup, setup_presentation_assets)
 	.add_systems(
 		Update,
+		write_durham_extent
+			.after(TerrainFillSystems::Generate)
+			.before(TerrainContractForward::Inner),
+	)
+	.add_systems(
+		Update,
 		generate_cells
 			.in_set(TerrainFillSystems::Generate)
-			.run_if(terrain_streaming_enabled)
-			.before(TerrainColliderSystems::QueueMeshes),
+			.run_if(terrain_streaming::<Durham>)
+			.before(TerrainColliderSystems::QueueMeshes)
+			.before(TerrainLayerSystems::<Durham>::QueueColliders),
 	);
 }
 
@@ -342,6 +355,7 @@ pub(crate) fn apply_durham_generation(world: &mut World, config: &crate::DurhamT
 /// Raw Durham present: the three stream presenter states and [`present_cells`].
 pub(crate) fn install_durham_presentation(app: &mut App) {
 	app.init_resource::<TerrainPresenterState>()
+		.init_resource::<LodPresentGate<(OnTerrain<Durham>, DurhamCells)>>()
 		.init_resource::<TerrainStreamPresenterState<TerrainNear>>()
 		.init_resource::<TerrainStreamPresenterState<TerrainFar>>()
 		.init_resource::<TerrainStreamPresenterState<TerrainBackground>>()
@@ -350,22 +364,21 @@ pub(crate) fn install_durham_presentation(app: &mut App) {
 			present_cells
 				.after(generate_cells)
 				.before(TerrainColliderSystems::QueueMeshes)
-				.run_if(terrain_streaming_enabled)
+				.before(TerrainLayerSystems::<Durham>::QueueColliders)
+				.run_if(terrain_streaming::<Durham>)
 				.run_if(mode_subscribed::<(OnTerrain<Durham>, DurhamCells)>()),
 		)
-		.add_systems(Update, clear_unsubscribed_terrain_present);
+		.add_systems(Update, clear_closed_terrain_present.after(LodPresentGateSync));
 }
 
-fn clear_unsubscribed_terrain_present(
-	subscription: ModeSubscription<(OnTerrain<Durham>, DurhamCells)>,
-	mut was_subscribed: Local<bool>,
+fn clear_closed_terrain_present(
+	gate: Res<LodPresentGate<(OnTerrain<Durham>, DurhamCells)>>,
 	mut commands: Commands,
 	mut state: ResMut<TerrainPresenterState>,
 ) {
-	if *was_subscribed && !subscription.active() {
+	if gate.is_changed() && !gate.open {
 		state.clear(&mut commands);
 	}
-	*was_subscribed = subscription.active();
 }
 
 #[derive(Resource, Clone, Copy)]

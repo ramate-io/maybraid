@@ -10,7 +10,7 @@ pub use terrain::render::cascade_chunk_for_cell;
 pub use terrain::{
 	origin_cell_ids_for_layout, playable_world_cell_layout, register_terrain_plugin,
 	retarget_presentation_assets, stream_banded_draws, stream_banded_level, stream_banded_scene,
-	fine_patch_cell_layout, terrain_collider_covers_xz, terrain_streaming_enabled,
+	fine_patch_cell_layout, terrain_collider_covers_xz,
 	AvianTerrainIndex, BaseTerrainNoise,
 	CanyonHighPassControllerLayout, CanyonLowPassControllerLayout, CanyonStampCell, CascadeChunk,
 	ComposedTerrain, Durham, DurhamCells, DurhamHeightSnapshot, DurhamRead, DurhamTerrainConfig,
@@ -30,7 +30,7 @@ pub use terrain::{
 	TerrainPresentationAssets, TerrainPresentationDirty, TerrainPresenterState,
 	TerrainRegionPresenter, TerrainRenderItem, TerrainResourcesPlugin, TerrainSdf,
 	TerrainStoreView, TerrainStreamMarker, TerrainStreamPresenterState,
-	TerrainStreamRegionPresenter, TerrainStreamingEnabled, TerrainSuperseded,
+	TerrainStreamRegionPresenter, TerrainSuperseded,
 	TerrainTrimeshCollider, TerrainVisualHost, ValleyHighPassControllerLayout,
 	ValleyLowPassControllerLayout, ValleyStampCell, WaterSurfaceSnapshot, WorldBaseTerrain,
 	MACRO_CELL_SIZE, TERRAIN_CELL_SIZE, TERRAIN_FRICTION, WORLD_FINE_HALF_EXTENT_CELLS,

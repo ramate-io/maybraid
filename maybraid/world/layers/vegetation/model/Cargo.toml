@@ -13,9 +13,9 @@ rust-version = { workspace = true }
 layer-stack = { workspace = true }
 bevy = { workspace = true }
 chico = { workspace = true }
-durham = { workspace = true }
 lod = { workspace = true }
 procedural-common = { workspace = true }
+terrain-layer-model = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }

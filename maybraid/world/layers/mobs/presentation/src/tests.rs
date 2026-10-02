@@ -9,8 +9,7 @@ use layer_stack::{subscribe_mode, ActiveGenerationMode, GenerationMode, Generati
 use urbanization_layer_model::Urbanization;
 
 use crate::present::{
-	drain_retired_mob_cells, retire_mob_presenters, MobCellRoot, MobHighLodRegion,
-	MobPresenterState, PresentedMobCell, MOB_HIGH_LOD_REFRESH_RADIUS,
+	MobCellRoot, MobHighLodRegion, MobPresenterState, PresentedMobCell, MOB_HIGH_LOD_REFRESH_RADIUS,
 };
 use crate::{MobPresent, MobPresentationPlugin};
 
@@ -46,17 +45,8 @@ impl GenerationMode for OtherMode {}
 
 #[test]
 fn retire_despawns_presented_roots_and_pending_while_unsubscribed() -> anyhow::Result<()> {
-	use bevy::ecs::system::RunSystemOnce;
-
-	let mut app = App::new();
-	app.add_plugins((
-		MinimalPlugins,
-		StatesPlugin,
-		GenerationModePlugin::<TestMode>::initial(),
-		GenerationModePlugin::<OtherMode>::default(),
-	));
+	let mut app = present_app();
 	subscribe_mode::<(Urbanized, MobPresent), TestMode>(&mut app);
-	app.init_resource::<MobPresenterState>();
 	let root = app.world_mut().spawn(MobCellRoot).id();
 	let pending = app.world_mut().spawn_empty().id();
 	let id = Id::from_cell(bevy::math::bounding::Aabb3d::from_min_max(
@@ -66,9 +56,6 @@ fn retire_despawns_presented_roots_and_pending_while_unsubscribed() -> anyhow::R
 	app.world_mut().resource_mut::<MobPresenterState>().insert_presented(id, vec![root]);
 	app.world_mut().resource_mut::<MobPresenterState>().push_pending(vec![pending]);
 	app.update();
-	app.world_mut()
-		.run_system_once(retire_mob_presenters::<Urbanized>)
-		.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 	anyhow::ensure!(
 		app.world().get_entity(root).is_ok(),
 		"subscribed mode keeps presented roots"
@@ -78,20 +65,6 @@ fn retire_despawns_presented_roots_and_pending_while_unsubscribed() -> anyhow::R
 		.resource_mut::<NextState<ActiveGenerationMode>>()
 		.set(ActiveGenerationMode::of::<OtherMode>());
 	app.update();
-	app.world_mut()
-		.run_system_once(retire_mob_presenters::<Urbanized>)
-		.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-	anyhow::ensure!(
-		app.world().get_entity(root).is_ok(),
-		"retire queues; the root lives through Update"
-	);
-	anyhow::ensure!(
-		app.world().get_entity(pending).is_ok(),
-		"pending stays until Last"
-	);
-	app.world_mut()
-		.run_system_once(drain_retired_mob_cells)
-		.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 	anyhow::ensure!(app.world().get_entity(root).is_err(), "Last drain despawns the root");
 	anyhow::ensure!(app.world().get_entity(pending).is_err(), "Last drain despawns pending");
 	Ok(())
@@ -180,7 +153,7 @@ fn teardown_app() -> App {
 		GenerationModePlugin::<TestMode>::initial(),
 		GenerationModePlugin::<OtherMode>::default(),
 	));
-	crate::present::install_mob_cell_teardown::<Urbanized>(&mut app);
+	crate::present::install_mob_cell_teardown(&mut app);
 	app
 }
 
@@ -188,8 +161,7 @@ fn present_app() -> App {
 	use durham::{
 		BaseTerrainNoise, TerrainCellLayout, TerrainConfig, TerrainEntryStore, WorldBaseTerrain,
 	};
-	use lod::LodPresentPlugin;
-	use lod::LodViewer;
+	use lod::{LodPresentCullPlugin, LodPresentPlugin, LodViewer};
 	use mob_layer_model::{MobIndex, MobLodChan};
 	use richmond::DevelopmentEntryStore;
 	use urbanization_cells::UrbanizationIndex;
@@ -197,6 +169,7 @@ fn present_app() -> App {
 	use crate::present::MobPresenter;
 
 	let mut app = teardown_app();
+	layer_stack::install_lod_present_gate::<(Urbanized, MobPresent), MobLodChan>(&mut app);
 	app.add_plugins((
 		AssetPlugin::default(),
 		LodPresentPlugin::<
@@ -206,7 +179,21 @@ fn present_app() -> App {
 			MobLodChan,
 			bevy::prelude::With<LodViewer>,
 		>::default(),
+		LodPresentCullPlugin::<
+			mob_layer_model::MobCell,
+			MobIndex,
+			MobPresenter<'_, '_, Urbanized>,
+			MobLodChan,
+		>::default(),
 	));
+	app.add_systems(
+		bevy::prelude::OnExit(ActiveGenerationMode::of::<TestMode>()),
+		|mut index: bevy::prelude::ResMut<MobIndex>| index.clear(),
+	);
+	app.add_systems(
+		bevy::prelude::OnExit(ActiveGenerationMode::of::<OtherMode>()),
+		|mut index: bevy::prelude::ResMut<MobIndex>| index.clear(),
+	);
 	app.insert_resource(TerrainEntryStore::default());
 	app.insert_resource(TerrainCellLayout::default());
 	app.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(
@@ -280,8 +267,9 @@ fn spawn_presented_squad(app: &mut App) -> (Id, bevy::prelude::Entity, bevy::pre
 fn retired_hosts_and_members_survive_post_update_then_leave_in_last() -> anyhow::Result<()> {
 	use bevy::prelude::PostUpdate;
 
-	let mut app = teardown_app();
+	let mut app = present_app();
 	subscribe_mode::<(Urbanized, MobPresent), TestMode>(&mut app);
+	cover_origin_keep(&mut app);
 	app.init_resource::<SquadSeenInPostUpdate>();
 	app.add_systems(PostUpdate, note_squad_before_last);
 	app.update();
@@ -345,9 +333,10 @@ fn announced_cell_presents_after_the_first_keep_scan() -> anyhow::Result<()> {
 fn presented_cells_leave_when_the_subscribed_mode_changes() -> anyhow::Result<()> {
 	use bevy::prelude::PostUpdate;
 
-	let mut app = teardown_app();
+	let mut app = present_app();
 	subscribe_mode::<(Urbanized, MobPresent), TestMode>(&mut app);
 	subscribe_mode::<(Urbanized, MobPresent), OtherMode>(&mut app);
+	cover_origin_keep(&mut app);
 	app.init_resource::<SquadSeenInPostUpdate>();
 	app.add_systems(PostUpdate, note_squad_before_last);
 	app.update();

@@ -7,7 +7,6 @@
 use bevy::ecs::system::SystemParam;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
-use durham::TerrainCellLayout;
 use lod::gen::{
 	GeneratingSpatialIndex, Id, LodGenerateBudget, LodGenerateKeepRegion, LodGenerateQueue,
 	LodGenerateRegion, MaterializeStatus, SpatialIndex, StorageStatus,
@@ -29,6 +28,7 @@ use crate::config::UrbanizationLayerConfig;
 use crate::generation::UrbanizationLayerRegion;
 use crate::generation::UrbanizationModeConfig;
 use layer_stack::GenerationMode;
+use terrain_layer_model::{terrain_streaming, TerrainExtent, TerrainLayerSystems};
 
 /// Default present ring multiplier (`1` → 1 km present / 3 km generate).
 pub const DEFAULT_URBANIZATION_STREAM_RADIUS: u32 = 1;
@@ -122,13 +122,8 @@ pub fn register_urbanization_lod_generate(app: &mut App) {
 }
 
 /// Hopscotch stream for a mode that owns a spec.
-pub fn install_urbanization_stream<Mode: GenerationMode>(
-	app: &mut App,
-	_config: &UrbanizationLayerConfig,
-) {
+pub fn install_urbanization_stream<Mode: GenerationMode, M: Send + Sync + 'static>(app: &mut App) {
 	use crate::generation::{UrbanizationGenerationSystems, UrbanizationStoreSystems};
-	use durham::terrain_streaming_enabled;
-	use durham::TerrainColliderSystems;
 	use lod::LodGenerateSystems;
 	use lod::LodPresentSystems;
 	use layer_stack::GenerationModeSystems;
@@ -143,7 +138,7 @@ pub fn install_urbanization_stream<Mode: GenerationMode>(
 			.before(LodGenerateSystems::Produce)
 			.before(UrbanizationStoreSystems)
 			.before(LodPresentSystems::Produce)
-			.before(TerrainColliderSystems::QueueMeshes),
+			.before(TerrainLayerSystems::<M>::QueueColliders),
 	);
 	app.add_systems(
 		Update,
@@ -159,9 +154,9 @@ pub fn install_urbanization_stream<Mode: GenerationMode>(
 		)
 			.in_set(GenerationModeSystems::<Mode>::default())
 			.in_set(UrbanizationGenerationSystems)
-			.run_if(terrain_streaming_enabled)
+			.run_if(terrain_streaming::<M>)
 			.before(LodPresentSystems::Produce)
-			.before(TerrainColliderSystems::QueueMeshes),
+			.before(TerrainLayerSystems::<M>::QueueColliders),
 	);
 }
 
@@ -386,31 +381,29 @@ pub fn generate_urbanization_developments<Mode: GenerationMode>(
 	}
 }
 
-/// Visual region for padding. Streamed layouts use Durham's presentation
-/// ring; a pinned patch uses the scheme region or the layout.
-pub fn urbanization_visual_region(
-	layout: &TerrainCellLayout,
+/// Visual region for padding. Streamed extents use the presentation ring; a
+/// pinned patch uses the scheme region or the extent.
+pub fn urbanization_visual_region<M: Send + Sync + 'static>(
+	extent: &TerrainExtent<M>,
 	layer_region: Option<Aabb3d>,
 ) -> Option<Aabb3d> {
-	if layout.is_streamed() {
-		Some(layout.presentation_region())
+	if extent.is_streamed() {
+		Some(extent.presentation_region())
 	} else {
-		Some(layer_region.unwrap_or_else(|| layout.presentation_region()))
+		Some(layer_region.unwrap_or_else(|| extent.presentation_region()))
 	}
 }
 
-/// Host region: the scheme's write, or the layout on a pinned patch.
-pub fn urbanization_host_region(
-	layout: &TerrainCellLayout,
+/// Host region: the scheme's write, or the extent on a pinned patch.
+pub fn urbanization_host_region<M: Send + Sync + 'static>(
+	extent: &TerrainExtent<M>,
 	layer_region: Option<Aabb3d>,
 ) -> Option<Aabb3d> {
-	layer_region.or_else(|| {
-		if layout.is_streamed() {
-			None
-		} else {
-			Some(layout.presentation_region())
-		}
-	})
+	if extent.is_streamed() {
+		layer_region
+	} else {
+		Some(layer_region.unwrap_or_else(|| extent.presentation_region()))
+	}
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -425,13 +418,13 @@ pub(crate) struct PaddedTerrainTickKey {
 ///
 /// Pads sample the inner terrain store (`M`), never `Urbanization<M>`.
 #[allow(private_interfaces)]
-pub fn generate_urbanization_padded_terrain(
+pub fn generate_urbanization_padded_terrain<M: Send + Sync + 'static>(
 	layer: Res<UrbanizationLayerRegion>,
-	layout: Res<TerrainCellLayout>,
+	extent: Res<TerrainExtent<M>>,
 	mut development: DevelopmentIndex,
 	mut last: Local<Option<PaddedTerrainTickKey>>,
 ) {
-	let Some(region) = urbanization_visual_region(&layout, layer.region) else {
+	let Some(region) = urbanization_visual_region(&*extent, layer.region) else {
 		*last = None;
 		return;
 	};

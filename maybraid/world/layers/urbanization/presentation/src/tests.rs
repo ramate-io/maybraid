@@ -139,6 +139,9 @@ fn streamed_hosts_leave_when_the_layer_region_is_gone() -> anyhow::Result<()> {
 	let mut app = subscribed_app();
 	app.insert_resource(UrbanizationLayerRegion::default());
 	app.insert_resource(playable_world_cell_layout());
+	app.insert_resource(terrain_layer_model::TerrainExtent::<Urbanized>::streamed(
+		playable_world_cell_layout().presentation_region(),
+	));
 	app.insert_resource(TerrainEntryStore::default());
 	app.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(
 		&TerrainConfig::new(42),
@@ -146,6 +149,7 @@ fn streamed_hosts_leave_when_the_layer_region_is_gone() -> anyhow::Result<()> {
 	app.insert_resource(UrbanizationIndex::default());
 	app.insert_resource(DevelopmentEntryStore::default());
 	app.init_resource::<UrbanizationPresenterState>();
+	app.init_resource::<lod::LodPresentGate<(Urbanized, UrbanizationHosts)>>();
 
 	let id = Id::from_cell(Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE));
 	let host = app.world_mut().spawn_empty().id();
@@ -342,7 +346,10 @@ fn hosts_walk_a_stored_development_with_no_hopscotch() -> anyhow::Result<()> {
 		store.insert_built(id, built, cell);
 	}
 
-	let region = urbanization_host_region(&layout, None)
+	let region = urbanization_host_region(
+		&terrain_layer_model::TerrainExtent::<Urbanized>::pinned(layout.presentation_region()),
+		None,
+	)
 		.ok_or_else(|| anyhow::anyhow!("fine-patch host region"))?;
 	let mut state = SystemState::<terrain_layer_model::TerrainView<Urbanized>>::new(&mut world);
 	let view = state.get(&world).map_err(|error| anyhow::anyhow!("{error:?}"))?;

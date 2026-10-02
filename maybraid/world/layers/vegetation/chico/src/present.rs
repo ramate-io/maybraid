@@ -81,6 +81,17 @@ impl ForestPresenterState {
 		self.presented.get(&id).is_some_and(|entry| entry.hidden)
 	}
 
+	pub fn presents(&self, id: Id) -> bool {
+		self.presented.contains_key(&id)
+	}
+
+	pub fn insert_presented(&mut self, id: Id, entities: Vec<Entity>) {
+		self.presented.insert(
+			id,
+			PresentedGrove { version: Version(1), entities, hidden: false },
+		);
+	}
+
 	pub fn presented_ids(&self) -> Vec<Id> {
 		self.presented.keys().copied().collect()
 	}
@@ -231,14 +242,23 @@ impl ForestPresenterState {
 			}
 			despawn_budget -= 1;
 		}
-		let stale: Vec<Id> = self
-			.presented_ids()
-			.into_iter()
-			.filter(|id| !keep.contains(id))
-			.filter(|id| SpatialIndex::<ChicoGrove>::get_bounds(spatial_index, *id).is_some())
-			.collect();
+		let mut missing = Vec::new();
+		let mut leaving = Vec::new();
+		for id in self.presented_ids() {
+			if SpatialIndex::<ChicoGrove>::get_bounds(spatial_index, id).is_none() {
+				missing.push(id);
+			} else if !keep.contains(&id) {
+				leaving.push(id);
+			}
+		}
+		if !missing.is_empty() {
+			let skip: HashSet<Id> = missing.iter().copied().collect();
+			let wanted: HashSet<Id> =
+				self.presented_ids().into_iter().filter(|id| !skip.contains(id)).collect();
+			self.remove_stale(commands, &wanted);
+		}
 		let mut to_remove = HashSet::new();
-		for id in stale {
+		for id in leaving {
 			if !self.is_hidden(id) {
 				self.hide(commands, id);
 			}

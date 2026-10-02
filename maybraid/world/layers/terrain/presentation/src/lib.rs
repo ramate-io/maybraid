@@ -8,7 +8,7 @@ use std::marker::PhantomData;
 
 use bevy::app::{App, Plugin};
 use terrain_layer_model::TerrainModel;
-use layer_stack::{subscribe_mode, GenerationMode};
+use layer_stack::{install_lod_present_gate, subscribe_mode, GenerationMode};
 
 /// Installs cell presentation for model `M`.
 pub trait TerrainPresenter<M: TerrainModel>: Send + Sync + 'static {
@@ -43,6 +43,7 @@ impl<Mode: GenerationMode, M: TerrainModel, P: TerrainPresenter<M>> Plugin
 {
 	fn build(&self, app: &mut App) {
 		subscribe_mode::<(M, P), Mode>(app);
+		install_lod_present_gate::<(M, P), (M, P)>(app);
 		if !app.is_plugin_added::<TerrainPresentationCore<M, P>>() {
 			app.add_plugins(TerrainPresentationCore::<M, P>::default());
 		}

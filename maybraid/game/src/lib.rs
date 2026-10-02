@@ -22,7 +22,7 @@ use maybraid_input::MenuNavPad;
 use maybraid_menu_controller::MenuControllerPlugin;
 use maybraid_world::{
 	resume_discovery_from_saved_waypoints, InventoryEditCameraFollow, PlayerPhysicsEnabled,
-	PlayerSpawnXz, ShadowQuality, TerrainStreamingEnabled, TrainingEnemyMarkersEnabled,
+	Durham, PlayerSpawnXz, ShadowQuality, TerrainStreaming, TrainingEnemyMarkersEnabled,
 	WorldGameplayEnabled, WorldMobHudEnabled, WorldPlayerLoadout, WorldPlugin,
 	WorldSceneryVisible, WorldSurfaceSet,
 };
@@ -52,7 +52,7 @@ impl Plugin for GamePlugin {
 			.insert_resource(WorldGameplayEnabled(false))
 			.insert_resource(InventoryEditCameraFollow(false))
 			.insert_resource(PlayerPhysicsEnabled(false))
-			.insert_resource(TerrainStreamingEnabled(false))
+			.insert_resource(TerrainStreaming::<Durham>::new(false))
 			.insert_resource(WorldSceneryVisible(false))
 			.insert_resource(ClearColor(MENU_CLEAR))
 			.init_resource::<PlaySession>()
