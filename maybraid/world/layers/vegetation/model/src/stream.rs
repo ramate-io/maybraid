@@ -22,6 +22,10 @@ use crate::config::ForestStreamSpec;
 use crate::generation::{VegetationGenerationSystems, VegetationModeConfig};
 use layer_stack::{GenerationMode, GenerationModeSystems};
 
+/// Spec fingerprint. A resource so leaving a mode can clear it.
+#[derive(Resource, Default, Debug, Clone, PartialEq, Eq)]
+pub struct VegetationStreamKey(pub Option<String>);
+
 /// Default present ring multiplier (`1` → 1 km grove present / 3 km generate).
 pub const DEFAULT_FOREST_STREAM_RADIUS: u32 = 1;
 
@@ -249,36 +253,75 @@ pub fn stream_forest<Mode: GenerationMode>(
 	config: Res<VegetationModeConfig<Mode>>,
 	camera: Query<&Transform, With<Camera3d>>,
 	mut lod: ForestStreamLod,
-	mut last_key: Local<Option<String>>,
+	mut last_key: ResMut<VegetationStreamKey>,
 ) {
 	let cam = camera.single().ok().map(|t| t.translation);
-	lod.apply_spec(config.config.forest.as_ref(), cam, &mut last_key);
+	lod.apply_spec(config.config.forest.as_ref(), cam, &mut last_key.0);
 }
 
 pub fn stream_canopy_bump_outs<Mode: GenerationMode>(
 	config: Res<VegetationModeConfig<Mode>>,
 	camera: Query<&Transform, With<Camera3d>>,
 	mut lod: BumpOutStreamLod,
-	mut last_key: Local<Option<String>>,
+	mut last_key: ResMut<VegetationStreamKey>,
 	mut last_medium_region: Local<Option<Aabb3d>>,
 ) {
 	let cam = camera.single().ok().map(|t| t.translation);
 	lod.apply_spec(
 		config.config.forest.as_ref(),
 		cam,
-		&mut last_key,
+		&mut last_key.0,
 		&mut last_medium_region,
 	);
+}
+
+/// Forest and bump-out streams share one key. Snapshot it once so the second
+/// apply still sees the cleared value after a hop.
+pub fn stream_vegetation<Mode: GenerationMode>(
+	config: Res<VegetationModeConfig<Mode>>,
+	camera: Query<&Transform, With<Camera3d>>,
+	mut forest: ForestStreamLod,
+	mut bump_outs: BumpOutStreamLod,
+	mut last_key: ResMut<VegetationStreamKey>,
+	mut last_medium_region: Local<Option<Aabb3d>>,
+) {
+	let cam = camera.single().ok().map(|t| t.translation);
+	let spec = config.config.forest.as_ref();
+	let mut forest_key = last_key.0.clone();
+	let mut bump_key = last_key.0.clone();
+	forest.apply_spec(spec, cam, &mut forest_key);
+	bump_outs.apply_spec(spec, cam, &mut bump_key, &mut last_medium_region);
+	last_key.0 = forest_key;
+}
+
+/// Tear stream LOD and the spec key down so the next mode can refill.
+pub fn clear_vegetation_stream(
+	index: Option<ResMut<ForestIndex>>,
+	key: Option<ResMut<VegetationStreamKey>>,
+	forest: Option<ForestStreamLod>,
+	bump_outs: Option<BumpOutStreamLod>,
+) {
+	if let Some(mut key) = key {
+		key.0 = None;
+	}
+	if let Some(mut lod) = forest {
+		let mut last = None;
+		lod.apply_spec(None, None, &mut last);
+	} else if let Some(mut index) = index {
+		index.clear();
+	}
+	if let Some(mut lod) = bump_outs {
+		let mut last = None;
+		let mut last_medium_region = None;
+		lod.apply_spec(None, None, &mut last, &mut last_medium_region);
+	}
 }
 
 /// Forest and bump-out streams for `Mode`, reading [`VegetationModeConfig`].
 pub fn install_vegetation_stream<Mode: GenerationMode>(app: &mut App) {
 	app.add_systems(
 		Update,
-		(
-			stream_forest::<Mode>,
-			stream_canopy_bump_outs::<Mode>.after(stream_forest::<Mode>),
-		)
+		stream_vegetation::<Mode>
 			.in_set(GenerationModeSystems::<Mode>::default())
 			.in_set(VegetationGenerationSystems)
 			.run_if(terrain_streaming_enabled)

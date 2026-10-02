@@ -157,7 +157,7 @@ fn stream_applies_focus_when_the_spec_kind_is_open() -> anyhow::Result<()> {
 	let mut app = App::new();
 	app.add_plugins((MinimalPlugins, StatesPlugin));
 	app.add_plugins(GenerationModePlugin::<TestMode>::initial());
-	register_urbanization_lod_generate(&mut app, 16);
+	register_urbanization_lod_generate(&mut app);
 	app.insert_resource(UrbanizationModeConfig::<TestMode>::new(config));
 	app.init_resource::<UrbanizationStreamKey>();
 	app.world_mut()
@@ -492,7 +492,7 @@ fn leaving_a_stream_mode_clears_then_reentering_streams_again() -> anyhow::Resul
 		GenerationModePlugin::<StreamMode>::initial(),
 		GenerationModePlugin::<OtherMode>::default(),
 	));
-	register_urbanization_lod_generate(&mut app, 16);
+	register_urbanization_lod_generate(&mut app);
 	app.insert_resource(UrbanizationModeConfig::<StreamMode>::new(
 		UrbanizationLayerConfig::world_defaults(),
 	));

@@ -9,7 +9,10 @@ use layer_stack::{ActiveGenerationMode, GenerationMode};
 use lod::gen::LodGenerateBudget;
 
 use crate::config::VegetationLayerConfig;
-use crate::stream::{install_vegetation_stream, register_bump_out_generate, register_forest_generate};
+use crate::stream::{
+	clear_vegetation_stream, install_vegetation_stream, register_bump_out_generate,
+	register_forest_generate, VegetationStreamKey,
+};
 
 /// Systems that arm forest and bump-out keep regions.
 ///
@@ -22,6 +25,7 @@ pub struct VegetationGenerationCore;
 
 impl Plugin for VegetationGenerationCore {
 	fn build(&self, app: &mut App) {
+		app.init_resource::<VegetationStreamKey>();
 		register_forest_generate(app);
 		register_bump_out_generate(app);
 	}
@@ -79,8 +83,20 @@ impl<Mode: GenerationMode> Plugin for VegetationGenerationPlugin<Mode> {
 			OnEnter(ActiveGenerationMode::of::<Mode>()),
 			apply_vegetation_mode::<Mode>,
 		);
+		app.add_systems(
+			OnExit(ActiveGenerationMode::of::<Mode>()),
+			clear_vegetation_mode,
+		);
 		install_vegetation_stream::<Mode>(app);
 	}
+}
+
+fn clear_vegetation_mode(
+	key: Option<ResMut<VegetationStreamKey>>,
+	forest: Option<crate::stream::ForestStreamLod>,
+	bump_outs: Option<crate::stream::BumpOutStreamLod>,
+) {
+	clear_vegetation_stream(None, key, forest, bump_outs);
 }
 
 #[cfg(test)]
@@ -212,20 +228,56 @@ mod tests {
 		Ok(())
 	}
 
+	fn origin_forest_is_selected(app: &App) -> bool {
+		use chico::{ChicoForest, ForestExtent, ForestIndex};
+		use lod::gen::SpatialIndex;
+
+		let index = app.world().resource::<ForestIndex>();
+		SpatialIndex::<ChicoForest>::get(index, ForestExtent::from_cell_index(0, 0).id()).is_some()
+	}
+
+	fn plant_origin_forest(app: &mut App) {
+		use chico::{ForestExtent, ForestIndex};
+
+		app.world_mut()
+			.resource_mut::<ForestIndex>()
+			.ensure_forest_selected(ForestExtent::from_cell_index(0, 0));
+	}
+
 	#[test]
 	fn hopping_modes_writes_each_forest_spec() -> anyhow::Result<()> {
+		use crate::stream::VegetationStreamKey;
+
 		let mut app = vegetation_app(
 			VegetationLayerConfig::world_defaults(),
 			VegetationLayerConfig::grove(),
 		);
 		app.update();
 		anyhow::ensure!(forest_radius::<Alpha>(&app) == Some(1), "initial mode is radius 1");
+		plant_origin_forest(&mut app);
+		anyhow::ensure!(origin_forest_is_selected(&app), "planted cell is in the index");
 
 		hop(&mut app, ActiveGenerationMode::of::<Beta>())?;
 		anyhow::ensure!(forest_radius::<Beta>(&app) == Some(0), "grove mode is radius 0");
+		anyhow::ensure!(!origin_forest_is_selected(&app), "leaving alpha clears the index");
+		anyhow::ensure!(
+			app.world().resource::<VegetationStreamKey>().0.is_none(),
+			"leaving alpha clears the stream key"
+		);
+
+		plant_origin_forest(&mut app);
+		anyhow::ensure!(origin_forest_is_selected(&app), "beta planted its own cell");
 
 		hop(&mut app, ActiveGenerationMode::of::<Alpha>())?;
 		anyhow::ensure!(forest_radius::<Alpha>(&app) == Some(1), "return restores radius 1");
+		anyhow::ensure!(
+			!origin_forest_is_selected(&app),
+			"return hop clears the index so alpha cannot keep beta's groves"
+		);
+		anyhow::ensure!(
+			app.world().resource::<VegetationStreamKey>().0.is_none(),
+			"return hop clears the stream key"
+		);
 		Ok(())
 	}
 }

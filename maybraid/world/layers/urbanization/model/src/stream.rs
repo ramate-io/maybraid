@@ -99,11 +99,10 @@ pub fn stream_radii_m(stream_radius: u32) -> (f32, f32) {
 /// Generate + present-keep plugins for [`SelectedUrbanization`].
 ///
 /// Presenter state is installed by urbanization presentation.
-pub fn register_urbanization_lod_generate(app: &mut App, generate_budget: u32) {
+pub fn register_urbanization_lod_generate(app: &mut App) {
 	app.init_resource::<UrbanizationIndex>()
 		.init_resource::<UrbanizationGenerateBullseye>()
 		.init_resource::<UrbanizationPresentBullseye>()
-		.insert_resource(LodGenerateBudget::<UrbanizationLodChan>::new(generate_budget))
 		.add_plugins(LodGenerateRegionPlugin::<
 			UrbanizationGenerateBullseye,
 			With<LodViewer>,
@@ -125,7 +124,7 @@ pub fn register_urbanization_lod_generate(app: &mut App, generate_budget: u32) {
 /// Hopscotch stream for a mode that owns a spec.
 pub fn install_urbanization_stream<Mode: GenerationMode>(
 	app: &mut App,
-	config: &UrbanizationLayerConfig,
+	_config: &UrbanizationLayerConfig,
 ) {
 	use crate::generation::{UrbanizationGenerationSystems, UrbanizationStoreSystems};
 	use durham::terrain_streaming_enabled;
@@ -134,7 +133,7 @@ pub fn install_urbanization_stream<Mode: GenerationMode>(
 	use lod::LodPresentSystems;
 	use layer_stack::GenerationModeSystems;
 
-	register_urbanization_lod_generate(app, config.generate_budget);
+	register_urbanization_lod_generate(app);
 	// Mob readers of UrbanizationIndex select cells before terrain streaming starts.
 	app.add_systems(
 		Update,
