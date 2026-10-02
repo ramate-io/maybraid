@@ -61,6 +61,16 @@ fn mob_cells_cover_a_four_hundred_metre_lattice() {
 }
 
 #[test]
+fn bounds_extent_keeps_the_given_rectangle() -> anyhow::Result<()> {
+	let min = Vec3::new(-36.0, 0.0, -28.0);
+	let max = Vec3::new(36.0, 1.0, 28.0);
+	let extent = MobCellExtent::from_bounds(min, max);
+	anyhow::ensure!(extent.aabb() == Aabb3d::from_min_max(min, max));
+	anyhow::ensure!(MobCellExtent::from_id(extent.id()).is_none(), "grid from_id stays 400 m");
+	Ok(())
+}
+
+#[test]
 fn origin_cell_is_always_populated_when_models_are_ready() -> anyhow::Result<()> {
 	let mut index = MobIndex::ready();
 	let extent = MobCellExtent::from_cell_index(0, 0);

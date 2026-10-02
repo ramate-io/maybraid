@@ -13,11 +13,13 @@ use terrain_layer_model::{BaseTerrainModeConfig, BaseTerrainScheme, OnTerrain};
 use urbanization_layer_model::Urbanization;
 use vegetation_layer_model::VegetationScheme;
 
+mod arena;
 mod mobs;
 mod round;
 mod urbanization;
 
-pub use mobs::{TrainingBrawler, TrainingRosterSeat};
+pub use arena::TrainingArena;
+pub use mobs::TrainingBrawler;
 pub use round::{TrainingMap, TrainingRound, TRAINING_FINE_HALF_EXTENT_CELLS};
 pub use urbanization::{
 	pad_influence_region, terrain_ids_under_pads, training_development_cell, TrainingPlazaStamped,

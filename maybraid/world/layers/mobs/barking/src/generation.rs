@@ -40,6 +40,8 @@ pub enum GroupKind {
 	Frontier,
 	Warfront,
 	Dystopian,
+	/// Written by a scheme that already placed the mobs. Not in [`Self::VALUES`].
+	Placed,
 }
 
 impl GroupKind {
@@ -50,6 +52,7 @@ impl GroupKind {
 		match self {
 			Self::Wild => (2, 8),
 			Self::Peaceful | Self::Frontier | Self::Warfront | Self::Dystopian => (2, 12),
+			Self::Placed => (0, 0),
 		}
 	}
 }
@@ -84,6 +87,9 @@ impl MobGroup {
 		origin: Vec2,
 		world: &(impl MobWorldSample + MobWorldHosts),
 	) -> Self {
+		if kind == GroupKind::Placed {
+			return Self { kind, seed, origin, extent: DEFAULT_GROUP_EXTENT, mobs: Vec::new() };
+		}
 		let mut rng = GroupRng::new(seed);
 		let (min, max) = kind.count_range();
 		let wanted = rng.in_range(min, max);
@@ -167,6 +173,7 @@ fn choose_mob(group: GroupKind, sample: MobEnvironmentSample, rng: &mut GroupRng
 			(MobKind::Pleb, 0.25 + urban * 2.2),
 			(MobKind::Herd, 0.15 + vegetation * 2.0),
 		],
+		GroupKind::Placed => &[(MobKind::Brawler, 1.0)],
 	};
 	let total: f32 = weights.iter().map(|(_, weight)| *weight).sum();
 	let mut throw = rng.unit() * total;
@@ -329,6 +336,19 @@ mod tests {
 			assert!(xz.distance(host.xz) <= host.arrival_radius + 1e-4);
 			assert_eq!(mob.transform.translation.y, 0.0);
 		}
+	}
+
+	#[test]
+	fn placed_is_not_an_environment_kind() {
+		let world = FlatWorld(MobEnvironmentSample {
+			elevation: Some(0.0),
+			urbanization: 1.0,
+			vegetation: 1.0,
+		});
+		assert!(!GroupKind::VALUES.contains(&GroupKind::Placed));
+		let group = MobGroup::generate(GroupKind::Placed, 3, Vec2::ZERO, &world);
+		assert!(group.mobs.is_empty());
+		assert_eq!(group.kind, GroupKind::Placed);
 	}
 
 	#[test]

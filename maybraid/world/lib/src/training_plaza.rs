@@ -1,17 +1,18 @@
 //! One seeded Richmond development on the Training FinePatch, walled into a
-//! flat courtyard arena. The training crate fields the roster as a mob cell;
-//! this module raises the wall and seats the player once padded colliders exist.
+//! flat courtyard arena. The training crate publishes [`TrainingArena`] once
+//! padded colliders exist; this module raises the wall and seats the player
+//! from that resource.
 
 use avian3d::prelude::{LinearVelocity, Position};
 use bevy::prelude::*;
 use building_components::{building_bounds, spawn_building_components};
 use building_physics::{spawn_building_walk_colliders, BUILDING_FRICTION};
 use buildings::wall_demo::TerrainPerimeterWall;
-use durham::{Durham, TerrainTrimeshCollider, WorldBaseTerrain};
+use durham::{Durham, WorldBaseTerrain};
 use lod::gen::Id;
 use player_camera::FollowCamera;
 use procedural_common::SeededHash;
-use richmond::{DevelopmentFinish, PresentedPaddedTerrainScene, Richmond};
+use richmond::{DevelopmentFinish, Richmond};
 use terrain_layer_model::{OnTerrain, TerrainView};
 use urbanization_layer_model::Urbanization;
 use world_player::player::{holding_elevation, player_spawn_point_at};
@@ -19,7 +20,7 @@ use world_player::{OffTerrainAnchor, Player};
 
 use layer_stack::ActiveGenerationMode;
 use maybraid_game_mode_training_ground::{
-	TrainingGround, TrainingMap, TrainingPlazaStamped, TrainingRosterSeat, TrainingRound,
+	TrainingArena, TrainingGround, TrainingMap, TrainingPlazaStamped, TrainingRound,
 };
 
 use crate::PlayerSpawnXz;
@@ -120,7 +121,7 @@ pub(crate) fn reseat_training_life(
 	mode: Res<State<ActiveGenerationMode>>,
 	round: Res<TrainingRound>,
 	mounted: Option<Res<TrainingPlazaMounted>>,
-	seat: Option<Res<TrainingRosterSeat>>,
+	seat: Option<Res<TrainingArena>>,
 	mut commands: Commands,
 	unanchored: Query<Entity, (With<Player>, Without<OffTerrainAnchor>)>,
 	mut players: Query<
@@ -146,14 +147,12 @@ pub(crate) fn reseat_training_life(
 	commands.entity(player).insert(OffTerrainAnchor { translation: seat.player });
 }
 
-/// Seat the player once padded colliders exist over the stamp and the roster
-/// has published its seat.
+/// Seat the player once the mode has published [`TrainingArena`].
 pub(crate) fn promote_training_plaza(
 	mode: Res<State<ActiveGenerationMode>>,
 	stamped: Option<Res<TrainingPlazaStamped>>,
-	seat: Option<Res<TrainingRosterSeat>>,
+	seat: Option<Res<TrainingArena>>,
 	mounted: Option<Res<TrainingPlazaMounted>>,
-	ready_pads: Query<&PresentedPaddedTerrainScene, With<TerrainTrimeshCollider>>,
 	mut spawn_xz: ResMut<PlayerSpawnXz>,
 	mut commands: Commands,
 	player_ids: Query<Entity, With<Player>>,
@@ -175,13 +174,6 @@ pub(crate) fn promote_training_plaza(
 	let Some(seat) = seat.as_deref() else {
 		return;
 	};
-	let cooked = ready_pads
-		.iter()
-		.filter(|scene| stamped.terrain_ids().contains(&scene.0))
-		.count();
-	if !stamped.fills_ready(cooked) {
-		return;
-	}
 	spawn_xz.0 = Some(seat.player.xz());
 	seat_player_at(&mut players, &mut cameras, seat.player, seat.facing);
 	// Terrain snap and void recovery sample the raw FinePatch, which is below
@@ -439,7 +431,7 @@ mod tests {
 		let mut world = plaza_world(true, round.next_life());
 		let seat = Vec3::new(40.0, 8.0, -20.0);
 		world.insert_resource(TrainingPlazaMounted(round));
-		world.insert_resource(TrainingRosterSeat { player: seat, facing: Vec3::Z });
+		world.insert_resource(TrainingArena::at_seat(seat, Vec3::Z));
 		let transform = Transform::from_translation(Vec3::new(0.0, 90.0, 0.0));
 		let body = world.spawn((Player, transform, GlobalTransform::from(transform))).id();
 		world

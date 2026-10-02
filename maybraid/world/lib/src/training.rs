@@ -5,8 +5,10 @@
 //! active, hopscotch stays off and a Training pose is not written. Terrain
 //! layout lives on each mode's [`terrain_layer_model::BaseTerrainScheme`].
 //! Training's urbanization scheme stamps one seeded Richmond development;
-//! [`crate::training_plaza`] raises the wall and seats the player once padded
-//! colliders exist. The training crate writes the roster as one mob cell.
+//! the training crate publishes [`maybraid_game_mode_training_ground::TrainingArena`]
+//! once padded colliders exist. [`crate::training_plaza`] raises the wall and
+//! seats the player from that resource; the mob scheme writes the roster as
+//! one cell.
 //!
 //! A Training respawn ends the life with [`TrainingLifeEnded`], and the shell
 //! advances [`TrainingRound`]. A new round moves the patch, tears the plaza

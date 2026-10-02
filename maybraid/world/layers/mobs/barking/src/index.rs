@@ -54,6 +54,11 @@ impl MobCellExtent {
 		}
 	}
 
+	/// Scheme-placed cell. Grid generate still uses [`Self::from_cell_index`].
+	pub fn from_bounds(min: Vec3, max: Vec3) -> Self {
+		Self { min, max }
+	}
+
 	pub fn from_id(id: Id) -> Option<Self> {
 		let bounds = id.origin_cell_bounds()?;
 		let width = bounds.max.x - bounds.min.x;

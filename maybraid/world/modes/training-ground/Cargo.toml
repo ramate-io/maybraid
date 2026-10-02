@@ -20,7 +20,6 @@ mob-scenes = { workspace = true }
 mob-characters = { workspace = true }
 barking = { workspace = true }
 mob-layer-model = { workspace = true }
-mob-layer-presentation = { workspace = true }
 richmond = { workspace = true }
 terrain-layer-model = { workspace = true }
 urbanization-layer-model = { workspace = true }

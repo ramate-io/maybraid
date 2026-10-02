@@ -6966,7 +6966,6 @@ dependencies = [
  "lod",
  "mob-characters",
  "mob-layer-model",
- "mob-layer-presentation",
  "mob-scenes",
  "richmond",
  "terrain-layer-model",
