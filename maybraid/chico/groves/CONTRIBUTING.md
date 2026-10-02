@@ -53,8 +53,10 @@ Woody High and Medium both nest plant hosts; Low swaps the tile to canopy proxie
 Register **the flattened wrapper** in [`view.rs`](../forests/src/view.rs):
 
 ```rust
-avian_host!(app, FlattenedComponentsOnly<PlacedVegetation<Arc<YourTree>>>);
+flattened_plant_host!(app, YourTree);
 ```
+
+(`flattened_plant_host!` expands to `gimme_host!` on `FlattenedComponentsOnly<PlacedVegetation<Arc<YourTree>>>` plus High-IR stick colliders.)
 
 Isolated `/show` trees use that same family (identity [`Placement`](../vegetation-components/src/placed.rs)). Do not add a second produce plugin per region channel.
 
