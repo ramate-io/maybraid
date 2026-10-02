@@ -7,11 +7,13 @@ use bevy::prelude::*;
 use durham::{
 	Durham, DurhamTerrainConfig, TerrainRetarget, playable_world_cell_layout,
 };
+use chico::{install_vegetation_stream, Chico, ChicoConfig};
 use mob_layer_model::{install_mob_grid_stream, MobLayerConfig, MobScheme};
 use terrain_layer_model::{BaseTerrainModeConfig, BaseTerrainScheme, OnTerrain};
 use layer_stack::{ActiveGenerationMode, GenerationMode};
 use richmond::{install_urbanization_stream, Richmond, RichmondConfig};
 use urbanization_layer_model::{Urbanization, UrbanizationScheme};
+use vegetation_layer_model::{Vegetation, VegetationScheme};
 
 pub const LABEL: &str = "Discovery";
 
@@ -40,7 +42,15 @@ impl UrbanizationScheme<Richmond<OnTerrain<Durham>>> for Discovery {
 	}
 }
 
-impl MobScheme<Urbanization<Richmond<OnTerrain<Durham>>>> for Discovery {
+impl VegetationScheme<Chico<Urbanization<Richmond<OnTerrain<Durham>>>>> for Discovery {
+	fn install(app: &mut App, _config: &ChicoConfig) {
+		install_vegetation_stream::<Discovery, Chico<Urbanization<Richmond<OnTerrain<Durham>>>>>(
+			app,
+		);
+	}
+}
+
+impl MobScheme<Vegetation<Chico<Urbanization<Richmond<OnTerrain<Durham>>>>>> for Discovery {
 	fn install(app: &mut App, _config: &MobLayerConfig) {
 		install_mob_grid_stream::<Discovery>(app);
 	}

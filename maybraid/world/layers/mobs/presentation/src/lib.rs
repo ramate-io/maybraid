@@ -14,7 +14,8 @@ use mob_scenes::{MobLodRefreshMode, MobScene, MobSceneSystems};
 use barking::MobGroupsPlugin;
 use mob_layer_model::{MobCell, MobGenerationCore, MobIndex, MobLodChan};
 use layer_stack::{install_lod_present_gate, subscribe_mode, GenerationMode, RequireLayer};
-use urbanization_layer_model::UrbanModel;
+use terrain_layer_model::TerrainModel;
+use vegetation_layer_model::Vegetation;
 
 mod present;
 
@@ -30,7 +31,6 @@ pub struct MobPresent;
 
 /// Presents generated mob groups on ground `G` while `Mode` is subscribed.
 ///
-/// Bound on [`UrbanModel`] only because mob generation needs urbanization today.
 /// Presentation itself reads nothing but `G`'s height.
 pub struct MobPresentationPlugin<Mode, G>(PhantomData<fn() -> (Mode, G)>);
 
@@ -48,7 +48,7 @@ impl<G> Default for MobPresentationCore<G> {
 	}
 }
 
-impl<G: UrbanModel> Plugin for MobPresentationCore<G> {
+impl<G: TerrainModel> Plugin for MobPresentationCore<G> {
 	fn build(&self, app: &mut App) {
 		// Indexed must be visible when MobScenesPlugin builds. Guarding
 		// MobGroupsPlugin would hide an assembler that already added groups
@@ -100,20 +100,21 @@ impl<G: UrbanModel> Plugin for MobPresentationCore<G> {
 	}
 }
 
-impl<Mode: GenerationMode, G: UrbanModel> Plugin for MobPresentationPlugin<Mode, G>
+impl<Mode: GenerationMode, V> Plugin for MobPresentationPlugin<Mode, Vegetation<V>>
 where
-	MobGenerationCore<G>: Plugin,
+	Vegetation<V>: TerrainModel,
+	MobGenerationCore<Vegetation<V>>: Plugin,
 {
 	fn build(&self, app: &mut App) {
-		subscribe_mode::<(G, MobPresent), Mode>(app);
-		install_lod_present_gate::<(G, MobPresent), MobLodChan>(app);
-		if !app.is_plugin_added::<MobPresentationCore<G>>() {
-			app.add_plugins(MobPresentationCore::<G>::default());
+		subscribe_mode::<(Vegetation<V>, MobPresent), Mode>(app);
+		install_lod_present_gate::<(Vegetation<V>, MobPresent), MobLodChan>(app);
+		if !app.is_plugin_added::<MobPresentationCore<Vegetation<V>>>() {
+			app.add_plugins(MobPresentationCore::<Vegetation<V>>::default());
 		}
 	}
 
 	fn finish(&self, app: &mut App) {
-		app.require_layer::<MobGenerationCore<G>, MobPresentationCore<G>>();
+		app.require_layer::<MobGenerationCore<Vegetation<V>>, MobPresentationCore<Vegetation<V>>>();
 	}
 }
 

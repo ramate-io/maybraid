@@ -6,7 +6,9 @@ use lod::gen::Id;
 use mob_scenes::{DEFAULT_MOB_HIGH_RADIUS, MobLodRefreshMode};
 use terrain_layer_model::{OnTerrain};
 use layer_stack::{subscribe_mode, ActiveGenerationMode, GenerationMode, GenerationModePlugin, ModeSubscribers};
+use chico::Chico;
 use urbanization_layer_model::Urbanization;
+use vegetation_layer_model::Vegetation;
 
 use crate::present::{
 	MobCellRoot, MobHighLodRegion, MobPresenterState, PresentedMobCell, MOB_HIGH_LOD_REFRESH_RADIUS,
@@ -14,6 +16,7 @@ use crate::present::{
 use crate::{MobPresent, MobPresentationPlugin};
 
 type Urbanized = Urbanization<richmond::Richmond<OnTerrain<Durham>>>;
+type Vegetated = Vegetation<Chico<Urbanized>>;
 
 #[test]
 fn high_lod_index_region_follows_the_viewer_in_three_dimensions() {
@@ -79,7 +82,7 @@ fn presentation_inserts_indexed_refresh_mode() -> anyhow::Result<()> {
 
 	let mut app = App::new();
 	app.add_plugins((MinimalPlugins, AssetPlugin::default()));
-	MobPresentationPlugin::<TestMode, Urbanized>::default().build(&mut app);
+	MobPresentationPlugin::<TestMode, Vegetated>::default().build(&mut app);
 	let mut ids = Vec::new();
 	let mut inspect_error = None;
 	app.world_mut().schedule_scope(Update, |world, schedule| {
@@ -122,7 +125,7 @@ fn presentation_inserts_indexed_refresh_mode() -> anyhow::Result<()> {
 #[test]
 #[should_panic(expected = "MobGenerationCore")]
 fn presentation_without_generation_names_the_missing_plugin() {
-	MobPresentationPlugin::<TestMode, Urbanized>::default().finish(&mut App::new());
+	MobPresentationPlugin::<TestMode, Vegetated>::default().finish(&mut App::new());
 }
 
 #[test]
@@ -132,14 +135,14 @@ fn two_modes_install_the_core_once() -> anyhow::Result<()> {
 	app.add_plugins((
 		GenerationModePlugin::<TestMode>::initial(),
 		GenerationModePlugin::<OtherMode>::default(),
-		MobPresentationPlugin::<TestMode, Urbanized>::default(),
-		MobPresentationPlugin::<OtherMode, Urbanized>::default(),
+		MobPresentationPlugin::<TestMode, Vegetated>::default(),
+		MobPresentationPlugin::<OtherMode, Vegetated>::default(),
 	));
 	anyhow::ensure!(
-		app.is_plugin_added::<crate::MobPresentationCore<Urbanized>>(),
+		app.is_plugin_added::<crate::MobPresentationCore<Vegetated>>(),
 		"core is installed"
 	);
-	let subscribers = app.world().resource::<ModeSubscribers<(Urbanized, MobPresent)>>();
+	let subscribers = app.world().resource::<ModeSubscribers<(Vegetated, MobPresent)>>();
 	anyhow::ensure!(subscribers.contains::<TestMode>());
 	anyhow::ensure!(subscribers.contains::<OtherMode>());
 	Ok(())

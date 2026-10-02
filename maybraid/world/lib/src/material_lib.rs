@@ -7,7 +7,7 @@ use firearms::{init_muzzle_flame_caches, MuzzleFlameMaterialLib};
 use furniture_shaders::{init_furniture_material_caches, FurnitureMaterialLib};
 use material_ref::{material_ref_plugin_installed, MaterialLib, MaterialRef, MaterialRefPlugin};
 use building_shaders::{init_urban_material_caches, UrbanSurfaceMaterialLib};
-use vegetation_layer_presentation::VegetationOnTerrainMaterialLib;
+use chico::VegetationOnTerrainMaterialLib;
 
 /// World-model lib: furniture kits, character face / clothing, Richmond urban
 /// surfaces, the muzzle flame, then vegetation and Standard.

@@ -17,7 +17,7 @@ use mob_scenes::MobScene;
 use mob_intelligence::MemberOf;
 use mob_layer_model::{MobCell, MobIndex};
 use terrain_layer_model::TerrainView;
-use urbanization_layer_model::UrbanModel;
+use terrain_layer_model::TerrainModel;
 
 /// Half-extent of the High produce cube. Sized a margin past the 200 m High sphere.
 pub const MOB_HIGH_LOD_REFRESH_RADIUS: f32 = 250.0;
@@ -104,13 +104,13 @@ impl MobPresenterState {
 }
 
 #[derive(SystemParam)]
-pub struct MobPresenter<'w, 's, G: UrbanModel> {
+pub struct MobPresenter<'w, 's, G: TerrainModel> {
 	commands: Commands<'w, 's>,
 	state: ResMut<'w, MobPresenterState>,
 	surface: TerrainView<'w, 's, G>,
 }
 
-impl<G: UrbanModel> RegionPresenter<MobCell, MobIndex> for MobPresenter<'_, '_, G> {
+impl<G: TerrainModel> RegionPresenter<MobCell, MobIndex> for MobPresenter<'_, '_, G> {
 	fn presented_version(&self, id: Id) -> Option<Version> {
 		self.state.presented.get(&id).map(|entry| entry.version)
 	}
@@ -188,7 +188,7 @@ impl<G: UrbanModel> RegionPresenter<MobCell, MobIndex> for MobPresenter<'_, '_, 
 	}
 }
 
-pub fn fit_mob_hosts_to_surface<G: UrbanModel>(
+pub fn fit_mob_hosts_to_surface<G: TerrainModel>(
 	surface: TerrainView<G>,
 	mut hosts: Query<&mut Transform, (With<MobScene>, Changed<Transform>)>,
 ) {

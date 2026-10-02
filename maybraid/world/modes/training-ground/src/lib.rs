@@ -5,9 +5,13 @@
 //! on [`TrainingGround`].
 
 use bevy::prelude::*;
+use chico::{install_vegetation_stream, Chico, ChicoConfig};
 use durham::{Durham, DurhamTerrainConfig, TerrainFillSystems, TerrainRetarget};
-use terrain_layer_model::{BaseTerrainModeConfig, BaseTerrainScheme};
+use terrain_layer_model::{BaseTerrainModeConfig, BaseTerrainScheme, OnTerrain};
 use layer_stack::{GenerationMode, GenerationModeSystems};
+use richmond::Richmond;
+use urbanization_layer_model::Urbanization;
+use vegetation_layer_model::VegetationScheme;
 
 mod mobs;
 mod round;
@@ -25,6 +29,14 @@ pub use urbanization::{
 pub struct TrainingGround;
 
 impl GenerationMode for TrainingGround {}
+
+impl VegetationScheme<Chico<Urbanization<Richmond<OnTerrain<Durham>>>>> for TrainingGround {
+	fn install(app: &mut App, _config: &ChicoConfig) {
+		install_vegetation_stream::<TrainingGround, Chico<Urbanization<Richmond<OnTerrain<Durham>>>>>(
+			app,
+		);
+	}
+}
 
 impl BaseTerrainScheme<Durham> for TrainingGround {
 	fn install(app: &mut App, _config: &DurhamTerrainConfig) {

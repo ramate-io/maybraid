@@ -20,9 +20,11 @@ barking = { workspace = true }
 mob-layer-model = { workspace = true }
 terrain-layer-model = { workspace = true }
 urbanization-layer-model = { workspace = true }
+vegetation-layer-model = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
+chico = { workspace = true }
 durham = { workspace = true }
 richmond = { workspace = true }
 urbanization-cells = { workspace = true }

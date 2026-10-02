@@ -1,18 +1,18 @@
-//! [`VegetationGenerationPlugin`]: forest, grove, and bump-out recipes.
+//! Vegetation as a layer over a [`VegetationModel`].
 //!
-//! Vegetation generation reads no terrain, so it is untyped. Terrain enters at
-//! presentation through `VegetationPresentationPlugin<Mode, G>`.
+//! [`Vegetation<V>`] is `V::Ground` with the same heights. Storage stays in the
+//! model crate; this crate only declares the contract.
 
-mod config;
 mod generation;
-mod stream;
+mod model;
+mod vegetation;
 
-pub use config::{ForestStreamSpec, VegetationLayerConfig};
 pub use generation::{
-	VegetationGenerationCore, VegetationGenerationPlugin, VegetationGenerationSystems,
-	VegetationModeConfig,
+	VegetationGeneration, VegetationGenerationCore, VegetationGenerationPlugin,
+	VegetationGenerationSystems, VegetationModeConfig, VegetationScheme,
 };
-pub use stream::{
-	install_vegetation_stream, stream_radii_m, stream_vegetation, VegetationStreamKey,
-	DEFAULT_FOREST_NOISE, DEFAULT_FOREST_STREAM_RADIUS,
-};
+pub use model::Vegetation;
+pub use vegetation::VegetationModel;
+
+#[cfg(test)]
+mod tests;

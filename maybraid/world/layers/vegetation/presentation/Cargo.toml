@@ -12,25 +12,12 @@ rust-version = { workspace = true }
 [dependencies]
 layer-stack = { workspace = true }
 bevy = { workspace = true }
-vegetation-bumpout = { workspace = true }
-chico = { workspace = true }
-vegetation-groves = { workspace = true }
-vegetation-shaders = { workspace = true }
-durham = { workspace = true }
 lod = { workspace = true }
-lod-cascade = { workspace = true }
-material-ref = { workspace = true }
-procedural-common = { workspace = true }
-render-item = { workspace = true }
-terrain-chunk-ref = { workspace = true }
 terrain-layer-model = { workspace = true }
 vegetation-layer-model = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
-richmond = { workspace = true }
-urbanization-cells = { workspace = true }
-urbanization-layer-model = { workspace = true }
 
 [lints]
 workspace = true

@@ -13,12 +13,14 @@ use mob_layer_model::{
 	MobCell, MobCellExtent, MobCellWrites, MobGenerationSystems, MobLayerConfig, MobScheme,
 };
 use mob_layer_presentation::PresentedMobCell;
+use chico::Chico;
 use richmond::{
 	DevelopmentEntryStore, DevelopmentHost, DevelopmentHosts, PresentedPaddedTerrainScene, Richmond,
 };
 use terrain_layer_model::{OnTerrain};
 use layer_stack::{ActiveGenerationMode, GenerationModeSystems};
 use urbanization_layer_model::Urbanization;
+use vegetation_layer_model::Vegetation;
 
 use crate::{TrainingGround, TrainingMap, TrainingPlazaStamped};
 
@@ -366,7 +368,7 @@ impl TrainingArena {
 	}
 }
 
-impl MobScheme<Urbanization<Richmond<OnTerrain<Durham>>>> for TrainingGround {
+impl MobScheme<Vegetation<Chico<Urbanization<Richmond<OnTerrain<Durham>>>>>> for TrainingGround {
 	fn install(app: &mut App, _config: &MobLayerConfig) {
 		app.add_systems(
 			Update,
@@ -810,7 +812,9 @@ mod tests {
 			GenerationModePlugin::<TrainingGround>::initial(),
 			GenerationModePlugin::<OtherMode>::default(),
 		));
-		<TrainingGround as MobScheme<Urbanization<Richmond<OnTerrain<Durham>>>>>::install(
+		<TrainingGround as MobScheme<
+			Vegetation<Chico<Urbanization<Richmond<OnTerrain<Durham>>>>>,
+		>>::install(
 			&mut app,
 			&MobLayerConfig::default(),
 		);

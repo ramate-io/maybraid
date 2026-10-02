@@ -10,11 +10,15 @@ use mob_layer_presentation::MobPresent;
 use terrain_layer_model::OnTerrain;
 use layer_stack::ModeSubscribers;
 use terrain_layer_presentation::TerrainPresentationCore;
+use chico::Chico;
 use urbanization_layer_model::Urbanization;
 use urbanization_layer_presentation::{PaddedCells, UrbanizationHosts};
+use vegetation_layer_model::Vegetation;
 use vegetation_layer_presentation::VegetationPresent;
 
 type Urbanized = Urbanization<richmond::Richmond<OnTerrain<Durham>>>;
+type Forested = Chico<Urbanized>;
+type Vegetated = Vegetation<Forested>;
 
 #[test]
 fn layered_world_stack_finishes_headless() -> anyhow::Result<()> {
@@ -31,15 +35,15 @@ fn layered_world_stack_finishes_headless() -> anyhow::Result<()> {
 	anyhow::ensure!(hosts.contains::<Discovery>());
 	anyhow::ensure!(hosts.contains::<TrainingGround>());
 
-	let vegetation = app.world().resource::<ModeSubscribers<(Urbanized, VegetationPresent)>>();
+	let vegetation = app.world().resource::<ModeSubscribers<(Vegetated, VegetationPresent)>>();
 	anyhow::ensure!(vegetation.contains::<Discovery>());
 	anyhow::ensure!(vegetation.contains::<TrainingGround>());
 
-	let mobs = app.world().resource::<ModeSubscribers<(Urbanized, MobPresent)>>();
+	let mobs = app.world().resource::<ModeSubscribers<(Vegetated, MobPresent)>>();
 	anyhow::ensure!(mobs.contains::<Discovery>());
 	anyhow::ensure!(mobs.contains::<TrainingGround>());
 	anyhow::ensure!(
-		app.is_plugin_added::<MobGenerationCore<Urbanized>>(),
+		app.is_plugin_added::<MobGenerationCore<Vegetated>>(),
 		"both mob generation plugins share one core"
 	);
 

@@ -10,16 +10,22 @@ mod assemble;
 mod blend;
 mod bump_out;
 mod chico;
+mod config;
 mod extent;
 mod forest;
 mod generation;
+mod ground;
 mod grove;
 pub(crate) mod hopscotch;
 mod host;
 mod index;
 mod kind;
 mod layer;
+mod layer_present;
+mod layer_stream;
+mod model;
 pub mod layerings;
+mod material;
 mod plugin;
 mod present;
 mod recipe;
@@ -43,7 +49,9 @@ pub use bump_out::{
 	MEDIUM_BUMP_OUT_INNER_RADIUS_M, MEDIUM_BUMP_OUT_OUTER_RADIUS_M,
 };
 pub use chico::{chico_hopscotch, select_cell, select_layering, DEFAULT_HOP_BUDGET};
+pub use config::{ChicoConfig, ForestStreamSpec};
 pub use extent::{ForestExtent, DEFAULT_FOREST_EXTENT_XZ, DEFAULT_FOREST_GROVE_TILE_XZ};
+pub use ground::{overlay_chunk_ref, ChicoGround};
 pub use forest::{neighbor_layers, ChicoForest};
 pub use generation::{
 	BumpOutGenerateBullseye, BumpOutLodChan, BumpOutPresentBullseye, ForestGenerateBullseye,
@@ -51,6 +59,14 @@ pub use generation::{
 	GROVE_GENERATE_RADIUS_M, GROVE_PRESENT_RADIUS_M,
 };
 pub use grove::{grove_from_id, grove_id, ChicoGrove};
+pub use layer_present::{
+	bump_out_from_cell, bump_out_noise, GroundCanopyBumpOutPresenter, GroundForestPresenter,
+	GroundGroveSample, GroundMediumCanopyBumpOutPresenter,
+};
+pub use layer_stream::{
+	install_vegetation_stream, stream_radii_m, stream_vegetation, VegetationStreamKey,
+	DEFAULT_FOREST_NOISE, DEFAULT_FOREST_STREAM_RADIUS,
+};
 pub use hopscotch::{select as hopscotch_select, HopscotchNode};
 pub use host::ChicoGroveHost;
 pub use index::{forest_world_sample, ForestIndex};
@@ -59,10 +75,17 @@ pub use kind::{
 	WeightedGrove, TUFT_DROP_MIN_HEIGHT_M,
 };
 pub use layer::{select_layers, throw_layer};
+pub use model::Chico;
+pub use material::{VegetationOnTerrainMaterialLib, VegetationOnTerrainMaterialRefPlugin};
 pub use plugin::{register_vegetation_view, VegetationViewPlugin};
 pub use present::ForestPresenterState;
 pub use recipe::{ForestGroveRecipe, WORLD_FOREST_TREE_VARIANTS};
 pub use stream::parse_layering_kind;
+
+#[cfg(test)]
+mod layer_tests;
+#[cfg(test)]
+mod present_tests;
 pub use view::{
 	VegetationBullseye, VegetationCull, VegetationLodRefreshPlugin, VegetationRefresh,
 	VegetationSpotlight,

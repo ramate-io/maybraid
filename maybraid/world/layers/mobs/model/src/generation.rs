@@ -9,11 +9,12 @@ use lod::{
 	LodGeneratePlugin, LodGenerateRegionPlugin, LodGenerateSystems, LodPresentRegionPlugin,
 	LodPresentSystems, LodViewer,
 };
-use layer_stack::{ActiveGenerationMode, GenerationMode, RequireLayer};
+use layer_stack::{ActiveGenerationMode, GenerationMode};
 use procedural_common::NoiseParams;
+use terrain_layer_model::TerrainModel;
 use urbanization_cells::UrbanizationKind;
 use urbanization_layer_model::UrbanModel;
-use vegetation_layer_model::VegetationGenerationCore;
+use vegetation_layer_model::{Vegetation, VegetationGeneration, VegetationModel};
 
 use crate::config::MobLayerConfig;
 use crate::index::{MobCell, MobIndex};
@@ -29,7 +30,7 @@ use crate::stream::{
 pub struct MobGenerationSystems;
 
 /// A mode's mob writes for ground `G`.
-pub trait MobScheme<G: UrbanModel<Selection = NoiseParams, Kind = UrbanizationKind>>: GenerationMode {
+pub trait MobScheme<G: TerrainModel>: GenerationMode {
 	fn install(app: &mut App, config: &MobLayerConfig);
 }
 
@@ -39,47 +40,6 @@ pub struct MobGenerationCore<G>(PhantomData<fn() -> G>);
 impl<G> Default for MobGenerationCore<G> {
 	fn default() -> Self {
 		Self(PhantomData)
-	}
-}
-
-impl<G: UrbanModel<Selection = NoiseParams, Kind = UrbanizationKind>> Plugin for MobGenerationCore<G> {
-	fn build(&self, app: &mut App) {
-		app.init_resource::<MobIndex>()
-			.init_resource::<MobGenerateBullseye>()
-			.init_resource::<MobPresentBullseye>()
-			.init_resource::<LodGenerateBudget<MobLodChan>>()
-			.add_plugins(LodGenerateRegionPlugin::<
-				MobGenerateBullseye,
-				With<LodViewer>,
-				MobLodChan,
-			>::default())
-			.add_plugins(LodGeneratePlugin::<
-				MobCell,
-				MobIndex,
-				MobLodChan,
-				With<LodViewer>,
-			>::default())
-			.add_plugins(LodPresentRegionPlugin::<
-				MobPresentBullseye,
-				With<LodViewer>,
-				MobLodChan,
-			>::default())
-			.configure_sets(Update, LodPresentSystems::Produce.after(LodGenerateSystems::Drain))
-			.add_systems(
-				Update,
-				(sync_mob_models::<G>, sync_mob_plant_hosts::<G>)
-					.chain()
-					.in_set(MobGenerationSystems)
-					.after(LodGenerateSystems::Produce)
-					.before(LodGenerateSystems::Drain),
-			)
-			.add_systems(
-				Update,
-				stream_mob_present
-					.in_set(MobGenerationSystems)
-					.before(LodGenerateSystems::Produce)
-					.before(LodPresentSystems::Produce),
-			);
 	}
 }
 
@@ -121,14 +81,68 @@ impl<Mode, G> Default for MobGenerationPlugin<Mode, G> {
 	}
 }
 
-impl<Mode, G> Plugin for MobGenerationPlugin<Mode, G>
+impl<V> Plugin for MobGenerationCore<Vegetation<V>>
 where
-	Mode: MobScheme<G>,
-	G: UrbanModel<Selection = NoiseParams, Kind = UrbanizationKind>,
+	V: VegetationModel,
+	V::Ground: UrbanModel<Selection = NoiseParams, Kind = UrbanizationKind>,
+	Vegetation<V>: TerrainModel<
+		Read = <V::Ground as TerrainModel>::Read,
+		Prepare = <V::Ground as TerrainModel>::Prepare,
+	>,
 {
 	fn build(&self, app: &mut App) {
-		if !app.is_plugin_added::<MobGenerationCore<G>>() {
-			app.add_plugins(MobGenerationCore::<G>::default());
+		app.init_resource::<MobIndex>()
+			.init_resource::<MobGenerateBullseye>()
+			.init_resource::<MobPresentBullseye>()
+			.init_resource::<LodGenerateBudget<MobLodChan>>()
+			.add_plugins(LodGenerateRegionPlugin::<
+				MobGenerateBullseye,
+				With<LodViewer>,
+				MobLodChan,
+			>::default())
+			.add_plugins(LodGeneratePlugin::<
+				MobCell,
+				MobIndex,
+				MobLodChan,
+				With<LodViewer>,
+			>::default())
+			.add_plugins(LodPresentRegionPlugin::<
+				MobPresentBullseye,
+				With<LodViewer>,
+				MobLodChan,
+			>::default())
+			.configure_sets(Update, LodPresentSystems::Produce.after(LodGenerateSystems::Drain))
+			.add_systems(
+				Update,
+				(sync_mob_models::<V::Ground>, sync_mob_plant_hosts::<V::Ground>)
+					.chain()
+					.in_set(MobGenerationSystems)
+					.after(LodGenerateSystems::Produce)
+					.before(LodGenerateSystems::Drain),
+			)
+			.add_systems(
+				Update,
+				stream_mob_present
+					.in_set(MobGenerationSystems)
+					.before(LodGenerateSystems::Produce)
+					.before(LodPresentSystems::Produce),
+			);
+	}
+}
+
+impl<Mode, V> Plugin for MobGenerationPlugin<Mode, Vegetation<V>>
+where
+	Mode: MobScheme<Vegetation<V>>,
+	V: VegetationGeneration,
+	V::Ground: UrbanModel<Selection = NoiseParams, Kind = UrbanizationKind>,
+	Vegetation<V>: TerrainModel<
+		Read = <V::Ground as TerrainModel>::Read,
+		Prepare = <V::Ground as TerrainModel>::Prepare,
+	>,
+{
+	fn build(&self, app: &mut App) {
+		if !app.is_plugin_added::<MobGenerationCore<Vegetation<V>>>() {
+			app.add_plugins(MobGenerationCore::<Vegetation<V>>::default());
 		}
 		app.insert_resource(MobModeConfig::<Mode>::new(self.config.clone()));
 		app.add_systems(
@@ -140,8 +154,7 @@ where
 	}
 
 	fn finish(&self, app: &mut App) {
-		G::require_generation(app);
-		app.require_layer::<VegetationGenerationCore, Self>();
+		<Vegetation<V> as TerrainModel>::require_generation(app);
 	}
 }
 

@@ -3,24 +3,31 @@
 use bevy::ecs::system::SystemParam;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
-use chico::{
-	BumpOutGenerateBullseye, BumpOutLodChan, BumpOutPresentBullseye, CanopyBumpOut, ChicoGrove,
-	ForestExtent, ForestGenerateBullseye, ForestIndex, ForestLodChan, ForestPresentBullseye,
-	MediumBumpOutLodChan, MediumCanopyBumpOut, BUMP_OUT_OUTER_RADIUS_M,
-	DEFAULT_FOREST_GROVE_TILE_XZ, GROVE_GENERATE_RADIUS_M, GROVE_PRESENT_RADIUS_M,
-	MEDIUM_BUMP_OUT_ANCHOR_STEP_M, MEDIUM_BUMP_OUT_OUTER_RADIUS_M,
-};
-use terrain_layer_model::{terrain_streaming, TerrainModel};
+use layer_stack::{GenerationMode, GenerationModeSystems};
 use lod::gen::{LodGenerateBudget, LodGenerateKeepRegion, LodGenerateQueue, LodGenerateRegion};
 use lod::presentation::{LodPresentKeepRegion, LodPresentQueue, LodPresentRegion};
 use lod::{
 	LodGeneratePlugin, LodGenerateRegionPlugin, LodGenerateSystems, LodPresentRegionPlugin,
 	LodPresentSystems, LodViewer,
 };
+use terrain_layer_model::{terrain_streaming, TerrainModel};
+use vegetation_layer_model::{
+	VegetationGeneration, VegetationGenerationSystems, VegetationModeConfig,
+};
 
+use crate::bump_out::{
+	CanopyBumpOut, MediumCanopyBumpOut, BUMP_OUT_OUTER_RADIUS_M, MEDIUM_BUMP_OUT_ANCHOR_STEP_M,
+	MEDIUM_BUMP_OUT_OUTER_RADIUS_M,
+};
 use crate::config::ForestStreamSpec;
-use crate::generation::{VegetationGenerationSystems, VegetationModeConfig};
-use layer_stack::{GenerationMode, GenerationModeSystems};
+use crate::extent::{ForestExtent, DEFAULT_FOREST_GROVE_TILE_XZ};
+use crate::generation::{
+	BumpOutGenerateBullseye, BumpOutLodChan, BumpOutPresentBullseye, ForestGenerateBullseye,
+	ForestLodChan, ForestPresentBullseye, MediumBumpOutLodChan, GROVE_GENERATE_RADIUS_M,
+	GROVE_PRESENT_RADIUS_M,
+};
+use crate::grove::ChicoGrove;
+use crate::index::ForestIndex;
 
 /// Spec fingerprint. A resource so leaving a mode can clear it.
 #[derive(Resource, Default, Debug, Clone, PartialEq, Eq)]
@@ -42,9 +49,10 @@ pub fn stream_radii_m(stream_radius: u32) -> (f32, f32) {
 }
 
 /// Generate half of the old `register_forest_lod`. Present plugins stay in
-/// vegetation presentation. Each mode writes [`LodGenerateBudget`] on enter.
+/// Chico presentation. Each mode writes [`LodGenerateBudget`] on enter.
 pub fn register_forest_generate(app: &mut App) {
-	app.init_resource::<ForestIndex>()
+	app.init_resource::<VegetationStreamKey>()
+		.init_resource::<ForestIndex>()
 		.init_resource::<LodGenerateBudget<ForestLodChan>>()
 		.init_resource::<LodPresentQueue<ChicoGrove>>()
 		.add_plugins(LodGenerateRegionPlugin::<
@@ -99,9 +107,6 @@ pub fn register_bump_out_generate(app: &mut App) {
 }
 
 /// Keep / queue / bullseye resources the forest stream drives.
-///
-/// Presenter teardown lives in vegetation presentation so this crate does not
-/// despawn hosts.
 #[derive(SystemParam)]
 pub struct ForestStreamLod<'w> {
 	index: ResMut<'w, ForestIndex>,
@@ -251,14 +256,17 @@ impl BumpOutStreamLod<'_> {
 
 /// Forest and bump-out streams share one key. Snapshot it once so the second
 /// apply still sees the cleared value after a hop.
-pub fn stream_vegetation<Mode: GenerationMode>(
-	config: Res<VegetationModeConfig<Mode>>,
+pub fn stream_vegetation<Mode, V>(
+	config: Res<VegetationModeConfig<Mode, V>>,
 	camera: Query<&Transform, With<Camera3d>>,
 	mut forest: ForestStreamLod,
 	mut bump_outs: BumpOutStreamLod,
 	mut last_key: ResMut<VegetationStreamKey>,
 	mut last_medium_region: Local<Option<Aabb3d>>,
-) {
+) where
+	Mode: GenerationMode,
+	V: VegetationGeneration<Config = crate::config::ChicoConfig>,
+{
 	let cam = camera.single().ok().map(|t| t.translation);
 	let spec = config.config.forest.as_ref();
 	let mut forest_key = last_key.0.clone();
@@ -269,33 +277,78 @@ pub fn stream_vegetation<Mode: GenerationMode>(
 }
 
 /// Tear stream LOD and the spec key down so the next mode can refill.
-pub(crate) fn clear_vegetation_stream(
-	key: Option<ResMut<VegetationStreamKey>>,
-	forest: Option<ForestStreamLod>,
-	bump_outs: Option<BumpOutStreamLod>,
-) {
-	if let Some(mut key) = key {
+pub fn clear_vegetation_stream_world(world: &mut World) {
+	if let Some(mut key) = world.get_resource_mut::<VegetationStreamKey>() {
 		key.0 = None;
 	}
-	if let Some(mut lod) = forest {
-		let mut last = None;
-		lod.apply_spec(None, None, &mut last);
+	if let Some(mut generate) = world.get_resource_mut::<ForestGenerateBullseye>() {
+		generate.enabled = false;
 	}
-	if let Some(mut lod) = bump_outs {
-		let mut last = None;
-		let mut last_medium_region = None;
-		lod.apply_spec(None, None, &mut last, &mut last_medium_region);
+	if let Some(mut present) = world.get_resource_mut::<ForestPresentBullseye>() {
+		present.enabled = false;
+	}
+	if let Some(mut keep) = world.get_resource_mut::<LodGenerateKeepRegion<ForestLodChan>>() {
+		keep.region = None;
+	}
+	if let Some(mut keep) = world.get_resource_mut::<LodPresentKeepRegion<ForestLodChan>>() {
+		keep.region = None;
+	}
+	if let Some(mut index) = world.get_resource_mut::<ForestIndex>() {
+		index.clear();
+	}
+	if let Some(mut queue) = world.get_resource_mut::<LodGenerateQueue<ChicoGrove>>() {
+		queue.clear();
+	}
+	if let Some(mut queue) = world.get_resource_mut::<LodPresentQueue<ChicoGrove>>() {
+		queue.clear();
+	}
+	if let Some(mut generate) = world.get_resource_mut::<BumpOutGenerateBullseye>() {
+		generate.enabled = false;
+	}
+	if let Some(mut present) = world.get_resource_mut::<BumpOutPresentBullseye>() {
+		present.enabled = false;
+	}
+	if let Some(mut keep) = world.get_resource_mut::<LodGenerateKeepRegion<BumpOutLodChan>>() {
+		keep.region = None;
+	}
+	if let Some(mut keep) = world.get_resource_mut::<LodPresentKeepRegion<BumpOutLodChan>>() {
+		keep.region = None;
+	}
+	if let Some(mut keep) = world.get_resource_mut::<LodGenerateKeepRegion<MediumBumpOutLodChan>>() {
+		keep.region = None;
+	}
+	if let Some(mut keep) = world.get_resource_mut::<LodPresentKeepRegion<MediumBumpOutLodChan>>() {
+		keep.region = None;
+	}
+	if let Some(mut queue) = world.get_resource_mut::<LodGenerateQueue<CanopyBumpOut>>() {
+		queue.clear();
+	}
+	if let Some(mut queue) = world.get_resource_mut::<LodPresentQueue<CanopyBumpOut>>() {
+		queue.clear();
+	}
+	if let Some(mut queue) = world.get_resource_mut::<LodGenerateQueue<MediumCanopyBumpOut>>() {
+		queue.clear();
+	}
+	if let Some(mut queue) = world.get_resource_mut::<LodPresentQueue<MediumCanopyBumpOut>>() {
+		queue.clear();
 	}
 }
 
 /// Forest and bump-out streams for `Mode`, reading [`VegetationModeConfig`].
-pub fn install_vegetation_stream<Mode: GenerationMode, M: TerrainModel>(app: &mut App) {
+///
+/// Terrain contract keys on `V::Ground` so wrappers share one streaming flag.
+pub fn install_vegetation_stream<Mode, V>(app: &mut App)
+where
+	Mode: GenerationMode,
+	V: VegetationGeneration<Config = crate::config::ChicoConfig>,
+	V::Ground: TerrainModel,
+{
 	app.add_systems(
 		Update,
-		stream_vegetation::<Mode>
+		stream_vegetation::<Mode, V>
 			.in_set(GenerationModeSystems::<Mode>::default())
 			.in_set(VegetationGenerationSystems)
-			.run_if(terrain_streaming::<M>)
+			.run_if(terrain_streaming::<V::Ground>)
 			.before(LodGenerateSystems::Produce)
 			.before(LodPresentSystems::Produce),
 	);
@@ -304,7 +357,6 @@ pub fn install_vegetation_stream<Mode: GenerationMode, M: TerrainModel>(app: &mu
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use chico::{DEFAULT_FOREST_GROVE_TILE_XZ, GROVE_GENERATE_RADIUS_M, GROVE_PRESENT_RADIUS_M};
 
 	#[test]
 	fn default_stream_radii_are_one_and_three_kilometres() -> anyhow::Result<()> {

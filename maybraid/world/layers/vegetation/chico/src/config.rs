@@ -1,10 +1,10 @@
-//! Layer knobs the vegetation playground's `PlaygroundConfig` used to carry.
+//! Stream knobs Chico's forest / bump-out generate reads.
 
 use bevy::prelude::*;
-use chico::LayeringKind;
 use procedural_common::NoiseParams;
 
-use crate::stream::DEFAULT_FOREST_STREAM_RADIUS;
+use crate::kind::LayeringKind;
+use crate::layer_stream::DEFAULT_FOREST_STREAM_RADIUS;
 
 /// Live forest-stream knobs (noise / ring / pinned layering).
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -42,14 +42,14 @@ impl ForestStreamSpec {
 /// Every budget is 16 in both the world and the playground. [`Self::world_defaults`]
 /// arms the forest at stream radius 1 (1 km present / 3 km generate).
 #[derive(Resource, Clone, Debug, PartialEq)]
-pub struct VegetationLayerConfig {
+pub struct ChicoConfig {
 	pub forest: Option<ForestStreamSpec>,
 	pub forest_budget: u32,
 	pub bump_out_budget: u32,
 	pub medium_bump_out_budget: u32,
 }
 
-impl Default for VegetationLayerConfig {
+impl Default for ChicoConfig {
 	fn default() -> Self {
 		Self {
 			forest: None,
@@ -60,7 +60,7 @@ impl Default for VegetationLayerConfig {
 	}
 }
 
-impl VegetationLayerConfig {
+impl ChicoConfig {
 	/// Forest on at radius 1, generate budgets 16.
 	pub fn world_defaults() -> Self {
 		Self {
@@ -81,32 +81,31 @@ impl VegetationLayerConfig {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::stream::{stream_radii_m, DEFAULT_FOREST_NOISE};
+	use crate::layer_stream::{stream_radii_m, DEFAULT_FOREST_NOISE};
 	use procedural_common::noise_params_from_scalar_str;
 
 	#[test]
 	fn world_defaults_keep_grove_fill_at_one_kilometre() -> anyhow::Result<()> {
-		let spec = VegetationLayerConfig::world_defaults()
+		let spec = ChicoConfig::world_defaults()
 			.forest
 			.ok_or_else(|| anyhow::anyhow!("forest on"))?;
 		assert_eq!(spec.stream_radius, 1);
 		assert_eq!(stream_radii_m(1), (1_000.0, 3_000.0));
-		assert_eq!(VegetationLayerConfig::default().forest_budget, 16);
-		assert_eq!(VegetationLayerConfig::default().bump_out_budget, 16);
-		assert_eq!(VegetationLayerConfig::default().medium_bump_out_budget, 16);
-		assert_eq!(VegetationLayerConfig::world_defaults().forest_budget, 16);
+		assert_eq!(ChicoConfig::default().forest_budget, 16);
+		assert_eq!(ChicoConfig::default().bump_out_budget, 16);
+		assert_eq!(ChicoConfig::default().medium_bump_out_budget, 16);
+		assert_eq!(ChicoConfig::world_defaults().forest_budget, 16);
 		Ok(())
 	}
 
 	#[test]
 	fn grove_keeps_one_extent() -> anyhow::Result<()> {
-		let spec = VegetationLayerConfig::grove()
+		let spec = ChicoConfig::grove()
 			.forest
 			.ok_or_else(|| anyhow::anyhow!("forest on"))?;
 		anyhow::ensure!(spec.stream_radius == 0, "grove stream radius is 0");
 		anyhow::ensure!(
-			VegetationLayerConfig::grove().forest_budget
-				== VegetationLayerConfig::world_defaults().forest_budget,
+			ChicoConfig::grove().forest_budget == ChicoConfig::world_defaults().forest_budget,
 			"grove keeps the same budgets"
 		);
 		Ok(())

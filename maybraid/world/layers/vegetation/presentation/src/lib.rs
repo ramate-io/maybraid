@@ -1,131 +1,71 @@
-//! [`VegetationPresentationPlugin`]: grow groves and bump-outs on model `G`.
+//! [`VegetationPresentationPlugin`]: grove hosts, bump-outs, and materials through the model.
 
 use std::marker::PhantomData;
 
 use bevy::app::{App, Plugin};
-use bevy::prelude::*;
-use vegetation_bumpout::BumpOutPlugin;
-use chico::{
-	register_vegetation_view, BumpOutLodChan, CanopyBumpOut, ChicoGrove, ForestIndex, ForestLodChan,
-	MediumBumpOutLodChan, MediumCanopyBumpOut,
-};
-use lod::{
-	LodGenerateSystems, LodPresentCullPlugin, LodPresentPlugin, LodPresentSystems, LodViewer,
-};
+use lod::LodPresentGate;
+use layer_stack::{install_lod_present_gate, subscribe_mode, GenerationMode};
 use terrain_layer_model::TerrainModel;
-use layer_stack::{install_lod_present_gate, subscribe_mode, GenerationMode, RequireLayer};
-use vegetation_layer_model::VegetationGenerationCore;
+use vegetation_layer_model::{Vegetation, VegetationGeneration};
 
-mod material;
-mod present;
+/// Grove hosts, bump-out overlays, and the material-library hookup for model `V`.
+pub trait VegetationPresentation: VegetationGeneration {
+	fn install_groves(app: &mut App);
 
-pub use material::{VegetationOnTerrainMaterialLib, VegetationOnTerrainMaterialRefPlugin};
-pub use present::{
-	bump_out_from_cell, bump_out_noise, GroundCanopyBumpOutPresenter, GroundForestPresenter,
-	GroundGroveSample, GroundMediumCanopyBumpOutPresenter,
-};
+	fn install_bump_outs(app: &mut App);
 
-use present::{CanopyBumpOutPresenterState, MediumCanopyBumpOutPresenterState};
+	fn install_materials(app: &mut App);
+}
 
-/// Marker for vegetation-presenter subscriptions on ground `G`.
+/// Marker for vegetation-presenter subscriptions on [`Vegetation<V>`].
 pub struct VegetationPresent;
 
-/// Presents generated vegetation on ground `G` while `Mode` is subscribed.
-/// Pads reach groves through `G`'s height (`Urbanization<…>` already composes
-/// them), not a special case.
-pub struct VegetationPresentationPlugin<Mode, G>(PhantomData<fn() -> (Mode, G)>);
+/// Presents generated vegetation of model `V` while `Mode` is subscribed.
+pub struct VegetationPresentationPlugin<Mode, V>(PhantomData<fn() -> (Mode, V)>);
 
-impl<Mode, G> Default for VegetationPresentationPlugin<Mode, G> {
+impl<Mode, V> Default for VegetationPresentationPlugin<Mode, V> {
 	fn default() -> Self {
 		Self(PhantomData)
 	}
 }
 
-pub struct VegetationPresentationCore<G>(PhantomData<fn() -> G>);
+pub struct VegetationPresentationCore<V>(PhantomData<fn() -> V>);
 
-impl<G> Default for VegetationPresentationCore<G> {
+impl<V> Default for VegetationPresentationCore<V> {
 	fn default() -> Self {
 		Self(PhantomData)
 	}
 }
 
-impl<G: TerrainModel> Plugin for VegetationPresentationCore<G>
+impl<V: VegetationPresentation> Plugin for VegetationPresentationCore<V>
 where
-	G::Snapshot: Clone + Send + Sync,
-	G::Cell: terrain_layer_model::TerrainCell<Mesh = durham::TerrainMeshBuilder>,
+	Vegetation<V>: terrain_layer_model::TerrainModel,
 {
 	fn build(&self, app: &mut App) {
-		register_vegetation_view(app);
-		if !app.is_plugin_added::<VegetationOnTerrainMaterialRefPlugin>() {
-			app.add_plugins(VegetationOnTerrainMaterialRefPlugin);
-		}
-		if !app.is_plugin_added::<BumpOutPlugin>() {
-			app.add_plugins(BumpOutPlugin);
-		}
-		app.init_resource::<chico::ForestPresenterState>()
-			.init_resource::<CanopyBumpOutPresenterState>()
-			.init_resource::<MediumCanopyBumpOutPresenterState>()
-			.add_plugins(LodPresentPlugin::<
-				ChicoGrove,
-				ForestIndex,
-				GroundForestPresenter<G>,
-				ForestLodChan,
-				With<LodViewer>,
-			>::default())
-			.add_plugins(LodPresentCullPlugin::<
-				ChicoGrove,
-				ForestIndex,
-				GroundForestPresenter<G>,
-				ForestLodChan,
-			>::default())
-			.add_plugins(LodPresentPlugin::<
-				CanopyBumpOut,
-				ForestIndex,
-				GroundCanopyBumpOutPresenter<G>,
-				BumpOutLodChan,
-				With<LodViewer>,
-			>::default())
-			.add_plugins(LodPresentCullPlugin::<
-				CanopyBumpOut,
-				ForestIndex,
-				GroundCanopyBumpOutPresenter<G>,
-				BumpOutLodChan,
-			>::default())
-			.add_plugins(LodPresentPlugin::<
-				MediumCanopyBumpOut,
-				ForestIndex,
-				GroundMediumCanopyBumpOutPresenter<G>,
-				MediumBumpOutLodChan,
-				With<LodViewer>,
-			>::default())
-			.add_plugins(LodPresentCullPlugin::<
-				MediumCanopyBumpOut,
-				ForestIndex,
-				GroundMediumCanopyBumpOutPresenter<G>,
-				MediumBumpOutLodChan,
-			>::default())
-			.configure_sets(Update, LodPresentSystems::Produce.after(LodGenerateSystems::Drain));
+		V::install_materials(app);
+		V::install_groves(app);
+		V::install_bump_outs(app);
+		app.init_resource::<LodPresentGate<(Vegetation<V>, VegetationPresent)>>();
 	}
 }
 
-impl<Mode: GenerationMode, G: TerrainModel> Plugin for VegetationPresentationPlugin<Mode, G>
+impl<Mode: GenerationMode, V: VegetationPresentation> Plugin
+	for VegetationPresentationPlugin<Mode, V>
 where
-	G::Snapshot: Clone + Send + Sync,
-	G::Cell: terrain_layer_model::TerrainCell<Mesh = durham::TerrainMeshBuilder>,
+	Vegetation<V>: terrain_layer_model::TerrainModel,
 {
 	fn build(&self, app: &mut App) {
-		subscribe_mode::<(G, VegetationPresent), Mode>(app);
-		install_lod_present_gate::<(G, VegetationPresent), ForestLodChan>(app);
-		install_lod_present_gate::<(G, VegetationPresent), BumpOutLodChan>(app);
-		install_lod_present_gate::<(G, VegetationPresent), MediumBumpOutLodChan>(app);
-		if !app.is_plugin_added::<VegetationPresentationCore<G>>() {
-			app.add_plugins(VegetationPresentationCore::<G>::default());
+		subscribe_mode::<(Vegetation<V>, VegetationPresent), Mode>(app);
+		install_lod_present_gate::<(Vegetation<V>, VegetationPresent), (Vegetation<V>, VegetationPresent)>(
+			app,
+		);
+		if !app.is_plugin_added::<VegetationPresentationCore<V>>() {
+			app.add_plugins(VegetationPresentationCore::<V>::default());
 		}
 	}
 
 	fn finish(&self, app: &mut App) {
-		G::require_generation(app);
-		app.require_layer::<VegetationGenerationCore, VegetationPresentationCore<G>>();
+		Vegetation::<V>::require_generation(app);
 	}
 }
 

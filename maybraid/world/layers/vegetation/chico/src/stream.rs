@@ -1,6 +1,6 @@
 //! Helpers that stay with the forest crate.
 //!
-//! Stream radii, specs, and LOD registration live in `vegetation-layer-model`.
+//! Stream radii, specs, and LOD registration live in [`crate::layer_stream`].
 
 use crate::LayeringKind;
 

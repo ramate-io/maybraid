@@ -16,8 +16,12 @@ use urbanization_cells::{
 	DevelopmentLeaf, SelectedUrbanization, UrbanDevelopmentKind, UrbanizationExtent,
 	UrbanizationIndex, UrbanizationKind,
 };
+use layer_stack::RequireLayer;
 use terrain_layer_model::OnTerrain;
 use urbanization_layer_model::{Urbanization, UrbanSetting};
+use vegetation_layer_model::{
+	Vegetation, VegetationGeneration, VegetationGenerationCore, VegetationModel, VegetationScheme,
+};
 
 use crate::index::{urban_leaf_arrival_radius, MobCell, MobCellExtent, MobIndex};
 use crate::stream::{
@@ -278,17 +282,52 @@ fn insert_and_remove_one_cell() -> anyhow::Result<()> {
 }
 
 #[test]
-#[should_panic(expected = "VegetationGenerationCore")]
 fn generation_without_vegetation_names_the_missing_plugin() {
-	MobGenerationPlugin::<SilentMode, Silent>::default().finish(&mut App::new());
+	let result = std::panic::catch_unwind(|| {
+		MobGenerationPlugin::<SilentMode, Vegetation<SilentVeg>>::default()
+			.finish(&mut App::new());
+	});
+	let message = match result {
+		Ok(()) => "plugin finish returned".to_string(),
+		Err(payload) => payload
+			.downcast_ref::<String>()
+			.cloned()
+			.or_else(|| payload.downcast_ref::<&str>().map(|s| (*s).to_string()))
+			.unwrap_or_else(|| "non-string panic".to_string()),
+	};
+	assert!(
+		message.contains("VegetationGenerationCore"),
+		"finish names the missing vegetation core, got {message}"
+	);
 }
 
 struct SilentMode;
 
 impl layer_stack::GenerationMode for SilentMode {}
 
-impl MobScheme<Silent> for SilentMode {
+impl MobScheme<Vegetation<SilentVeg>> for SilentMode {
 	fn install(_app: &mut App, _config: &MobLayerConfig) {}
+}
+
+struct SilentVeg;
+
+impl VegetationModel for SilentVeg {
+	type Ground = Silent;
+
+	fn require_generation(app: &App) {
+		app.require_layer::<VegetationGenerationCore<Self>, Vegetation<Self>>();
+	}
+}
+
+impl VegetationGeneration for SilentVeg {
+	type Config = ();
+	fn install_generation(_app: &mut App) {}
+	fn apply_generation(_world: &mut bevy::prelude::World, _config: &()) {}
+	fn clear_generation(_world: &mut bevy::prelude::World) {}
+}
+
+impl VegetationScheme<SilentVeg> for SilentMode {
+	fn install(_app: &mut App, _config: &()) {}
 }
 
 struct Silent;
@@ -462,8 +501,12 @@ struct OtherMode;
 
 impl layer_stack::GenerationMode for OtherMode {}
 
-impl MobScheme<Silent> for OtherMode {
+impl MobScheme<Vegetation<SilentVeg>> for OtherMode {
 	fn install(_app: &mut App, _config: &MobLayerConfig) {}
+}
+
+impl VegetationScheme<SilentVeg> for OtherMode {
+	fn install(_app: &mut App, _config: &()) {}
 }
 
 fn plugin_app() -> App {
@@ -480,10 +523,10 @@ fn plugin_app() -> App {
 		StatesPlugin,
 		GenerationModePlugin::<SilentMode>::initial(),
 		GenerationModePlugin::<OtherMode>::default(),
-		VegetationGenerationPlugin::<SilentMode, Silent>::default(),
-		VegetationGenerationPlugin::<OtherMode, Silent>::default(),
-		MobGenerationPlugin::<SilentMode, Silent>::new(MobLayerConfig::world_defaults()),
-		MobGenerationPlugin::<OtherMode, Silent>::new(MobLayerConfig::world_defaults()),
+		VegetationGenerationPlugin::<SilentMode, SilentVeg>::default(),
+		VegetationGenerationPlugin::<OtherMode, SilentVeg>::default(),
+		MobGenerationPlugin::<SilentMode, Vegetation<SilentVeg>>::new(MobLayerConfig::world_defaults()),
+		MobGenerationPlugin::<OtherMode, Vegetation<SilentVeg>>::new(MobLayerConfig::world_defaults()),
 	));
 	app.insert_resource(TerrainStreaming::<Silent>::new(false));
 	app.init_resource::<ForestIndex>();
@@ -495,7 +538,7 @@ fn two_modes_install_the_core_once() -> anyhow::Result<()> {
 	let mut app = plugin_app();
 	app.finish();
 	anyhow::ensure!(
-		app.is_plugin_added::<crate::MobGenerationCore<Silent>>(),
+		app.is_plugin_added::<crate::MobGenerationCore<Vegetation<SilentVeg>>>(),
 		"core is installed once"
 	);
 	Ok(())
@@ -638,10 +681,10 @@ fn different_budgets_build_and_apply_on_enter() -> anyhow::Result<()> {
 		StatesPlugin,
 		GenerationModePlugin::<SilentMode>::initial(),
 		GenerationModePlugin::<OtherMode>::default(),
-		VegetationGenerationPlugin::<SilentMode, Silent>::default(),
-		VegetationGenerationPlugin::<OtherMode, Silent>::default(),
-		MobGenerationPlugin::<SilentMode, Silent>::new(MobLayerConfig::world_defaults()),
-		MobGenerationPlugin::<OtherMode, Silent>::new(MobLayerConfig { generate_budget: 8 }),
+		VegetationGenerationPlugin::<SilentMode, SilentVeg>::default(),
+		VegetationGenerationPlugin::<OtherMode, SilentVeg>::default(),
+		MobGenerationPlugin::<SilentMode, Vegetation<SilentVeg>>::new(MobLayerConfig::world_defaults()),
+		MobGenerationPlugin::<OtherMode, Vegetation<SilentVeg>>::new(MobLayerConfig { generate_budget: 8 }),
 	));
 	app.insert_resource(TerrainStreaming::<Silent>::new(false));
 	app.init_resource::<ForestIndex>();
@@ -676,10 +719,10 @@ fn plugin_order_does_not_matter() -> anyhow::Result<()> {
 		MinimalPlugins,
 		AssetPlugin::default(),
 		StatesPlugin,
-		MobGenerationPlugin::<OtherMode, Silent>::new(MobLayerConfig { generate_budget: 8 }),
-		MobGenerationPlugin::<SilentMode, Silent>::new(MobLayerConfig::world_defaults()),
-		VegetationGenerationPlugin::<SilentMode, Silent>::default(),
-		VegetationGenerationPlugin::<OtherMode, Silent>::default(),
+		MobGenerationPlugin::<OtherMode, Vegetation<SilentVeg>>::new(MobLayerConfig { generate_budget: 8 }),
+		MobGenerationPlugin::<SilentMode, Vegetation<SilentVeg>>::new(MobLayerConfig::world_defaults()),
+		VegetationGenerationPlugin::<SilentMode, SilentVeg>::default(),
+		VegetationGenerationPlugin::<OtherMode, SilentVeg>::default(),
 		GenerationModePlugin::<SilentMode>::initial(),
 		GenerationModePlugin::<OtherMode>::default(),
 	));
@@ -688,7 +731,7 @@ fn plugin_order_does_not_matter() -> anyhow::Result<()> {
 	app.finish();
 	app.update();
 	anyhow::ensure!(
-		app.is_plugin_added::<crate::MobGenerationCore<Silent>>(),
+		app.is_plugin_added::<crate::MobGenerationCore<Vegetation<SilentVeg>>>(),
 		"core is installed"
 	);
 	Ok(())

@@ -13,8 +13,13 @@ use layer_stack::GenerationModePlugin;
 use terrain_layer_presentation::TerrainPresentationPlugin;
 use urbanization_layer_model::{Urbanization, UrbanizationGenerationPlugin};
 use urbanization_layer_presentation::{PaddedCells, UrbanizationPresentationPlugin};
-use vegetation_layer_model::{VegetationGenerationPlugin, VegetationLayerConfig};
+use chico::{Chico, ChicoConfig};
+use vegetation_layer_model::{Vegetation, VegetationGenerationPlugin};
 use vegetation_layer_presentation::VegetationPresentationPlugin;
+
+type Urbanized = Urbanization<Richmond<OnTerrain<Durham>>>;
+type Forested = Chico<Urbanized>;
+type Vegetated = Vegetation<Forested>;
 
 /// Every world layer at world defaults.
 ///
@@ -34,27 +39,12 @@ impl Plugin for WorldLayersPlugin {
 				UrbanizationGenerationPlugin::<Discovery, Richmond<OnTerrain<Durham>>>::new(
 					RichmondConfig::world_defaults(),
 				),
-				VegetationGenerationPlugin::<
-					Discovery,
-					Urbanization<Richmond<OnTerrain<Durham>>>,
-				>::new(VegetationLayerConfig::world_defaults()),
-				MobGenerationPlugin::<Discovery, Urbanization<Richmond<OnTerrain<Durham>>>>::new(
-					MobLayerConfig::world_defaults(),
-				),
-				TerrainPresentationPlugin::<
-					Discovery,
-					Urbanization<Richmond<OnTerrain<Durham>>>,
-					PaddedCells,
-				>::default(),
+				VegetationGenerationPlugin::<Discovery, Forested>::new(ChicoConfig::world_defaults()),
+				MobGenerationPlugin::<Discovery, Vegetated>::new(MobLayerConfig::world_defaults()),
+				TerrainPresentationPlugin::<Discovery, Urbanized, PaddedCells>::default(),
 				UrbanizationPresentationPlugin::<Discovery, Richmond<OnTerrain<Durham>>>::default(),
-				VegetationPresentationPlugin::<
-					Discovery,
-					Urbanization<Richmond<OnTerrain<Durham>>>,
-				>::default(),
-				MobPresentationPlugin::<
-					Discovery,
-					Urbanization<Richmond<OnTerrain<Durham>>>,
-				>::default(),
+				VegetationPresentationPlugin::<Discovery, Forested>::default(),
+				MobPresentationPlugin::<Discovery, Vegetated>::default(),
 			),
 			(
 				GenerationModePlugin::<TrainingGround>::default(),
@@ -64,31 +54,15 @@ impl Plugin for WorldLayersPlugin {
 				UrbanizationGenerationPlugin::<TrainingGround, Richmond<OnTerrain<Durham>>>::new(
 					RichmondConfig::shared_world(),
 				),
-				VegetationGenerationPlugin::<
-					TrainingGround,
-					Urbanization<Richmond<OnTerrain<Durham>>>,
-				>::new(VegetationLayerConfig::grove()),
-				MobGenerationPlugin::<
-					TrainingGround,
-					Urbanization<Richmond<OnTerrain<Durham>>>,
-				>::new(MobLayerConfig::world_defaults()),
-				TerrainPresentationPlugin::<
-					TrainingGround,
-					Urbanization<Richmond<OnTerrain<Durham>>>,
-					PaddedCells,
-				>::default(),
+				VegetationGenerationPlugin::<TrainingGround, Forested>::new(ChicoConfig::grove()),
+				MobGenerationPlugin::<TrainingGround, Vegetated>::new(MobLayerConfig::world_defaults()),
+				TerrainPresentationPlugin::<TrainingGround, Urbanized, PaddedCells>::default(),
 				UrbanizationPresentationPlugin::<
 					TrainingGround,
 					Richmond<OnTerrain<Durham>>,
 				>::default(),
-				VegetationPresentationPlugin::<
-					TrainingGround,
-					Urbanization<Richmond<OnTerrain<Durham>>>,
-				>::default(),
-				MobPresentationPlugin::<
-					TrainingGround,
-					Urbanization<Richmond<OnTerrain<Durham>>>,
-				>::default(),
+				VegetationPresentationPlugin::<TrainingGround, Forested>::default(),
+				MobPresentationPlugin::<TrainingGround, Vegetated>::default(),
 			),
 		));
 	}

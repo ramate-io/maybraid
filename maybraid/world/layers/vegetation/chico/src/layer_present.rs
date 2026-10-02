@@ -1,4 +1,4 @@
-//! Generic grove and canopy bump-out presenters over a [`TerrainModel`].
+//! Grove hosts and canopy bump-out presentation for [`crate::Chico`].
 
 use std::collections::{HashMap, HashSet};
 use std::marker::PhantomData;
@@ -6,23 +6,33 @@ use std::marker::PhantomData;
 use bevy::ecs::system::{ParamSet, SystemParam};
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
-use vegetation_bumpout::{BumpOut, BumpOutNeighborhood, BumpOutStyle};
-use chico::{
-	CanopyBumpOut, ChicoGrove, ForestIndex, ForestPresenterState, MediumCanopyBumpOut,
-	MEDIUM_BUMP_OUT_CELL_XZ,
-};
+use vegetation_bumpout::{BumpOut, BumpOutNeighborhood, BumpOutPlugin, BumpOutStyle};
 use vegetation_groves::GroveWorldSample;
-use durham::{cascade_chunk_for_cell, TerrainMeshBuilder, TERRAIN_CELL_SIZE};
+use layer_stack::install_lod_present_gate;
 use lod::gen::{Id, SpatialIndex, Version};
+use lod::hide_lod_tree;
 use lod::lod_ref::LodRef;
 use lod::presentation::RegionPresenter;
-use lod::hide_lod_tree;
-use lod_cascade::Chunk;
+use lod::{
+	LodGenerateSystems, LodPresentCullPlugin, LodPresentPlugin, LodPresentSystems, LodViewer,
+};
 use procedural_common::NoiseParams;
 use render_item::mesh::IdentifiedMesh;
 use render_item::NormalizeChunk;
 use terrain_chunk_ref::{TerrainChunkKey, TerrainChunkRef};
 use terrain_layer_model::{HeightField, TerrainCell, TerrainModel, TerrainView};
+use vegetation_layer_model::Vegetation;
+use vegetation_layer_presentation::{VegetationPresent, VegetationPresentation};
+
+use crate::bump_out::{CanopyBumpOut, MediumCanopyBumpOut, MEDIUM_BUMP_OUT_CELL_XZ};
+use crate::generation::{BumpOutLodChan, ForestLodChan, MediumBumpOutLodChan};
+use crate::ground::{overlay_chunk_ref, ChicoGround};
+use crate::grove::ChicoGrove;
+use crate::index::ForestIndex;
+use crate::model::Chico;
+use crate::material::VegetationOnTerrainMaterialRefPlugin;
+use crate::plugin::register_vegetation_view;
+use crate::present::ForestPresenterState;
 
 /// Urbanized medium bump-outs accept a padded cell only this close to
 /// [`MEDIUM_BUMP_OUT_CELL_XZ`]. Fine bump-outs pass `None` and take any size.
@@ -148,13 +158,6 @@ struct PresentedBumpOut {
 }
 
 impl<M: Send + Sync + 'static> BumpOutPresenterState<M> {
-	pub fn clear(&mut self, commands: &mut Commands) {
-		for presented in self.presented.values() {
-			commands.entity(presented.entity).despawn();
-		}
-		self.presented.clear();
-	}
-
 	pub fn presented_version_for_terrain(
 		&self,
 		id: Id,
@@ -211,15 +214,6 @@ impl<M: Send + Sync + 'static> BumpOutPresenterState<M> {
 	}
 }
 
-pub(crate) fn chunk_ref(
-	cell: &dyn TerrainCell<Mesh = TerrainMeshBuilder>,
-) -> TerrainChunkRef<TerrainMeshBuilder> {
-	let cascade = cascade_chunk_for_cell(cell.bounds(), cell.res_2());
-	let extent = cascade.extent.unwrap_or(Vec3::splat(cascade.size));
-	let chunk = Chunk::from_min_max(cascade.origin, cascade.origin + extent, None);
-	TerrainChunkRef::new(cell.mesh_builder(), chunk, cell.res_2())
-}
-
 /// Fine canopy overlays. Padded cells of any size win; otherwise the best raw
 /// fine cell. [`presented_version`](RegionPresenter::presented_version) follows
 /// the development presenters' terrain-key rule for every model.
@@ -233,16 +227,23 @@ pub struct GroundCanopyBumpOutPresenter<'w, 's, G: TerrainModel> {
 
 impl<G> GroundCanopyBumpOutPresenter<'_, '_, G>
 where
-	G: TerrainModel<Cell: TerrainCell<Mesh = TerrainMeshBuilder>>,
+	G: ChicoGround,
+	<G::Cell as TerrainCell>::Mesh: IdentifiedMesh + NormalizeChunk,
 {
-	fn terrain_ref_for(&self, bounds: Aabb3d) -> Option<TerrainChunkRef<TerrainMeshBuilder>> {
-		self.ground.overlay_cell(bounds, TERRAIN_CELL_SIZE, None).map(chunk_ref)
+	fn terrain_ref_for(
+		&self,
+		bounds: Aabb3d,
+	) -> Option<TerrainChunkRef<<G::Cell as TerrainCell>::Mesh>> {
+		self.ground
+			.overlay_cell(bounds, G::fine_overlay_size(), None)
+			.map(overlay_chunk_ref::<G>)
 	}
 }
 
 impl<G> RegionPresenter<CanopyBumpOut, ForestIndex> for GroundCanopyBumpOutPresenter<'_, '_, G>
 where
-	G: TerrainModel<Cell: TerrainCell<Mesh = TerrainMeshBuilder>>,
+	G: ChicoGround,
+	<G::Cell as TerrainCell>::Mesh: IdentifiedMesh + NormalizeChunk + Send + Sync,
 {
 	fn presented_version(&self, id: Id) -> Option<Version> {
 		let cell = SpatialIndex::<CanopyBumpOut>::get(&*self.forest, id)?;
@@ -289,19 +290,24 @@ pub struct GroundMediumCanopyBumpOutPresenter<'w, 's, G: TerrainModel> {
 
 impl<G> GroundMediumCanopyBumpOutPresenter<'_, '_, G>
 where
-	G: TerrainModel<Cell: TerrainCell<Mesh = TerrainMeshBuilder>>,
+	G: ChicoGround,
+	<G::Cell as TerrainCell>::Mesh: IdentifiedMesh + NormalizeChunk,
 {
-	fn terrain_ref_for(&self, bounds: Aabb3d) -> Option<TerrainChunkRef<TerrainMeshBuilder>> {
+	fn terrain_ref_for(
+		&self,
+		bounds: Aabb3d,
+	) -> Option<TerrainChunkRef<<G::Cell as TerrainCell>::Mesh>> {
 		self.ground
 			.overlay_cell(bounds, MEDIUM_BUMP_OUT_CELL_XZ, Some(MEDIUM_OVERLAY_SIZE_TOLERANCE))
-			.map(chunk_ref)
+			.map(overlay_chunk_ref::<G>)
 	}
 }
 
 impl<G> RegionPresenter<MediumCanopyBumpOut, ForestIndex>
 	for GroundMediumCanopyBumpOutPresenter<'_, '_, G>
 where
-	G: TerrainModel<Cell: TerrainCell<Mesh = TerrainMeshBuilder>>,
+	G: ChicoGround,
+	<G::Cell as TerrainCell>::Mesh: IdentifiedMesh + NormalizeChunk + Send + Sync,
 {
 	fn presented_version(&self, id: Id) -> Option<Version> {
 		let cell = SpatialIndex::<MediumCanopyBumpOut>::get(&*self.forest, id)?;
@@ -367,3 +373,73 @@ pub fn bump_out_noise(forest: &NoiseParams) -> NoiseParams {
 	}
 }
 
+impl<G: ChicoGround> VegetationPresentation for Chico<G>
+where
+	Vegetation<Chico<G>>: TerrainModel,
+	<G::Cell as TerrainCell>::Mesh: IdentifiedMesh + NormalizeChunk + Clone + Send + Sync,
+{
+	fn install_groves(app: &mut App) {
+		register_vegetation_view(app);
+		app.init_resource::<ForestPresenterState>();
+		install_lod_present_gate::<(Vegetation<Chico<G>>, VegetationPresent), ForestLodChan>(app);
+		app.add_plugins(LodPresentPlugin::<
+			ChicoGrove,
+			ForestIndex,
+			GroundForestPresenter<G>,
+			ForestLodChan,
+			With<LodViewer>,
+		>::default())
+		.add_plugins(LodPresentCullPlugin::<
+			ChicoGrove,
+			ForestIndex,
+			GroundForestPresenter<G>,
+			ForestLodChan,
+		>::default())
+		.configure_sets(Update, LodPresentSystems::Produce.after(LodGenerateSystems::Drain));
+	}
+
+	fn install_bump_outs(app: &mut App) {
+		if !app.is_plugin_added::<BumpOutPlugin>() {
+			app.add_plugins(BumpOutPlugin);
+		}
+		app.init_resource::<CanopyBumpOutPresenterState>()
+			.init_resource::<MediumCanopyBumpOutPresenterState>();
+		install_lod_present_gate::<(Vegetation<Chico<G>>, VegetationPresent), BumpOutLodChan>(app);
+		install_lod_present_gate::<(Vegetation<Chico<G>>, VegetationPresent), MediumBumpOutLodChan>(
+			app,
+		);
+		app.add_plugins(LodPresentPlugin::<
+			CanopyBumpOut,
+			ForestIndex,
+			GroundCanopyBumpOutPresenter<G>,
+			BumpOutLodChan,
+			With<LodViewer>,
+		>::default())
+		.add_plugins(LodPresentCullPlugin::<
+			CanopyBumpOut,
+			ForestIndex,
+			GroundCanopyBumpOutPresenter<G>,
+			BumpOutLodChan,
+		>::default())
+		.add_plugins(LodPresentPlugin::<
+			MediumCanopyBumpOut,
+			ForestIndex,
+			GroundMediumCanopyBumpOutPresenter<G>,
+			MediumBumpOutLodChan,
+			With<LodViewer>,
+		>::default())
+		.add_plugins(LodPresentCullPlugin::<
+			MediumCanopyBumpOut,
+			ForestIndex,
+			GroundMediumCanopyBumpOutPresenter<G>,
+			MediumBumpOutLodChan,
+		>::default())
+		.configure_sets(Update, LodPresentSystems::Produce.after(LodGenerateSystems::Drain));
+	}
+
+	fn install_materials(app: &mut App) {
+		if !app.is_plugin_added::<VegetationOnTerrainMaterialRefPlugin>() {
+			app.add_plugins(VegetationOnTerrainMaterialRefPlugin);
+		}
+	}
+}
