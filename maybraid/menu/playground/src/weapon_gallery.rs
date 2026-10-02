@@ -5,7 +5,7 @@ use std::f32::consts::FRAC_PI_2;
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, Scene};
 use camera_controls::look::CameraLookEnabled;
-use crozon_character_items::{random_gallery_firearms, FirearmSpec, ItemRng};
+use crozon_character_items::{FirearmSpec, ItemRng};
 use crozon_character_playground::CameraController;
 use crozon_characters::species::braidman::BraidmanConfig;
 use crozon_characters::{
@@ -85,7 +85,8 @@ fn apply_show_weapons(
 }
 
 fn spawn_gallery_operators(commands: &mut Commands) {
-	let items = random_gallery_firearms(&mut ItemRng::from_entropy(), GALLERY_COUNT);
+	let mut rng = ItemRng::from_entropy();
+	let items = rng.random_gallery_firearms(GALLERY_COUNT);
 	let rows = GALLERY_COUNT.div_ceil(GALLERY_COLS);
 	for (index, item) in items.into_iter().enumerate() {
 		let Some(spec) = item.firearm_spec() else {
