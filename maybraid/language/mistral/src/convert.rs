@@ -298,6 +298,9 @@ fn parse_role(name: &str) -> Result<SemanticRole, MistralLanguageError> {
 		"cause" => Ok(SemanticRole::Cause),
 		"content" => Ok(SemanticRole::Content),
 		"classification" | "class" => Ok(SemanticRole::Classification),
+		"manner" => Ok(SemanticRole::Manner),
+		"rate" => Ok(SemanticRole::Rate),
+		"time" => Ok(SemanticRole::Time),
 		other => Err(MistralLanguageError::invalid_output(format!("unknown role {other:?}"))),
 	}
 }

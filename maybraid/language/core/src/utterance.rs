@@ -69,6 +69,11 @@ impl Clause {
 		self.tense = Tense::Past;
 		self
 	}
+
+	pub fn negated(mut self) -> Self {
+		self.polarity = Polarity::Negative;
+		self
+	}
 }
 
 /// Role-bearing argument of a clause.
@@ -150,6 +155,9 @@ pub enum SemanticRole {
 	Cause,
 	Content,
 	Classification,
+	Manner,
+	Rate,
+	Time,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]

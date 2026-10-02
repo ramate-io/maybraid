@@ -173,10 +173,16 @@ impl DependencyDocument {
 					.and_then(|id| sentence.token(id))
 					.map(|head| head.text.as_str())
 					.unwrap_or("ROOT");
+				let case = sentence
+					.children(token.id)
+					.find(|child| child.relation.is("case"))
+					.map(|child| format!(" [case={}]", child.lemma))
+					.unwrap_or_default();
 				let _ = writeln!(
 					out,
-					"  {:<12} {:<6} {:<12} -> {head}",
+					"  {:<12} {:<8} {:<6} {:<12} -> {head}{case}",
 					token.text,
+					token.lemma,
 					token.pos.as_str(),
 					token.relation.as_str()
 				);

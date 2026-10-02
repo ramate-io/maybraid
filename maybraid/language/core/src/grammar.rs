@@ -7,7 +7,7 @@
 use crate::marshall::SemanticNode;
 use crate::output::LexicalOutput;
 use crate::utterance::{
-	Clause, ClauseId, Number, Referent, ReferentId, SemanticRole, SemanticValue,
+	Clause, ClauseId, Number, Polarity, Referent, ReferentId, SemanticRole, SemanticValue,
 };
 
 /// Linearized grammatical form. Morphology and a fuller grammar can extend this.
@@ -64,15 +64,16 @@ pub struct RoleParticles {
 	pub source: &'static str,
 	pub goal: &'static str,
 	pub plural: &'static str,
+	pub negative: &'static str,
 }
 
 impl RoleParticles {
 	pub fn compositional() -> Self {
-		Self { recipient: "tʰə", source: "kə", goal: "ŋə", plural: "ɲi" }
+		Self { recipient: "tʰə", source: "kə", goal: "ŋə", plural: "ɲi", negative: "ma" }
 	}
 
 	pub fn root_heavy() -> Self {
-		Self { recipient: "ʔu", source: "ħe", goal: "ɡo", plural: "riː" }
+		Self { recipient: "ʔu", source: "ħe", goal: "ɡo", plural: "riː", negative: "nu" }
 	}
 }
 
@@ -158,12 +159,18 @@ impl SurfaceGrammar {
 		match self.clause_order {
 			ClauseOrder::VerbMedial => {
 				words.extend(subject);
+				if clause.polarity == Polarity::Negative {
+					words.push(self.particles.negative.to_owned());
+				}
 				words.push(predicate);
 				words.extend(complements);
 			}
 			ClauseOrder::VerbFinal => {
 				words.extend(subject);
 				words.extend(complements);
+				if clause.polarity == Polarity::Negative {
+					words.push(self.particles.negative.to_owned());
+				}
 				words.push(predicate);
 			}
 		}
@@ -194,6 +201,9 @@ impl SurfaceGrammar {
 			(SemanticRole::Goal, Some(self.particles.goal)),
 			(SemanticRole::Instrument, None),
 			(SemanticRole::Location, None),
+			(SemanticRole::Manner, None),
+			(SemanticRole::Rate, None),
+			(SemanticRole::Time, None),
 			(SemanticRole::Cause, None),
 		] {
 			if let Some(value) = clause_value(clause, role) {

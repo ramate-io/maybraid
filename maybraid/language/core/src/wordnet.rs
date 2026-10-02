@@ -18,6 +18,7 @@ use crate::concept::{
 use crate::error::LanguageError;
 
 mod dict;
+mod morphy;
 
 pub use dict::{bundled_dict_dir, WordNetDict};
 
@@ -133,7 +134,7 @@ impl ConceptUniverse for WordNetConceptUniverse {
 		if lemma == "be" || lemma == "classified_as" {
 			ids.push(self.classified_as());
 		}
-		ids.extend(self.dict.resolve_lemma(&lemma));
+		ids.extend(self.dict.resolve_form(&lemma));
 		ids
 	}
 
