@@ -150,7 +150,8 @@ impl MobIndex {
 		self.models_ready = true;
 	}
 
-	/// Write one cell the scheme owns. Bumps membership so presenters see it.
+	/// Write one cell the scheme owns. Call [`crate::announce_mob_cell`] so
+	/// the presenter enqueues it; membership only drives stale removal.
 	pub fn insert_cell(&mut self, cell: MobCell) -> Id {
 		let id = cell.extent.id();
 		let bounds = cell.extent.aabb();

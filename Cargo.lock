@@ -5180,6 +5180,8 @@ dependencies = [
  "mob-groups",
  "mob-intelligence",
  "mob-layer-model",
+ "richmond-development-models",
+ "richmond-urbanization",
  "terrain-layer-model",
  "urbanization-layer-model",
 ]

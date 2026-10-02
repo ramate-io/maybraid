@@ -252,6 +252,7 @@ fn generate_stream_arms_the_grid() -> anyhow::Result<()> {
 	let mut app = App::new();
 	app.init_resource::<MobGenerateBullseye>();
 	app.init_resource::<lod::gen::LodGenerateKeepRegion<MobLodChan>>();
+	app.init_resource::<crate::stream::MobGenerateStreamCell>();
 	app.add_message::<lod::gen::LodGenerateRegion<MobLodChan>>()
 		.add_systems(bevy::prelude::Update, stream_mob_generate);
 	app.world_mut().spawn((Camera3d::default(), Transform::from_xyz(50.0, 0.0, -20.0)));
@@ -529,9 +530,37 @@ fn leaving_a_mode_clears_the_index() -> anyhow::Result<()> {
 }
 
 #[test]
+fn announce_mob_cell_writes_lod_generated() -> anyhow::Result<()> {
+	use bevy::ecs::message::Messages;
+	use bevy::ecs::system::RunSystemOnce;
+	use bevy::prelude::{MessageReader, MessageWriter};
+	use lod::gen::LodGenerated;
+
+	use crate::announce_mob_cell;
+
+	let mut world = World::new();
+	world.init_resource::<Messages<LodGenerated<MobCell>>>();
+	let id = MobCellExtent::from_cell_index(0, 0).id();
+	world
+		.run_system_once(move |mut generated: MessageWriter<LodGenerated<MobCell>>| {
+			announce_mob_cell(id, &mut generated);
+		})
+		.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+	let announced = world
+		.run_system_once(|mut reader: MessageReader<LodGenerated<MobCell>>| {
+			reader.read().map(|message| message.id).collect::<Vec<_>>()
+		})
+		.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+	anyhow::ensure!(announced == vec![id], "announce writes LodGenerated for the cell");
+	Ok(())
+}
+
+#[test]
 fn grid_stream_resumes_after_another_mode() -> anyhow::Result<()> {
+	use bevy::ecs::message::Messages;
 	use bevy::prelude::{AssetPlugin, Camera3d, MinimalPlugins, NextState, Transform};
 	use bevy::state::app::StatesPlugin;
+	use lod::gen::{LodGenerateQueue, LodGenerateRegion};
 	use crate::stream::{install_mob_grid_stream, MobGenerateBullseye};
 	use terrain_layer_model::{ActiveGenerationMode, GenerationModePlugin};
 
@@ -545,7 +574,8 @@ fn grid_stream_resumes_after_another_mode() -> anyhow::Result<()> {
 	));
 	app.init_resource::<MobGenerateBullseye>();
 	app.init_resource::<lod::gen::LodGenerateKeepRegion<MobLodChan>>();
-	app.add_message::<lod::gen::LodGenerateRegion<MobLodChan>>();
+	app.init_resource::<LodGenerateQueue<MobCell>>();
+	app.add_message::<LodGenerateRegion<MobLodChan>>();
 	install_mob_grid_stream::<SilentMode>(&mut app);
 	app.world_mut().spawn((Camera3d::default(), Transform::from_xyz(50.0, 0.0, -20.0)));
 	app.update();
@@ -553,6 +583,12 @@ fn grid_stream_resumes_after_another_mode() -> anyhow::Result<()> {
 		app.world().resource::<lod::gen::LodGenerateKeepRegion<MobLodChan>>().region.is_some(),
 		"grid generate keep follows the viewer"
 	);
+	let leftover = MobCellExtent::from_cell_index(4, 1).id();
+	app.world_mut().resource_mut::<LodGenerateQueue<MobCell>>().enqueue(leftover);
+	app.world_mut()
+		.resource_mut::<Messages<LodGenerateRegion<MobLodChan>>>()
+		.drain()
+		.for_each(drop);
 
 	app.world_mut()
 		.resource_mut::<NextState<ActiveGenerationMode>>()
@@ -563,6 +599,10 @@ fn grid_stream_resumes_after_another_mode() -> anyhow::Result<()> {
 		"leaving the grid mode drops generate keep"
 	);
 	anyhow::ensure!(!app.world().resource::<MobGenerateBullseye>().enabled);
+	anyhow::ensure!(
+		app.world().resource::<LodGenerateQueue<MobCell>>().is_empty(),
+		"leaving the grid mode drops leftover generate jobs"
+	);
 
 	app.world_mut()
 		.resource_mut::<NextState<ActiveGenerationMode>>()
@@ -571,6 +611,15 @@ fn grid_stream_resumes_after_another_mode() -> anyhow::Result<()> {
 	anyhow::ensure!(
 		app.world().resource::<lod::gen::LodGenerateKeepRegion<MobLodChan>>().region.is_some(),
 		"re-entering the grid mode arms generate again"
+	);
+	let regions = app
+		.world_mut()
+		.resource_mut::<Messages<LodGenerateRegion<MobLodChan>>>()
+		.drain()
+		.count();
+	anyhow::ensure!(
+		regions > 0,
+		"re-entering the grid mode writes a generate region without crossing a cell"
 	);
 	Ok(())
 }

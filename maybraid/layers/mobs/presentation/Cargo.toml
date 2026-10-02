@@ -23,6 +23,8 @@ urbanization-layer-model = { workspace = true }
 [dev-dependencies]
 anyhow = { workspace = true }
 durham-terrain-models = { workspace = true }
+richmond-development-models = { workspace = true }
+richmond-urbanization = { workspace = true }
 
 [lints]
 workspace = true

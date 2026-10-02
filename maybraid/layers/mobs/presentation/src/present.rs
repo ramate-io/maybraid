@@ -87,6 +87,11 @@ impl MobPresenterState {
 	}
 
 	#[cfg(test)]
+	pub(crate) fn presents(&self, id: Id) -> bool {
+		self.presented.contains_key(&id)
+	}
+
+	#[cfg(test)]
 	pub(crate) fn insert_presented(&mut self, id: Id, entities: Vec<Entity>) {
 		self.presented.insert(
 			id,
@@ -129,6 +134,7 @@ impl<G: UrbanModel> RegionPresenter<MobCell, MobIndex> for MobPresenter<'_, '_, 
 				Visibility::default(),
 			))
 			.id();
+		let mut entities = vec![cell_root];
 		for group in &cell.groups {
 			let group_root = self
 				.commands
@@ -146,11 +152,12 @@ impl<G: UrbanModel> RegionPresenter<MobCell, MobIndex> for MobPresenter<'_, '_, 
 				transform.translation.y = self.surface.height_or_fallback(xz);
 				let mob = placed.scene.spawn(&mut self.commands, transform);
 				self.commands.entity(mob).insert((ChildOf(group_root), PresentedMobCell(id)));
+				entities.push(mob);
 			}
 		}
 		self.state
 			.presented
-			.insert(id, PresentedCell { version, entities: vec![cell_root], hidden: false });
+			.insert(id, PresentedCell { version, entities, hidden: false });
 	}
 
 	fn hide(&mut self, id: Id) {
@@ -230,36 +237,18 @@ pub fn retire_mob_presenters<G: UrbanModel>(
 /// `PostUpdate`. Despawn in `Last` so those commands still find their targets.
 pub fn drain_retired_mob_cells(
 	mut presented: ResMut<MobPresenterState>,
-	hosts: Query<(Entity, &PresentedMobCell)>,
 	members: Query<(Entity, &MemberOf)>,
-	child_of: Query<&ChildOf>,
 	mut commands: Commands,
 ) {
-	while let Some(roots) = presented.pending_despawn.pop_front() {
-		let mut doomed = roots;
-		for (host, _) in &hosts {
-			if doomed.iter().any(|root| under(*root, host, &child_of)) {
-				doomed.push(host);
-			}
-		}
+	while let Some(entities) = presented.pending_despawn.pop_front() {
+		let hosts: HashSet<Entity> = entities.iter().copied().collect();
 		for (entity, member) in &members {
-			if doomed.contains(&member.mob) {
+			if hosts.contains(&member.mob) {
 				commands.entity(entity).try_despawn();
 			}
 		}
-		for entity in doomed {
+		for entity in entities {
 			commands.entity(entity).try_despawn();
 		}
 	}
-}
-
-fn under(root: Entity, entity: Entity, child_of: &Query<&ChildOf>) -> bool {
-	let mut current = Some(entity);
-	while let Some(entity) = current {
-		if entity == root {
-			return true;
-		}
-		current = child_of.get(entity).ok().map(ChildOf::parent);
-	}
-	false
 }

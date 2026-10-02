@@ -4,13 +4,14 @@ use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use crozon_characters::LocomotionCapsule;
 use durham_terrain_models::{Durham, TerrainTrimeshCollider};
-use lod::gen::Id;
+use lod::gen::{Id, LodGenerated};
 use lod::{LodGenerateSystems, LodPresentSystems};
 use maybraid_mobs::{Mob, MobKind, MobScene};
 use mob_characters::CharacterSpecies;
 use mob_groups::{GroupKind, MobEnvironmentSample, MobGroup, PlacedMob};
 use mob_layer_model::{
-	MobCell, MobCellExtent, MobGenerationSystems, MobIndex, MobLayerConfig, MobScheme,
+	announce_mob_cell, MobCell, MobCellExtent, MobGenerationSystems, MobIndex, MobLayerConfig,
+	MobScheme,
 };
 use mob_layer_presentation::PresentedMobCell;
 use richmond_development_models::{
@@ -369,6 +370,7 @@ impl TrainingArena {
 
 impl MobScheme<Urbanization<OnTerrain<Durham>>> for TrainingGround {
 	fn install(app: &mut App, _config: &MobLayerConfig) {
+		app.add_message::<LodGenerated<MobCell>>();
 		app.add_systems(
 			Update,
 			write_training_roster
@@ -408,6 +410,7 @@ fn write_training_roster(
 	store: Res<DevelopmentEntryStore>,
 	ready_pads: Query<&PresentedPaddedTerrainScene, With<TerrainTrimeshCollider>>,
 	mut index: ResMut<MobIndex>,
+	mut generated: MessageWriter<LodGenerated<MobCell>>,
 	mut commands: Commands,
 ) {
 	let Some(stamped) = stamped.as_deref() else {
@@ -439,6 +442,7 @@ fn write_training_roster(
 		.with_roster(&site);
 	let cell = arena.mob_cell(stamped.round().mob_seed());
 	let mob_id = index.insert_cell(cell);
+	announce_mob_cell(mob_id, &mut generated);
 	commands.insert_resource(TrainingRosterSeat {
 		player: arena.player,
 		facing: arena.player_facing(),
@@ -689,7 +693,10 @@ mod tests {
 	}
 
 	fn roster_world(round: TrainingRound, center: Vec2, footprint: Vec2) -> anyhow::Result<World> {
+		use bevy::ecs::message::Messages;
+
 		let mut world = World::new();
+		world.init_resource::<Messages<LodGenerated<MobCell>>>();
 		world.insert_resource(MobIndex::default());
 		let cell = training_development_cell(center);
 		let config = DevelopmentConfig::from_world_seed(round.development_seed());
@@ -740,6 +747,15 @@ mod tests {
 			.sum();
 		anyhow::ensure!(roster_size == TRAINING_ROSTER, "roster size {roster_size}");
 		anyhow::ensure!(world.get_resource::<TrainingRosterSeat>().is_some());
+		let announced = world
+			.run_system_once(|mut reader: MessageReader<LodGenerated<MobCell>>| {
+				reader.read().map(|message| message.id).collect::<Vec<_>>()
+			})
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		anyhow::ensure!(
+			announced == vec![mob_id],
+			"writing the roster announces the cell so the presenter can enqueue it"
+		);
 		Ok(())
 	}
 

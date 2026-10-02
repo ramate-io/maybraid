@@ -3,7 +3,9 @@
 use bevy::ecs::system::ParamSet;
 use bevy::prelude::*;
 use chico_forests::ForestIndex;
-use lod::gen::{LodGenerateKeepRegion, LodGenerateRegion};
+use lod::gen::{
+	Id, LodGenerateKeepRegion, LodGenerateQueue, LodGenerateRegion, LodGenerated,
+};
 use lod::lod_ref::LodRef;
 use lod::presentation::{LodPresentKeepRegion, LodPresentRegion};
 use lod::scene::{LodRefreshRegions, LodRefreshRegionsStatus};
@@ -12,7 +14,7 @@ use richmond_development_models::DiscoverablePlace;
 use terrain_layer_model::TerrainView;
 use urbanization_layer_model::{UrbanModel, UrbanSetting};
 
-use crate::index::{urban_leaf_arrival_radius, xz_radius_aabb, MobCellExtent, MobIndex};
+use crate::index::{urban_leaf_arrival_radius, xz_radius_aabb, MobCell, MobCellExtent, MobIndex};
 
 /// Present / generate rings the world stream used (1 km / 3 km).
 pub const MOB_GENERATE_RADIUS: f32 = 3_000.0;
@@ -72,6 +74,16 @@ fn refresh_status(enabled: bool, radius: f32, lod_ref: &LodRef) -> LodRefreshReg
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct MobLodChan;
+
+/// Last camera cell the grid generate stream armed. Cleared when that mode exits.
+#[derive(Resource, Default)]
+pub(crate) struct MobGenerateStreamCell(Option<(i32, i32)>);
+
+/// Tell the presenter a scheme-owned cell is ready. Membership alone only
+/// drives stale removal.
+pub fn announce_mob_cell(id: Id, generated: &mut MessageWriter<LodGenerated<MobCell>>) {
+	generated.write(LodGenerated::new(id));
+}
 
 pub fn sync_mob_models<G: UrbanModel>(
 	forest: Res<ForestIndex>,
@@ -164,7 +176,7 @@ pub fn stream_mob_generate(
 	mut generate: ResMut<MobGenerateBullseye>,
 	mut generate_regions: MessageWriter<LodGenerateRegion<MobLodChan>>,
 	mut generate_keep: ResMut<LodGenerateKeepRegion<MobLodChan>>,
-	mut previous_cell: Local<Option<(i32, i32)>>,
+	mut previous_cell: ResMut<MobGenerateStreamCell>,
 ) {
 	let Ok(camera) = camera.single() else {
 		return;
@@ -173,19 +185,25 @@ pub fn stream_mob_generate(
 	let generate_aabb = xz_radius_aabb(camera.translation, MOB_GENERATE_RADIUS);
 	generate_keep.region = Some(generate_aabb);
 	let current = MobCellExtent::cell_index_containing(camera.translation);
-	if previous_cell.as_ref() == Some(&current) {
+	if previous_cell.0.as_ref() == Some(&current) {
 		return;
 	}
 	generate_regions.write(LodGenerateRegion::new(generate_aabb));
-	*previous_cell = Some(current);
+	previous_cell.0 = Some(current);
 }
 
 fn clear_mob_generate(
 	mut generate: ResMut<MobGenerateBullseye>,
 	mut generate_keep: ResMut<LodGenerateKeepRegion<MobLodChan>>,
+	mut previous_cell: ResMut<MobGenerateStreamCell>,
+	queue: Option<ResMut<LodGenerateQueue<MobCell>>>,
 ) {
 	generate.enabled = false;
 	generate_keep.region = None;
+	previous_cell.0 = None;
+	if let Some(mut queue) = queue {
+		queue.clear();
+	}
 }
 
 /// Grid stream for a mode that owns hopscotch cells.
@@ -196,6 +214,7 @@ pub fn install_mob_grid_stream<Mode: terrain_layer_model::GenerationMode>(app: &
 
 	use crate::generation::MobGenerationSystems;
 
+	app.init_resource::<MobGenerateStreamCell>();
 	app.add_systems(
 		Update,
 		stream_mob_generate

@@ -7,10 +7,10 @@ use bevy::prelude::*;
 use durham_terrain_models::{
 	Durham, DurhamTerrainConfig, TerrainRetarget, playable_world_cell_layout,
 };
+use mob_layer_model::{install_mob_grid_stream, MobLayerConfig, MobScheme};
 use terrain_layer_model::{
 	ActiveGenerationMode, BaseTerrainModeConfig, BaseTerrainScheme, GenerationMode, OnTerrain,
 };
-use mob_layer_model::{install_mob_grid_stream, MobLayerConfig, MobScheme};
 use urbanization_layer_model::{
 	install_urbanization_stream, Urbanization, UrbanizationLayerConfig, UrbanizationScheme,
 };
