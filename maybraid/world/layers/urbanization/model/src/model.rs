@@ -1,4 +1,4 @@
-//! [`Urbanization`] wrapper and its [`TerrainModel`] / [`UrbanModel`] impls.
+//! [`Urbanization`] wrapper and its [`TerrainModel`] impl.
 
 use std::marker::PhantomData;
 
@@ -6,12 +6,11 @@ use bevy::ecs::system::{StaticSystemParam, SystemParam, SystemParamItem};
 use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec2;
 use bevy::prelude::App;
-use lod::gen::Id;
 use lod::lod_ref::LodRef;
 use terrain_layer_model::{HeightField, TerrainCell, TerrainModel};
 
 use crate::pads::PadOps;
-use crate::urban::{UrbanModel, UrbanizationModel};
+use crate::urban::{UrbanModel, UrbanSource, UrbanizationModel};
 
 /// Model `U` after urbanization: pads composed into `U::Ground`, urban artifacts on it.
 pub struct Urbanization<U>(PhantomData<fn() -> U>);
@@ -19,12 +18,12 @@ pub struct Urbanization<U>(PhantomData<fn() -> U>);
 /// Ground read plus the urbanization model's own resources.
 #[derive(SystemParam)]
 pub struct UrbanRead<'w, 's, U: UrbanizationModel> {
-	pub(crate) ground: StaticSystemParam<
+	pub ground: StaticSystemParam<
 		'w,
 		's,
 		<<U as UrbanizationModel>::Ground as TerrainModel>::Read,
 	>,
-	pub(crate) urban: StaticSystemParam<'w, 's, <U as UrbanizationModel>::Read>,
+	pub urban: StaticSystemParam<'w, 's, <U as UrbanizationModel>::Read>,
 }
 
 /// Inner snapshot plus the pads merged over the snapshot region.
@@ -84,17 +83,6 @@ where
 		U::pads_at(&read.urban, xz).modify_elevation(raw, xz.x, xz.y)
 	}
 
-	fn cell_ids_overlapping(read: &SystemParamItem<'_, '_, Self::Read>, region: Aabb3d) -> Vec<Id> {
-		U::surface_ids(&read.urban, region)
-	}
-
-	fn cell<'a>(
-		read: &'a SystemParamItem<'_, '_, Self::Read>,
-		id: Id,
-	) -> Option<&'a Self::Cell> {
-		U::surface(&read.urban, id)
-	}
-
 	/// Padded cell when its size passes `overlay_size_tolerance`, else the
 	/// inner model's raw cell.
 	fn overlay_cell<'a>(
@@ -129,11 +117,13 @@ where
 	}
 }
 
+/// [#925](https://github.com/ramate-io/maybraid/issues/925) moves the mob-only
+/// methods into Barking-owned traits. Bodies live on [`UrbanSource`] in richmond;
+/// this crate owns the impl so `Urbanization<Richmond<G>>` stays one local type.
 impl<U> UrbanModel for Urbanization<U>
 where
-	U: UrbanizationModel,
-	<U::Ground as TerrainModel>::Cell:
-		TerrainCell<Mesh = <U::Surface as TerrainCell>::Mesh>,
+	U: UrbanSource,
+	<U::Ground as TerrainModel>::Cell: TerrainCell<Mesh = <U::Surface as TerrainCell>::Mesh>,
 {
 	type Leaf = U::Leaf;
 	type Cell = U::Cell;
@@ -143,60 +133,53 @@ where
 	type Selection = U::Selection;
 	type Select = U::Select;
 
-	fn pads(read: &SystemParamItem<'_, '_, Self::Read>, region: Aabb3d) -> Self::Pads {
+	fn pads(read: &SystemParamItem<'_, '_, Self::Read>, region: Aabb3d) -> U::Pads {
 		U::pads(&read.urban, region)
-	}
-
-	fn urbanization_leaves<'a>(
-		read: &'a SystemParamItem<'_, '_, Self::Read>,
-		region: Aabb3d,
-	) -> Vec<&'a Self::Leaf> {
-		U::urbanization_leaves(&read.urban, region)
-	}
-
-	fn development_cells<'a>(
-		read: &'a SystemParamItem<'_, '_, Self::Read>,
-		region: Aabb3d,
-	) -> Vec<&'a <Self as UrbanModel>::Cell> {
-		U::development_cells(&read.urban, region)
 	}
 
 	fn built<'a>(
 		read: &'a SystemParamItem<'_, '_, Self::Read>,
 		region: Aabb3d,
-	) -> Vec<&'a Self::Built> {
+	) -> Vec<&'a U::Built> {
 		U::built(&read.urban, region)
 	}
 
 	fn built_overlapping<'a>(
 		read: &'a SystemParamItem<'_, '_, Self::Read>,
 		region: Aabb3d,
-	) -> Vec<(Id, lod::gen::Version, &'a Self::Built)> {
+	) -> Vec<(lod::gen::Id, lod::gen::Version, &'a U::Built)> {
 		U::built_overlapping(&read.urban, region)
 	}
 
-	fn development_cell<'a>(
+	fn urbanization_leaves<'a>(
 		read: &'a SystemParamItem<'_, '_, Self::Read>,
-		id: Id,
-	) -> Option<&'a <Self as UrbanModel>::Cell> {
-		U::development_cell(&read.urban, id)
+		region: Aabb3d,
+	) -> Vec<&'a U::Leaf> {
+		U::leaves(&read.urban, region)
+	}
+
+	fn development_cells<'a>(
+		read: &'a SystemParamItem<'_, '_, Self::Read>,
+		region: Aabb3d,
+	) -> Vec<&'a U::Cell> {
+		U::cells(&read.urban, region)
 	}
 
 	fn urbanization_selection(
 		read: &SystemParamItem<'_, '_, Self::Read>,
-	) -> (Self::Selection, Option<Self::Kind>) {
-		U::urbanization_selection(&read.urban)
+	) -> (U::Selection, Option<U::Kind>) {
+		U::selection(&read.urban)
 	}
 
-	fn leaf_bounds(leaf: &Self::Leaf) -> Aabb3d {
-		U::leaf_bounds(leaf)
+	fn leaf_bounds(leaf: &U::Leaf) -> Aabb3d {
+		U::leaf_aabb(leaf)
 	}
 
-	fn cell_bounds(cell: &<Self as UrbanModel>::Cell) -> Aabb3d {
-		U::cell_bounds(cell)
+	fn cell_bounds(cell: &U::Cell) -> Aabb3d {
+		U::cell_aabb(cell)
 	}
 
 	fn ensure_selected(select: &mut SystemParamItem<'_, '_, Self::Select>, region: Aabb3d) {
-		U::ensure_selected(select, region);
+		U::select(select, region)
 	}
 }

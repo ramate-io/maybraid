@@ -1,20 +1,20 @@
 //! Deterministic 4×4 jittered Shepherds Village placement.
 
+use bevy::ecs::system::SystemParamItem;
 use bevy::math::bounding::Aabb3d;
-use durham::{TerrainCellLayout, TerrainEntryStore};
 use procedural_common::{Bounds2, NoiseParams, SeededHash};
 use urbanization_developments::ShepherdsVillage;
 
 use crate::config::DevelopmentConfig;
 use crate::development::{cell_salt, DevelopmentPad};
+use crate::ground::RichmondGround;
 use crate::hydro::{composed_height_upper_on_rect, terrain_hydro_overlaps};
 use crate::pad::{PadComplex, PadParams, PlacedBuildingPad};
 use crate::scatter::bounds_intersect;
 use crate::shepherds_fit::{fit_shepherds_building, shepherds_recipe, ShepherdsBuildingKind};
 
-pub fn build_shepherds_village(
-	store: &TerrainEntryStore,
-	layout: &TerrainCellLayout,
+pub fn build_shepherds_village<G: RichmondGround>(
+	read: &SystemParamItem<'_, '_, G::GroundRead>,
 	cell: Aabb3d,
 	config: &DevelopmentConfig,
 ) -> Option<(ShepherdsVillage, Vec<DevelopmentPad>)> {
@@ -44,12 +44,11 @@ pub fn build_shepherds_village(
 			0.0,
 			PadParams::shepherds(),
 		);
-		if terrain_hydro_overlaps(store, layout, cell, coarse_pad.bounds) {
+		if terrain_hydro_overlaps::<G>(read, cell, coarse_pad.bounds) {
 			continue;
 		}
-		let Some(height) = composed_height_upper_on_rect(
-			store,
-			layout,
+		let Some(height) = composed_height_upper_on_rect::<G>(
+			read,
 			candidate.center,
 			PadParams::shepherds().influence_half(candidate.footprint * 0.5),
 			candidate.yaw,
@@ -78,7 +77,7 @@ pub fn build_shepherds_village(
 			continue;
 		};
 		let complex = placed.pad_complex(PadParams::shepherds());
-		if terrain_hydro_overlaps(store, layout, cell, complex.bounds) {
+		if terrain_hydro_overlaps::<G>(read, cell, complex.bounds) {
 			continue;
 		}
 		buildings.push(placed);

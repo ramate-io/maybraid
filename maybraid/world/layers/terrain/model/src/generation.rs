@@ -120,7 +120,6 @@ mod tests {
 	use bevy::math::{Vec2, Vec3};
 	use bevy::state::app::StatesPlugin;
 	use bevy::transform::components::Transform;
-	use lod::gen::Id;
 	use lod::lod_ref::LodRef;
 
 	struct Alpha;
@@ -194,20 +193,6 @@ mod tests {
 
 		fn fallback_height_at(read: &SystemParamItem<'_, '_, Self::Read>, _xz: Vec2) -> f32 {
 			read.store.fallback
-		}
-
-		fn cell_ids_overlapping(
-			_read: &SystemParamItem<'_, '_, Self::Read>,
-			_region: Aabb3d,
-		) -> Vec<Id> {
-			Vec::new()
-		}
-
-		fn cell<'a>(
-			_read: &'a SystemParamItem<'_, '_, Self::Read>,
-			_id: Id,
-		) -> Option<&'a f32> {
-			None
 		}
 
 		fn overlay_cell<'a>(

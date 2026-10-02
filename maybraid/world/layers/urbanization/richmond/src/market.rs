@@ -1,8 +1,8 @@
 //! Old City Market: hysteresis lanes joining multi-stall terrace clusters.
 
+use bevy::ecs::system::SystemParamItem;
 use bevy::math::bounding::{Aabb2d, Aabb3d};
 use bevy::math::{Vec2, Vec3};
-use durham::{TerrainCellLayout, TerrainEntryStore};
 use procedural_common::{Bounds2, HysteresisConfig, HysteresisGraph, NoiseParams, SeededHash};
 use urbanization_developments::{
 	DevelopmentEdge, OldCityMarket, OldCityMarketCorridor, OldCityMarketSite, OldCityMarketTerrace,
@@ -11,6 +11,7 @@ use urbanization_developments::{
 
 use crate::archetype_generation::ArchetypeGenerator;
 use crate::config::DevelopmentConfig;
+use crate::ground::RichmondGround;
 use crate::connectivity::{corridor_levels, ConnectivityCorridor, ConnectivityGraph};
 use crate::development::{cell_salt, DevelopmentPad};
 use crate::finish::DevelopmentFinishRole;
@@ -49,9 +50,8 @@ struct KeptCorridor {
 }
 
 impl ArchetypeGenerator {
-	pub(crate) fn build_old_city_market(
-		store: &TerrainEntryStore,
-		layout: &TerrainCellLayout,
+	pub(crate) fn build_old_city_market<G: RichmondGround>(
+		read: &SystemParamItem<'_, '_, G::GroundRead>,
 		cell: Aabb3d,
 		config: &DevelopmentConfig,
 	) -> Option<(OldCityMarket, Vec<DevelopmentPad>)> {
@@ -61,8 +61,8 @@ impl ArchetypeGenerator {
 			bounds,
 			root,
 			config.seed as i32,
-			|center, half, yaw| composed_height_upper_on_rect(store, layout, center, half, yaw),
-			|bounds| terrain_hydro_overlaps(store, layout, cell, bounds),
+			|center, half, yaw| composed_height_upper_on_rect::<G>(read, center, half, yaw),
+			|bounds| terrain_hydro_overlaps::<G>(read, cell, bounds),
 		)
 	}
 

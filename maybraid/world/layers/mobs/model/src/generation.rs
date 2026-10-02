@@ -104,30 +104,18 @@ fn apply_mob_mode<Mode: GenerationMode>(
 }
 
 /// Generation for ground `G` in `Mode`.
-pub struct MobGenerationPlugin<Mode, G>
-where
-	Mode: MobScheme<G>,
-	G: UrbanModel<Selection = NoiseParams, Kind = UrbanizationKind>,
-{
+pub struct MobGenerationPlugin<Mode, G> {
 	pub config: MobLayerConfig,
 	_marker: PhantomData<fn() -> (Mode, G)>,
 }
 
-impl<Mode, G> MobGenerationPlugin<Mode, G>
-where
-	Mode: MobScheme<G>,
-	G: UrbanModel<Selection = NoiseParams, Kind = UrbanizationKind>,
-{
+impl<Mode, G> MobGenerationPlugin<Mode, G> {
 	pub fn new(config: MobLayerConfig) -> Self {
 		Self { config, _marker: PhantomData }
 	}
 }
 
-impl<Mode, G> Default for MobGenerationPlugin<Mode, G>
-where
-	Mode: MobScheme<G>,
-	G: UrbanModel<Selection = NoiseParams, Kind = UrbanizationKind>,
-{
+impl<Mode, G> Default for MobGenerationPlugin<Mode, G> {
 	fn default() -> Self {
 		Self::new(MobLayerConfig::default())
 	}

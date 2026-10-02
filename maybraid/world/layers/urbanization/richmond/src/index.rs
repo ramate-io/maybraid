@@ -1,10 +1,9 @@
 //! Spatial store for development cells, padded terrain, and Les Halles hosts.
 
-use bevy::ecs::system::SystemParam;
+use bevy::ecs::system::{StaticSystemParam, SystemParam};
 use bevy::log::info_span;
 use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::prelude::*;
-use durham::{TerrainCellLayout, TerrainEntryStore};
 use lod::gen::{Id, OriginalId, SpatialIndex, StorageStatus, TrackedId, Version};
 use lod::lod_ref::LodRef;
 use procedural_common::Bounds2;
@@ -16,6 +15,7 @@ use urbanization_cells::UrbanizationIndex;
 use crate::artifact::BuiltDevelopment;
 use crate::config::DevelopmentConfig;
 use crate::development::DevelopmentCell;
+use crate::ground::RichmondGround;
 use crate::pad::PadComplex;
 use crate::padded::TerrainWithPads;
 
@@ -318,17 +318,16 @@ fn pad_index_cells(bounds: Bounds2) -> impl Iterator<Item = (i32, i32)> {
 	(min_x..=max_x).flat_map(move |x| (min_z..=max_z).map(move |z| (x, z)))
 }
 
-/// System-local index: development store plus read-only Durham terrain.
+/// System-local index: development store plus read-only ground.
 #[derive(SystemParam)]
-pub struct DevelopmentIndex<'w> {
+pub struct DevelopmentIndex<'w, 's, G: RichmondGround> {
 	pub store: ResMut<'w, DevelopmentEntryStore>,
-	pub terrain: Res<'w, TerrainEntryStore>,
-	pub layout: Res<'w, TerrainCellLayout>,
+	pub ground: StaticSystemParam<'w, 's, <G as RichmondGround>::GroundRead>,
 	pub config: Res<'w, DevelopmentConfig>,
 	pub urbanization: ResMut<'w, UrbanizationIndex>,
 }
 
-impl DevelopmentIndex<'_> {
+impl<G: RichmondGround> DevelopmentIndex<'_, '_, G> {
 	pub fn clear(&mut self) {
 		self.store.clear();
 		self.urbanization.clear();
@@ -337,19 +336,11 @@ impl DevelopmentIndex<'_> {
 	pub fn config(&self) -> &DevelopmentConfig {
 		&self.config
 	}
-
-	pub fn layout(&self) -> &TerrainCellLayout {
-		&self.layout
-	}
-
-	pub fn terrain_store(&self) -> &TerrainEntryStore {
-		&self.terrain
-	}
 }
 
 macro_rules! impl_spatial {
 	($ty:ty, $field:ident, $view:ident $(, $before_insert:ident)?) => {
-		impl<'w> SpatialIndex<$ty> for DevelopmentIndex<'w> {
+		impl<'w, 's, G: RichmondGround> SpatialIndex<$ty> for DevelopmentIndex<'w, 's, G> {
 			fn tracked_ids_for(&self, region: Aabb3d) -> Vec<TrackedId> {
 				self.store
 					.$field

@@ -79,20 +79,6 @@ impl TerrainModel for SilentGround {
 		0.0
 	}
 
-	fn cell_ids_overlapping(
-		_read: &SystemParamItem<'_, '_, Self::Read>,
-		_region: Aabb3d,
-	) -> Vec<Id> {
-		Vec::new()
-	}
-
-	fn cell<'a>(
-		_read: &'a SystemParamItem<'_, '_, Self::Read>,
-		_id: Id,
-	) -> Option<&'a SilentCell> {
-		None
-	}
-
 	fn overlay_cell<'a>(
 		_read: &'a SystemParamItem<'_, '_, Self::Read>,
 		_bounds: Aabb3d,
@@ -133,15 +119,9 @@ struct SilentUrban;
 
 impl UrbanizationModel for SilentUrban {
 	type Ground = SilentGround;
-	type Leaf = ();
-	type Cell = ();
-	type Built = ();
 	type Pads = SilentPads;
-	type Kind = ();
-	type Selection = ();
 	type Surface = SilentCell;
 	type Read = ();
-	type Select = ();
 	type Prepare = ();
 
 	fn pads(_read: &SystemParamItem<'_, '_, Self::Read>, _region: Aabb3d) -> SilentPads {
@@ -168,56 +148,6 @@ impl UrbanizationModel for SilentUrban {
 		_bounds: Aabb3d,
 	) -> Option<&'a SilentCell> {
 		None
-	}
-
-	fn urbanization_leaves<'a>(
-		_read: &'a SystemParamItem<'_, '_, Self::Read>,
-		_region: Aabb3d,
-	) -> Vec<&'a ()> {
-		Vec::new()
-	}
-
-	fn development_cells<'a>(
-		_read: &'a SystemParamItem<'_, '_, Self::Read>,
-		_region: Aabb3d,
-	) -> Vec<&'a ()> {
-		Vec::new()
-	}
-
-	fn built<'a>(_read: &'a SystemParamItem<'_, '_, Self::Read>, _region: Aabb3d) -> Vec<&'a ()> {
-		Vec::new()
-	}
-
-	fn built_overlapping<'a>(
-		_read: &'a SystemParamItem<'_, '_, Self::Read>,
-		_region: Aabb3d,
-	) -> Vec<(Id, lod::gen::Version, &'a ())> {
-		Vec::new()
-	}
-
-	fn development_cell<'a>(
-		_read: &'a SystemParamItem<'_, '_, Self::Read>,
-		_id: Id,
-	) -> Option<&'a ()> {
-		None
-	}
-
-	fn urbanization_selection(_read: &SystemParamItem<'_, '_, Self::Read>) -> ((), Option<()>) {
-		((), None)
-	}
-
-	fn leaf_bounds(_leaf: &()) -> Aabb3d {
-		Aabb3d::from_min_max(bevy::math::Vec3::ZERO, bevy::math::Vec3::ONE)
-	}
-
-	fn cell_bounds(_cell: &()) -> Aabb3d {
-		Aabb3d::from_min_max(bevy::math::Vec3::ZERO, bevy::math::Vec3::ONE)
-	}
-
-	fn ensure_selected(
-		_select: &mut SystemParamItem<'_, '_, Self::Select>,
-		_region: Aabb3d,
-	) {
 	}
 
 	fn prepare(

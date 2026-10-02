@@ -299,20 +299,6 @@ impl TerrainModel for Silent {
 		0.0
 	}
 
-	fn cell_ids_overlapping(
-		_read: &bevy::ecs::system::SystemParamItem<'_, '_, Self::Read>,
-		_region: Aabb3d,
-	) -> Vec<lod::gen::Id> {
-		Vec::new()
-	}
-
-	fn cell<'a>(
-		_read: &'a bevy::ecs::system::SystemParamItem<'_, '_, Self::Read>,
-		_id: lod::gen::Id,
-	) -> Option<&'a SilentCell> {
-		None
-	}
-
 	fn overlay_cell<'a>(
 		_read: &'a bevy::ecs::system::SystemParamItem<'_, '_, Self::Read>,
 		_bounds: Aabb3d,

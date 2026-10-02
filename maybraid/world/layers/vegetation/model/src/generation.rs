@@ -58,7 +58,7 @@ fn apply_vegetation_mode<Mode: GenerationMode>(
 
 /// Forest / grove / bump-out selection for `Mode`. No grow, no hosts.
 /// `M` is the ground whose [`terrain_streaming`](terrain_layer_model::terrain_streaming) gates the stream.
-pub struct VegetationGenerationPlugin<Mode: GenerationMode, M> {
+pub struct VegetationGenerationPlugin<Mode, M> {
 	pub config: VegetationLayerConfig,
 	_marker: PhantomData<fn() -> (Mode, M)>,
 }
@@ -183,20 +183,6 @@ mod tests {
 			_xz: bevy::math::Vec2,
 		) -> f32 {
 			0.0
-		}
-
-		fn cell_ids_overlapping(
-			_read: &bevy::ecs::system::SystemParamItem<'_, '_, Self::Read>,
-			_region: bevy::math::bounding::Aabb3d,
-		) -> Vec<lod::gen::Id> {
-			Vec::new()
-		}
-
-		fn cell<'a>(
-			_read: &'a bevy::ecs::system::SystemParamItem<'_, '_, Self::Read>,
-			_id: lod::gen::Id,
-		) -> Option<&'a GroundCell> {
-			None
 		}
 
 		fn overlay_cell<'a>(

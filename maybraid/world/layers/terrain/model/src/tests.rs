@@ -119,19 +119,6 @@ impl TerrainModel for Flat {
 		read.store.fallback
 	}
 
-	fn cell_ids_overlapping(read: &SystemParamItem<'_, '_, Self::Read>, region: Aabb3d) -> Vec<Id> {
-		read.store
-			.cells
-			.iter()
-			.filter(|(_, cell)| region.intersects(&cell.bounds))
-			.map(|(id, _)| *id)
-			.collect()
-	}
-
-	fn cell<'a>(read: &'a SystemParamItem<'_, '_, Self::Read>, id: Id) -> Option<&'a FlatCell> {
-		read.store.cells.get(&id)
-	}
-
 	fn overlay_cell<'a>(
 		read: &'a SystemParamItem<'_, '_, Self::Read>,
 		bounds: Aabb3d,
@@ -206,30 +193,29 @@ fn world_with_one_cell() -> (World, Id) {
 
 #[test]
 fn view_reads_stored_cells_and_opts_into_fallback() -> anyhow::Result<()> {
-	let (mut world, id) = world_with_one_cell();
+	let (mut world, _id) = world_with_one_cell();
 	let mut state = SystemState::<TerrainView<Flat>>::new(&mut world);
 	let view = state.get(&world)?;
 
 	assert_eq!(view.height_at(Vec2::new(5.0, 5.0)), Some(7.0));
 	assert_eq!(view.height_at(Vec2::new(50.0, 5.0)), None);
 	assert_eq!(view.height_or_fallback(Vec2::new(50.0, 5.0)), -3.0);
-	assert_eq!(view.cell(id).map(TerrainCell::mesh_builder), Some(7.0));
-
 	let region = Aabb3d::from_min_max(Vec3::new(-1.0, -1.0, -1.0), Vec3::new(1.0, 1.0, 1.0));
-	assert_eq!(view.cell_ids_overlapping(region), vec![id]);
+	assert!(view.overlay_cell(region, 10.0, None).is_some());
 	assert_eq!(view.snapshot(region).height_at(Vec2::new(1.0, 1.0)), Some(7.0));
 	Ok(())
 }
 
 #[test]
 fn on_terrain_is_transparent() -> anyhow::Result<()> {
-	let (mut world, id) = world_with_one_cell();
+	let (mut world, _id) = world_with_one_cell();
 	let mut state = SystemState::<TerrainView<OnTerrain<Flat>>>::new(&mut world);
 	let view = state.get(&world)?;
 
 	assert_eq!(view.height_at(Vec2::new(5.0, 5.0)), Some(7.0));
 	assert_eq!(view.height_or_fallback(Vec2::new(50.0, 5.0)), -3.0);
-	assert!(view.cell(id).is_some());
+	let region = Aabb3d::from_min_max(Vec3::new(-1.0, -1.0, -1.0), Vec3::new(1.0, 1.0, 1.0));
+	assert!(view.overlay_cell(region, 10.0, None).is_some());
 	Ok(())
 }
 

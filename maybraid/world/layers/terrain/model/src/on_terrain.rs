@@ -6,7 +6,6 @@ use bevy::app::App;
 use bevy::ecs::system::SystemParamItem;
 use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec2;
-use lod::gen::Id;
 use lod::lod_ref::LodRef;
 
 use crate::model::{TerrainCell, TerrainModel};
@@ -38,14 +37,6 @@ impl<T: TerrainModel> TerrainModel for OnTerrain<T> {
 
 	fn fallback_height_at(read: &SystemParamItem<'_, '_, Self::Read>, xz: Vec2) -> f32 {
 		T::fallback_height_at(read, xz)
-	}
-
-	fn cell_ids_overlapping(read: &SystemParamItem<'_, '_, Self::Read>, region: Aabb3d) -> Vec<Id> {
-		T::cell_ids_overlapping(read, region)
-	}
-
-	fn cell<'a>(read: &'a SystemParamItem<'_, '_, Self::Read>, id: Id) -> Option<&'a Self::Cell> {
-		T::cell(read, id)
 	}
 
 	fn overlay_cell<'a>(

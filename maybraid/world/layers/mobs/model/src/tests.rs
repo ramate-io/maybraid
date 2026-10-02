@@ -366,20 +366,6 @@ impl terrain_layer_model::TerrainModel for Silent {
 		0.0
 	}
 
-	fn cell_ids_overlapping(
-		_read: &bevy::ecs::system::SystemParamItem<'_, '_, Self::Read>,
-		_region: Aabb3d,
-	) -> Vec<Id> {
-		Vec::new()
-	}
-
-	fn cell<'a>(
-		_read: &'a bevy::ecs::system::SystemParamItem<'_, '_, Self::Read>,
-		_id: Id,
-	) -> Option<&'a SilentCell> {
-		None
-	}
-
 	fn overlay_cell<'a>(
 		_read: &'a bevy::ecs::system::SystemParamItem<'_, '_, Self::Read>,
 		_bounds: Aabb3d,
@@ -449,13 +435,6 @@ impl urbanization_layer_model::UrbanModel for Silent {
 		&'a richmond::BuiltDevelopment,
 	)> {
 		Vec::new()
-	}
-
-	fn development_cell<'a>(
-		_read: &'a bevy::ecs::system::SystemParamItem<'_, '_, Self::Read>,
-		_id: Id,
-	) -> Option<&'a richmond::DevelopmentCell> {
-		None
 	}
 
 	fn urbanization_selection(

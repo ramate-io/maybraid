@@ -20,7 +20,7 @@ pub use model::{UrbanRead, UrbanSnapshot, Urbanization};
 pub use pads::PadOps;
 pub use region::{urbanization_host_region, urbanization_visual_region};
 pub use setting::UrbanSetting;
-pub use urban::{UrbanModel, UrbanizationModel};
+pub use urban::{UrbanModel, UrbanSource, UrbanizationModel};
 
 #[cfg(test)]
 mod tests;

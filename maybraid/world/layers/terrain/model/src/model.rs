@@ -5,7 +5,6 @@ use bevy::ecs::system::{ReadOnlySystemParam, SystemParam, SystemParamItem};
 use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec2;
 use bevy::transform::components::Transform;
-use lod::gen::Id;
 use lod::lod_ref::LodRef;
 
 /// Owned height field for work off the main thread (grove grow).
@@ -88,18 +87,12 @@ pub trait TerrainModel: Send + Sync + 'static {
 	/// Analytic height used before the covering cell is stored (Durham: base noise).
 	fn fallback_height_at(read: &SystemParamItem<'_, '_, Self::Read>, xz: Vec2) -> f32;
 
-	/// Ids of stored cells whose bounds intersect `region`.
-	fn cell_ids_overlapping(read: &SystemParamItem<'_, '_, Self::Read>, region: Aabb3d) -> Vec<Id>;
-
-	fn cell<'a>(read: &'a SystemParamItem<'_, '_, Self::Read>, id: Id) -> Option<&'a Self::Cell>;
-
 	/// Cell a canopy bump-out should clone for `bounds`.
 	///
 	/// `target_size` is the raw-cell width. Among stored cells overlapping
 	/// `bounds`, the greatest XZ overlap whose width is within 25% of
 	/// `target_size` wins (the old `fine_terrain_for` / `medium_terrain_for`
-	/// rule). [`Self::cell`] does not express this: urbanization's `cell`
-	/// returns only a padded replacement and has no raw fallback.
+	/// rule).
 	///
 	/// A model with a replacement cell (urbanization's padded terrain) prefers
 	/// it first. `overlay_size_tolerance` gates that preference only:

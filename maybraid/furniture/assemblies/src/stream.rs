@@ -4,6 +4,7 @@
 //! Load ring is a 50 m-cell neighborhood — not the Richmond host tree.
 
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::marker::PhantomData;
 
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
@@ -17,7 +18,10 @@ use lod::{
 	LodSceneRefreshRegionPlugin,
 };
 use lod_gimme::GimmeLodSceneRefreshPlugin;
-use richmond::{BuiltDevelopment, DevelopmentEntryStore, DevelopmentHosts};
+use terrain_layer_model::TerrainView;
+use urbanization_layer_model::UrbanModel;
+
+use crate::slots::FurnitureSlotSource;
 
 use crate::cell::{
 	intersects_xz, world_slot, xz_radius_aabb, FurnitureCellExtent, FURNITURE_GENERATE_RADIUS,
@@ -88,8 +92,11 @@ impl FurnitureIndex {
 		self.slots.len()
 	}
 
-	fn refresh_slots(&mut self, developments: &DevelopmentEntryStore, region: Aabb3d) {
-		let tracked = developments.developments_overlapping_tracked(region);
+	fn refresh_slots<B: FurnitureSlotSource>(
+		&mut self,
+		tracked: Vec<(Id, Version, &B)>,
+		region: Aabb3d,
+	) {
 		let mut fingerprint: Vec<_> =
 			tracked.iter().map(|(id, version, _)| (*id, *version)).collect();
 		fingerprint.sort();
@@ -129,16 +136,13 @@ impl FurnitureIndex {
 	}
 }
 
-fn world_slots_of(
-	development: &BuiltDevelopment,
-) -> Vec<building_components::FurnitureNode> {
+fn world_slots_of(development: &impl FurnitureSlotSource) -> Vec<building_components::FurnitureNode> {
 	let mut out = Vec::new();
-	for host in development.hosts() {
-		let transform = host.transform();
-		for node in host.furniture_nodes() {
+	for (transform, nodes, usages) in development.furniture_hosts() {
+		for node in nodes {
 			out.push(world_slot(transform, node));
 		}
-		for node in furniture_usage_areas::expand_usages(host.furniture_usage_nodes()) {
+		for node in furniture_usage_areas::expand_usages(usages) {
 			out.push(world_slot(transform, node));
 		}
 	}
@@ -350,17 +354,19 @@ fn stream_furniture_keep(
 	*previous_cell = Some(current);
 }
 
-/// Materialize occupied 50 m cells from current Richmond developments.
-fn generate_furniture_cells(
-	developments: Res<DevelopmentEntryStore>,
+/// Materialize occupied 50 m cells from current urban developments.
+fn generate_furniture_cells<M: UrbanModel>(
+	view: TerrainView<M>,
 	generate_keep: Res<LodGenerateKeepRegion<FurnitureLodChan>>,
 	present_keep: Res<LodPresentKeepRegion<FurnitureLodChan>>,
 	mut index: ResMut<FurnitureIndex>,
-) {
+) where
+	M::Built: FurnitureSlotSource,
+{
 	let Some(region) = generate_keep.region.or(present_keep.region) else {
 		return;
 	};
-	index.refresh_slots(&developments, region);
+	index.refresh_slots(M::built_overlapping(&view.read, region), region);
 	let identity = Transform::IDENTITY;
 	let lod_ref = LodRef {
 		entity: Entity::PLACEHOLDER,
@@ -435,9 +441,18 @@ fn present_furniture_cells(
 }
 
 /// Generate + present + flattened-host refresh for the 50 m furniture neighborhood.
-pub struct FurnitureStreamPlugin;
+pub struct FurnitureStreamPlugin<M>(PhantomData<fn() -> M>);
 
-impl Plugin for FurnitureStreamPlugin {
+impl<M> Default for FurnitureStreamPlugin<M> {
+	fn default() -> Self {
+		Self(PhantomData)
+	}
+}
+
+impl<M: UrbanModel> Plugin for FurnitureStreamPlugin<M>
+where
+	M::Built: FurnitureSlotSource,
+{
 	fn build(&self, app: &mut App) {
 		if !app.is_plugin_added::<LodRefreshCorePlugin>() {
 			app.add_plugins(LodRefreshCorePlugin);
@@ -471,7 +486,7 @@ impl Plugin for FurnitureStreamPlugin {
 			)
 			.add_systems(
 				Update,
-				generate_furniture_cells.in_set(FurnitureStreamSystems::Generate),
+				generate_furniture_cells::<M>.in_set(FurnitureStreamSystems::Generate),
 			)
 			.add_systems(
 				Update,

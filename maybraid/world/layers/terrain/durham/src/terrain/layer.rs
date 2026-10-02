@@ -3,7 +3,6 @@
 use bevy::ecs::system::{SystemParam, SystemParamItem};
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
-use lod::gen::Id;
 use lod::lod_ref::LodRef;
 use terrain_layer_model::{BaseTerrainGenerationCore, HeightField, TerrainCell, TerrainGeneration, TerrainModel};
 use layer_stack::{RequireLayer};
@@ -89,14 +88,6 @@ impl TerrainModel for Durham {
 
 	fn fallback_height_at(read: &SystemParamItem<'_, '_, Self::Read>, xz: Vec2) -> f32 {
 		read.base.0.height_at(xz.x, xz.y)
-	}
-
-	fn cell_ids_overlapping(read: &SystemParamItem<'_, '_, Self::Read>, region: Aabb3d) -> Vec<Id> {
-		read.store.terrain_ids_overlapping(region)
-	}
-
-	fn cell<'a>(read: &'a SystemParamItem<'_, '_, Self::Read>, id: Id) -> Option<&'a Terrain> {
-		read.store.terrain(id)
 	}
 
 	/// Best-sized raw cell. Durham has no padded replacement, so
@@ -227,9 +218,6 @@ mod tests {
 
 		assert_eq!(view.height_at(Vec2::new(12.0, -7.0)), None);
 		assert_eq!(view.height_or_fallback(Vec2::new(12.0, -7.0)), base);
-		assert!(view
-			.cell_ids_overlapping(Aabb3d::new(Vec3::ZERO, Vec3::splat(1_000.0)))
-			.is_empty());
 		Ok(())
 	}
 

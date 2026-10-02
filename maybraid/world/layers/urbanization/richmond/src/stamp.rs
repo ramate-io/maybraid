@@ -1,8 +1,8 @@
 //! Stamp one filled development without urbanization occupancy.
 
+use bevy::ecs::system::SystemParamItem;
 use bevy::math::Vec2;
 use bevy::math::bounding::Aabb3d;
-use durham::{TerrainCellLayout, TerrainEntryStore};
 use procedural_common::{NoiseParams, SeededHash};
 use buildings::Fit;
 use urbanization_developments::PlacedBuilding;
@@ -11,6 +11,7 @@ use crate::archetype_generation::ArchetypeGenerator;
 use crate::artifact::BuiltDevelopment;
 use crate::commune::build_shepherds_commune;
 use crate::config::DevelopmentConfig;
+use crate::ground::RichmondGround;
 use crate::development::{DevelopmentCell, DevelopmentContent, DevelopmentKind, cell_salt};
 use crate::les_halles::LesHallesDevelopment;
 use crate::pad::{PadComplex, PadParams};
@@ -67,9 +68,8 @@ impl DevelopmentKind {
 impl DevelopmentCell {
 	/// Author one filled cell of `kind` on `height`. Village / market builders
 	/// sample the store; pad-only kinds use `height` as the terrace.
-	pub fn fill(
-		store: &TerrainEntryStore,
-		layout: &TerrainCellLayout,
+	pub fn fill<G: RichmondGround>(
+		read: &SystemParamItem<'_, '_, G::GroundRead>,
 		cell: Aabb3d,
 		kind: DevelopmentKind,
 		config: &DevelopmentConfig,
@@ -79,16 +79,16 @@ impl DevelopmentCell {
 			DevelopmentKind::Empty => return None,
 			DevelopmentKind::LesHalles => Self::with_les_halles(cell, height, config),
 			DevelopmentKind::ShepherdsVillage => {
-				let (village, pads) = build_shepherds_village(store, layout, cell, config)?;
+				let (village, pads) = build_shepherds_village::<G>(read, cell, config)?;
 				Self::with_shepherds_village(cell, village, pads)
 			}
 			DevelopmentKind::ShepherdsCommune => {
-				let (commune, pads) = build_shepherds_commune(store, layout, cell, config)?;
+				let (commune, pads) = build_shepherds_commune::<G>(read, cell, config)?;
 				Self::with_shepherds_commune(cell, commune, pads)
 			}
 			DevelopmentKind::OldCityMarket => {
 				let (market, pads) =
-					ArchetypeGenerator::build_old_city_market(store, layout, cell, config)?;
+					ArchetypeGenerator::build_old_city_market::<G>(read, cell, config)?;
 				Self::with_old_city_market(cell, market, pads)
 			}
 			DevelopmentKind::RingFort => Self::with_ring_fort(cell, height, config),

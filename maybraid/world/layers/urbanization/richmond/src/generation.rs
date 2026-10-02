@@ -2,7 +2,6 @@
 
 use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec3;
-use durham::{origin_cell_ids_for_layout, TerrainCellLayout, TerrainEntryStore};
 use lod::gen::{GeneratingSpatialIndex, GenerationScheme, Id, OriginalId, SpatialIndex};
 use lod::lod_ref::LodRef;
 use procedural_common::NoiseParams;
@@ -14,7 +13,9 @@ use crate::archetype_generation::ArchetypeGenerator;
 use crate::artifact::BuiltDevelopment;
 use crate::cell::DevelopmentExtent;
 use crate::commune::build_shepherds_commune;
+use crate::compose::PadComposable;
 use crate::development::{select_kind, DevelopmentCell, DevelopmentKind};
+use crate::ground::RichmondGround;
 use crate::hydro::{composed_height_at, terrain_hydro_overlaps};
 use crate::index::DevelopmentIndex;
 use crate::les_halles::LesHallesDevelopment;
@@ -23,9 +24,9 @@ use crate::ring_fort::RingFortDevelopment;
 use crate::shepherds::{ShepherdsCommuneDevelopment, ShepherdsVillageDevelopment};
 use crate::village::build_shepherds_village;
 
-impl<'w> GenerationScheme<DevelopmentIndex<'w>> for DevelopmentCell {
+impl<'w, 's, G: RichmondGround> GenerationScheme<DevelopmentIndex<'w, 's, G>> for DevelopmentCell {
 	fn original_ids_for(
-		spatial_index: &mut DevelopmentIndex<'w>,
+		spatial_index: &mut DevelopmentIndex<'w, 's, G>,
 		region: Aabb3d,
 	) -> Vec<OriginalId> {
 		if !spatial_index.config().use_urbanization {
@@ -54,7 +55,7 @@ impl<'w> GenerationScheme<DevelopmentIndex<'w>> for DevelopmentCell {
 	}
 
 	fn build_with_id(
-		spatial_index: &mut DevelopmentIndex<'w>,
+		spatial_index: &mut DevelopmentIndex<'w, 's, G>,
 		id: Id,
 		_lod_ref: &LodRef,
 	) -> Option<(Self, Aabb3d)> {
@@ -64,12 +65,16 @@ impl<'w> GenerationScheme<DevelopmentIndex<'w>> for DevelopmentCell {
 		build_from_lattice_extent(spatial_index, id)
 	}
 
-	fn descendants_with_lod(_id: Id, _spatial_index: &mut DevelopmentIndex<'w>, _lod_ref: &LodRef) {
+	fn descendants_with_lod(
+		_id: Id,
+		_spatial_index: &mut DevelopmentIndex<'w, 's, G>,
+		_lod_ref: &LodRef,
+	) {
 	}
 }
 
-fn build_from_urbanization_leaf(
-	spatial_index: &mut DevelopmentIndex<'_>,
+fn build_from_urbanization_leaf<G: RichmondGround>(
+	spatial_index: &mut DevelopmentIndex<'_, '_, G>,
 	id: Id,
 ) -> Option<(DevelopmentCell, Aabb3d)> {
 	if spatial_index.urbanization.leaf(id).is_none() {
@@ -86,8 +91,8 @@ fn build_from_urbanization_leaf(
 	build_development_for_kind(spatial_index, cell, kind)
 }
 
-fn build_from_lattice_extent(
-	spatial_index: &mut DevelopmentIndex<'_>,
+fn build_from_lattice_extent<G: RichmondGround>(
+	spatial_index: &mut DevelopmentIndex<'_, '_, G>,
 	id: Id,
 ) -> Option<(DevelopmentCell, Aabb3d)> {
 	let extent = DevelopmentExtent::from_id(id)?;
@@ -97,12 +102,11 @@ fn build_from_lattice_extent(
 	build_development_for_kind(spatial_index, cell, kind)
 }
 
-fn build_development_for_kind(
-	spatial_index: &mut DevelopmentIndex<'_>,
+fn build_development_for_kind<G: RichmondGround>(
+	spatial_index: &mut DevelopmentIndex<'_, '_, G>,
 	cell: Aabb3d,
 	kind: DevelopmentKind,
 ) -> Option<(DevelopmentCell, Aabb3d)> {
-	let layout = spatial_index.layout().clone();
 	let config = spatial_index.config().clone();
 	let center = Vec3::new(
 		(cell.min.x + cell.max.x) * 0.5,
@@ -113,16 +117,16 @@ fn build_development_for_kind(
 	if kind != DevelopmentKind::Empty {
 		// GET miss: Terrain is NotTracked. Do not insert Empty — that is an
 		// authored outcome, not a deferred generate.
-		site_height(spatial_index.terrain_store(), &layout, center.x, center.z)?;
+		composed_height_at::<G>(&spatial_index.ground, center.x, center.z)?;
 	}
 
 	let development = match kind {
 		DevelopmentKind::Empty => DevelopmentCell::empty(cell),
 		DevelopmentKind::LesHalles => {
-			let height = site_height(spatial_index.terrain_store(), &layout, center.x, center.z)?;
+			let height = composed_height_at::<G>(&spatial_index.ground, center.x, center.z)?;
 			let filled = DevelopmentCell::with_les_halles(cell, height, &config);
 			let overlaps_hydro = filled.pad_complex().is_some_and(|pad| {
-				terrain_hydro_overlaps(spatial_index.terrain_store(), &layout, cell, pad.bounds)
+				terrain_hydro_overlaps::<G>(&spatial_index.ground, cell, pad.bounds)
 			});
 			if overlaps_hydro {
 				DevelopmentCell::empty(cell)
@@ -131,7 +135,7 @@ fn build_development_for_kind(
 			}
 		}
 		DevelopmentKind::ShepherdsVillage => {
-			match build_shepherds_village(spatial_index.terrain_store(), &layout, cell, &config) {
+			match build_shepherds_village::<G>(&spatial_index.ground, cell, &config) {
 				Some((village, pads)) => {
 					DevelopmentCell::with_shepherds_village(cell, village, pads)
 				}
@@ -139,7 +143,7 @@ fn build_development_for_kind(
 			}
 		}
 		DevelopmentKind::ShepherdsCommune => {
-			match build_shepherds_commune(spatial_index.terrain_store(), &layout, cell, &config) {
+			match build_shepherds_commune::<G>(&spatial_index.ground, cell, &config) {
 				Some((commune, pads)) => {
 					DevelopmentCell::with_shepherds_commune(cell, commune, pads)
 				}
@@ -147,9 +151,8 @@ fn build_development_for_kind(
 			}
 		}
 		DevelopmentKind::OldCityMarket => {
-			match ArchetypeGenerator::build_old_city_market(
-				spatial_index.terrain_store(),
-				&layout,
+			match ArchetypeGenerator::build_old_city_market::<G>(
+				&spatial_index.ground,
 				cell,
 				&config,
 			) {
@@ -158,10 +161,10 @@ fn build_development_for_kind(
 			}
 		}
 		DevelopmentKind::RingFort => {
-			let height = site_height(spatial_index.terrain_store(), &layout, center.x, center.z)?;
+			let height = composed_height_at::<G>(&spatial_index.ground, center.x, center.z)?;
 			let filled = DevelopmentCell::with_ring_fort(cell, height, &config);
 			let overlaps_hydro = filled.pad_complex().is_some_and(|pad| {
-				terrain_hydro_overlaps(spatial_index.terrain_store(), &layout, cell, pad.bounds)
+				terrain_hydro_overlaps::<G>(&spatial_index.ground, cell, pad.bounds)
 			});
 			if overlaps_hydro {
 				DevelopmentCell::empty(cell)
@@ -174,10 +177,10 @@ fn build_development_for_kind(
 		| DevelopmentKind::SuburbanHomes
 		| DevelopmentKind::WizardsTower
 		| DevelopmentKind::SkybridgeBazaar) => {
-			let height = site_height(spatial_index.terrain_store(), &layout, center.x, center.z)?;
+			let height = composed_height_at::<G>(&spatial_index.ground, center.x, center.z)?;
 			let filled = DevelopmentCell::with_archetype(cell, height, kind, &config);
 			let overlaps_hydro = filled.pad_complex().is_some_and(|pad| {
-				terrain_hydro_overlaps(spatial_index.terrain_store(), &layout, cell, pad.bounds)
+				terrain_hydro_overlaps::<G>(&spatial_index.ground, cell, pad.bounds)
 			});
 			if overlaps_hydro {
 				DevelopmentCell::empty(cell)
@@ -189,43 +192,38 @@ fn build_development_for_kind(
 	Some((development, cell))
 }
 
-fn site_height(
-	store: &TerrainEntryStore,
-	layout: &TerrainCellLayout,
-	x: f32,
-	z: f32,
-) -> Option<f32> {
-	composed_height_at(store, layout, x, z)
-}
-
-impl<'w> GenerationScheme<DevelopmentIndex<'w>> for TerrainWithPads {
+impl<'w, 's, G: RichmondGround> GenerationScheme<DevelopmentIndex<'w, 's, G>> for TerrainWithPads {
 	fn original_ids_for(
-		spatial_index: &mut DevelopmentIndex<'w>,
+		spatial_index: &mut DevelopmentIndex<'w, 's, G>,
 		region: Aabb3d,
 	) -> Vec<OriginalId> {
-		origin_cell_ids_for_layout(spatial_index.layout(), region)
+		G::origin_ids(&spatial_index.ground, region)
 	}
 
 	fn build_with_id(
-		spatial_index: &mut DevelopmentIndex<'w>,
+		spatial_index: &mut DevelopmentIndex<'w, 's, G>,
 		id: Id,
 		lod_ref: &LodRef,
 	) -> Option<(Self, Aabb3d)> {
 		let bounds = id.origin_cell_bounds()?;
-		let terrain = spatial_index.terrain_store().terrain(id)?.clone();
+		let terrain = G::stored_cell(&spatial_index.ground, id)?.clone();
 
 		ensure_development_cells_for_bounds(spatial_index, bounds, lod_ref);
 		let pads = spatial_index.store.merged_pad_complex(bounds);
-		let padded = TerrainWithPads::compose(&terrain, [&pads]);
+		let padded = terrain.compose_pads(&pads);
 		Some((padded, bounds))
 	}
 
-	fn descendants_with_lod(_id: Id, _spatial_index: &mut DevelopmentIndex<'w>, _lod_ref: &LodRef) {
+	fn descendants_with_lod(
+		_id: Id,
+		_spatial_index: &mut DevelopmentIndex<'w, 's, G>,
+		_lod_ref: &LodRef,
+	) {
 	}
 }
 
-fn ensure_development_cells_for_bounds(
-	spatial_index: &mut DevelopmentIndex<'_>,
+fn ensure_development_cells_for_bounds<G: RichmondGround>(
+	spatial_index: &mut DevelopmentIndex<'_, '_, G>,
 	bounds: Aabb3d,
 	lod_ref: &LodRef,
 ) {
@@ -259,16 +257,16 @@ fn ensure_development_cells_for_bounds(
 	}
 }
 
-impl<'w> GenerationScheme<DevelopmentIndex<'w>> for BuiltDevelopment {
+impl<'w, 's, G: RichmondGround> GenerationScheme<DevelopmentIndex<'w, 's, G>> for BuiltDevelopment {
 	fn original_ids_for(
-		spatial_index: &mut DevelopmentIndex<'w>,
+		spatial_index: &mut DevelopmentIndex<'w, 's, G>,
 		region: Aabb3d,
 	) -> Vec<OriginalId> {
 		spatial_index.store.filled_original_ids(region)
 	}
 
 	fn build_with_id(
-		spatial_index: &mut DevelopmentIndex<'w>,
+		spatial_index: &mut DevelopmentIndex<'w, 's, G>,
 		id: Id,
 		lod_ref: &LodRef,
 	) -> Option<(Self, Aabb3d)> {
@@ -406,18 +404,10 @@ impl<'w> GenerationScheme<DevelopmentIndex<'w>> for BuiltDevelopment {
 		Some((built, cell_aabb))
 	}
 
-	fn descendants_with_lod(_id: Id, _spatial_index: &mut DevelopmentIndex<'w>, _lod_ref: &LodRef) {
-	}
-}
-
-#[cfg(test)]
-mod tests {
-	use super::*;
-
-	#[test]
-	fn missing_terrain_is_not_an_authored_empty_cell() {
-		let store = TerrainEntryStore::default();
-		let layout = TerrainCellLayout::default();
-		assert!(site_height(&store, &layout, 0.0, 0.0).is_none());
+	fn descendants_with_lod(
+		_id: Id,
+		_spatial_index: &mut DevelopmentIndex<'w, 's, G>,
+		_lod_ref: &LodRef,
+	) {
 	}
 }

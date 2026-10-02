@@ -1,8 +1,8 @@
 //! Shepherds Commune: hysteresis connectivity graph, then pads, then buildings.
 
+use bevy::ecs::system::SystemParamItem;
 use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec2;
-use durham::{TerrainCellLayout, TerrainEntryStore};
 use procedural_common::{Bounds2, HysteresisConfig, HysteresisGraph, NoiseParams, SeededHash};
 use urbanization_developments::{
 	DevelopmentEdge, ShepherdsCommune, ShepherdsCommuneCorridor, ShepherdsCommuneSite,
@@ -12,6 +12,7 @@ use urbanization_developments::{
 use crate::config::DevelopmentConfig;
 use crate::connectivity::{corridor_levels, ConnectivityGraph};
 use crate::development::{cell_salt, DevelopmentPad};
+use crate::ground::RichmondGround;
 use crate::hydro::{composed_height_upper_on_rect, terrain_hydro_overlaps};
 use crate::pad::{PadComplex, PadParams, PlacedBuildingPad};
 use crate::scatter::{bounds_intersect, ScatterCandidate};
@@ -39,9 +40,8 @@ struct CommuneSite {
 	yaw: f32,
 }
 
-pub fn build_shepherds_commune(
-	store: &TerrainEntryStore,
-	layout: &TerrainCellLayout,
+pub fn build_shepherds_commune<G: RichmondGround>(
+	read: &SystemParamItem<'_, '_, G::GroundRead>,
 	cell: Aabb3d,
 	config: &DevelopmentConfig,
 ) -> Option<(ShepherdsCommune, Vec<DevelopmentPad>)> {
@@ -98,9 +98,8 @@ pub fn build_shepherds_commune(
 		.collect();
 	let mut natural_height = vec![None; conn.keypoints.len()];
 	for (i, (p, site)) in conn.keypoints.iter().zip(&sites).enumerate() {
-		natural_height[i] = composed_height_upper_on_rect(
-			store,
-			layout,
+		natural_height[i] = composed_height_upper_on_rect::<G>(
+			read,
 			*p,
 			PadParams::shepherds().influence_half(site.footprint * 0.5),
 			site.yaw,
@@ -132,7 +131,7 @@ pub fn build_shepherds_commune(
 			PATH_HALF_WIDTH,
 			PadParams::path(),
 		);
-		if terrain_hydro_overlaps(store, layout, cell, complex.bounds) {
+		if terrain_hydro_overlaps::<G>(read, cell, complex.bounds) {
 			continue;
 		}
 		let height = 0.5 * (ha + hb);
@@ -177,7 +176,7 @@ pub fn build_shepherds_commune(
 			height,
 			PadParams::shepherds(),
 		);
-		if terrain_hydro_overlaps(store, layout, cell, coarse.bounds) {
+		if terrain_hydro_overlaps::<G>(read, cell, coarse.bounds) {
 			continue;
 		}
 		let noise =
@@ -188,7 +187,7 @@ pub fn build_shepherds_commune(
 			continue;
 		};
 		let complex = placed.pad_complex(PadParams::shepherds());
-		if terrain_hydro_overlaps(store, layout, cell, complex.bounds) {
+		if terrain_hydro_overlaps::<G>(read, cell, complex.bounds) {
 			continue;
 		}
 		buildings[i] = Some(placed);

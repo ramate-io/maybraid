@@ -110,9 +110,6 @@ fn without_pads_urbanization_reads_the_inner_surface() -> anyhow::Result<()> {
 
 	anyhow::ensure!(view.height_at(Vec2::new(40.0, 25.0)).is_none());
 	anyhow::ensure!(view.height_or_fallback(Vec2::new(40.0, 25.0)) == base);
-	anyhow::ensure!(view
-		.cell_ids_overlapping(Aabb3d::new(Vec3::ZERO, Vec3::splat(1_000.0)))
-		.is_empty());
 	Ok(())
 }
 
@@ -255,10 +252,14 @@ struct OverlayPadSpec {
 	res_2: u8,
 }
 
-fn insert_overlay_pad(mut index: DevelopmentIndex, spec: bevy::prelude::Res<OverlayPadSpec>) {
+fn insert_overlay_pad(
+	mut index: DevelopmentIndex<OnTerrain<Durham>>,
+	spec: bevy::prelude::Res<OverlayPadSpec>,
+) {
 	use terrain_layer_model::TerrainCell;
+	use crate::ground::RichmondGround;
 
-	let Some(terrain) = index.terrain.terrain(spec.source) else {
+	let Some(terrain) = OnTerrain::<Durham>::stored_cell(&index.ground, spec.source) else {
 		return;
 	};
 	let mut padded = TerrainWithPads::compose(terrain, std::iter::empty::<&PadComplex>());

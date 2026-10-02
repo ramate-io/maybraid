@@ -14,7 +14,7 @@ use lod::{
 	LodGeneratePlugin, LodGenerateRegionPlugin, LodGenerateSystems, LodPresentRegionPlugin,
 	LodPresentSystems, LodViewer,
 };
-use terrain_layer_model::{terrain_streaming, TerrainExtent, TerrainLayerSystems, TerrainModel};
+use terrain_layer_model::{terrain_streaming, TerrainExtent, TerrainLayerSystems};
 use urbanization_cells::{
 	SelectedUrbanization, UrbanDevelopmentKind, UrbanizationExtent, UrbanizationGenerateBullseye,
 	UrbanizationIndex, UrbanizationKind, UrbanizationLodChan, UrbanizationPresentBullseye,
@@ -25,16 +25,14 @@ use urbanization_layer_model::{
 	UrbanizationModeConfig, UrbanizationStoreSystems,
 };
 
-use crate::compose::PadComposable;
 use crate::config::DevelopmentConfig;
 use crate::development::DevelopmentCell;
+use crate::ground::RichmondGround;
 use crate::index::{DevelopmentEntryStore, DevelopmentIndex};
 use crate::layer::Richmond;
 use crate::layer_config::{focused_spec, RichmondConfig, UrbanizationStreamSpec};
 use crate::padded::TerrainWithPads;
 use crate::BuiltDevelopment;
-use durham::TerrainMeshBuilder;
-use terrain_layer_model::TerrainCell;
 
 /// Stream spec fingerprint. A resource so leaving a mode can clear it.
 #[derive(Resource, Default, Debug, Clone, PartialEq, Eq)]
@@ -84,8 +82,7 @@ pub fn register_urbanization_lod_generate(app: &mut App) {
 pub fn install_urbanization_stream<Mode, G>(app: &mut App)
 where
 	Mode: GenerationMode,
-	G: TerrainModel,
-	G::Cell: PadComposable<Padded = TerrainWithPads> + TerrainCell<Mesh = TerrainMeshBuilder>,
+	G: RichmondGround,
 {
 	register_urbanization_lod_generate(app);
 	app.add_systems(
@@ -202,13 +199,11 @@ impl UrbanizationStreamLod<'_> {
 	}
 }
 
-pub fn sync_urbanization_pin<Mode: GenerationMode, G: TerrainModel>(
+pub fn sync_urbanization_pin<Mode: GenerationMode, G: RichmondGround>(
 	config: Res<UrbanizationModeConfig<Mode, Richmond<G>>>,
 	mut urbanization: ResMut<UrbanizationIndex>,
 	mut development: ResMut<DevelopmentConfig>,
-) where
-	G::Cell: PadComposable<Padded = TerrainWithPads> + TerrainCell<Mesh = TerrainMeshBuilder>,
-{
+) {
 	if let Some(spec) = focused_spec(&config.config) {
 		urbanization.kind = spec.kind;
 		urbanization.noise = spec.noise;
@@ -220,14 +215,12 @@ pub fn sync_urbanization_pin<Mode: GenerationMode, G: TerrainModel>(
 	}
 }
 
-pub fn stream_urbanization<Mode: GenerationMode, G: TerrainModel>(
+pub fn stream_urbanization<Mode: GenerationMode, G: RichmondGround>(
 	config: Res<UrbanizationModeConfig<Mode, Richmond<G>>>,
 	camera: Query<&Transform, With<Camera3d>>,
 	mut lod: UrbanizationStreamLod,
 	mut last_key: ResMut<UrbanizationStreamKey>,
-) where
-	G::Cell: PadComposable<Padded = TerrainWithPads> + TerrainCell<Mesh = TerrainMeshBuilder>,
-{
+) {
 	let cam = camera.single().ok().map(|t| t.translation);
 	lod.apply_spec(focused_spec(&config.config).as_ref(), cam, &mut last_key.0);
 }
@@ -258,14 +251,12 @@ pub fn clear_urbanization_stream_world(world: &mut World) {
 
 /// Bounded leaf generate on the 1 km urbanization keep.
 #[allow(clippy::collapsible_if)]
-pub fn generate_urbanization_developments<Mode: GenerationMode, G: TerrainModel>(
+pub fn generate_urbanization_developments<Mode: GenerationMode, G: RichmondGround>(
 	config: Res<UrbanizationModeConfig<Mode, Richmond<G>>>,
 	keep: Res<LodPresentKeepRegion<UrbanizationLodChan>>,
-	mut development: DevelopmentIndex,
+	mut development: DevelopmentIndex<G>,
 	budget: Res<LodGenerateBudget<UrbanizationLodChan>>,
-) where
-	G::Cell: PadComposable<Padded = TerrainWithPads> + TerrainCell<Mesh = TerrainMeshBuilder>,
-{
+) {
 	if config.config.urbanization.is_none() {
 		return;
 	}
@@ -354,10 +345,10 @@ pub(crate) struct PaddedTerrainTickKey {
 }
 
 /// Compose pads only for stored ground cells.
-pub(crate) fn generate_richmond_padded_terrain<G: TerrainModel>(
+pub(crate) fn generate_richmond_padded_terrain<G: RichmondGround>(
 	layer: Res<UrbanizationLayerRegion>,
 	extent: Res<TerrainExtent<G::Base>>,
-	mut development: DevelopmentIndex,
+	mut development: DevelopmentIndex<G>,
 	mut last: Local<Option<PaddedTerrainTickKey>>,
 ) {
 	let Some(region) = urbanization_visual_region(&*extent, layer.region) else {
@@ -368,7 +359,7 @@ pub(crate) fn generate_richmond_padded_terrain<G: TerrainModel>(
 	let key = PaddedTerrainTickKey {
 		region,
 		store_rev: development.store.membership_revision(),
-		terrain_rev: development.terrain_store().membership_revision(),
+		terrain_rev: G::membership_revision(&development.ground),
 		viewer: None,
 	};
 	if removed == 0 && last.as_ref() == Some(&key) {
@@ -381,7 +372,7 @@ pub(crate) fn generate_richmond_padded_terrain<G: TerrainModel>(
 		current_transform: &identity,
 		bounds: &region,
 	};
-	for id in development.terrain_store().terrain_ids_overlapping(region) {
+	for id in G::terrain_ids_overlapping(&development.ground, region) {
 		let _ = GeneratingSpatialIndex::<TerrainWithPads>::get_or_generate(
 			&mut development,
 			id,
@@ -391,16 +382,12 @@ pub(crate) fn generate_richmond_padded_terrain<G: TerrainModel>(
 	*last = Some(PaddedTerrainTickKey {
 		region,
 		store_rev: development.store.membership_revision(),
-		terrain_rev: development.terrain_store().membership_revision(),
+		terrain_rev: G::membership_revision(&development.ground),
 		viewer: None,
 	});
 }
 
-impl<G> urbanization_layer_model::UrbanizationGeneration for Richmond<G>
-where
-	G: TerrainModel,
-	G::Cell: PadComposable<Padded = TerrainWithPads> + TerrainCell<Mesh = TerrainMeshBuilder>,
-{
+impl<G: RichmondGround> urbanization_layer_model::UrbanizationGeneration for Richmond<G> {
 	type Config = RichmondConfig;
 
 	fn install_generation(app: &mut App) {

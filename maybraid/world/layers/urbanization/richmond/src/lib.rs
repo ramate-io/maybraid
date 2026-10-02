@@ -21,6 +21,7 @@ pub mod connectivity;
 pub mod development;
 pub mod finish;
 pub mod generation;
+pub mod ground;
 pub mod host;
 pub mod hydro;
 pub mod index;
@@ -76,6 +77,7 @@ pub use pad::{
 pub use padded::{PresentedPaddedTerrainScene, TerrainWithPads};
 pub use place::{DiscoverablePlace, DiscoverablePlaceLabel, InteriorArea};
 pub use compose::PadComposable;
+pub use ground::{RichmondGround, RichmondGroundView};
 pub use layer::Richmond;
 pub use layer_config::{
 	DevelopmentFocus, RichmondConfig, UrbanizationStreamSpec, DEFAULT_URBANIZATION_NOISE,

@@ -1,9 +1,11 @@
 //! Skip development cells that overlap Watershed hydro primitives.
 
-use durham::{origin_cell_ids_for_layout, TerrainCellLayout, TerrainEntryStore};
-use lod::gen::OriginalId;
+use bevy::ecs::system::SystemParamItem;
+use bevy::math::bounding::Aabb3d;
 use terrain_watersheds::{WaterFill, WaterSurface};
 use procedural_common::Bounds2;
+
+use crate::ground::RichmondGround;
 
 const SITE_SAMPLE_SIDE: usize = 9;
 const SITE_HEIGHT_QUANTILE: f32 = 0.95;
@@ -40,31 +42,21 @@ pub fn hydro_overlaps_xz(fills: &[WaterFill], bounds: Bounds2) -> bool {
 }
 
 /// True when any stored terrain cell overlapping `cell` has hydro that intersects `bounds`.
-pub fn terrain_hydro_overlaps(
-	store: &TerrainEntryStore,
-	layout: &TerrainCellLayout,
-	cell: bevy::math::bounding::Aabb3d,
+pub fn terrain_hydro_overlaps<G: RichmondGround>(
+	read: &SystemParamItem<'_, '_, G::GroundRead>,
+	cell: Aabb3d,
 	bounds: Bounds2,
 ) -> bool {
-	for OriginalId(id) in origin_cell_ids_for_layout(layout, cell) {
-		let Some(terrain) = store.terrain(id) else {
-			continue;
-		};
-		if hydro_overlaps_xz(&terrain.marazion_fills, bounds) {
-			return true;
-		}
-	}
-	false
+	G::hydro_overlaps(read, cell, bounds)
 }
 
 /// Height sample from composed post-Watershed terrain, if the covering cell is stored.
-pub fn composed_height_at(
-	store: &TerrainEntryStore,
-	layout: &TerrainCellLayout,
+pub fn composed_height_at<G: RichmondGround>(
+	read: &SystemParamItem<'_, '_, G::GroundRead>,
 	x: f32,
 	z: f32,
 ) -> Option<f32> {
-	store.composed_height_at(layout, x, z)
+	G::composed_height_at(read, x, z)
 }
 
 /// Robust high composed elevation over a yawed rectangular support.
@@ -72,9 +64,8 @@ pub fn composed_height_at(
 /// A dense grid over the complete pad influence catches uphill terrain outside
 /// the flatten core. The 95th percentile sits close to that local high without
 /// letting one narrow terrain spike lift the entire terrace.
-pub fn composed_height_upper_on_rect(
-	store: &TerrainEntryStore,
-	layout: &TerrainCellLayout,
+pub fn composed_height_upper_on_rect<G: RichmondGround>(
+	read: &SystemParamItem<'_, '_, G::GroundRead>,
 	center: bevy::math::Vec2,
 	half: bevy::math::Vec2,
 	yaw: f32,
@@ -93,7 +84,7 @@ pub fn composed_height_upper_on_rect(
 					cos * local.x + sin * local.y,
 					-sin * local.x + cos * local.y,
 				);
-			if let Some(h) = composed_height_at(store, layout, p.x, p.y) {
+			if let Some(h) = composed_height_at::<G>(read, p.x, p.y) {
 				heights[count] = h;
 				count += 1;
 			}

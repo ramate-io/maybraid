@@ -3,7 +3,6 @@
 use bevy::ecs::system::{StaticSystemParam, SystemParam};
 use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec2;
-use lod::gen::Id;
 
 use crate::model::{TerrainCell, TerrainModel};
 
@@ -23,14 +22,6 @@ impl<M: TerrainModel> TerrainView<'_, '_, M> {
 	/// Stored height, else the model's analytic fallback.
 	pub fn height_or_fallback(&self, xz: Vec2) -> f32 {
 		self.height_at(xz).unwrap_or_else(|| M::fallback_height_at(&self.read, xz))
-	}
-
-	pub fn cell_ids_overlapping(&self, region: Aabb3d) -> Vec<Id> {
-		M::cell_ids_overlapping(&self.read, region)
-	}
-
-	pub fn cell(&self, id: Id) -> Option<&M::Cell> {
-		M::cell(&self.read, id)
 	}
 
 	/// See [`TerrainModel::overlay_cell`].

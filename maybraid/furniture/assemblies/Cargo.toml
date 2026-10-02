@@ -21,8 +21,8 @@ lod-gimme = { workspace = true }
 procedural-common = { workspace = true }
 building-components = { workspace = true }
 building-physics = { workspace = true }
-richmond = { workspace = true }
 furniture-usage-areas = { workspace = true }
+terrain-layer-model = { workspace = true }
 urbanization-layer-model = { workspace = true }
 
 [dev-dependencies]

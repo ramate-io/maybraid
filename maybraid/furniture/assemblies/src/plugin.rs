@@ -1,36 +1,12 @@
 //! Shared unit-cube mesh for gallery abutment walls (kits are GLBs).
 
 use bevy::prelude::*;
-use furniture_shaders::FurnitureShadersPlugin;
-use urbanization_layer_model::UrbanizationStoreSystems;
-
-use crate::stream::{FurnitureStreamPlugin, FurnitureStreamSystems};
 
 /// Handles for the unit cuboid stand-in (spans \([-0.5, 0.5]^3\)).
 #[derive(Resource, Clone)]
 pub struct FurnitureKitMeshes {
 	pub unit_cube: Handle<Mesh>,
 	pub wall: Handle<StandardMaterial>,
-}
-
-/// The same furniture install `UrbanizationPresentationCore` used to own.
-///
-/// Lives here because `richmond` cannot depend on this crate (`furniture-assemblies`
-/// already depends on `richmond`).
-pub fn install_on_urbanization(app: &mut App) {
-	if !app.is_plugin_added::<FurnitureShadersPlugin>() {
-		app.add_plugins(FurnitureShadersPlugin);
-	}
-	if !app.is_plugin_added::<FurnitureAssembliesPlugin>() {
-		app.add_plugins(FurnitureAssembliesPlugin);
-	}
-	if !app.is_plugin_added::<FurnitureStreamPlugin>() {
-		app.add_plugins(FurnitureStreamPlugin);
-	}
-	app.configure_sets(
-		Update,
-		FurnitureStreamSystems::Generate.after(UrbanizationStoreSystems),
-	);
 }
 
 /// Registers [`FurnitureKitMeshes`].

@@ -7,7 +7,7 @@ use durham::{Durham, TerrainCellLayout, TerrainEntryStore};
 use lod::gen::Id;
 use richmond::{
 	DEVELOPMENT_CELL_SIZE, DevelopmentCell, DevelopmentConfig, DevelopmentEntryStore,
-	DevelopmentKind, PadParams,
+	DevelopmentKind, PadParams, RichmondGroundView,
 };
 use terrain_layer_model::{OnTerrain, TerrainView};
 use layer_stack::{ActiveGenerationMode, GenerationModeSystems};
@@ -124,6 +124,7 @@ fn stamp_training_urbanization(
 			Res<TerrainCellLayout>,
 			ResMut<DevelopmentEntryStore>,
 			ResMut<UrbanizationLayerRegion>,
+			RichmondGroundView,
 		),
 		TerrainView<OnTerrain<Durham>>,
 	)>,
@@ -132,7 +133,7 @@ fn stamp_training_urbanization(
 	let current = stamped.as_deref().map(|stamped| (stamped.cell_id(), stamped.round().map()));
 	if let Some((id, map)) = current {
 		if map != round.map() {
-			let (_, _, mut developments, mut layer) = access.p0();
+			let (_, _, mut developments, mut layer, _) = access.p0();
 			developments.remove_cell(id);
 			let _ = developments.invalidate_dirty_padded();
 			layer.region = None;
@@ -145,22 +146,22 @@ fn stamp_training_urbanization(
 		return;
 	}
 	let waiting = {
-		let (store, layout, _, _) = access.p0();
+		let (store, layout, _, _, _) = access.p0();
 		*layout != round.layout() || !store.fills_layout(&layout)
 	};
 	if waiting {
 		return;
 	}
 	let center = {
-		let (_, layout, _, _) = access.p0();
+		let (_, layout, _, _, _) = access.p0();
 		layout.region_center_xz().xz()
 	};
 	let cell = training_development_cell(center);
 	let plaza_y = access.p1().height_or_fallback(center);
 	let config = DevelopmentConfig::from_world_seed(round.development_seed());
 	let fitted = {
-		let (store, layout, _, _) = access.p0();
-		stamp_training_development(&store, &layout, cell, &config, plaza_y)
+		let (_, _, _, _, ground) = access.p0();
+		stamp_training_development(&ground, cell, &config, plaza_y)
 	};
 	let Some((kind, filled, built, courtyard)) = fitted else {
 		let site = round.site();
@@ -181,7 +182,7 @@ fn stamp_training_urbanization(
 	);
 	let cell_id = Id::from_cell(filled.cell);
 	let terrain_ids = {
-		let (store, layout, mut developments, mut layer) = access.p0();
+		let (store, layout, mut developments, mut layer, _) = access.p0();
 		let terrain_ids = terrain_ids_under_pads(&store, &filled);
 		developments.insert_cell(cell_id, filled.clone());
 		developments.insert_built(cell_id, built, filled.cell);
@@ -237,8 +238,7 @@ pub fn training_development_cell(center: Vec2) -> Aabb3d {
 /// First single-terrace kind from the seeded pick onward, re-padded as one
 /// flat walled courtyard. Multi-terrace kinds cannot share a level arena.
 fn stamp_training_development(
-	store: &TerrainEntryStore,
-	layout: &TerrainCellLayout,
+	ground: &RichmondGroundView,
 	cell: Aabb3d,
 	config: &DevelopmentConfig,
 	height: f32,
@@ -248,7 +248,9 @@ fn stamp_training_development(
 	let start = DevelopmentKind::FILLED.iter().position(|kind| *kind == preferred).unwrap_or(0);
 	let count = DevelopmentKind::FILLED.len();
 	for kind in (0..count).map(|i| DevelopmentKind::FILLED[(start + i) % count]) {
-		let Some(filled) = DevelopmentCell::fill(store, layout, cell, kind, config, height) else {
+		let Some(filled) =
+			DevelopmentCell::fill::<OnTerrain<Durham>>(ground, cell, kind, config, height)
+		else {
 			continue;
 		};
 		let Some(footprint) = filled.footprint_half_extents() else {

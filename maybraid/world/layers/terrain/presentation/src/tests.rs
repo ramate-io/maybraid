@@ -108,19 +108,6 @@ impl TerrainModel for Flat {
 		read.store.fallback
 	}
 
-	fn cell_ids_overlapping(read: &SystemParamItem<'_, '_, Self::Read>, region: Aabb3d) -> Vec<Id> {
-		read.store
-			.cells
-			.iter()
-			.filter(|(_, cell)| region.intersects(&cell.bounds))
-			.map(|(id, _)| *id)
-			.collect()
-	}
-
-	fn cell<'a>(read: &'a SystemParamItem<'_, '_, Self::Read>, id: Id) -> Option<&'a FlatCell> {
-		read.store.cells.get(&id)
-	}
-
 	fn overlay_cell<'a>(
 		_read: &'a SystemParamItem<'_, '_, Self::Read>,
 		_bounds: Aabb3d,

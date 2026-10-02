@@ -62,7 +62,6 @@ fn main() {
 	app.add_plugins(
 		UrbanizationPresentationPlugin::<PlaygroundMode, Richmond<OnTerrain<Durham>>>::default(),
 	);
-	furniture_assemblies::install_on_urbanization(&mut app);
 	app.add_plugins(DevelopmentsOnTerrainPlugin { config: playground, commands: true })
 		.run();
 }

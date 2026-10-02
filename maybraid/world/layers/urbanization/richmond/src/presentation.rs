@@ -1,15 +1,14 @@
 //! Present padded terrain cells.
 
-use bevy::ecs::system::SystemParam;
+use bevy::ecs::system::{StaticSystemParam, SystemParam};
 use bevy::prelude::*;
-use durham::{
-	stream_banded_draws, PresentedWaterScene, TerrainEntryStore, TerrainVisualHost, Water,
-};
+use durham::{stream_banded_draws, PresentedWaterScene, TerrainVisualHost, Water};
 use lod::gen::{Id, LodScene, LodSceneLevel, RegionPresenter, SpatialIndex, Version};
 use lod::lod_ref::LodRef;
 use std::collections::HashMap;
 use std::collections::HashSet;
 
+use crate::ground::RichmondGround;
 use crate::index::PaddedStoreView;
 use crate::padded::{PresentedPaddedTerrainScene, TerrainWithPads};
 
@@ -39,19 +38,19 @@ impl PaddedTerrainPresenterState {
 
 /// System-local presenter for padded terrain meshes.
 #[derive(SystemParam)]
-pub struct PaddedTerrainPresenter<'w, 's> {
+pub struct PaddedTerrainPresenter<'w, 's, G: RichmondGround> {
 	commands: Commands<'w, 's>,
 	state: ResMut<'w, PaddedTerrainPresenterState>,
-	terrain_store: Res<'w, TerrainEntryStore>,
+	ground: StaticSystemParam<'w, 's, <G as RichmondGround>::GroundRead>,
 }
 
-impl PaddedTerrainPresenter<'_, '_> {
+impl<G: RichmondGround> PaddedTerrainPresenter<'_, '_, G> {
 	pub fn clear_presented(&mut self) {
 		self.state.clear(&mut self.commands);
 	}
 
 	pub fn terrain_membership_revision(&self) -> u64 {
-		self.terrain_store.membership_revision()
+		G::membership_revision(&self.ground)
 	}
 
 	pub fn remove_stale(&mut self, wanted: &HashSet<Id>) {
@@ -146,8 +145,8 @@ impl PaddedTerrainPresenter<'_, '_> {
 			};
 			let level = value.scene_lod_level(lod_ref);
 			let draw = stream_banded_draws(value, level);
-			let water_version = self.terrain_store.water_version(*id);
-			let water = draw.then(|| self.terrain_store.water(*id).cloned()).flatten();
+			let water_version = G::water_version(&self.ground, *id);
+			let water = draw.then(|| G::water(&self.ground, *id).cloned()).flatten();
 			if let Some(shown) = self.state.presented.get(id).copied() {
 				if shown.version == version {
 					if shown.level != level {
@@ -190,7 +189,9 @@ impl PaddedTerrainPresenter<'_, '_> {
 	}
 }
 
-impl<'a> RegionPresenter<TerrainWithPads, PaddedStoreView<'a>> for PaddedTerrainPresenter<'_, '_> {
+impl<'a, G: RichmondGround> RegionPresenter<TerrainWithPads, PaddedStoreView<'a>>
+	for PaddedTerrainPresenter<'_, '_, G>
+{
 	fn presented_version(&self, id: Id) -> Option<Version> {
 		self.state.presented.get(&id).map(|e| e.version)
 	}
@@ -212,6 +213,6 @@ impl<'a> RegionPresenter<TerrainWithPads, PaddedStoreView<'a>> for PaddedTerrain
 	}
 
 	fn remove_stale(&mut self, wanted: &HashSet<Id>) {
-		PaddedTerrainPresenter::remove_stale(self, wanted);
+		PaddedTerrainPresenter::<G>::remove_stale(self, wanted);
 	}
 }

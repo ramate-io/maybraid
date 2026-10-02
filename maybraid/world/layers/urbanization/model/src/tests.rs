@@ -106,20 +106,6 @@ impl TerrainModel for StubGround {
 		read.fallback
 	}
 
-	fn cell_ids_overlapping(
-		_read: &SystemParamItem<'_, '_, Self::Read>,
-		_region: Aabb3d,
-	) -> Vec<Id> {
-		Vec::new()
-	}
-
-	fn cell<'a>(
-		read: &'a SystemParamItem<'_, '_, Self::Read>,
-		_id: Id,
-	) -> Option<&'a StubRaw> {
-		read.cell.as_ref()
-	}
-
 	fn overlay_cell<'a>(
 		read: &'a SystemParamItem<'_, '_, Self::Read>,
 		_bounds: Aabb3d,
@@ -167,27 +153,13 @@ impl Default for StubPads {
 	}
 }
 
-struct StubLeaf {
-	bounds: Aabb3d,
-}
-
-struct StubDev {
-	bounds: Aabb3d,
-}
-
 struct StubUrban;
 
 impl UrbanizationModel for StubUrban {
 	type Ground = StubGround;
-	type Leaf = StubLeaf;
-	type Cell = StubDev;
-	type Built = ();
 	type Pads = StubPads;
-	type Kind = ();
-	type Selection = ();
 	type Surface = StubPadded;
 	type Read = Res<'static, UrbanStore>;
-	type Select = ();
 	type Prepare = ();
 
 	fn pads(read: &SystemParamItem<'_, '_, Self::Read>, _region: Aabb3d) -> StubPads {
@@ -218,61 +190,6 @@ impl UrbanizationModel for StubUrban {
 		_bounds: Aabb3d,
 	) -> Option<&'a StubPadded> {
 		read.padded.as_ref()
-	}
-
-	fn urbanization_leaves<'a>(
-		_read: &'a SystemParamItem<'_, '_, Self::Read>,
-		_region: Aabb3d,
-	) -> Vec<&'a StubLeaf> {
-		Vec::new()
-	}
-
-	fn development_cells<'a>(
-		_read: &'a SystemParamItem<'_, '_, Self::Read>,
-		_region: Aabb3d,
-	) -> Vec<&'a StubDev> {
-		Vec::new()
-	}
-
-	fn built<'a>(
-		_read: &'a SystemParamItem<'_, '_, Self::Read>,
-		_region: Aabb3d,
-	) -> Vec<&'a ()> {
-		Vec::new()
-	}
-
-	fn built_overlapping<'a>(
-		_read: &'a SystemParamItem<'_, '_, Self::Read>,
-		_region: Aabb3d,
-	) -> Vec<(Id, lod::gen::Version, &'a ())> {
-		Vec::new()
-	}
-
-	fn development_cell<'a>(
-		_read: &'a SystemParamItem<'_, '_, Self::Read>,
-		_id: Id,
-	) -> Option<&'a StubDev> {
-		None
-	}
-
-	fn urbanization_selection(
-		_read: &SystemParamItem<'_, '_, Self::Read>,
-	) -> ((), Option<()>) {
-		((), None)
-	}
-
-	fn leaf_bounds(leaf: &StubLeaf) -> Aabb3d {
-		leaf.bounds
-	}
-
-	fn cell_bounds(cell: &StubDev) -> Aabb3d {
-		cell.bounds
-	}
-
-	fn ensure_selected(
-		_select: &mut SystemParamItem<'_, '_, Self::Select>,
-		_region: Aabb3d,
-	) {
 	}
 
 	fn prepare(

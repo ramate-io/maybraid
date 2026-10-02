@@ -25,7 +25,6 @@ pub struct WorldLayersPlugin;
 
 impl Plugin for WorldLayersPlugin {
 	fn build(&self, app: &mut App) {
-		furniture_assemblies::install_on_urbanization(app);
 		app.add_plugins((
 			(
 				GenerationModePlugin::<Discovery>::initial(),

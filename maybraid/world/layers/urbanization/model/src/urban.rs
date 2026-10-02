@@ -12,21 +12,15 @@ use crate::pads::PadOps;
 
 /// Named urbanization over a ground model.
 ///
-/// Associated types are the artifacts current consumers read. Methods are the
-/// GET-only accessors those consumers call plus the writes [`UrbanModel`]
-/// already exposed (`ensure_selected`, `#720` prepare).
+/// Only what [`crate::Urbanization<Self>`]'s [`TerrainModel`] impl and
+/// urbanization presentation read. No method exists for a higher layer.
 pub trait UrbanizationModel: Send + Sync + 'static {
 	type Ground: TerrainModel;
-	type Leaf: Send + Sync + 'static;
-	type Cell: Send + Sync + 'static;
-	type Built: Send + Sync + 'static;
 	type Pads: PadOps + Clone + Send + Sync + 'static;
-	type Kind: Copy + Send + Sync + 'static;
-	type Selection: Clone + PartialEq + Send + Sync + 'static;
 	/// Composed fill stored as [`crate::Urbanization<Self>`]'s [`TerrainModel::Cell`].
 	type Surface: TerrainCell;
 	type Read: ReadOnlySystemParam + 'static;
-	type Select: SystemParam + 'static;
+	/// Present-time prepare [`crate::Urbanization<Self>`] forwards as [`TerrainModel::Prepare`].
 	type Prepare: SystemParam + 'static;
 
 	fn pads(read: &SystemParamItem<'_, '_, Self::Read>, region: Aabb3d) -> Self::Pads;
@@ -45,15 +39,25 @@ pub trait UrbanizationModel: Send + Sync + 'static {
 		bounds: Aabb3d,
 	) -> Option<&'a Self::Surface>;
 
-	fn urbanization_leaves<'a>(
-		read: &'a SystemParamItem<'_, '_, Self::Read>,
-		region: Aabb3d,
-	) -> Vec<&'a Self::Leaf>;
+	fn prepare(
+		prepare: &mut SystemParamItem<'_, '_, Self::Prepare>,
+		bounds: Aabb3d,
+		lod_ref: &LodRef,
+	);
 
-	fn development_cells<'a>(
-		read: &'a SystemParamItem<'_, '_, Self::Read>,
-		region: Aabb3d,
-	) -> Vec<&'a Self::Cell>;
+	fn require_generation(app: &App);
+}
+
+/// Artifacts Richmond stores; [`UrbanModel`] on [`crate::Urbanization<Self>`] forwards these.
+///
+/// Orphan rules keep the [`UrbanModel`] impl in this crate. Richmond implements this.
+pub trait UrbanSource: UrbanizationModel {
+	type Leaf: Send + Sync + 'static;
+	type Cell: Send + Sync + 'static;
+	type Built: Send + Sync + 'static;
+	type Kind: Copy + Send + Sync + 'static;
+	type Selection: Clone + PartialEq + Send + Sync + 'static;
+	type Select: SystemParam + 'static;
 
 	fn built<'a>(
 		read: &'a SystemParamItem<'_, '_, Self::Read>,
@@ -65,35 +69,33 @@ pub trait UrbanizationModel: Send + Sync + 'static {
 		region: Aabb3d,
 	) -> Vec<(Id, Version, &'a Self::Built)>;
 
-	fn development_cell<'a>(
+	fn leaves<'a>(
 		read: &'a SystemParamItem<'_, '_, Self::Read>,
-		id: Id,
-	) -> Option<&'a Self::Cell>;
+		region: Aabb3d,
+	) -> Vec<&'a Self::Leaf>;
 
-	fn urbanization_selection(
+	fn cells<'a>(
+		read: &'a SystemParamItem<'_, '_, Self::Read>,
+		region: Aabb3d,
+	) -> Vec<&'a Self::Cell>;
+
+	fn selection(
 		read: &SystemParamItem<'_, '_, Self::Read>,
 	) -> (Self::Selection, Option<Self::Kind>);
 
-	fn leaf_bounds(leaf: &Self::Leaf) -> Aabb3d;
+	fn leaf_aabb(leaf: &Self::Leaf) -> Aabb3d;
 
-	fn cell_bounds(cell: &Self::Cell) -> Aabb3d;
+	fn cell_aabb(cell: &Self::Cell) -> Aabb3d;
 
-	fn ensure_selected(select: &mut SystemParamItem<'_, '_, Self::Select>, region: Aabb3d);
-
-	fn prepare(
-		prepare: &mut SystemParamItem<'_, '_, Self::Prepare>,
-		bounds: Aabb3d,
-		lod_ref: &LodRef,
-	);
-
-	fn require_generation(app: &App);
+	fn select(select: &mut SystemParamItem<'_, '_, Self::Select>, region: Aabb3d);
 }
 
-/// Terrain model that also carries urbanization artifacts.
+/// Urbanized ground: pads and built developments, plus Barking's current reads.
 ///
-/// Read accessors are GET-only. [`Self::ensure_selected`] is the named write
-/// hook mob generation uses today
-/// ([#720](https://github.com/ramate-io/maybraid/issues/720)).
+/// [`Self::urbanization_selection`], [`Self::ensure_selected`] / [`Self::Select`],
+/// [`Self::urbanization_leaves`], [`Self::development_cells`], [`Self::leaf_bounds`],
+/// [`Self::cell_bounds`], [`Self::Selection`], and [`Self::Kind`] are mob-only.
+/// [#925](https://github.com/ramate-io/maybraid/issues/925) moves them into Barking-owned traits.
 pub trait UrbanModel: TerrainModel {
 	type Leaf: Send + Sync + 'static;
 	type Cell: Send + Sync + 'static;
@@ -105,16 +107,6 @@ pub trait UrbanModel: TerrainModel {
 
 	fn pads(read: &SystemParamItem<'_, '_, Self::Read>, region: Aabb3d) -> Self::Pads;
 
-	fn urbanization_leaves<'a>(
-		read: &'a SystemParamItem<'_, '_, Self::Read>,
-		region: Aabb3d,
-	) -> Vec<&'a Self::Leaf>;
-
-	fn development_cells<'a>(
-		read: &'a SystemParamItem<'_, '_, Self::Read>,
-		region: Aabb3d,
-	) -> Vec<&'a <Self as UrbanModel>::Cell>;
-
 	fn built<'a>(
 		read: &'a SystemParamItem<'_, '_, Self::Read>,
 		region: Aabb3d,
@@ -125,10 +117,15 @@ pub trait UrbanModel: TerrainModel {
 		region: Aabb3d,
 	) -> Vec<(Id, Version, &'a Self::Built)>;
 
-	fn development_cell<'a>(
+	fn urbanization_leaves<'a>(
 		read: &'a SystemParamItem<'_, '_, Self::Read>,
-		id: Id,
-	) -> Option<&'a <Self as UrbanModel>::Cell>;
+		region: Aabb3d,
+	) -> Vec<&'a Self::Leaf>;
+
+	fn development_cells<'a>(
+		read: &'a SystemParamItem<'_, '_, Self::Read>,
+		region: Aabb3d,
+	) -> Vec<&'a <Self as UrbanModel>::Cell>;
 
 	fn urbanization_selection(
 		read: &SystemParamItem<'_, '_, Self::Read>,

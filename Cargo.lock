@@ -4791,7 +4791,7 @@ dependencies = [
  "lod-gimme",
  "material-ref",
  "procedural-common",
- "richmond",
+ "terrain-layer-model",
  "urbanization-layer-model",
 ]
 
@@ -9967,6 +9967,8 @@ dependencies = [
  "building-shaders",
  "buildings",
  "durham",
+ "furniture-assemblies",
+ "furniture-shaders",
  "layer-stack",
  "lod",
  "lod-avian",

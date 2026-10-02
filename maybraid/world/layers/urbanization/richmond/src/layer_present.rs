@@ -5,16 +5,18 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use durham::{
-	PresentedTerrainScene, TerrainColliderMeshSource, TerrainMeshBuilder, TerrainSuperseded,
-	TerrainTrimeshCollider,
+	PresentedTerrainScene, TerrainColliderMeshSource, TerrainSuperseded, TerrainTrimeshCollider,
 };
 use layer_stack::LodPresentGateSync;
 use lod::gen::{Id, SpatialIndex, Version};
 use lod::lod_ref::LodRef;
 use lod::{LodPresentGate, LodPresentSystems, LodViewer};
-use terrain_layer_model::{
-	terrain_streaming, TerrainCell, TerrainExtent, TerrainLayerSystems, TerrainModel,
+use furniture_assemblies::{
+	FurnitureAssembliesPlugin, FurnitureStreamPlugin, FurnitureStreamSystems,
 };
+use furniture_shaders::FurnitureShadersPlugin;
+use terrain_layer_model::{terrain_streaming, TerrainExtent, TerrainLayerSystems};
+use urbanization_layer_model::UrbanizationStoreSystems;
 use urbanization_layer_model::{
 	urbanization_host_region, urbanization_visual_region, UrbanSetting, Urbanization,
 	UrbanizationGenerationSystems, UrbanizationLayerRegion,
@@ -23,8 +25,8 @@ use urbanization_layer_presentation::{
 	PaddedCells, UrbanizationHosts, UrbanizationPresentation,
 };
 
-use crate::compose::PadComposable;
 use crate::development::DevelopmentCell;
+use crate::ground::RichmondGround;
 use crate::host::DevelopmentHosts;
 use crate::index::{DevelopmentEntryStore, PaddedStoreView};
 use crate::layer::Richmond;
@@ -160,8 +162,7 @@ pub fn present_richmond_hosts<G>(
 	store: Res<DevelopmentEntryStore>,
 	mut state: ResMut<UrbanizationPresenterState>,
 ) where
-	G: TerrainModel,
-	G::Cell: PadComposable<Padded = TerrainWithPads> + TerrainCell<Mesh = TerrainMeshBuilder>,
+	G: RichmondGround,
 {
 	if gate.is_changed() && !gate.open {
 		state.clear(&mut commands);
@@ -222,14 +223,13 @@ pub(crate) fn present_richmond_padded_terrain<G>(
 	layer: Res<UrbanizationLayerRegion>,
 	extent: Res<TerrainExtent<G::Base>>,
 	store: Res<DevelopmentEntryStore>,
-	mut presenter: PaddedTerrainPresenter,
+	mut presenter: PaddedTerrainPresenter<G>,
 	mut state: ResMut<UrbanizationPaddedTerrainState>,
 	lod_viewers: Query<&GlobalTransform, With<LodViewer>>,
 	cameras: Query<&GlobalTransform, With<Camera3d>>,
 	mut last: Local<Option<PaddedTerrainTickKey>>,
 ) where
-	G: TerrainModel,
-	G::Cell: PadComposable<Padded = TerrainWithPads> + TerrainCell<Mesh = TerrainMeshBuilder>,
+	G: RichmondGround,
 {
 	let Some(region) = urbanization_visual_region(&*extent, layer.region).filter(|_| gate.open)
 	else {
@@ -314,13 +314,24 @@ pub fn sync_raw_terrain_replacements(
 	state.replaced = now_replaced;
 }
 
-impl<G> UrbanizationPresentation for Richmond<G>
+impl<G: RichmondGround> UrbanizationPresentation for Richmond<G>
 where
-	G: TerrainModel,
-	G::Cell: PadComposable<Padded = TerrainWithPads> + TerrainCell<Mesh = TerrainMeshBuilder>,
-	Urbanization<Richmond<G>>: TerrainModel,
+	Urbanization<Richmond<G>>: terrain_layer_model::TerrainModel,
 {
 	fn install_hosts(app: &mut App) {
+		if !app.is_plugin_added::<FurnitureShadersPlugin>() {
+			app.add_plugins(FurnitureShadersPlugin);
+		}
+		if !app.is_plugin_added::<FurnitureAssembliesPlugin>() {
+			app.add_plugins(FurnitureAssembliesPlugin);
+		}
+		if !app.is_plugin_added::<FurnitureStreamPlugin<Urbanization<Richmond<G>>>>() {
+			app.add_plugins(FurnitureStreamPlugin::<Urbanization<Richmond<G>>>::default());
+		}
+		app.configure_sets(
+			Update,
+			FurnitureStreamSystems::Generate.after(UrbanizationStoreSystems),
+		);
 		app.init_resource::<UrbanizationPresenterState>()
 			.init_resource::<LodPresentGate<(Urbanization<Richmond<G>>, UrbanizationHosts)>>();
 		app.add_systems(

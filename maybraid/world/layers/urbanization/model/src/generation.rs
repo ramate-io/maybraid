@@ -81,11 +81,7 @@ pub struct UrbanizationLayerRegion {
 }
 
 /// Generation for model `U` in `Mode`.
-pub struct UrbanizationGenerationPlugin<Mode, U>
-where
-	Mode: UrbanizationScheme<U>,
-	U: UrbanizationGeneration,
-{
+pub struct UrbanizationGenerationPlugin<Mode, U: UrbanizationGeneration> {
 	pub config: U::Config,
 	_marker: PhantomData<fn() -> (Mode, U)>,
 }
