@@ -429,11 +429,239 @@ panic = "unwind"
 [profile.release.build-override]
 opt-level = 3
 
-# rustc 1.95 + `strip = debuginfo` on this macOS rejects the mistral.rs
-# proc-macro dylib (`E0463` / "expected false got true") when `mistralrs`
-# re-exports `mistralrs_macros::tool`.
+# rustc 1.95 rejects stripped proc-macro dylibs on `pub use` (E0463).
+# Workspace `[profile.release] strip` does not apply to these units.
+[profile.release]
+strip = "none"
+
+[profile.release.package.akin]
+strip = "none"
+
+[profile.release.package.arg_enum_proc_macro]
+strip = "none"
+
+[profile.release.package.assert_type_match]
+strip = "none"
+
+[profile.release.package.async-trait]
+strip = "none"
+
+[profile.release.package.avian_derive]
+strip = "none"
+
+[profile.release.package.bevy_animation_macros]
+strip = "none"
+
+[profile.release.package.bevy_asset_macros]
+strip = "none"
+
+[profile.release.package.bevy_derive]
+strip = "none"
+
+[profile.release.package.bevy_ecs_macros]
+strip = "none"
+
+[profile.release.package.bevy_encase_derive]
+strip = "none"
+
+[profile.release.package.bevy_gizmos_macros]
+strip = "none"
+
+[profile.release.package.bevy_material_macros]
+strip = "none"
+
+[profile.release.package.bevy_reflect_derive]
+strip = "none"
+
+[profile.release.package.bevy_render_macros]
+strip = "none"
+
+[profile.release.package.bevy_scene_macros]
+strip = "none"
+
+[profile.release.package.bevy_state_macros]
+strip = "none"
+
+[profile.release.package.bytemuck_derive]
+strip = "none"
+
+[profile.release.package.cached_proc_macro]
+strip = "none"
+
+[profile.release.package.clap_derive]
+strip = "none"
+
+[profile.release.package.cssparser-macros]
+strip = "none"
+
+[profile.release.package.darling_macro]
+strip = "none"
+
+[profile.release.package.derive-new]
+strip = "none"
+
+[profile.release.package.derive_builder_macro]
+strip = "none"
+
+[profile.release.package.derive_more-impl]
+strip = "none"
+
+[profile.release.package.displaydoc]
+strip = "none"
+
+[profile.release.package.doctest-file]
+strip = "none"
+
+[profile.release.package.document-features]
+strip = "none"
+
+[profile.release.package.dyn-stack-macros]
+strip = "none"
+
+[profile.release.package.encase_derive]
+strip = "none"
+
+[profile.release.package.enum-as-inner]
+strip = "none"
+
+[profile.release.package.enumflags2_derive]
+strip = "none"
+
+[profile.release.package.enumn]
+strip = "none"
+
+[profile.release.package.equator-macro]
+strip = "none"
+
+[profile.release.package.foreign-types-macros]
+strip = "none"
+
+[profile.release.package.futures-macro]
+strip = "none"
+
+[profile.release.package.gltf-derive]
+strip = "none"
+
+[profile.release.package.interpolate_name]
+strip = "none"
+
+[profile.release.package.jiff-static]
+strip = "none"
+
+[profile.release.package.jni-macros]
+strip = "none"
+
+[profile.release.package.jni-sys-macros]
+strip = "none"
+
+[profile.release.package.macro_rules_attribute-proc_macro]
+strip = "none"
+
 [profile.release.package.mistralrs-macros]
 strip = "none"
+
+[profile.release.package.monostate-impl]
+strip = "none"
+
+[profile.release.package.multiversion_no_op]
+strip = "none"
+
+[profile.release.package.noop_proc_macro]
+strip = "none"
+
+[profile.release.package.num-derive]
+strip = "none"
+
+[profile.release.package.num_enum_derive]
+strip = "none"
+
+[profile.release.package.paste]
+strip = "none"
+
+[profile.release.package.pastey]
+strip = "none"
+
+[profile.release.package.phf_macros]
+strip = "none"
+
+[profile.release.package.pin-project-internal]
+strip = "none"
+
+[profile.release.package.proc-macro-error-attr3]
+strip = "none"
+
+[profile.release.package.profiling-procmacros]
+strip = "none"
+
+[profile.release.package.ref-cast-impl]
+strip = "none"
+
+[profile.release.package.rustversion]
+strip = "none"
+
+[profile.release.package.schemars_derive]
+strip = "none"
+
+[profile.release.package.seq-macro]
+strip = "none"
+
+[profile.release.package.serde_derive]
+strip = "none"
+
+[profile.release.package.serde_with_macros]
+strip = "none"
+
+[profile.release.package.simd_helpers]
+strip = "none"
+
+[profile.release.package.strum_macros]
+strip = "none"
+
+[profile.release.package.thiserror-impl]
+strip = "none"
+
+[profile.release.package.time-macros]
+strip = "none"
+
+[profile.release.package.tokio-macros]
+strip = "none"
+
+[profile.release.package.tracing-attributes]
+strip = "none"
+
+[profile.release.package.utoipa-gen]
+strip = "none"
+
+[profile.release.package.variadics_please]
+strip = "none"
+
+[profile.release.package.variantly]
+strip = "none"
+
+[profile.release.package.wasm-bindgen-macro]
+strip = "none"
+
+[profile.release.package.wayland-scanner]
+strip = "none"
+
+[profile.release.package.windows-implement]
+strip = "none"
+
+[profile.release.package.windows-interface]
+strip = "none"
+
+[profile.release.package.yoke-derive]
+strip = "none"
+
+[profile.release.package.zerocopy-derive]
+strip = "none"
+
+[profile.release.package.zerofrom-derive]
+strip = "none"
+
+[profile.release.package.zerovec-derive]
+strip = "none"
+
 
 [profile.perf]
 inherits = "release"
