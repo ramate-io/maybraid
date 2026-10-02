@@ -18,7 +18,7 @@
 
 use bevy::prelude::*;
 use combat_hud::{CombatScore, LiveEnemies};
-use crozon_character_items::{random_starter_loadout, Inventory, ItemRng};
+use crozon_character_items::{Inventory, ItemRng};
 use crozon_characters::species::{
 	braidman::BraidmanConfig, lero::LeroConfig, mygr::MygrConfig, tuberwaber::TuberwaberConfig,
 	wumbus::WumbusConfig,
@@ -89,7 +89,7 @@ pub fn training_trainee(round: TrainingRound) -> WorldPlayerLoadout {
 		3 => CharacterAppearance::Tuberwaber(TuberwaberConfig::default_preview()),
 		_ => CharacterAppearance::Wumbus(WumbusConfig::default_preview()),
 	};
-	let inventory = Inventory::with_starter_outfit(random_starter_loadout(&mut rng));
+	let inventory = Inventory::with_starter_outfit(rng.random_starter_loadout());
 	let key = format!("trainee-{:016x}-{}", round.seed, round.life());
 	WorldPlayerLoadout::new(key, appearance, inventory).with_name("Trainee")
 }

@@ -407,7 +407,7 @@ mod tests {
 	use super::{gallery_select_opens_edit, save_editing_character, CharacterSessionPlugin};
 	use crate::character::CharacterMenuState;
 	use bevy::prelude::*;
-	use crozon_character_items::{random_starter_loadout, ItemRng};
+	use crozon_character_items::ItemRng;
 	use crozon_character_persist::{CharacterId, SaveRoot};
 
 	fn scratch_root() -> SaveRoot {
@@ -430,7 +430,8 @@ mod tests {
 	fn a_freshly_created_character_saves_and_loads() -> Result<(), Box<dyn std::error::Error>> {
 		let root = scratch_root();
 		for seed in 1..=16 {
-			let items = random_starter_loadout(&mut ItemRng::from_seed(seed));
+			let mut rng = ItemRng::from_seed(seed);
+			let items = rng.random_starter_loadout();
 			let menu = CharacterMenuState::for_create(items);
 			let id = CharacterId::new();
 			save_editing_character(&root, id, &menu.0)?;
