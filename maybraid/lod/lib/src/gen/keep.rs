@@ -6,6 +6,7 @@ use bevy::math::bounding::Aabb3d;
 use bevy::prelude::Vec3;
 
 use super::Id;
+use crate::runtime_quantum::{regions_match, regions_overlap_xz};
 
 /// Default XZ slack on [`crate::LodGenerateKeepRegion`] / [`crate::LodPresentKeepRegion`].
 ///
@@ -21,15 +22,11 @@ pub fn expand_keep_xz(keep: Aabb3d, slack: f32) -> Aabb3d {
 	)
 }
 
-fn intersects_xz(a: Aabb3d, b: Aabb3d) -> bool {
-	a.min.x <= b.max.x && a.max.x >= b.min.x && a.min.z <= b.max.z && a.max.z >= b.min.z
-}
-
 /// Whether `id` should stay queued. No origin cell → keep (cannot test).
 pub fn id_lives_in_keep(id: Id, keep: Aabb3d, slack: f32) -> bool {
 	match id.origin_cell_bounds() {
 		None => true,
-		Some(bounds) => intersects_xz(expand_keep_xz(keep, slack), bounds),
+		Some(bounds) => regions_overlap_xz(expand_keep_xz(keep, slack), bounds),
 	}
 }
 
@@ -47,7 +44,7 @@ pub fn id_xz_distance2(id: Id, origin: Vec3) -> f32 {
 /// True when the keep AABB appeared, vanished, or moved.
 pub fn keep_region_changed(previous: Option<Aabb3d>, current: Option<Aabb3d>) -> bool {
 	match (previous, current) {
-		(Some(a), Some(b)) => !keep_regions_match(a, b),
+		(Some(a), Some(b)) => !regions_match(a, b),
 		(None, None) => false,
 		_ => true,
 	}
@@ -97,13 +94,6 @@ fn push_region(regions: &mut Vec<Aabb3d>, min: Vec3, max: Vec3) {
 		return;
 	}
 	regions.push(Aabb3d::from_min_max(min, max));
-}
-
-fn keep_regions_match(a: Aabb3d, b: Aabb3d) -> bool {
-	(a.min.x - b.min.x).abs() < 1e-3
-		&& (a.max.x - b.max.x).abs() < 1e-3
-		&& (a.min.z - b.min.z).abs() < 1e-3
-		&& (a.max.z - b.max.z).abs() < 1e-3
 }
 
 /// Drop pending origin ids whose cell sits outside keep + `slack`.
