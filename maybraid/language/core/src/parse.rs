@@ -160,6 +160,26 @@ pub trait EnglishDependencyParser {
 }
 
 impl DependencyDocument {
+	pub fn proper_nouns(&self) -> Vec<String> {
+		self.surface_forms(UniversalPos::ProperNoun)
+	}
+
+	pub fn numerals(&self) -> Vec<String> {
+		self.surface_forms(UniversalPos::Numeral)
+	}
+
+	fn surface_forms(&self, pos: UniversalPos) -> Vec<String> {
+		let mut forms = Vec::new();
+		for token in self.sentences.iter().flat_map(|sentence| sentence.tokens.iter()) {
+			if token.pos == pos {
+				if !forms.iter().any(|existing| existing == &token.text) {
+					forms.push(token.text.clone());
+				}
+			}
+		}
+		forms
+	}
+
 	pub fn debug_report(&self) -> String {
 		let mut out = String::new();
 		for (index, sentence) in self.sentences.iter().enumerate() {

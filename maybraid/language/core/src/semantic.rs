@@ -169,7 +169,11 @@ impl EnglishSemanticMarshaller {
 		let mut clauses = HashMap::<TokenId, crate::utterance::ClauseId>::new();
 		for predicate in &predicates {
 			let lemma = normalize_lemma(&predicate.lemma);
-			let concept = resolve_predicate(universe, &lemma)?;
+			let concept = if is_copular(predicate, sentence) {
+				resolve_concept(universe, "classified_as", Some(Pos::Verb))?
+			} else {
+				resolve_predicate(universe, &lemma)?
+			};
 			let mut clause = Clause::new(concept);
 			apply_clause_morph(&mut clause, predicate, sentence);
 			clauses.insert(predicate.id, utterance.add_clause(clause));
@@ -181,6 +185,24 @@ impl EnglishSemanticMarshaller {
 				continue;
 			};
 			let lemma = normalize_lemma(&predicate.lemma);
+			let frame_lemma = if is_copular(predicate, sentence) { "be" } else { lemma.as_str() };
+			if is_copular(predicate, sentence) {
+				let classification = self.ensure_referent(
+					predicate, sentence, universe, utterance, &mut referents,
+				)?;
+				if let Some(clause) = utterance.clauses.get_mut(clause_id) {
+					if !clause
+						.arguments
+						.iter()
+						.any(|argument| argument.role == SemanticRole::Classification)
+					{
+						clause.arguments.push(crate::utterance::Argument {
+							role: SemanticRole::Classification,
+							value: SemanticValue::Referent(classification),
+						});
+					}
+				}
+			}
 			for dependent in sentence.children(predicate.id) {
 				if is_universal_quantifier(dependent) {
 					if let Some(subject) =
@@ -200,7 +222,7 @@ impl EnglishSemanticMarshaller {
 					continue;
 				}
 				if let Some(nested) = clauses.get(&dependent.id).copied() {
-					if let Some(role) = self.role_for(&lemma, predicate, dependent, sentence) {
+					if let Some(role) = self.role_for(frame_lemma, predicate, dependent, sentence) {
 						if let Some(clause) = utterance.clauses.get_mut(clause_id) {
 							clause.arguments.push(crate::utterance::Argument {
 								role,
@@ -222,7 +244,7 @@ impl EnglishSemanticMarshaller {
 					Err(_) => continue,
 				};
 				apply_quantifiers(nominal, sentence, utterance, referent);
-				let Some(role) = self.role_for(&lemma, predicate, dependent, sentence) else {
+				let Some(role) = self.role_for(frame_lemma, predicate, dependent, sentence) else {
 					continue;
 				};
 				if let Some(clause) = utterance.clauses.get_mut(clause_id) {
@@ -295,6 +317,7 @@ impl EnglishSemanticMarshaller {
 			UniversalPos::Adjective => Some(Pos::Adjective),
 			UniversalPos::Adverb => Some(Pos::Adverb),
 			UniversalPos::Verb => Some(Pos::Verb),
+			UniversalPos::Numeral => Some(Pos::Noun),
 			_ => Some(Pos::Noun),
 		};
 		let concept = resolve_concept(universe, &lemma, prefer)?;
@@ -356,7 +379,7 @@ impl EnglishSemanticMarshaller {
 		}) {
 			return Some(mapping.role);
 		}
-		oblique_role(dependent, case, sentence).or_else(|| default_role(dependent, case))
+		oblique_role(dependent, case, sentence).or_else(|| default_role(dependent, sentence))
 	}
 }
 
@@ -504,6 +527,43 @@ fn is_cop(token: &DependencyToken) -> bool {
 	token.relation.base() == "cop"
 }
 
+fn is_copular(predicate: &DependencyToken, sentence: &DependencySentence) -> bool {
+	sentence.children(predicate.id).any(is_cop)
+}
+
+fn cardinal_word(lemma: &str) -> Option<&'static str> {
+	const ONES: [&str; 20] = [
+		"zero",
+		"one",
+		"two",
+		"three",
+		"four",
+		"five",
+		"six",
+		"seven",
+		"eight",
+		"nine",
+		"ten",
+		"eleven",
+		"twelve",
+		"thirteen",
+		"fourteen",
+		"fifteen",
+		"sixteen",
+		"seventeen",
+		"eighteen",
+		"nineteen",
+	];
+	const TENS: [&str; 10] =
+		["", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"];
+	let n: u16 = lemma.parse().ok()?;
+	match n {
+		0..=19 => Some(ONES[usize::from(n)]),
+		20 | 30 | 40 | 50 | 60 | 70 | 80 | 90 => Some(TENS[usize::from(n / 10)]),
+		_ => None,
+	}
+}
+
 fn form_is(token: &DependencyToken, form: &str) -> bool {
 	normalize_lemma(&token.lemma) == form || normalize_lemma(&token.text) == form
 }
@@ -588,7 +648,10 @@ fn is_time_nominal(token: &DependencyToken) -> bool {
 	)
 }
 
-fn default_role(dependent: &DependencyToken, _case: Option<&str>) -> Option<SemanticRole> {
+fn default_role(dependent: &DependencyToken, sentence: &DependencySentence) -> Option<SemanticRole> {
+	if dependent.relation.is("advcl") {
+		return adverbial_clause_role(dependent, sentence);
+	}
 	match dependent.relation.as_str() {
 		"nsubj:pass" => Some(SemanticRole::Theme),
 		"nsubj" => Some(SemanticRole::Agent),
@@ -598,6 +661,21 @@ fn default_role(dependent: &DependencyToken, _case: Option<&str>) -> Option<Sema
 		"advmod" => Some(SemanticRole::Manner),
 		_ => None,
 	}
+}
+
+fn adverbial_clause_role(
+	dependent: &DependencyToken,
+	sentence: &DependencySentence,
+) -> Option<SemanticRole> {
+	let mark = sentence
+		.children(dependent.id)
+		.find(|child| child.relation.is("mark"))
+		.map(|child| normalize_lemma(&child.lemma));
+	Some(match mark.as_deref() {
+		Some("when") | Some("while") | Some("before") | Some("after") | Some("as")
+		| Some("until") => SemanticRole::Time,
+		_ => SemanticRole::Cause,
+	})
 }
 
 fn apply_clause_morph(
@@ -618,11 +696,13 @@ fn apply_clause_morph(
 		clause.tense = Tense::Present;
 	}
 
-	if predicate.features.has("VerbForm", "Ger")
-		|| (predicate.features.has("VerbForm", "Part") && !is_passive(predicate, sentence))
-		|| sentence.children(predicate.id).any(|child| {
-			is_aux(child) && form_in(child, &["am", "is", "are", "was", "were", "be"])
-		}) {
+	if !is_passive(predicate, sentence)
+		&& (predicate.features.has("VerbForm", "Ger")
+			|| predicate.features.has("VerbForm", "Part")
+			|| sentence.children(predicate.id).any(|child| {
+				is_aux(child) && form_in(child, &["am", "is", "are", "was", "were", "be"])
+			}))
+	{
 		clause.aspect = Aspect::Progressive;
 	}
 	if sentence.children(predicate.id).any(|child| form_in(child, &["have", "has", "had"])) {
@@ -641,6 +721,9 @@ fn referent_lemma(token: &DependencyToken) -> String {
 	match normalize_lemma(&token.lemma).as_str() {
 		"i" | "me" | "we" | "us" | "myself" => "speaker".to_owned(),
 		"you" => "listener".to_owned(),
+		"he" | "him" | "his" | "she" | "her" | "they" | "them" | "their" | "himself"
+		| "herself" | "themselves" => "person".to_owned(),
+		"it" | "its" | "itself" => "thing".to_owned(),
 		other => other.to_owned(),
 	}
 }
@@ -657,7 +740,17 @@ fn definiteness_of(token: &DependencyToken, sentence: &DependencySentence) -> De
 			};
 		}
 	}
-	if matches!(normalize_lemma(&token.lemma).as_str(), "speaker" | "listener" | "i" | "you") {
+	if matches!(
+		normalize_lemma(&token.lemma).as_str(),
+		"speaker"
+			| "listener"
+			| "person"
+			| "thing"
+			| "i" | "you"
+			| "he" | "she"
+			| "they"
+			| "it"
+	) {
 		Definiteness::Definite
 	} else {
 		Definiteness::Indefinite
@@ -695,7 +788,16 @@ fn resolve_concept(
 			vec!["speaker".to_owned(), "person".to_owned()]
 		}
 		"you" | "listener" => vec!["listener".to_owned(), "person".to_owned()],
-		_ => vec![lemma],
+		"he" | "him" | "his" | "she" | "her" | "they" | "them" | "their" | "himself"
+		| "herself" | "themselves" | "person" => vec!["person".to_owned()],
+		"it" | "its" | "itself" | "thing" => vec!["thing".to_owned()],
+		other => {
+			let mut aliases = vec![other.to_owned()];
+			if let Some(word) = cardinal_word(other) {
+				aliases.push(word.to_owned());
+			}
+			aliases
+		}
 	};
 	for alias in aliases {
 		let ids = universe.resolve_english(&alias);
@@ -745,10 +847,22 @@ mod tests {
 		DependencyDocument { sentences: vec![DependencySentence { tokens }] }
 	}
 
-	fn universe() -> crate::wordnet::WordNetConceptUniverse {
-		poc_universe()
-			.expect("wordnet")
-			.with_proper_names(["John", "Mary", "Alice", "speaker", "listener"])
+	fn universe() -> Result<crate::wordnet::WordNetConceptUniverse, LanguageError> {
+		Ok(poc_universe()?.with_proper_names(["John", "Mary", "Alice", "speaker", "listener"]))
+	}
+
+	fn universe_for(
+		doc: &DependencyDocument,
+	) -> Result<crate::wordnet::WordNetConceptUniverse, LanguageError> {
+		Ok(universe()?.with_document_overlays(doc))
+	}
+
+	fn first_clause(utterance: &Utterance) -> Result<&Clause, LanguageError> {
+		utterance
+			.clauses
+			.values()
+			.next()
+			.ok_or_else(|| LanguageError::SemanticMarshal("missing clause".to_owned()))
 	}
 
 	fn roles(utterance: &Utterance) -> Vec<SemanticRole> {
@@ -777,7 +891,7 @@ mod tests {
 			tok(5, "book", "book", UniversalPos::Noun, 2, "obj", ""),
 			tok(6, ".", ".", UniversalPos::Punctuation, 2, "punct", ""),
 		]);
-		let utterance = EnglishSemanticMarshaller::default().marshal(&doc, &universe())?;
+		let utterance = EnglishSemanticMarshaller::default().marshal(&doc, &universe()?)?;
 		assert!(has_role(&utterance, SemanticRole::Agent));
 		assert!(has_role(&utterance, SemanticRole::Theme));
 		assert!(has_role(&utterance, SemanticRole::Recipient));
@@ -796,7 +910,7 @@ mod tests {
 			tok(6, "Mary", "Mary", UniversalPos::ProperNoun, 2, "obl", ""),
 			tok(7, ".", ".", UniversalPos::Punctuation, 2, "punct", ""),
 		]);
-		let utterance = EnglishSemanticMarshaller::default().marshal(&doc, &universe())?;
+		let utterance = EnglishSemanticMarshaller::default().marshal(&doc, &universe()?)?;
 		assert!(has_role(&utterance, SemanticRole::Recipient));
 		Ok(())
 	}
@@ -808,7 +922,7 @@ mod tests {
 			tok(2, "saw", "see", UniversalPos::Verb, 0, "root", "Tense=Past"),
 			tok(3, "John", "John", UniversalPos::ProperNoun, 2, "obj", ""),
 		]);
-		let utterance = EnglishSemanticMarshaller::default().marshal(&doc, &universe())?;
+		let utterance = EnglishSemanticMarshaller::default().marshal(&doc, &universe()?)?;
 		assert!(roles(&utterance).contains(&SemanticRole::Experiencer));
 		assert!(roles(&utterance).contains(&SemanticRole::Theme));
 		Ok(())
@@ -826,10 +940,11 @@ mod tests {
 			tok(7, "by", "by", UniversalPos::Adposition, 8, "case", ""),
 			tok(8, "John", "John", UniversalPos::ProperNoun, 4, "obl", ""),
 		]);
-		let utterance = EnglishSemanticMarshaller::default().marshal(&doc, &universe())?;
+		let utterance = EnglishSemanticMarshaller::default().marshal(&doc, &universe()?)?;
 		assert!(has_role(&utterance, SemanticRole::Theme));
 		assert!(has_role(&utterance, SemanticRole::Agent));
 		assert!(has_role(&utterance, SemanticRole::Recipient));
+		assert_ne!(first_clause(&utterance)?.aspect, Aspect::Progressive);
 		Ok(())
 	}
 
@@ -843,7 +958,7 @@ mod tests {
 			tok(5, "Alice", "Alice", UniversalPos::ProperNoun, 6, "nsubj", ""),
 			tok(6, "left", "leave", UniversalPos::Verb, 2, "ccomp", "Tense=Past"),
 		]);
-		let utterance = EnglishSemanticMarshaller::default().marshal(&doc, &universe())?;
+		let utterance = EnglishSemanticMarshaller::default().marshal(&doc, &universe()?)?;
 		assert_eq!(utterance.clauses.len(), 2);
 		assert!(has_role(&utterance, SemanticRole::Content));
 		Ok(())
@@ -861,7 +976,7 @@ mod tests {
 			tok(7, "the", "the", UniversalPos::Determiner, 8, "det", ""),
 			tok(8, "book", "book", UniversalPos::Noun, 6, "obj", ""),
 		]);
-		let utterance = EnglishSemanticMarshaller::default().marshal(&doc, &universe())?;
+		let utterance = EnglishSemanticMarshaller::default().marshal(&doc, &universe()?)?;
 		assert_eq!(utterance.clauses.len(), 2);
 		assert!(utterance.referents.values().any(|referent| !referent.relative_clauses.is_empty()));
 		Ok(())
@@ -877,8 +992,8 @@ mod tests {
 			tok(5, "the", "the", UniversalPos::Determiner, 6, "det", ""),
 			tok(6, "river", "river", UniversalPos::Noun, 3, "obl", ""),
 		]);
-		let utterance = EnglishSemanticMarshaller::default().marshal(&doc, &universe())?;
-		let clause = utterance.clauses.values().next().expect("clause");
+		let utterance = EnglishSemanticMarshaller::default().marshal(&doc, &universe()?)?;
+		let clause = first_clause(&utterance)?;
 		assert_eq!(clause.aspect, Aspect::Progressive);
 		assert_eq!(clause.tense, Tense::Present);
 		assert!(has_role(&utterance, SemanticRole::Goal));
@@ -894,8 +1009,8 @@ mod tests {
 			tok(4, "see", "see", UniversalPos::Verb, 0, "root", ""),
 			tok(5, "Mary", "Mary", UniversalPos::ProperNoun, 4, "obj", ""),
 		]);
-		let utterance = EnglishSemanticMarshaller::default().marshal(&doc, &universe())?;
-		let clause = utterance.clauses.values().next().expect("clause");
+		let utterance = EnglishSemanticMarshaller::default().marshal(&doc, &universe()?)?;
+		let clause = first_clause(&utterance)?;
 		assert_eq!(clause.polarity, Polarity::Negative);
 		assert_eq!(clause.tense, Tense::Past);
 		Ok(())
@@ -909,8 +1024,8 @@ mod tests {
 			tok(3, "n't", "not", UniversalPos::Particle, 2, "advmod", "Polarity=Neg"),
 			tok(4, "know", "know", UniversalPos::Verb, 0, "root", ""),
 		]);
-		let utterance = EnglishSemanticMarshaller::default().marshal(&doc, &universe())?;
-		let clause = utterance.clauses.values().next().expect("clause");
+		let utterance = EnglishSemanticMarshaller::default().marshal(&doc, &universe()?)?;
+		let clause = first_clause(&utterance)?;
 		assert_eq!(clause.polarity, Polarity::Negative);
 		Ok(())
 	}
@@ -922,8 +1037,8 @@ mod tests {
 			tok(2, "do", "do", UniversalPos::Auxiliary, 3, "aux", "Tense=Pres"),
 			tok(3, "know", "know", UniversalPos::Verb, 0, "root", ""),
 		]);
-		let utterance = EnglishSemanticMarshaller::default().marshal(&doc, &universe())?;
-		let clause = utterance.clauses.values().next().expect("clause");
+		let utterance = EnglishSemanticMarshaller::default().marshal(&doc, &universe()?)?;
+		let clause = first_clause(&utterance)?;
 		assert_eq!(clause.polarity, Polarity::Affirmative);
 		Ok(())
 	}
@@ -936,20 +1051,14 @@ mod tests {
 		let marshaller = EnglishSemanticMarshaller::default();
 		let negative = marshaller.marshal(
 			&crate::parse::EnglishDependencyParser::parse(&parser, "I don't know.")?,
-			&universe(),
+			&universe()?,
 		)?;
 		let affirmative = marshaller.marshal(
 			&crate::parse::EnglishDependencyParser::parse(&parser, "I do know.")?,
-			&universe(),
+			&universe()?,
 		)?;
-		assert_eq!(
-			negative.clauses.values().next().expect("neg").polarity,
-			Polarity::Negative
-		);
-		assert_eq!(
-			affirmative.clauses.values().next().expect("aff").polarity,
-			Polarity::Affirmative
-		);
+		assert_eq!(first_clause(&negative)?.polarity, Polarity::Negative);
+		assert_eq!(first_clause(&affirmative)?.polarity, Polarity::Affirmative);
 		Ok(())
 	}
 
@@ -963,10 +1072,10 @@ mod tests {
 			tok(5, "a", "a", UniversalPos::Determiner, 6, "det", ""),
 			tok(6, "walk", "walk", UniversalPos::Noun, 3, "obl", ""),
 		]);
-		let utterance = EnglishSemanticMarshaller::default().marshal(&doc, &universe())?;
+		let utterance = EnglishSemanticMarshaller::default().marshal(&doc, &universe()?)?;
 		assert!(has_role(&utterance, SemanticRole::Agent));
 		assert!(has_role(&utterance, SemanticRole::Goal));
-		let clause = utterance.clauses.values().next().expect("clause");
+		let clause = first_clause(&utterance)?;
 		assert_eq!(clause.aspect, Aspect::Progressive);
 		Ok(())
 	}
@@ -977,7 +1086,7 @@ mod tests {
 			return Ok(());
 		};
 		let document = crate::parse::EnglishDependencyParser::parse(&parser, "I am going for a walk.")?;
-		let utterance = EnglishSemanticMarshaller::default().marshal(&document, &universe())?;
+		let utterance = EnglishSemanticMarshaller::default().marshal(&document, &universe()?)?;
 		assert!(!utterance.roots.is_empty());
 		assert!(has_role(&utterance, SemanticRole::Agent));
 		Ok(())
@@ -996,7 +1105,7 @@ mod tests {
 			tok(8, "the", "the", UniversalPos::Determiner, 9, "det", ""),
 			tok(9, "child", "child", UniversalPos::Noun, 4, "obl", ""),
 		]);
-		let utterance = EnglishSemanticMarshaller::default().marshal(&doc, &universe())?;
+		let utterance = EnglishSemanticMarshaller::default().marshal(&doc, &universe()?)?;
 		assert!(utterance.referents.values().any(|referent| !referent.modifiers.is_empty()));
 		assert!(utterance.referents.values().any(|referent| referent.number == Number::Plural));
 		assert!(has_role(&utterance, SemanticRole::Recipient));
@@ -1011,7 +1120,7 @@ mod tests {
 			tok(3, "walk", "walk", UniversalPos::Verb, 0, "root", "Tense=Pres"),
 			tok(4, "together", "together", UniversalPos::Adverb, 3, "advmod", ""),
 		]);
-		let utterance = EnglishSemanticMarshaller::default().marshal(&doc, &universe())?;
+		let utterance = EnglishSemanticMarshaller::default().marshal(&doc, &universe()?)?;
 		assert!(has_role(&utterance, SemanticRole::Agent));
 		assert!(has_role(&utterance, SemanticRole::Manner));
 		assert!(utterance.referents.values().any(|referent| referent.number == Number::Many));
@@ -1029,7 +1138,7 @@ mod tests {
 			tok(6, "the", "the", UniversalPos::Determiner, 7, "det", ""),
 			tok(7, "river", "river", UniversalPos::Noun, 3, "obl", ""),
 		]);
-		let utterance = EnglishSemanticMarshaller::default().marshal(&doc, &universe())?;
+		let utterance = EnglishSemanticMarshaller::default().marshal(&doc, &universe()?)?;
 		assert!(has_role(&utterance, SemanticRole::Manner));
 		assert!(has_role(&utterance, SemanticRole::Goal));
 		Ok(())
@@ -1048,7 +1157,7 @@ mod tests {
 			tok(8, "the", "the", UniversalPos::Determiner, 9, "det", ""),
 			tok(9, "river", "river", UniversalPos::Noun, 3, "obl", ""),
 		]);
-		let utterance = EnglishSemanticMarshaller::default().marshal(&doc, &universe())?;
+		let utterance = EnglishSemanticMarshaller::default().marshal(&doc, &universe()?)?;
 		assert!(has_role(&utterance, SemanticRole::Agent));
 		assert!(has_role(&utterance, SemanticRole::Rate));
 		assert!(has_role(&utterance, SemanticRole::Goal));
@@ -1065,7 +1174,7 @@ mod tests {
 			tok(3, "despite", "despite", UniversalPos::Adposition, 4, "case", ""),
 			tok(4, "rain", "rain", UniversalPos::Noun, 2, "obl", ""),
 		]);
-		let utterance = EnglishSemanticMarshaller::default().marshal(&doc, &universe())?;
+		let utterance = EnglishSemanticMarshaller::default().marshal(&doc, &universe()?)?;
 		assert_eq!(utterance.roots.len(), 1);
 		assert!(has_role(&utterance, SemanticRole::Agent));
 		assert!(!has_role(&utterance, SemanticRole::Goal));
@@ -1081,7 +1190,7 @@ mod tests {
 			tok(4, "the", "the", UniversalPos::Determiner, 5, "det", ""),
 			tok(5, "river", "river", UniversalPos::Noun, 2, "obl", ""),
 		]);
-		let utterance = EnglishSemanticMarshaller::default().marshal(&doc, &universe())?;
+		let utterance = EnglishSemanticMarshaller::default().marshal(&doc, &universe()?)?;
 		assert!(has_role(&utterance, SemanticRole::Location));
 		assert!(!has_role(&utterance, SemanticRole::Rate));
 		Ok(())
@@ -1100,7 +1209,7 @@ mod tests {
 			tok(8, "the", "the", UniversalPos::Determiner, 9, "det", ""),
 			tok(9, "river", "river", UniversalPos::Noun, 3, "nmod", ""),
 		]);
-		let utterance = EnglishSemanticMarshaller::default().marshal(&doc, &universe())?;
+		let utterance = EnglishSemanticMarshaller::default().marshal(&doc, &universe()?)?;
 		assert_eq!(utterance.roots.len(), 1);
 		assert!(has_role(&utterance, SemanticRole::Agent));
 		assert!(has_role(&utterance, SemanticRole::Rate));
@@ -1117,7 +1226,8 @@ mod tests {
 			&parser,
 			"When the bell strikes 12, go to the river.",
 		)?;
-		let utterance = EnglishSemanticMarshaller::default().marshal(&document, &universe())?;
+		let utterance =
+			EnglishSemanticMarshaller::default().marshal(&document, &universe_for(&document)?)?;
 		assert!(
 			!utterance.roots.is_empty(),
 			"empty utterance from:\n{}",
@@ -1140,7 +1250,7 @@ mod tests {
 			"UDPipe produced no sentences:\n{}",
 			document.debug_report()
 		);
-		let utterance = EnglishSemanticMarshaller::default().marshal(&document, &universe())?;
+		let utterance = EnglishSemanticMarshaller::default().marshal(&document, &universe()?)?;
 		assert!(
 			!utterance.roots.is_empty(),
 			"empty utterance from:\n{}\n{utterance:#?}",
@@ -1149,6 +1259,70 @@ mod tests {
 		assert!(has_role(&utterance, SemanticRole::Agent));
 		assert!(has_role(&utterance, SemanticRole::Goal));
 		assert!(has_role(&utterance, SemanticRole::Rate) || has_role(&utterance, SemanticRole::Manner));
+		Ok(())
+	}
+
+	#[test]
+	fn mary_is_a_witch_is_classification() -> Result<(), LanguageError> {
+		let doc = sentence(vec![
+			tok(1, "Mary", "Mary", UniversalPos::ProperNoun, 4, "nsubj", ""),
+			tok(2, "is", "be", UniversalPos::Auxiliary, 4, "cop", "Tense=Pres"),
+			tok(3, "a", "a", UniversalPos::Determiner, 4, "det", ""),
+			tok(4, "witch", "witch", UniversalPos::Noun, 0, "root", ""),
+		]);
+		let utterance = EnglishSemanticMarshaller::default().marshal(&doc, &universe()?)?;
+		let clause = first_clause(&utterance)?;
+		assert!(has_role(&utterance, SemanticRole::Theme));
+		assert!(has_role(&utterance, SemanticRole::Classification));
+		assert!(!has_role(&utterance, SemanticRole::Agent));
+		assert_eq!(clause.arguments.len(), 2);
+		Ok(())
+	}
+
+	#[test]
+	fn he_saw_mary_resolves_third_person() -> Result<(), LanguageError> {
+		let doc = sentence(vec![
+			tok(1, "He", "he", UniversalPos::Pronoun, 2, "nsubj", ""),
+			tok(2, "saw", "see", UniversalPos::Verb, 0, "root", "Tense=Past"),
+			tok(3, "Mary", "Mary", UniversalPos::ProperNoun, 2, "obj", ""),
+		]);
+		let utterance = EnglishSemanticMarshaller::default().marshal(&doc, &universe()?)?;
+		assert!(has_role(&utterance, SemanticRole::Experiencer));
+		assert!(has_role(&utterance, SemanticRole::Theme));
+		Ok(())
+	}
+
+	#[test]
+	fn bob_is_overlaid_from_the_parse() -> Result<(), LanguageError> {
+		let doc = sentence(vec![
+			tok(1, "Bob", "Bob", UniversalPos::ProperNoun, 2, "nsubj", ""),
+			tok(2, "saw", "see", UniversalPos::Verb, 0, "root", "Tense=Past"),
+			tok(3, "Mary", "Mary", UniversalPos::ProperNoun, 2, "obj", ""),
+		]);
+		let utterance = EnglishSemanticMarshaller::default().marshal(&doc, &universe_for(&doc)?)?;
+		assert!(has_role(&utterance, SemanticRole::Experiencer));
+		assert!(has_role(&utterance, SemanticRole::Theme));
+		Ok(())
+	}
+
+	#[test]
+	fn when_the_bell_strikes_12_attaches_time() -> Result<(), LanguageError> {
+		let doc = sentence(vec![
+			tok(1, "When", "when", UniversalPos::SubordinatingConjunction, 4, "mark", ""),
+			tok(2, "the", "the", UniversalPos::Determiner, 3, "det", ""),
+			tok(3, "bell", "bell", UniversalPos::Noun, 4, "nsubj", ""),
+			tok(4, "strikes", "strike", UniversalPos::Verb, 6, "advcl", "Tense=Pres"),
+			tok(5, "12", "12", UniversalPos::Numeral, 4, "obj", "NumType=Card"),
+			tok(6, "go", "go", UniversalPos::Verb, 0, "root", "Mood=Imp"),
+			tok(7, "to", "to", UniversalPos::Adposition, 9, "case", ""),
+			tok(8, "the", "the", UniversalPos::Determiner, 9, "det", ""),
+			tok(9, "river", "river", UniversalPos::Noun, 6, "obl", ""),
+		]);
+		let utterance = EnglishSemanticMarshaller::default().marshal(&doc, &universe()?)?;
+		assert_eq!(utterance.clauses.len(), 2);
+		assert!(has_role(&utterance, SemanticRole::Time));
+		assert!(has_role(&utterance, SemanticRole::Theme));
+		assert!(has_role(&utterance, SemanticRole::Goal));
 		Ok(())
 	}
 

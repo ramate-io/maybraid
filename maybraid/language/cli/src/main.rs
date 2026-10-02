@@ -50,14 +50,13 @@ async fn main() -> anyhow::Result<()> {
 		_ => bail!("specify exactly one of --translate or --respond"),
 	};
 	let language = PocLanguage::from_number(args.to_language_number)?;
-	let universe = poc_universe()?.with_proper_names(["John", "Mary", "Alice", "speaker", "listener"]);
 	let parser = match &args.udpipe_path {
 		Some(path) => UdpipeEnglishParser::from_path(path).map_err(LanguagePipelineError::from)?,
 		None => UdpipeEnglishParser::bundled().map_err(LanguagePipelineError::from)?,
 	};
 	let marshaller = EnglishSemanticMarshaller::default();
 
-	let (english, source, parsed, utterance) = if args.respond.is_some() {
+	let (english, source, parsed, utterance, universe) = if args.respond.is_some() {
 		let model_path = args.model_path.clone().unwrap_or_else(bundled_model_path);
 		let mut config = MistralLanguageConfig::from_path(model_path);
 		if args.force_cpu {
@@ -71,12 +70,14 @@ async fn main() -> anyhow::Result<()> {
 			.await
 			.map_err(|error| LanguagePipelineError::ResponseGeneration(error.to_string()))?;
 		let parsed = parser.parse(&english).map_err(LanguagePipelineError::from)?;
+		let universe = poc_universe_for(&parsed)?;
 		let utterance = marshaller.marshal(&parsed, &universe).map_err(LanguagePipelineError::from)?;
-		(Some(english), input.to_owned(), parsed, utterance)
+		(Some(english), input.to_owned(), parsed, utterance, universe)
 	} else {
 		let parsed = parser.parse(input).map_err(LanguagePipelineError::from)?;
+		let universe = poc_universe_for(&parsed)?;
 		let utterance = marshaller.marshal(&parsed, &universe).map_err(LanguagePipelineError::from)?;
-		(None, input.to_owned(), parsed, utterance)
+		(None, input.to_owned(), parsed, utterance, universe)
 	};
 
 	let rendered = language.render(utterance.clone(), &universe);
@@ -91,9 +92,7 @@ async fn main() -> anyhow::Result<()> {
 			&language,
 		);
 	} else if args.with_english {
-		if let Some(english) = english {
-			println!("English:\n{english}\n");
-		}
+		println!("English:\n{}\n", display_english(english.as_deref(), &source));
 		println!("Language {}:\n{}", language.number, rendered.ipa);
 	} else {
 		println!("{}", rendered.ipa);
@@ -167,6 +166,16 @@ impl PocLanguage {
 		let ipa = lexical.realize(self.grammar()).ipa().to_string();
 		RenderedLanguage { ipa, lexical, graph }
 	}
+}
+
+fn poc_universe_for(parsed: &DependencyDocument) -> anyhow::Result<WordNetConceptUniverse> {
+	Ok(poc_universe()?
+		.with_proper_names(["John", "Mary", "Alice", "speaker", "listener"])
+		.with_document_overlays(parsed))
+}
+
+fn display_english<'a>(generated: Option<&'a str>, source: &'a str) -> &'a str {
+	generated.unwrap_or(source)
 }
 
 fn print_debug(
@@ -250,5 +259,11 @@ mod tests {
 		assert_eq!(zero.seed, CompositionalLexicalizer::DEFAULT_SEED);
 		assert_ne!(zero.seed, three.seed);
 		Ok(())
+	}
+
+	#[test]
+	fn with_english_falls_back_to_source_text() {
+		assert_eq!(super::display_english(None, "I do know."), "I do know.");
+		assert_eq!(super::display_english(Some("Sure."), "hello"), "Sure.");
 	}
 }

@@ -144,7 +144,8 @@ fn argument_schema() -> Value {
 			"Agent", "Patient", "Theme", "Experiencer",
 			"Recipient", "Beneficiary", "Instrument",
 			"Location", "Source", "Goal", "Possessor",
-			"Cause", "Content", "Classification"
+			"Cause", "Content", "Classification",
+			"Manner", "Rate", "Time"
 		]
 	});
 	// llguidance rejects JSON Schema `not`. Exclusive property sets

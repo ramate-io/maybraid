@@ -59,21 +59,21 @@ impl GeneratedUtterance {
 			clause.mood = parse_mood(generated.mood.as_deref())?;
 			clause.polarity = parse_polarity(generated.polarity.as_deref())?;
 			for argument in &generated.arguments {
-				let Some(argument) = argument.repaired() else {
+				let Some(repaired) = argument.repaired() else {
+					if is_agent_role(&argument.role) {
+						if let Some(agent) = default_agent(&self.referents, &referent_ids) {
+							clause.arguments.push(Argument {
+								role: SemanticRole::Agent,
+								value: SemanticValue::Referent(agent),
+							});
+						}
+					}
 					continue;
 				};
-				match argument.to_semantic(&referent_ids, &clause_ids) {
+				match repaired.to_semantic(&referent_ids, &clause_ids) {
 					Ok(Some(argument)) => clause.arguments.push(argument),
 					Ok(None) => {}
 					Err(error) => return Err(error),
-				}
-			}
-			if !clause.arguments.iter().any(|argument| argument.role == SemanticRole::Agent) {
-				if let Some(agent) = default_agent(&self.referents, &referent_ids) {
-					clause.arguments.push(Argument {
-						role: SemanticRole::Agent,
-						value: SemanticValue::Referent(agent),
-					});
 				}
 			}
 		}
@@ -165,6 +165,10 @@ fn is_person_like(concept: &str) -> bool {
 	aliases(concept).iter().any(|alias| matches!(alias.as_str(), "speaker" | "listener" | "person"))
 }
 
+fn is_agent_role(role: &str) -> bool {
+	matches!(normalize_lemma(role).as_str(), "agent" | "subject")
+}
+
 fn clause_at(
 	clauses: &[maybraid_language_core::ClauseId],
 	index: usize,
@@ -245,6 +249,9 @@ fn pronoun_aliases(lemma: &str) -> Option<Vec<String>> {
 		"you" | "listener" | "addressee" | "hearer" => {
 			Some(vec!["listener".to_owned(), "person".to_owned()])
 		}
+		"he" | "him" | "his" | "she" | "her" | "they" | "them" | "their" | "himself"
+		| "herself" | "themselves" | "person" => Some(vec!["person".to_owned()]),
+		"it" | "its" | "itself" | "thing" => Some(vec!["thing".to_owned()]),
 		_ => None,
 	}
 }

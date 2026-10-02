@@ -108,23 +108,24 @@ mod tests {
 	}
 
 	#[test]
-	fn missing_model_is_a_typed_error() {
-		let error = match UdpipeEnglishParser::from_path("/no/such/english-ewt.udpipe") {
-			Ok(_) => panic!("missing model should fail"),
-			Err(error) => error,
-		};
+	fn missing_model_is_a_typed_error() -> Result<(), LanguageError> {
+		let error = UdpipeEnglishParser::from_path("/no/such/english-ewt.udpipe").err().ok_or_else(
+			|| LanguageError::DependencyParse("missing model should fail".to_owned()),
+		)?;
 		assert!(matches!(error, LanguageError::UdpipeMissing { .. }));
+		Ok(())
 	}
 
 	#[test]
-	fn live_parse_john_gave_mary_the_book() {
+	fn live_parse_john_gave_mary_the_book() -> Result<(), LanguageError> {
 		let Ok(parser) = UdpipeEnglishParser::bundled() else {
-			return;
+			return Ok(());
 		};
-		let document = parser.parse("John gave Mary the book.").expect("parse");
+		let document = parser.parse("John gave Mary the book.")?;
 		assert!(!document.sentences.is_empty());
 		let tokens = &document.sentences[0].tokens;
 		assert!(tokens.iter().any(|token| token.lemma == "give" && token.relation.is("root")));
 		assert!(tokens.iter().any(|token| token.text == "John" && token.relation.is("nsubj")));
+		Ok(())
 	}
 }
