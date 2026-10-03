@@ -128,11 +128,15 @@ impl<T> LodGenerateQueue<T> {
 		self.pending_ids.contains(id)
 	}
 
-	pub fn clear(&mut self) {
+	/// Drop pending ids and scan regions. Returns how many tickets to release.
+	#[must_use]
+	pub fn clear(&mut self) -> u64 {
+		let cancelled = self.pending.len() as u64;
 		self.pending.clear();
 		self.pending_ids.clear();
 		self.scan_regions.clear();
 		self.reset_scan = true;
+		cancelled
 	}
 
 	pub fn enqueue(&mut self, id: Id) -> bool {
@@ -553,5 +557,19 @@ mod tests {
 		assert_eq!(jobs.active(), 1);
 		assert!(queue.contains(&Id::from_cell(region(0.0, 0.0, 1.0, 1.0))));
 		assert!(!queue.contains(&Id::from_cell(region(250.0, 0.0, 251.0, 1.0))));
+	}
+
+	#[test]
+	fn clear_releases_job_tickets() {
+		let jobs = LodJobCounter::default();
+		let mut queue = LodGenerateQueue::<()>::default();
+		assert!(queue.enqueue(Id::from_cell(region(0.0, 0.0, 1.0, 1.0))));
+		jobs.begin();
+		assert!(queue.enqueue(Id::from_cell(region(2.0, 0.0, 3.0, 1.0))));
+		jobs.begin();
+		assert_eq!(jobs.active(), 2);
+		jobs.end_n(queue.clear());
+		assert_eq!(jobs.active(), 0);
+		assert!(queue.is_empty());
 	}
 }

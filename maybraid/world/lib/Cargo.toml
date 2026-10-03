@@ -31,6 +31,9 @@ furniture-assemblies = { workspace = true }
 furniture-shaders = { workspace = true }
 furnishing-layer-model = { workspace = true }
 furnishing-layer-presentation = { workspace = true }
+geneva = { workspace = true }
+language-layer-model = { workspace = true }
+language-layer-presentation = { workspace = true }
 maputo = { workspace = true }
 firearms = { workspace = true }
 fleeing-intelligence = { workspace = true }

@@ -32,10 +32,11 @@ pub struct DevelopmentHostRoot;
 pub fn spawn_tagged_host_entities(
 	commands: &mut Commands,
 	development: &impl DevelopmentHosts,
+	host_id: Option<Id>,
 ) -> Vec<Entity> {
 	let mut spawned = Vec::new();
 	for host in development.hosts() {
-		for entity in host.spawn(commands) {
+		for entity in host.spawn(commands, host_id) {
 			commands.entity(entity).insert(DevelopmentHostRoot);
 			spawned.push(entity);
 		}
@@ -47,7 +48,7 @@ pub fn spawn_development_hosts(
 	commands: &mut Commands,
 	development: &impl DevelopmentHosts,
 ) -> usize {
-	spawn_tagged_host_entities(commands, development).len()
+	spawn_tagged_host_entities(commands, development, None).len()
 }
 
 #[derive(Resource, Default)]
@@ -138,7 +139,7 @@ impl UrbanizationPresenterState {
 				Transform::from_xyz(center.x, elevation, center.z),
 			))
 			.id()];
-		entities.extend(spawn_tagged_host_entities(commands, built));
+		entities.extend(spawn_tagged_host_entities(commands, built, Some(leaf_id)));
 		self.presented.insert(leaf_id, PresentedUrbanization { version, entities });
 	}
 }

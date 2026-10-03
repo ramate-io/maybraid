@@ -14,7 +14,7 @@ use layer_stack::{
 use lod::gen::{Id, Version};
 use mob_intelligence::MemberOf;
 use mob_layer_model::Mobs;
-use mob_layer_presentation::{MobPresent, MobPresenterState};
+use mob_layer_presentation::{drain_retired_mob_cells, MobPresenterState};
 use mob_scenes::{MobLodRefreshMode, DEFAULT_MOB_HIGH_RADIUS};
 use terrain_layer_model::OnTerrain;
 use urbanization_layer_model::Urbanization;
@@ -64,7 +64,7 @@ fn high_lod_refresh_keeps_margin_around_the_high_band() -> anyhow::Result<()> {
 #[test]
 fn retire_despawns_presented_roots_and_pending_while_unsubscribed() -> anyhow::Result<()> {
 	let mut app = present_app();
-	subscribe_mode::<(Inhabited, MobPresent), TestMode>(&mut app);
+	subscribe_mode::<Inhabited, TestMode>(&mut app);
 	let root = app.world_mut().spawn(MobCellRoot).id();
 	let pending = app.world_mut().spawn_empty().id();
 	let id = Id::from_cell(Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE));
@@ -132,6 +132,60 @@ fn presentation_inserts_indexed_refresh_mode() -> anyhow::Result<()> {
 }
 
 #[test]
+fn present_plugin_installs_last_cell_teardown() -> anyhow::Result<()> {
+	use bevy::ecs::system::IntoSystem;
+	use bevy::prelude::{Last, System};
+
+	let mut app = App::new();
+	app.add_plugins((MinimalPlugins, AssetPlugin::default()));
+	Present::<TestMode, Inhabited>::default().build(&mut app);
+	let mut ids = Vec::new();
+	let mut inspect_error = None;
+	app.world_mut().schedule_scope(Last, |world, schedule| {
+		if let Err(error) = schedule.initialize(world) {
+			inspect_error = Some(anyhow::anyhow!("{error:?}"));
+			return;
+		}
+		match schedule.systems() {
+			Ok(systems) => ids.extend(systems.map(|(_, system)| system.system_type())),
+			Err(error) => inspect_error = Some(anyhow::anyhow!("{error:?}")),
+		}
+	});
+	if let Some(error) = inspect_error {
+		return Err(error);
+	}
+	let drain_id = IntoSystem::into_system(drain_retired_mob_cells).system_type();
+	anyhow::ensure!(
+		ids.iter().any(|id| *id == drain_id),
+		"Present must install drain_retired_mob_cells in Last"
+	);
+
+	let host = app.world_mut().spawn_empty().id();
+	let id = Id::from_cell(Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE));
+	{
+		let mut state = app.world_mut().resource_mut::<MobPresenterState>();
+		state.remember(id, Version(1), vec![host]);
+		state.queue_remove(id);
+	}
+	let mut run_error = None;
+	app.world_mut().schedule_scope(Last, |world, schedule| {
+		if let Err(error) = schedule.initialize(world) {
+			run_error = Some(anyhow::anyhow!("{error:?}"));
+			return;
+		}
+		schedule.run(world);
+	});
+	if let Some(error) = run_error {
+		return Err(error);
+	}
+	anyhow::ensure!(
+		app.world().get_entity(host).is_err(),
+		"Present's Last drain despawns a queued host"
+	);
+	Ok(())
+}
+
+#[test]
 fn two_modes_share_one_presentation_core() -> anyhow::Result<()> {
 	let mut app = App::new();
 	app.add_plugins((MinimalPlugins, AssetPlugin::default(), StatesPlugin));
@@ -151,18 +205,6 @@ fn two_modes_share_one_presentation_core() -> anyhow::Result<()> {
 	Ok(())
 }
 
-fn teardown_app() -> App {
-	let mut app = App::new();
-	app.add_plugins((
-		MinimalPlugins,
-		StatesPlugin,
-		GenerationModePlugin::<TestMode>::initial(),
-		GenerationModePlugin::<OtherMode>::default(),
-	));
-	mob_layer_presentation::install_mob_cell_teardown(&mut app);
-	app
-}
-
 fn present_app() -> App {
 	use bevy::prelude::{OnExit, With};
 	use lod::{LodPresentCullPlugin, LodPresentPlugin, LodViewer};
@@ -170,31 +212,37 @@ fn present_app() -> App {
 	use crate::present::BarkingPresenter;
 	use crate::tests::insert_urbanized_resources;
 
-	let mut app = teardown_app();
-	layer_stack::install_lod_present_gate::<(Inhabited, MobPresent), MobLodChan>(&mut app);
-	app.add_plugins(
-		(
-			AssetPlugin::default(),
-			LodPresentPlugin::<
-				MobCell,
-				MobIndex,
-				BarkingPresenter<'_, '_, Urbanized>,
-				MobLodChan,
-				With<LodViewer>,
-			>::default(),
-			LodPresentCullPlugin::<
-				MobCell,
-				MobIndex,
-				BarkingPresenter<'_, '_, Urbanized>,
-				MobLodChan,
-			>::default(),
-		),
-	);
+	let mut app = App::new();
+	app.add_plugins((
+		MinimalPlugins,
+		AssetPlugin::default(),
+		StatesPlugin,
+		GenerationModePlugin::<TestMode>::initial(),
+		GenerationModePlugin::<OtherMode>::default(),
+	));
+	layer_stack::install_lod_present_gate::<Inhabited, MobLodChan>(&mut app);
+	mob_layer_presentation::install_mob_cell_teardown(&mut app);
+	app.add_plugins((
+		LodPresentPlugin::<
+			MobCell,
+			MobIndex,
+			BarkingPresenter<'_, '_, Urbanized>,
+			MobLodChan,
+			With<LodViewer>,
+		>::default(),
+		LodPresentCullPlugin::<
+			MobCell,
+			MobIndex,
+			BarkingPresenter<'_, '_, Urbanized>,
+			MobLodChan,
+		>::default(),
+	));
+	app.init_resource::<MobPresenterState>();
+	app.add_message::<mob_layer_model::MobCellPresented>();
 	app.add_systems(OnExit(ActiveGenerationMode::of::<TestMode>()), clear_index);
 	app.add_systems(OnExit(ActiveGenerationMode::of::<OtherMode>()), clear_index);
 	insert_urbanized_resources(app.world_mut());
 	app.init_resource::<MobIndex>();
-	app.add_message::<mob_layer_model::MobCellPresented>();
 	app
 }
 
@@ -259,7 +307,7 @@ fn spawn_presented_squad(app: &mut App) -> Squad {
 #[test]
 fn retired_hosts_and_members_survive_post_update_then_leave_in_last() -> anyhow::Result<()> {
 	let mut app = present_app();
-	subscribe_mode::<(Inhabited, MobPresent), TestMode>(&mut app);
+	subscribe_mode::<Inhabited, TestMode>(&mut app);
 	cover_origin_keep(&mut app);
 	app.init_resource::<SquadSeenInPostUpdate>();
 	app.add_systems(PostUpdate, note_squad_before_last);
@@ -299,7 +347,7 @@ fn announced_cell_presents_after_the_first_keep_scan() -> anyhow::Result<()> {
 	use crate::MobCellWrites;
 
 	let mut app = present_app();
-	subscribe_mode::<(Inhabited, MobPresent), TestMode>(&mut app);
+	subscribe_mode::<Inhabited, TestMode>(&mut app);
 	cover_origin_keep(&mut app);
 	spawn_viewer(&mut app);
 	app.update();
@@ -333,8 +381,8 @@ fn announced_cell_presents_after_the_first_keep_scan() -> anyhow::Result<()> {
 #[test]
 fn presented_cells_leave_when_the_subscribed_mode_changes() -> anyhow::Result<()> {
 	let mut app = present_app();
-	subscribe_mode::<(Inhabited, MobPresent), TestMode>(&mut app);
-	subscribe_mode::<(Inhabited, MobPresent), OtherMode>(&mut app);
+	subscribe_mode::<Inhabited, TestMode>(&mut app);
+	subscribe_mode::<Inhabited, OtherMode>(&mut app);
 	cover_origin_keep(&mut app);
 	app.init_resource::<SquadSeenInPostUpdate>();
 	app.add_systems(PostUpdate, note_squad_before_last);
@@ -384,8 +432,8 @@ fn a_cell_written_on_the_entering_frame_still_presents() -> anyhow::Result<()> {
 	use crate::MobCellWrites;
 
 	let mut app = present_app();
-	subscribe_mode::<(Inhabited, MobPresent), TestMode>(&mut app);
-	subscribe_mode::<(Inhabited, MobPresent), OtherMode>(&mut app);
+	subscribe_mode::<Inhabited, TestMode>(&mut app);
+	subscribe_mode::<Inhabited, OtherMode>(&mut app);
 	cover_origin_keep(&mut app);
 	spawn_viewer(&mut app);
 	app.add_systems(

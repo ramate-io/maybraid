@@ -73,15 +73,54 @@ impl Plugin for RichmondDevelopmentModelsPlugin {
 }
 
 /// High usage-area labels become extra local places while those children exist.
+///
+/// When an ancestor host already has a development identity, the High place
+/// inherits that host and gets a local id from the label text.
+#[allow(clippy::type_complexity)]
 fn stamp_label_places(
 	mut commands: Commands,
-	added: Query<(Entity, &LabelNode), (Added<LabelNode>, Without<DiscoverablePlace>)>,
+	added: Query<(Entity, &LabelNode, Option<&ChildOf>), (Added<LabelNode>, Without<DiscoverablePlace>)>,
+	ancestors: Query<(Option<&ChildOf>, Option<&DiscoverablePlace>)>,
 ) {
-	for (entity, node) in &added {
-		if let Some(place) = DiscoverablePlace::from_label_node(node) {
-			commands.entity(entity).insert(place);
+	for (entity, node, child_of) in &added {
+		let Some(mut place) = DiscoverablePlace::from_label_node(node) else {
+			continue;
+		};
+		if let Some(host) = ancestor_host(child_of.map(ChildOf::parent), &ancestors) {
+			place = place.with_identity(host, local_place_id(place.label, node));
 		}
+		commands.entity(entity).insert(place);
 	}
+}
+
+fn ancestor_host(
+	start: Option<Entity>,
+	ancestors: &Query<(Option<&ChildOf>, Option<&DiscoverablePlace>)>,
+) -> Option<lod::gen::Id> {
+	let mut current = start;
+	let mut guard = 0;
+	while let Some(entity) = current {
+		guard += 1;
+		if guard > 32 {
+			break;
+		}
+		let Ok((child_of, place)) = ancestors.get(entity) else {
+			break;
+		};
+		if let Some(host) = place.and_then(|place| place.host) {
+			return Some(host);
+		}
+		current = child_of.map(ChildOf::parent);
+	}
+	None
+}
+
+fn local_place_id(label: crate::DiscoverablePlaceLabel, node: &LabelNode) -> u32 {
+	let mut h = label.salt() as u32;
+	for byte in node.text.as_bytes() {
+		h = h.wrapping_mul(16777619) ^ u32::from(*byte);
+	}
+	h
 }
 
 #[cfg(test)]
@@ -121,6 +160,47 @@ mod tests {
 		assert_eq!(place.label, crate::DiscoverablePlaceLabel::Lounge);
 		assert!(!place.persistent);
 		assert!(app.world().get::<DiscoverablePlace>(furniture).is_none());
+		Ok(())
+	}
+
+	#[test]
+	fn high_child_inherits_host_identity() -> anyhow::Result<()> {
+		use lod::gen::Id;
+
+		let mut app = App::new();
+		app.add_systems(Update, stamp_label_places);
+		let host_id = Id::from_cell(bevy::math::bounding::Aabb3d::from_min_max(
+			bevy::math::Vec3::ZERO,
+			bevy::math::Vec3::ONE,
+		));
+		let parent = app
+			.world_mut()
+			.spawn(
+				DiscoverablePlace::host(crate::DiscoverablePlaceLabel::House, 8.0, 1.1)
+					.with_identity(host_id, 4),
+			)
+			.id();
+		let lounge = app
+			.world_mut()
+			.spawn((
+				LabelNode::new(
+					LabelStyle::Gray,
+					LabelGeometry::rectangle(bevy::math::Vec3::new(5.0, 3.0, 4.0)),
+					"Lounge",
+					Placement::default(),
+				),
+				ChildOf(parent),
+			))
+			.id();
+
+		app.update();
+
+		let place = app
+			.world()
+			.get::<DiscoverablePlace>(lounge)
+			.ok_or_else(|| anyhow::anyhow!("lounge should inherit host identity"))?;
+		anyhow::ensure!(place.host == Some(host_id));
+		anyhow::ensure!(place.local != 0);
 		Ok(())
 	}
 }

@@ -3,6 +3,7 @@
 use bevy::ecs::system::{ParamSet, StaticSystemParam, SystemParam};
 use bevy::prelude::*;
 use lod::gen::{Id, LodGenerateKeepRegion, LodGenerateQueue, LodGenerateRegion, LodGenerated};
+use lod::LodJobCounter;
 use lod::lod_ref::LodRef;
 use lod::presentation::{LodPresentKeepRegion, LodPresentRegion};
 use lod::scene::{LodRefreshRegions, LodRefreshRegionsStatus};
@@ -196,12 +197,16 @@ fn clear_mob_generate(
 	mut generate_keep: ResMut<LodGenerateKeepRegion<MobLodChan>>,
 	mut previous_cell: ResMut<MobGenerateStreamCell>,
 	queue: Option<ResMut<LodGenerateQueue<MobCell>>>,
+	jobs: Option<Res<LodJobCounter>>,
 ) {
 	generate.enabled = false;
 	generate_keep.region = None;
 	previous_cell.0 = None;
 	if let Some(mut queue) = queue {
-		queue.clear();
+		let cancelled = queue.clear();
+		if let Some(jobs) = jobs {
+			jobs.end_n(cancelled);
+		}
 	}
 }
 
