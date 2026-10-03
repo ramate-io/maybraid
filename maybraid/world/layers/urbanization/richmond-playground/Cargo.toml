@@ -20,8 +20,9 @@ bevy = { workspace = true }
 clap = { workspace = true }
 terrain-shaders = { workspace = true }
 durham = { workspace = true }
-furniture-assemblies = { workspace = true }
-furniture-shaders = { workspace = true }
+furnishing-layer-model = { workspace = true }
+furnishing-layer-presentation = { workspace = true }
+maputo = { workspace = true }
 game-commands = { workspace = true }
 log = { workspace = true }
 lod = { workspace = true }

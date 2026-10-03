@@ -15,11 +15,14 @@ members = [
   "maybraid/world/layers/urbanization/cells",
   "maybraid/world/layers/urbanization/richmond-playground",
 
-  "maybraid/furniture/components",
-  "maybraid/furniture/assemblies",
-  "maybraid/furniture/usage-areas",
-  "maybraid/furniture/shaders",
-  "maybraid/furniture/playground",
+  "maybraid/world/layers/furnishing/components",
+  "maybraid/world/layers/furnishing/assemblies",
+  "maybraid/world/layers/furnishing/usage-areas",
+  "maybraid/world/layers/furnishing/shaders",
+  "maybraid/world/layers/furnishing/playground",
+  "maybraid/world/layers/furnishing/model",
+  "maybraid/world/layers/furnishing/presentation",
+  "maybraid/world/layers/furnishing/maputo",
 
   "maybraid/menu/components",
   "maybraid/menu/character-ui-menu-renderer",
@@ -277,11 +280,14 @@ richmond = { path = "maybraid/world/layers/urbanization/richmond" }
 urbanization-cells = { path = "maybraid/world/layers/urbanization/cells" }
 richmond-playground = { path = "maybraid/world/layers/urbanization/richmond-playground" }
 
-furniture-components = { path = "maybraid/furniture/components" }
-furniture-assemblies = { path = "maybraid/furniture/assemblies" }
-furniture-usage-areas = { path = "maybraid/furniture/usage-areas" }
-furniture-shaders = { path = "maybraid/furniture/shaders" }
-furniture-playground = { path = "maybraid/furniture/playground" }
+furniture-components = { path = "maybraid/world/layers/furnishing/components" }
+furniture-assemblies = { path = "maybraid/world/layers/furnishing/assemblies" }
+furniture-usage-areas = { path = "maybraid/world/layers/furnishing/usage-areas" }
+furniture-shaders = { path = "maybraid/world/layers/furnishing/shaders" }
+furniture-playground = { path = "maybraid/world/layers/furnishing/playground" }
+furnishing-layer-model = { path = "maybraid/world/layers/furnishing/model" }
+furnishing-layer-presentation = { path = "maybraid/world/layers/furnishing/presentation" }
+maputo = { path = "maybraid/world/layers/furnishing/maputo" }
 
 menu-components = { path = "maybraid/menu/components" }
 maybraid-character-ui-menu-renderer = { path = "maybraid/menu/character-ui-menu-renderer" }

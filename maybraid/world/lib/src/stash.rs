@@ -596,7 +596,7 @@ pub(crate) fn claim_nearby_stashes(
 	>,
 	parts: Query<(Entity, &furniture_assemblies::FurnitureKitPart, &GlobalTransform)>,
 	child_of: Query<&ChildOf>,
-	hosts: Query<&furniture_assemblies::PresentedFurnitureCellId>,
+	hosts: Query<&maputo::PresentedFurnitureCellId>,
 ) {
 	if !intents.read().any(|intent| matches!(intent, CharacterIntent::StartInteraction)) {
 		return;
@@ -1868,8 +1868,9 @@ mod tests {
 	#[test]
 	fn claim_halo_marks_a_closed_crate() -> anyhow::Result<()> {
 		use crate::crate_loot::{ClosedLid, CrateLoot};
-		use furniture_assemblies::{FurnitureKitPart, PartKind, PresentedFurnitureCellId};
+		use furniture_assemblies::{FurnitureKitPart, PartKind};
 		use lod::gen::Id;
+		use maputo::PresentedFurnitureCellId;
 
 		let mut world = World::new();
 		world.init_resource::<Time>();

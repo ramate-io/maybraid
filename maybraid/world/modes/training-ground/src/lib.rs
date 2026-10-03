@@ -9,9 +9,11 @@ use chico::{install_vegetation_stream, Chico, ChicoConfig};
 use durham::{
 	Durham, DurhamTerrainConfig, TerrainColliderSystems, TerrainFillSystems, TerrainRetarget,
 };
+use furnishing_layer_model::FurnishingScheme;
 use layer_stack::{
 	in_generation_mode, ActiveGenerationMode, GenerationMode, GenerationModeSystems,
 };
+use maputo::{install_furnishing_stream, Maputo};
 use richmond::Richmond;
 use terrain_layer_model::{BaseTerrainModeConfig, BaseTerrainScheme, OnTerrain};
 use urbanization_layer_model::Urbanization;
@@ -47,6 +49,12 @@ impl VegetationScheme<Chico<Urbanization<Richmond<OnTerrain<Durham>>>>> for Trai
 		install_vegetation_stream::<TrainingGround, Chico<Urbanization<Richmond<OnTerrain<Durham>>>>>(
 			app,
 		);
+	}
+}
+
+impl FurnishingScheme<Maputo<Urbanization<Richmond<OnTerrain<Durham>>>>> for TrainingGround {
+	fn install(app: &mut App, _config: &()) {
+		install_furnishing_stream::<TrainingGround, Urbanization<Richmond<OnTerrain<Durham>>>>(app);
 	}
 }
 

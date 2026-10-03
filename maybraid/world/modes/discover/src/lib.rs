@@ -9,7 +9,9 @@ use barking::{install_mob_grid_stream, Barking, BarkingConfig};
 use bevy::prelude::*;
 use chico::{install_vegetation_stream, Chico, ChicoConfig};
 use durham::{playable_world_cell_layout, Durham, DurhamTerrainConfig, TerrainRetarget};
+use furnishing_layer_model::FurnishingScheme;
 use layer_stack::{ActiveGenerationMode, GenerationMode};
+use maputo::{install_furnishing_stream, Maputo};
 use mob_layer_model::MobScheme;
 use richmond::{install_urbanization_stream, Richmond, RichmondConfig};
 use terrain_layer_model::{BaseTerrainModeConfig, BaseTerrainScheme, OnTerrain};
@@ -54,6 +56,12 @@ impl MobScheme<Barking<Vegetation<Chico<Urbanization<Richmond<OnTerrain<Durham>>
 {
 	fn install(app: &mut App, _config: &BarkingConfig) {
 		install_mob_grid_stream::<Discovery>(app);
+	}
+}
+
+impl FurnishingScheme<Maputo<Urbanization<Richmond<OnTerrain<Durham>>>>> for Discovery {
+	fn install(app: &mut App, _config: &()) {
+		install_furnishing_stream::<Discovery, Urbanization<Richmond<OnTerrain<Durham>>>>(app);
 	}
 }
 

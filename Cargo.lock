@@ -4802,24 +4802,41 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "42703706b716c37f96a77aea830392ad231f44c9e9a67872fa5548707e11b11c"
 
 [[package]]
+name = "furnishing-layer-model"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "layer-stack",
+ "lod",
+ "terrain-layer-model",
+]
+
+[[package]]
+name = "furnishing-layer-presentation"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "furnishing-layer-model",
+ "layer-stack",
+ "lod",
+ "terrain-layer-model",
+]
+
+[[package]]
 name = "furniture-assemblies"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "avian3d",
  "bevy",
  "building-components",
- "building-physics",
  "furniture-components",
  "furniture-shaders",
  "furniture-usage-areas",
  "lod",
- "lod-avian",
- "lod-gimme",
  "material-ref",
  "procedural-common",
- "terrain-layer-model",
- "urbanization-layer-model",
 ]
 
 [[package]]
@@ -6810,6 +6827,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "maputo"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "avian3d",
+ "bevy",
+ "building-components",
+ "building-physics",
+ "buildings",
+ "furnishing-layer-model",
+ "furnishing-layer-presentation",
+ "furniture-assemblies",
+ "furniture-components",
+ "furniture-shaders",
+ "furniture-usage-areas",
+ "layer-stack",
+ "lod",
+ "lod-avian",
+ "lod-gimme",
+ "procedural-common",
+ "richmond",
+ "terrain-layer-model",
+ "urbanization-developments",
+ "urbanization-layer-model",
+]
+
+[[package]]
 name = "markup5ever"
 version = "0.36.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6937,7 +6981,9 @@ dependencies = [
  "bevy",
  "chico",
  "durham",
+ "furnishing-layer-model",
  "layer-stack",
+ "maputo",
  "mob-layer-model",
  "richmond",
  "terrain-layer-model",
@@ -6971,8 +7017,10 @@ dependencies = [
  "combat-hud",
  "damage",
  "durham",
+ "furnishing-layer-model",
  "layer-stack",
  "lod",
+ "maputo",
  "maybraid-game-mode-discover",
  "mob-characters",
  "mob-intelligence",
@@ -7118,6 +7166,8 @@ dependencies = [
  "firearm-user",
  "firearms",
  "fleeing-intelligence",
+ "furnishing-layer-model",
+ "furnishing-layer-presentation",
  "furniture-assemblies",
  "furniture-shaders",
  "game-commands",
@@ -7128,6 +7178,7 @@ dependencies = [
  "lod",
  "lod-avian",
  "log",
+ "maputo",
  "material-ref",
  "maybraid-character-controller",
  "maybraid-game-mode-discover",
@@ -9991,8 +10042,6 @@ dependencies = [
  "building-shaders",
  "buildings",
  "durham",
- "furniture-assemblies",
- "furniture-shaders",
  "layer-stack",
  "lod",
  "lod-avian",
@@ -10023,12 +10072,13 @@ dependencies = [
  "buildings",
  "clap",
  "durham",
- "furniture-assemblies",
- "furniture-shaders",
+ "furnishing-layer-model",
+ "furnishing-layer-presentation",
  "game-commands",
  "layer-stack",
  "lod",
  "log",
+ "maputo",
  "procedural-common",
  "richmond",
  "terrain-layer-model",

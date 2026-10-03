@@ -270,15 +270,6 @@ pub trait DevelopmentHosts {
 	fn hosts(&self) -> Vec<DevelopmentHost>;
 }
 
-impl furniture_assemblies::FurnitureSlotSource for BuiltDevelopment {
-	fn furniture_hosts(&self) -> Vec<(Transform, Vec<FurnitureNode>, Vec<FurnitureUsageNode>)> {
-		self.hosts()
-			.into_iter()
-			.map(|host| (host.transform(), host.furniture_nodes(), host.furniture_usage_nodes()))
-			.collect()
-	}
-}
-
 impl DevelopmentHosts for BuiltDevelopment {
 	fn hosts(&self) -> Vec<DevelopmentHost> {
 		match self {

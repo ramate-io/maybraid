@@ -2,7 +2,10 @@ use std::path::{Path, PathBuf};
 
 use bevy::prelude::*;
 use durham::{Durham, DurhamCells, DurhamTerrainConfig};
+use furnishing_layer_model::FurnishingGenerationPlugin;
+use furnishing_layer_presentation::FurnishingPresentationPlugin;
 use layer_stack::GenerationModePlugin;
+use maputo::Maputo;
 use richmond::{Richmond, RichmondConfig, UrbanizationStreamSpec};
 use richmond_playground::{
 	DevelopmentsOnTerrainPlugin, PendingStartupCommand, PlaygroundCommand, PlaygroundConfig,
@@ -62,6 +65,14 @@ fn main() {
 	app.add_plugins(
 		UrbanizationPresentationPlugin::<PlaygroundMode, Richmond<OnTerrain<Durham>>>::default(),
 	);
+	app.add_plugins(FurnishingGenerationPlugin::<
+		PlaygroundMode,
+		Maputo<Urbanization<Richmond<OnTerrain<Durham>>>>,
+	>::default());
+	app.add_plugins(FurnishingPresentationPlugin::<
+		PlaygroundMode,
+		Maputo<Urbanization<Richmond<OnTerrain<Durham>>>>,
+	>::default());
 	app.add_plugins(DevelopmentsOnTerrainPlugin { config: playground, commands: true })
 		.run();
 }

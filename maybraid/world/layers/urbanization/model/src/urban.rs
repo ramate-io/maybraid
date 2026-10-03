@@ -60,7 +60,7 @@ pub trait UrbanizationModel: Send + Sync + 'static {
 	fn require_generation(app: &App);
 }
 
-/// Urbanized ground: pads and the built developments furniture still reads.
+/// Urbanized ground: pads and the built developments stored on it.
 pub trait UrbanModel: TerrainModel {
 	type Built: Send + Sync + 'static;
 	type Pads: PadOps;

@@ -67,7 +67,6 @@ use character_ragdoll::{CharacterRagdollPlugin, CharacterRagdollTargets};
 use characters::{CharacterMotionSystems, DrawTerrainPitchProbes};
 use combat_hud::CombatHudPlugin;
 use durham::TerrainFrictionConfig;
-use furniture_shaders::FurnitureShadersPlugin;
 use game_commands::command::{GameCommandPlugin, TextEntryFocus};
 use game_commands::ui::GameCommandDrawerConfig;
 use lod::{Bullseye, OpenLattice};
@@ -152,7 +151,6 @@ impl Plugin for WorldPlugin {
 			.insert_resource(player::CharacterLocomotion { max_slope_angle: WORLD_MAX_SLOPE_ANGLE })
 			.insert_resource(TerrainFrictionConfig(WORLD_TERRAIN_FRICTION))
 			.insert_resource(WORLD_TERRAIN_PITCH_GIZMOS)
-			.add_plugins(FurnitureShadersPlugin)
 			.add_plugins(WorldMaterialRefPlugin)
 			.add_plugins(VirtualPadPlugin::new(VirtualPadConfig {
 				debug_overlay: self.input_debug_enabled,

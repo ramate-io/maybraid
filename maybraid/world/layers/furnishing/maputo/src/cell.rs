@@ -1,7 +1,7 @@
 //! 50 m furniture cells. These are the furniture [`lod::LodSceneHost`]s.
 
 use bevy::math::bounding::Aabb3d;
-use bevy::math::{EulerRot, Vec2, Vec3};
+use bevy::math::{EulerRot, Vec3};
 use bevy::prelude::Transform;
 use building_components::{FurnitureNode, Placement};
 use lod::gen::Id;
@@ -119,10 +119,6 @@ pub fn xz_radius_aabb(center: Vec3, radius: f32) -> Aabb3d {
 /// Keep / present / Gimme rings are XZ. Y is not a furniture live axis.
 pub fn intersects_xz(a: Aabb3d, b: Aabb3d) -> bool {
 	a.min.x <= b.max.x && a.max.x >= b.min.x && a.min.z <= b.max.z && a.max.z >= b.min.z
-}
-
-pub fn slot_xz(node: &FurnitureNode) -> Vec2 {
-	Vec2::new(node.placement.translation.x, node.placement.translation.z)
 }
 
 #[cfg(test)]

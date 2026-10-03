@@ -11,8 +11,9 @@ use lod::lod_host_scene_pending;
 use lod::lod_ref::LodRef;
 use lod::SceneChunk;
 
+use furniture_assemblies::posed_assembly;
+
 use crate::cell::FurnitureCellExtent;
-use crate::fill::posed_assembly;
 
 /// One 50 m furniture host: flattened painted / wireframe kits, no nested hosts.
 #[derive(Component, Clone, Debug)]

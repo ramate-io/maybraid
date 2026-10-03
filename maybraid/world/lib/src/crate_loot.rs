@@ -8,8 +8,9 @@ use std::collections::HashMap;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use character_items::{random_starter_firearms, Inventory, ItemRng};
-use furniture_assemblies::{FurnitureKitPart, PartKind, PresentedFurnitureCellId};
+use furniture_assemblies::{FurnitureKitPart, PartKind};
 use lod::gen::Id;
+use maputo::PresentedFurnitureCellId;
 
 use crate::stash::{spawn_world_stash, StashPolicy, DEFAULT_CLAIM_RADIUS, DEFAULT_LOOT_SECS};
 

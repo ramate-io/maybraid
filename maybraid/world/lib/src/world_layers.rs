@@ -1,11 +1,14 @@
-//! The world's layer stack: terrain, urbanization, vegetation, and mobs, each
-//! generated and then presented.
+//! The world's layer stack: terrain, urbanization, vegetation, mobs, and
+//! furnishing, each generated and then presented.
 
 use barking::{Barking, BarkingConfig};
 use bevy::prelude::*;
 use chico::{Chico, ChicoConfig};
 use durham::{Durham, DurhamTerrainConfig};
+use furnishing_layer_model::FurnishingGenerationPlugin;
+use furnishing_layer_presentation::FurnishingPresentationPlugin;
 use layer_stack::GenerationModePlugin;
+use maputo::Maputo;
 use maybraid_game_mode_discover::Discovery;
 use maybraid_game_mode_training_ground::{TrainingGround, TRAINING_FINE_HALF_EXTENT_CELLS};
 use mob_layer_model::{MobGenerationPlugin, Mobs};
@@ -46,10 +49,12 @@ impl Plugin for WorldLayersPlugin {
 				MobGenerationPlugin::<Discovery, Barking<Vegetated>>::new(
 					BarkingConfig::world_defaults(),
 				),
+				FurnishingGenerationPlugin::<Discovery, Maputo<Urbanized>>::default(),
 				TerrainPresentationPlugin::<Discovery, Urbanized, PaddedCells>::default(),
 				UrbanizationPresentationPlugin::<Discovery, Richmond<OnTerrain<Durham>>>::default(),
 				VegetationPresentationPlugin::<Discovery, Forested>::default(),
 				MobPresentationPlugin::<Discovery, Barking<Vegetated>>::default(),
+				FurnishingPresentationPlugin::<Discovery, Maputo<Urbanized>>::default(),
 			),
 			(
 				GenerationModePlugin::<TrainingGround>::default(),
@@ -63,6 +68,7 @@ impl Plugin for WorldLayersPlugin {
 				MobGenerationPlugin::<TrainingGround, Barking<Vegetated>>::new(
 					BarkingConfig::world_defaults(),
 				),
+				FurnishingGenerationPlugin::<TrainingGround, Maputo<Urbanized>>::default(),
 				TerrainPresentationPlugin::<TrainingGround, Urbanized, PaddedCells>::default(),
 				UrbanizationPresentationPlugin::<
 					TrainingGround,
@@ -70,6 +76,7 @@ impl Plugin for WorldLayersPlugin {
 				>::default(),
 				VegetationPresentationPlugin::<TrainingGround, Forested>::default(),
 				MobPresentationPlugin::<TrainingGround, Barking<Vegetated>>::default(),
+				FurnishingPresentationPlugin::<TrainingGround, Maputo<Urbanized>>::default(),
 			),
 		));
 	}

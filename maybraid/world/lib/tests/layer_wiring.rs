@@ -4,7 +4,10 @@ use barking::Barking;
 use bevy::prelude::{App, AssetPlugin, MinimalPlugins};
 use chico::Chico;
 use durham::{Durham, DurhamCells};
+use furnishing_layer_model::Furnishing;
+use furnishing_layer_presentation::FurnishingPresent;
 use layer_stack::ModeSubscribers;
+use maputo::Maputo;
 use maybraid_game_mode_discover::Discovery;
 use maybraid_game_mode_training_ground::TrainingGround;
 use maybraid_world::WorldLayersPlugin;
@@ -21,6 +24,7 @@ type Urbanized = Urbanization<richmond::Richmond<OnTerrain<Durham>>>;
 type Forested = Chico<Urbanized>;
 type Vegetated = Vegetation<Forested>;
 type Inhabited = Mobs<Barking<Vegetated>>;
+type Furnished = Furnishing<Maputo<Urbanized>>;
 
 #[test]
 fn layered_world_stack_finishes_headless() -> anyhow::Result<()> {
@@ -44,6 +48,10 @@ fn layered_world_stack_finishes_headless() -> anyhow::Result<()> {
 	let mobs = app.world().resource::<ModeSubscribers<(Inhabited, MobPresent)>>();
 	anyhow::ensure!(mobs.contains::<Discovery>());
 	anyhow::ensure!(mobs.contains::<TrainingGround>());
+
+	let furniture = app.world().resource::<ModeSubscribers<(Furnished, FurnishingPresent)>>();
+	anyhow::ensure!(furniture.contains::<Discovery>());
+	anyhow::ensure!(furniture.contains::<TrainingGround>());
 	anyhow::ensure!(
 		app.is_plugin_added::<MobGenerationCore<Barking<Vegetated>>>(),
 		"both mob generation plugins share one core"

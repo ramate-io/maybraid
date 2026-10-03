@@ -24,16 +24,18 @@ use durham::{
 	TerrainPresentationAssets, TerrainPresentationDirty, TerrainStampConfigs, WatershedConfigs,
 	WorldBaseTerrain,
 };
+use furnishing_layer_model::FurnishingScheme;
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use game_commands::ui::{GameCommandDrawerConfig, GameCommandStatusText};
 use layer_stack::GenerationMode;
+use maputo::{install_furnishing_stream, Maputo};
 use richmond::DevelopmentConfig;
 use richmond::{
 	install_urbanization_stream, DevelopmentFocus as LayerFocus, Richmond, RichmondConfig,
 };
 use std::f32::consts::PI;
 use terrain_layer_model::{BaseTerrainScheme, OnTerrain};
-use urbanization_layer_model::{UrbanizationModeConfig, UrbanizationScheme};
+use urbanization_layer_model::{Urbanization, UrbanizationModeConfig, UrbanizationScheme};
 
 /// Standalone playground generation mode.
 pub struct PlaygroundMode;
@@ -47,6 +49,12 @@ impl BaseTerrainScheme<Durham> for PlaygroundMode {
 impl UrbanizationScheme<Richmond<OnTerrain<Durham>>> for PlaygroundMode {
 	fn install(app: &mut App, _config: &RichmondConfig) {
 		install_urbanization_stream::<PlaygroundMode, OnTerrain<Durham>>(app);
+	}
+}
+
+impl FurnishingScheme<Maputo<Urbanization<Richmond<OnTerrain<Durham>>>>> for PlaygroundMode {
+	fn install(app: &mut App, _config: &()) {
+		install_furnishing_stream::<PlaygroundMode, Urbanization<Richmond<OnTerrain<Durham>>>>(app);
 	}
 }
 

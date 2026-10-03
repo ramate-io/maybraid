@@ -7,16 +7,11 @@ use bevy::prelude::*;
 use durham::{
 	PresentedTerrainScene, TerrainColliderMeshSource, TerrainSuperseded, TerrainTrimeshCollider,
 };
-use furniture_assemblies::{
-	FurnitureAssembliesPlugin, FurnitureStreamPlugin, FurnitureStreamSystems,
-};
-use furniture_shaders::FurnitureShadersPlugin;
 use layer_stack::LodPresentGateSync;
 use lod::gen::{Id, SpatialIndex, Version};
 use lod::lod_ref::LodRef;
 use lod::{LodPresentGate, LodPresentSystems, LodViewer};
 use terrain_layer_model::{terrain_streaming, TerrainExtent, TerrainLayerSystems};
-use urbanization_layer_model::UrbanizationStoreSystems;
 use urbanization_layer_model::{
 	urbanization_host_region, urbanization_visual_region, UrbanSetting, Urbanization,
 	UrbanizationGenerationSystems, UrbanizationLayerRegion,
@@ -317,19 +312,6 @@ where
 	Urbanization<Richmond<G>>: terrain_layer_model::TerrainModel,
 {
 	fn install_hosts(app: &mut App) {
-		if !app.is_plugin_added::<FurnitureShadersPlugin>() {
-			app.add_plugins(FurnitureShadersPlugin);
-		}
-		if !app.is_plugin_added::<FurnitureAssembliesPlugin>() {
-			app.add_plugins(FurnitureAssembliesPlugin);
-		}
-		if !app.is_plugin_added::<FurnitureStreamPlugin<Urbanization<Richmond<G>>>>() {
-			app.add_plugins(FurnitureStreamPlugin::<Urbanization<Richmond<G>>>::default());
-		}
-		app.configure_sets(
-			Update,
-			FurnitureStreamSystems::Generate.after(UrbanizationStoreSystems),
-		);
 		app.init_resource::<UrbanizationPresenterState>()
 			.init_resource::<LodPresentGate<(Urbanization<Richmond<G>>, UrbanizationHosts)>>();
 		app.add_systems(

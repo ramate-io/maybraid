@@ -101,8 +101,8 @@ pub(crate) fn sync_command_status_text(
 	mut status: ResMut<GameCommandStatusText>,
 	camera: Query<&GlobalTransform, With<Camera3d>>,
 	hosts: Query<(&MobScene, &GlobalTransform)>,
-	furniture: Query<&furniture_assemblies::FurnitureCell>,
-	furniture_index: Option<Res<furniture_assemblies::FurnitureIndex>>,
+	furniture: Query<&maputo::FurnitureCell>,
+	furniture_index: Option<Res<maputo::FurnitureIndex>>,
 ) {
 	let mut nearest = ranked_hosts(&camera, &hosts);
 	nearest.truncate(4);

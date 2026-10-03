@@ -4,7 +4,7 @@ use bevy::prelude::*;
 use furniture_playground::{FurniturePlaygroundPlugin, PendingStartupCommand, PlaygroundCommand};
 
 fn assets_root() -> PathBuf {
-	Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets")
+	Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../../assets")
 }
 
 fn main() {
