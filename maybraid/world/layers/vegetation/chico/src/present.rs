@@ -52,7 +52,14 @@ impl ForestPresenterState {
 			}
 		}
 		self.presented.clear();
-		self.growing.clear();
+		let growing: Vec<Id> = self.growing.keys().copied().collect();
+		for id in growing {
+			if let Some(pending) = self.growing.remove(&id) {
+				for entity in pending.entities {
+					commands.entity(entity).try_despawn();
+				}
+			}
+		}
 		for entities in self.pending_despawn.drain(..) {
 			for entity in entities {
 				commands.entity(entity).try_despawn();
@@ -62,6 +69,30 @@ impl ForestPresenterState {
 
 	fn retire(&mut self, id: Id) -> Option<PresentedGrove> {
 		self.presented.remove(&id)
+	}
+
+	/// Cancel in-flight growth, hide hosts already spawned, and queue teardown.
+	fn retire_growing(&mut self, commands: &mut Commands, id: Id) {
+		let Some(pending) = self.growing.remove(&id) else {
+			return;
+		};
+		if pending.entities.is_empty() {
+			return;
+		}
+		for entity in &pending.entities {
+			hide_lod_tree(commands, *entity);
+		}
+		self.pending_despawn.push_back(pending.entities);
+	}
+
+	fn remove_presented(&mut self, commands: &mut Commands, ids: impl IntoIterator<Item = Id>) {
+		for id in ids {
+			if let Some(entry) = self.presented.remove(&id) {
+				for entity in entry.entities {
+					commands.entity(entity).try_despawn();
+				}
+			}
+		}
 	}
 
 	pub fn presented_version(&self, id: Id) -> Option<Version> {
@@ -95,16 +126,14 @@ impl ForestPresenterState {
 	}
 
 	pub fn remove_stale(&mut self, commands: &mut Commands, wanted: &HashSet<Id>) {
-		self.growing.retain(|id, _| wanted.contains(id));
-		let stale: Vec<Id> =
-			self.presented.keys().copied().filter(|id| !wanted.contains(id)).collect();
-		for id in stale {
-			if let Some(entry) = self.presented.remove(&id) {
-				for entity in entry.entities {
-					commands.entity(entity).try_despawn();
-				}
-			}
+		let stale_growing: Vec<Id> =
+			self.growing.keys().copied().filter(|id| !wanted.contains(id)).collect();
+		for id in stale_growing {
+			self.retire_growing(commands, id);
 		}
+		let stale_presented: Vec<Id> =
+			self.presented.keys().copied().filter(|id| !wanted.contains(id)).collect();
+		self.remove_presented(commands, stale_presented);
 	}
 
 	/// Grow off-thread, then spawn a bounded number of host trees per present slot.
@@ -132,7 +161,7 @@ impl ForestPresenterState {
 		}
 
 		if self.growing.get(&id).is_some_and(|pending| pending.version != version) {
-			self.growing.remove(&id);
+			self.retire_growing(commands, id);
 		}
 		if !self.growing.contains_key(&id) {
 			if self.presented.get(&id).is_some_and(|presented| presented.version == version) {
@@ -230,7 +259,18 @@ impl ForestPresenterState {
 		keep: &HashSet<Id>,
 		mut despawn_budget: u32,
 	) -> u32 {
-		self.growing.retain(|id, _| keep.contains(id));
+		let stale_growing: Vec<Id> = self
+			.growing
+			.keys()
+			.copied()
+			.filter(|id| {
+				SpatialIndex::<ChicoGrove>::get_bounds(spatial_index, *id).is_none()
+					|| !keep.contains(id)
+			})
+			.collect();
+		for id in stale_growing {
+			self.retire_growing(commands, id);
+		}
 		while despawn_budget > 0 {
 			let Some(entities) = self.pending_despawn.pop_front() else {
 				break;
@@ -250,10 +290,7 @@ impl ForestPresenterState {
 			}
 		}
 		if !missing.is_empty() {
-			let skip: HashSet<Id> = missing.iter().copied().collect();
-			let wanted: HashSet<Id> =
-				self.presented_ids().into_iter().filter(|id| !skip.contains(id)).collect();
-			self.remove_stale(commands, &wanted);
+			self.remove_presented(commands, missing);
 		}
 		let mut to_remove = HashSet::new();
 		for id in leaving {
@@ -266,9 +303,7 @@ impl ForestPresenterState {
 			}
 		}
 		if !to_remove.is_empty() {
-			let wanted: HashSet<Id> =
-				self.presented_ids().into_iter().filter(|id| !to_remove.contains(&id)).collect();
-			self.remove_stale(commands, &wanted);
+			self.remove_presented(commands, to_remove);
 		}
 		despawn_budget
 	}
@@ -301,13 +336,40 @@ fn spawn_forest_grove_tile(
 mod tests {
 	use super::*;
 	use anyhow::Result;
+	use bevy::ecs::world::CommandQueue;
 	use bevy::math::bounding::Aabb3d;
 	use bevy::math::Vec3;
+
+	fn cell_id(x: f32) -> Id {
+		Id::from_cell(Aabb3d::from_min_max(Vec3::new(x, 0.0, 0.0), Vec3::new(x + 1.0, 1.0, 1.0)))
+	}
+
+	fn growing(version: Version, entities: Vec<Entity>) -> GrowingGrove {
+		GrowingGrove {
+			version,
+			layer: ForestLayer::UpperCanopy,
+			task: None,
+			ready: VecDeque::new(),
+			entities,
+		}
+	}
+
+	fn with_commands(
+		state: &mut ForestPresenterState,
+		world: &mut World,
+		f: impl FnOnce(&mut ForestPresenterState, &mut Commands),
+	) {
+		let mut queue = CommandQueue::default();
+		let mut commands = Commands::new(&mut queue, world);
+		f(state, &mut commands);
+		drop(commands);
+		queue.apply(world);
+	}
 
 	#[test]
 	fn retire_queues_previous_hosts_without_dropping_them() -> Result<()> {
 		let mut state = ForestPresenterState::default();
-		let id = Id::from_cell(Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE));
+		let id = cell_id(0.0);
 		let entity = Entity::from_raw_u32(7).expect("test entity");
 		state.presented.insert(
 			id,
@@ -318,6 +380,102 @@ mod tests {
 		state.pending_despawn.push_back(previous.entities);
 		assert_eq!(state.pending_despawn.len(), 1);
 		assert_eq!(state.pending_despawn[0], vec![entity]);
+		Ok(())
+	}
+
+	#[test]
+	fn retire_growing_hides_and_queues_spawned_hosts() -> Result<()> {
+		let mut world = World::new();
+		let entity = world.spawn_empty().id();
+		let id = cell_id(0.0);
+		let mut state = ForestPresenterState::default();
+		state.growing.insert(id, growing(Version(1), vec![entity]));
+		with_commands(&mut state, &mut world, |state, commands| {
+			state.retire_growing(commands, id);
+		});
+		anyhow::ensure!(state.growing.is_empty(), "growth is cancelled");
+		anyhow::ensure!(state.pending_despawn == vec![vec![entity]], "hosts wait on teardown");
+		Ok(())
+	}
+
+	#[test]
+	fn remove_stale_empty_retires_growing_hosts() -> Result<()> {
+		let mut world = World::new();
+		let entity = world.spawn_empty().id();
+		let id = cell_id(0.0);
+		let mut state = ForestPresenterState::default();
+		state.growing.insert(id, growing(Version(1), vec![entity]));
+		with_commands(&mut state, &mut world, |state, commands| {
+			state.remove_stale(commands, &HashSet::new());
+		});
+		anyhow::ensure!(state.growing.is_empty(), "gate close retires in-flight growth");
+		anyhow::ensure!(state.pending_despawn == vec![vec![entity]]);
+		Ok(())
+	}
+
+	#[test]
+	fn cull_does_not_cancel_growing_ids_still_in_keep() -> Result<()> {
+		use lod::lod_ref::LodRef;
+		use vegetation_groves::GroveExtent;
+
+		let growing_bounds =
+			Aabb3d::from_min_max(Vec3::new(0.0, 0.0, 0.0), Vec3::new(100.0, 1.0, 100.0));
+		let presented_bounds =
+			Aabb3d::from_min_max(Vec3::new(200.0, 0.0, 0.0), Vec3::new(300.0, 1.0, 100.0));
+		let growing_id = Id::from_cell(growing_bounds);
+		let presented_id = Id::from_cell(presented_bounds);
+		let mut index = ForestIndex::default();
+		let transform = Transform::IDENTITY;
+		let lod_ref = LodRef {
+			entity: Entity::PLACEHOLDER,
+			previous_transform: &transform,
+			current_transform: &transform,
+			bounds: &growing_bounds,
+		};
+		SpatialIndex::<ChicoGrove>::insert(
+			&mut index,
+			growing_id,
+			ChicoGrove::selected(
+				GroveExtent::new(Vec3::from(growing_bounds.min), Vec3::from(growing_bounds.max)),
+				ForestLayer::UpperCanopy,
+				Vec::new(),
+			),
+			growing_bounds,
+			&lod_ref,
+		);
+
+		let mut world = World::new();
+		let growing_entity = world.spawn_empty().id();
+		let presented_entity = world.spawn_empty().id();
+		let mut state = ForestPresenterState::default();
+		state.growing.insert(growing_id, growing(Version(1), vec![growing_entity]));
+		state.presented.insert(
+			presented_id,
+			PresentedGrove { version: Version(1), entities: vec![presented_entity], hidden: false },
+		);
+		let keep = HashSet::from([growing_id]);
+		with_commands(&mut state, &mut world, |state, commands| {
+			state.cull(commands, &index, &keep, 8);
+		});
+		anyhow::ensure!(state.growing.contains_key(&growing_id), "in-keep growth survives");
+		anyhow::ensure!(!state.presents(presented_id), "leaving presented is removed");
+		Ok(())
+	}
+
+	#[test]
+	fn version_replace_retires_the_previous_growing_hosts() -> Result<()> {
+		let mut world = World::new();
+		let entity = world.spawn_empty().id();
+		let id = cell_id(0.0);
+		let mut state = ForestPresenterState::default();
+		state.growing.insert(id, growing(Version(1), vec![entity]));
+		with_commands(&mut state, &mut world, |state, commands| {
+			if state.growing.get(&id).is_some_and(|pending| pending.version != Version(2)) {
+				state.retire_growing(commands, id);
+			}
+		});
+		anyhow::ensure!(state.growing.is_empty());
+		anyhow::ensure!(state.pending_despawn == vec![vec![entity]]);
 		Ok(())
 	}
 }
