@@ -86,7 +86,7 @@ impl ForestIndex {
 		self.bump_outs.clear();
 		self.bump_out_cells.clear();
 		self.medium_bump_outs.clear();
-		self.next_version = 0;
+		self.next_version += 1;
 	}
 
 	pub fn selected_layers_for(&self, extent: ForestExtent) -> SelectedLayers {
@@ -441,5 +441,25 @@ mod tests {
 
 		assert!(SpatialIndex::<ChicoGrove>::tracked_ids_for(&index, old).is_empty());
 		assert_eq!(SpatialIndex::<ChicoGrove>::tracked_ids_for(&index, moved), vec![TrackedId(id)]);
+	}
+
+	#[test]
+	fn clear_advances_versions_past_the_previous_epoch() {
+		let bounds = Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(100.0, 1.0, 100.0));
+		let id = Id::from_cell(bounds);
+		let mut index = ForestIndex::default();
+		with_lod_ref(|lod_ref| {
+			SpatialIndex::<ChicoGrove>::insert(&mut index, id, empty_grove(bounds), bounds, lod_ref);
+		});
+		let previous = SpatialIndex::<ChicoGrove>::version(&index, id).expect("inserted");
+		let previous_rev = index.membership_revision();
+		index.clear();
+		assert!(SpatialIndex::<ChicoGrove>::get(&index, id).is_none());
+		assert!(index.membership_revision() > previous_rev);
+		with_lod_ref(|lod_ref| {
+			SpatialIndex::<ChicoGrove>::insert(&mut index, id, empty_grove(bounds), bounds, lod_ref);
+		});
+		let rebuilt = SpatialIndex::<ChicoGrove>::version(&index, id).expect("reinserted");
+		assert!(rebuilt > previous, "restamp must not reuse a presented version");
 	}
 }
