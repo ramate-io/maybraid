@@ -21,21 +21,17 @@ mod player_position;
 mod poi;
 mod start;
 mod stash;
-mod training;
-mod training_markers;
-mod training_plaza;
 mod ui;
 mod vsync;
 mod weapon;
 mod world_layers;
 
-pub use chico_vegetation_on_terrain_playground::{PlayerPhysicsEnabled, PlayerSpawnXz};
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use control::{
 	InventoryEditCameraFollow, WorldGameplayEnabled, WorldSceneryVisible, WorldSurfaceReady,
 	WorldSurfaceSet,
 };
-pub use durham_terrain_models::{terrain_streaming_enabled, TerrainStreamingEnabled};
+pub use durham::Durham;
 pub use game_commands::command::PendingStartupCommand;
 pub use intelligence::WorldIntelligencePlugin;
 pub use lod::LodJobCounter;
@@ -58,30 +54,25 @@ pub use stash::{
 	spawn_exploded_stashes, spawn_world_stash, StashDisplayedItem, StashPolicy, WorldStash,
 	WorldStashPlugin, WorldStashSettings, DEFAULT_CLAIM_RADIUS, DEFAULT_LOOT_SECS,
 };
-pub use training::{training_trainee, TrainingLifeEnded};
-pub use training_markers::TrainingEnemyMarkersEnabled;
-pub use training_plaza::TrainingPlazaMounted;
+pub use terrain_layer_model::{terrain_streaming, TerrainStreaming};
 pub use ui::WorldMobHudEnabled;
 pub use vsync::{default_window_present_mode, RequestVsyncToggle, VSYNC_TOGGLE_KEY};
 pub use weapon::WorldPlayerLoadout;
 pub use world_layers::WorldLayersPlugin;
+pub use world_player::{PlayerPhysicsEnabled, PlayerSpawnXz};
 
 use avian3d::prelude::{CoefficientCombine, Friction};
 use bevy::prelude::*;
-use chico_vegetation_on_terrain_playground::{
-	CharacterCameraFollowEnabled, CharacterLocomotion, CharacterSpecies, MeshStatsPlugin,
-	PadMovementEnabled, PlayerControlSystems, PlaygroundDiag, PlaygroundMode,
-	PlaygroundTimingPlugin, RequestSetCharacter, VegetationHostPlugin, VegetationPlayerMotor,
-};
+use character_ragdoll::{CharacterRagdollPlugin, CharacterRagdollTargets};
+use characters::{CharacterMotionSystems, DrawTerrainPitchProbes};
 use combat_hud::CombatHudPlugin;
-use crozon_character_ragdoll::{CharacterRagdollPlugin, CharacterRagdollTargets};
-use crozon_characters::{CharacterMotionSystems, DrawTerrainPitchProbes};
-use durham_terrain_models::TerrainFrictionConfig;
-use furniture_shaders::FurnitureShadersPlugin;
+use durham::TerrainFrictionConfig;
 use game_commands::command::{GameCommandPlugin, TextEntryFocus};
 use game_commands::ui::GameCommandDrawerConfig;
 use lod::{Bullseye, OpenLattice};
 use maybraid_character_controller::{CharacterControlSystems, CharacterControllerPlugin};
+use maybraid_game_mode_discover::DiscoveryPlayerPlugin;
+use maybraid_game_mode_training_ground::TrainingGroundPlugin;
 use maybraid_input::{VirtualPadConfig, VirtualPadPlugin};
 use maybraid_skill_map::{SkillMapPlugin, SkillMapSystems};
 use maybraid_sky::SkyDomePlugin;
@@ -90,6 +81,11 @@ use player::{
 	register_motor_traction_physics, PlayerPlugin, PlayerPresentationPlugin, PlayerSystems,
 };
 use player_camera::{PlayerCameraPlugin, PlayerCameraSystems};
+use world_player::{
+	CharacterCameraFollowEnabled, CharacterLocomotion, CharacterSpecies, MeshStatsPlugin,
+	PadMovementEnabled, PlayerControlSystems, PlaygroundDiag, PlaygroundMode,
+	PlaygroundTimingPlugin, RequestSetCharacter, VegetationHostPlugin, VegetationPlayerMotor,
+};
 
 /// Steepest slope the controlled character can drive uphill.
 const WORLD_MAX_SLOPE_ANGLE: f32 = 70.0_f32.to_radians();
@@ -155,7 +151,6 @@ impl Plugin for WorldPlugin {
 			.insert_resource(player::CharacterLocomotion { max_slope_angle: WORLD_MAX_SLOPE_ANGLE })
 			.insert_resource(TerrainFrictionConfig(WORLD_TERRAIN_FRICTION))
 			.insert_resource(WORLD_TERRAIN_PITCH_GIZMOS)
-			.add_plugins(FurnitureShadersPlugin)
 			.add_plugins(WorldMaterialRefPlugin)
 			.add_plugins(VirtualPadPlugin::new(VirtualPadConfig {
 				debug_overlay: self.input_debug_enabled,
@@ -170,6 +165,7 @@ impl Plugin for WorldPlugin {
 			.insert_resource(CharacterRagdollTargets { players: true, npcs: true, unmarked: false })
 			.add_plugins(CharacterRagdollPlugin)
 			.add_plugins(WorldLayersPlugin)
+			.add_plugins((DiscoveryPlayerPlugin, TrainingGroundPlugin))
 			.add_plugins(WorldIntelligencePlugin)
 			.add_plugins(WeatherPlugin)
 			.add_plugins(SkillMapPlugin)
@@ -185,7 +181,6 @@ impl Plugin for WorldPlugin {
 			.init_resource::<InventoryEditCameraFollow>()
 			.init_resource::<WorldSurfaceReady>()
 			.init_resource::<WorldSceneryVisible>()
-			.add_plugins(training::TrainingGroundPlugin)
 			.insert_resource(WorldMobHudEnabled::from_debug_chrome(self.debug_chrome))
 			.insert_resource(Bullseye { inner: 50.0, outer: WORLD_BULLSEYE_OUTER_M })
 			.insert_resource(OpenLattice {

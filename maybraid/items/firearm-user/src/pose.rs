@@ -3,7 +3,7 @@
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use bevy::transform::helper::TransformHelper;
-use crozon_characters::{
+use characters::{
 	BoneMap, CharacterHeading, CharacterMembers, CharacterRig, CharacterRigRole, CharacterRoot,
 	RigSkeletonKind,
 };
@@ -158,7 +158,7 @@ pub fn pose_held_firearm(
 	users: Query<(&FirearmUser, &PlayerLook)>,
 	mut visuals: Query<
 		(&Transform, &mut CharacterHeading, &CharacterMembers, &ChildOf),
-		(With<CharacterRoot>, Without<HeldFirearm>, Without<crozon_characters::AnimBone>),
+		(With<CharacterRoot>, Without<HeldFirearm>, Without<characters::AnimBone>),
 	>,
 	maps: Query<&BoneMap, Without<HeldFirearm>>,
 	gun_members: Query<

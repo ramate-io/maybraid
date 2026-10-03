@@ -11,26 +11,26 @@
 //! [`TrainingGround`](maybraid_game_mode_training_ground::TrainingGround)
 //! together with the flow, so a Training pose is not written.
 
-use bevy::camera::ClearColorConfig;
 use bevy::camera::visibility::RenderLayers;
+use bevy::camera::ClearColorConfig;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
-use crozon_character_playground::CameraController as PreviewCameraController;
+use characters_playground::CameraController as PreviewCameraController;
+use layer_stack::ActiveGenerationMode;
 use maybraid_game_mode_discover::{streams_terrain, Discovery};
 use maybraid_game_mode_training_ground::TrainingGround;
 use maybraid_world::{
-	InventoryEditCameraFollow, PlayerPhysicsEnabled, SKY_CLEAR, TerrainStreamingEnabled,
-	WorldGameplayEnabled, WorldSceneryVisible,
+	Durham, InventoryEditCameraFollow, PlayerPhysicsEnabled, TerrainStreaming,
+	WorldGameplayEnabled, WorldSceneryVisible, SKY_CLEAR,
 };
 use menu_components::MENU_CLEAR;
 use menu_playground::{
 	CharacterEditorReturn, CharacterPreviewLight, CharacterPreviewRoot, CharacterScreen,
 };
 use menu_screens::{
-	MenuScreen, despawn_menu_screens, request_show_gallery, request_show_home,
-	request_show_in_game, request_show_loading,
+	despawn_menu_screens, request_show_gallery, request_show_home, request_show_in_game,
+	request_show_loading, MenuScreen,
 };
-use terrain_layer_model::ActiveGenerationMode;
 
 /// World camera pose stashed while the pause character editor uses the preview eye.
 #[derive(Resource, Clone, Copy, Debug)]
@@ -171,7 +171,10 @@ pub(crate) fn terrain_streaming_for_shell(flow: GameFlow) -> bool {
 	matches!(flow, GameFlow::LoadingWorld | GameFlow::World)
 }
 
-pub(crate) fn generation_mode_for_shell(flow: GameFlow, session: PlaySession) -> ActiveGenerationMode {
+pub(crate) fn generation_mode_for_shell(
+	flow: GameFlow,
+	session: PlaySession,
+) -> ActiveGenerationMode {
 	if terrain_streaming_for_shell(flow) && session == PlaySession::Training {
 		ActiveGenerationMode::of::<TrainingGround>()
 	} else {
@@ -220,7 +223,7 @@ pub(crate) fn apply_shell_look(
 	mut loading_cameras: Query<&mut Camera, (With<LoadingBackdropCamera>, Without<Camera3d>)>,
 	mut gameplay: ResMut<WorldGameplayEnabled>,
 	mut physics: ResMut<PlayerPhysicsEnabled>,
-	mut streaming: ResMut<TerrainStreamingEnabled>,
+	mut streaming: ResMut<TerrainStreaming<Durham>>,
 	mut scenery: ResMut<WorldSceneryVisible>,
 ) {
 	let flow = *flow.get();
@@ -245,7 +248,7 @@ pub(crate) fn apply_shell_look(
 	// world motor stay on while either session is playing.
 	let in_world_shell = terrain_streaming_for_shell(flow);
 	let training_session = generation_mode_for_shell(flow, *session).is::<TrainingGround>();
-	streaming.0 =
+	streaming.enabled =
 		streams_terrain(*session == PlaySession::Discovery, in_world_shell) || training_session;
 	scenery.0 = flow == GameFlow::World;
 	let playing = world_session_playing(flow, *session, pause.as_deref());
@@ -309,18 +312,18 @@ mod tests {
 	use bevy::prelude::*;
 
 	use super::{
-		PREVIEW_RENDER_LAYER, WORLD_RENDER_LAYER, ShellRoute, apply_shell_look,
-		camera_render_layers, generation_mode_for_shell, terrain_streaming_for_shell,
+		apply_shell_look, camera_render_layers, generation_mode_for_shell,
+		terrain_streaming_for_shell, ShellRoute, PREVIEW_RENDER_LAYER, WORLD_RENDER_LAYER,
 	};
 	use crate::flow::{GameFlow, PlaySession, WorldPause};
 	use bevy::ecs::system::RunSystemOnce;
+	use layer_stack::ActiveGenerationMode;
 	use maybraid_game_mode_discover::Discovery;
 	use maybraid_game_mode_training_ground::TrainingGround;
 	use maybraid_world::{
-		PlayerPhysicsEnabled, TerrainStreamingEnabled, WorldGameplayEnabled, WorldSceneryVisible,
+		Durham, PlayerPhysicsEnabled, TerrainStreaming, WorldGameplayEnabled, WorldSceneryVisible,
 	};
 	use menu_components::MENU_CLEAR;
-	use terrain_layer_model::ActiveGenerationMode;
 
 	#[test]
 	fn menu_camera_sees_preview_only() {
@@ -341,7 +344,9 @@ mod tests {
 		let mut world = World::new();
 		world.insert_resource(NextState::<GameFlow>::Unchanged);
 		world.insert_resource(NextState::<ActiveGenerationMode>::Unchanged);
-		world.run_system_once(enter_training).map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		world
+			.run_system_once(enter_training)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		let flow = world.resource::<NextState<GameFlow>>();
 		let mode = world.resource::<NextState<ActiveGenerationMode>>();
 		let flow_ok = matches!(flow, NextState::Pending(GameFlow::LoadingWorld));
@@ -366,12 +371,12 @@ mod tests {
 			world.insert_resource(ClearColor(MENU_CLEAR));
 			world.insert_resource(WorldGameplayEnabled(true));
 			world.insert_resource(PlayerPhysicsEnabled(false));
-			world.insert_resource(TerrainStreamingEnabled(false));
+			world.insert_resource(TerrainStreaming::<Durham>::new(false));
 			world.insert_resource(WorldSceneryVisible(false));
 			world
 				.run_system_once(apply_shell_look)
 				.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-			assert!(world.resource::<TerrainStreamingEnabled>().0);
+			anyhow::ensure!(world.resource::<TerrainStreaming<Durham>>().enabled);
 			assert!(!world.resource::<WorldGameplayEnabled>().0);
 			assert_eq!(world.resource::<WorldSceneryVisible>().0, flow == GameFlow::World);
 		}
@@ -398,14 +403,14 @@ mod tests {
 		world.insert_resource(ClearColor(MENU_CLEAR));
 		world.insert_resource(WorldGameplayEnabled(false));
 		world.insert_resource(PlayerPhysicsEnabled(false));
-		world.insert_resource(TerrainStreamingEnabled(false));
+		world.insert_resource(TerrainStreaming::<Durham>::new(false));
 		world.insert_resource(WorldSceneryVisible(false));
 		world
 			.run_system_once(apply_shell_look)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		assert!(world.resource::<WorldGameplayEnabled>().0);
 		assert!(world.resource::<PlayerPhysicsEnabled>().0);
-		assert!(world.resource::<TerrainStreamingEnabled>().0);
+		anyhow::ensure!(world.resource::<TerrainStreaming<Durham>>().enabled);
 		assert!(world.resource::<WorldSceneryVisible>().0);
 		Ok(())
 	}
@@ -423,7 +428,7 @@ mod tests {
 	#[test]
 	fn in_game_character_edit_keeps_the_world_camera() -> anyhow::Result<()> {
 		use bevy::ecs::system::RunSystemOnce;
-		use crozon_character_playground::CameraController as PreviewCameraController;
+		use characters_playground::CameraController as PreviewCameraController;
 		use maybraid_world::{InventoryEditCameraFollow, WorldSceneryVisible};
 		use menu_playground::{CharacterEditorReturn, CharacterScreen};
 
@@ -451,7 +456,7 @@ mod tests {
 	#[test]
 	fn gallery_character_edit_still_uses_preview_layers() -> anyhow::Result<()> {
 		use bevy::ecs::system::RunSystemOnce;
-		use crozon_character_playground::CameraController as PreviewCameraController;
+		use characters_playground::CameraController as PreviewCameraController;
 		use maybraid_world::{InventoryEditCameraFollow, WorldSceneryVisible};
 		use menu_playground::{CharacterEditorReturn, CharacterScreen};
 

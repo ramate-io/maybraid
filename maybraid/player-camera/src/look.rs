@@ -2,7 +2,7 @@
 
 use crate::FollowCamera;
 use bevy::prelude::*;
-use crozon_characters::CharacterHeading;
+use characters::CharacterHeading;
 use maybraid_character_controller::CharacterIntent;
 use player::{CameraFollow, PlayerLook, PlayerVisual, PlayerYawOwner};
 use std::f32::consts::{FRAC_PI_2, PI};

@@ -1,7 +1,7 @@
 //! Catalog [`FirearmStats`] → live [`Weapon`] / cadence / payload.
 
 use bevy::prelude::*;
-use crozon_character_items::{FireMode, FirearmMesh, FirearmSpec, FirearmStats, ProjectileKind};
+use character_items::{FireMode, FirearmMesh, FirearmSpec, FirearmStats, ProjectileKind};
 use damage::{HitPayload, DEFAULT_HIT};
 use firearms::{
 	BoltSpec, BulletSpec, FireControl, LaserSpec, ProjectileLoad, Weapon, WeaponRecoil,
@@ -144,7 +144,7 @@ fn load_from_stats(stats: FirearmStats) -> ProjectileLoad {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crozon_character_items::{FirearmMesh, FirearmSpec};
+	use character_items::{FirearmMesh, FirearmSpec};
 	use firearms::Cadence;
 
 	fn bolt_auto() -> FirearmStats {

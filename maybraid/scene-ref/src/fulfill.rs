@@ -33,7 +33,8 @@ pub(crate) fn fulfill_scene_ref_roots(
 			&mut meshes,
 			&type_registry,
 		) {
-			commands.entity(entity).insert(WorldAssetRoot(handle));
+			// Restamp / LOD teardown can retire the root before apply.
+			commands.entity(entity).try_insert(WorldAssetRoot(handle));
 			remaining -= 1;
 		}
 	}
@@ -67,7 +68,7 @@ pub(crate) fn fulfill_multi_scene_merge_roots(
 			&type_registry,
 			&mut miss_budget,
 		) {
-			commands.entity(entity).insert(WorldAssetRoot(handle));
+			commands.entity(entity).try_insert(WorldAssetRoot(handle));
 			remaining -= 1;
 		}
 	}

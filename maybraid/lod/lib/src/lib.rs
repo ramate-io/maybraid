@@ -32,10 +32,11 @@ pub use lod_ref::{
 	LodRequest,
 };
 pub use presentation::{
-	drain_lod_present, drain_lod_present_cull, produce_lod_present_cull_regions,
-	produce_lod_present_regions, LodPresentBudget, LodPresentCullBudget, LodPresentCullCursor,
-	LodPresentCullPlugin, LodPresentCullRegion, LodPresentCullRegionPlugin, LodPresentKeepRegion,
-	LodPresentPlugin, LodPresentQueue, LodPresentRegion, LodPresentRegionPlugin, LodPresentSystems,
+	apply_lod_present_gate, drain_lod_present, drain_lod_present_cull, lod_present_gate_open,
+	produce_lod_present_cull_regions, produce_lod_present_regions, LodPresentBudget,
+	LodPresentCullBudget, LodPresentCullCursor, LodPresentCullPlugin, LodPresentCullRegion,
+	LodPresentCullRegionPlugin, LodPresentGate, LodPresentKeepRegion, LodPresentPlugin,
+	LodPresentQueue, LodPresentRegion, LodPresentRegionPlugin, LodPresentSystems,
 	LodPresentTimeBudget, RegionPresenter,
 };
 pub use scene::{
@@ -59,9 +60,8 @@ pub use scene::{
 	LodChunkBudgetClock, LodChunkBudgetPlugin, LodChunkCullSystems, LodChunkDrainDiagnostics,
 	LodChunkFulfillBudget, LodChunkFulfillSystems, LodChunkFulfillment, LodCullInFlight,
 	LodCullMarkerPlugin, LodCullProduceCache, LodCullProduceCadence, LodCullRegionCursor,
-	LodCullRegions,
-	LodCullRegionsStatus, LodCullRequest, LodHostBounds, LodHostHasCullableRoots, LodLazyPending,
-	LodLevelProduceSystems, LodLevelProducer, LodLevelRoot, LodLevelRootOverlap,
+	LodCullRegions, LodCullRegionsStatus, LodCullRequest, LodHostBounds, LodHostHasCullableRoots,
+	LodLazyPending, LodLevelProduceSystems, LodLevelProducer, LodLevelRoot, LodLevelRootOverlap,
 	LodLevelRootPending, LodLevelRootStreamed, LodLevelRoots, LodLevelSpawnRequest,
 	LodNestedRefreshAllowed, LodNestedRefreshBlocked, LodNestedRefreshSyncBudget, LodProduceCache,
 	LodRefreshCorePlugin, LodRefreshDomain, LodRefreshMembership, LodRefreshProductionPlugin,

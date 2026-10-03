@@ -7,20 +7,20 @@ use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy::scene::prelude::bsn;
 use bevy::window::PrimaryWindow;
-use character_ui_menu::{CameraFocus, FocusRig};
-use crozon_character_items::{ClothingHost, ClothingMesh, FirearmSpec, InventoryItem, ItemColor};
-use crozon_character_persist::SaveRoot;
-use crozon_character_playground::CameraController;
-use crozon_character_ui_menus::{
+use character_creation_menus::{
 	spin_reveal_firearm_focus, spin_reveal_focus, CharacterField, CharacterMenu, ConceptSpecies,
 	MenuEvent, BODY_FOCUS,
 };
-use crozon_characters::{
+use character_items::{ClothingHost, ClothingMesh, FirearmSpec, InventoryItem, ItemColor};
+use character_persist::SaveRoot;
+use character_ui_menu::{CameraFocus, FocusRig};
+use characters::{
 	add_character_components_host, character_bounds, ActiveRigPose, AnimRef, AnimRefRoot,
 	ApplyTerrainPitch, BoneMap, CharacterComponents, CharacterHostSystems, CharacterMembers,
 	CharacterRecipe, CharacterRig, CharacterRigRole, ClothingLayer, ComponentsOnly, Layers,
 	PartNode, ResolvedPoseApplied, RigBindScales, SocketRefApplied, SocketRefRoot,
 };
+use characters_playground::CameraController;
 use firearm_user::GeneratedFirearm;
 use firearms_components::{
 	add_firearm_components_host, firearm_bounds, firearm_preview_camera, spawn_firearm_components,
@@ -116,11 +116,8 @@ impl PreviewOrbit {
 		self.pitch = self.pitch.clamp(low, high);
 		let azimuth = azimuth + self.yaw;
 		let elevation = elevation + self.pitch;
-		Vec3::new(
-			elevation.cos() * azimuth.sin(),
-			elevation.sin(),
-			elevation.cos() * azimuth.cos(),
-		) * radius
+		Vec3::new(elevation.cos() * azimuth.sin(), elevation.sin(), elevation.cos() * azimuth.cos())
+			* radius
 	}
 }
 
@@ -302,7 +299,7 @@ impl Plugin for CharacterPreviewPlugin {
 					stamp_preview_animation
 						.after(sync_preview)
 						.after(CharacterHostSystems::Membership)
-						.before(crozon_characters::CharacterMotionSystems::Anim),
+						.before(characters::CharacterMotionSystems::Anim),
 					queue_preview_camera_focus,
 					steer_preview_orbit.after(queue_preview_camera_focus),
 				),
@@ -458,12 +455,9 @@ fn clear_preview(
 	pending.clear();
 }
 
-fn menu_for_saved(
-	root: &SaveRoot,
-	id: crozon_character_persist::CharacterId,
-) -> Option<CharacterMenu> {
-	let model = crozon_character_model_user::load(root, id).ok()?;
-	let inventory = crozon_inventory_user::load(root, id).ok()?;
+fn menu_for_saved(root: &SaveRoot, id: character_persist::CharacterId) -> Option<CharacterMenu> {
+	let model = character_model_user::load(root, id).ok()?;
+	let inventory = character_inventory_user::load(root, id).ok()?;
 	Some(CharacterMenu::for_saved(model.name, &model.appearance, inventory))
 }
 
@@ -765,7 +759,7 @@ fn offset_camera_into_display_pane(
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crozon_character_ui_menus::focus::{EYE_FOCUS, HEAD_ROOT_FOCUS};
+	use character_creation_menus::focus::{EYE_FOCUS, HEAD_ROOT_FOCUS};
 
 	const EPS: f32 = 1e-4;
 
@@ -843,7 +837,7 @@ mod tests {
 
 	impl Fixture {
 		fn new() -> Self {
-			use crozon_characters::MemberOf;
+			use characters::MemberOf;
 
 			let mut world = World::new();
 			let root = world.spawn((CharacterPreviewRoot, Transform::IDENTITY)).id();
@@ -879,7 +873,10 @@ mod tests {
 		fixture.world.entity_mut(fixture.body).insert(ResolvedPoseApplied);
 		assert_eq!(fixture.resolve()?, Err(FocusWait::Attach(fixture.head)));
 
-		fixture.world.entity_mut(fixture.head).insert((ChildOf(fixture.neck), SocketRefApplied));
+		fixture
+			.world
+			.entity_mut(fixture.head)
+			.insert((ChildOf(fixture.neck), SocketRefApplied));
 		let clip = Transform::from_xyz(0.0, 1.5, 0.0).with_rotation(Quat::from_rotation_y(1.0));
 		fixture.world.entity_mut(fixture.neck).insert(clip);
 		let frame = fixture.resolve()?.map_err(|wait| format!("{wait:?}"))?;
@@ -891,7 +888,10 @@ mod tests {
 	#[test]
 	fn head_focus_waits_for_the_body_pose() -> Result<(), Box<dyn std::error::Error>> {
 		let mut fixture = Fixture::new();
-		fixture.world.entity_mut(fixture.head).insert((ChildOf(fixture.neck), SocketRefApplied));
+		fixture
+			.world
+			.entity_mut(fixture.head)
+			.insert((ChildOf(fixture.neck), SocketRefApplied));
 		assert_eq!(fixture.resolve()?, Err(FocusWait::Pose(fixture.body)));
 		Ok(())
 	}

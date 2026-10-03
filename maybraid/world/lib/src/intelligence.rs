@@ -4,8 +4,7 @@ use std::time::Duration;
 
 use bevy::prelude::*;
 use bevy::time::common_conditions::on_timer;
-use chico_vegetation_on_terrain_playground::Player as VegetationPlayer;
-use crozon_characters::CharacterMotionSystems;
+use characters::CharacterMotionSystems;
 use evasion_intelligence::{EvasionPlugin, EvasionSystems};
 use firearm_intelligence::{FirearmIntelligencePlugin, FirearmIntelligenceSystems};
 use firearm_user::FirearmUserPlugin;
@@ -18,8 +17,8 @@ use intelligence_lod::{
 	LOOK_APPLY_FOV_INSET, LOOK_FOV_INSET,
 };
 use lod::LodViewer;
-use maybraid_mobs::player_affiliations;
 use meandering_intelligence::MeanderingIntelligencePlugin;
+use mob_scenes::player_affiliations;
 use movement_intelligence::{
 	CandidateBudget, MovementIntelligenceLimits, MovementIntelligencePlugin,
 };
@@ -43,6 +42,7 @@ use threat_intelligence_damage::ThreatIntelligenceDamagePlugin;
 use threat_management_intelligence::{
 	ThreatManagementIntelligence, ThreatManagementPlugin, ThreatTactic,
 };
+use world_player::Player as VegetationPlayer;
 
 const INTELLIGENCE_LOD_REFRESH_INTERVAL: Duration = Duration::from_millis(250);
 
@@ -320,7 +320,7 @@ fn sync_world_player_threat_actor(mut commands: Commands, players: WorldPlayers)
 mod tests {
 	use super::*;
 	use damage::DamageApplied;
-	use maybraid_mobs::{MobBrain, MobKind, FFA_GROUP, PLAYER_GROUP};
+	use mob_scenes::{MobBrain, MobKind, FFA_GROUP, PLAYER_GROUP};
 	use threat_intelligence::{ThreatIntelligenceUser, ThreatKnowledge};
 
 	fn bake_app() -> App {

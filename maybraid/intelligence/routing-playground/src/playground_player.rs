@@ -7,9 +7,7 @@
 use avian3d::prelude::*;
 use bevy::ecs::query::Has;
 use bevy::prelude::*;
-use durham_terrain_models::{
-	BaseTerrainNoise, TerrainCellLayout, TerrainEntryStore, TerrainTrimeshCollider,
-};
+use durham::{BaseTerrainNoise, TerrainCellLayout, TerrainEntryStore, TerrainTrimeshCollider};
 use game_commands::command::TextEntryFocus;
 use lod_avian::PhysicsInteractionLayer;
 use maybraid_input::{PadButton, VirtualPad};
@@ -469,7 +467,7 @@ fn follow_character_camera(
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use durham_terrain_models::TerrainConfig;
+	use durham::TerrainConfig;
 
 	#[test]
 	fn holding_elevation_sits_above_base_noise() {

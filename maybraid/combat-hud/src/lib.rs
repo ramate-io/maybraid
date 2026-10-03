@@ -618,10 +618,13 @@ fn ingest_hit_markers(
 
 /// Headshot points inside the target's [`HeadshotBand`], hit points elsewhere.
 fn hit_points(target: Option<(&GlobalTransform, Option<&HeadshotBand>)>, point: Vec3) -> u8 {
-	let head = target.is_some_and(|(transform, band)| {
-		band.is_some_and(|band| band.contains(transform, point))
-	});
-	if head { HEAD_POINTS } else { HIT_POINTS }
+	let head = target
+		.is_some_and(|(transform, band)| band.is_some_and(|band| band.contains(transform, point)));
+	if head {
+		HEAD_POINTS
+	} else {
+		HIT_POINTS
+	}
 }
 
 fn spawn_hit_marker(commands: &mut Commands, hud: Entity, world: Vec3, born: f32, points: u8) {

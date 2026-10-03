@@ -26,10 +26,11 @@ use std::collections::HashSet;
 
 pub use crate::scene::{LodScene, LodSceneStatus, SemanticLodScene, VisualLodScene};
 pub use runtime::{
-	drain_lod_present, drain_lod_present_cull, produce_lod_present_cull_regions,
-	produce_lod_present_regions, LodPresentBudget, LodPresentCullBudget, LodPresentCullCursor,
-	LodPresentCullPlugin, LodPresentCullRegion, LodPresentCullRegionPlugin, LodPresentKeepRegion,
-	LodPresentPlugin, LodPresentQueue, LodPresentRegion, LodPresentRegionPlugin, LodPresentSystems,
+	apply_lod_present_gate, drain_lod_present, drain_lod_present_cull, lod_present_gate_open,
+	produce_lod_present_cull_regions, produce_lod_present_regions, LodPresentBudget,
+	LodPresentCullBudget, LodPresentCullCursor, LodPresentCullPlugin, LodPresentCullRegion,
+	LodPresentCullRegionPlugin, LodPresentGate, LodPresentKeepRegion, LodPresentPlugin,
+	LodPresentQueue, LodPresentRegion, LodPresentRegionPlugin, LodPresentSystems,
 	LodPresentTimeBudget,
 };
 
@@ -118,18 +119,31 @@ where
 	/// Hide, then budget-despawn, presented ids that are not in `keep`
 	/// (typically the last present-ring set).
 	///
-	/// Stale is keep-set membership. Each stale id with stored bounds is
-	/// hidden immediately. Up to `despawn_budget` ids are removed this call
-	/// (including first visit). Returns remaining budget.
+	/// Stale is keep-set membership or a missing index entry. Ids still in
+	/// the index are hidden immediately; ids already gone have no bounds to
+	/// hide and are retired without waiting for a despawn slot. A
+	/// remove-then-reinsert that finishes before cull still has bounds, so
+	/// it stays on the keep-set path. Up to `despawn_budget` in-index ids
+	/// are removed this call (including first visit). Returns remaining
+	/// budget.
 	fn cull(&mut self, spatial_index: &S, keep: &HashSet<Id>, mut despawn_budget: u32) -> u32 {
-		let stale: Vec<Id> = self
-			.presented_ids()
-			.into_iter()
-			.filter(|id| !keep.contains(id))
-			.filter(|id| spatial_index.get_bounds(*id).is_some())
-			.collect();
+		let mut missing = Vec::new();
+		let mut leaving = Vec::new();
+		for id in self.presented_ids() {
+			if spatial_index.get_bounds(id).is_none() {
+				missing.push(id);
+			} else if !keep.contains(&id) {
+				leaving.push(id);
+			}
+		}
+		if !missing.is_empty() {
+			let skip: HashSet<Id> = missing.iter().copied().collect();
+			let wanted: HashSet<Id> =
+				self.presented_ids().into_iter().filter(|id| !skip.contains(id)).collect();
+			self.remove_stale(&wanted);
+		}
 		let mut to_remove = HashSet::new();
-		for id in stale {
+		for id in leaving {
 			if !self.is_hidden(id) {
 				self.hide(id);
 			}

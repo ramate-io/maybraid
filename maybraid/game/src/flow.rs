@@ -45,7 +45,9 @@ impl PlaySession {
 /// What the executable does with a home-row pick.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HomeRoute {
-	World { session: PlaySession },
+	World {
+		session: PlaySession,
+	},
 	/// Pick who plays the Training rounds before loading.
 	TrainingSetup,
 	Characters,
