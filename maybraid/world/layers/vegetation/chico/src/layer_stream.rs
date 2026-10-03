@@ -6,6 +6,7 @@ use bevy::prelude::*;
 use layer_stack::{GenerationMode, GenerationModeSystems};
 use lod::gen::{LodGenerateBudget, LodGenerateKeepRegion, LodGenerateQueue, LodGenerateRegion};
 use lod::presentation::{LodPresentKeepRegion, LodPresentQueue, LodPresentRegion};
+use lod::LodJobCounter;
 use lod::{
 	LodGeneratePlugin, LodGenerateRegionPlugin, LodGenerateSystems, LodPresentRegionPlugin,
 	LodPresentSystems, LodViewer,
@@ -118,6 +119,7 @@ pub struct ForestStreamLod<'w> {
 	present_regions: MessageWriter<'w, LodPresentRegion<ForestLodChan>>,
 	generate_keep: ResMut<'w, LodGenerateKeepRegion<ForestLodChan>>,
 	keep: ResMut<'w, LodPresentKeepRegion<ForestLodChan>>,
+	jobs: Res<'w, LodJobCounter>,
 }
 
 impl ForestStreamLod<'_> {
@@ -134,8 +136,8 @@ impl ForestStreamLod<'_> {
 			self.generate_keep.region = None;
 			self.keep.region = None;
 			self.index.clear();
-			self.generate_queue.clear();
-			self.present_queue.clear();
+			self.jobs.end_n(self.generate_queue.clear());
+			self.jobs.end_n(self.present_queue.clear());
 			last_key.take();
 			return;
 		};
@@ -144,8 +146,8 @@ impl ForestStreamLod<'_> {
 		let key_changed = last_key.as_ref() != Some(&key);
 		if key_changed {
 			self.index.clear();
-			self.generate_queue.clear();
-			self.present_queue.clear();
+			self.jobs.end_n(self.generate_queue.clear());
+			self.jobs.end_n(self.present_queue.clear());
 			*last_key = Some(key);
 		}
 
@@ -188,6 +190,7 @@ pub struct BumpOutStreamLod<'w> {
 	keep: ResMut<'w, LodPresentKeepRegion<BumpOutLodChan>>,
 	medium_generate_keep: ResMut<'w, LodGenerateKeepRegion<MediumBumpOutLodChan>>,
 	medium_keep: ResMut<'w, LodPresentKeepRegion<MediumBumpOutLodChan>>,
+	jobs: Res<'w, LodJobCounter>,
 }
 
 impl BumpOutStreamLod<'_> {
@@ -203,12 +206,12 @@ impl BumpOutStreamLod<'_> {
 			self.present.enabled = false;
 			self.generate_keep.region = None;
 			self.keep.region = None;
-			self.generate_queue.clear();
-			self.present_queue.clear();
+			self.jobs.end_n(self.generate_queue.clear());
+			self.jobs.end_n(self.present_queue.clear());
 			self.medium_generate_keep.region = None;
 			self.medium_keep.region = None;
-			self.medium_generate_queue.clear();
-			self.medium_present_queue.clear();
+			self.jobs.end_n(self.medium_generate_queue.clear());
+			self.jobs.end_n(self.medium_present_queue.clear());
 			last_key.take();
 			last_medium_region.take();
 			return;
@@ -217,10 +220,10 @@ impl BumpOutStreamLod<'_> {
 		let key = spec.key();
 		let key_changed = last_key.as_ref() != Some(&key);
 		if key_changed {
-			self.generate_queue.clear();
-			self.present_queue.clear();
-			self.medium_generate_queue.clear();
-			self.medium_present_queue.clear();
+			self.jobs.end_n(self.generate_queue.clear());
+			self.jobs.end_n(self.present_queue.clear());
+			self.jobs.end_n(self.medium_generate_queue.clear());
+			self.jobs.end_n(self.medium_present_queue.clear());
 			*last_key = Some(key);
 		}
 
@@ -296,12 +299,16 @@ pub fn clear_vegetation_stream_world(world: &mut World) {
 	if let Some(mut index) = world.get_resource_mut::<ForestIndex>() {
 		index.clear();
 	}
-	if let Some(mut queue) = world.get_resource_mut::<LodGenerateQueue<ChicoGrove>>() {
-		queue.clear();
-	}
-	if let Some(mut queue) = world.get_resource_mut::<LodPresentQueue<ChicoGrove>>() {
-		queue.clear();
-	}
+	let cancelled = world
+		.get_resource_mut::<LodGenerateQueue<ChicoGrove>>()
+		.map(|mut queue| queue.clear())
+		.unwrap_or(0);
+	LodJobCounter::end_cleared(world, cancelled);
+	let cancelled = world
+		.get_resource_mut::<LodPresentQueue<ChicoGrove>>()
+		.map(|mut queue| queue.clear())
+		.unwrap_or(0);
+	LodJobCounter::end_cleared(world, cancelled);
 	if let Some(mut generate) = world.get_resource_mut::<BumpOutGenerateBullseye>() {
 		generate.enabled = false;
 	}
@@ -321,18 +328,26 @@ pub fn clear_vegetation_stream_world(world: &mut World) {
 	if let Some(mut keep) = world.get_resource_mut::<LodPresentKeepRegion<MediumBumpOutLodChan>>() {
 		keep.region = None;
 	}
-	if let Some(mut queue) = world.get_resource_mut::<LodGenerateQueue<CanopyBumpOut>>() {
-		queue.clear();
-	}
-	if let Some(mut queue) = world.get_resource_mut::<LodPresentQueue<CanopyBumpOut>>() {
-		queue.clear();
-	}
-	if let Some(mut queue) = world.get_resource_mut::<LodGenerateQueue<MediumCanopyBumpOut>>() {
-		queue.clear();
-	}
-	if let Some(mut queue) = world.get_resource_mut::<LodPresentQueue<MediumCanopyBumpOut>>() {
-		queue.clear();
-	}
+	let cancelled = world
+		.get_resource_mut::<LodGenerateQueue<CanopyBumpOut>>()
+		.map(|mut queue| queue.clear())
+		.unwrap_or(0);
+	LodJobCounter::end_cleared(world, cancelled);
+	let cancelled = world
+		.get_resource_mut::<LodPresentQueue<CanopyBumpOut>>()
+		.map(|mut queue| queue.clear())
+		.unwrap_or(0);
+	LodJobCounter::end_cleared(world, cancelled);
+	let cancelled = world
+		.get_resource_mut::<LodGenerateQueue<MediumCanopyBumpOut>>()
+		.map(|mut queue| queue.clear())
+		.unwrap_or(0);
+	LodJobCounter::end_cleared(world, cancelled);
+	let cancelled = world
+		.get_resource_mut::<LodPresentQueue<MediumCanopyBumpOut>>()
+		.map(|mut queue| queue.clear())
+		.unwrap_or(0);
+	LodJobCounter::end_cleared(world, cancelled);
 }
 
 /// Forest and bump-out streams for `Mode`, reading the vegetation [`layer_stack::LayerModeConfig`].

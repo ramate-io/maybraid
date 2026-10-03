@@ -4,7 +4,9 @@
 
 mod present;
 
-pub use present::{install_mob_cell_teardown, MobPresenterState, PresentedMobCell};
+pub use present::{
+	drain_retired_mob_cells, install_mob_cell_teardown, MobPresenterState, PresentedMobCell,
+};
 
 /// Marker for mob-presenter subscriptions on [`mob_layer_model::Mobs`].
 pub struct MobPresent;

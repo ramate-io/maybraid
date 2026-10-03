@@ -11,8 +11,8 @@ use lod::gen::{
 use lod::lod_ref::LodRef;
 use lod::presentation::{LodPresentKeepRegion, LodPresentRegion};
 use lod::{
-	LodGeneratePlugin, LodGenerateRegionPlugin, LodGenerateSystems, LodPresentRegionPlugin,
-	LodPresentSystems, LodViewer,
+	LodGeneratePlugin, LodGenerateRegionPlugin, LodGenerateSystems, LodJobCounter,
+	LodPresentRegionPlugin, LodPresentSystems, LodViewer,
 };
 use terrain_layer_model::{terrain_streaming, TerrainExtent, TerrainLayerSystems};
 use urbanization_cells::{
@@ -149,6 +149,7 @@ pub struct UrbanizationStreamLod<'w> {
 	present_regions: MessageWriter<'w, LodPresentRegion<UrbanizationLodChan>>,
 	generate_keep: ResMut<'w, LodGenerateKeepRegion<UrbanizationLodChan>>,
 	keep: ResMut<'w, LodPresentKeepRegion<UrbanizationLodChan>>,
+	jobs: Res<'w, LodJobCounter>,
 }
 
 impl UrbanizationStreamLod<'_> {
@@ -164,7 +165,7 @@ impl UrbanizationStreamLod<'_> {
 			self.generate_keep.region = None;
 			self.keep.region = None;
 			self.index.clear();
-			self.generate_queue.clear();
+			self.jobs.end_n(self.generate_queue.clear());
 			last_key.take();
 			return;
 		};
@@ -173,7 +174,7 @@ impl UrbanizationStreamLod<'_> {
 		let key_changed = last_key.as_ref() != Some(&key);
 		if key_changed {
 			self.index.clear();
-			self.generate_queue.clear();
+			self.jobs.end_n(self.generate_queue.clear());
 			*last_key = Some(key);
 		}
 
@@ -244,9 +245,11 @@ pub fn clear_urbanization_stream_world(world: &mut World) {
 	if let Some(mut index) = world.get_resource_mut::<UrbanizationIndex>() {
 		index.clear();
 	}
-	if let Some(mut queue) = world.get_resource_mut::<LodGenerateQueue<SelectedUrbanization>>() {
-		queue.clear();
-	}
+	let cancelled = world
+		.get_resource_mut::<LodGenerateQueue<SelectedUrbanization>>()
+		.map(|mut queue| queue.clear())
+		.unwrap_or(0);
+	LodJobCounter::end_cleared(world, cancelled);
 }
 
 /// Bounded leaf generate on the 1 km urbanization keep.
