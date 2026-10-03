@@ -382,3 +382,35 @@ fn hop_out_and_back_does_not_keep_the_other_mode_presenters() -> anyhow::Result<
 	);
 	Ok(())
 }
+
+#[test]
+fn closing_the_present_gate_despawns_partially_spawned_hosts() -> anyhow::Result<()> {
+	let (mut app, id) = forest_present_app(false);
+	app.update();
+	let host = app.world_mut().spawn_empty().id();
+	app.world_mut()
+		.resource_mut::<ForestPresenterState>()
+		.insert_growing_hosts(id, vec![host]);
+	app.world_mut()
+		.resource_mut::<NextState<ActiveGenerationMode>>()
+		.set(ActiveGenerationMode::of::<OtherMode>());
+	app.update();
+	anyhow::ensure!(
+		!app.world().resource::<LodPresentGate<ForestLodChan>>().open,
+		"leaving the subscribed mode closes the present gate"
+	);
+	anyhow::ensure!(
+		app.world().get_entity(host).is_err(),
+		"gate close must despawn in-flight hosts, not leave them queued for cull"
+	);
+	app.update();
+	anyhow::ensure!(
+		!app.world().resource::<LodPresentGate<ForestLodChan>>().open,
+		"the gate stays closed until a subscribed mode returns"
+	);
+	anyhow::ensure!(
+		app.world().get_entity(host).is_err(),
+		"hosts stay gone while the gate remains closed"
+	);
+	Ok(())
+}

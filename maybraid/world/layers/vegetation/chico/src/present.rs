@@ -60,6 +60,10 @@ impl ForestPresenterState {
 				}
 			}
 		}
+		self.flush_pending_despawn(commands);
+	}
+
+	fn flush_pending_despawn(&mut self, commands: &mut Commands) {
 		for entities in self.pending_despawn.drain(..) {
 			for entity in entities {
 				commands.entity(entity).try_despawn();
@@ -121,6 +125,20 @@ impl ForestPresenterState {
 			.insert(id, PresentedGrove { version: Version(1), entities, hidden: false });
 	}
 
+	#[cfg(test)]
+	pub(crate) fn insert_growing_hosts(&mut self, id: Id, entities: Vec<Entity>) {
+		self.growing.insert(
+			id,
+			GrowingGrove {
+				version: Version(1),
+				layer: ForestLayer::UpperCanopy,
+				task: None,
+				ready: VecDeque::new(),
+				entities,
+			},
+		);
+	}
+
 	pub fn presented_ids(&self) -> Vec<Id> {
 		self.presented.keys().copied().collect()
 	}
@@ -134,6 +152,10 @@ impl ForestPresenterState {
 		let stale_presented: Vec<Id> =
 			self.presented.keys().copied().filter(|id| !wanted.contains(id)).collect();
 		self.remove_presented(commands, stale_presented);
+		// Gate close (`wanted` empty) cannot wait on present-cull admission.
+		if wanted.is_empty() {
+			self.flush_pending_despawn(commands);
+		}
 	}
 
 	/// Grow off-thread, then spawn a bounded number of host trees per present slot.
@@ -409,7 +431,8 @@ mod tests {
 			state.remove_stale(commands, &HashSet::new());
 		});
 		anyhow::ensure!(state.growing.is_empty(), "gate close retires in-flight growth");
-		anyhow::ensure!(state.pending_despawn == vec![vec![entity]]);
+		anyhow::ensure!(state.pending_despawn.is_empty(), "gate close flushes teardown");
+		anyhow::ensure!(world.get_entity(entity).is_err(), "retired hosts are gone");
 		Ok(())
 	}
 

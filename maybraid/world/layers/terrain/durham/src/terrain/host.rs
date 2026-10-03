@@ -322,7 +322,6 @@ pub(crate) fn apply_durham_generation(world: &mut World, config: &crate::DurhamT
 		let terrain = TerrainConfig::new(config.seed);
 		let base = BaseTerrainNoise::from_config(&terrain);
 		world.insert_resource(WorldBaseTerrain(base));
-		world.insert_resource(crate::TerrainEntryStore::default());
 		if let Some(mut dirty) = world.get_resource_mut::<TerrainPresentationDirty>() {
 			dirty.0 = true;
 		}
@@ -552,6 +551,8 @@ fn present_cells(
 mod tests {
 	use super::*;
 	use crate::terrain::cell::origin_cell_ids_for_layout;
+	use crate::terrain::index::TerrainEntryStore;
+	use crate::DurhamTerrainConfig;
 
 	#[test]
 	fn world_near_high_stays_at_eight_cells() {
@@ -701,5 +702,80 @@ mod tests {
 		assert!(assets.macro_seam_half_extents.is_empty());
 		assert!(assets.macro_cell_min_size.is_none());
 		assert!(assets.macro_res_2.is_none());
+	}
+
+	#[test]
+	fn seed_change_keeps_store_until_dirty_generation_clears_it() {
+		let mut world = World::new();
+		let layout = TerrainCellLayout::default();
+		let base = BaseTerrainNoise::from_config(&TerrainConfig::new(1));
+		world.insert_resource(TerrainConfig::new(1));
+		world.insert_resource(TerrainEntryStore::default());
+		world.insert_resource(TerrainPresentationDirty(false));
+		world.insert_resource(TerrainPresentPending(false));
+		world.insert_resource(TerrainPresenterState::default());
+		let cell_entity = world.spawn_empty().id();
+		let present_entity = world.spawn_empty().id();
+		let (id, presented, revision) = {
+			let mut store = world.resource_mut::<TerrainEntryStore>();
+			store.insert_base_terrain_for_test(&layout, 0, 0, base);
+			let id = store.terrain.keys().copied().next().expect("inserted");
+			store.terrain.get_mut(&id).expect("inserted").entity = Some(cell_entity);
+			let presented = store.terrain.get(&id).expect("inserted").version;
+			let revision = store.membership_revision();
+			(id, presented, revision)
+		};
+		world.resource_mut::<TerrainPresenterState>().insert_for_test(
+			id,
+			presented,
+			present_entity,
+		);
+
+		apply_durham_generation(
+			&mut world,
+			&DurhamTerrainConfig {
+				seed: 99,
+				coverage: TerrainCoverage::FinePatch,
+				terrain_radius: 1,
+			},
+		);
+
+		assert!(
+			world.get_entity(cell_entity).is_ok(),
+			"seed change must not drop store-owned entities"
+		);
+		assert!(
+			world.get_entity(present_entity).is_ok(),
+			"the presenter survives apply"
+		);
+		{
+			let store = world.resource::<TerrainEntryStore>();
+			assert_eq!(
+				store.terrain.get(&id).map(|entry| entry.version),
+				Some(presented),
+				"apply must not rewind or replace the store"
+			);
+			assert_eq!(store.membership_revision(), revision);
+			assert_eq!(store.terrain.get(&id).and_then(|entry| entry.entity), Some(cell_entity));
+		}
+		assert_eq!(
+			world.resource::<TerrainPresenterState>().presented_version(id),
+			Some(presented)
+		);
+		assert!(world.resource::<TerrainPresentationDirty>().0);
+
+		world.resource_mut::<TerrainEntryStore>().clear_entries();
+		let rebuilt_base = BaseTerrainNoise::from_config(&TerrainConfig::new(99));
+		world.resource_mut::<TerrainEntryStore>().insert_base_terrain_for_test(
+			&layout,
+			0,
+			0,
+			rebuilt_base,
+		);
+		let rebuilt = world.resource::<TerrainEntryStore>().terrain[&id].version;
+		assert!(
+			rebuilt > presented,
+			"dirty clear must mint a version the surviving presenter will accept"
+		);
 	}
 }

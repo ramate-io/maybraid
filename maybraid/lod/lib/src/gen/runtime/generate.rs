@@ -129,6 +129,7 @@ impl<T> LodGenerateQueue<T> {
 	}
 
 	/// Drop pending ids and scan regions. Returns how many tickets to release.
+	#[must_use]
 	pub fn clear(&mut self) -> u64 {
 		let cancelled = self.pending.len() as u64;
 		self.pending.clear();
