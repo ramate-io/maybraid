@@ -5126,6 +5126,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "geneva"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "chico",
+ "comproc",
+ "language-layer-model",
+ "language-layer-presentation",
+ "layer-stack",
+ "lod",
+ "maybraid-language-core",
+ "maybraid-language-grammars",
+ "noise",
+ "richmond",
+ "terrain-layer-model",
+ "urbanization-cells",
+ "urbanization-layer-model",
+ "vegetation-layer-model",
+]
+
+[[package]]
 name = "gethostname"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6348,6 +6370,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "language-layer-model"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "layer-stack",
+ "lod",
+ "terrain-layer-model",
+ "vegetation-layer-model",
+]
+
+[[package]]
+name = "language-layer-presentation"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "language-layer-model",
+ "layer-stack",
+ "lod",
+ "terrain-layer-model",
+ "vegetation-layer-model",
+]
+
+[[package]]
 name = "layer-stack"
 version = "0.1.0"
 dependencies = [
@@ -6817,6 +6864,8 @@ dependencies = [
  "chico",
  "durham",
  "furnishing-layer-model",
+ "geneva",
+ "language-layer-model",
  "layer-stack",
  "maputo",
  "mob-layer-model",
@@ -6853,6 +6902,8 @@ dependencies = [
  "damage",
  "durham",
  "furnishing-layer-model",
+ "geneva",
+ "language-layer-model",
  "layer-stack",
  "lod",
  "maputo",
@@ -7006,9 +7057,12 @@ dependencies = [
  "furniture-assemblies",
  "furniture-shaders",
  "game-commands",
+ "geneva",
  "ground-avian",
  "hiding-intelligence",
  "intelligence-lod",
+ "language-layer-model",
+ "language-layer-presentation",
  "layer-stack",
  "lod",
  "lod-avian",
