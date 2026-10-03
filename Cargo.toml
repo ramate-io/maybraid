@@ -408,7 +408,7 @@ maybraid-language-core = { path = "maybraid/language/core" }
 maybraid-language-grammars = { path = "maybraid/language/grammars" }
 maybraid-language-mistral = { path = "maybraid/language/mistral" }
 maybraid-language = { path = "maybraid/language/cli" }
-mistralrs = "0.8.1"
+mistralrs = { git = "https://github.com/EricLBuehler/mistral.rs", tag = "v0.9.4" }
 slotmap = "1.0"
 udpipe-rs = "0.2"
 wordnet-db = "0.1.3"
@@ -430,19 +430,9 @@ panic = "unwind"
 
 [profile.release.build-override]
 opt-level = 3
+strip = false
 
 [profile.perf]
 inherits = "release"
 codegen-units = 1
 lto = "thin"
-
-
-[profile.wasm-dev]
-inherits = "dev"
-opt-level = 1
-
-[profile.server-dev]
-inherits = "dev"
-
-[profile.android-dev]
-inherits = "dev"
