@@ -5,8 +5,8 @@ use bevy::camera::{ClearColorConfig, RenderTarget};
 use bevy::prelude::*;
 use bevy::render::render_resource::{TextureDimension, TextureFormat, TextureUsages};
 use bevy::ui::widget::ViewportNode;
-use crozon_character_items::Inventory;
-use crozon_inventory_user::InventoryUser;
+use character_inventory_user::InventoryUser;
+use character_items::Inventory;
 use menu_components::{
 	spawn_hud_text_card, spawn_hud_text_card_label, HudFonts, HUD_TEXT_CARD_FACE_PX,
 	PANEL_BLOCK_FONT_SIZE, TEXT_YELLOW,
@@ -623,7 +623,7 @@ mod tests {
 
 	#[test]
 	fn primary_weapon_label_is_the_hashed_name() {
-		use crozon_character_items::{FirearmMesh, Inventory, InventoryItem};
+		use character_items::{FirearmMesh, Inventory, InventoryItem};
 
 		let mut bag = Inventory::default();
 		bag.items.push(InventoryItem::firearm(FirearmMesh::Bullpup));

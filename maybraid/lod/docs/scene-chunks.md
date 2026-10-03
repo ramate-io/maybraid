@@ -74,4 +74,4 @@ Lazy materialization of subtrees (factories evaluated only when the scheduler re
 
 - [`LodChunk` / `SceneChunk` / `VisualSceneChunk`](../lib/src/scene/chunk.rs)
 - [`chunk_fulfill`](../lib/src/chunk_fulfill.rs)
-- [Richmond CONTRIBUTING — LodScene](../../richmond/CONTRIBUTING.md#lodscene-on-buildings)
+- [Richmond CONTRIBUTING — LodScene](../../world/layers/urbanization/CONTRIBUTING.md#lodscene-on-buildings)

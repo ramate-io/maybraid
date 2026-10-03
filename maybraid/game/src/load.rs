@@ -5,8 +5,9 @@
 use crate::flow::{GameFlow, PlaySession};
 use crate::shell::ShellRoute;
 use bevy::prelude::*;
+use layer_stack::GenerationReadiness;
 use maybraid_game_mode_training_ground::TrainingRound;
-use maybraid_world::{LodJobCounter, TrainingPlazaMounted, WorldSurfaceReady};
+use maybraid_world::{LodJobCounter, WorldSurfaceReady};
 use menu_screens::{request_loading_explainer, request_loading_progress};
 
 /// Remaining generate / present / pending-root tickets that still count as
@@ -65,14 +66,22 @@ impl FirstLoadGate {
 
 	pub fn progress(&self, ready: bool, active: u64) -> f32 {
 		let from_jobs = if self.peak == 0 {
-			if self.saw_work { 0.55 } else { 0.08 }
+			if self.saw_work {
+				0.55
+			} else {
+				0.08
+			}
 		} else {
 			(1.0 - (active as f32 / self.peak as f32)).clamp(0.08, 0.95)
 		};
 		if ready && self.saw_work && active <= UNVEIL_JOB_THRESHOLD {
 			return from_jobs.max(0.9);
 		}
-		if ready { from_jobs.max(0.45) } else { from_jobs.min(0.4) }
+		if ready {
+			from_jobs.max(0.45)
+		} else {
+			from_jobs.min(0.4)
+		}
 	}
 
 	pub fn explainer(&self, ready: bool, active: u64) -> &'static str {
@@ -93,7 +102,11 @@ pub(crate) fn unveil_ready(
 	active: u64,
 	now: f32,
 ) -> bool {
-	if training { ready } else { gate.should_unveil(ready, active, now) }
+	if training {
+		ready
+	} else {
+		gate.should_unveil(ready, active, now)
+	}
 }
 
 pub(crate) fn loading_explainer(
@@ -103,7 +116,11 @@ pub(crate) fn loading_explainer(
 	active: u64,
 ) -> &'static str {
 	if training {
-		if ready { "Almost ready…" } else { "Waiting for the ground…" }
+		if ready {
+			"Almost ready…"
+		} else {
+			"Waiting for the ground…"
+		}
 	} else {
 		gate.explainer(ready, active)
 	}
@@ -121,7 +138,7 @@ pub(crate) fn finish_world_loading(
 	mut commands: Commands,
 	session: Res<PlaySession>,
 	ready: Res<WorldSurfaceReady>,
-	plaza: Option<Res<TrainingPlazaMounted>>,
+	ready_for: Option<Res<GenerationReadiness>>,
 	round: Option<Res<TrainingRound>>,
 	jobs: Option<Res<LodJobCounter>>,
 	mut gate: Option<ResMut<FirstLoadGate>>,
@@ -130,7 +147,7 @@ pub(crate) fn finish_world_loading(
 ) {
 	let training = *session == PlaySession::Training;
 	let surface_ready = if training {
-		ready.0 && plaza_mounted_for(plaza.as_deref(), round.as_deref())
+		ready.0 && plaza_mounted_for(ready_for.as_deref(), round.as_deref())
 	} else {
 		ready.0
 	};
@@ -153,10 +170,10 @@ pub(crate) fn finish_world_loading(
 	}
 }
 
-/// The previous map's plaza stays mounted until its teardown runs, so a new
+/// The previous map's readiness stays until its teardown runs, so a new
 /// map must not unveil on it. A new life on the same map unveils on the live one.
-fn plaza_mounted_for(plaza: Option<&TrainingPlazaMounted>, round: Option<&TrainingRound>) -> bool {
-	plaza.is_some_and(|plaza| round.is_none_or(|round| plaza.serves(*round)))
+fn plaza_mounted_for(ready: Option<&GenerationReadiness>, round: Option<&TrainingRound>) -> bool {
+	ready.is_some_and(|ready| round.is_none_or(|round| ready.covers(round.map().readiness_key())))
 }
 
 #[cfg(test)]
@@ -167,10 +184,11 @@ mod tests {
 	fn a_round_reload_waits_for_its_own_plaza() {
 		let round = TrainingRound::new(1);
 		let next = round.next();
-		assert!(plaza_mounted_for(Some(&TrainingPlazaMounted(round)), Some(&round)));
-		assert!(!plaza_mounted_for(Some(&TrainingPlazaMounted(round)), Some(&next)));
+		let ready = GenerationReadiness::new(round.map().readiness_key());
+		assert!(plaza_mounted_for(Some(&ready), Some(&round)));
+		assert!(!plaza_mounted_for(Some(&ready), Some(&next)));
 		assert!(!plaza_mounted_for(None, Some(&next)));
-		assert!(plaza_mounted_for(Some(&TrainingPlazaMounted(round)), Some(&round.next_life())));
+		assert!(plaza_mounted_for(Some(&ready), Some(&round.next_life())));
 	}
 
 	fn gate_at(entered_at: f32) -> FirstLoadGate {
@@ -224,15 +242,15 @@ mod tests {
 	#[test]
 	fn a_ready_training_surface_requests_world_without_leaving_training() -> anyhow::Result<()> {
 		use bevy::ecs::system::RunSystemOnce;
+		use layer_stack::ActiveGenerationMode;
 		use maybraid_game_mode_training_ground::TrainingGround;
-		use terrain_layer_model::ActiveGenerationMode;
 		let round = TrainingRound::new(1);
 		let mut world = World::new();
 		world.insert_resource(NextState::<GameFlow>::Unchanged);
 		world.insert_resource(NextState::<ActiveGenerationMode>::Unchanged);
 		world.insert_resource(PlaySession::Training);
 		world.insert_resource(WorldSurfaceReady(true));
-		world.insert_resource(TrainingPlazaMounted(round));
+		world.insert_resource(GenerationReadiness::new(round.map().readiness_key()));
 		world.insert_resource(round);
 		world.init_resource::<Time>();
 		world

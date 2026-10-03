@@ -1,8 +1,8 @@
 //! Right-side loadout plate: weapon card above the skill-map viewport.
 
 use bevy::prelude::*;
-use crozon_character_items::Inventory;
-use crozon_inventory_user::InventoryUser;
+use character_items::Inventory;
+use character_inventory_user::InventoryUser;
 use menu_components::{HudFonts, TEXT_YELLOW};
 
 use crate::user::SkillMapUser;

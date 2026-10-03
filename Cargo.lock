@@ -654,6 +654,74 @@ dependencies = [
 ]
 
 [[package]]
+name = "barking"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "chico",
+ "durham",
+ "layer-stack",
+ "lod",
+ "lod-gimme",
+ "mob-characters",
+ "mob-intelligence",
+ "mob-layer-model",
+ "mob-layer-presentation",
+ "mob-scenes",
+ "procedural-common",
+ "richmond",
+ "terrain-layer-model",
+ "urbanization-cells",
+ "urbanization-layer-model",
+ "vegetation-layer-model",
+]
+
+[[package]]
+name = "barking-playground"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "avian3d",
+ "bevy",
+ "characters",
+ "clap",
+ "durham",
+ "evasion-intelligence",
+ "firearm-intelligence",
+ "firearm-user",
+ "firearms",
+ "fleeing-intelligence",
+ "game-commands",
+ "ground-avian",
+ "hiding-intelligence",
+ "journeying-intelligence",
+ "lod",
+ "lod-avian",
+ "log",
+ "maybraid-character-controller",
+ "maybraid-input",
+ "meandering-intelligence",
+ "mob-characters",
+ "mob-intelligence",
+ "mob-scenes",
+ "movement-intelligence",
+ "movement-intelligence-avian",
+ "movement-realization",
+ "npc-intelligence",
+ "player",
+ "poi-intelligence",
+ "render-item",
+ "routing-intelligence",
+ "spotting-intelligence",
+ "terrain-shaders",
+ "tether-intelligence",
+ "threat-intelligence",
+ "threat-intelligence-damage",
+ "threat-management-intelligence",
+]
+
+[[package]]
 name = "base64"
 version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2381,6 +2449,73 @@ dependencies = [
 ]
 
 [[package]]
+name = "building-components"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "bevy_math",
+ "lod",
+ "material-ref",
+ "procedural-common",
+ "scene-ref",
+]
+
+[[package]]
+name = "building-physics"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "avian3d",
+ "bevy",
+ "bevy_math",
+ "building-components",
+ "lod",
+ "lod-avian",
+]
+
+[[package]]
+name = "building-shaders"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "material-ref",
+]
+
+[[package]]
+name = "buildings"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "bevy_math",
+ "building-components",
+ "lod",
+ "material-ref",
+ "procedural-common",
+]
+
+[[package]]
+name = "buildings-playground"
+version = "0.1.0"
+dependencies = [
+ "avian3d",
+ "bevy",
+ "bevy_math",
+ "building-components",
+ "buildings",
+ "clap",
+ "game-commands",
+ "lod",
+ "lod-avian",
+ "lod-gimme",
+ "log",
+ "procedural-common",
+ "scene-ref",
+ "urbanization-developments",
+]
+
+[[package]]
 name = "built"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2659,10 +2794,204 @@ dependencies = [
 ]
 
 [[package]]
+name = "character-animations"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "character-rigs",
+ "clap",
+ "game-commands",
+ "log",
+]
+
+[[package]]
+name = "character-concepts-playground"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "bevy-character-ui-menu-renderer",
+ "camera-controls",
+ "character-animations",
+ "character-creation-menus",
+ "character-items",
+ "character-rigs",
+ "character-ui-menu",
+ "characters",
+ "characters-playground",
+ "clap",
+ "game-commands",
+ "lod",
+ "material-ref",
+ "scene-ref",
+]
+
+[[package]]
+name = "character-creation-menus"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "bevy-character-ui-menu-renderer",
+ "bevy_math",
+ "character-items",
+ "character-ui-menu",
+ "characters",
+]
+
+[[package]]
+name = "character-inventory-user"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "character-items",
+ "character-persist",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "character-items"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "bevy_math",
+ "character-ui-menu",
+ "clap",
+ "serde",
+]
+
+[[package]]
+name = "character-model-user"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "character-items",
+ "character-persist",
+ "characters",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "character-motion"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "character-animations",
+ "character-rigs",
+ "ground",
+ "intelligence-lod",
+ "lod",
+ "rigs",
+]
+
+[[package]]
+name = "character-persist"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "character-ragdoll"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "avian3d",
+ "bevy",
+ "character-motion",
+ "character-rigs",
+ "characters",
+ "damage",
+ "lod-avian",
+ "player",
+ "rigs",
+]
+
+[[package]]
+name = "character-rigs"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "clap",
+ "game-commands",
+ "log",
+ "rigs",
+]
+
+[[package]]
+name = "character-shaders"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "material-ref",
+]
+
+[[package]]
 name = "character-ui-menu"
 version = "0.1.0"
 dependencies = [
  "bevy_math",
+]
+
+[[package]]
+name = "character-world-movements-playground"
+version = "0.1.0"
+dependencies = [
+ "avian3d",
+ "bevy",
+ "characters",
+ "chunk",
+ "clap",
+ "durham",
+ "game-commands",
+ "ground-avian",
+ "lod",
+ "lod-avian",
+ "log",
+ "render-item",
+ "terrain-shaders",
+]
+
+[[package]]
+name = "characters"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "bevy_math",
+ "character-items",
+ "character-motion",
+ "character-rigs",
+ "character-shaders",
+ "character-ui-menu",
+ "clap",
+ "lod",
+ "material-ref",
+ "rigs",
+ "scene-ref",
+ "serde",
+]
+
+[[package]]
+name = "characters-playground"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "camera-controls",
+ "character-animations",
+ "character-rigs",
+ "clap",
+ "game-commands",
+ "log",
 ]
 
 [[package]]
@@ -2678,151 +3007,35 @@ dependencies = [
 name = "chico"
 version = "0.1.0"
 dependencies = [
- "chico-sbs-trees",
- "chico-sdf",
-]
-
-[[package]]
-name = "chico-bumpout"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bevy",
- "chico-vegetation-shaders",
- "material-ref",
- "procedural-common",
- "terrain-chunk-ref",
-]
-
-[[package]]
-name = "chico-bumpout-playground"
-version = "0.1.0"
-dependencies = [
- "bevy",
- "camera-controls",
- "chico-bumpout",
- "clap",
- "game-commands",
- "lod-cascade",
- "material-ref",
- "procedural-common",
- "render-item",
- "sdf",
- "terrain-chunk-ref",
-]
-
-[[package]]
-name = "chico-forests"
-version = "0.1.0"
-dependencies = [
  "anyhow",
  "avian3d",
  "bevy",
  "bevy_math",
- "chico-groves",
- "chico-sbs-trees",
- "chico-vegetation-components",
- "chico-vegetation-shaders",
+ "durham",
  "futures",
  "gimme-gen",
+ "layer-stack",
  "lod",
  "lod-avian",
+ "lod-cascade",
  "lod-gimme",
  "lod-lazy-refs",
- "procedural-common",
- "scene-ref",
-]
-
-[[package]]
-name = "chico-groves"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bevy",
- "bevy_math",
- "chico-sbs-geometry",
- "chico-sbs-trees",
- "chico-vegetation-components",
- "chico-vegetation-shaders",
- "clap",
- "gimme-gen",
- "lod",
- "log",
  "material-ref",
- "procedural-common",
-]
-
-[[package]]
-name = "chico-sbs-geometry"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bevy",
- "bevy_math",
- "clap",
- "log",
  "procedural-common",
  "render-item",
-]
-
-[[package]]
-name = "chico-sbs-trees"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bevy",
- "chico-sbs-geometry",
- "chico-sdf",
- "chico-vegetation-components",
- "clap",
- "lod",
- "log",
- "procedural-common",
-]
-
-[[package]]
-name = "chico-sdf"
-version = "0.1.0"
-dependencies = [
- "sdf-common",
-]
-
-[[package]]
-name = "chico-vegetation-components"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bevy",
- "bevy_math",
- "lod",
- "material-ref",
+ "richmond",
+ "sbs-trees",
  "scene-ref",
-]
-
-[[package]]
-name = "chico-vegetation-on-terrain-playground"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "avian3d",
- "bevy",
- "chico-vegetation-components",
- "clap",
- "crozon-characters",
- "durham-terrain-models",
- "game-commands",
- "lod",
- "lod-avian",
- "maybraid-input",
-]
-
-[[package]]
-name = "chico-vegetation-shaders"
-version = "0.1.0"
-dependencies = [
- "bevy",
- "chico-vegetation-components",
- "material-ref",
+ "terrain-chunk-ref",
+ "terrain-layer-model",
+ "urbanization-cells",
+ "urbanization-layer-model",
+ "vegetation-bumpout",
+ "vegetation-components",
+ "vegetation-groves",
+ "vegetation-layer-model",
+ "vegetation-layer-presentation",
+ "vegetation-shaders",
 ]
 
 [[package]]
@@ -3420,188 +3633,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "crozon-character-concepts-playground"
-version = "0.1.0"
-dependencies = [
- "bevy",
- "bevy-character-ui-menu-renderer",
- "camera-controls",
- "character-ui-menu",
- "clap",
- "crozon-character-items",
- "crozon-character-playground",
- "crozon-character-ui-menus",
- "crozon-characters",
- "crozon-rigs",
- "game-commands",
- "lod",
- "malo-animations",
- "material-ref",
- "scene-ref",
-]
-
-[[package]]
-name = "crozon-character-items"
-version = "0.1.0"
-dependencies = [
- "bevy",
- "bevy_math",
- "character-ui-menu",
- "clap",
- "serde",
-]
-
-[[package]]
-name = "crozon-character-model-user"
-version = "0.1.0"
-dependencies = [
- "bevy",
- "crozon-character-items",
- "crozon-character-persist",
- "crozon-characters",
- "serde",
- "serde_json",
- "tempfile",
-]
-
-[[package]]
-name = "crozon-character-motion"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bevy",
- "crozon-rigs",
- "ground",
- "intelligence-lod",
- "lod",
- "malo-animations",
- "rigs",
-]
-
-[[package]]
-name = "crozon-character-persist"
-version = "0.1.0"
-dependencies = [
- "bevy",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "crozon-character-playground"
-version = "0.1.0"
-dependencies = [
- "bevy",
- "camera-controls",
- "clap",
- "crozon-rigs",
- "game-commands",
- "log",
- "malo-animations",
-]
-
-[[package]]
-name = "crozon-character-ragdoll"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "avian3d",
- "bevy",
- "crozon-character-motion",
- "crozon-characters",
- "crozon-rigs",
- "damage",
- "lod-avian",
- "player",
- "rigs",
-]
-
-[[package]]
-name = "crozon-character-shaders"
-version = "0.1.0"
-dependencies = [
- "bevy",
- "material-ref",
-]
-
-[[package]]
-name = "crozon-character-ui-menus"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bevy",
- "bevy-character-ui-menu-renderer",
- "bevy_math",
- "character-ui-menu",
- "crozon-character-items",
- "crozon-characters",
-]
-
-[[package]]
-name = "crozon-character-world-movements-playground"
-version = "0.1.0"
-dependencies = [
- "avian3d",
- "bevy",
- "chunk",
- "clap",
- "crozon-characters",
- "durham-terrain",
- "durham-terrain-models",
- "game-commands",
- "ground-avian",
- "lod",
- "lod-avian",
- "log",
- "render-item",
-]
-
-[[package]]
-name = "crozon-characters"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bevy",
- "bevy_math",
- "character-ui-menu",
- "clap",
- "crozon-character-items",
- "crozon-character-motion",
- "crozon-character-shaders",
- "crozon-rigs",
- "lod",
- "material-ref",
- "rigs",
- "scene-ref",
- "serde",
-]
-
-[[package]]
-name = "crozon-inventory-user"
-version = "0.1.0"
-dependencies = [
- "bevy",
- "crozon-character-items",
- "crozon-character-persist",
- "serde",
- "serde_json",
- "tempfile",
-]
-
-[[package]]
-name = "crozon-rigs"
-version = "0.1.0"
-dependencies = [
- "bevy",
- "clap",
- "game-commands",
- "log",
- "rigs",
-]
-
-[[package]]
 name = "crunchy"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4147,14 +4178,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "92773504d58c093f6de2459af4af33faa518c13451eb8f2b5698ed3d36e7c813"
 
 [[package]]
-name = "durham-terrain"
-version = "0.1.0"
-dependencies = [
- "durham-terrain-shaders",
-]
-
-[[package]]
-name = "durham-terrain-models"
+name = "durham"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -4162,12 +4186,10 @@ dependencies = [
  "bevy",
  "chunk",
  "comproc",
- "durham-terrain",
- "jersey-terrain-stamps",
+ "layer-stack",
  "lod",
  "lod-avian",
  "log",
- "marazion-watersheds",
  "noise",
  "procedural-common",
  "render-item",
@@ -4175,33 +4197,29 @@ dependencies = [
  "terrain-chunk-ref",
  "terrain-layer-model",
  "terrain-layer-presentation",
+ "terrain-shaders",
+ "terrain-stamps",
+ "terrain-watersheds",
  "visual-geometry-core",
 ]
 
 [[package]]
-name = "durham-terrain-models-playground"
+name = "durham-playground"
 version = "0.1.0"
 dependencies = [
  "avian3d",
  "bevy",
+ "characters",
  "chunk",
  "clap",
- "crozon-characters",
- "durham-terrain",
- "durham-terrain-models",
+ "durham",
  "game-commands",
  "ground-avian",
  "lod",
  "lod-avian",
  "log",
  "render-item",
-]
-
-[[package]]
-name = "durham-terrain-shaders"
-version = "0.1.0"
-dependencies = [
- "bevy",
+ "terrain-shaders",
 ]
 
 [[package]]
@@ -4530,8 +4548,8 @@ dependencies = [
  "anyhow",
  "avian3d",
  "bevy",
+ "characters",
  "combat-targeting",
- "crozon-characters",
  "damage",
  "firearm-user",
  "firearms",
@@ -4550,9 +4568,9 @@ dependencies = [
  "anyhow",
  "avian3d",
  "bevy",
- "crozon-character-items",
- "crozon-characters",
- "crozon-rigs",
+ "character-items",
+ "character-rigs",
+ "characters",
  "damage",
  "firearms",
  "lod",
@@ -4600,12 +4618,15 @@ name = "firing-range-playground"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "building-components",
+ "building-physics",
+ "buildings",
+ "character-items",
+ "character-ragdoll",
+ "characters",
  "clap",
  "combat-hud",
  "combat-targeting",
- "crozon-character-items",
- "crozon-character-ragdoll",
- "crozon-characters",
  "damage",
  "evasion-intelligence",
  "firearm-intelligence",
@@ -4630,9 +4651,6 @@ dependencies = [
  "player",
  "player-camera",
  "poi-intelligence",
- "richmond-building-components",
- "richmond-building-physics",
- "richmond-buildings",
  "spotting-intelligence",
  "spotting-intelligence-avian",
  "tether-intelligence",
@@ -4784,23 +4802,41 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "42703706b716c37f96a77aea830392ad231f44c9e9a67872fa5548707e11b11c"
 
 [[package]]
+name = "furnishing-layer-model"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "layer-stack",
+ "lod",
+ "terrain-layer-model",
+]
+
+[[package]]
+name = "furnishing-layer-presentation"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "furnishing-layer-model",
+ "layer-stack",
+ "lod",
+ "terrain-layer-model",
+]
+
+[[package]]
 name = "furniture-assemblies"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "avian3d",
  "bevy",
+ "building-components",
  "furniture-components",
  "furniture-shaders",
  "furniture-usage-areas",
  "lod",
- "lod-avian",
- "lod-gimme",
  "material-ref",
  "procedural-common",
- "richmond-building-components",
- "richmond-building-physics",
- "richmond-development-models",
 ]
 
 [[package]]
@@ -4809,9 +4845,9 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bevy",
+ "building-components",
  "lod",
  "material-ref",
- "richmond-building-components",
  "scene-ref",
 ]
 
@@ -4821,7 +4857,8 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bevy",
- "chico-vegetation-shaders",
+ "building-components",
+ "buildings",
  "clap",
  "furniture-assemblies",
  "furniture-shaders",
@@ -4830,9 +4867,8 @@ dependencies = [
  "lod-lazy-refs",
  "material-ref",
  "procedural-common",
- "richmond-building-components",
- "richmond-buildings",
  "scene-ref",
+ "vegetation-shaders",
 ]
 
 [[package]]
@@ -4848,7 +4884,7 @@ name = "furniture-usage-areas"
 version = "0.1.0"
 dependencies = [
  "bevy",
- "richmond-building-components",
+ "building-components",
 ]
 
 [[package]]
@@ -6291,15 +6327,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
-name = "jersey-terrain-stamps"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bevy_math",
- "procedural-common",
-]
-
-[[package]]
 name = "jiff"
 version = "0.2.37"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6485,6 +6512,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "layer-stack"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "lod",
+]
+
+[[package]]
 name = "lazy_static"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6502,15 +6538,15 @@ version = "0.1.0"
 dependencies = [
  "avian3d",
  "bevy",
+ "building-components",
+ "building-physics",
+ "buildings",
  "firearms",
  "lod-avian",
  "movement-intelligence-richmond",
  "player",
  "procedural-common",
- "richmond-building-components",
- "richmond-building-physics",
- "richmond-buildings",
- "richmond-developments",
+ "urbanization-developments",
 ]
 
 [[package]]
@@ -6791,25 +6827,30 @@ dependencies = [
 ]
 
 [[package]]
-name = "malo-animations"
+name = "maputo"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "avian3d",
  "bevy",
- "clap",
- "crozon-rigs",
- "game-commands",
- "log",
-]
-
-[[package]]
-name = "marazion-watersheds"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bevy_math",
- "jersey-terrain-stamps",
+ "building-components",
+ "building-physics",
+ "buildings",
+ "furnishing-layer-model",
+ "furnishing-layer-presentation",
+ "furniture-assemblies",
+ "furniture-components",
+ "furniture-shaders",
+ "furniture-usage-areas",
+ "layer-stack",
+ "lod",
+ "lod-avian",
+ "lod-gimme",
  "procedural-common",
+ "richmond",
+ "terrain-layer-model",
+ "urbanization-developments",
+ "urbanization-layer-model",
 ]
 
 [[package]]
@@ -6878,13 +6919,14 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bevy",
+ "character-inventory-user",
+ "character-items",
+ "character-model-user",
+ "character-persist",
+ "characters",
+ "characters-playground",
  "clap",
- "crozon-character-items",
- "crozon-character-model-user",
- "crozon-character-persist",
- "crozon-character-playground",
- "crozon-characters",
- "crozon-inventory-user",
+ "layer-stack",
  "maybraid-character-controller",
  "maybraid-game-mode-discover",
  "maybraid-game-mode-reliquary",
@@ -6896,7 +6938,6 @@ dependencies = [
  "menu-playground",
  "menu-screens",
  "tempfile",
- "terrain-layer-model",
 ]
 
 [[package]]
@@ -6936,11 +6977,19 @@ name = "maybraid-game-mode-discover"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "barking",
  "bevy",
- "durham-terrain-models",
+ "chico",
+ "durham",
+ "furnishing-layer-model",
+ "layer-stack",
+ "maputo",
  "mob-layer-model",
+ "richmond",
  "terrain-layer-model",
  "urbanization-layer-model",
+ "vegetation-layer-model",
+ "world-player",
 ]
 
 [[package]]
@@ -6955,19 +7004,36 @@ name = "maybraid-game-mode-training-ground"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "avian3d",
+ "barking",
  "bevy",
- "crozon-characters",
- "durham-terrain-models",
+ "building-components",
+ "building-physics",
+ "buildings",
+ "character-items",
+ "character-persist",
+ "characters",
+ "chico",
+ "combat-hud",
+ "damage",
+ "durham",
+ "furnishing-layer-model",
+ "layer-stack",
  "lod",
- "maybraid-mobs",
+ "maputo",
+ "maybraid-game-mode-discover",
  "mob-characters",
- "mob-groups",
+ "mob-intelligence",
  "mob-layer-model",
- "mob-layer-presentation",
- "richmond-development-models",
+ "mob-scenes",
+ "player-camera",
+ "procedural-common",
+ "richmond",
  "terrain-layer-model",
  "threat-intelligence",
  "urbanization-layer-model",
+ "vegetation-layer-model",
+ "world-player",
 ]
 
 [[package]]
@@ -7038,27 +7104,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "maybraid-mobs"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bevy",
- "crozon-character-items",
- "damage",
- "fleeing-intelligence",
- "journeying-intelligence",
- "lod",
- "maybraid-audio",
- "mob-characters",
- "mob-intelligence",
- "npc-intelligence",
- "poi-intelligence",
- "routing-intelligence",
- "tether-intelligence",
- "threat-intelligence",
-]
-
-[[package]]
 name = "maybraid-skill-map"
 version = "0.1.0"
 dependencies = [
@@ -7066,9 +7111,9 @@ dependencies = [
  "avian3d",
  "bevy",
  "bevy_hanabi",
+ "character-inventory-user",
+ "character-items",
  "combat-targeting",
- "crozon-character-items",
- "crozon-inventory-user",
  "damage",
  "evasion-intelligence",
  "lod-avian",
@@ -7103,47 +7148,50 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "avian3d",
+ "barking",
  "bevy",
- "chico-forests",
- "chico-vegetation-components",
- "chico-vegetation-on-terrain-playground",
+ "building-shaders",
+ "character-inventory-user",
+ "character-items",
+ "character-persist",
+ "character-ragdoll",
+ "characters",
+ "chico",
  "clap",
  "combat-hud",
- "crozon-character-items",
- "crozon-character-persist",
- "crozon-character-ragdoll",
- "crozon-characters",
- "crozon-inventory-user",
  "damage",
- "durham-terrain-models",
+ "durham",
  "evasion-intelligence",
  "firearm-intelligence",
  "firearm-user",
  "firearms",
  "fleeing-intelligence",
+ "furnishing-layer-model",
+ "furnishing-layer-presentation",
  "furniture-assemblies",
  "furniture-shaders",
  "game-commands",
  "ground-avian",
  "hiding-intelligence",
  "intelligence-lod",
+ "layer-stack",
  "lod",
  "lod-avian",
  "log",
+ "maputo",
  "material-ref",
  "maybraid-character-controller",
  "maybraid-game-mode-discover",
  "maybraid-game-mode-training-ground",
  "maybraid-input",
- "maybraid-mobs",
  "maybraid-skill-map",
  "maybraid-sky",
  "maybraid-weather",
  "meandering-intelligence",
  "mob-characters",
- "mob-intelligence",
  "mob-layer-model",
  "mob-layer-presentation",
+ "mob-scenes",
  "movement-intelligence",
  "movement-intelligence-avian",
  "movement-realization",
@@ -7151,13 +7199,7 @@ dependencies = [
  "player",
  "player-camera",
  "poi-intelligence",
- "procedural-common",
- "richmond-building-components",
- "richmond-building-physics",
- "richmond-building-shaders",
- "richmond-buildings",
- "richmond-development-models",
- "richmond-urbanization",
+ "richmond",
  "routing-intelligence",
  "serde",
  "serde_json",
@@ -7169,10 +7211,13 @@ dependencies = [
  "threat-intelligence",
  "threat-intelligence-damage",
  "threat-management-intelligence",
+ "urbanization-cells",
  "urbanization-layer-model",
  "urbanization-layer-presentation",
+ "vegetation-components",
  "vegetation-layer-model",
  "vegetation-layer-presentation",
+ "world-player",
 ]
 
 [[package]]
@@ -7229,15 +7274,15 @@ version = "0.1.0"
 dependencies = [
  "bevy",
  "camera-controls",
+ "character-creation-menus",
+ "character-inventory-user",
+ "character-items",
+ "character-model-user",
+ "character-persist",
  "character-ui-menu",
+ "characters",
+ "characters-playground",
  "clap",
- "crozon-character-items",
- "crozon-character-model-user",
- "crozon-character-persist",
- "crozon-character-playground",
- "crozon-character-ui-menus",
- "crozon-characters",
- "crozon-inventory-user",
  "firearm-user",
  "firearms-components",
  "game-commands",
@@ -7257,9 +7302,9 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bevy",
- "crozon-character-items",
- "crozon-character-model-user",
- "crozon-character-persist",
+ "character-items",
+ "character-model-user",
+ "character-persist",
  "game-commands",
  "maybraid-menu-controller",
  "menu-components",
@@ -7632,9 +7677,9 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bevy",
- "crozon-character-items",
- "crozon-characters",
- "crozon-inventory-user",
+ "character-inventory-user",
+ "character-items",
+ "characters",
  "damage",
  "firearm-user",
  "firearms",
@@ -7647,16 +7692,6 @@ dependencies = [
  "poi-intelligence",
  "routing-intelligence",
  "spotting-intelligence",
-]
-
-[[package]]
-name = "mob-groups"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bevy",
- "maybraid-mobs",
- "mob-characters",
 ]
 
 [[package]]
@@ -7686,18 +7721,9 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bevy",
- "chico-forests",
- "durham-terrain-models",
+ "layer-stack",
  "lod",
- "maybraid-mobs",
- "mob-groups",
- "procedural-common",
- "render-item",
- "richmond-development-models",
- "richmond-urbanization",
  "terrain-layer-model",
- "urbanization-layer-model",
- "vegetation-layer-model",
 ]
 
 [[package]]
@@ -7706,61 +7732,32 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bevy",
- "durham-terrain-models",
+ "layer-stack",
  "lod",
- "lod-gimme",
- "maybraid-mobs",
- "mob-groups",
  "mob-intelligence",
  "mob-layer-model",
- "richmond-development-models",
- "richmond-urbanization",
  "terrain-layer-model",
- "urbanization-layer-model",
 ]
 
 [[package]]
-name = "mob-on-terrain-playground"
+name = "mob-scenes"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "avian3d",
  "bevy",
- "clap",
- "crozon-characters",
- "durham-terrain",
- "durham-terrain-models",
- "evasion-intelligence",
- "firearm-intelligence",
- "firearm-user",
- "firearms",
+ "character-items",
+ "damage",
  "fleeing-intelligence",
- "game-commands",
- "ground-avian",
- "hiding-intelligence",
  "journeying-intelligence",
  "lod",
- "lod-avian",
- "log",
- "maybraid-character-controller",
- "maybraid-input",
- "maybraid-mobs",
- "meandering-intelligence",
+ "maybraid-audio",
  "mob-characters",
  "mob-intelligence",
- "movement-intelligence",
- "movement-intelligence-avian",
- "movement-realization",
  "npc-intelligence",
- "player",
  "poi-intelligence",
- "render-item",
  "routing-intelligence",
- "spotting-intelligence",
  "tether-intelligence",
  "threat-intelligence",
- "threat-intelligence-damage",
- "threat-management-intelligence",
 ]
 
 [[package]]
@@ -7813,10 +7810,10 @@ dependencies = [
  "anyhow",
  "bevy",
  "bevy_math",
+ "building-components",
+ "buildings",
  "movement-intelligence",
  "movement-intelligence-avian",
- "richmond-building-components",
- "richmond-buildings",
 ]
 
 [[package]]
@@ -9099,12 +9096,12 @@ dependencies = [
  "anyhow",
  "avian3d",
  "bevy",
- "crozon-characters",
- "crozon-rigs",
+ "character-animations",
+ "character-rigs",
+ "characters",
  "damage",
- "durham-terrain-models",
+ "durham",
  "lod-avian",
- "malo-animations",
  "maybraid-audio",
  "maybraid-character-controller",
 ]
@@ -9115,7 +9112,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bevy",
- "crozon-characters",
+ "characters",
  "lod",
  "maybraid-character-controller",
  "player",
@@ -10034,149 +10031,63 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "47b34b781b31e5d73e9fbc8689c70551fd1ade9a19e3e28cfec8580a79290cc4"
 
 [[package]]
-name = "richmond-building-components"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bevy",
- "bevy_math",
- "lod",
- "material-ref",
- "procedural-common",
- "scene-ref",
-]
-
-[[package]]
-name = "richmond-building-physics"
+name = "richmond"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "avian3d",
  "bevy",
- "bevy_math",
- "lod",
- "lod-avian",
- "richmond-building-components",
-]
-
-[[package]]
-name = "richmond-building-shaders"
-version = "0.1.0"
-dependencies = [
- "bevy",
- "material-ref",
-]
-
-[[package]]
-name = "richmond-buildings"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bevy",
- "bevy_math",
- "lod",
- "material-ref",
- "procedural-common",
- "richmond-building-components",
-]
-
-[[package]]
-name = "richmond-buildings-playground"
-version = "0.1.0"
-dependencies = [
- "avian3d",
- "bevy",
- "bevy_math",
- "clap",
- "game-commands",
- "lod",
- "lod-avian",
- "lod-gimme",
- "log",
- "procedural-common",
- "richmond-building-components",
- "richmond-buildings",
- "richmond-developments",
- "scene-ref",
-]
-
-[[package]]
-name = "richmond-development-models"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "avian3d",
- "bevy",
- "durham-terrain",
- "durham-terrain-models",
- "jersey-terrain-stamps",
+ "building-components",
+ "building-physics",
+ "building-shaders",
+ "buildings",
+ "durham",
+ "layer-stack",
  "lod",
  "lod-avian",
  "lod-gimme",
  "lod-lazy-refs",
- "marazion-watersheds",
  "material-ref",
  "procedural-common",
  "render-item",
- "richmond-building-components",
- "richmond-building-physics",
- "richmond-building-shaders",
- "richmond-buildings",
- "richmond-developments",
- "richmond-urbanization",
  "scene-ref",
  "terrain-layer-model",
-]
-
-[[package]]
-name = "richmond-developments"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bevy_math",
- "lod",
- "material-ref",
- "procedural-common",
- "richmond-building-components",
- "richmond-buildings",
-]
-
-[[package]]
-name = "richmond-developments-on-terrain-playground"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "avian3d",
- "bevy",
- "clap",
- "durham-terrain",
- "durham-terrain-models",
- "furniture-assemblies",
- "furniture-shaders",
- "game-commands",
- "lod",
- "log",
- "procedural-common",
- "richmond-building-components",
- "richmond-buildings",
- "richmond-development-models",
- "richmond-developments",
- "richmond-urbanization",
- "terrain-layer-model",
- "terrain-layer-presentation",
+ "terrain-shaders",
+ "terrain-stamps",
+ "terrain-watersheds",
+ "urbanization-cells",
+ "urbanization-developments",
  "urbanization-layer-model",
  "urbanization-layer-presentation",
 ]
 
 [[package]]
-name = "richmond-urbanization"
+name = "richmond-playground"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "avian3d",
  "bevy",
- "bevy_math",
+ "building-components",
+ "buildings",
+ "clap",
+ "durham",
+ "furnishing-layer-model",
+ "furnishing-layer-presentation",
+ "game-commands",
+ "layer-stack",
  "lod",
+ "log",
+ "maputo",
  "procedural-common",
+ "richmond",
+ "terrain-layer-model",
+ "terrain-layer-presentation",
+ "terrain-shaders",
+ "urbanization-cells",
+ "urbanization-developments",
+ "urbanization-layer-model",
+ "urbanization-layer-presentation",
 ]
 
 [[package]]
@@ -10252,8 +10163,7 @@ dependencies = [
  "avian3d",
  "bevy",
  "clap",
- "durham-terrain",
- "durham-terrain-models",
+ "durham",
  "game-commands",
  "lod",
  "lod-avian",
@@ -10266,6 +10176,7 @@ dependencies = [
  "player",
  "render-item",
  "routing-intelligence",
+ "terrain-shaders",
  "tether-intelligence",
 ]
 
@@ -10519,6 +10430,34 @@ dependencies = [
  "arraydeque",
  "smallvec 2.0.0-beta.1",
  "thiserror 2.0.21",
+]
+
+[[package]]
+name = "sbs-geometry"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "bevy_math",
+ "clap",
+ "log",
+ "procedural-common",
+ "render-item",
+]
+
+[[package]]
+name = "sbs-trees"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "clap",
+ "lod",
+ "log",
+ "procedural-common",
+ "sbs-geometry",
+ "sdf-common",
+ "vegetation-components",
 ]
 
 [[package]]
@@ -11687,6 +11626,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bevy",
+ "layer-stack",
  "lod",
 ]
 
@@ -11696,8 +11636,35 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bevy",
+ "layer-stack",
  "lod",
  "terrain-layer-model",
+]
+
+[[package]]
+name = "terrain-shaders"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+]
+
+[[package]]
+name = "terrain-stamps"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bevy_math",
+ "procedural-common",
+]
+
+[[package]]
+name = "terrain-watersheds"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bevy_math",
+ "procedural-common",
+ "terrain-stamps",
 ]
 
 [[package]]
@@ -12488,16 +12455,37 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8ecb6da28b8a351d773b68d5825ac39017e680750f980f3a1a85cd8dd28a47c1"
 
 [[package]]
+name = "urbanization-cells"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "bevy_math",
+ "lod",
+ "procedural-common",
+]
+
+[[package]]
+name = "urbanization-developments"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bevy_math",
+ "building-components",
+ "buildings",
+ "lod",
+ "material-ref",
+ "procedural-common",
+]
+
+[[package]]
 name = "urbanization-layer-model"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "bevy",
- "durham-terrain-models",
+ "layer-stack",
  "lod",
- "procedural-common",
- "richmond-development-models",
- "richmond-urbanization",
  "terrain-layer-model",
 ]
 
@@ -12507,13 +12495,8 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bevy",
- "durham-terrain-models",
- "furniture-assemblies",
- "furniture-shaders",
+ "layer-stack",
  "lod",
- "richmond-building-physics",
- "richmond-development-models",
- "richmond-urbanization",
  "terrain-layer-model",
  "terrain-layer-presentation",
  "urbanization-layer-model",
@@ -12702,15 +12685,73 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f1bddf1187be692e79c5ffeab891132dfb0f236ed36a43c7ed39f1165ee20191"
 
 [[package]]
+name = "vegetation-bumpout"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "material-ref",
+ "procedural-common",
+ "terrain-chunk-ref",
+ "vegetation-shaders",
+]
+
+[[package]]
+name = "vegetation-bumpout-playground"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "camera-controls",
+ "clap",
+ "game-commands",
+ "lod-cascade",
+ "material-ref",
+ "procedural-common",
+ "render-item",
+ "sdf",
+ "terrain-chunk-ref",
+ "vegetation-bumpout",
+]
+
+[[package]]
+name = "vegetation-components"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "bevy_math",
+ "lod",
+ "material-ref",
+ "scene-ref",
+]
+
+[[package]]
+name = "vegetation-groves"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "bevy_math",
+ "clap",
+ "gimme-gen",
+ "lod",
+ "log",
+ "material-ref",
+ "procedural-common",
+ "sbs-geometry",
+ "sbs-trees",
+ "vegetation-components",
+ "vegetation-shaders",
+]
+
+[[package]]
 name = "vegetation-layer-model"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "bevy",
- "chico-forests",
- "durham-terrain-models",
+ "layer-stack",
  "lod",
- "procedural-common",
  "terrain-layer-model",
 ]
 
@@ -12720,22 +12761,19 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bevy",
- "chico-bumpout",
- "chico-forests",
- "chico-groves",
- "chico-vegetation-shaders",
- "durham-terrain-models",
+ "layer-stack",
  "lod",
- "lod-cascade",
- "material-ref",
- "procedural-common",
- "render-item",
- "richmond-development-models",
- "richmond-urbanization",
- "terrain-chunk-ref",
  "terrain-layer-model",
- "urbanization-layer-model",
  "vegetation-layer-model",
+]
+
+[[package]]
+name = "vegetation-shaders"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "material-ref",
+ "vegetation-components",
 ]
 
 [[package]]
@@ -13890,6 +13928,24 @@ name = "wordnet-types"
 version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "99cdc77ac580700f64d314e2c30d2e8ec1c93ce981f66a62a894a671d1036af3"
+
+[[package]]
+name = "world-player"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "avian3d",
+ "bevy",
+ "characters",
+ "clap",
+ "durham",
+ "game-commands",
+ "lod",
+ "lod-avian",
+ "maybraid-input",
+ "player-camera",
+ "vegetation-components",
+]
 
 [[package]]
 name = "writeable"

@@ -195,7 +195,7 @@ fn release_modifiers_on_focus_change(
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crozon_characters::CharacterMotionSystems;
+	use characters::CharacterMotionSystems;
 	use maybraid_character_controller::CharacterIntent;
 
 	#[test]

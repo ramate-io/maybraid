@@ -23,11 +23,13 @@ pub use session::{FreeForAllBody, FreeForAllHost};
 use bevy::ecs::schedule::common_conditions::resource_exists;
 use bevy::prelude::*;
 use bevy::time::common_conditions::on_timer;
+use building_components::{apply_parent_confines, FurnitureWireframePlugin, LabelWireframePlugin};
+use building_physics::BuildingWalkColliderPlugin;
 use buildings_lod::FiringRangeBuildingsLodPlugin;
+use character_items::ItemRng;
+use character_ragdoll::{CharacterRagdollPlugin, CharacterRagdollSettings};
+use characters::CharacterHostsPlugin;
 use combat_hud::CombatHudPlugin;
-use crozon_character_items::ItemRng;
-use crozon_character_ragdoll::{CharacterRagdollPlugin, CharacterRagdollSettings};
-use crozon_characters::CharacterHostsPlugin;
 use diagnostics::FiringRangeDiagnosticsPlugin;
 use evasion_intelligence::{EvasionPlugin, EvasionSystems};
 use firearm_intelligence::{FirearmIntelligencePlugin, FirearmIntelligenceSystems};
@@ -53,10 +55,6 @@ use player::{
 	spawn_player_with_hidden_capsule, Npc, Player, PlayerLook, PlayerPlugin,
 };
 use player_camera::{spawn_follow_camera, PlayerCameraPlugin};
-use richmond_building_components::{
-	apply_parent_confines, FurnitureWireframePlugin, LabelWireframePlugin,
-};
-use richmond_building_physics::BuildingWalkColliderPlugin;
 use session::{AppliedSession, Civilian, LoadoutRng, RangeMode, RangeSession};
 use spotting_intelligence::SpottingSystems;
 use threat_intelligence::{ThreatIntelligencePlugin, ThreatSystems};

@@ -120,3 +120,48 @@ fn remove_stale_drops_unwanted_ids() -> Result<()> {
 	assert!(!presenter.vegetation.contains_key(&far));
 	Ok(())
 }
+
+#[test]
+fn cull_retires_presented_id_missing_from_the_index() -> Result<()> {
+	let mut index = WorldIndex::default();
+	let lod = TestLod::new(span(0.0, 9.0));
+	let near = Id::from_cell(cell(0.0));
+	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, near, &lod.lod_ref());
+
+	let mut presenter = RecordingPresenter::default();
+	RegionPresenter::<Vegetation, _>::present(
+		&mut presenter,
+		&index,
+		span(0.0, 9.0),
+		&lod.lod_ref(),
+	);
+	index.vegetation.remove(&near);
+	let keep = HashSet::from([near]);
+	RegionPresenter::<Vegetation, _>::cull(&mut presenter, &index, &keep, 0);
+	assert!(!presenter.vegetation.contains_key(&near));
+	assert!(!presenter.hidden.contains(&near));
+	Ok(())
+}
+
+#[test]
+fn cull_keeps_an_id_reinserted_before_cull() -> Result<()> {
+	let mut index = WorldIndex::default();
+	let lod = TestLod::new(span(0.0, 9.0));
+	let near = Id::from_cell(cell(0.0));
+	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, near, &lod.lod_ref());
+
+	let mut presenter = RecordingPresenter::default();
+	RegionPresenter::<Vegetation, _>::present(
+		&mut presenter,
+		&index,
+		span(0.0, 9.0),
+		&lod.lod_ref(),
+	);
+	index.vegetation.remove(&near);
+	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, near, &lod.lod_ref());
+	let keep = HashSet::from([near]);
+	RegionPresenter::<Vegetation, _>::cull(&mut presenter, &index, &keep, 1);
+	assert!(presenter.vegetation.contains_key(&near));
+	assert!(!presenter.hidden.contains(&near));
+	Ok(())
+}

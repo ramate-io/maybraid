@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 use std::fs;
 
 use bevy::prelude::*;
-use crozon_character_persist::{PersistError, SaveRoot};
+use character_persist::{PersistError, SaveRoot};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -158,7 +158,7 @@ pub(super) fn persist_machine_settings_on_exit(
 
 #[cfg(test)]
 mod tests {
-	use crozon_character_persist::SaveRoot;
+	use character_persist::SaveRoot;
 
 	use super::{
 		apply_seed, apply_shadows_env, load_machine_settings, parse_shadows_env,

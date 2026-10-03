@@ -1,6 +1,6 @@
 //! Catalog [`FirearmSpec`] → assembled [`FirearmKit`], with slot looks painted on.
 
-use crozon_character_items::{
+use character_items::{
 	FirearmBarrel, FirearmGrip, FirearmKitSpec, FirearmMesh, FirearmSight, FirearmSpec,
 	FirearmStock, FirearmTriggerBox, SlotLook,
 };
@@ -118,7 +118,7 @@ impl FirearmComponents for GeneratedFirearm {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crozon_character_items::{FirearmMaterial, FirearmMesh, ItemColor};
+	use character_items::{FirearmMaterial, FirearmMesh, ItemColor};
 	use firearms::SocketRef;
 
 	#[test]
