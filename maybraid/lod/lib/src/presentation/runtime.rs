@@ -15,6 +15,7 @@ use crate::gen::{
 	Id, LodGenerated, SpatialIndex, QUEUE_KEEP_SLACK_XZ,
 };
 use crate::jobs::{ensure_lod_job_counter, LodJobCounter};
+use crate::runtime_quantum::{regions_match, regions_overlap_xz, time_up, warn_atomic_overrun};
 use crate::lod_ref::{
 	collect_node_snapshots, lod_refs_from_snapshots, LodNode, LodNodeBounds, LodNodePlugin,
 	LodNodePose, LodNodeSystems,
@@ -480,7 +481,12 @@ pub fn drain_lod_present<T, S, Pr, M, F>(
 				reorder_pending = true;
 			}
 		}
-		warn_atomic_overrun("present region scan", quantum.elapsed(), time_budget.max_atomic_cost);
+		warn_atomic_overrun(
+			"presentation",
+			"present region scan",
+			quantum.elapsed(),
+			time_budget.max_atomic_cost,
+		);
 	}
 
 	if queue.pending.is_empty() {
@@ -502,6 +508,7 @@ pub fn drain_lod_present<T, S, Pr, M, F>(
 				.unwrap_or(std::cmp::Ordering::Equal)
 		});
 		warn_atomic_overrun(
+			"presentation",
 			"present queue ordering",
 			quantum.elapsed(),
 			time_budget.max_atomic_cost,
@@ -530,7 +537,12 @@ pub fn drain_lod_present<T, S, Pr, M, F>(
 		};
 		let quantum = Instant::now();
 		presenter.handle(id, version, value, lod_ref);
-		warn_atomic_overrun("present ID", quantum.elapsed(), time_budget.max_atomic_cost);
+		warn_atomic_overrun(
+			"presentation",
+			"present ID",
+			quantum.elapsed(),
+			time_budget.max_atomic_cost,
+		);
 		// Grow-then-spawn presenters may consume a slot without stamping
 		// `presented_version`. Re-queue so the next slot can finish without a
 		// keep rescan.
@@ -540,33 +552,6 @@ pub fn drain_lod_present<T, S, Pr, M, F>(
 			jobs.begin();
 		}
 	}
-}
-
-fn time_up(started: Instant, budget: Duration) -> bool {
-	!budget.is_zero() && started.elapsed() >= budget
-}
-
-fn warn_atomic_overrun(stage: &'static str, elapsed: Duration, maximum: Duration) {
-	if maximum.is_zero() || elapsed <= maximum {
-		return;
-	}
-	debug!(
-		stage,
-		elapsed_us = elapsed.as_micros(),
-		max_us = maximum.as_micros(),
-		"LOD presentation quantum exceeded max_atomic_cost"
-	);
-}
-
-fn regions_match(a: Aabb3d, b: Aabb3d) -> bool {
-	(a.min.x - b.min.x).abs() < 1e-3
-		&& (a.max.x - b.max.x).abs() < 1e-3
-		&& (a.min.z - b.min.z).abs() < 1e-3
-		&& (a.max.z - b.max.z).abs() < 1e-3
-}
-
-fn regions_overlap_xz(a: Aabb3d, b: Aabb3d) -> bool {
-	a.min.x <= b.max.x && a.max.x >= b.min.x && a.min.z <= b.max.z && a.max.z >= b.min.z
 }
 
 /// Emit optional [`LodPresentCullRegion<M>`] tiles via strategy `P`. Drain ignores them.
