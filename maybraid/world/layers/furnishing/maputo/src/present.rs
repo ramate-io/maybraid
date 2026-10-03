@@ -63,7 +63,7 @@ impl FurniturePresenterState {
 		}
 		if let Some(entities) = self.pending_despawn.pop_front() {
 			for entity in entities {
-				commands.entity(entity).despawn();
+				commands.entity(entity).try_despawn();
 			}
 		}
 	}
@@ -81,7 +81,7 @@ impl FurniturePresenterState {
 
 	fn despawn_all(&mut self, commands: &mut Commands) {
 		for entity in self.take_entities() {
-			commands.entity(entity).despawn();
+			commands.entity(entity).try_despawn();
 		}
 	}
 }

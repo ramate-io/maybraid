@@ -65,13 +65,13 @@ impl UrbanizationPresenterState {
 	pub fn clear(&mut self, commands: &mut Commands) {
 		for presented in self.presented.values() {
 			for entity in &presented.entities {
-				commands.entity(*entity).despawn();
+				commands.entity(*entity).try_despawn();
 			}
 		}
 		self.presented.clear();
 		for entities in self.pending_despawn.drain(..) {
 			for entity in entities {
-				commands.entity(entity).despawn();
+				commands.entity(entity).try_despawn();
 			}
 		}
 	}
@@ -104,7 +104,7 @@ impl UrbanizationPresenterState {
 		}
 		while let Some(entities) = self.pending_despawn.pop_front() {
 			for entity in entities {
-				commands.entity(entity).despawn();
+				commands.entity(entity).try_despawn();
 			}
 		}
 	}
@@ -292,14 +292,14 @@ pub fn sync_raw_terrain_replacements(
 					*visibility = Visibility::Hidden;
 				}
 				if !superseded {
-					commands.entity(entity).insert(TerrainSuperseded);
+					commands.entity(entity).try_insert(TerrainSuperseded);
 				}
 				now_replaced.insert(presented.0);
 			}
 		} else if state.replaced.contains(&presented.0) {
 			*visibility = Visibility::Inherited;
 			if superseded {
-				commands.entity(entity).remove::<TerrainSuperseded>();
+				commands.entity(entity).try_remove::<TerrainSuperseded>();
 			}
 		}
 	}

@@ -309,7 +309,7 @@ impl<M: TerrainStreamMarker> Default for TerrainStreamPresenterState<M> {
 impl<M: TerrainStreamMarker> TerrainStreamPresenterState<M> {
 	fn clear(&mut self, commands: &mut Commands) {
 		for entry in self.presented.values() {
-			commands.entity(entry.entity).despawn();
+			commands.entity(entry.entity).try_despawn();
 		}
 		self.presented.clear();
 	}
@@ -318,7 +318,7 @@ impl<M: TerrainStreamMarker> TerrainStreamPresenterState<M> {
 impl TerrainPresenterState {
 	pub fn clear(&mut self, commands: &mut Commands) {
 		for entry in self.presented.values() {
-			commands.entity(entry.entity).despawn();
+			commands.entity(entry.entity).try_despawn();
 		}
 		self.presented.clear();
 	}
@@ -445,7 +445,7 @@ impl<M: TerrainStreamMarker> TerrainStreamRegionPresenter<'_, '_, M> {
 					if shown.level != level {
 						self.commands.entity(shown.entity).insert(fill_visibility(draw));
 						if let Some(previous_water) = shown.water.take() {
-							self.commands.entity(previous_water).despawn();
+							self.commands.entity(previous_water).try_despawn();
 						}
 						shown.water =
 							water.map(|w| attach_water(&mut self.commands, *id, shown.entity, w));
@@ -455,7 +455,7 @@ impl<M: TerrainStreamMarker> TerrainStreamRegionPresenter<'_, '_, M> {
 				}
 			}
 			if let Some(previous) = self.state.presented.remove(id) {
-				self.commands.entity(previous.entity).despawn();
+				self.commands.entity(previous.entity).try_despawn();
 			}
 			let entity = entry.value.spawn_fill(
 				&mut self.commands,
@@ -483,7 +483,7 @@ impl<M: TerrainStreamMarker> TerrainStreamRegionPresenter<'_, '_, M> {
 			.map(|(id, entry)| (*id, entry.entity))
 			.collect();
 		for (id, entity) in stale {
-			self.commands.entity(entity).despawn();
+			self.commands.entity(entity).try_despawn();
 			self.state.presented.remove(&id);
 		}
 	}
@@ -500,7 +500,7 @@ impl<'a, 'w, 's> RegionPresenter<Terrain, TerrainStoreView<'a>> for TerrainRegio
 
 	fn handle(&mut self, id: Id, version: Version, value: &Terrain, _lod_ref: &LodRef) {
 		if let Some(previous) = self.state.presented.remove(&id) {
-			self.commands.entity(previous.entity).despawn();
+			self.commands.entity(previous.entity).try_despawn();
 		}
 		let entity = value.spawn_fill(&mut self.commands, Visibility::Inherited, true);
 		self.commands.entity(entity).insert((
@@ -528,7 +528,7 @@ impl<'a, 'w, 's> RegionPresenter<Terrain, TerrainStoreView<'a>> for TerrainRegio
 			.collect();
 
 		for (id, entity) in stale {
-			self.commands.entity(entity).despawn();
+			self.commands.entity(entity).try_despawn();
 			self.state.presented.remove(&id);
 		}
 	}

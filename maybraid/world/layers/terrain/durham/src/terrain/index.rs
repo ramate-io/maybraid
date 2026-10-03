@@ -536,7 +536,7 @@ impl<'w, 's> AvianTerrainIndex<'w, 's> {
 	pub fn clear(&mut self) {
 		let entities: Vec<Entity> = self.store.terrain.values().filter_map(|e| e.entity).collect();
 		for entity in entities {
-			self.commands.entity(entity).despawn();
+			self.commands.entity(entity).try_despawn();
 		}
 		*self.store = TerrainEntryStore::default();
 	}
@@ -619,7 +619,7 @@ macro_rules! impl_map_spatial_index {
 				if let Some(existing) = self.store.$field.remove(&id) {
 					if let Some(entity) = existing.entity {
 						self.store.entity_to_id.remove(&entity);
-						self.commands.entity(entity).despawn();
+						self.commands.entity(entity).try_despawn();
 					}
 				}
 				let version = self.store.next_version();
@@ -740,7 +740,7 @@ impl<'w, 's> SpatialIndex<Terrain> for AvianTerrainIndex<'w, 's> {
 		if let Some(existing) = self.store.terrain.remove(&id) {
 			if let Some(entity) = existing.entity {
 				self.store.entity_to_id.remove(&entity);
-				self.commands.entity(entity).despawn();
+				self.commands.entity(entity).try_despawn();
 			}
 		}
 

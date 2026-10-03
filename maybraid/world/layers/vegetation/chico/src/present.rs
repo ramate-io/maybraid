@@ -48,14 +48,14 @@ impl ForestPresenterState {
 	pub fn clear(&mut self, commands: &mut Commands) {
 		for presented in self.presented.values() {
 			for entity in &presented.entities {
-				commands.entity(*entity).despawn();
+				commands.entity(*entity).try_despawn();
 			}
 		}
 		self.presented.clear();
 		self.growing.clear();
 		for entities in self.pending_despawn.drain(..) {
 			for entity in entities {
-				commands.entity(entity).despawn();
+				commands.entity(entity).try_despawn();
 			}
 		}
 	}
@@ -101,7 +101,7 @@ impl ForestPresenterState {
 		for id in stale {
 			if let Some(entry) = self.presented.remove(&id) {
 				for entity in entry.entities {
-					commands.entity(entity).despawn();
+					commands.entity(entity).try_despawn();
 				}
 			}
 		}
@@ -236,7 +236,7 @@ impl ForestPresenterState {
 				break;
 			};
 			for entity in entities {
-				commands.entity(entity).despawn();
+				commands.entity(entity).try_despawn();
 			}
 			despawn_budget -= 1;
 		}

@@ -188,7 +188,7 @@ impl<M: Send + Sync + 'static> BumpOutPresenterState<M> {
 			self.presented.keys().copied().filter(|id| !wanted.contains(id)).collect();
 		for id in stale {
 			if let Some(entry) = self.presented.remove(&id) {
-				commands.entity(entry.entity).despawn();
+				commands.entity(entry.entity).try_despawn();
 			}
 		}
 	}
@@ -204,7 +204,7 @@ impl<M: Send + Sync + 'static> BumpOutPresenterState<M> {
 		T: IdentifiedMesh + NormalizeChunk + Send + Sync + 'static,
 	{
 		if let Some(previous) = self.presented.remove(&id) {
-			commands.entity(previous.entity).despawn();
+			commands.entity(previous.entity).try_despawn();
 		}
 		let terrain_key = terrain_ref.key().clone();
 		let entity = bump_out.spawn(commands, terrain_ref);

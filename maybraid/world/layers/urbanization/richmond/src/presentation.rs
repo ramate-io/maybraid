@@ -30,7 +30,7 @@ pub struct PaddedTerrainPresenterState {
 impl PaddedTerrainPresenterState {
 	pub fn clear(&mut self, commands: &mut Commands) {
 		for entry in self.presented.values() {
-			commands.entity(entry.entity).despawn();
+			commands.entity(entry.entity).try_despawn();
 		}
 		self.presented.clear();
 	}
@@ -62,7 +62,7 @@ impl<G: RichmondGround> PaddedTerrainPresenter<'_, '_, G> {
 			.map(|(id, entry)| (*id, entry.entity))
 			.collect();
 		for (id, entity) in stale {
-			self.commands.entity(entity).despawn();
+			self.commands.entity(entity).try_despawn();
 			self.state.presented.remove(&id);
 		}
 	}
@@ -81,7 +81,7 @@ impl<G: RichmondGround> PaddedTerrainPresenter<'_, '_, G> {
 		water: Option<&Water>,
 	) -> Option<Entity> {
 		if let Some(previous) = previous {
-			self.commands.entity(previous).despawn();
+			self.commands.entity(previous).try_despawn();
 		}
 		water.map(|water| self.attach_water(id, parent, water))
 	}
@@ -176,7 +176,7 @@ impl<G: RichmondGround> PaddedTerrainPresenter<'_, '_, G> {
 				}
 			}
 			if let Some(previous) = self.state.presented.remove(id) {
-				self.commands.entity(previous.entity).despawn();
+				self.commands.entity(previous.entity).try_despawn();
 			}
 			let (entity, water_entity) = self.spawn_cell(*id, value, draw, water.as_ref());
 			self.state.presented.insert(
@@ -198,7 +198,7 @@ impl<'a, G: RichmondGround> RegionPresenter<TerrainWithPads, PaddedStoreView<'a>
 
 	fn handle(&mut self, id: Id, version: Version, value: &TerrainWithPads, lod_ref: &LodRef) {
 		if let Some(previous) = self.state.presented.remove(&id) {
-			self.commands.entity(previous.entity).despawn();
+			self.commands.entity(previous.entity).try_despawn();
 		}
 		let level = value.scene_lod_level(lod_ref);
 		// FinePatch own-terrain presents water via [`durham::WaterRegionPresenter`].

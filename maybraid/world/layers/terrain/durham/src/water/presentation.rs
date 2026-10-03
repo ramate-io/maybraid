@@ -70,7 +70,7 @@ pub struct PresentedWaterScene(pub Id);
 impl WaterPresenterState {
 	pub fn clear(&mut self, commands: &mut Commands) {
 		for entry in self.presented.values() {
-			commands.entity(entry.entity).despawn();
+			commands.entity(entry.entity).try_despawn();
 		}
 		self.presented.clear();
 	}
@@ -163,7 +163,7 @@ impl<'w, 's> WaterRegionPresenter<'w, 's> {
 				continue;
 			}
 			if let Some(previous) = self.state.presented.remove(id) {
-				self.commands.entity(previous.entity).despawn();
+				self.commands.entity(previous.entity).try_despawn();
 			}
 			let entity = self
 				.commands
@@ -186,7 +186,7 @@ impl<'w, 's> WaterRegionPresenter<'w, 's> {
 			.collect();
 
 		for (id, entity) in stale {
-			self.commands.entity(entity).despawn();
+			self.commands.entity(entity).try_despawn();
 			self.state.presented.remove(&id);
 		}
 	}
@@ -199,7 +199,7 @@ impl<'a, 'w, 's> RegionPresenter<Water, WaterStoreView<'a>> for WaterRegionPrese
 
 	fn handle(&mut self, id: Id, version: Version, value: &Water, lod_ref: &LodRef) {
 		if let Some(previous) = self.state.presented.remove(&id) {
-			self.commands.entity(previous.entity).despawn();
+			self.commands.entity(previous.entity).try_despawn();
 		}
 		let entity = self
 			.commands
