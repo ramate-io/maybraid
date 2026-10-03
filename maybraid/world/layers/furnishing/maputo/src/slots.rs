@@ -29,27 +29,44 @@ pub struct FurnishedDevelopment {
 pub trait FurnitureSlots: Send + Sync + 'static {
 	type Read: ReadOnlySystemParam + 'static;
 
-	fn slots_overlapping(
+	/// Cheap overlapping store keys. Expand kits only after the slot cache misses.
+	fn overlapping_tracked(
 		read: &SystemParamItem<'_, '_, Self::Read>,
 		region: Aabb3d,
-	) -> Vec<FurnishedDevelopment>;
-}
+	) -> Vec<(Id, Version)>;
 
-impl<T: 'static> FurnitureSlots for Urbanization<richmond::Richmond<T>> {
-	type Read = Res<'static, DevelopmentEntryStore>;
+	fn world_slots(read: &SystemParamItem<'_, '_, Self::Read>, id: Id) -> Vec<FurnitureNode>;
 
 	fn slots_overlapping(
 		read: &SystemParamItem<'_, '_, Self::Read>,
 		region: Aabb3d,
 	) -> Vec<FurnishedDevelopment> {
-		read.developments_overlapping_tracked(region)
+		Self::overlapping_tracked(read, region)
 			.into_iter()
-			.map(|(id, version, development)| FurnishedDevelopment {
+			.map(|(id, version)| FurnishedDevelopment {
 				id,
 				version,
-				slots: world_slots_of(development),
+				slots: Self::world_slots(read, id),
 			})
 			.collect()
+	}
+}
+
+impl<T: 'static> FurnitureSlots for Urbanization<richmond::Richmond<T>> {
+	type Read = Res<'static, DevelopmentEntryStore>;
+
+	fn overlapping_tracked(
+		read: &SystemParamItem<'_, '_, Self::Read>,
+		region: Aabb3d,
+	) -> Vec<(Id, Version)> {
+		read.developments_overlapping_tracked(region)
+			.into_iter()
+			.map(|(id, version, _)| (id, version))
+			.collect()
+	}
+
+	fn world_slots(read: &SystemParamItem<'_, '_, Self::Read>, id: Id) -> Vec<FurnitureNode> {
+		read.development(id).map(world_slots_of).unwrap_or_default()
 	}
 }
 

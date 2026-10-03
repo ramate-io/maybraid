@@ -322,6 +322,19 @@ impl TerrainPresenterState {
 		}
 		self.presented.clear();
 	}
+
+	#[cfg(test)]
+	pub(crate) fn insert_for_test(&mut self, id: Id, version: Version, entity: Entity) {
+		self.presented.insert(
+			id,
+			PresentedEntry { version, entity, water: None, level: LodSceneLevel::High },
+		);
+	}
+
+	#[cfg(test)]
+	pub(crate) fn presented_version(&self, id: Id) -> Option<Version> {
+		self.presented.get(&id).map(|entry| entry.version)
+	}
 }
 
 /// Read-only spatial-index view over the terrain entry map for presentation.

@@ -219,6 +219,12 @@ impl TerrainEntryStore {
 		self.next_version
 	}
 
+	/// Drop every stored entry. Advances the revision so restamp cannot reuse it.
+	pub fn clear_entries(&mut self) {
+		let next_version = self.next_version + 1;
+		*self = Self { next_version, ..Self::default() };
+	}
+
 	pub fn len(&self) -> usize {
 		self.terrain.len()
 	}
@@ -538,7 +544,7 @@ impl<'w, 's> AvianTerrainIndex<'w, 's> {
 		for entity in entities {
 			self.commands.entity(entity).try_despawn();
 		}
-		*self.store = TerrainEntryStore::default();
+		self.store.clear_entries();
 	}
 
 	pub fn set_layout(&mut self, layout: TerrainCellLayout) {
@@ -750,5 +756,31 @@ impl<'w, 's> SpatialIndex<Terrain> for AvianTerrainIndex<'w, 's> {
 		self.store
 			.terrain
 			.insert(id, StoredEntry { value: t, bounds, version, entity: Some(entity) });
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use crate::terrain::base_noise::BaseTerrainNoise;
+	use crate::terrain::cell::TerrainCellLayout;
+	use crate::terrain::config::TerrainConfig;
+
+	#[test]
+	fn clear_entries_advances_versions_past_the_previous_epoch() {
+		let mut store = TerrainEntryStore::default();
+		let layout = TerrainCellLayout::default();
+		let base = BaseTerrainNoise::from_config(&TerrainConfig::new(7));
+		store.insert_base_terrain_for_test(&layout, 0, 0, base);
+		let id = store.terrain.keys().copied().next().expect("inserted");
+		let previous = store.terrain.get(&id).expect("inserted").version;
+		let previous_rev = store.membership_revision();
+		store.clear_entries();
+		assert!(store.terrain.is_empty());
+		assert!(store.membership_revision() > previous_rev);
+		let base = BaseTerrainNoise::from_config(&TerrainConfig::new(7));
+		store.insert_base_terrain_for_test(&layout, 0, 0, base);
+		let rebuilt = store.terrain.get(&id).expect("reinserted").version;
+		assert!(rebuilt > previous, "restamp must not reuse a presented version");
 	}
 }

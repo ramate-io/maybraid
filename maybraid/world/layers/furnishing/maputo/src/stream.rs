@@ -3,7 +3,6 @@
 use bevy::ecs::system::StaticSystemParam;
 use bevy::prelude::*;
 use layer_stack::{GenerationMode, GenerationModeSystems};
-use lod::gen::{GenerationScheme, OriginalId, SpatialIndex};
 use lod::lod_ref::LodRef;
 use lod::presentation::{LodPresentKeepRegion, LodPresentRegion};
 use lod::scene::{LodRefreshRegions, LodRefreshRegionsStatus};
@@ -14,8 +13,7 @@ use urbanization_layer_model::UrbanizationGenerationSystems;
 use crate::cell::{
 	xz_radius_aabb, FurnitureCellExtent, FURNITURE_GENERATE_RADIUS, FURNITURE_PRESENT_RADIUS,
 };
-use crate::host::FurnitureCell;
-use crate::index::{same_slots, FurnitureIndex};
+use crate::index::FurnitureIndex;
 use crate::present::{FurnitureLodChan, FurnitureRefresh};
 use crate::slots::FurnitureSlots;
 use furnishing_layer_model::FurnishingGenerationSystems;
@@ -115,7 +113,9 @@ fn generate_furniture_cells<G: FurnitureSlots>(
 	let Some(region) = generate_keep.region.or(present_keep.region) else {
 		return;
 	};
-	index.refresh_slots(G::slots_overlapping(&read, region), region);
+	index.refresh_slots(G::overlapping_tracked(&read, region), region, |id| {
+		G::world_slots(&read, id)
+	});
 	let identity = Transform::IDENTITY;
 	let lod_ref = LodRef {
 		entity: Entity::PLACEHOLDER,
@@ -123,20 +123,7 @@ fn generate_furniture_cells<G: FurnitureSlots>(
 		current_transform: &identity,
 		bounds: &region,
 	};
-	let mut built = 0usize;
-	for OriginalId(id) in FurnitureCell::original_ids_for(&mut index, region) {
-		let Some((cell, bounds)) = FurnitureCell::build_with_id(&mut index, id, &lod_ref) else {
-			continue;
-		};
-		if index.get(id).is_some_and(|existing| same_slots(existing, &cell)) {
-			continue;
-		}
-		if built >= FURNITURE_GENERATE_CELLS_PER_FRAME {
-			break;
-		}
-		index.insert(id, cell, bounds, &lod_ref);
-		built += 1;
-	}
+	index.generate_cells(region, &lod_ref, FURNITURE_GENERATE_CELLS_PER_FRAME);
 }
 
 pub(crate) fn register_furniture_generate(app: &mut App) {

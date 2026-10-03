@@ -39,7 +39,7 @@ impl Default for UrbanizationIndex {
 impl UrbanizationIndex {
 	pub fn clear(&mut self) {
 		self.cells.clear();
-		self.next_version = 0;
+		self.next_version += 1;
 	}
 
 	/// Insert the urbanization cell if missing (selection only).
@@ -142,6 +142,27 @@ mod tests {
 		index.ensure_selected(extent, noise);
 		assert_eq!(index.cells.len(), 1);
 		assert!(index.get(extent.id()).is_some());
+		Ok(())
+	}
+
+	#[test]
+	fn clear_advances_versions_past_the_previous_epoch() -> Result<()> {
+		let mut index = UrbanizationIndex::default();
+		let extent = UrbanizationExtent::default_cell();
+		let noise = NoiseParams::from_scalar(1.0, 0.01, 1.0, 1);
+		index.ensure_selected(extent, noise);
+		let previous = SpatialIndex::<SelectedUrbanization>::version(&index, extent.id())
+			.ok_or_else(|| anyhow::anyhow!("inserted"))?;
+		let previous_rev = SpatialIndex::<SelectedUrbanization>::membership_revision(&index);
+		index.clear();
+		anyhow::ensure!(index.get(extent.id()).is_none());
+		anyhow::ensure!(
+			SpatialIndex::<SelectedUrbanization>::membership_revision(&index) > previous_rev
+		);
+		index.ensure_selected(extent, noise);
+		let rebuilt = SpatialIndex::<SelectedUrbanization>::version(&index, extent.id())
+			.ok_or_else(|| anyhow::anyhow!("reinserted"))?;
+		anyhow::ensure!(rebuilt > previous, "restamp must not reuse a presented version");
 		Ok(())
 	}
 

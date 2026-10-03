@@ -140,11 +140,15 @@ impl<T> LodPresentQueue<T> {
 		self.enqueue_back(id)
 	}
 
-	pub fn clear(&mut self) {
+	/// Drop pending ids and scan regions. Returns how many tickets to release.
+	#[must_use]
+	pub fn clear(&mut self) -> u64 {
+		let cancelled = self.pending.len() as u64;
 		self.pending.clear();
 		self.pending_ids.clear();
 		self.scan_regions.clear();
 		self.reset_scan = true;
+		cancelled
 	}
 
 	/// Re-arm the keep-region scan on the next drain.
@@ -157,14 +161,6 @@ impl<T> LodPresentQueue<T> {
 			return false;
 		}
 		self.pending.push_back(id);
-		true
-	}
-
-	fn enqueue_front(&mut self, id: Id) -> bool {
-		if !self.pending_ids.insert(id) {
-			return false;
-		}
-		self.pending.push_front(id);
 		true
 	}
 
@@ -241,6 +237,7 @@ pub fn apply_lod_present_gate<C, T, S, Pr>(
 	presenter: StaticSystemParam<Pr>,
 	mut keep: ResMut<LodPresentKeepRegion<C>>,
 	mut queue: ResMut<LodPresentQueue<T>>,
+	jobs: Res<LodJobCounter>,
 	mut was_open: Local<Option<bool>>,
 ) where
 	C: Send + Sync + 'static,
@@ -268,7 +265,7 @@ pub fn apply_lod_present_gate<C, T, S, Pr>(
 	}
 	if !open {
 		keep.region = None;
-		queue.clear();
+		jobs.end_n(queue.clear());
 		let mut presenter = presenter.into_inner();
 		presenter.remove_stale(&HashSet::new());
 		return;
@@ -510,11 +507,18 @@ pub fn drain_lod_present<T, S, Pr, M, F>(
 
 	let n = budget.ids_per_frame as usize;
 	let mut handled = 0;
+	let mut seen = HashSet::new();
 	while handled < n && !time_up(started, time_budget.time_per_frame) {
 		let Some(id) = queue.pop_front() else {
 			break;
 		};
 		jobs.end();
+		if !seen.insert(id) {
+			if queue.enqueue_back(id) {
+				jobs.begin();
+			}
+			break;
+		}
 		handled += 1;
 		let Some(version) = index.version(id) else {
 			continue;
@@ -532,11 +536,11 @@ pub fn drain_lod_present<T, S, Pr, M, F>(
 		presenter.handle(id, version, value, lod_ref);
 		warn_atomic_overrun("present ID", quantum.elapsed(), time_budget.max_atomic_cost);
 		// Grow-then-spawn presenters may consume a slot without stamping
-		// `presented_version`. Re-queue so the next slot can finish without a
-		// keep rescan.
+		// `presented_version`. Re-queue at the back so other ids can run this
+		// drain, and so a larger budget cannot poll the same id again.
 		let still_needs =
 			presenter.presented_version(id).is_none_or(|presented| presented < version);
-		if still_needs && queue.enqueue_front(id) {
+		if still_needs && queue.enqueue_back(id) {
 			jobs.begin();
 		}
 	}
