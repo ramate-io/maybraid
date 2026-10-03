@@ -41,7 +41,27 @@ impl Dist {
 	}
 
 	pub(crate) fn apply(self, delta: DistDelta) -> Self {
-		Self { mean: self.mean + delta.add_mean, sd: (self.sd * delta.mul_sd).max(0.01) }
+		let scaled = self.sd * delta.mul_sd;
+		Self {
+			mean: self.mean + delta.add_mean,
+			sd: if scaled.is_finite() { scaled.max(0.01) } else { 0.01 },
+		}
+	}
+
+	/// Sample \(\mathcal{N}(\mu, \sigma)\) into `[min, max]`. Non-finite or inverted
+	/// bounds fall back instead of panicking in `f32::clamp`.
+	pub(crate) fn sample_clamped(self, rng: &mut ItemRng, min: f32, max: f32) -> f32 {
+		let lo = if min.is_finite() { min } else { 0.0 };
+		let hi = if max.is_finite() { max } else { lo };
+		let (lo, hi) = if lo <= hi { (lo, hi) } else { (hi, lo) };
+		let mean = if self.mean.is_finite() { self.mean } else { lo.midpoint(hi) };
+		let sd = if self.sd.is_finite() { self.sd.max(0.0) } else { 0.0 };
+		let sample = rng.sample_normal(mean, sd);
+		if sample.is_finite() {
+			sample.clamp(lo, hi)
+		} else {
+			mean.clamp(lo, hi)
+		}
 	}
 }
 
@@ -576,7 +596,7 @@ fn sample_index(rng: &mut ItemRng, weights: &[f32]) -> usize {
 }
 
 fn sample_f32(rng: &mut ItemRng, dist: Dist, min: f32, max: f32) -> f32 {
-	rng.sample_normal(dist.mean, dist.sd).clamp(min, max)
+	dist.sample_clamped(rng, min, max)
 }
 
 fn sample_u16(rng: &mut ItemRng, dist: Dist, min: u16, max: u16) -> u16 {
@@ -720,5 +740,15 @@ mod tests {
 		assert!(leskop_stats.sight_fov <= l_wide + 1e-4);
 		assert!(leskop_stats.sight_fov >= l_tight - 1e-4);
 		assert!(leskop_stats.sight_fov <= holorand_stats.sight_fov + 1e-4);
+	}
+
+	#[test]
+	fn sample_clamped_survives_nan_or_inverted_bounds() {
+		let mut rng = ItemRng::from_seed(7);
+		let dist = Dist::new(1.0, 0.25);
+		assert!(dist.sample_clamped(&mut rng, 0.0, f32::NAN).is_finite());
+		assert_eq!(dist.sample_clamped(&mut rng, 0.0, f32::NAN), 0.0);
+		assert!(dist.sample_clamped(&mut rng, 3.0, 1.0).is_finite());
+		assert!(Dist::new(f32::NAN, f32::NAN).sample_clamped(&mut rng, 0.0, 2.0).is_finite());
 	}
 }

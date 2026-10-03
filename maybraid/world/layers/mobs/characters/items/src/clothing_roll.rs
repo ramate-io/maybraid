@@ -411,7 +411,7 @@ fn sample_index(rng: &mut ItemRng, weights: &[f32]) -> usize {
 }
 
 fn sample_f32(rng: &mut ItemRng, dist: Dist, min: f32, max: f32) -> f32 {
-	rng.sample_normal(dist.mean, dist.sd).clamp(min, max)
+	dist.sample_clamped(rng, min, max)
 }
 
 fn sample_u16(rng: &mut ItemRng, dist: Dist, min: u16, max: u16) -> u16 {

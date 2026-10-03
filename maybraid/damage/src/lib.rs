@@ -40,7 +40,7 @@ impl Default for Health {
 
 impl Health {
 	pub fn from_max(max: f32) -> Self {
-		let max = max.max(1.0);
+		let max = if max.is_finite() { max.max(1.0) } else { 1.0 };
 		Self { current: max, max }
 	}
 
@@ -69,10 +69,15 @@ impl Health {
 	}
 
 	pub fn fraction(self) -> f32 {
-		if self.max <= 0.0 {
+		if !self.max.is_finite() || self.max <= 0.0 {
 			0.0
 		} else {
-			(self.current / self.max).clamp(0.0, 1.0)
+			let fraction = self.current / self.max;
+			if fraction.is_finite() {
+				fraction.clamp(0.0, 1.0)
+			} else {
+				0.0
+			}
 		}
 	}
 }
@@ -194,6 +199,14 @@ mod tests {
 		let health = Health::from_max(0.0);
 		assert_eq!(health.max, 1.0);
 		assert_eq!(health.current, 1.0);
+	}
+
+	#[test]
+	fn from_max_treats_nan_as_one() {
+		let health = Health::from_max(f32::NAN);
+		assert_eq!(health.max, 1.0);
+		assert_eq!(health.current, 1.0);
+		assert_eq!(health.fraction(), 1.0);
 	}
 
 	#[test]
