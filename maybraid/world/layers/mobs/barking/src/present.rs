@@ -177,6 +177,8 @@ pub fn install_barking_presentation<G: TerrainModel>(app: &mut App) {
 	app.insert_resource(MobLodRefreshMode::Indexed);
 	app.add_plugins(MobGroupsPlugin);
 	app.add_message::<MobCellPresented>();
+	// Cull only queues hosts; Last must despawn them and their members.
+	mob_layer_presentation::install_mob_cell_teardown(app);
 	app.init_resource::<MobPresenterState>()
 		.add_plugins(LodPresentPlugin::<
 			MobCell,
