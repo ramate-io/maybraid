@@ -55,7 +55,11 @@ pub fn hide_lod_tree_world(entity: &mut EntityWorldMut) {
 }
 
 fn hide_lod_tree_now(world: &mut World, root: Entity) {
-	let children: Vec<Entity> = {
+	const MAX_INLINE_CHILDREN: usize = 8;
+	let mut inline_children = [Entity::PLACEHOLDER; MAX_INLINE_CHILDREN];
+	let children_count: usize;
+
+	{
 		let Ok(mut entity) = world.get_entity_mut(root) else {
 			return;
 		};
@@ -63,16 +67,35 @@ fn hide_lod_tree_now(world: &mut World, root: Entity) {
 			entity.insert(Visibility::Hidden);
 			return;
 		}
-		let children = entity
-			.get::<Children>()
-			.map(|children| children.iter().collect())
-			.unwrap_or_default();
+
+		let child_slice = entity.get::<Children>().map(|c| &**c).unwrap_or(&[]);
+		children_count = child_slice.len();
+
+		if children_count <= MAX_INLINE_CHILDREN {
+			inline_children[..children_count].copy_from_slice(child_slice);
+		}
+
 		entity.insert((Visibility::Hidden, Disabled, LodTreeHideActive));
-		children
-	};
-	for child in children {
-		if let Ok(mut entity) = world.get_entity_mut(child) {
-			entity.insert_recursive::<Children>(Disabled);
+	}
+
+	if children_count <= MAX_INLINE_CHILDREN {
+		for child in &inline_children[..children_count] {
+			if let Ok(mut entity) = world.get_entity_mut(*child) {
+				entity.insert_recursive::<Children>(Disabled);
+			}
+		}
+	} else {
+		let Ok(entity) = world.get_entity(root) else {
+			return;
+		};
+		let Some(children) = entity.get::<Children>() else {
+			return;
+		};
+		let children_vec = children.to_vec();
+		for child in children_vec {
+			if let Ok(mut entity) = world.get_entity_mut(child) {
+				entity.insert_recursive::<Children>(Disabled);
+			}
 		}
 	}
 }
@@ -103,6 +126,9 @@ fn show_lod_tree_now(world: &mut World, root: Entity) {
 		return;
 	}
 
+	const MAX_INLINE_CHILDREN: usize = 8;
+	let mut inline_children = [Entity::PLACEHOLDER; MAX_INLINE_CHILDREN];
+
 	let mut stack = vec![root];
 	while let Some(entity) = stack.pop() {
 		let Ok(mut entity_mut) = world.get_entity_mut(entity) else {
@@ -111,16 +137,33 @@ fn show_lod_tree_now(world: &mut World, root: Entity) {
 		if entity != root && entity_mut.contains::<LodTreeHideActive>() {
 			continue;
 		}
-		let children: Vec<Entity> = entity_mut
-			.get::<Children>()
-			.map(|children| children.iter().collect())
-			.unwrap_or_default();
+
+		let child_slice = entity_mut.get::<Children>().map(|c| &**c).unwrap_or(&[]);
+		let children_count = child_slice.len();
+
+		let children_to_add = if children_count > 0 && children_count <= MAX_INLINE_CHILDREN {
+			inline_children[..children_count].copy_from_slice(child_slice);
+			Some(&inline_children[..children_count])
+		} else if children_count > MAX_INLINE_CHILDREN {
+			None
+		} else {
+			Some(&[] as &[Entity])
+		};
+
 		if entity == root {
 			entity_mut.remove::<(LodTreeHideActive, Disabled)>();
 		} else {
 			entity_mut.remove::<Disabled>();
 		}
-		stack.extend(children);
+
+		if let Some(children) = children_to_add {
+			stack.extend_from_slice(children);
+		} else if children_count > MAX_INLINE_CHILDREN {
+			drop(entity_mut);
+			if let Some(children) = world.get::<Children>(entity) {
+				stack.extend(children.to_vec());
+			}
+		}
 	}
 }
 
@@ -571,9 +614,8 @@ pub fn sync_lod_level_roots(
 			continue;
 		};
 
-		let child_ids: Vec<Entity> = root_children.iter().collect();
 		let mut found_desired = false;
-		for &child in &child_ids {
+		for child in root_children.iter() {
 			let Ok(root) = root_keys.get(child) else {
 				continue;
 			};
@@ -588,7 +630,7 @@ pub fn sync_lod_level_roots(
 		if apply_lod_level_root_visibility(
 			&mut commands,
 			desired,
-			&child_ids,
+			root_children,
 			&root_keys,
 			&pending,
 			&wants_cull,
@@ -639,11 +681,10 @@ pub fn settle_lod_level_root_visibility(
 		let Ok(root_children) = level_roots_heads.get(roots_entity) else {
 			continue;
 		};
-		let child_ids: Vec<Entity> = root_children.iter().collect();
 		if !apply_lod_level_root_visibility(
 			&mut commands,
 			*level,
-			&child_ids,
+			root_children,
 			&root_keys,
 			&pending,
 			&wants_cull,
