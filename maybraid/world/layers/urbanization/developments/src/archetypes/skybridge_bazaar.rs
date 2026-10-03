@@ -1,13 +1,13 @@
 use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::Vec2;
-use lod::gen::LodSceneLevel;
-use material_ref::MaterialRef;
 use building_components::joints::JointNode;
 use building_components::panels::PanelNode;
 use building_components::{
 	building_bounds, BuildingComponents, BuildingStructuralLodProbe, Layers,
 };
 use buildings::{CardinalFace, ConnectingHall, MappedOpening};
+use lod::gen::LodSceneLevel;
+use material_ref::MaterialRef;
 
 use crate::{BuildingFootprint, PlacedBuilding, ShepherdsVillageBuilding, SingleHighrise};
 

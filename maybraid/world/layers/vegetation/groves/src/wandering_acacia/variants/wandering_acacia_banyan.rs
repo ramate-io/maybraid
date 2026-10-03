@@ -1,7 +1,7 @@
 //! [`BuildWithNoise`] for [`WanderingAcaciaBanyan`].
 
-use sbs_geometry::SopesBanyanSbs;
 use procedural_common::{BuildWithNoise, NoiseConfig, NoiseParams, UnitRange};
+use sbs_geometry::SopesBanyanSbs;
 
 use crate::wandering_acacia::WanderingAcaciaBanyan;
 

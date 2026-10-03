@@ -3,11 +3,9 @@
 use std::ops::Deref;
 
 use bevy_math::Vec3;
+use buildings::{Confines, FillableRegions, FitError, LesHallesFloorPlan, MixedUseLesHallesStorey};
 use material_ref::MaterialRef;
 use procedural_common::NoiseParams;
-use buildings::{
-	Confines, FillableRegions, FitError, LesHallesFloorPlan, MixedUseLesHallesStorey,
-};
 
 use crate::les_halles::{MixedUseLesHallesDevelopment, MixedUseLesHallesHost};
 

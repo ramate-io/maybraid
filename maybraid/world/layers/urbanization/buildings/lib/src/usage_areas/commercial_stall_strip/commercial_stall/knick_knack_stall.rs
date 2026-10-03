@@ -12,9 +12,9 @@ pub mod parameterized;
 pub use parameterized::{KnickKnackStallParameterized, KnickKnackStallPlan};
 
 use bevy_math::bounding::Aabb3d;
+use building_components::{BuildingComponents, LabelNode, LabelStyle, Layers};
 use lod::gen::LodSceneLevel;
 use procedural_common::NoiseParams;
-use building_components::{BuildingComponents, LabelNode, LabelStyle, Layers};
 
 use crate::fit::{Confines, FillableRegions, Fit, FitError};
 

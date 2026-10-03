@@ -1,8 +1,8 @@
 //! Exploded kit pieces in unit-slot space.
 
 use bevy::prelude::Component;
-use material_ref::MaterialRef;
 use building_components::{AssetPath, Placement};
+use material_ref::MaterialRef;
 
 use crate::assets;
 use crate::kit_space::{

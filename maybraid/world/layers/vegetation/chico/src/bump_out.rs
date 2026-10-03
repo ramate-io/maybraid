@@ -10,8 +10,8 @@
 
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::{Color, Vec2, Vec3};
-use vegetation_groves::GroveExtent;
 use lod::gen::Id;
+use vegetation_groves::GroveExtent;
 
 use crate::{
 	ForestExtent, ForestGroveKind, ForestIndex, ForestLayer, SelectedLayers,

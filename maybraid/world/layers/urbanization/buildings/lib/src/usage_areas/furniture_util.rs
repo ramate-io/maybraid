@@ -2,12 +2,12 @@
 
 use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::{Vec2, Vec3};
-use procedural_common::{aabb3_to_plan, NoiseConfig, NoiseParams, PlanAxes};
 use building_components::furniture::{
 	FurnitureGeometry, FurnitureNode, FurnitureUsage, FurnitureUsageNode,
 };
 use building_components::placed::Placement;
 use building_components::{LabelNode, LabelStyle};
+use procedural_common::{aabb3_to_plan, NoiseConfig, NoiseParams, PlanAxes};
 
 use crate::fit::{aabb_xz_extent, Confines, FillRegion, SpaceKind};
 use crate::paneling::pillar::PanelPillar;

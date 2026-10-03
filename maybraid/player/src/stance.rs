@@ -1,10 +1,10 @@
 //! Player squat / prone. Hulls, speed, and clips derive from this plus the rest capsule.
 
 use bevy::prelude::*;
-use characters::{CharacterRoot, LocomotionCapsule, TerrainPitch};
-use character_rigs::humanoid::LegSegmentLengths;
-use damage::HeadshotBand;
 use character_animations::animations::Squat;
+use character_rigs::humanoid::LegSegmentLengths;
+use characters::{CharacterRoot, LocomotionCapsule, TerrainPitch};
+use damage::HeadshotBand;
 
 use crate::body::{apply_locomotion_capsule, CharacterController, Jumping};
 

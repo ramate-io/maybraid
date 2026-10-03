@@ -9,18 +9,17 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use bevy::prelude::*;
-use sbs_geometry::{BladeTuftShape, SpearTuftShape};
-use sbs_trees::TuftPatch;
-use vegetation_components::{
-	frond_material_ref, scene_children, FoliageNode, FrondCollection, FrondRun, Layers,
-	Placement, StickNode, StructuralLod, VegetationComponents, FLATTENED_KIT_CHUNK_WEIGHT,
-	FROND_KIT_HALF_X,
-};
 use lod::gen::{LodScene, LodSceneLevel};
 use lod::lod_ref::LodRef;
 use lod::SceneChunk;
 use material_ref::MaterialRef;
 use procedural_common::{BuildWithNoise, NoiseParams};
+use sbs_geometry::{BladeTuftShape, SpearTuftShape};
+use sbs_trees::TuftPatch;
+use vegetation_components::{
+	frond_material_ref, scene_children, FoliageNode, FrondCollection, FrondRun, Layers, Placement,
+	StickNode, StructuralLod, VegetationComponents, FLATTENED_KIT_CHUNK_WEIGHT, FROND_KIT_HALF_X,
+};
 
 use super::{placement_noise, FlatTerrainSample, GroveCellVariant, GroveExtent, PaletteMix};
 

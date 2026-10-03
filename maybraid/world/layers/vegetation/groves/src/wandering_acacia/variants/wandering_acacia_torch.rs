@@ -1,7 +1,7 @@
 //! [`BuildWithNoise`] for [`WanderingAcaciaTorch`] (Penmarch and Kamakura forms).
 
-use sbs_geometry::{KamakuraTorchSbs, PenmarchTorchSbs};
 use procedural_common::{BuildWithNoise, NoiseConfig, NoiseParams, UnitRange};
+use sbs_geometry::{KamakuraTorchSbs, PenmarchTorchSbs};
 
 use crate::wandering_acacia::WanderingAcaciaTorch;
 

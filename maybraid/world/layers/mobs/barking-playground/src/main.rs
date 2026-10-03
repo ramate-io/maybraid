@@ -1,10 +1,8 @@
 use std::path::{Path, PathBuf};
 
+use barking_playground::{MobOnTerrainPlaygroundPlugin, PendingStartupCommand, PlaygroundCommand};
 use bevy::prelude::*;
 use maybraid_input::PadHidPlugins;
-use barking_playground::{
-	MobOnTerrainPlaygroundPlugin, PendingStartupCommand, PlaygroundCommand,
-};
 
 fn assets_root() -> PathBuf {
 	Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../../assets")

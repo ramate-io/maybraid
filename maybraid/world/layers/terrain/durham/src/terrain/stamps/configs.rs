@@ -22,12 +22,12 @@ use crate::terrain::stamps::valley::{
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use comproc::guillotine::GuillotineConfig;
+use lod::gen::{GenerationScheme, Id, OriginalId};
+use lod::lod_ref::LodRef;
 use terrain_stamps::{
 	CanyonParams, PlateauCapParams, PocketWaterParams, RollingGroundParams, RuggedMassifParams,
 	ValleyTrainParams,
 };
-use lod::gen::{GenerationScheme, Id, OriginalId};
-use lod::lod_ref::LodRef;
 
 /// Guillotine cut knobs + stamp params + occupancy for one family band.
 #[derive(Debug, Clone)]

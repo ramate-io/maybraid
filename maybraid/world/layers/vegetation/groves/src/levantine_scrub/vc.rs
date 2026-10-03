@@ -4,12 +4,6 @@ use std::sync::Arc;
 #[cfg(test)]
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
-use sbs_trees::{
-	BraidOakTree, HighBushShoots, PenmarchTorch, PenmarchTorchParams, QuantizedPlant,
-	RorysHeadTrained, RorysHeadTrainedParams, SimplemansHedge, SimplemansHedgeParams, VaseTree,
-	VaseTreeParams,
-};
-use vegetation_components::{Placement, StickNode, VegetationComponents};
 use clap::Args;
 #[cfg(test)]
 use lod::gen::{LodScene, LodSceneLevel};
@@ -17,6 +11,12 @@ use lod::lod_ref::LodRef;
 use lod::SceneChunk;
 use material_ref::MaterialRef;
 use procedural_common::{BuildWithNoise, NoiseParams};
+use sbs_trees::{
+	BraidOakTree, HighBushShoots, PenmarchTorch, PenmarchTorchParams, QuantizedPlant,
+	RorysHeadTrained, RorysHeadTrainedParams, SimplemansHedge, SimplemansHedgeParams, VaseTree,
+	VaseTreeParams,
+};
+use vegetation_components::{Placement, StickNode, VegetationComponents};
 
 use super::{
 	definition, LevantineScrubCell, LevantineScrubHedge, DRY_HIGH_BUSH, DRY_RORY_HEAD,

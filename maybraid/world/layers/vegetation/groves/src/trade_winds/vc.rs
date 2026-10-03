@@ -6,11 +6,6 @@ use super::variants::trade_winds_banyan::{HonuBanyanSamples, SopeBanyanSamples};
 #[cfg(test)]
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
-use sbs_trees::{
-	HonuBanyan, QuantizedPlant, SopesBanyan, StorybookTree, StorybookTreeParams, WaialeaPalm,
-	WaialeaPalmParams,
-};
-use vegetation_components::{FoliageNode, Placement, VegetationComponents};
 use clap::Args;
 #[cfg(test)]
 use lod::gen::{LodScene, LodSceneLevel};
@@ -18,6 +13,11 @@ use lod::lod_ref::LodRef;
 use lod::SceneChunk;
 use material_ref::MaterialRef;
 use procedural_common::{BuildWithNoise, NoiseParams};
+use sbs_trees::{
+	HonuBanyan, QuantizedPlant, SopesBanyan, StorybookTree, StorybookTreeParams, WaialeaPalm,
+	WaialeaPalmParams,
+};
+use vegetation_components::{FoliageNode, Placement, VegetationComponents};
 
 use super::{
 	definition, TradeWindsCell, TradeWindsItem, RARE_TALL_TRADE_STORYBOOK, RARE_TRADE_WAIALEA_PALM,

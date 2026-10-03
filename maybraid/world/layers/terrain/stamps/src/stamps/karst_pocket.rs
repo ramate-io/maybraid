@@ -3,7 +3,7 @@
 //! Height-oracle dip + semantic cavity tags (full SDF carve is a later volume path).
 
 use crate::config::JitteredCenter;
-use crate::modulation::{StampModulation, RegionAffineModulation};
+use crate::modulation::{RegionAffineModulation, StampModulation};
 use crate::region::{CircleRegion, Region2D, RegionNoise};
 use crate::stamp::{scale_additive, StampSemantics, StampSet, StampStrength};
 use bevy_math::Vec2;

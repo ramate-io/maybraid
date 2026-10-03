@@ -16,12 +16,12 @@ use std::collections::{HashSet, VecDeque};
 
 use avian3d::prelude::{Collider, RigidBody};
 use bevy::prelude::*;
-use vegetation_components::{
-	Placement, StickMember, StickNode, VegetationComponents, STICK_KIT_HALF,
-};
 use lod::LodSceneHost;
 use lod::LodSceneLevel;
 use lod_avian::PhysicsInteractionLayer;
+use vegetation_components::{
+	Placement, StickMember, StickNode, VegetationComponents, STICK_KIT_HALF,
+};
 
 /// Four inches. Gate and floor use world-space girth after plant [`Placement`] scale.
 pub const MIN_STICK_COLLIDER_RADIUS_M: f32 = 4.0 * 0.0254;

@@ -6943,6 +6943,7 @@ dependencies = [
  "terrain-layer-model",
  "urbanization-layer-model",
  "vegetation-layer-model",
+ "world-player",
 ]
 
 [[package]]
@@ -6957,21 +6958,34 @@ name = "maybraid-game-mode-training-ground"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "avian3d",
  "barking",
  "bevy",
+ "building-components",
+ "building-physics",
+ "buildings",
+ "character-items",
+ "character-persist",
  "characters",
  "chico",
+ "combat-hud",
+ "damage",
  "durham",
  "layer-stack",
  "lod",
+ "maybraid-game-mode-discover",
  "mob-characters",
+ "mob-intelligence",
  "mob-layer-model",
  "mob-scenes",
+ "player-camera",
+ "procedural-common",
  "richmond",
  "terrain-layer-model",
  "threat-intelligence",
  "urbanization-layer-model",
  "vegetation-layer-model",
+ "world-player",
 ]
 
 [[package]]
@@ -7088,10 +7102,7 @@ dependencies = [
  "avian3d",
  "barking",
  "bevy",
- "building-components",
- "building-physics",
  "building-shaders",
- "buildings",
  "character-inventory-user",
  "character-items",
  "character-persist",
@@ -7127,7 +7138,6 @@ dependencies = [
  "maybraid-weather",
  "meandering-intelligence",
  "mob-characters",
- "mob-intelligence",
  "mob-layer-model",
  "mob-layer-presentation",
  "mob-scenes",
@@ -7138,7 +7148,6 @@ dependencies = [
  "player",
  "player-camera",
  "poi-intelligence",
- "procedural-common",
  "richmond",
  "routing-intelligence",
  "serde",
@@ -13884,6 +13893,7 @@ dependencies = [
  "lod",
  "lod-avian",
  "maybraid-input",
+ "player-camera",
  "vegetation-components",
 ]
 

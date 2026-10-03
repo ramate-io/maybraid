@@ -2,8 +2,8 @@
 
 use crate::palette::{chest, hardware};
 use crate::Assembly;
-use furniture_components::{latch_slab, slab, PartKind, PlacedPart};
 use building_components::FurnitureGeometry;
+use furniture_components::{latch_slab, slab, PartKind, PlacedPart};
 
 /// Finish-only knobs. Topology does not change with [`Self::finish_seed`].
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

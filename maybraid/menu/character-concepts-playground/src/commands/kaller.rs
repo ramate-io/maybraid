@@ -1,7 +1,6 @@
 //! `/kaller` commands for the Kaller concept species.
 
 use bevy::prelude::*;
-use clap::{Args, Subcommand};
 use character_items::{ClothingMaterial, ClothingMesh};
 use characters::species::{
 	common::{EyeMesh, HairMesh},
@@ -9,6 +8,7 @@ use characters::species::{
 		KallerConfig, KallerCrownColor, KallerEyeColor, KallerPlumageColor, KallerSnoutColor,
 	},
 };
+use clap::{Args, Subcommand};
 
 use crate::{animation::ConceptAnimation, preview::ConceptPreviewConfig};
 

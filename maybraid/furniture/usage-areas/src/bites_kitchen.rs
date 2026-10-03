@@ -134,11 +134,7 @@ fn peninsula_slab(
 	let range_t0 = range_i as f32 * station;
 	let range_t1 = (range_i as f32 + 1.0) * station;
 	if t0 < range_t1 && t0 + PEN_W > range_t0 {
-		t0 = if range_t0 > along * 0.5 {
-			0.35
-		} else {
-			(range_t1 + 0.12).min(along - PEN_W - 0.2)
-		};
+		t0 = if range_t0 > along * 0.5 { 0.35 } else { (range_t1 + 0.12).min(along - PEN_W - 0.2) };
 	}
 	let fat = wall_strip(region, wall, RUN_DEPTH + PEN_LEN, 0.0);
 	let slice = slice_along(&fat, along_is_x(&fat, Some(wall)), t0, t0 + PEN_W);

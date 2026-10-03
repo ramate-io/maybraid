@@ -4,7 +4,7 @@
 //! Wet rendering and full reach records are deferred to Watershed follow-on.
 
 use crate::config::{FractalAnchors, HysteresisSpine, JitteredCenter, SoftmaskAlongSpine};
-use crate::modulation::{StampModulation, RegionAffineModulation};
+use crate::modulation::{RegionAffineModulation, StampModulation};
 use crate::region::{CircleRegion, Region2D, RegionNoise};
 use crate::stamp::{StampSemantics, StampSet};
 use bevy_math::Vec2;

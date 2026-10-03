@@ -1,7 +1,7 @@
 //! [`BuildWithNoise`] for [`LevantineScrubVaseTree`].
 
-use sbs_geometry::VaseTreeSbs;
 use procedural_common::{BuildWithNoise, NoiseConfig, NoiseParams, UnitRange};
+use sbs_geometry::VaseTreeSbs;
 
 use crate::levantine_scrub::LevantineScrubVaseTree;
 

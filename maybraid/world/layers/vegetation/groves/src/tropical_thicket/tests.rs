@@ -176,8 +176,8 @@ fn populated_grove_is_deterministic_and_non_empty() -> Result<()> {
 #[cfg(feature = "render")]
 #[test]
 fn low_and_ultra_low_emit_canopy_ball_proxies() -> Result<()> {
-	use vegetation_components::{FoliageGeometry, VegetationComponents};
 	use lod::gen::LodSceneLevel;
+	use vegetation_components::{FoliageGeometry, VegetationComponents};
 
 	let mut params = TropicalThicketParams::default();
 	params.extent = GroveExtent::new(Vec3::ZERO, Vec3::new(40.0, 1.0, 40.0));
@@ -207,9 +207,9 @@ fn low_and_ultra_low_emit_canopy_ball_proxies() -> Result<()> {
 #[test]
 fn high_nests_one_plant_host_chunk_per_plant() -> Result<()> {
 	use bevy::prelude::Transform;
-	use vegetation_components::VegetationComponents;
 	use lod::gen::LodSceneLevel;
 	use lod::lod_ref::LodRef;
+	use vegetation_components::VegetationComponents;
 
 	let mut params = TropicalThicketParams::default();
 	params.extent = GroveExtent::new(Vec3::ZERO, Vec3::new(40.0, 1.0, 40.0));

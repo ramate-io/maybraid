@@ -1,9 +1,8 @@
+use character_items::{Inventory, InventoryItem};
 use character_ui_menu::{
 	CameraFocus, LabelOption, ListValues, MenuComponent, MenuNode, SingleSelect,
 };
-use character_items::{Inventory, InventoryItem};
 use characters::{
-	CharacterAppearance, ConceptAnimation,
 	species::{
 		braidman::BraidmanConfig, brenal::BrenalConfig, brodler::BrodlerConfig,
 		brokker::BrokkerConfig, caole::CaoleConfig, chupri::ChupriConfig, claber::ClaberConfig,
@@ -14,6 +13,7 @@ use characters::{
 		tipple::TippleConfig, topple::ToppleConfig, tuberwaber::TuberwaberConfig,
 		wumbus::WumbusConfig, ylter::YilterConfig,
 	},
+	CharacterAppearance, ConceptAnimation,
 };
 
 use crate::{
@@ -317,7 +317,11 @@ impl CharacterMenu {
 
 	pub fn saved_name(&self) -> String {
 		let name = self.name.trim();
-		if name.is_empty() { String::from("Unnamed") } else { name.to_string() }
+		if name.is_empty() {
+			String::from("Unnamed")
+		} else {
+			name.to_string()
+		}
 	}
 
 	pub fn is_create(&self) -> bool {

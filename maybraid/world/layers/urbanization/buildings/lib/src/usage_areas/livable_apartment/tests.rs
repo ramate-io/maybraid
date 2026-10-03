@@ -2,9 +2,9 @@
 
 use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
+use building_components::{BuildingComponents, Layer};
 use lod::gen::LodSceneLevel;
 use procedural_common::{aabb2_area, NoiseParams};
-use building_components::{BuildingComponents, Layer};
 
 use crate::fit::{Confines, FillRegion, MultiConfines, SpaceKind};
 use crate::openings::{Opening, OpeningId, OpeningLabel, Openings};

@@ -1,9 +1,9 @@
 use bevy_math::Vec3;
+use character_items::ItemColor;
 use character_ui_menu::{
 	AssetSingleSelect, CameraFocus, FocusRig, IdentifiedAsset, MenuComponent, MenuNode,
 	PreviewColor, Section, SingleSelect, SwatchSingleSelect,
 };
-use character_items::ItemColor;
 use characters::{
 	presets::{BuildPreset, GenderPreset},
 	species::sonyak::{

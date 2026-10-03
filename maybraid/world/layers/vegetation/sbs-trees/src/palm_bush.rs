@@ -17,13 +17,11 @@
 mod crown;
 
 use bevy::prelude::*;
-use sbs_geometry::FrondCrownShape;
-use sbs_geometry::PalmBushSbs;
-use vegetation_components::{
-	FoliageNode, Layers, StickNode, StructuralLod, VegetationComponents,
-};
 use clap::Args;
 use lod::gen::LodSceneLevel;
+use sbs_geometry::FrondCrownShape;
+use sbs_geometry::PalmBushSbs;
+use vegetation_components::{FoliageNode, Layers, StickNode, StructuralLod, VegetationComponents};
 
 use crate::palm_crown::{
 	PalmCrownParams, DETAIL_FROND_LENGTH_FRACTION, DETAIL_FROND_WIDTH_FRACTION,

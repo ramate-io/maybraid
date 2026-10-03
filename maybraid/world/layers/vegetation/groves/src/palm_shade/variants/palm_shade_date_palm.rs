@@ -1,7 +1,7 @@
 //! [`BuildWithNoise`] for [`PalmShadeDatePalm`].
 
-use sbs_geometry::DatePalmSbs;
 use procedural_common::{BuildWithNoise, NoiseConfig, NoiseParams, UnitRange};
+use sbs_geometry::DatePalmSbs;
 
 use crate::palm_shade::PalmShadeDatePalm;
 

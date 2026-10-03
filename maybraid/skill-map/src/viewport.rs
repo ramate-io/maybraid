@@ -5,8 +5,8 @@ use bevy::camera::{ClearColorConfig, RenderTarget};
 use bevy::prelude::*;
 use bevy::render::render_resource::{TextureDimension, TextureFormat, TextureUsages};
 use bevy::ui::widget::ViewportNode;
-use character_items::Inventory;
 use character_inventory_user::InventoryUser;
+use character_items::Inventory;
 use menu_components::{
 	spawn_hud_text_card, spawn_hud_text_card_label, HudFonts, HUD_TEXT_CARD_FACE_PX,
 	PANEL_BLOCK_FONT_SIZE, TEXT_YELLOW,

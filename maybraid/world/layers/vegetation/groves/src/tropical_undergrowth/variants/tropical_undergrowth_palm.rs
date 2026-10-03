@@ -1,7 +1,7 @@
 //! [`BuildWithNoise`] for [`TropicalUndergrowthPalm`].
 
-use sbs_geometry::PalmBushSbs;
 use procedural_common::{BuildWithNoise, NoiseConfig, NoiseParams, UnitRange};
+use sbs_geometry::PalmBushSbs;
 
 use crate::tropical_undergrowth::TropicalUndergrowthPalm;
 

@@ -7,10 +7,16 @@ use bevy::math::{Vec2, Vec3};
 use bevy::prelude::{Local, MinimalPlugins, NextState, ResMut, Resource, Update, World};
 use bevy::state::app::StatesPlugin;
 use bevy::transform::components::Transform;
+use layer_stack::{
+	subscribe_mode, ActiveGenerationMode, GenerationMode, GenerationModePlugin, ModeSubscription,
+	RequireLayer,
+};
 use lod::gen::Id;
 use lod::lod_ref::LodRef;
-use terrain_layer_model::{BaseTerrainGenerationCore, BaseTerrainGenerationPlugin, BaseTerrainScheme, HeightField, OnTerrain, TerrainCell, TerrainGeneration, TerrainModel};
-use layer_stack::{subscribe_mode, ActiveGenerationMode, GenerationMode, GenerationModePlugin, ModeSubscription, RequireLayer};
+use terrain_layer_model::{
+	BaseTerrainGenerationCore, BaseTerrainGenerationPlugin, BaseTerrainScheme, HeightField,
+	OnTerrain, TerrainCell, TerrainGeneration, TerrainModel,
+};
 
 use crate::{TerrainPresentationPlugin, TerrainPresenter};
 
@@ -184,7 +190,7 @@ fn presenter_installs_and_finish_requires_generation() {
 		GenerationModePlugin::<TestMode>::initial(),
 		BaseTerrainGenerationPlugin::<TestMode, Flat>::new(2.5),
 	))
-		.add_plugins(TerrainPresentationPlugin::<TestMode, OnTerrain<Flat>, FlatPresenter>::default());
+	.add_plugins(TerrainPresentationPlugin::<TestMode, OnTerrain<Flat>, FlatPresenter>::default());
 	app.finish();
 	app.update();
 
@@ -196,7 +202,9 @@ fn presenter_installs_and_finish_requires_generation() {
 #[should_panic(expected = "requires terrain_layer_model::generation::BaseTerrainGenerationCore")]
 fn presentation_without_generation_names_the_missing_plugin() {
 	let mut app = App::new();
-	app.add_plugins(TerrainPresentationPlugin::<TestMode, OnTerrain<Flat>, FlatPresenter>::default());
+	app.add_plugins(
+		TerrainPresentationPlugin::<TestMode, OnTerrain<Flat>, FlatPresenter>::default(),
+	);
 	app.finish();
 }
 

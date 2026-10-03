@@ -1,14 +1,6 @@
 use std::collections::HashMap;
 
 use bevy::prelude::*;
-use clap::ValueEnum;
-use character_rigs::{
-	debug::{format_rigged_axis, log_bind_pose, log_pose_deltas, RigPoseDebug},
-	humanoid::HumanoidRig,
-	rigs::humanoid_v0::HumanoidV0Rig,
-	BonePose, Name as RigName,
-};
-use log::info;
 use character_animations::{
 	animations::{
 		FixedTuck, Run, Squat, Tuck, TuckedFlip, TwoFootedJump, TwoFootedTuckedFlip, Walk,
@@ -16,6 +8,14 @@ use character_animations::{
 	},
 	Animation, Effects,
 };
+use character_rigs::{
+	debug::{format_rigged_axis, log_bind_pose, log_pose_deltas, RigPoseDebug},
+	humanoid::HumanoidRig,
+	rigs::humanoid_v0::HumanoidV0Rig,
+	BonePose, Name as RigName,
+};
+use clap::ValueEnum;
+use log::info;
 
 use crate::character::CharacterConfig;
 use crate::skinning::{BoneMap, CharacterRig};

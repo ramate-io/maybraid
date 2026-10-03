@@ -1,8 +1,8 @@
 //! `/grener` commands for the Grener concept species.
 
 use bevy::prelude::*;
-use clap::{Args, Subcommand};
 use characters::species::grener::{GrenerBodyColor, GrenerColors, GrenerConfig};
+use clap::{Args, Subcommand};
 
 use crate::{animation::ConceptAnimation, preview::ConceptPreviewConfig};
 

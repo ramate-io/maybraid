@@ -1,8 +1,8 @@
 //! Portal assignment → [`ClippedArcSweep`] for circular storey rings.
 
 use bevy_math::Vec3;
-use procedural_common::{NoiseConfig, NoiseParams};
 use building_components::partitions::PartitionStyle;
+use procedural_common::{NoiseConfig, NoiseParams};
 
 use crate::arcs::clipped_sweep::ClippedArcSweep;
 use crate::portals::{

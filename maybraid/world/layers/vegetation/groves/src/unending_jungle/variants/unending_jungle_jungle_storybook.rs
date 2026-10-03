@@ -1,10 +1,10 @@
 //! [`BuildWithNoise`] for [`UnendingJungleJungleStorybook`].
 
+use procedural_common::{BuildWithNoise, NoiseConfig, NoiseParams, UnitRange};
 use sbs_geometry::sbs::jungle_storybook_tree::{
 	JUNGLE_ANCHORS_PER_RING, JUNGLE_LEAF_RADIUS_FRACTION, JUNGLE_STALK_BASE_RADIUS_FRACTION,
 };
 use sbs_geometry::JungleStorybookTreeSbs;
-use procedural_common::{BuildWithNoise, NoiseConfig, NoiseParams, UnitRange};
 
 use crate::unending_jungle::UnendingJungleJungleStorybook;
 

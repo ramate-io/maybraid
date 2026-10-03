@@ -12,10 +12,9 @@ use player_camera::FollowCamera;
 use serde::{Deserialize, Serialize};
 use terrain_layer_model::{terrain_streaming, TerrainStreaming};
 use world_player::player::{holding_elevation, player_spawn_point_at};
-use world_player::Player;
+use world_player::{ModePlayerPolicies, Player};
 
 use layer_stack::ActiveGenerationMode;
-use maybraid_game_mode_training_ground::TrainingGround;
 
 use crate::{PlayerSpawnXz, WorldPlayerLoadout};
 
@@ -101,6 +100,7 @@ pub fn resume_discovery_from_saved_waypoints(
 	save_root: Res<SaveRoot>,
 	loadout: Option<Res<WorldPlayerLoadout>>,
 	mode: Option<Res<State<ActiveGenerationMode>>>,
+	policies: Option<Res<ModePlayerPolicies>>,
 	layout: Res<TerrainCellLayout>,
 	base: Res<WorldBaseTerrain>,
 	mut waypoints: ResMut<PlayerPositionWaypoints>,
@@ -116,7 +116,7 @@ pub fn resume_discovery_from_saved_waypoints(
 	if spawn.0.is_some() {
 		return;
 	}
-	if mode.as_deref().is_some_and(|mode| mode.get().is::<TrainingGround>()) {
+	if !mode_keeps_waypoints(mode.as_deref(), policies.as_deref()) {
 		return;
 	}
 	let Some(id) = current_character_id(loadout.as_deref()) else {
@@ -220,15 +220,27 @@ fn log_player_position(players: Query<&Transform, With<Player>>) {
 	info!(target: "world.player", "position ({:.1}, {:.1}, {:.1})", p.x, p.y, p.z);
 }
 
+fn mode_keeps_waypoints(
+	mode: Option<&State<ActiveGenerationMode>>,
+	policies: Option<&ModePlayerPolicies>,
+) -> bool {
+	let Some(policies) = policies else {
+		return true;
+	};
+	let mode = mode.and_then(|mode| mode.get().mode_id());
+	policies.keeps_waypoints(mode)
+}
+
 fn retain_player_waypoints(
 	streaming: Res<TerrainStreaming<Durham>>,
 	mode: Option<Res<State<ActiveGenerationMode>>>,
+	policies: Option<Res<ModePlayerPolicies>>,
 	save_root: Res<SaveRoot>,
 	loadout: Option<Res<WorldPlayerLoadout>>,
 	players: Query<&Transform, With<Player>>,
 	mut waypoints: ResMut<PlayerPositionWaypoints>,
 ) {
-	if !streaming.enabled || mode.is_some_and(|mode| mode.get().is::<TrainingGround>()) {
+	if !streaming.enabled || !mode_keeps_waypoints(mode.as_deref(), policies.as_deref()) {
 		return;
 	}
 	let Ok(transform) = players.single() else {
@@ -315,8 +327,13 @@ fn save_waypoints(
 #[cfg(test)]
 mod tests {
 	use bevy::ecs::system::RunSystemOnce;
+	use layer_stack::GenerationMode;
 
 	use super::*;
+
+	struct QuietMode;
+
+	impl GenerationMode for QuietMode {}
 
 	#[test]
 	fn waypoints_keep_five_far_samples() {
@@ -333,14 +350,24 @@ mod tests {
 	}
 
 	#[test]
-	fn training_grounds_do_not_persist_a_pose() -> anyhow::Result<()> {
+	fn a_mode_that_drops_waypoints_does_not_persist_a_pose() -> anyhow::Result<()> {
 		let dir = tempfile::tempdir()?;
 		let root = SaveRoot::at(dir.path());
 		let id = CharacterId(7);
 		let mut world = World::new();
 		world.insert_resource(root.clone());
 		world.insert_resource(TerrainStreaming::<Durham>::new(true));
-		world.insert_resource(State::new(ActiveGenerationMode::of::<TrainingGround>()));
+		let mut policies = ModePlayerPolicies::default();
+		policies.register(
+			std::any::TypeId::of::<QuietMode>(),
+			world_player::ModePlayerPolicy {
+				home: Vec2::ZERO,
+				keep_waypoints: false,
+				respawn_ends_life: false,
+			},
+		);
+		world.insert_resource(policies);
+		world.insert_resource(State::new(ActiveGenerationMode::of::<QuietMode>()));
 		world.insert_resource(PlayerPositionWaypoints::default());
 		world.insert_resource(crate::WorldPlayerLoadout::new(
 			id.to_hex(),

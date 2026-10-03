@@ -16,8 +16,8 @@ use bevy::prelude::*;
 mod bump_out_material;
 mod frond_material;
 mod leaf_material;
-mod stick_material;
 mod material_lib;
+mod stick_material;
 
 pub use bump_out_material::{
 	BumpOutMaterial, BumpOutMaterialPlugin, BumpOutUniform, BUMP_OUT_MATERIAL,
@@ -26,23 +26,19 @@ pub use bump_out_material::{
 };
 pub use frond_material::{FrondMaterial, FrondMaterialPlugin};
 pub use leaf_material::{LeafMaterial, LeafMaterialPlugin};
-pub use stick_material::{StickMaterial, StickMaterialPlugin};
 pub use material_lib::{
 	init_vegetation_material_caches, FrondMaterialRefCache, LeafMaterialRefCache,
-	VegetationMaterialLib, VegetationMaterialRefPlugin, StandaloneVegetationMaterialLib,
-	StickMaterialRefCache,
+	StandaloneVegetationMaterialLib, StickMaterialRefCache, VegetationMaterialLib,
+	VegetationMaterialRefPlugin,
 };
+pub use stick_material::{StickMaterial, StickMaterialPlugin};
 
 /// Convenience plugin that registers vegetation materials.
 pub struct VegetationShadersPlugin;
 
 impl Plugin for VegetationShadersPlugin {
 	fn build(&self, app: &mut App) {
-		app.add_plugins((
-			StickMaterialPlugin,
-			LeafMaterialPlugin,
-			FrondMaterialPlugin,
-		));
+		app.add_plugins((StickMaterialPlugin, LeafMaterialPlugin, FrondMaterialPlugin));
 		if !app.is_plugin_added::<BumpOutMaterialPlugin>() {
 			app.add_plugins(BumpOutMaterialPlugin);
 		}

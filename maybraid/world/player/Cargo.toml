@@ -20,6 +20,7 @@ characters = { workspace = true }
 clap = { workspace = true }
 game-commands = { workspace = true }
 maybraid-input = { workspace = true }
+player-camera = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }

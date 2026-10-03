@@ -53,10 +53,7 @@ where
 {
 	fn build(&self, app: &mut App) {
 		app.init_resource::<LodPresentGate<C>>()
-			.configure_sets(
-				Update,
-				LodPresentGateSync.before(LodPresentSystems::Produce),
-			)
+			.configure_sets(Update, LodPresentGateSync.before(LodPresentSystems::Produce))
 			.add_systems(Update, sync_lod_present_gate::<K, C>.in_set(LodPresentGateSync));
 	}
 }
@@ -64,9 +61,7 @@ where
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::{
-		subscribe_mode, ActiveGenerationMode, GenerationMode, GenerationModePlugin,
-	};
+	use crate::{subscribe_mode, ActiveGenerationMode, GenerationMode, GenerationModePlugin};
 	use bevy::state::app::StatesPlugin;
 
 	struct Alpha;
@@ -95,10 +90,7 @@ mod tests {
 			.resource_mut::<bevy::prelude::NextState<ActiveGenerationMode>>()
 			.set(ActiveGenerationMode::of::<Beta>());
 		app.update();
-		anyhow::ensure!(
-			!app.world().resource::<LodPresentGate<Chan>>().open,
-			"beta closes"
-		);
+		anyhow::ensure!(!app.world().resource::<LodPresentGate<Chan>>().open, "beta closes");
 		Ok(())
 	}
 }

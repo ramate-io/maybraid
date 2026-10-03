@@ -64,8 +64,8 @@ impl<K: Send + Sync + 'static> ModeSubscription<'_, K> {
 }
 
 /// Run condition for systems that should not run while `K` is unsubscribed.
-pub fn mode_subscribed<K: Send + Sync + 'static>()
--> impl FnMut(Option<Res<ModeSubscribers<K>>>, Option<Res<State<ActiveGenerationMode>>>) -> bool + Clone
+pub fn mode_subscribed<K: Send + Sync + 'static>(
+) -> impl FnMut(Option<Res<ModeSubscribers<K>>>, Option<Res<State<ActiveGenerationMode>>>) -> bool + Clone
 {
 	|subscribers, mode| subscribed(subscribers.as_deref(), mode.as_deref())
 }
@@ -95,9 +95,8 @@ mod tests {
 		subscribe_mode::<Presenter, Alpha>(&mut app);
 		app.update();
 		{
-			let mut state = bevy::ecs::system::SystemState::<ModeSubscription<Presenter>>::new(
-				app.world_mut(),
-			);
+			let mut state =
+				bevy::ecs::system::SystemState::<ModeSubscription<Presenter>>::new(app.world_mut());
 			anyhow::ensure!(
 				state.get(app.world()).map_err(|error| anyhow::anyhow!("{error:?}"))?.active(),
 				"alpha is subscribed"
@@ -109,9 +108,8 @@ mod tests {
 			.set(ActiveGenerationMode::of::<Beta>());
 		app.update();
 		{
-			let mut state = bevy::ecs::system::SystemState::<ModeSubscription<Presenter>>::new(
-				app.world_mut(),
-			);
+			let mut state =
+				bevy::ecs::system::SystemState::<ModeSubscription<Presenter>>::new(app.world_mut());
 			anyhow::ensure!(
 				!state.get(app.world()).map_err(|error| anyhow::anyhow!("{error:?}"))?.active(),
 				"beta is not subscribed"
@@ -123,11 +121,7 @@ mod tests {
 	#[test]
 	fn double_subscription_is_a_noop() -> anyhow::Result<()> {
 		let mut app = App::new();
-		app.add_plugins((
-			MinimalPlugins,
-			StatesPlugin,
-			GenerationModePlugin::<Alpha>::initial(),
-		));
+		app.add_plugins((MinimalPlugins, StatesPlugin, GenerationModePlugin::<Alpha>::initial()));
 		subscribe_mode::<Presenter, Alpha>(&mut app);
 		subscribe_mode::<Presenter, Alpha>(&mut app);
 		let subscribers = app.world().resource::<ModeSubscribers<Presenter>>();

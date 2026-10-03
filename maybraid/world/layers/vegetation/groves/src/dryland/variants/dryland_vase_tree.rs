@@ -1,7 +1,7 @@
 //! [`BuildWithNoise`] for [`DrylandVaseTree`].
 
-use sbs_geometry::VaseTreeSbs;
 use procedural_common::{BuildWithNoise, NoiseConfig, NoiseParams, UnitRange};
+use sbs_geometry::VaseTreeSbs;
 
 use crate::dryland::DrylandVaseTree;
 

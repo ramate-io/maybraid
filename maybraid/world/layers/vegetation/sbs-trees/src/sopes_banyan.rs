@@ -19,13 +19,13 @@ mod canopy;
 mod stick;
 
 use bevy::prelude::*;
-use sbs_geometry::{BallStickChain, SopesBanyanChain, SopesBanyanSbs};
-use vegetation_components::{
-	leaf_material_ref, stick_material_ref, FoliageNode, Layers, StickNode,
-	StructuralLod, VegetationComponents,
-};
 use clap::Args;
 use lod::gen::LodSceneLevel;
+use sbs_geometry::{BallStickChain, SopesBanyanChain, SopesBanyanSbs};
+use vegetation_components::{
+	leaf_material_ref, stick_material_ref, FoliageNode, Layers, StickNode, StructuralLod,
+	VegetationComponents,
+};
 
 use crate::storybook_tree::{merge_cheap_ball_foliage, merge_kit_sticks};
 use canopy::{

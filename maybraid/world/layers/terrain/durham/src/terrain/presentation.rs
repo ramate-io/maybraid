@@ -15,7 +15,6 @@ use bevy::ecs::system::SystemParam;
 use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::prelude::*;
 use chunk::cascade::CascadeChunk;
-use terrain_shaders::TerrainShader;
 use lod::gen::{
 	GenerationScheme, Id, LodScene, OriginalId, RegionPresenter, SpatialIndex, StorageStatus,
 	TrackedId, Version,
@@ -25,6 +24,7 @@ use lod::LodSceneLevel;
 use render_item::sdf::cpu_shot::WallFaces;
 use std::collections::{HashMap, HashSet};
 use std::marker::PhantomData;
+use terrain_shaders::TerrainShader;
 
 /// One concentric mesh-LOD band on the fine (base-sized) cell grid.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

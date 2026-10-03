@@ -5,11 +5,11 @@ use std::ops::RangeInclusive;
 use procedural_common::UnitRange;
 
 #[cfg(feature = "render")]
+use procedural_common::{BuildWithNoise, NoiseConfig, NoiseParams};
+#[cfg(feature = "render")]
 use sbs_geometry::BladeTuftShape;
 #[cfg(feature = "render")]
 use sbs_trees::tuft_patch::TuftPatchParams;
-#[cfg(feature = "render")]
-use procedural_common::{BuildWithNoise, NoiseConfig, NoiseParams};
 
 /// Authored tuft-patch layout around a grove's blade clump geometry `C`: a few blade tufts
 /// scattered over an XZ footprint instead of radiating from a single anchor

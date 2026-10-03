@@ -10,9 +10,7 @@ use layer_stack::{
 };
 use lod::lod_ref::LodRef;
 use terrain_layer_model::{HeightField, TerrainCell, TerrainModel};
-use vegetation_layer_model::{
-	Vegetation, VegetationGeneration, VegetationModel,
-};
+use vegetation_layer_model::{Vegetation, VegetationGeneration, VegetationModel};
 
 use crate::{
 	VegetationPresent, VegetationPresentation, VegetationPresentationCore,

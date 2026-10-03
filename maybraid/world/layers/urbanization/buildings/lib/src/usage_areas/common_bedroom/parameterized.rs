@@ -1,7 +1,7 @@
 //! Noise knobs + plan for [`super::CommonBedroom`].
 
-use procedural_common::{aabb2_area, aabb3_to_plan, NoiseConfig, NoiseParams, PlanAxes};
 use building_components::LabelStyle;
+use procedural_common::{aabb2_area, aabb3_to_plan, NoiseConfig, NoiseParams, PlanAxes};
 
 use crate::fit::{Confines, FitError};
 

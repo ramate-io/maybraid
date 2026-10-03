@@ -8,12 +8,12 @@
 //! that reads slightly proud of the door looks better than one that stops short.
 
 use bevy_math::Vec3;
-use lod::gen::LodSceneLevel;
 use building_components::floors::FloorNode;
 use building_components::joints::JointNode;
 use building_components::panels::PanelNode;
 use building_components::partitions::{PartitionNode, PartitionStyle};
 use building_components::{BuildingComponents, Layers};
+use lod::gen::LodSceneLevel;
 
 use crate::openings::{MapsOpenings, OpeningId, OpeningLabel, Openings};
 use crate::shells::arc_floor::{ArcFloor, ArcFloorSlab};

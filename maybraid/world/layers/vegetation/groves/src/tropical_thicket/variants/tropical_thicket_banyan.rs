@@ -1,7 +1,7 @@
 //! [`BuildWithNoise`] for [`TropicalThicketBanyan`].
 
-use sbs_geometry::HonuBanyanSbs;
 use procedural_common::{BuildWithNoise, NoiseConfig, NoiseParams, UnitRange};
+use sbs_geometry::HonuBanyanSbs;
 
 use crate::tropical_thicket::TropicalThicketBanyan;
 

@@ -6,9 +6,7 @@ use combat_hud::CombatHudVisible;
 use damage::{Downed, Health};
 use mob_intelligence::MemberOf;
 
-use crate::ui::project_mob_pin;
-use layer_stack::ActiveGenerationMode;
-use maybraid_game_mode_training_ground::{TrainingBrawler, TrainingGround};
+use crate::TrainingBrawler;
 
 const MARKER_PX: f32 = 10.0;
 const MARKER_BORDER_PX: f32 = 1.5;
@@ -17,6 +15,7 @@ const MARKER_LIFT_M: f32 = 2.4;
 const MARKER_FILL: Color = Color::srgba(1.0, 0.24, 0.2, 0.9);
 const ON_SCREEN_RING: Color = Color::srgba(0.0, 0.0, 0.0, 0.6);
 const OFF_SCREEN_RING: Color = Color::WHITE;
+const MARKER_MARGIN_PX: f32 = 22.0;
 
 /// The game copies the Training pause menu's Enemy markers row onto this.
 #[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
@@ -89,11 +88,10 @@ type MarkerParts<'a> =
 	(Entity, &'a TrainingEnemyMarker, &'a mut Node, &'a mut BorderColor, &'a mut Visibility);
 
 /// One dot per standing member of a Training Brawler squad. A downed or dead
-/// fighter loses its dot; leaving Training, or turning markers off, drops the
-/// whole layer.
+/// fighter loses its dot. Turning markers off drops the layer; leaving drops
+/// it from [`clear_training_enemy_markers`].
 pub(crate) fn sync_training_enemy_markers(
 	mut commands: Commands,
-	mode: Res<State<ActiveGenerationMode>>,
 	enabled: Option<Res<TrainingEnemyMarkersEnabled>>,
 	hud: Option<Res<CombatHudVisible>>,
 	camera: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
@@ -105,10 +103,8 @@ pub(crate) fn sync_training_enemy_markers(
 	fighters: Query<(Entity, &MemberOf, &Health, &GlobalTransform), Without<Downed>>,
 	mut markers: Query<MarkerParts<'_>, Without<TrainingEnemyMarkers>>,
 ) {
-	if !mode.get().is::<TrainingGround>() || enabled.is_some_and(|enabled| !enabled.0) {
-		for (root, _) in &roots {
-			commands.entity(root).try_despawn();
-		}
+	if enabled.is_some_and(|enabled| !enabled.0) {
+		clear_training_enemy_markers(roots, &mut commands);
 		return;
 	}
 	let root = match roots.single_mut() {
@@ -133,7 +129,7 @@ pub(crate) fn sync_training_enemy_markers(
 		};
 		marked.push(target);
 		let projected = camera.and_then(|(camera, eye)| {
-			project_mob_pin(camera, eye, TrainingEnemyMarker::anchor(feet))
+			project_marker(camera, eye, TrainingEnemyMarker::anchor(feet))
 		});
 		let Some((screen, on_screen)) = projected else {
 			visibility.set_if_neq(Visibility::Hidden);
@@ -148,7 +144,7 @@ pub(crate) fn sync_training_enemy_markers(
 	};
 	for &(target, feet) in standing.iter().filter(|(target, _)| !marked.contains(target)) {
 		let Some((screen, on_screen)) =
-			project_mob_pin(camera, eye, TrainingEnemyMarker::anchor(feet))
+			project_marker(camera, eye, TrainingEnemyMarker::anchor(feet))
 		else {
 			continue;
 		};
@@ -162,6 +158,75 @@ pub(crate) fn sync_training_enemy_markers(
 			Pickable::IGNORE,
 		));
 	}
+}
+
+pub(crate) fn despawn_training_enemy_markers(
+	roots: Query<
+		(Entity, &mut Visibility),
+		(With<TrainingEnemyMarkers>, Without<TrainingEnemyMarker>),
+	>,
+	mut commands: Commands,
+) {
+	clear_training_enemy_markers(roots, &mut commands);
+}
+
+pub(crate) fn clear_training_enemy_markers(
+	roots: Query<
+		(Entity, &mut Visibility),
+		(With<TrainingEnemyMarkers>, Without<TrainingEnemyMarker>),
+	>,
+	commands: &mut Commands,
+) {
+	for (root, _) in &roots {
+		commands.entity(root).try_despawn();
+	}
+}
+
+fn project_marker(
+	camera: &Camera,
+	camera_transform: &GlobalTransform,
+	world: Vec3,
+) -> Option<(Vec2, bool)> {
+	let rect = camera.logical_viewport_rect()?;
+	let mut ndc = camera.world_to_ndc(camera_transform, world)?;
+	let in_frustum = ndc.z > 0.0 && ndc.z < 1.0;
+	if !in_frustum {
+		ndc.x = -ndc.x;
+		ndc.y = -ndc.y;
+	}
+	ndc.y = -ndc.y;
+	let mut screen = (ndc.truncate() + Vec2::ONE) / 2.0 * rect.size() + rect.min;
+	let on_screen = in_frustum
+		&& screen.x >= rect.min.x
+		&& screen.x <= rect.max.x
+		&& screen.y >= rect.min.y
+		&& screen.y <= rect.max.y;
+	if !on_screen {
+		screen = clamp_to_rect(
+			rect.center(),
+			screen,
+			rect.min + Vec2::splat(MARKER_MARGIN_PX),
+			rect.max - Vec2::splat(MARKER_MARGIN_PX),
+		);
+	}
+	Some((screen, on_screen))
+}
+
+fn clamp_to_rect(center: Vec2, point: Vec2, min: Vec2, max: Vec2) -> Vec2 {
+	let dir = point - center;
+	if dir.length_squared() < 1e-6 {
+		return Vec2::new(center.x.clamp(min.x, max.x), center.y.clamp(min.y, max.y));
+	}
+	let mut t = f32::INFINITY;
+	if dir.x.abs() > 1e-6 {
+		let edge = if dir.x > 0.0 { max.x } else { min.x };
+		t = t.min((edge - center.x) / dir.x);
+	}
+	if dir.y.abs() > 1e-6 {
+		let edge = if dir.y > 0.0 { max.y } else { min.y };
+		t = t.min((edge - center.y) / dir.y);
+	}
+	center + dir * t.clamp(0.0, 1.0)
 }
 
 #[cfg(test)]
@@ -185,26 +250,33 @@ mod tests {
 	#[test]
 	fn the_marker_layer_lives_only_while_training() -> anyhow::Result<()> {
 		let mut world = World::new();
-		world.insert_resource(State::new(ActiveGenerationMode::of::<TrainingGround>()));
 		let mut system = IntoSystem::into_system(sync_training_enemy_markers);
 		system.initialize(&mut world);
 		run(&mut world, &mut system)?;
 		let roots = world.query_filtered::<(), With<TrainingEnemyMarkers>>().iter(&world).count();
 		assert_eq!(roots, 1);
 
-		world.insert_resource(State::new(ActiveGenerationMode::of::<
-			maybraid_game_mode_discover::Discovery,
-		>()));
-		run(&mut world, &mut system)?;
+		let mut clear = IntoSystem::into_system(clear_markers_system);
+		clear.initialize(&mut world);
+		run(&mut world, &mut clear)?;
 		let roots = world.query_filtered::<(), With<TrainingEnemyMarkers>>().iter(&world).count();
 		assert_eq!(roots, 0);
 		Ok(())
 	}
 
+	fn clear_markers_system(
+		roots: Query<
+			(Entity, &mut Visibility),
+			(With<TrainingEnemyMarkers>, Without<TrainingEnemyMarker>),
+		>,
+		mut commands: Commands,
+	) {
+		clear_training_enemy_markers(roots, &mut commands);
+	}
+
 	#[test]
 	fn turning_markers_off_drops_the_layer() -> anyhow::Result<()> {
 		let mut world = World::new();
-		world.insert_resource(State::new(ActiveGenerationMode::of::<TrainingGround>()));
 		world.insert_resource(TrainingEnemyMarkersEnabled(true));
 		let mut system = IntoSystem::into_system(sync_training_enemy_markers);
 		system.initialize(&mut world);
@@ -227,7 +299,6 @@ mod tests {
 	#[test]
 	fn downed_and_foreign_fighters_lose_their_dots() -> anyhow::Result<()> {
 		let mut world = World::new();
-		world.insert_resource(State::new(ActiveGenerationMode::of::<TrainingGround>()));
 		let squad = world.spawn(TrainingBrawler).id();
 		let stranger = world.spawn_empty().id();
 		let fighter =

@@ -20,19 +20,19 @@ use commands::{
 	RequestTerrainRadius,
 };
 use durham::{
-	Durham, DurhamTerrainConfig, TerrainStampConfigs, WatershedConfigs, TerrainCellLayout,
-	TerrainConfig, TerrainMeshLodBand, TerrainPresentationAssets, TerrainPresentationDirty,
+	Durham, DurhamTerrainConfig, TerrainCellLayout, TerrainConfig, TerrainMeshLodBand,
+	TerrainPresentationAssets, TerrainPresentationDirty, TerrainStampConfigs, WatershedConfigs,
 	WorldBaseTerrain,
 };
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use game_commands::ui::{GameCommandDrawerConfig, GameCommandStatusText};
-use richmond::DevelopmentConfig;
-use std::f32::consts::PI;
-use terrain_layer_model::{BaseTerrainScheme, OnTerrain};
 use layer_stack::GenerationMode;
+use richmond::DevelopmentConfig;
 use richmond::{
 	install_urbanization_stream, DevelopmentFocus as LayerFocus, Richmond, RichmondConfig,
 };
+use std::f32::consts::PI;
+use terrain_layer_model::{BaseTerrainScheme, OnTerrain};
 use urbanization_layer_model::{UrbanizationModeConfig, UrbanizationScheme};
 
 /// Standalone playground generation mode.
@@ -298,18 +298,18 @@ mod tests {
 		app.insert_resource(TerrainConfig::new(42));
 		app.insert_resource(TerrainStampConfigs::from_world_seed(42));
 		app.insert_resource(WatershedConfigs::default());
-		app.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(
-			&TerrainConfig::new(42),
-		)));
+		app.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(&TerrainConfig::new(
+			42,
+		))));
 		app.insert_resource(DevelopmentConfig::default());
-		app.insert_resource(UrbanizationModeConfig::<
-			PlaygroundMode,
-			Richmond<OnTerrain<Durham>>,
-		>::new(RichmondConfig::default()));
+		app.insert_resource(
+			UrbanizationModeConfig::<PlaygroundMode, Richmond<OnTerrain<Durham>>>::new(
+				RichmondConfig::default(),
+			),
+		);
 		app.insert_resource(TerrainPresentationDirty(false));
 		app.insert_resource(GameCommandStatusText::default());
-		app.world_mut()
-			.spawn(RequestDevelopmentFocus(DevelopmentFocus::LesHalles));
+		app.world_mut().spawn(RequestDevelopmentFocus(DevelopmentFocus::LesHalles));
 		app.world_mut()
 			.run_system_once(apply_commands)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;

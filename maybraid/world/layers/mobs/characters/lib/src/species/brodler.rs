@@ -14,10 +14,10 @@ use crate::{
 	CharacterRecipe, ClothingLayer,
 };
 
-use clap::ValueEnum;
 use character_items::{
 	ClothingColor, ClothingHost, ClothingMaterial, ClothingMaterialChoice, ClothingMesh, ItemColor,
 };
+use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 
 pub use assets::HornMesh;

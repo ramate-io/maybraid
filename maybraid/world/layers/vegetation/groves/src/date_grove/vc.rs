@@ -4,8 +4,6 @@ use std::sync::Arc;
 
 #[cfg(test)]
 use bevy::math::bounding::Aabb3d;
-use sbs_trees::{DatePalm, DatePalmParams, QuantizedPlant};
-use vegetation_components::{Placement, VegetationComponents};
 use clap::Args;
 #[cfg(test)]
 use lod::gen::{LodScene, LodSceneLevel};
@@ -13,6 +11,8 @@ use lod::lod_ref::LodRef;
 use lod::SceneChunk;
 use material_ref::MaterialRef;
 use procedural_common::{BuildWithNoise, NoiseParams};
+use sbs_trees::{DatePalm, DatePalmParams, QuantizedPlant};
+use vegetation_components::{Placement, VegetationComponents};
 
 use super::{definition, DateGroveCell, DateGroveItem, FRUITING_DATE_PALM};
 use crate::grove::vc_tuft::{patch_variant_index, variant_noise};

@@ -320,9 +320,9 @@ mod tests {
 		let medium = tower.floor_nodes_for_level(LodSceneLevel::Medium).flatten();
 		let high = tower.floor_nodes_for_level(LodSceneLevel::High).flatten();
 		assert!(!medium.is_empty());
-		assert!(medium.iter().all(|node| {
-			node.confines == building_components::ParentConfines::External
-		}));
+		assert!(medium
+			.iter()
+			.all(|node| { node.confines == building_components::ParentConfines::External }));
 		assert!(high.len() > medium.len());
 		assert!(tower.floor_nodes_for_level(LodSceneLevel::Low).is_empty());
 	}

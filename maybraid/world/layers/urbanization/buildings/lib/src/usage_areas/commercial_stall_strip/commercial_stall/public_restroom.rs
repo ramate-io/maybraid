@@ -13,10 +13,10 @@ pub mod parameterized;
 pub use parameterized::{PublicRestroomParameterized, PublicRestroomPlan};
 
 use bevy_math::bounding::Aabb3d;
-use lod::gen::LodSceneLevel;
-use procedural_common::NoiseParams;
 use building_components::panels::PanelNode;
 use building_components::{BuildingComponents, LabelNode, LabelStyle, Layers};
+use lod::gen::LodSceneLevel;
+use procedural_common::NoiseParams;
 
 use crate::fit::{Confines, FillRegion, FillableRegions, Fit, FitError, SpaceKind};
 use crate::openings::{Opening, OpeningId, Openings};

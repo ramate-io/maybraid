@@ -7,9 +7,7 @@
 use avian3d::prelude::*;
 use bevy::ecs::query::Has;
 use bevy::prelude::*;
-use durham::{
-	BaseTerrainNoise, TerrainCellLayout, TerrainEntryStore, TerrainTrimeshCollider,
-};
+use durham::{BaseTerrainNoise, TerrainCellLayout, TerrainEntryStore, TerrainTrimeshCollider};
 use game_commands::command::TextEntryFocus;
 use lod_avian::PhysicsInteractionLayer;
 use maybraid_input::{PadButton, VirtualPad};

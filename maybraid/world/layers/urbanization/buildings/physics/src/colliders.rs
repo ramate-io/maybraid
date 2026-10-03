@@ -7,9 +7,6 @@
 use avian3d::prelude::{Collider, Friction, RigidBody};
 use bevy::prelude::*;
 use bevy_math::Vec3;
-use lod::gen::LodSceneLevel;
-use lod::LodSceneHost;
-use lod_avian::PhysicsInteractionLayer;
 use building_components::floors::FloorGeometry;
 use building_components::panels::{
 	rectangle_kit_hull, right_triangle_kit_hull, tessellated_triangle_kit_hull,
@@ -20,6 +17,9 @@ use building_components::partitions::{
 };
 use building_components::placed::Placement;
 use building_components::{BuildingComponents, FloorNode, PanelNode, PartitionNode};
+use lod::gen::LodSceneLevel;
+use lod::LodSceneHost;
+use lod_avian::PhysicsInteractionLayer;
 
 use crate::BuildingFrictionConfig;
 

@@ -1,7 +1,7 @@
 //! Parameterized knobs + fit for [`super::KnickKnackStall`].
 
-use procedural_common::{aabb3_to_plan, NoiseConfig, NoiseParams, OptionalFaceBand, PlanAxes};
 use building_components::LabelStyle;
+use procedural_common::{aabb3_to_plan, NoiseConfig, NoiseParams, OptionalFaceBand, PlanAxes};
 
 use crate::fit::{Confines, FitError};
 use crate::usage_areas::clearance::{PassageClearance, PlanHost};

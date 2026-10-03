@@ -1,8 +1,8 @@
 //! Parameterized knobs + plan for [`super::EatingArea`].
 
 use bevy_math::bounding::Aabb2d;
-use procedural_common::{NoiseConfig, NoiseParams};
 use building_components::LabelStyle;
+use procedural_common::{NoiseConfig, NoiseParams};
 
 use crate::fit::{Confines, FitError};
 use crate::usage_areas::livable_quarters::dining_room::DiningRoomPlan;

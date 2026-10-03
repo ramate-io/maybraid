@@ -9,9 +9,9 @@ pub use ring::StackedRing;
 
 use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
-use lod::gen::LodSceneLevel;
 use building_components::partitions::PartitionNode;
 use building_components::{BuildingComponents, Layers};
+use lod::gen::LodSceneLevel;
 
 use crate::CellConstraints;
 

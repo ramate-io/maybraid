@@ -464,8 +464,7 @@ mod tests {
 	fn rim_boundary_noise_shifts_ring_to_apron_seam() -> anyhow::Result<()> {
 		let mut node = reach_node(8.0);
 		// Constant +2 wu on rim outer (sample_boundary returns raw when not expand_only).
-		node.params.rim_boundary_noise =
-			Some(terrain_stamps::RegionNoise::from_seed(0, 0.0, 2.0));
+		node.params.rim_boundary_noise = Some(terrain_stamps::RegionNoise::from_seed(0, 0.0, 2.0));
 		// Force a constant sample by using amp with zero frequency — still spatial.
 		// Instead assert via rim_outer offset when noise amp is large and we pick a
 		// point where classification must move with rim_edge.

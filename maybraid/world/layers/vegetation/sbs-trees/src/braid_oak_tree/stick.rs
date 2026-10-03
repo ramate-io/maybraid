@@ -6,13 +6,13 @@
 use std::f32::consts::PI;
 
 use bevy::prelude::*;
+use procedural_common::{NoiseConfig, NoiseParams};
 use sbs_geometry::{
 	horizontal_radius_from_y_axis, sample_max_horizontal_radius_by_azimuth_height,
 	AzimuthHeightBands, BallStickChain, BallStickSegment, StorybookTreeChain, StorybookTreePhase,
 };
 use sdf_common::CrookCylinder;
 use vegetation_components::{StickGeometry, StickNode};
-use procedural_common::{NoiseConfig, NoiseParams};
 
 /// Base crook strength on the stalk (maps to ~`0.10` SDF radius via the crook cylinder).
 const STALK_BEND_STRENGTH: f32 = 10.0;

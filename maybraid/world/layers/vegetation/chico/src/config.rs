@@ -51,12 +51,7 @@ pub struct ChicoConfig {
 
 impl Default for ChicoConfig {
 	fn default() -> Self {
-		Self {
-			forest: None,
-			forest_budget: 16,
-			bump_out_budget: 16,
-			medium_bump_out_budget: 16,
-		}
+		Self { forest: None, forest_budget: 16, bump_out_budget: 16, medium_bump_out_budget: 16 }
 	}
 }
 
@@ -100,9 +95,7 @@ mod tests {
 
 	#[test]
 	fn grove_keeps_one_extent() -> anyhow::Result<()> {
-		let spec = ChicoConfig::grove()
-			.forest
-			.ok_or_else(|| anyhow::anyhow!("forest on"))?;
+		let spec = ChicoConfig::grove().forest.ok_or_else(|| anyhow::anyhow!("forest on"))?;
 		anyhow::ensure!(spec.stream_radius == 0, "grove stream radius is 0");
 		anyhow::ensure!(
 			ChicoConfig::grove().forest_budget == ChicoConfig::world_defaults().forest_budget,

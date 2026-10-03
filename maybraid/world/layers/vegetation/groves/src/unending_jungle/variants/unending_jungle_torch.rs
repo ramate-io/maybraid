@@ -1,7 +1,7 @@
 //! [`BuildWithNoise`] for [`UnendingJungleTorch`].
 
-use sbs_geometry::PenmarchTorchSbs;
 use procedural_common::{BuildWithNoise, NoiseConfig, NoiseParams, UnitRange};
+use sbs_geometry::PenmarchTorchSbs;
 
 use crate::unending_jungle::UnendingJungleTorch;
 

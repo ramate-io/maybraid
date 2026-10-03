@@ -21,9 +21,6 @@ mod player_position;
 mod poi;
 mod start;
 mod stash;
-mod training;
-mod training_markers;
-mod training_plaza;
 mod ui;
 mod vsync;
 mod weapon;
@@ -58,9 +55,6 @@ pub use stash::{
 	WorldStashPlugin, WorldStashSettings, DEFAULT_CLAIM_RADIUS, DEFAULT_LOOT_SECS,
 };
 pub use terrain_layer_model::{terrain_streaming, TerrainStreaming};
-pub use training::{training_trainee, TrainingLifeEnded};
-pub use training_markers::TrainingEnemyMarkersEnabled;
-pub use training_plaza::TrainingPlazaMounted;
 pub use ui::WorldMobHudEnabled;
 pub use vsync::{default_window_present_mode, RequestVsyncToggle, VSYNC_TOGGLE_KEY};
 pub use weapon::WorldPlayerLoadout;
@@ -78,6 +72,8 @@ use game_commands::command::{GameCommandPlugin, TextEntryFocus};
 use game_commands::ui::GameCommandDrawerConfig;
 use lod::{Bullseye, OpenLattice};
 use maybraid_character_controller::{CharacterControlSystems, CharacterControllerPlugin};
+use maybraid_game_mode_discover::DiscoveryPlayerPlugin;
+use maybraid_game_mode_training_ground::TrainingGroundPlugin;
 use maybraid_input::{VirtualPadConfig, VirtualPadPlugin};
 use maybraid_skill_map::{SkillMapPlugin, SkillMapSystems};
 use maybraid_sky::SkyDomePlugin;
@@ -171,6 +167,7 @@ impl Plugin for WorldPlugin {
 			.insert_resource(CharacterRagdollTargets { players: true, npcs: true, unmarked: false })
 			.add_plugins(CharacterRagdollPlugin)
 			.add_plugins(WorldLayersPlugin)
+			.add_plugins((DiscoveryPlayerPlugin, TrainingGroundPlugin))
 			.add_plugins(WorldIntelligencePlugin)
 			.add_plugins(WeatherPlugin)
 			.add_plugins(SkillMapPlugin)
@@ -186,7 +183,6 @@ impl Plugin for WorldPlugin {
 			.init_resource::<InventoryEditCameraFollow>()
 			.init_resource::<WorldSurfaceReady>()
 			.init_resource::<WorldSceneryVisible>()
-			.add_plugins(training::TrainingGroundPlugin)
 			.insert_resource(WorldMobHudEnabled::from_debug_chrome(self.debug_chrome))
 			.insert_resource(Bullseye { inner: 50.0, outer: WORLD_BULLSEYE_OUTER_M })
 			.insert_resource(OpenLattice {

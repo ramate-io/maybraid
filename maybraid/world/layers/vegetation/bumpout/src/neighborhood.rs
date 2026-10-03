@@ -1,6 +1,6 @@
 use bevy::prelude::Color;
-use vegetation_shaders::BUMP_OUT_MATERIAL;
 use material_ref::{MaterialRef, MATERIAL_RASTER_SAMPLES, MATERIAL_RASTER_WIDTH};
+use vegetation_shaders::BUMP_OUT_MATERIAL;
 
 pub use vegetation_shaders::{
 	RASTER_AVERAGE_HEIGHT, RASTER_BITE_SIZE, RASTER_BITE_SIZE_DEVIATION, RASTER_DENSITY,

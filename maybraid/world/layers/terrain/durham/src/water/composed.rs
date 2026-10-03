@@ -16,10 +16,10 @@ use crate::terrain::sdf::TerrainSdf;
 use crate::water::water_distance as fill_water_distance;
 use bevy::prelude::*;
 use chunk::cascade::CascadeChunk;
-use terrain_watersheds::WaterFill;
 use render_item::mesh::{IdentifiedMesh, MeshId};
 use render_item::NormalizeChunk;
 use sdf::{Sdf, Sign, SignBoundary, SignUniformIntervals};
+use terrain_watersheds::WaterFill;
 
 /// Composed wet volume for one terrain origin cell: union of stamp fills against
 /// the cell's finished heightfield.

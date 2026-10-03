@@ -1,13 +1,13 @@
 //! Live character session: Users plus save/load for the gallery editor.
 
 use bevy::prelude::*;
+use character_creation_menus::{CharacterMenu, MenuEvent};
+use character_inventory_user::{spawn_bag, InventoryUser, InventoryUserPlugin};
 use character_items::Inventory;
 use character_model_user::{
 	spawn_model, CharacterModel, CharacterModelUser, CharacterModelUserPlugin,
 };
 use character_persist::{CharacterId, PersistError, SaveRoot};
-use character_creation_menus::{CharacterMenu, MenuEvent};
-use character_inventory_user::{spawn_bag, InventoryUser, InventoryUserPlugin};
 use menu_components::info::description::{set_description_for_menu, TextMenuDescription};
 use menu_components::{MenuActivate, MenuObjectiveMarker, ScreenEditPressed};
 use menu_screens::{
@@ -186,9 +186,7 @@ fn sync_gallery_active_caption(
 	}
 	*last = Some((root, id));
 	let caption = id
-		.and_then(|id| {
-			character_model_user::load(&save_root, id).ok().map(|model| model.name)
-		})
+		.and_then(|id| character_model_user::load(&save_root, id).ok().map(|model| model.name))
 		.unwrap_or_default();
 	set_description_for_menu(root, caption, &children, &mut lines);
 }

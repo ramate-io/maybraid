@@ -1,7 +1,7 @@
 //! [`BuildWithNoise`] for [`AridConiferSaplingFriendsConifer`].
 
-use sbs_geometry::FriendsConiferSbs;
 use procedural_common::{BuildWithNoise, NoiseConfig, NoiseParams, UnitRange};
+use sbs_geometry::FriendsConiferSbs;
 
 use crate::arid_conifer_sapling::AridConiferSaplingFriendsConifer;
 

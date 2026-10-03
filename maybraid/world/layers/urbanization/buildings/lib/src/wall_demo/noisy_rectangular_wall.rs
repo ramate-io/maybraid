@@ -5,11 +5,11 @@
 //! bay that contains that arc-length fraction.
 
 use bevy_math::Vec3;
-use lod::gen::LodSceneLevel;
-use procedural_common::{AllowedAngles, NoiseParams, NoisyPathParams, StepLenRange};
 use building_components::joints::JointNode;
 use building_components::panels::{PanelNode, PanelStyle};
 use building_components::{BuildingComponents, Layers};
+use lod::gen::LodSceneLevel;
+use procedural_common::{AllowedAngles, NoiseParams, NoisyPathParams, StepLenRange};
 
 use crate::paneling::{
 	ClippedRectangularStrip, PanelComplexJointPolicy, RectInset, RectangularStripNode,

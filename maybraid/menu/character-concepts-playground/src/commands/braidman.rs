@@ -1,7 +1,6 @@
 //! `/braidman` commands for the simplified concept species.
 
 use bevy::prelude::*;
-use clap::{Args, Subcommand};
 use character_items::{ClothingMaterial, ClothingMesh};
 use characters::{
 	species::{
@@ -10,6 +9,7 @@ use characters::{
 	},
 	BuildPreset, GenderPreset,
 };
+use clap::{Args, Subcommand};
 
 use crate::{animation::ConceptAnimation, preview::ConceptPreviewConfig};
 
@@ -106,8 +106,7 @@ impl PreviewArgs {
 				hair: self.hair,
 				clothing: self.clothing,
 				colors: {
-					let mut colors =
-						characters::species::braidman::BraidmanColors::default();
+					let mut colors = characters::species::braidman::BraidmanColors::default();
 					colors.clothing_material = self.clothing_material;
 					colors
 				},

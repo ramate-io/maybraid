@@ -3,6 +3,8 @@
 //! The game shell still owns cameras, loading, and pause. This crate is the
 //! session those systems ask when the home row enters Discovery.
 
+use std::any::TypeId;
+
 use barking::{install_mob_grid_stream, Barking, BarkingConfig};
 use bevy::prelude::*;
 use chico::{install_vegetation_stream, Chico, ChicoConfig};
@@ -13,6 +15,7 @@ use richmond::{install_urbanization_stream, Richmond, RichmondConfig};
 use terrain_layer_model::{BaseTerrainModeConfig, BaseTerrainScheme, OnTerrain};
 use urbanization_layer_model::{Urbanization, UrbanizationScheme};
 use vegetation_layer_model::{Vegetation, VegetationScheme};
+use world_player::{ModePlayerPolicies, ModePlayerPolicy};
 
 pub const LABEL: &str = "Discovery";
 
@@ -52,6 +55,20 @@ impl MobScheme<Barking<Vegetation<Chico<Urbanization<Richmond<OnTerrain<Durham>>
 	fn install(app: &mut App, _config: &BarkingConfig) {
 		install_mob_grid_stream::<Discovery>(app);
 	}
+}
+
+/// Discovery's player home is the origin. Waypoints stay; a respawn walks to a POI.
+pub struct DiscoveryPlayerPlugin;
+
+impl Plugin for DiscoveryPlayerPlugin {
+	fn build(&self, app: &mut App) {
+		let mut policies = app.world_mut().get_resource_or_insert_with(ModePlayerPolicies::default);
+		policies.register(TypeId::of::<Discovery>(), discovery_player_policy());
+	}
+}
+
+fn discovery_player_policy() -> ModePlayerPolicy {
+	ModePlayerPolicy { home: Vec2::ZERO, keep_waypoints: true, respawn_ends_life: false }
 }
 
 fn restore_playable_world(

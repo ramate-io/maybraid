@@ -28,8 +28,8 @@ pub use game_commands::command::PendingStartupCommand;
 use bevy::prelude::*;
 use bevy_character_ui_menu_renderer::CharacterMenuRendererPlugin;
 use camera_controls::look::{CameraLookConfig, CameraLookPlugin};
-use characters_playground::camera;
 use character_creation_menus::CharacterMenu;
+use characters_playground::camera;
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 
 use camera_focus::{apply_camera_suggestion, PendingCameraFocus};

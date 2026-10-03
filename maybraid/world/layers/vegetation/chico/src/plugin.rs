@@ -1,11 +1,11 @@
 //! Bevy plugins: vegetation view stack plus forest generate / present / cull.
 
 use bevy::prelude::*;
+use scene_ref::SceneRefPlugin;
 use vegetation_components::VegetationProceduralPlugin;
 use vegetation_shaders::{
 	init_vegetation_material_caches, VegetationMaterialRefPlugin, VegetationShadersPlugin,
 };
-use scene_ref::SceneRefPlugin;
 
 use crate::view::VegetationLodRefreshPlugin;
 

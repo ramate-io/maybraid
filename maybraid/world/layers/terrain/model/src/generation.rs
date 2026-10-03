@@ -5,9 +5,9 @@ use std::marker::PhantomData;
 use bevy::app::{App, Plugin};
 use bevy::prelude::*;
 
-use layer_stack::{ActiveGenerationMode, GenerationMode};
 use crate::contract::{TerrainExtent, TerrainStreaming};
 use crate::model::TerrainModel;
+use layer_stack::{ActiveGenerationMode, GenerationMode};
 
 /// A model with its own generation stack (the bottom of the wiring diagram).
 ///
@@ -91,10 +91,7 @@ where
 			app.add_plugins(BaseTerrainGenerationCore::<T>::default());
 		}
 		app.insert_resource(BaseTerrainModeConfig::<Mode, T>::new(self.config.clone()));
-		app.add_systems(
-			OnEnter(ActiveGenerationMode::of::<Mode>()),
-			apply_base_terrain::<Mode, T>,
-		);
+		app.add_systems(OnEnter(ActiveGenerationMode::of::<Mode>()), apply_base_terrain::<Mode, T>);
 		Mode::install(app, &self.config);
 	}
 }
@@ -111,15 +108,15 @@ where
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use layer_stack::GenerationModePlugin;
 	use crate::{HeightField, TerrainCell, TerrainModel};
-	use layer_stack::RequireLayer;
 	use bevy::ecs::system::{SystemParam, SystemParamItem};
-	use bevy::prelude::NextState;
 	use bevy::math::bounding::Aabb3d;
 	use bevy::math::{Vec2, Vec3};
+	use bevy::prelude::NextState;
 	use bevy::state::app::StatesPlugin;
 	use bevy::transform::components::Transform;
+	use layer_stack::GenerationModePlugin;
+	use layer_stack::RequireLayer;
 	use lod::lod_ref::LodRef;
 
 	struct Alpha;
@@ -254,9 +251,7 @@ mod tests {
 	}
 
 	fn hop(app: &mut App, mode: ActiveGenerationMode) {
-		app.world_mut()
-			.resource_mut::<NextState<ActiveGenerationMode>>()
-			.set(mode);
+		app.world_mut().resource_mut::<NextState<ActiveGenerationMode>>().set(mode);
 		app.update();
 	}
 
@@ -334,11 +329,11 @@ mod tests {
 
 	#[test]
 	fn wrappers_read_the_base_contract_the_same_update() -> anyhow::Result<()> {
-		use bevy::math::bounding::Aabb3d;
-		use bevy::math::Vec3;
 		use crate::contract::TerrainContract;
 		use crate::on_terrain::OnTerrain;
 		use crate::{terrain_streaming, TerrainExtent, TerrainStreaming};
+		use bevy::math::bounding::Aabb3d;
+		use bevy::math::Vec3;
 
 		type Stacked = OnTerrain<OnTerrain<Stub>>;
 
@@ -355,10 +350,7 @@ mod tests {
 		let first = Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE);
 		app.insert_resource(TerrainExtent::<Stub>::pinned(first));
 		app.init_resource::<Seen>();
-		app.add_systems(
-			Update,
-			note_contract.run_if(terrain_streaming::<Stacked>),
-		);
+		app.add_systems(Update, note_contract.run_if(terrain_streaming::<Stacked>));
 
 		app.update();
 		anyhow::ensure!(

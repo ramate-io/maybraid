@@ -1,5 +1,5 @@
-use character_ui_menu::{MenuComponent, MenuNode};
 use character_items::ClothingMesh;
+use character_ui_menu::{MenuComponent, MenuNode};
 use characters::species::{
 	braidman::BraidmanConfig, brodler::BrodlerConfig, tuberwaber::TuberwaberConfig,
 };
@@ -534,9 +534,7 @@ fn create_menu_weapons_is_ranked_grid_catalog() -> anyhow::Result<()> {
 
 #[test]
 fn create_menu_skill_maps_is_ranked_grid_catalog() -> anyhow::Result<()> {
-	use character_items::{
-		InventoryItem, SkillMapKind, SkillMapSpec, SKILL_MAP_QUEUE_LIMIT,
-	};
+	use character_items::{InventoryItem, SkillMapKind, SkillMapSpec, SKILL_MAP_QUEUE_LIMIT};
 
 	let items = vec![
 		InventoryItem::skill_map(SkillMapSpec::new(SkillMapKind::Fireball, 1)),
@@ -570,9 +568,7 @@ fn create_menu_skill_maps_is_ranked_grid_catalog() -> anyhow::Result<()> {
 
 #[test]
 fn create_menu_loadout_compiles_character_sheet() -> anyhow::Result<()> {
-	use character_items::{
-		ClothingMaterial, ClothingMesh, FirearmMesh, InventoryItem, ItemColor,
-	};
+	use character_items::{ClothingMaterial, ClothingMesh, FirearmMesh, InventoryItem, ItemColor};
 
 	let items = vec![
 		InventoryItem::clothing(ClothingMesh::Pants, ClothingMaterial::Cloth, ItemColor::Natural),

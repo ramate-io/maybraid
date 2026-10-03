@@ -1,8 +1,8 @@
 //! Stochastic apex canopy at the stalk crown (Friend's ball, Temperate fronds).
 
+use procedural_common::NoiseParams;
 use sbs_geometry::render::mix_seed::mix_seed_below_fraction;
 use sbs_geometry::BallStickNode;
-use procedural_common::NoiseParams;
 
 /// Default fraction of trees that receive an apex canopy cluster (deterministic from [`NoiseParams`] + tip).
 pub const DEFAULT_APEX_CANOPY_SPAWN_FRACTION: f32 = 0.72;

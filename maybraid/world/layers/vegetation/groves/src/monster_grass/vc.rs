@@ -5,13 +5,11 @@ use super::{
 use std::sync::Arc;
 
 use bevy::prelude::*;
-use sbs_trees::QuantizedPlant;
-use vegetation_components::{
-	FoliageNode, Layers, StickNode, StructuralLod, VegetationComponents,
-};
 use clap::Args;
 use lod::gen::LodSceneLevel;
 use procedural_common::{noise_params_from_scalar_str, NoiseParams};
+use sbs_trees::QuantizedPlant;
+use vegetation_components::{FoliageNode, Layers, StickNode, StructuralLod, VegetationComponents};
 
 use super::{
 	definition, MonsterGrassCell, BROAD_JUNGLE_BLADE, BROAD_JUNGLE_BLADE_PATCH, GIANT_WET_BLADE,

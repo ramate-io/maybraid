@@ -1,7 +1,6 @@
 //! `/lero` commands for the Lero concept species.
 
 use bevy::prelude::*;
-use clap::{Args, Subcommand};
 use character_items::{ClothingMaterial, ClothingMesh};
 use characters::species::{
 	common::HairMesh,
@@ -10,6 +9,7 @@ use characters::species::{
 		LeroTailColor,
 	},
 };
+use clap::{Args, Subcommand};
 
 use crate::{animation::ConceptAnimation, preview::ConceptPreviewConfig};
 

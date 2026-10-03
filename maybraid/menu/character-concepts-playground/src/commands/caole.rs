@@ -1,7 +1,6 @@
 //! `/caole` commands for the quadruped concept species.
 
 use bevy::prelude::*;
-use clap::{Args, Subcommand};
 use characters::{
 	species::{
 		caole::{
@@ -13,6 +12,7 @@ use characters::{
 	},
 	BuildPreset, GenderPreset,
 };
+use clap::{Args, Subcommand};
 
 use crate::{animation::ConceptAnimation, preview::ConceptPreviewConfig};
 

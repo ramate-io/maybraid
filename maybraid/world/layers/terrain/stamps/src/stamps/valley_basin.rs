@@ -1,7 +1,7 @@
 //! Stamp Valley Basins (unchained) — [RFC-105 §3.8.1](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-105-procedural-terrain#381-jersey-valley-basins-unchained).
 
 use crate::config::{DownhillPair, FractalAnchors, HysteresisSpine};
-use crate::modulation::{StampModulation, RegionAffineModulation, RegionGradingModulation};
+use crate::modulation::{RegionAffineModulation, RegionGradingModulation, StampModulation};
 use crate::region::{CircleRegion, Region2D, RegionNoise};
 use crate::stamp::{scale_additive, scale_near_one, StampSemantics, StampSet, StampStrength};
 use bevy_math::Vec2;

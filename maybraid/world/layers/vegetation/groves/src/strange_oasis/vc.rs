@@ -4,14 +4,6 @@ use std::sync::Arc;
 #[cfg(test)]
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
-use sbs_geometry::DatePalmSbs;
-use sbs_trees::{
-	DatePalm, DatePalmParams, PalmCrown, PalmCrownParams, PenmarchTorch, PenmarchTorchParams,
-	QuantizedPlant, StorybookTree, StorybookTreeParams,
-};
-use vegetation_components::{
-	FoliageNode, Layers, Placement, StickNode, StructuralLod, VegetationComponents,
-};
 use clap::Args;
 #[cfg(test)]
 use lod::gen::LodScene;
@@ -20,6 +12,14 @@ use lod::lod_ref::LodRef;
 use lod::SceneChunk;
 use material_ref::MaterialRef;
 use procedural_common::{BuildWithNoise, NoiseParams};
+use sbs_geometry::DatePalmSbs;
+use sbs_trees::{
+	DatePalm, DatePalmParams, PalmCrown, PalmCrownParams, PenmarchTorch, PenmarchTorchParams,
+	QuantizedPlant, StorybookTree, StorybookTreeParams,
+};
+use vegetation_components::{
+	FoliageNode, Layers, Placement, StickNode, StructuralLod, VegetationComponents,
+};
 
 use super::{
 	definition, StrangeOasisCell, COMPACT_DATE_PALM, OASIS_STORYBOOK, RED_TORCH_ACCENT,

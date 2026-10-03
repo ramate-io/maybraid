@@ -1,7 +1,7 @@
 //! [`BuildWithNoise`] for [`JungleLowerMassivesBraidOak`].
 
-use sbs_geometry::BraidOakTreeSbs;
 use procedural_common::{BuildWithNoise, NoiseConfig, NoiseParams, UnitRange};
+use sbs_geometry::BraidOakTreeSbs;
 
 use crate::jungle_lower_massives::JungleLowerMassivesBraidOak;
 

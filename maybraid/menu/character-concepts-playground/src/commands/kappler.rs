@@ -1,7 +1,6 @@
 //! `/kappler` commands for the Kappler concept species.
 
 use bevy::prelude::*;
-use clap::{Args, Subcommand};
 use character_items::{ClothingMaterial, ClothingMesh};
 use characters::species::{
 	common::{EyeMesh, HairMesh},
@@ -9,6 +8,7 @@ use characters::species::{
 		KapplerBeakColor, KapplerBeakMesh, KapplerConfig, KapplerEyeColor, KapplerPlumageColor,
 	},
 };
+use clap::{Args, Subcommand};
 
 use crate::{animation::ConceptAnimation, preview::ConceptPreviewConfig};
 

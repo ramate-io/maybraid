@@ -4,9 +4,9 @@
 //! inside the spire hole are omitted (empty scenes).
 
 use bevy_math::Vec3;
-use lod::gen::LodSceneLevel;
 use building_components::partitions::{Partition, PartitionNode};
 use building_components::{BuildingComponents, Layers, Placement};
+use lod::gen::LodSceneLevel;
 
 use crate::CellConstraints;
 

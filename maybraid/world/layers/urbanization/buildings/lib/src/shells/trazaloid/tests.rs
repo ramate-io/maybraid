@@ -1,6 +1,6 @@
 use bevy_math::{Vec2, Vec3};
-use lod::gen::LodSceneLevel;
 use building_components::BuildingComponents;
+use lod::gen::LodSceneLevel;
 
 use crate::openings::{MapsOpenings, Opening, OpeningId, OpeningLabel, Openings};
 use crate::paneling::clipped_ruled_strip::ClippedStripPiece;

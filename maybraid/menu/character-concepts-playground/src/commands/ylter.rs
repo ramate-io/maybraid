@@ -1,11 +1,11 @@
 //! `/ylter` commands for the long-necked Yilter quadruped concept species.
 
 use bevy::prelude::*;
-use clap::{Args, Subcommand};
 use characters::{
 	species::ylter::{assets::YilterMouthMesh, sliders::YilterSliders, YilterConfig},
 	BuildPreset, GenderPreset,
 };
+use clap::{Args, Subcommand};
 
 use crate::{animation::ConceptAnimation, preview::ConceptPreviewConfig};
 

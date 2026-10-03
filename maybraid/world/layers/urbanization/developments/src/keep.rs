@@ -1,7 +1,5 @@
 //! Corner keep: a circular or trazaloid shell plus storey-to-storey stairwells.
 
-use lod::gen::LodSceneLevel;
-use material_ref::{MaterialId, MaterialRef};
 use building_components::floors::FloorGeometry;
 use building_components::panels::PanelStyle;
 use building_components::partitions::PartitionStyle;
@@ -14,6 +12,8 @@ use buildings::{
 	Openings, StairwellKind, Trazaloid, TrazaloidParams, TrazaloidSide, TrazaloidSlab, WellAabb,
 	WellSide,
 };
+use lod::gen::LodSceneLevel;
+use material_ref::{MaterialId, MaterialRef};
 
 use bevy_math::{Vec2, Vec3};
 

@@ -5,8 +5,8 @@
 
 use bevy::math::bounding::Aabb3d;
 use bevy_math::Vec3;
-use vegetation_groves::{GroveExtent, DEFAULT_GROVE_EXTENT_XZ};
 use lod::gen::Id;
+use vegetation_groves::{GroveExtent, DEFAULT_GROVE_EXTENT_XZ};
 
 /// Default square forest cell span in metres on X and Z.
 pub const DEFAULT_FOREST_EXTENT_XZ: f32 = 1600.0;

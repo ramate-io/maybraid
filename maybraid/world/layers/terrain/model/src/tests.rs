@@ -9,7 +9,10 @@ use bevy::transform::components::Transform;
 use lod::gen::Id;
 use lod::lod_ref::LodRef;
 
-use crate::{BaseTerrainGenerationCore, BaseTerrainGenerationPlugin, BaseTerrainScheme, HeightField, OnTerrain, TerrainCell, TerrainGeneration, TerrainModel, TerrainView};
+use crate::{
+	BaseTerrainGenerationCore, BaseTerrainGenerationPlugin, BaseTerrainScheme, HeightField,
+	OnTerrain, TerrainCell, TerrainGeneration, TerrainModel, TerrainView,
+};
 use layer_stack::{GenerationMode, GenerationModePlugin, RequireLayer};
 
 /// Flat test model: stored cells carry a constant height; fallback is configured.
@@ -128,13 +131,14 @@ impl TerrainModel for Flat {
 		let mut best: Option<(f32, &'a FlatCell)> = None;
 		for cell in read.store.cells.values() {
 			let size = (cell.bounds.max.x - cell.bounds.min.x).max(1e-3);
-			if (size - target_size).abs() > target_size * 0.25 || !bounds.intersects(&cell.bounds)
-			{
+			if (size - target_size).abs() > target_size * 0.25 || !bounds.intersects(&cell.bounds) {
 				continue;
 			}
-			let overlap = (bounds.max.x.min(cell.bounds.max.x) - bounds.min.x.max(cell.bounds.min.x))
-				.max(0.0)
-				* (bounds.max.z.min(cell.bounds.max.z) - bounds.min.z.max(cell.bounds.min.z)).max(0.0);
+			let overlap = (bounds.max.x.min(cell.bounds.max.x)
+				- bounds.min.x.max(cell.bounds.min.x))
+			.max(0.0) * (bounds.max.z.min(cell.bounds.max.z)
+				- bounds.min.z.max(cell.bounds.min.z))
+			.max(0.0);
 			if overlap <= 1e-3 {
 				continue;
 			}

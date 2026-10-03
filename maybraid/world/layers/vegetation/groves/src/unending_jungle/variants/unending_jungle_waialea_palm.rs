@@ -1,7 +1,7 @@
 //! [`BuildWithNoise`] for [`UnendingJungleWaialeaPalm`].
 
-use sbs_geometry::WaialeaPalmSbs;
 use procedural_common::{BuildWithNoise, NoiseConfig, NoiseParams, UnitRange};
+use sbs_geometry::WaialeaPalmSbs;
 
 use crate::unending_jungle::UnendingJungleWaialeaPalm;
 

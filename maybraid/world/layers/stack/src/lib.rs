@@ -10,7 +10,7 @@ mod subscription;
 
 pub use generation_mode::{
 	in_generation_mode, ActiveGenerationMode, GenerationMode, GenerationModePlugin,
-	GenerationModeSystems,
+	GenerationModeSystems, GenerationReadiness,
 };
 pub use present_gate::{
 	install_lod_present_gate, sync_lod_present_gate, LodPresentGatePlugin, LodPresentGateSync,

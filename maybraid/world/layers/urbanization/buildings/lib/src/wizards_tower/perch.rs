@@ -4,16 +4,16 @@
 
 use bevy::scene::prelude::Scene;
 use bevy_math::Vec3;
-use lod::gen::{LodScene, LodSceneLevel};
-use lod::lod_ref::LodRef;
-use material_ref::MaterialRef;
-use procedural_common::NoiseParams;
 use building_components::floors::FloorNode;
 use building_components::partitions::PartitionStyle;
 use building_components::scene_children;
 use building_components::{
 	append_flattened_component_scenes, BuildingComponents, Layers, PartitionNode,
 };
+use lod::gen::{LodScene, LodSceneLevel};
+use lod::lod_ref::LodRef;
+use material_ref::MaterialRef;
+use procedural_common::NoiseParams;
 
 use crate::arcs::{portal_ring_wall, PortalRingParams, PortalRingWall};
 use crate::wizards_tower::floor_fill::{squared_floor_with_spire_hole, SPIRE_HALF_FRAC};

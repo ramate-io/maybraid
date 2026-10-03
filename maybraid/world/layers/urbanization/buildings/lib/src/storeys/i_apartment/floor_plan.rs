@@ -2,12 +2,12 @@
 
 use bevy_math::bounding::{Aabb2d, Aabb3d, BoundingVolume};
 use bevy_math::{Vec2, Vec3};
-use lod::gen::LodSceneLevel;
-use procedural_common::{plan_to_aabb3, PlanAxes};
 use building_components::joints::JointNode;
 use building_components::labels::{LabelNode, LabelStyle};
 use building_components::panels::{PanelNode, PanelStyle};
 use building_components::{BuildingComponents, Layers};
+use lod::gen::LodSceneLevel;
+use procedural_common::{plan_to_aabb3, PlanAxes};
 
 use crate::fit::{
 	aabb_xz_center, aabb_xz_extent, aabb_xz_overlap_area, Confines, FillRegion, FillableRegions,
@@ -413,7 +413,11 @@ fn shaft_aabb_at_pocket(
 	if half > pocket_half + EPS {
 		let slide = |c: f32, lo: f32, hi: f32| {
 			let (lo, hi) = (lo + SHAFT_WALL_CLEARANCE + half, hi - SHAFT_WALL_CLEARANCE - half);
-			if lo <= hi { c.clamp(lo, hi) } else { (lo + hi) * 0.5 }
+			if lo <= hi {
+				c.clamp(lo, hi)
+			} else {
+				(lo + hi) * 0.5
+			}
 		};
 		cx = slide(cx, rect.min_x, rect.max_x);
 		cz = slide(cz, rect.min_z, rect.max_z);

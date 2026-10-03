@@ -21,8 +21,8 @@ use crate::primitive::backfill::RimBackfillParams;
 use crate::primitive::complex::HydroComplex;
 use crate::primitive::parameters::{ApronParams, RimParams};
 use bevy_math::Vec2;
-use terrain_stamps::{DownhillPair, HysteresisSpine};
 use procedural_common::Bounds2;
+use terrain_stamps::{DownhillPair, HysteresisSpine};
 
 /// Minimum channel half-width (world units); smaller budgets skip the stamp.
 const MIN_HALF_WIDTH: f32 = 3.0;

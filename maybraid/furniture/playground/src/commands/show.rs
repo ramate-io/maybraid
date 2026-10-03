@@ -3,8 +3,8 @@
 pub mod transform;
 
 use bevy::prelude::*;
-use clap::{Args, Subcommand};
 use building_components::FurnitureGeometry;
+use clap::{Args, Subcommand};
 
 use crate::preview::{PreviewConfig, PreviewSubject};
 

@@ -2,8 +2,8 @@
 //!
 //! Used by [`crate::arcs`] ring walls and [`crate::wall_demo`] noisy strip demos.
 
-use procedural_common::NoiseConfig;
 use building_components::partitions::SLICE_KIT_HEIGHT;
+use procedural_common::NoiseConfig;
 
 /// Lintel / top-slice baseline as a fraction of storey height.
 ///

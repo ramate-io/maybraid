@@ -223,9 +223,15 @@ mod tests {
 		let node = seating_node(Vec3::new(0.0, 0.0, 0.0), Vec3::new(12.0, 3.2, 8.0));
 		let pieces = BitesSeatingUsage::expand(&node);
 		let tables = pieces.iter().filter(|n| n.geometry == FurnitureGeometry::Table).count();
-		assert!((2..=MAX_TABLES).contains(&tables), "large seating should stay sparse, got {tables}");
+		assert!(
+			(2..=MAX_TABLES).contains(&tables),
+			"large seating should stay sparse, got {tables}"
+		);
 		let chairs = pieces.iter().filter(|n| n.geometry == FurnitureGeometry::Chair).count();
-		assert!(chairs as f32 / tables as f32 >= 3.0, "more chairs per table, chairs {chairs} tables {tables}");
+		assert!(
+			chairs as f32 / tables as f32 >= 3.0,
+			"more chairs per table, chairs {chairs} tables {tables}"
+		);
 	}
 
 	#[test]

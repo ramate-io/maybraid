@@ -2,8 +2,8 @@
 
 use bevy_math::bounding::Aabb2d;
 use bevy_math::{Vec2, Vec3};
-use procedural_common::aabb2_area;
 use building_components::labels::LabelStyle;
+use procedural_common::aabb2_area;
 
 use crate::fit::MultiConfines;
 use crate::openings::{Opening, OpeningId, OpeningLabel, Openings};

@@ -3,7 +3,6 @@
 use bevy::ecs::query::Has;
 use bevy::ecs::relationship::RelationshipTarget;
 use bevy::prelude::*;
-use clap::ValueEnum;
 use characters::{
 	spawn_fixed_character_assembly,
 	species::{
@@ -20,6 +19,7 @@ use characters::{
 	CharacterMembers, CharacterRecipe, CharacterRig, CharacterRigRole, CharacterRoot,
 	RigSkeletonKind,
 };
+use clap::ValueEnum;
 use game_commands::ui::GameCommandStatusText;
 
 use crate::commands::RequestModeCharacter;

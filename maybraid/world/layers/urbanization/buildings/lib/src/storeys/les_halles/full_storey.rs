@@ -4,13 +4,13 @@
 //! paints [`LesHallesCommercialUsage`] onto [`SpaceKind::ExternalSpace`] strips.
 //! Residual walkways / shafts remain in [`FillableRegions::within`].
 
-use lod::gen::LodSceneLevel;
-use procedural_common::NoiseParams;
 use building_components::furniture::FurnitureNode;
 use building_components::joints::JointNode;
 use building_components::labels::LabelNode;
 use building_components::panels::PanelNode;
 use building_components::{BuildingComponents, Layers};
+use lod::gen::LodSceneLevel;
+use procedural_common::NoiseParams;
 
 use crate::fit::{Confines, FillableRegions, Fit, FitError};
 use crate::usage_areas::CommercialStallStrip;
@@ -85,9 +85,9 @@ mod tests {
 	use super::*;
 	use bevy_math::bounding::Aabb3d;
 	use bevy_math::Vec3;
+	use building_components::BuildingComponents;
 	use lod::gen::LodSceneLevel;
 	use procedural_common::NoiseParams;
-	use building_components::BuildingComponents;
 
 	use crate::fit::SpaceKind;
 	use crate::storeys::les_halles::{LesHallesFloorPlan, LesHallesParameterized};

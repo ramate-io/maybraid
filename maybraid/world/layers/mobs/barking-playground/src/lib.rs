@@ -29,9 +29,8 @@ use camera::{
 	camera_controller, refocus_camera_on_elevation, release_modifiers_on_focus_change,
 	setup_camera, surface_or_hold,
 };
-use commands::{RequestModeCharacter, RequestModeFree};
 use characters::CharacterMotionSystems;
-use terrain_shaders::{TerrainShader, TerrainShaderPlugin, RefractionWater};
+use commands::{RequestModeCharacter, RequestModeFree};
 use durham::{
 	AvianTerrainIndex, BaseTerrainNoise, ComposedWater, DurhamTerrainModelsPlugin, Terrain,
 	TerrainCellLayout, TerrainConfig, TerrainEntryStore, TerrainFrictionConfig, TerrainMeshBuilder,
@@ -52,9 +51,9 @@ use lod::gen::{GeneratingSpatialIndex, RegionPresenter, SpatialIndex};
 use lod::lod_ref::LodRef;
 use maybraid_character_controller::CharacterControllerPlugin;
 use maybraid_input::{PadGameplayEnabled, VirtualPadPlugin, VirtualPadSystems};
-use mob_scenes::{MobSceneSystems, MobScenesPlugin};
 use meandering_intelligence::MeanderingIntelligencePlugin;
 use mob_intelligence::MobSystems;
+use mob_scenes::{MobSceneSystems, MobScenesPlugin};
 use movement_intelligence::{
 	CandidateBudget, MovementIntelligenceLimits, MovementIntelligencePlugin,
 };
@@ -67,6 +66,7 @@ use render_item::mesh::handle::EnforceCachingPlugin;
 use routing_intelligence::RoutingSystems;
 use spotting_intelligence::SpottingSystems;
 use std::f32::consts::PI;
+use terrain_shaders::{RefractionWater, TerrainShader, TerrainShaderPlugin};
 use tether_intelligence::TetherSystems;
 use threat_intelligence::ThreatIntelligencePlugin;
 use threat_intelligence_damage::ThreatIntelligenceDamagePlugin;

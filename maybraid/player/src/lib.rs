@@ -24,10 +24,10 @@ pub use body::{
 	Sprinting, WalkableGround,
 };
 pub use buoyancy::{Buoyant, Wading, WaterRegime};
+pub use characters::{HeadCapsule, HitCapsule};
 pub use contact::{
 	motor_traction_bundle, register_motor_traction_physics, MotorTraction, MotorTractionHooks,
 };
-pub use characters::{HeadCapsule, HitCapsule};
 pub use hit::HitVolume;
 pub use identity::{
 	CameraFollow, Npc, Player, PlayerCameraAim, PlayerCameraPose, PlayerCapsule, PlayerLook,

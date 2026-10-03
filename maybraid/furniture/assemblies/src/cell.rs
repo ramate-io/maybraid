@@ -3,8 +3,8 @@
 use bevy::math::bounding::Aabb3d;
 use bevy::math::{EulerRot, Vec2, Vec3};
 use bevy::prelude::Transform;
-use lod::gen::Id;
 use building_components::{FurnitureNode, Placement};
+use lod::gen::Id;
 
 /// Square furniture-cell edge length (metres).
 pub const FURNITURE_CELL_SIZE: f32 = 50.0;

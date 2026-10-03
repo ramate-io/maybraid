@@ -5,9 +5,9 @@ use crate::usage_areas::clearance::PASSAGE_CLEARANCE;
 use crate::usage_areas::livable_quarters::ResidentialBathroom;
 use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
-use procedural_common::{aabb3_to_plan, PlanAxes};
 use building_components::furniture::FurnitureAbutment;
 use building_components::FurnitureGeometry;
+use procedural_common::{aabb3_to_plan, PlanAxes};
 
 fn roomy_south() -> Confines {
 	let mut openings = Openings::new();

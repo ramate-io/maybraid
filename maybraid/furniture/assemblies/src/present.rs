@@ -1,10 +1,8 @@
 //! Slot wireframes plus posed furniture GLBs.
 
 use bevy::scene::Scene;
+use building_components::{pose, scene_children, wireframe_box_with_handles, FurnitureNode};
 use furniture_components::assembly_scene;
-use building_components::{
-	pose, scene_children, wireframe_box_with_handles, FurnitureNode,
-};
 
 use crate::fill::{abutment_wall, posed_assembly};
 use crate::plugin::FurnitureKitMeshes;

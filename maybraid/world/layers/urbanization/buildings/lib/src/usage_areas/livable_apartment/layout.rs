@@ -48,8 +48,8 @@
 
 use bevy_math::bounding::Aabb2d;
 use bevy_math::{Vec2, Vec3};
-use procedural_common::{aabb2_area, inflate_aabb2, NoiseParams};
 use building_components::labels::{LabelNode, LabelStyle};
+use procedural_common::{aabb2_area, inflate_aabb2, NoiseParams};
 
 use crate::fit::{Confines, FillRegion, FillableRegions, FitError, MultiConfines, SpaceKind};
 use crate::openings::Openings;

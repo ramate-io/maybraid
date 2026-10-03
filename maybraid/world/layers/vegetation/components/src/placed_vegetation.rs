@@ -7,9 +7,7 @@ use material_ref::MaterialRef;
 use crate::foliage::geometry::FoliageGeometry;
 use crate::foliage::node::FoliageNode;
 use crate::layer::Layers;
-use crate::materials::{
-	frond_material_ref, leaf_material_ref, stick_material_ref,
-};
+use crate::materials::{frond_material_ref, leaf_material_ref, stick_material_ref};
 use crate::placed::Placement;
 use crate::sticks::node::StickNode;
 use crate::structural_lod::StructuralLod;

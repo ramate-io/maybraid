@@ -1,7 +1,7 @@
 //! Parameterized knobs + plan for [`super::LivingRoom`].
 
-use procedural_common::{NoiseConfig, NoiseParams};
 use building_components::LabelStyle;
+use procedural_common::{NoiseConfig, NoiseParams};
 
 use crate::fit::{Confines, FitError};
 

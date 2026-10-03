@@ -118,8 +118,8 @@ mod tests {
 	use crate::index::forest_world_sample;
 	use crate::{ChicoGrove, ForestGroveKind, ForestGroveRecipe};
 	use bevy::prelude::{Entity, Transform, Vec3};
-	use vegetation_groves::GroveExtent;
 	use lod::LodScene;
+	use vegetation_groves::GroveExtent;
 
 	fn lod_at(translation: Vec3) -> (Transform, Aabb3d) {
 		(Transform::from_translation(translation), Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE))

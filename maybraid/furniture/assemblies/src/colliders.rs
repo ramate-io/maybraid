@@ -2,10 +2,10 @@
 
 use avian3d::prelude::{Collider, RigidBody};
 use bevy::prelude::*;
-use lod::LodSceneHost;
-use lod_avian::PhysicsInteractionLayer;
 use building_components::{FurnitureGeometry, FurnitureNode};
 use building_physics::BUILDING_FRICTION;
+use lod::LodSceneHost;
+use lod_avian::PhysicsInteractionLayer;
 
 use crate::host::FurnitureCell;
 

@@ -5,9 +5,9 @@
 //! [`PanelComplex`] → right-triangle panel kits.
 
 use bevy_math::Vec3;
-use lod::gen::LodSceneLevel;
 use building_components::panels::PanelStyle;
 use building_components::{BuildingComponents, Layers, PanelNode};
+use lod::gen::LodSceneLevel;
 
 use crate::paneling::panel_complex::{
 	PanelComplex, PanelComplexJointPolicy, PanelPointId, DEFAULT_PANEL_THICKNESS,

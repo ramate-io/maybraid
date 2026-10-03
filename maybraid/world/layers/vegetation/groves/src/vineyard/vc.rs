@@ -4,8 +4,6 @@ use std::sync::Arc;
 #[cfg(test)]
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
-use sbs_trees::{QuantizedPlant, RorysHeadTrained, RorysHeadTrainedParams};
-use vegetation_components::{Placement, StickNode, VegetationComponents};
 use clap::Args;
 #[cfg(test)]
 use lod::gen::{LodScene, LodSceneLevel};
@@ -13,6 +11,8 @@ use lod::lod_ref::LodRef;
 use lod::SceneChunk;
 use material_ref::MaterialRef;
 use procedural_common::NoiseParams;
+use sbs_trees::{QuantizedPlant, RorysHeadTrained, RorysHeadTrainedParams};
+use vegetation_components::{Placement, StickNode, VegetationComponents};
 
 use super::{definition, VineyardCell, VineyardItem, TRAINED_VINE_RORY};
 use crate::grove::vc_tuft::patch_variant_index;

@@ -16,6 +16,9 @@ mod foliage;
 use std::collections::BTreeMap;
 
 use bevy::prelude::*;
+use clap::Args;
+use lod::gen::LodSceneLevel;
+use procedural_common::{parse_unit_range, UnitRange};
 use sbs_geometry::render::mix_seed::mix_seed_below_fraction;
 use sbs_geometry::{align_frond_direction, FrondCrownShape};
 use sbs_geometry::{
@@ -26,9 +29,6 @@ use vegetation_components::{
 	stick_material_ref, FoliageNode, FrondCollection, FrondRun, Layers, Placement, StickNode,
 	StructuralLod, VegetationComponents,
 };
-use clap::Args;
-use lod::gen::LodSceneLevel;
-use procedural_common::{parse_unit_range, UnitRange};
 
 use crate::conifer_canopy_apex::{sample_apex_canopy_spawn, DEFAULT_APEX_CANOPY_SPAWN_FRACTION};
 use crate::northern_conifer::stick::{stick_nodes_high, stick_nodes_low, stick_nodes_medium};

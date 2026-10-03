@@ -14,13 +14,13 @@
 pub mod canopy;
 
 use bevy::prelude::*;
-use sbs_geometry::{BallStickChain, FriendsConiferChain, FriendsConiferSbs};
-use vegetation_components::{
-	leaf_material_ref, stick_material_ref, FoliageNode, Layers, StickNode,
-	StructuralLod, VegetationComponents,
-};
 use clap::Args;
 use lod::gen::LodSceneLevel;
+use sbs_geometry::{BallStickChain, FriendsConiferChain, FriendsConiferSbs};
+use vegetation_components::{
+	leaf_material_ref, stick_material_ref, FoliageNode, Layers, StickNode, StructuralLod,
+	VegetationComponents,
+};
 
 use crate::conifer_canopy_apex::{
 	DEFAULT_APEX_CANOPY_SPAWN_FRACTION, FRIENDS_APEX_BALL_RADIUS_FRACTION_OF_HEIGHT,

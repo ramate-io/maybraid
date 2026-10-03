@@ -11,8 +11,8 @@ use std::collections::HashMap;
 
 use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::{Vec2, Vec3};
-use procedural_common::NoiseParams;
 use building_components::panels::PanelStyle;
+use procedural_common::NoiseParams;
 
 use crate::fit::{aabb_xz_extent, Confines, FillRegion, FitError, MultiConfines, SpaceKind};
 use crate::openings::{Opening, OpeningId, OpeningLabel, Openings};

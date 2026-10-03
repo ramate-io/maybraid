@@ -629,8 +629,8 @@ fn ear_contains_other(verts: &[Vec2], ear_i: usize, a: Vec2, b: Vec2, c: Vec2) -
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use lod::gen::LodSceneLevel;
 	use building_components::BuildingComponents;
+	use lod::gen::LodSceneLevel;
 
 	fn ground_triangle() -> (Vec3, Vec3, Vec3) {
 		(Vec3::ZERO, Vec3::new(3.0, 0.0, 0.0), Vec3::new(0.0, 0.0, 2.0))

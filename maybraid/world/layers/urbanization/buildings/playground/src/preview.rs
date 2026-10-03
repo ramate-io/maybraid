@@ -6,9 +6,6 @@ use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value};
 use bevy_math::bounding::Aabb3d;
 use bevy_math::{Isometry3d, Vec2};
-use lod::gen::LodScene;
-use lod::{point_bounds, LodNode, LodNodeBounds, LodNodePose, LodRef, LodViewer};
-use procedural_common::{AllowedAngles, NoiseParams, StepLenRange};
 use building_components::panels::{PanelGeometry, PanelNode, TessellatedTriangle};
 use building_components::partitions::rough_stonework::{
 	RoughStonework180, RoughStonework90, RoughStoneworkLinear, RoughStoneworkSlice90,
@@ -51,6 +48,9 @@ use buildings::{
 	TrazaloidSlab, Tube, TubeCrossSectionNode, TubeFaces, WellAabb, WellSide,
 	DEFAULT_PANEL_THICKNESS,
 };
+use lod::gen::LodScene;
+use lod::{point_bounds, LodNode, LodNodeBounds, LodNodePose, LodRef, LodViewer};
+use procedural_common::{AllowedAngles, NoiseParams, StepLenRange};
 use urbanization_developments::MixedUseLesHallesDevelopment;
 #[derive(Component)]
 pub struct PreviewRoot;
@@ -1336,10 +1336,7 @@ impl CachedPreview {
 				match CommonBedroom::fit_with_fill(
 					&confines,
 					seed,
-					buildings::CommonBedroomParameterized::with_fill(
-						*spaciousness,
-						*occupancy,
-					),
+					buildings::CommonBedroomParameterized::with_fill(*spaciousness, *occupancy),
 				) {
 					Ok((room, _)) => self.bedroom = Some(room),
 					Err(err) => bevy::log::error!("common-bedroom fit failed: {err}"),
@@ -4527,11 +4524,11 @@ fn spawn_building_preview<T>(
 ) where
 	T: BuildingComponents + Clone + Send + Sync + 'static,
 {
-	use lod::gen::LodScene;
 	use building_components::{
 		append_flattened_component_scenes, scene_children, spawn_building_components,
 		ComponentsOnly,
 	};
+	use lod::gen::LodScene;
 	if building.structural_lod().is_some() {
 		let host = ComponentsOnly(building.clone());
 		let bounds = host.scene_bounds();

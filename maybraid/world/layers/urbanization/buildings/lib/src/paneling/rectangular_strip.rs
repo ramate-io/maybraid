@@ -4,10 +4,10 @@
 //! the vector from this node’s position to the next.
 
 use bevy_math::Vec3;
-use lod::gen::LodSceneLevel;
 use building_components::joints::JointNode;
 use building_components::panels::{PanelNode, PanelStyle};
 use building_components::{BuildingComponents, Layers};
+use lod::gen::LodSceneLevel;
 
 use crate::paneling::panel_complex::PanelComplexJointPolicy;
 use crate::paneling::rect_crease::joint_along_bay_crease;

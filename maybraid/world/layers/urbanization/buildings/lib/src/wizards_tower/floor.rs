@@ -8,10 +8,6 @@
 use bevy::prelude::{Color, PointLight, Transform, Visibility};
 use bevy::scene::prelude::{bsn, template_value, Scene};
 use bevy_math::Vec3;
-use lod::gen::{LodScene, LodSceneLevel};
-use lod::lod_ref::LodRef;
-use material_ref::MaterialRef;
-use procedural_common::NoiseParams;
 use building_components::floors::FloorNode;
 use building_components::partitions::PartitionStyle;
 use building_components::scene_children;
@@ -20,6 +16,10 @@ use building_components::{
 	append_flattened_component_scenes, confined_scene, BuildingComponents, Layers, ParentConfines,
 	PartitionNode,
 };
+use lod::gen::{LodScene, LodSceneLevel};
+use lod::lod_ref::LodRef;
+use material_ref::MaterialRef;
+use procedural_common::NoiseParams;
 
 use crate::arc_spire::{uniform_storey_bindings, ArcSpire, ArcSpireParams, FitTolerance};
 use crate::arcs::{portal_ring_wall, PortalRingParams, PortalRingWall};

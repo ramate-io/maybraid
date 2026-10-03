@@ -1,6 +1,6 @@
 use bevy::prelude::*;
-use clap::Parser;
 use character_persist::SaveRoot;
+use clap::Parser;
 use maybraid::{assets_root, GamePlugin};
 use maybraid_input::PadHidPlugins;
 use maybraid_world::{

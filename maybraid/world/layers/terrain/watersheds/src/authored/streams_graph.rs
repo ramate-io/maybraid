@@ -15,8 +15,8 @@ use crate::primitive::complex::HydroComplex;
 use crate::primitive::node::nodes_from_polyline;
 use crate::primitive::parameters::{HydroParams, TARGET_RIM_WIDTH};
 use bevy_math::Vec2;
-use terrain_stamps::{DownhillPair, RegionNoise};
 use procedural_common::{Bounds2, HysteresisGraph, SeededHash};
+use terrain_stamps::{DownhillPair, RegionNoise};
 
 /// Minimum channel half-width (world units); smaller budgets skip the stamp.
 const MIN_HALF_WIDTH: f32 = 3.0;

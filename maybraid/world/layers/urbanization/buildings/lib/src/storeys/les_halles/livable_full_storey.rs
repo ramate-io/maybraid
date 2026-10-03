@@ -6,13 +6,13 @@
 //! Deeper galleries come from [`LesHallesParameterized::sample_livable`]. Prefer
 //! larger footprints than commercial demos (playground default `72,4,54`).
 
-use lod::gen::LodSceneLevel;
-use procedural_common::NoiseParams;
 use building_components::furniture::FurnitureNode;
 use building_components::joints::JointNode;
 use building_components::labels::LabelNode;
 use building_components::panels::PanelNode;
 use building_components::{BuildingComponents, BuildingStructuralLodProbe, Layers};
+use lod::gen::LodSceneLevel;
+use procedural_common::NoiseParams;
 
 use crate::fit::{Confines, FillableRegions, Fit, FitError};
 use crate::paneling::clipped_rectangular_strip::ClippedRectangularStrip;
@@ -104,9 +104,9 @@ mod tests {
 	use crate::usage_areas::rectangular_livable_area::{RectAreaRoom, RectLivableStrategy};
 	use bevy_math::bounding::Aabb3d;
 	use bevy_math::Vec3;
+	use building_components::{BuildingComponents, Layer};
 	use lod::gen::LodSceneLevel;
 	use procedural_common::NoiseParams;
-	use building_components::{BuildingComponents, Layer};
 
 	fn large_bounds() -> Aabb3d {
 		Aabb3d::from_min_max(Vec3::new(-36.0, 0.0, -27.0), Vec3::new(36.0, 4.0, 27.0))

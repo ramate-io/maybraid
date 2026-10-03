@@ -1,7 +1,7 @@
 //! Stamp Plateau Caps (unchained) — [RFC-105 §3.8.2](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-105-procedural-terrain#382-jersey-plateau-caps-unchained).
 
 use crate::config::JitteredCenter;
-use crate::modulation::{StampModulation, RegionAffineModulation, RegionGradingModulation};
+use crate::modulation::{RegionAffineModulation, RegionGradingModulation, StampModulation};
 use crate::region::{CircleRegion, RectRegion, Region2D, RegionNoise};
 use crate::stamp::{scale_additive, scale_near_one, StampSemantics, StampSet, StampStrength};
 use bevy_math::Vec2;

@@ -8,13 +8,13 @@
 //! collection nodes bake at build so produce / grove emit do not walk the crown AABB.
 
 use bevy::prelude::*;
+use clap::Args;
+use lod::gen::LodSceneLevel;
 use sbs_geometry::FrondCrownShape;
 use vegetation_components::{
 	FoliageNode, FrondCollection, FrondRun, Layers, Placement, StickNode, StructuralLod,
 	VegetationComponents,
 };
-use clap::Args;
-use lod::gen::LodSceneLevel;
 
 use crate::palm_tree::{low_star_collection_nodes, LOW_STAR_FROND_COUNT};
 

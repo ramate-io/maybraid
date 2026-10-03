@@ -1,9 +1,9 @@
 use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::{Vec2, Vec3};
-use material_ref::MaterialRef;
-use procedural_common::NoiseParams;
 use buildings::wizards_tower::WizardsTower;
 use buildings::{CellConstraints, Confines, FillableRegions, Fit, FitError};
+use material_ref::MaterialRef;
+use procedural_common::NoiseParams;
 
 use crate::BuildingFootprint;
 

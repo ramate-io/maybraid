@@ -622,7 +622,9 @@ where
 		cache.region = Some(keep_region);
 		cache.revision = revision;
 		cache.ids.clear();
-		cache.ids.extend(index.tracked_ids_for(keep_region).into_iter().map(|tracked| tracked.0));
+		cache
+			.ids
+			.extend(index.tracked_ids_for(keep_region).into_iter().map(|tracked| tracked.0));
 	}
 	&cache.ids
 }

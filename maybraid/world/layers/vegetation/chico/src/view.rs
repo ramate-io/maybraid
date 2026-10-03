@@ -9,6 +9,21 @@ use crate::host::ChicoGroveHost;
 use avian3d::prelude::PhysicsPlugins;
 use avian3d::schedule::PhysicsSchedulePlugin;
 use bevy::prelude::*;
+use lod::{
+	Bullseye, LodChunkFulfillBudget, LodCullProduceCadence, LodCullRegionCursor,
+	LodRefreshCorePlugin, LodSceneCullRegionPlugin, LodSceneRefreshRegionPlugin, OpenLattice,
+	Spotlight,
+};
+use lod_gimme::{GimmeLodSceneCullPlugin, GimmeLodSceneRefreshPlugin};
+use lod_lazy_refs::LodLazyRefsPlugin;
+use sbs_trees::{
+	BraidOakTree, DatePalm, FriendsConifer, HighBushShoots, HonuBanyan, JungleGrowth,
+	JungleStorybookTree, KamakuraTorch, LiamsConifer, NorthernConifer, PalmBush, PalmCrown,
+	PenmarchTorch, RorysHeadTrained, SimplemansHedge, SopesBanyan, StorybookTree, TemperateConifer,
+	TuftPatch, VaseTree, WaialeaPalm,
+};
+use scene_ref::SceneRefAdmitBudget;
+use vegetation_components::{FlattenedComponentsOnly, FoliageNode, PlacedVegetation, StickNode};
 use vegetation_groves::{
 	Alpine, AridConiferSapling, BraidGrass, BushScrub, ChristmasTaiga, CommonTufts,
 	ConiferMassives, ConiferSapling, DateGrove, Dryland, ForlornSavanna, GoettingenFollow,
@@ -18,23 +33,6 @@ use vegetation_groves::{
 	TemperateLowerMassives, TemperateMassives, TradeWinds, TropicalThicket, TropicalTufts,
 	TropicalUndergrowth, UnendingJungle, Vineyard, WanderingAcacia, WildGrass,
 };
-use sbs_trees::{
-	BraidOakTree, DatePalm, FriendsConifer, HighBushShoots, HonuBanyan, JungleGrowth,
-	JungleStorybookTree, KamakuraTorch, LiamsConifer, NorthernConifer, PalmBush, PalmCrown,
-	PenmarchTorch, RorysHeadTrained, SimplemansHedge, SopesBanyan, StorybookTree, TemperateConifer,
-	TuftPatch, VaseTree, WaialeaPalm,
-};
-use vegetation_components::{
-	FlattenedComponentsOnly, FoliageNode, PlacedVegetation, StickNode,
-};
-use lod::{
-	Bullseye, LodChunkFulfillBudget, LodCullProduceCadence, LodCullRegionCursor,
-	LodRefreshCorePlugin, LodSceneCullRegionPlugin, LodSceneRefreshRegionPlugin, OpenLattice,
-	Spotlight,
-};
-use lod_gimme::{GimmeLodSceneCullPlugin, GimmeLodSceneRefreshPlugin};
-use lod_lazy_refs::LodLazyRefsPlugin;
-use scene_ref::SceneRefAdmitBudget;
 
 use crate::stick_physics::{register_vegetation_stick_colliders, StickPhysicsPlugin};
 

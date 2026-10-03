@@ -16,16 +16,16 @@ use bevy::prelude::{App, Plugin};
 use vegetation_shaders::BumpOutMaterialPlugin;
 
 pub use bump_out::BumpOut;
-pub use vegetation_shaders::{
-	BumpOutMaterial, BumpOutUniform, BUMP_OUT_MATERIAL, RASTER_AVERAGE_HEIGHT,
-	RASTER_BITE_SIZE, RASTER_BITE_SIZE_DEVIATION, RASTER_DENSITY, RASTER_HEIGHT_DEVIATION,
-};
 pub use material::{
 	init_bump_out_material_caches, BumpOutMaterialLib, BumpOutMaterialRefCache,
 	BumpOutMaterialRefPlugin, BumpOutStandaloneMaterialLib,
 };
 pub use neighborhood::{
 	BumpOutNeighborhood, BumpOutStyle, BUMP_OUT_NEIGHBORHOOD_SAMPLES, BUMP_OUT_NEIGHBORHOOD_WIDTH,
+};
+pub use vegetation_shaders::{
+	BumpOutMaterial, BumpOutUniform, BUMP_OUT_MATERIAL, RASTER_AVERAGE_HEIGHT, RASTER_BITE_SIZE,
+	RASTER_BITE_SIZE_DEVIATION, RASTER_DENSITY, RASTER_HEIGHT_DEVIATION,
 };
 
 /// Registers the bump-out shader and caches. Does not install a [`material_ref::MaterialRefPlugin`].

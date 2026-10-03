@@ -9,7 +9,8 @@ use crate::gen::{GeneratingSpatialIndex, Id, LodGenerated, RegionPresenter, Vers
 use crate::lod_ref::{LodNode, LodNodePose, LodRef};
 use crate::presentation::{
 	LodPresentBudget, LodPresentCullBudget, LodPresentCullPlugin, LodPresentGate,
-	LodPresentKeepRegion, LodPresentPlugin, LodPresentQueue, LodPresentRegion, LodPresentTimeBudget,
+	LodPresentKeepRegion, LodPresentPlugin, LodPresentQueue, LodPresentRegion,
+	LodPresentTimeBudget,
 };
 
 #[derive(SystemParam)]

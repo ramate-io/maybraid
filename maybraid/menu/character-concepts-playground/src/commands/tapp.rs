@@ -1,12 +1,12 @@
 //! `/tapp` commands for the Tapp concept species.
 
 use bevy::prelude::*;
-use clap::{Args, Subcommand};
 use character_items::{ClothingMaterial, ClothingMesh};
 use characters::species::{
 	common::{EyeMesh, HairMesh},
 	tapp::{TappBeakColor, TappBeakMesh, TappConfig, TappEyeColor, TappPlumageColor},
 };
+use clap::{Args, Subcommand};
 
 use crate::{animation::ConceptAnimation, preview::ConceptPreviewConfig};
 

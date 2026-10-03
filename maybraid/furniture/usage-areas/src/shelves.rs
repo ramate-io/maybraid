@@ -167,12 +167,7 @@ fn cell_kind(ix: usize, iz: usize, n_x: usize, n_z: usize, mood: LeftoverMood) -
 	}
 }
 
-fn partition_in_cell(
-	cell: &Aabb3d,
-	host: &Aabb3d,
-	ix: usize,
-	iz: usize,
-) -> Vec<FurnitureNode> {
+fn partition_in_cell(cell: &Aabb3d, host: &Aabb3d, ix: usize, iz: usize) -> Vec<FurnitureNode> {
 	let sx = cell.max.x - cell.min.x;
 	let sz = cell.max.z - cell.min.z;
 	if sx.min(sz) < 1.1 {
@@ -255,7 +250,8 @@ mod tests {
 			.filter(|n| n.geometry == FurnitureGeometry::Partition)
 			.map(|n| n.placement.translation.z)
 			.collect();
-		let spread = zs.iter().cloned().fold(f32::MAX, f32::min) - zs.iter().cloned().fold(f32::MIN, f32::max);
+		let spread = zs.iter().cloned().fold(f32::MAX, f32::min)
+			- zs.iter().cloned().fold(f32::MIN, f32::max);
 		assert!(
 			spread.abs() > 3.0,
 			"partitions should occupy more than one aisle row, z spread {spread}"

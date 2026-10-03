@@ -1,8 +1,8 @@
+use character_items::{ClothingMesh, ItemColor};
 use character_ui_menu::{
 	AssetSingleSelect, CameraFocus, MenuComponent, MenuNode, PreviewColor, Section, SingleSelect,
 	Slider, SwatchSingleSelect,
 };
-use character_items::{ClothingMesh, ItemColor};
 use characters::{
 	presets::{BuildPreset, GenderPreset},
 	species::{

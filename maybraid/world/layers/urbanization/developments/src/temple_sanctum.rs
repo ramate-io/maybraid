@@ -2,9 +2,6 @@
 
 use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::{Vec2, Vec3};
-use lod::gen::LodSceneLevel;
-use material_ref::MaterialRef;
-use procedural_common::NoiseParams;
 use building_components::{
 	BuildingComponents, BuildingStructuralLodProbe, FloorNode, JointNode, Layers, PanelNode,
 	PartitionNode, StairNode,
@@ -13,6 +10,9 @@ use buildings::{
 	Confines, FillableRegions, Fit, FitError, Openings, RectFloor, RectFloorParams, RectFloorSlab,
 	Trazaloid, TrazaloidParams, TrazaloidSlab,
 };
+use lod::gen::LodSceneLevel;
+use material_ref::MaterialRef;
+use procedural_common::NoiseParams;
 
 use crate::keep::TOWER_STOREY_HEIGHT;
 use crate::{BuildingFootprint, RingFortKeep};

@@ -3,13 +3,13 @@
 //! Sample authored bush ranges into a [`HighBushShootsShape`] without applying the Common High
 //! Bush playground preset.
 
+use procedural_common::{BuildWithNoise, NoiseConfig, NoiseParams, UnitRange};
 use sbs_geometry::anchors::high_bush::{
 	DEFAULT_ANCHOR_LIFT_FRACTION, DEFAULT_SEGMENT_LENGTH_FRACTION_HI,
 	DEFAULT_SEGMENT_LENGTH_FRACTION_LO, DEFAULT_SEGMENT_RADIUS_FRACTION_HI,
 	DEFAULT_SEGMENT_RADIUS_FRACTION_LO,
 };
 use sbs_geometry::{HighBushFoliageStyle, HighBushShootsShape};
-use procedural_common::{BuildWithNoise, NoiseConfig, NoiseParams, UnitRange};
 
 use crate::low_bush::LowBushBush;
 

@@ -97,14 +97,8 @@ where
 			app.add_plugins(VegetationGenerationCore::<V>::default());
 		}
 		app.insert_resource(VegetationModeConfig::<Mode, V>::new(self.config.clone()));
-		app.add_systems(
-			OnEnter(ActiveGenerationMode::of::<Mode>()),
-			apply_vegetation::<Mode, V>,
-		);
-		app.add_systems(
-			OnExit(ActiveGenerationMode::of::<Mode>()),
-			clear_vegetation::<V>,
-		);
+		app.add_systems(OnEnter(ActiveGenerationMode::of::<Mode>()), apply_vegetation::<Mode, V>);
+		app.add_systems(OnExit(ActiveGenerationMode::of::<Mode>()), clear_vegetation::<V>);
 		Mode::install(app, &self.config);
 	}
 

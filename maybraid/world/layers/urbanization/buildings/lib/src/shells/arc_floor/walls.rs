@@ -1,9 +1,7 @@
 //! Layer 1: 15° wall sectors, solid merges, and cut-sector slice strips.
 
 use bevy_math::Vec3;
-use building_components::partitions::{
-	Partition, PartitionNode, PartitionStyle, SLICE_KIT_HEIGHT,
-};
+use building_components::partitions::{Partition, PartitionNode, PartitionStyle, SLICE_KIT_HEIGHT};
 use building_components::Placement;
 
 use super::ring::{aabb3d_intersects, EPS, SECTORS, SEG_DEG};

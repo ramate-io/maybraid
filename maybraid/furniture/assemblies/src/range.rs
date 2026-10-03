@@ -4,8 +4,8 @@ use bevy::math::Vec3;
 
 use crate::palette::{hardware, metal};
 use crate::Assembly;
-use furniture_components::{run_slab, shift, slab, PartKind, PlacedPart};
 use building_components::FurnitureGeometry;
+use furniture_components::{run_slab, shift, slab, PartKind, PlacedPart};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct RangeParams {

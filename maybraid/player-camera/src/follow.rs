@@ -3,9 +3,7 @@
 use bevy::prelude::*;
 use bevy::transform::helper::TransformHelper;
 use characters::LocomotionCapsule;
-use characters::{
-	hide_socketed_parts, BoneMap, CharacterMembers, CharacterPartSlot, PartNode,
-};
+use characters::{hide_socketed_parts, BoneMap, CharacterMembers, CharacterPartSlot, PartNode};
 use player::{
 	CameraFollow, PlayerCameraAim, PlayerCameraPose, PlayerLook, PlayerVisual,
 	RestLocomotionCapsule,

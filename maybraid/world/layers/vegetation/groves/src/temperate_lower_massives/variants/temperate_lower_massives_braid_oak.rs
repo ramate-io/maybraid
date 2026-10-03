@@ -1,7 +1,7 @@
 //! [`BuildWithNoise`] for [`TemperateLowerMassivesBraidOak`].
 
-use sbs_geometry::BraidOakTreeSbs;
 use procedural_common::{BuildWithNoise, NoiseConfig, NoiseParams, UnitRange};
+use sbs_geometry::BraidOakTreeSbs;
 
 use crate::temperate_lower_massives::TemperateLowerMassivesBraidOak;
 

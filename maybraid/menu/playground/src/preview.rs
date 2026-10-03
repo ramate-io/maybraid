@@ -7,20 +7,20 @@ use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy::scene::prelude::bsn;
 use bevy::window::PrimaryWindow;
-use character_ui_menu::{CameraFocus, FocusRig};
-use character_items::{ClothingHost, ClothingMesh, FirearmSpec, InventoryItem, ItemColor};
-use character_persist::SaveRoot;
-use characters_playground::CameraController;
 use character_creation_menus::{
 	spin_reveal_firearm_focus, spin_reveal_focus, CharacterField, CharacterMenu, ConceptSpecies,
 	MenuEvent, BODY_FOCUS,
 };
+use character_items::{ClothingHost, ClothingMesh, FirearmSpec, InventoryItem, ItemColor};
+use character_persist::SaveRoot;
+use character_ui_menu::{CameraFocus, FocusRig};
 use characters::{
 	add_character_components_host, character_bounds, ActiveRigPose, AnimRef, AnimRefRoot,
 	ApplyTerrainPitch, BoneMap, CharacterComponents, CharacterHostSystems, CharacterMembers,
 	CharacterRecipe, CharacterRig, CharacterRigRole, ClothingLayer, ComponentsOnly, Layers,
 	PartNode, ResolvedPoseApplied, RigBindScales, SocketRefApplied, SocketRefRoot,
 };
+use characters_playground::CameraController;
 use firearm_user::GeneratedFirearm;
 use firearms_components::{
 	add_firearm_components_host, firearm_bounds, firearm_preview_camera, spawn_firearm_components,
@@ -116,11 +116,8 @@ impl PreviewOrbit {
 		self.pitch = self.pitch.clamp(low, high);
 		let azimuth = azimuth + self.yaw;
 		let elevation = elevation + self.pitch;
-		Vec3::new(
-			elevation.cos() * azimuth.sin(),
-			elevation.sin(),
-			elevation.cos() * azimuth.cos(),
-		) * radius
+		Vec3::new(elevation.cos() * azimuth.sin(), elevation.sin(), elevation.cos() * azimuth.cos())
+			* radius
 	}
 }
 
@@ -458,10 +455,7 @@ fn clear_preview(
 	pending.clear();
 }
 
-fn menu_for_saved(
-	root: &SaveRoot,
-	id: character_persist::CharacterId,
-) -> Option<CharacterMenu> {
+fn menu_for_saved(root: &SaveRoot, id: character_persist::CharacterId) -> Option<CharacterMenu> {
 	let model = character_model_user::load(root, id).ok()?;
 	let inventory = character_inventory_user::load(root, id).ok()?;
 	Some(CharacterMenu::for_saved(model.name, &model.appearance, inventory))
@@ -879,7 +873,10 @@ mod tests {
 		fixture.world.entity_mut(fixture.body).insert(ResolvedPoseApplied);
 		assert_eq!(fixture.resolve()?, Err(FocusWait::Attach(fixture.head)));
 
-		fixture.world.entity_mut(fixture.head).insert((ChildOf(fixture.neck), SocketRefApplied));
+		fixture
+			.world
+			.entity_mut(fixture.head)
+			.insert((ChildOf(fixture.neck), SocketRefApplied));
 		let clip = Transform::from_xyz(0.0, 1.5, 0.0).with_rotation(Quat::from_rotation_y(1.0));
 		fixture.world.entity_mut(fixture.neck).insert(clip);
 		let frame = fixture.resolve()?.map_err(|wait| format!("{wait:?}"))?;
@@ -891,7 +888,10 @@ mod tests {
 	#[test]
 	fn head_focus_waits_for_the_body_pose() -> Result<(), Box<dyn std::error::Error>> {
 		let mut fixture = Fixture::new();
-		fixture.world.entity_mut(fixture.head).insert((ChildOf(fixture.neck), SocketRefApplied));
+		fixture
+			.world
+			.entity_mut(fixture.head)
+			.insert((ChildOf(fixture.neck), SocketRefApplied));
 		assert_eq!(fixture.resolve()?, Err(FocusWait::Pose(fixture.body)));
 		Ok(())
 	}

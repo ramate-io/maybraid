@@ -12,8 +12,7 @@ macro_rules! delegate_components {
 			fn partition_nodes_for_level(
 				&self,
 				level: lod::gen::LodSceneLevel,
-			) -> building_components::Layers<building_components::PartitionNode>
-			{
+			) -> building_components::Layers<building_components::PartitionNode> {
 				self.$field.partition_nodes_for_level(level)
 			}
 			fn floor_nodes_for_level(
@@ -49,16 +48,13 @@ macro_rules! delegate_components {
 			fn furniture_nodes_for_level(
 				&self,
 				level: lod::gen::LodSceneLevel,
-			) -> building_components::Layers<building_components::FurnitureNode>
-			{
+			) -> building_components::Layers<building_components::FurnitureNode> {
 				self.$field.furniture_nodes_for_level(level)
 			}
 			fn furniture_usage_nodes_for_level(
 				&self,
 				level: lod::gen::LodSceneLevel,
-			) -> building_components::Layers<
-				building_components::FurnitureUsageNode,
-			> {
+			) -> building_components::Layers<building_components::FurnitureUsageNode> {
 				self.$field.furniture_usage_nodes_for_level(level)
 			}
 			fn label_nodes_for_level(
@@ -90,8 +86,8 @@ pub use wizards_tower::SolitaryWizardsTower;
 mod tests {
 	use bevy_math::bounding::Aabb3d;
 	use bevy_math::Vec3;
-	use procedural_common::NoiseParams;
 	use buildings::{Confines, Fit};
+	use procedural_common::NoiseParams;
 
 	use super::{SingleHighrise, SolitaryWizardsTower};
 

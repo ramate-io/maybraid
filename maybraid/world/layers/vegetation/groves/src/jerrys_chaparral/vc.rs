@@ -6,11 +6,6 @@ use super::variants::jerrys_chaparral_friends_conifer::ConiferSamples;
 #[cfg(test)]
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
-use sbs_trees::{
-	FriendsConifer, FriendsConiferParams, HighBushShoots, QuantizedPlant, RorysHeadTrained,
-	RorysHeadTrainedParams,
-};
-use vegetation_components::{Placement, StickNode, VegetationComponents};
 use clap::Args;
 #[cfg(test)]
 use lod::gen::{LodScene, LodSceneLevel};
@@ -18,6 +13,11 @@ use lod::lod_ref::LodRef;
 use lod::SceneChunk;
 use material_ref::MaterialRef;
 use procedural_common::{BuildWithNoise, NoiseParams};
+use sbs_trees::{
+	FriendsConifer, FriendsConiferParams, HighBushShoots, QuantizedPlant, RorysHeadTrained,
+	RorysHeadTrainedParams,
+};
+use vegetation_components::{Placement, StickNode, VegetationComponents};
 
 use super::{
 	definition, JerrysChaparralCell, JerrysChaparralFriendsConifer, CHAPARRAL_HIGH_BUSH,

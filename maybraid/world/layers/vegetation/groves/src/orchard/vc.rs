@@ -2,13 +2,13 @@ use super::WOODY_LOD;
 use std::sync::Arc;
 
 use bevy::prelude::*;
-use sbs_trees::{QuantizedPlant, StorybookTree, StorybookTreeParams};
-use vegetation_components::{Placement, VegetationComponents};
 use clap::Args;
 use lod::lod_ref::LodRef;
 use lod::SceneChunk;
 use material_ref::MaterialRef;
 use procedural_common::{BuildWithNoise, NoiseParams};
+use sbs_trees::{QuantizedPlant, StorybookTree, StorybookTreeParams};
+use vegetation_components::{Placement, VegetationComponents};
 
 use super::{definition, OrchardCell, OrchardStorybook, FRUITING_STORYBOOK, PALE_BLOOM_STORYBOOK};
 use crate::grove::vc_tuft::{patch_variant_index, variant_noise};

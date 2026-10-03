@@ -2,15 +2,15 @@
 
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
-use vegetation_shaders::{
-	init_vegetation_material_caches, VegetationMaterialLib, VegetationShadersPlugin,
-};
 use furniture_shaders::{
 	init_furniture_material_caches, FurnitureMaterialLib, FurnitureShadersPlugin,
 };
 use material_ref::{
 	material_ref_plugin_installed, MaterialLib, MaterialRef, MaterialRefPlugin,
 	StandardMaterialLib, StandardMaterialRefCache,
+};
+use vegetation_shaders::{
+	init_vegetation_material_caches, VegetationMaterialLib, VegetationShadersPlugin,
 };
 
 /// Isolated catalog lib: furniture surfaces, then leaf / stick / frond.

@@ -12,6 +12,13 @@ use std::collections::HashSet;
 use bevy::ecs::batching::BatchingStrategy;
 use bevy::ecs::query::{Has, Or};
 use bevy::prelude::*;
+use character_animations::{
+	animations::{
+		Idle, Jab, Prone, QuadrupedIdle, QuadrupedLeap, QuadrupedRun, Squat, Tuck,
+		TwoFootedTuckedFlip, UprightLeap,
+	},
+	Animation, Effects,
+};
 use character_rigs::{
 	forelimbed::ForelimbedRig,
 	rigs::{
@@ -21,13 +28,6 @@ use character_rigs::{
 };
 use intelligence_lod::{
 	look_applies, IntelligenceFocus, IntelligenceLod, IntelligenceLookFrame, IntelligencePriority,
-};
-use character_animations::{
-	animations::{
-		Idle, Jab, Prone, QuadrupedIdle, QuadrupedLeap, QuadrupedRun, Squat, Tuck,
-		TwoFootedTuckedFlip, UprightLeap,
-	},
-	Animation, Effects,
 };
 
 use crate::clip::{AnimClip, AnimId, AnimRefRoot};

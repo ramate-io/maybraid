@@ -1,7 +1,7 @@
 //! [`BuildWithNoise`] for [`UnendingJungleRoryHead`].
 
-use sbs_geometry::RorysHeadTrainedSbs;
 use procedural_common::{BuildWithNoise, NoiseConfig, NoiseParams, UnitRange};
+use sbs_geometry::RorysHeadTrainedSbs;
 
 use crate::unending_jungle::UnendingJungleRoryHead;
 

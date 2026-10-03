@@ -5,31 +5,33 @@ use bevy::math::bounding::Aabb3d;
 use bevy::math::{Vec2, Vec3};
 use bevy::prelude::{App, MinimalPlugins, NextState, World};
 use bevy::state::app::StatesPlugin;
-use vegetation_groves::{GroveHeightModulation, GroveTerrain, GroveWorldSample, ModulatedGroveSample};
 use durham::{
 	BaseTerrainNoise, Durham, TerrainCellLayout, TerrainConfig, TerrainEntryStore,
 	TerrainHeightSnapshot, WorldBaseTerrain,
+};
+use layer_stack::{
+	install_lod_present_gate, subscribe_mode, ActiveGenerationMode, GenerationMode,
+	GenerationModePlugin, ModeSubscription,
 };
 use lod::gen::{Id, Version};
 use lod::lod_ref::LodRef;
 use lod::presentation::RegionPresenter;
 use lod::{LodPresentCullPlugin, LodPresentGate, LodPresentKeepRegion, LodPresentPlugin};
 use richmond::{DevelopmentCell, DevelopmentConfig, DevelopmentEntryStore, PadComplex};
-use urbanization_cells::UrbanizationIndex;
 use terrain_layer_model::{HeightField, OnTerrain, TerrainView};
-use layer_stack::{
-	install_lod_present_gate, subscribe_mode, ActiveGenerationMode, GenerationMode,
-	GenerationModePlugin, ModeSubscription,
-};
+use urbanization_cells::UrbanizationIndex;
 use urbanization_layer_model::Urbanization;
+use vegetation_groves::{
+	GroveHeightModulation, GroveTerrain, GroveWorldSample, ModulatedGroveSample,
+};
 use vegetation_layer_model::Vegetation;
 use vegetation_layer_presentation::VegetationPresent;
 
 use crate::generation::ForestLodChan;
 use crate::grove::ChicoGrove;
 use crate::index::ForestIndex;
-use crate::model::Chico;
 use crate::layer_present::GroundGroveSample;
+use crate::model::Chico;
 use crate::present::ForestPresenterState;
 
 type Urbanized = Urbanization<richmond::Richmond<OnTerrain<Durham>>>;
@@ -80,16 +82,10 @@ fn assert_same(
 	let position = Vec3::new(xz.x, 0.0, xz.y);
 	let old_height = old.height_at(position);
 	let new_height = new.height_at(position);
-	anyhow::ensure!(
-		old_height == new_height,
-		"height at {xz:?}: {old_height} vs {new_height}"
-	);
+	anyhow::ensure!(old_height == new_height, "height at {xz:?}: {old_height} vs {new_height}");
 	let old_steep = old.steepness_at(position);
 	let new_steep = new.steepness_at(position);
-	anyhow::ensure!(
-		old_steep == new_steep,
-		"steepness at {xz:?}: {old_steep} vs {new_steep}"
-	);
+	anyhow::ensure!(old_steep == new_steep, "steepness at {xz:?}: {old_steep} vs {new_steep}");
 	Ok(())
 }
 
@@ -103,9 +99,12 @@ fn ground_grove_sample_matches_durham_and_modulated_samples() -> anyhow::Result<
 	world.insert_resource(WorldBaseTerrain(base.clone()));
 	world.insert_resource(DevelopmentEntryStore::default());
 	world.insert_resource(UrbanizationIndex::default());
-	world
-		.resource_mut::<TerrainEntryStore>()
-		.insert_base_terrain_for_test(&layout, 0, 0, base.clone());
+	world.resource_mut::<TerrainEntryStore>().insert_base_terrain_for_test(
+		&layout,
+		0,
+		0,
+		base.clone(),
+	);
 
 	let store = world.resource::<TerrainEntryStore>();
 	let probe = Aabb3d::from_min_max(Vec3::new(1.0, -1_000.0, 1.0), Vec3::new(2.0, 1_000.0, 2.0));
@@ -131,10 +130,8 @@ fn ground_grove_sample_matches_durham_and_modulated_samples() -> anyhow::Result<
 	};
 	let pads = world.resource::<DevelopmentEntryStore>().merged_pad_complex(region);
 	let old_durham = DurhamGroveSample(owned.clone());
-	let old_urban = ModulatedGroveSample::new(
-		DurhamGroveSample(owned),
-		vec![DevelopmentPadModulation(pads)],
-	);
+	let old_urban =
+		ModulatedGroveSample::new(DurhamGroveSample(owned), vec![DevelopmentPadModulation(pads)]);
 
 	let durham_snapshot = {
 		let mut state = SystemState::<TerrainView<OnTerrain<Durham>>>::new(&mut world);
@@ -149,10 +146,8 @@ fn ground_grove_sample_matches_durham_and_modulated_samples() -> anyhow::Result<
 	let new_durham = GroundGroveSample::new(durham_snapshot.clone());
 	let new_urban = GroundGroveSample::new(urban_snapshot);
 
-	let center = Vec2::new(
-		(region.min.x + region.max.x) * 0.5,
-		(region.min.z + region.max.z) * 0.5,
-	);
+	let center =
+		Vec2::new((region.min.x + region.max.x) * 0.5, (region.min.z + region.max.z) * 0.5);
 	let ungenerated = Vec2::new(5_000.0, -4_000.0);
 	let center_pos = Vec3::new(center.x, 0.0, center.y);
 	let center_mod = old_urban.height_at(center_pos);

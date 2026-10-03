@@ -1,7 +1,7 @@
-//! One seeded Richmond development on the Training FinePatch, walled into a
-//! flat courtyard arena. The training crate publishes [`TrainingArena`] once
-//! padded colliders exist; this module raises the wall and seats the player
-//! from that resource.
+//! Courtyard wall, parking, and the player seat for one Training map.
+//!
+//! The urbanization scheme publishes [`TrainingPlazaStamped`]; the arena
+//! resource seats the player once padded colliders exist.
 
 use avian3d::prelude::{LinearVelocity, Position};
 use bevy::prelude::*;
@@ -9,6 +9,7 @@ use building_components::{building_bounds, spawn_building_components};
 use building_physics::{spawn_building_walk_colliders, BUILDING_FRICTION};
 use buildings::wall_demo::TerrainPerimeterWall;
 use durham::{Durham, WorldBaseTerrain};
+use layer_stack::{ActiveGenerationMode, GenerationReadiness};
 use lod::gen::Id;
 use player_camera::FollowCamera;
 use procedural_common::SeededHash;
@@ -16,29 +17,13 @@ use richmond::{DevelopmentFinish, Richmond};
 use terrain_layer_model::{OnTerrain, TerrainView};
 use urbanization_layer_model::Urbanization;
 use world_player::player::{holding_elevation, player_spawn_point_at};
-use world_player::{OffTerrainAnchor, Player};
+use world_player::{ModePlayerPolicies, OffTerrainAnchor, Player, PlayerSeat, PlayerSpawnXz};
 
-use layer_stack::ActiveGenerationMode;
-use maybraid_game_mode_training_ground::{
-	TrainingArena, TrainingGround, TrainingMap, TrainingPlazaStamped, TrainingRound,
-};
-
-use crate::PlayerSpawnXz;
+use crate::markers::TrainingEnemyMarkers;
+use crate::{TrainingArena, TrainingGround, TrainingMap, TrainingPlazaStamped, TrainingRound};
 
 const TRAINING_WALL_STEP_M: f32 = 8.0;
 const TRAINING_WALL_HEIGHT_M: f32 = 20.0;
-
-/// The development, wall, and player seat have been stamped for this round's map.
-/// Also set, with nothing stamped, once every site the round tried fit no
-/// development.
-#[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
-pub struct TrainingPlazaMounted(pub TrainingRound);
-
-impl TrainingPlazaMounted {
-	pub fn serves(&self, round: TrainingRound) -> bool {
-		self.0.map() == round.map()
-	}
-}
 
 /// Wall spawned for this stamp cell.
 #[derive(Resource, Debug)]
@@ -46,22 +31,27 @@ pub(crate) struct TrainingPlazaWall {
 	cell_id: Id,
 }
 
+/// The map whose site the player has already been parked on.
+#[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct ParkedTrainingMap(TrainingMap);
+
+/// Set on exit. [`finish_training_leave`] consumes it in [`Last`] so combat
+/// commands queued through PostUpdate still find the wall and the anchor.
+#[derive(Resource, Clone, Copy, Debug, Default)]
+pub(crate) struct TrainingLeave;
+
 /// Stamped on Training fixtures so Leave can despawn them.
 #[derive(Component, Clone, Copy, Debug, Default)]
 pub(crate) struct TrainingPlaza;
 
 /// Raise the courtyard wall once the urbanization scheme has recorded a stamp.
 pub(crate) fn mount_training_plaza(
-	mode: Res<State<ActiveGenerationMode>>,
 	round: Res<TrainingRound>,
 	stamped: Option<Res<TrainingPlazaStamped>>,
 	wall: Option<Res<TrainingPlazaWall>>,
 	ground: TerrainView<Urbanization<Richmond<OnTerrain<Durham>>>>,
 	mut commands: Commands,
 ) {
-	if !mode.get().is::<TrainingGround>() {
-		return;
-	}
 	let Some(stamped) = stamped.as_deref() else {
 		return;
 	};
@@ -84,11 +74,11 @@ pub(crate) fn mount_training_plaza(
 /// while the patch streams, so the camera, vegetation, and LOD follow it. A
 /// body still being respawned is parked once it exists.
 pub(crate) fn park_on_training_site(
-	mode: Res<State<ActiveGenerationMode>>,
 	round: Res<TrainingRound>,
 	base: Res<WorldBaseTerrain>,
-	mut parked: Local<Option<TrainingMap>>,
+	parked: Option<Res<ParkedTrainingMap>>,
 	mut spawn_xz: ResMut<PlayerSpawnXz>,
+	mut commands: Commands,
 	mut players: Query<
 		(&mut Transform, &mut GlobalTransform, Option<&mut Position>, Option<&mut LinearVelocity>),
 		With<Player>,
@@ -98,11 +88,7 @@ pub(crate) fn park_on_training_site(
 		(With<Camera3d>, Without<Player>),
 	>,
 ) {
-	if !mode.get().is::<TrainingGround>() {
-		*parked = None;
-		return;
-	}
-	if *parked == Some(round.map()) {
+	if parked.is_some_and(|parked| parked.0 == round.map()) {
 		return;
 	}
 	let center = round.layout().region_center_xz().xz();
@@ -111,16 +97,15 @@ pub(crate) fn park_on_training_site(
 		return;
 	}
 	let at = player_spawn_point_at(center, holding_elevation(&base.0, center.x, center.y));
-	seat_player_at(&mut players, &mut cameras, at, Vec3::Z);
-	*parked = Some(round.map());
+	PlayerSeat { at, facing: Vec3::Z }.apply(&mut players, &mut cameras);
+	commands.insert_resource(ParkedTrainingMap(round.map()));
 }
 
 /// A body respawned onto the live plaza (a new life on the same map) takes
 /// the arena seat and its anchor.
 pub(crate) fn reseat_training_life(
-	mode: Res<State<ActiveGenerationMode>>,
 	round: Res<TrainingRound>,
-	mounted: Option<Res<TrainingPlazaMounted>>,
+	ready: Option<Res<GenerationReadiness>>,
 	seat: Option<Res<TrainingArena>>,
 	mut commands: Commands,
 	unanchored: Query<Entity, (With<Player>, Without<OffTerrainAnchor>)>,
@@ -133,8 +118,7 @@ pub(crate) fn reseat_training_life(
 		(With<Camera3d>, Without<Player>),
 	>,
 ) {
-	if !mode.get().is::<TrainingGround>() || !mounted.is_some_and(|mounted| mounted.serves(*round))
-	{
+	if !ready.is_some_and(|ready| ready.covers(round.map().readiness_key())) {
 		return;
 	}
 	let Some(seat) = seat else {
@@ -143,16 +127,15 @@ pub(crate) fn reseat_training_life(
 	let Ok(player) = unanchored.single() else {
 		return;
 	};
-	seat_player_at(&mut players, &mut cameras, seat.player, seat.facing);
+	PlayerSeat { at: seat.player, facing: seat.facing }.apply(&mut players, &mut cameras);
 	commands.entity(player).insert(OffTerrainAnchor { translation: seat.player });
 }
 
 /// Seat the player once the mode has published [`TrainingArena`].
 pub(crate) fn promote_training_plaza(
-	mode: Res<State<ActiveGenerationMode>>,
 	stamped: Option<Res<TrainingPlazaStamped>>,
 	seat: Option<Res<TrainingArena>>,
-	mounted: Option<Res<TrainingPlazaMounted>>,
+	ready: Option<Res<GenerationReadiness>>,
 	mut spawn_xz: ResMut<PlayerSpawnXz>,
 	mut commands: Commands,
 	player_ids: Query<Entity, With<Player>>,
@@ -165,7 +148,7 @@ pub(crate) fn promote_training_plaza(
 		(With<Camera3d>, Without<Player>),
 	>,
 ) {
-	if !mode.get().is::<TrainingGround>() || mounted.is_some() {
+	if ready.is_some() {
 		return;
 	}
 	let Some(stamped) = stamped.as_deref() else {
@@ -175,28 +158,50 @@ pub(crate) fn promote_training_plaza(
 		return;
 	};
 	spawn_xz.0 = Some(seat.player.xz());
-	seat_player_at(&mut players, &mut cameras, seat.player, seat.facing);
+	PlayerSeat { at: seat.player, facing: seat.facing }.apply(&mut players, &mut cameras);
 	// Terrain snap and void recovery sample the raw FinePatch, which is below
 	// the courtyard wherever the terrace fills. The anchor keeps the seat on
 	// the padded collider.
 	for player in &player_ids {
 		commands.entity(player).insert(OffTerrainAnchor { translation: seat.player });
 	}
-	commands.insert_resource(TrainingPlazaMounted(stamped.round()));
+	commands.insert_resource(GenerationReadiness::new(stamped.round().map().readiness_key()));
 }
 
-/// Tear the plaza down when Training ends or the round moves to a new map. Leaving
-/// parks the player on Discovery's default spawn, so Discovery resumes the
-/// character's saved trail instead of starting at the last Training site.
-pub(crate) fn clear_training_plaza(
-	mode: Res<State<ActiveGenerationMode>>,
+pub(crate) fn request_training_leave(mut commands: Commands) {
+	commands.insert_resource(TrainingLeave);
+}
+
+/// Tear a plaza down when the round moves to a new map. The live session stays;
+/// leaving is [`finish_training_leave`].
+pub(crate) fn clear_stale_training_plaza(
 	round: Res<TrainingRound>,
+	ready: Option<Res<GenerationReadiness>>,
+	mut commands: Commands,
+	fixtures: Query<Entity, With<TrainingPlaza>>,
+	anchored: Query<Entity, (With<Player>, With<OffTerrainAnchor>)>,
+) {
+	let Some(ready) = ready else {
+		return;
+	};
+	if ready.covers(round.map().readiness_key()) {
+		return;
+	}
+	tear_down_plaza(&mut commands, &fixtures, &anchored);
+}
+
+/// Leave parks the player on the destination mode's home, so that mode resumes
+/// its own trail instead of the last Training site.
+pub(crate) fn finish_training_leave(
+	mode: Res<State<ActiveGenerationMode>>,
+	policies: Res<ModePlayerPolicies>,
 	base: Res<WorldBaseTerrain>,
-	mounted: Option<Res<TrainingPlazaMounted>>,
+	ready: Option<Res<GenerationReadiness>>,
 	mut spawn_xz: ResMut<PlayerSpawnXz>,
 	mut commands: Commands,
 	fixtures: Query<Entity, With<TrainingPlaza>>,
 	anchored: Query<Entity, (With<Player>, With<OffTerrainAnchor>)>,
+	markers: Query<Entity, With<TrainingEnemyMarkers>>,
 	mut players: Query<
 		(&mut Transform, &mut GlobalTransform, Option<&mut Position>, Option<&mut LinearVelocity>),
 		With<Player>,
@@ -206,29 +211,38 @@ pub(crate) fn clear_training_plaza(
 		(With<Camera3d>, Without<Player>),
 	>,
 ) {
-	let live = mode.get().is::<TrainingGround>();
-	let stale = |of: TrainingRound| !live || of.map() != round.map();
-	let mounted_stale = mounted.as_deref().is_some_and(|mounted| stale(mounted.0));
-	if !mounted_stale {
+	commands.remove_resource::<TrainingLeave>();
+	commands.remove_resource::<ParkedTrainingMap>();
+	for root in &markers {
+		commands.entity(root).try_despawn();
+	}
+	if ready.is_none() {
 		return;
 	}
+	tear_down_plaza(&mut commands, &fixtures, &anchored);
+	spawn_xz.0 = None;
+	let Some(home) = policies.home(mode.get().mode_id()) else {
+		return;
+	};
+	let at = player_spawn_point_at(home, holding_elevation(&base.0, home.x, home.y));
+	PlayerSeat { at, facing: Vec3::Z }.apply(&mut players, &mut cameras);
+}
+
+fn tear_down_plaza(
+	commands: &mut Commands,
+	fixtures: &Query<Entity, With<TrainingPlaza>>,
+	anchored: &Query<Entity, (With<Player>, With<OffTerrainAnchor>)>,
+) {
 	// Fixtures nest under one another; every teardown command must tolerate a
 	// target already gone.
-	for entity in &fixtures {
+	for entity in fixtures {
 		commands.entity(entity).try_despawn();
 	}
-	for player in &anchored {
+	for player in anchored {
 		commands.entity(player).try_remove::<OffTerrainAnchor>();
 	}
 	commands.remove_resource::<TrainingPlazaWall>();
-	commands.remove_resource::<TrainingPlazaMounted>();
-	if live {
-		return;
-	}
-	spawn_xz.0 = None;
-	let home = Vec2::ZERO;
-	let at = player_spawn_point_at(home, holding_elevation(&base.0, home.x, home.y));
-	seat_player_at(&mut players, &mut cameras, at, Vec3::Z);
+	commands.remove_resource::<GenerationReadiness>();
 }
 
 fn spawn_training_wall(
@@ -259,56 +273,39 @@ fn spawn_training_wall(
 	}
 }
 
-fn seat_player_at(
-	players: &mut Query<
-		(&mut Transform, &mut GlobalTransform, Option<&mut Position>, Option<&mut LinearVelocity>),
-		With<Player>,
-	>,
-	cameras: &mut Query<
-		(&mut Transform, &mut GlobalTransform, &FollowCamera),
-		(With<Camera3d>, Without<Player>),
-	>,
-	at: Vec3,
-	facing: Vec3,
-) {
-	let Ok((mut player_tf, mut player_global, mut body, mut velocity)) = players.single_mut()
-	else {
-		return;
-	};
-	player_tf.translation = at;
-	*player_global = GlobalTransform::from(*player_tf);
-	if let Some(position) = body.as_deref_mut() {
-		position.0 = at;
-	}
-	if let Some(velocity) = velocity.as_deref_mut() {
-		velocity.0 = Vec3::ZERO;
-	}
-	drop((player_tf, player_global, body, velocity));
-
-	let Ok((mut camera_tf, mut camera_global, follow)) = cameras.single_mut() else {
-		return;
-	};
-	let look = at + Vec3::Y * follow.look_height;
-	let eye = look - facing * follow.distance + Vec3::Y * follow.height;
-	let parked = Transform::from_translation(eye).looking_at(look, Vec3::Y);
-	*camera_tf = parked;
-	*camera_global = GlobalTransform::from(parked);
-}
-
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use maybraid_game_mode_training_ground::{
+	use crate::{
 		pad_influence_region, training_development_cell, TRAINING_ARENA_MARGIN_M,
 		TRAINING_ARENA_MAX_HALF_M, TRAINING_COURTYARD_EASE_M, TRAINING_COURTYARD_OVERHANG_M,
 	};
+	use maybraid_game_mode_discover::Discovery;
 	use richmond::{
 		DevelopmentCell, DevelopmentConfig, DevelopmentKind, PadParams, DEVELOPMENT_CELL_SIZE,
 	};
+	use std::any::TypeId;
 
 	fn base_terrain() -> WorldBaseTerrain {
 		use durham::{BaseTerrainNoise, TerrainConfig};
 		WorldBaseTerrain(BaseTerrainNoise::from_config(&TerrainConfig::new(42)))
+	}
+
+	fn discovery_policies() -> ModePlayerPolicies {
+		let mut policies = ModePlayerPolicies::default();
+		policies.register(
+			TypeId::of::<Discovery>(),
+			world_player::ModePlayerPolicy {
+				home: Vec2::ZERO,
+				keep_waypoints: true,
+				respawn_ends_life: false,
+			},
+		);
+		policies
+	}
+
+	fn readiness_for(round: TrainingRound) -> GenerationReadiness {
+		GenerationReadiness::new(round.map().readiness_key())
 	}
 
 	#[test]
@@ -371,11 +368,12 @@ mod tests {
 		world.insert_resource(State::new(if grounds {
 			ActiveGenerationMode::of::<TrainingGround>()
 		} else {
-			ActiveGenerationMode::of::<maybraid_game_mode_discover::Discovery>()
+			ActiveGenerationMode::of::<Discovery>()
 		}));
 		world.insert_resource(round);
 		world.insert_resource(base_terrain());
 		world.insert_resource(PlayerSpawnXz(Some(Vec2::ONE)));
+		world.insert_resource(discovery_policies());
 		world
 	}
 
@@ -396,29 +394,29 @@ mod tests {
 		use bevy::ecs::system::RunSystemOnce;
 		let round = TrainingRound::new(8);
 		let mut world = plaza_world(true, round.next());
-		world.insert_resource(TrainingPlazaMounted(round));
+		world.insert_resource(readiness_for(round));
 		let seat = Vec3::new(900.0, 30.0, -400.0);
 		let player = seated_player(&mut world, seat);
 		let wall = world.spawn(TrainingPlaza).id();
 		world
-			.run_system_once(clear_training_plaza)
+			.run_system_once(clear_stale_training_plaza)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		anyhow::ensure!(world.get_resource::<TrainingPlazaMounted>().is_none());
+		anyhow::ensure!(world.get_resource::<GenerationReadiness>().is_none());
 		anyhow::ensure!(world.get_entity(wall).is_err());
 		anyhow::ensure!(world.get::<OffTerrainAnchor>(player).is_none());
 		anyhow::ensure!(world.get::<Transform>(player).map(|t| t.translation) == Some(seat));
 		anyhow::ensure!(world.resource::<PlayerSpawnXz>().0 == Some(Vec2::ONE));
 
-		world.insert_resource(TrainingPlazaMounted(round.next()));
+		world.insert_resource(readiness_for(round.next()));
 		let wall = world.spawn(TrainingPlaza).id();
 		world
-			.run_system_once(clear_training_plaza)
+			.run_system_once(clear_stale_training_plaza)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		anyhow::ensure!(world.get_entity(wall).is_ok(), "the live round keeps its plaza");
 
 		world.insert_resource(round.next().next_life());
 		world
-			.run_system_once(clear_training_plaza)
+			.run_system_once(clear_stale_training_plaza)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		anyhow::ensure!(world.get_entity(wall).is_ok(), "a new life keeps the map's plaza");
 		Ok(())
@@ -430,7 +428,7 @@ mod tests {
 		let round = TrainingRound::new(13);
 		let mut world = plaza_world(true, round.next_life());
 		let seat = Vec3::new(40.0, 8.0, -20.0);
-		world.insert_resource(TrainingPlazaMounted(round));
+		world.insert_resource(readiness_for(round));
 		world.insert_resource(TrainingArena::at_seat(seat, Vec3::Z));
 		let transform = Transform::from_translation(Vec3::new(0.0, 90.0, 0.0));
 		let body = world.spawn((Player, transform, GlobalTransform::from(transform))).id();
@@ -482,11 +480,11 @@ mod tests {
 		use bevy::ecs::system::RunSystemOnce;
 		let round = TrainingRound::default();
 		let mut world = plaza_world(false, round);
-		world.insert_resource(TrainingPlazaMounted(round));
+		world.insert_resource(readiness_for(round));
 		let player = seated_player(&mut world, Vec3::new(4_000.0, 12.0, -2_000.0));
 		let wall = world.spawn(TrainingPlaza).id();
 		world
-			.run_system_once(clear_training_plaza)
+			.run_system_once(finish_training_leave)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		anyhow::ensure!(world.get::<OffTerrainAnchor>(player).is_none());
 		anyhow::ensure!(world.resource::<PlayerSpawnXz>().0.is_none());
@@ -509,19 +507,19 @@ mod tests {
 	fn leaving_tolerates_targets_despawned_in_the_same_frame() -> anyhow::Result<()> {
 		let round = TrainingRound::default();
 		let mut world = plaza_world(false, round);
-		world.insert_resource(TrainingPlazaMounted(round));
+		world.insert_resource(readiness_for(round));
 		let player = seated_player(&mut world, Vec3::new(4_000.0, 12.0, -2_000.0));
 		world.entity_mut(player).insert(DoomedThisFrame);
 		let wall = world.spawn((TrainingPlaza, DoomedThisFrame)).id();
 
 		let mut schedule = Schedule::default();
-		schedule.add_systems((despawn_doomed, clear_training_plaza).chain_ignore_deferred());
+		schedule.add_systems((despawn_doomed, finish_training_leave).chain_ignore_deferred());
 		schedule.run(&mut world);
 
 		for entity in [player, wall] {
 			anyhow::ensure!(world.get_entity(entity).is_err());
 		}
-		anyhow::ensure!(world.get_resource::<TrainingPlazaMounted>().is_none());
+		anyhow::ensure!(world.get_resource::<GenerationReadiness>().is_none());
 		Ok(())
 	}
 }

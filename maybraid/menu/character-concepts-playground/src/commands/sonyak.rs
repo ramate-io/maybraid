@@ -1,11 +1,11 @@
 //! `/sonyak` commands for the Gumbus-bodied Sonyak quadruped concept species.
 
 use bevy::prelude::*;
-use clap::{Args, Subcommand};
 use characters::{
 	species::sonyak::{assets::SonyakMouthMesh, sliders::SonyakSliders, SonyakConfig},
 	BuildPreset, GenderPreset,
 };
+use clap::{Args, Subcommand};
 
 use crate::{animation::ConceptAnimation, preview::ConceptPreviewConfig};
 

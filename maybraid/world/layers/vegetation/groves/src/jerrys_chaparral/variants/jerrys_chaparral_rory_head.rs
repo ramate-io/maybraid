@@ -1,7 +1,7 @@
 //! [`BuildWithNoise`] for [`JerrysChaparralRoryHead`].
 
-use sbs_geometry::RorysHeadTrainedSbs;
 use procedural_common::{BuildWithNoise, NoiseConfig, NoiseParams, UnitRange};
+use sbs_geometry::RorysHeadTrainedSbs;
 
 use crate::jerrys_chaparral::JerrysChaparralRoryHead;
 

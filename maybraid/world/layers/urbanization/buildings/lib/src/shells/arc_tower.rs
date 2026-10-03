@@ -2,12 +2,10 @@
 
 use bevy_math::bounding::Aabb3d;
 use bevy_math::{Vec2, Vec3};
-use lod::gen::LodSceneLevel;
 use building_components::floors::FloorNode;
 use building_components::partitions::{PartitionNode, PartitionStyle};
-use building_components::{
-	BuildingComponents, BuildingStructuralLodProbe, Layers, MassingVolume,
-};
+use building_components::{BuildingComponents, BuildingStructuralLodProbe, Layers, MassingVolume};
+use lod::gen::LodSceneLevel;
 
 use crate::openings::{MappedOpening, Opening, OpeningId, OpeningLabel, Openings};
 use crate::shells::arc_floor::{ArcFloor, ArcFloorParams, ArcFloorSlab};

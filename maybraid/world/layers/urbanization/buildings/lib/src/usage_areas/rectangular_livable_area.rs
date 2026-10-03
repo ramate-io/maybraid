@@ -18,15 +18,15 @@ use slot_policy::{min_area_for, SlotPolicy};
 
 use bevy_math::bounding::{Aabb2d, Aabb3d, BoundingVolume};
 use bevy_math::{Vec2, Vec3};
-use lod::gen::LodSceneLevel;
-use procedural_common::{
-	aabb2_area, aabb3_to_plan, Aabb2dPack, NoiseConfig, NoiseParams, PlanAxes, PlanOpeningFace,
-};
 use building_components::furniture::FurnitureNode;
 use building_components::joints::JointNode;
 use building_components::labels::{LabelNode, LabelStyle};
 use building_components::panels::{PanelNode, PanelStyle};
 use building_components::{BuildingComponents, Layers};
+use lod::gen::LodSceneLevel;
+use procedural_common::{
+	aabb2_area, aabb3_to_plan, Aabb2dPack, NoiseConfig, NoiseParams, PlanAxes, PlanOpeningFace,
+};
 
 use crate::fit::{Confines, FillRegion, FillableRegions, Fit, FitError, SpaceKind};
 use crate::openings::{Opening, OpeningId, OpeningLabel, Openings};

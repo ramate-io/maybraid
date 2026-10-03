@@ -1,11 +1,11 @@
 //! Honu canopy: jungle-growth clusters + cheap canopy balls (VegetationComponents).
 
 use bevy::prelude::*;
+use lod::gen::LodSceneLevel;
 use sbs_geometry::chain::honu_banyan::{is_graph_terminal, HonuBanyanChain};
 use sbs_geometry::render::mix_seed::mix_seed_below_fraction;
 use sbs_geometry::{AzimuthHeightBands, BallStickChain, BallStickNode};
 use vegetation_components::{FoliageNode, Placement};
-use lod::gen::LodSceneLevel;
 
 use crate::jungle_canopy_vc::{
 	emit_jungle_canopy_lod, JungleCanopyLodPlan, JungleFoliageCandidate, JungleGrowthEmitMode,

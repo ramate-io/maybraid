@@ -2,8 +2,8 @@
 
 use crate::palette::{crust, mix_seed};
 use crate::Assembly;
-use furniture_components::{slab, PartKind, PlacedPart};
 use building_components::FurnitureGeometry;
+use furniture_components::{slab, PartKind, PlacedPart};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct BreadParams {

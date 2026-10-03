@@ -1,7 +1,7 @@
 //! [`BuildWithNoise`] for [`TropicalPalmBush`].
 
-use sbs_geometry::PalmBushSbs;
 use procedural_common::{BuildWithNoise, NoiseParams};
+use sbs_geometry::PalmBushSbs;
 
 use crate::tropical_tufts::TropicalPalmBush;
 

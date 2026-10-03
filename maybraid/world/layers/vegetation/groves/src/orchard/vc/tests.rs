@@ -2,9 +2,9 @@ use super::*;
 use anyhow::Result;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::{Entity, Transform};
-use vegetation_components::VegetationComponents;
 use lod::gen::{LodScene, LodSceneLevel};
 use lod::lod_ref::LodRef;
+use vegetation_components::VegetationComponents;
 
 fn small_grove() -> Orchard {
 	OrchardParams::default()

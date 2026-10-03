@@ -1,7 +1,7 @@
 //! [`BuildWithNoise`] for [`StrangeOasisStorybook`].
 
-use sbs_geometry::StorybookTreeSbs;
 use procedural_common::{BuildWithNoise, NoiseConfig, NoiseParams, UnitRange};
+use sbs_geometry::StorybookTreeSbs;
 
 use crate::strange_oasis::StrangeOasisStorybook;
 

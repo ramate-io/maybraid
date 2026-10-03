@@ -1,7 +1,6 @@
 //! `/tuberwaber` commands for the biped concept species.
 
 use bevy::prelude::*;
-use clap::{Args, Subcommand};
 use character_items::{ClothingMaterial, ClothingMesh};
 use characters::{
 	species::{
@@ -12,6 +11,7 @@ use characters::{
 	},
 	BuildPreset, GenderPreset,
 };
+use clap::{Args, Subcommand};
 
 use crate::{animation::ConceptAnimation, preview::ConceptPreviewConfig};
 
@@ -104,8 +104,7 @@ impl PreviewArgs {
 				hair: self.hair,
 				clothing: self.clothing,
 				colors: {
-					let mut colors =
-						characters::species::tuberwaber::TuberwaberColors::default();
+					let mut colors = characters::species::tuberwaber::TuberwaberColors::default();
 					colors.clothing_material = self.clothing_material;
 					colors
 				},

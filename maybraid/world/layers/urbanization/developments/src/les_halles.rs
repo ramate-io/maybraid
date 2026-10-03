@@ -7,8 +7,6 @@
 
 use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::{Vec2, Vec3};
-use material_ref::MaterialRef;
-use procedural_common::{NoiseConfig, NoiseParams};
 use building_components::panels::PanelStyle;
 use buildings::{
 	Confines, ConnectingStairwell, FillableRegions, Fit, FitError, LesHallesArcadeUsage,
@@ -17,6 +15,8 @@ use buildings::{
 	MixedUseLesHallesStorey, Openings, Overhang, PitchedRoof, PitchedRoofParams, RectRingFloorSlab,
 	RoofHalf, StairwellKind, WellAabb, WellSide,
 };
+use material_ref::MaterialRef;
+use procedural_common::{NoiseConfig, NoiseParams};
 
 use crate::placed::BuildingFootprint;
 

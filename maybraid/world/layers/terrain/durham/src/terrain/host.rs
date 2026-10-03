@@ -11,13 +11,13 @@
 use bevy::ecs::system::SystemParam;
 use bevy::math::{IVec2, UVec2};
 use bevy::prelude::*;
-use terrain_shaders::{TerrainShader, TerrainShaderPlugin, RefractionWater};
 use lod::gen::{GeneratingSpatialIndex, Id, OriginalId, SpatialIndex, StorageStatus};
 use lod::lod_ref::LodRef;
 use lod::presentation::RegionPresenter;
 use lod::LodViewer;
 use render_item::mesh::handle::MeshFulfillBudget;
 use std::collections::HashSet;
+use terrain_shaders::{RefractionWater, TerrainShader, TerrainShaderPlugin};
 use visual_geometry_core::{
 	install_enforced_mesh_cache, share_terrain_chunk_refs, VisualGeometryCorePlugin,
 };
@@ -33,15 +33,14 @@ use crate::terrain::presentation::{
 	TerrainBackground, TerrainFar, TerrainMeshLodBand, TerrainNear, TerrainPresentationAssets,
 	TerrainPresenterState, TerrainRegionPresenter, TerrainStoreView, TerrainStreamPresenterState,
 };
-use terrain_layer_model::{
-	terrain_streaming, OnTerrain, TerrainExtent, TerrainLayerSystems,
-	TerrainStreaming,
-};
-use layer_stack::{mode_subscribed, LodPresentGateSync};
-use lod::LodPresentGate;
-use terrain_layer_presentation::TerrainPresenter;
 use crate::water::{ComposedWater, Water, WaterPresentationAssets};
 use crate::{DurhamTerrainModelsPlugin, Terrain, TerrainMeshBuilder};
+use layer_stack::{mode_subscribed, LodPresentGateSync};
+use lod::LodPresentGate;
+use terrain_layer_model::{
+	terrain_streaming, OnTerrain, TerrainExtent, TerrainLayerSystems, TerrainStreaming,
+};
+use terrain_layer_presentation::TerrainPresenter;
 
 /// Composed Durham SDF / CpuShot terrain model.
 pub struct Durham;
@@ -115,10 +114,7 @@ fn extent_from_layout<M: Send + Sync + 'static>(layout: &TerrainCellLayout) -> T
 	}
 }
 
-fn write_durham_extent(
-	layout: Res<TerrainCellLayout>,
-	mut extent: ResMut<TerrainExtent<Durham>>,
-) {
+fn write_durham_extent(layout: Res<TerrainCellLayout>, mut extent: ResMut<TerrainExtent<Durham>>) {
 	if !layout.is_changed() {
 		return;
 	}
@@ -297,21 +293,14 @@ pub(crate) fn install_durham_generation(app: &mut App) {
 	.insert_resource(WorldBaseTerrain(base))
 	.init_resource::<TerrainCoverage>()
 	.insert_resource(layout)
-	.insert_resource(TerrainFillParams {
-		coverage: TerrainCoverage::default(),
-		terrain_radius: 1,
-	})
+	.insert_resource(TerrainFillParams { coverage: TerrainCoverage::default(), terrain_radius: 1 })
 	.init_resource::<TerrainPresentationDirty>()
 	.init_resource::<TerrainPresentPending>()
 	.init_resource::<TerrainStreaming<Durham>>()
 	.init_resource::<TerrainExtent<Durham>>()
 	.init_resource::<TerrainLayoutPinned>()
 	.add_systems(Startup, setup_presentation_assets)
-	.add_systems(
-		Update,
-		write_durham_extent
-			.after(TerrainFillSystems::Generate),
-	)
+	.add_systems(Update, write_durham_extent.after(TerrainFillSystems::Generate))
 	.add_systems(
 		Update,
 		generate_cells
@@ -345,10 +334,7 @@ pub(crate) fn apply_durham_generation(world: &mut World, config: &crate::DurhamT
 		}
 		world.insert_resource(terrain);
 	}
-	world.insert_resource(TerrainFillParams {
-		coverage: config.coverage,
-		terrain_radius,
-	});
+	world.insert_resource(TerrainFillParams { coverage: config.coverage, terrain_radius });
 }
 
 /// Raw Durham present: the three stream presenter states and [`present_cells`].

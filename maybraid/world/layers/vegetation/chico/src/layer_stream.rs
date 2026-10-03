@@ -314,7 +314,8 @@ pub fn clear_vegetation_stream_world(world: &mut World) {
 	if let Some(mut keep) = world.get_resource_mut::<LodPresentKeepRegion<BumpOutLodChan>>() {
 		keep.region = None;
 	}
-	if let Some(mut keep) = world.get_resource_mut::<LodGenerateKeepRegion<MediumBumpOutLodChan>>() {
+	if let Some(mut keep) = world.get_resource_mut::<LodGenerateKeepRegion<MediumBumpOutLodChan>>()
+	{
 		keep.region = None;
 	}
 	if let Some(mut keep) = world.get_resource_mut::<LodPresentKeepRegion<MediumBumpOutLodChan>>() {

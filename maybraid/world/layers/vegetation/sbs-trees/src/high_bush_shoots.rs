@@ -13,6 +13,8 @@
 //! Layered balls stay separate nodes (shared GLBs).
 
 use bevy::prelude::*;
+use clap::Args;
+use lod::gen::LodSceneLevel;
 use sbs_geometry::{
 	should_allocate_foliage, BallStickChain, HighBushChain, HighBushFoliageStyle,
 	HighBushShootsShape,
@@ -21,8 +23,6 @@ use vegetation_components::{
 	leaf_material_ref, stick_material_ref, FoliageNode, Layers, Placement, StickNode,
 	StructuralLod, VegetationComponents,
 };
-use clap::Args;
-use lod::gen::LodSceneLevel;
 
 use crate::storybook_tree::{merge_cheap_ball_foliage, merge_kit_sticks};
 
@@ -225,9 +225,7 @@ mod tests {
 		let terminal_only = built
 			.chain
 			.nodes_with_hysteresis_enumerated()
-			.filter(|(idx, _, _)| {
-				sbs_geometry::high_bush_is_graph_terminal(&built.chain, *idx)
-			})
+			.filter(|(idx, _, _)| sbs_geometry::high_bush_is_graph_terminal(&built.chain, *idx))
 			.count();
 		assert!(foliage.len() >= terminal_only);
 		assert!(foliage.iter().all(|n| n.geometry.is_layered_ball()));

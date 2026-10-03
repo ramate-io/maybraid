@@ -27,15 +27,15 @@ pub use high_pass::{
 	bootstrap_pre_pocket_high_pass_layout,
 	original_ids_for_marazion_pocket_waters_high_pass_leaves,
 	original_ids_for_pocket_high_pass_cells, original_ids_for_pre_pocket_high_pass_cells,
-	BootstrapPrePocketHighPassLayout, PocketWatersHighPass, PocketHighPassCell,
+	BootstrapPrePocketHighPassLayout, PocketHighPassCell, PocketWatersHighPass,
 	PrePocketHighPassCell, PrePocketHighPassLayout,
 };
 pub use leaf_kind::{WatershedBandPass, WatershedLeafBounds, WatershedLeafKind};
 pub use low_pass::{
 	bootstrap_pre_pocket_low_pass_layout, original_ids_for_marazion_pocket_waters_low_pass_leaves,
 	original_ids_for_pocket_low_pass_cells, original_ids_for_pre_pocket_low_pass_cells,
-	BootstrapPrePocketLowPassLayout, PocketWatersLowPass, PocketLowPassCell,
-	PrePocketLowPassCell, PrePocketLowPassLayout,
+	BootstrapPrePocketLowPassLayout, PocketLowPassCell, PocketWatersLowPass, PrePocketLowPassCell,
+	PrePocketLowPassLayout,
 };
 pub use pocket_water::PocketWater;
 

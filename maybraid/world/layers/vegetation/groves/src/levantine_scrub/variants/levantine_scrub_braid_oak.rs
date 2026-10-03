@@ -1,7 +1,7 @@
 //! [`BuildWithNoise`] for [`LevantineScrubBraidOak`].
 
-use sbs_geometry::BraidOakTreeSbs;
 use procedural_common::{BuildWithNoise, NoiseConfig, NoiseParams, UnitRange};
+use sbs_geometry::BraidOakTreeSbs;
 
 use crate::levantine_scrub::LevantineScrubBraidOak;
 

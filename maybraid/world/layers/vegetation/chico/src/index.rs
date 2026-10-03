@@ -5,10 +5,10 @@ use std::collections::{HashMap, HashSet};
 
 use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::prelude::*;
-use vegetation_groves::FlatTerrainSample;
 use lod::gen::{Id, SpatialIndex, StorageStatus, TrackedId, Version};
 use lod::lod_ref::LodRef;
 use procedural_common::NoiseParams;
+use vegetation_groves::FlatTerrainSample;
 
 use crate::bump_out::{
 	bump_out_cells_overlapping, bump_out_in_inner_hole, medium_bump_out_in_band, CanopyBumpOut,
@@ -383,8 +383,8 @@ pub fn forest_world_sample() -> FlatTerrainSample {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use vegetation_groves::GroveExtent;
 	use lod::lod_ref::LodRef;
+	use vegetation_groves::GroveExtent;
 
 	fn empty_grove(bounds: Aabb3d) -> ChicoGrove {
 		ChicoGrove::selected(

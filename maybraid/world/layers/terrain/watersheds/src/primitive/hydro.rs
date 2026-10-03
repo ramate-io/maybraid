@@ -142,8 +142,8 @@ mod tests {
 	use super::*;
 	use crate::primitive::complex::HydroComplex;
 	use crate::primitive::parameters::ComplexParams;
-	use terrain_stamps::RegionNoise;
 	use procedural_common::Bounds2;
+	use terrain_stamps::RegionNoise;
 
 	#[test]
 	fn reach_profile_bowls_in_x_pitches_in_z() -> anyhow::Result<()> {

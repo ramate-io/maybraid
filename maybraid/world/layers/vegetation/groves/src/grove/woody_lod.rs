@@ -2,13 +2,13 @@
 
 use bevy::prelude::Vec3;
 use bevy::scene::prelude::Scene;
+use lod::gen::LodSceneLevel;
+use lod::lod_ref::LodRef;
+use lod::SceneChunk;
 use vegetation_components::{
 	flattened_canopy_proxy_chunks, FoliageNode, Layers, StickNode, StructuralLod,
 	VegetationComponents,
 };
-use lod::gen::LodSceneLevel;
-use lod::lod_ref::LodRef;
-use lod::SceneChunk;
 
 use super::vc_compose::{
 	foliage_ultra_low_merged_balls, grove_detail_level, grove_detail_level_keep_low,

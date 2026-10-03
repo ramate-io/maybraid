@@ -11,13 +11,13 @@
 //! cores stay separate.
 
 use bevy::prelude::*;
+use clap::Args;
+use lod::gen::LodSceneLevel;
+use procedural_common::{NoiseConfig, NoiseParams};
 use vegetation_components::{
 	leaf_material_ref, FoliageNode, Layers, Placement, StickNode, StructuralLod,
 	VegetationComponents,
 };
-use clap::Args;
-use lod::gen::LodSceneLevel;
-use procedural_common::{NoiseConfig, NoiseParams};
 
 use crate::storybook_tree::merge_cheap_ball_foliage;
 

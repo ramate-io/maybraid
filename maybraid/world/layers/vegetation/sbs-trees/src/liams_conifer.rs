@@ -11,13 +11,13 @@
 //! folds sticks and cheap balls into collections.
 
 use bevy::prelude::*;
-use sbs_geometry::{BallStickChain, LiamsConiferChain, LiamsConiferSbs};
-use vegetation_components::{
-	leaf_material_ref, stick_material_ref, FoliageNode, Layers, StickNode,
-	StructuralLod, VegetationComponents,
-};
 use clap::Args;
 use lod::gen::LodSceneLevel;
+use sbs_geometry::{BallStickChain, LiamsConiferChain, LiamsConiferSbs};
+use vegetation_components::{
+	leaf_material_ref, stick_material_ref, FoliageNode, Layers, StickNode, StructuralLod,
+	VegetationComponents,
+};
 
 use crate::northern_conifer::canopy::{
 	foliage_nodes_banded, foliage_nodes_low_single_proxy, foliage_nodes_medium_no_proxy,

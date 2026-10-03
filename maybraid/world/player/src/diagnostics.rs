@@ -18,9 +18,9 @@ use std::time::Duration;
 use bevy::camera::visibility::VisibilitySystems;
 use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use bevy::prelude::*;
-use vegetation_components::{FoliageLodProbe, StickLodProbe};
 use game_commands::ui::GameCommandStatusText;
 use lod::LodSceneHost;
+use vegetation_components::{FoliageLodProbe, StickLodProbe};
 
 use crate::commands::RequestMeshStats;
 use crate::ui;
@@ -94,10 +94,7 @@ pub struct MeshStatsPlugin;
 
 impl Plugin for MeshStatsPlugin {
 	fn build(&self, app: &mut App) {
-		app.add_systems(
-			PostUpdate,
-			apply_mesh_stats.after(VisibilitySystems::CheckVisibility),
-		);
+		app.add_systems(PostUpdate, apply_mesh_stats.after(VisibilitySystems::CheckVisibility));
 	}
 }
 

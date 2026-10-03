@@ -5,13 +5,13 @@
 //! - **Canopy** — cheap balls on remaining foliage-eligible sites.
 
 use bevy::prelude::*;
+use lod::gen::LodSceneLevel;
 use sbs_geometry::chain::storybook_tree::{
 	is_graph_terminal, StorybookTreeChain, StorybookTreePhase,
 };
 use sbs_geometry::render::mix_seed::mix_seed_below_fraction;
 use sbs_geometry::{BallStickChain, BallStickNode};
 use vegetation_components::{FoliageNode, Placement};
-use lod::gen::LodSceneLevel;
 
 use crate::jungle_canopy_vc::{
 	emit_jungle_canopy_lod, JungleCanopyLodPlan, JungleFoliageCandidate, JungleGrowthEmitMode,

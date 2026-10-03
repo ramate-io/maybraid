@@ -4,12 +4,12 @@
 //! [`LivableApartment`] per suite (no per-cell shells — avoids double-walling).
 
 use bevy_math::Vec3;
-use lod::gen::LodSceneLevel;
-use procedural_common::{NoiseConfig, NoiseParams};
 use building_components::joints::JointNode;
 use building_components::labels::LabelNode;
 use building_components::panels::PanelNode;
 use building_components::{BuildingComponents, BuildingStructuralLodProbe, Layers};
+use lod::gen::LodSceneLevel;
+use procedural_common::{NoiseConfig, NoiseParams};
 
 use crate::fit::{aabb_xz_extent, Confines, FillRegion, FillableRegions, Fit, FitError, SpaceKind};
 use crate::paneling::clipped_rectangular_strip::ClippedRectangularStrip;

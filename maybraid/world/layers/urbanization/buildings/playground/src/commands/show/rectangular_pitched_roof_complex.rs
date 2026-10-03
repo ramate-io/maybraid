@@ -1,10 +1,10 @@
 //! `/show rectangular-pitched-roof-complex` — orthogonal AABB pitched roofs with valleys.
 
 use bevy::prelude::*;
-use clap::{Args, ValueEnum};
 use buildings::{
 	EndCap, OpeningLabel, Overhang, RectangularPitchedRoofComplexParams, RidgeJunction,
 };
+use clap::{Args, ValueEnum};
 
 use super::ShowTransform;
 use crate::preview::PreviewSubject;

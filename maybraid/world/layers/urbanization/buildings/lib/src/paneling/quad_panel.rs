@@ -4,11 +4,11 @@
 //! Use [`Self::into_complex`] to continue editing (e.g. add more triangles).
 
 use bevy_math::Vec3;
-use lod::gen::LodSceneLevel;
 use building_components::joints::JointNode;
 use building_components::panels::{PanelNode, PanelStyle};
 use building_components::partitions::PANEL_Y_HALF;
 use building_components::{BuildingComponents, Layers};
+use lod::gen::LodSceneLevel;
 
 use crate::paneling::panel_complex::{
 	PanelComplex, PanelComplexJointPolicy, PanelPoint, PanelPointId,
@@ -127,9 +127,9 @@ impl From<QuadPanel> for PanelComplex {
 mod tests {
 	use super::*;
 	use bevy_math::{EulerRot, Quat, Vec3};
-	use lod::gen::LodSceneLevel;
 	use building_components::joints::JOINT_KIT_XZ;
 	use building_components::BuildingComponents;
+	use lod::gen::LodSceneLevel;
 
 	#[test]
 	fn coplanar_emits_two_panels_and_no_joint() {

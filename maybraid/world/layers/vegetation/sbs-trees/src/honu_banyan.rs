@@ -16,13 +16,13 @@ mod canopy;
 mod stick;
 
 use bevy::prelude::*;
-use sbs_geometry::{BallStickChain, HonuBanyanChain, HonuBanyanSbs};
-use vegetation_components::{
-	leaf_material_ref, stick_material_ref, FoliageNode, Layers, StickNode,
-	StructuralLod, VegetationComponents,
-};
 use clap::Args;
 use lod::gen::LodSceneLevel;
+use sbs_geometry::{BallStickChain, HonuBanyanChain, HonuBanyanSbs};
+use vegetation_components::{
+	leaf_material_ref, stick_material_ref, FoliageNode, Layers, StickNode, StructuralLod,
+	VegetationComponents,
+};
 
 /// Structural band edges as `distance / tree_radius` (High / Medium / Low).
 const STRUCTURAL_HIGH_FACTOR: f32 = 10.0;

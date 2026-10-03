@@ -140,25 +140,18 @@ fn empty_world() -> World {
 fn wrapper_heights_match_the_ground() -> anyhow::Result<()> {
 	let mut world = empty_world();
 	world.resource_mut::<GroundStore>().fallback = 7.0;
-	world.resource_mut::<GroundStore>().cell = Some(StubRaw {
-		bounds: Aabb3d::from_min_max(Vec3::ZERO, Vec3::splat(40.0)),
-	});
+	world.resource_mut::<GroundStore>().cell =
+		Some(StubRaw { bounds: Aabb3d::from_min_max(Vec3::ZERO, Vec3::splat(40.0)) });
 	let xz = Vec2::new(2.0, 3.0);
 	let stacked_height = {
 		let mut stacked = SystemState::<TerrainView<Stacked>>::new(&mut world);
 		let view = stacked.get(&world).map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		(
-			Stacked::height_at(&view.read, xz),
-			Stacked::fallback_height_at(&view.read, xz),
-		)
+		(Stacked::height_at(&view.read, xz), Stacked::fallback_height_at(&view.read, xz))
 	};
 	let ground_height = {
 		let mut ground = SystemState::<TerrainView<StubGround>>::new(&mut world);
 		let view = ground.get(&world).map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		(
-			StubGround::height_at(&view.read, xz),
-			StubGround::fallback_height_at(&view.read, xz),
-		)
+		(StubGround::height_at(&view.read, xz), StubGround::fallback_height_at(&view.read, xz))
 	};
 	anyhow::ensure!(stacked_height == ground_height);
 	Ok(())
@@ -167,9 +160,8 @@ fn wrapper_heights_match_the_ground() -> anyhow::Result<()> {
 #[test]
 fn overlays_pass_through_the_ground_cell() -> anyhow::Result<()> {
 	let mut world = empty_world();
-	world.resource_mut::<GroundStore>().cell = Some(StubRaw {
-		bounds: Aabb3d::from_min_max(Vec3::ZERO, Vec3::splat(40.0)),
-	});
+	world.resource_mut::<GroundStore>().cell =
+		Some(StubRaw { bounds: Aabb3d::from_min_max(Vec3::ZERO, Vec3::splat(40.0)) });
 	let mut state = SystemState::<TerrainView<Stacked>>::new(&mut world);
 	let view = state.get(&world).map_err(|error| anyhow::anyhow!("{error:?}"))?;
 	let cell = Stacked::overlay_cell(
@@ -217,10 +209,7 @@ fn wrappers_read_the_ground_contract_the_same_update() -> anyhow::Result<()> {
 	app.add_systems(Update, note_contract.run_if(terrain_streaming::<Stacked>));
 
 	app.update();
-	anyhow::ensure!(
-		app.world().resource::<Seen>().0.is_none(),
-		"streaming off skips the reader"
-	);
+	anyhow::ensure!(app.world().resource::<Seen>().0.is_none(), "streaming off skips the reader");
 
 	app.world_mut().resource_mut::<TerrainStreaming<StubGround>>().enabled = true;
 	let next = Aabb3d::from_min_max(Vec3::splat(-4.0), Vec3::splat(4.0));

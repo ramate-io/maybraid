@@ -1,6 +1,6 @@
 use character_ui_menu::SectionOpen;
 
-use crate::{SectionOpenState, event::SectionId};
+use crate::{event::SectionId, SectionOpenState};
 
 impl SectionOpen for SectionOpenState {
 	fn is_open(&self, label: &'static str) -> bool {

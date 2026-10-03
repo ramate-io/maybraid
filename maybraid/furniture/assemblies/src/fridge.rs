@@ -2,8 +2,8 @@
 
 use crate::palette::{enamel, hardware};
 use crate::Assembly;
-use furniture_components::{run_slab, slab, PartKind, PlacedPart};
 use building_components::FurnitureGeometry;
+use furniture_components::{run_slab, slab, PartKind, PlacedPart};
 use std::f32::consts::PI;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

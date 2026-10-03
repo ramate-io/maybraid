@@ -1,7 +1,7 @@
 //! [`BuildWithNoise`] for [`LevantineScrubTorch`].
 
-use sbs_geometry::PenmarchTorchSbs;
 use procedural_common::{BuildWithNoise, NoiseConfig, NoiseParams, UnitRange};
+use sbs_geometry::PenmarchTorchSbs;
 
 use crate::levantine_scrub::LevantineScrubTorch;
 

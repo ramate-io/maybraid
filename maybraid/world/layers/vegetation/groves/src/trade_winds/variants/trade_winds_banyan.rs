@@ -1,7 +1,7 @@
 //! [`BuildWithNoise`] for [`TradeWindsBanyan`] (Honu and Sope forms).
 
-use sbs_geometry::{HonuBanyanSbs, SopesBanyanSbs};
 use procedural_common::{BuildWithNoise, NoiseConfig, NoiseParams, UnitRange};
+use sbs_geometry::{HonuBanyanSbs, SopesBanyanSbs};
 
 use crate::trade_winds::TradeWindsBanyan;
 

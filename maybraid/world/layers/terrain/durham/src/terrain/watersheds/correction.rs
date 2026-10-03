@@ -9,15 +9,15 @@
 //! ```
 
 use crate::terrain::cell::original_ids_for_origin_cells;
-use crate::terrain::watersheds::high_pass::{PocketWatersHighPass, PocketHighPassCell};
-use crate::terrain::watersheds::low_pass::{PocketWatersLowPass, PocketLowPassCell};
+use crate::terrain::watersheds::high_pass::{PocketHighPassCell, PocketWatersHighPass};
+use crate::terrain::watersheds::low_pass::{PocketLowPassCell, PocketWatersLowPass};
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use lod::gen::{GeneratingSpatialIndex, GenerationScheme, Id, OriginalId};
 use lod::lod_ref::LodRef;
-use terrain_watersheds::{CorrectionStage, HydroComplex};
 use procedural_common::Bounds2;
 use std::sync::Arc;
+use terrain_watersheds::{CorrectionStage, HydroComplex};
 
 /// Origin-grid hydrology complex: unions hydrology nodes from both pocket-water passes.
 #[derive(Debug, Clone, Component)]
@@ -66,24 +66,22 @@ where
 		let seed = cell_seed(cell, configs.seed);
 
 		let mut hydrology = Vec::new();
-		for pass in
-			GeneratingSpatialIndex::<PocketWatersHighPass>::get_or_generate_region_values(
-				spatial_index,
-				cell,
-				lod_ref,
-			) {
+		for pass in GeneratingSpatialIndex::<PocketWatersHighPass>::get_or_generate_region_values(
+			spatial_index,
+			cell,
+			lod_ref,
+		) {
 			hydrology.extend(
 				pass.hydro_nodes()
 					.into_iter()
 					.filter(|node| node.correction_intersects(cell_bounds)),
 			);
 		}
-		for pass in
-			GeneratingSpatialIndex::<PocketWatersLowPass>::get_or_generate_region_values(
-				spatial_index,
-				cell,
-				lod_ref,
-			) {
+		for pass in GeneratingSpatialIndex::<PocketWatersLowPass>::get_or_generate_region_values(
+			spatial_index,
+			cell,
+			lod_ref,
+		) {
 			hydrology.extend(
 				pass.hydro_nodes()
 					.into_iter()

@@ -1,11 +1,9 @@
 use bevy::prelude::*;
-use sbs_trees::QuantizedPlant;
-use vegetation_components::{
-	FoliageNode, Layers, StickNode, StructuralLod, VegetationComponents,
-};
 use clap::Args;
 use lod::gen::LodSceneLevel;
 use procedural_common::{noise_params_from_scalar_str, NoiseParams};
+use sbs_trees::QuantizedPlant;
+use vegetation_components::{FoliageNode, Layers, StickNode, StructuralLod, VegetationComponents};
 
 use super::{
 	definition, BraidGrassCell, DEEP_GREEN_BLADE, DEEP_GREEN_PATCH, FOUNTAIN_SPEAR, GREEN_SPEAR,

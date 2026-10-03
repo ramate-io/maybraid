@@ -151,8 +151,8 @@ impl From<RuledStrip> for PanelComplex {
 mod tests {
 	use super::*;
 	use bevy_math::Vec3;
-	use lod::gen::LodSceneLevel;
 	use building_components::BuildingComponents;
+	use lod::gen::LodSceneLevel;
 
 	fn example_lines() -> (Vec<Vec3>, Vec<Vec3>) {
 		let rail_a =

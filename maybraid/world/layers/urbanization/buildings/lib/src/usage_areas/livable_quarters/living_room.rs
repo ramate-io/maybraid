@@ -5,10 +5,10 @@ mod parameterized;
 
 pub use parameterized::{LivingRoomParameterized, LivingRoomPlan, SCOPE};
 
-use lod::gen::LodSceneLevel;
-use procedural_common::NoiseParams;
 use building_components::furniture::FurnitureNode;
 use building_components::{BuildingComponents, LabelNode, LabelStyle, Layers};
+use lod::gen::LodSceneLevel;
+use procedural_common::NoiseParams;
 
 use crate::fit::{Confines, FillableRegions, Fit, FitError};
 use crate::usage_areas::furniture_util::{furniture_fill, FurnitureFill};

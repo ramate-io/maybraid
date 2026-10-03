@@ -2,12 +2,12 @@
 
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
-use vegetation_bumpout::{init_bump_out_material_caches, BumpOutMaterialLib};
-use vegetation_shaders::{init_vegetation_material_caches, VegetationMaterialLib};
 use material_ref::{
 	material_ref_plugin_installed, MaterialLib, MaterialRef, MaterialRefPlugin,
 	StandardMaterialLib, StandardMaterialRefCache,
 };
+use vegetation_bumpout::{init_bump_out_material_caches, BumpOutMaterialLib};
+use vegetation_shaders::{init_vegetation_material_caches, VegetationMaterialLib};
 
 /// Vegetation playground / world-view lib: bump-out, then leaf/stick/frond, then Standard.
 #[derive(SystemParam)]

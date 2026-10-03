@@ -6,8 +6,8 @@ mod material_lib;
 mod urban_surface;
 
 pub use material_lib::{
-	init_urban_material_caches, UrbanMaterialLib, UrbanMaterialRefPlugin,
-	UrbanSurfaceMaterialLib, UrbanSurfaceMaterialRefCache,
+	init_urban_material_caches, UrbanMaterialLib, UrbanMaterialRefPlugin, UrbanSurfaceMaterialLib,
+	UrbanSurfaceMaterialRefCache,
 };
 pub use urban_surface::{
 	is_urban_surface_recipe, UrbanSurfaceKind, UrbanSurfaceMaterial, UrbanSurfaceMaterialPlugin,

@@ -63,10 +63,10 @@ pub use host::{spawn_furniture_cell, FurnitureCell};
 pub use on_buildings::{paint_host_furniture, PaintedFurniture};
 pub use partition::{Partition, PartitionParams};
 pub use plugin::{FurnitureAssembliesPlugin, FurnitureKitMeshes};
-pub use slots::FurnitureSlotSource;
 pub use present::{filled_slot_scene, filled_slots_scene};
 pub use range::{Range, RangeParams};
 pub use shelf::{Shelf, ShelfParams};
+pub use slots::FurnitureSlotSource;
 pub use stream::{
 	FurnitureIndex, FurnitureLodChan, FurnitureRefresh, FurnitureStreamPlugin,
 	FurnitureStreamSystems, PresentedFurnitureCellId,

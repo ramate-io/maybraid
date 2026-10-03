@@ -3,9 +3,11 @@
 use bevy::ecs::system::{SystemParam, SystemParamItem};
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
+use layer_stack::RequireLayer;
 use lod::lod_ref::LodRef;
-use terrain_layer_model::{BaseTerrainGenerationCore, HeightField, TerrainCell, TerrainGeneration, TerrainModel};
-use layer_stack::{RequireLayer};
+use terrain_layer_model::{
+	BaseTerrainGenerationCore, HeightField, TerrainCell, TerrainGeneration, TerrainModel,
+};
 
 use crate::terrain::cell::TerrainCellLayout;
 use crate::terrain::host::{
@@ -174,7 +176,6 @@ impl DurhamTerrainConfig {
 			terrain_radius: terrain_radius.max(1),
 		}
 	}
-
 }
 
 impl TerrainGeneration for Durham {
@@ -188,7 +189,6 @@ impl TerrainGeneration for Durham {
 		apply_durham_generation(world, config);
 	}
 }
-
 
 #[cfg(test)]
 mod tests {

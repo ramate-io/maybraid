@@ -1,8 +1,8 @@
 //! `/show pitched-rectangular-roof` — two-half pitched roof (rectangular hip by default).
 
 use bevy::prelude::*;
-use clap::Args;
 use buildings::{OpeningLabel, PitchedRoof, PitchedRoofParams};
+use clap::Args;
 
 use super::opening::{parse_opening_arg, OpeningArg, PreviewOpening};
 use super::ShowTransform;

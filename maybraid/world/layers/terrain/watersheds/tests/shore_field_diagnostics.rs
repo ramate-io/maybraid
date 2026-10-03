@@ -15,16 +15,16 @@
 //!   to confirm reach `frame()` depth disagrees with capsule \(\phi\) at end-caps.
 
 use bevy_math::Vec2;
-use terrain_stamps::RegionNoise;
-use terrain_watersheds::{
-	CorrectionStage, Ellipse, HydroComplex, HydroElevation, HydroFootprint, HydroNode, HydroParams,
-	HydroPrimitive, RadialBowl, ReachProfile, ReachSegment,
-};
 use procedural_common::Bounds2;
 use std::f32::consts::TAU;
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
+use terrain_stamps::RegionNoise;
+use terrain_watersheds::{
+	CorrectionStage, Ellipse, HydroComplex, HydroElevation, HydroFootprint, HydroNode, HydroParams,
+	HydroPrimitive, RadialBowl, ReachProfile, ReachSegment,
+};
 
 /// SVG written beside `maybraid/world/layers/terrain/watersheds/Cargo.toml`.
 const PLOT_REL: &str = "shore_field_diagnostics.svg";

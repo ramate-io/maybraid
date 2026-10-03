@@ -6,9 +6,6 @@
 
 use bevy_math::bounding::{Aabb2d, Aabb3d, BoundingVolume};
 use bevy_math::{Vec2, Vec3};
-use lod::gen::LodSceneLevel;
-use material_ref::MaterialRef;
-use procedural_common::NoiseParams;
 use building_components::doors::DoorNode;
 use building_components::floors::FloorNode;
 use building_components::furniture::FurnitureNode;
@@ -18,9 +15,10 @@ use building_components::panels::{PanelNode, PanelStyle};
 use building_components::partitions::{PartitionNode, PartitionStyle};
 use building_components::roofs::RoofNode;
 use building_components::stairs::StairNode;
-use building_components::{
-	BuildingComponents, BuildingStructuralLodProbe, Layers, MassingVolume,
-};
+use building_components::{BuildingComponents, BuildingStructuralLodProbe, Layers, MassingVolume};
+use lod::gen::LodSceneLevel;
+use material_ref::MaterialRef;
+use procedural_common::NoiseParams;
 
 use crate::connecting::{ConnectingStairwell, StairwellKind, WellAabb, WellSide};
 use crate::fit::{aabb_xz_extent, Confines, FillableRegions, Fit, FitError};
@@ -209,10 +207,7 @@ impl BuildingComponents for SingleHighriseStorey {
 	storey_components!(door_nodes_for_level, DoorNode);
 	storey_components!(joint_nodes_for_level, JointNode);
 	storey_components!(furniture_nodes_for_level, FurnitureNode);
-	storey_components!(
-		furniture_usage_nodes_for_level,
-		building_components::FurnitureUsageNode
-	);
+	storey_components!(furniture_usage_nodes_for_level, building_components::FurnitureUsageNode);
 	storey_components!(label_nodes_for_level, LabelNode);
 }
 
@@ -286,10 +281,7 @@ impl BuildingComponents for ApartmentMonotower {
 	tower_components!(door_nodes_for_level, DoorNode);
 	tower_components!(joint_nodes_for_level, JointNode);
 	tower_components!(furniture_nodes_for_level, FurnitureNode);
-	tower_components!(
-		furniture_usage_nodes_for_level,
-		building_components::FurnitureUsageNode
-	);
+	tower_components!(furniture_usage_nodes_for_level, building_components::FurnitureUsageNode);
 	tower_components!(label_nodes_for_level, LabelNode);
 }
 

@@ -3,8 +3,8 @@
 use std::marker::PhantomData;
 
 use bevy::app::{App, Plugin};
-use lod::LodPresentGate;
 use layer_stack::{install_lod_present_gate, subscribe_mode, GenerationMode};
+use lod::LodPresentGate;
 use terrain_layer_model::TerrainModel;
 use vegetation_layer_model::{Vegetation, VegetationGeneration};
 
@@ -56,9 +56,10 @@ where
 {
 	fn build(&self, app: &mut App) {
 		subscribe_mode::<(Vegetation<V>, VegetationPresent), Mode>(app);
-		install_lod_present_gate::<(Vegetation<V>, VegetationPresent), (Vegetation<V>, VegetationPresent)>(
-			app,
-		);
+		install_lod_present_gate::<
+			(Vegetation<V>, VegetationPresent),
+			(Vegetation<V>, VegetationPresent),
+		>(app);
 		if !app.is_plugin_added::<VegetationPresentationCore<V>>() {
 			app.add_plugins(VegetationPresentationCore::<V>::default());
 		}

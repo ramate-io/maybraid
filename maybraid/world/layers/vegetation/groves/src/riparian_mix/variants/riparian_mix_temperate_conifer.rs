@@ -1,7 +1,7 @@
 //! [`BuildWithNoise`] for [`RiparianMixTemperateConifer`].
 
-use sbs_geometry::FriendsConiferSbs;
 use procedural_common::{BuildWithNoise, NoiseConfig, NoiseParams, UnitRange, UsizeRange};
+use sbs_geometry::FriendsConiferSbs;
 
 use crate::riparian_mix::RiparianMixTemperateConifer;
 

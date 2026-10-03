@@ -6,14 +6,14 @@ mod pad;
 
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
-use movement_intelligence_richmond::{
-	circulation_from_stairwell, circulation_from_storey, CirculationStairwell,
-};
-use procedural_common::NoiseParams;
 use building_components::{building_bounds, spawn_building_components};
 use building_physics::{spawn_building_walk_colliders, BUILDING_FRICTION};
 use buildings::wall_demo::TerrainPerimeterWall;
 use buildings::{Confines, Fit, FitError, Openings};
+use movement_intelligence_richmond::{
+	circulation_from_stairwell, circulation_from_storey, CirculationStairwell,
+};
+use procedural_common::NoiseParams;
 use urbanization_developments::MixedUseLesHallesDevelopment;
 
 pub use pad::{spawn_pad, ArenaPad};

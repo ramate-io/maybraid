@@ -4,8 +4,8 @@ use bevy::math::Vec3;
 
 use crate::palette::carcass;
 use crate::Assembly;
-use furniture_components::{shift, slab_xz, PartKind, PlacedPart};
 use building_components::FurnitureGeometry;
+use furniture_components::{shift, slab_xz, PartKind, PlacedPart};
 
 const SLATS: usize = 5;
 

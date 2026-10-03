@@ -11,13 +11,13 @@
 //! matters (e.g. grove authorship).
 
 use bevy::prelude::*;
+use clap::Args;
+use lod::gen::LodSceneLevel;
+use procedural_common::{NoiseConfig, NoiseParams};
 use sbs_geometry::BladeTuftShape;
 use vegetation_components::{
 	FoliageNode, FrondCollection, FrondRun, Layers, Placement, StickNode, VegetationComponents,
 };
-use clap::Args;
-use lod::gen::LodSceneLevel;
-use procedural_common::{NoiseConfig, NoiseParams};
 
 /// Authoring / CLI parameters for a tuft patch.
 #[derive(Component, Clone, Args, Debug, PartialEq)]

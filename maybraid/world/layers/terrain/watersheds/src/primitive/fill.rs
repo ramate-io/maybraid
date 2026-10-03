@@ -6,8 +6,8 @@
 
 use crate::primitive::complex::HydroComplex;
 use bevy_math::{Vec2, Vec3};
-use terrain_stamps::Region2D;
 use std::sync::Arc;
+use terrain_stamps::Region2D;
 
 /// Water surface elevation model decided by the stamp.
 #[derive(Debug, Clone)]

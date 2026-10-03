@@ -3,8 +3,8 @@
 //! The belly half-width is **length-proportional** (`length * belly_factor`); the base tapers
 //! to roughly a third of the belly, keeping the authored belly→tip ribbon profile.
 
-use sbs_geometry::SpearTuftShape;
 use procedural_common::{BuildWithNoise, NoiseConfig, NoiseParams, UnitRange};
+use sbs_geometry::SpearTuftShape;
 
 use crate::braid_grass::BraidSpearClump;
 

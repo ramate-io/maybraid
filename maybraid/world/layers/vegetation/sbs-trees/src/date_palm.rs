@@ -17,13 +17,13 @@
 mod crown;
 
 use bevy::prelude::*;
+use clap::Args;
+use lod::gen::LodSceneLevel;
 use sbs_geometry::FrondCrownShape;
 use sbs_geometry::{BallStickChain, DatePalmChain, DatePalmSbs};
 use vegetation_components::{
 	stick_material_ref, FoliageNode, Layers, StickNode, StructuralLod, VegetationComponents,
 };
-use clap::Args;
-use lod::gen::LodSceneLevel;
 
 use crate::palm_crown::{
 	PalmCrownParams, DATE_PALM_FROND_LENGTH_FRACTION, DATE_PALM_FROND_WIDTH_FRACTION,

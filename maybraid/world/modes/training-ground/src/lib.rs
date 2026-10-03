@@ -6,21 +6,31 @@
 
 use bevy::prelude::*;
 use chico::{install_vegetation_stream, Chico, ChicoConfig};
-use durham::{Durham, DurhamTerrainConfig, TerrainFillSystems, TerrainRetarget};
-use layer_stack::{GenerationMode, GenerationModeSystems};
+use durham::{
+	Durham, DurhamTerrainConfig, TerrainColliderSystems, TerrainFillSystems, TerrainRetarget,
+};
+use layer_stack::{
+	in_generation_mode, ActiveGenerationMode, GenerationMode, GenerationModeSystems,
+};
 use richmond::Richmond;
 use terrain_layer_model::{BaseTerrainModeConfig, BaseTerrainScheme, OnTerrain};
 use urbanization_layer_model::Urbanization;
 use vegetation_layer_model::VegetationScheme;
+use world_player::{PlayerLifeEnded, PlayerLifeSet};
 
 mod arena;
+mod markers;
 mod mobs;
+mod plaza;
 mod round;
+mod session;
 mod urbanization;
 
 pub use arena::TrainingArena;
+pub use markers::TrainingEnemyMarkersEnabled;
 pub use mobs::TrainingBrawler;
 pub use round::{TrainingMap, TrainingRound, TRAINING_FINE_HALF_EXTENT_CELLS};
+pub use session::{training_trainee, TrainingLifeEnded, TrainingSessionSet, TrainingTrainee};
 pub use urbanization::{
 	pad_influence_region, terrain_ids_under_pads, training_development_cell, TrainingPlazaStamped,
 	TrainingStampSettled, TRAINING_ARENA_MARGIN_M, TRAINING_ARENA_MAX_HALF_M,
@@ -63,6 +73,61 @@ fn apply_training_patch(
 		return;
 	}
 	terrain.apply(round.layout(), config.config.coverage, config.config.terrain_radius, true);
+}
+
+/// Plaza, score, markers, and the trainee roll for a Training session.
+pub struct TrainingGroundPlugin;
+
+impl Plugin for TrainingGroundPlugin {
+	fn build(&self, app: &mut App) {
+		session::register_training_policy(app);
+		app.init_resource::<TrainingRound>()
+			.init_resource::<TrainingEnemyMarkersEnabled>()
+			.add_message::<TrainingLifeEnded>()
+			.add_message::<PlayerLifeEnded>()
+			.configure_sets(Update, PlayerLifeSet::Resolve)
+			.configure_sets(Update, TrainingSessionSet::LifeEnded.after(PlayerLifeSet::Resolve))
+			.add_systems(
+				OnEnter(ActiveGenerationMode::of::<TrainingGround>()),
+				session::open_training_score,
+			)
+			.add_systems(
+				OnExit(ActiveGenerationMode::of::<TrainingGround>()),
+				(
+					session::close_training_score,
+					session::clear_training_live_enemies,
+					plaza::request_training_leave,
+				),
+			)
+			.add_systems(
+				Update,
+				(
+					(
+						plaza::park_on_training_site,
+						plaza::mount_training_plaza,
+						plaza::promote_training_plaza.after(TerrainColliderSystems::QueueMeshes),
+						plaza::reseat_training_life,
+						session::count_training_enemies,
+						markers::sync_training_enemy_markers,
+					)
+						.run_if(in_generation_mode::<TrainingGround>()),
+					session::note_training_life_ended
+						.in_set(TrainingSessionSet::LifeEnded)
+						.run_if(in_generation_mode::<TrainingGround>()),
+				),
+			)
+			// Wall fixtures and the player anchor tear down in Last so combat
+			// commands queued through PostUpdate still find their targets.
+			.add_systems(
+				Last,
+				(
+					plaza::clear_stale_training_plaza
+						.run_if(in_generation_mode::<TrainingGround>()),
+					(plaza::finish_training_leave, markers::despawn_training_enemy_markers)
+						.run_if(resource_exists::<plaza::TrainingLeave>),
+				),
+			);
+	}
 }
 
 #[cfg(test)]

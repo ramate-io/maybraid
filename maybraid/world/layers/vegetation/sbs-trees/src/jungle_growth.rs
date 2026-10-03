@@ -4,12 +4,10 @@
 //! [`crate::jungle_growth_vc`]. Approximates jungle-growth foliage without the inner dirt/wood ball.
 
 use bevy::prelude::*;
-use sbs_geometry::JungleGrowthShape;
-use vegetation_components::{
-	FoliageNode, Layers, StickNode, StructuralLod, VegetationComponents,
-};
 use clap::Args;
 use lod::gen::LodSceneLevel;
+use sbs_geometry::JungleGrowthShape;
+use vegetation_components::{FoliageNode, Layers, StickNode, StructuralLod, VegetationComponents};
 
 use crate::jungle_growth_vc::{jungle_growth_foliage_nodes, JungleGrowthVcParams};
 

@@ -6,10 +6,10 @@
 //! [`ClippedRuledStrip`] faces.
 
 use bevy_math::Vec3;
-use lod::gen::LodSceneLevel;
 use building_components::joints::JointNode;
 use building_components::panels::{PanelNode, PanelStyle};
 use building_components::{BuildingComponents, Layers};
+use lod::gen::LodSceneLevel;
 
 use crate::paneling::clipped_ruled_strip::ClippedRuledStrip;
 use crate::paneling::panel_complex::PanelComplexJointPolicy;
@@ -490,8 +490,8 @@ mod tests {
 
 	#[test]
 	fn disabled_faces_omit_presentation() {
-		use lod::gen::LodSceneLevel;
 		use building_components::BuildingComponents;
+		use lod::gen::LodSceneLevel;
 
 		let nodes = [level_node(0.0, 1.0, 1.0), level_node(2.0, 1.0, 1.0)];
 		let full = Tube::from_nodes(PanelStyle::RoughStonework, nodes);

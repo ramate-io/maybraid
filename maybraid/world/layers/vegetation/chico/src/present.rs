@@ -5,12 +5,12 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use bevy::log::info_span;
 use bevy::prelude::*;
 use bevy::tasks::{AsyncComputeTaskPool, Task};
-use vegetation_groves::GroveWorldSample;
-use vegetation_components::spawn_lod_scene_host_with_lod_ref;
 use futures::FutureExt;
 use lod::gen::{Id, SpatialIndex, Version};
 use lod::lod_ref::LodRef;
 use lod::{hide_lod_tree, LodScene};
+use vegetation_components::spawn_lod_scene_host_with_lod_ref;
+use vegetation_groves::GroveWorldSample;
 
 use crate::{ChicoGrove, ChicoGroveHost, ForestGroveTile, ForestIndex, ForestLayer};
 
@@ -86,10 +86,8 @@ impl ForestPresenterState {
 	}
 
 	pub fn insert_presented(&mut self, id: Id, entities: Vec<Entity>) {
-		self.presented.insert(
-			id,
-			PresentedGrove { version: Version(1), entities, hidden: false },
-		);
+		self.presented
+			.insert(id, PresentedGrove { version: Version(1), entities, hidden: false });
 	}
 
 	pub fn presented_ids(&self) -> Vec<Id> {

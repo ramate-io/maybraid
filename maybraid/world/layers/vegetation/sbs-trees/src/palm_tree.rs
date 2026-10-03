@@ -223,8 +223,8 @@ mod tests {
 	#[test]
 	fn high_waialea_rachis_tips_hang() -> Result<()> {
 		use crate::waialea_palm::WaialeaPalmParams;
-		use vegetation_components::VegetationComponents;
 		use lod::gen::LodSceneLevel;
+		use vegetation_components::VegetationComponents;
 
 		let built = WaialeaPalmParams::default().build();
 		let nodes = built.foliage_nodes_for_level(LodSceneLevel::High).flatten();

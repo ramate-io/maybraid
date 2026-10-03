@@ -1,7 +1,7 @@
 //! [`BuildWithNoise`] for [`ConiferMassivesLiamsConifer`].
 
-use sbs_geometry::LiamsConiferSbs;
 use procedural_common::{BuildWithNoise, NoiseConfig, NoiseParams, UnitRange};
+use sbs_geometry::LiamsConiferSbs;
 
 use crate::conifer_massives::ConiferMassivesLiamsConifer;
 

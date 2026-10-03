@@ -1,12 +1,12 @@
 //! `/topple` commands for the Topple concept species.
 
 use bevy::prelude::*;
-use clap::{Args, Subcommand};
 use character_items::{ClothingMaterial, ClothingMesh};
 use characters::species::{
 	common::{EyeMesh, HairMesh},
 	topple::{ToppleBeakColor, ToppleBeakMesh, ToppleConfig, ToppleEyeColor, TopplePlumageColor},
 };
+use clap::{Args, Subcommand};
 
 use crate::{animation::ConceptAnimation, preview::ConceptPreviewConfig};
 

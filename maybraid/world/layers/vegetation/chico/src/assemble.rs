@@ -330,8 +330,8 @@ mod tests {
 	use crate::{select_cell, ForestGroveKind, ForestLayer, LayeringKind, SelectedLayers};
 	use anyhow::Result;
 	use bevy_math::Vec3;
-	use vegetation_groves::FlatTerrainSample;
 	use procedural_common::NoiseParams;
+	use vegetation_groves::FlatTerrainSample;
 
 	#[test]
 	fn grow_one_ag_town_orchard_tile() -> Result<()> {

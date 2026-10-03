@@ -4,10 +4,10 @@
 //! composition is handled by the LodScene host (not ChildOf mesh roots as in RenderItem).
 
 use anyhow::Result;
+use lod::gen::LodSceneLevel;
 use sbs_geometry::DatePalmSbs;
 use sbs_trees::{DatePalmParams, PalmBushParams};
 use vegetation_components::VegetationComponents;
-use lod::gen::LodSceneLevel;
 
 #[test]
 fn palm_bush_ring_anchors_are_tree_local() -> Result<()> {

@@ -4,8 +4,8 @@
 use std::sync::Arc;
 
 use bevy::prelude::*;
-use mob_scenes::{MobKind, MobRosterRecipe, MobScene};
 use mob_characters::{CharacterInventory, CharacterSpecies, MobCharacter};
+use mob_scenes::{MobKind, MobRosterRecipe, MobScene};
 
 /// Stable seed for `MobScene::of_kind`. Count is truncated after generation.
 pub const PLAYGROUND_NUM: f32 = 4.0;

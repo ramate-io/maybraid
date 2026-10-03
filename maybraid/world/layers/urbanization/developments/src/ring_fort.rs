@@ -9,9 +9,6 @@ use std::sync::Arc;
 
 use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::{Vec2, Vec3};
-use lod::gen::LodSceneLevel;
-use material_ref::MaterialRef;
-use procedural_common::{NoiseConfig, NoiseParams};
 use building_components::furniture::FurnitureNode;
 use building_components::panels::PanelStyle;
 use building_components::{
@@ -26,6 +23,9 @@ use buildings::{
 	PanelPillarLine, PanelPoint, RectRingFloor, RectRingFloorParams, RectRingFloorSlab,
 	RectangularPitchedRoofComplex, RectangularPitchedRoofComplexParams, StairwellKind, WellAabb,
 };
+use lod::gen::LodSceneLevel;
+use material_ref::MaterialRef;
+use procedural_common::{NoiseConfig, NoiseParams};
 
 use crate::connected::{ConnectedDevelopment, DevelopmentEdge};
 use crate::les_halles::{courtyard_well_side, MixedUseLesHallesHost};
@@ -987,9 +987,9 @@ mod tests {
 
 	#[test]
 	fn with_finish_shades_keeps_and_gallery_roof() -> anyhow::Result<()> {
+		use building_components::BuildingComponents;
 		use lod::gen::LodSceneLevel;
 		use material_ref::MaterialId;
-		use building_components::BuildingComponents;
 
 		let wall = MaterialRef::named("stucco");
 		let roof = MaterialRef::named("iron");

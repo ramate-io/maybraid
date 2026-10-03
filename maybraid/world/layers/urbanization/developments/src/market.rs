@@ -2,10 +2,10 @@
 
 use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::{Vec2, Vec3};
-use lod::gen::LodSceneLevel;
 use building_components::panels::{PanelNode, PanelStyle};
 use building_components::{BuildingComponents, JointNode, Layers};
 use buildings::{Openings, RectFloor, RectFloorParams, RectFloorSlab};
+use lod::gen::LodSceneLevel;
 
 use crate::{BuildingFootprint, ConnectedDevelopment, PlacedBuilding, ShepherdsVillageBuilding};
 

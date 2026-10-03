@@ -30,8 +30,8 @@ pub use lod_host::{
 	posed_foliage_multi_scene_merge, posed_frond_multi_scene_merge, posed_material_asset_tier,
 };
 pub use materials::{
-	frond_material_ref, leaf_material_ref, stick_material_ref,
-	FROND_MATERIAL, LEAF_MATERIAL, STICK_MATERIAL,
+	frond_material_ref, leaf_material_ref, stick_material_ref, FROND_MATERIAL, LEAF_MATERIAL,
+	STICK_MATERIAL,
 };
 pub use placed::Placement;
 pub use placed_vegetation::{PlacedVegetation, VegetationInstance};

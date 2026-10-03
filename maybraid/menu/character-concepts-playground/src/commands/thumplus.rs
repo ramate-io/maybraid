@@ -1,8 +1,8 @@
 //! `/thumplus` commands for the Thumplus concept species.
 
 use bevy::prelude::*;
-use clap::{Args, Subcommand};
 use characters::species::thumplus::{ThumplusBodyColor, ThumplusColors, ThumplusConfig};
+use clap::{Args, Subcommand};
 
 use crate::{animation::ConceptAnimation, preview::ConceptPreviewConfig};
 

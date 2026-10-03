@@ -155,9 +155,7 @@ fn strip_humanoid_clothing(
 #[cfg(test)]
 mod tests {
 	use anyhow::Context;
-	use character_items::{
-		ClothingMaterial, ClothingMesh, Inventory, InventoryItem, ItemColor,
-	};
+	use character_items::{ClothingMaterial, ClothingMesh, Inventory, InventoryItem, ItemColor};
 
 	use crate::appearance::CharacterAppearance;
 

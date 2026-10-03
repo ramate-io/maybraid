@@ -9,6 +9,8 @@ pub mod character;
 pub mod commands;
 pub mod diagnostics;
 pub mod player;
+pub mod policy;
+pub mod seat;
 mod ui;
 
 pub use camera::CameraController;
@@ -16,9 +18,7 @@ pub use character::{
 	CharacterSpecies, PlayerVisual, RequestSetCharacter, RequestSetCharacterAppearance,
 };
 pub use commands::{RequestMeshStats, RequestModeCharacter, RequestModeFree};
-pub use diagnostics::{
-	MeshStatsPlugin, PlaygroundDiag, PlaygroundTimingPlugin, RequestFpsToggle,
-};
+pub use diagnostics::{MeshStatsPlugin, PlaygroundDiag, PlaygroundTimingPlugin, RequestFpsToggle};
 pub use durham::{TerrainCoverage, WorldBaseTerrain, WORLD_FINE_HALF_EXTENT_CELLS};
 pub use game_commands::command::PendingStartupCommand;
 pub use player::{
@@ -28,6 +28,10 @@ pub use player::{
 	PlayerControlSystems, PlayerPhysicsEnabled, PlayerPlugin, PlayerSpawnXz, PlaygroundMode,
 	VegetationPlayerMotor,
 };
+pub use policy::{
+	ModePlayerPolicies, ModePlayerPolicy, PlayerLifeEnded, PlayerLifeSet, RespawnOrigin,
+};
+pub use seat::PlayerSeat;
 
 use avian3d::prelude::LinearVelocity;
 use bevy::prelude::*;

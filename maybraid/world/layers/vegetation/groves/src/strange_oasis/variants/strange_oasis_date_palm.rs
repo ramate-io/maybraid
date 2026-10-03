@@ -1,7 +1,7 @@
 //! [`BuildWithNoise`] for [`StrangeOasisDatePalm`].
 
-use sbs_geometry::DatePalmSbs;
 use procedural_common::{BuildWithNoise, NoiseConfig, NoiseParams, UnitRange};
+use sbs_geometry::DatePalmSbs;
 
 use crate::strange_oasis::StrangeOasisDatePalm;
 

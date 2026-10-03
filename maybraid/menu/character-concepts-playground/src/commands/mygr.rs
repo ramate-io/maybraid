@@ -1,12 +1,12 @@
 //! `/mygr` commands for the Mygr concept species.
 
 use bevy::prelude::*;
-use clap::{Args, Subcommand};
 use character_items::{ClothingMaterial, ClothingMesh};
 use characters::species::{
 	common::{EyeMesh, HairMesh},
 	mygr::{MygrConfig, MygrEyeColor, MygrSkinColor},
 };
+use clap::{Args, Subcommand};
 
 use crate::{animation::ConceptAnimation, preview::ConceptPreviewConfig};
 

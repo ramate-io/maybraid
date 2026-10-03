@@ -8,8 +8,8 @@ mod scene;
 mod species;
 
 use bevy::prelude::*;
-use characters::CharacterHostsPlugin;
 use character_inventory_user::InventoryUserPlugin;
+use characters::CharacterHostsPlugin;
 use firearms::{add_firearm_components_host, FirearmHostsPlugin};
 use npc_intelligence::NpcIntelligencePlugin;
 use player::PlayerPlugin;

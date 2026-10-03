@@ -1,7 +1,7 @@
 //! [`BuildWithNoise`] for [`TropicalUndergrowthStorybook`].
 
-use sbs_geometry::StorybookTreeSbs;
 use procedural_common::{BuildWithNoise, NoiseConfig, NoiseParams, UnitRange};
+use sbs_geometry::StorybookTreeSbs;
 
 use crate::tropical_undergrowth::variants::tropical_undergrowth_vase_tree::{
 	understory_ring_spacing, UNDERSTORY_ANCHORS_PER_RING,

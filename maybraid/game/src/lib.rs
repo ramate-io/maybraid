@@ -17,14 +17,15 @@ use crate::shell::{
 };
 use bevy::prelude::*;
 use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
-use maybraid_game_mode_training_ground::TrainingRound;
+use maybraid_game_mode_training_ground::{
+	TrainingEnemyMarkersEnabled, TrainingRound, TrainingSessionSet,
+};
 use maybraid_input::MenuNavPad;
 use maybraid_menu_controller::MenuControllerPlugin;
 use maybraid_world::{
 	resume_discovery_from_saved_waypoints, InventoryEditCameraFollow, PlayerPhysicsEnabled,
-	Durham, PlayerSpawnXz, ShadowQuality, TerrainStreaming, TrainingEnemyMarkersEnabled,
-	WorldGameplayEnabled, WorldMobHudEnabled, WorldPlayerLoadout, WorldPlugin,
-	WorldSceneryVisible, WorldSurfaceSet,
+	Durham, PlayerSpawnXz, ShadowQuality, TerrainStreaming, WorldGameplayEnabled,
+	WorldMobHudEnabled, WorldPlayerLoadout, WorldPlugin, WorldSceneryVisible, WorldSurfaceSet,
 };
 use menu_components::{
 	consume_screen_back, ActiveOverlayKey, MenuBackConsumed, ScreenBackPressed, ShortTextModal,
@@ -134,7 +135,9 @@ impl Plugin for GamePlugin {
 						.before(LoadingScreenSystems::Apply),
 					route_home_choice.run_if(in_state(GameFlow::Home)),
 					crate::training::start_training_session.run_if(in_state(GameFlow::Home)),
-					crate::training::reload_training_round.run_if(in_state(GameFlow::World)),
+					crate::training::reload_training_round
+						.run_if(in_state(GameFlow::World))
+						.after(TrainingSessionSet::LifeEnded),
 					home_settings_back
 						.after(TextMenuSystems::Navigate)
 						.run_if(in_state(GameFlow::Home)),
@@ -556,7 +559,7 @@ mod tests {
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		assert_eq!(
 			world.get_resource::<WorldPlayerLoadout>(),
-			Some(&maybraid_world::training_trainee(round))
+			Some(&crate::training::trainee_loadout(round))
 		);
 		Ok(())
 	}
@@ -568,7 +571,7 @@ mod tests {
 		let id = CharacterId(7);
 		character_inventory_user::save(&root, id, &Inventory::default())?;
 
-		let trainee = maybraid_world::training_trainee(TrainingRound::new(3));
+		let trainee = crate::training::trainee_loadout(TrainingRound::new(3));
 		assert!(!trainee.inventory.items.is_empty());
 		let mut world = World::new();
 		world.insert_resource(root.clone());

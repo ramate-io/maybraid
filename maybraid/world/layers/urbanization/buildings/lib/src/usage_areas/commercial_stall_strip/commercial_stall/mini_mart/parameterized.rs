@@ -1,9 +1,9 @@
 //! Parameterized knobs + fit for [`super::MiniMart`].
 
+use building_components::LabelStyle;
 use procedural_common::{
 	aabb2_area, aabb3_to_plan, NoiseConfig, NoiseParams, OptionalFaceBand, PlanAxes,
 };
-use building_components::LabelStyle;
 
 use crate::fit::{Confines, FitError};
 

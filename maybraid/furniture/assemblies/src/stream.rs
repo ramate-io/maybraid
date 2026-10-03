@@ -136,7 +136,9 @@ impl FurnitureIndex {
 	}
 }
 
-fn world_slots_of(development: &impl FurnitureSlotSource) -> Vec<building_components::FurnitureNode> {
+fn world_slots_of(
+	development: &impl FurnitureSlotSource,
+) -> Vec<building_components::FurnitureNode> {
 	let mut out = Vec::new();
 	for (transform, nodes, usages) in development.furniture_hosts() {
 		for node in nodes {
@@ -504,28 +506,21 @@ mod tests {
 
 	#[test]
 	fn matching_slots_ignore_finish_seed() {
-		let a = building_components::FurnitureNode::chair(Placement::IDENTITY)
-			.with_finish_seed(1);
-		let b = building_components::FurnitureNode::chair(Placement::IDENTITY)
-			.with_finish_seed(9);
+		let a = building_components::FurnitureNode::chair(Placement::IDENTITY).with_finish_seed(1);
+		let b = building_components::FurnitureNode::chair(Placement::IDENTITY).with_finish_seed(9);
 		assert!(slots_match(&[a.clone()], &[b]));
-		let moved =
-			building_components::FurnitureNode::chair(Placement::new(Vec3::X, 0.0));
+		let moved = building_components::FurnitureNode::chair(Placement::new(Vec3::X, 0.0));
 		assert!(!slots_match(&[a], &[moved]));
 	}
 
 	#[test]
 	fn original_ids_bin_slots_to_cells() {
 		let mut index = FurnitureIndex::default();
-		index
-			.slots
-			.push(building_components::FurnitureNode::chest(Placement::IDENTITY));
-		index
-			.slots
-			.push(building_components::FurnitureNode::chair(Placement::new(
-				Vec3::new(60.0, 0.0, 0.0),
-				0.0,
-			)));
+		index.slots.push(building_components::FurnitureNode::chest(Placement::IDENTITY));
+		index.slots.push(building_components::FurnitureNode::chair(Placement::new(
+			Vec3::new(60.0, 0.0, 0.0),
+			0.0,
+		)));
 		let region = xz_radius_aabb(Vec3::ZERO, 200.0);
 		let ids = FurnitureCell::original_ids_for(&mut index, region);
 		assert_eq!(ids.len(), 2);

@@ -3,7 +3,6 @@
 use bevy::prelude::*;
 use character_items::{Inventory, InventoryItem};
 use characters::{
-	CharacterRecipe, LocomotionCapsule,
 	species::{
 		braidman::BraidmanConfig, brenal::BrenalConfig, brodler::BrodlerConfig,
 		brokker::BrokkerConfig, caole::CaoleConfig, chupri::ChupriConfig, claber::ClaberConfig,
@@ -13,12 +12,13 @@ use characters::{
 		tapp::TappConfig, thumplus::ThumplusConfig, tipple::TippleConfig, topple::ToppleConfig,
 		tuberwaber::TuberwaberConfig, wumbus::WumbusConfig, ylter::YilterConfig,
 	},
+	CharacterRecipe, LocomotionCapsule,
 };
 use maybraid_audio::{FlinchProfile, GruntStyle};
 use player::spawn_npc_visual;
 
+use crate::number::{index, FromMobNumber};
 use crate::CharacterBuild;
-use crate::number::{FromMobNumber, index};
 
 #[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum CharacterSpecies {

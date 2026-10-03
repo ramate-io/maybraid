@@ -2,13 +2,13 @@
 
 use bevy::prelude::*;
 use bevy::transform::helper::TransformHelper;
-use characters::{
-	AnimBone, AnimMailbox, AnimateBones, BoneMap, CharacterMembers, CharacterRoot, SuspendAnimation,
-};
 use character_rigs::articulation::{TwoBoneAim, BONE_LENGTH_AXIS};
 use character_rigs::humanoid::HumanoidRig;
 use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
 use character_rigs::{Name, Side};
+use characters::{
+	AnimBone, AnimMailbox, AnimateBones, BoneMap, CharacterMembers, CharacterRoot, SuspendAnimation,
+};
 use firearms::{FirearmMembers, FirearmRoot};
 
 use crate::pose::HeldFirearm;
@@ -523,10 +523,8 @@ mod tests {
 		use std::collections::HashMap;
 
 		use crate::{FirearmUser, FirearmUserSettings};
-		use characters::{
-			AnimMailbox, AnimateBones, CharacterHeading, CharacterRoot, MemberOf,
-		};
 		use character_rigs::Name as RigName;
+		use characters::{AnimMailbox, AnimateBones, CharacterHeading, CharacterRoot, MemberOf};
 		use firearms::FirearmRoot;
 		use player::PlayerLook;
 

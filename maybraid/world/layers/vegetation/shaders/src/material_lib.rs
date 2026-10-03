@@ -3,13 +3,11 @@
 use bevy::ecs::system::SystemParam;
 use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
-use vegetation_components::{
-	FROND_MATERIAL, LEAF_MATERIAL, STICK_MATERIAL,
-};
 use material_ref::{
 	MaterialId, MaterialLib, MaterialRef, MaterialRefCache, MaterialRefKey, MaterialRefPlugin,
 	StandardMaterialLib, StandardMaterialRefCache,
 };
+use vegetation_components::{FROND_MATERIAL, LEAF_MATERIAL, STICK_MATERIAL};
 
 use crate::{FrondMaterial, LeafMaterial, StickMaterial};
 

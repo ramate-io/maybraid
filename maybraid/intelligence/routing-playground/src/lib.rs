@@ -26,7 +26,6 @@ use commands::{
 	RequestGo, RequestModeCharacter, RequestModeFree, RequestStalk, RequestTether,
 	RequestTetherDrive, RequestTetherIdle,
 };
-use terrain_shaders::{TerrainShader, TerrainShaderPlugin, RefractionWater};
 use durham::{
 	AvianTerrainIndex, BaseTerrainNoise, ComposedWater, DurhamTerrainModelsPlugin, Terrain,
 	TerrainCellLayout, TerrainConfig, TerrainEntryStore, TerrainMeshBuilder, TerrainMeshLodBand,
@@ -60,6 +59,7 @@ use routing_intelligence::{
 	RoutingIntelligenceUser, RoutingPlugin, RoutingSettings, RoutingSystems,
 };
 use std::f32::consts::PI;
+use terrain_shaders::{RefractionWater, TerrainShader, TerrainShaderPlugin};
 use tether_intelligence::{
 	install_tether, StalkRadii, Tether, TetherIntelligenceUser, TetherObjective, TetherPlugin,
 	TetherSystems,

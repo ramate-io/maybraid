@@ -16,13 +16,13 @@ pub(crate) mod canopy;
 pub(crate) mod stick;
 
 use bevy::prelude::*;
-use sbs_geometry::{BallStickChain, LiamsConiferChain, NorthernConiferSbs};
-use vegetation_components::{
-	leaf_material_ref, stick_material_ref, FoliageNode, Layers, StickNode,
-	StructuralLod, VegetationComponents,
-};
 use clap::Args;
 use lod::gen::LodSceneLevel;
+use sbs_geometry::{BallStickChain, LiamsConiferChain, NorthernConiferSbs};
+use vegetation_components::{
+	leaf_material_ref, stick_material_ref, FoliageNode, Layers, StickNode, StructuralLod,
+	VegetationComponents,
+};
 
 use crate::conifer_canopy_apex::NORTHERN_APEX_BALL_RADIUS_FRACTION_OF_HEIGHT;
 use crate::storybook_tree::{merge_cheap_ball_foliage, merge_kit_sticks};

@@ -2,14 +2,14 @@ use std::path::{Path, PathBuf};
 
 use bevy::prelude::*;
 use durham::{Durham, DurhamCells, DurhamTerrainConfig};
+use layer_stack::GenerationModePlugin;
+use richmond::{Richmond, RichmondConfig, UrbanizationStreamSpec};
 use richmond_playground::{
 	DevelopmentsOnTerrainPlugin, PendingStartupCommand, PlaygroundCommand, PlaygroundConfig,
 	PlaygroundMode,
 };
 use terrain_layer_model::{BaseTerrainGenerationPlugin, OnTerrain};
-use layer_stack::{GenerationModePlugin};
 use terrain_layer_presentation::TerrainPresentationPlugin;
-use richmond::{Richmond, RichmondConfig, UrbanizationStreamSpec};
 use urbanization_layer_model::{Urbanization, UrbanizationGenerationPlugin};
 use urbanization_layer_presentation::{PaddedCells, UrbanizationPresentationPlugin};
 
@@ -51,9 +51,9 @@ fn main() {
 	app.add_plugins(
 		TerrainPresentationPlugin::<PlaygroundMode, OnTerrain<Durham>, DurhamCells>::default(),
 	);
-	app.add_plugins(UrbanizationGenerationPlugin::<PlaygroundMode, Richmond<OnTerrain<Durham>>>::new(
-		urban,
-	));
+	app.add_plugins(
+		UrbanizationGenerationPlugin::<PlaygroundMode, Richmond<OnTerrain<Durham>>>::new(urban),
+	);
 	app.add_plugins(TerrainPresentationPlugin::<
 		PlaygroundMode,
 		Urbanization<Richmond<OnTerrain<Durham>>>,

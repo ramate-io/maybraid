@@ -82,8 +82,7 @@ impl FoliageNode {
 
 	/// Point-tip straight frond (`straight_frond_001_*`); prefer [`Self::straight_frond_segment`].
 	pub fn straight_frond(placement: Placement) -> Self {
-		Self::new(FoliageGeometry::StraightFrond, placement)
-			.with_material(frond_material_ref())
+		Self::new(FoliageGeometry::StraightFrond, placement).with_material(frond_material_ref())
 	}
 
 	/// Frond collection under one LOD parent. Default presenter is merge.

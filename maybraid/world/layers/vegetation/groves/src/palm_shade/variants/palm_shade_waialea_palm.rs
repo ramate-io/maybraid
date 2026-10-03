@@ -1,7 +1,7 @@
 //! [`BuildWithNoise`] for [`PalmShadeWaialeaPalm`].
 
-use sbs_geometry::WaialeaPalmSbs;
 use procedural_common::{BuildWithNoise, NoiseConfig, NoiseParams, UnitRange};
+use sbs_geometry::WaialeaPalmSbs;
 
 use crate::palm_shade::PalmShadeWaialeaPalm;
 

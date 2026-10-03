@@ -11,10 +11,10 @@
 //! face is still authored; disabled faces skip panel/joint emission only.
 
 use bevy_math::Vec3;
-use lod::gen::LodSceneLevel;
 use building_components::joints::JointNode;
 use building_components::panels::{PanelNode, PanelStyle};
 use building_components::{BuildingComponents, Layers};
+use lod::gen::LodSceneLevel;
 
 use crate::paneling::clipped_rectangular_strip::ClippedRectangularStrip;
 use crate::paneling::panel_complex::PanelComplexJointPolicy;
@@ -385,8 +385,8 @@ mod tests {
 
 	#[test]
 	fn omitted_face_edges_skip_presentation() {
-		use lod::gen::LodSceneLevel;
 		use building_components::BuildingComponents;
+		use lod::gen::LodSceneLevel;
 
 		let full = RectangularNTube::from_stations(
 			PanelStyle::RoughStonework,

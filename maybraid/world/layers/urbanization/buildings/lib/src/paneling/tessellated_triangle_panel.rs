@@ -7,11 +7,9 @@
 //! 4. [`PanelNode`] fills in panel space; kit yaw is composed under that parent
 
 use bevy_math::Vec3;
-use lod::gen::LodSceneLevel;
-use building_components::panels::{
-	PanelGeometry, PanelNode, PanelStyle, TessellatedTriangle,
-};
+use building_components::panels::{PanelGeometry, PanelNode, PanelStyle, TessellatedTriangle};
 use building_components::{BuildingComponents, Layers, Placement};
+use lod::gen::LodSceneLevel;
 
 use crate::paneling::panel_plane::panel_plane_frame;
 

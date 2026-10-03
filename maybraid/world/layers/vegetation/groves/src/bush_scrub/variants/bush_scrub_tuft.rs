@@ -5,8 +5,8 @@
 //! Blade width is **length-proportional** (`length * width_factor`), so short and tall
 //! varietals stay equally grass-thin.
 
-use sbs_geometry::BladeTuftShape;
 use procedural_common::{BuildWithNoise, NoiseConfig, NoiseParams, UnitRange};
+use sbs_geometry::BladeTuftShape;
 
 use crate::bush_scrub::BushScrubTuft;
 

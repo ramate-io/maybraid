@@ -2,8 +2,8 @@
 
 use crate::palette::{carcass, marble};
 use crate::Assembly;
-use furniture_components::{run_slab, PartKind, PlacedPart};
 use building_components::FurnitureGeometry;
+use furniture_components::{run_slab, PartKind, PlacedPart};
 
 /// Toekick insets only on the room-side depth, never the run length.
 pub const TOEKICK_Z: f32 = 0.72;

@@ -1,17 +1,17 @@
 //! Buildings LOD refresh for the firing-range Les Halles stack.
 
 use bevy::prelude::*;
+use building_components::{
+	ComponentsOnly, DoorNode, FloorNode, FurnitureNode, JointNode, LabelNode, PanelNode,
+	PartitionNode, RoofNode, StairNode,
+};
+use buildings::{ConnectingStairwell, MixedUseLesHallesStorey, PitchedRoof};
 use lod::{
 	Bullseye, LodChunkFulfillBudget, LodCullRegionCursor, LodRefreshCorePlugin,
 	LodSceneCullRegionPlugin, LodSceneRefreshRegionPlugin, OpenLattice, Spotlight,
 };
 use lod_gimme::{GimmeLodSceneCullPlugin, GimmeLodSceneRefreshPlugin};
 use player::register_motor_traction_physics;
-use building_components::{
-	ComponentsOnly, DoorNode, FloorNode, FurnitureNode, JointNode, LabelNode, PanelNode,
-	PartitionNode, RoofNode, StairNode,
-};
-use buildings::{ConnectingStairwell, MixedUseLesHallesStorey, PitchedRoof};
 
 /// Shared produce domain for bullseye and spotlight building refresh.
 #[derive(Debug, Clone, Copy, Default)]

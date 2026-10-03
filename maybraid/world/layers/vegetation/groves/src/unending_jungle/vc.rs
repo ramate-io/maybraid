@@ -6,12 +6,6 @@ use super::variants::unending_jungle_banyan::{HonuBanyanSamples, SopeBanyanSampl
 #[cfg(test)]
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
-use sbs_trees::{
-	HonuBanyan, JungleStorybookTree, PenmarchTorch, PenmarchTorchParams, QuantizedPlant,
-	RorysHeadTrained, RorysHeadTrainedParams, SopesBanyan, StorybookTree, StorybookTreeParams,
-	WaialeaPalm, WaialeaPalmParams,
-};
-use vegetation_components::{FoliageNode, Placement, StickNode, VegetationComponents};
 use clap::Args;
 #[cfg(test)]
 use lod::gen::{LodScene, LodSceneLevel};
@@ -19,6 +13,12 @@ use lod::lod_ref::LodRef;
 use lod::SceneChunk;
 use material_ref::MaterialRef;
 use procedural_common::{BuildWithNoise, NoiseParams};
+use sbs_trees::{
+	HonuBanyan, JungleStorybookTree, PenmarchTorch, PenmarchTorchParams, QuantizedPlant,
+	RorysHeadTrained, RorysHeadTrainedParams, SopesBanyan, StorybookTree, StorybookTreeParams,
+	WaialeaPalm, WaialeaPalmParams,
+};
+use vegetation_components::{FoliageNode, Placement, StickNode, VegetationComponents};
 
 use super::{
 	definition, UnendingJungleCell, LOWER_STORYBOOK, PENUMARCH_ACCENT, RED_JUNGLE_TORCH,

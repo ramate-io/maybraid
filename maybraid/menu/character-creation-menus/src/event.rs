@@ -1,11 +1,10 @@
 use character_items::{ClothingMaterial, ClothingMesh, ItemColor};
 use characters::{
-	ConceptAnimation,
 	presets::{BuildPreset, GenderPreset},
 	species::{
 		brenal::{BrenalBodyMesh, BrenalHeadMesh, BrenalMouthMesh},
 		brodler::{
-			BrodlerEyeColor, BrodlerHeadMesh, BrodlerHornColor, BrodlerSkinColor, assets::HornMesh,
+			assets::HornMesh, BrodlerEyeColor, BrodlerHeadMesh, BrodlerHornColor, BrodlerSkinColor,
 		},
 		brokker::{BrokkerEyeColor, BrokkerHeadMesh, BrokkerPlumageColor, BrokkerSnoutColor},
 		caole::{CaoleBodyMesh, CaoleMouthMesh},
@@ -58,6 +57,7 @@ use characters::{
 		},
 		ylter::{YilterBodyMesh, YilterMouthMesh},
 	},
+	ConceptAnimation,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

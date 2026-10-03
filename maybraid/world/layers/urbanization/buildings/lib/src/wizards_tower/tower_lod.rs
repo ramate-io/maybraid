@@ -9,9 +9,9 @@
 use bevy::prelude::Transform;
 use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
+use building_components::distance_to_segment;
 use lod::gen::LodSceneLevel;
 use lod::lod_ref::LodRef;
-use building_components::distance_to_segment;
 
 /// High (exterior + internals) when capsule surface distance ≤ this × footprint radius.
 pub const HIGH_FOOTPRINT_MULTIPLIER: f32 = 5.0;

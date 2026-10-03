@@ -1018,11 +1018,7 @@ mod tests {
 
 	#[test]
 	fn take_fraction_is_seeded_and_remaps_selections() {
-		let selected = Inventory {
-			clothing: vec![0, 2],
-			weapons: vec![1],
-			..mixed_three()
-		};
+		let selected = Inventory { clothing: vec![0, 2], weapons: vec![1], ..mixed_three() };
 		let mut first = selected.clone();
 		let mut second = selected;
 		let taken_a = first.take_fraction(&mut ItemRng::from_seed(99), LootFraction::ONE_THIRD);

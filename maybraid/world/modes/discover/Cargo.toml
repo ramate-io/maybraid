@@ -12,6 +12,7 @@ rust-version = { workspace = true }
 [dependencies]
 layer-stack = { workspace = true }
 bevy = { workspace = true }
+world-player = { workspace = true }
 chico = { workspace = true }
 durham = { workspace = true }
 barking = { workspace = true }

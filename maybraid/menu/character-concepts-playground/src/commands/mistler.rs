@@ -1,8 +1,8 @@
 //! `/mistler` commands for the Mistler concept species.
 
 use bevy::prelude::*;
-use clap::{Args, Subcommand};
 use characters::species::mistler::{MistlerBodyColor, MistlerColors, MistlerConfig};
+use clap::{Args, Subcommand};
 
 use crate::{animation::ConceptAnimation, preview::ConceptPreviewConfig};
 

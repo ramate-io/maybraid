@@ -14,13 +14,13 @@ pub use game_commands::command::PendingStartupCommand;
 use bevy::camera::primitives::Aabb;
 use bevy::prelude::*;
 use camera_controls::look::CameraLookPlugin;
-use vegetation_bumpout::{BumpOut, BumpOutMaterialRefPlugin, BumpOutPlugin};
 use commands::NeighborhoodValues;
 use game_commands::command::GameCommandPlugin;
 use ground::setup_ground;
 use material_ref::MaterialRefRoot;
 use scene::{setup_tiles, PlaygroundTerrainBuilder, TILE_RADIUS};
 use terrain_chunk_ref::{TerrainChunkRef, TerrainChunkRefPlugin};
+use vegetation_bumpout::{BumpOut, BumpOutMaterialRefPlugin, BumpOutPlugin};
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum PresenterLayer {

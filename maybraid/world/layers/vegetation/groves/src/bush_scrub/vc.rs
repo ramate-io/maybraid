@@ -4,8 +4,6 @@ use std::sync::Arc;
 #[cfg(test)]
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
-use sbs_trees::{HighBushShoots, QuantizedPlant, TuftPatch};
-use vegetation_components::{Placement, VegetationComponents};
 use clap::Args;
 #[cfg(test)]
 use lod::gen::{LodScene, LodSceneLevel};
@@ -13,6 +11,8 @@ use lod::lod_ref::LodRef;
 use lod::SceneChunk;
 use material_ref::MaterialRef;
 use procedural_common::{noise_params_from_scalar_str, NoiseParams};
+use sbs_trees::{HighBushShoots, QuantizedPlant, TuftPatch};
+use vegetation_components::{Placement, VegetationComponents};
 
 use super::{
 	definition, BushScrubCell, DRY_TUFT, DRY_TUFT_PATCH, GREEN_TUFT, GREEN_TUFT_PATCH,

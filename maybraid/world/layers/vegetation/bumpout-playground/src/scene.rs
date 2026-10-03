@@ -1,5 +1,4 @@
 use bevy::prelude::*;
-use vegetation_bumpout::{BumpOut, BumpOutNeighborhood, BumpOutStyle};
 use lod_cascade::Chunk;
 use procedural_common::NoiseParams;
 use render_item::mesh::{IdentifiedMesh, MeshId};
@@ -7,6 +6,7 @@ use render_item::sdf::cpu_shot::CpuShotBuilder;
 use render_item::NormalizeChunk;
 use sdf::Sdf;
 use terrain_chunk_ref::TerrainChunkRef;
+use vegetation_bumpout::{BumpOut, BumpOutNeighborhood, BumpOutStyle};
 
 use crate::{PresenterLayer, TileCoordinate};
 

@@ -5,12 +5,12 @@
 #![allow(dead_code)]
 
 use bevy::scene::prelude::Scene;
-use vegetation_components::{
-	components_only_host, PlacedVegetation, Placement, VegetationComponents,
-};
 use lod::lod_ref::LodRef;
 use lod::SceneChunk;
 use material_ref::MaterialRef;
+use vegetation_components::{
+	components_only_host, PlacedVegetation, Placement, VegetationComponents,
+};
 
 /// Nest one posed plant as [`vegetation_components::ComponentsOnly`]`<`[`PlacedVegetation`]`<T>>`.
 pub fn nest_placed_plant_host<T>(

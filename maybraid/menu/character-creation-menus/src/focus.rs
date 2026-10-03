@@ -1,6 +1,6 @@
 use bevy_math::Vec3;
-use character_ui_menu::{CameraFocus, FocusRig};
 use character_items::ClothingKind;
+use character_ui_menu::{CameraFocus, FocusRig};
 use characters::species::{
 	chupri::pose::CHUPRI_OVERALL_SCALE, kappler::pose::KAPPLER_OVERALL_SCALE,
 	topple::pose::TOPPLE_OVERALL_SCALE,

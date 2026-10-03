@@ -1,16 +1,16 @@
 use std::sync::Arc;
 
 use bevy::prelude::*;
-use sbs_trees::{PalmBush, PalmBushParams, QuantizedPlant};
-use vegetation_components::{
-	FoliageNode, Layers, Placement, StickNode, StructuralLod, VegetationComponents,
-};
 use clap::Args;
 use lod::gen::{LodScene, LodSceneLevel};
 use lod::lod_ref::LodRef;
 use lod::SceneChunk;
 use material_ref::MaterialRef;
 use procedural_common::{noise_params_from_scalar_str, NoiseParams};
+use sbs_trees::{PalmBush, PalmBushParams, QuantizedPlant};
+use vegetation_components::{
+	FoliageNode, Layers, Placement, StickNode, StructuralLod, VegetationComponents,
+};
 
 use super::{
 	definition, TropicalTuftsCell, BRIGHT_TUFT, BRIGHT_TUFT_PATCH, DEEP_TUFT, DEEP_TUFT_PATCH,

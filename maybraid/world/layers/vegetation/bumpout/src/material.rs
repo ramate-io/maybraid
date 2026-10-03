@@ -3,11 +3,11 @@
 use bevy::ecs::system::SystemParam;
 use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
-use vegetation_shaders::{BumpOutMaterial, BUMP_OUT_MATERIAL};
 use material_ref::{
 	MaterialId, MaterialLib, MaterialRef, MaterialRefCache, MaterialRefKey, MaterialRefPlugin,
 	StandardMaterialLib, StandardMaterialRefCache,
 };
+use vegetation_shaders::{BumpOutMaterial, BUMP_OUT_MATERIAL};
 
 pub type BumpOutMaterialRefCache = MaterialRefCache<BumpOutMaterial>;
 
@@ -98,11 +98,11 @@ impl Plugin for BumpOutMaterialRefPlugin {
 
 #[cfg(test)]
 mod tests {
+	use procedural_common::NoiseParams;
 	use vegetation_shaders::{
 		BumpOutUniform, RASTER_AVERAGE_HEIGHT, RASTER_BITE_SIZE, RASTER_BITE_SIZE_DEVIATION,
 		RASTER_DENSITY, RASTER_HEIGHT_DEVIATION,
 	};
-	use procedural_common::NoiseParams;
 
 	use super::*;
 	use crate::{BumpOutNeighborhood, BumpOutStyle};

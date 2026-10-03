@@ -5,8 +5,8 @@ use bevy::prelude::*;
 use bevy_character_ui_menu_renderer::{
 	BevyMenuSink, MenuSink, MenuThumbnailContext, RenderContext,
 };
-use character_ui_menu::{AssetThumbnailDisplay, MenuComponent, ThumbnailRequest};
 use character_creation_menus::SectionOpenState;
+use character_ui_menu::{AssetThumbnailDisplay, MenuComponent, ThumbnailRequest};
 use game_commands::ui::{GameCommandDrawerConfig, GameCommandStatusText, GameCommandUiConfig};
 
 use crate::{

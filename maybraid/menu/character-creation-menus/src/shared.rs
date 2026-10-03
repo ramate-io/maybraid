@@ -4,14 +4,14 @@
 //! species, so they are defined once here instead of per species. Each
 //! implements [`MenuComponent`] to lower itself into [`MenuNode`]s.
 
+use character_items::{
+	CharacterSheet, ClothingColor, ClothingMaterial, ClothingMaterialChoice, ClothingMesh,
+	Inventory, InventoryItem, InventorySlot, ItemColor, WORN_CLOTHING_LIMIT,
+};
 use character_ui_menu::{
 	AssetChoice, AssetOption, AssetSingleSelect, CameraFocus, GridCatalogChoice, ItemRow,
 	MenuComponent, MenuNode, MultiSelect, PreviewColor, SelectGroup, SingleSelect, StatCard,
 	StatLine, SwatchChoice, SwatchSingleSelect, ThumbnailCamera,
-};
-use character_items::{
-	CharacterSheet, ClothingColor, ClothingMaterial, ClothingMaterialChoice, ClothingMesh,
-	Inventory, InventoryItem, InventorySlot, ItemColor, WORN_CLOTHING_LIMIT,
 };
 use characters::ConceptAnimation;
 

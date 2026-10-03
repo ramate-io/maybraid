@@ -4,9 +4,9 @@
 //! other rectangle kits — not a polygonal world clip / earcut path.
 
 use bevy_math::Vec3;
-use lod::gen::LodSceneLevel;
 use building_components::panels::{PanelGeometry, PanelNode, PanelStyle};
 use building_components::{BuildingComponents, Layers};
+use lod::gen::LodSceneLevel;
 
 use crate::paneling::panel_complex::{PanelPoint, DEFAULT_PANEL_THICKNESS};
 use crate::paneling::rect_fit::{fit_rectangle, FittedRect, RectInset};

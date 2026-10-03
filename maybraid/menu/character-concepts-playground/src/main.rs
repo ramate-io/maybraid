@@ -2,8 +2,7 @@ use std::path::{Path, PathBuf};
 
 use bevy::prelude::*;
 use character_concepts_playground::{
-	fps_debug_enabled, ConceptsCommand, CharacterConceptsPlaygroundPlugin,
-	PendingStartupCommand,
+	fps_debug_enabled, CharacterConceptsPlaygroundPlugin, ConceptsCommand, PendingStartupCommand,
 };
 
 fn assets_root() -> PathBuf {

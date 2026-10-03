@@ -1,9 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use bevy::prelude::*;
-use durham_playground::{
-	PendingStartupCommand, PlaygroundCommand, TerrainModelsPlaygroundPlugin,
-};
+use durham_playground::{PendingStartupCommand, PlaygroundCommand, TerrainModelsPlaygroundPlugin};
 
 fn assets_root() -> PathBuf {
 	Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../../assets")

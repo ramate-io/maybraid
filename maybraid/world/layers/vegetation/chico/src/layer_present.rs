@@ -6,8 +6,6 @@ use std::marker::PhantomData;
 use bevy::ecs::system::{ParamSet, SystemParam};
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
-use vegetation_bumpout::{BumpOut, BumpOutNeighborhood, BumpOutPlugin, BumpOutStyle};
-use vegetation_groves::GroveWorldSample;
 use layer_stack::install_lod_present_gate;
 use lod::gen::{Id, SpatialIndex, Version};
 use lod::hide_lod_tree;
@@ -21,6 +19,8 @@ use render_item::mesh::IdentifiedMesh;
 use render_item::NormalizeChunk;
 use terrain_chunk_ref::{TerrainChunkKey, TerrainChunkRef};
 use terrain_layer_model::{HeightField, TerrainCell, TerrainModel, TerrainView};
+use vegetation_bumpout::{BumpOut, BumpOutNeighborhood, BumpOutPlugin, BumpOutStyle};
+use vegetation_groves::GroveWorldSample;
 use vegetation_layer_model::Vegetation;
 use vegetation_layer_presentation::{VegetationPresent, VegetationPresentation};
 
@@ -29,8 +29,8 @@ use crate::generation::{BumpOutLodChan, ForestLodChan, MediumBumpOutLodChan};
 use crate::ground::{overlay_chunk_ref, ChicoGround};
 use crate::grove::ChicoGrove;
 use crate::index::ForestIndex;
-use crate::model::Chico;
 use crate::material::VegetationOnTerrainMaterialRefPlugin;
+use crate::model::Chico;
 use crate::plugin::register_vegetation_view;
 use crate::present::ForestPresenterState;
 
@@ -389,13 +389,13 @@ where
 			ForestLodChan,
 			With<LodViewer>,
 		>::default())
-		.add_plugins(LodPresentCullPlugin::<
-			ChicoGrove,
-			ForestIndex,
-			GroundForestPresenter<G>,
-			ForestLodChan,
-		>::default())
-		.configure_sets(Update, LodPresentSystems::Produce.after(LodGenerateSystems::Drain));
+			.add_plugins(LodPresentCullPlugin::<
+				ChicoGrove,
+				ForestIndex,
+				GroundForestPresenter<G>,
+				ForestLodChan,
+			>::default())
+			.configure_sets(Update, LodPresentSystems::Produce.after(LodGenerateSystems::Drain));
 	}
 
 	fn install_bump_outs(app: &mut App) {
@@ -415,26 +415,26 @@ where
 			BumpOutLodChan,
 			With<LodViewer>,
 		>::default())
-		.add_plugins(LodPresentCullPlugin::<
-			CanopyBumpOut,
-			ForestIndex,
-			GroundCanopyBumpOutPresenter<G>,
-			BumpOutLodChan,
-		>::default())
-		.add_plugins(LodPresentPlugin::<
-			MediumCanopyBumpOut,
-			ForestIndex,
-			GroundMediumCanopyBumpOutPresenter<G>,
-			MediumBumpOutLodChan,
-			With<LodViewer>,
-		>::default())
-		.add_plugins(LodPresentCullPlugin::<
-			MediumCanopyBumpOut,
-			ForestIndex,
-			GroundMediumCanopyBumpOutPresenter<G>,
-			MediumBumpOutLodChan,
-		>::default())
-		.configure_sets(Update, LodPresentSystems::Produce.after(LodGenerateSystems::Drain));
+			.add_plugins(LodPresentCullPlugin::<
+				CanopyBumpOut,
+				ForestIndex,
+				GroundCanopyBumpOutPresenter<G>,
+				BumpOutLodChan,
+			>::default())
+			.add_plugins(LodPresentPlugin::<
+				MediumCanopyBumpOut,
+				ForestIndex,
+				GroundMediumCanopyBumpOutPresenter<G>,
+				MediumBumpOutLodChan,
+				With<LodViewer>,
+			>::default())
+			.add_plugins(LodPresentCullPlugin::<
+				MediumCanopyBumpOut,
+				ForestIndex,
+				GroundMediumCanopyBumpOutPresenter<G>,
+				MediumBumpOutLodChan,
+			>::default())
+			.configure_sets(Update, LodPresentSystems::Produce.after(LodGenerateSystems::Drain));
 	}
 
 	fn install_materials(app: &mut App) {

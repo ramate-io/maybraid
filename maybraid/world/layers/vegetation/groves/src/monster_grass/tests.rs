@@ -353,12 +353,12 @@ mod render_tests {
 		use crate::grove::GroveCellVariant;
 		use bevy::math::bounding::Aabb3d;
 		use bevy::prelude::{Entity, Transform};
-		use vegetation_components::{
-			CollectionPresent, VegetationComponents, FLATTENED_KIT_CHUNK_WEIGHT,
-		};
 		use lod::gen::{LodScene, LodSceneLevel};
 		use lod::lod_ref::LodRef;
 		use lod::SceneChunk;
+		use vegetation_components::{
+			CollectionPresent, VegetationComponents, FLATTENED_KIT_CHUNK_WEIGHT,
+		};
 
 		let grove = MonsterGrassParams::with_resolved_placements(
 			vec![GroveCellVariant::new(
@@ -424,8 +424,8 @@ mod render_tests {
 			MONSTER_GRASS_STRUCTURAL_HIGH_FACTOR, MONSTER_GRASS_STRUCTURAL_LOW_FACTOR,
 			MONSTER_GRASS_STRUCTURAL_MEDIUM_FACTOR,
 		};
-		use vegetation_components::VegetationComponents;
 		use lod::gen::LodSceneLevel;
+		use vegetation_components::VegetationComponents;
 
 		let placements: Vec<_> = (0..8)
 			.map(|i| {
@@ -475,8 +475,8 @@ mod render_tests {
 	#[test]
 	fn medium_keeps_quarter_of_high_tufts() -> Result<()> {
 		use crate::grove::GroveCellVariant;
-		use vegetation_components::VegetationComponents;
 		use lod::gen::LodSceneLevel;
+		use vegetation_components::VegetationComponents;
 
 		let placements: Vec<_> = (0..16)
 			.map(|i| {

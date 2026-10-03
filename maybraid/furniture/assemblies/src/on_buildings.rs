@@ -1,8 +1,8 @@
 //! Isolated paint helper. World present uses 50 m [`crate::FurnitureCell`] hosts.
 
 use bevy::prelude::{ChildOf, Commands, CommandsSceneExt, Component, Entity};
-use furniture_components::assembly_scene;
 use building_components::FurnitureNode;
+use furniture_components::assembly_scene;
 
 use crate::fill::posed_assembly;
 

@@ -11,26 +11,26 @@
 //! [`TrainingGround`](maybraid_game_mode_training_ground::TrainingGround)
 //! together with the flow, so a Training pose is not written.
 
-use bevy::camera::ClearColorConfig;
 use bevy::camera::visibility::RenderLayers;
+use bevy::camera::ClearColorConfig;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use characters_playground::CameraController as PreviewCameraController;
+use layer_stack::ActiveGenerationMode;
 use maybraid_game_mode_discover::{streams_terrain, Discovery};
 use maybraid_game_mode_training_ground::TrainingGround;
 use maybraid_world::{
-	Durham, InventoryEditCameraFollow, PlayerPhysicsEnabled, SKY_CLEAR, TerrainStreaming,
-	WorldGameplayEnabled, WorldSceneryVisible,
+	Durham, InventoryEditCameraFollow, PlayerPhysicsEnabled, TerrainStreaming,
+	WorldGameplayEnabled, WorldSceneryVisible, SKY_CLEAR,
 };
 use menu_components::MENU_CLEAR;
 use menu_playground::{
 	CharacterEditorReturn, CharacterPreviewLight, CharacterPreviewRoot, CharacterScreen,
 };
 use menu_screens::{
-	MenuScreen, despawn_menu_screens, request_show_gallery, request_show_home,
-	request_show_in_game, request_show_loading,
+	despawn_menu_screens, request_show_gallery, request_show_home, request_show_in_game,
+	request_show_loading, MenuScreen,
 };
-use layer_stack::ActiveGenerationMode;
 
 /// World camera pose stashed while the pause character editor uses the preview eye.
 #[derive(Resource, Clone, Copy, Debug)]
@@ -171,7 +171,10 @@ pub(crate) fn terrain_streaming_for_shell(flow: GameFlow) -> bool {
 	matches!(flow, GameFlow::LoadingWorld | GameFlow::World)
 }
 
-pub(crate) fn generation_mode_for_shell(flow: GameFlow, session: PlaySession) -> ActiveGenerationMode {
+pub(crate) fn generation_mode_for_shell(
+	flow: GameFlow,
+	session: PlaySession,
+) -> ActiveGenerationMode {
 	if terrain_streaming_for_shell(flow) && session == PlaySession::Training {
 		ActiveGenerationMode::of::<TrainingGround>()
 	} else {
@@ -309,18 +312,18 @@ mod tests {
 	use bevy::prelude::*;
 
 	use super::{
-		PREVIEW_RENDER_LAYER, WORLD_RENDER_LAYER, ShellRoute, apply_shell_look,
-		camera_render_layers, generation_mode_for_shell, terrain_streaming_for_shell,
+		apply_shell_look, camera_render_layers, generation_mode_for_shell,
+		terrain_streaming_for_shell, ShellRoute, PREVIEW_RENDER_LAYER, WORLD_RENDER_LAYER,
 	};
 	use crate::flow::{GameFlow, PlaySession, WorldPause};
 	use bevy::ecs::system::RunSystemOnce;
+	use layer_stack::ActiveGenerationMode;
 	use maybraid_game_mode_discover::Discovery;
 	use maybraid_game_mode_training_ground::TrainingGround;
 	use maybraid_world::{
 		Durham, PlayerPhysicsEnabled, TerrainStreaming, WorldGameplayEnabled, WorldSceneryVisible,
 	};
 	use menu_components::MENU_CLEAR;
-	use layer_stack::ActiveGenerationMode;
 
 	#[test]
 	fn menu_camera_sees_preview_only() {
@@ -341,7 +344,9 @@ mod tests {
 		let mut world = World::new();
 		world.insert_resource(NextState::<GameFlow>::Unchanged);
 		world.insert_resource(NextState::<ActiveGenerationMode>::Unchanged);
-		world.run_system_once(enter_training).map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		world
+			.run_system_once(enter_training)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		let flow = world.resource::<NextState<GameFlow>>();
 		let mode = world.resource::<NextState<ActiveGenerationMode>>();
 		let flow_ok = matches!(flow, NextState::Pending(GameFlow::LoadingWorld));

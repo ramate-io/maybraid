@@ -1,12 +1,12 @@
 //! `/dui` commands for the Dui concept species.
 
 use bevy::prelude::*;
-use clap::{Args, Subcommand};
 use character_items::{ClothingMaterial, ClothingMesh};
 use characters::species::{
 	common::HairMesh,
 	dui::{DuiConfig, DuiMouthColor, DuiNoseMesh, DuiSkinColor},
 };
+use clap::{Args, Subcommand};
 
 use crate::{animation::ConceptAnimation, preview::ConceptPreviewConfig};
 

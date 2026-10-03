@@ -4,8 +4,8 @@ use std::sync::OnceLock;
 
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::Vec3;
-use vegetation_groves::{GroveExtent, GroveWorldSample};
 use lod::gen::Id;
+use vegetation_groves::{GroveExtent, GroveWorldSample};
 
 use crate::{ForestGroveRecipe, ForestGroveTile, ForestLayer};
 

@@ -83,7 +83,9 @@ impl SaveRoot {
 
 	/// Repo `.maybraid/saves`, from this crate's manifest directory.
 	pub fn workspace() -> Self {
-		Self { path: Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../../../../.maybraid/saves") }
+		Self {
+			path: Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../../../../.maybraid/saves"),
+		}
 	}
 
 	/// Packaged install → user data; otherwise [`Self::workspace`].

@@ -13,8 +13,8 @@ use vegetation_layer_model::{
 use crate::config::ChicoConfig;
 use crate::generation::{BumpOutLodChan, ForestLodChan};
 use crate::ground::ChicoGround;
-use crate::model::Chico;
 use crate::layer_stream::VegetationStreamKey;
+use crate::model::Chico;
 
 struct Alpha;
 
@@ -131,9 +131,7 @@ fn forest_radius<Mode: GenerationMode>(app: &App) -> Option<u32> {
 }
 
 fn hop(app: &mut App, mode: ActiveGenerationMode) -> anyhow::Result<()> {
-	app.world_mut()
-		.resource_mut::<NextState<ActiveGenerationMode>>()
-		.set(mode);
+	app.world_mut().resource_mut::<NextState<ActiveGenerationMode>>().set(mode);
 	app.update();
 	Ok(())
 }
@@ -173,10 +171,7 @@ fn different_budgets_build_and_apply_on_enter() -> anyhow::Result<()> {
 		"beta forest budget"
 	);
 	anyhow::ensure!(
-		app.world()
-			.resource::<LodGenerateBudget<BumpOutLodChan>>()
-			.ids_per_frame
-			== 8,
+		app.world().resource::<LodGenerateBudget<BumpOutLodChan>>().ids_per_frame == 8,
 		"beta bump-out budget"
 	);
 
@@ -207,10 +202,7 @@ fn plugin_order_does_not_matter() -> anyhow::Result<()> {
 		generation_first.is_plugin_added::<VegetationGenerationCore<Chico<Ground>>>(),
 		"core is installed"
 	);
-	anyhow::ensure!(
-		forest_radius::<Alpha>(&generation_first) == Some(1),
-		"alpha keeps radius 1"
-	);
+	anyhow::ensure!(forest_radius::<Alpha>(&generation_first) == Some(1), "alpha keeps radius 1");
 
 	let mut beta_first = App::new();
 	beta_first.add_plugins((

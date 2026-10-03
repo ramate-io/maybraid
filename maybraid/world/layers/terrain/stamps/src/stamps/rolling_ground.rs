@@ -1,7 +1,7 @@
 //! Stamp Rolling Ground (unchained) — [RFC-105 §3.8.11](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-105-procedural-terrain#3811-jersey-rolling-ground-unchained).
 
 use crate::config::JitteredCenter;
-use crate::modulation::{StampModulation, RegionAffineModulation};
+use crate::modulation::{RegionAffineModulation, StampModulation};
 use crate::region::{CircleRegion, Region2D, RegionNoise};
 use crate::stamp::{scale_additive, StampSemantics, StampSet, StampStrength};
 use procedural_common::{Bounds2, SeededHash};

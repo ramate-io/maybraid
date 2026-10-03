@@ -1,7 +1,7 @@
 //! [`BuildWithNoise`] for [`TropicalUndergrowthTorch`] (Penmarch and Kamakura forms).
 
-use sbs_geometry::{KamakuraTorchSbs, PenmarchTorchSbs};
 use procedural_common::{BuildWithNoise, NoiseConfig, NoiseParams, UnitRange};
+use sbs_geometry::{KamakuraTorchSbs, PenmarchTorchSbs};
 
 use crate::tropical_undergrowth::variants::tropical_undergrowth_vase_tree::{
 	understory_ring_spacing, UNDERSTORY_ANCHORS_PER_RING,

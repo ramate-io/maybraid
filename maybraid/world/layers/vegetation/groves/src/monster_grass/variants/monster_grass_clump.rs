@@ -3,8 +3,8 @@
 //! Blade width is **length-proportional** (`length * width_factor`), so monster blades stay
 //! grass-thin at 2–6 m heights.
 
-use sbs_geometry::BladeTuftShape;
 use procedural_common::{BuildWithNoise, NoiseConfig, NoiseParams, UnitRange};
+use sbs_geometry::BladeTuftShape;
 
 use crate::monster_grass::MonsterGrassClump;
 

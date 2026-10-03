@@ -4,14 +4,14 @@
 //! body-rig host. `From<ConceptAnimation>` lives in `characters`.
 
 use bevy::prelude::*;
-use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
-use character_rigs::Side;
 use character_animations::animations::{
 	air_duration, DorsoventralUndulation, FixedTuck, Flapping, FlipDirection, Gallop,
 	LateralUndulation, Leap, QuadrupedRun, Run, Soaring, TuckProfile, TuckedFlip, TwoFootedJump,
 	Walk, AIR_END, DEFAULT_BACKSWING, DEFAULT_GRAVITY, DEFAULT_JAB_TARGET, DEFAULT_JUMP_HEIGHT,
 	DEFAULT_LANDING_SQUAT_SPEED, DEFAULT_PRE_SQUAT_SPEED, DEFAULT_SPRING_DURATION, TAKEOFF_END,
 };
+use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
+use character_rigs::Side;
 
 const RUN_CYCLE_SPEED: f32 = 1.68;
 const WALK_CYCLE_SPEED: f32 = 1.08;

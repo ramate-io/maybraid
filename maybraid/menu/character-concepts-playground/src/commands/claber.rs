@@ -1,7 +1,6 @@
 //! `/claber` commands for the oversized low-slung quadruped concept species.
 
 use bevy::prelude::*;
-use clap::{Args, Subcommand};
 use characters::{
 	species::{
 		claber::{sliders::ClaberSliders, ClaberConfig, ClaberHornMesh},
@@ -9,6 +8,7 @@ use characters::{
 	},
 	BuildPreset, GenderPreset,
 };
+use clap::{Args, Subcommand};
 
 use crate::{animation::ConceptAnimation, preview::ConceptPreviewConfig};
 

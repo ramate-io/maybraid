@@ -1,9 +1,9 @@
 //! Adapter from jersey / marazion hydro height ops onto durham [`ElevationModulation`].
 
 use crate::terrain::sdf::{ElevationModulation, TerrainSdf};
+use std::sync::Arc;
 use terrain_stamps::StampModulation;
 use terrain_watersheds::HydroComplex;
-use std::sync::Arc;
 
 /// One elevation op in the final terrain stack.
 #[derive(Debug, Clone)]

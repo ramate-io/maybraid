@@ -3,7 +3,7 @@
 //! Each helper owns the knobs that only that operation needs. Stamp families
 //! compose the helpers they use; there is no single umbrella config.
 
-use crate::modulation::{StampModulation, RegionAffineModulation, RegionGradingModulation};
+use crate::modulation::{RegionAffineModulation, RegionGradingModulation, StampModulation};
 use crate::region::{CircleRegion, Region2D, RegionNoise};
 use bevy_math::Vec2;
 use procedural_common::{Bounds2, HysteresisConfig, HysteresisGraph, SeededHash};

@@ -4,16 +4,16 @@ use std::collections::HashMap;
 
 use bevy::prelude::{Color, Vec3};
 use bevy::scene::prelude::Scene;
-use sbs_trees::RorysHeadTrained;
-use vegetation_components::{
-	frond_material_ref, leaf_material_ref, stick_material_ref,
-	flattened_components_only_host, FoliageGeometry, FoliageNode, Layers, PlacedVegetation,
-	Placement, StickGeometry, StickNode, StructuralLod, VegetationComponents,
-};
 use lod::gen::{LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
 use lod::{cull_offset_bands_from_factor, SceneChunk};
 use material_ref::MaterialRef;
+use sbs_trees::RorysHeadTrained;
+use vegetation_components::{
+	flattened_components_only_host, frond_material_ref, leaf_material_ref, stick_material_ref,
+	FoliageGeometry, FoliageNode, Layers, PlacedVegetation, Placement, StickGeometry, StickNode,
+	StructuralLod, VegetationComponents,
+};
 
 use super::{GroveExtent, PaletteMix};
 
@@ -566,9 +566,7 @@ pub fn woody_grove_scene_chunks(
 				SceneChunk::chunks(plant_chunks)
 			}
 		}
-		None => {
-			vegetation_components::flattened_canopy_proxy_chunks(vegetation, lod_ref, level)
-		}
+		None => vegetation_components::flattened_canopy_proxy_chunks(vegetation, lod_ref, level),
 	}
 }
 
@@ -590,9 +588,7 @@ pub fn woody_grove_scene_chunks_keep_low_plants(
 				SceneChunk::chunks(plant_chunks)
 			}
 		}
-		None => {
-			vegetation_components::flattened_canopy_proxy_chunks(vegetation, lod_ref, level)
-		}
+		None => vegetation_components::flattened_canopy_proxy_chunks(vegetation, lod_ref, level),
 	}
 }
 
@@ -671,8 +667,8 @@ mod tests {
 	#[test]
 	fn column_proxy_is_taller_than_wide() {
 		let plant = LodPlant(StructuralLod::from_extent(Vec3::Y * 80.0, 20.0, 160.0));
-		let site = canopy_proxy_column(&plant, Placement::IDENTITY, &leaf_material_ref())
-			.expect("column");
+		let site =
+			canopy_proxy_column(&plant, Placement::IDENTITY, &leaf_material_ref()).expect("column");
 		assert!(site.half_extents.y > site.half_extents.x * 2.0);
 		assert!((site.half_extents.x - site.half_extents.z).abs() < 1e-4);
 		let nodes = foliage_low_canopy_balls([site]);
@@ -687,18 +683,15 @@ mod tests {
 	fn crown_proxy_sits_near_canopy_not_trunk_mid() {
 		let mid = StructuralLod::from_extent(Vec3::Y * 20.0, 8.0, 40.0);
 		let plant = LodPlant(mid);
-		let site = canopy_proxy_crown(&plant, Placement::IDENTITY, &leaf_material_ref())
-			.expect("crown");
+		let site =
+			canopy_proxy_crown(&plant, Placement::IDENTITY, &leaf_material_ref()).expect("crown");
 		assert!(site.center.y > mid.center.y);
 		assert!(site.radius() < mid.tree_radius * 0.6);
 
 		let crown_lod = StructuralLod::new(Vec3::Y * 34.0, 20.0);
-		let already = canopy_proxy_crown(
-			&LodPlant(crown_lod),
-			Placement::IDENTITY,
-			&leaf_material_ref(),
-		)
-		.expect("already-crown");
+		let already =
+			canopy_proxy_crown(&LodPlant(crown_lod), Placement::IDENTITY, &leaf_material_ref())
+				.expect("already-crown");
 		assert!((already.center.y - 34.0).abs() < 1e-3);
 		assert!(already.radius() < 12.0);
 	}
@@ -757,12 +750,8 @@ mod tests {
 		let crown = StructuralLod::new(Vec3::Y * 10.0, 6.0);
 		let plant = LodPlant(crown);
 		let placement = Placement::new(Vec3::new(2.0, 0.0, -1.0), 0.0).with_scale(Vec3::splat(2.0));
-		let sites = canopy_proxy_waialea(
-			&plant,
-			placement,
-			&stick_material_ref(),
-			&leaf_material_ref(),
-		);
+		let sites =
+			canopy_proxy_waialea(&plant, placement, &stick_material_ref(), &leaf_material_ref());
 		assert_eq!(sites.len(), 2);
 		let trunk = &sites[0];
 		let ball = &sites[1];
@@ -796,8 +785,8 @@ mod tests {
 	#[test]
 	fn frond_palette_uses_chico_frond_recipe() {
 		use crate::grove::{PaletteMix, PaletteSlot};
-		use vegetation_components::FROND_MATERIAL;
 		use material_ref::MaterialId;
+		use vegetation_components::FROND_MATERIAL;
 
 		let named = frond_material_from_palette(None, 0);
 		assert_eq!(named.name, MaterialId::named(FROND_MATERIAL));

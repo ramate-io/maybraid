@@ -33,11 +33,11 @@ pub use public_restroom::{PublicRestroom, PublicRestroomParameterized, PublicRes
 
 use bevy_math::bounding::Aabb3d;
 use bevy_math::{Vec2, Vec3};
-use lod::gen::LodSceneLevel;
-use procedural_common::{NoiseConfig, NoiseParams};
 use building_components::furniture::FurnitureNode;
 use building_components::panels::{PanelNode, PanelStyle};
 use building_components::{BuildingComponents, LabelNode, LabelStyle, Layers};
+use lod::gen::LodSceneLevel;
+use procedural_common::{NoiseConfig, NoiseParams};
 
 use crate::constraints::FaceKind;
 use crate::fit::{aabb_near_plane, aabb_xz_overlap_area, Confines, FillableRegions, Fit, FitError};

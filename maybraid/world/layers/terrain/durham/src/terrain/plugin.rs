@@ -6,14 +6,13 @@ use crate::terrain::collider::{
 	TerrainColliderSystems, TerrainFrictionConfig,
 };
 use crate::terrain::index::TerrainEntryStore;
-use crate::terrain::stamps::{StampControllerLayouts, TerrainStampConfigs};
-use crate::terrain::watersheds::{
-	bootstrap_pre_pocket_high_pass_layout, bootstrap_pre_pocket_low_pass_layout,
-	WatershedConfigs,
-};
 use crate::terrain::presentation::{
 	sync_visual_terrain_host_pose, TerrainBackground, TerrainFar, TerrainNear,
 	TerrainPresenterState, TerrainStreamPresenterState,
+};
+use crate::terrain::stamps::{StampControllerLayouts, TerrainStampConfigs};
+use crate::terrain::watersheds::{
+	bootstrap_pre_pocket_high_pass_layout, bootstrap_pre_pocket_low_pass_layout, WatershedConfigs,
 };
 use avian3d::prelude::PhysicsPlugins;
 use avian3d::schedule::PhysicsSchedulePlugin;
@@ -71,7 +70,9 @@ impl Plugin for TerrainResourcesPlugin {
 				(drop_superseded_terrain_colliders, queue_terrain_trimesh_colliders)
 					.chain()
 					.in_set(TerrainColliderSystems::QueueMeshes)
-					.in_set(terrain_layer_model::TerrainLayerSystems::<crate::Durham>::QueueColliders),
+					.in_set(
+						terrain_layer_model::TerrainLayerSystems::<crate::Durham>::QueueColliders,
+					),
 			)
 			.add_systems(
 				PostUpdate,

@@ -34,6 +34,13 @@ pub struct TrainingMap {
 	site_attempt: u32,
 }
 
+impl TrainingMap {
+	/// Stable identity for [`layer_stack::GenerationReadiness`]. A new life keeps it.
+	pub fn readiness_key(self) -> u64 {
+		mix(self.seed ^ u64::from(self.site_attempt).rotate_left(17))
+	}
+}
+
 impl Default for TrainingRound {
 	fn default() -> Self {
 		Self::new(42)

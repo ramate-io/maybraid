@@ -34,8 +34,6 @@
 
 use bevy::prelude::*;
 use camera_controls::look::CameraLookEnabled;
-use character_ui_menu::{CameraFocus, FocusRig};
-use characters_playground::CameraController;
 use character_creation_menus::characters::brenal::BODY_FOCUS as BRENAL_BODY_FOCUS;
 use character_creation_menus::characters::caole::BODY_FOCUS as CAOLE_BODY_FOCUS;
 use character_creation_menus::characters::claber::BODY_FOCUS as CLABER_BODY_FOCUS;
@@ -53,7 +51,9 @@ use character_creation_menus::focus::SPIBMOM_BODY_FOCUS;
 use character_creation_menus::focus::THUMPLUS_BODY_FOCUS;
 use character_creation_menus::focus::TIPPLE_BODY_FOCUS;
 use character_creation_menus::BODY_FOCUS;
+use character_ui_menu::{CameraFocus, FocusRig};
 use characters::{SocketRefApplied, SocketRefRoot};
+use characters_playground::CameraController;
 
 use crate::{
 	focus_reference::FocusReferenceRig,

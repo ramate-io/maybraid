@@ -1,8 +1,8 @@
 //! `/show i-floor` — I / T / U / L / Z storey shell with openings.
 
 use bevy::prelude::*;
-use clap::Args;
 use buildings::{IFloor, IFloorParams, IFloorSlab};
+use clap::Args;
 
 use super::opening::{i_floor_openings, parse_opening_arg, OpeningArg, OrthoOpeningContext};
 use super::ShowTransform;

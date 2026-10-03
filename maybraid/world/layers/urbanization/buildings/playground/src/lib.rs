@@ -14,6 +14,10 @@ pub use preview::{PreviewConfig, PreviewSubject};
 
 use bevy::camera::visibility::VisibilitySystems;
 use bevy::prelude::*;
+use building_components::{
+	apply_parent_confines, FurnitureWireframePlugin, LabelWireframePlugin, MassingSilhouettePlugin,
+};
+use buildings::wizards_tower::TowerSilhouettePlugin;
 use buildings_lod::BuildingsLodRefreshPlugin;
 use commands::RequestMeshStats;
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
@@ -25,10 +29,6 @@ use preview::{
 	draw_label_text_gizmos, draw_opening_plan_gizmos, draw_roof_complex_gizmos,
 	present_preview_lod, CachedPreview,
 };
-use building_components::{
-	apply_parent_confines, FurnitureWireframePlugin, LabelWireframePlugin, MassingSilhouettePlugin,
-};
-use buildings::wizards_tower::TowerSilhouettePlugin;
 use scene_ref::SceneRefPlugin;
 
 pub struct BuildingsPlaygroundPlugin;

@@ -23,10 +23,10 @@ mod walls;
 mod tests;
 
 use bevy_math::{Vec2, Vec3};
-use lod::gen::LodSceneLevel;
 use building_components::floors::FloorNode;
 use building_components::partitions::{PartitionNode, PartitionStyle};
 use building_components::{BuildingComponents, Layers};
+use lod::gen::LodSceneLevel;
 
 use crate::openings::{MappedOpenings, Openings};
 

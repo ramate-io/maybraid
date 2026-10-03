@@ -14,13 +14,13 @@ pub use game_commands::command::PendingStartupCommand;
 pub use preview::{PreviewConfig, PreviewSubject};
 
 use bevy::prelude::*;
+use building_components::FurnitureWireframePlugin;
 use furniture_assemblies::FurnitureAssembliesPlugin;
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use ground::setup_ground;
 use lod_lazy_refs::LodLazyRefsPlugin;
 use material_lib::PlaygroundMaterialRefPlugin;
 use preview::present_preview;
-use building_components::FurnitureWireframePlugin;
 use scene_ref::SceneRefPlugin;
 
 pub struct FurniturePlaygroundPlugin;

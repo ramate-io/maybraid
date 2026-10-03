@@ -1,9 +1,9 @@
 //! Two-rail strip of best-fit [`PanelGeometry::Rectangle`] kits + crease joints.
 
-use lod::gen::LodSceneLevel;
 use building_components::joints::JointNode;
 use building_components::panels::{PanelNode, PanelStyle};
 use building_components::{BuildingComponents, Layers};
+use lod::gen::LodSceneLevel;
 
 use crate::paneling::fitted_rectangle::FittedRectangle;
 use crate::paneling::panel_complex::{PanelComplexJointPolicy, PanelPoint};

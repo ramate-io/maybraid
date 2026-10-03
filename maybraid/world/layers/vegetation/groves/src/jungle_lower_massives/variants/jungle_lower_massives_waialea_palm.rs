@@ -1,7 +1,7 @@
 //! [`BuildWithNoise`] for [`JungleLowerMassivesWaialeaPalm`].
 
-use sbs_geometry::WaialeaPalmSbs;
 use procedural_common::{BuildWithNoise, NoiseConfig, NoiseParams, UnitRange};
+use sbs_geometry::WaialeaPalmSbs;
 
 use crate::jungle_lower_massives::JungleLowerMassivesWaialeaPalm;
 

@@ -20,9 +20,7 @@ pub trait ChicoGround: TerrainModel {
 
 impl<T> ChicoGround for Urbanization<Richmond<T>>
 where
-	Urbanization<Richmond<T>>: TerrainModel<
-		Cell: TerrainCell<Mesh = durham::TerrainMeshBuilder>,
-	>,
+	Urbanization<Richmond<T>>: TerrainModel<Cell: TerrainCell<Mesh = durham::TerrainMeshBuilder>>,
 {
 	fn fine_overlay_size() -> f32 {
 		durham::TERRAIN_CELL_SIZE
@@ -52,9 +50,7 @@ mod tests {
 	use bevy::math::bounding::Aabb3d;
 	use bevy::math::Vec3;
 	use bevy::prelude::World;
-	use durham::{
-		BaseTerrainNoise, TerrainCellLayout, TerrainConfig, TerrainEntryStore,
-	};
+	use durham::{BaseTerrainNoise, TerrainCellLayout, TerrainConfig, TerrainEntryStore};
 	use lod_cascade::Chunk;
 	use terrain_chunk_ref::TerrainChunkRef;
 	use terrain_layer_model::{OnTerrain, TerrainCell};
@@ -96,6 +92,8 @@ mod tests {
 	#[test]
 	fn bump_out_cells_match_terrain_rings() {
 		assert!((crate::BUMP_OUT_CELL_XZ - Urbanized::fine_overlay_size()).abs() < 1e-3);
-		assert!((crate::MEDIUM_BUMP_OUT_CELL_XZ - 2.0 * Urbanized::fine_overlay_size()).abs() < 1e-3);
+		assert!(
+			(crate::MEDIUM_BUMP_OUT_CELL_XZ - 2.0 * Urbanized::fine_overlay_size()).abs() < 1e-3
+		);
 	}
 }

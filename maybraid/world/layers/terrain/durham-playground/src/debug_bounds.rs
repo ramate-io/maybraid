@@ -3,8 +3,8 @@
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use durham::{
-	cascade_chunk_for_cell, StampControllerLayouts, WatershedLeafKind,
-	PlateauLowPassControllerLayout, Terrain, TerrainCellId, TerrainCellLayout, TerrainEntryStore,
+	cascade_chunk_for_cell, PlateauLowPassControllerLayout, StampControllerLayouts, Terrain,
+	TerrainCellId, TerrainCellLayout, TerrainEntryStore, WatershedLeafKind,
 };
 use std::fmt::{Display, Formatter, Result as FmtResult};
 

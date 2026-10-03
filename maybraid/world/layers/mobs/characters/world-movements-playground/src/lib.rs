@@ -21,9 +21,8 @@ use character::{
 	apply_set_character, apply_stampede, drive_player_locomotion, respawn_stampede_members,
 	StampedeMember,
 };
-use commands::{RequestModeCharacter, RequestModeFree};
 use characters::{CharacterHostsPlugin, CharacterMotionSystems, LocomotionCapsule};
-use terrain_shaders::{TerrainShader, TerrainShaderPlugin, RefractionWater};
+use commands::{RequestModeCharacter, RequestModeFree};
 use durham::{
 	AvianTerrainIndex, BaseTerrainNoise, ComposedWater, DurhamTerrainModelsPlugin, Terrain,
 	TerrainCellLayout, TerrainConfig, TerrainEntryStore, TerrainMeshBuilder, TerrainMeshLodBand,
@@ -38,6 +37,7 @@ use pitch::{apply_avian_terrain_pitch, sync_suspend_terrain_pitch};
 use player::{respawn_player_on_layout, Player, PlayerControlSystems, PlayerPlugin};
 use render_item::mesh::handle::EnforceCachingPlugin;
 use std::f32::consts::PI;
+use terrain_shaders::{RefractionWater, TerrainShader, TerrainShaderPlugin};
 
 /// Fine-grid half-extent in base cells. 4×4 cells → ~640 m at the Durham cell size.
 const PLAYGROUND_FINE_HALF_EXTENT_CELLS: i32 = 2;

@@ -26,6 +26,6 @@ pub use hopscotch::{select as hopscotch_select, HopscotchNode};
 pub use index::UrbanizationIndex;
 pub use kind::{UrbanDevelopmentKind, UrbanizationKind, UrbanizationRecipe, WeightedDevelopment};
 pub use richmond::{
-	urbanization_hopscotch, select_cell, select_cell_as, select_kind, DevelopmentLeaf,
+	select_cell, select_cell_as, select_kind, urbanization_hopscotch, DevelopmentLeaf,
 	SelectedUrbanization, DEFAULT_HOP_BUDGET,
 };

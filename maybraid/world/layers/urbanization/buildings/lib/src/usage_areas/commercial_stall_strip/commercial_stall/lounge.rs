@@ -5,10 +5,10 @@
 //! **Programmatically:** single bay-filling label; never soft-fails (outside the
 //! weighted catalog; last resort in [`super::interior`]).
 
-use lod::gen::LodSceneLevel;
-use procedural_common::NoiseParams;
 use building_components::furniture::FurnitureNode;
 use building_components::{BuildingComponents, LabelNode, LabelStyle, Layers};
+use lod::gen::LodSceneLevel;
+use procedural_common::NoiseParams;
 
 use crate::fit::{Confines, FillableRegions, Fit, FitError};
 use crate::usage_areas::furniture_util::{chairs_in_aabb, FurnitureFill};

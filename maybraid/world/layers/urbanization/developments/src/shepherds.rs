@@ -9,9 +9,6 @@ use std::sync::Arc;
 
 use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::{Vec2, Vec3};
-use lod::gen::LodSceneLevel;
-use material_ref::MaterialRef;
-use procedural_common::{NoiseConfig, NoiseParams};
 use building_components::panels::PanelStyle;
 use building_components::{
 	BuildingComponents, BuildingStructuralLodProbe, DoorNode, FloorNode, FurnitureNode, JointNode,
@@ -24,6 +21,9 @@ use buildings::{
 	RectangularPitchedRoofComplex, RectangularPitchedRoofComplexParams, StairwellKind, WellAabb,
 	MIN_HALL_WIDTH, MIN_POCKET_SHAFT_SIDE,
 };
+use lod::gen::LodSceneLevel;
+use material_ref::MaterialRef;
+use procedural_common::{NoiseConfig, NoiseParams};
 
 use crate::connected::ConnectedDevelopment;
 use crate::placed::{BuildingFootprint, PlacedBuilding};

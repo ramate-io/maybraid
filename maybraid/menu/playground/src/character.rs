@@ -4,9 +4,9 @@ use std::collections::HashMap;
 
 use bevy::prelude::*;
 use bevy::ui::widget::ViewportNode;
-use character_ui_menu::{AssetThumbnailDisplay, MenuComponent};
-use character_items::{Inventory, InventoryItem};
 use character_creation_menus::{CharacterMenu, MenuEvent};
+use character_items::{Inventory, InventoryItem};
+use character_ui_menu::{AssetThumbnailDisplay, MenuComponent};
 use maybraid_character_ui_menu_renderer::{
 	find_overlay_node, overlay_closes_on_pick, render_overlay_body, spawn_overlay_shell,
 	CharacterHudSystems, CharacterMenuEvent, MaybraidCharacterMenuRendererPlugin, MaybraidMenuSink,
@@ -712,8 +712,8 @@ fn on_short_text_change(
 #[cfg(test)]
 mod tests {
 	use super::{save_chrome, CharacterEditBaseline};
-	use character_items::Inventory;
 	use character_creation_menus::CharacterMenu;
+	use character_items::Inventory;
 
 	#[test]
 	fn save_chrome_create_and_dirty_saved() {

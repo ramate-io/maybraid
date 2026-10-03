@@ -3,10 +3,10 @@ use bevy_character_ui_menu_renderer::{CharacterMenuEvent, MenuButton, ToggleSect
 use character_creation_menus::{CharacterMenu, ConceptSpecies, MenuEvent, SectionId};
 
 use crate::{
-	camera_focus::{PendingCameraFocus, focus_debug_enabled, queue_camera_focus},
+	camera_focus::{focus_debug_enabled, queue_camera_focus, PendingCameraFocus},
 	focus_reference::FocusReferenceSyncState,
 	preview::{ConceptPreviewConfig, ConceptPreviewSyncState, PreviewRespawnCooldown},
-	species_session::{CameraFocusBootState, SpeciesSessionState, reset_for_species_switch},
+	species_session::{reset_for_species_switch, CameraFocusBootState, SpeciesSessionState},
 };
 
 #[derive(Resource, Clone, Debug, PartialEq)]

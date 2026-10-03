@@ -1,7 +1,6 @@
 //! `/brodler` commands for the Brodler concept species.
 
 use bevy::prelude::*;
-use clap::{Args, Subcommand};
 use character_items::{ClothingMaterial, ClothingMesh};
 use characters::species::{
 	brodler::{
@@ -10,6 +9,7 @@ use characters::species::{
 	},
 	common::{EarMesh, EyeMesh, HairMesh, MouthMesh, NoseMesh},
 };
+use clap::{Args, Subcommand};
 
 use crate::{animation::ConceptAnimation, preview::ConceptPreviewConfig};
 

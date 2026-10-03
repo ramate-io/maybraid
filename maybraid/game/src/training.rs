@@ -6,8 +6,8 @@
 //! the same map; your own character's moves to a new one.
 
 use bevy::prelude::*;
-use maybraid_game_mode_training_ground::TrainingRound;
-use maybraid_world::{TrainingLifeEnded, WorldPlayerLoadout, WorldSurfaceReady};
+use maybraid_game_mode_training_ground::{training_trainee, TrainingLifeEnded, TrainingRound};
+use maybraid_world::{WorldPlayerLoadout, WorldSurfaceReady};
 use menu_screens::{GameMode, TrainingCharacterChoice, TrainingSpawn};
 
 use crate::flow::{GameFlow, PlaySession};
@@ -73,7 +73,13 @@ pub(crate) fn session_trainee(
 	if spawn?.current != TrainingCharacterChoice::Random {
 		return None;
 	}
-	round.map(|round| maybraid_world::training_trainee(*round))
+	round.map(|round| trainee_loadout(*round))
+}
+
+pub(crate) fn trainee_loadout(round: TrainingRound) -> WorldPlayerLoadout {
+	let trainee = training_trainee(round);
+	WorldPlayerLoadout::new(trainee.key, trainee.appearance, trainee.inventory)
+		.with_name(trainee.name)
 }
 
 /// Leave / Home: drop the session.
@@ -93,8 +99,8 @@ pub(crate) fn clear_play_session(
 mod tests {
 	use super::*;
 	use bevy::ecs::system::RunSystemOnce;
-	use maybraid_game_mode_training_ground::TrainingGround;
 	use layer_stack::ActiveGenerationMode;
+	use maybraid_game_mode_training_ground::TrainingGround;
 
 	fn shell_states(world: &mut World) {
 		world.insert_resource(NextState::<GameFlow>::Unchanged);
@@ -177,10 +183,7 @@ mod tests {
 		let next = ended_life(TrainingCharacterChoice::Random)?;
 		assert_eq!(next, round.next_life());
 		assert_eq!(next.map(), round.map());
-		assert_ne!(
-			maybraid_world::training_trainee(next),
-			maybraid_world::training_trainee(round)
-		);
+		assert_ne!(trainee_loadout(next), trainee_loadout(round));
 		Ok(())
 	}
 
@@ -198,7 +201,7 @@ mod tests {
 		let active = TrainingSpawn::new(TrainingCharacterChoice::Active);
 		assert_eq!(
 			session_trainee(PlaySession::Training, Some(&random), Some(&round)),
-			Some(maybraid_world::training_trainee(round))
+			Some(trainee_loadout(round))
 		);
 		assert_eq!(session_trainee(PlaySession::Training, Some(&active), Some(&round)), None);
 		assert_eq!(session_trainee(PlaySession::Discovery, Some(&random), Some(&round)), None);

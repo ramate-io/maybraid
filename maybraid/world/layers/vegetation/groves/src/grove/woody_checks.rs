@@ -6,9 +6,9 @@ use std::collections::HashSet;
 use anyhow::Result;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::{Entity, Transform, Vec3};
-use vegetation_components::VegetationComponents;
 use lod::gen::{LodScene, LodSceneLevel};
 use lod::lod_ref::LodRef;
+use vegetation_components::VegetationComponents;
 
 /// Camera used by the copied High/Medium nest checks.
 pub fn preview_lod_ref<'a>(camera: &'a Transform, bounds: &'a Aabb3d) -> LodRef<'a> {

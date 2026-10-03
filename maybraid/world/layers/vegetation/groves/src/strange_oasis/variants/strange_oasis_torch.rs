@@ -1,7 +1,7 @@
 //! [`BuildWithNoise`] for [`StrangeOasisTorch`].
 
-use sbs_geometry::PenmarchTorchSbs;
 use procedural_common::{BuildWithNoise, NoiseConfig, NoiseParams, UnitRange};
+use sbs_geometry::PenmarchTorchSbs;
 
 use crate::strange_oasis::StrangeOasisTorch;
 

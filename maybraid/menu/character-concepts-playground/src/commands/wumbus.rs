@@ -1,12 +1,12 @@
 //! `/wumbus` commands for the Wumbus concept species.
 
 use bevy::prelude::*;
-use clap::{Args, Subcommand};
 use character_items::{ClothingMaterial, ClothingMesh};
 use characters::species::{
 	common::{EyeMesh, HairMesh},
 	wumbus::{WumbusConfig, WumbusEarColor, WumbusEyeColor, WumbusHornMesh, WumbusSkinColor},
 };
+use clap::{Args, Subcommand};
 
 use crate::{animation::ConceptAnimation, preview::ConceptPreviewConfig};
 

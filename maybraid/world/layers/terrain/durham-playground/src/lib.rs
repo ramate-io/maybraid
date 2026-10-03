@@ -18,19 +18,17 @@ use bevy::math::{IVec2, UVec2};
 use bevy::prelude::*;
 use camera::{camera_controller, refocus_camera_on_layout, setup_camera};
 use character::{apply_set_character, drive_player_locomotion};
+use characters::{CharacterHostsPlugin, CharacterMotionSystems};
 use commands::{
 	PendingCellLayoutPatch, RequestCellShow, RequestMeshStats, RequestModeCharacter,
 	RequestModeFree, RequestSeed,
 };
-use characters::{CharacterHostsPlugin, CharacterMotionSystems};
 use debug_bounds::{setup_cell_location_hud, update_cell_location_hud, PlaygroundDebugOverlay};
-use terrain_shaders::{TerrainShader, TerrainShaderPlugin, RefractionWater};
 use durham::{
-	AvianTerrainIndex, BaseTerrainNoise, ComposedWater, DurhamTerrainModelsPlugin,
-	TerrainStampConfigs, WatershedConfigs, OuterCellRing, Terrain, TerrainCellLayout,
-	TerrainConfig, TerrainEntryStore, TerrainMeshBuilder, TerrainMeshLodBand,
-	TerrainPresentationAssets, TerrainRegionPresenter, TerrainStoreView, Water,
-	WaterPresentationAssets, TERRAIN_CELL_SIZE,
+	AvianTerrainIndex, BaseTerrainNoise, ComposedWater, DurhamTerrainModelsPlugin, OuterCellRing,
+	Terrain, TerrainCellLayout, TerrainConfig, TerrainEntryStore, TerrainMeshBuilder,
+	TerrainMeshLodBand, TerrainPresentationAssets, TerrainRegionPresenter, TerrainStampConfigs,
+	TerrainStoreView, Water, WaterPresentationAssets, WatershedConfigs, TERRAIN_CELL_SIZE,
 };
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use game_commands::ui::{GameCommandDrawerConfig, GameCommandStatusText};
@@ -40,6 +38,7 @@ use pitch::{apply_avian_terrain_pitch, sync_suspend_terrain_pitch};
 use player::{respawn_player_on_layout, Player, PlayerControlSystems, PlayerPlugin};
 use render_item::mesh::handle::EnforceCachingPlugin;
 use std::f32::consts::PI;
+use terrain_shaders::{RefractionWater, TerrainShader, TerrainShaderPlugin};
 
 /// Fine-grid half-extent in base cells (covers rings through base-sized `res_2 = 2`).
 /// World footprint `[-R·s, R·s)` so it abuts the 2× outer-ring tiles.

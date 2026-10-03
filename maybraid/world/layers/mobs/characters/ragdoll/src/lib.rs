@@ -320,7 +320,11 @@ fn begin_corpse_handoffs(
 				continue;
 			}
 			commands.entity(visual).insert((
-				Corpse { source: downed.source, point: downed.point, inherited_velocity: inherited },
+				Corpse {
+					source: downed.source,
+					point: downed.point,
+					inherited_velocity: inherited,
+				},
 				SuspendAnimation,
 			));
 			commands.entity(body).try_insert(CorpseHandoff { visual, started_at: now });
@@ -957,7 +961,9 @@ mod tests {
 		assert!(world.get::<CorpseHandoff>(body).is_some());
 		assert!(world.get::<CharacterController>(body).is_none());
 		assert!(world.get::<MoveWish>(body).is_some_and(|wish| wish.0 == Vec3::ZERO));
-		assert!(world.get::<LinearVelocity>(body).is_some_and(|velocity| velocity.0 == Vec3::ZERO));
+		assert!(world
+			.get::<LinearVelocity>(body)
+			.is_some_and(|velocity| velocity.0 == Vec3::ZERO));
 		assert!(world.get::<DespawnAfter>(body).is_some());
 		Ok(())
 	}

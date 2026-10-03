@@ -1,11 +1,11 @@
 //! Joint [`FrondCrownShape`] sprays aligned to branch direction ([RFC §3.1.7.15](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-183-chico-vegetation/03-01-stalk-and-ball-stick-trees/07-well-known-tree-constructions/15-temperate-conifer/README.md), [#238](https://github.com/ramate-io/maybraid/issues/238)).
 
 use bevy::prelude::*;
+use procedural_common::UnitRange;
 use sbs_geometry::render::mix_seed::node_mix_seed;
 use sbs_geometry::{
 	BallStickChain, BallStickNode, FriendsConiferChain, FriendsConiferSbs, FrondCrownShape,
 };
-use procedural_common::UnitRange;
 
 const FROND_WIDTH_FRACTION_OF_HEIGHT: f32 = 0.010;
 const FROND_DROOP: f32 = 0.24;

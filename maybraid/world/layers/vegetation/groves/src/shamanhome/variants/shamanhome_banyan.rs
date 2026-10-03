@@ -1,7 +1,7 @@
 //! [`BuildWithNoise`] for [`ShamanhomeBanyan`].
 
-use sbs_geometry::SopesBanyanSbs;
 use procedural_common::{BuildWithNoise, NoiseConfig, NoiseParams, UnitRange};
+use sbs_geometry::SopesBanyanSbs;
 
 use crate::shamanhome::ShamanhomeBanyan;
 

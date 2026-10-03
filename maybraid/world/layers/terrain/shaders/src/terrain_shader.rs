@@ -111,9 +111,7 @@ mod tests {
 
 	#[test]
 	fn noise_uniform_global_seed_helpers() {
-		let n = TerrainNoiseUniform::default()
-			.with_global_seed(7.0)
-			.with_band_seed(1, 99.0);
+		let n = TerrainNoiseUniform::default().with_global_seed(7.0).with_band_seed(1, 99.0);
 		assert!((n.seed() - 7.0).abs() < 1e-5);
 		assert!((n.bands[0].config.x - 120_079.0).abs() < 1e-3);
 		assert!((n.bands[1].config.x - 99.0).abs() < 1e-5);

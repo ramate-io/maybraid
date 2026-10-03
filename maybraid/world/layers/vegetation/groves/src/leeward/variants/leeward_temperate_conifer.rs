@@ -1,8 +1,8 @@
 //! [`BuildWithNoise`] for [`LeewardTemperateConifer`].
 
-use sbs_geometry::FriendsConiferSbs;
 use procedural_common::UsizeRange;
 use procedural_common::{BuildWithNoise, NoiseConfig, NoiseParams, UnitRange};
+use sbs_geometry::FriendsConiferSbs;
 
 use crate::leeward::LeewardTemperateConifer;
 

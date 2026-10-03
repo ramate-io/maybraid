@@ -18,8 +18,8 @@ use sbs_geometry::{
 	BallStickChain, StorybookTreeChain, VaseTreeSbs, DEFAULT_APEX_BALL_RADIUS_FRACTION_OF_HEIGHT,
 };
 use vegetation_components::{
-	leaf_material_ref, stick_material_ref, FoliageNode, Layers, StickNode,
-	StructuralLod, VegetationComponents,
+	leaf_material_ref, stick_material_ref, FoliageNode, Layers, StickNode, StructuralLod,
+	VegetationComponents,
 };
 
 use crate::storybook_tree::{merge_cheap_ball_foliage, merge_kit_sticks};

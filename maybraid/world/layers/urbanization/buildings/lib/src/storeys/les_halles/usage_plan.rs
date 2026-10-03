@@ -12,13 +12,13 @@ mod livable;
 
 pub use livable::LesHallesLivableUsage;
 
-use lod::gen::LodSceneLevel;
-use procedural_common::NoiseParams;
 use building_components::furniture::FurnitureNode;
 use building_components::joints::JointNode;
 use building_components::labels::LabelNode;
 use building_components::panels::PanelNode;
 use building_components::{BuildingComponents, Layers};
+use lod::gen::LodSceneLevel;
+use procedural_common::NoiseParams;
 
 use crate::fit::{FillableRegions, Fit, FitError, SpaceKind};
 use crate::usage_areas::furniture_util::{

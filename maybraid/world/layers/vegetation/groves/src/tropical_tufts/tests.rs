@@ -99,10 +99,10 @@ mod render_tests {
 	use crate::tropical_tufts::TropicalTuftsParams;
 	use bevy::math::bounding::Aabb3d;
 	use bevy::prelude::{Entity, Transform};
-	use vegetation_components::VegetationComponents;
 	use lod::gen::{LodScene, LodSceneLevel};
 	use lod::lod_ref::LodRef;
 	use lod::SceneChunk;
+	use vegetation_components::VegetationComponents;
 
 	#[test]
 	fn palms_share_quantized_arcs() -> Result<()> {

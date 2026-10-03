@@ -9,9 +9,9 @@
 //! 3. Tessellate a spiral of rough-stone treads around [`ArcSpireParams::radius`].
 
 use bevy_math::Vec3;
-use lod::gen::LodSceneLevel;
 use building_components::stairs::{Stair, StairNode};
 use building_components::{BuildingComponents, Layers, Placement};
+use lod::gen::LodSceneLevel;
 
 /// Inclusive scale range vs the target tread height used when fitting \(Y\) gaps.
 #[derive(Debug, Clone, Copy, PartialEq)]

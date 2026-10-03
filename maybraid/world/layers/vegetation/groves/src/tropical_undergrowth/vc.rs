@@ -4,13 +4,6 @@ use std::sync::Arc;
 #[cfg(test)]
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
-use sbs_geometry::{KamakuraTorchSbs, PenmarchTorchSbs};
-use sbs_trees::{
-	KamakuraTorch, KamakuraTorchParams, PalmBush, PalmBushParams, PenmarchTorch,
-	PenmarchTorchParams, QuantizedPlant, RorysHeadTrained, RorysHeadTrainedParams, StorybookTree,
-	StorybookTreeParams, TuftPatch, VaseTree, VaseTreeParams,
-};
-use vegetation_components::{Placement, StickNode, VegetationComponents};
 use clap::Args;
 #[cfg(test)]
 use lod::gen::{LodScene, LodSceneLevel};
@@ -18,6 +11,13 @@ use lod::lod_ref::LodRef;
 use lod::SceneChunk;
 use material_ref::MaterialRef;
 use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
+use sbs_geometry::{KamakuraTorchSbs, PenmarchTorchSbs};
+use sbs_trees::{
+	KamakuraTorch, KamakuraTorchParams, PalmBush, PalmBushParams, PenmarchTorch,
+	PenmarchTorchParams, QuantizedPlant, RorysHeadTrained, RorysHeadTrainedParams, StorybookTree,
+	StorybookTreeParams, TuftPatch, VaseTree, VaseTreeParams,
+};
+use vegetation_components::{Placement, StickNode, VegetationComponents};
 
 use super::{
 	definition, TropicalUndergrowthCell, TropicalUndergrowthTorch, BRIGHT_TUFT, BRIGHT_TUFT_PATCH,

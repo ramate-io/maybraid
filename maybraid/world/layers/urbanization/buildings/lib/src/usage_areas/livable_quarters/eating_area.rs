@@ -7,12 +7,12 @@ pub use parameterized::{EatingAreaPacked, EatingAreaParameterized, EatingAreaPla
 
 use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
-use lod::gen::LodSceneLevel;
-use procedural_common::NoiseParams;
 use building_components::furniture::FurnitureNode;
 use building_components::joints::JointNode;
 use building_components::panels::PanelNode;
 use building_components::{BuildingComponents, LabelNode, LabelStyle, Layers};
+use lod::gen::LodSceneLevel;
+use procedural_common::NoiseParams;
 
 use crate::fit::{Confines, FillableRegions, Fit, FitError};
 use crate::usage_areas::label_util::label_filling_aabb;

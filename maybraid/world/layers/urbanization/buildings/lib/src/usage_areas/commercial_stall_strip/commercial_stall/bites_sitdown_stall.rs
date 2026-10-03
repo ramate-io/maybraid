@@ -12,10 +12,10 @@ pub mod parameterized;
 
 pub use parameterized::{BitesSitdownParameterized, BitesSitdownPlan};
 
-use lod::gen::LodSceneLevel;
-use procedural_common::NoiseParams;
 use building_components::furniture::{FurnitureUsage, FurnitureUsageNode};
 use building_components::{BuildingComponents, LabelNode, LabelStyle, Layers};
+use lod::gen::LodSceneLevel;
+use procedural_common::NoiseParams;
 
 use crate::fit::{Confines, FillableRegions, Fit, FitError};
 use crate::usage_areas::furniture_util::{furniture_usage_fill, FurnitureUsageFill};
@@ -177,9 +177,10 @@ mod tests {
 		let plan = BitesSitdownPlan::from_parameterized(roomy_params(35.0), &confines).unwrap();
 		let stall = BitesSitdownStall::from_plan(plan, &confines, NoiseParams::default());
 		assert!(!stall.bites_counters.is_empty());
-		assert!(stall.bites_counters.iter().all(|fill| {
-			fill.usage.kind == building_components::FurnitureUsage::BitesCounter
-		}));
+		assert!(stall
+			.bites_counters
+			.iter()
+			.all(|fill| { fill.usage.kind == building_components::FurnitureUsage::BitesCounter }));
 		assert_eq!(
 			stall.bites_kitchen.usage.kind,
 			building_components::FurnitureUsage::BitesKitchen

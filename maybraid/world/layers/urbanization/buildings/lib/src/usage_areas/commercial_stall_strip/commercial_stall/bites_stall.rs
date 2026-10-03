@@ -11,10 +11,10 @@ pub mod parameterized;
 
 pub use parameterized::{BitesStallParameterized, BitesStallPlan};
 
-use lod::gen::LodSceneLevel;
-use procedural_common::NoiseParams;
 use building_components::furniture::{FurnitureUsage, FurnitureUsageNode};
 use building_components::{BuildingComponents, LabelNode, LabelStyle, Layers};
+use lod::gen::LodSceneLevel;
+use procedural_common::NoiseParams;
 
 use crate::fit::{Confines, FillableRegions, Fit, FitError};
 use crate::usage_areas::furniture_util::{furniture_usage_fill, FurnitureUsageFill};

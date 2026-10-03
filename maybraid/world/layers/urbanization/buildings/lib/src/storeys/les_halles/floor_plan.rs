@@ -2,14 +2,14 @@
 
 use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::{Vec2, Vec3};
-use lod::gen::LodSceneLevel;
-use material_ref::MaterialRef;
-use procedural_common::{NoiseConfig, NoiseParams};
 use building_components::joints::JointNode;
 use building_components::panels::{PanelNode, PanelStyle};
 use building_components::{
 	ring_strip_xz, BuildingComponents, BuildingStructuralLodProbe, Layers, MassingVolume,
 };
+use lod::gen::LodSceneLevel;
+use material_ref::MaterialRef;
+use procedural_common::{NoiseConfig, NoiseParams};
 
 use crate::fit::{
 	aabb_near_plane, aabb_xz_center, aabb_xz_overlap_area, Confines, FillRegion, FillableRegions,

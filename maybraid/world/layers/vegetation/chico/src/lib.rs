@@ -23,9 +23,9 @@ mod kind;
 mod layer;
 mod layer_present;
 mod layer_stream;
-mod model;
 pub mod layerings;
 mod material;
+mod model;
 mod plugin;
 mod present;
 mod recipe;
@@ -51,22 +51,14 @@ pub use bump_out::{
 pub use chico::{chico_hopscotch, select_cell, select_layering, DEFAULT_HOP_BUDGET};
 pub use config::{ChicoConfig, ForestStreamSpec};
 pub use extent::{ForestExtent, DEFAULT_FOREST_EXTENT_XZ, DEFAULT_FOREST_GROVE_TILE_XZ};
-pub use ground::{overlay_chunk_ref, ChicoGround};
 pub use forest::{neighbor_layers, ChicoForest};
 pub use generation::{
 	BumpOutGenerateBullseye, BumpOutLodChan, BumpOutPresentBullseye, ForestGenerateBullseye,
 	ForestLodChan, ForestPresentBullseye, ForestPresentLattice, MediumBumpOutLodChan,
 	GROVE_GENERATE_RADIUS_M, GROVE_PRESENT_RADIUS_M,
 };
+pub use ground::{overlay_chunk_ref, ChicoGround};
 pub use grove::{grove_from_id, grove_id, ChicoGrove};
-pub use layer_present::{
-	bump_out_from_cell, bump_out_noise, GroundCanopyBumpOutPresenter, GroundForestPresenter,
-	GroundGroveSample, GroundMediumCanopyBumpOutPresenter,
-};
-pub use layer_stream::{
-	install_vegetation_stream, stream_radii_m, stream_vegetation, VegetationStreamKey,
-	DEFAULT_FOREST_NOISE, DEFAULT_FOREST_STREAM_RADIUS,
-};
 pub use hopscotch::{select as hopscotch_select, HopscotchNode};
 pub use host::ChicoGroveHost;
 pub use index::{forest_world_sample, ForestIndex};
@@ -75,8 +67,16 @@ pub use kind::{
 	WeightedGrove, TUFT_DROP_MIN_HEIGHT_M,
 };
 pub use layer::{select_layers, throw_layer};
-pub use model::Chico;
+pub use layer_present::{
+	bump_out_from_cell, bump_out_noise, GroundCanopyBumpOutPresenter, GroundForestPresenter,
+	GroundGroveSample, GroundMediumCanopyBumpOutPresenter,
+};
+pub use layer_stream::{
+	install_vegetation_stream, stream_radii_m, stream_vegetation, VegetationStreamKey,
+	DEFAULT_FOREST_NOISE, DEFAULT_FOREST_STREAM_RADIUS,
+};
 pub use material::{VegetationOnTerrainMaterialLib, VegetationOnTerrainMaterialRefPlugin};
+pub use model::Chico;
 pub use plugin::{register_vegetation_view, VegetationViewPlugin};
 pub use present::ForestPresenterState;
 pub use recipe::{ForestGroveRecipe, WORLD_FOREST_TREE_VARIANTS};

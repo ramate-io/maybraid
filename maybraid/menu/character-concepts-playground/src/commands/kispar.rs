@@ -1,12 +1,12 @@
 //! `/kispar` commands for the Kispar concept species.
 
 use bevy::prelude::*;
-use clap::{Args, Subcommand};
 use character_items::{ClothingMaterial, ClothingMesh};
 use characters::species::{
 	common::{EyeMesh, HairMesh},
 	kispar::{KisparBeakColor, KisparBeakMesh, KisparConfig, KisparEyeColor, KisparPlumageColor},
 };
+use clap::{Args, Subcommand};
 
 use crate::{animation::ConceptAnimation, preview::ConceptPreviewConfig};
 

@@ -7,11 +7,11 @@
 //! `TypedBucketThrow`; try that kind, then walk first-fit order. Soft-fails
 //! (`FitError::TooSmall`) skip to the next kind; Lounge always succeeds.
 
-use lod::gen::LodSceneLevel;
-use procedural_common::{NoiseParams, NoiseType, TypedBucketThrow};
 use building_components::furniture::FurnitureNode;
 use building_components::panels::PanelNode;
 use building_components::{BuildingComponents, LabelNode, Layers};
+use lod::gen::LodSceneLevel;
+use procedural_common::{NoiseParams, NoiseType, TypedBucketThrow};
 
 use crate::fit::{Confines, FillableRegions, Fit, FitError};
 

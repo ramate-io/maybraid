@@ -1,9 +1,9 @@
 //! One circular wall storey: two 180° arcs scaled to radius and floor height.
 
 use bevy_math::Vec3;
-use lod::gen::LodSceneLevel;
 use building_components::partitions::{Partition, PartitionNode};
 use building_components::{BuildingComponents, Layers, Placement};
+use lod::gen::LodSceneLevel;
 
 /// A single ring of outer circular walls.
 #[derive(Debug, Clone, PartialEq)]

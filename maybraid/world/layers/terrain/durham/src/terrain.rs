@@ -6,17 +6,18 @@ pub mod collider;
 pub mod config;
 pub mod host;
 pub mod index;
-pub mod stamps;
-pub mod stamp_modulation;
 pub mod layer;
-pub mod watersheds;
 pub mod plugin;
 pub mod presentation;
 pub mod render;
 pub mod sdf;
+pub mod stamp_modulation;
+pub mod stamps;
 pub mod stream_lod;
+pub mod watersheds;
 
 use crate::terrain::cell::original_ids_for_origin_cells;
+use crate::terrain::render::cascade_chunk_for_cell;
 use crate::terrain::stamps::{
 	original_ids_for_canyon_high_pass_leaves, original_ids_for_canyon_low_pass_leaves,
 	original_ids_for_massif_high_pass_leaves, original_ids_for_massif_low_pass_leaves,
@@ -30,22 +31,21 @@ use crate::terrain::watersheds::{
 	original_ids_for_marazion_pocket_waters_low_pass_leaves, HydroComplexCell,
 	WatershedAproningCell, WatershedCarvingCell, WatershedRimmingCell,
 };
-use crate::terrain::render::cascade_chunk_for_cell;
 use bevy::ecs::template::template;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value, Scene};
-use terrain_shaders::TerrainShader;
-use terrain_stamps::StampModulation;
 use lod::gen::{
 	GeneratingSpatialIndex, GenerationScheme, Id, LodScene, LodSceneLevel, LodSceneStatus,
 	OriginalId, SpatialIndex,
 };
 use lod::lod_ref::LodRef;
-use terrain_watersheds::WaterFill;
 use render_item::mesh::handle::Cached;
 use render_item::sdf::cpu_shot::{CpuShotBuilder, WallFaces};
 use std::sync::Arc;
+use terrain_shaders::TerrainShader;
+use terrain_stamps::StampModulation;
+use terrain_watersheds::WaterFill;
 
 pub use base_noise::BaseTerrainNoise;
 pub use cell::{
@@ -60,50 +60,16 @@ pub use collider::{
 };
 pub use config::TerrainConfig;
 pub use host::{
-	fine_patch_cell_layout, playable_world_cell_layout, retarget_presentation_assets,
-	Durham, DurhamCells, TerrainCoverage, TerrainFillSystems, TerrainLayoutPinned,
-	TerrainPresentPending, TerrainPresentationDirty, TerrainRetarget, WorldBaseTerrain,
-	WORLD_FINE_HALF_EXTENT_CELLS, WORLD_OUTER_2X_ROWS, WORLD_OUTER_4X_ROWS,
+	fine_patch_cell_layout, playable_world_cell_layout, retarget_presentation_assets, Durham,
+	DurhamCells, TerrainCoverage, TerrainFillSystems, TerrainLayoutPinned, TerrainPresentPending,
+	TerrainPresentationDirty, TerrainRetarget, WorldBaseTerrain, WORLD_FINE_HALF_EXTENT_CELLS,
+	WORLD_OUTER_2X_ROWS, WORLD_OUTER_4X_ROWS,
 };
 pub use index::{
 	AvianTerrainIndex, TerrainCellId, TerrainEntryStore, TerrainHeightSnapshot,
 	WaterSurfaceSnapshot,
 };
-pub use stamps::{
-	CanyonHighPassControllerCell, CanyonHighPassControllerLayout, CanyonHighPassStampCell,
-	CanyonLowPassControllerCell, CanyonLowPassControllerLayout, CanyonLowPassStampCell,
-	StampControllerLayouts, TerrainStampConfigs, MassifHighPassControllerCell,
-	MassifHighPassControllerLayout, MassifHighPassStampCell, MassifLowPassControllerCell,
-	MassifLowPassControllerLayout, MassifLowPassStampCell, PlateauControllerLayout,
-	PlateauHighPassControllerCell, PlateauHighPassControllerLayout, PlateauHighPassStampCell,
-	PlateauLowPassControllerCell, PlateauLowPassControllerLayout, PlateauLowPassStampCell,
-	PocketWaterHighPassControllerCell, PocketWaterHighPassControllerLayout,
-	PocketWaterHighPassStampCell, PocketWaterLowPassControllerCell,
-	PocketWaterLowPassControllerLayout, PocketWaterLowPassStampCell, RollingHighPassControllerCell,
-	RollingHighPassControllerLayout, RollingHighPassStampCell, RollingLowPassControllerCell,
-	RollingLowPassControllerLayout, RollingLowPassStampCell, ValleyHighPassControllerCell,
-	ValleyHighPassControllerLayout, ValleyHighPassStampCell, ValleyLowPassControllerCell,
-	ValleyLowPassControllerLayout, ValleyLowPassStampCell,
-};
-pub use stamps::{
-	CanyonLowPassStampCell as CanyonStampCell, MassifLowPassStampCell as MassifStampCell,
-	PlateauLowPassStampCell as PlateauStampCell,
-	PocketWaterLowPassStampCell as PocketWaterStampCell,
-	RollingLowPassStampCell as RollingStampCell, ValleyLowPassStampCell as ValleyStampCell,
-};
-pub use stamp_modulation::ComposedElevationOp;
 pub use layer::{DurhamHeightSnapshot, DurhamRead, DurhamTerrainConfig};
-pub use watersheds::{
-	WatershedBandPass, WatershedLeafBounds, WatershedLeafKind, PocketWater,
-	PocketWatersHighPass, PocketWatersLowPass, WatershedConfigs,
-	PocketHighPassCell, PocketLowPassCell, PrePocketHighPassCell, PrePocketHighPassLayout,
-	PrePocketLowPassCell, PrePocketLowPassLayout,
-};
-/// Low-pass aliases kept for older HUD / call sites.
-pub use watersheds::{
-	PocketWatersLowPass as LakeStampCell, PocketLowPassCell as PocketCell,
-	PrePocketLowPassCell as PrePocketCell, PrePocketLowPassLayout as PrePocketLayout,
-};
 pub use plugin::{register_terrain_plugin, TerrainResourcesPlugin};
 pub use presentation::{
 	sync_visual_terrain_host_pose, PresentedTerrainScene, TerrainBackground,
@@ -114,8 +80,41 @@ pub use presentation::{
 };
 pub use render::TerrainRenderItem;
 pub use sdf::{ComposedTerrain, ElevationModulation, TerrainSdf};
+pub use stamp_modulation::ComposedElevationOp;
+pub use stamps::{
+	CanyonHighPassControllerCell, CanyonHighPassControllerLayout, CanyonHighPassStampCell,
+	CanyonLowPassControllerCell, CanyonLowPassControllerLayout, CanyonLowPassStampCell,
+	MassifHighPassControllerCell, MassifHighPassControllerLayout, MassifHighPassStampCell,
+	MassifLowPassControllerCell, MassifLowPassControllerLayout, MassifLowPassStampCell,
+	PlateauControllerLayout, PlateauHighPassControllerCell, PlateauHighPassControllerLayout,
+	PlateauHighPassStampCell, PlateauLowPassControllerCell, PlateauLowPassControllerLayout,
+	PlateauLowPassStampCell, PocketWaterHighPassControllerCell,
+	PocketWaterHighPassControllerLayout, PocketWaterHighPassStampCell,
+	PocketWaterLowPassControllerCell, PocketWaterLowPassControllerLayout,
+	PocketWaterLowPassStampCell, RollingHighPassControllerCell, RollingHighPassControllerLayout,
+	RollingHighPassStampCell, RollingLowPassControllerCell, RollingLowPassControllerLayout,
+	RollingLowPassStampCell, StampControllerLayouts, TerrainStampConfigs,
+	ValleyHighPassControllerCell, ValleyHighPassControllerLayout, ValleyHighPassStampCell,
+	ValleyLowPassControllerCell, ValleyLowPassControllerLayout, ValleyLowPassStampCell,
+};
+pub use stamps::{
+	CanyonLowPassStampCell as CanyonStampCell, MassifLowPassStampCell as MassifStampCell,
+	PlateauLowPassStampCell as PlateauStampCell,
+	PocketWaterLowPassStampCell as PocketWaterStampCell,
+	RollingLowPassStampCell as RollingStampCell, ValleyLowPassStampCell as ValleyStampCell,
+};
 pub use stream_lod::{
 	stream_banded_draws, stream_banded_level, stream_banded_scene, StreamBandedLod,
+};
+pub use watersheds::{
+	PocketHighPassCell, PocketLowPassCell, PocketWater, PocketWatersHighPass, PocketWatersLowPass,
+	PrePocketHighPassCell, PrePocketHighPassLayout, PrePocketLowPassCell, PrePocketLowPassLayout,
+	WatershedBandPass, WatershedConfigs, WatershedLeafBounds, WatershedLeafKind,
+};
+/// Low-pass aliases kept for older HUD / call sites.
+pub use watersheds::{
+	PocketLowPassCell as PocketCell, PocketWatersLowPass as LakeStampCell,
+	PrePocketLowPassCell as PrePocketCell, PrePocketLowPassLayout as PrePocketLayout,
 };
 
 /// CpuShot wrapper stored on [`Terrain`] and used by Durham fill + overlay presenters.

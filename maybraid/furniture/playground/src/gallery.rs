@@ -2,8 +2,6 @@
 
 use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec3;
-use lod::gen::LodSceneLevel;
-use procedural_common::NoiseParams;
 use building_components::{
 	BuildingComponents, FurnitureAbutment, FurnitureGeometry, FurnitureNode, Placement,
 };
@@ -11,6 +9,8 @@ use buildings::{
 	CommonBedroom, CommonBedroomParameterized, Confines, Kitchen, KitchenCounterLayout,
 	KitchenParameterized, LivingRoom, LivingRoomParameterized, Opening, OpeningId, Openings,
 };
+use lod::gen::LodSceneLevel;
+use procedural_common::NoiseParams;
 
 /// One gallery cell: world-space slot (already offset).
 #[derive(Clone, Debug)]
@@ -347,8 +347,8 @@ pub fn unit_slot(geometry: FurnitureGeometry, seed: u64) -> FurnitureNode {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use furniture_assemblies::{try_assembly, PartKind};
 	use building_components::FurnitureAbutment;
+	use furniture_assemblies::{try_assembly, PartKind};
 
 	#[test]
 	fn richmond_rooms_emit_expected_kinds() -> anyhow::Result<()> {

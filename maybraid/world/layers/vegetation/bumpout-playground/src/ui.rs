@@ -1,6 +1,6 @@
 use bevy::prelude::*;
-use vegetation_bumpout::BumpOut;
 use game_commands::ui::{GameCommandStatusText, GameCommandUiConfig};
+use vegetation_bumpout::BumpOut;
 
 use crate::{NeighborhoodControls, PresenterLayer, TileCoordinate};
 

@@ -1,12 +1,12 @@
 //! `/tipple` commands for the Tipple concept species.
 
 use bevy::prelude::*;
-use clap::{Args, Subcommand};
 use character_items::{ClothingMaterial, ClothingMesh};
 use characters::species::{
 	common::{EyeMesh, HairMesh},
 	tipple::{TippleBeakColor, TippleBeakMesh, TippleConfig, TippleEyeColor, TipplePlumageColor},
 };
+use clap::{Args, Subcommand};
 
 use crate::{animation::ConceptAnimation, preview::ConceptPreviewConfig};
 

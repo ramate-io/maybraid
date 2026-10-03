@@ -5,11 +5,11 @@
 //! simply buries more of the wall; the top stays level at `plaza + clearance`.
 
 use bevy_math::Vec2;
-use lod::gen::LodSceneLevel;
-use material_ref::MaterialRef;
 use building_components::joints::JointNode;
 use building_components::panels::{PanelNode, PanelStyle};
 use building_components::{BuildingComponents, Layers};
+use lod::gen::LodSceneLevel;
+use material_ref::MaterialRef;
 
 use crate::paneling::{RectangularStrip, RectangularStripNode, DEFAULT_PANEL_THICKNESS};
 
@@ -58,7 +58,10 @@ impl TerrainPerimeterWall {
 		if let Some(first) = nodes.first().copied() {
 			nodes.push(first);
 		}
-		Self { strip: RectangularStrip::from_nodes(PanelStyle::RoughStonework, nodes), material: None }
+		Self {
+			strip: RectangularStrip::from_nodes(PanelStyle::RoughStonework, nodes),
+			material: None,
+		}
 	}
 
 	/// Shade every panel with `material` instead of the kit's baked look.

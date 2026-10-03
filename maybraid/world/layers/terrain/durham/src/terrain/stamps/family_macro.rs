@@ -245,16 +245,13 @@ macro_rules! define_stamp_family {
 					family.strength_min,
 					family.strength_max,
 				);
-				let $params = terrain_stamps::StampStrength::with_strength(
-					family.stamp.clone(),
-					strength,
-				);
+				let $params =
+					terrain_stamps::StampStrength::with_strength(family.stamp.clone(), strength);
 				let height = |x: f32, z: f32| base.height_at(x, z);
 				let $height_at: Option<&dyn Fn(f32, f32) -> f32> = Some(&height);
 				// Hard-clip + edge ease to the leaf AABB so support is identity
 				// outside the leaf (neighbors may omit this stamp).
-				let modulations =
-					terrain_stamps::StampModulation::bind_all($build, $bounds);
+				let modulations = terrain_stamps::StampModulation::bind_all($build, $bounds);
 				Some((Self { cell, modulations }, cell))
 			}
 

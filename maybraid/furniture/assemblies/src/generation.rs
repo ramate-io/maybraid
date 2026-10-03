@@ -1,8 +1,8 @@
 //! Pass over Richmond buildings: collect High furniture slots and paint kits.
 
+use building_components::{BuildingComponents, FurnitureNode};
 use furniture_usage_areas::expand_usages;
 use lod::LodSceneLevel;
-use building_components::{BuildingComponents, FurnitureNode};
 
 use crate::fill::try_assembly;
 use crate::Assembly;

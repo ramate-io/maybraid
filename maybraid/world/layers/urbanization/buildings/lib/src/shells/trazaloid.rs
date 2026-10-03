@@ -17,13 +17,11 @@ mod tests;
 
 use bevy_math::bounding::Aabb3d;
 use bevy_math::{Vec2, Vec3};
-use lod::gen::LodSceneLevel;
 use building_components::joints::geometry::JointPost;
 use building_components::joints::JointNode;
 use building_components::panels::{PanelNode, PanelStyle};
-use building_components::{
-	BuildingComponents, BuildingStructuralLodProbe, Layers, MassingVolume,
-};
+use building_components::{BuildingComponents, BuildingStructuralLodProbe, Layers, MassingVolume};
+use lod::gen::LodSceneLevel;
 
 use crate::openings::{MappedOpenings, Openings};
 use crate::paneling::clipped_ruled_strip::ClippedRuledStrip;

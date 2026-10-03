@@ -1,7 +1,7 @@
 //! [`BuildWithNoise`] for [`TallGrassClump`].
 
-use sbs_geometry::BladeTuftShape;
 use procedural_common::{BuildWithNoise, NoiseConfig, NoiseParams, UnitRange};
+use sbs_geometry::BladeTuftShape;
 
 use crate::tall_grass::TallGrassClump;
 

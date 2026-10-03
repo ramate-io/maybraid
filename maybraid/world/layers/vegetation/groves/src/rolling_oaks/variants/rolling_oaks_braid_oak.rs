@@ -1,7 +1,7 @@
 //! [`BuildWithNoise`] for [`RollingOaksBraidOak`].
 
-use sbs_geometry::BraidOakTreeSbs;
 use procedural_common::{BuildWithNoise, NoiseConfig, NoiseParams, UnitRange};
+use sbs_geometry::BraidOakTreeSbs;
 
 use crate::rolling_oaks::RollingOaksBraidOak;
 
