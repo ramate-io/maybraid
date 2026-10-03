@@ -1,9 +1,9 @@
 //! Shared active-job census for LOD generate, present, and chunk fulfill.
 //!
 //! Queues are typed, so a first-load gate cannot query every `T` at once.
-//! Each enqueue / pending-root add takes a ticket; pop, expire, and remove
-//! release it. The count is approximate: saturating subtract so a missed
-//! begin cannot wrap the counter.
+//! Each enqueue / pending-root add takes a ticket; pop, expire, remove, and
+//! queue `clear` release it. The count is approximate: saturating subtract so
+//! a missed begin cannot wrap the counter.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -68,6 +68,13 @@ impl LodJobCounter {
 	pub fn is_quiet(&self, threshold: u64) -> bool {
 		self.active() <= threshold
 	}
+
+	/// Release tickets dropped by a queue `clear` when the counter is installed.
+	pub fn end_cleared(world: &World, cancelled: u64) {
+		if let Some(jobs) = world.get_resource::<Self>() {
+			jobs.end_n(cancelled);
+		}
+	}
 }
 
 /// Idempotent: first plugin to run owns the default zeroed counter.
@@ -94,6 +101,12 @@ pub(crate) fn count_lod_job_remove(world: DeferredWorld, _ctx: HookContext) {
 mod tests {
 	use super::*;
 	use crate::LodLevelRootPending;
+
+	#[test]
+	fn end_cleared_is_silent_without_counter() {
+		let world = World::new();
+		LodJobCounter::end_cleared(&world, 3);
+	}
 
 	#[test]
 	fn begin_end_tracks_active() {

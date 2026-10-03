@@ -140,11 +140,14 @@ impl<T> LodPresentQueue<T> {
 		self.enqueue_back(id)
 	}
 
-	pub fn clear(&mut self) {
+	/// Drop pending ids and scan regions. Returns how many tickets to release.
+	pub fn clear(&mut self) -> u64 {
+		let cancelled = self.pending.len() as u64;
 		self.pending.clear();
 		self.pending_ids.clear();
 		self.scan_regions.clear();
 		self.reset_scan = true;
+		cancelled
 	}
 
 	/// Re-arm the keep-region scan on the next drain.
@@ -241,6 +244,7 @@ pub fn apply_lod_present_gate<C, T, S, Pr>(
 	presenter: StaticSystemParam<Pr>,
 	mut keep: ResMut<LodPresentKeepRegion<C>>,
 	mut queue: ResMut<LodPresentQueue<T>>,
+	jobs: Res<LodJobCounter>,
 	mut was_open: Local<Option<bool>>,
 ) where
 	C: Send + Sync + 'static,
@@ -268,7 +272,7 @@ pub fn apply_lod_present_gate<C, T, S, Pr>(
 	}
 	if !open {
 		keep.region = None;
-		queue.clear();
+		jobs.end_n(queue.clear());
 		let mut presenter = presenter.into_inner();
 		presenter.remove_stale(&HashSet::new());
 		return;

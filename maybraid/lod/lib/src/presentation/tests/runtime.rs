@@ -7,6 +7,7 @@ use crate::gen::tests::test_utils::{
 };
 use crate::gen::{GeneratingSpatialIndex, Id, LodGenerated, RegionPresenter, Version};
 use crate::lod_ref::{LodNode, LodNodePose, LodRef};
+use crate::jobs::LodJobCounter;
 use crate::presentation::{
 	LodPresentBudget, LodPresentCullBudget, LodPresentCullPlugin, LodPresentGate,
 	LodPresentKeepRegion, LodPresentPlugin, LodPresentQueue, LodPresentRegion,
@@ -510,6 +511,28 @@ fn closing_the_present_gate_retires_and_blocks_until_reopened() -> Result<()> {
 	assert!(
 		app.world().resource::<RecordingPresenter>().vegetation.contains_key(&id),
 		"reopening presents again"
+	);
+	Ok(())
+}
+
+#[test]
+fn closing_the_present_gate_releases_queued_job_tickets() -> Result<()> {
+	let (mut app, _id) = present_app_with_keep();
+	app.update();
+	let leftover = Id::from_cell(cell(99.0));
+	assert!(app.world_mut().resource_mut::<LodPresentQueue<Vegetation>>().enqueue(leftover));
+	app.world().resource::<LodJobCounter>().begin();
+	let before = app.world().resource::<LodJobCounter>().active();
+	app.world_mut().resource_mut::<LodPresentGate<PresentChan>>().open = false;
+	app.update();
+	assert_eq!(
+		app.world().resource::<LodJobCounter>().active(),
+		before - 1,
+		"gate close must release tickets owned by the cancelled queue"
+	);
+	assert!(
+		app.world().resource::<LodPresentQueue<Vegetation>>().is_empty(),
+		"gate close drops pending ids"
 	);
 	Ok(())
 }
