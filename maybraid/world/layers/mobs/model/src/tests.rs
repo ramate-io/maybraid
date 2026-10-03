@@ -4,15 +4,15 @@ use bevy::ecs::system::{Res, ResMut, RunSystemOnce, SystemParam, SystemParamItem
 use bevy::math::bounding::Aabb3d;
 use bevy::math::{Vec2, Vec3};
 use bevy::prelude::{Resource, World};
-use layer_stack::{GenerationMode, RequireLayer};
+use layer_stack::{Generate, GenerationMode, LayerGenerationCore, RequireLayer, Scheme};
 use lod::gen::{Id, LodGenerated};
 use lod::lod_ref::LodRef;
 use terrain_layer_model::{
-	terrain_streaming, BaseTerrainGenerationCore, HeightField, TerrainCell, TerrainContract,
-	TerrainExtent, TerrainGeneration, TerrainModel, TerrainStreaming, TerrainView,
+	terrain_streaming, HeightField, OnTerrain, TerrainCell, TerrainContract, TerrainExtent,
+	TerrainGeneration, TerrainModel, TerrainStreaming, TerrainView,
 };
 
-use crate::{MobGeneration, MobGenerationCore, MobGenerationPlugin, MobModel, MobScheme, Mobs};
+use crate::{MobGeneration, MobModel, Mobs};
 
 struct TestMode;
 
@@ -100,14 +100,16 @@ impl TerrainModel for StubGround {
 	}
 
 	fn require_generation(app: &App) {
-		app.require_layer::<BaseTerrainGenerationCore<Self>, Self>();
+		app.require_layer::<LayerGenerationCore<OnTerrain<Self>>, Self>();
 	}
 }
 
 impl TerrainGeneration for StubGround {
+	const LABEL: &'static str = "stub";
 	type Config = ();
 	fn install_generation(_app: &mut App) {}
 	fn apply_generation(_world: &mut World, _config: &()) {}
+	fn install_presentation(_app: &mut App) {}
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -145,11 +147,12 @@ impl MobModel for StubMob {
 	type Writes = StubWrites<'static>;
 
 	fn require_generation(app: &App) {
-		app.require_layer::<MobGenerationCore<Self>, Mobs<Self>>();
+		app.require_layer::<LayerGenerationCore<Mobs<Self>>, Mobs<Self>>();
 	}
 }
 
 impl MobGeneration for StubMob {
+	const LABEL: &'static str = "stub";
 	type Config = u32;
 
 	fn install_generation(app: &mut App) {
@@ -164,13 +167,15 @@ impl MobGeneration for StubMob {
 	fn clear_generation(world: &mut World) {
 		world.resource_mut::<StubStore>().cells.clear();
 	}
+
+	fn install_presentation(_app: &mut App) {}
 }
 
-impl MobScheme<StubMob> for TestMode {
+impl Scheme<Mobs<StubMob>> for TestMode {
 	fn install(_app: &mut App, _config: &u32) {}
 }
 
-impl MobScheme<StubMob> for OtherMode {
+impl Scheme<Mobs<StubMob>> for OtherMode {
 	fn install(_app: &mut App, _config: &u32) {}
 }
 
@@ -276,16 +281,16 @@ fn wrappers_read_the_ground_contract_the_same_update() -> anyhow::Result<()> {
 }
 
 #[test]
-#[should_panic(expected = "requires terrain_layer_model::generation::BaseTerrainGenerationCore")]
+#[should_panic(expected = "LayerGenerationCore")]
 fn requirements_recurse_to_the_ground() {
 	Stacked::require_generation(&App::new());
 }
 
 #[test]
-#[should_panic(expected = "requires mob_layer_model::generation::MobGenerationCore")]
+#[should_panic(expected = "Mobs")]
 fn requirements_name_the_mob_core() {
 	let mut app = App::new();
-	app.add_plugins(BaseTerrainGenerationCore::<StubGround>::default());
+	app.add_plugins(LayerGenerationCore::<OnTerrain<StubGround>>::default());
 	Stacked::require_generation(&app);
 }
 
@@ -302,9 +307,9 @@ fn leaving_a_mode_clears_and_entering_applies() -> anyhow::Result<()> {
 		StatesPlugin,
 		GenerationModePlugin::<TestMode>::initial(),
 		GenerationModePlugin::<OtherMode>::default(),
-		BaseTerrainGenerationCore::<StubGround>::default(),
-		MobGenerationPlugin::<TestMode, StubMob>::new(16),
-		MobGenerationPlugin::<OtherMode, StubMob>::new(8),
+		LayerGenerationCore::<OnTerrain<StubGround>>::default(),
+		Generate::<TestMode, Mobs<StubMob>>::new(16),
+		Generate::<OtherMode, Mobs<StubMob>>::new(8),
 	));
 	app.finish();
 	app.update();

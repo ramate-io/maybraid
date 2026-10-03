@@ -7,17 +7,15 @@ use bevy::prelude::{
 };
 use bevy::state::app::StatesPlugin;
 use layer_stack::{
-	ActiveGenerationMode, GenerationMode, GenerationModePlugin, GenerationModeSystems, RequireLayer,
+	ActiveGenerationMode, Generate, GenerationMode, GenerationModePlugin, GenerationModeSystems,
+	LayerGenerationCore, RequireLayer, Scheme,
 };
 use lod::lod_ref::LodRef;
 use terrain_layer_model::{
-	BaseTerrainGenerationCore, HeightField, TerrainCell, TerrainGeneration, TerrainModel,
+	HeightField, OnTerrain, TerrainCell, TerrainGeneration, TerrainModel,
 };
 
-use crate::{
-	Furnishing, FurnishingGeneration, FurnishingGenerationCore, FurnishingGenerationPlugin,
-	FurnishingModel, FurnishingScheme,
-};
+use crate::{Furnishing, FurnishingGeneration, FurnishingModel};
 
 struct TestMode;
 struct OtherMode;
@@ -94,14 +92,16 @@ impl TerrainModel for StubGround {
 	}
 
 	fn require_generation(app: &App) {
-		app.require_layer::<BaseTerrainGenerationCore<Self>, Self>();
+		app.require_layer::<LayerGenerationCore<OnTerrain<Self>>, Self>();
 	}
 }
 
 impl TerrainGeneration for StubGround {
+	const LABEL: &'static str = "stub";
 	type Config = ();
 	fn install_generation(_app: &mut App) {}
 	fn apply_generation(_world: &mut World, _config: &()) {}
+	fn install_presentation(_app: &mut App) {}
 }
 
 struct StubCell;
@@ -113,15 +113,17 @@ impl FurnishingModel for StubFurnishing {
 	type Cell = StubCell;
 
 	fn require_generation(app: &App) {
-		app.require_layer::<FurnishingGenerationCore<Self>, Furnishing<Self>>();
+		app.require_layer::<LayerGenerationCore<Furnishing<Self>>, Furnishing<Self>>();
 	}
 }
 
 impl FurnishingGeneration for StubFurnishing {
+	const LABEL: &'static str = "stub";
 	type Config = ();
 	fn install_generation(_app: &mut App) {}
 	fn apply_generation(_world: &mut World, _config: &()) {}
 	fn clear_generation(_world: &mut World) {}
+	fn install_presentation(_app: &mut App) {}
 }
 
 #[derive(Resource, Default)]
@@ -138,13 +140,13 @@ fn tick_other(mut ticks: ResMut<ModeTicks>) {
 	ticks.other += 1;
 }
 
-impl FurnishingScheme<StubFurnishing> for TestMode {
+impl Scheme<Furnishing<StubFurnishing>> for TestMode {
 	fn install(app: &mut App, _config: &()) {
 		app.add_systems(Update, tick_test.in_set(GenerationModeSystems::<TestMode>::default()));
 	}
 }
 
-impl FurnishingScheme<StubFurnishing> for OtherMode {
+impl Scheme<Furnishing<StubFurnishing>> for OtherMode {
 	fn install(app: &mut App, _config: &()) {
 		app.add_systems(Update, tick_other.in_set(GenerationModeSystems::<OtherMode>::default()));
 	}
@@ -158,9 +160,9 @@ fn generation_runs_only_in_subscribed_modes() -> anyhow::Result<()> {
 		StatesPlugin,
 		GenerationModePlugin::<TestMode>::initial(),
 		GenerationModePlugin::<OtherMode>::default(),
-		BaseTerrainGenerationCore::<StubGround>::default(),
-		FurnishingGenerationPlugin::<TestMode, StubFurnishing>::default(),
-		FurnishingGenerationPlugin::<OtherMode, StubFurnishing>::default(),
+		LayerGenerationCore::<OnTerrain<StubGround>>::default(),
+		Generate::<TestMode, Furnishing<StubFurnishing>>::default(),
+		Generate::<OtherMode, Furnishing<StubFurnishing>>::default(),
 	));
 	app.init_resource::<ModeTicks>();
 	app.finish();
@@ -178,7 +180,7 @@ fn generation_runs_only_in_subscribed_modes() -> anyhow::Result<()> {
 }
 
 #[test]
-#[should_panic(expected = "requires terrain_layer_model::generation::BaseTerrainGenerationCore")]
+#[should_panic(expected = "LayerGenerationCore")]
 fn generation_finish_names_the_missing_ground() {
-	FurnishingGenerationPlugin::<TestMode, StubFurnishing>::default().finish(&mut App::new());
+	Generate::<TestMode, Furnishing<StubFurnishing>>::default().finish(&mut App::new());
 }

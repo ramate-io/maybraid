@@ -6,13 +6,13 @@ use bevy::ecs::system::{Res, SystemParam, SystemParamItem};
 use bevy::math::bounding::Aabb3d;
 use bevy::math::{Vec2, Vec3};
 use bevy::prelude::App;
-use layer_stack::RequireLayer;
+use layer_stack::{LayerGenerationCore, RequireLayer};
 use lod::gen::{
 	GeneratingSpatialIndex, GenerationScheme, Id, OriginalId, SpatialIndex, TrackedId, Version,
 };
 use lod::lod_ref::LodRef;
 use urbanization_cells::UrbanizationIndex;
-use urbanization_layer_model::{Urbanization, UrbanizationGenerationCore, UrbanizationModel};
+use urbanization_layer_model::{Urbanization, UrbanizationModel};
 
 use crate::development::DevelopmentCell;
 use crate::ground::RichmondGround;
@@ -111,6 +111,6 @@ impl<G: RichmondGround> UrbanizationModel for Richmond<G> {
 	}
 
 	fn require_generation(app: &App) {
-		app.require_layer::<UrbanizationGenerationCore<Self>, Urbanization<Self>>();
+		app.require_layer::<LayerGenerationCore<Urbanization<Self>>, Urbanization<Self>>();
 	}
 }

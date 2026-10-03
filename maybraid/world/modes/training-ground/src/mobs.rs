@@ -7,7 +7,8 @@ use durham::Durham;
 use layer_stack::{ActiveGenerationMode, GenerationModeSystems};
 use lod::gen::Id;
 use lod::{LodGenerateSystems, LodPresentSystems};
-use mob_layer_model::{MobCellPresented, MobGenerationSystems, MobScheme};
+use layer_stack::Scheme;
+use mob_layer_model::{MobCellPresented, MobGenerationSystems, Mobs};
 use richmond::Richmond;
 use terrain_layer_model::OnTerrain;
 use urbanization_layer_model::Urbanization;
@@ -26,7 +27,7 @@ struct TrainingRoster {
 	mob_id: Id,
 }
 
-impl MobScheme<Barking<Vegetation<Chico<Urbanization<Richmond<OnTerrain<Durham>>>>>>>
+impl Scheme<Mobs<Barking<Vegetation<Chico<Urbanization<Richmond<OnTerrain<Durham>>>>>>>>
 	for TrainingGround
 {
 	fn install(app: &mut App, _config: &BarkingConfig) {
@@ -266,8 +267,8 @@ mod tests {
 			GenerationModePlugin::<TrainingGround>::initial(),
 			GenerationModePlugin::<OtherMode>::default(),
 		));
-		<TrainingGround as MobScheme<
-			Barking<Vegetation<Chico<Urbanization<Richmond<OnTerrain<Durham>>>>>>,
+		<TrainingGround as Scheme<
+			Mobs<Barking<Vegetation<Chico<Urbanization<Richmond<OnTerrain<Durham>>>>>>>,
 		>>::install(&mut app, &BarkingConfig::default());
 		app.init_resource::<Messages<LodGenerated<MobCell>>>();
 		let round = TrainingRound::new(42);

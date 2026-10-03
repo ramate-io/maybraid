@@ -68,7 +68,7 @@ impl MobPresenterState {
 	}
 }
 
-/// Last-schedule despawn [`crate::MobPresentationCore`] uses.
+/// Last-schedule despawn presentation install uses.
 pub fn install_mob_cell_teardown(app: &mut App) {
 	app.init_resource::<MobPresenterState>()
 		.add_systems(Last, drain_retired_mob_cells);

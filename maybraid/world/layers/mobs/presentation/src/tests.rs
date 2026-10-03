@@ -9,20 +9,17 @@ use bevy::prelude::{
 };
 use bevy::state::app::StatesPlugin;
 use layer_stack::{
-	subscribe_mode, ActiveGenerationMode, GenerationMode, GenerationModePlugin, ModeSubscribers,
-	ModeSubscription,
+	subscribe_mode, ActiveGenerationMode, Generate, GenerationMode, GenerationModePlugin,
+	LayerGenerationCore, LayerPresentationCore, ModeSubscribers, ModeSubscription, Present,
+	RequireLayer, Scheme,
 };
 use lod::gen::{Id, LodGenerated, Version};
 use lod::lod_ref::LodRef;
 use mob_intelligence::MemberOf;
-use mob_layer_model::{
-	MobCellPresented, MobGeneration, MobGenerationCore, MobGenerationPlugin, MobModel, MobScheme,
-	Mobs,
-};
-use terrain_layer_model::{BaseTerrainGenerationCore, HeightField, TerrainCell, TerrainModel};
+use mob_layer_model::{MobCellPresented, MobGeneration, MobModel, Mobs};
+use terrain_layer_model::{HeightField, OnTerrain, TerrainCell, TerrainGeneration, TerrainModel};
 
 use crate::present::MobPresenterState;
-use crate::{MobPresent, MobPresentation, MobPresentationCore, MobPresentationPlugin};
 
 struct TestMode;
 
@@ -101,17 +98,16 @@ impl TerrainModel for SilentGround {
 	}
 
 	fn require_generation(app: &App) {
-		layer_stack::RequireLayer::require_layer::<
-			terrain_layer_model::BaseTerrainGenerationCore<Self>,
-			Self,
-		>(app);
+		app.require_layer::<LayerGenerationCore<OnTerrain<Self>>, Self>();
 	}
 }
 
-impl terrain_layer_model::TerrainGeneration for SilentGround {
+impl TerrainGeneration for SilentGround {
+	const LABEL: &'static str = "silent-ground";
 	type Config = ();
 	fn install_generation(_app: &mut App) {}
 	fn apply_generation(_world: &mut World, _config: &()) {}
+	fn install_presentation(_app: &mut App) {}
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -145,11 +141,12 @@ impl MobModel for StubMob {
 	type Writes = StubWrites<'static>;
 
 	fn require_generation(app: &App) {
-		layer_stack::RequireLayer::require_layer::<MobGenerationCore<Self>, Mobs<Self>>(app);
+		app.require_layer::<LayerGenerationCore<Mobs<Self>>, Mobs<Self>>();
 	}
 }
 
 impl MobGeneration for StubMob {
+	const LABEL: &'static str = "stub";
 	type Config = ();
 
 	fn install_generation(app: &mut App) {
@@ -162,22 +159,19 @@ impl MobGeneration for StubMob {
 	fn clear_generation(world: &mut World) {
 		world.resource_mut::<StubStore>().cells.clear();
 	}
-}
-
-impl MobPresentation for StubMob {
-	type Channel = StubMob;
 
 	fn install_presentation(app: &mut App) {
+		app.init_resource::<MobPresenterState>();
 		app.add_message::<MobCellPresented>();
 		app.add_systems(Update, present_announced);
 	}
 }
 
-impl MobScheme<StubMob> for TestMode {
+impl Scheme<Mobs<StubMob>> for TestMode {
 	fn install(_app: &mut App, _config: &()) {}
 }
 
-impl MobScheme<StubMob> for OtherMode {
+impl Scheme<Mobs<StubMob>> for OtherMode {
 	fn install(_app: &mut App, _config: &()) {}
 }
 
@@ -210,10 +204,10 @@ fn panic_message(result: Result<(), Box<dyn std::any::Any + Send>>) -> String {
 #[test]
 fn presentation_without_generation_names_the_missing_ground() {
 	let message = panic_message(std::panic::catch_unwind(|| {
-		MobPresentationPlugin::<TestMode, StubMob>::default().finish(&mut App::new());
+		Present::<TestMode, Mobs<StubMob>>::default().finish(&mut App::new());
 	}));
 	assert!(
-		message.contains("BaseTerrainGenerationCore"),
+		message.contains("LayerGenerationCore"),
 		"finish names the missing ground core, got {message}"
 	);
 }
@@ -225,9 +219,9 @@ fn announced_writes_present_hosts() -> anyhow::Result<()> {
 		MinimalPlugins,
 		StatesPlugin,
 		GenerationModePlugin::<TestMode>::initial(),
-		BaseTerrainGenerationCore::<SilentGround>::default(),
-		MobGenerationPlugin::<TestMode, StubMob>::default(),
-		MobPresentationPlugin::<TestMode, StubMob>::default(),
+		LayerGenerationCore::<OnTerrain<SilentGround>>::default(),
+		Generate::<TestMode, Mobs<StubMob>>::default(),
+		Present::<TestMode, Mobs<StubMob>>::default(),
 	));
 	let id = Id::from_cell(Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE));
 	app.world_mut()
@@ -303,11 +297,11 @@ fn two_modes_install_the_core_once() -> anyhow::Result<()> {
 	app.add_plugins((
 		GenerationModePlugin::<TestMode>::initial(),
 		GenerationModePlugin::<OtherMode>::default(),
-		MobPresentationPlugin::<TestMode, StubMob>::default(),
-		MobPresentationPlugin::<OtherMode, StubMob>::default(),
+		Present::<TestMode, Mobs<StubMob>>::default(),
+		Present::<OtherMode, Mobs<StubMob>>::default(),
 	));
-	anyhow::ensure!(app.is_plugin_added::<MobPresentationCore<StubMob>>(), "core is installed");
-	let subscribers = app.world().resource::<ModeSubscribers<(Stacked, MobPresent)>>();
+	anyhow::ensure!(app.is_plugin_added::<LayerPresentationCore<Mobs<StubMob>>>(), "core is installed");
+	let subscribers = app.world().resource::<ModeSubscribers<Stacked>>();
 	anyhow::ensure!(subscribers.contains::<TestMode>());
 	anyhow::ensure!(subscribers.contains::<OtherMode>());
 	Ok(())
@@ -324,11 +318,11 @@ fn losing_subscription_is_inactive_and_returning_is_active() -> anyhow::Result<(
 		GenerationModePlugin::<TestMode>::initial(),
 		GenerationModePlugin::<OtherMode>::default(),
 	));
-	subscribe_mode::<(Stacked, MobPresent), TestMode>(&mut app);
+	subscribe_mode::<Stacked, TestMode>(&mut app);
 	app.update();
 	{
 		let mut state =
-			SystemState::<ModeSubscription<(Stacked, MobPresent)>>::new(app.world_mut());
+			SystemState::<ModeSubscription<Stacked>>::new(app.world_mut());
 		anyhow::ensure!(
 			state.get(app.world()).map_err(|error| anyhow::anyhow!("{error:?}"))?.active(),
 			"subscribed mode presents"
@@ -340,7 +334,7 @@ fn losing_subscription_is_inactive_and_returning_is_active() -> anyhow::Result<(
 	app.update();
 	{
 		let mut state =
-			SystemState::<ModeSubscription<(Stacked, MobPresent)>>::new(app.world_mut());
+			SystemState::<ModeSubscription<Stacked>>::new(app.world_mut());
 		anyhow::ensure!(
 			!state.get(app.world()).map_err(|error| anyhow::anyhow!("{error:?}"))?.active(),
 			"unsubscribed mode retires"
@@ -352,7 +346,7 @@ fn losing_subscription_is_inactive_and_returning_is_active() -> anyhow::Result<(
 	app.update();
 	{
 		let mut state =
-			SystemState::<ModeSubscription<(Stacked, MobPresent)>>::new(app.world_mut());
+			SystemState::<ModeSubscription<Stacked>>::new(app.world_mut());
 		anyhow::ensure!(
 			state.get(app.world()).map_err(|error| anyhow::anyhow!("{error:?}"))?.active(),
 			"return presents again"

@@ -1,7 +1,7 @@
 //! Training Ground is a seeded FinePatch of the Maybraid world.
 //!
 //! The shell requests this mode on [`layer_stack::ActiveGenerationMode`].
-//! Terrain layout is [`BaseTerrainScheme`](terrain_layer_model::BaseTerrainScheme)
+//! Terrain layout is [`Scheme`](layer_stack::Scheme)`<OnTerrain<Durham>>`
 //! on [`TrainingGround`].
 
 use bevy::prelude::*;
@@ -9,15 +9,16 @@ use chico::{install_vegetation_stream, Chico, ChicoConfig};
 use durham::{
 	Durham, DurhamTerrainConfig, TerrainColliderSystems, TerrainFillSystems, TerrainRetarget,
 };
-use furnishing_layer_model::FurnishingScheme;
+use furnishing_layer_model::Furnishing;
 use layer_stack::{
 	in_generation_mode, ActiveGenerationMode, GenerationMode, GenerationModeSystems,
+	LayerModeConfig, Scheme,
 };
 use maputo::{install_furnishing_stream, Maputo};
 use richmond::Richmond;
-use terrain_layer_model::{BaseTerrainModeConfig, BaseTerrainScheme, OnTerrain};
+use terrain_layer_model::OnTerrain;
 use urbanization_layer_model::Urbanization;
-use vegetation_layer_model::VegetationScheme;
+use vegetation_layer_model::Vegetation;
 use world_player::{PlayerLifeEnded, PlayerLifeSet};
 
 mod arena;
@@ -44,7 +45,7 @@ pub struct TrainingGround;
 
 impl GenerationMode for TrainingGround {}
 
-impl VegetationScheme<Chico<Urbanization<Richmond<OnTerrain<Durham>>>>> for TrainingGround {
+impl Scheme<Vegetation<Chico<Urbanization<Richmond<OnTerrain<Durham>>>>>> for TrainingGround {
 	fn install(app: &mut App, _config: &ChicoConfig) {
 		install_vegetation_stream::<TrainingGround, Chico<Urbanization<Richmond<OnTerrain<Durham>>>>>(
 			app,
@@ -52,13 +53,13 @@ impl VegetationScheme<Chico<Urbanization<Richmond<OnTerrain<Durham>>>>> for Trai
 	}
 }
 
-impl FurnishingScheme<Maputo<Urbanization<Richmond<OnTerrain<Durham>>>>> for TrainingGround {
+impl Scheme<Furnishing<Maputo<Urbanization<Richmond<OnTerrain<Durham>>>>>> for TrainingGround {
 	fn install(app: &mut App, _config: &()) {
 		install_furnishing_stream::<TrainingGround, Urbanization<Richmond<OnTerrain<Durham>>>>(app);
 	}
 }
 
-impl BaseTerrainScheme<Durham> for TrainingGround {
+impl Scheme<OnTerrain<Durham>> for TrainingGround {
 	fn install(app: &mut App, _config: &DurhamTerrainConfig) {
 		app.add_systems(
 			Update,
@@ -71,7 +72,7 @@ impl BaseTerrainScheme<Durham> for TrainingGround {
 
 fn apply_training_patch(
 	round: Option<Res<TrainingRound>>,
-	config: Res<BaseTerrainModeConfig<TrainingGround, Durham>>,
+	config: Res<LayerModeConfig<TrainingGround, OnTerrain<Durham>>>,
 	mut terrain: TerrainRetarget,
 ) {
 	let Some(round) = round else {
@@ -164,7 +165,7 @@ mod tests {
 	fn playable_world(round: TrainingRound) -> World {
 		let mut world = World::new();
 		world.insert_resource(round);
-		world.insert_resource(BaseTerrainModeConfig::<TrainingGround, Durham>::new(
+		world.insert_resource(LayerModeConfig::<TrainingGround, OnTerrain<Durham>>::new(
 			DurhamTerrainConfig::fine_patch(TRAINING_FINE_HALF_EXTENT_CELLS),
 		));
 		world.insert_resource(playable_world_cell_layout());

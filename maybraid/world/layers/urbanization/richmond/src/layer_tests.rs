@@ -14,14 +14,13 @@ use durham::{
 	TerrainConfig, TerrainEntryStore, TerrainSuperseded, TerrainTrimeshCollider, WorldBaseTerrain,
 	TERRAIN_CELL_SIZE,
 };
-use layer_stack::{ActiveGenerationMode, GenerationMode, GenerationModePlugin};
+use layer_stack::{ActiveGenerationMode, Generate, GenerationMode, GenerationModePlugin, LayerGenerationCore, LayerModeConfig, Present, Scheme};
 use lod::gen::{Id, LodGenerateBudget, LodGenerateRegion, SpatialIndex};
 use lod::lod_ref::LodRef;
 use lod::presentation::LodPresentKeepRegion;
 use procedural_common::{noise_params_from_scalar_str, NoiseParams};
 use terrain_layer_model::{
-	BaseTerrainGenerationCore, BaseTerrainGenerationPlugin, BaseTerrainScheme, HeightField,
-	OnTerrain, TerrainExtent, TerrainStreaming, TerrainView,
+	HeightField, OnTerrain, TerrainExtent, TerrainStreaming, TerrainView,
 };
 use urbanization_cells::{
 	DevelopmentLeaf, SelectedUrbanization, UrbanDevelopmentKind, UrbanizationExtent,
@@ -29,12 +28,9 @@ use urbanization_cells::{
 };
 use urbanization_layer_model::{
 	urbanization_host_region, UrbanModel, UrbanSnapshot, Urbanization, UrbanizationGeneration,
-	UrbanizationGenerationCore, UrbanizationGenerationPlugin, UrbanizationLayerRegion,
-	UrbanizationModeConfig, UrbanizationScheme,
+	UrbanizationLayerRegion,
 };
-use urbanization_layer_presentation::{
-	PaddedCells, UrbanizationHosts, UrbanizationPresentationPlugin,
-};
+use urbanization_layer_presentation::{PaddedCells, UrbanizationHosts};
 
 use crate::index::DevelopmentIndex;
 use crate::layer::Richmond;
@@ -57,11 +53,11 @@ struct TestMode;
 
 impl GenerationMode for TestMode {}
 
-impl BaseTerrainScheme<Durham> for TestMode {
+impl Scheme<OnTerrain<Durham>> for TestMode {
 	fn install(_app: &mut App, _config: &DurhamTerrainConfig) {}
 }
 
-impl UrbanizationScheme<Richmond<OnTerrain<Durham>>> for TestMode {
+impl Scheme<Urbanization<Richmond<OnTerrain<Durham>>>> for TestMode {
 	fn install(_app: &mut App, _config: &RichmondConfig) {}
 }
 
@@ -71,19 +67,19 @@ struct OtherMode;
 impl GenerationMode for StreamMode {}
 impl GenerationMode for OtherMode {}
 
-impl BaseTerrainScheme<Durham> for StreamMode {
+impl Scheme<OnTerrain<Durham>> for StreamMode {
 	fn install(_app: &mut App, _config: &DurhamTerrainConfig) {}
 }
 
-impl BaseTerrainScheme<Durham> for OtherMode {
+impl Scheme<OnTerrain<Durham>> for OtherMode {
 	fn install(_app: &mut App, _config: &DurhamTerrainConfig) {}
 }
 
-impl UrbanizationScheme<Richmond<OnTerrain<Durham>>> for StreamMode {
+impl Scheme<Urbanization<Richmond<OnTerrain<Durham>>>> for StreamMode {
 	fn install(_app: &mut App, _config: &RichmondConfig) {}
 }
 
-impl UrbanizationScheme<Richmond<OnTerrain<Durham>>> for OtherMode {
+impl Scheme<Urbanization<Richmond<OnTerrain<Durham>>>> for OtherMode {
 	fn install(_app: &mut App, _config: &RichmondConfig) {}
 }
 
@@ -188,7 +184,7 @@ fn stream_applies_focus_when_the_spec_kind_is_open() -> anyhow::Result<()> {
 	app.add_plugins((MinimalPlugins, StatesPlugin));
 	app.add_plugins(GenerationModePlugin::<TestMode>::initial());
 	register_urbanization_lod_generate(&mut app);
-	app.insert_resource(UrbanizationModeConfig::<TestMode, Richmond<OnTerrain<Durham>>>::new(
+	app.insert_resource(LayerModeConfig::<TestMode, Urbanization<Richmond<OnTerrain<Durham>>>>::new(
 		config,
 	));
 	app.init_resource::<UrbanizationStreamKey>();
@@ -208,11 +204,11 @@ fn stream_applies_focus_when_the_spec_kind_is_open() -> anyhow::Result<()> {
 fn urbanization_stack_names_the_local_mode() {
 	let _stack = (
 		GenerationModePlugin::<TestMode>::initial(),
-		BaseTerrainGenerationPlugin::<TestMode, Durham>::new(DurhamTerrainConfig::fine_patch(2)),
-		UrbanizationGenerationPlugin::<TestMode, Richmond<OnTerrain<Durham>>>::new(
+		Generate::<TestMode, OnTerrain<Durham>>::new(DurhamTerrainConfig::fine_patch(2)),
+		Generate::<TestMode, Urbanization<Richmond<OnTerrain<Durham>>>>::new(
 			RichmondConfig::default(),
 		),
-		UrbanizationPresentationPlugin::<TestMode, Richmond<OnTerrain<Durham>>>::default(),
+		Present::<TestMode, Urbanization<Richmond<OnTerrain<Durham>>>>::default(),
 	);
 }
 
@@ -430,7 +426,7 @@ fn leaving_a_stream_mode_clears_then_reentering_streams_again() -> anyhow::Resul
 		GenerationModePlugin::<OtherMode>::default(),
 	));
 	register_urbanization_lod_generate(&mut app);
-	app.insert_resource(UrbanizationModeConfig::<StreamMode, Richmond<OnTerrain<Durham>>>::new(
+	app.insert_resource(LayerModeConfig::<StreamMode, Urbanization<Richmond<OnTerrain<Durham>>>>::new(
 		RichmondConfig::world_defaults(),
 	));
 	app.init_resource::<UrbanizationStreamKey>();
@@ -504,11 +500,11 @@ fn different_budgets_build_and_apply_on_enter() -> anyhow::Result<()> {
 		StatesPlugin,
 		GenerationModePlugin::<StreamMode>::initial(),
 		GenerationModePlugin::<OtherMode>::default(),
-		BaseTerrainGenerationCore::<Durham>::default(),
-		UrbanizationGenerationPlugin::<StreamMode, Richmond<OnTerrain<Durham>>>::new(
+		LayerGenerationCore::<OnTerrain<Durham>>::default(),
+		Generate::<StreamMode, Urbanization<Richmond<OnTerrain<Durham>>>>::new(
 			RichmondConfig::world_defaults(),
 		),
-		UrbanizationGenerationPlugin::<OtherMode, Richmond<OnTerrain<Durham>>>::new(
+		Generate::<OtherMode, Urbanization<Richmond<OnTerrain<Durham>>>>::new(
 			RichmondConfig { generate_budget: 8, ..RichmondConfig::shared_world() },
 		),
 	));
@@ -545,20 +541,20 @@ fn plugin_order_does_not_matter() -> anyhow::Result<()> {
 		MinimalPlugins,
 		AssetPlugin::default(),
 		StatesPlugin,
-		UrbanizationGenerationPlugin::<OtherMode, Richmond<OnTerrain<Durham>>>::new(
+		Generate::<OtherMode, Urbanization<Richmond<OnTerrain<Durham>>>>::new(
 			RichmondConfig::shared_world(),
 		),
-		UrbanizationGenerationPlugin::<StreamMode, Richmond<OnTerrain<Durham>>>::new(
+		Generate::<StreamMode, Urbanization<Richmond<OnTerrain<Durham>>>>::new(
 			RichmondConfig::world_defaults(),
 		),
-		BaseTerrainGenerationCore::<Durham>::default(),
+		LayerGenerationCore::<OnTerrain<Durham>>::default(),
 		GenerationModePlugin::<StreamMode>::initial(),
 		GenerationModePlugin::<OtherMode>::default(),
 	));
 	app.insert_resource(TerrainStreaming::<Durham>::new(false));
 	app.finish();
 	anyhow::ensure!(
-		app.is_plugin_added::<UrbanizationGenerationCore<Richmond<OnTerrain<Durham>>>>(),
+		app.is_plugin_added::<LayerGenerationCore<Urbanization<Richmond<OnTerrain<Durham>>>>>(),
 		"core is installed"
 	);
 	Ok(())
@@ -689,7 +685,7 @@ fn streamed_hosts_leave_when_the_layer_region_is_gone() -> anyhow::Result<()> {
 	app.insert_resource(UrbanizationIndex::default());
 	app.insert_resource(DevelopmentEntryStore::default());
 	app.init_resource::<UrbanizationPresenterState>();
-	app.init_resource::<lod::LodPresentGate<(Urbanized, UrbanizationHosts)>>();
+	app.init_resource::<lod::LodPresentGate<Urbanized>>();
 
 	let id = Id::from_cell(Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE));
 	let host = app.world_mut().spawn_empty().id();

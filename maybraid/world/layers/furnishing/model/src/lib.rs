@@ -8,10 +8,7 @@ mod generation;
 mod model;
 
 pub use furnishing::FurnishingModel;
-pub use generation::{
-	FurnishingGeneration, FurnishingGenerationCore, FurnishingGenerationPlugin,
-	FurnishingGenerationSystems, FurnishingModeConfig, FurnishingScheme,
-};
+pub use generation::{FurnishingGeneration, FurnishingGenerationSystems};
 pub use model::Furnishing;
 
 #[cfg(test)]

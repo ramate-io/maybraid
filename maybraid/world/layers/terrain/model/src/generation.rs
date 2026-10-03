@@ -1,19 +1,16 @@
 //! Base of the stack: models that own a generation pipeline.
 
-use std::marker::PhantomData;
+use bevy::app::App;
+use bevy::prelude::World;
 
-use bevy::app::{App, Plugin};
-use bevy::prelude::*;
-
-use crate::contract::{TerrainExtent, TerrainStreaming};
 use crate::model::TerrainModel;
-use layer_stack::{ActiveGenerationMode, GenerationMode};
 
 /// A model with its own generation stack (the bottom of the wiring diagram).
 ///
-/// Wrappers such as `Urbanization<M>` are not `TerrainGeneration`; their
-/// generation plugins are typed by the model they read instead.
+/// Wrappers such as `Urbanization<M>` are not `TerrainGeneration`;
+/// [`crate::OnTerrain<Self>`] is the [`layer_stack::Layer`].
 pub trait TerrainGeneration: TerrainModel {
+	const LABEL: &'static str;
 	type Config: Clone + Send + Sync + 'static;
 
 	/// Register the model's stores, layout, and generate systems. No presentation.
@@ -21,102 +18,22 @@ pub trait TerrainGeneration: TerrainModel {
 
 	/// Apply this mode's config. A seed change rebuilds stores the way a retarget does.
 	fn apply_generation(world: &mut World, config: &Self::Config);
-}
 
-/// A mode's layout writes for base model `T`. Per-frame systems go in
-/// [`crate::GenerationModeSystems<Self>`]; enter systems on
-/// `OnEnter(ActiveGenerationMode::of::<Self>())`.
-pub trait BaseTerrainScheme<T: TerrainGeneration>: GenerationMode {
-	fn install(app: &mut App, config: &T::Config);
-}
-
-/// Shared install for `T`, added once. [`TerrainModel::require_generation`]
-/// names this instead of a mode-specific plugin.
-pub struct BaseTerrainGenerationCore<T: TerrainGeneration>(PhantomData<fn() -> T>);
-
-impl<T: TerrainGeneration> Default for BaseTerrainGenerationCore<T> {
-	fn default() -> Self {
-		Self(PhantomData)
-	}
-}
-
-impl<T: TerrainGeneration> Plugin for BaseTerrainGenerationCore<T> {
-	fn build(&self, app: &mut App) {
-		app.init_resource::<TerrainStreaming<T::Base>>()
-			.init_resource::<TerrainExtent<T::Base>>();
-	}
-}
-
-/// Per-mode config the scheme systems read.
-#[derive(Resource, Clone)]
-pub struct BaseTerrainModeConfig<Mode: GenerationMode, T: TerrainGeneration> {
-	pub config: T::Config,
-	_mode: PhantomData<fn() -> Mode>,
-}
-
-impl<Mode: GenerationMode, T: TerrainGeneration> BaseTerrainModeConfig<Mode, T> {
-	pub fn new(config: T::Config) -> Self {
-		Self { config, _mode: PhantomData }
-	}
-}
-
-/// Generation for base model `T` in `Mode`.
-pub struct BaseTerrainGenerationPlugin<Mode, T>
-where
-	Mode: BaseTerrainScheme<T>,
-	T: TerrainGeneration,
-{
-	pub config: T::Config,
-	_mode: PhantomData<fn() -> Mode>,
-}
-
-impl<Mode, T> BaseTerrainGenerationPlugin<Mode, T>
-where
-	Mode: BaseTerrainScheme<T>,
-	T: TerrainGeneration,
-{
-	pub fn new(config: T::Config) -> Self {
-		Self { config, _mode: PhantomData }
-	}
-}
-
-impl<Mode, T> Plugin for BaseTerrainGenerationPlugin<Mode, T>
-where
-	Mode: BaseTerrainScheme<T>,
-	T: TerrainGeneration,
-{
-	fn build(&self, app: &mut App) {
-		if !app.is_plugin_added::<BaseTerrainGenerationCore<T>>() {
-			T::install_generation(app);
-			app.add_plugins(BaseTerrainGenerationCore::<T>::default());
-		}
-		app.insert_resource(BaseTerrainModeConfig::<Mode, T>::new(self.config.clone()));
-		app.add_systems(OnEnter(ActiveGenerationMode::of::<Mode>()), apply_base_terrain::<Mode, T>);
-		Mode::install(app, &self.config);
-	}
-}
-
-fn apply_base_terrain<Mode, T>(world: &mut World)
-where
-	Mode: GenerationMode,
-	T: TerrainGeneration,
-{
-	let config = world.resource::<BaseTerrainModeConfig<Mode, T>>().config.clone();
-	T::apply_generation(world, &config);
+	fn install_presentation(app: &mut App);
 }
 
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::{HeightField, TerrainCell, TerrainModel};
+	use crate::{HeightField, OnTerrain, TerrainCell, TerrainModel};
 	use bevy::ecs::system::{SystemParam, SystemParamItem};
 	use bevy::math::bounding::Aabb3d;
 	use bevy::math::{Vec2, Vec3};
-	use bevy::prelude::NextState;
+	use bevy::prelude::*;
 	use bevy::state::app::StatesPlugin;
-	use bevy::transform::components::Transform;
-	use layer_stack::GenerationModePlugin;
-	use layer_stack::RequireLayer;
+	use layer_stack::{
+		Generate, GenerationMode, GenerationModePlugin, LayerGenerationCore, RequireLayer, Scheme,
+	};
 	use lod::lod_ref::LodRef;
 
 	struct Alpha;
@@ -206,7 +123,7 @@ mod tests {
 		}
 
 		fn require_generation(app: &App) {
-			app.require_layer::<BaseTerrainGenerationCore<Stub>, Stub>();
+			app.require_layer::<LayerGenerationCore<OnTerrain<Stub>>, Stub>();
 		}
 	}
 
@@ -217,6 +134,7 @@ mod tests {
 	}
 
 	impl TerrainGeneration for Stub {
+		const LABEL: &'static str = "stub";
 		type Config = StubConfig;
 
 		fn install_generation(app: &mut App) {
@@ -232,13 +150,15 @@ mod tests {
 			store.fallback = config.layout;
 			store.applies += 1;
 		}
+
+		fn install_presentation(_app: &mut App) {}
 	}
 
-	impl BaseTerrainScheme<Stub> for Alpha {
+	impl Scheme<OnTerrain<Stub>> for Alpha {
 		fn install(_app: &mut App, _config: &StubConfig) {}
 	}
 
-	impl BaseTerrainScheme<Stub> for Beta {
+	impl Scheme<OnTerrain<Stub>> for Beta {
 		fn install(_app: &mut App, _config: &StubConfig) {}
 	}
 
@@ -250,8 +170,10 @@ mod tests {
 		StubConfig { seed: 2, layout: 9.0 }
 	}
 
-	fn hop(app: &mut App, mode: ActiveGenerationMode) {
-		app.world_mut().resource_mut::<NextState<ActiveGenerationMode>>().set(mode);
+	fn hop(app: &mut App, mode: layer_stack::ActiveGenerationMode) {
+		app.world_mut()
+			.resource_mut::<NextState<layer_stack::ActiveGenerationMode>>()
+			.set(mode);
 		app.update();
 	}
 
@@ -268,8 +190,8 @@ mod tests {
 			StatesPlugin,
 			GenerationModePlugin::<Alpha>::initial(),
 			GenerationModePlugin::<Beta>::default(),
-			BaseTerrainGenerationPlugin::<Alpha, Stub>::new(alpha_config()),
-			BaseTerrainGenerationPlugin::<Beta, Stub>::new(beta_config()),
+			Generate::<Alpha, OnTerrain<Stub>>::new(alpha_config()),
+			Generate::<Beta, OnTerrain<Stub>>::new(beta_config()),
 		));
 		app.finish();
 		let store = app.world().resource::<StubStore>();
@@ -277,10 +199,10 @@ mod tests {
 		app.update();
 		anyhow::ensure!(live(&app) == (1, 3.0), "initial mode applied {:?}", live(&app));
 
-		hop(&mut app, ActiveGenerationMode::of::<Beta>());
+		hop(&mut app, layer_stack::ActiveGenerationMode::of::<Beta>());
 		anyhow::ensure!(live(&app) == (2, 9.0), "beta seed and layout {:?}", live(&app));
 
-		hop(&mut app, ActiveGenerationMode::of::<Alpha>());
+		hop(&mut app, layer_stack::ActiveGenerationMode::of::<Alpha>());
 		anyhow::ensure!(live(&app) == (1, 3.0), "return restores {:?}", live(&app));
 		Ok(())
 	}
@@ -291,8 +213,8 @@ mod tests {
 		generation_first.add_plugins((
 			MinimalPlugins,
 			StatesPlugin,
-			BaseTerrainGenerationPlugin::<Beta, Stub>::new(beta_config()),
-			BaseTerrainGenerationPlugin::<Alpha, Stub>::new(alpha_config()),
+			Generate::<Beta, OnTerrain<Stub>>::new(beta_config()),
+			Generate::<Alpha, OnTerrain<Stub>>::new(alpha_config()),
 			GenerationModePlugin::<Alpha>::initial(),
 			GenerationModePlugin::<Beta>::default(),
 		));
@@ -304,7 +226,7 @@ mod tests {
 			live(&generation_first)
 		);
 		anyhow::ensure!(
-			generation_first.is_plugin_added::<BaseTerrainGenerationCore<Stub>>(),
+			generation_first.is_plugin_added::<LayerGenerationCore<OnTerrain<Stub>>>(),
 			"core is installed"
 		);
 
@@ -314,8 +236,8 @@ mod tests {
 			StatesPlugin,
 			GenerationModePlugin::<Alpha>::initial(),
 			GenerationModePlugin::<Beta>::default(),
-			BaseTerrainGenerationPlugin::<Beta, Stub>::new(beta_config()),
-			BaseTerrainGenerationPlugin::<Alpha, Stub>::new(alpha_config()),
+			Generate::<Beta, OnTerrain<Stub>>::new(beta_config()),
+			Generate::<Alpha, OnTerrain<Stub>>::new(alpha_config()),
 		));
 		beta_first.finish();
 		beta_first.update();
@@ -330,10 +252,7 @@ mod tests {
 	#[test]
 	fn wrappers_read_the_base_contract_the_same_update() -> anyhow::Result<()> {
 		use crate::contract::TerrainContract;
-		use crate::on_terrain::OnTerrain;
 		use crate::{terrain_streaming, TerrainExtent, TerrainStreaming};
-		use bevy::math::bounding::Aabb3d;
-		use bevy::math::Vec3;
 
 		type Stacked = OnTerrain<OnTerrain<Stub>>;
 

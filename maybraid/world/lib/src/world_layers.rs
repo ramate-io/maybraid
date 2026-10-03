@@ -5,27 +5,22 @@ use barking::{Barking, BarkingConfig};
 use bevy::prelude::*;
 use chico::{Chico, ChicoConfig};
 use durham::{Durham, DurhamTerrainConfig};
-use furnishing_layer_model::FurnishingGenerationPlugin;
-use furnishing_layer_presentation::FurnishingPresentationPlugin;
-use layer_stack::GenerationModePlugin;
+use furnishing_layer_model::Furnishing;
+use layer_stack::{Generate, GenerationModePlugin, Present};
 use maputo::Maputo;
 use maybraid_game_mode_discover::Discovery;
 use maybraid_game_mode_training_ground::{TrainingGround, TRAINING_FINE_HALF_EXTENT_CELLS};
-use mob_layer_model::{MobGenerationPlugin, Mobs};
-use mob_layer_presentation::MobPresentationPlugin;
+use mob_layer_model::Mobs;
 use richmond::{Richmond, RichmondConfig};
-use terrain_layer_model::{BaseTerrainGenerationPlugin, OnTerrain};
-use terrain_layer_presentation::TerrainPresentationPlugin;
-use urbanization_layer_model::{Urbanization, UrbanizationGenerationPlugin};
-use urbanization_layer_presentation::{PaddedCells, UrbanizationPresentationPlugin};
-use vegetation_layer_model::{Vegetation, VegetationGenerationPlugin};
-use vegetation_layer_presentation::VegetationPresentationPlugin;
+use terrain_layer_model::OnTerrain;
+use urbanization_layer_model::Urbanization;
+use vegetation_layer_model::Vegetation;
 
-type Urbanized = Urbanization<Richmond<OnTerrain<Durham>>>;
-type Forested = Chico<Urbanized>;
-type Vegetated = Vegetation<Forested>;
-#[allow(dead_code)]
-type Inhabited = Mobs<Barking<Vegetated>>;
+type Ground = OnTerrain<Durham>;
+type Urban = Urbanization<Richmond<Ground>>;
+type Veg = Vegetation<Chico<Urban>>;
+type Mob = Mobs<Barking<Veg>>;
+type Furniture = Furnishing<Maputo<Urban>>;
 
 /// Every world layer at world defaults.
 ///
@@ -39,44 +34,31 @@ impl Plugin for WorldLayersPlugin {
 		app.add_plugins((
 			(
 				GenerationModePlugin::<Discovery>::initial(),
-				BaseTerrainGenerationPlugin::<Discovery, Durham>::new(
-					DurhamTerrainConfig::playable_world(),
-				),
-				UrbanizationGenerationPlugin::<Discovery, Richmond<OnTerrain<Durham>>>::new(
-					RichmondConfig::world_defaults(),
-				),
-				VegetationGenerationPlugin::<Discovery, Forested>::new(ChicoConfig::world_defaults()),
-				MobGenerationPlugin::<Discovery, Barking<Vegetated>>::new(
-					BarkingConfig::world_defaults(),
-				),
-				FurnishingGenerationPlugin::<Discovery, Maputo<Urbanized>>::default(),
-				TerrainPresentationPlugin::<Discovery, Urbanized, PaddedCells>::default(),
-				UrbanizationPresentationPlugin::<Discovery, Richmond<OnTerrain<Durham>>>::default(),
-				VegetationPresentationPlugin::<Discovery, Forested>::default(),
-				MobPresentationPlugin::<Discovery, Barking<Vegetated>>::default(),
-				FurnishingPresentationPlugin::<Discovery, Maputo<Urbanized>>::default(),
+				Generate::<Discovery, Ground>::new(DurhamTerrainConfig::playable_world()),
+				Generate::<Discovery, Urban>::new(RichmondConfig::world_defaults()),
+				Generate::<Discovery, Veg>::new(ChicoConfig::world_defaults()),
+				Generate::<Discovery, Mob>::new(BarkingConfig::world_defaults()),
+				Generate::<Discovery, Furniture>::new(()),
+				Present::<Discovery, Ground>::default(),
+				Present::<Discovery, Urban>::default(),
+				Present::<Discovery, Veg>::default(),
+				Present::<Discovery, Mob>::default(),
+				Present::<Discovery, Furniture>::default(),
 			),
 			(
 				GenerationModePlugin::<TrainingGround>::default(),
-				BaseTerrainGenerationPlugin::<TrainingGround, Durham>::new(
-					DurhamTerrainConfig::fine_patch(TRAINING_FINE_HALF_EXTENT_CELLS),
-				),
-				UrbanizationGenerationPlugin::<TrainingGround, Richmond<OnTerrain<Durham>>>::new(
-					RichmondConfig::shared_world(),
-				),
-				VegetationGenerationPlugin::<TrainingGround, Forested>::new(ChicoConfig::grove()),
-				MobGenerationPlugin::<TrainingGround, Barking<Vegetated>>::new(
-					BarkingConfig::world_defaults(),
-				),
-				FurnishingGenerationPlugin::<TrainingGround, Maputo<Urbanized>>::default(),
-				TerrainPresentationPlugin::<TrainingGround, Urbanized, PaddedCells>::default(),
-				UrbanizationPresentationPlugin::<
-					TrainingGround,
-					Richmond<OnTerrain<Durham>>,
-				>::default(),
-				VegetationPresentationPlugin::<TrainingGround, Forested>::default(),
-				MobPresentationPlugin::<TrainingGround, Barking<Vegetated>>::default(),
-				FurnishingPresentationPlugin::<TrainingGround, Maputo<Urbanized>>::default(),
+				Generate::<TrainingGround, Ground>::new(DurhamTerrainConfig::fine_patch(
+					TRAINING_FINE_HALF_EXTENT_CELLS,
+				)),
+				Generate::<TrainingGround, Urban>::new(RichmondConfig::shared_world()),
+				Generate::<TrainingGround, Veg>::new(ChicoConfig::grove()),
+				Generate::<TrainingGround, Mob>::new(BarkingConfig::world_defaults()),
+				Generate::<TrainingGround, Furniture>::new(()),
+				Present::<TrainingGround, Ground>::default(),
+				Present::<TrainingGround, Urban>::default(),
+				Present::<TrainingGround, Veg>::default(),
+				Present::<TrainingGround, Mob>::default(),
+				Present::<TrainingGround, Furniture>::default(),
 			),
 		));
 	}

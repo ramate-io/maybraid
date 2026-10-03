@@ -3,20 +3,16 @@ use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec2;
 use bevy::prelude::{App, MinimalPlugins, NextState, World};
 use bevy::state::app::StatesPlugin;
-use furnishing_layer_model::{
-	Furnishing, FurnishingGeneration, FurnishingGenerationCore, FurnishingGenerationPlugin,
-	FurnishingModel, FurnishingScheme,
-};
+use furnishing_layer_model::{Furnishing, FurnishingGeneration, FurnishingModel};
 use layer_stack::{
-	ActiveGenerationMode, GenerationMode, GenerationModePlugin, ModeSubscribers, RequireLayer,
+	ActiveGenerationMode, Generate, GenerationMode, GenerationModePlugin, LayerGenerationCore,
+	ModeSubscribers, Present, RequireLayer, Scheme,
 };
 use lod::lod_ref::LodRef;
 use lod::LodPresentGate;
 use terrain_layer_model::{
-	BaseTerrainGenerationCore, HeightField, TerrainCell, TerrainGeneration, TerrainModel,
+	HeightField, OnTerrain, TerrainCell, TerrainGeneration, TerrainModel,
 };
-
-use crate::{FurnishingPresent, FurnishingPresentation, FurnishingPresentationPlugin};
 
 struct TestMode;
 struct OtherMode;
@@ -93,14 +89,16 @@ impl TerrainModel for SilentGround {
 	}
 
 	fn require_generation(app: &App) {
-		app.require_layer::<BaseTerrainGenerationCore<Self>, Self>();
+		app.require_layer::<LayerGenerationCore<OnTerrain<Self>>, Self>();
 	}
 }
 
 impl TerrainGeneration for SilentGround {
+	const LABEL: &'static str = "silent-ground";
 	type Config = ();
 	fn install_generation(_app: &mut App) {}
 	fn apply_generation(_world: &mut World, _config: &()) {}
+	fn install_presentation(_app: &mut App) {}
 }
 
 struct SilentFurnishing;
@@ -110,27 +108,21 @@ impl FurnishingModel for SilentFurnishing {
 	type Cell = ();
 
 	fn require_generation(app: &App) {
-		app.require_layer::<FurnishingGenerationCore<Self>, Furnishing<Self>>();
+		app.require_layer::<LayerGenerationCore<Furnishing<Self>>, Furnishing<Self>>();
 	}
 }
 
 impl FurnishingGeneration for SilentFurnishing {
+	const LABEL: &'static str = "silent-furnishing";
 	type Config = ();
 	fn install_generation(_app: &mut App) {}
 	fn apply_generation(_world: &mut World, _config: &()) {}
 	fn clear_generation(_world: &mut World) {}
-}
-
-struct SilentChannel;
-
-impl FurnishingScheme<SilentFurnishing> for TestMode {
-	fn install(_app: &mut App, _config: &()) {}
-}
-
-impl FurnishingPresentation for SilentFurnishing {
-	type Channel = SilentChannel;
-
 	fn install_presentation(_app: &mut App) {}
+}
+
+impl Scheme<Furnishing<SilentFurnishing>> for TestMode {
+	fn install(_app: &mut App, _config: &()) {}
 }
 
 #[test]
@@ -141,20 +133,20 @@ fn presentation_follows_the_subscribed_mode() -> anyhow::Result<()> {
 		StatesPlugin,
 		GenerationModePlugin::<TestMode>::initial(),
 		GenerationModePlugin::<OtherMode>::default(),
-		BaseTerrainGenerationCore::<SilentGround>::default(),
-		FurnishingGenerationPlugin::<TestMode, SilentFurnishing>::default(),
-		FurnishingPresentationPlugin::<TestMode, SilentFurnishing>::default(),
+		LayerGenerationCore::<OnTerrain<SilentGround>>::default(),
+		Generate::<TestMode, Furnishing<SilentFurnishing>>::default(),
+		Present::<TestMode, Furnishing<SilentFurnishing>>::default(),
 	));
 	app.finish();
 	app.update();
 
 	let subscribers = app
 		.world()
-		.resource::<ModeSubscribers<(Furnishing<SilentFurnishing>, FurnishingPresent)>>();
+		.resource::<ModeSubscribers<Furnishing<SilentFurnishing>>>();
 	anyhow::ensure!(subscribers.contains::<TestMode>(), "test mode is subscribed");
 	anyhow::ensure!(!subscribers.contains::<OtherMode>(), "other mode is not subscribed");
 	anyhow::ensure!(
-		app.world().resource::<LodPresentGate<SilentChannel>>().open,
+		app.world().resource::<LodPresentGate<Furnishing<SilentFurnishing>>>().open,
 		"subscribed mode opens the channel"
 	);
 
@@ -163,7 +155,7 @@ fn presentation_follows_the_subscribed_mode() -> anyhow::Result<()> {
 		.set(ActiveGenerationMode::of::<OtherMode>());
 	app.update();
 	anyhow::ensure!(
-		!app.world().resource::<LodPresentGate<SilentChannel>>().open,
+		!app.world().resource::<LodPresentGate<Furnishing<SilentFurnishing>>>().open,
 		"unsubscribed mode closes the channel"
 	);
 	Ok(())

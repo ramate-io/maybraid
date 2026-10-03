@@ -3,11 +3,8 @@
 use std::marker::PhantomData;
 
 use bevy::prelude::{App, World};
-use furnishing_layer_model::{
-	Furnishing, FurnishingGeneration, FurnishingGenerationCore, FurnishingModel,
-};
-use furnishing_layer_presentation::FurnishingPresentation;
-use layer_stack::RequireLayer;
+use furnishing_layer_model::{Furnishing, FurnishingGeneration, FurnishingModel};
+use layer_stack::{LayerGenerationCore, RequireLayer};
 use terrain_layer_model::TerrainModel;
 
 use crate::host::FurnitureCell;
@@ -28,7 +25,7 @@ where
 
 	fn require_generation(app: &App) {
 		G::require_generation(app);
-		app.require_layer::<FurnishingGenerationCore<Self>, Furnishing<Self>>();
+		app.require_layer::<LayerGenerationCore<Furnishing<Self>>, Furnishing<Self>>();
 	}
 }
 
@@ -36,6 +33,7 @@ impl<G> FurnishingGeneration for Maputo<G>
 where
 	G: FurnitureSlots + TerrainModel,
 {
+	const LABEL: &'static str = "maputo";
 	type Config = ();
 
 	fn install_generation(app: &mut App) {
@@ -49,15 +47,9 @@ where
 			index.clear();
 		}
 	}
-}
-
-impl<G> FurnishingPresentation for Maputo<G>
-where
-	G: FurnitureSlots + TerrainModel,
-{
-	type Channel = FurnitureLodChan;
 
 	fn install_presentation(app: &mut App) {
+		layer_stack::install_lod_present_gate::<Furnishing<Self>, FurnitureLodChan>(app);
 		install_maputo_presentation(app);
 	}
 }

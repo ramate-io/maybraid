@@ -3,17 +3,14 @@ use bevy::ecs::system::{Res, SystemParamItem, SystemState};
 use bevy::math::bounding::Aabb3d;
 use bevy::math::{Vec2, Vec3};
 use bevy::prelude::{Resource, World};
-use layer_stack::{GenerationMode, RequireLayer};
+use layer_stack::{Generate, GenerationMode, LayerGenerationCore, RequireLayer, Scheme};
 use lod::lod_ref::LodRef;
 use terrain_layer_model::{
-	terrain_streaming, BaseTerrainGenerationCore, HeightField, TerrainCell, TerrainContract,
-	TerrainExtent, TerrainGeneration, TerrainModel, TerrainStreaming, TerrainView,
+	terrain_streaming, HeightField, OnTerrain, TerrainCell, TerrainContract, TerrainExtent,
+	TerrainGeneration, TerrainModel, TerrainStreaming, TerrainView,
 };
 
-use crate::{
-	Vegetation, VegetationGeneration, VegetationGenerationCore, VegetationGenerationPlugin,
-	VegetationModel, VegetationScheme,
-};
+use crate::{Vegetation, VegetationGeneration, VegetationModel};
 
 struct TestMode;
 
@@ -97,14 +94,16 @@ impl TerrainModel for StubGround {
 	}
 
 	fn require_generation(app: &App) {
-		app.require_layer::<BaseTerrainGenerationCore<Self>, Self>();
+		app.require_layer::<LayerGenerationCore<OnTerrain<Self>>, Self>();
 	}
 }
 
 impl TerrainGeneration for StubGround {
+	const LABEL: &'static str = "stub";
 	type Config = ();
 	fn install_generation(_app: &mut App) {}
 	fn apply_generation(_world: &mut World, _config: &()) {}
+	fn install_presentation(_app: &mut App) {}
 }
 
 struct StubVeg;
@@ -113,18 +112,20 @@ impl VegetationModel for StubVeg {
 	type Ground = StubGround;
 
 	fn require_generation(app: &App) {
-		app.require_layer::<VegetationGenerationCore<Self>, Vegetation<Self>>();
+		app.require_layer::<LayerGenerationCore<Vegetation<Self>>, Vegetation<Self>>();
 	}
 }
 
 impl VegetationGeneration for StubVeg {
+	const LABEL: &'static str = "stub";
 	type Config = ();
 	fn install_generation(_app: &mut App) {}
 	fn apply_generation(_world: &mut World, _config: &()) {}
 	fn clear_generation(_world: &mut World) {}
+	fn install_presentation(_app: &mut App) {}
 }
 
-impl VegetationScheme<StubVeg> for TestMode {
+impl Scheme<Vegetation<StubVeg>> for TestMode {
 	fn install(_app: &mut App, _config: &()) {}
 }
 
@@ -176,16 +177,16 @@ fn overlays_pass_through_the_ground_cell() -> anyhow::Result<()> {
 }
 
 #[test]
-#[should_panic(expected = "requires terrain_layer_model::generation::BaseTerrainGenerationCore")]
+#[should_panic(expected = "LayerGenerationCore")]
 fn requirements_recurse_to_the_ground() {
 	Stacked::require_generation(&App::new());
 }
 
 #[test]
-#[should_panic(expected = "requires vegetation_layer_model::generation::VegetationGenerationCore")]
+#[should_panic(expected = "Vegetation")]
 fn requirements_name_the_vegetation_core() {
 	let mut app = App::new();
-	app.add_plugins(BaseTerrainGenerationCore::<StubGround>::default());
+	app.add_plugins(LayerGenerationCore::<OnTerrain<StubGround>>::default());
 	Stacked::require_generation(&app);
 }
 
@@ -223,7 +224,7 @@ fn wrappers_read_the_ground_contract_the_same_update() -> anyhow::Result<()> {
 #[test]
 fn vegetation_generation_without_ground_names_the_missing_plugin() {
 	let result = std::panic::catch_unwind(|| {
-		VegetationGenerationPlugin::<TestMode, StubVeg>::default().finish(&mut App::new());
+		Generate::<TestMode, Vegetation<StubVeg>>::default().finish(&mut App::new());
 	});
 	let message = match result {
 		Ok(()) => "plugin finish returned".to_string(),
@@ -234,7 +235,7 @@ fn vegetation_generation_without_ground_names_the_missing_plugin() {
 			.unwrap_or_else(|| "non-string panic".to_string()),
 	};
 	assert!(
-		message.contains("BaseTerrainGenerationCore"),
+		message.contains("LayerGenerationCore"),
 		"finish names the missing ground core, got {message}"
 	);
 }

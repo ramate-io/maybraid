@@ -5,10 +5,12 @@ use std::marker::PhantomData;
 use bevy::ecs::system::SystemParamItem;
 use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec2;
-use bevy::prelude::App;
+use bevy::prelude::{App, Update, World};
+use layer_stack::{Layer, LayerPresentation, LayerSystems};
 use lod::lod_ref::LodRef;
 use terrain_layer_model::{TerrainCell, TerrainModel};
 
+use crate::generation::{MobGeneration, MobGenerationSystems};
 use crate::mob::MobModel;
 
 /// Model `B` after mobs: the same heights as `B::Ground`.
@@ -56,5 +58,34 @@ where
 	fn require_generation(app: &App) {
 		B::Ground::require_generation(app);
 		B::require_generation(app);
+	}
+}
+
+impl<B: MobGeneration> Layer for Mobs<B> {
+	const LABEL: &'static str = B::LABEL;
+	type Config = B::Config;
+
+	fn install_generation(app: &mut App) {
+		B::install_generation(app);
+		app.configure_sets(Update, MobGenerationSystems);
+		app.configure_sets(Update, LayerSystems::<Mobs<B>>::default());
+	}
+
+	fn apply_generation(world: &mut World, config: &Self::Config) {
+		B::apply_generation(world, config);
+	}
+
+	fn clear_generation(world: &mut World) {
+		B::clear_generation(world);
+	}
+
+	fn require_lower(app: &App) {
+		B::Ground::require_generation(app);
+	}
+}
+
+impl<B: MobGeneration> LayerPresentation for Mobs<B> {
+	fn install_presentation(app: &mut App) {
+		B::install_presentation(app);
 	}
 }

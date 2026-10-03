@@ -1,20 +1,21 @@
 use std::path::{Path, PathBuf};
 
 use bevy::prelude::*;
-use durham::{Durham, DurhamCells, DurhamTerrainConfig};
-use furnishing_layer_model::FurnishingGenerationPlugin;
-use furnishing_layer_presentation::FurnishingPresentationPlugin;
-use layer_stack::GenerationModePlugin;
+use durham::{Durham, DurhamTerrainConfig};
+use furnishing_layer_model::Furnishing;
+use layer_stack::{Generate, GenerationModePlugin, Present};
 use maputo::Maputo;
 use richmond::{Richmond, RichmondConfig, UrbanizationStreamSpec};
 use richmond_playground::{
 	DevelopmentsOnTerrainPlugin, PendingStartupCommand, PlaygroundCommand, PlaygroundConfig,
 	PlaygroundMode,
 };
-use terrain_layer_model::{BaseTerrainGenerationPlugin, OnTerrain};
-use terrain_layer_presentation::TerrainPresentationPlugin;
-use urbanization_layer_model::{Urbanization, UrbanizationGenerationPlugin};
-use urbanization_layer_presentation::{PaddedCells, UrbanizationPresentationPlugin};
+use terrain_layer_model::OnTerrain;
+use urbanization_layer_model::Urbanization;
+
+type Ground = OnTerrain<Durham>;
+type Urban = Urbanization<Richmond<Ground>>;
+type Furniture = Furnishing<Maputo<Urban>>;
 
 fn assets_root() -> PathBuf {
 	Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../../assets")
@@ -48,31 +49,14 @@ fn main() {
 	);
 	app.insert_resource(PendingStartupCommand(startup.command));
 	app.add_plugins(GenerationModePlugin::<PlaygroundMode>::initial());
-	app.add_plugins(BaseTerrainGenerationPlugin::<PlaygroundMode, Durham>::new(
-		DurhamTerrainConfig::fine_patch(playground.terrain_radius),
-	));
-	app.add_plugins(
-		TerrainPresentationPlugin::<PlaygroundMode, OnTerrain<Durham>, DurhamCells>::default(),
-	);
-	app.add_plugins(
-		UrbanizationGenerationPlugin::<PlaygroundMode, Richmond<OnTerrain<Durham>>>::new(urban),
-	);
-	app.add_plugins(TerrainPresentationPlugin::<
-		PlaygroundMode,
-		Urbanization<Richmond<OnTerrain<Durham>>>,
-		PaddedCells,
-	>::default());
-	app.add_plugins(
-		UrbanizationPresentationPlugin::<PlaygroundMode, Richmond<OnTerrain<Durham>>>::default(),
-	);
-	app.add_plugins(FurnishingGenerationPlugin::<
-		PlaygroundMode,
-		Maputo<Urbanization<Richmond<OnTerrain<Durham>>>>,
-	>::default());
-	app.add_plugins(FurnishingPresentationPlugin::<
-		PlaygroundMode,
-		Maputo<Urbanization<Richmond<OnTerrain<Durham>>>>,
-	>::default());
+	app.add_plugins(Generate::<PlaygroundMode, Ground>::new(DurhamTerrainConfig::fine_patch(
+		playground.terrain_radius,
+	)));
+	app.add_plugins(Present::<PlaygroundMode, Ground>::default());
+	app.add_plugins(Generate::<PlaygroundMode, Urban>::new(urban));
+	app.add_plugins(Present::<PlaygroundMode, Urban>::default());
+	app.add_plugins(Generate::<PlaygroundMode, Furniture>::new(()));
+	app.add_plugins(Present::<PlaygroundMode, Furniture>::default());
 	app.add_plugins(DevelopmentsOnTerrainPlugin { config: playground, commands: true })
 		.run();
 }

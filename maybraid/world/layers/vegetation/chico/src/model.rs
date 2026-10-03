@@ -3,11 +3,9 @@
 use std::marker::PhantomData;
 
 use bevy::prelude::{App, World};
-use layer_stack::RequireLayer;
+use layer_stack::{LayerGenerationCore, RequireLayer};
 use lod::gen::LodGenerateBudget;
-use vegetation_layer_model::{
-	Vegetation, VegetationGeneration, VegetationGenerationCore, VegetationModel,
-};
+use vegetation_layer_model::{Vegetation, VegetationGeneration, VegetationModel};
 
 use crate::config::ChicoConfig;
 use crate::generation::{BumpOutLodChan, ForestLodChan, MediumBumpOutLodChan};
@@ -23,11 +21,12 @@ impl<G: ChicoGround> VegetationModel for Chico<G> {
 	type Ground = G;
 
 	fn require_generation(app: &App) {
-		app.require_layer::<VegetationGenerationCore<Self>, Vegetation<Self>>();
+		app.require_layer::<LayerGenerationCore<Vegetation<Self>>, Vegetation<Self>>();
 	}
 }
 
 impl<G: ChicoGround> VegetationGeneration for Chico<G> {
+	const LABEL: &'static str = "chico";
 	type Config = ChicoConfig;
 
 	fn install_generation(app: &mut App) {
@@ -46,5 +45,9 @@ impl<G: ChicoGround> VegetationGeneration for Chico<G> {
 
 	fn clear_generation(world: &mut World) {
 		clear_vegetation_stream_world(world);
+	}
+
+	fn install_presentation(app: &mut App) {
+		G::install_presentation(app);
 	}
 }

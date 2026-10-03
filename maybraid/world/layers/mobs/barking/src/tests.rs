@@ -7,7 +7,7 @@ use chico::{Chico, ForestIndex};
 use durham::{
 	BaseTerrainNoise, Durham, TerrainCellLayout, TerrainConfig, TerrainEntryStore, WorldBaseTerrain,
 };
-use layer_stack::RequireLayer;
+use layer_stack::{Generate, LayerGenerationCore, RequireLayer, Scheme};
 use lod::gen::{GenerationScheme, Id, LodGenerateKeepRegion, SpatialIndex};
 use lod::lod_ref::LodRef;
 use lod::presentation::LodPresentKeepRegion;
@@ -19,9 +19,7 @@ use urbanization_cells::{
 	UrbanizationIndex, UrbanizationKind,
 };
 use urbanization_layer_model::{UrbanSetting, Urbanization};
-use vegetation_layer_model::{
-	Vegetation, VegetationGeneration, VegetationGenerationCore, VegetationModel, VegetationScheme,
-};
+use vegetation_layer_model::{Vegetation, VegetationGeneration, VegetationModel};
 
 use crate::generation::{GroupKind, MobGroup, MobPlantHost, MobWorldSample};
 use crate::index::{urban_leaf_arrival_radius, MobCell, MobCellExtent, MobIndex};
@@ -33,7 +31,7 @@ use crate::stream::{
 	MobGenerateBullseye, MobLodChan, MobPresentBullseye,
 };
 use crate::{Barking, BarkingConfig};
-use mob_layer_model::{MobGenerationPlugin, MobScheme};
+use mob_layer_model::Mobs;
 
 type Urbanized = Urbanization<richmond::Richmond<OnTerrain<Durham>>>;
 
@@ -429,15 +427,17 @@ struct SilentVeg;
 impl VegetationModel for SilentVeg {
 	type Ground = Silent;
 	fn require_generation(app: &App) {
-		app.require_layer::<VegetationGenerationCore<Self>, Vegetation<Self>>();
+		app.require_layer::<LayerGenerationCore<Vegetation<Self>>, Vegetation<Self>>();
 	}
 }
 
 impl VegetationGeneration for SilentVeg {
+	const LABEL: &'static str = "stub";
 	type Config = ();
 	fn install_generation(_app: &mut App) {}
 	fn apply_generation(_world: &mut World, _config: &()) {}
 	fn clear_generation(_world: &mut World) {}
+	fn install_presentation(_app: &mut App) {}
 }
 
 impl ForestSelection for SilentVeg {
@@ -452,19 +452,19 @@ impl ForestSelection for SilentVeg {
 	}
 }
 
-impl VegetationScheme<SilentVeg> for SilentMode {
+impl Scheme<Vegetation<SilentVeg>> for SilentMode {
 	fn install(_app: &mut App, _config: &()) {}
 }
 
-impl VegetationScheme<SilentVeg> for OtherMode {
+impl Scheme<Vegetation<SilentVeg>> for OtherMode {
 	fn install(_app: &mut App, _config: &()) {}
 }
 
-impl MobScheme<Barking<Vegetation<SilentVeg>>> for SilentMode {
+impl Scheme<Mobs<Barking<Vegetation<SilentVeg>>>> for SilentMode {
 	fn install(_app: &mut App, _config: &BarkingConfig) {}
 }
 
-impl MobScheme<Barking<Vegetation<SilentVeg>>> for OtherMode {
+impl Scheme<Mobs<Barking<Vegetation<SilentVeg>>>> for OtherMode {
 	fn install(_app: &mut App, _config: &BarkingConfig) {}
 }
 
@@ -472,7 +472,7 @@ fn plugin_app() -> App {
 	use bevy::prelude::{AssetPlugin, MinimalPlugins};
 	use bevy::state::app::StatesPlugin;
 	use layer_stack::GenerationModePlugin;
-	use vegetation_layer_model::VegetationGenerationPlugin;
+	
 
 	let mut app = App::new();
 	app.add_plugins((
@@ -481,12 +481,12 @@ fn plugin_app() -> App {
 		StatesPlugin,
 		GenerationModePlugin::<SilentMode>::initial(),
 		GenerationModePlugin::<OtherMode>::default(),
-		VegetationGenerationPlugin::<SilentMode, SilentVeg>::default(),
-		VegetationGenerationPlugin::<OtherMode, SilentVeg>::default(),
-		MobGenerationPlugin::<SilentMode, Barking<Vegetation<SilentVeg>>>::new(
+		Generate::<SilentMode, Vegetation<SilentVeg>>::default(),
+		Generate::<OtherMode, Vegetation<SilentVeg>>::default(),
+		Generate::<SilentMode, Mobs<Barking<Vegetation<SilentVeg>>>>::new(
 			BarkingConfig::world_defaults(),
 		),
-		MobGenerationPlugin::<OtherMode, Barking<Vegetation<SilentVeg>>>::new(
+		Generate::<OtherMode, Mobs<Barking<Vegetation<SilentVeg>>>>::new(
 			BarkingConfig::world_defaults(),
 		),
 	));
@@ -496,7 +496,7 @@ fn plugin_app() -> App {
 #[test]
 fn generation_without_vegetation_names_the_missing_plugin() {
 	let result = std::panic::catch_unwind(|| {
-		MobGenerationPlugin::<SilentMode, Barking<Vegetation<SilentVeg>>>::default()
+		Generate::<SilentMode, Mobs<Barking<Vegetation<SilentVeg>>>>::default()
 			.finish(&mut App::new());
 	});
 	let message = match result {
@@ -508,7 +508,7 @@ fn generation_without_vegetation_names_the_missing_plugin() {
 			.unwrap_or_else(|| "non-string panic".to_string()),
 	};
 	assert!(
-		message.contains("VegetationGenerationCore"),
+		message.contains("LayerGenerationCore"),
 		"finish names the missing vegetation core, got {message}"
 	);
 }
@@ -518,7 +518,7 @@ fn two_modes_install_the_core_once() -> anyhow::Result<()> {
 	let mut app = plugin_app();
 	app.finish();
 	anyhow::ensure!(
-		app.is_plugin_added::<mob_layer_model::MobGenerationCore<Barking<Vegetation<SilentVeg>>>>(),
+		app.is_plugin_added::<LayerGenerationCore<Mobs<Barking<Vegetation<SilentVeg>>>>>(),
 		"core is installed once"
 	);
 	Ok(())
@@ -577,7 +577,7 @@ fn different_budgets_build_and_apply_on_enter() -> anyhow::Result<()> {
 	use bevy::state::app::StatesPlugin;
 	use layer_stack::{ActiveGenerationMode, GenerationModePlugin};
 	use lod::gen::LodGenerateBudget;
-	use vegetation_layer_model::VegetationGenerationPlugin;
+	
 
 	let mut app = App::new();
 	app.add_plugins((
@@ -586,12 +586,12 @@ fn different_budgets_build_and_apply_on_enter() -> anyhow::Result<()> {
 		StatesPlugin,
 		GenerationModePlugin::<SilentMode>::initial(),
 		GenerationModePlugin::<OtherMode>::default(),
-		VegetationGenerationPlugin::<SilentMode, SilentVeg>::default(),
-		VegetationGenerationPlugin::<OtherMode, SilentVeg>::default(),
-		MobGenerationPlugin::<SilentMode, Barking<Vegetation<SilentVeg>>>::new(
+		Generate::<SilentMode, Vegetation<SilentVeg>>::default(),
+		Generate::<OtherMode, Vegetation<SilentVeg>>::default(),
+		Generate::<SilentMode, Mobs<Barking<Vegetation<SilentVeg>>>>::new(
 			BarkingConfig::world_defaults(),
 		),
-		MobGenerationPlugin::<OtherMode, Barking<Vegetation<SilentVeg>>>::new(BarkingConfig {
+		Generate::<OtherMode, Mobs<Barking<Vegetation<SilentVeg>>>>::new(BarkingConfig {
 			generate_budget: 8,
 		}),
 	));

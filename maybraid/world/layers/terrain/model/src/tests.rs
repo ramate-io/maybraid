@@ -9,10 +9,7 @@ use bevy::transform::components::Transform;
 use lod::gen::Id;
 use lod::lod_ref::LodRef;
 
-use crate::{
-	BaseTerrainGenerationCore, BaseTerrainGenerationPlugin, BaseTerrainScheme, HeightField,
-	OnTerrain, TerrainCell, TerrainGeneration, TerrainModel, TerrainView,
-};
+use crate::{HeightField, OnTerrain, TerrainCell, TerrainGeneration, TerrainModel, TerrainView};
 use layer_stack::{GenerationMode, GenerationModePlugin, RequireLayer};
 
 /// Flat test model: stored cells carry a constant height; fallback is configured.
@@ -163,11 +160,12 @@ impl TerrainModel for Flat {
 	}
 
 	fn require_generation(app: &App) {
-		app.require_layer::<BaseTerrainGenerationCore<Flat>, Flat>();
+		app.require_layer::<layer_stack::LayerGenerationCore<OnTerrain<Flat>>, Flat>();
 	}
 }
 
 impl TerrainGeneration for Flat {
+	const LABEL: &'static str = "flat";
 	type Config = f32;
 
 	fn install_generation(app: &mut App) {
@@ -177,13 +175,15 @@ impl TerrainGeneration for Flat {
 	fn apply_generation(world: &mut World, config: &f32) {
 		world.resource_mut::<FlatStore>().fallback = *config;
 	}
+
+	fn install_presentation(_app: &mut App) {}
 }
 
 struct TestMode;
 
 impl GenerationMode for TestMode {}
 
-impl BaseTerrainScheme<Flat> for TestMode {
+impl layer_stack::Scheme<OnTerrain<Flat>> for TestMode {
 	fn install(_app: &mut App, _config: &f32) {}
 }
 
@@ -228,7 +228,7 @@ fn base_generation_installs_model() {
 	let mut app = App::new();
 	app.add_plugins((
 		GenerationModePlugin::<TestMode>::initial(),
-		BaseTerrainGenerationPlugin::<TestMode, Flat>::new(2.5),
+		layer_stack::Generate::<TestMode, OnTerrain<Flat>>::new(2.5),
 	));
 	app.finish();
 	app.update();

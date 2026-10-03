@@ -5,9 +5,9 @@
 //! in each model's own resources. [`TerrainModel::Read`] is the read-only borrow
 //! of those resources, and [`TerrainView`] is what systems take.
 //!
-//! Generation plugins are typed by the model they read. Presentation plugins are
-//! typed by a presenter in a presentation crate. Every layer plugin checks the
-//! stack beneath it in [`Plugin::finish`](bevy::app::Plugin::finish) through
+//! [`layer_stack::Generate`] / [`layer_stack::Present`] are keyed by
+//! [`OnTerrain<T>`]. Every layer checks the stack beneath it in
+//! [`Plugin::finish`](bevy::app::Plugin::finish) through
 //! [`TerrainModel::require_generation`] instead of adding other layers itself.
 
 mod contract;
@@ -20,10 +20,7 @@ pub use contract::{
 	terrain_streaming, TerrainContract, TerrainExtent, TerrainExtentKind, TerrainLayerSystems,
 	TerrainStreaming,
 };
-pub use generation::{
-	BaseTerrainGenerationCore, BaseTerrainGenerationPlugin, BaseTerrainModeConfig,
-	BaseTerrainScheme, TerrainGeneration,
-};
+pub use generation::TerrainGeneration;
 pub use model::{HeightField, TerrainCell, TerrainModel};
 pub use on_terrain::OnTerrain;
 pub use view::TerrainView;

@@ -12,7 +12,7 @@ use lod::{
 };
 use terrain_layer_model::{terrain_streaming, TerrainModel};
 use vegetation_layer_model::{
-	VegetationGeneration, VegetationGenerationSystems, VegetationModeConfig,
+	Vegetation, VegetationGeneration, VegetationGenerationSystems,
 };
 
 use crate::bump_out::{
@@ -257,7 +257,7 @@ impl BumpOutStreamLod<'_> {
 /// Forest and bump-out streams share one key. Snapshot it once so the second
 /// apply still sees the cleared value after a hop.
 pub fn stream_vegetation<Mode, V>(
-	config: Res<VegetationModeConfig<Mode, V>>,
+	config: Res<layer_stack::LayerModeConfig<Mode, Vegetation<V>>>,
 	camera: Query<&Transform, With<Camera3d>>,
 	mut forest: ForestStreamLod,
 	mut bump_outs: BumpOutStreamLod,
@@ -335,7 +335,7 @@ pub fn clear_vegetation_stream_world(world: &mut World) {
 	}
 }
 
-/// Forest and bump-out streams for `Mode`, reading [`VegetationModeConfig`].
+/// Forest and bump-out streams for `Mode`, reading the vegetation [`layer_stack::LayerModeConfig`].
 ///
 /// Terrain contract keys on `V::Ground` so wrappers share one streaming flag.
 pub fn install_vegetation_stream<Mode, V>(app: &mut App)

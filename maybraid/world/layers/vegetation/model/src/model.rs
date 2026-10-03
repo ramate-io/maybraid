@@ -5,10 +5,12 @@ use std::marker::PhantomData;
 use bevy::ecs::system::SystemParamItem;
 use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec2;
-use bevy::prelude::App;
+use bevy::prelude::{App, Update, World};
+use layer_stack::{Layer, LayerPresentation, LayerSystems};
 use lod::lod_ref::LodRef;
 use terrain_layer_model::{TerrainCell, TerrainModel};
 
+use crate::generation::{VegetationGeneration, VegetationGenerationSystems};
 use crate::vegetation::VegetationModel;
 
 /// Model `V` after vegetation: the same heights as `V::Ground`.
@@ -56,5 +58,34 @@ where
 	fn require_generation(app: &App) {
 		V::Ground::require_generation(app);
 		V::require_generation(app);
+	}
+}
+
+impl<V: VegetationGeneration> Layer for Vegetation<V> {
+	const LABEL: &'static str = V::LABEL;
+	type Config = V::Config;
+
+	fn install_generation(app: &mut App) {
+		V::install_generation(app);
+		app.configure_sets(Update, VegetationGenerationSystems);
+		app.configure_sets(Update, LayerSystems::<Vegetation<V>>::default());
+	}
+
+	fn apply_generation(world: &mut World, config: &Self::Config) {
+		V::apply_generation(world, config);
+	}
+
+	fn clear_generation(world: &mut World) {
+		V::clear_generation(world);
+	}
+
+	fn require_lower(app: &App) {
+		V::Ground::require_generation(app);
+	}
+}
+
+impl<V: VegetationGeneration> LayerPresentation for Vegetation<V> {
+	fn install_presentation(app: &mut App) {
+		V::install_presentation(app);
 	}
 }

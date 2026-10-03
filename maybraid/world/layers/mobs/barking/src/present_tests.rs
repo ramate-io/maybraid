@@ -8,14 +8,13 @@ use bevy::state::app::StatesPlugin;
 use chico::Chico;
 use durham::Durham;
 use layer_stack::{
-	subscribe_mode, ActiveGenerationMode, GenerationMode, GenerationModePlugin, ModeSubscribers,
+	subscribe_mode, ActiveGenerationMode, GenerationMode, GenerationModePlugin, LayerPresentationCore,
+	ModeSubscribers, Present,
 };
 use lod::gen::{Id, Version};
 use mob_intelligence::MemberOf;
 use mob_layer_model::Mobs;
-use mob_layer_presentation::{
-	MobPresent, MobPresentationCore, MobPresentationPlugin, MobPresenterState,
-};
+use mob_layer_presentation::{MobPresent, MobPresenterState};
 use mob_scenes::{MobLodRefreshMode, DEFAULT_MOB_HIGH_RADIUS};
 use terrain_layer_model::OnTerrain;
 use urbanization_layer_model::Urbanization;
@@ -94,7 +93,7 @@ fn presentation_inserts_indexed_refresh_mode() -> anyhow::Result<()> {
 
 	let mut app = App::new();
 	app.add_plugins((MinimalPlugins, AssetPlugin::default()));
-	MobPresentationPlugin::<TestMode, Barking<Vegetated>>::default().build(&mut app);
+	Present::<TestMode, Inhabited>::default().build(&mut app);
 	let mut ids = Vec::new();
 	let mut inspect_error = None;
 	app.world_mut().schedule_scope(Update, |world, schedule| {
@@ -139,14 +138,14 @@ fn two_modes_share_one_presentation_core() -> anyhow::Result<()> {
 	app.add_plugins((
 		GenerationModePlugin::<TestMode>::initial(),
 		GenerationModePlugin::<OtherMode>::default(),
-		MobPresentationPlugin::<TestMode, Barking<Vegetated>>::default(),
-		MobPresentationPlugin::<OtherMode, Barking<Vegetated>>::default(),
+		Present::<TestMode, Inhabited>::default(),
+		Present::<OtherMode, Inhabited>::default(),
 	));
 	anyhow::ensure!(
-		app.is_plugin_added::<MobPresentationCore<Barking<Vegetated>>>(),
+		app.is_plugin_added::<LayerPresentationCore<Inhabited>>(),
 		"core is installed"
 	);
-	let subscribers = app.world().resource::<ModeSubscribers<(Inhabited, MobPresent)>>();
+	let subscribers = app.world().resource::<ModeSubscribers<Inhabited>>();
 	anyhow::ensure!(subscribers.contains::<TestMode>());
 	anyhow::ensure!(subscribers.contains::<OtherMode>());
 	Ok(())

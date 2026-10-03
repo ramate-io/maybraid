@@ -3,13 +3,13 @@
 use std::marker::PhantomData;
 
 use bevy::prelude::{App, IntoScheduleConfigs, Update, With, World};
-use layer_stack::RequireLayer;
+use layer_stack::{LayerGenerationCore, RequireLayer};
 use lod::gen::LodGenerateBudget;
 use lod::{
 	LodGeneratePlugin, LodGenerateRegionPlugin, LodGenerateSystems, LodPresentRegionPlugin,
 	LodPresentSystems, LodViewer,
 };
-use mob_layer_model::{MobGeneration, MobGenerationCore, MobGenerationSystems, MobModel, Mobs};
+use mob_layer_model::{MobGeneration, MobGenerationSystems, MobModel, Mobs};
 use terrain_layer_model::TerrainModel;
 use vegetation_layer_model::{Vegetation, VegetationModel};
 
@@ -21,7 +21,6 @@ use crate::stream::{
 	stream_mob_present, sync_mob_models, sync_mob_plant_hosts, MobCellWrites, MobGenerateBullseye,
 	MobLodChan, MobPresentBullseye,
 };
-use mob_layer_presentation::MobPresentation;
 
 /// Mob model over ground `G`.
 pub struct Barking<G>(PhantomData<fn() -> G>);
@@ -37,7 +36,7 @@ where
 	type Writes = MobCellWrites<'static>;
 
 	fn require_generation(app: &App) {
-		app.require_layer::<MobGenerationCore<Self>, Mobs<Self>>();
+		app.require_layer::<LayerGenerationCore<Mobs<Self>>, Mobs<Self>>();
 	}
 }
 
@@ -47,6 +46,7 @@ where
 	Vegetation<V>: TerrainModel,
 	V::Ground: BarkingEnvironment,
 {
+	const LABEL: &'static str = "barking";
 	type Config = BarkingConfig;
 
 	fn install_generation(app: &mut App) {
@@ -94,17 +94,9 @@ where
 	fn clear_generation(world: &mut World) {
 		world.resource_mut::<MobIndex>().clear();
 	}
-}
-
-impl<V> MobPresentation for Barking<Vegetation<V>>
-where
-	V: VegetationModel + ForestSelection,
-	Vegetation<V>: TerrainModel,
-	V::Ground: BarkingEnvironment,
-{
-	type Channel = MobLodChan;
 
 	fn install_presentation(app: &mut App) {
+		layer_stack::install_lod_present_gate::<Mobs<Self>, MobLodChan>(app);
 		install_barking_presentation::<Vegetation<V>>(app);
 	}
 }

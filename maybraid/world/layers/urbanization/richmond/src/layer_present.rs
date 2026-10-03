@@ -16,7 +16,6 @@ use urbanization_layer_model::{
 	urbanization_host_region, urbanization_visual_region, UrbanSetting, Urbanization,
 	UrbanizationGenerationSystems, UrbanizationLayerRegion,
 };
-use urbanization_layer_presentation::{PaddedCells, UrbanizationHosts, UrbanizationPresentation};
 
 use crate::development::DevelopmentCell;
 use crate::ground::RichmondGround;
@@ -149,7 +148,7 @@ pub(crate) struct UrbanizationHostPresent;
 
 pub fn present_richmond_hosts<G>(
 	mut commands: Commands,
-	gate: Res<LodPresentGate<(Urbanization<Richmond<G>>, UrbanizationHosts)>>,
+	gate: Res<LodPresentGate<Urbanization<Richmond<G>>>>,
 	layer: Res<UrbanizationLayerRegion>,
 	extent: Res<TerrainExtent<G::Base>>,
 	store: Res<DevelopmentEntryStore>,
@@ -212,7 +211,7 @@ pub struct UrbanizationPaddedTerrainState {
 }
 
 pub(crate) fn present_richmond_padded_terrain<G>(
-	gate: Res<LodPresentGate<(Urbanization<Richmond<G>>, PaddedCells)>>,
+	gate: Res<LodPresentGate<Urbanization<Richmond<G>>>>,
 	layer: Res<UrbanizationLayerRegion>,
 	extent: Res<TerrainExtent<G::Base>>,
 	store: Res<DevelopmentEntryStore>,
@@ -307,38 +306,31 @@ pub fn sync_raw_terrain_replacements(
 	state.replaced = now_replaced;
 }
 
-impl<G: RichmondGround> UrbanizationPresentation for Richmond<G>
+pub(crate) fn install_richmond_presentation<G: RichmondGround>(app: &mut App)
 where
 	Urbanization<Richmond<G>>: terrain_layer_model::TerrainModel,
 {
-	fn install_hosts(app: &mut App) {
-		app.init_resource::<UrbanizationPresenterState>()
-			.init_resource::<LodPresentGate<(Urbanization<Richmond<G>>, UrbanizationHosts)>>();
-		app.add_systems(
-			Update,
-			present_richmond_hosts::<G>
-				.in_set(UrbanizationHostPresent)
-				.after(UrbanizationGenerationSystems)
-				.after(LodPresentGateSync)
-				.run_if(terrain_streaming::<G>)
-				.before(LodPresentSystems::Produce)
-				.before(TerrainLayerSystems::<G::Base>::QueueColliders),
-		);
-	}
-
-	fn install_padded_cells(app: &mut App) {
-		app.init_resource::<UrbanizationPaddedTerrainState>()
-			.init_resource::<LodPresentGate<(Urbanization<Richmond<G>>, PaddedCells)>>()
-			.add_systems(
-				Update,
-				(present_richmond_padded_terrain::<G>, sync_raw_terrain_replacements)
-					.chain()
-					.after(UrbanizationGenerationSystems)
-					.after(UrbanizationHostPresent)
-					.after(LodPresentGateSync)
-					.run_if(terrain_streaming::<G>)
-					.before(LodPresentSystems::Produce)
-					.before(TerrainLayerSystems::<G::Base>::QueueColliders),
-			);
-	}
+	app.init_resource::<UrbanizationPresenterState>()
+		.init_resource::<LodPresentGate<Urbanization<Richmond<G>>>>();
+	app.add_systems(
+		Update,
+		present_richmond_hosts::<G>
+			.in_set(UrbanizationHostPresent)
+			.after(UrbanizationGenerationSystems)
+			.after(LodPresentGateSync)
+			.run_if(terrain_streaming::<G>)
+			.before(LodPresentSystems::Produce)
+			.before(TerrainLayerSystems::<G::Base>::QueueColliders),
+	);
+	app.init_resource::<UrbanizationPaddedTerrainState>().add_systems(
+		Update,
+		(present_richmond_padded_terrain::<G>, sync_raw_terrain_replacements)
+			.chain()
+			.after(UrbanizationGenerationSystems)
+			.after(UrbanizationHostPresent)
+			.after(LodPresentGateSync)
+			.run_if(terrain_streaming::<G>)
+			.before(LodPresentSystems::Produce)
+			.before(TerrainLayerSystems::<G::Base>::QueueColliders),
+	);
 }

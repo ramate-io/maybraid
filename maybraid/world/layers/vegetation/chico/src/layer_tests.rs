@@ -2,13 +2,11 @@ use bevy::ecs::system::SystemParamItem;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::{App, AssetPlugin, MinimalPlugins, NextState};
 use bevy::state::app::StatesPlugin;
-use layer_stack::{ActiveGenerationMode, GenerationMode, GenerationModePlugin};
+use layer_stack::{ActiveGenerationMode, Generate, GenerationMode, GenerationModePlugin, LayerGenerationCore, LayerModeConfig, Scheme};
 use lod::gen::LodGenerateBudget;
 use lod::lod_ref::LodRef;
 use terrain_layer_model::{HeightField, TerrainCell, TerrainModel, TerrainStreaming};
-use vegetation_layer_model::{
-	VegetationGenerationCore, VegetationGenerationPlugin, VegetationModeConfig, VegetationScheme,
-};
+use vegetation_layer_model::Vegetation;
 
 use crate::config::ChicoConfig;
 use crate::generation::{BumpOutLodChan, ForestLodChan};
@@ -111,13 +109,13 @@ impl ChicoGround for Ground {
 	}
 }
 
-impl VegetationScheme<Chico<Ground>> for Alpha {
+impl Scheme<Vegetation<Chico<Ground>>> for Alpha {
 	fn install(app: &mut App, _config: &ChicoConfig) {
 		crate::install_vegetation_stream::<Alpha, Chico<Ground>>(app);
 	}
 }
 
-impl VegetationScheme<Chico<Ground>> for Beta {
+impl Scheme<Vegetation<Chico<Ground>>> for Beta {
 	fn install(app: &mut App, _config: &ChicoConfig) {
 		crate::install_vegetation_stream::<Beta, Chico<Ground>>(app);
 	}
@@ -125,7 +123,7 @@ impl VegetationScheme<Chico<Ground>> for Beta {
 
 fn forest_radius<Mode: GenerationMode>(app: &App) -> Option<u32> {
 	app.world()
-		.get_resource::<VegetationModeConfig<Mode, Chico<Ground>>>()
+		.get_resource::<LayerModeConfig<Mode, Vegetation<Chico<Ground>>>>()
 		.and_then(|config| config.config.forest)
 		.map(|spec| spec.stream_radius)
 }
@@ -144,8 +142,8 @@ fn vegetation_app(alpha: ChicoConfig, beta: ChicoConfig) -> App {
 		StatesPlugin,
 		GenerationModePlugin::<Alpha>::initial(),
 		GenerationModePlugin::<Beta>::default(),
-		VegetationGenerationPlugin::<Alpha, Chico<Ground>>::new(alpha),
-		VegetationGenerationPlugin::<Beta, Chico<Ground>>::new(beta),
+		Generate::<Alpha, Vegetation<Chico<Ground>>>::new(alpha),
+		Generate::<Beta, Vegetation<Chico<Ground>>>::new(beta),
 	));
 	app.insert_resource(TerrainStreaming::<Ground>::new(false));
 	app.finish();
@@ -190,8 +188,8 @@ fn plugin_order_does_not_matter() -> anyhow::Result<()> {
 		MinimalPlugins,
 		AssetPlugin::default(),
 		StatesPlugin,
-		VegetationGenerationPlugin::<Beta, Chico<Ground>>::new(ChicoConfig::grove()),
-		VegetationGenerationPlugin::<Alpha, Chico<Ground>>::new(ChicoConfig::world_defaults()),
+		Generate::<Beta, Vegetation<Chico<Ground>>>::new(ChicoConfig::grove()),
+		Generate::<Alpha, Vegetation<Chico<Ground>>>::new(ChicoConfig::world_defaults()),
 		GenerationModePlugin::<Alpha>::initial(),
 		GenerationModePlugin::<Beta>::default(),
 	));
@@ -199,7 +197,7 @@ fn plugin_order_does_not_matter() -> anyhow::Result<()> {
 	generation_first.finish();
 	generation_first.update();
 	anyhow::ensure!(
-		generation_first.is_plugin_added::<VegetationGenerationCore<Chico<Ground>>>(),
+		generation_first.is_plugin_added::<LayerGenerationCore<Vegetation<Chico<Ground>>>>(),
 		"core is installed"
 	);
 	anyhow::ensure!(forest_radius::<Alpha>(&generation_first) == Some(1), "alpha keeps radius 1");
@@ -211,8 +209,8 @@ fn plugin_order_does_not_matter() -> anyhow::Result<()> {
 		StatesPlugin,
 		GenerationModePlugin::<Alpha>::initial(),
 		GenerationModePlugin::<Beta>::default(),
-		VegetationGenerationPlugin::<Beta, Chico<Ground>>::new(ChicoConfig::grove()),
-		VegetationGenerationPlugin::<Alpha, Chico<Ground>>::new(ChicoConfig::world_defaults()),
+		Generate::<Beta, Vegetation<Chico<Ground>>>::new(ChicoConfig::grove()),
+		Generate::<Alpha, Vegetation<Chico<Ground>>>::new(ChicoConfig::world_defaults()),
 	));
 	beta_first.insert_resource(TerrainStreaming::<Ground>::new(false));
 	beta_first.finish();

@@ -7,10 +7,7 @@ mod generation;
 mod model;
 mod vegetation;
 
-pub use generation::{
-	VegetationGeneration, VegetationGenerationCore, VegetationGenerationPlugin,
-	VegetationGenerationSystems, VegetationModeConfig, VegetationScheme,
-};
+pub use generation::{VegetationGeneration, VegetationGenerationSystems};
 pub use model::Vegetation;
 pub use vegetation::VegetationModel;
 

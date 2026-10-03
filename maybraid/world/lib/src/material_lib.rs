@@ -47,7 +47,7 @@ impl MaterialLib for WorldMaterialLib<'_> {
 
 /// Installs [`WorldMaterialLib`] as the single [`MaterialRefPlugin`] for Maybraid World.
 ///
-/// Add this before [`vegetation_layer_presentation::VegetationPresentationPlugin`]
+/// Add this before vegetation [`layer_stack::Present`]
 /// so the nested vegetation material plugin skips installing a second
 /// [`MaterialRefPlugin`]. [`characters::material_lib::CharacterMaterialRefPlugin`]
 /// and [`building_shaders::UrbanMaterialRefPlugin`] also skip;

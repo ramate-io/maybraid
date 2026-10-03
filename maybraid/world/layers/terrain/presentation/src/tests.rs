@@ -8,17 +8,16 @@ use bevy::prelude::{Local, MinimalPlugins, NextState, ResMut, Resource, Update, 
 use bevy::state::app::StatesPlugin;
 use bevy::transform::components::Transform;
 use layer_stack::{
-	subscribe_mode, ActiveGenerationMode, GenerationMode, GenerationModePlugin, ModeSubscription,
-	RequireLayer,
+	subscribe_mode, ActiveGenerationMode, Generate, GenerationMode, GenerationModePlugin,
+	LayerGenerationCore, ModeSubscription, Present, RequireLayer, Scheme,
 };
 use lod::gen::Id;
 use lod::lod_ref::LodRef;
 use terrain_layer_model::{
-	BaseTerrainGenerationCore, BaseTerrainGenerationPlugin, BaseTerrainScheme, HeightField,
-	OnTerrain, TerrainCell, TerrainGeneration, TerrainModel,
+	HeightField, OnTerrain, TerrainCell, TerrainGeneration, TerrainModel,
 };
 
-use crate::{TerrainPresentationPlugin, TerrainPresenter};
+use crate::TerrainPresenter;
 
 struct Flat;
 
@@ -137,11 +136,12 @@ impl TerrainModel for Flat {
 	}
 
 	fn require_generation(app: &App) {
-		app.require_layer::<BaseTerrainGenerationCore<Flat>, Flat>();
+		app.require_layer::<LayerGenerationCore<OnTerrain<Flat>>, Flat>();
 	}
 }
 
 impl TerrainGeneration for Flat {
+	const LABEL: &'static str = "stub";
 	type Config = f32;
 
 	fn install_generation(app: &mut App) {
@@ -151,13 +151,16 @@ impl TerrainGeneration for Flat {
 	fn apply_generation(world: &mut World, config: &f32) {
 		world.resource_mut::<FlatStore>().fallback = *config;
 	}
+	fn install_presentation(app: &mut App) {
+		FlatPresenter::install(app);
+	}
 }
 
 struct TestMode;
 
 impl GenerationMode for TestMode {}
 
-impl BaseTerrainScheme<Flat> for TestMode {
+impl Scheme<OnTerrain<Flat>> for TestMode {
 	fn install(_app: &mut App, _config: &f32) {}
 }
 
@@ -188,9 +191,9 @@ fn presenter_installs_and_finish_requires_generation() {
 	let mut app = App::new();
 	app.add_plugins((
 		GenerationModePlugin::<TestMode>::initial(),
-		BaseTerrainGenerationPlugin::<TestMode, Flat>::new(2.5),
+		Generate::<TestMode, OnTerrain<Flat>>::new(2.5),
 	))
-	.add_plugins(TerrainPresentationPlugin::<TestMode, OnTerrain<Flat>, FlatPresenter>::default());
+	.add_plugins(Present::<TestMode, OnTerrain<Flat>>::default());
 	app.finish();
 	app.update();
 
@@ -199,11 +202,11 @@ fn presenter_installs_and_finish_requires_generation() {
 }
 
 #[test]
-#[should_panic(expected = "requires terrain_layer_model::generation::BaseTerrainGenerationCore")]
+#[should_panic(expected = "LayerGenerationCore")]
 fn presentation_without_generation_names_the_missing_plugin() {
 	let mut app = App::new();
 	app.add_plugins(
-		TerrainPresentationPlugin::<TestMode, OnTerrain<Flat>, FlatPresenter>::default(),
+		Present::<TestMode, OnTerrain<Flat>>::default(),
 	);
 	app.finish();
 }
@@ -214,9 +217,9 @@ fn two_modes_install_the_core_once() -> anyhow::Result<()> {
 	app.add_plugins((
 		GenerationModePlugin::<TestMode>::initial(),
 		GenerationModePlugin::<OtherMode>::default(),
-		BaseTerrainGenerationPlugin::<TestMode, Flat>::new(2.5),
-		TerrainPresentationPlugin::<TestMode, OnTerrain<Flat>, FlatPresenter>::default(),
-		TerrainPresentationPlugin::<OtherMode, OnTerrain<Flat>, FlatPresenter>::default(),
+		Generate::<TestMode, OnTerrain<Flat>>::new(2.5),
+		Present::<TestMode, OnTerrain<Flat>>::default(),
+		Present::<OtherMode, OnTerrain<Flat>>::default(),
 	));
 	app.finish();
 	let count = app.world().resource::<InstallCount>().0;
@@ -228,7 +231,7 @@ fn two_modes_install_the_core_once() -> anyhow::Result<()> {
 struct Shown(bool);
 
 fn sync_shown(
-	subscription: ModeSubscription<(OnTerrain<Flat>, FlatPresenter)>,
+	subscription: ModeSubscription<OnTerrain<Flat>>,
 	mut was: Local<bool>,
 	mut shown: ResMut<Shown>,
 ) {
@@ -249,7 +252,7 @@ fn losing_subscription_clears_and_returning_presents() -> anyhow::Result<()> {
 		GenerationModePlugin::<TestMode>::initial(),
 		GenerationModePlugin::<OtherMode>::default(),
 	));
-	subscribe_mode::<(OnTerrain<Flat>, FlatPresenter), TestMode>(&mut app);
+	subscribe_mode::<OnTerrain<Flat>, TestMode>(&mut app);
 	app.insert_resource(Shown(false));
 	app.add_systems(Update, sync_shown);
 	app.update();

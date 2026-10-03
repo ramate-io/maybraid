@@ -16,6 +16,9 @@ pub trait ChicoGround: TerrainModel {
 	fn fine_overlay_size() -> f32;
 
 	fn cascade_chunk(bounds: Aabb3d, res_2: u8) -> (Vec3, Vec3);
+
+	/// Present groves and bump-outs. Stub grounds leave this empty.
+	fn install_presentation(_app: &mut bevy::prelude::App) {}
 }
 
 impl<T> ChicoGround for Urbanization<Richmond<T>>
@@ -30,6 +33,10 @@ where
 		let cascade = durham::cascade_chunk_for_cell(bounds, res_2);
 		let extent = cascade.extent.unwrap_or(Vec3::splat(cascade.size));
 		(cascade.origin, extent)
+	}
+
+	fn install_presentation(app: &mut bevy::prelude::App) {
+		crate::layer_present::install_chico_presentation::<Self>(app);
 	}
 }
 

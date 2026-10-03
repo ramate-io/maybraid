@@ -5,17 +5,12 @@ use bevy::math::Vec2;
 use bevy::prelude::{AssetPlugin, MinimalPlugins, NextState, World};
 use bevy::state::app::StatesPlugin;
 use layer_stack::{
-	subscribe_mode, ActiveGenerationMode, GenerationMode, GenerationModePlugin, ModeSubscribers,
-	ModeSubscription,
+	subscribe_mode, ActiveGenerationMode, GenerationMode, GenerationModePlugin, LayerGenerationCore,
+	LayerPresentationCore, ModeSubscribers, ModeSubscription, Present, RequireLayer,
 };
 use lod::lod_ref::LodRef;
-use terrain_layer_model::{HeightField, TerrainCell, TerrainModel};
+use terrain_layer_model::{HeightField, OnTerrain, TerrainCell, TerrainGeneration, TerrainModel};
 use vegetation_layer_model::{Vegetation, VegetationGeneration, VegetationModel};
-
-use crate::{
-	VegetationPresent, VegetationPresentation, VegetationPresentationCore,
-	VegetationPresentationPlugin,
-};
 
 struct TestMode;
 
@@ -90,17 +85,16 @@ impl TerrainModel for SilentGround {
 	}
 
 	fn require_generation(app: &App) {
-		layer_stack::RequireLayer::require_layer::<
-			terrain_layer_model::BaseTerrainGenerationCore<Self>,
-			Self,
-		>(app);
+		app.require_layer::<LayerGenerationCore<OnTerrain<Self>>, Self>();
 	}
 }
 
-impl terrain_layer_model::TerrainGeneration for SilentGround {
+impl TerrainGeneration for SilentGround {
+	const LABEL: &'static str = "silent-ground";
 	type Config = ();
 	fn install_generation(_app: &mut App) {}
 	fn apply_generation(_world: &mut World, _config: &()) {}
+	fn install_presentation(_app: &mut App) {}
 }
 
 struct SilentVeg;
@@ -109,30 +103,23 @@ impl VegetationModel for SilentVeg {
 	type Ground = SilentGround;
 
 	fn require_generation(app: &App) {
-		layer_stack::RequireLayer::require_layer::<
-			vegetation_layer_model::VegetationGenerationCore<Self>,
-			Vegetation<Self>,
-		>(app);
+		app.require_layer::<LayerGenerationCore<Vegetation<Self>>, Vegetation<Self>>();
 	}
 }
 
 impl VegetationGeneration for SilentVeg {
+	const LABEL: &'static str = "stub";
 	type Config = ();
 	fn install_generation(_app: &mut App) {}
 	fn apply_generation(_world: &mut World, _config: &()) {}
 	fn clear_generation(_world: &mut World) {}
-}
-
-impl VegetationPresentation for SilentVeg {
-	fn install_groves(_app: &mut App) {}
-	fn install_bump_outs(_app: &mut App) {}
-	fn install_materials(_app: &mut App) {}
+	fn install_presentation(_app: &mut App) {}
 }
 
 #[test]
 fn presentation_without_generation_names_the_missing_plugin() {
 	let result = std::panic::catch_unwind(|| {
-		VegetationPresentationPlugin::<TestMode, SilentVeg>::default().finish(&mut App::new());
+		Present::<TestMode, Vegetation<SilentVeg>>::default().finish(&mut App::new());
 	});
 	let message = match result {
 		Ok(()) => "plugin finish returned".to_string(),
@@ -143,7 +130,7 @@ fn presentation_without_generation_names_the_missing_plugin() {
 			.unwrap_or_else(|| "non-string panic".to_string()),
 	};
 	assert!(
-		message.contains("BaseTerrainGenerationCore"),
+		message.contains("LayerGenerationCore"),
 		"finish names the missing ground core, got {message}"
 	);
 }
@@ -162,7 +149,7 @@ fn subscribed_app() -> App {
 		GenerationModePlugin::<TestMode>::initial(),
 		GenerationModePlugin::<OtherMode>::default(),
 	));
-	subscribe_mode::<(Stacked, VegetationPresent), TestMode>(&mut app);
+	subscribe_mode::<Stacked, TestMode>(&mut app);
 	app
 }
 
@@ -172,7 +159,7 @@ fn losing_subscription_is_inactive_and_returning_is_active() -> anyhow::Result<(
 	app.update();
 	{
 		let mut state =
-			SystemState::<ModeSubscription<(Stacked, VegetationPresent)>>::new(app.world_mut());
+			SystemState::<ModeSubscription<Stacked>>::new(app.world_mut());
 		anyhow::ensure!(
 			state.get(app.world()).map_err(|error| anyhow::anyhow!("{error:?}"))?.active(),
 			"subscribed mode presents"
@@ -185,7 +172,7 @@ fn losing_subscription_is_inactive_and_returning_is_active() -> anyhow::Result<(
 	app.update();
 	{
 		let mut state =
-			SystemState::<ModeSubscription<(Stacked, VegetationPresent)>>::new(app.world_mut());
+			SystemState::<ModeSubscription<Stacked>>::new(app.world_mut());
 		anyhow::ensure!(
 			!state.get(app.world()).map_err(|error| anyhow::anyhow!("{error:?}"))?.active(),
 			"unsubscribed mode retires"
@@ -198,7 +185,7 @@ fn losing_subscription_is_inactive_and_returning_is_active() -> anyhow::Result<(
 	app.update();
 	{
 		let mut state =
-			SystemState::<ModeSubscription<(Stacked, VegetationPresent)>>::new(app.world_mut());
+			SystemState::<ModeSubscription<Stacked>>::new(app.world_mut());
 		anyhow::ensure!(
 			state.get(app.world()).map_err(|error| anyhow::anyhow!("{error:?}"))?.active(),
 			"return presents again"
@@ -214,14 +201,14 @@ fn two_modes_install_the_core_once() -> anyhow::Result<()> {
 	app.add_plugins((
 		GenerationModePlugin::<TestMode>::initial(),
 		GenerationModePlugin::<OtherMode>::default(),
-		VegetationPresentationPlugin::<TestMode, SilentVeg>::default(),
-		VegetationPresentationPlugin::<OtherMode, SilentVeg>::default(),
+		Present::<TestMode, Vegetation<SilentVeg>>::default(),
+		Present::<OtherMode, Vegetation<SilentVeg>>::default(),
 	));
 	anyhow::ensure!(
-		app.is_plugin_added::<VegetationPresentationCore<SilentVeg>>(),
+		app.is_plugin_added::<LayerPresentationCore<Vegetation<SilentVeg>>>(),
 		"core is installed"
 	);
-	let subscribers = app.world().resource::<ModeSubscribers<(Stacked, VegetationPresent)>>();
+	let subscribers = app.world().resource::<ModeSubscribers<Stacked>>();
 	anyhow::ensure!(subscribers.contains::<TestMode>());
 	anyhow::ensure!(subscribers.contains::<OtherMode>());
 	Ok(())

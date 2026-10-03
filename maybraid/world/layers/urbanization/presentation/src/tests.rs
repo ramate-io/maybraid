@@ -5,18 +5,15 @@ use bevy::math::Vec2;
 use bevy::prelude::{AssetPlugin, MinimalPlugins, NextState, World};
 use bevy::state::app::StatesPlugin;
 use layer_stack::{
-	subscribe_mode, ActiveGenerationMode, GenerationMode, GenerationModePlugin, ModeSubscribers,
-	ModeSubscription,
+	subscribe_mode, ActiveGenerationMode, GenerationMode, GenerationModePlugin, LayerGenerationCore,
+	LayerPresentationCore, ModeSubscribers, ModeSubscription, Present, RequireLayer,
 };
 use lod::gen::{Id, Version};
 use lod::lod_ref::LodRef;
-use terrain_layer_model::{HeightField, TerrainCell, TerrainModel};
+use terrain_layer_model::{HeightField, OnTerrain, TerrainCell, TerrainGeneration, TerrainModel};
 use urbanization_layer_model::{PadOps, Urbanization, UrbanizationGeneration, UrbanizationModel};
 
-use crate::{
-	PaddedCells, UrbanizationHosts, UrbanizationPresentation, UrbanizationPresentationCore,
-	UrbanizationPresentationPlugin,
-};
+use crate::{PaddedCells, UrbanizationHosts};
 
 struct TestMode;
 
@@ -91,17 +88,16 @@ impl TerrainModel for SilentGround {
 	}
 
 	fn require_generation(app: &App) {
-		layer_stack::RequireLayer::require_layer::<
-			terrain_layer_model::BaseTerrainGenerationCore<Self>,
-			Self,
-		>(app);
+		app.require_layer::<LayerGenerationCore<OnTerrain<Self>>, Self>();
 	}
 }
 
-impl terrain_layer_model::TerrainGeneration for SilentGround {
+impl TerrainGeneration for SilentGround {
+	const LABEL: &'static str = "silent-ground";
 	type Config = ();
 	fn install_generation(_app: &mut App) {}
 	fn apply_generation(_world: &mut World, _config: &()) {}
+	fn install_presentation(_app: &mut App) {}
 }
 
 #[derive(Clone, Copy, Default)]
@@ -168,29 +164,23 @@ impl UrbanizationModel for SilentUrban {
 	}
 
 	fn require_generation(app: &App) {
-		layer_stack::RequireLayer::require_layer::<
-			urbanization_layer_model::UrbanizationGenerationCore<Self>,
-			Urbanization<Self>,
-		>(app);
+		app.require_layer::<LayerGenerationCore<Urbanization<Self>>, Urbanization<Self>>();
 	}
 }
 
 impl UrbanizationGeneration for SilentUrban {
+	const LABEL: &'static str = "stub";
 	type Config = ();
 	fn install_generation(_app: &mut App) {}
 	fn apply_generation(_world: &mut World, _config: &()) {}
 	fn clear_generation(_world: &mut World) {}
-}
-
-impl UrbanizationPresentation for SilentUrban {
-	fn install_hosts(_app: &mut App) {}
-	fn install_padded_cells(_app: &mut App) {}
+	fn install_presentation(_app: &mut App) {}
 }
 
 #[test]
 fn presentation_without_generation_names_the_missing_plugin() {
 	let result = std::panic::catch_unwind(|| {
-		UrbanizationPresentationPlugin::<TestMode, SilentUrban>::default().finish(&mut App::new());
+		Present::<TestMode, Urbanization<SilentUrban>>::default().finish(&mut App::new());
 	});
 	let message = match result {
 		Ok(()) => "plugin finish returned".to_string(),
@@ -201,7 +191,7 @@ fn presentation_without_generation_names_the_missing_plugin() {
 			.unwrap_or_else(|| "non-string panic".to_string()),
 	};
 	assert!(
-		message.contains("BaseTerrainGenerationCore"),
+		message.contains("LayerGenerationCore"),
 		"finish names the missing ground core, got {message}"
 	);
 }
@@ -281,14 +271,14 @@ fn two_modes_install_the_core_once() -> anyhow::Result<()> {
 	app.add_plugins((
 		GenerationModePlugin::<TestMode>::initial(),
 		GenerationModePlugin::<OtherMode>::default(),
-		UrbanizationPresentationPlugin::<TestMode, SilentUrban>::default(),
-		UrbanizationPresentationPlugin::<OtherMode, SilentUrban>::default(),
+		Present::<TestMode, Urbanization<SilentUrban>>::default(),
+		Present::<OtherMode, Urbanization<SilentUrban>>::default(),
 	));
 	anyhow::ensure!(
-		app.is_plugin_added::<UrbanizationPresentationCore<SilentUrban>>(),
+		app.is_plugin_added::<LayerPresentationCore<Urbanization<SilentUrban>>>(),
 		"core is installed"
 	);
-	let hosts = app.world().resource::<ModeSubscribers<(Stacked, UrbanizationHosts)>>();
+	let hosts = app.world().resource::<ModeSubscribers<Stacked>>();
 	anyhow::ensure!(hosts.contains::<TestMode>());
 	anyhow::ensure!(hosts.contains::<OtherMode>());
 	Ok(())

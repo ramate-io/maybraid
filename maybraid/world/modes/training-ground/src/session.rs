@@ -121,7 +121,8 @@ mod tests {
 	};
 	use layer_stack::{GenerationModePlugin, GenerationReadiness};
 	use maybraid_game_mode_discover::Discovery;
-	use terrain_layer_model::{BaseTerrainModeConfig, BaseTerrainScheme};
+	use layer_stack::{LayerModeConfig, Scheme};
+	use terrain_layer_model::OnTerrain;
 	use world_player::{PlayerSpawnXz, RespawnOrigin};
 
 	use crate::TRAINING_FINE_HALF_EXTENT_CELLS;
@@ -326,10 +327,10 @@ mod tests {
 		));
 		let playable = DurhamTerrainConfig::playable_world();
 		let training = DurhamTerrainConfig::fine_patch(TRAINING_FINE_HALF_EXTENT_CELLS);
-		Discovery::install(&mut app, &playable);
-		TrainingGround::install(&mut app, &training);
-		app.insert_resource(BaseTerrainModeConfig::<Discovery, Durham>::new(playable));
-		app.insert_resource(BaseTerrainModeConfig::<TrainingGround, Durham>::new(training));
+		<Discovery as Scheme<OnTerrain<Durham>>>::install(&mut app, &playable);
+		<TrainingGround as Scheme<OnTerrain<Durham>>>::install(&mut app, &training);
+		app.insert_resource(LayerModeConfig::<Discovery, OnTerrain<Durham>>::new(playable));
+		app.insert_resource(LayerModeConfig::<TrainingGround, OnTerrain<Durham>>::new(training));
 		app.init_state::<ShellFlow>();
 		app.insert_resource(round);
 		app.insert_resource(playable_world_cell_layout());

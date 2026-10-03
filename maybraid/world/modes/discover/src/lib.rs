@@ -9,14 +9,14 @@ use barking::{install_mob_grid_stream, Barking, BarkingConfig};
 use bevy::prelude::*;
 use chico::{install_vegetation_stream, Chico, ChicoConfig};
 use durham::{playable_world_cell_layout, Durham, DurhamTerrainConfig, TerrainRetarget};
-use furnishing_layer_model::FurnishingScheme;
-use layer_stack::{ActiveGenerationMode, GenerationMode};
+use furnishing_layer_model::Furnishing;
+use layer_stack::{ActiveGenerationMode, GenerationMode, LayerModeConfig, Scheme};
 use maputo::{install_furnishing_stream, Maputo};
-use mob_layer_model::MobScheme;
+use mob_layer_model::Mobs;
 use richmond::{install_urbanization_stream, Richmond, RichmondConfig};
-use terrain_layer_model::{BaseTerrainModeConfig, BaseTerrainScheme, OnTerrain};
-use urbanization_layer_model::{Urbanization, UrbanizationScheme};
-use vegetation_layer_model::{Vegetation, VegetationScheme};
+use terrain_layer_model::OnTerrain;
+use urbanization_layer_model::Urbanization;
+use vegetation_layer_model::Vegetation;
 use world_player::{ModePlayerPolicies, ModePlayerPolicy};
 
 pub const LABEL: &str = "Discovery";
@@ -31,19 +31,19 @@ pub struct Discovery;
 
 impl GenerationMode for Discovery {}
 
-impl BaseTerrainScheme<Durham> for Discovery {
+impl Scheme<OnTerrain<Durham>> for Discovery {
 	fn install(app: &mut App, _config: &DurhamTerrainConfig) {
 		app.add_systems(OnEnter(ActiveGenerationMode::of::<Discovery>()), restore_playable_world);
 	}
 }
 
-impl UrbanizationScheme<Richmond<OnTerrain<Durham>>> for Discovery {
+impl Scheme<Urbanization<Richmond<OnTerrain<Durham>>>> for Discovery {
 	fn install(app: &mut App, _config: &RichmondConfig) {
 		install_urbanization_stream::<Discovery, OnTerrain<Durham>>(app);
 	}
 }
 
-impl VegetationScheme<Chico<Urbanization<Richmond<OnTerrain<Durham>>>>> for Discovery {
+impl Scheme<Vegetation<Chico<Urbanization<Richmond<OnTerrain<Durham>>>>>> for Discovery {
 	fn install(app: &mut App, _config: &ChicoConfig) {
 		install_vegetation_stream::<Discovery, Chico<Urbanization<Richmond<OnTerrain<Durham>>>>>(
 			app,
@@ -51,7 +51,7 @@ impl VegetationScheme<Chico<Urbanization<Richmond<OnTerrain<Durham>>>>> for Disc
 	}
 }
 
-impl MobScheme<Barking<Vegetation<Chico<Urbanization<Richmond<OnTerrain<Durham>>>>>>>
+impl Scheme<Mobs<Barking<Vegetation<Chico<Urbanization<Richmond<OnTerrain<Durham>>>>>>>>
 	for Discovery
 {
 	fn install(app: &mut App, _config: &BarkingConfig) {
@@ -59,7 +59,7 @@ impl MobScheme<Barking<Vegetation<Chico<Urbanization<Richmond<OnTerrain<Durham>>
 	}
 }
 
-impl FurnishingScheme<Maputo<Urbanization<Richmond<OnTerrain<Durham>>>>> for Discovery {
+impl Scheme<Furnishing<Maputo<Urbanization<Richmond<OnTerrain<Durham>>>>>> for Discovery {
 	fn install(app: &mut App, _config: &()) {
 		install_furnishing_stream::<Discovery, Urbanization<Richmond<OnTerrain<Durham>>>>(app);
 	}
@@ -80,7 +80,7 @@ fn discovery_player_policy() -> ModePlayerPolicy {
 }
 
 fn restore_playable_world(
-	config: Res<BaseTerrainModeConfig<Discovery, Durham>>,
+	config: Res<LayerModeConfig<Discovery, OnTerrain<Durham>>>,
 	mut terrain: TerrainRetarget,
 ) {
 	if terrain.coverage() == config.config.coverage {
@@ -119,7 +119,7 @@ mod tests {
 
 	fn world_with(coverage: TerrainCoverage, layout: TerrainCellLayout) -> World {
 		let mut world = World::new();
-		world.insert_resource(BaseTerrainModeConfig::<Discovery, Durham>::new(
+		world.insert_resource(LayerModeConfig::<Discovery, OnTerrain<Durham>>::new(
 			DurhamTerrainConfig::playable_world(),
 		));
 		world.insert_resource(layout);

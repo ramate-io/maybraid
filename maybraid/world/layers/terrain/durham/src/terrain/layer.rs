@@ -3,10 +3,10 @@
 use bevy::ecs::system::{SystemParam, SystemParamItem};
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
-use layer_stack::RequireLayer;
+use layer_stack::{LayerGenerationCore, RequireLayer};
 use lod::lod_ref::LodRef;
 use terrain_layer_model::{
-	BaseTerrainGenerationCore, HeightField, TerrainCell, TerrainGeneration, TerrainModel,
+	HeightField, OnTerrain, TerrainCell, TerrainGeneration, TerrainModel,
 };
 
 use crate::terrain::cell::TerrainCellLayout;
@@ -113,7 +113,7 @@ impl TerrainModel for Durham {
 	}
 
 	fn require_generation(app: &App) {
-		app.require_layer::<BaseTerrainGenerationCore<Durham>, Durham>();
+		app.require_layer::<LayerGenerationCore<OnTerrain<Durham>>, Durham>();
 	}
 }
 
@@ -179,6 +179,7 @@ impl DurhamTerrainConfig {
 }
 
 impl TerrainGeneration for Durham {
+	const LABEL: &'static str = "durham";
 	type Config = DurhamTerrainConfig;
 
 	fn install_generation(app: &mut App) {
@@ -187,6 +188,10 @@ impl TerrainGeneration for Durham {
 
 	fn apply_generation(world: &mut World, config: &DurhamTerrainConfig) {
 		apply_durham_generation(world, config);
+	}
+
+	fn install_presentation(app: &mut App) {
+		crate::terrain::host::install_durham_presentation(app);
 	}
 }
 

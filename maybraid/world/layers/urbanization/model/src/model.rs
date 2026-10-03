@@ -5,10 +5,12 @@ use std::marker::PhantomData;
 use bevy::ecs::system::{StaticSystemParam, SystemParam, SystemParamItem};
 use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec2;
-use bevy::prelude::App;
+use bevy::prelude::{App, IntoScheduleConfigs, Update, World};
+use layer_stack::{Layer, LayerPresentation, LayerSystems};
 use lod::lod_ref::LodRef;
-use terrain_layer_model::{HeightField, TerrainCell, TerrainModel};
+use terrain_layer_model::{terrain_streaming, HeightField, TerrainCell, TerrainModel};
 
+use crate::generation::{UrbanizationGeneration, UrbanizationGenerationSystems};
 use crate::pads::PadOps;
 use crate::urban::{UrbanModel, UrbanizationModel};
 
@@ -131,5 +133,41 @@ where
 		region: Aabb3d,
 	) -> Vec<(lod::gen::Id, lod::gen::Version, &'a U::Built)> {
 		U::built_overlapping(&read.urban, region)
+	}
+}
+
+impl<U: UrbanizationGeneration> Layer for Urbanization<U> {
+	const LABEL: &'static str = U::LABEL;
+	type Config = U::Config;
+
+	fn install_generation(app: &mut App) {
+		U::install_generation(app);
+		app.configure_sets(
+			Update,
+			(
+				UrbanizationGenerationSystems,
+				LayerSystems::<Urbanization<U>>::default()
+					.in_set(UrbanizationGenerationSystems)
+					.run_if(terrain_streaming::<U::Ground>),
+			),
+		);
+	}
+
+	fn apply_generation(world: &mut World, config: &Self::Config) {
+		U::apply_generation(world, config);
+	}
+
+	fn clear_generation(world: &mut World) {
+		U::clear_generation(world);
+	}
+
+	fn require_lower(app: &App) {
+		U::Ground::require_generation(app);
+	}
+}
+
+impl<U: UrbanizationGeneration> LayerPresentation for Urbanization<U> {
+	fn install_presentation(app: &mut App) {
+		U::install_presentation(app);
 	}
 }

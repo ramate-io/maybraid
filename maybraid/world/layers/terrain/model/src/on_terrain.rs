@@ -6,8 +6,12 @@ use bevy::app::App;
 use bevy::ecs::system::SystemParamItem;
 use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec2;
+use bevy::prelude::World;
+use layer_stack::{Layer, LayerPresentation};
 use lod::lod_ref::LodRef;
 
+use crate::contract::{TerrainExtent, TerrainStreaming};
+use crate::generation::TerrainGeneration;
 use crate::model::{TerrainCell, TerrainModel};
 
 /// The solid-ground surface of model `T`, as opposed to its other outputs (water).
@@ -54,5 +58,28 @@ impl<T: TerrainModel> TerrainModel for OnTerrain<T> {
 
 	fn require_generation(app: &App) {
 		T::require_generation(app);
+	}
+}
+
+impl<T: TerrainGeneration> Layer for OnTerrain<T> {
+	const LABEL: &'static str = T::LABEL;
+	type Config = T::Config;
+
+	fn install_generation(app: &mut App) {
+		app.init_resource::<TerrainStreaming<T::Base>>()
+			.init_resource::<TerrainExtent<T::Base>>();
+		T::install_generation(app);
+	}
+
+	fn apply_generation(world: &mut World, config: &Self::Config) {
+		T::apply_generation(world, config);
+	}
+
+	fn require_lower(_app: &App) {}
+}
+
+impl<T: TerrainGeneration> LayerPresentation for OnTerrain<T> {
+	fn install_presentation(app: &mut App) {
+		T::install_presentation(app);
 	}
 }

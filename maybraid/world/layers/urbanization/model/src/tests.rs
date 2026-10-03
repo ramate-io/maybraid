@@ -3,18 +3,15 @@ use bevy::ecs::system::{Res, SystemParamItem, SystemState};
 use bevy::math::bounding::Aabb3d;
 use bevy::math::{Vec2, Vec3};
 use bevy::prelude::{Resource, World};
-use layer_stack::{GenerationMode, RequireLayer};
+use layer_stack::{Generate, GenerationMode, LayerGenerationCore, RequireLayer};
 use lod::gen::{Id, Version};
 use lod::lod_ref::LodRef;
 use terrain_layer_model::{
-	terrain_streaming, BaseTerrainGenerationCore, HeightField, TerrainCell, TerrainContract,
-	TerrainExtent, TerrainGeneration, TerrainModel, TerrainStreaming, TerrainView,
+	terrain_streaming, HeightField, OnTerrain, TerrainCell, TerrainContract, TerrainExtent,
+	TerrainGeneration, TerrainModel, TerrainStreaming, TerrainView,
 };
 
-use crate::{
-	PadOps, UrbanSnapshot, Urbanization, UrbanizationGeneration, UrbanizationGenerationCore,
-	UrbanizationGenerationPlugin, UrbanizationModel, UrbanizationScheme,
-};
+use crate::{PadOps, UrbanSnapshot, Urbanization, UrbanizationGeneration, UrbanizationModel};
 
 struct TestMode;
 
@@ -120,14 +117,16 @@ impl TerrainModel for StubGround {
 	}
 
 	fn require_generation(app: &App) {
-		app.require_layer::<BaseTerrainGenerationCore<Self>, Self>();
+		app.require_layer::<LayerGenerationCore<OnTerrain<Self>>, Self>();
 	}
 }
 
 impl TerrainGeneration for StubGround {
+	const LABEL: &'static str = "stub";
 	type Config = ();
 	fn install_generation(_app: &mut App) {}
 	fn apply_generation(_world: &mut World, _config: &()) {}
+	fn install_presentation(_app: &mut App) {}
 }
 
 #[derive(Clone, Copy)]
@@ -212,18 +211,20 @@ impl UrbanizationModel for StubUrban {
 	}
 
 	fn require_generation(app: &App) {
-		app.require_layer::<UrbanizationGenerationCore<Self>, Urbanization<Self>>();
+		app.require_layer::<LayerGenerationCore<Urbanization<Self>>, Urbanization<Self>>();
 	}
 }
 
 impl UrbanizationGeneration for StubUrban {
+	const LABEL: &'static str = "stub";
 	type Config = ();
 	fn install_generation(_app: &mut App) {}
 	fn apply_generation(_world: &mut World, _config: &()) {}
 	fn clear_generation(_world: &mut World) {}
+	fn install_presentation(_app: &mut App) {}
 }
 
-impl UrbanizationScheme<StubUrban> for TestMode {
+impl layer_stack::Scheme<Urbanization<StubUrban>> for TestMode {
 	fn install(_app: &mut App, _config: &()) {}
 }
 
@@ -266,18 +267,16 @@ fn overlays_prefer_stub_padded_cells() -> anyhow::Result<()> {
 }
 
 #[test]
-#[should_panic(expected = "requires terrain_layer_model::generation::BaseTerrainGenerationCore")]
+#[should_panic(expected = "LayerGenerationCore")]
 fn requirements_recurse_to_the_ground() {
 	Stacked::require_generation(&App::new());
 }
 
 #[test]
-#[should_panic(
-	expected = "requires urbanization_layer_model::generation::UrbanizationGenerationCore"
-)]
+#[should_panic(expected = "Urbanization")]
 fn requirements_name_the_urbanization_core() {
 	let mut app = App::new();
-	app.add_plugins(BaseTerrainGenerationCore::<StubGround>::default());
+	app.add_plugins(LayerGenerationCore::<OnTerrain<StubGround>>::default());
 	Stacked::require_generation(&app);
 }
 
@@ -348,7 +347,7 @@ fn empty_keep_draws_a_fine_patch_from_the_layout() -> anyhow::Result<()> {
 #[test]
 fn urbanization_generation_without_ground_names_the_missing_plugin() {
 	let result = std::panic::catch_unwind(|| {
-		UrbanizationGenerationPlugin::<TestMode, StubUrban>::default().finish(&mut App::new());
+		Generate::<TestMode, Urbanization<StubUrban>>::default().finish(&mut App::new());
 	});
 	let message = match result {
 		Ok(()) => "plugin finish returned".to_string(),
@@ -359,7 +358,7 @@ fn urbanization_generation_without_ground_names_the_missing_plugin() {
 			.unwrap_or_else(|| "non-string panic".to_string()),
 	};
 	assert!(
-		message.contains("BaseTerrainGenerationCore"),
+		message.contains("LayerGenerationCore"),
 		"finish names the missing ground core, got {message}"
 	);
 }

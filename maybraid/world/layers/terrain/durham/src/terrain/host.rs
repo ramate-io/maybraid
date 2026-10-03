@@ -340,7 +340,7 @@ pub(crate) fn apply_durham_generation(world: &mut World, config: &crate::DurhamT
 /// Raw Durham present: the three stream presenter states and [`present_cells`].
 pub(crate) fn install_durham_presentation(app: &mut App) {
 	app.init_resource::<TerrainPresenterState>()
-		.init_resource::<LodPresentGate<(OnTerrain<Durham>, DurhamCells)>>()
+		.init_resource::<LodPresentGate<OnTerrain<Durham>>>()
 		.init_resource::<TerrainStreamPresenterState<TerrainNear>>()
 		.init_resource::<TerrainStreamPresenterState<TerrainFar>>()
 		.init_resource::<TerrainStreamPresenterState<TerrainBackground>>()
@@ -351,13 +351,13 @@ pub(crate) fn install_durham_presentation(app: &mut App) {
 				.before(TerrainColliderSystems::QueueMeshes)
 				.before(TerrainLayerSystems::<Durham>::QueueColliders)
 				.run_if(terrain_streaming::<Durham>)
-				.run_if(mode_subscribed::<(OnTerrain<Durham>, DurhamCells)>()),
+				.run_if(mode_subscribed::<OnTerrain<Durham>>()),
 		)
 		.add_systems(Update, clear_closed_terrain_present.after(LodPresentGateSync));
 }
 
 fn clear_closed_terrain_present(
-	gate: Res<LodPresentGate<(OnTerrain<Durham>, DurhamCells)>>,
+	gate: Res<LodPresentGate<OnTerrain<Durham>>>,
 	mut commands: Commands,
 	mut state: ResMut<TerrainPresenterState>,
 ) {

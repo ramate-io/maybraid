@@ -20,9 +20,9 @@ use urbanization_cells::{
 	UrbanizationIndex, UrbanizationKind, UrbanizationLodChan, UrbanizationPresentBullseye,
 	DEFAULT_URBANIZATION_EXTENT_XZ, DEVELOPMENT_GENERATE_RADIUS_M, DEVELOPMENT_PRESENT_RADIUS_M,
 };
+use layer_stack::{LayerModeConfig, LayerSystems};
 use urbanization_layer_model::{
-	urbanization_visual_region, UrbanizationGenerationSystems, UrbanizationLayerRegion,
-	UrbanizationModeConfig, UrbanizationStoreSystems,
+	urbanization_visual_region, Urbanization, UrbanizationGenerationSystems, UrbanizationLayerRegion,
 };
 
 use crate::config::DevelopmentConfig;
@@ -91,7 +91,7 @@ where
 			.in_set(GenerationModeSystems::<Mode>::default())
 			.in_set(UrbanizationGenerationSystems)
 			.before(LodGenerateSystems::Produce)
-			.before(UrbanizationStoreSystems)
+			.before(LayerSystems::<Urbanization<Richmond<G>>>::default())
 			.before(LodPresentSystems::Produce)
 			.before(TerrainLayerSystems::<G::Base>::QueueColliders),
 	);
@@ -100,11 +100,11 @@ where
 		(
 			stream_urbanization::<Mode, G>
 				.before(LodGenerateSystems::Produce)
-				.before(UrbanizationStoreSystems),
+				.before(LayerSystems::<Urbanization<Richmond<G>>>::default()),
 			generate_urbanization_developments::<Mode, G>
 				.after(LodGenerateSystems::Drain)
-				.before(UrbanizationStoreSystems),
-			write_urbanization_host_region.in_set(UrbanizationStoreSystems),
+				.before(LayerSystems::<Urbanization<Richmond<G>>>::default()),
+			write_urbanization_host_region.in_set(LayerSystems::<Urbanization<Richmond<G>>>::default()),
 		)
 			.in_set(GenerationModeSystems::<Mode>::default())
 			.in_set(UrbanizationGenerationSystems)
@@ -200,7 +200,7 @@ impl UrbanizationStreamLod<'_> {
 }
 
 pub fn sync_urbanization_pin<Mode: GenerationMode, G: RichmondGround>(
-	config: Res<UrbanizationModeConfig<Mode, Richmond<G>>>,
+	config: Res<LayerModeConfig<Mode, Urbanization<Richmond<G>>>>,
 	mut urbanization: ResMut<UrbanizationIndex>,
 	mut development: ResMut<DevelopmentConfig>,
 ) {
@@ -216,7 +216,7 @@ pub fn sync_urbanization_pin<Mode: GenerationMode, G: RichmondGround>(
 }
 
 pub fn stream_urbanization<Mode: GenerationMode, G: RichmondGround>(
-	config: Res<UrbanizationModeConfig<Mode, Richmond<G>>>,
+	config: Res<LayerModeConfig<Mode, Urbanization<Richmond<G>>>>,
 	camera: Query<&Transform, With<Camera3d>>,
 	mut lod: UrbanizationStreamLod,
 	mut last_key: ResMut<UrbanizationStreamKey>,
@@ -252,7 +252,7 @@ pub fn clear_urbanization_stream_world(world: &mut World) {
 /// Bounded leaf generate on the 1 km urbanization keep.
 #[allow(clippy::collapsible_if)]
 pub fn generate_urbanization_developments<Mode: GenerationMode, G: RichmondGround>(
-	config: Res<UrbanizationModeConfig<Mode, Richmond<G>>>,
+	config: Res<LayerModeConfig<Mode, Urbanization<Richmond<G>>>>,
 	keep: Res<LodPresentKeepRegion<UrbanizationLodChan>>,
 	mut development: DevelopmentIndex<G>,
 	budget: Res<LodGenerateBudget<UrbanizationLodChan>>,
@@ -388,6 +388,7 @@ pub(crate) fn generate_richmond_padded_terrain<G: RichmondGround>(
 }
 
 impl<G: RichmondGround> urbanization_layer_model::UrbanizationGeneration for Richmond<G> {
+	const LABEL: &'static str = "richmond";
 	type Config = RichmondConfig;
 
 	fn install_generation(app: &mut App) {
@@ -400,7 +401,7 @@ impl<G: RichmondGround> urbanization_layer_model::UrbanizationGeneration for Ric
 			Update,
 			generate_richmond_padded_terrain::<G>
 				.in_set(UrbanizationGenerationSystems)
-				.after(UrbanizationStoreSystems)
+				.after(LayerSystems::<Urbanization<Richmond<G>>>::default())
 				.run_if(terrain_streaming::<G>)
 				.before(LodPresentSystems::Produce)
 				.before(TerrainLayerSystems::<G::Base>::QueueColliders),
@@ -421,5 +422,9 @@ impl<G: RichmondGround> urbanization_layer_model::UrbanizationGeneration for Ric
 			layer.region = None;
 		}
 		clear_urbanization_stream_world(world);
+	}
+
+	fn install_presentation(app: &mut App) {
+		crate::layer_present::install_richmond_presentation::<G>(app);
 	}
 }
