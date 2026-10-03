@@ -10,9 +10,12 @@ use urbanization_layer_model::UrbanizationGenerationSystems;
 use vegetation_layer_model::VegetationGenerationSystems;
 
 use crate::index::{origin_keep, LanguageIndex, LanguageWorldSeed};
-use crate::present::{LanguageLodChan, LanguageOverlay};
+use crate::present::LanguageLodChan;
 use crate::sources::NamedWorld;
+
 const LANGUAGE_GENERATE_RADIUS: f32 = 40_000.0;
+/// Modest per-frame assignment budget. Overlay rebuild is presentation's job.
+const ASSIGN_BUDGET: usize = 32;
 
 #[derive(Resource, Clone, Copy, Debug, PartialEq)]
 pub(crate) struct LanguageGenerateBullseye {
@@ -50,26 +53,31 @@ fn generate_language_region<W: NamedWorld>(
 	seed: Res<LanguageWorldSeed>,
 	generate_keep: Res<LodGenerateKeepRegion<LanguageLodChan>>,
 	mut index: ResMut<LanguageIndex>,
-	mut overlay: ResMut<LanguageOverlay>,
 ) {
 	let region = generate_keep.region.unwrap_or_else(origin_keep);
-	let mut features = W::groves_overlapping(&read, region);
-	features.extend(W::geography_overlapping(&read, region));
-	features.extend(W::urban_overlapping(&read, region));
-	let places = W::places_overlapping(&read, region);
-	index.assign_keep(seed.0, region, &features, &places);
-	*overlay = LanguageOverlay::from_index(&index);
+	let fingerprint = W::source_fingerprint(&read);
+	if fingerprint != index.source_fingerprint() {
+		let mut features = W::groves_overlapping(&read, region);
+		features.extend(W::geography_overlapping(&read, region));
+		features.extend(W::urban_overlapping(&read, region));
+		let places = W::places_overlapping(&read, region);
+		index.queue_keep(seed.0, region, &features, &places);
+		index.note_source_fingerprint(fingerprint);
+	}
+	index.assign_budgeted(seed.0, ASSIGN_BUDGET);
 }
 
 pub(crate) fn register_language_generate(app: &mut App) {
 	app.init_resource::<LanguageIndex>()
 		.init_resource::<LanguageWorldSeed>()
-		.init_resource::<LanguageOverlay>()
 		.init_resource::<LanguageGenerateBullseye>()
 		.init_resource::<LodGenerateKeepRegion<LanguageLodChan>>();
 }
 
 /// Keep and name assignment for `Mode`, after vegetation and urbanization.
+///
+/// `GlobalTransform` reads use last frame's PostUpdate propagation. Language
+/// assignment is in `Update`, so parented POIs need a frame of transform sync.
 pub fn install_language_stream<Mode, W>(app: &mut App)
 where
 	Mode: GenerationMode,
@@ -88,12 +96,6 @@ where
 
 pub(crate) fn apply_origin_tiles(world: &mut World) {
 	let seed = world.get_resource::<LanguageWorldSeed>().map(|seed| seed.0).unwrap_or(0);
-	{
-		let mut index = world.get_resource_or_insert_with(LanguageIndex::default);
-		index.ensure_tiles(seed, origin_keep());
-	}
-	let snapshot = world.resource::<LanguageIndex>().clone();
-	if let Some(mut overlay) = world.get_resource_mut::<LanguageOverlay>() {
-		*overlay = LanguageOverlay::from_index(&snapshot);
-	}
+	let mut index = world.get_resource_or_insert_with(LanguageIndex::default);
+	index.ensure_tiles(seed, origin_keep());
 }

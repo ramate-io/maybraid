@@ -6,7 +6,7 @@ use bevy::prelude::*;
 use chico::{Chico, ChicoConfig};
 use durham::{Durham, DurhamTerrainConfig};
 use furnishing_layer_model::Furnishing;
-use geneva::Geneva;
+use geneva::{Geneva, LanguageConfig};
 use language_layer_model::Language;
 use layer_stack::{Generate, GenerationModePlugin, Present};
 use maputo::Maputo;
@@ -42,7 +42,7 @@ impl Plugin for WorldLayersPlugin {
 				Generate::<Discovery, Veg>::new(ChicoConfig::world_defaults()),
 				Generate::<Discovery, Mob>::new(BarkingConfig::world_defaults()),
 				Generate::<Discovery, Furniture>::new(()),
-				Generate::<Discovery, Named>::new(()),
+				Generate::<Discovery, Named>::new(LanguageConfig::world_defaults()),
 				Present::<Discovery, Ground>::default(),
 				Present::<Discovery, Urban>::default(),
 				Present::<Discovery, Veg>::default(),
@@ -59,7 +59,7 @@ impl Plugin for WorldLayersPlugin {
 				Generate::<TrainingGround, Veg>::new(ChicoConfig::grove()),
 				Generate::<TrainingGround, Mob>::new(BarkingConfig::world_defaults()),
 				Generate::<TrainingGround, Furniture>::new(()),
-				Generate::<TrainingGround, Named>::new(()),
+				Generate::<TrainingGround, Named>::new(LanguageConfig::world_defaults()),
 				Present::<TrainingGround, Ground>::default(),
 				Present::<TrainingGround, Urban>::default(),
 				Present::<TrainingGround, Veg>::default(),

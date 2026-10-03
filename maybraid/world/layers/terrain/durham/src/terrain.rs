@@ -4,6 +4,7 @@ pub mod base_noise;
 pub mod cell;
 pub mod collider;
 pub mod config;
+pub mod geography;
 pub mod host;
 pub mod index;
 pub mod layer;
@@ -64,6 +65,9 @@ pub use host::{
 	DurhamCells, TerrainCoverage, TerrainFillSystems, TerrainLayoutPinned, TerrainPresentPending,
 	TerrainPresentationDirty, TerrainRetarget, WorldBaseTerrain, WORLD_FINE_HALF_EXTENT_CELLS,
 	WORLD_OUTER_2X_ROWS, WORLD_OUTER_4X_ROWS,
+};
+pub use geography::{
+	GeographicBand, GeographicFamily, GeographicFeature, GeographicFeatureId, GeographicFeatureKind,
 };
 pub use index::{
 	AvianTerrainIndex, TerrainCellId, TerrainEntryStore, TerrainHeightSnapshot,

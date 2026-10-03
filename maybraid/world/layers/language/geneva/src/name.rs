@@ -10,12 +10,26 @@ use crate::bundle::{LanguageBundle, LexiconFamily};
 use crate::catalog::KindConceptUniverse;
 
 /// Assigned place name. Overlay concept is the proper-name handle.
+///
+/// Realization is lexicalization plus optional modifier-after-noun ordering.
+/// Composite grammar (word order, agreement, particles) is not exercised yet.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PlaceName {
 	pub surface: String,
 	pub english: Vec<String>,
 	pub overlay: ConceptId,
 	pub language_seed: u64,
+}
+
+/// Persistence metadata for one assigned name.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AssignedName {
+	pub name: PlaceName,
+	pub source_revision: u64,
+	pub fingerprint: u64,
+	/// Regional names stay provisional until a complete canonical summary exists.
+	/// Places without a stable host identity are also provisional.
+	pub provisional: bool,
 }
 
 impl PlaceName {
@@ -62,29 +76,43 @@ fn lexicalize(
 	realization.term.ipa.0
 }
 
-fn pick_terms(english: &[String], pick_seed: u64) -> Vec<String> {
-	if english.is_empty() {
-		return Vec::new();
-	}
-	let mut unique = Vec::new();
-	for word in english {
-		if !unique.iter().any(|seen: &String| seen == word) {
-			unique.push(word.clone());
-		}
-	}
+/// Canonicalize, sort, and deduplicate before the seeded shuffle.
+pub fn pick_terms(english: &[String], pick_seed: u64) -> Vec<String> {
+	let mut unique = canonicalize_terms(english);
 	if unique.is_empty() {
 		return unique;
 	}
 	let take = (1 + (mix(pick_seed) as usize % 3.min(unique.len()))).min(unique.len());
 	let mut rng = mix(pick_seed ^ 0xC0FF);
-	let mut order = unique;
-	for i in 0..order.len() {
+	for i in 0..unique.len() {
 		rng = mix(rng);
-		let j = (rng as usize) % order.len();
-		order.swap(i, j);
+		let j = (rng as usize) % unique.len();
+		unique.swap(i, j);
 	}
-	order.truncate(take);
-	order
+	unique.truncate(take);
+	unique
+}
+
+/// Sorted unique lowercase terms. Input arrival order does not survive.
+pub fn canonicalize_terms(english: &[String]) -> Vec<String> {
+	let mut unique = Vec::new();
+	for word in english {
+		let normalized = word.trim().to_ascii_lowercase();
+		if normalized.is_empty() || unique.iter().any(|seen: &String| seen == &normalized) {
+			continue;
+		}
+		unique.push(normalized);
+	}
+	unique.sort_unstable();
+	unique
+}
+
+pub fn terms_fingerprint(english: &[String]) -> u64 {
+	let mut h = 0x811c_9dc5_u64;
+	for word in canonicalize_terms(english) {
+		h = mix(h ^ stable_surface(&word));
+	}
+	h
 }
 
 fn stable_surface(surface: &str) -> u64 {
