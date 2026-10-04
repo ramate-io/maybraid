@@ -6,7 +6,9 @@ use durham::Durham;
 use game_commands::command::TextEntryFocus;
 use geneva::{LanguageOverlay, NameKey, NamedOverlay};
 use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
-use menu_components::{NOTO_SANS_REGULAR, TEXT_YELLOW};
+use menu_components::{
+	BARLOW_BLACK, ITEM_FONT_SIZE, NOTO_SANS_REGULAR, TEXT_YELLOW, TEXT_YELLOW_FAINT,
+};
 use player::CameraFollow;
 use player_camera::{
 	CameraController, CameraLookSuppressed, CameraPovLocked, FollowCamera, PlayerCameraSystems,
@@ -32,6 +34,10 @@ const REGION_LABEL_PX: f32 = 28.0;
 const FEATURE_LABEL_PX: f32 = 14.0;
 const POI_LABEL_PX: f32 = 7.0;
 const PLAYER_MARKER_PX: f32 = 14.0;
+const SELECTED_POI_LABEL_PX: f32 = 16.0;
+const SELECTION_RING_PX: f32 = 46.0;
+const SELECTION_DOT_PX: f32 = 10.0;
+const PICKER_TITLE: &str = "Pick Respawn Point";
 
 /// Overhead view of the current location. Focus moves with spawn-location picks only.
 #[derive(Resource, Debug, PartialEq)]
@@ -92,6 +98,12 @@ struct MapLabelFont(Handle<Font>);
 struct MapNameHud;
 
 #[derive(Component)]
+struct RespawnPickerTitle;
+
+#[derive(Component)]
+struct MapRespawnSelection;
+
+#[derive(Component)]
 struct MapNamePin {
 	target: MapPinTarget,
 }
@@ -146,7 +158,13 @@ impl Plugin for WorldMapViewPlugin {
 			)
 			.add_systems(
 				Update,
-				(sync_map_name_pins, sync_map_player_marker, draw_highlighted_poi)
+				(
+					sync_map_name_pins,
+					sync_map_player_marker,
+					sync_respawn_picker_title,
+					sync_respawn_selection_marker,
+					draw_highlighted_poi,
+				)
 					.after(PlayerCameraSystems::Apply),
 			);
 	}
@@ -165,6 +183,29 @@ fn spawn_map_name_hud(mut commands: Commands, assets: Res<AssetServer>) {
 		},
 		Pickable::IGNORE,
 		Visibility::Hidden,
+	));
+	commands.spawn((
+		Name::new("respawn-picker-title"),
+		RespawnPickerTitle,
+		Node {
+			position_type: PositionType::Absolute,
+			top: Val::Px(28.0),
+			width: Val::Percent(100.0),
+			justify_content: JustifyContent::Center,
+			..default()
+		},
+		Text::new(PICKER_TITLE),
+		TextFont {
+			font: assets.load(BARLOW_BLACK).into(),
+			font_size: FontSize::Px(ITEM_FONT_SIZE),
+			..default()
+		},
+		TextColor(TEXT_YELLOW),
+		TextShadow { offset: Vec2::new(1.5, 1.5), color: Color::srgba(0.06, 0.05, 0.04, 0.72) },
+		TextLayout::new(Justify::Center, bevy::text::LineBreak::NoWrap),
+		Pickable::IGNORE,
+		Visibility::Hidden,
+		GlobalZIndex(i32::MAX - 2),
 	));
 }
 
@@ -404,6 +445,7 @@ fn map_pin_targets(
 ) -> Vec<MapPinWanted> {
 	let view = map_view_rect(map);
 	let mut wanted = Vec::new();
+	let highlighted = pending.and_then(|state| state.pending.as_ref()?.highlighted);
 	if let Some(pending) = pending.and_then(|state| state.pending.as_ref()) {
 		if pending.map_opened {
 			if let Some(registry) = registry {
@@ -412,12 +454,17 @@ fn map_pin_targets(
 						continue;
 					};
 					let xz = record.position.xz();
+					let selected = Some(*id) == highlighted;
 					wanted.push(MapPinWanted {
 						id: MapPinTarget::Poi(*id),
 						xz,
 						extent: Rect::from_center_size(xz, Vec2::splat(12.0)),
 						label: label_for_poi(record, overlay),
-						size: map_label_size(MapLabelKind::Poi),
+						size: if selected {
+							SELECTED_POI_LABEL_PX
+						} else {
+							map_label_size(MapLabelKind::Poi)
+						},
 					});
 				}
 			}
@@ -467,7 +514,7 @@ fn map_pin_targets(
 		});
 	}
 	wanted.truncate(MAP_PIN_LIMIT);
-	resolve_label_collisions(wanted, view)
+	resolve_label_collisions(wanted, view, highlighted.map(MapPinTarget::Poi))
 }
 
 fn map_view_rect(map: &WorldMapView) -> Rect {
@@ -530,13 +577,22 @@ fn clamp_into_rect(point: Vec2, rect: Rect) -> Vec2 {
 	Vec2::new(point.x.clamp(rect.min.x, rect.max.x), point.y.clamp(rect.min.y, rect.max.y))
 }
 
-fn resolve_label_collisions(wanted: Vec<MapPinWanted>, view: Rect) -> Vec<MapPinWanted> {
+fn resolve_label_collisions(
+	mut wanted: Vec<MapPinWanted>,
+	view: Rect,
+	keep: Option<MapPinTarget>,
+) -> Vec<MapPinWanted> {
+	if let Some(keep) = keep {
+		wanted.sort_by_key(|pin| if pin.id == keep { 0u8 } else { 1 });
+	}
 	let mut kept = Vec::with_capacity(wanted.len());
 	for pin in wanted {
+		let keep_pin = keep == Some(pin.id);
 		let sep = label_separation(&pin, view);
-		if kept.iter().all(|other: &MapPinWanted| {
-			pin.xz.distance(other.xz) >= sep.max(label_separation(other, view))
-		}) {
+		if keep_pin
+			|| kept.iter().all(|other: &MapPinWanted| {
+				pin.xz.distance(other.xz) >= sep.max(label_separation(other, view))
+			}) {
 			kept.push(pin);
 			continue;
 		}
@@ -773,6 +829,111 @@ fn place_player_marker(node: &mut Node, screen: Vec2) {
 	node.top = Val::Px(screen.y - PLAYER_MARKER_PX * 0.5);
 }
 
+fn picker_prompt_visible(map: &WorldMapView) -> bool {
+	map.open && map.close_locked
+}
+
+fn sync_respawn_picker_title(
+	map: Res<WorldMapView>,
+	mut titles: Query<&mut Visibility, With<RespawnPickerTitle>>,
+) {
+	let visible = picker_prompt_visible(&map);
+	for mut visibility in &mut titles {
+		*visibility = if visible { Visibility::Visible } else { Visibility::Hidden };
+	}
+}
+
+fn selected_poi_xz(
+	pending: Option<&WorldPlayerRespawnState>,
+	registry: Option<&PoiRegistry>,
+) -> Option<Vec2> {
+	let id = pending?.pending.as_ref()?.highlighted?;
+	Some(registry?.get(id)?.position.xz())
+}
+
+fn sync_respawn_selection_marker(
+	map: Res<WorldMapView>,
+	registry: Option<Res<PoiRegistry>>,
+	pending: Option<Res<WorldPlayerRespawnState>>,
+	camera: Query<(&Camera, &GlobalTransform), (With<Camera3d>, With<FollowCamera>)>,
+	surface: TerrainView<Urbanization<Richmond<OnTerrain<Durham>>>>,
+	mut markers: Query<(&mut Node, &mut Visibility), With<MapRespawnSelection>>,
+	mut commands: Commands,
+) {
+	let Some(xz) = selected_poi_xz(pending.as_deref(), registry.as_deref())
+		.filter(|_| picker_prompt_visible(&map))
+	else {
+		hide_selection_markers(&mut markers);
+		return;
+	};
+	let Ok((camera, camera_transform)) = camera.single() else {
+		hide_selection_markers(&mut markers);
+		return;
+	};
+	let Some((screen, _)) = project_mob_pin(camera, camera_transform, pin_world(&surface, xz))
+	else {
+		hide_selection_markers(&mut markers);
+		return;
+	};
+	if let Some((mut node, mut visibility)) = markers.iter_mut().next() {
+		place_selection_marker(&mut node, screen);
+		*visibility = Visibility::Visible;
+		return;
+	}
+	let marker = commands
+		.spawn((
+			Name::new("map-respawn-selection"),
+			MapRespawnSelection,
+			selection_marker_node(screen),
+			BackgroundColor(Color::srgba(1.0, 0.86, 0.22, 0.12)),
+			BorderColor::all(TEXT_YELLOW),
+			Pickable::IGNORE,
+			Visibility::Visible,
+			GlobalZIndex(i32::MAX - 8),
+		))
+		.id();
+	commands.entity(marker).with_children(|root| {
+		root.spawn((
+			Node {
+				width: Val::Px(SELECTION_DOT_PX),
+				height: Val::Px(SELECTION_DOT_PX),
+				border_radius: BorderRadius::all(Val::Px(SELECTION_DOT_PX * 0.5)),
+				..default()
+			},
+			BackgroundColor(TEXT_YELLOW),
+			Pickable::IGNORE,
+		));
+	});
+}
+
+fn hide_selection_markers(
+	markers: &mut Query<(&mut Node, &mut Visibility), With<MapRespawnSelection>>,
+) {
+	for (_, mut visibility) in markers.iter_mut() {
+		*visibility = Visibility::Hidden;
+	}
+}
+
+fn selection_marker_node(screen: Vec2) -> Node {
+	Node {
+		position_type: PositionType::Absolute,
+		left: Val::Px(screen.x - SELECTION_RING_PX * 0.5),
+		top: Val::Px(screen.y - SELECTION_RING_PX * 0.5),
+		width: Val::Px(SELECTION_RING_PX),
+		height: Val::Px(SELECTION_RING_PX),
+		border: UiRect::all(Val::Px(3.0)),
+		border_radius: BorderRadius::all(Val::Px(SELECTION_RING_PX * 0.5)),
+		justify_content: JustifyContent::Center,
+		align_items: AlignItems::Center,
+		..default()
+	}
+}
+
+fn place_selection_marker(node: &mut Node, screen: Vec2) {
+	node.left = Val::Px(screen.x - SELECTION_RING_PX * 0.5);
+	node.top = Val::Px(screen.y - SELECTION_RING_PX * 0.5);
+}
+
 fn draw_highlighted_poi(
 	map: Res<WorldMapView>,
 	registry: Option<Res<PoiRegistry>>,
@@ -788,23 +949,30 @@ fn draw_highlighted_poi(
 		let at = pin_world(&surface, xz);
 		gizmos.sphere(Isometry3d::from_translation(at), 2.2, TEXT_YELLOW);
 	}
-	let Some(id) = pending.and_then(|state| state.pending.as_ref()?.highlighted) else {
+	let Some(id) = pending.as_deref().and_then(|state| state.pending.as_ref()?.highlighted) else {
 		return;
 	};
 	let Some(record) = registry.and_then(|registry| registry.get(id).copied()) else {
 		return;
 	};
-	let radius = record.arrival_radius.max(4.0);
+	let radius = (map.height * 0.045).max(record.arrival_radius).clamp(12.0, 48.0);
 	let mut points = Vec::with_capacity(33);
 	for index in 0..=32 {
 		let angle = index as f32 / 32.0 * std::f32::consts::TAU;
 		points.push(Vec3::new(
 			record.position.x + angle.cos() * radius,
-			record.position.y + 0.6,
+			record.position.y + 0.8,
 			record.position.z + angle.sin() * radius,
 		));
 	}
-	gizmos.linestrip(points, Color::srgb(0.95, 0.72, 0.18));
+	gizmos.linestrip(points, TEXT_YELLOW);
+	if let Some(death) = death_xz(pending.as_deref()) {
+		gizmos.line(
+			pin_world(&surface, death),
+			pin_world(&surface, record.position.xz()),
+			TEXT_YELLOW_FAINT,
+		);
+	}
 }
 
 #[cfg(test)]
@@ -1008,6 +1176,26 @@ mod tests {
 		assert!(!map.open);
 		assert!(!map.close_locked);
 		assert!(map.begin_life);
+	}
+
+	#[test]
+	fn selected_respawn_labels_are_larger_than_idle_pois() {
+		assert!(SELECTED_POI_LABEL_PX > map_label_size(MapLabelKind::Poi));
+	}
+
+	#[test]
+	fn picker_title_only_shows_on_a_locked_map() {
+		assert!(picker_prompt_visible(&WorldMapView {
+			open: true,
+			close_locked: true,
+			..default()
+		}));
+		assert!(!picker_prompt_visible(&WorldMapView {
+			open: true,
+			close_locked: false,
+			..default()
+		}));
+		assert!(!picker_prompt_visible(&WorldMapView::default()));
 	}
 
 	#[test]

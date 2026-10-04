@@ -35,6 +35,9 @@ use crate::weapon::WorldPlayerAppearanceRequested;
 use crate::{WorldGameplayEnabled, WorldPlayerLoadout};
 
 const MAP_OPEN_SECS: f32 = 0.18;
+const STICK_REST: f32 = 0.28;
+const STICK_FLICK: f32 = 0.45;
+const STICK_ALIGN: f32 = 0.2;
 
 /// World-player downed duration, nearby POI scan, and replacement interests.
 #[derive(Resource, Clone, Debug, PartialEq)]
@@ -76,6 +79,8 @@ pub(crate) struct PendingPlayerRespawn {
 	pub candidates: Vec<PoiId>,
 	pub highlighted: Option<PoiId>,
 	pub map_opened: bool,
+	/// Stick is home; the next throw is one flick.
+	pub stick_resting: bool,
 }
 
 #[derive(Resource, Default)]
@@ -197,6 +202,7 @@ fn queue_downed_world_player(
 			candidates: Vec::new(),
 			highlighted: None,
 			map_opened: false,
+			stick_resting: true,
 		});
 		velocity.0 = Vec3::ZERO;
 		if let Some(firearm) = firearm {
@@ -241,6 +247,7 @@ fn drive_respawn_picker(
 	if pending.candidates.is_empty() {
 		return;
 	}
+	let stick = pad.as_deref().map(|pad| pad.move_stick).unwrap_or(Vec2::ZERO);
 	let mut step = 0i32;
 	if let Some(pad) = pad.as_deref() {
 		if pad.just_pressed(PadButton::DpadUp) {
@@ -250,7 +257,22 @@ fn drive_respawn_picker(
 			step += 1;
 		}
 	}
-	if step != 0 {
+	if let Some(dir) = consume_stick_flick(&mut pending.stick_resting, stick) {
+		let from = pending
+			.highlighted
+			.and_then(|id| registry.get(id))
+			.map(|record| record.position.xz())
+			.unwrap_or(map.focus);
+		if let Some(next) = next_candidate_in_direction(
+			&pending.candidates,
+			&registry,
+			from,
+			pending.highlighted,
+			dir,
+		) {
+			pending.highlighted = Some(next);
+		}
+	} else if step != 0 {
 		let len = pending.candidates.len() as i32;
 		let current = pending
 			.highlighted
@@ -258,11 +280,13 @@ fn drive_respawn_picker(
 			.unwrap_or(0) as i32;
 		let next = (current + step).rem_euclid(len) as usize;
 		pending.highlighted = pending.candidates.get(next).copied();
-		if let Some(record) = pending.highlighted.and_then(|id| registry.get(id)) {
-			map.focus = record.position.xz();
+	} else if pending.highlighted.is_none() {
+		if let Some(nearest) = nearest_candidate(&pending.candidates, &registry, map.focus) {
+			pending.highlighted = Some(nearest);
 		}
-	} else if let Some(nearest) = nearest_candidate(&pending.candidates, &registry, map.focus) {
-		pending.highlighted = Some(nearest);
+	}
+	if let Some(record) = pending.highlighted.and_then(|id| registry.get(id)) {
+		map.focus = record.position.xz();
 	}
 	let Some(poi) = pending.highlighted else {
 		return;
@@ -406,6 +430,7 @@ fn open_respawn_picker(
 	});
 	pending.candidates = records.iter().map(|record| record.id).collect();
 	pending.highlighted = pending.candidates.first().copied();
+	pending.stick_resting = true;
 	pending.map_opened = true;
 	pending.pick_timer = Timer::from_seconds(config.pick_timeout_secs.max(0.0), TimerMode::Once);
 	map.open_at(pending.death_at.xz(), true);
@@ -429,6 +454,69 @@ fn apply_camera_begin_life(
 	for mut controller in &mut cameras {
 		controller.begin_life();
 	}
+}
+
+fn consume_stick_flick(resting: &mut bool, stick: Vec2) -> Option<Vec2> {
+	let mag = stick.length();
+	if mag < STICK_REST {
+		*resting = true;
+		return None;
+	}
+	if *resting && mag >= STICK_FLICK {
+		*resting = false;
+		Some(stick)
+	} else {
+		None
+	}
+}
+
+fn next_candidate_in_direction(
+	candidates: &[PoiId],
+	registry: &PoiRegistry,
+	from: Vec2,
+	current: Option<PoiId>,
+	dir: Vec2,
+) -> Option<PoiId> {
+	let points: Vec<_> = candidates
+		.iter()
+		.filter_map(|id| registry.get(*id).map(|record| (*id, record.position.xz())))
+		.collect();
+	nearest_in_direction(from, current, dir, &points)
+}
+
+fn nearest_in_direction(
+	from: Vec2,
+	current: Option<PoiId>,
+	dir: Vec2,
+	points: &[(PoiId, Vec2)],
+) -> Option<PoiId> {
+	let dir = dir.normalize_or_zero();
+	if dir == Vec2::ZERO {
+		return None;
+	}
+	points
+		.iter()
+		.filter_map(|(id, xz)| {
+			if Some(*id) == current {
+				return None;
+			}
+			let delta = *xz - from;
+			let dist = delta.length();
+			if dist < 0.5 {
+				return None;
+			}
+			let align = (delta / dist).dot(dir);
+			if align < STICK_ALIGN {
+				return None;
+			}
+			Some((*id, dist, align))
+		})
+		.min_by(|a, b| {
+			a.1.total_cmp(&b.1)
+				.then_with(|| b.2.total_cmp(&a.2))
+				.then_with(|| a.0.cmp(&b.0))
+		})
+		.map(|(id, _, _)| id)
 }
 
 fn nearest_candidate(candidates: &[PoiId], registry: &PoiRegistry, focus: Vec2) -> Option<PoiId> {
@@ -628,6 +716,7 @@ mod tests {
 				candidates: Vec::new(),
 				highlighted: None,
 				map_opened: false,
+				stick_resting: true,
 			}),
 			..default()
 		});
@@ -829,6 +918,87 @@ mod tests {
 		let controller = world.query::<&CameraController>().single(&world)?;
 		assert_eq!(controller.pov, CameraPov::ThirdPerson);
 		assert!(!world.resource::<WorldMapView>().begin_life);
+		Ok(())
+	}
+
+	#[test]
+	fn a_stick_flick_picks_the_next_closest_poi_in_that_direction() {
+		let west = PoiId(1);
+		let near_east = PoiId(2);
+		let far_east = PoiId(3);
+		let north = PoiId(4);
+		let picked = nearest_in_direction(
+			Vec2::ZERO,
+			Some(west),
+			Vec2::X,
+			&[
+				(west, Vec2::new(-10.0, 0.0)),
+				(near_east, Vec2::new(20.0, 2.0)),
+				(far_east, Vec2::new(80.0, 1.0)),
+				(north, Vec2::new(4.0, 40.0)),
+			],
+		);
+		assert_eq!(picked, Some(near_east));
+	}
+
+	#[test]
+	fn a_stick_flick_waits_for_the_stick_to_come_home() {
+		let mut resting = true;
+		assert_eq!(consume_stick_flick(&mut resting, Vec2::X), Some(Vec2::X));
+		assert!(!resting);
+		assert_eq!(consume_stick_flick(&mut resting, Vec2::X), None);
+		assert_eq!(consume_stick_flick(&mut resting, Vec2::ZERO), None);
+		assert!(resting);
+		assert_eq!(consume_stick_flick(&mut resting, Vec2::NEG_X), Some(Vec2::NEG_X));
+	}
+
+	#[test]
+	fn a_stick_flick_moves_the_picker_highlight() -> anyhow::Result<()> {
+		let mut world = discovery_respawn_world(0.2, 30.0);
+		let west = world.spawn_empty().id();
+		let east = world.spawn_empty().id();
+		world.resource_mut::<PoiRegistry>().upsert(
+			west,
+			poi_intelligence::Poi::new(PoiId(1), URBAN_POI).with_arrival_radius(8.0),
+			Vec3::new(-30.0, 4.0, 5.0),
+			true,
+			false,
+		)?;
+		world.resource_mut::<PoiRegistry>().upsert(
+			east,
+			poi_intelligence::Poi::new(PoiId(2), URBAN_POI).with_arrival_radius(8.0),
+			Vec3::new(40.0, 4.0, 5.0),
+			true,
+			false,
+		)?;
+		world
+			.run_system_once(respawn_world_player)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		{
+			let mut state = world.resource_mut::<WorldPlayerRespawnState>();
+			let pending = state.pending.as_mut().unwrap();
+			pending.candidates = vec![PoiId(1), PoiId(2)];
+			pending.highlighted = Some(PoiId(1));
+			pending.stick_resting = true;
+		}
+		world.insert_resource(WorldMapView {
+			open: true,
+			focus: Vec2::new(-30.0, 5.0),
+			height: crate::map_view::DEFAULT_MAP_HEIGHT,
+			close_locked: true,
+			begin_life: false,
+		});
+		let mut pad = VirtualPad::default();
+		pad.move_stick = Vec2::X;
+		world.insert_resource(pad);
+		world.init_resource::<Messages<PlayerChoseRespawnPoi>>();
+		world.init_resource::<Messages<CharacterIntent>>();
+		world
+			.run_system_once(drive_respawn_picker)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let pending = world.resource::<WorldPlayerRespawnState>().pending.as_ref().unwrap();
+		assert_eq!(pending.highlighted, Some(PoiId(2)));
+		assert_eq!(world.resource::<WorldMapView>().focus, Vec2::new(40.0, 5.0));
 		Ok(())
 	}
 }
