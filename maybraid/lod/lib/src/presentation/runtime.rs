@@ -164,6 +164,14 @@ impl<T> LodPresentQueue<T> {
 		true
 	}
 
+	fn enqueue_front(&mut self, id: Id) -> bool {
+		if !self.pending_ids.insert(id) {
+			return false;
+		}
+		self.pending.push_front(id);
+		true
+	}
+
 	fn pop_front(&mut self) -> Option<Id> {
 		let id = self.pending.pop_front()?;
 		self.pending_ids.remove(&id);
@@ -193,9 +201,8 @@ impl<T> LodPresentQueue<T> {
 		before.saturating_sub(self.pending.len()) as u64
 	}
 
-	/// Near-first only for ids appended this drain. Already-queued work —
-	/// including grow-then-spawn ids re-queued at the back — keeps its place
-	/// so a drip of closer generated ids cannot monopolize the budget.
+	/// Near-first only for ids appended this drain. Already-queued work keeps
+	/// its place so a drip of closer generated ids cannot reshuffle the queue.
 	fn sort_added_by_xz(&mut self, already_pending: usize, origin: Vec3) {
 		if already_pending >= self.pending.len() {
 			return;
@@ -518,18 +525,11 @@ pub fn drain_lod_present<T, S, Pr, M, F>(
 
 	let n = budget.ids_per_frame as usize;
 	let mut handled = 0;
-	let mut seen = HashSet::new();
 	while handled < n && !time_up(started, time_budget.time_per_frame) {
 		let Some(id) = queue.pop_front() else {
 			break;
 		};
 		jobs.end();
-		if !seen.insert(id) {
-			if queue.enqueue_back(id) {
-				jobs.begin();
-			}
-			break;
-		}
 		handled += 1;
 		let Some(version) = index.version(id) else {
 			continue;
@@ -547,11 +547,11 @@ pub fn drain_lod_present<T, S, Pr, M, F>(
 		presenter.handle(id, version, value, lod_ref);
 		warn_atomic_overrun("present ID", quantum.elapsed(), time_budget.max_atomic_cost);
 		// Grow-then-spawn presenters may consume a slot without stamping
-		// `presented_version`. Re-queue at the back so other ids can run this
-		// drain, and so a larger budget cannot poll the same id again.
+		// `presented_version`. Re-queue so the next slot can finish without a
+		// keep rescan.
 		let still_needs =
 			presenter.presented_version(id).is_none_or(|presented| presented < version);
-		if still_needs && queue.enqueue_back(id) {
+		if still_needs && queue.enqueue_front(id) {
 			jobs.begin();
 		}
 	}
