@@ -5575,6 +5575,7 @@ dependencies = [
  "bevy",
  "character-items",
  "lod-avian",
+ "projectiles",
 ]
 
 [[package]]

@@ -30,7 +30,6 @@ impl Plugin for GrenadeUserPlugin {
 					hold::stamp_holding_grenade,
 					hold::pose_held_grenade,
 					hold::apply_grenade_swap_pose,
-					throw::advance_throw,
 					hold::sync_held_visibility,
 				)
 					.chain()
@@ -41,6 +40,10 @@ impl Plugin for GrenadeUserPlugin {
 				hold::sync_throw_arm
 					.in_set(PlayerPoseSystems::Overlay)
 					.after(CharacterMotionSystems::Anim),
+			)
+			.add_systems(
+				Update,
+				throw::advance_throw.after(PlayerPoseSystems::Overlay),
 			)
 			.add_systems(
 				Update,

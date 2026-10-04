@@ -1,5 +1,6 @@
 //! Query-only bolts and bullets: shapecast through Fixed / Animated and emit
-//! each distinct contact along the flight.
+//! each distinct contact along the flight. Tossed bodies share the same
+//! sensor / gravity flight so a grenade stays visible without contacting.
 
 use std::collections::HashMap;
 
@@ -57,6 +58,20 @@ impl Default for BulletSpec {
 			penetration: 0.25,
 			color: Color::srgb(1.0, 0.72, 0.22),
 		}
+	}
+}
+
+/// Slow arcing toss. Sensor + gravity, same body setup as a bullet.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TossedSpec {
+	pub radius: f32,
+	pub gravity: f32,
+	pub color: Color,
+}
+
+impl Default for TossedSpec {
+	fn default() -> Self {
+		Self { radius: 0.1, gravity: 1.0, color: Color::srgb(0.28, 0.34, 0.18) }
 	}
 }
 
@@ -402,6 +417,45 @@ pub fn spawn_flight(
 			GravityScale(gravity),
 			Restitution::ZERO,
 			Flight::spawn(muzzle, max_range, max_through, max_age),
+		))
+		.id()
+}
+
+/// Gravity sphere that does not contact. Lifetime is owned by the caller.
+pub fn spawn_tossed(
+	commands: &mut Commands,
+	meshes: &mut Assets<Mesh>,
+	materials: &mut Assets<StandardMaterial>,
+	origin: Vec3,
+	velocity: Vec3,
+	spec: TossedSpec,
+) -> Entity {
+	let direction = velocity.normalize_or(Vec3::Y);
+	let collider = Collider::sphere(spec.radius);
+	commands
+		.spawn((
+			Name::new("tossed-projectile"),
+			Transform {
+				translation: origin,
+				rotation: Quat::from_rotation_arc(Vec3::Y, direction),
+				scale: Vec3::ONE,
+			},
+			Visibility::default(),
+			Mesh3d(meshes.add(Sphere::new(spec.radius).mesh().ico(2).expect("tossed sphere"))),
+			MeshMaterial3d(materials.add(StandardMaterial {
+				base_color: spec.color,
+				perceptual_roughness: 0.72,
+				metallic: 0.18,
+				..default()
+			})),
+			RigidBody::Dynamic,
+			MassPropertiesBundle::from_shape(&collider, 1.0),
+			collider,
+			Sensor,
+			PhysicsInteractionLayer::projectile_layers(),
+			LinearVelocity(velocity),
+			GravityScale(spec.gravity),
+			Restitution::ZERO,
 		))
 		.id()
 }

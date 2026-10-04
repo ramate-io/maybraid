@@ -1,9 +1,10 @@
 //! Use activation, windup, release marker, and follow-through.
 
-use avian3d::prelude::{LinearVelocity, SpatialQuery};
+use avian3d::prelude::LinearVelocity;
 use bevy::prelude::*;
 use character_inventory_user::InventoryUser;
 use character_items::{GrenadeStats, Inventory, InventoryItem};
+use characters::{CharacterHeading, CharacterRoot};
 use firearm_user::WeaponSwap;
 use grenades::{spawn_thrown_grenade, GrenadeEffect};
 use maybraid_character_controller::CharacterIntent;
@@ -50,7 +51,7 @@ pub struct GrenadeUserSettings {
 
 impl Default for GrenadeUserSettings {
 	fn default() -> Self {
-		Self { hold_forward: 0.22, hold_right: 0.16, hold_up: 0.08 }
+		Self { hold_forward: 0.08, hold_right: 0.02, hold_up: 0.02 }
 	}
 }
 
@@ -111,9 +112,9 @@ pub fn advance_throw(
 	mut commands: Commands,
 	mut meshes: ResMut<Assets<Mesh>>,
 	mut materials: ResMut<Assets<StandardMaterial>>,
-	spatial: SpatialQuery,
 	looks: Query<&PlayerLook>,
 	velocities: Query<&LinearVelocity>,
+	headings: Query<(&CharacterHeading, &ChildOf), With<CharacterRoot>>,
 	carriers: Query<&InventoryUser>,
 	mut bags: Query<&mut Inventory>,
 	mut users: Query<(Entity, &GrenadeUser, &mut GrenadeThrow)>,
@@ -139,9 +140,9 @@ pub fn advance_throw(
 						&mut commands,
 						&mut meshes,
 						&mut materials,
-						&spatial,
 						&looks,
 						&velocities,
+						&headings,
 						&carriers,
 						&mut bags,
 						&mut held,
@@ -175,9 +176,9 @@ fn release_grenade(
 	commands: &mut Commands,
 	meshes: &mut Assets<Mesh>,
 	materials: &mut Assets<StandardMaterial>,
-	spatial: &SpatialQuery,
 	looks: &Query<&PlayerLook>,
 	velocities: &Query<&LinearVelocity>,
+	headings: &Query<(&CharacterHeading, &ChildOf), With<CharacterRoot>>,
 	carriers: &Query<&InventoryUser>,
 	bags: &mut Query<&mut Inventory>,
 	held: &mut Query<(&Transform, &mut Visibility), With<HeldGrenade>>,
@@ -187,11 +188,17 @@ fn release_grenade(
 ) {
 	let look = looks.get(user_entity).copied().unwrap_or_default();
 	let inherit = velocities.get(user_entity).map(|v| v.0).unwrap_or(Vec3::ZERO);
+	let facing = headings
+		.iter()
+		.find(|(_, child)| child.parent() == user_entity)
+		.map(|(heading, _)| heading.0)
+		.unwrap_or(Vec3::Z);
 	let Ok((pose, mut visibility)) = held.get_mut(held_entity) else {
 		return;
 	};
 	*visibility = Visibility::Hidden;
-	let origin = pose.translation;
+	let aim = throw_aim(facing, &look);
+	let origin = pose.translation + aim * 0.35 + Vec3::Y * 0.08;
 	let spec = carriers
 		.get(user_entity)
 		.ok()
@@ -209,23 +216,38 @@ fn release_grenade(
 		commands,
 		meshes,
 		materials,
-		spatial,
 		origin,
-		launch_velocity(&look, &stats, inherit),
+		launch_velocity(aim, &stats, inherit),
 		spec,
 		stats,
 		GrenadeEffect::from_stats(&stats),
 		user_entity,
-		[user_entity, held_entity],
 	);
 }
 
-pub fn launch_velocity(look: &PlayerLook, stats: &GrenadeStats, inherit: Vec3) -> Vec3 {
-	let yaw = Quat::from_rotation_y(look.yaw);
-	let pitch = Quat::from_rotation_x(-look.pitch);
-	let aim = (yaw * pitch) * -Vec3::Z;
+/// Body-forward toss. Third person follows heading; look yaw 0 is camera `-Z`, not body forward.
+pub fn throw_aim(facing: Vec3, look: &PlayerLook) -> Vec3 {
+	if look.first_person {
+		return (Quat::from_rotation_y(look.yaw) * Quat::from_rotation_x(-look.pitch)) * -Vec3::Z;
+	}
+	let flat = Vec3::new(facing.x, 0.0, facing.z).normalize_or(Vec3::Z);
+	let right = Vec3::Y.cross(flat).normalize_or(Vec3::X);
+	(Quat::from_axis_angle(right, -look.pitch) * flat).normalize_or(flat)
+}
+
+pub fn launch_velocity(aim: Vec3, stats: &GrenadeStats, inherit: Vec3) -> Vec3 {
 	let tossed = (aim + Vec3::Y * stats.upward_bias).normalize_or(Vec3::Y);
 	tossed * stats.launch_speed + inherit * stats.inherit_velocity
+}
+
+pub fn yaw_xz(dir: Vec3) -> f32 {
+	let xz = Vec3::new(dir.x, 0.0, dir.z);
+	if xz.length_squared() < 1e-8 {
+		0.0
+	} else {
+		let n = xz.normalize();
+		n.x.atan2(n.z)
+	}
 }
 
 #[cfg(test)]
@@ -233,11 +255,19 @@ mod tests {
 	use super::*;
 
 	#[test]
-	fn launch_includes_upward_bias() {
+	fn launch_follows_body_heading_not_default_look_yaw() {
 		let look = PlayerLook { yaw: 0.0, pitch: 0.0, ..default() };
-		let velocity = launch_velocity(&look, &GrenadeStats::standard(), Vec3::ZERO);
+		let aim = throw_aim(Vec3::Z, &look);
+		let velocity = launch_velocity(aim, &GrenadeStats::standard(), Vec3::ZERO);
 		assert!(velocity.y > 0.0);
-		assert!(velocity.z < 0.0);
+		assert!(velocity.z > 0.0, "facing +Z must toss +Z, got {velocity:?}");
+	}
+
+	#[test]
+	fn first_person_uses_look_yaw() {
+		let look = PlayerLook { yaw: 0.0, pitch: 0.0, first_person: true, ..default() };
+		let aim = throw_aim(Vec3::Z, &look);
+		assert!(aim.z < 0.0);
 	}
 
 	#[test]
