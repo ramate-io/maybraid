@@ -2,11 +2,11 @@
 
 use bevy::prelude::*;
 
+use crate::HudFonts;
 use crate::theme::{
 	OBJECTIVE_MARKER_BORDER, OBJECTIVE_MARKER_FONT_SIZE, OBJECTIVE_MARKER_PAD_X,
 	OBJECTIVE_MARKER_PAD_Y, OBJECTIVE_MARKER_RADIUS, TEXT_YELLOW,
 };
-use crate::HudFonts;
 
 /// Bordered label that stays readable on busy art.
 #[derive(Component, Debug, Clone, PartialEq)]

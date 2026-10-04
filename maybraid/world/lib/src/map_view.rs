@@ -6,7 +6,7 @@ use durham::Durham;
 use game_commands::command::TextEntryFocus;
 use geneva::{LanguageOverlay, NameKey};
 use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
-use menu_components::BARLOW_REGULAR;
+use menu_components::{NOTO_SANS_REGULAR, TEXT_YELLOW};
 use player::CameraFollow;
 use player_camera::{
 	CameraController, CameraLookSuppressed, CameraPovLocked, FollowCamera, PlayerCameraSystems,
@@ -19,13 +19,16 @@ use world_player::{Player as VegetationPlayer, PlaygroundMode};
 
 use crate::control::{InventoryEditCameraFollow, WorldGameplayEnabled};
 use crate::player_lifecycle::WorldPlayerRespawnState;
-use crate::ui::{place_pin, project_mob_pin};
+use crate::ui::project_mob_pin;
 
 pub const DEFAULT_MAP_HEIGHT: f32 = 420.0;
 const MIN_MAP_HEIGHT: f32 = 80.0;
 const MAX_MAP_HEIGHT: f32 = 2_400.0;
 const MAP_PIN_LIMIT: usize = 48;
-const MAP_PIN_WIDTH: f32 = 160.0;
+const REGION_LABEL_PX: f32 = 28.0;
+const FEATURE_LABEL_PX: f32 = 14.0;
+const POI_LABEL_PX: f32 = 7.0;
+const PLAYER_MARKER_PX: f32 = 14.0;
 
 /// Overhead view of the current location. Focus moves with spawn-location picks only.
 #[derive(Resource, Debug, PartialEq)]
@@ -75,6 +78,9 @@ struct MapNamePin {
 	target: MapPinTarget,
 }
 
+#[derive(Component)]
+struct MapPlayerMarker;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum MapPinTarget {
 	Name(NameKey),
@@ -115,13 +121,14 @@ impl Plugin for WorldMapViewPlugin {
 			)
 			.add_systems(
 				Update,
-				(sync_map_name_pins, draw_highlighted_poi).after(PlayerCameraSystems::Apply),
+				(sync_map_name_pins, sync_map_player_marker, draw_highlighted_poi)
+					.after(PlayerCameraSystems::Apply),
 			);
 	}
 }
 
 fn spawn_map_name_hud(mut commands: Commands, assets: Res<AssetServer>) {
-	commands.insert_resource(MapLabelFont(assets.load(BARLOW_REGULAR)));
+	commands.insert_resource(MapLabelFont(assets.load(NOTO_SANS_REGULAR)));
 	commands.spawn((
 		Name::new("map-name-hud"),
 		MapNameHud,
@@ -289,10 +296,10 @@ fn sync_map_name_pins(
 			*visibility = Visibility::Hidden;
 			continue;
 		};
-		place_map_pin(&mut node, screen);
+		place_map_pin(&mut node, screen, target.size);
 		background.0 = pin_color(target.id, highlighted, on_screen);
 		text.0 = target.label.clone();
-		*font = map_label_text_font(&fonts);
+		*font = map_label_text_font(&fonts, target.size);
 		*visibility = Visibility::Visible;
 		assigned.push(target.id);
 	}
@@ -309,10 +316,10 @@ fn sync_map_name_pins(
 			root.spawn(MapNamePinBundle {
 				name: Name::new("map-name-pin"),
 				pin: MapNamePin { target: target.id },
-				node: map_pin_node(screen),
+				node: map_pin_node(screen, target.size),
 				background: BackgroundColor(pin_color(target.id, highlighted, on_screen)),
 				text: Text::new(target.label.clone()),
-				font: map_label_text_font(&fonts),
+				font: map_label_text_font(&fonts, target.size),
 				color: TextColor(Color::WHITE),
 				pickable: Pickable::IGNORE,
 				visibility: Visibility::Visible,
@@ -321,14 +328,41 @@ fn sync_map_name_pins(
 	}
 }
 
-fn map_label_text_font(font: &MapLabelFont) -> TextFont {
-	TextFont { font: font.0.clone().into(), font_size: FontSize::Px(13.0), ..default() }
+fn map_label_text_font(font: &MapLabelFont, size: f32) -> TextFont {
+	TextFont { font: font.0.clone().into(), font_size: FontSize::Px(size), ..default() }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum MapLabelKind {
+	Region,
+	Feature,
+	Poi,
+}
+
+fn map_label_kind(target: MapPinTarget) -> MapLabelKind {
+	match target {
+		MapPinTarget::Poi(_) => MapLabelKind::Poi,
+		MapPinTarget::Name(NameKey::Region { .. }) => MapLabelKind::Region,
+		MapPinTarget::Name(NameKey::Place { .. } | NameKey::ProvisionalPlace { .. }) => {
+			MapLabelKind::Poi
+		}
+		MapPinTarget::Name(_) => MapLabelKind::Feature,
+	}
+}
+
+fn map_label_size(kind: MapLabelKind) -> f32 {
+	match kind {
+		MapLabelKind::Region => REGION_LABEL_PX,
+		MapLabelKind::Feature => FEATURE_LABEL_PX,
+		MapLabelKind::Poi => POI_LABEL_PX,
+	}
 }
 
 struct MapPinWanted {
 	id: MapPinTarget,
 	xz: Vec2,
 	label: String,
+	size: f32,
 }
 
 fn map_pin_targets(
@@ -350,6 +384,7 @@ fn map_pin_targets(
 						id: MapPinTarget::Poi(*id),
 						xz: record.position.xz(),
 						label: label_for_poi(record, overlay),
+						size: map_label_size(MapLabelKind::Poi),
 					});
 				}
 			}
@@ -374,6 +409,7 @@ fn map_pin_targets(
 			id: MapPinTarget::Name(name.key),
 			xz: name.xz,
 			label: name.surface.clone(),
+			size: map_label_size(map_label_kind(MapPinTarget::Name(name.key))),
 		});
 	}
 	wanted.truncate(MAP_PIN_LIMIT);
@@ -381,20 +417,18 @@ fn map_pin_targets(
 }
 
 fn name_visible(key: NameKey, height: f32) -> bool {
-	match key {
-		NameKey::Place { .. } | NameKey::ProvisionalPlace { .. } => true,
-		NameKey::Urban(_) | NameKey::UrbanLeaf(_) => height >= 160.0,
-		NameKey::Grove(_) | NameKey::Forest(_) | NameKey::Geographic(_) => height >= 280.0,
-		NameKey::Region { .. } => height >= 700.0,
+	match map_label_kind(MapPinTarget::Name(key)) {
+		MapLabelKind::Region => true,
+		MapLabelKind::Feature => height >= 160.0,
+		MapLabelKind::Poi => height <= 1_200.0,
 	}
 }
 
 fn name_rank(key: NameKey) -> u8 {
-	match key {
-		NameKey::Place { .. } | NameKey::ProvisionalPlace { .. } => 0,
-		NameKey::Urban(_) | NameKey::UrbanLeaf(_) => 1,
-		NameKey::Grove(_) | NameKey::Forest(_) | NameKey::Geographic(_) => 2,
-		NameKey::Region { .. } => 3,
+	match map_label_kind(MapPinTarget::Name(key)) {
+		MapLabelKind::Region => 0,
+		MapLabelKind::Feature => 1,
+		MapLabelKind::Poi => 2,
 	}
 }
 
@@ -439,31 +473,130 @@ fn pin_color(target: MapPinTarget, highlighted: Option<PoiId>, on_screen: bool) 
 	color.with_alpha(if on_screen { color.alpha() } else { 0.94 })
 }
 
-fn map_pin_node(screen: Vec2) -> Node {
+fn pin_width(size: f32) -> f32 {
+	(size * 8.5).clamp(72.0, 260.0)
+}
+
+fn map_pin_node(screen: Vec2, size: f32) -> Node {
+	let width = pin_width(size);
 	Node {
 		position_type: PositionType::Absolute,
-		left: Val::Px(screen.x - MAP_PIN_WIDTH * 0.5),
-		top: Val::Px(screen.y - 12.0),
-		width: Val::Px(MAP_PIN_WIDTH),
-		padding: UiRect::axes(Val::Px(6.0), Val::Px(3.0)),
+		left: Val::Px(screen.x - width * 0.5),
+		top: Val::Px(screen.y - size * 0.85),
+		width: Val::Px(width),
+		padding: UiRect::axes(Val::Px((size * 0.35).max(3.0)), Val::Px((size * 0.18).max(2.0))),
 		justify_content: JustifyContent::Center,
 		..default()
 	}
 }
 
-fn place_map_pin(node: &mut Node, screen: Vec2) {
-	place_pin(node, screen);
-	node.left = Val::Px(screen.x - MAP_PIN_WIDTH * 0.5);
+fn place_map_pin(node: &mut Node, screen: Vec2, size: f32) {
+	let width = pin_width(size);
+	node.left = Val::Px(screen.x - width * 0.5);
+	node.top = Val::Px(screen.y - size * 0.85);
+	node.width = Val::Px(width);
+	node.padding = UiRect::axes(Val::Px((size * 0.35).max(3.0)), Val::Px((size * 0.18).max(2.0)));
+}
+
+fn sync_map_player_marker(
+	map: Res<WorldMapView>,
+	pending: Option<Res<WorldPlayerRespawnState>>,
+	players: Query<&Transform, With<VegetationPlayer>>,
+	camera: Query<(&Camera, &GlobalTransform), (With<Camera3d>, With<FollowCamera>)>,
+	surface: TerrainView<Urbanization<Richmond<OnTerrain<Durham>>>>,
+	hud: Query<Entity, With<MapNameHud>>,
+	mut markers: Query<(&mut Node, &mut Visibility), With<MapPlayerMarker>>,
+	mut commands: Commands,
+) {
+	if !map.open {
+		hide_player_markers(&mut markers);
+		return;
+	}
+	let Some(xz) = player_map_xz(players.iter().next(), death_xz(pending.as_deref())) else {
+		hide_player_markers(&mut markers);
+		return;
+	};
+	let Ok((camera, camera_transform)) = camera.single() else {
+		hide_player_markers(&mut markers);
+		return;
+	};
+	let Some((screen, _)) = project_mob_pin(camera, camera_transform, pin_world(&surface, xz))
+	else {
+		hide_player_markers(&mut markers);
+		return;
+	};
+	if let Some((mut node, mut visibility)) = markers.iter_mut().next() {
+		place_player_marker(&mut node, screen);
+		*visibility = Visibility::Visible;
+		return;
+	}
+	let Ok(hud) = hud.single() else {
+		return;
+	};
+	commands.entity(hud).with_children(|root| {
+		root.spawn((
+			Name::new("map-player-marker"),
+			MapPlayerMarker,
+			player_marker_node(screen),
+			BackgroundColor(TEXT_YELLOW),
+			BorderColor::all(Color::srgba(0.08, 0.10, 0.14, 0.92)),
+			Pickable::IGNORE,
+			Visibility::Visible,
+			GlobalZIndex(i32::MAX - 10),
+		));
+	});
+}
+
+fn hide_player_markers(
+	markers: &mut Query<(&mut Node, &mut Visibility), With<MapPlayerMarker>>,
+) {
+	for (_, mut visibility) in markers.iter_mut() {
+		*visibility = Visibility::Hidden;
+	}
+}
+
+fn death_xz(pending: Option<&WorldPlayerRespawnState>) -> Option<Vec2> {
+	pending
+		.and_then(|state| state.pending.as_ref())
+		.map(|pending| pending.death_at.xz())
+}
+
+fn player_map_xz(live: Option<&Transform>, death: Option<Vec2>) -> Option<Vec2> {
+	live.map(|transform| transform.translation.xz()).or(death)
+}
+
+fn player_marker_node(screen: Vec2) -> Node {
+	Node {
+		position_type: PositionType::Absolute,
+		left: Val::Px(screen.x - PLAYER_MARKER_PX * 0.5),
+		top: Val::Px(screen.y - PLAYER_MARKER_PX * 0.5),
+		width: Val::Px(PLAYER_MARKER_PX),
+		height: Val::Px(PLAYER_MARKER_PX),
+		border: UiRect::all(Val::Px(2.0)),
+		border_radius: BorderRadius::all(Val::Px(PLAYER_MARKER_PX * 0.5)),
+		..default()
+	}
+}
+
+fn place_player_marker(node: &mut Node, screen: Vec2) {
+	node.left = Val::Px(screen.x - PLAYER_MARKER_PX * 0.5);
+	node.top = Val::Px(screen.y - PLAYER_MARKER_PX * 0.5);
 }
 
 fn draw_highlighted_poi(
 	map: Res<WorldMapView>,
 	registry: Option<Res<PoiRegistry>>,
 	pending: Option<Res<WorldPlayerRespawnState>>,
+	players: Query<&Transform, With<VegetationPlayer>>,
+	surface: TerrainView<Urbanization<Richmond<OnTerrain<Durham>>>>,
 	mut gizmos: Gizmos,
 ) {
 	if !map.open {
 		return;
+	}
+	if let Some(xz) = player_map_xz(players.iter().next(), death_xz(pending.as_deref())) {
+		let at = pin_world(&surface, xz);
+		gizmos.sphere(Isometry3d::from_translation(at), 2.2, TEXT_YELLOW);
 	}
 	let Some(id) = pending.and_then(|state| state.pending.as_ref()?.highlighted) else {
 		return;
@@ -584,5 +717,29 @@ mod tests {
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		assert!(!world.resource::<WorldMapView>().open);
 		Ok(())
+	}
+
+	#[test]
+	fn label_sizes_halve_by_layer() {
+		assert_eq!(
+			map_label_size(MapLabelKind::Feature),
+			map_label_size(MapLabelKind::Region) * 0.5
+		);
+		assert_eq!(map_label_size(MapLabelKind::Poi), map_label_size(MapLabelKind::Feature) * 0.5);
+		assert_eq!(
+			map_label_kind(MapPinTarget::Name(NameKey::Region { ix: 0, iz: 0 })),
+			MapLabelKind::Region
+		);
+	}
+
+	#[test]
+	fn player_marker_prefers_the_live_body() {
+		let live = Transform::from_xyz(4.0, 1.0, -3.0);
+		assert_eq!(
+			player_map_xz(Some(&live), Some(Vec2::new(90.0, 80.0))),
+			Some(Vec2::new(4.0, -3.0))
+		);
+		assert_eq!(player_map_xz(None, Some(Vec2::new(90.0, 80.0))), Some(Vec2::new(90.0, 80.0)));
+		assert_eq!(player_map_xz(None, None), None);
 	}
 }

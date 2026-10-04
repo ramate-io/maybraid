@@ -6,10 +6,10 @@ pub mod hint;
 pub mod objective;
 pub mod text_card;
 
-pub use brand::{set_brand_mode_title, BrandModeCorner, BrandModeLine, BrandModeTitle, BRAND_NAME};
-pub use description::{set_description_for_menu, TextMenuDescription};
-pub use hint::{set_hint_for_menu, TextMenuHint, TextMenuHintLabel};
-pub use objective::{spawn_menu_objective, MenuObjective};
+pub use brand::{BRAND_NAME, BrandModeCorner, BrandModeLine, BrandModeTitle, set_brand_mode_title};
+pub use description::{TextMenuDescription, set_description_for_menu};
+pub use hint::{TextMenuHint, TextMenuHintLabel, set_hint_for_menu};
+pub use objective::{MenuObjective, spawn_menu_objective};
 pub use text_card::{
-	spawn_hud_text_card, spawn_hud_text_card_label, HudTextCard, HUD_TEXT_CARD_FACE_PX,
+	HUD_TEXT_CARD_FACE_PX, HudTextCard, spawn_hud_text_card, spawn_hud_text_card_label,
 };

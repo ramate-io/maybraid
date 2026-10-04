@@ -1,7 +1,7 @@
 //! Text menu whose active row shows an animated mark in a reserved gutter.
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{bsn, template_value, Scene};
+use bevy::scene::prelude::{Scene, bsn, template_value};
 use bevy::text::{FontSourceTemplate, Justify};
 
 use crate::icons::maybraid::AnimatedIcon;
@@ -792,9 +792,9 @@ fn text_cursor_menu<'a>(
 #[cfg(test)]
 mod tests {
 	use super::{MenuObjectiveKind, TextCursorColumn, TextCursorRow};
+	use crate::ITEM_FONT_SIZE;
 	use crate::single_select::{TextColumnAlign, TextColumnAnchor};
 	use crate::theme::{OBJECTIVE_MARKER_FONT_SIZE, TEXT_LIME, TEXT_PURPLE, TEXT_SALMON};
-	use crate::ITEM_FONT_SIZE;
 
 	#[derive(Clone, Copy)]
 	enum RowAction {

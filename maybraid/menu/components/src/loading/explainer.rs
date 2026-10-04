@@ -1,7 +1,7 @@
 //! Centered line under the loading bar.
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{bsn, template_value, Scene};
+use bevy::scene::prelude::{Scene, bsn, template_value};
 use bevy::text::{FontSourceTemplate, LineBreak};
 
 use crate::theme::{

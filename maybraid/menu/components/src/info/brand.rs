@@ -1,7 +1,7 @@
 //! Upper-left brand plus the current game mode.
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{bsn, template_value, Scene};
+use bevy::scene::prelude::{Scene, bsn, template_value};
 use bevy::text::{FontSourceTemplate, Justify};
 
 use crate::theme::{BARLOW_BLACK, BRAND_MODE_FONT_SIZE, COLUMN_INSET, TEXT_YELLOW};
@@ -111,7 +111,7 @@ fn set_brand_under(
 
 #[cfg(test)]
 mod tests {
-	use super::{BrandModeLine, BRAND_NAME};
+	use super::{BRAND_NAME, BrandModeLine};
 
 	#[test]
 	fn display_joins_brand_and_mode() {

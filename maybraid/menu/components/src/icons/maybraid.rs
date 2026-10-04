@@ -3,11 +3,11 @@
 pub mod animated;
 pub mod spinning;
 
-pub use animated::{blink_animated_icons, AnimatedIcon};
-pub use spinning::{spin_icons, SpinningIcon};
+pub use animated::{AnimatedIcon, blink_animated_icons};
+pub use spinning::{SpinningIcon, spin_icons};
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{bsn, template_value, Scene};
+use bevy::scene::prelude::{Scene, bsn, template_value};
 
 use crate::theme::{MAYBRAID_LOGO, TEXT_YELLOW};
 

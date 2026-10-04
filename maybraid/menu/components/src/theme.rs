@@ -13,6 +13,9 @@ pub const BARLOW_SEMIBOLD: &str = "fonts/barlow/BarlowSemiCondensed-SemiBold.ttf
 /// Barlow Semi Condensed Regular, under `maybraid/assets`.
 pub const BARLOW_REGULAR: &str = "fonts/barlow/BarlowSemiCondensed-Regular.ttf";
 
+/// Noto Sans Regular — IPA coverage for generated place names.
+pub const NOTO_SANS_REGULAR: &str = "fonts/noto/NotoSans-Regular.ttf";
+
 /// Largest face on a text menu (title / header).
 pub const HEADER_FONT_SIZE: f32 = 96.0;
 

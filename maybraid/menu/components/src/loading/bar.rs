@@ -1,7 +1,7 @@
 //! Thin fillable loading track.
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{bsn, template_value, Scene};
+use bevy::scene::prelude::{Scene, bsn, template_value};
 
 use crate::theme::{LOADING_BAR_HEIGHT, LOADING_BAR_WIDTH, TEXT_YELLOW, TEXT_YELLOW_FAINT};
 

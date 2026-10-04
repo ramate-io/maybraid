@@ -3,11 +3,11 @@
 pub mod bar;
 pub mod explainer;
 
-pub use bar::{loading_bar_scene, set_loading_progress, sync_loading_bar_fill, LoadingBarFill};
-pub use explainer::{set_loading_explainer, LoadingExplainer};
+pub use bar::{LoadingBarFill, loading_bar_scene, set_loading_progress, sync_loading_bar_fill};
+pub use explainer::{LoadingExplainer, set_loading_explainer};
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{bsn, Scene};
+use bevy::scene::prelude::{Scene, bsn};
 
 use crate::icons::maybraid::SpinningIcon;
 use crate::theme::{LOADING_ICON_SIZE, LOADING_STACK_GAP, TEXT_YELLOW};

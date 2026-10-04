@@ -8,10 +8,10 @@ use crate::theme::{
 	PANEL_HEADER_CURSOR_ICON_SIZE, PANEL_HEADER_FONT_SIZE, PANEL_VALUE_FONT_SIZE, TEXT_YELLOW,
 };
 
+use super::HudFonts;
 use super::section::CursorRow;
 use super::text::{spawn_cursor_slot_sized, spawn_header_line, spawn_hud_text};
 use super::tile::HoverTile;
-use super::HudFonts;
 
 /// Pickable label with no chip background. `extra` is typically `MenuButton<E>`.
 pub fn spawn_text_button(

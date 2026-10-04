@@ -327,7 +327,7 @@ pub(crate) fn entity_is_under(
 
 #[cfg(test)]
 mod tests {
-	use super::{hud_nav_scroll_delta, scroll_delta_to_reveal, HUD_NAV_SCROLL_LINE};
+	use super::{HUD_NAV_SCROLL_LINE, hud_nav_scroll_delta, scroll_delta_to_reveal};
 	use maybraid_input::MenuNav;
 
 	#[test]

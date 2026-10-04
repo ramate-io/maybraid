@@ -15,6 +15,10 @@ pub mod spin_reveal;
 pub mod theme;
 
 pub use controls::{
+	ActiveOverlayKey, ActiveShortText, CursorRow, HoverTile, HudFonts, HudMenu, HudMenuIgnoresLock,
+	HudMenuItem, HudOverlayMenu, HudScroll, HudScrollThumb, HudScrollTrack, HudScrollViewport,
+	OverlayHeader, OverlayHeaderKey, ShortTextChange, ShortTextField, ShortTextKey, ShortTextModal,
+	ShortTextModalRoot, ShortTextPad, ShortTextToggle, ShortTextValue, SlotRank,
 	apply_hud_menu_nav, clear_short_text_dismissed, color_from_hex,
 	emit_short_text_submit_on_confirm, menu_display_name, navigate_hud_menus, on_hud_scroll,
 	restore_short_text_editing, scroll_hud_selection_into_view, scroll_hud_viewport_on_nav,
@@ -24,43 +28,39 @@ pub use controls::{
 	spawn_labeled_row, spawn_panel_title, spawn_scroll_pane, spawn_section_header,
 	spawn_short_text_button, spawn_stepper, spawn_swatch, spawn_swatch_row, spawn_text_button,
 	spawn_tile_grid, sync_hover_tiles, sync_hud_cursors, sync_hud_item_focus, sync_hud_scrollbars,
-	sync_tile_wrap, ActiveOverlayKey, ActiveShortText, CursorRow, HoverTile, HudFonts, HudMenu,
-	HudMenuIgnoresLock, HudMenuItem, HudOverlayMenu, HudScroll, HudScrollThumb, HudScrollTrack,
-	HudScrollViewport, OverlayHeader, OverlayHeaderKey, ShortTextChange, ShortTextField,
-	ShortTextKey, ShortTextModal, ShortTextModalRoot, ShortTextPad, ShortTextToggle,
-	ShortTextValue, SlotRank,
+	sync_tile_wrap,
 };
-pub use icons::{blink_animated_icons, spin_icons, AnimatedIcon, Icon, SpinningIcon};
+pub use icons::{AnimatedIcon, Icon, SpinningIcon, blink_animated_icons, spin_icons};
 pub use info::{
-	set_brand_mode_title, set_description_for_menu, set_hint_for_menu, spawn_hud_text_card,
-	spawn_hud_text_card_label, spawn_menu_objective, BrandModeCorner, BrandModeLine,
-	BrandModeTitle, HudTextCard, MenuObjective, TextMenuDescription, TextMenuHint,
-	TextMenuHintLabel, BRAND_NAME, HUD_TEXT_CARD_FACE_PX,
+	BRAND_NAME, BrandModeCorner, BrandModeLine, BrandModeTitle, HUD_TEXT_CARD_FACE_PX, HudTextCard,
+	MenuObjective, TextMenuDescription, TextMenuHint, TextMenuHintLabel, set_brand_mode_title,
+	set_description_for_menu, set_hint_for_menu, spawn_hud_text_card, spawn_hud_text_card_label,
+	spawn_menu_objective,
 };
 pub use loading::{
-	set_loading_explainer, set_loading_progress, sync_loading_bar_fill, LoadingBarFill,
-	LoadingExplainer, LoadingPanel, LoadingStack,
+	LoadingBarFill, LoadingExplainer, LoadingPanel, LoadingStack, set_loading_explainer,
+	set_loading_progress, sync_loading_bar_fill,
 };
 pub use single_select::{
-	apply_text_menu_nav, clear_menu_back_consumed, consume_screen_back,
-	emit_menu_activate_on_click, emit_menu_activate_on_enter, emit_menu_activate_on_nav,
-	emit_menu_focus, emit_screen_back_on_click, emit_screen_edit_on_click, navigate_text_menus,
+	ButtonWithSubtext, KeyboardMenuNav, MenuActivate, MenuBackConsumed, MenuFocus, MenuItemLocked,
+	MenuObjectiveKind, MenuObjectiveMarker, ScreenBack, ScreenBackPressed, ScreenEdit,
+	ScreenEditPressed, TextColumnAlign, TextColumnAnchor, TextCursorColumn, TextCursorMenu,
+	TextCursorRow, TextCursorScroll, TextCursorSlot, TextMenu, TextMenuColumn, TextMenuHeader,
+	TextMenuInputLock, TextMenuItem, TextMenuItemLabel, apply_text_menu_nav,
+	clear_menu_back_consumed, consume_screen_back, emit_menu_activate_on_click,
+	emit_menu_activate_on_enter, emit_menu_activate_on_nav, emit_menu_focus,
+	emit_screen_back_on_click, emit_screen_edit_on_click, navigate_text_menus,
 	republish_menu_activate, screen_back_scene, screen_edit_scene,
 	scroll_text_cursor_selection_into_view, select_text_menu_item_on_over, sync_screen_edit_cursor,
-	sync_text_cursor_icons, sync_text_menu_item_colors, ButtonWithSubtext, KeyboardMenuNav,
-	MenuActivate, MenuBackConsumed, MenuFocus, MenuItemLocked, MenuObjectiveKind,
-	MenuObjectiveMarker, ScreenBack, ScreenBackPressed, ScreenEdit, ScreenEditPressed,
-	TextColumnAlign, TextColumnAnchor, TextCursorColumn, TextCursorMenu, TextCursorRow,
-	TextCursorScroll, TextCursorSlot, TextMenu, TextMenuColumn, TextMenuHeader, TextMenuInputLock,
-	TextMenuItem, TextMenuItemLabel,
+	sync_text_cursor_icons, sync_text_menu_item_colors,
 };
 pub use spin_reveal::{
-	SpinRevealCover, SpinRevealFace, SpinRevealPayload, SpinRevealSlot, SpinRevealViewport,
 	SPIN_REVEAL_SECS, SPIN_REVEAL_SLOT_SIZE, SPIN_REVEAL_TILE_HEIGHT, SPIN_REVEAL_TILE_WIDTH,
+	SpinRevealCover, SpinRevealFace, SpinRevealPayload, SpinRevealSlot, SpinRevealViewport,
 };
 pub use theme::{
 	BARLOW_BLACK, BARLOW_REGULAR, BARLOW_SEMIBOLD, DESCRIPTION_PANE_LEFT_PERCENT, HEADER_FONT_SIZE,
-	ITEM_FONT_SIZE, LOADING_ICON_SIZE, MENU_CLEAR, OBJECTIVE_MARKER_FONT_SIZE,
+	ITEM_FONT_SIZE, LOADING_ICON_SIZE, MENU_CLEAR, NOTO_SANS_REGULAR, OBJECTIVE_MARKER_FONT_SIZE,
 	PANEL_BLOCK_FONT_SIZE, PANEL_GROUP_FONT_SIZE, PANEL_HEADER_FONT_SIZE, PANEL_ITEM_FONT_SIZE,
 	PANEL_LABEL_FONT_SIZE, PANEL_ROW_GAP, TEXT_LIGHT_BLUE, TEXT_LIME, TEXT_PURPLE, TEXT_SALMON,
 	TEXT_YELLOW, TEXT_YELLOW_FAINT, TEXT_YELLOW_FAINT_FOCUS, TEXT_YELLOW_HOVER,

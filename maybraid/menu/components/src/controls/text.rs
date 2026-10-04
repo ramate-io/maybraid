@@ -10,8 +10,8 @@ use crate::theme::{
 	PANEL_ITEM_FONT_SIZE, TEXT_YELLOW, TEXT_YELLOW_FAINT,
 };
 
-use super::display::menu_display_name;
 use super::HudFonts;
+use super::display::menu_display_name;
 
 /// Largest panel title: section chrome and overlay picker headers.
 pub fn spawn_panel_title(parent: &mut ChildSpawnerCommands, fonts: &HudFonts, label: &str) {
