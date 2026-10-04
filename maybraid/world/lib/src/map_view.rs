@@ -6,8 +6,10 @@ use durham::Durham;
 use game_commands::command::TextEntryFocus;
 use geneva::{LanguageOverlay, NameKey};
 use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
-use player::Player;
-use player_camera::{CameraLookSuppressed, CameraPovLocked, PlayerCameraSystems};
+use player::CameraFollow;
+use player_camera::{
+	CameraController, CameraLookSuppressed, CameraPovLocked, FollowCamera, PlayerCameraSystems,
+};
 use poi_intelligence::{PoiId, PoiRecord, PoiRegistry};
 use richmond::Richmond;
 use terrain_layer_model::{OnTerrain, TerrainView};
@@ -108,14 +110,13 @@ impl Plugin for WorldMapViewPlugin {
 			.add_systems(Startup, spawn_map_name_hud)
 			.add_systems(
 				Update,
-				(toggle_map_view, sync_map_camera_locks, pan_map_view)
+				(toggle_map_view, sync_map_camera_locks, pan_map_view, stamp_map_camera)
 					.chain()
 					.in_set(WorldMapSet::Toggle),
 			)
-			.add_systems(Update, apply_map_camera.after(PlayerCameraSystems::Apply))
 			.add_systems(
 				Update,
-				(sync_map_name_pins, draw_highlighted_poi).after(apply_map_camera),
+				(sync_map_name_pins, draw_highlighted_poi).after(PlayerCameraSystems::Apply),
 			);
 	}
 }
@@ -141,7 +142,8 @@ pub(crate) fn toggle_map_view(
 	text_focus: Res<TextEntryFocus>,
 	mut map: ResMut<WorldMapView>,
 	mut intents: MessageReader<CharacterIntent>,
-	players: Query<&Transform, (With<VegetationPlayer>, With<Player>)>,
+	players: Query<&Transform, With<VegetationPlayer>>,
+	followers: Query<&Transform, (With<CameraFollow>, Without<Camera3d>)>,
 ) {
 	if text_focus.0 || *mode != PlaygroundMode::Character {
 		return;
@@ -166,10 +168,15 @@ pub(crate) fn toggle_map_view(
 	if !open || map.open || !gameplay.0 {
 		return;
 	}
-	let Ok(player) = players.single() else {
+	let Some(xz) = players
+		.iter()
+		.next()
+		.or_else(|| followers.iter().next())
+		.map(|transform| transform.translation.xz())
+	else {
 		return;
 	};
-	map.open_at(player.translation.xz(), false);
+	map.open_at(xz, false);
 }
 
 fn sync_map_camera_locks(
@@ -213,21 +220,19 @@ fn pan_map_view(
 		(map.height * (1.0 - zoom * 0.6 * time.delta_secs())).clamp(MIN_MAP_HEIGHT, MAX_MAP_HEIGHT);
 }
 
-fn apply_map_camera(
+fn stamp_map_camera(
 	map: Res<WorldMapView>,
 	surface: TerrainView<Urbanization<Richmond<OnTerrain<Durham>>>>,
-	mut cameras: Query<&mut Transform, With<Camera3d>>,
+	mut cameras: Query<&mut CameraController, With<FollowCamera>>,
 ) {
-	if !map.open {
-		return;
-	}
-	let Ok(mut transform) = cameras.single_mut() else {
-		return;
-	};
 	let ground = surface.height_or_fallback(map.focus);
-	let look = Vec3::new(map.focus.x, ground, map.focus.y);
-	let eye = look + Vec3::Y * map.height.max(MIN_MAP_HEIGHT);
-	*transform = Transform::from_translation(eye).looking_at(look, Vec3::Z);
+	for mut controller in &mut cameras {
+		if map.open {
+			controller.enter_map(map.focus, map.height, ground);
+		} else {
+			controller.exit_map();
+		}
+	}
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -236,7 +241,7 @@ fn sync_map_name_pins(
 	overlay: Res<LanguageOverlay>,
 	registry: Option<Res<PoiRegistry>>,
 	pending: Option<Res<WorldPlayerRespawnState>>,
-	camera: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
+	camera: Query<(&Camera, &GlobalTransform), (With<Camera3d>, With<FollowCamera>)>,
 	surface: TerrainView<Urbanization<Richmond<OnTerrain<Durham>>>>,
 	hud: Query<Entity, With<MapNameHud>>,
 	mut pins: Query<(
@@ -490,7 +495,7 @@ mod tests {
 	}
 
 	#[test]
-	fn opening_the_map_strips_camera_follow() -> anyhow::Result<()> {
+	fn opening_the_map_keeps_camera_follow() -> anyhow::Result<()> {
 		let mut world = World::new();
 		world.insert_resource(PlaygroundMode::Character);
 		world.insert_resource(WorldGameplayEnabled(true));
@@ -500,7 +505,6 @@ mod tests {
 		let player = world
 			.spawn((
 				VegetationPlayer,
-				Player,
 				CameraFollow,
 				Transform::from_xyz(12.0, 3.0, -8.0),
 			))
@@ -518,7 +522,7 @@ mod tests {
 		assert!(map.open);
 		assert_eq!(map.focus, Vec2::new(12.0, -8.0));
 		assert!(!map.close_locked);
-		assert!(world.get::<CameraFollow>(player).is_none());
+		assert!(world.get::<CameraFollow>(player).is_some());
 		Ok(())
 	}
 

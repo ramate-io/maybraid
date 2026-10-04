@@ -79,12 +79,11 @@ pub(crate) fn sync_camera_mode(
 	mode: Res<PlaygroundMode>,
 	gameplay: Res<WorldGameplayEnabled>,
 	inventory_edit: Option<Res<InventoryEditCameraFollow>>,
-	map: Option<Res<WorldMapView>>,
-	players: Query<(Entity, Has<CameraFollow>), (With<VegetationPlayer>, With<Player>)>,
+	players: Query<(Entity, Has<CameraFollow>), With<VegetationPlayer>>,
 ) {
+	// Map is [`CameraPov::Map`] on the follow camera, not a detached eye.
 	let follow = *mode == PlaygroundMode::Character
-		&& (gameplay.0 || inventory_edit.is_some_and(|edit| edit.0))
-		&& !map.is_some_and(|map| map.open);
+		&& (gameplay.0 || inventory_edit.is_some_and(|edit| edit.0));
 	for (entity, following) in &players {
 		if follow && !following {
 			commands.entity(entity).insert(CameraFollow);
@@ -99,7 +98,7 @@ pub(crate) fn sync_inventory_edit_look(
 	map: Option<Res<WorldMapView>>,
 	mut locked: Option<ResMut<CameraPovLocked>>,
 	mut suppressed: Option<ResMut<CameraLookSuppressed>>,
-	mut cameras: Query<&mut CameraController, With<Camera3d>>,
+	mut cameras: Query<&mut CameraController, With<FollowCamera>>,
 ) {
 	let map_open = map.is_some_and(|map| map.open);
 	if let Some(locked) = locked.as_deref_mut() {
@@ -108,10 +107,13 @@ pub(crate) fn sync_inventory_edit_look(
 	if let Some(suppressed) = suppressed.as_deref_mut() {
 		suppressed.0 = map_open;
 	}
-	if !edit.0 {
+	if !edit.0 || map_open {
 		return;
 	}
 	for mut controller in &mut cameras {
+		if controller.pov.is_map() {
+			continue;
+		}
 		controller.pov = CameraPov::ThirdPerson;
 		controller.focus = 0.0;
 		controller.ads = 0.0;

@@ -190,7 +190,7 @@ impl Plugin for WorldIntelligencePlugin {
 /// Copy ADS / bore poses into the focus mailbox. Firearm control stays out of the bake.
 fn hip_fov(follow: &FollowCamera, controller: &CameraController) -> f32 {
 	match controller.pov {
-		CameraPov::ThirdPerson => follow.third_person_fov,
+		CameraPov::ThirdPerson | CameraPov::Map => follow.third_person_fov,
 		CameraPov::FirstPerson => follow.first_person_fov,
 	}
 }
@@ -337,14 +337,7 @@ mod tests {
 		app.world_mut().spawn((
 			LodViewer,
 			FollowCamera { first_person_fov: base_fov, third_person_fov: base_fov, ..default() },
-			CameraController {
-				yaw: 0.0,
-				pitch: 0.0,
-				pov: CameraPov::FirstPerson,
-				focus: 0.0,
-				ads: 0.0,
-				focus_blend: 0.0,
-			},
+			CameraController { pov: CameraPov::FirstPerson, ..default() },
 			Projection::Perspective(PerspectiveProjection {
 				fov: current_fov,
 				aspect_ratio: 16.0 / 9.0,
