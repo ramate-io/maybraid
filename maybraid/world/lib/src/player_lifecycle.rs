@@ -297,7 +297,10 @@ fn respawn_world_player(
 		return;
 	}
 	if !live_player.is_empty() {
-		close_respawn_map(&mut map);
+		// Only the death picker is locked. A player-toggled map must stay open.
+		if map.close_locked {
+			map.close();
+		}
 		state.pending = None;
 		return;
 	}
@@ -407,7 +410,9 @@ fn open_respawn_picker(
 }
 
 fn close_respawn_map(map: &mut WorldMapView) {
-	map.close();
+	if map.close_locked {
+		map.close();
+	}
 }
 
 fn nearest_candidate(candidates: &[PoiId], registry: &PoiRegistry, focus: Vec2) -> Option<PoiId> {
@@ -633,6 +638,25 @@ mod tests {
 			character_items::Inventory::default(),
 		));
 		world
+	}
+
+	#[test]
+	fn a_live_player_does_not_close_an_unlocked_map() -> anyhow::Result<()> {
+		let mut world = respawn_world(0.0, true, true);
+		world.spawn(VegetationPlayer);
+		world.insert_resource(WorldMapView {
+			open: true,
+			focus: Vec2::new(3.0, 5.0),
+			height: crate::map_view::DEFAULT_MAP_HEIGHT,
+			close_locked: false,
+		});
+		world
+			.run_system_once(respawn_world_player)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(world.resource::<WorldMapView>().open);
+		assert!(!world.resource::<WorldMapView>().close_locked);
+		assert!(world.resource::<WorldPlayerRespawnState>().pending.is_none());
+		Ok(())
 	}
 
 	#[test]
