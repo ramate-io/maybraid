@@ -141,7 +141,7 @@ pub(crate) fn sample<A: Animation<R>, R: HumanoidRig>(
 	(pose, anim.effects_for(rig, progress))
 }
 
-fn sample_pose<A: Animation<R>, R: HumanoidRig>(
+pub(crate) fn sample_pose<A: Animation<R>, R: HumanoidRig>(
 	anim: &A,
 	rig: &mut R,
 	rest: &RigPose,

@@ -38,12 +38,7 @@ impl<R: HumanoidRig> TwoFootedJump<R> {
 		self.apply_for_inner(rig, elapsed, Some(cache));
 	}
 
-	fn apply_for_inner(
-		&self,
-		rig: &mut R,
-		elapsed: f32,
-		cache: Option<&mut JumpTransitionCache>,
-	) {
+	fn apply_for_inner(&self, rig: &mut R, elapsed: f32, cache: Option<&mut JumpTransitionCache>) {
 		let lengths = rig.segment_lengths();
 		let (segment, local) = self.segment(lengths, elapsed);
 		let timings = self.timings(lengths);
@@ -56,8 +51,8 @@ impl<R: HumanoidRig> TwoFootedJump<R> {
 			}
 			JumpSegment::Spring => {
 				let spring = Spring::<R>::default();
-				let transition =
-					Transition::from_pose(spring, RigPose::new()).with_curve(TransitionCurve::SmoothStep);
+				let transition = Transition::from_pose(spring, RigPose::new())
+					.with_curve(TransitionCurve::SmoothStep);
 				let _ = apply_jump_transition(
 					cache,
 					JumpTransitionKey::SpringFromSquat,
@@ -239,7 +234,11 @@ mod tests {
 		}
 	}
 
-	fn sample_jump_uncached(jump: &TwoFootedJump<HumanoidV0Rig>, rig: &mut HumanoidV0Rig, elapsed: f32) {
+	fn sample_jump_uncached(
+		jump: &TwoFootedJump<HumanoidV0Rig>,
+		rig: &mut HumanoidV0Rig,
+		elapsed: f32,
+	) {
 		jump.apply_for(rig, elapsed);
 	}
 
@@ -342,7 +341,7 @@ mod tests {
 	#[test]
 	fn cached_jump_matches_uncached_across_segments() -> anyhow::Result<()> {
 		let jump = default_jump();
-		let lengths = jump.timings(Default::default());
+		let lengths = HumanoidV0Rig::imported().segment_lengths();
 		let timings = jump.timings(lengths);
 		let checkpoints = [
 			timings.squat_descent_duration * 0.5,
@@ -380,7 +379,7 @@ mod tests {
 	#[test]
 	fn cached_jump_matches_uncached_after_restart() -> anyhow::Result<()> {
 		let jump = default_jump();
-		let lengths = jump.timings(Default::default());
+		let lengths = HumanoidV0Rig::imported().segment_lengths();
 		let timings = jump.timings(lengths);
 		let mid_air = timings.spring_end() + timings.air_duration * 0.5;
 
@@ -402,7 +401,7 @@ mod tests {
 	#[test]
 	fn cached_jump_preserves_unrelated_bone_motion_during_spring() -> anyhow::Result<()> {
 		let jump = default_jump();
-		let lengths = jump.timings(Default::default());
+		let lengths = HumanoidV0Rig::imported().segment_lengths();
 		let timings = jump.timings(lengths);
 		let spring_start = timings.squat_end();
 		let spring_end = spring_start + timings.spring_duration * 0.4;
@@ -446,23 +445,30 @@ mod tests {
 	#[ignore = "microbench: run with --release -- --ignored"]
 	fn bench_jump_transition_capture() -> anyhow::Result<()> {
 		let jump = default_jump();
-		let lengths = jump.timings(Default::default());
+		let lengths = HumanoidV0Rig::imported().segment_lengths();
 		let timings = jump.timings(lengths);
 		let spring_elapsed = timings.squat_end() + timings.spring_duration * 0.5;
 		const RUNS: u32 = 200;
 		const WARMUP: u32 = 20;
+
+		fn median(samples: &mut [std::time::Duration]) -> std::time::Duration {
+			samples.sort();
+			samples[samples.len() / 2]
+		}
 
 		let mut uncached_rig = HumanoidV0Rig::imported();
 		seed_bind_pose(&mut uncached_rig);
 		for _ in 0..WARMUP {
 			sample_jump_uncached(&jump, &mut uncached_rig, spring_elapsed);
 		}
-		let mut min_uncached = std::time::Duration::MAX;
+		let mut uncached_samples = Vec::with_capacity(RUNS as usize);
 		for _ in 0..RUNS {
 			let start = Instant::now();
 			black_box(sample_jump_uncached(&jump, &mut uncached_rig, spring_elapsed));
-			min_uncached = min_uncached.min(start.elapsed());
+			uncached_samples.push(start.elapsed());
 		}
+		let min_uncached = *uncached_samples.iter().min().expect("samples");
+		let median_uncached = median(&mut uncached_samples);
 
 		let mut cached_rig = HumanoidV0Rig::imported();
 		seed_bind_pose(&mut cached_rig);
@@ -471,18 +477,43 @@ mod tests {
 			cache.invalidate();
 			sample_jump_cached(&jump, &mut cached_rig, spring_elapsed, &mut cache);
 		}
-		let mut min_cached = std::time::Duration::MAX;
+		let mut cached_first_samples = Vec::with_capacity(RUNS as usize);
 		for _ in 0..RUNS {
 			cache.invalidate();
 			let start = Instant::now();
 			black_box(sample_jump_cached(&jump, &mut cached_rig, spring_elapsed, &mut cache));
-			min_cached = min_cached.min(start.elapsed());
+			cached_first_samples.push(start.elapsed());
 		}
+		let min_cached_first = *cached_first_samples.iter().min().expect("samples");
+		let median_cached_first = median(&mut cached_first_samples);
+
+		let mut cached_hit_samples = Vec::with_capacity(RUNS as usize);
+		for _ in 0..RUNS {
+			let start = Instant::now();
+			black_box(sample_jump_cached(&jump, &mut cached_rig, spring_elapsed, &mut cache));
+			cached_hit_samples.push(start.elapsed());
+		}
+		let min_cached_hit = *cached_hit_samples.iter().min().expect("samples");
+		let median_cached_hit = median(&mut cached_hit_samples);
 
 		eprintln!(
-			"jump spring segment (1 rig, uncached vs cached): uncached min={:?}, cached min={:?}",
+			"jump spring segment (1 HumanoidV0Rig, TwoFootedJump::apply_for, {} runs):",
+			RUNS
+		);
+		eprintln!(
+			"  uncached (capture every frame): min={:?} median={:?}",
 			min_uncached,
-			min_cached
+			median_uncached,
+		);
+		eprintln!(
+			"  cached first frame (segment entry capture): min={:?} median={:?}",
+			min_cached_first,
+			median_cached_first,
+		);
+		eprintln!(
+			"  cached hit (reuse masked source): min={:?} median={:?}",
+			min_cached_hit,
+			median_cached_hit,
 		);
 		Ok(())
 	}

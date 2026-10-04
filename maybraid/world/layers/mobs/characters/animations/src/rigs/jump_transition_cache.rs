@@ -5,12 +5,14 @@
 //! rig each frame. Caching stores only bones the source animation changes so unrelated
 //! motion on other bones is not frozen.
 
-use bevy::prelude::Name;
-use character_rigs::{humanoid::HumanoidRig, RigPose};
+use character_rigs::{humanoid::HumanoidRig, Name, RigPose};
 
 use crate::animations::JumpSegment;
-use crate::rigs::mix::{pose_from_animation, snapshot_pose};
+use crate::rigs::mix::{restore_pose, sample_pose, snapshot_pose};
 use crate::Animation;
+
+/// Offset applied when probing whether an animation overwrites a bone independent of rest.
+const PROBE_DELTA: f32 = 0.37;
 
 /// Which jump segment transition source is cached.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -27,20 +29,27 @@ pub struct MaskedTransitionSource {
 }
 
 impl MaskedTransitionSource {
-	/// Capture an animation sample, keeping only bones that differ from the incoming rig.
+	/// Capture an animation endpoint, caching only bones the animation overwrites.
+	///
+	/// Bones the animation leaves rest-dependent (untouched or layered) are omitted so
+	/// [`Self::merge_into_current`] can keep following the live rig each frame.
 	pub fn capture<A, R>(anim: &A, rig: &mut R, progress: f32) -> Self
 	where
 		A: Animation<R>,
 		R: HumanoidRig,
 	{
 		let rest = snapshot_pose(rig);
-		let sampled = pose_from_animation(anim, rig, progress);
+		let probe = probe_rest(&rest);
+		let from_rest = sample_pose(anim, rig, &rest, progress);
+		let from_probe = sample_pose(anim, rig, &probe, progress);
+		restore_pose(rig, &rest);
+
 		let mut bones = RigPose::new();
 		for bone in rig.animation_bones() {
-			let after = sampled.get(&bone);
-			let before = rest.get(&bone);
-			if after != before {
-				if let Some(pose) = after {
+			let at_rest = from_rest.get(&bone);
+			let at_probe = from_probe.get(&bone);
+			if at_rest == at_probe {
+				if let Some(pose) = at_rest {
 					bones.insert(pose.clone());
 				}
 			}
@@ -61,6 +70,20 @@ impl MaskedTransitionSource {
 		}
 		merged
 	}
+}
+
+fn probe_rest(rest: &RigPose) -> RigPose {
+	let mut probe = RigPose::new();
+	for (name, bone) in rest.iter() {
+		probe.insert(character_rigs::BonePose {
+			name: name.clone(),
+			transform: bone.transform,
+			swing: bone.swing + PROBE_DELTA,
+			flex: bone.flex + PROBE_DELTA,
+			twist: bone.twist + PROBE_DELTA,
+		});
+	}
+	probe
 }
 
 /// Per-character cache for jump transition sources. Invalidate on segment change rules below.
@@ -122,8 +145,8 @@ mod tests {
 	use character_rigs::{rigs::humanoid_v0::HumanoidV0Rig, Side};
 
 	use super::*;
-	use crate::animations::{Fall, Spring, Squat};
-	use crate::rigs::mix::seed_bind_pose;
+	use crate::animations::{Fall, Squat};
+	use crate::rigs::mix::{pose_from_animation, seed_bind_pose};
 
 	#[test]
 	fn masked_capture_omits_unrelated_bones() -> anyhow::Result<()> {
@@ -139,7 +162,11 @@ mod tests {
 			twist: shoulder.twist,
 		});
 
-		let masked = MaskedTransitionSource::capture(&Squat::<HumanoidV0Rig>::for_loop(1.0, 1.0), &mut rig, 0.0);
+		let masked = MaskedTransitionSource::capture(
+			&Squat::<HumanoidV0Rig>::for_loop(1.0, 1.0),
+			&mut rig,
+			0.0,
+		);
 		assert!(
 			!masked.masked_bones().any(|name| *name == shoulder_name),
 			"squat@0 should not mask unrelated shoulder motion"
@@ -152,20 +179,26 @@ mod tests {
 	fn merge_into_current_tracks_live_unrelated_bones() -> anyhow::Result<()> {
 		let mut rig = HumanoidV0Rig::imported();
 		seed_bind_pose(&mut rig);
-		let masked = MaskedTransitionSource::capture(&Spring::<HumanoidV0Rig>::default(), &mut rig, 1.0);
-		let shoulder_name = rig.arm(Side::Left).shoulder.name.clone();
-		let shoulder = rig.pose().get(&shoulder_name).expect("shoulder").clone();
+		let masked =
+			MaskedTransitionSource::capture(&Fall::<HumanoidV0Rig>::default(), &mut rig, 1.0);
+		let root_name = rig.spine().root.name.clone();
+		assert!(
+			!masked.masked_bones().any(|name| *name == root_name),
+			"fall spread should not mask the root"
+		);
+		let root = rig.pose().get(&root_name).expect("root").clone();
+		let live_swing = root.swing + 0.4;
 		rig.pose_mut().insert(character_rigs::BonePose {
-			name: shoulder.name.clone(),
-			transform: shoulder.transform,
-			swing: shoulder.swing + 0.4,
-			flex: shoulder.flex,
-			twist: shoulder.twist,
+			name: root.name.clone(),
+			transform: root.transform,
+			swing: live_swing,
+			flex: root.flex,
+			twist: root.twist,
 		});
 
 		let merged = masked.merge_into_current(&rig);
-		let merged_shoulder = merged.get(&shoulder_name).expect("merged shoulder");
-		assert!((merged_shoulder.swing - (shoulder.swing)).abs() < 1e-5);
+		let merged_root = merged.get(&root_name).expect("merged root");
+		assert!((merged_root.swing - live_swing).abs() < 1e-5);
 		Ok(())
 	}
 
@@ -185,7 +218,8 @@ mod tests {
 		seed_bind_pose(&mut rig);
 		Fall::<HumanoidV0Rig>::default().apply(&mut rig, 0.5);
 		let per_frame = pose_from_animation(&Fall::<HumanoidV0Rig>::default(), &mut rig, 1.0);
-		let masked = MaskedTransitionSource::capture(&Fall::<HumanoidV0Rig>::default(), &mut rig, 1.0);
+		let masked =
+			MaskedTransitionSource::capture(&Fall::<HumanoidV0Rig>::default(), &mut rig, 1.0);
 		let merged = masked.merge_into_current(&rig);
 
 		for bone in rig.animation_bones() {

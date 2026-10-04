@@ -590,7 +590,9 @@ fn sample_humanoid(
 		}
 		AnimClip::Walk(walk) => sample_split(&walk, rig, progress, write_bones, write_effects),
 		AnimClip::Run(run) => sample_split(&run, rig, progress, write_bones, write_effects),
-		AnimClip::Jump(params) => sample_jump(params, rig, progress, write_bones, write_effects, jump_transition),
+		AnimClip::Jump(params) => {
+			sample_jump(params, rig, progress, write_bones, write_effects, jump_transition)
+		}
 		AnimClip::Leap(leap) => {
 			sample_split(&UprightLeap::from_leap(&leap), rig, progress, write_bones, write_effects)
 		}
@@ -802,7 +804,9 @@ mod tests {
 			rig.pose.insert(BonePose::new(RigName::from(bone), Transform::IDENTITY));
 		}
 
-		let effects = sample_humanoid(AnimClip::Still, &mut rig, 0.25, true, true);
+		let mut jump_transition = JumpTransitionCache::default();
+		let effects =
+			sample_humanoid(AnimClip::Still, &mut rig, 0.25, true, true, &mut jump_transition);
 		assert!(effects.r#move.is_none());
 		let left = rig.pose.get(&RigName::from("shoulder.L")).expect("left");
 		assert!(left.swing.abs() > 0.0);
@@ -823,7 +827,9 @@ mod tests {
 		use character_rigs::Side;
 
 		let mut rig = HumanoidV0Rig::imported();
-		let effects = sample_humanoid(AnimClip::squat(), &mut rig, 1.0, true, true);
+		let mut jump_transition = JumpTransitionCache::default();
+		let effects =
+			sample_humanoid(AnimClip::squat(), &mut rig, 1.0, true, true, &mut jump_transition);
 		if effects.r#move.is_some() {
 			return Err(anyhow!("held squat must not Effects.move"));
 		}
@@ -850,7 +856,9 @@ mod tests {
 		use character_rigs::humanoid::HumanoidRig;
 
 		let mut rig = HumanoidV0Rig::imported();
-		let effects = sample_humanoid(AnimClip::prone(), &mut rig, 1.0, true, true);
+		let mut jump_transition = JumpTransitionCache::default();
+		let effects =
+			sample_humanoid(AnimClip::prone(), &mut rig, 1.0, true, true, &mut jump_transition);
 		if effects.r#move.is_some() {
 			return Err(anyhow!("held prone must not Effects.move"));
 		}
