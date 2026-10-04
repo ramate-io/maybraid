@@ -7079,6 +7079,7 @@ dependencies = [
  "maybraid-sky",
  "maybraid-weather",
  "meandering-intelligence",
+ "menu-components",
  "mob-characters",
  "mob-layer-model",
  "mob-layer-presentation",

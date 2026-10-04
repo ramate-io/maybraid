@@ -49,6 +49,7 @@ maybraid-game-mode-training-ground = { workspace = true }
 material-ref = { workspace = true }
 maybraid-character-controller = { workspace = true }
 maybraid-input = { workspace = true }
+menu-components = { workspace = true }
 maybraid-skill-map = { workspace = true }
 maybraid-sky = { workspace = true }
 maybraid-weather = { workspace = true }

@@ -6,6 +6,7 @@ use durham::Durham;
 use game_commands::command::TextEntryFocus;
 use geneva::{LanguageOverlay, NameKey};
 use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
+use menu_components::BARLOW_REGULAR;
 use player::CameraFollow;
 use player_camera::{
 	CameraController, CameraLookSuppressed, CameraPovLocked, FollowCamera, PlayerCameraSystems,
@@ -26,7 +27,7 @@ const MAX_MAP_HEIGHT: f32 = 2_400.0;
 const MAP_PIN_LIMIT: usize = 48;
 const MAP_PIN_WIDTH: f32 = 160.0;
 
-/// Pannable overhead view of the current location.
+/// Overhead view of the current location. Focus moves with spawn-location picks only.
 #[derive(Resource, Debug, PartialEq)]
 pub struct WorldMapView {
 	pub open: bool,
@@ -37,12 +38,7 @@ pub struct WorldMapView {
 
 impl Default for WorldMapView {
 	fn default() -> Self {
-		Self {
-			open: false,
-			focus: Vec2::ZERO,
-			height: DEFAULT_MAP_HEIGHT,
-			close_locked: false,
-		}
+		Self { open: false, focus: Vec2::ZERO, height: DEFAULT_MAP_HEIGHT, close_locked: false }
 	}
 }
 
@@ -67,6 +63,9 @@ impl WorldMapView {
 pub(crate) enum WorldMapSet {
 	Toggle,
 }
+
+#[derive(Resource, Clone)]
+struct MapLabelFont(Handle<Font>);
 
 #[derive(Component)]
 struct MapNameHud;
@@ -121,7 +120,8 @@ impl Plugin for WorldMapViewPlugin {
 	}
 }
 
-fn spawn_map_name_hud(mut commands: Commands) {
+fn spawn_map_name_hud(mut commands: Commands, assets: Res<AssetServer>) {
+	commands.insert_resource(MapLabelFont(assets.load(BARLOW_REGULAR)));
 	commands.spawn((
 		Name::new("map-name-hud"),
 		MapNameHud,
@@ -202,19 +202,15 @@ fn pan_map_view(
 	if !map.open {
 		return;
 	}
-	let mut stick = Vec2::ZERO;
 	let mut zoom_in = 0.0;
 	let mut zoom_out = 0.0;
 	for intent in intents.read() {
 		match *intent {
-			CharacterIntent::Move(value) | CharacterIntent::Look(value) => stick += value,
 			CharacterIntent::Focus(value) => zoom_in += value,
 			CharacterIntent::Ads(value) => zoom_out += value,
 			_ => {}
 		}
 	}
-	let speed = map.height * 1.4 * time.delta_secs();
-	map.focus += Vec2::new(stick.x, stick.y) * speed;
 	let zoom = (zoom_in - zoom_out).clamp(-1.0, 1.0);
 	map.height =
 		(map.height * (1.0 - zoom * 0.6 * time.delta_secs())).clamp(MIN_MAP_HEIGHT, MAX_MAP_HEIGHT);
@@ -239,6 +235,7 @@ fn stamp_map_camera(
 fn sync_map_name_pins(
 	map: Res<WorldMapView>,
 	overlay: Res<LanguageOverlay>,
+	fonts: Res<MapLabelFont>,
 	registry: Option<Res<PoiRegistry>>,
 	pending: Option<Res<WorldPlayerRespawnState>>,
 	camera: Query<(&Camera, &GlobalTransform), (With<Camera3d>, With<FollowCamera>)>,
@@ -250,6 +247,7 @@ fn sync_map_name_pins(
 		&mut Node,
 		&mut BackgroundColor,
 		&mut Text,
+		&mut TextFont,
 		&mut Visibility,
 	)>,
 	mut commands: Commands,
@@ -260,7 +258,7 @@ fn sync_map_name_pins(
 	};
 	if !map.open {
 		*hud_vis = Visibility::Hidden;
-		for (_, _, _, _, _, mut visibility) in &mut pins {
+		for (_, _, _, _, _, _, mut visibility) in &mut pins {
 			*visibility = Visibility::Hidden;
 		}
 		return;
@@ -270,7 +268,7 @@ fn sync_map_name_pins(
 		return;
 	};
 	let Ok((camera, camera_transform)) = camera.single() else {
-		for (_, _, _, _, _, mut visibility) in &mut pins {
+		for (_, _, _, _, _, _, mut visibility) in &mut pins {
 			*visibility = Visibility::Hidden;
 		}
 		return;
@@ -279,7 +277,8 @@ fn sync_map_name_pins(
 	let highlighted = pending.as_deref().and_then(|state| state.pending.as_ref()?.highlighted);
 	let wanted = map_pin_targets(&map, &overlay, registry.as_deref(), pending.as_deref());
 	let mut assigned = Vec::new();
-	for (pin_entity, pin, mut node, mut background, mut text, mut visibility) in &mut pins {
+	for (pin_entity, pin, mut node, mut background, mut text, mut font, mut visibility) in &mut pins
+	{
 		let Some(target) = wanted.iter().find(|target| target.id == pin.target) else {
 			commands.entity(pin_entity).despawn();
 			continue;
@@ -293,6 +292,7 @@ fn sync_map_name_pins(
 		place_map_pin(&mut node, screen);
 		background.0 = pin_color(target.id, highlighted, on_screen);
 		text.0 = target.label.clone();
+		*font = map_label_text_font(&fonts);
 		*visibility = Visibility::Visible;
 		assigned.push(target.id);
 	}
@@ -312,13 +312,17 @@ fn sync_map_name_pins(
 				node: map_pin_node(screen),
 				background: BackgroundColor(pin_color(target.id, highlighted, on_screen)),
 				text: Text::new(target.label.clone()),
-				font: TextFont { font_size: FontSize::Px(13.0), ..default() },
+				font: map_label_text_font(&fonts),
 				color: TextColor(Color::WHITE),
 				pickable: Pickable::IGNORE,
 				visibility: Visibility::Visible,
 			});
 		});
 	}
+}
+
+fn map_label_text_font(font: &MapLabelFont) -> TextFont {
+	TextFont { font: font.0.clone().into(), font_size: FontSize::Px(13.0), ..default() }
 }
 
 struct MapPinWanted {
@@ -419,10 +423,7 @@ pub(crate) fn label_for_poi(poi: &PoiRecord, overlay: &LanguageOverlay) -> Strin
 		.unwrap_or_else(|| format!("{:?}", poi.kind))
 }
 
-fn pin_world(
-	surface: &TerrainView<Urbanization<Richmond<OnTerrain<Durham>>>>,
-	xz: Vec2,
-) -> Vec3 {
+fn pin_world(surface: &TerrainView<Urbanization<Richmond<OnTerrain<Durham>>>>, xz: Vec2) -> Vec3 {
 	Vec3::new(xz.x, surface.height_or_fallback(xz) + 2.0, xz.y)
 }
 
@@ -503,11 +504,7 @@ mod tests {
 		world.init_resource::<WorldMapView>();
 		world.init_resource::<Messages<CharacterIntent>>();
 		let player = world
-			.spawn((
-				VegetationPlayer,
-				CameraFollow,
-				Transform::from_xyz(12.0, 3.0, -8.0),
-			))
+			.spawn((VegetationPlayer, CameraFollow, Transform::from_xyz(12.0, 3.0, -8.0)))
 			.id();
 
 		write_toggle(&mut world);
@@ -545,6 +542,26 @@ mod tests {
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		assert!(world.resource::<WorldMapView>().open);
 		assert!(world.resource::<WorldMapView>().close_locked);
+		Ok(())
+	}
+
+	#[test]
+	fn stick_intents_do_not_pan_the_map() -> anyhow::Result<()> {
+		let mut world = World::new();
+		world.init_resource::<Time>();
+		world.insert_resource(WorldMapView {
+			open: true,
+			focus: Vec2::new(10.0, 20.0),
+			height: DEFAULT_MAP_HEIGHT,
+			close_locked: false,
+		});
+		world.init_resource::<Messages<CharacterIntent>>();
+		world.write_message(CharacterIntent::Move(Vec2::X));
+		world.write_message(CharacterIntent::Look(Vec2::Y));
+		world
+			.run_system_once(pan_map_view)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert_eq!(world.resource::<WorldMapView>().focus, Vec2::new(10.0, 20.0));
 		Ok(())
 	}
 
