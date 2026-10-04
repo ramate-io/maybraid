@@ -1,15 +1,15 @@
 //! Debug overlay of tile bounds and assigned names. Not a mesh stream.
 
-use bevy::math::Vec2;
+use bevy::math::{Rect, Vec2};
 use bevy::prelude::{App, IntoScheduleConfigs, Local, Res, ResMut, Resource, Update};
 use language_layer_model::Language;
 use lod::lod_present_gate_open;
 use terrain_layer_model::TerrainModel;
 
+use crate::Geneva;
 use crate::index::{LanguageIndex, NameKey};
 use crate::name::AssignedName;
 use crate::sources::NamedWorld;
-use crate::Geneva;
 
 /// Channel marker for language generate / present keep.
 #[derive(Debug, Clone, Copy, Default)]
@@ -36,8 +36,10 @@ pub struct LargeTileOverlay {
 pub struct NamedOverlay {
 	pub key: NameKey,
 	pub surface: String,
+	pub english: Vec<String>,
 	pub provisional: bool,
 	pub xz: Vec2,
+	pub extent: Rect,
 }
 
 impl LanguageOverlay {
@@ -57,8 +59,10 @@ impl LanguageOverlay {
 				Some(NamedOverlay {
 					key,
 					surface: assigned.name.surface.clone(),
+					english: assigned.name.english.clone(),
 					provisional: assigned.provisional,
 					xz: index.anchor(key)?,
+					extent: index.extent(key)?,
 				})
 			})
 			.collect();

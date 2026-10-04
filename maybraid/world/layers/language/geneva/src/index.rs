@@ -3,7 +3,7 @@
 use std::collections::{HashMap, VecDeque};
 
 use bevy::math::bounding::Aabb3d;
-use bevy::math::Vec2;
+use bevy::math::{Rect, Vec2};
 use bevy::prelude::Resource;
 use durham::GeographicFeatureId;
 use lod::gen::Id;
@@ -66,6 +66,7 @@ pub struct FeatureAssign<'a> {
 	pub world_seed: u64,
 	pub key: NameKey,
 	pub center: Vec2,
+	pub extent: Rect,
 	pub english: &'a [String],
 	pub revision: u64,
 	pub fingerprint: u64,
@@ -84,6 +85,7 @@ enum PendingAssign {
 	Feature {
 		key: NameKey,
 		center: Vec2,
+		extent: Rect,
 		english: Vec<String>,
 		revision: u64,
 		fingerprint: u64,
@@ -99,6 +101,8 @@ pub struct LanguageIndex {
 	names: HashMap<NameKey, AssignedName>,
 	/// World XZ for each assigned name. Kept off [`AssignedName`] so that type stays `Eq`.
 	anchors: HashMap<NameKey, Vec2>,
+	/// XZ extent of the named cell or large tile. Used by the map to label intersections.
+	extents: HashMap<NameKey, Rect>,
 	host_languages: HashMap<Id, u64>,
 	pending: VecDeque<PendingAssign>,
 	source_fingerprint: u64,
@@ -111,6 +115,7 @@ impl LanguageIndex {
 		self.large.clear();
 		self.names.clear();
 		self.anchors.clear();
+		self.extents.clear();
 		self.host_languages.clear();
 		self.pending.clear();
 		self.source_fingerprint = 0;
@@ -120,6 +125,14 @@ impl LanguageIndex {
 	/// World XZ stored when the name was assigned.
 	pub fn anchor(&self, key: NameKey) -> Option<Vec2> {
 		self.anchors.get(&key).copied()
+	}
+
+	/// XZ extent stored when the name was assigned, or the large-tile rect for a region.
+	pub fn extent(&self, key: NameKey) -> Option<Rect> {
+		self.extents.get(&key).copied().or_else(|| match key {
+			NameKey::Region { ix, iz } => Some(region_extent(ix, iz)),
+			_ => None,
+		})
 	}
 
 	pub fn large_tile(&self, ix: i32, iz: i32) -> Option<&LargeTile> {
@@ -194,6 +207,7 @@ impl LanguageIndex {
 			self.pending.push_back(PendingAssign::Feature {
 				key: feature.key,
 				center,
+				extent: xz_extent(feature.bounds),
 				english: feature.english.clone(),
 				revision: feature.revision,
 				fingerprint: feature.fingerprint,
@@ -205,6 +219,7 @@ impl LanguageIndex {
 			self.pending.push_back(PendingAssign::Feature {
 				key: place.key,
 				center: place.xz,
+				extent: Rect::from_center_size(place.xz, Vec2::splat(12.0)),
 				english: place.english.clone(),
 				revision: place.revision,
 				fingerprint: place.fingerprint,
@@ -245,6 +260,7 @@ impl LanguageIndex {
 			PendingAssign::Feature {
 				key,
 				center,
+				extent,
 				english,
 				revision,
 				fingerprint,
@@ -254,6 +270,7 @@ impl LanguageIndex {
 				world_seed,
 				key,
 				center,
+				extent,
 				english: &english,
 				revision,
 				fingerprint,
@@ -301,6 +318,7 @@ impl LanguageIndex {
 			},
 		);
 		self.anchors.insert(key, region_anchor(ix, iz));
+		self.extents.insert(key, region_extent(ix, iz));
 		self.epoch = self.epoch.wrapping_add(1);
 		true
 	}
@@ -341,6 +359,7 @@ impl LanguageIndex {
 			},
 		);
 		self.anchors.insert(work.key, work.center);
+		self.extents.insert(work.key, work.extent);
 		self.epoch = self.epoch.wrapping_add(1);
 		true
 	}
@@ -457,8 +476,16 @@ fn id_bits(id: Id) -> u64 {
 }
 
 fn region_anchor(ix: i32, iz: i32) -> Vec2 {
+	region_extent(ix, iz).center()
+}
+
+fn region_extent(ix: i32, iz: i32) -> Rect {
 	let (ox, oz) = large_tile_origin(ix, iz);
-	Vec2::new(ox, oz) + Vec2::splat(LARGE_TILE * 0.5)
+	Rect::from_corners(Vec2::new(ox, oz), Vec2::new(ox + LARGE_TILE, oz + LARGE_TILE))
+}
+
+fn xz_extent(bounds: Aabb3d) -> Rect {
+	Rect::from_corners(Vec2::new(bounds.min.x, bounds.min.z), Vec2::new(bounds.max.x, bounds.max.z))
 }
 
 /// Default keep used when a mode enters and no camera has streamed yet.

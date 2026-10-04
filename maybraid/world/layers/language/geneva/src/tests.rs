@@ -230,12 +230,17 @@ fn overlay_copies_name_anchors() -> anyhow::Result<()> {
 		.find(|name| name.key == key)
 		.ok_or_else(|| anyhow::anyhow!("feature overlay"))?;
 	anyhow::ensure!((feature.xz - Vec2::new(15.0, 15.0)).length() < 1e-3);
+	anyhow::ensure!(feature.english == ["plateau".to_owned()]);
+	anyhow::ensure!((feature.extent.min - Vec2::new(10.0, 10.0)).length() < 1e-3);
+	anyhow::ensure!((feature.extent.max - Vec2::new(20.0, 20.0)).length() < 1e-3);
 	let region_name = overlay
 		.names
 		.iter()
 		.find(|name| matches!(name.key, NameKey::Region { ix: 0, iz: 0 }))
 		.ok_or_else(|| anyhow::anyhow!("region overlay"))?;
 	anyhow::ensure!((region_name.xz - Vec2::splat(LARGE_TILE * 0.5)).length() < 1e-3);
+	anyhow::ensure!((region_name.extent.min - Vec2::ZERO).length() < 1e-3);
+	anyhow::ensure!((region_name.extent.max - Vec2::splat(LARGE_TILE)).length() < 1e-3);
 	Ok(())
 }
 

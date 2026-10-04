@@ -4,7 +4,7 @@ use bevy::prelude::*;
 use bevy::text::FontSize;
 use durham::Durham;
 use game_commands::command::TextEntryFocus;
-use geneva::{LanguageOverlay, NameKey};
+use geneva::{LanguageOverlay, NameKey, NamedOverlay};
 use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
 use menu_components::{NOTO_SANS_REGULAR, TEXT_YELLOW};
 use player::CameraFollow;
@@ -92,10 +92,10 @@ struct MapNamePinBundle {
 	name: Name,
 	pin: MapNamePin,
 	node: Node,
-	background: BackgroundColor,
 	text: Text,
 	font: TextFont,
 	color: TextColor,
+	shadow: TextShadow,
 	pickable: Pickable,
 	visibility: Visibility,
 }
@@ -252,9 +252,9 @@ fn sync_map_name_pins(
 		Entity,
 		&MapNamePin,
 		&mut Node,
-		&mut BackgroundColor,
 		&mut Text,
 		&mut TextFont,
+		&mut TextColor,
 		&mut Visibility,
 	)>,
 	mut commands: Commands,
@@ -284,22 +284,21 @@ fn sync_map_name_pins(
 	let highlighted = pending.as_deref().and_then(|state| state.pending.as_ref()?.highlighted);
 	let wanted = map_pin_targets(&map, &overlay, registry.as_deref(), pending.as_deref());
 	let mut assigned = Vec::new();
-	for (pin_entity, pin, mut node, mut background, mut text, mut font, mut visibility) in &mut pins
-	{
+	for (pin_entity, pin, mut node, mut text, mut font, mut color, mut visibility) in &mut pins {
 		let Some(target) = wanted.iter().find(|target| target.id == pin.target) else {
 			commands.entity(pin_entity).despawn();
 			continue;
 		};
-		let Some((screen, on_screen)) =
+		let Some((screen, _)) =
 			project_mob_pin(camera, camera_transform, pin_world(&surface, target.xz))
 		else {
 			*visibility = Visibility::Hidden;
 			continue;
 		};
-		place_map_pin(&mut node, screen, target.size);
-		background.0 = pin_color(target.id, highlighted, on_screen);
+		place_map_pin(&mut node, screen, target.size, &target.label);
 		text.0 = target.label.clone();
 		*font = map_label_text_font(&fonts, target.size);
+		color.0 = label_ink(target.id, highlighted);
 		*visibility = Visibility::Visible;
 		assigned.push(target.id);
 	}
@@ -307,7 +306,7 @@ fn sync_map_name_pins(
 		if assigned.contains(&target.id) {
 			continue;
 		}
-		let Some((screen, on_screen)) =
+		let Some((screen, _)) =
 			project_mob_pin(camera, camera_transform, pin_world(&surface, target.xz))
 		else {
 			continue;
@@ -316,11 +315,11 @@ fn sync_map_name_pins(
 			root.spawn(MapNamePinBundle {
 				name: Name::new("map-name-pin"),
 				pin: MapNamePin { target: target.id },
-				node: map_pin_node(screen, target.size),
-				background: BackgroundColor(pin_color(target.id, highlighted, on_screen)),
+				node: map_pin_node(screen, target.size, &target.label),
 				text: Text::new(target.label.clone()),
 				font: map_label_text_font(&fonts, target.size),
-				color: TextColor(Color::WHITE),
+				color: TextColor(label_ink(target.id, highlighted)),
+				shadow: map_label_shadow(),
 				pickable: Pickable::IGNORE,
 				visibility: Visibility::Visible,
 			});
@@ -361,6 +360,7 @@ fn map_label_size(kind: MapLabelKind) -> f32 {
 struct MapPinWanted {
 	id: MapPinTarget,
 	xz: Vec2,
+	extent: Rect,
 	label: String,
 	size: f32,
 }
@@ -371,7 +371,7 @@ fn map_pin_targets(
 	registry: Option<&PoiRegistry>,
 	pending: Option<&WorldPlayerRespawnState>,
 ) -> Vec<MapPinWanted> {
-	let radius = (map.height * 1.5).clamp(120.0, 3_000.0);
+	let view = map_view_rect(map);
 	let mut wanted = Vec::new();
 	if let Some(pending) = pending.and_then(|state| state.pending.as_ref()) {
 		if pending.map_opened {
@@ -380,9 +380,11 @@ fn map_pin_targets(
 					let Some(record) = registry.get(*id) else {
 						continue;
 					};
+					let xz = record.position.xz();
 					wanted.push(MapPinWanted {
 						id: MapPinTarget::Poi(*id),
-						xz: record.position.xz(),
+						xz,
+						extent: Rect::from_center_size(xz, Vec2::splat(12.0)),
 						label: label_for_poi(record, overlay),
 						size: map_label_size(MapLabelKind::Poi),
 					});
@@ -393,27 +395,101 @@ fn map_pin_targets(
 	let mut names: Vec<_> = overlay
 		.names
 		.iter()
-		.filter(|name| name.xz.distance(map.focus) <= radius)
 		.filter(|name| name_visible(name.key, map.height))
+		.filter_map(|name| {
+			let kind = map_label_kind(MapPinTarget::Name(name.key));
+			let xz = label_anchor(name, view, kind)?;
+			Some((name, kind, xz))
+		})
 		.collect();
-	names.sort_by(|a, b| {
+	names.sort_by(|(a, _, a_xz), (b, _, b_xz)| {
 		name_rank(a.key)
 			.cmp(&name_rank(b.key))
-			.then_with(|| a.xz.distance(map.focus).total_cmp(&b.xz.distance(map.focus)))
+			.then_with(|| a_xz.distance(map.focus).total_cmp(&b_xz.distance(map.focus)))
 	});
-	for name in names.into_iter().take(MAP_PIN_LIMIT) {
-		if wanted.iter().any(|pin| pin.xz.distance(name.xz) < 8.0) {
+	for (name, kind, xz) in names.into_iter().take(MAP_PIN_LIMIT) {
+		if matches!(kind, MapLabelKind::Poi) && wanted.iter().any(|pin| pin.xz.distance(xz) < 8.0) {
 			continue;
 		}
 		wanted.push(MapPinWanted {
 			id: MapPinTarget::Name(name.key),
-			xz: name.xz,
-			label: name.surface.clone(),
-			size: map_label_size(map_label_kind(MapPinTarget::Name(name.key))),
+			xz,
+			extent: name.extent,
+			label: bilingual(&name.surface, &name.english),
+			size: map_label_size(kind),
 		});
 	}
 	wanted.truncate(MAP_PIN_LIMIT);
+	spread_extent_labels(&mut wanted, view);
 	wanted
+}
+
+fn map_view_rect(map: &WorldMapView) -> Rect {
+	let half = (map.height * 1.05).clamp(90.0, 2_200.0);
+	Rect::from_center_size(map.focus, Vec2::splat(half * 2.0))
+}
+
+fn label_anchor(name: &NamedOverlay, view: Rect, kind: MapLabelKind) -> Option<Vec2> {
+	match kind {
+		MapLabelKind::Poi => view.contains(name.xz).then_some(name.xz),
+		MapLabelKind::Region | MapLabelKind::Feature => {
+			let hit = view.intersect(name.extent);
+			if rect_empty(hit) {
+				return None;
+			}
+			let toward = clamp_into_rect(name.xz, hit);
+			Some(hit.center().lerp(toward, 0.55))
+		}
+	}
+}
+
+fn rect_empty(rect: Rect) -> bool {
+	rect.width() <= 0.0 || rect.height() <= 0.0
+}
+
+fn clamp_into_rect(point: Vec2, rect: Rect) -> Vec2 {
+	Vec2::new(point.x.clamp(rect.min.x, rect.max.x), point.y.clamp(rect.min.y, rect.max.y))
+}
+
+fn spread_extent_labels(wanted: &mut [MapPinWanted], view: Rect) {
+	let min_sep = (view.width().min(view.height()) * 0.18).max(24.0);
+	for first in 0..wanted.len() {
+		if matches!(map_label_kind(wanted[first].id), MapLabelKind::Poi) {
+			continue;
+		}
+		for second in (first + 1)..wanted.len() {
+			if matches!(map_label_kind(wanted[second].id), MapLabelKind::Poi) {
+				continue;
+			}
+			let delta = wanted[first].xz - wanted[second].xz;
+			let distance = delta.length();
+			let push = if distance < 1e-3 {
+				Vec2::new(min_sep * 0.5, 0.0)
+			} else if distance < min_sep {
+				delta.normalize() * ((min_sep - distance) * 0.5)
+			} else {
+				continue;
+			};
+			let first_hit = view.intersect(wanted[first].extent);
+			let second_hit = view.intersect(wanted[second].extent);
+			if !rect_empty(first_hit) {
+				wanted[first].xz = clamp_into_rect(wanted[first].xz + push, first_hit);
+			}
+			if !rect_empty(second_hit) {
+				wanted[second].xz = clamp_into_rect(wanted[second].xz - push, second_hit);
+			}
+		}
+	}
+}
+
+fn bilingual(surface: &str, english: &[String]) -> String {
+	let gloss: Vec<_> =
+		english.iter().map(|word| word.trim()).filter(|word| !word.is_empty()).collect();
+	if gloss.is_empty() {
+		surface.to_string()
+	} else {
+		format!("{surface} ({})", gloss.join(" "))
+	}
 }
 
 fn name_visible(key: NameKey, height: f32) -> bool {
@@ -443,7 +519,6 @@ pub(crate) fn label_for_poi(poi: &PoiRecord, overlay: &LanguageOverlay) -> Strin
 		.min_by(|a, b| {
 			a.xz.distance(poi.position.xz()).total_cmp(&b.xz.distance(poi.position.xz()))
 		})
-		.map(|name| name.surface.clone())
 		.or_else(|| {
 			overlay
 				.names
@@ -452,8 +527,8 @@ pub(crate) fn label_for_poi(poi: &PoiRecord, overlay: &LanguageOverlay) -> Strin
 				.min_by(|a, b| {
 					a.xz.distance(poi.position.xz()).total_cmp(&b.xz.distance(poi.position.xz()))
 				})
-				.map(|name| name.surface.clone())
 		})
+		.map(|name| bilingual(&name.surface, &name.english))
 		.unwrap_or_else(|| format!("{:?}", poi.kind))
 }
 
@@ -461,41 +536,42 @@ fn pin_world(surface: &TerrainView<Urbanization<Richmond<OnTerrain<Durham>>>>, x
 	Vec3::new(xz.x, surface.height_or_fallback(xz) + 2.0, xz.y)
 }
 
-fn pin_color(target: MapPinTarget, highlighted: Option<PoiId>, on_screen: bool) -> Color {
-	let selected = matches!(target, MapPinTarget::Poi(id) if Some(id) == highlighted);
-	let color = if selected {
-		Color::srgba(0.95, 0.72, 0.18, 0.92)
-	} else if matches!(target, MapPinTarget::Poi(_)) {
-		Color::srgba(0.18, 0.42, 0.62, 0.82)
-	} else {
-		Color::srgba(0.12, 0.16, 0.22, 0.78)
-	};
-	color.with_alpha(if on_screen { color.alpha() } else { 0.94 })
+fn label_ink(target: MapPinTarget, highlighted: Option<PoiId>) -> Color {
+	if matches!(target, MapPinTarget::Poi(id) if Some(id) == highlighted) {
+		return TEXT_YELLOW;
+	}
+	match map_label_kind(target) {
+		MapLabelKind::Region => Color::srgba(0.10, 0.08, 0.06, 0.94),
+		MapLabelKind::Feature => Color::srgba(0.14, 0.12, 0.09, 0.90),
+		MapLabelKind::Poi => Color::srgba(0.16, 0.14, 0.11, 0.86),
+	}
 }
 
-fn pin_width(size: f32) -> f32 {
-	(size * 8.5).clamp(72.0, 260.0)
+fn map_label_shadow() -> TextShadow {
+	TextShadow { offset: Vec2::new(1.0, 1.0), color: Color::srgba(0.98, 0.94, 0.86, 0.82) }
 }
 
-fn map_pin_node(screen: Vec2, size: f32) -> Node {
-	let width = pin_width(size);
+fn pin_width(size: f32, label: &str) -> f32 {
+	(size * 0.58 * label.chars().count() as f32 + 12.0).clamp(72.0, 520.0)
+}
+
+fn map_pin_node(screen: Vec2, size: f32, label: &str) -> Node {
+	let width = pin_width(size, label);
 	Node {
 		position_type: PositionType::Absolute,
 		left: Val::Px(screen.x - width * 0.5),
 		top: Val::Px(screen.y - size * 0.85),
 		width: Val::Px(width),
-		padding: UiRect::axes(Val::Px((size * 0.35).max(3.0)), Val::Px((size * 0.18).max(2.0))),
 		justify_content: JustifyContent::Center,
 		..default()
 	}
 }
 
-fn place_map_pin(node: &mut Node, screen: Vec2, size: f32) {
-	let width = pin_width(size);
+fn place_map_pin(node: &mut Node, screen: Vec2, size: f32, label: &str) {
+	let width = pin_width(size, label);
 	node.left = Val::Px(screen.x - width * 0.5);
 	node.top = Val::Px(screen.y - size * 0.85);
 	node.width = Val::Px(width);
-	node.padding = UiRect::axes(Val::Px((size * 0.35).max(3.0)), Val::Px((size * 0.18).max(2.0)));
 }
 
 fn sync_map_player_marker(
@@ -547,9 +623,7 @@ fn sync_map_player_marker(
 	});
 }
 
-fn hide_player_markers(
-	markers: &mut Query<(&mut Node, &mut Visibility), With<MapPlayerMarker>>,
-) {
+fn hide_player_markers(markers: &mut Query<(&mut Node, &mut Visibility), With<MapPlayerMarker>>) {
 	for (_, mut visibility) in markers.iter_mut() {
 		*visibility = Visibility::Hidden;
 	}
@@ -730,6 +804,38 @@ mod tests {
 			map_label_kind(MapPinTarget::Name(NameKey::Region { ix: 0, iz: 0 })),
 			MapLabelKind::Region
 		);
+	}
+
+	#[test]
+	fn bilingual_label_appends_english() {
+		assert_eq!(bilingual("ʃin", &["ridge".into()]), "ʃin (ridge)");
+		assert_eq!(bilingual("ʃin", &[String::new()]), "ʃin");
+	}
+
+	#[test]
+	fn region_label_sits_in_the_view_not_at_the_centroid() {
+		let map = WorldMapView {
+			open: true,
+			focus: Vec2::new(100.0, 80.0),
+			height: DEFAULT_MAP_HEIGHT,
+			close_locked: false,
+		};
+		let overlay = LanguageOverlay {
+			names: vec![NamedOverlay {
+				key: NameKey::Region { ix: 0, iz: 0 },
+				surface: "ʃin".into(),
+				english: vec!["ridge".into()],
+				provisional: true,
+				xz: Vec2::splat(12_500.0),
+				extent: Rect::from_corners(Vec2::ZERO, Vec2::splat(25_000.0)),
+			}],
+			..Default::default()
+		};
+		let wanted = map_pin_targets(&map, &overlay, None, None);
+		assert_eq!(wanted.len(), 1);
+		assert!(map_view_rect(&map).contains(wanted[0].xz));
+		assert!(wanted[0].xz.distance(Vec2::splat(12_500.0)) > 1_000.0);
+		assert_eq!(wanted[0].label, "ʃin (ridge)");
 	}
 
 	#[test]
