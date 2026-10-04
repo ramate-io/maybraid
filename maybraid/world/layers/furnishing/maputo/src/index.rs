@@ -3,7 +3,6 @@
 use std::collections::{HashMap, HashSet};
 
 use bevy::math::bounding::Aabb3d;
-use bevy::math::Vec3;
 use bevy::prelude::*;
 use building_components::{FurnitureNode, Placement};
 use lod::gen::{GenerationScheme, Id, OriginalId, SpatialIndex, StorageStatus, TrackedId, Version};
@@ -86,15 +85,15 @@ impl FurnitureIndex {
 		self.development_slots.retain(|id, _| live.contains(id));
 		self.slots.clear();
 		for (id, version) in tracked {
-			let cached = self
-				.development_slots
-				.entry(id)
-				.or_insert_with(|| CachedDevelopmentSlots { version: Version(0), slots: Vec::new() });
+			let cached = self.development_slots.entry(id).or_insert_with(|| {
+				CachedDevelopmentSlots { version: Version(0), slots: Vec::new() }
+			});
 			if cached.version != version {
 				cached.slots = expand(id);
 				cached.version = version;
 			}
-			self.slots.extend(cached.slots.iter().filter(|slot| slot_in_region(slot, region)).cloned());
+			self.slots
+				.extend(cached.slots.iter().filter(|slot| slot_in_region(slot, region)).cloned());
 		}
 		self.slots_fingerprint = fingerprint;
 		self.slots_region = Some(region);
@@ -159,9 +158,10 @@ fn placement_match(left: &Placement, right: &Placement) -> bool {
 
 fn slots_match(left: &[FurnitureNode], right: &[FurnitureNode]) -> bool {
 	left.len() == right.len()
-		&& left.iter().zip(right).all(|(a, b)| {
-			a.geometry == b.geometry && placement_match(&a.placement, &b.placement)
-		})
+		&& left
+			.iter()
+			.zip(right)
+			.all(|(a, b)| a.geometry == b.geometry && placement_match(&a.placement, &b.placement))
 }
 
 impl SpatialIndex<FurnitureCell> for FurnitureIndex {
@@ -249,6 +249,7 @@ pub(crate) fn same_slots(existing: &FurnitureCell, cell: &FurnitureCell) -> bool
 mod tests {
 	use super::*;
 	use crate::cell::xz_radius_aabb;
+	use bevy::math::Vec3;
 
 	fn test_lod<'a>(identity: &'a Transform, bounds: &'a Aabb3d) -> LodRef<'a> {
 		LodRef {
@@ -372,11 +373,9 @@ mod tests {
 		let keep = Id::from_cell(Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE));
 		let leave = Id::from_cell(Aabb3d::from_min_max(Vec3::splat(10.0), Vec3::splat(11.0)));
 		let region = xz_radius_aabb(Vec3::ZERO, 40.0);
-		index.refresh_slots(
-			vec![(keep, Version(1)), (leave, Version(1))],
-			region,
-			|_| vec![FurnitureNode::chair(Placement::IDENTITY)],
-		);
+		index.refresh_slots(vec![(keep, Version(1)), (leave, Version(1))], region, |_| {
+			vec![FurnitureNode::chair(Placement::IDENTITY)]
+		});
 		assert_eq!(index.development_slots.len(), 2);
 		index.refresh_slots(vec![(keep, Version(1))], region, |_| {
 			panic!("kept development is already cached")

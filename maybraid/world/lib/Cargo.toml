@@ -28,7 +28,6 @@ evasion-intelligence = { workspace = true }
 firearm-intelligence = { workspace = true }
 firearm-user = { workspace = true }
 furniture-assemblies = { workspace = true }
-furniture-shaders = { workspace = true }
 furnishing-layer-model = { workspace = true }
 furnishing-layer-presentation = { workspace = true }
 geneva = { workspace = true }
@@ -47,6 +46,7 @@ lod-avian = { workspace = true }
 maybraid-game-mode-discover = { workspace = true }
 maybraid-game-mode-training-ground = { workspace = true }
 material-ref = { workspace = true }
+world-materials = { workspace = true }
 maybraid-character-controller = { workspace = true }
 maybraid-input = { workspace = true }
 maybraid-skill-map = { workspace = true }
@@ -66,7 +66,6 @@ movement-realization = { workspace = true }
 npc-intelligence = { workspace = true }
 poi-intelligence = { workspace = true }
 world-player = { workspace = true }
-building-shaders = { workspace = true }
 richmond = { workspace = true }
 urbanization-cells = { workspace = true }
 routing-intelligence = { workspace = true }

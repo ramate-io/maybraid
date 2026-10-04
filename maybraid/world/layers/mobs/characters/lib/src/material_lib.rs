@@ -58,8 +58,8 @@ impl MaterialLib for FaceMaterialLib<'_> {
 				let handle = self.resolve_face(material_ref);
 				commands
 					.entity(entity)
-					.remove::<MeshMaterial3d<StandardMaterial>>()
-					.insert(MeshMaterial3d(handle));
+					.try_remove::<MeshMaterial3d<StandardMaterial>>()
+					.try_insert(MeshMaterial3d(handle));
 				true
 			}
 			_ => false,
@@ -103,8 +103,8 @@ impl MaterialLib for ClothingMaterialLib<'_> {
 				let handle = self.resolve_clothing(material_ref);
 				commands
 					.entity(entity)
-					.remove::<MeshMaterial3d<StandardMaterial>>()
-					.insert(MeshMaterial3d(handle));
+					.try_remove::<MeshMaterial3d<StandardMaterial>>()
+					.try_insert(MeshMaterial3d(handle));
 				true
 			}
 			_ => false,
