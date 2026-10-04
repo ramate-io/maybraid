@@ -24,7 +24,7 @@ pub use english::{
 pub use index::{LanguageConfig, LanguageIndex, LanguageWorldSeed, NameKey};
 pub use model::Geneva;
 pub use name::{AssignedName, PlaceName};
-pub use present::{LanguageLodChan, LanguageOverlay};
+pub use present::{LanguageLodChan, LanguageOverlay, NamedOverlay};
 pub use sources::{NamedFeature, NamedPlace, NamedWorld};
 pub use stream::install_language_stream;
 pub use tiles::{

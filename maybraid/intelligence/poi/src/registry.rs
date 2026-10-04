@@ -187,22 +187,16 @@ impl PoiRegistry {
 		self.choose_in(center, NearbyQuery::weighted(radius), interests, excluded, seed)
 	}
 
-	/// Choose a local/global POI inside [`NearbyQuery`].
-	///
-	/// Candidates closer than `min_radius` on XZ are dropped. `excluded` IDs
-	/// are dropped while another candidate remains. [`NearbyChoice::Weighted`]
-	/// uses interest, salience, and proximity; [`NearbyChoice::Nearest`] takes
-	/// the closest remaining XZ pose.
-	pub fn choose_in(
+	/// Local and global POIs inside [`NearbyQuery`], minus the inner hole and `excluded`.
+	pub fn nearby_in(
 		&self,
 		center: Vec3,
 		query: NearbyQuery,
 		interests: &PoiInterests,
 		excluded: &[PoiId],
-		seed: u64,
-	) -> Option<PoiRecord> {
+	) -> Vec<PoiRecord> {
 		if interests.is_empty() || !center.is_finite() || !query.radius.is_finite() {
-			return None;
+			return Vec::new();
 		}
 		let radius = query.radius.clamp(0.0, MAX_LOCAL_QUERY_RADIUS);
 		let min_radius = query.min_radius.max(0.0);
@@ -217,13 +211,37 @@ impl PoiRegistry {
 		candidates.retain(|candidate| xz_distance(center, candidate.position) >= min_radius);
 		candidates.sort_by_key(|candidate| candidate.id);
 		Self::drop_excluded(&mut candidates, excluded);
+		candidates
+	}
+
+	/// Choose a local/global POI inside [`NearbyQuery`].
+	///
+	/// Candidates closer than `min_radius` on XZ are dropped. `excluded` IDs
+	/// are dropped while another candidate remains. [`NearbyChoice::Weighted`]
+	/// uses interest, salience, and proximity; [`NearbyChoice::Nearest`] takes
+	/// the closest remaining XZ pose.
+	pub fn choose_in(
+		&self,
+		center: Vec3,
+		query: NearbyQuery,
+		interests: &PoiInterests,
+		excluded: &[PoiId],
+		seed: u64,
+	) -> Option<PoiRecord> {
+		let candidates = self.nearby_in(center, query, interests, excluded);
 		match query.choice {
 			NearbyChoice::Nearest => candidates.into_iter().min_by(|a, b| {
 				xz_distance(center, a.position)
 					.total_cmp(&xz_distance(center, b.position))
 					.then_with(|| a.id.cmp(&b.id))
 			}),
-			NearbyChoice::Weighted => choose_weighted(center, radius, interests, candidates, seed),
+			NearbyChoice::Weighted => choose_weighted(
+				center,
+				query.radius.clamp(0.0, MAX_LOCAL_QUERY_RADIUS),
+				interests,
+				candidates,
+				seed,
+			),
 		}
 	}
 

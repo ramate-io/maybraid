@@ -1,0 +1,567 @@
+//! Overhead map camera and place-name pins. One `Camera3d`, not a minimap.
+
+use bevy::prelude::*;
+use bevy::text::FontSize;
+use durham::Durham;
+use game_commands::command::TextEntryFocus;
+use geneva::{LanguageOverlay, NameKey};
+use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
+use player::Player;
+use player_camera::{CameraLookSuppressed, CameraPovLocked, PlayerCameraSystems};
+use poi_intelligence::{PoiId, PoiRecord, PoiRegistry};
+use richmond::Richmond;
+use terrain_layer_model::{OnTerrain, TerrainView};
+use urbanization_layer_model::Urbanization;
+use world_player::{Player as VegetationPlayer, PlaygroundMode};
+
+use crate::control::{InventoryEditCameraFollow, WorldGameplayEnabled};
+use crate::player_lifecycle::WorldPlayerRespawnState;
+use crate::ui::{place_pin, project_mob_pin};
+
+pub const DEFAULT_MAP_HEIGHT: f32 = 420.0;
+const MIN_MAP_HEIGHT: f32 = 80.0;
+const MAX_MAP_HEIGHT: f32 = 2_400.0;
+const MAP_PIN_LIMIT: usize = 48;
+const MAP_PIN_WIDTH: f32 = 160.0;
+
+/// Pannable overhead view of the current location.
+#[derive(Resource, Debug, PartialEq)]
+pub struct WorldMapView {
+	pub open: bool,
+	pub focus: Vec2,
+	pub height: f32,
+	pub close_locked: bool,
+}
+
+impl Default for WorldMapView {
+	fn default() -> Self {
+		Self {
+			open: false,
+			focus: Vec2::ZERO,
+			height: DEFAULT_MAP_HEIGHT,
+			close_locked: false,
+		}
+	}
+}
+
+impl WorldMapView {
+	pub fn open_at(&mut self, focus: Vec2, close_locked: bool) {
+		self.open = true;
+		self.focus = focus;
+		self.height = self.height.clamp(MIN_MAP_HEIGHT, MAX_MAP_HEIGHT);
+		if self.height < MIN_MAP_HEIGHT + 1.0 {
+			self.height = DEFAULT_MAP_HEIGHT;
+		}
+		self.close_locked = close_locked;
+	}
+
+	pub fn close(&mut self) {
+		self.open = false;
+		self.close_locked = false;
+	}
+}
+
+#[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub(crate) enum WorldMapSet {
+	Toggle,
+}
+
+#[derive(Component)]
+struct MapNameHud;
+
+#[derive(Component)]
+struct MapNamePin {
+	target: MapPinTarget,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum MapPinTarget {
+	Name(NameKey),
+	Poi(PoiId),
+}
+
+#[derive(Bundle)]
+struct MapNamePinBundle {
+	name: Name,
+	pin: MapNamePin,
+	node: Node,
+	background: BackgroundColor,
+	text: Text,
+	font: TextFont,
+	color: TextColor,
+	pickable: Pickable,
+	visibility: Visibility,
+}
+
+pub struct WorldMapViewPlugin;
+
+impl Plugin for WorldMapViewPlugin {
+	fn build(&self, app: &mut App) {
+		app.init_resource::<WorldMapView>()
+			.init_resource::<LanguageOverlay>()
+			.configure_sets(
+				Update,
+				WorldMapSet::Toggle
+					.after(CharacterControlSystems)
+					.before(PlayerCameraSystems::Look),
+			)
+			.add_systems(Startup, spawn_map_name_hud)
+			.add_systems(
+				Update,
+				(toggle_map_view, sync_map_camera_locks, pan_map_view)
+					.chain()
+					.in_set(WorldMapSet::Toggle),
+			)
+			.add_systems(Update, apply_map_camera.after(PlayerCameraSystems::Apply))
+			.add_systems(
+				Update,
+				(sync_map_name_pins, draw_highlighted_poi).after(apply_map_camera),
+			);
+	}
+}
+
+fn spawn_map_name_hud(mut commands: Commands) {
+	commands.spawn((
+		Name::new("map-name-hud"),
+		MapNameHud,
+		Node {
+			position_type: PositionType::Absolute,
+			width: Val::Percent(100.0),
+			height: Val::Percent(100.0),
+			..default()
+		},
+		Pickable::IGNORE,
+		Visibility::Hidden,
+	));
+}
+
+pub(crate) fn toggle_map_view(
+	mode: Res<PlaygroundMode>,
+	gameplay: Res<WorldGameplayEnabled>,
+	text_focus: Res<TextEntryFocus>,
+	mut map: ResMut<WorldMapView>,
+	mut intents: MessageReader<CharacterIntent>,
+	players: Query<&Transform, (With<VegetationPlayer>, With<Player>)>,
+) {
+	if text_focus.0 || *mode != PlaygroundMode::Character {
+		return;
+	}
+	let mut open = false;
+	let mut close = false;
+	for intent in intents.read() {
+		match intent {
+			CharacterIntent::ToggleMap if map.open => close = true,
+			CharacterIntent::ToggleMap | CharacterIntent::OpenMap => open = true,
+			CharacterIntent::CloseMap => close = true,
+			_ => {}
+		}
+	}
+	if map.close_locked {
+		return;
+	}
+	if close && map.open {
+		map.close();
+		return;
+	}
+	if !open || map.open || !gameplay.0 {
+		return;
+	}
+	let Ok(player) = players.single() else {
+		return;
+	};
+	map.open_at(player.translation.xz(), false);
+}
+
+fn sync_map_camera_locks(
+	map: Res<WorldMapView>,
+	edit: Option<Res<InventoryEditCameraFollow>>,
+	mut locked: Option<ResMut<CameraPovLocked>>,
+	mut suppressed: Option<ResMut<CameraLookSuppressed>>,
+) {
+	let hold = map.open || edit.is_some_and(|edit| edit.0);
+	if let Some(locked) = locked.as_deref_mut() {
+		locked.0 = hold;
+	}
+	if let Some(suppressed) = suppressed.as_deref_mut() {
+		suppressed.0 = map.open;
+	}
+}
+
+fn pan_map_view(
+	time: Res<Time>,
+	mut map: ResMut<WorldMapView>,
+	mut intents: MessageReader<CharacterIntent>,
+) {
+	if !map.open {
+		return;
+	}
+	let mut stick = Vec2::ZERO;
+	let mut zoom_in = 0.0;
+	let mut zoom_out = 0.0;
+	for intent in intents.read() {
+		match *intent {
+			CharacterIntent::Move(value) | CharacterIntent::Look(value) => stick += value,
+			CharacterIntent::Focus(value) => zoom_in += value,
+			CharacterIntent::Ads(value) => zoom_out += value,
+			_ => {}
+		}
+	}
+	let speed = map.height * 1.4 * time.delta_secs();
+	map.focus += Vec2::new(stick.x, stick.y) * speed;
+	let zoom = (zoom_in - zoom_out).clamp(-1.0, 1.0);
+	map.height =
+		(map.height * (1.0 - zoom * 0.6 * time.delta_secs())).clamp(MIN_MAP_HEIGHT, MAX_MAP_HEIGHT);
+}
+
+fn apply_map_camera(
+	map: Res<WorldMapView>,
+	surface: TerrainView<Urbanization<Richmond<OnTerrain<Durham>>>>,
+	mut cameras: Query<&mut Transform, With<Camera3d>>,
+) {
+	if !map.open {
+		return;
+	}
+	let Ok(mut transform) = cameras.single_mut() else {
+		return;
+	};
+	let ground = surface.height_or_fallback(map.focus);
+	let look = Vec3::new(map.focus.x, ground, map.focus.y);
+	let eye = look + Vec3::Y * map.height.max(MIN_MAP_HEIGHT);
+	*transform = Transform::from_translation(eye).looking_at(look, Vec3::Z);
+}
+
+#[allow(clippy::too_many_arguments)]
+fn sync_map_name_pins(
+	map: Res<WorldMapView>,
+	overlay: Res<LanguageOverlay>,
+	registry: Option<Res<PoiRegistry>>,
+	pending: Option<Res<WorldPlayerRespawnState>>,
+	camera: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
+	surface: TerrainView<Urbanization<Richmond<OnTerrain<Durham>>>>,
+	hud: Query<Entity, With<MapNameHud>>,
+	mut pins: Query<(
+		Entity,
+		&MapNamePin,
+		&mut Node,
+		&mut BackgroundColor,
+		&mut Text,
+		&mut Visibility,
+	)>,
+	mut commands: Commands,
+	mut root: Query<&mut Visibility, (With<MapNameHud>, Without<MapNamePin>)>,
+) {
+	let Ok(mut hud_vis) = root.single_mut() else {
+		return;
+	};
+	if !map.open {
+		*hud_vis = Visibility::Hidden;
+		for (_, _, _, _, _, mut visibility) in &mut pins {
+			*visibility = Visibility::Hidden;
+		}
+		return;
+	}
+	*hud_vis = Visibility::Inherited;
+	let Ok(hud) = hud.single() else {
+		return;
+	};
+	let Ok((camera, camera_transform)) = camera.single() else {
+		for (_, _, _, _, _, mut visibility) in &mut pins {
+			*visibility = Visibility::Hidden;
+		}
+		return;
+	};
+
+	let highlighted = pending.as_deref().and_then(|state| state.pending.as_ref()?.highlighted);
+	let wanted = map_pin_targets(&map, &overlay, registry.as_deref(), pending.as_deref());
+	let mut assigned = Vec::new();
+	for (pin_entity, pin, mut node, mut background, mut text, mut visibility) in &mut pins {
+		let Some(target) = wanted.iter().find(|target| target.id == pin.target) else {
+			commands.entity(pin_entity).despawn();
+			continue;
+		};
+		let Some((screen, on_screen)) =
+			project_mob_pin(camera, camera_transform, pin_world(&surface, target.xz))
+		else {
+			*visibility = Visibility::Hidden;
+			continue;
+		};
+		place_map_pin(&mut node, screen);
+		background.0 = pin_color(target.id, highlighted, on_screen);
+		text.0 = target.label.clone();
+		*visibility = Visibility::Visible;
+		assigned.push(target.id);
+	}
+	for target in wanted {
+		if assigned.contains(&target.id) {
+			continue;
+		}
+		let Some((screen, on_screen)) =
+			project_mob_pin(camera, camera_transform, pin_world(&surface, target.xz))
+		else {
+			continue;
+		};
+		commands.entity(hud).with_children(|root| {
+			root.spawn(MapNamePinBundle {
+				name: Name::new("map-name-pin"),
+				pin: MapNamePin { target: target.id },
+				node: map_pin_node(screen),
+				background: BackgroundColor(pin_color(target.id, highlighted, on_screen)),
+				text: Text::new(target.label.clone()),
+				font: TextFont { font_size: FontSize::Px(13.0), ..default() },
+				color: TextColor(Color::WHITE),
+				pickable: Pickable::IGNORE,
+				visibility: Visibility::Visible,
+			});
+		});
+	}
+}
+
+struct MapPinWanted {
+	id: MapPinTarget,
+	xz: Vec2,
+	label: String,
+}
+
+fn map_pin_targets(
+	map: &WorldMapView,
+	overlay: &LanguageOverlay,
+	registry: Option<&PoiRegistry>,
+	pending: Option<&WorldPlayerRespawnState>,
+) -> Vec<MapPinWanted> {
+	let radius = (map.height * 1.5).clamp(120.0, 3_000.0);
+	let mut wanted = Vec::new();
+	if let Some(pending) = pending.and_then(|state| state.pending.as_ref()) {
+		if pending.map_opened {
+			if let Some(registry) = registry {
+				for id in &pending.candidates {
+					let Some(record) = registry.get(*id) else {
+						continue;
+					};
+					wanted.push(MapPinWanted {
+						id: MapPinTarget::Poi(*id),
+						xz: record.position.xz(),
+						label: label_for_poi(record, overlay),
+					});
+				}
+			}
+		}
+	}
+	let mut names: Vec<_> = overlay
+		.names
+		.iter()
+		.filter(|name| name.xz.distance(map.focus) <= radius)
+		.filter(|name| name_visible(name.key, map.height))
+		.collect();
+	names.sort_by(|a, b| {
+		name_rank(a.key)
+			.cmp(&name_rank(b.key))
+			.then_with(|| a.xz.distance(map.focus).total_cmp(&b.xz.distance(map.focus)))
+	});
+	for name in names.into_iter().take(MAP_PIN_LIMIT) {
+		if wanted.iter().any(|pin| pin.xz.distance(name.xz) < 8.0) {
+			continue;
+		}
+		wanted.push(MapPinWanted {
+			id: MapPinTarget::Name(name.key),
+			xz: name.xz,
+			label: name.surface.clone(),
+		});
+	}
+	wanted.truncate(MAP_PIN_LIMIT);
+	wanted
+}
+
+fn name_visible(key: NameKey, height: f32) -> bool {
+	match key {
+		NameKey::Place { .. } | NameKey::ProvisionalPlace { .. } => true,
+		NameKey::Urban(_) | NameKey::UrbanLeaf(_) => height >= 160.0,
+		NameKey::Grove(_) | NameKey::Forest(_) | NameKey::Geographic(_) => height >= 280.0,
+		NameKey::Region { .. } => height >= 700.0,
+	}
+}
+
+fn name_rank(key: NameKey) -> u8 {
+	match key {
+		NameKey::Place { .. } | NameKey::ProvisionalPlace { .. } => 0,
+		NameKey::Urban(_) | NameKey::UrbanLeaf(_) => 1,
+		NameKey::Grove(_) | NameKey::Forest(_) | NameKey::Geographic(_) => 2,
+		NameKey::Region { .. } => 3,
+	}
+}
+
+pub(crate) fn label_for_poi(poi: &PoiRecord, overlay: &LanguageOverlay) -> String {
+	overlay
+		.names
+		.iter()
+		.filter(|name| {
+			matches!(name.key, NameKey::Place { .. } | NameKey::ProvisionalPlace { .. })
+				&& name.xz.distance(poi.position.xz()) <= poi.arrival_radius.max(8.0)
+		})
+		.min_by(|a, b| {
+			a.xz.distance(poi.position.xz()).total_cmp(&b.xz.distance(poi.position.xz()))
+		})
+		.map(|name| name.surface.clone())
+		.or_else(|| {
+			overlay
+				.names
+				.iter()
+				.filter(|name| name.xz.distance(poi.position.xz()) <= 24.0)
+				.min_by(|a, b| {
+					a.xz.distance(poi.position.xz()).total_cmp(&b.xz.distance(poi.position.xz()))
+				})
+				.map(|name| name.surface.clone())
+		})
+		.unwrap_or_else(|| format!("{:?}", poi.kind))
+}
+
+fn pin_world(
+	surface: &TerrainView<Urbanization<Richmond<OnTerrain<Durham>>>>,
+	xz: Vec2,
+) -> Vec3 {
+	Vec3::new(xz.x, surface.height_or_fallback(xz) + 2.0, xz.y)
+}
+
+fn pin_color(target: MapPinTarget, highlighted: Option<PoiId>, on_screen: bool) -> Color {
+	let selected = matches!(target, MapPinTarget::Poi(id) if Some(id) == highlighted);
+	let color = if selected {
+		Color::srgba(0.95, 0.72, 0.18, 0.92)
+	} else if matches!(target, MapPinTarget::Poi(_)) {
+		Color::srgba(0.18, 0.42, 0.62, 0.82)
+	} else {
+		Color::srgba(0.12, 0.16, 0.22, 0.78)
+	};
+	color.with_alpha(if on_screen { color.alpha() } else { 0.94 })
+}
+
+fn map_pin_node(screen: Vec2) -> Node {
+	Node {
+		position_type: PositionType::Absolute,
+		left: Val::Px(screen.x - MAP_PIN_WIDTH * 0.5),
+		top: Val::Px(screen.y - 12.0),
+		width: Val::Px(MAP_PIN_WIDTH),
+		padding: UiRect::axes(Val::Px(6.0), Val::Px(3.0)),
+		justify_content: JustifyContent::Center,
+		..default()
+	}
+}
+
+fn place_map_pin(node: &mut Node, screen: Vec2) {
+	place_pin(node, screen);
+	node.left = Val::Px(screen.x - MAP_PIN_WIDTH * 0.5);
+}
+
+fn draw_highlighted_poi(
+	map: Res<WorldMapView>,
+	registry: Option<Res<PoiRegistry>>,
+	pending: Option<Res<WorldPlayerRespawnState>>,
+	mut gizmos: Gizmos,
+) {
+	if !map.open {
+		return;
+	}
+	let Some(id) = pending.and_then(|state| state.pending.as_ref()?.highlighted) else {
+		return;
+	};
+	let Some(record) = registry.and_then(|registry| registry.get(id).copied()) else {
+		return;
+	};
+	let radius = record.arrival_radius.max(4.0);
+	let mut points = Vec::with_capacity(33);
+	for index in 0..=32 {
+		let angle = index as f32 / 32.0 * std::f32::consts::TAU;
+		points.push(Vec3::new(
+			record.position.x + angle.cos() * radius,
+			record.position.y + 0.6,
+			record.position.z + angle.sin() * radius,
+		));
+	}
+	gizmos.linestrip(points, Color::srgb(0.95, 0.72, 0.18));
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use bevy::ecs::system::RunSystemOnce;
+	use game_commands::command::TextEntryFocus;
+	use player::CameraFollow;
+
+	fn write_toggle(world: &mut World) {
+		world.write_message(CharacterIntent::ToggleMap);
+	}
+
+	#[test]
+	fn opening_the_map_strips_camera_follow() -> anyhow::Result<()> {
+		let mut world = World::new();
+		world.insert_resource(PlaygroundMode::Character);
+		world.insert_resource(WorldGameplayEnabled(true));
+		world.insert_resource(TextEntryFocus(false));
+		world.init_resource::<WorldMapView>();
+		world.init_resource::<Messages<CharacterIntent>>();
+		let player = world
+			.spawn((
+				VegetationPlayer,
+				Player,
+				CameraFollow,
+				Transform::from_xyz(12.0, 3.0, -8.0),
+			))
+			.id();
+
+		write_toggle(&mut world);
+		world
+			.run_system_once(toggle_map_view)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		world
+			.run_system_once(crate::camera::sync_camera_mode)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+
+		let map = world.resource::<WorldMapView>();
+		assert!(map.open);
+		assert_eq!(map.focus, Vec2::new(12.0, -8.0));
+		assert!(!map.close_locked);
+		assert!(world.get::<CameraFollow>(player).is_none());
+		Ok(())
+	}
+
+	#[test]
+	fn locked_map_ignores_toggle() -> anyhow::Result<()> {
+		let mut world = World::new();
+		world.insert_resource(PlaygroundMode::Character);
+		world.insert_resource(WorldGameplayEnabled(true));
+		world.insert_resource(TextEntryFocus(false));
+		world.insert_resource(WorldMapView {
+			open: true,
+			focus: Vec2::ZERO,
+			height: DEFAULT_MAP_HEIGHT,
+			close_locked: true,
+		});
+		world.init_resource::<Messages<CharacterIntent>>();
+		write_toggle(&mut world);
+		world
+			.run_system_once(toggle_map_view)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(world.resource::<WorldMapView>().open);
+		assert!(world.resource::<WorldMapView>().close_locked);
+		Ok(())
+	}
+
+	#[test]
+	fn dpad_down_closes_an_unlocked_map() -> anyhow::Result<()> {
+		let mut world = World::new();
+		world.insert_resource(PlaygroundMode::Character);
+		world.insert_resource(WorldGameplayEnabled(true));
+		world.insert_resource(TextEntryFocus(false));
+		world.insert_resource(WorldMapView {
+			open: true,
+			focus: Vec2::ZERO,
+			height: DEFAULT_MAP_HEIGHT,
+			close_locked: false,
+		});
+		world.init_resource::<Messages<CharacterIntent>>();
+		world.write_message(CharacterIntent::CloseMap);
+		world
+			.run_system_once(toggle_map_view)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(!world.resource::<WorldMapView>().open);
+		Ok(())
+	}
+}

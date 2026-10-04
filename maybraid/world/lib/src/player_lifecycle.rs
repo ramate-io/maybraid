@@ -8,6 +8,8 @@ use damage::{DamageSystems, DespawnAfter, Downed};
 use durham::Durham;
 use firearm_user::FirearmUser;
 use firearms::WeaponTrigger;
+use maybraid_character_controller::CharacterIntent;
+use maybraid_input::{PadButton, VirtualPad};
 use mob_characters::{LOCAL_POI, URBAN_POI, VEGETATION_POI};
 use player::{CameraFollow, Player as MaybraidPlayer, PlayerUse};
 use poi_intelligence::{
@@ -27,13 +29,18 @@ use world_player::{
 use layer_stack::ActiveGenerationMode;
 
 use crate::control::strip_world_player_motor;
+use crate::map_view::WorldMapView;
 use crate::weapon::WorldPlayerAppearanceRequested;
 use crate::{WorldGameplayEnabled, WorldPlayerLoadout};
+
+const MAP_OPEN_SECS: f32 = 0.18;
 
 /// World-player downed duration, nearby POI scan, and replacement interests.
 #[derive(Resource, Clone, Debug, PartialEq)]
 pub struct WorldPlayerRespawnConfig {
 	pub delay_secs: f32,
+	/// After the glaze, wait this long for a map pick before `place_nearby`.
+	pub pick_timeout_secs: f32,
 	pub poi_radius: f32,
 	pub fallback: NearbyFallback,
 	pub interests: PoiInterests,
@@ -43,6 +50,7 @@ impl Default for WorldPlayerRespawnConfig {
 	fn default() -> Self {
 		Self {
 			delay_secs: 4.0,
+			pick_timeout_secs: 30.0,
 			poi_radius: DEFAULT_NEARBY_RADIUS,
 			fallback: NearbyFallback::new(60.0, 100.0),
 			interests: default_player_respawn_interests(),
@@ -58,18 +66,28 @@ impl WorldPlayerRespawnConfig {
 }
 
 #[derive(Debug)]
-struct PendingPlayerRespawn {
-	timer: Timer,
-	death_at: Vec3,
-	seed: u64,
-	origin: RespawnOrigin,
+pub(crate) struct PendingPlayerRespawn {
+	pub timer: Timer,
+	pub pick_timer: Timer,
+	pub death_at: Vec3,
+	pub seed: u64,
+	pub origin: RespawnOrigin,
+	pub candidates: Vec<PoiId>,
+	pub highlighted: Option<PoiId>,
+	pub map_opened: bool,
 }
 
 #[derive(Resource, Default)]
-struct WorldPlayerRespawnState {
-	pending: Option<PendingPlayerRespawn>,
+pub(crate) struct WorldPlayerRespawnState {
+	pub pending: Option<PendingPlayerRespawn>,
 	generation: u64,
 	last_poi: Option<PoiId>,
+}
+
+/// Discovery map picker confirmed this POI.
+#[derive(Message, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PlayerChoseRespawnPoi {
+	pub poi: PoiId,
 }
 
 #[derive(Component)]
@@ -89,7 +107,10 @@ impl Plugin for WorldPlayerLifecyclePlugin {
 	fn build(&self, app: &mut App) {
 		app.init_resource::<WorldPlayerRespawnConfig>()
 			.init_resource::<WorldPlayerRespawnState>()
+			.init_resource::<WorldMapView>()
 			.add_message::<PlayerLifeEnded>()
+			.add_message::<PlayerChoseRespawnPoi>()
+			.add_message::<CharacterIntent>()
 			.configure_sets(Update, PlayerLifeSet::Resolve)
 			.add_systems(Startup, spawn_player_death_glaze)
 			.add_systems(
@@ -100,7 +121,12 @@ impl Plugin for WorldPlayerLifecyclePlugin {
 			)
 			.add_systems(
 				Update,
-				respawn_world_player.after(PoiSystems::Index).in_set(PlayerLifeSet::Resolve),
+				(
+					drive_respawn_picker,
+					respawn_world_player.after(drive_respawn_picker),
+				)
+					.after(PoiSystems::Index)
+					.in_set(PlayerLifeSet::Resolve),
 			)
 			.add_systems(Update, sync_player_death_glaze.after(respawn_world_player));
 	}
@@ -127,6 +153,7 @@ fn spawn_player_death_glaze(mut commands: Commands) {
 
 fn sync_player_death_glaze(
 	state: Res<WorldPlayerRespawnState>,
+	map: Option<Res<WorldMapView>>,
 	mut glaze: Query<(&mut BackgroundColor, &mut Visibility), With<PlayerDeathGlaze>>,
 ) {
 	let Ok((mut color, mut visibility)) = glaze.single_mut() else {
@@ -137,7 +164,8 @@ fn sync_player_death_glaze(
 		*visibility = Visibility::Hidden;
 		return;
 	};
-	color.0 = death_glaze_color(death_glaze_alpha(&pending.timer));
+	let map_open = map.is_some_and(|map| map.open);
+	color.0 = death_glaze_color(death_glaze_alpha(&pending.timer, map_open));
 	*visibility = Visibility::Visible;
 }
 
@@ -157,9 +185,13 @@ fn queue_downed_world_player(
 		let ends_life = policies.as_deref().is_some_and(|policies| policies.respawn_ends_life(now));
 		state.pending = Some(PendingPlayerRespawn {
 			timer: Timer::from_seconds(config.delay_secs.max(0.0), TimerMode::Once),
+			pick_timer: Timer::from_seconds(config.pick_timeout_secs.max(0.0), TimerMode::Once),
 			death_at: transform.translation,
 			seed,
 			origin: RespawnOrigin::began(now, ends_life),
+			candidates: Vec::new(),
+			highlighted: None,
+			map_opened: false,
 		});
 		velocity.0 = Vec3::ZERO;
 		if let Some(firearm) = firearm {
@@ -187,6 +219,56 @@ fn queue_downed_world_player(
 	}
 }
 
+fn drive_respawn_picker(
+	pad: Option<Res<VirtualPad>>,
+	mut map: ResMut<WorldMapView>,
+	registry: Res<PoiRegistry>,
+	mut state: ResMut<WorldPlayerRespawnState>,
+	mut chosen: MessageWriter<PlayerChoseRespawnPoi>,
+	mut intents: MessageReader<CharacterIntent>,
+) {
+	if !map.open || !map.close_locked {
+		return;
+	}
+	let Some(pending) = state.pending.as_mut() else {
+		return;
+	};
+	if pending.candidates.is_empty() {
+		return;
+	}
+	let mut step = 0i32;
+	if let Some(pad) = pad.as_deref() {
+		if pad.just_pressed(PadButton::DpadUp) {
+			step -= 1;
+		}
+		if pad.just_pressed(PadButton::DpadDown) {
+			step += 1;
+		}
+	}
+	if step != 0 {
+		let len = pending.candidates.len() as i32;
+		let current = pending
+			.highlighted
+			.and_then(|id| pending.candidates.iter().position(|candidate| *candidate == id))
+			.unwrap_or(0) as i32;
+		let next = (current + step).rem_euclid(len) as usize;
+		pending.highlighted = pending.candidates.get(next).copied();
+		if let Some(record) = pending.highlighted.and_then(|id| registry.get(id)) {
+			map.focus = record.position.xz();
+		}
+	} else if let Some(nearest) = nearest_candidate(&pending.candidates, &registry, map.focus) {
+		pending.highlighted = Some(nearest);
+	}
+	let Some(poi) = pending.highlighted else {
+		return;
+	};
+	if intents.read().any(|intent| {
+		matches!(intent, CharacterIntent::Jump | CharacterIntent::StartInteraction)
+	}) {
+		chosen.write(PlayerChoseRespawnPoi { poi });
+	}
+}
+
 /// A mode that keeps the player respawns near a POI. A mode whose policy ends
 /// the life replaces the body where it fell and writes [`PlayerLifeEnded`].
 /// Leaving that mode mid-respawn replaces the body at once and ends nothing.
@@ -201,8 +283,10 @@ fn respawn_world_player(
 	surface: TerrainView<Urbanization<richmond::Richmond<OnTerrain<Durham>>>>,
 	mode: Option<Res<State<ActiveGenerationMode>>>,
 	mut ended: MessageWriter<PlayerLifeEnded>,
+	mut chosen: MessageReader<PlayerChoseRespawnPoi>,
 	live_player: Query<(), With<VegetationPlayer>>,
 	mut state: ResMut<WorldPlayerRespawnState>,
+	mut map: ResMut<WorldMapView>,
 	mut commands: Commands,
 	mut meshes: ResMut<Assets<Mesh>>,
 	mut materials: ResMut<Assets<StandardMaterial>>,
@@ -213,55 +297,158 @@ fn respawn_world_player(
 		return;
 	}
 	if !live_player.is_empty() {
+		close_respawn_map(&mut map);
 		state.pending = None;
 		return;
 	}
+	let last_poi = state.last_poi;
 	let Some(pending) = state.pending.as_mut() else {
 		return;
 	};
 	pending.timer.tick(time.delta());
-	if !pending.timer.is_finished() && !pending.origin.replace_immediately(now) {
-		return;
-	}
-	let death_at = pending.death_at;
-	let seed = pending.seed;
-	let origin = pending.origin;
-	state.pending = None;
 
-	let position = if origin.replace_in_place(now) {
+	if pending.origin.replace_in_place(now) {
+		if !pending.timer.is_finished() && !pending.origin.replace_immediately(now) {
+			return;
+		}
+		let death_at = pending.death_at;
+		let origin = pending.origin;
+		close_respawn_map(&mut map);
+		state.pending = None;
 		if origin.ends_life(now) {
 			ended.write(PlayerLifeEnded);
 		}
-		player_position_above_surface(death_at)
-	} else {
-		let placed = registry.place_nearby(
-			death_at,
-			config.nearby_query(),
-			&config.interests,
-			state.last_poi,
-			seed,
-			config.fallback,
+		finish_world_player_spawn(
+			&mut commands,
+			&mut meshes,
+			&mut materials,
+			locomotion.as_ref(),
+			loadout.as_deref(),
+			origin,
+			now,
+			player_position_above_surface(death_at),
 		);
-		let mut surface_point = placed.position;
-		let terrain_y = surface.height_or_fallback(surface_point.xz());
-		if terrain_y.is_finite() {
-			surface_point.y = terrain_y;
-		}
-		state.last_poi = placed.poi;
-		player_position_above_surface(surface_point)
-	};
+		return;
+	}
 
-	let player = spawn_player_body(
+	if !pending.map_opened
+		&& (pending.timer.elapsed_secs() >= MAP_OPEN_SECS || pending.timer.is_finished())
+	{
+		open_respawn_picker(pending, &mut map, &registry, &config, last_poi);
+	}
+
+	pending.pick_timer.tick(time.delta());
+	let picked = chosen.read().next().map(|msg| msg.poi);
+	let timed_out = pending.map_opened && pending.pick_timer.is_finished();
+	if picked.is_none() && !timed_out {
+		return;
+	}
+
+	let death_at = pending.death_at;
+	let seed = pending.seed;
+	let origin = pending.origin;
+	close_respawn_map(&mut map);
+	state.pending = None;
+
+	let position = match picked.and_then(|id| registry.get(id).copied()) {
+		Some(record) => {
+			state.last_poi = Some(record.id);
+			player_position_above_surface(surface_at(record.position, &surface))
+		}
+		None => {
+			let placed = registry.place_nearby(
+				death_at,
+				config.nearby_query(),
+				&config.interests,
+				state.last_poi,
+				seed,
+				config.fallback,
+			);
+			state.last_poi = placed.poi;
+			player_position_above_surface(surface_at(placed.position, &surface))
+		}
+	};
+	finish_world_player_spawn(
 		&mut commands,
 		&mut meshes,
 		&mut materials,
 		locomotion.as_ref(),
+		loadout.as_deref(),
+		origin,
+		now,
 		position,
 	);
-	crate::control::apply_world_player_motor(&mut commands, player);
+}
+
+fn open_respawn_picker(
+	pending: &mut PendingPlayerRespawn,
+	map: &mut WorldMapView,
+	registry: &PoiRegistry,
+	config: &WorldPlayerRespawnConfig,
+	last_poi: Option<PoiId>,
+) {
+	let excluded = last_poi.as_slice();
+	let mut records = registry.nearby_in(
+		pending.death_at,
+		config.nearby_query(),
+		&config.interests,
+		excluded,
+	);
+	records.sort_by(|a, b| {
+		xz_distance(pending.death_at, a.position)
+			.total_cmp(&xz_distance(pending.death_at, b.position))
+			.then_with(|| a.id.cmp(&b.id))
+	});
+	pending.candidates = records.iter().map(|record| record.id).collect();
+	pending.highlighted = pending.candidates.first().copied();
+	pending.map_opened = true;
+	pending.pick_timer = Timer::from_seconds(config.pick_timeout_secs.max(0.0), TimerMode::Once);
+	map.open_at(pending.death_at.xz(), true);
+}
+
+fn close_respawn_map(map: &mut WorldMapView) {
+	map.close();
+}
+
+fn nearest_candidate(candidates: &[PoiId], registry: &PoiRegistry, focus: Vec2) -> Option<PoiId> {
+	candidates
+		.iter()
+		.filter_map(|id| registry.get(*id).copied())
+		.min_by(|a, b| {
+			a.position.xz().distance(focus).total_cmp(&b.position.xz().distance(focus)).then_with(|| a.id.cmp(&b.id))
+		})
+		.map(|record| record.id)
+}
+
+fn xz_distance(a: Vec3, b: Vec3) -> f32 {
+	(a.xz() - b.xz()).length()
+}
+
+fn surface_at(
+	mut point: Vec3,
+	surface: &TerrainView<Urbanization<richmond::Richmond<OnTerrain<Durham>>>>,
+) -> Vec3 {
+	let terrain_y = surface.height_or_fallback(point.xz());
+	if terrain_y.is_finite() {
+		point.y = terrain_y;
+	}
+	point
+}
+
+#[allow(clippy::too_many_arguments)]
+fn finish_world_player_spawn(
+	commands: &mut Commands,
+	meshes: &mut Assets<Mesh>,
+	materials: &mut Assets<StandardMaterial>,
+	locomotion: &CharacterLocomotion,
+	loadout: Option<&WorldPlayerLoadout>,
+	origin: RespawnOrigin,
+	now: Option<std::any::TypeId>,
+	position: Vec3,
+) {
+	let player = spawn_player_body(commands, meshes, materials, locomotion, position);
+	crate::control::apply_world_player_motor(commands, player);
 	if let Some(loadout) = loadout {
-		// The next life may swap the loadout before the body arms, so a life
-		// that just ended leaves its appearance to that loadout.
 		if !origin.ends_life(now) {
 			commands.entity(player).insert(WorldPlayerAppearanceRequested);
 		}
@@ -271,12 +458,12 @@ fn respawn_world_player(
 	}
 }
 
-fn death_glaze_alpha(timer: &Timer) -> f32 {
-	let elapsed = timer.elapsed_secs();
-	let remaining = timer.remaining_secs();
-	let fade_in = (elapsed / 0.18).clamp(0.0, 1.0);
-	let fade_out = (remaining / 0.35).clamp(0.0, 1.0);
-	0.68 * fade_in * fade_out
+fn death_glaze_alpha(timer: &Timer, map_open: bool) -> f32 {
+	if map_open {
+		return 0.12;
+	}
+	let fade_in = (timer.elapsed_secs() / MAP_OPEN_SECS).clamp(0.0, 1.0);
+	0.68 * fade_in
 }
 
 fn death_glaze_color(alpha: f32) -> Color {
@@ -341,19 +528,21 @@ mod tests {
 	fn default_respawn_waits_four_seconds_and_scans_nearby() {
 		let config = WorldPlayerRespawnConfig::default();
 		assert_eq!(config.delay_secs, 4.0);
+		assert_eq!(config.pick_timeout_secs, 30.0);
 		assert_eq!(config.poi_radius, DEFAULT_NEARBY_RADIUS);
 		assert_eq!(config.fallback, NearbyFallback::new(60.0, 100.0));
 		assert_eq!(config.nearby_query().min_radius, config.fallback.min_radius);
 	}
 
 	#[test]
-	fn death_glaze_fades_in_and_out() {
+	fn death_glaze_fades_in_and_holds_a_map_vignette() {
 		let mut timer = Timer::from_seconds(4.0, TimerMode::Once);
-		assert_eq!(death_glaze_alpha(&timer), 0.0);
+		assert_eq!(death_glaze_alpha(&timer, false), 0.0);
 		timer.tick(std::time::Duration::from_secs_f32(0.5));
-		assert!((death_glaze_alpha(&timer) - 0.68).abs() < 1e-5);
+		assert!((death_glaze_alpha(&timer, false) - 0.68).abs() < 1e-5);
 		timer.tick(std::time::Duration::from_secs_f32(3.4));
-		assert!(death_glaze_alpha(&timer) < 0.3);
+		assert!((death_glaze_alpha(&timer, false) - 0.68).abs() < 1e-5);
+		assert!((death_glaze_alpha(&timer, true) - 0.12).abs() < 1e-5);
 	}
 
 	#[test]
@@ -407,14 +596,20 @@ mod tests {
 		world.insert_resource(WorldPlayerRespawnState {
 			pending: Some(PendingPlayerRespawn {
 				timer: Timer::from_seconds(timer_secs, TimerMode::Once),
+				pick_timer: Timer::from_seconds(30.0, TimerMode::Once),
 				death_at: Vec3::new(3.0, 4.0, 5.0),
 				seed: 7,
 				origin: RespawnOrigin::began(began, true),
+				candidates: Vec::new(),
+				highlighted: None,
+				map_opened: false,
 			}),
 			..default()
 		});
 		world.insert_resource(Time::<()>::default());
 		world.insert_resource(WorldGameplayEnabled(gameplay));
+		world.init_resource::<WorldMapView>();
+		world.init_resource::<Messages<PlayerChoseRespawnPoi>>();
 		world.init_resource::<PoiRegistry>();
 		world.init_resource::<CharacterLocomotion>();
 		world.init_resource::<TerrainEntryStore>();
@@ -456,6 +651,7 @@ mod tests {
 		assert_eq!(body.translation.xz(), Vec2::new(3.0, 5.0));
 		assert!(!requested, "the next life's loadout dresses the body");
 		assert!(world.resource::<WorldPlayerRespawnState>().pending.is_none());
+		assert!(!world.resource::<WorldMapView>().open);
 		Ok(())
 	}
 
@@ -479,6 +675,88 @@ mod tests {
 		let mut bodies = world.query_filtered::<(), With<VegetationPlayer>>();
 		assert_eq!(bodies.iter(&world).count(), 1);
 		assert!(world.resource::<WorldPlayerRespawnState>().pending.is_none(), "glaze clears");
+		assert!(!world.resource::<WorldMapView>().open);
+		Ok(())
+	}
+
+	fn discovery_respawn_world(elapsed: f32, pick_timeout: f32) -> World {
+		let mut world = respawn_world(4.0, true, true);
+		world.insert_resource(WorldPlayerRespawnConfig {
+			delay_secs: 4.0,
+			pick_timeout_secs: pick_timeout,
+			..default()
+		});
+		let mut state = world.resource_mut::<WorldPlayerRespawnState>();
+		let pending = state.pending.as_mut().unwrap();
+		pending.origin = RespawnOrigin::began(Some(std::any::TypeId::of::<EndsLife>()), false);
+		pending.timer.set_elapsed(std::time::Duration::from_secs_f32(elapsed));
+		world
+	}
+
+	#[test]
+	fn discovery_respawn_waits_for_a_map_pick() -> anyhow::Result<()> {
+		let mut world = discovery_respawn_world(0.2, 30.0);
+		world
+			.run_system_once(respawn_world_player)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+
+		assert!(world.resource::<WorldMapView>().open);
+		assert!(world.resource::<WorldMapView>().close_locked);
+		assert!(world.resource::<WorldPlayerRespawnState>().pending.is_some());
+		let mut bodies = world.query_filtered::<(), With<VegetationPlayer>>();
+		assert_eq!(bodies.iter(&world).count(), 0);
+		Ok(())
+	}
+
+	#[test]
+	fn discovery_respawn_spawns_at_the_chosen_poi() -> anyhow::Result<()> {
+		let mut world = discovery_respawn_world(0.2, 30.0);
+		let poi = world.spawn_empty().id();
+		world.resource_mut::<PoiRegistry>().upsert(
+			poi,
+			poi_intelligence::Poi::new(PoiId(1), URBAN_POI).with_arrival_radius(8.0),
+			Vec3::new(80.0, 4.0, 5.0),
+			true,
+			false,
+		)?;
+		world
+			.run_system_once(respawn_world_player)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		world.write_message(PlayerChoseRespawnPoi { poi: PoiId(1) });
+		world
+			.run_system_once(respawn_world_player)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+
+		let mut bodies = world.query_filtered::<&Transform, With<VegetationPlayer>>();
+		let body = bodies.single(&world)?;
+		assert_eq!(body.translation.xz(), Vec2::new(80.0, 5.0));
+		assert!(world.resource::<WorldPlayerRespawnState>().pending.is_none());
+		assert!(!world.resource::<WorldMapView>().open);
+		Ok(())
+	}
+
+	#[test]
+	fn discovery_respawn_times_out_to_place_nearby() -> anyhow::Result<()> {
+		let mut world = discovery_respawn_world(0.2, 0.0);
+		world
+			.run_system_once(respawn_world_player)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+
+		let mut bodies = world.query_filtered::<&Transform, With<VegetationPlayer>>();
+		let body = bodies.single(&world)?;
+		let config = world.resource::<WorldPlayerRespawnConfig>().clone();
+		let placed = poi_intelligence::place_nearby(
+			None,
+			Vec3::new(3.0, 4.0, 5.0),
+			config.nearby_query(),
+			None,
+			None,
+			7,
+			config.fallback,
+		);
+		assert_eq!(body.translation.xz(), placed.position.xz());
+		assert!(world.resource::<WorldPlayerRespawnState>().pending.is_none());
+		assert!(!world.resource::<WorldMapView>().open);
 		Ok(())
 	}
 }

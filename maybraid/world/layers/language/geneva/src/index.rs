@@ -11,7 +11,7 @@ use maybraid_language_core::lexicalizer::mix;
 
 use crate::bundle::LanguageBundle;
 use crate::name::{terms_fingerprint, AssignedName, PlaceName};
-use crate::tiles::{large_tile_index, LargeTile, LARGE_TILE};
+use crate::tiles::{large_tile_index, large_tile_origin, LargeTile, LARGE_TILE};
 
 /// Configured world seed for language tiles and names.
 #[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
@@ -97,6 +97,8 @@ enum PendingAssign {
 pub struct LanguageIndex {
 	large: HashMap<(i32, i32), LargeTile>,
 	names: HashMap<NameKey, AssignedName>,
+	/// World XZ for each assigned name. Kept off [`AssignedName`] so that type stays `Eq`.
+	anchors: HashMap<NameKey, Vec2>,
 	host_languages: HashMap<Id, u64>,
 	pending: VecDeque<PendingAssign>,
 	source_fingerprint: u64,
@@ -108,10 +110,16 @@ impl LanguageIndex {
 	pub fn clear(&mut self) {
 		self.large.clear();
 		self.names.clear();
+		self.anchors.clear();
 		self.host_languages.clear();
 		self.pending.clear();
 		self.source_fingerprint = 0;
 		self.epoch = self.epoch.wrapping_add(1);
+	}
+
+	/// World XZ stored when the name was assigned.
+	pub fn anchor(&self, key: NameKey) -> Option<Vec2> {
+		self.anchors.get(&key).copied()
 	}
 
 	pub fn large_tile(&self, ix: i32, iz: i32) -> Option<&LargeTile> {
@@ -292,6 +300,7 @@ impl LanguageIndex {
 				provisional: true,
 			},
 		);
+		self.anchors.insert(key, region_anchor(ix, iz));
 		self.epoch = self.epoch.wrapping_add(1);
 		true
 	}
@@ -331,6 +340,7 @@ impl LanguageIndex {
 				provisional: work.provisional,
 			},
 		);
+		self.anchors.insert(work.key, work.center);
 		self.epoch = self.epoch.wrapping_add(1);
 		true
 	}
@@ -444,6 +454,11 @@ fn id_bits(id: Id) -> u64 {
 				^ u64::from(bounds.max.x.to_bits()).wrapping_shl(2)
 		}
 	}
+}
+
+fn region_anchor(ix: i32, iz: i32) -> Vec2 {
+	let (ox, oz) = large_tile_origin(ix, iz);
+	Vec2::new(ox, oz) + Vec2::splat(LARGE_TILE * 0.5)
 }
 
 /// Default keep used when a mode enters and no camera has streamed yet.

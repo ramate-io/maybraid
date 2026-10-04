@@ -10,7 +10,7 @@ use player::{PlayerPlugin, PlayerPoseSystems, PlayerSystems};
 use std::f32::consts::FRAC_PI_2;
 
 pub use follow::{sync_camera_fov, sync_first_person_head_visibility};
-pub use look::{CameraController, CameraPov, CameraPovLocked};
+pub use look::{CameraController, CameraLookSuppressed, CameraPov, CameraPovLocked};
 
 /// Camera schedule. Item crates add aim writers to [`PlayerCameraSystems::Aim`].
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -91,6 +91,7 @@ pub struct PlayerCameraPlugin;
 impl Plugin for PlayerCameraPlugin {
 	fn build(&self, app: &mut App) {
 		app.init_resource::<CameraPovLocked>()
+			.init_resource::<look::CameraLookSuppressed>()
 			.configure_sets(
 				Update,
 				(

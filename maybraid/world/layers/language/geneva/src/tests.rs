@@ -209,6 +209,37 @@ fn regional_names_stay_provisional_and_refresh_when_inputs_change() -> anyhow::R
 }
 
 #[test]
+fn overlay_copies_name_anchors() -> anyhow::Result<()> {
+	let mut index = LanguageIndex::default();
+	let region = feature_aabb(0.0, 0.0, LARGE_TILE, LARGE_TILE);
+	let key = NameKey::Geographic(GeographicFeatureId {
+		family: GeographicFamily::Plateau,
+		band: GeographicBand::LowPass,
+		source: origin_cell(10.0, 10.0, 20.0, 20.0),
+	});
+	index.assign_keep(
+		SEED,
+		region,
+		&[NamedFeature::new(key, feature_aabb(10.0, 10.0, 20.0, 20.0), vec!["plateau".to_owned()], 1)],
+		&[],
+	);
+	let overlay = LanguageOverlay::from_index(&index);
+	let feature = overlay
+		.names
+		.iter()
+		.find(|name| name.key == key)
+		.ok_or_else(|| anyhow::anyhow!("feature overlay"))?;
+	anyhow::ensure!((feature.xz - Vec2::new(15.0, 15.0)).length() < 1e-3);
+	let region_name = overlay
+		.names
+		.iter()
+		.find(|name| matches!(name.key, NameKey::Region { ix: 0, iz: 0 }))
+		.ok_or_else(|| anyhow::anyhow!("region overlay"))?;
+	anyhow::ensure!((region_name.xz - Vec2::splat(LARGE_TILE * 0.5)).length() < 1e-3);
+	Ok(())
+}
+
+#[test]
 fn source_revision_invalidates_feature_names_unload_does_not() -> anyhow::Result<()> {
 	let mut index = LanguageIndex::default();
 	let region = feature_aabb(0.0, 0.0, LARGE_TILE, LARGE_TILE);

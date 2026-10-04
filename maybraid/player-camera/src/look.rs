@@ -11,6 +11,10 @@ use std::f32::consts::{FRAC_PI_2, PI};
 #[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct CameraPovLocked(pub bool);
 
+/// When `true`, look / focus / ADS do not drive the follow camera (world map).
+#[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct CameraLookSuppressed(pub bool);
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum CameraPov {
 	#[default]
@@ -42,9 +46,14 @@ pub struct CameraController {
 pub(crate) fn apply_look_intents(
 	mouse: Res<ButtonInput<MouseButton>>,
 	locked: Option<Res<CameraPovLocked>>,
+	suppressed: Option<Res<CameraLookSuppressed>>,
 	mut intents: MessageReader<CharacterIntent>,
 	mut cameras: Query<(&mut CameraController, &FollowCamera, Option<&Projection>), With<Camera3d>>,
 ) {
+	if suppressed.is_some_and(|suppressed| suppressed.0) {
+		for _ in intents.read() {}
+		return;
+	}
 	let mut focus = f32::from(mouse.pressed(MouseButton::Right));
 	let mut ads = f32::from(mouse.pressed(MouseButton::Middle));
 	let mut swap_pov = false;

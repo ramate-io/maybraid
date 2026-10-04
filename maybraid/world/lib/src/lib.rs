@@ -14,6 +14,7 @@ pub mod commands;
 mod control;
 mod crate_loot;
 mod intelligence;
+mod map_view;
 mod material_lib;
 mod pitch;
 mod player_lifecycle;
@@ -40,6 +41,7 @@ pub use maybraid_sky::{
 	ShadowQuality, SkyClock, SkyCommand, SKY_BLUE, SKY_CLEAR, SKY_HORIZON, SKY_NADIR, SKY_ZENITH,
 	SUN_COLOR, SUN_ILLUMINANCE,
 };
+pub use map_view::{WorldMapView, WorldMapViewPlugin};
 pub use player_camera::{CameraPov, CameraPovLocked};
 pub use player_lifecycle::{WorldPlayerLifecyclePlugin, WorldPlayerRespawnConfig};
 pub use player_position::{
@@ -171,6 +173,7 @@ impl Plugin for WorldPlugin {
 			.add_plugins(SkillMapPlugin)
 			.insert_resource(maybraid_skill_map::SkillMapEnabled(false))
 			.add_plugins(WorldPoiPlugin)
+			.add_plugins(WorldMapViewPlugin)
 			.add_plugins(WorldPlayerLifecyclePlugin)
 			.add_plugins(WorldStashPlugin)
 			.add_plugins(PlayerPositionPlugin)
@@ -221,6 +224,7 @@ impl Plugin for WorldPlugin {
 					control::sync_skill_map_enabled.before(SkillMapSystems::Spawn),
 					control::apply_intents_to_movement
 						.after(CharacterControlSystems)
+						.after(map_view::WorldMapSet::Toggle)
 						.after(PlayerSystems::Intent)
 						.before(PlayerSystems::Body)
 						.before(PlayerControlSystems),
