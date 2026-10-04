@@ -15,7 +15,6 @@ mod control;
 mod crate_loot;
 mod intelligence;
 mod map_view;
-mod material_lib;
 mod pitch;
 mod player_lifecycle;
 mod player_position;
@@ -37,7 +36,6 @@ pub use game_commands::command::PendingStartupCommand;
 pub use intelligence::WorldIntelligencePlugin;
 pub use lod::LodJobCounter;
 pub use map_view::{WorldMapView, WorldMapViewPlugin};
-pub use material_lib::{WorldMaterialLib, WorldMaterialRefPlugin};
 pub use maybraid_sky::{
 	ShadowQuality, SkyClock, SkyCommand, SKY_BLUE, SKY_CLEAR, SKY_HORIZON, SKY_NADIR, SKY_ZENITH,
 	SUN_COLOR, SUN_ILLUMINANCE,
@@ -63,6 +61,7 @@ pub use ui::WorldMobHudEnabled;
 pub use vsync::{default_window_present_mode, RequestVsyncToggle, VSYNC_TOGGLE_KEY};
 pub use weapon::WorldPlayerLoadout;
 pub use world_layers::WorldLayersPlugin;
+pub use world_materials::{WorldMaterialLib, WorldMaterialRefPlugin};
 pub use world_player::{PlayerPhysicsEnabled, PlayerSpawnXz};
 
 use avian3d::prelude::{CoefficientCombine, Friction};
@@ -71,6 +70,7 @@ use character_ragdoll::{CharacterRagdollPlugin, CharacterRagdollTargets};
 use characters::{CharacterMotionSystems, DrawTerrainPitchProbes};
 use combat_hud::CombatHudPlugin;
 use durham::TerrainFrictionConfig;
+use firearms::EnergyMaterialPlugin;
 use game_commands::command::{GameCommandPlugin, TextEntryFocus};
 use game_commands::ui::GameCommandDrawerConfig;
 use lod::{Bullseye, OpenLattice};
@@ -156,6 +156,7 @@ impl Plugin for WorldPlugin {
 			.insert_resource(TerrainFrictionConfig(WORLD_TERRAIN_FRICTION))
 			.insert_resource(WORLD_TERRAIN_PITCH_GIZMOS)
 			.add_plugins(WorldMaterialRefPlugin)
+			.add_plugins(EnergyMaterialPlugin)
 			.add_plugins(VirtualPadPlugin::new(VirtualPadConfig {
 				debug_overlay: self.input_debug_enabled,
 				..default()
