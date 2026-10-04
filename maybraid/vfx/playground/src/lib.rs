@@ -82,7 +82,9 @@ mod tests {
 	#[test]
 	fn parses_show_default() -> Result<(), String> {
 		let command = <PlaygroundCommand as GameCommand>::parse_line("show")?;
-		let PlaygroundCommand::Show { effect, scale, intensity, distance, seed } = command else {
+		let PlaygroundCommand::Show { effect, scale, intensity, distance, seed, playback } =
+			command
+		else {
 			return Err("expected show".into());
 		};
 		assert_eq!(effect, "firey-explosion");
@@ -90,6 +92,7 @@ mod tests {
 		assert!((intensity - 1.0).abs() < 1e-4);
 		assert!(distance.abs() < 1e-4);
 		assert_eq!(seed, 0);
+		assert!((playback - 1.0).abs() < 1e-4);
 		Ok(())
 	}
 
@@ -98,22 +101,26 @@ mod tests {
 		let command = <PlaygroundCommand as GameCommand>::parse_line("firey-explosion")?;
 		assert!(matches!(
 			command,
-			PlaygroundCommand::FireyExplosion { scale, intensity, distance, seed }
+			PlaygroundCommand::FireyExplosion { scale, intensity, distance, seed, playback }
 				if (scale - 1.0).abs() < 1e-4
 					&& (intensity - 1.0).abs() < 1e-4
 					&& distance.abs() < 1e-4
 					&& seed == 0
+					&& (playback - 1.0).abs() < 1e-4
 		));
 		let command = <PlaygroundCommand as GameCommand>::parse_line(
-			"firey-explosion --scale 1.5 --intensity 1.2 --distance 6 --seed 3",
+			"firey-explosion --scale 1.5 --intensity 1.2 --distance 6 --seed 3 --playback 0.5",
 		)?;
-		let PlaygroundCommand::FireyExplosion { scale, intensity, distance, seed } = command else {
+		let PlaygroundCommand::FireyExplosion { scale, intensity, distance, seed, playback } =
+			command
+		else {
 			return Err("expected firey-explosion".into());
 		};
 		assert!((scale - 1.5).abs() < 1e-4);
 		assert!((intensity - 1.2).abs() < 1e-4);
 		assert!((distance - 6.0).abs() < 1e-4);
 		assert_eq!(seed, 3);
+		assert!((playback - 0.5).abs() < 1e-4);
 		Ok(())
 	}
 

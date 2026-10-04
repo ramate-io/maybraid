@@ -15,6 +15,8 @@ use crate::particles::effect_properties;
 pub const MAX_INTENSITY: f32 = 2.0;
 pub const MIN_SCALE: f32 = 0.25;
 pub const MAX_SCALE: f32 = 4.0;
+pub const MIN_PLAYBACK: f32 = 0.25;
+pub const MAX_PLAYBACK: f32 = 4.0;
 
 /// Per-instance overrides. Never mutates a shared Hanabi asset.
 #[derive(Clone, Debug)]
@@ -22,13 +24,22 @@ pub struct VfxSpawn {
 	pub transform: Transform,
 	pub scale: f32,
 	pub intensity: f32,
+	/// 1.0 is the authored layer envelope. Higher plays the same ratios faster.
+	pub playback: f32,
 	pub tint: Option<Color>,
 	pub seed: u64,
 }
 
 impl Default for VfxSpawn {
 	fn default() -> Self {
-		Self { transform: Transform::IDENTITY, scale: 1.0, intensity: 1.0, tint: None, seed: 0 }
+		Self {
+			transform: Transform::IDENTITY,
+			scale: 1.0,
+			intensity: 1.0,
+			playback: 1.0,
+			tint: None,
+			seed: 0,
+		}
 	}
 }
 
@@ -39,6 +50,10 @@ impl VfxSpawn {
 
 	pub fn clamped_intensity(&self) -> f32 {
 		self.intensity.clamp(0.25, MAX_INTENSITY)
+	}
+
+	pub fn clamped_playback(&self) -> f32 {
+		self.playback.clamp(MIN_PLAYBACK, MAX_PLAYBACK)
 	}
 
 	pub fn tint_or_white(&self) -> Color {
@@ -52,6 +67,7 @@ pub struct VfxInstance {
 	pub name: String,
 	pub age: f32,
 	pub duration: f32,
+	pub playback: f32,
 	/// False until Hanabi has compiled and the first burst can emit.
 	pub armed: bool,
 }
@@ -69,6 +85,7 @@ pub struct VfxFlash {
 	pub age: f32,
 	pub fade: f32,
 	pub peak: f32,
+	pub playback: f32,
 }
 
 /// Particle layer waiting for [`CompiledParticleEffect::is_ready`].
@@ -85,6 +102,7 @@ pub struct VfxEmitterArmed;
 pub struct VfxLayerLife {
 	pub age: f32,
 	pub duration: f32,
+	pub playback: f32,
 	pub waiting_for_emitter: bool,
 }
 
@@ -95,6 +113,7 @@ pub struct VfxLobe {
 	pub spec: crate::composition::LobeSpec,
 	pub seed: u64,
 	pub index: u32,
+	pub playback: f32,
 }
 
 /// Spawn a named definition at `spawn.transform`. Returns the root entity.
@@ -103,8 +122,12 @@ pub fn spawn_vfx(
 	definition: &EffectDefinition,
 	spawn: VfxSpawn,
 ) -> Entity {
-	let spawn =
-		VfxSpawn { scale: spawn.clamped_scale(), intensity: spawn.clamped_intensity(), ..spawn };
+	let spawn = VfxSpawn {
+		scale: spawn.clamped_scale(),
+		intensity: spawn.clamped_intensity(),
+		playback: spawn.clamped_playback(),
+		..spawn
+	};
 	let duration = definition.duration();
 	let mut pending = Vec::new();
 	let mut immediate = Vec::new();
@@ -126,7 +149,13 @@ pub fn spawn_vfx(
 			Name::new(format!("vfx-{}", definition.name)),
 			root_transform,
 			Visibility::Visible,
-			VfxInstance { name: definition.name.clone(), age: 0.0, duration, armed: false },
+			VfxInstance {
+				name: definition.name.clone(),
+				age: 0.0,
+				duration,
+				playback: spawn.clamped_playback(),
+				armed: false,
+			},
 			VfxPendingLayers { layers: pending, spawn: spawn.clone() },
 			NotShadowCaster,
 		))
@@ -190,7 +219,7 @@ pub fn tick_vfx_instances(
 			}
 			instance.age = 0.0;
 		}
-		instance.age += dt;
+		instance.age += dt * instance.playback;
 		let spawn = pending.spawn.clone();
 		let mut remain = Vec::new();
 		for layer in pending.layers.drain(..) {
@@ -218,7 +247,7 @@ pub fn tick_vfx_flashes(
 ) {
 	let dt = time.delta_secs();
 	for (entity, mut flash, mut light, life) in &mut flashes {
-		flash.age += dt;
+		flash.age += dt * flash.playback;
 		if let Some(mut life) = life {
 			life.age = flash.age;
 		}
@@ -242,7 +271,7 @@ pub fn tick_vfx_lobes(
 ) {
 	let dt = time.delta_secs();
 	for (mut lobe, mut transform, material, life) in &mut lobes {
-		lobe.age += dt;
+		lobe.age += dt * lobe.playback;
 		if let Some(mut life) = life {
 			life.age = lobe.age;
 		}
@@ -269,7 +298,7 @@ pub fn tick_vfx_layer_lives(
 			life.waiting_for_emitter = false;
 			life.age = 0.0;
 		}
-		life.age += dt;
+		life.age += dt * life.playback;
 	}
 }
 
@@ -359,7 +388,12 @@ fn realize_layer(
 				ParticleEffect::new(part.effect.clone()),
 				effect_properties(spawn, layer.scale),
 				VfxEmitter { count },
-				VfxLayerLife { age: 0.0, duration: part.max_lifetime, waiting_for_emitter: true },
+				VfxLayerLife {
+					age: 0.0,
+					duration: part.max_lifetime,
+					playback: spawn.clamped_playback(),
+					waiting_for_emitter: true,
+				},
 				NotShadowCaster,
 			));
 			if !part.images.is_empty() {
@@ -381,8 +415,13 @@ fn realize_layer(
 					shadow_maps_enabled: false,
 					..default()
 				},
-				VfxFlash { age: 0.0, fade: pulse.fade, peak },
-				VfxLayerLife { age: 0.0, duration: pulse.fade, waiting_for_emitter: false },
+				VfxFlash { age: 0.0, fade: pulse.fade, peak, playback: spawn.clamped_playback() },
+				VfxLayerLife {
+					age: 0.0,
+					duration: pulse.fade,
+					playback: spawn.clamped_playback(),
+					waiting_for_emitter: false,
+				},
 			));
 		}
 		EffectPart::Mesh(part) => {
@@ -410,8 +449,19 @@ fn realize_layer(
 					Mesh3d(part.mesh.clone()),
 					pose,
 					Visibility::Inherited,
-					VfxLobe { age: 0.0, spec, seed: spawn.seed, index: index as u32 },
-					VfxLayerLife { age: 0.0, duration: spec.duration, waiting_for_emitter: false },
+					VfxLobe {
+						age: 0.0,
+						spec,
+						seed: spawn.seed,
+						index: index as u32,
+						playback: spawn.clamped_playback(),
+					},
+					VfxLayerLife {
+						age: 0.0,
+						duration: spec.duration,
+						playback: spawn.clamped_playback(),
+						waiting_for_emitter: false,
+					},
 					NotShadowCaster,
 					LobeMaterialSlot(material),
 				));
@@ -445,10 +495,21 @@ mod tests {
 	use crate::layers::flash::FLASH_FADE;
 
 	#[test]
-	fn spawn_clamps_scale_and_intensity() {
-		let spawn = VfxSpawn { scale: 99.0, intensity: 0.01, ..default() };
+	fn spawn_clamps_scale_intensity_and_playback() {
+		let spawn = VfxSpawn { scale: 99.0, intensity: 0.01, playback: 0.01, ..default() };
 		assert_eq!(spawn.clamped_scale(), MAX_SCALE);
 		assert_eq!(spawn.clamped_intensity(), 0.25);
+		assert_eq!(spawn.clamped_playback(), MIN_PLAYBACK);
+		let fast = VfxSpawn { playback: 99.0, ..default() };
+		assert_eq!(fast.clamped_playback(), MAX_PLAYBACK);
+	}
+
+	#[test]
+	fn playback_preserves_layer_ratios() {
+		let authored: f32 = 0.05 + 2.4;
+		let playback: f32 = 2.0;
+		assert!(((authored / playback) - 1.225).abs() < 1e-4);
+		assert!((0.05 / authored - (0.05 / playback) / (authored / playback)).abs() < 1e-6);
 	}
 
 	#[test]
@@ -472,9 +533,15 @@ mod tests {
 
 	#[test]
 	fn tint_override_is_distinct_from_default() {
-		let spawn = VfxSpawn { tint: Some(Color::srgb(0.2, 0.8, 1.0)), seed: 7, ..default() };
+		let spawn = VfxSpawn {
+			tint: Some(Color::srgb(0.2, 0.8, 1.0)),
+			seed: 7,
+			playback: 2.0,
+			..default()
+		};
 		let props = effect_properties(&spawn, 1.0);
 		assert!(props.get_stored(crate::particles::PROP_TINT).is_some());
 		assert!(props.get_stored(crate::particles::PROP_SEED).is_some());
+		assert!(props.get_stored(crate::particles::PROP_PLAYBACK).is_some());
 	}
 }

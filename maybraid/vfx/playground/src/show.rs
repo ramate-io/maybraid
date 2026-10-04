@@ -55,8 +55,13 @@ pub fn apply_pending_shows(
 		}
 		last.request = Some(request.clone());
 		last.label = format!(
-			"{} · scale {:.2} · intensity {:.2} · d {:.1} · seed {}",
-			definition.name, request.scale, request.intensity, request.distance, request.seed
+			"{} · scale {:.2} · intensity {:.2} · playback {:.2} · d {:.1} · seed {}",
+			definition.name,
+			request.scale,
+			request.intensity,
+			request.playback,
+			request.distance,
+			request.seed
 		);
 		status.0 = format!("show {}", last.label);
 	}
@@ -83,7 +88,8 @@ pub fn repeat_shown_effect(
 		return;
 	};
 	repeating.wait += time.delta_secs();
-	if repeating.wait >= definition.duration() + 0.45 {
+	let playback = request.playback.clamp(maybraid_vfx::MIN_PLAYBACK, maybraid_vfx::MAX_PLAYBACK);
+	if repeating.wait >= definition.duration() / playback + 0.45 {
 		repeating.wait = 0.0;
 		burst(&mut commands, definition, &request);
 	}
@@ -118,6 +124,7 @@ fn burst(
 			scale: request.scale,
 			intensity: request.intensity,
 			seed: request.seed,
+			playback: request.playback,
 			..default()
 		},
 	);

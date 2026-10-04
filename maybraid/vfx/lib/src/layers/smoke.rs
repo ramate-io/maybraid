@@ -13,7 +13,9 @@ use crate::composition::{
 	EffectDefinition, EffectLayer, LobeKind, LobeSpec, MeshPart, ParticlePart, SMOKE,
 };
 use crate::flipbook::update_sprite_index;
-use crate::particles::{add_instance_properties, init_smoke_velocity, update_scaled_size3};
+use crate::particles::{
+	add_instance_properties, init_lifetime, init_smoke_velocity, update_scaled_size3,
+};
 
 pub const SMOKE_COUNT: f32 = 10.0;
 pub const SMOKE_CAPACITY: u32 = 32;
@@ -64,21 +66,20 @@ pub fn compile_wisps_kind(
 	let init_vel = init_smoke_velocity(
 		&writer,
 		&props.scale,
+		&props.playback,
 		SMOKE_OUTWARD_MIN,
 		SMOKE_OUTWARD_MAX,
 		SMOKE_RISE,
 		ground,
 	);
 	let init_age = SetAttributeModifier::new(Attribute::AGE, writer.lit(0.).expr());
-	let init_lifetime = SetAttributeModifier::new(
-		Attribute::LIFETIME,
-		writer.lit(SMOKE_LIFE_MIN).uniform(writer.lit(SMOKE_LIFE_MAX)).expr(),
-	);
+	let init_lifetime = init_lifetime(&writer, &props.playback, SMOKE_LIFE_MIN, SMOKE_LIFE_MAX);
 	let init_sprite = SetAttributeModifier::new(Attribute::SPRITE_INDEX, writer.lit(0i32).expr());
 	let init_color = SetAttributeModifier::new(Attribute::HDR_COLOR, props.tint.expr());
-	let update_drag = LinearDragModifier::new(writer.lit(1.1).expr());
-	let update_accel =
-		AccelModifier::new((writer.lit(Vec3::new(0.0, 0.55, 0.0)) * props.scale.clone()).expr());
+	let update_drag = LinearDragModifier::new((writer.lit(1.1) * props.playback.clone()).expr());
+	let update_accel = AccelModifier::new(
+		(writer.lit(Vec3::new(0.0, 0.55, 0.0)) * props.scale.clone() * props.playback).expr(),
+	);
 	let update_size =
 		update_scaled_size3(&writer, &props.scale, Vec3::splat(0.42), Vec3::splat(0.95));
 	let update_sprite = update_sprite_index(&writer, smoke);

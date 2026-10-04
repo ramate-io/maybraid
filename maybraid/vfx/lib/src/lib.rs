@@ -24,7 +24,7 @@ pub use composition::{
 };
 pub use library::{canonicalize_effect_name, VfxLibrary};
 pub use lobe_material::{LobeMaterial, LobeMaterialPlugin};
-pub use spawn::{spawn_vfx, SpawnVfxExt, VfxInstance, VfxSpawn};
+pub use spawn::{spawn_vfx, SpawnVfxExt, VfxInstance, VfxSpawn, MAX_PLAYBACK, MIN_PLAYBACK};
 
 use bevy::prelude::*;
 use bevy_hanabi::HanabiPlugin;

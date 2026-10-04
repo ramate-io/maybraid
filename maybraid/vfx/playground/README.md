@@ -5,7 +5,7 @@ Isolated host for [`maybraid-vfx`](../lib). Spawn the composed fiery explosion o
 ```text
 cargo run -p vfx-playground -- firey-explosion
 cargo run -p vfx-playground -- show fireball
-cargo run -p vfx-playground -- firey-explosion --scale 1.5 --intensity 1.2 --seed 4
+cargo run -p vfx-playground -- firey-explosion --scale 1.5 --intensity 1.2 --seed 4 --playback 0.5
 ```
 
 In-game (press `/`):
@@ -15,6 +15,7 @@ In-game (press `/`):
 - `show flash|fireball|smoke|sparks` — one layer
 - `--distance` — offset along +Z; `spread` places near / mid / far
 - `--seed` — independent instance variation
+- `--playback` — 1.0 is authored tempo; `0.5` is half speed, `2` is twice as fast
 - `orbit` — orbit the camera around the burst
 - `freeze 0.4` — pause once the instance reaches that age; `play` resumes
 - `noloop` — stop repeating the last show

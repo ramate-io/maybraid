@@ -9,7 +9,9 @@ use bevy_hanabi::prelude::{
 };
 
 use crate::composition::{EffectDefinition, EffectLayer, ParticlePart, SPARKS};
-use crate::particles::{add_instance_properties, init_radial_velocity, update_scaled_size3};
+use crate::particles::{
+	add_instance_properties, init_lifetime, init_radial_velocity, update_scaled_size3,
+};
 
 pub const SPARKS_COUNT: f32 = 28.0;
 pub const SPARKS_CAPACITY: u32 = 48;
@@ -24,16 +26,14 @@ pub fn compile(effects: &mut Assets<EffectAsset>, taper: Handle<Image>) -> Parti
 		radius: (writer.lit(0.06) * props.scale.clone()).expr(),
 		dimension: ShapeDimension::Volume,
 	};
-	let init_vel = init_radial_velocity(&writer, &props.scale, 3.5, 7.0);
+	let init_vel = init_radial_velocity(&writer, &props.scale, &props.playback, 3.5, 7.0);
 	let init_age = SetAttributeModifier::new(Attribute::AGE, writer.lit(0.).expr());
-	let init_lifetime = SetAttributeModifier::new(
-		Attribute::LIFETIME,
-		writer.lit(SPARKS_LIFE_MIN).uniform(writer.lit(SPARKS_LIFE_MAX)).expr(),
-	);
+	let init_lifetime = init_lifetime(&writer, &props.playback, SPARKS_LIFE_MIN, SPARKS_LIFE_MAX);
 	let init_color = SetAttributeModifier::new(Attribute::HDR_COLOR, props.tint.expr());
-	let update_drag = LinearDragModifier::new(writer.lit(1.2).expr());
-	let update_accel =
-		AccelModifier::new((writer.lit(Vec3::new(0.0, -10.0, 0.0)) * props.scale.clone()).expr());
+	let update_drag = LinearDragModifier::new((writer.lit(1.2) * props.playback.clone()).expr());
+	let update_accel = AccelModifier::new(
+		(writer.lit(Vec3::new(0.0, -10.0, 0.0)) * props.scale.clone() * props.playback).expr(),
+	);
 	let update_size = update_scaled_size3(
 		&writer,
 		&props.scale,

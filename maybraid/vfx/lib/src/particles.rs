@@ -10,18 +10,26 @@ use crate::spawn::VfxSpawn;
 pub const PROP_SCALE: &str = "vfx_scale";
 pub const PROP_TINT: &str = "vfx_tint";
 pub const PROP_SEED: &str = "vfx_seed";
+pub const PROP_PLAYBACK: &str = "vfx_playback";
 
 pub struct InstanceExprs {
 	pub scale: WriterExpr,
 	pub tint: WriterExpr,
 	pub seed: WriterExpr,
+	pub playback: WriterExpr,
 }
 
 pub fn add_instance_properties(writer: &ExprWriter) -> InstanceExprs {
 	let scale = writer.add_property(PROP_SCALE, 1.0.into());
 	let tint = writer.add_property(PROP_TINT, Vec4::ONE.into());
 	let seed = writer.add_property(PROP_SEED, 0.0.into());
-	InstanceExprs { scale: writer.prop(scale), tint: writer.prop(tint), seed: writer.prop(seed) }
+	let playback = writer.add_property(PROP_PLAYBACK, 1.0.into());
+	InstanceExprs {
+		scale: writer.prop(scale),
+		tint: writer.prop(tint),
+		seed: writer.prop(seed),
+		playback: writer.prop(playback),
+	}
 }
 
 pub fn effect_properties(spawn: &VfxSpawn, layer_scale: f32) -> EffectProperties {
@@ -30,6 +38,7 @@ pub fn effect_properties(spawn: &VfxSpawn, layer_scale: f32) -> EffectProperties
 	let tint = spawn.tint.map(LinearRgba::from).unwrap_or(LinearRgba::WHITE);
 	properties.set(PROP_TINT, Vec4::new(tint.red, tint.green, tint.blue, 1.0).into());
 	properties.set(PROP_SEED, seed_as_f32(spawn.seed).into());
+	properties.set(PROP_PLAYBACK, spawn.clamped_playback().into());
 	properties
 }
 
@@ -60,6 +69,7 @@ pub fn smoke_launch_velocity(
 pub fn init_smoke_velocity(
 	writer: &ExprWriter,
 	scale: &WriterExpr,
+	playback: &WriterExpr,
 	outward_min: f32,
 	outward_max: f32,
 	rise: f32,
@@ -69,21 +79,33 @@ pub fn init_smoke_velocity(
 	let dir = pos.clone().div(pos.length().max(writer.lit(1e-3)));
 	let outward = writer.lit(outward_min).uniform(writer.lit(outward_max));
 	let lift = if ground { rise.max(outward_max + 0.2) } else { rise };
-	let vel = (dir * outward + writer.lit(Vec3::Y) * writer.lit(lift)) * scale.clone();
+	let vel =
+		(dir * outward + writer.lit(Vec3::Y) * writer.lit(lift)) * scale.clone() * playback.clone();
 	SetAttributeModifier::new(Attribute::VELOCITY, vel.expr())
 }
 
 pub fn init_radial_velocity(
 	writer: &ExprWriter,
 	scale: &WriterExpr,
+	playback: &WriterExpr,
 	speed_min: f32,
 	speed_max: f32,
 ) -> SetAttributeModifier {
 	let pos = writer.attr(Attribute::POSITION);
 	let dir = pos.clone().div(pos.length().max(writer.lit(1e-3)));
 	let speed = writer.lit(speed_min).uniform(writer.lit(speed_max));
-	let vel = dir * speed * scale.clone();
+	let vel = dir * speed * scale.clone() * playback.clone();
 	SetAttributeModifier::new(Attribute::VELOCITY, vel.expr())
+}
+
+pub fn init_lifetime(
+	writer: &ExprWriter,
+	playback: &WriterExpr,
+	min: f32,
+	max: f32,
+) -> SetAttributeModifier {
+	let life = writer.lit(min).uniform(writer.lit(max)) / playback.clone();
+	SetAttributeModifier::new(Attribute::LIFETIME, life.expr())
 }
 
 pub fn update_scaled_size3(

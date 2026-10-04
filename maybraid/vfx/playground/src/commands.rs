@@ -30,6 +30,9 @@ pub enum PlaygroundCommand {
 		distance: f32,
 		#[arg(long, default_value_t = 0)]
 		seed: u64,
+		/// 1.0 is the authored layer envelope. Higher plays the same ratios faster.
+		#[arg(long, default_value_t = 1.0)]
+		playback: f32,
 	},
 	/// Spawn a named definition. Repeat to overlay instances.
 	Show {
@@ -43,6 +46,9 @@ pub enum PlaygroundCommand {
 		distance: f32,
 		#[arg(long, default_value_t = 0)]
 		seed: u64,
+		/// 1.0 is the authored layer envelope. Higher plays the same ratios faster.
+		#[arg(long, default_value_t = 1.0)]
+		playback: f32,
 	},
 	/// Spawn the last effect at near, mid, and far distances.
 	Spread,
@@ -73,6 +79,7 @@ pub struct VfxShowRequest {
 	pub intensity: f32,
 	pub distance: f32,
 	pub seed: u64,
+	pub playback: f32,
 }
 
 #[derive(Resource, Default, Clone, Debug)]
@@ -110,17 +117,26 @@ impl PlaygroundCommand {
 		match self {
 			Self::Help => *console = Self::long_help_string(),
 			Self::Script(script) => script.run(commands, console),
-			Self::FireyExplosion { scale, intensity, distance, seed } => {
-				queue_show(commands, console, "firey_explosion", scale, intensity, distance, seed);
+			Self::FireyExplosion { scale, intensity, distance, seed, playback } => {
+				queue_show(
+					commands,
+					console,
+					"firey_explosion",
+					scale,
+					intensity,
+					distance,
+					seed,
+					playback,
+				);
 			}
-			Self::Show { effect, scale, intensity, distance, seed } => {
+			Self::Show { effect, scale, intensity, distance, seed, playback } => {
 				let Some(name) = canonicalize_effect_name(&effect) else {
 					*console = format!(
 						"unknown effect `{effect}` — try firey-explosion, flash, fireball, smoke, sparks"
 					);
 					return;
 				};
-				queue_show(commands, console, name, scale, intensity, distance, seed);
+				queue_show(commands, console, name, scale, intensity, distance, seed, playback);
 			}
 			Self::Spread => {
 				*console = "spread near / mid / far".into();
@@ -183,9 +199,10 @@ fn queue_show(
 	intensity: f32,
 	distance: f32,
 	seed: u64,
+	playback: f32,
 ) {
 	*console = format!(
-		"show {name} --scale {scale} --intensity {intensity} --distance {distance} --seed {seed}"
+		"show {name} --scale {scale} --intensity {intensity} --distance {distance} --seed {seed} --playback {playback}"
 	);
 	let name = name.to_string();
 	commands.queue(move |world: &mut World| {
@@ -197,6 +214,7 @@ fn queue_show(
 			intensity,
 			distance,
 			seed,
+			playback,
 		});
 	});
 }

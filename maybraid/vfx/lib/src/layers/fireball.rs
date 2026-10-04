@@ -13,7 +13,9 @@ use crate::composition::{
 	EffectDefinition, EffectLayer, LobeKind, LobeSpec, MeshPart, ParticlePart, FIREBALL,
 };
 use crate::flipbook::update_sprite_index;
-use crate::particles::{add_instance_properties, init_radial_velocity, update_scaled_size3};
+use crate::particles::{
+	add_instance_properties, init_lifetime, init_radial_velocity, update_scaled_size3,
+};
 
 pub const FIREBALL_COUNT: f32 = 6.0;
 pub const FIREBALL_CAPACITY: u32 = 16;
@@ -48,17 +50,16 @@ pub fn compile_wisps(effects: &mut Assets<EffectAsset>, fire: &FlipbookAsset) ->
 		radius: (writer.lit(0.08) * props.scale.clone()).expr(),
 		dimension: ShapeDimension::Volume,
 	};
-	let init_vel = init_radial_velocity(&writer, &props.scale, 1.2, 2.4);
+	let init_vel = init_radial_velocity(&writer, &props.scale, &props.playback, 1.2, 2.4);
 	let init_age = SetAttributeModifier::new(Attribute::AGE, writer.lit(0.).expr());
-	let init_lifetime = SetAttributeModifier::new(
-		Attribute::LIFETIME,
-		writer.lit(FIREBALL_LIFE_MIN).uniform(writer.lit(FIREBALL_LIFE_MAX)).expr(),
-	);
+	let init_lifetime =
+		init_lifetime(&writer, &props.playback, FIREBALL_LIFE_MIN, FIREBALL_LIFE_MAX);
 	let init_sprite = SetAttributeModifier::new(Attribute::SPRITE_INDEX, writer.lit(0i32).expr());
 	let init_color = SetAttributeModifier::new(Attribute::HDR_COLOR, props.tint.expr());
-	let update_drag = LinearDragModifier::new(writer.lit(1.4).expr());
-	let update_accel =
-		AccelModifier::new((writer.lit(Vec3::new(0.0, 0.6, 0.0)) * props.scale.clone()).expr());
+	let update_drag = LinearDragModifier::new((writer.lit(1.4) * props.playback.clone()).expr());
+	let update_accel = AccelModifier::new(
+		(writer.lit(Vec3::new(0.0, 0.6, 0.0)) * props.scale.clone() * props.playback).expr(),
+	);
 	let update_size =
 		update_scaled_size3(&writer, &props.scale, Vec3::splat(0.32), Vec3::splat(0.72));
 	let update_sprite = update_sprite_index(&writer, fire);
