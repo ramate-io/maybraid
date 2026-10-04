@@ -1,7 +1,7 @@
 //! Spin-and-reveal slot: spinning mark, then a picture or a camera viewport.
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{Scene, bsn, template_value};
+use bevy::scene::prelude::{bsn, template_value, Scene};
 use bevy::text::{FontSourceTemplate, LineBreak};
 
 use crate::icons::maybraid::SpinningIcon;

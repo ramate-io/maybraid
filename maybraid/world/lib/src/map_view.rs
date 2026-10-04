@@ -7,7 +7,9 @@ use game_commands::command::TextEntryFocus;
 use geneva::{LanguageOverlay, NameKey, NamedOverlay};
 use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
 use menu_components::{
-	BARLOW_BLACK, ITEM_FONT_SIZE, NOTO_SANS_REGULAR, TEXT_YELLOW, TEXT_YELLOW_FAINT,
+	BARLOW_BLACK, BONES_ICON, ITEM_FONT_SIZE, MAP_ARROW_ICON, MAP_HOUSE_ICON, MAP_MOUNTAIN_ICON,
+	MAP_TOWN_ICON, MAP_TREE_ICON, MAP_WATER_ICON, NOTO_SANS_REGULAR, TEXT_SALMON, TEXT_YELLOW,
+	TEXT_YELLOW_FAINT,
 };
 use player::CameraFollow;
 use player_camera::{
@@ -31,10 +33,14 @@ const MAX_REGION_LABELS: usize = 2;
 const MAX_FEATURE_LABELS: usize = 6;
 const MAX_POI_LABELS: usize = 10;
 const REGION_LABEL_PX: f32 = 28.0;
-const FEATURE_LABEL_PX: f32 = 14.0;
-const POI_LABEL_PX: f32 = 7.0;
+const FEATURE_LABEL_PX: f32 = 16.0;
+const POI_LABEL_PX: f32 = 12.0;
 const PLAYER_MARKER_PX: f32 = 14.0;
-const SELECTED_POI_LABEL_PX: f32 = 16.0;
+const DEATH_BONES_PX: f32 = 32.0;
+const SELECTED_POI_LABEL_PX: f32 = 18.0;
+const MAP_MARK_PX: f32 = 22.0;
+const MAP_ARROW_PX: f32 = 18.0;
+const LABEL_SCREEN_GUTTER: f32 = 72.0;
 const SELECTION_RING_PX: f32 = 46.0;
 const SELECTION_DOT_PX: f32 = 10.0;
 const SPAWN_KNOB_PX: f32 = 12.0;
@@ -122,6 +128,41 @@ struct MapNamePin {
 #[derive(Component)]
 struct MapPlayerMarker;
 
+#[derive(Component)]
+struct MapDeathBones;
+
+#[derive(Component)]
+struct MapTypeMark {
+	target: MapPinTarget,
+}
+
+#[derive(Component)]
+struct MapEdgeArrow {
+	target: MapPinTarget,
+}
+
+#[derive(Resource, Clone)]
+struct MapBonesIcon(Handle<Image>);
+
+#[derive(Resource, Clone)]
+struct MapMarkIcons {
+	tree: Handle<Image>,
+	house: Handle<Image>,
+	town: Handle<Image>,
+	mountain: Handle<Image>,
+	water: Handle<Image>,
+	arrow: Handle<Image>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum MapMarkKind {
+	Tree,
+	House,
+	Town,
+	Mountain,
+	Water,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum MapPinTarget {
 	Name(NameKey),
@@ -172,7 +213,10 @@ impl Plugin for WorldMapViewPlugin {
 				Update,
 				(
 					sync_map_name_pins,
+					sync_map_type_marks,
+					sync_map_edge_arrows,
 					sync_map_player_marker,
+					sync_map_death_bones,
 					sync_respawn_picker_title,
 					sync_respawn_spawn_knobs,
 					sync_respawn_selection_marker,
@@ -185,6 +229,15 @@ impl Plugin for WorldMapViewPlugin {
 
 fn spawn_map_name_hud(mut commands: Commands, assets: Res<AssetServer>) {
 	commands.insert_resource(MapLabelFont(assets.load(NOTO_SANS_REGULAR)));
+	commands.insert_resource(MapBonesIcon(assets.load(BONES_ICON)));
+	commands.insert_resource(MapMarkIcons {
+		tree: assets.load(MAP_TREE_ICON),
+		house: assets.load(MAP_HOUSE_ICON),
+		town: assets.load(MAP_TOWN_ICON),
+		mountain: assets.load(MAP_MOUNTAIN_ICON),
+		water: assets.load(MAP_WATER_ICON),
+		arrow: assets.load(MAP_ARROW_ICON),
+	});
 	commands.spawn((
 		Name::new("map-name-hud"),
 		MapNameHud,
@@ -373,18 +426,21 @@ fn sync_map_name_pins(
 
 	let highlighted = pending.as_deref().and_then(|state| state.pending.as_ref()?.highlighted);
 	let wanted = map_pin_targets(&map, &overlay, registry.as_deref(), pending.as_deref());
+	let viewport = camera.logical_viewport_rect();
+	let picker = picker_prompt_visible(&map);
 	let mut assigned = Vec::new();
 	for (pin_entity, pin, mut node, mut text, mut font, mut color, mut visibility) in &mut pins {
 		let Some(target) = wanted.iter().find(|target| target.id == pin.target) else {
 			commands.entity(pin_entity).despawn();
 			continue;
 		};
-		let Some((screen, _)) =
+		let Some((projected, on_screen)) =
 			project_mob_pin(camera, camera_transform, pin_world(&surface, target.xz))
 		else {
 			*visibility = Visibility::Hidden;
 			continue;
 		};
+		let screen = pin_label_screen(projected, on_screen, viewport, target, picker).0;
 		place_map_pin(&mut node, screen, target, highlighted);
 		text.0 = target.label.clone();
 		*font = map_label_text_font(&fonts, target.size);
@@ -396,11 +452,12 @@ fn sync_map_name_pins(
 		if assigned.contains(&target.id) {
 			continue;
 		}
-		let Some((screen, _)) =
+		let Some((projected, on_screen)) =
 			project_mob_pin(camera, camera_transform, pin_world(&surface, target.xz))
 		else {
 			continue;
 		};
+		let screen = pin_label_screen(projected, on_screen, viewport, &target, picker).0;
 		commands.entity(hud).with_children(|root| {
 			root.spawn(MapNamePinBundle {
 				name: Name::new("map-name-pin"),
@@ -458,6 +515,7 @@ struct MapPinWanted {
 	extent: Rect,
 	label: String,
 	size: f32,
+	mark: Option<MapMarkKind>,
 }
 
 fn map_pin_targets(
@@ -488,6 +546,7 @@ fn map_pin_targets(
 						} else {
 							map_label_size(MapLabelKind::Poi)
 						},
+						mark: mark_for_poi(record, overlay),
 					});
 				}
 			}
@@ -534,6 +593,7 @@ fn map_pin_targets(
 			extent: name.extent,
 			label: map_name_label(&name.surface, &name.english),
 			size: map_label_size(kind),
+			mark: mark_for_name(name),
 		});
 	}
 	wanted.truncate(MAP_PIN_LIMIT);
@@ -807,6 +867,125 @@ fn pin_lines(label: &str) -> f32 {
 	label.lines().count().max(1) as f32
 }
 
+fn pin_label_half(target: &MapPinWanted) -> Vec2 {
+	Vec2::new(
+		pin_width(target.size, &target.label) * 0.5,
+		target.size * 0.85 * pin_lines(&target.label),
+	)
+}
+
+fn pin_label_screen(
+	projected: Vec2,
+	on_screen: bool,
+	viewport: Option<Rect>,
+	target: &MapPinWanted,
+	picker: bool,
+) -> (Vec2, Option<Vec2>) {
+	let Some(viewport) = viewport else {
+		return (projected, None);
+	};
+	comfortable_label_screen(projected, on_screen, viewport, pin_label_half(target), picker)
+}
+
+fn comfortable_label_screen(
+	projected: Vec2,
+	on_screen: bool,
+	viewport: Rect,
+	half: Vec2,
+	picker: bool,
+) -> (Vec2, Option<Vec2>) {
+	let top =
+		if picker { PICKER_TITLE_GUTTER + ITEM_FONT_SIZE + 12.0 } else { LABEL_SCREEN_GUTTER };
+	let min = viewport.min + Vec2::new(LABEL_SCREEN_GUTTER, top) + half;
+	let max = viewport.max - Vec2::splat(LABEL_SCREEN_GUTTER) - half;
+	let clamped = Vec2::new(
+		projected.x.clamp(min.x.min(max.x), max.x.max(min.x)),
+		projected.y.clamp(min.y.min(max.y), max.y.max(min.y)),
+	);
+	let delta = projected - clamped;
+	if !on_screen || delta.length() > 8.0 {
+		let dir = if delta.length() > 1e-3 {
+			delta.normalize()
+		} else {
+			(projected - viewport.center()).normalize_or(Vec2::NEG_Y)
+		};
+		(clamped, Some(dir))
+	} else {
+		(clamped, None)
+	}
+}
+
+fn mark_for_name(name: &NamedOverlay) -> Option<MapMarkKind> {
+	match name.key {
+		NameKey::Grove(_) | NameKey::Forest(_) => Some(MapMarkKind::Tree),
+		NameKey::Place { .. } | NameKey::ProvisionalPlace { .. } => Some(MapMarkKind::House),
+		NameKey::Urban(_) | NameKey::UrbanLeaf(_) => Some(MapMarkKind::Town),
+		NameKey::Geographic(_) => mark_from_english(&name.english),
+		NameKey::Region { .. } => None,
+	}
+}
+
+fn mark_for_poi(poi: &PoiRecord, overlay: &LanguageOverlay) -> Option<MapMarkKind> {
+	if let Some(name) = overlay_name_for_poi(poi, overlay) {
+		if let Some(mark) = mark_for_name(name) {
+			return Some(mark);
+		}
+	}
+	let kind = poi.kind.name();
+	if kind.contains("vegetation") || kind.contains("forage") {
+		Some(MapMarkKind::Tree)
+	} else if kind.contains("urban") || kind.contains("saloon") {
+		Some(MapMarkKind::Town)
+	} else if kind.contains("water") {
+		Some(MapMarkKind::Water)
+	} else {
+		Some(MapMarkKind::House)
+	}
+}
+
+fn mark_from_english(english: &[String]) -> Option<MapMarkKind> {
+	const WATER: &[&str] = &[
+		"lake",
+		"loch",
+		"tarn",
+		"mere",
+		"stream",
+		"brook",
+		"creek",
+		"rivulet",
+		"run",
+		"pool",
+		"pond",
+		"bog",
+		"marsh",
+		"fen",
+		"mire",
+		"swamp",
+		"water",
+		"waters",
+		"waterhole",
+	];
+	if english.iter().any(|word| WATER.contains(&word.as_str())) {
+		Some(MapMarkKind::Water)
+	} else {
+		Some(MapMarkKind::Mountain)
+	}
+}
+
+fn mark_image(icons: &MapMarkIcons, kind: MapMarkKind) -> Handle<Image> {
+	match kind {
+		MapMarkKind::Tree => icons.tree.clone(),
+		MapMarkKind::House => icons.house.clone(),
+		MapMarkKind::Town => icons.town.clone(),
+		MapMarkKind::Mountain => icons.mountain.clone(),
+		MapMarkKind::Water => icons.water.clone(),
+	}
+}
+
+fn arrow_rotation(dir: Vec2) -> f32 {
+	dir.y.atan2(dir.x) + std::f32::consts::FRAC_PI_2
+}
+
 fn pin_label_top(screen_y: f32, target: &MapPinWanted, highlighted: Option<PoiId>) -> f32 {
 	if matches!(target.id, MapPinTarget::Poi(_)) {
 		let selected = matches!(target.id, MapPinTarget::Poi(id) if Some(id) == highlighted);
@@ -836,9 +1015,213 @@ fn place_map_pin(node: &mut Node, screen: Vec2, target: &MapPinWanted, highlight
 	node.width = Val::Px(width);
 }
 
+fn sync_map_type_marks(
+	map: Res<WorldMapView>,
+	overlay: Res<LanguageOverlay>,
+	icons: Res<MapMarkIcons>,
+	registry: Option<Res<PoiRegistry>>,
+	pending: Option<Res<WorldPlayerRespawnState>>,
+	camera: Query<(&Camera, &GlobalTransform), (With<Camera3d>, With<FollowCamera>)>,
+	surface: TerrainView<Urbanization<Richmond<OnTerrain<Durham>>>>,
+	hud: Query<Entity, With<MapNameHud>>,
+	mut marks: Query<(Entity, &MapTypeMark, &mut Node, &mut ImageNode, &mut Visibility)>,
+	mut commands: Commands,
+) {
+	if !map.open {
+		for (entity, _, _, _, _) in &marks {
+			commands.entity(entity).despawn();
+		}
+		return;
+	}
+	let Ok((camera, camera_transform)) = camera.single() else {
+		for (_, _, _, _, mut visibility) in &mut marks {
+			*visibility = Visibility::Hidden;
+		}
+		return;
+	};
+	let Ok(hud) = hud.single() else {
+		return;
+	};
+	let wanted = map_pin_targets(&map, &overlay, registry.as_deref(), pending.as_deref());
+	let mut assigned = Vec::new();
+	for (entity, mark, mut node, mut image, mut visibility) in &mut marks {
+		let Some(target) =
+			wanted.iter().find(|target| target.id == mark.target && target.mark.is_some())
+		else {
+			commands.entity(entity).despawn();
+			continue;
+		};
+		let Some((screen, on_screen)) =
+			project_mob_pin(camera, camera_transform, pin_world(&surface, target.xz))
+		else {
+			*visibility = Visibility::Hidden;
+			continue;
+		};
+		if !on_screen {
+			*visibility = Visibility::Hidden;
+			continue;
+		}
+		place_type_mark(&mut node, screen);
+		if let Some(kind) = target.mark {
+			image.image = mark_image(&icons, kind);
+		}
+		*visibility = Visibility::Visible;
+		assigned.push(target.id);
+	}
+	for target in wanted {
+		if assigned.contains(&target.id) || target.mark.is_none() {
+			continue;
+		}
+		let Some((screen, on_screen)) =
+			project_mob_pin(camera, camera_transform, pin_world(&surface, target.xz))
+		else {
+			continue;
+		};
+		if !on_screen {
+			continue;
+		}
+		let Some(kind) = target.mark else {
+			continue;
+		};
+		commands.entity(hud).with_children(|root| {
+			root.spawn((
+				Name::new("map-type-mark"),
+				MapTypeMark { target: target.id },
+				type_mark_node(screen),
+				ImageNode { image: mark_image(&icons, kind), ..default() },
+				Pickable::IGNORE,
+				Visibility::Visible,
+				GlobalZIndex(i32::MAX - 8),
+			));
+		});
+	}
+}
+
+fn type_mark_node(screen: Vec2) -> Node {
+	Node {
+		position_type: PositionType::Absolute,
+		left: Val::Px(screen.x - MAP_MARK_PX * 0.5),
+		top: Val::Px(screen.y - MAP_MARK_PX * 0.5),
+		width: Val::Px(MAP_MARK_PX),
+		height: Val::Px(MAP_MARK_PX),
+		..default()
+	}
+}
+
+fn place_type_mark(node: &mut Node, screen: Vec2) {
+	node.left = Val::Px(screen.x - MAP_MARK_PX * 0.5);
+	node.top = Val::Px(screen.y - MAP_MARK_PX * 0.5);
+}
+
+fn sync_map_edge_arrows(
+	map: Res<WorldMapView>,
+	overlay: Res<LanguageOverlay>,
+	icons: Res<MapMarkIcons>,
+	registry: Option<Res<PoiRegistry>>,
+	pending: Option<Res<WorldPlayerRespawnState>>,
+	camera: Query<(&Camera, &GlobalTransform), (With<Camera3d>, With<FollowCamera>)>,
+	surface: TerrainView<Urbanization<Richmond<OnTerrain<Durham>>>>,
+	hud: Query<Entity, With<MapNameHud>>,
+	mut arrows: Query<(Entity, &MapEdgeArrow, &mut Node, &mut UiTransform, &mut Visibility)>,
+	mut commands: Commands,
+) {
+	if !map.open {
+		for (entity, _, _, _, _) in &arrows {
+			commands.entity(entity).despawn();
+		}
+		return;
+	}
+	let Ok((camera, camera_transform)) = camera.single() else {
+		for (_, _, _, _, mut visibility) in &mut arrows {
+			*visibility = Visibility::Hidden;
+		}
+		return;
+	};
+	let Ok(hud) = hud.single() else {
+		return;
+	};
+	let viewport = camera.logical_viewport_rect();
+	let picker = picker_prompt_visible(&map);
+	let wanted = map_pin_targets(&map, &overlay, registry.as_deref(), pending.as_deref());
+	let mut assigned = Vec::new();
+	for (entity, arrow, mut node, mut transform, mut visibility) in &mut arrows {
+		let Some(target) = wanted.iter().find(|target| target.id == arrow.target) else {
+			commands.entity(entity).despawn();
+			continue;
+		};
+		let Some((projected, on_screen)) =
+			project_mob_pin(camera, camera_transform, pin_world(&surface, target.xz))
+		else {
+			*visibility = Visibility::Hidden;
+			continue;
+		};
+		let (label_screen, dir) = pin_label_screen(projected, on_screen, viewport, target, picker);
+		let Some(dir) = dir else {
+			*visibility = Visibility::Hidden;
+			continue;
+		};
+		place_edge_arrow(&mut node, label_screen, dir);
+		transform.rotation = Rot2::radians(arrow_rotation(dir));
+		*visibility = Visibility::Visible;
+		assigned.push(target.id);
+	}
+	for target in wanted {
+		if assigned.contains(&target.id) {
+			continue;
+		}
+		let Some((projected, on_screen)) =
+			project_mob_pin(camera, camera_transform, pin_world(&surface, target.xz))
+		else {
+			continue;
+		};
+		let (label_screen, Some(dir)) =
+			pin_label_screen(projected, on_screen, viewport, &target, picker)
+		else {
+			continue;
+		};
+		commands.entity(hud).with_children(|root| {
+			root.spawn((
+				Name::new("map-edge-arrow"),
+				MapEdgeArrow { target: target.id },
+				edge_arrow_node(label_screen, dir),
+				ImageNode {
+					image: icons.arrow.clone(),
+					color: label_ink(target.id, None),
+					..default()
+				},
+				UiTransform { rotation: Rot2::radians(arrow_rotation(dir)), ..default() },
+				Pickable::IGNORE,
+				Visibility::Visible,
+				GlobalZIndex(i32::MAX - 6),
+			));
+		});
+	}
+}
+
+fn edge_arrow_screen(label: Vec2, dir: Vec2) -> Vec2 {
+	label + dir * (MAP_ARROW_PX * 0.9)
+}
+
+fn edge_arrow_node(label: Vec2, dir: Vec2) -> Node {
+	let screen = edge_arrow_screen(label, dir);
+	Node {
+		position_type: PositionType::Absolute,
+		left: Val::Px(screen.x - MAP_ARROW_PX * 0.5),
+		top: Val::Px(screen.y - MAP_ARROW_PX * 0.5),
+		width: Val::Px(MAP_ARROW_PX),
+		height: Val::Px(MAP_ARROW_PX),
+		..default()
+	}
+}
+
+fn place_edge_arrow(node: &mut Node, label: Vec2, dir: Vec2) {
+	let screen = edge_arrow_screen(label, dir);
+	node.left = Val::Px(screen.x - MAP_ARROW_PX * 0.5);
+	node.top = Val::Px(screen.y - MAP_ARROW_PX * 0.5);
+}
+
 fn sync_map_player_marker(
 	map: Res<WorldMapView>,
-	pending: Option<Res<WorldPlayerRespawnState>>,
 	players: Query<&Transform, With<VegetationPlayer>>,
 	camera: Query<(&Camera, &GlobalTransform), (With<Camera3d>, With<FollowCamera>)>,
 	surface: TerrainView<Urbanization<Richmond<OnTerrain<Durham>>>>,
@@ -846,11 +1229,11 @@ fn sync_map_player_marker(
 	mut markers: Query<(&mut Node, &mut Visibility), With<MapPlayerMarker>>,
 	mut commands: Commands,
 ) {
-	if !map.open {
+	if !map.open || picker_prompt_visible(&map) {
 		hide_player_markers(&mut markers);
 		return;
 	}
-	let Some(xz) = player_map_xz(players.iter().next(), death_xz(pending.as_deref())) else {
+	let Some(xz) = players.iter().next().map(|transform| transform.translation.xz()) else {
 		hide_player_markers(&mut markers);
 		return;
 	};
@@ -917,6 +1300,79 @@ fn player_marker_node(screen: Vec2) -> Node {
 fn place_player_marker(node: &mut Node, screen: Vec2) {
 	node.left = Val::Px(screen.x - PLAYER_MARKER_PX * 0.5);
 	node.top = Val::Px(screen.y - PLAYER_MARKER_PX * 0.5);
+}
+
+fn sync_map_death_bones(
+	map: Res<WorldMapView>,
+	pending: Option<Res<WorldPlayerRespawnState>>,
+	icon: Option<Res<MapBonesIcon>>,
+	camera: Query<(&Camera, &GlobalTransform), (With<Camera3d>, With<FollowCamera>)>,
+	surface: TerrainView<Urbanization<Richmond<OnTerrain<Durham>>>>,
+	hud: Query<Entity, With<MapNameHud>>,
+	mut markers: Query<(&mut Node, &mut Visibility), With<MapDeathBones>>,
+	mut commands: Commands,
+) {
+	if !picker_prompt_visible(&map) {
+		hide_death_bones(&mut markers);
+		return;
+	}
+	let Some(xz) = death_xz(pending.as_deref()) else {
+		hide_death_bones(&mut markers);
+		return;
+	};
+	let Ok((camera, camera_transform)) = camera.single() else {
+		hide_death_bones(&mut markers);
+		return;
+	};
+	let Some((screen, _)) = project_mob_pin(camera, camera_transform, pin_world(&surface, xz))
+	else {
+		hide_death_bones(&mut markers);
+		return;
+	};
+	if let Some((mut node, mut visibility)) = markers.iter_mut().next() {
+		place_death_bones(&mut node, screen);
+		*visibility = Visibility::Visible;
+		return;
+	}
+	let Some(icon) = icon else {
+		return;
+	};
+	let Ok(hud) = hud.single() else {
+		return;
+	};
+	commands.entity(hud).with_children(|root| {
+		root.spawn((
+			Name::new("map-death-bones"),
+			MapDeathBones,
+			death_bones_node(screen),
+			ImageNode { image: icon.0.clone(), color: TEXT_SALMON, ..default() },
+			Pickable::IGNORE,
+			Visibility::Visible,
+			GlobalZIndex(i32::MAX - 7),
+		));
+	});
+}
+
+fn hide_death_bones(markers: &mut Query<(&mut Node, &mut Visibility), With<MapDeathBones>>) {
+	for (_, mut visibility) in markers.iter_mut() {
+		*visibility = Visibility::Hidden;
+	}
+}
+
+fn death_bones_node(screen: Vec2) -> Node {
+	Node {
+		position_type: PositionType::Absolute,
+		left: Val::Px(screen.x - DEATH_BONES_PX * 0.5),
+		top: Val::Px(screen.y - DEATH_BONES_PX * 0.5),
+		width: Val::Px(DEATH_BONES_PX),
+		height: Val::Px(DEATH_BONES_PX),
+		..default()
+	}
+}
+
+fn place_death_bones(node: &mut Node, screen: Vec2) {
+	node.left = Val::Px(screen.x - DEATH_BONES_PX * 0.5);
+	node.top = Val::Px(screen.y - DEATH_BONES_PX * 0.5);
 }
 
 fn picker_prompt_visible(map: &WorldMapView) -> bool {
@@ -1167,9 +1623,10 @@ fn draw_highlighted_poi(
 	if !map.open {
 		return;
 	}
-	if let Some(xz) = player_map_xz(players.iter().next(), death_xz(pending.as_deref())) {
-		let at = pin_world(&surface, xz);
-		gizmos.sphere(Isometry3d::from_translation(at), 2.2, TEXT_YELLOW);
+	if !picker_prompt_visible(&map) {
+		if let Some(xz) = players.iter().next().map(|transform| transform.translation.xz()) {
+			gizmos.sphere(Isometry3d::from_translation(pin_world(&surface, xz)), 2.2, TEXT_YELLOW);
+		}
 	}
 	let Some(id) = pending.as_deref().and_then(|state| state.pending.as_ref()?.highlighted) else {
 		return;
@@ -1305,12 +1762,10 @@ mod tests {
 	}
 
 	#[test]
-	fn label_sizes_halve_by_layer() {
-		assert_eq!(
-			map_label_size(MapLabelKind::Feature),
-			map_label_size(MapLabelKind::Region) * 0.5
-		);
-		assert_eq!(map_label_size(MapLabelKind::Poi), map_label_size(MapLabelKind::Feature) * 0.5);
+	fn label_sizes_step_down_by_layer() {
+		assert!(map_label_size(MapLabelKind::Region) > map_label_size(MapLabelKind::Feature));
+		assert!(map_label_size(MapLabelKind::Feature) > map_label_size(MapLabelKind::Poi));
+		assert!(map_label_size(MapLabelKind::Poi) >= 12.0);
 		assert_eq!(
 			map_label_kind(MapPinTarget::Name(NameKey::Region { ix: 0, iz: 0 })),
 			MapLabelKind::Region
@@ -1448,6 +1903,7 @@ mod tests {
 			extent: Rect::from_center_size(Vec2::ZERO, Vec2::splat(12.0)),
 			label: "Grove".into(),
 			size: SELECTED_POI_LABEL_PX,
+			mark: Some(MapMarkKind::Tree),
 		};
 		let top = pin_label_top(100.0, &target, Some(PoiId(1)));
 		assert!(top > 100.0, "cartographic labels sit under the marker, top={top}");
@@ -1477,6 +1933,41 @@ mod tests {
 			..default()
 		}));
 		assert!(!picker_prompt_visible(&WorldMapView::default()));
+	}
+
+	#[test]
+	fn respawn_map_uses_the_bones_icon_for_death() {
+		assert_eq!(BONES_ICON, "iconography/bones_icon.png");
+		assert!(DEATH_BONES_PX > PLAYER_MARKER_PX);
+	}
+
+	#[test]
+	fn map_uses_kenney_cartography_marks() {
+		assert_eq!(MAP_TREE_ICON, "iconography/kenney/cartography/tree_pine.png");
+		assert_eq!(MAP_HOUSE_ICON, "iconography/kenney/cartography/house.png");
+		assert_eq!(MAP_ARROW_ICON, "iconography/kenney/game-icons/arrow_up.png");
+		assert_eq!(mark_from_english(&["blue".into(), "lake".into()]), Some(MapMarkKind::Water));
+		assert_eq!(
+			mark_from_english(&["rolling".into(), "hills".into()]),
+			Some(MapMarkKind::Mountain)
+		);
+	}
+
+	#[test]
+	fn edge_labels_stay_inside_the_screen_and_point_out() {
+		let viewport = Rect::from_corners(Vec2::ZERO, Vec2::new(800.0, 600.0));
+		let (screen, dir) = comfortable_label_screen(
+			Vec2::new(790.0, 20.0),
+			false,
+			viewport,
+			Vec2::new(40.0, 16.0),
+			false,
+		);
+		assert!(screen.x < 800.0 - 40.0);
+		assert!(screen.y > 40.0);
+		let dir = dir.expect("off-screen labels keep an arrow");
+		assert!(dir.x > 0.0);
+		assert!(dir.y < 0.0);
 	}
 
 	#[test]

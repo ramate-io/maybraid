@@ -10,9 +10,9 @@ use crate::theme::{
 	TEXT_YELLOW_HOVER, TILE_FOCUS_PAD,
 };
 
-use super::HudFonts;
 use super::display::menu_display_name;
 use super::hud_menu::{HudMenu, HudMenuItem};
+use super::HudFonts;
 
 const TILE_PAD_X: f32 = 8.0;
 const TILE_PAD_Y: f32 = 6.0;
@@ -380,7 +380,7 @@ mod tests {
 	use bevy::ecs::system::RunSystemOnce;
 	use bevy::prelude::*;
 
-	use super::{HoverTile, sync_hover_tiles, tile_caption, tile_grid_columns, tile_node};
+	use super::{sync_hover_tiles, tile_caption, tile_grid_columns, tile_node, HoverTile};
 	use crate::controls::hud_menu::{HudMenu, HudMenuItem};
 	use crate::theme::PANEL_TILE_COLUMNS;
 

@@ -14,8 +14,8 @@ use urbanization_layer_model::Urbanization;
 use vegetation_layer_model::Vegetation;
 
 use crate::english::{
-	development_terms, geographic_terms, grove_kind_terms, layering_terms, place_label_terms,
-	urbanization_terms, with_color_name,
+	named_forest_english, named_geographic_english, named_grove_english, named_place_english,
+	named_urban_english,
 };
 use crate::index::{name_key_salt, NameKey};
 use crate::name::terms_fingerprint;
@@ -154,19 +154,21 @@ fn grove_features(index: &ForestIndex, region: Aabb3d) -> Vec<NamedFeature> {
 			continue;
 		};
 		let revision = SpatialIndex::<ChicoForest>::version(index, id).map(|v| v.0).unwrap_or(0);
-		let mut english = layering_terms(forest.layers.layering);
-		for kind in [
+		let kinds = [
 			forest.layers.tufts,
 			forest.layers.understory,
 			forest.layers.lower_canopy,
 			forest.layers.upper_canopy,
 		]
 		.into_iter()
-		.flatten()
-		{
-			english.extend(grove_kind_terms(kind));
-		}
-		out.push(NamedFeature::new(NameKey::Forest(id), bounds, english, revision));
+		.flatten();
+		let key = NameKey::Forest(id);
+		out.push(NamedFeature::new(
+			key,
+			bounds,
+			named_forest_english(forest.layers.layering, kinds, name_key_salt(key)),
+			revision,
+		));
 	}
 	for TrackedId(id) in SpatialIndex::<ChicoGrove>::tracked_ids_for(index, region) {
 		let Some(grove) = SpatialIndex::<ChicoGrove>::get(index, id) else {
@@ -176,15 +178,11 @@ fn grove_features(index: &ForestIndex, region: Aabb3d) -> Vec<NamedFeature> {
 			continue;
 		};
 		let revision = SpatialIndex::<ChicoGrove>::version(index, id).map(|v| v.0).unwrap_or(0);
-		let mut english = Vec::new();
-		for recipe in &grove.recipes {
-			english.extend(grove_kind_terms(recipe.kind));
-		}
 		let key = NameKey::Grove(id);
 		out.push(NamedFeature::new(
 			key,
 			bounds,
-			with_color_name(english, name_key_salt(key)),
+			named_grove_english(grove.recipes.iter().map(|recipe| recipe.kind), name_key_salt(key)),
 			revision,
 		));
 	}
@@ -203,7 +201,10 @@ fn geography_features(store: &TerrainEntryStore, region: Aabb3d) -> Vec<NamedFea
 			NamedFeature::new(
 				NameKey::Geographic(feature.id),
 				bounds,
-				geographic_terms(feature.kind),
+				named_geographic_english(
+					feature.kind,
+					name_key_salt(NameKey::Geographic(feature.id)),
+				),
 				feature.revision.0,
 			)
 		})
@@ -222,15 +223,15 @@ fn urban_features(index: &UrbanizationIndex, region: Aabb3d) -> Vec<NamedFeature
 		let revision = SpatialIndex::<SelectedUrbanization>::version(index, id)
 			.map(|v| v.0)
 			.unwrap_or(0);
-		let english = urbanization_terms(cell.kind);
-		out.push(NamedFeature::new(NameKey::Urban(id), bounds, english.clone(), revision));
+		let cell_key = NameKey::Urban(id);
+		let english = named_urban_english(cell.kind, None, name_key_salt(cell_key));
+		out.push(NamedFeature::new(cell_key, bounds, english, revision));
 		for leaf in &cell.leaves {
-			let mut leaf_english = english.clone();
-			leaf_english.extend(development_terms(leaf.kind));
+			let leaf_key = NameKey::UrbanLeaf(leaf.id());
 			out.push(NamedFeature::new(
-				NameKey::UrbanLeaf(leaf.id()),
+				leaf_key,
 				leaf.bounds,
-				leaf_english,
+				named_urban_english(cell.kind, Some(leaf.kind), name_key_salt(leaf_key)),
 				revision,
 			));
 		}
@@ -250,8 +251,8 @@ fn place_features(
 		}
 		let xz = Vec2::new(world.x, world.z);
 		let (key, provisional, inherit_host_language) = place_key(place, xz);
-		let english = with_color_name(
-			place_label_terms(place.label),
+		let english = named_place_english(
+			place.label,
 			place_identity_bits(place) ^ u64::from(xz.x.to_bits()) ^ u64::from(xz.y.to_bits()),
 		);
 		let fingerprint = terms_fingerprint(&english);
@@ -310,8 +311,8 @@ pub(crate) fn places_from_world_xz(
 		}
 		let xz = Vec2::new(world.x, world.z);
 		let (key, provisional, inherit_host_language) = place_key(&place, xz);
-		let english = with_color_name(
-			place_label_terms(place.label),
+		let english = named_place_english(
+			place.label,
 			place_identity_bits(&place) ^ u64::from(xz.x.to_bits()) ^ u64::from(xz.y.to_bits()),
 		);
 		let fingerprint = terms_fingerprint(&english);

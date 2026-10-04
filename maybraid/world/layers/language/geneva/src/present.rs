@@ -6,10 +6,10 @@ use language_layer_model::Language;
 use lod::lod_present_gate_open;
 use terrain_layer_model::TerrainModel;
 
-use crate::Geneva;
 use crate::index::{LanguageIndex, NameKey};
 use crate::name::AssignedName;
 use crate::sources::NamedWorld;
+use crate::Geneva;
 
 /// Channel marker for language generate / present keep.
 #[derive(Debug, Clone, Copy, Default)]

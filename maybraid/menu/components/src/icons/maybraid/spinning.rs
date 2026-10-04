@@ -3,7 +3,7 @@
 use std::f32::consts::TAU;
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{Scene, bsn, template_value};
+use bevy::scene::prelude::{bsn, template_value, Scene};
 
 use crate::theme::{LOADING_SPIN_SECS, MAYBRAID_LOGO};
 

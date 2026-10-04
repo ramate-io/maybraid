@@ -6,16 +6,17 @@ use bevy::state::app::StatesPlugin;
 use chico::ForestGroveKind;
 use durham::{GeographicBand, GeographicFamily, GeographicFeatureId, GeographicFeatureKind};
 use language_layer_model::{Language, LanguageGeneration};
-use layer_stack::{
-	Generate, GenerationMode, GenerationModePlugin, Present, Scheme,
-};
+use layer_stack::{Generate, GenerationMode, GenerationModePlugin, Present, Scheme};
 use lod::gen::Id;
 use lod::lod_ref::LodRef;
 use lod::LodPresentGate;
 use richmond::{DiscoverablePlace, DiscoverablePlaceLabel};
 use terrain_layer_model::{HeightField, OnTerrain, TerrainCell, TerrainGeneration, TerrainModel};
 
-use crate::english::{geographic_terms, grove_kind_terms, with_color_name, PLACE_COLORS};
+use crate::english::{
+	compose_english, geographic_terms, grove_kind_terms, named_grove_english, with_color_name,
+	PLACE_COLORS,
+};
 use crate::index::{LanguageConfig, LanguageIndex, LanguageWorldSeed, NameKey};
 use crate::name::{canonicalize_terms, pick_terms, terms_fingerprint, PlaceName};
 use crate::present::LanguageOverlay;
@@ -35,10 +36,40 @@ fn origin_cell(min_x: f32, min_z: f32, max_x: f32, max_z: f32) -> Id {
 
 #[test]
 fn explicit_vocab_does_not_split_debug_idents() -> anyhow::Result<()> {
-	anyhow::ensure!(grove_kind_terms(ForestGroveKind::RiparianMix) == ["riparian"]);
-	anyhow::ensure!(grove_kind_terms(ForestGroveKind::RollingOaks) == ["oak"]);
-	anyhow::ensure!(geographic_terms(GeographicFeatureKind::StreamsGraph) == ["stream"]);
-	anyhow::ensure!(geographic_terms(GeographicFeatureKind::Massif) == ["massif", "mountain"]);
+	let riparian = grove_kind_terms(ForestGroveKind::RiparianMix);
+	anyhow::ensure!(riparian.contains(&"riparian".to_owned()));
+	anyhow::ensure!(riparian
+		.iter()
+		.any(|word| ["grove", "stand", "gallery", "woods"].contains(&word.as_str())));
+	let oak = grove_kind_terms(ForestGroveKind::RollingOaks);
+	anyhow::ensure!(oak.contains(&"oak".to_owned()));
+	anyhow::ensure!(oak
+		.iter()
+		.any(|word| ["grove", "stand", "copse", "woods"].contains(&word.as_str())));
+	let stream = geographic_terms(GeographicFeatureKind::StreamsGraph);
+	anyhow::ensure!(stream.contains(&"stream".to_owned()));
+	let massif = geographic_terms(GeographicFeatureKind::Massif);
+	anyhow::ensure!(
+		massif.contains(&"massif".to_owned()) && massif.contains(&"mountain".to_owned())
+	);
+	Ok(())
+}
+
+#[test]
+fn grove_english_keeps_a_noun_head() -> anyhow::Result<()> {
+	let phrase = named_grove_english([ForestGroveKind::RiparianMix], 7);
+	anyhow::ensure!(phrase.first().is_some_and(|word| PLACE_COLORS.contains(&word.as_str())));
+	anyhow::ensure!(
+		phrase
+			.last()
+			.is_some_and(|word| ["grove", "stand", "gallery", "woods"].contains(&word.as_str())),
+		"expected a grove noun, got {phrase:?}"
+	);
+	anyhow::ensure!(phrase.len() >= 2);
+	let rolling = compose_english(&["rolling"], &["hills", "downs"], 3, false);
+	anyhow::ensure!(
+		rolling.last() == Some(&"hills".to_owned()) || rolling.last() == Some(&"downs".to_owned())
+	);
 	Ok(())
 }
 
@@ -47,12 +78,10 @@ fn color_names_vary_by_seed_and_keep_the_kind() -> anyhow::Result<()> {
 	let first = with_color_name(vec!["bush".to_owned()], 1);
 	anyhow::ensure!(first.len() == 2 && first[1] == "bush");
 	anyhow::ensure!(PLACE_COLORS.contains(&first[0].as_str()));
-	let colors: std::collections::HashSet<_> =
-		(0..48).map(|seed| with_color_name(vec!["bush".to_owned()], seed)[0].clone()).collect();
-	anyhow::ensure!(
-		colors.len() > 4,
-		"expected several colors across seeds, got {colors:?}"
-	);
+	let colors: std::collections::HashSet<_> = (0..48)
+		.map(|seed| with_color_name(vec!["bush".to_owned()], seed)[0].clone())
+		.collect();
+	anyhow::ensure!(colors.len() > 4, "expected several colors across seeds, got {colors:?}");
 	Ok(())
 }
 
@@ -75,9 +104,10 @@ fn large_tiles_compose_three_to_twelve_languages() -> anyhow::Result<()> {
 			anyhow::ensure!(!tile.small.is_empty());
 			for small in &tile.small {
 				anyhow::ensure!(!small.language_ids.is_empty());
-				anyhow::ensure!(
-					small.language_ids.iter().all(|id| (*id as usize) < tile.languages.len())
-				);
+				anyhow::ensure!(small
+					.language_ids
+					.iter()
+					.all(|id| (*id as usize) < tile.languages.len()));
 			}
 		}
 	}
@@ -142,9 +172,7 @@ fn small_tiles_stay_inside_the_large_tile() -> anyhow::Result<()> {
 fn language_subset_uses_feature_key_not_lowest_id() -> anyhow::Result<()> {
 	let mut index = LanguageIndex::default();
 	index.ensure_tiles(SEED, feature_aabb(0.0, 0.0, LARGE_TILE, LARGE_TILE));
-	let tile = index
-		.large_tile(0, 0)
-		.ok_or_else(|| anyhow::anyhow!("tile"))?;
+	let tile = index.large_tile(0, 0).ok_or_else(|| anyhow::anyhow!("tile"))?;
 	let small = tile
 		.small
 		.iter()
@@ -234,7 +262,12 @@ fn overlay_copies_name_anchors() -> anyhow::Result<()> {
 	index.assign_keep(
 		SEED,
 		region,
-		&[NamedFeature::new(key, feature_aabb(10.0, 10.0, 20.0, 20.0), vec!["plateau".to_owned()], 1)],
+		&[NamedFeature::new(
+			key,
+			feature_aabb(10.0, 10.0, 20.0, 20.0),
+			vec!["plateau".to_owned()],
+			1,
+		)],
 		&[],
 	);
 	let overlay = LanguageOverlay::from_index(&index);
@@ -267,22 +300,21 @@ fn source_revision_invalidates_feature_names_unload_does_not() -> anyhow::Result
 		band: GeographicBand::LowPass,
 		source: origin_cell(10.0, 10.0, 20.0, 20.0),
 	});
-	let first = NamedFeature::new(key, feature_aabb(10.0, 10.0, 20.0, 20.0), vec!["plateau".to_owned()], 1);
+	let first =
+		NamedFeature::new(key, feature_aabb(10.0, 10.0, 20.0, 20.0), vec!["plateau".to_owned()], 1);
 	index.assign_keep(SEED, region, &[first.clone()], &[]);
 	let first_name = index.name(key).ok_or_else(|| anyhow::anyhow!("first"))?.clone();
 
 	index.assign_keep(SEED, region, &[], &[]);
 	anyhow::ensure!(index.name(key) == Some(&first_name), "visual unload must keep the name");
 
-	let restamp = NamedFeature::new(
-		key,
-		feature_aabb(10.0, 10.0, 20.0, 20.0),
-		vec!["canyon".to_owned()],
-		2,
-	);
+	let restamp =
+		NamedFeature::new(key, feature_aabb(10.0, 10.0, 20.0, 20.0), vec!["canyon".to_owned()], 2);
 	index.assign_keep(SEED, region, &[restamp], &[]);
 	let restamped = index.name(key).ok_or_else(|| anyhow::anyhow!("restamp"))?;
-	anyhow::ensure!(restamped.english != first_name.english || restamped.surface != first_name.surface);
+	anyhow::ensure!(
+		restamped.english != first_name.english || restamped.surface != first_name.surface
+	);
 	Ok(())
 }
 
@@ -290,10 +322,10 @@ fn source_revision_invalidates_feature_names_unload_does_not() -> anyhow::Result
 fn parented_elevated_pois_use_world_xz_and_host_identity() -> anyhow::Result<()> {
 	let region = feature_aabb(0.0, 0.0, 100.0, 100.0);
 	let host = origin_cell(0.0, 0.0, 50.0, 50.0);
-	let host_place = DiscoverablePlace::host(DiscoverablePlaceLabel::House, 8.0, 1.1)
-		.with_identity(host, 4);
-	let interior = DiscoverablePlace::high(DiscoverablePlaceLabel::Lounge, 3.0, 1.1)
-		.with_identity(host, 99);
+	let host_place =
+		DiscoverablePlace::host(DiscoverablePlaceLabel::House, 8.0, 1.1).with_identity(host, 4);
+	let interior =
+		DiscoverablePlace::high(DiscoverablePlaceLabel::Lounge, 3.0, 1.1).with_identity(host, 99);
 	let elevated = places_from_world_xz(
 		[
 			(host_place, Vec3::new(12.0, 40.0, 18.0)),
@@ -487,7 +519,9 @@ fn generation_and_presentation_hooks_refresh_overlay_only_when_open() -> anyhow:
 		StatesPlugin,
 		GenerationModePlugin::<HookMode>::initial(),
 		layer_stack::LayerGenerationCore::<OnTerrain<RecordingWorld>>::default(),
-		Generate::<HookMode, Language<Geneva<RecordingWorld>>>::new(LanguageConfig::world_defaults()),
+		Generate::<HookMode, Language<Geneva<RecordingWorld>>>::new(
+			LanguageConfig::world_defaults(),
+		),
 		Present::<HookMode, Language<Geneva<RecordingWorld>>>::default(),
 	));
 	app.insert_resource(RecordingSources {
@@ -512,9 +546,7 @@ fn generation_and_presentation_hooks_refresh_overlay_only_when_open() -> anyhow:
 	app.update();
 
 	anyhow::ensure!(
-		app.world()
-			.resource::<LodPresentGate<Language<Geneva<RecordingWorld>>>>()
-			.open
+		app.world().resource::<LodPresentGate<Language<Geneva<RecordingWorld>>>>().open
 	);
 	let overlay = app.world().resource::<LanguageOverlay>().clone();
 	anyhow::ensure!(!overlay.names.is_empty(), "open gate materializes names");

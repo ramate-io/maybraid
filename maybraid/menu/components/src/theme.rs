@@ -89,6 +89,27 @@ pub const CURSOR_ICON_GAP: f32 = 12.0;
 /// Maybraid mark, under `maybraid/assets`. Author file: `art/iconography/maybraid_logo_icon.blend`.
 pub const MAYBRAID_LOGO: &str = "iconography/maybraid_logo_icon.png";
 
+/// Death / last-body mark. Author file: `art/iconography/bones_icon.blend`.
+pub const BONES_ICON: &str = "iconography/bones_icon.png";
+
+/// Kenney cartography pine. Grove / vegetation marks.
+pub const MAP_TREE_ICON: &str = "iconography/kenney/cartography/tree_pine.png";
+
+/// Kenney cartography house. Discoverable places.
+pub const MAP_HOUSE_ICON: &str = "iconography/kenney/cartography/house.png";
+
+/// Kenney cartography houses. Urban cells.
+pub const MAP_TOWN_ICON: &str = "iconography/kenney/cartography/houses.png";
+
+/// Kenney cartography mountain. Landform features.
+pub const MAP_MOUNTAIN_ICON: &str = "iconography/kenney/cartography/mountain.png";
+
+/// Kenney cartography lake. Water features.
+pub const MAP_WATER_ICON: &str = "iconography/kenney/cartography/lake.png";
+
+/// Kenney game-icons white arrow. Rotated toward off-screen anchors.
+pub const MAP_ARROW_ICON: &str = "iconography/kenney/game-icons/arrow_up.png";
+
 /// Blink period for animated marks, in seconds.
 pub const ICON_BLINK_SECS: f32 = 1.2;
 

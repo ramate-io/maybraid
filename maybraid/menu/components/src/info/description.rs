@@ -1,7 +1,7 @@
 //! Description copy stacked with a menu, or in the remainder to the right.
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{Scene, bsn, template_value};
+use bevy::scene::prelude::{bsn, template_value, Scene};
 use bevy::text::{FontSourceTemplate, LineBreak};
 
 use crate::theme::{

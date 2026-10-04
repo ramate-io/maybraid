@@ -2,11 +2,11 @@
 
 use bevy::prelude::*;
 
-use crate::HudFonts;
 use crate::theme::{
 	MENU_CLEAR, OBJECTIVE_MARKER_BORDER, OBJECTIVE_MARKER_PAD_X, OBJECTIVE_MARKER_PAD_Y,
 	OBJECTIVE_MARKER_RADIUS, TEXT_YELLOW,
 };
+use crate::HudFonts;
 
 /// Face size for play HUD cards (smaller than menu [`crate::OBJECTIVE_MARKER_FONT_SIZE`]).
 pub const HUD_TEXT_CARD_FACE_PX: f32 = 13.0;

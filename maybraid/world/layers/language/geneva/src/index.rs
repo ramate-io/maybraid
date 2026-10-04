@@ -49,16 +49,26 @@ impl Default for LanguageConfig {
 /// cannot collide. ECS entity ids and rounded coordinates are not durable keys.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum NameKey {
-	Region { ix: i32, iz: i32 },
+	Region {
+		ix: i32,
+		iz: i32,
+	},
 	Forest(Id),
 	Grove(Id),
 	Urban(Id),
 	UrbanLeaf(Id),
 	Geographic(GeographicFeatureId),
-	Place { host: Id, local: u32 },
+	Place {
+		host: Id,
+		local: u32,
+	},
 	/// Rounded XZ + label when Richmond has not attached a host identity.
 	/// Assignments under this key stay provisional.
-	ProvisionalPlace { qx: i32, qz: i32, label: u32 },
+	ProvisionalPlace {
+		qx: i32,
+		qz: i32,
+		label: u32,
+	},
 }
 
 /// Inputs for one feature or place assignment.
@@ -308,15 +318,8 @@ impl LanguageIndex {
 		if name.surface.is_empty() {
 			return false;
 		}
-		self.names.insert(
-			key,
-			AssignedName {
-				name,
-				source_revision: 0,
-				fingerprint,
-				provisional: true,
-			},
-		);
+		self.names
+			.insert(key, AssignedName { name, source_revision: 0, fingerprint, provisional: true });
 		self.anchors.insert(key, region_anchor(ix, iz));
 		self.extents.insert(key, region_extent(ix, iz));
 		self.epoch = self.epoch.wrapping_add(1);
@@ -339,13 +342,7 @@ impl LanguageIndex {
 		let Some(bundle) = bundle else {
 			return false;
 		};
-		let pick = mix(work.world_seed ^ feature_key);
-		let name = match work.key {
-			NameKey::Grove(_) | NameKey::Place { .. } | NameKey::ProvisionalPlace { .. } => {
-				PlaceName::translate_all(bundle, work.english)
-			}
-			_ => PlaceName::translate(bundle, work.english, pick),
-		};
+		let name = PlaceName::translate_all(bundle, work.english);
 		if name.surface.is_empty() {
 			return false;
 		}
