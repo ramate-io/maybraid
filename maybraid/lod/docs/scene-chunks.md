@@ -53,7 +53,7 @@ Cancel: if the desired level changes, pending roots for other levels are despawn
 add_lod_refresh_chunk_full_for::<MyHost>(app); // update + chunk fulfill + cull
 // or
 add_lod_refresh_chunk_for::<MyHost>(app);      // fulfill only (probe / region writes level)
-// or Avian region stack (see chico-forests `view.rs`)
+// or Gimme region stack via gimme_host! (see chico/src/view.rs)
 ```
 
 Pending hosts use [`SemanticLodScene::host`](../lib/src/scene/lod_scene.rs) (core pending
@@ -73,5 +73,5 @@ Lazy materialization of subtrees (factories evaluated only when the scheduler re
 ## Related
 
 - [`LodChunk` / `SceneChunk` / `VisualSceneChunk`](../lib/src/scene/chunk.rs)
-- [`chunk_fulfill`](../lib/src/chunk_fulfill.rs)
+- [`chunk_fulfill`](../lib/src/scene/chunk_fulfill.rs)
 - [Richmond CONTRIBUTING — LodScene](../../world/layers/urbanization/CONTRIBUTING.md#lodscene-on-buildings)

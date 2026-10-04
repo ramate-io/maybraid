@@ -5,7 +5,9 @@ use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use layer_stack::{GenerationMode, GenerationModeSystems};
 use lod::gen::{LodGenerateBudget, LodGenerateKeepRegion, LodGenerateQueue, LodGenerateRegion};
-use lod::presentation::{LodPresentKeepRegion, LodPresentQueue, LodPresentRegion};
+use lod::presentation::{
+	LodPresentBudget, LodPresentKeepRegion, LodPresentQueue, LodPresentRegion,
+};
 use lod::LodJobCounter;
 use lod::{
 	LodGeneratePlugin, LodGenerateRegionPlugin, LodGenerateSystems, LodPresentRegionPlugin,
@@ -50,11 +52,12 @@ pub fn stream_radii_m(stream_radius: u32) -> (f32, f32) {
 }
 
 /// Generate half of the old `register_forest_lod`. Present plugins stay in
-/// Chico presentation. Each mode writes [`LodGenerateBudget`] on enter.
+/// Chico presentation. Each mode writes generate and present budgets on enter.
 pub fn register_forest_generate(app: &mut App) {
 	app.init_resource::<VegetationStreamKey>()
 		.init_resource::<ForestIndex>()
 		.init_resource::<LodGenerateBudget<ForestLodChan>>()
+		.init_resource::<LodPresentBudget<ForestLodChan>>()
 		.init_resource::<LodPresentQueue<ChicoGrove>>()
 		.add_plugins(LodGenerateRegionPlugin::<
 			ForestGenerateBullseye,
@@ -79,6 +82,8 @@ pub fn register_forest_generate(app: &mut App) {
 pub fn register_bump_out_generate(app: &mut App) {
 	app.init_resource::<LodGenerateBudget<BumpOutLodChan>>()
 		.init_resource::<LodGenerateBudget<MediumBumpOutLodChan>>()
+		.init_resource::<LodPresentBudget<BumpOutLodChan>>()
+		.init_resource::<LodPresentBudget<MediumBumpOutLodChan>>()
 		.init_resource::<LodPresentQueue<CanopyBumpOut>>()
 		.init_resource::<LodPresentQueue<MediumCanopyBumpOut>>()
 		.init_resource::<LodPresentKeepRegion<MediumBumpOutLodChan>>()

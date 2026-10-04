@@ -5,6 +5,7 @@ use std::marker::PhantomData;
 use bevy::prelude::{App, World};
 use layer_stack::{LayerGenerationCore, RequireLayer};
 use lod::gen::LodGenerateBudget;
+use lod::presentation::LodPresentBudget;
 use vegetation_layer_model::{Vegetation, VegetationGeneration, VegetationModel};
 
 use crate::config::ChicoConfig;
@@ -41,6 +42,12 @@ impl<G: ChicoGround> VegetationGeneration for Chico<G> {
 			LodGenerateBudget::new(config.bump_out_budget);
 		*world.resource_mut::<LodGenerateBudget<MediumBumpOutLodChan>>() =
 			LodGenerateBudget::new(config.medium_bump_out_budget);
+		*world.resource_mut::<LodPresentBudget<ForestLodChan>>() =
+			LodPresentBudget::new(config.forest_budget);
+		*world.resource_mut::<LodPresentBudget<BumpOutLodChan>>() =
+			LodPresentBudget::new(config.bump_out_budget);
+		*world.resource_mut::<LodPresentBudget<MediumBumpOutLodChan>>() =
+			LodPresentBudget::new(config.medium_bump_out_budget);
 	}
 
 	fn clear_generation(world: &mut World) {

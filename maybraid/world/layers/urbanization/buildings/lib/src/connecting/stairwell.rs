@@ -352,13 +352,9 @@ mod tests {
 	use super::*;
 	use crate::openings::MappedOpening;
 	use bevy_math::{Vec2, Vec3};
+	use building_components::normalize_xz;
 	use building_components::partitions::PANEL_Y_HALF;
 	use building_components::stairs::Stair;
-
-	fn normalize_xz(v: Vec2) -> Option<Vec2> {
-		let n = v.length();
-		(n > 1e-5).then(|| v / n)
-	}
 
 	/// Horizontal shaft face: `center` in the hole, walk-on on the −orientation side.
 	fn shaft_opening(
