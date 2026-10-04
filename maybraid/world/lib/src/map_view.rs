@@ -379,7 +379,7 @@ fn sync_map_name_pins(
 			*visibility = Visibility::Hidden;
 			continue;
 		};
-		place_map_pin(&mut node, screen, target.size, &target.label);
+		place_map_pin(&mut node, screen, target, highlighted);
 		text.0 = target.label.clone();
 		*font = map_label_text_font(&fonts, target.size);
 		color.0 = label_ink(target.id, highlighted);
@@ -399,7 +399,7 @@ fn sync_map_name_pins(
 			root.spawn(MapNamePinBundle {
 				name: Name::new("map-name-pin"),
 				pin: MapNamePin { target: target.id },
-				node: map_pin_node(screen, target.size, &target.label),
+				node: map_pin_node(screen, &target, highlighted),
 				text: Text::new(target.label.clone()),
 				font: map_label_text_font(&fonts, target.size),
 				layout: map_label_layout(),
@@ -801,22 +801,32 @@ fn pin_lines(label: &str) -> f32 {
 	label.lines().count().max(1) as f32
 }
 
-fn map_pin_node(screen: Vec2, size: f32, label: &str) -> Node {
-	let width = pin_width(size, label);
+fn pin_label_top(screen_y: f32, target: &MapPinWanted, highlighted: Option<PoiId>) -> f32 {
+	if matches!(target.id, MapPinTarget::Poi(_)) {
+		let selected = matches!(target.id, MapPinTarget::Poi(id) if Some(id) == highlighted);
+		let clearance =
+			if selected { SELECTION_RING_PX * 0.5 + 8.0 } else { SPAWN_KNOB_PX * 0.5 + 6.0 };
+		return screen_y + clearance;
+	}
+	screen_y - target.size * 0.85 * pin_lines(&target.label)
+}
+
+fn map_pin_node(screen: Vec2, target: &MapPinWanted, highlighted: Option<PoiId>) -> Node {
+	let width = pin_width(target.size, &target.label);
 	Node {
 		position_type: PositionType::Absolute,
 		left: Val::Px(screen.x - width * 0.5),
-		top: Val::Px(screen.y - size * 0.85 * pin_lines(label)),
+		top: Val::Px(pin_label_top(screen.y, target, highlighted)),
 		width: Val::Px(width),
 		justify_content: JustifyContent::Center,
 		..default()
 	}
 }
 
-fn place_map_pin(node: &mut Node, screen: Vec2, size: f32, label: &str) {
-	let width = pin_width(size, label);
+fn place_map_pin(node: &mut Node, screen: Vec2, target: &MapPinWanted, highlighted: Option<PoiId>) {
+	let width = pin_width(target.size, &target.label);
 	node.left = Val::Px(screen.x - width * 0.5);
-	node.top = Val::Px(screen.y - size * 0.85 * pin_lines(label));
+	node.top = Val::Px(pin_label_top(screen.y, target, highlighted));
 	node.width = Val::Px(width);
 }
 
@@ -1422,6 +1432,20 @@ mod tests {
 		assert!(!map.open);
 		assert!(!map.close_locked);
 		assert!(map.begin_life);
+	}
+
+	#[test]
+	fn spawn_labels_sit_below_the_ring() {
+		let target = MapPinWanted {
+			id: MapPinTarget::Poi(PoiId(1)),
+			xz: Vec2::ZERO,
+			extent: Rect::from_center_size(Vec2::ZERO, Vec2::splat(12.0)),
+			label: "Grove".into(),
+			size: SELECTED_POI_LABEL_PX,
+		};
+		let top = pin_label_top(100.0, &target, Some(PoiId(1)));
+		assert!(top > 100.0, "cartographic labels sit under the marker, top={top}");
+		assert!((top - (100.0 + SELECTION_RING_PX * 0.5 + 8.0)).abs() < 1e-4);
 	}
 
 	#[test]

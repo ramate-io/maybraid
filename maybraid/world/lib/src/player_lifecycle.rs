@@ -251,6 +251,7 @@ fn drive_respawn_picker(
 		}
 	}
 	if let Some(dir) = consume_stick_flick(&mut pending.stick_resting, stick) {
+		let dir = map_flick_dir(dir);
 		if let Some(from) = current_highlight_xz(pending, &registry) {
 			if let Some(next) = next_candidate_in_direction(
 				&pending.candidates,
@@ -438,6 +439,11 @@ fn current_highlight_xz(pending: &PendingPlayerRespawn, registry: &PoiRegistry) 
 fn set_highlighted(pending: &mut PendingPlayerRespawn, id: PoiId, registry: &PoiRegistry) {
 	pending.highlighted = Some(id);
 	pending.highlighted_at = registry.get(id).map(|record| record.position.xz());
+}
+
+/// North-up map looks down with world +Z as screen up, so screen-right is world −X.
+fn map_flick_dir(stick: Vec2) -> Vec2 {
+	Vec2::new(-stick.x, stick.y)
 }
 
 fn consume_stick_flick(resting: &mut bool, stick: Vec2) -> Option<Vec2> {
@@ -947,7 +953,7 @@ mod tests {
 			begin_life: false,
 		});
 		let mut pad = VirtualPad::default();
-		pad.move_stick = Vec2::X;
+		pad.move_stick = Vec2::NEG_X;
 		world.insert_resource(pad);
 		world.init_resource::<Messages<PlayerChoseRespawnPoi>>();
 		world.init_resource::<Messages<CharacterIntent>>();
@@ -963,6 +969,12 @@ mod tests {
 			"the view stays on the death point; flicks do not recenter"
 		);
 		Ok(())
+	}
+
+	#[test]
+	fn map_flicks_treat_stick_right_as_screen_right() {
+		assert_eq!(map_flick_dir(Vec2::X), Vec2::NEG_X);
+		assert_eq!(map_flick_dir(Vec2::Y), Vec2::Y);
 	}
 
 	#[test]
