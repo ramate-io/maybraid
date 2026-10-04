@@ -364,8 +364,6 @@ pub struct RecordingPresenter {
 	pub ops: Vec<PresenterOp>,
 	/// Ids flagged for repair even when storage version is unchanged.
 	pub repair_ids: HashSet<Id>,
-	/// Handle records the op but does not stamp `presented_version` (grow-then-spawn).
-	pub hold_ids: HashSet<Id>,
 }
 
 macro_rules! presenter_methods {
@@ -379,12 +377,9 @@ macro_rules! presenter_methods {
 		}
 
 		fn handle(&mut self, id: Id, version: Version, _value: &$ty, _lod_ref: &LodRef) {
-			self.ops.push(PresenterOp::Handle(id, version));
-			if self.hold_ids.contains(&id) {
-				return;
-			}
 			self.$field.insert(id, version);
 			self.hidden.remove(&id);
+			self.ops.push(PresenterOp::Handle(id, version));
 		}
 
 		fn hide(&mut self, id: Id) {
