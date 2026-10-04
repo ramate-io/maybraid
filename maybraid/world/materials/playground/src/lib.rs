@@ -4,6 +4,7 @@ mod camera;
 pub mod commands;
 mod ground;
 mod preview;
+mod shape;
 mod shoot;
 mod ui;
 
@@ -14,7 +15,8 @@ pub use preview::PreviewConfig;
 use bevy::prelude::*;
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use ground::setup_ground;
-use preview::{setup_preview, sync_preview};
+use preview::sync_preview;
+use shape::setup_meshes;
 use shoot::{fly_shots, tick_shoot, ShootConfig};
 use world_materials::WorldMaterialsPlugin;
 
@@ -28,7 +30,7 @@ impl Plugin for WorldMaterialsPlaygroundPlugin {
 			.add_plugins(GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()));
 		app.add_systems(
 			Startup,
-			(camera::setup_camera, setup_lighting, setup_ground, setup_preview),
+			(camera::setup_camera, setup_lighting, setup_ground, setup_meshes),
 		)
 		.add_systems(
 			Update,
@@ -102,6 +104,26 @@ mod tests {
 			command,
 			PlaygroundCommand::Shoot { action: Some(commands::ShootAction::Stop) }
 		));
+		Ok(())
+	}
+
+	#[test]
+	fn parses_mesh_blast() -> Result<(), String> {
+		let command = <PlaygroundCommand as GameCommand>::parse_line("mesh blast")?;
+		let PlaygroundCommand::Mesh { shape } = command else {
+			return Err("expected mesh".into());
+		};
+		assert_eq!(shape, crate::shape::PreviewShape::Blast);
+		Ok(())
+	}
+
+	#[test]
+	fn parses_mesh_ring() -> Result<(), String> {
+		let command = <PlaygroundCommand as GameCommand>::parse_line("mesh ring")?;
+		let PlaygroundCommand::Mesh { shape } = command else {
+			return Err("expected mesh".into());
+		};
+		assert_eq!(shape, crate::shape::PreviewShape::Ring);
 		Ok(())
 	}
 }

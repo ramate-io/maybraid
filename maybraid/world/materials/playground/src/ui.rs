@@ -7,10 +7,10 @@ use crate::shoot::ShootConfig;
 pub fn ui_config() -> GameCommandUiConfig {
 	GameCommandUiConfig {
 		title: "World materials — / cmd — WASD/Space/Shift — mouse look".into(),
-		empty_console_text: "Console: `show hex|pulse|tail|muzzle-flame|standard`, `shoot`, `help`"
-			.into(),
+		empty_console_text:
+			"Console: `show pulse`, `mesh blast|ring|shell|core|cards`, `shoot`, `help`".into(),
 		root_background: Color::srgba(0.08, 0.09, 0.12, 0.86),
-		controls_hint: "help — show hex|pulse|tail — shoot / shoot stop — Enter — history".into(),
+		controls_hint: "help — mesh blast — show pulse — shoot — Enter — history".into(),
 	}
 }
 

@@ -7,6 +7,7 @@ use game_commands::command::{CommandScript, GameCommand};
 use material_ref::MaterialRef;
 
 use crate::preview::PreviewConfig;
+use crate::shape::PreviewShape;
 use crate::shoot::ShootConfig;
 
 pub const PLAYGROUND_CLI_NAME: &str = "materials";
@@ -23,12 +24,17 @@ pub type Script = CommandScript<PlaygroundCommand>;
 pub enum PlaygroundCommand {
 	Help,
 	Script(Script),
-	/// Put a named recipe on the preview sphere.
+	/// Put a named recipe on the current preview hull.
 	Show {
 		/// `hex`, `pulse`, `tail`, `muzzle-flame`, `standard`, or any world recipe name.
 		recipe: String,
 	},
-	/// Fire repeating cylinders using the current sphere recipe. `shoot stop` cancels.
+	/// Switch the preview / shot hull. `sphere` and `capsule` are the solid baselines.
+	Mesh {
+		/// `sphere`, `capsule`, `core`, `shell`, `ring`, `cards`, or `blast`.
+		shape: PreviewShape,
+	},
+	/// Fire repeating copies of the current hull. `shoot stop` cancels.
 	Shoot {
 		#[command(subcommand)]
 		action: Option<ShootAction>,
@@ -62,6 +68,12 @@ impl PlaygroundCommand {
 					world.resource_mut::<PreviewConfig>().material = material;
 				});
 			}
+			Self::Mesh { shape } => {
+				*console = format!("mesh {}", shape.label());
+				commands.queue(move |world: &mut World| {
+					world.resource_mut::<PreviewConfig>().shape = shape;
+				});
+			}
 			Self::Shoot { action: Some(ShootAction::Stop) } => {
 				*console = "shoot stop".into();
 				commands.queue(|world: &mut World| {
@@ -71,10 +83,11 @@ impl PlaygroundCommand {
 			Self::Shoot { action: None } => {
 				*console = "shoot".into();
 				commands.queue(|world: &mut World| {
-					let material = world.resource::<PreviewConfig>().material.clone();
+					let preview = world.resource::<PreviewConfig>().clone();
 					let mut shoot = world.resource_mut::<ShootConfig>();
 					shoot.enabled = true;
-					shoot.material = material;
+					shoot.material = preview.material;
+					shoot.shape = preview.shape;
 					shoot.accumulator = shoot.interval;
 				});
 			}
