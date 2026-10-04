@@ -277,9 +277,10 @@ impl RigPose {
 
 	/// Copy pose fields into an existing entry, or insert a clone when missing.
 	pub fn upsert_from(&mut self, source: &BonePose) {
-		match self.0.get_mut(&source.name) {
-			Some(existing) => existing.copy_fields_from(source),
-			None => self.0.insert(source.name.clone(), source.clone()),
+		if let Some(existing) = self.0.get_mut(&source.name) {
+			existing.copy_fields_from(source);
+		} else {
+			self.0.insert(source.name.clone(), source.clone());
 		}
 	}
 

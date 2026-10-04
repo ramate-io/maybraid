@@ -10,13 +10,39 @@ use crate::{Animation, Effects};
 /// Reused pose buffers for snapshot / sample / blend hot paths.
 #[derive(Debug, Default)]
 pub(crate) struct PoseScratch {
-	pub rest: RigPose,
-	pub from_pose: RigPose,
-	pub to_pose: RigPose,
+	rest: RefCell<RigPose>,
+	from_pose: RefCell<RigPose>,
+	to_pose: RefCell<RigPose>,
+}
+
+impl PoseScratch {
+	pub fn rest_mut(&self) -> std::cell::RefMut<'_, RigPose> {
+		self.rest.borrow_mut()
+	}
+
+	pub fn rest(&self) -> std::cell::Ref<'_, RigPose> {
+		self.rest.borrow()
+	}
+
+	pub fn from_pose(&self) -> std::cell::Ref<'_, RigPose> {
+		self.from_pose.borrow()
+	}
+
+	pub fn from_pose_mut(&self) -> std::cell::RefMut<'_, RigPose> {
+		self.from_pose.borrow_mut()
+	}
+
+	pub fn to_pose(&self) -> std::cell::Ref<'_, RigPose> {
+		self.to_pose.borrow()
+	}
+
+	pub fn to_pose_mut(&self) -> std::cell::RefMut<'_, RigPose> {
+		self.to_pose.borrow_mut()
+	}
 }
 
 thread_local! {
-	pub(crate) static POSE_SCRATCH: RefCell<PoseScratch> = RefCell::new(PoseScratch::default());
+	pub(crate) static POSE_SCRATCH: PoseScratch = PoseScratch::default();
 }
 
 impl<A, B, R> Animation<R> for Mix<A, B, R>
@@ -122,12 +148,11 @@ fn blend_poses<A, B, R>(
 	B: Animation<R>,
 	R: HumanoidRig,
 {
-	POSE_SCRATCH.with(|cell| {
-		let mut scratch = cell.borrow_mut();
-		snapshot_pose_into(rig, &mut scratch.rest);
-		sample_pose_into(from, rig, &scratch.rest, from_progress, &mut scratch.from_pose);
-		sample_pose_into(to, rig, &scratch.rest, to_progress, &mut scratch.to_pose);
-		blend_pose(rig, &scratch.from_pose, &scratch.to_pose, weight);
+	POSE_SCRATCH.with(|scratch| {
+		snapshot_pose_into(rig, &mut *scratch.rest_mut());
+		sample_pose_into(from, rig, &*scratch.rest(), from_progress, &mut *scratch.from_pose_mut());
+		sample_pose_into(to, rig, &*scratch.rest(), to_progress, &mut *scratch.to_pose_mut());
+		blend_pose(rig, &*scratch.from_pose(), &*scratch.to_pose(), weight);
 	});
 }
 
@@ -159,6 +184,7 @@ pub(crate) fn restore_pose<R: HumanoidRig>(rig: &mut R, rest: &RigPose) {
 	}
 }
 
+#[allow(dead_code)]
 pub(crate) fn sample<A: Animation<R>, R: HumanoidRig>(
 	anim: &A,
 	rig: &mut R,
@@ -252,12 +278,11 @@ pub(crate) fn pose_from_animation<A: Animation<R>, R: HumanoidRig>(
 	rig: &mut R,
 	progress: f32,
 ) -> RigPose {
-	POSE_SCRATCH.with(|cell| {
-		let mut scratch = cell.borrow_mut();
-		snapshot_pose_into(rig, &mut scratch.rest);
-		sample_pose_into(anim, rig, &scratch.rest, progress, &mut scratch.from_pose);
-		restore_pose(rig, &scratch.rest);
-		scratch.from_pose.clone()
+	POSE_SCRATCH.with(|scratch| {
+		snapshot_pose_into(rig, &mut *scratch.rest_mut());
+		sample_pose_into(anim, rig, &*scratch.rest(), progress, &mut *scratch.from_pose_mut());
+		restore_pose(rig, &*scratch.rest());
+		scratch.from_pose().clone()
 	})
 }
 
@@ -281,6 +306,7 @@ mod tests {
 	use crate::animations::{Mix, Spring, Squat};
 
 	mod legacy {
+		use bevy::prelude::Transform;
 		use character_rigs::{humanoid::HumanoidRig, BonePose, RigPose};
 
 		use crate::Animation;
@@ -375,17 +401,17 @@ mod tests {
 	}
 
 	fn dirty_scratch() -> PoseScratch {
-		let mut scratch = PoseScratch::default();
+		let scratch = PoseScratch::default();
 		scratch
-			.rest
+			.rest_mut()
 			.insert(BonePose::new("stale.A", Transform::from_translation(Vec3::X)));
 		scratch
-			.rest
+			.rest_mut()
 			.insert(BonePose::new("stale.B", Transform::from_translation(Vec3::Y)));
 		scratch
-			.from_pose
+			.from_pose_mut()
 			.insert(BonePose::new("stale.C", Transform::from_translation(Vec3::Z)));
-		scratch.to_pose.insert(BonePose::new("stale.D", Transform::IDENTITY));
+		scratch.to_pose_mut().insert(BonePose::new("stale.D", Transform::IDENTITY));
 		scratch
 	}
 
@@ -393,21 +419,21 @@ mod tests {
 	fn snapshot_pose_into_matches_allocating_path() {
 		let rig = seeded_rig();
 		let expected = legacy::snapshot_pose(&rig);
-		let mut scratch = dirty_scratch();
-		snapshot_pose_into(&rig, &mut scratch.rest);
-		assert!(poses_equal(&expected, &scratch.rest));
-		assert!(!scratch.rest.iter().any(|(name, _)| name.as_str().starts_with("stale.")));
+		let scratch = dirty_scratch();
+		snapshot_pose_into(&rig, &mut *scratch.rest_mut());
+		assert!(poses_equal(&expected, &*scratch.rest()));
+		assert!(!scratch.rest().iter().any(|(name, _)| name.as_str().starts_with("stale.")));
 	}
 
 	#[test]
 	fn snapshot_pose_into_reuses_capacity_on_repeat() {
 		let rig = seeded_rig();
-		let mut scratch = dirty_scratch();
-		snapshot_pose_into(&rig, &mut scratch.rest);
-		let capacity_after_first = scratch.rest.capacity();
-		snapshot_pose_into(&rig, &mut scratch.rest);
-		assert!(scratch.rest.capacity() >= capacity_after_first);
-		assert!(poses_equal(&legacy::snapshot_pose(&rig), &scratch.rest));
+		let scratch = dirty_scratch();
+		snapshot_pose_into(&rig, &mut *scratch.rest_mut());
+		let capacity_after_first = scratch.rest().capacity();
+		snapshot_pose_into(&rig, &mut *scratch.rest_mut());
+		assert!(scratch.rest().capacity() >= capacity_after_first);
+		assert!(poses_equal(&legacy::snapshot_pose(&rig), &*scratch.rest()));
 	}
 
 	#[test]
@@ -440,10 +466,10 @@ mod tests {
 		let rest = legacy::snapshot_pose(&rig_a);
 		let anim = Squat::<HumanoidV0Rig>::for_loop(1.0, 1.0);
 		let expected = legacy::sample_pose(&anim, &mut rig_a, &rest, 0.35);
-		let mut scratch = dirty_scratch();
-		sample_pose_into(&anim, &mut rig_b, &rest, 0.35, &mut scratch.from_pose);
-		assert!(poses_equal(&expected, &scratch.from_pose));
-		assert!(!scratch.from_pose.iter().any(|(name, _)| name.as_str().starts_with("stale.")));
+		let scratch = dirty_scratch();
+		sample_pose_into(&anim, &mut rig_b, &rest, 0.35, &mut *scratch.from_pose_mut());
+		assert!(poses_equal(&expected, &*scratch.from_pose()));
+		assert!(!scratch.from_pose().iter().any(|(name, _)| name.as_str().starts_with("stale.")));
 	}
 
 	#[test]
@@ -456,11 +482,17 @@ mod tests {
 			0.5,
 		);
 		legacy::blend_poses(&mut rig_a, &mix.from, &mix.to, 0.25, 0.75, mix.weight);
-		let mut scratch = dirty_scratch();
-		snapshot_pose_into(&rig_b, &mut scratch.rest);
-		sample_pose_into(&mix.from, &mut rig_b, &scratch.rest, 0.25, &mut scratch.from_pose);
-		sample_pose_into(&mix.to, &mut rig_b, &scratch.rest, 0.75, &mut scratch.to_pose);
-		blend_pose(&mut rig_b, &scratch.from_pose, &scratch.to_pose, mix.weight);
+		let scratch = dirty_scratch();
+		snapshot_pose_into(&rig_b, &mut *scratch.rest_mut());
+		sample_pose_into(
+			&mix.from,
+			&mut rig_b,
+			&*scratch.rest(),
+			0.25,
+			&mut *scratch.from_pose_mut(),
+		);
+		sample_pose_into(&mix.to, &mut rig_b, &*scratch.rest(), 0.75, &mut *scratch.to_pose_mut());
+		blend_pose(&mut rig_b, &*scratch.from_pose(), &*scratch.to_pose(), mix.weight);
 		assert!(poses_equal(rig_a.pose(), rig_b.pose()));
 	}
 
@@ -538,15 +570,15 @@ mod tests {
 			0.5,
 		);
 		let iterations = 2_000usize;
-		let mut scratch = PoseScratch::default();
+		let scratch = PoseScratch::default();
 
 		// Warm scratch buffers to steady-state capacity.
 		for _ in 0..32 {
 			let mut warm = seeded_rig();
 			blend_poses(&mut warm, &mix.from, &mix.to, 0.25, 0.75, mix.weight);
 		}
-		snapshot_pose_into(&rig, &mut scratch.rest);
-		let steady_capacity = scratch.rest.capacity();
+		snapshot_pose_into(&rig, &mut *scratch.rest_mut());
+		let steady_capacity = scratch.rest().capacity();
 
 		let mut allocating = Vec::with_capacity(9);
 		for _ in 0..9 {

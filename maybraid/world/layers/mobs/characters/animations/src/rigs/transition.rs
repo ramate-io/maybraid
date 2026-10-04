@@ -18,15 +18,14 @@ where
 	}
 
 	pub fn apply(&self, rig: &mut R, animation_progress: f32, transition_progress: f32) -> Effects {
-		POSE_SCRATCH.with(|cell| {
-			let mut scratch = cell.borrow_mut();
-			snapshot_pose_into(rig, &mut scratch.rest);
-			restore_pose(rig, &scratch.rest);
+		POSE_SCRATCH.with(|scratch| {
+			snapshot_pose_into(rig, &mut *scratch.rest_mut());
+			restore_pose(rig, &*scratch.rest());
 			self.animation.apply_for(rig, animation_progress);
 			let effects = self.animation.effects_for(rig, animation_progress);
-			snapshot_pose_into(rig, &mut scratch.to_pose);
+			snapshot_pose_into(rig, &mut *scratch.to_pose_mut());
 			let weight = self.weight(transition_progress);
-			blend_pose(rig, &self.from_pose, &scratch.to_pose, weight);
+			blend_pose(rig, &self.from_pose, &*scratch.to_pose(), weight);
 			mix_effects(Effects::default(), effects, weight)
 		})
 	}
