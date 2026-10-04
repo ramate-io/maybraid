@@ -44,9 +44,9 @@ pub fn compile(effects: &mut Assets<EffectAsset>, fire: &FlipbookAsset) -> Parti
 	color.add_key(0.4, Vec4::new(1.2, 0.45, 0.08, 0.9));
 	color.add_key(1.0, Vec4::new(0.25, 0.04, 0.01, 0.0));
 	let mut size = bevy_hanabi::Gradient::new();
-	size.add_key(0.0, Vec3::splat(0.55));
-	size.add_key(0.35, Vec3::splat(0.95));
-	size.add_key(1.0, Vec3::splat(1.25));
+	size.add_key(0.0, Vec3::splat(0.22));
+	size.add_key(0.35, Vec3::splat(0.38));
+	size.add_key(1.0, Vec3::splat(0.48));
 
 	let mut module = writer.finish();
 	module.add_texture_slot("fire");
@@ -54,7 +54,7 @@ pub fn compile(effects: &mut Assets<EffectAsset>, fire: &FlipbookAsset) -> Parti
 	let effect = effects.add(
 		EffectAsset::new(FIREBALL_CAPACITY, SpawnerSettings::once(FIREBALL_COUNT.into()), module)
 			.with_name("vfx-fireball")
-			.with_simulation_space(SimulationSpace::Global)
+			.with_simulation_space(SimulationSpace::Local)
 			.with_alpha_mode(bevy_hanabi::AlphaMode::Add)
 			.init(init_pos)
 			.init(init_vel)
@@ -107,5 +107,6 @@ mod tests {
 		assert_eq!(part.capacity, FIREBALL_CAPACITY);
 		assert!((part.max_lifetime - FIREBALL_LIFE_MAX).abs() < 1e-4);
 		assert_eq!(part.images.len(), 1);
+		assert_eq!(effects.get(&part.effect).unwrap().simulation_space, SimulationSpace::Local);
 	}
 }

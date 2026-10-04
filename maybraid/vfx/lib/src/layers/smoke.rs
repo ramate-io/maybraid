@@ -47,9 +47,9 @@ pub fn compile(effects: &mut Assets<EffectAsset>, smoke: &FlipbookAsset) -> Part
 	color.add_key(0.4, Vec4::new(0.32, 0.32, 0.33, 0.28));
 	color.add_key(1.0, Vec4::new(0.16, 0.16, 0.17, 0.0));
 	let mut size = bevy_hanabi::Gradient::new();
-	size.add_key(0.0, Vec3::splat(0.7));
-	size.add_key(0.5, Vec3::splat(1.35));
-	size.add_key(1.0, Vec3::splat(1.9));
+	size.add_key(0.0, Vec3::splat(0.28));
+	size.add_key(0.5, Vec3::splat(0.5));
+	size.add_key(1.0, Vec3::splat(0.72));
 
 	let mut module = writer.finish();
 	module.add_texture_slot("smoke");
@@ -57,7 +57,7 @@ pub fn compile(effects: &mut Assets<EffectAsset>, smoke: &FlipbookAsset) -> Part
 	let effect = effects.add(
 		EffectAsset::new(SMOKE_CAPACITY, SpawnerSettings::once(SMOKE_COUNT.into()), module)
 			.with_name("vfx-smoke")
-			.with_simulation_space(SimulationSpace::Global)
+			.with_simulation_space(SimulationSpace::Local)
 			.with_alpha_mode(bevy_hanabi::AlphaMode::Blend)
 			.init(init_pos)
 			.init(init_vel)

@@ -48,7 +48,7 @@ pub fn compile(effects: &mut Assets<EffectAsset>) -> ParticlePart {
 			writer.finish(),
 		)
 		.with_name("vfx-sparks")
-		.with_simulation_space(SimulationSpace::Global)
+		.with_simulation_space(SimulationSpace::Local)
 		.with_alpha_mode(bevy_hanabi::AlphaMode::Add)
 		.init(init_pos)
 		.init(init_vel)

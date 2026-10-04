@@ -78,10 +78,15 @@ pub fn spawn_vfx(
 		}
 	}
 
+	let root_transform = Transform {
+		translation: spawn.transform.translation,
+		rotation: spawn.transform.rotation,
+		scale: Vec3::splat(spawn.clamped_scale()),
+	};
 	let root = commands
 		.spawn((
 			Name::new(format!("vfx-{}", definition.name)),
-			spawn.transform,
+			root_transform,
 			Visibility::default(),
 			VfxInstance { name: definition.name.clone(), age: 0.0, duration },
 			VfxPendingLayers { layers: pending, spawn: spawn.clone() },
@@ -147,11 +152,11 @@ pub fn tick_vfx_flashes(
 }
 
 fn realize_layer(commands: &mut Commands, parent: Entity, layer: &EffectLayer, spawn: &VfxSpawn) {
-	let scale = spawn.clamped_scale() * layer.scale;
+	// Emitters simulate in local space and inherit the root's world pose + scale.
 	let transform = Transform {
-		translation: layer.transform.translation * scale,
+		translation: layer.transform.translation,
 		rotation: layer.transform.rotation,
-		scale: Vec3::splat(scale),
+		scale: Vec3::splat(layer.scale),
 	};
 	match &layer.part {
 		EffectPart::Particle(part) => {
@@ -172,6 +177,7 @@ fn realize_layer(commands: &mut Commands, parent: Entity, layer: &EffectLayer, s
 		EffectPart::Light(pulse) => {
 			let peak = pulse.peak_intensity * spawn.clamped_intensity();
 			let color = spawn.tint.unwrap_or(pulse.color);
+			let range = pulse.range * spawn.clamped_scale() * layer.scale;
 			commands.spawn((
 				Name::new("vfx-layer-flash"),
 				ChildOf(parent),
@@ -179,7 +185,7 @@ fn realize_layer(commands: &mut Commands, parent: Entity, layer: &EffectLayer, s
 				PointLight {
 					color,
 					intensity: peak,
-					range: pulse.range * scale,
+					range,
 					shadow_maps_enabled: false,
 					..default()
 				},

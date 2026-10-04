@@ -82,6 +82,25 @@ mod tests {
 	}
 
 	#[test]
+	fn parses_firey_explosion_command() -> Result<(), String> {
+		let command = <PlaygroundCommand as GameCommand>::parse_line("firey-explosion")?;
+		assert!(matches!(
+			command,
+			PlaygroundCommand::FireyExplosion { scale, intensity }
+				if (scale - 1.0).abs() < 1e-4 && (intensity - 1.0).abs() < 1e-4
+		));
+		let command = <PlaygroundCommand as GameCommand>::parse_line(
+			"firey-explosion --scale 1.5 --intensity 1.2",
+		)?;
+		let PlaygroundCommand::FireyExplosion { scale, intensity } = command else {
+			return Err("expected firey-explosion".into());
+		};
+		assert!((scale - 1.5).abs() < 1e-4);
+		assert!((intensity - 1.2).abs() < 1e-4);
+		Ok(())
+	}
+
+	#[test]
 	fn parses_show_layers_and_overrides() -> Result<(), String> {
 		for (line, name) in [
 			("show flash", FLASH),

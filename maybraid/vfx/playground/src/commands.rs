@@ -19,6 +19,15 @@ pub type Script = CommandScript<PlaygroundCommand>;
 pub enum PlaygroundCommand {
 	Help,
 	Script(Script),
+	/// Spawn the composed fiery explosion (flash + fireball + smoke + sparks).
+	FireyExplosion {
+		/// Spatial scale (positions, sizes, velocities, light range). Duration is unchanged.
+		#[arg(long, default_value_t = 1.0)]
+		scale: f32,
+		/// Particle-count and flash-intensity scale, clamped by the crate.
+		#[arg(long, default_value_t = 1.0)]
+		intensity: f32,
+	},
 	/// Spawn a named definition at the origin. Repeat to overlay instances.
 	Show {
 		/// `firey-explosion`, `flash`, `fireball`, `smoke`, or `sparks`.
@@ -57,6 +66,9 @@ impl PlaygroundCommand {
 		match self {
 			Self::Help => *console = Self::long_help_string(),
 			Self::Script(script) => script.run(commands, console),
+			Self::FireyExplosion { scale, intensity } => {
+				queue_show(commands, console, "firey_explosion", scale, intensity);
+			}
 			Self::Show { effect, scale, intensity } => {
 				let Some(name) = canonicalize_effect_name(&effect) else {
 					*console = format!(
@@ -64,15 +76,7 @@ impl PlaygroundCommand {
 					);
 					return;
 				};
-				*console = format!("show {name} --scale {scale} --intensity {intensity}");
-				let name = name.to_string();
-				commands.queue(move |world: &mut World| {
-					world.resource_mut::<PendingVfxShows>().0.push(VfxShowRequest {
-						effect: name,
-						scale,
-						intensity,
-					});
-				});
+				queue_show(commands, console, name, scale, intensity);
 			}
 		}
 	}
@@ -84,4 +88,22 @@ impl GameCommand for PlaygroundCommand {
 	fn react(self, commands: &mut Commands, console: &mut String) {
 		Self::react(self, commands, console);
 	}
+}
+
+fn queue_show(
+	commands: &mut Commands,
+	console: &mut String,
+	name: &str,
+	scale: f32,
+	intensity: f32,
+) {
+	*console = format!("show {name} --scale {scale} --intensity {intensity}");
+	let name = name.to_string();
+	commands.queue(move |world: &mut World| {
+		world.resource_mut::<PendingVfxShows>().0.push(VfxShowRequest {
+			effect: name,
+			scale,
+			intensity,
+		});
+	});
 }
