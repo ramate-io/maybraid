@@ -4,12 +4,13 @@ use bevy::prelude::{App, AssetPlugin, MinimalPlugins, NextState};
 use bevy::state::app::StatesPlugin;
 use layer_stack::{ActiveGenerationMode, Generate, GenerationMode, GenerationModePlugin, LayerGenerationCore, LayerModeConfig, Scheme};
 use lod::gen::LodGenerateBudget;
+use lod::presentation::LodPresentBudget;
 use lod::lod_ref::LodRef;
 use terrain_layer_model::{HeightField, TerrainCell, TerrainModel, TerrainStreaming};
 use vegetation_layer_model::Vegetation;
 
 use crate::config::ChicoConfig;
-use crate::generation::{BumpOutLodChan, ForestLodChan};
+use crate::generation::{BumpOutLodChan, ForestLodChan, MediumBumpOutLodChan};
 use crate::ground::ChicoGround;
 use crate::layer_stream::VegetationStreamKey;
 use crate::model::Chico;
@@ -162,6 +163,10 @@ fn different_budgets_build_and_apply_on_enter() -> anyhow::Result<()> {
 		app.world().resource::<LodGenerateBudget<ForestLodChan>>().ids_per_frame == 16,
 		"initial forest budget"
 	);
+	anyhow::ensure!(
+		app.world().resource::<LodPresentBudget<ForestLodChan>>().ids_per_frame == 16,
+		"initial forest present budget"
+	);
 
 	hop(&mut app, ActiveGenerationMode::of::<Beta>())?;
 	anyhow::ensure!(
@@ -169,14 +174,30 @@ fn different_budgets_build_and_apply_on_enter() -> anyhow::Result<()> {
 		"beta forest budget"
 	);
 	anyhow::ensure!(
+		app.world().resource::<LodPresentBudget<ForestLodChan>>().ids_per_frame == 32,
+		"beta forest present budget"
+	);
+	anyhow::ensure!(
 		app.world().resource::<LodGenerateBudget<BumpOutLodChan>>().ids_per_frame == 8,
 		"beta bump-out budget"
+	);
+	anyhow::ensure!(
+		app.world().resource::<LodPresentBudget<BumpOutLodChan>>().ids_per_frame == 8,
+		"beta bump-out present budget"
+	);
+	anyhow::ensure!(
+		app.world().resource::<LodPresentBudget<MediumBumpOutLodChan>>().ids_per_frame == 4,
+		"beta medium bump-out present budget"
 	);
 
 	hop(&mut app, ActiveGenerationMode::of::<Alpha>())?;
 	anyhow::ensure!(
 		app.world().resource::<LodGenerateBudget<ForestLodChan>>().ids_per_frame == 16,
 		"return restores forest budget"
+	);
+	anyhow::ensure!(
+		app.world().resource::<LodPresentBudget<ForestLodChan>>().ids_per_frame == 16,
+		"return restores forest present budget"
 	);
 	Ok(())
 }

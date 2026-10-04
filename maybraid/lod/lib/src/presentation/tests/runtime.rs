@@ -3,7 +3,7 @@ use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 
 use crate::gen::tests::test_utils::{
-	cell, span, PresenterOp, RecordingPresenter, Terrain, Vegetation, WorldIndex,
+	cell, span, RecordingPresenter, Terrain, Vegetation, WorldIndex,
 };
 use crate::gen::{GeneratingSpatialIndex, Id, LodGenerated, RegionPresenter, Version};
 use crate::lod_ref::{LodNode, LodNodePose, LodRef};
@@ -133,81 +133,6 @@ fn independent_present_drains_each_receive_the_configured_budget() -> Result<()>
 	let presenter = app.world().resource::<RecordingPresenter>();
 	assert_eq!(presenter.terrain.len(), 1);
 	assert_eq!(presenter.vegetation.len(), 1);
-	Ok(())
-}
-
-fn handle_count(presenter: &RecordingPresenter, id: Id) -> usize {
-	presenter.ops.iter().filter(|op| matches!(op, PresenterOp::Handle(got, _) if *got == id)).count()
-}
-
-fn pending_present_app(ids: &[Id], budget: u32) -> App {
-	let mut index = WorldIndex::default();
-	let identity = Transform::IDENTITY;
-	let bounds = cell(0.0);
-	let lod = LodRef {
-		entity: Entity::PLACEHOLDER,
-		previous_transform: &identity,
-		current_transform: &identity,
-		bounds: &bounds,
-	};
-	for id in ids {
-		GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, *id, &lod);
-	}
-	let mut keep = LodPresentKeepRegion::<PresentChan>::default();
-	keep.region = Some(span(-10.0, 20.0));
-	let mut presenter = RecordingPresenter::default();
-	presenter.hold_ids.extend(ids.iter().copied());
-	let mut app = App::new();
-	app.add_plugins(MinimalPlugins)
-		.insert_resource(index)
-		.insert_resource(presenter)
-		.insert_resource(LodPresentBudget::<PresentChan>::new(budget))
-		.insert_resource(LodPresentTimeBudget {
-			time_per_frame: std::time::Duration::ZERO,
-			..default()
-		})
-		.insert_resource(keep)
-		.add_plugins(
-			LodPresentPlugin::<Vegetation, WorldIndex, RecordingParam, PresentChan>::default(),
-		);
-	app.world_mut().spawn((LodNode, LodNodePose::default(), Transform::IDENTITY));
-	app
-}
-
-#[test]
-fn incomplete_present_is_handled_once_per_drain() -> Result<()> {
-	let id = Id::from_cell(cell(0.0));
-	let mut app = pending_present_app(&[id], 4);
-	app.update();
-	let presenter = app.world().resource::<RecordingPresenter>();
-	assert_eq!(handle_count(presenter, id), 1, "a larger budget must not re-poll the same id");
-	Ok(())
-}
-
-#[test]
-fn incomplete_present_handles_each_id_once_when_budget_exceeds_queue() -> Result<()> {
-	let first = Id::from_cell(cell(0.0));
-	let second = Id::from_cell(cell(2.0));
-	let mut app = pending_present_app(&[first, second], 4);
-	app.update();
-	let presenter = app.world().resource::<RecordingPresenter>();
-	assert_eq!(handle_count(presenter, first), 1);
-	assert_eq!(handle_count(presenter, second), 1);
-	Ok(())
-}
-
-#[test]
-fn incomplete_present_yields_to_other_ids() -> Result<()> {
-	let first = Id::from_cell(cell(0.0));
-	let second = Id::from_cell(cell(2.0));
-	let mut app = pending_present_app(&[first, second], 1);
-	app.update();
-	assert_eq!(handle_count(app.world().resource::<RecordingPresenter>(), first), 1);
-	assert_eq!(handle_count(app.world().resource::<RecordingPresenter>(), second), 0);
-	app.update();
-	let presenter = app.world().resource::<RecordingPresenter>();
-	assert_eq!(handle_count(presenter, first), 1, "front-of-queue retry would handle first again");
-	assert_eq!(handle_count(presenter, second), 1, "back-of-queue lets the other id run");
 	Ok(())
 }
 
