@@ -31,11 +31,62 @@ pub struct LightPulse {
 	pub fade: f32,
 }
 
-/// Concrete particle or light variant owned by a layer.
+/// Near-core mesh material kind.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LobeKind {
+	Fire,
+	Smoke,
+	Flash,
+}
+
+impl LobeKind {
+	pub fn as_f32(self) -> f32 {
+		match self {
+			Self::Fire => 0.0,
+			Self::Smoke => 1.0,
+			Self::Flash => 2.0,
+		}
+	}
+}
+
+/// One overlapping rounded volume in a mesh cluster.
+#[derive(Clone, Copy, Debug)]
+pub struct LobeSpec {
+	pub offset: Vec3,
+	pub scale: Vec3,
+	pub expand: f32,
+	pub rise: f32,
+	pub duration: f32,
+}
+
+/// Shared mesh plus a lobe arrangement. Runtime animation stays in spawn.
+#[derive(Clone, Debug)]
+pub struct MeshPart {
+	pub name: String,
+	pub mesh: Handle<Mesh>,
+	pub kind: LobeKind,
+	pub lobes: Vec<LobeSpec>,
+	pub duration: f32,
+}
+
+impl MeshPart {
+	pub fn duration_from_lobes(
+		name: impl Into<String>,
+		mesh: Handle<Mesh>,
+		kind: LobeKind,
+		lobes: Vec<LobeSpec>,
+	) -> Self {
+		let duration = lobes.iter().map(|lobe| lobe.duration).fold(0.0, f32::max);
+		Self { name: name.into(), mesh, kind, lobes, duration }
+	}
+}
+
+/// Concrete particle, light, or mesh variant owned by a layer.
 #[derive(Clone, Debug)]
 pub enum EffectPart {
 	Particle(ParticlePart),
 	Light(LightPulse),
+	Mesh(MeshPart),
 }
 
 /// One timed piece of a composite: part, delay, local pose, scale.
@@ -66,6 +117,15 @@ impl EffectLayer {
 		}
 	}
 
+	pub fn mesh(part: MeshPart) -> Self {
+		Self {
+			part: EffectPart::Mesh(part),
+			delay: 0.0,
+			transform: Transform::IDENTITY,
+			scale: 1.0,
+		}
+	}
+
 	pub fn with_delay(mut self, delay: f32) -> Self {
 		self.delay = delay;
 		self
@@ -77,11 +137,15 @@ impl EffectLayer {
 	}
 
 	pub fn duration(&self) -> f32 {
-		let life = match &self.part {
+		self.delay + self.part_lifetime()
+	}
+
+	pub fn part_lifetime(&self) -> f32 {
+		match &self.part {
 			EffectPart::Particle(part) => part.max_lifetime,
 			EffectPart::Light(pulse) => pulse.fade,
-		};
-		self.delay + life
+			EffectPart::Mesh(part) => part.duration,
+		}
 	}
 }
 
@@ -107,4 +171,5 @@ impl EffectDefinition {
 pub struct VfxFlipbooks {
 	pub fire: FlipbookAsset,
 	pub smoke: FlipbookAsset,
+	pub spark: Handle<Image>,
 }

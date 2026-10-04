@@ -4,12 +4,13 @@ use bevy::prelude::*;
 use bevy_hanabi::prelude::{EffectMaterial, ParticleEffect};
 use bevy_hanabi::EffectAsset;
 
-use crate::assets::{fire_flipbook, smoke_flipbook};
+use crate::assets::{fire_flipbook, smoke_flipbook, spark_taper};
 use crate::composition::{
 	EffectDefinition, VfxFlipbooks, FIREBALL, FIREY_EXPLOSION, FLASH, SMOKE, SPARKS,
 };
 use crate::effects::firey_explosion;
 use crate::layers::{fireball, flash, smoke, sparks};
+use crate::lobe::rounded_lobe_mesh;
 
 /// Shared definitions. Clone a handle out; never mutate the compiled assets.
 #[derive(Resource, Clone, Debug)]
@@ -51,26 +52,36 @@ pub fn setup_vfx_library(
 	mut commands: Commands,
 	mut images: ResMut<Assets<Image>>,
 	mut effects: ResMut<Assets<EffectAsset>>,
+	mut meshes: ResMut<Assets<Mesh>>,
 ) {
-	let flipbooks =
-		VfxFlipbooks { fire: fire_flipbook(&mut images), smoke: smoke_flipbook(&mut images) };
-	let fireball_part = fireball::compile(&mut effects, &flipbooks.fire);
-	let smoke_part = smoke::compile(&mut effects, &flipbooks.smoke);
-	let sparks_part = sparks::compile(&mut effects);
+	let lobe_mesh = meshes.add(rounded_lobe_mesh());
+	let flipbooks = VfxFlipbooks {
+		fire: fire_flipbook(&mut images),
+		smoke: smoke_flipbook(&mut images),
+		spark: spark_taper(&mut images),
+	};
+	let flash_mesh = flash::compile_mesh(lobe_mesh.clone());
+	let fireball_mesh = fireball::compile_mesh(lobe_mesh.clone());
+	let fireball_wisps = fireball::compile_wisps(&mut effects, &flipbooks.fire);
+	let smoke_mesh = smoke::compile_mesh(lobe_mesh);
+	let smoke_wisps = smoke::compile_wisps(&mut effects, &flipbooks.smoke);
+	let sparks_part = sparks::compile(&mut effects, flipbooks.spark.clone());
 	let library = VfxLibrary {
-		flash: flash::definition(),
-		fireball: fireball::definition(fireball_part.clone()),
-		smoke: smoke::definition(smoke_part.clone()),
+		flash: flash::definition(flash_mesh.clone()),
+		fireball: fireball::definition(fireball_mesh.clone(), fireball_wisps.clone()),
+		smoke: smoke::definition(smoke_mesh.clone(), smoke_wisps.clone()),
 		sparks: sparks::definition(sparks_part.clone()),
 		firey_explosion: firey_explosion::definition(
-			fireball_part.clone(),
-			smoke_part.clone(),
+			flash_mesh,
+			fireball_mesh,
+			fireball_wisps.clone(),
+			smoke_mesh,
+			smoke_wisps.clone(),
 			sparks_part.clone(),
 		),
 		flipbooks,
 	};
-	// Hidden instances compile GPU shaders before the first visible burst.
-	for part in [&fireball_part, &smoke_part, &sparks_part] {
+	for part in [&fireball_wisps, &smoke_wisps, &sparks_part] {
 		let mut warmup = commands.spawn((
 			Name::new(format!("vfx-warmup-{}", part.name)),
 			ParticleEffect::new(part.effect.clone()),

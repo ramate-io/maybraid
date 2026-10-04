@@ -1,71 +1,111 @@
-//! Reusable drifting smoke flipbook emitter.
+//! Near smoke: shaded mesh puffs plus thin rising wisps.
 
 use bevy::prelude::*;
 use bevy_hanabi::prelude::{
 	AccelModifier, Attribute, ColorBlendMask, ColorBlendMode, ColorOverLifetimeModifier,
 	EffectAsset, ExprWriter, FlipbookModifier, ImageSampleMapping, LinearDragModifier, OrientMode,
 	OrientModifier, ParticleTextureModifier, SetAttributeModifier, SetPositionSphereModifier,
-	SetVelocitySphereModifier, ShapeDimension, SimulationSpace, SizeOverLifetimeModifier,
-	SpawnerSettings,
+	ShapeDimension, SimulationSpace, SpawnerSettings,
 };
 
 use crate::assets::FlipbookAsset;
-use crate::composition::{EffectDefinition, EffectLayer, ParticlePart, SMOKE};
+use crate::composition::{
+	EffectDefinition, EffectLayer, LobeKind, LobeSpec, MeshPart, ParticlePart, SMOKE,
+};
 use crate::flipbook::update_sprite_index;
+use crate::particles::{add_instance_properties, init_smoke_velocity, update_scaled_size3};
 
 pub const SMOKE_COUNT: f32 = 10.0;
 pub const SMOKE_CAPACITY: u32 = 32;
 pub const SMOKE_LIFE_MIN: f32 = 1.2;
 pub const SMOKE_LIFE_MAX: f32 = 2.4;
 pub const SMOKE_DELAY: f32 = 0.05;
+pub const SMOKE_OUTWARD_MIN: f32 = 0.35;
+pub const SMOKE_OUTWARD_MAX: f32 = 0.9;
+pub const SMOKE_RISE: f32 = 1.15;
 
-pub fn compile(effects: &mut Assets<EffectAsset>, smoke: &FlipbookAsset) -> ParticlePart {
+pub fn compile_mesh(mesh: Handle<Mesh>) -> MeshPart {
+	MeshPart::duration_from_lobes(
+		SMOKE,
+		mesh,
+		LobeKind::Smoke,
+		vec![
+			puff(Vec3::new(0.00, 0.10, 0.00), 0.62, 1.05, 0.55, 2.20),
+			puff(Vec3::new(0.20, 0.16, 0.08), 0.48, 0.95, 0.62, 2.05),
+			puff(Vec3::new(-0.18, 0.14, 0.12), 0.46, 0.98, 0.58, 2.10),
+			puff(Vec3::new(0.06, 0.22, -0.18), 0.44, 0.90, 0.70, 2.30),
+			puff(Vec3::new(-0.12, 0.06, -0.16), 0.42, 0.88, 0.48, 1.90),
+			puff(Vec3::new(0.14, 0.04, 0.18), 0.40, 0.86, 0.50, 1.95),
+			puff(Vec3::new(-0.04, 0.28, 0.04), 0.38, 0.80, 0.78, 2.40),
+		],
+	)
+}
+
+fn puff(offset: Vec3, scale: f32, expand: f32, rise: f32, duration: f32) -> LobeSpec {
+	LobeSpec { offset, scale: Vec3::splat(scale), expand, rise, duration }
+}
+
+pub fn compile_wisps(effects: &mut Assets<EffectAsset>, smoke: &FlipbookAsset) -> ParticlePart {
+	compile_wisps_kind(effects, smoke, true)
+}
+
+pub fn compile_wisps_kind(
+	effects: &mut Assets<EffectAsset>,
+	smoke: &FlipbookAsset,
+	ground: bool,
+) -> ParticlePart {
 	let writer = ExprWriter::new();
+	let props = add_instance_properties(&writer);
 	let init_pos = SetPositionSphereModifier {
 		center: writer.lit(Vec3::ZERO).expr(),
-		radius: writer.lit(0.14).expr(),
+		radius: (writer.lit(0.14) * props.scale.clone()).expr(),
 		dimension: ShapeDimension::Volume,
 	};
-	let speed = writer.lit(0.35).uniform(writer.lit(0.9));
-	let init_vel = SetVelocitySphereModifier {
-		center: writer.lit(Vec3::new(0.0, 0.35, 0.0)).expr(),
-		speed: speed.expr(),
-	};
+	let init_vel = init_smoke_velocity(
+		&writer,
+		&props.scale,
+		SMOKE_OUTWARD_MIN,
+		SMOKE_OUTWARD_MAX,
+		SMOKE_RISE,
+		ground,
+	);
 	let init_age = SetAttributeModifier::new(Attribute::AGE, writer.lit(0.).expr());
 	let init_lifetime = SetAttributeModifier::new(
 		Attribute::LIFETIME,
 		writer.lit(SMOKE_LIFE_MIN).uniform(writer.lit(SMOKE_LIFE_MAX)).expr(),
 	);
 	let init_sprite = SetAttributeModifier::new(Attribute::SPRITE_INDEX, writer.lit(0i32).expr());
+	let init_color = SetAttributeModifier::new(Attribute::HDR_COLOR, props.tint.expr());
 	let update_drag = LinearDragModifier::new(writer.lit(1.1).expr());
-	let update_accel = AccelModifier::new(writer.lit(Vec3::new(0.0, 0.85, 0.0)).expr());
+	let update_accel =
+		AccelModifier::new((writer.lit(Vec3::new(0.0, 0.55, 0.0)) * props.scale.clone()).expr());
+	let update_size =
+		update_scaled_size3(&writer, &props.scale, Vec3::splat(0.42), Vec3::splat(0.95));
 	let update_sprite = update_sprite_index(&writer, smoke);
 	let texture_slot = writer.lit(0u32).expr();
 
 	let mut color = bevy_hanabi::Gradient::new();
-	color.add_key(0.0, Vec4::new(0.55, 0.54, 0.52, 0.55));
-	color.add_key(0.4, Vec4::new(0.32, 0.32, 0.33, 0.28));
-	color.add_key(1.0, Vec4::new(0.16, 0.16, 0.17, 0.0));
-	let mut size = bevy_hanabi::Gradient::new();
-	size.add_key(0.0, Vec3::splat(0.55));
-	size.add_key(0.5, Vec3::splat(0.95));
-	size.add_key(1.0, Vec3::splat(1.35));
+	color.add_key(0.0, Vec4::new(0.58, 0.44, 0.34, 0.72));
+	color.add_key(0.45, Vec4::new(0.30, 0.32, 0.36, 0.42));
+	color.add_key(1.0, Vec4::new(0.18, 0.20, 0.24, 0.0));
 
 	let mut module = writer.finish();
 	module.add_texture_slot("smoke");
 
 	let effect = effects.add(
 		EffectAsset::new(SMOKE_CAPACITY, SpawnerSettings::once(SMOKE_COUNT.into()), module)
-			.with_name("vfx-smoke")
-			.with_simulation_space(SimulationSpace::Local)
+			.with_name(if ground { "vfx-smoke-wisps" } else { "vfx-smoke-wisps-air" })
+			.with_simulation_space(SimulationSpace::Global)
 			.with_alpha_mode(bevy_hanabi::AlphaMode::Blend)
 			.init(init_pos)
 			.init(init_vel)
 			.init(init_age)
 			.init(init_lifetime)
 			.init(init_sprite)
+			.init(init_color)
 			.update(update_drag)
 			.update(update_accel)
+			.update(update_size)
 			.update(update_sprite)
 			.render(ParticleTextureModifier {
 				texture_slot,
@@ -74,15 +114,14 @@ pub fn compile(effects: &mut Assets<EffectAsset>, smoke: &FlipbookAsset) -> Part
 			.render(FlipbookModifier { sprite_grid_size: smoke.grid })
 			.render(ColorOverLifetimeModifier {
 				gradient: color,
-				blend: ColorBlendMode::Overwrite,
+				blend: ColorBlendMode::Modulate,
 				mask: ColorBlendMask::RGBA,
 			})
-			.render(SizeOverLifetimeModifier { gradient: size, screen_space_size: false })
 			.render(OrientModifier::new(OrientMode::FaceCameraPosition)),
 	);
 
 	ParticlePart {
-		name: SMOKE.into(),
+		name: format!("{SMOKE}-wisps"),
 		effect,
 		images: vec![smoke.image.clone()],
 		count: SMOKE_COUNT,
@@ -91,23 +130,41 @@ pub fn compile(effects: &mut Assets<EffectAsset>, smoke: &FlipbookAsset) -> Part
 	}
 }
 
-pub fn definition(part: ParticlePart) -> EffectDefinition {
-	EffectDefinition::new(SMOKE, [EffectLayer::particle(part).with_delay(SMOKE_DELAY)])
+pub fn definition(mesh: MeshPart, wisps: ParticlePart) -> EffectDefinition {
+	EffectDefinition::new(
+		SMOKE,
+		[
+			EffectLayer::mesh(mesh).with_delay(SMOKE_DELAY),
+			EffectLayer::particle(wisps).with_delay(SMOKE_DELAY),
+		],
+	)
 }
 
 #[cfg(test)]
 mod tests {
 	use super::*;
 	use crate::assets::smoke_flipbook;
+	use crate::particles::smoke_launch_velocity;
 
 	#[test]
 	fn standalone_smoke_keeps_its_delay() {
 		let mut images = Assets::<Image>::default();
 		let mut effects = Assets::<EffectAsset>::default();
-		let part = compile(&mut effects, &smoke_flipbook(&mut images));
-		let def = definition(part);
-		assert_eq!(def.layers.len(), 1);
+		let wisps = compile_wisps(&mut effects, &smoke_flipbook(&mut images));
+		let def = definition(compile_mesh(Handle::default()), wisps);
+		assert_eq!(def.layers.len(), 2);
 		assert!((def.layers[0].delay - SMOKE_DELAY).abs() < 1e-4);
 		assert!((def.duration() - (SMOKE_DELAY + SMOKE_LIFE_MAX)).abs() < 1e-4);
+	}
+
+	#[test]
+	fn spawn_in_old_radius_does_not_launch_down() {
+		let velocity = smoke_launch_velocity(
+			Vec3::new(0.0, 0.0, 0.0) - Vec3::new(0.0, 0.35, 0.0),
+			0.6,
+			SMOKE_RISE,
+			true,
+		);
+		assert!(velocity.y > 0.0, "{velocity:?}");
 	}
 }

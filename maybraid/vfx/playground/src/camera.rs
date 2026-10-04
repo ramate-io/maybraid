@@ -1,10 +1,11 @@
 use std::f32::consts::PI;
 
-use bevy::camera::Hdr;
-use bevy::post_process::bloom::Bloom;
 use bevy::prelude::*;
 use bevy::window::WindowFocused;
 use game_commands::command::TextEntryFocus;
+
+use crate::commands::CameraOrbit;
+use crate::show::SHOW_ORIGIN;
 
 #[derive(Component)]
 pub struct CameraController {
@@ -28,8 +29,6 @@ pub fn setup_camera(mut commands: Commands) {
 
 	commands.spawn((
 		Camera3d::default(),
-		Hdr,
-		Bloom::NATURAL,
 		transform,
 		Projection::Perspective(PerspectiveProjection { near: 0.05, far: 400.0, ..default() }),
 		CameraController { speed: 6.0, sensitivity: 0.005, yaw, pitch },
@@ -122,4 +121,34 @@ pub fn camera_controller(
 	if movement != Vec3::ZERO {
 		transform.translation += movement.normalize() * controller.speed * time.delta_secs();
 	}
+}
+
+pub fn orbit_camera(
+	real_time: Res<Time<Real>>,
+	mut orbit: ResMut<CameraOrbit>,
+	mut query: Query<(&mut Transform, &mut CameraController), With<Camera3d>>,
+) {
+	if !orbit.enabled {
+		return;
+	}
+	if orbit.radius < 1.0 {
+		orbit.radius = 4.2;
+		orbit.height = 1.7;
+	}
+	orbit.yaw += real_time.delta_secs() * 0.35;
+	let Ok((mut transform, mut controller)) = query.single_mut() else {
+		return;
+	};
+	let target = SHOW_ORIGIN;
+	let offset =
+		Vec3::new(orbit.yaw.cos() * orbit.radius, orbit.height, orbit.yaw.sin() * orbit.radius);
+	transform.translation = target + offset;
+	transform.look_at(target, Vec3::Y);
+	let rotation = transform.rotation;
+	let (x, y, z, w) = (rotation.x, rotation.y, rotation.z, rotation.w);
+	let sin_yaw = 2.0 * (w * y + x * z);
+	let cos_yaw = 1.0 - 2.0 * (y * y + z * z);
+	controller.yaw = sin_yaw.atan2(cos_yaw);
+	let sin_pitch = 2.0 * (w * x - y * z);
+	controller.pitch = sin_pitch.asin();
 }

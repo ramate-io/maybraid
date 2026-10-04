@@ -21,36 +21,80 @@ pub enum PlaygroundCommand {
 	Script(Script),
 	/// Spawn the composed fiery explosion (flash + fireball + smoke + sparks).
 	FireyExplosion {
-		/// Spatial scale (positions, sizes, velocities, light range). Duration is unchanged.
 		#[arg(long, default_value_t = 1.0)]
 		scale: f32,
-		/// Particle-count and flash-intensity scale, clamped by the crate.
 		#[arg(long, default_value_t = 1.0)]
 		intensity: f32,
+		/// World-space Z offset from the default burst origin, in meters.
+		#[arg(long, default_value_t = 0.0)]
+		distance: f32,
+		#[arg(long, default_value_t = 0)]
+		seed: u64,
 	},
-	/// Spawn a named definition at the origin. Repeat to overlay instances.
+	/// Spawn a named definition. Repeat to overlay instances.
 	Show {
-		/// `firey-explosion`, `flash`, `fireball`, `smoke`, or `sparks`.
 		#[arg(default_value = "firey-explosion")]
 		effect: String,
-		/// Spatial scale (positions, sizes, velocities, light range). Duration is unchanged.
 		#[arg(long, default_value_t = 1.0)]
 		scale: f32,
-		/// Particle-count and flash-intensity scale, clamped by the crate.
 		#[arg(long, default_value_t = 1.0)]
 		intensity: f32,
+		#[arg(long, default_value_t = 0.0)]
+		distance: f32,
+		#[arg(long, default_value_t = 0)]
+		seed: u64,
 	},
+	/// Spawn the last effect at near, mid, and far distances.
+	Spread,
+	/// Orbit the camera around the burst origin.
+	Orbit,
+	/// Freeze playback once the instance reaches `age` seconds.
+	Freeze {
+		#[arg(allow_hyphen_values = true)]
+		age: f32,
+	},
+	/// Resume playback after `/freeze`.
+	Play,
+	/// Stop automatically repeating the last show.
+	Noloop,
 }
 
 /// Queued `/show` requests. Applied once [`maybraid_vfx::VfxLibrary`] exists.
 #[derive(Resource, Default)]
 pub struct PendingVfxShows(pub Vec<VfxShowRequest>);
 
+#[derive(Resource, Default)]
+pub struct SpreadOnce(pub bool);
+
 #[derive(Clone, Debug)]
 pub struct VfxShowRequest {
 	pub effect: String,
 	pub scale: f32,
 	pub intensity: f32,
+	pub distance: f32,
+	pub seed: u64,
+}
+
+#[derive(Resource, Default, Clone, Debug)]
+pub struct PreviewFreeze {
+	pub age: Option<f32>,
+}
+
+#[derive(Resource, Clone, Debug)]
+pub struct LoopEnabled(pub bool);
+
+impl Default for LoopEnabled {
+	fn default() -> Self {
+		Self(true)
+	}
+}
+
+#[derive(Resource, Default, Debug)]
+pub struct CameraOrbit {
+	pub enabled: bool,
+	pub yaw: f32,
+	pub radius: f32,
+	pub height: f32,
 }
 
 impl PlaygroundCommand {
@@ -66,17 +110,58 @@ impl PlaygroundCommand {
 		match self {
 			Self::Help => *console = Self::long_help_string(),
 			Self::Script(script) => script.run(commands, console),
-			Self::FireyExplosion { scale, intensity } => {
-				queue_show(commands, console, "firey_explosion", scale, intensity);
+			Self::FireyExplosion { scale, intensity, distance, seed } => {
+				queue_show(commands, console, "firey_explosion", scale, intensity, distance, seed);
 			}
-			Self::Show { effect, scale, intensity } => {
+			Self::Show { effect, scale, intensity, distance, seed } => {
 				let Some(name) = canonicalize_effect_name(&effect) else {
 					*console = format!(
 						"unknown effect `{effect}` — try firey-explosion, flash, fireball, smoke, sparks"
 					);
 					return;
 				};
-				queue_show(commands, console, name, scale, intensity);
+				queue_show(commands, console, name, scale, intensity, distance, seed);
+			}
+			Self::Spread => {
+				*console = "spread near / mid / far".into();
+				commands.queue(|world: &mut World| {
+					world.resource_mut::<SpreadOnce>().0 = true;
+				});
+			}
+			Self::Orbit => {
+				commands.queue(|world: &mut World| {
+					let mut orbit = world.resource_mut::<CameraOrbit>();
+					orbit.enabled = !orbit.enabled;
+					if orbit.radius < 1.0 {
+						orbit.radius = 4.2;
+						orbit.height = 1.7;
+					}
+				});
+				*console = "orbit toggled".into();
+			}
+			Self::Freeze { age } => {
+				let hold = if age < 0.0 { None } else { Some(age) };
+				commands.queue(move |world: &mut World| {
+					world.resource_mut::<PreviewFreeze>().age = hold;
+					world.resource_mut::<Time<Virtual>>().unpause();
+				});
+				*console = match hold {
+					Some(age) => format!("freeze at {age:.2}s"),
+					None => "freeze off".into(),
+				};
+			}
+			Self::Play => {
+				commands.queue(|world: &mut World| {
+					world.resource_mut::<PreviewFreeze>().age = None;
+					world.resource_mut::<Time<Virtual>>().unpause();
+				});
+				*console = "play".into();
+			}
+			Self::Noloop => {
+				commands.queue(|world: &mut World| {
+					world.resource_mut::<LoopEnabled>().0 = false;
+				});
+				*console = "loop off".into();
 			}
 		}
 	}
@@ -96,14 +181,22 @@ fn queue_show(
 	name: &str,
 	scale: f32,
 	intensity: f32,
+	distance: f32,
+	seed: u64,
 ) {
-	*console = format!("show {name} --scale {scale} --intensity {intensity}");
+	*console = format!(
+		"show {name} --scale {scale} --intensity {intensity} --distance {distance} --seed {seed}"
+	);
 	let name = name.to_string();
 	commands.queue(move |world: &mut World| {
+		world.resource_mut::<LoopEnabled>().0 = true;
+		world.resource_mut::<Time<Virtual>>().unpause();
 		world.resource_mut::<PendingVfxShows>().0.push(VfxShowRequest {
 			effect: name,
 			scale,
 			intensity,
+			distance,
+			seed,
 		});
 	});
 }

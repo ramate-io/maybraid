@@ -1,20 +1,60 @@
-//! Reusable flash and optional light pulse.
+//! Brief emissive burst shape plus an optional light pulse.
 
-use crate::composition::{EffectDefinition, EffectLayer, LightPulse, FLASH};
+use bevy::prelude::*;
 
-pub const FLASH_FADE: f32 = 0.1;
-pub const FLASH_PEAK: f32 = 1_200_000.0;
+use crate::composition::{
+	EffectDefinition, EffectLayer, LightPulse, LobeKind, LobeSpec, MeshPart, FLASH,
+};
+
+pub const FLASH_FADE: f32 = 0.12;
+pub const FLASH_PEAK: f32 = 40_000.0;
 pub const FLASH_RANGE: f32 = 6.0;
 
 pub fn pulse() -> LightPulse {
 	LightPulse {
-		color: bevy::prelude::Color::srgb(1.0, 0.82, 0.45),
+		color: Color::srgb(1.0, 0.82, 0.45),
 		peak_intensity: FLASH_PEAK,
 		range: FLASH_RANGE,
 		fade: FLASH_FADE,
 	}
 }
 
-pub fn definition() -> EffectDefinition {
-	EffectDefinition::new(FLASH, [EffectLayer::light(pulse())])
+pub fn compile_mesh(mesh: Handle<Mesh>) -> MeshPart {
+	MeshPart::duration_from_lobes(
+		FLASH,
+		mesh,
+		LobeKind::Flash,
+		vec![
+			LobeSpec {
+				offset: Vec3::ZERO,
+				scale: Vec3::splat(0.22),
+				expand: 1.55,
+				rise: 0.0,
+				duration: FLASH_FADE,
+			},
+			LobeSpec {
+				offset: Vec3::new(0.05, 0.03, -0.03),
+				scale: Vec3::splat(0.11),
+				expand: 1.1,
+				rise: 0.0,
+				duration: FLASH_FADE * 0.7,
+			},
+		],
+	)
+}
+
+pub fn definition(mesh: MeshPart) -> EffectDefinition {
+	EffectDefinition::new(FLASH, [EffectLayer::mesh(mesh), EffectLayer::light(pulse())])
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn flash_owns_shape_and_light() {
+		let def = definition(compile_mesh(Handle::default()));
+		assert_eq!(def.layers.len(), 2);
+		assert!((def.duration() - FLASH_FADE).abs() < 1e-4);
+	}
 }
