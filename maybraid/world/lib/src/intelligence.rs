@@ -8,6 +8,7 @@ use characters::CharacterMotionSystems;
 use evasion_intelligence::{EvasionPlugin, EvasionSystems};
 use firearm_intelligence::{FirearmIntelligencePlugin, FirearmIntelligenceSystems};
 use firearm_user::FirearmUserPlugin;
+use grenade_user::GrenadeUserPlugin;
 use firearms::{FirearmWeaponSystems, FirearmWeaponsPlugin};
 use fleeing_intelligence::{FleeingPlugin, FleeingSystems};
 use hiding_intelligence::{HidingPlugin, HidingSystems};
@@ -88,6 +89,9 @@ impl Plugin for WorldIntelligencePlugin {
 		}
 		if !app.is_plugin_added::<FirearmUserPlugin>() {
 			app.add_plugins(FirearmUserPlugin);
+		}
+		if !app.is_plugin_added::<GrenadeUserPlugin>() {
+			app.add_plugins(GrenadeUserPlugin);
 		}
 		if !app.is_plugin_added::<MovementIntelligencePlugin<AvianMovementSurface<'_, '_>>>() {
 			app.add_plugins(MovementIntelligencePlugin::<AvianMovementSurface<'_, '_>>::default());

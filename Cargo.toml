@@ -119,6 +119,8 @@ members = [
   "maybraid/items/firearms-components",
   "maybraid/items/firearms",
   "maybraid/items/firearm-user",
+  "maybraid/items/grenades",
+  "maybraid/items/grenade-user",
   "maybraid/items/playground",
   "maybraid/items/firing-range-playground",
   "maybraid/items/les-halles-arena",
@@ -373,6 +375,8 @@ damage = { path = "maybraid/damage" }
 firearms-components = { path = "maybraid/items/firearms-components" }
 firearms = { path = "maybraid/items/firearms" }
 firearm-user = { path = "maybraid/items/firearm-user" }
+grenades = { path = "maybraid/items/grenades" }
+grenade-user = { path = "maybraid/items/grenade-user" }
 intelligence-lod = { path = "maybraid/intelligence/lod" }
 movement-intelligence = { path = "maybraid/intelligence/movement/lib" }
 movement-intelligence-avian = { path = "maybraid/intelligence/movement/avian" }

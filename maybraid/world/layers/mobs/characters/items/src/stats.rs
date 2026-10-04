@@ -297,7 +297,13 @@ impl CharacterSheet {
 			}
 		}
 		for &index in &inventory.weapons {
-			if let Some(stats) = inventory.items.get(index).and_then(InventoryItem::firearm_stats) {
+			let Some(item) = inventory.items.get(index) else {
+				continue;
+			};
+			if let Some(stats) = item.firearm_stats() {
+				sheet.weight = sheet.weight.saturating_add(stats.weight);
+			}
+			if let Some(stats) = item.grenade_stats() {
 				sheet.weight = sheet.weight.saturating_add(stats.weight);
 			}
 		}

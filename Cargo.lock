@@ -5551,6 +5551,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "grenade-user"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "avian3d",
+ "bevy",
+ "character-inventory-user",
+ "character-items",
+ "character-rigs",
+ "characters",
+ "firearm-user",
+ "grenades",
+ "maybraid-character-controller",
+ "player",
+]
+
+[[package]]
+name = "grenades"
+version = "0.1.0"
+dependencies = [
+ "avian3d",
+ "bevy",
+ "character-items",
+ "lod-avian",
+]
+
+[[package]]
 name = "grid"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7177,6 +7204,8 @@ dependencies = [
  "furnishing-layer-presentation",
  "furniture-assemblies",
  "game-commands",
+ "grenade-user",
+ "grenades",
  "ground-avian",
  "hiding-intelligence",
  "intelligence-lod",
@@ -7192,6 +7221,7 @@ dependencies = [
  "maybraid-input",
  "maybraid-skill-map",
  "maybraid-sky",
+ "maybraid-vfx",
  "maybraid-weather",
  "meandering-intelligence",
  "mob-characters",
