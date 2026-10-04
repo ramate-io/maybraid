@@ -64,6 +64,12 @@ impl WorldPlayerRespawnConfig {
 	pub fn nearby_query(&self) -> NearbyQuery {
 		NearbyQuery::nearest_beyond(self.poi_radius, self.fallback.min_radius)
 	}
+
+	/// Cover the overhead view so labeled groves at the edge stay selectable.
+	pub fn picker_query(&self, map_height: f32) -> NearbyQuery {
+		let radius = (map_height * 1.2).max(self.poi_radius);
+		NearbyQuery::nearest_beyond(radius, self.fallback.min_radius)
+	}
 }
 
 #[derive(Debug)]
@@ -393,7 +399,12 @@ fn open_respawn_picker(
 ) {
 	let excluded = last_poi.as_slice();
 	let records = prefer_building_pois(
-		registry.nearby_in(pending.death_at, config.nearby_query(), &config.interests, excluded),
+		registry.nearby_in(
+			pending.death_at,
+			config.picker_query(map.height),
+			&config.interests,
+			excluded,
+		),
 		pending.death_at,
 	);
 	pending.candidates = records.iter().map(|record| record.id).collect();
@@ -496,14 +507,18 @@ fn nearest_in_direction(
 			if align < STICK_ALIGN {
 				return None;
 			}
-			Some((*id, dist, align))
+			// Prefer a well-aimed far mark over a closer POI that is only loosely
+			// in the cone, so a flick toward an on-screen grove can reach it.
+			let score = dist / (align * align);
+			Some((*id, score, dist, align))
 		})
 		.min_by(|a, b| {
 			a.1.total_cmp(&b.1)
-				.then_with(|| b.2.total_cmp(&a.2))
+				.then_with(|| a.2.total_cmp(&b.2))
+				.then_with(|| b.3.total_cmp(&a.3))
 				.then_with(|| a.0.cmp(&b.0))
 		})
-		.map(|(id, _, _)| id)
+		.map(|(id, _, _, _)| id)
 }
 
 fn nearest_candidate(candidates: &[PoiId], registry: &PoiRegistry, focus: Vec2) -> Option<PoiId> {
@@ -592,23 +607,28 @@ fn prefer_building_pois(records: Vec<PoiRecord>, death_at: Vec3) -> Vec<PoiRecor
 			.then_with(|| a.id.cmp(&b.id))
 	};
 	let mut buildings = Vec::new();
-	let mut vegetation = Vec::new();
+	let mut groves = Vec::new();
+	let mut trees = Vec::new();
 	let mut other = Vec::new();
 	for record in records {
 		if is_building_poi(record.kind) {
 			buildings.push(record);
+		} else if record.kind == VEGETATION_POI && record.global {
+			groves.push(record);
 		} else if record.kind == VEGETATION_POI {
-			vegetation.push(record);
+			trees.push(record);
 		} else {
 			other.push(record);
 		}
 	}
 	buildings.sort_by(nearer);
+	groves.sort_by(nearer);
 	other.sort_by(nearer);
-	vegetation.sort_by(nearer);
-	vegetation.truncate(MAX_VEGETATION_RESPAWN);
+	trees.sort_by(nearer);
+	trees.truncate(MAX_VEGETATION_RESPAWN);
+	buildings.extend(groves);
 	buildings.extend(other);
-	buildings.extend(vegetation);
+	buildings.extend(trees);
 	buildings
 }
 
@@ -678,7 +698,47 @@ mod tests {
 		let records = prefer_building_pois(records, death);
 		assert_eq!(records[0].kind, LOCAL_POI);
 		assert_eq!(
-			records.iter().filter(|record| record.kind == VEGETATION_POI).count(),
+			records
+				.iter()
+				.filter(|record| record.kind == VEGETATION_POI && !record.global)
+				.count(),
+			MAX_VEGETATION_RESPAWN
+		);
+	}
+
+	#[test]
+	fn respawn_picker_keeps_named_groves_outside_the_tree_cap() {
+		let death = Vec3::ZERO;
+		let mut records = Vec::new();
+		for index in 0..6u64 {
+			records.push(PoiRecord {
+				id: PoiId(10 + index),
+				entity: Entity::from_bits(10 + index),
+				kind: VEGETATION_POI,
+				position: Vec3::new(70.0 + index as f32 * 4.0, 1.0, 0.0),
+				arrival_radius: 4.0,
+				salience: 0.55,
+				local: true,
+				global: false,
+			});
+		}
+		records.push(PoiRecord {
+			id: PoiId(99),
+			entity: Entity::from_bits(99),
+			kind: VEGETATION_POI,
+			position: Vec3::new(0.0, 1.0, 280.0),
+			arrival_radius: 24.0,
+			salience: 1.25,
+			local: false,
+			global: true,
+		});
+		let records = prefer_building_pois(records, death);
+		assert!(records.iter().any(|record| record.id == PoiId(99)));
+		assert_eq!(
+			records
+				.iter()
+				.filter(|record| record.kind == VEGETATION_POI && !record.global)
+				.count(),
 			MAX_VEGETATION_RESPAWN
 		);
 	}
@@ -690,6 +750,7 @@ mod tests {
 		assert_eq!(config.poi_radius, 320.0);
 		assert_eq!(config.fallback, NearbyFallback::new(60.0, 100.0));
 		assert_eq!(config.nearby_query().min_radius, config.fallback.min_radius);
+		assert!(config.picker_query(420.0).radius > config.poi_radius);
 	}
 
 	#[test]
@@ -967,6 +1028,20 @@ mod tests {
 			],
 		);
 		assert_eq!(picked, Some(near_east));
+	}
+
+	#[test]
+	fn a_stick_flick_can_reach_a_well_aimed_far_poi() {
+		let here = PoiId(1);
+		let beside = PoiId(2);
+		let ahead = PoiId(3);
+		let picked = nearest_in_direction(
+			Vec2::ZERO,
+			Some(here),
+			Vec2::Y,
+			&[(here, Vec2::ZERO), (beside, Vec2::new(20.0, 8.0)), (ahead, Vec2::new(4.0, 90.0))],
+		);
+		assert_eq!(picked, Some(ahead));
 	}
 
 	#[test]
