@@ -15,12 +15,21 @@ where
 	}
 
 	pub fn apply(&self, rig: &mut R, animation_progress: f32, transition_progress: f32) -> Effects {
-		let rest = snapshot_pose(rig);
-		restore_pose(rig, &rest);
+		let weight = self.weight(transition_progress);
+
+		if weight <= 0.0 {
+			restore_pose(rig, &self.from_pose);
+			return Effects::default();
+		}
+
 		self.animation.apply_for(rig, animation_progress);
 		let effects = self.animation.effects_for(rig, animation_progress);
+
+		if weight >= 1.0 {
+			return effects;
+		}
+
 		let target_pose = snapshot_pose(rig);
-		let weight = self.weight(transition_progress);
 		blend_pose(rig, &self.from_pose, &target_pose, weight);
 		mix_effects(Effects::default(), effects, weight)
 	}
@@ -119,5 +128,43 @@ mod tests {
 			femur.swing.abs() < Squat::<HumanoidV0Rig>::for_loop(1.0, 1.0).femur_swing(0.5).abs()
 		);
 		Ok(())
+	}
+
+	/// Micro-benchmark for [`Transition::apply`] on a jump-style blend (Spring segment).
+	/// Run with: `cargo test -p character-animations transition_apply_microbench -- --ignored --nocapture`
+	#[test]
+	#[ignore]
+	fn transition_apply_microbench() {
+		use std::time::Instant;
+
+		const FRAMES: u32 = 5_000;
+		const CHARACTERS: u32 = 32;
+
+		let mut rigs: Vec<_> = (0..CHARACTERS)
+			.map(|_| {
+				let mut rig = HumanoidV0Rig::imported();
+				seed_bind_pose(&mut rig);
+				let from_pose = capture_animation_pose(
+					&Squat::<HumanoidV0Rig>::for_loop(1.0, 1.0),
+					&mut rig,
+					0.0,
+				);
+				(rig, Transition::from_pose(Spring::<HumanoidV0Rig>::default(), from_pose))
+			})
+			.collect();
+
+		let start = Instant::now();
+		for frame in 0..FRAMES {
+			let progress = (frame % 100) as f32 / 100.0;
+			for (rig, transition) in &mut rigs {
+				let _ = transition.apply(rig, progress, progress);
+			}
+		}
+		let elapsed = start.elapsed();
+		let samples = FRAMES as u64 * CHARACTERS as u64;
+		eprintln!(
+			"transition_apply_microbench: {samples} samples in {elapsed:?} ({:.0} ns/sample)",
+			elapsed.as_nanos() as f64 / samples as f64
+		);
 	}
 }
