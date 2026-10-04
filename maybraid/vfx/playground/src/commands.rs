@@ -3,6 +3,7 @@
 use bevy::prelude::*;
 use clap::Parser;
 use game_commands::command::{CommandScript, GameCommand};
+use maybraid_vfx::canonicalize_effect_name;
 
 pub const PLAYGROUND_CLI_NAME: &str = "vfx";
 pub type Script = CommandScript<PlaygroundCommand>;
@@ -18,6 +19,29 @@ pub type Script = CommandScript<PlaygroundCommand>;
 pub enum PlaygroundCommand {
 	Help,
 	Script(Script),
+	/// Spawn a named definition at the origin. Repeat to overlay instances.
+	Show {
+		/// `firey-explosion`, `flash`, `fireball`, `smoke`, or `sparks`.
+		#[arg(default_value = "firey-explosion")]
+		effect: String,
+		/// Spatial scale (positions, sizes, velocities, light range). Duration is unchanged.
+		#[arg(long, default_value_t = 1.0)]
+		scale: f32,
+		/// Particle-count and flash-intensity scale, clamped by the crate.
+		#[arg(long, default_value_t = 1.0)]
+		intensity: f32,
+	},
+}
+
+/// Queued `/show` requests. Applied once [`maybraid_vfx::VfxLibrary`] exists.
+#[derive(Resource, Default)]
+pub struct PendingVfxShows(pub Vec<VfxShowRequest>);
+
+#[derive(Clone, Debug)]
+pub struct VfxShowRequest {
+	pub effect: String,
+	pub scale: f32,
+	pub intensity: f32,
 }
 
 impl PlaygroundCommand {
@@ -33,6 +57,23 @@ impl PlaygroundCommand {
 		match self {
 			Self::Help => *console = Self::long_help_string(),
 			Self::Script(script) => script.run(commands, console),
+			Self::Show { effect, scale, intensity } => {
+				let Some(name) = canonicalize_effect_name(&effect) else {
+					*console = format!(
+						"unknown effect `{effect}` — try firey-explosion, flash, fireball, smoke, sparks"
+					);
+					return;
+				};
+				*console = format!("show {name} --scale {scale} --intensity {intensity}");
+				let name = name.to_string();
+				commands.queue(move |world: &mut World| {
+					world.resource_mut::<PendingVfxShows>().0.push(VfxShowRequest {
+						effect: name,
+						scale,
+						intensity,
+					});
+				});
+			}
 		}
 	}
 }
