@@ -15,7 +15,7 @@ use poi_intelligence::{PoiId, PoiRecord, PoiRegistry};
 use richmond::Richmond;
 use terrain_layer_model::{OnTerrain, TerrainView};
 use urbanization_layer_model::Urbanization;
-use world_player::{Player as VegetationPlayer, PlaygroundMode};
+use world_player::{Player as VegetationPlayer, PlayerLifeSet, PlaygroundMode};
 
 use crate::control::{InventoryEditCameraFollow, WorldGameplayEnabled};
 use crate::player_lifecycle::WorldPlayerRespawnState;
@@ -40,11 +40,19 @@ pub struct WorldMapView {
 	pub focus: Vec2,
 	pub height: f32,
 	pub close_locked: bool,
+	/// Death picker / new body: stamp third person instead of restoring the last POV.
+	pub begin_life: bool,
 }
 
 impl Default for WorldMapView {
 	fn default() -> Self {
-		Self { open: false, focus: Vec2::ZERO, height: DEFAULT_MAP_HEIGHT, close_locked: false }
+		Self {
+			open: false,
+			focus: Vec2::ZERO,
+			height: DEFAULT_MAP_HEIGHT,
+			close_locked: false,
+			begin_life: false,
+		}
 	}
 }
 
@@ -60,8 +68,15 @@ impl WorldMapView {
 	}
 
 	pub fn close(&mut self) {
+		if self.close_locked {
+			self.begin_life = true;
+		}
 		self.open = false;
 		self.close_locked = false;
+	}
+
+	pub fn request_begin_life(&mut self) {
+		self.begin_life = true;
 	}
 }
 
@@ -118,9 +133,16 @@ impl Plugin for WorldMapViewPlugin {
 			.add_systems(Startup, spawn_map_name_hud)
 			.add_systems(
 				Update,
-				(toggle_map_view, sync_map_camera_locks, pan_map_view, stamp_map_camera)
+				(toggle_map_view, sync_map_camera_locks, pan_map_view)
 					.chain()
 					.in_set(WorldMapSet::Toggle),
+			)
+			.add_systems(
+				Update,
+				stamp_map_camera
+					.after(WorldMapSet::Toggle)
+					.after(PlayerLifeSet::Resolve)
+					.before(PlayerCameraSystems::Look),
 			)
 			.add_systems(
 				Update,
@@ -227,14 +249,20 @@ fn pan_map_view(
 }
 
 fn stamp_map_camera(
-	map: Res<WorldMapView>,
+	mut map: ResMut<WorldMapView>,
 	surface: TerrainView<Urbanization<Richmond<OnTerrain<Durham>>>>,
 	mut cameras: Query<&mut CameraController, With<FollowCamera>>,
 ) {
 	let ground = surface.height_or_fallback(map.focus);
+	let begin_life = !map.open && map.begin_life;
+	if begin_life {
+		map.begin_life = false;
+	}
 	for mut controller in &mut cameras {
 		if map.open {
 			controller.enter_map(map.focus, map.height, ground);
+		} else if begin_life {
+			controller.begin_life();
 		} else {
 			controller.exit_map();
 		}
@@ -829,6 +857,7 @@ mod tests {
 			focus: Vec2::ZERO,
 			height: DEFAULT_MAP_HEIGHT,
 			close_locked: true,
+			begin_life: false,
 		});
 		world.init_resource::<Messages<CharacterIntent>>();
 		write_toggle(&mut world);
@@ -849,6 +878,7 @@ mod tests {
 			focus: Vec2::new(10.0, 20.0),
 			height: DEFAULT_MAP_HEIGHT,
 			close_locked: false,
+			begin_life: false,
 		});
 		world.init_resource::<Messages<CharacterIntent>>();
 		world.write_message(CharacterIntent::Move(Vec2::X));
@@ -871,6 +901,7 @@ mod tests {
 			focus: Vec2::ZERO,
 			height: DEFAULT_MAP_HEIGHT,
 			close_locked: false,
+			begin_life: false,
 		});
 		world.init_resource::<Messages<CharacterIntent>>();
 		world.write_message(CharacterIntent::CloseMap);
@@ -907,6 +938,7 @@ mod tests {
 			focus: Vec2::new(100.0, 80.0),
 			height: DEFAULT_MAP_HEIGHT,
 			close_locked: false,
+			begin_life: false,
 		};
 		let overlay = LanguageOverlay {
 			names: vec![NamedOverlay {
@@ -935,6 +967,7 @@ mod tests {
 			focus: Vec2::ZERO,
 			height: DEFAULT_MAP_HEIGHT,
 			close_locked: false,
+			begin_life: false,
 		};
 		let overlay = LanguageOverlay {
 			names: vec![
@@ -966,6 +999,15 @@ mod tests {
 		let wanted = map_pin_targets(&map, &overlay, None, None);
 		assert_eq!(wanted.len(), 2);
 		assert!(wanted[0].xz.distance(wanted[1].xz) > 40.0);
+	}
+
+	#[test]
+	fn closing_a_locked_map_requests_a_new_life_camera() {
+		let mut map = WorldMapView { open: true, close_locked: true, ..default() };
+		map.close();
+		assert!(!map.open);
+		assert!(!map.close_locked);
+		assert!(map.begin_life);
 	}
 
 	#[test]

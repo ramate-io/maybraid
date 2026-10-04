@@ -98,6 +98,17 @@ impl CameraController {
 			};
 		}
 	}
+
+	/// New body after death. Leave the map and start in third person.
+	pub fn begin_life(&mut self) {
+		self.exit_map();
+		self.pov = CameraPov::ThirdPerson;
+		self.resume_pov = CameraPov::ThirdPerson;
+		self.focus = 0.0;
+		self.ads = 0.0;
+		self.focus_blend = 0.0;
+		self.pitch = -0.12;
+	}
 }
 
 pub(crate) fn apply_look_intents(
@@ -105,7 +116,10 @@ pub(crate) fn apply_look_intents(
 	locked: Option<Res<CameraPovLocked>>,
 	suppressed: Option<Res<CameraLookSuppressed>>,
 	mut intents: MessageReader<CharacterIntent>,
-	mut cameras: Query<(&mut CameraController, &FollowCamera, Option<&Projection>), With<FollowCamera>>,
+	mut cameras: Query<
+		(&mut CameraController, &FollowCamera, Option<&Projection>),
+		With<FollowCamera>,
+	>,
 ) {
 	if suppressed.is_some_and(|suppressed| suppressed.0)
 		|| cameras.iter().any(|(controller, _, _)| controller.pov.is_map())
@@ -377,11 +391,7 @@ mod tests {
 			.add_systems(Update, apply_look_intents);
 		let camera = app
 			.world_mut()
-			.spawn((
-				Camera3d::default(),
-				CameraController::default(),
-				FollowCamera::default(),
-			))
+			.spawn((Camera3d::default(), CameraController::default(), FollowCamera::default()))
 			.id();
 		app.world_mut().write_message(CharacterIntent::Focus(1.0));
 		app.update();

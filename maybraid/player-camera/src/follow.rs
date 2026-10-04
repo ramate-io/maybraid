@@ -31,6 +31,19 @@ pub(crate) fn follow_character_camera(
 		Query<(&mut Transform, &mut CameraController, &FollowCamera), With<Camera3d>>,
 	)>,
 ) {
+	{
+		let mut cameras = transforms.p1();
+		let Ok((mut camera_transform, controller, _)) = cameras.single_mut() else {
+			return;
+		};
+		if controller.pov.is_map() {
+			*camera_transform =
+				map_pose(controller.map_focus, controller.map_ground_y, controller.map_height)
+					.transform();
+			return;
+		}
+	}
+
 	let Ok((player, aim, look, live_hull, rest_hull)) = players.single() else {
 		return;
 	};
@@ -45,16 +58,6 @@ pub(crate) fn follow_character_camera(
 	let Ok((mut camera_transform, mut controller, follow)) = cameras.single_mut() else {
 		return;
 	};
-
-	if controller.pov.is_map() {
-		*camera_transform = map_pose(
-			controller.map_focus,
-			controller.map_ground_y,
-			controller.map_height,
-		)
-		.transform();
-		return;
-	}
 
 	let yaw = Quat::from_axis_angle(Vec3::Y, controller.yaw);
 	let pitch = Quat::from_axis_angle(Vec3::X, controller.pitch);
@@ -76,11 +79,9 @@ pub(crate) fn follow_character_camera(
 		CameraPov::FirstPerson => {
 			first_person_pose(player.translation(), head, look_rotation, follow, height_scale)
 		}
-		CameraPov::Map => map_pose(
-			controller.map_focus,
-			controller.map_ground_y,
-			controller.map_height,
-		),
+		CameraPov::Map => {
+			map_pose(controller.map_focus, controller.map_ground_y, controller.map_height)
+		}
 	};
 	if controller.pov.is_first_person() {
 		if let Some(sight) = aim.pose {
@@ -147,12 +148,12 @@ pub fn sync_camera_fov(
 	followers: Query<&PlayerCameraAim, With<CameraFollow>>,
 	mut cameras: Query<(&CameraController, &FollowCamera, &mut Projection), With<FollowCamera>>,
 ) {
-	if followers.is_empty() {
-		return;
-	}
 	let Ok((controller, follow, mut projection)) = cameras.single_mut() else {
 		return;
 	};
+	if followers.is_empty() && !controller.pov.is_map() {
+		return;
+	}
 	let Projection::Perspective(perspective) = projection.as_mut() else {
 		return;
 	};
@@ -299,6 +300,42 @@ mod tests {
 		assert_eq!(controller.resume_pov, CameraPov::FirstPerson);
 		controller.exit_map();
 		assert_eq!(controller.pov, CameraPov::FirstPerson);
+	}
+
+	#[test]
+	fn begin_life_leaves_the_map_in_third_person() {
+		let mut controller = CameraController { pov: CameraPov::FirstPerson, ..default() };
+		controller.enter_map(Vec2::ONE, 200.0, 3.0);
+		controller.begin_life();
+		assert_eq!(controller.pov, CameraPov::ThirdPerson);
+		assert_eq!(controller.resume_pov, CameraPov::ThirdPerson);
+		assert_eq!(controller.focus, 0.0);
+	}
+
+	#[test]
+	fn map_pose_applies_without_a_follow_target() -> anyhow::Result<()> {
+		use bevy::ecs::system::RunSystemOnce;
+
+		let mut world = World::new();
+		world.init_resource::<Time>();
+		world.spawn((
+			Camera3d::default(),
+			FollowCamera::default(),
+			CameraController {
+				pov: CameraPov::Map,
+				map_focus: Vec2::new(4.0, 8.0),
+				map_height: 200.0,
+				map_ground_y: 2.0,
+				..default()
+			},
+			Transform::default(),
+		));
+		world
+			.run_system_once(follow_character_camera)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let transform = world.query::<&Transform>().single(&world)?;
+		assert!((transform.translation - Vec3::new(4.0, 202.0, 8.0)).length() < 1e-3);
+		Ok(())
 	}
 
 	#[test]

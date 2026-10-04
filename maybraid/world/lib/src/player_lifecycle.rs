@@ -12,6 +12,7 @@ use maybraid_character_controller::CharacterIntent;
 use maybraid_input::{PadButton, VirtualPad};
 use mob_characters::{LOCAL_POI, URBAN_POI, VEGETATION_POI};
 use player::{CameraFollow, Player as MaybraidPlayer, PlayerUse};
+use player_camera::{CameraController, FollowCamera};
 use poi_intelligence::{
 	mix_seed, NearbyFallback, NearbyQuery, PoiId, PoiInterest, PoiInterests, PoiRegistry,
 	PoiSystems, DEFAULT_NEARBY_RADIUS,
@@ -111,7 +112,10 @@ impl Plugin for WorldPlayerLifecyclePlugin {
 			.add_message::<PlayerLifeEnded>()
 			.add_message::<PlayerChoseRespawnPoi>()
 			.add_message::<CharacterIntent>()
-			.configure_sets(Update, PlayerLifeSet::Resolve)
+			.configure_sets(
+				Update,
+				PlayerLifeSet::Resolve.before(player_camera::PlayerCameraSystems::Look),
+			)
 			.add_systems(Startup, spawn_player_death_glaze)
 			.add_systems(
 				PostUpdate,
@@ -124,6 +128,7 @@ impl Plugin for WorldPlayerLifecyclePlugin {
 				(
 					drive_respawn_picker,
 					respawn_world_player.after(drive_respawn_picker),
+					apply_camera_begin_life.after(respawn_world_player),
 				)
 					.after(PoiSystems::Index)
 					.in_set(PlayerLifeSet::Resolve),
@@ -262,9 +267,10 @@ fn drive_respawn_picker(
 	let Some(poi) = pending.highlighted else {
 		return;
 	};
-	if intents.read().any(|intent| {
-		matches!(intent, CharacterIntent::Jump | CharacterIntent::StartInteraction)
-	}) {
+	if intents
+		.read()
+		.any(|intent| matches!(intent, CharacterIntent::Jump | CharacterIntent::StartInteraction))
+	{
 		chosen.write(PlayerChoseRespawnPoi { poi });
 	}
 }
@@ -391,12 +397,8 @@ fn open_respawn_picker(
 	last_poi: Option<PoiId>,
 ) {
 	let excluded = last_poi.as_slice();
-	let mut records = registry.nearby_in(
-		pending.death_at,
-		config.nearby_query(),
-		&config.interests,
-		excluded,
-	);
+	let mut records =
+		registry.nearby_in(pending.death_at, config.nearby_query(), &config.interests, excluded);
 	records.sort_by(|a, b| {
 		xz_distance(pending.death_at, a.position)
 			.total_cmp(&xz_distance(pending.death_at, b.position))
@@ -410,8 +412,22 @@ fn open_respawn_picker(
 }
 
 fn close_respawn_map(map: &mut WorldMapView) {
+	map.request_begin_life();
 	if map.close_locked {
 		map.close();
+	}
+}
+
+fn apply_camera_begin_life(
+	mut map: ResMut<WorldMapView>,
+	mut cameras: Query<&mut CameraController, With<FollowCamera>>,
+) {
+	if !map.begin_life {
+		return;
+	}
+	map.begin_life = false;
+	for mut controller in &mut cameras {
+		controller.begin_life();
 	}
 }
 
@@ -420,7 +436,11 @@ fn nearest_candidate(candidates: &[PoiId], registry: &PoiRegistry, focus: Vec2) 
 		.iter()
 		.filter_map(|id| registry.get(*id).copied())
 		.min_by(|a, b| {
-			a.position.xz().distance(focus).total_cmp(&b.position.xz().distance(focus)).then_with(|| a.id.cmp(&b.id))
+			a.position
+				.xz()
+				.distance(focus)
+				.total_cmp(&b.position.xz().distance(focus))
+				.then_with(|| a.id.cmp(&b.id))
 		})
 		.map(|record| record.id)
 }
@@ -649,12 +669,14 @@ mod tests {
 			focus: Vec2::new(3.0, 5.0),
 			height: crate::map_view::DEFAULT_MAP_HEIGHT,
 			close_locked: false,
+			begin_life: false,
 		});
 		world
 			.run_system_once(respawn_world_player)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		assert!(world.resource::<WorldMapView>().open);
 		assert!(!world.resource::<WorldMapView>().close_locked);
+		assert!(!world.resource::<WorldMapView>().begin_life);
 		assert!(world.resource::<WorldPlayerRespawnState>().pending.is_none());
 		Ok(())
 	}
@@ -676,6 +698,7 @@ mod tests {
 		assert!(!requested, "the next life's loadout dresses the body");
 		assert!(world.resource::<WorldPlayerRespawnState>().pending.is_none());
 		assert!(!world.resource::<WorldMapView>().open);
+		assert!(world.resource::<WorldMapView>().begin_life);
 		Ok(())
 	}
 
@@ -756,6 +779,7 @@ mod tests {
 		assert_eq!(body.translation.xz(), Vec2::new(80.0, 5.0));
 		assert!(world.resource::<WorldPlayerRespawnState>().pending.is_none());
 		assert!(!world.resource::<WorldMapView>().open);
+		assert!(world.resource::<WorldMapView>().begin_life);
 		Ok(())
 	}
 
@@ -781,6 +805,30 @@ mod tests {
 		assert_eq!(body.translation.xz(), placed.position.xz());
 		assert!(world.resource::<WorldPlayerRespawnState>().pending.is_none());
 		assert!(!world.resource::<WorldMapView>().open);
+		assert!(world.resource::<WorldMapView>().begin_life);
+		Ok(())
+	}
+
+	#[test]
+	fn a_new_life_forces_third_person() -> anyhow::Result<()> {
+		use player_camera::CameraPov;
+
+		let mut world = World::new();
+		world.insert_resource(WorldMapView { begin_life: true, ..default() });
+		world.spawn((
+			FollowCamera::default(),
+			CameraController {
+				pov: CameraPov::Map,
+				resume_pov: CameraPov::FirstPerson,
+				..default()
+			},
+		));
+		world
+			.run_system_once(apply_camera_begin_life)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let controller = world.query::<&CameraController>().single(&world)?;
+		assert_eq!(controller.pov, CameraPov::ThirdPerson);
+		assert!(!world.resource::<WorldMapView>().begin_life);
 		Ok(())
 	}
 }
