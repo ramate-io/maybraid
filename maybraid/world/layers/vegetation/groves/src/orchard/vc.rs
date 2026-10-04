@@ -8,7 +8,7 @@ use lod::SceneChunk;
 use material_ref::MaterialRef;
 use procedural_common::{BuildWithNoise, NoiseParams};
 use sbs_trees::{QuantizedPlant, StorybookTree, StorybookTreeParams};
-use vegetation_components::{Placement, VegetationComponents};
+use vegetation_components::{PlacedVegetation, Placement, VegetationComponents};
 
 use super::{definition, OrchardCell, OrchardStorybook, FRUITING_STORYBOOK, PALE_BLOOM_STORYBOOK};
 use crate::grove::vc_tuft::{patch_variant_index, variant_noise};
@@ -86,10 +86,23 @@ impl QuantizedPlant for OrchardPaleBloom {
 #[derive(Clone)]
 pub struct OrchardPlant {
 	pub placement: Placement,
-	pub(crate) tree: Arc<StorybookTree>,
+	pub tree: Arc<StorybookTree>,
 	stick_material: MaterialRef,
 	ball_material: MaterialRef,
 	frond_material: MaterialRef,
+}
+
+impl OrchardPlant {
+	/// Posed tree IR used by both flattened hosts and packed visual batches.
+	pub fn placed(&self) -> PlacedVegetation<Arc<StorybookTree>> {
+		PlacedVegetation::new(
+			Arc::clone(&self.tree),
+			self.placement,
+			self.stick_material.clone(),
+			self.ball_material.clone(),
+			self.frond_material.clone(),
+		)
+	}
 }
 
 #[derive(Clone, Component)]

@@ -44,7 +44,13 @@ type ProduceColliderPoses = fn(&World, Entity, LodSceneLevel) -> Vec<(Transform,
 
 /// Type-erased source callback; all vegetation types share one runtime drain.
 #[derive(Component, Clone, Copy)]
-struct StickPhysicsProducer(ProduceColliderPoses);
+pub(crate) struct StickPhysicsProducer(ProduceColliderPoses);
+
+impl StickPhysicsProducer {
+	pub(crate) fn new(produce: ProduceColliderPoses) -> Self {
+		Self(produce)
+	}
+}
 
 #[derive(Component)]
 pub(crate) struct StickPhysicsCompound;
@@ -217,6 +223,18 @@ fn authored_radius(placement: Placement) -> f32 {
 /// Trunks always; branches at least four inches in world space. Thinner High twigs stay visual-only.
 fn should_collide_member(is_trunk: bool, placement: Placement) -> bool {
 	is_trunk || authored_radius(placement) + 1e-5 >= MIN_STICK_COLLIDER_RADIUS_M
+}
+
+pub(crate) fn collider_poses_for(
+	vegetation: &impl VegetationComponents,
+	level: LodSceneLevel,
+) -> Vec<(Transform, f32, f32)> {
+	vegetation
+		.stick_nodes_for_level(level)
+		.flatten()
+		.into_iter()
+		.flat_map(|node| collider_poses(&node, level))
+		.collect()
 }
 
 fn collider_poses(node: &StickNode, level: LodSceneLevel) -> Vec<(Transform, f32, f32)> {

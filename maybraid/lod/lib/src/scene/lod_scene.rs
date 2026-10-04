@@ -187,13 +187,15 @@ impl<T: SemanticLodScene + Send + Sync + 'static> SemanticLodScene for std::sync
 /// Camera motion that only changes triangles / impostors / instance density
 /// should implement this — not insert `LodLevelSpawnRequest` or rebuild ECS
 /// roots. [#667](https://github.com/ramate-io/maybraid/issues/667) fills
-/// [`VisualLodPrimitive`]. There is no consume plugin on this branch.
+/// [`VisualLodPrimitive`]. Chico's orchard plugin
+/// ([#956](https://github.com/ramate-io/maybraid/issues/956)) consumes packed
+/// leaves; unsupported vegetation stays on the host `Mesh3d` path.
 pub trait VisualLodScene {
 	/// Packed / impostor / instance tree for `level`. Must be cheap to plan;
 	/// do not `spawn_scene`.
 	fn visual_chunks_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> VisualSceneChunk {
 		let _ = lod_ref;
-		VisualSceneChunk::primitive(VisualLodPrimitive { level })
+		VisualSceneChunk::primitive(VisualLodPrimitive::stub(level))
 	}
 }
 
