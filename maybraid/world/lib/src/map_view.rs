@@ -13,7 +13,7 @@ use player::CameraFollow;
 use player_camera::{
 	CameraController, CameraLookSuppressed, CameraPovLocked, FollowCamera, PlayerCameraSystems,
 };
-use poi_intelligence::{PoiId, PoiRecord, PoiRegistry};
+use poi_intelligence::{PoiId, PoiKind, PoiRecord, PoiRegistry};
 use richmond::Richmond;
 use terrain_layer_model::{OnTerrain, TerrainView};
 use urbanization_layer_model::Urbanization;
@@ -37,7 +37,12 @@ const PLAYER_MARKER_PX: f32 = 14.0;
 const SELECTED_POI_LABEL_PX: f32 = 16.0;
 const SELECTION_RING_PX: f32 = 46.0;
 const SELECTION_DOT_PX: f32 = 10.0;
+const SPAWN_KNOB_PX: f32 = 12.0;
+const SPAWN_KNOB_ACTIVE_PX: f32 = 16.0;
+const GIZMO_LIFT: f32 = 16.0;
+const POI_NAME_RADIUS: f32 = 160.0;
 const PICKER_TITLE: &str = "Pick Respawn Point";
+const SPAWN_KNOB_GRAY: Color = Color::srgb(0.58, 0.56, 0.52);
 
 /// Overhead view of the current location. Focus moves with spawn-location picks only.
 #[derive(Resource, Debug, PartialEq)]
@@ -104,6 +109,11 @@ struct RespawnPickerTitle;
 struct MapRespawnSelection;
 
 #[derive(Component)]
+struct MapSpawnKnob {
+	id: PoiId,
+}
+
+#[derive(Component)]
 struct MapNamePin {
 	target: MapPinTarget,
 }
@@ -163,6 +173,7 @@ impl Plugin for WorldMapViewPlugin {
 					sync_map_name_pins,
 					sync_map_player_marker,
 					sync_respawn_picker_title,
+					sync_respawn_spawn_knobs,
 					sync_respawn_selection_marker,
 					draw_highlighted_poi,
 				)
@@ -712,31 +723,58 @@ fn name_rank(key: NameKey) -> u8 {
 }
 
 pub(crate) fn label_for_poi(poi: &PoiRecord, overlay: &LanguageOverlay) -> String {
+	overlay_name_for_poi(poi, overlay)
+		.map(|name| map_name_label(&name.surface, &name.english))
+		.unwrap_or_else(|| kind_label(poi.kind))
+}
+
+fn overlay_name_for_poi<'a>(
+	poi: &PoiRecord,
+	overlay: &'a LanguageOverlay,
+) -> Option<&'a NamedOverlay> {
+	let xz = poi.position.xz();
+	let place_r = poi.arrival_radius.max(48.0);
 	overlay
 		.names
 		.iter()
-		.filter(|name| {
-			matches!(name.key, NameKey::Place { .. } | NameKey::ProvisionalPlace { .. })
-				&& name.xz.distance(poi.position.xz()) <= poi.arrival_radius.max(8.0)
-		})
+		.filter(|name| name_covers_poi(name, xz, place_r))
 		.min_by(|a, b| {
-			a.xz.distance(poi.position.xz()).total_cmp(&b.xz.distance(poi.position.xz()))
+			poi_name_rank(a.key)
+				.cmp(&poi_name_rank(b.key))
+				.then_with(|| a.xz.distance(xz).total_cmp(&b.xz.distance(xz)))
 		})
-		.or_else(|| {
-			overlay
-				.names
-				.iter()
-				.filter(|name| name.xz.distance(poi.position.xz()) <= 24.0)
-				.min_by(|a, b| {
-					a.xz.distance(poi.position.xz()).total_cmp(&b.xz.distance(poi.position.xz()))
-				})
-		})
-		.map(|name| map_name_label(&name.surface, &name.english))
-		.unwrap_or_else(|| title_case(&format!("{:?}", poi.kind)))
+}
+
+fn name_covers_poi(name: &NamedOverlay, xz: Vec2, place_r: f32) -> bool {
+	match name.key {
+		NameKey::Place { .. } | NameKey::ProvisionalPlace { .. } => {
+			name.xz.distance(xz) <= place_r || name.extent.contains(xz)
+		}
+		NameKey::Grove(_) => name.extent.contains(xz) || name.xz.distance(xz) <= POI_NAME_RADIUS,
+		NameKey::Forest(_) | NameKey::Urban(_) | NameKey::UrbanLeaf(_) => name.extent.contains(xz),
+		NameKey::Geographic(_) | NameKey::Region { .. } => false,
+	}
+}
+
+fn poi_name_rank(key: NameKey) -> u8 {
+	match key {
+		NameKey::Place { .. } | NameKey::ProvisionalPlace { .. } => 0,
+		NameKey::Grove(_) => 1,
+		NameKey::Urban(_) | NameKey::UrbanLeaf(_) => 2,
+		NameKey::Forest(_) => 3,
+		NameKey::Geographic(_) | NameKey::Region { .. } => 4,
+	}
+}
+
+fn kind_label(kind: PoiKind) -> String {
+	let name = kind.name();
+	let leaf = name.rsplit('/').next().unwrap_or(name);
+	let leaf = leaf.rsplit("::").next().unwrap_or(leaf);
+	title_case(leaf)
 }
 
 fn pin_world(surface: &TerrainView<Urbanization<Richmond<OnTerrain<Durham>>>>, xz: Vec2) -> Vec3 {
-	Vec3::new(xz.x, surface.height_or_fallback(xz) + 2.0, xz.y)
+	Vec3::new(xz.x, surface.height_or_fallback(xz) + GIZMO_LIFT, xz.y)
 }
 
 fn label_ink(target: MapPinTarget, highlighted: Option<PoiId>) -> Color {
@@ -887,6 +925,138 @@ fn selected_poi_xz(
 	Some(registry?.get(id)?.position.xz())
 }
 
+fn picker_candidates(pending: Option<&WorldPlayerRespawnState>) -> &[PoiId] {
+	pending
+		.and_then(|state| state.pending.as_ref())
+		.map(|pending| pending.candidates.as_slice())
+		.unwrap_or(&[])
+}
+
+fn picker_highlighted(pending: Option<&WorldPlayerRespawnState>) -> Option<PoiId> {
+	pending.and_then(|state| state.pending.as_ref()?.highlighted)
+}
+
+fn sync_respawn_spawn_knobs(
+	map: Res<WorldMapView>,
+	registry: Option<Res<PoiRegistry>>,
+	pending: Option<Res<WorldPlayerRespawnState>>,
+	camera: Query<(&Camera, &GlobalTransform), (With<Camera3d>, With<FollowCamera>)>,
+	surface: TerrainView<Urbanization<Richmond<OnTerrain<Durham>>>>,
+	mut knobs: Query<(
+		Entity,
+		&MapSpawnKnob,
+		&mut Node,
+		&mut BackgroundColor,
+		&mut BorderColor,
+		&mut Visibility,
+	)>,
+	mut commands: Commands,
+) {
+	if !picker_prompt_visible(&map) {
+		for (entity, _, _, _, _, _) in &knobs {
+			commands.entity(entity).despawn();
+		}
+		return;
+	}
+	let Ok((camera, camera_transform)) = camera.single() else {
+		for (_, _, _, _, _, mut visibility) in &mut knobs {
+			*visibility = Visibility::Hidden;
+		}
+		return;
+	};
+	let highlighted = picker_highlighted(pending.as_deref());
+	let candidates = picker_candidates(pending.as_deref());
+	let registry = registry.as_deref();
+	let mut assigned = Vec::new();
+	for (entity, knob, mut node, mut fill, mut border, mut visibility) in &mut knobs {
+		if !candidates.contains(&knob.id) {
+			commands.entity(entity).despawn();
+			continue;
+		}
+		let Some(xz) = registry
+			.and_then(|registry| registry.get(knob.id))
+			.map(|record| record.position.xz())
+		else {
+			commands.entity(entity).despawn();
+			continue;
+		};
+		let Some((screen, _)) = project_mob_pin(camera, camera_transform, pin_world(&surface, xz))
+		else {
+			*visibility = Visibility::Hidden;
+			continue;
+		};
+		let selected = Some(knob.id) == highlighted;
+		paint_spawn_knob(&mut node, &mut fill, &mut border, screen, selected);
+		*visibility = Visibility::Visible;
+		assigned.push(knob.id);
+	}
+	for id in candidates {
+		if assigned.contains(id) {
+			continue;
+		}
+		let Some(xz) = registry
+			.and_then(|registry| registry.get(*id))
+			.map(|record| record.position.xz())
+		else {
+			continue;
+		};
+		let Some((screen, _)) = project_mob_pin(camera, camera_transform, pin_world(&surface, xz))
+		else {
+			continue;
+		};
+		let selected = Some(*id) == highlighted;
+		let (size, fill, border) = spawn_knob_look(selected);
+		commands.spawn((
+			Name::new("map-spawn-knob"),
+			MapSpawnKnob { id: *id },
+			spawn_knob_node(screen, size),
+			BackgroundColor(fill),
+			BorderColor::all(border),
+			Pickable::IGNORE,
+			Visibility::Visible,
+			GlobalZIndex(i32::MAX - 9),
+		));
+	}
+}
+
+fn spawn_knob_look(selected: bool) -> (f32, Color, Color) {
+	if selected {
+		(SPAWN_KNOB_ACTIVE_PX, TEXT_YELLOW, Color::srgba(0.08, 0.10, 0.14, 0.92))
+	} else {
+		(SPAWN_KNOB_PX, SPAWN_KNOB_GRAY, Color::srgba(0.22, 0.20, 0.18, 0.88))
+	}
+}
+
+fn spawn_knob_node(screen: Vec2, size: f32) -> Node {
+	Node {
+		position_type: PositionType::Absolute,
+		left: Val::Px(screen.x - size * 0.5),
+		top: Val::Px(screen.y - size * 0.5),
+		width: Val::Px(size),
+		height: Val::Px(size),
+		border: UiRect::all(Val::Px(2.0)),
+		border_radius: BorderRadius::all(Val::Px(size * 0.5)),
+		..default()
+	}
+}
+
+fn paint_spawn_knob(
+	node: &mut Node,
+	fill: &mut BackgroundColor,
+	border: &mut BorderColor,
+	screen: Vec2,
+	selected: bool,
+) {
+	let (size, fill_color, border_color) = spawn_knob_look(selected);
+	node.left = Val::Px(screen.x - size * 0.5);
+	node.top = Val::Px(screen.y - size * 0.5);
+	node.width = Val::Px(size);
+	node.height = Val::Px(size);
+	node.border_radius = BorderRadius::all(Val::Px(size * 0.5));
+	fill.0 = fill_color;
+	*border = BorderColor::all(border_color);
+}
+
 fn sync_respawn_selection_marker(
 	map: Res<WorldMapView>,
 	registry: Option<Res<PoiRegistry>>,
@@ -995,10 +1165,12 @@ fn draw_highlighted_poi(
 	let mut points = Vec::with_capacity(33);
 	for index in 0..=32 {
 		let angle = index as f32 / 32.0 * std::f32::consts::TAU;
-		points.push(Vec3::new(
-			record.position.x + angle.cos() * radius,
-			record.position.y + 0.8,
-			record.position.z + angle.sin() * radius,
+		points.push(pin_world(
+			&surface,
+			Vec2::new(
+				record.position.x + angle.cos() * radius,
+				record.position.z + angle.sin() * radius,
+			),
 		));
 	}
 	gizmos.linestrip(points, TEXT_YELLOW);
@@ -1127,6 +1299,43 @@ mod tests {
 			map_label_kind(MapPinTarget::Name(NameKey::Region { ix: 0, iz: 0 })),
 			MapLabelKind::Region
 		);
+	}
+
+	#[test]
+	fn poi_kind_fallback_is_a_plain_name() {
+		assert_eq!(kind_label(PoiKind::new("mobs/vegetation")), "Vegetation");
+		assert!(!kind_label(PoiKind::new("mobs/vegetation")).contains("PoiKind"));
+	}
+
+	fn test_poi(xz: Vec2) -> PoiRecord {
+		PoiRecord {
+			id: PoiId(1),
+			entity: Entity::from_bits(1),
+			kind: PoiKind::new("mobs/vegetation"),
+			position: Vec3::new(xz.x, 4.0, xz.y),
+			arrival_radius: 8.0,
+			salience: 1.0,
+			local: true,
+			global: false,
+		}
+	}
+
+	#[test]
+	fn poi_labels_take_covering_place_names() {
+		let poi = test_poi(Vec2::new(10.0, 6.0));
+		let overlay = LanguageOverlay {
+			names: vec![NamedOverlay {
+				key: NameKey::ProvisionalPlace { qx: 0, qz: 0, label: 1 },
+				surface: "oak stand".into(),
+				english: vec!["green grove".into()],
+				provisional: true,
+				xz: Vec2::new(80.0, 90.0),
+				extent: Rect::from_corners(Vec2::new(0.0, 0.0), Vec2::new(100.0, 100.0)),
+			}],
+			..Default::default()
+		};
+		assert_eq!(label_for_poi(&poi, &overlay), "Oak Stand\nGreen Grove");
+		assert_eq!(label_for_poi(&poi, &LanguageOverlay::default()), "Vegetation");
 	}
 
 	#[test]
