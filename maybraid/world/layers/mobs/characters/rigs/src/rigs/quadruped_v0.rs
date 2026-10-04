@@ -1,13 +1,15 @@
 use bevy::prelude::*;
 
 use crate::{
-	quadruped::{
-		LegSegmentLengths, QuadrupedFrontLeg, QuadrupedHindLeg, QuadrupedNeck, QuadrupedRig,
-		QuadrupedSpine,
+	authoring::{
+		quadruped_v0_definition, resolve_quadruped, PoseBuffer, PoseScratch, QuadrupedPose,
+		RigBinding, QUADRUPED_V0_BONES,
 	},
-	BoneDefinition, BonePose, BoneTable, Name, RigPose, RiggedAxis, Side,
+	quadruped::LegSegmentLengths,
+	BoneDefinition, BoneTable, Name, RiggedAxis,
 };
 
+/// Left thigh: sagittal stride on Y, medial/lateral on X, knee hinge lives on shin.
 const QUADRUPED_V0_THIGH_AXIS: RiggedAxis =
 	RiggedAxis { swing_axis: Vec3::Y, flex_axis: Vec3::X, twist_axis: Vec3::Z };
 
@@ -24,7 +26,10 @@ const QUADRUPED_V0_RIGHT_SHIN_AXIS: RiggedAxis =
 #[derive(Component, Debug, Clone)]
 pub struct QuadrupedV0Rig {
 	pub bones: BoneTable,
-	pub pose: RigPose,
+	pub binding: RigBinding,
+	/// Last resolved local pose. Sampling always starts from [`Self::binding`] rest.
+	pub pose: PoseBuffer,
+	pub scratch: PoseScratch,
 	pub segment_lengths: LegSegmentLengths,
 }
 
@@ -34,119 +39,45 @@ impl QuadrupedV0Rig {
 		for (name, relative_axis) in QUADRUPED_V0_BONE_DEFINITIONS {
 			bones.insert(BoneDefinition { name: Name::from(name), relative_axis });
 		}
-
-		Self { bones, pose: RigPose::new(), segment_lengths: LegSegmentLengths::default() }
-	}
-}
-
-impl QuadrupedRig for QuadrupedV0Rig {
-	fn front_leg(&self, side: Side) -> QuadrupedFrontLeg {
-		let suffix = side.suffix();
-		QuadrupedFrontLeg {
-			shoulder: self.bone_pose(format!("shoulder.{suffix}")),
-			thigh: self.bone_pose(format!("anterior_thigh.{suffix}")),
-			shin: self.bone_pose(format!("anterior_shin.{suffix}")),
+		let definition = quadruped_v0_definition();
+		let len = definition.len();
+		let binding = RigBinding::from_rest(
+			definition,
+			vec![Entity::PLACEHOLDER; len].into_boxed_slice(),
+			PoseBuffer::identity(len),
+		);
+		Self {
+			bones,
+			pose: PoseBuffer::identity(len),
+			scratch: PoseScratch::identity(len),
+			binding,
+			segment_lengths: LegSegmentLengths::default(),
 		}
 	}
 
-	fn hind_leg(&self, side: Side) -> QuadrupedHindLeg {
-		let suffix = side.suffix();
-		QuadrupedHindLeg {
-			hip: self.bone_pose(format!("hip.{suffix}")),
-			thigh: self.bone_pose(format!("posterior_thigh.{suffix}")),
-			shin: self.bone_pose(format!("posterior_shin.{suffix}")),
-		}
+	pub fn write_pose(&mut self, pose: &QuadrupedPose) {
+		resolve_quadruped(pose, &self.binding, &mut self.pose);
+		self.segment_lengths = self.binding.metrics.quadruped_leg;
 	}
 
-	fn spine(&self) -> QuadrupedSpine {
-		QuadrupedSpine {
-			back_ridge: self.bone_pose("back_ridge"),
-			upper_back: self.bone_pose("upper_back"),
-			lumbar: self.bone_pose("lumbar"),
-		}
+	pub fn rotation(&self, name: &str) -> Quat {
+		self.binding
+			.definition
+			.id(name)
+			.map(|id| self.pose.rotation(id))
+			.unwrap_or(Quat::IDENTITY)
 	}
 
-	fn neck(&self) -> QuadrupedNeck {
-		QuadrupedNeck { neck: self.bone_pose("neck") }
+	pub fn animation_bone_names(&self) -> impl Iterator<Item = &'static str> {
+		QUADRUPED_V0_BONES.iter().copied()
 	}
 
-	fn pose(&self) -> &RigPose {
-		&self.pose
-	}
-
-	fn pose_mut(&mut self) -> &mut RigPose {
-		&mut self.pose
-	}
-
-	fn rigged_axis(&self, bone: &Name) -> Option<RiggedAxis> {
+	pub fn rigged_axis(&self, bone: &Name) -> Option<RiggedAxis> {
 		self.bones.get(bone).map(|bone| bone.relative_axis)
 	}
 
-	fn animation_bones(&self) -> Vec<Name> {
-		QuadrupedV0Rig::animation_bones(self)
-	}
-
-	fn segment_lengths(&self) -> LegSegmentLengths {
-		self.segment_lengths
-	}
-
-	fn parent_world_rotation(&self, bone: &Name) -> Quat {
-		self.parent_world_rotation_for(bone)
-	}
-}
-
-impl QuadrupedV0Rig {
-	fn bone_pose(&self, name: impl Into<Name>) -> BonePose {
-		let name = name.into();
-		self.pose
-			.get(&name)
-			.cloned()
-			.unwrap_or_else(|| BonePose::new(name, Transform::IDENTITY))
-	}
-
-	fn local_rotation(&self, bone: &Name) -> Quat {
-		self.pose
-			.get(bone)
-			.map(|pose| pose.transform.rotation)
-			.unwrap_or(Quat::IDENTITY)
-	}
-
-	fn world_rotation_for(&self, bone: &Name) -> Quat {
-		self.parent_world_rotation_for(bone) * self.local_rotation(bone)
-	}
-
-	fn parent_world_rotation_for(&self, bone: &Name) -> Quat {
-		quadruped_v0_parent(bone.as_str())
-			.map(|parent| self.world_rotation_for(&Name::from(parent)))
-			.unwrap_or(Quat::IDENTITY)
-	}
-
 	pub fn animation_bones(&self) -> Vec<Name> {
-		let left_front = self.front_leg(Side::Left);
-		let right_front = self.front_leg(Side::Right);
-		let left_hind = self.hind_leg(Side::Left);
-		let right_hind = self.hind_leg(Side::Right);
-		let spine = self.spine();
-		let neck = self.neck();
-
-		vec![
-			spine.back_ridge.name,
-			spine.upper_back.name,
-			spine.lumbar.name,
-			neck.neck.name,
-			left_front.shoulder.name,
-			right_front.shoulder.name,
-			left_front.thigh.name,
-			left_front.shin.name,
-			right_front.thigh.name,
-			right_front.shin.name,
-			left_hind.hip.name,
-			right_hind.hip.name,
-			left_hind.thigh.name,
-			left_hind.shin.name,
-			right_hind.thigh.name,
-			right_hind.shin.name,
-		]
+		self.animation_bone_names().map(Name::from).collect()
 	}
 }
 
@@ -187,65 +118,58 @@ pub fn quadruped_v0_bone_names() -> impl Iterator<Item = &'static str> {
 	QUADRUPED_V0_BONE_DEFINITIONS.into_iter().map(|(name, _axis)| name)
 }
 
-const QUADRUPED_V0_PARENT: &[(&str, &str)] = &[
-	("back_ridge", ""),
-	("upper_back", "back_ridge"),
-	("lumbar", "back_ridge"),
-	("neck", "upper_back"),
-	("shoulder.L", "upper_back"),
-	("shoulder.R", "upper_back"),
-	("anterior_thigh.L", "shoulder.L"),
-	("anterior_thigh.R", "shoulder.R"),
-	("anterior_shin.L", "anterior_thigh.L"),
-	("anterior_shin.R", "anterior_thigh.R"),
-	("hip.L", "lumbar"),
-	("hip.R", "lumbar"),
-	("posterior_thigh.L", "hip.L"),
-	("posterior_thigh.R", "hip.R"),
-	("posterior_shin.L", "posterior_thigh.L"),
-	("posterior_shin.R", "posterior_thigh.R"),
-];
-
-fn quadruped_v0_parent(name: &str) -> Option<&'static str> {
-	QUADRUPED_V0_PARENT
-		.iter()
-		.find(|(child, _)| *child == name)
-		.map(|(_, parent)| *parent)
-		.filter(|parent| !parent.is_empty())
-}
-
 #[cfg(test)]
 mod tests {
 	use super::*;
-
-	#[test]
-	fn quadruped_v0_accessors_map_to_imported_names() {
-		let rig = QuadrupedV0Rig::imported();
-
-		assert_eq!(rig.front_leg(Side::Left).thigh.name, Name::from("anterior_thigh.L"));
-		assert_eq!(rig.hind_leg(Side::Right).shin.name, Name::from("posterior_shin.R"));
-		assert_eq!(rig.spine().upper_back.name, Name::from("upper_back"));
-		assert_eq!(rig.neck().neck.name, Name::from("neck"));
-	}
+	use crate::Side;
 
 	#[test]
 	fn quadruped_v0_animation_bones_exist_in_definition_table() {
 		let rig = QuadrupedV0Rig::imported();
-
 		for name in rig.animation_bones() {
 			assert!(rig.bones.get(&name).is_some(), "missing animation bone {name}");
+			assert!(rig.binding.definition.id(name.as_str()).is_some(), "missing id {name}");
 		}
 	}
 
 	#[test]
-	fn quadruped_v0_leg_pose_round_trips_through_rig_pose() {
+	fn quadruped_v0_definition_covers_imported_dump() {
+		let rig = QuadrupedV0Rig::imported();
+		for name in quadruped_v0_bone_names() {
+			assert!(rig.bones.get(&Name::from(name)).is_some(), "missing bone {name}");
+		}
+		assert_eq!(rig.bones.len(), QUADRUPED_V0_BONE_DEFINITIONS.len());
+	}
+
+	#[test]
+	fn same_positive_stride_and_hinge_bend_both_sides_sagittally() {
 		let mut rig = QuadrupedV0Rig::imported();
-		let mut leg = rig.front_leg(Side::Left);
-		leg.shin.transform = Transform::from_translation(Vec3::Z);
+		let mut pose = QuadrupedPose::default();
+		for side in [Side::Left, Side::Right] {
+			let front = pose.front_mut(side);
+			front.stride = 0.5;
+			front.hinge = 0.7;
+			let hind = pose.hind_mut(side);
+			hind.stride = 0.5;
+			hind.hinge = 0.7;
+		}
+		rig.write_pose(&pose);
 
-		rig.pose_front_leg(leg);
-		let hydrated = rig.front_leg_pose(Side::Left);
-
-		assert_eq!(hydrated.shin.transform, Transform::from_translation(Vec3::Z));
+		for (left_name, right_name) in [
+			("anterior_thigh.L", "anterior_thigh.R"),
+			("anterior_shin.L", "anterior_shin.R"),
+			("posterior_thigh.L", "posterior_thigh.R"),
+			("posterior_shin.L", "posterior_shin.R"),
+		] {
+			let left = rig.rotation(left_name) * Vec3::Y;
+			let right = rig.rotation(right_name) * Vec3::Y;
+			assert!(left.x.abs() < 1e-3, "{left_name} left the sagittal plane: {left:?}");
+			assert!(right.x.abs() < 1e-3, "{right_name} left the sagittal plane: {right:?}");
+			assert!(
+				(left.z - right.z).abs() < 1e-4,
+				"{left_name} and {right_name} diverged: {left:?} vs {right:?}"
+			);
+			assert!(left.z > 0.2, "{left_name} should flex toward +Z, got {left:?}");
+		}
 	}
 }

@@ -1,6 +1,6 @@
 pub mod articulation;
+pub mod authoring;
 pub mod debug;
-pub mod forelimbed;
 pub mod humanoid;
 pub mod pose;
 pub mod quadruped;
@@ -69,6 +69,22 @@ impl Side {
 		match self {
 			Self::Left => 1.0,
 			Self::Right => -1.0,
+		}
+	}
+
+	/// Left = 0, right = 1. Indexes bilateral pose arrays.
+	pub fn index(self) -> usize {
+		match self {
+			Self::Left => 0,
+			Self::Right => 1,
+		}
+	}
+
+	/// Alternating gait timing. This does not choose a rotation axis or a mirror sign.
+	pub fn phase_offset(self) -> f32 {
+		match self {
+			Self::Left => 0.0,
+			Self::Right => 0.5,
 		}
 	}
 }
@@ -193,7 +209,7 @@ impl BonePose {
 		self.twist = twist;
 		let rest = self.transform.rotation;
 		self.transform.rotation =
-			articulation::compose_local_rotation(rest, axis, swing, flex, twist);
+			articulation::compose_parent_rotation(rest, axis, swing, flex, twist);
 		self
 	}
 

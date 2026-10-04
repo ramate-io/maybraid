@@ -1,4 +1,4 @@
-//! Latest-wins mailbox that transitions from the last applied [`RigPose`].
+//! Latest-wins mailbox that transitions from the last visible pose and armature offset.
 //!
 //! [`tick_anim_mailbox`] advances clip time for every body host. [`apply_anim_mailbox`]
 //! samples and writes only hosts with [`AnimateBones`] and/or [`AnimateEffects`].
@@ -6,8 +6,6 @@
 //! bodies; off-screen Near holds the last pose. Visible High Mid/Far plants
 //! keep [`AnimateBones`] from sync, so they compete here too. No published look
 //! means every marked body competes (tests / playgrounds).
-
-use std::collections::HashSet;
 
 use bevy::ecs::batching::BatchingStrategy;
 use bevy::ecs::query::{Has, Or};
@@ -20,11 +18,14 @@ use character_animations::{
 	Animation, Effects,
 };
 use character_rigs::{
-	forelimbed::ForelimbedRig,
+	authoring::{
+		forelimbed_v0_definition, humanoid_v0_definition, quadruped_v0_definition, ArmatureOffset,
+		BlendCurve, PoseBuffer, RigBinding, RigDefinition,
+	},
 	rigs::{
 		forelimbed_v0::ForelimbedV0Rig, humanoid_v0::HumanoidV0Rig, quadruped_v0::QuadrupedV0Rig,
 	},
-	BonePose, Name as RigName, RigPose,
+	Name as RigName,
 };
 use intelligence_lod::{
 	look_applies, IntelligenceFocus, IntelligenceLod, IntelligenceLookFrame, IntelligencePriority,
@@ -35,6 +36,7 @@ use crate::markers::{AnimateBones, AnimateEffects, SuspendAnimation};
 use crate::plant::plant_lod_entity;
 use crate::rig::{bone_map_ready, BoneMap, CharacterRig, CharacterRigRole, RigSkeletonKind};
 use rigs::PoseSkipRotation;
+use std::collections::HashSet;
 
 /// Per-frame Near mailbox budget. Rank fills first; leftovers hold pose.
 ///
@@ -80,13 +82,18 @@ pub struct AnimBone {
 /// Last sampled pose + in-flight transition. Latest [`AnimRefRoot`] wins.
 #[derive(Component, Clone)]
 pub struct AnimMailbox {
-	pub output: RigPose,
+	pub output: PoseBuffer,
+	/// True after a bone sample has been written. Hold code waits for this.
+	pub posed: bool,
+	/// Offset currently shown on the armature. A new clip blends from here.
+	pub displayed_offset: ArmatureOffset,
 	/// Frames this Near body was skipped. Reset when it applies.
 	pub apply_skips: u8,
 	last: Option<AnimId>,
 	clip_progress: f32,
 	blend_progress: f32,
-	from_pose: RigPose,
+	from_pose: PoseBuffer,
+	from_offset: ArmatureOffset,
 	bind_transform: Transform,
 }
 
@@ -95,15 +102,27 @@ pub struct AnimMailbox {
 #[derive(Component, Clone, Copy, Debug, PartialEq)]
 pub struct AnimProgress(pub f32);
 
+/// Inserted when landmarks are ready but a required animation bone is still missing.
+/// Prepare retries until the bone appears, and logs only on the first gap.
+#[derive(Component, Clone, Copy, Default)]
+pub struct AnimBindingGap;
+
 impl AnimMailbox {
 	pub fn new(bind_transform: Transform) -> Self {
+		Self::with_bones(bind_transform, 0)
+	}
+
+	pub fn with_bones(bind_transform: Transform, len: usize) -> Self {
 		Self {
-			output: RigPose::new(),
+			output: PoseBuffer::identity(len),
+			posed: false,
+			displayed_offset: ArmatureOffset::IDENTITY,
 			apply_skips: 0,
 			last: None,
 			clip_progress: 0.0,
 			blend_progress: 1.0,
-			from_pose: RigPose::new(),
+			from_pose: PoseBuffer::identity(len),
+			from_offset: ArmatureOffset::IDENTITY,
 			bind_transform,
 		}
 	}
@@ -120,12 +139,12 @@ impl AnimMailbox {
 pub fn prepare_anim_mailbox(
 	mut commands: Commands,
 	hosts: Query<
-		(Entity, &AnimRefRoot, &BoneMap, &CharacterRig, &Transform),
+		(Entity, &AnimRefRoot, &BoneMap, &CharacterRig, &Transform, Has<AnimBindingGap>),
 		(Without<AnimMailbox>, With<CharacterRig>),
 	>,
 	transforms: Query<&Transform>,
 ) {
-	for (entity, _root, bone_map, character_rig, transform) in &hosts {
+	for (entity, _root, bone_map, character_rig, transform, gap) in &hosts {
 		if character_rig.role != CharacterRigRole::Body {
 			continue;
 		}
@@ -133,41 +152,68 @@ pub fn prepare_anim_mailbox(
 			continue;
 		}
 
-		let bone_names = match character_rig.skeleton {
-			RigSkeletonKind::Humanoid => {
-				let rig = HumanoidV0Rig::imported();
-				let names = rig.animation_bones();
-				commands.entity(entity).insert(rig);
-				names
-			}
-			RigSkeletonKind::Quadruped => {
-				let rig = QuadrupedV0Rig::imported();
-				let names = rig.animation_bones();
-				commands.entity(entity).insert(rig);
-				names
-			}
-			RigSkeletonKind::Forelimbed => {
-				let rig = ForelimbedV0Rig::imported();
-				let names = ForelimbedRig::animation_bones(&rig);
-				commands.entity(entity).insert(rig);
-				names
-			}
+		let definition = match character_rig.skeleton {
+			RigSkeletonKind::Humanoid => humanoid_v0_definition(),
+			RigSkeletonKind::Quadruped => quadruped_v0_definition(),
+			RigSkeletonKind::Forelimbed => forelimbed_v0_definition(),
 			RigSkeletonKind::Neck => continue,
 		};
+		let Some((rest, entities)) = capture_rest(&definition, bone_map, &transforms) else {
+			if !gap {
+				let missing = missing_animation_bones(&definition, bone_map);
+				error!(
+					"animation bones missing for {entity:?} ({:?}): {}",
+					character_rig.skeleton,
+					missing.join(", ")
+				);
+				commands.entity(entity).insert(AnimBindingGap);
+			}
+			continue;
+		};
+		if gap {
+			commands.entity(entity).remove::<AnimBindingGap>();
+		}
 
-		for name in bone_names {
-			let Some(&bone_entity) = bone_map.by_name.get(name.as_str()) else {
-				continue;
-			};
-			let Ok(bone_tf) = transforms.get(bone_entity) else {
+		let names: Vec<&'static str> = definition.names.iter().copied().collect();
+		let binding =
+			RigBinding::from_rest(definition, entities.clone().into_boxed_slice(), rest.clone());
+		match character_rig.skeleton {
+			RigSkeletonKind::Humanoid => {
+				let mut rig = HumanoidV0Rig::imported();
+				rig.binding = binding;
+				rig.segment_lengths = rig.binding.metrics.humanoid_leg;
+				rig.pose.copy_from(&rest);
+				commands.entity(entity).insert(rig);
+			}
+			RigSkeletonKind::Quadruped => {
+				let mut rig = QuadrupedV0Rig::imported();
+				rig.binding = binding;
+				rig.segment_lengths = rig.binding.metrics.quadruped_leg;
+				rig.pose.copy_from(&rest);
+				commands.entity(entity).insert(rig);
+			}
+			RigSkeletonKind::Forelimbed => {
+				let mut rig = ForelimbedV0Rig::imported();
+				rig.binding = binding;
+				rig.pose.copy_from(&rest);
+				commands.entity(entity).insert(rig);
+			}
+			RigSkeletonKind::Neck => continue,
+		}
+
+		for (entity_bone, name) in entities.iter().zip(names.iter().copied()) {
+			let Ok(bone_tf) = transforms.get(*entity_bone) else {
 				continue;
 			};
 			commands
-				.entity(bone_entity)
-				.insert((AnimBone { name: name.clone(), rest: *bone_tf }, PoseSkipRotation));
+				.entity(*entity_bone)
+				.insert((AnimBone { name: RigName::from(name), rest: *bone_tf }, PoseSkipRotation));
 		}
 
-		commands.entity(entity).insert(AnimMailbox::new(*transform));
+		let mut mailbox = AnimMailbox::with_bones(*transform, rest.len());
+		mailbox.output.copy_from(&rest);
+		mailbox.from_pose.copy_from(&rest);
+		commands.entity(entity).insert(mailbox);
 	}
 }
 
@@ -279,13 +325,12 @@ pub fn tick_anim_mailbox(
 	time: Res<Time>,
 	set: Option<Res<MailboxApplySet>>,
 	mut hosts: Query<
-		(Entity, &AnimRefRoot, &mut AnimMailbox, Option<&AnimProgress>, &CharacterRig, &BoneMap),
+		(Entity, &AnimRefRoot, &mut AnimMailbox, Option<&AnimProgress>, &CharacterRig),
 		(With<AnimMailbox>, Without<AnimBone>, Without<SuspendAnimation>),
 	>,
-	bones: Query<&AnimBone, Without<AnimMailbox>>,
 ) {
 	let dt = time.delta_secs();
-	for (entity, root, mut mailbox, progress, character_rig, bone_map) in &mut hosts {
+	for (entity, root, mut mailbox, progress, character_rig) in &mut hosts {
 		if !set.as_deref().is_none_or(|set| set.allows(entity)) {
 			continue;
 		}
@@ -295,11 +340,11 @@ pub fn tick_anim_mailbox(
 
 		let requested_id = root.0.clip.id();
 		if mailbox.last != Some(requested_id) {
-			mailbox.from_pose = if mailbox.output.is_empty() {
-				rest_pose(bone_map, &bones)
-			} else {
-				mailbox.output.clone()
-			};
+			if mailbox.posed {
+				let AnimMailbox { output, from_pose, .. } = &mut *mailbox;
+				from_pose.copy_from(output);
+			}
+			mailbox.from_offset = mailbox.displayed_offset;
 			mailbox.blend_progress = 0.0;
 			mailbox.clip_progress = 0.0;
 			mailbox.last = Some(requested_id);
@@ -349,7 +394,7 @@ pub fn apply_anim_mailbox(
 			entity,
 			root,
 			mut mailbox,
-			bone_map,
+			_bone_map,
 			character_rig,
 			mut armature,
 			write_bones,
@@ -366,31 +411,65 @@ pub fn apply_anim_mailbox(
 			}
 
 			let requested = root.0.clip;
-			let rest = rest_pose(bone_map, &bones);
-			let Some((sampled, effects)) = sample_requested(
-				character_rig.skeleton,
-				requested,
-				&rest,
-				clip_progress(requested, mailbox.clip_progress, entity),
-				write_bones,
-				write_effects,
-				humanoid,
-				quadruped,
-				forelimbed,
-			) else {
-				return;
+			let progress = clip_progress(requested, mailbox.clip_progress, entity);
+			let weight = BlendCurve::SmoothStep.sample(mailbox.blend_progress);
+			let effects = match character_rig.skeleton {
+				RigSkeletonKind::Humanoid => {
+					let mut rig = match humanoid {
+						Some(rig) => rig,
+						None => return,
+					};
+					if write_bones {
+						sync_humanoid_rest(&mut rig, &bones);
+					}
+					let effects =
+						sample_humanoid(requested, &mut rig, progress, write_bones, write_effects);
+					if write_bones {
+						publish_pose(&mut mailbox, &rig.pose, weight);
+					}
+					effects
+				}
+				RigSkeletonKind::Quadruped => {
+					let mut rig = match quadruped {
+						Some(rig) => rig,
+						None => return,
+					};
+					if write_bones {
+						sync_quadruped_rest(&mut rig, &bones);
+					}
+					let effects =
+						sample_quadruped(requested, &mut rig, progress, write_bones, write_effects);
+					if write_bones {
+						publish_pose(&mut mailbox, &rig.pose, weight);
+					}
+					effects
+				}
+				RigSkeletonKind::Forelimbed => {
+					let mut rig = match forelimbed {
+						Some(rig) => rig,
+						None => return,
+					};
+					if write_bones {
+						sync_binding_rest(&mut rig.binding, &bones);
+					}
+					let effects = sample_forelimbed(
+						requested,
+						&mut rig,
+						progress,
+						write_bones,
+						write_effects,
+					);
+					if write_bones {
+						publish_pose(&mut mailbox, &rig.pose, weight);
+					}
+					effects
+				}
+				RigSkeletonKind::Neck => return,
 			};
-
-			let weight = smoothstep(mailbox.blend_progress);
-			if write_bones {
-				mailbox.output = if mailbox.blending() || weight < 1.0 {
-					RigPose::blend(&mailbox.from_pose, &sampled, weight)
-				} else {
-					sampled
-				};
-			}
 			if write_effects {
-				apply_root_motion(&mut armature, mailbox.bind_transform, effects, weight);
+				let shown = ArmatureOffset::blend(mailbox.from_offset, effects, weight);
+				mailbox.displayed_offset = shown;
+				*armature = shown.apply_to_bind(mailbox.bind_transform);
 			}
 		},
 	);
@@ -402,7 +481,13 @@ pub fn apply_anim_mailbox(
 		if !allows_only(only.as_ref(), entity) {
 			continue;
 		}
-		write_pose(&mailbox.output, bone_map, &bones, &mut bone_tfs);
+		let names = match character_rig.skeleton {
+			RigSkeletonKind::Humanoid => humanoid_v0_definition(),
+			RigSkeletonKind::Quadruped => quadruped_v0_definition(),
+			RigSkeletonKind::Forelimbed => forelimbed_v0_definition(),
+			RigSkeletonKind::Neck => continue,
+		};
+		write_pose(&mailbox.output, &names.names, bone_map, &mut bone_tfs);
 	}
 }
 
@@ -413,103 +498,102 @@ fn clip_progress(clip: AnimClip, clip_progress: f32, entity: Entity) -> f32 {
 	}
 }
 
-fn sample_requested(
-	skeleton: RigSkeletonKind,
-	requested: AnimClip,
-	rest: &RigPose,
-	clip_progress: f32,
-	write_bones: bool,
-	write_effects: bool,
-	humanoid: Option<Mut<HumanoidV0Rig>>,
-	quadruped: Option<Mut<QuadrupedV0Rig>>,
-	forelimbed: Option<Mut<ForelimbedV0Rig>>,
-) -> Option<(RigPose, Effects)> {
-	Some(match skeleton {
-		RigSkeletonKind::Humanoid => {
-			let mut rig = humanoid?;
-			seed_rig(&mut rig.pose, rest);
-			let effects =
-				sample_humanoid(requested, &mut rig, clip_progress, write_bones, write_effects);
-			(rig.pose.clone(), effects)
-		}
-		RigSkeletonKind::Quadruped => {
-			let mut rig = quadruped?;
-			seed_rig(&mut rig.pose, rest);
-			let effects =
-				sample_quadruped(requested, &mut rig, clip_progress, write_bones, write_effects);
-			(rig.pose.clone(), effects)
-		}
-		RigSkeletonKind::Forelimbed => {
-			let mut rig = forelimbed?;
-			seed_rig(&mut rig.pose, rest);
-			let effects =
-				sample_forelimbed(requested, &mut rig, clip_progress, write_bones, write_effects);
-			(rig.pose.clone(), effects)
-		}
-		RigSkeletonKind::Neck => return None,
-	})
+fn publish_pose(mailbox: &mut AnimMailbox, sampled: &PoseBuffer, weight: f32) {
+	if weight < 1.0 {
+		PoseBuffer::blend_into(&mailbox.from_pose, sampled, weight, &mut mailbox.output);
+	} else {
+		mailbox.output.copy_from(sampled);
+	}
+	mailbox.posed = true;
 }
 
-fn rest_pose(bone_map: &BoneMap, bones: &Query<&AnimBone, Without<AnimMailbox>>) -> RigPose {
-	let mut pose = RigPose::new();
-	for entity in bone_map.by_name.values() {
-		let Ok(bone) = bones.get(*entity) else {
-			continue;
-		};
-		pose.insert(BonePose::new(bone.name.clone(), bone.rest));
+fn sync_humanoid_rest(rig: &mut HumanoidV0Rig, bones: &Query<&AnimBone, Without<AnimMailbox>>) {
+	if sync_binding_rest(&mut rig.binding, bones) {
+		rig.segment_lengths = rig.binding.metrics.humanoid_leg;
 	}
-	pose
 }
 
-fn seed_rig(pose: &mut RigPose, rest: &RigPose) {
-	for (_, bone) in rest.iter() {
-		pose.insert(bone.clone());
+fn sync_quadruped_rest(rig: &mut QuadrupedV0Rig, bones: &Query<&AnimBone, Without<AnimMailbox>>) {
+	if sync_binding_rest(&mut rig.binding, bones) {
+		rig.segment_lengths = rig.binding.metrics.quadruped_leg;
 	}
+}
+
+/// Recalibrate when a bone rest changed. Returns true when the cache refreshed.
+fn sync_binding_rest(
+	binding: &mut RigBinding,
+	bones: &Query<&AnimBone, Without<AnimMailbox>>,
+) -> bool {
+	if binding
+		.entities
+		.iter()
+		.zip(binding.effective_rest.local.iter())
+		.all(|(entity, rest)| bones.get(*entity).is_ok_and(|bone| bone.rest == *rest))
+	{
+		return false;
+	}
+	let Some(rest) = rest_from_bones(binding, bones) else {
+		return false;
+	};
+	binding.refresh_rest(rest);
+	true
+}
+
+fn rest_from_bones(
+	binding: &RigBinding,
+	bones: &Query<&AnimBone, Without<AnimMailbox>>,
+) -> Option<PoseBuffer> {
+	let mut rest = PoseBuffer::identity(binding.definition.len());
+	for (index, entity) in binding.entities.iter().enumerate() {
+		rest.local[index] = bones.get(*entity).ok()?.rest;
+	}
+	Some(rest)
+}
+
+fn capture_rest(
+	definition: &RigDefinition,
+	bone_map: &BoneMap,
+	transforms: &Query<&Transform>,
+) -> Option<(PoseBuffer, Vec<Entity>)> {
+	let mut rest = PoseBuffer::identity(definition.len());
+	let mut entities = vec![Entity::PLACEHOLDER; definition.len()];
+	for (index, name) in definition.names.iter().enumerate() {
+		let bone_entity = *bone_map.by_name.get(*name)?;
+		rest.local[index] = *transforms.get(bone_entity).ok()?;
+		entities[index] = bone_entity;
+	}
+	Some((rest, entities))
+}
+
+fn missing_animation_bones(definition: &RigDefinition, bone_map: &BoneMap) -> Vec<&'static str> {
+	definition
+		.names
+		.iter()
+		.copied()
+		.filter(|name| !bone_map.by_name.contains_key(*name))
+		.collect()
 }
 
 fn write_pose(
-	pose: &RigPose,
+	pose: &PoseBuffer,
+	names: &[&'static str],
 	bone_map: &BoneMap,
-	bones: &Query<&AnimBone, Without<AnimMailbox>>,
 	transforms: &mut Query<&mut Transform, (With<AnimBone>, Without<AnimMailbox>)>,
 ) {
-	for (name, entity) in &bone_map.by_name {
-		let Ok(anim_bone) = bones.get(*entity) else {
+	for (index, name) in names.iter().enumerate() {
+		let Some(&entity) = bone_map.by_name.get(*name) else {
 			continue;
 		};
-		let Ok(mut transform) = transforms.get_mut(*entity) else {
+		let Some(desired) = pose.local.get(index) else {
 			continue;
 		};
-		if let Some(bone_pose) = pose.get(&anim_bone.name) {
-			*transform = bone_pose.transform;
-		} else if let Some(bone_pose) = pose.get(&RigName::from(name.as_str())) {
-			*transform = bone_pose.transform;
+		let Ok(mut transform) = transforms.get_mut(entity) else {
+			continue;
+		};
+		if *transform != *desired {
+			*transform = *desired;
 		}
 	}
-}
-
-fn apply_root_motion(armature: &mut Transform, bind: Transform, effects: Effects, weight: f32) {
-	*armature = bind;
-	let Some(offset) = effects.r#move else {
-		return;
-	};
-	let t = lerp_transform(Transform::IDENTITY, offset, weight);
-	armature.translation += t.translation;
-	armature.rotation = t.rotation * armature.rotation;
-	armature.scale *= t.scale;
-}
-
-fn lerp_transform(a: Transform, b: Transform, t: f32) -> Transform {
-	Transform {
-		translation: a.translation.lerp(b.translation, t),
-		rotation: a.rotation.slerp(b.rotation, t),
-		scale: a.scale.lerp(b.scale, t),
-	}
-}
-
-fn smoothstep(t: f32) -> f32 {
-	let t = t.clamp(0.0, 1.0);
-	t * t * (3.0 - 2.0 * t)
 }
 
 fn sample_split<A, R>(
@@ -528,7 +612,7 @@ where
 	if write_effects {
 		anim.effects_for(rig, progress)
 	} else {
-		Effects::default()
+		Effects::IDENTITY
 	}
 }
 
@@ -552,7 +636,7 @@ fn sample_humanoid(
 			sample_split(&UprightLeap::from_leap(&leap), rig, progress, write_bones, write_effects)
 		}
 		AnimClip::Tuck(params) => sample_split(
-			&Tuck::<HumanoidV0Rig>::new(params.tightness),
+			&Tuck::new(params.tightness),
 			rig,
 			progress.rem_euclid(1.0),
 			write_bones,
@@ -581,22 +665,16 @@ fn sample_humanoid(
 			sample_split(&flapping, rig, progress, write_bones, write_effects)
 		}
 		AnimClip::Jab(params) => sample_split(
-			&Jab::<HumanoidV0Rig>::new(params.side, params.backswing, params.target),
+			&Jab::new(params.side, params.backswing, params.target),
 			rig,
 			progress.rem_euclid(1.0),
 			write_bones,
 			write_effects,
 		),
-		AnimClip::Squat => {
-			sample_split(&Squat::<HumanoidV0Rig>::held(), rig, progress, write_bones, write_effects)
+		AnimClip::Squat => sample_split(&Squat::held(), rig, progress, write_bones, write_effects),
+		AnimClip::Prone => {
+			sample_split(&Prone::default(), rig, progress, write_bones, write_effects)
 		}
-		AnimClip::Prone => sample_split(
-			&Prone::<HumanoidV0Rig>::default(),
-			rig,
-			progress,
-			write_bones,
-			write_effects,
-		),
 		AnimClip::Gallop(_)
 		| AnimClip::QuadrupedRun(_)
 		| AnimClip::LateralUndulation(_)
@@ -747,56 +825,31 @@ mod tests {
 	#[test]
 	fn still_samples_idle_on_humanoid() {
 		let mut rig = HumanoidV0Rig::imported();
-		for bone in [
-			"shoulder.L",
-			"shoulder.R",
-			"humerus.L",
-			"humerus.R",
-			"forearm.L",
-			"lower_neck",
-			"pelvis.L",
-		] {
-			rig.pose.insert(BonePose::new(RigName::from(bone), Transform::IDENTITY));
-		}
-
 		let effects = sample_humanoid(AnimClip::Still, &mut rig, 0.25, true, true);
-		assert!(effects.r#move.is_none());
-		let left = rig.pose.get(&RigName::from("shoulder.L")).expect("left");
-		assert!(left.swing.abs() > 0.0);
-		assert!(left.swing.abs() < 0.1);
-		let hang = Idle::default().arm_hang;
-		let humerus = rig.pose.get(&RigName::from("humerus.L")).expect("humerus");
-		assert!(
-			humerus.flex.abs() > hang * 0.8,
-			"Still should hang arms off T-pose rest 0, matching Idle::arm_hang {hang}, got {}",
-			humerus.flex
-		);
+		assert!(effects.is_identity());
+		let shoulder = rig.rotation("shoulder.L") * Vec3::Y;
+		assert!((shoulder - Vec3::Y).length() > 0.0);
+		assert!((shoulder - Vec3::Y).length() < 0.15);
+		let humerus = rig.rotation("humerus.L") * Vec3::Y;
+		assert!((humerus - Vec3::Y).length() > 0.2, "Still should hang the arms, got {humerus:?}");
 	}
 
 	#[test]
 	fn stance_squat_has_no_root_move() -> anyhow::Result<()> {
 		use anyhow::anyhow;
-		use character_rigs::humanoid::HumanoidRig;
-		use character_rigs::Side;
 
 		let mut rig = HumanoidV0Rig::imported();
 		let effects = sample_humanoid(AnimClip::squat(), &mut rig, 1.0, true, true);
-		if effects.r#move.is_some() {
-			return Err(anyhow!("held squat must not Effects.move"));
+		if !effects.is_identity() {
+			return Err(anyhow!("held squat must not move the armature"));
 		}
-		let femur = rig
-			.pose()
-			.get(&rig.leg(Side::Left).femur.name)
-			.ok_or_else(|| anyhow!("left femur"))?;
-		if femur.swing.abs() < 0.2 {
-			return Err(anyhow!("held squat should flex femurs, got {}", femur.swing));
+		let femur = rig.rotation("femur.L") * Vec3::Y;
+		if femur.z > -0.1 {
+			return Err(anyhow!("held squat should flex femurs, got {femur:?}"));
 		}
-		let pelvis = rig
-			.pose()
-			.get(&rig.leg(Side::Left).pelvis.name)
-			.ok_or_else(|| anyhow!("pelvis"))?;
-		if pelvis.twist.abs() < 0.2 {
-			return Err(anyhow!("held squat should crease the pelvis, got {}", pelvis.twist));
+		let pelvis = rig.rotation("pelvis.L") * Vec3::Y;
+		if pelvis.z < 0.1 {
+			return Err(anyhow!("held squat should crease the pelvis, got {pelvis:?}"));
 		}
 		Ok(())
 	}
@@ -804,16 +857,15 @@ mod tests {
 	#[test]
 	fn stance_prone_pitches_the_spine() -> anyhow::Result<()> {
 		use anyhow::anyhow;
-		use character_rigs::humanoid::HumanoidRig;
 
 		let mut rig = HumanoidV0Rig::imported();
 		let effects = sample_humanoid(AnimClip::prone(), &mut rig, 1.0, true, true);
-		if effects.r#move.is_some() {
-			return Err(anyhow!("held prone must not Effects.move"));
+		if !effects.is_identity() {
+			return Err(anyhow!("held prone must not move the armature"));
 		}
-		let root = rig.pose().get(&rig.spine().root.name).ok_or_else(|| anyhow!("root"))?;
-		if root.twist.abs() < 0.3 {
-			return Err(anyhow!("prone should pitch the spine, got twist {}", root.twist));
+		let root = rig.rotation("root") * Vec3::Y;
+		if root.z.abs() < 0.2 || root.x.abs() > 0.2 {
+			return Err(anyhow!("prone should pitch the spine, got {root:?}"));
 		}
 		Ok(())
 	}
@@ -823,12 +875,11 @@ mod tests {
 		let mut rig = QuadrupedV0Rig::imported();
 		let effects =
 			sample_quadruped(AnimClip::Still, &mut rig, QuadrupedIdle::graze_peak(), true, true);
-		assert!(effects.r#move.is_none());
-		let neck = rig.pose.get(&RigName::from("neck")).expect("neck");
-		assert!(neck.flex < -0.5);
-		assert!(neck.twist < -0.3);
-		let lumbar = rig.pose.get(&RigName::from("lumbar")).expect("lumbar");
-		assert!(lumbar.flex > 0.1);
+		assert!(effects.is_identity());
+		let neck = rig.rotation("neck") * Vec3::Y;
+		assert!((neck - Vec3::Y).length() > 0.2, "neck leaves rest, got {neck:?}");
+		let lumbar = rig.rotation("lumbar") * Vec3::Y;
+		assert!((lumbar - Vec3::Y).length() > 0.05, "lumbar leaves rest, got {lumbar:?}");
 	}
 
 	#[test]

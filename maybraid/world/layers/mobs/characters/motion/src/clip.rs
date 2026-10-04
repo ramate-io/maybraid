@@ -10,7 +10,6 @@ use character_animations::animations::{
 	Walk, AIR_END, DEFAULT_BACKSWING, DEFAULT_GRAVITY, DEFAULT_JAB_TARGET, DEFAULT_JUMP_HEIGHT,
 	DEFAULT_LANDING_SQUAT_SPEED, DEFAULT_PRE_SQUAT_SPEED, DEFAULT_SPRING_DURATION, TAKEOFF_END,
 };
-use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
 use character_rigs::Side;
 
 const RUN_CYCLE_SPEED: f32 = 1.68;
@@ -95,7 +94,7 @@ impl Default for JumpParams {
 }
 
 impl JumpParams {
-	pub(crate) fn apply_humanoid(self) -> TwoFootedJump<HumanoidV0Rig> {
+	pub(crate) fn apply_humanoid(self) -> TwoFootedJump {
 		TwoFootedJump::default()
 			.with_gravity(self.gravity)
 			.with_jump_height(self.jump_height)
@@ -154,7 +153,7 @@ impl Default for TuckedFlipParams {
 }
 
 impl TuckedFlipParams {
-	pub(crate) fn apply_humanoid(self) -> TuckedFlip<HumanoidV0Rig> {
+	pub(crate) fn apply_humanoid(self) -> TuckedFlip {
 		let mut flip = TuckedFlip::default();
 		flip.turns = self.turns;
 		flip.direction = self.direction;

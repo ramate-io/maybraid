@@ -1,58 +1,42 @@
-use character_rigs::humanoid::HumanoidRig;
+use character_rigs::authoring::HumanoidPose;
+use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
 
 use crate::animations::Soaring;
 use crate::rigs::humanoid::wing::{apply_flight_body, apply_flight_wings};
 use crate::Animation;
 
-impl<R: HumanoidRig> Animation<R> for Soaring {
-	fn apply_for(&self, rig: &mut R, progress: f32) {
-		apply_flight_body(rig);
-		apply_flight_wings(rig, self.flap_amount(progress));
+impl Animation<HumanoidV0Rig> for Soaring {
+	fn apply_for(&self, rig: &mut HumanoidV0Rig, progress: f32) {
+		let mut pose = HumanoidPose::default();
+		apply_flight_body(&mut pose);
+		apply_flight_wings(&mut pose, self.flap_amount(progress));
+		rig.write_pose(&pose);
 	}
 }
 
 #[cfg(test)]
 mod tests {
-	use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
-	use character_rigs::{BonePose, Name};
+	use bevy::prelude::Vec3;
 
 	use super::*;
-	use crate::Animation;
 
-	fn seeded_rig() -> HumanoidV0Rig {
-		let mut rig = HumanoidV0Rig::imported();
-		for bone in [
-			"root",
-			"shoulder.L",
-			"shoulder.R",
-			"humerus.L",
-			"humerus.R",
-			"forearm.L",
-			"forearm.R",
-			"femur.L",
-			"femur.R",
-			"shin.L",
-			"shin.R",
-		] {
-			rig.pose_mut()
-				.insert(BonePose::new(Name::from(bone), bevy::prelude::Transform::IDENTITY));
-		}
-		rig
+	fn tip(rig: &HumanoidV0Rig, name: &str) -> Vec3 {
+		rig.rotation(name) * Vec3::Y
 	}
 
 	#[test]
 	fn soaring_holds_spread_while_gliding() -> anyhow::Result<()> {
 		let soar = Soaring::default();
-		let mut rig = seeded_rig();
+		let mut rig = HumanoidV0Rig::imported();
 		let glide_t = soar.burst_duration() + soar.pause * 0.5;
 		soar.apply(&mut rig, glide_t);
-		let left = rig.pose().get(&Name::from("shoulder.L")).expect("left shoulder");
-		let right = rig.pose().get(&Name::from("shoulder.R")).expect("right shoulder");
-		assert!(left.swing.abs() > 0.2);
-		assert!((left.swing + right.swing).abs() < 1e-4);
-		// Glide hold stays near T-pose on Z — no big overhead lift.
-		assert!(left.flex.abs() < 0.05);
-		assert!(left.twist.abs() < 1e-5);
+		let left = tip(&rig, "shoulder.L");
+		let right = tip(&rig, "shoulder.R");
+		assert!(left.z.abs() > 0.15, "held stroke is sagittal, got {left:?}");
+		assert!((left.z + right.z).abs() < 1e-3, "opposite shoulder bias, got {left:?} {right:?}");
+		assert!(left.x.abs() < 0.05, "glide hold stays near T-pose laterally, got {left:?}");
+		let yaw = rig.rotation("shoulder.L") * Vec3::Z;
+		assert!(yaw.x.abs() < 1e-3, "no shoulder twist, got {yaw:?}");
 		Ok(())
 	}
 }
