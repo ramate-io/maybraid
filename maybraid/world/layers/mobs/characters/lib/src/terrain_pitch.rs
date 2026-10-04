@@ -8,12 +8,11 @@ use character_motion::{BoneMap, CharacterRig, CharacterRigRole, RigSkeletonKind}
 use crate::member::{CharacterMembers, CharacterRoot};
 
 pub use character_motion::pitch::{
-	default_half_span, default_half_width, facing_with_support_tilt, facing_with_tilt,
-	follow_target, girdle_midpoint, half_span_from_girdles, half_width_from_sides,
-	measured_support_half, observed_pitch, observed_roll, pitch_weight, pitched_half_run,
-	roll_weight, sagittal_axis, sample_facing, step_toward, support_offset, CharacterHeading,
-	TerrainPitch, MAX_TILT, QUADRUPED_FRONT, QUADRUPED_HIND, QUADRUPED_LEFT, QUADRUPED_RIGHT,
-	SUPPORT_RATE, TILT_RATE, TILT_SMOOTH,
+	facing_with_support_tilt, facing_with_tilt, follow_target, girdle_midpoint,
+	measured_support_half, observed_pitch, observed_roll, pitched_half_run, sagittal_axis,
+	sample_facing, step_toward, support_offset, CharacterHeading, TerrainPitch, MAX_TILT,
+	QUADRUPED_FRONT, QUADRUPED_HIND, QUADRUPED_LEFT, QUADRUPED_RIGHT, SUPPORT_RATE, TILT_RATE,
+	TILT_SMOOTH,
 };
 
 /// Insert [`TerrainPitch`] on character roots that opted in with [`ApplyTerrainPitch`],
@@ -35,7 +34,8 @@ pub fn prepare_character_terrain_pitch(
 		let Some(kind) = body_skeleton(members, &rigs) else {
 			continue;
 		};
-		let mut pitch = TerrainPitch::new(kind, default_half_span(kind), default_half_width(kind));
+		let mut pitch =
+			TerrainPitch::new(kind, kind.default_half_span(), kind.default_half_width());
 		if let Some(bones) = body_bones(members, &rigs) {
 			record_quadruped_girdles(&mut pitch, kind, bones, &globals);
 		}

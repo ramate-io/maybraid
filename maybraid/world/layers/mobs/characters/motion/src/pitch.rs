@@ -117,8 +117,8 @@ impl TerrainPitch {
 		Self {
 			half_span,
 			half_width,
-			pitch_weight: pitch_weight(kind),
-			roll_weight: roll_weight(kind),
+			pitch_weight: kind.default_pitch_weight(),
+			roll_weight: kind.default_roll_weight(),
 			pitch: 0.0,
 			roll: 0.0,
 			support: 0.0,
@@ -189,34 +189,48 @@ pub const QUADRUPED_HIND: &[&str] = &["hip.L", "hip.R"];
 pub const QUADRUPED_LEFT: &[&str] = &["shoulder.L", "hip.L"];
 pub const QUADRUPED_RIGHT: &[&str] = &["shoulder.R", "hip.R"];
 
-pub fn default_half_span(kind: RigSkeletonKind) -> f32 {
-	match kind {
-		RigSkeletonKind::Humanoid | RigSkeletonKind::Neck => HUMANOID_HALF_SPAN,
-		RigSkeletonKind::Quadruped => QUADRUPED_HALF_SPAN,
-		RigSkeletonKind::Forelimbed => FORELIMBED_HALF_SPAN,
+impl RigSkeletonKind {
+	/// Rest front/hind wheelbase when girdles are missing or stacked.
+	pub fn default_half_span(self) -> f32 {
+		match self {
+			Self::Humanoid | Self::Neck => HUMANOID_HALF_SPAN,
+			Self::Quadruped => QUADRUPED_HALF_SPAN,
+			Self::Forelimbed => FORELIMBED_HALF_SPAN,
+		}
 	}
-}
 
-pub fn default_half_width(kind: RigSkeletonKind) -> f32 {
-	match kind {
-		RigSkeletonKind::Humanoid | RigSkeletonKind::Neck => HUMANOID_HALF_WIDTH,
-		RigSkeletonKind::Quadruped => QUADRUPED_HALF_WIDTH,
-		RigSkeletonKind::Forelimbed => FORELIMBED_HALF_WIDTH,
+	/// Rest left/right stance width when girdles are missing or stacked.
+	pub fn default_half_width(self) -> f32 {
+		match self {
+			Self::Humanoid | Self::Neck => HUMANOID_HALF_WIDTH,
+			Self::Quadruped => QUADRUPED_HALF_WIDTH,
+			Self::Forelimbed => FORELIMBED_HALF_WIDTH,
+		}
 	}
-}
 
-/// How much of the front/hind slope to apply. Long bodies need more or they sink.
-pub fn pitch_weight(kind: RigSkeletonKind) -> f32 {
-	match kind {
-		RigSkeletonKind::Humanoid | RigSkeletonKind::Neck => 0.4,
-		RigSkeletonKind::Quadruped => 1.0,
-		RigSkeletonKind::Forelimbed => 0.7,
+	/// How much of the front/hind slope to apply. Long bodies need more or they sink.
+	pub fn default_pitch_weight(self) -> f32 {
+		match self {
+			Self::Humanoid | Self::Neck => 0.4,
+			Self::Quadruped => 1.0,
+			Self::Forelimbed => 0.7,
+		}
 	}
-}
 
-/// How much of the left/right slope to apply. Zero: stand upright; opt in later.
-pub fn roll_weight(_kind: RigSkeletonKind) -> f32 {
-	0.0
+	/// How much of the left/right slope to apply. Zero: stand upright; opt in later.
+	pub fn default_roll_weight(self) -> f32 {
+		0.0
+	}
+
+	/// Rest wheelbase from girdle world positions, or the family default.
+	pub fn half_span_from_girdles(self, front: Option<Vec3>, hind: Option<Vec3>) -> f32 {
+		measured_half(front, hind, self.default_half_span())
+	}
+
+	/// Rest stance width from left/right world positions, or the family default.
+	pub fn half_width_from_sides(self, left: Option<Vec3>, right: Option<Vec3>) -> f32 {
+		measured_half(left, right, self.default_half_width())
+	}
 }
 
 /// Midpoint of named bones in XZ, if at least one exists.
@@ -241,24 +255,6 @@ pub fn measured_support_half(a: Option<Vec3>, b: Option<Vec3>) -> Option<f32> {
 	};
 	let delta = Vec2::new(a.x - b.x, a.z - b.z).length() * 0.5;
 	(delta >= MIN_MEASURED).then_some(delta)
-}
-
-/// Rest wheelbase from girdle world positions, or the family default.
-pub fn half_span_from_girdles(
-	kind: RigSkeletonKind,
-	front: Option<Vec3>,
-	hind: Option<Vec3>,
-) -> f32 {
-	measured_half(front, hind, default_half_span(kind))
-}
-
-/// Rest stance width from left/right world positions, or the family default.
-pub fn half_width_from_sides(
-	kind: RigSkeletonKind,
-	left: Option<Vec3>,
-	right: Option<Vec3>,
-) -> f32 {
-	measured_half(left, right, default_half_width(kind))
 }
 
 /// Flattened unit XZ, or `None` if the vector has no ground-plane direction.
@@ -394,11 +390,11 @@ mod tests {
 	#[test]
 	fn missing_girdles_use_family_default() {
 		assert_eq!(
-			half_span_from_girdles(RigSkeletonKind::Quadruped, None, None),
+			RigSkeletonKind::Quadruped.half_span_from_girdles(None, None),
 			QUADRUPED_HALF_SPAN
 		);
 		assert_eq!(
-			half_width_from_sides(RigSkeletonKind::Quadruped, None, None),
+			RigSkeletonKind::Quadruped.half_width_from_sides(None, None),
 			QUADRUPED_HALF_WIDTH
 		);
 	}
@@ -407,7 +403,7 @@ mod tests {
 	fn stacked_girdles_use_family_default() {
 		let origin = Vec3::new(10.0, 1.0, 4.0);
 		assert_eq!(
-			half_span_from_girdles(RigSkeletonKind::Quadruped, Some(origin), Some(origin)),
+			RigSkeletonKind::Quadruped.half_span_from_girdles(Some(origin), Some(origin)),
 			QUADRUPED_HALF_SPAN
 		);
 	}
@@ -417,7 +413,7 @@ mod tests {
 		let front = Vec3::new(0.0, 1.0, 2.0);
 		let hind = Vec3::new(0.0, 1.0, 0.0);
 		assert!(
-			(half_span_from_girdles(RigSkeletonKind::Quadruped, Some(front), Some(hind)) - 1.0)
+			(RigSkeletonKind::Quadruped.half_span_from_girdles(Some(front), Some(hind)) - 1.0)
 				.abs() < 1e-5
 		);
 	}
@@ -468,8 +464,8 @@ mod tests {
 			RigSkeletonKind::Forelimbed,
 			RigSkeletonKind::Neck,
 		] {
-			assert_eq!(roll_weight(kind), 0.0);
-			assert!(pitch_weight(kind) > 0.0);
+			assert_eq!(kind.default_roll_weight(), 0.0);
+			assert!(kind.default_pitch_weight() > 0.0);
 		}
 	}
 
