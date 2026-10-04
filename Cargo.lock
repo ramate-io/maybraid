@@ -6970,6 +6970,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "maybraid-vfx"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "bevy_hanabi",
+]
+
+[[package]]
 name = "maybraid-weather"
 version = "0.1.2"
 dependencies = [
@@ -6985,7 +6993,6 @@ dependencies = [
  "avian3d",
  "barking",
  "bevy",
- "building-shaders",
  "character-inventory-user",
  "character-items",
  "character-persist",
@@ -7004,7 +7011,6 @@ dependencies = [
  "furnishing-layer-model",
  "furnishing-layer-presentation",
  "furniture-assemblies",
- "furniture-shaders",
  "game-commands",
  "ground-avian",
  "hiding-intelligence",
@@ -7052,6 +7058,7 @@ dependencies = [
  "vegetation-components",
  "vegetation-layer-model",
  "vegetation-layer-presentation",
+ "world-materials",
  "world-player",
 ]
 
@@ -12572,6 +12579,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
+name = "vfx-playground"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "clap",
+ "game-commands",
+ "maybraid-vfx",
+]
+
+[[package]]
 name = "visual-geometry-core"
 version = "0.1.2"
 dependencies = [
@@ -13732,6 +13749,33 @@ name = "wordnet-types"
 version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "99cdc77ac580700f64d314e2c30d2e8ec1c93ce981f66a62a894a671d1036af3"
+
+[[package]]
+name = "world-materials"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "building-shaders",
+ "characters",
+ "chico",
+ "firearms",
+ "furniture-shaders",
+ "material-ref",
+ "vegetation-bumpout",
+ "vegetation-shaders",
+]
+
+[[package]]
+name = "world-materials-playground"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "clap",
+ "firearms",
+ "game-commands",
+ "material-ref",
+ "world-materials",
+]
 
 [[package]]
 name = "world-player"
