@@ -49,13 +49,15 @@ impl LobeKind {
 	}
 }
 
-/// One overlapping rounded volume in a mesh cluster.
+/// One overlapping irregular volume in a mesh cluster.
 #[derive(Clone, Copy, Debug)]
 pub struct LobeSpec {
 	pub offset: Vec3,
 	pub scale: Vec3,
+	pub euler: Vec3,
 	pub expand: f32,
 	pub rise: f32,
+	pub roll: f32,
 	pub duration: f32,
 }
 

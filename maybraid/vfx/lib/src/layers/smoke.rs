@@ -32,19 +32,83 @@ pub fn compile_mesh(mesh: Handle<Mesh>) -> MeshPart {
 		mesh,
 		LobeKind::Smoke,
 		vec![
-			puff(Vec3::new(0.00, 0.10, 0.00), 0.62, 1.05, 0.55, 2.20),
-			puff(Vec3::new(0.20, 0.16, 0.08), 0.48, 0.95, 0.62, 2.05),
-			puff(Vec3::new(-0.18, 0.14, 0.12), 0.46, 0.98, 0.58, 2.10),
-			puff(Vec3::new(0.06, 0.22, -0.18), 0.44, 0.90, 0.70, 2.30),
-			puff(Vec3::new(-0.12, 0.06, -0.16), 0.42, 0.88, 0.48, 1.90),
-			puff(Vec3::new(0.14, 0.04, 0.18), 0.40, 0.86, 0.50, 1.95),
-			puff(Vec3::new(-0.04, 0.28, 0.04), 0.38, 0.80, 0.78, 2.40),
+			puff(
+				Vec3::new(0.00, 0.10, 0.00),
+				Vec3::new(0.82, 0.48, 0.64),
+				Vec3::new(0.20, 0.55, -0.15),
+				1.05,
+				0.55,
+				1.4,
+				2.20,
+			),
+			puff(
+				Vec3::new(0.20, 0.16, 0.08),
+				Vec3::new(0.38, 0.62, 0.44),
+				Vec3::new(-0.70, 0.90, 0.30),
+				0.95,
+				0.62,
+				1.8,
+				2.05,
+			),
+			puff(
+				Vec3::new(-0.18, 0.14, 0.12),
+				Vec3::new(0.58, 0.36, 0.50),
+				Vec3::new(0.85, -0.40, 0.55),
+				0.98,
+				0.58,
+				1.2,
+				2.10,
+			),
+			puff(
+				Vec3::new(0.06, 0.22, -0.18),
+				Vec3::new(0.46, 0.70, 0.34),
+				Vec3::new(-0.25, 1.20, -0.65),
+				0.90,
+				0.70,
+				2.0,
+				2.30,
+			),
+			puff(
+				Vec3::new(-0.12, 0.06, -0.16),
+				Vec3::new(0.54, 0.32, 0.48),
+				Vec3::new(1.05, 0.20, 0.15),
+				0.88,
+				0.48,
+				1.1,
+				1.90,
+			),
+			puff(
+				Vec3::new(0.14, 0.04, 0.18),
+				Vec3::new(0.30, 0.50, 0.66),
+				Vec3::new(-0.90, -0.55, 0.80),
+				0.86,
+				0.50,
+				1.6,
+				1.95,
+			),
+			puff(
+				Vec3::new(-0.04, 0.28, 0.04),
+				Vec3::new(0.64, 0.40, 0.28),
+				Vec3::new(0.35, 0.75, -0.90),
+				0.80,
+				0.78,
+				1.5,
+				2.40,
+			),
 		],
 	)
 }
 
-fn puff(offset: Vec3, scale: f32, expand: f32, rise: f32, duration: f32) -> LobeSpec {
-	LobeSpec { offset, scale: Vec3::splat(scale), expand, rise, duration }
+fn puff(
+	offset: Vec3,
+	scale: Vec3,
+	euler: Vec3,
+	expand: f32,
+	rise: f32,
+	roll: f32,
+	duration: f32,
+) -> LobeSpec {
+	LobeSpec { offset, scale, euler, expand, rise, roll, duration }
 }
 
 pub fn compile_wisps(effects: &mut Assets<EffectAsset>, smoke: &FlipbookAsset) -> ParticlePart {
@@ -167,5 +231,11 @@ mod tests {
 			true,
 		);
 		assert!(velocity.y > 0.0, "{velocity:?}");
+	}
+
+	#[test]
+	fn smoke_lobes_are_anisotropic() {
+		let mesh = compile_mesh(Handle::default());
+		assert!(mesh.lobes.iter().all(|lobe| (lobe.scale.x - lobe.scale.y).abs() > 0.04));
 	}
 }

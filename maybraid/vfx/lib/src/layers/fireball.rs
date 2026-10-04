@@ -28,18 +28,74 @@ pub fn compile_mesh(mesh: Handle<Mesh>) -> MeshPart {
 		mesh,
 		LobeKind::Fire,
 		vec![
-			lobe(Vec3::new(0.00, 0.05, 0.00), 0.58, 0.88, 0.08, 0.55),
-			lobe(Vec3::new(0.16, 0.10, 0.05), 0.40, 0.72, 0.12, 0.50),
-			lobe(Vec3::new(-0.14, 0.08, 0.10), 0.38, 0.74, 0.10, 0.52),
-			lobe(Vec3::new(0.04, 0.14, -0.16), 0.36, 0.70, 0.14, 0.48),
-			lobe(Vec3::new(-0.08, -0.02, -0.12), 0.34, 0.62, 0.06, 0.46),
-			lobe(Vec3::new(0.10, -0.04, 0.14), 0.32, 0.64, 0.07, 0.47),
+			lobe(
+				Vec3::new(0.00, 0.05, 0.00),
+				Vec3::new(0.72, 0.46, 0.58),
+				Vec3::new(0.15, 0.40, -0.22),
+				0.88,
+				0.08,
+				0.35,
+				0.55,
+			),
+			lobe(
+				Vec3::new(0.16, 0.10, 0.05),
+				Vec3::new(0.34, 0.52, 0.28),
+				Vec3::new(-0.55, 0.80, 0.18),
+				0.72,
+				0.12,
+				0.55,
+				0.50,
+			),
+			lobe(
+				Vec3::new(-0.14, 0.08, 0.10),
+				Vec3::new(0.48, 0.30, 0.40),
+				Vec3::new(0.70, -0.35, 0.45),
+				0.74,
+				0.10,
+				0.40,
+				0.52,
+			),
+			lobe(
+				Vec3::new(0.04, 0.14, -0.16),
+				Vec3::new(0.28, 0.44, 0.50),
+				Vec3::new(-0.20, 1.10, -0.60),
+				0.70,
+				0.14,
+				0.70,
+				0.48,
+			),
+			lobe(
+				Vec3::new(-0.08, -0.02, -0.12),
+				Vec3::new(0.42, 0.26, 0.36),
+				Vec3::new(0.95, 0.25, 0.10),
+				0.62,
+				0.06,
+				0.30,
+				0.46,
+			),
+			lobe(
+				Vec3::new(0.10, -0.04, 0.14),
+				Vec3::new(0.24, 0.38, 0.46),
+				Vec3::new(-0.80, -0.50, 0.75),
+				0.64,
+				0.07,
+				0.50,
+				0.47,
+			),
 		],
 	)
 }
 
-fn lobe(offset: Vec3, scale: f32, expand: f32, rise: f32, duration: f32) -> LobeSpec {
-	LobeSpec { offset, scale: Vec3::splat(scale), expand, rise, duration }
+fn lobe(
+	offset: Vec3,
+	scale: Vec3,
+	euler: Vec3,
+	expand: f32,
+	rise: f32,
+	roll: f32,
+	duration: f32,
+) -> LobeSpec {
+	LobeSpec { offset, scale, euler, expand, rise, roll, duration }
 }
 
 pub fn compile_wisps(effects: &mut Assets<EffectAsset>, fire: &FlipbookAsset) -> ParticlePart {
@@ -139,5 +195,11 @@ mod tests {
 				.simulation_space,
 			SimulationSpace::Global
 		);
+	}
+
+	#[test]
+	fn fireball_lobes_are_anisotropic() {
+		let mesh = compile_mesh(Handle::default());
+		assert!(mesh.lobes.iter().all(|lobe| (lobe.scale.x - lobe.scale.y).abs() > 0.04));
 	}
 }

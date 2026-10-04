@@ -27,16 +27,20 @@ pub fn compile_mesh(mesh: Handle<Mesh>) -> MeshPart {
 		vec![
 			LobeSpec {
 				offset: Vec3::ZERO,
-				scale: Vec3::splat(0.22),
+				scale: Vec3::new(0.28, 0.18, 0.22),
+				euler: Vec3::new(0.25, 0.6, -0.15),
 				expand: 1.55,
 				rise: 0.0,
+				roll: 0.2,
 				duration: FLASH_FADE,
 			},
 			LobeSpec {
 				offset: Vec3::new(0.05, 0.03, -0.03),
-				scale: Vec3::splat(0.11),
+				scale: Vec3::new(0.14, 0.08, 0.11),
+				euler: Vec3::new(-0.7, 0.3, 0.5),
 				expand: 1.1,
 				rise: 0.0,
+				roll: 0.4,
 				duration: FLASH_FADE * 0.7,
 			},
 		],

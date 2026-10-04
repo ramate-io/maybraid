@@ -1,4 +1,4 @@
-//! Shared rounded lobe mesh and age-driven cluster animation.
+//! Shared lobe mesh and age-driven cluster animation.
 
 use bevy::prelude::*;
 
@@ -42,10 +42,13 @@ pub fn lobe_transform(spec: &LobeSpec, age: f32, seed: u64, index: u32) -> Trans
 	let expand = expand_amount(age, spec.duration);
 	let jitter = lobe_jitter(seed, index) * 0.035;
 	let offset = spec.offset + jitter;
+	let rest = Quat::from_euler(EulerRot::YXZ, spec.euler.y, spec.euler.x, spec.euler.z);
+	let spin = Quat::from_axis_angle(rest * Vec3::X, spec.roll * expand);
+	let stretch = Vec3::new(1.0, 1.0 + expand * 0.18, 1.0);
 	Transform {
 		translation: offset * (1.0 + expand * 0.38) + Vec3::Y * spec.rise * expand,
-		scale: spec.scale * (1.0 + spec.expand * expand),
-		..Transform::IDENTITY
+		rotation: spin * rest,
+		scale: spec.scale * stretch * (1.0 + spec.expand * expand),
 	}
 }
 
@@ -65,5 +68,22 @@ mod tests {
 		let a = lobe_jitter(1, 0);
 		let b = lobe_jitter(2, 0);
 		assert!(a.distance(b) > 1e-4);
+	}
+
+	#[test]
+	fn lobes_rotate_as_they_expand() {
+		let spec = LobeSpec {
+			offset: Vec3::ZERO,
+			scale: Vec3::new(0.7, 0.4, 0.5),
+			euler: Vec3::new(0.2, 0.4, -0.1),
+			expand: 0.8,
+			rise: 0.2,
+			roll: 1.4,
+			duration: 1.0,
+		};
+		let early = lobe_transform(&spec, 0.05, 1, 0);
+		let late = lobe_transform(&spec, 0.8, 1, 0);
+		assert!(early.rotation.angle_between(late.rotation) > 0.2);
+		assert!((early.scale.x - early.scale.y).abs() > 0.05);
 	}
 }

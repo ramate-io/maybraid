@@ -6,7 +6,7 @@ use bevy::pbr::{MaterialPipeline, MaterialPipelineKey};
 use bevy::prelude::*;
 use bevy::reflect::TypePath;
 use bevy::render::render_resource::{
-	AsBindGroup, RenderPipelineDescriptor, SpecializedMeshPipelineError,
+	AsBindGroup, Face, RenderPipelineDescriptor, SpecializedMeshPipelineError,
 };
 use bevy::shader::ShaderRef;
 
@@ -20,7 +20,7 @@ pub struct LobeMaterial {
 	pub params: Vec4,
 	#[uniform(1)]
 	pub tint: Vec4,
-	/// `x` emission/gain, `y` unused, `z` displace, `w` value-band count.
+	/// `x` emission/gain, `y` deform roll rate, `z` displace, `w` value-band count.
 	#[uniform(2)]
 	pub extras: Vec4,
 }
@@ -28,15 +28,15 @@ pub struct LobeMaterial {
 impl LobeMaterial {
 	pub fn new(kind: LobeKind, duration: f32, seed: f32, tint: Color, intensity: f32) -> Self {
 		let tint = LinearRgba::from(tint);
-		let (gain, displace, bands) = match kind {
-			LobeKind::Fire => (1.15 * intensity, 0.07, 4.0),
-			LobeKind::Smoke => (0.95 * intensity, 0.09, 3.0),
-			LobeKind::Flash => (2.4 * intensity, 0.03, 2.0),
+		let (gain, roll, displace, bands) = match kind {
+			LobeKind::Fire => (1.15 * intensity, 0.45, 0.24, 4.0),
+			LobeKind::Smoke => (0.95 * intensity, 1.85, 0.30, 3.0),
+			LobeKind::Flash => (2.4 * intensity, 0.0, 0.10, 2.0),
 		};
 		Self {
 			params: Vec4::new(0.0, duration.max(1e-3), seed, kind.as_f32()),
 			tint: Vec4::new(tint.red, tint.green, tint.blue, 1.0),
-			extras: Vec4::new(gain, 0.0, displace, bands),
+			extras: Vec4::new(gain, roll, displace, bands),
 		}
 	}
 
@@ -90,7 +90,7 @@ impl Material for LobeMaterial {
 		_layout: &MeshVertexBufferLayoutRef,
 		_key: MaterialPipelineKey<Self>,
 	) -> Result<(), SpecializedMeshPipelineError> {
-		descriptor.primitive.cull_mode = None;
+		descriptor.primitive.cull_mode = Some(Face::Back);
 		if let Some(depth) = descriptor.depth_stencil.as_mut() {
 			depth.depth_write_enabled = Some(false);
 		}
@@ -122,5 +122,7 @@ mod tests {
 		assert_eq!(fire.alpha_mode(), AlphaMode::Blend);
 		assert_eq!(smoke.alpha_mode(), AlphaMode::Blend);
 		assert_eq!(flash.alpha_mode(), AlphaMode::Add);
+		assert!(smoke.extras.z > fire.extras.z);
+		assert!(smoke.extras.y > fire.extras.y);
 	}
 }

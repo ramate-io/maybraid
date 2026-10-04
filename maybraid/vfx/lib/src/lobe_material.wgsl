@@ -1,6 +1,6 @@
 //---------------------------------------------------------
-// Stylized explosion lobes: object-space noise displacement,
-// age-driven fire heat or warm/cool smoke bands, silhouette dissolve.
+// Stylized explosion lobes: broad bulges, displaced normals,
+// view-facing silhouette, opacity breakup from the start.
 //---------------------------------------------------------
 
 #import bevy_pbr::{
@@ -19,9 +19,6 @@ var<uniform> tint: vec4<f32>;
 
 @group(#{MATERIAL_BIND_GROUP}) @binding(2)
 var<uniform> extras: vec4<f32>;
-
-const KIND_SMOKE: f32 = 1.0;
-const KIND_FLASH: f32 = 2.0;
 
 fn hash21(p: vec2<f32>) -> f32 {
     let p3 = fract(vec3<f32>(p.x, p.y, p.x) * 0.1031);
@@ -72,6 +69,12 @@ fn soft_band(v: f32, steps: f32) -> f32 {
     return (q + smoothstep(0.32, 0.68, f)) / s;
 }
 
+fn rotate_y(p: vec3<f32>, a: f32) -> vec3<f32> {
+    let c = cos(a);
+    let s = sin(a);
+    return vec3<f32>(c * p.x + s * p.z, p.y, -s * p.x + c * p.z);
+}
+
 fn object_pos(vertex: Vertex) -> vec3<f32> {
 #ifdef VERTEX_COLORS
     return vertex.color.xyz;
@@ -80,20 +83,47 @@ fn object_pos(vertex: Vertex) -> vec3<f32> {
 #endif
 }
 
+fn deform(local: vec3<f32>, age_n: f32) -> vec3<f32> {
+    let seed = params.z;
+    let q = rotate_y(local, age_n * extras.y);
+    let dir = normalize(q + vec3<f32>(1e-4, 0.0, 0.0));
+    let b0 = normalize(vec3<f32>(sin(seed * 2.1), 0.38, cos(seed * 1.4)));
+    let b1 = normalize(vec3<f32>(cos(seed * 3.3), -0.48, sin(seed * 0.9)));
+    let b2 = normalize(vec3<f32>(sin(seed * 0.6 + 1.7), 0.72, cos(seed * 2.8)));
+    let large = pow(saturate(dot(dir, b0)), 2.2) * 0.34
+        + pow(saturate(dot(dir, b1)), 3.0) * 0.24
+        + pow(saturate(dot(dir, b2)), 1.8) * 0.14;
+    let fine = (fbm(q * 4.6 + vec3<f32>(seed, 2.0, age_n * 0.7)) - 0.48) * 0.12;
+    let amount = extras.z * (0.85 + 0.35 * age_n);
+    return rotate_y(q + dir * ((large + fine) * amount), -age_n * extras.y);
+}
+
+fn deform_normal(local: vec3<f32>, age_n: f32, n: vec3<f32>) -> vec3<f32> {
+    let eps = 0.03;
+    var t1 = cross(n, vec3<f32>(0.0, 1.0, 0.0));
+    if length(t1) < 1e-3 {
+        t1 = cross(n, vec3<f32>(1.0, 0.0, 0.0));
+    }
+    t1 = normalize(t1);
+    let t2 = normalize(cross(n, t1));
+    let p0 = deform(local, age_n);
+    let p1 = deform(local + t1 * eps, age_n);
+    let p2 = deform(local + t2 * eps, age_n);
+    return normalize(cross(p1 - p0, p2 - p0));
+}
+
 @vertex
 fn vertex(vertex_no_morph: Vertex) -> VertexOutput {
     var out: VertexOutput;
     var vertex = vertex_no_morph;
     let world_from_local = mesh_functions::get_world_from_local(vertex_no_morph.instance_index);
     let age_n = saturate(params.x / max(params.y, 1e-3));
-    let seed = params.z;
     let local0 = object_pos(vertex);
-    let nse = fbm(local0 * 3.4 + vec3<f32>(seed, seed * 0.37, seed * 1.13));
-    let displace = extras.z * (nse - 0.48) * (0.55 + 0.45 * age_n);
-    var local = vertex.position + vertex.normal * displace;
+    let local = deform(local0, age_n);
+    let n_local = deform_normal(local0, age_n, vertex.normal);
 #ifdef VERTEX_NORMALS
     out.world_normal = mesh_functions::mesh_normal_local_to_world(
-        vertex.normal,
+        n_local,
         vertex_no_morph.instance_index,
     );
 #endif
@@ -118,7 +148,7 @@ fn vertex(vertex_no_morph: Vertex) -> VertexOutput {
     );
 #endif
 #ifdef VERTEX_COLORS
-    out.color = vec4<f32>(local0, 1.0);
+    out.color = vec4<f32>(local, 1.0);
 #endif
 #ifdef VERTEX_OUTPUT_INSTANCE_INDEX
     out.instance_index = vertex_no_morph.instance_index;
@@ -132,50 +162,48 @@ fn vertex(vertex_no_morph: Vertex) -> VertexOutput {
     return out;
 }
 
+fn silhouette_alpha(facing: f32, breakup: f32, age_n: f32) -> f32 {
+    let rim = smoothstep(0.02, 0.38, facing);
+    let holes = smoothstep(0.18, 0.52, breakup);
+    let dissolve = 1.0 - smoothstep(0.55, 1.0, age_n + (1.0 - breakup) * 0.28);
+    return rim * mix(0.45, 1.0, holes) * dissolve;
+}
+
 fn shade_fire(local: vec3<f32>, n: vec3<f32>, view_dir: vec3<f32>, age_n: f32) -> vec4<f32> {
-    let key = normalize(vec3<f32>(0.28, 0.86, 0.32));
-    let wrap = saturate(dot(n, key) * 0.55 + 0.45);
-    let facing = saturate(abs(dot(n, view_dir)));
-    let heat = saturate((1.0 - age_n) * (0.42 + 0.58 * wrap));
+    let facing = saturate(dot(n, view_dir));
+    let blotch = fbm(local * 2.5 + vec3<f32>(params.z, age_n * 0.4, 1.6));
+    let heat = saturate((1.0 - age_n) * mix(0.28, 1.05, blotch));
     let hot = vec3<f32>(1.12, 0.88, 0.38);
     let mid = vec3<f32>(0.98, 0.34, 0.06);
     let cool = vec3<f32>(0.32, 0.05, 0.02);
-    var rgb = mix(cool, mix(mid, hot, saturate(heat * 1.35 - 0.2)), soft_band(heat, extras.w));
+    var rgb = mix(cool, mix(mid, hot, saturate(heat * 1.25 - 0.12)), soft_band(heat, extras.w));
     rgb *= tint.xyz;
-    let nse = fbm(local * 2.6 + vec3<f32>(params.z, 2.1, 0.4));
-    let rim = saturate(1.0 - facing);
-    rgb += mid * rim * 0.12 * (1.0 - age_n);
-    let body = mix(0.55, 1.0, facing) * extras.x;
-    let edge = saturate(1.2 - length(local) * 2.15);
-    let dissolve = smoothstep(age_n * 1.12 - 0.12, age_n * 1.12 + 0.22, nse * 0.6 + edge * 0.4);
-    let alpha = dissolve * (1.0 - age_n * age_n) * mix(0.5, 0.92, edge);
-    return vec4<f32>(rgb * body, alpha);
+    let n_lit = saturate(dot(n, normalize(vec3<f32>(0.28, 0.86, 0.32))) * 0.22 + 0.78);
+    rgb *= n_lit * extras.x;
+    let alpha = silhouette_alpha(facing, blotch, age_n);
+    return vec4<f32>(rgb, alpha);
 }
 
 fn shade_smoke(local: vec3<f32>, n: vec3<f32>, view_dir: vec3<f32>, age_n: f32) -> vec4<f32> {
-    let key = normalize(vec3<f32>(0.32, 0.84, 0.22));
-    let wrap = saturate(dot(n, key) * 0.5 + 0.5);
-    let facing = saturate(abs(dot(n, view_dir)));
+    let facing = saturate(dot(n, view_dir));
+    let blotch = fbm(local * 1.9 + vec3<f32>(params.z * 0.7, age_n * 0.85, 3.1));
     let warm = vec3<f32>(0.46, 0.36, 0.28);
     let cool = vec3<f32>(0.18, 0.22, 0.28);
-    let lift = soft_band(wrap * (0.75 + 0.25 * facing), extras.w);
-    var rgb = mix(cool, warm, lift) * tint.xyz;
-    let nse = fbm(local * 2.2 + vec3<f32>(params.z * 0.7, 4.0, 1.2));
-    rgb *= 0.78 + 0.22 * nse;
-    let edge = saturate(1.15 - length(local) * 2.05);
-    let dissolve = smoothstep(age_n * 1.05 - 0.08, age_n * 1.05 + 0.28, nse * 0.55 + edge * 0.45);
-    let alpha = dissolve * (1.0 - pow(age_n, 1.35)) * mix(0.42, 0.88, edge);
-    return vec4<f32>(rgb * extras.x, alpha);
+    let n_lit = saturate(dot(n, normalize(vec3<f32>(0.32, 0.84, 0.22))) * 0.2 + 0.8);
+    let lift = soft_band(blotch * 0.72 + n_lit * 0.28, extras.w);
+    let rgb = mix(cool, warm, lift) * tint.xyz * extras.x;
+    let alpha = silhouette_alpha(facing, blotch, age_n) * 0.92;
+    return vec4<f32>(rgb, alpha);
 }
 
 fn shade_flash(local: vec3<f32>, n: vec3<f32>, view_dir: vec3<f32>, age_n: f32) -> vec4<f32> {
-    let facing = saturate(abs(dot(n, view_dir)));
+    let facing = saturate(dot(n, view_dir));
+    let blotch = fbm(local * 3.2 + vec3<f32>(params.z, 0.0, 0.5));
     let hot = vec3<f32>(1.4, 1.15, 0.72);
     let limb = vec3<f32>(1.0, 0.55, 0.16);
-    let rgb = mix(limb, hot, facing) * tint.xyz;
-    let edge = saturate(1.3 - length(local) * 2.4);
-    let fade = 1.0 - smoothstep(0.15, 1.0, age_n);
-    let alpha = edge * fade * mix(0.35, 1.0, facing);
+    let rgb = mix(limb, hot, facing * mix(0.6, 1.0, blotch)) * tint.xyz;
+    let fade = 1.0 - smoothstep(0.12, 1.0, age_n);
+    let alpha = smoothstep(0.04, 0.32, facing) * fade * mix(0.45, 1.0, blotch);
     return vec4<f32>(rgb * extras.x * fade, alpha);
 }
 
