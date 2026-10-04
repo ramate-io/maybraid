@@ -37,10 +37,12 @@ impl ForestStreamSpec {
 	}
 }
 
-/// Stream spec and the three vegetation generate budgets.
+/// Stream spec and the three vegetation generate / present budgets.
 ///
-/// Every budget is 16 in both the world and the playground. [`Self::world_defaults`]
-/// arms the forest at stream radius 1 (1 km present / 3 km generate).
+/// Every budget is 16 in both the world and the playground, and is applied to
+/// both [`lod::LodGenerateBudget`] and [`lod::LodPresentBudget`] for that
+/// channel. [`Self::world_defaults`] arms the forest at stream radius 1
+/// (1 km present / 3 km generate).
 #[derive(Resource, Clone, Debug, PartialEq)]
 pub struct ChicoConfig {
 	pub forest: Option<ForestStreamSpec>,

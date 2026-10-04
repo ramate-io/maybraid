@@ -212,6 +212,47 @@ fn incomplete_present_yields_to_other_ids() -> Result<()> {
 }
 
 #[test]
+fn incomplete_present_yields_when_closer_ids_keep_arriving() -> Result<()> {
+	let first = Id::from_cell(cell(0.0));
+	let second = Id::from_cell(cell(2.0));
+	let arriving = Id::from_cell(cell(0.5));
+	let mut app = pending_present_app(&[first, second], 1);
+	app.update();
+	assert_eq!(handle_count(app.world().resource::<RecordingPresenter>(), first), 1);
+	assert_eq!(handle_count(app.world().resource::<RecordingPresenter>(), second), 0);
+
+	let identity = Transform::IDENTITY;
+	let bounds = cell(0.0);
+	let lod = LodRef {
+		entity: Entity::PLACEHOLDER,
+		previous_transform: &identity,
+		current_transform: &identity,
+		bounds: &bounds,
+	};
+	{
+		let mut index = app.world_mut().resource_mut::<WorldIndex>();
+		GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut *index, arriving, &lod);
+	}
+	app.world_mut().resource_mut::<RecordingPresenter>().hold_ids.insert(arriving);
+	app.world_mut().write_message(LodGenerated::<Vegetation>::new(arriving));
+	app.update();
+
+	let presenter = app.world().resource::<RecordingPresenter>();
+	assert_eq!(
+		handle_count(presenter, first),
+		1,
+		"a closer generated id must not re-sort the incomplete front id back to drain"
+	);
+	assert_eq!(
+		handle_count(presenter, second),
+		1,
+		"already-queued work must run before newly arriving ids"
+	);
+	assert_eq!(handle_count(presenter, arriving), 0);
+	Ok(())
+}
+
+#[test]
 fn drain_present_picks_up_keep_region_without_a_new_message() -> Result<()> {
 	let mut app = App::new();
 	let mut index = WorldIndex::default();

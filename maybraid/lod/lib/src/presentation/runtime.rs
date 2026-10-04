@@ -192,6 +192,20 @@ impl<T> LodPresentQueue<T> {
 		self.scan_regions.retain(|region| regions_overlap_xz(*region, live));
 		before.saturating_sub(self.pending.len()) as u64
 	}
+
+	/// Near-first only for ids appended this drain. Already-queued work —
+	/// including grow-then-spawn ids re-queued at the back — keeps its place
+	/// so a drip of closer generated ids cannot monopolize the budget.
+	fn sort_added_by_xz(&mut self, already_pending: usize, origin: Vec3) {
+		if already_pending >= self.pending.len() {
+			return;
+		}
+		self.pending.make_contiguous()[already_pending..].sort_by(|a, b| {
+			id_xz_distance2(*a, origin)
+				.partial_cmp(&id_xz_distance2(*b, origin))
+				.unwrap_or(std::cmp::Ordering::Equal)
+		});
+	}
 }
 
 /// Whether channel `C` may produce, scan, or present.
@@ -415,6 +429,7 @@ pub fn drain_lod_present<T, S, Pr, M, F>(
 		*last_keep = keep.region;
 		jobs.end_n(queue.expire_outside_keep(keep.region, keep.slack_xz));
 	}
+	let already_pending = queue.pending.len();
 
 	let mut received_region = false;
 	for message in regions.read() {
@@ -493,11 +508,7 @@ pub fn drain_lod_present<T, S, Pr, M, F>(
 	let origin = lod_ref.current_transform.translation;
 	if reorder_pending {
 		let quantum = Instant::now();
-		queue.pending.make_contiguous().sort_by(|a, b| {
-			id_xz_distance2(*a, origin)
-				.partial_cmp(&id_xz_distance2(*b, origin))
-				.unwrap_or(std::cmp::Ordering::Equal)
-		});
+		queue.sort_added_by_xz(already_pending, origin);
 		warn_atomic_overrun(
 			"present queue ordering",
 			quantum.elapsed(),
