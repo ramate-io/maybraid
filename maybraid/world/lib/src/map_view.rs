@@ -124,6 +124,7 @@ struct MapNamePinBundle {
 	node: Node,
 	text: Text,
 	font: TextFont,
+	layout: TextLayout,
 	color: TextColor,
 	shadow: TextShadow,
 	pickable: Pickable,
@@ -390,6 +391,7 @@ fn sync_map_name_pins(
 				node: map_pin_node(screen, target.size, &target.label),
 				text: Text::new(target.label.clone()),
 				font: map_label_text_font(&fonts, target.size),
+				layout: map_label_layout(),
 				color: TextColor(label_ink(target.id, highlighted)),
 				shadow: map_label_shadow(),
 				pickable: Pickable::IGNORE,
@@ -401,6 +403,10 @@ fn sync_map_name_pins(
 
 fn map_label_text_font(font: &MapLabelFont, size: f32) -> TextFont {
 	TextFont { font: font.0.clone().into(), font_size: FontSize::Px(size), ..default() }
+}
+
+fn map_label_layout() -> TextLayout {
+	TextLayout::new(Justify::Center, bevy::text::LineBreak::WordBoundary)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -509,7 +515,7 @@ fn map_pin_targets(
 			id: MapPinTarget::Name(name.key),
 			xz,
 			extent: name.extent,
-			label: bilingual(&name.surface, &name.english),
+			label: map_name_label(&name.surface, &name.english),
 			size: map_label_size(kind),
 		});
 	}
@@ -654,13 +660,38 @@ fn allowed_label_rect(pin: &MapPinWanted, view: Rect, sep: f32) -> Rect {
 	}
 }
 
-fn bilingual(surface: &str, english: &[String]) -> String {
-	let gloss: Vec<_> =
-		english.iter().map(|word| word.trim()).filter(|word| !word.is_empty()).collect();
+fn title_case(text: &str) -> String {
+	text.split_whitespace()
+		.filter(|word| !word.is_empty())
+		.map(|word| {
+			let mut chars = word.chars();
+			match chars.next() {
+				Some(first) => {
+					let mut titled = first.to_uppercase().collect::<String>();
+					titled.push_str(chars.as_str());
+					titled
+				}
+				None => String::new(),
+			}
+		})
+		.collect::<Vec<_>>()
+		.join(" ")
+}
+
+fn map_name_label(surface: &str, english: &[String]) -> String {
+	let native = title_case(surface.trim());
+	let gloss = title_case(
+		&english
+			.iter()
+			.map(|word| word.trim())
+			.filter(|word| !word.is_empty())
+			.collect::<Vec<_>>()
+			.join(" "),
+	);
 	if gloss.is_empty() {
-		surface.to_string()
+		native
 	} else {
-		format!("{surface} ({})", gloss.join(" "))
+		format!("{native}\n{gloss}")
 	}
 }
 
@@ -700,8 +731,8 @@ pub(crate) fn label_for_poi(poi: &PoiRecord, overlay: &LanguageOverlay) -> Strin
 					a.xz.distance(poi.position.xz()).total_cmp(&b.xz.distance(poi.position.xz()))
 				})
 		})
-		.map(|name| bilingual(&name.surface, &name.english))
-		.unwrap_or_else(|| format!("{:?}", poi.kind))
+		.map(|name| map_name_label(&name.surface, &name.english))
+		.unwrap_or_else(|| title_case(&format!("{:?}", poi.kind)))
 }
 
 fn pin_world(surface: &TerrainView<Urbanization<Richmond<OnTerrain<Durham>>>>, xz: Vec2) -> Vec3 {
@@ -724,7 +755,12 @@ fn map_label_shadow() -> TextShadow {
 }
 
 fn pin_width(size: f32, label: &str) -> f32 {
-	(size * 0.58 * label.chars().count() as f32 + 12.0).clamp(72.0, 520.0)
+	let chars = label.lines().map(|line| line.chars().count()).max().unwrap_or(0);
+	(size * 0.58 * chars as f32 + 12.0).clamp(72.0, 520.0)
+}
+
+fn pin_lines(label: &str) -> f32 {
+	label.lines().count().max(1) as f32
 }
 
 fn map_pin_node(screen: Vec2, size: f32, label: &str) -> Node {
@@ -732,7 +768,7 @@ fn map_pin_node(screen: Vec2, size: f32, label: &str) -> Node {
 	Node {
 		position_type: PositionType::Absolute,
 		left: Val::Px(screen.x - width * 0.5),
-		top: Val::Px(screen.y - size * 0.85),
+		top: Val::Px(screen.y - size * 0.85 * pin_lines(label)),
 		width: Val::Px(width),
 		justify_content: JustifyContent::Center,
 		..default()
@@ -742,7 +778,7 @@ fn map_pin_node(screen: Vec2, size: f32, label: &str) -> Node {
 fn place_map_pin(node: &mut Node, screen: Vec2, size: f32, label: &str) {
 	let width = pin_width(size, label);
 	node.left = Val::Px(screen.x - width * 0.5);
-	node.top = Val::Px(screen.y - size * 0.85);
+	node.top = Val::Px(screen.y - size * 0.85 * pin_lines(label));
 	node.width = Val::Px(width);
 }
 
@@ -1094,9 +1130,10 @@ mod tests {
 	}
 
 	#[test]
-	fn bilingual_label_appends_english() {
-		assert_eq!(bilingual("ʃin", &["ridge".into()]), "ʃin (ridge)");
-		assert_eq!(bilingual("ʃin", &[String::new()]), "ʃin");
+	fn bilingual_label_stacks_title_case_english() {
+		assert_eq!(map_name_label("ʃin", &["ridge".into()]), "Ʃin\nRidge");
+		assert_eq!(map_name_label("red bush", &[String::new()]), "Red Bush");
+		assert_eq!(map_name_label("oak grove", &["green wood".into()]), "Oak Grove\nGreen Wood");
 	}
 
 	#[test]
@@ -1125,7 +1162,7 @@ mod tests {
 		assert!(view.contains(wanted[0].xz));
 		assert!((wanted[0].xz.x - view.center().x).abs() < view.width() * 0.2);
 		assert!(wanted[0].xz.y > view.center().y);
-		assert_eq!(wanted[0].label, "ʃin (ridge)");
+		assert_eq!(wanted[0].label, "Ʃin\nRidge");
 	}
 
 	#[test]
