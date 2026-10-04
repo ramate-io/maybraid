@@ -1,6 +1,7 @@
 //! Compiled handles and named definitions, loaded once.
 
 use bevy::prelude::*;
+use bevy_hanabi::prelude::{EffectMaterial, ParticleEffect};
 use bevy_hanabi::EffectAsset;
 
 use crate::assets::{fire_flipbook, smoke_flipbook};
@@ -61,9 +62,25 @@ pub fn setup_vfx_library(
 		fireball: fireball::definition(fireball_part.clone()),
 		smoke: smoke::definition(smoke_part.clone()),
 		sparks: sparks::definition(sparks_part.clone()),
-		firey_explosion: firey_explosion::definition(fireball_part, smoke_part, sparks_part),
+		firey_explosion: firey_explosion::definition(
+			fireball_part.clone(),
+			smoke_part.clone(),
+			sparks_part.clone(),
+		),
 		flipbooks,
 	};
+	// Hidden instances compile GPU shaders before the first visible burst.
+	for part in [&fireball_part, &smoke_part, &sparks_part] {
+		let mut warmup = commands.spawn((
+			Name::new(format!("vfx-warmup-{}", part.name)),
+			ParticleEffect::new(part.effect.clone()),
+			Transform::from_xyz(0.0, -80.0, 0.0),
+			Visibility::Hidden,
+		));
+		if !part.images.is_empty() {
+			warmup.insert(EffectMaterial { images: part.images.clone() });
+		}
+	}
 	commands.insert_resource(library);
 }
 

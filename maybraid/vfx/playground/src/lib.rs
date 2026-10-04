@@ -13,7 +13,7 @@ use bevy::prelude::*;
 use game_commands::command::GameCommandPlugin;
 use ground::setup_ground;
 use maybraid_vfx::VfxPlugin;
-use show::{apply_pending_shows, LastVfxShow};
+use show::{apply_pending_shows, repeat_shown_effect, LastVfxShow, RepeatingVfxShow};
 
 use crate::commands::PendingVfxShows;
 
@@ -23,6 +23,7 @@ impl Plugin for VfxPlaygroundPlugin {
 	fn build(&self, app: &mut App) {
 		app.init_resource::<PendingVfxShows>()
 			.init_resource::<LastVfxShow>()
+			.init_resource::<RepeatingVfxShow>()
 			.add_plugins(VfxPlugin)
 			.add_plugins(GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()));
 		app.add_systems(Startup, (camera::setup_camera, setup_lighting, setup_ground))
@@ -32,6 +33,7 @@ impl Plugin for VfxPlaygroundPlugin {
 					camera::release_modifiers_on_focus_change.before(camera::camera_controller),
 					camera::camera_controller,
 					apply_pending_shows,
+					repeat_shown_effect.after(apply_pending_shows),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 				),
 			);

@@ -14,3 +14,4 @@ In-game (press `/`):
 - `show` — same as `firey-explosion`
 - `show flash|fireball|smoke|sparks` — one layer
 - Repeat a command to overlay concurrent instances
+- The last effect loops so a one-shot burst can be judged

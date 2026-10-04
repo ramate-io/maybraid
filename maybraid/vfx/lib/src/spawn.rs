@@ -2,7 +2,10 @@
 
 use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
-use bevy_hanabi::prelude::{EffectMaterial, EffectSpawner, ParticleEffect, SpawnerSettings};
+use bevy_hanabi::prelude::{
+	CompiledParticleEffect, EffectMaterial, EffectSpawner, EffectSystems, ParticleEffect,
+	SpawnerSettings,
+};
 
 use crate::composition::{EffectDefinition, EffectLayer, EffectPart};
 
@@ -42,6 +45,8 @@ pub struct VfxInstance {
 	pub name: String,
 	pub age: f32,
 	pub duration: f32,
+	/// False until Hanabi has compiled and the first burst can emit.
+	pub armed: bool,
 }
 
 /// Layers waiting for their start delay relative to the root.
@@ -58,6 +63,15 @@ pub struct VfxFlash {
 	pub fade: f32,
 	pub peak: f32,
 }
+
+/// Particle layer waiting for [`CompiledParticleEffect::is_ready`].
+#[derive(Component, Debug)]
+pub struct VfxEmitter {
+	pub count: f32,
+}
+
+#[derive(Component, Debug)]
+pub struct VfxEmitterArmed;
 
 /// Spawn a named definition at `spawn.transform`. Returns the root entity.
 pub fn spawn_vfx(
@@ -87,8 +101,8 @@ pub fn spawn_vfx(
 		.spawn((
 			Name::new(format!("vfx-{}", definition.name)),
 			root_transform,
-			Visibility::default(),
-			VfxInstance { name: definition.name.clone(), age: 0.0, duration },
+			Visibility::Visible,
+			VfxInstance { name: definition.name.clone(), age: 0.0, duration, armed: false },
 			VfxPendingLayers { layers: pending, spawn: spawn.clone() },
 			NotShadowCaster,
 		))
@@ -111,13 +125,46 @@ impl SpawnVfxExt for Commands<'_, '_> {
 	}
 }
 
+/// Reset `once` spawners only after Hanabi compiled the GPU effect.
+pub fn arm_vfx_emitters(
+	mut commands: Commands,
+	mut emitters: Query<
+		(Entity, &VfxEmitter, &CompiledParticleEffect, Option<&mut EffectSpawner>),
+		Without<VfxEmitterArmed>,
+	>,
+) {
+	for (entity, emitter, compiled, spawner) in &mut emitters {
+		if !compiled.is_ready() {
+			continue;
+		}
+		let settings = SpawnerSettings::once(emitter.count.into());
+		if let Some(mut spawner) = spawner {
+			spawner.settings = settings;
+			spawner.reset();
+			spawner.active = true;
+		} else {
+			commands.entity(entity).insert(EffectSpawner::new(&settings));
+		}
+		commands.entity(entity).insert(VfxEmitterArmed);
+	}
+}
+
 pub fn tick_vfx_instances(
 	mut commands: Commands,
 	time: Res<Time>,
+	emitters: Query<Has<VfxEmitterArmed>, With<VfxEmitter>>,
+	children: Query<&Children>,
 	mut instances: Query<(Entity, &mut VfxInstance, &mut VfxPendingLayers)>,
 ) {
 	let dt = time.delta_secs();
 	for (entity, mut instance, mut pending) in &mut instances {
+		if !instance.armed {
+			instance.armed = instance_emitters_armed(entity, &children, &emitters);
+			if !instance.armed {
+				continue;
+			}
+			instance.age = 0.0;
+		}
 		instance.age += dt;
 		let spawn = pending.spawn.clone();
 		let mut remain = Vec::new();
@@ -151,8 +198,31 @@ pub fn tick_vfx_flashes(
 	}
 }
 
+pub fn vfx_lifecycle_plugin(app: &mut App) {
+	app.add_systems(PostUpdate, arm_vfx_emitters.before(EffectSystems::TickSpawners))
+		.add_systems(Update, (tick_vfx_instances, tick_vfx_flashes));
+}
+
+fn instance_emitters_armed(
+	entity: Entity,
+	children: &Query<&Children>,
+	emitters: &Query<Has<VfxEmitterArmed>, With<VfxEmitter>>,
+) -> bool {
+	let Ok(kids) = children.get(entity) else {
+		return true;
+	};
+	for child in kids.iter() {
+		let Ok(armed) = emitters.get(child) else {
+			continue;
+		};
+		if !armed {
+			return false;
+		}
+	}
+	true
+}
+
 fn realize_layer(commands: &mut Commands, parent: Entity, layer: &EffectLayer, spawn: &VfxSpawn) {
-	// Emitters simulate in local space and inherit the root's world pose + scale.
 	let transform = Transform {
 		translation: layer.transform.translation,
 		rotation: layer.transform.rotation,
@@ -167,7 +237,7 @@ fn realize_layer(commands: &mut Commands, parent: Entity, layer: &EffectLayer, s
 				transform,
 				Visibility::Inherited,
 				ParticleEffect::new(part.effect.clone()),
-				EffectSpawner::new(&SpawnerSettings::once(count.into())),
+				VfxEmitter { count },
 				NotShadowCaster,
 			));
 			if !part.images.is_empty() {

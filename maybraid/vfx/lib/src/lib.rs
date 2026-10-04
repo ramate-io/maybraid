@@ -26,7 +26,7 @@ use bevy::prelude::*;
 use bevy_hanabi::HanabiPlugin;
 
 use crate::library::setup_vfx_library;
-use crate::spawn::{tick_vfx_flashes, tick_vfx_instances};
+use crate::spawn::vfx_lifecycle_plugin;
 
 /// Registers Hanabi, compiles shared definitions once, and ticks instance cleanup.
 pub struct VfxPlugin;
@@ -36,7 +36,7 @@ impl Plugin for VfxPlugin {
 		if !app.is_plugin_added::<HanabiPlugin>() {
 			app.add_plugins(HanabiPlugin);
 		}
-		app.add_systems(Startup, setup_vfx_library)
-			.add_systems(Update, (tick_vfx_instances, tick_vfx_flashes));
+		app.add_systems(Startup, setup_vfx_library);
+		vfx_lifecycle_plugin(app);
 	}
 }

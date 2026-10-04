@@ -47,9 +47,9 @@ pub fn compile(effects: &mut Assets<EffectAsset>, smoke: &FlipbookAsset) -> Part
 	color.add_key(0.4, Vec4::new(0.32, 0.32, 0.33, 0.28));
 	color.add_key(1.0, Vec4::new(0.16, 0.16, 0.17, 0.0));
 	let mut size = bevy_hanabi::Gradient::new();
-	size.add_key(0.0, Vec3::splat(0.28));
-	size.add_key(0.5, Vec3::splat(0.5));
-	size.add_key(1.0, Vec3::splat(0.72));
+	size.add_key(0.0, Vec3::splat(0.55));
+	size.add_key(0.5, Vec3::splat(0.95));
+	size.add_key(1.0, Vec3::splat(1.35));
 
 	let mut module = writer.finish();
 	module.add_texture_slot("smoke");
