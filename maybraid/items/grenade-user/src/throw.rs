@@ -230,14 +230,17 @@ fn release_grenade(
 	);
 }
 
-/// Body-forward toss. Third person follows heading; look yaw 0 is camera `-Z`, not body forward.
+/// Camera `-Z` with the same yaw×pitch product as the follow camera.
+pub fn look_forward(look: &PlayerLook) -> Vec3 {
+	(Quat::from_rotation_y(look.yaw) * Quat::from_rotation_x(look.pitch)) * -Vec3::Z
+}
+
+/// First person follows the camera. Third person uses body heading; orbit pitch is not a throw angle.
 pub fn throw_aim(facing: Vec3, look: &PlayerLook) -> Vec3 {
 	if look.first_person {
-		return (Quat::from_rotation_y(look.yaw) * Quat::from_rotation_x(-look.pitch)) * -Vec3::Z;
+		return look_forward(look);
 	}
-	let flat = Vec3::new(facing.x, 0.0, facing.z).normalize_or(Vec3::Z);
-	let right = Vec3::Y.cross(flat).normalize_or(Vec3::X);
-	(Quat::from_axis_angle(right, -look.pitch) * flat).normalize_or(flat)
+	Vec3::new(facing.x, 0.0, facing.z).normalize_or(Vec3::Z)
 }
 
 pub fn launch_velocity(aim: Vec3, stats: &GrenadeStats, inherit: Vec3) -> Vec3 {
@@ -273,6 +276,22 @@ mod tests {
 		let look = PlayerLook { yaw: 0.0, pitch: 0.0, first_person: true, ..default() };
 		let aim = throw_aim(Vec3::Z, &look);
 		assert!(aim.z < 0.0);
+	}
+
+	#[test]
+	fn first_person_positive_pitch_throws_up() {
+		let look = PlayerLook { yaw: 0.0, pitch: 0.4, first_person: true, ..default() };
+		let aim = throw_aim(Vec3::Z, &look);
+		assert!(aim.y > 0.2, "camera-up must toss up, got {aim:?}");
+		assert!(aim.z < 0.0);
+	}
+
+	#[test]
+	fn third_person_ignores_orbit_pitch() {
+		let look = PlayerLook { yaw: 0.0, pitch: 0.6, first_person: false, ..default() };
+		let aim = throw_aim(Vec3::Z, &look);
+		assert!(aim.y.abs() < 1e-5, "orbit pitch is not a throw angle, got {aim:?}");
+		assert!(aim.z > 0.9);
 	}
 
 	#[test]

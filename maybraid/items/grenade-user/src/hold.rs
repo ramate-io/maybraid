@@ -15,19 +15,18 @@ use characters::{
 use firearm_user::{HoldingArms, WeaponSwap};
 use grenades::grenade_mesh;
 use player::{PlayerLook, PlayerUse};
-use std::f32::consts::FRAC_PI_2;
 
 use crate::throw::{
-	throw_aim, yaw_xz, GrenadePhase, GrenadeThrow, GrenadeUser, GrenadeUserSettings,
+	look_forward, yaw_xz, GrenadePhase, GrenadeThrow, GrenadeUser, GrenadeUserSettings,
 };
 
 /// Preferred grip points. A later `hand_socket.R` on the body rig is picked first.
 pub const RIGHT_HAND_SOCKETS: &[&str] = &["hand_socket.R", "hand.R", "palm.R"];
 
 const HELD_SCALE: f32 = 0.2;
-/// Elbow out to the right so the overhand does not fold over the head.
-const THROW_POLE: Vec3 = Vec3::new(1.0, 0.4, -0.2);
-const THROW_POLE_FALLBACK: Vec3 = Vec3::new(0.6, 0.8, 0.2);
+/// Body +X is left. Negative X wings the right elbow out laterally.
+const THROW_POLE: Vec3 = Vec3::new(-1.0, 0.45, -0.2);
+const THROW_POLE_FALLBACK: Vec3 = Vec3::new(-0.6, 0.8, 0.2);
 
 #[derive(Component, Clone, Copy, Debug)]
 pub struct HeldGrenade {
@@ -84,7 +83,7 @@ pub fn stamp_holding_grenade(
 	rigs: Query<(Entity, &CharacterRig, Has<HoldingGrenade>, Has<HoldingArms>)>,
 ) {
 	for (members, child_of) in &visuals {
-		let overlay = users.get(child_of.parent()).ok().is_some_and(GrenadeThrow::busy);
+		let overlay = users.get(child_of.parent()).is_ok();
 		for member in members.iter() {
 			let Ok((entity, rig, holding, armed)) = rigs.get(member) else {
 				continue;
@@ -108,42 +107,31 @@ pub fn stamp_holding_grenade(
 pub fn pose_held_grenade(
 	users: Query<(&GrenadeUser, &GrenadeThrow, &PlayerLook)>,
 	visuals: Query<
-		(&Transform, &CharacterHeading, &CharacterMembers, &ChildOf),
+		(&Transform, &CharacterHeading, &ChildOf),
 		(With<CharacterRoot>, Without<HeldGrenade>, Without<AnimBone>),
 	>,
-	maps: Query<&BoneMap, Without<HeldGrenade>>,
-	mut transforms: ParamSet<(
-		TransformHelper,
-		Query<&mut Transform, (With<HeldGrenade>, Without<CharacterRoot>)>,
-	)>,
+	mut grenades: Query<&mut Transform, (With<HeldGrenade>, Without<CharacterRoot>)>,
 ) {
-	for (visual, heading, members, child_of) in &visuals {
+	for (visual, heading, child_of) in &visuals {
 		let Ok((user, throw, look)) = users.get(child_of.parent()) else {
 			continue;
 		};
 		if throw.busy() {
 			continue;
 		}
-		let helper = transforms.p0();
-		let Some(hand) = right_hand(members, &maps, &helper) else {
-			drop(helper);
-			continue;
-		};
-		drop(helper);
-		let facing = heading.0;
-		let yaw = if look.first_person { look.yaw } else { yaw_xz(facing) };
-		let mut grenades = transforms.p1();
+		let forward = primed_forward(heading.0, look);
+		let right = Vec3::Y.cross(forward).normalize_or(Vec3::X);
 		let Ok(mut transform) = grenades.get_mut(user.held) else {
 			continue;
 		};
 		*transform = Transform {
-			translation: hand
-				+ Vec3::Y * user.settings.hold_up
-				+ Quat::from_rotation_y(yaw) * Vec3::X * user.settings.hold_right,
-			rotation: Quat::from_rotation_y(yaw),
+			translation: visual.translation
+				+ Vec3::Y * (1.28 + user.settings.hold_up)
+				+ right * (0.18 + user.settings.hold_right)
+				+ forward * (0.32 + user.settings.hold_forward),
+			rotation: Quat::from_rotation_y(yaw_xz(forward)),
 			scale: Vec3::splat(HELD_SCALE),
 		};
-		let _ = visual;
 	}
 }
 
@@ -159,7 +147,7 @@ pub fn apply_grenade_swap_pose(
 }
 
 pub fn sync_throw_arm(
-	users: Query<(&GrenadeUser, &GrenadeThrow, &PlayerLook, Has<WeaponSwap>)>,
+	users: Query<(&GrenadeUser, &GrenadeThrow, Has<WeaponSwap>)>,
 	carriers: Query<&InventoryUser>,
 	bags: Query<&Inventory>,
 	visuals: Query<
@@ -180,10 +168,10 @@ pub fn sync_throw_arm(
 	)>,
 ) {
 	for (visual, heading, members, child_of) in &visuals {
-		let Ok((user, throw, look, swapping)) = users.get(child_of.parent()) else {
+		let Ok((user, throw, swapping)) = users.get(child_of.parent()) else {
 			continue;
 		};
-		if swapping || !throw.busy() {
+		if swapping {
 			continue;
 		}
 		let throw_secs = carriers
@@ -194,12 +182,7 @@ pub fn sync_throw_arm(
 			.map(|stats| stats.throw_secs)
 			.unwrap_or_else(|| GrenadeStats::standard().throw_secs);
 		let t = throw_phase_t(throw.phase, throw_secs);
-		let helper = transforms.p0();
-		let Some(body_rot) = helper.compute_global_transform(visual).ok().map(|tf| tf.rotation())
-		else {
-			continue;
-		};
-		drop(helper);
+		let _ = visual;
 		for member in members.iter() {
 			let Ok((mut rig, map, mailbox)) = rigs.get_mut(member) else {
 				continue;
@@ -207,24 +190,16 @@ pub fn sync_throw_arm(
 			if mailbox.output.is_empty() {
 				continue;
 			}
-			let helper = transforms.p0();
-			let target = bone_world(map, &helper, "humerus.R").and_then(|shoulder| {
-				let world = throw_hand_from_shoulder(shoulder, heading.0, look, t);
-				let dir = world - shoulder;
-				(dir.length_squared() >= 1e-6).then(|| body_rot.inverse() * dir)
-			});
-			drop(helper);
+			let target = clamp_throw_reach(throw_reach_from_shoulder(t));
 			let mut bones = transforms.p1();
 			rig.pose.clone_from(&mailbox.output);
-			if let Some(target) = target {
-				let arm = rig.arm_pose(Side::Right);
-				let length = arm.forearm.transform.translation.length();
-				if let Some(reach) = TwoBoneAim::reach(target, THROW_POLE, length, length)
-					.or_else(|| TwoBoneAim::reach(target, THROW_POLE_FALLBACK, length, length))
-				{
-					reset_arm_to_rest(&mut rig, map, &bones, Side::Right);
-					pose_throw_arm(&mut rig, reach);
-				}
+			let arm = rig.arm_pose(Side::Right);
+			let length = arm.forearm.transform.translation.length();
+			if let Some(reach) = TwoBoneAim::reach(target, THROW_POLE, length, length)
+				.or_else(|| TwoBoneAim::reach(target, THROW_POLE_FALLBACK, length, length))
+			{
+				reset_arm_to_rest(&mut rig, map, &bones, Side::Right);
+				pose_throw_arm(&mut rig, reach);
 			}
 			write_throw_bones(&rig, map, &mut bones);
 			drop(bones);
@@ -281,15 +256,23 @@ fn throw_phase_t(phase: GrenadePhase, throw_secs: f32) -> f32 {
 	}
 }
 
-/// Shoulder-local overhand: `(right, up, forward)` in heading space.
+fn primed_forward(facing: Vec3, look: &PlayerLook) -> Vec3 {
+	if look.first_person {
+		let aim = look_forward(look);
+		return Vec3::new(aim.x, 0.0, aim.z).normalize_or(-Vec3::Z);
+	}
+	Vec3::new(facing.x, 0.0, facing.z).normalize_or(Vec3::Z)
+}
+
+/// Body-local reach from the right shoulder. `-X` is lateral, `+Z` is fight-forward.
 fn throw_reach_from_shoulder(t: f32) -> Vec3 {
 	const KEYS: [(f32, Vec3); 6] = [
-		(0.00, Vec3::new(0.20, -0.22, 0.22)),
-		(0.22, Vec3::new(0.24, 0.02, 0.16)),
-		(0.45, Vec3::new(0.28, 0.32, 0.10)),
-		(0.61, Vec3::new(0.12, 0.24, 0.40)),
-		(0.82, Vec3::new(0.10, 0.02, 0.42)),
-		(1.00, Vec3::new(0.14, -0.16, 0.24)),
+		(0.00, Vec3::new(-0.20, 0.12, 0.32)),
+		(0.22, Vec3::new(-0.26, 0.20, 0.22)),
+		(0.45, Vec3::new(-0.30, 0.34, 0.10)),
+		(0.61, Vec3::new(-0.14, 0.20, 0.42)),
+		(0.82, Vec3::new(-0.12, 0.02, 0.40)),
+		(1.00, Vec3::new(-0.18, 0.08, 0.28)),
 	];
 	let t = t.clamp(0.0, 1.0);
 	for window in KEYS.windows(2) {
@@ -303,26 +286,37 @@ fn throw_reach_from_shoulder(t: f32) -> Vec3 {
 	KEYS[KEYS.len() - 1].1
 }
 
-fn throw_hand_from_shoulder(shoulder: Vec3, facing: Vec3, look: &PlayerLook, t: f32) -> Vec3 {
-	let aim = throw_aim(facing, look);
-	let flat = Vec3::new(aim.x, 0.0, aim.z).normalize_or(Vec3::Z);
-	let right = Vec3::Y.cross(flat).normalize_or(Vec3::X);
-	let reach = throw_reach_from_shoulder(t);
-	let mut world = shoulder + right * reach.x + Vec3::Y * reach.y + flat * reach.z;
-	let along = (world - shoulder).dot(flat);
-	if along < 0.08 {
-		world += flat * (0.08 - along);
-	}
-	world
+fn clamp_throw_reach(mut reach: Vec3) -> Vec3 {
+	reach.x = reach.x.min(-0.08);
+	reach.z = reach.z.max(0.08);
+	reach
 }
 
 fn pose_throw_arm(rig: &mut HumanoidV0Rig, reach: TwoBoneAim) {
+	let roll = humerus_roll_for_reach(rig, reach);
 	let mut posed = rig.arm_pose(Side::Right);
-	posed.humerus = rig.humerus_along_with_roll(Side::Right, reach.upper_along, FRAC_PI_2);
+	posed.humerus = rig.humerus_along_with_roll(Side::Right, reach.upper_along, roll);
 	rig.pose_arm(posed);
 	let mut posed = rig.arm_pose(Side::Right);
 	posed.forearm = rig.articulate_on_rig(posed.forearm, 0.0, reach.flex);
 	rig.pose_arm(posed);
+}
+
+fn humerus_roll_for_reach(rig: &HumanoidV0Rig, reach: TwoBoneAim) -> f32 {
+	let arm = rig.arm_pose(Side::Right);
+	let humerus = rig.humerus_along_with_roll(Side::Right, reach.upper_along, 0.0);
+	let forearm = rig.articulate_on_rig(arm.forearm, 0.0, reach.flex);
+	let humerus_world = rig.parent_world_rotation(&humerus.name) * humerus.transform.rotation;
+	let zero_roll_lower = forearm.transform.rotation * BONE_LENGTH_AXIS;
+	let desired_lower = humerus_world.inverse() * reach.lower_along;
+	signed_angle_about_axis(zero_roll_lower, desired_lower, BONE_LENGTH_AXIS).unwrap_or(0.0)
+}
+
+fn signed_angle_about_axis(from: Vec3, to: Vec3, axis: Vec3) -> Option<f32> {
+	let axis = axis.try_normalize()?;
+	let from = (from - axis * from.dot(axis)).try_normalize()?;
+	let to = (to - axis * to.dot(axis)).try_normalize()?;
+	Some(axis.dot(from.cross(to)).atan2(from.dot(to)))
 }
 
 fn reset_arm_to_rest(
@@ -350,22 +344,6 @@ fn reset_arm_to_rest(
 	rig.pose_arm(arm);
 }
 
-fn right_hand(
-	members: &CharacterMembers,
-	maps: &Query<&BoneMap, Without<HeldGrenade>>,
-	helper: &TransformHelper,
-) -> Option<Vec3> {
-	for member in members.iter() {
-		let Ok(map) = maps.get(member) else {
-			continue;
-		};
-		if let Some(hand) = named_hand(map, helper).or_else(|| distal_forearm(map, helper)) {
-			return Some(hand);
-		}
-	}
-	None
-}
-
 fn named_hand(map: &BoneMap, helper: &TransformHelper) -> Option<Vec3> {
 	for name in RIGHT_HAND_SOCKETS {
 		if let Some(&entity) = map.by_name.get(*name) {
@@ -387,11 +365,6 @@ fn distal_forearm(map: &BoneMap, helper: &TransformHelper) -> Option<Vec3> {
 		.map(|humerus| humerus.translation().distance(global.translation()))
 		.unwrap_or(0.28);
 	Some(global.translation() + global.rotation() * (BONE_LENGTH_AXIS * length))
-}
-
-fn bone_world(map: &BoneMap, helper: &TransformHelper, name: &str) -> Option<Vec3> {
-	let entity = *map.by_name.get(name)?;
-	helper.compute_global_transform(entity).ok().map(|global| global.translation())
 }
 
 fn write_throw_bones(
@@ -436,12 +409,19 @@ mod tests {
 	}
 
 	#[test]
-	fn throw_target_stays_in_front_of_heading() {
-		let look = PlayerLook::default();
-		let shoulder = Vec3::new(0.2, 1.4, 0.0);
+	fn primed_hold_is_high_forward_and_lateral() {
+		let primed = throw_reach_from_shoulder(0.0);
+		assert!(primed.x < -0.12, "right arm stays out, got {primed:?}");
+		assert!(primed.y > 0.0, "primed hold is chest-high, got {primed:?}");
+		assert!(primed.z > 0.24, "primed hold is in front, got {primed:?}");
+	}
+
+	#[test]
+	fn throw_reach_stays_lateral_and_forward() {
 		for t in [0.0, 0.22, 0.45, 0.61, 0.82, 1.0] {
-			let target = throw_hand_from_shoulder(shoulder, Vec3::Z, &look, t);
-			assert!(target.z > shoulder.z, "t={t} must stay in front, got {target:?}");
+			let reach = clamp_throw_reach(throw_reach_from_shoulder(t));
+			assert!(reach.x < 0.0, "t={t} crossed the body, got {reach:?}");
+			assert!(reach.z > 0.0, "t={t} went behind, got {reach:?}");
 		}
 	}
 
@@ -450,8 +430,15 @@ mod tests {
 		let start = throw_reach_from_shoulder(0.0);
 		let cock = throw_reach_from_shoulder(0.45);
 		let release = throw_reach_from_shoulder(0.61);
-		assert!(cock.y > start.y + 0.35, "must raise, start={start:?} cock={cock:?}");
+		assert!(cock.y > start.y + 0.15, "must raise, start={start:?} cock={cock:?}");
 		assert!(release.z > cock.z + 0.2, "must snap forward, cock={cock:?} release={release:?}");
+	}
+
+	#[test]
+	fn right_elbow_pole_wings_out() {
+		let reach = TwoBoneAim::reach(throw_reach_from_shoulder(0.0), THROW_POLE, 0.35, 0.35)
+			.expect("primed reach");
+		assert!(reach.upper_along.x < 0.0, "elbow must wing out, got {:?}", reach.upper_along);
 	}
 
 	#[test]
