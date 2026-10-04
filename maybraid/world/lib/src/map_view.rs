@@ -7,9 +7,9 @@ use game_commands::command::TextEntryFocus;
 use geneva::{LanguageOverlay, NameKey, NamedOverlay};
 use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
 use menu_components::{
-	BARLOW_BLACK, BONES_ICON, ITEM_FONT_SIZE, MAP_ARROW_ICON, MAP_HOUSE_ICON, MAP_MOUNTAIN_ICON,
-	MAP_TOWN_ICON, MAP_TREE_ICON, MAP_WATER_ICON, NOTO_SANS_REGULAR, TEXT_SALMON, TEXT_YELLOW,
-	TEXT_YELLOW_FAINT,
+	BARLOW_BLACK, BONES_ICON, ITEM_FONT_SIZE, MAP_ARROW_ICON, MAP_GROVE_ICON, MAP_HOUSE_ICON,
+	MAP_MOUNTAIN_ICON, MAP_TOWN_ICON, MAP_TREE_ICON, MAP_WATER_ICON, NOTO_SANS_REGULAR,
+	TEXT_SALMON, TEXT_YELLOW, TEXT_YELLOW_FAINT,
 };
 use player::CameraFollow;
 use player_camera::{
@@ -39,6 +39,7 @@ const PLAYER_MARKER_PX: f32 = 14.0;
 const DEATH_BONES_PX: f32 = 32.0;
 const SELECTED_POI_LABEL_PX: f32 = 18.0;
 const MAP_MARK_PX: f32 = 22.0;
+const MAP_MARK_GAP: f32 = 6.0;
 const MAP_ARROW_PX: f32 = 18.0;
 const LABEL_SCREEN_GUTTER: f32 = 72.0;
 const SELECTION_RING_PX: f32 = 46.0;
@@ -147,6 +148,7 @@ struct MapBonesIcon(Handle<Image>);
 #[derive(Resource, Clone)]
 struct MapMarkIcons {
 	tree: Handle<Image>,
+	grove: Handle<Image>,
 	house: Handle<Image>,
 	town: Handle<Image>,
 	mountain: Handle<Image>,
@@ -157,6 +159,7 @@ struct MapMarkIcons {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum MapMarkKind {
 	Tree,
+	Grove,
 	House,
 	Town,
 	Mountain,
@@ -232,6 +235,7 @@ fn spawn_map_name_hud(mut commands: Commands, assets: Res<AssetServer>) {
 	commands.insert_resource(MapBonesIcon(assets.load(BONES_ICON)));
 	commands.insert_resource(MapMarkIcons {
 		tree: assets.load(MAP_TREE_ICON),
+		grove: assets.load(MAP_GROVE_ICON),
 		house: assets.load(MAP_HOUSE_ICON),
 		town: assets.load(MAP_TOWN_ICON),
 		mountain: assets.load(MAP_MOUNTAIN_ICON),
@@ -868,8 +872,9 @@ fn pin_lines(label: &str) -> f32 {
 }
 
 fn pin_label_half(target: &MapPinWanted) -> Vec2 {
+	let mark = if target.mark.is_some() { MAP_MARK_PX + MAP_MARK_GAP } else { 0.0 };
 	Vec2::new(
-		pin_width(target.size, &target.label) * 0.5,
+		pin_width(target.size, &target.label) * 0.5 + mark,
 		target.size * 0.85 * pin_lines(&target.label),
 	)
 }
@@ -917,7 +922,7 @@ fn comfortable_label_screen(
 
 fn mark_for_name(name: &NamedOverlay) -> Option<MapMarkKind> {
 	match name.key {
-		NameKey::Grove(_) | NameKey::Forest(_) => Some(MapMarkKind::Tree),
+		NameKey::Grove(_) | NameKey::Forest(_) => Some(MapMarkKind::Grove),
 		NameKey::Place { .. } | NameKey::ProvisionalPlace { .. } => Some(MapMarkKind::House),
 		NameKey::Urban(_) | NameKey::UrbanLeaf(_) => Some(MapMarkKind::Town),
 		NameKey::Geographic(_) => mark_from_english(&name.english),
@@ -975,11 +980,19 @@ fn mark_from_english(english: &[String]) -> Option<MapMarkKind> {
 fn mark_image(icons: &MapMarkIcons, kind: MapMarkKind) -> Handle<Image> {
 	match kind {
 		MapMarkKind::Tree => icons.tree.clone(),
+		MapMarkKind::Grove => icons.grove.clone(),
 		MapMarkKind::House => icons.house.clone(),
 		MapMarkKind::Town => icons.town.clone(),
 		MapMarkKind::Mountain => icons.mountain.clone(),
 		MapMarkKind::Water => icons.water.clone(),
 	}
+}
+
+fn type_mark_screen(label: Vec2, target: &MapPinWanted, highlighted: Option<PoiId>) -> Vec2 {
+	let width = pin_width(target.size, &target.label);
+	let top = pin_label_top(label.y, target, highlighted);
+	let height = target.size * pin_lines(&target.label);
+	Vec2::new(label.x - width * 0.5 - MAP_MARK_GAP - MAP_MARK_PX * 0.5, top + height * 0.5)
 }
 
 fn arrow_rotation(dir: Vec2) -> f32 {
@@ -1042,6 +1055,9 @@ fn sync_map_type_marks(
 	let Ok(hud) = hud.single() else {
 		return;
 	};
+	let viewport = camera.logical_viewport_rect();
+	let picker = picker_prompt_visible(&map);
+	let highlighted = pending.as_deref().and_then(|state| state.pending.as_ref()?.highlighted);
 	let wanted = map_pin_targets(&map, &overlay, registry.as_deref(), pending.as_deref());
 	let mut assigned = Vec::new();
 	for (entity, mark, mut node, mut image, mut visibility) in &mut marks {
@@ -1051,16 +1067,14 @@ fn sync_map_type_marks(
 			commands.entity(entity).despawn();
 			continue;
 		};
-		let Some((screen, on_screen)) =
+		let Some((projected, on_screen)) =
 			project_mob_pin(camera, camera_transform, pin_world(&surface, target.xz))
 		else {
 			*visibility = Visibility::Hidden;
 			continue;
 		};
-		if !on_screen {
-			*visibility = Visibility::Hidden;
-			continue;
-		}
+		let label = pin_label_screen(projected, on_screen, viewport, target, picker).0;
+		let screen = type_mark_screen(label, target, highlighted);
 		place_type_mark(&mut node, screen);
 		if let Some(kind) = target.mark {
 			image.image = mark_image(&icons, kind);
@@ -1072,17 +1086,16 @@ fn sync_map_type_marks(
 		if assigned.contains(&target.id) || target.mark.is_none() {
 			continue;
 		}
-		let Some((screen, on_screen)) =
+		let Some((projected, on_screen)) =
 			project_mob_pin(camera, camera_transform, pin_world(&surface, target.xz))
 		else {
 			continue;
 		};
-		if !on_screen {
-			continue;
-		}
 		let Some(kind) = target.mark else {
 			continue;
 		};
+		let label = pin_label_screen(projected, on_screen, viewport, &target, picker).0;
+		let screen = type_mark_screen(label, &target, highlighted);
 		commands.entity(hud).with_children(|root| {
 			root.spawn((
 				Name::new("map-type-mark"),
@@ -1944,13 +1957,47 @@ mod tests {
 	#[test]
 	fn map_uses_kenney_cartography_marks() {
 		assert_eq!(MAP_TREE_ICON, "iconography/kenney/cartography/tree_pine.png");
+		assert_eq!(MAP_GROVE_ICON, "iconography/kenney/cartography/tree_pines.png");
+		assert_ne!(MAP_TREE_ICON, MAP_GROVE_ICON);
 		assert_eq!(MAP_HOUSE_ICON, "iconography/kenney/cartography/house.png");
 		assert_eq!(MAP_ARROW_ICON, "iconography/kenney/game-icons/arrow_up.png");
+		assert_eq!(
+			mark_for_poi(&test_poi(Vec2::ZERO), &LanguageOverlay::default()),
+			Some(MapMarkKind::Tree)
+		);
+		assert_eq!(
+			mark_for_name(&NamedOverlay {
+				key: NameKey::ProvisionalPlace { qx: 0, qz: 0, label: 1 },
+				surface: "house".into(),
+				english: vec!["amber".into(), "house".into()],
+				provisional: true,
+				xz: Vec2::ZERO,
+				extent: Rect::from_center_size(Vec2::ZERO, Vec2::splat(8.0)),
+			}),
+			Some(MapMarkKind::House)
+		);
 		assert_eq!(mark_from_english(&["blue".into(), "lake".into()]), Some(MapMarkKind::Water));
 		assert_eq!(
 			mark_from_english(&["rolling".into(), "hills".into()]),
 			Some(MapMarkKind::Mountain)
 		);
+	}
+
+	#[test]
+	fn type_marks_sit_left_of_the_name() {
+		let target = MapPinWanted {
+			id: MapPinTarget::Poi(PoiId(1)),
+			xz: Vec2::ZERO,
+			extent: Rect::from_center_size(Vec2::ZERO, Vec2::splat(12.0)),
+			label: "Grove".into(),
+			size: SELECTED_POI_LABEL_PX,
+			mark: Some(MapMarkKind::Grove),
+		};
+		let label = Vec2::new(200.0, 100.0);
+		let mark = type_mark_screen(label, &target, Some(PoiId(1)));
+		let width = pin_width(target.size, &target.label);
+		assert!(mark.x < label.x - width * 0.5);
+		assert!(mark.y > label.y);
 	}
 
 	#[test]

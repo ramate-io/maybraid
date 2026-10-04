@@ -10,12 +10,12 @@ use firearm_user::FirearmUser;
 use firearms::WeaponTrigger;
 use maybraid_character_controller::CharacterIntent;
 use maybraid_input::{PadButton, VirtualPad};
-use mob_characters::{LOCAL_POI, URBAN_POI, VEGETATION_POI};
+use mob_characters::{LOCAL_POI, SALOON_POI, URBAN_POI, VEGETATION_POI};
 use player::{CameraFollow, Player as MaybraidPlayer, PlayerUse};
 use player_camera::{CameraController, FollowCamera};
 use poi_intelligence::{
-	NearbyFallback, NearbyQuery, PoiId, PoiInterest, PoiInterests, PoiRegistry, PoiSystems,
-	DEFAULT_NEARBY_RADIUS,
+	NearbyFallback, NearbyQuery, PoiId, PoiInterest, PoiInterests, PoiKind, PoiRecord, PoiRegistry,
+	PoiSystems,
 };
 use spotting_intelligence::SpotSubject;
 use terrain_layer_model::{OnTerrain, TerrainView};
@@ -52,7 +52,7 @@ impl Default for WorldPlayerRespawnConfig {
 	fn default() -> Self {
 		Self {
 			delay_secs: 4.0,
-			poi_radius: DEFAULT_NEARBY_RADIUS,
+			poi_radius: 320.0,
 			fallback: NearbyFallback::new(60.0, 100.0),
 			interests: default_player_respawn_interests(),
 		}
@@ -392,13 +392,10 @@ fn open_respawn_picker(
 	last_poi: Option<PoiId>,
 ) {
 	let excluded = last_poi.as_slice();
-	let mut records =
-		registry.nearby_in(pending.death_at, config.nearby_query(), &config.interests, excluded);
-	records.sort_by(|a, b| {
-		xz_distance(pending.death_at, a.position)
-			.total_cmp(&xz_distance(pending.death_at, b.position))
-			.then_with(|| a.id.cmp(&b.id))
-	});
+	let records = prefer_building_pois(
+		registry.nearby_in(pending.death_at, config.nearby_query(), &config.interests, excluded),
+		pending.death_at,
+	);
 	pending.candidates = records.iter().map(|record| record.id).collect();
 	pending.highlighted = records.first().map(|record| record.id);
 	pending.highlighted_at = records.first().map(|record| record.position.xz());
@@ -573,12 +570,46 @@ fn death_glaze_color(alpha: f32) -> Color {
 	Color::srgba(0.2, 0.005, 0.025, alpha)
 }
 
+const MAX_VEGETATION_RESPAWN: usize = 4;
+
 fn default_player_respawn_interests() -> PoiInterests {
 	PoiInterests::new([
-		PoiInterest::new(LOCAL_POI, 1.25),
-		PoiInterest::new(URBAN_POI, 1.5),
-		PoiInterest::new(VEGETATION_POI, 1.0),
+		PoiInterest::new(SALOON_POI, 1.7),
+		PoiInterest::new(LOCAL_POI, 1.6),
+		PoiInterest::new(URBAN_POI, 1.55),
+		PoiInterest::new(VEGETATION_POI, 0.4),
 	])
+}
+
+fn is_building_poi(kind: PoiKind) -> bool {
+	kind == LOCAL_POI || kind == URBAN_POI || kind == SALOON_POI
+}
+
+fn prefer_building_pois(records: Vec<PoiRecord>, death_at: Vec3) -> Vec<PoiRecord> {
+	let nearer = |a: &PoiRecord, b: &PoiRecord| {
+		xz_distance(death_at, a.position)
+			.total_cmp(&xz_distance(death_at, b.position))
+			.then_with(|| a.id.cmp(&b.id))
+	};
+	let mut buildings = Vec::new();
+	let mut vegetation = Vec::new();
+	let mut other = Vec::new();
+	for record in records {
+		if is_building_poi(record.kind) {
+			buildings.push(record);
+		} else if record.kind == VEGETATION_POI {
+			vegetation.push(record);
+		} else {
+			other.push(record);
+		}
+	}
+	buildings.sort_by(nearer);
+	other.sort_by(nearer);
+	vegetation.sort_by(nearer);
+	vegetation.truncate(MAX_VEGETATION_RESPAWN);
+	buildings.extend(other);
+	buildings.extend(vegetation);
+	buildings
 }
 
 #[cfg(test)]
@@ -613,16 +644,50 @@ mod tests {
 	#[test]
 	fn player_respawn_prefers_urban_pois() {
 		let interests = WorldPlayerRespawnConfig::default().interests;
-		assert_eq!(interests.weight(URBAN_POI), Some(1.5));
-		assert_eq!(interests.weight(LOCAL_POI), Some(1.25));
-		assert!(interests.contains(VEGETATION_POI));
+		assert_eq!(interests.weight(SALOON_POI), Some(1.7));
+		assert_eq!(interests.weight(LOCAL_POI), Some(1.6));
+		assert_eq!(interests.weight(URBAN_POI), Some(1.55));
+		assert!(interests.weight(VEGETATION_POI).is_some_and(|weight| weight < 0.5));
+	}
+
+	#[test]
+	fn respawn_picker_keeps_buildings_ahead_of_a_few_trees() {
+		let death = Vec3::new(0.0, 1.0, 0.0);
+		let mut records = vec![PoiRecord {
+			id: PoiId(1),
+			entity: Entity::from_bits(1),
+			kind: LOCAL_POI,
+			position: Vec3::new(90.0, 1.0, 0.0),
+			arrival_radius: 6.0,
+			salience: 1.0,
+			local: true,
+			global: false,
+		}];
+		for index in 0..6u64 {
+			records.push(PoiRecord {
+				id: PoiId(10 + index),
+				entity: Entity::from_bits(10 + index),
+				kind: VEGETATION_POI,
+				position: Vec3::new(70.0 + index as f32 * 4.0, 1.0, 0.0),
+				arrival_radius: 4.0,
+				salience: 1.0,
+				local: true,
+				global: false,
+			});
+		}
+		let records = prefer_building_pois(records, death);
+		assert_eq!(records[0].kind, LOCAL_POI);
+		assert_eq!(
+			records.iter().filter(|record| record.kind == VEGETATION_POI).count(),
+			MAX_VEGETATION_RESPAWN
+		);
 	}
 
 	#[test]
 	fn default_respawn_waits_four_seconds_and_scans_nearby() {
 		let config = WorldPlayerRespawnConfig::default();
 		assert_eq!(config.delay_secs, 4.0);
-		assert_eq!(config.poi_radius, DEFAULT_NEARBY_RADIUS);
+		assert_eq!(config.poi_radius, 320.0);
 		assert_eq!(config.fallback, NearbyFallback::new(60.0, 100.0));
 		assert_eq!(config.nearby_query().min_radius, config.fallback.min_radius);
 	}

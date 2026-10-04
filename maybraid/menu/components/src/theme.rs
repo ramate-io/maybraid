@@ -92,8 +92,11 @@ pub const MAYBRAID_LOGO: &str = "iconography/maybraid_logo_icon.png";
 /// Death / last-body mark. Author file: `art/iconography/bones_icon.blend`.
 pub const BONES_ICON: &str = "iconography/bones_icon.png";
 
-/// Kenney cartography pine. Grove / vegetation marks.
+/// Kenney cartography pine. A single tree.
 pub const MAP_TREE_ICON: &str = "iconography/kenney/cartography/tree_pine.png";
+
+/// Kenney cartography pine cluster. A grove or forest.
+pub const MAP_GROVE_ICON: &str = "iconography/kenney/cartography/tree_pines.png";
 
 /// Kenney cartography house. Discoverable places.
 pub const MAP_HOUSE_ICON: &str = "iconography/kenney/cartography/house.png";
