@@ -3,7 +3,7 @@
 use bevy::camera::ScalingMode;
 use bevy::prelude::*;
 use bevy::ui::widget::ViewportNode;
-use crozon_character_items::SkillMapSpec;
+use character_items::SkillMapSpec;
 
 use crate::map::{authored_map, MapExtents, SkillKind, SkillMapId};
 use crate::tile_material::SkillMapTileAssets;

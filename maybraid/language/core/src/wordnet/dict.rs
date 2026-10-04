@@ -1,5 +1,6 @@
 //! Adapter over [`wordnet_db`] for the full Princeton `dict` directory.
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use wordnet_db::{LoadMode, WordNet};
@@ -7,6 +8,7 @@ use wordnet_types::{Pos as WnPos, SynsetId};
 
 use crate::concept::{Concept, ConceptId, ConceptRelation, Pos, RelationKind};
 use crate::error::LanguageError;
+use crate::wordnet::morphy::Morphy;
 use crate::wordnet::normalize_lemma;
 
 /// Directory containing the vendored WordNet 3.1 `data.*` / `index.*` files.
@@ -17,6 +19,7 @@ pub fn bundled_dict_dir() -> PathBuf {
 /// Full WordNet dictionary via mmap. Languages still import neighborhoods lazily.
 pub struct WordNetDict {
 	inner: WordNet,
+	morphy: Morphy,
 }
 
 impl WordNetDict {
@@ -25,7 +28,7 @@ impl WordNetDict {
 		let inner = WordNet::load_with_mode(path, LoadMode::Mmap).map_err(|source| {
 			LanguageError::WordNet { path: path.display().to_string(), detail: source.to_string() }
 		})?;
-		Ok(Self { inner })
+		Ok(Self { inner, morphy: Morphy::from_dir(path)? })
 	}
 
 	pub fn concept(&self, id: ConceptId) -> Option<Concept> {
@@ -37,14 +40,46 @@ impl WordNetDict {
 	}
 
 	pub fn resolve_lemma(&self, lemma: &str) -> Vec<ConceptId> {
-		let lemma = normalize_lemma(lemma);
+		self.lookup_form(&normalize_lemma(lemma))
+	}
+
+	/// Citation-form lookup plus Morphy (`struck` → `strike`, `children` → `child`).
+	pub fn resolve_form(&self, form: &str) -> Vec<ConceptId> {
+		let form = normalize_lemma(form);
+		let mut ids = Vec::new();
+		let mut seen = HashSet::new();
+		for pos in [Pos::Noun, Pos::Verb, Pos::Adjective, Pos::Adverb] {
+			for candidate in self.morphy.candidates(&form, pos) {
+				for id in self.lookup_pos(&candidate, pos) {
+					if seen.insert(id) {
+						ids.push(id);
+					}
+				}
+			}
+		}
+		ids
+	}
+
+	fn lookup_form(&self, lemma: &str) -> Vec<ConceptId> {
 		let mut ids = Vec::new();
 		for pos in [WnPos::Noun, WnPos::Verb, WnPos::Adj, WnPos::Adv] {
-			for synset_id in self.inner.synsets_for_lemma(pos, &lemma) {
+			for synset_id in self.inner.synsets_for_lemma(pos, lemma) {
 				ids.push(from_synset_id(*synset_id));
 			}
 		}
 		ids
+	}
+
+	fn lookup_pos(&self, lemma: &str, pos: Pos) -> Vec<ConceptId> {
+		let Some(wn_pos) = to_wn_pos(pos) else {
+			return Vec::new();
+		};
+		self.inner
+			.synsets_for_lemma(wn_pos, lemma)
+			.iter()
+			.copied()
+			.map(from_synset_id)
+			.collect()
 	}
 
 	pub fn sense(&self, lemma: &str, pos: Pos, sense: usize) -> Option<ConceptId> {

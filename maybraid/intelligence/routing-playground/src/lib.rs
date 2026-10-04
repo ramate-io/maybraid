@@ -26,8 +26,7 @@ use commands::{
 	RequestGo, RequestModeCharacter, RequestModeFree, RequestStalk, RequestTether,
 	RequestTetherDrive, RequestTetherIdle,
 };
-use durham_terrain::shaders::{DurhamTerrainShader, DurhamTerrainShaderPlugin, RefractionWater};
-use durham_terrain_models::{
+use durham::{
 	AvianTerrainIndex, BaseTerrainNoise, ComposedWater, DurhamTerrainModelsPlugin, Terrain,
 	TerrainCellLayout, TerrainConfig, TerrainEntryStore, TerrainMeshBuilder, TerrainMeshLodBand,
 	TerrainPresentationAssets, TerrainRegionPresenter, TerrainStoreView, TerrainTrimeshCollider,
@@ -60,6 +59,7 @@ use routing_intelligence::{
 	RoutingIntelligenceUser, RoutingPlugin, RoutingSettings, RoutingSystems,
 };
 use std::f32::consts::PI;
+use terrain_shaders::{RefractionWater, TerrainShader, TerrainShaderPlugin};
 use tether_intelligence::{
 	install_tether, StalkRadii, Tether, TetherIntelligenceUser, TetherObjective, TetherPlugin,
 	TetherSystems,
@@ -117,8 +117,8 @@ impl Plugin for RoutingPlaygroundPlugin {
 		let goal = RoutingGoal(offset_xz(&layout, GOAL_OFFSET_XZ));
 
 		app.add_plugins(DurhamTerrainModelsPlugin)
-			.add_plugins(DurhamTerrainShaderPlugin)
-			.add_plugins(EnforceCachingPlugin::<TerrainMeshBuilder, DurhamTerrainShader>::default())
+			.add_plugins(TerrainShaderPlugin)
+			.add_plugins(EnforceCachingPlugin::<TerrainMeshBuilder, TerrainShader>::default())
 			.add_plugins(EnforceCachingPlugin::<ComposedWater, RefractionWater>::default())
 			.add_plugins(
 				GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config())
@@ -195,11 +195,11 @@ fn setup_lighting(mut commands: Commands) {
 
 fn setup_presentation_assets(
 	mut commands: Commands,
-	mut terrain_materials: ResMut<Assets<DurhamTerrainShader>>,
+	mut terrain_materials: ResMut<Assets<TerrainShader>>,
 	mut water_materials: ResMut<Assets<RefractionWater>>,
 	config: Res<TerrainConfig>,
 ) {
-	let material = terrain_materials.add(DurhamTerrainShader::default());
+	let material = terrain_materials.add(TerrainShader::default());
 	commands.insert_resource(TerrainPresentationAssets {
 		config: config.clone(),
 		material,

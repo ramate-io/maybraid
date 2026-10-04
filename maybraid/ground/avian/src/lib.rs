@@ -14,7 +14,7 @@ use bevy::math::{Dir3, Vec3};
 use ground::{ElevationProbe, GroundHit};
 use lod_avian::PhysicsInteractionLayer;
 
-/// Matches `crozon_character_motion::PROBE_LIFT`: pitch rays start this far
+/// Matches `character_motion::PROBE_LIFT`: pitch rays start this far
 /// above the body. Hits closer than this are canopy / solid-start volumes.
 pub const MIN_GROUND_DROP: f32 = 2.0;
 

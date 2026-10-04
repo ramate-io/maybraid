@@ -1,23 +1,23 @@
 //! Starter held kit for the vegetation player capsule.
 
 use bevy::prelude::*;
-use chico_vegetation_on_terrain_playground::{
-	CharacterSpecies, Player as VegetationPlayer, PlayerVisual as VegetationPlayerVisual,
-	PlaygroundMode, RequestSetCharacter, RequestSetCharacterAppearance,
-};
-use crozon_character_items::{CharacterSheet, Inventory, InventoryItem};
-use crozon_characters::{CharacterAppearance, CharacterRoot};
-use crozon_inventory_user::{InventoryUser, spawn_bag};
+use character_inventory_user::{spawn_bag, InventoryUser};
+use character_items::{CharacterSheet, Inventory, InventoryItem};
+use characters::{CharacterAppearance, CharacterRoot};
 use damage::Health;
 use firearm_user::{
-	FirearmUser, FirearmUserSettings, FirearmUserSystems, GeneratedFirearm, WeaponSwap,
-	live_weapon_from_stats, spawn_held_firearm, spawn_held_kit, spawn_reticle,
+	live_weapon_from_stats, spawn_held_firearm, spawn_held_kit, spawn_reticle, FirearmUser,
+	FirearmUserSettings, FirearmUserSystems, GeneratedFirearm, WeaponSwap,
 };
 use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
-use maybraid_skill_map::{SkillMapEquip, SkillMapSystems, spawn_skill_maps};
+use maybraid_skill_map::{spawn_skill_maps, SkillMapEquip, SkillMapSystems};
 use player::{
-	CameraFollow, Player as MaybraidPlayer, PlayerCameraAim, PlayerLook, PlayerUse,
-	PlayerVisual as MaybraidPlayerVisual, PlayerYawOwner, apply_character_mobility,
+	apply_character_mobility, CameraFollow, Player as MaybraidPlayer, PlayerCameraAim, PlayerLook,
+	PlayerUse, PlayerVisual as MaybraidPlayerVisual, PlayerYawOwner,
+};
+use world_player::{
+	CharacterSpecies, Player as VegetationPlayer, PlayerVisual as VegetationPlayerVisual,
+	PlaygroundMode, RequestSetCharacter, RequestSetCharacterAppearance,
 };
 
 use crate::control::{InventoryEditCameraFollow, WorldGameplayEnabled};
@@ -74,7 +74,7 @@ type WorldPlayerEquipment<'a> = (
 
 type WorldPlayerVisual<'a> = (Entity, &'a ChildOf, Has<MaybraidPlayerVisual>);
 
-/// Give the world player its selected loadout once the Crozon visual exists.
+/// Give the world player its selected loadout once the character visual exists.
 ///
 /// [`firearm_user`] fire/pose query [`MaybraidPlayer`] / [`PlayerLook`]. The
 /// player-crate locomotion controller is stamped in [`crate::control`] so
@@ -328,17 +328,17 @@ pub(crate) fn configure(app: &mut App) {
 mod tests {
 	use bevy::ecs::system::RunSystemOnce;
 	use bevy::prelude::*;
-	use chico_vegetation_on_terrain_playground::{
+	use character_items::{
+		ClothingMaterial, ClothingMesh, FirearmMesh, Inventory, InventoryItem, ItemColor,
+	};
+	use characters::{CharacterAppearance, CharacterRoot};
+	use world_player::{
 		Player as VegetationPlayer, PlayerVisual as VegetationPlayerVisual, PlaygroundMode,
 		RequestSetCharacterAppearance,
 	};
-	use crozon_character_items::{
-		ClothingMaterial, ClothingMesh, FirearmMesh, Inventory, InventoryItem, ItemColor,
-	};
-	use crozon_characters::{CharacterAppearance, CharacterRoot};
 
+	use crate::weapon::{arm_world_player, WorldPlayerAppearanceRequested, WorldPlayerLoadout};
 	use crate::WorldGameplayEnabled;
-	use crate::weapon::{WorldPlayerAppearanceRequested, WorldPlayerLoadout, arm_world_player};
 
 	#[test]
 	fn world_loadout_keeps_primary_weapon_and_worn_clothing() {
@@ -429,7 +429,7 @@ mod tests {
 	}
 
 	fn two_map_bag() -> Inventory {
-		use crozon_character_items::{SkillMapKind, SkillMapSpec};
+		use character_items::{SkillMapKind, SkillMapSpec};
 
 		Inventory {
 			items: vec![
@@ -444,7 +444,7 @@ mod tests {
 
 	#[test]
 	fn y_starts_a_swap_without_changing_the_kit() -> anyhow::Result<()> {
-		use crozon_inventory_user::InventoryUser;
+		use character_inventory_user::InventoryUser;
 		use firearm_user::{FirearmUser, WeaponSwap};
 		use maybraid_character_controller::CharacterIntent;
 
@@ -480,8 +480,8 @@ mod tests {
 
 	#[test]
 	fn y_swaps_the_queued_primary() -> anyhow::Result<()> {
-		use crozon_inventory_user::InventoryUser;
-		use firearm_user::{FirearmUser, WEAPON_SWAP_SECS, WeaponSwap};
+		use character_inventory_user::InventoryUser;
+		use firearm_user::{FirearmUser, WeaponSwap, WEAPON_SWAP_SECS};
 
 		use crate::weapon::commit_weapon_swap;
 
@@ -527,8 +527,8 @@ mod tests {
 
 	#[test]
 	fn dpad_cycles_the_presented_skill_map() -> anyhow::Result<()> {
-		use crozon_character_items::{SkillMapKind, SkillMapSpec};
-		use crozon_inventory_user::InventoryUser;
+		use character_inventory_user::InventoryUser;
+		use character_items::{SkillMapKind, SkillMapSpec};
 		use maybraid_character_controller::CharacterIntent;
 		use maybraid_skill_map::SkillMapEquip;
 

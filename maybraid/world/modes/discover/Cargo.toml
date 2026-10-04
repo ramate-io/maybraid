@@ -1,0 +1,31 @@
+[package]
+name = "maybraid-game-mode-discover"
+version = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+authors = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
+publish = { workspace = true }
+rust-version = { workspace = true }
+
+[dependencies]
+layer-stack = { workspace = true }
+bevy = { workspace = true }
+world-player = { workspace = true }
+chico = { workspace = true }
+durham = { workspace = true }
+barking = { workspace = true }
+mob-layer-model = { workspace = true }
+richmond = { workspace = true }
+terrain-layer-model = { workspace = true }
+urbanization-layer-model = { workspace = true }
+vegetation-layer-model = { workspace = true }
+furnishing-layer-model = { workspace = true }
+maputo = { workspace = true }
+
+[dev-dependencies]
+anyhow = { workspace = true }
+
+[lints]
+workspace = true

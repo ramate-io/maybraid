@@ -1,6 +1,6 @@
 use bevy::core_pipeline::prepass::DepthPrepass;
 use bevy::prelude::*;
-use durham_terrain_models::{BaseTerrainNoise, TerrainCellLayout, TerrainEntryStore};
+use durham::{BaseTerrainNoise, TerrainCellLayout, TerrainEntryStore};
 use game_commands::command::TextEntryFocus;
 use lod::LodViewer;
 use std::f32::consts::PI;

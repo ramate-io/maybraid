@@ -1,16 +1,25 @@
-//! Stub surface linearizer.
+//! Grammar abstraction and the basic POC linearizer.
 //!
-//! This is not a grammar core. It has no agreement, case, conjugation, or
-//! sandhi. It only orders already-chosen base terms into a
-//! [`GrammaticalOutput`]. [`IpaUtterance`] is the phonemic view of that output.
+//! Concrete typological strategies live in `maybraid-grammars`. This module
+//! defines the input, the surface IR, and [`SurfaceGrammar`] as the simplest
+//! realization that still implements [`Grammar`].
 
 use crate::marshall::SemanticNode;
 use crate::output::LexicalOutput;
+use crate::profile::Profile;
 use crate::utterance::{
-	Clause, ClauseId, Number, Referent, ReferentId, SemanticRole, SemanticValue,
+	Clause, ClauseId, Number, Polarity, Referent, ReferentId, SemanticRole, SemanticValue,
+	Utterance,
 };
 
-/// Linearized grammatical form. Morphology and a fuller grammar can extend this.
+mod surface;
+
+pub use surface::{
+	AffixPlacement, BoundaryKind, GrammaticalRelation, LexicalPart, ParticleDomain, SurfaceClause,
+	SurfaceConstituent, SurfaceForm,
+};
+
+/// Linearized grammatical form. Phonology reads this, not the surface IR.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GrammaticalOutput {
 	pub words: Vec<String>,
@@ -21,7 +30,6 @@ impl GrammaticalOutput {
 		Self { words }
 	}
 
-	/// Phonemic rendering of this linearization.
 	pub fn ipa(&self) -> IpaUtterance {
 		IpaUtterance::from(self)
 	}
@@ -57,22 +65,53 @@ impl std::fmt::Display for IpaUtterance {
 	}
 }
 
-/// Role-bearing function words. A later grammar issue should generate these.
+/// Semantic graph plus lexical material. Grammar may split or insert forms.
+pub struct GrammarInput<'a> {
+	pub utterance: &'a Utterance,
+	pub lexicalizations: &'a LexicalOutput,
+	pub profile: &'a Profile,
+}
+
+impl<'a> GrammarInput<'a> {
+	pub fn new(lexicalizations: &'a LexicalOutput, profile: &'a Profile) -> Self {
+		Self { utterance: &lexicalizations.utterance, lexicalizations, profile }
+	}
+
+	pub fn from_output(lexicalizations: &'a LexicalOutput) -> Self {
+		Self::new(lexicalizations, &Profile::NEUTRAL)
+	}
+
+	pub fn ipa_for(&self, node: SemanticNode) -> Option<&'a str> {
+		self.lexicalizations.ipa_for(node)
+	}
+}
+
+/// Realizes an utterance from semantics and lexicalizations, not from a word list.
+pub trait Grammar {
+	fn realize_surface(&self, input: &GrammarInput<'_>) -> SurfaceForm;
+
+	fn realize(&self, input: &GrammarInput<'_>) -> GrammaticalOutput {
+		self.realize_surface(input).linearize()
+	}
+}
+
+/// Role-bearing function words used by the basic POC linearizer.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RoleParticles {
 	pub recipient: &'static str,
 	pub source: &'static str,
 	pub goal: &'static str,
 	pub plural: &'static str,
+	pub negative: &'static str,
 }
 
 impl RoleParticles {
 	pub fn compositional() -> Self {
-		Self { recipient: "tʰə", source: "kə", goal: "ŋə", plural: "ɲi" }
+		Self { recipient: "tʰə", source: "kə", goal: "ŋə", plural: "ɲi", negative: "ma" }
 	}
 
 	pub fn root_heavy() -> Self {
-		Self { recipient: "ʔu", source: "ħe", goal: "ɡo", plural: "riː" }
+		Self { recipient: "ʔu", source: "ħe", goal: "ɡo", plural: "riː", negative: "nu" }
 	}
 }
 
@@ -99,7 +138,7 @@ pub enum ModifierPlacement {
 	AfterNoun,
 }
 
-/// Fixed linearization rules for one POC language.
+/// Simplest POC realization. Seeds the composers in `maybraid-grammars`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SurfaceGrammar {
 	pub clause_order: ClauseOrder,
@@ -128,58 +167,72 @@ impl SurfaceGrammar {
 	}
 
 	pub fn realize(self, output: &LexicalOutput) -> GrammaticalOutput {
-		let mut words = Vec::new();
-		for (index, root) in output.utterance.roots.iter().enumerate() {
-			if index > 0 {
-				words.push("‖".to_owned());
-			}
-			self.emit_clause(&mut words, output, *root, None);
-		}
-		GrammaticalOutput::new(words)
+		<Self as Grammar>::realize(&self, &GrammarInput::from_output(output))
 	}
+}
 
+impl Grammar for SurfaceGrammar {
+	fn realize_surface(&self, input: &GrammarInput<'_>) -> SurfaceForm {
+		let mut clauses = Vec::new();
+		for root in &input.utterance.roots {
+			let constituents = self.emit_clause(input, *root, None);
+			clauses.push(SurfaceClause::new(*root, constituents));
+		}
+		SurfaceForm::new(clauses)
+	}
+}
+
+impl SurfaceGrammar {
 	fn emit_clause(
 		&self,
-		words: &mut Vec<String>,
-		output: &LexicalOutput,
+		input: &GrammarInput<'_>,
 		clause_id: ClauseId,
 		bound: Option<ReferentId>,
-	) {
-		let Some(clause) = output.utterance.clauses.get(clause_id) else {
-			return;
+	) -> Vec<SurfaceConstituent> {
+		let Some(clause) = input.utterance.clauses.get(clause_id) else {
+			return Vec::new();
 		};
 		let mut subject = Vec::new();
 		let mut complements = Vec::new();
-		self.collect_arguments(&mut subject, &mut complements, output, clause, bound);
+		self.collect_arguments(&mut subject, &mut complements, input, clause, bound);
 
-		let predicate =
-			output.ipa_for(SemanticNode::Predicate(clause_id)).unwrap_or("…").to_owned();
+		let predicate = SurfaceConstituent::lexical(
+			input.ipa_for(SemanticNode::Predicate(clause_id)).unwrap_or("…"),
+			SemanticNode::Predicate(clause_id),
+		);
+		let negative = (clause.polarity == Polarity::Negative).then(|| {
+			SurfaceConstituent::particle(self.particles.negative, ParticleDomain::Polarity)
+		});
 
+		let mut words = Vec::new();
 		match self.clause_order {
 			ClauseOrder::VerbMedial => {
 				words.extend(subject);
+				words.extend(negative);
 				words.push(predicate);
 				words.extend(complements);
 			}
 			ClauseOrder::VerbFinal => {
 				words.extend(subject);
 				words.extend(complements);
+				words.extend(negative);
 				words.push(predicate);
 			}
 		}
+		words
 	}
 
 	fn collect_arguments(
 		&self,
-		subject: &mut Vec<String>,
-		complements: &mut Vec<String>,
-		output: &LexicalOutput,
+		subject: &mut Vec<SurfaceConstituent>,
+		complements: &mut Vec<SurfaceConstituent>,
+		input: &GrammarInput<'_>,
 		clause: &Clause,
 		bound: Option<ReferentId>,
 	) {
 		for role in [SemanticRole::Agent, SemanticRole::Experiencer, SemanticRole::Possessor] {
 			if let Some(value) = clause_value(clause, role) {
-				self.emit_value(subject, output, value, bound);
+				self.emit_value(subject, input, value, bound, Some(GrammaticalRelation::Subject));
 			}
 		}
 
@@ -194,69 +247,83 @@ impl SurfaceGrammar {
 			(SemanticRole::Goal, Some(self.particles.goal)),
 			(SemanticRole::Instrument, None),
 			(SemanticRole::Location, None),
+			(SemanticRole::Manner, None),
+			(SemanticRole::Rate, None),
+			(SemanticRole::Time, None),
 			(SemanticRole::Cause, None),
 		] {
 			if let Some(value) = clause_value(clause, role) {
 				if let Some(particle) = particle {
 					if !is_bound(value, bound) {
-						complements.push(particle.to_owned());
+						complements.push(SurfaceConstituent::particle(
+							particle,
+							ParticleDomain::Adposition,
+						));
 					}
 				}
-				self.emit_value(complements, output, value, bound);
+				self.emit_value(
+					complements,
+					input,
+					value,
+					bound,
+					Some(GrammaticalRelation::Object),
+				);
 			}
 		}
 	}
 
 	fn emit_value(
 		&self,
-		words: &mut Vec<String>,
-		output: &LexicalOutput,
+		words: &mut Vec<SurfaceConstituent>,
+		input: &GrammarInput<'_>,
 		value: SemanticValue,
 		bound: Option<ReferentId>,
+		relation: Option<GrammaticalRelation>,
 	) {
 		match value {
 			SemanticValue::Referent(referent) if Some(referent) == bound => {}
 			SemanticValue::Referent(referent) => {
-				self.emit_referent(words, output, referent);
+				self.emit_referent(words, input, referent, relation);
 			}
 			SemanticValue::Clause(clause) => {
-				self.emit_clause(words, output, clause, bound);
+				words.extend(self.emit_clause(input, clause, bound));
 			}
 		}
 	}
 
 	fn emit_referent(
 		&self,
-		words: &mut Vec<String>,
-		output: &LexicalOutput,
+		words: &mut Vec<SurfaceConstituent>,
+		input: &GrammarInput<'_>,
 		referent_id: ReferentId,
+		relation: Option<GrammaticalRelation>,
 	) {
-		let Some(referent) = output.utterance.referents.get(referent_id) else {
+		let Some(referent) = input.utterance.referents.get(referent_id) else {
 			return;
 		};
 		let mut head = Vec::new();
-		self.emit_noun_phrase(&mut head, output, referent_id, referent);
+		self.emit_noun_phrase(&mut head, input, referent_id, referent, relation);
 
 		let mut relatives = Vec::new();
 		for (index, clause) in referent.relative_clauses.iter().enumerate() {
 			if index > 0 || !relatives.is_empty() {
-				relatives.push("|".to_owned());
+				relatives.push(SurfaceConstituent::Boundary { kind: BoundaryKind::Relative });
 			}
-			self.emit_clause(&mut relatives, output, *clause, Some(referent_id));
+			relatives.extend(self.emit_clause(input, *clause, Some(referent_id)));
 		}
 
 		match self.relative {
 			RelativePlacement::AfterHead => {
 				words.extend(head);
 				if !relatives.is_empty() {
-					words.push("|".to_owned());
+					words.push(SurfaceConstituent::Boundary { kind: BoundaryKind::Relative });
 					words.extend(relatives);
 				}
 			}
 			RelativePlacement::BeforeHead => {
 				if !relatives.is_empty() {
 					words.extend(relatives);
-					words.push("|".to_owned());
+					words.push(SurfaceConstituent::Boundary { kind: BoundaryKind::Relative });
 				}
 				words.extend(head);
 			}
@@ -265,20 +332,26 @@ impl SurfaceGrammar {
 
 	fn emit_noun_phrase(
 		&self,
-		words: &mut Vec<String>,
-		output: &LexicalOutput,
+		words: &mut Vec<SurfaceConstituent>,
+		input: &GrammarInput<'_>,
 		referent_id: ReferentId,
 		referent: &Referent,
+		relation: Option<GrammaticalRelation>,
 	) {
 		let mut modifiers = Vec::new();
 		for index in 0..referent.modifiers.len() {
-			if let Some(ipa) =
-				output.ipa_for(SemanticNode::Modifier { referent: referent_id, index })
-			{
-				modifiers.push(ipa.to_owned());
+			let node = SemanticNode::Modifier { referent: referent_id, index };
+			if let Some(ipa) = input.ipa_for(node) {
+				modifiers.push(SurfaceConstituent::lexical(ipa, node));
 			}
 		}
-		let noun = output.ipa_for(SemanticNode::Referent(referent_id)).unwrap_or("…").to_owned();
+		let mut noun = SurfaceConstituent::lexical(
+			input.ipa_for(SemanticNode::Referent(referent_id)).unwrap_or("…"),
+			SemanticNode::Referent(referent_id),
+		);
+		if let Some(relation) = relation {
+			noun = noun.with_relation(relation);
+		}
 		match self.modifier {
 			ModifierPlacement::BeforeNoun => {
 				words.extend(modifiers);
@@ -290,14 +363,22 @@ impl SurfaceGrammar {
 			}
 		}
 		if matches!(referent.number, Number::Plural | Number::Many) {
-			words.push(self.particles.plural.to_owned());
+			words.push(SurfaceConstituent::Particle {
+				form: self.particles.plural.to_owned(),
+				domain: ParticleDomain::Number,
+				host: Some(SemanticNode::Referent(referent_id)),
+			});
 		}
 	}
 }
 
 impl LexicalOutput {
-	pub fn realize(&self, grammar: SurfaceGrammar) -> GrammaticalOutput {
-		grammar.realize(self)
+	pub fn realize(&self, grammar: impl Grammar) -> GrammaticalOutput {
+		grammar.realize(&GrammarInput::from_output(self))
+	}
+
+	pub fn realize_surface(&self, grammar: impl Grammar) -> SurfaceForm {
+		grammar.realize_surface(&GrammarInput::from_output(self))
 	}
 
 	pub fn ipa_for(&self, node: SemanticNode) -> Option<&str> {

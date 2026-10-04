@@ -7,8 +7,8 @@
 //! cone and a thin ember jet while the beam is on.
 
 use ::projectiles::{
-	BoltSpec, BulletSpec, ProjectileContact, ProjectileSource, ProjectileVisualCache,
-	ProjectilesPlugin, spawn_flight, tick_flights,
+	spawn_flight, tick_flights, BoltSpec, BulletSpec, ProjectileContact, ProjectileSource,
+	ProjectileVisualCache, ProjectilesPlugin,
 };
 
 use avian3d::prelude::{SpatialQuery, SpatialQueryFilter};
@@ -18,7 +18,6 @@ use bevy::ecs::system::SystemParam;
 use bevy::light::NotShadowCaster;
 use bevy::mesh::ConeAnchor;
 use bevy::prelude::*;
-use bevy_hanabi::Gradient;
 use bevy_hanabi::prelude::{
 	Attribute, ColorBlendMask, ColorBlendMode, ColorOverLifetimeModifier, EffectAsset,
 	EffectMaterial, EffectSpawner, ExprWriter, ImageSampleMapping, LinearDragModifier, OrientMode,
@@ -26,22 +25,23 @@ use bevy_hanabi::prelude::{
 	SetPositionSphereModifier, SetVelocitySphereModifier, ShapeDimension, SimulationSpace,
 	SizeOverLifetimeModifier, SpawnerSettings,
 };
+use bevy_hanabi::Gradient;
 use damage::{DamageSystems, Hit, HitPayload};
 use firearms_components::{BoneMap, FirearmHostSystems, FirearmMembers, FirearmRoot, RigRoot};
 use lod_avian::PhysicsInteractionLayer;
 use maybraid_audio::{Audio, AudioClip, AudioPlugin, AudioSystems, Mixer};
 
-use crate::cadence::{FireControl, WeaponFired, WeaponRecoil, trigger_allows_fire};
+use crate::cadence::{trigger_allows_fire, FireControl, WeaponFired, WeaponRecoil};
 use crate::impact::{
-	ImpactEffects, puff_mask, setup_impact_effects, spawn_impact, tick_impact_bursts,
+	puff_mask, setup_impact_effects, spawn_impact, tick_impact_bursts, ImpactEffects,
 };
 use crate::muzzle_flame::{
-	MuzzleFlameMaterial, MuzzleFlameMaterialPlugin, MuzzleFlameMaterialRefCache,
-	init_muzzle_flame_caches, muzzle_flame_ref, resolve_muzzle_flame,
+	init_muzzle_flame_caches, muzzle_flame_ref, resolve_muzzle_flame, MuzzleFlameMaterial,
+	MuzzleFlameMaterialPlugin, MuzzleFlameMaterialRefCache,
 };
 use crate::sound::{
-	FirearmFireSounds, copy_flight_audio_velocity, ensure_camera_spatial_listener,
-	setup_fire_sounds,
+	copy_flight_audio_velocity, ensure_camera_spatial_listener, setup_fire_sounds,
+	FirearmFireSounds,
 };
 
 /// Authored rest length of the `barrel` bone (head → tail) in bone-local units.
@@ -308,7 +308,16 @@ impl WeaponFx<'_, '_> {
 		else {
 			return;
 		};
-		sounds.loop_on(commands, &self.clips, audio, &mut self.mixer, listener, laser, world, player);
+		sounds.loop_on(
+			commands,
+			&self.clips,
+			audio,
+			&mut self.mixer,
+			listener,
+			laser,
+			world,
+			player,
+		);
 	}
 
 	fn loop_fizz(
@@ -561,7 +570,11 @@ fn hide_muzzle_flash(
 
 /// A one-shot hides after its life. A laser hides once the beam entity is gone.
 fn muzzle_flash_finished(age: f32, life: f32, sustain: bool, laser_alive: bool) -> bool {
-	if sustain { !laser_alive } else { age >= life }
+	if sustain {
+		!laser_alive
+	} else {
+		age >= life
+	}
 }
 
 fn tick_muzzle_flashes(

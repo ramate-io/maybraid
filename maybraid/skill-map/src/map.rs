@@ -2,7 +2,7 @@
 
 use bevy::camera::visibility::RenderLayers;
 use bevy::prelude::*;
-use crozon_character_items::{SkillMapKind, SkillMapSpec};
+use character_items::{SkillMapKind, SkillMapSpec};
 
 /// User-facing map id. Live play presents one equipped spec at layer `0`.
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq, Hash)]

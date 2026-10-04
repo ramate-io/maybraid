@@ -1,10 +1,10 @@
 //! Player squat / prone. Hulls, speed, and clips derive from this plus the rest capsule.
 
 use bevy::prelude::*;
-use crozon_characters::{CharacterRoot, LocomotionCapsule, TerrainPitch};
-use crozon_rigs::humanoid::LegSegmentLengths;
+use character_animations::animations::Squat;
+use character_rigs::humanoid::LegSegmentLengths;
+use characters::{CharacterRoot, LocomotionCapsule, TerrainPitch};
 use damage::HeadshotBand;
-use malo_animations::animations::Squat;
 
 use crate::body::{apply_locomotion_capsule, CharacterController, Jumping};
 
@@ -113,7 +113,7 @@ pub(crate) fn apply_stance_hulls(
 			StanceKind::Prone => {
 				if !rest.0.pronograde {
 					commands.entity(entity).insert(rest.0.prone_hit_capsule());
-					commands.entity(entity).remove::<crozon_characters::HeadCapsule>();
+					commands.entity(entity).remove::<characters::HeadCapsule>();
 				}
 				commands.entity(entity).remove::<HeadshotBand>();
 			}
@@ -162,7 +162,7 @@ mod tests {
 	use anyhow::{anyhow, Result};
 	use avian3d::prelude::{Collider, Sensor};
 	use bevy::ecs::system::RunSystemOnce;
-	use crozon_characters::HitCapsule;
+	use characters::HitCapsule;
 
 	#[test]
 	fn speed_scale_slows_squat_and_prone() {
@@ -366,7 +366,7 @@ mod tests {
 			.spawn((
 				CharacterRoot,
 				ChildOf(body),
-				TerrainPitch::new(crozon_characters::RigSkeletonKind::Humanoid, 0.22, 0.18),
+				TerrainPitch::new(characters::RigSkeletonKind::Humanoid, 0.22, 0.18),
 			))
 			.id();
 		app.update();

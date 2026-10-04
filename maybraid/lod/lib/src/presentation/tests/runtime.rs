@@ -7,9 +7,11 @@ use crate::gen::tests::test_utils::{
 };
 use crate::gen::{GeneratingSpatialIndex, Id, LodGenerated, RegionPresenter, Version};
 use crate::lod_ref::{LodNode, LodNodePose, LodRef};
+use crate::jobs::LodJobCounter;
 use crate::presentation::{
-	LodPresentBudget, LodPresentCullBudget, LodPresentCullPlugin, LodPresentKeepRegion,
-	LodPresentPlugin, LodPresentQueue, LodPresentRegion, LodPresentTimeBudget,
+	LodPresentBudget, LodPresentCullBudget, LodPresentCullPlugin, LodPresentGate,
+	LodPresentKeepRegion, LodPresentPlugin, LodPresentQueue, LodPresentRegion,
+	LodPresentTimeBudget,
 };
 
 #[derive(SystemParam)]
@@ -446,5 +448,106 @@ fn drain_present_picks_up_generated_id_without_a_region_message() -> Result<()> 
 
 	let presenter = app.world().resource::<RecordingPresenter>();
 	assert!(presenter.vegetation.contains_key(&Id::from_cell(later)));
+	Ok(())
+}
+
+fn present_app_with_keep() -> (App, Id) {
+	let mut app = App::new();
+	let mut index = WorldIndex::default();
+	let identity = Transform::IDENTITY;
+	let bounds = cell(2.0);
+	let lod = LodRef {
+		entity: Entity::PLACEHOLDER,
+		previous_transform: &identity,
+		current_transform: &identity,
+		bounds: &bounds,
+	};
+	let id = Id::from_cell(cell(2.0));
+	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, id, &lod);
+	app.add_plugins(MinimalPlugins)
+		.insert_resource(index)
+		.insert_resource(RecordingPresenter::default())
+		.insert_resource(LodPresentBudget::<PresentChan>::new(1))
+		.insert_resource(LodPresentCullBudget { despawns_per_frame: 8 })
+		.insert_resource({
+			let mut keep = LodPresentKeepRegion::<PresentChan>::default();
+			keep.region = Some(cell(2.0));
+			keep
+		})
+		.add_plugins((
+			LodPresentPlugin::<Vegetation, WorldIndex, RecordingParam, PresentChan>::default(),
+			LodPresentCullPlugin::<Vegetation, WorldIndex, RecordingParam, PresentChan>::default(),
+		));
+	app.world_mut().spawn((LodNode, LodNodePose::default(), Transform::IDENTITY));
+	(app, id)
+}
+
+#[test]
+fn closing_the_present_gate_retires_and_blocks_until_reopened() -> Result<()> {
+	let (mut app, id) = present_app_with_keep();
+	app.update();
+	assert!(app.world().resource::<RecordingPresenter>().vegetation.contains_key(&id));
+
+	app.world_mut().resource_mut::<LodPresentGate<PresentChan>>().open = false;
+	app.update();
+	assert!(
+		!app.world().resource::<RecordingPresenter>().vegetation.contains_key(&id),
+		"closing the gate retires presented ids"
+	);
+	assert!(
+		app.world().resource::<LodPresentKeepRegion<PresentChan>>().region.is_none(),
+		"closing clears the keep region"
+	);
+
+	app.update();
+	assert!(
+		!app.world().resource::<RecordingPresenter>().vegetation.contains_key(&id),
+		"nothing re-presents while the gate is closed"
+	);
+
+	app.world_mut().resource_mut::<LodPresentKeepRegion<PresentChan>>().region = Some(cell(2.0));
+	app.world_mut().resource_mut::<LodPresentGate<PresentChan>>().open = true;
+	app.update();
+	assert!(
+		app.world().resource::<RecordingPresenter>().vegetation.contains_key(&id),
+		"reopening presents again"
+	);
+	Ok(())
+}
+
+#[test]
+fn closing_the_present_gate_releases_queued_job_tickets() -> Result<()> {
+	let (mut app, _id) = present_app_with_keep();
+	app.update();
+	let leftover = Id::from_cell(cell(99.0));
+	assert!(app.world_mut().resource_mut::<LodPresentQueue<Vegetation>>().enqueue(leftover));
+	app.world().resource::<LodJobCounter>().begin();
+	let before = app.world().resource::<LodJobCounter>().active();
+	app.world_mut().resource_mut::<LodPresentGate<PresentChan>>().open = false;
+	app.update();
+	assert_eq!(
+		app.world().resource::<LodJobCounter>().active(),
+		before - 1,
+		"gate close must release tickets owned by the cancelled queue"
+	);
+	assert!(
+		app.world().resource::<LodPresentQueue<Vegetation>>().is_empty(),
+		"gate close drops pending ids"
+	);
+	Ok(())
+}
+
+#[test]
+fn removing_an_id_from_the_index_retires_it_without_an_extra_system() -> Result<()> {
+	let (mut app, id) = present_app_with_keep();
+	app.update();
+	assert!(app.world().resource::<RecordingPresenter>().vegetation.contains_key(&id));
+
+	app.world_mut().resource_mut::<WorldIndex>().vegetation.remove(&id);
+	app.update();
+	assert!(
+		!app.world().resource::<RecordingPresenter>().vegetation.contains_key(&id),
+		"cull retires a presented id that left the index"
+	);
 	Ok(())
 }

@@ -2,7 +2,7 @@
 
 use avian3d::prelude::LinearVelocity;
 use bevy::prelude::*;
-use crozon_characters::{
+use characters::{
 	AnimClip, AnimProgress, AnimRef, AnimRefRoot, CharacterHeading, CharacterMembers, CharacterRig,
 	CharacterRigRole, CharacterRoot, JumpParams, RigSkeletonKind,
 };
@@ -138,7 +138,7 @@ fn locomotion_clip(
 mod tests {
 	use super::*;
 	use crate::body::{JumpPhase, JOG_SPEED, MOVE_SPEED};
-	use crozon_characters::AnimId;
+	use characters::AnimId;
 
 	#[test]
 	fn standing_hop_uses_jump_clip() {

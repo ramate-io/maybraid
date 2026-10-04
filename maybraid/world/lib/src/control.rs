@@ -1,10 +1,7 @@
 //! Apply [`CharacterIntent`] to the vegetation capsule / camera-relative wish.
 
 use bevy::prelude::*;
-use chico_vegetation_on_terrain_playground::{
-	MoveWish, MovementAction, Player, PlayerPhysicsEnabled, PlayerSpawnXz, PlaygroundMode,
-};
-use durham_terrain_models::{
+use durham::{
 	terrain_collider_covers_xz, CascadeChunk, TerrainCellLayout, TerrainEntryStore,
 	TerrainTrimeshCollider,
 };
@@ -19,6 +16,9 @@ use player::{
 	Wading,
 };
 use player_camera::CameraController;
+use world_player::{
+	MoveWish, MovementAction, Player, PlayerPhysicsEnabled, PlayerSpawnXz, PlaygroundMode,
+};
 
 /// When `false`, world movement / POV intents are ignored (menus, pause overlay).
 #[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
@@ -53,7 +53,7 @@ pub struct WorldSurfaceReady(pub bool);
 pub struct WorldSurfaceSet;
 
 pub(crate) fn update_world_surface_ready(
-	streaming: Res<durham_terrain_models::TerrainStreamingEnabled>,
+	streaming: Res<terrain_layer_model::TerrainStreaming<durham::Durham>>,
 	store: Res<TerrainEntryStore>,
 	layout: Res<TerrainCellLayout>,
 	spawn: Res<PlayerSpawnXz>,
@@ -63,7 +63,7 @@ pub(crate) fn update_world_surface_ready(
 ) {
 	// Menu shells keep streaming off. Leave the ready bit alone; Training
 	// unveils from this same column once a padded FinePatch collider exists.
-	if !streaming.0 {
+	if !streaming.enabled {
 		return;
 	}
 	let xz = discovery_xz(&spawn, &players, &layout);
@@ -305,7 +305,7 @@ pub(crate) fn strip_world_player_motor(commands: &mut Commands, body: Entity) {
 mod tests {
 	use super::*;
 	use bevy::ecs::system::RunSystemOnce;
-	use durham_terrain_models::{terrain_collider_covers_xz, CascadeChunk};
+	use durham::{terrain_collider_covers_xz, CascadeChunk};
 
 	#[test]
 	fn surface_ready_requires_local_column() {

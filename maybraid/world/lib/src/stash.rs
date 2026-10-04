@@ -24,15 +24,14 @@
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value};
 use bevy::text::FontSize;
-use chico_vegetation_on_terrain_playground::Player as VegetationPlayer;
-use crozon_character_items::{
+use character_inventory_user::{spawn_bag, InventoryUser};
+use character_items::{
 	ClothingHost, Inventory, InventoryItem, InventorySlot, ItemRng, LootFraction, MaterialRefParams,
 };
-use crozon_characters::{
+use characters::{
 	add_character_components_host, character_bounds, CharacterComponents, ClothingLayer,
 	ComponentsOnly, Layers, PartNode,
 };
-use crozon_inventory_user::{spawn_bag, InventoryUser};
 use damage::{DamageSystems, DespawnAfter, Downed};
 use firearm_user::{held_scale_from_bounds, FirearmUser, FirearmUserSettings, GeneratedFirearm};
 use firearms::{firearm_bounds, spawn_firearm_components};
@@ -42,9 +41,10 @@ use lod::LodScene;
 use material_ref::{MaterialRef, MaterialRefRoot, PropagateToDescendants};
 use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
 use player::PlayerUse;
+use world_player::Player as VegetationPlayer;
 
-use maybraid_mobs::MobKind;
 use mob_characters::CharacterBrains;
+use mob_scenes::MobKind;
 
 use crate::control::WorldGameplayEnabled;
 use crate::weapon::{AppliedWorldPlayerLoadout, WorldPlayerLoadout};
@@ -182,8 +182,8 @@ impl Default for StashClothingPreview {
 	fn default() -> Self {
 		Self {
 			layer: ClothingLayer::new(
-				crozon_character_items::ClothingMesh::TankTop,
-				crozon_character_items::ItemColor::Natural,
+				character_items::ClothingMesh::TankTop,
+				character_items::ItemColor::Natural,
 				ClothingHost::HUMANOID,
 			),
 		}
@@ -596,7 +596,7 @@ pub(crate) fn claim_nearby_stashes(
 	>,
 	parts: Query<(Entity, &furniture_assemblies::FurnitureKitPart, &GlobalTransform)>,
 	child_of: Query<&ChildOf>,
-	hosts: Query<&furniture_assemblies::PresentedFurnitureCellId>,
+	hosts: Query<&maputo::PresentedFurnitureCellId>,
 ) {
 	if !intents.read().any(|intent| matches!(intent, CharacterIntent::StartInteraction)) {
 		return;
@@ -1054,14 +1054,12 @@ fn spawn_stash_claim_halo(
 mod tests {
 	use super::*;
 	use bevy::ecs::system::RunSystemOnce;
-	use chico_vegetation_on_terrain_playground::Player as VegetationPlayer;
-	use crozon_character_items::{
-		ClothingMaterial, ClothingMesh, FirearmMesh, InventoryItem, ItemColor,
-	};
+	use character_items::{ClothingMaterial, ClothingMesh, FirearmMesh, InventoryItem, ItemColor};
 	use damage::tick_queued_despawns;
 	use firearm_user::held_scale_from_bounds;
 	use material_ref::MaterialId;
 	use player::Npc;
+	use world_player::Player as VegetationPlayer;
 
 	fn mixed_bag() -> Inventory {
 		Inventory {
@@ -1523,7 +1521,7 @@ mod tests {
 	#[test]
 	fn claim_updates_world_player_loadout() -> anyhow::Result<()> {
 		use crate::weapon::WorldPlayerLoadout;
-		use crozon_characters::CharacterAppearance;
+		use characters::CharacterAppearance;
 
 		let (mut world, player, stash) = claim_setup(Vec3::ZERO, Vec3::new(1.0, 0.0, 0.0))?;
 		world.insert_resource(WorldPlayerLoadout::new(
@@ -1551,7 +1549,7 @@ mod tests {
 	#[test]
 	fn drop_clears_world_player_loadout() -> anyhow::Result<()> {
 		use crate::weapon::WorldPlayerLoadout;
-		use crozon_characters::CharacterAppearance;
+		use characters::CharacterAppearance;
 
 		let mut world = World::new();
 		world.init_resource::<WorldStashSettings>();
@@ -1870,8 +1868,9 @@ mod tests {
 	#[test]
 	fn claim_halo_marks_a_closed_crate() -> anyhow::Result<()> {
 		use crate::crate_loot::{ClosedLid, CrateLoot};
-		use furniture_assemblies::{FurnitureKitPart, PartKind, PresentedFurnitureCellId};
+		use furniture_assemblies::{FurnitureKitPart, PartKind};
 		use lod::gen::Id;
+		use maputo::PresentedFurnitureCellId;
 
 		let mut world = World::new();
 		world.init_resource::<Time>();
