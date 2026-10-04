@@ -28,8 +28,8 @@ pub enum PlaygroundCommand {
 		/// World-space Z offset from the default burst origin, in meters.
 		#[arg(long, default_value_t = 0.0)]
 		distance: f32,
-		#[arg(long, default_value_t = 0)]
-		seed: u64,
+		#[arg(long)]
+		seed: Option<u64>,
 		/// 1.0 is the authored layer envelope. Higher plays the same ratios faster.
 		#[arg(long, default_value_t = 1.0)]
 		playback: f32,
@@ -44,8 +44,8 @@ pub enum PlaygroundCommand {
 		intensity: f32,
 		#[arg(long, default_value_t = 0.0)]
 		distance: f32,
-		#[arg(long, default_value_t = 0)]
-		seed: u64,
+		#[arg(long)]
+		seed: Option<u64>,
 		/// 1.0 is the authored layer envelope. Higher plays the same ratios faster.
 		#[arg(long, default_value_t = 1.0)]
 		playback: f32,
@@ -78,7 +78,7 @@ pub struct VfxShowRequest {
 	pub scale: f32,
 	pub intensity: f32,
 	pub distance: f32,
-	pub seed: u64,
+	pub seed: Option<u64>,
 	pub playback: f32,
 }
 
@@ -198,11 +198,12 @@ fn queue_show(
 	scale: f32,
 	intensity: f32,
 	distance: f32,
-	seed: u64,
+	seed: Option<u64>,
 	playback: f32,
 ) {
+	let seed_label = seed.map(|s| s.to_string()).unwrap_or_else(|| "auto".into());
 	*console = format!(
-		"show {name} --scale {scale} --intensity {intensity} --distance {distance} --seed {seed} --playback {playback}"
+		"show {name} --scale {scale} --intensity {intensity} --distance {distance} --seed {seed_label} --playback {playback}"
 	);
 	let name = name.to_string();
 	commands.queue(move |world: &mut World| {

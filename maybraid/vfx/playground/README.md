@@ -14,7 +14,7 @@ In-game (press `/`):
 - `show` — same as `firey-explosion`
 - `show flash|fireball|smoke|sparks` — one layer
 - `--distance` — offset along +Z; `spread` places near / mid / far
-- `--seed` — independent instance variation
+- `--seed` — reproduce an instance; omit to generate a new one
 - `--playback` — 1.0 is authored tempo; `0.5` is half speed, `2` is twice as fast
 - `orbit` — orbit the camera around the burst
 - `freeze 0.4` — pause once the instance reaches that age; `play` resumes

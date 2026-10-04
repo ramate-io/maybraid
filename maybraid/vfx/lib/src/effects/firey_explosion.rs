@@ -1,6 +1,7 @@
 //! Canonical shared realization: flash, fireball, smoke, sparks.
 
-use crate::composition::{EffectDefinition, EffectLayer, MeshPart, ParticlePart, FIREY_EXPLOSION};
+use crate::composition::{EffectDefinition, EffectLayer, MeshPart, ParticlePart};
+use crate::names::FIREY_EXPLOSION;
 use crate::layers::{flash, smoke};
 
 /// Overlay the four layer modules. Mesh cores plus optional cards, coordinated in time.
@@ -29,7 +30,7 @@ pub fn definition(
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::composition::{EffectPart, LobeKind};
+	use crate::composition::{EffectPart, LobeKind, ParticleShade};
 
 	fn dummy_particle(name: &str, life: f32) -> ParticlePart {
 		ParticlePart {
@@ -39,6 +40,7 @@ mod tests {
 			count: 1.0,
 			capacity: 1,
 			max_lifetime: life,
+			shade: ParticleShade::Fire,
 		}
 	}
 

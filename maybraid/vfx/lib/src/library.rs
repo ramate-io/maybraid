@@ -4,13 +4,12 @@ use bevy::prelude::*;
 use bevy_hanabi::prelude::{EffectMaterial, ParticleEffect};
 use bevy_hanabi::EffectAsset;
 
-use crate::assets::{fire_flipbook, smoke_flipbook, spark_taper};
-use crate::composition::{
-	EffectDefinition, VfxFlipbooks, FIREBALL, FIREY_EXPLOSION, FLASH, SMOKE, SPARKS,
-};
+use crate::assets::{fire_flipbook, smoke_flipbook, spark_taper, VfxFlipbooks};
+use crate::composition::EffectDefinition;
 use crate::effects::firey_explosion;
 use crate::layers::{fireball, flash, smoke, sparks};
-use crate::lobe::rounded_lobe_mesh;
+use crate::lobes::rounded_lobe_mesh;
+use crate::names::{FIREBALL, FIREY_EXPLOSION, FLASH, SMOKE, SPARKS};
 
 /// Shared definitions. Clone a handle out; never mutate the compiled assets.
 #[derive(Resource, Clone, Debug)]

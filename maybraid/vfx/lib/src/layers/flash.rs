@@ -2,9 +2,9 @@
 
 use bevy::prelude::*;
 
-use crate::composition::{
-	EffectDefinition, EffectLayer, LightPulse, LobeKind, LobeSpec, MeshPart, FLASH,
-};
+use crate::composition::{EffectDefinition, EffectLayer, LightPulse, LobeKind, LobeSpec, MeshPart};
+use crate::names::FLASH;
+use crate::palette::ExplosionPalette;
 
 pub const FLASH_FADE: f32 = 0.12;
 pub const FLASH_PEAK: f32 = 40_000.0;
@@ -12,7 +12,7 @@ pub const FLASH_RANGE: f32 = 6.0;
 
 pub fn pulse() -> LightPulse {
 	LightPulse {
-		color: Color::srgb(1.0, 0.82, 0.45),
+		color: ExplosionPalette::color(ExplosionPalette::maybraid().flash),
 		peak_intensity: FLASH_PEAK,
 		range: FLASH_RANGE,
 		fade: FLASH_FADE,
@@ -25,24 +25,16 @@ pub fn compile_mesh(mesh: Handle<Mesh>) -> MeshPart {
 		mesh,
 		LobeKind::Flash,
 		vec![
-			LobeSpec {
-				offset: Vec3::ZERO,
-				scale: Vec3::new(0.28, 0.18, 0.22),
-				euler: Vec3::new(0.25, 0.6, -0.15),
-				expand: 1.55,
-				rise: 0.0,
-				roll: 0.2,
-				duration: FLASH_FADE,
-			},
-			LobeSpec {
-				offset: Vec3::new(0.05, 0.03, -0.03),
-				scale: Vec3::new(0.14, 0.08, 0.11),
-				euler: Vec3::new(-0.7, 0.3, 0.5),
-				expand: 1.1,
-				rise: 0.0,
-				roll: 0.4,
-				duration: FLASH_FADE * 0.7,
-			},
+			LobeSpec::new(Vec3::ZERO, Vec3::new(0.28, 0.18, 0.22))
+				.with_euler(Vec3::new(0.25, 0.6, -0.15))
+				.with_expand(1.55)
+				.with_roll(0.2)
+				.with_duration(FLASH_FADE),
+			LobeSpec::new(Vec3::new(0.05, 0.03, -0.03), Vec3::new(0.14, 0.08, 0.11))
+				.with_euler(Vec3::new(-0.7, 0.3, 0.5))
+				.with_expand(1.1)
+				.with_roll(0.4)
+				.with_duration(FLASH_FADE * 0.7),
 		],
 	)
 }

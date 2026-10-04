@@ -39,8 +39,12 @@ pub fn apply_pending_shows(
 		if let Some(base) = last.request.clone() {
 			pending.0.extend([
 				VfxShowRequest { distance: 0.0, seed: base.seed, ..base.clone() },
-				VfxShowRequest { distance: 6.0, seed: base.seed.wrapping_add(1), ..base.clone() },
-				VfxShowRequest { distance: 14.0, seed: base.seed.wrapping_add(2), ..base },
+				VfxShowRequest {
+					distance: 6.0,
+					seed: base.seed.map(|s| s.wrapping_add(1)),
+					..base.clone()
+				},
+				VfxShowRequest { distance: 14.0, seed: base.seed.map(|s| s.wrapping_add(2)), ..base },
 			]);
 		}
 	}
@@ -48,12 +52,12 @@ pub fn apply_pending_shows(
 		let Some(definition) = library.get(&request.effect) else {
 			continue;
 		};
-		burst(&mut commands, definition, &request);
+		let spawn = burst(&mut commands, definition, &request);
 		if looping.0 {
-			repeating.request = Some(request.clone());
+			repeating.request = Some(VfxShowRequest { seed: spawn.seed, ..request.clone() });
 			repeating.wait = 0.0;
 		}
-		last.request = Some(request.clone());
+		last.request = Some(VfxShowRequest { seed: spawn.seed, ..request.clone() });
 		last.label = format!(
 			"{} · scale {:.2} · intensity {:.2} · playback {:.2} · d {:.1} · seed {}",
 			definition.name,
@@ -61,7 +65,7 @@ pub fn apply_pending_shows(
 			request.intensity,
 			request.playback,
 			request.distance,
-			request.seed
+			spawn.resolved_seed()
 		);
 		status.0 = format!("show {}", last.label);
 	}
@@ -115,17 +119,16 @@ fn burst(
 	commands: &mut Commands,
 	definition: &maybraid_vfx::EffectDefinition,
 	request: &VfxShowRequest,
-) {
-	spawn_vfx(
-		commands,
-		definition,
-		VfxSpawn {
-			transform: Transform::from_translation(SHOW_ORIGIN + Vec3::Z * request.distance),
-			scale: request.scale,
-			intensity: request.intensity,
-			seed: request.seed,
-			playback: request.playback,
-			..default()
-		},
-	);
+) -> VfxSpawn {
+	let spawn = VfxSpawn {
+		transform: Transform::from_translation(SHOW_ORIGIN + Vec3::Z * request.distance),
+		scale: request.scale,
+		intensity: request.intensity,
+		seed: request.seed,
+		playback: request.playback,
+		..default()
+	}
+	.resolved();
+	spawn_vfx(commands, definition, spawn.clone());
+	spawn
 }

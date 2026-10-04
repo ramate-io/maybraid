@@ -8,29 +8,37 @@
 //! `firey_explosion`.
 
 pub mod assets;
+pub mod atlas;
 pub mod composition;
 pub mod effects;
 pub mod flipbook;
 pub mod layers;
 pub mod library;
-pub mod lobe;
+pub mod lifecycle;
 pub mod lobe_material;
+pub mod lobes;
+pub mod names;
+pub mod palette;
 pub mod particles;
+pub mod seed;
 pub mod spawn;
 
+pub use assets::VfxFlipbooks;
 pub use composition::{
 	EffectDefinition, EffectLayer, EffectPart, LightPulse, LobeKind, LobeSpec, MeshPart,
-	ParticlePart, VfxFlipbooks, FIREBALL, FIREY_EXPLOSION, FLASH, SMOKE, SPARKS,
+	ParticlePart, ParticleShade,
 };
 pub use library::{canonicalize_effect_name, VfxLibrary};
 pub use lobe_material::{LobeMaterial, LobeMaterialPlugin};
+pub use names::{FIREBALL, FIREY_EXPLOSION, FLASH, SMOKE, SPARKS};
+pub use palette::ExplosionPalette;
 pub use spawn::{spawn_vfx, SpawnVfxExt, VfxInstance, VfxSpawn, MAX_PLAYBACK, MIN_PLAYBACK};
 
 use bevy::prelude::*;
 use bevy_hanabi::HanabiPlugin;
 
 use crate::library::setup_vfx_library;
-use crate::spawn::vfx_lifecycle_plugin;
+use crate::lifecycle::vfx_lifecycle_plugin;
 
 /// Registers Hanabi, the lobe material, compiled definitions, and instance cleanup.
 pub struct VfxPlugin;

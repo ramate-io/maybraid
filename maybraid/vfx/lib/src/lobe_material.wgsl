@@ -20,6 +20,15 @@ var<uniform> tint: vec4<f32>;
 @group(#{MATERIAL_BIND_GROUP}) @binding(2)
 var<uniform> extras: vec4<f32>;
 
+@group(#{MATERIAL_BIND_GROUP}) @binding(3)
+var<uniform> color_hot: vec4<f32>;
+
+@group(#{MATERIAL_BIND_GROUP}) @binding(4)
+var<uniform> color_mid: vec4<f32>;
+
+@group(#{MATERIAL_BIND_GROUP}) @binding(5)
+var<uniform> color_cool: vec4<f32>;
+
 fn hash21(p: vec2<f32>) -> f32 {
     let p3 = fract(vec3<f32>(p.x, p.y, p.x) * 0.1031);
     let d = dot(p3, p3.yzx + vec3<f32>(33.33));
@@ -173,10 +182,7 @@ fn shade_fire(local: vec3<f32>, n: vec3<f32>, view_dir: vec3<f32>, age_n: f32) -
     let facing = saturate(dot(n, view_dir));
     let blotch = fbm(local * 2.5 + vec3<f32>(params.z, age_n * 0.4, 1.6));
     let heat = saturate((1.0 - age_n) * mix(0.28, 1.05, blotch));
-    let hot = vec3<f32>(1.12, 0.88, 0.38);
-    let mid = vec3<f32>(0.98, 0.34, 0.06);
-    let cool = vec3<f32>(0.32, 0.05, 0.02);
-    var rgb = mix(cool, mix(mid, hot, saturate(heat * 1.25 - 0.12)), soft_band(heat, extras.w));
+    var rgb = mix(color_cool.xyz, mix(color_mid.xyz, color_hot.xyz, saturate(heat * 1.25 - 0.12)), soft_band(heat, extras.w));
     rgb *= tint.xyz;
     let n_lit = saturate(dot(n, normalize(vec3<f32>(0.28, 0.86, 0.32))) * 0.22 + 0.78);
     rgb *= n_lit * extras.x;
@@ -187,11 +193,9 @@ fn shade_fire(local: vec3<f32>, n: vec3<f32>, view_dir: vec3<f32>, age_n: f32) -
 fn shade_smoke(local: vec3<f32>, n: vec3<f32>, view_dir: vec3<f32>, age_n: f32) -> vec4<f32> {
     let facing = saturate(dot(n, view_dir));
     let blotch = fbm(local * 1.9 + vec3<f32>(params.z * 0.7, age_n * 0.85, 3.1));
-    let warm = vec3<f32>(0.46, 0.36, 0.28);
-    let cool = vec3<f32>(0.18, 0.22, 0.28);
     let n_lit = saturate(dot(n, normalize(vec3<f32>(0.32, 0.84, 0.22))) * 0.2 + 0.8);
     let lift = soft_band(blotch * 0.72 + n_lit * 0.28, extras.w);
-    let rgb = mix(cool, warm, lift) * tint.xyz * extras.x;
+    let rgb = mix(color_cool.xyz, color_hot.xyz, lift) * tint.xyz * extras.x;
     let alpha = silhouette_alpha(facing, blotch, age_n) * 0.92;
     return vec4<f32>(rgb, alpha);
 }
@@ -199,9 +203,7 @@ fn shade_smoke(local: vec3<f32>, n: vec3<f32>, view_dir: vec3<f32>, age_n: f32) 
 fn shade_flash(local: vec3<f32>, n: vec3<f32>, view_dir: vec3<f32>, age_n: f32) -> vec4<f32> {
     let facing = saturate(dot(n, view_dir));
     let blotch = fbm(local * 3.2 + vec3<f32>(params.z, 0.0, 0.5));
-    let hot = vec3<f32>(1.4, 1.15, 0.72);
-    let limb = vec3<f32>(1.0, 0.55, 0.16);
-    let rgb = mix(limb, hot, facing * mix(0.6, 1.0, blotch)) * tint.xyz;
+    let rgb = mix(color_mid.xyz, color_hot.xyz, facing * mix(0.6, 1.0, blotch)) * tint.xyz;
     let fade = 1.0 - smoothstep(0.12, 1.0, age_n);
     let alpha = smoothstep(0.04, 0.32, facing) * fade * mix(0.45, 1.0, blotch);
     return vec4<f32>(rgb * extras.x * fade, alpha);

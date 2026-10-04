@@ -1,15 +1,15 @@
-//! Shared definitions: parts, layers, and named composites.
+//! Generic parts, layers, and composites. Preset names live in [`crate::library`].
 
 use bevy::prelude::*;
 use bevy_hanabi::EffectAsset;
 
-use crate::assets::FlipbookAsset;
-
-pub const FIREY_EXPLOSION: &str = "firey_explosion";
-pub const FLASH: &str = "flash";
-pub const FIREBALL: &str = "fireball";
-pub const SMOKE: &str = "smoke";
-pub const SPARKS: &str = "sparks";
+/// Which explosion colors a particle layer samples from the instance palette.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ParticleShade {
+	Fire,
+	Smoke,
+	Spark,
+}
 
 /// Shared Hanabi effect handle and configurable spawn defaults.
 #[derive(Clone, Debug)]
@@ -20,6 +20,7 @@ pub struct ParticlePart {
 	pub count: f32,
 	pub capacity: u32,
 	pub max_lifetime: f32,
+	pub shade: ParticleShade,
 }
 
 /// Light color, peak intensity, range, and fade duration.
@@ -61,7 +62,38 @@ pub struct LobeSpec {
 	pub duration: f32,
 }
 
-/// Shared mesh plus a lobe arrangement. Runtime animation stays in spawn.
+impl LobeSpec {
+	pub fn new(offset: Vec3, scale: Vec3) -> Self {
+		Self { offset, scale, euler: Vec3::ZERO, expand: 0.7, rise: 0.0, roll: 0.0, duration: 0.5 }
+	}
+
+	pub fn with_euler(mut self, euler: Vec3) -> Self {
+		self.euler = euler;
+		self
+	}
+
+	pub fn with_expand(mut self, expand: f32) -> Self {
+		self.expand = expand;
+		self
+	}
+
+	pub fn with_rise(mut self, rise: f32) -> Self {
+		self.rise = rise;
+		self
+	}
+
+	pub fn with_roll(mut self, roll: f32) -> Self {
+		self.roll = roll;
+		self
+	}
+
+	pub fn with_duration(mut self, duration: f32) -> Self {
+		self.duration = duration;
+		self
+	}
+}
+
+/// Shared mesh plus a lobe arrangement. Runtime animation stays in [`crate::lobes`].
 #[derive(Clone, Debug)]
 pub struct MeshPart {
 	pub name: String,
@@ -166,12 +198,4 @@ impl EffectDefinition {
 	pub fn duration(&self) -> f32 {
 		self.layers.iter().map(EffectLayer::duration).fold(0.0, f32::max)
 	}
-}
-
-/// Flipbooks compiled for the first explosion set.
-#[derive(Clone, Debug)]
-pub struct VfxFlipbooks {
-	pub fire: FlipbookAsset,
-	pub smoke: FlipbookAsset,
-	pub spark: Handle<Image>,
 }

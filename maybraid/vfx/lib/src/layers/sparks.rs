@@ -8,9 +8,11 @@ use bevy_hanabi::prelude::{
 	SimulationSpace, SpawnerSettings,
 };
 
-use crate::composition::{EffectDefinition, EffectLayer, ParticlePart, SPARKS};
+use crate::composition::{EffectDefinition, EffectLayer, ParticlePart, ParticleShade};
+use crate::names::SPARKS;
 use crate::particles::{
-	add_instance_properties, init_lifetime, init_radial_velocity, update_scaled_size3,
+	add_instance_properties, init_lifetime, init_palette_color, init_radial_velocity,
+	update_palette_color, update_scaled_size3, value_lifetime_gradient,
 };
 
 pub const SPARKS_COUNT: f32 = 28.0;
@@ -26,10 +28,13 @@ pub fn compile(effects: &mut Assets<EffectAsset>, taper: Handle<Image>) -> Parti
 		radius: (writer.lit(0.06) * props.scale.clone()).expr(),
 		dimension: ShapeDimension::Volume,
 	};
-	let init_vel = init_radial_velocity(&writer, &props.scale, &props.playback, 3.5, 7.0);
+	let init_vel =
+		init_radial_velocity(&writer, &props.scale, &props.playback, &props.seed, 3.5, 7.0);
 	let init_age = SetAttributeModifier::new(Attribute::AGE, writer.lit(0.).expr());
-	let init_lifetime = init_lifetime(&writer, &props.playback, SPARKS_LIFE_MIN, SPARKS_LIFE_MAX);
-	let init_color = SetAttributeModifier::new(Attribute::HDR_COLOR, props.tint.expr());
+	let init_lifetime =
+		init_lifetime(&writer, &props.playback, &props.seed, SPARKS_LIFE_MIN, SPARKS_LIFE_MAX);
+	let init_color = init_palette_color(&props);
+	let update_color = update_palette_color(&writer, &props);
 	let update_drag = LinearDragModifier::new((writer.lit(1.2) * props.playback.clone()).expr());
 	let update_accel = AccelModifier::new(
 		(writer.lit(Vec3::new(0.0, -10.0, 0.0)) * props.scale.clone() * props.playback).expr(),
@@ -41,11 +46,7 @@ pub fn compile(effects: &mut Assets<EffectAsset>, taper: Handle<Image>) -> Parti
 		Vec3::new(0.10, 0.014, 1.0),
 	);
 	let texture_slot = writer.lit(0u32).expr();
-
-	let mut color = bevy_hanabi::Gradient::new();
-	color.add_key(0.0, Vec4::new(1.6, 1.05, 0.32, 1.0));
-	color.add_key(0.4, Vec4::new(1.2, 0.42, 0.08, 1.0));
-	color.add_key(1.0, Vec4::new(0.2, 0.04, 0.01, 0.0));
+	let color = value_lifetime_gradient(&[(0.0, 1.0), (0.4, 1.0), (1.0, 0.0)]);
 
 	let mut module = writer.finish();
 	module.add_texture_slot("spark");
@@ -63,6 +64,7 @@ pub fn compile(effects: &mut Assets<EffectAsset>, taper: Handle<Image>) -> Parti
 			.update(update_drag)
 			.update(update_accel)
 			.update(update_size)
+			.update(update_color)
 			.render(ParticleTextureModifier {
 				texture_slot,
 				sample_mapping: ImageSampleMapping::Modulate,
@@ -82,6 +84,7 @@ pub fn compile(effects: &mut Assets<EffectAsset>, taper: Handle<Image>) -> Parti
 		count: SPARKS_COUNT,
 		capacity: SPARKS_CAPACITY,
 		max_lifetime: SPARKS_LIFE_MAX,
+		shade: ParticleShade::Spark,
 	}
 }
 

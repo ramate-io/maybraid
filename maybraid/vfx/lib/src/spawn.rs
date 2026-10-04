@@ -1,16 +1,15 @@
-//! Public spawn API, delayed layers, and hierarchy cleanup.
+//! Public spawn API and layer dispatch.
 
 use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
-use bevy_hanabi::prelude::{
-	CompiledParticleEffect, EffectMaterial, EffectSpawner, EffectSystems, ParticleEffect,
-	SpawnerSettings,
-};
+use bevy_hanabi::prelude::{EffectMaterial, ParticleEffect};
 
-use crate::composition::{EffectDefinition, EffectLayer, EffectPart};
-use crate::lobe::lobe_transform;
+use crate::composition::{EffectDefinition, EffectLayer, EffectPart, LobeKind};
 use crate::lobe_material::LobeMaterial;
+use crate::lobes::{lobe_transform, vary_lobe, LobeMaterialSlot, VfxLobe};
+use crate::palette::ExplosionPalette;
 use crate::particles::effect_properties;
+use crate::seed;
 
 pub const MAX_INTENSITY: f32 = 2.0;
 pub const MIN_SCALE: f32 = 0.25;
@@ -26,8 +25,12 @@ pub struct VfxSpawn {
 	pub intensity: f32,
 	/// 1.0 is the authored layer envelope. Higher plays the same ratios faster.
 	pub playback: f32,
+	/// Optional overall multiplier applied on top of [`Self::palette`].
 	pub tint: Option<Color>,
-	pub seed: u64,
+	/// `None` picks a new seed. `Some` reproduces that instance.
+	pub seed: Option<u64>,
+	/// `None` uses [`ExplosionPalette::maybraid`].
+	pub palette: Option<ExplosionPalette>,
 }
 
 impl Default for VfxSpawn {
@@ -38,7 +41,8 @@ impl Default for VfxSpawn {
 			intensity: 1.0,
 			playback: 1.0,
 			tint: None,
-			seed: 0,
+			seed: None,
+			palette: None,
 		}
 	}
 }
@@ -59,6 +63,27 @@ impl VfxSpawn {
 	pub fn tint_or_white(&self) -> Color {
 		self.tint.unwrap_or(Color::WHITE)
 	}
+
+	pub fn resolved_seed(&self) -> u64 {
+		self.seed.unwrap_or(0)
+	}
+
+	pub fn palette(&self) -> ExplosionPalette {
+		self.palette.unwrap_or_default()
+	}
+
+	/// Clamp numeric overrides and fill a missing seed. Call once before spawn.
+	pub fn resolved(self) -> Self {
+		Self {
+			transform: self.transform,
+			scale: self.clamped_scale(),
+			intensity: self.clamped_intensity(),
+			playback: self.clamped_playback(),
+			tint: self.tint,
+			seed: Some(self.seed.unwrap_or_else(seed::generate)),
+			palette: self.palette,
+		}
+	}
 }
 
 /// Root of one spawned instance.
@@ -68,7 +93,8 @@ pub struct VfxInstance {
 	pub age: f32,
 	pub duration: f32,
 	pub playback: f32,
-	/// False until Hanabi has compiled and the first burst can emit.
+	pub seed: u64,
+	/// False until immediate particle emitters are ready to burst.
 	pub armed: bool,
 }
 
@@ -88,7 +114,7 @@ pub struct VfxFlash {
 	pub playback: f32,
 }
 
-/// Particle layer waiting for [`CompiledParticleEffect::is_ready`].
+/// Particle layer waiting for [`bevy_hanabi::CompiledParticleEffect::is_ready`].
 #[derive(Component, Debug)]
 pub struct VfxEmitter {
 	pub count: f32,
@@ -96,6 +122,10 @@ pub struct VfxEmitter {
 
 #[derive(Component, Debug)]
 pub struct VfxEmitterArmed;
+
+/// Spawner has been reset for this instance's start gate.
+#[derive(Component, Debug)]
+pub struct VfxEmitterBurst;
 
 /// Actual start clock for one realized layer. Cleanup uses this, not planned delay.
 #[derive(Component, Debug)]
@@ -106,28 +136,13 @@ pub struct VfxLayerLife {
 	pub waiting_for_emitter: bool,
 }
 
-/// One animated mesh lobe. Material is per-instance.
-#[derive(Component, Debug)]
-pub struct VfxLobe {
-	pub age: f32,
-	pub spec: crate::composition::LobeSpec,
-	pub seed: u64,
-	pub index: u32,
-	pub playback: f32,
-}
-
 /// Spawn a named definition at `spawn.transform`. Returns the root entity.
 pub fn spawn_vfx(
 	commands: &mut Commands,
 	definition: &EffectDefinition,
 	spawn: VfxSpawn,
 ) -> Entity {
-	let spawn = VfxSpawn {
-		scale: spawn.clamped_scale(),
-		intensity: spawn.clamped_intensity(),
-		playback: spawn.clamped_playback(),
-		..spawn
-	};
+	let spawn = spawn.resolved();
 	let duration = definition.duration();
 	let mut pending = Vec::new();
 	let mut immediate = Vec::new();
@@ -154,6 +169,7 @@ pub fn spawn_vfx(
 				age: 0.0,
 				duration,
 				playback: spawn.clamped_playback(),
+				seed: spawn.resolved_seed(),
 				armed: false,
 			},
 			VfxPendingLayers { layers: pending, spawn: spawn.clone() },
@@ -162,7 +178,7 @@ pub fn spawn_vfx(
 		.id();
 
 	for layer in immediate {
-		realize_layer(commands, root, &layer, &spawn, 0.0);
+		realize_layer(commands, root, &layer, &spawn);
 	}
 	root
 }
@@ -178,200 +194,7 @@ impl SpawnVfxExt for Commands<'_, '_> {
 	}
 }
 
-/// Reset `once` spawners only after Hanabi compiled the GPU effect.
-pub fn arm_vfx_emitters(
-	mut commands: Commands,
-	mut emitters: Query<
-		(Entity, &VfxEmitter, &CompiledParticleEffect, Option<&mut EffectSpawner>),
-		Without<VfxEmitterArmed>,
-	>,
-) {
-	for (entity, emitter, compiled, spawner) in &mut emitters {
-		if !compiled.is_ready() {
-			continue;
-		}
-		let settings = SpawnerSettings::once(emitter.count.into());
-		if let Some(mut spawner) = spawner {
-			spawner.settings = settings;
-			spawner.reset();
-			spawner.active = true;
-		} else {
-			commands.entity(entity).insert(EffectSpawner::new(&settings));
-		}
-		commands.entity(entity).insert(VfxEmitterArmed);
-	}
-}
-
-pub fn tick_vfx_instances(
-	mut commands: Commands,
-	time: Res<Time>,
-	emitters: Query<Has<VfxEmitterArmed>, With<VfxEmitter>>,
-	lives: Query<&VfxLayerLife>,
-	children: Query<&Children>,
-	mut instances: Query<(Entity, &mut VfxInstance, &mut VfxPendingLayers)>,
-) {
-	let dt = time.delta_secs();
-	for (entity, mut instance, mut pending) in &mut instances {
-		if !instance.armed {
-			instance.armed = instance_emitters_armed(entity, &children, &emitters);
-			if !instance.armed {
-				continue;
-			}
-			instance.age = 0.0;
-		}
-		instance.age += dt * instance.playback;
-		let spawn = pending.spawn.clone();
-		let mut remain = Vec::new();
-		for layer in pending.layers.drain(..) {
-			if instance.age + 1e-4 >= layer.delay {
-				let actual_start = instance.age;
-				instance.duration = instance.duration.max(actual_start + layer.part_lifetime());
-				realize_layer(&mut commands, entity, &layer, &spawn, actual_start);
-			} else {
-				remain.push(layer);
-			}
-		}
-		pending.layers = remain;
-		if pending.layers.is_empty() && layers_finished(entity, &children, &lives) {
-			if instance.age >= instance.duration {
-				commands.entity(entity).try_despawn();
-			}
-		}
-	}
-}
-
-pub fn tick_vfx_flashes(
-	mut commands: Commands,
-	time: Res<Time>,
-	mut flashes: Query<(Entity, &mut VfxFlash, &mut PointLight, Option<&mut VfxLayerLife>)>,
-) {
-	let dt = time.delta_secs();
-	for (entity, mut flash, mut light, life) in &mut flashes {
-		flash.age += dt * flash.playback;
-		if let Some(mut life) = life {
-			life.age = flash.age;
-		}
-		let t = if flash.fade > 1e-4 { (flash.age / flash.fade).clamp(0.0, 1.0) } else { 1.0 };
-		light.intensity = flash.peak * (1.0 - t);
-		if t >= 1.0 {
-			commands.entity(entity).try_despawn();
-		}
-	}
-}
-
-pub fn tick_vfx_lobes(
-	time: Res<Time>,
-	mut materials: ResMut<Assets<LobeMaterial>>,
-	mut lobes: Query<(
-		&mut VfxLobe,
-		&mut Transform,
-		Option<&MeshMaterial3d<LobeMaterial>>,
-		Option<&mut VfxLayerLife>,
-	)>,
-) {
-	let dt = time.delta_secs();
-	for (mut lobe, mut transform, material, life) in &mut lobes {
-		lobe.age += dt * lobe.playback;
-		if let Some(mut life) = life {
-			life.age = lobe.age;
-		}
-		*transform = lobe_transform(&lobe.spec, lobe.age, lobe.seed, lobe.index);
-		if let Some(handle) = material {
-			if let Some(mut material) = materials.get_mut(&handle.0) {
-				material.set_age(lobe.age);
-			}
-		}
-	}
-}
-
-pub fn tick_vfx_layer_lives(
-	time: Res<Time>,
-	armed: Query<Has<VfxEmitterArmed>, With<VfxEmitter>>,
-	mut lives: Query<(Entity, &mut VfxLayerLife), With<VfxEmitter>>,
-) {
-	let dt = time.delta_secs();
-	for (entity, mut life) in &mut lives {
-		if life.waiting_for_emitter {
-			if armed.get(entity).ok() != Some(true) {
-				continue;
-			}
-			life.waiting_for_emitter = false;
-			life.age = 0.0;
-		}
-		life.age += dt * life.playback;
-	}
-}
-
-pub fn vfx_lifecycle_plugin(app: &mut App) {
-	app.add_systems(PostUpdate, arm_vfx_emitters.before(EffectSystems::TickSpawners))
-		.add_systems(
-			Update,
-			(
-				stamp_lobe_materials,
-				tick_vfx_instances,
-				tick_vfx_flashes,
-				tick_vfx_lobes,
-				tick_vfx_layer_lives,
-			),
-		);
-}
-
-fn instance_emitters_armed(
-	entity: Entity,
-	children: &Query<&Children>,
-	emitters: &Query<Has<VfxEmitterArmed>, With<VfxEmitter>>,
-) -> bool {
-	let Ok(kids) = children.get(entity) else {
-		return true;
-	};
-	for child in kids.iter() {
-		let Ok(armed) = emitters.get(child) else {
-			continue;
-		};
-		if !armed {
-			return false;
-		}
-	}
-	true
-}
-
-fn layers_finished(
-	entity: Entity,
-	children: &Query<&Children>,
-	lives: &Query<&VfxLayerLife>,
-) -> bool {
-	let Ok(kids) = children.get(entity) else {
-		return true;
-	};
-	let mut saw = false;
-	for child in kids.iter() {
-		if let Ok(life) = lives.get(child) {
-			saw = true;
-			if life.waiting_for_emitter || life.age + 1e-3 < life.duration {
-				return false;
-			}
-		}
-		if let Ok(grand) = children.get(child) {
-			for g in grand.iter() {
-				if let Ok(life) = lives.get(g) {
-					saw = true;
-					if life.waiting_for_emitter || life.age + 1e-3 < life.duration {
-						return false;
-					}
-				}
-			}
-		}
-	}
-	saw
-}
-
-fn realize_layer(
-	commands: &mut Commands,
-	parent: Entity,
-	layer: &EffectLayer,
-	spawn: &VfxSpawn,
-	_actual_start: f32,
-) {
+pub fn realize_layer(commands: &mut Commands, parent: Entity, layer: &EffectLayer, spawn: &VfxSpawn) {
 	let transform = Transform {
 		translation: layer.transform.translation,
 		rotation: layer.transform.rotation,
@@ -386,7 +209,7 @@ fn realize_layer(
 				transform,
 				Visibility::Inherited,
 				ParticleEffect::new(part.effect.clone()),
-				effect_properties(spawn, layer.scale),
+				effect_properties(spawn, layer.scale, part.shade),
 				VfxEmitter { count },
 				VfxLayerLife {
 					age: 0.0,
@@ -402,7 +225,7 @@ fn realize_layer(
 		}
 		EffectPart::Light(pulse) => {
 			let peak = pulse.peak_intensity * spawn.clamped_intensity();
-			let color = spawn.tint.unwrap_or(pulse.color);
+			let color = ExplosionPalette::color(spawn.palette().with_tint(spawn.tint).flash);
 			let range = pulse.range * spawn.clamped_scale() * layer.scale;
 			commands.spawn((
 				Name::new("vfx-layer-flash"),
@@ -410,7 +233,7 @@ fn realize_layer(
 				transform,
 				PointLight {
 					color,
-					intensity: peak,
+					intensity: 0.0,
 					range,
 					shadow_maps_enabled: false,
 					..default()
@@ -434,28 +257,24 @@ fn realize_layer(
 					NotShadowCaster,
 				))
 				.id();
+			let layer_id = layer_stream(part.kind);
 			for (index, spec) in part.lobes.iter().copied().enumerate() {
+				let spec = vary_lobe(spec, spawn.resolved_seed(), layer_id, index as u32);
 				let material = LobeMaterial::new(
 					part.kind,
 					spec.duration,
-					crate::particles::seed_as_f32(spawn.seed.wrapping_add(index as u64)),
+					seed::unit(seed::stream(spawn.resolved_seed(), layer_id, index as u32)),
+					&spawn.palette(),
 					spawn.tint_or_white(),
 					spawn.clamped_intensity(),
 				);
-				let pose = lobe_transform(&spec, 0.0, spawn.seed, index as u32);
 				commands.spawn((
 					Name::new(format!("vfx-lobe-{}-{index}", part.name)),
 					ChildOf(cluster),
 					Mesh3d(part.mesh.clone()),
-					pose,
-					Visibility::Inherited,
-					VfxLobe {
-						age: 0.0,
-						spec,
-						seed: spawn.seed,
-						index: index as u32,
-						playback: spawn.clamped_playback(),
-					},
+					lobe_transform(&spec, 0.0),
+					Visibility::Hidden,
+					VfxLobe { age: 0.0, spec, playback: spawn.clamped_playback() },
 					VfxLayerLife {
 						age: 0.0,
 						duration: spec.duration,
@@ -470,28 +289,18 @@ fn realize_layer(
 	}
 }
 
-/// Temporary holder so [`stamp_lobe_materials`] can add the asset after spawn.
-#[derive(Component)]
-struct LobeMaterialSlot(LobeMaterial);
-
-fn stamp_lobe_materials(
-	mut commands: Commands,
-	mut materials: ResMut<Assets<LobeMaterial>>,
-	pending: Query<(Entity, &LobeMaterialSlot)>,
-) {
-	for (entity, slot) in &pending {
-		let handle = materials.add(slot.0.clone());
-		commands
-			.entity(entity)
-			.insert(MeshMaterial3d(handle))
-			.remove::<LobeMaterialSlot>();
+fn layer_stream(kind: LobeKind) -> u32 {
+	match kind {
+		LobeKind::Fire => seed::LAYER_FIRE,
+		LobeKind::Smoke => seed::LAYER_SMOKE,
+		LobeKind::Flash => seed::LAYER_FLASH,
 	}
 }
 
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::composition::{EffectLayer, LightPulse};
+	use crate::composition::{EffectLayer, LightPulse, ParticleShade};
 	use crate::layers::flash::FLASH_FADE;
 
 	#[test]
@@ -502,6 +311,16 @@ mod tests {
 		assert_eq!(spawn.clamped_playback(), MIN_PLAYBACK);
 		let fast = VfxSpawn { playback: 99.0, ..default() };
 		assert_eq!(fast.clamped_playback(), MAX_PLAYBACK);
+	}
+
+	#[test]
+	fn omitted_seed_is_filled_once() {
+		let a = VfxSpawn::default().resolved();
+		let b = VfxSpawn::default().resolved();
+		assert!(a.seed.is_some());
+		assert_ne!(a.seed, b.seed);
+		let same = VfxSpawn { seed: Some(11), ..default() }.resolved();
+		assert_eq!(same.seed, Some(11));
 	}
 
 	#[test]
@@ -532,16 +351,18 @@ mod tests {
 	}
 
 	#[test]
-	fn tint_override_is_distinct_from_default() {
+	fn tint_and_palette_reach_particle_properties() {
 		let spawn = VfxSpawn {
 			tint: Some(Color::srgb(0.2, 0.8, 1.0)),
-			seed: 7,
+			seed: Some(7),
 			playback: 2.0,
 			..default()
-		};
-		let props = effect_properties(&spawn, 1.0);
+		}
+		.resolved();
+		let props = effect_properties(&spawn, 1.0, ParticleShade::Fire);
 		assert!(props.get_stored(crate::particles::PROP_TINT).is_some());
 		assert!(props.get_stored(crate::particles::PROP_SEED).is_some());
 		assert!(props.get_stored(crate::particles::PROP_PLAYBACK).is_some());
+		assert!(props.get_stored(crate::particles::PROP_COLOR0).is_some());
 	}
 }

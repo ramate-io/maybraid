@@ -91,7 +91,7 @@ mod tests {
 		assert!((scale - 1.0).abs() < 1e-4);
 		assert!((intensity - 1.0).abs() < 1e-4);
 		assert!(distance.abs() < 1e-4);
-		assert_eq!(seed, 0);
+		assert!(seed.is_none());
 		assert!((playback - 1.0).abs() < 1e-4);
 		Ok(())
 	}
@@ -105,7 +105,7 @@ mod tests {
 				if (scale - 1.0).abs() < 1e-4
 					&& (intensity - 1.0).abs() < 1e-4
 					&& distance.abs() < 1e-4
-					&& seed == 0
+					&& seed.is_none()
 					&& (playback - 1.0).abs() < 1e-4
 		));
 		let command = <PlaygroundCommand as GameCommand>::parse_line(
@@ -119,7 +119,7 @@ mod tests {
 		assert!((scale - 1.5).abs() < 1e-4);
 		assert!((intensity - 1.2).abs() < 1e-4);
 		assert!((distance - 6.0).abs() < 1e-4);
-		assert_eq!(seed, 3);
+		assert_eq!(seed, Some(3));
 		assert!((playback - 0.5).abs() < 1e-4);
 		Ok(())
 	}

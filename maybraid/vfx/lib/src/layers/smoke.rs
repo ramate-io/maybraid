@@ -10,11 +10,13 @@ use bevy_hanabi::prelude::{
 
 use crate::assets::FlipbookAsset;
 use crate::composition::{
-	EffectDefinition, EffectLayer, LobeKind, LobeSpec, MeshPart, ParticlePart, SMOKE,
+	EffectDefinition, EffectLayer, LobeKind, LobeSpec, MeshPart, ParticlePart, ParticleShade,
 };
 use crate::flipbook::update_sprite_index;
+use crate::names::SMOKE;
 use crate::particles::{
-	add_instance_properties, init_lifetime, init_smoke_velocity, update_scaled_size3,
+	add_instance_properties, init_lifetime, init_palette_color, init_smoke_velocity,
+	update_palette_color, update_scaled_size3, value_lifetime_gradient,
 };
 
 pub const SMOKE_COUNT: f32 = 10.0;
@@ -32,83 +34,50 @@ pub fn compile_mesh(mesh: Handle<Mesh>) -> MeshPart {
 		mesh,
 		LobeKind::Smoke,
 		vec![
-			puff(
-				Vec3::new(0.00, 0.10, 0.00),
-				Vec3::new(0.82, 0.48, 0.64),
-				Vec3::new(0.20, 0.55, -0.15),
-				1.05,
-				0.55,
-				1.4,
-				2.20,
-			),
-			puff(
-				Vec3::new(0.20, 0.16, 0.08),
-				Vec3::new(0.38, 0.62, 0.44),
-				Vec3::new(-0.70, 0.90, 0.30),
-				0.95,
-				0.62,
-				1.8,
-				2.05,
-			),
-			puff(
-				Vec3::new(-0.18, 0.14, 0.12),
-				Vec3::new(0.58, 0.36, 0.50),
-				Vec3::new(0.85, -0.40, 0.55),
-				0.98,
-				0.58,
-				1.2,
-				2.10,
-			),
-			puff(
-				Vec3::new(0.06, 0.22, -0.18),
-				Vec3::new(0.46, 0.70, 0.34),
-				Vec3::new(-0.25, 1.20, -0.65),
-				0.90,
-				0.70,
-				2.0,
-				2.30,
-			),
-			puff(
-				Vec3::new(-0.12, 0.06, -0.16),
-				Vec3::new(0.54, 0.32, 0.48),
-				Vec3::new(1.05, 0.20, 0.15),
-				0.88,
-				0.48,
-				1.1,
-				1.90,
-			),
-			puff(
-				Vec3::new(0.14, 0.04, 0.18),
-				Vec3::new(0.30, 0.50, 0.66),
-				Vec3::new(-0.90, -0.55, 0.80),
-				0.86,
-				0.50,
-				1.6,
-				1.95,
-			),
-			puff(
-				Vec3::new(-0.04, 0.28, 0.04),
-				Vec3::new(0.64, 0.40, 0.28),
-				Vec3::new(0.35, 0.75, -0.90),
-				0.80,
-				0.78,
-				1.5,
-				2.40,
-			),
+			LobeSpec::new(Vec3::new(0.00, 0.10, 0.00), Vec3::new(0.82, 0.48, 0.64))
+				.with_euler(Vec3::new(0.20, 0.55, -0.15))
+				.with_expand(1.05)
+				.with_rise(0.55)
+				.with_roll(1.4)
+				.with_duration(2.20),
+			LobeSpec::new(Vec3::new(0.20, 0.16, 0.08), Vec3::new(0.38, 0.62, 0.44))
+				.with_euler(Vec3::new(-0.70, 0.90, 0.30))
+				.with_expand(0.95)
+				.with_rise(0.62)
+				.with_roll(1.8)
+				.with_duration(2.05),
+			LobeSpec::new(Vec3::new(-0.18, 0.14, 0.12), Vec3::new(0.58, 0.36, 0.50))
+				.with_euler(Vec3::new(0.85, -0.40, 0.55))
+				.with_expand(0.98)
+				.with_rise(0.58)
+				.with_roll(1.2)
+				.with_duration(2.10),
+			LobeSpec::new(Vec3::new(0.06, 0.22, -0.18), Vec3::new(0.46, 0.70, 0.34))
+				.with_euler(Vec3::new(-0.25, 1.20, -0.65))
+				.with_expand(0.90)
+				.with_rise(0.70)
+				.with_roll(2.0)
+				.with_duration(2.30),
+			LobeSpec::new(Vec3::new(-0.12, 0.06, -0.16), Vec3::new(0.54, 0.32, 0.48))
+				.with_euler(Vec3::new(1.05, 0.20, 0.15))
+				.with_expand(0.88)
+				.with_rise(0.48)
+				.with_roll(1.1)
+				.with_duration(1.90),
+			LobeSpec::new(Vec3::new(0.14, 0.04, 0.18), Vec3::new(0.30, 0.50, 0.66))
+				.with_euler(Vec3::new(-0.90, -0.55, 0.80))
+				.with_expand(0.86)
+				.with_rise(0.50)
+				.with_roll(1.6)
+				.with_duration(1.95),
+			LobeSpec::new(Vec3::new(-0.04, 0.28, 0.04), Vec3::new(0.64, 0.40, 0.28))
+				.with_euler(Vec3::new(0.35, 0.75, -0.90))
+				.with_expand(0.80)
+				.with_rise(0.78)
+				.with_roll(1.5)
+				.with_duration(2.40),
 		],
 	)
-}
-
-fn puff(
-	offset: Vec3,
-	scale: Vec3,
-	euler: Vec3,
-	expand: f32,
-	rise: f32,
-	roll: f32,
-	duration: f32,
-) -> LobeSpec {
-	LobeSpec { offset, scale, euler, expand, rise, roll, duration }
 }
 
 pub fn compile_wisps(effects: &mut Assets<EffectAsset>, smoke: &FlipbookAsset) -> ParticlePart {
@@ -131,15 +100,18 @@ pub fn compile_wisps_kind(
 		&writer,
 		&props.scale,
 		&props.playback,
+		&props.seed,
 		SMOKE_OUTWARD_MIN,
 		SMOKE_OUTWARD_MAX,
 		SMOKE_RISE,
 		ground,
 	);
 	let init_age = SetAttributeModifier::new(Attribute::AGE, writer.lit(0.).expr());
-	let init_lifetime = init_lifetime(&writer, &props.playback, SMOKE_LIFE_MIN, SMOKE_LIFE_MAX);
+	let init_lifetime =
+		init_lifetime(&writer, &props.playback, &props.seed, SMOKE_LIFE_MIN, SMOKE_LIFE_MAX);
 	let init_sprite = SetAttributeModifier::new(Attribute::SPRITE_INDEX, writer.lit(0i32).expr());
-	let init_color = SetAttributeModifier::new(Attribute::HDR_COLOR, props.tint.expr());
+	let init_color = init_palette_color(&props);
+	let update_color = update_palette_color(&writer, &props);
 	let update_drag = LinearDragModifier::new((writer.lit(1.1) * props.playback.clone()).expr());
 	let update_accel = AccelModifier::new(
 		(writer.lit(Vec3::new(0.0, 0.55, 0.0)) * props.scale.clone() * props.playback).expr(),
@@ -148,11 +120,7 @@ pub fn compile_wisps_kind(
 		update_scaled_size3(&writer, &props.scale, Vec3::splat(0.42), Vec3::splat(0.95));
 	let update_sprite = update_sprite_index(&writer, smoke);
 	let texture_slot = writer.lit(0u32).expr();
-
-	let mut color = bevy_hanabi::Gradient::new();
-	color.add_key(0.0, Vec4::new(0.58, 0.44, 0.34, 0.72));
-	color.add_key(0.45, Vec4::new(0.30, 0.32, 0.36, 0.42));
-	color.add_key(1.0, Vec4::new(0.18, 0.20, 0.24, 0.0));
+	let color = value_lifetime_gradient(&[(0.0, 0.72), (0.45, 0.42), (1.0, 0.0)]);
 
 	let mut module = writer.finish();
 	module.add_texture_slot("smoke");
@@ -172,6 +140,7 @@ pub fn compile_wisps_kind(
 			.update(update_accel)
 			.update(update_size)
 			.update(update_sprite)
+			.update(update_color)
 			.render(ParticleTextureModifier {
 				texture_slot,
 				sample_mapping: ImageSampleMapping::Modulate,
@@ -192,6 +161,7 @@ pub fn compile_wisps_kind(
 		count: SMOKE_COUNT,
 		capacity: SMOKE_CAPACITY,
 		max_lifetime: SMOKE_LIFE_MAX,
+		shade: ParticleShade::Smoke,
 	}
 }
 
