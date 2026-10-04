@@ -24,7 +24,7 @@ use urbanization_layer_model::Urbanization;
 use world_player::{
 	player_position_above_surface, spawn_player_body, CharacterLocomotion, CharacterSpecies,
 	ModePlayerPolicies, MoveWish, Player as VegetationPlayer, PlayerLifeEnded, PlayerLifeSet,
-	RequestSetCharacter, RequestSetCharacterAppearance, RespawnOrigin,
+	PlayerSpawnXz, RequestSetCharacter, RequestSetCharacterAppearance, RespawnOrigin,
 };
 
 use layer_stack::ActiveGenerationMode;
@@ -84,12 +84,21 @@ pub(crate) struct PendingPlayerRespawn {
 	pub map_opened: bool,
 	/// Stick is home; the next throw is one flick.
 	pub stick_resting: bool,
+	/// First Discovery life: no death glaze or bones.
+	pub first_life: bool,
 }
 
 #[derive(Resource, Default)]
-pub(crate) struct WorldPlayerRespawnState {
-	pub pending: Option<PendingPlayerRespawn>,
+pub struct WorldPlayerRespawnState {
+	pub(crate) pending: Option<PendingPlayerRespawn>,
 	last_poi: Option<PoiId>,
+	/// This world load already queued or skipped the first-life picker.
+	first_spawn_offered: bool,
+}
+
+/// Clear the first-life offer so the next world load can pick again.
+pub fn reset_first_spawn_offer(mut state: ResMut<WorldPlayerRespawnState>) {
+	state.first_spawn_offered = false;
 }
 
 /// Discovery map picker confirmed this POI.
@@ -133,8 +142,11 @@ impl Plugin for WorldPlayerLifecyclePlugin {
 			.add_systems(
 				Update,
 				(
+					queue_first_spawn_picker,
 					drive_respawn_picker,
-					respawn_world_player.after(drive_respawn_picker),
+					respawn_world_player
+						.after(queue_first_spawn_picker)
+						.after(drive_respawn_picker),
 					apply_camera_begin_life.after(respawn_world_player),
 				)
 					.after(PoiSystems::Index)
@@ -176,6 +188,11 @@ fn sync_player_death_glaze(
 		*visibility = Visibility::Hidden;
 		return;
 	};
+	if pending.first_life {
+		color.0 = death_glaze_color(0.0);
+		*visibility = Visibility::Hidden;
+		return;
+	}
 	let map_open = map.is_some_and(|map| map.open);
 	color.0 = death_glaze_color(death_glaze_alpha(&pending.timer, map_open));
 	*visibility = Visibility::Visible;
@@ -202,6 +219,7 @@ fn queue_downed_world_player(
 			highlighted_at: None,
 			map_opened: false,
 			stick_resting: true,
+			first_life: false,
 		});
 		velocity.0 = Vec3::ZERO;
 		if let Some(firearm) = firearm {
@@ -227,6 +245,67 @@ fn queue_downed_world_player(
 			Affiliations,
 		)>();
 	}
+}
+
+fn queue_first_spawn_picker(
+	gameplay: Res<WorldGameplayEnabled>,
+	spawn: Res<PlayerSpawnXz>,
+	mode: Option<Res<State<ActiveGenerationMode>>>,
+	policies: Option<Res<ModePlayerPolicies>>,
+	mut state: ResMut<WorldPlayerRespawnState>,
+	mut commands: Commands,
+	players: Query<
+		(Entity, &Transform, Option<&FirearmUser>, Option<&InventoryUser>),
+		With<VegetationPlayer>,
+	>,
+	mut triggers: Query<&mut WeaponTrigger>,
+) {
+	if !gameplay.0 || state.first_spawn_offered || state.pending.is_some() {
+		return;
+	}
+	if spawn.0.is_some() {
+		state.first_spawn_offered = true;
+		return;
+	}
+	let now = mode.as_deref().and_then(|mode| mode.get().mode_id());
+	if !policies.as_deref().is_some_and(|policies| policies.pick_first_spawn(now)) {
+		return;
+	}
+	let Ok((player, transform, firearm, inventory)) = players.single() else {
+		return;
+	};
+	state.first_spawn_offered = true;
+	state.pending = Some(PendingPlayerRespawn {
+		timer: Timer::from_seconds(0.0, TimerMode::Once),
+		death_at: transform.translation,
+		origin: RespawnOrigin::began(now, false),
+		candidates: Vec::new(),
+		highlighted: None,
+		highlighted_at: None,
+		map_opened: false,
+		stick_resting: true,
+		first_life: true,
+	});
+	retire_startup_player(&mut commands, player, firearm, inventory, &mut triggers);
+}
+
+fn retire_startup_player(
+	commands: &mut Commands,
+	player: Entity,
+	firearm: Option<&FirearmUser>,
+	inventory: Option<&InventoryUser>,
+	triggers: &mut Query<&mut WeaponTrigger>,
+) {
+	if let Some(firearm) = firearm {
+		if let Ok(mut trigger) = triggers.get_mut(firearm.held) {
+			trigger.0 = false;
+		}
+		commands.entity(firearm.held).try_insert(DespawnAfter::seconds(0.0));
+	}
+	if let Some(inventory) = inventory {
+		commands.entity(inventory.bag).try_despawn();
+	}
+	commands.entity(player).try_despawn();
 }
 
 fn drive_respawn_picker(
@@ -325,12 +404,15 @@ fn respawn_world_player(
 		return;
 	}
 	if !live_player.is_empty() {
-		// Only the death picker is locked. A player-toggled map must stay open.
-		if map.close_locked {
-			map.close();
+		// First-life despawn is still in flight this frame.
+		if !state.pending.as_ref().is_some_and(|pending| pending.first_life) {
+			// Only the death picker is locked. A player-toggled map must stay open.
+			if map.close_locked {
+				map.close();
+			}
+			state.pending = None;
+			return;
 		}
-		state.pending = None;
-		return;
 	}
 	let last_poi = state.last_poi;
 	let Some(pending) = state.pending.as_mut() else {
@@ -363,9 +445,13 @@ fn respawn_world_player(
 	}
 
 	if !pending.map_opened
-		&& (pending.timer.elapsed_secs() >= MAP_OPEN_SECS || pending.timer.is_finished())
+		&& (pending.first_life
+			|| pending.timer.elapsed_secs() >= MAP_OPEN_SECS
+			|| pending.timer.is_finished())
 	{
 		open_respawn_picker(pending, &mut map, &registry, &config, last_poi);
+	} else if pending.first_life && pending.map_opened && pending.candidates.is_empty() {
+		fill_picker_candidates(pending, &map, &registry, &config, last_poi);
 	}
 
 	let Some(poi) = chosen.read().next().map(|msg| msg.poi) else {
@@ -397,22 +483,34 @@ fn open_respawn_picker(
 	config: &WorldPlayerRespawnConfig,
 	last_poi: Option<PoiId>,
 ) {
-	let excluded = last_poi.as_slice();
+	fill_picker_candidates(pending, map, registry, config, last_poi);
+	pending.map_opened = true;
+	map.open_at(pending.death_at.xz(), true);
+}
+
+fn fill_picker_candidates(
+	pending: &mut PendingPlayerRespawn,
+	map: &WorldMapView,
+	registry: &PoiRegistry,
+	config: &WorldPlayerRespawnConfig,
+	last_poi: Option<PoiId>,
+) {
 	let records = prefer_building_pois(
 		registry.nearby_in(
 			pending.death_at,
 			config.picker_query(map.height),
 			&config.interests,
-			excluded,
+			last_poi.as_slice(),
 		),
 		pending.death_at,
 	);
+	if records.is_empty() {
+		return;
+	}
 	pending.candidates = records.iter().map(|record| record.id).collect();
 	pending.highlighted = records.first().map(|record| record.id);
 	pending.highlighted_at = records.first().map(|record| record.position.xz());
 	pending.stick_resting = true;
-	pending.map_opened = true;
-	map.open_at(pending.death_at.xz(), true);
 }
 
 fn close_respawn_map(map: &mut WorldMapView) {
@@ -822,6 +920,7 @@ mod tests {
 				highlighted_at: None,
 				map_opened: false,
 				stick_resting: true,
+				first_life: false,
 			}),
 			..default()
 		});
@@ -1115,6 +1214,170 @@ mod tests {
 	fn map_flicks_treat_stick_right_as_screen_right() {
 		assert_eq!(map_flick_dir(Vec2::X), Vec2::NEG_X);
 		assert_eq!(map_flick_dir(Vec2::Y), Vec2::Y);
+	}
+
+	struct PicksFirst;
+	struct NoFirstPick;
+
+	impl GenerationMode for PicksFirst {}
+	impl GenerationMode for NoFirstPick {}
+
+	fn first_spawn_world(pick: bool, spawn: Option<Vec2>) -> World {
+		let mut world = World::new();
+		world.init_resource::<WorldPlayerRespawnState>();
+		world.init_resource::<WorldMapView>();
+		world.insert_resource(WorldGameplayEnabled(true));
+		world.insert_resource(PlayerSpawnXz(spawn));
+		let mut policies = ModePlayerPolicies::default();
+		if pick {
+			policies.register(
+				std::any::TypeId::of::<PicksFirst>(),
+				world_player::ModePlayerPolicy {
+					home: Vec2::ZERO,
+					keep_waypoints: true,
+					respawn_ends_life: false,
+					pick_first_spawn: true,
+				},
+			);
+			world.insert_resource(State::new(ActiveGenerationMode::of::<PicksFirst>()));
+		} else {
+			policies.register(
+				std::any::TypeId::of::<NoFirstPick>(),
+				world_player::ModePlayerPolicy {
+					home: Vec2::ZERO,
+					keep_waypoints: false,
+					respawn_ends_life: true,
+					pick_first_spawn: false,
+				},
+			);
+			world.insert_resource(State::new(ActiveGenerationMode::of::<NoFirstPick>()));
+		}
+		world.insert_resource(policies);
+		world
+	}
+
+	#[test]
+	fn first_spawn_picker_retires_the_startup_body() -> anyhow::Result<()> {
+		let mut world = first_spawn_world(true, None);
+		let player = world.spawn((VegetationPlayer, Transform::from_xyz(12.0, 4.0, -8.0))).id();
+		world
+			.run_system_once(queue_first_spawn_picker)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(!world.entities().contains(player));
+		let state = world.resource::<WorldPlayerRespawnState>();
+		let pending = state.pending.as_ref().expect("first life pending");
+		assert!(pending.first_life);
+		assert_eq!(pending.death_at.xz(), Vec2::new(12.0, -8.0));
+		assert!(state.first_spawn_offered);
+		Ok(())
+	}
+
+	#[test]
+	fn first_spawn_picker_skips_an_explicit_start_at() -> anyhow::Result<()> {
+		let mut world = first_spawn_world(true, Some(Vec2::new(-1500.0, -600.0)));
+		let player = world.spawn((VegetationPlayer, Transform::from_xyz(12.0, 4.0, -8.0))).id();
+		world
+			.run_system_once(queue_first_spawn_picker)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(world.entities().contains(player));
+		assert!(world.resource::<WorldPlayerRespawnState>().pending.is_none());
+		assert!(world.resource::<WorldPlayerRespawnState>().first_spawn_offered);
+		Ok(())
+	}
+
+	#[test]
+	fn first_spawn_picker_skips_a_mode_that_does_not_pick() -> anyhow::Result<()> {
+		let mut world = first_spawn_world(false, None);
+		let player = world.spawn((VegetationPlayer, Transform::from_xyz(12.0, 4.0, -8.0))).id();
+		world
+			.run_system_once(queue_first_spawn_picker)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(world.entities().contains(player));
+		assert!(world.resource::<WorldPlayerRespawnState>().pending.is_none());
+		assert!(!world.resource::<WorldPlayerRespawnState>().first_spawn_offered);
+		Ok(())
+	}
+
+	#[test]
+	fn first_life_opens_the_map_immediately() -> anyhow::Result<()> {
+		let mut world = respawn_world(4.0, true, true);
+		{
+			let mut state = world.resource_mut::<WorldPlayerRespawnState>();
+			let pending = state.pending.as_mut().unwrap();
+			pending.origin = RespawnOrigin::began(Some(std::any::TypeId::of::<EndsLife>()), false);
+			pending.first_life = true;
+			pending.timer = Timer::from_seconds(0.0, TimerMode::Once);
+		}
+		world
+			.run_system_once(respawn_world_player)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(world.resource::<WorldMapView>().open);
+		assert!(world.resource::<WorldMapView>().close_locked);
+		assert!(world.resource::<WorldPlayerRespawnState>().pending.is_some());
+		Ok(())
+	}
+
+	#[test]
+	fn a_live_player_does_not_cancel_a_first_life_pending() -> anyhow::Result<()> {
+		let mut world = respawn_world(0.0, true, true);
+		{
+			let mut state = world.resource_mut::<WorldPlayerRespawnState>();
+			let pending = state.pending.as_mut().unwrap();
+			pending.origin = RespawnOrigin::began(Some(std::any::TypeId::of::<EndsLife>()), false);
+			pending.first_life = true;
+		}
+		world.spawn(VegetationPlayer);
+		world
+			.run_system_once(respawn_world_player)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(world.resource::<WorldPlayerRespawnState>().pending.is_some());
+		assert!(world.resource::<WorldMapView>().open);
+		assert!(world.resource::<WorldMapView>().close_locked);
+		Ok(())
+	}
+
+	#[test]
+	fn first_life_does_not_paint_death_glaze() -> anyhow::Result<()> {
+		let mut world = World::new();
+		world.insert_resource(WorldPlayerRespawnState {
+			pending: Some(PendingPlayerRespawn {
+				timer: Timer::from_seconds(0.0, TimerMode::Once),
+				death_at: Vec3::ZERO,
+				origin: RespawnOrigin::began(None, false),
+				candidates: Vec::new(),
+				highlighted: None,
+				highlighted_at: None,
+				map_opened: true,
+				stick_resting: true,
+				first_life: true,
+			}),
+			..default()
+		});
+		world.insert_resource(WorldMapView { open: true, close_locked: true, ..default() });
+		world.spawn((
+			PlayerDeathGlaze,
+			BackgroundColor(death_glaze_color(0.5)),
+			Visibility::Visible,
+		));
+		world
+			.run_system_once(sync_player_death_glaze)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let (color, visibility) =
+			world.query::<(&BackgroundColor, &Visibility)>().single(&world)?;
+		assert_eq!(color.0, death_glaze_color(0.0));
+		assert_eq!(*visibility, Visibility::Hidden);
+		Ok(())
+	}
+
+	#[test]
+	fn reset_first_spawn_offer_clears_the_session_flag() -> anyhow::Result<()> {
+		let mut world = World::new();
+		world.insert_resource(WorldPlayerRespawnState { first_spawn_offered: true, ..default() });
+		world
+			.run_system_once(reset_first_spawn_offer)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(!world.resource::<WorldPlayerRespawnState>().first_spawn_offered);
+		Ok(())
 	}
 
 	#[test]

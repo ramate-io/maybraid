@@ -36,14 +36,16 @@ pub use durham::Durham;
 pub use game_commands::command::PendingStartupCommand;
 pub use intelligence::WorldIntelligencePlugin;
 pub use lod::LodJobCounter;
+pub use map_view::{WorldMapView, WorldMapViewPlugin};
 pub use material_lib::{WorldMaterialLib, WorldMaterialRefPlugin};
 pub use maybraid_sky::{
 	ShadowQuality, SkyClock, SkyCommand, SKY_BLUE, SKY_CLEAR, SKY_HORIZON, SKY_NADIR, SKY_ZENITH,
 	SUN_COLOR, SUN_ILLUMINANCE,
 };
-pub use map_view::{WorldMapView, WorldMapViewPlugin};
 pub use player_camera::{CameraPov, CameraPovLocked};
-pub use player_lifecycle::{WorldPlayerLifecyclePlugin, WorldPlayerRespawnConfig};
+pub use player_lifecycle::{
+	reset_first_spawn_offer, WorldPlayerLifecyclePlugin, WorldPlayerRespawnConfig,
+};
 pub use player_position::{
 	resume_discovery_from_saved_waypoints, PlayerPositionPlugin, PlayerPositionWaypoints,
 };

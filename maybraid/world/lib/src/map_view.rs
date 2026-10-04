@@ -1325,7 +1325,7 @@ fn sync_map_death_bones(
 	mut markers: Query<(&mut Node, &mut Visibility), With<MapDeathBones>>,
 	mut commands: Commands,
 ) {
-	if !picker_prompt_visible(&map) {
+	if !picker_prompt_visible(&map) || pending_is_first_life(pending.as_deref()) {
 		hide_death_bones(&mut markers);
 		return;
 	}
@@ -1390,6 +1390,12 @@ fn place_death_bones(node: &mut Node, screen: Vec2) {
 
 fn picker_prompt_visible(map: &WorldMapView) -> bool {
 	map.open && map.close_locked
+}
+
+fn pending_is_first_life(pending: Option<&WorldPlayerRespawnState>) -> bool {
+	pending
+		.and_then(|state| state.pending.as_ref())
+		.is_some_and(|pending| pending.first_life)
 }
 
 fn sync_respawn_picker_title(
