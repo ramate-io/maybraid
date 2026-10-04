@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 use character_inventory_user::{spawn_bag, InventoryUser};
-use character_items::{CharacterSheet, Inventory, InventoryItem};
+use character_items::{effect_scale_for_blast, CharacterSheet, Inventory, InventoryItem};
 use characters::{CharacterAppearance, CharacterRoot};
 use damage::Health;
 use firearm_user::{
@@ -11,9 +11,9 @@ use firearm_user::{
 };
 use grenade_user::{spawn_held_grenade, GrenadeThrow, GrenadeUser, GrenadeUserSettings};
 use grenades::GrenadeDetonated;
-use maybraid_vfx::{SpawnVfxExt, VfxLibrary, VfxSpawn};
 use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
 use maybraid_skill_map::{spawn_skill_maps, SkillMapEquip, SkillMapSystems};
+use maybraid_vfx::{SpawnVfxExt, VfxLibrary, VfxSpawn};
 use player::{
 	apply_character_mobility, CameraFollow, Player as MaybraidPlayer, PlayerCameraAim, PlayerLook,
 	PlayerUse, PlayerVisual as MaybraidPlayerVisual, PlayerYawOwner,
@@ -217,7 +217,9 @@ fn teardown_held_weapon(
 		commands.entity(grenade.held).try_despawn();
 	}
 	if firearm.is_some() || grenade.is_some() {
-		commands.entity(player).remove::<(FirearmUser, GrenadeUser, GrenadeThrow, PlayerUse)>();
+		commands
+			.entity(player)
+			.remove::<(FirearmUser, GrenadeUser, GrenadeThrow, PlayerUse)>();
 	}
 }
 
@@ -226,7 +228,10 @@ fn begin_weapon_swap(
 	mut intents: MessageReader<CharacterIntent>,
 	gameplay: Res<WorldGameplayEnabled>,
 	mut commands: Commands,
-	players: Query<(Entity, &InventoryUser, Has<WeaponSwap>, Option<&GrenadeThrow>), With<VegetationPlayer>>,
+	players: Query<
+		(Entity, &InventoryUser, Has<WeaponSwap>, Option<&GrenadeThrow>),
+		With<VegetationPlayer>,
+	>,
 	bags: Query<&Inventory>,
 ) {
 	if !gameplay.0 || !intents.read().any(|intent| matches!(intent, CharacterIntent::SwapActive)) {
@@ -349,7 +354,7 @@ fn spawn_detonation_vfx(
 			&library.fiery_explosion,
 			VfxSpawn {
 				transform: Transform::from_translation(event.position),
-				scale: event.effect.scale,
+				scale: effect_scale_for_blast(event.radius),
 				intensity: event.effect.intensity,
 				playback: event.effect.playback,
 				seed: event.effect.seed,
@@ -612,7 +617,10 @@ mod tests {
 		use crate::weapon::begin_weapon_swap;
 
 		let inventory = Inventory {
-			items: vec![InventoryItem::firearm(FirearmMesh::Bullpup), InventoryItem::standard_grenade()],
+			items: vec![
+				InventoryItem::firearm(FirearmMesh::Bullpup),
+				InventoryItem::standard_grenade(),
+			],
 			clothing: Vec::new(),
 			weapons: vec![0, 1],
 			skills: Vec::new(),

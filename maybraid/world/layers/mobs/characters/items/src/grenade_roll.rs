@@ -27,8 +27,12 @@ pub fn realize_grenade_stats(rng: &mut ItemRng) -> GrenadeStats {
 	stats
 }
 
+/// Fiery-explosion scale `1` reads as about this many meters of bright core.
+/// A 6.5 m blast at the old 4× VFX cap looked like 1–2 m.
+pub const FIERY_EXPLOSION_METERS: f32 = 0.5;
+
 pub fn effect_scale_for_blast(blast_radius: f32) -> f32 {
-	(blast_radius / 2.2).clamp(2.2, 4.5)
+	(blast_radius / FIERY_EXPLOSION_METERS).clamp(1.0, 20.0)
 }
 
 #[cfg(test)]
@@ -50,8 +54,19 @@ mod tests {
 				"{}",
 				stats.blast_damage
 			);
-			assert!(stats.effect_scale >= 2.2);
+			assert!(
+				(stats.effect_scale - stats.blast_radius / FIERY_EXPLOSION_METERS).abs() < 1e-4,
+				"scale {} radius {}",
+				stats.effect_scale,
+				stats.blast_radius
+			);
 		}
+	}
+
+	#[test]
+	fn effect_scale_matches_street_blast_meters() {
+		assert!((effect_scale_for_blast(6.5) - 13.0).abs() < 1e-4);
+		assert!(effect_scale_for_blast(6.5) > 4.0);
 	}
 
 	#[test]

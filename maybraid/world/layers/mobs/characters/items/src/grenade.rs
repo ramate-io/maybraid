@@ -117,7 +117,7 @@ impl GrenadeStats {
 			weight: 12,
 			blast_radius: 6.5,
 			blast_damage: 65.0,
-			effect_scale: 3.0,
+			effect_scale: 13.0,
 			effect_intensity: 1.0,
 			effect_playback: 1.0,
 		}
@@ -199,6 +199,6 @@ mod tests {
 		let stats = GrenadeStats::standard();
 		assert!(stats.blast_radius >= 5.0);
 		assert!(stats.blast_damage >= 50.0);
-		assert!(stats.effect_scale >= 2.0);
+		assert!((stats.effect_scale - 13.0).abs() < 1e-4);
 	}
 }

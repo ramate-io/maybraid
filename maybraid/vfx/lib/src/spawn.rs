@@ -13,7 +13,7 @@ use crate::seed;
 
 pub const MAX_INTENSITY: f32 = 2.0;
 pub const MIN_SCALE: f32 = 0.25;
-pub const MAX_SCALE: f32 = 4.0;
+pub const MAX_SCALE: f32 = 20.0;
 pub const MIN_PLAYBACK: f32 = 0.25;
 pub const MAX_PLAYBACK: f32 = 4.0;
 
@@ -194,7 +194,12 @@ impl SpawnVfxExt for Commands<'_, '_> {
 	}
 }
 
-pub fn realize_layer(commands: &mut Commands, parent: Entity, layer: &EffectLayer, spawn: &VfxSpawn) {
+pub fn realize_layer(
+	commands: &mut Commands,
+	parent: Entity,
+	layer: &EffectLayer,
+	spawn: &VfxSpawn,
+) {
 	let transform = Transform {
 		translation: layer.transform.translation,
 		rotation: layer.transform.rotation,
