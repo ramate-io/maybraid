@@ -14,6 +14,7 @@ pub mod layer;
 pub mod lod_band;
 pub mod lod_host_helper;
 pub mod massing;
+pub mod math;
 pub mod panels;
 pub mod parent_confines;
 pub mod partitions;
@@ -40,6 +41,7 @@ pub use massing::{
 	is_massing_level, massing_box_scene, massing_box_transform, massing_scene, ring_strip_xz,
 	MassingKind, MassingRoof, MassingSilhouettePlugin, MassingVolume,
 };
+pub use math::normalize_xz;
 pub use panels::{
 	dihedral_kink, fitted_tile_count, to_centered_rect_placement, triangle_normal,
 	update_panel_host_levels, with_wall_standup_pitch, PanelGeometry, PanelKitCaps, PanelLodBand,
