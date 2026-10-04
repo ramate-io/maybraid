@@ -72,7 +72,10 @@ pub fn apply_throw_intents(
 	mut intents: MessageReader<CharacterIntent>,
 	bags: Query<&Inventory>,
 	carriers: Query<&InventoryUser>,
-	mut users: Query<(Entity, &mut GrenadeThrow, Has<WeaponSwap>), (With<Player>, With<GrenadeUser>)>,
+	mut users: Query<
+		(Entity, &mut GrenadeThrow, Has<WeaponSwap>),
+		(With<Player>, With<GrenadeUser>),
+	>,
 ) {
 	let mut use_held = mouse.pressed(MouseButton::Left);
 	for intent in intents.read() {
@@ -160,7 +163,9 @@ pub fn advance_throw(
 				}
 			}
 			GrenadePhase::Recovery { age } => {
-				let throw_secs = stats.map(|stats| stats.throw_secs).unwrap_or(0.6);
+				let throw_secs = stats
+					.map(|stats| stats.throw_secs)
+					.unwrap_or(GrenadeStats::standard().throw_secs);
 				let next = age + dt;
 				if next >= throw_secs {
 					throw.phase = GrenadePhase::Ready;
@@ -198,7 +203,7 @@ fn release_grenade(
 	};
 	*visibility = Visibility::Hidden;
 	let aim = throw_aim(facing, &look);
-	let origin = pose.translation + aim * 0.35 + Vec3::Y * 0.08;
+	let origin = pose.translation + aim * 0.55 + Vec3::Y * 0.12;
 	let spec = carriers
 		.get(user_entity)
 		.ok()
@@ -276,5 +281,14 @@ mod tests {
 		let prev = stats.release_at - 0.2;
 		let next = prev + 0.5;
 		assert!(prev < stats.release_at && next >= stats.release_at);
+	}
+
+	#[test]
+	fn launch_is_a_short_lob() {
+		let stats = GrenadeStats::standard();
+		let velocity = launch_velocity(Vec3::Z, &stats, Vec3::ZERO);
+		assert!(stats.launch_speed < 8.0);
+		assert!(velocity.length() < 8.0);
+		assert!(velocity.y > velocity.z * 0.25);
 	}
 }

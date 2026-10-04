@@ -1,8 +1,10 @@
 //! Thrown grenade body, fuse, and detonation message.
 
+use avian3d::prelude::*;
 use bevy::prelude::*;
 use character_items::{GrenadeSpec, GrenadeStats};
-use projectiles::{spawn_tossed, TossedSpec};
+use lod_avian::PhysicsInteractionLayer;
+use std::f32::consts::PI;
 
 /// Palette-free explosion knobs copied onto the thrown body.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -47,6 +49,11 @@ pub struct GrenadeDetonated {
 	pub effect: GrenadeEffect,
 }
 
+/// Animated membership, Fixed contacts only — terrain and buildings, not capsules.
+pub fn grenade_layers() -> CollisionLayers {
+	CollisionLayers::new(PhysicsInteractionLayer::Animated, PhysicsInteractionLayer::Fixed)
+}
+
 pub fn grenade_mesh() -> Mesh {
 	Sphere::new(0.5).mesh().ico(2).expect("grenade sphere")
 }
@@ -62,24 +69,47 @@ pub fn spawn_thrown_grenade(
 	effect: GrenadeEffect,
 	source: Entity,
 ) -> Entity {
-	let tossed = spawn_tossed(
-		commands,
-		meshes,
-		materials,
-		origin,
-		velocity,
-		TossedSpec {
-			radius: stats.radius.max(0.08),
-			gravity: 1.0,
-			color: Color::srgb(0.28, 0.34, 0.18),
+	let radius = stats.radius.max(0.08);
+	let collider = Collider::sphere(radius);
+	let volume = (4.0 / 3.0) * PI * radius * radius * radius;
+	let density = (stats.mass / volume.max(1e-6)).max(0.05);
+	let tumble = velocity.cross(Vec3::Y).normalize_or(Vec3::X) * 10.0;
+	let body = commands
+		.spawn((
+			Name::new("thrown-grenade"),
+			Transform {
+				translation: origin,
+				rotation: Quat::from_rotation_arc(Vec3::Y, velocity.normalize_or(Vec3::Y)),
+				scale: Vec3::splat(radius * 2.0),
+			},
+			Visibility::default(),
+			Mesh3d(meshes.add(grenade_mesh())),
+			MeshMaterial3d(materials.add(StandardMaterial {
+				base_color: Color::srgb(0.28, 0.34, 0.18),
+				perceptual_roughness: 0.72,
+				metallic: 0.18,
+				..default()
+			})),
+			RigidBody::Dynamic,
+			MassPropertiesBundle::from_shape(&collider, density),
+			collider,
+			grenade_layers(),
+			LinearVelocity(velocity),
+			AngularVelocity(tumble),
+			GravityScale(1.0),
+		))
+		.id();
+	commands.entity(body).insert((
+		Restitution { coefficient: stats.restitution, combine_rule: CoefficientCombine::Average },
+		Friction {
+			dynamic_coefficient: stats.friction,
+			static_coefficient: stats.friction,
+			combine_rule: CoefficientCombine::Average,
 		},
-	);
-	commands.entity(tossed).insert((
-		Name::new("thrown-grenade"),
 		ThrownGrenade { spec, stats, effect, source, detonated: false },
 		GrenadeFuse { remaining: stats.fuse },
 	));
-	tossed
+	body
 }
 
 pub fn tick_grenade_fuses(
@@ -142,5 +172,16 @@ mod tests {
 		world.run_system_once(tick_grenade_fuses).expect("tick");
 		assert!(!world.entities().contains(id));
 		assert_eq!(world.resource_mut::<Messages<GrenadeDetonated>>().drain().count(), 1);
+	}
+
+	#[test]
+	fn thrown_body_contacts_fixed_not_characters() {
+		let grenade = grenade_layers();
+		let fixed = PhysicsInteractionLayer::fixed_layers();
+		let animated = PhysicsInteractionLayer::animated_layers();
+		assert!(grenade.interacts_with(fixed));
+		assert!(fixed.interacts_with(grenade));
+		assert!(!grenade.interacts_with(animated));
+		assert!(!animated.interacts_with(grenade));
 	}
 }

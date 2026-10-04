@@ -3,7 +3,7 @@
 use bevy::prelude::*;
 use bevy::transform::helper::TransformHelper;
 use character_inventory_user::InventoryUser;
-use character_items::{Inventory, InventoryItem};
+use character_items::{GrenadeStats, Inventory, InventoryItem};
 use character_rigs::articulation::{TwoBoneAim, BONE_LENGTH_AXIS};
 use character_rigs::humanoid::HumanoidRig;
 use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
@@ -17,13 +17,17 @@ use grenades::grenade_mesh;
 use player::{PlayerLook, PlayerUse};
 use std::f32::consts::FRAC_PI_2;
 
-use crate::throw::{throw_aim, yaw_xz, GrenadePhase, GrenadeThrow, GrenadeUser, GrenadeUserSettings};
+use crate::throw::{
+	throw_aim, yaw_xz, GrenadePhase, GrenadeThrow, GrenadeUser, GrenadeUserSettings,
+};
 
 /// Preferred grip points. A later `hand_socket.R` on the body rig is picked first.
 pub const RIGHT_HAND_SOCKETS: &[&str] = &["hand_socket.R", "hand.R", "palm.R"];
 
 const HELD_SCALE: f32 = 0.2;
-const RIGHT_POLE: Vec3 = Vec3::new(-1.0, -1.0, -0.1);
+/// Elbow out to the right so the overhand does not fold over the head.
+const THROW_POLE: Vec3 = Vec3::new(1.0, 0.4, -0.2);
+const THROW_POLE_FALLBACK: Vec3 = Vec3::new(0.6, 0.8, 0.2);
 
 #[derive(Component, Clone, Copy, Debug)]
 pub struct HeldGrenade {
@@ -156,8 +160,10 @@ pub fn apply_grenade_swap_pose(
 
 pub fn sync_throw_arm(
 	users: Query<(&GrenadeUser, &GrenadeThrow, &PlayerLook, Has<WeaponSwap>)>,
+	carriers: Query<&InventoryUser>,
+	bags: Query<&Inventory>,
 	visuals: Query<
-		(Entity, &Transform, &CharacterHeading, &CharacterMembers, &ChildOf),
+		(Entity, &CharacterHeading, &CharacterMembers, &ChildOf),
 		(With<CharacterRoot>, Without<AnimBone>),
 	>,
 	mut rigs: Query<
@@ -173,20 +179,27 @@ pub fn sync_throw_arm(
 		Query<&mut Transform, (With<HeldGrenade>, Without<CharacterRoot>)>,
 	)>,
 ) {
-	for (visual, visual_tf, heading, members, child_of) in &visuals {
+	for (visual, heading, members, child_of) in &visuals {
 		let Ok((user, throw, look, swapping)) = users.get(child_of.parent()) else {
 			continue;
 		};
 		if swapping || !throw.busy() {
 			continue;
 		}
+		let throw_secs = carriers
+			.get(child_of.parent())
+			.ok()
+			.and_then(|carrier| bags.get(carrier.bag).ok())
+			.and_then(|bag| bag.primary_weapon().and_then(InventoryItem::grenade_stats))
+			.map(|stats| stats.throw_secs)
+			.unwrap_or_else(|| GrenadeStats::standard().throw_secs);
+		let t = throw_phase_t(throw.phase, throw_secs);
 		let helper = transforms.p0();
-		let Some(body_rot) = helper.compute_global_transform(visual).ok().map(|t| t.rotation())
+		let Some(body_rot) = helper.compute_global_transform(visual).ok().map(|tf| tf.rotation())
 		else {
 			continue;
 		};
 		drop(helper);
-		let world_target = throw_hand_world(visual_tf.translation, heading.0, look, throw.phase);
 		for member in members.iter() {
 			let Ok((mut rig, map, mailbox)) = rigs.get_mut(member) else {
 				continue;
@@ -195,8 +208,9 @@ pub fn sync_throw_arm(
 				continue;
 			}
 			let helper = transforms.p0();
-			let target = bone_world(map, &helper, "humerus.R").and_then(|from| {
-				let dir = world_target - from;
+			let target = bone_world(map, &helper, "humerus.R").and_then(|shoulder| {
+				let world = throw_hand_from_shoulder(shoulder, heading.0, look, t);
+				let dir = world - shoulder;
 				(dir.length_squared() >= 1e-6).then(|| body_rot.inverse() * dir)
 			});
 			drop(helper);
@@ -205,8 +219,8 @@ pub fn sync_throw_arm(
 			if let Some(target) = target {
 				let arm = rig.arm_pose(Side::Right);
 				let length = arm.forearm.transform.translation.length();
-				if let Some(reach) = TwoBoneAim::reach(target, RIGHT_POLE, length, length)
-					.or_else(|| TwoBoneAim::reach(target, Vec3::new(-1.0, 0.0, 1.0), length, length))
+				if let Some(reach) = TwoBoneAim::reach(target, THROW_POLE, length, length)
+					.or_else(|| TwoBoneAim::reach(target, THROW_POLE_FALLBACK, length, length))
 				{
 					reset_arm_to_rest(&mut rig, map, &bones, Side::Right);
 					pose_throw_arm(&mut rig, reach);
@@ -258,20 +272,48 @@ pub fn sync_held_visibility(
 	}
 }
 
-fn throw_hand_world(origin: Vec3, facing: Vec3, look: &PlayerLook, phase: GrenadePhase) -> Vec3 {
-	let aim = throw_aim(facing, look);
-	let right = aim.cross(Vec3::Y).normalize_or(Vec3::X);
+fn throw_phase_t(phase: GrenadePhase, throw_secs: f32) -> f32 {
 	match phase {
-		GrenadePhase::Ready => origin + Vec3::Y * 1.1 + aim * 0.28 + right * 0.16,
-		GrenadePhase::Windup { age } => {
-			let t = (age / 0.25).clamp(0.0, 1.0);
-			origin + Vec3::Y * (1.2 + 0.4 * t) + aim * (0.32 - 0.04 * t) + right * 0.18
-		}
-		GrenadePhase::Recovery { age } => {
-			let t = ((age - 0.25) / 0.35).clamp(0.0, 1.0);
-			origin + Vec3::Y * (1.55 - 0.4 * t) + aim * (0.3 + 0.4 * t) + right * 0.14
+		GrenadePhase::Ready => 0.0,
+		GrenadePhase::Windup { age } | GrenadePhase::Recovery { age } => {
+			(age / throw_secs.max(1e-3)).clamp(0.0, 1.0)
 		}
 	}
+}
+
+/// Shoulder-local overhand: `(right, up, forward)` in heading space.
+fn throw_reach_from_shoulder(t: f32) -> Vec3 {
+	const KEYS: [(f32, Vec3); 6] = [
+		(0.00, Vec3::new(0.20, -0.22, 0.22)),
+		(0.22, Vec3::new(0.24, 0.02, 0.16)),
+		(0.45, Vec3::new(0.28, 0.32, 0.10)),
+		(0.61, Vec3::new(0.12, 0.24, 0.40)),
+		(0.82, Vec3::new(0.10, 0.02, 0.42)),
+		(1.00, Vec3::new(0.14, -0.16, 0.24)),
+	];
+	let t = t.clamp(0.0, 1.0);
+	for window in KEYS.windows(2) {
+		let (t0, a) = window[0];
+		let (t1, b) = window[1];
+		if t <= t1 {
+			let u = ((t - t0) / (t1 - t0).max(1e-4)).clamp(0.0, 1.0);
+			return a.lerp(b, u);
+		}
+	}
+	KEYS[KEYS.len() - 1].1
+}
+
+fn throw_hand_from_shoulder(shoulder: Vec3, facing: Vec3, look: &PlayerLook, t: f32) -> Vec3 {
+	let aim = throw_aim(facing, look);
+	let flat = Vec3::new(aim.x, 0.0, aim.z).normalize_or(Vec3::Z);
+	let right = Vec3::Y.cross(flat).normalize_or(Vec3::X);
+	let reach = throw_reach_from_shoulder(t);
+	let mut world = shoulder + right * reach.x + Vec3::Y * reach.y + flat * reach.z;
+	let along = (world - shoulder).dot(flat);
+	if along < 0.08 {
+		world += flat * (0.08 - along);
+	}
+	world
 }
 
 fn pose_throw_arm(rig: &mut HumanoidV0Rig, reach: TwoBoneAim) {
@@ -394,10 +436,35 @@ mod tests {
 	}
 
 	#[test]
-	fn windup_target_stays_in_front_of_heading() {
+	fn throw_target_stays_in_front_of_heading() {
 		let look = PlayerLook::default();
-		let target = throw_hand_world(Vec3::ZERO, Vec3::Z, &look, GrenadePhase::Windup { age: 0.2 });
-		assert!(target.z > 0.0, "overhand must stay in front, got {target:?}");
-		assert!(target.y > 1.0);
+		let shoulder = Vec3::new(0.2, 1.4, 0.0);
+		for t in [0.0, 0.22, 0.45, 0.61, 0.82, 1.0] {
+			let target = throw_hand_from_shoulder(shoulder, Vec3::Z, &look, t);
+			assert!(target.z > shoulder.z, "t={t} must stay in front, got {target:?}");
+		}
+	}
+
+	#[test]
+	fn throw_swing_raises_then_snaps_forward() {
+		let start = throw_reach_from_shoulder(0.0);
+		let cock = throw_reach_from_shoulder(0.45);
+		let release = throw_reach_from_shoulder(0.61);
+		assert!(cock.y > start.y + 0.35, "must raise, start={start:?} cock={cock:?}");
+		assert!(release.z > cock.z + 0.2, "must snap forward, cock={cock:?} release={release:?}");
+	}
+
+	#[test]
+	fn throw_phase_uses_full_throw_window() {
+		let stats = GrenadeStats::standard();
+		assert!(
+			(throw_phase_t(GrenadePhase::Windup { age: stats.release_at }, stats.throw_secs)
+				- stats.release_at / stats.throw_secs)
+				.abs() < 1e-4
+		);
+		assert_eq!(
+			throw_phase_t(GrenadePhase::Recovery { age: stats.throw_secs }, stats.throw_secs),
+			1.0
+		);
 	}
 }
