@@ -42,6 +42,8 @@ const MAP_MARK_PX: f32 = 22.0;
 const MAP_MARK_GAP: f32 = 6.0;
 const MAP_ARROW_PX: f32 = 18.0;
 const LABEL_SCREEN_GUTTER: f32 = 72.0;
+/// Pull a label onto the frame only when its true projection is this close.
+const EDGE_PULL_PX: f32 = 96.0;
 const SELECTION_RING_PX: f32 = 46.0;
 const SELECTION_DOT_PX: f32 = 10.0;
 const SPAWN_KNOB_PX: f32 = 12.0;
@@ -439,12 +441,22 @@ fn sync_map_name_pins(
 			continue;
 		};
 		let Some((projected, on_screen)) =
-			project_mob_pin(camera, camera_transform, pin_world(&surface, target.xz))
+			project_map_pin(camera, camera_transform, pin_world(&surface, target.xz))
 		else {
 			*visibility = Visibility::Hidden;
 			continue;
 		};
-		let screen = pin_label_screen(projected, on_screen, viewport, target, picker).0;
+		let Some((screen, _)) = pin_label_screen(
+			projected,
+			on_screen,
+			viewport,
+			target,
+			picker,
+			pin_is_kept(target, highlighted),
+		) else {
+			*visibility = Visibility::Hidden;
+			continue;
+		};
 		place_map_pin(&mut node, screen, target, highlighted);
 		text.0 = target.label.clone();
 		*font = map_label_text_font(&fonts, target.size);
@@ -457,11 +469,20 @@ fn sync_map_name_pins(
 			continue;
 		}
 		let Some((projected, on_screen)) =
-			project_mob_pin(camera, camera_transform, pin_world(&surface, target.xz))
+			project_map_pin(camera, camera_transform, pin_world(&surface, target.xz))
 		else {
 			continue;
 		};
-		let screen = pin_label_screen(projected, on_screen, viewport, &target, picker).0;
+		let Some((screen, _)) = pin_label_screen(
+			projected,
+			on_screen,
+			viewport,
+			&target,
+			picker,
+			pin_is_kept(&target, highlighted),
+		) else {
+			continue;
+		};
 		commands.entity(hud).with_children(|root| {
 			root.spawn(MapNamePinBundle {
 				name: Name::new("map-name-pin"),
@@ -540,6 +561,9 @@ fn map_pin_targets(
 					};
 					let xz = record.position.xz();
 					let selected = Some(*id) == highlighted;
+					if !selected && !near_view_rect(xz, view) {
+						continue;
+					}
 					wanted.push(MapPinWanted {
 						id: MapPinTarget::Poi(*id),
 						xz,
@@ -607,6 +631,11 @@ fn map_pin_targets(
 fn map_view_rect(map: &WorldMapView) -> Rect {
 	let half = (map.height * 1.05).clamp(90.0, 2_200.0);
 	Rect::from_center_size(map.focus, Vec2::splat(half * 2.0))
+}
+
+fn near_view_rect(xz: Vec2, view: Rect) -> bool {
+	let pad = view.size() * 0.04;
+	Rect { min: view.min - pad, max: view.max + pad }.contains(xz)
 }
 
 fn label_anchor(name: &NamedOverlay, view: Rect, kind: MapLabelKind) -> Option<Vec2> {
@@ -879,17 +908,22 @@ fn pin_label_half(target: &MapPinWanted) -> Vec2 {
 	)
 }
 
+fn pin_is_kept(target: &MapPinWanted, highlighted: Option<PoiId>) -> bool {
+	matches!(target.id, MapPinTarget::Poi(id) if Some(id) == highlighted)
+}
+
 fn pin_label_screen(
 	projected: Vec2,
 	on_screen: bool,
 	viewport: Option<Rect>,
 	target: &MapPinWanted,
 	picker: bool,
-) -> (Vec2, Option<Vec2>) {
+	keep: bool,
+) -> Option<(Vec2, Option<Vec2>)> {
 	let Some(viewport) = viewport else {
-		return (projected, None);
+		return Some((projected, None));
 	};
-	comfortable_label_screen(projected, on_screen, viewport, pin_label_half(target), picker)
+	comfortable_label_screen(projected, on_screen, viewport, pin_label_half(target), picker, keep)
 }
 
 fn comfortable_label_screen(
@@ -898,7 +932,11 @@ fn comfortable_label_screen(
 	viewport: Rect,
 	half: Vec2,
 	picker: bool,
-) -> (Vec2, Option<Vec2>) {
+	keep: bool,
+) -> Option<(Vec2, Option<Vec2>)> {
+	if !on_screen && !keep && !near_screen_edge(projected, viewport) {
+		return None;
+	}
 	let top =
 		if picker { PICKER_TITLE_GUTTER + ITEM_FONT_SIZE + 12.0 } else { LABEL_SCREEN_GUTTER };
 	let min = viewport.min + Vec2::new(LABEL_SCREEN_GUTTER, top) + half;
@@ -914,10 +952,36 @@ fn comfortable_label_screen(
 		} else {
 			(projected - viewport.center()).normalize_or(Vec2::NEG_Y)
 		};
-		(clamped, Some(dir))
+		Some((clamped, Some(dir)))
 	} else {
-		(clamped, None)
+		Some((clamped, None))
 	}
+}
+
+fn near_screen_edge(projected: Vec2, viewport: Rect) -> bool {
+	Rect {
+		min: viewport.min - Vec2::splat(EDGE_PULL_PX),
+		max: viewport.max + Vec2::splat(EDGE_PULL_PX),
+	}
+	.contains(projected)
+}
+
+/// Screen position without the combat-HUD rim clamp.
+fn project_map_pin(
+	camera: &Camera,
+	camera_transform: &GlobalTransform,
+	world: Vec3,
+) -> Option<(Vec2, bool)> {
+	let rect = camera.logical_viewport_rect()?;
+	let ndc = camera.world_to_ndc(camera_transform, world)?;
+	let in_frustum = ndc.z > 0.0 && ndc.z < 1.0;
+	let screen = (Vec2::new(ndc.x, -ndc.y) + Vec2::ONE) / 2.0 * rect.size() + rect.min;
+	let on_screen = in_frustum
+		&& screen.x >= rect.min.x
+		&& screen.x <= rect.max.x
+		&& screen.y >= rect.min.y
+		&& screen.y <= rect.max.y;
+	Some((screen, on_screen))
 }
 
 fn mark_for_name(name: &NamedOverlay) -> Option<MapMarkKind> {
@@ -1068,12 +1132,22 @@ fn sync_map_type_marks(
 			continue;
 		};
 		let Some((projected, on_screen)) =
-			project_mob_pin(camera, camera_transform, pin_world(&surface, target.xz))
+			project_map_pin(camera, camera_transform, pin_world(&surface, target.xz))
 		else {
 			*visibility = Visibility::Hidden;
 			continue;
 		};
-		let label = pin_label_screen(projected, on_screen, viewport, target, picker).0;
+		let Some((label, _)) = pin_label_screen(
+			projected,
+			on_screen,
+			viewport,
+			target,
+			picker,
+			pin_is_kept(target, highlighted),
+		) else {
+			*visibility = Visibility::Hidden;
+			continue;
+		};
 		let screen = type_mark_screen(label, target, highlighted);
 		place_type_mark(&mut node, screen);
 		if let Some(kind) = target.mark {
@@ -1087,14 +1161,23 @@ fn sync_map_type_marks(
 			continue;
 		}
 		let Some((projected, on_screen)) =
-			project_mob_pin(camera, camera_transform, pin_world(&surface, target.xz))
+			project_map_pin(camera, camera_transform, pin_world(&surface, target.xz))
 		else {
 			continue;
 		};
 		let Some(kind) = target.mark else {
 			continue;
 		};
-		let label = pin_label_screen(projected, on_screen, viewport, &target, picker).0;
+		let Some((label, _)) = pin_label_screen(
+			projected,
+			on_screen,
+			viewport,
+			&target,
+			picker,
+			pin_is_kept(&target, highlighted),
+		) else {
+			continue;
+		};
 		let screen = type_mark_screen(label, &target, highlighted);
 		commands.entity(hud).with_children(|root| {
 			root.spawn((
@@ -1155,6 +1238,7 @@ fn sync_map_edge_arrows(
 	};
 	let viewport = camera.logical_viewport_rect();
 	let picker = picker_prompt_visible(&map);
+	let highlighted = pending.as_deref().and_then(|state| state.pending.as_ref()?.highlighted);
 	let wanted = map_pin_targets(&map, &overlay, registry.as_deref(), pending.as_deref());
 	let mut assigned = Vec::new();
 	for (entity, arrow, mut node, mut transform, mut visibility) in &mut arrows {
@@ -1163,12 +1247,22 @@ fn sync_map_edge_arrows(
 			continue;
 		};
 		let Some((projected, on_screen)) =
-			project_mob_pin(camera, camera_transform, pin_world(&surface, target.xz))
+			project_map_pin(camera, camera_transform, pin_world(&surface, target.xz))
 		else {
 			*visibility = Visibility::Hidden;
 			continue;
 		};
-		let (label_screen, dir) = pin_label_screen(projected, on_screen, viewport, target, picker);
+		let Some((label_screen, dir)) = pin_label_screen(
+			projected,
+			on_screen,
+			viewport,
+			target,
+			picker,
+			pin_is_kept(target, highlighted),
+		) else {
+			*visibility = Visibility::Hidden;
+			continue;
+		};
 		let Some(dir) = dir else {
 			*visibility = Visibility::Hidden;
 			continue;
@@ -1183,13 +1277,18 @@ fn sync_map_edge_arrows(
 			continue;
 		}
 		let Some((projected, on_screen)) =
-			project_mob_pin(camera, camera_transform, pin_world(&surface, target.xz))
+			project_map_pin(camera, camera_transform, pin_world(&surface, target.xz))
 		else {
 			continue;
 		};
-		let (label_screen, Some(dir)) =
-			pin_label_screen(projected, on_screen, viewport, &target, picker)
-		else {
+		let Some((label_screen, Some(dir))) = pin_label_screen(
+			projected,
+			on_screen,
+			viewport,
+			&target,
+			picker,
+			pin_is_kept(&target, highlighted),
+		) else {
 			continue;
 		};
 		commands.entity(hud).with_children(|root| {
@@ -1458,6 +1557,7 @@ fn sync_respawn_spawn_knobs(
 	let highlighted = picker_highlighted(pending.as_deref());
 	let candidates = picker_candidates(pending.as_deref());
 	let registry = registry.as_deref();
+	let viewport = camera.logical_viewport_rect();
 	let mut assigned = Vec::new();
 	for (entity, knob, mut node, mut fill, mut border, mut visibility) in &mut knobs {
 		if !candidates.contains(&knob.id) {
@@ -1471,12 +1571,17 @@ fn sync_respawn_spawn_knobs(
 			commands.entity(entity).despawn();
 			continue;
 		};
-		let Some((screen, _)) = project_mob_pin(camera, camera_transform, pin_world(&surface, xz))
+		let Some((projected, on_screen)) =
+			project_map_pin(camera, camera_transform, pin_world(&surface, xz))
 		else {
 			*visibility = Visibility::Hidden;
 			continue;
 		};
 		let selected = Some(knob.id) == highlighted;
+		let Some(screen) = map_marker_screen(projected, on_screen, viewport, selected) else {
+			*visibility = Visibility::Hidden;
+			continue;
+		};
 		paint_spawn_knob(&mut node, &mut fill, &mut border, screen, selected);
 		*visibility = Visibility::Visible;
 		assigned.push(knob.id);
@@ -1491,11 +1596,15 @@ fn sync_respawn_spawn_knobs(
 		else {
 			continue;
 		};
-		let Some((screen, _)) = project_mob_pin(camera, camera_transform, pin_world(&surface, xz))
+		let Some((projected, on_screen)) =
+			project_map_pin(camera, camera_transform, pin_world(&surface, xz))
 		else {
 			continue;
 		};
 		let selected = Some(*id) == highlighted;
+		let Some(screen) = map_marker_screen(projected, on_screen, viewport, selected) else {
+			continue;
+		};
 		let (size, fill, border) = spawn_knob_look(selected);
 		commands.spawn((
 			Name::new("map-spawn-knob"),
@@ -1508,6 +1617,29 @@ fn sync_respawn_spawn_knobs(
 			GlobalZIndex(i32::MAX - 9),
 		));
 	}
+}
+
+fn map_marker_screen(
+	projected: Vec2,
+	on_screen: bool,
+	viewport: Option<Rect>,
+	keep: bool,
+) -> Option<Vec2> {
+	if on_screen {
+		return Some(projected);
+	}
+	if !keep && !viewport.is_some_and(|viewport| near_screen_edge(projected, viewport)) {
+		return None;
+	}
+	let Some(viewport) = viewport else {
+		return Some(projected);
+	};
+	let min = viewport.min + Vec2::splat(LABEL_SCREEN_GUTTER);
+	let max = viewport.max - Vec2::splat(LABEL_SCREEN_GUTTER);
+	Some(Vec2::new(
+		projected.x.clamp(min.x.min(max.x), max.x.max(min.x)),
+		projected.y.clamp(min.y.min(max.y), max.y.max(min.y)),
+	))
 }
 
 fn spawn_knob_look(selected: bool) -> (f32, Color, Color) {
@@ -1567,7 +1699,14 @@ fn sync_respawn_selection_marker(
 		hide_selection_markers(&mut markers);
 		return;
 	};
-	let Some((screen, _)) = project_mob_pin(camera, camera_transform, pin_world(&surface, xz))
+	let Some((projected, on_screen)) =
+		project_map_pin(camera, camera_transform, pin_world(&surface, xz))
+	else {
+		hide_selection_markers(&mut markers);
+		return;
+	};
+	let Some(screen) =
+		map_marker_screen(projected, on_screen, camera.logical_viewport_rect(), true)
 	else {
 		hide_selection_markers(&mut markers);
 		return;
@@ -2015,12 +2154,46 @@ mod tests {
 			viewport,
 			Vec2::new(40.0, 16.0),
 			false,
-		);
+			false,
+		)
+		.expect("near-edge names stay on the frame");
 		assert!(screen.x < 800.0 - 40.0);
 		assert!(screen.y > 40.0);
 		let dir = dir.expect("off-screen labels keep an arrow");
 		assert!(dir.x > 0.0);
 		assert!(dir.y < 0.0);
+	}
+
+	#[test]
+	fn far_picker_candidates_stay_off_the_name_list() {
+		let view = Rect::from_center_size(Vec2::ZERO, Vec2::splat(200.0));
+		assert!(near_view_rect(Vec2::new(80.0, 0.0), view));
+		assert!(!near_view_rect(Vec2::new(400.0, 0.0), view));
+	}
+
+	#[test]
+	fn far_off_screen_pois_do_not_crowd_the_rim() {
+		let viewport = Rect::from_corners(Vec2::ZERO, Vec2::new(800.0, 600.0));
+		assert!(comfortable_label_screen(
+			Vec2::new(2_000.0, 300.0),
+			false,
+			viewport,
+			Vec2::new(40.0, 16.0),
+			true,
+			false,
+		)
+		.is_none());
+		let (screen, dir) = comfortable_label_screen(
+			Vec2::new(2_000.0, 300.0),
+			false,
+			viewport,
+			Vec2::new(40.0, 16.0),
+			true,
+			true,
+		)
+		.expect("the selected spawn stays on the rim");
+		assert!(screen.x > 600.0);
+		assert!(dir.is_some());
 	}
 
 	#[test]
