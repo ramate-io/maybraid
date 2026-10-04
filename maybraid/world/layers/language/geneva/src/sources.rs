@@ -15,9 +15,9 @@ use vegetation_layer_model::Vegetation;
 
 use crate::english::{
 	development_terms, geographic_terms, grove_kind_terms, layering_terms, place_label_terms,
-	urbanization_terms,
+	urbanization_terms, with_color_name,
 };
-use crate::index::NameKey;
+use crate::index::{name_key_salt, NameKey};
 use crate::name::terms_fingerprint;
 
 /// A generated cell the language layer may name.
@@ -180,7 +180,13 @@ fn grove_features(index: &ForestIndex, region: Aabb3d) -> Vec<NamedFeature> {
 		for recipe in &grove.recipes {
 			english.extend(grove_kind_terms(recipe.kind));
 		}
-		out.push(NamedFeature::new(NameKey::Grove(id), bounds, english, revision));
+		let key = NameKey::Grove(id);
+		out.push(NamedFeature::new(
+			key,
+			bounds,
+			with_color_name(english, name_key_salt(key)),
+			revision,
+		));
 	}
 	out
 }
@@ -213,8 +219,9 @@ fn urban_features(index: &UrbanizationIndex, region: Aabb3d) -> Vec<NamedFeature
 		let Some(bounds) = SpatialIndex::<SelectedUrbanization>::get_bounds(index, id) else {
 			continue;
 		};
-		let revision =
-			SpatialIndex::<SelectedUrbanization>::version(index, id).map(|v| v.0).unwrap_or(0);
+		let revision = SpatialIndex::<SelectedUrbanization>::version(index, id)
+			.map(|v| v.0)
+			.unwrap_or(0);
 		let english = urbanization_terms(cell.kind);
 		out.push(NamedFeature::new(NameKey::Urban(id), bounds, english.clone(), revision));
 		for leaf in &cell.leaves {
@@ -243,7 +250,10 @@ fn place_features(
 		}
 		let xz = Vec2::new(world.x, world.z);
 		let (key, provisional, inherit_host_language) = place_key(place, xz);
-		let english = place_label_terms(place.label);
+		let english = with_color_name(
+			place_label_terms(place.label),
+			place_identity_bits(place) ^ u64::from(xz.x.to_bits()) ^ u64::from(xz.y.to_bits()),
+		);
 		let fingerprint = terms_fingerprint(&english);
 		out.push(NamedPlace {
 			key,
@@ -267,11 +277,7 @@ fn xz_contains(region: Aabb3d, x: f32, z: f32) -> bool {
 
 fn place_key(place: &DiscoverablePlace, xz: Vec2) -> (NameKey, bool, bool) {
 	if let Some(host) = place.host {
-		(
-			NameKey::Place { host, local: place.local },
-			false,
-			!place.persistent,
-		)
+		(NameKey::Place { host, local: place.local }, false, !place.persistent)
 	} else {
 		(
 			NameKey::ProvisionalPlace {
@@ -304,7 +310,10 @@ pub(crate) fn places_from_world_xz(
 		}
 		let xz = Vec2::new(world.x, world.z);
 		let (key, provisional, inherit_host_language) = place_key(&place, xz);
-		let english = place_label_terms(place.label);
+		let english = with_color_name(
+			place_label_terms(place.label),
+			place_identity_bits(&place) ^ u64::from(xz.x.to_bits()) ^ u64::from(xz.y.to_bits()),
+		);
 		let fingerprint = terms_fingerprint(&english);
 		out.push(NamedPlace {
 			key,

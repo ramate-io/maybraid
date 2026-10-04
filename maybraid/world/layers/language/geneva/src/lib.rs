@@ -18,8 +18,8 @@ mod tiles;
 pub use bundle::{LanguageBundle, LexiconFamily};
 pub use catalog::KindConceptUniverse;
 pub use english::{
-	development_terms, geographic_terms, grove_kind_terms, layering_terms, place_label_terms,
-	urbanization_terms,
+	color_term, development_terms, geographic_terms, grove_kind_terms, layering_terms,
+	place_label_terms, urbanization_terms, with_color_name, PLACE_COLORS,
 };
 pub use index::{LanguageConfig, LanguageIndex, LanguageWorldSeed, NameKey};
 pub use model::Geneva;

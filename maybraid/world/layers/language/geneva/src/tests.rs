@@ -15,7 +15,7 @@ use lod::LodPresentGate;
 use richmond::{DiscoverablePlace, DiscoverablePlaceLabel};
 use terrain_layer_model::{HeightField, OnTerrain, TerrainCell, TerrainGeneration, TerrainModel};
 
-use crate::english::{geographic_terms, grove_kind_terms};
+use crate::english::{geographic_terms, grove_kind_terms, with_color_name, PLACE_COLORS};
 use crate::index::{LanguageConfig, LanguageIndex, LanguageWorldSeed, NameKey};
 use crate::name::{canonicalize_terms, pick_terms, terms_fingerprint, PlaceName};
 use crate::present::LanguageOverlay;
@@ -39,6 +39,20 @@ fn explicit_vocab_does_not_split_debug_idents() -> anyhow::Result<()> {
 	anyhow::ensure!(grove_kind_terms(ForestGroveKind::RollingOaks) == ["oak"]);
 	anyhow::ensure!(geographic_terms(GeographicFeatureKind::StreamsGraph) == ["stream"]);
 	anyhow::ensure!(geographic_terms(GeographicFeatureKind::Massif) == ["massif", "mountain"]);
+	Ok(())
+}
+
+#[test]
+fn color_names_vary_by_seed_and_keep_the_kind() -> anyhow::Result<()> {
+	let first = with_color_name(vec!["bush".to_owned()], 1);
+	anyhow::ensure!(first.len() == 2 && first[1] == "bush");
+	anyhow::ensure!(PLACE_COLORS.contains(&first[0].as_str()));
+	let colors: std::collections::HashSet<_> =
+		(0..48).map(|seed| with_color_name(vec!["bush".to_owned()], seed)[0].clone()).collect();
+	anyhow::ensure!(
+		colors.len() > 4,
+		"expected several colors across seeds, got {colors:?}"
+	);
 	Ok(())
 }
 

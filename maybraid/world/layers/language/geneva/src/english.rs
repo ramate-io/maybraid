@@ -2,6 +2,7 @@
 
 use chico::{ForestGroveKind, LayeringKind};
 use durham::GeographicFeatureKind;
+use maybraid_language_core::lexicalizer::mix;
 use richmond::DiscoverablePlaceLabel;
 use urbanization_cells::{UrbanDevelopmentKind, UrbanizationKind};
 
@@ -27,15 +28,11 @@ pub fn layering_terms(kind: LayeringKind) -> Vec<String> {
 		LayeringKind::Riparian => &["riparian"],
 		LayeringKind::Taiga => &["taiga"],
 		LayeringKind::LiamsSummer => &["summer"],
-		LayeringKind::OwlsDesert | LayeringKind::OldNevada | LayeringKind::DamasEdge => {
-			&["desert"]
-		}
+		LayeringKind::OwlsDesert | LayeringKind::OldNevada | LayeringKind::DamasEdge => &["desert"],
 		LayeringKind::MiRobles => &["oak"],
 		LayeringKind::Seceda => &["alpine"],
 		LayeringKind::Waiguo | LayeringKind::OldSteppe | LayeringKind::SteppeDown => &["steppe"],
-		LayeringKind::AgTown | LayeringKind::Storybook | LayeringKind::FruitPlains => {
-			&["orchard"]
-		}
+		LayeringKind::AgTown | LayeringKind::Storybook | LayeringKind::FruitPlains => &["orchard"],
 		LayeringKind::SunsBarren => &["barren"],
 		LayeringKind::TemperateHoly => &["temperate"],
 		LayeringKind::TrapThicket => &["thicket"],
@@ -136,6 +133,25 @@ pub fn place_label_terms(label: DiscoverablePlaceLabel) -> Vec<String> {
 		DiscoverablePlaceLabel::Tower => &["tower"],
 		DiscoverablePlaceLabel::Room => &["room"],
 	})
+}
+
+/// Seeded color adjectives so nearby groves and POIs of the same kind differ.
+pub const PLACE_COLORS: &[&str] = &[
+	"red", "ochre", "amber", "gold", "olive", "green", "teal", "blue", "violet", "rose", "ivory",
+	"umber", "slate", "copper", "silver", "rust",
+];
+
+/// One color from [`PLACE_COLORS`], stable for `seed`.
+pub fn color_term(seed: u64) -> String {
+	PLACE_COLORS[(mix(seed ^ 0xC010_A11A) as usize) % PLACE_COLORS.len()].to_owned()
+}
+
+/// Prepend a seeded color, keeping the kind terms after it.
+pub fn with_color_name(mut english: Vec<String>, seed: u64) -> Vec<String> {
+	let color = color_term(seed);
+	english.retain(|word| word != &color);
+	english.insert(0, color);
+	english
 }
 
 fn owned(words: &[&str]) -> Vec<String> {

@@ -25,6 +25,9 @@ pub const DEFAULT_MAP_HEIGHT: f32 = 420.0;
 const MIN_MAP_HEIGHT: f32 = 80.0;
 const MAX_MAP_HEIGHT: f32 = 2_400.0;
 const MAP_PIN_LIMIT: usize = 48;
+const MAX_REGION_LABELS: usize = 2;
+const MAX_FEATURE_LABELS: usize = 6;
+const MAX_POI_LABELS: usize = 10;
 const REGION_LABEL_PX: f32 = 28.0;
 const FEATURE_LABEL_PX: f32 = 14.0;
 const POI_LABEL_PX: f32 = 7.0;
@@ -407,9 +410,25 @@ fn map_pin_targets(
 			.cmp(&name_rank(b.key))
 			.then_with(|| a_xz.distance(map.focus).total_cmp(&b_xz.distance(map.focus)))
 	});
-	for (name, kind, xz) in names.into_iter().take(MAP_PIN_LIMIT) {
+	let mut regions = 0;
+	let mut features = 0;
+	let mut pois = 0;
+	for (name, kind, xz) in names {
+		let at_cap = match kind {
+			MapLabelKind::Region => regions >= MAX_REGION_LABELS,
+			MapLabelKind::Feature => features >= MAX_FEATURE_LABELS,
+			MapLabelKind::Poi => pois >= MAX_POI_LABELS,
+		};
+		if at_cap {
+			continue;
+		}
 		if matches!(kind, MapLabelKind::Poi) && wanted.iter().any(|pin| pin.xz.distance(xz) < 8.0) {
 			continue;
+		}
+		match kind {
+			MapLabelKind::Region => regions += 1,
+			MapLabelKind::Feature => features += 1,
+			MapLabelKind::Poi => pois += 1,
 		}
 		wanted.push(MapPinWanted {
 			id: MapPinTarget::Name(name.key),
@@ -420,8 +439,7 @@ fn map_pin_targets(
 		});
 	}
 	wanted.truncate(MAP_PIN_LIMIT);
-	spread_extent_labels(&mut wanted, view);
-	wanted
+	resolve_label_collisions(wanted, view)
 }
 
 fn map_view_rect(map: &WorldMapView) -> Rect {
@@ -432,14 +450,47 @@ fn map_view_rect(map: &WorldMapView) -> Rect {
 fn label_anchor(name: &NamedOverlay, view: Rect, kind: MapLabelKind) -> Option<Vec2> {
 	match kind {
 		MapLabelKind::Poi => view.contains(name.xz).then_some(name.xz),
-		MapLabelKind::Region | MapLabelKind::Feature => {
+		MapLabelKind::Region => {
 			let hit = view.intersect(name.extent);
 			if rect_empty(hit) {
 				return None;
 			}
-			let toward = clamp_into_rect(name.xz, hit);
-			Some(hit.center().lerp(toward, 0.55))
+			Some(title_band(hit))
 		}
+		MapLabelKind::Feature => {
+			let hit = view.intersect(name.extent);
+			if rect_empty(hit) {
+				return None;
+			}
+			if swallows_view(hit, view) {
+				return None;
+			}
+			if hit.contains(name.xz) {
+				Some(name.xz)
+			} else {
+				Some(clamp_into_rect(name.xz, inset_rect(hit, 0.12)))
+			}
+		}
+	}
+}
+
+fn title_band(hit: Rect) -> Vec2 {
+	let pad_y = (hit.height() * 0.16).max(8.0);
+	Vec2::new(hit.center().x, (hit.max.y - pad_y).clamp(hit.min.y + 4.0, hit.max.y - 4.0))
+}
+
+fn swallows_view(hit: Rect, view: Rect) -> bool {
+	hit.width() * hit.height() >= view.width() * view.height() * 0.45
+}
+
+fn inset_rect(rect: Rect, fraction: f32) -> Rect {
+	let pad = rect.size() * fraction.clamp(0.0, 0.4);
+	let min = rect.min + pad;
+	let max = rect.max - pad;
+	if min.x < max.x && min.y < max.y {
+		Rect { min, max }
+	} else {
+		rect
 	}
 }
 
@@ -451,32 +502,69 @@ fn clamp_into_rect(point: Vec2, rect: Rect) -> Vec2 {
 	Vec2::new(point.x.clamp(rect.min.x, rect.max.x), point.y.clamp(rect.min.y, rect.max.y))
 }
 
-fn spread_extent_labels(wanted: &mut [MapPinWanted], view: Rect) {
-	let min_sep = (view.width().min(view.height()) * 0.18).max(24.0);
-	for first in 0..wanted.len() {
-		if matches!(map_label_kind(wanted[first].id), MapLabelKind::Poi) {
+fn resolve_label_collisions(wanted: Vec<MapPinWanted>, view: Rect) -> Vec<MapPinWanted> {
+	let mut kept = Vec::with_capacity(wanted.len());
+	for pin in wanted {
+		let sep = label_separation(&pin, view);
+		if kept.iter().all(|other: &MapPinWanted| {
+			pin.xz.distance(other.xz) >= sep.max(label_separation(other, view))
+		}) {
+			kept.push(pin);
 			continue;
 		}
-		for second in (first + 1)..wanted.len() {
-			if matches!(map_label_kind(wanted[second].id), MapLabelKind::Poi) {
-				continue;
-			}
-			let delta = wanted[first].xz - wanted[second].xz;
-			let distance = delta.length();
-			let push = if distance < 1e-3 {
-				Vec2::new(min_sep * 0.5, 0.0)
-			} else if distance < min_sep {
-				delta.normalize() * ((min_sep - distance) * 0.5)
+		if let Some(xz) = nudge_label(&pin, &kept, view, sep) {
+			kept.push(MapPinWanted { xz, ..pin });
+		}
+	}
+	kept
+}
+
+fn label_separation(pin: &MapPinWanted, view: Rect) -> f32 {
+	let side = view.width().min(view.height());
+	match map_label_kind(pin.id) {
+		MapLabelKind::Region => (side * 0.28).max(48.0),
+		MapLabelKind::Feature => (side * 0.16).max(28.0),
+		MapLabelKind::Poi => (side * 0.12).max(20.0),
+	}
+}
+
+fn nudge_label(pin: &MapPinWanted, kept: &[MapPinWanted], view: Rect, sep: f32) -> Option<Vec2> {
+	let room = allowed_label_rect(pin, view, sep);
+	if rect_empty(room) {
+		return None;
+	}
+	let dirs = [
+		Vec2::X,
+		Vec2::NEG_X,
+		Vec2::Y,
+		Vec2::NEG_Y,
+		Vec2::new(1.0, 1.0),
+		Vec2::new(-1.0, 1.0),
+		Vec2::new(1.0, -1.0),
+		Vec2::new(-1.0, -1.0),
+	];
+	for dir in dirs {
+		let candidate = clamp_into_rect(pin.xz + dir.normalize() * sep, room);
+		if kept.iter().all(|other: &MapPinWanted| {
+			candidate.distance(other.xz) >= sep.max(label_separation(other, view))
+		}) {
+			return Some(candidate);
+		}
+	}
+	None
+}
+
+fn allowed_label_rect(pin: &MapPinWanted, view: Rect, sep: f32) -> Rect {
+	match map_label_kind(pin.id) {
+		MapLabelKind::Poi => {
+			view.intersect(Rect::from_center_size(pin.xz, Vec2::splat((sep * 2.0).max(24.0))))
+		}
+		MapLabelKind::Region | MapLabelKind::Feature => {
+			let hit = view.intersect(pin.extent);
+			if rect_empty(hit) {
+				view
 			} else {
-				continue;
-			};
-			let first_hit = view.intersect(wanted[first].extent);
-			let second_hit = view.intersect(wanted[second].extent);
-			if !rect_empty(first_hit) {
-				wanted[first].xz = clamp_into_rect(wanted[first].xz + push, first_hit);
-			}
-			if !rect_empty(second_hit) {
-				wanted[second].xz = clamp_into_rect(wanted[second].xz - push, second_hit);
+				hit
 			}
 		}
 	}
@@ -833,9 +921,51 @@ mod tests {
 		};
 		let wanted = map_pin_targets(&map, &overlay, None, None);
 		assert_eq!(wanted.len(), 1);
-		assert!(map_view_rect(&map).contains(wanted[0].xz));
-		assert!(wanted[0].xz.distance(Vec2::splat(12_500.0)) > 1_000.0);
+		let view = map_view_rect(&map);
+		assert!(view.contains(wanted[0].xz));
+		assert!((wanted[0].xz.x - view.center().x).abs() < view.width() * 0.2);
+		assert!(wanted[0].xz.y > view.center().y);
 		assert_eq!(wanted[0].label, "ʃin (ridge)");
+	}
+
+	#[test]
+	fn overlapping_region_titles_do_not_stack() {
+		let map = WorldMapView {
+			open: true,
+			focus: Vec2::ZERO,
+			height: DEFAULT_MAP_HEIGHT,
+			close_locked: false,
+		};
+		let overlay = LanguageOverlay {
+			names: vec![
+				NamedOverlay {
+					key: NameKey::Region { ix: 0, iz: 0 },
+					surface: "east".into(),
+					english: Vec::new(),
+					provisional: true,
+					xz: Vec2::new(5_000.0, 0.0),
+					extent: Rect::from_corners(
+						Vec2::new(0.0, -10_000.0),
+						Vec2::new(10_000.0, 10_000.0),
+					),
+				},
+				NamedOverlay {
+					key: NameKey::Region { ix: -1, iz: 0 },
+					surface: "west".into(),
+					english: Vec::new(),
+					provisional: true,
+					xz: Vec2::new(-5_000.0, 0.0),
+					extent: Rect::from_corners(
+						Vec2::new(-10_000.0, -10_000.0),
+						Vec2::new(0.0, 10_000.0),
+					),
+				},
+			],
+			..Default::default()
+		};
+		let wanted = map_pin_targets(&map, &overlay, None, None);
+		assert_eq!(wanted.len(), 2);
+		assert!(wanted[0].xz.distance(wanted[1].xz) > 40.0);
 	}
 
 	#[test]

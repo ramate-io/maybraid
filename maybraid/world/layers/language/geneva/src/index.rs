@@ -340,7 +340,12 @@ impl LanguageIndex {
 			return false;
 		};
 		let pick = mix(work.world_seed ^ feature_key);
-		let name = PlaceName::translate(bundle, work.english, pick);
+		let name = match work.key {
+			NameKey::Grove(_) | NameKey::Place { .. } | NameKey::ProvisionalPlace { .. } => {
+				PlaceName::translate_all(bundle, work.english)
+			}
+			_ => PlaceName::translate(bundle, work.english, pick),
+		};
 		if name.surface.is_empty() {
 			return false;
 		}
