@@ -27,9 +27,9 @@ impl<R: HumanoidRig> Animation<R> for TwoFootedJump<R> {
 			}
 			JumpSegment::Spring => {
 				let from_pose = capture_animation_pose(&Squat::<R>::for_loop(1.0, 1.0), rig, 0.0);
-				let _ = Transition::from_pose(Spring::<R>::default(), from_pose)
+				Transition::from_pose(Spring::<R>::default(), from_pose)
 					.with_curve(TransitionCurve::SmoothStep)
-					.apply(rig, local, local);
+					.apply_pose_for(rig, local, local);
 			}
 			JumpSegment::Fall => {
 				let fall = Fall::<R>::default();
@@ -47,9 +47,9 @@ impl<R: HumanoidRig> Animation<R> for TwoFootedJump<R> {
 				if local < blend_end {
 					let from_pose = capture_animation_pose(&Spring::<R>::default(), rig, 1.0);
 					let transition_progress = (local / blend_end).clamp(0.0, 1.0);
-					let _ = Transition::from_pose(fall, from_pose)
+					Transition::from_pose(fall, from_pose)
 						.with_curve(TransitionCurve::SmoothStep)
-						.apply(rig, local, transition_progress);
+						.apply_pose_for(rig, local, transition_progress);
 				} else {
 					fall.apply_for(rig, local);
 				}
@@ -79,9 +79,9 @@ impl<R: HumanoidRig> Animation<R> for TwoFootedJump<R> {
 				}
 				if transition_progress < 1.0 {
 					let from_pose = capture_animation_pose(&Fall::<R>::default(), rig, 1.0);
-					let _ = Transition::from_pose(land, from_pose)
+					Transition::from_pose(land, from_pose)
 						.with_curve(TransitionCurve::SmoothStep)
-						.apply(rig, land_progress, transition_progress);
+						.apply_pose_for(rig, land_progress, transition_progress);
 				} else {
 					land.apply_for(rig, land_progress);
 				}
@@ -134,7 +134,7 @@ mod tests {
 	use character_rigs::{rigs::humanoid_v0::HumanoidV0Rig, Side};
 
 	use super::*;
-	use crate::animations::{Squat, DEFAULT_SPRING_DURATION};
+	use crate::animations::{JumpTiming, Squat, DEFAULT_SPRING_DURATION};
 
 	fn default_jump() -> TwoFootedJump<HumanoidV0Rig> {
 		TwoFootedJump::default()
@@ -225,5 +225,142 @@ mod tests {
 		assert!(shoulder.flex.abs() > 0.05);
 		assert!(shoulder.flex.abs() < fall_shoulder.abs());
 		Ok(())
+	}
+
+	/// Pre-optimization path: transition segments call [`Transition::apply`] and discard effects.
+	fn apply_for_with_transition_apply(
+		jump: &TwoFootedJump<HumanoidV0Rig>,
+		rig: &mut HumanoidV0Rig,
+		elapsed: f32,
+	) {
+		let lengths = rig.segment_lengths();
+		let (segment, local) = jump.segment(lengths, elapsed);
+		let timings = jump.timings(lengths);
+
+		match segment {
+			JumpSegment::Squat => {
+				let squat = jump.prejump_squat(lengths);
+				let progress = local / timings.squat_duration().max(f32::EPSILON);
+				squat.apply_for(rig, progress);
+			}
+			JumpSegment::Spring => {
+				let from_pose =
+					capture_animation_pose(&Squat::<HumanoidV0Rig>::for_loop(1.0, 1.0), rig, 0.0);
+				let _ = Transition::from_pose(Spring::<HumanoidV0Rig>::default(), from_pose)
+					.with_curve(TransitionCurve::SmoothStep)
+					.apply(rig, local, local);
+			}
+			JumpSegment::Fall => {
+				let fall = Fall::<HumanoidV0Rig>::default();
+				let blend_end = FALL_BLEND_FRACTION;
+				if local < blend_end {
+					let from_pose =
+						capture_animation_pose(&Spring::<HumanoidV0Rig>::default(), rig, 1.0);
+					let transition_progress = (local / blend_end).clamp(0.0, 1.0);
+					let _ = Transition::from_pose(fall, from_pose)
+						.with_curve(TransitionCurve::SmoothStep)
+						.apply(rig, local, transition_progress);
+				} else {
+					fall.apply_for(rig, local);
+				}
+			}
+			JumpSegment::Land => {
+				let land = jump.landing_squat(lengths);
+				let land_duration = timings.land_duration().max(f32::EPSILON);
+				let land_progress = local / land_duration;
+				let blend_window = timings.land_pose_blend_duration();
+				let transition_progress = if blend_window > f32::EPSILON {
+					(local / blend_window).clamp(0.0, 1.0)
+				} else {
+					1.0
+				};
+				if transition_progress < 1.0 {
+					let from_pose =
+						capture_animation_pose(&Fall::<HumanoidV0Rig>::default(), rig, 1.0);
+					let _ = Transition::from_pose(land, from_pose)
+						.with_curve(TransitionCurve::SmoothStep)
+						.apply(rig, land_progress, transition_progress);
+				} else {
+					land.apply_for(rig, land_progress);
+				}
+			}
+		}
+	}
+
+	fn jump_segment_elapsed_samples(timings: &JumpTiming) -> Vec<(JumpSegment, f32)> {
+		vec![
+			(JumpSegment::Squat, timings.squat_descent_duration * 0.5),
+			(JumpSegment::Spring, timings.squat_end() + timings.spring_duration * 0.5),
+			(
+				JumpSegment::Fall,
+				timings.spring_end() + timings.air_duration * FALL_BLEND_FRACTION * 0.5,
+			),
+			(JumpSegment::Fall, timings.spring_end() + timings.air_duration * 0.75),
+			(JumpSegment::Land, timings.air_end() + timings.land_pose_blend_duration() * 0.5),
+			(JumpSegment::Land, timings.air_end() + timings.land_descent_duration * 0.75),
+		]
+	}
+
+	fn bench_jump_apply_for(use_legacy_transitions: bool) -> (u128, u128, u128) {
+		use std::hint::black_box;
+		use std::time::Instant;
+
+		const FRAMES_PER_SAMPLE: u32 = 500;
+		const CHARACTERS: u32 = 32;
+		const RUNS: u32 = 5;
+
+		let jump = default_jump();
+		let mut rigs: Vec<_> = (0..CHARACTERS)
+			.map(|_| {
+				let mut rig = HumanoidV0Rig::imported();
+				crate::rigs::mix::seed_bind_pose(&mut rig);
+				rig
+			})
+			.collect();
+		let lengths = rigs[0].segment_lengths();
+		let timings = jump.timings(lengths);
+		let samples = jump_segment_elapsed_samples(&timings);
+
+		let mut run_ns: Vec<u128> = Vec::with_capacity(RUNS as usize);
+		for _ in 0..RUNS {
+			let start = Instant::now();
+			for frame in 0..FRAMES_PER_SAMPLE {
+				let (segment, elapsed) = samples[frame as usize % samples.len()];
+				for rig in &mut rigs {
+					if use_legacy_transitions {
+						black_box(apply_for_with_transition_apply(&jump, rig, black_box(elapsed)));
+					} else {
+						black_box(jump.apply_for(rig, black_box(elapsed)));
+					}
+					black_box(segment);
+				}
+			}
+			let total = FRAMES_PER_SAMPLE as u64 * CHARACTERS as u64;
+			run_ns.push(start.elapsed().as_nanos() / total as u128);
+		}
+
+		run_ns.sort_unstable();
+		let min = *run_ns.first().expect("run");
+		let median = run_ns[run_ns.len() / 2];
+		(min, median, run_ns.iter().sum::<u128>() / run_ns.len() as u128)
+	}
+
+	/// Micro-benchmark for [`TwoFootedJump::apply_for`] across jump segment boundaries.
+	/// Run with:
+	/// `cargo test -p character-animations two_footed_jump_pose_microbench --release -- --ignored --nocapture`
+	#[test]
+	#[ignore]
+	fn two_footed_jump_pose_microbench() {
+		let (legacy_min, legacy_median, legacy_mean) = bench_jump_apply_for(true);
+		eprintln!(
+			"two_footed_jump_pose_microbench legacy (Transition::apply): min={legacy_min} ns/sample median={legacy_median} ns/sample mean={legacy_mean} ns/sample"
+		);
+		let (min, median, mean) = bench_jump_apply_for(false);
+		eprintln!(
+			"two_footed_jump_pose_microbench optimized (apply_pose_for): min={min} ns/sample median={median} ns/sample mean={mean} ns/sample"
+		);
+		eprintln!(
+			"32 characters × 500 frames × 6 segment samples × 5 runs; method=TwoFootedJump::apply_for"
+		);
 	}
 }
