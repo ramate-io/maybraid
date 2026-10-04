@@ -9,6 +9,7 @@
 
 use bevy_math::{Vec2, Vec3};
 use building_components::joints::JointNode;
+use building_components::normalize_xz;
 use building_components::panels::{PanelNode, PanelStyle};
 use building_components::{BuildingComponents, Layers};
 use lod::gen::LodSceneLevel;
@@ -191,15 +192,6 @@ fn lerp_nodes(
 		(None, None) => {}
 	}
 	mid
-}
-
-fn normalize_xz(v: Vec2) -> Option<Vec2> {
-	let len = v.length();
-	if len < EPS {
-		None
-	} else {
-		Some(v / len)
-	}
 }
 
 /// Intersect rays `p_a + t d_a` and `p_b + s d_b` in XZ. Returns `(t, s, point)`.
