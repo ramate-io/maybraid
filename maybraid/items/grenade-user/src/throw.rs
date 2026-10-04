@@ -6,7 +6,7 @@ use character_inventory_user::InventoryUser;
 use character_items::{GrenadeStats, Inventory, InventoryItem};
 use characters::{CharacterHeading, CharacterRoot};
 use firearm_user::WeaponSwap;
-use grenades::{spawn_thrown_grenade, GrenadeEffect};
+use grenades::{spawn_thrown_grenade, GrenadeEffect, GrenadeMaterial};
 use maybraid_character_controller::CharacterIntent;
 use player::{Player, PlayerLook};
 
@@ -51,7 +51,7 @@ pub struct GrenadeUserSettings {
 
 impl Default for GrenadeUserSettings {
 	fn default() -> Self {
-		Self { hold_forward: 0.08, hold_right: 0.02, hold_up: 0.02 }
+		Self { hold_forward: 0.16, hold_right: -0.04, hold_up: 0.03 }
 	}
 }
 
@@ -114,7 +114,7 @@ pub fn advance_throw(
 	time: Res<Time>,
 	mut commands: Commands,
 	mut meshes: ResMut<Assets<Mesh>>,
-	mut materials: ResMut<Assets<StandardMaterial>>,
+	mut materials: ResMut<Assets<GrenadeMaterial>>,
 	looks: Query<&PlayerLook>,
 	velocities: Query<&LinearVelocity>,
 	headings: Query<(&CharacterHeading, &ChildOf), With<CharacterRoot>>,
@@ -180,7 +180,7 @@ pub fn advance_throw(
 fn release_grenade(
 	commands: &mut Commands,
 	meshes: &mut Assets<Mesh>,
-	materials: &mut Assets<StandardMaterial>,
+	materials: &mut Assets<GrenadeMaterial>,
 	looks: &Query<&PlayerLook>,
 	velocities: &Query<&LinearVelocity>,
 	headings: &Query<(&CharacterHeading, &ChildOf), With<CharacterRoot>>,
@@ -303,11 +303,11 @@ mod tests {
 	}
 
 	#[test]
-	fn launch_is_a_short_lob() {
+	fn launch_is_a_brisk_lob() {
 		let stats = GrenadeStats::standard();
 		let velocity = launch_velocity(Vec3::Z, &stats, Vec3::ZERO);
-		assert!(stats.launch_speed < 8.0);
-		assert!(velocity.length() < 8.0);
-		assert!(velocity.y > velocity.z * 0.25);
+		assert!(stats.launch_speed > 8.0 && stats.launch_speed < 12.0);
+		assert!(velocity.length() > 8.0 && velocity.length() < 12.0);
+		assert!(velocity.y > velocity.z * 0.18);
 	}
 }

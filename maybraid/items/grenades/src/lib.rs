@@ -1,11 +1,15 @@
 //! Thrown grenade body, fuse, blast hits, and detonation message.
 
+mod material;
+
 use avian3d::prelude::*;
 use bevy::prelude::*;
 use character_items::{GrenadeSpec, GrenadeStats};
 use damage::Hit;
 use lod_avian::PhysicsInteractionLayer;
 use std::f32::consts::PI;
+
+pub use material::{grenade_material, GrenadeMaterial, GrenadeMaterialPlugin};
 
 /// Palette-free explosion knobs copied onto the thrown body.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -58,7 +62,7 @@ pub fn grenade_layers() -> CollisionLayers {
 }
 
 pub fn grenade_mesh() -> Mesh {
-	Sphere::new(0.5).mesh().ico(2).expect("grenade sphere")
+	Sphere::new(0.5).mesh().ico(3).expect("grenade sphere")
 }
 
 /// Full damage at the origin, zero at `radius`.
@@ -72,7 +76,7 @@ pub fn blast_amount(damage: f32, radius: f32, distance: f32) -> f32 {
 pub fn spawn_thrown_grenade(
 	commands: &mut Commands,
 	meshes: &mut Assets<Mesh>,
-	materials: &mut Assets<StandardMaterial>,
+	materials: &mut Assets<GrenadeMaterial>,
 	origin: Vec3,
 	velocity: Vec3,
 	spec: GrenadeSpec,
@@ -95,12 +99,7 @@ pub fn spawn_thrown_grenade(
 			},
 			Visibility::default(),
 			Mesh3d(meshes.add(grenade_mesh())),
-			MeshMaterial3d(materials.add(StandardMaterial {
-				base_color: Color::srgb(0.28, 0.34, 0.18),
-				perceptual_roughness: 0.72,
-				metallic: 0.18,
-				..default()
-			})),
+			MeshMaterial3d(materials.add(grenade_material())),
 			RigidBody::Dynamic,
 			MassPropertiesBundle::from_shape(&collider, density),
 			collider,
@@ -181,6 +180,9 @@ pub struct GrenadesPlugin;
 
 impl Plugin for GrenadesPlugin {
 	fn build(&self, app: &mut App) {
+		if !app.is_plugin_added::<GrenadeMaterialPlugin>() {
+			app.add_plugins(GrenadeMaterialPlugin);
+		}
 		app.add_message::<GrenadeDetonated>().add_message::<Hit>().add_systems(
 			Update,
 			(tick_grenade_fuses, apply_grenade_blasts.after(tick_grenade_fuses)),

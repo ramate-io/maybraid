@@ -41,10 +41,7 @@ impl Plugin for GrenadeUserPlugin {
 					.in_set(PlayerPoseSystems::Overlay)
 					.after(CharacterMotionSystems::Anim),
 			)
-			.add_systems(
-				Update,
-				throw::advance_throw.after(PlayerPoseSystems::Overlay),
-			)
+			.add_systems(Update, throw::advance_throw.after(PlayerPoseSystems::Overlay))
 			.add_systems(
 				Update,
 				(

@@ -13,7 +13,7 @@ use characters::{
 	CharacterRigRole, CharacterRoot, RigSkeletonKind, SuspendAnimation,
 };
 use firearm_user::{HoldingArms, WeaponSwap};
-use grenades::grenade_mesh;
+use grenades::{grenade_material, grenade_mesh, GrenadeMaterial};
 use player::{PlayerLook, PlayerUse};
 
 use crate::throw::{
@@ -60,18 +60,13 @@ pub fn spawn_held_grenade(
 pub fn realize_held_grenade_visuals(
 	mut commands: Commands,
 	mut meshes: ResMut<Assets<Mesh>>,
-	mut materials: ResMut<Assets<StandardMaterial>>,
+	mut materials: ResMut<Assets<GrenadeMaterial>>,
 	held: Query<Entity, (With<HeldGrenade>, Without<Mesh3d>)>,
 ) {
 	for entity in &held {
 		commands.entity(entity).insert((
 			Mesh3d(meshes.add(grenade_mesh())),
-			MeshMaterial3d(materials.add(StandardMaterial {
-				base_color: Color::srgb(0.28, 0.34, 0.18),
-				perceptual_roughness: 0.72,
-				metallic: 0.18,
-				..default()
-			})),
+			MeshMaterial3d(materials.add(grenade_material())),
 		));
 	}
 }
@@ -127,8 +122,8 @@ pub fn pose_held_grenade(
 		*transform = Transform {
 			translation: visual.translation
 				+ Vec3::Y * (1.28 + user.settings.hold_up)
-				+ right * (0.18 + user.settings.hold_right)
-				+ forward * (0.32 + user.settings.hold_forward),
+				+ right * (0.08 + user.settings.hold_right)
+				+ forward * (0.44 + user.settings.hold_forward),
 			rotation: Quat::from_rotation_y(yaw_xz(forward)),
 			scale: Vec3::splat(HELD_SCALE),
 		};
@@ -207,10 +202,11 @@ pub fn sync_throw_arm(
 			let hand = named_hand(map, &helper).or_else(|| distal_forearm(map, &helper));
 			drop(helper);
 			if let Some(hand) = hand {
+				let forward = Vec3::new(heading.0.x, 0.0, heading.0.z).normalize_or(Vec3::Z);
 				let mut grenades = transforms.p2();
 				if let Ok(mut transform) = grenades.get_mut(user.held) {
 					*transform = Transform {
-						translation: hand,
+						translation: hand + forward * 0.06 + Vec3::Y * 0.02,
 						rotation: Quat::from_rotation_y(yaw_xz(heading.0)),
 						scale: Vec3::splat(HELD_SCALE),
 					};
@@ -267,12 +263,12 @@ fn primed_forward(facing: Vec3, look: &PlayerLook) -> Vec3 {
 /// Body-local reach from the right shoulder. `-X` is lateral, `+Z` is fight-forward.
 fn throw_reach_from_shoulder(t: f32) -> Vec3 {
 	const KEYS: [(f32, Vec3); 6] = [
-		(0.00, Vec3::new(-0.20, 0.12, 0.32)),
-		(0.22, Vec3::new(-0.26, 0.20, 0.22)),
-		(0.45, Vec3::new(-0.30, 0.34, 0.10)),
-		(0.61, Vec3::new(-0.14, 0.20, 0.42)),
-		(0.82, Vec3::new(-0.12, 0.02, 0.40)),
-		(1.00, Vec3::new(-0.18, 0.08, 0.28)),
+		(0.00, Vec3::new(-0.10, 0.14, 0.42)),
+		(0.22, Vec3::new(-0.16, 0.22, 0.28)),
+		(0.45, Vec3::new(-0.22, 0.36, 0.16)),
+		(0.61, Vec3::new(-0.08, 0.18, 0.46)),
+		(0.82, Vec3::new(-0.08, 0.02, 0.42)),
+		(1.00, Vec3::new(-0.10, 0.10, 0.38)),
 	];
 	let t = t.clamp(0.0, 1.0);
 	for window in KEYS.windows(2) {
@@ -287,7 +283,7 @@ fn throw_reach_from_shoulder(t: f32) -> Vec3 {
 }
 
 fn clamp_throw_reach(mut reach: Vec3) -> Vec3 {
-	reach.x = reach.x.min(-0.08);
+	reach.x = reach.x.min(-0.06);
 	reach.z = reach.z.max(0.08);
 	reach
 }
@@ -409,11 +405,14 @@ mod tests {
 	}
 
 	#[test]
-	fn primed_hold_is_high_forward_and_lateral() {
+	fn primed_hold_is_high_and_in_front() {
 		let primed = throw_reach_from_shoulder(0.0);
-		assert!(primed.x < -0.12, "right arm stays out, got {primed:?}");
+		assert!(
+			primed.x < -0.06 && primed.x > -0.16,
+			"primed hold stays slightly out, got {primed:?}"
+		);
 		assert!(primed.y > 0.0, "primed hold is chest-high, got {primed:?}");
-		assert!(primed.z > 0.24, "primed hold is in front, got {primed:?}");
+		assert!(primed.z > 0.36, "primed hold is in front, got {primed:?}");
 	}
 
 	#[test]
