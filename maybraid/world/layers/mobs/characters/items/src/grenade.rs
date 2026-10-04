@@ -53,9 +53,21 @@ pub struct GrenadeStats {
 	pub throw_secs: f32,
 	pub release_at: f32,
 	pub weight: u16,
+	#[serde(default = "default_blast_radius")]
+	pub blast_radius: f32,
+	#[serde(default = "default_blast_damage")]
+	pub blast_damage: f32,
 	pub effect_scale: f32,
 	pub effect_intensity: f32,
 	pub effect_playback: f32,
+}
+
+fn default_blast_radius() -> f32 {
+	GrenadeStats::standard().blast_radius
+}
+
+fn default_blast_damage() -> f32 {
+	GrenadeStats::standard().blast_damage
 }
 
 impl PartialEq for GrenadeStats {
@@ -72,6 +84,8 @@ impl PartialEq for GrenadeStats {
 			&& self.throw_secs.to_bits() == other.throw_secs.to_bits()
 			&& self.release_at.to_bits() == other.release_at.to_bits()
 			&& self.weight == other.weight
+			&& self.blast_radius.to_bits() == other.blast_radius.to_bits()
+			&& self.blast_damage.to_bits() == other.blast_damage.to_bits()
 			&& self.effect_scale.to_bits() == other.effect_scale.to_bits()
 			&& self.effect_intensity.to_bits() == other.effect_intensity.to_bits()
 			&& self.effect_playback.to_bits() == other.effect_playback.to_bits()
@@ -101,20 +115,32 @@ impl GrenadeStats {
 			throw_secs: 0.92,
 			release_at: 0.56,
 			weight: 12,
-			effect_scale: 1.0,
+			blast_radius: 6.5,
+			blast_damage: 65.0,
+			effect_scale: 3.0,
 			effect_intensity: 1.0,
 			effect_playback: 1.0,
 		}
 	}
 
+	pub fn realize(rng: &mut crate::ItemRng) -> Self {
+		crate::realize_grenade_stats(rng)
+	}
+
+	pub fn generate(spec: &GrenadeSpec) -> Self {
+		crate::generate_grenade_stats(spec)
+	}
+
 	pub fn catalog_detail(&self) -> String {
-		format!("fuse {:.1}s · recharge {:.1}s · {:>3} wt", self.fuse, self.recharge, self.weight)
+		format!("fuse {:.1}s · blast {:.0}m · {:>3} wt", self.fuse, self.blast_radius, self.weight)
 	}
 
 	pub fn stat_rows(&self) -> Vec<(String, String)> {
 		vec![
 			(String::from("Fuse"), format!("{:.1}s", self.fuse)),
 			(String::from("Recharge"), format!("{:.1}s", self.recharge)),
+			(String::from("Blast"), format!("{:.0}m", self.blast_radius)),
+			(String::from("Damage"), format!("{:.0}", self.blast_damage)),
 			(String::from("Throw"), format!("{:.0} m/s", self.launch_speed)),
 			(String::from("Weight"), self.weight.to_string()),
 		]
@@ -166,5 +192,13 @@ mod tests {
 		assert!(stats.release_at > 0.0);
 		assert!(stats.release_at < stats.throw_secs);
 		assert!(stats.recharge > stats.fuse);
+	}
+
+	#[test]
+	fn standard_blast_is_street_scale() {
+		let stats = GrenadeStats::standard();
+		assert!(stats.blast_radius >= 5.0);
+		assert!(stats.blast_damage >= 50.0);
+		assert!(stats.effect_scale >= 2.0);
 	}
 }

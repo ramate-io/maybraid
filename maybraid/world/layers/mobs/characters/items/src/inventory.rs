@@ -7,9 +7,10 @@
 use bevy::prelude::*;
 
 use crate::{
-	hashed_firearm_name, hashed_grenade_name, hashed_item_name, hashed_skill_map_name, ClothingKind,
-	ClothingMaterial, ClothingMesh, ClothingStats, FirearmMesh, FirearmSpec, FirearmStats,
-	GrenadeRecharge, GrenadeSpec, GrenadeStats, ItemColor, SkillMapKind, SkillMapSpec,
+	hashed_firearm_name, hashed_grenade_name, hashed_item_name, hashed_skill_map_name,
+	ClothingKind, ClothingMaterial, ClothingMesh, ClothingStats, FirearmMesh, FirearmSpec,
+	FirearmStats, GrenadeRecharge, GrenadeSpec, GrenadeStats, ItemColor, SkillMapKind,
+	SkillMapSpec,
 };
 
 /// How many garments character creation rolls before the body editor.
@@ -135,6 +136,10 @@ impl InventoryItem {
 
 	pub const fn standard_grenade() -> Self {
 		Self::grenade(GrenadeSpec::standard(), GrenadeStats::standard())
+	}
+
+	pub fn rolled_grenade(rng: &mut ItemRng) -> Self {
+		Self::grenade(GrenadeSpec::standard(), GrenadeStats::realize(rng))
 	}
 
 	pub const fn slot(&self) -> InventorySlot {
@@ -686,7 +691,7 @@ pub fn random_starter_skill_maps(rng: &mut ItemRng, count: usize) -> Vec<Invento
 pub fn random_starter_loadout(rng: &mut ItemRng) -> Vec<InventoryItem> {
 	let mut items = random_starter_clothing(rng, STARTER_CLOTHING_COUNT);
 	items.extend(random_starter_firearms(rng, STARTER_WEAPON_COUNT));
-	items.push(InventoryItem::standard_grenade());
+	items.push(InventoryItem::rolled_grenade(rng));
 	items.extend(random_starter_skill_maps(rng, STARTER_SKILL_MAP_COUNT));
 	items
 }
@@ -814,6 +819,8 @@ mod tests {
 		assert_eq!(items.iter().filter(|item| item.slot() == InventorySlot::Clothing).count(), 3);
 		assert_eq!(items.iter().filter(|item| item.slot() == InventorySlot::Weapons).count(), 3);
 		assert_eq!(items.iter().filter_map(InventoryItem::grenade_spec).count(), 1);
+		let blast = items.iter().find_map(InventoryItem::grenade_stats).expect("grenade");
+		assert!((crate::BLAST_RADIUS_MIN..=crate::BLAST_RADIUS_MAX).contains(&blast.blast_radius));
 		assert_eq!(items.iter().filter(|item| item.slot() == InventorySlot::Skills).count(), 1);
 		let mut guns: Vec<_> = items.iter().filter_map(InventoryItem::firearm_mesh).collect();
 		guns.sort_by_key(|mesh| mesh.label());

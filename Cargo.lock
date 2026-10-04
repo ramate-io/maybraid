@@ -5416,6 +5416,7 @@ dependencies = [
  "avian3d",
  "bevy",
  "character-items",
+ "damage",
  "lod-avian",
 ]
 
