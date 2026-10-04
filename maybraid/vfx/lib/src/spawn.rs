@@ -183,7 +183,7 @@ pub fn spawn_vfx(
 	root
 }
 
-/// `Commands` extension: `commands.spawn_vfx(&library.firey_explosion, VfxSpawn { .. })`.
+/// `Commands` extension: `commands.spawn_vfx(&library.fiery_explosion, VfxSpawn { .. })`.
 pub trait SpawnVfxExt {
 	fn spawn_vfx(&mut self, definition: &EffectDefinition, spawn: VfxSpawn) -> Entity;
 }

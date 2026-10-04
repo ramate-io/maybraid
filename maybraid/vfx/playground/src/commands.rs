@@ -20,7 +20,7 @@ pub enum PlaygroundCommand {
 	Help,
 	Script(Script),
 	/// Spawn the composed fiery explosion (flash + fireball + smoke + sparks).
-	FireyExplosion {
+	FieryExplosion {
 		#[arg(long, default_value_t = 1.0)]
 		scale: f32,
 		#[arg(long, default_value_t = 1.0)]
@@ -36,7 +36,7 @@ pub enum PlaygroundCommand {
 	},
 	/// Spawn a named definition. Repeat to overlay instances.
 	Show {
-		#[arg(default_value = "firey-explosion")]
+		#[arg(default_value = "fiery-explosion")]
 		effect: String,
 		#[arg(long, default_value_t = 1.0)]
 		scale: f32,
@@ -117,11 +117,11 @@ impl PlaygroundCommand {
 		match self {
 			Self::Help => *console = Self::long_help_string(),
 			Self::Script(script) => script.run(commands, console),
-			Self::FireyExplosion { scale, intensity, distance, seed, playback } => {
+			Self::FieryExplosion { scale, intensity, distance, seed, playback } => {
 				queue_show(
 					commands,
 					console,
-					"firey_explosion",
+					"fiery_explosion",
 					scale,
 					intensity,
 					distance,
@@ -132,7 +132,7 @@ impl PlaygroundCommand {
 			Self::Show { effect, scale, intensity, distance, seed, playback } => {
 				let Some(name) = canonicalize_effect_name(&effect) else {
 					*console = format!(
-						"unknown effect `{effect}` — try firey-explosion, flash, fireball, smoke, sparks"
+						"unknown effect `{effect}` — try fiery-explosion, flash, fireball, smoke, sparks"
 					);
 					return;
 				};

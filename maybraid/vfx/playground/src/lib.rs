@@ -70,7 +70,7 @@ fn setup_lighting(mut commands: Commands) {
 mod tests {
 	use super::*;
 	use game_commands::command::GameCommand;
-	use maybraid_vfx::{FIREBALL, FIREY_EXPLOSION, FLASH, SMOKE, SPARKS};
+	use maybraid_vfx::{FIREBALL, FIERY_EXPLOSION, FLASH, SMOKE, SPARKS};
 
 	#[test]
 	fn parses_help() -> Result<(), String> {
@@ -87,7 +87,7 @@ mod tests {
 		else {
 			return Err("expected show".into());
 		};
-		assert_eq!(effect, "firey-explosion");
+		assert_eq!(effect, "fiery-explosion");
 		assert!((scale - 1.0).abs() < 1e-4);
 		assert!((intensity - 1.0).abs() < 1e-4);
 		assert!(distance.abs() < 1e-4);
@@ -97,11 +97,11 @@ mod tests {
 	}
 
 	#[test]
-	fn parses_firey_explosion_command() -> Result<(), String> {
-		let command = <PlaygroundCommand as GameCommand>::parse_line("firey-explosion")?;
+	fn parses_fiery_explosion_command() -> Result<(), String> {
+		let command = <PlaygroundCommand as GameCommand>::parse_line("fiery-explosion")?;
 		assert!(matches!(
 			command,
-			PlaygroundCommand::FireyExplosion { scale, intensity, distance, seed, playback }
+			PlaygroundCommand::FieryExplosion { scale, intensity, distance, seed, playback }
 				if (scale - 1.0).abs() < 1e-4
 					&& (intensity - 1.0).abs() < 1e-4
 					&& distance.abs() < 1e-4
@@ -109,12 +109,12 @@ mod tests {
 					&& (playback - 1.0).abs() < 1e-4
 		));
 		let command = <PlaygroundCommand as GameCommand>::parse_line(
-			"firey-explosion --scale 1.5 --intensity 1.2 --distance 6 --seed 3 --playback 0.5",
+			"fiery-explosion --scale 1.5 --intensity 1.2 --distance 6 --seed 3 --playback 0.5",
 		)?;
-		let PlaygroundCommand::FireyExplosion { scale, intensity, distance, seed, playback } =
+		let PlaygroundCommand::FieryExplosion { scale, intensity, distance, seed, playback } =
 			command
 		else {
-			return Err("expected firey-explosion".into());
+			return Err("expected fiery-explosion".into());
 		};
 		assert!((scale - 1.5).abs() < 1e-4);
 		assert!((intensity - 1.2).abs() < 1e-4);
@@ -131,7 +131,7 @@ mod tests {
 			("show fireball", FIREBALL),
 			("show smoke", SMOKE),
 			("show sparks", SPARKS),
-			("show firey-explosion", FIREY_EXPLOSION),
+			("show fiery-explosion", FIERY_EXPLOSION),
 		] {
 			let command = <PlaygroundCommand as GameCommand>::parse_line(line)?;
 			let PlaygroundCommand::Show { effect, .. } = command else {

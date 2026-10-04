@@ -3,15 +3,15 @@
 Isolated host for [`maybraid-vfx`](../lib). Spawn the composed fiery explosion or any single layer.
 
 ```text
-cargo run -p vfx-playground -- firey-explosion
+cargo run -p vfx-playground -- fiery-explosion
 cargo run -p vfx-playground -- show fireball
-cargo run -p vfx-playground -- firey-explosion --scale 1.5 --intensity 1.2 --seed 4 --playback 0.5
+cargo run -p vfx-playground -- fiery-explosion --scale 1.5 --intensity 1.2 --seed 4 --playback 0.5
 ```
 
 In-game (press `/`):
 
-- `firey-explosion` — all four layers (flash, fireball, smoke, sparks)
-- `show` — same as `firey-explosion`
+- `fiery-explosion` — all four layers (flash, fireball, smoke, sparks)
+- `show` — same as `fiery-explosion`
 - `show flash|fireball|smoke|sparks` — one layer
 - `--distance` — offset along +Z; `spread` places near / mid / far
 - `--seed` — reproduce an instance; omit to generate a new one

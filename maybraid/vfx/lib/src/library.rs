@@ -6,10 +6,10 @@ use bevy_hanabi::EffectAsset;
 
 use crate::assets::{fire_flipbook, smoke_flipbook, spark_taper, VfxFlipbooks};
 use crate::composition::EffectDefinition;
-use crate::effects::firey_explosion;
+use crate::effects::fiery_explosion;
 use crate::layers::{fireball, flash, smoke, sparks};
 use crate::lobes::rounded_lobe_mesh;
-use crate::names::{FIREBALL, FIREY_EXPLOSION, FLASH, SMOKE, SPARKS};
+use crate::names::{FIREBALL, FIERY_EXPLOSION, FLASH, SMOKE, SPARKS};
 
 /// Shared definitions. Clone a handle out; never mutate the compiled assets.
 #[derive(Resource, Clone, Debug)]
@@ -19,7 +19,7 @@ pub struct VfxLibrary {
 	pub fireball: EffectDefinition,
 	pub smoke: EffectDefinition,
 	pub sparks: EffectDefinition,
-	pub firey_explosion: EffectDefinition,
+	pub fiery_explosion: EffectDefinition,
 }
 
 impl VfxLibrary {
@@ -29,7 +29,7 @@ impl VfxLibrary {
 			FIREBALL => Some(&self.fireball),
 			SMOKE => Some(&self.smoke),
 			SPARKS => Some(&self.sparks),
-			FIREY_EXPLOSION => Some(&self.firey_explosion),
+			FIERY_EXPLOSION => Some(&self.fiery_explosion),
 			_ => None,
 		}
 	}
@@ -42,7 +42,7 @@ pub fn canonicalize_effect_name(name: &str) -> Option<&'static str> {
 		"fireball" | "fire" => Some(FIREBALL),
 		"smoke" => Some(SMOKE),
 		"sparks" | "spark" => Some(SPARKS),
-		"firey-explosion" | "fiery-explosion" | "explosion" => Some(FIREY_EXPLOSION),
+		"fiery-explosion" | "explosion" => Some(FIERY_EXPLOSION),
 		_ => None,
 	}
 }
@@ -70,7 +70,7 @@ pub fn setup_vfx_library(
 		fireball: fireball::definition(fireball_mesh.clone(), fireball_wisps.clone()),
 		smoke: smoke::definition(smoke_mesh.clone(), smoke_wisps.clone()),
 		sparks: sparks::definition(sparks_part.clone()),
-		firey_explosion: firey_explosion::definition(
+		fiery_explosion: fiery_explosion::definition(
 			flash_mesh,
 			fireball_mesh,
 			fireball_wisps.clone(),
@@ -100,8 +100,8 @@ mod tests {
 
 	#[test]
 	fn aliases_resolve_to_canonical_names() {
-		assert_eq!(canonicalize_effect_name("firey_explosion"), Some(FIREY_EXPLOSION));
-		assert_eq!(canonicalize_effect_name("fiery-explosion"), Some(FIREY_EXPLOSION));
+		assert_eq!(canonicalize_effect_name("fiery_explosion"), Some(FIERY_EXPLOSION));
+		assert_eq!(canonicalize_effect_name("fiery-explosion"), Some(FIERY_EXPLOSION));
 		assert_eq!(canonicalize_effect_name("Fire"), Some(FIREBALL));
 		assert_eq!(canonicalize_effect_name("nope"), None);
 	}

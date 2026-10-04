@@ -1,3 +1,3 @@
 //! Named composites built from reusable layers.
 
-pub mod firey_explosion;
+pub mod fiery_explosion;

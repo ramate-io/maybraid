@@ -1,8 +1,8 @@
 //! Canonical shared realization: flash, fireball, smoke, sparks.
 
 use crate::composition::{EffectDefinition, EffectLayer, MeshPart, ParticlePart};
-use crate::names::FIREY_EXPLOSION;
 use crate::layers::{flash, smoke};
+use crate::names::FIERY_EXPLOSION;
 
 /// Overlay the four layer modules. Mesh cores plus optional cards, coordinated in time.
 pub fn definition(
@@ -14,7 +14,7 @@ pub fn definition(
 	sparks_part: ParticlePart,
 ) -> EffectDefinition {
 	EffectDefinition::new(
-		FIREY_EXPLOSION,
+		FIERY_EXPLOSION,
 		[
 			EffectLayer::mesh(flash_mesh),
 			EffectLayer::light(flash::pulse()),
@@ -55,7 +55,7 @@ mod tests {
 	}
 
 	#[test]
-	fn firey_explosion_assembles_the_four_modules() {
+	fn fiery_explosion_assembles_the_four_modules() {
 		let def = definition(
 			dummy_mesh("flash", 0.12, LobeKind::Flash),
 			dummy_mesh("fireball", 0.55, LobeKind::Fire),
@@ -64,7 +64,7 @@ mod tests {
 			dummy_particle("smoke-wisps", 2.4),
 			dummy_particle("sparks", 0.4),
 		);
-		assert_eq!(def.name, FIREY_EXPLOSION);
+		assert_eq!(def.name, FIERY_EXPLOSION);
 		assert_eq!(def.layers.len(), 7);
 		assert!(matches!(def.layers[0].part, EffectPart::Mesh(_)));
 		assert!(matches!(def.layers[1].part, EffectPart::Light(_)));

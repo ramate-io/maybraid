@@ -5,7 +5,7 @@
 //!
 //! First delivery ([#945](https://github.com/ramate-io/maybraid/issues/945)):
 //! reusable flash / fireball / smoke / sparks layers and the composed
-//! `firey_explosion`.
+//! `fiery_explosion`.
 
 pub mod assets;
 pub mod atlas;
@@ -30,7 +30,7 @@ pub use composition::{
 };
 pub use library::{canonicalize_effect_name, VfxLibrary};
 pub use lobe_material::{LobeMaterial, LobeMaterialPlugin};
-pub use names::{FIREBALL, FIREY_EXPLOSION, FLASH, SMOKE, SPARKS};
+pub use names::{FIREBALL, FIERY_EXPLOSION, FLASH, SMOKE, SPARKS};
 pub use palette::ExplosionPalette;
 pub use spawn::{spawn_vfx, SpawnVfxExt, VfxInstance, VfxSpawn, MAX_PLAYBACK, MIN_PLAYBACK};
 
