@@ -42,6 +42,7 @@ const SPAWN_KNOB_ACTIVE_PX: f32 = 16.0;
 const GIZMO_LIFT: f32 = 16.0;
 const POI_NAME_RADIUS: f32 = 160.0;
 const PICKER_TITLE: &str = "Pick Respawn Point";
+const PICKER_TITLE_GUTTER: f32 = 48.0;
 const SPAWN_KNOB_GRAY: Color = Color::srgb(0.58, 0.56, 0.52);
 
 /// Overhead view of the current location. Focus moves with spawn-location picks only.
@@ -201,8 +202,13 @@ fn spawn_map_name_hud(mut commands: Commands, assets: Res<AssetServer>) {
 		RespawnPickerTitle,
 		Node {
 			position_type: PositionType::Absolute,
-			top: Val::Px(28.0),
 			width: Val::Percent(100.0),
+			padding: UiRect::new(
+				Val::Px(PICKER_TITLE_GUTTER),
+				Val::Px(PICKER_TITLE_GUTTER),
+				Val::Px(PICKER_TITLE_GUTTER),
+				Val::Px(0.0),
+			),
 			justify_content: JustifyContent::Center,
 			..default()
 		},
@@ -1451,6 +1457,11 @@ mod tests {
 	#[test]
 	fn selected_respawn_labels_are_larger_than_idle_pois() {
 		assert!(SELECTED_POI_LABEL_PX > map_label_size(MapLabelKind::Poi));
+	}
+
+	#[test]
+	fn picker_title_keeps_menu_gutters() {
+		assert_eq!(PICKER_TITLE_GUTTER, 48.0);
 	}
 
 	#[test]
