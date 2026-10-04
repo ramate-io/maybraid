@@ -6,12 +6,9 @@ use crate::animations::{
 	FixedPosition, JumpSegment, Spring, Squat, Transition, TransitionCurve, Tuck,
 	TwoFootedTuckedFlip, FALL_BLEND_FRACTION,
 };
+use crate::rigs::segment_debug::segment_debug_enabled;
 use crate::rigs::transition::capture_animation_pose;
 use crate::{Animation, Effects};
-
-fn segment_debug_enabled() -> bool {
-	std::env::var("CROZON_ANIMATION_DEBUG").is_ok()
-}
 
 impl<R: HumanoidRig> Animation<R> for TwoFootedTuckedFlip<R> {
 	fn apply_for(&self, rig: &mut R, elapsed: f32) {
