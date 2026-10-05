@@ -25,10 +25,11 @@ pub use forelimbed::{
 };
 pub use frame::{JointAngles, JointFrame};
 pub use humanoid::{
-	apply_humanoid_glb_rest, bone_axis as humanoid_bone_axis, humanoid_v0_definition,
-	identity_binding as humanoid_identity_binding, resolve_humanoid, ArmAim, ArmPose, HumanoidPose,
-	LegPose, NeckBone, NeckPose, SpinePose, HUMANOID_FEMUR_AXIS, HUMANOID_GLB_FEMUR,
-	HUMANOID_GLB_PELVIS_L, HUMANOID_GLB_PELVIS_R, HUMANOID_GLB_SHOULDER_L, HUMANOID_GLB_SHOULDER_R,
+	apply_humanoid_glb_rest, bone_axis as humanoid_bone_axis, humanoid_bone_bit,
+	humanoid_v0_definition, humanoid_write_mask, identity_binding as humanoid_identity_binding,
+	resolve_humanoid, resolve_humanoid_masked, ArmAim, ArmPose, HumanoidPose, LegPose, NeckBone,
+	NeckPose, SpinePose, HUMANOID_FEMUR_AXIS, HUMANOID_GLB_FEMUR, HUMANOID_GLB_PELVIS_L,
+	HUMANOID_GLB_PELVIS_R, HUMANOID_GLB_SHOULDER_L, HUMANOID_GLB_SHOULDER_R,
 	HUMANOID_RIGHT_FEMUR_AXIS, HUMANOID_RIGHT_FLEX_AXIS, HUMANOID_RIGHT_SHIN_AXIS,
 	HUMANOID_SHIN_AXIS, HUMANOID_V0_BONES, HUMANOID_V0_COUNT,
 };

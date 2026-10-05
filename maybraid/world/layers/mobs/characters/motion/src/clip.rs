@@ -10,6 +10,7 @@ use character_animations::animations::{
 	Walk, AIR_END, DEFAULT_BACKSWING, DEFAULT_GRAVITY, DEFAULT_JAB_TARGET, DEFAULT_JUMP_HEIGHT,
 	DEFAULT_LANDING_SQUAT_SPEED, DEFAULT_PRE_SQUAT_SPEED, DEFAULT_SPRING_DURATION, TAKEOFF_END,
 };
+use character_animations::{ClipTimePolicy, SampleAddress};
 use character_rigs::Side;
 
 const RUN_CYCLE_SPEED: f32 = 1.68;
@@ -300,6 +301,42 @@ impl AnimClip {
 	pub fn dorsoventral_undulation() -> Self {
 		Self::DorsoventralUndulation(DorsoventralUndulation::default())
 	}
+
+	/// Content generation included in sample-cache keys.
+	pub const fn revision(self) -> u64 {
+		0
+	}
+
+	/// Idle, walk, and run share quantized humanoid samples. Other clips stay uncached.
+	pub const fn is_sample_cacheable(self) -> bool {
+		matches!(self, Self::Still | Self::Walk(_) | Self::Run(_))
+	}
+
+	pub const fn time_policy(self) -> ClipTimePolicy {
+		match self {
+			Self::Still => ClipTimePolicy::Unbounded,
+			Self::Walk(_) | Self::Run(_) | Self::QuadrupedRun(_) | Self::Gallop(_) => {
+				ClipTimePolicy::Cycle { duration: 1.0 }
+			}
+			Self::Tuck(_) | Self::TuckedFlip(_) | Self::Jab(_) => {
+				ClipTimePolicy::Cycle { duration: 1.0 }
+			}
+			Self::Jump(_)
+			| Self::Leap(_)
+			| Self::TwoFootedTuckedFlip(_)
+			| Self::Squat
+			| Self::Prone => ClipTimePolicy::Clamp { duration: 1.0 },
+			Self::Soaring(_) | Self::Flapping(_) => ClipTimePolicy::Unbounded,
+			Self::LateralUndulation(_) | Self::DorsoventralUndulation(_) => {
+				ClipTimePolicy::Cycle { duration: 1.0 }
+			}
+		}
+	}
+
+	/// Nearest bin for continuous `clip_time`. Evaluation uses [`SampleAddress::canonical_time`].
+	pub fn sample_address(self, clip_time: f32, sample_interval_us: u32) -> SampleAddress {
+		SampleAddress::from_clip_time(clip_time, sample_interval_us, self.time_policy())
+	}
 }
 
 /// Clip + playback speed on a rig member.
@@ -356,6 +393,17 @@ mod tests {
 		assert_eq!(AnimClip::still().default_speed(), IDLE_CYCLE_SPEED);
 		assert!(IDLE_CYCLE_SPEED < WALK_CYCLE_SPEED);
 		assert_ne!(AnimClip::still().id(), AnimClip::walk().id());
+	}
+
+	#[test]
+	fn idle_walk_run_are_the_first_cached_clips() {
+		assert!(AnimClip::still().is_sample_cacheable());
+		assert!(AnimClip::walk().is_sample_cacheable());
+		assert!(AnimClip::run().is_sample_cacheable());
+		assert!(!AnimClip::jab().is_sample_cacheable());
+		assert!(!AnimClip::leap().is_sample_cacheable());
+		assert_eq!(AnimClip::walk().revision(), 0);
+		assert_eq!(AnimClip::walk().sample_address(0.123, 10_000).canonical_time, 0.12);
 	}
 
 	#[test]

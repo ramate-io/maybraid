@@ -18,6 +18,7 @@ pub mod plant;
 pub mod plugin;
 pub mod policy;
 pub mod rig;
+pub mod sample_cache;
 pub mod shown;
 pub mod sync;
 
@@ -42,6 +43,12 @@ pub use policy::{clamp_intelligence, motion_policy, MotionPolicy};
 pub use rig::{
 	bone_map_ready, missing_landmark_bones, BoneMap, CharacterRig, CharacterRigRole,
 	RigSkeletonKind,
+};
+pub use sample_cache::{
+	authored_sample, clip_bone_mask, parameters_key, AnimSampleCache, AnimSampleCacheSettings,
+	AnimSampleCacheStats, AuthoredSample, ClipParametersId, ClipParametersKey, ClipVariantKey,
+	RigVariantId, SampleKey, CURRENT_CLIP_REVISION, DEFAULT_MAX_SAMPLES,
+	DEFAULT_MAX_SAMPLES_PER_VARIANT, DEFAULT_MAX_VARIANTS,
 };
 pub use shown::shown_level_root;
 pub use sync::sync_motion_markers;

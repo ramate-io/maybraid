@@ -6,17 +6,31 @@ use crate::animations::{UprightWalk, Walk};
 use crate::rigs::humanoid::apply::{apply_arm, apply_root};
 use crate::{Animation, Progress};
 
+impl Walk {
+	/// Authored semantic pose at `progress`. Rest is applied later by the rig.
+	pub fn sample_pose(&self, progress: f32) -> HumanoidPose {
+		UprightWalk::from_walk(self).sample_pose(progress)
+	}
+}
+
 impl Animation<HumanoidV0Rig> for Walk {
 	fn apply_for(&self, rig: &mut HumanoidV0Rig, progress: f32) {
-		UprightWalk::from_walk(self).apply_for(rig, progress)
+		rig.write_pose(&self.sample_pose(progress))
+	}
+}
+
+impl UprightWalk {
+	/// Authored semantic pose at `progress`. Rest is applied later by the rig.
+	pub fn sample_pose(&self, progress: f32) -> HumanoidPose {
+		let mut pose = HumanoidPose::default();
+		sample_walk(self, progress, &mut pose);
+		pose
 	}
 }
 
 impl Animation<HumanoidV0Rig> for UprightWalk {
 	fn apply_for(&self, rig: &mut HumanoidV0Rig, progress: f32) {
-		let mut pose = HumanoidPose::default();
-		sample_walk(self, progress, &mut pose);
-		rig.write_pose(&pose);
+		rig.write_pose(&self.sample_pose(progress));
 	}
 }
 

@@ -35,6 +35,7 @@ use crate::clip::{AnimClip, AnimId, AnimRefRoot};
 use crate::markers::{AnimateBones, AnimateEffects, SuspendAnimation};
 use crate::plant::plant_lod_entity;
 use crate::rig::{bone_map_ready, BoneMap, CharacterRig, CharacterRigRole, RigSkeletonKind};
+use crate::sample_cache::AnimSampleCache;
 use rigs::PoseSkipRotation;
 use std::collections::HashSet;
 
@@ -364,6 +365,7 @@ pub fn tick_anim_mailbox(
 /// Sample clips in parallel; write bone transforms serially (shared bone query).
 pub fn apply_anim_mailbox(
 	set: Option<Res<MailboxApplySet>>,
+	cache: Option<Res<AnimSampleCache>>,
 	mut hosts: Query<
 		(
 			Entity,
@@ -389,6 +391,7 @@ pub fn apply_anim_mailbox(
 	mut bone_tfs: Query<&mut Transform, (With<AnimBone>, Without<AnimMailbox>)>,
 ) {
 	let only = set.as_ref().and_then(|set| set.only.clone());
+	let cache = cache.as_deref();
 	hosts.par_iter_mut().batching_strategy(BatchingStrategy::fixed(8)).for_each(
 		|(
 			entity,
@@ -422,8 +425,14 @@ pub fn apply_anim_mailbox(
 					if write_bones {
 						sync_humanoid_rest(&mut rig, &bones);
 					}
-					let effects =
-						sample_humanoid(requested, &mut rig, progress, write_bones, write_effects);
+					let effects = sample_humanoid_maybe_cached(
+						requested,
+						&mut rig,
+						progress,
+						write_bones,
+						write_effects,
+						cache,
+					);
 					if write_bones {
 						publish_pose(&mut mailbox, &rig.pose, weight);
 					}
@@ -594,6 +603,24 @@ fn write_pose(
 			*transform = *desired;
 		}
 	}
+}
+
+fn sample_humanoid_maybe_cached(
+	clip: AnimClip,
+	rig: &mut HumanoidV0Rig,
+	progress: f32,
+	write_bones: bool,
+	write_effects: bool,
+	cache: Option<&AnimSampleCache>,
+) -> Effects {
+	if let Some(cache) = cache {
+		if let Some(effects) =
+			cache.sample_humanoid(clip, rig, progress, write_bones, write_effects)
+		{
+			return effects;
+		}
+	}
+	sample_humanoid(clip, rig, progress, write_bones, write_effects)
 }
 
 fn sample_split<A, R>(
