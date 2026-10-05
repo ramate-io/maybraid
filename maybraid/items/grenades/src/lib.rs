@@ -149,29 +149,107 @@ pub fn tick_grenade_fuses(
 	}
 }
 
-/// Overlap every `Health` pool in the blast and write [`Hit`]s. `source` is the thrower
-/// so player-thrown blasts feed hit markers.
+/// Animated colliders only; terrain is [`PhysicsInteractionLayer::Fixed`].
+fn blast_overlap_filter(source: Entity) -> SpatialQueryFilter {
+	PhysicsInteractionLayer::Animated
+		.query_filter()
+		.with_excluded_entities([source])
+}
+
+/// Extension point for wall occlusion before falloff. Always clear until LOS is wired.
+fn blast_line_of_sight_clear(
+	_origin: Vec3,
+	_target: Vec3,
+	_spatial: &SpatialQuery,
+	_filter: &SpatialQueryFilter,
+) -> bool {
+	// Follow-up: ray from origin toward target against Fixed (see spotting `clear_segment`).
+	true
+}
+
+fn blast_target_point(
+	target: Entity,
+	collider: Entity,
+	transforms: &Query<(Entity, &Transform, Option<&GlobalTransform>)>,
+) -> Option<Vec3> {
+	for entity in [target, collider] {
+		if let Ok((_, transform, global)) = transforms.get(entity) {
+			return Some(global.map(GlobalTransform::translation).unwrap_or(transform.translation));
+		}
+	}
+	None
+}
+
+/// Resolve spatial overlap hits to [`Hit`]s with radial falloff. Unit-tested without Avian overlap.
+fn collect_blast_hits(
+	blast: &GrenadeDetonated,
+	candidates: &[Entity],
+	transforms: &Query<(Entity, &Transform, Option<&GlobalTransform>)>,
+	health: &Query<(), With<damage::Health>>,
+	parents: &Query<&ChildOf>,
+	spatial: &SpatialQuery,
+	filter: &SpatialQueryFilter,
+) -> Vec<Hit> {
+	let mut damaged = Vec::new();
+	let mut out = Vec::new();
+	for &collider in candidates {
+		if collider == blast.source {
+			continue;
+		}
+		let parent = parents.get(collider).ok().map(|child| child.parent());
+		let target = damage::Health::entity_or_parent(
+			collider,
+			parent,
+			health.contains(collider),
+			parent.is_some_and(|parent| health.contains(parent)),
+		);
+		if target == blast.source || !health.contains(target) || damaged.contains(&target) {
+			continue;
+		}
+		let Some(point) = blast_target_point(target, collider, transforms) else {
+			continue;
+		};
+		if !blast_line_of_sight_clear(blast.position, point, spatial, filter) {
+			continue;
+		}
+		let amount = blast_amount(blast.damage, blast.radius, point.distance(blast.position));
+		if amount <= 1e-3 {
+			continue;
+		}
+		damaged.push(target);
+		out.push(Hit { target, source: Some(blast.source), amount, point });
+	}
+	out
+}
+
+/// Sphere overlap for blast candidates, then radial falloff and [`Hit`] writes. `source` is
+/// the thrower so player-thrown blasts feed hit markers.
 pub fn apply_grenade_blasts(
 	mut detonations: MessageReader<GrenadeDetonated>,
-	health: Query<(Entity, &Transform, Option<&GlobalTransform>), With<damage::Health>>,
+	spatial: SpatialQuery,
+	transforms: Query<(Entity, &Transform, Option<&GlobalTransform>)>,
+	health: Query<(), With<damage::Health>>,
+	parents: Query<&ChildOf>,
 	mut hits: MessageWriter<Hit>,
 ) {
 	for blast in detonations.read() {
-		let mut damaged = Vec::new();
-		for (entity, transform, global) in &health {
-			if entity == blast.source {
-				continue;
-			}
-			if damaged.contains(&entity) {
-				continue;
-			}
-			let point = global.map(GlobalTransform::translation).unwrap_or(transform.translation);
-			let amount = blast_amount(blast.damage, blast.radius, point.distance(blast.position));
-			if amount <= 1e-3 {
-				continue;
-			}
-			damaged.push(entity);
-			hits.write(Hit { target: entity, source: Some(blast.source), amount, point });
+		let filter = blast_overlap_filter(blast.source);
+		let candidates = spatial.shape_intersections(
+			&Collider::sphere(blast.radius),
+			blast.position,
+			Quat::IDENTITY,
+			&filter,
+		);
+		for hit in collect_blast_hits(
+			&blast,
+			&candidates,
+			&transforms,
+			&health,
+			&parents,
+			&spatial,
+			&filter,
+		) {
+			hits.write(hit);
 		}
 	}
 }
@@ -192,7 +270,9 @@ impl Plugin for GrenadesPlugin {
 
 #[cfg(test)]
 mod tests {
+	use bevy::asset::AssetPlugin;
 	use bevy::ecs::system::RunSystemOnce;
+	use bevy::mesh::MeshPlugin;
 	use damage::Health;
 
 	use super::*;
@@ -206,6 +286,66 @@ mod tests {
 			radius: stats.blast_radius,
 			damage: stats.blast_damage,
 		}
+	}
+
+	fn blast_test_app() -> App {
+		let mut app = App::new();
+		app.add_plugins((
+			MinimalPlugins,
+			TransformPlugin,
+			PhysicsPlugins::default(),
+			AssetPlugin::default(),
+			MeshPlugin,
+		));
+		app.finish();
+		app.init_resource::<Messages<GrenadeDetonated>>();
+		app.init_resource::<Messages<Hit>>();
+		app.update();
+		app
+	}
+
+	fn spawn_damageable(app: &mut App, translation: Vec3) -> Entity {
+		app.world_mut()
+			.spawn((
+				Health::from_max(100.0),
+				Transform::from_translation(translation),
+				RigidBody::Dynamic,
+				Collider::capsule(0.4, 1.0),
+				PhysicsInteractionLayer::animated_layers(),
+			))
+			.id()
+	}
+
+	fn run_blast_system(app: &mut App, blast: GrenadeDetonated) {
+		app.world_mut().resource_mut::<Messages<GrenadeDetonated>>().write(blast);
+		app.update();
+		app.world_mut().run_system_once(apply_grenade_blasts).expect("blast");
+	}
+
+	fn collect_hits(
+		world: &mut World,
+		blast: GrenadeDetonated,
+		candidates: Vec<Entity>,
+	) -> Vec<Hit> {
+		world
+			.run_system_once(
+				move |spatial: SpatialQuery,
+				      transforms: Query<(Entity, &Transform, Option<&GlobalTransform>)>,
+				      health: Query<(), With<Health>>,
+				      parents: Query<&ChildOf>| {
+					let filter = blast_overlap_filter(blast.source);
+					collect_blast_hits(
+						&blast,
+						&candidates,
+						&transforms,
+						&health,
+						&parents,
+						&spatial,
+						&filter,
+					)
+				},
+			)
+			.expect("collect")
 	}
 
 	#[test]
@@ -250,19 +390,35 @@ mod tests {
 	}
 
 	#[test]
+	fn collect_blast_hits_respects_radius_and_source() {
+		let mut app = blast_test_app();
+		let in_range = spawn_damageable(&mut app, Vec3::new(2.0, 0.0, 0.0));
+		let out_of_range = spawn_damageable(&mut app, Vec3::new(10.0, 0.0, 0.0));
+		let thrower = spawn_damageable(&mut app, Vec3::new(0.5, 0.0, 0.0));
+		app.update();
+		let mut blast = standard_blast();
+		blast.source = thrower;
+		let hits = collect_hits(
+			app.world_mut(),
+			blast,
+			vec![in_range, out_of_range, thrower],
+		);
+		assert_eq!(hits.len(), 1);
+		assert_eq!(hits[0].target, in_range);
+		assert_eq!(hits[0].source, Some(thrower));
+		assert!(hits[0].amount > 0.0);
+	}
+
+	#[test]
 	fn blast_hits_carry_the_thrower() {
-		let mut world = World::new();
-		world.init_resource::<Messages<GrenadeDetonated>>();
-		world.init_resource::<Messages<Hit>>();
-		let thrower = world.spawn_empty().id();
-		let target =
-			world.spawn((Health::from_max(100.0), Transform::from_xyz(2.0, 0.0, 0.0))).id();
+		let mut app = blast_test_app();
+		let thrower = app.world_mut().spawn_empty().id();
+		let target = spawn_damageable(&mut app, Vec3::new(2.0, 0.0, 0.0));
 		let mut blast = standard_blast();
 		blast.source = thrower;
 		blast.position = Vec3::ZERO;
-		world.resource_mut::<Messages<GrenadeDetonated>>().write(blast);
-		world.run_system_once(apply_grenade_blasts).expect("blast");
-		let hits: Vec<Hit> = world.resource_mut::<Messages<Hit>>().drain().collect();
+		run_blast_system(&mut app, blast);
+		let hits: Vec<Hit> = app.world_mut().resource_mut::<Messages<Hit>>().drain().collect();
 		assert_eq!(hits.len(), 1);
 		assert_eq!(hits[0].target, target);
 		assert_eq!(hits[0].source, Some(thrower));
@@ -270,16 +426,23 @@ mod tests {
 	}
 
 	#[test]
-	fn blast_does_not_hit_the_thrower() {
-		let mut world = World::new();
-		world.init_resource::<Messages<GrenadeDetonated>>();
-		world.init_resource::<Messages<Hit>>();
-		let thrower =
-			world.spawn((Health::from_max(100.0), Transform::from_xyz(0.5, 0.0, 0.0))).id();
+	fn blast_skips_out_of_radius_targets() {
+		let mut app = blast_test_app();
+		let thrower = app.world_mut().spawn_empty().id();
+		spawn_damageable(&mut app, Vec3::new(10.0, 0.0, 0.0));
 		let mut blast = standard_blast();
 		blast.source = thrower;
-		world.resource_mut::<Messages<GrenadeDetonated>>().write(blast);
-		world.run_system_once(apply_grenade_blasts).expect("blast");
-		assert_eq!(world.resource_mut::<Messages<Hit>>().drain().count(), 0);
+		run_blast_system(&mut app, blast);
+		assert_eq!(app.world_mut().resource_mut::<Messages<Hit>>().drain().count(), 0);
+	}
+
+	#[test]
+	fn blast_does_not_hit_the_thrower() {
+		let mut app = blast_test_app();
+		let thrower = spawn_damageable(&mut app, Vec3::new(0.5, 0.0, 0.0));
+		let mut blast = standard_blast();
+		blast.source = thrower;
+		run_blast_system(&mut app, blast);
+		assert_eq!(app.world_mut().resource_mut::<Messages<Hit>>().drain().count(), 0);
 	}
 }
