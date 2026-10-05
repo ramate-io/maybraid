@@ -216,10 +216,15 @@ fn calibrate(definition: &RigDefinition, rest: &PoseBuffer) -> Box<[JointFrame]>
 	for (index, frame) in frames.iter_mut().enumerate() {
 		let bone = BoneId(index as u16);
 		let rotation = rest.rotation(bone);
+		let parent = definition.parent_rotation(rest, bone);
 		*frame = match definition.family {
-			SkeletonFamily::Humanoid => super::humanoid::frame_for(definition, bone, rotation),
-			SkeletonFamily::Quadruped => super::quadruped::frame_for(definition, bone, rotation),
-			SkeletonFamily::Forelimbed => super::forelimbed::frame_for(rotation),
+			SkeletonFamily::Humanoid => {
+				super::humanoid::frame_for(definition, bone, rotation, parent)
+			}
+			SkeletonFamily::Quadruped => {
+				super::quadruped::frame_for(definition, bone, rotation, parent)
+			}
+			SkeletonFamily::Forelimbed => super::forelimbed::frame_for(rotation, parent),
 		};
 	}
 	frames.into_boxed_slice()

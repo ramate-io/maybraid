@@ -19,7 +19,6 @@ use bevy::prelude::*;
 use super::binding::{BoneId, RigBinding, RigDefinition, SkeletonFamily};
 use super::buffer::PoseBuffer;
 use super::frame::{JointAngles, JointFrame};
-use super::{CHARACTER_FORWARD, CHARACTER_RIGHT, CHARACTER_UP};
 use crate::articulation::{rotation_along_with_roll, BONE_LENGTH_AXIS};
 use crate::Side;
 
@@ -181,14 +180,19 @@ impl HumanoidPose {
 	}
 }
 
-pub(crate) fn frame_for(definition: &RigDefinition, bone: BoneId, rest: Quat) -> JointFrame {
+pub(crate) fn frame_for(
+	definition: &RigDefinition,
+	bone: BoneId,
+	rest: Quat,
+	parent: Quat,
+) -> JointFrame {
 	let _ = definition;
 	let _ = bone;
-	// One anatomical triad for every humanoid bone. Right-side hinge mirrors are
-	// not extra signs: both legs share +X flexion so the same positive knee bend
-	// folds both knees the same way. A reflected bind flips axial inside calibrate.
-	JointFrame::calibrate(rest, CHARACTER_RIGHT, CHARACTER_FORWARD, CHARACTER_UP)
-		.unwrap_or(JointFrame::IDENTITY)
+	// Character +X / +Z / +Y, conjugated into this bone's parent. The inspected
+	// pelvis bind sends local +X to character +Z; without the parent conjugate,
+	// hip flexion swings the thigh sideways. Right-side hinges do not take an
+	// extra sign: both knees share positive flexion.
+	JointFrame::calibrate_in_character(rest, parent).unwrap_or(JointFrame::IDENTITY)
 }
 
 pub fn resolve_humanoid(pose: &HumanoidPose, binding: &RigBinding, out: &mut PoseBuffer) {
@@ -403,6 +407,34 @@ mod tests {
 			(left - right).length() < 1e-4,
 			"same flexion, same sagittal bend: {left:?} vs {right:?}"
 		);
+	}
+
+	#[test]
+	fn imported_pelvis_bind_keeps_hip_flexion_sagittal() {
+		let definition = humanoid_v0_definition();
+		let mut rest = PoseBuffer::identity(definition.len());
+		let pelvis = definition.id("pelvis.L").expect("pelvis");
+		let femur = definition.id("femur.L").expect("femur");
+		let shin = definition.id("shin.L").expect("shin");
+		// Inspected humanoid_rig.glb: pelvis.L permutes +X onto character +Z, and
+		// femur.L aims local +Y along pelvis −Z so the thigh hangs down.
+		rest.local[pelvis.index()].rotation = Quat::from_xyzw(-0.5, -0.5, -0.5, 0.5);
+		rest.local[femur.index()].rotation = Quat::from_rotation_x(-FRAC_PI_2);
+		let binding = RigBinding::from_rest(
+			definition,
+			vec![Entity::PLACEHOLDER; rest.len()].into_boxed_slice(),
+			rest,
+		);
+		let mut pose = HumanoidPose::default();
+		pose.leg_mut(Side::Left).hip_flexion = 0.5;
+		pose.leg_mut(Side::Left).knee_flexion = 0.6;
+		let mut out = PoseBuffer::identity(binding.definition.len());
+		resolve_humanoid(&pose, &binding, &mut out);
+		let thigh = binding.definition.rotation_in_character(&out, femur) * Vec3::Y;
+		let shin_dir = binding.definition.rotation_in_character(&out, shin) * Vec3::Y;
+		assert!(thigh.z.abs() > 0.3, "stride must move back/front, got {thigh:?}");
+		assert!(thigh.x.abs() < 0.08, "stride must not swing sideways, got {thigh:?}");
+		assert!(shin_dir.z.abs() > shin_dir.x.abs(), "knee stays sagittal, got {shin_dir:?}");
 	}
 
 	#[test]

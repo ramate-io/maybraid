@@ -10,7 +10,6 @@ use bevy::prelude::*;
 use super::binding::{BoneId, RigBinding, RigDefinition, SkeletonFamily};
 use super::buffer::PoseBuffer;
 use super::frame::{JointAngles, JointFrame};
-use super::{CHARACTER_FORWARD, CHARACTER_RIGHT, CHARACTER_UP};
 
 /// upper_mid, upper, lower_mid, lower, tailbone.
 pub const FORELIMBED_SPINE: usize = 5;
@@ -74,9 +73,8 @@ pub struct ForelimbedPose {
 	pub fin_flap: [f32; 2],
 }
 
-pub(crate) fn frame_for(rest: Quat) -> JointFrame {
-	JointFrame::calibrate(rest, CHARACTER_RIGHT, CHARACTER_FORWARD, CHARACTER_UP)
-		.unwrap_or(JointFrame::IDENTITY)
+pub(crate) fn frame_for(rest: Quat, parent: Quat) -> JointFrame {
+	JointFrame::calibrate_in_character(rest, parent).unwrap_or(JointFrame::IDENTITY)
 }
 
 pub fn resolve_forelimbed(pose: &ForelimbedPose, binding: &RigBinding, out: &mut PoseBuffer) {

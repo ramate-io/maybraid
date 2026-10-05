@@ -11,7 +11,6 @@ use bevy::prelude::*;
 use super::binding::{BoneId, RigBinding, RigDefinition, SkeletonFamily};
 use super::buffer::PoseBuffer;
 use super::frame::{JointAngles, JointFrame};
-use super::{CHARACTER_FORWARD, CHARACTER_RIGHT, CHARACTER_UP};
 use crate::Side;
 
 pub const QUADRUPED_V0_BONES: &[&str] = &[
@@ -103,10 +102,14 @@ impl QuadrupedPose {
 	}
 }
 
-pub(crate) fn frame_for(definition: &RigDefinition, bone: BoneId, rest: Quat) -> JointFrame {
+pub(crate) fn frame_for(
+	definition: &RigDefinition,
+	bone: BoneId,
+	rest: Quat,
+	parent: Quat,
+) -> JointFrame {
 	let _ = (definition, bone);
-	JointFrame::calibrate(rest, CHARACTER_RIGHT, CHARACTER_FORWARD, CHARACTER_UP)
-		.unwrap_or(JointFrame::IDENTITY)
+	JointFrame::calibrate_in_character(rest, parent).unwrap_or(JointFrame::IDENTITY)
 }
 
 pub fn resolve_quadruped(pose: &QuadrupedPose, binding: &RigBinding, out: &mut PoseBuffer) {

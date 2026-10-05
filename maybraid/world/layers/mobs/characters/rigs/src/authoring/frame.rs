@@ -1,5 +1,7 @@
 use bevy::prelude::*;
 
+use super::{CHARACTER_FORWARD, CHARACTER_RIGHT, CHARACTER_UP};
+
 /// Anatomical angles in radians.
 ///
 /// Application order is flexion, then lateral bend, then axial rotation.
@@ -96,6 +98,20 @@ impl JointFrame {
 		self.lateral_sign *= lateral.signum();
 		self.axial_sign *= axial.signum();
 		self
+	}
+
+	/// Character-space anatomical triad, expressed in this bone's parent rest.
+	///
+	/// Flexion stays about character +X even when a pelvis or shoulder bind
+	/// permutes the parent axes. Identity parent keeps the triad as +X / +Z / +Y.
+	pub fn calibrate_in_character(rest: Quat, parent: Quat) -> Option<Self> {
+		let into_parent = parent.inverse();
+		Self::calibrate(
+			rest,
+			into_parent * CHARACTER_RIGHT,
+			into_parent * CHARACTER_FORWARD,
+			into_parent * CHARACTER_UP,
+		)
 	}
 
 	pub fn local_rotation(&self, rest: Quat, angles: JointAngles) -> Quat {

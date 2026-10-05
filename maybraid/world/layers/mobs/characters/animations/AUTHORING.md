@@ -4,6 +4,8 @@ Clips sample an anatomical pose. The rig resolves that pose into bone-local rota
 
 Character space is the armature’s local frame: **+X** right, **+Y** up, **+Z** fight-forward. Bevy’s world stays **+Y** up and **−Z** camera-forward. Convert positions and directions with the character `GlobalTransform`. Do not send a direction through point conversion.
 
+Joint frames conjugate that triad through the **parent** rest. On the imported humanoid, `pelvis.L` sends its local +X onto character +Z. Hip flexion is still about character +X, so the thigh swings back and front, not sideways.
+
 ## Channels
 
 Angles are radians.
