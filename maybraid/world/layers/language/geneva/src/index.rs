@@ -129,6 +129,29 @@ enum PendingAssign {
 	},
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct QueuedStamp {
+	revision: u64,
+	fingerprint: u64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum SourceClass {
+	Vegetation,
+	Geography,
+	Urban,
+	Place,
+	Region,
+}
+
+/// Keys presentation should upsert or drop without cloning the whole index.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct OverlayDirty {
+	pub rebuild_all: bool,
+	pub tiles: bool,
+	pub keys: HashSet<NameKey>,
+}
+
 /// Tiles and names for the keep ring.
 #[derive(Resource, Clone, Debug, Default)]
 pub struct LanguageIndex {
@@ -140,9 +163,12 @@ pub struct LanguageIndex {
 	extents: HashMap<NameKey, Rect>,
 	host_languages: HashMap<Id, u64>,
 	pending: VecDeque<PendingAssign>,
+	queued: HashMap<NameKey, QueuedStamp>,
+	region_terms: HashMap<(i32, i32), Vec<String>>,
 	source_deps: Option<LanguageSourceDeps>,
 	/// Names currently overlapping the keep ring. Durable records may outlive this.
 	active: HashSet<NameKey>,
+	overlay_dirty: OverlayDirty,
 	/// Increments when assigned names or tiles change.
 	pub epoch: u64,
 }
@@ -155,8 +181,46 @@ impl LanguageIndex {
 		self.extents.clear();
 		self.host_languages.clear();
 		self.pending.clear();
+		self.queued.clear();
+		self.region_terms.clear();
 		self.source_deps = None;
 		self.active.clear();
+		self.overlay_dirty = OverlayDirty { rebuild_all: true, tiles: true, keys: HashSet::new() };
+		self.epoch = self.epoch.wrapping_add(1);
+	}
+
+	/// Last queued or assigned stamp matches, so keep must not re-translate.
+	pub(crate) fn is_current(&self, key: NameKey, revision: u64, fingerprint: u64) -> bool {
+		if self
+			.queued
+			.get(&key)
+			.is_some_and(|stamp| stamp.revision == revision && stamp.fingerprint == fingerprint)
+		{
+			return true;
+		}
+		self.names.get(&key).is_some_and(|assigned| {
+			assigned.source_revision == revision && assigned.fingerprint == fingerprint
+		})
+	}
+
+	/// Storage version still matches. Used to skip English rebuilds on snapshot.
+	pub(crate) fn is_current_revision(&self, key: NameKey, revision: u64) -> bool {
+		self.queued.get(&key).is_some_and(|stamp| stamp.revision == revision)
+			|| self
+				.names
+				.get(&key)
+				.is_some_and(|assigned| assigned.source_revision == revision)
+	}
+
+	pub(crate) fn take_overlay_dirty(&mut self) -> OverlayDirty {
+		std::mem::take(&mut self.overlay_dirty)
+	}
+
+	fn mark_overlay_key(&mut self, key: NameKey) {
+		self.overlay_dirty.keys.insert(key);
+	}
+
+	fn bump_epoch(&mut self) {
 		self.epoch = self.epoch.wrapping_add(1);
 	}
 
@@ -218,7 +282,8 @@ impl LanguageIndex {
 			});
 		}
 		if added {
-			self.epoch = self.epoch.wrapping_add(1);
+			self.overlay_dirty.tiles = true;
+			self.bump_epoch();
 		}
 	}
 
@@ -230,6 +295,7 @@ impl LanguageIndex {
 		places: &[crate::NamedPlace],
 	) {
 		self.ensure_tiles(world_seed, region);
+		self.region_terms.clear();
 		let mut next_active = HashSet::new();
 		for (ix, iz) in large_tiles_overlapping(region) {
 			next_active.insert(NameKey::Region { ix, iz });
@@ -241,44 +307,163 @@ impl LanguageIndex {
 				}
 			}
 			let fingerprint = terms_fingerprint(&english);
-			self.pending.push_back(PendingAssign::Region { ix, iz, english, fingerprint });
+			self.region_terms.insert((ix, iz), english.clone());
+			self.enqueue_region(ix, iz, english, fingerprint);
 		}
 		for feature in features {
 			next_active.insert(feature.key);
-			let center = Vec2::new(
-				(feature.bounds.min.x + feature.bounds.max.x) * 0.5,
-				(feature.bounds.min.z + feature.bounds.max.z) * 0.5,
-			);
-			self.pending.push_back(PendingAssign::Feature {
-				key: feature.key,
-				center,
-				extent: xz_extent(feature.bounds),
-				english: feature.english.clone(),
-				revision: feature.revision,
-				fingerprint: feature.fingerprint,
-				provisional: feature.provisional,
-				inherit_host: None,
-			});
+			self.enqueue_feature(feature);
 		}
 		for place in places {
 			next_active.insert(place.key);
-			self.pending.push_back(PendingAssign::Feature {
-				key: place.key,
-				center: place.xz,
-				extent: Rect::from_center_size(place.xz, Vec2::splat(12.0)),
-				english: place.english.clone(),
-				revision: place.revision,
-				fingerprint: place.fingerprint,
-				provisional: place.provisional,
-				inherit_host: place.host.filter(|_| place.inherit_host_language),
-			});
+			self.enqueue_place(place);
 		}
 		self.retire_superseded(&next_active);
-		if self.active != next_active {
-			self.active = next_active;
-			self.epoch = self.epoch.wrapping_add(1);
-		}
+		self.replace_active(next_active);
 		self.coalesce_pending();
+	}
+
+	/// Merge one source's snapshot without rebuilding the other domains.
+	pub(crate) fn queue_feature_snapshot(
+		&mut self,
+		world_seed: u64,
+		region: Aabb3d,
+		snapshot: crate::FeatureSnapshot,
+		class: SourceClass,
+	) {
+		self.ensure_tiles(world_seed, region);
+		for feature in &snapshot.work {
+			self.enqueue_feature(feature);
+			self.add_region_terms(feature);
+		}
+		self.replace_active_class(class, snapshot.active);
+		let active = self.active.clone();
+		self.retire_superseded(&active);
+		self.coalesce_pending();
+	}
+
+	pub(crate) fn queue_place_snapshot(
+		&mut self,
+		world_seed: u64,
+		region: Aabb3d,
+		snapshot: crate::PlaceSnapshot,
+	) {
+		self.ensure_tiles(world_seed, region);
+		for place in &snapshot.work {
+			self.enqueue_place(place);
+		}
+		self.replace_active_class(SourceClass::Place, snapshot.active);
+		let active = self.active.clone();
+		self.retire_superseded(&active);
+		self.coalesce_pending();
+	}
+
+	fn enqueue_region(&mut self, ix: i32, iz: i32, english: Vec<String>, fingerprint: u64) {
+		let key = NameKey::Region { ix, iz };
+		if self.is_current(key, 0, fingerprint) {
+			return;
+		}
+		self.queued.insert(key, QueuedStamp { revision: 0, fingerprint });
+		self.pending.push_back(PendingAssign::Region { ix, iz, english, fingerprint });
+	}
+
+	fn enqueue_feature(&mut self, feature: &crate::NamedFeature) {
+		if self.is_current(feature.key, feature.revision, feature.fingerprint) {
+			return;
+		}
+		self.queued.insert(
+			feature.key,
+			QueuedStamp { revision: feature.revision, fingerprint: feature.fingerprint },
+		);
+		let center = Vec2::new(
+			(feature.bounds.min.x + feature.bounds.max.x) * 0.5,
+			(feature.bounds.min.z + feature.bounds.max.z) * 0.5,
+		);
+		self.pending.push_back(PendingAssign::Feature {
+			key: feature.key,
+			center,
+			extent: xz_extent(feature.bounds),
+			english: feature.english.clone(),
+			revision: feature.revision,
+			fingerprint: feature.fingerprint,
+			provisional: feature.provisional,
+			inherit_host: None,
+		});
+	}
+
+	fn enqueue_place(&mut self, place: &crate::NamedPlace) {
+		let inherit_host = place.host.filter(|_| place.inherit_host_language);
+		if inherit_host.is_none() && self.is_current(place.key, place.revision, place.fingerprint) {
+			return;
+		}
+		self.queued.insert(
+			place.key,
+			QueuedStamp { revision: place.revision, fingerprint: place.fingerprint },
+		);
+		self.pending.push_back(PendingAssign::Feature {
+			key: place.key,
+			center: place.xz,
+			extent: Rect::from_center_size(place.xz, Vec2::splat(12.0)),
+			english: place.english.clone(),
+			revision: place.revision,
+			fingerprint: place.fingerprint,
+			provisional: place.provisional,
+			inherit_host,
+		});
+	}
+
+	fn add_region_terms(&mut self, feature: &crate::NamedFeature) {
+		for (ix, iz) in large_tiles_overlapping(feature.bounds) {
+			if !self.large.contains_key(&(ix, iz)) {
+				continue;
+			}
+			let terms = {
+				let entry = self.region_terms.entry((ix, iz)).or_default();
+				entry.extend(feature.english.iter().cloned());
+				entry.clone()
+			};
+			let fingerprint = terms_fingerprint(&terms);
+			self.enqueue_region(ix, iz, terms, fingerprint);
+		}
+	}
+
+	fn replace_active(&mut self, next_active: HashSet<NameKey>) {
+		if self.active == next_active {
+			return;
+		}
+		for key in self.active.difference(&next_active) {
+			self.overlay_dirty.keys.insert(*key);
+		}
+		for key in next_active.difference(&self.active) {
+			self.overlay_dirty.keys.insert(*key);
+		}
+		self.active = next_active;
+		self.bump_epoch();
+	}
+
+	fn replace_active_class(&mut self, class: SourceClass, next: HashSet<NameKey>) {
+		let stale: Vec<_> = self
+			.active
+			.iter()
+			.copied()
+			.filter(|key| source_class(*key) == class && !next.contains(key))
+			.collect();
+		let mut changed = false;
+		for key in stale {
+			self.active.remove(&key);
+			self.queued.remove(&key);
+			self.mark_overlay_key(key);
+			changed = true;
+		}
+		for key in next {
+			if self.active.insert(key) {
+				self.mark_overlay_key(key);
+				changed = true;
+			}
+		}
+		if changed {
+			self.bump_epoch();
+		}
 	}
 
 	pub fn assign_keep(
@@ -327,8 +512,10 @@ impl LanguageIndex {
 			self.names.remove(&key);
 			self.anchors.remove(&key);
 			self.extents.remove(&key);
+			self.queued.remove(&key);
+			self.mark_overlay_key(key);
 		}
-		self.epoch = self.epoch.wrapping_add(1);
+		self.bump_epoch();
 	}
 
 	fn apply_pending(&mut self, world_seed: u64, work: PendingAssign) -> bool {
@@ -399,7 +586,8 @@ impl LanguageIndex {
 		);
 		self.anchors.insert(key, region_anchor(ix, iz));
 		self.extents.insert(key, region_extent(ix, iz));
-		self.epoch = self.epoch.wrapping_add(1);
+		self.mark_overlay_key(key);
+		self.bump_epoch();
 		true
 	}
 
@@ -441,7 +629,8 @@ impl LanguageIndex {
 		);
 		self.anchors.insert(work.key, work.center);
 		self.extents.insert(work.key, work.extent);
-		self.epoch = self.epoch.wrapping_add(1);
+		self.mark_overlay_key(work.key);
+		self.bump_epoch();
 		true
 	}
 
@@ -471,6 +660,16 @@ impl LanguageIndex {
 enum PendingKey {
 	Region { ix: i32, iz: i32 },
 	Feature(NameKey),
+}
+
+pub(crate) fn source_class(key: NameKey) -> SourceClass {
+	match key {
+		NameKey::Forest(_) | NameKey::Grove(_) => SourceClass::Vegetation,
+		NameKey::Geographic(_) => SourceClass::Geography,
+		NameKey::Urban(_) | NameKey::UrbanLeaf(_) => SourceClass::Urban,
+		NameKey::Place { .. } | NameKey::ProvisionalPlace { .. } => SourceClass::Place,
+		NameKey::Region { .. } => SourceClass::Region,
+	}
 }
 
 fn pending_key(work: &PendingAssign) -> PendingKey {

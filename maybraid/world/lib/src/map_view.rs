@@ -13,11 +13,11 @@ use menu_components::{
 	MAP_MOUNTAIN_ICON, MAP_TOWN_ICON, MAP_TREE_ICON, MAP_WATER_ICON, NOTO_SANS_REGULAR,
 	TEXT_SALMON, TEXT_YELLOW, TEXT_YELLOW_FAINT,
 };
+use mob_characters::{LOCAL_POI, SALOON_POI, URBAN_POI, VEGETATION_POI};
 use player::CameraFollow;
 use player_camera::{
 	CameraController, CameraLookSuppressed, CameraPovLocked, FollowCamera, PlayerCameraSystems,
 };
-use mob_characters::{LOCAL_POI, SALOON_POI, URBAN_POI, VEGETATION_POI};
 use poi_intelligence::{PoiId, PoiKind, PoiRecord, PoiRegistry};
 use richmond::{DiscoverablePlace, Richmond};
 use terrain_layer_model::{OnTerrain, TerrainView};
@@ -413,6 +413,23 @@ fn place_name_keys(
 		.collect()
 }
 
+const MAP_PIN_QUANT_M: f32 = 8.0;
+
+#[derive(Clone, PartialEq, Eq)]
+struct MapPrepKey {
+	overlay_epoch: u64,
+	focus: IVec2,
+	height_q: i32,
+	highlighted: Option<PoiId>,
+	picker: bool,
+	cam: IVec3,
+	viewport: Option<(IVec2, IVec2)>,
+}
+
+fn quantize_map_axis(value: f32) -> i32 {
+	(value / MAP_PIN_QUANT_M).round() as i32
+}
+
 fn prepare_map_presentation(
 	map: Res<WorldMapView>,
 	overlay: Res<LanguageOverlay>,
@@ -422,16 +439,51 @@ fn prepare_map_presentation(
 	surface: TerrainView<Urbanization<Richmond<OnTerrain<Durham>>>>,
 	places: Query<(Entity, &DiscoverablePlace, &GlobalTransform)>,
 	mut presentation: ResMut<MapPresentation>,
+	mut last_key: Local<Option<MapPrepKey>>,
 ) {
 	if !map.open {
-		*presentation = MapPresentation::default();
+		if presentation.open {
+			*presentation = MapPresentation::default();
+		}
+		*last_key = None;
 		return;
 	}
+	let highlighted = pending.as_deref().and_then(|state| state.pending.as_ref()?.highlighted);
+	let picker = picker_prompt_visible(&map);
+	let (cam, viewport) = if let Ok((camera, camera_transform)) = camera.single() {
+		let translation = camera_transform.translation();
+		(
+			IVec3::new(
+				quantize_map_axis(translation.x),
+				quantize_map_axis(translation.y),
+				quantize_map_axis(translation.z),
+			),
+			camera.logical_viewport_rect().map(|rect| {
+				(
+					IVec2::new(rect.min.x.round() as i32, rect.min.y.round() as i32),
+					IVec2::new(rect.max.x.round() as i32, rect.max.y.round() as i32),
+				)
+			}),
+		)
+	} else {
+		(IVec3::ZERO, None)
+	};
+	let key = MapPrepKey {
+		overlay_epoch: overlay.epoch,
+		focus: IVec2::new(quantize_map_axis(map.focus.x), quantize_map_axis(map.focus.y)),
+		height_q: quantize_map_axis(map.height),
+		highlighted,
+		picker,
+		cam,
+		viewport,
+	};
+	if last_key.as_ref() == Some(&key) {
+		return;
+	}
+	*last_key = Some(key);
 	let named = place_name_keys(&places);
 	let wanted =
 		map_pin_targets(&map, &overlay, registry.as_deref(), pending.as_deref(), Some(&named));
-	let highlighted = pending.as_deref().and_then(|state| state.pending.as_ref()?.highlighted);
-	let picker = picker_prompt_visible(&map);
 	let projected = if let Ok((camera, camera_transform)) = camera.single() {
 		let viewport = camera.logical_viewport_rect();
 		wanted
@@ -494,7 +546,8 @@ fn sync_map_name_pins(
 	let highlighted = presentation.highlighted;
 	let mut assigned = Vec::new();
 	for (pin_entity, pin, mut node, mut text, mut font, mut color, mut visibility) in &mut pins {
-		let Some(presented) = presentation.pins.iter().find(|pin_wanted| pin_wanted.wanted.id == pin.target)
+		let Some(presented) =
+			presentation.pins.iter().find(|pin_wanted| pin_wanted.wanted.id == pin.target)
 		else {
 			commands.entity(pin_entity).despawn();
 			continue;
@@ -910,7 +963,9 @@ fn overlay_name_for_poi<'a>(
 	overlay
 		.names
 		.iter()
-		.filter(|name| name_covers_poi(name, xz, place_r) && name_kind_matches_poi(name.key, poi.kind))
+		.filter(|name| {
+			name_covers_poi(name, xz, place_r) && name_kind_matches_poi(name.key, poi.kind)
+		})
 		.min_by(|a, b| {
 			poi_name_rank(a.key)
 				.cmp(&poi_name_rank(b.key))
@@ -1284,8 +1339,7 @@ fn sync_map_edge_arrows(
 	};
 	let mut assigned = Vec::new();
 	for (entity, arrow, mut node, mut transform, mut visibility) in &mut arrows {
-		let Some(presented) =
-			presentation.pins.iter().find(|pin| pin.wanted.id == arrow.target)
+		let Some(presented) = presentation.pins.iter().find(|pin| pin.wanted.id == arrow.target)
 		else {
 			commands.entity(entity).despawn();
 			continue;
@@ -2020,10 +2074,7 @@ mod tests {
 			],
 			..Default::default()
 		};
-		assert_eq!(
-			label_for_poi(&building, &overlay, Some(key)),
-			"Amber House\nAmber House"
-		);
+		assert_eq!(label_for_poi(&building, &overlay, Some(key)), "Amber House\nAmber House");
 		assert_eq!(
 			label_for_poi(&test_poi(Vec2::new(10.0, 6.0)), &overlay, None),
 			"Oak Stand\nGreen Grove"

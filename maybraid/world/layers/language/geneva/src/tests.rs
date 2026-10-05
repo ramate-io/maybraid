@@ -17,12 +17,13 @@ use crate::english::{
 	compose_english, geographic_terms, grove_kind_terms, named_grove_english, with_color_name,
 	PLACE_COLORS,
 };
-use crate::index::{
-	LanguageConfig, LanguageIndex, LanguageSourceDeps, LanguageWorldSeed, NameKey,
-};
+use crate::index::{LanguageConfig, LanguageIndex, LanguageSourceDeps, LanguageWorldSeed, NameKey};
 use crate::name::{canonicalize_terms, pick_terms, terms_fingerprint, PlaceName};
 use crate::present::LanguageOverlay;
-use crate::sources::{places_from_world_xz, NamedFeature, NamedPlace, NamedWorld, SourceRevisions};
+use crate::sources::{
+	places_from_world_xz, places_signature_from_world_xz, NamedFeature, NamedPlace, NamedWorld,
+	SourceRevisions,
+};
 use crate::tiles::{LargeTile, LARGE_TILE};
 use crate::Geneva;
 
@@ -695,10 +696,7 @@ fn child_assigned_before_host_adopts_the_host_language() -> anyhow::Result<()> {
 	index.assign_keep(SEED, region, &[], &child_only);
 	let child_key = NameKey::Place { host, local: 99 };
 	let host_key = NameKey::Place { host, local: 4 };
-	let first = index
-		.assigned(child_key)
-		.ok_or_else(|| anyhow::anyhow!("child first"))?
-		.clone();
+	let first = index.assigned(child_key).ok_or_else(|| anyhow::anyhow!("child first"))?.clone();
 
 	index.assign_keep(SEED, region, &[], &both);
 	let host_name = index.assigned(host_key).ok_or_else(|| anyhow::anyhow!("host"))?;
@@ -709,5 +707,79 @@ fn child_assigned_before_host_adopts_the_host_language() -> anyhow::Result<()> {
 		first.inherited_language != child.inherited_language
 			|| first.name.language_seed == child.name.language_seed
 	);
+	Ok(())
+}
+
+#[test]
+fn place_deps_ignore_sub_quantum_transform_jitter() -> anyhow::Result<()> {
+	let host = origin_cell(0.0, 0.0, 50.0, 50.0);
+	let place =
+		DiscoverablePlace::host(DiscoverablePlaceLabel::House, 8.0, 1.1).with_identity(host, 4);
+	let a = places_signature_from_world_xz([(place.clone(), Vec3::new(12.0, 40.0, 18.0))]);
+	let b = places_signature_from_world_xz([(place, Vec3::new(12.4, 41.0, 18.3))]);
+	anyhow::ensure!(a == b, "host-keyed places must not dirty keep on pose jitter");
+
+	let provisional = DiscoverablePlace::high(DiscoverablePlaceLabel::Room, 2.0, 1.0);
+	let near = places_signature_from_world_xz([(provisional.clone(), Vec3::new(16.1, 0.0, 24.2))]);
+	let still = places_signature_from_world_xz([(provisional.clone(), Vec3::new(19.4, 0.0, 27.6))]);
+	let moved = places_signature_from_world_xz([(provisional, Vec3::new(40.0, 0.0, 40.0))]);
+	anyhow::ensure!(near == still, "provisional places quantize XZ at 8 m");
+	anyhow::ensure!(near != moved);
+	Ok(())
+}
+
+#[test]
+fn repeat_keep_does_not_requeue_current_names() -> anyhow::Result<()> {
+	let mut index = LanguageIndex::default();
+	let region = feature_aabb(0.0, 0.0, LARGE_TILE, LARGE_TILE);
+	let key = NameKey::Forest(origin_cell(0.0, 0.0, 10.0, 10.0));
+	let feature =
+		NamedFeature::new(key, feature_aabb(0.0, 0.0, 10.0, 10.0), vec!["taiga".to_owned()], 1);
+	index.assign_keep(SEED, region, &[feature.clone()], &[]);
+	let epoch = index.epoch;
+	index.queue_keep(SEED, region, &[feature], &[]);
+	anyhow::ensure!(index.epoch == epoch, "unchanged keep must not bump epoch");
+	index.assign_budgeted(SEED, 32);
+	anyhow::ensure!(index.epoch == epoch);
+	Ok(())
+}
+
+#[test]
+fn overlay_dirty_upserts_without_dropping_other_names() -> anyhow::Result<()> {
+	let mut index = LanguageIndex::default();
+	let region = feature_aabb(0.0, 0.0, LARGE_TILE, LARGE_TILE);
+	let forest = NameKey::Forest(origin_cell(0.0, 0.0, 10.0, 10.0));
+	index.assign_keep(
+		SEED,
+		region,
+		&[NamedFeature::new(
+			forest,
+			feature_aabb(0.0, 0.0, 10.0, 10.0),
+			vec!["taiga".to_owned()],
+			1,
+		)],
+		&[],
+	);
+	let mut overlay = LanguageOverlay::from_index(&index);
+	let grove = NameKey::Grove(origin_cell(20.0, 20.0, 30.0, 30.0));
+	index.queue_feature_snapshot(
+		SEED,
+		region,
+		crate::FeatureSnapshot {
+			active: [forest, grove].into_iter().collect(),
+			work: vec![NamedFeature::new(
+				grove,
+				feature_aabb(20.0, 20.0, 30.0, 30.0),
+				vec!["oak".to_owned()],
+				1,
+			)],
+		},
+		crate::index::SourceClass::Vegetation,
+	);
+	index.assign_budgeted(SEED, 32);
+	let dirty = index.take_overlay_dirty();
+	overlay.apply_dirty(&index, dirty);
+	anyhow::ensure!(overlay.names.iter().any(|name| name.key == forest));
+	anyhow::ensure!(overlay.names.iter().any(|name| name.key == grove));
 	Ok(())
 }

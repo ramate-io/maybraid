@@ -9,7 +9,9 @@ use lod::LodGenerateKeepRegion;
 use urbanization_layer_model::UrbanizationGenerationSystems;
 use vegetation_layer_model::VegetationGenerationSystems;
 
-use crate::index::{origin_keep, LanguageIndex, LanguageSourceDeps, LanguageWorldSeed};
+use crate::index::{
+	origin_keep, LanguageIndex, LanguageSourceDeps, LanguageWorldSeed, SourceClass,
+};
 use crate::present::LanguageLodChan;
 use crate::sources::NamedWorld;
 
@@ -56,13 +58,39 @@ fn generate_language_region<W: NamedWorld>(
 ) {
 	let region = generate_keep.region.unwrap_or_else(origin_keep);
 	let deps = LanguageSourceDeps::from_keep(W::source_revisions(&read), seed.0, region);
-	if index.source_deps() != Some(deps) {
-		let mut features = W::groves_overlapping(&read, region);
-		features.extend(W::geography_overlapping(&read, region));
-		features.extend(W::urban_overlapping(&read, region));
-		let places = W::places_overlapping(&read, region);
-		index.queue_keep(seed.0, region, &features, &places);
-		index.note_source_deps(deps);
+	match index.source_deps() {
+		Some(prev) if prev == deps => {}
+		Some(prev)
+			if prev.seed == deps.seed
+				&& prev.tile_min == deps.tile_min
+				&& prev.tile_max == deps.tile_max =>
+		{
+			if prev.revisions.forest != deps.revisions.forest {
+				let snapshot = W::groves_snapshot(&read, region, &index);
+				index.queue_feature_snapshot(seed.0, region, snapshot, SourceClass::Vegetation);
+			}
+			if prev.revisions.terrain != deps.revisions.terrain {
+				let snapshot = W::geography_snapshot(&read, region, &index);
+				index.queue_feature_snapshot(seed.0, region, snapshot, SourceClass::Geography);
+			}
+			if prev.revisions.urban != deps.revisions.urban {
+				let snapshot = W::urban_snapshot(&read, region, &index);
+				index.queue_feature_snapshot(seed.0, region, snapshot, SourceClass::Urban);
+			}
+			if prev.revisions.places != deps.revisions.places {
+				let snapshot = W::places_snapshot(&read, region, &index);
+				index.queue_place_snapshot(seed.0, region, snapshot);
+			}
+			index.note_source_deps(deps);
+		}
+		_ => {
+			let mut features = W::groves_overlapping(&read, region);
+			features.extend(W::geography_overlapping(&read, region));
+			features.extend(W::urban_overlapping(&read, region));
+			let places = W::places_overlapping(&read, region);
+			index.queue_keep(seed.0, region, &features, &places);
+			index.note_source_deps(deps);
+		}
 	}
 	index.assign_budgeted(seed.0, ASSIGN_BUDGET);
 }

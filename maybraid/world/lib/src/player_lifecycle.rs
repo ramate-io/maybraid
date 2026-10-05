@@ -14,8 +14,8 @@ use mob_characters::{LOCAL_POI, SALOON_POI, URBAN_POI, VEGETATION_POI};
 use player::{CameraFollow, Player as MaybraidPlayer, PlayerUse};
 use player_camera::{CameraController, FollowCamera};
 use poi_intelligence::{
-	place_nearby, NearbyFallback, NearbyQuery, PoiId, PoiInterest, PoiInterests, PoiKind, PoiRecord,
-	PoiRegistry, PoiSystems,
+	place_nearby, NearbyFallback, NearbyQuery, PoiId, PoiInterest, PoiInterests, PoiKind,
+	PoiRecord, PoiRegistry, PoiSystems,
 };
 use spotting_intelligence::SpotSubject;
 use terrain_layer_model::{OnTerrain, TerrainView};
@@ -533,9 +533,9 @@ fn refresh_picker_candidates(
 }
 
 fn validate_highlight(pending: &mut PendingPlayerRespawn, registry: &PoiRegistry) {
-	let still_valid = pending.highlighted.filter(|id| {
-		pending.candidates.contains(id) && registry.get(*id).is_some()
-	});
+	let still_valid = pending
+		.highlighted
+		.filter(|id| pending.candidates.contains(id) && registry.get(*id).is_some());
 	if let Some(id) = still_valid {
 		pending.highlighted_at = registry.get(id).map(|record| record.position.xz());
 		return;

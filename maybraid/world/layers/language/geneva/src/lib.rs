@@ -27,7 +27,9 @@ pub use index::{LanguageConfig, LanguageIndex, LanguageSourceDeps, LanguageWorld
 pub use model::Geneva;
 pub use name::{AssignedName, PlaceName};
 pub use present::{LanguageLodChan, LanguageOverlay, NamedOverlay};
-pub use sources::{NamedFeature, NamedPlace, NamedWorld, SourceRevisions};
+pub use sources::{
+	FeatureSnapshot, NamedFeature, NamedPlace, NamedWorld, PlaceSnapshot, SourceRevisions,
+};
 pub use stream::install_language_stream;
 pub use tiles::{
 	large_tile_index, large_tile_origin, LargeTile, SmallTile, LARGE_TILE, SMALL_STEP_MAX,
