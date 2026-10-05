@@ -35,6 +35,8 @@ terrain-layer-model = { workspace = true }
 urbanization-layer-model = { workspace = true }
 vegetation-layer-model = { workspace = true }
 furnishing-layer-model = { workspace = true }
+geneva = { workspace = true }
+language-layer-model = { workspace = true }
 maputo = { workspace = true }
 world-player = { workspace = true }
 

@@ -1,5 +1,5 @@
 [package]
-name = "maybraid-game-mode-discover"
+name = "geneva"
 version = { workspace = true }
 edition = { workspace = true }
 license = { workspace = true }
@@ -10,21 +10,23 @@ publish = { workspace = true }
 rust-version = { workspace = true }
 
 [dependencies]
-layer-stack = { workspace = true }
 bevy = { workspace = true }
-world-player = { workspace = true }
 chico = { workspace = true }
+comproc = { workspace = true }
 durham = { workspace = true }
-barking = { workspace = true }
-mob-layer-model = { workspace = true }
+language-layer-model = { workspace = true }
+procedural-common = { workspace = true }
+language-layer-presentation = { workspace = true }
+layer-stack = { workspace = true }
+lod = { workspace = true }
+maybraid-language-core = { workspace = true }
+maybraid-language-grammars = { workspace = true }
+noise = { workspace = true }
 richmond = { workspace = true }
 terrain-layer-model = { workspace = true }
+urbanization-cells = { workspace = true }
 urbanization-layer-model = { workspace = true }
 vegetation-layer-model = { workspace = true }
-furnishing-layer-model = { workspace = true }
-geneva = { workspace = true }
-language-layer-model = { workspace = true }
-maputo = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
