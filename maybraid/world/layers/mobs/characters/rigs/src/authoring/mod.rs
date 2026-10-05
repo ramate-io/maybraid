@@ -1,17 +1,13 @@
-//! Anatomical authoring, calibrated joint frames, and indexed pose buffers.
+//! V0 pose authoring and indexed pose buffers.
+//!
+//! Clip evaluation is a compatibility mapping onto the imported parent-space
+//! swing / flex / twist compose. Semantic field names are the authoring API;
+//! they do not by themselves mean character-space anatomical hinges. See
+//! [`super::articulation::compose_parent_rotation`] and the per-family
+//! `bone_axis` tables.
 //!
 //! Character space is the armature local frame: **+X** right, **+Y** up, **+Z**
 //! fight-forward. Bevy world space stays **+Y** up and **−Z** camera-forward.
-//! Convert positions and directions at the character [`GlobalTransform`] boundary;
-//! do not send a direction through point conversion.
-//!
-//! Angles are radians. Positive spine flexion tips a +Y bone toward fight-forward
-//! (+Z). Positive hip and knee flexion move the distal endpoint in the sagittal
-//! (YZ) plane. Lateral bend is about +Z, axial turn about +Y. Composition order
-//! inside a joint is flexion, then lateral bend, then axial rotation.
-//!
-//! Side mirroring lives on the joint frame. A positive knee flexion is the same
-//! number on both legs; gait phase offsets are separate.
 
 mod binding;
 mod buffer;
@@ -29,7 +25,7 @@ pub use forelimbed::{
 };
 pub use frame::{JointAngles, JointFrame};
 pub use humanoid::{
-	bone_axis as humanoid_bone_axis, humanoid_v0_definition,
+	apply_humanoid_glb_rest, bone_axis as humanoid_bone_axis, humanoid_v0_definition,
 	identity_binding as humanoid_identity_binding, resolve_humanoid, ArmAim, ArmPose, HumanoidPose,
 	LegPose, NeckBone, NeckPose, SpinePose, HUMANOID_FEMUR_AXIS, HUMANOID_GLB_FEMUR,
 	HUMANOID_GLB_PELVIS_L, HUMANOID_GLB_PELVIS_R, HUMANOID_GLB_SHOULDER_L, HUMANOID_GLB_SHOULDER_R,
@@ -37,11 +33,11 @@ pub use humanoid::{
 	HUMANOID_SHIN_AXIS, HUMANOID_V0_BONES, HUMANOID_V0_COUNT,
 };
 pub use quadruped::{
-	bone_axis as quadruped_bone_axis, identity_binding as quadruped_identity_binding,
-	quadruped_v0_definition, resolve_quadruped, QuadrupedLimbPose, QuadrupedPose,
-	QUADRUPED_GLB_ANTERIOR_MID_BACK, QUADRUPED_GLB_SHOULDER_L, QUADRUPED_GLB_THIGH,
-	QUADRUPED_RIGHT_SHIN_AXIS, QUADRUPED_RIGHT_THIGH_AXIS, QUADRUPED_SHIN_AXIS,
-	QUADRUPED_THIGH_AXIS, QUADRUPED_V0_BONES, QUADRUPED_V0_COUNT,
+	apply_quadruped_glb_rest, bone_axis as quadruped_bone_axis,
+	identity_binding as quadruped_identity_binding, quadruped_v0_definition, resolve_quadruped,
+	QuadrupedLimbPose, QuadrupedPose, QUADRUPED_GLB_ANTERIOR_MID_BACK, QUADRUPED_GLB_SHOULDER_L,
+	QUADRUPED_GLB_THIGH, QUADRUPED_RIGHT_SHIN_AXIS, QUADRUPED_RIGHT_THIGH_AXIS,
+	QUADRUPED_SHIN_AXIS, QUADRUPED_THIGH_AXIS, QUADRUPED_V0_BONES, QUADRUPED_V0_COUNT,
 };
 pub use space::{
 	character_direction_from_world, CharacterPoint, WorldPoint, CHARACTER_FORWARD, CHARACTER_RIGHT,

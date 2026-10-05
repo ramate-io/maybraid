@@ -125,7 +125,7 @@ mod tests {
 	#[test]
 	fn deepest_squat_returns_armature_drop_without_bone_translation() {
 		let mut rig = HumanoidV0Rig::imported();
-		rig.seed_rest("femur.L", Transform::from_translation(Vec3::new(0.0, 0.25, 0.0)));
+		rig.seed_rest("shin.L", Transform::from_translation(Vec3::new(0.0, 0.6, 0.0)));
 
 		let squat = Squat::for_loop(1.0, 1.0);
 		let effects = squat.apply(&mut rig, 0.5);
@@ -135,6 +135,9 @@ mod tests {
 		assert_eq!(effects, ArmatureOffset::from_translation(Vec3::new(0.0, -drop, 0.0)));
 
 		let femur = rig.binding.definition.id("femur.L").expect("femur");
-		assert_eq!(rig.pose.get(femur).expect("pose").translation, Vec3::new(0.0, 0.25, 0.0));
+		assert_eq!(
+			rig.pose.get(femur).expect("pose").translation,
+			rig.binding.effective_rest.get(femur).expect("rest").translation
+		);
 	}
 }

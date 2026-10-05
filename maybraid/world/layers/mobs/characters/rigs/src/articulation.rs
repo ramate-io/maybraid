@@ -68,10 +68,8 @@ pub fn rotation_along_with_roll(
 
 /// Parent-space swing, then twist, then flex, pre-multiplied onto `rest`.
 ///
-/// The delta axes are constants in the bone's **parent** coordinates:
-/// `q = R(swing) * R(twist) * R(flex) * rest`.
-/// Bone-local anatomical deltas belong on [`crate::authoring::JointFrame`], which
-/// post-multiplies a calibrated frame. Do not use this helper for new clips.
+/// This is the V0 clip path. The delta axes are constants in the bone's
+/// **parent** coordinates: `q = R(swing) * R(twist) * R(flex) * rest`.
 pub fn compose_parent_rotation(
 	rest: Quat,
 	axis: RiggedAxis,

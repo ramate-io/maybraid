@@ -519,7 +519,7 @@ fn sync_quadruped_rest(rig: &mut QuadrupedV0Rig, bones: &Query<&AnimBone, Withou
 	}
 }
 
-/// Recalibrate when a bone rest changed. Returns true when the cache refreshed.
+/// Refresh rest and segment lengths when a bone rest changed.
 fn sync_binding_rest(
 	binding: &mut RigBinding,
 	bones: &Query<&AnimBone, Without<AnimMailbox>>,

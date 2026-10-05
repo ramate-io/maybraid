@@ -3,7 +3,6 @@ use std::sync::Arc;
 use bevy::prelude::*;
 
 use super::buffer::PoseBuffer;
-use super::frame::JointFrame;
 use crate::humanoid::LegSegmentLengths as HumanoidLengths;
 use crate::quadruped::LegSegmentLengths as QuadrupedLengths;
 
@@ -102,6 +101,36 @@ impl RigDefinition {
 			None => Quat::IDENTITY,
 		}
 	}
+
+	/// Character-space origin of `bone` in `pose`, parents first.
+	pub fn translation_in_character(&self, pose: &PoseBuffer, bone: BoneId) -> Vec3 {
+		let mut chain = [BoneId(0); 24];
+		let mut count = 0;
+		let mut cursor = Some(bone);
+		while let Some(id) = cursor {
+			if count >= chain.len() {
+				break;
+			}
+			chain[count] = id;
+			count += 1;
+			cursor = self.parent(id);
+		}
+		let mut transform = Transform::IDENTITY;
+		for id in chain[..count].iter().rev() {
+			if let Some(local) = pose.get(*id) {
+				transform = transform * local;
+			}
+		}
+		transform.translation
+	}
+
+	fn first_child(&self, bone: BoneId) -> Option<BoneId> {
+		self.parents
+			.iter()
+			.enumerate()
+			.find(|(_, parent)| **parent == Some(bone))
+			.map(|(index, _)| BoneId(index as u16))
+	}
 }
 
 fn evaluation_order(parents: &[Option<BoneId>]) -> Box<[BoneId]> {
@@ -123,15 +152,12 @@ fn evaluation_order(parents: &[Option<BoneId>]) -> Box<[BoneId]> {
 	order.into_boxed_slice()
 }
 
-/// Per-character rest, entities, and calibrated frames.
-///
-/// `frames[i]` matches `definition` bone `i`. Rebuild frames only when rest changes.
+/// Per-character rest, entities, and derived segment lengths.
 #[derive(Clone, Debug)]
 pub struct RigBinding {
 	pub definition: Arc<RigDefinition>,
 	pub entities: Box<[Entity]>,
 	pub effective_rest: PoseBuffer,
-	pub frames: Box<[JointFrame]>,
 	pub metrics: RigMetrics,
 }
 
@@ -141,9 +167,8 @@ impl RigBinding {
 		entities: Box<[Entity]>,
 		effective_rest: PoseBuffer,
 	) -> Self {
-		let frames = calibrate(&definition, &effective_rest);
 		let metrics = RigMetrics::from_rest(&definition, &effective_rest);
-		Self { definition, entities, effective_rest, frames, metrics }
+		Self { definition, entities, effective_rest, metrics }
 	}
 
 	/// Replace rest when a proportion edit or bone-map reload changes bind transforms.
@@ -151,13 +176,16 @@ impl RigBinding {
 		if effective_rest.local == self.effective_rest.local {
 			return;
 		}
-		self.frames = calibrate(&self.definition, &effective_rest);
 		self.metrics = RigMetrics::from_rest(&self.definition, &effective_rest);
 		self.effective_rest = effective_rest;
 	}
 }
 
-/// Lengths derived from effective rest. Zero bind translations keep the family default.
+/// Lengths derived from joint-to-joint rest distances.
+///
+/// A bone's own translation is the offset to its origin, not its segment length.
+/// Femur length is the shin origin's translation. A missing distal joint keeps
+/// the family default (0.5 m).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct RigMetrics {
 	pub humanoid_leg: HumanoidLengths,
@@ -176,18 +204,19 @@ impl Default for RigMetrics {
 impl RigMetrics {
 	pub fn from_rest(definition: &RigDefinition, rest: &PoseBuffer) -> Self {
 		let mut metrics = Self::default();
-		let length = |name: &str| -> f32 {
+		let distal = |name: &str| -> f32 {
 			definition
 				.id(name)
-				.and_then(|id| rest.get(id))
+				.and_then(|id| definition.first_child(id))
+				.and_then(|child| rest.get(child))
 				.map(|transform| transform.translation.length())
 				.filter(|length| *length > 1e-3)
 				.unwrap_or(0.0)
 		};
 		match definition.family {
 			SkeletonFamily::Humanoid => {
-				let femur = length("femur.L");
-				let shin = length("shin.L");
+				let femur = distal("femur.L");
+				let shin = distal("shin.L");
 				if femur > 0.0 {
 					metrics.humanoid_leg.femur = femur;
 				}
@@ -196,8 +225,8 @@ impl RigMetrics {
 				}
 			}
 			SkeletonFamily::Quadruped => {
-				let upper = length("anterior_thigh.L");
-				let lower = length("anterior_shin.L");
+				let upper = distal("anterior_thigh.L");
+				let lower = distal("anterior_shin.L");
 				if upper > 0.0 {
 					metrics.quadruped_leg.upper = upper;
 				}
@@ -211,21 +240,24 @@ impl RigMetrics {
 	}
 }
 
-fn calibrate(definition: &RigDefinition, rest: &PoseBuffer) -> Box<[JointFrame]> {
-	let mut frames = vec![JointFrame::IDENTITY; definition.len()];
-	for (index, frame) in frames.iter_mut().enumerate() {
-		let bone = BoneId(index as u16);
-		let rotation = rest.rotation(bone);
-		let parent = definition.parent_rotation(rest, bone);
-		*frame = match definition.family {
-			SkeletonFamily::Humanoid => {
-				super::humanoid::frame_for(definition, bone, rotation, parent)
-			}
-			SkeletonFamily::Quadruped => {
-				super::quadruped::frame_for(definition, bone, rotation, parent)
-			}
-			SkeletonFamily::Forelimbed => super::forelimbed::frame_for(rotation, parent),
-		};
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use crate::authoring::{apply_humanoid_glb_rest, humanoid_v0_definition};
+
+	#[test]
+	fn humanoid_glb_femur_length_is_the_shin_origin() {
+		let definition = humanoid_v0_definition();
+		let mut rest = PoseBuffer::identity(definition.len());
+		apply_humanoid_glb_rest(&definition, &mut rest);
+		let metrics = RigMetrics::from_rest(&definition, &rest);
+		assert!(
+			(metrics.humanoid_leg.femur - 0.5).abs() < 1e-4,
+			"got {}",
+			metrics.humanoid_leg.femur
+		);
+		assert!((metrics.humanoid_leg.shin - 0.5).abs() < 1e-4, "shin keeps the default");
+		let femur = definition.id("femur.L").expect("femur");
+		assert!((rest.get(femur).expect("t").translation.length() - 0.25).abs() < 1e-4);
 	}
-	frames.into_boxed_slice()
 }

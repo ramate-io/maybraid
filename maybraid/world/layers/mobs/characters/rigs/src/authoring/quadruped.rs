@@ -10,7 +10,6 @@ use bevy::prelude::*;
 
 use super::binding::{BoneId, RigBinding, RigDefinition, SkeletonFamily};
 use super::buffer::PoseBuffer;
-use super::frame::JointFrame;
 use crate::articulation::compose_parent_rotation;
 use crate::{RiggedAxis, Side};
 
@@ -131,24 +130,13 @@ impl QuadrupedPose {
 	}
 }
 
-pub(crate) fn frame_for(
-	definition: &RigDefinition,
-	bone: BoneId,
-	rest: Quat,
-	parent: Quat,
-) -> JointFrame {
-	let _ = (definition, bone);
-	JointFrame::calibrate_in_character(rest, parent).unwrap_or(JointFrame::IDENTITY)
-}
-
 pub fn resolve_quadruped(pose: &QuadrupedPose, binding: &RigBinding, out: &mut PoseBuffer) {
-	apply(pose, &binding.definition, &binding.frames, &binding.effective_rest, out);
+	apply(pose, &binding.definition, &binding.effective_rest, out);
 }
 
 pub(crate) fn apply(
 	pose: &QuadrupedPose,
 	definition: &RigDefinition,
-	_frames: &[JointFrame],
 	rest: &PoseBuffer,
 	out: &mut PoseBuffer,
 ) {
@@ -184,6 +172,49 @@ fn channels_for(name: &str, pose: &QuadrupedPose) -> Option<(f32, f32, f32)> {
 		"posterior_shin.R" => Some((0.0, pose.hind[1].hinge, 0.0)),
 		_ => None,
 	}
+}
+
+/// Inspected `quadruped_rig.glb` local transforms for the V0 animation bones.
+pub fn apply_quadruped_glb_rest(definition: &RigDefinition, rest: &mut PoseBuffer) {
+	let set = |rest: &mut PoseBuffer, name: &str, translation: Vec3, rotation: Quat| {
+		if let Some(id) = definition.id(name) {
+			if let Some(slot) = rest.local.get_mut(id.index()) {
+				slot.translation = translation;
+				slot.rotation = rotation;
+			}
+		}
+	};
+	set(rest, "back_ridge", Vec3::ZERO, Quat::IDENTITY);
+	set(rest, "upper_back", Vec3::new(0.0, 0.25, 0.0), Quat::IDENTITY);
+	set(rest, "lumbar", Vec3::new(0.0, 0.25, 0.0), Quat::IDENTITY);
+	set(rest, "neck", Vec3::new(0.0, 0.50, 0.0), Quat::IDENTITY);
+	set(rest, "shoulder.L", Vec3::new(0.0, 0.50, 0.0), QUADRUPED_GLB_SHOULDER_L);
+	set(
+		rest,
+		"shoulder.R",
+		Vec3::new(0.0, 0.50, 0.0),
+		Quat::from_xyzw(0.0, 0.0, -0.70710677, 0.70710677),
+	);
+	set(rest, "anterior_thigh.L", Vec3::new(0.0, 0.50, 0.0), QUADRUPED_GLB_THIGH);
+	set(rest, "anterior_thigh.R", Vec3::new(0.0, 0.50, 0.0), QUADRUPED_GLB_THIGH);
+	set(rest, "anterior_shin.L", Vec3::new(0.0, 0.50, 0.0), Quat::IDENTITY);
+	set(rest, "anterior_shin.R", Vec3::new(0.0, 0.50, 0.0), Quat::IDENTITY);
+	set(
+		rest,
+		"hip.L",
+		Vec3::new(0.0, 0.50, 0.0),
+		Quat::from_xyzw(0.0, 0.0, -0.70710677, 0.70710677),
+	);
+	set(
+		rest,
+		"hip.R",
+		Vec3::new(0.0, 0.50, 0.0),
+		Quat::from_xyzw(0.0, 0.0, 0.70710677, 0.70710677),
+	);
+	set(rest, "posterior_thigh.L", Vec3::new(0.0, 0.40, 0.0), QUADRUPED_GLB_THIGH);
+	set(rest, "posterior_thigh.R", Vec3::new(0.0, 0.40, 0.0), QUADRUPED_GLB_THIGH);
+	set(rest, "posterior_shin.L", Vec3::new(0.0, 0.50, 0.0), Quat::IDENTITY);
+	set(rest, "posterior_shin.R", Vec3::new(0.0, 0.50, 0.0), Quat::IDENTITY);
 }
 
 pub fn identity_binding() -> RigBinding {

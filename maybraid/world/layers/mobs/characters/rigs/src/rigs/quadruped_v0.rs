@@ -22,6 +22,16 @@ pub struct QuadrupedV0Rig {
 }
 
 impl QuadrupedV0Rig {
+	pub fn for_clip_test() -> Self {
+		let mut rig = Self::imported();
+		let mut rest = rig.binding.effective_rest.clone();
+		crate::authoring::apply_quadruped_glb_rest(&rig.binding.definition, &mut rest);
+		rig.binding.refresh_rest(rest);
+		rig.pose.copy_from(&rig.binding.effective_rest);
+		rig.segment_lengths = rig.binding.metrics.quadruped_leg;
+		rig
+	}
+
 	pub fn imported() -> Self {
 		let mut bones = BoneTable::new();
 		for (name, relative_axis) in QUADRUPED_V0_BONE_DEFINITIONS {
@@ -139,7 +149,9 @@ mod tests {
 	#[test]
 	fn same_positive_stride_and_hinge_use_mirrored_imported_axes() {
 		use crate::articulation::compose_parent_rotation;
-		use crate::authoring::{QUADRUPED_RIGHT_SHIN_AXIS, QUADRUPED_SHIN_AXIS, QUADRUPED_THIGH_AXIS};
+		use crate::authoring::{
+			QUADRUPED_RIGHT_SHIN_AXIS, QUADRUPED_SHIN_AXIS, QUADRUPED_THIGH_AXIS,
+		};
 
 		let mut rig = QuadrupedV0Rig::imported();
 		let mut pose = QuadrupedPose::default();

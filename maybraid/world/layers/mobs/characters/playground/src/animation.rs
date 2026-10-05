@@ -7,7 +7,8 @@ use character_animations::{
 	Animation, Effects,
 };
 use character_rigs::{
-	authoring::JointAngles,
+	articulation::compose_parent_rotation,
+	authoring::humanoid_bone_axis,
 	debug::{format_rigged_axis, log_bind_pose, RigPoseDebug},
 	rigs::humanoid_v0::HumanoidV0Rig,
 	Name as RigName,
@@ -507,16 +508,12 @@ fn apply_joint_preview(
 	let Some(rest) = rig.binding.effective_rest.get(id) else {
 		return;
 	};
-	let Some(frame) = rig.binding.frames.get(id.index()) else {
-		return;
-	};
-	let rotation = frame.local_rotation(
+	let rotation = compose_parent_rotation(
 		rest.rotation,
-		JointAngles {
-			flexion: degrees.flexion.to_radians(),
-			lateral: degrees.lateral.to_radians(),
-			axial: degrees.axial.to_radians(),
-		},
+		humanoid_bone_axis(&playback.joint),
+		degrees.lateral.to_radians(),
+		degrees.flexion.to_radians(),
+		degrees.axial.to_radians(),
 	);
 	for (mut transform, animator) in limbs.iter_mut() {
 		if animator.bone.as_str() == playback.joint {

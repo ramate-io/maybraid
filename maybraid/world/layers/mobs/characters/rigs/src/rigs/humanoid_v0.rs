@@ -59,22 +59,10 @@ impl HumanoidV0Rig {
 		self.segment_lengths = self.binding.metrics.humanoid_leg;
 	}
 
-	/// Load the inspected `humanoid_rig.glb` bind rotations used by authoring tests.
+	/// Load the inspected `humanoid_rig.glb` local transforms.
 	pub fn seed_v0_bind(&mut self) {
 		let mut rest = self.binding.effective_rest.clone();
-		let set = |rest: &mut PoseBuffer, name: &str, rotation: Quat| {
-			if let Some(id) = self.binding.definition.id(name) {
-				if let Some(slot) = rest.local.get_mut(id.index()) {
-					slot.rotation = rotation;
-				}
-			}
-		};
-		set(&mut rest, "pelvis.L", crate::authoring::HUMANOID_GLB_PELVIS_L);
-		set(&mut rest, "pelvis.R", crate::authoring::HUMANOID_GLB_PELVIS_R);
-		set(&mut rest, "femur.L", crate::authoring::HUMANOID_GLB_FEMUR);
-		set(&mut rest, "femur.R", crate::authoring::HUMANOID_GLB_FEMUR);
-		set(&mut rest, "shoulder.L", crate::authoring::HUMANOID_GLB_SHOULDER_L);
-		set(&mut rest, "shoulder.R", crate::authoring::HUMANOID_GLB_SHOULDER_R);
+		crate::authoring::apply_humanoid_glb_rest(&self.binding.definition, &mut rest);
 		self.binding.refresh_rest(rest);
 		self.pose.copy_from(&self.binding.effective_rest);
 		self.segment_lengths = self.binding.metrics.humanoid_leg;
@@ -89,7 +77,16 @@ impl HumanoidV0Rig {
 			.unwrap_or(Vec3::Y)
 	}
 
-	/// Replace one bone's effective rest and recalibrate frames.
+	/// Character-space origin of a bone (parents included).
+	pub fn character_point(&self, name: &str) -> Vec3 {
+		self.binding
+			.definition
+			.id(name)
+			.map(|id| self.binding.definition.translation_in_character(&self.pose, id))
+			.unwrap_or(Vec3::ZERO)
+	}
+
+	/// Replace one bone's effective rest. Segment lengths refresh from joint-to-joint distances.
 	pub fn seed_rest(&mut self, name: &str, transform: Transform) {
 		let Some(id) = self.binding.definition.id(name) else {
 			return;
@@ -200,12 +197,24 @@ mod tests {
 		let mut rig = HumanoidV0Rig::imported();
 		rig.seed_rest("femur.L", Transform::from_translation(Vec3::Y * 0.8));
 		rig.seed_rest("shin.L", Transform::from_translation(Vec3::Y * 0.6));
-		assert!((rig.segment_lengths.femur - 0.8).abs() < 1e-5);
-		assert!((rig.segment_lengths.shin - 0.6).abs() < 1e-5);
+		assert!((rig.segment_lengths.femur - 0.6).abs() < 1e-5, "femur is shin-origin distance");
+		assert!((rig.segment_lengths.shin - 0.5).abs() < 1e-5, "no foot joint keeps the default");
 		let mut pose = HumanoidPose::default();
 		pose.leg_mut(Side::Left).hip_flexion = 0.2;
 		rig.write_pose(&pose);
-		assert!((rig.segment_lengths.femur - 0.8).abs() < 1e-5);
+		assert!((rig.segment_lengths.femur - 0.6).abs() < 1e-5);
+	}
+
+	#[test]
+	fn glb_fixture_does_not_use_femur_origin_as_length() {
+		let rig = HumanoidV0Rig::for_clip_test();
+		assert!((rig.segment_lengths.femur - 0.5).abs() < 1e-4);
+		assert!((rig.segment_lengths.shin - 0.5).abs() < 1e-4);
+		let femur = rig.binding.definition.id("femur.L").expect("femur");
+		assert!(
+			(rig.binding.effective_rest.get(femur).expect("t").translation.length() - 0.25).abs()
+				< 1e-4
+		);
 	}
 
 	#[test]

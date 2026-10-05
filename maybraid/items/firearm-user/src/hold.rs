@@ -482,6 +482,20 @@ mod tests {
 	}
 
 	#[test]
+	#[test]
+	fn pose_arm_flexes_the_t_pose_forearm_off_length_roll() -> Result<(), &'static str> {
+		let s = settings();
+		let mut rig = HumanoidV0Rig::for_clip_test();
+		let reach = TwoBoneAim::reach(Vec3::new(0.2, -0.15, 0.55), s.left_pole, 0.5, 0.5)
+			.ok_or("missing reach")?;
+		pose_arm(&mut rig, Side::Left, reach, 1.0, s.humerus_roll);
+		let along = rig.character_length("forearm.L");
+		assert!(rig.posed_angle("forearm.L") > 0.1, "hold writes an elbow flex");
+		assert!(along.y.abs() > 0.1, "flex changes the hinge, not only a length roll, {along:?}");
+		Ok(())
+	}
+
+	#[test]
 	fn pose_arm_aims_humerus_length_along_reach() -> Result<(), &'static str> {
 		let s = settings();
 		let mut rig = HumanoidV0Rig::imported();

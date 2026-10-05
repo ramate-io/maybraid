@@ -1,7 +1,7 @@
 /// Rest-pose thigh and shin lengths used for analytic drop.
 ///
-/// Sampling derives these from the effective rest. A translation whose length is
-/// near zero keeps the default 0.5 m.
+/// Sampling derives femur length from the shin origin's translation. A missing
+/// distal joint keeps the default 0.5 m.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct LegSegmentLengths {
 	pub femur: f32,
