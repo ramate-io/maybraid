@@ -34,6 +34,7 @@ pub mod market;
 pub mod pad;
 pub mod padded;
 pub mod place;
+pub mod place_index;
 pub mod plugin;
 pub mod presentation;
 pub mod ring_fort;
@@ -92,6 +93,7 @@ pub use pad::{
 };
 pub use padded::{PresentedPaddedTerrainScene, TerrainWithPads};
 pub use place::{DiscoverablePlace, DiscoverablePlaceLabel, InteriorArea};
+pub use place_index::{DiscoverablePlaceIndex, IndexedPlace};
 pub use plugin::{register_richmond_plugin, RichmondDevelopmentModelsPlugin};
 pub use presentation::{PaddedTerrainPresenter, PaddedTerrainPresenterState};
 pub use ring_fort::RingFortDevelopment;

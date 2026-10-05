@@ -178,10 +178,11 @@ fn grove_cells_for(bounds: Aabb3d) -> impl Iterator<Item = (i32, i32)> {
 
 impl SpatialIndex<ChicoForest> for ForestIndex {
 	fn tracked_ids_for(&self, region: Aabb3d) -> Vec<TrackedId> {
-		self.forests
-			.iter()
-			.filter(|(_, entry)| region.intersects(&entry.bounds))
-			.map(|(id, _)| TrackedId(*id))
+		crate::ForestExtent::cells_overlapping(region)
+			.into_iter()
+			.filter_map(|extent| {
+				self.forests.contains_key(&extent.id()).then_some(TrackedId(extent.id()))
+			})
 			.collect()
 	}
 
@@ -449,7 +450,13 @@ mod tests {
 		let id = Id::from_cell(bounds);
 		let mut index = ForestIndex::default();
 		with_lod_ref(|lod_ref| {
-			SpatialIndex::<ChicoGrove>::insert(&mut index, id, empty_grove(bounds), bounds, lod_ref);
+			SpatialIndex::<ChicoGrove>::insert(
+				&mut index,
+				id,
+				empty_grove(bounds),
+				bounds,
+				lod_ref,
+			);
 		});
 		let previous = SpatialIndex::<ChicoGrove>::version(&index, id).expect("inserted");
 		let previous_rev = index.membership_revision();
@@ -457,7 +464,13 @@ mod tests {
 		assert!(SpatialIndex::<ChicoGrove>::get(&index, id).is_none());
 		assert!(index.membership_revision() > previous_rev);
 		with_lod_ref(|lod_ref| {
-			SpatialIndex::<ChicoGrove>::insert(&mut index, id, empty_grove(bounds), bounds, lod_ref);
+			SpatialIndex::<ChicoGrove>::insert(
+				&mut index,
+				id,
+				empty_grove(bounds),
+				bounds,
+				lod_ref,
+			);
 		});
 		let rebuilt = SpatialIndex::<ChicoGrove>::version(&index, id).expect("reinserted");
 		assert!(rebuilt > previous, "restamp must not reuse a presented version");

@@ -387,23 +387,23 @@ where
 	Vegetation<Chico<G>>: TerrainModel,
 	<G::Cell as TerrainCell>::Mesh: IdentifiedMesh + NormalizeChunk + Clone + Send + Sync,
 {
-		register_vegetation_view(app);
-		app.init_resource::<ForestPresenterState>();
-		install_lod_present_gate::<Vegetation<Chico<G>>, ForestLodChan>(app);
-		app.add_plugins(LodPresentPlugin::<
+	register_vegetation_view(app);
+	app.init_resource::<ForestPresenterState>();
+	install_lod_present_gate::<Vegetation<Chico<G>>, ForestLodChan>(app);
+	app.add_plugins(LodPresentPlugin::<
+		ChicoGrove,
+		ForestIndex,
+		GroundForestPresenter<G>,
+		ForestLodChan,
+		With<LodViewer>,
+	>::default())
+		.add_plugins(LodPresentCullPlugin::<
 			ChicoGrove,
 			ForestIndex,
 			GroundForestPresenter<G>,
 			ForestLodChan,
-			With<LodViewer>,
 		>::default())
-			.add_plugins(LodPresentCullPlugin::<
-				ChicoGrove,
-				ForestIndex,
-				GroundForestPresenter<G>,
-				ForestLodChan,
-			>::default())
-			.configure_sets(Update, LodPresentSystems::Produce.after(LodGenerateSystems::Drain));
+		.configure_sets(Update, LodPresentSystems::Produce.after(LodGenerateSystems::Drain));
 }
 
 fn install_chico_bump_outs<G: ChicoGround>(app: &mut App)
@@ -411,40 +411,40 @@ where
 	Vegetation<Chico<G>>: TerrainModel,
 	<G::Cell as TerrainCell>::Mesh: IdentifiedMesh + NormalizeChunk + Clone + Send + Sync,
 {
-		if !app.is_plugin_added::<BumpOutPlugin>() {
-			app.add_plugins(BumpOutPlugin);
-		}
-		app.init_resource::<CanopyBumpOutPresenterState>()
-			.init_resource::<MediumCanopyBumpOutPresenterState>();
-		install_lod_present_gate::<Vegetation<Chico<G>>, BumpOutLodChan>(app);
-		install_lod_present_gate::<Vegetation<Chico<G>>, MediumBumpOutLodChan>(app);
-		app.add_plugins(LodPresentPlugin::<
+	if !app.is_plugin_added::<BumpOutPlugin>() {
+		app.add_plugins(BumpOutPlugin);
+	}
+	app.init_resource::<CanopyBumpOutPresenterState>()
+		.init_resource::<MediumCanopyBumpOutPresenterState>();
+	install_lod_present_gate::<Vegetation<Chico<G>>, BumpOutLodChan>(app);
+	install_lod_present_gate::<Vegetation<Chico<G>>, MediumBumpOutLodChan>(app);
+	app.add_plugins(LodPresentPlugin::<
+		CanopyBumpOut,
+		ForestIndex,
+		GroundCanopyBumpOutPresenter<G>,
+		BumpOutLodChan,
+		With<LodViewer>,
+	>::default())
+		.add_plugins(LodPresentCullPlugin::<
 			CanopyBumpOut,
 			ForestIndex,
 			GroundCanopyBumpOutPresenter<G>,
 			BumpOutLodChan,
+		>::default())
+		.add_plugins(LodPresentPlugin::<
+			MediumCanopyBumpOut,
+			ForestIndex,
+			GroundMediumCanopyBumpOutPresenter<G>,
+			MediumBumpOutLodChan,
 			With<LodViewer>,
 		>::default())
-			.add_plugins(LodPresentCullPlugin::<
-				CanopyBumpOut,
-				ForestIndex,
-				GroundCanopyBumpOutPresenter<G>,
-				BumpOutLodChan,
-			>::default())
-			.add_plugins(LodPresentPlugin::<
-				MediumCanopyBumpOut,
-				ForestIndex,
-				GroundMediumCanopyBumpOutPresenter<G>,
-				MediumBumpOutLodChan,
-				With<LodViewer>,
-			>::default())
-			.add_plugins(LodPresentCullPlugin::<
-				MediumCanopyBumpOut,
-				ForestIndex,
-				GroundMediumCanopyBumpOutPresenter<G>,
-				MediumBumpOutLodChan,
-			>::default())
-			.configure_sets(Update, LodPresentSystems::Produce.after(LodGenerateSystems::Drain));
+		.add_plugins(LodPresentCullPlugin::<
+			MediumCanopyBumpOut,
+			ForestIndex,
+			GroundMediumCanopyBumpOutPresenter<G>,
+			MediumBumpOutLodChan,
+		>::default())
+		.configure_sets(Update, LodPresentSystems::Produce.after(LodGenerateSystems::Drain));
 }
 
 fn install_chico_materials(app: &mut App) {

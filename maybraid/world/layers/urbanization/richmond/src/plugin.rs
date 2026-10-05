@@ -69,6 +69,7 @@ impl Plugin for RichmondDevelopmentModelsPlugin {
 			.init_resource::<PaddedTerrainPresenterState>()
 			.add_systems(Update, apply_parent_confines.after(LodRefreshSystems::Cull))
 			.add_systems(Update, stamp_label_places);
+		crate::place_index::register_place_index(app);
 	}
 }
 
@@ -79,7 +80,10 @@ impl Plugin for RichmondDevelopmentModelsPlugin {
 #[allow(clippy::type_complexity)]
 fn stamp_label_places(
 	mut commands: Commands,
-	added: Query<(Entity, &LabelNode, Option<&ChildOf>), (Added<LabelNode>, Without<DiscoverablePlace>)>,
+	added: Query<
+		(Entity, &LabelNode, Option<&ChildOf>),
+		(Added<LabelNode>, Without<DiscoverablePlace>),
+	>,
 	ancestors: Query<(Option<&ChildOf>, Option<&DiscoverablePlace>)>,
 ) {
 	for (entity, node, child_of) in &added {

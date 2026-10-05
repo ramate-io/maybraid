@@ -1,7 +1,8 @@
-//! Keep-ring tiles and names after vegetation and urbanization cells exist.
+//! Keep-ring tiles and nearby names after vegetation and urbanization cells exist.
 
 use bevy::ecs::system::StaticSystemParam;
 use bevy::math::bounding::Aabb3d;
+use bevy::math::Vec2;
 use bevy::prelude::*;
 use language_layer_model::LanguageGenerationSystems;
 use layer_stack::{GenerationMode, GenerationModeSystems};
@@ -13,9 +14,12 @@ use crate::index::{
 	origin_keep, LanguageIndex, LanguageSourceDeps, LanguageWorldSeed, SourceClass,
 };
 use crate::present::LanguageLodChan;
-use crate::sources::NamedWorld;
+use crate::sources::{NamedWorld, NamingRegion, NAME_WINDOW_QUANT_M};
 
 const LANGUAGE_GENERATE_RADIUS: f32 = 40_000.0;
+/// Nearby entity naming. Language tiles keep the broad generate window.
+pub(crate) const LANGUAGE_NAME_RADIUS: f32 = 400.0;
+const LANGUAGE_NAME_HYSTERESIS: f32 = 80.0;
 /// Modest per-frame assignment budget. Overlay rebuild is presentation's job.
 const ASSIGN_BUDGET: usize = 32;
 
@@ -31,6 +35,37 @@ impl Default for LanguageGenerateBullseye {
 	}
 }
 
+#[derive(Resource, Clone, Copy, Debug, PartialEq)]
+pub(crate) struct LanguageNamingBullseye {
+	pub(crate) origin: Vec2,
+	pub(crate) collect_radius: f32,
+	pub(crate) retain_radius: f32,
+}
+
+impl Default for LanguageNamingBullseye {
+	fn default() -> Self {
+		Self {
+			origin: Vec2::ZERO,
+			collect_radius: collect_radius(),
+			retain_radius: retain_radius(),
+		}
+	}
+}
+
+impl LanguageNamingBullseye {
+	fn region(self) -> NamingRegion {
+		NamingRegion::around(self.origin, self.collect_radius, self.retain_radius)
+	}
+}
+
+fn collect_radius() -> f32 {
+	LANGUAGE_NAME_RADIUS + NAME_WINDOW_QUANT_M * 0.5
+}
+
+fn retain_radius() -> f32 {
+	collect_radius() + LANGUAGE_NAME_HYSTERESIS
+}
+
 fn xz_radius_aabb(origin: Vec3, radius: f32) -> Aabb3d {
 	Aabb3d::from_min_max(
 		Vec3::new(origin.x - radius, -1.0, origin.z - radius),
@@ -41,54 +76,70 @@ fn xz_radius_aabb(origin: Vec3, radius: f32) -> Aabb3d {
 fn stream_language_keep(
 	camera: Query<&Transform, With<Camera3d>>,
 	mut generate: ResMut<LanguageGenerateBullseye>,
+	mut naming: ResMut<LanguageNamingBullseye>,
 	mut generate_keep: ResMut<LodGenerateKeepRegion<LanguageLodChan>>,
 ) {
-	let Ok(camera) = camera.single() else {
-		return;
-	};
+	let origin = camera.single().map(|transform| transform.translation).unwrap_or(Vec3::ZERO);
 	generate.enabled = true;
-	generate_keep.region = Some(xz_radius_aabb(camera.translation, generate.radius_m));
+	generate_keep.region = Some(xz_radius_aabb(origin, generate.radius_m));
+	naming.origin = Vec2::new(origin.x, origin.z);
+	naming.collect_radius = collect_radius();
+	naming.retain_radius = retain_radius();
 }
 
 fn generate_language_region<W: NamedWorld>(
 	read: StaticSystemParam<W::Read>,
 	seed: Res<LanguageWorldSeed>,
 	generate_keep: Res<LodGenerateKeepRegion<LanguageLodChan>>,
+	naming: Res<LanguageNamingBullseye>,
 	mut index: ResMut<LanguageIndex>,
 ) {
-	let region = generate_keep.region.unwrap_or_else(origin_keep);
-	let deps = LanguageSourceDeps::from_keep(W::source_revisions(&read), seed.0, region);
+	let tile_region = generate_keep.region.unwrap_or_else(origin_keep);
+	let naming_region = naming.region();
+	index.ensure_tiles(seed.0, tile_region);
+
+	let deps = LanguageSourceDeps::from_windows(
+		W::source_revisions(&read),
+		seed.0,
+		tile_region,
+		naming_region.origin,
+	);
 	match index.source_deps() {
 		Some(prev) if prev == deps => {}
-		Some(prev)
-			if prev.seed == deps.seed
-				&& prev.tile_min == deps.tile_min
-				&& prev.tile_max == deps.tile_max =>
-		{
-			if prev.revisions.forest != deps.revisions.forest {
-				let snapshot = W::groves_snapshot(&read, region, &index);
-				index.queue_feature_snapshot(seed.0, region, snapshot, SourceClass::Vegetation);
+		Some(prev) if prev.seed == deps.seed => {
+			let naming_moved = !prev.naming_window_match(deps);
+			if naming_moved || prev.revisions.forest != deps.revisions.forest {
+				let snapshot = W::groves_snapshot(&read, naming_region, &index);
+				index.queue_feature_snapshot(
+					seed.0,
+					tile_region,
+					snapshot,
+					SourceClass::Vegetation,
+				);
 			}
-			if prev.revisions.terrain != deps.revisions.terrain {
-				let snapshot = W::geography_snapshot(&read, region, &index);
-				index.queue_feature_snapshot(seed.0, region, snapshot, SourceClass::Geography);
+			if naming_moved || prev.revisions.terrain != deps.revisions.terrain {
+				let snapshot = W::geography_snapshot(&read, naming_region, &index);
+				index.queue_feature_snapshot(seed.0, tile_region, snapshot, SourceClass::Geography);
 			}
-			if prev.revisions.urban != deps.revisions.urban {
-				let snapshot = W::urban_snapshot(&read, region, &index);
-				index.queue_feature_snapshot(seed.0, region, snapshot, SourceClass::Urban);
+			if naming_moved || prev.revisions.urban != deps.revisions.urban {
+				let snapshot = W::urban_snapshot(&read, naming_region, &index);
+				index.queue_feature_snapshot(seed.0, tile_region, snapshot, SourceClass::Urban);
 			}
-			if prev.revisions.places != deps.revisions.places {
-				let snapshot = W::places_snapshot(&read, region, &index);
-				index.queue_place_snapshot(seed.0, region, snapshot);
+			if naming_moved || prev.revisions.places != deps.revisions.places {
+				let snapshot = W::places_snapshot(&read, naming_region, &index);
+				index.queue_place_snapshot(seed.0, tile_region, snapshot);
 			}
 			index.note_source_deps(deps);
 		}
 		_ => {
-			let mut features = W::groves_overlapping(&read, region);
-			features.extend(W::geography_overlapping(&read, region));
-			features.extend(W::urban_overlapping(&read, region));
-			let places = W::places_overlapping(&read, region);
-			index.queue_keep(seed.0, region, &features, &places);
+			let groves = W::groves_snapshot(&read, naming_region, &index);
+			index.queue_feature_snapshot(seed.0, tile_region, groves, SourceClass::Vegetation);
+			let geography = W::geography_snapshot(&read, naming_region, &index);
+			index.queue_feature_snapshot(seed.0, tile_region, geography, SourceClass::Geography);
+			let urban = W::urban_snapshot(&read, naming_region, &index);
+			index.queue_feature_snapshot(seed.0, tile_region, urban, SourceClass::Urban);
+			let places = W::places_snapshot(&read, naming_region, &index);
+			index.queue_place_snapshot(seed.0, tile_region, places);
 			index.note_source_deps(deps);
 		}
 	}
@@ -99,6 +150,7 @@ pub(crate) fn register_language_generate(app: &mut App) {
 	app.init_resource::<LanguageIndex>()
 		.init_resource::<LanguageWorldSeed>()
 		.init_resource::<LanguageGenerateBullseye>()
+		.init_resource::<LanguageNamingBullseye>()
 		.init_resource::<LodGenerateKeepRegion<LanguageLodChan>>();
 }
 

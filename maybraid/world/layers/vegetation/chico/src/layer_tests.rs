@@ -2,10 +2,13 @@ use bevy::ecs::system::SystemParamItem;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::{App, AssetPlugin, MinimalPlugins, NextState};
 use bevy::state::app::StatesPlugin;
-use layer_stack::{ActiveGenerationMode, Generate, GenerationMode, GenerationModePlugin, LayerGenerationCore, LayerModeConfig, Scheme};
+use layer_stack::{
+	ActiveGenerationMode, Generate, GenerationMode, GenerationModePlugin, LayerGenerationCore,
+	LayerModeConfig, Scheme,
+};
 use lod::gen::LodGenerateBudget;
-use lod::presentation::LodPresentBudget;
 use lod::lod_ref::LodRef;
+use lod::presentation::LodPresentBudget;
 use terrain_layer_model::{HeightField, TerrainCell, TerrainModel, TerrainStreaming};
 use vegetation_layer_model::Vegetation;
 

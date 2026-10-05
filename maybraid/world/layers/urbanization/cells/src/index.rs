@@ -91,10 +91,11 @@ impl UrbanizationIndex {
 
 impl SpatialIndex<SelectedUrbanization> for UrbanizationIndex {
 	fn tracked_ids_for(&self, region: Aabb3d) -> Vec<TrackedId> {
-		self.cells
-			.iter()
-			.filter(|(_, entry)| region.intersects(&entry.bounds))
-			.map(|(id, _)| TrackedId(*id))
+		crate::UrbanizationExtent::cells_overlapping(region)
+			.into_iter()
+			.filter_map(|extent| {
+				self.cells.contains_key(&extent.id()).then_some(TrackedId(extent.id()))
+			})
 			.collect()
 	}
 

@@ -4,6 +4,7 @@ use bevy::ecs::system::SystemParam;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use layer_stack::{GenerationMode, GenerationModeSystems};
+use layer_stack::{LayerModeConfig, LayerSystems};
 use lod::gen::{
 	GeneratingSpatialIndex, Id, LodGenerateBudget, LodGenerateKeepRegion, LodGenerateQueue,
 	LodGenerateRegion, MaterializeStatus, SpatialIndex, StorageStatus,
@@ -20,9 +21,9 @@ use urbanization_cells::{
 	UrbanizationIndex, UrbanizationKind, UrbanizationLodChan, UrbanizationPresentBullseye,
 	DEFAULT_URBANIZATION_EXTENT_XZ, DEVELOPMENT_GENERATE_RADIUS_M, DEVELOPMENT_PRESENT_RADIUS_M,
 };
-use layer_stack::{LayerModeConfig, LayerSystems};
 use urbanization_layer_model::{
-	urbanization_visual_region, Urbanization, UrbanizationGenerationSystems, UrbanizationLayerRegion,
+	urbanization_visual_region, Urbanization, UrbanizationGenerationSystems,
+	UrbanizationLayerRegion,
 };
 
 use crate::config::DevelopmentConfig;
@@ -104,7 +105,8 @@ where
 			generate_urbanization_developments::<Mode, G>
 				.after(LodGenerateSystems::Drain)
 				.before(LayerSystems::<Urbanization<Richmond<G>>>::default()),
-			write_urbanization_host_region.in_set(LayerSystems::<Urbanization<Richmond<G>>>::default()),
+			write_urbanization_host_region
+				.in_set(LayerSystems::<Urbanization<Richmond<G>>>::default()),
 		)
 			.in_set(GenerationModeSystems::<Mode>::default())
 			.in_set(UrbanizationGenerationSystems)

@@ -14,14 +14,15 @@ use durham::{
 	TerrainConfig, TerrainEntryStore, TerrainSuperseded, TerrainTrimeshCollider, WorldBaseTerrain,
 	TERRAIN_CELL_SIZE,
 };
-use layer_stack::{ActiveGenerationMode, Generate, GenerationMode, GenerationModePlugin, LayerGenerationCore, LayerModeConfig, Present, Scheme};
+use layer_stack::{
+	ActiveGenerationMode, Generate, GenerationMode, GenerationModePlugin, LayerGenerationCore,
+	LayerModeConfig, Present, Scheme,
+};
 use lod::gen::{Id, LodGenerateBudget, LodGenerateRegion, SpatialIndex};
 use lod::lod_ref::LodRef;
 use lod::presentation::LodPresentKeepRegion;
 use procedural_common::{noise_params_from_scalar_str, NoiseParams};
-use terrain_layer_model::{
-	HeightField, OnTerrain, TerrainExtent, TerrainStreaming, TerrainView,
-};
+use terrain_layer_model::{HeightField, OnTerrain, TerrainExtent, TerrainStreaming, TerrainView};
 use urbanization_cells::{
 	DevelopmentLeaf, SelectedUrbanization, UrbanDevelopmentKind, UrbanizationExtent,
 	UrbanizationIndex, UrbanizationKind, UrbanizationLodChan,
@@ -184,9 +185,9 @@ fn stream_applies_focus_when_the_spec_kind_is_open() -> anyhow::Result<()> {
 	app.add_plugins((MinimalPlugins, StatesPlugin));
 	app.add_plugins(GenerationModePlugin::<TestMode>::initial());
 	register_urbanization_lod_generate(&mut app);
-	app.insert_resource(LayerModeConfig::<TestMode, Urbanization<Richmond<OnTerrain<Durham>>>>::new(
-		config,
-	));
+	app.insert_resource(
+		LayerModeConfig::<TestMode, Urbanization<Richmond<OnTerrain<Durham>>>>::new(config),
+	);
 	app.init_resource::<UrbanizationStreamKey>();
 	app.world_mut().spawn((Camera3d::default(), Transform::from_xyz(0.0, 8.0, 0.0)));
 
@@ -426,9 +427,11 @@ fn leaving_a_stream_mode_clears_then_reentering_streams_again() -> anyhow::Resul
 		GenerationModePlugin::<OtherMode>::default(),
 	));
 	register_urbanization_lod_generate(&mut app);
-	app.insert_resource(LayerModeConfig::<StreamMode, Urbanization<Richmond<OnTerrain<Durham>>>>::new(
-		RichmondConfig::world_defaults(),
-	));
+	app.insert_resource(
+		LayerModeConfig::<StreamMode, Urbanization<Richmond<OnTerrain<Durham>>>>::new(
+			RichmondConfig::world_defaults(),
+		),
+	);
 	app.init_resource::<UrbanizationStreamKey>();
 	app.init_resource::<UrbanizationLayerRegion>();
 	app.init_resource::<DevelopmentEntryStore>();
@@ -504,9 +507,10 @@ fn different_budgets_build_and_apply_on_enter() -> anyhow::Result<()> {
 		Generate::<StreamMode, Urbanization<Richmond<OnTerrain<Durham>>>>::new(
 			RichmondConfig::world_defaults(),
 		),
-		Generate::<OtherMode, Urbanization<Richmond<OnTerrain<Durham>>>>::new(
-			RichmondConfig { generate_budget: 8, ..RichmondConfig::shared_world() },
-		),
+		Generate::<OtherMode, Urbanization<Richmond<OnTerrain<Durham>>>>::new(RichmondConfig {
+			generate_budget: 8,
+			..RichmondConfig::shared_world()
+		}),
 	));
 	app.insert_resource(TerrainStreaming::<Durham>::new(false));
 	app.finish();
