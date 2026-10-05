@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 use character_inventory_user::{spawn_bag, InventoryUser};
-use character_items::{effect_scale_for_blast, CharacterSheet, Inventory, InventoryItem};
+use character_items::{CharacterSheet, Inventory, InventoryItem};
 use characters::{CharacterAppearance, CharacterRoot};
 use damage::Health;
 use firearm_user::{
@@ -354,7 +354,7 @@ fn spawn_detonation_vfx(
 			&library.fiery_explosion,
 			VfxSpawn {
 				transform: Transform::from_translation(event.position),
-				scale: effect_scale_for_blast(event.radius),
+				scale: event.effect.scale,
 				intensity: event.effect.intensity,
 				playback: event.effect.playback,
 				seed: event.effect.seed,
@@ -704,6 +704,62 @@ mod tests {
 			loadout.inventory.primary_skill_map().and_then(InventoryItem::skill_map_spec),
 			Some(SkillMapSpec::new(SkillMapKind::Dumbwave, 2))
 		);
+		Ok(())
+	}
+
+	#[test]
+	fn detonation_vfx_forwards_grenade_effect_scale() -> Result<(), String> {
+		use character_items::GrenadeStats;
+		use grenades::{GrenadeDetonated, GrenadeEffect};
+		use maybraid_vfx::{
+			EffectDefinition, FlipbookAsset, FIERY_EXPLOSION, ScaleBounds, VfxFlipbooks, VfxInstance,
+			VfxLibrary,
+		};
+
+		let mut world = World::new();
+		world.init_resource::<Messages<GrenadeDetonated>>();
+		let blank = EffectDefinition::new("stub", []);
+		let fiery = EffectDefinition::new(FIERY_EXPLOSION, [])
+			.with_scale_bounds(ScaleBounds { min: 0.25, max: 20.0 });
+		world.insert_resource(VfxLibrary {
+			flipbooks: VfxFlipbooks {
+				fire: FlipbookAsset {
+					image: Handle::default(),
+					grid: UVec2::ONE,
+					frame_count: 1,
+					playback: 1.0,
+				},
+				smoke: FlipbookAsset {
+					image: Handle::default(),
+					grid: UVec2::ONE,
+					frame_count: 1,
+					playback: 1.0,
+				},
+				spark: Handle::default(),
+			},
+			flash: blank.clone(),
+			fireball: blank.clone(),
+			smoke: blank.clone(),
+			sparks: blank,
+			fiery_explosion: fiery,
+		});
+		let stats = GrenadeStats::standard();
+		world.resource_mut::<Messages<GrenadeDetonated>>().write(GrenadeDetonated {
+			position: Vec3::new(1.0, 2.0, 3.0),
+			source: Entity::PLACEHOLDER,
+			effect: GrenadeEffect::from_stats(&stats),
+			radius: stats.blast_radius,
+			damage: stats.blast_damage,
+		});
+		world
+			.run_system_once(super::spawn_detonation_vfx)
+			.map_err(|error| format!("{error:?}"))?;
+		let mut query = world.query::<(&Transform, &VfxInstance)>();
+		let Some((transform, instance)) = query.iter(&world).next() else {
+			return Err(String::from("missing detonation vfx"));
+		};
+		assert_eq!(instance.name, FIERY_EXPLOSION);
+		assert!((transform.scale.x - stats.effect_scale).abs() < 1e-4);
 		Ok(())
 	}
 }

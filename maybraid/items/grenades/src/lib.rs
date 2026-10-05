@@ -209,6 +209,13 @@ mod tests {
 	}
 
 	#[test]
+	fn effect_from_stats_forwards_scale() {
+		let stats = GrenadeStats::standard();
+		let effect = GrenadeEffect::from_stats(&stats);
+		assert!((effect.scale - stats.effect_scale).abs() < 1e-4);
+	}
+
+	#[test]
 	fn fuse_expires_once() {
 		let mut world = World::new();
 		world.init_resource::<Time>();

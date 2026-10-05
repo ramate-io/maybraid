@@ -23,10 +23,10 @@ pub mod particles;
 pub mod seed;
 pub mod spawn;
 
-pub use assets::VfxFlipbooks;
+pub use assets::{FlipbookAsset, VfxFlipbooks};
 pub use composition::{
-	EffectDefinition, EffectLayer, EffectPart, LightPulse, LobeKind, LobeSpec, MeshPart,
-	ParticlePart, ParticleShade,
+	DEFAULT_SCALE_MAX, DEFAULT_SCALE_MIN, EffectDefinition, EffectLayer, EffectPart, LightPulse,
+	LobeKind, LobeSpec, MeshPart, ParticlePart, ParticleShade, ScaleBounds,
 };
 pub use library::{canonicalize_effect_name, VfxLibrary};
 pub use lobe_material::{LobeMaterial, LobeMaterialPlugin};
