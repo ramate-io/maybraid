@@ -302,7 +302,7 @@ impl AnimClip {
 		Self::DorsoventralUndulation(DorsoventralUndulation::default())
 	}
 
-	/// Content generation included in sample-cache keys.
+	/// Content generation included in prepared-clip identity.
 	pub const fn revision(self) -> u64 {
 		0
 	}

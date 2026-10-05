@@ -10,6 +10,7 @@
 //! This crate does **not** implement [`lod::LodScene`] or species recipes.
 
 pub mod clip;
+pub mod clip_cache;
 pub mod elevation;
 pub mod mailbox;
 pub mod markers;
@@ -18,13 +19,18 @@ pub mod plant;
 pub mod plugin;
 pub mod policy;
 pub mod rig;
-pub mod sample_cache;
 pub mod shown;
 pub mod sync;
 
 pub use clip::{
 	AnimClip, AnimId, AnimRef, AnimRefRoot, JabParams, JumpParams, TuckParams, TuckedFlipParams,
 	TwoFootedTuckedFlipParams,
+};
+pub use clip_cache::{
+	apply_evaluated_sample, clip_bone_mask, parameters_key, AnimClipCache, AnimClipCacheSettings,
+	AnimClipCacheStats, CachedClipSample, ClipParametersId, ClipParametersKey, ClipVariantKey,
+	EvaluatedBoneOutput, PreparedClip, RigVariantId, SamplingSettings, CURRENT_CLIP_REVISION,
+	DEFAULT_MAX_UNBOUNDED_BINS, DEFAULT_MAX_VARIANTS,
 };
 pub use elevation::{
 	apply_terrain_pitch, draw_terrain_pitch_probes, is_local_visual_child, probe_origin,
@@ -43,12 +49,6 @@ pub use policy::{clamp_intelligence, motion_policy, MotionPolicy};
 pub use rig::{
 	bone_map_ready, missing_landmark_bones, BoneMap, CharacterRig, CharacterRigRole,
 	RigSkeletonKind,
-};
-pub use sample_cache::{
-	authored_sample, clip_bone_mask, parameters_key, AnimSampleCache, AnimSampleCacheSettings,
-	AnimSampleCacheStats, AuthoredSample, ClipParametersId, ClipParametersKey, ClipVariantKey,
-	RigVariantId, SampleKey, CURRENT_CLIP_REVISION, DEFAULT_MAX_SAMPLES,
-	DEFAULT_MAX_SAMPLES_PER_VARIANT, DEFAULT_MAX_VARIANTS,
 };
 pub use shown::shown_level_root;
 pub use sync::sync_motion_markers;

@@ -238,6 +238,15 @@ pub fn humanoid_write_mask(names: &[&str]) -> u32 {
 		.fold(0, |mask, bit| mask | bit)
 }
 
+/// Parent-space authored rotation `Q` such that posed = `Q * rest`.
+///
+/// Built with an identity rest so a clip cache can share deltas across compatible
+/// bindings.
+pub fn humanoid_parent_rotation_delta(name: &str, pose: &HumanoidPose) -> Option<Quat> {
+	let (swing, flex, twist) = channels_for(name, pose)?;
+	Some(compose_parent_rotation(Quat::IDENTITY, bone_axis(name), swing, flex, twist))
+}
+
 pub(crate) fn apply(
 	pose: &HumanoidPose,
 	definition: &RigDefinition,

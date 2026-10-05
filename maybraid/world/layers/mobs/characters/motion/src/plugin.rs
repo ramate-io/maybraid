@@ -4,12 +4,12 @@ use bevy::prelude::*;
 
 use intelligence_lod::{IntelligenceFocus, IntelligenceLookFrame, IntelligencePriority};
 
+use crate::clip_cache::AnimClipCache;
 use crate::elevation::{draw_terrain_pitch_probes, DrawTerrainPitchProbes};
 use crate::mailbox::{
 	apply_anim_mailbox, prepare_anim_mailbox, select_mailbox_applies, tick_anim_mailbox,
 	MailboxApplyLimits, MailboxApplySet,
 };
-use crate::sample_cache::AnimSampleCache;
 use crate::sync::sync_motion_markers;
 
 /// Per-frame articulation sets. Recipes schedule structural pose **before**
@@ -38,7 +38,7 @@ impl Plugin for CharacterMotionPlugin {
 			.init_resource::<IntelligenceFocus>()
 			.init_resource::<MailboxApplyLimits>()
 			.init_resource::<MailboxApplySet>()
-			.init_resource::<AnimSampleCache>()
+			.init_resource::<AnimClipCache>()
 			.configure_sets(
 				Update,
 				CharacterMotionSystems::Elevation.after(CharacterMotionSystems::Anim),

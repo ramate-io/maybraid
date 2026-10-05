@@ -24,6 +24,18 @@ pub struct SampleAddress {
 	pub canonical_time: f32,
 }
 
+impl ClipTimePolicy {
+	/// Finite table length for this policy, if the clip can be precomputed.
+	pub fn table_len(self, sample_interval_us: u32) -> Option<usize> {
+		let interval = interval_seconds(sample_interval_us);
+		match self {
+			Self::Cycle { duration } => Some(bins_in_span(duration, interval) as usize),
+			Self::Clamp { duration } => Some(bins_in_span(duration, interval) as usize + 1),
+			Self::Unbounded => None,
+		}
+	}
+}
+
 impl SampleAddress {
 	/// Resolve `clip_time` to the nearest bin of `sample_interval_us`.
 	pub fn from_clip_time(clip_time: f32, sample_interval_us: u32, policy: ClipTimePolicy) -> Self {
@@ -199,5 +211,19 @@ mod tests {
 		assert_eq!(finite_parameter_bits(-0.0), finite_parameter_bits(0.0));
 		assert!(finite_parameter_bits(f32::NAN).is_none());
 		assert!(finite_parameter_bits(f32::INFINITY).is_none());
+	}
+
+	#[test]
+	fn table_len_matches_addressable_bins() -> anyhow::Result<()> {
+		if (ClipTimePolicy::Cycle { duration: 1.0 }).table_len(TEN_MS) != Some(100) {
+			anyhow::bail!("a 1s walk/run cycle is 100 bins at 10 ms");
+		}
+		if (ClipTimePolicy::Clamp { duration: 1.0 }).table_len(TEN_MS) != Some(101) {
+			anyhow::bail!("clamp keeps both endpoints, so 101 slots");
+		}
+		if ClipTimePolicy::Unbounded.table_len(TEN_MS).is_some() {
+			anyhow::bail!("unbounded idle has no finite table");
+		}
+		Ok(())
 	}
 }
