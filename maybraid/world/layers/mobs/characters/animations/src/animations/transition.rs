@@ -42,7 +42,8 @@ pub type BlendCurve = TransitionCurve;
 /// Transition into an animation from a captured source pose.
 ///
 /// Unlike [`Mix`](super::Mix) or [`Smooth`](super::Smooth), the source pose is fixed at
-/// construction time rather than re-sampled each frame. Call [`Transition::apply`] with
+/// construction time rather than re-sampled each frame. Call [`Transition::apply_pose_for`]
+/// for bone pose only, or [`Transition::apply`] when child effects are needed — both take
 /// separate animation and transition progress values.
 #[derive(Debug, Clone)]
 pub struct Transition<A, R> {

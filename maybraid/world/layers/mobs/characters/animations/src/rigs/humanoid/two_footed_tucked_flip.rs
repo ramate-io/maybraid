@@ -29,9 +29,9 @@ impl<R: HumanoidRig> Animation<R> for TwoFootedTuckedFlip<R> {
 			}
 			JumpSegment::Spring => {
 				let from_pose = capture_animation_pose(&Squat::<R>::for_loop(1.0, 1.0), rig, 0.0);
-				let _ = Transition::from_pose(Spring::<R>::default(), from_pose)
+				Transition::from_pose(Spring::<R>::default(), from_pose)
 					.with_curve(TransitionCurve::SmoothStep)
-					.apply(rig, local, local);
+					.apply_pose_for(rig, local, local);
 			}
 			JumpSegment::Fall => {
 				let tuck = Tuck::<R>::new(flip.tuck.tightness());
@@ -47,9 +47,9 @@ impl<R: HumanoidRig> Animation<R> for TwoFootedTuckedFlip<R> {
 				if local < blend_end {
 					let from_pose = capture_animation_pose(&Spring::<R>::default(), rig, 1.0);
 					let transition_progress = (local / blend_end).clamp(0.0, 1.0);
-					let _ = Transition::from_pose(tuck, from_pose)
+					Transition::from_pose(tuck, from_pose)
 						.with_curve(TransitionCurve::SmoothStep)
-						.apply(rig, 1.0, transition_progress);
+						.apply_pose_for(rig, 1.0, transition_progress);
 				} else {
 					let _ = flip.tuck.apply_fixed(rig);
 				}
@@ -72,9 +72,9 @@ impl<R: HumanoidRig> Animation<R> for TwoFootedTuckedFlip<R> {
 				}
 				if transition_progress < 1.0 {
 					let from_pose = capture_animation_pose(&flip.tuck, rig, 0.0);
-					let _ = Transition::from_pose(land, from_pose)
+					Transition::from_pose(land, from_pose)
 						.with_curve(TransitionCurve::SmoothStep)
-						.apply(rig, land_progress, transition_progress);
+						.apply_pose_for(rig, land_progress, transition_progress);
 				} else {
 					land.apply_for(rig, land_progress);
 				}
