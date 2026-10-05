@@ -1,9 +1,8 @@
 //! Shared biped wing-spread pose used by soaring and flapping.
 //!
-//! The humanoid rest pose is a T-pose (arms already out along ±X), so the held
-//! flight pose should not add much shoulder lift. Wing beats are shoulder forward
-//! flexion (sagittal), with a modest static bias angling each shoulder away from
-//! the spine.
+//! The humanoid rest pose is a T-pose (arms already out along ±X). Held lift
+//! stays near zero. Wing beats still use the imported shoulder **swing** axis
+//! (parent Y on DEFAULT), the stroke the previous clips used.
 
 use character_rigs::authoring::HumanoidPose;
 use character_rigs::Side;
@@ -20,7 +19,7 @@ pub(crate) const LEG_TRAIL: f32 = -0.22;
 pub(crate) const KNEE_SOFT: f32 = 0.28;
 pub(crate) const ROOT_LEAN: f32 = -0.12;
 
-/// Flap stroke as shoulder forward flexion (sagittal), not a lateral lift.
+/// Flap stroke about the imported shoulder swing axis (parent Y), not a new lift.
 pub(crate) const FLAP_SHOULDER_SWING_AMP: f32 = 0.4;
 pub(crate) const FLAP_HUMERUS_AMP: f32 = 0.22;
 pub(crate) const FLAP_ELBOW_AMP: f32 = 0.12;

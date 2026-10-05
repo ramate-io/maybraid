@@ -1,8 +1,8 @@
 //! Quadruped semantic pose.
 //!
-//! Limb stride and hinge are sagittal flexion (+X). Proximal swing that used to
-//! be parent-space yaw stays axial (+Y). Neck nod is flexion, side tilt is
-//! lateral, and roll-about-length is axial.
+//! Semantic fields map onto the imported V0 swing / flex / twist compose.
+//! Shoulder and hip keep DEFAULT swing/flex. Thigh stride is swing. Shin hinge
+//! is flex, with the right-side −Z mirror from the pre-rewrite table.
 
 use std::sync::{Arc, OnceLock};
 
@@ -10,8 +10,37 @@ use bevy::prelude::*;
 
 use super::binding::{BoneId, RigBinding, RigDefinition, SkeletonFamily};
 use super::buffer::PoseBuffer;
-use super::frame::{JointAngles, JointFrame};
-use crate::Side;
+use super::frame::JointFrame;
+use crate::articulation::compose_parent_rotation;
+use crate::{RiggedAxis, Side};
+
+pub const QUADRUPED_THIGH_AXIS: RiggedAxis =
+	RiggedAxis { swing_axis: Vec3::Y, flex_axis: Vec3::X, twist_axis: Vec3::Z };
+
+pub const QUADRUPED_SHIN_AXIS: RiggedAxis =
+	RiggedAxis { swing_axis: Vec3::Y, flex_axis: Vec3::Z, twist_axis: Vec3::X };
+
+pub const QUADRUPED_RIGHT_THIGH_AXIS: RiggedAxis =
+	RiggedAxis { swing_axis: Vec3::NEG_Y, flex_axis: Vec3::NEG_X, twist_axis: Vec3::Z };
+
+pub const QUADRUPED_RIGHT_SHIN_AXIS: RiggedAxis =
+	RiggedAxis { swing_axis: Vec3::Y, flex_axis: Vec3::NEG_Z, twist_axis: Vec3::X };
+
+/// Inspected `quadruped_rig.glb` node rotations (xyzw). Production quadruped bodies share them.
+pub const QUADRUPED_GLB_ANTERIOR_MID_BACK: Quat = Quat::from_xyzw(0.0, 0.70710677, 0.70710677, 0.0);
+pub const QUADRUPED_GLB_SHOULDER_L: Quat = Quat::from_xyzw(0.0, 0.0, 0.70710677, 0.70710677);
+pub const QUADRUPED_GLB_THIGH: Quat = Quat::from_xyzw(-0.70710677, 0.0, 0.0, 0.70710677);
+
+/// Imported V0 hinge axes. Forelimb elbows use shin flex, including the right −Z mirror.
+pub fn bone_axis(name: &str) -> RiggedAxis {
+	match name {
+		"anterior_thigh.L" | "posterior_thigh.L" => QUADRUPED_THIGH_AXIS,
+		"anterior_thigh.R" | "posterior_thigh.R" => QUADRUPED_RIGHT_THIGH_AXIS,
+		"anterior_shin.L" | "posterior_shin.L" => QUADRUPED_SHIN_AXIS,
+		"anterior_shin.R" | "posterior_shin.R" => QUADRUPED_RIGHT_SHIN_AXIS,
+		_ => RiggedAxis::DEFAULT,
+	}
+}
 
 pub const QUADRUPED_V0_BONES: &[&str] = &[
 	"back_ridge",
@@ -119,55 +148,40 @@ pub fn resolve_quadruped(pose: &QuadrupedPose, binding: &RigBinding, out: &mut P
 pub(crate) fn apply(
 	pose: &QuadrupedPose,
 	definition: &RigDefinition,
-	frames: &[JointFrame],
+	_frames: &[JointFrame],
 	rest: &PoseBuffer,
 	out: &mut PoseBuffer,
 ) {
 	out.copy_from(rest);
 	for (index, name) in definition.names.iter().enumerate() {
-		let Some(angles) = angles_for(name, pose) else {
+		let Some((swing, flex, twist)) = channels_for(name, pose) else {
 			continue;
 		};
 		let bone = BoneId(index as u16);
-		let frame = frames.get(index).copied().unwrap_or(JointFrame::IDENTITY);
-		out.set_rotation(bone, frame.local_rotation(rest.rotation(bone), angles));
+		out.set_rotation(
+			bone,
+			compose_parent_rotation(rest.rotation(bone), bone_axis(name), swing, flex, twist),
+		);
 	}
 }
 
-fn angles_for(name: &str, pose: &QuadrupedPose) -> Option<JointAngles> {
-	let proximal = |limb: QuadrupedLimbPose| JointAngles {
-		flexion: 0.0,
-		lateral: limb.proximal_lateral,
-		axial: limb.proximal_turn,
-	};
-	let stride =
-		|limb: QuadrupedLimbPose| JointAngles { flexion: limb.stride, lateral: 0.0, axial: 0.0 };
-	let hinge =
-		|limb: QuadrupedLimbPose| JointAngles { flexion: limb.hinge, lateral: 0.0, axial: 0.0 };
+fn channels_for(name: &str, pose: &QuadrupedPose) -> Option<(f32, f32, f32)> {
 	match name {
-		"back_ridge" => Some(JointAngles { flexion: 0.0, lateral: 0.0, axial: pose.spine_axial }),
-		"lumbar" => Some(JointAngles {
-			flexion: pose.spine_sagittal,
-			lateral: pose.spine_lateral,
-			axial: 0.0,
-		}),
-		"neck" => Some(JointAngles {
-			flexion: pose.neck_nod,
-			lateral: pose.neck_tilt,
-			axial: pose.neck_turn,
-		}),
-		"shoulder.L" => Some(proximal(pose.front[0])),
-		"shoulder.R" => Some(proximal(pose.front[1])),
-		"hip.L" => Some(proximal(pose.hind[0])),
-		"hip.R" => Some(proximal(pose.hind[1])),
-		"anterior_thigh.L" => Some(stride(pose.front[0])),
-		"anterior_thigh.R" => Some(stride(pose.front[1])),
-		"posterior_thigh.L" => Some(stride(pose.hind[0])),
-		"posterior_thigh.R" => Some(stride(pose.hind[1])),
-		"anterior_shin.L" => Some(hinge(pose.front[0])),
-		"anterior_shin.R" => Some(hinge(pose.front[1])),
-		"posterior_shin.L" => Some(hinge(pose.hind[0])),
-		"posterior_shin.R" => Some(hinge(pose.hind[1])),
+		"back_ridge" => Some((pose.spine_axial, 0.0, 0.0)),
+		"lumbar" => Some((0.0, pose.spine_lateral, pose.spine_sagittal)),
+		"neck" => Some((pose.neck_turn, pose.neck_tilt, pose.neck_nod)),
+		"shoulder.L" => Some((pose.front[0].proximal_turn, pose.front[0].proximal_lateral, 0.0)),
+		"shoulder.R" => Some((pose.front[1].proximal_turn, pose.front[1].proximal_lateral, 0.0)),
+		"hip.L" => Some((pose.hind[0].proximal_turn, pose.hind[0].proximal_lateral, 0.0)),
+		"hip.R" => Some((pose.hind[1].proximal_turn, pose.hind[1].proximal_lateral, 0.0)),
+		"anterior_thigh.L" => Some((pose.front[0].stride, 0.0, 0.0)),
+		"anterior_thigh.R" => Some((pose.front[1].stride, 0.0, 0.0)),
+		"posterior_thigh.L" => Some((pose.hind[0].stride, 0.0, 0.0)),
+		"posterior_thigh.R" => Some((pose.hind[1].stride, 0.0, 0.0)),
+		"anterior_shin.L" => Some((0.0, pose.front[0].hinge, 0.0)),
+		"anterior_shin.R" => Some((0.0, pose.front[1].hinge, 0.0)),
+		"posterior_shin.L" => Some((0.0, pose.hind[0].hinge, 0.0)),
+		"posterior_shin.R" => Some((0.0, pose.hind[1].hinge, 0.0)),
 		_ => None,
 	}
 }
@@ -180,4 +194,57 @@ pub fn identity_binding() -> RigBinding {
 		vec![Entity::PLACEHOLDER; len].into_boxed_slice(),
 		PoseBuffer::identity(len),
 	)
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use crate::articulation::compose_parent_rotation;
+
+	#[test]
+	fn hinge_uses_imported_shin_flex() {
+		let binding = identity_binding();
+		let mut pose = QuadrupedPose::default();
+		pose.front_mut(Side::Left).hinge = 0.4;
+		pose.front_mut(Side::Right).hinge = 0.4;
+		let mut out = PoseBuffer::identity(binding.definition.len());
+		resolve_quadruped(&pose, &binding, &mut out);
+		let left = binding.definition.id("anterior_shin.L").expect("shin.L");
+		let right = binding.definition.id("anterior_shin.R").expect("shin.R");
+		assert!(
+			out.rotation(left)
+				.dot(compose_parent_rotation(Quat::IDENTITY, QUADRUPED_SHIN_AXIS, 0.0, 0.4, 0.0))
+				.abs() > 1.0 - 1e-5
+		);
+		assert!(
+			out.rotation(right)
+				.dot(compose_parent_rotation(
+					Quat::IDENTITY,
+					QUADRUPED_RIGHT_SHIN_AXIS,
+					0.0,
+					0.4,
+					0.0
+				))
+				.abs() > 1.0 - 1e-5
+		);
+	}
+
+	#[test]
+	fn imported_forelimb_chain_folds_the_elbow_backward() {
+		// quadruped_rig.glb: anterior_mid_back parents upper_back. Old shin flex is parent Z.
+		let mid = QUADRUPED_GLB_ANTERIOR_MID_BACK;
+		let shoulder = QUADRUPED_GLB_SHOULDER_L;
+		let thigh = QUADRUPED_GLB_THIGH;
+		let binding = identity_binding();
+		let mut pose = QuadrupedPose::default();
+		pose.front_mut(Side::Left).hinge = 0.4;
+		let mut out = PoseBuffer::identity(binding.definition.len());
+		resolve_quadruped(&pose, &binding, &mut out);
+		let shin = binding.definition.id("anterior_shin.L").expect("shin");
+		let visual = mid * shoulder * thigh * out.rotation(shin) * Vec3::Y;
+		let rest = mid * shoulder * thigh * Vec3::Y;
+		assert!(rest.y < -0.9, "bind hangs down, got {rest:?}");
+		assert!(visual.z < -0.2, "old flex folds the shin backward, got {visual:?}");
+		assert!(visual.x.abs() < 0.05, "hinge stays sagittal, got {visual:?}");
+	}
 }

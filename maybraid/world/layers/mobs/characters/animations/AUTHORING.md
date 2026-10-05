@@ -4,7 +4,13 @@ Clips sample an anatomical pose. The rig resolves that pose into bone-local rota
 
 Character space is the armature’s local frame: **+X** right, **+Y** up, **+Z** fight-forward. Bevy’s world stays **+Y** up and **−Z** camera-forward. Convert positions and directions with the character `GlobalTransform`. Do not send a direction through point conversion.
 
-Joint frames conjugate that triad through the **parent** rest. On the imported humanoid, `pelvis.L` sends its local +X onto character +Z. Hip flexion is still about character +X, so the thigh swings back and front, not sideways.
+Clip evaluation does **not** conjugate that triad through every joint. The previous working clips composed imported [`RiggedAxis`](../../rigs/src/lib.rs) swing / flex / twist in the bone’s parent space (`R(swing) * R(twist) * R(flex) * rest`). Semantic pose fields are an authoring adapter onto those knobs. `/character joint --flexion` still previews a character-space frame for gizmos; that preview is not the clip solver.
+
+Inspected `humanoid_rig.glb` (production biped bodies share these binds): T-pose `shoulder.L` is `Rz(−90°)`, `shoulder.R` is `Rz(+90°)`, humerus/forearm rest identity, `pelvis.L` is `(-0.5,-0.5,-0.5,0.5)`, femur `Rx(−90°)`, shin identity. Parent **Y** (DEFAULT swing) is the previous flap / arm-pump stroke (T-pose +Y sweeps in XZ). Parent **Z** (DEFAULT flex, right forearm `−Z`) is the elbow hinge. Character **X** is the arm length and would only twist those joints.
+
+Inspected `quadruped_rig.glb` (production quadruped bodies share these binds): `anterior_mid_back` `(0, s2, s2, 0)` parents `upper_back`; `shoulder.L` is `Rz(+90°)`; `anterior_thigh` is `Rx(−90°)`; shin identity. The V0 definition still parents `upper_back` to `back_ridge`; judge the live fold as `mid_back * shoulder * thigh * shin`. The old shin hinge is parent **Z** (right `−Z`).
+
+Inspected `forelimbed_rig.glb`: `shoulder.L` is the same `Rz(−90°)` as the humanoid T-pose. Fin sweep is DEFAULT parent-Y swing.
 
 ## Channels
 
@@ -30,6 +36,8 @@ A jab aim is a character-space direction on the humerus, plus a roll. The elbow 
 ## What a sample may depend on
 
 A sample reads the clip definition, the effective rest, the clip parameters, and progress. Sampling again does not accumulate. Bones the clip does not write stay at rest. `ArmatureOffset::IDENTITY` means the armature is not visually offset. Gameplay locomotion is not that offset.
+
+Identity rest is not a production T-pose. Clip tests that need bind geometry use `HumanoidV0Rig::for_clip_test()`, which seeds the inspected rotations above.
 
 Segment lengths come from the effective-rest translation. A length near zero keeps the family default (0.5 m for a humanoid femur or shin). Editing rest refreshes the calibrated frames and those lengths.
 

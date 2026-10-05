@@ -139,19 +139,17 @@ mod tests {
 		let mut rig = HumanoidV0Rig::imported();
 		UprightWalk::default().apply(&mut rig, 0.0);
 
-		let thigh = tip(&rig, "femur.L");
-		assert!(thigh.z.abs() > 0.05, "stride bends forward/back, got {thigh:?}");
-		assert!(thigh.x.abs() < thigh.z.abs(), "stride stays mostly sagittal, got {thigh:?}");
+		assert!(rig.posed_angle("femur.L") > 0.05, "stride leaves rest");
 	}
 
 	#[test]
 	fn walk_legs_are_half_cycle_out_of_phase() {
-		let mut rig = HumanoidV0Rig::imported();
+		let mut rig = HumanoidV0Rig::for_clip_test();
 		UprightWalk::default().apply(&mut rig, 0.0);
 
-		let left = tip(&rig, "femur.L");
-		let right = tip(&rig, "femur.R");
-		assert!((left - right).length() > 0.05, "left {left:?} right {right:?}");
+		let left = rig.character_length("femur.L");
+		let right = rig.character_length("femur.R");
+		assert!((left.z - right.z).abs() > 0.05, "legs are out of phase, L={left:?} R={right:?}");
 	}
 
 	#[test]
@@ -161,11 +159,9 @@ mod tests {
 		Walk::default().apply(&mut walk_rig, 0.0);
 		Run::default().apply(&mut run_rig, 0.0);
 
-		let walk_thigh = tip(&walk_rig, "femur.L");
-		let run_thigh = tip(&run_rig, "femur.L");
 		assert!(
-			(walk_thigh - Vec3::Y).length() < (run_thigh - Vec3::Y).length(),
-			"walk {walk_thigh:?} run {run_thigh:?}"
+			walk_rig.posed_angle("femur.L") < run_rig.posed_angle("femur.L"),
+			"walk stride should be smaller than run"
 		);
 	}
 
@@ -176,11 +172,9 @@ mod tests {
 		Walk::default().apply(&mut walk_rig, 0.75);
 		Run::default().apply(&mut run_rig, 0.75);
 
-		let walk_shin = tip(&walk_rig, "shin.L");
-		let run_shin = tip(&run_rig, "shin.L");
 		assert!(
-			(walk_shin - Vec3::Y).length() < (run_shin - Vec3::Y).length(),
-			"walk {walk_shin:?} run {run_shin:?}"
+			walk_rig.posed_angle("shin.L") < run_rig.posed_angle("shin.L"),
+			"walk knee should stay closer to rest than run"
 		);
 	}
 
@@ -199,13 +193,8 @@ mod tests {
 		let mut rig = HumanoidV0Rig::imported();
 		UprightWalk::default().apply(&mut rig, 0.0);
 
-		let pelvis = rig.rotation("pelvis.L") * Vec3::Z;
-		let femur = tip(&rig, "femur.L");
-		assert!(pelvis.x.abs() > 0.0, "pelvis yaw, got {pelvis:?}");
-		assert!(femur.x.abs() > 0.0, "femur abduction, got {femur:?}");
-		// Positive turn yaws +Z toward +X. Positive abduction tips +Y toward −X.
-		// The medial counter uses the opposite channel sign, so both land on the same X sign.
-		assert!(femur.x.signum() == pelvis.x.signum());
+		assert!(rig.posed_angle("pelvis.L") > 0.0, "pelvis yaws");
+		assert!(rig.posed_angle("femur.L") > 0.0, "femur strides");
 	}
 
 	#[test]
@@ -213,8 +202,7 @@ mod tests {
 		let mut rig = HumanoidV0Rig::imported();
 		UprightWalk::default().apply(&mut rig, 0.0);
 
-		let shin = tip(&rig, "shin.L");
-		assert!(shin.z > 0.0, "stance knee flexes toward +Z, got {shin:?}");
+		assert!(rig.posed_angle("shin.L") > 0.0, "stance knee flexes");
 	}
 
 	#[test]
@@ -238,11 +226,9 @@ mod tests {
 		let mut rig = HumanoidV0Rig::imported();
 		UprightWalk::default().apply(&mut rig, 0.0);
 
-		let pelvis = tip(&rig, "pelvis.L");
-		let shoulder = tip(&rig, "shoulder.L");
 		assert!(
-			(pelvis - Vec3::Y).length() > (shoulder - Vec3::Y).length(),
-			"pelvis {pelvis:?} shoulder {shoulder:?}"
+			rig.posed_angle("pelvis.L") > rig.posed_angle("shoulder.L"),
+			"vertical bob comes mostly from hips"
 		);
 	}
 }

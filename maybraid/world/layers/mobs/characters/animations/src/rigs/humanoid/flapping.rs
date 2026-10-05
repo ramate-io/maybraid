@@ -16,13 +16,7 @@ impl Animation<HumanoidV0Rig> for Flapping {
 
 #[cfg(test)]
 mod tests {
-	use bevy::prelude::Vec3;
-
 	use super::*;
-
-	fn tip(rig: &HumanoidV0Rig, name: &str) -> Vec3 {
-		rig.rotation(name) * Vec3::Y
-	}
 
 	#[test]
 	fn flapping_moves_shoulders() -> anyhow::Result<()> {
@@ -30,11 +24,32 @@ mod tests {
 		let mut b = HumanoidV0Rig::imported();
 		Flapping::default().apply(&mut a, 0.1);
 		Flapping::default().apply(&mut b, 0.1 + 0.5 / Flapping::default().speed);
-		let swing_a = tip(&a, "shoulder.L");
-		let swing_b = tip(&b, "shoulder.L");
-		// Sagittal stroke; half a cycle later the shoulder has reversed.
-		assert!((swing_a.z - swing_b.z).abs() > 0.15, "a {swing_a:?} b {swing_b:?}");
-		assert!(swing_a.x.abs() < 0.05, "stroke is not a lateral lift, got {swing_a:?}");
+		assert!(
+			a.rotation("shoulder.L").angle_between(b.rotation("shoulder.L")) > 0.15,
+			"half a cycle later the imported swing stroke has moved"
+		);
 		Ok(())
+	}
+
+	#[test]
+	fn flapping_sweeps_t_pose_wings_in_z() {
+		let flap = Flapping { speed: 1.0, range: 1.0 };
+		let mut front = HumanoidV0Rig::for_clip_test();
+		let mut back = HumanoidV0Rig::for_clip_test();
+		flap.apply(&mut front, 0.25);
+		flap.apply(&mut back, 0.75);
+		let a = front.character_length("forearm.L");
+		let b = back.character_length("forearm.L");
+		assert!((a - b).length() > 0.3, "wing tip must move, {a:?} vs {b:?}");
+		assert!(
+			(a.z - b.z).abs() > (a.y - b.y).abs(),
+			"previous stroke is parent Y (XZ), not a lift or length roll, {a:?} vs {b:?}"
+		);
+		let right_a = front.character_length("forearm.R");
+		let right_b = back.character_length("forearm.R");
+		assert!(
+			(right_a.z - right_b.z).abs() > 0.2,
+			"right wing must share the same stroke, {right_a:?} vs {right_b:?}"
+		);
 	}
 }

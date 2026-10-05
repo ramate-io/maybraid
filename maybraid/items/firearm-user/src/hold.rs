@@ -2,8 +2,10 @@
 
 use bevy::prelude::*;
 use bevy::transform::helper::TransformHelper;
-use character_rigs::articulation::{rotation_along_with_roll, TwoBoneAim, BONE_LENGTH_AXIS};
-use character_rigs::authoring::{JointAngles, JointFrame};
+use character_rigs::articulation::{
+	compose_parent_rotation, rotation_along_with_roll, TwoBoneAim, BONE_LENGTH_AXIS,
+};
+use character_rigs::authoring::humanoid_bone_axis;
 use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
 use character_rigs::Side;
 use characters::{
@@ -189,10 +191,12 @@ fn pose_arm(
 	);
 	rig.pose.set_rotation(humerus, aimed);
 	scale_translation(rig, humerus, stretch);
-	let frame = rig.binding.frames.get(forearm.index()).copied().unwrap_or(JointFrame::IDENTITY);
-	let flexed = frame.local_rotation(
+	let flexed = compose_parent_rotation(
 		rig.binding.effective_rest.rotation(forearm),
-		JointAngles { flexion: reach.flex, lateral: 0.0, axial: 0.0 },
+		humanoid_bone_axis(forearm_name),
+		0.0,
+		reach.flex,
+		0.0,
 	);
 	rig.pose.set_rotation(forearm, flexed);
 	scale_translation(rig, forearm, stretch);
@@ -243,10 +247,15 @@ fn humerus_roll_for_reach(
 		BONE_LENGTH_AXIS,
 	);
 	let humerus_world = parent * aimed;
-	let frame = rig.binding.frames.get(forearm.index()).copied().unwrap_or(JointFrame::IDENTITY);
-	let forearm_rotation = frame.local_rotation(
+	let forearm_rotation = compose_parent_rotation(
 		rig.binding.effective_rest.rotation(forearm),
-		JointAngles { flexion: reach.flex, lateral: 0.0, axial: 0.0 },
+		humanoid_bone_axis(match side {
+			Side::Left => "forearm.L",
+			Side::Right => "forearm.R",
+		}),
+		0.0,
+		reach.flex,
+		0.0,
 	);
 	let zero_roll_lower = forearm_rotation * BONE_LENGTH_AXIS;
 	let desired_lower = humerus_world.inverse() * reach.lower_along;
@@ -276,10 +285,15 @@ fn lower_arm_direction(rig: &HumanoidV0Rig, side: Side, reach: TwoBoneAim, roll:
 		roll,
 		BONE_LENGTH_AXIS,
 	);
-	let frame = rig.binding.frames.get(forearm.index()).copied().unwrap_or(JointFrame::IDENTITY);
-	let forearm_rotation = frame.local_rotation(
+	let forearm_rotation = compose_parent_rotation(
 		rig.binding.effective_rest.rotation(forearm),
-		JointAngles { flexion: reach.flex, lateral: 0.0, axial: 0.0 },
+		humanoid_bone_axis(match side {
+			Side::Left => "forearm.L",
+			Side::Right => "forearm.R",
+		}),
+		0.0,
+		reach.flex,
+		0.0,
 	);
 	(parent * aimed * forearm_rotation * BONE_LENGTH_AXIS).normalize_or(Vec3::Z)
 }

@@ -18,9 +18,44 @@ use bevy::prelude::*;
 
 use super::binding::{BoneId, RigBinding, RigDefinition, SkeletonFamily};
 use super::buffer::PoseBuffer;
-use super::frame::{JointAngles, JointFrame};
-use crate::articulation::{rotation_along_with_roll, BONE_LENGTH_AXIS};
-use crate::Side;
+use super::frame::JointFrame;
+use crate::articulation::{compose_parent_rotation, rotation_along_with_roll, BONE_LENGTH_AXIS};
+use crate::{RiggedAxis, Side};
+
+/// Left femur: imported stride on parent Y, medial/lateral on X.
+pub const HUMANOID_FEMUR_AXIS: RiggedAxis =
+	RiggedAxis { swing_axis: Vec3::Y, flex_axis: Vec3::X, twist_axis: Vec3::Z };
+
+pub const HUMANOID_SHIN_AXIS: RiggedAxis =
+	RiggedAxis { swing_axis: Vec3::Y, flex_axis: Vec3::Z, twist_axis: Vec3::X };
+
+pub const HUMANOID_RIGHT_FEMUR_AXIS: RiggedAxis =
+	RiggedAxis { swing_axis: Vec3::NEG_Y, flex_axis: Vec3::NEG_X, twist_axis: Vec3::Z };
+
+pub const HUMANOID_RIGHT_SHIN_AXIS: RiggedAxis =
+	RiggedAxis { swing_axis: Vec3::Y, flex_axis: Vec3::NEG_Z, twist_axis: Vec3::X };
+
+pub const HUMANOID_RIGHT_FLEX_AXIS: RiggedAxis =
+	RiggedAxis { swing_axis: Vec3::Y, flex_axis: Vec3::NEG_Z, twist_axis: Vec3::X };
+
+/// Inspected `humanoid_rig.glb` node rotations (xyzw). Production biped bodies share them.
+pub const HUMANOID_GLB_SHOULDER_L: Quat = Quat::from_xyzw(0.0, 0.0, -0.70710677, 0.70710677);
+pub const HUMANOID_GLB_SHOULDER_R: Quat = Quat::from_xyzw(0.0, 0.0, 0.70710677, 0.70710677);
+pub const HUMANOID_GLB_PELVIS_L: Quat = Quat::from_xyzw(-0.5, -0.5, -0.5, 0.5);
+pub const HUMANOID_GLB_PELVIS_R: Quat = Quat::from_xyzw(-0.5, 0.5, 0.5, 0.5);
+pub const HUMANOID_GLB_FEMUR: Quat = Quat::from_xyzw(-0.70710677, 0.0, 0.0, 0.70710677);
+
+/// Imported V0 hinge axes. Clips still evaluate through these, not character X/Z/Y.
+pub fn bone_axis(name: &str) -> RiggedAxis {
+	match name {
+		"femur.L" => HUMANOID_FEMUR_AXIS,
+		"femur.R" => HUMANOID_RIGHT_FEMUR_AXIS,
+		"shin.L" => HUMANOID_SHIN_AXIS,
+		"shin.R" => HUMANOID_RIGHT_SHIN_AXIS,
+		"forearm.R" => HUMANOID_RIGHT_FLEX_AXIS,
+		_ => RiggedAxis::DEFAULT,
+	}
+}
 
 pub const HUMANOID_V0_BONES: &[&str] = &[
 	"root",
@@ -186,13 +221,11 @@ pub(crate) fn frame_for(
 	rest: Quat,
 	parent: Quat,
 ) -> JointFrame {
-	let _ = definition;
-	let _ = bone;
-	// Character +X / +Z / +Y, conjugated into this bone's parent. The inspected
-	// pelvis bind sends local +X to character +Z; without the parent conjugate,
-	// hip flexion swings the thigh sideways. Right-side hinges do not take an
-	// extra sign: both knees share positive flexion.
-	JointFrame::calibrate_in_character(rest, parent).unwrap_or(JointFrame::IDENTITY)
+	let frame = JointFrame::calibrate_in_character(rest, parent).unwrap_or(JointFrame::IDENTITY);
+	// T-pose right forearm used parent −Z for flex so both elbows fold the same
+	// way. That mirror lives on the frame, not in clip signs.
+	let _ = (definition, bone);
+	frame
 }
 
 pub fn resolve_humanoid(pose: &HumanoidPose, binding: &RigBinding, out: &mut PoseBuffer) {
@@ -202,19 +235,20 @@ pub fn resolve_humanoid(pose: &HumanoidPose, binding: &RigBinding, out: &mut Pos
 pub(crate) fn apply(
 	pose: &HumanoidPose,
 	definition: &RigDefinition,
-	frames: &[JointFrame],
+	_frames: &[JointFrame],
 	rest: &PoseBuffer,
 	out: &mut PoseBuffer,
 ) {
 	out.copy_from(rest);
 	for (index, name) in definition.names.iter().enumerate() {
 		let bone = BoneId(index as u16);
-		let Some(angles) = angles_for(name, pose) else {
+		let Some((swing, flex, twist)) = channels_for(name, pose) else {
 			continue;
 		};
-		let frame = frames.get(index).copied().unwrap_or(JointFrame::IDENTITY);
-		let rest_rotation = rest.rotation(bone);
-		out.set_rotation(bone, frame.local_rotation(rest_rotation, angles));
+		out.set_rotation(
+			bone,
+			compose_parent_rotation(rest.rotation(bone), bone_axis(name), swing, flex, twist),
+		);
 	}
 	for side in [Side::Left, Side::Right] {
 		let Some(aim) = pose.arms[side.index()].aim else {
@@ -224,83 +258,68 @@ pub(crate) fn apply(
 	}
 }
 
-fn angles_for(name: &str, pose: &HumanoidPose) -> Option<JointAngles> {
-	let spine = |slot: usize| JointAngles {
-		flexion: pose.spine.forward_bend[slot],
-		lateral: pose.spine.side_bend[slot],
-		axial: pose.spine.turn[slot],
+/// Map semantic fields back onto the pre-rewrite swing / flex / twist knobs.
+///
+/// Spine forward bend is the old DEFAULT **twist** (parent X). That is the
+/// squat pitch path; walk lean uses the same channel so it does not yaw.
+fn channels_for(name: &str, pose: &HumanoidPose) -> Option<(f32, f32, f32)> {
+	let spine = |slot: usize| {
+		Some((pose.spine.turn[slot], pose.spine.side_bend[slot], pose.spine.forward_bend[slot]))
 	};
-	let neck = |bone: NeckBone| JointAngles {
-		flexion: bone.nod,
-		lateral: bone.side_tilt,
-		axial: bone.turn,
-	};
-	let leg = |side: Side| {
-		let leg = pose.legs[side.index()];
-		JointAngles {
-			flexion: leg.hip_flexion,
-			lateral: leg.hip_abduction,
-			axial: leg.hip_rotation,
-		}
-	};
-	let pelvis = |side: Side| {
-		let leg = pose.legs[side.index()];
-		JointAngles {
-			flexion: leg.pelvis_flexion,
-			lateral: leg.pelvis_lateral,
-			axial: leg.pelvis_turn,
-		}
-	};
-	let shoulder = |side: Side| {
-		let arm = pose.arms[side.index()];
-		JointAngles {
-			flexion: arm.shoulder_forward,
-			lateral: arm.shoulder_lift,
-			axial: arm.shoulder_twist,
-		}
-	};
-	let humerus = |side: Side| {
-		let arm = pose.arms[side.index()];
-		if arm.aim.is_some() {
-			None
-		} else {
-			Some(JointAngles {
-				flexion: arm.forward_elevation,
-				lateral: arm.lateral_elevation,
-				axial: arm.axial_rotation,
-			})
-		}
-	};
-	let elbow = |side: Side| JointAngles {
-		flexion: pose.arms[side.index()].elbow_flexion,
-		lateral: 0.0,
-		axial: 0.0,
-	};
+	let neck = |bone: NeckBone| Some((bone.turn, bone.side_tilt, bone.nod));
 	match name {
-		"root" => Some(spine(0)),
-		"lumbar" => Some(spine(1)),
-		"midback" => Some(spine(2)),
-		"upper_back" => Some(spine(3)),
-		"lower_neck" => Some(neck(pose.neck.lower)),
-		"upper_neck" => Some(neck(pose.neck.upper)),
-		"pelvis.L" => Some(pelvis(Side::Left)),
-		"pelvis.R" => Some(pelvis(Side::Right)),
-		"femur.L" => Some(leg(Side::Left)),
-		"femur.R" => Some(leg(Side::Right)),
-		"shin.L" => Some(elbow_like(pose.legs[0].knee_flexion)),
-		"shin.R" => Some(elbow_like(pose.legs[1].knee_flexion)),
-		"shoulder.L" => Some(shoulder(Side::Left)),
-		"shoulder.R" => Some(shoulder(Side::Right)),
-		"humerus.L" => humerus(Side::Left),
-		"humerus.R" => humerus(Side::Right),
-		"forearm.L" => Some(elbow(Side::Left)),
-		"forearm.R" => Some(elbow(Side::Right)),
+		"root" => spine(0),
+		"lumbar" => spine(1),
+		"midback" => spine(2),
+		"upper_back" => spine(3),
+		"lower_neck" => neck(pose.neck.lower),
+		"upper_neck" => neck(pose.neck.upper),
+		"pelvis.L" => {
+			let leg = pose.legs[0];
+			Some((leg.pelvis_turn, leg.pelvis_lateral, leg.pelvis_flexion))
+		}
+		"pelvis.R" => {
+			let leg = pose.legs[1];
+			Some((leg.pelvis_turn, leg.pelvis_lateral, leg.pelvis_flexion))
+		}
+		"femur.L" => {
+			let leg = pose.legs[0];
+			Some((leg.hip_flexion, leg.hip_abduction, leg.hip_rotation))
+		}
+		"femur.R" => {
+			let leg = pose.legs[1];
+			Some((leg.hip_flexion, leg.hip_abduction, leg.hip_rotation))
+		}
+		"shin.L" => Some((0.0, pose.legs[0].knee_flexion, 0.0)),
+		"shin.R" => Some((0.0, pose.legs[1].knee_flexion, 0.0)),
+		"shoulder.L" => {
+			let arm = pose.arms[0];
+			Some((arm.shoulder_forward, arm.shoulder_lift, arm.shoulder_twist))
+		}
+		"shoulder.R" => {
+			let arm = pose.arms[1];
+			Some((arm.shoulder_forward, arm.shoulder_lift, arm.shoulder_twist))
+		}
+		"humerus.L" => {
+			let arm = pose.arms[0];
+			(!arm.aim.is_some()).then_some((
+				arm.forward_elevation,
+				arm.lateral_elevation,
+				arm.axial_rotation,
+			))
+		}
+		"humerus.R" => {
+			let arm = pose.arms[1];
+			(!arm.aim.is_some()).then_some((
+				arm.forward_elevation,
+				arm.lateral_elevation,
+				arm.axial_rotation,
+			))
+		}
+		"forearm.L" => Some((0.0, pose.arms[0].elbow_flexion, 0.0)),
+		"forearm.R" => Some((0.0, pose.arms[1].elbow_flexion, 0.0)),
 		_ => None,
 	}
-}
-
-fn elbow_like(flexion: f32) -> JointAngles {
-	JointAngles { flexion, lateral: 0.0, axial: 0.0 }
 }
 
 fn aim_humerus(
@@ -338,7 +357,6 @@ pub fn identity_binding() -> RigBinding {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use std::f32::consts::FRAC_PI_2;
 
 	fn bone(binding: &RigBinding, name: &str) -> BoneId {
 		binding.definition.id(name).expect(name)
@@ -380,32 +398,52 @@ mod tests {
 	}
 
 	#[test]
-	fn hip_and_knee_flexion_move_endpoints_sagittally() {
+	fn hip_and_knee_use_imported_swing_and_flex() {
+		use crate::articulation::compose_parent_rotation;
 		let binding = identity_binding();
 		let mut pose = HumanoidPose::default();
 		pose.leg_mut(Side::Left).hip_flexion = 0.5;
 		pose.leg_mut(Side::Left).knee_flexion = 0.7;
 		let mut out = PoseBuffer::identity(binding.definition.len());
 		resolve_humanoid(&pose, &binding, &mut out);
-		let thigh = out.rotation(bone(&binding, "femur.L")) * Vec3::Y;
-		let shin = out.rotation(bone(&binding, "shin.L")) * Vec3::Y;
-		assert!(thigh.z > 0.2 && thigh.x.abs() < 1e-3, "hip {thigh:?}");
-		assert!(shin.z > 0.2 && shin.x.abs() < 1e-3, "knee {shin:?}");
+		let femur = bone(&binding, "femur.L");
+		let shin = bone(&binding, "shin.L");
+		assert!(
+			out.rotation(femur)
+				.dot(compose_parent_rotation(Quat::IDENTITY, HUMANOID_FEMUR_AXIS, 0.5, 0.0, 0.0))
+				.abs() > 1.0 - 1e-5
+		);
+		assert!(
+			out.rotation(shin)
+				.dot(compose_parent_rotation(Quat::IDENTITY, HUMANOID_SHIN_AXIS, 0.0, 0.7, 0.0))
+				.abs() > 1.0 - 1e-5
+		);
 	}
 
 	#[test]
-	fn left_and_right_knees_share_positive_flexion() {
+	fn left_and_right_knees_share_positive_flex_on_mirrored_axes() {
+		use crate::articulation::compose_parent_rotation;
 		let binding = identity_binding();
 		let mut pose = HumanoidPose::default();
 		pose.leg_mut(Side::Left).knee_flexion = 0.6;
 		pose.leg_mut(Side::Right).knee_flexion = 0.6;
 		let mut out = PoseBuffer::identity(binding.definition.len());
 		resolve_humanoid(&pose, &binding, &mut out);
-		let left = out.rotation(bone(&binding, "shin.L")) * Vec3::Y;
-		let right = out.rotation(bone(&binding, "shin.R")) * Vec3::Y;
 		assert!(
-			(left - right).length() < 1e-4,
-			"same flexion, same sagittal bend: {left:?} vs {right:?}"
+			out.rotation(bone(&binding, "shin.L"))
+				.dot(compose_parent_rotation(Quat::IDENTITY, HUMANOID_SHIN_AXIS, 0.0, 0.6, 0.0))
+				.abs() > 1.0 - 1e-5
+		);
+		assert!(
+			out.rotation(bone(&binding, "shin.R"))
+				.dot(compose_parent_rotation(
+					Quat::IDENTITY,
+					HUMANOID_RIGHT_SHIN_AXIS,
+					0.0,
+					0.6,
+					0.0
+				))
+				.abs() > 1.0 - 1e-5
 		);
 	}
 
@@ -418,8 +456,8 @@ mod tests {
 		let shin = definition.id("shin.L").expect("shin");
 		// Inspected humanoid_rig.glb: pelvis.L permutes +X onto character +Z, and
 		// femur.L aims local +Y along pelvis −Z so the thigh hangs down.
-		rest.local[pelvis.index()].rotation = Quat::from_xyzw(-0.5, -0.5, -0.5, 0.5);
-		rest.local[femur.index()].rotation = Quat::from_rotation_x(-FRAC_PI_2);
+		rest.local[pelvis.index()].rotation = HUMANOID_GLB_PELVIS_L;
+		rest.local[femur.index()].rotation = HUMANOID_GLB_FEMUR;
 		let binding = RigBinding::from_rest(
 			definition,
 			vec![Entity::PLACEHOLDER; rest.len()].into_boxed_slice(),
@@ -438,23 +476,72 @@ mod tests {
 	}
 
 	#[test]
-	fn femur_bind_redirecting_length_still_flexes_sagittally() {
+	fn t_pose_elbow_flex_is_not_a_length_roll() {
 		let definition = humanoid_v0_definition();
 		let mut rest = PoseBuffer::identity(definition.len());
-		let femur = definition.id("femur.L").expect("femur");
-		rest.local[femur.index()].rotation = Quat::from_rotation_x(-FRAC_PI_2);
+		let shoulder = definition.id("shoulder.L").expect("shoulder");
+		let forearm = definition.id("forearm.L").expect("forearm");
+		// humanoid_rig.glb: T-pose shoulder.L is Rz(−90°); forearm rest is identity.
+		rest.local[shoulder.index()].rotation = HUMANOID_GLB_SHOULDER_L;
 		let binding = RigBinding::from_rest(
 			definition,
 			vec![Entity::PLACEHOLDER; rest.len()].into_boxed_slice(),
 			rest,
 		);
 		let mut pose = HumanoidPose::default();
-		pose.leg_mut(Side::Left).hip_flexion = 0.5;
+		pose.arm_mut(Side::Left).elbow_flexion = 0.4;
 		let mut out = PoseBuffer::identity(binding.definition.len());
 		resolve_humanoid(&pose, &binding, &mut out);
-		let dir = out.rotation(femur) * Vec3::Y;
-		assert!(dir.x.abs() < 0.08, "non-identity femur flexion stays sagittal, got {dir:?}");
-		assert!((dir - Vec3::NEG_Z).length() > 0.15, "endpoint moved, got {dir:?}");
+		let along = binding.definition.rotation_in_character(&out, forearm) * Vec3::Y;
+		assert!(along.y.abs() > 0.2, "old flex lifts the T-pose forearm, got {along:?}");
+		assert!(along.x.abs() > 0.8, "length stays near ±X, got {along:?}");
+		assert!(along.z.abs() < 0.05, "elbow is not a forward twist, got {along:?}");
+	}
+
+	#[test]
+	fn t_pose_right_elbow_flex_mirrors_the_left_hinge() {
+		let definition = humanoid_v0_definition();
+		let mut rest = PoseBuffer::identity(definition.len());
+		let shoulder = definition.id("shoulder.R").expect("shoulder");
+		let forearm = definition.id("forearm.R").expect("forearm");
+		rest.local[shoulder.index()].rotation = HUMANOID_GLB_SHOULDER_R;
+		let binding = RigBinding::from_rest(
+			definition,
+			vec![Entity::PLACEHOLDER; rest.len()].into_boxed_slice(),
+			rest,
+		);
+		let mut pose = HumanoidPose::default();
+		pose.arm_mut(Side::Right).elbow_flexion = 0.4;
+		let mut out = PoseBuffer::identity(binding.definition.len());
+		resolve_humanoid(&pose, &binding, &mut out);
+		let along = binding.definition.rotation_in_character(&out, forearm) * Vec3::Y;
+		assert!(along.y.abs() > 0.2, "right flex lifts the T-pose forearm, got {along:?}");
+		assert!(along.x < -0.8, "right length stays near −X, got {along:?}");
+		assert!(along.z.abs() < 0.05, "right elbow is not a forward twist, got {along:?}");
+	}
+
+	#[test]
+	fn t_pose_shoulder_swing_matches_previous_flap_stroke() {
+		use crate::articulation::compose_parent_rotation;
+		let definition = humanoid_v0_definition();
+		let mut rest = PoseBuffer::identity(definition.len());
+		let shoulder = definition.id("shoulder.L").expect("shoulder");
+		let bind = HUMANOID_GLB_SHOULDER_L;
+		rest.local[shoulder.index()].rotation = bind;
+		let binding = RigBinding::from_rest(
+			definition,
+			vec![Entity::PLACEHOLDER; rest.len()].into_boxed_slice(),
+			rest,
+		);
+		let mut pose = HumanoidPose::default();
+		pose.arm_mut(Side::Left).shoulder_forward = 0.4;
+		let mut out = PoseBuffer::identity(binding.definition.len());
+		resolve_humanoid(&pose, &binding, &mut out);
+		let expected = compose_parent_rotation(bind, RiggedAxis::DEFAULT, 0.4, 0.0, 0.0);
+		assert!(out.rotation(shoulder).dot(expected).abs() > 1.0 - 1e-5);
+		let along = binding.definition.rotation_in_character(&out, shoulder) * Vec3::Y;
+		assert!(along.z.abs() > 0.2, "previous flap stroke was parent Y, got {along:?}");
+		assert!(along.y.abs() < 0.05, "stroke is not a length roll, got {along:?}");
 	}
 
 	#[test]

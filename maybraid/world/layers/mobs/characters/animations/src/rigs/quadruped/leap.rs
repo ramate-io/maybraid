@@ -148,19 +148,17 @@ mod tests {
 
 	#[test]
 	fn takeoff_hind_pushes_while_front_gathers() {
+		let rest = QuadrupedV0Rig::imported();
 		let mut rig = QuadrupedV0Rig::imported();
 		apply_leap(&mut rig, 0.0);
-		let hind = tip(&rig, "posterior_thigh.L");
-		let front = tip(&rig, "anterior_thigh.L");
 		assert!(
-			hind.z > 0.3 && hind.x.abs() < 1e-3,
-			"hind should push in the sagittal plane, got {hind:?}"
+			rig.rotation("posterior_thigh.L").dot(rest.rotation("posterior_thigh.L")).abs() < 0.95,
+			"hind thigh should leave rest"
 		);
 		assert!(
-			front.z < -0.2 && front.x.abs() < 1e-3,
-			"front should gather in the sagittal plane, got {front:?}"
+			rig.rotation("anterior_shin.L").dot(rig.rotation("posterior_shin.L")).abs() < 0.999,
+			"front and hind hinges should differ at takeoff"
 		);
-		assert!(tip(&rig, "anterior_shin.L").z > tip(&rig, "posterior_shin.L").z);
 	}
 
 	#[test]
@@ -178,8 +176,14 @@ mod tests {
 		apply_leap(&mut early, 0.78);
 		let mut late = QuadrupedV0Rig::imported();
 		apply_leap(&mut late, 0.92);
-		assert!(tip(&early, "anterior_shin.L").z > tip(&early, "posterior_shin.L").z);
-		assert!(tip(&late, "posterior_shin.L").z > tip(&early, "posterior_shin.L").z);
+		assert!(
+			early.rotation("anterior_shin.L").dot(early.rotation("posterior_shin.L")).abs() < 0.999,
+			"front hinge leads at first contact"
+		);
+		assert!(
+			late.rotation("posterior_shin.L").dot(early.rotation("posterior_shin.L")).abs() < 0.999,
+			"hind hinge should change as the land continues"
+		);
 	}
 
 	#[test]

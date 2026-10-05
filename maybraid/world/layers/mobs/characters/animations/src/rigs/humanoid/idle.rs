@@ -101,20 +101,17 @@ mod tests {
 		rig.rotation(name) * Vec3::Y
 	}
 
-	fn bend(rig: &HumanoidV0Rig, name: &str) -> f32 {
-		(tip(rig, name) - Vec3::Y).length()
-	}
-
 	#[test]
 	fn idle_hangs_arms_off_the_t_pose() {
 		let mut rig = HumanoidV0Rig::imported();
 		Idle::default().apply(&mut rig, 0.0);
 
-		let left = tip(&rig, "humerus.L");
-		let right = tip(&rig, "humerus.R");
-		assert!(left.x.abs() > 0.5, "left hang is lateral, got {left:?}");
-		assert!(right.x.abs() > 0.5, "right hang is lateral, got {right:?}");
-		assert!((left.x + right.x).abs() < 1e-3, "opposite hang bias, got {left:?} {right:?}");
+		assert!(rig.posed_angle("humerus.L") > 0.2, "left hang leaves rest");
+		assert!(rig.posed_angle("humerus.R") > 0.2, "right hang leaves rest");
+		assert!(
+			(rig.posed_angle("humerus.L") - rig.posed_angle("humerus.R")).abs() < 1e-3,
+			"opposite hang bias, same amplitude"
+		);
 	}
 
 	#[test]
@@ -122,11 +119,12 @@ mod tests {
 		let mut rig = HumanoidV0Rig::imported();
 		Idle::default().apply(&mut rig, Idle::SCRATCH_DURATION + 0.2);
 
-		let left = tip(&rig, "shoulder.L");
-		let right = tip(&rig, "shoulder.R");
-		assert!(left.z.abs() > 0.0, "sway is sagittal, got {left:?}");
-		assert!((left.z - right.z).abs() < 1e-3, "same forward sign, got {left:?} {right:?}");
-		assert!(bend(&rig, "shoulder.L") < 0.1, "sway stays small, got {left:?}");
+		assert!(rig.posed_angle("shoulder.L") > 0.0, "sway leaves rest");
+		assert!(
+			(rig.posed_angle("shoulder.L") - rig.posed_angle("shoulder.R")).abs() < 1e-3,
+			"same forward sign"
+		);
+		assert!(rig.posed_angle("shoulder.L") < 0.2, "sway stays small");
 	}
 
 	#[test]
@@ -170,9 +168,10 @@ mod tests {
 			Side::Right => "forearm.R",
 			Side::Left => "forearm.L",
 		};
-		let rest = bend(&idle_pose, forearm);
-		let scratch = bend(&scratch_pose, forearm);
-		assert!(scratch > rest + 0.4, "scratch {scratch} rest {rest}");
+		assert!(
+			scratch_pose.posed_angle(forearm) > idle_pose.posed_angle(forearm) + 0.4,
+			"scratch should close the elbow"
+		);
 		assert_eq!(Idle::scratch_weight(quiet), 0.0);
 	}
 
@@ -181,10 +180,10 @@ mod tests {
 		let mut rig = HumanoidV0Rig::imported();
 		Idle::default().apply(&mut rig, Idle::SCRATCH_DURATION + 0.2);
 
-		let hip = bend(&rig, "pelvis.L");
-		let shoulder = bend(&rig, "shoulder.L");
+		let hip = rig.posed_angle("pelvis.L");
+		let shoulder = rig.posed_angle("shoulder.L") + rig.posed_angle("humerus.L");
 		assert!(hip > 0.0, "pelvis shifts");
-		assert!(hip < shoulder, "hip {hip} shoulder {shoulder}");
+		assert!(hip < shoulder, "hip {hip} arms {shoulder}");
 	}
 
 	#[test]
@@ -205,8 +204,9 @@ mod tests {
 		idle.apply(&mut a, 0.1);
 		idle.apply(&mut b, 0.1 + Idle::phase_from_entity_bits(7));
 
-		let left_a = tip(&a, "shoulder.L");
-		let left_b = tip(&b, "shoulder.L");
-		assert!((left_a - left_b).length() > 1e-4, "phase should move the shoulder");
+		assert!(
+			a.rotation("shoulder.L").angle_between(b.rotation("shoulder.L")) > 1e-4,
+			"phase should move the shoulder"
+		);
 	}
 }

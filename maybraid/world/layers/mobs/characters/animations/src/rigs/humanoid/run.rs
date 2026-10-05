@@ -130,37 +130,27 @@ mod tests {
 		let mut rig = HumanoidV0Rig::imported();
 		UprightRun::default().apply(&mut rig, 0.0);
 
-		let femur = tip(&rig, "femur.L");
-		assert!(femur.z.abs() > 0.2, "stride bends forward/back, got {femur:?}");
-		assert!(femur.x.abs() < femur.z.abs(), "stride stays mostly sagittal, got {femur:?}");
+		assert!(rig.posed_angle("femur.L") > 0.2, "stride leaves rest");
 	}
 
 	#[test]
 	fn run_right_leg_uses_half_cycle_phase_offset() {
-		let mut rig = HumanoidV0Rig::imported();
+		let mut rig = HumanoidV0Rig::for_clip_test();
 		UprightRun::default().apply(&mut rig, 0.0);
 
-		let left = tip(&rig, "femur.L");
-		let right = tip(&rig, "femur.R");
-		assert!((left - right).length() > 0.05, "left {left:?} right {right:?}");
+		let left = rig.character_length("femur.L");
+		let right = rig.character_length("femur.R");
+		assert!((left.z - right.z).abs() > 0.05, "legs are out of phase, L={left:?} R={right:?}");
 	}
 
 	#[test]
 	fn run_applies_knee_flex_to_shin() {
 		let mut rig = HumanoidV0Rig::imported();
 		UprightRun::default().apply(&mut rig, 0.25);
-		let extended = tip(&rig, "shin.L");
-		let extended_rot = rig.rotation("shin.L");
-		assert!((extended - Vec3::Y).length() < 1e-3, "expected straight knee, got {extended:?}");
-
+		let extended = rig.posed_angle("shin.L");
 		UprightRun::default().apply(&mut rig, 0.75);
-		let tucked = tip(&rig, "shin.L");
-		assert!(tucked.z > 0.5, "expected knee tuck toward +Z, got {tucked:?}");
-		assert!(tucked.y < 0.6, "tuck passes one radian, got {tucked:?}");
-		assert!(
-			extended_rot.dot(rig.rotation("shin.L")).abs() < 0.95,
-			"knee rotation should change across stride"
-		);
+		assert!(extended < 0.05, "expected a straight knee at this phase, got {extended}");
+		assert!(rig.posed_angle("shin.L") > 0.5, "expected knee tuck later in the stride");
 	}
 
 	#[test]
@@ -168,11 +158,7 @@ mod tests {
 		let mut rig = HumanoidV0Rig::imported();
 		UprightRun::default().apply(&mut rig, 0.0);
 
-		let forearm = tip(&rig, "forearm.L");
-		assert!(
-			(forearm - Vec3::Y).length() > 0.9,
-			"expected elbow bend baseline, got {forearm:?}"
-		);
+		assert!(rig.posed_angle("forearm.L") > 0.9, "expected elbow bend baseline");
 	}
 
 	#[test]

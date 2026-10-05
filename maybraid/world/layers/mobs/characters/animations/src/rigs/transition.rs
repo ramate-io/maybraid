@@ -49,10 +49,6 @@ mod tests {
 	use character_rigs::authoring::ArmatureOffset;
 	use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
 
-	fn tip(rig: &HumanoidV0Rig, name: &str) -> Vec3 {
-		rig.rotation(name) * Vec3::Y
-	}
-
 	#[test]
 	fn transition_at_zero_matches_from_pose() -> anyhow::Result<()> {
 		let mut rig = HumanoidV0Rig::imported();
@@ -93,11 +89,7 @@ mod tests {
 			.with_curve(TransitionCurve::SmoothStep)
 			.apply(&mut rig, land_progress, 0.5);
 
-		let shoulder = tip(&rig, "shoulder.L");
-		assert!(
-			(shoulder - Vec3::Y).length() > 0.02,
-			"blended shoulder leaves rest, got {shoulder:?}"
-		);
+		assert!(rig.posed_angle("shoulder.L") > 0.02, "blended shoulder leaves rest");
 		Ok(())
 	}
 
@@ -108,11 +100,10 @@ mod tests {
 
 		Transition::from_pose(Spring::default(), from_pose).apply(&mut rig, 0.5, 0.5);
 
-		let femur = tip(&rig, "femur.L");
-		assert!((femur - Vec3::Y).length() > 0.0);
+		assert!(rig.posed_angle("femur.L") > 0.0);
 		let mut full = HumanoidV0Rig::imported();
 		Squat::for_loop(1.0, 1.0).apply(&mut full, 0.5);
-		assert!((femur - Vec3::Y).length() < (tip(&full, "femur.L") - Vec3::Y).length());
+		assert!(rig.posed_angle("femur.L") < full.posed_angle("femur.L"));
 		Ok(())
 	}
 

@@ -29,13 +29,19 @@ pub use forelimbed::{
 };
 pub use frame::{JointAngles, JointFrame};
 pub use humanoid::{
-	humanoid_v0_definition, identity_binding as humanoid_identity_binding, resolve_humanoid,
-	ArmAim, ArmPose, HumanoidPose, LegPose, NeckBone, NeckPose, SpinePose, HUMANOID_V0_BONES,
-	HUMANOID_V0_COUNT,
+	bone_axis as humanoid_bone_axis, humanoid_v0_definition,
+	identity_binding as humanoid_identity_binding, resolve_humanoid, ArmAim, ArmPose, HumanoidPose,
+	LegPose, NeckBone, NeckPose, SpinePose, HUMANOID_FEMUR_AXIS, HUMANOID_GLB_FEMUR,
+	HUMANOID_GLB_PELVIS_L, HUMANOID_GLB_PELVIS_R, HUMANOID_GLB_SHOULDER_L, HUMANOID_GLB_SHOULDER_R,
+	HUMANOID_RIGHT_FEMUR_AXIS, HUMANOID_RIGHT_FLEX_AXIS, HUMANOID_RIGHT_SHIN_AXIS,
+	HUMANOID_SHIN_AXIS, HUMANOID_V0_BONES, HUMANOID_V0_COUNT,
 };
 pub use quadruped::{
-	identity_binding as quadruped_identity_binding, quadruped_v0_definition, resolve_quadruped,
-	QuadrupedLimbPose, QuadrupedPose, QUADRUPED_V0_BONES, QUADRUPED_V0_COUNT,
+	bone_axis as quadruped_bone_axis, identity_binding as quadruped_identity_binding,
+	quadruped_v0_definition, resolve_quadruped, QuadrupedLimbPose, QuadrupedPose,
+	QUADRUPED_GLB_ANTERIOR_MID_BACK, QUADRUPED_GLB_SHOULDER_L, QUADRUPED_GLB_THIGH,
+	QUADRUPED_RIGHT_SHIN_AXIS, QUADRUPED_RIGHT_THIGH_AXIS, QUADRUPED_SHIN_AXIS,
+	QUADRUPED_THIGH_AXIS, QUADRUPED_V0_BONES, QUADRUPED_V0_COUNT,
 };
 pub use space::{
 	character_direction_from_world, CharacterPoint, WorldPoint, CHARACTER_FORWARD, CHARACTER_RIGHT,

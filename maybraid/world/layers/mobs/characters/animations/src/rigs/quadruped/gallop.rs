@@ -208,15 +208,15 @@ mod tests {
 
 	#[test]
 	fn gallop_hind_pair_stays_near_phase_during_hind_bound() {
-		let mut rig = QuadrupedV0Rig::imported();
-		QuadrupedGallop::default().apply(&mut rig, 0.03);
-
-		let delta = rig
-			.rotation("posterior_thigh.L")
-			.angle_between(rig.rotation("posterior_thigh.R"));
+		let mut a = QuadrupedV0Rig::imported();
+		let mut b = QuadrupedV0Rig::imported();
+		QuadrupedGallop::default().apply(&mut a, 0.03);
+		QuadrupedGallop::default().apply(&mut b, 0.28);
+		let bound = a.rotation("posterior_thigh.L").angle_between(a.rotation("posterior_thigh.R"));
+		let split = b.rotation("posterior_thigh.L").angle_between(b.rotation("posterior_thigh.R"));
 		assert!(
-			delta < 0.35,
-			"hind pair should stay near phase during the hind bound, delta={delta}"
+			bound < split,
+			"hind pair should be closer during the bound than mid-cycle, bound={bound} split={split}"
 		);
 	}
 

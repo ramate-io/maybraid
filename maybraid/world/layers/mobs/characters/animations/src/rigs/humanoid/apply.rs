@@ -1,8 +1,9 @@
 //! Fill a [`HumanoidPose`] from authored angles.
 //!
-//! These helpers do not choose imported skeleton axes. Flexion, lateral bend, and
-//! axial turn are the anatomical channels on [`HumanoidPose`]. Side mirroring lives
-//! in the joint frames, so a positive knee flexion is the same number on both legs.
+//! Field names are semantic. The resolver still applies them through the imported
+//! V0 `RiggedAxis` swing / flex / twist compose so previous clip values keep
+//! their hinge axes and signs. Right-shin and right-forearm flex already use
+//! −Z, so both sides share one positive flexion number.
 
 use character_rigs::authoring::HumanoidPose;
 use character_rigs::Side;
@@ -79,8 +80,8 @@ pub fn apply_arm(
 	);
 }
 
-/// Shoulder and humerus swing become forward flexion. Flex becomes lateral elevation.
-/// Elbow flexion is the same positive direction on both arms.
+/// Shoulder and humerus `swing` / `flex` / `twist` keep those imported axes.
+/// Elbow `flex` is the same number on both arms; the right forearm axis is −Z.
 pub fn apply_arm_twisted(
 	pose: &mut HumanoidPose,
 	side: Side,

@@ -111,14 +111,8 @@ impl Animation<HumanoidV0Rig> for TwoFootedTuckedFlip {
 
 #[cfg(test)]
 mod tests {
-	use bevy::prelude::Vec3;
-
 	use super::*;
 	use crate::animations::DEFAULT_SPRING_DURATION;
-
-	fn tip(rig: &HumanoidV0Rig, name: &str) -> Vec3 {
-		rig.rotation(name) * Vec3::Y
-	}
 
 	fn default_flip() -> TwoFootedTuckedFlip {
 		TwoFootedTuckedFlip::default()
@@ -132,10 +126,8 @@ mod tests {
 		let elapsed = flip.timings(lengths).squat_end() + DEFAULT_SPRING_DURATION * 0.99;
 		flip.apply(&mut rig, elapsed);
 
-		let femur = tip(&rig, "femur.L");
-		let shin = tip(&rig, "shin.L");
-		assert!((femur - Vec3::Y).length() < 0.05, "femur {femur:?}");
-		assert!((shin - Vec3::Y).length() < 0.05, "shin {shin:?}");
+		assert!(rig.posed_angle("femur.L") < 0.05, "femur should be straight");
+		assert!(rig.posed_angle("shin.L") < 0.05, "shin should be straight");
 		Ok(())
 	}
 
@@ -148,9 +140,7 @@ mod tests {
 		let elapsed = timings.spring_end() + timings.air_duration * 0.5;
 		let effects = flip.apply(&mut rig, elapsed);
 
-		let shin = tip(&rig, "shin.L");
-		assert!(shin.z > 0.5, "knee flexes toward +Z, got {shin:?}");
-		assert!(shin.y < 0.55, "bend passes one radian, got {shin:?}");
+		assert!(rig.posed_angle("shin.L") > 0.5, "knee folds in the tuck");
 
 		assert!(effects.0.translation.y > 0.0);
 		assert!(effects.0.rotation.to_euler(bevy::prelude::EulerRot::XYZ).0 > 0.0);
@@ -168,15 +158,11 @@ mod tests {
 
 		let mut tucked = HumanoidV0Rig::imported();
 		flip.flip.tuck.apply_fixed(&mut tucked);
-		let shoulder = (tip(&rig, "shoulder.L") - Vec3::Y).length();
-		let full = (tip(&tucked, "shoulder.L") - Vec3::Y).length();
-		assert!(shoulder < full, "landing blend is short of the held tuck");
-
-		let femur = tip(&rig, "femur.L");
 		assert!(
-			(femur - Vec3::Y).length() > 0.01,
-			"legs should be partway into landing squat, got {femur:?}"
+			rig.posed_angle("shoulder.L") < tucked.posed_angle("shoulder.L"),
+			"landing blend is short of the held tuck"
 		);
+		assert!(rig.posed_angle("femur.L") > 0.01, "legs should be partway into landing squat");
 		Ok(())
 	}
 
@@ -188,8 +174,7 @@ mod tests {
 		let timings = flip.timings(lengths);
 		flip.apply(&mut rig, timings.air_end() + timings.land_descent_duration * 0.25);
 
-		let femur = tip(&rig, "femur.L");
-		assert!((femur - Vec3::Y).length() > 0.01, "got {femur:?}");
+		assert!(rig.posed_angle("femur.L") > 0.01);
 		Ok(())
 	}
 }

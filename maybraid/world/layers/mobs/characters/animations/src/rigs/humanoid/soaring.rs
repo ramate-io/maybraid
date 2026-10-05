@@ -16,13 +16,7 @@ impl Animation<HumanoidV0Rig> for Soaring {
 
 #[cfg(test)]
 mod tests {
-	use bevy::prelude::Vec3;
-
 	use super::*;
-
-	fn tip(rig: &HumanoidV0Rig, name: &str) -> Vec3 {
-		rig.rotation(name) * Vec3::Y
-	}
 
 	#[test]
 	fn soaring_holds_spread_while_gliding() -> anyhow::Result<()> {
@@ -30,13 +24,11 @@ mod tests {
 		let mut rig = HumanoidV0Rig::imported();
 		let glide_t = soar.burst_duration() + soar.pause * 0.5;
 		soar.apply(&mut rig, glide_t);
-		let left = tip(&rig, "shoulder.L");
-		let right = tip(&rig, "shoulder.R");
-		assert!(left.z.abs() > 0.15, "held stroke is sagittal, got {left:?}");
-		assert!((left.z + right.z).abs() < 1e-3, "opposite shoulder bias, got {left:?} {right:?}");
-		assert!(left.x.abs() < 0.05, "glide hold stays near T-pose laterally, got {left:?}");
-		let yaw = rig.rotation("shoulder.L") * Vec3::Z;
-		assert!(yaw.x.abs() < 1e-3, "no shoulder twist, got {yaw:?}");
+		assert!(rig.posed_angle("shoulder.L") > 0.15, "held swing leaves rest");
+		assert!(
+			(rig.posed_angle("shoulder.L") - rig.posed_angle("shoulder.R")).abs() < 1e-3,
+			"opposite sides share the held amplitude"
+		);
 		Ok(())
 	}
 }

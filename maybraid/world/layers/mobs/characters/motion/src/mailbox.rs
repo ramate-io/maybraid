@@ -827,11 +827,9 @@ mod tests {
 		let mut rig = HumanoidV0Rig::imported();
 		let effects = sample_humanoid(AnimClip::Still, &mut rig, 0.25, true, true);
 		assert!(effects.is_identity());
-		let shoulder = rig.rotation("shoulder.L") * Vec3::Y;
-		assert!((shoulder - Vec3::Y).length() > 0.0);
-		assert!((shoulder - Vec3::Y).length() < 0.15);
-		let humerus = rig.rotation("humerus.L") * Vec3::Y;
-		assert!((humerus - Vec3::Y).length() > 0.2, "Still should hang the arms, got {humerus:?}");
+		assert!(rig.posed_angle("shoulder.L") > 0.0);
+		assert!(rig.posed_angle("shoulder.L") < 0.15);
+		assert!(rig.posed_angle("humerus.L") > 0.2, "Still should hang the arms");
 	}
 
 	#[test]
@@ -843,13 +841,11 @@ mod tests {
 		if !effects.is_identity() {
 			return Err(anyhow!("held squat must not move the armature"));
 		}
-		let femur = rig.rotation("femur.L") * Vec3::Y;
-		if femur.z > -0.1 {
-			return Err(anyhow!("held squat should flex femurs, got {femur:?}"));
+		if rig.posed_angle("femur.L") < 0.3 {
+			return Err(anyhow!("held squat should flex femurs"));
 		}
-		let pelvis = rig.rotation("pelvis.L") * Vec3::Y;
-		if pelvis.z < 0.1 {
-			return Err(anyhow!("held squat should crease the pelvis, got {pelvis:?}"));
+		if rig.posed_angle("pelvis.L") < 0.1 {
+			return Err(anyhow!("held squat should crease the pelvis"));
 		}
 		Ok(())
 	}

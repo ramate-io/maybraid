@@ -126,12 +126,14 @@ fn blend_poses<A, B>(
 	A: Animation<HumanoidV0Rig>,
 	B: Animation<HumanoidV0Rig>,
 {
+	let depth = rig.scratch.depth;
+	rig.scratch.depth = depth + 1;
 	from.apply_for(rig, from_progress);
-	rig.scratch.a.copy_from(&rig.pose);
+	rig.scratch.capture_from(depth, &rig.pose);
 	to.apply_for(rig, to_progress);
-	rig.scratch.b.copy_from(&rig.pose);
-	let HumanoidV0Rig { pose, scratch, .. } = rig;
-	PoseBuffer::blend_into(&scratch.a, &scratch.b, weight, pose);
+	rig.scratch.capture_to(depth, &rig.pose);
+	rig.scratch.blend_saved(depth, weight, &mut rig.pose);
+	rig.scratch.depth = depth;
 }
 
 pub(crate) fn mix_effects(from: Effects, to: Effects, weight: f32) -> Effects {
@@ -157,22 +159,16 @@ mod tests {
 	use super::*;
 	use crate::animations::{Mix, Smooth, Spring, Squat};
 
-	fn tip(rig: &HumanoidV0Rig, name: &str) -> Vec3 {
-		rig.rotation(name) * Vec3::Y
-	}
-
 	#[test]
 	fn mix_interpolates_femur_swing() -> anyhow::Result<()> {
 		let mut rig = HumanoidV0Rig::imported();
 		let mix = Mix::new(Squat::for_loop(1.0, 1.0), Squat::for_loop(1.0, 1.0), 0.5);
 		mix.apply_at(&mut rig, 0.0, 0.5);
 
-		let femur = tip(&rig, "femur.L");
+		assert!(rig.posed_angle("femur.L") > 0.0);
 		let mut full = HumanoidV0Rig::imported();
 		Squat::for_loop(1.0, 1.0).apply(&mut full, 0.5);
-		let full_tip = tip(&full, "femur.L");
-		assert!((femur - Vec3::Y).length() > 0.0);
-		assert!((femur - Vec3::Y).length() < (full_tip - Vec3::Y).length());
+		assert!(rig.posed_angle("femur.L") < full.posed_angle("femur.L"));
 		Ok(())
 	}
 
@@ -200,15 +196,38 @@ mod tests {
 	}
 
 	#[test]
+	fn nested_mix_keeps_the_outer_first_child() -> anyhow::Result<()> {
+		let squat = Squat::for_loop(1.0, 1.0);
+		let inner = Mix::new(Spring::default(), Squat::for_loop(1.0, 1.0), 0.5);
+		let nested = Mix::new(squat.clone(), inner.clone(), 0.5);
+
+		let mut expected_from = HumanoidV0Rig::imported();
+		squat.apply(&mut expected_from, 0.25);
+		let mut expected_to = HumanoidV0Rig::imported();
+		inner.apply_at(&mut expected_to, 0.25, 0.25);
+		let mut expected = HumanoidV0Rig::imported();
+		PoseBuffer::blend_into(&expected_from.pose, &expected_to.pose, 0.5, &mut expected.pose);
+
+		let mut nested_rig = HumanoidV0Rig::imported();
+		nested.apply_at(&mut nested_rig, 0.25, 0.25);
+
+		assert!(
+			expected.rotation("femur.L").dot(nested_rig.rotation("femur.L")).abs() > 1.0 - 1e-5,
+			"inner Mix must not overwrite the outer from-pose"
+		);
+		assert!(
+			expected.rotation("root").dot(nested_rig.rotation("root")).abs() > 1.0 - 1e-5,
+			"spine blend must keep both children"
+		);
+		Ok(())
+	}
+
+	#[test]
 	fn smooth_spring_from_stand_blends_arms() -> anyhow::Result<()> {
 		let mut rig = HumanoidV0Rig::imported();
 		Smooth::new(Squat::for_loop(1.0, 1.0), Spring::default(), 0.5).apply_at(&mut rig, 0.0, 1.0);
 
-		let shoulder = tip(&rig, "shoulder.L");
-		assert!(
-			(shoulder - Vec3::Y).length() > 0.02,
-			"blended shoulder leaves rest, got {shoulder:?}"
-		);
+		assert!(rig.posed_angle("shoulder.L") > 0.02, "blended shoulder leaves rest");
 		Ok(())
 	}
 }

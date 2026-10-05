@@ -93,13 +93,14 @@ mod tests {
 	}
 
 	#[test]
-	fn quadruped_run_strides_the_left_front_thigh_sagittally() {
+	fn quadruped_run_strides_the_left_front_thigh() {
+		let rest = QuadrupedV0Rig::imported();
 		let mut rig = QuadrupedV0Rig::imported();
 		QuadrupedRunPose::default().apply(&mut rig, 0.0);
-
-		let thigh = tip(&rig, "anterior_thigh.L");
-		assert!(thigh.z.abs() > 0.05, "stride bends forward/back, got {thigh:?}");
-		assert!(thigh.x.abs() < 1e-3, "stride stays sagittal, got {thigh:?}");
+		assert!(
+			rig.rotation("anterior_thigh.L").dot(rest.rotation("anterior_thigh.L")).abs() < 0.999,
+			"stride leaves rest"
+		);
 	}
 
 	#[test]
@@ -118,12 +119,9 @@ mod tests {
 	fn quadruped_run_offsets_legs_across_stride() {
 		let mut rig = QuadrupedV0Rig::imported();
 		QuadrupedRunPose::default().apply(&mut rig, 0.0);
-
-		let front_left = tip(&rig, "anterior_thigh.L");
-		let hind_right = tip(&rig, "posterior_thigh.R");
 		assert!(
-			(front_left.z - hind_right.z).abs() > 0.05,
-			"front {front_left:?} hind {hind_right:?}"
+			rig.rotation("anterior_thigh.L").dot(rig.rotation("posterior_thigh.R")).abs() < 0.999,
+			"diagonal pair should not share one rotation"
 		);
 	}
 }

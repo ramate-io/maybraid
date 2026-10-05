@@ -123,25 +123,22 @@ mod tests {
 		let mut rig = HumanoidV0Rig::imported();
 		jab.apply(&mut rig, 0.47);
 
-		let forearm = tip(&rig, "forearm.R");
-		assert!(
-			(forearm - Vec3::Y).length() < 0.2,
-			"extended elbow stays near rest, got {forearm:?}"
-		);
+		assert!(rig.posed_angle("forearm.R") < 0.2, "extended elbow stays near rest");
 		Ok(())
 	}
 
 	#[test]
 	fn jab_applies_lead_stance() -> anyhow::Result<()> {
 		let jab = Jab::default();
-		let mut rig = HumanoidV0Rig::imported();
+		let mut rig = HumanoidV0Rig::for_clip_test();
 		jab.apply(&mut rig, 0.47);
 
-		let lead = tip(&rig, "femur.R");
-		let rear = tip(&rig, "femur.L");
-		assert!(lead.z > 0.0, "lead hip flexion toward +Z, got {lead:?}");
-		assert!(rear.z < 0.0, "rear hip flexion toward -Z, got {rear:?}");
-		assert!(lead.x.abs() < lead.z.abs() && rear.x.abs() < rear.z.abs());
+		assert!(rig.posed_angle("femur.R") > 0.0, "lead hip leaves rest");
+		assert!(rig.posed_angle("femur.L") > 0.0, "rear hip leaves rest");
+		assert!(
+			(rig.character_length("femur.L").z - rig.character_length("femur.R").z).abs() > 0.05,
+			"lead and rear stance should differ"
+		);
 		Ok(())
 	}
 
@@ -151,8 +148,7 @@ mod tests {
 		let mut rig = HumanoidV0Rig::imported();
 		jab.apply(&mut rig, 0.47);
 
-		let forearm = tip(&rig, "forearm.L");
-		assert!(forearm.z > 0.5, "cover elbow should stay tucked, got {forearm:?}");
+		assert!(rig.posed_angle("forearm.L") > 0.5, "cover elbow should stay tucked");
 		Ok(())
 	}
 

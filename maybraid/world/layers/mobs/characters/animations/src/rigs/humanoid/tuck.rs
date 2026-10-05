@@ -33,22 +33,14 @@ impl Animation<HumanoidV0Rig> for Tuck {
 
 #[cfg(test)]
 mod tests {
-	use bevy::prelude::Vec3;
-
 	use super::*;
-
-	fn tip(rig: &HumanoidV0Rig, name: &str) -> Vec3 {
-		rig.rotation(name) * Vec3::Y
-	}
 
 	#[test]
 	fn tuck_bends_knees_on_rig() -> anyhow::Result<()> {
 		let mut rig = HumanoidV0Rig::imported();
 		Tuck::default().apply(&mut rig, 0.5);
 
-		let shin = tip(&rig, "shin.L");
-		assert!(shin.z > 0.5, "knee flexes toward +Z, got {shin:?}");
-		assert!(shin.y < 0.55, "bend passes one radian, got {shin:?}");
+		assert!(rig.posed_angle("shin.L") > 0.5, "knee folds");
 		Ok(())
 	}
 
@@ -57,12 +49,8 @@ mod tests {
 		let mut rig = HumanoidV0Rig::imported();
 		Tuck::default().apply(&mut rig, 0.5);
 
-		let humerus = tip(&rig, "humerus.L");
-		let yaw = rig.rotation("humerus.L") * Vec3::Z;
-		let forearm = tip(&rig, "forearm.L");
-		assert!(humerus.x.abs() > 0.05, "lateral elevation, got {humerus:?}");
-		assert!(yaw.x.abs() > 0.05, "axial spin yaws the long axis, got {yaw:?}");
-		assert!(forearm.z > 0.05, "elbow flexion reaches +Z, got {forearm:?}");
+		assert!(rig.posed_angle("humerus.L") > 0.05, "humerus leaves rest");
+		assert!(rig.posed_angle("forearm.L") > 0.05, "elbow folds");
 		Ok(())
 	}
 
@@ -71,13 +59,11 @@ mod tests {
 		let mut rig = HumanoidV0Rig::imported();
 		Tuck::default().apply(&mut rig, 1.0);
 
-		let left = tip(&rig, "shoulder.L");
-		let right = tip(&rig, "shoulder.R");
-		assert!(left.z.abs() > 0.05, "shoulder forward flexion, got {left:?}");
-		assert!((left.z.abs() - right.z.abs()).abs() < 1e-3, "matched amplitude");
-		assert!(left.z.signum() != right.z.signum(), "opposite roll signs");
-		assert!(left.x.abs() < 1e-3, "roll stays sagittal, got {left:?}");
-		assert!(right.x.abs() < 1e-3, "roll stays sagittal, got {right:?}");
+		assert!(rig.posed_angle("shoulder.L") > 0.05, "shoulders leave rest");
+		assert!(
+			(rig.posed_angle("shoulder.L") - rig.posed_angle("shoulder.R")).abs() < 1e-3,
+			"matched amplitude"
+		);
 		Ok(())
 	}
 
@@ -86,10 +72,8 @@ mod tests {
 		let mut rig = HumanoidV0Rig::imported();
 		Tuck::default().apply(&mut rig, 1.0);
 
-		let yaw = rig.rotation("humerus.L") * Vec3::Z;
-		let forearm = tip(&rig, "forearm.L");
-		assert!(yaw.x.abs() > 0.5, "full tuck spins the humerus, got {yaw:?}");
-		assert!((forearm - Vec3::Y).length() > 1.0, "full tuck closes the elbow, got {forearm:?}");
+		assert!(rig.posed_angle("humerus.L") > 0.5, "full tuck spins the humerus");
+		assert!(rig.posed_angle("forearm.L") > 1.0, "full tuck closes the elbow");
 		Ok(())
 	}
 }

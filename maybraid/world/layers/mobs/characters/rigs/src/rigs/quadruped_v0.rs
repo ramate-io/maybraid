@@ -3,24 +3,12 @@ use bevy::prelude::*;
 use crate::{
 	authoring::{
 		quadruped_v0_definition, resolve_quadruped, PoseBuffer, PoseScratch, QuadrupedPose,
-		RigBinding, QUADRUPED_V0_BONES,
+		RigBinding, QUADRUPED_RIGHT_SHIN_AXIS, QUADRUPED_RIGHT_THIGH_AXIS, QUADRUPED_SHIN_AXIS,
+		QUADRUPED_THIGH_AXIS, QUADRUPED_V0_BONES,
 	},
 	quadruped::LegSegmentLengths,
 	BoneDefinition, BoneTable, Name, RiggedAxis,
 };
-
-/// Left thigh: sagittal stride on Y, medial/lateral on X, knee hinge lives on shin.
-const QUADRUPED_V0_THIGH_AXIS: RiggedAxis =
-	RiggedAxis { swing_axis: Vec3::Y, flex_axis: Vec3::X, twist_axis: Vec3::Z };
-
-const QUADRUPED_V0_SHIN_AXIS: RiggedAxis =
-	RiggedAxis { swing_axis: Vec3::Y, flex_axis: Vec3::Z, twist_axis: Vec3::X };
-
-const QUADRUPED_V0_RIGHT_THIGH_AXIS: RiggedAxis =
-	RiggedAxis { swing_axis: Vec3::NEG_Y, flex_axis: Vec3::NEG_X, twist_axis: Vec3::Z };
-
-const QUADRUPED_V0_RIGHT_SHIN_AXIS: RiggedAxis =
-	RiggedAxis { swing_axis: Vec3::Y, flex_axis: Vec3::NEG_Z, twist_axis: Vec3::X };
 
 /// Store the bones of the imported quadruped rig in a semantically reasonable hierarchy.
 #[derive(Component, Debug, Clone)]
@@ -60,6 +48,13 @@ impl QuadrupedV0Rig {
 		self.segment_lengths = self.binding.metrics.quadruped_leg;
 	}
 
+	pub fn posed_angle(&self, name: &str) -> f32 {
+		let Some(id) = self.binding.definition.id(name) else {
+			return 0.0;
+		};
+		self.pose.rotation(id).angle_between(self.binding.effective_rest.rotation(id))
+	}
+
 	pub fn rotation(&self, name: &str) -> Quat {
 		self.binding
 			.definition
@@ -93,17 +88,17 @@ pub const QUADRUPED_V0_BONE_DEFINITIONS: [(&str, RiggedAxis); 24] = [
 	("lumbar", RiggedAxis::DEFAULT),
 	("neck", RiggedAxis::DEFAULT),
 	("shoulder.L", RiggedAxis::DEFAULT),
-	("anterior_thigh.L", QUADRUPED_V0_THIGH_AXIS),
-	("anterior_shin.L", QUADRUPED_V0_SHIN_AXIS),
+	("anterior_thigh.L", QUADRUPED_THIGH_AXIS),
+	("anterior_shin.L", QUADRUPED_SHIN_AXIS),
 	("shoulder.R", RiggedAxis::DEFAULT),
-	("anterior_thigh.R", QUADRUPED_V0_RIGHT_THIGH_AXIS),
-	("anterior_shin.R", QUADRUPED_V0_RIGHT_SHIN_AXIS),
+	("anterior_thigh.R", QUADRUPED_RIGHT_THIGH_AXIS),
+	("anterior_shin.R", QUADRUPED_RIGHT_SHIN_AXIS),
 	("hip.L", RiggedAxis::DEFAULT),
-	("posterior_thigh.L", QUADRUPED_V0_THIGH_AXIS),
-	("posterior_shin.L", QUADRUPED_V0_SHIN_AXIS),
+	("posterior_thigh.L", QUADRUPED_THIGH_AXIS),
+	("posterior_shin.L", QUADRUPED_SHIN_AXIS),
 	("hip.R", RiggedAxis::DEFAULT),
-	("posterior_thigh.R", QUADRUPED_V0_RIGHT_THIGH_AXIS),
-	("posterior_shin.R", QUADRUPED_V0_RIGHT_SHIN_AXIS),
+	("posterior_thigh.R", QUADRUPED_RIGHT_THIGH_AXIS),
+	("posterior_shin.R", QUADRUPED_RIGHT_SHIN_AXIS),
 	("tailbone", RiggedAxis::DEFAULT),
 	("head_socket", RiggedAxis::DEFAULT),
 	("chest_thickness", RiggedAxis::DEFAULT),
@@ -142,7 +137,10 @@ mod tests {
 	}
 
 	#[test]
-	fn same_positive_stride_and_hinge_bend_both_sides_sagittally() {
+	fn same_positive_stride_and_hinge_use_mirrored_imported_axes() {
+		use crate::articulation::compose_parent_rotation;
+		use crate::authoring::{QUADRUPED_RIGHT_SHIN_AXIS, QUADRUPED_SHIN_AXIS, QUADRUPED_THIGH_AXIS};
+
 		let mut rig = QuadrupedV0Rig::imported();
 		let mut pose = QuadrupedPose::default();
 		for side in [Side::Left, Side::Right] {
@@ -155,21 +153,26 @@ mod tests {
 		}
 		rig.write_pose(&pose);
 
-		for (left_name, right_name) in [
-			("anterior_thigh.L", "anterior_thigh.R"),
-			("anterior_shin.L", "anterior_shin.R"),
-			("posterior_thigh.L", "posterior_thigh.R"),
-			("posterior_shin.L", "posterior_shin.R"),
-		] {
-			let left = rig.rotation(left_name) * Vec3::Y;
-			let right = rig.rotation(right_name) * Vec3::Y;
-			assert!(left.x.abs() < 1e-3, "{left_name} left the sagittal plane: {left:?}");
-			assert!(right.x.abs() < 1e-3, "{right_name} left the sagittal plane: {right:?}");
-			assert!(
-				(left.z - right.z).abs() < 1e-4,
-				"{left_name} and {right_name} diverged: {left:?} vs {right:?}"
-			);
-			assert!(left.z > 0.2, "{left_name} should flex toward +Z, got {left:?}");
-		}
+		assert!(
+			rig.rotation("anterior_thigh.L")
+				.dot(compose_parent_rotation(Quat::IDENTITY, QUADRUPED_THIGH_AXIS, 0.5, 0.0, 0.0))
+				.abs() > 1.0 - 1e-5
+		);
+		assert!(
+			rig.rotation("anterior_shin.L")
+				.dot(compose_parent_rotation(Quat::IDENTITY, QUADRUPED_SHIN_AXIS, 0.0, 0.7, 0.0))
+				.abs() > 1.0 - 1e-5
+		);
+		assert!(
+			rig.rotation("anterior_shin.R")
+				.dot(compose_parent_rotation(
+					Quat::IDENTITY,
+					QUADRUPED_RIGHT_SHIN_AXIS,
+					0.0,
+					0.7,
+					0.0
+				))
+				.abs() > 1.0 - 1e-5
+		);
 	}
 }

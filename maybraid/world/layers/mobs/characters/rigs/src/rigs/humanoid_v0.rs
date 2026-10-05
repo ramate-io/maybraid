@@ -3,29 +3,12 @@ use bevy::prelude::*;
 use crate::{
 	authoring::{
 		humanoid_v0_definition, resolve_humanoid, HumanoidPose, PoseBuffer, PoseScratch,
-		RigBinding, HUMANOID_V0_BONES,
+		RigBinding, HUMANOID_FEMUR_AXIS, HUMANOID_RIGHT_FEMUR_AXIS, HUMANOID_RIGHT_FLEX_AXIS,
+		HUMANOID_RIGHT_SHIN_AXIS, HUMANOID_SHIN_AXIS, HUMANOID_V0_BONES,
 	},
 	humanoid::LegSegmentLengths,
 	BoneDefinition, BoneTable, Name, RiggedAxis,
 };
-
-/// Left femur: sagittal stride on Y, medial/lateral on X, knee hinge lives on shin.
-const HUMANOID_V0_FEMUR_AXIS: RiggedAxis =
-	RiggedAxis { swing_axis: Vec3::Y, flex_axis: Vec3::X, twist_axis: Vec3::Z };
-
-const HUMANOID_V0_SHIN_AXIS: RiggedAxis =
-	RiggedAxis { swing_axis: Vec3::Y, flex_axis: Vec3::Z, twist_axis: Vec3::X };
-
-/// Mirrored right femur: negate swing and medial/lateral axes together.
-const HUMANOID_V0_RIGHT_FEMUR_AXIS: RiggedAxis =
-	RiggedAxis { swing_axis: Vec3::NEG_Y, flex_axis: Vec3::NEG_X, twist_axis: Vec3::Z };
-
-/// Mirrored right shin: negate flex so knee hinge matches the left leg semantically.
-const HUMANOID_V0_RIGHT_SHIN_AXIS: RiggedAxis =
-	RiggedAxis { swing_axis: Vec3::Y, flex_axis: Vec3::NEG_Z, twist_axis: Vec3::X };
-
-const HUMANOID_V0_RIGHT_FLEX_AXIS: RiggedAxis =
-	RiggedAxis { swing_axis: Vec3::Y, flex_axis: Vec3::NEG_Z, twist_axis: Vec3::X };
 
 /// Store the bones of the first imported humanoid rig in a semantically reasonable hierarchy.
 ///
@@ -43,6 +26,13 @@ pub struct HumanoidV0Rig {
 }
 
 impl HumanoidV0Rig {
+	/// Identity rest plus the inspected `humanoid_rig.glb` limb binds.
+	pub fn for_clip_test() -> Self {
+		let mut rig = Self::imported();
+		rig.seed_v0_bind();
+		rig
+	}
+
 	pub fn imported() -> Self {
 		let mut bones = BoneTable::new();
 		for (name, relative_axis) in HUMANOID_V0_BONE_DEFINITIONS {
@@ -69,6 +59,36 @@ impl HumanoidV0Rig {
 		self.segment_lengths = self.binding.metrics.humanoid_leg;
 	}
 
+	/// Load the inspected `humanoid_rig.glb` bind rotations used by authoring tests.
+	pub fn seed_v0_bind(&mut self) {
+		let mut rest = self.binding.effective_rest.clone();
+		let set = |rest: &mut PoseBuffer, name: &str, rotation: Quat| {
+			if let Some(id) = self.binding.definition.id(name) {
+				if let Some(slot) = rest.local.get_mut(id.index()) {
+					slot.rotation = rotation;
+				}
+			}
+		};
+		set(&mut rest, "pelvis.L", crate::authoring::HUMANOID_GLB_PELVIS_L);
+		set(&mut rest, "pelvis.R", crate::authoring::HUMANOID_GLB_PELVIS_R);
+		set(&mut rest, "femur.L", crate::authoring::HUMANOID_GLB_FEMUR);
+		set(&mut rest, "femur.R", crate::authoring::HUMANOID_GLB_FEMUR);
+		set(&mut rest, "shoulder.L", crate::authoring::HUMANOID_GLB_SHOULDER_L);
+		set(&mut rest, "shoulder.R", crate::authoring::HUMANOID_GLB_SHOULDER_R);
+		self.binding.refresh_rest(rest);
+		self.pose.copy_from(&self.binding.effective_rest);
+		self.segment_lengths = self.binding.metrics.humanoid_leg;
+	}
+
+	/// Bone +Y in character space (parents included).
+	pub fn character_length(&self, name: &str) -> Vec3 {
+		self.binding
+			.definition
+			.id(name)
+			.map(|id| self.binding.definition.rotation_in_character(&self.pose, id) * Vec3::Y)
+			.unwrap_or(Vec3::Y)
+	}
+
 	/// Replace one bone's effective rest and recalibrate frames.
 	pub fn seed_rest(&mut self, name: &str, transform: Transform) {
 		let Some(id) = self.binding.definition.id(name) else {
@@ -80,6 +100,14 @@ impl HumanoidV0Rig {
 		}
 		self.binding.refresh_rest(rest);
 		self.segment_lengths = self.binding.metrics.humanoid_leg;
+	}
+
+	/// Angle between the posed local rotation and effective rest.
+	pub fn posed_angle(&self, name: &str) -> f32 {
+		let Some(id) = self.binding.definition.id(name) else {
+			return 0.0;
+		};
+		self.pose.rotation(id).angle_between(self.binding.effective_rest.rotation(id))
 	}
 
 	pub fn rotation(&self, name: &str) -> Quat {
@@ -125,7 +153,7 @@ pub const HUMANOID_V0_BONE_DEFINITIONS: [(&str, RiggedAxis); 37] = [
 	("upper_neck", RiggedAxis::DEFAULT),
 	("shoulder.R", RiggedAxis::DEFAULT),
 	("humerus.R", RiggedAxis::DEFAULT),
-	("forearm.R", HUMANOID_V0_RIGHT_FLEX_AXIS),
+	("forearm.R", HUMANOID_RIGHT_FLEX_AXIS),
 	("lower_arm_thickness.R", RiggedAxis::DEFAULT),
 	("upper_arm_thickness.R", RiggedAxis::DEFAULT),
 	("chest.L", RiggedAxis::DEFAULT),
@@ -139,13 +167,13 @@ pub const HUMANOID_V0_BONE_DEFINITIONS: [(&str, RiggedAxis); 37] = [
 	("waist.R", RiggedAxis::DEFAULT),
 	("lower_belly", RiggedAxis::DEFAULT),
 	("pelvis.L", RiggedAxis::DEFAULT),
-	("femur.L", HUMANOID_V0_FEMUR_AXIS),
-	("shin.L", HUMANOID_V0_SHIN_AXIS),
+	("femur.L", HUMANOID_FEMUR_AXIS),
+	("shin.L", HUMANOID_SHIN_AXIS),
 	("calf_thickness.L", RiggedAxis::DEFAULT),
 	("thigh_thickness.L", RiggedAxis::DEFAULT),
 	("pelvis.R", RiggedAxis::DEFAULT),
-	("femur.R", HUMANOID_V0_RIGHT_FEMUR_AXIS),
-	("shin.R", HUMANOID_V0_RIGHT_SHIN_AXIS),
+	("femur.R", HUMANOID_RIGHT_FEMUR_AXIS),
+	("shin.R", HUMANOID_RIGHT_SHIN_AXIS),
 	("calf_thickness.R", RiggedAxis::DEFAULT),
 	("thigh_thickness.R", RiggedAxis::DEFAULT),
 	("buttocks", RiggedAxis::DEFAULT),

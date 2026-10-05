@@ -143,14 +143,8 @@ impl TwoFootedJump {
 
 #[cfg(test)]
 mod tests {
-	use bevy::prelude::Vec3;
-
 	use super::*;
 	use crate::animations::DEFAULT_SPRING_DURATION;
-
-	fn tip(rig: &HumanoidV0Rig, name: &str) -> Vec3 {
-		rig.rotation(name) * Vec3::Y
-	}
 
 	fn default_jump() -> TwoFootedJump {
 		TwoFootedJump::default()
@@ -164,10 +158,8 @@ mod tests {
 		let elapsed = jump.timings(lengths).squat_end() + DEFAULT_SPRING_DURATION * 0.99;
 		jump.apply(&mut rig, elapsed);
 
-		let femur = tip(&rig, "femur.L");
-		let shin = tip(&rig, "shin.L");
-		assert!((femur - Vec3::Y).length() < 0.05, "femur {femur:?}");
-		assert!((shin - Vec3::Y).length() < 0.05, "shin {shin:?}");
+		assert!(rig.posed_angle("femur.L") < 0.05, "femur should be straight");
+		assert!(rig.posed_angle("shin.L") < 0.05, "shin should be straight");
 		Ok(())
 	}
 
@@ -179,8 +171,7 @@ mod tests {
 		let timings = jump.timings(lengths);
 		jump.apply(&mut rig, timings.air_end() + timings.land_descent_duration * 0.25);
 
-		let femur = tip(&rig, "femur.L");
-		assert!((femur - Vec3::Y).length() > 0.01, "got {femur:?}");
+		assert!(rig.posed_angle("femur.L") > 0.01, "land should start folding");
 		Ok(())
 	}
 
@@ -188,14 +179,14 @@ mod tests {
 	fn land_peak_below_full_squat() -> anyhow::Result<()> {
 		let mut rig_squat = HumanoidV0Rig::imported();
 		Squat::for_loop(1.0, 1.0).apply(&mut rig_squat, 0.5);
-		let squat_femur = (tip(&rig_squat, "femur.L") - Vec3::Y).length();
+		let squat_femur = rig_squat.posed_angle("femur.L");
 
 		let mut rig_land = HumanoidV0Rig::imported();
 		let jump = default_jump();
 		let lengths = rig_land.segment_lengths;
 		let timings = jump.timings(lengths);
 		jump.apply(&mut rig_land, timings.air_end() + timings.land_descent_duration * 0.99);
-		let land_femur = (tip(&rig_land, "femur.L") - Vec3::Y).length();
+		let land_femur = rig_land.posed_angle("femur.L");
 
 		assert!(land_femur < squat_femur);
 		Ok(())
@@ -228,10 +219,11 @@ mod tests {
 
 		let mut fall_rig = HumanoidV0Rig::imported();
 		Fall::default().apply(&mut fall_rig, 1.0);
-		let shoulder = (tip(&rig, "shoulder.L") - Vec3::Y).length();
-		let fall_shoulder = (tip(&fall_rig, "shoulder.L") - Vec3::Y).length();
-		assert!(shoulder > 0.05, "blended shoulder leaves rest, got {shoulder}");
-		assert!(shoulder < fall_shoulder, "blend is short of the full fall spread");
+		assert!(rig.posed_angle("shoulder.L") > 0.05, "blended shoulder leaves rest");
+		assert!(
+			rig.posed_angle("shoulder.L") < fall_rig.posed_angle("shoulder.L"),
+			"blend is short of the full fall spread"
+		);
 		Ok(())
 	}
 }

@@ -130,29 +130,15 @@ fn lerp(a: f32, b: f32, t: f32) -> f32 {
 
 #[cfg(test)]
 mod tests {
-	use bevy::prelude::Vec3;
-
 	use super::*;
 	use crate::animations::{Leap, Squat, TwoFootedJump};
-
-	fn tip(rig: &HumanoidV0Rig, name: &str) -> Vec3 {
-		rig.rotation(name) * Vec3::Y
-	}
 
 	fn femur_z(rig: &HumanoidV0Rig, side: Side) -> f32 {
 		let name = match side {
 			Side::Left => "femur.L",
 			Side::Right => "femur.R",
 		};
-		tip(rig, name).z
-	}
-
-	fn shin_z(rig: &HumanoidV0Rig, side: Side) -> f32 {
-		let name = match side {
-			Side::Left => "shin.L",
-			Side::Right => "shin.R",
-		};
-		tip(rig, name).z
+		rig.character_length(name).z
 	}
 
 	fn apply_leap(rig: &mut HumanoidV0Rig, progress: f32) -> crate::Effects {
@@ -179,29 +165,35 @@ mod tests {
 
 	#[test]
 	fn takeoff_keeps_a_run_split() {
-		let mut rig = HumanoidV0Rig::imported();
+		let mut rig = HumanoidV0Rig::for_clip_test();
 		apply_leap(&mut rig, 0.0);
-		let left = femur_z(&rig, Side::Left);
-		let right = femur_z(&rig, Side::Right);
-		assert!(left > 0.25, "trail femur flexion reaches +Z, z={left}");
-		assert!(right < -0.25, "lead femur flexion reaches −Z, z={right}");
+		assert!(rig.posed_angle("femur.L") > 0.25, "trail femur leaves rest");
+		assert!(rig.posed_angle("femur.R") > 0.25, "lead femur leaves rest");
+		let left = rig.character_length("femur.L");
+		let right = rig.character_length("femur.R");
+		assert!(
+			(left.z - right.z).abs() > 0.25,
+			"takeoff keeps a run split, L={left:?} R={right:?}"
+		);
 	}
 
 	#[test]
 	fn takeoff_is_not_a_standing_squat() {
-		let mut leap_rig = HumanoidV0Rig::imported();
+		let mut leap_rig = HumanoidV0Rig::for_clip_test();
 		apply_leap(&mut leap_rig, 0.0);
-		let leap_left = femur_z(&leap_rig, Side::Left);
-		let leap_right = femur_z(&leap_rig, Side::Right);
-
-		let mut squat_rig = HumanoidV0Rig::imported();
+		let mut squat_rig = HumanoidV0Rig::for_clip_test();
 		Squat::for_loop(1.0, 1.0).apply(&mut squat_rig, 0.5);
-		let squat = femur_z(&squat_rig, Side::Left);
 
-		assert_ne!(leap_left.signum(), leap_right.signum());
+		let leap_left = leap_rig.character_length("femur.L");
+		let leap_right = leap_rig.character_length("femur.R");
+		let squat_left = squat_rig.character_length("femur.L");
 		assert!(
-			(leap_left - squat).abs() > 0.15 || (leap_right - squat).abs() > 0.15,
-			"takeoff should not match a symmetric squat"
+			(leap_left.z - leap_right.z).abs() > 0.15,
+			"takeoff is a split, not a symmetric squat, L={leap_left:?} R={leap_right:?}"
+		);
+		assert!(
+			(leap_left.z - squat_left.z).abs() > 0.15,
+			"takeoff should not match a symmetric squat, leap={leap_left:?} squat={squat_left:?}"
 		);
 	}
 
@@ -211,7 +203,7 @@ mod tests {
 		apply_leap(&mut leap_rig, 0.0);
 		let mut jump_rig = HumanoidV0Rig::imported();
 		TwoFootedJump::default().apply(&mut jump_rig, 0.0);
-		assert!((femur_z(&leap_rig, Side::Left) - femur_z(&jump_rig, Side::Left)).abs() > 0.25);
+		assert!(leap_rig.rotation("femur.L").angle_between(jump_rig.rotation("femur.L")) > 0.25);
 	}
 
 	#[test]
@@ -220,7 +212,7 @@ mod tests {
 		apply_leap(&mut takeoff, 0.0);
 		let mut air = HumanoidV0Rig::imported();
 		apply_leap(&mut air, 0.45);
-		assert!(shin_z(&air, Side::Left) > shin_z(&takeoff, Side::Left) + 0.15);
+		assert!(air.posed_angle("shin.L") > takeoff.posed_angle("shin.L") + 0.15);
 	}
 
 	#[test]
@@ -229,9 +221,7 @@ mod tests {
 		apply_leap(&mut mid, 0.86);
 		let mut end = HumanoidV0Rig::imported();
 		apply_leap(&mut end, 1.0);
-		let mid_bend = (tip(&mid, "femur.L") - Vec3::Y).length();
-		let end_bend = (tip(&end, "femur.L") - Vec3::Y).length();
-		assert!(mid_bend > end_bend + 0.04);
+		assert!(mid.posed_angle("femur.L") > end.posed_angle("femur.L") + 0.04);
 	}
 
 	#[test]

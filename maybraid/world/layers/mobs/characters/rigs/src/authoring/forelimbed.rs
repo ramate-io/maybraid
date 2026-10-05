@@ -9,7 +9,9 @@ use bevy::prelude::*;
 
 use super::binding::{BoneId, RigBinding, RigDefinition, SkeletonFamily};
 use super::buffer::PoseBuffer;
-use super::frame::{JointAngles, JointFrame};
+use super::frame::JointFrame;
+use crate::articulation::compose_parent_rotation;
+use crate::RiggedAxis;
 
 /// upper_mid, upper, lower_mid, lower, tailbone.
 pub const FORELIMBED_SPINE: usize = 5;
@@ -84,40 +86,63 @@ pub fn resolve_forelimbed(pose: &ForelimbedPose, binding: &RigBinding, out: &mut
 pub(crate) fn apply(
 	pose: &ForelimbedPose,
 	definition: &RigDefinition,
-	frames: &[JointFrame],
+	_frames: &[JointFrame],
 	rest: &PoseBuffer,
 	out: &mut PoseBuffer,
 ) {
 	out.copy_from(rest);
 	for (index, name) in definition.names.iter().enumerate() {
-		let Some(angles) = angles_for(name, pose) else {
+		let Some((swing, flex, twist)) = channels_for(name, pose) else {
 			continue;
 		};
 		let bone = BoneId(index as u16);
-		let frame = frames.get(index).copied().unwrap_or(JointFrame::IDENTITY);
-		out.set_rotation(bone, frame.local_rotation(rest.rotation(bone), angles));
+		out.set_rotation(
+			bone,
+			compose_parent_rotation(rest.rotation(bone), RiggedAxis::DEFAULT, swing, flex, twist),
+		);
 	}
 }
 
-fn angles_for(name: &str, pose: &ForelimbedPose) -> Option<JointAngles> {
+fn channels_for(name: &str, pose: &ForelimbedPose) -> Option<(f32, f32, f32)> {
 	if let Some(slot) = SPINE_NAMES.iter().position(|candidate| *candidate == name) {
-		// Lateral undulation is yaw (+Y axial). Dorsoventral bend is flexion (+X).
-		return Some(JointAngles {
-			flexion: pose.dorsoventral[slot],
-			lateral: pose.axial[slot],
-			axial: pose.lateral[slot],
-		});
+		// Old DEFAULT: swing = yaw, flex = leftover, twist = dorsoventral pitch.
+		return Some((pose.lateral[slot], pose.axial[slot], pose.dorsoventral[slot]));
 	}
-	let fin = |side: usize, sweep_scale: f32, flap_scale: f32| JointAngles {
-		flexion: 0.0,
-		lateral: pose.fin_flap[side] * flap_scale,
-		axial: pose.fin_sweep[side] * sweep_scale,
+	let fin = |side: usize, sweep_scale: f32, flap_scale: f32| {
+		Some((pose.fin_sweep[side] * sweep_scale, pose.fin_flap[side] * flap_scale, 0.0))
 	};
 	match name {
-		"shoulder.L" => Some(fin(0, 1.0, 1.0)),
-		"upper_arm.L" => Some(fin(0, 0.6, 0.6)),
-		"shoulder.R" => Some(fin(1, 1.0, 1.0)),
-		"upper_arm.R" => Some(fin(1, 0.6, 0.6)),
+		"shoulder.L" => fin(0, 1.0, 1.0),
+		"upper_arm.L" => fin(0, 0.6, 0.6),
+		"shoulder.R" => fin(1, 1.0, 1.0),
+		"upper_arm.R" => fin(1, 0.6, 0.6),
 		_ => None,
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use crate::authoring::HUMANOID_GLB_SHOULDER_L;
+
+	#[test]
+	fn t_pose_fin_sweep_uses_parent_y_not_a_length_roll() {
+		// forelimbed_rig.glb shoulder.L is the same Rz(−90°) as the humanoid T-pose.
+		let definition = forelimbed_v0_definition();
+		let mut rest = PoseBuffer::identity(definition.len());
+		let shoulder = definition.id("shoulder.L").expect("shoulder");
+		rest.local[shoulder.index()].rotation = HUMANOID_GLB_SHOULDER_L;
+		let binding = RigBinding::from_rest(
+			definition,
+			vec![Entity::PLACEHOLDER; rest.len()].into_boxed_slice(),
+			rest,
+		);
+		let mut pose = ForelimbedPose::default();
+		pose.fin_sweep[0] = 0.4;
+		let mut out = PoseBuffer::identity(binding.definition.len());
+		resolve_forelimbed(&pose, &binding, &mut out);
+		let along = binding.definition.rotation_in_character(&out, shoulder) * Vec3::Y;
+		assert!(along.z.abs() > 0.2, "old fin sweep was parent Y, got {along:?}");
+		assert!(along.y.abs() < 0.05, "sweep is not a length roll, got {along:?}");
 	}
 }

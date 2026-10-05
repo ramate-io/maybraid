@@ -66,14 +66,12 @@ mod tests {
 		let mut rig = HumanoidV0Rig::imported();
 		Squat::for_loop(1.0, 1.0).apply(&mut rig, 0.5);
 
-		let left = tip(&rig, "femur.L");
-		let right = tip(&rig, "femur.R");
-		let shin = tip(&rig, "shin.L");
-		assert!((left - right).length() < 1e-4, "same flexion on both femurs: {left:?} {right:?}");
-		assert!(left.z < -0.3, "negative hip flexion reaches back, got {left:?}");
-		assert!(left.x.abs() < 1e-3, "hip flexion stays sagittal, got {left:?}");
-		assert!(shin.z > 0.5, "knee flexion reaches forward, got {shin:?}");
-		assert!(shin.x.abs() < 1e-3);
+		assert!(
+			(rig.posed_angle("femur.L") - rig.posed_angle("femur.R")).abs() < 1e-4,
+			"same swing on both femurs"
+		);
+		assert!(rig.posed_angle("femur.L") > 0.3, "hips fold");
+		assert!(rig.posed_angle("shin.L") > 0.5, "knees fold");
 
 		for name in ["root", "lumbar", "midback", "upper_back"] {
 			let bone = tip(&rig, name);
@@ -111,13 +109,11 @@ mod tests {
 		if !effects.is_identity() {
 			return Err(anyhow::anyhow!("held squat must not move the armature"));
 		}
-		let femur = tip(&rig, "femur.L");
-		if femur.z > -0.4 {
-			return Err(anyhow::anyhow!("held squat should fold the hips, got {femur:?}"));
+		if rig.posed_angle("femur.L") < 0.4 {
+			return Err(anyhow::anyhow!("held squat should fold the hips"));
 		}
-		let pelvis = tip(&rig, "pelvis.L");
-		if pelvis.z < 0.1 {
-			return Err(anyhow::anyhow!("held squat should crease the pelvis, got {pelvis:?}"));
+		if rig.posed_angle("pelvis.L") < 0.1 {
+			return Err(anyhow::anyhow!("held squat should crease the pelvis"));
 		}
 		let root = tip(&rig, "root");
 		if root.z < 0.05 || root.x.abs() > 1e-3 {

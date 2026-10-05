@@ -65,17 +65,64 @@ impl PoseBuffer {
 	}
 }
 
-/// Two child slots for one Mix / Transition. Nested composites need another
-/// scratch pair; the mailbox prepares these once per character.
+/// Scratch pairs for Mix / Smooth / Transition.
+///
+/// Depth 0 uses [`Self::a`] / [`Self::b`]. Nested composites allocate extra
+/// pairs so evaluating an inner child cannot overwrite an outer saved pose.
 #[derive(Clone, Debug)]
 pub struct PoseScratch {
 	pub a: PoseBuffer,
 	pub b: PoseBuffer,
+	nested: Vec<(PoseBuffer, PoseBuffer)>,
+	pub depth: usize,
 }
 
 impl PoseScratch {
 	pub fn identity(len: usize) -> Self {
-		Self { a: PoseBuffer::identity(len), b: PoseBuffer::identity(len) }
+		Self {
+			a: PoseBuffer::identity(len),
+			b: PoseBuffer::identity(len),
+			nested: Vec::new(),
+			depth: 0,
+		}
+	}
+
+	fn ensure_nested(&mut self, depth: usize) {
+		if depth == 0 {
+			return;
+		}
+		let len = self.a.len();
+		while self.nested.len() < depth {
+			self.nested.push((PoseBuffer::identity(len), PoseBuffer::identity(len)));
+		}
+	}
+
+	pub fn capture_from(&mut self, depth: usize, pose: &PoseBuffer) {
+		if depth == 0 {
+			self.a.copy_from(pose);
+			return;
+		}
+		self.ensure_nested(depth);
+		self.nested[depth - 1].0.copy_from(pose);
+	}
+
+	pub fn capture_to(&mut self, depth: usize, pose: &PoseBuffer) {
+		if depth == 0 {
+			self.b.copy_from(pose);
+			return;
+		}
+		self.ensure_nested(depth);
+		self.nested[depth - 1].1.copy_from(pose);
+	}
+
+	pub fn blend_saved(&self, depth: usize, weight: f32, out: &mut PoseBuffer) {
+		let (from, to) = if depth == 0 {
+			(&self.a, &self.b)
+		} else {
+			let pair = &self.nested[depth - 1];
+			(&pair.0, &pair.1)
+		};
+		PoseBuffer::blend_into(from, to, weight, out);
 	}
 }
 
