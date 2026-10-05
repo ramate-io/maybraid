@@ -2,7 +2,7 @@
 //!
 //! The fragment shader also applies a cheap ridged-height POM crack layer
 //! (full march to 60 m, faded by 150 m, with a persistent far pattern)
-//! and an optional world-space grass turf with its own 140–200 m march.
+//! and an optional world-space grass turf with its own 35–50 m march.
 
 mod band;
 mod grass;

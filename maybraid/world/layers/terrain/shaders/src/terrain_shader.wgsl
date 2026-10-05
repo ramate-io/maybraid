@@ -12,7 +12,7 @@
 //     anchored roots, and time-driven bend.
 //   - Authored coverage scales moisture noise so barren
 //     ground cannot become meadow on its own.
-//   - Grass POM uses its own 140–200 m range; cracks keep
+//   - Grass POM uses its own 35–50 m range; cracks keep
 //     the 60–150 m fade plus the far pattern.
 //
 // Preserves original material bindings, palette, fog,
@@ -728,11 +728,12 @@ const GRASS_CELL_M: f32 = 0.12;
 const GRASS_HEIGHT_M: f32 = 0.095;
 const GRASS_TURF_HEIGHT_M: f32 = 0.010;
 const GRASS_HALF_WIDTH_M: f32 = 0.022;
-const GRASS_POM_START_M: f32 = 140.0;
-const GRASS_POM_END_M: f32 = 200.0;
-const GRASS_MIN_STEPS: i32 = 24;
-const GRASS_MAX_STEPS: i32 = 80;
-const GRASS_REFINE_STEPS: i32 = 5;
+const GRASS_POM_START_M: f32 = 35.0;
+const GRASS_POM_END_M: f32 = 50.0;
+const GRASS_MIN_STEPS: i32 = 8;
+const GRASS_MAX_STEPS: i32 = 32;
+const GRASS_REFINE_STEPS: i32 = 3;
+const GRASS_SURFACE_REACH_M: f32 = 0.06;
 const GRASS_RAY_DENOM_MIN: f32 = 0.10;
 const GRASS_NORMAL_EPS_M: f32 = 0.002;
 const GRASS_FAR_COVERAGE: f32 = 0.96;
@@ -852,19 +853,6 @@ fn grass_threshold(lushness: f32) -> f32 {
 }
 
 
-// Thresholding removes coverage. Authored coverage then scales
-// that local variation so a barren material cannot become meadow.
-fn grass_patch(p: vec2<f32>) -> f32 {
-    let lower = grass_threshold(grass_region(p));
-
-    return smoothstep(
-        lower,
-        lower + GRASS_PATCH_HIGH - GRASS_PATCH_LOW,
-        grass_patch_noise(p)
-    ) * grass_authored_coverage();
-}
-
-
 // Traveling waves in world space. Mask and root positions never
 // move. Time is cached per fragment in grass_prepare_eval.
 fn grass_wind_at(root: vec2<f32>) -> f32 {
@@ -978,13 +966,28 @@ fn grass_blade_height(
 }
 
 
-fn grass_height(p: vec2<f32>) -> f32 {
-    let meadow = grass_patch(p);
+// Two-lattice speckle for the cheap mat. This is what remains
+// when blades are subpixel; it must not depend on the march.
+fn grass_cell_speckle(p: vec2<f32>) -> f32 {
+    let a = relief_random(
+        vec2<i32>(floor(p / GRASS_CELL_M)),
+        449u
+    );
+    let b = relief_random(
+        vec2<i32>(floor(
+            (p + vec2<f32>(0.061, 0.053)) / GRASS_CELL_M
+        )),
+        450u
+    );
 
-    if (meadow <= 0.0) {
-        return 0.0;
-    }
+    return mix(a, b, 0.5);
+}
 
+
+// Blades only. The 1 cm turf is a color underlayer, not a
+// height floor — marching to it made every meadow ray pay
+// the full step budget.
+fn grass_blades(p: vec2<f32>) -> f32 {
     let a = grass_blade_height(
         p,
         vec2<f32>(0.0),
@@ -999,7 +1002,16 @@ fn grass_height(p: vec2<f32>) -> f32 {
         1
     );
 
-    return meadow * max(GRASS_TURF_HEIGHT_M, max(a, b));
+    return max(a, b);
+}
+
+
+fn grass_height(p: vec2<f32>, meadow: f32) -> f32 {
+    if (meadow <= 0.0) {
+        return 0.0;
+    }
+
+    return meadow * grass_blades(p);
 }
 
 
@@ -1008,7 +1020,8 @@ fn grass_height(p: vec2<f32>) -> f32 {
 fn trace_grass(
     p: vec2<f32>,
     N: vec3<f32>,
-    V: vec3<f32>
+    V: vec3<f32>,
+    meadow: f32
 ) -> GrassHit {
     let denom = max(dot(N, V), GRASS_RAY_DENOM_MIN);
     let top = V * (GRASS_HEIGHT_M / denom);
@@ -1030,7 +1043,7 @@ fn trace_grass(
 
         let t = f32(i) / f32(steps);
         let offset = top * (1.0 - t);
-        let height = grass_height(p + offset.xz);
+        let height = grass_height(p + offset.xz, meadow);
         let f = height - GRASS_HEIGHT_M * (1.0 - t);
 
         if (f >= 0.0 && height > 1e-6) {
@@ -1049,7 +1062,7 @@ fn trace_grass(
     for (var i = 0; i < GRASS_REFINE_STEPS; i = i + 1) {
         let t = 0.5 * (lo + hi);
         let offset = top * (1.0 - t);
-        let f = grass_height(p + offset.xz)
+        let f = grass_height(p + offset.xz, meadow)
             - GRASS_HEIGHT_M * (1.0 - t);
 
         if (f >= 0.0) {
@@ -1063,20 +1076,20 @@ fn trace_grass(
 
     return GrassHit(
         offset,
-        grass_height(p + offset.xz),
+        grass_height(p + offset.xz, meadow),
         true
     );
 }
 
 
-fn grass_gradient(p: vec2<f32>) -> vec2<f32> {
+fn grass_gradient(p: vec2<f32>, meadow: f32) -> vec2<f32> {
     let e = GRASS_NORMAL_EPS_M;
 
     return vec2<f32>(
-        grass_height(p + vec2<f32>(e, 0.0))
-            - grass_height(p - vec2<f32>(e, 0.0)),
-        grass_height(p + vec2<f32>(0.0, e))
-            - grass_height(p - vec2<f32>(0.0, e))
+        grass_height(p + vec2<f32>(e, 0.0), meadow)
+            - grass_height(p - vec2<f32>(e, 0.0), meadow),
+        grass_height(p + vec2<f32>(0.0, e), meadow)
+            - grass_height(p - vec2<f32>(0.0, e), meadow)
     ) / (2.0 * e);
 }
 
@@ -1430,6 +1443,7 @@ fn fragment(
     var regional_lushness = 0.0;
     var local_threshold = 0.0;
     var local_meadow_noise = 0.0;
+    var surface_meadow = 0.0;
     var grass_patch_w = 0.0;
 
     if (authored_coverage > 1e-4) {
@@ -1444,7 +1458,7 @@ fn fragment(
         local_meadow_noise =
             grass_patch_noise(relief_p);
 
-        grass_patch_w =
+        surface_meadow =
             smoothstep(
                 local_threshold,
                 local_threshold
@@ -1452,8 +1466,10 @@ fn fragment(
                     - GRASS_PATCH_LOW,
                 local_meadow_noise
             )
-            * grass_slope
             * authored_coverage;
+
+        grass_patch_w =
+            surface_meadow * grass_slope;
     }
 
     let grass_cover =
@@ -1581,9 +1597,25 @@ fn fragment(
             wind_term
         );
 
+        // Cell speckle keeps the mat readable after POM
+        // drops for subpixel blades. Do not fade this with
+        // the footprint gate.
+        let speckle = grass_cell_speckle(relief_p);
+        let far_ground =
+            mix(
+                far_palette.mid,
+                far_palette.tip,
+                saturate(
+                    GRASS_TURF_TIP_MIX
+                    + 0.22 * speckle
+                    + wind_term
+                )
+            )
+            * (0.90 + 0.16 * speckle);
+
         ground = mix(
             ground,
-            far_palette.turf,
+            far_ground,
             grass_cover
         );
 
@@ -1595,8 +1627,9 @@ fn fragment(
     //-----------------------------------------------------
     // Near-field grass POM
     //
-    // Own 140–200 m range, plus the existing footprint fade.
-    // Conservative empty-region rejection stays.
+    // 35–50 m range. Footprint only skips the march;
+    // the speckled underlayer stays. Steep views use a
+    // single surface sample instead of a ray.
     //-----------------------------------------------------
 
     if (authored_coverage > 1e-4) {
@@ -1651,7 +1684,25 @@ fn fragment(
             );
 
         if (grass_pom_w > 1e-4 && meadow_upper_bound > 0.0) {
-            let hit = trace_grass(relief_p, macro_n, V);
+            var hit = GrassHit(vec3<f32>(0.0), 0.0, false);
+
+            if (grass_reach <= GRASS_SURFACE_REACH_M) {
+                let height = grass_height(
+                    relief_p,
+                    surface_meadow
+                );
+
+                if (height > 1e-6) {
+                    hit = GrassHit(vec3<f32>(0.0), height, true);
+                }
+            } else {
+                hit = trace_grass(
+                    relief_p,
+                    macro_n,
+                    V,
+                    surface_meadow
+                );
+            }
 
             if (hit.found) {
                 let q = relief_p + hit.offset.xz;
@@ -1659,14 +1710,11 @@ fn fragment(
                     saturate(hit.height / GRASS_HEIGHT_M);
                 let tint = grass_tint();
                 let hit_palette = grass_palette_at(
-                    grass_region(q),
+                    regional_lushness,
                     tint,
                     0.0
                 );
 
-                // Turf-height hits use the same floor as
-                // the distant mat. Blades lift toward the
-                // tip; only a slight root dip at the base.
                 let along_blade = mix(
                     hit_palette.turf,
                     hit_palette.tip,
@@ -1683,9 +1731,7 @@ fn fragment(
                     0.55
                 );
 
-                let cell_color = grass_patch_noise(
-                    q + vec2<f32>(43.1, 9.7)
-                );
+                let cell_color = grass_cell_speckle(q);
 
                 let detailed_ground =
                     mix(
@@ -1693,9 +1739,12 @@ fn fragment(
                         along_blade,
                         smoothstep(0.0, 0.18, height_ratio)
                     )
-                    * (0.96 + 0.08 * cell_color);
+                    * (0.92 + 0.12 * cell_color);
 
-                let gradient = grass_gradient(q);
+                let gradient = grass_gradient(
+                    q,
+                    surface_meadow
+                );
                 let compression =
                     max(dot(macro_n, V), 0.0)
                     / max(dot(macro_n, V), GRASS_RAY_DENOM_MIN);
