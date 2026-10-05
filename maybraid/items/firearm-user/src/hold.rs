@@ -482,7 +482,6 @@ mod tests {
 	}
 
 	#[test]
-	#[test]
 	fn pose_arm_flexes_the_t_pose_forearm_off_length_roll() -> Result<(), &'static str> {
 		let s = settings();
 		let mut rig = HumanoidV0Rig::for_clip_test();
