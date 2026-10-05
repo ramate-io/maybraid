@@ -4,6 +4,7 @@ use character_rigs::Side;
 
 use crate::animations::{UprightWalk, Walk};
 use crate::rigs::humanoid::apply::{apply_arm, apply_root};
+use crate::rigs::humanoid::gait_knee::lerp_swing_knee;
 use crate::{Animation, Progress};
 
 impl Animation<HumanoidV0Rig> for Walk {
@@ -93,11 +94,9 @@ fn hip_lift(leg_swing: f32, amplitude: f32) -> f32 {
 	leg_swing * amplitude
 }
 
-/// Soft knee on stance; smooth half-sine lift through swing and back to stance.
+/// Soft knee on stance; shared swing envelope peaks mid-stride for toe clearance.
 fn knee_flex(leg_phase: f32, walk: &UprightWalk) -> f32 {
-	let p = leg_phase.fract();
-	let t = ((p - 0.5).max(0.0) * 2.0) * std::f32::consts::PI;
-	walk.knee_stance_bend + t.sin() * (walk.knee_swing_bend - walk.knee_stance_bend)
+	lerp_swing_knee(leg_phase, walk.knee_stance_bend, walk.knee_swing_bend)
 }
 
 #[cfg(test)]
@@ -207,10 +206,12 @@ mod tests {
 
 	#[test]
 	fn walk_knee_flex_is_continuous_across_stride() {
+		use crate::rigs::humanoid::gait_knee::SWING_KNEE_LIFT_SPAN;
+
 		let walk = UprightWalk::default();
 		let samples = 120;
-		let max_step = (walk.knee_swing_bend - walk.knee_stance_bend) * 2.0 * std::f32::consts::PI
-			/ samples as f32
+		let max_step = (walk.knee_swing_bend - walk.knee_stance_bend) * std::f32::consts::PI
+			/ (SWING_KNEE_LIFT_SPAN * samples as f32)
 			+ 1e-4;
 		let mut prev = knee_flex(0.0, &walk);
 		for i in 1..=samples {
@@ -218,6 +219,70 @@ mod tests {
 			let flex = knee_flex(phase, &walk);
 			assert!((flex - prev).abs() < max_step, "knee snap at phase {phase}: {prev} -> {flex}");
 			prev = flex;
+		}
+	}
+
+	#[test]
+	fn walk_knee_peak_precedes_late_swing_contact() {
+		use crate::rigs::humanoid::gait_knee::{SWING_KNEE_LIFT_SPAN, SWING_KNEE_LIFT_START};
+
+		let walk = UprightWalk::default();
+		let expected_peak = SWING_KNEE_LIFT_START + SWING_KNEE_LIFT_SPAN * 0.5;
+		let samples = 120;
+		let mut peak_phase = 0.0;
+		let mut peak_flex = knee_flex(0.0, &walk);
+		for i in 1..=samples {
+			let phase = i as f32 / samples as f32;
+			let flex = knee_flex(phase, &walk);
+			if flex > peak_flex {
+				peak_flex = flex;
+				peak_phase = phase;
+			}
+		}
+
+		assert!(
+			(peak_phase - expected_peak).abs() < 0.02,
+			"expected peak near {expected_peak}, got {peak_phase}"
+		);
+		assert!(peak_phase < 0.75, "knee peak should precede late-swing contact");
+
+		let mut rig = HumanoidV0Rig::for_clip_test();
+		Walk::default().apply(&mut rig, peak_phase);
+		assert!(
+			rig.posed_angle("shin.L") > walk.knee_stance_bend + 0.4,
+			"swing knee should flex at peak"
+		);
+
+		let mut late_neutral = None;
+		for i in 0..=samples {
+			let phase = i as f32 / samples as f32;
+			if phase < 0.5 {
+				continue;
+			}
+			let mut sample = HumanoidV0Rig::for_clip_test();
+			Walk::default().apply(&mut sample, phase);
+			if sample.character_length("femur.L").z.abs() < 0.02 {
+				late_neutral = Some(phase);
+				break;
+			}
+		}
+		let contact = late_neutral.expect("femur should recross neutral late in stride");
+		assert!(
+			peak_phase < contact - 0.05,
+			"peak knee {peak_phase} should clear before contact at {contact}"
+		);
+	}
+
+	#[test]
+	fn walk_knee_lift_envelope_matches_both_legs() {
+		let walk = UprightWalk::default();
+		for (global, shin) in [(0.60, "shin.L"), (0.10, "shin.R")] {
+			let mut rig = HumanoidV0Rig::for_clip_test();
+			Walk::default().apply(&mut rig, global);
+			assert!(
+				(rig.posed_angle(shin) - walk.knee_swing_bend).abs() < 0.05,
+				"{shin} at global {global}"
+			);
 		}
 	}
 
