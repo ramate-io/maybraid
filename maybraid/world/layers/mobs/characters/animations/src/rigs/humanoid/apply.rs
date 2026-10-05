@@ -1,50 +1,49 @@
-use character_rigs::{humanoid::HumanoidRig, Side};
+//! Fill a [`HumanoidPose`] from authored angles.
+//!
+//! Field names are semantic. The resolver still applies them through the imported
+//! V0 `RiggedAxis` swing / flex / twist compose so previous clip values keep
+//! their hinge axes and signs. Right-shin and right-forearm flex already use
+//! −Z, so both sides share one positive flexion number.
 
-/// Apply symmetric leg flexion (both legs share the same phase).
-pub fn apply_leg<R: HumanoidRig>(rig: &mut R, side: Side, femur_swing: f32, shin_flex: f32) {
-	let mut leg = rig.leg_pose(side);
+use character_rigs::authoring::HumanoidPose;
+use character_rigs::Side;
 
-	leg.femur = rig.articulate_on_rig(leg.femur, femur_swing, 0.0);
-	leg.shin = rig.articulate_on_rig(leg.shin, 0.0, shin_flex);
-	rig.pose_leg(leg);
+/// Symmetric leg flexion. `femur_swing` is hip flexion; `shin_flex` is knee flexion.
+pub fn apply_leg(pose: &mut HumanoidPose, side: Side, femur_swing: f32, shin_flex: f32) {
+	let leg = pose.leg_mut(side);
+	leg.hip_flexion += femur_swing;
+	leg.knee_flexion += shin_flex;
 }
 
-pub fn apply_root<R: HumanoidRig>(rig: &mut R, root_swing: f32) {
-	let mut spine = rig.spine_pose();
-	spine.root = rig.articulate_on_rig(spine.root, root_swing, 0.0);
-	rig.pose_spine(spine);
+/// Sagittal lean on the root only. Walk and other “lean” knobs use this so the
+/// authored angle is a forward bend, not a yaw.
+pub fn apply_root(pose: &mut HumanoidPose, root_swing: f32) {
+	pose.spine.add_root_forward(root_swing);
 }
 
-/// Sagittal fold on DEFAULT spine bones (`twist` ≈ pitch). Spreads the bend so
-/// the torso reads as a fold, not a single-root yaw.
-pub fn apply_spine_pitch<R: HumanoidRig>(rig: &mut R, pitch: f32) {
-	let mut spine = rig.spine_pose();
-	spine.root = rig.articulate_on_rig_twisted(spine.root, 0.0, 0.0, pitch * 0.28);
-	spine.lumbar = rig.articulate_on_rig_twisted(spine.lumbar, 0.0, 0.0, pitch * 0.26);
-	spine.midback = rig.articulate_on_rig_twisted(spine.midback, 0.0, 0.0, pitch * 0.24);
-	spine.upper_back = rig.articulate_on_rig_twisted(spine.upper_back, 0.0, 0.0, pitch * 0.22);
-	rig.pose_spine(spine);
+/// Sagittal fold spread across the spine stack. Held and looping squat share it.
+pub fn apply_spine_pitch(pose: &mut HumanoidPose, pitch: f32) {
+	pose.spine.add_stack_forward(pitch);
 }
 
-/// Hip crease on DEFAULT pelvis (`twist` ≈ sagittal pitch).
-pub fn apply_hip_fold<R: HumanoidRig>(rig: &mut R, side: Side, fold: f32) {
-	let mut leg = rig.leg_pose(side);
-	leg.pelvis = rig.articulate_on_rig_twisted(leg.pelvis, 0.0, 0.0, fold);
-	rig.pose_leg(leg);
+/// Hip crease as pelvis flexion.
+pub fn apply_hip_fold(pose: &mut HumanoidPose, side: Side, fold: f32) {
+	pose.leg_mut(side).pelvis_flexion += fold;
 }
 
-pub fn apply_neck<R: HumanoidRig>(
-	rig: &mut R,
+pub fn apply_neck(
+	pose: &mut HumanoidPose,
 	lower_swing: f32,
 	lower_flex: f32,
 	upper_swing: f32,
 	upper_flex: f32,
 ) {
-	apply_neck_twisted(rig, lower_swing, lower_flex, 0.0, upper_swing, upper_flex, 0.0);
+	apply_neck_twisted(pose, lower_swing, lower_flex, 0.0, upper_swing, upper_flex, 0.0);
 }
 
-pub fn apply_neck_twisted<R: HumanoidRig>(
-	rig: &mut R,
+/// Neck channels: swing is turn, flex is side tilt, twist is nod.
+pub fn apply_neck_twisted(
+	pose: &mut HumanoidPose,
 	lower_swing: f32,
 	lower_flex: f32,
 	lower_twist: f32,
@@ -52,16 +51,16 @@ pub fn apply_neck_twisted<R: HumanoidRig>(
 	upper_flex: f32,
 	upper_twist: f32,
 ) {
-	let mut neck = rig.neck_pose();
-	neck.lower_neck =
-		rig.articulate_on_rig_twisted(neck.lower_neck, lower_swing, lower_flex, lower_twist);
-	neck.upper_neck =
-		rig.articulate_on_rig_twisted(neck.upper_neck, upper_swing, upper_flex, upper_twist);
-	rig.pose_neck(neck);
+	pose.neck.lower.turn += lower_swing;
+	pose.neck.lower.side_tilt += lower_flex;
+	pose.neck.lower.nod += lower_twist;
+	pose.neck.upper.turn += upper_swing;
+	pose.neck.upper.side_tilt += upper_flex;
+	pose.neck.upper.nod += upper_twist;
 }
 
-pub fn apply_arm<R: HumanoidRig>(
-	rig: &mut R,
+pub fn apply_arm(
+	pose: &mut HumanoidPose,
 	side: Side,
 	shoulder_swing: f32,
 	shoulder_flex: f32,
@@ -70,7 +69,7 @@ pub fn apply_arm<R: HumanoidRig>(
 	forearm_flex: f32,
 ) {
 	apply_arm_twisted(
-		rig,
+		pose,
 		side,
 		shoulder_swing,
 		shoulder_flex,
@@ -81,9 +80,10 @@ pub fn apply_arm<R: HumanoidRig>(
 	);
 }
 
-/// Like [`apply_arm`], with shoulder long-axis twist (external/internal rotation).
-pub fn apply_arm_twisted<R: HumanoidRig>(
-	rig: &mut R,
+/// Shoulder and humerus `swing` / `flex` / `twist` keep those imported axes.
+/// Elbow `flex` is the same number on both arms; the right forearm axis is −Z.
+pub fn apply_arm_twisted(
+	pose: &mut HumanoidPose,
 	side: Side,
 	shoulder_swing: f32,
 	shoulder_flex: f32,
@@ -92,11 +92,11 @@ pub fn apply_arm_twisted<R: HumanoidRig>(
 	humerus_flex: f32,
 	forearm_flex: f32,
 ) {
-	let mut arm = rig.arm_pose(side);
-
-	arm.shoulder =
-		rig.articulate_on_rig_twisted(arm.shoulder, shoulder_swing, shoulder_flex, shoulder_twist);
-	arm.humerus = rig.articulate_on_rig(arm.humerus, humerus_swing, humerus_flex);
-	arm.forearm = rig.articulate_on_rig(arm.forearm, 0.0, forearm_flex);
-	rig.pose_arm(arm);
+	let arm = pose.arm_mut(side);
+	arm.shoulder_forward += shoulder_swing;
+	arm.shoulder_lift += shoulder_flex;
+	arm.shoulder_twist += shoulder_twist;
+	arm.forward_elevation += humerus_swing;
+	arm.lateral_elevation += humerus_flex;
+	arm.elbow_flexion += forearm_flex;
 }
