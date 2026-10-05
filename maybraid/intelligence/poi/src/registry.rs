@@ -63,6 +63,7 @@ pub struct PoiRegistry {
 	globals: BTreeSet<PoiId>,
 	by_entity: HashMap<Entity, PoiId>,
 	local_max_level: Level,
+	membership: u64,
 }
 
 impl Default for PoiRegistry {
@@ -78,6 +79,7 @@ impl Default for PoiRegistry {
 			globals: BTreeSet::new(),
 			by_entity: HashMap::new(),
 			local_max_level: 0,
+			membership: 0,
 		}
 	}
 }
@@ -130,7 +132,13 @@ impl PoiRegistry {
 		if global {
 			self.globals.insert(poi.id);
 		}
+		self.bump_membership();
 		Ok(())
+	}
+
+	/// Increments when a record is inserted, updated, or removed.
+	pub fn membership_revision(&self) -> u64 {
+		self.membership
 	}
 
 	pub fn remove_entity(&mut self, entity: Entity) -> Option<PoiRecord> {
@@ -304,7 +312,12 @@ impl PoiRegistry {
 		self.globals.remove(&id);
 		let record = self.records.remove(&id)?;
 		self.by_entity.remove(&record.entity);
+		self.bump_membership();
 		Some(record)
+	}
+
+	fn bump_membership(&mut self) {
+		self.membership = self.membership.wrapping_add(1);
 	}
 }
 

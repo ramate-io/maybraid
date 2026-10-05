@@ -1,5 +1,7 @@
 //! Overhead map camera and place-name pins. One `Camera3d`, not a minimap.
 
+use std::collections::HashMap;
+
 use bevy::prelude::*;
 use bevy::text::FontSize;
 use durham::Durham;
@@ -15,8 +17,9 @@ use player::CameraFollow;
 use player_camera::{
 	CameraController, CameraLookSuppressed, CameraPovLocked, FollowCamera, PlayerCameraSystems,
 };
+use mob_characters::{LOCAL_POI, SALOON_POI, URBAN_POI, VEGETATION_POI};
 use poi_intelligence::{PoiId, PoiKind, PoiRecord, PoiRegistry};
-use richmond::Richmond;
+use richmond::{DiscoverablePlace, Richmond};
 use terrain_layer_model::{OnTerrain, TerrainView};
 use urbanization_layer_model::Urbanization;
 use world_player::{Player as VegetationPlayer, PlayerLifeSet, PlaygroundMode};
@@ -194,6 +197,7 @@ impl Plugin for WorldMapViewPlugin {
 	fn build(&self, app: &mut App) {
 		app.init_resource::<WorldMapView>()
 			.init_resource::<LanguageOverlay>()
+			.init_resource::<MapPresentation>()
 			.configure_sets(
 				Update,
 				WorldMapSet::Toggle
@@ -217,6 +221,7 @@ impl Plugin for WorldMapViewPlugin {
 			.add_systems(
 				Update,
 				(
+					prepare_map_presentation,
 					sync_map_name_pins,
 					sync_map_type_marks,
 					sync_map_edge_arrows,
@@ -227,6 +232,7 @@ impl Plugin for WorldMapViewPlugin {
 					sync_respawn_selection_marker,
 					draw_highlighted_poi,
 				)
+					.chain()
 					.after(PlayerCameraSystems::Apply),
 			);
 	}
@@ -387,15 +393,77 @@ fn stamp_map_camera(
 	}
 }
 
-#[allow(clippy::too_many_arguments)]
-fn sync_map_name_pins(
+fn place_name_keys(
+	places: &Query<(Entity, &DiscoverablePlace, &GlobalTransform)>,
+) -> HashMap<Entity, NameKey> {
+	places
+		.iter()
+		.map(|(entity, place, transform)| {
+			let xz = transform.translation().xz();
+			let key = match place.host {
+				Some(host) => NameKey::Place { host, local: place.local },
+				None => NameKey::ProvisionalPlace {
+					qx: xz.x.round() as i32,
+					qz: xz.y.round() as i32,
+					label: place.label.salt() as u32,
+				},
+			};
+			(entity, key)
+		})
+		.collect()
+}
+
+fn prepare_map_presentation(
 	map: Res<WorldMapView>,
 	overlay: Res<LanguageOverlay>,
-	fonts: Res<MapLabelFont>,
 	registry: Option<Res<PoiRegistry>>,
 	pending: Option<Res<WorldPlayerRespawnState>>,
 	camera: Query<(&Camera, &GlobalTransform), (With<Camera3d>, With<FollowCamera>)>,
 	surface: TerrainView<Urbanization<Richmond<OnTerrain<Durham>>>>,
+	places: Query<(Entity, &DiscoverablePlace, &GlobalTransform)>,
+	mut presentation: ResMut<MapPresentation>,
+) {
+	if !map.open {
+		*presentation = MapPresentation::default();
+		return;
+	}
+	let named = place_name_keys(&places);
+	let wanted =
+		map_pin_targets(&map, &overlay, registry.as_deref(), pending.as_deref(), Some(&named));
+	let highlighted = pending.as_deref().and_then(|state| state.pending.as_ref()?.highlighted);
+	let picker = picker_prompt_visible(&map);
+	let projected = if let Ok((camera, camera_transform)) = camera.single() {
+		let viewport = camera.logical_viewport_rect();
+		wanted
+			.into_iter()
+			.map(|wanted| {
+				let projected =
+					project_map_pin(camera, camera_transform, pin_world(&surface, wanted.xz));
+				let label = projected.and_then(|(screen, on_screen)| {
+					pin_label_screen(
+						screen,
+						on_screen,
+						viewport,
+						&wanted,
+						picker,
+						pin_is_kept(&wanted, highlighted),
+					)
+				});
+				PresentedMapPin { wanted, label }
+			})
+			.collect()
+	} else {
+		wanted
+			.into_iter()
+			.map(|wanted| PresentedMapPin { wanted, label: None })
+			.collect()
+	};
+	*presentation = MapPresentation { open: true, highlighted, pins: projected };
+}
+
+fn sync_map_name_pins(
+	presentation: Res<MapPresentation>,
+	fonts: Res<MapLabelFont>,
 	hud: Query<Entity, With<MapNameHud>>,
 	mut pins: Query<(
 		Entity,
@@ -412,7 +480,7 @@ fn sync_map_name_pins(
 	let Ok(mut hud_vis) = root.single_mut() else {
 		return;
 	};
-	if !map.open {
+	if !presentation.open {
 		*hud_vis = Visibility::Hidden;
 		for (_, _, _, _, _, _, mut visibility) in &mut pins {
 			*visibility = Visibility::Hidden;
@@ -423,75 +491,46 @@ fn sync_map_name_pins(
 	let Ok(hud) = hud.single() else {
 		return;
 	};
-	let Ok((camera, camera_transform)) = camera.single() else {
-		for (_, _, _, _, _, _, mut visibility) in &mut pins {
-			*visibility = Visibility::Hidden;
-		}
-		return;
-	};
-
-	let highlighted = pending.as_deref().and_then(|state| state.pending.as_ref()?.highlighted);
-	let wanted = map_pin_targets(&map, &overlay, registry.as_deref(), pending.as_deref());
-	let viewport = camera.logical_viewport_rect();
-	let picker = picker_prompt_visible(&map);
+	let highlighted = presentation.highlighted;
 	let mut assigned = Vec::new();
 	for (pin_entity, pin, mut node, mut text, mut font, mut color, mut visibility) in &mut pins {
-		let Some(target) = wanted.iter().find(|target| target.id == pin.target) else {
+		let Some(presented) = presentation.pins.iter().find(|pin_wanted| pin_wanted.wanted.id == pin.target)
+		else {
 			commands.entity(pin_entity).despawn();
 			continue;
 		};
-		let Some((projected, on_screen)) =
-			project_map_pin(camera, camera_transform, pin_world(&surface, target.xz))
-		else {
+		let Some((screen, _)) = presented.label else {
 			*visibility = Visibility::Hidden;
 			continue;
 		};
-		let Some((screen, _)) = pin_label_screen(
-			projected,
-			on_screen,
-			viewport,
-			target,
-			picker,
-			pin_is_kept(target, highlighted),
-		) else {
-			*visibility = Visibility::Hidden;
-			continue;
-		};
-		place_map_pin(&mut node, screen, target, highlighted);
-		text.0 = target.label.clone();
-		*font = map_label_text_font(&fonts, target.size);
-		color.0 = label_ink(target.id, highlighted);
+		place_map_pin(&mut node, screen, &presented.wanted, highlighted);
+		if text.0 != presented.wanted.label {
+			text.0 = presented.wanted.label.clone();
+		}
+		let next_font = map_label_text_font(&fonts, presented.wanted.size);
+		if font.font != next_font.font || font.font_size != next_font.font_size {
+			*font = next_font;
+		}
+		color.0 = label_ink(presented.wanted.id, highlighted);
 		*visibility = Visibility::Visible;
-		assigned.push(target.id);
+		assigned.push(presented.wanted.id);
 	}
-	for target in wanted {
-		if assigned.contains(&target.id) {
+	for presented in &presentation.pins {
+		if assigned.contains(&presented.wanted.id) {
 			continue;
 		}
-		let Some((projected, on_screen)) =
-			project_map_pin(camera, camera_transform, pin_world(&surface, target.xz))
-		else {
-			continue;
-		};
-		let Some((screen, _)) = pin_label_screen(
-			projected,
-			on_screen,
-			viewport,
-			&target,
-			picker,
-			pin_is_kept(&target, highlighted),
-		) else {
+		let Some((screen, _)) = presented.label else {
 			continue;
 		};
 		commands.entity(hud).with_children(|root| {
 			root.spawn(MapNamePinBundle {
 				name: Name::new("map-name-pin"),
-				pin: MapNamePin { target: target.id },
-				node: map_pin_node(screen, &target, highlighted),
-				text: Text::new(target.label.clone()),
-				font: map_label_text_font(&fonts, target.size),
+				pin: MapNamePin { target: presented.wanted.id },
+				node: map_pin_node(screen, &presented.wanted, highlighted),
+				text: Text::new(presented.wanted.label.clone()),
+				font: map_label_text_font(&fonts, presented.wanted.size),
 				layout: map_label_layout(),
-				color: TextColor(label_ink(target.id, highlighted)),
+				color: TextColor(label_ink(presented.wanted.id, highlighted)),
 				shadow: map_label_shadow(),
 				pickable: Pickable::IGNORE,
 				visibility: Visibility::Visible,
@@ -534,6 +573,7 @@ fn map_label_size(kind: MapLabelKind) -> f32 {
 	}
 }
 
+#[derive(Clone, Debug)]
 struct MapPinWanted {
 	id: MapPinTarget,
 	xz: Vec2,
@@ -543,11 +583,25 @@ struct MapPinWanted {
 	mark: Option<MapMarkKind>,
 }
 
+#[derive(Clone)]
+struct PresentedMapPin {
+	wanted: MapPinWanted,
+	label: Option<(Vec2, Option<Vec2>)>,
+}
+
+#[derive(Resource, Default)]
+struct MapPresentation {
+	open: bool,
+	highlighted: Option<PoiId>,
+	pins: Vec<PresentedMapPin>,
+}
+
 fn map_pin_targets(
 	map: &WorldMapView,
 	overlay: &LanguageOverlay,
 	registry: Option<&PoiRegistry>,
 	pending: Option<&WorldPlayerRespawnState>,
+	named: Option<&HashMap<Entity, NameKey>>,
 ) -> Vec<MapPinWanted> {
 	let view = map_view_rect(map);
 	let mut wanted = Vec::new();
@@ -564,17 +618,18 @@ fn map_pin_targets(
 					if !selected && !near_view_rect(xz, view) {
 						continue;
 					}
+					let name_key = named.and_then(|names| names.get(&record.entity)).copied();
 					wanted.push(MapPinWanted {
 						id: MapPinTarget::Poi(*id),
 						xz,
 						extent: Rect::from_center_size(xz, Vec2::splat(12.0)),
-						label: label_for_poi(record, overlay),
+						label: label_for_poi(record, overlay, name_key),
 						size: if selected {
 							SELECTED_POI_LABEL_PX
 						} else {
 							map_label_size(MapLabelKind::Poi)
 						},
-						mark: mark_for_poi(record, overlay),
+						mark: mark_for_poi(record, overlay, name_key),
 					});
 				}
 			}
@@ -666,8 +721,17 @@ fn label_anchor(name: &NamedOverlay, view: Rect, kind: MapLabelKind) -> Option<V
 }
 
 fn title_band(hit: Rect) -> Vec2 {
-	let pad_y = (hit.height() * 0.16).max(8.0);
-	Vec2::new(hit.center().x, (hit.max.y - pad_y).clamp(hit.min.y + 4.0, hit.max.y - 4.0))
+	let height = hit.height();
+	if !height.is_finite() || height < 8.0 {
+		return hit.center();
+	}
+	let pad_y = (height * 0.16).max(8.0).min(height * 0.5);
+	let lo = hit.min.y + 4.0;
+	let hi = hit.max.y - 4.0;
+	if lo > hi {
+		return hit.center();
+	}
+	Vec2::new(hit.center().x, (hit.max.y - pad_y).clamp(lo, hi))
 }
 
 fn swallows_view(hit: Rect, view: Rect) -> bool {
@@ -821,8 +885,12 @@ fn name_rank(key: NameKey) -> u8 {
 	}
 }
 
-pub(crate) fn label_for_poi(poi: &PoiRecord, overlay: &LanguageOverlay) -> String {
-	overlay_name_for_poi(poi, overlay)
+pub(crate) fn label_for_poi(
+	poi: &PoiRecord,
+	overlay: &LanguageOverlay,
+	named: Option<NameKey>,
+) -> String {
+	overlay_name_for_poi(poi, overlay, named)
 		.map(|name| map_name_label(&name.surface, &name.english))
 		.unwrap_or_else(|| kind_label(poi.kind))
 }
@@ -830,18 +898,40 @@ pub(crate) fn label_for_poi(poi: &PoiRecord, overlay: &LanguageOverlay) -> Strin
 fn overlay_name_for_poi<'a>(
 	poi: &PoiRecord,
 	overlay: &'a LanguageOverlay,
+	named: Option<NameKey>,
 ) -> Option<&'a NamedOverlay> {
+	if let Some(key) = named {
+		if let Some(name) = overlay.names.iter().find(|name| name.key == key) {
+			return Some(name);
+		}
+	}
 	let xz = poi.position.xz();
 	let place_r = poi.arrival_radius.max(48.0);
 	overlay
 		.names
 		.iter()
-		.filter(|name| name_covers_poi(name, xz, place_r))
+		.filter(|name| name_covers_poi(name, xz, place_r) && name_kind_matches_poi(name.key, poi.kind))
 		.min_by(|a, b| {
 			poi_name_rank(a.key)
 				.cmp(&poi_name_rank(b.key))
 				.then_with(|| a.xz.distance(xz).total_cmp(&b.xz.distance(xz)))
 		})
+}
+
+fn name_kind_matches_poi(key: NameKey, kind: PoiKind) -> bool {
+	if kind == VEGETATION_POI {
+		matches!(key, NameKey::Grove(_) | NameKey::Forest(_))
+	} else if kind == LOCAL_POI || kind == SALOON_POI || kind == URBAN_POI {
+		matches!(
+			key,
+			NameKey::Place { .. }
+				| NameKey::ProvisionalPlace { .. }
+				| NameKey::Urban(_)
+				| NameKey::UrbanLeaf(_)
+		)
+	} else {
+		false
+	}
 }
 
 fn name_covers_poi(name: &NamedOverlay, xz: Vec2, place_r: f32) -> bool {
@@ -994,8 +1084,12 @@ fn mark_for_name(name: &NamedOverlay) -> Option<MapMarkKind> {
 	}
 }
 
-fn mark_for_poi(poi: &PoiRecord, overlay: &LanguageOverlay) -> Option<MapMarkKind> {
-	if let Some(name) = overlay_name_for_poi(poi, overlay) {
+fn mark_for_poi(
+	poi: &PoiRecord,
+	overlay: &LanguageOverlay,
+	named: Option<NameKey>,
+) -> Option<MapMarkKind> {
+	if let Some(name) = overlay_name_for_poi(poi, overlay, named) {
 		if let Some(mark) = mark_for_name(name) {
 			return Some(mark);
 		}
@@ -1093,96 +1187,59 @@ fn place_map_pin(node: &mut Node, screen: Vec2, target: &MapPinWanted, highlight
 }
 
 fn sync_map_type_marks(
-	map: Res<WorldMapView>,
-	overlay: Res<LanguageOverlay>,
+	presentation: Res<MapPresentation>,
 	icons: Res<MapMarkIcons>,
-	registry: Option<Res<PoiRegistry>>,
-	pending: Option<Res<WorldPlayerRespawnState>>,
-	camera: Query<(&Camera, &GlobalTransform), (With<Camera3d>, With<FollowCamera>)>,
-	surface: TerrainView<Urbanization<Richmond<OnTerrain<Durham>>>>,
 	hud: Query<Entity, With<MapNameHud>>,
 	mut marks: Query<(Entity, &MapTypeMark, &mut Node, &mut ImageNode, &mut Visibility)>,
 	mut commands: Commands,
 ) {
-	if !map.open {
+	if !presentation.open {
 		for (entity, _, _, _, _) in &marks {
 			commands.entity(entity).despawn();
 		}
 		return;
 	}
-	let Ok((camera, camera_transform)) = camera.single() else {
-		for (_, _, _, _, mut visibility) in &mut marks {
-			*visibility = Visibility::Hidden;
-		}
-		return;
-	};
 	let Ok(hud) = hud.single() else {
 		return;
 	};
-	let viewport = camera.logical_viewport_rect();
-	let picker = picker_prompt_visible(&map);
-	let highlighted = pending.as_deref().and_then(|state| state.pending.as_ref()?.highlighted);
-	let wanted = map_pin_targets(&map, &overlay, registry.as_deref(), pending.as_deref());
+	let highlighted = presentation.highlighted;
 	let mut assigned = Vec::new();
 	for (entity, mark, mut node, mut image, mut visibility) in &mut marks {
-		let Some(target) =
-			wanted.iter().find(|target| target.id == mark.target && target.mark.is_some())
+		let Some(presented) = presentation
+			.pins
+			.iter()
+			.find(|pin| pin.wanted.id == mark.target && pin.wanted.mark.is_some())
 		else {
 			commands.entity(entity).despawn();
 			continue;
 		};
-		let Some((projected, on_screen)) =
-			project_map_pin(camera, camera_transform, pin_world(&surface, target.xz))
-		else {
+		let Some((label, _)) = presented.label else {
 			*visibility = Visibility::Hidden;
 			continue;
 		};
-		let Some((label, _)) = pin_label_screen(
-			projected,
-			on_screen,
-			viewport,
-			target,
-			picker,
-			pin_is_kept(target, highlighted),
-		) else {
-			*visibility = Visibility::Hidden;
-			continue;
-		};
-		let screen = type_mark_screen(label, target, highlighted);
+		let screen = type_mark_screen(label, &presented.wanted, highlighted);
 		place_type_mark(&mut node, screen);
-		if let Some(kind) = target.mark {
+		if let Some(kind) = presented.wanted.mark {
 			image.image = mark_image(&icons, kind);
 		}
 		*visibility = Visibility::Visible;
-		assigned.push(target.id);
+		assigned.push(presented.wanted.id);
 	}
-	for target in wanted {
-		if assigned.contains(&target.id) || target.mark.is_none() {
+	for presented in &presentation.pins {
+		if assigned.contains(&presented.wanted.id) || presented.wanted.mark.is_none() {
 			continue;
 		}
-		let Some((projected, on_screen)) =
-			project_map_pin(camera, camera_transform, pin_world(&surface, target.xz))
-		else {
+		let Some(kind) = presented.wanted.mark else {
 			continue;
 		};
-		let Some(kind) = target.mark else {
+		let Some((label, _)) = presented.label else {
 			continue;
 		};
-		let Some((label, _)) = pin_label_screen(
-			projected,
-			on_screen,
-			viewport,
-			&target,
-			picker,
-			pin_is_kept(&target, highlighted),
-		) else {
-			continue;
-		};
-		let screen = type_mark_screen(label, &target, highlighted);
+		let screen = type_mark_screen(label, &presented.wanted, highlighted);
 		commands.entity(hud).with_children(|root| {
 			root.spawn((
 				Name::new("map-type-mark"),
-				MapTypeMark { target: target.id },
+				MapTypeMark { target: presented.wanted.id },
 				type_mark_node(screen),
 				ImageNode { image: mark_image(&icons, kind), ..default() },
 				Pickable::IGNORE,
@@ -1210,56 +1267,30 @@ fn place_type_mark(node: &mut Node, screen: Vec2) {
 }
 
 fn sync_map_edge_arrows(
-	map: Res<WorldMapView>,
-	overlay: Res<LanguageOverlay>,
+	presentation: Res<MapPresentation>,
 	icons: Res<MapMarkIcons>,
-	registry: Option<Res<PoiRegistry>>,
-	pending: Option<Res<WorldPlayerRespawnState>>,
-	camera: Query<(&Camera, &GlobalTransform), (With<Camera3d>, With<FollowCamera>)>,
-	surface: TerrainView<Urbanization<Richmond<OnTerrain<Durham>>>>,
 	hud: Query<Entity, With<MapNameHud>>,
 	mut arrows: Query<(Entity, &MapEdgeArrow, &mut Node, &mut UiTransform, &mut Visibility)>,
 	mut commands: Commands,
 ) {
-	if !map.open {
+	if !presentation.open {
 		for (entity, _, _, _, _) in &arrows {
 			commands.entity(entity).despawn();
 		}
 		return;
 	}
-	let Ok((camera, camera_transform)) = camera.single() else {
-		for (_, _, _, _, mut visibility) in &mut arrows {
-			*visibility = Visibility::Hidden;
-		}
-		return;
-	};
 	let Ok(hud) = hud.single() else {
 		return;
 	};
-	let viewport = camera.logical_viewport_rect();
-	let picker = picker_prompt_visible(&map);
-	let highlighted = pending.as_deref().and_then(|state| state.pending.as_ref()?.highlighted);
-	let wanted = map_pin_targets(&map, &overlay, registry.as_deref(), pending.as_deref());
 	let mut assigned = Vec::new();
 	for (entity, arrow, mut node, mut transform, mut visibility) in &mut arrows {
-		let Some(target) = wanted.iter().find(|target| target.id == arrow.target) else {
+		let Some(presented) =
+			presentation.pins.iter().find(|pin| pin.wanted.id == arrow.target)
+		else {
 			commands.entity(entity).despawn();
 			continue;
 		};
-		let Some((projected, on_screen)) =
-			project_map_pin(camera, camera_transform, pin_world(&surface, target.xz))
-		else {
-			*visibility = Visibility::Hidden;
-			continue;
-		};
-		let Some((label_screen, dir)) = pin_label_screen(
-			projected,
-			on_screen,
-			viewport,
-			target,
-			picker,
-			pin_is_kept(target, highlighted),
-		) else {
+		let Some((label_screen, dir)) = presented.label else {
 			*visibility = Visibility::Hidden;
 			continue;
 		};
@@ -1270,35 +1301,23 @@ fn sync_map_edge_arrows(
 		place_edge_arrow(&mut node, label_screen, dir);
 		transform.rotation = Rot2::radians(arrow_rotation(dir));
 		*visibility = Visibility::Visible;
-		assigned.push(target.id);
+		assigned.push(presented.wanted.id);
 	}
-	for target in wanted {
-		if assigned.contains(&target.id) {
+	for presented in &presentation.pins {
+		if assigned.contains(&presented.wanted.id) {
 			continue;
 		}
-		let Some((projected, on_screen)) =
-			project_map_pin(camera, camera_transform, pin_world(&surface, target.xz))
-		else {
-			continue;
-		};
-		let Some((label_screen, Some(dir))) = pin_label_screen(
-			projected,
-			on_screen,
-			viewport,
-			&target,
-			picker,
-			pin_is_kept(&target, highlighted),
-		) else {
+		let Some((label_screen, Some(dir))) = presented.label else {
 			continue;
 		};
 		commands.entity(hud).with_children(|root| {
 			root.spawn((
 				Name::new("map-edge-arrow"),
-				MapEdgeArrow { target: target.id },
+				MapEdgeArrow { target: presented.wanted.id },
 				edge_arrow_node(label_screen, dir),
 				ImageNode {
 					image: icons.arrow.clone(),
-					color: label_ink(target.id, None),
+					color: label_ink(presented.wanted.id, None),
 					..default()
 				},
 				UiTransform { rotation: Rot2::radians(arrow_rotation(dir)), ..default() },
@@ -1950,7 +1969,7 @@ mod tests {
 	}
 
 	#[test]
-	fn poi_labels_take_covering_place_names() {
+	fn vegetation_poi_does_not_steal_a_nearby_place_name() {
 		let poi = test_poi(Vec2::new(10.0, 6.0));
 		let overlay = LanguageOverlay {
 			names: vec![NamedOverlay {
@@ -1963,8 +1982,52 @@ mod tests {
 			}],
 			..Default::default()
 		};
-		assert_eq!(label_for_poi(&poi, &overlay), "Oak Stand\nGreen Grove");
-		assert_eq!(label_for_poi(&poi, &LanguageOverlay::default()), "Vegetation");
+		assert_eq!(label_for_poi(&poi, &overlay, None), "Vegetation");
+		assert_eq!(label_for_poi(&poi, &LanguageOverlay::default(), None), "Vegetation");
+	}
+
+	#[test]
+	fn poi_labels_prefer_identity_then_compatible_cover() {
+		let key = NameKey::ProvisionalPlace { qx: 10, qz: 6, label: 1 };
+		let building = PoiRecord {
+			id: PoiId(2),
+			entity: Entity::from_bits(2),
+			kind: LOCAL_POI,
+			position: Vec3::new(10.0, 4.0, 6.0),
+			arrival_radius: 8.0,
+			salience: 1.0,
+			local: true,
+			global: false,
+		};
+		let overlay = LanguageOverlay {
+			names: vec![
+				NamedOverlay {
+					key,
+					surface: "amber house".into(),
+					english: vec!["amber house".into()],
+					provisional: true,
+					xz: Vec2::new(10.0, 6.0),
+					extent: Rect::from_center_size(Vec2::new(10.0, 6.0), Vec2::splat(8.0)),
+				},
+				NamedOverlay {
+					key: NameKey::Grove(lod::gen::Id::Universal),
+					surface: "oak stand".into(),
+					english: vec!["green grove".into()],
+					provisional: false,
+					xz: Vec2::new(12.0, 6.0),
+					extent: Rect::from_center_size(Vec2::new(12.0, 6.0), Vec2::splat(40.0)),
+				},
+			],
+			..Default::default()
+		};
+		assert_eq!(
+			label_for_poi(&building, &overlay, Some(key)),
+			"Amber House\nAmber House"
+		);
+		assert_eq!(
+			label_for_poi(&test_poi(Vec2::new(10.0, 6.0)), &overlay, None),
+			"Oak Stand\nGreen Grove"
+		);
 	}
 
 	#[test]
@@ -1994,7 +2057,7 @@ mod tests {
 			}],
 			..Default::default()
 		};
-		let wanted = map_pin_targets(&map, &overlay, None, None);
+		let wanted = map_pin_targets(&map, &overlay, None, None, None);
 		assert_eq!(wanted.len(), 1);
 		let view = map_view_rect(&map);
 		assert!(view.contains(wanted[0].xz));
@@ -2039,7 +2102,7 @@ mod tests {
 			],
 			..Default::default()
 		};
-		let wanted = map_pin_targets(&map, &overlay, None, None);
+		let wanted = map_pin_targets(&map, &overlay, None, None, None);
 		assert_eq!(wanted.len(), 2);
 		assert!(wanted[0].xz.distance(wanted[1].xz) > 40.0);
 	}
@@ -2107,7 +2170,7 @@ mod tests {
 		assert_eq!(MAP_HOUSE_ICON, "iconography/kenney/cartography/house.png");
 		assert_eq!(MAP_ARROW_ICON, "iconography/kenney/game-icons/arrow_up.png");
 		assert_eq!(
-			mark_for_poi(&test_poi(Vec2::ZERO), &LanguageOverlay::default()),
+			mark_for_poi(&test_poi(Vec2::ZERO), &LanguageOverlay::default(), None),
 			Some(MapMarkKind::Tree)
 		);
 		assert_eq!(
@@ -2194,6 +2257,22 @@ mod tests {
 		.expect("the selected spawn stays on the rim");
 		assert!(screen.x > 600.0);
 		assert!(dir.is_some());
+	}
+
+	#[test]
+	fn title_band_survives_thin_intersections() {
+		for height in [0.0, 1.0, 4.0, 7.9, 8.0] {
+			let hit = Rect::from_corners(Vec2::new(0.0, 0.0), Vec2::new(12.0, height));
+			let at = title_band(hit);
+			assert!(at.x.is_finite() && at.y.is_finite(), "height {height}");
+			if height > 0.0 {
+				assert!(
+					at.y >= hit.min.y - 1e-4 && at.y <= hit.max.y + 1e-4,
+					"height {height} y={}",
+					at.y
+				);
+			}
+		}
 	}
 
 	#[test]

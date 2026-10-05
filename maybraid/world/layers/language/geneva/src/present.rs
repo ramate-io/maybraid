@@ -56,6 +56,9 @@ impl LanguageOverlay {
 		let names = index
 			.assigned_names()
 			.filter_map(|(key, assigned): (NameKey, &AssignedName)| {
+				if !index.is_active(key) {
+					return None;
+				}
 				Some(NamedOverlay {
 					key,
 					surface: assigned.name.surface.clone(),

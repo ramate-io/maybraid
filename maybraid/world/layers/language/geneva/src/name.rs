@@ -30,6 +30,8 @@ pub struct AssignedName {
 	/// Regional names stay provisional until a complete canonical summary exists.
 	/// Places without a stable host identity are also provisional.
 	pub provisional: bool,
+	/// Host language consumed when this name was assigned, if any.
+	pub inherited_language: Option<u64>,
 }
 
 impl PlaceName {

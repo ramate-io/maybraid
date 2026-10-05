@@ -17,10 +17,12 @@ use crate::english::{
 	compose_english, geographic_terms, grove_kind_terms, named_grove_english, with_color_name,
 	PLACE_COLORS,
 };
-use crate::index::{LanguageConfig, LanguageIndex, LanguageWorldSeed, NameKey};
+use crate::index::{
+	LanguageConfig, LanguageIndex, LanguageSourceDeps, LanguageWorldSeed, NameKey,
+};
 use crate::name::{canonicalize_terms, pick_terms, terms_fingerprint, PlaceName};
 use crate::present::LanguageOverlay;
-use crate::sources::{places_from_world_xz, NamedFeature, NamedPlace, NamedWorld};
+use crate::sources::{places_from_world_xz, NamedFeature, NamedPlace, NamedWorld, SourceRevisions};
 use crate::tiles::{LargeTile, LARGE_TILE};
 use crate::Geneva;
 
@@ -422,8 +424,8 @@ struct RecordingWorld;
 impl NamedWorld for RecordingWorld {
 	type Read = Res<'static, RecordingSources>;
 
-	fn source_fingerprint(read: &SystemParamItem<'_, '_, Self::Read>) -> u64 {
-		read.fingerprint
+	fn source_revisions(read: &SystemParamItem<'_, '_, Self::Read>) -> SourceRevisions {
+		SourceRevisions { forest: read.fingerprint, urban: 0, terrain: 0, places: 0 }
 	}
 
 	fn groves_overlapping(
@@ -571,6 +573,141 @@ fn generation_and_presentation_hooks_refresh_overlay_only_when_open() -> anyhow:
 	anyhow::ensure!(
 		app.world().resource::<LanguageOverlay>().names == overlay.names,
 		"closed presentation gate must not refresh overlay"
+	);
+	Ok(())
+}
+
+#[test]
+fn simultaneous_source_revisions_do_not_cancel() -> anyhow::Result<()> {
+	let region = feature_aabb(0.0, 0.0, LARGE_TILE, LARGE_TILE);
+	let first = LanguageSourceDeps::from_keep(
+		SourceRevisions { forest: 1, urban: 1, terrain: 0, places: 0 },
+		SEED,
+		region,
+	);
+	let second = LanguageSourceDeps::from_keep(
+		SourceRevisions { forest: 2, urban: 2, terrain: 0, places: 0 },
+		SEED,
+		region,
+	);
+	anyhow::ensure!(first != second, "paired revision bumps must stay distinct");
+	let moved = LanguageSourceDeps::from_keep(
+		first.revisions,
+		SEED,
+		feature_aabb(LARGE_TILE, LARGE_TILE, LARGE_TILE * 2.0, LARGE_TILE * 2.0),
+	);
+	anyhow::ensure!(first != moved, "keep-tile range is part of the dependency tuple");
+	Ok(())
+}
+
+#[test]
+fn overlay_shows_only_active_keep_names() -> anyhow::Result<()> {
+	let mut index = LanguageIndex::default();
+	let region = feature_aabb(0.0, 0.0, LARGE_TILE, LARGE_TILE);
+	let key = NameKey::Geographic(GeographicFeatureId {
+		family: GeographicFamily::Plateau,
+		band: GeographicBand::LowPass,
+		source: origin_cell(10.0, 10.0, 20.0, 20.0),
+	});
+	index.assign_keep(
+		SEED,
+		region,
+		&[NamedFeature::new(
+			key,
+			feature_aabb(10.0, 10.0, 20.0, 20.0),
+			vec!["plateau".to_owned()],
+			1,
+		)],
+		&[],
+	);
+	anyhow::ensure!(LanguageOverlay::from_index(&index).names.iter().any(|name| name.key == key));
+
+	index.assign_keep(SEED, region, &[], &[]);
+	anyhow::ensure!(index.name(key).is_some(), "durable assignment survives unload");
+	anyhow::ensure!(
+		LanguageOverlay::from_index(&index).names.iter().all(|name| name.key != key),
+		"inactive names stay off the map overlay"
+	);
+	Ok(())
+}
+
+#[test]
+fn superseded_provisional_place_is_retired() -> anyhow::Result<()> {
+	let mut index = LanguageIndex::default();
+	let region = feature_aabb(0.0, 0.0, LARGE_TILE, LARGE_TILE);
+	let provisional = NameKey::ProvisionalPlace { qx: 12, qz: 18, label: 1 };
+	let host = origin_cell(0.0, 0.0, 50.0, 50.0);
+	index.assign_keep(
+		SEED,
+		region,
+		&[],
+		&[NamedPlace {
+			key: provisional,
+			xz: Vec2::new(12.0, 18.0),
+			english: vec!["house".to_owned()],
+			persistent: false,
+			revision: 1,
+			fingerprint: terms_fingerprint(&["house".to_owned()]),
+			provisional: true,
+			host: None,
+			inherit_host_language: false,
+		}],
+	);
+	anyhow::ensure!(index.name(provisional).is_some());
+
+	let durable = NameKey::Place { host, local: 4 };
+	index.assign_keep(
+		SEED,
+		region,
+		&[],
+		&[NamedPlace {
+			key: durable,
+			xz: Vec2::new(12.0, 18.0),
+			english: vec!["house".to_owned()],
+			persistent: true,
+			revision: 1,
+			fingerprint: terms_fingerprint(&["house".to_owned()]),
+			provisional: false,
+			host: Some(host),
+			inherit_host_language: false,
+		}],
+	);
+	anyhow::ensure!(index.name(durable).is_some());
+	anyhow::ensure!(index.name(provisional).is_none(), "replaced provisional keys must retire");
+	Ok(())
+}
+
+#[test]
+fn child_assigned_before_host_adopts_the_host_language() -> anyhow::Result<()> {
+	let region = feature_aabb(0.0, 0.0, LARGE_TILE, LARGE_TILE);
+	let host = origin_cell(0.0, 0.0, 50.0, 50.0);
+	let host_place =
+		DiscoverablePlace::host(DiscoverablePlaceLabel::House, 8.0, 1.1).with_identity(host, 4);
+	let interior =
+		DiscoverablePlace::high(DiscoverablePlaceLabel::Lounge, 3.0, 1.1).with_identity(host, 99);
+	let child_only = places_from_world_xz([(interior, Vec3::new(12.5, 48.0, 18.5))], region);
+	let both = places_from_world_xz(
+		[(host_place, Vec3::new(12.0, 40.0, 18.0)), (interior, Vec3::new(12.5, 48.0, 18.5))],
+		region,
+	);
+
+	let mut index = LanguageIndex::default();
+	index.assign_keep(SEED, region, &[], &child_only);
+	let child_key = NameKey::Place { host, local: 99 };
+	let host_key = NameKey::Place { host, local: 4 };
+	let first = index
+		.assigned(child_key)
+		.ok_or_else(|| anyhow::anyhow!("child first"))?
+		.clone();
+
+	index.assign_keep(SEED, region, &[], &both);
+	let host_name = index.assigned(host_key).ok_or_else(|| anyhow::anyhow!("host"))?;
+	let child = index.assigned(child_key).ok_or_else(|| anyhow::anyhow!("child later"))?;
+	anyhow::ensure!(child.name.language_seed == host_name.name.language_seed);
+	anyhow::ensure!(child.inherited_language == Some(host_name.name.language_seed));
+	anyhow::ensure!(
+		first.inherited_language != child.inherited_language
+			|| first.name.language_seed == child.name.language_seed
 	);
 	Ok(())
 }

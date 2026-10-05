@@ -14,8 +14,8 @@ use mob_characters::{LOCAL_POI, SALOON_POI, URBAN_POI, VEGETATION_POI};
 use player::{CameraFollow, Player as MaybraidPlayer, PlayerUse};
 use player_camera::{CameraController, FollowCamera};
 use poi_intelligence::{
-	NearbyFallback, NearbyQuery, PoiId, PoiInterest, PoiInterests, PoiKind, PoiRecord, PoiRegistry,
-	PoiSystems,
+	place_nearby, NearbyFallback, NearbyQuery, PoiId, PoiInterest, PoiInterests, PoiKind, PoiRecord,
+	PoiRegistry, PoiSystems,
 };
 use spotting_intelligence::SpotSubject;
 use terrain_layer_model::{OnTerrain, TerrainView};
@@ -86,6 +86,9 @@ pub(crate) struct PendingPlayerRespawn {
 	pub stick_resting: bool,
 	/// First Discovery life: no death glaze or bones.
 	pub first_life: bool,
+	/// Ring placement used when the registry has nothing selectable.
+	pub fallback_at: Vec3,
+	pub registry_revision: u64,
 }
 
 #[derive(Resource, Default)]
@@ -101,10 +104,10 @@ pub fn reset_first_spawn_offer(mut state: ResMut<WorldPlayerRespawnState>) {
 	state.first_spawn_offered = false;
 }
 
-/// Discovery map picker confirmed this POI.
+/// Discovery map picker confirmed a POI, or `None` for the fallback ring.
 #[derive(Message, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PlayerChoseRespawnPoi {
-	pub poi: PoiId,
+	pub poi: Option<PoiId>,
 }
 
 #[derive(Component)]
@@ -220,6 +223,8 @@ fn queue_downed_world_player(
 			map_opened: false,
 			stick_resting: true,
 			first_life: false,
+			fallback_at: transform.translation,
+			registry_revision: 0,
 		});
 		velocity.0 = Vec3::ZERO;
 		if let Some(firearm) = firearm {
@@ -285,6 +290,8 @@ fn queue_first_spawn_picker(
 		map_opened: false,
 		stick_resting: true,
 		first_life: true,
+		fallback_at: transform.translation,
+		registry_revision: 0,
 	});
 	retire_startup_player(&mut commands, player, firearm, inventory, &mut triggers);
 }
@@ -322,57 +329,53 @@ fn drive_respawn_picker(
 	let Some(pending) = state.pending.as_mut() else {
 		return;
 	};
-	if pending.candidates.is_empty() {
-		return;
-	}
-	let stick = pad.as_deref().map(|pad| pad.move_stick).unwrap_or(Vec2::ZERO);
-	let mut step = 0i32;
-	if let Some(pad) = pad.as_deref() {
-		if pad.just_pressed(PadButton::DpadUp) {
-			step -= 1;
-		}
-		if pad.just_pressed(PadButton::DpadDown) {
-			step += 1;
-		}
-	}
-	if let Some(dir) = consume_stick_flick(&mut pending.stick_resting, stick) {
-		let dir = map_flick_dir(dir);
-		if let Some(from) = current_highlight_xz(pending, &registry) {
-			if let Some(next) = next_candidate_in_direction(
-				&pending.candidates,
-				&registry,
-				from,
-				pending.highlighted,
-				dir,
-			) {
-				set_highlighted(pending, next, &registry);
+	if !pending.candidates.is_empty() {
+		let stick = pad.as_deref().map(|pad| pad.move_stick).unwrap_or(Vec2::ZERO);
+		let mut step = 0i32;
+		if let Some(pad) = pad.as_deref() {
+			if pad.just_pressed(PadButton::DpadUp) {
+				step -= 1;
+			}
+			if pad.just_pressed(PadButton::DpadDown) {
+				step += 1;
 			}
 		}
-	} else if step != 0 {
-		let len = pending.candidates.len() as i32;
-		let current = pending
-			.highlighted
-			.and_then(|id| pending.candidates.iter().position(|candidate| *candidate == id))
-			.unwrap_or(0) as i32;
-		let next = (current + step).rem_euclid(len) as usize;
-		if let Some(id) = pending.candidates.get(next).copied() {
-			set_highlighted(pending, id, &registry);
-		}
-	} else if pending.highlighted.is_none() {
-		if let Some(nearest) =
-			nearest_candidate(&pending.candidates, &registry, pending.death_at.xz())
-		{
-			set_highlighted(pending, nearest, &registry);
+		if let Some(dir) = consume_stick_flick(&mut pending.stick_resting, stick) {
+			let dir = map_flick_dir(dir);
+			if let Some(from) = current_highlight_xz(pending, &registry) {
+				if let Some(next) = next_candidate_in_direction(
+					&pending.candidates,
+					&registry,
+					from,
+					pending.highlighted,
+					dir,
+				) {
+					set_highlighted(pending, next, &registry);
+				}
+			}
+		} else if step != 0 {
+			let len = pending.candidates.len() as i32;
+			let current = pending
+				.highlighted
+				.and_then(|id| pending.candidates.iter().position(|candidate| *candidate == id))
+				.unwrap_or(0) as i32;
+			let next = (current + step).rem_euclid(len) as usize;
+			if let Some(id) = pending.candidates.get(next).copied() {
+				set_highlighted(pending, id, &registry);
+			}
+		} else if pending.highlighted.is_none() {
+			if let Some(nearest) =
+				nearest_candidate(&pending.candidates, &registry, pending.death_at.xz())
+			{
+				set_highlighted(pending, nearest, &registry);
+			}
 		}
 	}
-	let Some(poi) = pending.highlighted else {
-		return;
-	};
 	if intents
 		.read()
 		.any(|intent| matches!(intent, CharacterIntent::Jump | CharacterIntent::StartInteraction))
 	{
-		chosen.write(PlayerChoseRespawnPoi { poi });
+		chosen.write(PlayerChoseRespawnPoi { poi: pending.highlighted });
 	}
 }
 
@@ -450,20 +453,25 @@ fn respawn_world_player(
 			|| pending.timer.is_finished())
 	{
 		open_respawn_picker(pending, &mut map, &registry, &config, last_poi);
-	} else if pending.first_life && pending.map_opened && pending.candidates.is_empty() {
-		fill_picker_candidates(pending, &map, &registry, &config, last_poi);
+	} else if pending.map_opened {
+		refresh_picker_candidates(pending, &map, &registry, &config, last_poi);
 	}
 
-	let Some(poi) = chosen.read().next().map(|msg| msg.poi) else {
-		return;
-	};
-	let Some(record) = registry.get(poi).copied() else {
+	let Some(choice) = chosen.read().next().copied() else {
 		return;
 	};
 	let origin = pending.origin;
+	let fallback_at = pending.fallback_at;
+	let placed = choice.poi.and_then(|id| registry.get(id).copied());
 	close_respawn_map(&mut map);
 	state.pending = None;
-	state.last_poi = Some(record.id);
+	let position = match placed {
+		Some(record) => {
+			state.last_poi = Some(record.id);
+			player_position_above_surface(surface_at(record.position, &surface))
+		}
+		None => player_position_above_surface(fallback_at),
+	};
 	finish_world_player_spawn(
 		&mut commands,
 		&mut meshes,
@@ -472,7 +480,7 @@ fn respawn_world_player(
 		loadout.as_deref(),
 		origin,
 		now,
-		player_position_above_surface(surface_at(record.position, &surface)),
+		position,
 	);
 }
 
@@ -483,18 +491,28 @@ fn open_respawn_picker(
 	config: &WorldPlayerRespawnConfig,
 	last_poi: Option<PoiId>,
 ) {
-	fill_picker_candidates(pending, map, registry, config, last_poi);
+	refresh_picker_candidates(pending, map, registry, config, last_poi);
 	pending.map_opened = true;
 	map.open_at(pending.death_at.xz(), true);
 }
 
-fn fill_picker_candidates(
+fn refresh_picker_candidates(
 	pending: &mut PendingPlayerRespawn,
 	map: &WorldMapView,
 	registry: &PoiRegistry,
 	config: &WorldPlayerRespawnConfig,
 	last_poi: Option<PoiId>,
 ) {
+	pending.fallback_at = place_nearby(
+		Some(registry),
+		pending.death_at,
+		config.nearby_query(),
+		Some(&config.interests),
+		last_poi,
+		fallback_seed(pending.death_at),
+		config.fallback,
+	)
+	.position;
 	let records = prefer_building_pois(
 		registry.nearby_in(
 			pending.death_at,
@@ -504,13 +522,34 @@ fn fill_picker_candidates(
 		),
 		pending.death_at,
 	);
-	if records.is_empty() {
+	let ids: Vec<_> = records.iter().map(|record| record.id).collect();
+	let revision = registry.membership_revision();
+	if pending.registry_revision != revision || pending.candidates != ids {
+		pending.registry_revision = revision;
+		pending.candidates = ids;
+		pending.stick_resting = true;
+	}
+	validate_highlight(pending, registry);
+}
+
+fn validate_highlight(pending: &mut PendingPlayerRespawn, registry: &PoiRegistry) {
+	let still_valid = pending.highlighted.filter(|id| {
+		pending.candidates.contains(id) && registry.get(*id).is_some()
+	});
+	if let Some(id) = still_valid {
+		pending.highlighted_at = registry.get(id).map(|record| record.position.xz());
 		return;
 	}
-	pending.candidates = records.iter().map(|record| record.id).collect();
-	pending.highlighted = records.first().map(|record| record.id);
-	pending.highlighted_at = records.first().map(|record| record.position.xz());
-	pending.stick_resting = true;
+	if let Some(nearest) = nearest_candidate(&pending.candidates, registry, pending.death_at.xz()) {
+		set_highlighted(pending, nearest, registry);
+	} else {
+		pending.highlighted = None;
+		pending.highlighted_at = None;
+	}
+}
+
+fn fallback_seed(death_at: Vec3) -> u64 {
+	u64::from(death_at.x.to_bits()) ^ u64::from(death_at.z.to_bits()).wrapping_shl(1)
 }
 
 fn close_respawn_map(map: &mut WorldMapView) {
@@ -921,6 +960,8 @@ mod tests {
 				map_opened: false,
 				stick_resting: true,
 				first_life: false,
+				fallback_at: Vec3::new(3.0, 4.0, 5.0),
+				registry_revision: 0,
 			}),
 			..default()
 		});
@@ -1058,7 +1099,7 @@ mod tests {
 		world
 			.run_system_once(respawn_world_player)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		world.write_message(PlayerChoseRespawnPoi { poi: PoiId(1) });
+		world.write_message(PlayerChoseRespawnPoi { poi: Some(PoiId(1)) });
 		world
 			.run_system_once(respawn_world_player)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
@@ -1350,6 +1391,8 @@ mod tests {
 				map_opened: true,
 				stick_resting: true,
 				first_life: true,
+				fallback_at: Vec3::ZERO,
+				registry_revision: 0,
 			}),
 			..default()
 		});
@@ -1377,6 +1420,110 @@ mod tests {
 			.run_system_once(reset_first_spawn_offer)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		assert!(!world.resource::<WorldPlayerRespawnState>().first_spawn_offered);
+		Ok(())
+	}
+
+	#[test]
+	fn empty_registry_confirm_uses_the_fallback_ring() -> anyhow::Result<()> {
+		let mut world = discovery_respawn_world(0.2);
+		world
+			.run_system_once(respawn_world_player)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let fallback_at = {
+			let pending = world
+				.resource::<WorldPlayerRespawnState>()
+				.pending
+				.as_ref()
+				.ok_or_else(|| anyhow::anyhow!("pending"))?;
+			assert!(pending.map_opened);
+			assert!(pending.candidates.is_empty());
+			assert!(pending.highlighted.is_none());
+			assert_ne!(pending.fallback_at.xz(), pending.death_at.xz());
+			pending.fallback_at
+		};
+		world.write_message(PlayerChoseRespawnPoi { poi: None });
+		world
+			.run_system_once(respawn_world_player)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let mut bodies = world.query_filtered::<&Transform, With<VegetationPlayer>>();
+		let body = bodies.single(&world)?;
+		assert_eq!(body.translation.xz(), fallback_at.xz());
+		assert!(world.resource::<WorldPlayerRespawnState>().pending.is_none());
+		Ok(())
+	}
+
+	#[test]
+	fn picker_refreshes_when_pois_arrive() -> anyhow::Result<()> {
+		let mut world = discovery_respawn_world(0.2);
+		world
+			.run_system_once(respawn_world_player)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(world
+			.resource::<WorldPlayerRespawnState>()
+			.pending
+			.as_ref()
+			.is_some_and(|pending| pending.candidates.is_empty()));
+
+		let poi = world.spawn_empty().id();
+		world.resource_mut::<PoiRegistry>().upsert(
+			poi,
+			poi_intelligence::Poi::new(PoiId(7), URBAN_POI).with_arrival_radius(8.0),
+			Vec3::new(80.0, 4.0, 5.0),
+			true,
+			false,
+		)?;
+		world
+			.run_system_once(respawn_world_player)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let pending = world
+			.resource::<WorldPlayerRespawnState>()
+			.pending
+			.as_ref()
+			.ok_or_else(|| anyhow::anyhow!("pending"))?;
+		assert_eq!(pending.candidates, vec![PoiId(7)]);
+		assert_eq!(pending.highlighted, Some(PoiId(7)));
+		Ok(())
+	}
+
+	#[test]
+	fn picker_drops_a_removed_highlight() -> anyhow::Result<()> {
+		let mut world = discovery_respawn_world(0.2);
+		let keep = world.spawn_empty().id();
+		let gone = world.spawn_empty().id();
+		world.resource_mut::<PoiRegistry>().upsert(
+			keep,
+			poi_intelligence::Poi::new(PoiId(1), URBAN_POI).with_arrival_radius(8.0),
+			Vec3::new(80.0, 4.0, 5.0),
+			true,
+			false,
+		)?;
+		world.resource_mut::<PoiRegistry>().upsert(
+			gone,
+			poi_intelligence::Poi::new(PoiId(2), URBAN_POI).with_arrival_radius(8.0),
+			Vec3::new(40.0, 4.0, 5.0),
+			true,
+			false,
+		)?;
+		world
+			.run_system_once(respawn_world_player)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		{
+			let mut state = world.resource_mut::<WorldPlayerRespawnState>();
+			let pending = state.pending.as_mut().unwrap();
+			pending.highlighted = Some(PoiId(2));
+			pending.highlighted_at = Some(Vec2::new(40.0, 5.0));
+		}
+		world.resource_mut::<PoiRegistry>().remove_entity(gone);
+		world
+			.run_system_once(respawn_world_player)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let pending = world
+			.resource::<WorldPlayerRespawnState>()
+			.pending
+			.as_ref()
+			.ok_or_else(|| anyhow::anyhow!("pending"))?;
+		assert_eq!(pending.candidates, vec![PoiId(1)]);
+		assert_eq!(pending.highlighted, Some(PoiId(1)));
 		Ok(())
 	}
 

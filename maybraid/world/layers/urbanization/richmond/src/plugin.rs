@@ -75,7 +75,7 @@ impl Plugin for RichmondDevelopmentModelsPlugin {
 /// High usage-area labels become extra local places while those children exist.
 ///
 /// When an ancestor host already has a development identity, the High place
-/// inherits that host and gets a local id from the label text.
+/// inherits that host and gets a local id from the authored room pose.
 #[allow(clippy::type_complexity)]
 fn stamp_label_places(
 	mut commands: Commands,
@@ -87,7 +87,7 @@ fn stamp_label_places(
 			continue;
 		};
 		if let Some(host) = ancestor_host(child_of.map(ChildOf::parent), &ancestors) {
-			place = place.with_identity(host, local_place_id(place.label, node));
+			place = place.with_identity(host, local_place_id(node));
 		}
 		commands.entity(entity).insert(place);
 	}
@@ -115,10 +115,21 @@ fn ancestor_host(
 	None
 }
 
-fn local_place_id(label: crate::DiscoverablePlaceLabel, node: &LabelNode) -> u32 {
-	let mut h = label.salt() as u32;
-	for byte in node.text.as_bytes() {
-		h = h.wrapping_mul(16777619) ^ u32::from(*byte);
+/// Durable room id from the authored usage-area pose, not the display label.
+fn local_place_id(node: &LabelNode) -> u32 {
+	let translation = node.placement.translation;
+	let extents = node.geometry.extents();
+	let mut h = 2_166_131_261u32;
+	for bits in [
+		translation.x.to_bits(),
+		translation.y.to_bits(),
+		translation.z.to_bits(),
+		extents.x.to_bits(),
+		extents.y.to_bits(),
+		extents.z.to_bits(),
+		node.placement.yaw.to_bits(),
+	] {
+		h = h.wrapping_mul(16_777_619) ^ bits;
 	}
 	h
 }
@@ -201,6 +212,66 @@ mod tests {
 			.ok_or_else(|| anyhow::anyhow!("lounge should inherit host identity"))?;
 		anyhow::ensure!(place.host == Some(host_id));
 		anyhow::ensure!(place.local != 0);
+		Ok(())
+	}
+
+	#[test]
+	fn duplicate_lounge_labels_under_one_host_stay_distinct() -> anyhow::Result<()> {
+		use lod::gen::Id;
+
+		let mut app = App::new();
+		app.add_systems(Update, stamp_label_places);
+		let host_id = Id::from_cell(bevy::math::bounding::Aabb3d::from_min_max(
+			bevy::math::Vec3::ZERO,
+			bevy::math::Vec3::ONE,
+		));
+		let parent = app
+			.world_mut()
+			.spawn(
+				DiscoverablePlace::host(crate::DiscoverablePlaceLabel::House, 8.0, 1.1)
+					.with_identity(host_id, 4),
+			)
+			.id();
+		let lounge_a = app
+			.world_mut()
+			.spawn((
+				LabelNode::rectangle(
+					LabelStyle::Gray,
+					"Lounge",
+					bevy::math::Vec3::new(0.0, 0.0, 0.0),
+					bevy::math::Vec3::new(5.0, 3.0, 4.0),
+					0.0,
+				),
+				ChildOf(parent),
+			))
+			.id();
+		let lounge_b = app
+			.world_mut()
+			.spawn((
+				LabelNode::rectangle(
+					LabelStyle::Gray,
+					"Lounge",
+					bevy::math::Vec3::new(8.0, 0.0, 0.0),
+					bevy::math::Vec3::new(5.0, 3.0, 4.0),
+					0.0,
+				),
+				ChildOf(parent),
+			))
+			.id();
+
+		app.update();
+
+		let first = app
+			.world()
+			.get::<DiscoverablePlace>(lounge_a)
+			.ok_or_else(|| anyhow::anyhow!("first lounge"))?;
+		let second = app
+			.world()
+			.get::<DiscoverablePlace>(lounge_b)
+			.ok_or_else(|| anyhow::anyhow!("second lounge"))?;
+		anyhow::ensure!(first.host == Some(host_id));
+		anyhow::ensure!(second.host == Some(host_id));
+		anyhow::ensure!(first.local != second.local, "label text must not identify the room");
 		Ok(())
 	}
 }

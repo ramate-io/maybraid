@@ -67,6 +67,7 @@ struct PadState {
 	pulses: Vec<LivePulse>,
 	axes: HashMap<GamepadAxis, f32>,
 	buttons: HashMap<GamepadButton, f32>,
+	select: Option<MainThreadRc<GCControllerButtonInput>>,
 	logged_select: bool,
 }
 
@@ -148,6 +149,12 @@ fn sync_controller(
 				"pad_rumble: generic 'Controller' name is usually USB Xbox; Apple rumble often only works over Bluetooth"
 			);
 		}
+		let select = unsafe { select_button(controller, &extended) };
+		if let Some(select) = select.as_ref() {
+			unsafe {
+				claim_for_app(select);
+			}
+		}
 		PadState {
 			entity,
 			controller: MainThreadRc(controller.retain()),
@@ -155,6 +162,7 @@ fn sync_controller(
 			pulses: Vec::new(),
 			axes: HashMap::new(),
 			buttons: HashMap::new(),
+			select: select.map(MainThreadRc),
 			logged_select: false,
 		}
 	});
@@ -226,16 +234,15 @@ fn emit_extended(
 /// USB Xbox; macOS also binds Options to a screenshot gesture unless disabled.
 fn emit_select(
 	state: &mut PadState,
-	pad: &GCExtendedGamepad,
+	_pad: &GCExtendedGamepad,
 	raw_events: &mut MessageWriter<RawGamepadEvent>,
 ) {
-	let select = unsafe { select_button(&state.controller.0, pad) };
 	if !state.logged_select {
 		state.logged_select = true;
 		let name = controller_name(&state.controller.0);
-		match &select {
+		match state.select.as_ref() {
 			Some(button) => {
-				let bound = unsafe { button.isBoundToSystemGesture() };
+				let bound = unsafe { button.0.isBoundToSystemGesture() };
 				debug!("pad_select: {name} View/Options claimed bound_to_system={bound}");
 			}
 			None => {
@@ -244,11 +251,10 @@ fn emit_select(
 			}
 		}
 	}
-	let Some(select) = select else {
+	let Some(select) = state.select.as_ref().map(|select| select.0.clone()) else {
 		return;
 	};
 	unsafe {
-		claim_for_app(&select);
 		emit_button(state, raw_events, GamepadButton::Select, &select);
 	}
 }

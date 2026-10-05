@@ -13,12 +13,23 @@ use urbanization_cells::{SelectedUrbanization, UrbanizationIndex};
 use urbanization_layer_model::Urbanization;
 use vegetation_layer_model::Vegetation;
 
+use maybraid_language_core::lexicalizer::mix;
+
 use crate::english::{
 	named_forest_english, named_geographic_english, named_grove_english, named_place_english,
 	named_urban_english,
 };
 use crate::index::{name_key_salt, NameKey};
 use crate::name::terms_fingerprint;
+
+/// Individual source revisions. Do not XOR these together for invalidation.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct SourceRevisions {
+	pub forest: u64,
+	pub urban: u64,
+	pub terrain: u64,
+	pub places: u64,
+}
 
 /// A generated cell the language layer may name.
 #[derive(Clone, Debug, PartialEq)]
@@ -58,7 +69,7 @@ pub struct NamedPlace {
 pub trait NamedWorld: Send + Sync + 'static {
 	type Read: ReadOnlySystemParam + 'static;
 
-	fn source_fingerprint(read: &SystemParamItem<'_, '_, Self::Read>) -> u64;
+	fn source_revisions(read: &SystemParamItem<'_, '_, Self::Read>) -> SourceRevisions;
 
 	fn groves_overlapping(
 		read: &SystemParamItem<'_, '_, Self::Read>,
@@ -91,22 +102,14 @@ type WorldRead = (
 impl<T: 'static> NamedWorld for Vegetation<Chico<Urbanization<Richmond<T>>>> {
 	type Read = WorldRead;
 
-	fn source_fingerprint(read: &SystemParamItem<'_, '_, Self::Read>) -> u64 {
+	fn source_revisions(read: &SystemParamItem<'_, '_, Self::Read>) -> SourceRevisions {
 		let (forests, urban, terrain, places) = read;
-		let mut h = forests.membership_revision();
-		h ^= SpatialIndex::<SelectedUrbanization>::membership_revision(&**urban);
-		if let Some(store) = terrain {
-			h ^= store.membership_revision().wrapping_mul(0x9E37);
+		SourceRevisions {
+			forest: forests.membership_revision(),
+			urban: SpatialIndex::<SelectedUrbanization>::membership_revision(&**urban),
+			terrain: terrain.as_ref().map(|store| store.membership_revision()).unwrap_or(0),
+			places: places_signature(places),
 		}
-		h ^= u64::from(places.iter().len() as u32);
-		for (place, transform) in places.iter() {
-			let t = transform.translation();
-			h = h.wrapping_mul(16777619)
-				^ place_identity_bits(place)
-				^ u64::from(t.x.to_bits())
-				^ u64::from(t.z.to_bits());
-		}
-		h
 	}
 
 	fn groves_overlapping(
@@ -290,6 +293,36 @@ fn place_key(place: &DiscoverablePlace, xz: Vec2) -> (NameKey, bool, bool) {
 			false,
 		)
 	}
+}
+
+fn places_signature(
+	places: &Query<'_, '_, (&DiscoverablePlace, &GlobalTransform)>,
+) -> u64 {
+	let mut items: Vec<_> = places
+		.iter()
+		.map(|(place, transform)| {
+			let t = transform.translation();
+			(
+				place_identity_bits(place),
+				place.persistent,
+				place.label.salt(),
+				t.x.to_bits(),
+				t.z.to_bits(),
+			)
+		})
+		.collect();
+	items.sort_unstable();
+	let mut sig = mix(items.len() as u64);
+	for (identity, persistent, label, x, z) in items {
+		sig = mix(
+			sig ^ mix(identity)
+				^ mix(u64::from(persistent))
+				^ mix(label)
+				^ mix(u64::from(x))
+				^ mix(u64::from(z)),
+		);
+	}
+	sig
 }
 
 fn place_identity_bits(place: &DiscoverablePlace) -> u64 {
