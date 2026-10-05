@@ -1,11 +1,13 @@
-//! The world's layer stack: terrain, urbanization, vegetation, mobs, and
-//! furnishing, each generated and then presented.
+//! The world's layer stack: terrain, urbanization, vegetation, mobs,
+//! furnishing, and language, each generated and then presented.
 
 use barking::{Barking, BarkingConfig};
 use bevy::prelude::*;
 use chico::{Chico, ChicoConfig};
 use durham::{Durham, DurhamTerrainConfig};
 use furnishing_layer_model::Furnishing;
+use geneva::{Geneva, LanguageConfig};
+use language_layer_model::Language;
 use layer_stack::{Generate, GenerationModePlugin, Present};
 use maputo::Maputo;
 use maybraid_game_mode_discover::Discovery;
@@ -21,6 +23,7 @@ type Urban = Urbanization<Richmond<Ground>>;
 type Veg = Vegetation<Chico<Urban>>;
 type Mob = Mobs<Barking<Veg>>;
 type Furniture = Furnishing<Maputo<Urban>>;
+type Named = Language<Geneva<Veg>>;
 
 /// Every world layer at world defaults.
 ///
@@ -39,11 +42,13 @@ impl Plugin for WorldLayersPlugin {
 				Generate::<Discovery, Veg>::new(ChicoConfig::world_defaults()),
 				Generate::<Discovery, Mob>::new(BarkingConfig::world_defaults()),
 				Generate::<Discovery, Furniture>::new(()),
+				Generate::<Discovery, Named>::new(LanguageConfig::world_defaults()),
 				Present::<Discovery, Ground>::default(),
 				Present::<Discovery, Urban>::default(),
 				Present::<Discovery, Veg>::default(),
 				Present::<Discovery, Mob>::default(),
 				Present::<Discovery, Furniture>::default(),
+				Present::<Discovery, Named>::default(),
 			),
 			(
 				GenerationModePlugin::<TrainingGround>::default(),
@@ -54,12 +59,28 @@ impl Plugin for WorldLayersPlugin {
 				Generate::<TrainingGround, Veg>::new(ChicoConfig::grove()),
 				Generate::<TrainingGround, Mob>::new(BarkingConfig::world_defaults()),
 				Generate::<TrainingGround, Furniture>::new(()),
+				Generate::<TrainingGround, Named>::new(LanguageConfig::world_defaults()),
 				Present::<TrainingGround, Ground>::default(),
 				Present::<TrainingGround, Urban>::default(),
 				Present::<TrainingGround, Veg>::default(),
 				Present::<TrainingGround, Mob>::default(),
 				Present::<TrainingGround, Furniture>::default(),
+				Present::<TrainingGround, Named>::default(),
 			),
 		));
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use layer_stack::{Layer, Scheme};
+
+	fn assert_scheme<M: Scheme<L>, L: Layer>() {}
+
+	#[test]
+	fn language_layer_is_subscribed_in_discovery_and_training_ground() {
+		assert_scheme::<Discovery, Named>();
+		assert_scheme::<TrainingGround, Named>();
 	}
 }
