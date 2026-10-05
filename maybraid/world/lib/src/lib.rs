@@ -14,7 +14,11 @@ pub mod commands;
 mod control;
 mod crate_loot;
 mod intelligence;
+<<<<<<< HEAD
 mod map_view;
+mod material_lib;
+=======
+>>>>>>> d9a52b0a573905ec7a163684d01331dced71c374
 mod pitch;
 mod player_lifecycle;
 mod player_position;
@@ -35,7 +39,11 @@ pub use durham::Durham;
 pub use game_commands::command::PendingStartupCommand;
 pub use intelligence::WorldIntelligencePlugin;
 pub use lod::LodJobCounter;
+<<<<<<< HEAD
 pub use map_view::{WorldMapView, WorldMapViewPlugin};
+pub use material_lib::{WorldMaterialLib, WorldMaterialRefPlugin};
+=======
+>>>>>>> d9a52b0a573905ec7a163684d01331dced71c374
 pub use maybraid_sky::{
 	ShadowQuality, SkyClock, SkyCommand, SKY_BLUE, SKY_CLEAR, SKY_HORIZON, SKY_NADIR, SKY_ZENITH,
 	SUN_COLOR, SUN_ILLUMINANCE,
