@@ -7,9 +7,8 @@ use bevy::transform::helper::TransformHelper;
 use intelligence_lod::{due_by_rank, IntelligenceBand, IntelligenceLod, IntelligencePriority};
 use lod_avian::PhysicsInteractionLayer;
 use spotting_intelligence::{
-	allocate_sample_budget, apply_candidate_budget, rank_candidates, SpotCandidate,
-	SpotContactView, SpotDirective, SpotSubject, SpottedContact, SpottingObserveLimits,
-	SpottingUser,
+	SpotCandidate, SpotContactView, SpotDirective, SpotSubject, SpottedContact,
+	SpottingObserveLimits, SpottingUser,
 };
 
 use crate::clear_segment;
@@ -315,11 +314,12 @@ pub fn observe_spotting(
 
 		let mut ranked: Vec<SpotCandidate> =
 			candidates.values().map(|candidate| candidate.rank).collect();
-		rank_candidates(&mut ranked);
+		SpotCandidate::rank(&mut ranked);
 		let candidate_budget = band.scale_count(user.settings.candidate_budget);
 		let vision_samples = band.scale_count(user.settings.vision_samples);
-		apply_candidate_budget(&mut ranked, candidate_budget);
-		let grants = allocate_sample_budget(&ranked, candidate_budget, vision_samples);
+		SpotCandidate::apply_budget(&mut ranked, candidate_budget);
+		let grants =
+			SpotCandidate::allocate_sample_budget(&ranked, candidate_budget, vision_samples);
 
 		for (candidate, sample_budget) in ranked.into_iter().zip(grants) {
 			if sample_budget == 0 {
