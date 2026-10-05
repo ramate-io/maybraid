@@ -147,15 +147,16 @@ impl GrenadeStats {
 	}
 }
 
-/// Remaining recharge on this owned instance. Ignored by catalog equality.
+/// Remaining recharge on this owned instance. Use [`InventoryItem::same_catalog_identity`]
+/// when comparing authored identity without cooldown.
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct GrenadeRecharge {
 	pub remaining: f32,
 }
 
 impl PartialEq for GrenadeRecharge {
-	fn eq(&self, _other: &Self) -> bool {
-		true
+	fn eq(&self, other: &Self) -> bool {
+		self.remaining.to_bits() == other.remaining.to_bits()
 	}
 }
 
@@ -180,10 +181,29 @@ mod tests {
 	use super::*;
 
 	#[test]
-	fn recharge_is_ignored_by_equality() {
-		let a = GrenadeRecharge { remaining: 4.0 };
-		let b = GrenadeRecharge { remaining: 0.0 };
-		assert_eq!(a, b);
+	fn recharge_remaining_affects_equality() -> anyhow::Result<()> {
+		let ready = GrenadeRecharge { remaining: 0.0 };
+		let cooling = GrenadeRecharge { remaining: 4.0 };
+		anyhow::ensure!(ready != cooling);
+		anyhow::ensure!(ready == GrenadeRecharge { remaining: 0.0 });
+		Ok(())
+	}
+
+	#[test]
+	fn grenade_catalog_identity_ignores_recharge() -> anyhow::Result<()> {
+		use crate::InventoryItem;
+
+		let spec = GrenadeSpec::standard();
+		let stats = GrenadeStats::standard();
+		let ready = InventoryItem::Grenade { spec, stats, recharge: GrenadeRecharge { remaining: 0.0 } };
+		let cooling = InventoryItem::Grenade {
+			spec,
+			stats,
+			recharge: GrenadeRecharge { remaining: 4.0 },
+		};
+		anyhow::ensure!(ready != cooling);
+		anyhow::ensure!(ready.same_catalog_identity(&cooling));
+		Ok(())
 	}
 
 	#[test]
