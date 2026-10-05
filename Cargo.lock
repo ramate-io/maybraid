@@ -2905,6 +2905,7 @@ dependencies = [
 name = "character-rigs"
 version = "0.1.2"
 dependencies = [
+ "anyhow",
  "bevy",
  "clap",
  "game-commands",
