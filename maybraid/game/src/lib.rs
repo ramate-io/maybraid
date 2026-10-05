@@ -10,10 +10,10 @@ pub use flow::{GameFlow, HomeRoute, PauseMenuRoute, PlaySession, WorldPause};
 pub use paths::assets_root;
 
 use crate::shell::{
-	ShellRoute, apply_pause_character_look, apply_shell_look, attach_preview_camera,
-	despawn_loading_backdrop, detach_preview_camera, enter_characters, enter_home,
-	enter_loading_world, enter_world, enter_world_menu, exit_world_menu,
-	restore_stashed_world_camera, spawn_loading_backdrop, stamp_preview_render_layers,
+	apply_pause_character_look, apply_shell_look, attach_preview_camera, despawn_loading_backdrop,
+	detach_preview_camera, enter_characters, enter_home, enter_loading_world, enter_world,
+	enter_world_menu, exit_world_menu, restore_stashed_world_camera, spawn_loading_backdrop,
+	stamp_preview_render_layers, ShellRoute,
 };
 use bevy::prelude::*;
 use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
@@ -23,9 +23,10 @@ use maybraid_game_mode_training_ground::{
 use maybraid_input::MenuNavPad;
 use maybraid_menu_controller::MenuControllerPlugin;
 use maybraid_world::{
-	resume_discovery_from_saved_waypoints, InventoryEditCameraFollow, PlayerPhysicsEnabled,
-	Durham, PlayerSpawnXz, ShadowQuality, TerrainStreaming, WorldGameplayEnabled,
-	WorldMobHudEnabled, WorldPlayerLoadout, WorldPlugin, WorldSceneryVisible, WorldSurfaceSet,
+	reset_first_spawn_offer, resume_discovery_from_saved_waypoints, Durham,
+	InventoryEditCameraFollow, PlayerPhysicsEnabled, PlayerSpawnXz, ShadowQuality,
+	TerrainStreaming, WorldGameplayEnabled, WorldMobHudEnabled, WorldPlayerLoadout, WorldPlugin,
+	WorldSceneryVisible, WorldSurfaceSet,
 };
 use menu_components::{
 	consume_screen_back, ActiveOverlayKey, MenuBackConsumed, ScreenBackPressed, ShortTextModal,
@@ -97,6 +98,7 @@ impl Plugin for GamePlugin {
 					crate::load::arm_first_load,
 					crate::training::begin_training_round.before(load_active_player_loadout),
 					load_active_player_loadout.before(resume_discovery_from_saved_waypoints),
+					reset_first_spawn_offer,
 					resume_discovery_from_saved_waypoints,
 				),
 			)

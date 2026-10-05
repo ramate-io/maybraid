@@ -13,12 +13,23 @@ use urbanization_cells::{SelectedUrbanization, UrbanizationIndex};
 use urbanization_layer_model::Urbanization;
 use vegetation_layer_model::Vegetation;
 
+use maybraid_language_core::lexicalizer::mix;
+
 use crate::english::{
-	development_terms, geographic_terms, grove_kind_terms, layering_terms, place_label_terms,
-	urbanization_terms,
+	named_forest_english, named_geographic_english, named_grove_english, named_place_english,
+	named_urban_english,
 };
-use crate::index::NameKey;
+use crate::index::{name_key_salt, NameKey};
 use crate::name::terms_fingerprint;
+
+/// Individual source revisions. Do not XOR these together for invalidation.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct SourceRevisions {
+	pub forest: u64,
+	pub urban: u64,
+	pub terrain: u64,
+	pub places: u64,
+}
 
 /// A generated cell the language layer may name.
 #[derive(Clone, Debug, PartialEq)]
@@ -58,7 +69,7 @@ pub struct NamedPlace {
 pub trait NamedWorld: Send + Sync + 'static {
 	type Read: ReadOnlySystemParam + 'static;
 
-	fn source_fingerprint(read: &SystemParamItem<'_, '_, Self::Read>) -> u64;
+	fn source_revisions(read: &SystemParamItem<'_, '_, Self::Read>) -> SourceRevisions;
 
 	fn groves_overlapping(
 		read: &SystemParamItem<'_, '_, Self::Read>,
@@ -91,22 +102,14 @@ type WorldRead = (
 impl<T: 'static> NamedWorld for Vegetation<Chico<Urbanization<Richmond<T>>>> {
 	type Read = WorldRead;
 
-	fn source_fingerprint(read: &SystemParamItem<'_, '_, Self::Read>) -> u64 {
+	fn source_revisions(read: &SystemParamItem<'_, '_, Self::Read>) -> SourceRevisions {
 		let (forests, urban, terrain, places) = read;
-		let mut h = forests.membership_revision();
-		h ^= SpatialIndex::<SelectedUrbanization>::membership_revision(&**urban);
-		if let Some(store) = terrain {
-			h ^= store.membership_revision().wrapping_mul(0x9E37);
+		SourceRevisions {
+			forest: forests.membership_revision(),
+			urban: SpatialIndex::<SelectedUrbanization>::membership_revision(&**urban),
+			terrain: terrain.as_ref().map(|store| store.membership_revision()).unwrap_or(0),
+			places: places_signature(places),
 		}
-		h ^= u64::from(places.iter().len() as u32);
-		for (place, transform) in places.iter() {
-			let t = transform.translation();
-			h = h.wrapping_mul(16777619)
-				^ place_identity_bits(place)
-				^ u64::from(t.x.to_bits())
-				^ u64::from(t.z.to_bits());
-		}
-		h
 	}
 
 	fn groves_overlapping(
@@ -154,19 +157,21 @@ fn grove_features(index: &ForestIndex, region: Aabb3d) -> Vec<NamedFeature> {
 			continue;
 		};
 		let revision = SpatialIndex::<ChicoForest>::version(index, id).map(|v| v.0).unwrap_or(0);
-		let mut english = layering_terms(forest.layers.layering);
-		for kind in [
+		let kinds = [
 			forest.layers.tufts,
 			forest.layers.understory,
 			forest.layers.lower_canopy,
 			forest.layers.upper_canopy,
 		]
 		.into_iter()
-		.flatten()
-		{
-			english.extend(grove_kind_terms(kind));
-		}
-		out.push(NamedFeature::new(NameKey::Forest(id), bounds, english, revision));
+		.flatten();
+		let key = NameKey::Forest(id);
+		out.push(NamedFeature::new(
+			key,
+			bounds,
+			named_forest_english(forest.layers.layering, kinds, name_key_salt(key)),
+			revision,
+		));
 	}
 	for TrackedId(id) in SpatialIndex::<ChicoGrove>::tracked_ids_for(index, region) {
 		let Some(grove) = SpatialIndex::<ChicoGrove>::get(index, id) else {
@@ -176,11 +181,13 @@ fn grove_features(index: &ForestIndex, region: Aabb3d) -> Vec<NamedFeature> {
 			continue;
 		};
 		let revision = SpatialIndex::<ChicoGrove>::version(index, id).map(|v| v.0).unwrap_or(0);
-		let mut english = Vec::new();
-		for recipe in &grove.recipes {
-			english.extend(grove_kind_terms(recipe.kind));
-		}
-		out.push(NamedFeature::new(NameKey::Grove(id), bounds, english, revision));
+		let key = NameKey::Grove(id);
+		out.push(NamedFeature::new(
+			key,
+			bounds,
+			named_grove_english(grove.recipes.iter().map(|recipe| recipe.kind), name_key_salt(key)),
+			revision,
+		));
 	}
 	out
 }
@@ -197,7 +204,10 @@ fn geography_features(store: &TerrainEntryStore, region: Aabb3d) -> Vec<NamedFea
 			NamedFeature::new(
 				NameKey::Geographic(feature.id),
 				bounds,
-				geographic_terms(feature.kind),
+				named_geographic_english(
+					feature.kind,
+					name_key_salt(NameKey::Geographic(feature.id)),
+				),
 				feature.revision.0,
 			)
 		})
@@ -213,17 +223,18 @@ fn urban_features(index: &UrbanizationIndex, region: Aabb3d) -> Vec<NamedFeature
 		let Some(bounds) = SpatialIndex::<SelectedUrbanization>::get_bounds(index, id) else {
 			continue;
 		};
-		let revision =
-			SpatialIndex::<SelectedUrbanization>::version(index, id).map(|v| v.0).unwrap_or(0);
-		let english = urbanization_terms(cell.kind);
-		out.push(NamedFeature::new(NameKey::Urban(id), bounds, english.clone(), revision));
+		let revision = SpatialIndex::<SelectedUrbanization>::version(index, id)
+			.map(|v| v.0)
+			.unwrap_or(0);
+		let cell_key = NameKey::Urban(id);
+		let english = named_urban_english(cell.kind, None, name_key_salt(cell_key));
+		out.push(NamedFeature::new(cell_key, bounds, english, revision));
 		for leaf in &cell.leaves {
-			let mut leaf_english = english.clone();
-			leaf_english.extend(development_terms(leaf.kind));
+			let leaf_key = NameKey::UrbanLeaf(leaf.id());
 			out.push(NamedFeature::new(
-				NameKey::UrbanLeaf(leaf.id()),
+				leaf_key,
 				leaf.bounds,
-				leaf_english,
+				named_urban_english(cell.kind, Some(leaf.kind), name_key_salt(leaf_key)),
 				revision,
 			));
 		}
@@ -243,7 +254,10 @@ fn place_features(
 		}
 		let xz = Vec2::new(world.x, world.z);
 		let (key, provisional, inherit_host_language) = place_key(place, xz);
-		let english = place_label_terms(place.label);
+		let english = named_place_english(
+			place.label,
+			place_identity_bits(place) ^ u64::from(xz.x.to_bits()) ^ u64::from(xz.y.to_bits()),
+		);
 		let fingerprint = terms_fingerprint(&english);
 		out.push(NamedPlace {
 			key,
@@ -267,11 +281,7 @@ fn xz_contains(region: Aabb3d, x: f32, z: f32) -> bool {
 
 fn place_key(place: &DiscoverablePlace, xz: Vec2) -> (NameKey, bool, bool) {
 	if let Some(host) = place.host {
-		(
-			NameKey::Place { host, local: place.local },
-			false,
-			!place.persistent,
-		)
+		(NameKey::Place { host, local: place.local }, false, !place.persistent)
 	} else {
 		(
 			NameKey::ProvisionalPlace {
@@ -283,6 +293,36 @@ fn place_key(place: &DiscoverablePlace, xz: Vec2) -> (NameKey, bool, bool) {
 			false,
 		)
 	}
+}
+
+fn places_signature(
+	places: &Query<'_, '_, (&DiscoverablePlace, &GlobalTransform)>,
+) -> u64 {
+	let mut items: Vec<_> = places
+		.iter()
+		.map(|(place, transform)| {
+			let t = transform.translation();
+			(
+				place_identity_bits(place),
+				place.persistent,
+				place.label.salt(),
+				t.x.to_bits(),
+				t.z.to_bits(),
+			)
+		})
+		.collect();
+	items.sort_unstable();
+	let mut sig = mix(items.len() as u64);
+	for (identity, persistent, label, x, z) in items {
+		sig = mix(
+			sig ^ mix(identity)
+				^ mix(u64::from(persistent))
+				^ mix(label)
+				^ mix(u64::from(x))
+				^ mix(u64::from(z)),
+		);
+	}
+	sig
 }
 
 fn place_identity_bits(place: &DiscoverablePlace) -> u64 {
@@ -304,7 +344,10 @@ pub(crate) fn places_from_world_xz(
 		}
 		let xz = Vec2::new(world.x, world.z);
 		let (key, provisional, inherit_host_language) = place_key(&place, xz);
-		let english = place_label_terms(place.label);
+		let english = named_place_english(
+			place.label,
+			place_identity_bits(&place) ^ u64::from(xz.x.to_bits()) ^ u64::from(xz.y.to_bits()),
+		);
 		let fingerprint = terms_fingerprint(&english);
 		out.push(NamedPlace {
 			key,

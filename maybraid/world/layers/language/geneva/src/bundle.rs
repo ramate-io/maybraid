@@ -20,19 +20,15 @@ pub struct LanguageBundle {
 
 impl LanguageBundle {
 	pub fn compose(world_seed: u64, coarse: (i32, i32), local: (i32, i32), index: u8) -> Self {
-		let coarse_hash = mix(
-			world_seed
-				^ mix(coarse.0 as u64)
-				^ mix((coarse.1 as u64).wrapping_mul(0x9E37))
-				^ u64::from(index),
-		);
-		let local_hash = mix(
-			world_seed
-				^ mix(local.0 as u64)
-				^ mix((local.1 as u64).wrapping_mul(0x85EB))
-				^ u64::from(index)
-				^ 0xD1E7_A11A,
-		);
+		let coarse_hash = mix(world_seed
+			^ mix(coarse.0 as u64)
+			^ mix((coarse.1 as u64).wrapping_mul(0x9E37))
+			^ u64::from(index));
+		let local_hash = mix(world_seed
+			^ mix(local.0 as u64)
+			^ mix((local.1 as u64).wrapping_mul(0x85EB))
+			^ u64::from(index)
+			^ 0xD1E7_A11A);
 		let presets = grammar_presets();
 		let mut grammar = presets[(coarse_hash as usize) % presets.len()];
 		if local_hash.is_multiple_of(4) {

@@ -5127,7 +5127,7 @@ dependencies = [
 
 [[package]]
 name = "geneva"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "bevy",
@@ -6373,7 +6373,7 @@ dependencies = [
 
 [[package]]
 name = "language-layer-model"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "bevy",
@@ -6385,7 +6385,7 @@ dependencies = [
 
 [[package]]
 name = "language-layer-presentation"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "bevy",
@@ -7085,6 +7085,7 @@ dependencies = [
  "maybraid-sky",
  "maybraid-weather",
  "meandering-intelligence",
+ "menu-components",
  "mob-characters",
  "mob-layer-model",
  "mob-layer-presentation",

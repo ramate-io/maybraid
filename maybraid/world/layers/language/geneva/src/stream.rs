@@ -9,7 +9,7 @@ use lod::LodGenerateKeepRegion;
 use urbanization_layer_model::UrbanizationGenerationSystems;
 use vegetation_layer_model::VegetationGenerationSystems;
 
-use crate::index::{origin_keep, LanguageIndex, LanguageWorldSeed};
+use crate::index::{origin_keep, LanguageIndex, LanguageSourceDeps, LanguageWorldSeed};
 use crate::present::LanguageLodChan;
 use crate::sources::NamedWorld;
 
@@ -55,14 +55,14 @@ fn generate_language_region<W: NamedWorld>(
 	mut index: ResMut<LanguageIndex>,
 ) {
 	let region = generate_keep.region.unwrap_or_else(origin_keep);
-	let fingerprint = W::source_fingerprint(&read);
-	if fingerprint != index.source_fingerprint() {
+	let deps = LanguageSourceDeps::from_keep(W::source_revisions(&read), seed.0, region);
+	if index.source_deps() != Some(deps) {
 		let mut features = W::groves_overlapping(&read, region);
 		features.extend(W::geography_overlapping(&read, region));
 		features.extend(W::urban_overlapping(&read, region));
 		let places = W::places_overlapping(&read, region);
 		index.queue_keep(seed.0, region, &features, &places);
-		index.note_source_fingerprint(fingerprint);
+		index.note_source_deps(deps);
 	}
 	index.assign_budgeted(seed.0, ASSIGN_BUDGET);
 }
