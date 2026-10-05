@@ -17,13 +17,28 @@ where
 	pub fn apply(&self, rig: &mut R, animation_progress: f32, transition_progress: f32) -> Effects {
 		let rest = snapshot_pose(rig);
 		restore_pose(rig, &rest);
-		self.animation.apply_for(rig, animation_progress);
-		let effects = self.animation.effects_for(rig, animation_progress);
-		let target_pose = snapshot_pose(rig);
-		let weight = self.weight(transition_progress);
-		blend_pose(rig, &self.from_pose, &target_pose, weight);
-		mix_effects(Effects::default(), effects, weight)
+		apply_with_from_pose(self, rig, &self.from_pose, animation_progress, transition_progress)
 	}
+}
+
+/// Apply a transition using an explicit from-pose (e.g. merged from a masked cache).
+pub fn apply_with_from_pose<A, R>(
+	transition: &Transition<A, R>,
+	rig: &mut R,
+	from_pose: &RigPose,
+	animation_progress: f32,
+	transition_progress: f32,
+) -> Effects
+where
+	A: Animation<R>,
+	R: HumanoidRig,
+{
+	transition.animation.apply_for(rig, animation_progress);
+	let effects = transition.animation.effects_for(rig, animation_progress);
+	let target_pose = snapshot_pose(rig);
+	let weight = transition.weight(transition_progress);
+	blend_pose(rig, from_pose, &target_pose, weight);
+	mix_effects(Effects::default(), effects, weight)
 }
 
 /// Samples an animation into a pose without leaving the rig in that state.

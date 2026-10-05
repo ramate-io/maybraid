@@ -17,6 +17,7 @@ use character_animations::{
 		Idle, Jab, Prone, QuadrupedIdle, QuadrupedLeap, QuadrupedRun, Squat, Tuck,
 		TwoFootedTuckedFlip, UprightLeap,
 	},
+	rigs::jump_transition_cache::JumpTransitionCache,
 	Animation, Effects,
 };
 use character_rigs::{
@@ -30,7 +31,7 @@ use intelligence_lod::{
 	look_applies, IntelligenceFocus, IntelligenceLod, IntelligenceLookFrame, IntelligencePriority,
 };
 
-use crate::clip::{AnimClip, AnimId, AnimRefRoot};
+use crate::clip::{AnimClip, AnimId, AnimRefRoot, JumpParams};
 use crate::markers::{AnimateBones, AnimateEffects, SuspendAnimation};
 use crate::plant::plant_lod_entity;
 use crate::rig::{bone_map_ready, BoneMap, CharacterRig, CharacterRigRole, RigSkeletonKind};
@@ -88,6 +89,8 @@ pub struct AnimMailbox {
 	blend_progress: f32,
 	from_pose: RigPose,
 	bind_transform: Transform,
+	jump_transition: JumpTransitionCache,
+	last_jump_params: Option<JumpParams>,
 }
 
 /// Sample coordinate for the current clip. When present, [`tick_anim_mailbox`]
@@ -105,6 +108,8 @@ impl AnimMailbox {
 			blend_progress: 1.0,
 			from_pose: RigPose::new(),
 			bind_transform,
+			jump_transition: JumpTransitionCache::default(),
+			last_jump_params: None,
 		}
 	}
 
@@ -302,7 +307,19 @@ pub fn tick_anim_mailbox(
 			};
 			mailbox.blend_progress = 0.0;
 			mailbox.clip_progress = 0.0;
+			mailbox.jump_transition.invalidate();
+			mailbox.last_jump_params = None;
 			mailbox.last = Some(requested_id);
+		}
+
+		if let AnimClip::Jump(params) = root.0.clip {
+			if mailbox.last_jump_params != Some(params) {
+				mailbox.jump_transition.invalidate();
+				mailbox.last_jump_params = Some(params);
+			}
+		} else if mailbox.last_jump_params.is_some() {
+			mailbox.jump_transition.invalidate();
+			mailbox.last_jump_params = None;
 		}
 
 		if let Some(progress) = progress {
@@ -374,6 +391,7 @@ pub fn apply_anim_mailbox(
 				clip_progress(requested, mailbox.clip_progress, entity),
 				write_bones,
 				write_effects,
+				&mut mailbox.jump_transition,
 				humanoid,
 				quadruped,
 				forelimbed,
@@ -420,6 +438,7 @@ fn sample_requested(
 	clip_progress: f32,
 	write_bones: bool,
 	write_effects: bool,
+	jump_transition: &mut JumpTransitionCache,
 	humanoid: Option<Mut<HumanoidV0Rig>>,
 	quadruped: Option<Mut<QuadrupedV0Rig>>,
 	forelimbed: Option<Mut<ForelimbedV0Rig>>,
@@ -428,8 +447,14 @@ fn sample_requested(
 		RigSkeletonKind::Humanoid => {
 			let mut rig = humanoid?;
 			seed_rig(&mut rig.pose, rest);
-			let effects =
-				sample_humanoid(requested, &mut rig, clip_progress, write_bones, write_effects);
+			let effects = sample_humanoid(
+				requested,
+				&mut rig,
+				clip_progress,
+				write_bones,
+				write_effects,
+				jump_transition,
+			);
 			(rig.pose.clone(), effects)
 		}
 		RigSkeletonKind::Quadruped => {
@@ -532,12 +557,32 @@ where
 	}
 }
 
+fn sample_jump(
+	params: JumpParams,
+	rig: &mut HumanoidV0Rig,
+	progress: f32,
+	write_bones: bool,
+	write_effects: bool,
+	jump_transition: &mut JumpTransitionCache,
+) -> Effects {
+	let jump = params.apply_humanoid();
+	if write_bones {
+		jump.apply_for_with_cache(rig, progress, jump_transition);
+	}
+	if write_effects {
+		jump.effects_for(rig, progress)
+	} else {
+		Effects::default()
+	}
+}
+
 fn sample_humanoid(
 	clip: AnimClip,
 	rig: &mut HumanoidV0Rig,
 	progress: f32,
 	write_bones: bool,
 	write_effects: bool,
+	jump_transition: &mut JumpTransitionCache,
 ) -> Effects {
 	match clip {
 		AnimClip::Still => {
@@ -546,7 +591,7 @@ fn sample_humanoid(
 		AnimClip::Walk(walk) => sample_split(&walk, rig, progress, write_bones, write_effects),
 		AnimClip::Run(run) => sample_split(&run, rig, progress, write_bones, write_effects),
 		AnimClip::Jump(params) => {
-			sample_split(&params.apply_humanoid(), rig, progress, write_bones, write_effects)
+			sample_jump(params, rig, progress, write_bones, write_effects, jump_transition)
 		}
 		AnimClip::Leap(leap) => {
 			sample_split(&UprightLeap::from_leap(&leap), rig, progress, write_bones, write_effects)
@@ -759,7 +804,9 @@ mod tests {
 			rig.pose.insert(BonePose::new(RigName::from(bone), Transform::IDENTITY));
 		}
 
-		let effects = sample_humanoid(AnimClip::Still, &mut rig, 0.25, true, true);
+		let mut jump_transition = JumpTransitionCache::default();
+		let effects =
+			sample_humanoid(AnimClip::Still, &mut rig, 0.25, true, true, &mut jump_transition);
 		assert!(effects.r#move.is_none());
 		let left = rig.pose.get(&RigName::from("shoulder.L")).expect("left");
 		assert!(left.swing.abs() > 0.0);
@@ -780,7 +827,9 @@ mod tests {
 		use character_rigs::Side;
 
 		let mut rig = HumanoidV0Rig::imported();
-		let effects = sample_humanoid(AnimClip::squat(), &mut rig, 1.0, true, true);
+		let mut jump_transition = JumpTransitionCache::default();
+		let effects =
+			sample_humanoid(AnimClip::squat(), &mut rig, 1.0, true, true, &mut jump_transition);
 		if effects.r#move.is_some() {
 			return Err(anyhow!("held squat must not Effects.move"));
 		}
@@ -807,7 +856,9 @@ mod tests {
 		use character_rigs::humanoid::HumanoidRig;
 
 		let mut rig = HumanoidV0Rig::imported();
-		let effects = sample_humanoid(AnimClip::prone(), &mut rig, 1.0, true, true);
+		let mut jump_transition = JumpTransitionCache::default();
+		let effects =
+			sample_humanoid(AnimClip::prone(), &mut rig, 1.0, true, true, &mut jump_transition);
 		if effects.r#move.is_some() {
 			return Err(anyhow!("held prone must not Effects.move"));
 		}
