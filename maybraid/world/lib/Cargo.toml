@@ -30,6 +30,9 @@ firearm-user = { workspace = true }
 furniture-assemblies = { workspace = true }
 furnishing-layer-model = { workspace = true }
 furnishing-layer-presentation = { workspace = true }
+geneva = { workspace = true }
+language-layer-model = { workspace = true }
+language-layer-presentation = { workspace = true }
 maputo = { workspace = true }
 firearms = { workspace = true }
 fleeing-intelligence = { workspace = true }
@@ -46,6 +49,7 @@ material-ref = { workspace = true }
 world-materials = { workspace = true }
 maybraid-character-controller = { workspace = true }
 maybraid-input = { workspace = true }
+menu-components = { workspace = true }
 maybraid-skill-map = { workspace = true }
 maybraid-sky = { workspace = true }
 maybraid-weather = { workspace = true }

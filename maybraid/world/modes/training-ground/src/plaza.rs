@@ -299,6 +299,7 @@ mod tests {
 				home: Vec2::ZERO,
 				keep_waypoints: true,
 				respawn_ends_life: false,
+				pick_first_spawn: true,
 			},
 		);
 		policies

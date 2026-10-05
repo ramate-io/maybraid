@@ -68,6 +68,27 @@ fn weighted_nearby_choice_avoids_the_previous_poi() -> anyhow::Result<()> {
 }
 
 #[test]
+fn nearby_in_lists_local_and_global_outside_the_hole() -> anyhow::Result<()> {
+	let mut world = World::new();
+	let near = world.spawn_empty().id();
+	let mid = world.spawn_empty().id();
+	let global = world.spawn_empty().id();
+	let mut registry = PoiRegistry::default();
+	registry.upsert(near, Poi::new(PoiId(1), CAMP), Vec3::X * 10.0, true, false)?;
+	registry.upsert(mid, Poi::new(PoiId(2), CAMP), Vec3::X * 80.0, true, false)?;
+	registry.upsert(global, Poi::new(PoiId(3), CAMP), Vec3::Z * 90.0, false, true)?;
+	let interests = PoiInterests::one(CAMP);
+	let listed = registry.nearby_in(
+		Vec3::ZERO,
+		crate::NearbyQuery::nearest_beyond(DEFAULT_NEARBY_RADIUS, 60.0),
+		&interests,
+		&[PoiId(2)],
+	);
+	assert_eq!(listed.iter().map(|record| record.id).collect::<Vec<_>>(), [PoiId(3)]);
+	Ok(())
+}
+
+#[test]
 fn registry_tracks_an_entity_when_its_poi_id_changes() -> anyhow::Result<()> {
 	let mut world = World::new();
 	let entity = world.spawn_empty().id();
