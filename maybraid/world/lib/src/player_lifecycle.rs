@@ -470,7 +470,7 @@ fn respawn_world_player(
 			state.last_poi = Some(record.id);
 			player_position_above_surface(surface_at(record.position, &surface))
 		}
-		None => player_position_above_surface(fallback_at),
+		None => player_position_above_surface(surface_at(fallback_at, &surface)),
 	};
 	finish_world_player_spawn(
 		&mut commands,
@@ -492,6 +492,7 @@ fn open_respawn_picker(
 	last_poi: Option<PoiId>,
 ) {
 	refresh_picker_candidates(pending, map, registry, config, last_poi);
+	pending.stick_resting = true;
 	pending.map_opened = true;
 	map.open_at(pending.death_at.xz(), true);
 }
@@ -527,7 +528,6 @@ fn refresh_picker_candidates(
 	if pending.registry_revision != revision || pending.candidates != ids {
 		pending.registry_revision = revision;
 		pending.candidates = ids;
-		pending.stick_resting = true;
 	}
 	validate_highlight(pending, registry);
 }
@@ -1482,6 +1482,38 @@ mod tests {
 			.ok_or_else(|| anyhow::anyhow!("pending"))?;
 		assert_eq!(pending.candidates, vec![PoiId(7)]);
 		assert_eq!(pending.highlighted, Some(PoiId(7)));
+		Ok(())
+	}
+
+	#[test]
+	fn registry_refresh_does_not_rearm_a_held_stick() -> anyhow::Result<()> {
+		let mut world = discovery_respawn_world(0.2);
+		world
+			.run_system_once(respawn_world_player)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		{
+			let mut state = world.resource_mut::<WorldPlayerRespawnState>();
+			let pending = state.pending.as_mut().ok_or_else(|| anyhow::anyhow!("pending"))?;
+			pending.stick_resting = false;
+		}
+		let poi = world.spawn_empty().id();
+		world.resource_mut::<PoiRegistry>().upsert(
+			poi,
+			poi_intelligence::Poi::new(PoiId(7), URBAN_POI).with_arrival_radius(8.0),
+			Vec3::new(80.0, 4.0, 5.0),
+			true,
+			false,
+		)?;
+		world
+			.run_system_once(respawn_world_player)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let pending = world
+			.resource::<WorldPlayerRespawnState>()
+			.pending
+			.as_ref()
+			.ok_or_else(|| anyhow::anyhow!("pending"))?;
+		assert_eq!(pending.candidates, vec![PoiId(7)]);
+		assert!(!pending.stick_resting, "a held stick must come home before the next flick");
 		Ok(())
 	}
 
