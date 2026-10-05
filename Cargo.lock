@@ -5127,7 +5127,7 @@ dependencies = [
 
 [[package]]
 name = "geneva"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "bevy",
@@ -5418,7 +5418,7 @@ dependencies = [
 
 [[package]]
 name = "grenade-user"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "avian3d",
@@ -5435,7 +5435,7 @@ dependencies = [
 
 [[package]]
 name = "grenades"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "avian3d",
  "bevy",
@@ -6401,7 +6401,7 @@ dependencies = [
 
 [[package]]
 name = "language-layer-model"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "bevy",
@@ -6413,7 +6413,7 @@ dependencies = [
 
 [[package]]
 name = "language-layer-presentation"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "bevy",
@@ -7052,7 +7052,7 @@ dependencies = [
 
 [[package]]
 name = "maybraid-vfx"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "bevy",
  "bevy_hanabi",
@@ -12667,7 +12667,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "vfx-playground"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "bevy",
  "clap",
@@ -13839,7 +13839,7 @@ checksum = "99cdc77ac580700f64d314e2c30d2e8ec1c93ce981f66a62a894a671d1036af3"
 
 [[package]]
 name = "world-materials"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "bevy",
  "building-shaders",
@@ -13854,7 +13854,7 @@ dependencies = [
 
 [[package]]
 name = "world-materials-playground"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "bevy",
  "clap",

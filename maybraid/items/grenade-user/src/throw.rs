@@ -8,7 +8,7 @@ use characters::{CharacterHeading, CharacterRoot};
 use firearm_user::WeaponSwap;
 use grenades::{spawn_thrown_grenade, GrenadeEffect, GrenadeMaterial};
 use maybraid_character_controller::CharacterIntent;
-use player::{Player, PlayerLook};
+use player::PlayerLook;
 
 use crate::hold::HeldGrenade;
 use crate::HeldByGrenade;
@@ -68,21 +68,12 @@ pub enum GrenadePhase {
 }
 
 pub fn apply_throw_intents(
-	mouse: Res<ButtonInput<MouseButton>>,
 	mut intents: MessageReader<CharacterIntent>,
 	bags: Query<&Inventory>,
 	carriers: Query<&InventoryUser>,
-	mut users: Query<
-		(Entity, &mut GrenadeThrow, Has<WeaponSwap>),
-		(With<Player>, With<GrenadeUser>),
-	>,
+	mut users: Query<(Entity, &mut GrenadeThrow, Has<WeaponSwap>), With<GrenadeUser>>,
 ) {
-	let mut use_held = mouse.pressed(MouseButton::Left);
-	for intent in intents.read() {
-		if let CharacterIntent::UseItem(_) = *intent {
-			use_held = true;
-		}
-	}
+	let use_held = intents.read().any(|intent| matches!(intent, CharacterIntent::UseItem(_)));
 	for (entity, mut throw, swapping) in &mut users {
 		if !use_held {
 			throw.use_latched = false;
@@ -261,6 +252,119 @@ pub fn yaw_xz(dir: Vec3) -> f32 {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use bevy::ecs::system::RunSystemOnce;
+	use character_items::{GrenadeRecharge, GrenadeSpec, GrenadeStats, InventoryItem};
+
+	fn spawn_ready_user(world: &mut World) -> Entity {
+		let bag = world
+			.spawn(Inventory {
+				items: vec![InventoryItem::Grenade {
+					spec: GrenadeSpec::standard(),
+					stats: GrenadeStats::standard(),
+					recharge: GrenadeRecharge { remaining: 0.0 },
+				}],
+				clothing: Vec::new(),
+				weapons: vec![0],
+				skills: Vec::new(),
+			})
+			.id();
+		let held = world.spawn_empty().id();
+		world
+			.spawn((
+				InventoryUser::carrying(bag),
+				GrenadeUser::holding(held),
+				GrenadeThrow::default(),
+			))
+			.id()
+	}
+
+	fn apply_use_item(world: &mut World) -> anyhow::Result<()> {
+		world.init_resource::<Messages<CharacterIntent>>();
+		world.write_message(CharacterIntent::UseItem(1.0));
+		world
+			.run_system_once(apply_throw_intents)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		Ok(())
+	}
+
+	#[test]
+	fn use_item_starts_windup_without_mouse() -> anyhow::Result<()> {
+		let mut world = World::new();
+		let user = spawn_ready_user(&mut world);
+		apply_use_item(&mut world)?;
+		let throw = world.get::<GrenadeThrow>(user).expect("throw");
+		assert!(matches!(throw.phase, GrenadePhase::Windup { age: 0.0 }));
+		assert!(throw.use_latched);
+		Ok(())
+	}
+
+	#[test]
+	fn use_item_works_for_non_player_users() -> anyhow::Result<()> {
+		let mut world = World::new();
+		let user = spawn_ready_user(&mut world);
+		apply_use_item(&mut world)?;
+		assert!(matches!(
+			world.get::<GrenadeThrow>(user).expect("throw").phase,
+			GrenadePhase::Windup { .. }
+		));
+		Ok(())
+	}
+
+	#[test]
+	fn held_use_item_does_not_rethrow_while_latched() -> anyhow::Result<()> {
+		let mut world = World::new();
+		let user = spawn_ready_user(&mut world);
+		apply_use_item(&mut world)?;
+		world.write_message(CharacterIntent::UseItem(1.0));
+		world
+			.run_system_once(apply_throw_intents)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let throw = world.get::<GrenadeThrow>(user).expect("throw");
+		assert!(matches!(throw.phase, GrenadePhase::Windup { age: 0.0 }));
+		assert!(throw.use_latched);
+		Ok(())
+	}
+
+	#[test]
+	fn weapon_swap_blocks_throw_start() -> anyhow::Result<()> {
+		let mut world = World::new();
+		let user = spawn_ready_user(&mut world);
+		world.entity_mut(user).insert(WeaponSwap::default());
+		apply_use_item(&mut world)?;
+		let throw = world.get::<GrenadeThrow>(user).expect("throw");
+		assert_eq!(throw.phase, GrenadePhase::Ready);
+		assert!(!throw.use_latched);
+		Ok(())
+	}
+
+	#[test]
+	fn recharging_grenade_blocks_throw_start() -> anyhow::Result<()> {
+		let mut world = World::new();
+		let bag = world
+			.spawn(Inventory {
+				items: vec![InventoryItem::Grenade {
+					spec: GrenadeSpec::standard(),
+					stats: GrenadeStats::standard(),
+					recharge: GrenadeRecharge { remaining: 2.0 },
+				}],
+				clothing: Vec::new(),
+				weapons: vec![0],
+				skills: Vec::new(),
+			})
+			.id();
+		let held = world.spawn_empty().id();
+		let user = world
+			.spawn((
+				InventoryUser::carrying(bag),
+				GrenadeUser::holding(held),
+				GrenadeThrow::default(),
+			))
+			.id();
+		apply_use_item(&mut world)?;
+		let throw = world.get::<GrenadeThrow>(user).expect("throw");
+		assert_eq!(throw.phase, GrenadePhase::Ready);
+		Ok(())
+	}
 
 	#[test]
 	fn launch_follows_body_heading_not_default_look_yaw() {
