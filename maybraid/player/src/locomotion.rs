@@ -2,6 +2,7 @@
 
 use avian3d::prelude::LinearVelocity;
 use bevy::prelude::*;
+use character_animations::animations::smoothstep;
 use characters::{
 	AnimClip, AnimProgress, AnimRef, AnimRefRoot, CharacterHeading, CharacterMembers, CharacterRig,
 	CharacterRigRole, CharacterRoot, JumpParams, RigSkeletonKind,
@@ -12,6 +13,15 @@ use crate::identity::PlayerYawOwner;
 use crate::stance::{CharacterStance, StanceKind};
 
 pub(crate) const WALK_SPEED: f32 = 1.0;
+
+/// 0 = walk, 1 = run. Smoothsteps between [`WALK_SPEED`] and [`LEAP_SPEED`].
+pub(crate) fn gait_run_weight(speed: f32) -> f32 {
+	if speed <= WALK_SPEED {
+		return 0.0;
+	}
+	let span = (LEAP_SPEED - WALK_SPEED).max(1e-3);
+	smoothstep(((speed - WALK_SPEED) / span).clamp(0.0, 1.0))
+}
 
 pub(crate) fn face_wish_yaw(
 	time: Res<Time>,
@@ -100,10 +110,8 @@ fn locomotion_clip(
 					StanceKind::Prone => AnimClip::prone(),
 					StanceKind::Squat => AnimClip::squat(),
 					StanceKind::Stand => {
-						if speed > LEAP_SPEED {
-							AnimClip::run()
-						} else if speed > WALK_SPEED {
-							AnimClip::walk()
+						if speed > WALK_SPEED {
+							AnimClip::gait(gait_run_weight(speed))
 						} else {
 							AnimClip::still()
 						}
@@ -166,15 +174,31 @@ mod tests {
 	}
 
 	#[test]
-	fn clip_follows_the_cap() {
-		assert_eq!(
-			locomotion_clip(RigSkeletonKind::Humanoid, None, StanceKind::Stand, JOG_SPEED).id(),
-			AnimId::Walk
-		);
-		assert_eq!(
-			locomotion_clip(RigSkeletonKind::Humanoid, None, StanceKind::Stand, MOVE_SPEED).id(),
-			AnimId::Run
-		);
+	fn gait_blends_walk_into_run_by_speed() {
+		let jog = locomotion_clip(RigSkeletonKind::Humanoid, None, StanceKind::Stand, JOG_SPEED);
+		assert_eq!(jog.id(), AnimId::Gait);
+		let sprint =
+			locomotion_clip(RigSkeletonKind::Humanoid, None, StanceKind::Stand, MOVE_SPEED);
+		assert_eq!(sprint.id(), AnimId::Gait);
+		let jog_weight = match jog {
+			AnimClip::Gait(params) => params.run_weight,
+			_ => panic!("expected gait"),
+		};
+		let sprint_weight = match sprint {
+			AnimClip::Gait(params) => params.run_weight,
+			_ => panic!("expected gait"),
+		};
+		assert!(jog_weight > 0.0 && jog_weight < 1.0);
+		assert!(sprint_weight > jog_weight);
+		assert!((sprint_weight - 1.0).abs() < 1e-3);
+	}
+
+	#[test]
+	fn gait_weight_endpoints() {
+		assert_eq!(gait_run_weight(0.0), 0.0);
+		assert_eq!(gait_run_weight(WALK_SPEED), 0.0);
+		assert!((gait_run_weight(LEAP_SPEED) - 1.0).abs() < 1e-5);
+		assert!((gait_run_weight(MOVE_SPEED) - 1.0).abs() < 1e-5);
 	}
 
 	#[test]

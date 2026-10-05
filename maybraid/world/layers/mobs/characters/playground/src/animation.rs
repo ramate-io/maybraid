@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use character_animations::{
 	animations::{
-		FixedTuck, Run, Squat, Tuck, TuckedFlip, TwoFootedJump, TwoFootedTuckedFlip, Walk,
+		FixedTuck, Mix, Run, Squat, Tuck, TuckedFlip, TwoFootedJump, TwoFootedTuckedFlip, Walk,
 		DEFAULT_GRAVITY, DEFAULT_LANDING_SQUAT_SPEED, DEFAULT_PRE_SQUAT_SPEED,
 	},
 	Animation, Effects,
@@ -49,6 +49,8 @@ pub enum AnimationMode {
 	#[default]
 	Run,
 	Walk,
+	/// Walk→run [`Mix`]. Scrub with `/character playback --progress 0..1` for run weight.
+	Gait,
 	Squat,
 	Jump,
 	Tuck,
@@ -79,6 +81,8 @@ pub struct AnimationPlayback {
 	pub show_rest: bool,
 	/// When set, replace that bone's clip rotation with these anatomical degrees.
 	pub joint_degrees: Option<JointDegrees>,
+	/// Walk→run blend weight for [`AnimationMode::Gait`].
+	pub gait_run_weight: f32,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -101,6 +105,7 @@ impl Default for AnimationPlayback {
 			joint: String::new(),
 			show_rest: true,
 			joint_degrees: None,
+			gait_run_weight: 0.5,
 		}
 	}
 }
@@ -206,6 +211,9 @@ pub fn animate_limbs(
 		AnimationMode::Walk => {
 			animate_walk(&config, &playback, &mut rig, &mut armature, &mut limbs, t)
 		}
+		AnimationMode::Gait => {
+			animate_gait(&config, &playback, &mut rig, &mut armature, &mut limbs, t)
+		}
 		AnimationMode::Squat => {
 			animate_squat(&config, &playback, &mut debug, &mut rig, &mut armature, &mut limbs, t)
 		}
@@ -266,6 +274,28 @@ fn animate_walk(
 
 	marshal_limbs_into_pose(&mut rig, limbs, playback);
 	let effects = Walk::default().apply(rig.as_mut(), t * WALK_CYCLE_SPEED);
+	apply_effects(config.transform, effects, armature);
+	marshal_pose_to_limbs(&rig, limbs);
+}
+
+fn animate_gait(
+	config: &CharacterConfig,
+	playback: &AnimationPlayback,
+	rig: &mut Query<&mut HumanoidV0Rig, With<CharacterRig>>,
+	armature: &mut Query<&mut Transform, (With<CharacterRig>, Without<LimbAnimator>)>,
+	limbs: &mut Query<(&mut Transform, &LimbAnimator)>,
+	t: f32,
+) {
+	let Ok(mut rig) = rig.single_mut() else {
+		return;
+	};
+
+	let run_weight = playback.gait_run_weight.clamp(0.0, 1.0);
+	let cycle_speed = WALK_CYCLE_SPEED * (1.0 - run_weight) + RUN_CYCLE_SPEED * run_weight;
+	let progress = t * cycle_speed;
+	marshal_limbs_into_pose(&mut rig, limbs, playback);
+	let mix = Mix::new(Walk::default(), Run::default(), run_weight);
+	let effects = mix.apply_at(rig.as_mut(), progress, progress);
 	apply_effects(config.transform, effects, armature);
 	marshal_pose_to_limbs(&rig, limbs);
 }
