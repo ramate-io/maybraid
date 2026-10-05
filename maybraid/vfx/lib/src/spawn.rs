@@ -5,6 +5,7 @@ use bevy::prelude::*;
 use bevy_hanabi::prelude::{EffectMaterial, ParticleEffect};
 
 use crate::composition::{EffectDefinition, EffectLayer, EffectPart, LobeKind};
+use crate::membership::VfxMemberOf;
 use crate::lobe_material::LobeMaterial;
 use crate::lobes::{lobe_transform, vary_lobe, LobeMaterialSlot, VfxLobe};
 use crate::palette::ExplosionPalette;
@@ -128,7 +129,7 @@ pub struct VfxEmitterArmed;
 pub struct VfxEmitterBurst;
 
 /// Actual start clock for one realized layer. Cleanup uses this, not planned delay.
-#[derive(Component, Debug)]
+#[derive(Clone, Component, Debug)]
 pub struct VfxLayerLife {
 	pub age: f32,
 	pub duration: f32,
@@ -206,6 +207,7 @@ pub fn realize_layer(commands: &mut Commands, parent: Entity, layer: &EffectLaye
 			let mut entity = commands.spawn((
 				Name::new(format!("vfx-layer-{}", part.name)),
 				ChildOf(parent),
+				VfxMemberOf(parent),
 				transform,
 				Visibility::Inherited,
 				ParticleEffect::new(part.effect.clone()),
@@ -230,6 +232,7 @@ pub fn realize_layer(commands: &mut Commands, parent: Entity, layer: &EffectLaye
 			commands.spawn((
 				Name::new("vfx-layer-flash"),
 				ChildOf(parent),
+				VfxMemberOf(parent),
 				transform,
 				PointLight {
 					color,
@@ -252,6 +255,7 @@ pub fn realize_layer(commands: &mut Commands, parent: Entity, layer: &EffectLaye
 				.spawn((
 					Name::new(format!("vfx-layer-{}", part.name)),
 					ChildOf(parent),
+					VfxMemberOf(parent),
 					transform,
 					Visibility::Inherited,
 					NotShadowCaster,
@@ -271,6 +275,7 @@ pub fn realize_layer(commands: &mut Commands, parent: Entity, layer: &EffectLaye
 				commands.spawn((
 					Name::new(format!("vfx-lobe-{}-{index}", part.name)),
 					ChildOf(cluster),
+					VfxMemberOf(parent),
 					Mesh3d(part.mesh.clone()),
 					lobe_transform(&spec, 0.0),
 					Visibility::Hidden,

@@ -15,6 +15,7 @@ pub mod flipbook;
 pub mod layers;
 pub mod library;
 pub mod lifecycle;
+pub mod membership;
 pub mod lobe_material;
 pub mod lobes;
 pub mod names;

@@ -5,6 +5,7 @@ use bevy_hanabi::prelude::{CompiledParticleEffect, EffectSpawner, EffectSystems,
 
 use crate::lobe_material::LobeMaterial;
 use crate::lobes::{lobe_transform, stamp_lobe_materials, VfxLobe};
+use crate::membership::{VfxInstanceMembers, VfxMemberOf};
 use crate::spawn::{
 	realize_layer, VfxEmitter, VfxEmitterArmed, VfxEmitterBurst, VfxFlash, VfxInstance, VfxLayerLife,
 	VfxPendingLayers,
@@ -26,20 +27,19 @@ pub fn arm_vfx_emitters(
 /// Already-armed instances also burst late layers as they become ready.
 pub fn gate_vfx_instances(
 	mut commands: Commands,
-	children: Query<&Children>,
 	emitters: Query<(&VfxEmitter, Has<VfxEmitterArmed>, Has<VfxEmitterBurst>)>,
 	mut spawners: Query<Option<&mut EffectSpawner>, With<VfxEmitter>>,
-	mut instances: Query<(Entity, &mut VfxInstance)>,
+	mut instances: Query<(Entity, &mut VfxInstance, &VfxInstanceMembers)>,
 ) {
-	for (entity, mut instance) in &mut instances {
+	for (_entity, mut instance, members) in &mut instances {
 		if !instance.armed {
-			if !instance_emitters_ready(entity, &children, &emitters) {
+			if !members.emitters_ready(&emitters) {
 				continue;
 			}
 			instance.armed = true;
 			instance.age = 0.0;
 		}
-		burst_child_emitters(entity, &children, &emitters, &mut spawners, &mut commands);
+		burst_instance_emitters(members, &emitters, &mut spawners, &mut commands);
 	}
 }
 
@@ -47,11 +47,10 @@ pub fn tick_vfx_instances(
 	mut commands: Commands,
 	time: Res<Time>,
 	lives: Query<&VfxLayerLife>,
-	children: Query<&Children>,
-	mut instances: Query<(Entity, &mut VfxInstance, &mut VfxPendingLayers)>,
+	mut instances: Query<(Entity, &mut VfxInstance, &mut VfxPendingLayers, &VfxInstanceMembers)>,
 ) {
 	let dt = time.delta_secs();
-	for (entity, mut instance, mut pending) in &mut instances {
+	for (entity, mut instance, mut pending, members) in &mut instances {
 		if !instance.armed {
 			continue;
 		}
@@ -68,7 +67,7 @@ pub fn tick_vfx_instances(
 			}
 		}
 		pending.layers = remain;
-		if pending.layers.is_empty() && layers_finished(entity, &children, &lives) {
+		if pending.layers.is_empty() && members.layers_finished(&lives) {
 			if instance.age >= instance.duration {
 				commands.entity(entity).try_despawn();
 			}
@@ -79,13 +78,18 @@ pub fn tick_vfx_instances(
 pub fn tick_vfx_flashes(
 	mut commands: Commands,
 	time: Res<Time>,
-	child_of: Query<&ChildOf>,
 	instances: Query<&VfxInstance>,
-	mut flashes: Query<(Entity, &mut VfxFlash, &mut PointLight, Option<&mut VfxLayerLife>)>,
+	mut flashes: Query<(
+		Entity,
+		&VfxMemberOf,
+		&mut VfxFlash,
+		&mut PointLight,
+		Option<&mut VfxLayerLife>,
+	)>,
 ) {
 	let dt = time.delta_secs();
-	for (entity, mut flash, mut light, life) in &mut flashes {
-		if !ancestor_armed(entity, &child_of, &instances) {
+	for (entity, member, mut flash, mut light, life) in &mut flashes {
+		if !member.instance_armed(&instances) {
 			light.intensity = 0.0;
 			continue;
 		}
@@ -103,11 +107,11 @@ pub fn tick_vfx_flashes(
 
 pub fn tick_vfx_lobes(
 	time: Res<Time>,
-	child_of: Query<&ChildOf>,
 	instances: Query<&VfxInstance>,
 	mut materials: ResMut<Assets<LobeMaterial>>,
 	mut lobes: Query<(
 		Entity,
+		&VfxMemberOf,
 		&mut VfxLobe,
 		&mut Transform,
 		&mut Visibility,
@@ -116,8 +120,8 @@ pub fn tick_vfx_lobes(
 	)>,
 ) {
 	let dt = time.delta_secs();
-	for (entity, mut lobe, mut transform, mut visibility, material, life) in &mut lobes {
-		if !ancestor_armed(entity, &child_of, &instances) {
+	for (_entity, member, mut lobe, mut transform, mut visibility, material, life) in &mut lobes {
+		if !member.instance_armed(&instances) {
 			*visibility = Visibility::Hidden;
 			continue;
 		}
@@ -173,98 +177,136 @@ pub fn vfx_lifecycle_plugin(app: &mut App) {
 	);
 }
 
-fn instance_emitters_ready(
-	entity: Entity,
-	children: &Query<&Children>,
-	emitters: &Query<(&VfxEmitter, Has<VfxEmitterArmed>, Has<VfxEmitterBurst>)>,
-) -> bool {
-	let Ok(kids) = children.get(entity) else {
-		return true;
-	};
-	for child in kids.iter() {
-		let Ok((_, armed, _)) = emitters.get(child) else {
-			continue;
-		};
-		if !armed {
-			return false;
-		}
-	}
-	true
-}
-
-fn burst_child_emitters(
-	entity: Entity,
-	children: &Query<&Children>,
+fn burst_instance_emitters(
+	members: &VfxInstanceMembers,
 	emitters: &Query<(&VfxEmitter, Has<VfxEmitterArmed>, Has<VfxEmitterBurst>)>,
 	spawners: &mut Query<Option<&mut EffectSpawner>, With<VfxEmitter>>,
 	commands: &mut Commands,
 ) {
-	let Ok(kids) = children.get(entity) else {
-		return;
-	};
-	for child in kids.iter() {
-		let Ok((emitter, armed, burst)) = emitters.get(child) else {
+	for member in members.iter() {
+		let Ok((emitter, armed, burst)) = emitters.get(member) else {
 			continue;
 		};
 		if !armed || burst {
 			continue;
 		}
 		let settings = SpawnerSettings::once(emitter.count.into());
-		if let Ok(Some(mut spawner)) = spawners.get_mut(child) {
+		if let Ok(Some(mut spawner)) = spawners.get_mut(member) {
 			spawner.settings = settings;
 			spawner.reset();
 			spawner.active = true;
 		} else {
-			commands.entity(child).insert(EffectSpawner::new(&settings));
+			commands.entity(member).insert(EffectSpawner::new(&settings));
 		}
-		commands.entity(child).insert(VfxEmitterBurst);
+		commands.entity(member).insert(VfxEmitterBurst);
 	}
 }
 
-fn layers_finished(
-	entity: Entity,
-	children: &Query<&Children>,
-	lives: &Query<&VfxLayerLife>,
-) -> bool {
-	let Ok(kids) = children.get(entity) else {
-		return true;
-	};
-	let mut saw = false;
-	for child in kids.iter() {
-		if let Ok(life) = lives.get(child) {
-			saw = true;
-			if life.waiting_for_emitter || life.age + 1e-3 < life.duration {
-				return false;
-			}
-		}
-		if let Ok(grand) = children.get(child) {
-			for g in grand.iter() {
-				if let Ok(life) = lives.get(g) {
-					saw = true;
-					if life.waiting_for_emitter || life.age + 1e-3 < life.duration {
-						return false;
-					}
-				}
-			}
-		}
-	}
-	saw
-}
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use crate::membership::{VfxInstanceMembers, VfxMemberOf};
 
-pub fn ancestor_armed(
-	entity: Entity,
-	child_of: &Query<&ChildOf>,
-	instances: &Query<&VfxInstance>,
-) -> bool {
-	let mut current = entity;
-	for _ in 0..4 {
-		let Ok(parent) = child_of.get(current) else {
-			return true;
-		};
-		if let Ok(instance) = instances.get(parent.parent()) {
-			return instance.armed;
-		}
-		current = parent.parent();
+	fn spawn_instance(world: &mut World) -> Entity {
+		world
+			.spawn((
+				VfxInstance {
+					name: "test".into(),
+					age: 0.0,
+					duration: 1.0,
+					playback: 1.0,
+					seed: 0,
+					armed: false,
+				},
+				VfxPendingLayers { layers: Vec::new(), spawn: Default::default() },
+			))
+			.id()
 	}
-	true
+
+	#[test]
+	fn deep_member_respects_instance_armed() -> Result<(), String> {
+		let mut world = World::new();
+		let root = spawn_instance(&mut world);
+		let mid = world.spawn(ChildOf(root)).id();
+		world.spawn((ChildOf(mid), VfxMemberOf(root)));
+		world.flush();
+
+		let deep = world
+			.query_filtered::<Entity, With<VfxMemberOf>>()
+			.single(&world)
+			.map_err(|_| "missing deep member")?;
+		let member = world.get::<VfxMemberOf>(deep).ok_or("missing VfxMemberOf")?;
+		assert!(!member.instance_armed_in_world(&world), "disarmed instance should gate deep member");
+
+		world.entity_mut(root).get_mut::<VfxInstance>().ok_or("missing instance")?.armed = true;
+		let member = world.get::<VfxMemberOf>(deep).ok_or("missing VfxMemberOf")?;
+		assert!(member.instance_armed_in_world(&world), "armed instance should release deep member");
+		Ok(())
+	}
+
+	#[test]
+	fn membership_emitters_ready_ignores_depth() -> Result<(), String> {
+		let mut world = World::new();
+		let root = spawn_instance(&mut world);
+		let mid = world.spawn(ChildOf(root)).id();
+		world.spawn((ChildOf(mid), VfxMemberOf(root), VfxEmitter { count: 1.0 }));
+		world.flush();
+
+		let members = world
+			.get::<VfxInstanceMembers>(root)
+			.ok_or("root missing VfxInstanceMembers")?;
+		assert!(!members.emitters_ready_in_world(&world), "unarmed emitter should block readiness");
+
+		let emitter = members.iter().next().ok_or("missing nested emitter")?;
+		world.entity_mut(emitter).insert(VfxEmitterArmed);
+		let members = world.get::<VfxInstanceMembers>(root).ok_or("root missing VfxInstanceMembers")?;
+		assert!(members.emitters_ready_in_world(&world), "armed nested emitter should satisfy readiness");
+		Ok(())
+	}
+
+	#[test]
+	fn membership_layers_finished_ignores_depth() -> Result<(), String> {
+		let mut world = World::new();
+		let root = spawn_instance(&mut world);
+		let cluster = world.spawn((ChildOf(root), VfxMemberOf(root))).id();
+		world.spawn((
+			ChildOf(cluster),
+			VfxMemberOf(root),
+			VfxLayerLife {
+				age: 0.5,
+				duration: 0.5,
+				playback: 1.0,
+				waiting_for_emitter: false,
+			},
+		));
+		world.spawn((
+			ChildOf(cluster),
+			VfxMemberOf(root),
+			VfxLayerLife {
+				age: 0.2,
+				duration: 0.5,
+				playback: 1.0,
+				waiting_for_emitter: false,
+			},
+		));
+		world.flush();
+
+		let members = world
+			.get::<VfxInstanceMembers>(root)
+			.ok_or("root missing VfxInstanceMembers")?;
+		assert!(!members.layers_finished_in_world(&world), "unfinished deep lobe should block cleanup");
+
+		for member in members.iter().collect::<Vec<_>>() {
+			let Some(life) = world.get::<VfxLayerLife>(member).cloned() else {
+				continue;
+			};
+			world.entity_mut(member).insert(VfxLayerLife {
+				age: life.duration,
+				..life
+			});
+		}
+		let members = world.get::<VfxInstanceMembers>(root).ok_or("root missing VfxInstanceMembers")?;
+		assert!(members.layers_finished_in_world(&world), "finished deep lobes should allow cleanup");
+		Ok(())
+	}
 }
