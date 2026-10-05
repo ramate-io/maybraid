@@ -263,6 +263,26 @@ impl InventoryItem {
 			Self::Grenade { .. } | Self::SkillMap { .. } => "",
 		}
 	}
+
+	/// Authored identity: spec/stats/kind match, excluding transient grenade recharge.
+	pub fn same_catalog_identity(&self, other: &Self) -> bool {
+		match (self, other) {
+			(
+				Self::Clothing { mesh, material, stats },
+				Self::Clothing { mesh: other_mesh, material: other_material, stats: other_stats },
+			) => mesh == other_mesh && material == other_material && stats == other_stats,
+			(
+				Self::Firearm { spec, stats },
+				Self::Firearm { spec: other_spec, stats: other_stats },
+			) => spec == other_spec && stats == other_stats,
+			(
+				Self::Grenade { spec, stats, .. },
+				Self::Grenade { spec: other_spec, stats: other_stats, .. },
+			) => spec == other_spec && stats == other_stats,
+			(Self::SkillMap { spec }, Self::SkillMap { spec: other_spec }) => spec == other_spec,
+			_ => false,
+		}
+	}
 }
 
 /// Owned items plus per-slot selections. Clothing is wear order; weapons and
@@ -276,6 +296,19 @@ pub struct Inventory {
 }
 
 impl Inventory {
+	/// Bag layout matches and every item has the same authored identity.
+	pub fn same_catalog_identity(&self, other: &Self) -> bool {
+		self.clothing == other.clothing
+			&& self.weapons == other.weapons
+			&& self.skills == other.skills
+			&& self.items.len() == other.items.len()
+			&& self
+				.items
+				.iter()
+				.zip(&other.items)
+				.all(|(left, right)| left.same_catalog_identity(right))
+	}
+
 	/// Every clothing item starts worn (up to the wear cap). Weapons stay unequipped.
 	pub fn with_all_worn(items: Vec<InventoryItem>) -> Self {
 		let clothing: Vec<usize> = items
