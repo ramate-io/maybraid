@@ -171,7 +171,14 @@ impl GrenadeRecharge {
 	}
 
 	pub fn tick(&mut self, dt: f32) {
-		self.remaining = (self.remaining - dt.max(0.0)).max(0.0);
+		if self.remaining <= 0.0 {
+			return;
+		}
+		let dt = dt.max(0.0);
+		if dt <= 0.0 {
+			return;
+		}
+		self.remaining = (self.remaining - dt).max(0.0);
 	}
 }
 
@@ -200,5 +207,24 @@ mod tests {
 		assert!(stats.blast_radius >= 5.0);
 		assert!(stats.blast_damage >= 50.0);
 		assert!((stats.effect_scale - 13.0).abs() < 1e-4);
+	}
+
+	#[test]
+	fn tick_at_zero_remaining_is_noop() -> anyhow::Result<()> {
+		let mut recharge = GrenadeRecharge { remaining: 0.0 };
+		recharge.tick(0.5);
+		anyhow::ensure!(recharge.remaining == 0.0, "idle recharge must stay at zero");
+		Ok(())
+	}
+
+	#[test]
+	fn tick_with_positive_dt_decreases_remaining() -> anyhow::Result<()> {
+		let mut recharge = GrenadeRecharge { remaining: 2.0 };
+		recharge.tick(0.75);
+		anyhow::ensure!(
+			(recharge.remaining - 1.25).abs() < 1e-4,
+			"active recharge must count down by dt"
+		);
+		Ok(())
 	}
 }

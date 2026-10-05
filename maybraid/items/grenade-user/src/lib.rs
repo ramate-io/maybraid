@@ -3,6 +3,7 @@
 mod hold;
 mod throw;
 
+use bevy::ecs::system::ParamSet;
 use bevy::prelude::*;
 use character_items::{Inventory, InventoryItem};
 use characters::CharacterMotionSystems;
@@ -58,12 +59,33 @@ pub fn teardown_held_grenade(commands: &mut Commands, user: Entity, grenade: &Gr
 	commands.entity(user).remove::<(GrenadeUser, GrenadeThrow, PlayerUse)>();
 }
 
-fn tick_owned_recharge(time: Res<Time>, mut bags: Query<&mut Inventory>) {
+fn tick_owned_recharge(
+	time: Res<Time>,
+	mut bags: ParamSet<(Query<(Entity, &Inventory)>, Query<&mut Inventory>)>,
+	mut due: Local<Vec<Entity>>,
+) {
 	let dt = time.delta_secs();
-	for mut bag in &mut bags {
+	if dt <= 0.0 {
+		return;
+	}
+	due.clear();
+	for (entity, bag) in bags.p0().iter() {
+		if bag.items.iter().any(|item| {
+			matches!(item, InventoryItem::Grenade { recharge, .. } if recharge.remaining > 0.0)
+		}) {
+			due.push(entity);
+		}
+	}
+	let mut mutable = bags.p1();
+	for entity in due.iter().copied() {
+		let Ok(mut bag) = mutable.get_mut(entity) else {
+			continue;
+		};
 		for item in &mut bag.items {
 			if let InventoryItem::Grenade { recharge, .. } = item {
-				recharge.tick(dt);
+				if recharge.remaining > 0.0 {
+					recharge.tick(dt);
+				}
 			}
 		}
 	}
@@ -87,7 +109,7 @@ mod tests {
 	use std::time::Duration;
 
 	#[test]
-	fn owned_recharge_ticks_while_unequipped() {
+	fn owned_recharge_ticks_while_unequipped() -> anyhow::Result<()> {
 		let mut world = World::new();
 		let mut time = Time::<()>::default();
 		time.advance_by(Duration::from_millis(500));
@@ -102,12 +124,51 @@ mod tests {
 			weapons: vec![0],
 			skills: Vec::new(),
 		});
-		world.run_system_once(tick_owned_recharge).expect("tick");
-		let bag = world.query::<&Inventory>().single(&world).expect("bag");
+		world.run_system_once(tick_owned_recharge).map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let bag = world
+			.query::<&Inventory>()
+			.single(&world)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		let InventoryItem::Grenade { recharge, .. } = &bag.items[0] else {
-			panic!("grenade");
+			anyhow::bail!("expected grenade inventory item");
 		};
-		assert!(recharge.remaining < 1.0);
+		anyhow::ensure!(recharge.remaining < 1.0, "active recharge must count down");
+		Ok(())
+	}
+
+	#[test]
+	fn idle_recharge_does_not_dirty_inventory() -> anyhow::Result<()> {
+		let mut world = World::new();
+		let mut time = Time::<()>::default();
+		time.advance_by(Duration::from_millis(16));
+		world.insert_resource(time);
+		let entity = world
+			.spawn(Inventory {
+				items: vec![InventoryItem::Grenade {
+					spec: GrenadeSpec::standard(),
+					stats: GrenadeStats::standard(),
+					recharge: GrenadeRecharge { remaining: 0.0 },
+				}],
+				clothing: Vec::new(),
+				weapons: vec![0],
+				skills: Vec::new(),
+			})
+			.id();
+		world.clear_trackers();
+		world.run_system_once(tick_owned_recharge).map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		let bag = world
+			.query::<Ref<Inventory>>()
+			.get(&world, entity)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		anyhow::ensure!(
+			!bag.is_changed(),
+			"idle grenade recharge must not dirty the inventory"
+		);
+		let InventoryItem::Grenade { recharge, .. } = &bag.items[0] else {
+			anyhow::bail!("expected grenade inventory item");
+		};
+		anyhow::ensure!(recharge.remaining == 0.0, "idle recharge must stay at zero");
+		Ok(())
 	}
 
 	#[test]
