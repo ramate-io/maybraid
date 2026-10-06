@@ -1,4 +1,6 @@
-use character_rigs::{humanoid::HumanoidRig, Side};
+use character_rigs::authoring::HumanoidPose;
+use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
+use character_rigs::Side;
 
 use crate::animations::{smoothstep, UprightLeap, AIR_END, TAKEOFF_END};
 use crate::rigs::humanoid::apply::{apply_arm, apply_leg, apply_root};
@@ -18,18 +20,36 @@ struct LeapPose {
 	elbow: f32,
 }
 
-impl<R: HumanoidRig> Animation<R> for UprightLeap<R> {
-	fn apply_for(&self, rig: &mut R, progress: f32) {
-		let pose = self.pose_at(Progress(progress).clamp());
-		apply_leg(rig, Side::Left, pose.left_femur, pose.left_shin);
-		apply_leg(rig, Side::Right, pose.right_femur, pose.right_shin);
-		apply_root(rig, pose.lean);
-		apply_arm(rig, Side::Left, pose.left_shoulder, 0.0, pose.left_humerus, 0.0, pose.elbow);
-		apply_arm(rig, Side::Right, pose.right_shoulder, 0.0, pose.right_humerus, 0.0, pose.elbow);
+impl Animation<HumanoidV0Rig> for UprightLeap {
+	fn apply_for(&self, rig: &mut HumanoidV0Rig, progress: f32) {
+		let mut pose = HumanoidPose::default();
+		let sample = self.pose_at(Progress(progress).clamp());
+		apply_leg(&mut pose, Side::Left, sample.left_femur, sample.left_shin);
+		apply_leg(&mut pose, Side::Right, sample.right_femur, sample.right_shin);
+		apply_root(&mut pose, sample.lean);
+		apply_arm(
+			&mut pose,
+			Side::Left,
+			sample.left_shoulder,
+			0.0,
+			sample.left_humerus,
+			0.0,
+			sample.elbow,
+		);
+		apply_arm(
+			&mut pose,
+			Side::Right,
+			sample.right_shoulder,
+			0.0,
+			sample.right_humerus,
+			0.0,
+			sample.elbow,
+		);
+		rig.write_pose(&pose);
 	}
 }
 
-impl<Rig> UprightLeap<Rig> {
+impl UprightLeap {
 	fn pose_at(&self, t: f32) -> LeapPose {
 		if t < TAKEOFF_END {
 			self.takeoff(smoothstep(t / TAKEOFF_END))
@@ -110,21 +130,18 @@ fn lerp(a: f32, b: f32, t: f32) -> f32 {
 
 #[cfg(test)]
 mod tests {
-	use character_rigs::{rigs::humanoid_v0::HumanoidV0Rig, Side};
-
 	use super::*;
 	use crate::animations::{Leap, Squat, TwoFootedJump};
-	use crate::Effects;
 
-	fn femur_swing(rig: &HumanoidV0Rig, side: Side) -> f32 {
-		rig.pose().get(&rig.leg(side).femur.name).expect("femur").swing
+	fn femur_z(rig: &HumanoidV0Rig, side: Side) -> f32 {
+		let name = match side {
+			Side::Left => "femur.L",
+			Side::Right => "femur.R",
+		};
+		rig.character_length(name).z
 	}
 
-	fn shin_flex(rig: &HumanoidV0Rig, side: Side) -> f32 {
-		rig.pose().get(&rig.leg(side).shin.name).expect("shin").flex
-	}
-
-	fn apply_leap(rig: &mut HumanoidV0Rig, progress: f32) -> Effects {
+	fn apply_leap(rig: &mut HumanoidV0Rig, progress: f32) -> crate::Effects {
 		UprightLeap::from_leap(&Leap::default()).apply(rig, progress)
 	}
 
@@ -134,43 +151,49 @@ mod tests {
 			let mut from_leap = HumanoidV0Rig::imported();
 			let mut from_upright = HumanoidV0Rig::imported();
 			apply_leap(&mut from_leap, phase);
-			UprightLeap::<HumanoidV0Rig>::default().apply(&mut from_upright, phase);
-			for bone in from_leap.animation_bones() {
-				let Some(leap_pose) = from_leap.pose().get(&bone) else {
-					continue;
-				};
-				let upright = from_upright.pose().get(&bone).expect("upright pose");
-				assert_eq!(leap_pose.swing, upright.swing, "swing mismatch on {bone} at {phase}");
-				assert_eq!(leap_pose.flex, upright.flex, "flex mismatch on {bone} at {phase}");
+			UprightLeap::default().apply(&mut from_upright, phase);
+			for name in from_leap.animation_bone_names() {
+				let leap_rot = from_leap.rotation(name);
+				let upright_rot = from_upright.rotation(name);
+				assert!(
+					leap_rot.dot(upright_rot).abs() > 1.0 - 1e-5,
+					"rotation mismatch on {name} at {phase}"
+				);
 			}
 		}
 	}
 
 	#[test]
 	fn takeoff_keeps_a_run_split() {
-		let mut rig = HumanoidV0Rig::imported();
+		let mut rig = HumanoidV0Rig::for_clip_test();
 		apply_leap(&mut rig, 0.0);
-		let left = femur_swing(&rig, Side::Left);
-		let right = femur_swing(&rig, Side::Right);
-		assert!(left > 0.3, "trail femur should be back, swing={left}");
-		assert!(right < -0.3, "lead femur should be forward, swing={right}");
+		assert!(rig.posed_angle("femur.L") > 0.25, "trail femur leaves rest");
+		assert!(rig.posed_angle("femur.R") > 0.25, "lead femur leaves rest");
+		let left = rig.character_length("femur.L");
+		let right = rig.character_length("femur.R");
+		assert!(
+			(left.z - right.z).abs() > 0.25,
+			"takeoff keeps a run split, L={left:?} R={right:?}"
+		);
 	}
 
 	#[test]
 	fn takeoff_is_not_a_standing_squat() {
-		let mut leap_rig = HumanoidV0Rig::imported();
+		let mut leap_rig = HumanoidV0Rig::for_clip_test();
 		apply_leap(&mut leap_rig, 0.0);
-		let leap_left = femur_swing(&leap_rig, Side::Left);
-		let leap_right = femur_swing(&leap_rig, Side::Right);
+		let mut squat_rig = HumanoidV0Rig::for_clip_test();
+		Squat::for_loop(1.0, 1.0).apply(&mut squat_rig, 0.5);
 
-		let mut squat_rig = HumanoidV0Rig::imported();
-		Squat::<HumanoidV0Rig>::for_loop(1.0, 1.0).apply(&mut squat_rig, 0.5);
-		let squat = femur_swing(&squat_rig, Side::Left);
-
-		assert_ne!(leap_left.signum(), leap_right.signum());
+		let leap_left = leap_rig.character_length("femur.L");
+		let leap_right = leap_rig.character_length("femur.R");
+		let squat_left = squat_rig.character_length("femur.L");
 		assert!(
-			(leap_left - squat).abs() > 0.2 || (leap_right - squat).abs() > 0.2,
-			"takeoff should not match a symmetric squat"
+			(leap_left.z - leap_right.z).abs() > 0.15,
+			"takeoff is a split, not a symmetric squat, L={leap_left:?} R={leap_right:?}"
+		);
+		assert!(
+			(leap_left.z - squat_left.z).abs() > 0.15,
+			"takeoff should not match a symmetric squat, leap={leap_left:?} squat={squat_left:?}"
 		);
 	}
 
@@ -179,10 +202,8 @@ mod tests {
 		let mut leap_rig = HumanoidV0Rig::imported();
 		apply_leap(&mut leap_rig, 0.0);
 		let mut jump_rig = HumanoidV0Rig::imported();
-		TwoFootedJump::<HumanoidV0Rig>::default().apply(&mut jump_rig, 0.0);
-		assert!(
-			(femur_swing(&leap_rig, Side::Left) - femur_swing(&jump_rig, Side::Left)).abs() > 0.3
-		);
+		TwoFootedJump::default().apply(&mut jump_rig, 0.0);
+		assert!(leap_rig.rotation("femur.L").angle_between(jump_rig.rotation("femur.L")) > 0.25);
 	}
 
 	#[test]
@@ -191,7 +212,7 @@ mod tests {
 		apply_leap(&mut takeoff, 0.0);
 		let mut air = HumanoidV0Rig::imported();
 		apply_leap(&mut air, 0.45);
-		assert!(shin_flex(&air, Side::Left) > shin_flex(&takeoff, Side::Left) + 0.2);
+		assert!(air.posed_angle("shin.L") > takeoff.posed_angle("shin.L") + 0.15);
 	}
 
 	#[test]
@@ -200,14 +221,14 @@ mod tests {
 		apply_leap(&mut mid, 0.86);
 		let mut end = HumanoidV0Rig::imported();
 		apply_leap(&mut end, 1.0);
-		assert!(femur_swing(&mid, Side::Left).abs() > femur_swing(&end, Side::Left).abs() + 0.05);
+		assert!(mid.posed_angle("femur.L") > end.posed_angle("femur.L") + 0.04);
 	}
 
 	#[test]
 	fn leap_has_no_root_motion() {
 		let mut rig = HumanoidV0Rig::imported();
 		let effects = apply_leap(&mut rig, 0.45);
-		assert!(effects.r#move.is_none());
+		assert!(effects.is_identity());
 	}
 
 	#[test]
@@ -216,6 +237,6 @@ mod tests {
 		let mut b = HumanoidV0Rig::imported();
 		apply_leap(&mut a, 1.0);
 		apply_leap(&mut b, 1.7);
-		assert_eq!(femur_swing(&a, Side::Left), femur_swing(&b, Side::Left));
+		assert!((femur_z(&a, Side::Left) - femur_z(&b, Side::Left)).abs() < 1e-5);
 	}
 }

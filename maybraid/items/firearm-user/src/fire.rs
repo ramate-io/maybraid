@@ -218,14 +218,7 @@ mod tests {
 			.world_mut()
 			.spawn((
 				Camera3d::default(),
-				CameraController {
-					yaw: 0.0,
-					pitch: 0.0,
-					pov: CameraPov::ThirdPerson,
-					focus: 0.0,
-					ads: 0.0,
-					focus_blend: 0.0,
-				},
+				CameraController { pov: CameraPov::ThirdPerson, ..default() },
 			))
 			.id();
 		let gun = app.world_mut().spawn(RecoilPattern::from_seed(seed)).id();

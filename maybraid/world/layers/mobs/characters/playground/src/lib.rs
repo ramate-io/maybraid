@@ -13,7 +13,10 @@ pub use camera::CameraController;
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use game_commands::command::PendingStartupCommand;
 
-use animation::{animate_limbs, init_limb_animators, AnimationArticulationDebug};
+use animation::{
+	animate_limbs, draw_authoring_gizmos, init_limb_animators, AnimationArticulationDebug,
+	AnimationPlayback,
+};
 use bevy::prelude::*;
 use camera_controls::look::CameraLookPlugin;
 use character::CharacterConfig;
@@ -31,6 +34,7 @@ impl Plugin for CharactersPlaygroundPlugin {
 		app.init_resource::<CharacterConfig>()
 			.init_resource::<character::CharacterSyncState>()
 			.init_resource::<AnimationArticulationDebug>()
+			.init_resource::<AnimationPlayback>()
 			.init_resource::<DumpBonesRequest>()
 			.add_plugins(CameraLookPlugin::default())
 			.add_plugins(GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()))
@@ -49,6 +53,7 @@ impl Plugin for CharactersPlaygroundPlugin {
 					remap_part_skin_to_rig.after(attach_parts_to_sockets),
 					init_limb_animators.after(build_rig_bone_map),
 					animate_limbs.after(init_limb_animators),
+					draw_authoring_gizmos.after(animate_limbs),
 					dump_bones_to_console,
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 				),

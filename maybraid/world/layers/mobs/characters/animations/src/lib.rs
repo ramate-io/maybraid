@@ -1,14 +1,12 @@
 pub mod animations;
 pub mod rigs;
 
-use bevy::prelude::*;
+pub use character_rigs::authoring::ArmatureOffset;
 
-/// Side effects from an animation pass, applied outside the bone pose (e.g. armature root).
-#[derive(Debug, Clone, Copy, Default, PartialEq)]
-pub struct Effects {
-	/// Offset relative to the armature bind transform.
-	pub r#move: Option<Transform>,
-}
+/// Armature offset returned by [`Animation::effects_for`].
+///
+/// Identity is the absent effect. Translation, rotation, and scale all blend.
+pub type Effects = ArmatureOffset;
 
 /// Normalized animation sampling coordinate.
 ///
@@ -63,7 +61,7 @@ pub trait Animation<Rig> {
 
 	/// Armature side effects from rest lengths and `progress`. Must not write bones.
 	fn effects_for(&self, _rig: &Rig, _progress: f32) -> Effects {
-		Effects::default()
+		Effects::IDENTITY
 	}
 
 	/// Compatibility: [`Self::apply_for`] then [`Self::effects_for`].
