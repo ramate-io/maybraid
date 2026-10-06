@@ -41,7 +41,7 @@ use camera::{
 };
 use character::{apply_set_character, drive_player_locomotion};
 use characters::{CharacterHostsPlugin, CharacterMotionSystems};
-use durham::{TerrainCellLayout, TerrainEntryStore};
+use durham::{HcsgStorage, TerrainCellLayout, TerrainStorage};
 use game_commands::command::{TextEntryBlocked, TextEntryFocus};
 use game_commands::ui::GameCommandStatusText;
 use maybraid_input::{PadGameplayEnabled, VirtualPadPlugin, VirtualPadSystems};
@@ -99,7 +99,7 @@ fn apply_mode_commands(
 	mut status: Option<ResMut<GameCommandStatusText>>,
 	layout: Res<TerrainCellLayout>,
 	base: Res<WorldBaseTerrain>,
-	store: Res<TerrainEntryStore>,
+	store: Res<HcsgStorage>,
 	free: Query<Entity, With<RequestModeFree>>,
 	character: Query<Entity, With<RequestModeCharacter>>,
 	mut players: Query<(Entity, &mut Transform, &mut LinearVelocity), With<Player>>,
@@ -186,7 +186,7 @@ mod tests {
 		app.insert_resource(PlaygroundMode::Character)
 			.insert_resource(PlayerPhysicsEnabled::default())
 			.insert_resource(TerrainCellLayout::default())
-			.insert_resource(TerrainEntryStore::default())
+			.init_resource::<HcsgStorage>()
 			.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(&TerrainConfig::new(
 				42,
 			))))
@@ -259,7 +259,7 @@ mod tests {
 		world.insert_resource(mode);
 		world.insert_resource(PlayerPhysicsEnabled::default());
 		world.insert_resource(TerrainCellLayout::default());
-		world.insert_resource(TerrainEntryStore::default());
+		world.init_resource::<HcsgStorage>();
 		world.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(
 			&TerrainConfig::new(42),
 		)));

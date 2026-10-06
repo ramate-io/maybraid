@@ -6,8 +6,8 @@ use bevy::math::{Vec2, Vec3};
 use bevy::prelude::{App, MinimalPlugins, NextState, World};
 use bevy::state::app::StatesPlugin;
 use durham::{
-	BaseTerrainNoise, Durham, TerrainCellLayout, TerrainConfig, TerrainEntryStore,
-	TerrainHeightSnapshot, WorldBaseTerrain,
+	BaseTerrainNoise, Durham, HcsgStorage, TerrainCellLayout, TerrainConfig, TerrainHeightSnapshot,
+	TerrainStorage, WorldBaseTerrain,
 };
 use layer_stack::{
 	install_lod_present_gate, subscribe_mode, ActiveGenerationMode, GenerationMode,
@@ -94,19 +94,16 @@ fn ground_grove_sample_matches_durham_and_modulated_samples() -> anyhow::Result<
 	let mut world = World::new();
 	let layout = TerrainCellLayout::default();
 	let base = BaseTerrainNoise::from_config(&TerrainConfig::new(42));
-	world.insert_resource(TerrainEntryStore::default());
+	world.init_resource::<HcsgStorage>();
 	world.insert_resource(layout.clone());
 	world.insert_resource(WorldBaseTerrain(base.clone()));
 	world.insert_resource(DevelopmentEntryStore::default());
 	world.insert_resource(UrbanizationIndex::default());
-	world.resource_mut::<TerrainEntryStore>().insert_base_terrain_for_test(
-		&layout,
-		0,
-		0,
-		base.clone(),
-	);
+	world
+		.resource_mut::<HcsgStorage>()
+		.insert_base_terrain_for_test(&layout, 0, 0, base.clone());
 
-	let store = world.resource::<TerrainEntryStore>();
+	let store = world.resource::<HcsgStorage>();
 	let probe = Aabb3d::from_min_max(Vec3::new(1.0, -1_000.0, 1.0), Vec3::new(2.0, 1_000.0, 2.0));
 	let cell_id = store
 		.terrain_ids_overlapping(probe)
@@ -124,7 +121,7 @@ fn ground_grove_sample_matches_durham_and_modulated_samples() -> anyhow::Result<
 	);
 
 	let owned = OwnedDurham {
-		snapshot: world.resource::<TerrainEntryStore>().height_snapshot(),
+		snapshot: world.resource::<HcsgStorage>().height_snapshot(),
 		layout: layout.clone(),
 		fallback: base,
 	};

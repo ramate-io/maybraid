@@ -5,7 +5,7 @@ use avian3d::prelude::{Gravity, GravityScale, LinearVelocity};
 use bevy::ecs::query::Has;
 use bevy::prelude::*;
 use characters::LocomotionCapsule;
-use durham::{TerrainCellLayout, TerrainEntryStore, WaterColumn};
+use durham::{HcsgStorage, TerrainCellLayout, TerrainStorage, WaterColumn};
 
 /// Draft as a fraction of hull height (head out).
 pub const FLOAT_DRAFT: f32 = 0.55;
@@ -95,7 +95,7 @@ pub(crate) fn wade_speed() -> f32 {
 pub(crate) fn apply_buoyancy(
 	mut commands: Commands,
 	time: Res<Time>,
-	store: Option<Res<TerrainEntryStore>>,
+	store: Option<Res<HcsgStorage>>,
 	layout: Option<Res<TerrainCellLayout>>,
 	gravity: Option<Res<Gravity>>,
 	mut controllers: Query<

@@ -116,14 +116,7 @@ fn generate_furniture_cells<G: FurnitureSlots>(
 	index.refresh_slots(G::overlapping_tracked(&read, region), region, |id| {
 		G::world_slots(&read, id)
 	});
-	let identity = Transform::IDENTITY;
-	let lod_ref = LodRef {
-		entity: Entity::PLACEHOLDER,
-		previous_transform: &identity,
-		current_transform: &identity,
-		bounds: &region,
-	};
-	index.generate_cells(region, &lod_ref, FURNITURE_GENERATE_CELLS_PER_FRAME);
+	index.generate_cells(region, FURNITURE_GENERATE_CELLS_PER_FRAME);
 }
 
 pub(crate) fn register_furniture_generate(app: &mut App) {

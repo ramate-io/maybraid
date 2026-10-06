@@ -6,7 +6,8 @@ use bevy::math::bounding::Aabb3d;
 use bevy::math::{Vec2, Vec3};
 use bevy::prelude::World;
 use durham::{
-	BaseTerrainNoise, Durham, TerrainCellLayout, TerrainConfig, TerrainEntryStore, WorldBaseTerrain,
+	BaseTerrainNoise, Durham, HcsgStorage, TerrainCellLayout, TerrainConfig, TerrainStorage,
+	WorldBaseTerrain,
 };
 use richmond::{pad::PadStage, DevelopmentCell, DevelopmentConfig, DevelopmentEntryStore};
 use terrain_layer_model::{OnTerrain, TerrainView};
@@ -14,7 +15,7 @@ use urbanization_cells::UrbanizationIndex;
 use urbanization_layer_model::Urbanization;
 
 fn old_ground_height(
-	store: &TerrainEntryStore,
+	store: &HcsgStorage,
 	layout: &TerrainCellLayout,
 	base: &WorldBaseTerrain,
 	developments: &DevelopmentEntryStore,
@@ -51,7 +52,7 @@ fn first_unclassified(pad: &richmond::PadComplex) -> Option<Vec2> {
 fn terrain_view_ground_matches_the_retired_world_formula() -> anyhow::Result<()> {
 	let layout = TerrainCellLayout::default();
 	let base_noise = BaseTerrainNoise::from_config(&TerrainConfig::new(42));
-	let mut store = TerrainEntryStore::default();
+	let mut store = HcsgStorage::default();
 	store.insert_base_terrain_for_test(&layout, 0, 0, base_noise.clone());
 
 	let pad_bounds = Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(100.0, 100.0, 100.0));
@@ -80,7 +81,7 @@ fn terrain_view_ground_matches_the_retired_world_formula() -> anyhow::Result<()>
 	world.insert_resource(UrbanizationIndex::default());
 
 	let (expected, pad_free) = {
-		let store = world.resource::<TerrainEntryStore>();
+		let store = world.resource::<HcsgStorage>();
 		let layout = world.resource::<TerrainCellLayout>();
 		let base = world.resource::<WorldBaseTerrain>();
 		let developments = world.resource::<DevelopmentEntryStore>();

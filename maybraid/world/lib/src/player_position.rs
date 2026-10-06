@@ -364,6 +364,7 @@ mod tests {
 				home: Vec2::ZERO,
 				keep_waypoints: false,
 				respawn_ends_life: false,
+				pick_first_spawn: false,
 			},
 		);
 		world.insert_resource(policies);

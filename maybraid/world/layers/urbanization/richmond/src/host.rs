@@ -15,7 +15,7 @@ use buildings::wizards_tower::WizardsTower;
 use buildings::{
 	ConnectingStairwell, MixedUseLesHallesStorey, PitchedRoof, RectangularPitchedRoofComplex,
 };
-use lod::gen::LodScene;
+use lod::gen::{Id, LodScene};
 use lod::lod_host_scene_pending;
 use lod::lod_ref::LodRef;
 use lod::LodSceneLevel;
@@ -204,7 +204,27 @@ impl DevelopmentHost {
 		}
 	}
 
-	pub fn spawn(&self, commands: &mut Commands) -> Vec<Entity> {
+	pub fn place_local_id(&self) -> u32 {
+		match self {
+			Self::LesHallesStorey(_, _) => 1,
+			Self::LesHallesStairwell(_, _) => 2,
+			Self::LesHallesRoof(_, _) => 3,
+			Self::ShepherdsHouse(_, _) => 4,
+			Self::ShepherdsHut(_, _) => 5,
+			Self::OldCityMarketTerrace(_, _) => 6,
+			Self::RingFortCircularTower(_, _) => 7,
+			Self::RingFortTrazaloidTower(_, _) => 8,
+			Self::RingFortGalleryTerrace(_, _) => 9,
+			Self::RingFortGalleryColonnade(_, _) => 10,
+			Self::RingFortGalleryRoof(_, _) => 11,
+			Self::SingleHighrise(_, _) => 12,
+			Self::TempleSanctum(_, _) => 13,
+			Self::WizardsTower(_, _) => 14,
+			Self::SkybridgeHall(_, _) => 15,
+		}
+	}
+
+	pub fn spawn(&self, commands: &mut Commands, host_id: Option<Id>) -> Vec<Entity> {
 		let entities = match self {
 			Self::LesHallesStorey(building, transform) => spawn(commands, building, *transform),
 			Self::LesHallesStairwell(building, transform) => {
@@ -240,8 +260,11 @@ impl DevelopmentHost {
 			}
 			Self::SkybridgeHall(building, transform) => spawn(commands, building, *transform),
 		};
-		if let Some(place) = self.discoverable_place() {
+		if let Some(mut place) = self.discoverable_place() {
 			if let Some(entity) = entities.first() {
+				if let Some(host) = host_id {
+					place = place.with_identity(host, self.place_local_id());
+				}
 				commands.entity(*entity).insert(place);
 			}
 		}

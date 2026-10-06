@@ -5,12 +5,14 @@
 //! stamped when each source component is added, then one shared drain creates a
 //! compound collider per host (every gated stick, no shape cap).
 //!
-//! Compounds live on the [`LodSceneHost`], not a High level root, so band flicker
-//! does not rebuild them and Hidden warm-hold roots do not keep live physics.
-//! The first **High or Medium** realization stamps High-IR capsules (grove
-//! High/Medium both nest plants). Hosts with no collideable sticks still take
-//! [`StickPhysicsAttached`] so empty tuft / frond plants do not starve the drain.
-//! Later Low / UltraLow leaves the compound in place until the host is culled.
+//! Compounds live on the stick source entity (isolated `/show` host, or a posed
+//! plant under a grove). Band flicker does not rebuild them. The first **High
+//! or Medium** realization — on this entity or an ancestor [`LodSceneHost`] —
+//! stamps High-IR capsules. Grove High/Medium pose plants without nested hosts;
+//! the grove band is what makes the compound playable. Sources with no
+//! collideable sticks still take [`StickPhysicsAttached`] so empty tuft / frond
+//! plants do not starve the drain. Later Low / UltraLow leaves the compound in
+//! place until the source is culled.
 
 use std::collections::{HashSet, VecDeque};
 
@@ -131,17 +133,26 @@ fn wants_playable_colliders(level: LodSceneLevel) -> bool {
 	matches!(level, LodSceneLevel::High | LodSceneLevel::Medium)
 }
 
+/// Playable band on this entity, or an ancestor [`LodSceneHost`] (posed grove plants).
+fn playable_level_for(world: &World, entity: Entity) -> Option<LodSceneLevel> {
+	let mut current = Some(entity);
+	while let Some(entity) = current {
+		if let Some(level) = world.get::<LodSceneLevel>(entity).copied() {
+			return wants_playable_colliders(level).then_some(level);
+		}
+		current = world.get::<ChildOf>(entity).map(|child| child.parent());
+	}
+	None
+}
+
 fn sync_stick_colliders(world: &mut World) {
 	let pending: Vec<_> = {
-		let mut hosts = world.query_filtered::<(Entity, &LodSceneLevel), (
-			With<LodSceneHost>,
-			With<StickPhysicsProducer>,
-			Without<StickPhysicsAttached>,
-		)>();
-		hosts
+		let mut sources = world
+			.query_filtered::<Entity, (With<StickPhysicsProducer>, Without<StickPhysicsAttached>)>(
+			);
+		sources
 			.iter(world)
-			.filter(|(_, level)| wants_playable_colliders(**level))
-			.map(|(entity, _)| entity)
+			.filter(|entity| playable_level_for(world, *entity).is_some())
 			.collect()
 	};
 	for entity in pending {
@@ -153,13 +164,10 @@ fn sync_stick_colliders(world: &mut World) {
 		let Some(entity) = world.resource_mut::<StickPhysicsQueue>().pop_front() else {
 			break;
 		};
-		if world.get_entity(entity).is_err() || world.get::<LodSceneHost>(entity).is_none() {
+		if world.get_entity(entity).is_err() {
 			continue;
 		}
-		let Some(level) = world.get::<LodSceneLevel>(entity).copied() else {
-			continue;
-		};
-		if !wants_playable_colliders(level) {
+		if playable_level_for(world, entity).is_none() {
 			continue;
 		}
 		if world.get::<StickPhysicsAttached>(entity).is_some() && has_compound(world, entity) {
@@ -399,16 +407,27 @@ mod tests {
 	}
 
 	#[test]
-	fn high_compound_attaches_after_lod_host_arrives() {
+	fn high_compound_attaches_after_playable_band_arrives() {
 		let mut app = App::new();
 		app.add_plugins(StickPhysicsPlugin);
-		let host = app.world_mut().spawn((playable_trunk(), LodSceneLevel::High)).id();
+		let host = app.world_mut().spawn(playable_trunk()).id();
 		app.update();
 		assert!(!has_compound(app.world(), host));
 
-		app.world_mut().entity_mut(host).insert(LodSceneHost);
+		app.world_mut().entity_mut(host).insert(LodSceneLevel::High);
 		app.update();
 		assert!(has_compound(app.world(), host));
+	}
+
+	#[test]
+	fn posed_plant_uses_ancestor_grove_band() {
+		let mut app = App::new();
+		app.add_plugins(StickPhysicsPlugin);
+		let grove = app.world_mut().spawn((LodSceneHost, LodSceneLevel::High)).id();
+		let plant = app.world_mut().spawn((playable_trunk(), ChildOf(grove))).id();
+		app.update();
+		assert!(has_compound(app.world(), plant));
+		assert!(!has_compound(app.world(), grove));
 	}
 
 	#[test]

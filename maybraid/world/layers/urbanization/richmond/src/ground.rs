@@ -3,8 +3,8 @@
 use bevy::ecs::system::{ReadOnlySystemParam, Res, SystemParam, SystemParamItem};
 use bevy::math::bounding::Aabb3d;
 use durham::{
-	origin_cell_ids_for_layout, Durham, Terrain, TerrainCellLayout, TerrainEntryStore,
-	TerrainMeshBuilder, Water,
+	CellTiling, Durham, HcsgStorage, Terrain, TerrainCellLayout, TerrainMeshBuilder,
+	TerrainStorage, Water,
 };
 use lod::gen::{Id, OriginalId, Version};
 use procedural_common::Bounds2;
@@ -59,7 +59,7 @@ pub trait RichmondGround:
 /// Durham store + layout. Named only here and in tests.
 #[derive(SystemParam)]
 pub struct RichmondGroundView<'w> {
-	store: Res<'w, TerrainEntryStore>,
+	store: Res<'w, HcsgStorage>,
 	layout: Res<'w, TerrainCellLayout>,
 }
 
@@ -70,7 +70,7 @@ impl RichmondGround for OnTerrain<Durham> {
 		read: &SystemParamItem<'_, '_, Self::GroundRead>,
 		region: Aabb3d,
 	) -> Vec<OriginalId> {
-		origin_cell_ids_for_layout(&read.layout, region)
+		read.layout.cell_ids(region)
 	}
 
 	fn stored_cell<'a>(
@@ -89,7 +89,7 @@ impl RichmondGround for OnTerrain<Durham> {
 	}
 
 	fn membership_revision(read: &SystemParamItem<'_, '_, Self::GroundRead>) -> u64 {
-		read.store.membership_revision()
+		read.store.terrain_revision()
 	}
 
 	fn terrain_ids_overlapping(

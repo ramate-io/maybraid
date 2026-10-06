@@ -10,6 +10,8 @@ use durham::{
 	Durham, DurhamTerrainConfig, TerrainColliderSystems, TerrainFillSystems, TerrainRetarget,
 };
 use furnishing_layer_model::Furnishing;
+use geneva::{install_language_stream, Geneva, LanguageConfig};
+use language_layer_model::Language;
 use layer_stack::{
 	in_generation_mode, ActiveGenerationMode, GenerationMode, GenerationModeSystems,
 	LayerModeConfig, Scheme,
@@ -56,6 +58,17 @@ impl Scheme<Vegetation<Chico<Urbanization<Richmond<OnTerrain<Durham>>>>>> for Tr
 impl Scheme<Furnishing<Maputo<Urbanization<Richmond<OnTerrain<Durham>>>>>> for TrainingGround {
 	fn install(app: &mut App, _config: &()) {
 		install_furnishing_stream::<TrainingGround, Urbanization<Richmond<OnTerrain<Durham>>>>(app);
+	}
+}
+
+impl Scheme<Language<Geneva<Vegetation<Chico<Urbanization<Richmond<OnTerrain<Durham>>>>>>>>
+	for TrainingGround
+{
+	fn install(app: &mut App, _config: &LanguageConfig) {
+		install_language_stream::<
+			TrainingGround,
+			Vegetation<Chico<Urbanization<Richmond<OnTerrain<Durham>>>>>,
+		>(app);
 	}
 }
 

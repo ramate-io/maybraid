@@ -3,15 +3,19 @@
 //! Playable coverage is three scale streams (160 / 320 / 640 m) that follow the
 //! viewer. Near cells use `res_2 = 5` and own collision; far and background are
 //! render-only at `res_2 = 4` and `3`. Far / Background holes inset so Medium
-//! overlaps the next-finer High rim. Generation admits a bounded number of
-//! missing origin ids per frame. Playable visuals come from the urbanized
+//! overlaps the next-finer High rim. The [`TerrainWindow`] producer publishes
+//! the layout's request region; `Terrain` and `Water` subscribe to it and
+//! admit a bounded number of missing origin ids per frame. Playable visuals come from the urbanized
 //! presenter. Generation runs on every coverage. Raw present is
 //! [`crate::DurhamCells`], gated by the presenter subscription.
 
 use bevy::ecs::system::SystemParam;
 use bevy::math::{IVec2, UVec2};
 use bevy::prelude::*;
-use lod::gen::{GeneratingSpatialIndex, Id, OriginalId, SpatialIndex, StorageStatus};
+use lod::gen::{Id, LodGenerateBudget, LodGenerated, Version};
+use lod::hcsg::{
+	ChannelTimeBudget, GenerateOn, GenerationProducer, HcsgSeedSystems, HcsgStorage, Seed,
+};
 use lod::lod_ref::LodRef;
 use lod::presentation::RegionPresenter;
 use lod::LodViewer;
@@ -24,15 +28,17 @@ use visual_geometry_core::{
 
 use crate::terrain::base_noise::BaseTerrainNoise;
 use crate::terrain::cell::{
-	origin_cell_ids_for_layout, TerrainCellLayout, TerrainCellRing, TERRAIN_CELL_SIZE,
+	universal_bounds, TerrainCellLayout, TerrainCellRing, TERRAIN_CELL_SIZE,
 };
 use crate::terrain::collider::{TerrainColliderEpoch, TerrainColliderSystems};
 use crate::terrain::config::TerrainConfig;
-use crate::terrain::index::AvianTerrainIndex;
+use crate::terrain::index::{DurhamNodes, TerrainStorage};
 use crate::terrain::presentation::{
 	TerrainBackground, TerrainFar, TerrainMeshLodBand, TerrainNear, TerrainPresentationAssets,
-	TerrainPresenterState, TerrainRegionPresenter, TerrainStoreView, TerrainStreamPresenterState,
+	TerrainPresenterState, TerrainRegionPresenter, TerrainStreamPresenterState,
 };
+use crate::terrain::stamps::TerrainStampConfigs;
+use crate::terrain::watersheds::WatershedConfigs;
 use crate::water::{ComposedWater, Water, WaterPresentationAssets};
 use crate::{DurhamTerrainModelsPlugin, Terrain, TerrainMeshBuilder};
 use layer_stack::{mode_subscribed, LodPresentGateSync};
@@ -77,7 +83,11 @@ const WORLD_TERRAIN_CULL_MARGIN_M: f32 = 0.0;
 /// Snap stream anchors to the 640 m lattice.
 const WORLD_TERRAIN_PRESENT_STEP_M: f32 = 4.0 * TERRAIN_CELL_SIZE;
 /// Sync Durham DAGs admitted per frame, nearest missing origin ids first.
-const TERRAIN_ADMIT_PER_FRAME: usize = 4;
+const TERRAIN_ADMIT_PER_FRAME: u32 = 4;
+
+/// Producer channel for Durham's terrain window: the [`TerrainCellLayout`]
+/// request region around the viewer.
+pub struct TerrainWindow;
 
 /// Fine-only patch vs playable world extents (fine grid + macro rings).
 #[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -87,15 +97,20 @@ pub enum TerrainCoverage {
 	PlayableWorld,
 }
 
-/// When true, [`generate_cells`] keeps the current origin instead of recentering
-/// on the viewer. A pinned fine patch uses this so the window stays put.
+/// When true, [`produce_terrain_window`] keeps the current origin instead of
+/// recentering on the viewer. A pinned fine patch uses this so the window stays put.
 #[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct TerrainLayoutPinned(pub bool);
 
-/// Durham fill. Layout retargets run before [`Self::Generate`].
+/// Durham fill. Layout retargets run before [`Self::Generate`], which holds
+/// [`Self::Window`] then [`Self::Subscribe`].
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum TerrainFillSystems {
 	Generate,
+	/// [`TerrainWindow`] producer: rebuilds, recenters, seeds the layout.
+	Window,
+	/// `Terrain` / `Water` subscribers on [`TerrainWindow`].
+	Subscribe,
 }
 
 /// Base noise used for camera height before (and alongside) generation.
@@ -263,9 +278,9 @@ impl TerrainRetarget<'_> {
 }
 
 /// Generation half of the old Durham terrain plugin: models, shaders, mesh
-/// caches, layout, and [`generate_cells`].
+/// caches, layout, the [`TerrainWindow`] producer, and its subscribers.
 ///
-/// `setup_presentation_assets` stays here. The terrain index reads
+/// `setup_presentation_assets` stays here. Generation reads the seeded
 /// [`TerrainPresentationAssets`] and [`WaterPresentationAssets`] while filling
 /// cells, and a live session retargets the terrain assets even when raw present is off.
 pub(crate) fn install_durham_generation(app: &mut App) {
@@ -299,15 +314,38 @@ pub(crate) fn install_durham_generation(app: &mut App) {
 	.init_resource::<TerrainStreaming<Durham>>()
 	.init_resource::<TerrainExtent<Durham>>()
 	.init_resource::<TerrainLayoutPinned>()
+	.insert_resource(LodGenerateBudget::<TerrainWindow>::new(TERRAIN_ADMIT_PER_FRAME))
+	.insert_resource(ChannelTimeBudget::<TerrainWindow>::unlimited())
+	.add_plugins((
+		Seed::<TerrainStampConfigs>::default(),
+		Seed::<WatershedConfigs>::default(),
+		Seed::<TerrainPresentationAssets>::default(),
+		Seed::<WaterPresentationAssets>::default(),
+		GenerateOn::<TerrainWindow, Terrain>::in_set(TerrainFillSystems::Subscribe),
+		GenerateOn::<TerrainWindow, Water>::in_set(TerrainFillSystems::Subscribe),
+	))
+	.configure_sets(
+		Update,
+		(
+			TerrainFillSystems::Window
+				.in_set(TerrainFillSystems::Generate)
+				.after(HcsgSeedSystems)
+				.before(TerrainFillSystems::Subscribe),
+			TerrainFillSystems::Subscribe.in_set(TerrainFillSystems::Generate),
+			TerrainFillSystems::Generate
+				.run_if(terrain_streaming::<Durham>)
+				.before(TerrainColliderSystems::QueueMeshes)
+				.before(TerrainLayerSystems::<Durham>::QueueColliders),
+		),
+	)
 	.add_systems(Startup, setup_presentation_assets)
 	.add_systems(Update, write_durham_extent.after(TerrainFillSystems::Generate))
+	.add_systems(Update, produce_terrain_window.in_set(TerrainFillSystems::Window))
 	.add_systems(
 		Update,
-		generate_cells
+		(mark_generated_pending, sync_world_base)
 			.in_set(TerrainFillSystems::Generate)
-			.run_if(terrain_streaming::<Durham>)
-			.before(TerrainColliderSystems::QueueMeshes)
-			.before(TerrainLayerSystems::<Durham>::QueueColliders),
+			.after(TerrainFillSystems::Subscribe),
 	);
 }
 
@@ -346,7 +384,7 @@ pub(crate) fn install_durham_presentation(app: &mut App) {
 		.add_systems(
 			Update,
 			present_cells
-				.after(generate_cells)
+				.after(TerrainFillSystems::Generate)
 				.before(TerrainColliderSystems::QueueMeshes)
 				.before(TerrainLayerSystems::<Durham>::QueueColliders)
 				.run_if(terrain_streaming::<Durham>)
@@ -412,111 +450,87 @@ fn viewer_xz(
 	})
 }
 
-fn origin_xz_distance_sq(id: Id, viewer: Vec3) -> f32 {
-	let Some(bounds) = id.origin_cell_bounds() else {
-		return f32::MAX;
-	};
-	let min = Vec3::from(bounds.min);
-	let max = Vec3::from(bounds.max);
-	let dx = (min.x + max.x) * 0.5 - viewer.x;
-	let dz = (min.z + max.z) * 0.5 - viewer.z;
-	dx * dx + dz * dz
-}
-
-fn generate_cells(
-	mut index: AvianTerrainIndex,
+/// Rebuilds after a dirty retarget, recenters the layout on the viewer, seeds
+/// it, and republishes its request region on [`TerrainWindow`].
+///
+/// The layout's rings tile differently around each center, so a moved or
+/// retargeted window restarts subscribers rather than scanning entering strips.
+#[allow(clippy::too_many_arguments)]
+pub fn produce_terrain_window(
+	mut storage: ResMut<HcsgStorage>,
+	mut layout: ResMut<TerrainCellLayout>,
 	mut dirty: ResMut<TerrainPresentationDirty>,
 	mut pending: ResMut<TerrainPresentPending>,
-	mut world_base: ResMut<WorldBaseTerrain>,
 	mut epoch: ResMut<TerrainColliderEpoch>,
 	mut mesh_budget: ResMut<MeshFulfillBudget<TerrainMeshBuilder>>,
 	pinned: Res<TerrainLayoutPinned>,
-	mut window_filled: Local<bool>,
+	mut window: GenerationProducer<TerrainWindow>,
 	lod_viewers: Query<&GlobalTransform, With<LodViewer>>,
 	cameras: Query<&GlobalTransform, With<Camera3d>>,
 ) {
+	let mut restart = window.current().is_none();
 	if dirty.0 {
-		index.clear();
+		storage.clear_group::<DurhamNodes>();
 		epoch.0 = epoch.0.wrapping_add(1);
 		dirty.0 = false;
 		pending.0 = true;
-		*window_filled = false;
+		restart = true;
 	}
 
 	let viewer = viewer_xz(&lod_viewers, &cameras);
 	if let Some(xz) = viewer {
 		mesh_budget.prefer_xz = Some(xz);
 		if !pinned.0 {
-			let mut layout = index.layout().clone();
-			if layout.recenter_on_xz(xz) {
-				index.set_layout(layout);
+			let mut recentered = layout.clone();
+			if recentered.recenter_on_xz(xz) {
+				*layout = recentered;
 				pending.0 = true;
-				*window_filled = false;
 			}
 		}
 	}
 
-	let layout = index.layout().clone();
-	let region = layout.request_region();
-	let identity = Transform::IDENTITY;
-	let lod_ref = LodRef {
-		entity: Entity::PLACEHOLDER,
-		previous_transform: &identity,
-		current_transform: &identity,
-		bounds: &region,
-	};
-	index.publish_layout_if_changed(&lod_ref);
-
-	if *window_filled {
-		if let Some(base) = index.base_noise() {
-			world_base.0 = base.clone();
-		}
-		return;
+	if storage.get::<TerrainCellLayout>(Id::Universal) != Some(&*layout) {
+		storage.seed(layout.clone(), universal_bounds());
+		restart = true;
 	}
 
-	let prefer = viewer.unwrap_or_else(|| layout.region_center_xz());
-	let mut missing: Vec<Id> = origin_cell_ids_for_layout(&layout, region)
-		.into_iter()
-		.map(|OriginalId(id)| id)
-		.filter(|id| {
-			<AvianTerrainIndex as SpatialIndex<Terrain>>::storage_status(&index, *id)
-				== StorageStatus::NotTracked
-		})
-		.collect();
-	if missing.is_empty() {
-		*window_filled = true;
-		if let Some(base) = index.base_noise() {
-			world_base.0 = base.clone();
-		}
-		return;
+	let priority = viewer.unwrap_or_else(|| layout.region_center_xz()).xz();
+	if restart {
+		window.restart(layout.request_region(), Some(priority));
+	} else {
+		window.publish(layout.request_region(), Some(priority));
 	}
-	missing.sort_by(|a, b| {
-		origin_xz_distance_sq(*a, prefer)
-			.partial_cmp(&origin_xz_distance_sq(*b, prefer))
-			.unwrap_or(std::cmp::Ordering::Equal)
-	});
+}
 
-	let _span = bevy::log::debug_span!("durham_terrain_generate").entered();
-	let mut created = 0usize;
-	for id in missing.into_iter().take(TERRAIN_ADMIT_PER_FRAME) {
-		if GeneratingSpatialIndex::<Terrain>::get_or_generate(&mut index, id, &lod_ref).is_some() {
-			created += 1;
-		}
-		let _ = GeneratingSpatialIndex::<Water>::get_or_generate(&mut index, id, &lod_ref);
-	}
-	if created > 0 {
-		debug!("admitted terrain_cells={created}");
+/// Terrain and water finish independently, so either announcement re-presents.
+fn mark_generated_pending(
+	mut terrain: MessageReader<LodGenerated<Terrain>>,
+	mut water: MessageReader<LodGenerated<Water>>,
+	mut pending: ResMut<TerrainPresentPending>,
+) {
+	if terrain.read().count() + water.read().count() > 0 {
 		pending.0 = true;
 	}
+}
 
-	if let Some(base) = index.base_noise() {
-		world_base.0 = base.clone();
+/// Camera height reads [`WorldBaseTerrain`]; keep it on the stored base noise.
+fn sync_world_base(
+	storage: Res<HcsgStorage>,
+	mut world_base: ResMut<WorldBaseTerrain>,
+	mut synced: Local<Option<Version>>,
+) {
+	let Some(entry) = storage.entry::<BaseTerrainNoise>(Id::Universal) else {
+		return;
+	};
+	if *synced != Some(entry.version) {
+		world_base.0 = entry.value.clone();
+		*synced = Some(entry.version);
 	}
 }
 
 fn present_cells(
 	mut terrain_presenter: TerrainRegionPresenter,
-	store: Res<crate::terrain::index::TerrainEntryStore>,
+	storage: Res<HcsgStorage>,
 	layout: Res<TerrainCellLayout>,
 	mut pending: ResMut<TerrainPresentPending>,
 	lod_viewers: Query<&GlobalTransform, With<LodViewer>>,
@@ -536,13 +550,9 @@ fn present_cells(
 		current_transform: &viewer,
 		bounds: &region,
 	};
-	let terrain_view = TerrainStoreView::new(&store, &layout);
-	RegionPresenter::<Terrain, _>::present(&mut terrain_presenter, &terrain_view, region, &lod_ref);
-	let wanted: HashSet<Id> = terrain_view
-		.tracked_ids_for(region)
-		.into_iter()
-		.map(|tracked| tracked.0)
-		.collect();
+	RegionPresenter::<Terrain, _>::present(&mut terrain_presenter, &*storage, region, &lod_ref);
+	terrain_presenter.sync_water();
+	let wanted: HashSet<Id> = storage.terrain_ids_overlapping(region).into_iter().collect();
 	terrain_presenter.remove_stale(&wanted);
 	pending.0 = false;
 }
@@ -550,8 +560,8 @@ fn present_cells(
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::terrain::cell::origin_cell_ids_for_layout;
-	use crate::terrain::index::TerrainEntryStore;
+	use crate::terrain::cell::CellTiling;
+	use crate::terrain::index::register_durham_nodes;
 	use crate::DurhamTerrainConfig;
 
 	#[test]
@@ -573,7 +583,7 @@ mod tests {
 		assert!(layout.stream_rings[0].seeds_collision());
 		assert!(!layout.stream_rings[1].seeds_collision());
 		assert!(!layout.stream_rings[2].seeds_collision());
-		let ids = origin_cell_ids_for_layout(&layout, layout.request_region());
+		let ids = layout.cell_ids(layout.request_region());
 		assert!(!ids.is_empty());
 	}
 
@@ -618,7 +628,7 @@ mod tests {
 		let size = TERRAIN_CELL_SIZE;
 		assert!(layout.recenter_on_xz(Vec3::X * 20.0 * size));
 		assert_eq!(layout.origin, IVec2::new(12, -WORLD_FINE_HALF_EXTENT_CELLS));
-		let ids = origin_cell_ids_for_layout(&layout, layout.request_region());
+		let ids = layout.cell_ids(layout.request_region());
 		assert!(!ids.is_empty());
 	}
 
@@ -705,25 +715,25 @@ mod tests {
 	}
 
 	#[test]
-	fn seed_change_keeps_store_until_dirty_generation_clears_it() {
+	fn seed_change_keeps_store_until_dirty_generation_clears_it() -> anyhow::Result<()> {
 		let mut world = World::new();
 		let layout = TerrainCellLayout::default();
 		let base = BaseTerrainNoise::from_config(&TerrainConfig::new(1));
+		let mut storage = HcsgStorage::default();
+		register_durham_nodes(&mut storage);
+		world.insert_resource(storage);
 		world.insert_resource(TerrainConfig::new(1));
-		world.insert_resource(TerrainEntryStore::default());
 		world.insert_resource(TerrainPresentationDirty(false));
 		world.insert_resource(TerrainPresentPending(false));
 		world.insert_resource(TerrainPresenterState::default());
-		let cell_entity = world.spawn_empty().id();
 		let present_entity = world.spawn_empty().id();
 		let (id, presented, revision) = {
-			let mut store = world.resource_mut::<TerrainEntryStore>();
-			store.insert_base_terrain_for_test(&layout, 0, 0, base);
-			let id = store.terrain.keys().copied().next().expect("inserted");
-			store.terrain.get_mut(&id).expect("inserted").entity = Some(cell_entity);
-			let presented = store.terrain.get(&id).expect("inserted").version;
-			let revision = store.membership_revision();
-			(id, presented, revision)
+			let mut storage = world.resource_mut::<HcsgStorage>();
+			storage.insert_base_terrain_for_test(&layout, 0, 0, base);
+			let id = storage.terrain_ids_overlapping(layout.request_region())[0];
+			let presented =
+				storage.entry::<Terrain>(id).ok_or_else(|| anyhow::anyhow!("inserted"))?.version;
+			(id, presented, storage.latest_version())
 		};
 		world.resource_mut::<TerrainPresenterState>().insert_for_test(
 			id,
@@ -740,23 +750,15 @@ mod tests {
 			},
 		);
 
-		assert!(
-			world.get_entity(cell_entity).is_ok(),
-			"seed change must not drop store-owned entities"
-		);
-		assert!(
-			world.get_entity(present_entity).is_ok(),
-			"the presenter survives apply"
-		);
+		assert!(world.get_entity(present_entity).is_ok(), "the presenter survives apply");
 		{
-			let store = world.resource::<TerrainEntryStore>();
+			let storage = world.resource::<HcsgStorage>();
 			assert_eq!(
-				store.terrain.get(&id).map(|entry| entry.version),
+				storage.entry::<Terrain>(id).map(|entry| entry.version),
 				Some(presented),
 				"apply must not rewind or replace the store"
 			);
-			assert_eq!(store.membership_revision(), revision);
-			assert_eq!(store.terrain.get(&id).and_then(|entry| entry.entity), Some(cell_entity));
+			assert_eq!(storage.latest_version(), revision);
 		}
 		assert_eq!(
 			world.resource::<TerrainPresenterState>().presented_version(id),
@@ -764,18 +766,106 @@ mod tests {
 		);
 		assert!(world.resource::<TerrainPresentationDirty>().0);
 
-		world.resource_mut::<TerrainEntryStore>().clear_entries();
+		let mut storage = world.resource_mut::<HcsgStorage>();
+		storage.clear_group::<DurhamNodes>();
 		let rebuilt_base = BaseTerrainNoise::from_config(&TerrainConfig::new(99));
-		world.resource_mut::<TerrainEntryStore>().insert_base_terrain_for_test(
-			&layout,
-			0,
-			0,
-			rebuilt_base,
-		);
-		let rebuilt = world.resource::<TerrainEntryStore>().terrain[&id].version;
+		storage.insert_base_terrain_for_test(&layout, 0, 0, rebuilt_base);
+		let rebuilt = storage
+			.entry::<Terrain>(id)
+			.ok_or_else(|| anyhow::anyhow!("reinserted"))?
+			.version;
 		assert!(
 			rebuilt > presented,
 			"dirty clear must mint a version the surviving presenter will accept"
 		);
+		Ok(())
+	}
+
+	fn empty_water(cell: bevy::math::bounding::Aabb3d) -> Water {
+		let terrain = crate::terrain::sdf::TerrainSdf::new(1, 20.0);
+		Water {
+			cell,
+			sdf: ComposedWater::compose(terrain.clone(), Vec::new()),
+			terrain,
+			fills: Vec::new(),
+			material: Handle::default(),
+			res_2: 4,
+			stream_ring: None,
+		}
+	}
+
+	#[test]
+	fn water_generated_after_its_terrain_still_attaches() -> anyhow::Result<()> {
+		let mut app = App::new();
+		let layout = TerrainCellLayout::default();
+		let mut storage = HcsgStorage::default();
+		register_durham_nodes(&mut storage);
+		app.insert_resource(storage)
+			.insert_resource(layout.clone())
+			.insert_resource(TerrainPresentPending(false))
+			.init_resource::<TerrainPresenterState>()
+			.add_message::<LodGenerated<Terrain>>()
+			.add_message::<LodGenerated<Water>>()
+			.add_systems(Update, (mark_generated_pending, present_cells).chain());
+
+		let id = {
+			let mut storage = app.world_mut().resource_mut::<HcsgStorage>();
+			let base = BaseTerrainNoise::from_config(&TerrainConfig::new(1));
+			storage.insert_base_terrain_for_test(&layout, 0, 0, base);
+			storage.terrain_ids_overlapping(layout.request_region())[0]
+		};
+		app.world_mut().write_message(LodGenerated::<Terrain>::new(id));
+		app.update();
+
+		let terrain_version = {
+			let state = app.world().resource::<TerrainPresenterState>();
+			assert!(state.presented_water(id).is_none(), "no water generated yet");
+			state
+				.presented_version(id)
+				.ok_or_else(|| anyhow::anyhow!("terrain presented"))?
+		};
+
+		let cell = app
+			.world()
+			.resource::<HcsgStorage>()
+			.entry::<Terrain>(id)
+			.ok_or_else(|| anyhow::anyhow!("terrain stored"))?
+			.value
+			.cell;
+		let first =
+			app.world_mut()
+				.resource_mut::<HcsgStorage>()
+				.insert(id, empty_water(cell), cell);
+		app.world_mut().write_message(LodGenerated::<Water>::new(id));
+		app.update();
+
+		let (first_entity, attached) = app
+			.world()
+			.resource::<TerrainPresenterState>()
+			.presented_water(id)
+			.ok_or_else(|| anyhow::anyhow!("late water must attach to presented terrain"))?;
+		assert_eq!(attached, first);
+		assert_eq!(
+			app.world().resource::<TerrainPresenterState>().presented_version(id),
+			Some(terrain_version),
+			"water arrival must not respawn the terrain"
+		);
+
+		let second =
+			app.world_mut()
+				.resource_mut::<HcsgStorage>()
+				.insert(id, empty_water(cell), cell);
+		app.world_mut().write_message(LodGenerated::<Water>::new(id));
+		app.update();
+
+		let (second_entity, attached) = app
+			.world()
+			.resource::<TerrainPresenterState>()
+			.presented_water(id)
+			.ok_or_else(|| anyhow::anyhow!("rebuilt water stays attached"))?;
+		assert_eq!(attached, second);
+		assert_ne!(second_entity, first_entity);
+		assert!(app.world().get_entity(first_entity).is_err(), "stale water despawns");
+		Ok(())
 	}
 }

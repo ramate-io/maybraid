@@ -3,8 +3,7 @@
 use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::math::{IVec2, UVec2, Vec3};
 use bevy::prelude::*;
-use lod::gen::{GeneratingSpatialIndex, GenerationScheme, Id, OriginalId, SpatialIndex};
-use lod::lod_ref::LodRef;
+use lod::gen::{GeneratingSpatialIndex, Id, OriginalId};
 use lod::LodSceneLevel;
 
 /// Naturescapes cascade `min_size`.
@@ -54,6 +53,56 @@ pub const TERRAIN_PRESENT_VERTICAL_HALF_EXTENT: f32 = 8_000.0;
 /// Large AABB for universal (`Id::Universal`) generation deps.
 pub fn universal_bounds() -> Aabb3d {
 	Aabb3d::from_min_max(Vec3::splat(-1_000_000.0), Vec3::splat(1_000_000.0))
+}
+
+/// [`lod::gen::GenerationScheme`] for a world singleton at [`Id::Universal`]
+/// derived from other universals (or a constant).
+///
+/// Root inputs nothing can derive use [`lod::seeded_root`] instead. Either
+/// way, consumers read the value with `get_one_or_generate(Id::Universal)`.
+macro_rules! derived_universal_scheme {
+	($T:ty $(, where S: $bound:path)?, |$index:ident| $build:expr) => {
+		impl<S $(: $bound)?> lod::gen::GenerationScheme<S> for $T {
+			fn original_ids_for(
+				_spatial_index: &mut S,
+				_region: bevy::math::bounding::Aabb3d,
+			) -> Vec<lod::gen::OriginalId> {
+				vec![lod::gen::OriginalId::universal()]
+			}
+
+			fn build_with_id(
+				$index: &mut S,
+				id: lod::gen::Id,
+			) -> Option<(Self, bevy::math::bounding::Aabb3d)> {
+				if id != lod::gen::Id::Universal {
+					return None;
+				}
+				Some(($build?, $crate::terrain::cell::universal_bounds()))
+			}
+		}
+	};
+}
+
+pub(crate) use derived_universal_scheme;
+
+/// A Universal layout that tiles regions into cell ids.
+///
+/// Grid roots (`PreWatershedTerrain`, `HydroComplexCell`, band controllers)
+/// discover their ids with [`Self::original_cell_ids_for`]; everything stacked
+/// on a root reuses its ids through `GeneratingSpatialIndex::original_ids_for`.
+pub trait CellTiling: Sized {
+	/// Ids of this layout's cells intersecting `region`.
+	fn cell_ids(&self, region: Aabb3d) -> Vec<OriginalId>;
+
+	/// [`Self::cell_ids`] on the index's Universal layout; empty if it cannot be built.
+	fn original_cell_ids_for<S>(spatial_index: &mut S, region: Aabb3d) -> Vec<OriginalId>
+	where
+		S: GeneratingSpatialIndex<Self>,
+	{
+		GeneratingSpatialIndex::<Self>::get_one_or_generate(spatial_index, Id::Universal)
+			.map(|layout| layout.cell_ids(region))
+			.unwrap_or_default()
+	}
 }
 
 /// Optional coarser origin cells wrapping an inner footprint.
@@ -158,7 +207,7 @@ impl TerrainCellRing {
 
 /// Layout for tiling terrain origin cells in the XZ plane.
 ///
-/// Materialized once under [`Id::Universal`] via [`GenerationScheme`].
+/// Materialized once under [`Id::Universal`] via [`lod::gen::GenerationScheme`].
 #[derive(Resource, Debug, Clone, PartialEq)]
 pub struct TerrainCellLayout {
 	/// Edge length of each origin cell in world units.
@@ -279,6 +328,12 @@ impl TerrainCellLayout {
 		IVec2::new((xz.x / size).floor() as i32, (xz.z / size).floor() as i32)
 	}
 
+	/// Bounds of the fine origin cell containing `(x, z)`.
+	pub fn fine_cell_bounds_containing(&self, x: f32, z: f32) -> Aabb3d {
+		let cell = self.fine_cell_containing_xz(Vec3::new(x, 0.0, z));
+		cell_bounds(cell.x, cell.y, self.cell_size, self.vertical_half_extent)
+	}
+
 	/// Fine-grid origin so the window stays centered on the cell that contains `xz`.
 	pub fn origin_centered_on_xz(&self, xz: Vec3) -> IVec2 {
 		let cell = self.fine_cell_containing_xz(xz);
@@ -319,30 +374,8 @@ impl TerrainCellLayout {
 	}
 }
 
-/// Bootstrap source used only when first materializing [`TerrainCellLayout`] at
-/// [`Id::Universal`]. Consumers should depend on
-/// [`lod::gen::GeneratingSpatialIndex`]`<TerrainCellLayout>` instead.
-pub trait BootstrapTerrainCellLayout {
-	fn bootstrap_terrain_cell_layout(&self) -> TerrainCellLayout;
-}
-
-impl<S> GenerationScheme<S> for TerrainCellLayout
-where
-	S: BootstrapTerrainCellLayout,
-{
-	fn original_ids_for(_spatial_index: &mut S, _region: Aabb3d) -> Vec<OriginalId> {
-		vec![OriginalId::universal()]
-	}
-
-	fn build_with_id(spatial_index: &mut S, id: Id, _lod_ref: &LodRef) -> Option<(Self, Aabb3d)> {
-		if id != Id::Universal {
-			return None;
-		}
-		Some((spatial_index.bootstrap_terrain_cell_layout(), universal_bounds()))
-	}
-
-	fn descendants_with_lod(_id: Id, _spatial_index: &mut S, _lod_ref: &LodRef) {}
-}
+// Seeded by the terrain window producer, which recenters it on the viewer.
+lod::seeded_root!(TerrainCellLayout);
 
 /// Layout for macro-scale tiling (jersey stamp size defaults).
 ///
@@ -421,104 +454,74 @@ pub fn expand_aabb_xz_y(region: Aabb3d, pad_xz: f32, pad_y: f32) -> Aabb3d {
 	)
 }
 
-/// Origin-cell [`OriginalId`]s covering `region` for a materialized layout.
-///
-/// Fine-grid cells come only from [`TerrainCellLayout::fine_request_region`],
-/// not from the padded request AABB. Each [`TerrainCellLayout::outer_rings`]
-/// entry then tiles only its own expanded frame (not the remaining pad), so
-/// 2× cells do not fill the 4× ring and 160 m cells do not fill either ring.
-///
-/// When [`TerrainCellLayout::stream_rings`] is set, each annulus emits only its
-/// own cell size inside its retain band.
-pub fn origin_cell_ids_for_layout(layout: &TerrainCellLayout, region: Aabb3d) -> Vec<OriginalId> {
-	if !layout.stream_rings.is_empty() {
-		let min = Vec3::from(region.min);
-		let max = Vec3::from(region.max);
-		let anchor = Vec3::new((min.x + max.x) * 0.5, 0.0, (min.z + max.z) * 0.5);
-		let mut ids = std::collections::HashSet::new();
-		for ring in &layout.stream_rings {
-			let outer = ring.high_outer_radius + ring.cull_margin;
-			let bounds = Aabb3d::from_min_max(
-				Vec3::new(anchor.x - outer, region.min.y, anchor.z - outer),
-				Vec3::new(anchor.x + outer, region.max.y, anchor.z + outer),
-			);
-			for (ix, iz) in cell_coords_for_region(bounds, ring.cell_size) {
-				let cell = cell_bounds(ix, iz, ring.cell_size, layout.vertical_half_extent);
-				let center = (Vec3::from(cell.min) + Vec3::from(cell.max)) * 0.5;
-				if region.intersects(&cell) && ring.retains_cell_center(center, anchor) {
-					ids.insert(OriginalId(Id::from_cell(cell)));
+impl CellTiling for TerrainCellLayout {
+	/// Origin-cell [`OriginalId`]s covering `region` for a materialized layout.
+	///
+	/// Fine-grid cells come only from [`TerrainCellLayout::fine_request_region`],
+	/// not from the padded request AABB. Each [`TerrainCellLayout::outer_rings`]
+	/// entry then tiles only its own expanded frame (not the remaining pad), so
+	/// 2× cells do not fill the 4× ring and 160 m cells do not fill either ring.
+	///
+	/// When [`TerrainCellLayout::stream_rings`] is set, each annulus emits only its
+	/// own cell size inside its retain band.
+	fn cell_ids(&self, region: Aabb3d) -> Vec<OriginalId> {
+		if !self.stream_rings.is_empty() {
+			let min = Vec3::from(region.min);
+			let max = Vec3::from(region.max);
+			let anchor = Vec3::new((min.x + max.x) * 0.5, 0.0, (min.z + max.z) * 0.5);
+			let mut ids = std::collections::HashSet::new();
+			for ring in &self.stream_rings {
+				let outer = ring.high_outer_radius + ring.cull_margin;
+				let bounds = Aabb3d::from_min_max(
+					Vec3::new(anchor.x - outer, region.min.y, anchor.z - outer),
+					Vec3::new(anchor.x + outer, region.max.y, anchor.z + outer),
+				);
+				for (ix, iz) in cell_coords_for_region(bounds, ring.cell_size) {
+					let cell = cell_bounds(ix, iz, ring.cell_size, self.vertical_half_extent);
+					let center = (Vec3::from(cell.min) + Vec3::from(cell.max)) * 0.5;
+					if region.intersects(&cell) && ring.retains_cell_center(center, anchor) {
+						ids.insert(OriginalId(Id::from_cell(cell)));
+					}
 				}
 			}
+			let mut ids: Vec<_> = ids.into_iter().collect();
+			ids.sort();
+			return ids;
 		}
-		let mut ids: Vec<_> = ids.into_iter().collect();
-		ids.sort_by(|a, b| a.0.cmp(&b.0));
-		return ids;
-	}
 
-	let fine = layout.fine_request_region();
-	let mut ids: Vec<OriginalId> = cell_coords_for_region(fine, layout.cell_size)
-		.filter_map(|(ix, iz)| {
-			let bounds = cell_bounds(ix, iz, layout.cell_size, layout.vertical_half_extent);
-			region.intersects(&bounds).then(|| OriginalId(Id::from_cell(bounds)))
-		})
-		.collect();
+		let fine = self.fine_request_region();
+		let mut ids: Vec<OriginalId> = cell_coords_for_region(fine, self.cell_size)
+			.filter_map(|(ix, iz)| {
+				let bounds = cell_bounds(ix, iz, self.cell_size, self.vertical_half_extent);
+				region.intersects(&bounds).then(|| OriginalId(Id::from_cell(bounds)))
+			})
+			.collect();
 
-	let mut covered = fine;
-	for outer in &layout.outer_rings {
-		if outer.rows <= 0 {
-			continue;
+		let mut covered = fine;
+		for outer in &self.outer_rings {
+			if outer.rows <= 0 {
+				continue;
+			}
+			let g = outer.cell_size.max(1e-3);
+			let hole: std::collections::HashSet<(i32, i32)> =
+				cell_coords_for_region(covered, g).collect();
+			let expanded = expand_aabb_xz(covered, outer.rows as f32 * g);
+			let outer_ids = cell_coords_for_region(expanded, g).filter_map(|(ix, iz)| {
+				if hole.contains(&(ix, iz)) {
+					return None;
+				}
+				let bounds = cell_bounds(ix, iz, g, self.vertical_half_extent);
+				if !region.intersects(&bounds) {
+					return None;
+				}
+				Some(OriginalId(Id::from_cell(bounds)))
+			});
+			ids.extend(outer_ids);
+			covered = expanded;
 		}
-		let g = outer.cell_size.max(1e-3);
-		let hole: std::collections::HashSet<(i32, i32)> =
-			cell_coords_for_region(covered, g).collect();
-		let expanded = expand_aabb_xz(covered, outer.rows as f32 * g);
-		let outer_ids = cell_coords_for_region(expanded, g).filter_map(|(ix, iz)| {
-			if hole.contains(&(ix, iz)) {
-				return None;
-			}
-			let bounds = cell_bounds(ix, iz, g, layout.vertical_half_extent);
-			if !region.intersects(&bounds) {
-				return None;
-			}
-			Some(OriginalId(Id::from_cell(bounds)))
-		});
-		ids.extend(outer_ids);
-		covered = expanded;
-	}
 
-	ids
-}
-
-/// Origin-cell [`OriginalId`]s covering `region`, using Universal [`TerrainCellLayout`].
-///
-/// Emits fine-grid cells plus nested [`TerrainCellLayout::outer_rings`] macro
-/// cells that intersect `region` and do not overlap the previously covered
-/// footprint. See [`origin_cell_ids_for_layout`].
-pub fn original_ids_for_origin_cells<S>(spatial_index: &mut S, region: Aabb3d) -> Vec<OriginalId>
-where
-	S: GeneratingSpatialIndex<TerrainCellLayout>,
-{
-	let identity = Transform::IDENTITY;
-	let lod_ref = LodRef {
-		entity: Entity::PLACEHOLDER,
-		previous_transform: &identity,
-		current_transform: &identity,
-		bounds: &region,
-	};
-	if GeneratingSpatialIndex::<TerrainCellLayout>::get_or_generate(
-		spatial_index,
-		Id::Universal,
-		&lod_ref,
-	)
-	.is_none()
-	{
-		return Vec::new();
+		ids
 	}
-	let Some(layout) = <S as SpatialIndex<TerrainCellLayout>>::get(spatial_index, Id::Universal)
-	else {
-		return Vec::new();
-	};
-	origin_cell_ids_for_layout(&layout.clone(), region)
 }
 
 #[cfg(test)]
@@ -548,7 +551,7 @@ mod tests {
 	#[test]
 	fn padded_request_does_not_paint_fine_cells_on_macro_rings() {
 		let layout = world_like_layout();
-		let ids = origin_cell_ids_for_layout(&layout, layout.request_region());
+		let ids = layout.cell_ids(layout.request_region());
 		let fine = TERRAIN_CELL_SIZE;
 		assert_eq!(count_edge(&ids, fine), 32 * 32);
 		assert_eq!(count_edge(&ids, 2.0 * fine), 144);
@@ -566,7 +569,7 @@ mod tests {
 		assert_eq!(layout.fine_cell_radius(10, 0), 0);
 		assert_eq!(layout.fine_cell_radius(12, 0), 2);
 		assert!(!layout.recenter_on_xz(Vec3::new(10.0 * size, 0.0, 0.0)));
-		let ids = origin_cell_ids_for_layout(&layout, layout.request_region());
+		let ids = layout.cell_ids(layout.request_region());
 		assert_eq!(count_edge(&ids, TERRAIN_CELL_SIZE), 32 * 32);
 		assert!(ids.len() > 32 * 32);
 	}
@@ -605,7 +608,7 @@ mod tests {
 	#[test]
 	fn streamed_rings_emit_one_cell_size_per_annulus() {
 		let layout = streamed_layout();
-		let ids = origin_cell_ids_for_layout(&layout, layout.request_region());
+		let ids = layout.cell_ids(layout.request_region());
 		let fine = TERRAIN_CELL_SIZE;
 		assert!(count_edge(&ids, fine) > 0);
 		assert!(count_edge(&ids, 2.0 * fine) > 0);
@@ -654,7 +657,7 @@ mod tests {
 			Vec3::new(fine_region.max.x + pad * 0.25, fine_region.min.y, 0.0),
 			Vec3::new(fine_region.max.x + pad * 0.75, fine_region.max.y, pad),
 		);
-		let ids = origin_cell_ids_for_layout(&layout, outer_query);
+		let ids = layout.cell_ids(outer_query);
 		assert_eq!(count_edge(&ids, TERRAIN_CELL_SIZE), 0);
 		assert!(!ids.is_empty());
 	}

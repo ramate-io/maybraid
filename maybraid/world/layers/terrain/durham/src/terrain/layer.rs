@@ -1,26 +1,25 @@
-//! Durham as a [`TerrainModel`]: GET-only reads over [`TerrainEntryStore`].
+//! Durham as a [`TerrainModel`]: GET-only reads over [`HcsgStorage`].
 
 use bevy::ecs::system::{SystemParam, SystemParamItem};
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use layer_stack::{LayerGenerationCore, RequireLayer};
+use lod::hcsg::HcsgStorage;
 use lod::lod_ref::LodRef;
-use terrain_layer_model::{
-	HeightField, OnTerrain, TerrainCell, TerrainGeneration, TerrainModel,
-};
+use terrain_layer_model::{HeightField, OnTerrain, TerrainCell, TerrainGeneration, TerrainModel};
 
 use crate::terrain::cell::TerrainCellLayout;
 use crate::terrain::host::{
 	apply_durham_generation, install_durham_generation, Durham, TerrainCoverage, WorldBaseTerrain,
 	WORLD_FINE_HALF_EXTENT_CELLS,
 };
-use crate::terrain::index::{TerrainEntryStore, TerrainHeightSnapshot};
+use crate::terrain::index::{TerrainHeightSnapshot, TerrainStorage};
 use crate::terrain::{Terrain, TerrainMeshBuilder};
 
 /// Resources behind [`Durham`]'s [`TerrainModel::Read`].
 #[derive(SystemParam)]
 pub struct DurhamRead<'w> {
-	store: Res<'w, TerrainEntryStore>,
+	store: Res<'w, HcsgStorage>,
 	layout: Res<'w, TerrainCellLayout>,
 	base: Res<'w, WorldBaseTerrain>,
 }
@@ -206,7 +205,7 @@ mod tests {
 
 	fn empty_durham_world() -> World {
 		let mut world = World::new();
-		world.insert_resource(TerrainEntryStore::default());
+		world.insert_resource(HcsgStorage::default());
 		world.insert_resource(TerrainCellLayout::default());
 		world.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(
 			&TerrainConfig::new(42),
@@ -238,7 +237,7 @@ mod tests {
 			..TerrainCellLayout::default()
 		};
 		{
-			let mut store = world.resource_mut::<TerrainEntryStore>();
+			let mut store = world.resource_mut::<HcsgStorage>();
 			store.insert_base_terrain_for_test(&fine, 0, 0, base.clone());
 			store.insert_base_terrain_for_test(&medium, 0, 0, base);
 		}

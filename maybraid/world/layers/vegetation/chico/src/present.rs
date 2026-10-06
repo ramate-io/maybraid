@@ -454,7 +454,6 @@ mod tests {
 
 	#[test]
 	fn cull_does_not_cancel_growing_ids_still_in_keep() -> Result<()> {
-		use lod::lod_ref::LodRef;
 		use vegetation_groves::GroveExtent;
 
 		let growing_bounds =
@@ -464,13 +463,6 @@ mod tests {
 		let growing_id = Id::from_cell(growing_bounds);
 		let presented_id = Id::from_cell(presented_bounds);
 		let mut index = ForestIndex::default();
-		let transform = Transform::IDENTITY;
-		let lod_ref = LodRef {
-			entity: Entity::PLACEHOLDER,
-			previous_transform: &transform,
-			current_transform: &transform,
-			bounds: &growing_bounds,
-		};
 		SpatialIndex::<ChicoGrove>::insert(
 			&mut index,
 			growing_id,
@@ -480,7 +472,6 @@ mod tests {
 				Vec::new(),
 			),
 			growing_bounds,
-			&lod_ref,
 		);
 
 		let mut world = World::new();
