@@ -14,6 +14,7 @@ use character_rigs::Side;
 
 const RUN_CYCLE_SPEED: f32 = 1.68;
 const WALK_CYCLE_SPEED: f32 = 1.08;
+const CROUCH_WALK_CYCLE_SPEED: f32 = WALK_CYCLE_SPEED * 0.85;
 /// Slow rest cycle so a crowd idle is a sway, not a march.
 pub const IDLE_CYCLE_SPEED: f32 = 0.2;
 const GALLOP_CYCLE_SPEED: f32 = 0.35;
@@ -44,6 +45,7 @@ pub enum AnimId {
 	Flapping,
 	Jab,
 	Squat,
+	CrouchWalk,
 	Prone,
 	LateralUndulation,
 	DorsoventralUndulation,
@@ -66,6 +68,7 @@ impl AnimId {
 			Self::Flapping => 1.0,
 			Self::Jab => JAB_CYCLE_SPEED,
 			Self::Squat => 1.0,
+			Self::CrouchWalk => CROUCH_WALK_CYCLE_SPEED,
 			Self::Prone => 1.0,
 			Self::LateralUndulation => 1.0,
 			Self::DorsoventralUndulation => 1.0,
@@ -169,6 +172,26 @@ pub struct TwoFootedTuckedFlipParams {
 	pub flip: TuckedFlipParams,
 }
 
+/// Squat-held + walk-cycle blend for crouched locomotion.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CrouchWalkParams {
+	pub walk: Walk,
+	/// Held squat depth (0 = stand, 1 = bottom). From [`CharacterStance::blend`].
+	pub depth: f32,
+	/// Leg-cycle influence (0 = frozen squat, 1 = full walk overlay).
+	pub walk_weight: f32,
+}
+
+impl CrouchWalkParams {
+	pub fn blended(depth: f32, walk_weight: f32) -> Self {
+		Self {
+			walk: Walk { stride: 0.20, bounce: 0.40, rotation: 0.30 },
+			depth: depth.clamp(0.0, 1.0),
+			walk_weight: walk_weight.clamp(0.0, 1.0),
+		}
+	}
+}
+
 /// Untyped jab knobs ([`Jab`] is rig-generic).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct JabParams {
@@ -201,6 +224,7 @@ pub enum AnimClip {
 	Flapping(Flapping),
 	Jab(JabParams),
 	Squat,
+	CrouchWalk(CrouchWalkParams),
 	Prone,
 	LateralUndulation(LateralUndulation),
 	DorsoventralUndulation(DorsoventralUndulation),
@@ -223,6 +247,7 @@ impl AnimClip {
 			Self::Flapping(_) => AnimId::Flapping,
 			Self::Jab(_) => AnimId::Jab,
 			Self::Squat => AnimId::Squat,
+			Self::CrouchWalk(_) => AnimId::CrouchWalk,
 			Self::Prone => AnimId::Prone,
 			Self::LateralUndulation(_) => AnimId::LateralUndulation,
 			Self::DorsoventralUndulation(_) => AnimId::DorsoventralUndulation,
@@ -287,6 +312,10 @@ impl AnimClip {
 
 	pub fn squat() -> Self {
 		Self::Squat
+	}
+
+	pub fn crouch_walk(depth: f32, walk_weight: f32) -> Self {
+		Self::CrouchWalk(CrouchWalkParams::blended(depth, walk_weight))
 	}
 
 	pub fn prone() -> Self {
