@@ -164,13 +164,20 @@ pub struct TerrainChunkRefSeen {
 
 /// Caps overlay applies and (optional) first-time builds per frame.
 ///
-/// Cache hits consume [`Self::apply_per_frame`] and
-/// [`Self::main_thread_budget`]. Misses that already saw the current
-/// [`HandleMap`] generation skip the hashmap walk.
+/// Cache hits consume [`Self::apply_per_frame`]. Cache probes and Seen stamps
+/// consume [`Self::inspect_per_frame`]. [`Self::main_thread_budget`] starts
+/// after the first query look, including already-Seen skips — not only after
+/// the first apply. Overlay fill uses
+/// [`TerrainChunkRefCache::without_build_on_miss`]; without those caps a
+/// mailbox generation bump re-walks the whole waiter set on Update.
+/// Misses that already saw the current [`HandleMap`] generation skip the
+/// hashmap walk.
 #[derive(Resource, Debug, Clone, Copy)]
 pub struct TerrainChunkRefBudget {
 	pub new_meshes_per_frame: u32,
 	pub apply_per_frame: u32,
+	/// Changed / unresolved refs to classify this frame.
+	pub inspect_per_frame: u32,
 	pub main_thread_budget: Duration,
 }
 
@@ -179,6 +186,7 @@ impl Default for TerrainChunkRefBudget {
 		Self {
 			new_meshes_per_frame: u32::MAX,
 			apply_per_frame: 16,
+			inspect_per_frame: 256,
 			main_thread_budget: Duration::from_millis(2),
 		}
 	}
@@ -223,16 +231,19 @@ pub fn fulfill_terrain_chunk_refs<T>(
 {
 	let mut remaining = budget.new_meshes_per_frame;
 	let mut applied = 0u32;
+	let mut inspected = 0u32;
+	let mut looked = 0u32;
 	let started = Instant::now();
 	let generation = cache.handles().generation();
 
 	for (entity, terrain_ref, resolved, empty, mesh, seen) in &query {
-		if applied > 0 && started.elapsed() >= budget.main_thread_budget {
+		if looked > 0 && started.elapsed() >= budget.main_thread_budget {
 			break;
 		}
 		if applied >= budget.apply_per_frame {
 			break;
 		}
+		looked += 1;
 
 		let key = terrain_ref.key();
 		if mesh.is_some() && resolved.is_some_and(|resolved| &resolved.0 == key) {
@@ -244,6 +255,10 @@ pub fn fulfill_terrain_chunk_refs<T>(
 		if seen.is_some_and(|seen| seen.generation == generation && seen.key == *key) {
 			continue;
 		}
+		if inspected >= budget.inspect_per_frame {
+			break;
+		}
+		inspected += 1;
 
 		if let Some(handle) = cache.cached_handle(terrain_ref) {
 			apply_resolved_mesh(&mut commands, entity, terrain_ref, handle);
@@ -530,6 +545,7 @@ mod tests {
 		.insert_resource(TerrainChunkRefBudget {
 			new_meshes_per_frame: 0,
 			apply_per_frame: 1,
+			inspect_per_frame: u32::MAX,
 			main_thread_budget: Duration::from_secs(1),
 		})
 		.add_plugins(TerrainChunkRefPlugin::<CountingTerrain>::default());
@@ -543,6 +559,53 @@ mod tests {
 		app.update();
 		assert!(app.world().get::<Mesh3d>(a).is_some());
 		assert!(app.world().get::<Mesh3d>(b).is_some());
+		Ok(())
+	}
+
+	#[test]
+	fn inspect_budget_spreads_overlay_miss_scan() -> anyhow::Result<()> {
+		let handles = HandleMap::<CountingTerrain>::new();
+		let model = CountingTerrain {
+			builds: Arc::new(AtomicUsize::new(0)),
+			ids: Arc::new(AtomicUsize::new(0)),
+		};
+		let chunk = Chunk::cube(Vec3::splat(-1.0), 2.0, None);
+		let terrain_ref = TerrainChunkRef::new(model.clone(), chunk, 2);
+
+		let mut app = App::new();
+		app.add_plugins((MinimalPlugins, AssetPlugin::default())).init_asset::<Mesh>();
+		app.insert_resource(
+			TerrainChunkRefCache::<CountingTerrain>::new()
+				.with_handles(handles)
+				.without_build_on_miss(),
+		)
+		.insert_resource(TerrainChunkRefBudget {
+			new_meshes_per_frame: 0,
+			apply_per_frame: 16,
+			inspect_per_frame: 8,
+			main_thread_budget: Duration::from_secs(1),
+		})
+		.add_plugins(TerrainChunkRefPlugin::<CountingTerrain>::default());
+
+		let entities: Vec<_> =
+			(0..32).map(|_| app.world_mut().spawn(terrain_ref.clone()).id()).collect();
+		app.update();
+		let seen = entities
+			.iter()
+			.filter(|entity| app.world().get::<TerrainChunkRefSeen>(**entity).is_some())
+			.count();
+		assert_eq!(seen, 8, "inspect cap should stamp Seen on a slice, not the whole waiter set");
+		assert!(entities.iter().all(|entity| app.world().get::<Mesh3d>(*entity).is_none()));
+		assert_eq!(model.builds.load(Ordering::Relaxed), 0);
+
+		for _ in 0..3 {
+			app.update();
+		}
+		let seen = entities
+			.iter()
+			.filter(|entity| app.world().get::<TerrainChunkRefSeen>(**entity).is_some())
+			.count();
+		assert_eq!(seen, 32);
 		Ok(())
 	}
 

@@ -1,6 +1,5 @@
 //! Universal per-family guillotine + stamp authoring knobs (dual band).
 
-use crate::terrain::cell::universal_bootstrap_scheme;
 use crate::terrain::stamps::canyon::{
 	CanyonHighPassControllerLayout, CanyonLowPassControllerLayout,
 };
@@ -218,12 +217,4 @@ impl Default for TerrainStampConfigs {
 	}
 }
 
-/// Bootstrap source for [`TerrainStampConfigs`] at [`lod::gen::Id::Universal`].
-pub trait BootstrapTerrainStampConfigs {
-	fn bootstrap_terrain_stamp_configs(&self) -> TerrainStampConfigs;
-}
-
-universal_bootstrap_scheme!(
-	TerrainStampConfigs,
-	BootstrapTerrainStampConfigs::bootstrap_terrain_stamp_configs
-);
+lod::seeded_root!(TerrainStampConfigs);

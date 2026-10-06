@@ -1,7 +1,7 @@
 use bevy::core_pipeline::prepass::DepthPrepass;
 use bevy::prelude::*;
 use bevy::window::WindowFocused;
-use durham::{BaseTerrainNoise, TerrainCellLayout, TerrainEntryStore};
+use durham::{BaseTerrainNoise, HcsgStorage, TerrainCellLayout, TerrainStorage};
 use game_commands::command::TextEntryFocus;
 use lod::LodViewer;
 use maybraid_input::{PadButton, VirtualPad};
@@ -80,7 +80,7 @@ pub fn refocus_camera_on_elevation(
 /// Composed height when the cell is stored; otherwise the holding altitude.
 pub fn surface_or_hold(
 	layout: &TerrainCellLayout,
-	store: &TerrainEntryStore,
+	store: &HcsgStorage,
 	base: &BaseTerrainNoise,
 ) -> f32 {
 	let center = layout.region_center_xz();

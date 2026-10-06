@@ -28,7 +28,6 @@
 pub mod canyon;
 pub mod configs;
 pub mod family_macro;
-pub mod layouts;
 pub mod massif;
 pub mod plateau;
 pub mod pocket_water;
@@ -40,40 +39,31 @@ pub mod valley;
 mod tests;
 
 pub use canyon::{
-	BootstrapCanyonHighPassControllerLayout, BootstrapCanyonLowPassControllerLayout,
 	CanyonHighPassControllerCell, CanyonHighPassControllerLayout, CanyonHighPassStampCell,
 	CanyonLowPassControllerCell, CanyonLowPassControllerLayout, CanyonLowPassStampCell,
 };
-pub use configs::{
-	BootstrapTerrainStampConfigs, DualBandFamilyConfig, FamilyGuillotineConfig, TerrainStampConfigs,
-};
-pub use layouts::StampControllerLayouts;
+pub use configs::{DualBandFamilyConfig, FamilyGuillotineConfig, TerrainStampConfigs};
 pub use massif::{
-	BootstrapMassifHighPassControllerLayout, BootstrapMassifLowPassControllerLayout,
 	MassifHighPassControllerCell, MassifHighPassControllerLayout, MassifHighPassStampCell,
 	MassifLowPassControllerCell, MassifLowPassControllerLayout, MassifLowPassStampCell,
 };
 pub use plateau::{
-	BootstrapPlateauHighPassControllerLayout, BootstrapPlateauLowPassControllerLayout,
 	PlateauHighPassControllerCell, PlateauHighPassControllerLayout, PlateauHighPassStampCell,
 	PlateauLowPassControllerCell, PlateauLowPassControllerLayout, PlateauLowPassStampCell,
 };
 /// Compatibility alias: low-pass plateau layout (detail band).
 pub type PlateauControllerLayout = PlateauLowPassControllerLayout;
 pub use pocket_water::{
-	BootstrapPocketWaterHighPassControllerLayout, BootstrapPocketWaterLowPassControllerLayout,
 	PocketWaterHighPassControllerCell, PocketWaterHighPassControllerLayout,
 	PocketWaterHighPassStampCell, PocketWaterLowPassControllerCell,
 	PocketWaterLowPassControllerLayout, PocketWaterLowPassStampCell,
 };
 pub use rolling::{
-	BootstrapRollingHighPassControllerLayout, BootstrapRollingLowPassControllerLayout,
 	RollingHighPassControllerCell, RollingHighPassControllerLayout, RollingHighPassStampCell,
 	RollingLowPassControllerCell, RollingLowPassControllerLayout, RollingLowPassStampCell,
 };
 pub use shared::StampLeaf;
 pub use valley::{
-	BootstrapValleyHighPassControllerLayout, BootstrapValleyLowPassControllerLayout,
 	ValleyHighPassControllerCell, ValleyHighPassControllerLayout, ValleyHighPassStampCell,
 	ValleyLowPassControllerCell, ValleyLowPassControllerLayout, ValleyLowPassStampCell,
 };

@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use durham::TerrainCellLayout;
-use durham::TerrainEntryStore;
+use durham::{HcsgStorage, TerrainStorage};
 use game_commands::ui::{GameCommandStatusText, GameCommandUiConfig};
 use mob_intelligence::MemberOf;
 use routing_intelligence::RoutingIntelligenceUser;
@@ -24,7 +24,7 @@ pub fn ui_config() -> GameCommandUiConfig {
 pub(crate) fn sync_command_status_text(
 	mode: Res<PlaygroundMode>,
 	state: Res<PlaygroundState>,
-	store: Res<TerrainEntryStore>,
+	store: Res<HcsgStorage>,
 	layout: Res<TerrainCellLayout>,
 	hosts: Query<(Entity, &mob_scenes::MobScene, &Transform, Option<&RoutingIntelligenceUser>)>,
 	plants: Query<(&MemberOf, &GlobalTransform)>,
