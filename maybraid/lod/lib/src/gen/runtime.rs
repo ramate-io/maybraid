@@ -9,6 +9,7 @@ mod generate;
 #[cfg(test)]
 mod tests;
 
+pub(crate) use generate::ensure_generate_sets;
 pub use generate::{
 	drain_lod_generate, produce_lod_generate_regions, LodGenerateBudget, LodGenerateKeepRegion,
 	LodGeneratePlugin, LodGenerateQueue, LodGenerateRegion, LodGenerateRegionPlugin,

@@ -711,3 +711,42 @@ fn child_assigned_before_host_adopts_the_host_language() -> anyhow::Result<()> {
 	);
 	Ok(())
 }
+
+#[test]
+fn unrelated_storage_writes_do_not_move_the_geography_revision() -> anyhow::Result<()> {
+	use bevy::ecs::system::SystemState;
+	use chico::{Chico, ForestIndex};
+	use durham::{HcsgStorage, TerrainStorage};
+	use richmond::Richmond;
+	use urbanization_cells::UrbanizationIndex;
+	use urbanization_layer_model::Urbanization;
+	use vegetation_layer_model::Vegetation;
+
+	type Real = Vegetation<Chico<Urbanization<Richmond<()>>>>;
+	struct Furniture;
+
+	let mut world = World::new();
+	world.init_resource::<ForestIndex>();
+	world.init_resource::<UrbanizationIndex>();
+	world.init_resource::<HcsgStorage>();
+	let mut read = SystemState::<<Real as NamedWorld>::Read>::new(&mut world);
+	let before = Real::source_revisions(&read.get(&world)?);
+
+	let bounds = feature_aabb(0.0, 0.0, 160.0, 160.0);
+	{
+		let mut storage = world.resource_mut::<HcsgStorage>();
+		storage.insert(Id::from_cell(bounds), Furniture, bounds);
+		storage.insert_base_terrain_for_test(
+			&durham::TerrainCellLayout::default(),
+			0,
+			0,
+			durham::BaseTerrainNoise::from_config(&durham::TerrainConfig::new(1)),
+		);
+	}
+	let after = Real::source_revisions(&read.get(&world)?);
+	anyhow::ensure!(
+		after.terrain == before.terrain,
+		"furniture and terrain-cell writes must not trigger geographic rediscovery"
+	);
+	Ok(())
+}

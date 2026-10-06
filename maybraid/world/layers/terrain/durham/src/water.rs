@@ -45,8 +45,8 @@ pub use column::WaterColumn;
 pub use composed::ComposedWater;
 pub use plugin::{register_water_plugin, WaterPlugin};
 pub use presentation::{
-	sync_unparented_water_pose, BootstrapWaterPresentationAssets, PresentedWaterScene,
-	WaterPresentationAssets, WaterPresenterState, WaterRegionPresenter, WaterStoreView,
+	sync_unparented_water_pose, PresentedWaterScene, WaterPresentationAssets, WaterPresenterState,
+	WaterRegionPresenter,
 };
 
 /// Cell-level water collector: same origin cell as [`Terrain`], composed fills + mesh.

@@ -3,8 +3,9 @@
 use bevy::ecs::system::ParamSet;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
-use durham::{Durham, TerrainCellLayout, TerrainEntryStore};
+use durham::{Durham, HcsgStorage, TerrainCellLayout, TerrainStorage};
 use layer_stack::{ActiveGenerationMode, GenerationModeSystems};
+use layer_stack::{LayerSystems, Scheme};
 use lod::gen::Id;
 use richmond::Richmond;
 use richmond::{
@@ -12,7 +13,6 @@ use richmond::{
 	RichmondGroundView, DEVELOPMENT_CELL_SIZE,
 };
 use terrain_layer_model::{OnTerrain, TerrainView};
-use layer_stack::{LayerSystems, Scheme};
 use urbanization_layer_model::{Urbanization, UrbanizationLayerRegion};
 
 use crate::{TrainingGround, TrainingMap, TrainingRound};
@@ -116,7 +116,7 @@ fn stamp_training_urbanization(
 	stamped: Option<Res<TrainingPlazaStamped>>,
 	mut access: ParamSet<(
 		(
-			Res<TerrainEntryStore>,
+			Res<HcsgStorage>,
 			Res<TerrainCellLayout>,
 			ResMut<DevelopmentEntryStore>,
 			ResMut<UrbanizationLayerRegion>,
@@ -265,7 +265,7 @@ fn stamp_training_development(
 	None
 }
 
-pub fn terrain_ids_under_pads(store: &TerrainEntryStore, filled: &DevelopmentCell) -> Vec<Id> {
+pub fn terrain_ids_under_pads(store: &HcsgStorage, filled: &DevelopmentCell) -> Vec<Id> {
 	let Some(region) = pad_influence_region(filled) else {
 		return Vec::new();
 	};
@@ -298,14 +298,14 @@ mod tests {
 	use bevy::prelude::{App, MinimalPlugins, NextState, World};
 	use bevy::state::app::StatesPlugin;
 	use durham::{
-		BaseTerrainNoise, Durham, TerrainCellLayout, TerrainConfig, TerrainEntryStore,
+		BaseTerrainNoise, Durham, HcsgStorage, TerrainCellLayout, TerrainConfig, TerrainStorage,
 		WorldBaseTerrain,
 	};
+	use layer_stack::Scheme;
 	use layer_stack::{ActiveGenerationMode, GenerationMode, GenerationModePlugin};
 	use lod::gen::Id;
 	use richmond::{DevelopmentCell, DevelopmentEntryStore, DEVELOPMENT_CELL_SIZE};
 	use terrain_layer_model::OnTerrain;
-	use layer_stack::Scheme;
 	use urbanization_layer_model::{Urbanization, UrbanizationLayerRegion};
 
 	use super::{
@@ -331,7 +331,7 @@ mod tests {
 		world.insert_resource(WorldBaseTerrain(noise.clone()));
 		world.insert_resource(layout.clone());
 		{
-			let mut store = world.resource_mut::<TerrainEntryStore>();
+			let mut store = world.resource_mut::<HcsgStorage>();
 			for x in 0..layout.extents.x {
 				for z in 0..layout.extents.y {
 					store.insert_base_terrain_for_test(
@@ -343,7 +343,7 @@ mod tests {
 				}
 			}
 		}
-		let stored = world.resource::<TerrainEntryStore>().fills_layout(&layout);
+		let stored = world.resource::<HcsgStorage>().fills_layout(&layout);
 		anyhow::ensure!(stored, "fine patch at {:?} was not stored", layout.origin);
 		Ok(())
 	}
@@ -362,7 +362,7 @@ mod tests {
 	fn stamp_world() -> World {
 		let mut world = World::new();
 		world.insert_resource(TrainingRound::new(42));
-		world.insert_resource(TerrainEntryStore::default());
+		world.init_resource::<HcsgStorage>();
 		world.insert_resource(TerrainCellLayout::default());
 		world.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(
 			&TerrainConfig::new(42),
@@ -458,7 +458,7 @@ mod tests {
 			&richmond::RichmondConfig::default(),
 		);
 		app.insert_resource(TrainingRound::new(42));
-		app.insert_resource(TerrainEntryStore::default());
+		app.init_resource::<HcsgStorage>();
 		app.insert_resource(TerrainCellLayout::default());
 		app.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(&TerrainConfig::new(
 			42,

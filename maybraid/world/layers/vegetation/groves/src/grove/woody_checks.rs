@@ -27,7 +27,7 @@ fn preview_camera_and_bounds() -> (Transform, Aabb3d) {
 	)
 }
 
-/// High/Medium must nest one lazy flattened host per plant, not per kit node.
+/// High/Medium must pose one lazy kit group per plant, not a nested LOD host.
 pub fn assert_high_medium_nests_plants<G>(grove: &G, plant_count: usize, label: &str) -> Result<()>
 where
 	G: VegetationComponents + LodScene,
@@ -52,7 +52,10 @@ where
 		anyhow::bail!("High {label} plants should be SceneChunk::Lazy");
 	};
 	anyhow::ensure!(*remaining_primitives == plant_count);
-	anyhow::ensure!(*remaining_weight as usize == plant_count);
+	anyhow::ensure!(
+		*remaining_weight == super::vc_compose::flattened_plant_lazy_weight(plant_count),
+		"posed plants should charge flattened kit weight"
+	);
 	Ok(())
 }
 
