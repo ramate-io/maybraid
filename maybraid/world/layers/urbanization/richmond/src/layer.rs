@@ -7,9 +7,7 @@ use bevy::math::bounding::Aabb3d;
 use bevy::math::{Vec2, Vec3};
 use bevy::prelude::App;
 use layer_stack::{LayerGenerationCore, RequireLayer};
-use lod::gen::{
-	GeneratingSpatialIndex, GenerationScheme, Id, OriginalId, SpatialIndex, TrackedId, Version,
-};
+use lod::gen::{GeneratingSpatialIndex, Id, OriginalId, SpatialIndex, TrackedId, Version};
 use lod::lod_ref::LodRef;
 use urbanization_cells::UrbanizationIndex;
 use urbanization_layer_model::{Urbanization, UrbanizationModel};
@@ -95,18 +93,12 @@ impl<G: RichmondGround> UrbanizationModel for Richmond<G> {
 	fn prepare(
 		prepare: &mut SystemParamItem<'_, '_, Self::Prepare>,
 		bounds: Aabb3d,
-		lod_ref: &LodRef,
+		_lod_ref: &LodRef,
 	) {
-		let ids =
-			<DevelopmentCell as GenerationScheme<DevelopmentIndex<'_, '_, G>>>::original_ids_for(
-				prepare, bounds,
-			);
+		let ids = GeneratingSpatialIndex::<DevelopmentCell>::original_ids_for(prepare, bounds);
 		for OriginalId(development_id) in ids {
-			let _ = GeneratingSpatialIndex::<DevelopmentCell>::get_or_generate(
-				prepare,
-				development_id,
-				lod_ref,
-			);
+			let _ =
+				GeneratingSpatialIndex::<DevelopmentCell>::get_or_generate(prepare, development_id);
 		}
 	}
 

@@ -5,7 +5,6 @@ use bevy::log::info_span;
 use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::prelude::*;
 use lod::gen::{Id, OriginalId, SpatialIndex, StorageStatus, TrackedId, Version};
-use lod::lod_ref::LodRef;
 use procedural_common::Bounds2;
 use std::collections::{HashMap, HashSet};
 use std::sync::RwLock;
@@ -374,7 +373,7 @@ macro_rules! impl_spatial {
 				self.store.membership_revision()
 			}
 
-			fn insert(&mut self, id: Id, t: $ty, bounds: Aabb3d, _lod_ref: &LodRef) {
+			fn insert(&mut self, id: Id, t: $ty, bounds: Aabb3d) {
 				$(self.store.$before_insert(id, &t);)?
 				let version = self.store.stamp();
 				self.store.$field.insert(id, StoredEntry { value: t, bounds, version });
@@ -425,7 +424,7 @@ macro_rules! impl_spatial {
 				self.store.membership_revision()
 			}
 
-			fn insert(&mut self, _id: Id, _t: $ty, _bounds: Aabb3d, _lod_ref: &LodRef) {
+			fn insert(&mut self, _id: Id, _t: $ty, _bounds: Aabb3d) {
 				panic!(concat!(stringify!($view), " is read-only"));
 			}
 		}

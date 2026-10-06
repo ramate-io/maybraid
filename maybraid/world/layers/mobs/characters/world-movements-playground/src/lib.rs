@@ -225,18 +225,9 @@ fn generate_cells(
 
 	let layout = index.layout().clone();
 	let region = layout.request_region();
-	let identity = Transform::IDENTITY;
-	let lod_ref = LodRef {
-		entity: Entity::PLACEHOLDER,
-		previous_transform: &identity,
-		current_transform: &identity,
-		bounds: &region,
-	};
 
-	let terrains =
-		GeneratingSpatialIndex::<Terrain>::get_or_generate_region(&mut index, region, &lod_ref);
-	let waters =
-		GeneratingSpatialIndex::<Water>::get_or_generate_region(&mut index, region, &lod_ref);
+	let terrains = GeneratingSpatialIndex::<Terrain>::get_or_generate_region(&mut index, region);
+	let waters = GeneratingSpatialIndex::<Water>::get_or_generate_region(&mut index, region);
 	let water_fills: usize = waters
 		.iter()
 		.filter_map(|(id, _)| SpatialIndex::<Water>::get(&index, *id).map(|w| w.fills.len()))

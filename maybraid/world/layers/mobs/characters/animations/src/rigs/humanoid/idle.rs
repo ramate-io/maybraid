@@ -8,8 +8,9 @@ use crate::animations::Idle;
 use crate::rigs::humanoid::apply::{apply_arm, apply_neck_twisted};
 use crate::Animation;
 
-impl Animation<HumanoidV0Rig> for Idle {
-	fn apply_for(&self, rig: &mut HumanoidV0Rig, progress: f32) {
+impl Idle {
+	/// Authored semantic pose at unwrapped `progress`. Rest is applied later by the rig.
+	pub fn sample_pose(&self, progress: f32) -> HumanoidPose {
 		let mut pose = HumanoidPose::default();
 		let arm = (TAU * (progress * Idle::ARM_FREQ)).sin();
 		let yaw = Idle::look_wave(progress, Idle::NECK_YAW_FREQ, 0.15);
@@ -23,7 +24,13 @@ impl Animation<HumanoidV0Rig> for Idle {
 		apply_idle_arm(&mut pose, Side::Right, arm, scratch, scratch_side, progress, self);
 		apply_idle_neck(&mut pose, yaw, nod, scratch, scratch_side, self);
 		apply_idle_hips(&mut pose, hip, self);
-		rig.write_pose(&pose);
+		pose
+	}
+}
+
+impl Animation<HumanoidV0Rig> for Idle {
+	fn apply_for(&self, rig: &mut HumanoidV0Rig, progress: f32) {
+		rig.write_pose(&self.sample_pose(progress));
 	}
 }
 
