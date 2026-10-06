@@ -65,7 +65,7 @@ impl CharacterStance {
 }
 
 pub fn squat_drop() -> f32 {
-	Squat::<()>::held().peak_vertical_drop(LegSegmentLengths::default())
+	Squat::held().peak_vertical_drop(LegSegmentLengths::default())
 }
 
 impl RestLocomotionCapsule {
@@ -387,8 +387,8 @@ mod tests {
 	fn held_squat_drops_more_than_jump_windup() {
 		let lengths = LegSegmentLengths::default();
 		assert!(
-			Squat::<()>::held().peak_vertical_drop(lengths)
-				> Squat::<()>::default().peak_vertical_drop(lengths)
+			Squat::held().peak_vertical_drop(lengths)
+				> Squat::default().peak_vertical_drop(lengths)
 		);
 	}
 }

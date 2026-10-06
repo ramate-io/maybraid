@@ -19,7 +19,7 @@ mod tests {
 	use std::hint::black_box;
 	use std::time::Instant;
 
-	use character_rigs::{humanoid::HumanoidRig, rigs::humanoid_v0::HumanoidV0Rig, Side};
+	use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
 
 	use super::*;
 	use crate::animations::{TwoFootedJump, TwoFootedTuckedFlip};
@@ -45,47 +45,35 @@ mod tests {
 
 	#[test]
 	fn jump_pose_unchanged_when_debug_env_set() -> anyhow::Result<()> {
-		let jump = TwoFootedJump::<HumanoidV0Rig>::default();
-		let lengths = HumanoidV0Rig::imported().segment_lengths();
+		let jump = TwoFootedJump::default();
+		let lengths = HumanoidV0Rig::imported().segment_lengths;
 		let elapsed = jump.timings(lengths).air_end() + 0.05;
 
 		let mut baseline = HumanoidV0Rig::imported();
-		crate::rigs::mix::seed_bind_pose(&mut baseline);
 		jump.apply(&mut baseline, elapsed);
 
 		let mut with_debug = HumanoidV0Rig::imported();
-		crate::rigs::mix::seed_bind_pose(&mut with_debug);
 		// Logging branch only; pose path must not depend on the flag.
 		let _ = segment_debug_enabled();
 		jump.apply(&mut with_debug, elapsed);
 
-		for bone_name in [
-			baseline.leg(Side::Left).femur.name.clone(),
-			baseline.leg(Side::Left).shin.name.clone(),
-			baseline.arm(Side::Left).shoulder.name.clone(),
-		] {
-			let base = baseline.pose().get(&bone_name).expect("baseline bone");
-			let debug = with_debug.pose().get(&bone_name).expect("debug bone");
-			assert_eq!(base.swing, debug.swing);
-			assert_eq!(base.flex, debug.flex);
-			assert_eq!(base.twist, debug.twist);
+		for bone in ["femur.L", "shin.L", "shoulder.L"] {
+			assert_eq!(baseline.posed_angle(bone), with_debug.posed_angle(bone), "{bone}");
 		}
 		Ok(())
 	}
 
 	#[test]
 	fn tucked_flip_effects_unchanged_when_debug_env_set() -> anyhow::Result<()> {
-		let flip = TwoFootedTuckedFlip::<HumanoidV0Rig>::default();
-		let lengths = HumanoidV0Rig::imported().segment_lengths();
+		let flip = TwoFootedTuckedFlip::default();
+		let lengths = HumanoidV0Rig::imported().segment_lengths;
 		let timings = flip.timings(lengths);
 		let elapsed = timings.air_end() + timings.land_descent_duration * 0.25;
 
 		let mut baseline = HumanoidV0Rig::imported();
-		crate::rigs::mix::seed_bind_pose(&mut baseline);
 		let baseline_effects = flip.apply(&mut baseline, elapsed);
 
 		let mut with_debug = HumanoidV0Rig::imported();
-		crate::rigs::mix::seed_bind_pose(&mut with_debug);
 		let _ = segment_debug_enabled();
 		let debug_effects = flip.apply(&mut with_debug, elapsed);
 
