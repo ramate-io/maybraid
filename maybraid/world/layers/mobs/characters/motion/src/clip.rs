@@ -348,7 +348,7 @@ impl AnimClip {
 			Self::Walk(_) | Self::Run(_) | Self::QuadrupedRun(_) | Self::Gallop(_) => {
 				ClipTimePolicy::Cycle { duration: 1.0 }
 			}
-			Self::Tuck(_) | Self::TuckedFlip(_) | Self::Jab(_) => {
+			Self::Tuck(_) | Self::TuckedFlip(_) | Self::Jab(_) | Self::Salute(_) => {
 				ClipTimePolicy::Cycle { duration: 1.0 }
 			}
 			Self::Jump(_)
