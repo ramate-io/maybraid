@@ -1,3 +1,4 @@
+pub mod crouch_walk;
 pub mod dorsoventral_undulation;
 pub mod fall;
 pub mod fixed;
@@ -29,6 +30,7 @@ pub mod upright_run;
 pub mod upright_walk;
 pub mod walk;
 
+pub use crouch_walk::CrouchedWalk;
 pub use dorsoventral_undulation::DorsoventralUndulation;
 pub use fall::Fall;
 pub use fixed::FixedPosition;

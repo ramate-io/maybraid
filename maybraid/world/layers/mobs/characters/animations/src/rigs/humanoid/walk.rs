@@ -47,6 +47,29 @@ fn apply_leg(pose: &mut HumanoidPose, side: Side, phase: f32, lift_sign: f32, wa
 	leg.knee_flexion = knee_flex(phase, walk);
 }
 
+/// Add a scaled walk leg cycle on top of an existing pose (crouch-walk overlay).
+pub(crate) fn overlay_walk_leg(
+	pose: &mut HumanoidPose,
+	side: Side,
+	phase: f32,
+	lift_sign: f32,
+	walk: &UprightWalk,
+	scale: f32,
+) {
+	if scale <= f32::EPSILON {
+		return;
+	}
+	let phase = if side == Side::Left { phase } else { phase + side.phase_offset() };
+	let swing = thigh_swing(phase);
+	let leg = pose.leg_mut(side);
+	leg.pelvis_turn += swing * walk.hip_swing * lift_sign * scale;
+	leg.pelvis_lateral += hip_lift(swing, walk.hip_lift) * lift_sign * scale;
+	leg.hip_flexion += swing * walk.stride * scale;
+	leg.hip_abduction += -swing * walk.femur_medial_counter * lift_sign * scale;
+	let knee_delta = knee_flex(phase, walk) - walk.knee_stance_bend;
+	leg.knee_flexion += knee_delta * scale;
+}
+
 fn apply_walk_arm(
 	pose: &mut HumanoidPose,
 	side: Side,
@@ -66,7 +89,31 @@ fn apply_walk_arm(
 	);
 }
 
-fn thigh_swing(phase: f32) -> f32 {
+/// Add a scaled arm counter-swing on top of an existing pose.
+pub(crate) fn overlay_walk_arm(
+	pose: &mut HumanoidPose,
+	side: Side,
+	arm_swing_value: f32,
+	phase: f32,
+	humerus_flex: f32,
+	walk: &UprightWalk,
+	scale: f32,
+) {
+	if scale <= f32::EPSILON {
+		return;
+	}
+	apply_arm(
+		pose,
+		side,
+		arm_swing_value * walk.shoulder_swing * scale,
+		-shoulder_lift(arm_swing_value, walk.shoulder_lift) * scale,
+		arm_swing_value * walk.humerus_swing_scale * scale,
+		humerus_flex * scale,
+		elbow_flex(arm_swing_value, phase, -1.0, walk) * scale,
+	);
+}
+
+pub(crate) fn thigh_swing(phase: f32) -> f32 {
 	let p = phase.fract();
 	if p < 0.5 {
 		4.0 * p - 1.0

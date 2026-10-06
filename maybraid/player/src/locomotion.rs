@@ -8,7 +8,7 @@ use characters::{
 	CharacterRig, CharacterRigRole, CharacterRoot, JumpParams, RigSkeletonKind,
 };
 
-use crate::body::{CharacterController, Jumping, JOG_SPEED, MoveWish, LEAP_SPEED};
+use crate::body::{CharacterController, Jumping, MoveWish, JOG_SPEED, LEAP_SPEED};
 use crate::identity::PlayerYawOwner;
 use crate::stance::{CharacterStance, StanceKind};
 
@@ -118,9 +118,10 @@ fn locomotion_clip(
 				match stance {
 					StanceKind::Prone => AnimClip::prone(),
 					StanceKind::Squat => {
-						let walk_weight = crouch_walk_weight(speed);
-						if walk_weight > 0.0 {
-							AnimClip::crouch_walk(stance_blend, walk_weight)
+						if speed > 0.0 {
+							// Keep CrouchWalk active (weight may be 0) so hovering near
+							// CROUCH_WALK_MIN_SPEED does not restart mailbox crossfades.
+							AnimClip::crouch_walk(stance_blend, crouch_walk_weight(speed))
 						} else {
 							AnimClip::squat()
 						}
@@ -202,7 +203,8 @@ mod tests {
 	#[test]
 	fn clip_follows_the_cap() {
 		assert_eq!(
-			locomotion_clip(RigSkeletonKind::Humanoid, None, StanceKind::Stand, 1.0, JOG_SPEED).id(),
+			locomotion_clip(RigSkeletonKind::Humanoid, None, StanceKind::Stand, 1.0, JOG_SPEED)
+				.id(),
 			AnimId::Walk
 		);
 		assert_eq!(
@@ -262,6 +264,41 @@ mod tests {
 			locomotion_clip(RigSkeletonKind::Humanoid, None, StanceKind::Squat, 1.0, 0.0).id(),
 			AnimId::Squat
 		);
+	}
+
+	#[test]
+	fn squat_below_threshold_keeps_crouch_walk_id() {
+		let clip = locomotion_clip(RigSkeletonKind::Humanoid, None, StanceKind::Squat, 1.0, 0.10);
+		assert_eq!(clip.id(), AnimId::CrouchWalk);
+		let weight = match clip {
+			AnimClip::CrouchWalk(params) => params.walk_weight,
+			_ => panic!("expected crouch walk"),
+		};
+		assert_eq!(weight, 0.0);
+	}
+
+	#[test]
+	fn squat_threshold_band_does_not_flicker_clip_id() {
+		let below = locomotion_clip(RigSkeletonKind::Humanoid, None, StanceKind::Squat, 1.0, 0.14);
+		let above = locomotion_clip(RigSkeletonKind::Humanoid, None, StanceKind::Squat, 1.0, 0.16);
+		assert_eq!(below.id(), AnimId::CrouchWalk);
+		assert_eq!(above.id(), AnimId::CrouchWalk);
+	}
+
+	#[test]
+	fn jump_from_crouch_walk_uses_jump_clip() {
+		let jump = Jumping::start(2.0);
+		assert_eq!(
+			locomotion_clip(RigSkeletonKind::Humanoid, Some(&jump), StanceKind::Squat, 1.0, 2.0)
+				.id(),
+			AnimClip::jump().id()
+		);
+	}
+
+	#[test]
+	fn stand_up_from_crouch_walk_uses_standing_clip() {
+		let clip = locomotion_clip(RigSkeletonKind::Humanoid, None, StanceKind::Stand, 1.0, 2.0);
+		assert_eq!(clip.id(), AnimId::Walk);
 	}
 
 	#[test]

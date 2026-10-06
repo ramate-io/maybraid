@@ -12,7 +12,7 @@ use bevy::ecs::query::{Has, Or};
 use bevy::prelude::*;
 use character_animations::{
 	animations::{
-		Idle, Jab, Mix, Prone, QuadrupedIdle, QuadrupedLeap, QuadrupedRun, Squat, Tuck,
+		CrouchedWalk, Idle, Jab, Prone, QuadrupedIdle, QuadrupedLeap, QuadrupedRun, Squat, Tuck,
 		TwoFootedTuckedFlip, UprightLeap,
 	},
 	Animation, Effects,
@@ -603,15 +603,17 @@ fn sample_crouch_walk(
 	write_bones: bool,
 	write_effects: bool,
 ) -> Effects {
-	let mix = Mix::new(Squat::held(), params.walk, params.walk_weight);
+	let crouch =
+		CrouchedWalk { walk: params.walk, depth: params.depth, leg_cycle: params.walk_weight };
 	let walk_phase = progress.rem_euclid(1.0);
 	if write_bones && write_effects {
-		mix.apply_at(rig, params.depth, walk_phase)
+		crouch.apply_for(rig, walk_phase);
+		crouch.effects_for(rig, walk_phase)
 	} else if write_bones {
-		mix.apply_at(rig, params.depth, walk_phase);
+		crouch.apply_for(rig, walk_phase);
 		Effects::IDENTITY
 	} else if write_effects {
-		mix.effects_for(rig, walk_phase)
+		crouch.effects_for(rig, walk_phase)
 	} else {
 		Effects::IDENTITY
 	}
@@ -911,38 +913,61 @@ mod tests {
 	}
 
 	#[test]
-	fn crouch_walk_mix_endpoints_match_squat_and_walk() -> anyhow::Result<()> {
+	fn crouch_walk_weight_zero_matches_held_squat() -> anyhow::Result<()> {
 		use crate::clip::CrouchWalkParams;
 
 		let depth = 1.0;
 		let walk_phase = 0.35;
-		let walk_knobs = CrouchWalkParams::blended(depth, 1.0).walk;
-		let mut squat = HumanoidV0Rig::imported();
+		let mut squat = HumanoidV0Rig::for_clip_test();
 		sample_humanoid(AnimClip::Squat, &mut squat, depth, true, false);
-		let mut walk = HumanoidV0Rig::imported();
-		sample_humanoid(AnimClip::Walk(walk_knobs), &mut walk, walk_phase, true, false);
-		let mut blended = HumanoidV0Rig::imported();
+		let mut crouch = HumanoidV0Rig::for_clip_test();
 		sample_humanoid(
 			AnimClip::CrouchWalk(CrouchWalkParams::blended(depth, 0.0)),
-			&mut blended,
+			&mut crouch,
 			walk_phase,
 			true,
 			false,
 		);
+		for name in ["femur.L", "femur.R", "shin.L", "shin.R", "root"] {
+			assert!(
+				squat.rotation(name).dot(crouch.rotation(name)).abs() > 1.0 - 1e-5,
+				"walk weight 0 should match held squat on {name}"
+			);
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn crouch_walk_preserves_minimum_depth_over_cycle() -> anyhow::Result<()> {
+		use crate::clip::CrouchWalkParams;
+
+		let depth = 1.0;
+		let max_weight = 0.40;
+		let mut squat = HumanoidV0Rig::for_clip_test();
+		sample_humanoid(AnimClip::Squat, &mut squat, depth, true, false);
+		let squat_depth = squat.posed_angle("femur.L")
+			+ squat.posed_angle("shin.L")
+			+ squat.posed_angle("root")
+			+ squat.posed_angle("pelvis.L");
+
+		let params = CrouchWalkParams::blended(depth, max_weight);
+		let samples = 64;
+		let mut min_depth = f32::MAX;
+		for i in 0..samples {
+			let phase = i as f32 / samples as f32;
+			let mut rig = HumanoidV0Rig::for_clip_test();
+			sample_humanoid(AnimClip::CrouchWalk(params), &mut rig, phase, true, false);
+			let depth_metric = rig.posed_angle("femur.L")
+				+ rig.posed_angle("shin.L")
+				+ rig.posed_angle("root")
+				+ rig.posed_angle("pelvis.L");
+			min_depth = min_depth.min(depth_metric);
+		}
+		let drop = (squat_depth - min_depth) / squat_depth;
 		assert!(
-			squat.rotation("femur.L").dot(blended.rotation("femur.L")).abs() > 1.0 - 1e-5,
-			"walk weight 0 should match held squat"
-		);
-		sample_humanoid(
-			AnimClip::CrouchWalk(CrouchWalkParams::blended(depth, 1.0)),
-			&mut blended,
-			walk_phase,
-			true,
-			false,
-		);
-		assert!(
-			walk.rotation("femur.L").dot(blended.rotation("femur.L")).abs() > 1.0 - 1e-5,
-			"walk weight 1 should match walk overlay"
+			drop < 0.10,
+			"crouch-walk depth should stay within 10% of held squat (drop={:.1}%)",
+			drop * 100.0
 		);
 		Ok(())
 	}
@@ -952,19 +977,99 @@ mod tests {
 		use crate::clip::CrouchWalkParams;
 
 		let params = CrouchWalkParams::blended(1.0, 0.35);
-		let mut early = HumanoidV0Rig::imported();
+		let mut early = HumanoidV0Rig::for_clip_test();
 		sample_humanoid(AnimClip::CrouchWalk(params), &mut early, 0.0, true, false);
-		let mut late = HumanoidV0Rig::imported();
+		let mut late = HumanoidV0Rig::for_clip_test();
 		sample_humanoid(AnimClip::CrouchWalk(params), &mut late, 0.5, true, false);
 		assert!(
 			early.posed_angle("femur.L") != late.posed_angle("femur.L"),
 			"walk phase should move the legs"
 		);
-		let mut squat = HumanoidV0Rig::imported();
+		let mut squat = HumanoidV0Rig::for_clip_test();
 		sample_humanoid(AnimClip::Squat, &mut squat, 1.0, true, false);
 		assert!(
-			early.posed_angle("root") > squat.posed_angle("root") * 0.5,
+			early.posed_angle("root") > squat.posed_angle("root") * 0.85,
 			"spine stays mostly folded while legs cycle"
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn crouch_walk_phase_continues_when_knobs_change() -> anyhow::Result<()> {
+		use crate::clip::CrouchWalkParams;
+
+		let mut mailbox = AnimMailbox::new(Transform::default());
+		mailbox.clip_progress = 0.42;
+		mailbox.blend_progress = 1.0;
+		mailbox.last = Some(AnimId::CrouchWalk);
+
+		let low = AnimClip::CrouchWalk(CrouchWalkParams::blended(1.0, 0.1));
+		let high = AnimClip::CrouchWalk(CrouchWalkParams::blended(1.0, 0.35));
+		assert_eq!(low.id(), high.id());
+		assert_ne!(low, high);
+
+		let requested_id = high.id();
+		if mailbox.last != Some(requested_id) {
+			return Err(anyhow::anyhow!("knob change should not change AnimId"));
+		}
+		mailbox.clip_progress += 0.016 * high.default_speed();
+
+		assert_eq!(mailbox.blend_progress, 1.0, "knob change must not restart crossfade");
+		assert!(mailbox.clip_progress > 0.42, "phase should keep advancing");
+		Ok(())
+	}
+
+	#[test]
+	fn crouch_walk_to_jump_captures_visible_pose() -> anyhow::Result<()> {
+		let mut mailbox = AnimMailbox::with_bones(Transform::default(), 4);
+		mailbox.clip_progress = 0.33;
+		mailbox.blend_progress = 1.0;
+		mailbox.last = Some(AnimId::CrouchWalk);
+		mailbox.posed = true;
+		mailbox.output.local[0].rotation = Quat::from_rotation_x(0.3);
+
+		let requested_id = AnimClip::jump().id();
+		if mailbox.last != Some(requested_id) {
+			if mailbox.posed {
+				mailbox.from_pose.copy_from(&mailbox.output);
+			}
+			mailbox.from_offset = mailbox.displayed_offset;
+			mailbox.blend_progress = 0.0;
+			mailbox.clip_progress = 0.0;
+			mailbox.last = Some(requested_id);
+		}
+
+		assert_eq!(mailbox.last, Some(AnimId::Jump));
+		assert_eq!(mailbox.blend_progress, 0.0, "clip switch should start mailbox crossfade");
+		assert!(
+			mailbox.from_pose.local[0].rotation.dot(Quat::from_rotation_x(0.3)).abs() > 1.0 - 1e-5,
+			"interruption should capture the visible pose into from_pose"
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn crouch_walk_to_squat_captures_visible_pose() -> anyhow::Result<()> {
+		let mut mailbox = AnimMailbox::with_bones(Transform::default(), 4);
+		mailbox.blend_progress = 1.0;
+		mailbox.last = Some(AnimId::CrouchWalk);
+		mailbox.posed = true;
+		mailbox.output.local[0].rotation = Quat::from_rotation_x(0.25);
+
+		let requested_id = AnimClip::squat().id();
+		if mailbox.last != Some(requested_id) {
+			if mailbox.posed {
+				mailbox.from_pose.copy_from(&mailbox.output);
+			}
+			mailbox.blend_progress = 0.0;
+			mailbox.last = Some(requested_id);
+		}
+
+		assert_eq!(mailbox.last, Some(AnimId::Squat));
+		assert_eq!(mailbox.blend_progress, 0.0);
+		assert!(
+			mailbox.from_pose.local[0].rotation.dot(Quat::from_rotation_x(0.25)).abs() > 1.0 - 1e-5,
+			"stand-still should capture visible pose when leaving crouch-walk"
 		);
 		Ok(())
 	}
