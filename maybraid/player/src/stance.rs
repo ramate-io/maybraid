@@ -23,13 +23,15 @@ pub enum StanceKind {
 #[derive(Component, Clone, Copy, Debug, PartialEq)]
 pub struct CharacterStance {
 	pub kind: StanceKind,
-	/// 0 = previous pose, 1 = settled at `kind`.
+	/// Committed stance depth for gameplay. Always 1.0 once a change lands.
 	pub blend: f32,
+	/// Visual-only prone-entry progress (0 = just entered prone, 1 = descent clip done).
+	pub descent_progress: f32,
 }
 
 impl CharacterStance {
 	pub fn settled(kind: StanceKind) -> Self {
-		Self { kind, blend: 1.0 }
+		Self { kind, blend: 1.0, descent_progress: 1.0 }
 	}
 
 	pub fn speed_scale(self) -> f32 {
@@ -47,16 +49,27 @@ impl CharacterStance {
 			StanceKind::Prone => StanceKind::Squat,
 		};
 		self.blend = 1.0;
+		self.descent_progress = 1.0;
 	}
 
 	pub fn change_prone(&mut self) {
 		self.kind = StanceKind::Prone;
 		self.blend = 1.0;
+		self.descent_progress = 0.0;
 	}
 
 	pub fn stand(&mut self) {
 		self.kind = StanceKind::Stand;
 		self.blend = 1.0;
+		self.descent_progress = 1.0;
+	}
+
+	/// True once the prone descent clip has finished (visual only).
+	pub fn prone_settled(self) -> bool {
+		match self.kind {
+			StanceKind::Prone => self.descent_progress >= 1.0,
+			StanceKind::Stand | StanceKind::Squat => true,
+		}
 	}
 
 	pub fn is_prone(self) -> bool {
@@ -66,6 +79,22 @@ impl CharacterStance {
 
 pub fn squat_drop() -> f32 {
 	Squat::held().peak_vertical_drop(LegSegmentLengths::default())
+}
+
+/// Ease visual prone-entry progress so enter uses [`ProneDescent`].
+pub(crate) fn advance_prone_blend(
+	time: Res<Time>,
+	mut stances: Query<&mut CharacterStance, With<CharacterController>>,
+) {
+	let dt = time.delta_secs();
+	for mut stance in &mut stances {
+		if stance.kind != StanceKind::Prone || stance.descent_progress >= 1.0 {
+			continue;
+		}
+		stance.descent_progress = (stance.descent_progress
+			+ dt * character_animations::animations::DEFAULT_PRONE_DESCENT_SPEED)
+			.min(1.0);
+	}
 }
 
 impl RestLocomotionCapsule {
@@ -163,6 +192,19 @@ mod tests {
 	use avian3d::prelude::{Collider, Sensor};
 	use bevy::ecs::system::RunSystemOnce;
 	use characters::HitCapsule;
+
+	#[test]
+	fn mid_descent_matches_settled_prone_gameplay() -> Result<()> {
+		let rest = RestLocomotionCapsule(LocomotionCapsule::HUMANOID);
+		let settled = CharacterStance::settled(StanceKind::Prone);
+		let mid_descent =
+			CharacterStance { kind: StanceKind::Prone, blend: 1.0, descent_progress: 0.5 };
+		assert!((settled.speed_scale() - mid_descent.speed_scale()).abs() < 1e-6);
+		assert_eq!(rest.hull_for(settled.kind), rest.hull_for(mid_descent.kind));
+		assert!(!mid_descent.prone_settled());
+		assert!((mid_descent.blend - 1.0).abs() < 1e-6);
+		Ok(())
+	}
 
 	#[test]
 	fn speed_scale_slows_squat_and_prone() {

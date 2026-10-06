@@ -240,7 +240,7 @@ mod tests {
 		assert_eq!(footstep_rate(false, None, None, 6.0), 0.0);
 		let jump = Jumping::start(0.0);
 		assert_eq!(footstep_rate(true, Some(&jump), None, 6.0), 0.0);
-		let squat = CharacterStance { kind: StanceKind::Squat, blend: 1.0 };
+		let squat = CharacterStance { kind: StanceKind::Squat, blend: 1.0, descent_progress: 1.0 };
 		assert_eq!(footstep_rate(true, None, Some(&squat), 6.0), 0.0);
 	}
 

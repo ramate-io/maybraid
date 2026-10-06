@@ -47,7 +47,7 @@ pub fn drive_player_locomotion(
 			continue;
 		};
 		let speed = Vec3::new(velocity.x, 0.0, velocity.z).length();
-		let kind = stance.map(|stance| stance.kind).unwrap_or(StanceKind::Stand);
+		let stance = stance.copied().unwrap_or_else(|| CharacterStance::settled(StanceKind::Stand));
 		for member in members.iter() {
 			let Ok(rig) = rigs.get(member) else {
 				continue;
@@ -55,7 +55,7 @@ pub fn drive_player_locomotion(
 			if rig.role != CharacterRigRole::Body {
 				continue;
 			}
-			let clip = locomotion_clip(rig.skeleton, jumping, kind, speed);
+			let clip = locomotion_clip(rig.skeleton, jumping, &stance, speed);
 			let desired = AnimRef::new(clip);
 			let needs = match anims.get(member) {
 				Ok(root) => root.0 != desired,
@@ -72,10 +72,12 @@ pub fn drive_player_locomotion(
 					JumpParams::default().elapsed_from_phase(phase)
 				};
 				commands.entity(member).insert(AnimProgress(progress));
-			} else if matches!(kind, StanceKind::Squat | StanceKind::Prone) {
-				commands
-					.entity(member)
-					.insert(AnimProgress(stance.map(|s| s.blend).unwrap_or(1.0)));
+			} else if !stance.prone_settled()
+				|| matches!(stance.kind, StanceKind::Squat | StanceKind::Prone)
+			{
+				let progress =
+					if !stance.prone_settled() { stance.descent_progress } else { stance.blend };
+				commands.entity(member).insert(AnimProgress(progress));
 			} else {
 				commands.entity(member).remove::<AnimProgress>();
 			}
@@ -86,7 +88,7 @@ pub fn drive_player_locomotion(
 fn locomotion_clip(
 	skeleton: RigSkeletonKind,
 	jumping: Option<&Jumping>,
-	stance: StanceKind,
+	stance: &CharacterStance,
 	speed: f32,
 ) -> AnimClip {
 	match skeleton {
@@ -95,8 +97,10 @@ fn locomotion_clip(
 				AnimClip::leap()
 			} else if jumping.is_some() {
 				AnimClip::jump()
+			} else if stance.kind == StanceKind::Prone && !stance.prone_settled() {
+				AnimClip::prone_descent()
 			} else {
-				match stance {
+				match stance.kind {
 					StanceKind::Prone => AnimClip::prone(),
 					StanceKind::Squat => AnimClip::squat(),
 					StanceKind::Stand => {
@@ -143,9 +147,10 @@ mod tests {
 	#[test]
 	fn standing_hop_uses_jump_clip() {
 		let jump = Jumping::start(0.0);
+		let stance = CharacterStance::settled(StanceKind::Stand);
 		assert!(!jump.leaping);
 		assert_eq!(
-			locomotion_clip(RigSkeletonKind::Humanoid, Some(&jump), StanceKind::Stand, 0.0).id(),
+			locomotion_clip(RigSkeletonKind::Humanoid, Some(&jump), &stance, 0.0).id(),
 			AnimClip::jump().id()
 		);
 	}
@@ -153,26 +158,27 @@ mod tests {
 	#[test]
 	fn running_leap_uses_leap_clip() {
 		let jump = Jumping::start(MOVE_SPEED);
+		let stance = CharacterStance::settled(StanceKind::Stand);
 		assert!(jump.leaping);
 		assert_eq!(
-			locomotion_clip(RigSkeletonKind::Humanoid, Some(&jump), StanceKind::Stand, MOVE_SPEED)
-				.id(),
+			locomotion_clip(RigSkeletonKind::Humanoid, Some(&jump), &stance, MOVE_SPEED).id(),
 			AnimClip::leap().id()
 		);
 		assert_eq!(
-			locomotion_clip(RigSkeletonKind::Quadruped, Some(&jump), StanceKind::Stand, 0.0).id(),
+			locomotion_clip(RigSkeletonKind::Quadruped, Some(&jump), &stance, 0.0).id(),
 			AnimClip::leap().id()
 		);
 	}
 
 	#[test]
 	fn clip_follows_the_cap() {
+		let stance = CharacterStance::settled(StanceKind::Stand);
 		assert_eq!(
-			locomotion_clip(RigSkeletonKind::Humanoid, None, StanceKind::Stand, JOG_SPEED).id(),
+			locomotion_clip(RigSkeletonKind::Humanoid, None, &stance, JOG_SPEED).id(),
 			AnimId::Walk
 		);
 		assert_eq!(
-			locomotion_clip(RigSkeletonKind::Humanoid, None, StanceKind::Stand, MOVE_SPEED).id(),
+			locomotion_clip(RigSkeletonKind::Humanoid, None, &stance, MOVE_SPEED).id(),
 			AnimId::Run
 		);
 	}
@@ -181,8 +187,9 @@ mod tests {
 	fn land_keeps_the_jump_clip() {
 		let mut jump = Jumping::start(0.0);
 		jump.phase = JumpPhase::Land;
+		let stance = CharacterStance::settled(StanceKind::Squat);
 		assert_eq!(
-			locomotion_clip(RigSkeletonKind::Humanoid, Some(&jump), StanceKind::Squat, 0.0).id(),
+			locomotion_clip(RigSkeletonKind::Humanoid, Some(&jump), &stance, 0.0).id(),
 			AnimClip::jump().id()
 		);
 	}
@@ -190,21 +197,85 @@ mod tests {
 	#[test]
 	fn stance_clips_win_over_still_walk() {
 		assert_eq!(
-			locomotion_clip(RigSkeletonKind::Humanoid, None, StanceKind::Squat, 0.0).id(),
+			locomotion_clip(
+				RigSkeletonKind::Humanoid,
+				None,
+				&CharacterStance::settled(StanceKind::Squat),
+				0.0,
+			)
+			.id(),
 			AnimId::Squat
 		);
 		assert_eq!(
-			locomotion_clip(RigSkeletonKind::Humanoid, None, StanceKind::Prone, 0.0).id(),
+			locomotion_clip(
+				RigSkeletonKind::Humanoid,
+				None,
+				&CharacterStance::settled(StanceKind::Prone),
+				0.0,
+			)
+			.id(),
 			AnimId::Prone
 		);
 		assert_eq!(
-			locomotion_clip(RigSkeletonKind::Humanoid, None, StanceKind::Stand, 0.0).id(),
+			locomotion_clip(
+				RigSkeletonKind::Humanoid,
+				None,
+				&CharacterStance::settled(StanceKind::Stand),
+				0.0,
+			)
+			.id(),
 			AnimId::Still
 		);
 		let jump = Jumping::start(0.0);
 		assert_eq!(
-			locomotion_clip(RigSkeletonKind::Humanoid, Some(&jump), StanceKind::Squat, 0.0).id(),
+			locomotion_clip(
+				RigSkeletonKind::Humanoid,
+				Some(&jump),
+				&CharacterStance::settled(StanceKind::Squat),
+				0.0,
+			)
+			.id(),
 			AnimClip::jump().id()
+		);
+	}
+
+	#[test]
+	fn entering_prone_uses_descent_clip() {
+		let stance = CharacterStance { kind: StanceKind::Prone, blend: 1.0, descent_progress: 0.0 };
+		assert_eq!(
+			locomotion_clip(RigSkeletonKind::Humanoid, None, &stance, 0.0).id(),
+			AnimId::ProneDescent
+		);
+	}
+
+	#[test]
+	fn jump_interrupts_prone_descent() {
+		let jump = Jumping::start(0.0);
+		let stance = CharacterStance { kind: StanceKind::Prone, blend: 1.0, descent_progress: 0.4 };
+		assert_eq!(
+			locomotion_clip(RigSkeletonKind::Humanoid, Some(&jump), &stance, 0.0).id(),
+			AnimClip::jump().id()
+		);
+	}
+
+	#[test]
+	fn squat_toggle_interrupts_prone_descent() {
+		let stance = CharacterStance { kind: StanceKind::Squat, blend: 1.0, descent_progress: 0.5 };
+		assert_eq!(
+			locomotion_clip(RigSkeletonKind::Humanoid, None, &stance, 0.0).id(),
+			AnimId::Squat
+		);
+	}
+
+	#[test]
+	fn descent_progress_is_separate_from_blend() {
+		let mid_descent =
+			CharacterStance { kind: StanceKind::Prone, blend: 1.0, descent_progress: 0.5 };
+		assert!((mid_descent.blend - 1.0).abs() < 1e-6);
+		assert!(!mid_descent.prone_settled());
+		assert_eq!(
+			mid_descent.speed_scale(),
+			CharacterStance::settled(StanceKind::Prone).speed_scale()
 		);
 	}
 }
