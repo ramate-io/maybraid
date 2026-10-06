@@ -95,6 +95,9 @@ pub enum LodRefreshSystems {
 	/// Enqueue + budgeted teardown of inactive level roots.
 	Cull,
 	/// Budgeted descendant [`Disabled`] apply for hide/show trees.
+	///
+	/// [`crate::LodTreeVisBudget::time_per_frame`] is a per-visit target, not a
+	/// hard cap — one wide [`Children`] copy can overrun.
 	VisDrain,
 }
 
