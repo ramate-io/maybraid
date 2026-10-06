@@ -32,6 +32,7 @@ use intelligence_lod::{
 };
 
 use crate::clip::{AnimClip, AnimId, AnimRefRoot};
+use crate::clip_cache::{apply_evaluated_sample, AnimClipCache, PreparedClip};
 use crate::markers::{AnimateBones, AnimateEffects, SuspendAnimation};
 use crate::plant::plant_lod_entity;
 use crate::rig::{bone_map_ready, BoneMap, CharacterRig, CharacterRigRole, RigSkeletonKind};
@@ -95,6 +96,9 @@ pub struct AnimMailbox {
 	from_pose: PoseBuffer,
 	from_offset: ArmatureOffset,
 	bind_transform: Transform,
+	/// Prepared clip table. Rebuilt when the selected clip or its parameters change.
+	pub prepared_clip: Option<PreparedClip>,
+	prepared_from: Option<AnimClip>,
 }
 
 /// Sample coordinate for the current clip. When present, [`tick_anim_mailbox`]
@@ -124,6 +128,8 @@ impl AnimMailbox {
 			from_pose: PoseBuffer::identity(len),
 			from_offset: ArmatureOffset::IDENTITY,
 			bind_transform,
+			prepared_clip: None,
+			prepared_from: None,
 		}
 	}
 
@@ -324,12 +330,14 @@ fn in_apply_cone(
 pub fn tick_anim_mailbox(
 	time: Res<Time>,
 	set: Option<Res<MailboxApplySet>>,
+	cache: Option<Res<AnimClipCache>>,
 	mut hosts: Query<
 		(Entity, &AnimRefRoot, &mut AnimMailbox, Option<&AnimProgress>, &CharacterRig),
 		(With<AnimMailbox>, Without<AnimBone>, Without<SuspendAnimation>),
 	>,
 ) {
 	let dt = time.delta_secs();
+	let cache = cache.as_deref();
 	for (entity, root, mut mailbox, progress, character_rig) in &mut hosts {
 		if !set.as_deref().is_none_or(|set| set.allows(entity)) {
 			continue;
@@ -338,7 +346,8 @@ pub fn tick_anim_mailbox(
 			continue;
 		}
 
-		let requested_id = root.0.clip.id();
+		let requested = root.0.clip;
+		let requested_id = requested.id();
 		if mailbox.last != Some(requested_id) {
 			if mailbox.posed {
 				let AnimMailbox { output, from_pose, .. } = &mut *mailbox;
@@ -358,12 +367,14 @@ pub fn tick_anim_mailbox(
 		if mailbox.blending() {
 			mailbox.blend_progress = (mailbox.blend_progress + dt / BLEND_DURATION).min(1.0);
 		}
+		refresh_prepared_clip(&mut mailbox, requested, character_rig.skeleton, cache);
 	}
 }
 
 /// Sample clips in parallel; write bone transforms serially (shared bone query).
 pub fn apply_anim_mailbox(
 	set: Option<Res<MailboxApplySet>>,
+	cache: Option<Res<AnimClipCache>>,
 	mut hosts: Query<
 		(
 			Entity,
@@ -389,6 +400,7 @@ pub fn apply_anim_mailbox(
 	mut bone_tfs: Query<&mut Transform, (With<AnimBone>, Without<AnimMailbox>)>,
 ) {
 	let only = set.as_ref().and_then(|set| set.only.clone());
+	let cache = cache.as_deref();
 	hosts.par_iter_mut().batching_strategy(BatchingStrategy::fixed(8)).for_each(
 		|(
 			entity,
@@ -413,6 +425,7 @@ pub fn apply_anim_mailbox(
 			let requested = root.0.clip;
 			let progress = clip_progress(requested, mailbox.clip_progress, entity);
 			let weight = BlendCurve::SmoothStep.sample(mailbox.blend_progress);
+			let prepared = mailbox.prepared_clip.clone();
 			let effects = match character_rig.skeleton {
 				RigSkeletonKind::Humanoid => {
 					let mut rig = match humanoid {
@@ -422,8 +435,15 @@ pub fn apply_anim_mailbox(
 					if write_bones {
 						sync_humanoid_rest(&mut rig, &bones);
 					}
-					let effects =
-						sample_humanoid(requested, &mut rig, progress, write_bones, write_effects);
+					let effects = sample_humanoid_prepared(
+						requested,
+						&mut rig,
+						progress,
+						write_bones,
+						write_effects,
+						cache,
+						prepared.as_ref(),
+					);
 					if write_bones {
 						publish_pose(&mut mailbox, &rig.pose, weight);
 					}
@@ -594,6 +614,46 @@ fn write_pose(
 			*transform = *desired;
 		}
 	}
+}
+
+fn refresh_prepared_clip(
+	mailbox: &mut AnimMailbox,
+	clip: AnimClip,
+	skeleton: RigSkeletonKind,
+	cache: Option<&AnimClipCache>,
+) {
+	let Some(cache) = cache else {
+		mailbox.prepared_clip = None;
+		mailbox.prepared_from = None;
+		return;
+	};
+	if mailbox.prepared_from == Some(clip) {
+		return;
+	}
+	mailbox.prepared_from = Some(clip);
+	mailbox.prepared_clip = skeleton
+		.sample_rig_variant()
+		.and_then(|rig| cache.prepare(clip, rig, cache.settings.sampling));
+}
+
+fn sample_humanoid_prepared(
+	clip: AnimClip,
+	rig: &mut HumanoidV0Rig,
+	progress: f32,
+	write_bones: bool,
+	write_effects: bool,
+	cache: Option<&AnimClipCache>,
+	prepared: Option<&PreparedClip>,
+) -> Effects {
+	if let (Some(cache), Some(prepared)) = (cache, prepared) {
+		if let Some(sample) = cache.sample(prepared, progress) {
+			if write_bones {
+				apply_evaluated_sample(&rig.binding.effective_rest, sample, &mut rig.pose);
+			}
+			return if write_effects { sample.effects } else { Effects::IDENTITY };
+		}
+	}
+	sample_humanoid(clip, rig, progress, write_bones, write_effects)
 }
 
 fn sample_split<A, R>(
@@ -979,5 +1039,43 @@ mod tests {
 		assert!(only.contains(&ahead));
 		assert!(!only.contains(&behind));
 		assert_eq!(world.get::<AnimMailbox>(behind).unwrap().apply_skips, 8);
+	}
+
+	#[test]
+	fn tick_prepares_a_walk_handle_once() -> anyhow::Result<()> {
+		use anyhow::anyhow;
+
+		let cache = AnimClipCache::default();
+		let mut mailbox = AnimMailbox::new(Transform::IDENTITY);
+		refresh_prepared_clip(
+			&mut mailbox,
+			AnimClip::walk(),
+			RigSkeletonKind::Humanoid,
+			Some(&cache),
+		);
+		let first = mailbox.prepared_clip.clone().ok_or_else(|| anyhow!("prepared walk"))?;
+		refresh_prepared_clip(
+			&mut mailbox,
+			AnimClip::walk(),
+			RigSkeletonKind::Humanoid,
+			Some(&cache),
+		);
+		let second = mailbox.prepared_clip.as_ref().ok_or_else(|| anyhow!("still prepared"))?;
+		if !first.ptr_eq(second) {
+			return Err(anyhow!("the mailbox should retain the same prepared handle"));
+		}
+		if cache.stats().prepares != 1 {
+			return Err(anyhow!("identical walk should prepare once, got {:?}", cache.stats()));
+		}
+		refresh_prepared_clip(
+			&mut mailbox,
+			AnimClip::jab(),
+			RigSkeletonKind::Humanoid,
+			Some(&cache),
+		);
+		if mailbox.prepared_clip.is_some() {
+			return Err(anyhow!("uncacheable clips must drop the handle"));
+		}
+		Ok(())
 	}
 }

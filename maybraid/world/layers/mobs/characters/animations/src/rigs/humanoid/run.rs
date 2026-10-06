@@ -6,14 +6,22 @@ use crate::animations::{Run, UprightRun};
 use crate::rigs::humanoid::apply::apply_arm;
 use crate::{Animation, Progress};
 
-impl Animation<HumanoidV0Rig> for Run {
-	fn apply_for(&self, rig: &mut HumanoidV0Rig, progress: f32) {
-		UprightRun::from_run(self).apply_for(rig, progress)
+impl Run {
+	/// Authored semantic pose at `progress`. Rest is applied later by the rig.
+	pub fn sample_pose(&self, progress: f32) -> HumanoidPose {
+		UprightRun::from_run(self).sample_pose(progress)
 	}
 }
 
-impl Animation<HumanoidV0Rig> for UprightRun {
+impl Animation<HumanoidV0Rig> for Run {
 	fn apply_for(&self, rig: &mut HumanoidV0Rig, progress: f32) {
+		rig.write_pose(&self.sample_pose(progress))
+	}
+}
+
+impl UprightRun {
+	/// Authored semantic pose at `progress`. Rest is applied later by the rig.
+	pub fn sample_pose(&self, progress: f32) -> HumanoidPose {
 		let mut pose = HumanoidPose::default();
 		let phase = Progress(progress).cycle();
 		let left_arm_swing = -arm_swing(phase);
@@ -24,7 +32,13 @@ impl Animation<HumanoidV0Rig> for UprightRun {
 		// Both elbows share one flexion sign. Opposite arm_down values are a hang bias.
 		apply_run_arm(&mut pose, Side::Left, left_arm_swing, phase, -self.arm_down, self);
 		apply_run_arm(&mut pose, Side::Right, right_arm_swing, phase, self.arm_down, self);
-		rig.write_pose(&pose);
+		pose
+	}
+}
+
+impl Animation<HumanoidV0Rig> for UprightRun {
+	fn apply_for(&self, rig: &mut HumanoidV0Rig, progress: f32) {
+		rig.write_pose(&self.sample_pose(progress));
 	}
 }
 
