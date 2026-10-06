@@ -279,18 +279,18 @@ Copies of Tracy CSVs and hitch logs from the orchard work (`frame_*.csv`, `*trac
 
 ## Migrating a grove to the orchard (flattened) approach
 
-Orchard High/Medium plants are **posed kit content**, not a nest of per-stick / per-ball [`LodSceneHost`](maybraid/lod/lib/src/scene/host.rs)s. That is what made `/show vast-orchards` scale: one Avian volume per plant, shared stick/ball [`SceneRef`](maybraid/scene-ref)s, and no fine-phase refresh per kit node.
+Orchard High/Medium plants are **posed kit content**, not a nest of per-stick / per-ball [`LodSceneHost`](maybraid/lod/lib/src/scene/host.rs)s. That is what made `/show vast-orchards` scale: one Gimme-indexed host per plant, shared stick/ball [`SceneRef`](maybraid/scene-ref)s, and no fine-phase refresh per kit node.
 
 Canonical example: [`maybraid/world/layers/vegetation/groves/src/orchard.rs`](maybraid/world/layers/vegetation/groves/src/orchard.rs) (`nest_plant_chunks`) plus helpers in [`grove/vc_compose.rs`](maybraid/world/layers/vegetation/groves/src/grove/vc_compose.rs).
 
 1. **Compose with `nest_flattened_plant_chunk`**, not the unused nested-host helpers in [`placed_host.rs`](maybraid/world/layers/vegetation/groves/src/grove/placed_host.rs). Those wrap [`ComponentsOnly`](maybraid/world/layers/vegetation/components/src/lib.rs)`<PlacedVegetation<T>>` and spawn nested [`FoliageNode`](maybraid/world/layers/vegetation/components/src/foliage/node.rs) / [`StickNode`](maybraid/world/layers/vegetation/components/src/sticks/node.rs) LOD hosts. Flattened hosts wrap `FlattenedComponentsOnly<PlacedVegetation<T>>` and emit posed kits only.
 2. **Share the plant type with `Arc<T>`** when `T` is large (Storybook trees). Orchard stores `Arc<StorybookTree>` so begin/drain does not clone geometry per chunk. Register **that** wrapper in the playground:
-   `avian_host!(app, FlattenedComponentsOnly<PlacedVegetation<Arc<YourTree>>>);`
+   `flattened_plant_host!(app, YourTree);`
    in [`view.rs`](maybraid/world/layers/vegetation/chico/src/view.rs). Isolated leftover plant hosts use the same family.
 3. **Lazy `SceneChunk` for the plant list.** Build one `SceneChunk::lazy(n, n, …)` that yields `nest_flattened_plant_chunk` per plant (see Orchard `nest_plant_chunks`). Begin must not box every `scene_with_level` up front.
 4. **Leave Low / UltraLow as canopy proxies** (`canopy_proxy_site`, `ULTRA_LOW_CANOPY_BIN_METERS`). Flattening is for the High/Medium plant hosts.
 5. **Charge kit weight.** Flattened kits use [`FLATTENED_KIT_CHUNK_WEIGHT`](maybraid/world/layers/vegetation/components/src/lib.rs) so drain does not admit a full SceneRef / `WorldAssetRoot` wave in one frame.
-6. **Do not add a second produce plugin per region channel.** `AvianLodSceneRefreshPlugin<T, M, F>` can still be added for bullseye and spotlight; fill/emit are registered once per `T`. Cull fill is the same pattern: one untyped host-hit query (`LodCullProduceCache`), then per-`T` enqueue (`AvianLodSceneCullPlugin`).
+6. **Do not add a second produce plugin per region channel.** `GimmeLodSceneRefreshPlugin<T, M, F>` can still be added for bullseye and spotlight; fill/emit are registered once per `T`. Cull fill is the same pattern: one untyped host-hit query (`LodCullProduceCache`), then per-`T` enqueue (`GimmeLodSceneCullPlugin`).
 
 7. **Quantize + merge kits on the plant.** Step-by-step for other constructions: [`sbs-trees` CONTRIBUTING](maybraid/world/layers/vegetation/sbs-trees/CONTRIBUTING.md) (tree / tuft `unit_from_num` + collection merge) and [`vegetation-groves` CONTRIBUTING](maybraid/world/layers/vegetation/groves/CONTRIBUTING.md) (`tree_variants` / flatten). Orchard uses [`StorybookTree::unit_from_num`](maybraid/world/layers/vegetation/sbs-trees/src/storybook_tree.rs) (`tree_variants`, default 100). Emission folds sticks and cheap balls into [`MultiSceneMerge`](maybraid/scene-ref) collections. Merge packs kit-local positions into vertex color so [`LeafMaterial`](maybraid/world/layers/vegetation/shaders/src/leaf_material.wgsl) breakup still works. World size stays on the plant [`Placement`](maybraid/world/layers/vegetation/components/src/placed.rs) scale.
 

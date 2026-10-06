@@ -10,6 +10,8 @@ use bevy::prelude::*;
 use chico::{install_vegetation_stream, Chico, ChicoConfig};
 use durham::{playable_world_cell_layout, Durham, DurhamTerrainConfig, TerrainRetarget};
 use furnishing_layer_model::Furnishing;
+use geneva::{install_language_stream, Geneva, LanguageConfig};
+use language_layer_model::Language;
 use layer_stack::{ActiveGenerationMode, GenerationMode, LayerModeConfig, Scheme};
 use maputo::{install_furnishing_stream, Maputo};
 use mob_layer_model::Mobs;
@@ -65,7 +67,19 @@ impl Scheme<Furnishing<Maputo<Urbanization<Richmond<OnTerrain<Durham>>>>>> for D
 	}
 }
 
-/// Discovery's player home is the origin. Waypoints stay; a respawn walks to a POI.
+impl Scheme<Language<Geneva<Vegetation<Chico<Urbanization<Richmond<OnTerrain<Durham>>>>>>>>
+	for Discovery
+{
+	fn install(app: &mut App, _config: &LanguageConfig) {
+		install_language_stream::<
+			Discovery,
+			Vegetation<Chico<Urbanization<Richmond<OnTerrain<Durham>>>>>,
+		>(app);
+	}
+}
+
+/// Discovery's player home is the origin. Waypoints stay; first load and death
+/// both open the POI picker.
 pub struct DiscoveryPlayerPlugin;
 
 impl Plugin for DiscoveryPlayerPlugin {
@@ -76,7 +90,12 @@ impl Plugin for DiscoveryPlayerPlugin {
 }
 
 fn discovery_player_policy() -> ModePlayerPolicy {
-	ModePlayerPolicy { home: Vec2::ZERO, keep_waypoints: true, respawn_ends_life: false }
+	ModePlayerPolicy {
+		home: Vec2::ZERO,
+		keep_waypoints: true,
+		respawn_ends_life: false,
+		pick_first_spawn: true,
+	}
 }
 
 fn restore_playable_world(

@@ -5126,6 +5126,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "geneva"
+version = "0.1.2"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "chico",
+ "comproc",
+ "durham",
+ "language-layer-model",
+ "language-layer-presentation",
+ "layer-stack",
+ "lod",
+ "maybraid-language-core",
+ "maybraid-language-grammars",
+ "noise",
+ "procedural-common",
+ "richmond",
+ "terrain-layer-model",
+ "urbanization-cells",
+ "urbanization-layer-model",
+ "vegetation-layer-model",
+]
+
+[[package]]
 name = "gethostname"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6348,6 +6372,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "language-layer-model"
+version = "0.1.2"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "layer-stack",
+ "lod",
+ "terrain-layer-model",
+ "vegetation-layer-model",
+]
+
+[[package]]
+name = "language-layer-presentation"
+version = "0.1.2"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "language-layer-model",
+ "layer-stack",
+ "lod",
+ "terrain-layer-model",
+ "vegetation-layer-model",
+]
+
+[[package]]
 name = "layer-stack"
 version = "0.1.2"
 dependencies = [
@@ -6817,6 +6866,8 @@ dependencies = [
  "chico",
  "durham",
  "furnishing-layer-model",
+ "geneva",
+ "language-layer-model",
  "layer-stack",
  "maputo",
  "mob-layer-model",
@@ -6853,6 +6904,8 @@ dependencies = [
  "damage",
  "durham",
  "furnishing-layer-model",
+ "geneva",
+ "language-layer-model",
  "layer-stack",
  "lod",
  "maputo",
@@ -6971,7 +7024,7 @@ dependencies = [
 
 [[package]]
 name = "maybraid-vfx"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "bevy",
  "bevy_hanabi",
@@ -7012,9 +7065,12 @@ dependencies = [
  "furnishing-layer-presentation",
  "furniture-assemblies",
  "game-commands",
+ "geneva",
  "ground-avian",
  "hiding-intelligence",
  "intelligence-lod",
+ "language-layer-model",
+ "language-layer-presentation",
  "layer-stack",
  "lod",
  "lod-avian",
@@ -7029,6 +7085,7 @@ dependencies = [
  "maybraid-sky",
  "maybraid-weather",
  "meandering-intelligence",
+ "menu-components",
  "mob-characters",
  "mob-layer-model",
  "mob-layer-presentation",
@@ -12580,7 +12637,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "vfx-playground"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "bevy",
  "clap",
@@ -13752,7 +13809,7 @@ checksum = "99cdc77ac580700f64d314e2c30d2e8ec1c93ce981f66a62a894a671d1036af3"
 
 [[package]]
 name = "world-materials"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "bevy",
  "building-shaders",
@@ -13767,7 +13824,7 @@ dependencies = [
 
 [[package]]
 name = "world-materials-playground"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "bevy",
  "clap",
