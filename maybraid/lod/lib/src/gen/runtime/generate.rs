@@ -207,7 +207,7 @@ pub enum LodGenerateSystems {
 	Drain,
 }
 
-pub(super) fn ensure_generate_sets(app: &mut App) {
+pub(crate) fn ensure_generate_sets(app: &mut App) {
 	if app.is_plugin_added::<LodGenerateSetsPlugin>() {
 		return;
 	}

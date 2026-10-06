@@ -5,7 +5,7 @@ use bevy::math::{Vec2, Vec3, Vec3Swizzles};
 use bevy::prelude::{GlobalTransform, Transform, World};
 use chico::{Chico, ForestIndex};
 use durham::{
-	BaseTerrainNoise, Durham, TerrainCellLayout, TerrainConfig, TerrainEntryStore, WorldBaseTerrain,
+	BaseTerrainNoise, Durham, HcsgStorage, TerrainCellLayout, TerrainConfig, WorldBaseTerrain,
 };
 use layer_stack::{Generate, LayerGenerationCore, RequireLayer, Scheme};
 use lod::gen::{GenerationScheme, Id, LodGenerateKeepRegion, SpatialIndex};
@@ -36,7 +36,7 @@ use mob_layer_model::Mobs;
 type Urbanized = Urbanization<richmond::Richmond<OnTerrain<Durham>>>;
 
 pub(crate) fn insert_urbanized_resources(world: &mut World) {
-	world.insert_resource(TerrainEntryStore::default());
+	world.init_resource::<HcsgStorage>();
 	world.insert_resource(TerrainCellLayout::default());
 	world.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(&TerrainConfig::new(42))));
 	world.insert_resource(DevelopmentEntryStore::default());

@@ -54,13 +54,14 @@ pub use geography::{
 	GeographicBand, GeographicFamily, GeographicFeature, GeographicFeatureId, GeographicFeatureKind,
 };
 pub use host::{
-	fine_patch_cell_layout, playable_world_cell_layout, retarget_presentation_assets, Durham,
-	DurhamCells, TerrainCoverage, TerrainFillSystems, TerrainLayoutPinned, TerrainPresentPending,
-	TerrainPresentationDirty, TerrainRetarget, WorldBaseTerrain, WORLD_FINE_HALF_EXTENT_CELLS,
-	WORLD_OUTER_2X_ROWS, WORLD_OUTER_4X_ROWS,
+	fine_patch_cell_layout, playable_world_cell_layout, produce_terrain_window,
+	retarget_presentation_assets, Durham, DurhamCells, TerrainCoverage, TerrainFillSystems,
+	TerrainLayoutPinned, TerrainPresentPending, TerrainPresentationDirty, TerrainRetarget,
+	TerrainWindow, WorldBaseTerrain, WORLD_FINE_HALF_EXTENT_CELLS, WORLD_OUTER_2X_ROWS,
+	WORLD_OUTER_4X_ROWS,
 };
 pub use index::{
-	AvianTerrainIndex, TerrainCellId, TerrainEntryStore, TerrainHeightSnapshot,
+	register_durham_nodes, DurhamNodes, DurhamRoots, TerrainHeightSnapshot, TerrainStorage,
 	WaterSurfaceSnapshot,
 };
 pub use layer::{DurhamHeightSnapshot, DurhamRead, DurhamTerrainConfig};
@@ -69,7 +70,7 @@ pub use presentation::{
 	sync_visual_terrain_host_pose, PresentedTerrainScene, TerrainBackground,
 	TerrainBackgroundRegionPresenter, TerrainFar, TerrainFarRegionPresenter, TerrainMeshLodBand,
 	TerrainNear, TerrainNearRegionPresenter, TerrainPresentationAssets, TerrainPresenterState,
-	TerrainRegionPresenter, TerrainStoreView, TerrainStreamMarker, TerrainStreamPresenterState,
+	TerrainRegionPresenter, TerrainStreamMarker, TerrainStreamPresenterState,
 	TerrainStreamRegionPresenter, TerrainVisualHost,
 };
 pub use render::TerrainRenderItem;
@@ -87,9 +88,9 @@ pub use stamps::{
 	PocketWaterLowPassControllerCell, PocketWaterLowPassControllerLayout,
 	PocketWaterLowPassStampCell, RollingHighPassControllerCell, RollingHighPassControllerLayout,
 	RollingHighPassStampCell, RollingLowPassControllerCell, RollingLowPassControllerLayout,
-	RollingLowPassStampCell, StampControllerLayouts, TerrainStampConfigs,
-	ValleyHighPassControllerCell, ValleyHighPassControllerLayout, ValleyHighPassStampCell,
-	ValleyLowPassControllerCell, ValleyLowPassControllerLayout, ValleyLowPassStampCell,
+	RollingLowPassStampCell, TerrainStampConfigs, ValleyHighPassControllerCell,
+	ValleyHighPassControllerLayout, ValleyHighPassStampCell, ValleyLowPassControllerCell,
+	ValleyLowPassControllerLayout, ValleyLowPassStampCell,
 };
 pub use stamps::{
 	CanyonLowPassStampCell as CanyonStampCell, MassifLowPassStampCell as MassifStampCell,

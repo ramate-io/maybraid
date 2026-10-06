@@ -355,6 +355,7 @@ impl AnimClip {
 			| Self::Leap(_)
 			| Self::TwoFootedTuckedFlip(_)
 			| Self::Squat
+			| Self::SquatDescent
 			| Self::Prone => ClipTimePolicy::Clamp { duration: 1.0 },
 			Self::Soaring(_) | Self::Flapping(_) => ClipTimePolicy::Unbounded,
 			Self::LateralUndulation(_) | Self::DorsoventralUndulation(_) => {
