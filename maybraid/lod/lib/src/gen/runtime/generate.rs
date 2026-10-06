@@ -50,17 +50,27 @@ impl<T: Send + Sync + 'static> LodGenerated<T> {
 	}
 }
 
-/// How many origin ids each generate drain may materialize per frame.
+/// How many origin ids each generate drain may materialize per frame
+/// for channel `C`.
 ///
-/// Independent of scene and presentation.
+/// Independent of scene and presentation. Each channel has its own
+/// resource, so assemblers set a value without last-insert-wins.
 #[derive(Resource, Debug, Clone, Copy, PartialEq, Eq)]
-pub struct LodGenerateBudget {
+pub struct LodGenerateBudget<C> {
 	pub ids_per_frame: u32,
+	_chan: PhantomData<fn() -> C>,
 }
 
-impl Default for LodGenerateBudget {
+impl<C> LodGenerateBudget<C> {
+	pub const fn new(ids_per_frame: u32) -> Self {
+		Self { ids_per_frame, _chan: PhantomData }
+	}
+}
+
+impl<C> Default for LodGenerateBudget<C> {
+	/// Same default as the old global.
 	fn default() -> Self {
-		Self { ids_per_frame: 1 }
+		Self::new(1)
 	}
 }
 
@@ -118,11 +128,15 @@ impl<T> LodGenerateQueue<T> {
 		self.pending_ids.contains(id)
 	}
 
-	pub fn clear(&mut self) {
+	/// Drop pending ids and scan regions. Returns how many tickets to release.
+	#[must_use]
+	pub fn clear(&mut self) -> u64 {
+		let cancelled = self.pending.len() as u64;
 		self.pending.clear();
 		self.pending_ids.clear();
 		self.scan_regions.clear();
 		self.reset_scan = true;
+		cancelled
 	}
 
 	pub fn enqueue(&mut self, id: Id) -> bool {
@@ -209,14 +223,12 @@ impl Plugin for LodGenerateSetsPlugin {
 			app.add_plugins(LodNodePlugin);
 		}
 		ensure_lod_job_counter(app);
-		app.init_resource::<LodGenerateBudget>()
-			.init_resource::<LodGenerateTimeBudget>()
-			.configure_sets(
-				Update,
-				(LodGenerateSystems::Produce, LodGenerateSystems::Drain)
-					.chain()
-					.after(LodNodeSystems::Track),
-			);
+		app.init_resource::<LodGenerateTimeBudget>().configure_sets(
+			Update,
+			(LodGenerateSystems::Produce, LodGenerateSystems::Drain)
+				.chain()
+				.after(LodNodeSystems::Track),
+		);
 	}
 }
 
@@ -257,7 +269,7 @@ pub fn produce_lod_generate_regions<P, F, M>(
 pub fn drain_lod_generate<T, S, M, F>(
 	mut index: ResMut<S>,
 	mut queue: ResMut<LodGenerateQueue<T>>,
-	budget: Res<LodGenerateBudget>,
+	budget: Res<LodGenerateBudget<M>>,
 	time_budget: Res<LodGenerateTimeBudget>,
 	jobs: Res<LodJobCounter>,
 	mut regions: MessageReader<LodGenerateRegion<M>>,
@@ -468,7 +480,7 @@ where
 {
 	fn build(&self, app: &mut App) {
 		ensure_generate_sets(app);
-		app.init_resource::<LodGenerateBudget>()
+		app.init_resource::<LodGenerateBudget<M>>()
 			.init_resource::<LodGenerateTimeBudget>()
 			.init_resource::<LodGenerateQueue<T>>()
 			.init_resource::<LodGenerateKeepRegion<M>>()
@@ -545,5 +557,19 @@ mod tests {
 		assert_eq!(jobs.active(), 1);
 		assert!(queue.contains(&Id::from_cell(region(0.0, 0.0, 1.0, 1.0))));
 		assert!(!queue.contains(&Id::from_cell(region(250.0, 0.0, 251.0, 1.0))));
+	}
+
+	#[test]
+	fn clear_releases_job_tickets() {
+		let jobs = LodJobCounter::default();
+		let mut queue = LodGenerateQueue::<()>::default();
+		assert!(queue.enqueue(Id::from_cell(region(0.0, 0.0, 1.0, 1.0))));
+		jobs.begin();
+		assert!(queue.enqueue(Id::from_cell(region(2.0, 0.0, 3.0, 1.0))));
+		jobs.begin();
+		assert_eq!(jobs.active(), 2);
+		jobs.end_n(queue.clear());
+		assert_eq!(jobs.active(), 0);
+		assert!(queue.is_empty());
 	}
 }

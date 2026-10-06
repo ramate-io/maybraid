@@ -4,9 +4,9 @@ use std::collections::HashMap;
 
 use bevy::prelude::*;
 use bevy::ui::widget::ViewportNode;
+use character_creation_menus::{CharacterMenu, MenuEvent};
+use character_items::{Inventory, InventoryItem};
 use character_ui_menu::{AssetThumbnailDisplay, MenuComponent};
-use crozon_character_items::{Inventory, InventoryItem};
-use crozon_character_ui_menus::{CharacterMenu, MenuEvent};
 use maybraid_character_ui_menu_renderer::{
 	find_overlay_node, overlay_closes_on_pick, render_overlay_body, spawn_overlay_shell,
 	CharacterHudSystems, CharacterMenuEvent, MaybraidCharacterMenuRendererPlugin, MaybraidMenuSink,
@@ -52,7 +52,7 @@ impl Default for CharacterMenuState {
 }
 
 impl CharacterMenuState {
-	pub fn for_create(items: Vec<crozon_character_items::InventoryItem>) -> Self {
+	pub fn for_create(items: Vec<character_items::InventoryItem>) -> Self {
 		Self(CharacterMenu::for_create(items))
 	}
 }
@@ -547,7 +547,7 @@ fn ensure_skill_map_menu_previews(
 fn skill_map_specs_to_preview(
 	inventory: Option<&Inventory>,
 	spin: Option<&SpinRevealItems>,
-) -> Vec<crozon_character_items::SkillMapSpec> {
+) -> Vec<character_items::SkillMapSpec> {
 	let mut specs = Vec::new();
 	if let Some(inventory) = inventory {
 		specs.extend(inventory.items.iter().filter_map(InventoryItem::skill_map_spec));
@@ -712,8 +712,8 @@ fn on_short_text_change(
 #[cfg(test)]
 mod tests {
 	use super::{save_chrome, CharacterEditBaseline};
-	use crozon_character_items::Inventory;
-	use crozon_character_ui_menus::CharacterMenu;
+	use character_creation_menus::CharacterMenu;
+	use character_items::Inventory;
 
 	#[test]
 	fn save_chrome_create_and_dirty_saved() {

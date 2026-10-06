@@ -8,12 +8,13 @@ mod hit;
 mod identity;
 mod intent;
 mod locomotion;
+mod movement;
 mod separation;
 mod spawn;
 mod stance;
 
 use bevy::prelude::*;
-use crozon_characters::CharacterMotionSystems;
+use characters::CharacterMotionSystems;
 use maybraid_character_controller::CharacterControlSystems;
 
 pub use body::{
@@ -23,10 +24,10 @@ pub use body::{
 	Sprinting, WalkableGround,
 };
 pub use buoyancy::{Buoyant, Wading, WaterRegime};
+pub use characters::{HeadCapsule, HitCapsule};
 pub use contact::{
 	motor_traction_bundle, register_motor_traction_physics, MotorTraction, MotorTractionHooks,
 };
-pub use crozon_characters::{HeadCapsule, HitCapsule};
 pub use hit::HitVolume;
 pub use identity::{
 	CameraFollow, Npc, Player, PlayerCameraAim, PlayerCameraPose, PlayerCapsule, PlayerLook,
@@ -126,6 +127,7 @@ impl Plugin for PlayerPlugin {
 					.in_set(PlayerSystems::Locomotion),
 			);
 		flinch::configure_flinch(app);
+		movement::configure_movement(app);
 	}
 }
 

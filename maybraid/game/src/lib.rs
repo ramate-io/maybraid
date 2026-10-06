@@ -13,16 +13,19 @@ use crate::shell::{
 	apply_pause_character_look, apply_shell_look, attach_preview_camera, despawn_loading_backdrop,
 	detach_preview_camera, enter_characters, enter_home, enter_loading_world, enter_world,
 	enter_world_menu, exit_world_menu, restore_stashed_world_camera, spawn_loading_backdrop,
-	stamp_preview_render_layers,
+	stamp_preview_render_layers, ShellRoute,
 };
 use bevy::prelude::*;
 use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
+use maybraid_game_mode_training_ground::{
+	TrainingEnemyMarkersEnabled, TrainingRound, TrainingSessionSet,
+};
 use maybraid_input::MenuNavPad;
 use maybraid_menu_controller::MenuControllerPlugin;
 use maybraid_world::{
-	resume_discovery_from_saved_waypoints, InventoryEditCameraFollow, PlayerPhysicsEnabled,
-	PlayerSpawnXz, ShadowQuality, TerrainStreamingEnabled, TrainingEnemyMarkersEnabled,
-	TrainingRound, WorldGameplayEnabled, WorldMobHudEnabled, WorldPlayerLoadout, WorldPlugin,
+	reset_first_spawn_offer, resume_discovery_from_saved_waypoints, Durham,
+	InventoryEditCameraFollow, PlayerPhysicsEnabled, PlayerSpawnXz, ShadowQuality,
+	TerrainStreaming, WorldGameplayEnabled, WorldMobHudEnabled, WorldPlayerLoadout, WorldPlugin,
 	WorldSceneryVisible, WorldSurfaceSet,
 };
 use menu_components::{
@@ -51,16 +54,14 @@ impl Plugin for GamePlugin {
 			.insert_resource(WorldGameplayEnabled(false))
 			.insert_resource(InventoryEditCameraFollow(false))
 			.insert_resource(PlayerPhysicsEnabled(false))
-			.insert_resource(TerrainStreamingEnabled(false))
+			.insert_resource(TerrainStreaming::<Durham>::new(false))
 			.insert_resource(WorldSceneryVisible(false))
 			.insert_resource(ClearColor(MENU_CLEAR))
 			.init_resource::<PlaySession>()
 			.init_state::<GameFlow>()
 			.add_sub_state::<WorldPause>()
 			.add_plugins((
-				maybraid_game_mode_discover::DiscoverPlugin,
 				maybraid_game_mode_reliquary::ReliquaryPlugin,
-				maybraid_game_mode_training_ground::TrainingGroundPlugin,
 				HomeScreenPlugin,
 				TrainingScreenPlugin,
 				InGameScreenPlugin,
@@ -97,6 +98,7 @@ impl Plugin for GamePlugin {
 					crate::load::arm_first_load,
 					crate::training::begin_training_round.before(load_active_player_loadout),
 					load_active_player_loadout.before(resume_discovery_from_saved_waypoints),
+					reset_first_spawn_offer,
 					resume_discovery_from_saved_waypoints,
 				),
 			)
@@ -135,7 +137,9 @@ impl Plugin for GamePlugin {
 						.before(LoadingScreenSystems::Apply),
 					route_home_choice.run_if(in_state(GameFlow::Home)),
 					crate::training::start_training_session.run_if(in_state(GameFlow::Home)),
-					crate::training::reload_training_round.run_if(in_state(GameFlow::World)),
+					crate::training::reload_training_round
+						.run_if(in_state(GameFlow::World))
+						.after(TrainingSessionSet::LifeEnded),
 					home_settings_back
 						.after(TextMenuSystems::Navigate)
 						.run_if(in_state(GameFlow::Home)),
@@ -166,7 +170,7 @@ fn starting_discovery_at_override(spawn: Res<PlayerSpawnXz>) -> bool {
 
 fn boot_shell(
 	spawn: Res<PlayerSpawnXz>,
-	mut flow: ResMut<NextState<GameFlow>>,
+	mut route: ShellRoute,
 	mut mode: ResMut<GameMode>,
 	mut commands: Commands,
 	screens: Query<Entity, With<MenuScreen>>,
@@ -175,7 +179,7 @@ fn boot_shell(
 		mode.label = String::from("Discovery");
 		commands.insert_resource(PlaySession::Discovery);
 		enter_loading_world(commands, screens);
-		flow.set(GameFlow::LoadingWorld);
+		route.enter(GameFlow::LoadingWorld, PlaySession::Discovery);
 		return;
 	}
 	enter_home(commands);
@@ -187,11 +191,11 @@ fn load_active_player_loadout(
 	spawn: Option<Res<TrainingSpawn>>,
 	round: Option<Res<TrainingRound>>,
 	active: Option<Res<ActiveCharacter>>,
-	save_root: Res<crozon_character_persist::SaveRoot>,
+	save_root: Res<character_persist::SaveRoot>,
 ) {
 	commands.remove_resource::<WorldPlayerLoadout>();
 	if let Some(trainee) =
-		crate::training::training_trainee(*session, spawn.as_deref(), round.as_deref())
+		crate::training::session_trainee(*session, spawn.as_deref(), round.as_deref())
 	{
 		commands.insert_resource(trainee);
 		return;
@@ -211,17 +215,18 @@ fn load_active_player_loadout(
 }
 
 fn read_player_loadout(
-	save_root: &crozon_character_persist::SaveRoot,
-	id: crozon_character_persist::CharacterId,
-) -> Result<WorldPlayerLoadout, crozon_character_persist::PersistError> {
-	let model = crozon_character_model_user::load(save_root, id)?;
-	let inventory = crozon_inventory_user::load(save_root, id)?;
+	save_root: &character_persist::SaveRoot,
+	id: character_persist::CharacterId,
+) -> Result<WorldPlayerLoadout, character_persist::PersistError> {
+	let model = character_model_user::load(save_root, id)?;
+	let inventory = character_inventory_user::load(save_root, id)?;
 	Ok(WorldPlayerLoadout::new(id.to_hex(), model.appearance, inventory).with_name(model.name))
 }
 
 fn route_home_choice(
 	mut choices: MessageReader<HomeMenuChoice>,
-	mut flow: ResMut<NextState<GameFlow>>,
+	current: Res<PlaySession>,
+	mut route: ShellRoute,
 	mut mode: ResMut<GameMode>,
 	mut commands: Commands,
 ) {
@@ -232,10 +237,10 @@ fn route_home_choice(
 		HomeRoute::World { session } => {
 			commands.insert_resource(session);
 			mode.label = String::from(session.label());
-			flow.set(GameFlow::LoadingWorld);
+			route.enter(GameFlow::LoadingWorld, session);
 		}
 		HomeRoute::TrainingSetup => request_show_training(&mut commands),
-		HomeRoute::Characters => flow.set(GameFlow::Characters),
+		HomeRoute::Characters => route.enter(GameFlow::Characters, *current),
 		HomeRoute::Settings => request_show_in_game_settings(&mut commands),
 		HomeRoute::Unimplemented => {}
 	}
@@ -243,7 +248,8 @@ fn route_home_choice(
 
 fn route_in_game_choice(
 	mut choices: MessageReader<InGameMenuChoice>,
-	mut flow: ResMut<NextState<GameFlow>>,
+	session: Res<PlaySession>,
+	mut route: ShellRoute,
 	mut commands: Commands,
 	mut edits: MessageWriter<RequestEditCharacter>,
 	active: Option<Res<ActiveCharacter>>,
@@ -253,7 +259,7 @@ fn route_in_game_choice(
 		return;
 	};
 	match PauseMenuRoute::from_choice(choice) {
-		PauseMenuRoute::Leave => flow.set(GameFlow::Home),
+		PauseMenuRoute::Leave => route.enter(GameFlow::Home, *session),
 		PauseMenuRoute::Settings => request_show_in_game_settings(&mut commands),
 		PauseMenuRoute::Character => {
 			let Some(active) = active else {
@@ -277,7 +283,7 @@ fn route_in_game_choice(
 fn persist_changed_player_inventory(
 	loadout: Option<Res<WorldPlayerLoadout>>,
 	active: Option<Res<ActiveCharacter>>,
-	save_root: Res<crozon_character_persist::SaveRoot>,
+	save_root: Res<character_persist::SaveRoot>,
 ) {
 	let Some(loadout) = loadout else {
 		return;
@@ -291,7 +297,7 @@ fn persist_changed_player_inventory(
 	if !plays_saved_character(Some(&loadout), &active) {
 		return;
 	}
-	if let Err(error) = crozon_inventory_user::save(&save_root, active.id, &loadout.inventory) {
+	if let Err(error) = character_inventory_user::save(&save_root, active.id, &loadout.inventory) {
 		warn!("failed to persist inventory {}: {error}", active.id.to_hex());
 	}
 }
@@ -426,7 +432,8 @@ fn toggle_world_pause(
 }
 
 fn character_back(
-	mut flow: ResMut<NextState<GameFlow>>,
+	session: Res<PlaySession>,
+	mut route: ShellRoute,
 	mut commands: Commands,
 	nav: Res<MenuNavPad>,
 	overlay: Res<ActiveOverlayKey>,
@@ -458,7 +465,7 @@ fn character_back(
 		return;
 	}
 	if !gallery.is_empty() {
-		flow.set(GameFlow::Home);
+		route.enter(GameFlow::Home, *session);
 	}
 }
 
@@ -466,12 +473,12 @@ fn character_back(
 mod tests {
 	use bevy::ecs::system::RunSystemOnce;
 	use bevy::prelude::*;
-	use crozon_character_items::{
+	use character_items::{
 		ClothingMaterial, ClothingMesh, FirearmMesh, Inventory, InventoryItem, ItemColor,
 	};
-	use crozon_character_model_user::CharacterModel;
-	use crozon_character_persist::{CharacterId, SaveRoot};
-	use crozon_characters::CharacterAppearance;
+	use character_model_user::CharacterModel;
+	use character_persist::{CharacterId, SaveRoot};
+	use characters::CharacterAppearance;
 	use menu_playground::ActiveCharacter;
 
 	use crate::{
@@ -479,7 +486,8 @@ mod tests {
 		read_player_loadout, route_home_choice, sync_world_loadout_from_editor, sync_world_shadows,
 		GameFlow, PlaySession,
 	};
-	use maybraid_world::{ShadowQuality, TrainingRound, WorldPlayerLoadout};
+	use maybraid_game_mode_training_ground::TrainingRound;
+	use maybraid_world::{ShadowQuality, WorldPlayerLoadout};
 	use menu_playground::{
 		CharacterEditBaseline, CharacterEditorReturn, CharacterMenuState, EditingCharacter,
 	};
@@ -501,8 +509,8 @@ mod tests {
 		let id = CharacterId(11);
 		let model = CharacterModel::new(id, "Trainee", CharacterAppearance::default());
 		let inventory = Inventory::default();
-		crozon_character_model_user::save(&root, &model)?;
-		crozon_inventory_user::save(&root, id, &inventory)?;
+		character_model_user::save(&root, &model)?;
+		character_inventory_user::save(&root, id, &inventory)?;
 
 		let mut world = World::new();
 		world.insert_resource(PlaySession::Training);
@@ -525,6 +533,7 @@ mod tests {
 		world.init_resource::<Messages<HomeMenuChoice>>();
 		world.write_message(HomeMenuChoice::TrainingGround);
 		world.insert_resource(NextState::<GameFlow>::Unchanged);
+		world.insert_resource(NextState::<layer_stack::ActiveGenerationMode>::Unchanged);
 		world.insert_resource(GameMode::default());
 		world.insert_resource(PlaySession::None);
 		world
@@ -550,7 +559,10 @@ mod tests {
 		world
 			.run_system_once(load_active_player_loadout)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		assert_eq!(world.get_resource::<WorldPlayerLoadout>(), Some(&round.trainee()));
+		assert_eq!(
+			world.get_resource::<WorldPlayerLoadout>(),
+			Some(&crate::training::trainee_loadout(round))
+		);
 		Ok(())
 	}
 
@@ -559,9 +571,9 @@ mod tests {
 		let dir = tempfile::tempdir()?;
 		let root = SaveRoot::at(dir.path());
 		let id = CharacterId(7);
-		crozon_inventory_user::save(&root, id, &Inventory::default())?;
+		character_inventory_user::save(&root, id, &Inventory::default())?;
 
-		let trainee = TrainingRound::new(3).trainee();
+		let trainee = crate::training::trainee_loadout(TrainingRound::new(3));
 		assert!(!trainee.inventory.items.is_empty());
 		let mut world = World::new();
 		world.insert_resource(root.clone());
@@ -571,7 +583,7 @@ mod tests {
 			.run_system_once(persist_changed_player_inventory)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 
-		assert_eq!(crozon_inventory_user::load(&root, id)?, Inventory::default());
+		assert_eq!(character_inventory_user::load(&root, id)?, Inventory::default());
 		Ok(())
 	}
 
@@ -582,8 +594,8 @@ mod tests {
 		let id = CharacterId(42);
 		let model = CharacterModel::new(id, "Active", CharacterAppearance::default());
 		let inventory = Inventory::default();
-		crozon_character_model_user::save(&root, &model)?;
-		crozon_inventory_user::save(&root, id, &inventory)?;
+		character_model_user::save(&root, &model)?;
+		character_inventory_user::save(&root, id, &inventory)?;
 
 		let loadout = read_player_loadout(&root, id)?;
 		assert_eq!(loadout.key, id.to_hex());
@@ -599,8 +611,8 @@ mod tests {
 		let root = SaveRoot::at(dir.path());
 		let id = CharacterId(7);
 		let model = CharacterModel::new(id, "Live", CharacterAppearance::default());
-		crozon_character_model_user::save(&root, &model)?;
-		crozon_inventory_user::save(&root, id, &Inventory::default())?;
+		character_model_user::save(&root, &model)?;
+		character_inventory_user::save(&root, id, &Inventory::default())?;
 
 		let bag = Inventory::with_starter_outfit(vec![
 			InventoryItem::clothing(
@@ -622,7 +634,7 @@ mod tests {
 			.run_system_once(persist_changed_player_inventory)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 
-		let loaded = crozon_inventory_user::load(&root, id)?;
+		let loaded = character_inventory_user::load(&root, id)?;
 		assert_eq!(loaded.items.len(), bag.items.len());
 		assert_eq!(loaded.clothing, bag.clothing);
 		assert_eq!(loaded.weapons, bag.weapons);

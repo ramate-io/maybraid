@@ -2,7 +2,7 @@
 
 use crate::FollowCamera;
 use bevy::prelude::*;
-use crozon_characters::CharacterHeading;
+use characters::CharacterHeading;
 use maybraid_character_controller::CharacterIntent;
 use player::{CameraFollow, PlayerLook, PlayerVisual, PlayerYawOwner};
 use std::f32::consts::{FRAC_PI_2, PI};
@@ -11,11 +11,17 @@ use std::f32::consts::{FRAC_PI_2, PI};
 #[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct CameraPovLocked(pub bool);
 
+/// When `true`, look / focus / ADS do not drive the follow camera (world map).
+#[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct CameraLookSuppressed(pub bool);
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum CameraPov {
 	#[default]
 	ThirdPerson,
 	FirstPerson,
+	/// North-up overhead. Same `Camera3d` as orbit / hip-fire.
+	Map,
 }
 
 impl CameraPov {
@@ -23,7 +29,16 @@ impl CameraPov {
 		*self = match self {
 			Self::ThirdPerson => Self::FirstPerson,
 			Self::FirstPerson => Self::ThirdPerson,
+			Self::Map => Self::Map,
 		};
+	}
+
+	pub fn is_map(self) -> bool {
+		self == Self::Map
+	}
+
+	pub fn is_first_person(self) -> bool {
+		self == Self::FirstPerson
 	}
 }
 
@@ -37,14 +52,81 @@ pub struct CameraController {
 	/// Iron ADS (LB / middle mouse). Pose only; FOV stays [`crate::FollowCamera::sight_fov`].
 	pub ads: f32,
 	pub focus_blend: f32,
+	/// XZ the overhead map looks at. Follow writes this pose when [`CameraPov::Map`].
+	pub map_focus: Vec2,
+	pub map_height: f32,
+	pub map_ground_y: f32,
+	/// POV restored when leaving [`CameraPov::Map`].
+	pub resume_pov: CameraPov,
+}
+
+impl Default for CameraController {
+	fn default() -> Self {
+		Self {
+			yaw: 0.0,
+			pitch: 0.0,
+			pov: CameraPov::ThirdPerson,
+			focus: 0.0,
+			ads: 0.0,
+			focus_blend: 0.0,
+			map_focus: Vec2::ZERO,
+			map_height: 420.0,
+			map_ground_y: 0.0,
+			resume_pov: CameraPov::ThirdPerson,
+		}
+	}
+}
+
+impl CameraController {
+	pub fn enter_map(&mut self, focus: Vec2, height: f32, ground_y: f32) {
+		if !self.pov.is_map() {
+			self.resume_pov = self.pov;
+		}
+		self.pov = CameraPov::Map;
+		self.map_focus = focus;
+		self.map_height = height.max(1.0);
+		self.map_ground_y = ground_y;
+		self.focus = 0.0;
+		self.ads = 0.0;
+	}
+
+	pub fn exit_map(&mut self) {
+		if self.pov.is_map() {
+			self.pov = match self.resume_pov {
+				CameraPov::Map => CameraPov::ThirdPerson,
+				resume => resume,
+			};
+		}
+	}
+
+	/// New body after death. Leave the map and start in third person.
+	pub fn begin_life(&mut self) {
+		self.exit_map();
+		self.pov = CameraPov::ThirdPerson;
+		self.resume_pov = CameraPov::ThirdPerson;
+		self.focus = 0.0;
+		self.ads = 0.0;
+		self.focus_blend = 0.0;
+		self.pitch = -0.12;
+	}
 }
 
 pub(crate) fn apply_look_intents(
 	mouse: Res<ButtonInput<MouseButton>>,
 	locked: Option<Res<CameraPovLocked>>,
+	suppressed: Option<Res<CameraLookSuppressed>>,
 	mut intents: MessageReader<CharacterIntent>,
-	mut cameras: Query<(&mut CameraController, &FollowCamera, Option<&Projection>), With<Camera3d>>,
+	mut cameras: Query<
+		(&mut CameraController, &FollowCamera, Option<&Projection>),
+		With<FollowCamera>,
+	>,
 ) {
+	if suppressed.is_some_and(|suppressed| suppressed.0)
+		|| cameras.iter().any(|(controller, _, _)| controller.pov.is_map())
+	{
+		for _ in intents.read() {}
+		return;
+	}
 	let mut focus = f32::from(mouse.pressed(MouseButton::Right));
 	let mut ads = f32::from(mouse.pressed(MouseButton::Middle));
 	let mut swap_pov = false;
@@ -83,7 +165,7 @@ pub(crate) fn apply_look_intents(
 }
 
 pub(crate) fn sync_player_look(
-	cameras: Query<&CameraController, With<Camera3d>>,
+	cameras: Query<&CameraController, With<FollowCamera>>,
 	mut looks: Query<&mut PlayerLook, With<CameraFollow>>,
 ) {
 	let Ok(controller) = cameras.single() else {
@@ -92,13 +174,13 @@ pub(crate) fn sync_player_look(
 	for mut look in &mut looks {
 		look.yaw = controller.yaw;
 		look.pitch = controller.pitch;
-		look.first_person = controller.pov == CameraPov::FirstPerson;
+		look.first_person = controller.pov.is_first_person();
 		look.focus = controller.focus.max(controller.ads);
 	}
 }
 
 pub(crate) fn sync_yaw_owner(
-	cameras: Query<&CameraController, With<Camera3d>>,
+	cameras: Query<&CameraController, With<FollowCamera>>,
 	followers: Query<Entity, With<CameraFollow>>,
 	children: Query<&Children>,
 	mut owners: Query<&mut PlayerYawOwner>,
@@ -108,7 +190,7 @@ pub(crate) fn sync_yaw_owner(
 	};
 	let owner = match controller.pov {
 		CameraPov::FirstPerson => PlayerYawOwner::Look,
-		CameraPov::ThirdPerson => PlayerYawOwner::Wish,
+		CameraPov::ThirdPerson | CameraPov::Map => PlayerYawOwner::Wish,
 	};
 	for follower in &followers {
 		set_yaw_owner(&mut owners, follower, owner);
@@ -128,7 +210,7 @@ fn set_yaw_owner(owners: &mut Query<&mut PlayerYawOwner>, entity: Entity, owner:
 
 pub(crate) fn turn_body_with_look(
 	time: Res<Time>,
-	mut cameras: Query<(&mut CameraController, &FollowCamera), With<Camera3d>>,
+	mut cameras: Query<(&mut CameraController, &FollowCamera), With<FollowCamera>>,
 	followers: Query<(), With<CameraFollow>>,
 	mut visuals: Query<
 		(Entity, &mut Transform, &mut CharacterHeading),
@@ -142,7 +224,7 @@ pub(crate) fn turn_body_with_look(
 	let Ok((mut controller, follow)) = cameras.single_mut() else {
 		return;
 	};
-	if controller.pov != CameraPov::FirstPerson {
+	if !controller.pov.is_first_person() {
 		return;
 	}
 	let Ok((entity, mut visual, mut heading)) = visuals.single_mut() else {
@@ -208,6 +290,9 @@ mod tests {
 		assert_eq!(pov, CameraPov::FirstPerson);
 		pov.toggle();
 		assert_eq!(pov, CameraPov::ThirdPerson);
+		let mut map = CameraPov::Map;
+		map.toggle();
+		assert_eq!(map, CameraPov::Map);
 	}
 
 	#[test]
@@ -222,14 +307,7 @@ mod tests {
 		world.spawn((
 			Camera3d::default(),
 			FollowCamera::default(),
-			CameraController {
-				yaw: 0.0,
-				pitch: 0.0,
-				pov: CameraPov::ThirdPerson,
-				focus: 0.0,
-				ads: 0.0,
-				focus_blend: 0.0,
-			},
+			CameraController { pov: CameraPov::ThirdPerson, ..default() },
 		));
 		world
 			.run_system_once(|mut writer: MessageWriter<CharacterIntent>| {
@@ -276,7 +354,7 @@ mod tests {
 			Camera3d::default(),
 			FollowCamera::default(),
 			Projection::Perspective(PerspectiveProjection { fov, ..default() }),
-			CameraController { yaw: 0.0, pitch: 0.0, pov, focus: 0.0, ads: 0.0, focus_blend: 0.0 },
+			CameraController { pov, ..default() },
 		));
 		world.write_message(CharacterIntent::Look(Vec2::X));
 		world
@@ -313,18 +391,7 @@ mod tests {
 			.add_systems(Update, apply_look_intents);
 		let camera = app
 			.world_mut()
-			.spawn((
-				Camera3d::default(),
-				CameraController {
-					yaw: 0.0,
-					pitch: 0.0,
-					pov: CameraPov::ThirdPerson,
-					focus: 0.0,
-					ads: 0.0,
-					focus_blend: 0.0,
-				},
-				FollowCamera::default(),
-			))
+			.spawn((Camera3d::default(), CameraController::default(), FollowCamera::default()))
 			.id();
 		app.world_mut().write_message(CharacterIntent::Focus(1.0));
 		app.update();

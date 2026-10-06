@@ -3,7 +3,7 @@ use bevy::text::FontSize;
 use damage::Downed;
 use evasion_intelligence::{EvasionActuator, EvasionIntelligenceUser};
 use game_commands::ui::{GameCommandStatusText, GameCommandUiConfig};
-use maybraid_mobs::{MobKind, MobScene, DEFAULT_MOB_HIGH_RADIUS};
+use mob_scenes::{MobKind, MobScene, DEFAULT_MOB_HIGH_RADIUS};
 use player::Npc;
 use threat_management_intelligence::{ThreatManagementIntelligence, ThreatTactic};
 
@@ -19,7 +19,7 @@ pub fn ui_config() -> GameCommandUiConfig {
 		empty_console_text: "Console: `mode free`, `set-character`, `stats mesh`, `stats vsync`, `help`".into(),
 		root_background: Color::srgba(0.08, 0.16, 0.22, 0.82),
 		controls_hint:
-			"L-stick move — R-stick look — hold RB / V and flick a stick to throw the skill map — L3 / Shift sprint — R3 POV — A jump — B tap squat / hold prone — LT optic — LB irons — D-Pad / [ ] cycle map — RT use — X / E pick up — Tab drop — RT+X power — / commands"
+			"L-stick move — R-stick look — M / D-Pad up overhead map — D-Pad down close — hold RB / V and flick a stick to throw the skill map — L3 / Shift sprint — R3 POV — A jump — B tap squat / hold prone — LT optic — LB irons — D-Pad left/right / [ ] cycle map — RT use — X / E pick up — Tab drop — RT+X power — / commands"
 				.into(),
 	}
 }
@@ -101,8 +101,8 @@ pub(crate) fn sync_command_status_text(
 	mut status: ResMut<GameCommandStatusText>,
 	camera: Query<&GlobalTransform, With<Camera3d>>,
 	hosts: Query<(&MobScene, &GlobalTransform)>,
-	furniture: Query<&furniture_assemblies::FurnitureCell>,
-	furniture_index: Option<Res<furniture_assemblies::FurnitureIndex>>,
+	furniture: Query<&maputo::FurnitureCell>,
+	furniture_index: Option<Res<maputo::FurnitureIndex>>,
 ) {
 	let mut nearest = ranked_hosts(&camera, &hosts);
 	nearest.truncate(4);

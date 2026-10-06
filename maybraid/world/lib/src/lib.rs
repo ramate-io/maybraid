@@ -4,7 +4,8 @@
 //! selection generate. Canopy bump-outs occupy the 1–5 km present keep and
 //! clone Durham fine-cell mesh handles. Vegetation LOD bullseye / lattice
 //! cover the grove fill ring. Urbanization hopscotch streams at the same
-//! 1 km / 3 km rings without re-registering Durham (`TerrainPlugin` owns terrain).
+//! 1 km / 3 km rings without re-registering Durham (base terrain generation owns
+//! the fill; raw present is a separate plugin, off until Training).
 //! Painted furniture is a generate pass over Richmond High slots, presented as
 //! flattened 50 m cell hosts in a neighborhood around the camera.
 
@@ -13,39 +14,36 @@ pub mod commands;
 mod control;
 mod crate_loot;
 mod intelligence;
-mod material_lib;
-mod mobs;
+mod map_view;
 mod pitch;
 mod player_lifecycle;
 mod player_position;
 mod poi;
 mod start;
 mod stash;
-mod training;
-mod training_markers;
-mod training_plaza;
 mod ui;
 mod vsync;
 mod weapon;
+mod world_layers;
 
-pub use chico_vegetation_on_terrain_playground::{PlayerPhysicsEnabled, PlayerSpawnXz};
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use control::{
 	InventoryEditCameraFollow, WorldGameplayEnabled, WorldSceneryVisible, WorldSurfaceReady,
 	WorldSurfaceSet,
 };
-pub use durham_terrain_models::{terrain_streaming_enabled, TerrainStreamingEnabled};
+pub use durham::Durham;
 pub use game_commands::command::PendingStartupCommand;
 pub use intelligence::WorldIntelligencePlugin;
 pub use lod::LodJobCounter;
-pub use material_lib::{WorldMaterialLib, WorldMaterialRefPlugin};
+pub use map_view::{WorldMapView, WorldMapViewPlugin};
 pub use maybraid_sky::{
 	ShadowQuality, SkyClock, SkyCommand, SKY_BLUE, SKY_CLEAR, SKY_HORIZON, SKY_NADIR, SKY_ZENITH,
 	SUN_COLOR, SUN_ILLUMINANCE,
 };
-pub use mobs::WorldMobsPlugin;
 pub use player_camera::{CameraPov, CameraPovLocked};
-pub use player_lifecycle::{WorldPlayerLifecyclePlugin, WorldPlayerRespawnConfig};
+pub use player_lifecycle::{
+	reset_first_spawn_offer, WorldPlayerLifecyclePlugin, WorldPlayerRespawnConfig,
+};
 pub use player_position::{
 	resume_discovery_from_saved_waypoints, PlayerPositionPlugin, PlayerPositionWaypoints,
 };
@@ -58,30 +56,27 @@ pub use stash::{
 	spawn_exploded_stashes, spawn_world_stash, StashDisplayedItem, StashPolicy, WorldStash,
 	WorldStashPlugin, WorldStashSettings, DEFAULT_CLAIM_RADIUS, DEFAULT_LOOT_SECS,
 };
-pub use training::{TrainingGrounds, TrainingLifeEnded, TrainingMap, TrainingRound};
-pub use training_markers::TrainingEnemyMarkersEnabled;
-pub use training_plaza::TrainingPlazaMounted;
+pub use terrain_layer_model::{terrain_streaming, TerrainStreaming};
 pub use ui::WorldMobHudEnabled;
 pub use vsync::{default_window_present_mode, RequestVsyncToggle, VSYNC_TOGGLE_KEY};
 pub use weapon::WorldPlayerLoadout;
+pub use world_layers::WorldLayersPlugin;
+pub use world_materials::{WorldMaterialLib, WorldMaterialRefPlugin};
+pub use world_player::{PlayerPhysicsEnabled, PlayerSpawnXz};
 
 use avian3d::prelude::{CoefficientCombine, Friction};
 use bevy::prelude::*;
-use chico_vegetation_on_terrain_playground::{
-	CharacterCameraFollowEnabled, CharacterLocomotion, CharacterSpecies, PadMovementEnabled,
-	PlayerControlSystems, PlaygroundConfig as VegetationPlaygroundConfig, PlaygroundDiag,
-	PlaygroundMode, PlaygroundTimingPlugin, RequestSetCharacter, VegetationOnTerrainPlugin,
-	VegetationPlayerMotor,
-};
+use character_ragdoll::{CharacterRagdollPlugin, CharacterRagdollTargets};
+use characters::{CharacterMotionSystems, DrawTerrainPitchProbes};
 use combat_hud::CombatHudPlugin;
-use crozon_character_ragdoll::{CharacterRagdollPlugin, CharacterRagdollTargets};
-use crozon_characters::{CharacterMotionSystems, DrawTerrainPitchProbes};
-use durham_terrain_models::{Durham, TerrainFrictionConfig, TerrainPlugin};
-use furniture_shaders::FurnitureShadersPlugin;
+use durham::TerrainFrictionConfig;
+use firearms::EnergyMaterialPlugin;
 use game_commands::command::{GameCommandPlugin, TextEntryFocus};
 use game_commands::ui::GameCommandDrawerConfig;
 use lod::{Bullseye, OpenLattice};
 use maybraid_character_controller::{CharacterControlSystems, CharacterControllerPlugin};
+use maybraid_game_mode_discover::DiscoveryPlayerPlugin;
+use maybraid_game_mode_training_ground::TrainingGroundPlugin;
 use maybraid_input::{VirtualPadConfig, VirtualPadPlugin};
 use maybraid_skill_map::{SkillMapPlugin, SkillMapSystems};
 use maybraid_sky::SkyDomePlugin;
@@ -90,9 +85,10 @@ use player::{
 	register_motor_traction_physics, PlayerPlugin, PlayerPresentationPlugin, PlayerSystems,
 };
 use player_camera::{PlayerCameraPlugin, PlayerCameraSystems};
-use richmond_building_physics::BuildingWalkColliderPlugin;
-use richmond_developments_on_terrain_playground::{
-	DevelopmentsOnTerrainPlugin, PlaygroundConfig as DevelopmentsPlaygroundConfig,
+use world_player::{
+	CharacterCameraFollowEnabled, CharacterLocomotion, CharacterSpecies, MeshStatsPlugin,
+	PadMovementEnabled, PlayerControlSystems, PlaygroundDiag, PlaygroundMode,
+	PlaygroundTimingPlugin, RequestSetCharacter, VegetationHostPlugin, VegetationPlayerMotor,
 };
 
 /// Steepest slope the controlled character can drive uphill.
@@ -159,9 +155,8 @@ impl Plugin for WorldPlugin {
 			.insert_resource(player::CharacterLocomotion { max_slope_angle: WORLD_MAX_SLOPE_ANGLE })
 			.insert_resource(TerrainFrictionConfig(WORLD_TERRAIN_FRICTION))
 			.insert_resource(WORLD_TERRAIN_PITCH_GIZMOS)
-			.add_plugins(FurnitureShadersPlugin)
 			.add_plugins(WorldMaterialRefPlugin)
-			.add_plugins(TerrainPlugin::<Durham>::playable_world())
+			.add_plugins(EnergyMaterialPlugin)
 			.add_plugins(VirtualPadPlugin::new(VirtualPadConfig {
 				debug_overlay: self.input_debug_enabled,
 				..default()
@@ -170,33 +165,18 @@ impl Plugin for WorldPlugin {
 			.add_plugins(PlayerPresentationPlugin)
 			.add_plugins(PlayerCameraPlugin)
 			.add_plugins(WORLD_COMBAT_HUD)
-			.add_plugins(VegetationOnTerrainPlugin {
-				config: VegetationPlaygroundConfig::world_defaults(),
-				commands: false,
-				register_forest_lod: false,
-				register_bump_out_lod: false,
-				register_camera: false,
-				register_terrain_pitch: false,
-				own_terrain: false,
-			})
+			.add_plugins(VegetationHostPlugin { register_camera: false })
+			.add_plugins(MeshStatsPlugin)
 			.insert_resource(CharacterRagdollTargets { players: true, npcs: true, unmarked: false })
 			.add_plugins(CharacterRagdollPlugin)
-			// Urbanization stream only — `TerrainPlugin` already owns Durham / TerrainEntryStore.
-			.add_plugins(DevelopmentsOnTerrainPlugin {
-				config: DevelopmentsPlaygroundConfig::world_defaults(),
-				commands: false,
-				own_terrain: false,
-				register_development_forest_lod: true,
-			});
-		if !app.is_plugin_added::<BuildingWalkColliderPlugin>() {
-			app.add_plugins(BuildingWalkColliderPlugin);
-		}
-		app.add_plugins(WorldMobsPlugin)
+			.add_plugins(WorldLayersPlugin)
+			.add_plugins((DiscoveryPlayerPlugin, TrainingGroundPlugin))
 			.add_plugins(WorldIntelligencePlugin)
 			.add_plugins(WeatherPlugin)
 			.add_plugins(SkillMapPlugin)
 			.insert_resource(maybraid_skill_map::SkillMapEnabled(false))
 			.add_plugins(WorldPoiPlugin)
+			.add_plugins(WorldMapViewPlugin)
 			.add_plugins(WorldPlayerLifecyclePlugin)
 			.add_plugins(WorldStashPlugin)
 			.add_plugins(PlayerPositionPlugin)
@@ -207,7 +187,6 @@ impl Plugin for WorldPlugin {
 			.init_resource::<InventoryEditCameraFollow>()
 			.init_resource::<WorldSurfaceReady>()
 			.init_resource::<WorldSceneryVisible>()
-			.add_plugins(training::TrainingGroundPlugin)
 			.insert_resource(WorldMobHudEnabled::from_debug_chrome(self.debug_chrome))
 			.insert_resource(Bullseye { inner: 50.0, outer: WORLD_BULLSEYE_OUTER_M })
 			.insert_resource(OpenLattice {
@@ -248,6 +227,7 @@ impl Plugin for WorldPlugin {
 					control::sync_skill_map_enabled.before(SkillMapSystems::Spawn),
 					control::apply_intents_to_movement
 						.after(CharacterControlSystems)
+						.after(map_view::WorldMapSet::Toggle)
 						.after(PlayerSystems::Intent)
 						.before(PlayerSystems::Body)
 						.before(PlayerControlSystems),

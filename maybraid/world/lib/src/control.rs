@@ -1,10 +1,7 @@
 //! Apply [`CharacterIntent`] to the vegetation capsule / camera-relative wish.
 
 use bevy::prelude::*;
-use chico_vegetation_on_terrain_playground::{
-	MoveWish, MovementAction, Player, PlayerPhysicsEnabled, PlayerSpawnXz, PlaygroundMode,
-};
-use durham_terrain_models::{
+use durham::{
 	terrain_collider_covers_xz, CascadeChunk, TerrainCellLayout, TerrainEntryStore,
 	TerrainTrimeshCollider,
 };
@@ -19,6 +16,11 @@ use player::{
 	Wading,
 };
 use player_camera::CameraController;
+use world_player::{
+	MoveWish, MovementAction, Player, PlayerPhysicsEnabled, PlayerSpawnXz, PlaygroundMode,
+};
+
+use crate::map_view::WorldMapView;
 
 /// When `false`, world movement / POV intents are ignored (menus, pause overlay).
 #[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
@@ -53,7 +55,7 @@ pub struct WorldSurfaceReady(pub bool);
 pub struct WorldSurfaceSet;
 
 pub(crate) fn update_world_surface_ready(
-	streaming: Res<durham_terrain_models::TerrainStreamingEnabled>,
+	streaming: Res<terrain_layer_model::TerrainStreaming<durham::Durham>>,
 	store: Res<TerrainEntryStore>,
 	layout: Res<TerrainCellLayout>,
 	spawn: Res<PlayerSpawnXz>,
@@ -62,8 +64,8 @@ pub(crate) fn update_world_surface_ready(
 	mut ready: ResMut<WorldSurfaceReady>,
 ) {
 	// Menu shells keep streaming off. Leave the ready bit alone; Training
-	// unveils from this same column once the FinePatch collider exists.
-	if !streaming.0 {
+	// unveils from this same column once a padded FinePatch collider exists.
+	if !streaming.enabled {
 		return;
 	}
 	let xz = discovery_xz(&spawn, &players, &layout);
@@ -101,9 +103,10 @@ pub(crate) fn sync_combat_hud_visible(
 pub(crate) fn sync_skill_map_enabled(
 	gameplay: Res<WorldGameplayEnabled>,
 	text_focus: Res<TextEntryFocus>,
+	map: Option<Res<WorldMapView>>,
 	mut enabled: ResMut<SkillMapEnabled>,
 ) {
-	let next = gameplay.0 && !text_focus.0;
+	let next = gameplay.0 && !text_focus.0 && !map.is_some_and(|map| map.open);
 	if enabled.0 != next {
 		enabled.0 = next;
 	}
@@ -113,6 +116,7 @@ pub(crate) fn apply_intents_to_movement(
 	mode: Res<PlaygroundMode>,
 	text_focus: Res<TextEntryFocus>,
 	gameplay: Res<WorldGameplayEnabled>,
+	map: Option<Res<WorldMapView>>,
 	mut commands: Commands,
 	mut intents: MessageReader<CharacterIntent>,
 	cameras: Query<&CameraController, With<Camera3d>>,
@@ -120,7 +124,11 @@ pub(crate) fn apply_intents_to_movement(
 	mut player_wishes: Query<(Entity, &mut PlayerMoveWish, Has<Player>), With<CharacterController>>,
 	mut movement: MessageWriter<MovementAction>,
 ) {
-	if !gameplay.0 || *mode != PlaygroundMode::Character || text_focus.0 {
+	if !gameplay.0
+		|| *mode != PlaygroundMode::Character
+		|| text_focus.0
+		|| map.is_some_and(|map| map.open)
+	{
 		for _ in intents.read() {}
 		for mut wish in &mut wishes {
 			wish.0 = Vec3::ZERO;
@@ -305,7 +313,7 @@ pub(crate) fn strip_world_player_motor(commands: &mut Commands, body: Entity) {
 mod tests {
 	use super::*;
 	use bevy::ecs::system::RunSystemOnce;
-	use durham_terrain_models::{terrain_collider_covers_xz, CascadeChunk};
+	use durham::{terrain_collider_covers_xz, CascadeChunk};
 
 	#[test]
 	fn surface_ready_requires_local_column() {

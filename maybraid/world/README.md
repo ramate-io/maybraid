@@ -23,4 +23,4 @@ cargo run -p maybraid-world-playground
 In-game: `/` console, `Y` or `F1` drawer. Character: WASD, mouse look, Space jump.
 `mode free` restores the fly camera. FPS is on-screen (toggle with `stats fps`).
 
-A/B the forest against tiled groves through `VegetationOnTerrainPlugin` (`/forest` vs `/grove`) in the world playground.
+Forest stream knobs live on each mode's `VegetationLayerConfig`; Training only changes the stream radius.

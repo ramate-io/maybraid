@@ -2,8 +2,8 @@
 
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, Scene};
-use crozon_character_model_user::list_summaries;
-use crozon_character_persist::SaveRoot;
+use character_model_user::list_summaries;
+use character_persist::SaveRoot;
 use maybraid_menu_controller::MenuController;
 use menu_components::info::description::{set_description_for_menu, TextMenuDescription};
 use menu_components::single_select::text_cursor::TextCursorColumn;

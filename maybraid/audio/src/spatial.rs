@@ -1,7 +1,7 @@
 //! Spatial play API and ECS voice sync.
 
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 use bevy::asset::LoadState;
 use bevy::prelude::*;
@@ -158,7 +158,11 @@ pub struct PendingPlay {
 }
 
 pub fn amplitude_to_db(amplitude: f32) -> f32 {
-	if amplitude <= 1e-6 { -80.0 } else { 20.0 * amplitude.log10() }
+	if amplitude <= 1e-6 {
+		-80.0
+	} else {
+		20.0 * amplitude.log10()
+	}
 }
 
 fn point3(v: Vec3) -> mint::Point3<f32> {
@@ -239,13 +243,7 @@ impl Audio {
 		gain.set_amplitude_ratio(spec.gain * mixer.gain(spec.bus));
 		let Some(spatial) = self.play_buffered(
 			signal,
-			options(
-				spec.position,
-				spec.velocity,
-				listener,
-				self.listener_velocity(),
-				spec.radius,
-			),
+			options(spec.position, spec.velocity, listener, self.listener_velocity(), spec.radius),
 		) else {
 			return;
 		};

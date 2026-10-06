@@ -3,20 +3,21 @@
 use avian3d::prelude::{Collider, ShapeCastConfig, SpatialQuery, SpatialQueryFilter};
 use bevy::core_pipeline::prepass::DepthPrepass;
 use bevy::prelude::*;
-use chico_vegetation_on_terrain_playground::{
-	Player as VegetationPlayer, PlayerSpawnXz, PlaygroundMode, player::holding_elevation,
-};
-use durham_terrain_models::WorldBaseTerrain;
+use durham::WorldBaseTerrain;
 use game_commands::command::TextEntryFocus;
 use lod_avian::PhysicsInteractionLayer;
 use maybraid_input::{PadButton, VirtualPad};
 use player::{CameraFollow, Player};
 use player_camera::{
-	CameraController, CameraPov, CameraPovLocked, FollowCamera, PlayerCameraSystems,
-	spawn_follow_camera,
+	spawn_follow_camera, CameraController, CameraLookSuppressed, CameraPov, CameraPovLocked,
+	FollowCamera, PlayerCameraSystems,
+};
+use world_player::{
+	player::holding_elevation, Player as VegetationPlayer, PlayerSpawnXz, PlaygroundMode,
 };
 
 use crate::control::{InventoryEditCameraFollow, WorldGameplayEnabled};
+use crate::map_view::{WorldMapSet, WorldMapView};
 
 const CAMERA_COLLISION_RADIUS: f32 = 0.18;
 const CAMERA_COLLISION_SKIN: f32 = 0.08;
@@ -78,8 +79,9 @@ pub(crate) fn sync_camera_mode(
 	mode: Res<PlaygroundMode>,
 	gameplay: Res<WorldGameplayEnabled>,
 	inventory_edit: Option<Res<InventoryEditCameraFollow>>,
-	players: Query<(Entity, Has<CameraFollow>), (With<VegetationPlayer>, With<Player>)>,
+	players: Query<(Entity, Has<CameraFollow>), With<VegetationPlayer>>,
 ) {
+	// Map is [`CameraPov::Map`] on the follow camera, not a detached eye.
 	let follow = *mode == PlaygroundMode::Character
 		&& (gameplay.0 || inventory_edit.is_some_and(|edit| edit.0));
 	for (entity, following) in &players {
@@ -93,18 +95,25 @@ pub(crate) fn sync_camera_mode(
 
 pub(crate) fn sync_inventory_edit_look(
 	edit: Res<InventoryEditCameraFollow>,
+	map: Option<Res<WorldMapView>>,
 	mut locked: Option<ResMut<CameraPovLocked>>,
-	mut cameras: Query<&mut CameraController, With<Camera3d>>,
+	mut suppressed: Option<ResMut<CameraLookSuppressed>>,
+	mut cameras: Query<&mut CameraController, With<FollowCamera>>,
 ) {
+	let map_open = map.is_some_and(|map| map.open);
 	if let Some(locked) = locked.as_deref_mut() {
-		if locked.0 != edit.0 {
-			locked.0 = edit.0;
-		}
+		locked.0 = edit.0 || map_open;
 	}
-	if !edit.0 {
+	if let Some(suppressed) = suppressed.as_deref_mut() {
+		suppressed.0 = map_open;
+	}
+	if !edit.0 || map_open {
 		return;
 	}
 	for mut controller in &mut cameras {
+		if controller.pov.is_map() {
+			continue;
+		}
 		controller.pov = CameraPov::ThirdPerson;
 		controller.focus = 0.0;
 		controller.ads = 0.0;
@@ -222,7 +231,9 @@ pub(crate) fn configure(app: &mut App) {
 	app.add_systems(Startup, spawn_world_camera)
 		.add_systems(
 			Update,
-			(sync_camera_mode, sync_inventory_edit_look).before(PlayerCameraSystems::Look),
+			(sync_camera_mode, sync_inventory_edit_look)
+				.after(WorldMapSet::Toggle)
+				.before(PlayerCameraSystems::Look),
 		)
 		.add_systems(
 			Update,
@@ -247,7 +258,7 @@ mod tests {
 	#[test]
 	fn world_camera_setup_spawns_one_shared_gameplay_camera() {
 		let mut app = App::new();
-		app.init_resource::<chico_vegetation_on_terrain_playground::PlayerSpawnXz>();
+		app.init_resource::<world_player::PlayerSpawnXz>();
 		app.add_systems(Startup, spawn_world_camera);
 		app.update();
 		let mut cameras = app
@@ -274,8 +285,8 @@ mod tests {
 	#[test]
 	fn inventory_edit_keeps_follow_while_paused() -> anyhow::Result<()> {
 		use bevy::ecs::system::RunSystemOnce;
-		use chico_vegetation_on_terrain_playground::Player as VegetationPlayer;
 		use player::{CameraFollow, Player};
+		use world_player::Player as VegetationPlayer;
 
 		use crate::InventoryEditCameraFollow;
 

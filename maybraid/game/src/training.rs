@@ -6,10 +6,12 @@
 //! the same map; your own character's moves to a new one.
 
 use bevy::prelude::*;
-use maybraid_world::{TrainingLifeEnded, TrainingRound, WorldPlayerLoadout, WorldSurfaceReady};
+use maybraid_game_mode_training_ground::{training_trainee, TrainingLifeEnded, TrainingRound};
+use maybraid_world::{WorldPlayerLoadout, WorldSurfaceReady};
 use menu_screens::{GameMode, TrainingCharacterChoice, TrainingSpawn};
 
 use crate::flow::{GameFlow, PlaySession};
+use crate::shell::ShellRoute;
 
 pub(crate) fn reset_surface_ready(mut ready: ResMut<WorldSurfaceReady>) {
 	ready.0 = false;
@@ -18,7 +20,7 @@ pub(crate) fn reset_surface_ready(mut ready: ResMut<WorldSurfaceReady>) {
 /// Training setup pick: start a session on a fresh seed.
 pub(crate) fn start_training_session(
 	mut choices: MessageReader<TrainingCharacterChoice>,
-	mut flow: ResMut<NextState<GameFlow>>,
+	mut route: ShellRoute,
 	mut mode: ResMut<GameMode>,
 	mut commands: Commands,
 ) {
@@ -29,20 +31,21 @@ pub(crate) fn start_training_session(
 	commands.insert_resource(TrainingSpawn::new(choice));
 	commands.insert_resource(TrainingRound::from_entropy());
 	mode.label = String::from(PlaySession::Training.label());
-	flow.set(GameFlow::LoadingWorld);
+	route.enter(GameFlow::LoadingWorld, PlaySession::Training);
 }
 
 pub(crate) fn reload_training_round(
 	mut ended: MessageReader<TrainingLifeEnded>,
 	spawn: Option<Res<TrainingSpawn>>,
+	session: Res<PlaySession>,
 	mut round: ResMut<TrainingRound>,
-	mut flow: ResMut<NextState<GameFlow>>,
+	mut route: ShellRoute,
 ) {
 	if ended.read().last().is_none() {
 		return;
 	}
 	*round = next_training_round(spawn.as_deref(), *round);
-	flow.set(GameFlow::LoadingWorld);
+	route.enter(GameFlow::LoadingWorld, *session);
 }
 
 fn next_training_round(spawn: Option<&TrainingSpawn>, round: TrainingRound) -> TrainingRound {
@@ -59,7 +62,7 @@ pub(crate) fn begin_training_round(spawn: Option<ResMut<TrainingSpawn>>) {
 }
 
 /// The round's trainee when this Training round plays a random character.
-pub(crate) fn training_trainee(
+pub(crate) fn session_trainee(
 	session: PlaySession,
 	spawn: Option<&TrainingSpawn>,
 	round: Option<&TrainingRound>,
@@ -70,12 +73,16 @@ pub(crate) fn training_trainee(
 	if spawn?.current != TrainingCharacterChoice::Random {
 		return None;
 	}
-	round.map(|round| round.trainee())
+	round.map(|round| trainee_loadout(*round))
 }
 
-/// Leave / Home: drop the session. [`crate::shell`] then clears
-/// [`maybraid_game_mode_training_ground::TrainingGroundActive`] so the world
-/// fill restores the playable rings.
+pub(crate) fn trainee_loadout(round: TrainingRound) -> WorldPlayerLoadout {
+	let trainee = training_trainee(round);
+	WorldPlayerLoadout::new(trainee.key, trainee.appearance, trainee.inventory)
+		.with_name(trainee.name)
+}
+
+/// Leave / Home: drop the session.
 pub(crate) fn clear_play_session(
 	mut commands: Commands,
 	mut session: ResMut<PlaySession>,
@@ -92,6 +99,13 @@ pub(crate) fn clear_play_session(
 mod tests {
 	use super::*;
 	use bevy::ecs::system::RunSystemOnce;
+	use layer_stack::ActiveGenerationMode;
+	use maybraid_game_mode_training_ground::TrainingGround;
+
+	fn shell_states(world: &mut World) {
+		world.insert_resource(NextState::<GameFlow>::Unchanged);
+		world.insert_resource(NextState::<ActiveGenerationMode>::Unchanged);
+	}
 
 	#[test]
 	fn leave_drops_the_fixtures_and_the_session() -> anyhow::Result<()> {
@@ -115,7 +129,7 @@ mod tests {
 		let mut world = World::new();
 		world.init_resource::<Messages<TrainingCharacterChoice>>();
 		world.write_message(TrainingCharacterChoice::Random);
-		world.insert_resource(NextState::<GameFlow>::Unchanged);
+		shell_states(&mut world);
 		world.insert_resource(GameMode::default());
 		world.insert_resource(PlaySession::None);
 		world
@@ -132,6 +146,10 @@ mod tests {
 			world.resource::<NextState<GameFlow>>(),
 			NextState::Pending(GameFlow::LoadingWorld)
 		));
+		assert!(matches!(
+			world.resource::<NextState<ActiveGenerationMode>>(),
+			NextState::PendingIfNeq(mode) if mode.is::<TrainingGround>()
+		));
 		Ok(())
 	}
 
@@ -139,7 +157,8 @@ mod tests {
 		let mut world = World::new();
 		world.init_resource::<Messages<TrainingLifeEnded>>();
 		world.write_message(TrainingLifeEnded);
-		world.insert_resource(NextState::<GameFlow>::Unchanged);
+		shell_states(&mut world);
+		world.insert_resource(PlaySession::Training);
 		world.insert_resource(TrainingRound::new(3));
 		let mut spawn = TrainingSpawn::new(TrainingCharacterChoice::Random);
 		spawn.next = next;
@@ -151,6 +170,10 @@ mod tests {
 			world.resource::<NextState<GameFlow>>(),
 			NextState::Pending(GameFlow::LoadingWorld)
 		));
+		assert!(matches!(
+			world.resource::<NextState<ActiveGenerationMode>>(),
+			NextState::PendingIfNeq(mode) if mode.is::<TrainingGround>()
+		));
 		Ok(*world.resource::<TrainingRound>())
 	}
 
@@ -160,7 +183,7 @@ mod tests {
 		let next = ended_life(TrainingCharacterChoice::Random)?;
 		assert_eq!(next, round.next_life());
 		assert_eq!(next.map(), round.map());
-		assert_ne!(next.trainee(), round.trainee());
+		assert_ne!(trainee_loadout(next), trainee_loadout(round));
 		Ok(())
 	}
 
@@ -177,12 +200,12 @@ mod tests {
 		let random = TrainingSpawn::new(TrainingCharacterChoice::Random);
 		let active = TrainingSpawn::new(TrainingCharacterChoice::Active);
 		assert_eq!(
-			training_trainee(PlaySession::Training, Some(&random), Some(&round)),
-			Some(round.trainee())
+			session_trainee(PlaySession::Training, Some(&random), Some(&round)),
+			Some(trainee_loadout(round))
 		);
-		assert_eq!(training_trainee(PlaySession::Training, Some(&active), Some(&round)), None);
-		assert_eq!(training_trainee(PlaySession::Discovery, Some(&random), Some(&round)), None);
-		assert_eq!(training_trainee(PlaySession::Training, None, Some(&round)), None);
+		assert_eq!(session_trainee(PlaySession::Training, Some(&active), Some(&round)), None);
+		assert_eq!(session_trainee(PlaySession::Discovery, Some(&random), Some(&round)), None);
+		assert_eq!(session_trainee(PlaySession::Training, None, Some(&round)), None);
 	}
 
 	#[test]

@@ -1,11 +1,13 @@
 //! Weather events near the listener. Wind is breeze (looped) and gust (one-shot).
 
+mod birdsong;
 mod swirl;
 mod wind;
 
 use bevy::prelude::*;
 use maybraid_audio::{AudioPlugin, AudioSystems};
 
+pub use birdsong::BirdsongClock;
 pub use swirl::{crossing_pose, WindSwirl, WindSwirlEffects};
 pub use wind::{
 	point_near_listener, WeatherClock, WeatherEvent, WeatherKind, WeatherSounds, BREEZE_LIFE_MAX,
@@ -25,6 +27,7 @@ impl Plugin for WeatherPlugin {
 			app.add_plugins(bevy_hanabi::HanabiPlugin);
 		}
 		app.init_resource::<WeatherClock>()
+			.init_resource::<BirdsongClock>()
 			.add_systems(Startup, (wind::setup_weather_sounds, swirl::setup_wind_swirls))
 			.add_systems(
 				PostUpdate,
@@ -32,6 +35,7 @@ impl Plugin for WeatherPlugin {
 					wind::despawn_finished_weather,
 					wind::spawn_weather_near_listener,
 					swirl::tick_wind_swirls,
+					birdsong::spawn_birdsong_near_listener,
 				)
 					.chain()
 					.after(TransformSystems::Propagate)

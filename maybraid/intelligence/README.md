@@ -10,7 +10,7 @@ Higher-order brains write objectives; lower-order crates field them.
 
 A higher-order system writes the objective and inserts [`ReplanMovement`](movement/lib/src/user.rs) when it wants a new plan. [`MovementIntelligenceLimits`](movement/lib/src/surface.rs) caps per-query sampling, how many markers start, and how many walk probes run in one frame. `Reach` / `EdgeOf` keep one candidate and may detour unless already on the disk; covering queries LOD by distance. Walk via length is leftover work capped by [`MovementAbility`](movement/lib/src/ability.rs) `path_segment`, not `max_step`. Budget and vantage *sampling* live on that sheet. Hide / sightline *policy* belongs on the writer (firearm movement, etc.).
 
-Walk colliders for Richmond IR live in [`richmond-building-physics`](../richmond/building-physics).
+Walk colliders for Richmond IR live in [`building-physics`](../world/layers/urbanization/buildings/physics).
 
 ## Spotting
 

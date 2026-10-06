@@ -11,9 +11,10 @@ mod swap;
 mod weapon;
 
 use bevy::prelude::*;
-use crozon_characters::CharacterMotionSystems;
+use characters::CharacterMotionSystems;
 use damage::DamageSystems;
 use firearms::{add_firearm_components_host, FirearmWeaponSystems};
+use maybraid_audio::AudioSystems;
 use maybraid_input::PadRumbleSystems;
 use player::{PlayerPoseSystems, PlayerSystems};
 use player_camera::PlayerCameraSystems;
@@ -120,6 +121,12 @@ impl Plugin for FirearmUserPlugin {
 					.in_set(PlayerPoseSystems::Item),
 			)
 			.add_systems(Update, swap::clear_finished_weapon_swaps.after(swap::advance_weapon_swap))
+			.add_systems(
+				PostUpdate,
+				swap::play_change_item
+					.after(TransformSystems::Propagate)
+					.before(AudioSystems::Sync),
+			)
 			.add_systems(Update, aim::write_sight_aim.in_set(PlayerCameraSystems::Aim))
 			.add_systems(
 				Update,
