@@ -189,7 +189,7 @@ impl Plugin for VegetationLodRefreshPlugin {
 		gimme_host!(app, Shamanhome);
 		gimme_host!(app, DateGrove);
 
-		// Isolated /show plants and grove-nested plants.
+		// Isolated /show plants. Grove tiles pose kits under ChicoGroveHost.
 		flattened_plant_host!(app, StorybookTree);
 		flattened_plant_host!(app, VaseTree);
 		flattened_plant_host!(app, JungleStorybookTree);
