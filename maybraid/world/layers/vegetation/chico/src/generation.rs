@@ -35,11 +35,7 @@ impl GenerationScheme<ForestIndex> for ChicoForest {
 			.collect()
 	}
 
-	fn build_with_id(
-		spatial_index: &mut ForestIndex,
-		id: lod::gen::Id,
-		_lod_ref: &LodRef,
-	) -> Option<(Self, Aabb3d)> {
+	fn build_with_id(spatial_index: &mut ForestIndex, id: lod::gen::Id) -> Option<(Self, Aabb3d)> {
 		let extent = ForestExtent::from_id(id)?;
 		let layers = spatial_index.selected_layers_for(extent);
 		Some((Self { extent, layers }, extent.aabb()))
@@ -71,22 +67,14 @@ impl GenerationScheme<ForestIndex> for ChicoGrove {
 		ids
 	}
 
-	fn build_with_id(
-		spatial_index: &mut ForestIndex,
-		id: lod::gen::Id,
-		lod_ref: &LodRef,
-	) -> Option<(Self, Aabb3d)> {
+	fn build_with_id(spatial_index: &mut ForestIndex, id: lod::gen::Id) -> Option<(Self, Aabb3d)> {
 		let (extent, layer) = grove_from_id(id)?;
 		let center = (extent.min() + extent.max()) * 0.5;
 		let forest_extent = ForestExtent::from_cell_index(
 			ForestExtent::cell_index_containing(center).0,
 			ForestExtent::cell_index_containing(center).1,
 		);
-		GeneratingSpatialIndex::<ChicoForest>::get_or_generate(
-			spatial_index,
-			forest_extent.id(),
-			lod_ref,
-		)?;
+		GeneratingSpatialIndex::<ChicoForest>::get_or_generate(spatial_index, forest_extent.id())?;
 		ensure_forest_ring(spatial_index, forest_extent);
 		let forest = SpatialIndex::<ChicoForest>::get(spatial_index, forest_extent.id())?;
 		let kind = layer.kind(forest.layers);
@@ -118,11 +106,7 @@ impl GenerationScheme<ForestIndex> for CanopyBumpOut {
 			.collect()
 	}
 
-	fn build_with_id(
-		spatial_index: &mut ForestIndex,
-		id: lod::gen::Id,
-		_lod_ref: &LodRef,
-	) -> Option<(Self, Aabb3d)> {
+	fn build_with_id(spatial_index: &mut ForestIndex, id: lod::gen::Id) -> Option<(Self, Aabb3d)> {
 		let bounds = id.origin_cell_bounds()?;
 		let size = (bounds.max.x - bounds.min.x).max(1e-3);
 		if (size - BUMP_OUT_CELL_XZ).abs() > 1e-2 {
@@ -155,11 +139,7 @@ impl GenerationScheme<ForestIndex> for MediumCanopyBumpOut {
 			.collect()
 	}
 
-	fn build_with_id(
-		spatial_index: &mut ForestIndex,
-		id: lod::gen::Id,
-		_lod_ref: &LodRef,
-	) -> Option<(Self, Aabb3d)> {
+	fn build_with_id(spatial_index: &mut ForestIndex, id: lod::gen::Id) -> Option<(Self, Aabb3d)> {
 		let bounds = id.origin_cell_bounds()?;
 		let size = (bounds.max.x - bounds.min.x).max(1e-3);
 		if (size - MEDIUM_BUMP_OUT_CELL_XZ).abs() > 1e-2 {
@@ -381,10 +361,6 @@ mod tests {
 	use lod::gen::GeneratingSpatialIndex;
 	use lod::lod_ref::LodRef;
 
-	fn test_lod_ref(bounds: Aabb3d) -> (bevy::prelude::Transform, Aabb3d) {
-		(bevy::prelude::Transform::IDENTITY, bounds)
-	}
-
 	#[test]
 	fn forest_original_ids_are_overlapping_forest_cells() -> Result<()> {
 		let region = ForestExtent::ring_aabb((0, 0), 1);
@@ -399,15 +375,7 @@ mod tests {
 		index.layering = Some(crate::LayeringKind::LushJungle);
 		let extent = ForestExtent::default_cell();
 		let id = extent.id();
-		let (identity, bounds) = test_lod_ref(extent.aabb());
-		let lod_ref = LodRef {
-			entity: bevy::prelude::Entity::PLACEHOLDER,
-			previous_transform: &identity,
-			current_transform: &identity,
-			bounds: &bounds,
-		};
-		assert!(GeneratingSpatialIndex::<ChicoForest>::get_or_generate(&mut index, id, &lod_ref)
-			.is_some());
+		assert!(GeneratingSpatialIndex::<ChicoForest>::get_or_generate(&mut index, id).is_some());
 		let forest = lod::gen::SpatialIndex::<ChicoForest>::get(&index, id)
 			.ok_or_else(|| anyhow::anyhow!("forest"))?;
 		assert_eq!(forest.layers.layering, crate::LayeringKind::LushJungle);
@@ -437,15 +405,7 @@ mod tests {
 		let region = ForestExtent::xz_radius_aabb(Vec3::ZERO, 50.0);
 		let ids = ChicoGrove::original_ids_for(&mut index, region);
 		let id = ids.first().ok_or_else(|| anyhow::anyhow!("grove id"))?.0;
-		let (identity, bounds) = test_lod_ref(region);
-		let lod_ref = LodRef {
-			entity: bevy::prelude::Entity::PLACEHOLDER,
-			previous_transform: &identity,
-			current_transform: &identity,
-			bounds: &bounds,
-		};
-		assert!(GeneratingSpatialIndex::<ChicoGrove>::get_or_generate(&mut index, id, &lod_ref)
-			.is_some());
+		assert!(GeneratingSpatialIndex::<ChicoGrove>::get_or_generate(&mut index, id).is_some());
 		let grove = lod::gen::SpatialIndex::<ChicoGrove>::get(&index, id)
 			.ok_or_else(|| anyhow::anyhow!("grove"))?;
 		assert!(!grove.recipes.is_empty());
@@ -511,15 +471,8 @@ mod tests {
 		);
 		let id = grove.id();
 		let bounds = grove.aabb();
-		let (identity, lod_bounds) = test_lod_ref(bounds);
-		let lod_ref = LodRef {
-			entity: Entity::PLACEHOLDER,
-			previous_transform: &identity,
-			current_transform: &identity,
-			bounds: &lod_bounds,
-		};
 		let mut index = ForestIndex::default();
-		SpatialIndex::<ChicoGrove>::insert(&mut index, id, grove, bounds, &lod_ref);
+		SpatialIndex::<ChicoGrove>::insert(&mut index, id, grove, bounds);
 
 		let mut app = App::new();
 		app.add_plugins(MinimalPlugins)
@@ -593,15 +546,7 @@ mod tests {
 			"fixture cell should sit outside the inner hole"
 		);
 		let id = lod::gen::Id::from_cell(bounds);
-		let (identity, lod_bounds) = test_lod_ref(bounds);
-		let lod_ref = LodRef {
-			entity: bevy::prelude::Entity::PLACEHOLDER,
-			previous_transform: &identity,
-			current_transform: &identity,
-			bounds: &lod_bounds,
-		};
-		assert!(GeneratingSpatialIndex::<CanopyBumpOut>::get_or_generate(&mut index, id, &lod_ref)
-			.is_some());
+		assert!(GeneratingSpatialIndex::<CanopyBumpOut>::get_or_generate(&mut index, id).is_some());
 		let cell = lod::gen::SpatialIndex::<CanopyBumpOut>::get(&index, id)
 			.ok_or_else(|| anyhow::anyhow!("bump-out"))?;
 		assert!(cell.has_density());

@@ -190,11 +190,10 @@ where
 		GeneratingSpatialIndex::<Terrain>::original_ids_for(spatial_index, region)
 	}
 
-	fn build_with_id(spatial_index: &mut S, id: Id, lod_ref: &LodRef) -> Option<(Self, Aabb3d)> {
+	fn build_with_id(spatial_index: &mut S, id: Id) -> Option<(Self, Aabb3d)> {
 		let bounds = id.origin_cell_bounds()?;
 		// Terrain composes every Watershed band before returning; fills ride along.
-		let terrain =
-			GeneratingSpatialIndex::<Terrain>::get_one_or_generate(spatial_index, id, lod_ref)?;
+		let terrain = GeneratingSpatialIndex::<Terrain>::get_one_or_generate(spatial_index, id)?;
 		// Lattice resolution comes from the terrain cell — not a water-only knob.
 		let res_2 = terrain.res_2;
 		let stream_ring = terrain.stream_ring;
@@ -211,7 +210,6 @@ where
 		let assets = GeneratingSpatialIndex::<WaterPresentationAssets>::get_one_or_generate(
 			spatial_index,
 			Id::Universal,
-			lod_ref,
 		)?;
 		let sdf = ComposedWater::compose(terrain_sdf.clone(), fills.clone());
 		Some((

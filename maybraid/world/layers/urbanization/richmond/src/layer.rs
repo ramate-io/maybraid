@@ -93,15 +93,12 @@ impl<G: RichmondGround> UrbanizationModel for Richmond<G> {
 	fn prepare(
 		prepare: &mut SystemParamItem<'_, '_, Self::Prepare>,
 		bounds: Aabb3d,
-		lod_ref: &LodRef,
+		_lod_ref: &LodRef,
 	) {
 		let ids = GeneratingSpatialIndex::<DevelopmentCell>::original_ids_for(prepare, bounds);
 		for OriginalId(development_id) in ids {
-			let _ = GeneratingSpatialIndex::<DevelopmentCell>::get_or_generate(
-				prepare,
-				development_id,
-				lod_ref,
-			);
+			let _ =
+				GeneratingSpatialIndex::<DevelopmentCell>::get_or_generate(prepare, development_id);
 		}
 	}
 

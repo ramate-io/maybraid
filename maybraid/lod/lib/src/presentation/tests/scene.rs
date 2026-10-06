@@ -94,11 +94,7 @@ fn scene_fulfill_drains_one_constituent_per_frame() -> Result<()> {
 		current_transform: &identity,
 		bounds: &bounds,
 	};
-	GeneratingSpatialIndex::<Vegetation>::get_or_generate(
-		&mut index,
-		Id::from_cell(cell(2.0)),
-		&lod,
-	);
+	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, Id::from_cell(cell(2.0)));
 	app.add_plugins(MinimalPlugins)
 		.insert_resource(index)
 		.insert_resource(SceneRecording::default())

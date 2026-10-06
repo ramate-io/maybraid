@@ -6,10 +6,9 @@ use anyhow::{anyhow, Result};
 fn index_materializes_full_descendant_chain_to_moss() -> Result<()> {
 	let mut index = WorldIndex::default();
 	let veg_id = Id::from_cell(cell(7.0));
-	let lod = TestLod::new(cell(7.0));
 
 	assert_eq!(
-		GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, veg_id, &lod.lod_ref()),
+		GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, veg_id),
 		Some(MaterializeStatus::Created)
 	);
 

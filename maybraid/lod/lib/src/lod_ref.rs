@@ -45,18 +45,3 @@ pub struct LodRef<'a> {
 	/// Not the host / scene AABB — host geometry is separate ([`crate::LodHostBounds`]).
 	pub bounds: &'a Aabb3d,
 }
-
-static DETACHED_POSE: Transform = Transform::IDENTITY;
-
-impl<'a> LodRef<'a> {
-	/// A ref with no driver: placeholder entity at the identity pose. For work
-	/// that has a region but no LOD node, such as id discovery.
-	pub fn detached(bounds: &'a Aabb3d) -> Self {
-		Self {
-			entity: Entity::PLACEHOLDER,
-			previous_transform: &DETACHED_POSE,
-			current_transform: &DETACHED_POSE,
-			bounds,
-		}
-	}
-}

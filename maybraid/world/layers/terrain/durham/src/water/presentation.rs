@@ -104,7 +104,7 @@ impl SpatialIndex<Water> for WaterStoreView<'_> {
 		self.store.water.get(&id).map(|e| e.version)
 	}
 
-	fn insert(&mut self, _id: Id, _t: Water, _bounds: Aabb3d, _lod_ref: &LodRef) {
+	fn insert(&mut self, _id: Id, _t: Water, _bounds: Aabb3d) {
 		panic!("WaterStoreView is read-only; insert via AvianTerrainIndex");
 	}
 }

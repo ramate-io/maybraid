@@ -5,7 +5,6 @@ use bevy::math::{Vec2, Vec3};
 use comproc::guillotine::{Bounds2, Guillotine, GuillotineCuts};
 use comproc::noise::config::NoiseConfig;
 use lod::gen::{GeneratingSpatialIndex, Id, OriginalId};
-use lod::lod_ref::LodRef;
 use noise::Perlin;
 use procedural_common::Bounds2 as ProcBounds2;
 use terrain_stamps::StampModulation;
@@ -181,16 +180,12 @@ pub trait LeafAabbs: Sized {
 		S: GeneratingSpatialIndex<Self>,
 	{
 		let mut ids: Vec<OriginalId> =
-			GeneratingSpatialIndex::<Self>::get_or_generate_region_values(
-				spatial_index,
-				region,
-				&LodRef::detached(&region),
-			)
-			.into_iter()
-			.flat_map(Self::leaf_aabbs)
-			.filter(|leaf| region.intersects(leaf))
-			.map(|leaf| OriginalId(Id::from_cell(leaf)))
-			.collect();
+			GeneratingSpatialIndex::<Self>::get_or_generate_region_values(spatial_index, region)
+				.into_iter()
+				.flat_map(Self::leaf_aabbs)
+				.filter(|leaf| region.intersects(leaf))
+				.map(|leaf| OriginalId(Id::from_cell(leaf)))
+				.collect();
 		ids.sort();
 		ids.dedup();
 		ids
