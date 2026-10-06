@@ -25,14 +25,15 @@ use commands::{
 };
 use debug_bounds::{setup_cell_location_hud, update_cell_location_hud, PlaygroundDebugOverlay};
 use durham::{
-	AvianTerrainIndex, BaseTerrainNoise, ComposedWater, DurhamTerrainModelsPlugin, OuterCellRing,
-	Terrain, TerrainCellLayout, TerrainConfig, TerrainEntryStore, TerrainMeshBuilder,
-	TerrainMeshLodBand, TerrainPresentationAssets, TerrainRegionPresenter, TerrainStampConfigs,
-	TerrainStoreView, Water, WaterPresentationAssets, WatershedConfigs, TERRAIN_CELL_SIZE,
+	BaseTerrainNoise, ComposedWater, DurhamRoots, DurhamTerrainModelsPlugin, OuterCellRing,
+	Terrain, TerrainCellLayout, TerrainConfig, TerrainMeshBuilder, TerrainMeshLodBand,
+	TerrainPresentationAssets, TerrainRegionPresenter, TerrainStampConfigs, TerrainStorage, Water,
+	WaterPresentationAssets, WatershedConfigs, TERRAIN_CELL_SIZE,
 };
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use game_commands::ui::{GameCommandDrawerConfig, GameCommandStatusText};
-use lod::gen::{GeneratingSpatialIndex, RegionPresenter, SpatialIndex};
+use lod::gen::{GeneratingSpatialIndex, RegionPresenter};
+use lod::hcsg::HcsgStorage;
 use lod::lod_ref::LodRef;
 use pitch::{apply_avian_terrain_pitch, sync_suspend_terrain_pitch};
 use player::{respawn_player_on_layout, Player, PlayerControlSystems, PlayerPlugin};
@@ -258,7 +259,7 @@ fn apply_mode_commands(
 	mut status: ResMut<GameCommandStatusText>,
 	layout: Res<TerrainCellLayout>,
 	base: Res<WorldBaseTerrain>,
-	store: Res<TerrainEntryStore>,
+	store: Res<HcsgStorage>,
 	free: Query<Entity, With<RequestModeFree>>,
 	character: Query<Entity, With<RequestModeCharacter>>,
 	mut players: Query<(&mut Transform, &mut LinearVelocity), With<Player>>,
@@ -326,7 +327,8 @@ fn apply_mesh_stats(
 }
 
 fn generate_cells(
-	mut index: AvianTerrainIndex,
+	mut storage: ResMut<HcsgStorage>,
+	roots: DurhamRoots,
 	mut dirty: ResMut<TerrainPresentationDirty>,
 	mut pending: ResMut<TerrainPresentPending>,
 	mode: Res<PlaygroundMode>,
@@ -338,22 +340,20 @@ fn generate_cells(
 		return;
 	}
 
-	index.clear();
+	roots.reseed(&mut storage);
 
-	let layout = index.layout().clone();
+	let layout = roots.layout().clone();
 	let region = layout.request_region();
 
-	let terrains = GeneratingSpatialIndex::<Terrain>::get_or_generate_region(&mut index, region);
-	let waters = GeneratingSpatialIndex::<Water>::get_or_generate_region(&mut index, region);
+	let terrains = GeneratingSpatialIndex::<Terrain>::get_or_generate_region(&mut *storage, region);
+	let waters = GeneratingSpatialIndex::<Water>::get_or_generate_region(&mut *storage, region);
 	let water_fills: usize = waters
 		.iter()
-		.filter_map(|(id, _)| SpatialIndex::<Water>::get(&index, *id).map(|w| w.fills.len()))
+		.filter_map(|(id, _)| storage.water(*id).map(|w| w.fills.len()))
 		.sum();
 	let marazion_leaves: usize = terrains
 		.iter()
-		.filter_map(|(id, _)| {
-			SpatialIndex::<Terrain>::get(&index, *id).map(|t| t.marazion_leaves.len())
-		})
+		.filter_map(|(id, _)| storage.terrain(*id).map(|t| t.marazion_leaves.len()))
 		.sum();
 	info!(
 		"generated terrain_cells={} marazion_leaves={} water_cells={} water_fills={}",
@@ -363,14 +363,14 @@ fn generate_cells(
 		water_fills
 	);
 
-	if let Some(base) = index.base_noise() {
+	if let Some(base) = storage.base_noise() {
 		world_base.0 = base.clone();
 	}
 
 	if let Ok((mut transform, mut velocity)) = players.single_mut() {
 		let center = layout.region_center_xz();
-		let elevation = index
-			.composed_height_at(center.x, center.z)
+		let elevation = storage
+			.composed_height_at(&layout, center.x, center.z)
 			.unwrap_or_else(|| world_base.0.height_at(center.x, center.z));
 		respawn_player_on_layout(&layout, elevation, &mut transform, &mut velocity);
 	}
@@ -387,7 +387,7 @@ fn generate_cells(
 
 fn present_cells(
 	mut terrain_presenter: TerrainRegionPresenter,
-	store: Res<TerrainEntryStore>,
+	storage: Res<HcsgStorage>,
 	layout: Res<TerrainCellLayout>,
 	mut pending: ResMut<TerrainPresentPending>,
 ) {
@@ -403,12 +403,8 @@ fn present_cells(
 		current_transform: &identity,
 		bounds: &region,
 	};
-	let terrain_view = TerrainStoreView::new(&store, &layout);
-	RegionPresenter::<Terrain, _>::present(&mut terrain_presenter, &terrain_view, region, &lod_ref);
-	let terrain_wanted = SpatialIndex::<Terrain>::tracked_ids_for(&terrain_view, region)
-		.into_iter()
-		.map(|tracked| tracked.0)
-		.collect();
+	RegionPresenter::<Terrain, _>::present(&mut terrain_presenter, &*storage, region, &lod_ref);
+	let terrain_wanted = storage.terrain_ids_overlapping(region).into_iter().collect();
 	terrain_presenter.remove_stale(&terrain_wanted);
 
 	pending.0 = false;

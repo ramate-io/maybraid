@@ -4,7 +4,7 @@ use crate::terrain::watersheds::band_macro::define_marazion_band;
 
 define_marazion_band! {
 	layout: PrePocketHighPassLayout,
-	bootstrap_layout: BootstrapPrePocketHighPassLayout / bootstrap_pre_pocket_high_pass_layout,
+	layout_from_configs: pre_pocket_high_pass_layout,
 	pre_cell: PrePocketHighPassCell,
 	pocket: PocketHighPassCell,
 	pocket_waters: PocketWatersHighPass,

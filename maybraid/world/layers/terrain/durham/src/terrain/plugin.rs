@@ -5,18 +5,17 @@ use crate::terrain::collider::{
 	drop_superseded_terrain_colliders, queue_terrain_trimesh_colliders, TerrainColliderEpoch,
 	TerrainColliderSystems, TerrainFrictionConfig,
 };
-use crate::terrain::index::TerrainEntryStore;
+use crate::terrain::index::register_durham_nodes;
 use crate::terrain::presentation::{
 	sync_visual_terrain_host_pose, TerrainBackground, TerrainFar, TerrainNear,
 	TerrainPresenterState, TerrainStreamPresenterState,
 };
-use crate::terrain::stamps::{StampControllerLayouts, TerrainStampConfigs};
-use crate::terrain::watersheds::{
-	bootstrap_pre_pocket_high_pass_layout, bootstrap_pre_pocket_low_pass_layout, WatershedConfigs,
-};
+use crate::terrain::stamps::TerrainStampConfigs;
+use crate::terrain::watersheds::WatershedConfigs;
 use avian3d::prelude::PhysicsPlugins;
 use avian3d::schedule::PhysicsSchedulePlugin;
 use bevy::prelude::*;
+use lod::hcsg::HcsgStorage;
 
 /// Registers Avian (if needed) and resources for the terrain model.
 pub struct TerrainResourcesPlugin;
@@ -40,16 +39,11 @@ impl Plugin for TerrainResourcesPlugin {
 		if !app.is_plugin_added::<PhysicsSchedulePlugin>() {
 			app.add_plugins(PhysicsPlugins::default());
 		}
-		let marazion = WatershedConfigs::default();
-		let pre_pocket_low = bootstrap_pre_pocket_low_pass_layout(&marazion);
-		let pre_pocket_high = bootstrap_pre_pocket_high_pass_layout(&marazion);
-		app.init_resource::<TerrainEntryStore>()
-			.init_resource::<TerrainCellLayout>()
+		app.init_resource::<HcsgStorage>();
+		register_durham_nodes(&mut app.world_mut().resource_mut::<HcsgStorage>());
+		app.init_resource::<TerrainCellLayout>()
 			.init_resource::<TerrainStampConfigs>()
-			.init_resource::<StampControllerLayouts>()
-			.insert_resource(marazion)
-			.insert_resource(pre_pocket_low)
-			.insert_resource(pre_pocket_high)
+			.init_resource::<WatershedConfigs>()
 			.init_resource::<TerrainPresenterState>()
 			.init_resource::<TerrainStreamPresenterState<TerrainNear>>()
 			.init_resource::<TerrainStreamPresenterState<TerrainFar>>()

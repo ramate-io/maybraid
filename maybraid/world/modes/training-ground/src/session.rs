@@ -221,7 +221,9 @@ mod tests {
 
 	#[test]
 	fn plaza_waits_for_the_whole_patch() {
-		let store = durham::TerrainEntryStore::default();
+		use durham::TerrainStorage;
+
+		let store = durham::HcsgStorage::default();
 		let origin = IVec2::splat(-TRAINING_FINE_HALF_EXTENT_CELLS);
 		let patch = fine_patch_cell_layout(TRAINING_FINE_HALF_EXTENT_CELLS, origin);
 		assert!(!store.fills_layout(&patch));
