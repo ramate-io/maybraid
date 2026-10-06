@@ -137,17 +137,16 @@ impl PreWatershedTerrain {
 	}
 
 	/// Pre-watershed height at `(x, z)`, materializing the fine origin cell under it.
-	pub fn sample_height<S>(spatial_index: &mut S, x: f32, z: f32, lod_ref: &LodRef) -> Option<f32>
+	pub fn sample_height<S>(spatial_index: &mut S, x: f32, z: f32) -> Option<f32>
 	where
 		S: GeneratingSpatialIndex<Self> + GeneratingSpatialIndex<TerrainCellLayout>,
 	{
 		let layout = GeneratingSpatialIndex::<TerrainCellLayout>::get_one_or_generate(
 			spatial_index,
 			Id::Universal,
-			lod_ref,
 		)?;
 		let id = Id::from_cell(layout.fine_cell_bounds_containing(x, z));
-		let pre = GeneratingSpatialIndex::<Self>::get_one_or_generate(spatial_index, id, lod_ref)?;
+		let pre = GeneratingSpatialIndex::<Self>::get_one_or_generate(spatial_index, id)?;
 		Some(pre.sdf.terrain().height_at_with_all_modulations(x, z))
 	}
 }
@@ -304,9 +303,8 @@ impl JerseyStamps {
 		&mut self,
 		spatial_index: &mut S,
 		bounds: Aabb3d,
-		lod_ref: &LodRef,
 	) -> Option<()> {
-		GeneratingSpatialIndex::<T>::for_each_origin(spatial_index, bounds, lod_ref, |stamp| {
+		GeneratingSpatialIndex::<T>::for_each_origin(spatial_index, bounds, |stamp| {
 			if !stamp.modulations().is_empty() {
 				self.leaves.push(stamp.cell());
 				self.modulations.extend_from_slice(stamp.modulations());
@@ -340,29 +338,28 @@ where
 		TerrainCellLayout::original_cell_ids_for(spatial_index, region)
 	}
 
-	fn build_with_id(spatial_index: &mut S, id: Id, lod_ref: &LodRef) -> Option<(Self, Aabb3d)> {
+	fn build_with_id(spatial_index: &mut S, id: Id) -> Option<(Self, Aabb3d)> {
 		let bounds = id.origin_cell_bounds()?;
 		let base = GeneratingSpatialIndex::<BaseTerrainNoise>::get_one_or_generate(
 			spatial_index,
 			Id::Universal,
-			lod_ref,
 		)?
 		.clone();
 
 		// Composition order is global: high-pass (regional) bands, then low-pass (detail).
 		let mut stamps = JerseyStamps::default();
-		stamps.pull::<PlateauHighPassStampCell, _>(spatial_index, bounds, lod_ref)?;
-		stamps.pull::<MassifHighPassStampCell, _>(spatial_index, bounds, lod_ref)?;
-		stamps.pull::<CanyonHighPassStampCell, _>(spatial_index, bounds, lod_ref)?;
-		stamps.pull::<PocketWaterHighPassStampCell, _>(spatial_index, bounds, lod_ref)?;
-		stamps.pull::<RollingHighPassStampCell, _>(spatial_index, bounds, lod_ref)?;
-		stamps.pull::<ValleyHighPassStampCell, _>(spatial_index, bounds, lod_ref)?;
-		stamps.pull::<PlateauLowPassStampCell, _>(spatial_index, bounds, lod_ref)?;
-		stamps.pull::<MassifLowPassStampCell, _>(spatial_index, bounds, lod_ref)?;
-		stamps.pull::<CanyonLowPassStampCell, _>(spatial_index, bounds, lod_ref)?;
-		stamps.pull::<PocketWaterLowPassStampCell, _>(spatial_index, bounds, lod_ref)?;
-		stamps.pull::<RollingLowPassStampCell, _>(spatial_index, bounds, lod_ref)?;
-		stamps.pull::<ValleyLowPassStampCell, _>(spatial_index, bounds, lod_ref)?;
+		stamps.pull::<PlateauHighPassStampCell, _>(spatial_index, bounds)?;
+		stamps.pull::<MassifHighPassStampCell, _>(spatial_index, bounds)?;
+		stamps.pull::<CanyonHighPassStampCell, _>(spatial_index, bounds)?;
+		stamps.pull::<PocketWaterHighPassStampCell, _>(spatial_index, bounds)?;
+		stamps.pull::<RollingHighPassStampCell, _>(spatial_index, bounds)?;
+		stamps.pull::<ValleyHighPassStampCell, _>(spatial_index, bounds)?;
+		stamps.pull::<PlateauLowPassStampCell, _>(spatial_index, bounds)?;
+		stamps.pull::<MassifLowPassStampCell, _>(spatial_index, bounds)?;
+		stamps.pull::<CanyonLowPassStampCell, _>(spatial_index, bounds)?;
+		stamps.pull::<PocketWaterLowPassStampCell, _>(spatial_index, bounds)?;
+		stamps.pull::<RollingLowPassStampCell, _>(spatial_index, bounds)?;
+		stamps.pull::<ValleyLowPassStampCell, _>(spatial_index, bounds)?;
 
 		let JerseyStamps { modulations, leaves: jersey_leaves } = stamps;
 		let sdf = Self::compose_sdf(&base, &modulations);
@@ -391,55 +388,35 @@ where
 		GeneratingSpatialIndex::<PreWatershedTerrain>::original_ids_for(spatial_index, region)
 	}
 
-	fn build_with_id(spatial_index: &mut S, id: Id, lod_ref: &LodRef) -> Option<(Self, Aabb3d)> {
+	fn build_with_id(spatial_index: &mut S, id: Id) -> Option<(Self, Aabb3d)> {
 		let bounds = id.origin_cell_bounds()?;
-		let pre = GeneratingSpatialIndex::<PreWatershedTerrain>::get_one_or_generate(
-			spatial_index,
-			id,
-			lod_ref,
-		)?
-		.clone();
+		let pre =
+			GeneratingSpatialIndex::<PreWatershedTerrain>::get_one_or_generate(spatial_index, id)?
+				.clone();
 
 		// Authored leaf overlays (banded); hydrology composition is cellular below.
 		let mut marazion_leaves = Vec::new();
 		GeneratingSpatialIndex::<PocketWatersHighPass>::for_each_origin(
 			spatial_index,
 			bounds,
-			lod_ref,
 			|leaf| marazion_leaves.push(leaf.leaf_bounds()),
 		)?;
 		GeneratingSpatialIndex::<PocketWatersLowPass>::for_each_origin(
 			spatial_index,
 			bounds,
-			lod_ref,
 			|leaf| marazion_leaves.push(leaf.leaf_bounds()),
 		)?;
 
-		let complex = GeneratingSpatialIndex::<HydroComplexCell>::get_one_or_generate(
-			spatial_index,
-			id,
-			lod_ref,
-		)?
-		.indexed()
-		.cloned();
+		let complex =
+			GeneratingSpatialIndex::<HydroComplexCell>::get_one_or_generate(spatial_index, id)?
+				.indexed()
+				.cloned();
 
 		// Keep stage cells materialized for later policy work; elevation uses
 		// the cellular HydroComplex directly (internal carve → rim → apron).
-		GeneratingSpatialIndex::<WatershedCarvingCell>::get_or_generate(
-			spatial_index,
-			id,
-			lod_ref,
-		)?;
-		GeneratingSpatialIndex::<WatershedRimmingCell>::get_or_generate(
-			spatial_index,
-			id,
-			lod_ref,
-		)?;
-		GeneratingSpatialIndex::<WatershedAproningCell>::get_or_generate(
-			spatial_index,
-			id,
-			lod_ref,
-		)?;
+		GeneratingSpatialIndex::<WatershedCarvingCell>::get_or_generate(spatial_index, id)?;
+		GeneratingSpatialIndex::<WatershedRimmingCell>::get_or_generate(spatial_index, id)?;
+		GeneratingSpatialIndex::<WatershedAproningCell>::get_or_generate(spatial_index, id)?;
 
 		let marazion_fills = complex.iter().cloned().map(WaterFill::from_hydro).collect();
 		let modulations: Vec<_> = pre
@@ -456,7 +433,6 @@ where
 		let assets = GeneratingSpatialIndex::<TerrainPresentationAssets>::get_one_or_generate(
 			spatial_index,
 			Id::Universal,
-			lod_ref,
 		)?;
 		let (res_2, wall_faces) = assets.mesh_params_for_cell(bounds, &layout);
 		let cell_size = (Vec3::from(bounds.max) - Vec3::from(bounds.min)).x;

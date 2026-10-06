@@ -456,14 +456,7 @@ fn generate_cells(
 
 	let layout = index.layout().clone();
 	let region = layout.request_region();
-	let identity = Transform::IDENTITY;
-	let lod_ref = LodRef {
-		entity: Entity::PLACEHOLDER,
-		previous_transform: &identity,
-		current_transform: &identity,
-		bounds: &region,
-	};
-	index.publish_layout_if_changed(&lod_ref);
+	index.publish_layout_if_changed();
 
 	if *window_filled {
 		if let Some(base) = index.base_noise() {
@@ -498,10 +491,10 @@ fn generate_cells(
 	let _span = bevy::log::debug_span!("durham_terrain_generate").entered();
 	let mut created = 0usize;
 	for id in missing.into_iter().take(TERRAIN_ADMIT_PER_FRAME) {
-		if GeneratingSpatialIndex::<Terrain>::get_or_generate(&mut index, id, &lod_ref).is_some() {
+		if GeneratingSpatialIndex::<Terrain>::get_or_generate(&mut index, id).is_some() {
 			created += 1;
 		}
-		let _ = GeneratingSpatialIndex::<Water>::get_or_generate(&mut index, id, &lod_ref);
+		let _ = GeneratingSpatialIndex::<Water>::get_or_generate(&mut index, id);
 	}
 	if created > 0 {
 		debug!("admitted terrain_cells={created}");

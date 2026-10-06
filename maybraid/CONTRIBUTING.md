@@ -41,12 +41,13 @@ World layers compose by **reusing `GenerationScheme`s**, not by re-deriving each
 
 1. **Write one `GenerationScheme` per generated type, beside that type, under its world layer.** `original_ids_for` says which ids originate in a region; `build_with_id` builds one id. Put shared discovery on the trait that owns the concept, not in free functions over `&mut S`. In Durham, `CellTiling::original_cell_ids_for` serves layout-gridded roots and `LeafAabbs::original_leaf_ids_for` serves leaves of a controller.
 2. **Bound only on what you read directly.** If you read type `D`, require `S: GeneratingSpatialIndex<D>`. `D`'s own controllers, layouts, and configs are `D`'s bounds, not yours; they resolve at the concrete index. Use plain `SpatialIndex<D>` when you only read and never generate.
-3. **Discover dependencies through the index.** Use `GeneratingSpatialIndex::<D>::for_each_origin(index, region, lod_ref, visit)`, or `original_ids_for` and then `get_one_or_generate` for each id. This keeps discovery lazy and in id order. Do not call `D::original_ids_for` or `<D as GenerationScheme<S>>::…` directly, and do not swap discovery for eager `get_or_generate_region`.
+3. **Discover dependencies through the index.** Use `GeneratingSpatialIndex::<D>::for_each_origin(index, region, visit)`, or `original_ids_for` and then `get_one_or_generate` for each id. This keeps discovery lazy and in id order. Do not call `D::original_ids_for` or `<D as GenerationScheme<S>>::…` directly, and do not swap discovery for eager `get_or_generate_region`.
 4. **Reuse existing ids.** If your type sits on an existing grid, delegate `original_ids_for` to that grid's root type. For example, `Terrain` and `Water` reuse [`PreWatershedTerrain`](world/layers/terrain/durham/src/terrain.rs)'s origin cells, and the watershed stages reuse `HydroComplexCell`'s.
 5. **Seed universal singletons from `Bootstrap*` traits.** In Durham, use `universal_bootstrap_scheme!` instead of hand-writing a scheme for each config or layout.
 6. **Use generic helpers when a scheme pulls a family of leaves.** Share the leaf shape through a trait (Durham's `StampLeaf`) instead of writing a macro for each type.
+7. **Keep generation independent of the viewer.** Schemes never see a `LodRef` or camera pose. Presentation decides what content it needs (a distant forest needs selection and a canopy proxy; a nearby forest needs grove recipes and detailed geometry) and requests those ids. `descendants` is only for descendants that always accompany a node. If quality changes the generated value itself, make it part of cache identity (a separate type, id, or generation parameter), so two presentation paths never share an id while expecting different content.
 
-The runtime follows the same rule: `LodGeneratePlugin<T, S>` needs only `S: GeneratingSpatialIndex<T>`.
+The runtime follows the same rule: `LodGeneratePlugin<T, S>` needs only `S: GeneratingSpatialIndex<T>`. It still reads driver poses, but only to prioritize its queue.
 
 ## Chico vegetation trees (LOD)
 

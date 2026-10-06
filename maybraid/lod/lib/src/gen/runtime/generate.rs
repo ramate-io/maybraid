@@ -374,7 +374,7 @@ pub fn drain_lod_generate<T, S, M, F>(
 		};
 		jobs.end();
 		let quantum = Instant::now();
-		if index.get_or_generate(id, lod_ref) == Some(MaterializeStatus::Created) {
+		if index.get_or_generate(id) == Some(MaterializeStatus::Created) {
 			generated.write(LodGenerated::new(id));
 		}
 		warn_atomic_overrun("generate ID", quantum.elapsed(), time_budget.max_atomic_cost);

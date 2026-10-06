@@ -4,7 +4,6 @@ use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::math::{IVec2, UVec2, Vec3};
 use bevy::prelude::*;
 use lod::gen::{GeneratingSpatialIndex, Id, OriginalId};
-use lod::lod_ref::LodRef;
 use lod::LodSceneLevel;
 
 /// Naturescapes cascade `min_size`.
@@ -74,7 +73,6 @@ macro_rules! universal_bootstrap_scheme {
 			fn build_with_id(
 				spatial_index: &mut S,
 				id: lod::gen::Id,
-				_lod_ref: &lod::lod_ref::LodRef,
 			) -> Option<(Self, bevy::math::bounding::Aabb3d)> {
 				(id == lod::gen::Id::Universal).then(|| {
 					(spatial_index.$bootstrap(), $crate::terrain::cell::universal_bounds())
@@ -100,13 +98,9 @@ pub trait CellTiling: Sized {
 	where
 		S: GeneratingSpatialIndex<Self>,
 	{
-		GeneratingSpatialIndex::<Self>::get_one_or_generate(
-			spatial_index,
-			Id::Universal,
-			&LodRef::detached(&region),
-		)
-		.map(|layout| layout.cell_ids(region))
-		.unwrap_or_default()
+		GeneratingSpatialIndex::<Self>::get_one_or_generate(spatial_index, Id::Universal)
+			.map(|layout| layout.cell_ids(region))
+			.unwrap_or_default()
 	}
 }
 

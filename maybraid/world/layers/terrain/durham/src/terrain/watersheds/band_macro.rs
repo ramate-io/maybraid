@@ -125,13 +125,12 @@ macro_rules! define_marazion_band {
 			fn build_with_id(
 				spatial_index: &mut S,
 				id: lod::gen::Id,
-				lod_ref: &lod::lod_ref::LodRef,
 			) -> Option<(Self, bevy::math::bounding::Aabb3d)> {
 				use lod::gen::{GeneratingSpatialIndex, Id};
 				let cell = id.origin_cell_bounds()?;
 				let configs = GeneratingSpatialIndex::<
 					$crate::terrain::watersheds::config::WatershedConfigs,
-				>::get_one_or_generate(spatial_index, Id::Universal, lod_ref)?;
+				>::get_one_or_generate(spatial_index, Id::Universal)?;
 				let cx = (cell.min.x + cell.max.x) * 0.5;
 				let cz = (cell.min.z + cell.max.z) * 0.5;
 				let mut params = configs.$band_field.pre_pocket;
@@ -173,14 +172,13 @@ macro_rules! define_marazion_band {
 			fn build_with_id(
 				spatial_index: &mut S,
 				id: lod::gen::Id,
-				lod_ref: &lod::lod_ref::LodRef,
 			) -> Option<(Self, bevy::math::bounding::Aabb3d)> {
 				use lod::gen::{GeneratingSpatialIndex, Id};
 				use procedural_common::Bounds2;
 				let cell = id.origin_cell_bounds()?;
 				let configs = GeneratingSpatialIndex::<
 					$crate::terrain::watersheds::config::WatershedConfigs,
-				>::get_one_or_generate(spatial_index, Id::Universal, lod_ref)?;
+				>::get_one_or_generate(spatial_index, Id::Universal)?;
 				let band = &configs.$band_field;
 				let mut gparams = band.guillotine;
 				gparams.seed = configs.seed.wrapping_add(band.family_salt).wrapping_add(0x6011);
@@ -248,14 +246,13 @@ macro_rules! define_marazion_band {
 			fn build_with_id(
 				spatial_index: &mut S,
 				id: lod::gen::Id,
-				lod_ref: &lod::lod_ref::LodRef,
 			) -> Option<(Self, bevy::math::bounding::Aabb3d)> {
 				use lod::gen::{GeneratingSpatialIndex, Id};
 				use procedural_common::Bounds2;
 				let cell = id.origin_cell_bounds()?;
 				let configs = GeneratingSpatialIndex::<
 					$crate::terrain::watersheds::config::WatershedConfigs,
-				>::get_one_or_generate(spatial_index, Id::Universal, lod_ref)?
+				>::get_one_or_generate(spatial_index, Id::Universal)?
 				.clone();
 				let band = configs.$band_field.clone();
 				let occ_seed = $crate::terrain::stamps::shared::occupancy_seed(
@@ -290,7 +287,6 @@ macro_rules! define_marazion_band {
 						*spatial_index.borrow_mut(),
 						x,
 						z,
-						lod_ref,
 					)
 					.unwrap_or(0.0)
 				};

@@ -26,7 +26,6 @@ impl GenerationScheme<UrbanizationIndex> for SelectedUrbanization {
 	fn build_with_id(
 		spatial_index: &mut UrbanizationIndex,
 		id: lod::gen::Id,
-		_lod_ref: &LodRef,
 	) -> Option<(Self, Aabb3d)> {
 		let extent = UrbanizationExtent::from_id(id)?;
 		spatial_index.ensure_selected(extent, spatial_index.noise);
@@ -110,10 +109,6 @@ mod tests {
 	use lod::gen::GeneratingSpatialIndex;
 	use procedural_common::NoiseParams;
 
-	fn test_lod_ref(bounds: Aabb3d) -> (bevy::prelude::Transform, Aabb3d) {
-		(bevy::prelude::Transform::IDENTITY, bounds)
-	}
-
 	#[test]
 	fn urbanization_original_ids_are_overlapping_cells() -> Result<()> {
 		let region = UrbanizationExtent::ring_aabb((0, 0), 1);
@@ -128,17 +123,8 @@ mod tests {
 		index.noise = NoiseParams::from_scalar(9.0, 0.005, 1.0, 1);
 		let extent = UrbanizationExtent::default_cell();
 		let id = extent.id();
-		let (identity, bounds) = test_lod_ref(extent.aabb());
-		let lod_ref = LodRef {
-			entity: bevy::prelude::Entity::PLACEHOLDER,
-			previous_transform: &identity,
-			current_transform: &identity,
-			bounds: &bounds,
-		};
-		assert!(GeneratingSpatialIndex::<SelectedUrbanization>::get_or_generate(
-			&mut index, id, &lod_ref
-		)
-		.is_some());
+		assert!(GeneratingSpatialIndex::<SelectedUrbanization>::get_or_generate(&mut index, id)
+			.is_some());
 		let selected = lod::gen::SpatialIndex::<SelectedUrbanization>::get(&index, id)
 			.ok_or_else(|| anyhow::anyhow!("urbanization"))?;
 		assert_eq!(selected.extent, extent);

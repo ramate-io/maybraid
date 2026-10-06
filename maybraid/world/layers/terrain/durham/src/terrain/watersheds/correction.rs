@@ -15,7 +15,6 @@ use crate::terrain::watersheds::low_pass::PocketWatersLowPass;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use lod::gen::{GeneratingSpatialIndex, GenerationScheme, Id, OriginalId};
-use lod::lod_ref::LodRef;
 use procedural_common::Bounds2;
 use std::sync::Arc;
 use terrain_watersheds::{CorrectionStage, HydroComplex};
@@ -56,14 +55,13 @@ where
 		TerrainCellLayout::original_cell_ids_for(spatial_index, region)
 	}
 
-	fn build_with_id(spatial_index: &mut S, id: Id, lod_ref: &LodRef) -> Option<(Self, Aabb3d)> {
+	fn build_with_id(spatial_index: &mut S, id: Id) -> Option<(Self, Aabb3d)> {
 		let cell = id.origin_cell_bounds()?;
 		let cell_bounds = aabb_to_bounds2(cell);
 
 		let configs = GeneratingSpatialIndex::<WatershedConfigs>::get_one_or_generate(
 			spatial_index,
 			Id::Universal,
-			lod_ref,
 		)?;
 		let seed = cell_seed(cell, configs.seed);
 
@@ -71,7 +69,6 @@ where
 		for pass in GeneratingSpatialIndex::<PocketWatersHighPass>::get_or_generate_region_values(
 			spatial_index,
 			cell,
-			lod_ref,
 		) {
 			hydrology.extend(
 				pass.hydro_nodes()
@@ -82,7 +79,6 @@ where
 		for pass in GeneratingSpatialIndex::<PocketWatersLowPass>::get_or_generate_region_values(
 			spatial_index,
 			cell,
-			lod_ref,
 		) {
 			hydrology.extend(
 				pass.hydro_nodes()
@@ -130,15 +126,10 @@ macro_rules! impl_correction_stage_cell {
 				GeneratingSpatialIndex::<HydroComplexCell>::original_ids_for(spatial_index, region)
 			}
 
-			fn build_with_id(
-				spatial_index: &mut S,
-				id: Id,
-				lod_ref: &LodRef,
-			) -> Option<(Self, Aabb3d)> {
+			fn build_with_id(spatial_index: &mut S, id: Id) -> Option<(Self, Aabb3d)> {
 				let complex_cell = GeneratingSpatialIndex::<HydroComplexCell>::get_one_or_generate(
 					spatial_index,
 					id,
-					lod_ref,
 				)?;
 				let cell = complex_cell.cell;
 				Some((Self { cell, complex: complex_cell.indexed().cloned() }, cell))

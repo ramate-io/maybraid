@@ -133,13 +133,11 @@ macro_rules! define_stamp_family {
 			fn build_with_id(
 				spatial_index: &mut S,
 				id: lod::gen::Id,
-				lod_ref: &lod::lod_ref::LodRef,
 			) -> Option<(Self, bevy::math::bounding::Aabb3d)> {
 				let bounds = id.origin_cell_bounds()?;
-				let configs =
-					lod::gen::GeneratingSpatialIndex::<
-						$crate::terrain::stamps::configs::TerrainStampConfigs,
-					>::get_one_or_generate(spatial_index, lod::gen::Id::Universal, lod_ref)?;
+				let configs = lod::gen::GeneratingSpatialIndex::<
+					$crate::terrain::stamps::configs::TerrainStampConfigs,
+				>::get_one_or_generate(spatial_index, lod::gen::Id::Universal)?;
 				let family = &configs.$config_family.$config_band;
 				Some((Self::from_family_config(bounds, family), bounds))
 			}
@@ -182,18 +180,15 @@ macro_rules! define_stamp_family {
 			fn build_with_id(
 				spatial_index: &mut S,
 				id: lod::gen::Id,
-				lod_ref: &lod::lod_ref::LodRef,
 			) -> Option<(Self, bevy::math::bounding::Aabb3d)> {
 				let cell = id.origin_cell_bounds()?;
-				let configs =
-					lod::gen::GeneratingSpatialIndex::<
-						$crate::terrain::stamps::configs::TerrainStampConfigs,
-					>::get_one_or_generate(spatial_index, lod::gen::Id::Universal, lod_ref)?
-					.clone();
-				let base =
-					lod::gen::GeneratingSpatialIndex::<
-						$crate::terrain::base_noise::BaseTerrainNoise,
-					>::get_one_or_generate(spatial_index, lod::gen::Id::Universal, lod_ref)?;
+				let configs = lod::gen::GeneratingSpatialIndex::<
+					$crate::terrain::stamps::configs::TerrainStampConfigs,
+				>::get_one_or_generate(spatial_index, lod::gen::Id::Universal)?
+				.clone();
+				let base = lod::gen::GeneratingSpatialIndex::<
+					$crate::terrain::base_noise::BaseTerrainNoise,
+				>::get_one_or_generate(spatial_index, lod::gen::Id::Universal)?;
 				let family = &configs.$config_family.$config_band;
 				let $seed =
 					$crate::terrain::stamps::shared::family_seed(base.seed, cell, $family_salt);

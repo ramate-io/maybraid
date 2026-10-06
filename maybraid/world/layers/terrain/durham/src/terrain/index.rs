@@ -43,7 +43,6 @@ use bevy::ecs::system::SystemParam;
 use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::prelude::*;
 use lod::gen::{Id, OriginalId, SpatialIndex, StorageStatus, TrackedId, Version};
-use lod::lod_ref::LodRef;
 use render_item::sdf::cpu_shot::WallFaces;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -555,7 +554,7 @@ impl<'w, 's> AvianTerrainIndex<'w, 's> {
 	///
 	/// Origin ids come from the stored [`TerrainCellLayout`], not the resource, so
 	/// a sliding window must re-insert when origin changes.
-	pub fn publish_layout_if_changed(&mut self, lod_ref: &LodRef) {
+	pub fn publish_layout_if_changed(&mut self) {
 		let layout = self.layout.clone();
 		let stale = <Self as SpatialIndex<TerrainCellLayout>>::get(self, Id::Universal)
 			.is_none_or(|stored| stored != &layout);
@@ -565,7 +564,6 @@ impl<'w, 's> AvianTerrainIndex<'w, 's> {
 				Id::Universal,
 				layout,
 				universal_bounds(),
-				lod_ref,
 			);
 		}
 	}
@@ -621,7 +619,7 @@ macro_rules! impl_map_spatial_index {
 				self.store.$field.get(&id).map(|e| e.version)
 			}
 
-			fn insert(&mut self, id: Id, value: $ty, bounds: Aabb3d, _lod_ref: &LodRef) {
+			fn insert(&mut self, id: Id, value: $ty, bounds: Aabb3d) {
 				if let Some(existing) = self.store.$field.remove(&id) {
 					if let Some(entity) = existing.entity {
 						self.store.entity_to_id.remove(&entity);
@@ -742,7 +740,7 @@ impl<'w, 's> SpatialIndex<Terrain> for AvianTerrainIndex<'w, 's> {
 		self.store.terrain.get(&id).map(|e| e.version)
 	}
 
-	fn insert(&mut self, id: Id, t: Terrain, bounds: Aabb3d, _lod_ref: &LodRef) {
+	fn insert(&mut self, id: Id, t: Terrain, bounds: Aabb3d) {
 		if let Some(existing) = self.store.terrain.remove(&id) {
 			if let Some(entity) = existing.entity {
 				self.store.entity_to_id.remove(&entity);

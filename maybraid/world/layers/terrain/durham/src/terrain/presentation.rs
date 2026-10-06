@@ -365,7 +365,7 @@ impl SpatialIndex<Terrain> for TerrainStoreView<'_> {
 		self.store.terrain.get(&id).map(|e| e.version)
 	}
 
-	fn insert(&mut self, _id: Id, _t: Terrain, _bounds: Aabb3d, _lod_ref: &LodRef) {
+	fn insert(&mut self, _id: Id, _t: Terrain, _bounds: Aabb3d) {
 		panic!("TerrainStoreView is read-only; insert via AvianTerrainIndex");
 	}
 }
