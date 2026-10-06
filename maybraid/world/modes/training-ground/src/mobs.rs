@@ -119,9 +119,10 @@ mod tests {
 	use bevy::state::app::StatesPlugin;
 	use layer_stack::{GenerationMode, GenerationModePlugin};
 	use lod::gen::{LodGenerated, SpatialIndex};
-	use richmond::{DevelopmentCell, DevelopmentConfig, DevelopmentEntryStore};
+	use durham::HcsgStorage;
 
 	use crate::arena::publish_training_arena;
+	use crate::urbanization::{author_for_test, les_halles_for_test};
 	use crate::{training_development_cell, TrainingPlazaStamped, TrainingRound};
 
 	struct OtherMode;
@@ -148,16 +149,9 @@ mod tests {
 		world.init_resource::<Messages<LodGenerated<MobCell>>>();
 		world.insert_resource(MobIndex::default());
 		let cell = training_development_cell(center);
-		let config = DevelopmentConfig::from_world_seed(round.development_seed());
-		let filled = DevelopmentCell::with_les_halles(cell, 4.0, &config);
-		let built = filled
-			.built(config.seed as i32)
-			.ok_or_else(|| anyhow::anyhow!("les halles built"))?;
-		let mut store = DevelopmentEntryStore::default();
-		let cell_id = Id::from_cell(cell);
-		store.insert_cell(cell_id, filled);
-		store.insert_built(cell_id, built, cell);
-		world.insert_resource(store);
+		let mut storage = HcsgStorage::default();
+		author_for_test(&mut storage, les_halles_for_test(cell, 4.0, round.development_seed()))?;
+		world.insert_resource(storage);
 		world.insert_resource(stamp_for(round, center, footprint));
 		Ok(world)
 	}
@@ -238,16 +232,10 @@ mod tests {
 		let next = round.next();
 		let next_center = Vec2::new(400.0, 0.0);
 		let next_cell = training_development_cell(next_center);
-		let config = DevelopmentConfig::from_world_seed(next.development_seed());
-		let filled = DevelopmentCell::with_les_halles(next_cell, 4.0, &config);
-		let built =
-			filled.built(config.seed as i32).ok_or_else(|| anyhow::anyhow!("next built"))?;
-		let next_id = Id::from_cell(next_cell);
-		{
-			let mut store = world.resource_mut::<DevelopmentEntryStore>();
-			store.insert_cell(next_id, filled);
-			store.insert_built(next_id, built, next_cell);
-		}
+		author_for_test(
+			&mut world.resource_mut::<HcsgStorage>(),
+			les_halles_for_test(next_cell, 4.0, next.development_seed()),
+		)?;
 		world.insert_resource(stamp_for(next, next_center, Vec2::splat(36.0)));
 		publish_then_write(&mut world)?;
 		anyhow::ensure!(
@@ -277,8 +265,7 @@ mod tests {
 			src.remove_resource::<MobIndex>().ok_or_else(|| anyhow::anyhow!("mob index"))?,
 		);
 		app.insert_resource(
-			src.remove_resource::<DevelopmentEntryStore>()
-				.ok_or_else(|| anyhow::anyhow!("developments"))?,
+			src.remove_resource::<HcsgStorage>().ok_or_else(|| anyhow::anyhow!("storage"))?,
 		);
 		app.insert_resource(
 			src.remove_resource::<TrainingPlazaStamped>()

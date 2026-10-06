@@ -1,24 +1,28 @@
-//! Old City Market: hysteresis lanes joining multi-stall terrace clusters.
+//! [`OldCityMarketCell`]: hysteresis lanes joining multi-stall terrace clusters.
 
-use bevy::ecs::system::SystemParamItem;
+use std::marker::PhantomData;
+
 use bevy::math::bounding::{Aabb2d, Aabb3d};
 use bevy::math::{Vec2, Vec3};
+use lod::gen::{GenerationScheme, Id, OriginalId};
+use lod::hcsg::HcsgStorage;
 use procedural_common::{Bounds2, HysteresisConfig, HysteresisGraph, NoiseParams, SeededHash};
 use urbanization_developments::{
 	DevelopmentEdge, OldCityMarket, OldCityMarketCorridor, OldCityMarketSite, OldCityMarketTerrace,
 	OldCityMarketTier, PlacedBuilding, MARKET_PLATFORM_HEIGHT,
 };
 
-use crate::archetype_generation::ArchetypeGenerator;
-use crate::config::DevelopmentConfig;
+use super::site::{DevelopmentKind, DevelopmentSite};
+use super::DevelopmentPad;
+use crate::artifact::BuiltDevelopment;
+use crate::cell::cell_salt;
 use crate::connectivity::{corridor_levels, ConnectivityCorridor, ConnectivityGraph};
-use crate::development::{cell_salt, DevelopmentPad};
 use crate::finish::DevelopmentFinishRole;
-use crate::ground::RichmondGround;
-use crate::hydro::{composed_height_upper_on_rect, terrain_hydro_overlaps};
+use crate::ground::{GroundSampler, RichmondGround, SiteGround};
 use crate::pad::{PadComplex, PadParams};
 use crate::scatter::{bounds_intersect, ScatterChoice, ScatterRecipe};
 use crate::shepherds_fit::{fit_shepherds_building_for_role, ShepherdsBuildingKind};
+use crate::storage::column_bounds;
 
 const MIN_MARKET_EXTENT: f32 = 210.0;
 const MAX_MARKET_EXTENT: f32 = 236.0;
@@ -49,56 +53,67 @@ struct KeptCorridor {
 	complex: PadComplex,
 }
 
-impl ArchetypeGenerator {
-	pub(crate) fn build_old_city_market<G: RichmondGround>(
-		read: &SystemParamItem<'_, '_, G::GroundRead>,
-		cell: Aabb3d,
-		config: &DevelopmentConfig,
-	) -> Option<(OldCityMarket, Vec<DevelopmentPad>)> {
-		let root = SeededHash::new(config.seed.wrapping_add(cell_salt(cell)));
-		let bounds = Self::old_city_market_bounds(cell, root);
-		build_old_city_market_with(
-			bounds,
-			root,
-			config.seed as i32,
-			|center, half, yaw| composed_height_upper_on_rect::<G>(read, center, half, yaw),
-			|bounds| terrain_hydro_overlaps::<G>(read, cell, bounds),
-		)
+/// An Old City Market over ground `G`: terraces and lanes as separate pads.
+pub struct OldCityMarketCell<G> {
+	pub cell: Aabb3d,
+	pub pads: Vec<DevelopmentPad>,
+	pub market: OldCityMarket,
+	_ground: PhantomData<fn() -> G>,
+}
+
+impl<G> OldCityMarketCell<G> {
+	pub fn built(&self) -> BuiltDevelopment {
+		BuiltDevelopment::OldCityMarket(Box::new(self.market.clone()))
+	}
+}
+
+impl<G: RichmondGround> GenerationScheme<HcsgStorage> for OldCityMarketCell<G> {
+	fn original_ids_for(storage: &mut HcsgStorage, region: Aabb3d) -> Vec<OriginalId> {
+		DevelopmentSite::ids_of_kind(storage, region, DevelopmentKind::OldCityMarket)
 	}
 
-	fn old_city_market_bounds(cell: Aabb3d, root: SeededHash) -> Aabb3d {
-		let available = Vec2::new(cell.max.x - cell.min.x, cell.max.z - cell.min.z);
-		let max_x = (available.x - 2.0 * PLAN_EDGE_INSET).max(0.0);
-		let max_z = (available.y - 2.0 * PLAN_EDGE_INSET).max(0.0);
-		let extent = Vec2::new(
-			lerp(MIN_MARKET_EXTENT, MAX_MARKET_EXTENT, root.unit(311)).min(max_x),
-			lerp(MIN_MARKET_EXTENT, MAX_MARKET_EXTENT, root.unit(313)).min(max_z),
-		);
-		let center = Vec2::new((cell.min.x + cell.max.x) * 0.5, (cell.min.z + cell.max.z) * 0.5);
-		Aabb3d::from_min_max(
-			Vec3::new(center.x - extent.x * 0.5, cell.min.y, center.y - extent.y * 0.5),
-			Vec3::new(center.x + extent.x * 0.5, cell.max.y, center.y + extent.y * 0.5),
-		)
+	fn build_with_id(storage: &mut HcsgStorage, id: Id) -> Option<(Self, Aabb3d)> {
+		let (site, config) = DevelopmentSite::planned(storage, id, DevelopmentKind::OldCityMarket)?;
+		let cell = site.cell;
+		let root = SeededHash::new(config.seed.wrapping_add(cell_salt(cell)));
+		let bounds = column_bounds(cell);
+		let mut ground = GroundSampler::<G>::new(storage, bounds);
+		let (market, pads) = build_old_city_market_with(
+			old_city_market_bounds(cell, root),
+			root,
+			config.seed as i32,
+			&mut ground,
+		)?;
+		Some((Self { cell, pads, market, _ground: PhantomData }, bounds))
 	}
+}
+
+fn old_city_market_bounds(cell: Aabb3d, root: SeededHash) -> Aabb3d {
+	let available = Vec2::new(cell.max.x - cell.min.x, cell.max.z - cell.min.z);
+	let max_x = (available.x - 2.0 * PLAN_EDGE_INSET).max(0.0);
+	let max_z = (available.y - 2.0 * PLAN_EDGE_INSET).max(0.0);
+	let extent = Vec2::new(
+		lerp(MIN_MARKET_EXTENT, MAX_MARKET_EXTENT, root.unit(311)).min(max_x),
+		lerp(MIN_MARKET_EXTENT, MAX_MARKET_EXTENT, root.unit(313)).min(max_z),
+	);
+	let center = Vec2::new((cell.min.x + cell.max.x) * 0.5, (cell.min.z + cell.max.z) * 0.5);
+	Aabb3d::from_min_max(
+		Vec3::new(center.x - extent.x * 0.5, cell.min.y, center.y - extent.y * 0.5),
+		Vec3::new(center.x + extent.x * 0.5, cell.max.y, center.y + extent.y * 0.5),
+	)
 }
 
 fn build_old_city_market_with(
 	bounds: Aabb3d,
 	root: SeededHash,
 	noise_seed: i32,
-	mut sample_height: impl FnMut(Vec2, Vec2, f32) -> Option<f32>,
-	mut hydro_overlaps: impl FnMut(Bounds2) -> bool,
+	ground: &mut impl SiteGround,
 ) -> Option<(OldCityMarket, Vec<DevelopmentPad>)> {
 	for attempt in 0..3u32 {
 		let attempt_root =
 			SeededHash::new(root.seed.wrapping_add(attempt.wrapping_mul(0x9E37_79B9)));
-		if let Some(market) = try_build_old_city_market(
-			bounds,
-			attempt_root,
-			noise_seed,
-			&mut sample_height,
-			&mut hydro_overlaps,
-		) {
+		if let Some(market) = try_build_old_city_market(bounds, attempt_root, noise_seed, ground)
+		{
 			return Some(market);
 		}
 	}
@@ -109,8 +124,7 @@ fn try_build_old_city_market(
 	bounds: Aabb3d,
 	root: SeededHash,
 	noise_seed: i32,
-	sample_height: &mut impl FnMut(Vec2, Vec2, f32) -> Option<f32>,
-	hydro_overlaps: &mut impl FnMut(Bounds2) -> bool,
+	ground: &mut impl SiteGround,
 ) -> Option<(OldCityMarket, Vec<DevelopmentPad>)> {
 	let plan_bounds = Bounds2::from_xz(bounds.min.x, bounds.min.z, bounds.max.x, bounds.max.z);
 	if plan_bounds.extent().min_element() < MIN_MARKET_EXTENT - 1.0 {
@@ -222,11 +236,11 @@ fn try_build_old_city_market(
 			0.0,
 			PadParams::market(),
 		);
-		if hydro_overlaps(coarse.bounds) {
+		if ground.hydro_overlaps(coarse.bounds) {
 			retained[index] = false;
 			continue;
 		}
-		natural_height[index] = sample_height(site.center, half, 0.0);
+		natural_height[index] = ground.height_upper_on_rect(site.center, half, 0.0);
 		if natural_height[index].is_none() {
 			retained[index] = false;
 		}
@@ -258,7 +272,7 @@ fn try_build_old_city_market(
 			PATH_HALF_WIDTH,
 			PadParams::path(),
 		);
-		if complex.is_empty() || hydro_overlaps(complex.bounds) {
+		if complex.is_empty() || ground.hydro_overlaps(complex.bounds) {
 			continue;
 		}
 		kept_corridors.push(KeptCorridor { corridor: corridor.clone(), levels, complex });
@@ -531,6 +545,7 @@ fn lerp(a: f32, b: f32, t: f32) -> f32 {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::ground::tests::FlatGround;
 	use crate::{BuiltDevelopment, DevelopmentHosts};
 
 	fn representative_bounds() -> Aabb3d {
@@ -542,8 +557,7 @@ mod tests {
 			representative_bounds(),
 			SeededHash::new(seed),
 			seed as i32,
-			|_, _, _| Some(12.0),
-			|_| false,
+			&mut FlatGround { height: 12.0, wet: |_| false },
 		)
 		.ok_or_else(|| anyhow::anyhow!("representative market should fit"))
 	}
@@ -661,8 +675,7 @@ mod tests {
 			representative_bounds(),
 			SeededHash::new(73),
 			73,
-			|_, _, _| Some(12.0),
-			|_| true,
+			&mut FlatGround { height: 12.0, wet: |_| true },
 		);
 		assert!(market.is_none());
 	}
@@ -677,8 +690,7 @@ mod tests {
 						bounds,
 						SeededHash::new(*seed),
 						*seed as i32,
-						|_, _, _| Some(12.0),
-						|_| false,
+						&mut FlatGround { height: 12.0, wet: |_| false },
 					)
 					.is_some()
 				})

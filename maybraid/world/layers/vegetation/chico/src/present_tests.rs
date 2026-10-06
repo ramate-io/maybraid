@@ -17,9 +17,12 @@ use lod::gen::{Id, Version};
 use lod::lod_ref::LodRef;
 use lod::presentation::RegionPresenter;
 use lod::{LodPresentCullPlugin, LodPresentGate, LodPresentKeepRegion, LodPresentPlugin};
-use richmond::{DevelopmentCell, DevelopmentConfig, DevelopmentEntryStore, PadComplex};
+use lod::hcsg::universal_bounds;
+use richmond::{
+	register_richmond_nodes, AuthoredDevelopment, AuthoredDevelopments, DevelopmentConfig,
+	DevelopmentKind, PadComplex, RichmondDevelopment, RichmondStorage,
+};
 use terrain_layer_model::{HeightField, OnTerrain, TerrainView};
-use urbanization_cells::UrbanizationIndex;
 use urbanization_layer_model::Urbanization;
 use vegetation_groves::{
 	GroveHeightModulation, GroveTerrain, GroveWorldSample, ModulatedGroveSample,
@@ -94,14 +97,12 @@ fn ground_grove_sample_matches_durham_and_modulated_samples() -> anyhow::Result<
 	let mut world = World::new();
 	let layout = TerrainCellLayout::default();
 	let base = BaseTerrainNoise::from_config(&TerrainConfig::new(42));
-	world.init_resource::<HcsgStorage>();
+	let mut storage = HcsgStorage::default();
+	register_richmond_nodes::<OnTerrain<Durham>>(&mut storage);
+	storage.insert_base_terrain_for_test(&layout, 0, 0, base.clone());
+	world.insert_resource(storage);
 	world.insert_resource(layout.clone());
 	world.insert_resource(WorldBaseTerrain(base.clone()));
-	world.insert_resource(DevelopmentEntryStore::default());
-	world.insert_resource(UrbanizationIndex::default());
-	world
-		.resource_mut::<HcsgStorage>()
-		.insert_base_terrain_for_test(&layout, 0, 0, base.clone());
 
 	let store = world.resource::<HcsgStorage>();
 	let probe = Aabb3d::from_min_max(Vec3::new(1.0, -1_000.0, 1.0), Vec3::new(2.0, 1_000.0, 2.0));
@@ -115,17 +116,28 @@ fn ground_grove_sample_matches_durham_and_modulated_samples() -> anyhow::Result<
 		.map(terrain_layer_model::TerrainCell::bounds)
 		.ok_or_else(|| anyhow::anyhow!("cell bounds"))?;
 	let config = DevelopmentConfig::from_world_seed(42);
-	world.resource_mut::<DevelopmentEntryStore>().insert_cell(
-		Id::from_cell(region),
-		DevelopmentCell::with_les_halles(region, 12.0, &config),
-	);
+	let authored = AuthoredDevelopment {
+		cell: region,
+		kinds: vec![DevelopmentKind::LesHalles],
+		height: 12.0,
+		config: config.clone(),
+		courtyard: None,
+	};
+	{
+		let mut storage = world.resource_mut::<HcsgStorage>();
+		storage.seed(config, universal_bounds());
+		storage.seed(AuthoredDevelopments(vec![authored]), universal_bounds());
+		storage
+			.get_or_generate::<RichmondDevelopment<OnTerrain<Durham>>>(Id::from_cell(region))
+			.ok_or_else(|| anyhow::anyhow!("authored development"))?;
+	}
 
 	let owned = OwnedDurham {
 		snapshot: world.resource::<HcsgStorage>().height_snapshot(),
 		layout: layout.clone(),
 		fallback: base,
 	};
-	let pads = world.resource::<DevelopmentEntryStore>().merged_pad_complex(region);
+	let pads = world.resource::<HcsgStorage>().merged_pads::<OnTerrain<Durham>>(region);
 	let old_durham = DurhamGroveSample(owned.clone());
 	let old_urban =
 		ModulatedGroveSample::new(DurhamGroveSample(owned), vec![DevelopmentPadModulation(pads)]);

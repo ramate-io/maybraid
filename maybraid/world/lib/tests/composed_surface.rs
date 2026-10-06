@@ -9,26 +9,34 @@ use durham::{
 	BaseTerrainNoise, Durham, HcsgStorage, TerrainCellLayout, TerrainConfig, TerrainStorage,
 	WorldBaseTerrain,
 };
-use richmond::{pad::PadStage, DevelopmentCell, DevelopmentConfig, DevelopmentEntryStore};
+use lod::hcsg::universal_bounds;
+use richmond::{
+	pad::PadStage, register_richmond_nodes, AuthoredDevelopment, AuthoredDevelopments,
+	DevelopmentConfig, DevelopmentKind, RichmondDevelopment, RichmondStorage,
+};
 use terrain_layer_model::{OnTerrain, TerrainView};
-use urbanization_cells::UrbanizationIndex;
 use urbanization_layer_model::Urbanization;
+
+type Ground = OnTerrain<Durham>;
 
 fn old_ground_height(
 	store: &HcsgStorage,
 	layout: &TerrainCellLayout,
 	base: &WorldBaseTerrain,
-	developments: &DevelopmentEntryStore,
+	with_pads: bool,
 	xz: Vec2,
 ) -> f32 {
 	let raw = store
 		.composed_height_at(layout, xz.x, xz.y)
 		.unwrap_or_else(|| base.0.height_at(xz.x, xz.y));
+	if !with_pads {
+		return raw;
+	}
 	let probe = Aabb3d::from_min_max(
 		Vec3::new(xz.x - 0.5, -10_000.0, xz.y - 0.5),
 		Vec3::new(xz.x + 0.5, 10_000.0, xz.y + 0.5),
 	);
-	developments.merged_pad_complex(probe).modify_elevation(raw, xz.x, xz.y)
+	store.merged_pads::<Ground>(probe).modify_elevation(raw, xz.x, xz.y)
 }
 
 fn first_classified(pad: &richmond::PadComplex, stage: PadStage) -> Option<Vec2> {
@@ -56,14 +64,21 @@ fn terrain_view_ground_matches_the_retired_world_formula() -> anyhow::Result<()>
 	store.insert_base_terrain_for_test(&layout, 0, 0, base_noise.clone());
 
 	let pad_bounds = Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(100.0, 100.0, 100.0));
-	let development =
-		DevelopmentCell::with_les_halles(pad_bounds, 18.0, &DevelopmentConfig::default());
-	let pad = development
-		.pad_complex()
-		.cloned()
+	let authored = AuthoredDevelopment {
+		cell: pad_bounds,
+		kinds: vec![DevelopmentKind::LesHalles],
+		height: 18.0,
+		config: DevelopmentConfig::default(),
+		courtyard: None,
+	};
+	let id = authored.id();
+	register_richmond_nodes::<Ground>(&mut store);
+	store.seed(DevelopmentConfig::default(), universal_bounds());
+	store.seed(AuthoredDevelopments(vec![authored]), universal_bounds());
+	let pad = store
+		.get_one_or_generate::<RichmondDevelopment<Ground>>(id)
+		.and_then(|development| development.pad_complexes().next().cloned())
 		.ok_or_else(|| anyhow::anyhow!("les halles cell should carry a pad"))?;
-	let mut developments = DevelopmentEntryStore::default();
-	developments.insert_cell(lod::gen::Id::from_cell(pad_bounds), development);
 
 	let inside = first_classified(&pad, PadStage::Flatten)
 		.ok_or_else(|| anyhow::anyhow!("pad should have a flatten terrace"))?;
@@ -77,20 +92,16 @@ fn terrain_view_ground_matches_the_retired_world_formula() -> anyhow::Result<()>
 	world.insert_resource(store);
 	world.insert_resource(layout.clone());
 	world.insert_resource(WorldBaseTerrain(base_noise));
-	world.insert_resource(developments);
-	world.insert_resource(UrbanizationIndex::default());
 
 	let (expected, pad_free) = {
 		let store = world.resource::<HcsgStorage>();
 		let layout = world.resource::<TerrainCellLayout>();
 		let base = world.resource::<WorldBaseTerrain>();
-		let developments = world.resource::<DevelopmentEntryStore>();
 		let expected: Vec<(Vec2, f32)> = [inside, skirt, outside, ungenerated]
 			.into_iter()
-			.map(|xz| (xz, old_ground_height(store, layout, base, developments, xz)))
+			.map(|xz| (xz, old_ground_height(store, layout, base, true, xz)))
 			.collect();
-		let pad_free =
-			old_ground_height(store, layout, base, &DevelopmentEntryStore::default(), inside);
+		let pad_free = old_ground_height(store, layout, base, false, inside);
 		(expected, pad_free)
 	};
 

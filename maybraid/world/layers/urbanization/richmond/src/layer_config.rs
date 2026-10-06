@@ -2,9 +2,9 @@
 
 use bevy::prelude::*;
 use procedural_common::NoiseParams;
-use urbanization_cells::UrbanizationKind;
+use urbanization_cells::{UrbanizationKind, UrbanizationSelection};
 
-use crate::config::DevelopmentConfig;
+use crate::config::{DevelopmentConfig, DevelopmentSites};
 
 /// Occupancy fill used by both the world and the developments playground.
 pub const PLAYGROUND_LIKELIHOOD: f32 = 0.9;
@@ -170,18 +170,38 @@ impl RichmondConfig {
 	}
 
 	pub fn development_config(&self) -> DevelopmentConfig {
+		// Urbanization leaves under a stream or pinned urbanization; a
+		// development focus then only changes kind weights. The 300 m lattice is
+		// the no-stream catalog path. Without either the world is hopscotch-off
+		// and only authored developments stand.
+		let sites = if self.urbanization.is_some() || self.focus_urbanization.is_some() {
+			DevelopmentSites::Urbanization
+		} else if self.focus_development.is_some() {
+			DevelopmentSites::Lattice
+		} else {
+			DevelopmentSites::Authored
+		};
 		let mut development = DevelopmentConfig {
 			likelihood: PLAYGROUND_LIKELIHOOD,
-			// Stream generate walks urbanization leaves. A development focus
-			// then only changes kind weights. The 300 m lattice is the no-stream
-			// catalog path.
-			use_urbanization: self.urbanization.is_some() || self.focus_development.is_none(),
+			sites,
 			..DevelopmentConfig::from_world_seed(42)
 		};
 		if let Some(focus) = self.focus_development {
 			focus.apply(&mut development);
 		}
+		if let Some(spec) = self.urbanization {
+			development.seed = spec.noise.seed.max(0) as u32;
+		}
 		development
+	}
+
+	/// Urbanization the developments sit on: the development seed's noise,
+	/// pinned to the focused kind.
+	pub fn urbanization_selection(&self) -> UrbanizationSelection {
+		UrbanizationSelection {
+			noise: self.development_config().urbanization_noise(),
+			kind: focused_spec(self).and_then(|spec| spec.kind).or(self.focus_urbanization),
+		}
 	}
 }
 

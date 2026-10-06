@@ -1,13 +1,10 @@
-//! [`GenerationScheme`] and camera bullseyes for [`SelectedUrbanization`].
+//! [`GenerationScheme`] for [`SelectedUrbanization`] and its producer channel.
 
 use bevy::math::bounding::Aabb3d;
-use bevy::prelude::*;
-use lod::gen::{GenerationScheme, OriginalId};
-use lod::lod_ref::LodRef;
-use lod::scene::{LodRefreshRegions, LodRefreshRegionsStatus};
+use lod::gen::{GeneratingSpatialIndex, GenerationScheme, Id, OriginalId};
 
-use crate::index::UrbanizationIndex;
-use crate::{SelectedUrbanization, UrbanizationExtent};
+use crate::storage::UrbanizationSelection;
+use crate::{select_cell, select_cell_as, SelectedUrbanization, UrbanizationExtent};
 
 /// Urbanization selection generate ring around the camera (metres).
 pub const DEVELOPMENT_GENERATE_RADIUS_M: f32 = 3000.0;
@@ -15,90 +12,32 @@ pub const DEVELOPMENT_GENERATE_RADIUS_M: f32 = 3000.0;
 /// Urbanization present ring around the camera (metres).
 pub const DEVELOPMENT_PRESENT_RADIUS_M: f32 = 1000.0;
 
-impl GenerationScheme<UrbanizationIndex> for SelectedUrbanization {
-	fn original_ids_for(_spatial_index: &mut UrbanizationIndex, region: Aabb3d) -> Vec<OriginalId> {
+/// Producer channel for urbanization selection: the generate ring around the viewer.
+pub struct UrbanizationWindow;
+
+impl<S> GenerationScheme<S> for SelectedUrbanization
+where
+	S: GeneratingSpatialIndex<UrbanizationSelection>,
+{
+	fn original_ids_for(_spatial_index: &mut S, region: Aabb3d) -> Vec<OriginalId> {
 		UrbanizationExtent::cells_overlapping(region)
 			.into_iter()
 			.map(|extent| OriginalId(extent.id()))
 			.collect()
 	}
 
-	fn build_with_id(
-		spatial_index: &mut UrbanizationIndex,
-		id: lod::gen::Id,
-	) -> Option<(Self, Aabb3d)> {
+	fn build_with_id(spatial_index: &mut S, id: Id) -> Option<(Self, Aabb3d)> {
 		let extent = UrbanizationExtent::from_id(id)?;
-		spatial_index.ensure_selected(extent, spatial_index.noise);
-		let selected = spatial_index.get(id)?.clone();
+		let selection =
+			GeneratingSpatialIndex::<UrbanizationSelection>::get_one_or_generate(
+				spatial_index,
+				Id::Universal,
+			)?;
+		let selected = match selection.kind {
+			Some(kind) => select_cell_as(extent, selection.noise, kind),
+			None => select_cell(extent, selection.noise),
+		};
 		Some((selected, extent.aabb()))
-	}
-}
-
-/// Channel marker for urbanization generate / present messages.
-#[derive(Debug, Clone, Copy, Default)]
-pub struct UrbanizationLodChan;
-
-/// Generate bullseye: emit a metric AABB when the driver crosses a 1600 m cell.
-#[derive(Resource, Debug, Clone, Copy, PartialEq)]
-pub struct UrbanizationGenerateBullseye {
-	pub radius_m: f32,
-	pub enabled: bool,
-}
-
-impl Default for UrbanizationGenerateBullseye {
-	fn default() -> Self {
-		Self { radius_m: DEVELOPMENT_GENERATE_RADIUS_M, enabled: false }
-	}
-}
-
-impl LodRefreshRegions for UrbanizationGenerateBullseye {
-	fn lod_refresh_regions(&self, lod_ref: &LodRef) -> LodRefreshRegionsStatus {
-		if !self.enabled {
-			return LodRefreshRegionsStatus::Unchanged;
-		}
-		let previous =
-			UrbanizationExtent::cell_index_containing(lod_ref.previous_transform.translation);
-		let current =
-			UrbanizationExtent::cell_index_containing(lod_ref.current_transform.translation);
-		if current == previous {
-			return LodRefreshRegionsStatus::Unchanged;
-		}
-		LodRefreshRegionsStatus::Changed(UrbanizationExtent::xz_radius_aabb(
-			lod_ref.current_transform.translation,
-			self.radius_m,
-		))
-	}
-}
-
-/// Present ring — typically 1 km when generate is 3 km.
-#[derive(Resource, Debug, Clone, Copy, PartialEq)]
-pub struct UrbanizationPresentBullseye {
-	pub radius_m: f32,
-	pub enabled: bool,
-}
-
-impl Default for UrbanizationPresentBullseye {
-	fn default() -> Self {
-		Self { radius_m: DEVELOPMENT_PRESENT_RADIUS_M, enabled: false }
-	}
-}
-
-impl LodRefreshRegions for UrbanizationPresentBullseye {
-	fn lod_refresh_regions(&self, lod_ref: &LodRef) -> LodRefreshRegionsStatus {
-		if !self.enabled {
-			return LodRefreshRegionsStatus::Unchanged;
-		}
-		let previous =
-			UrbanizationExtent::cell_index_containing(lod_ref.previous_transform.translation);
-		let current =
-			UrbanizationExtent::cell_index_containing(lod_ref.current_transform.translation);
-		if current == previous {
-			return LodRefreshRegionsStatus::Unchanged;
-		}
-		LodRefreshRegionsStatus::Changed(UrbanizationExtent::xz_radius_aabb(
-			lod_ref.current_transform.translation,
-			self.radius_m,
-		))
 	}
 }
 
@@ -106,28 +45,13 @@ impl LodRefreshRegions for UrbanizationPresentBullseye {
 mod tests {
 	use super::*;
 	use anyhow::Result;
-	use lod::gen::GeneratingSpatialIndex;
-	use procedural_common::NoiseParams;
+	use lod::hcsg::HcsgStorage;
 
 	#[test]
 	fn urbanization_original_ids_are_overlapping_cells() -> Result<()> {
 		let region = UrbanizationExtent::ring_aabb((0, 0), 1);
-		let ids = SelectedUrbanization::original_ids_for(&mut UrbanizationIndex::default(), region);
+		let ids = HcsgStorage::default().original_ids_for::<SelectedUrbanization>(region);
 		assert_eq!(ids.len(), 9);
-		Ok(())
-	}
-
-	#[test]
-	fn urbanization_build_is_select_only() -> Result<()> {
-		let mut index = UrbanizationIndex::default();
-		index.noise = NoiseParams::from_scalar(9.0, 0.005, 1.0, 1);
-		let extent = UrbanizationExtent::default_cell();
-		let id = extent.id();
-		assert!(GeneratingSpatialIndex::<SelectedUrbanization>::get_or_generate(&mut index, id)
-			.is_some());
-		let selected = lod::gen::SpatialIndex::<SelectedUrbanization>::get(&index, id)
-			.ok_or_else(|| anyhow::anyhow!("urbanization"))?;
-		assert_eq!(selected.extent, extent);
 		Ok(())
 	}
 }

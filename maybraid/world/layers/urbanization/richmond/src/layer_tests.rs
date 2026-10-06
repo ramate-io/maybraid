@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use bevy::app::App;
 use bevy::ecs::system::{RunSystemOnce, SystemState};
-use bevy::math::bounding::{Aabb3d, IntersectsVolume};
+use bevy::math::bounding::Aabb3d;
 use bevy::math::{Vec2, Vec3};
 use bevy::prelude::{
 	AssetPlugin, Camera3d, MinimalPlugins, NextState, OnExit, Transform, Visibility, World,
@@ -18,13 +18,13 @@ use layer_stack::{
 	ActiveGenerationMode, Generate, GenerationMode, GenerationModePlugin, LayerGenerationCore,
 	LayerModeConfig, Present, Scheme,
 };
-use lod::gen::{Id, LodGenerateBudget, LodGenerateRegion, SpatialIndex};
-use lod::presentation::LodPresentKeepRegion;
-use procedural_common::{noise_params_from_scalar_str, NoiseParams};
+use lod::gen::{Id, LodGenerateBudget, OriginalId};
+use lod::hcsg::{universal_bounds, CurrentBounds, GenerateOn, GenerationProducer, Seed};
+use procedural_common::noise_params_from_scalar_str;
 use terrain_layer_model::{HeightField, OnTerrain, TerrainExtent, TerrainStreaming, TerrainView};
 use urbanization_cells::{
-	DevelopmentLeaf, SelectedUrbanization, UrbanDevelopmentKind, UrbanizationExtent,
-	UrbanizationIndex, UrbanizationKind, UrbanizationLodChan,
+	register_urbanization_nodes, SelectedUrbanization, UrbanDevelopmentKind, UrbanizationExtent,
+	UrbanizationKind, UrbanizationWindow,
 };
 use urbanization_layer_model::{
 	urbanization_host_region, UrbanModel, UrbanSnapshot, Urbanization, UrbanizationGeneration,
@@ -32,7 +32,7 @@ use urbanization_layer_model::{
 };
 use urbanization_layer_presentation::{PaddedCells, UrbanizationHosts};
 
-use crate::index::DevelopmentIndex;
+use crate::built::Built;
 use crate::layer::Richmond;
 use crate::layer_config::{
 	DevelopmentFocus, RichmondConfig, UrbanizationStreamSpec, DEFAULT_URBANIZATION_NOISE,
@@ -42,12 +42,14 @@ use crate::layer_present::{
 	present_richmond_hosts, quantize_viewer_xz_for_test, sync_raw_terrain_replacements,
 	UrbanizationPaddedTerrainState, UrbanizationPresenterState,
 };
-use crate::layer_stream::{
-	parse_urbanization_kind, register_urbanization_lod_generate, stream_radii_m,
-	stream_urbanization, write_urbanization_host_region, UrbanizationStreamKey,
+use crate::layer_stream::{parse_urbanization_kind, stream_radii_m, stream_urbanization, HostWindow};
+use crate::padded::{PaddedTerrain, PresentedPaddedTerrainScene, TerrainWithPads};
+use crate::storage::{register_richmond_nodes, RichmondNodes};
+use crate::{
+	AuthoredDevelopment, AuthoredDevelopments, DevelopmentConfig, DevelopmentKind, DevelopmentSite,
+	DevelopmentSites,
+	PadComplex, PadParams, DEVELOPMENT_CELL_SIZE,
 };
-use crate::padded::{PresentedPaddedTerrainScene, TerrainWithPads};
-use crate::{DevelopmentCell, DevelopmentConfig, DevelopmentEntryStore, PadComplex, PadParams};
 
 struct TestMode;
 
@@ -83,16 +85,56 @@ impl Scheme<Urbanization<Richmond<OnTerrain<Durham>>>> for OtherMode {
 	fn install(_app: &mut App, _config: &RichmondConfig) {}
 }
 
-type Urbanized = Urbanization<Richmond<OnTerrain<Durham>>>;
+type Ground = OnTerrain<Durham>;
+type Urbanized = Urbanization<Richmond<Ground>>;
+
+fn registered_storage() -> HcsgStorage {
+	let mut storage = HcsgStorage::default();
+	register_urbanization_nodes(&mut storage);
+	register_richmond_nodes::<Ground>(&mut storage);
+	storage
+}
 
 fn empty_urbanized_world() -> World {
 	let mut world = World::new();
-	world.init_resource::<HcsgStorage>();
+	world.insert_resource(registered_storage());
 	world.insert_resource(TerrainCellLayout::default());
 	world.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(&TerrainConfig::new(42))));
-	world.insert_resource(DevelopmentEntryStore::default());
-	world.insert_resource(UrbanizationIndex::default());
 	world
+}
+
+fn authored_only_config() -> DevelopmentConfig {
+	DevelopmentConfig {
+		sites: DevelopmentSites::Authored,
+		..DevelopmentConfig::from_world_seed(42)
+	}
+}
+
+fn les_halles_at(center: Vec2, config: &DevelopmentConfig) -> AuthoredDevelopment {
+	let half = DEVELOPMENT_CELL_SIZE * 0.5;
+	AuthoredDevelopment {
+		cell: Aabb3d::from_min_max(
+			Vec3::new(center.x - half, 0.0, center.y - half),
+			Vec3::new(center.x + half, 1.0, center.y + half),
+		),
+		kinds: vec![DevelopmentKind::LesHalles],
+		height: 12.0,
+		config: config.clone(),
+		courtyard: None,
+	}
+}
+
+fn generated<T>(storage: &mut HcsgStorage, id: Id) -> Option<&T>
+where
+	T: lod::gen::GenerationScheme<HcsgStorage> + Send + Sync + 'static,
+{
+	storage.get_or_generate::<T>(id)?;
+	storage.get::<T>(id)
+}
+
+fn seed_roots(storage: &mut HcsgStorage, config: DevelopmentConfig, authored: AuthoredDevelopments) {
+	storage.seed(config, universal_bounds());
+	storage.seed(authored, universal_bounds());
 }
 
 #[test]
@@ -172,31 +214,34 @@ fn development_focus_from_kebab_is_case_insensitive() -> anyhow::Result<()> {
 }
 
 #[test]
-fn stream_applies_focus_when_the_spec_kind_is_open() -> anyhow::Result<()> {
+fn selection_applies_focus_when_the_spec_kind_is_open() -> anyhow::Result<()> {
 	let mut config = RichmondConfig::world_defaults();
 	config.focus_urbanization = Some(UrbanizationKind::Frontier);
 	anyhow::ensure!(
 		config.urbanization.as_ref().is_some_and(|spec| spec.kind.is_none()),
 		"world defaults leave kind open"
 	);
-
-	let mut app = App::new();
-	app.add_plugins((MinimalPlugins, StatesPlugin));
-	app.add_plugins(GenerationModePlugin::<TestMode>::initial());
-	register_urbanization_lod_generate(&mut app);
-	app.insert_resource(
-		LayerModeConfig::<TestMode, Urbanization<Richmond<OnTerrain<Durham>>>>::new(config),
-	);
-	app.init_resource::<UrbanizationStreamKey>();
-	app.world_mut().spawn((Camera3d::default(), Transform::from_xyz(0.0, 8.0, 0.0)));
-
-	app.world_mut()
-		.run_system_once(stream_urbanization::<TestMode, OnTerrain<Durham>>)
-		.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 	anyhow::ensure!(
-		app.world().resource::<UrbanizationIndex>().kind == Some(UrbanizationKind::Frontier),
-		"apply_spec must keep the focused kind"
+		config.urbanization_selection().kind == Some(UrbanizationKind::Frontier),
+		"the selection must keep the focused kind"
 	);
+	anyhow::ensure!(
+		config.development_config().sites == DevelopmentSites::Urbanization,
+		"a spec places on leaves"
+	);
+	Ok(())
+}
+
+#[test]
+fn a_mode_without_a_stream_or_focus_places_only_authored_developments() -> anyhow::Result<()> {
+	anyhow::ensure!(
+		RichmondConfig::shared_world().development_config().sites == DevelopmentSites::Authored
+	);
+	let catalog = RichmondConfig {
+		focus_development: Some(DevelopmentFocus::LesHalles),
+		..RichmondConfig::shared_world()
+	};
+	anyhow::ensure!(catalog.development_config().sites == DevelopmentSites::Lattice);
 	Ok(())
 }
 
@@ -238,29 +283,24 @@ fn pad_modulation_sets_exact_terrace_and_preserves_base_outside() -> anyhow::Res
 	Ok(())
 }
 
-#[derive(bevy::prelude::Resource)]
-struct OverlayPadSpec {
+fn insert_overlay_pad(
+	world: &mut World,
 	source: Id,
 	bounds: Aabb3d,
 	res_2: u8,
-}
-
-fn insert_overlay_pad(
-	mut index: DevelopmentIndex<OnTerrain<Durham>>,
-	spec: bevy::prelude::Res<OverlayPadSpec>,
-) {
-	use crate::ground::RichmondGround;
+) -> anyhow::Result<()> {
 	use terrain_layer_model::TerrainCell;
 
-	let Some(terrain) = OnTerrain::<Durham>::stored_cell(&index.ground, spec.source) else {
-		return;
+	let mut storage = world.resource_mut::<HcsgStorage>();
+	let mut padded = {
+		let terrain = storage.terrain(source).ok_or_else(|| anyhow::anyhow!("source terrain"))?;
+		TerrainWithPads::compose(terrain, std::iter::empty::<&PadComplex>())
 	};
-	let mut padded = TerrainWithPads::compose(terrain, std::iter::empty::<&PadComplex>());
-	padded.cell = spec.bounds;
-	padded.res_2 = spec.res_2;
+	padded.cell = bounds;
+	padded.res_2 = res_2;
 	let bounds = padded.bounds();
-	let id = Id::from_cell(bounds);
-	SpatialIndex::<TerrainWithPads>::insert(&mut index, id, padded, bounds);
+	storage.insert(Id::from_cell(bounds), PaddedTerrain::<Ground>::new(padded), bounds);
+	Ok(())
 }
 
 fn overlay_width_res(
@@ -281,7 +321,6 @@ fn overlay_width_res(
 #[test]
 fn overlay_cell_prefers_a_padded_cell_then_falls_back_by_size() -> anyhow::Result<()> {
 	let mut world = empty_urbanized_world();
-	world.insert_resource(DevelopmentConfig::default());
 	let base = BaseTerrainNoise::from_config(&TerrainConfig::new(42));
 	let fine = TerrainCellLayout::default();
 	let medium =
@@ -316,173 +355,153 @@ fn overlay_cell_prefers_a_padded_cell_then_falls_back_by_size() -> anyhow::Resul
 			medium_bounds.ok_or_else(|| anyhow::anyhow!("medium bounds"))?,
 		)
 	};
+	let clear = |world: &mut World| world.resource_mut::<HcsgStorage>().clear_group::<RichmondNodes>();
 
-	let run = |world: &mut World| {
-		world
-			.run_system_once(insert_overlay_pad)
-			.map_err(|error| anyhow::anyhow!("{error:?}"))
-	};
-
-	world.insert_resource(OverlayPadSpec { source, bounds: medium_bounds, res_2: 9 });
-	run(&mut world)?;
+	insert_overlay_pad(&mut world, source, medium_bounds, 9)?;
 	let (width, res) = overlay_width_res(&mut world, query, TERRAIN_CELL_SIZE, None)?;
 	anyhow::ensure!((width - 2.0 * TERRAIN_CELL_SIZE).abs() < 1e-3);
 	anyhow::ensure!(res == 9);
 
-	world.resource_mut::<DevelopmentEntryStore>().clear();
+	clear(&mut world);
 	let (width, res) = overlay_width_res(&mut world, query, TERRAIN_CELL_SIZE, None)?;
 	anyhow::ensure!((width - TERRAIN_CELL_SIZE).abs() < 1e-3);
 	anyhow::ensure!(res == 0);
 
-	world.insert_resource(OverlayPadSpec { source, bounds: fine_bounds, res_2: 9 });
-	run(&mut world)?;
+	insert_overlay_pad(&mut world, source, fine_bounds, 9)?;
 	let (width, res) = overlay_width_res(&mut world, query, 2.0 * TERRAIN_CELL_SIZE, Some(1e-2))?;
 	anyhow::ensure!((width - 2.0 * TERRAIN_CELL_SIZE).abs() < 1e-3);
 	anyhow::ensure!(res == 0);
 
-	world.resource_mut::<DevelopmentEntryStore>().clear();
-	world.insert_resource(OverlayPadSpec { source, bounds: medium_bounds, res_2: 9 });
-	run(&mut world)?;
+	clear(&mut world);
+	insert_overlay_pad(&mut world, source, medium_bounds, 9)?;
 	let (width, res) = overlay_width_res(&mut world, query, 2.0 * TERRAIN_CELL_SIZE, Some(1e-2))?;
 	anyhow::ensure!((width - 2.0 * TERRAIN_CELL_SIZE).abs() < 1e-3);
 	anyhow::ensure!(res == 9);
 	Ok(())
 }
 
-#[test]
-fn host_region_covers_every_leaf_of_selected_cells() -> anyhow::Result<()> {
-	let extent = UrbanizationExtent::default_cell();
-	let keep = Aabb3d::from_min_max(Vec3::new(-10.0, 0.0, -10.0), Vec3::new(10.0, 1.0, 10.0));
-	anyhow::ensure!(keep.intersects(&extent.aabb()), "the keep must overlap the urbanization cell");
-
-	let mut world = World::new();
-	world.insert_resource(UrbanizationLayerRegion::default());
-	world.insert_resource({
-		let mut keep_region = LodPresentKeepRegion::<UrbanizationLodChan>::default();
-		keep_region.region = Some(keep);
-		keep_region
-	});
-	world.insert_resource(UrbanizationIndex::default());
-	world.resource_mut::<UrbanizationIndex>().kind = Some(UrbanizationKind::MixedAgeCity);
-	world
-		.resource_mut::<UrbanizationIndex>()
-		.ensure_selected(extent, NoiseParams::default());
-
-	let selected = world
-		.resource::<UrbanizationIndex>()
-		.get(extent.id())
-		.cloned()
-		.ok_or_else(|| anyhow::anyhow!("selected cell"))?;
-	let old: HashSet<Id> = selected
-		.leaves
-		.iter()
-		.filter(|leaf| leaf.kind != UrbanDevelopmentKind::Empty)
-		.map(DevelopmentLeaf::id)
-		.collect();
-	anyhow::ensure!(!old.is_empty(), "hopscotch produced no filled leaves");
-	let outside_keep = selected
-		.leaves
-		.iter()
-		.any(|leaf| leaf.kind != UrbanDevelopmentKind::Empty && !keep.intersects(&leaf.bounds));
-	anyhow::ensure!(outside_keep, "this fixture needs a filled leaf that sits outside the keep");
-
-	world
-		.run_system_once(write_urbanization_host_region)
-		.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-	let host = world
-		.resource::<UrbanizationLayerRegion>()
-		.region
-		.ok_or_else(|| anyhow::anyhow!("host region"))?;
-	anyhow::ensure!(host == extent.aabb(), "the stream writes the selected cell");
-
-	let index = world.resource::<UrbanizationIndex>();
-	let new: HashSet<Id> = SpatialIndex::<SelectedUrbanization>::tracked_ids_for(&*index, host)
-		.into_iter()
-		.filter_map(|tracked| index.get(tracked.0))
-		.flat_map(|selected| selected.leaves.iter())
-		.filter(|leaf| leaf.kind != UrbanDevelopmentKind::Empty)
-		.map(DevelopmentLeaf::id)
-		.collect();
-	anyhow::ensure!(old == new, "hosts present the same leaf ids as the old walk");
-	Ok(())
-}
-
-#[test]
-fn leaving_a_stream_mode_clears_then_reentering_streams_again() -> anyhow::Result<()> {
-	use bevy::ecs::message::Messages;
-
-	let spec = UrbanizationStreamSpec::default();
+fn stream_app<Mode: GenerationMode>(config: RichmondConfig) -> App {
 	let mut app = App::new();
 	app.add_plugins((MinimalPlugins, StatesPlugin));
 	app.add_plugins((
 		GenerationModePlugin::<StreamMode>::initial(),
 		GenerationModePlugin::<OtherMode>::default(),
+		GenerateOn::<UrbanizationWindow, SelectedUrbanization>::default(),
 	));
-	register_urbanization_lod_generate(&mut app);
-	app.insert_resource(
-		LayerModeConfig::<StreamMode, Urbanization<Richmond<OnTerrain<Durham>>>>::new(
-			RichmondConfig::world_defaults(),
-		),
-	);
-	app.init_resource::<UrbanizationStreamKey>();
+	let mut storage = registered_storage();
+	storage.seed(config.urbanization_selection(), universal_bounds());
+	seed_roots(&mut storage, config.development_config(), AuthoredDevelopments::default());
+	app.insert_resource(storage);
+	app.insert_resource(LayerModeConfig::<Mode, Urbanized>::new(config));
 	app.init_resource::<UrbanizationLayerRegion>();
-	app.init_resource::<DevelopmentEntryStore>();
-	app.init_resource::<DevelopmentConfig>();
+	app.world_mut().spawn((Camera3d::default(), Transform::from_xyz(0.0, 8.0, 0.0)));
+	app
+}
+
+fn run_stream<Mode: GenerationMode>(app: &mut App) -> anyhow::Result<()> {
+	app.world_mut()
+		.run_system_once(stream_urbanization::<Mode, Ground>)
+		.map_err(|error| anyhow::anyhow!("{error:?}"))
+}
+
+#[test]
+fn stream_layer_region_covers_every_leaf_of_the_selected_cells() -> anyhow::Result<()> {
+	let mut config = RichmondConfig::world_defaults();
+	config.focus_urbanization = Some(UrbanizationKind::MixedAgeCity);
+	let mut app = stream_app::<StreamMode>(config);
+	run_stream::<StreamMode>(&mut app)?;
+
+	let host = app
+		.world()
+		.resource::<UrbanizationLayerRegion>()
+		.region
+		.ok_or_else(|| anyhow::anyhow!("layer region"))?;
+	anyhow::ensure!(
+		app.world().resource::<CurrentBounds<UrbanizationWindow>>().bounds.is_some(),
+		"the stream publishes the urbanization window"
+	);
+
+	let extents = UrbanizationExtent::cells_overlapping(host);
+	anyhow::ensure!(!extents.is_empty(), "the layer region holds urbanization cells");
+	let mut storage = app.world_mut().resource_mut::<HcsgStorage>();
+	let mut filled = 0;
+	for extent in extents {
+		let Some(selected) = generated::<SelectedUrbanization>(&mut storage, extent.id()) else {
+			continue;
+		};
+		for leaf in selected.leaves.iter().filter(|leaf| leaf.kind != UrbanDevelopmentKind::Empty) {
+			filled += 1;
+			anyhow::ensure!(
+				leaf.bounds.min.x >= host.min.x
+					&& leaf.bounds.min.z >= host.min.z
+					&& leaf.bounds.max.x <= host.max.x
+					&& leaf.bounds.max.z <= host.max.z,
+				"leaf {:?} sits outside the layer region",
+				leaf.bounds
+			);
+		}
+	}
+	anyhow::ensure!(filled > 0, "hopscotch produced no filled leaves");
+	Ok(())
+}
+
+#[test]
+fn leaving_a_stream_mode_clears_then_reentering_streams_again() -> anyhow::Result<()> {
+	let mut config = RichmondConfig::world_defaults();
+	config.focus_urbanization = Some(UrbanizationKind::MixedAgeCity);
+	let mut app = stream_app::<StreamMode>(config);
 	app.add_systems(OnExit(ActiveGenerationMode::of::<StreamMode>()), |world: &mut World| {
-		Richmond::<OnTerrain<Durham>>::clear_generation(world)
+		Richmond::<Ground>::clear_generation(world);
 	});
 	app.add_systems(OnExit(ActiveGenerationMode::of::<OtherMode>()), |world: &mut World| {
-		Richmond::<OnTerrain<Durham>>::clear_generation(world)
+		Richmond::<Ground>::clear_generation(world);
 	});
-	app.world_mut().spawn((Camera3d::default(), Transform::from_xyz(0.0, 8.0, 0.0)));
 
-	let bounds =
-		Aabb3d::from_min_max(Vec3::new(4_000.0, 0.0, 4_000.0), Vec3::new(4_080.0, 1.0, 4_080.0));
-	let streamed_id = Id::from_cell(bounds);
-	app.world_mut()
-		.resource_mut::<DevelopmentEntryStore>()
-		.insert_cell(streamed_id, DevelopmentCell::empty(bounds));
 	let extent = UrbanizationExtent::default_cell();
-	app.world_mut()
-		.resource_mut::<UrbanizationIndex>()
-		.ensure_selected(extent, spec.noise);
-	let selected = extent.id();
-	app.world_mut().insert_resource(UrbanizationStreamKey(Some(spec.key())));
-
+	let site = {
+		let mut storage = app.world_mut().resource_mut::<HcsgStorage>();
+		anyhow::ensure!(storage.get_or_generate::<SelectedUrbanization>(extent.id()).is_some());
+		let OriginalId(site) = storage
+			.original_ids_for::<DevelopmentSite>(extent.aabb())
+			.first()
+			.copied()
+			.ok_or_else(|| anyhow::anyhow!("a development site"))?;
+		anyhow::ensure!(storage.get_or_generate::<DevelopmentSite>(site).is_some());
+		site
+	};
 	app.update();
-	anyhow::ensure!(app.world().resource::<DevelopmentEntryStore>().cell(streamed_id).is_some());
+	run_stream::<StreamMode>(&mut app)?;
+	anyhow::ensure!(app.world().resource::<UrbanizationLayerRegion>().region.is_some());
 
 	app.world_mut()
 		.resource_mut::<NextState<ActiveGenerationMode>>()
 		.set(ActiveGenerationMode::of::<OtherMode>());
 	app.update();
+	let storage = app.world().resource::<HcsgStorage>();
 	anyhow::ensure!(
-		app.world().resource::<DevelopmentEntryStore>().cell(streamed_id).is_none(),
+		storage.get::<DevelopmentSite>(site).is_none(),
 		"the other mode holds no streamed development"
 	);
 	anyhow::ensure!(
-		app.world().resource::<UrbanizationIndex>().get(selected).is_none(),
+		storage.get::<SelectedUrbanization>(extent.id()).is_none(),
 		"the other mode holds no hopscotch selection"
 	);
-	anyhow::ensure!(app.world().resource::<UrbanizationStreamKey>().0.is_none());
+	anyhow::ensure!(app.world().resource::<UrbanizationLayerRegion>().region.is_none());
+	anyhow::ensure!(
+		app.world().resource::<CurrentBounds<UrbanizationWindow>>().bounds.is_none(),
+		"leaving forgets the urbanization window"
+	);
 
 	app.world_mut()
 		.resource_mut::<NextState<ActiveGenerationMode>>()
 		.set(ActiveGenerationMode::of::<StreamMode>());
 	app.update();
-	app.world_mut()
-		.run_system_once(stream_urbanization::<StreamMode, OnTerrain<Durham>>)
-		.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+	run_stream::<StreamMode>(&mut app)?;
 	anyhow::ensure!(
-		app.world().resource::<UrbanizationStreamKey>().0.as_ref() == Some(&spec.key()),
-		"re-entering stores the spec key again"
+		app.world().resource::<CurrentBounds<UrbanizationWindow>>().bounds.is_some(),
+		"re-entering publishes the urbanization window again"
 	);
-	let regions = app
-		.world()
-		.resource::<Messages<LodGenerateRegion<UrbanizationLodChan>>>()
-		.iter_current_update_messages()
-		.count();
-	anyhow::ensure!(regions == 1, "re-entering emits a generate region, got {regions}");
+	anyhow::ensure!(app.world().resource::<UrbanizationLayerRegion>().region.is_some());
 	Ok(())
 }
 
@@ -511,8 +530,12 @@ fn different_budgets_build_and_apply_on_enter() -> anyhow::Result<()> {
 		&RichmondConfig::world_defaults(),
 	);
 	anyhow::ensure!(
-		app.world().resource::<LodGenerateBudget<UrbanizationLodChan>>().ids_per_frame == 16,
+		app.world().resource::<LodGenerateBudget<UrbanizationWindow>>().ids_per_frame == 16,
 		"initial generate budget"
+	);
+	anyhow::ensure!(
+		app.world().resource::<LodGenerateBudget<HostWindow>>().ids_per_frame == 16,
+		"initial host budget"
 	);
 	anyhow::ensure!(
 		app.world().resource::<DevelopmentConfig>().likelihood == PLAYGROUND_LIKELIHOOD,
@@ -524,7 +547,7 @@ fn different_budgets_build_and_apply_on_enter() -> anyhow::Result<()> {
 		&RichmondConfig { generate_budget: 8, ..RichmondConfig::shared_world() },
 	);
 	anyhow::ensure!(
-		app.world().resource::<LodGenerateBudget<UrbanizationLodChan>>().ids_per_frame == 8,
+		app.world().resource::<LodGenerateBudget<UrbanizationWindow>>().ids_per_frame == 8,
 		"other mode budget"
 	);
 	Ok(())
@@ -676,10 +699,8 @@ fn streamed_hosts_leave_when_the_layer_region_is_gone() -> anyhow::Result<()> {
 	app.insert_resource(TerrainExtent::<Durham>::streamed(
 		playable_world_cell_layout().presentation_region(),
 	));
-	app.init_resource::<HcsgStorage>();
+	app.insert_resource(registered_storage());
 	app.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(&TerrainConfig::new(42))));
-	app.insert_resource(UrbanizationIndex::default());
-	app.insert_resource(DevelopmentEntryStore::default());
 	app.init_resource::<UrbanizationPresenterState>();
 	app.init_resource::<lod::LodPresentGate<Urbanized>>();
 
@@ -694,7 +715,7 @@ fn streamed_hosts_leave_when_the_layer_region_is_gone() -> anyhow::Result<()> {
 	);
 
 	app.world_mut()
-		.run_system_once(present_richmond_hosts::<OnTerrain<Durham>>)
+		.run_system_once(present_richmond_hosts::<Ground>)
 		.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 	anyhow::ensure!(
 		app.world().resource::<UrbanizationPresenterState>().presented_ids().is_empty(),
@@ -705,34 +726,28 @@ fn streamed_hosts_leave_when_the_layer_region_is_gone() -> anyhow::Result<()> {
 }
 
 #[test]
-fn hosts_walk_a_stored_development_with_no_hopscotch() -> anyhow::Result<()> {
-	let mut world = World::new();
+fn hosts_walk_an_authored_development_with_no_hopscotch() -> anyhow::Result<()> {
+	let mut world = empty_urbanized_world();
 	world.insert_resource(UrbanizationLayerRegion::default());
 	let layout = fine_patch_cell_layout(2, bevy::math::IVec2::ZERO);
 	world.insert_resource(layout.clone());
-	world.init_resource::<HcsgStorage>();
-	world.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(&TerrainConfig::new(42))));
-	world.insert_resource(UrbanizationIndex::default());
-	world.insert_resource(DevelopmentEntryStore::default());
 
-	let cell = Aabb3d::from_min_max(Vec3::new(-20.0, 0.0, -20.0), Vec3::new(20.0, 1.0, 20.0));
-	let config = DevelopmentConfig::from_world_seed(42);
-	let filled = DevelopmentCell::with_les_halles(cell, 12.0, &config);
-	let built = filled
-		.built(config.seed as i32)
-		.ok_or_else(|| anyhow::anyhow!("les halles built"))?;
-	let id = Id::from_cell(filled.cell);
-	{
-		let mut store = world.resource_mut::<DevelopmentEntryStore>();
-		store.insert_cell(id, filled);
-		store.insert_built(id, built, cell);
-	}
-
+	let config = authored_only_config();
+	let authored = les_halles_at(Vec2::ZERO, &config);
+	let id = authored.id();
 	let region = urbanization_host_region(
 		&TerrainExtent::<Durham>::pinned(layout.presentation_region()),
 		None,
 	)
 	.ok_or_else(|| anyhow::anyhow!("fine-patch host region"))?;
+	{
+		let mut storage = world.resource_mut::<HcsgStorage>();
+		seed_roots(&mut storage, config, AuthoredDevelopments(vec![authored]));
+		for OriginalId(origin) in storage.original_ids_for::<Built<Ground>>(region) {
+			storage.get_or_generate::<Built<Ground>>(origin);
+		}
+	}
+
 	let mut state = SystemState::<TerrainView<Urbanized>>::new(&mut world);
 	let view = state.get(&world).map_err(|error| anyhow::anyhow!("{error:?}"))?;
 	let ids: Vec<_> = Urbanized::built_overlapping(&view.read, region)
@@ -740,16 +755,90 @@ fn hosts_walk_a_stored_development_with_no_hopscotch() -> anyhow::Result<()> {
 		.map(|(id, _, _)| id)
 		.collect();
 	drop(state);
+	anyhow::ensure!(ids == [id], "hosts walk only the authored development, got {ids:?}");
 	anyhow::ensure!(
-		ids.contains(&id),
-		"hosts walk a stored development with no hopscotch selection"
-	);
-	anyhow::ensure!(
-		world
-			.resource::<UrbanizationIndex>()
-			.filled_leaves_overlapping(region)
-			.is_empty(),
+		world.resource::<HcsgStorage>().overlapping::<SelectedUrbanization>(region).is_empty(),
 		"no hopscotch cells are selected"
 	);
 	Ok(())
+}
+
+#[test]
+fn padded_terrain_follows_the_developments_over_its_ground_cell() -> anyhow::Result<()> {
+	let base = BaseTerrainNoise::from_config(&TerrainConfig::new(42));
+	let layout = TerrainCellLayout::default();
+	let mut storage = registered_storage();
+	storage.insert_base_terrain_for_test(&layout, 0, 0, base.clone());
+	storage.insert_base_terrain_for_test(&layout, 40, 40, base.clone());
+	let ids = |storage: &HcsgStorage, ix: f32, iz: f32| {
+		let center = Vec3::new((ix + 0.5) * layout.cell_size, 0.0, (iz + 0.5) * layout.cell_size);
+		storage.terrain_ids_overlapping(Aabb3d::new(center, Vec3::splat(0.25)))
+	};
+	let under = ids(&storage, 0.0, 0.0).first().copied().ok_or_else(|| anyhow::anyhow!("near"))?;
+	let far = ids(&storage, 40.0, 40.0).first().copied().ok_or_else(|| anyhow::anyhow!("far"))?;
+	let under_center = storage
+		.terrain(under)
+		.map(|terrain| Vec2::new(terrain.cell.min.x + terrain.cell.max.x, terrain.cell.min.z + terrain.cell.max.z) * 0.5)
+		.ok_or_else(|| anyhow::anyhow!("near terrain"))?;
+
+	let config = authored_only_config();
+	let authored = les_halles_at(under_center, &config);
+	seed_roots(&mut storage, config, AuthoredDevelopments(vec![authored]));
+
+	let padded = generated::<PaddedTerrain<Ground>>(&mut storage, under)
+		.ok_or_else(|| anyhow::anyhow!("padded terrain under the development"))?;
+	anyhow::ensure!(padded.surface.pad_count > 0, "the development's pads are composed in");
+	anyhow::ensure!(
+		storage.get_or_generate::<PaddedTerrain<Ground>>(far).is_none(),
+		"a cell no pad reaches stays raw"
+	);
+
+	let version = storage.entry::<PaddedTerrain<Ground>>(under).map(|entry| entry.version);
+	storage.insert_base_terrain_for_test(&layout, 80, 80, base);
+	anyhow::ensure!(
+		storage.entry::<PaddedTerrain<Ground>>(under).map(|entry| entry.version) == version,
+		"an unrelated ground write leaves the padded cell alone"
+	);
+	Ok(())
+}
+
+#[test]
+fn reseeding_authored_developments_regenerates_a_stationary_window() -> anyhow::Result<()> {
+	let config = authored_only_config();
+	let authored = les_halles_at(Vec2::ZERO, &config);
+	let id = authored.id();
+
+	let mut app = App::new();
+	app.add_plugins(MinimalPlugins);
+	app.insert_resource(registered_storage());
+	app.insert_resource(config);
+	app.insert_resource(AuthoredDevelopments::default());
+	app.add_plugins((
+		Seed::<DevelopmentConfig>::default().invalidates::<RichmondNodes>().restarts::<HostWindow>(),
+		Seed::<AuthoredDevelopments>::default()
+			.invalidates::<RichmondNodes>()
+			.restarts::<HostWindow>(),
+		GenerateOn::<HostWindow, Built<Ground>>::default(),
+	));
+	let keep = Aabb3d::new(Vec3::ZERO, Vec3::new(400.0, 1.0, 400.0));
+	app.world_mut()
+		.run_system_once(move |mut hosts: GenerationProducer<HostWindow>| {
+			hosts.publish(keep, None);
+		})
+		.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+	let built = |app: &App| app.world().resource::<HcsgStorage>().get::<Built<Ground>>(id).is_some();
+
+	for _ in 0..8 {
+		app.update();
+	}
+	anyhow::ensure!(!built(&app), "nothing is authored yet");
+
+	app.world_mut().resource_mut::<AuthoredDevelopments>().0.push(authored);
+	for _ in 0..8 {
+		app.update();
+		if built(&app) {
+			return Ok(());
+		}
+	}
+	anyhow::bail!("the reseed regenerates the unmoved host window")
 }

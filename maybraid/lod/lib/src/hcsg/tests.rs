@@ -219,6 +219,85 @@ fn stationary_window_regenerates_cleared_records_only_after_restart() {
 	assert_eq!(app.world().resource::<LodJobCounter>().active(), 0);
 }
 
+#[derive(Resource, Clone, PartialEq, Default)]
+struct Shape(u32);
+
+crate::seeded_root!(Shape);
+
+/// Records derived from [`Shape`]: invalidated when it reseeds.
+struct ShapedNodes;
+
+#[derive(Debug, PartialEq)]
+struct ShapedCell(u32);
+
+impl<S> GenerationScheme<S> for ShapedCell
+where
+	S: GeneratingSpatialIndex<Terrain> + GeneratingSpatialIndex<Shape>,
+{
+	fn original_ids_for(spatial_index: &mut S, region: Aabb3d) -> Vec<OriginalId> {
+		GeneratingSpatialIndex::<Terrain>::original_ids_for(spatial_index, region)
+	}
+
+	fn build_with_id(spatial_index: &mut S, id: Id) -> Option<(Self, Aabb3d)> {
+		let shape =
+			GeneratingSpatialIndex::<Shape>::get_one_or_generate(spatial_index, Id::Universal)?;
+		Some((Self(shape.0), id.origin_cell_bounds()?))
+	}
+}
+
+fn shaped_app() -> App {
+	let mut app = App::new();
+	app.add_plugins(MinimalPlugins);
+	ensure_lod_job_counter(&mut app);
+	app.world_mut().init_resource::<HcsgStorage>();
+	app.world_mut()
+		.resource_mut::<HcsgStorage>()
+		.add_to_group::<ShapedNodes, ShapedCell>();
+	app.init_resource::<PublishNext>()
+		.init_resource::<RestartNext>()
+		.insert_resource(Shape(1))
+		.add_plugins((
+			GenerateOn::<Window, ShapedCell>::default(),
+			Seed::<Shape>::default().invalidates::<ShapedNodes>().restarts::<Window>(),
+		))
+		.insert_resource(LodGenerateBudget::<Window>::new(64))
+		.add_systems(Update, publish.in_set(crate::gen::LodGenerateSystems::Produce));
+	app
+}
+
+#[test]
+fn reseeding_a_changed_root_regenerates_a_stationary_window() {
+	let mut app = shaped_app();
+	let id = Id::from_cell(cell(0.0));
+	app.world_mut().resource_mut::<PublishNext>().0 = Some(span(0.0, 1.5));
+	app.update();
+	let first = app.world().resource::<HcsgStorage>().entry::<ShapedCell>(id).map(|e| e.version);
+	assert_eq!(app.world().resource::<HcsgStorage>().get::<ShapedCell>(id), Some(&ShapedCell(1)));
+
+	app.world_mut().resource_mut::<Shape>().0 = 2;
+	app.update();
+	let storage = app.world().resource::<HcsgStorage>();
+	assert_eq!(storage.get::<ShapedCell>(id), Some(&ShapedCell(2)));
+	assert!(storage.entry::<ShapedCell>(id).map(|e| e.version) > first);
+	assert!(storage.contains::<ShapedCell>(Id::from_cell(cell(1.0))));
+	assert_eq!(app.world().resource::<LodJobCounter>().active(), 0);
+}
+
+#[test]
+fn rewriting_an_equal_root_invalidates_nothing() {
+	let mut app = shaped_app();
+	let id = Id::from_cell(cell(0.0));
+	app.world_mut().resource_mut::<PublishNext>().0 = Some(span(0.0, 0.5));
+	app.update();
+	let first = app.world().resource::<HcsgStorage>().entry::<ShapedCell>(id).map(|e| e.version);
+
+	app.world_mut().resource_mut::<Shape>().set_changed();
+	app.update();
+	let storage = app.world().resource::<HcsgStorage>();
+	assert_eq!(storage.entry::<ShapedCell>(id).map(|e| e.version), first);
+	assert!(app.world().resource::<Messages<crate::hcsg::Reseeded<Shape>>>().is_empty());
+}
+
 #[derive(Clone)]
 struct Gate;
 
@@ -263,6 +342,41 @@ fn failed_builds_retry_on_restart() {
 	app.world_mut().resource_mut::<RestartNext>().0 = Some(keep);
 	app.update();
 	assert!(app.world().resource::<HcsgStorage>().contains::<Gated>(id));
+	assert_eq!(app.world().resource::<LodJobCounter>().active(), 0);
+}
+
+#[derive(Resource, Default)]
+struct RescanNext(Vec<Aabb3d>);
+
+fn rescan(mut next: ResMut<RescanNext>, mut channel: GenerationProducer<Window>) {
+	if !next.0.is_empty() {
+		channel.rescan(std::mem::take(&mut next.0));
+	}
+}
+
+#[test]
+fn rescan_retries_only_the_named_strip_of_an_unmoved_window() {
+	let mut app = app();
+	app.init_resource::<RescanNext>()
+		.add_plugins(GenerateOn::<Window, Gated>::default())
+		.add_systems(
+			Update,
+			rescan.in_set(crate::gen::LodGenerateSystems::Produce).after(publish),
+		);
+	app.world_mut().resource_mut::<PublishNext>().0 = Some(span(0.0, 1.5));
+	app.update();
+	app.world_mut()
+		.resource_mut::<HcsgStorage>()
+		.seed(Gate, crate::hcsg::universal_bounds());
+
+	app.world_mut().resource_mut::<RescanNext>().0 = vec![span(1.25, 1.5)];
+	app.update();
+	let storage = app.world().resource::<HcsgStorage>();
+	assert!(storage.contains::<Gated>(Id::from_cell(cell(1.0))));
+	assert!(
+		!storage.contains::<Gated>(Id::from_cell(cell(0.0))),
+		"ids outside the rescanned strip stay as they were"
+	);
 	assert_eq!(app.world().resource::<LodJobCounter>().active(), 0);
 }
 

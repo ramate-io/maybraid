@@ -6,7 +6,8 @@ use bevy::prelude::Res;
 use building_components::FurnitureNode;
 use furniture_usage_areas::expand_usages;
 use lod::gen::{Id, Version};
-use richmond::{BuiltDevelopment, DevelopmentEntryStore, DevelopmentHosts};
+use lod::hcsg::HcsgStorage;
+use richmond::{Built, BuiltDevelopment, DevelopmentHosts, RichmondGround, RichmondStorage};
 use urbanization_layer_model::Urbanization;
 
 use crate::cell::world_slot;
@@ -52,21 +53,23 @@ pub trait FurnitureSlots: Send + Sync + 'static {
 	}
 }
 
-impl<T: 'static> FurnitureSlots for Urbanization<richmond::Richmond<T>> {
-	type Read = Res<'static, DevelopmentEntryStore>;
+impl<G: RichmondGround> FurnitureSlots for Urbanization<richmond::Richmond<G>> {
+	type Read = Res<'static, HcsgStorage>;
 
 	fn overlapping_tracked(
 		read: &SystemParamItem<'_, '_, Self::Read>,
 		region: Aabb3d,
 	) -> Vec<(Id, Version)> {
-		read.developments_overlapping_tracked(region)
+		read.built_overlapping::<G>(region)
 			.into_iter()
 			.map(|(id, version, _)| (id, version))
 			.collect()
 	}
 
 	fn world_slots(read: &SystemParamItem<'_, '_, Self::Read>, id: Id) -> Vec<FurnitureNode> {
-		read.development(id).map(world_slots_of).unwrap_or_default()
+		read.get::<Built<G>>(id)
+			.map(|built| world_slots_of(&built.development))
+			.unwrap_or_default()
 	}
 }
 

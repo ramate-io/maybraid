@@ -7,8 +7,10 @@ use bevy::prelude::*;
 use durham::{
 	PresentedTerrainScene, TerrainColliderMeshSource, TerrainSuperseded, TerrainTrimeshCollider,
 };
+use durham::Water;
 use layer_stack::LodPresentGateSync;
 use lod::gen::{Id, SpatialIndex, Version};
+use lod::hcsg::{HcsgStorage, LodGenerateSystems};
 use lod::lod_ref::LodRef;
 use lod::{LodPresentGate, LodPresentSystems, LodViewer};
 use terrain_layer_model::{terrain_streaming, TerrainExtent, TerrainLayerSystems};
@@ -17,13 +19,13 @@ use urbanization_layer_model::{
 	UrbanizationGenerationSystems, UrbanizationLayerRegion,
 };
 
-use crate::development::DevelopmentCell;
+use crate::developments::RichmondDevelopment;
 use crate::ground::RichmondGround;
 use crate::host::DevelopmentHosts;
-use crate::index::{DevelopmentEntryStore, PaddedStoreView};
 use crate::layer::Richmond;
-use crate::padded::TerrainWithPads;
+use crate::padded::PaddedTerrain;
 use crate::presentation::PaddedTerrainPresenter;
+use crate::storage::RichmondStorage;
 use crate::{BuiltDevelopment, PresentedPaddedTerrainScene};
 
 #[derive(Component)]
@@ -110,12 +112,14 @@ impl UrbanizationPresenterState {
 		}
 	}
 
+	/// Spawns `built`'s hosts and an [`UrbanSetting`] at `elevation` (the
+	/// leaf's first pad), replacing an older version of the leaf.
 	pub fn present_leaf(
 		&mut self,
 		commands: &mut Commands,
 		leaf_id: Id,
 		version: Version,
-		cell: &DevelopmentCell,
+		elevation: Option<f32>,
 		built: &BuiltDevelopment,
 		leaf_bounds: Aabb3d,
 	) {
@@ -127,7 +131,7 @@ impl UrbanizationPresenterState {
 		}
 
 		let center = (leaf_bounds.min + leaf_bounds.max) * 0.5;
-		let elevation = cell.pads().next().map(|pad| pad.height).unwrap_or(center.y);
+		let elevation = elevation.unwrap_or(center.y);
 		let arrival_radius = ((leaf_bounds.max.x - leaf_bounds.min.x)
 			.min(leaf_bounds.max.z - leaf_bounds.min.z)
 			* 0.25)
@@ -152,7 +156,7 @@ pub fn present_richmond_hosts<G>(
 	gate: Res<LodPresentGate<Urbanization<Richmond<G>>>>,
 	layer: Res<UrbanizationLayerRegion>,
 	extent: Res<TerrainExtent<G::Base>>,
-	store: Res<DevelopmentEntryStore>,
+	storage: Res<HcsgStorage>,
 	mut state: ResMut<UrbanizationPresenterState>,
 ) where
 	G: RichmondGround,
@@ -170,14 +174,12 @@ pub fn present_richmond_hosts<G>(
 	};
 
 	let mut wanted = HashSet::new();
-	for (id, version, built) in store.developments_overlapping_tracked(region) {
-		let Some(cell) = store.cell(id) else {
+	for (id, version, built) in storage.built_overlapping::<G>(region) {
+		let Some(development) = storage.get::<RichmondDevelopment<G>>(id) else {
 			continue;
 		};
-		if !cell.is_filled() {
-			continue;
-		}
-		state.present_leaf(&mut commands, id, version, cell, built, cell.cell);
+		let elevation = development.pads().first().map(|pad| pad.height);
+		state.present_leaf(&mut commands, id, version, elevation, built, development.cell());
 		wanted.insert(id);
 	}
 	state.remove_stale(&mut commands, &wanted);
@@ -186,9 +188,9 @@ pub fn present_richmond_hosts<G>(
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct PaddedTerrainTickKey {
 	region: Aabb3d,
-	store_rev: u64,
-	terrain_rev: u64,
-	viewer: Option<(i32, i32)>,
+	padded_rev: u64,
+	water_rev: u64,
+	viewer: (i32, i32),
 }
 
 const PADDED_VIEWER_QUANT_XZ: f32 = 8.0;
@@ -215,8 +217,8 @@ pub(crate) fn present_richmond_padded_terrain<G>(
 	gate: Res<LodPresentGate<Urbanization<Richmond<G>>>>,
 	layer: Res<UrbanizationLayerRegion>,
 	extent: Res<TerrainExtent<G::Base>>,
-	store: Res<DevelopmentEntryStore>,
-	mut presenter: PaddedTerrainPresenter<G>,
+	storage: Res<HcsgStorage>,
+	mut presenter: PaddedTerrainPresenter,
 	mut state: ResMut<UrbanizationPaddedTerrainState>,
 	lod_viewers: Query<&GlobalTransform, With<LodViewer>>,
 	cameras: Query<&GlobalTransform, With<Camera3d>>,
@@ -244,9 +246,9 @@ pub(crate) fn present_richmond_padded_terrain<G>(
 		.unwrap_or(Transform::IDENTITY);
 	let key = PaddedTerrainTickKey {
 		region,
-		store_rev: store.membership_revision(),
-		terrain_rev: presenter.terrain_membership_revision(),
-		viewer: Some(quantize_viewer_xz(viewer.translation)),
+		padded_rev: SpatialIndex::<PaddedTerrain<G>>::membership_revision(&*storage),
+		water_rev: SpatialIndex::<Water>::membership_revision(&*storage),
+		viewer: quantize_viewer_xz(viewer.translation),
 	};
 	if last.as_ref() == Some(&key) {
 		return;
@@ -257,12 +259,8 @@ pub(crate) fn present_richmond_padded_terrain<G>(
 		current_transform: &viewer,
 		bounds: &region,
 	};
-	let view = PaddedStoreView::new(&store);
-	let tracked: HashSet<Id> = SpatialIndex::<TerrainWithPads>::tracked_ids_for(&view, region)
-		.into_iter()
-		.map(|tracked| tracked.0)
-		.collect();
-	presenter.present_tracked(&view, &tracked, &lod_ref);
+	let tracked: HashSet<Id> = storage.overlapping::<PaddedTerrain<G>>(region).into_iter().collect();
+	presenter.present_tracked::<G>(&storage, &tracked, &lod_ref);
 	state.wanted = tracked;
 	*last = Some(key);
 }
@@ -318,6 +316,7 @@ where
 		present_richmond_hosts::<G>
 			.in_set(UrbanizationHostPresent)
 			.after(UrbanizationGenerationSystems)
+			.after(LodGenerateSystems::Drain)
 			.after(LodPresentGateSync)
 			.run_if(terrain_streaming::<G>)
 			.before(LodPresentSystems::Produce)
@@ -328,6 +327,7 @@ where
 		(present_richmond_padded_terrain::<G>, sync_raw_terrain_replacements)
 			.chain()
 			.after(UrbanizationGenerationSystems)
+			.after(LodGenerateSystems::Drain)
 			.after(UrbanizationHostPresent)
 			.after(LodPresentGateSync)
 			.run_if(terrain_streaming::<G>)

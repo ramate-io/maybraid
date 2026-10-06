@@ -10,15 +10,21 @@ use durham::{
 	cascade_chunk_for_cell, stream_banded_level, ComposedTerrain, StreamBandedLod, Terrain,
 	TerrainCellRing, TerrainColliderMeshSource, TerrainMeshBuilder, TerrainSdf,
 };
-use lod::gen::{Id, LodScene, LodSceneLevel, LodSceneStatus};
+use lod::gen::{GenerationScheme, Id, LodScene, LodSceneLevel, LodSceneStatus, OriginalId};
+use lod::hcsg::HcsgStorage;
 use lod::lod_ref::LodRef;
 use render_item::mesh::handle::Cached;
 use render_item::sdf::cpu_shot::{CpuShotBuilder, WallFaces};
+use std::marker::PhantomData;
 use std::sync::Arc;
 use terrain_layer_model::TerrainCell;
 use terrain_shaders::TerrainShader;
 
+use crate::compose::PadComposable;
+use crate::developments::RichmondDevelopment;
+use crate::ground::RichmondGround;
 use crate::pad::PadComplex;
+use crate::storage::RichmondStorage;
 
 /// Durham [`Terrain`] plus overlapping development pads.
 #[derive(Debug, Clone, Component)]
@@ -170,6 +176,41 @@ impl LodScene for TerrainWithPads {
 
 	fn scene_with_level(&self, _lod_ref: &LodRef, _level: LodSceneLevel) -> impl Scene + 'static {
 		self.mesh_scene()
+	}
+}
+
+/// A cell of ground `G` with the pads of the developments over it composed in.
+pub struct PaddedTerrain<G> {
+	pub surface: TerrainWithPads,
+	_ground: PhantomData<fn() -> G>,
+}
+
+impl<G> PaddedTerrain<G> {
+	pub fn new(surface: TerrainWithPads) -> Self {
+		Self { surface, _ground: PhantomData }
+	}
+}
+
+impl<G: RichmondGround> GenerationScheme<HcsgStorage> for PaddedTerrain<G> {
+	/// The ground's stored cells: its rings tile differently around each
+	/// center, so padded cells follow whatever ground is streamed.
+	fn original_ids_for(storage: &mut HcsgStorage, region: Aabb3d) -> Vec<OriginalId> {
+		storage.overlapping::<G::Cell>(region).into_iter().map(OriginalId).collect()
+	}
+
+	/// Generates the developments over the cell. A cell no pad reaches has
+	/// no padded surface; the ground presents it as is.
+	fn build_with_id(storage: &mut HcsgStorage, id: Id) -> Option<(Self, Aabb3d)> {
+		let bounds = storage.entry::<G::Cell>(id)?.bounds;
+		for OriginalId(development) in storage.original_ids_for::<RichmondDevelopment<G>>(bounds) {
+			storage.get_or_generate::<RichmondDevelopment<G>>(development);
+		}
+		let pads = storage.merged_pads::<G>(bounds);
+		if pads.is_empty() {
+			return None;
+		}
+		let surface = storage.get::<G::Cell>(id)?.compose_pads(&pads);
+		Some((Self::new(surface), bounds))
 	}
 }
 

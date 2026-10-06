@@ -27,6 +27,7 @@ mod spatial_index;
 #[cfg(test)]
 pub mod tests;
 
+pub use crate::hcsg::{LodGenerateBudget, LodGenerateSystems, LodGenerateTimeBudget, LodGenerated};
 pub use crate::presentation::{
 	LodScene, LodSceneStatus, RegionPresenter, SemanticLodScene, VisualLodScene,
 };
@@ -42,10 +43,8 @@ pub use keep::{
 	entering_keep_regions, expand_keep_xz, expire_pending_outside_keep, id_lives_in_keep,
 	id_xz_distance2, keep_region_changed, QUEUE_KEEP_SLACK_XZ,
 };
-pub(crate) use runtime::ensure_generate_sets;
 pub use runtime::{
-	drain_lod_generate, produce_lod_generate_regions, LodGenerateBudget, LodGenerateKeepRegion,
-	LodGeneratePlugin, LodGenerateQueue, LodGenerateRegion, LodGenerateRegionPlugin,
-	LodGenerateSystems, LodGenerateTimeBudget, LodGenerated,
+	drain_lod_generate, produce_lod_generate_regions, LodGenerateKeepRegion, LodGeneratePlugin,
+	LodGenerateQueue, LodGenerateRegion, LodGenerateRegionPlugin,
 };
 pub use spatial_index::{SpatialIndex, Version};

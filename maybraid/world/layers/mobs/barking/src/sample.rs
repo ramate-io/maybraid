@@ -9,11 +9,15 @@ use bevy::math::bounding::Aabb3d;
 use bevy::math::{Vec2, Vec3, Vec3Swizzles};
 use bevy::prelude::{GlobalTransform, Query, Res};
 use chico::{select_cell, Chico, ForestExtent, ForestIndex, LayeringKind};
+use lod::gen::Id;
+use lod::hcsg::HcsgStorage;
 use procedural_common::NoiseParams;
-use richmond::layer::RichmondRead;
-use richmond::{DiscoverablePlace, Richmond, RichmondGround};
+use richmond::{column_bounds, DiscoverablePlace, Richmond, RichmondDevelopment, RichmondGround};
 use terrain_layer_model::TerrainModel;
-use urbanization_cells::{select_kind, UrbanizationExtent, UrbanizationIndex, UrbanizationKind};
+use urbanization_cells::{
+	select_kind, SelectedUrbanization, UrbanizationExtent, UrbanizationKind,
+	UrbanizationSelection, UrbanizationStorage,
+};
 use urbanization_layer_model::{UrbanRead, UrbanSetting, Urbanization};
 
 use crate::generation::MobPlantHost;
@@ -126,13 +130,17 @@ where
 		read: &SystemParamItem<'_, '_, Self::Read>,
 		region: Aabb3d,
 	) -> Vec<MobPlantHost> {
-		let urban: &RichmondRead<'_> = &read.urban;
+		let storage: &HcsgStorage = &read.urban;
 		let mut hosts = Vec::new();
-		for leaf in urban.urbanization.filled_leaves_overlapping(region) {
+		for leaf in storage.filled_leaves_overlapping(region) {
 			hosts.push(host_at(leaf.bounds));
 		}
-		for cell in urban.developments.filled_cells_overlapping(region) {
-			hosts.push(host_at(cell.cell));
+		for id in storage.overlapping::<RichmondDevelopment<T>>(column_bounds(region)) {
+			if let Some(development) =
+				storage.get::<RichmondDevelopment<T>>(id).filter(|development| development.is_filled())
+			{
+				hosts.push(host_at(development.cell()));
+			}
 		}
 		hosts
 	}
@@ -146,8 +154,10 @@ where
 	fn selection(
 		read: &SystemParamItem<'_, '_, Self::Read>,
 	) -> (NoiseParams, Option<UrbanizationKind>) {
-		let urban: &RichmondRead<'_> = &read.urban;
-		(urban.urbanization.noise, urban.urbanization.kind)
+		read.urban
+			.get::<UrbanizationSelection>(Id::Universal)
+			.map(|selection| (selection.noise, selection.kind))
+			.unwrap_or_default()
 	}
 
 	fn kind_at(noise: NoiseParams, pinned: Option<UrbanizationKind>, xz: Vec2) -> UrbanizationKind {
@@ -187,12 +197,11 @@ impl<T> SelectUrbanization for Urbanization<Richmond<T>>
 where
 	T: RichmondGround,
 {
-	type Select = ResMut<'static, UrbanizationIndex>;
+	type Select = ResMut<'static, HcsgStorage>;
 
 	fn ensure_selected(select: &mut SystemParamItem<'_, '_, Self::Select>, region: Aabb3d) {
-		let noise = select.noise;
 		for extent in UrbanizationExtent::cells_overlapping(region) {
-			select.ensure_selected(extent, noise);
+			select.get_or_generate::<SelectedUrbanization>(extent.id());
 		}
 	}
 }

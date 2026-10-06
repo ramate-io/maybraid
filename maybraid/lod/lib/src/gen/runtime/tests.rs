@@ -3,11 +3,12 @@ use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 
 use crate::gen::runtime::{
-	LodGenerateBudget, LodGenerateKeepRegion, LodGeneratePlugin, LodGenerateQueue,
-	LodGenerateRegion, LodGenerateRegionPlugin, LodGenerateTimeBudget,
+	LodGenerateKeepRegion, LodGeneratePlugin, LodGenerateQueue, LodGenerateRegion,
+	LodGenerateRegionPlugin,
 };
 use crate::gen::tests::test_utils::{cell, Terrain, Vegetation, WorldIndex};
 use crate::gen::{Id, SpatialIndex};
+use crate::hcsg::{LodGenerateBudget, LodGenerateTimeBudget};
 use crate::jobs::LodJobCounter;
 use crate::lod_ref::{LodNode, LodNodePose};
 use crate::scene::{Bullseye, LodRefreshCorePlugin};

@@ -12,11 +12,15 @@ use lod::gen::{GenerationScheme, Id, LodGenerateKeepRegion, SpatialIndex};
 use lod::lod_ref::LodRef;
 use lod::presentation::LodPresentKeepRegion;
 use procedural_common::NoiseParams;
-use richmond::{DevelopmentConfig, DevelopmentEntryStore};
+use lod::hcsg::universal_bounds;
+use richmond::{
+	register_richmond_nodes, AuthoredDevelopment, AuthoredDevelopments, DevelopmentConfig,
+	DevelopmentKind, RichmondDevelopment,
+};
 use terrain_layer_model::{HeightField, OnTerrain, TerrainCell, TerrainModel};
 use urbanization_cells::{
-	DevelopmentLeaf, SelectedUrbanization, UrbanDevelopmentKind, UrbanizationExtent,
-	UrbanizationIndex, UrbanizationKind,
+	register_urbanization_nodes, DevelopmentLeaf, SelectedUrbanization, UrbanDevelopmentKind,
+	UrbanizationExtent, UrbanizationKind, UrbanizationSelection,
 };
 use urbanization_layer_model::{UrbanSetting, Urbanization};
 use vegetation_layer_model::{Vegetation, VegetationGeneration, VegetationModel};
@@ -36,11 +40,13 @@ use mob_layer_model::Mobs;
 type Urbanized = Urbanization<richmond::Richmond<OnTerrain<Durham>>>;
 
 pub(crate) fn insert_urbanized_resources(world: &mut World) {
-	world.init_resource::<HcsgStorage>();
+	let mut storage = HcsgStorage::default();
+	register_urbanization_nodes(&mut storage);
+	register_richmond_nodes::<OnTerrain<Durham>>(&mut storage);
+	storage.seed(UrbanizationSelection::default(), universal_bounds());
+	world.insert_resource(storage);
 	world.insert_resource(TerrainCellLayout::default());
 	world.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(&TerrainConfig::new(42))));
-	world.insert_resource(DevelopmentEntryStore::default());
-	world.insert_resource(UrbanizationIndex::default());
 }
 
 #[test]
@@ -105,7 +111,9 @@ fn mob_models_follow_a_late_urbanization_pin() -> anyhow::Result<()> {
 	app.add_systems(bevy::prelude::Update, sync_mob_models::<Chico<Urbanized>, Urbanized>);
 	app.update();
 	let pinned = NoiseParams { frequency: 0.0005, ..Default::default() };
-	app.world_mut().resource_mut::<UrbanizationIndex>().noise = pinned;
+	app.world_mut()
+		.resource_mut::<HcsgStorage>()
+		.seed(UrbanizationSelection { noise: pinned, kind: None }, universal_bounds());
 	app.update();
 	let mobs = app
 		.world()
@@ -146,18 +154,23 @@ fn plant_hosts_follow_leaves_cells_settings_then_places() -> anyhow::Result<()> 
 			kind: UrbanDevelopmentKind::LesHalles,
 		}],
 	};
-	SpatialIndex::<SelectedUrbanization>::insert(
-		&mut *app.world_mut().resource_mut::<UrbanizationIndex>(),
-		extent.id(),
-		selected,
-		extent.aabb(),
-	);
-
 	let config = DevelopmentConfig::from_world_seed(42);
-	app.world_mut().resource_mut::<DevelopmentEntryStore>().insert_cell(
-		Id::from_cell(cell_bounds),
-		richmond::DevelopmentCell::with_les_halles(cell_bounds, 12.0, &config),
-	);
+	let authored = AuthoredDevelopment {
+		cell: cell_bounds,
+		kinds: vec![DevelopmentKind::LesHalles],
+		height: 12.0,
+		config: config.clone(),
+		courtyard: None,
+	};
+	{
+		let mut storage = app.world_mut().resource_mut::<HcsgStorage>();
+		storage.insert(extent.id(), selected, extent.aabb());
+		storage.seed(config, universal_bounds());
+		storage.seed(AuthoredDevelopments(vec![authored]), universal_bounds());
+		storage
+			.get_or_generate::<RichmondDevelopment<OnTerrain<Durham>>>(Id::from_cell(cell_bounds))
+			.ok_or_else(|| anyhow::anyhow!("authored development"))?;
+	}
 
 	let setting_at = Vec3::new(12.0, 4.0, -6.0);
 	app.world_mut().spawn((
@@ -197,10 +210,10 @@ fn plant_hosts_follow_leaves_cells_settings_then_places() -> anyhow::Result<()> 
 	assert_eq!(hosts[2], MobPlantHost { xz: setting_at.xz(), arrival_radius: 14.0 });
 	assert_eq!(hosts[3], MobPlantHost { xz: place_at.xz(), arrival_radius: 9.0 });
 
-	let urbanization = app.world().resource::<UrbanizationIndex>();
+	let storage = app.world().resource::<HcsgStorage>();
 	for extent in UrbanizationExtent::cells_overlapping(region) {
 		anyhow::ensure!(
-			urbanization.get(extent.id()).is_some(),
+			storage.get::<SelectedUrbanization>(extent.id()).is_some(),
 			"generate keep cell {:?} was not selected",
 			extent.id()
 		);

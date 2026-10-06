@@ -1,16 +1,16 @@
 //! Present padded terrain cells.
 
-use bevy::ecs::system::{StaticSystemParam, SystemParam};
+use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use durham::{stream_banded_draws, PresentedWaterScene, TerrainVisualHost, Water};
-use lod::gen::{Id, LodScene, LodSceneLevel, RegionPresenter, SpatialIndex, Version};
+use lod::gen::{Id, LodScene, LodSceneLevel, Version};
+use lod::hcsg::HcsgStorage;
 use lod::lod_ref::LodRef;
 use std::collections::HashMap;
 use std::collections::HashSet;
 
 use crate::ground::RichmondGround;
-use crate::index::PaddedStoreView;
-use crate::padded::{PresentedPaddedTerrainScene, TerrainWithPads};
+use crate::padded::{PaddedTerrain, PresentedPaddedTerrainScene, TerrainWithPads};
 
 #[derive(Debug, Clone, Copy)]
 struct PresentedEntry {
@@ -38,19 +38,14 @@ impl PaddedTerrainPresenterState {
 
 /// System-local presenter for padded terrain meshes.
 #[derive(SystemParam)]
-pub struct PaddedTerrainPresenter<'w, 's, G: RichmondGround> {
+pub struct PaddedTerrainPresenter<'w, 's> {
 	commands: Commands<'w, 's>,
 	state: ResMut<'w, PaddedTerrainPresenterState>,
-	ground: StaticSystemParam<'w, 's, <G as RichmondGround>::GroundRead>,
 }
 
-impl<G: RichmondGround> PaddedTerrainPresenter<'_, '_, G> {
+impl PaddedTerrainPresenter<'_, '_> {
 	pub fn clear_presented(&mut self) {
 		self.state.clear(&mut self.commands);
-	}
-
-	pub fn terrain_membership_revision(&self) -> u64 {
-		G::membership_revision(&self.ground)
 	}
 
 	pub fn remove_stale(&mut self, wanted: &HashSet<Id>) {
@@ -104,24 +99,13 @@ impl<G: RichmondGround> PaddedTerrainPresenter<'_, '_, G> {
 		(entity, water_entity)
 	}
 
-	/// Present keep-region pads that draw or seed Near collision.
-	pub fn present_banded(
+	/// Present stored padded cells of `tracked` that draw or seed Near collision.
+	///
+	/// A padded cell replaces the ground cell under the same id, so it
+	/// carries that cell's water.
+	pub fn present_tracked<G: RichmondGround>(
 		&mut self,
-		view: &PaddedStoreView<'_>,
-		region: bevy::math::bounding::Aabb3d,
-		lod_ref: &LodRef,
-	) {
-		let tracked: HashSet<Id> = SpatialIndex::<TerrainWithPads>::tracked_ids_for(view, region)
-			.into_iter()
-			.map(|tracked| tracked.0)
-			.collect();
-		self.present_tracked(view, &tracked, lod_ref);
-	}
-
-	/// Present already-known tracked ids (draw / collision filter is still applied).
-	pub fn present_tracked(
-		&mut self,
-		view: &PaddedStoreView<'_>,
+		storage: &HcsgStorage,
 		tracked: &HashSet<Id>,
 		lod_ref: &LodRef,
 	) {
@@ -129,7 +113,8 @@ impl<G: RichmondGround> PaddedTerrainPresenter<'_, '_, G> {
 			.iter()
 			.copied()
 			.filter(|&id| {
-				SpatialIndex::<TerrainWithPads>::get(view, id).is_some_and(|value| {
+				storage.get::<PaddedTerrain<G>>(id).is_some_and(|padded| {
+					let value = &padded.surface;
 					let level = value.scene_lod_level(lod_ref);
 					stream_banded_draws(value, level) || value.seeds_collision()
 				})
@@ -137,16 +122,15 @@ impl<G: RichmondGround> PaddedTerrainPresenter<'_, '_, G> {
 			.collect();
 
 		for id in &wanted {
-			let Some(value) = SpatialIndex::<TerrainWithPads>::get(view, *id) else {
+			let Some(entry) = storage.entry::<PaddedTerrain<G>>(*id) else {
 				continue;
 			};
-			let Some(version) = SpatialIndex::<TerrainWithPads>::version(view, *id) else {
-				continue;
-			};
+			let (value, version) = (&entry.value.surface, entry.version);
 			let level = value.scene_lod_level(lod_ref);
 			let draw = stream_banded_draws(value, level);
-			let water_version = G::water_version(&self.ground, *id);
-			let water = draw.then(|| G::water(&self.ground, *id).cloned()).flatten();
+			let water = storage.entry::<Water>(*id);
+			let water_version = water.map(|water| water.version);
+			let water = water.filter(|_| draw).map(|water| &water.value);
 			if let Some(shown) = self.state.presented.get(id).copied() {
 				if shown.version == version {
 					if shown.level != level {
@@ -155,8 +139,7 @@ impl<G: RichmondGround> PaddedTerrainPresenter<'_, '_, G> {
 						} else {
 							Visibility::Hidden
 						});
-						let water_entity =
-							self.replace_water(*id, shown.entity, shown.water, water.as_ref());
+						let water_entity = self.replace_water(*id, shown.entity, shown.water, water);
 						if let Some(shown) = self.state.presented.get_mut(id) {
 							shown.level = level;
 							shown.water_version = water_version;
@@ -165,8 +148,7 @@ impl<G: RichmondGround> PaddedTerrainPresenter<'_, '_, G> {
 						continue;
 					}
 					if shown.water_version != water_version {
-						let water_entity =
-							self.replace_water(*id, shown.entity, shown.water, water.as_ref());
+						let water_entity = self.replace_water(*id, shown.entity, shown.water, water);
 						if let Some(shown) = self.state.presented.get_mut(id) {
 							shown.water_version = water_version;
 							shown.water = water_entity;
@@ -178,7 +160,7 @@ impl<G: RichmondGround> PaddedTerrainPresenter<'_, '_, G> {
 			if let Some(previous) = self.state.presented.remove(id) {
 				self.commands.entity(previous.entity).try_despawn();
 			}
-			let (entity, water_entity) = self.spawn_cell(*id, value, draw, water.as_ref());
+			let (entity, water_entity) = self.spawn_cell(*id, value, draw, water);
 			self.state.presented.insert(
 				*id,
 				PresentedEntry { version, water_version, entity, water: water_entity, level },
@@ -186,33 +168,5 @@ impl<G: RichmondGround> PaddedTerrainPresenter<'_, '_, G> {
 		}
 
 		self.remove_stale(&wanted);
-	}
-}
-
-impl<'a, G: RichmondGround> RegionPresenter<TerrainWithPads, PaddedStoreView<'a>>
-	for PaddedTerrainPresenter<'_, '_, G>
-{
-	fn presented_version(&self, id: Id) -> Option<Version> {
-		self.state.presented.get(&id).map(|e| e.version)
-	}
-
-	fn handle(&mut self, id: Id, version: Version, value: &TerrainWithPads, lod_ref: &LodRef) {
-		if let Some(previous) = self.state.presented.remove(&id) {
-			self.commands.entity(previous.entity).try_despawn();
-		}
-		let level = value.scene_lod_level(lod_ref);
-		// FinePatch own-terrain presents water via [`durham::WaterRegionPresenter`].
-		let (entity, water) = self.spawn_cell(id, value, true, None);
-		self.state
-			.presented
-			.insert(id, PresentedEntry { version, water_version: None, entity, water, level });
-	}
-
-	fn presented_ids(&self) -> Vec<Id> {
-		self.state.presented.keys().copied().collect()
-	}
-
-	fn remove_stale(&mut self, wanted: &HashSet<Id>) {
-		PaddedTerrainPresenter::<G>::remove_stale(self, wanted);
 	}
 }

@@ -775,8 +775,6 @@ mod tests {
 	use bevy::ecs::system::RunSystemOnce;
 	use durham::{HcsgStorage, TerrainCellLayout};
 	use layer_stack::GenerationMode;
-	use richmond::DevelopmentEntryStore;
-	use urbanization_cells::UrbanizationIndex;
 	use world_player::WorldBaseTerrain;
 
 	#[test]
@@ -973,8 +971,6 @@ mod tests {
 		world.init_resource::<CharacterLocomotion>();
 		world.init_resource::<HcsgStorage>();
 		world.init_resource::<TerrainCellLayout>();
-		world.init_resource::<DevelopmentEntryStore>();
-		world.init_resource::<UrbanizationIndex>();
 		world.insert_resource(WorldBaseTerrain(durham::BaseTerrainNoise::from_config(
 			&durham::TerrainConfig::new(42),
 		)));

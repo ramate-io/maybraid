@@ -375,7 +375,6 @@ mod tests {
 		app.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(&TerrainConfig::new(
 			42,
 		))));
-		app.insert_resource(richmond::DevelopmentEntryStore::default());
 		app.insert_resource(PlayerSpawnXz(None));
 		let mut policies = ModePlayerPolicies::default();
 		policies.register(

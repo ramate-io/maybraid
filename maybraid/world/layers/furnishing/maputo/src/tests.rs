@@ -7,16 +7,20 @@ use bevy::prelude::{Res, World};
 use building_components::FurnitureNode;
 use buildings::{Confines, Fit};
 use furniture_usage_areas::expand_usages;
+use durham::Durham;
 use lod::gen::Id;
+use lod::hcsg::HcsgStorage;
 use procedural_common::NoiseParams;
-use richmond::{BuiltDevelopment, DevelopmentEntryStore, DevelopmentHosts, LesHallesDevelopment};
+use richmond::{Built, BuiltDevelopment, DevelopmentHosts, LesHallesDevelopment};
+use terrain_layer_model::OnTerrain;
 use urbanization_developments::{MixedUseLesHallesDevelopment, PlacedBuilding};
 use urbanization_layer_model::Urbanization;
 
 use crate::cell::world_slot;
 use crate::slots::FurnitureSlots;
 
-struct Silent;
+type Ground = OnTerrain<Durham>;
+type Urbanized = Urbanization<richmond::Richmond<Ground>>;
 
 fn les_halles(yaw: f32) -> anyhow::Result<BuiltDevelopment> {
 	let bounds = Aabb3d::from_min_max(Vec3::new(-18.0, 0.0, -18.0), Vec3::new(18.0, 10.0, 18.0));
@@ -62,20 +66,17 @@ fn furniture_slots_match_les_halles_world_slots() -> anyhow::Result<()> {
 	let other = les_halles(0.0)?;
 
 	let mut world = World::new();
-	world.insert_resource(DevelopmentEntryStore::default());
+	world.init_resource::<HcsgStorage>();
 	{
-		let mut store = world.resource_mut::<DevelopmentEntryStore>();
-		store.insert_built(id, built, bounds);
-		store.insert_built(Id::from_cell(elsewhere), other, elsewhere);
+		let mut store = world.resource_mut::<HcsgStorage>();
+		store.insert(id, Built::<Ground>::new(built), bounds);
+		store.insert(Id::from_cell(elsewhere), Built::<Ground>::new(other), elsewhere);
 	}
 
 	let overlapping = world
-		.run_system_once(move |read: Res<DevelopmentEntryStore>| {
-			let version = read.built_at(id).map(|(_, version)| version);
-			let found =
-				<Urbanization<richmond::Richmond<Silent>> as FurnitureSlots>::slots_overlapping(
-					&read, bounds,
-				);
+		.run_system_once(move |read: Res<HcsgStorage>| {
+			let version = read.entry::<Built<Ground>>(id).map(|entry| entry.version);
+			let found = <Urbanized as FurnitureSlots>::slots_overlapping(&read, bounds);
 			(version, found)
 		})
 		.map_err(|error| anyhow::anyhow!("{error:?}"))?;
@@ -87,10 +88,8 @@ fn furniture_slots_match_les_halles_world_slots() -> anyhow::Result<()> {
 	anyhow::ensure!(found[0].slots == expected, "world-space slots match the host list");
 
 	let missed = world
-		.run_system_once(move |read: Res<DevelopmentEntryStore>| {
-			<Urbanization<richmond::Richmond<Silent>> as FurnitureSlots>::slots_overlapping(
-				&read, elsewhere,
-			)
+		.run_system_once(move |read: Res<HcsgStorage>| {
+			<Urbanized as FurnitureSlots>::slots_overlapping(&read, elsewhere)
 		})
 		.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 	anyhow::ensure!(missed.len() == 1, "far development is its own overlap");

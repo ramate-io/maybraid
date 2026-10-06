@@ -12,11 +12,8 @@ use lod::LodRefreshSystems;
 use lod_lazy_refs::LodLazyRefsPlugin;
 use scene_ref::SceneRefPlugin;
 
-use urbanization_cells::UrbanizationIndex;
-
 use crate::buildings_lod::register_developments_buildings_lod_plugin;
 use crate::config::DevelopmentConfig;
-use crate::index::DevelopmentEntryStore;
 use crate::place::DiscoverablePlace;
 use crate::presentation::PaddedTerrainPresenterState;
 
@@ -63,9 +60,7 @@ impl Plugin for RichmondDevelopmentModelsPlugin {
 		}
 		register_developments_buildings_lod_plugin(app);
 
-		app.init_resource::<DevelopmentEntryStore>()
-			.init_resource::<DevelopmentConfig>()
-			.init_resource::<UrbanizationIndex>()
+		app.init_resource::<DevelopmentConfig>()
 			.init_resource::<PaddedTerrainPresenterState>()
 			.add_systems(Update, apply_parent_confines.after(LodRefreshSystems::Cull))
 			.add_systems(Update, stamp_label_places);

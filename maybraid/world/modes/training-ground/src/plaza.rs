@@ -278,12 +278,12 @@ mod tests {
 	use super::*;
 	use crate::{
 		pad_influence_region, training_development_cell, TRAINING_ARENA_MARGIN_M,
-		TRAINING_ARENA_MAX_HALF_M, TRAINING_COURTYARD_EASE_M, TRAINING_COURTYARD_OVERHANG_M,
+		TRAINING_ARENA_MAX_HALF_M,
 	};
 	use maybraid_game_mode_discover::Discovery;
-	use richmond::{
-		DevelopmentCell, DevelopmentConfig, DevelopmentKind, PadParams, DEVELOPMENT_CELL_SIZE,
-	};
+	use crate::urbanization::{author_for_test, TrainingDevelopment, TRAINING_COURTYARD};
+	use durham::HcsgStorage;
+	use richmond::{AuthoredDevelopment, DevelopmentConfig, DevelopmentKind, DEVELOPMENT_CELL_SIZE};
 	use std::any::TypeId;
 
 	fn base_terrain() -> WorldBaseTerrain {
@@ -333,7 +333,7 @@ mod tests {
 
 	#[test]
 	fn empty_cell_has_no_pad_influence() -> anyhow::Result<()> {
-		let empty = DevelopmentCell::empty(training_development_cell(Vec2::ZERO));
+		let empty = TrainingDevelopment::Empty(training_development_cell(Vec2::ZERO));
 		anyhow::ensure!(pad_influence_region(&empty).is_none());
 		Ok(())
 	}
@@ -341,17 +341,24 @@ mod tests {
 	#[test]
 	fn les_halles_courtyard_covers_the_wall() -> anyhow::Result<()> {
 		let cell = training_development_cell(Vec2::ZERO);
-		let config = DevelopmentConfig::from_world_seed(42);
-		let filled = DevelopmentCell::with_les_halles(cell, 20.0, &config);
+		let mut storage = HcsgStorage::default();
+		let id = author_for_test(
+			&mut storage,
+			AuthoredDevelopment {
+				cell,
+				kinds: vec![DevelopmentKind::LesHalles],
+				height: 20.0,
+				config: DevelopmentConfig::from_world_seed(42),
+				courtyard: Some(TRAINING_COURTYARD),
+			},
+		)?;
+		let walled = storage
+			.get::<TrainingDevelopment>(id)
+			.ok_or_else(|| anyhow::anyhow!("courtyard"))?;
 		let footprint =
-			filled.footprint_half_extents().ok_or_else(|| anyhow::anyhow!("footprint"))?;
+			walled.footprint_half_extents().ok_or_else(|| anyhow::anyhow!("footprint"))?;
 		let half = (footprint + Vec2::splat(TRAINING_ARENA_MARGIN_M))
 			.min(Vec2::splat(TRAINING_ARENA_MAX_HALF_M));
-		let courtyard_half = half + Vec2::splat(TRAINING_COURTYARD_OVERHANG_M);
-		let params = PadParams { berm: 0.0, ease: TRAINING_COURTYARD_EASE_M, round: 0.0 };
-		let walled = filled
-			.with_courtyard(courtyard_half, params)
-			.ok_or_else(|| anyhow::anyhow!("courtyard"))?;
 		let complex = walled.pad_complexes().next().ok_or_else(|| anyhow::anyhow!("pad"))?;
 		let (min, max) = (-half, half);
 		for sample in TerrainPerimeterWall::sample_rectangle(min, max, TRAINING_WALL_STEP_M) {

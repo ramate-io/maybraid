@@ -9,7 +9,7 @@ use durham::{HcsgStorage, TerrainStorage};
 use lod::gen::{SpatialIndex, TrackedId};
 use procedural_common::Bounds2;
 use richmond::{DiscoverablePlace, Richmond};
-use urbanization_cells::{SelectedUrbanization, UrbanizationIndex};
+use urbanization_cells::UrbanizationStorage;
 use urbanization_layer_model::Urbanization;
 use vegetation_layer_model::Vegetation;
 
@@ -94,7 +94,6 @@ pub trait NamedWorld: Send + Sync + 'static {
 
 type WorldRead = (
 	Res<'static, ForestIndex>,
-	Res<'static, UrbanizationIndex>,
 	Option<Res<'static, HcsgStorage>>,
 	Query<'static, 'static, (&'static DiscoverablePlace, &'static GlobalTransform)>,
 );
@@ -103,11 +102,11 @@ impl<T: 'static> NamedWorld for Vegetation<Chico<Urbanization<Richmond<T>>>> {
 	type Read = WorldRead;
 
 	fn source_revisions(read: &SystemParamItem<'_, '_, Self::Read>) -> SourceRevisions {
-		let (forests, urban, terrain, places) = read;
+		let (forests, storage, places) = read;
 		SourceRevisions {
 			forest: forests.membership_revision(),
-			urban: SpatialIndex::<SelectedUrbanization>::membership_revision(&**urban),
-			terrain: terrain.as_ref().map(|store| store.geography_revision()).unwrap_or(0),
+			urban: storage.as_ref().map(|store| store.urbanization_revision()).unwrap_or(0),
+			terrain: storage.as_ref().map(|store| store.geography_revision()).unwrap_or(0),
 			places: places_signature(places),
 		}
 	}
@@ -116,7 +115,7 @@ impl<T: 'static> NamedWorld for Vegetation<Chico<Urbanization<Richmond<T>>>> {
 		read: &SystemParamItem<'_, '_, Self::Read>,
 		region: Aabb3d,
 	) -> Vec<NamedFeature> {
-		let (forests, _, _, _) = read;
+		let (forests, _, _) = read;
 		grove_features(forests, region)
 	}
 
@@ -124,7 +123,7 @@ impl<T: 'static> NamedWorld for Vegetation<Chico<Urbanization<Richmond<T>>>> {
 		read: &SystemParamItem<'_, '_, Self::Read>,
 		region: Aabb3d,
 	) -> Vec<NamedFeature> {
-		let (_, _, Some(store), _) = read else {
+		let (_, Some(store), _) = read else {
 			return Vec::new();
 		};
 		geography_features(store, region)
@@ -134,15 +133,17 @@ impl<T: 'static> NamedWorld for Vegetation<Chico<Urbanization<Richmond<T>>>> {
 		read: &SystemParamItem<'_, '_, Self::Read>,
 		region: Aabb3d,
 	) -> Vec<NamedFeature> {
-		let (_, urban, _, _) = read;
-		urban_features(urban, region)
+		let (_, Some(store), _) = read else {
+			return Vec::new();
+		};
+		urban_features(store, region)
 	}
 
 	fn places_overlapping(
 		read: &SystemParamItem<'_, '_, Self::Read>,
 		region: Aabb3d,
 	) -> Vec<NamedPlace> {
-		let (_, _, _, places) = read;
+		let (_, _, places) = read;
 		place_features(places, region)
 	}
 }
@@ -214,18 +215,10 @@ fn geography_features(store: &HcsgStorage, region: Aabb3d) -> Vec<NamedFeature> 
 		.collect()
 }
 
-fn urban_features(index: &UrbanizationIndex, region: Aabb3d) -> Vec<NamedFeature> {
+fn urban_features(store: &HcsgStorage, region: Aabb3d) -> Vec<NamedFeature> {
 	let mut out = Vec::new();
-	for TrackedId(id) in SpatialIndex::<SelectedUrbanization>::tracked_ids_for(index, region) {
-		let Some(cell) = SpatialIndex::<SelectedUrbanization>::get(index, id) else {
-			continue;
-		};
-		let Some(bounds) = SpatialIndex::<SelectedUrbanization>::get_bounds(index, id) else {
-			continue;
-		};
-		let revision = SpatialIndex::<SelectedUrbanization>::version(index, id)
-			.map(|v| v.0)
-			.unwrap_or(0);
+	for (id, entry) in store.selected_overlapping(region) {
+		let (cell, bounds, revision) = (&entry.value, entry.bounds, entry.version.0);
 		let cell_key = NameKey::Urban(id);
 		let english = named_urban_english(cell.kind, None, name_key_salt(cell_key));
 		out.push(NamedFeature::new(cell_key, bounds, english, revision));

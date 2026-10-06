@@ -718,7 +718,6 @@ fn unrelated_storage_writes_do_not_move_the_geography_revision() -> anyhow::Resu
 	use chico::{Chico, ForestIndex};
 	use durham::{HcsgStorage, TerrainStorage};
 	use richmond::Richmond;
-	use urbanization_cells::UrbanizationIndex;
 	use urbanization_layer_model::Urbanization;
 	use vegetation_layer_model::Vegetation;
 
@@ -727,7 +726,6 @@ fn unrelated_storage_writes_do_not_move_the_geography_revision() -> anyhow::Resu
 
 	let mut world = World::new();
 	world.init_resource::<ForestIndex>();
-	world.init_resource::<UrbanizationIndex>();
 	world.init_resource::<HcsgStorage>();
 	let mut read = SystemState::<<Real as NamedWorld>::Read>::new(&mut world);
 	let before = Real::source_revisions(&read.get(&world)?);
@@ -748,5 +746,6 @@ fn unrelated_storage_writes_do_not_move_the_geography_revision() -> anyhow::Resu
 		after.terrain == before.terrain,
 		"furniture and terrain-cell writes must not trigger geographic rediscovery"
 	);
+	anyhow::ensure!(after.urban == before.urban, "nor urban renaming");
 	Ok(())
 }

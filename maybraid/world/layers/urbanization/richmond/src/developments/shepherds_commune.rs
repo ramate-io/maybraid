@@ -1,20 +1,27 @@
-//! Shepherds Commune: hysteresis connectivity graph, then pads, then buildings.
+//! [`ShepherdsCommuneCell`]: hysteresis connectivity graph, then pads, then buildings.
 
-use bevy::ecs::system::SystemParamItem;
+use std::marker::PhantomData;
+
 use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec2;
+use lod::gen::{GenerationScheme, Id, OriginalId};
+use lod::hcsg::HcsgStorage;
 use procedural_common::{Bounds2, HysteresisConfig, HysteresisGraph, NoiseParams, SeededHash};
 use urbanization_developments::{
 	DevelopmentEdge, ShepherdsCommune, ShepherdsCommuneCorridor, ShepherdsCommuneSite,
 	ShepherdsVillageBuilding,
 };
 
+use super::site::{DevelopmentKind, DevelopmentSite};
+use super::DevelopmentPad;
+use crate::artifact::BuiltDevelopment;
+use crate::cell::cell_salt;
 use crate::config::DevelopmentConfig;
 use crate::connectivity::{corridor_levels, ConnectivityGraph};
-use crate::development::{cell_salt, DevelopmentPad};
-use crate::ground::RichmondGround;
-use crate::hydro::{composed_height_upper_on_rect, terrain_hydro_overlaps};
+use crate::ground::{GroundSampler, RichmondGround, SiteGround};
 use crate::pad::{PadComplex, PadParams, PlacedBuildingPad};
+use crate::shepherds::ShepherdsCommuneDevelopment;
+use crate::storage::column_bounds;
 use crate::scatter::{bounds_intersect, ScatterCandidate};
 use crate::shepherds_fit::{
 	fit_shepherds_building, sample_shepherds_footprint, sample_shepherds_kind, shepherds_recipe,
@@ -40,8 +47,39 @@ struct CommuneSite {
 	yaw: f32,
 }
 
-pub fn build_shepherds_commune<G: RichmondGround>(
-	read: &SystemParamItem<'_, '_, G::GroundRead>,
+/// A Shepherds Commune over ground `G`: graded corridors joining building pads.
+pub struct ShepherdsCommuneCell<G> {
+	pub cell: Aabb3d,
+	pub pads: Vec<DevelopmentPad>,
+	pub commune: ShepherdsCommune,
+	_ground: PhantomData<fn() -> G>,
+}
+
+impl<G> ShepherdsCommuneCell<G> {
+	pub fn built(&self) -> BuiltDevelopment {
+		BuiltDevelopment::ShepherdsCommune(Box::new(ShepherdsCommuneDevelopment {
+			commune: self.commune.clone(),
+		}))
+	}
+}
+
+impl<G: RichmondGround> GenerationScheme<HcsgStorage> for ShepherdsCommuneCell<G> {
+	fn original_ids_for(storage: &mut HcsgStorage, region: Aabb3d) -> Vec<OriginalId> {
+		DevelopmentSite::ids_of_kind(storage, region, DevelopmentKind::ShepherdsCommune)
+	}
+
+	fn build_with_id(storage: &mut HcsgStorage, id: Id) -> Option<(Self, Aabb3d)> {
+		let (site, config) =
+			DevelopmentSite::planned(storage, id, DevelopmentKind::ShepherdsCommune)?;
+		let bounds = column_bounds(site.cell);
+		let mut ground = GroundSampler::<G>::new(storage, bounds);
+		let (commune, pads) = build_shepherds_commune(&mut ground, site.cell, &config)?;
+		Some((Self { cell: site.cell, pads, commune, _ground: PhantomData }, bounds))
+	}
+}
+
+fn build_shepherds_commune(
+	ground: &mut impl SiteGround,
 	cell: Aabb3d,
 	config: &DevelopmentConfig,
 ) -> Option<(ShepherdsCommune, Vec<DevelopmentPad>)> {
@@ -98,8 +136,7 @@ pub fn build_shepherds_commune<G: RichmondGround>(
 		.collect();
 	let mut natural_height = vec![None; conn.keypoints.len()];
 	for (i, (p, site)) in conn.keypoints.iter().zip(&sites).enumerate() {
-		natural_height[i] = composed_height_upper_on_rect::<G>(
-			read,
+		natural_height[i] = ground.height_upper_on_rect(
 			*p,
 			PadParams::shepherds().influence_half(site.footprint * 0.5),
 			site.yaw,
@@ -131,7 +168,7 @@ pub fn build_shepherds_commune<G: RichmondGround>(
 			PATH_HALF_WIDTH,
 			PadParams::path(),
 		);
-		if terrain_hydro_overlaps::<G>(read, cell, complex.bounds) {
+		if ground.hydro_overlaps(complex.bounds) {
 			continue;
 		}
 		let height = 0.5 * (ha + hb);
@@ -176,7 +213,7 @@ pub fn build_shepherds_commune<G: RichmondGround>(
 			height,
 			PadParams::shepherds(),
 		);
-		if terrain_hydro_overlaps::<G>(read, cell, coarse.bounds) {
+		if ground.hydro_overlaps(coarse.bounds) {
 			continue;
 		}
 		let noise =
@@ -187,7 +224,7 @@ pub fn build_shepherds_commune<G: RichmondGround>(
 			continue;
 		};
 		let complex = placed.pad_complex(PadParams::shepherds());
-		if terrain_hydro_overlaps::<G>(read, cell, complex.bounds) {
+		if ground.hydro_overlaps(complex.bounds) {
 			continue;
 		}
 		buildings[i] = Some(placed);

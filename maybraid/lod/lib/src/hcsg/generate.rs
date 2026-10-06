@@ -17,12 +17,13 @@ use bevy::math::bounding::{Aabb3d, BoundingVolume};
 use bevy::prelude::*;
 
 use crate::gen::{
-	ensure_generate_sets, entering_keep_regions, expand_keep_xz, id_lives_in_keep, id_xz_distance2,
-	keep_region_changed, GenerationScheme, Id, LodGenerateBudget, LodGenerateSystems,
-	LodGenerateTimeBudget, LodGenerated, MaterializeStatus, OriginalId, SpatialIndex,
-	StorageStatus, QUEUE_KEEP_SLACK_XZ,
+	entering_keep_regions, expand_keep_xz, id_lives_in_keep, id_xz_distance2, keep_region_changed,
+	GenerationScheme, Id, MaterializeStatus, OriginalId, SpatialIndex, StorageStatus,
+	QUEUE_KEEP_SLACK_XZ,
 };
+use crate::hcsg::schedule::ensure_generate_sets;
 use crate::hcsg::storage::{HcsgNode, HcsgStorage};
+use crate::hcsg::{LodGenerateBudget, LodGenerateSystems, LodGenerateTimeBudget, LodGenerated};
 use crate::jobs::LodJobCounter;
 use crate::lod_ref::{point_bounds, LodNode, LodNodeBounds, LodNodePose, LodNodeSnapshot};
 use crate::scene::{LodRefreshRegions, LodRefreshRegionsStatus};
@@ -145,6 +146,39 @@ impl<P: Send + Sync + 'static> GenerationProducer<'_, P> {
 	/// builds failed for missing inputs: subscribers only rescan on a request.
 	pub fn restart(&mut self, keep: Aabb3d, priority_xz: Option<Vec2>) {
 		self.send(GenerationBounds::restart(keep, priority_xz));
+	}
+
+	/// [`Self::restart`] at the current `keep`. `false` before the first publish,
+	/// when the first publish scans everything anyway.
+	pub fn restart_current(&mut self) -> bool {
+		let Some(bounds) = self.current.bounds.as_ref() else {
+			return false;
+		};
+		let (keep, priority_xz) = (bounds.keep, bounds.priority_xz);
+		self.restart(keep, priority_xz);
+		true
+	}
+
+	/// Rescans `regions` inside the current `keep` without dropping pending work.
+	///
+	/// Use it when an input of a subscriber's origins grew inside an unmoved
+	/// `keep`. `false` (nothing sent) before the first publish or with no regions.
+	pub fn rescan(&mut self, regions: impl IntoIterator<Item = Aabb3d>) -> bool {
+		let Some(current) = self.current.bounds.as_ref() else {
+			return false;
+		};
+		let entering: Vec<Aabb3d> = regions.into_iter().collect();
+		if entering.is_empty() {
+			return false;
+		}
+		let bounds = GenerationBounds {
+			keep: current.keep,
+			entering,
+			priority_xz: current.priority_xz,
+			restart: false,
+		};
+		self.requests.write(GenerationRequest::new(bounds));
+		true
 	}
 
 	fn send(&mut self, bounds: GenerationBounds) {
@@ -550,16 +584,68 @@ fn warn_atomic_overrun(stage: &'static str, elapsed: Duration, maximum: Duration
 ///
 /// Root inputs are values generation cannot derive (a seed, mode
 /// configuration). Seed them here; derive everything else in a scheme.
+///
+/// Records derived from `R` go stale when it changes. [`Self::invalidates`]
+/// and [`Self::restarts`] make the reseed the whole invalidation: clear the
+/// derived groups, then rescan the producers that build them, so a
+/// stationary window regenerates.
 pub struct Seed<R> {
 	bounds: Aabb3d,
-	_marker: PhantomData<fn() -> R>,
+	invalidation: Option<SeedInvalidation<R>>,
+}
+
+struct SeedInvalidation<R> {
+	differs: fn(&HcsgStorage, &R) -> bool,
+	groups: Vec<fn(&mut HcsgStorage)>,
+	restarts: Vec<fn(&mut App)>,
+}
+
+impl<R> Clone for SeedInvalidation<R> {
+	fn clone(&self) -> Self {
+		Self { differs: self.differs, groups: self.groups.clone(), restarts: self.restarts.clone() }
+	}
 }
 
 impl<R> Seed<R> {
 	pub fn with_bounds(bounds: Aabb3d) -> Self {
-		Self { bounds, _marker: PhantomData }
+		Self { bounds, invalidation: None }
 	}
 }
+
+impl<R: Resource + Clone + PartialEq> Seed<R> {
+	/// Clears group `G` when `R` reseeds with a different value.
+	///
+	/// An invalidating seed compares values: a write that leaves `R` equal
+	/// neither reseeds nor invalidates.
+	pub fn invalidates<G: 'static>(mut self) -> Self {
+		self.invalidation_mut().groups.push(HcsgStorage::clear_group::<G>);
+		self
+	}
+
+	/// Restarts producer `P` at its current bounds when `R` reseeds with a
+	/// different value.
+	pub fn restarts<P: Send + Sync + 'static>(mut self) -> Self {
+		self.invalidation_mut().restarts.push(|app| {
+			app.add_plugins(GenerationChannelPlugin::<P>::default()).add_systems(
+				Update,
+				restart_on_reseed::<R, P>.in_set(HcsgSeedSystems).after(seed_universal::<R>),
+			);
+		});
+		self
+	}
+
+	fn invalidation_mut(&mut self) -> &mut SeedInvalidation<R> {
+		self.invalidation.get_or_insert_with(|| SeedInvalidation {
+			differs: |storage, value| storage.get::<R>(Id::Universal) != Some(value),
+			groups: Vec::new(),
+			restarts: Vec::new(),
+		})
+	}
+}
+
+/// `R` reseeded with a different value after an earlier seed.
+#[derive(Message)]
+pub struct Reseeded<R: Send + Sync + 'static>(PhantomData<fn() -> R>);
 
 impl<R> Default for Seed<R> {
 	fn default() -> Self {
@@ -601,9 +687,9 @@ macro_rules! seeded_root {
 pub struct HcsgSeedSystems;
 
 #[derive(Resource)]
-struct SeedBounds<R> {
+struct SeedState<R> {
 	bounds: Aabb3d,
-	_marker: PhantomData<fn() -> R>,
+	invalidation: Option<SeedInvalidation<R>>,
 }
 
 impl<R> Plugin for Seed<R>
@@ -613,21 +699,52 @@ where
 	fn build(&self, app: &mut App) {
 		ensure_generate_sets(app);
 		app.init_resource::<HcsgStorage>()
-			.insert_resource(SeedBounds::<R> { bounds: self.bounds, _marker: PhantomData })
+			.insert_resource(SeedState::<R> {
+				bounds: self.bounds,
+				invalidation: self.invalidation.clone(),
+			})
+			.add_message::<Reseeded<R>>()
 			.configure_sets(Update, HcsgSeedSystems.before(LodGenerateSystems::Produce))
 			.add_systems(Update, seed_universal::<R>.in_set(HcsgSeedSystems));
+		for restart in self.invalidation.iter().flat_map(|invalidation| &invalidation.restarts) {
+			restart(app);
+		}
 	}
 }
 
 fn seed_universal<R: Resource + Clone>(
 	source: Option<Res<R>>,
-	bounds: Res<SeedBounds<R>>,
+	state: Res<SeedState<R>>,
 	mut storage: ResMut<HcsgStorage>,
+	mut reseeded: MessageWriter<Reseeded<R>>,
 ) {
 	let Some(source) = source else {
 		return;
 	};
-	if source.is_changed() || !storage.contains::<R>(Id::Universal) {
-		storage.seed(source.clone(), bounds.bounds);
+	let seeded = storage.contains::<R>(Id::Universal);
+	let Some(invalidation) = state.invalidation.as_ref() else {
+		if source.is_changed() || !seeded {
+			storage.seed(source.clone(), state.bounds);
+		}
+		return;
+	};
+	if !(invalidation.differs)(&storage, &source) {
+		return;
+	}
+	if seeded {
+		for clear in &invalidation.groups {
+			clear(&mut storage);
+		}
+		reseeded.write(Reseeded(PhantomData));
+	}
+	storage.seed(source.clone(), state.bounds);
+}
+
+fn restart_on_reseed<R: Send + Sync + 'static, P: Send + Sync + 'static>(
+	mut reseeded: MessageReader<Reseeded<R>>,
+	mut producer: GenerationProducer<P>,
+) {
+	if reseeded.read().count() > 0 {
+		producer.restart_current();
 	}
 }

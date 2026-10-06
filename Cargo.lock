@@ -6721,6 +6721,7 @@ dependencies = [
  "building-components",
  "building-physics",
  "buildings",
+ "durham",
  "furnishing-layer-model",
  "furnishing-layer-presentation",
  "furniture-assemblies",

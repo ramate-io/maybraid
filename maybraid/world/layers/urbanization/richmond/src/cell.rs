@@ -158,6 +158,11 @@ impl DevelopmentExtent {
 	}
 }
 
+/// Per-cell salt for [`procedural_common::SeededHash`] draws.
+pub(crate) fn cell_salt(cell: Aabb3d) -> u32 {
+	cell.min.x.to_bits().wrapping_mul(73856093) ^ cell.min.z.to_bits().wrapping_mul(19349663)
+}
+
 /// Spatially correlated occupancy via bilinear value noise at the cell center.
 ///
 /// Same scheme as Stamp leaf selection: `likelihood` is the approximate

@@ -9,9 +9,9 @@ use durham::TerrainTrimeshCollider;
 use layer_stack::{ActiveGenerationMode, GenerationModeSystems};
 use mob_characters::CharacterSpecies;
 use mob_scenes::{Mob, MobKind, MobScene};
-use richmond::{
-	DevelopmentEntryStore, DevelopmentHost, DevelopmentHosts, PresentedPaddedTerrainScene,
-};
+use durham::{Durham, HcsgStorage};
+use richmond::{Built, DevelopmentHost, DevelopmentHosts, PresentedPaddedTerrainScene};
+use terrain_layer_model::OnTerrain;
 
 use crate::{TrainingGround, TrainingMap, TrainingPlazaStamped};
 
@@ -416,7 +416,7 @@ fn clear_training_arena(mut commands: Commands) {
 pub(crate) fn publish_training_arena(
 	stamped: Option<Res<TrainingPlazaStamped>>,
 	arena: Option<Res<TrainingArena>>,
-	store: Res<DevelopmentEntryStore>,
+	storage: Res<HcsgStorage>,
 	ready_pads: Query<&PresentedPaddedTerrainScene, With<TerrainTrimeshCollider>>,
 	mut commands: Commands,
 ) {
@@ -429,7 +429,7 @@ pub(crate) fn publish_training_arena(
 	if arena.as_deref().is_some_and(|arena| arena.map == stamped.round().map()) {
 		return;
 	}
-	let Some((built, _)) = store.built_at(stamped.cell_id()) else {
+	let Some(built) = storage.get::<Built<OnTerrain<Durham>>>(stamped.cell_id()) else {
 		if arena.is_some() {
 			commands.remove_resource::<TrainingArena>();
 		}
@@ -445,7 +445,7 @@ pub(crate) fn publish_training_arena(
 		}
 		return;
 	}
-	let hosts = built.hosts();
+	let hosts = built.development.hosts();
 	let site = TrainingSite::of_hosts(&hosts, stamped.center(), stamped.footprint());
 	commands.insert_resource(TrainingArena::from_stamp(stamped, &site));
 }
@@ -456,9 +456,9 @@ mod tests {
 	use bevy::ecs::system::RunSystemOnce;
 	use bevy::prelude::World;
 	use lod::gen::Id;
-	use richmond::{DevelopmentCell, DevelopmentConfig};
 	use threat_intelligence::ThreatId;
 
+	use crate::urbanization::{author_for_test, les_halles_for_test, TrainingDevelopment};
 	use crate::{training_development_cell, TrainingRound, TRAINING_COURTYARD_EASE_M};
 	use mob_scenes::player_affiliations;
 
@@ -649,13 +649,18 @@ mod tests {
 	#[test]
 	fn les_halles_squads_stand_clear_of_its_buildings() -> anyhow::Result<()> {
 		let cell = training_development_cell(Vec2::ZERO);
-		let config = DevelopmentConfig::from_world_seed(42);
-		let filled = DevelopmentCell::with_les_halles(cell, 20.0, &config);
-		let footprint =
-			filled.footprint_half_extents().ok_or_else(|| anyhow::anyhow!("footprint"))?;
-		let built = filled.built(config.seed as i32).ok_or_else(|| anyhow::anyhow!("built"))?;
+		let mut storage = HcsgStorage::default();
+		let id = author_for_test(&mut storage, les_halles_for_test(cell, 20.0, 42))?;
+		let footprint = storage
+			.get::<TrainingDevelopment>(id)
+			.and_then(TrainingDevelopment::footprint_half_extents)
+			.ok_or_else(|| anyhow::anyhow!("footprint"))?;
+		let built = storage
+			.get::<Built<OnTerrain<Durham>>>(id)
+			.ok_or_else(|| anyhow::anyhow!("built"))?;
 		let arena = TrainingArena::around(Vec2::ZERO, footprint, 20.0);
-		let site = TrainingSite::of_hosts(&built.hosts(), arena.center, arena.footprint);
+		let site =
+			TrainingSite::of_hosts(&built.development.hosts(), arena.center, arena.footprint);
 		anyhow::ensure!(!site.pois.is_empty(), "Les Halles exposes no POI");
 		let arena = arena.with_roster(&site);
 		anyhow::ensure!(arena.brawlers() == TRAINING_ROSTER, "{} brawlers", arena.brawlers());
@@ -691,27 +696,24 @@ mod tests {
 	) -> anyhow::Result<World> {
 		let mut world = World::new();
 		let cell = training_development_cell(center);
-		let config = DevelopmentConfig::from_world_seed(round.development_seed());
-		let filled = DevelopmentCell::with_les_halles(cell, 4.0, &config);
-		let built = filled
-			.built(config.seed as i32)
-			.ok_or_else(|| anyhow::anyhow!("les halles built"))?;
-		let mut store = DevelopmentEntryStore::default();
-		let cell_id = Id::from_cell(cell);
-		store.insert_cell(cell_id, filled);
-		store.insert_built(cell_id, built, cell);
-		world.insert_resource(store);
+		let mut storage = HcsgStorage::default();
+		author_for_test(&mut storage, les_halles_for_test(cell, 4.0, round.development_seed()))?;
+		world.insert_resource(storage);
 		world.insert_resource(stamp_for(round, center, footprint, terrain_ids));
 		Ok(world)
 	}
 
 	fn expected_arena(world: &World) -> anyhow::Result<TrainingArena> {
 		let stamped = world.resource::<TrainingPlazaStamped>();
-		let (built, _) = world
-			.resource::<DevelopmentEntryStore>()
-			.built_at(stamped.cell_id())
+		let built = world
+			.resource::<HcsgStorage>()
+			.get::<Built<OnTerrain<Durham>>>(stamped.cell_id())
 			.ok_or_else(|| anyhow::anyhow!("built missing"))?;
-		let site = TrainingSite::of_hosts(&built.hosts(), stamped.center(), stamped.footprint());
+		let site = TrainingSite::of_hosts(
+			&built.development.hosts(),
+			stamped.center(),
+			stamped.footprint(),
+		);
 		Ok(TrainingArena::from_stamp(stamped, &site))
 	}
 

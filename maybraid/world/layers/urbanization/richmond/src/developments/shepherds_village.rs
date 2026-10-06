@@ -1,20 +1,58 @@
-//! Deterministic 4×4 jittered Shepherds Village placement.
+//! [`ShepherdsVillageCell`]: deterministic 4×4 jittered Shepherds Village placement.
 
-use bevy::ecs::system::SystemParamItem;
+use std::marker::PhantomData;
+
 use bevy::math::bounding::Aabb3d;
+use lod::gen::{GenerationScheme, Id, OriginalId};
+use lod::hcsg::HcsgStorage;
 use procedural_common::{Bounds2, NoiseParams, SeededHash};
 use urbanization_developments::ShepherdsVillage;
 
+use super::site::{DevelopmentKind, DevelopmentSite};
+use super::DevelopmentPad;
+use crate::artifact::BuiltDevelopment;
+use crate::cell::cell_salt;
 use crate::config::DevelopmentConfig;
-use crate::development::{cell_salt, DevelopmentPad};
-use crate::ground::RichmondGround;
-use crate::hydro::{composed_height_upper_on_rect, terrain_hydro_overlaps};
+use crate::ground::{GroundSampler, RichmondGround, SiteGround};
 use crate::pad::{PadComplex, PadParams, PlacedBuildingPad};
 use crate::scatter::bounds_intersect;
+use crate::shepherds::ShepherdsVillageDevelopment;
 use crate::shepherds_fit::{fit_shepherds_building, shepherds_recipe, ShepherdsBuildingKind};
+use crate::storage::column_bounds;
 
-pub fn build_shepherds_village<G: RichmondGround>(
-	read: &SystemParamItem<'_, '_, G::GroundRead>,
+/// A Shepherds Village over ground `G`: one pad per hut or house.
+pub struct ShepherdsVillageCell<G> {
+	pub cell: Aabb3d,
+	pub pads: Vec<DevelopmentPad>,
+	pub village: ShepherdsVillage,
+	_ground: PhantomData<fn() -> G>,
+}
+
+impl<G> ShepherdsVillageCell<G> {
+	pub fn built(&self) -> BuiltDevelopment {
+		BuiltDevelopment::ShepherdsVillage(Box::new(ShepherdsVillageDevelopment {
+			village: self.village.clone(),
+		}))
+	}
+}
+
+impl<G: RichmondGround> GenerationScheme<HcsgStorage> for ShepherdsVillageCell<G> {
+	fn original_ids_for(storage: &mut HcsgStorage, region: Aabb3d) -> Vec<OriginalId> {
+		DevelopmentSite::ids_of_kind(storage, region, DevelopmentKind::ShepherdsVillage)
+	}
+
+	fn build_with_id(storage: &mut HcsgStorage, id: Id) -> Option<(Self, Aabb3d)> {
+		let (site, config) =
+			DevelopmentSite::planned(storage, id, DevelopmentKind::ShepherdsVillage)?;
+		let bounds = column_bounds(site.cell);
+		let mut ground = GroundSampler::<G>::new(storage, bounds);
+		let (village, pads) = build_shepherds_village(&mut ground, site.cell, &config)?;
+		Some((Self { cell: site.cell, pads, village, _ground: PhantomData }, bounds))
+	}
+}
+
+fn build_shepherds_village(
+	ground: &mut impl SiteGround,
 	cell: Aabb3d,
 	config: &DevelopmentConfig,
 ) -> Option<(ShepherdsVillage, Vec<DevelopmentPad>)> {
@@ -44,11 +82,10 @@ pub fn build_shepherds_village<G: RichmondGround>(
 			0.0,
 			PadParams::shepherds(),
 		);
-		if terrain_hydro_overlaps::<G>(read, cell, coarse_pad.bounds) {
+		if ground.hydro_overlaps(coarse_pad.bounds) {
 			continue;
 		}
-		let Some(height) = composed_height_upper_on_rect::<G>(
-			read,
+		let Some(height) = ground.height_upper_on_rect(
 			candidate.center,
 			PadParams::shepherds().influence_half(candidate.footprint * 0.5),
 			candidate.yaw,
@@ -77,7 +114,7 @@ pub fn build_shepherds_village<G: RichmondGround>(
 			continue;
 		};
 		let complex = placed.pad_complex(PadParams::shepherds());
-		if terrain_hydro_overlaps::<G>(read, cell, complex.bounds) {
+		if ground.hydro_overlaps(complex.bounds) {
 			continue;
 		}
 		buildings.push(placed);
@@ -100,7 +137,26 @@ mod tests {
 	use std::sync::Arc;
 	use urbanization_developments::{ShepherdsBuilding, ShepherdsHut, ShepherdsVillageBuilding};
 
+	use crate::ground::tests::FlatGround;
 	use crate::shepherds_fit::shepherds_recipe;
+
+	#[test]
+	fn flat_dry_ground_places_buildings_on_their_pads() -> anyhow::Result<()> {
+		let cell = Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(300.0, 1.0, 300.0));
+		let mut ground = FlatGround { height: 9.0, wet: |_| false };
+		let (village, pads) =
+			build_shepherds_village(&mut ground, cell, &DevelopmentConfig::default())
+				.ok_or_else(|| anyhow::anyhow!("village on flat ground"))?;
+		anyhow::ensure!(!village.buildings.is_empty());
+		anyhow::ensure!(pads.len() == village.buildings.len());
+		anyhow::ensure!(pads.iter().all(|pad| (pad.height - 9.0).abs() < 1e-3));
+		let mut wet = FlatGround { height: 9.0, wet: |_| true };
+		anyhow::ensure!(
+			build_shepherds_village(&mut wet, cell, &DevelopmentConfig::default()).is_none(),
+			"water everywhere rejects every hut"
+		);
+		Ok(())
+	}
 
 	#[test]
 	fn jittered_centers_stay_inside_the_cell_inset() {

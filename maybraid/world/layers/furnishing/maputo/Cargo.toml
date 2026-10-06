@@ -31,6 +31,7 @@ urbanization-layer-model = { workspace = true }
 [dev-dependencies]
 anyhow = { workspace = true }
 buildings = { workspace = true }
+durham = { workspace = true }
 procedural-common = { workspace = true }
 urbanization-developments = { workspace = true }
 

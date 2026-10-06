@@ -189,8 +189,7 @@ fn apply_commands(
 	for (entity, request) in &focuses {
 		request.0.apply(development);
 		urban.config.focus_development = (request.0 != LayerFocus::All).then_some(request.0);
-		development.use_urbanization =
-			urban.config.urbanization.is_some() || urban.config.focus_development.is_none();
+		development.sites = urban.config.development_config().sites;
 		dirty.0 = true;
 		status.0 = format!("focus-development {} (regen)", request.0);
 		commands.entity(entity).despawn();

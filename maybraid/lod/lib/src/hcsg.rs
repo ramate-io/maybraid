@@ -13,6 +13,7 @@
 //! vocabulary ([`crate::presentation`], [`crate::scene`]).
 
 pub mod generate;
+pub mod schedule;
 pub mod storage;
 
 #[cfg(test)]
@@ -21,6 +22,7 @@ mod tests;
 pub use generate::{
 	generate, produce_from_nodes, universal_bounds, ChannelTimeBudget, CurrentBounds, GenerateOn,
 	GenerateQueue, GenerationBounds, GenerationChannelPlugin, GenerationProducer,
-	GenerationRequest, HcsgSeedSystems, ProduceFromNodes, Seed,
+	GenerationRequest, HcsgSeedSystems, ProduceFromNodes, Reseeded, Seed,
 };
+pub use schedule::{LodGenerateBudget, LodGenerateSystems, LodGenerateTimeBudget, LodGenerated};
 pub use storage::{HcsgNode, HcsgStorage, NodeStore, StoredEntry, DEFAULT_BASE_SCALE};
