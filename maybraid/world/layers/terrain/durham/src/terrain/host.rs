@@ -23,9 +23,7 @@ use visual_geometry_core::{
 };
 
 use crate::terrain::base_noise::BaseTerrainNoise;
-use crate::terrain::cell::{
-	origin_cell_ids_for_layout, TerrainCellLayout, TerrainCellRing, TERRAIN_CELL_SIZE,
-};
+use crate::terrain::cell::{TerrainCellLayout, TerrainCellRing, TERRAIN_CELL_SIZE};
 use crate::terrain::collider::{TerrainColliderEpoch, TerrainColliderSystems};
 use crate::terrain::config::TerrainConfig;
 use crate::terrain::index::AvianTerrainIndex;
@@ -458,14 +456,7 @@ fn generate_cells(
 
 	let layout = index.layout().clone();
 	let region = layout.request_region();
-	let identity = Transform::IDENTITY;
-	let lod_ref = LodRef {
-		entity: Entity::PLACEHOLDER,
-		previous_transform: &identity,
-		current_transform: &identity,
-		bounds: &region,
-	};
-	index.publish_layout_if_changed(&lod_ref);
+	index.publish_layout_if_changed();
 
 	if *window_filled {
 		if let Some(base) = index.base_noise() {
@@ -475,14 +466,15 @@ fn generate_cells(
 	}
 
 	let prefer = viewer.unwrap_or_else(|| layout.region_center_xz());
-	let mut missing: Vec<Id> = origin_cell_ids_for_layout(&layout, region)
-		.into_iter()
-		.map(|OriginalId(id)| id)
-		.filter(|id| {
-			<AvianTerrainIndex as SpatialIndex<Terrain>>::storage_status(&index, *id)
-				== StorageStatus::NotTracked
-		})
-		.collect();
+	let mut missing: Vec<Id> =
+		GeneratingSpatialIndex::<Terrain>::original_ids_for(&mut index, region)
+			.into_iter()
+			.map(|OriginalId(id)| id)
+			.filter(|id| {
+				<AvianTerrainIndex as SpatialIndex<Terrain>>::storage_status(&index, *id)
+					== StorageStatus::NotTracked
+			})
+			.collect();
 	if missing.is_empty() {
 		*window_filled = true;
 		if let Some(base) = index.base_noise() {
@@ -499,10 +491,10 @@ fn generate_cells(
 	let _span = bevy::log::debug_span!("durham_terrain_generate").entered();
 	let mut created = 0usize;
 	for id in missing.into_iter().take(TERRAIN_ADMIT_PER_FRAME) {
-		if GeneratingSpatialIndex::<Terrain>::get_or_generate(&mut index, id, &lod_ref).is_some() {
+		if GeneratingSpatialIndex::<Terrain>::get_or_generate(&mut index, id).is_some() {
 			created += 1;
 		}
-		let _ = GeneratingSpatialIndex::<Water>::get_or_generate(&mut index, id, &lod_ref);
+		let _ = GeneratingSpatialIndex::<Water>::get_or_generate(&mut index, id);
 	}
 	if created > 0 {
 		debug!("admitted terrain_cells={created}");
@@ -550,7 +542,7 @@ fn present_cells(
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::terrain::cell::origin_cell_ids_for_layout;
+	use crate::terrain::cell::CellTiling;
 	use crate::terrain::index::TerrainEntryStore;
 	use crate::DurhamTerrainConfig;
 
@@ -573,7 +565,7 @@ mod tests {
 		assert!(layout.stream_rings[0].seeds_collision());
 		assert!(!layout.stream_rings[1].seeds_collision());
 		assert!(!layout.stream_rings[2].seeds_collision());
-		let ids = origin_cell_ids_for_layout(&layout, layout.request_region());
+		let ids = layout.cell_ids(layout.request_region());
 		assert!(!ids.is_empty());
 	}
 
@@ -618,7 +610,7 @@ mod tests {
 		let size = TERRAIN_CELL_SIZE;
 		assert!(layout.recenter_on_xz(Vec3::X * 20.0 * size));
 		assert_eq!(layout.origin, IVec2::new(12, -WORLD_FINE_HALF_EXTENT_CELLS));
-		let ids = origin_cell_ids_for_layout(&layout, layout.request_region());
+		let ids = layout.cell_ids(layout.request_region());
 		assert!(!ids.is_empty());
 	}
 
@@ -744,10 +736,7 @@ mod tests {
 			world.get_entity(cell_entity).is_ok(),
 			"seed change must not drop store-owned entities"
 		);
-		assert!(
-			world.get_entity(present_entity).is_ok(),
-			"the presenter survives apply"
-		);
+		assert!(world.get_entity(present_entity).is_ok(), "the presenter survives apply");
 		{
 			let store = world.resource::<TerrainEntryStore>();
 			assert_eq!(

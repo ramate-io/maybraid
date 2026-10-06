@@ -6,7 +6,6 @@ use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::prelude::*;
 use chico::LayeringKind;
 use lod::gen::{GenerationScheme, Id, OriginalId, SpatialIndex, StorageStatus, TrackedId, Version};
-use lod::lod_ref::LodRef;
 use procedural_common::NoiseParams;
 use urbanization_cells::UrbanizationKind;
 
@@ -333,7 +332,7 @@ impl SpatialIndex<MobCell> for MobIndex {
 		self.next_version
 	}
 
-	fn insert(&mut self, id: Id, value: MobCell, bounds: Aabb3d, _lod_ref: &LodRef) {
+	fn insert(&mut self, id: Id, value: MobCell, bounds: Aabb3d) {
 		let version = self.next_version();
 		self.cells.insert(id, StoredMobCell { value, bounds, version });
 	}
@@ -350,7 +349,7 @@ impl GenerationScheme<MobIndex> for MobCell {
 			.collect()
 	}
 
-	fn build_with_id(index: &mut MobIndex, id: Id, _lod_ref: &LodRef) -> Option<(Self, Aabb3d)> {
+	fn build_with_id(index: &mut MobIndex, id: Id) -> Option<(Self, Aabb3d)> {
 		if !index.models_ready {
 			return None;
 		}

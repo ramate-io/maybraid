@@ -10,8 +10,8 @@ fn cull_hides_within_one_hit_and_despawns_when_budgeted() -> Result<()> {
 	let lod = TestLod::new(span(0.0, 9.0));
 	let near = Id::from_cell(cell(0.0));
 	let far = Id::from_cell(cell(8.0));
-	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, near, &lod.lod_ref());
-	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, far, &lod.lod_ref());
+	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, near);
+	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, far);
 
 	let mut presenter = RecordingPresenter::default();
 	RegionPresenter::<Vegetation, _>::present(
@@ -47,8 +47,8 @@ fn cull_despawns_on_first_hit_when_budget_allows() -> Result<()> {
 	let lod = TestLod::new(span(0.0, 9.0));
 	let near = Id::from_cell(cell(0.0));
 	let far = Id::from_cell(cell(8.0));
-	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, near, &lod.lod_ref());
-	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, far, &lod.lod_ref());
+	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, near);
+	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, far);
 
 	let mut presenter = RecordingPresenter::default();
 	RegionPresenter::<Vegetation, _>::present(
@@ -73,9 +73,9 @@ fn cull_despawn_budget_is_one_id_per_slot() -> Result<()> {
 	let near = Id::from_cell(cell(0.0));
 	let mid = Id::from_cell(cell(4.0));
 	let far = Id::from_cell(cell(8.0));
-	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, near, &lod.lod_ref());
-	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, mid, &lod.lod_ref());
-	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, far, &lod.lod_ref());
+	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, near);
+	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, mid);
+	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, far);
 
 	let mut presenter = RecordingPresenter::default();
 	RegionPresenter::<Vegetation, _>::present(
@@ -105,8 +105,8 @@ fn remove_stale_drops_unwanted_ids() -> Result<()> {
 	let lod = TestLod::new(span(0.0, 9.0));
 	let near = Id::from_cell(cell(0.0));
 	let far = Id::from_cell(cell(8.0));
-	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, near, &lod.lod_ref());
-	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, far, &lod.lod_ref());
+	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, near);
+	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, far);
 
 	let mut presenter = RecordingPresenter::default();
 	RegionPresenter::<Vegetation, _>::present(
@@ -126,7 +126,7 @@ fn cull_retires_presented_id_missing_from_the_index() -> Result<()> {
 	let mut index = WorldIndex::default();
 	let lod = TestLod::new(span(0.0, 9.0));
 	let near = Id::from_cell(cell(0.0));
-	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, near, &lod.lod_ref());
+	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, near);
 
 	let mut presenter = RecordingPresenter::default();
 	RegionPresenter::<Vegetation, _>::present(
@@ -148,7 +148,7 @@ fn cull_keeps_an_id_reinserted_before_cull() -> Result<()> {
 	let mut index = WorldIndex::default();
 	let lod = TestLod::new(span(0.0, 9.0));
 	let near = Id::from_cell(cell(0.0));
-	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, near, &lod.lod_ref());
+	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, near);
 
 	let mut presenter = RecordingPresenter::default();
 	RegionPresenter::<Vegetation, _>::present(
@@ -158,7 +158,7 @@ fn cull_keeps_an_id_reinserted_before_cull() -> Result<()> {
 		&lod.lod_ref(),
 	);
 	index.vegetation.remove(&near);
-	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, near, &lod.lod_ref());
+	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, near);
 	let keep = HashSet::from([near]);
 	RegionPresenter::<Vegetation, _>::cull(&mut presenter, &index, &keep, 1);
 	assert!(presenter.vegetation.contains_key(&near));

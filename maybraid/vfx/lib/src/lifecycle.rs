@@ -3,7 +3,7 @@
 use bevy::prelude::*;
 use bevy_hanabi::prelude::{CompiledParticleEffect, EffectSpawner, EffectSystems, SpawnerSettings};
 
-use crate::lobe_material::LobeMaterial;
+use crate::lobe_instances::sync_lobe_instance_buffer;
 use crate::lobes::{lobe_transform, stamp_lobe_materials, VfxLobe};
 use crate::membership::{VfxInstanceMembers, VfxMemberOf};
 use crate::spawn::{
@@ -108,19 +108,17 @@ pub fn tick_vfx_flashes(
 pub fn tick_vfx_lobes(
 	time: Res<Time>,
 	instances: Query<&VfxInstance>,
-	mut materials: ResMut<Assets<LobeMaterial>>,
 	mut lobes: Query<(
 		Entity,
 		&VfxMemberOf,
 		&mut VfxLobe,
 		&mut Transform,
 		&mut Visibility,
-		Option<&MeshMaterial3d<LobeMaterial>>,
 		Option<&mut VfxLayerLife>,
 	)>,
 ) {
 	let dt = time.delta_secs();
-	for (_entity, member, mut lobe, mut transform, mut visibility, material, life) in &mut lobes {
+	for (_entity, member, mut lobe, mut transform, mut visibility, life) in &mut lobes {
 		if !member.instance_armed(&instances) {
 			*visibility = Visibility::Hidden;
 			continue;
@@ -131,11 +129,6 @@ pub fn tick_vfx_lobes(
 			life.age = lobe.age;
 		}
 		*transform = lobe_transform(&lobe.spec, lobe.age);
-		if let Some(handle) = material {
-			if let Some(mut material) = materials.get_mut(&handle.0) {
-				material.set_age(lobe.age);
-			}
-		}
 	}
 }
 
@@ -171,6 +164,7 @@ pub fn vfx_lifecycle_plugin(app: &mut App) {
 			tick_vfx_instances,
 			tick_vfx_flashes,
 			tick_vfx_lobes,
+			sync_lobe_instance_buffer,
 			tick_vfx_layer_lives,
 		)
 			.chain(),

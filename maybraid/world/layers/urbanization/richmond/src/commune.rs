@@ -14,6 +14,7 @@ use crate::connectivity::{corridor_levels, ConnectivityGraph};
 use crate::development::{cell_salt, DevelopmentPad};
 use crate::ground::RichmondGround;
 use crate::hydro::{composed_height_upper_on_rect, terrain_hydro_overlaps};
+use crate::math::lerp;
 use crate::pad::{PadComplex, PadParams, PlacedBuildingPad};
 use crate::scatter::{bounds_intersect, ScatterCandidate};
 use crate::shepherds_fit::{
@@ -228,10 +229,6 @@ fn sample_endpoint(hash: SeededHash, salt: u32, bounds: Bounds2) -> Vec2 {
 		lerp(bounds.min.x, bounds.max.x, hash.unit(salt)),
 		lerp(bounds.min.y, bounds.max.y, hash.unit(salt.wrapping_add(1))),
 	)
-}
-
-fn lerp(a: f32, b: f32, t: f32) -> f32 {
-	a + (b - a) * t.clamp(0.0, 1.0)
 }
 
 #[cfg(test)]
