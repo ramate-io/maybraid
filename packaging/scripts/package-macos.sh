@@ -34,7 +34,25 @@ fi
 
 if [[ "${SKIP_BUILD:-}" != "1" ]]; then
     echo "==> Building maybraid (release)"
-    (cd "$REPO_ROOT" && cargo build -p maybraid --release)
+    # Use system libiconv (not Nix store) for release builds to avoid
+    # /nix/store paths in the shipped binary (issue #1013).
+    # Unset Nix-injected library paths; the Apple linker will find
+    # /usr/lib/libiconv.2.dylib from the macOS SDK.
+    (
+        cd "$REPO_ROOT"
+        unset RUSTFLAGS LIBRARY_PATH
+        # Keep only non-libiconv flags from LDFLAGS if present
+        if [[ -n "${LDFLAGS:-}" ]]; then
+            LDFLAGS_FILTERED=""
+            for flag in $LDFLAGS; do
+                if [[ "$flag" != *"libiconv"* ]]; then
+                    LDFLAGS_FILTERED="$LDFLAGS_FILTERED $flag"
+                fi
+            done
+            export LDFLAGS="${LDFLAGS_FILTERED# }"
+        fi
+        cargo build -p maybraid --release
+    )
 fi
 
 if [[ ! -f "$BINARY" ]]; then

@@ -96,6 +96,9 @@
             # rustc's Darwin target always passes `-liconv`. The Nix `cc`
             # wrapper does not reliably inject `libiconv` into rustc's own
             # link line (and Xcode `DEVELOPER_DIR` can hide the SDK copy).
+            # For development builds, add Nix libiconv to ensure successful linking.
+            # For release/packaging builds, the packaging script unsets these to use
+            # the system libiconv and avoid /nix/store paths in shipped binaries.
             RUSTFLAGS = pkgs.lib.optionalString pkgs.stdenv.isDarwin
               "-L native=${pkgs.libiconv}/lib";
             LIBRARY_PATH = pkgs.lib.optionalString pkgs.stdenv.isDarwin
