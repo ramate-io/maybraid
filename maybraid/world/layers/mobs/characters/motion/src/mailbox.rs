@@ -373,6 +373,7 @@ pub fn apply_anim_mailbox(
 			Entity,
 			&AnimRefRoot,
 			&mut AnimMailbox,
+			&BoneMap,
 			&CharacterRig,
 			&mut Transform,
 			Has<AnimateBones>,
@@ -397,6 +398,7 @@ pub fn apply_anim_mailbox(
 			entity,
 			root,
 			mut mailbox,
+			_bone_map,
 			character_rig,
 			mut armature,
 			write_bones,
@@ -476,18 +478,36 @@ pub fn apply_anim_mailbox(
 		},
 	);
 
-	for (entity, _, mailbox, character_rig, _, write_bones, _, _, _, _) in &hosts {
+	for (entity, _, mailbox, bone_map, character_rig, _, write_bones, _, _, _, _) in &hosts {
 		if !write_bones || character_rig.role != CharacterRigRole::Body {
 			continue;
 		}
 		if !allows_only(only.as_ref(), entity) {
 			continue;
 		}
-		if mailbox.bone_entities.is_empty() {
-			continue;
+		let names = match character_rig.skeleton {
+			RigSkeletonKind::Humanoid => &humanoid_v0_definition().names,
+			RigSkeletonKind::Quadruped => &quadruped_v0_definition().names,
+			RigSkeletonKind::Forelimbed => &forelimbed_v0_definition().names,
+			RigSkeletonKind::Neck => continue,
+		};
+		if indexed_cache_valid(&mailbox.bone_entities, mailbox.output.local.len(), &bone_tfs) {
+			write_pose_indexed(&mailbox.output, &mailbox.bone_entities, &mut bone_tfs);
+		} else {
+			write_pose_by_name(&mailbox.output, names, bone_map, &mut bone_tfs);
 		}
-		write_pose_indexed(&mailbox.output, &mailbox.bone_entities, &mut bone_tfs);
 	}
+}
+
+/// True when prepare-time bone entities still align with the sampled pose length and exist.
+fn indexed_cache_valid(
+	entities: &[Entity],
+	pose_len: usize,
+	transforms: &Query<&mut Transform, (With<AnimBone>, Without<AnimMailbox>)>,
+) -> bool {
+	!entities.is_empty()
+		&& entities.len() == pose_len
+		&& entities.iter().all(|entity| transforms.get(*entity).is_ok())
 }
 
 fn clip_progress(clip: AnimClip, clip_progress: f32, entity: Entity) -> f32 {
@@ -571,6 +591,28 @@ fn missing_animation_bones(definition: &RigDefinition, bone_map: &BoneMap) -> Ve
 		.copied()
 		.filter(|name| !bone_map.by_name.contains_key(*name))
 		.collect()
+}
+
+fn write_pose_by_name(
+	pose: &PoseBuffer,
+	names: &[&'static str],
+	bone_map: &BoneMap,
+	transforms: &mut Query<&mut Transform, (With<AnimBone>, Without<AnimMailbox>)>,
+) {
+	for (index, name) in names.iter().enumerate() {
+		let Some(&entity) = bone_map.by_name.get(*name) else {
+			continue;
+		};
+		let Some(desired) = pose.local.get(index) else {
+			continue;
+		};
+		let Ok(mut transform) = transforms.get_mut(entity) else {
+			continue;
+		};
+		if *transform != *desired {
+			*transform = *desired;
+		}
+	}
 }
 
 fn write_pose_indexed(
@@ -729,9 +771,9 @@ fn sample_forelimbed(
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::AnimRef;
 	use bevy::ecs::system::RunSystemOnce;
 	use character_rigs::authoring::humanoid_v0_definition;
-	use crate::AnimRef;
 	use intelligence_lod::IntelligenceBand;
 	use std::collections::HashMap;
 	use std::hint::black_box;
@@ -1074,6 +1116,94 @@ mod tests {
 	}
 
 	#[test]
+	fn unprepared_mailbox_writes_pose_by_name() {
+		let definition = humanoid_v0_definition();
+		let mut world = World::new();
+		let mut bone_map = HashMap::new();
+		for (index, name) in definition.names.iter().enumerate() {
+			let rest = Transform {
+				translation: Vec3::new(index as f32 * 0.01, 0.0, 0.0),
+				rotation: Quat::from_rotation_x(index as f32 * 0.02),
+				scale: Vec3::ONE,
+			};
+			let entity = world.spawn((AnimBone { name: RigName::from(*name), rest }, rest)).id();
+			bone_map.insert(name.to_string(), entity);
+		}
+
+		let mut rig = HumanoidV0Rig::imported();
+		let mut pose = PoseBuffer::identity(definition.len());
+		for (index, bone) in pose.local.iter_mut().enumerate() {
+			*bone = Transform {
+				translation: Vec3::new(index as f32 * 0.03, 0.2, 0.0),
+				rotation: Quat::from_rotation_y(index as f32 * 0.04),
+				scale: Vec3::ONE,
+			};
+		}
+		rig.pose.copy_from(&pose);
+
+		let mut mailbox = AnimMailbox::new(Transform::IDENTITY);
+		mailbox.output.copy_from(&pose);
+		mailbox.posed = true;
+		assert!(mailbox.bone_entities.is_empty(), "firearm-hold style mailbox has no cache");
+
+		let host = world
+			.spawn((
+				CharacterRig { role: CharacterRigRole::Body, skeleton: RigSkeletonKind::Humanoid },
+				mailbox,
+				BoneMap { by_name: bone_map },
+				rig,
+			))
+			.id();
+		world.init_resource::<MailboxApplySet>();
+		world.resource_mut::<MailboxApplySet>().only = None;
+
+		apply_mailbox_write_loop(&mut world, &[host], false);
+
+		for (index, name) in definition.names.iter().enumerate() {
+			let entity = world.get::<BoneMap>(host).unwrap().by_name.get(*name).unwrap();
+			let transform = world.get::<Transform>(*entity).unwrap();
+			assert_eq!(*transform, pose.local[index], "bone {name} should match mailbox output");
+		}
+	}
+
+	#[test]
+	fn stale_bone_entities_fall_back_to_name_lookup() {
+		let definition = humanoid_v0_definition();
+		let mut world = World::new();
+		let host = spawn_mailbox_apply_host(&mut world, AnimClip::Still, 0.0);
+		world.init_resource::<MailboxApplySet>();
+		world.resource_mut::<MailboxApplySet>().only = None;
+
+		let stale_entity = world.get::<AnimMailbox>(host).unwrap().bone_entities[3];
+		world.despawn(stale_entity);
+		let replacement = world
+			.spawn((
+				AnimBone { name: RigName::from(definition.names[3]), rest: Transform::IDENTITY },
+				Transform::IDENTITY,
+			))
+			.id();
+		let mut bone_map = world.get::<BoneMap>(host).unwrap().clone();
+		bone_map.by_name.insert(definition.names[3].to_string(), replacement);
+		world.entity_mut(host).insert(bone_map);
+		assert!(
+			world.get::<AnimMailbox>(host).unwrap().bone_entities.contains(&stale_entity),
+			"mailbox cache should still reference the despawned entity"
+		);
+
+		let mut pose = world.get::<AnimMailbox>(host).unwrap().output.clone();
+		pose.local[3].translation.y = 0.42;
+		world.get_mut::<AnimMailbox>(host).unwrap().output.copy_from(&pose);
+
+		apply_mailbox_write_loop(&mut world, &[host], false);
+
+		let written = world.get::<Transform>(replacement).unwrap();
+		assert_eq!(
+			written.translation.y, 0.42,
+			"replacement bone should receive pose via name fallback"
+		);
+	}
+
+	#[test]
 	fn indexed_write_leaves_unwritten_bones_unchanged() {
 		let (mut world, mut pose, bone_map, entities) = humanoid_write_fixture();
 		let names = &humanoid_v0_definition().names;
@@ -1156,7 +1286,7 @@ mod tests {
 			.id()
 	}
 
-	fn apply_mailbox_write_loop(world: &mut World, hosts: &[Entity], use_name_lookup: bool) {
+	fn apply_mailbox_write_loop(world: &mut World, hosts: &[Entity], force_name_lookup: bool) {
 		let only = world.resource::<MailboxApplySet>().only.clone();
 		let definition = humanoid_v0_definition();
 		let mut jobs = Vec::with_capacity(hosts.len());
@@ -1176,15 +1306,19 @@ mod tests {
 				mailbox.output.clone(),
 				mailbox.bone_entities.clone(),
 				world.get::<BoneMap>(*host).expect("bone map").clone(),
-				use_name_lookup,
+				force_name_lookup,
 			));
 		}
 
-		for (output, bone_entities, bone_map, use_name_lookup) in jobs {
-			if use_name_lookup {
-				write_pose_by_name_world(world, &output, &definition.names, &bone_map);
-			} else {
+		for (output, bone_entities, bone_map, force_name_lookup) in jobs {
+			let use_indexed = !force_name_lookup
+				&& !bone_entities.is_empty()
+				&& bone_entities.len() == output.local.len()
+				&& bone_entities.iter().all(|entity| world.get::<Transform>(*entity).is_some());
+			if use_indexed {
 				write_pose_indexed_world(world, &output, &bone_entities);
+			} else {
+				write_pose_by_name_world(world, &output, &definition.names, &bone_map);
 			}
 		}
 	}
@@ -1219,7 +1353,8 @@ mod tests {
 				for (world, host) in &mut worlds {
 					let clip = clips[frame as usize % clips.len()];
 					let progress = black_box(
-						(frame as f32 * 0.013 + (host.to_bits() % 997) as f32 * 0.01).rem_euclid(1.0),
+						(frame as f32 * 0.013 + (host.to_bits() % 997) as f32 * 0.01)
+							.rem_euclid(1.0),
 					);
 					let sampled = {
 						let mut rig = world.get_mut::<HumanoidV0Rig>(*host).expect("rig");
