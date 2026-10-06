@@ -28,7 +28,8 @@ use crate::player::{
 };
 use crate::WorldBaseTerrain;
 use avian3d::prelude::LinearVelocity;
-use durham::{TerrainCellLayout, TerrainEntryStore};
+use durham::{TerrainCellLayout, TerrainStorage};
+use lod::hcsg::HcsgStorage;
 
 const WALK_SPEED: f32 = 1.0;
 const RUN_SPEED: f32 = 5.0;
@@ -190,7 +191,7 @@ pub(crate) fn apply_stampede(
 	mut status: ResMut<GameCommandStatusText>,
 	layout: Res<TerrainCellLayout>,
 	base: Res<WorldBaseTerrain>,
-	store: Res<TerrainEntryStore>,
+	store: Res<HcsgStorage>,
 	requests: Query<Entity, With<RequestStampede>>,
 	mut players: Query<(Entity, &mut LinearVelocity), With<Player>>,
 	visuals: Query<Entity, With<PlayerVisual>>,

@@ -55,14 +55,14 @@ pub fn universal_bounds() -> Aabb3d {
 	Aabb3d::from_min_max(Vec3::splat(-1_000_000.0), Vec3::splat(1_000_000.0))
 }
 
-/// [`lod::gen::GenerationScheme`] for a world singleton stored at [`Id::Universal`].
+/// [`lod::gen::GenerationScheme`] for a world singleton at [`Id::Universal`]
+/// derived from other universals (or a constant).
 ///
-/// The bootstrap trait is the scheme's only capability: it seeds the value
-/// once. Consumers depend on `GeneratingSpatialIndex<T>`, never on the
-/// bootstrap source.
-macro_rules! universal_bootstrap_scheme {
-	($T:ty, $Bootstrap:ident :: $bootstrap:ident) => {
-		impl<S: $Bootstrap> lod::gen::GenerationScheme<S> for $T {
+/// Root inputs nothing can derive use [`lod::seeded_root`] instead. Either
+/// way, consumers read the value with `get_one_or_generate(Id::Universal)`.
+macro_rules! derived_universal_scheme {
+	($T:ty $(, where S: $bound:path)?, |$index:ident| $build:expr) => {
+		impl<S $(: $bound)?> lod::gen::GenerationScheme<S> for $T {
 			fn original_ids_for(
 				_spatial_index: &mut S,
 				_region: bevy::math::bounding::Aabb3d,
@@ -71,18 +71,19 @@ macro_rules! universal_bootstrap_scheme {
 			}
 
 			fn build_with_id(
-				spatial_index: &mut S,
+				$index: &mut S,
 				id: lod::gen::Id,
 			) -> Option<(Self, bevy::math::bounding::Aabb3d)> {
-				(id == lod::gen::Id::Universal).then(|| {
-					(spatial_index.$bootstrap(), $crate::terrain::cell::universal_bounds())
-				})
+				if id != lod::gen::Id::Universal {
+					return None;
+				}
+				Some(($build?, $crate::terrain::cell::universal_bounds()))
 			}
 		}
 	};
 }
 
-pub(crate) use universal_bootstrap_scheme;
+pub(crate) use derived_universal_scheme;
 
 /// A Universal layout that tiles regions into cell ids.
 ///
@@ -373,17 +374,8 @@ impl TerrainCellLayout {
 	}
 }
 
-/// Bootstrap source used only when first materializing [`TerrainCellLayout`] at
-/// [`Id::Universal`]. Consumers should depend on
-/// [`lod::gen::GeneratingSpatialIndex`]`<TerrainCellLayout>` instead.
-pub trait BootstrapTerrainCellLayout {
-	fn bootstrap_terrain_cell_layout(&self) -> TerrainCellLayout;
-}
-
-universal_bootstrap_scheme!(
-	TerrainCellLayout,
-	BootstrapTerrainCellLayout::bootstrap_terrain_cell_layout
-);
+// Seeded by the terrain window producer, which recenters it on the viewer.
+lod::seeded_root!(TerrainCellLayout);
 
 /// Layout for macro-scale tiling (jersey stamp size defaults).
 ///

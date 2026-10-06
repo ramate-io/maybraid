@@ -6,6 +6,7 @@ pub use lod_cascade as cascade;
 pub use lod_cascade_system as cascade_system;
 
 pub mod gen;
+pub mod hcsg;
 pub mod jobs;
 pub mod lod_ref;
 pub mod presentation;

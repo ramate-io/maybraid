@@ -10,7 +10,7 @@
 macro_rules! define_marazion_band {
 	(
 		layout: $Layout:ident,
-		bootstrap_layout: $Bootstrap:ident / $bootstrap_fn:ident,
+		layout_from_configs: $layout_fn:ident,
 		pre_cell: $PreCell:ident,
 		pocket: $Pocket:ident,
 		pocket_waters: $PocketWaters:ident,
@@ -60,7 +60,8 @@ macro_rules! define_marazion_band {
 			pub const FAMILY_SALT: u32 = $family_salt;
 		}
 
-		pub fn $bootstrap_fn(
+		/// This band's pre-pocket grid, derived from [`WatershedConfigs`](crate::terrain::watersheds::WatershedConfigs).
+		pub fn $layout_fn(
 			configs: &$crate::terrain::watersheds::config::WatershedConfigs,
 		) -> $Layout {
 			let band = &configs.$band_field;
@@ -72,11 +73,14 @@ macro_rules! define_marazion_band {
 			}
 		}
 
-		pub trait $Bootstrap {
-			fn $bootstrap_fn(&self) -> $Layout;
-		}
-
-		$crate::terrain::cell::universal_bootstrap_scheme!($Layout, $Bootstrap::$bootstrap_fn);
+		$crate::terrain::cell::derived_universal_scheme!(
+			$Layout,
+			where S: lod::gen::GeneratingSpatialIndex<$crate::terrain::watersheds::config::WatershedConfigs>,
+			|index| lod::gen::GeneratingSpatialIndex::<
+				$crate::terrain::watersheds::config::WatershedConfigs,
+			>::get_one_or_generate(index, lod::gen::Id::Universal)
+			.map($layout_fn)
+		);
 
 		impl $crate::terrain::cell::CellTiling for $Layout {
 			fn cell_ids(&self, region: bevy::math::bounding::Aabb3d) -> Vec<lod::gen::OriginalId> {

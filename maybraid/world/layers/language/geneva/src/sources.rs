@@ -5,7 +5,7 @@ use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec2;
 use bevy::prelude::{GlobalTransform, Query, Res};
 use chico::{Chico, ChicoForest, ChicoGrove, ForestIndex};
-use durham::TerrainEntryStore;
+use durham::{HcsgStorage, TerrainStorage};
 use lod::gen::{SpatialIndex, TrackedId};
 use procedural_common::Bounds2;
 use richmond::{DiscoverablePlace, Richmond};
@@ -95,7 +95,7 @@ pub trait NamedWorld: Send + Sync + 'static {
 type WorldRead = (
 	Res<'static, ForestIndex>,
 	Res<'static, UrbanizationIndex>,
-	Option<Res<'static, TerrainEntryStore>>,
+	Option<Res<'static, HcsgStorage>>,
 	Query<'static, 'static, (&'static DiscoverablePlace, &'static GlobalTransform)>,
 );
 
@@ -107,7 +107,7 @@ impl<T: 'static> NamedWorld for Vegetation<Chico<Urbanization<Richmond<T>>>> {
 		SourceRevisions {
 			forest: forests.membership_revision(),
 			urban: SpatialIndex::<SelectedUrbanization>::membership_revision(&**urban),
-			terrain: terrain.as_ref().map(|store| store.membership_revision()).unwrap_or(0),
+			terrain: terrain.as_ref().map(|store| store.latest_version()).unwrap_or(0),
 			places: places_signature(places),
 		}
 	}
@@ -192,7 +192,7 @@ fn grove_features(index: &ForestIndex, region: Aabb3d) -> Vec<NamedFeature> {
 	out
 }
 
-fn geography_features(store: &TerrainEntryStore, region: Aabb3d) -> Vec<NamedFeature> {
+fn geography_features(store: &HcsgStorage, region: Aabb3d) -> Vec<NamedFeature> {
 	let query = Bounds2::from_xz(region.min.x, region.min.z, region.max.x, region.max.z);
 	store
 		.geographic_features_overlapping(query)
@@ -295,9 +295,7 @@ fn place_key(place: &DiscoverablePlace, xz: Vec2) -> (NameKey, bool, bool) {
 	}
 }
 
-fn places_signature(
-	places: &Query<'_, '_, (&DiscoverablePlace, &GlobalTransform)>,
-) -> u64 {
+fn places_signature(places: &Query<'_, '_, (&DiscoverablePlace, &GlobalTransform)>) -> u64 {
 	let mut items: Vec<_> = places
 		.iter()
 		.map(|(place, transform)| {
@@ -314,13 +312,12 @@ fn places_signature(
 	items.sort_unstable();
 	let mut sig = mix(items.len() as u64);
 	for (identity, persistent, label, x, z) in items {
-		sig = mix(
-			sig ^ mix(identity)
-				^ mix(u64::from(persistent))
-				^ mix(label)
-				^ mix(u64::from(x))
-				^ mix(u64::from(z)),
-		);
+		sig = mix(sig
+			^ mix(identity)
+			^ mix(u64::from(persistent))
+			^ mix(label)
+			^ mix(u64::from(x))
+			^ mix(u64::from(z)));
 	}
 	sig
 }
