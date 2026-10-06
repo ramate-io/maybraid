@@ -12,7 +12,7 @@ use bevy::ecs::query::{Has, Or};
 use bevy::prelude::*;
 use character_animations::{
 	animations::{
-		Idle, Jab, Prone, QuadrupedIdle, QuadrupedLeap, QuadrupedRun, Squat, Tuck,
+		Idle, Jab, Mix, Prone, QuadrupedIdle, QuadrupedLeap, QuadrupedRun, Squat, Tuck,
 		TwoFootedTuckedFlip, UprightLeap,
 	},
 	Animation, Effects,
@@ -596,6 +596,27 @@ fn write_pose(
 	}
 }
 
+fn sample_crouch_walk(
+	params: crate::clip::CrouchWalkParams,
+	rig: &mut HumanoidV0Rig,
+	progress: f32,
+	write_bones: bool,
+	write_effects: bool,
+) -> Effects {
+	let mix = Mix::new(Squat::held(), params.walk, params.walk_weight);
+	let walk_phase = progress.rem_euclid(1.0);
+	if write_bones && write_effects {
+		mix.apply_at(rig, params.depth, walk_phase)
+	} else if write_bones {
+		mix.apply_at(rig, params.depth, walk_phase);
+		Effects::IDENTITY
+	} else if write_effects {
+		mix.effects_for(rig, walk_phase)
+	} else {
+		Effects::IDENTITY
+	}
+}
+
 fn sample_split<A, R>(
 	anim: &A,
 	rig: &mut R,
@@ -672,6 +693,9 @@ fn sample_humanoid(
 			write_effects,
 		),
 		AnimClip::Squat => sample_split(&Squat::held(), rig, progress, write_bones, write_effects),
+		AnimClip::CrouchWalk(params) => {
+			sample_crouch_walk(params, rig, progress, write_bones, write_effects)
+		}
 		AnimClip::Prone => {
 			sample_split(&Prone::default(), rig, progress, write_bones, write_effects)
 		}
@@ -884,6 +908,65 @@ mod tests {
 		let b = Entity::from_bits(2);
 		assert_ne!(clip_progress(AnimClip::Still, 0.0, a), clip_progress(AnimClip::Still, 0.0, b));
 		assert_eq!(clip_progress(AnimClip::walk(), 0.3, a), 0.3);
+	}
+
+	#[test]
+	fn crouch_walk_mix_endpoints_match_squat_and_walk() -> anyhow::Result<()> {
+		use crate::clip::CrouchWalkParams;
+
+		let depth = 1.0;
+		let walk_phase = 0.35;
+		let walk_knobs = CrouchWalkParams::blended(depth, 1.0).walk;
+		let mut squat = HumanoidV0Rig::imported();
+		sample_humanoid(AnimClip::Squat, &mut squat, depth, true, false);
+		let mut walk = HumanoidV0Rig::imported();
+		sample_humanoid(AnimClip::Walk(walk_knobs), &mut walk, walk_phase, true, false);
+		let mut blended = HumanoidV0Rig::imported();
+		sample_humanoid(
+			AnimClip::CrouchWalk(CrouchWalkParams::blended(depth, 0.0)),
+			&mut blended,
+			walk_phase,
+			true,
+			false,
+		);
+		assert!(
+			squat.rotation("femur.L").dot(blended.rotation("femur.L")).abs() > 1.0 - 1e-5,
+			"walk weight 0 should match held squat"
+		);
+		sample_humanoid(
+			AnimClip::CrouchWalk(CrouchWalkParams::blended(depth, 1.0)),
+			&mut blended,
+			walk_phase,
+			true,
+			false,
+		);
+		assert!(
+			walk.rotation("femur.L").dot(blended.rotation("femur.L")).abs() > 1.0 - 1e-5,
+			"walk weight 1 should match walk overlay"
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn crouch_walk_legs_oscillate_with_phase() -> anyhow::Result<()> {
+		use crate::clip::CrouchWalkParams;
+
+		let params = CrouchWalkParams::blended(1.0, 0.35);
+		let mut early = HumanoidV0Rig::imported();
+		sample_humanoid(AnimClip::CrouchWalk(params), &mut early, 0.0, true, false);
+		let mut late = HumanoidV0Rig::imported();
+		sample_humanoid(AnimClip::CrouchWalk(params), &mut late, 0.5, true, false);
+		assert!(
+			early.posed_angle("femur.L") != late.posed_angle("femur.L"),
+			"walk phase should move the legs"
+		);
+		let mut squat = HumanoidV0Rig::imported();
+		sample_humanoid(AnimClip::Squat, &mut squat, 1.0, true, false);
+		assert!(
+			early.posed_angle("root") > squat.posed_angle("root") * 0.5,
+			"spine stays mostly folded while legs cycle"
+		);
+		Ok(())
 	}
 
 	#[test]

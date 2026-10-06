@@ -22,8 +22,8 @@ pub mod shown;
 pub mod sync;
 
 pub use clip::{
-	AnimClip, AnimId, AnimRef, AnimRefRoot, JabParams, JumpParams, TuckParams, TuckedFlipParams,
-	TwoFootedTuckedFlipParams,
+	AnimClip, AnimId, AnimRef, AnimRefRoot, CrouchWalkParams, JabParams, JumpParams, TuckParams,
+	TuckedFlipParams, TwoFootedTuckedFlipParams,
 };
 pub use elevation::{
 	apply_terrain_pitch, draw_terrain_pitch_probes, is_local_visual_child, probe_origin,
