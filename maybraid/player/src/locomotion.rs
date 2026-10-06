@@ -72,8 +72,12 @@ pub fn drive_player_locomotion(
 					JumpParams::default().elapsed_from_phase(phase)
 				};
 				commands.entity(member).insert(AnimProgress(progress));
-			} else if !stance.prone_settled() || matches!(stance.kind, StanceKind::Squat | StanceKind::Prone) {
-				commands.entity(member).insert(AnimProgress(stance.blend));
+			} else if !stance.prone_settled()
+				|| matches!(stance.kind, StanceKind::Squat | StanceKind::Prone)
+			{
+				let progress =
+					if !stance.prone_settled() { stance.descent_progress } else { stance.blend };
+				commands.entity(member).insert(AnimProgress(progress));
 			} else {
 				commands.entity(member).remove::<AnimProgress>();
 			}
@@ -237,7 +241,7 @@ mod tests {
 
 	#[test]
 	fn entering_prone_uses_descent_clip() {
-		let stance = CharacterStance { kind: StanceKind::Prone, blend: 0.0 };
+		let stance = CharacterStance { kind: StanceKind::Prone, blend: 1.0, descent_progress: 0.0 };
 		assert_eq!(
 			locomotion_clip(RigSkeletonKind::Humanoid, None, &stance, 0.0).id(),
 			AnimId::ProneDescent
@@ -247,10 +251,31 @@ mod tests {
 	#[test]
 	fn jump_interrupts_prone_descent() {
 		let jump = Jumping::start(0.0);
-		let stance = CharacterStance { kind: StanceKind::Prone, blend: 0.4 };
+		let stance = CharacterStance { kind: StanceKind::Prone, blend: 1.0, descent_progress: 0.4 };
 		assert_eq!(
 			locomotion_clip(RigSkeletonKind::Humanoid, Some(&jump), &stance, 0.0).id(),
 			AnimClip::jump().id()
+		);
+	}
+
+	#[test]
+	fn squat_toggle_interrupts_prone_descent() {
+		let stance = CharacterStance { kind: StanceKind::Squat, blend: 1.0, descent_progress: 0.5 };
+		assert_eq!(
+			locomotion_clip(RigSkeletonKind::Humanoid, None, &stance, 0.0).id(),
+			AnimId::Squat
+		);
+	}
+
+	#[test]
+	fn descent_progress_is_separate_from_blend() {
+		let mid_descent =
+			CharacterStance { kind: StanceKind::Prone, blend: 1.0, descent_progress: 0.5 };
+		assert!((mid_descent.blend - 1.0).abs() < 1e-6);
+		assert!(!mid_descent.prone_settled());
+		assert_eq!(
+			mid_descent.speed_scale(),
+			CharacterStance::settled(StanceKind::Prone).speed_scale()
 		);
 	}
 }

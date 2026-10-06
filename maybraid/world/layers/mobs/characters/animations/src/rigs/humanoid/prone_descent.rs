@@ -124,10 +124,7 @@ mod tests {
 		assert!(root.z > 0.05, "blend should pitch the spine toward prone, got {root:?}");
 		let rest = HumanoidV0Rig::for_clip_test();
 		let rest_root = tip(&rest, "root");
-		assert!(
-			root.z > rest_root.z + 0.03,
-			"blend should leave walk and move toward prone"
-		);
+		assert!(root.z > rest_root.z + 0.03, "blend should leave walk and move toward prone");
 		Ok(())
 	}
 
@@ -151,14 +148,15 @@ mod tests {
 	fn jump_interruption_from_mid_descent_stays_deterministic() -> anyhow::Result<()> {
 		let mut rig = HumanoidV0Rig::for_clip_test();
 		ProneDescent::default().apply(&mut rig, 0.4);
-		let interrupted: Vec<_> = rig
-			.animation_bone_names()
-			.map(|name| (name, rig.rotation(name)))
-			.collect();
+		let interrupted: Vec<_> =
+			rig.animation_bone_names().map(|name| (name, rig.rotation(name))).collect();
 		ProneDescent::default().apply(&mut rig, 0.4);
 		for (name, before) in interrupted {
 			let after = rig.rotation(name);
-			assert!(after.dot(before).abs() > 1.0 - 1e-5, "re-sample after pause must not drift on {name}");
+			assert!(
+				after.dot(before).abs() > 1.0 - 1e-5,
+				"re-sample after pause must not drift on {name}"
+			);
 		}
 		Ok(())
 	}
@@ -186,10 +184,7 @@ mod tests {
 			for name in descent_rig.animation_bone_names() {
 				let a = descent_rig.rotation(name);
 				let b = held_rig.rotation(name);
-				assert!(
-					a.dot(b).abs() > 1.0 - 1e-5,
-					"scale {scale} endpoint mismatch on {name}"
-				);
+				assert!(a.dot(b).abs() > 1.0 - 1e-5, "scale {scale} endpoint mismatch on {name}");
 			}
 		}
 		Ok(())

@@ -983,4 +983,77 @@ mod tests {
 		assert!(!only.contains(&behind));
 		assert_eq!(world.get::<AnimMailbox>(behind).unwrap().apply_skips, 8);
 	}
+
+	fn poses_match(a: &PoseBuffer, b: &PoseBuffer) -> bool {
+		a.local.len() == b.local.len()
+			&& a.local.iter().zip(&b.local).all(|(left, right)| {
+				left.translation.distance_squared(right.translation) < 1e-8
+					&& left.rotation.dot(right.rotation).abs() > 1.0 - 1e-5
+					&& left.scale.distance_squared(right.scale) < 1e-8
+			})
+	}
+
+	fn pose_at_mid_descent() -> (HumanoidV0Rig, PoseBuffer) {
+		let mut rig = HumanoidV0Rig::imported();
+		sample_humanoid(AnimClip::ProneDescent, &mut rig, 0.5, true, true);
+		let pose = rig.pose.clone();
+		(rig, pose)
+	}
+
+	#[test]
+	fn prone_descent_entry_from_walk_starts_at_visible_pose() -> anyhow::Result<()> {
+		let mut rig = HumanoidV0Rig::imported();
+		sample_humanoid(AnimClip::walk(), &mut rig, 0.35, true, true);
+		let walk_pose = rig.pose.clone();
+
+		let mut mailbox = AnimMailbox::with_bones(Transform::default(), rig.pose.len());
+		mailbox.from_pose.copy_from(&walk_pose);
+		mailbox.blend_progress = 0.0;
+
+		sample_humanoid(AnimClip::ProneDescent, &mut rig, 0.0, true, true);
+		publish_pose(&mut mailbox, &rig.pose, 0.0);
+		assert!(poses_match(&mailbox.output, &walk_pose));
+
+		sample_humanoid(AnimClip::prone(), &mut rig, 1.0, true, true);
+		assert!(!poses_match(&mailbox.output, &rig.pose), "entry must not snap to full prone");
+		Ok(())
+	}
+
+	#[test]
+	fn jump_interrupt_preserves_mid_descent_pose() -> anyhow::Result<()> {
+		let (mut rig, visible) = pose_at_mid_descent();
+		let mut mailbox = AnimMailbox::with_bones(Transform::default(), rig.pose.len());
+		publish_pose(&mut mailbox, &visible, 1.0);
+
+		mailbox.from_pose.copy_from(&visible);
+		mailbox.blend_progress = 0.0;
+
+		sample_humanoid(AnimClip::jump(), &mut rig, 0.0, true, true);
+		publish_pose(&mut mailbox, &rig.pose, 0.0);
+		assert!(poses_match(&mailbox.output, &visible));
+
+		let mut jump_rest = HumanoidV0Rig::imported();
+		sample_humanoid(AnimClip::jump(), &mut jump_rest, 0.0, true, true);
+		assert!(!poses_match(&mailbox.output, &jump_rest.pose), "must not snap to jump rest");
+		Ok(())
+	}
+
+	#[test]
+	fn squat_interrupt_preserves_mid_descent_pose() -> anyhow::Result<()> {
+		let (mut rig, visible) = pose_at_mid_descent();
+		let mut mailbox = AnimMailbox::with_bones(Transform::default(), rig.pose.len());
+		publish_pose(&mut mailbox, &visible, 1.0);
+
+		mailbox.from_pose.copy_from(&visible);
+		mailbox.blend_progress = 0.0;
+
+		sample_humanoid(AnimClip::squat(), &mut rig, 1.0, true, true);
+		publish_pose(&mut mailbox, &rig.pose, 0.0);
+		assert!(poses_match(&mailbox.output, &visible));
+
+		let mut squat_pose = HumanoidV0Rig::imported();
+		sample_humanoid(AnimClip::squat(), &mut squat_pose, 1.0, true, true);
+		assert!(!poses_match(&mailbox.output, &squat_pose.pose), "must not snap to held squat");
+		Ok(())
+	}
 }
