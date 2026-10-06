@@ -22,7 +22,8 @@ pub mod shown;
 pub mod sync;
 
 pub use clip::{
-	AnimClip, AnimId, AnimRef, AnimRefRoot, JabParams, JumpParams, TuckParams, TuckedFlipParams,
+	AnimClip, AnimId, AnimRef, AnimRefRoot, JabParams, JumpParams, SaluteParams, TuckParams,
+	TuckedFlipParams,
 	TwoFootedTuckedFlipParams,
 };
 pub use elevation::{

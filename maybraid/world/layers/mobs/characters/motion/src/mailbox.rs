@@ -12,7 +12,7 @@ use bevy::ecs::query::{Has, Or};
 use bevy::prelude::*;
 use character_animations::{
 	animations::{
-		Idle, Jab, Prone, QuadrupedIdle, QuadrupedLeap, QuadrupedRun, Squat, Tuck,
+		Idle, Jab, Prone, QuadrupedIdle, QuadrupedLeap, QuadrupedRun, Salute, Squat, Tuck,
 		TwoFootedTuckedFlip, UprightLeap,
 	},
 	Animation, Effects,
@@ -668,6 +668,13 @@ fn sample_humanoid(
 			&Jab::new(params.side, params.backswing, params.target),
 			rig,
 			progress.rem_euclid(1.0),
+			write_bones,
+			write_effects,
+		),
+		AnimClip::Salute(params) => sample_split(
+			&Salute::new(params.side),
+			rig,
+			progress.clamp(0.0, 1.0),
 			write_bones,
 			write_effects,
 		),

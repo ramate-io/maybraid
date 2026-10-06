@@ -4,7 +4,7 @@
 use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
 use character_rigs::rigs::quadruped_v0::QuadrupedV0Rig;
 
-use crate::animations::{Flapping, Jab, QuadrupedRun, Squat, Walk};
+use crate::animations::{Flapping, Jab, QuadrupedRun, Salute, Squat, Walk};
 use crate::Animation;
 
 #[test]
@@ -61,6 +61,17 @@ fn jab_cover_elbow_tucks_in_y_not_as_a_roll() {
 		(cover - rest_cover).length() > 0.2,
 		"cover is not a length-axis roll, {cover:?} vs {rest_cover:?}"
 	);
+}
+
+#[test]
+fn salute_lifts_the_forearm_tip_inboard_and_up() {
+	let rest = HumanoidV0Rig::for_clip_test();
+	let mut posed = HumanoidV0Rig::for_clip_test();
+	Salute::default().apply(&mut posed, 0.45);
+	let rest_tip = rest.character_point("forearm.R");
+	let posed_tip = posed.character_point("forearm.R");
+	assert!(posed_tip.y > rest_tip.y + 0.12, "salute raises the hand, {posed_tip:?}");
+	assert!(posed_tip.x > rest_tip.x + 0.04, "salute moves inboard, {posed_tip:?}");
 }
 
 #[test]
