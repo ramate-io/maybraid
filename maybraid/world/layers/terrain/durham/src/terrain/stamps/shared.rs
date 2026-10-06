@@ -2,15 +2,16 @@
 
 use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::math::{Vec2, Vec3};
-use bevy::prelude::*;
 use comproc::guillotine::{Bounds2, Guillotine, GuillotineCuts};
 use comproc::noise::config::NoiseConfig;
 use lod::gen::{GeneratingSpatialIndex, Id, OriginalId, SpatialIndex};
-use lod::lod_ref::LodRef;
 use noise::Perlin;
 use procedural_common::Bounds2 as ProcBounds2;
+use terrain_stamps::StampModulation;
 
-use crate::terrain::cell::{cell_coords_for_region, TERRAIN_CELL_VERTICAL_HALF_EXTENT};
+use crate::terrain::cell::{
+	cell_coords_for_region, discovery_lod_ref, TERRAIN_CELL_VERTICAL_HALF_EXTENT,
+};
 use crate::terrain::stamps::configs::FamilyGuillotineConfig;
 
 /// Uniform controller grid with optional XZ origin offset.
@@ -162,8 +163,10 @@ pub fn leaf_aabbs(cell: Aabb3d, cuts: &GuillotineCuts<2>) -> Vec<Aabb3d> {
 		.collect()
 }
 
-/// Controller-cell ids covering `region` for an offset grid layout type.
-pub fn original_ids_for_controller_cells<S, L>(
+/// Controller-cell ids covering `region` on layout `L`'s offset grid.
+///
+/// Discovery helper for controller schemes; reads only the Universal layout.
+pub(crate) fn original_ids_for_controller_cells<S, L>(
 	spatial_index: &mut S,
 	region: Aabb3d,
 	grid: impl FnOnce(&L) -> &OffsetControllerGrid,
@@ -171,22 +174,13 @@ pub fn original_ids_for_controller_cells<S, L>(
 where
 	S: GeneratingSpatialIndex<L>,
 {
-	let identity = Transform::IDENTITY;
-	let lod_ref = LodRef {
-		entity: Entity::PLACEHOLDER,
-		previous_transform: &identity,
-		current_transform: &identity,
-		bounds: &region,
-	};
-	if GeneratingSpatialIndex::<L>::get_or_generate(spatial_index, Id::Universal, &lod_ref)
-		.is_none()
-	{
-		return Vec::new();
-	}
-	let Some(layout) = <S as SpatialIndex<L>>::get(spatial_index, Id::Universal) else {
+	let lod_ref = discovery_lod_ref(&region);
+	let Some(layout) =
+		GeneratingSpatialIndex::<L>::get_one_or_generate(spatial_index, Id::Universal, &lod_ref)
+	else {
 		return Vec::new();
 	};
-	let grid = grid(layout).clone();
+	let grid = grid(layout);
 	let grid_region = grid.region_in_grid_space(region);
 	cell_coords_for_region(grid_region, grid.cell_size)
 		.map(|(ix, iz)| OriginalId(Id::from_cell(grid.cell_bounds(ix, iz))))
@@ -194,19 +188,18 @@ where
 		.collect()
 }
 
-/// Leaf ids from controllers that expose [`leaf_aabbs`](LeafAabbs::leaf_aabbs).
-pub fn original_ids_for_leaves<S, C>(spatial_index: &mut S, region: Aabb3d) -> Vec<OriginalId>
+/// Sorted leaf ids intersecting `region`, from controllers `C` in `region`.
+///
+/// Discovery helper for leaf schemes; only the controller level materializes.
+pub(crate) fn original_ids_for_leaves<S, C>(
+	spatial_index: &mut S,
+	region: Aabb3d,
+) -> Vec<OriginalId>
 where
 	S: GeneratingSpatialIndex<C>,
 	C: LeafAabbs,
 {
-	let identity = Transform::IDENTITY;
-	let lod_ref = LodRef {
-		entity: Entity::PLACEHOLDER,
-		previous_transform: &identity,
-		current_transform: &identity,
-		bounds: &region,
-	};
+	let lod_ref = discovery_lod_ref(&region);
 	let controllers =
 		GeneratingSpatialIndex::<C>::get_or_generate_region(spatial_index, region, &lod_ref);
 	let mut out = Vec::new();
@@ -227,4 +220,10 @@ where
 
 pub trait LeafAabbs {
 	fn leaf_aabbs(&self) -> Vec<Aabb3d>;
+}
+
+/// Leaf output of any jersey family band, so composers stay band-agnostic.
+pub trait StampLeaf {
+	fn cell(&self) -> Aabb3d;
+	fn modulations(&self) -> &[StampModulation];
 }

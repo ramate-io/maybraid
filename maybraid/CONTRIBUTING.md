@@ -35,6 +35,19 @@ Sometimes, particularly during early development of a model, the game object may
 > [!IMPORTANT]
 > Please update this section if increasing or different layers are consistently implemented at the `-models` level.
 
+## Hierarchical generation (CSG)
+
+World layers compose by **reusing `GenerationScheme`s**, not by re-deriving each other's discovery. To add a stage (a stamp band, a correction pass, a layer that sits on terrain):
+
+1. **Write one `GenerationScheme` per generated type, beside that type, under its world layer.** `original_ids_for` says which ids originate in a region; `build_with_id` builds one id. Put discovery helpers in the owning module and keep them private to the crate. Do not export `original_ids_for_*` free functions for other schemes to call.
+2. **Bound only on what you read directly.** If you read type `D`, require `S: GeneratingSpatialIndex<D>`. `D`'s own controllers, layouts, and configs are `D`'s bounds, not yours; they resolve at the concrete index. Use plain `SpatialIndex<D>` when you only read and never generate.
+3. **Discover dependencies through the index.** Call `GeneratingSpatialIndex::<D>::original_ids_for(index, region)` and then `get_one_or_generate` / `get_or_generate` for each id. This keeps discovery lazy and in id order. Do not call `D::original_ids_for` or `<D as GenerationScheme<S>>::…` directly, and do not swap discovery for eager `get_or_generate_region`.
+4. **Reuse existing ids.** If your type sits on an existing grid, delegate `original_ids_for` to that grid's root type. For example, `Terrain` and `Water` reuse [`PreWatershedTerrain`](world/layers/terrain/durham/src/terrain.rs)'s origin cells, and the watershed stages reuse `HydroComplexCell`'s.
+5. **Seed universal singletons from `Bootstrap*` traits.** In Durham, use `universal_bootstrap_scheme!` instead of hand-writing a scheme for each config or layout.
+6. **Use generic helpers when a scheme pulls a family of leaves.** Share the leaf shape through a trait (Durham's `StampLeaf`) instead of writing a macro for each type.
+
+The runtime follows the same rule: `LodGeneratePlugin<T, S>` needs only `S: GeneratingSpatialIndex<T>`.
+
 ## Chico vegetation trees (LOD)
 
 Learnings from migrating ball-stick trees (Sope’s Banyan, Penmarch / Kamakura torch, Rory’s Head-trained) onto [`vegetation-components`](./world/layers/vegetation/components/) + [`sbs-trees`](./world/layers/vegetation/sbs-trees/).

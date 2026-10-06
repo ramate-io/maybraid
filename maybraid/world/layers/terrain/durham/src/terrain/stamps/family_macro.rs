@@ -8,6 +8,9 @@
 /// Leaf identities are not stored: stamp `build_with_id` down-levels `Id` to
 /// cell bounds. The playable-world stream walks that band's controllers only.
 ///
+/// Consumers depend on `GeneratingSpatialIndex<$Stamp>` alone; leaf discovery
+/// (controller cells → guillotine leaves) is encapsulated in `$Stamp`'s scheme.
+///
 /// `config_family` / `config_band` select e.g. `configs.massif.low_pass`.
 ///
 /// Defaults for `likelihood`, `spatial_correlation`, `strength`, and guillotine
@@ -19,7 +22,6 @@ macro_rules! define_stamp_family {
 		bootstrap_layout: $BootstrapLayout:ident / $bootstrap_layout_fn:ident,
 		controller: $Controller:ident,
 		stamp: $Stamp:ident,
-		leaves_fn: $leaves_fn:ident,
 		family_salt: $family_salt:expr,
 		cell_size: ($cell_min:expr, $cell_max:expr),
 		controller_cell_size: $controller_cell_size:expr,
@@ -78,38 +80,10 @@ macro_rules! define_stamp_family {
 			fn $bootstrap_layout_fn(&self) -> $Layout;
 		}
 
-		impl<S> lod::gen::GenerationScheme<S> for $Layout
-		where
-			S: $BootstrapLayout,
-		{
-			fn original_ids_for(
-				_spatial_index: &mut S,
-				_region: bevy::math::bounding::Aabb3d,
-			) -> Vec<lod::gen::OriginalId> {
-				vec![lod::gen::OriginalId::universal()]
-			}
-
-			fn build_with_id(
-				spatial_index: &mut S,
-				id: lod::gen::Id,
-				_lod_ref: &lod::lod_ref::LodRef,
-			) -> Option<(Self, bevy::math::bounding::Aabb3d)> {
-				if id != lod::gen::Id::Universal {
-					return None;
-				}
-				Some((
-					spatial_index.$bootstrap_layout_fn(),
-					$crate::terrain::cell::universal_bounds(),
-				))
-			}
-
-			fn descendants_with_lod(
-				_id: lod::gen::Id,
-				_spatial_index: &mut S,
-				_lod_ref: &lod::lod_ref::LodRef,
-			) {
-			}
-		}
+		$crate::terrain::cell::universal_bootstrap_scheme!(
+			$Layout,
+			$BootstrapLayout::$bootstrap_layout_fn
+		);
 
 		/// Controller cell: owns this band's guillotine cuts.
 		#[derive(Debug, Clone, bevy::prelude::Component)]
@@ -135,9 +109,10 @@ macro_rules! define_stamp_family {
 
 		impl<S> lod::gen::GenerationScheme<S> for $Controller
 		where
-			S: lod::gen::GeneratingSpatialIndex<
+			S: lod::gen::GeneratingSpatialIndex<$Layout>
+				+ lod::gen::GeneratingSpatialIndex<
 					$crate::terrain::stamps::configs::TerrainStampConfigs,
-				> + lod::gen::GeneratingSpatialIndex<$Layout>,
+				>,
 		{
 			fn original_ids_for(
 				spatial_index: &mut S,
@@ -163,27 +138,6 @@ macro_rules! define_stamp_family {
 				let family = &configs.$config_family.$config_band;
 				Some((Self::from_family_config(bounds, family), bounds))
 			}
-
-			fn descendants_with_lod(
-				_id: lod::gen::Id,
-				_spatial_index: &mut S,
-				_lod_ref: &lod::lod_ref::LodRef,
-			) {
-			}
-		}
-
-		/// Discover leaf ids for this family band's controller grid.
-		pub fn $leaves_fn<S>(
-			spatial_index: &mut S,
-			region: bevy::math::bounding::Aabb3d,
-		) -> Vec<lod::gen::OriginalId>
-		where
-			S: lod::gen::GeneratingSpatialIndex<$Controller>,
-		{
-			$crate::terrain::stamps::shared::original_ids_for_leaves::<S, $Controller>(
-				spatial_index,
-				region,
-			)
 		}
 
 		/// Stamp output on one leaf of this band's guillotine partition.
@@ -193,18 +147,31 @@ macro_rules! define_stamp_family {
 			pub modulations: Vec<terrain_stamps::StampModulation>,
 		}
 
+		impl $crate::terrain::stamps::shared::StampLeaf for $Stamp {
+			fn cell(&self) -> bevy::math::bounding::Aabb3d {
+				self.cell
+			}
+
+			fn modulations(&self) -> &[terrain_stamps::StampModulation] {
+				&self.modulations
+			}
+		}
+
 		impl<S> lod::gen::GenerationScheme<S> for $Stamp
 		where
-			S: lod::gen::GeneratingSpatialIndex<
+			S: lod::gen::GeneratingSpatialIndex<$Controller>
+				+ lod::gen::GeneratingSpatialIndex<
 					$crate::terrain::stamps::configs::TerrainStampConfigs,
-				> + lod::gen::GeneratingSpatialIndex<$crate::terrain::base_noise::BaseTerrainNoise>
-				+ lod::gen::GeneratingSpatialIndex<$Controller>,
+				> + lod::gen::GeneratingSpatialIndex<$crate::terrain::base_noise::BaseTerrainNoise>,
 		{
 			fn original_ids_for(
 				spatial_index: &mut S,
 				region: bevy::math::bounding::Aabb3d,
 			) -> Vec<lod::gen::OriginalId> {
-				$leaves_fn(spatial_index, region)
+				$crate::terrain::stamps::shared::original_ids_for_leaves::<S, $Controller>(
+					spatial_index,
+					region,
+				)
 			}
 
 			fn build_with_id(
@@ -253,13 +220,6 @@ macro_rules! define_stamp_family {
 				// outside the leaf (neighbors may omit this stamp).
 				let modulations = terrain_stamps::StampModulation::bind_all($build, $bounds);
 				Some((Self { cell, modulations }, cell))
-			}
-
-			fn descendants_with_lod(
-				_id: lod::gen::Id,
-				_spatial_index: &mut S,
-				_lod_ref: &lod::lod_ref::LodRef,
-			) {
 			}
 		}
 	};

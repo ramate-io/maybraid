@@ -4,6 +4,9 @@
 //! pattern as [`crate::terrain::stamps::family_macro::define_stamp_family`].
 
 /// Defines `PrePocketLayout` → `PrePocketCell` → `PocketCell` → `PocketWaters*` for one band.
+///
+/// Each level discovers its ids from the level above through
+/// `GeneratingSpatialIndex`, so consumers bound only on `$PocketWaters`.
 macro_rules! define_marazion_band {
 	(
 		layout: $Layout:ident,
@@ -11,9 +14,6 @@ macro_rules! define_marazion_band {
 		pre_cell: $PreCell:ident,
 		pocket: $Pocket:ident,
 		pocket_waters: $PocketWaters:ident,
-		pre_ids: $pre_ids:ident,
-		pocket_ids: $pocket_ids:ident,
-		pocket_waters_ids: $pocket_waters_ids:ident,
 		band_field: $band_field:ident,
 		band_pass: $band_pass:ident,
 		family_salt: $family_salt:expr,
@@ -76,35 +76,7 @@ macro_rules! define_marazion_band {
 			fn $bootstrap_fn(&self) -> $Layout;
 		}
 
-		impl<S> lod::gen::GenerationScheme<S> for $Layout
-		where
-			S: $Bootstrap,
-		{
-			fn original_ids_for(
-				_spatial_index: &mut S,
-				_region: bevy::math::bounding::Aabb3d,
-			) -> Vec<lod::gen::OriginalId> {
-				vec![lod::gen::OriginalId::universal()]
-			}
-
-			fn build_with_id(
-				spatial_index: &mut S,
-				id: lod::gen::Id,
-				_lod_ref: &lod::lod_ref::LodRef,
-			) -> Option<(Self, bevy::math::bounding::Aabb3d)> {
-				if id != lod::gen::Id::Universal {
-					return None;
-				}
-				Some((spatial_index.$bootstrap_fn(), $crate::terrain::cell::universal_bounds()))
-			}
-
-			fn descendants_with_lod(
-				_id: lod::gen::Id,
-				_spatial_index: &mut S,
-				_lod_ref: &lod::lod_ref::LodRef,
-			) {
-			}
-		}
+		$crate::terrain::cell::universal_bootstrap_scheme!($Layout, $Bootstrap::$bootstrap_fn);
 
 		#[derive(Debug, Clone, bevy::prelude::Component)]
 		pub struct $PreCell {
@@ -112,57 +84,37 @@ macro_rules! define_marazion_band {
 			pub pre: terrain_watersheds::PrePocket,
 		}
 
-		pub fn $pre_ids<S>(
-			spatial_index: &mut S,
-			region: bevy::math::bounding::Aabb3d,
-		) -> Vec<lod::gen::OriginalId>
-		where
-			S: lod::gen::GeneratingSpatialIndex<$Layout>,
-		{
-			use bevy::math::bounding::IntersectsVolume;
-			use bevy::prelude::*;
-			use lod::gen::{GeneratingSpatialIndex, Id, OriginalId, SpatialIndex};
-			let identity = Transform::IDENTITY;
-			let lod_ref = lod::lod_ref::LodRef {
-				entity: Entity::PLACEHOLDER,
-				previous_transform: &identity,
-				current_transform: &identity,
-				bounds: &region,
-			};
-			if GeneratingSpatialIndex::<$Layout>::get_or_generate(
-				spatial_index,
-				Id::Universal,
-				&lod_ref,
-			)
-			.is_none()
-			{
-				return Vec::new();
+		/// Pocket AABBs on this pre-pocket's lattice.
+		impl $crate::terrain::stamps::shared::LeafAabbs for $PreCell {
+			fn leaf_aabbs(&self) -> Vec<bevy::math::bounding::Aabb3d> {
+				let (vy_min, vy_max) = (self.cell.min.y, self.cell.max.y);
+				(0..self.pre.nx)
+					.flat_map(|px| (0..self.pre.nz).map(move |pz| (px, pz)))
+					.map(|(px, pz)| {
+						$crate::terrain::watersheds::pre_pocket::pocket_aabb(
+							&self.pre, px, pz, vy_min, vy_max,
+						)
+					})
+					.collect()
 			}
-			let Some(layout) = <S as SpatialIndex<$Layout>>::get(spatial_index, Id::Universal)
-			else {
-				return Vec::new();
-			};
-			let grid = layout.grid.clone();
-			let grid_region = grid.region_in_grid_space(region);
-			$crate::terrain::cell::cell_coords_for_region(grid_region, grid.cell_size)
-				.map(|(ix, iz)| OriginalId(Id::from_cell(grid.cell_bounds(ix, iz))))
-				.filter(|OriginalId(id)| {
-					id.origin_cell_bounds().is_some_and(|b| region.intersects(&b))
-				})
-				.collect()
 		}
 
 		impl<S> lod::gen::GenerationScheme<S> for $PreCell
 		where
-			S: lod::gen::GeneratingSpatialIndex<
+			S: lod::gen::GeneratingSpatialIndex<$Layout>
+				+ lod::gen::GeneratingSpatialIndex<
 					$crate::terrain::watersheds::config::WatershedConfigs,
-				> + lod::gen::GeneratingSpatialIndex<$Layout>,
+				>,
 		{
 			fn original_ids_for(
 				spatial_index: &mut S,
 				region: bevy::math::bounding::Aabb3d,
 			) -> Vec<lod::gen::OriginalId> {
-				$pre_ids(spatial_index, region)
+				$crate::terrain::stamps::shared::original_ids_for_controller_cells::<S, $Layout>(
+					spatial_index,
+					region,
+					|layout| &layout.grid,
+				)
 			}
 
 			fn build_with_id(
@@ -182,13 +134,6 @@ macro_rules! define_marazion_band {
 				let pre = terrain_watersheds::PrePocket::containing(cx, cz, &params);
 				Some((Self { cell, pre }, cell))
 			}
-
-			fn descendants_with_lod(
-				_id: lod::gen::Id,
-				_spatial_index: &mut S,
-				_lod_ref: &lod::lod_ref::LodRef,
-			) {
-			}
 		}
 
 		#[derive(Debug, Clone, bevy::prelude::Component)]
@@ -203,67 +148,21 @@ macro_rules! define_marazion_band {
 			}
 		}
 
-		pub fn $pocket_ids<S>(
-			spatial_index: &mut S,
-			region: bevy::math::bounding::Aabb3d,
-		) -> Vec<lod::gen::OriginalId>
-		where
-			S: lod::gen::GeneratingSpatialIndex<$PreCell>,
-		{
-			use bevy::math::bounding::IntersectsVolume;
-			use bevy::prelude::*;
-			use lod::gen::{GeneratingSpatialIndex, Id, OriginalId, SpatialIndex};
-			let identity = Transform::IDENTITY;
-			let lod_ref = lod::lod_ref::LodRef {
-				entity: Entity::PLACEHOLDER,
-				previous_transform: &identity,
-				current_transform: &identity,
-				bounds: &region,
-			};
-			let pre_cells = GeneratingSpatialIndex::<$PreCell>::get_or_generate_region(
-				spatial_index,
-				region,
-				&lod_ref,
-			);
-			let mut out = Vec::new();
-			for (pre_id, _) in pre_cells {
-				let Some(pre_cell) = <S as SpatialIndex<$PreCell>>::get(spatial_index, pre_id)
-				else {
-					continue;
-				};
-				let vy_min = pre_cell.cell.min.y;
-				let vy_max = pre_cell.cell.max.y;
-				for px in 0..pre_cell.pre.nx {
-					for pz in 0..pre_cell.pre.nz {
-						let aabb = $crate::terrain::watersheds::pre_pocket::pocket_aabb(
-							&pre_cell.pre,
-							px,
-							pz,
-							vy_min,
-							vy_max,
-						);
-						if region.intersects(&aabb) {
-							out.push(OriginalId(Id::from_cell(aabb)));
-						}
-					}
-				}
-			}
-			out.sort_by(|a, b| a.0.cmp(&b.0));
-			out.dedup();
-			out
-		}
-
 		impl<S> lod::gen::GenerationScheme<S> for $Pocket
 		where
-			S: lod::gen::GeneratingSpatialIndex<
+			S: lod::gen::GeneratingSpatialIndex<$PreCell>
+				+ lod::gen::GeneratingSpatialIndex<
 					$crate::terrain::watersheds::config::WatershedConfigs,
-				> + lod::gen::GeneratingSpatialIndex<$PreCell>,
+				>,
 		{
 			fn original_ids_for(
 				spatial_index: &mut S,
 				region: bevy::math::bounding::Aabb3d,
 			) -> Vec<lod::gen::OriginalId> {
-				$pocket_ids(spatial_index, region)
+				$crate::terrain::stamps::shared::original_ids_for_leaves::<S, $PreCell>(
+					spatial_index,
+					region,
+				)
 			}
 
 			fn build_with_id(
@@ -291,13 +190,6 @@ macro_rules! define_marazion_band {
 					.collect();
 				Some((Self { cell, leaves }, cell))
 			}
-
-			fn descendants_with_lod(
-				_id: lod::gen::Id,
-				_spatial_index: &mut S,
-				_lod_ref: &lod::lod_ref::LodRef,
-			) {
-			}
 		}
 
 		/// Guillotine leaf holding one authored pocket-water stamp (not a compiled complex).
@@ -316,34 +208,36 @@ macro_rules! define_marazion_band {
 			pub fn kind(&self) -> $crate::terrain::watersheds::leaf_kind::WatershedLeafKind {
 				self.authored.kind()
 			}
+
+			pub fn leaf_bounds(
+				&self,
+			) -> $crate::terrain::watersheds::leaf_kind::WatershedLeafBounds {
+				$crate::terrain::watersheds::leaf_kind::WatershedLeafBounds {
+					cell: self.cell,
+					kind: self.kind(),
+					band: self.band,
+				}
+			}
 		}
 
-		pub fn $pocket_waters_ids<S>(
-			spatial_index: &mut S,
-			region: bevy::math::bounding::Aabb3d,
-		) -> Vec<lod::gen::OriginalId>
-		where
-			S: lod::gen::GeneratingSpatialIndex<$Pocket>,
-		{
-			$crate::terrain::stamps::shared::original_ids_for_leaves::<S, $Pocket>(
-				spatial_index,
-				region,
-			)
-		}
-
+		// `PreWatershedTerrain` + `TerrainCellLayout` back the live height
+		// sampler (`pre_watershed_height_at`) used while authoring.
 		impl<S> lod::gen::GenerationScheme<S> for $PocketWaters
 		where
-			S: lod::gen::GeneratingSpatialIndex<
+			S: lod::gen::GeneratingSpatialIndex<$Pocket>
+				+ lod::gen::GeneratingSpatialIndex<
 					$crate::terrain::watersheds::config::WatershedConfigs,
-				> + lod::gen::GeneratingSpatialIndex<$Pocket>
-				+ lod::gen::GeneratingSpatialIndex<$crate::terrain::PreWatershedTerrain>
+				> + lod::gen::GeneratingSpatialIndex<$crate::terrain::PreWatershedTerrain>
 				+ lod::gen::GeneratingSpatialIndex<$crate::terrain::cell::TerrainCellLayout>,
 		{
 			fn original_ids_for(
 				spatial_index: &mut S,
 				region: bevy::math::bounding::Aabb3d,
 			) -> Vec<lod::gen::OriginalId> {
-				$pocket_waters_ids(spatial_index, region)
+				$crate::terrain::stamps::shared::original_ids_for_leaves::<S, $Pocket>(
+					spatial_index,
+					region,
+				)
 			}
 
 			fn build_with_id(
@@ -470,13 +364,6 @@ macro_rules! define_marazion_band {
 					},
 					cell,
 				))
-			}
-
-			fn descendants_with_lod(
-				_id: lod::gen::Id,
-				_spatial_index: &mut S,
-				_lod_ref: &lod::lod_ref::LodRef,
-			) {
 			}
 		}
 	};

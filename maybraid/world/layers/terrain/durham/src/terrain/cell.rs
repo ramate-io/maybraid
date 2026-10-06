@@ -3,7 +3,7 @@
 use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::math::{IVec2, UVec2, Vec3};
 use bevy::prelude::*;
-use lod::gen::{GeneratingSpatialIndex, GenerationScheme, Id, OriginalId, SpatialIndex};
+use lod::gen::{GeneratingSpatialIndex, Id, OriginalId};
 use lod::lod_ref::LodRef;
 use lod::LodSceneLevel;
 
@@ -54,6 +54,48 @@ pub const TERRAIN_PRESENT_VERTICAL_HALF_EXTENT: f32 = 8_000.0;
 /// Large AABB for universal (`Id::Universal`) generation deps.
 pub fn universal_bounds() -> Aabb3d {
 	Aabb3d::from_min_max(Vec3::splat(-1_000_000.0), Vec3::splat(1_000_000.0))
+}
+
+/// [`lod::gen::GenerationScheme`] for a world singleton stored at [`Id::Universal`].
+///
+/// The bootstrap trait is the scheme's only capability: it seeds the value
+/// once. Consumers depend on `GeneratingSpatialIndex<T>`, never on the
+/// bootstrap source.
+macro_rules! universal_bootstrap_scheme {
+	($T:ty, $Bootstrap:ident :: $bootstrap:ident) => {
+		impl<S: $Bootstrap> lod::gen::GenerationScheme<S> for $T {
+			fn original_ids_for(
+				_spatial_index: &mut S,
+				_region: bevy::math::bounding::Aabb3d,
+			) -> Vec<lod::gen::OriginalId> {
+				vec![lod::gen::OriginalId::universal()]
+			}
+
+			fn build_with_id(
+				spatial_index: &mut S,
+				id: lod::gen::Id,
+				_lod_ref: &lod::lod_ref::LodRef,
+			) -> Option<(Self, bevy::math::bounding::Aabb3d)> {
+				(id == lod::gen::Id::Universal).then(|| {
+					(spatial_index.$bootstrap(), $crate::terrain::cell::universal_bounds())
+				})
+			}
+		}
+	};
+}
+
+pub(crate) use universal_bootstrap_scheme;
+
+static DISCOVERY_POSE: Transform = Transform::IDENTITY;
+
+/// Driverless [`LodRef`] for id discovery, which has no LOD driver of its own.
+pub(crate) fn discovery_lod_ref(region: &Aabb3d) -> LodRef<'_> {
+	LodRef {
+		entity: Entity::PLACEHOLDER,
+		previous_transform: &DISCOVERY_POSE,
+		current_transform: &DISCOVERY_POSE,
+		bounds: region,
+	}
 }
 
 /// Optional coarser origin cells wrapping an inner footprint.
@@ -158,7 +200,7 @@ impl TerrainCellRing {
 
 /// Layout for tiling terrain origin cells in the XZ plane.
 ///
-/// Materialized once under [`Id::Universal`] via [`GenerationScheme`].
+/// Materialized once under [`Id::Universal`] via [`lod::gen::GenerationScheme`].
 #[derive(Resource, Debug, Clone, PartialEq)]
 pub struct TerrainCellLayout {
 	/// Edge length of each origin cell in world units.
@@ -326,23 +368,10 @@ pub trait BootstrapTerrainCellLayout {
 	fn bootstrap_terrain_cell_layout(&self) -> TerrainCellLayout;
 }
 
-impl<S> GenerationScheme<S> for TerrainCellLayout
-where
-	S: BootstrapTerrainCellLayout,
-{
-	fn original_ids_for(_spatial_index: &mut S, _region: Aabb3d) -> Vec<OriginalId> {
-		vec![OriginalId::universal()]
-	}
-
-	fn build_with_id(spatial_index: &mut S, id: Id, _lod_ref: &LodRef) -> Option<(Self, Aabb3d)> {
-		if id != Id::Universal {
-			return None;
-		}
-		Some((spatial_index.bootstrap_terrain_cell_layout(), universal_bounds()))
-	}
-
-	fn descendants_with_lod(_id: Id, _spatial_index: &mut S, _lod_ref: &LodRef) {}
-}
+universal_bootstrap_scheme!(
+	TerrainCellLayout,
+	BootstrapTerrainCellLayout::bootstrap_terrain_cell_layout
+);
 
 /// Layout for macro-scale tiling (jersey stamp size defaults).
 ///
@@ -491,34 +520,23 @@ pub fn origin_cell_ids_for_layout(layout: &TerrainCellLayout, region: Aabb3d) ->
 
 /// Origin-cell [`OriginalId`]s covering `region`, using Universal [`TerrainCellLayout`].
 ///
-/// Emits fine-grid cells plus nested [`TerrainCellLayout::outer_rings`] macro
-/// cells that intersect `region` and do not overlap the previously covered
-/// footprint. See [`origin_cell_ids_for_layout`].
-pub fn original_ids_for_origin_cells<S>(spatial_index: &mut S, region: Aabb3d) -> Vec<OriginalId>
+/// Only origin-grid roots call this; everything else on the grid reuses a
+/// root's ids via [`GeneratingSpatialIndex::original_ids_for`]. See
+/// [`origin_cell_ids_for_layout`].
+pub(crate) fn original_ids_for_origin_cells<S>(
+	spatial_index: &mut S,
+	region: Aabb3d,
+) -> Vec<OriginalId>
 where
 	S: GeneratingSpatialIndex<TerrainCellLayout>,
 {
-	let identity = Transform::IDENTITY;
-	let lod_ref = LodRef {
-		entity: Entity::PLACEHOLDER,
-		previous_transform: &identity,
-		current_transform: &identity,
-		bounds: &region,
-	};
-	if GeneratingSpatialIndex::<TerrainCellLayout>::get_or_generate(
+	GeneratingSpatialIndex::<TerrainCellLayout>::get_one_or_generate(
 		spatial_index,
 		Id::Universal,
-		&lod_ref,
+		&discovery_lod_ref(&region),
 	)
-	.is_none()
-	{
-		return Vec::new();
-	}
-	let Some(layout) = <S as SpatialIndex<TerrainCellLayout>>::get(spatial_index, Id::Universal)
-	else {
-		return Vec::new();
-	};
-	origin_cell_ids_for_layout(&layout.clone(), region)
+	.map(|layout| origin_cell_ids_for_layout(layout, region))
+	.unwrap_or_default()
 }
 
 #[cfg(test)]

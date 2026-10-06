@@ -64,13 +64,6 @@ impl<'w, 's, G: RichmondGround> GenerationScheme<DevelopmentIndex<'w, 's, G>> fo
 		}
 		build_from_lattice_extent(spatial_index, id)
 	}
-
-	fn descendants_with_lod(
-		_id: Id,
-		_spatial_index: &mut DevelopmentIndex<'w, 's, G>,
-		_lod_ref: &LodRef,
-	) {
-	}
 }
 
 fn build_from_urbanization_leaf<G: RichmondGround>(
@@ -212,13 +205,6 @@ impl<'w, 's, G: RichmondGround> GenerationScheme<DevelopmentIndex<'w, 's, G>> fo
 		let pads = spatial_index.store.merged_pad_complex(bounds);
 		let padded = terrain.compose_pads(&pads);
 		Some((padded, bounds))
-	}
-
-	fn descendants_with_lod(
-		_id: Id,
-		_spatial_index: &mut DevelopmentIndex<'w, 's, G>,
-		_lod_ref: &LodRef,
-	) {
 	}
 }
 
@@ -402,12 +388,5 @@ impl<'w, 's, G: RichmondGround> GenerationScheme<DevelopmentIndex<'w, 's, G>> fo
 			}
 		};
 		Some((built, cell_aabb))
-	}
-
-	fn descendants_with_lod(
-		_id: Id,
-		_spatial_index: &mut DevelopmentIndex<'w, 's, G>,
-		_lod_ref: &LodRef,
-	) {
 	}
 }

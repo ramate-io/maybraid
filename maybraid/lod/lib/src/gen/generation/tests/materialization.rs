@@ -1,5 +1,5 @@
 use crate::gen::tests::test_utils::*;
-use crate::gen::{GeneratingSpatialIndex, Id, MaterializeStatus, SpatialIndex};
+use crate::gen::{GeneratingSpatialIndex, Id, MaterializeStatus, OriginalId, SpatialIndex};
 use anyhow::{anyhow, Result};
 
 #[test]
@@ -49,6 +49,21 @@ fn regenerating_existing_id_reports_existing_and_keeps_version() -> Result<()> {
 		.ok_or_else(|| anyhow!("missing vegetation version"))?;
 
 	assert_eq!(first, second);
+
+	Ok(())
+}
+
+#[test]
+fn original_ids_delegate_to_scheme_without_materializing() -> Result<()> {
+	let mut index = WorldIndex::default();
+	let region = cell(2.0);
+
+	let ids = GeneratingSpatialIndex::<Vegetation>::original_ids_for(&mut index, region);
+
+	assert_eq!(ids, GeneratingSpatialIndex::<Terrain>::original_ids_for(&mut index, region));
+	assert!(ids.iter().any(|OriginalId(id)| *id == Id::from_cell(cell(2.0))));
+	assert!(SpatialIndex::<Terrain>::tracked_ids_for(&index, region).is_empty());
+	assert!(SpatialIndex::<Vegetation>::tracked_ids_for(&index, region).is_empty());
 
 	Ok(())
 }

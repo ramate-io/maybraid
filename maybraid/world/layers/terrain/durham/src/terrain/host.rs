@@ -23,9 +23,7 @@ use visual_geometry_core::{
 };
 
 use crate::terrain::base_noise::BaseTerrainNoise;
-use crate::terrain::cell::{
-	origin_cell_ids_for_layout, TerrainCellLayout, TerrainCellRing, TERRAIN_CELL_SIZE,
-};
+use crate::terrain::cell::{TerrainCellLayout, TerrainCellRing, TERRAIN_CELL_SIZE};
 use crate::terrain::collider::{TerrainColliderEpoch, TerrainColliderSystems};
 use crate::terrain::config::TerrainConfig;
 use crate::terrain::index::AvianTerrainIndex;
@@ -475,14 +473,15 @@ fn generate_cells(
 	}
 
 	let prefer = viewer.unwrap_or_else(|| layout.region_center_xz());
-	let mut missing: Vec<Id> = origin_cell_ids_for_layout(&layout, region)
-		.into_iter()
-		.map(|OriginalId(id)| id)
-		.filter(|id| {
-			<AvianTerrainIndex as SpatialIndex<Terrain>>::storage_status(&index, *id)
-				== StorageStatus::NotTracked
-		})
-		.collect();
+	let mut missing: Vec<Id> =
+		GeneratingSpatialIndex::<Terrain>::original_ids_for(&mut index, region)
+			.into_iter()
+			.map(|OriginalId(id)| id)
+			.filter(|id| {
+				<AvianTerrainIndex as SpatialIndex<Terrain>>::storage_status(&index, *id)
+					== StorageStatus::NotTracked
+			})
+			.collect();
 	if missing.is_empty() {
 		*window_filled = true;
 		if let Some(base) = index.base_noise() {
@@ -744,10 +743,7 @@ mod tests {
 			world.get_entity(cell_entity).is_ok(),
 			"seed change must not drop store-owned entities"
 		);
-		assert!(
-			world.get_entity(present_entity).is_ok(),
-			"the presenter survives apply"
-		);
+		assert!(world.get_entity(present_entity).is_ok(), "the presenter survives apply");
 		{
 			let store = world.resource::<TerrainEntryStore>();
 			assert_eq!(

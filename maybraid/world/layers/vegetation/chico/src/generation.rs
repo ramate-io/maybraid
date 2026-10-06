@@ -44,13 +44,6 @@ impl GenerationScheme<ForestIndex> for ChicoForest {
 		let layers = spatial_index.selected_layers_for(extent);
 		Some((Self { extent, layers }, extent.aabb()))
 	}
-
-	fn descendants_with_lod(
-		_id: lod::gen::Id,
-		_spatial_index: &mut ForestIndex,
-		_lod_ref: &LodRef,
-	) {
-	}
 }
 
 impl GenerationScheme<ForestIndex> for ChicoGrove {
@@ -104,13 +97,6 @@ impl GenerationScheme<ForestIndex> for ChicoGrove {
 			grove_id(extent, layer).origin_cell_bounds()?,
 		))
 	}
-
-	fn descendants_with_lod(
-		_id: lod::gen::Id,
-		_spatial_index: &mut ForestIndex,
-		_lod_ref: &LodRef,
-	) {
-	}
 }
 
 fn ensure_forests_for_bounds(index: &mut ForestIndex, bounds: Aabb3d) {
@@ -153,13 +139,6 @@ impl GenerationScheme<ForestIndex> for CanopyBumpOut {
 			return None;
 		}
 		Some((cell, bounds))
-	}
-
-	fn descendants_with_lod(
-		_id: lod::gen::Id,
-		_spatial_index: &mut ForestIndex,
-		_lod_ref: &LodRef,
-	) {
 	}
 }
 

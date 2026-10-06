@@ -33,13 +33,6 @@ impl GenerationScheme<UrbanizationIndex> for SelectedUrbanization {
 		let selected = spatial_index.get(id)?.clone();
 		Some((selected, extent.aabb()))
 	}
-
-	fn descendants_with_lod(
-		_id: lod::gen::Id,
-		_spatial_index: &mut UrbanizationIndex,
-		_lod_ref: &LodRef,
-	) {
-	}
 }
 
 /// Channel marker for urbanization generate / present messages.

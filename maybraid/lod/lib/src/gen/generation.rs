@@ -16,9 +16,18 @@ use std::collections::HashSet;
 /// an instance, and which descendants to materialize alongside it.
 ///
 /// `S` is the spatial store the scheme runs against. Dependencies and
-/// descendants recurse through the same `S` (typically via
-/// [`GeneratingSpatialIndex`] bounds), so the whole tree materializes from a
-/// single entry point.
+/// descendants recurse through the same `S`, so the whole tree materializes
+/// from a single entry point.
+///
+/// # Capability boundary
+///
+/// Bound `S` only on what this scheme touches directly: one
+/// `GeneratingSpatialIndex<D>` per dependency `D` it discovers or
+/// materializes (or `SpatialIndex<D>` for a plain read). Discover a
+/// dependency's ids with [`GeneratingSpatialIndex::original_ids_for`] rather
+/// than calling `D`'s scheme or a discovery helper, so `D`'s own layouts,
+/// controllers, and configs stay `D`'s bounds. They are resolved once, at the
+/// concrete index, by the blanket [`GeneratingSpatialIndex`] impl.
 pub trait GenerationScheme<S>: Sized {
 	/// Ids that originate in the region for this type.
 	///
@@ -47,6 +56,10 @@ pub enum MaterializeStatus {
 /// defines a scheme over `S`. There is no separate middleware path: this is
 /// the only generation algorithm.
 pub trait GeneratingSpatialIndex<T>: SpatialIndex<T> {
+	/// Ids of `T` originating in `region`, per `T`'s scheme. Lazy: nothing
+	/// is materialized except what `T` needs to discover its origins.
+	fn original_ids_for(&mut self, region: Aabb3d) -> Vec<OriginalId>;
+
 	fn get_or_generate(&mut self, id: Id, lod_ref: &LodRef) -> Option<MaterializeStatus>;
 
 	/// Materialize `id` if needed, then return the stored entry.
@@ -75,6 +88,10 @@ where
 	S: SpatialIndex<T>,
 	T: GenerationScheme<S>,
 {
+	fn original_ids_for(&mut self, region: Aabb3d) -> Vec<OriginalId> {
+		T::original_ids_for(self, region)
+	}
+
 	fn get_or_generate(&mut self, id: Id, lod_ref: &LodRef) -> Option<MaterializeStatus> {
 		if self.get(id).is_some() {
 			return Some(MaterializeStatus::Existing);

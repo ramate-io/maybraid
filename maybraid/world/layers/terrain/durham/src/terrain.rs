@@ -19,18 +19,9 @@ pub mod watersheds;
 
 use crate::terrain::cell::original_ids_for_origin_cells;
 use crate::terrain::render::cascade_chunk_for_cell;
-use crate::terrain::stamps::{
-	original_ids_for_canyon_high_pass_leaves, original_ids_for_canyon_low_pass_leaves,
-	original_ids_for_massif_high_pass_leaves, original_ids_for_massif_low_pass_leaves,
-	original_ids_for_plateau_high_pass_leaves, original_ids_for_plateau_low_pass_leaves,
-	original_ids_for_pocket_water_high_pass_leaves, original_ids_for_pocket_water_low_pass_leaves,
-	original_ids_for_rolling_high_pass_leaves, original_ids_for_rolling_low_pass_leaves,
-	original_ids_for_valley_high_pass_leaves, original_ids_for_valley_low_pass_leaves,
-};
+use crate::terrain::stamps::StampLeaf;
 use crate::terrain::watersheds::{
-	original_ids_for_marazion_pocket_waters_high_pass_leaves,
-	original_ids_for_marazion_pocket_waters_low_pass_leaves, HydroComplexCell,
-	WatershedAproningCell, WatershedCarvingCell, WatershedRimmingCell,
+	HydroComplexCell, WatershedAproningCell, WatershedCarvingCell, WatershedRimmingCell,
 };
 use bevy::ecs::template::template;
 use bevy::math::bounding::Aabb3d;
@@ -60,14 +51,14 @@ pub use collider::{
 	TERRAIN_FRICTION,
 };
 pub use config::TerrainConfig;
+pub use geography::{
+	GeographicBand, GeographicFamily, GeographicFeature, GeographicFeatureId, GeographicFeatureKind,
+};
 pub use host::{
 	fine_patch_cell_layout, playable_world_cell_layout, retarget_presentation_assets, Durham,
 	DurhamCells, TerrainCoverage, TerrainFillSystems, TerrainLayoutPinned, TerrainPresentPending,
 	TerrainPresentationDirty, TerrainRetarget, WorldBaseTerrain, WORLD_FINE_HALF_EXTENT_CELLS,
 	WORLD_OUTER_2X_ROWS, WORLD_OUTER_4X_ROWS,
-};
-pub use geography::{
-	GeographicBand, GeographicFamily, GeographicFeature, GeographicFeatureId, GeographicFeatureKind,
 };
 pub use index::{
 	AvianTerrainIndex, TerrainCellId, TerrainEntryStore, TerrainHeightSnapshot,
@@ -287,87 +278,70 @@ impl LodScene for Terrain {
 	}
 }
 
-macro_rules! pull_family_stamps {
-	($spatial_index:expr, $lod_ref:expr, $bounds:expr, $leaves_fn:path, $Stamp:ty, $mods:expr, $leaf_out:expr) => {{
-		let mut leaf_ids = $leaves_fn($spatial_index, $bounds);
-		leaf_ids.sort_by(|a, b| a.0.cmp(&b.0));
-		for OriginalId(lid) in leaf_ids {
-			let stamp = GeneratingSpatialIndex::<$Stamp>::get_one_or_generate(
-				$spatial_index,
-				lid,
-				$lod_ref,
-			)?;
-			if stamp.modulations.is_empty() {
-				continue;
-			}
-			$leaf_out.push(stamp.cell);
-			$mods.extend(stamp.modulations.iter().cloned());
-		}
-	}};
+/// Visits `T`'s origins in `region`, materializing each lazily in id order.
+///
+/// Discovery is `T`'s own scheme, so the caller needs only
+/// `GeneratingSpatialIndex<T>`; `T`'s controllers and layouts stay `T`'s bounds.
+fn for_each_origin<T, S>(
+	spatial_index: &mut S,
+	region: Aabb3d,
+	lod_ref: &LodRef,
+	mut visit: impl FnMut(&T),
+) -> Option<()>
+where
+	S: GeneratingSpatialIndex<T>,
+{
+	let mut ids = GeneratingSpatialIndex::<T>::original_ids_for(spatial_index, region);
+	ids.sort();
+	for OriginalId(id) in ids {
+		visit(GeneratingSpatialIndex::<T>::get_one_or_generate(spatial_index, id, lod_ref)?);
+	}
+	Some(())
 }
 
-/// Retain authored leaf AABBs for color-coded pocket-water debug overlays.
-macro_rules! pull_marazion_leaf_bounds {
-	($spatial_index:expr, $lod_ref:expr, $bounds:expr, $leaves_fn:path, $Stamp:ty, $leaf_out:expr) => {{
-		let mut leaf_ids = $leaves_fn($spatial_index, $bounds);
-		leaf_ids.sort_by(|a, b| a.0.cmp(&b.0));
-		for OriginalId(lid) in leaf_ids {
-			let stamp = GeneratingSpatialIndex::<$Stamp>::get_one_or_generate(
-				$spatial_index,
-				lid,
-				$lod_ref,
-			)?;
-			$leaf_out.push($crate::terrain::watersheds::WatershedLeafBounds {
-				cell: stamp.cell,
-				kind: stamp.kind(),
-				band: stamp.band,
-			});
-		}
-	}};
+/// Non-empty jersey stamp leaves on one origin cell, in pull order.
+#[derive(Default)]
+struct JerseyStamps {
+	modulations: Vec<StampModulation>,
+	leaves: Vec<Aabb3d>,
+}
+
+impl JerseyStamps {
+	fn pull<T: StampLeaf, S: GeneratingSpatialIndex<T>>(
+		&mut self,
+		spatial_index: &mut S,
+		bounds: Aabb3d,
+		lod_ref: &LodRef,
+	) -> Option<()> {
+		for_each_origin(spatial_index, bounds, lod_ref, |stamp: &T| {
+			if !stamp.modulations().is_empty() {
+				self.leaves.push(stamp.cell());
+				self.modulations.extend_from_slice(stamp.modulations());
+			}
+		})
+	}
 }
 
 /// Pre-watershed: base noise + jersey landform stamps (including pocket-water height).
+///
+/// Origin-grid root: tiles [`TerrainCellLayout`] directly. Each stamp band is
+/// one leaf bound; its controller grid and configs are that band's concern.
 impl<S> GenerationScheme<S> for PreWatershedTerrain
 where
-	S: GeneratingSpatialIndex<BaseTerrainNoise>
-		+ GeneratingSpatialIndex<TerrainStampConfigs>
+	S: GeneratingSpatialIndex<TerrainCellLayout>
+		+ GeneratingSpatialIndex<BaseTerrainNoise>
 		+ GeneratingSpatialIndex<PlateauHighPassStampCell>
-		+ GeneratingSpatialIndex<PlateauHighPassControllerCell>
-		+ GeneratingSpatialIndex<PlateauHighPassControllerLayout>
-		+ GeneratingSpatialIndex<PlateauLowPassStampCell>
-		+ GeneratingSpatialIndex<PlateauLowPassControllerCell>
-		+ GeneratingSpatialIndex<PlateauLowPassControllerLayout>
 		+ GeneratingSpatialIndex<MassifHighPassStampCell>
-		+ GeneratingSpatialIndex<MassifHighPassControllerCell>
-		+ GeneratingSpatialIndex<MassifHighPassControllerLayout>
-		+ GeneratingSpatialIndex<MassifLowPassStampCell>
-		+ GeneratingSpatialIndex<MassifLowPassControllerCell>
-		+ GeneratingSpatialIndex<MassifLowPassControllerLayout>
 		+ GeneratingSpatialIndex<CanyonHighPassStampCell>
-		+ GeneratingSpatialIndex<CanyonHighPassControllerCell>
-		+ GeneratingSpatialIndex<CanyonHighPassControllerLayout>
-		+ GeneratingSpatialIndex<CanyonLowPassStampCell>
-		+ GeneratingSpatialIndex<CanyonLowPassControllerCell>
-		+ GeneratingSpatialIndex<CanyonLowPassControllerLayout>
 		+ GeneratingSpatialIndex<PocketWaterHighPassStampCell>
-		+ GeneratingSpatialIndex<PocketWaterHighPassControllerCell>
-		+ GeneratingSpatialIndex<PocketWaterHighPassControllerLayout>
-		+ GeneratingSpatialIndex<PocketWaterLowPassStampCell>
-		+ GeneratingSpatialIndex<PocketWaterLowPassControllerCell>
-		+ GeneratingSpatialIndex<PocketWaterLowPassControllerLayout>
 		+ GeneratingSpatialIndex<RollingHighPassStampCell>
-		+ GeneratingSpatialIndex<RollingHighPassControllerCell>
-		+ GeneratingSpatialIndex<RollingHighPassControllerLayout>
-		+ GeneratingSpatialIndex<RollingLowPassStampCell>
-		+ GeneratingSpatialIndex<RollingLowPassControllerCell>
-		+ GeneratingSpatialIndex<RollingLowPassControllerLayout>
 		+ GeneratingSpatialIndex<ValleyHighPassStampCell>
-		+ GeneratingSpatialIndex<ValleyHighPassControllerCell>
-		+ GeneratingSpatialIndex<ValleyHighPassControllerLayout>
-		+ GeneratingSpatialIndex<ValleyLowPassStampCell>
-		+ GeneratingSpatialIndex<ValleyLowPassControllerCell>
-		+ GeneratingSpatialIndex<ValleyLowPassControllerLayout>
-		+ GeneratingSpatialIndex<TerrainCellLayout>,
+		+ GeneratingSpatialIndex<PlateauLowPassStampCell>
+		+ GeneratingSpatialIndex<MassifLowPassStampCell>
+		+ GeneratingSpatialIndex<CanyonLowPassStampCell>
+		+ GeneratingSpatialIndex<PocketWaterLowPassStampCell>
+		+ GeneratingSpatialIndex<RollingLowPassStampCell>
+		+ GeneratingSpatialIndex<ValleyLowPassStampCell>,
 {
 	fn original_ids_for(spatial_index: &mut S, region: Aabb3d) -> Vec<OriginalId> {
 		original_ids_for_origin_cells(spatial_index, region)
@@ -375,7 +349,6 @@ where
 
 	fn build_with_id(spatial_index: &mut S, id: Id, lod_ref: &LodRef) -> Option<(Self, Aabb3d)> {
 		let bounds = id.origin_cell_bounds()?;
-
 		let base = GeneratingSpatialIndex::<BaseTerrainNoise>::get_one_or_generate(
 			spatial_index,
 			Id::Universal,
@@ -383,153 +356,50 @@ where
 		)?
 		.clone();
 
-		let mut modulations = Vec::new();
-		let mut jersey_leaves = Vec::new();
+		// Composition order is global: high-pass (regional) bands, then low-pass (detail).
+		let mut stamps = JerseyStamps::default();
+		stamps.pull::<PlateauHighPassStampCell, _>(spatial_index, bounds, lod_ref)?;
+		stamps.pull::<MassifHighPassStampCell, _>(spatial_index, bounds, lod_ref)?;
+		stamps.pull::<CanyonHighPassStampCell, _>(spatial_index, bounds, lod_ref)?;
+		stamps.pull::<PocketWaterHighPassStampCell, _>(spatial_index, bounds, lod_ref)?;
+		stamps.pull::<RollingHighPassStampCell, _>(spatial_index, bounds, lod_ref)?;
+		stamps.pull::<ValleyHighPassStampCell, _>(spatial_index, bounds, lod_ref)?;
+		stamps.pull::<PlateauLowPassStampCell, _>(spatial_index, bounds, lod_ref)?;
+		stamps.pull::<MassifLowPassStampCell, _>(spatial_index, bounds, lod_ref)?;
+		stamps.pull::<CanyonLowPassStampCell, _>(spatial_index, bounds, lod_ref)?;
+		stamps.pull::<PocketWaterLowPassStampCell, _>(spatial_index, bounds, lod_ref)?;
+		stamps.pull::<RollingLowPassStampCell, _>(spatial_index, bounds, lod_ref)?;
+		stamps.pull::<ValleyLowPassStampCell, _>(spatial_index, bounds, lod_ref)?;
 
-		pull_family_stamps!(
-			spatial_index,
-			lod_ref,
-			bounds,
-			original_ids_for_plateau_high_pass_leaves,
-			PlateauHighPassStampCell,
-			modulations,
-			jersey_leaves
-		);
-		pull_family_stamps!(
-			spatial_index,
-			lod_ref,
-			bounds,
-			original_ids_for_massif_high_pass_leaves,
-			MassifHighPassStampCell,
-			modulations,
-			jersey_leaves
-		);
-		pull_family_stamps!(
-			spatial_index,
-			lod_ref,
-			bounds,
-			original_ids_for_canyon_high_pass_leaves,
-			CanyonHighPassStampCell,
-			modulations,
-			jersey_leaves
-		);
-		pull_family_stamps!(
-			spatial_index,
-			lod_ref,
-			bounds,
-			original_ids_for_pocket_water_high_pass_leaves,
-			PocketWaterHighPassStampCell,
-			modulations,
-			jersey_leaves
-		);
-		pull_family_stamps!(
-			spatial_index,
-			lod_ref,
-			bounds,
-			original_ids_for_rolling_high_pass_leaves,
-			RollingHighPassStampCell,
-			modulations,
-			jersey_leaves
-		);
-		pull_family_stamps!(
-			spatial_index,
-			lod_ref,
-			bounds,
-			original_ids_for_valley_high_pass_leaves,
-			ValleyHighPassStampCell,
-			modulations,
-			jersey_leaves
-		);
-
-		pull_family_stamps!(
-			spatial_index,
-			lod_ref,
-			bounds,
-			original_ids_for_plateau_low_pass_leaves,
-			PlateauLowPassStampCell,
-			modulations,
-			jersey_leaves
-		);
-		pull_family_stamps!(
-			spatial_index,
-			lod_ref,
-			bounds,
-			original_ids_for_massif_low_pass_leaves,
-			MassifLowPassStampCell,
-			modulations,
-			jersey_leaves
-		);
-		pull_family_stamps!(
-			spatial_index,
-			lod_ref,
-			bounds,
-			original_ids_for_canyon_low_pass_leaves,
-			CanyonLowPassStampCell,
-			modulations,
-			jersey_leaves
-		);
-		pull_family_stamps!(
-			spatial_index,
-			lod_ref,
-			bounds,
-			original_ids_for_pocket_water_low_pass_leaves,
-			PocketWaterLowPassStampCell,
-			modulations,
-			jersey_leaves
-		);
-		pull_family_stamps!(
-			spatial_index,
-			lod_ref,
-			bounds,
-			original_ids_for_rolling_low_pass_leaves,
-			RollingLowPassStampCell,
-			modulations,
-			jersey_leaves
-		);
-		pull_family_stamps!(
-			spatial_index,
-			lod_ref,
-			bounds,
-			original_ids_for_valley_low_pass_leaves,
-			ValleyLowPassStampCell,
-			modulations,
-			jersey_leaves
-		);
-
+		let JerseyStamps { modulations, leaves: jersey_leaves } = stamps;
 		let sdf = Self::compose_sdf(&base, &modulations);
 		Some((Self { cell: bounds, base, modulations, jersey_leaves, sdf }, bounds))
 	}
-
-	fn descendants_with_lod(_id: Id, _spatial_index: &mut S, _lod_ref: &LodRef) {}
 }
 
 /// Final terrain: pre-watershed + Watershed correction stages (carve → rim → apron).
+///
+/// Shares [`PreWatershedTerrain`]'s origin ids. Pocket-water leaves, the
+/// hydro complex, and stage cells are bound only as the leaves this scheme
+/// reads; their pocket / pre-pocket / config stacks resolve at the index.
 impl<S> GenerationScheme<S> for Terrain
 where
 	S: GeneratingSpatialIndex<PreWatershedTerrain>
-		+ GeneratingSpatialIndex<WatershedConfigs>
-		+ GeneratingSpatialIndex<PrePocketLowPassLayout>
-		+ GeneratingSpatialIndex<PrePocketLowPassCell>
-		+ GeneratingSpatialIndex<PocketLowPassCell>
-		+ GeneratingSpatialIndex<PocketWatersLowPass>
-		+ GeneratingSpatialIndex<PrePocketHighPassLayout>
-		+ GeneratingSpatialIndex<PrePocketHighPassCell>
-		+ GeneratingSpatialIndex<PocketHighPassCell>
 		+ GeneratingSpatialIndex<PocketWatersHighPass>
+		+ GeneratingSpatialIndex<PocketWatersLowPass>
 		+ GeneratingSpatialIndex<HydroComplexCell>
 		+ GeneratingSpatialIndex<WatershedCarvingCell>
 		+ GeneratingSpatialIndex<WatershedRimmingCell>
 		+ GeneratingSpatialIndex<WatershedAproningCell>
-		+ GeneratingSpatialIndex<TerrainCellLayout>
-		+ GeneratingSpatialIndex<TerrainPresentationAssets>,
+		+ GeneratingSpatialIndex<TerrainPresentationAssets>
+		+ SpatialIndex<TerrainCellLayout>,
 {
 	fn original_ids_for(spatial_index: &mut S, region: Aabb3d) -> Vec<OriginalId> {
-		original_ids_for_origin_cells(spatial_index, region)
+		GeneratingSpatialIndex::<PreWatershedTerrain>::original_ids_for(spatial_index, region)
 	}
 
 	fn build_with_id(spatial_index: &mut S, id: Id, lod_ref: &LodRef) -> Option<(Self, Aabb3d)> {
 		let bounds = id.origin_cell_bounds()?;
-
 		let pre = GeneratingSpatialIndex::<PreWatershedTerrain>::get_one_or_generate(
 			spatial_index,
 			id,
@@ -537,98 +407,76 @@ where
 		)?
 		.clone();
 
-		let mut modulations: Vec<ComposedElevationOp> =
-			pre.modulations.iter().cloned().map(ComposedElevationOp::Stamp).collect();
-		let jersey_leaves = pre.jersey_leaves.clone();
-		let mut marazion_leaves = Vec::new();
-
 		// Authored leaf overlays (banded); hydrology composition is cellular below.
-		pull_marazion_leaf_bounds!(
-			spatial_index,
-			lod_ref,
-			bounds,
-			original_ids_for_marazion_pocket_waters_high_pass_leaves,
-			PocketWatersHighPass,
-			marazion_leaves
-		);
-		pull_marazion_leaf_bounds!(
-			spatial_index,
-			lod_ref,
-			bounds,
-			original_ids_for_marazion_pocket_waters_low_pass_leaves,
-			PocketWatersLowPass,
-			marazion_leaves
-		);
+		let mut marazion_leaves = Vec::new();
+		for_each_origin(spatial_index, bounds, lod_ref, |leaf: &PocketWatersHighPass| {
+			marazion_leaves.push(leaf.leaf_bounds());
+		})?;
+		for_each_origin(spatial_index, bounds, lod_ref, |leaf: &PocketWatersLowPass| {
+			marazion_leaves.push(leaf.leaf_bounds());
+		})?;
 
-		let complex_cell = GeneratingSpatialIndex::<HydroComplexCell>::get_one_or_generate(
+		let complex = GeneratingSpatialIndex::<HydroComplexCell>::get_one_or_generate(
 			spatial_index,
 			id,
 			lod_ref,
 		)?
-		.clone();
-		let marazion_fills = if complex_cell.complex.is_empty() {
-			Vec::new()
-		} else {
-			vec![WaterFill::from_hydro(Arc::clone(&complex_cell.complex))]
-		};
+		.indexed()
+		.cloned();
 
 		// Keep stage cells materialized for later policy work; elevation uses
 		// the cellular HydroComplex directly (internal carve → rim → apron).
-		let _ = GeneratingSpatialIndex::<WatershedCarvingCell>::get_one_or_generate(
+		GeneratingSpatialIndex::<WatershedCarvingCell>::get_or_generate(
 			spatial_index,
 			id,
 			lod_ref,
 		)?;
-		let _ = GeneratingSpatialIndex::<WatershedRimmingCell>::get_one_or_generate(
+		GeneratingSpatialIndex::<WatershedRimmingCell>::get_or_generate(
 			spatial_index,
 			id,
 			lod_ref,
 		)?;
-		let _ = GeneratingSpatialIndex::<WatershedAproningCell>::get_one_or_generate(
+		GeneratingSpatialIndex::<WatershedAproningCell>::get_or_generate(
 			spatial_index,
 			id,
 			lod_ref,
 		)?;
 
-		if !complex_cell.complex.is_empty() {
-			modulations.push(ComposedElevationOp::Hydro(Arc::clone(&complex_cell.complex)));
-		}
-
+		let marazion_fills = complex.iter().cloned().map(WaterFill::from_hydro).collect();
+		let modulations: Vec<_> = pre
+			.modulations
+			.into_iter()
+			.map(ComposedElevationOp::Stamp)
+			.chain(complex.map(ComposedElevationOp::Hydro))
+			.collect();
 		let sdf = Arc::new(Self::compose_sdf(&pre.base, &modulations));
+
+		let layout = SpatialIndex::<TerrainCellLayout>::get(spatial_index, Id::Universal)
+			.cloned()
+			.unwrap_or_default();
 		let assets = GeneratingSpatialIndex::<TerrainPresentationAssets>::get_one_or_generate(
 			spatial_index,
 			Id::Universal,
 			lod_ref,
-		)?
-		.clone();
-		let material = assets.material.clone();
-		let layout = <S as SpatialIndex<crate::terrain::cell::TerrainCellLayout>>::get(
-			spatial_index,
-			Id::Universal,
-		)
-		.cloned()
-		.unwrap_or_default();
+		)?;
 		let (res_2, wall_faces) = assets.mesh_params_for_cell(bounds, &layout);
 		let cell_size = (Vec3::from(bounds.max) - Vec3::from(bounds.min)).x;
-		let stream_ring = layout.stream_ring_for_cell_size(cell_size);
 
 		Some((
 			Self {
 				cell: bounds,
 				base: pre.base,
 				modulations,
-				jersey_leaves,
+				jersey_leaves: pre.jersey_leaves,
 				marazion_leaves,
 				marazion_fills,
 				sdf,
-				material,
+				material: assets.material.clone(),
 				res_2,
-				stream_ring,
+				stream_ring: layout.stream_ring_for_cell_size(cell_size),
 				wall_faces,
 			},
 			bounds,
 		))
 	}
-
-	fn descendants_with_lod(_id: Id, _spatial_index: &mut S, _lod_ref: &LodRef) {}
 }

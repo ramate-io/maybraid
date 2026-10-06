@@ -8,9 +8,10 @@
 //!   → Terrain applies HydroComplex (internal carve → rim → apron)
 //! ```
 
-use crate::terrain::cell::original_ids_for_origin_cells;
-use crate::terrain::watersheds::high_pass::{PocketHighPassCell, PocketWatersHighPass};
-use crate::terrain::watersheds::low_pass::{PocketLowPassCell, PocketWatersLowPass};
+use crate::terrain::cell::{original_ids_for_origin_cells, TerrainCellLayout};
+use crate::terrain::watersheds::config::WatershedConfigs;
+use crate::terrain::watersheds::high_pass::PocketWatersHighPass;
+use crate::terrain::watersheds::low_pass::PocketWatersLowPass;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use lod::gen::{GeneratingSpatialIndex, GenerationScheme, Id, OriginalId};
@@ -42,15 +43,14 @@ fn cell_seed(cell: Aabb3d, salt: u32) -> u32 {
 		.wrapping_add(cell.min.z.to_bits().wrapping_mul(19349663))
 }
 
+/// Origin-grid root for watershed correction; both pocket-water passes are
+/// pulled by region, so their pocket / pre-pocket stacks stay out of these bounds.
 impl<S> GenerationScheme<S> for HydroComplexCell
 where
-	S: GeneratingSpatialIndex<PocketWatersHighPass>
-		+ GeneratingSpatialIndex<PocketWatersLowPass>
-		+ GeneratingSpatialIndex<PocketHighPassCell>
-		+ GeneratingSpatialIndex<PocketLowPassCell>
-		+ GeneratingSpatialIndex<crate::terrain::watersheds::config::WatershedConfigs>
-		+ GeneratingSpatialIndex<crate::terrain::PreWatershedTerrain>
-		+ GeneratingSpatialIndex<crate::terrain::cell::TerrainCellLayout>,
+	S: GeneratingSpatialIndex<TerrainCellLayout>
+		+ GeneratingSpatialIndex<WatershedConfigs>
+		+ GeneratingSpatialIndex<PocketWatersHighPass>
+		+ GeneratingSpatialIndex<PocketWatersLowPass>,
 {
 	fn original_ids_for(spatial_index: &mut S, region: Aabb3d) -> Vec<OriginalId> {
 		original_ids_for_origin_cells(spatial_index, region)
@@ -60,9 +60,11 @@ where
 		let cell = id.origin_cell_bounds()?;
 		let cell_bounds = aabb_to_bounds2(cell);
 
-		let configs = GeneratingSpatialIndex::<
-			crate::terrain::watersheds::config::WatershedConfigs,
-		>::get_one_or_generate(spatial_index, Id::Universal, lod_ref)?;
+		let configs = GeneratingSpatialIndex::<WatershedConfigs>::get_one_or_generate(
+			spatial_index,
+			Id::Universal,
+			lod_ref,
+		)?;
 		let seed = cell_seed(cell, configs.seed);
 
 		let mut hydrology = Vec::new();
@@ -93,8 +95,6 @@ where
 
 		Some((Self { cell, complex }, cell))
 	}
-
-	fn descendants_with_lod(_id: Id, _spatial_index: &mut S, _lod_ref: &LodRef) {}
 }
 
 /// Origin-cell carve stage over the cellular [`HydroComplexCell`].
@@ -118,44 +118,16 @@ pub struct WatershedAproningCell {
 	pub complex: Option<Arc<HydroComplex>>,
 }
 
-fn complex_from_complex_cell<S>(
-	spatial_index: &mut S,
-	id: Id,
-	lod_ref: &LodRef,
-) -> Option<(Aabb3d, Option<Arc<HydroComplex>>)>
-where
-	S: GeneratingSpatialIndex<HydroComplexCell>
-		+ GeneratingSpatialIndex<PocketWatersHighPass>
-		+ GeneratingSpatialIndex<PocketWatersLowPass>
-		+ GeneratingSpatialIndex<PocketHighPassCell>
-		+ GeneratingSpatialIndex<PocketLowPassCell>
-		+ GeneratingSpatialIndex<crate::terrain::watersheds::config::WatershedConfigs>
-		+ GeneratingSpatialIndex<crate::terrain::PreWatershedTerrain>
-		+ GeneratingSpatialIndex<crate::terrain::cell::TerrainCellLayout>,
-{
-	let complex_cell = GeneratingSpatialIndex::<HydroComplexCell>::get_one_or_generate(
-		spatial_index,
-		id,
-		lod_ref,
-	)?;
-	Some((complex_cell.cell, complex_cell.indexed().cloned()))
-}
-
+/// Stage cells are views over [`HydroComplexCell`]: same origin ids, and that
+/// is their only dependency.
 macro_rules! impl_correction_stage_cell {
 	($Cell:ty) => {
 		impl<S> GenerationScheme<S> for $Cell
 		where
-			S: GeneratingSpatialIndex<HydroComplexCell>
-				+ GeneratingSpatialIndex<PocketWatersHighPass>
-				+ GeneratingSpatialIndex<PocketWatersLowPass>
-				+ GeneratingSpatialIndex<PocketHighPassCell>
-				+ GeneratingSpatialIndex<PocketLowPassCell>
-				+ GeneratingSpatialIndex<crate::terrain::watersheds::config::WatershedConfigs>
-				+ GeneratingSpatialIndex<crate::terrain::PreWatershedTerrain>
-				+ GeneratingSpatialIndex<crate::terrain::cell::TerrainCellLayout>,
+			S: GeneratingSpatialIndex<HydroComplexCell>,
 		{
 			fn original_ids_for(spatial_index: &mut S, region: Aabb3d) -> Vec<OriginalId> {
-				original_ids_for_origin_cells(spatial_index, region)
+				GeneratingSpatialIndex::<HydroComplexCell>::original_ids_for(spatial_index, region)
 			}
 
 			fn build_with_id(
@@ -163,11 +135,14 @@ macro_rules! impl_correction_stage_cell {
 				id: Id,
 				lod_ref: &LodRef,
 			) -> Option<(Self, Aabb3d)> {
-				let (cell, complex) = complex_from_complex_cell(spatial_index, id, lod_ref)?;
-				Some((Self { cell, complex }, cell))
+				let complex_cell = GeneratingSpatialIndex::<HydroComplexCell>::get_one_or_generate(
+					spatial_index,
+					id,
+					lod_ref,
+				)?;
+				let cell = complex_cell.cell;
+				Some((Self { cell, complex: complex_cell.indexed().cloned() }, cell))
 			}
-
-			fn descendants_with_lod(_id: Id, _spatial_index: &mut S, _lod_ref: &LodRef) {}
 		}
 	};
 }

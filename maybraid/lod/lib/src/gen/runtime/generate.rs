@@ -11,8 +11,7 @@ use bevy::prelude::*;
 
 use crate::gen::{
 	entering_keep_regions, expand_keep_xz, id_lives_in_keep, id_xz_distance2, keep_region_changed,
-	GeneratingSpatialIndex, GenerationScheme, Id, MaterializeStatus, StorageStatus,
-	QUEUE_KEEP_SLACK_XZ,
+	GeneratingSpatialIndex, Id, MaterializeStatus, StorageStatus, QUEUE_KEEP_SLACK_XZ,
 };
 use crate::jobs::{ensure_lod_job_counter, LodJobCounter};
 use crate::lod_ref::{
@@ -279,7 +278,7 @@ pub fn drain_lod_generate<T, S, M, F>(
 	mut scan_initialized: Local<bool>,
 	mut generated: MessageWriter<LodGenerated<T>>,
 ) where
-	T: GenerationScheme<S> + Send + Sync + 'static,
+	T: Send + Sync + 'static,
 	S: Resource<Mutability = Mutable> + GeneratingSpatialIndex<T>,
 	M: Send + Sync + 'static,
 	F: QueryFilter + 'static,
@@ -322,7 +321,7 @@ pub fn drain_lod_generate<T, S, M, F>(
 			break;
 		};
 		let quantum = Instant::now();
-		for original in T::original_ids_for(&mut *index, region) {
+		for original in GeneratingSpatialIndex::<T>::original_ids_for(&mut *index, region) {
 			if index.storage_status(original.0) != StorageStatus::NotTracked {
 				continue;
 			}
@@ -451,7 +450,7 @@ where
 /// Budgeted `get_or_generate` for `T` on resource index `S`.
 pub struct LodGeneratePlugin<T, S, M, F = ()>
 where
-	T: GenerationScheme<S> + Send + Sync + 'static,
+	T: Send + Sync + 'static,
 	S: Resource<Mutability = Mutable> + GeneratingSpatialIndex<T>,
 	M: Send + Sync + 'static,
 	F: QueryFilter + 'static,
@@ -461,7 +460,7 @@ where
 
 impl<T, S, M, F> Default for LodGeneratePlugin<T, S, M, F>
 where
-	T: GenerationScheme<S> + Send + Sync + 'static,
+	T: Send + Sync + 'static,
 	S: Resource<Mutability = Mutable> + GeneratingSpatialIndex<T>,
 	M: Send + Sync + 'static,
 	F: QueryFilter + 'static,
@@ -473,7 +472,7 @@ where
 
 impl<T, S, M, F> Plugin for LodGeneratePlugin<T, S, M, F>
 where
-	T: GenerationScheme<S> + Send + Sync + 'static,
+	T: Send + Sync + 'static,
 	S: Resource<Mutability = Mutable> + GeneratingSpatialIndex<T>,
 	M: Send + Sync + 'static,
 	F: QueryFilter + 'static,

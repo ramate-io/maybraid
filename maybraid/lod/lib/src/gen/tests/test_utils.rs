@@ -236,8 +236,6 @@ where
 		let bounds = id.origin_cell_bounds()?;
 		Some((Self { cell: bounds }, bounds))
 	}
-
-	fn descendants_with_lod(_id: Id, _spatial_index: &mut S, _lod_ref: &LodRef) {}
 }
 
 impl<S> GenerationScheme<S> for Vegetation
@@ -245,7 +243,7 @@ where
 	S: GeneratingSpatialIndex<Terrain> + GeneratingSpatialIndex<Tree>,
 {
 	fn original_ids_for(spatial_index: &mut S, region: Aabb3d) -> Vec<OriginalId> {
-		<Terrain as GenerationScheme<S>>::original_ids_for(spatial_index, region)
+		GeneratingSpatialIndex::<Terrain>::original_ids_for(spatial_index, region)
 	}
 
 	fn build_with_id(spatial_index: &mut S, id: Id, lod_ref: &LodRef) -> Option<(Self, Aabb3d)> {
@@ -335,8 +333,6 @@ where
 		}
 		Some((Self { parent, cell: bounds }, bounds))
 	}
-
-	fn descendants_with_lod(_id: Id, _spatial_index: &mut S, _lod_ref: &LodRef) {}
 }
 
 // -----------------------------------------------------------------------------

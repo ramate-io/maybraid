@@ -54,6 +54,4 @@ where
 		)?;
 		Some((Self::from_config(&assets.config), universal_bounds()))
 	}
-
-	fn descendants_with_lod(_id: Id, _spatial_index: &mut S, _lod_ref: &LodRef) {}
 }
