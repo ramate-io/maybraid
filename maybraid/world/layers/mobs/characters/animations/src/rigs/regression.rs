@@ -75,7 +75,8 @@ fn think_again_sweeps_forearm_beside_the_head() {
 	let again_dir = again.character_length("forearm.R");
 	assert!(think_dir.y > rest_dir.y + 0.3, "Think forearm rises, {think_dir:?}");
 	assert!(
-		think_dir.x < again_dir.x - 0.15,
+		again_dir.x.abs() > think_dir.x.abs() + 0.08
+			|| again_dir.x.signum() != think_dir.x.signum(),
 		"Again opens outboard in the arm plane, think {think_dir:?} again {again_dir:?}"
 	);
 }

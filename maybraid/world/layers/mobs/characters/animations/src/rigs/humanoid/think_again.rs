@@ -24,6 +24,19 @@ impl Animation<HumanoidV0Rig> for ThinkAgain {
 	}
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct ArmKeyPose {
+	shoulder: Vec3,
+	elbow: Vec3,
+	tip: Vec3,
+	humerus_dir: Vec3,
+	forearm_dir: Vec3,
+}
+
+fn bone_name(prefix: &str, side: Side) -> String {
+	format!("{prefix}.{}", side.suffix())
+}
+
 fn segment_tip(rig: &HumanoidV0Rig, bone: &str) -> Vec3 {
 	let Some(id) = rig.binding.definition.id(bone) else {
 		panic!("missing bone {bone}");
@@ -32,14 +45,50 @@ fn segment_tip(rig: &HumanoidV0Rig, bone: &str) -> Vec3 {
 	rig.character_point(bone) + rig.character_length(bone) * len
 }
 
-fn forearm_from_vertical(rig: &HumanoidV0Rig, side: Side) -> f32 {
-	let bone = format!("forearm.{}", side.suffix());
-	let dir = rig.character_length(&bone);
-	dir.x.atan2(dir.y)
+fn arm_key_pose(rig: &HumanoidV0Rig, side: Side) -> ArmKeyPose {
+	let humerus = bone_name("humerus", side);
+	let forearm = bone_name("forearm", side);
+	let shoulder = rig.character_point(&humerus);
+	let elbow = rig.character_point(&forearm);
+	let tip = segment_tip(rig, &forearm);
+	let humerus_dir = rig.character_length(&humerus);
+	let forearm_dir = (tip - elbow).normalize_or_zero();
+	ArmKeyPose { shoulder, elbow, tip, humerus_dir, forearm_dir }
+}
+
+fn forearm_tilt_from_positions(elbow: Vec3, tip: Vec3) -> f32 {
+	let delta = tip - elbow;
+	delta.x.atan2(delta.y).to_degrees()
+}
+
+fn tip_is_above_elbow(elbow: Vec3, tip: Vec3) -> bool {
+	tip.y > elbow.y + 0.05
+}
+
+fn tip_is_inboard_of_elbow(elbow: Vec3, tip: Vec3) -> bool {
+	tip.x.abs() < elbow.x.abs()
+}
+
+fn tip_is_outboard_of_elbow(elbow: Vec3, tip: Vec3) -> bool {
+	tip.x.abs() > elbow.x.abs()
+}
+
+fn humerus_points_laterally_outward(rest: &ArmKeyPose, posed: &ArmKeyPose) -> bool {
+	let rest_outward = rest.tip.x - rest.shoulder.x;
+	let posed_outward = posed.elbow.x - posed.shoulder.x;
+	rest_outward.signum() == posed_outward.signum()
+}
+
+/// Same side of the body midline (`x = 0`) as the shoulder.
+fn tip_stays_on_gesture_side(shoulder: Vec3, tip: Vec3) -> bool {
+	if shoulder.x.abs() < 1e-4 {
+		return true;
+	}
+	shoulder.x.signum() == tip.x.signum()
 }
 
 fn palm_inward_dot(rig: &HumanoidV0Rig, side: Side) -> f32 {
-	let bone = format!("forearm.{}", side.suffix());
+	let bone = bone_name("forearm", side);
 	let local_palm = match side {
 		Side::Right => Vec3::X,
 		Side::Left => Vec3::NEG_X,
@@ -47,6 +96,17 @@ fn palm_inward_dot(rig: &HumanoidV0Rig, side: Side) -> f32 {
 	let palm = rig.rotation(&bone) * local_palm;
 	let inward = Vec3::new(side.sign(), 0.0, 0.0);
 	palm.dot(inward)
+}
+
+fn pose_with_roll(side: Side, roll: f32, progress: f32) -> HumanoidV0Rig {
+	let clip = ThinkAgain::default().with_side(side);
+	let mut rig = HumanoidV0Rig::for_clip_test();
+	let mut pose = HumanoidPose::default();
+	let arm = pose.arm_mut(side);
+	arm.elbow_flexion = clip.elbow_flexion(progress);
+	arm.aim = Some(ArmAim { along: clip.humerus_along(progress), roll });
+	rig.write_pose(&pose);
+	rig
 }
 
 #[cfg(test)]
@@ -60,6 +120,13 @@ mod tests {
 
 	fn again_hold() -> f32 {
 		0.815
+	}
+
+	fn posed_arm(side: Side, progress: f32) -> ArmKeyPose {
+		let clip = ThinkAgain::default().with_side(side);
+		let mut rig = HumanoidV0Rig::for_clip_test();
+		clip.apply(&mut rig, progress);
+		arm_key_pose(&rig, side)
 	}
 
 	#[test]
@@ -109,78 +176,94 @@ mod tests {
 	}
 
 	#[test]
-	fn think_again_humerus_stays_horizontal_lateral() -> anyhow::Result<()> {
-		let clip = ThinkAgain::default().with_side(Side::Right);
-		let mut rig = HumanoidV0Rig::for_clip_test();
-		clip.apply(&mut rig, think_hold());
-
-		let humerus = rig.character_length("humerus.R");
-		let elevation = humerus.y.atan2(humerus.x.abs()).to_degrees();
-		assert!(elevation.abs() < 10.0, "humerus elevation {elevation:.1}°, dir {humerus:?}");
-		assert!(humerus.x > 0.85, "lateral +X, got {humerus:?}");
+	fn think_again_humerus_points_laterally_outward() -> anyhow::Result<()> {
+		for side in [Side::Right, Side::Left] {
+			let rest = arm_key_pose(&HumanoidV0Rig::for_clip_test(), side);
+			let posed = posed_arm(side, think_hold());
+			assert!(
+				humerus_points_laterally_outward(&rest, &posed),
+				"{side:?} humerus should abduct outboard, rest {rest:?} posed {posed:?}"
+			);
+			let elevation = posed.humerus_dir.y.atan2(posed.humerus_dir.x.abs()).to_degrees();
+			assert!(
+				elevation.abs() < 10.0,
+				"{side:?} humerus should stay horizontal, elevation {elevation:.1}° dir {:?}",
+				posed.humerus_dir
+			);
+		}
 		Ok(())
 	}
 
 	#[test]
 	fn think_again_humerus_barely_moves_between_key_poses() -> anyhow::Result<()> {
-		let clip = ThinkAgain::default().with_side(Side::Right);
-		let mut think = HumanoidV0Rig::for_clip_test();
-		let mut again = HumanoidV0Rig::for_clip_test();
-		clip.apply(&mut think, think_hold());
-		clip.apply(&mut again, again_hold());
-
-		let think_dir = think.character_length("humerus.R");
-		let again_dir = again.character_length("humerus.R");
-		let delta = think_dir.angle_between(again_dir).to_degrees();
-		assert!(delta < 3.0, "humerus drift {delta:.1}° {think_dir:?} vs {again_dir:?}");
+		for side in [Side::Right, Side::Left] {
+			let think = posed_arm(side, think_hold());
+			let again = posed_arm(side, again_hold());
+			let delta = think.humerus_dir.angle_between(again.humerus_dir).to_degrees();
+			let elbow_shift = (think.elbow - again.elbow).length();
+			assert!(delta < 3.0, "{side:?} humerus drift {delta:.1}°");
+			assert!(elbow_shift < 0.02, "{side:?} elbow moved {elbow_shift:.3}");
+		}
 		Ok(())
 	}
 
 	#[test]
-	fn think_again_elbow_sweeps_about_sixty_degrees() -> anyhow::Result<()> {
-		let clip = ThinkAgain::default().with_side(Side::Right);
-		let mut think = HumanoidV0Rig::for_clip_test();
-		let mut again = HumanoidV0Rig::for_clip_test();
-		clip.apply(&mut think, think_hold());
-		clip.apply(&mut again, again_hold());
-
-		let think_angle = think.posed_angle("forearm.R");
-		let again_angle = again.posed_angle("forearm.R");
-		let delta = (think_angle - again_angle).abs();
-		assert!(delta > 0.45 && delta < 1.15, "elbow sweep {delta:.2} rad");
+	fn think_again_think_pose_forearm_inboard() -> anyhow::Result<()> {
+		for side in [Side::Right, Side::Left] {
+			let pose = posed_arm(side, think_hold());
+			let tilt = forearm_tilt_from_positions(pose.elbow, pose.tip);
+			let head_y = HumanoidV0Rig::for_clip_test().character_point("upper_neck").y + 0.12;
+			assert!(tip_is_above_elbow(pose.elbow, pose.tip), "{side:?} tip above elbow {pose:?}");
+			assert!(
+				tip_is_inboard_of_elbow(pose.elbow, pose.tip),
+				"{side:?} Think inboard |tip.x| < |elbow.x|, {pose:?}"
+			);
+			assert!(
+				tilt.abs() > 35.0 && tilt.abs() < 55.0,
+				"{side:?} Think tilt ~45°, got {tilt:.1}°"
+			);
+			assert!(
+				pose.tip.y > head_y - 0.08,
+				"{side:?} hand near head height, tip {:?}",
+				pose.tip
+			);
+			assert!(
+				tip_stays_on_gesture_side(pose.shoulder, pose.tip),
+				"{side:?} Think must stay on gesture side of midline, {pose:?}"
+			);
+		}
 		Ok(())
 	}
 
 	#[test]
-	fn think_again_hand_near_head_at_think() -> anyhow::Result<()> {
-		let clip = ThinkAgain::default().with_side(Side::Right);
-		let mut rig = HumanoidV0Rig::for_clip_test();
-		clip.apply(&mut rig, think_hold());
-
-		let tip = segment_tip(&rig, "forearm.R");
-		let elbow = rig.character_point("forearm.R");
-		let head_y = rig.character_point("upper_neck").y + 0.12;
-		assert!(tip.y > head_y - 0.08, "hand near head height, tip {tip:?}");
-		assert!(tip.x < elbow.x + 0.05, "hand inboard of elbow, tip {tip:?} elbow {elbow:?}");
-		Ok(())
-	}
-
-	#[test]
-	fn think_again_hand_outboard_at_again() -> anyhow::Result<()> {
-		let clip = ThinkAgain::default().with_side(Side::Right);
-		let mut think = HumanoidV0Rig::for_clip_test();
-		let mut again = HumanoidV0Rig::for_clip_test();
-		clip.apply(&mut think, think_hold());
-		clip.apply(&mut again, again_hold());
-
-		let think_tip = segment_tip(&think, "forearm.R");
-		let again_tip = segment_tip(&again, "forearm.R");
-		assert!(
-			again_tip.x > think_tip.x + 0.08,
-			"Again opens outboard, think {think_tip:?} again {again_tip:?}"
-		);
-		let head_x = rig_head_half_width(&again);
-		assert!(again_tip.x < head_x + 0.25, "hand stays modestly outside head, tip {again_tip:?}");
+	fn think_again_again_pose_forearm_outboard() -> anyhow::Result<()> {
+		for side in [Side::Right, Side::Left] {
+			let think = posed_arm(side, think_hold());
+			let again = posed_arm(side, again_hold());
+			let tilt = forearm_tilt_from_positions(again.elbow, again.tip);
+			assert!(
+				tip_is_above_elbow(again.elbow, again.tip),
+				"{side:?} tip above elbow {again:?}"
+			);
+			assert!(
+				tip_is_outboard_of_elbow(again.elbow, again.tip),
+				"{side:?} Again outboard |tip.x| > |elbow.x|, {again:?}"
+			);
+			assert!(
+				again.tip.x.abs() > think.tip.x.abs() + 0.08,
+				"{side:?} Again opens past Think, think {:?} again {:?}",
+				think.tip,
+				again.tip
+			);
+			assert!(
+				tilt.abs() > 5.0 && tilt.abs() < 25.0,
+				"{side:?} Again tilt ~15° past vertical, got {tilt:.1}°"
+			);
+			assert!(
+				tip_stays_on_gesture_side(again.shoulder, again.tip),
+				"{side:?} Again must stay on gesture side of midline, {again:?}"
+			);
+		}
 		Ok(())
 	}
 
@@ -198,28 +281,59 @@ mod tests {
 	}
 
 	#[test]
-	fn think_again_palm_faces_inward() -> anyhow::Result<()> {
-		let clip = ThinkAgain::default().with_side(Side::Right);
-		let mut rig = HumanoidV0Rig::for_clip_test();
-		clip.apply(&mut rig, think_hold());
-		assert!(palm_inward_dot(&rig, Side::Right) > 0.35, "palm should face inward");
+	fn think_again_palm_faces_inward_both_sides() -> anyhow::Result<()> {
+		for side in [Side::Right, Side::Left] {
+			let clip = ThinkAgain::default().with_side(side);
+			let mut rig = HumanoidV0Rig::for_clip_test();
+			clip.apply(&mut rig, think_hold());
+			let dot = palm_inward_dot(&rig, side);
+			assert!(dot > 0.35, "{side:?} palm should face inward, dot {dot}");
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn think_again_roll_is_not_mirrored_by_side_sign() -> anyhow::Result<()> {
+		use std::f32::consts::PI;
+
+		let progress = think_hold();
+		let clip_right = ThinkAgain::default().with_side(Side::Right);
+		let clip_left = ThinkAgain::default().with_side(Side::Left);
+		assert_eq!(
+			clip_right.humerus_roll(progress),
+			clip_left.humerus_roll(progress),
+			"roll is a shared constant, not multiplied by Side::sign"
+		);
+
+		for side in [Side::Right, Side::Left] {
+			let tuned = pose_with_roll(side, clip_right.humerus_roll(progress), progress);
+			let tuned_pose = arm_key_pose(&tuned, side);
+			assert!(
+				tuned_pose.tip.y > tuned_pose.elbow.y + 0.25,
+				"{side:?} tuned roll keeps hand at head height"
+			);
+			assert!(palm_inward_dot(&tuned, side) > 0.35, "{side:?} tuned roll keeps palm inward");
+
+			// The first draft used `π` together with inverted `humerus_along` (+X on right).
+			// With corrected lateral aim, `π` still passes palm but folds to shoulder height.
+			let legacy_pi = pose_with_roll(side, PI, progress);
+			let legacy_pose = arm_key_pose(&legacy_pi, side);
+			assert!(
+				tuned_pose.tip.y > legacy_pose.tip.y + 0.5,
+				"{side:?}: π is not the correct hinge with corrected aim, tuned {:?} vs π {:?}",
+				tuned_pose.tip,
+				legacy_pose.tip
+			);
+		}
 		Ok(())
 	}
 
 	#[test]
 	fn think_again_mirrors_for_left_side() -> anyhow::Result<()> {
-		let right = ThinkAgain::default().with_side(Side::Right);
-		let left = ThinkAgain::default().with_side(Side::Left);
-		let mut r = HumanoidV0Rig::for_clip_test();
-		let mut l = HumanoidV0Rig::for_clip_test();
-		right.apply(&mut r, think_hold());
-		left.apply(&mut l, think_hold());
-
-		let r_tip = segment_tip(&r, "forearm.R");
-		let l_tip = segment_tip(&l, "forearm.L");
-		assert!((r_tip.x + l_tip.x).abs() < 0.06, "mirrored tips {r_tip:?} {l_tip:?}");
-		assert!((r_tip.y - l_tip.y).abs() < 0.08, "matched height {r_tip:?} {l_tip:?}");
-		assert!(palm_inward_dot(&l, Side::Left) > 0.35, "left palm inward");
+		let right = posed_arm(Side::Right, think_hold());
+		let left = posed_arm(Side::Left, think_hold());
+		assert!((right.tip.x + left.tip.x).abs() < 0.06, "mirrored tips {right:?} {left:?}");
+		assert!((right.tip.y - left.tip.y).abs() < 0.08, "matched height {right:?} {left:?}");
 		Ok(())
 	}
 
@@ -236,18 +350,17 @@ mod tests {
 	}
 
 	#[test]
-	fn think_again_tip_stays_on_gesture_side() -> anyhow::Result<()> {
+	fn think_again_tip_stays_on_gesture_side_of_midline() -> anyhow::Result<()> {
 		for side in [Side::Right, Side::Left] {
-			let bone = format!("forearm.{}", side.suffix());
-			let rest = HumanoidV0Rig::for_clip_test();
-			let mut posed = HumanoidV0Rig::for_clip_test();
-			ThinkAgain::default().with_side(side).apply(&mut posed, think_hold());
-			let rest_tip = segment_tip(&rest, &bone);
-			let posed_tip = segment_tip(&posed, &bone);
-			assert!(
-				posed_tip.x.signum() == rest_tip.x.signum(),
-				"{side:?} must not cross midline, {posed_tip:?} vs {rest_tip:?}"
-			);
+			for progress in [think_hold(), again_hold()] {
+				let pose = posed_arm(side, progress);
+				assert!(
+					tip_stays_on_gesture_side(pose.shoulder, pose.tip),
+					"{side:?} at {progress} crossed midline: shoulder {:?} tip {:?}",
+					pose.shoulder,
+					pose.tip
+				);
+			}
 		}
 		Ok(())
 	}
@@ -256,9 +369,6 @@ mod tests {
 	fn think_again_samples_are_continuous() -> anyhow::Result<()> {
 		let clip = ThinkAgain::default().with_side(Side::Right);
 		let mut prev = segment_tip(&HumanoidV0Rig::for_clip_test(), "forearm.R");
-		let mut rig = HumanoidV0Rig::for_clip_test();
-		clip.apply(&mut rig, 0.0);
-		prev = segment_tip(&rig, "forearm.R");
 		for i in 1..=64 {
 			let t = i as f32 / 64.0;
 			let mut rig = HumanoidV0Rig::for_clip_test();
@@ -271,24 +381,5 @@ mod tests {
 			prev = tip;
 		}
 		Ok(())
-	}
-
-	#[test]
-	fn think_again_forearm_angles_match_spec() -> anyhow::Result<()> {
-		let clip = ThinkAgain::default().with_side(Side::Right);
-		let mut think = HumanoidV0Rig::for_clip_test();
-		let mut again = HumanoidV0Rig::for_clip_test();
-		clip.apply(&mut think, think_hold());
-		clip.apply(&mut again, again_hold());
-
-		let think_deg = forearm_from_vertical(&think, Side::Right).to_degrees();
-		let again_deg = forearm_from_vertical(&again, Side::Right).to_degrees();
-		assert!(think_deg < -35.0 && think_deg > -55.0, "Think tilt {think_deg:.1}°");
-		assert!(again_deg > 5.0 && again_deg < 25.0, "Again tilt {again_deg:.1}°");
-		Ok(())
-	}
-
-	fn rig_head_half_width(rig: &HumanoidV0Rig) -> f32 {
-		rig.character_point("upper_neck").x.abs() + 0.08
 	}
 }

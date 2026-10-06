@@ -3,10 +3,8 @@
 //! Character space matches [`Jab`](super::Jab): +X right, +Y up, +Z fight-forward.
 //! The humerus stays abducted horizontally; Think and Again differ mainly in elbow flex.
 //!
-//! Angle interpretation (see PR): forearm tilt from vertical in the arm plane (X–Y when
-//! the humerus points lateral). Think ≈ −45° inboard; Again ≈ +15° outboard (~60° sweep).
-
-use std::f32::consts::PI;
+//! Forearm tilt in tests is derived from posed elbow→tip positions: `atan2(Δx, Δy)`.
+//! Think ≈ +45° inboard; Again ≈ −15° outboard (~60° sweep).
 
 use bevy::prelude::Vec3;
 use character_rigs::Side;
@@ -23,12 +21,15 @@ const AGAIN_END: f32 = 0.72;
 /// Brief Again hold ends; recover begins.
 const AGAIN_HOLD_END: f32 = 0.82;
 
-/// Elbow flex at Think (−45° from vertical on the tuned roll axis).
+/// Elbow flex at Think (~45° inboard from vertical at [`THINK_AGAIN_ROLL`]).
 const THINK_ELBOW: f32 = 2.35;
-/// Elbow flex at Again (+15° from vertical).
+/// Elbow flex at Again (~15° past vertical outboard).
 const AGAIN_ELBOW: f32 = 1.30;
-/// Roll so palm faces inward once the humerus is lateral.
-const THINK_AGAIN_ROLL: f32 = PI;
+/// Roll about the lateral humerus so the forearm hinge opens beside the head.
+///
+/// Not multiplied by [`Side::sign`]: bilateral mirroring is already carried by
+/// [`Self::humerus_along`] and the rig's mirrored shoulder rests. See rig tests.
+const THINK_AGAIN_ROLL: f32 = 0.0;
 
 /// One-shot Think Again knobs. The rig resolver maps these onto anatomical frames.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -88,10 +89,10 @@ impl ThinkAgain {
 	/// Character-space humerus length direction: lateral abduction (half T-pose).
 	///
 	/// [`Side::sign`] is `+1` on left and `−1` on right (yaw/roll mirroring). Lateral
-	/// outboard is the opposite: right → `+X`, left → `−X`.
+	/// outboard matches rest geometry: right → `−X`, left → `+X`.
 	pub fn humerus_along(&self, progress: f32) -> Vec3 {
 		let amount = self.gesture_amount(progress);
-		Vec3::new(-self.side.sign() * amount, 0.0, 0.0).normalize_or_zero()
+		Vec3::new(self.side.sign() * amount, 0.0, 0.0).normalize_or_zero()
 	}
 
 	pub fn humerus_roll(&self, _progress: f32) -> f32 {
@@ -151,8 +152,8 @@ mod tests {
 		let left = ThinkAgain::default().with_side(Side::Left);
 		let r = right.humerus_along(think_hold());
 		let l = left.humerus_along(think_hold());
-		assert!(r.x > 0.0, "right arm lateral +X, got {r:?}");
-		assert!(l.x < 0.0, "left arm lateral −X, got {l:?}");
+		assert!(r.x < 0.0, "right arm lateral −X, got {r:?}");
+		assert!(l.x > 0.0, "left arm lateral +X, got {l:?}");
 		assert!((r.x + l.x).abs() < 0.05, "mirrored lateral aim {r:?} {l:?}");
 		Ok(())
 	}
