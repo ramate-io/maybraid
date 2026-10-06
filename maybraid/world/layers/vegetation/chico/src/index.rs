@@ -6,7 +6,6 @@ use std::collections::{HashMap, HashSet};
 use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::prelude::*;
 use lod::gen::{Id, SpatialIndex, StorageStatus, TrackedId, Version};
-use lod::lod_ref::LodRef;
 use procedural_common::NoiseParams;
 use vegetation_groves::FlatTerrainSample;
 
@@ -210,7 +209,7 @@ impl SpatialIndex<ChicoForest> for ForestIndex {
 		ForestIndex::membership_revision(self)
 	}
 
-	fn insert(&mut self, id: Id, t: ChicoForest, bounds: Aabb3d, _lod_ref: &LodRef) {
+	fn insert(&mut self, id: Id, t: ChicoForest, bounds: Aabb3d) {
 		let version = self.next_version();
 		self.forests.insert(id, ForestEntry { value: t, bounds, version });
 	}
@@ -267,7 +266,7 @@ impl SpatialIndex<ChicoGrove> for ForestIndex {
 		ForestIndex::membership_revision(self)
 	}
 
-	fn insert(&mut self, id: Id, t: ChicoGrove, bounds: Aabb3d, _lod_ref: &LodRef) {
+	fn insert(&mut self, id: Id, t: ChicoGrove, bounds: Aabb3d) {
 		let version = self.next_version();
 		if let Some(previous_bounds) = self.groves.get(&id).map(|previous| previous.bounds) {
 			self.unindex_grove(id, previous_bounds);
@@ -325,7 +324,7 @@ impl SpatialIndex<CanopyBumpOut> for ForestIndex {
 		ForestIndex::membership_revision(self)
 	}
 
-	fn insert(&mut self, id: Id, t: CanopyBumpOut, bounds: Aabb3d, _lod_ref: &LodRef) {
+	fn insert(&mut self, id: Id, t: CanopyBumpOut, bounds: Aabb3d) {
 		let version = self.next_version();
 		if let Some(previous_bounds) = self.bump_outs.get(&id).map(|previous| previous.bounds) {
 			self.unindex_bump_out(previous_bounds);
@@ -370,7 +369,7 @@ impl SpatialIndex<MediumCanopyBumpOut> for ForestIndex {
 		ForestIndex::membership_revision(self)
 	}
 
-	fn insert(&mut self, id: Id, value: MediumCanopyBumpOut, bounds: Aabb3d, _lod_ref: &LodRef) {
+	fn insert(&mut self, id: Id, value: MediumCanopyBumpOut, bounds: Aabb3d) {
 		let version = self.next_version();
 		self.medium_bump_outs.insert(id, MediumBumpOutEntry { value, bounds, version });
 	}
@@ -384,7 +383,6 @@ pub fn forest_world_sample() -> FlatTerrainSample {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use lod::lod_ref::LodRef;
 	use vegetation_groves::GroveExtent;
 
 	fn empty_grove(bounds: Aabb3d) -> ChicoGrove {
@@ -395,18 +393,6 @@ mod tests {
 		)
 	}
 
-	fn with_lod_ref<R>(f: impl FnOnce(&LodRef<'_>) -> R) -> R {
-		let transform = Transform::IDENTITY;
-		let bounds = Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE);
-		let lod_ref = LodRef {
-			entity: Entity::PLACEHOLDER,
-			previous_transform: &transform,
-			current_transform: &transform,
-			bounds: &bounds,
-		};
-		f(&lod_ref)
-	}
-
 	#[test]
 	fn grove_grid_returns_only_intersecting_cells() {
 		let near = Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(100.0, 1.0, 100.0));
@@ -414,16 +400,8 @@ mod tests {
 		let near_id = Id::from_cell(near);
 		let far_id = Id::from_cell(far);
 		let mut index = ForestIndex::default();
-		with_lod_ref(|lod_ref| {
-			SpatialIndex::<ChicoGrove>::insert(
-				&mut index,
-				near_id,
-				empty_grove(near),
-				near,
-				lod_ref,
-			);
-			SpatialIndex::<ChicoGrove>::insert(&mut index, far_id, empty_grove(far), far, lod_ref);
-		});
+		SpatialIndex::<ChicoGrove>::insert(&mut index, near_id, empty_grove(near), near);
+		SpatialIndex::<ChicoGrove>::insert(&mut index, far_id, empty_grove(far), far);
 
 		let hits = SpatialIndex::<ChicoGrove>::tracked_ids_for(&index, near);
 		assert_eq!(hits, vec![TrackedId(near_id)]);
@@ -435,10 +413,8 @@ mod tests {
 		let moved = Aabb3d::from_min_max(Vec3::new(200.0, 0.0, 0.0), Vec3::new(300.0, 1.0, 100.0));
 		let id = Id::from_cell(old);
 		let mut index = ForestIndex::default();
-		with_lod_ref(|lod_ref| {
-			SpatialIndex::<ChicoGrove>::insert(&mut index, id, empty_grove(old), old, lod_ref);
-			SpatialIndex::<ChicoGrove>::insert(&mut index, id, empty_grove(moved), moved, lod_ref);
-		});
+		SpatialIndex::<ChicoGrove>::insert(&mut index, id, empty_grove(old), old);
+		SpatialIndex::<ChicoGrove>::insert(&mut index, id, empty_grove(moved), moved);
 
 		assert!(SpatialIndex::<ChicoGrove>::tracked_ids_for(&index, old).is_empty());
 		assert_eq!(SpatialIndex::<ChicoGrove>::tracked_ids_for(&index, moved), vec![TrackedId(id)]);
@@ -449,29 +425,13 @@ mod tests {
 		let bounds = Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(100.0, 1.0, 100.0));
 		let id = Id::from_cell(bounds);
 		let mut index = ForestIndex::default();
-		with_lod_ref(|lod_ref| {
-			SpatialIndex::<ChicoGrove>::insert(
-				&mut index,
-				id,
-				empty_grove(bounds),
-				bounds,
-				lod_ref,
-			);
-		});
+		SpatialIndex::<ChicoGrove>::insert(&mut index, id, empty_grove(bounds), bounds);
 		let previous = SpatialIndex::<ChicoGrove>::version(&index, id).expect("inserted");
 		let previous_rev = index.membership_revision();
 		index.clear();
 		assert!(SpatialIndex::<ChicoGrove>::get(&index, id).is_none());
 		assert!(index.membership_revision() > previous_rev);
-		with_lod_ref(|lod_ref| {
-			SpatialIndex::<ChicoGrove>::insert(
-				&mut index,
-				id,
-				empty_grove(bounds),
-				bounds,
-				lod_ref,
-			);
-		});
+		SpatialIndex::<ChicoGrove>::insert(&mut index, id, empty_grove(bounds), bounds);
 		let rebuilt = SpatialIndex::<ChicoGrove>::version(&index, id).expect("reinserted");
 		assert!(rebuilt > previous, "restamp must not reuse a presented version");
 	}

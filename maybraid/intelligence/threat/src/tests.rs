@@ -579,3 +579,49 @@ fn missing_lod_uses_near_move_quantum() -> anyhow::Result<()> {
 		.is_some_and(|record| record.position == Vec3::X * 2.0));
 	Ok(())
 }
+
+#[test]
+#[ignore]
+fn local_query_clone_timing() {
+	const SUBJECT_COUNT: usize = 128;
+	const SCANS: usize = 10_000;
+	const RADIUS: f32 = 80.0;
+
+	let mut registry = ThreatRegistry::default();
+	for index in 0..SUBJECT_COUNT {
+		let id = ThreatId(index as u64 + 1);
+		let angle = (index as f32 / SUBJECT_COUNT as f32) * core::f32::consts::TAU;
+		let position = Vec3::new(angle.cos() * 40.0, 0.0, angle.sin() * 40.0);
+		registry
+			.upsert(
+				Entity::from_bits(index as u64 + 1),
+				ThreatSubject::new(id),
+				&ffa_affiliations(id),
+				position,
+			)
+			.expect("upsert threat");
+	}
+
+	let clone_start = std::time::Instant::now();
+	for _ in 0..SCANS {
+		let records = registry.local(Vec3::ZERO, RADIUS);
+		std::hint::black_box(records);
+	}
+	let clone_elapsed = clone_start.elapsed();
+
+	let mut scratch = Vec::new();
+	let id_start = std::time::Instant::now();
+	for _ in 0..SCANS {
+		registry.collect_local(Vec3::ZERO, RADIUS, &mut scratch);
+		for id in &scratch {
+			std::hint::black_box(registry.get(*id));
+		}
+	}
+	let id_elapsed = id_start.elapsed();
+
+	eprintln!(
+		"local_query_clone_timing: {SUBJECT_COUNT} subjects × {SCANS} scans — clone local() {:?}, collect_local+get {:?}",
+		clone_elapsed,
+		id_elapsed,
+	);
+}

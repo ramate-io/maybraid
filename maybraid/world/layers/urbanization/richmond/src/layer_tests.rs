@@ -5,7 +5,7 @@ use bevy::ecs::system::{RunSystemOnce, SystemState};
 use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::math::{Vec2, Vec3};
 use bevy::prelude::{
-	AssetPlugin, Camera3d, Entity, MinimalPlugins, NextState, OnExit, Transform, Visibility, World,
+	AssetPlugin, Camera3d, MinimalPlugins, NextState, OnExit, Transform, Visibility, World,
 };
 use bevy::state::app::StatesPlugin;
 use durham::{
@@ -19,7 +19,6 @@ use layer_stack::{
 	LayerModeConfig, Present, Scheme,
 };
 use lod::gen::{Id, LodGenerateBudget, LodGenerateRegion, SpatialIndex};
-use lod::lod_ref::LodRef;
 use lod::presentation::LodPresentKeepRegion;
 use procedural_common::{noise_params_from_scalar_str, NoiseParams};
 use terrain_layer_model::{HeightField, OnTerrain, TerrainExtent, TerrainStreaming, TerrainView};
@@ -261,14 +260,7 @@ fn insert_overlay_pad(
 	padded.res_2 = spec.res_2;
 	let bounds = padded.bounds();
 	let id = Id::from_cell(bounds);
-	let transform = Transform::IDENTITY;
-	let lod_ref = LodRef {
-		entity: Entity::PLACEHOLDER,
-		previous_transform: &transform,
-		current_transform: &transform,
-		bounds: &bounds,
-	};
-	SpatialIndex::<TerrainWithPads>::insert(&mut index, id, padded, bounds, &lod_ref);
+	SpatialIndex::<TerrainWithPads>::insert(&mut index, id, padded, bounds);
 }
 
 fn overlay_width_res(

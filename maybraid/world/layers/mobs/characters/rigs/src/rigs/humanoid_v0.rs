@@ -2,9 +2,9 @@ use bevy::prelude::*;
 
 use crate::{
 	authoring::{
-		humanoid_v0_definition, resolve_humanoid, HumanoidPose, PoseBuffer, PoseScratch,
-		RigBinding, HUMANOID_FEMUR_AXIS, HUMANOID_RIGHT_FEMUR_AXIS, HUMANOID_RIGHT_FLEX_AXIS,
-		HUMANOID_RIGHT_SHIN_AXIS, HUMANOID_SHIN_AXIS, HUMANOID_V0_BONES,
+		humanoid_v0_definition, resolve_humanoid, resolve_humanoid_masked, HumanoidPose,
+		PoseBuffer, PoseScratch, RigBinding, HUMANOID_FEMUR_AXIS, HUMANOID_RIGHT_FEMUR_AXIS,
+		HUMANOID_RIGHT_FLEX_AXIS, HUMANOID_RIGHT_SHIN_AXIS, HUMANOID_SHIN_AXIS, HUMANOID_V0_BONES,
 	},
 	humanoid::LegSegmentLengths,
 	BoneDefinition, BoneTable, Name, RiggedAxis,
@@ -56,6 +56,12 @@ impl HumanoidV0Rig {
 
 	pub fn write_pose(&mut self, pose: &HumanoidPose) {
 		resolve_humanoid(pose, &self.binding, &mut self.pose);
+		self.segment_lengths = self.binding.metrics.humanoid_leg;
+	}
+
+	/// Write `mask` bones from authored channels onto rest. Unmasked bones stay at rest.
+	pub fn apply_masked_pose(&mut self, pose: &HumanoidPose, mask: u32) {
+		resolve_humanoid_masked(pose, mask, &self.binding, &mut self.pose);
 		self.segment_lengths = self.binding.metrics.humanoid_leg;
 	}
 

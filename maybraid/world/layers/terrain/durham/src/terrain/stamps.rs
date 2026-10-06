@@ -15,12 +15,13 @@
 //! `ControllerLayout` → `ControllerCell` (cuts) → leaf `Id` → `StampCell`
 //!
 //! There is no stored guillotine-identity layer: a valid leaf [`lod::gen::Id`]
-//! down-levels to its cell. [`crate::terrain::Terrain`] pulls stamp cells
-//! directly (high-pass first, then low-pass).
+//! down-levels to its cell. [`crate::terrain::PreWatershedTerrain`] pulls
+//! stamp cells through `GeneratingSpatialIndex<StampCell>` (high-pass first,
+//! then low-pass); controllers and layouts never appear in its bounds.
 //!
 //! Modules:
 //! - [`configs`] — universal dual-band cut + stamp + likelihood params
-//! - [`shared`] — offset grids, cut helpers, leaf lookup, occupancy
+//! - [`shared`] — offset grids, cut helpers, leaf discovery, occupancy
 //! - [`plateau`] / [`massif`] / [`canyon`] / [`pocket_water`] / [`rolling`] /
 //!   [`valley`] — independent family stacks
 
@@ -39,7 +40,6 @@ pub mod valley;
 mod tests;
 
 pub use canyon::{
-	original_ids_for_canyon_high_pass_leaves, original_ids_for_canyon_low_pass_leaves,
 	BootstrapCanyonHighPassControllerLayout, BootstrapCanyonLowPassControllerLayout,
 	CanyonHighPassControllerCell, CanyonHighPassControllerLayout, CanyonHighPassStampCell,
 	CanyonLowPassControllerCell, CanyonLowPassControllerLayout, CanyonLowPassStampCell,
@@ -49,13 +49,11 @@ pub use configs::{
 };
 pub use layouts::StampControllerLayouts;
 pub use massif::{
-	original_ids_for_massif_high_pass_leaves, original_ids_for_massif_low_pass_leaves,
 	BootstrapMassifHighPassControllerLayout, BootstrapMassifLowPassControllerLayout,
 	MassifHighPassControllerCell, MassifHighPassControllerLayout, MassifHighPassStampCell,
 	MassifLowPassControllerCell, MassifLowPassControllerLayout, MassifLowPassStampCell,
 };
 pub use plateau::{
-	original_ids_for_plateau_high_pass_leaves, original_ids_for_plateau_low_pass_leaves,
 	BootstrapPlateauHighPassControllerLayout, BootstrapPlateauLowPassControllerLayout,
 	PlateauHighPassControllerCell, PlateauHighPassControllerLayout, PlateauHighPassStampCell,
 	PlateauLowPassControllerCell, PlateauLowPassControllerLayout, PlateauLowPassStampCell,
@@ -63,20 +61,18 @@ pub use plateau::{
 /// Compatibility alias: low-pass plateau layout (detail band).
 pub type PlateauControllerLayout = PlateauLowPassControllerLayout;
 pub use pocket_water::{
-	original_ids_for_pocket_water_high_pass_leaves, original_ids_for_pocket_water_low_pass_leaves,
 	BootstrapPocketWaterHighPassControllerLayout, BootstrapPocketWaterLowPassControllerLayout,
 	PocketWaterHighPassControllerCell, PocketWaterHighPassControllerLayout,
 	PocketWaterHighPassStampCell, PocketWaterLowPassControllerCell,
 	PocketWaterLowPassControllerLayout, PocketWaterLowPassStampCell,
 };
 pub use rolling::{
-	original_ids_for_rolling_high_pass_leaves, original_ids_for_rolling_low_pass_leaves,
 	BootstrapRollingHighPassControllerLayout, BootstrapRollingLowPassControllerLayout,
 	RollingHighPassControllerCell, RollingHighPassControllerLayout, RollingHighPassStampCell,
 	RollingLowPassControllerCell, RollingLowPassControllerLayout, RollingLowPassStampCell,
 };
+pub use shared::StampLeaf;
 pub use valley::{
-	original_ids_for_valley_high_pass_leaves, original_ids_for_valley_low_pass_leaves,
 	BootstrapValleyHighPassControllerLayout, BootstrapValleyLowPassControllerLayout,
 	ValleyHighPassControllerCell, ValleyHighPassControllerLayout, ValleyHighPassStampCell,
 	ValleyLowPassControllerCell, ValleyLowPassControllerLayout, ValleyLowPassStampCell,

@@ -1,8 +1,9 @@
 use bevy::prelude::*;
 use character_animations::{
 	animations::{
-		FixedTuck, Run, Squat, Tuck, TuckedFlip, TwoFootedJump, TwoFootedTuckedFlip, Walk,
-		DEFAULT_GRAVITY, DEFAULT_LANDING_SQUAT_SPEED, DEFAULT_PRE_SQUAT_SPEED,
+		FixedTuck, Run, Squat, SquatDescent, Tuck, TuckedFlip, TwoFootedJump, TwoFootedTuckedFlip,
+		Walk, DEFAULT_DESCENT_SPEED, DEFAULT_GRAVITY, DEFAULT_LANDING_SQUAT_SPEED,
+		DEFAULT_PRE_SQUAT_SPEED,
 	},
 	Animation, Effects,
 };
@@ -50,6 +51,7 @@ pub enum AnimationMode {
 	Run,
 	Walk,
 	Squat,
+	SquatDescent,
 	Jump,
 	Tuck,
 	FixedTuck,
@@ -209,6 +211,15 @@ pub fn animate_limbs(
 		AnimationMode::Squat => {
 			animate_squat(&config, &playback, &mut debug, &mut rig, &mut armature, &mut limbs, t)
 		}
+		AnimationMode::SquatDescent => animate_squat_descent(
+			&config,
+			&playback,
+			&mut debug,
+			&mut rig,
+			&mut armature,
+			&mut limbs,
+			t,
+		),
 		AnimationMode::Jump => {
 			animate_jump(&config, &playback, &mut debug, &mut rig, &mut armature, &mut limbs, t)
 		}
@@ -377,6 +388,36 @@ fn animate_squat(
 			let tip = rig.rotation(name) * Vec3::Y;
 			info!("[{name}] tip={}", character_rigs::debug::format_vec3(tip));
 		}
+	}
+
+	marshal_pose_to_limbs(&rig, limbs);
+}
+
+fn animate_squat_descent(
+	config: &CharacterConfig,
+	playback: &AnimationPlayback,
+	debug: &mut AnimationArticulationDebug,
+	rig: &mut Query<&mut HumanoidV0Rig, With<CharacterRig>>,
+	armature: &mut Query<&mut Transform, (With<CharacterRig>, Without<LimbAnimator>)>,
+	limbs: &mut Query<(&mut Transform, &LimbAnimator)>,
+	t: f32,
+) {
+	let Ok(mut rig) = rig.single_mut() else {
+		return;
+	};
+
+	marshal_limbs_into_pose(&mut rig, limbs, playback);
+	let descent = SquatDescent::default();
+	let progress = (t * DEFAULT_DESCENT_SPEED).clamp(0.0, 1.0);
+	let effects = descent.apply(&mut rig, progress);
+	apply_effects(config.transform, effects, armature);
+
+	if debug.0.should_log(t) {
+		info!(
+			"t={t:.2}s depth={:.3} femur.L={:.3}",
+			descent.depth(progress),
+			rig.posed_angle("femur.L"),
+		);
 	}
 
 	marshal_pose_to_limbs(&rig, limbs);

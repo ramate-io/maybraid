@@ -26,7 +26,9 @@ use world_player::{Player as VegetationPlayer, PlayerLifeSet, PlaygroundMode};
 
 use crate::control::{InventoryEditCameraFollow, WorldGameplayEnabled};
 use crate::player_lifecycle::WorldPlayerRespawnState;
-use crate::ui::project_mob_pin;
+use combat_hud::ScreenPin;
+
+use crate::ui::HUD_MARGIN;
 
 pub const DEFAULT_MAP_HEIGHT: f32 = 420.0;
 const MIN_MAP_HEIGHT: f32 = 80.0;
@@ -1435,7 +1437,8 @@ fn sync_map_player_marker(
 		hide_player_markers(&mut markers);
 		return;
 	};
-	let Some((screen, _)) = project_mob_pin(camera, camera_transform, pin_world(&surface, xz))
+	let Some((screen, _)) =
+		ScreenPin::project(camera, camera_transform, pin_world(&surface, xz), HUD_MARGIN)
 	else {
 		hide_player_markers(&mut markers);
 		return;
@@ -1518,7 +1521,8 @@ fn sync_map_death_bones(
 		hide_death_bones(&mut markers);
 		return;
 	};
-	let Some((screen, _)) = project_mob_pin(camera, camera_transform, pin_world(&surface, xz))
+	let Some((screen, _)) =
+		ScreenPin::project(camera, camera_transform, pin_world(&surface, xz), HUD_MARGIN)
 	else {
 		hide_death_bones(&mut markers);
 		return;

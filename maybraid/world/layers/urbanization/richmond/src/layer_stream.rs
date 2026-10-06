@@ -9,7 +9,6 @@ use lod::gen::{
 	GeneratingSpatialIndex, Id, LodGenerateBudget, LodGenerateKeepRegion, LodGenerateQueue,
 	LodGenerateRegion, MaterializeStatus, SpatialIndex, StorageStatus,
 };
-use lod::lod_ref::LodRef;
 use lod::presentation::{LodPresentKeepRegion, LodPresentRegion};
 use lod::{
 	LodGeneratePlugin, LodGenerateRegionPlugin, LodGenerateSystems, LodJobCounter,
@@ -275,14 +274,6 @@ pub fn generate_urbanization_developments<Mode: GenerationMode, G: RichmondGroun
 		development.urbanization.kind = spec.kind;
 	}
 
-	let identity = Transform::IDENTITY;
-	let lod_ref = LodRef {
-		entity: Entity::PLACEHOLDER,
-		previous_transform: &identity,
-		current_transform: &identity,
-		bounds: &region,
-	};
-
 	let mut created = 0usize;
 	let cap = budget.ids_per_frame.max(1) as usize;
 	let urbanization_ids: Vec<Id> =
@@ -311,7 +302,6 @@ pub fn generate_urbanization_developments<Mode: GenerationMode, G: RichmondGroun
 				if GeneratingSpatialIndex::<DevelopmentCell>::get_or_generate(
 					&mut development,
 					leaf_id,
-					&lod_ref,
 				)
 				.is_none()
 				{
@@ -332,7 +322,6 @@ pub fn generate_urbanization_developments<Mode: GenerationMode, G: RichmondGroun
 			if GeneratingSpatialIndex::<BuiltDevelopment>::get_or_generate(
 				&mut development,
 				leaf_id,
-				&lod_ref,
 			) == Some(MaterializeStatus::Created)
 			{
 				created += 1;
@@ -370,19 +359,8 @@ pub(crate) fn generate_richmond_padded_terrain<G: RichmondGround>(
 	if removed == 0 && last.as_ref() == Some(&key) {
 		return;
 	}
-	let identity = Transform::IDENTITY;
-	let lod_ref = LodRef {
-		entity: Entity::PLACEHOLDER,
-		previous_transform: &identity,
-		current_transform: &identity,
-		bounds: &region,
-	};
 	for id in G::terrain_ids_overlapping(&development.ground, region) {
-		let _ = GeneratingSpatialIndex::<TerrainWithPads>::get_or_generate(
-			&mut development,
-			id,
-			&lod_ref,
-		);
+		let _ = GeneratingSpatialIndex::<TerrainWithPads>::get_or_generate(&mut development, id);
 	}
 	*last = Some(PaddedTerrainTickKey {
 		region,
