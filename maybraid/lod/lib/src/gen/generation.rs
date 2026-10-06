@@ -68,6 +68,22 @@ pub trait GeneratingSpatialIndex<T>: SpatialIndex<T> {
 		self.get(id)
 	}
 
+	/// Visits each origin of `T` in `region` in id order, materializing one at
+	/// a time. Stops with `None` at the first origin that fails to build.
+	fn for_each_origin(
+		&mut self,
+		region: Aabb3d,
+		lod_ref: &LodRef,
+		mut visit: impl FnMut(&T),
+	) -> Option<()> {
+		let mut ids = GeneratingSpatialIndex::<T>::original_ids_for(self, region);
+		ids.sort();
+		for OriginalId(id) in ids {
+			visit(GeneratingSpatialIndex::<T>::get_one_or_generate(self, id, lod_ref)?);
+		}
+		Some(())
+	}
+
 	/// Materializes everything originating or tracked in the region and
 	/// returns the ids with their bounds.
 	fn get_or_generate_region(&mut self, region: Aabb3d, lod_ref: &LodRef) -> Vec<(Id, Aabb3d)>;

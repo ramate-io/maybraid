@@ -10,7 +10,6 @@ pub mod band_macro;
 pub mod bog;
 pub mod config;
 pub mod correction;
-pub mod height;
 pub mod high_pass;
 pub mod lake;
 pub mod leaf_kind;

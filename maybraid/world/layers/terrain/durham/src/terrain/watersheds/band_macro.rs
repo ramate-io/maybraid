@@ -78,6 +78,12 @@ macro_rules! define_marazion_band {
 
 		$crate::terrain::cell::universal_bootstrap_scheme!($Layout, $Bootstrap::$bootstrap_fn);
 
+		impl $crate::terrain::cell::CellTiling for $Layout {
+			fn cell_ids(&self, region: bevy::math::bounding::Aabb3d) -> Vec<lod::gen::OriginalId> {
+				self.grid.cell_ids(region)
+			}
+		}
+
 		#[derive(Debug, Clone, bevy::prelude::Component)]
 		pub struct $PreCell {
 			pub cell: bevy::math::bounding::Aabb3d,
@@ -110,10 +116,9 @@ macro_rules! define_marazion_band {
 				spatial_index: &mut S,
 				region: bevy::math::bounding::Aabb3d,
 			) -> Vec<lod::gen::OriginalId> {
-				$crate::terrain::stamps::shared::original_ids_for_controller_cells::<S, $Layout>(
+				<$Layout as $crate::terrain::cell::CellTiling>::original_cell_ids_for(
 					spatial_index,
 					region,
-					|layout| &layout.grid,
 				)
 			}
 
@@ -159,7 +164,7 @@ macro_rules! define_marazion_band {
 				spatial_index: &mut S,
 				region: bevy::math::bounding::Aabb3d,
 			) -> Vec<lod::gen::OriginalId> {
-				$crate::terrain::stamps::shared::original_ids_for_leaves::<S, $PreCell>(
+				<$PreCell as $crate::terrain::stamps::shared::LeafAabbs>::original_leaf_ids_for(
 					spatial_index,
 					region,
 				)
@@ -221,7 +226,7 @@ macro_rules! define_marazion_band {
 		}
 
 		// `PreWatershedTerrain` + `TerrainCellLayout` back the live height
-		// sampler (`pre_watershed_height_at`) used while authoring.
+		// sampler (`PreWatershedTerrain::sample_height`) used while authoring.
 		impl<S> lod::gen::GenerationScheme<S> for $PocketWaters
 		where
 			S: lod::gen::GeneratingSpatialIndex<$Pocket>
@@ -234,7 +239,7 @@ macro_rules! define_marazion_band {
 				spatial_index: &mut S,
 				region: bevy::math::bounding::Aabb3d,
 			) -> Vec<lod::gen::OriginalId> {
-				$crate::terrain::stamps::shared::original_ids_for_leaves::<S, $Pocket>(
+				<$Pocket as $crate::terrain::stamps::shared::LeafAabbs>::original_leaf_ids_for(
 					spatial_index,
 					region,
 				)
@@ -281,7 +286,7 @@ macro_rules! define_marazion_band {
 				// land in a different terrain origin cell.
 				let spatial_index = std::cell::RefCell::new(spatial_index);
 				let height_fn = |x: f32, z: f32| {
-					$crate::terrain::watersheds::height::pre_watershed_height_at(
+					$crate::terrain::PreWatershedTerrain::sample_height(
 						*spatial_index.borrow_mut(),
 						x,
 						z,

@@ -549,7 +549,7 @@ fn present_cells(
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::terrain::cell::origin_cell_ids_for_layout;
+	use crate::terrain::cell::CellTiling;
 	use crate::terrain::index::TerrainEntryStore;
 	use crate::DurhamTerrainConfig;
 
@@ -572,7 +572,7 @@ mod tests {
 		assert!(layout.stream_rings[0].seeds_collision());
 		assert!(!layout.stream_rings[1].seeds_collision());
 		assert!(!layout.stream_rings[2].seeds_collision());
-		let ids = origin_cell_ids_for_layout(&layout, layout.request_region());
+		let ids = layout.cell_ids(layout.request_region());
 		assert!(!ids.is_empty());
 	}
 
@@ -617,7 +617,7 @@ mod tests {
 		let size = TERRAIN_CELL_SIZE;
 		assert!(layout.recenter_on_xz(Vec3::X * 20.0 * size));
 		assert_eq!(layout.origin, IVec2::new(12, -WORLD_FINE_HALF_EXTENT_CELLS));
-		let ids = origin_cell_ids_for_layout(&layout, layout.request_region());
+		let ids = layout.cell_ids(layout.request_region());
 		assert!(!ids.is_empty());
 	}
 

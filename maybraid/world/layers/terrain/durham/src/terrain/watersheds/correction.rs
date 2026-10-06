@@ -8,7 +8,7 @@
 //!   → Terrain applies HydroComplex (internal carve → rim → apron)
 //! ```
 
-use crate::terrain::cell::{original_ids_for_origin_cells, TerrainCellLayout};
+use crate::terrain::cell::{CellTiling, TerrainCellLayout};
 use crate::terrain::watersheds::config::WatershedConfigs;
 use crate::terrain::watersheds::high_pass::PocketWatersHighPass;
 use crate::terrain::watersheds::low_pass::PocketWatersLowPass;
@@ -53,7 +53,7 @@ where
 		+ GeneratingSpatialIndex<PocketWatersLowPass>,
 {
 	fn original_ids_for(spatial_index: &mut S, region: Aabb3d) -> Vec<OriginalId> {
-		original_ids_for_origin_cells(spatial_index, region)
+		TerrainCellLayout::original_cell_ids_for(spatial_index, region)
 	}
 
 	fn build_with_id(spatial_index: &mut S, id: Id, lod_ref: &LodRef) -> Option<(Self, Aabb3d)> {

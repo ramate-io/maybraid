@@ -260,7 +260,7 @@ fn apply_mesh_stats(
 mod tests {
 	use super::*;
 	use bevy::math::{IVec2, UVec2};
-	use durham::{origin_cell_ids_for_layout, TerrainCellLayout, TERRAIN_CELL_SIZE};
+	use durham::{CellTiling, TerrainCellLayout, TERRAIN_CELL_SIZE};
 
 	fn cell_layout(half_extent: i32) -> TerrainCellLayout {
 		let r = half_extent.max(1);
@@ -275,7 +275,7 @@ mod tests {
 	#[test]
 	fn default_patch_is_two_cell_radius() {
 		let layout = cell_layout(DEFAULT_TERRAIN_RADIUS);
-		let ids = origin_cell_ids_for_layout(&layout, layout.request_region());
+		let ids = layout.cell_ids(layout.request_region());
 		assert_eq!(ids.len(), 16);
 	}
 

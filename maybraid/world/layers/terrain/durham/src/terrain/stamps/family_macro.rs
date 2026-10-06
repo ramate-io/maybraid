@@ -85,6 +85,12 @@ macro_rules! define_stamp_family {
 			$BootstrapLayout::$bootstrap_layout_fn
 		);
 
+		impl $crate::terrain::cell::CellTiling for $Layout {
+			fn cell_ids(&self, region: bevy::math::bounding::Aabb3d) -> Vec<lod::gen::OriginalId> {
+				self.grid.cell_ids(region)
+			}
+		}
+
 		/// Controller cell: owns this band's guillotine cuts.
 		#[derive(Debug, Clone, bevy::prelude::Component)]
 		pub struct $Controller {
@@ -118,10 +124,9 @@ macro_rules! define_stamp_family {
 				spatial_index: &mut S,
 				region: bevy::math::bounding::Aabb3d,
 			) -> Vec<lod::gen::OriginalId> {
-				$crate::terrain::stamps::shared::original_ids_for_controller_cells::<S, $Layout>(
+				<$Layout as $crate::terrain::cell::CellTiling>::original_cell_ids_for(
 					spatial_index,
 					region,
-					|layout| &layout.grid,
 				)
 			}
 
@@ -168,7 +173,7 @@ macro_rules! define_stamp_family {
 				spatial_index: &mut S,
 				region: bevy::math::bounding::Aabb3d,
 			) -> Vec<lod::gen::OriginalId> {
-				$crate::terrain::stamps::shared::original_ids_for_leaves::<S, $Controller>(
+				<$Controller as $crate::terrain::stamps::shared::LeafAabbs>::original_leaf_ids_for(
 					spatial_index,
 					region,
 				)

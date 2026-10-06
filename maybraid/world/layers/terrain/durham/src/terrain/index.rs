@@ -2,8 +2,7 @@
 
 use crate::terrain::base_noise::BaseTerrainNoise;
 use crate::terrain::cell::{
-	cell_bounds, origin_cell_ids_for_layout, universal_bounds, BootstrapTerrainCellLayout,
-	TerrainCellLayout,
+	cell_bounds, universal_bounds, BootstrapTerrainCellLayout, CellTiling, TerrainCellLayout,
 };
 use crate::terrain::presentation::{BootstrapTerrainPresentationAssets, TerrainPresentationAssets};
 use crate::terrain::stamps::{
@@ -253,7 +252,8 @@ impl TerrainEntryStore {
 	/// Every origin cell of `layout`'s request window is stored. Generation
 	/// admits a few cells per frame, so a stamp read earlier misses the rest.
 	pub fn fills_layout(&self, layout: &TerrainCellLayout) -> bool {
-		origin_cell_ids_for_layout(layout, layout.request_region())
+		layout
+			.cell_ids(layout.request_region())
 			.into_iter()
 			.all(|OriginalId(id)| self.terrain.contains_key(&id))
 	}

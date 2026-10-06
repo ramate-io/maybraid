@@ -69,6 +69,28 @@ fn original_ids_delegate_to_scheme_without_materializing() -> Result<()> {
 }
 
 #[test]
+fn for_each_origin_visits_sorted_origins_and_materializes_them() -> Result<()> {
+	let mut index = WorldIndex::default();
+	let region = cell(2.0);
+	let lod = TestLod::new(region);
+	let mut expected = GeneratingSpatialIndex::<Terrain>::original_ids_for(&mut index, region);
+	expected.sort();
+
+	let mut visited = Vec::new();
+	GeneratingSpatialIndex::<Terrain>::for_each_origin(&mut index, region, &lod.lod_ref(), |t| {
+		visited.push(OriginalId(Id::from_cell(t.cell)));
+	})
+	.ok_or_else(|| anyhow!("an origin failed to build"))?;
+
+	assert_eq!(visited, expected);
+	for OriginalId(id) in &expected {
+		assert!(SpatialIndex::<Terrain>::get(&index, *id).is_some(), "{id:?} not materialized");
+	}
+
+	Ok(())
+}
+
+#[test]
 fn region_generation_builds_fresh_origin_ids() -> Result<()> {
 	let mut index = WorldIndex::default();
 	let region = cell(2.0);

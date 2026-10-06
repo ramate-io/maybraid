@@ -426,7 +426,7 @@ fn present_cells(
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use durham::origin_cell_ids_for_layout;
+	use durham::CellTiling;
 
 	#[test]
 	fn playground_fine_grid_is_twenty_four_cells() {
@@ -437,7 +437,7 @@ mod tests {
 	#[test]
 	fn playground_origin_cells_cover_fine_disk_plus_macro_rings() {
 		let layout = playground_cell_layout();
-		let ids = origin_cell_ids_for_layout(&layout, layout.request_region());
+		let ids = layout.cell_ids(layout.request_region());
 		assert_eq!(ids.len(), 48 * 48 + 448 + 144);
 	}
 }
