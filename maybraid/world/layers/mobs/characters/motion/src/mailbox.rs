@@ -12,7 +12,7 @@ use bevy::ecs::query::{Has, Or};
 use bevy::prelude::*;
 use character_animations::{
 	animations::{
-		Idle, Jab, Prone, QuadrupedIdle, QuadrupedLeap, QuadrupedRun, Squat, Tuck,
+		Idle, Jab, Prone, QuadrupedIdle, QuadrupedLeap, QuadrupedRun, Squat, SquatDescent, Tuck,
 		TwoFootedTuckedFlip, UprightLeap,
 	},
 	Animation, Effects,
@@ -732,6 +732,13 @@ fn sample_humanoid(
 			write_effects,
 		),
 		AnimClip::Squat => sample_split(&Squat::held(), rig, progress, write_bones, write_effects),
+		AnimClip::SquatDescent => sample_split(
+			&SquatDescent::default(),
+			rig,
+			progress.clamp(0.0, 1.0),
+			write_bones,
+			write_effects,
+		),
 		AnimClip::Prone => {
 			sample_split(&Prone::default(), rig, progress, write_bones, write_effects)
 		}
@@ -890,6 +897,26 @@ mod tests {
 		assert!(rig.posed_angle("shoulder.L") > 0.0);
 		assert!(rig.posed_angle("shoulder.L") < 0.15);
 		assert!(rig.posed_angle("humerus.L") > 0.2, "Still should hang the arms");
+	}
+
+	#[test]
+	fn squat_descent_matches_held_squat_at_full_depth() -> anyhow::Result<()> {
+		use anyhow::anyhow;
+		let mut descent = HumanoidV0Rig::for_clip_test();
+		let mut held = HumanoidV0Rig::for_clip_test();
+		sample_humanoid(AnimClip::squat_descent(), &mut descent, 1.0, true, true);
+		sample_humanoid(AnimClip::squat(), &mut held, 1.0, true, true);
+		for name in descent.animation_bone_names() {
+			let a = descent.rotation(name);
+			let b = held.rotation(name);
+			if a.dot(b).abs() < 1.0 - 1e-5 {
+				return Err(anyhow!("descent end must match held squat on {name}"));
+			}
+		}
+		let mut mid = HumanoidV0Rig::for_clip_test();
+		sample_humanoid(AnimClip::squat_descent(), &mut mid, 0.5, true, true);
+		assert!(mid.posed_angle("femur.L") > 0.15, "mid descent should fold hips");
+		Ok(())
 	}
 
 	#[test]
