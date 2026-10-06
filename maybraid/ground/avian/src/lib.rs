@@ -7,19 +7,19 @@
 //! ground; among the rest, the **lowest** hit wins so a tree canopy cannot
 //! steal the Durham trimesh.
 
-pub mod column_skip;
-
 use avian3d::prelude::{SpatialQuery, SpatialQueryFilter};
 use bevy::ecs::entity::Entity;
 use bevy::ecs::system::SystemParam;
 use bevy::math::{Dir3, Vec3};
-use column_skip::{ColumnSkipBuffer, MAX_COLUMN_HITS};
 use ground::{ElevationProbe, GroundHit};
 use lod_avian::PhysicsInteractionLayer;
 
 /// Matches `character_motion::PROBE_LIFT`: pitch rays start this far
 /// above the body. Hits closer than this are canopy / solid-start volumes.
 pub const MIN_GROUND_DROP: f32 = 2.0;
+
+/// Grove tiles and overlapping High-band plants on one plumb line.
+const MAX_COLUMN_HITS: usize = 8;
 
 /// [`SystemParam`] Avian implementation of [`ElevationProbe`].
 ///
@@ -44,17 +44,14 @@ impl ElevationProbe for AvianElevationProbe<'_, '_> {
 		if max_distance <= 0.0 {
 			return None;
 		}
-		let mut skipped = ColumnSkipBuffer::from_exclude(exclude);
+		let mut filter = fixed_filter(exclude.iter().copied());
 		let mut best: Option<GroundHit> = None;
 		for _ in 0..MAX_COLUMN_HITS {
-			let filter = fixed_filter(skipped.iter());
 			let Some(hit) = self.spatial.cast_ray(origin, Dir3::NEG_Y, max_distance, true, &filter)
 			else {
 				break;
 			};
-			if !skipped.push(hit.entity) {
-				break;
-			}
+			filter.excluded_entities.insert(hit.entity);
 			if hit.distance < MIN_GROUND_DROP {
 				continue;
 			}

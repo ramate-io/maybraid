@@ -6,8 +6,8 @@ use crate::gen::tests::test_utils::{
 	cell, span, RecordingPresenter, Terrain, Vegetation, WorldIndex,
 };
 use crate::gen::{GeneratingSpatialIndex, Id, LodGenerated, RegionPresenter, Version};
-use crate::lod_ref::{LodNode, LodNodePose, LodRef};
 use crate::jobs::LodJobCounter;
+use crate::lod_ref::{LodNode, LodNodePose, LodRef};
 use crate::presentation::{
 	LodPresentBudget, LodPresentCullBudget, LodPresentCullPlugin, LodPresentGate,
 	LodPresentKeepRegion, LodPresentPlugin, LodPresentQueue, LodPresentRegion,
