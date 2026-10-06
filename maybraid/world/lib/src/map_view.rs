@@ -13,11 +13,11 @@ use menu_components::{
 	MAP_MOUNTAIN_ICON, MAP_TOWN_ICON, MAP_TREE_ICON, MAP_WATER_ICON, NOTO_SANS_REGULAR,
 	TEXT_SALMON, TEXT_YELLOW, TEXT_YELLOW_FAINT,
 };
+use mob_characters::{LOCAL_POI, SALOON_POI, URBAN_POI, VEGETATION_POI};
 use player::CameraFollow;
 use player_camera::{
 	CameraController, CameraLookSuppressed, CameraPovLocked, FollowCamera, PlayerCameraSystems,
 };
-use mob_characters::{LOCAL_POI, SALOON_POI, URBAN_POI, VEGETATION_POI};
 use poi_intelligence::{PoiId, PoiKind, PoiRecord, PoiRegistry};
 use richmond::{DiscoverablePlace, Richmond};
 use terrain_layer_model::{OnTerrain, TerrainView};
@@ -26,7 +26,9 @@ use world_player::{Player as VegetationPlayer, PlayerLifeSet, PlaygroundMode};
 
 use crate::control::{InventoryEditCameraFollow, WorldGameplayEnabled};
 use crate::player_lifecycle::WorldPlayerRespawnState;
-use crate::ui::project_mob_pin;
+use combat_hud::ScreenPin;
+
+use crate::ui::HUD_MARGIN;
 
 pub const DEFAULT_MAP_HEIGHT: f32 = 420.0;
 const MIN_MAP_HEIGHT: f32 = 80.0;
@@ -494,7 +496,8 @@ fn sync_map_name_pins(
 	let highlighted = presentation.highlighted;
 	let mut assigned = Vec::new();
 	for (pin_entity, pin, mut node, mut text, mut font, mut color, mut visibility) in &mut pins {
-		let Some(presented) = presentation.pins.iter().find(|pin_wanted| pin_wanted.wanted.id == pin.target)
+		let Some(presented) =
+			presentation.pins.iter().find(|pin_wanted| pin_wanted.wanted.id == pin.target)
 		else {
 			commands.entity(pin_entity).despawn();
 			continue;
@@ -910,7 +913,9 @@ fn overlay_name_for_poi<'a>(
 	overlay
 		.names
 		.iter()
-		.filter(|name| name_covers_poi(name, xz, place_r) && name_kind_matches_poi(name.key, poi.kind))
+		.filter(|name| {
+			name_covers_poi(name, xz, place_r) && name_kind_matches_poi(name.key, poi.kind)
+		})
 		.min_by(|a, b| {
 			poi_name_rank(a.key)
 				.cmp(&poi_name_rank(b.key))
@@ -1284,8 +1289,7 @@ fn sync_map_edge_arrows(
 	};
 	let mut assigned = Vec::new();
 	for (entity, arrow, mut node, mut transform, mut visibility) in &mut arrows {
-		let Some(presented) =
-			presentation.pins.iter().find(|pin| pin.wanted.id == arrow.target)
+		let Some(presented) = presentation.pins.iter().find(|pin| pin.wanted.id == arrow.target)
 		else {
 			commands.entity(entity).despawn();
 			continue;
@@ -1372,7 +1376,8 @@ fn sync_map_player_marker(
 		hide_player_markers(&mut markers);
 		return;
 	};
-	let Some((screen, _)) = project_mob_pin(camera, camera_transform, pin_world(&surface, xz))
+	let Some((screen, _)) =
+		ScreenPin::project(camera, camera_transform, pin_world(&surface, xz), HUD_MARGIN)
 	else {
 		hide_player_markers(&mut markers);
 		return;
@@ -1455,7 +1460,8 @@ fn sync_map_death_bones(
 		hide_death_bones(&mut markers);
 		return;
 	};
-	let Some((screen, _)) = project_mob_pin(camera, camera_transform, pin_world(&surface, xz))
+	let Some((screen, _)) =
+		ScreenPin::project(camera, camera_transform, pin_world(&surface, xz), HUD_MARGIN)
 	else {
 		hide_death_bones(&mut markers);
 		return;
@@ -2020,10 +2026,7 @@ mod tests {
 			],
 			..Default::default()
 		};
-		assert_eq!(
-			label_for_poi(&building, &overlay, Some(key)),
-			"Amber House\nAmber House"
-		);
+		assert_eq!(label_for_poi(&building, &overlay, Some(key)), "Amber House\nAmber House");
 		assert_eq!(
 			label_for_poi(&test_poi(Vec2::new(10.0, 6.0)), &overlay, None),
 			"Oak Stand\nGreen Grove"

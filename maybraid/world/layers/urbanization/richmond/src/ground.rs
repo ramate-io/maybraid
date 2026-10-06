@@ -3,8 +3,7 @@
 use bevy::ecs::system::{ReadOnlySystemParam, Res, SystemParam, SystemParamItem};
 use bevy::math::bounding::Aabb3d;
 use durham::{
-	origin_cell_ids_for_layout, Durham, Terrain, TerrainCellLayout, TerrainEntryStore,
-	TerrainMeshBuilder, Water,
+	CellTiling, Durham, Terrain, TerrainCellLayout, TerrainEntryStore, TerrainMeshBuilder, Water,
 };
 use lod::gen::{Id, OriginalId, Version};
 use procedural_common::Bounds2;
@@ -70,7 +69,7 @@ impl RichmondGround for OnTerrain<Durham> {
 		read: &SystemParamItem<'_, '_, Self::GroundRead>,
 		region: Aabb3d,
 	) -> Vec<OriginalId> {
-		origin_cell_ids_for_layout(&read.layout, region)
+		read.layout.cell_ids(region)
 	}
 
 	fn stored_cell<'a>(

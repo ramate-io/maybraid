@@ -8,13 +8,13 @@ pub mod water;
 
 pub use terrain::render::cascade_chunk_for_cell;
 pub use terrain::{
-	fine_patch_cell_layout, origin_cell_ids_for_layout, playable_world_cell_layout,
-	register_terrain_plugin, retarget_presentation_assets, stream_banded_draws,
-	stream_banded_level, stream_banded_scene, terrain_collider_covers_xz, AvianTerrainIndex,
-	BaseTerrainNoise, CanyonHighPassControllerLayout, CanyonLowPassControllerLayout,
-	CanyonStampCell, CascadeChunk, ComposedTerrain, Durham, DurhamCells, DurhamHeightSnapshot,
-	DurhamRead, DurhamTerrainConfig, GeographicBand, GeographicFamily, GeographicFeature,
-	GeographicFeatureId, GeographicFeatureKind, MacroCellLayout, MassifHighPassControllerLayout,
+	fine_patch_cell_layout, playable_world_cell_layout, register_terrain_plugin,
+	retarget_presentation_assets, stream_banded_draws, stream_banded_level, stream_banded_scene,
+	terrain_collider_covers_xz, AvianTerrainIndex, BaseTerrainNoise,
+	CanyonHighPassControllerLayout, CanyonLowPassControllerLayout, CanyonStampCell, CascadeChunk,
+	CellTiling, ComposedTerrain, Durham, DurhamCells, DurhamHeightSnapshot, DurhamRead,
+	DurhamTerrainConfig, GeographicBand, GeographicFamily, GeographicFeature, GeographicFeatureId,
+	GeographicFeatureKind, MacroCellLayout, MassifHighPassControllerLayout,
 	MassifLowPassControllerLayout, MassifStampCell, OuterCellRing, PlateauControllerLayout,
 	PlateauHighPassControllerLayout, PlateauLowPassControllerLayout, PlateauStampCell,
 	PocketWaterHighPassControllerLayout, PocketWaterLowPassControllerLayout, PocketWaterStampCell,

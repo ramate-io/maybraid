@@ -2,8 +2,9 @@
 
 use bevy::prelude::*;
 
-use crate::composition::LobeSpec;
+use crate::composition::{LobeKind, LobeSpec};
 use crate::lobe_material::LobeMaterial;
+use crate::lobe_instances::LobeInstancePack;
 use crate::seed::{signed_salted, stream};
 
 /// Low-poly icosphere with vertex colors holding object-space positions.
@@ -60,18 +61,21 @@ pub struct VfxLobe {
 	pub playback: f32,
 }
 
-/// Temporary holder so [`stamp_lobe_materials`] can add the asset after spawn.
-#[derive(Component)]
-pub struct LobeMaterialSlot(pub LobeMaterial);
+/// Assigns a shared blend/add material handle once the instance pack exists.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct LobeMaterialPending(pub LobeKind);
 
 pub fn stamp_lobe_materials(
 	mut commands: Commands,
-	mut materials: ResMut<Assets<LobeMaterial>>,
-	pending: Query<(Entity, &LobeMaterialSlot)>,
+	pack: Option<Res<LobeInstancePack>>,
+	pending: Query<(Entity, &LobeMaterialPending), Without<MeshMaterial3d<LobeMaterial>>>,
 ) {
-	for (entity, slot) in &pending {
-		let handle = materials.add(slot.0.clone());
-		commands.entity(entity).insert(MeshMaterial3d(handle)).remove::<LobeMaterialSlot>();
+	let Some(pack) = pack else {
+		return;
+	};
+	for (entity, pending) in &pending {
+		let material = pack.material_for(pending.0);
+		commands.entity(entity).insert(MeshMaterial3d(material)).remove::<LobeMaterialPending>();
 	}
 }
 
