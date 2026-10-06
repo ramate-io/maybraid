@@ -67,6 +67,11 @@ impl Salute {
 	}
 
 	/// Character-space humerus length direction for the saluting arm.
+	///
+	/// [`ArmAim::along`] is a character-space direction; [`resolve_humanoid`] does
+	/// not mirror it per side (it only picks the humerus bone and converts through
+	/// the shoulder parent). Lateral inboard matches [`Jab::humerus_lateral`]: left
+	/// → −X, right → +X.
 	pub fn humerus_along(&self, progress: f32) -> Vec3 {
 		let amount = self.salute_amount(progress);
 		let inboard = -self.side.sign() * HUMERUS_INBOARD;

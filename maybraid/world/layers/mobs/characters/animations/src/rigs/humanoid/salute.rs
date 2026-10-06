@@ -2,7 +2,6 @@
 
 use character_rigs::authoring::{ArmAim, HumanoidPose};
 use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
-use character_rigs::Side;
 
 use crate::animations::Salute;
 use crate::rigs::humanoid::apply::apply_neck_twisted;
@@ -42,6 +41,7 @@ impl Animation<HumanoidV0Rig> for Salute {
 #[cfg(test)]
 mod tests {
 	use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
+	use character_rigs::Side;
 
 	use super::*;
 	use crate::Animation;
@@ -97,27 +97,33 @@ mod tests {
 	}
 
 	#[test]
-	fn salute_raises_forearm_tip_at_peak() -> anyhow::Result<()> {
-		let salute = Salute::default().with_side(Side::Right);
-		let rest = HumanoidV0Rig::for_clip_test();
-		let mut posed = HumanoidV0Rig::for_clip_test();
-		salute.apply(&mut posed, peak());
+	fn salute_forearm_tip_moves_inboard_up_without_crossing_midline() -> anyhow::Result<()> {
+		for side in [Side::Right, Side::Left] {
+			let bone = format!("forearm.{}", side.suffix());
+			let rest = HumanoidV0Rig::for_clip_test();
+			let mut posed = HumanoidV0Rig::for_clip_test();
+			Salute::default().with_side(side).apply(&mut posed, peak());
 
-		let rest_tip = rest.character_point("forearm.R");
-		let posed_tip = posed.character_point("forearm.R");
-		assert!(
-			posed_tip.y > rest_tip.y + 0.15,
-			"forearm tip rises to brow, {posed_tip:?} vs {rest_tip:?}"
-		);
-		assert!(
-			posed_tip.x > rest_tip.x + 0.05,
-			"right salute moves inboard (+X), {posed_tip:?} vs {rest_tip:?}"
-		);
+			let rest_tip = rest.character_point(&bone);
+			let posed_tip = posed.character_point(&bone);
+			assert!(
+				posed_tip.y > rest_tip.y + 0.15,
+				"{side:?} forearm rises to brow, {posed_tip:?} vs {rest_tip:?}"
+			);
+			assert!(
+				posed_tip.x.abs() < rest_tip.x.abs() - 0.05,
+				"{side:?} forearm moves toward centerline, |x| {rest_tip:?} -> {posed_tip:?}"
+			);
+			assert!(
+				posed_tip.x.signum() == rest_tip.x.signum(),
+				"{side:?} forearm must not cross midline, {posed_tip:?} vs {rest_tip:?}"
+			);
+		}
 		Ok(())
 	}
 
 	#[test]
-	fn salute_mirrors_forearm_inboard_for_left_side() -> anyhow::Result<()> {
+	fn salute_mirrors_forearm_height_for_both_sides() -> anyhow::Result<()> {
 		let right = Salute::default().with_side(Side::Right);
 		let left = Salute::default().with_side(Side::Left);
 		let mut r = HumanoidV0Rig::for_clip_test();
@@ -127,7 +133,6 @@ mod tests {
 
 		let r_tip = r.character_point("forearm.R");
 		let l_tip = l.character_point("forearm.L");
-		assert!(r_tip.x < 0.0 && l_tip.x > 0.0, "brow tips cross the sagittal plane: {r_tip:?} {l_tip:?}");
 		assert!((r_tip.x + l_tip.x).abs() < 0.02, "mirrored brow placement {r_tip:?} {l_tip:?}");
 		assert!((r_tip.y - l_tip.y).abs() < 0.08, "matched height {r_tip:?} {l_tip:?}");
 		Ok(())

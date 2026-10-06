@@ -71,7 +71,10 @@ fn salute_lifts_the_forearm_tip_inboard_and_up() {
 	let rest_tip = rest.character_point("forearm.R");
 	let posed_tip = posed.character_point("forearm.R");
 	assert!(posed_tip.y > rest_tip.y + 0.12, "salute raises the hand, {posed_tip:?}");
-	assert!(posed_tip.x > rest_tip.x + 0.04, "salute moves inboard, {posed_tip:?}");
+	assert!(
+		posed_tip.x.abs() < rest_tip.x.abs() - 0.04,
+		"salute moves toward centerline, {posed_tip:?} vs {rest_tip:?}"
+	);
 }
 
 #[test]
