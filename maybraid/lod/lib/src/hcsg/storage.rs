@@ -355,7 +355,7 @@ impl<T: HcsgNode> SpatialIndex<T> for HcsgStorage {
 	}
 
 	fn membership_revision(&self) -> u64 {
-		self.store::<T>().map_or(self.next_version, NodeStore::membership_revision)
+		self.store::<T>().map_or(0, NodeStore::membership_revision)
 	}
 
 	fn insert(&mut self, id: Id, value: T, bounds: Aabb3d) {

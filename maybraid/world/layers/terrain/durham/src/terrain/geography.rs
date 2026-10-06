@@ -212,6 +212,33 @@ pub(crate) fn geographic_features_overlapping(
 	}
 }
 
+/// Latest membership change among the stores [`geographic_features_overlapping`]
+/// reads. Writes to any other type, inside Durham or not, leave it unchanged.
+pub(crate) fn geography_revision(storage: &HcsgStorage) -> u64 {
+	fn revision<T: HcsgNode>(storage: &HcsgStorage) -> u64 {
+		storage.store::<T>().map_or(0, |store| store.membership_revision())
+	}
+	[
+		revision::<MassifHighPassStampCell>(storage),
+		revision::<MassifLowPassStampCell>(storage),
+		revision::<PlateauHighPassStampCell>(storage),
+		revision::<PlateauLowPassStampCell>(storage),
+		revision::<CanyonHighPassStampCell>(storage),
+		revision::<CanyonLowPassStampCell>(storage),
+		revision::<RollingHighPassStampCell>(storage),
+		revision::<RollingLowPassStampCell>(storage),
+		revision::<ValleyHighPassStampCell>(storage),
+		revision::<ValleyLowPassStampCell>(storage),
+		revision::<PocketWaterHighPassStampCell>(storage),
+		revision::<PocketWaterLowPassStampCell>(storage),
+		revision::<PocketWatersHighPass>(storage),
+		revision::<PocketWatersLowPass>(storage),
+	]
+	.into_iter()
+	.max()
+	.unwrap_or(0)
+}
+
 fn push_stamp_features<T: HcsgNode>(
 	out: &mut Vec<GeographicFeature>,
 	region: Bounds2,
@@ -449,6 +476,27 @@ mod tests {
 		anyhow::ensure!(lakes[0].id.source == lake_id);
 		anyhow::ensure!(lakes[0].id.family == GeographicFamily::Watershed);
 		anyhow::ensure!(lakes[0].revision == lake_version);
+		Ok(())
+	}
+
+	#[test]
+	fn geography_revision_moves_only_for_source_stores() -> anyhow::Result<()> {
+		struct Furniture;
+		let mut store = HcsgStorage::default();
+		let before = store.geography_revision();
+		let bounds = cell(0.0, 0.0, 100.0, 100.0);
+		store.insert(Id::from_cell(bounds), Furniture, bounds);
+		store.insert(
+			Id::from_cell(bounds),
+			HydroComplexCell {
+				cell: bounds,
+				complex: Arc::new(HydroComplex::new(Bounds2::from_xz(0.0, 0.0, 100.0, 100.0), 1)),
+			},
+			bounds,
+		);
+		anyhow::ensure!(store.geography_revision() == before, "non-source writes must not count");
+		insert_stamp(&mut store, Id::from_cell(bounds), bounds, true);
+		anyhow::ensure!(store.geography_revision() > before, "a stamp write is a source change");
 		Ok(())
 	}
 

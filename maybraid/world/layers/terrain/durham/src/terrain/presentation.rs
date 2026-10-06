@@ -13,7 +13,7 @@ use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use chunk::cascade::CascadeChunk;
 use lod::gen::{Id, LodScene, RegionPresenter, Version};
-use lod::hcsg::HcsgStorage;
+use lod::hcsg::{HcsgStorage, StoredEntry};
 use lod::lod_ref::LodRef;
 use lod::LodSceneLevel;
 use render_item::sdf::cpu_shot::WallFaces;
@@ -199,7 +199,12 @@ impl TerrainPresentationAssets {
 
 lod::seeded_root!(TerrainPresentationAssets);
 
-/// Runtime presentation bookkeeping: last presented version and root entity per id.
+/// Runtime presentation bookkeeping: last presented terrain and water versions
+/// and the root entity per id.
+///
+/// Terrain and water generate independently, so a cell can be presented before
+/// its water exists. Water is reconciled against its own version, not the
+/// terrain version.
 #[derive(Resource, Default)]
 pub struct TerrainPresenterState {
 	presented: HashMap<Id, PresentedEntry>,
@@ -210,7 +215,27 @@ struct PresentedEntry {
 	version: Version,
 	entity: Entity,
 	water: Option<Entity>,
+	water_version: Option<Version>,
 	level: LodSceneLevel,
+}
+
+impl PresentedEntry {
+	fn new(version: Version, entity: Entity, level: LodSceneLevel) -> Self {
+		Self { version, entity, water: None, water_version: None, level }
+	}
+
+	/// Attach, replace, or drop the water child so it matches `water`.
+	fn sync_water(&mut self, commands: &mut Commands, id: Id, water: Option<&StoredEntry<Water>>) {
+		let version = water.map(|entry| entry.version);
+		if self.water_version == version {
+			return;
+		}
+		if let Some(previous) = self.water.take() {
+			commands.entity(previous).try_despawn();
+		}
+		self.water = water.map(|entry| attach_water(commands, id, self.entity, &entry.value));
+		self.water_version = version;
+	}
 }
 
 /// Marks a spawned terrain scene root as belonging to a presented id.
@@ -297,15 +322,19 @@ impl TerrainPresenterState {
 
 	#[cfg(test)]
 	pub(crate) fn insert_for_test(&mut self, id: Id, version: Version, entity: Entity) {
-		self.presented.insert(
-			id,
-			PresentedEntry { version, entity, water: None, level: LodSceneLevel::High },
-		);
+		self.presented
+			.insert(id, PresentedEntry::new(version, entity, LodSceneLevel::High));
 	}
 
 	#[cfg(test)]
 	pub(crate) fn presented_version(&self, id: Id) -> Option<Version> {
 		self.presented.get(&id).map(|entry| entry.version)
+	}
+
+	#[cfg(test)]
+	pub(crate) fn presented_water(&self, id: Id) -> Option<(Entity, Version)> {
+		let entry = self.presented.get(&id)?;
+		entry.water.zip(entry.water_version)
 	}
 }
 
@@ -320,6 +349,15 @@ pub struct TerrainRegionPresenter<'w, 's> {
 impl<'w, 's> TerrainRegionPresenter<'w, 's> {
 	pub fn clear_presented(&mut self) {
 		self.state.clear(&mut self.commands);
+	}
+
+	/// Bring every presented cell's water up to the stored [`Water`] version.
+	/// Run after [`RegionPresenter::present`]; that pass only compares terrain
+	/// versions, so water generated later would otherwise never attach.
+	pub fn sync_water(&mut self) {
+		for (id, shown) in &mut self.state.presented {
+			shown.sync_water(&mut self.commands, *id, self.store.entry::<Water>(*id));
+		}
 	}
 }
 
@@ -376,18 +414,14 @@ impl<M: TerrainStreamMarker> TerrainStreamRegionPresenter<'_, '_, M> {
 			};
 			let level = entry.value.scene_lod_level(lod_ref);
 			let draw = crate::terrain::stream_lod::stream_banded_draws(&entry.value, level);
-			let water = draw.then(|| self.store.get::<Water>(*id)).flatten();
+			let water = draw.then(|| self.store.entry::<Water>(*id)).flatten();
 			if let Some(shown) = self.state.presented.get_mut(id) {
 				if shown.version == entry.version {
 					if shown.level != level {
 						self.commands.entity(shown.entity).insert(fill_visibility(draw));
-						if let Some(previous_water) = shown.water.take() {
-							self.commands.entity(previous_water).try_despawn();
-						}
-						shown.water =
-							water.map(|w| attach_water(&mut self.commands, *id, shown.entity, w));
 						shown.level = level;
 					}
+					shown.sync_water(&mut self.commands, *id, water);
 					continue;
 				}
 			}
@@ -405,11 +439,9 @@ impl<M: TerrainStreamMarker> TerrainStreamRegionPresenter<'_, '_, M> {
 				TerrainVisualHost,
 				M::default(),
 			));
-			let water_entity = water.map(|w| attach_water(&mut self.commands, *id, entity, w));
-			self.state.presented.insert(
-				*id,
-				PresentedEntry { version: entry.version, entity, water: water_entity, level },
-			);
+			let mut shown = PresentedEntry::new(entry.version, entity, level);
+			shown.sync_water(&mut self.commands, *id, water);
+			self.state.presented.insert(*id, shown);
 		}
 
 		let stale: Vec<(Id, Entity)> = self
@@ -445,13 +477,9 @@ impl<'w, 's> RegionPresenter<Terrain, HcsgStorage> for TerrainRegionPresenter<'w
 			PresentedTerrainScene(id),
 			TerrainVisualHost,
 		));
-		let water = self
-			.store
-			.get::<Water>(id)
-			.map(|w| attach_water(&mut self.commands, id, entity, w));
-		self.state
-			.presented
-			.insert(id, PresentedEntry { version, entity, water, level: LodSceneLevel::High });
+		let mut shown = PresentedEntry::new(version, entity, LodSceneLevel::High);
+		shown.sync_water(&mut self.commands, id, self.store.entry::<Water>(id));
+		self.state.presented.insert(id, shown);
 	}
 
 	fn presented_ids(&self) -> Vec<Id> {

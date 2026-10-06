@@ -107,7 +107,7 @@ impl<T: 'static> NamedWorld for Vegetation<Chico<Urbanization<Richmond<T>>>> {
 		SourceRevisions {
 			forest: forests.membership_revision(),
 			urban: SpatialIndex::<SelectedUrbanization>::membership_revision(&**urban),
-			terrain: terrain.as_ref().map(|store| store.latest_version()).unwrap_or(0),
+			terrain: terrain.as_ref().map(|store| store.geography_revision()).unwrap_or(0),
 			places: places_signature(places),
 		}
 	}

@@ -196,6 +196,10 @@ pub trait TerrainStorage {
 	/// Advances whenever a terrain cell is stored, moved, or dropped.
 	fn terrain_revision(&self) -> u64;
 
+	/// Advances whenever a store read by [`Self::geographic_features_overlapping`]
+	/// changes membership. Other writes, including other layers', leave it alone.
+	fn geography_revision(&self) -> u64;
+
 	/// Origin ids already stored in `region` (GET; does not admit missing cells).
 	fn terrain_ids_overlapping(&self, region: Aabb3d) -> Vec<Id>;
 
@@ -255,6 +259,10 @@ impl TerrainStorage for HcsgStorage {
 
 	fn terrain_revision(&self) -> u64 {
 		lod::gen::SpatialIndex::<Terrain>::membership_revision(self)
+	}
+
+	fn geography_revision(&self) -> u64 {
+		crate::terrain::geography::geography_revision(self)
 	}
 
 	fn terrain_ids_overlapping(&self, region: Aabb3d) -> Vec<Id> {

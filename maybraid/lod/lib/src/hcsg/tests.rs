@@ -5,7 +5,8 @@ use crate::gen::tests::test_utils::{
 	cell, leaf_id, moss_id, span, tree_id, Leaf, Moss, Terrain, Tree, Vegetation,
 };
 use crate::gen::{
-	Id, LodGenerateBudget, LodGenerated, MaterializeStatus, SpatialIndex, StorageStatus,
+	GeneratingSpatialIndex, GenerationScheme, Id, LodGenerateBudget, LodGenerated,
+	MaterializeStatus, OriginalId, SpatialIndex, StorageStatus,
 };
 use crate::hcsg::{GenerateOn, GenerateQueue, GenerationProducer, HcsgStorage, Seed};
 use crate::jobs::{ensure_lod_job_counter, LodJobCounter};
@@ -110,9 +111,19 @@ struct Window;
 #[derive(Resource, Default)]
 struct PublishNext(Option<Aabb3d>);
 
-fn publish(mut next: ResMut<PublishNext>, mut channel: GenerationProducer<Window>) {
+#[derive(Resource, Default)]
+struct RestartNext(Option<Aabb3d>);
+
+fn publish(
+	mut next: ResMut<PublishNext>,
+	mut restart: ResMut<RestartNext>,
+	mut channel: GenerationProducer<Window>,
+) {
 	if let Some(keep) = next.0.take() {
 		channel.publish(keep, Some(Vec2::ZERO));
+	}
+	if let Some(keep) = restart.0.take() {
+		channel.restart(keep, Some(Vec2::ZERO));
 	}
 }
 
@@ -121,6 +132,7 @@ fn app() -> App {
 	app.add_plugins(MinimalPlugins);
 	ensure_lod_job_counter(&mut app);
 	app.init_resource::<PublishNext>()
+		.init_resource::<RestartNext>()
 		.add_plugins((
 			GenerateOn::<Window, Terrain>::default(),
 			GenerateOn::<Window, Vegetation>::default(),
@@ -181,4 +193,115 @@ fn late_subscriber_reset_rescans_current_bounds() {
 	let storage = app.world().resource::<HcsgStorage>();
 	assert!(storage.contains::<Vegetation>(Id::from_cell(cell(0.0))));
 	assert!(storage.contains::<Vegetation>(Id::from_cell(cell(1.0))));
+}
+
+#[test]
+fn stationary_window_regenerates_cleared_records_only_after_restart() {
+	let mut app = app();
+	let keep = span(0.0, 1.5);
+	app.world_mut().resource_mut::<PublishNext>().0 = Some(keep);
+	app.update();
+	let id = Id::from_cell(cell(0.0));
+	assert!(app.world().resource::<HcsgStorage>().contains::<Terrain>(id));
+
+	app.world_mut().resource_mut::<HcsgStorage>().clear::<Terrain>();
+	app.update();
+	assert!(
+		!app.world().resource::<HcsgStorage>().contains::<Terrain>(id),
+		"clearing records alone does not wake subscribers on an unmoved window"
+	);
+
+	app.world_mut().resource_mut::<RestartNext>().0 = Some(keep);
+	app.update();
+	let storage = app.world().resource::<HcsgStorage>();
+	assert!(storage.contains::<Terrain>(id));
+	assert!(storage.contains::<Terrain>(Id::from_cell(cell(1.0))));
+	assert_eq!(app.world().resource::<LodJobCounter>().active(), 0);
+}
+
+#[derive(Clone)]
+struct Gate;
+
+crate::seeded_root!(Gate);
+
+/// Builds only once [`Gate`] is seeded.
+struct Gated;
+
+impl<S> GenerationScheme<S> for Gated
+where
+	S: GeneratingSpatialIndex<Terrain> + GeneratingSpatialIndex<Gate>,
+{
+	fn original_ids_for(spatial_index: &mut S, region: Aabb3d) -> Vec<OriginalId> {
+		GeneratingSpatialIndex::<Terrain>::original_ids_for(spatial_index, region)
+	}
+
+	fn build_with_id(spatial_index: &mut S, id: Id) -> Option<(Self, Aabb3d)> {
+		GeneratingSpatialIndex::<Gate>::get_one_or_generate(spatial_index, Id::Universal)?;
+		Some((Self, id.origin_cell_bounds()?))
+	}
+}
+
+#[test]
+fn failed_builds_retry_on_restart() {
+	let mut app = app();
+	app.add_plugins(GenerateOn::<Window, Gated>::default());
+	let keep = span(0.0, 0.5);
+	let id = Id::from_cell(cell(0.0));
+	app.world_mut().resource_mut::<PublishNext>().0 = Some(keep);
+	app.update();
+	assert!(!app.world().resource::<HcsgStorage>().contains::<Gated>(id));
+
+	app.world_mut()
+		.resource_mut::<HcsgStorage>()
+		.seed(Gate, crate::hcsg::universal_bounds());
+	app.update();
+	assert!(
+		!app.world().resource::<HcsgStorage>().contains::<Gated>(id),
+		"a failed id is dropped, not polled"
+	);
+
+	app.world_mut().resource_mut::<RestartNext>().0 = Some(keep);
+	app.update();
+	assert!(app.world().resource::<HcsgStorage>().contains::<Gated>(id));
+	assert_eq!(app.world().resource::<LodJobCounter>().active(), 0);
+}
+
+#[test]
+fn resting_drivers_keep_their_coverage_while_another_moves() {
+	use crate::hcsg::{CurrentBounds, ProduceFromNodes};
+	use crate::lod_ref::{LodNode, LodNodePose};
+	use crate::scene::Bullseye;
+	use bevy::math::bounding::BoundingVolume;
+
+	let mut app = App::new();
+	app.add_plugins(MinimalPlugins)
+		.add_plugins(ProduceFromNodes::<Bullseye, ()>::default())
+		.insert_resource(Bullseye::new(10.0, 40.0));
+	let at = |x: f32| LodNodePose {
+		previous: Transform::from_xyz(x, 0.0, 0.0),
+		current: Transform::from_xyz(x, 0.0, 0.0),
+	};
+	let resting = app.world_mut().spawn((LodNode, at(500.0))).id();
+	let moving = app.world_mut().spawn((LodNode, at(0.0))).id();
+	app.update();
+
+	let covers = |app: &App, x: f32| {
+		app.world()
+			.resource::<CurrentBounds<Bullseye>>()
+			.keep()
+			.is_some_and(|keep| keep.contains(&Aabb3d::new(Vec3::new(x, 0.0, 0.0), Vec3::ZERO)))
+	};
+	assert!(covers(&app, 0.0) && covers(&app, 500.0));
+
+	app.world_mut().entity_mut(moving).insert(LodNodePose {
+		previous: Transform::from_xyz(0.0, 0.0, 0.0),
+		current: Transform::from_xyz(-100.0, 0.0, 0.0),
+	});
+	app.update();
+	assert!(covers(&app, -100.0), "the moved driver's new region is covered");
+	assert!(covers(&app, 500.0), "the resting driver keeps its region");
+
+	app.world_mut().despawn(resting);
+	app.update();
+	assert!(!covers(&app, 500.0), "a departed driver's region is released");
 }

@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 use bevy::ecs::query::QueryFilter;
 use bevy::ecs::schedule::{InternedSystemSet, SystemSet};
 use bevy::ecs::system::SystemParam;
-use bevy::math::bounding::Aabb3d;
+use bevy::math::bounding::{Aabb3d, BoundingVolume};
 use bevy::prelude::*;
 
 use crate::gen::{
@@ -24,9 +24,7 @@ use crate::gen::{
 };
 use crate::hcsg::storage::{HcsgNode, HcsgStorage};
 use crate::jobs::LodJobCounter;
-use crate::lod_ref::{
-	collect_node_snapshots, lod_refs_from_snapshots, LodNode, LodNodeBounds, LodNodePose,
-};
+use crate::lod_ref::{point_bounds, LodNode, LodNodeBounds, LodNodePose, LodNodeSnapshot};
 use crate::scene::{LodRefreshRegions, LodRefreshRegionsStatus};
 
 impl HcsgStorage {
@@ -142,6 +140,9 @@ impl<P: Send + Sync + 'static> GenerationProducer<'_, P> {
 	}
 
 	/// Publishes `keep` unconditionally and makes subscribers rescan all of it.
+	///
+	/// Use it whenever records inside an unmoved `keep` were cleared or their
+	/// builds failed for missing inputs: subscribers only rescan on a request.
 	pub fn restart(&mut self, keep: Aabb3d, priority_xz: Option<Vec2>) {
 		self.send(GenerationBounds::restart(keep, priority_xz));
 	}
@@ -198,29 +199,67 @@ where
 	}
 }
 
-/// Publishes `P`'s bullseye region when a driver crosses its threshold.
+/// Every `F`-filtered driver with its pose change tick.
+type Drivers<'w, 's, F> = Query<
+	'w,
+	's,
+	(Entity, Ref<'static, LodNodePose>, Option<&'static LodNodeBounds>),
+	(With<LodNode>, F),
+>;
+
+/// Publishes the union of every active driver's [`LodRefreshRegions::lod_coverage`].
+///
+/// Recomputes only when a moved driver crosses `P`'s threshold or a driver
+/// joins or leaves, but then covers all drivers, so a resting driver keeps
+/// its region while another moves. With no drivers the last bounds stand.
 pub fn produce_from_nodes<P, F>(
 	producer: Res<P>,
-	nodes: Query<
-		(Entity, &LodNodePose, Option<&LodNodeBounds>),
-		(With<LodNode>, Changed<LodNodePose>, F),
-	>,
+	nodes: Drivers<F>,
+	mut roster: Local<Vec<Entity>>,
 	mut channel: GenerationProducer<P>,
 ) where
 	P: Resource + LodRefreshRegions,
 	F: QueryFilter + 'static,
 {
-	if nodes.is_empty() {
+	let snapshot = |entity, pose: &LodNodePose, bounds: Option<&LodNodeBounds>| LodNodeSnapshot {
+		entity,
+		previous: pose.previous,
+		current: pose.current,
+		bounds: bounds.map_or_else(|| point_bounds(pose.current.translation), |b| b.0),
+	};
+	let moved: Vec<LodNodeSnapshot> = nodes
+		.iter()
+		.filter(|(_, pose, _)| pose.is_changed())
+		.map(|(entity, pose, bounds)| snapshot(entity, &pose, bounds))
+		.collect();
+	let crossed = moved.iter().any(|driver| {
+		matches!(
+			producer.lod_refresh_regions(&driver.as_lod_ref()),
+			LodRefreshRegionsStatus::Changed(_)
+		)
+	});
+
+	let mut active: Vec<Entity> = nodes.iter().map(|(entity, _, _)| entity).collect();
+	active.sort_unstable();
+	let rostered = *roster != active;
+	if !crossed && !rostered && channel.current().is_some() {
 		return;
 	}
-	let snapshots = collect_node_snapshots(&nodes);
-	let refs = lod_refs_from_snapshots(&snapshots);
-	let priority = refs.first().map(|lod_ref| lod_ref.current_transform.translation.xz());
-	let Ok(LodRefreshRegionsStatus::Changed(region)) = producer.lod_refresh_regions_for(&refs)
+	*roster = active;
+
+	let drivers: Vec<LodNodeSnapshot> = nodes
+		.iter()
+		.map(|(entity, pose, bounds)| snapshot(entity, &pose, bounds))
+		.collect();
+	let Some(coverage) = drivers
+		.iter()
+		.filter_map(|driver| producer.lod_coverage(&driver.as_lod_ref()))
+		.reduce(|a, b| a.merge(&b))
 	else {
 		return;
 	};
-	channel.publish(region, priority);
+	let priority = moved.first().or(drivers.first()).map(|driver| driver.current.translation.xz());
+	channel.publish(coverage, priority);
 }
 
 /// Pending origin ids of `T` requested on `P`'s channel.
@@ -319,6 +358,9 @@ fn overlaps_xz(a: Aabb3d, b: Aabb3d) -> bool {
 }
 
 /// Replaces [`LodGenerateTimeBudget`] for subscribers on producer `P`'s channel.
+///
+/// Applied per subscriber, like [`LodGenerateBudget<P>`]: each
+/// [`GenerateOn<P, _>`] may spend the whole budget in the same frame.
 #[derive(Resource, Debug, Clone, Copy)]
 pub struct ChannelTimeBudget<P> {
 	pub budget: LodGenerateTimeBudget,
@@ -342,6 +384,11 @@ impl<P> ChannelTimeBudget<P> {
 /// Subscribes `T` to producer `P`'s channel.
 ///
 /// Runs in [`LodGenerateSystems::Drain`] unless [`Self::in_set`] names another set.
+///
+/// Budgets are named for the channel but spent per subscriber: every
+/// `GenerateOn<P, _>` builds up to [`LodGenerateBudget<P>`] ids and spends up
+/// to the channel's time budget on its own. Adding a subscriber to `P` adds
+/// that much possible work per frame.
 pub struct GenerateOn<P, T> {
 	set: Option<InternedSystemSet>,
 	_marker: PhantomData<fn() -> (P, T)>,
@@ -384,7 +431,12 @@ where
 /// budgeted, nearest-first slice of them.
 ///
 /// Announces every origin of `T` in the requested bounds as [`LodGenerated`],
-/// including ids another subscriber already built as a dependency.
+/// including ids another subscriber already built as a dependency. Ids built
+/// recursively as someone else's dependency are not announced when they are
+/// built, so this is a presentation impulse, not an insertion hook.
+///
+/// An id whose build returns `None` (a missing input) is dropped, not polled.
+/// Publish [`GenerationProducer::restart`] once the input exists to retry it.
 #[allow(clippy::too_many_arguments)]
 pub fn generate<P, T>(
 	mut storage: ResMut<HcsgStorage>,

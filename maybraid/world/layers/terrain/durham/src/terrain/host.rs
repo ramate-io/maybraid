@@ -502,11 +502,13 @@ pub fn produce_terrain_window(
 	}
 }
 
+/// Terrain and water finish independently, so either announcement re-presents.
 fn mark_generated_pending(
-	mut generated: MessageReader<LodGenerated<Terrain>>,
+	mut terrain: MessageReader<LodGenerated<Terrain>>,
+	mut water: MessageReader<LodGenerated<Water>>,
 	mut pending: ResMut<TerrainPresentPending>,
 ) {
-	if generated.read().count() > 0 {
+	if terrain.read().count() + water.read().count() > 0 {
 		pending.0 = true;
 	}
 }
@@ -549,6 +551,7 @@ fn present_cells(
 		bounds: &region,
 	};
 	RegionPresenter::<Terrain, _>::present(&mut terrain_presenter, &*storage, region, &lod_ref);
+	terrain_presenter.sync_water();
 	let wanted: HashSet<Id> = storage.terrain_ids_overlapping(region).into_iter().collect();
 	terrain_presenter.remove_stale(&wanted);
 	pending.0 = false;
@@ -775,6 +778,94 @@ mod tests {
 			rebuilt > presented,
 			"dirty clear must mint a version the surviving presenter will accept"
 		);
+		Ok(())
+	}
+
+	fn empty_water(cell: bevy::math::bounding::Aabb3d) -> Water {
+		let terrain = crate::terrain::sdf::TerrainSdf::new(1, 20.0);
+		Water {
+			cell,
+			sdf: ComposedWater::compose(terrain.clone(), Vec::new()),
+			terrain,
+			fills: Vec::new(),
+			material: Handle::default(),
+			res_2: 4,
+			stream_ring: None,
+		}
+	}
+
+	#[test]
+	fn water_generated_after_its_terrain_still_attaches() -> anyhow::Result<()> {
+		let mut app = App::new();
+		let layout = TerrainCellLayout::default();
+		let mut storage = HcsgStorage::default();
+		register_durham_nodes(&mut storage);
+		app.insert_resource(storage)
+			.insert_resource(layout.clone())
+			.insert_resource(TerrainPresentPending(false))
+			.init_resource::<TerrainPresenterState>()
+			.add_message::<LodGenerated<Terrain>>()
+			.add_message::<LodGenerated<Water>>()
+			.add_systems(Update, (mark_generated_pending, present_cells).chain());
+
+		let id = {
+			let mut storage = app.world_mut().resource_mut::<HcsgStorage>();
+			let base = BaseTerrainNoise::from_config(&TerrainConfig::new(1));
+			storage.insert_base_terrain_for_test(&layout, 0, 0, base);
+			storage.terrain_ids_overlapping(layout.request_region())[0]
+		};
+		app.world_mut().write_message(LodGenerated::<Terrain>::new(id));
+		app.update();
+
+		let terrain_version = {
+			let state = app.world().resource::<TerrainPresenterState>();
+			assert!(state.presented_water(id).is_none(), "no water generated yet");
+			state
+				.presented_version(id)
+				.ok_or_else(|| anyhow::anyhow!("terrain presented"))?
+		};
+
+		let cell = app
+			.world()
+			.resource::<HcsgStorage>()
+			.entry::<Terrain>(id)
+			.ok_or_else(|| anyhow::anyhow!("terrain stored"))?
+			.value
+			.cell;
+		let first =
+			app.world_mut()
+				.resource_mut::<HcsgStorage>()
+				.insert(id, empty_water(cell), cell);
+		app.world_mut().write_message(LodGenerated::<Water>::new(id));
+		app.update();
+
+		let (first_entity, attached) = app
+			.world()
+			.resource::<TerrainPresenterState>()
+			.presented_water(id)
+			.ok_or_else(|| anyhow::anyhow!("late water must attach to presented terrain"))?;
+		assert_eq!(attached, first);
+		assert_eq!(
+			app.world().resource::<TerrainPresenterState>().presented_version(id),
+			Some(terrain_version),
+			"water arrival must not respawn the terrain"
+		);
+
+		let second =
+			app.world_mut()
+				.resource_mut::<HcsgStorage>()
+				.insert(id, empty_water(cell), cell);
+		app.world_mut().write_message(LodGenerated::<Water>::new(id));
+		app.update();
+
+		let (second_entity, attached) = app
+			.world()
+			.resource::<TerrainPresenterState>()
+			.presented_water(id)
+			.ok_or_else(|| anyhow::anyhow!("rebuilt water stays attached"))?;
+		assert_eq!(attached, second);
+		assert_ne!(second_entity, first_entity);
+		assert!(app.world().get_entity(first_entity).is_err(), "stale water despawns");
 		Ok(())
 	}
 }
