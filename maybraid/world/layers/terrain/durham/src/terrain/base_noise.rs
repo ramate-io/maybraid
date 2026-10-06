@@ -7,7 +7,6 @@ use crate::terrain::sdf::{ComposedTerrain, TerrainSdf};
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use lod::gen::{GeneratingSpatialIndex, GenerationScheme, Id, OriginalId};
-use lod::lod_ref::LodRef;
 
 /// Shared heightfield noise used by every terrain cell and grading search.
 #[derive(Debug, Clone, Component)]
@@ -43,17 +42,14 @@ where
 		vec![OriginalId::universal()]
 	}
 
-	fn build_with_id(spatial_index: &mut S, id: Id, lod_ref: &LodRef) -> Option<(Self, Aabb3d)> {
+	fn build_with_id(spatial_index: &mut S, id: Id) -> Option<(Self, Aabb3d)> {
 		if id != Id::Universal {
 			return None;
 		}
 		let assets = GeneratingSpatialIndex::<TerrainPresentationAssets>::get_one_or_generate(
 			spatial_index,
 			Id::Universal,
-			lod_ref,
 		)?;
 		Some((Self::from_config(&assets.config), universal_bounds()))
 	}
-
-	fn descendants_with_lod(_id: Id, _spatial_index: &mut S, _lod_ref: &LodRef) {}
 }

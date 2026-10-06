@@ -4,11 +4,11 @@ use bevy::ecs::system::SystemParam;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use layer_stack::{GenerationMode, GenerationModeSystems};
+use layer_stack::{LayerModeConfig, LayerSystems};
 use lod::gen::{
 	GeneratingSpatialIndex, Id, LodGenerateBudget, LodGenerateKeepRegion, LodGenerateQueue,
 	LodGenerateRegion, MaterializeStatus, SpatialIndex, StorageStatus,
 };
-use lod::lod_ref::LodRef;
 use lod::presentation::{LodPresentKeepRegion, LodPresentRegion};
 use lod::{
 	LodGeneratePlugin, LodGenerateRegionPlugin, LodGenerateSystems, LodJobCounter,
@@ -20,9 +20,9 @@ use urbanization_cells::{
 	UrbanizationIndex, UrbanizationKind, UrbanizationLodChan, UrbanizationPresentBullseye,
 	DEFAULT_URBANIZATION_EXTENT_XZ, DEVELOPMENT_GENERATE_RADIUS_M, DEVELOPMENT_PRESENT_RADIUS_M,
 };
-use layer_stack::{LayerModeConfig, LayerSystems};
 use urbanization_layer_model::{
-	urbanization_visual_region, Urbanization, UrbanizationGenerationSystems, UrbanizationLayerRegion,
+	urbanization_visual_region, Urbanization, UrbanizationGenerationSystems,
+	UrbanizationLayerRegion,
 };
 
 use crate::config::DevelopmentConfig;
@@ -104,7 +104,8 @@ where
 			generate_urbanization_developments::<Mode, G>
 				.after(LodGenerateSystems::Drain)
 				.before(LayerSystems::<Urbanization<Richmond<G>>>::default()),
-			write_urbanization_host_region.in_set(LayerSystems::<Urbanization<Richmond<G>>>::default()),
+			write_urbanization_host_region
+				.in_set(LayerSystems::<Urbanization<Richmond<G>>>::default()),
 		)
 			.in_set(GenerationModeSystems::<Mode>::default())
 			.in_set(UrbanizationGenerationSystems)
@@ -273,14 +274,6 @@ pub fn generate_urbanization_developments<Mode: GenerationMode, G: RichmondGroun
 		development.urbanization.kind = spec.kind;
 	}
 
-	let identity = Transform::IDENTITY;
-	let lod_ref = LodRef {
-		entity: Entity::PLACEHOLDER,
-		previous_transform: &identity,
-		current_transform: &identity,
-		bounds: &region,
-	};
-
 	let mut created = 0usize;
 	let cap = budget.ids_per_frame.max(1) as usize;
 	let urbanization_ids: Vec<Id> =
@@ -309,7 +302,6 @@ pub fn generate_urbanization_developments<Mode: GenerationMode, G: RichmondGroun
 				if GeneratingSpatialIndex::<DevelopmentCell>::get_or_generate(
 					&mut development,
 					leaf_id,
-					&lod_ref,
 				)
 				.is_none()
 				{
@@ -330,7 +322,6 @@ pub fn generate_urbanization_developments<Mode: GenerationMode, G: RichmondGroun
 			if GeneratingSpatialIndex::<BuiltDevelopment>::get_or_generate(
 				&mut development,
 				leaf_id,
-				&lod_ref,
 			) == Some(MaterializeStatus::Created)
 			{
 				created += 1;
@@ -368,19 +359,8 @@ pub(crate) fn generate_richmond_padded_terrain<G: RichmondGround>(
 	if removed == 0 && last.as_ref() == Some(&key) {
 		return;
 	}
-	let identity = Transform::IDENTITY;
-	let lod_ref = LodRef {
-		entity: Entity::PLACEHOLDER,
-		previous_transform: &identity,
-		current_transform: &identity,
-		bounds: &region,
-	};
 	for id in G::terrain_ids_overlapping(&development.ground, region) {
-		let _ = GeneratingSpatialIndex::<TerrainWithPads>::get_or_generate(
-			&mut development,
-			id,
-			&lod_ref,
-		);
+		let _ = GeneratingSpatialIndex::<TerrainWithPads>::get_or_generate(&mut development, id);
 	}
 	*last = Some(PaddedTerrainTickKey {
 		region,

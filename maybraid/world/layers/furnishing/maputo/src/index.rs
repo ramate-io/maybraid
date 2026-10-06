@@ -6,7 +6,6 @@ use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use building_components::{FurnitureNode, Placement};
 use lod::gen::{GenerationScheme, Id, OriginalId, SpatialIndex, StorageStatus, TrackedId, Version};
-use lod::lod_ref::LodRef;
 
 use crate::cell::{intersects_xz, FurnitureCellExtent};
 use crate::host::FurnitureCell;
@@ -99,15 +98,10 @@ impl FurnitureIndex {
 		self.slots_region = Some(region);
 	}
 
-	pub(crate) fn generate_cells(
-		&mut self,
-		region: Aabb3d,
-		lod_ref: &LodRef,
-		budget: usize,
-	) -> usize {
+	pub(crate) fn generate_cells(&mut self, region: Aabb3d, budget: usize) -> usize {
 		let mut built = 0usize;
 		for OriginalId(id) in FurnitureCell::original_ids_for(self, region) {
-			match FurnitureCell::build_with_id(self, id, lod_ref) {
+			match FurnitureCell::build_with_id(self, id) {
 				Some((cell, bounds)) => {
 					if self.get(id).is_some_and(|existing| same_slots(existing, &cell)) {
 						continue;
@@ -115,7 +109,7 @@ impl FurnitureIndex {
 					if built >= budget {
 						break;
 					}
-					self.insert(id, cell, bounds, lod_ref);
+					self.insert(id, cell, bounds);
 					built += 1;
 				}
 				None => {
@@ -197,7 +191,7 @@ impl SpatialIndex<FurnitureCell> for FurnitureIndex {
 		self.next_version
 	}
 
-	fn insert(&mut self, id: Id, value: FurnitureCell, bounds: Aabb3d, _lod_ref: &LodRef) {
+	fn insert(&mut self, id: Id, value: FurnitureCell, bounds: Aabb3d) {
 		let version = self.next_version();
 		self.cells.insert(id, StoredFurnitureCell { value, bounds, version });
 	}
@@ -220,11 +214,7 @@ impl GenerationScheme<FurnitureIndex> for FurnitureCell {
 		ids.into_iter().map(OriginalId).collect()
 	}
 
-	fn build_with_id(
-		index: &mut FurnitureIndex,
-		id: Id,
-		_lod_ref: &LodRef,
-	) -> Option<(Self, Aabb3d)> {
+	fn build_with_id(index: &mut FurnitureIndex, id: Id) -> Option<(Self, Aabb3d)> {
 		let extent = FurnitureCellExtent::from_id(id)?;
 		let slots: Vec<_> = index
 			.slots
@@ -250,15 +240,6 @@ mod tests {
 	use super::*;
 	use crate::cell::xz_radius_aabb;
 	use bevy::math::Vec3;
-
-	fn test_lod<'a>(identity: &'a Transform, bounds: &'a Aabb3d) -> LodRef<'a> {
-		LodRef {
-			entity: Entity::PLACEHOLDER,
-			previous_transform: identity,
-			current_transform: identity,
-			bounds,
-		}
-	}
 
 	#[test]
 	fn matching_slots_ignore_finish_seed() {
@@ -292,8 +273,7 @@ mod tests {
 		let slot = FurnitureNode::chair(Placement::IDENTITY);
 		let cell = FurnitureCell::new(extent, vec![slot]);
 		let bounds = cell.bounds();
-		let identity = Transform::IDENTITY;
-		index.insert(extent.id(), cell, bounds, &test_lod(&identity, &bounds));
+		index.insert(extent.id(), cell, bounds);
 		index.slots.clear();
 		let ids = FurnitureCell::original_ids_for(&mut index, xz_radius_aabb(Vec3::ZERO, 40.0));
 		assert_eq!(ids, vec![OriginalId(extent.id())]);
@@ -306,11 +286,10 @@ mod tests {
 		let slot = FurnitureNode::chair(Placement::IDENTITY);
 		let cell = FurnitureCell::new(extent, vec![slot]);
 		let bounds = cell.bounds();
-		let identity = Transform::IDENTITY;
 		let region = xz_radius_aabb(Vec3::ZERO, 40.0);
-		index.insert(extent.id(), cell, bounds, &test_lod(&identity, &bounds));
+		index.insert(extent.id(), cell, bounds);
 		index.slots.clear();
-		assert_eq!(index.generate_cells(region, &test_lod(&identity, &region), 1), 1);
+		assert_eq!(index.generate_cells(region, 1), 1);
 		assert!(index.get(extent.id()).is_none());
 	}
 
@@ -324,8 +303,7 @@ mod tests {
 		));
 		let cell = FurnitureCell::new(extent, vec![slot]);
 		let bounds = cell.bounds();
-		let identity = Transform::IDENTITY;
-		index.insert(extent.id(), cell, bounds, &test_lod(&identity, &bounds));
+		index.insert(extent.id(), cell, bounds);
 		let camera = xz_radius_aabb(Vec3::new(extent.center().x, -141.0, extent.center().z), 125.0);
 		assert_eq!(SpatialIndex::<FurnitureCell>::tracked_ids_for(&index, camera).len(), 1);
 		let sea = Aabb3d::from_min_max(

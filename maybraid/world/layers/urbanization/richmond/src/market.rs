@@ -16,6 +16,7 @@ use crate::development::{cell_salt, DevelopmentPad};
 use crate::finish::DevelopmentFinishRole;
 use crate::ground::RichmondGround;
 use crate::hydro::{composed_height_upper_on_rect, terrain_hydro_overlaps};
+use crate::math::lerp;
 use crate::pad::{PadComplex, PadParams};
 use crate::scatter::{bounds_intersect, ScatterChoice, ScatterRecipe};
 use crate::shepherds_fit::{fit_shepherds_building_for_role, ShepherdsBuildingKind};
@@ -522,10 +523,6 @@ fn raise_toward_peak(heights: &mut [Option<f32>], max_relief: f32) {
 	for height in heights.iter_mut().flatten() {
 		*height = height.max(floor);
 	}
-}
-
-fn lerp(a: f32, b: f32, t: f32) -> f32 {
-	a + (b - a) * t.clamp(0.0, 1.0)
 }
 
 #[cfg(test)]
