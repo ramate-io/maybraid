@@ -104,6 +104,7 @@ impl Plugin for PlayerPlugin {
 					body::apply_wish_movement,
 					body::apply_wish_jump,
 					stance::stand_when_airborne,
+					stance::advance_prone_blend,
 					stance::apply_stance_hulls,
 					stance::sync_stance_pitch,
 					body::advance_jump_phases,

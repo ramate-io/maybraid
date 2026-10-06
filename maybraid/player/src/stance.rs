@@ -20,6 +20,16 @@ pub enum StanceKind {
 	Prone,
 }
 
+impl StanceKind {
+	/// Target prone depth once a stance change has finished blending.
+	pub fn prone_target(self) -> f32 {
+		match self {
+			Self::Prone => 1.0,
+			Self::Stand | Self::Squat => 0.0,
+		}
+	}
+}
+
 #[derive(Component, Clone, Copy, Debug, PartialEq)]
 pub struct CharacterStance {
 	pub kind: StanceKind,
@@ -51,12 +61,25 @@ impl CharacterStance {
 
 	pub fn change_prone(&mut self) {
 		self.kind = StanceKind::Prone;
-		self.blend = 1.0;
+		self.blend = 0.0;
 	}
 
 	pub fn stand(&mut self) {
 		self.kind = StanceKind::Stand;
 		self.blend = 1.0;
+	}
+
+	/// True once the prone depth matches the target stance.
+	pub fn prone_settled(self) -> bool {
+		match self.kind {
+			StanceKind::Prone => self.blend >= 1.0,
+			StanceKind::Stand | StanceKind::Squat => true,
+		}
+	}
+
+	/// Target prone depth for the current stance kind.
+	pub fn prone_target(self) -> f32 {
+		self.kind.prone_target()
 	}
 
 	pub fn is_prone(self) -> bool {
@@ -66,6 +89,26 @@ impl CharacterStance {
 
 pub fn squat_drop() -> f32 {
 	Squat::held().peak_vertical_drop(LegSegmentLengths::default())
+}
+
+/// Ease prone depth toward the stance target so enter uses [`ProneDescent`].
+pub(crate) fn advance_prone_blend(
+	time: Res<Time>,
+	mut stances: Query<&mut CharacterStance, With<CharacterController>>,
+) {
+	let dt = time.delta_secs();
+	for mut stance in &mut stances {
+		let target = stance.prone_target();
+		if stance.blend < target {
+			stance.blend = (stance.blend
+				+ dt * character_animations::animations::DEFAULT_PRONE_DESCENT_SPEED)
+				.min(target);
+		} else if stance.blend > target {
+			stance.blend = (stance.blend
+				- dt * character_animations::animations::DEFAULT_PRONE_DESCENT_SPEED)
+				.max(target);
+		}
+	}
 }
 
 impl RestLocomotionCapsule {

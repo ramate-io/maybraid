@@ -12,7 +12,7 @@ use bevy::ecs::query::{Has, Or};
 use bevy::prelude::*;
 use character_animations::{
 	animations::{
-		Idle, Jab, Prone, QuadrupedIdle, QuadrupedLeap, QuadrupedRun, Squat, Tuck,
+		Idle, Jab, Prone, ProneDescent, QuadrupedIdle, QuadrupedLeap, QuadrupedRun, Squat, Tuck,
 		TwoFootedTuckedFlip, UprightLeap,
 	},
 	Animation, Effects,
@@ -672,6 +672,9 @@ fn sample_humanoid(
 			write_effects,
 		),
 		AnimClip::Squat => sample_split(&Squat::held(), rig, progress, write_bones, write_effects),
+		AnimClip::ProneDescent => {
+			sample_split(&ProneDescent::default(), rig, progress, write_bones, write_effects)
+		}
 		AnimClip::Prone => {
 			sample_split(&Prone::default(), rig, progress, write_bones, write_effects)
 		}
