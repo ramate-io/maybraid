@@ -1,6 +1,6 @@
 use bevy::core_pipeline::prepass::DepthPrepass;
 use bevy::prelude::*;
-use durham::{BaseTerrainNoise, TerrainCellLayout, TerrainEntryStore};
+use durham::{BaseTerrainNoise, HcsgStorage, TerrainCellLayout, TerrainStorage};
 use game_commands::command::TextEntryFocus;
 use lod::LodViewer;
 use std::f32::consts::PI;
@@ -75,7 +75,7 @@ pub fn refocus_camera_on_elevation(
 /// Composed height when the cell is stored; otherwise base noise.
 pub fn surface_or_hold(
 	layout: &TerrainCellLayout,
-	store: &TerrainEntryStore,
+	store: &HcsgStorage,
 	base: &BaseTerrainNoise,
 ) -> f32 {
 	let center = layout.region_center_xz();

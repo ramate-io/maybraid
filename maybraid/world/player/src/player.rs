@@ -9,8 +9,8 @@ use std::f32::consts::PI;
 use avian3d::prelude::*;
 use bevy::{ecs::query::Has, prelude::*};
 use durham::{
-	terrain_collider_covers_xz, BaseTerrainNoise, CascadeChunk, TerrainCellLayout,
-	TerrainEntryStore, TerrainTrimeshCollider,
+	terrain_collider_covers_xz, BaseTerrainNoise, CascadeChunk, HcsgStorage, TerrainCellLayout,
+	TerrainStorage, TerrainTrimeshCollider,
 };
 use game_commands::command::TextEntryFocus;
 use lod_avian::PhysicsInteractionLayer;
@@ -300,7 +300,7 @@ pub fn player_position_above_surface(surface: Vec3) -> Vec3 {
 	surface + Vec3::Y * (capsule_half_height() + 0.5)
 }
 
-/// Elevation used before [`TerrainEntryStore`] has the cell underfoot.
+/// Elevation used before [`HcsgStorage`] has the cell underfoot.
 pub fn holding_elevation(base: &BaseTerrainNoise, x: f32, z: f32) -> f32 {
 	base.height_at(x, z) + base.height_scale * HOLD_ABOVE_BASE_FACTOR
 }
@@ -316,7 +316,7 @@ pub fn player_spawn_point(layout: &TerrainCellLayout, elevation: f32) -> Vec3 {
 pub(crate) fn snap_player_to_composed_surface(
 	mut commands: Commands,
 	physics: Res<PlayerPhysicsEnabled>,
-	store: Res<TerrainEntryStore>,
+	store: Res<HcsgStorage>,
 	layout: Res<TerrainCellLayout>,
 	awaiting: Query<Entity, (With<Player>, With<AwaitingTerrainSurface>)>,
 	mut players: Query<
@@ -399,7 +399,7 @@ fn queue_void_player_respawn(
 
 fn recover_void_player(
 	time: Res<Time>,
-	store: Res<TerrainEntryStore>,
+	store: Res<HcsgStorage>,
 	layout: Res<TerrainCellLayout>,
 	base: Res<WorldBaseTerrain>,
 	mut respawn: ResMut<PlayerRespawn>,
@@ -866,7 +866,7 @@ mod tests {
 		world.insert_resource(PlayerPhysicsEnabled::default());
 		world.insert_resource(PlayerRespawn::default());
 		world.insert_resource(TerrainCellLayout::default());
-		world.insert_resource(TerrainEntryStore::default());
+		world.init_resource::<HcsgStorage>();
 		world.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(
 			&TerrainConfig::new(42),
 		)));

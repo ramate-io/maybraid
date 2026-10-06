@@ -4,18 +4,16 @@
 //! spawns a posed fill entity ([`Terrain::spawn_fill`]). [`Mesh3d`] and the
 //! Near trimesh land on that same entity.
 
-use crate::terrain::cell::{
-	expand_aabb_xz, universal_bootstrap_scheme, TerrainCellLayout, TERRAIN_CELL_SIZE,
-};
+use crate::terrain::cell::{expand_aabb_xz, TerrainCellLayout, TERRAIN_CELL_SIZE};
 use crate::terrain::config::TerrainConfig;
-use crate::terrain::index::TerrainEntryStore;
 use crate::terrain::Terrain;
 use crate::water::{PresentedWaterScene, Water};
 use bevy::ecs::system::SystemParam;
-use bevy::math::bounding::{Aabb3d, IntersectsVolume};
+use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use chunk::cascade::CascadeChunk;
-use lod::gen::{Id, LodScene, RegionPresenter, SpatialIndex, StorageStatus, TrackedId, Version};
+use lod::gen::{Id, LodScene, RegionPresenter, Version};
+use lod::hcsg::{HcsgStorage, StoredEntry};
 use lod::lod_ref::LodRef;
 use lod::LodSceneLevel;
 use render_item::sdf::cpu_shot::WallFaces;
@@ -199,19 +197,14 @@ impl TerrainPresentationAssets {
 	}
 }
 
-/// Bootstrap source used only when first materializing [`TerrainPresentationAssets`]
-/// at [`Id::Universal`]. Consumers should depend on
-/// [`lod::gen::GeneratingSpatialIndex`]`<TerrainPresentationAssets>` instead.
-pub trait BootstrapTerrainPresentationAssets {
-	fn bootstrap_terrain_presentation_assets(&self) -> TerrainPresentationAssets;
-}
+lod::seeded_root!(TerrainPresentationAssets);
 
-universal_bootstrap_scheme!(
-	TerrainPresentationAssets,
-	BootstrapTerrainPresentationAssets::bootstrap_terrain_presentation_assets
-);
-
-/// Runtime presentation bookkeeping: last presented version and root entity per id.
+/// Runtime presentation bookkeeping: last presented terrain and water versions
+/// and the root entity per id.
+///
+/// Terrain and water generate independently, so a cell can be presented before
+/// its water exists. Water is reconciled against its own version, not the
+/// terrain version.
 #[derive(Resource, Default)]
 pub struct TerrainPresenterState {
 	presented: HashMap<Id, PresentedEntry>,
@@ -222,7 +215,27 @@ struct PresentedEntry {
 	version: Version,
 	entity: Entity,
 	water: Option<Entity>,
+	water_version: Option<Version>,
 	level: LodSceneLevel,
+}
+
+impl PresentedEntry {
+	fn new(version: Version, entity: Entity, level: LodSceneLevel) -> Self {
+		Self { version, entity, water: None, water_version: None, level }
+	}
+
+	/// Attach, replace, or drop the water child so it matches `water`.
+	fn sync_water(&mut self, commands: &mut Commands, id: Id, water: Option<&StoredEntry<Water>>) {
+		let version = water.map(|entry| entry.version);
+		if self.water_version == version {
+			return;
+		}
+		if let Some(previous) = self.water.take() {
+			commands.entity(previous).try_despawn();
+		}
+		self.water = water.map(|entry| attach_water(commands, id, self.entity, &entry.value));
+		self.water_version = version;
+	}
 }
 
 /// Marks a spawned terrain scene root as belonging to a presented id.
@@ -309,64 +322,19 @@ impl TerrainPresenterState {
 
 	#[cfg(test)]
 	pub(crate) fn insert_for_test(&mut self, id: Id, version: Version, entity: Entity) {
-		self.presented.insert(
-			id,
-			PresentedEntry { version, entity, water: None, level: LodSceneLevel::High },
-		);
+		self.presented
+			.insert(id, PresentedEntry::new(version, entity, LodSceneLevel::High));
 	}
 
 	#[cfg(test)]
 	pub(crate) fn presented_version(&self, id: Id) -> Option<Version> {
 		self.presented.get(&id).map(|entry| entry.version)
 	}
-}
 
-/// Read-only spatial-index view over the terrain entry map for presentation.
-///
-/// Insert is unsupported; generate through [`crate::terrain::AvianTerrainIndex`] first.
-pub struct TerrainStoreView<'a> {
-	store: &'a TerrainEntryStore,
-	_layout: &'a TerrainCellLayout,
-}
-
-impl<'a> TerrainStoreView<'a> {
-	pub fn new(store: &'a TerrainEntryStore, layout: &'a TerrainCellLayout) -> Self {
-		Self { store, _layout: layout }
-	}
-}
-
-impl SpatialIndex<Terrain> for TerrainStoreView<'_> {
-	fn tracked_ids_for(&self, region: Aabb3d) -> Vec<TrackedId> {
-		self.store
-			.terrain
-			.iter()
-			.filter(|(_, entry)| region.intersects(&entry.bounds))
-			.map(|(id, _)| TrackedId(*id))
-			.collect()
-	}
-
-	fn storage_status(&self, id: Id) -> StorageStatus {
-		if self.store.terrain.contains_key(&id) {
-			StorageStatus::TrackedWithin
-		} else {
-			StorageStatus::NotTracked
-		}
-	}
-
-	fn get(&self, id: Id) -> Option<&Terrain> {
-		self.store.terrain.get(&id).map(|e| &e.value)
-	}
-
-	fn get_bounds(&self, id: Id) -> Option<Aabb3d> {
-		self.store.terrain.get(&id).map(|e| e.bounds)
-	}
-
-	fn version(&self, id: Id) -> Option<Version> {
-		self.store.terrain.get(&id).map(|e| e.version)
-	}
-
-	fn insert(&mut self, _id: Id, _t: Terrain, _bounds: Aabb3d) {
-		panic!("TerrainStoreView is read-only; insert via AvianTerrainIndex");
+	#[cfg(test)]
+	pub(crate) fn presented_water(&self, id: Id) -> Option<(Entity, Version)> {
+		let entry = self.presented.get(&id)?;
+		entry.water.zip(entry.water_version)
 	}
 }
 
@@ -375,12 +343,21 @@ impl SpatialIndex<Terrain> for TerrainStoreView<'_> {
 pub struct TerrainRegionPresenter<'w, 's> {
 	commands: Commands<'w, 's>,
 	state: ResMut<'w, TerrainPresenterState>,
-	store: Res<'w, TerrainEntryStore>,
+	store: Res<'w, HcsgStorage>,
 }
 
 impl<'w, 's> TerrainRegionPresenter<'w, 's> {
 	pub fn clear_presented(&mut self) {
 		self.state.clear(&mut self.commands);
+	}
+
+	/// Bring every presented cell's water up to the stored [`Water`] version.
+	/// Run after [`RegionPresenter::present`]; that pass only compares terrain
+	/// versions, so water generated later would otherwise never attach.
+	pub fn sync_water(&mut self) {
+		for (id, shown) in &mut self.state.presented {
+			shown.sync_water(&mut self.commands, *id, self.store.entry::<Water>(*id));
+		}
 	}
 }
 
@@ -389,7 +366,7 @@ impl<'w, 's> TerrainRegionPresenter<'w, 's> {
 pub struct TerrainStreamRegionPresenter<'w, 's, M: TerrainStreamMarker> {
 	commands: Commands<'w, 's>,
 	state: ResMut<'w, TerrainStreamPresenterState<M>>,
-	store: Res<'w, TerrainEntryStore>,
+	store: Res<'w, HcsgStorage>,
 }
 
 pub type TerrainNearRegionPresenter<'w, 's> = TerrainStreamRegionPresenter<'w, 's, TerrainNear>;
@@ -407,7 +384,7 @@ impl<M: TerrainStreamMarker> TerrainStreamRegionPresenter<'_, '_, M> {
 	/// banding (High = mesh, Medium / Low = empty), not a presenter High filter.
 	pub fn present(
 		&mut self,
-		store: &TerrainEntryStore,
+		store: &HcsgStorage,
 		layout: &TerrainCellLayout,
 		region: Aabb3d,
 		lod_ref: &LodRef,
@@ -419,35 +396,32 @@ impl<M: TerrainStreamMarker> TerrainStreamRegionPresenter<'_, '_, M> {
 			return;
 		};
 		let wanted: HashSet<Id> = store
-			.terrain
-			.iter()
-			.filter(|(_, entry)| region.intersects(&entry.bounds) && Self::matches(&entry.value))
-			.filter(|(_, entry)| {
-				let level = entry.value.scene_lod_level(lod_ref);
-				crate::terrain::stream_lod::stream_banded_draws(&entry.value, level)
-					|| entry.value.seeds_collision()
+			.overlapping::<Terrain>(region)
+			.into_iter()
+			.filter(|id| {
+				store.get::<Terrain>(*id).is_some_and(|value| {
+					let level = value.scene_lod_level(lod_ref);
+					Self::matches(value)
+						&& (crate::terrain::stream_lod::stream_banded_draws(value, level)
+							|| value.seeds_collision())
+				})
 			})
-			.map(|(id, _)| *id)
 			.collect();
 
 		for id in &wanted {
-			let Some(entry) = store.terrain.get(id) else {
+			let Some(entry) = store.entry::<Terrain>(*id) else {
 				continue;
 			};
 			let level = entry.value.scene_lod_level(lod_ref);
 			let draw = crate::terrain::stream_lod::stream_banded_draws(&entry.value, level);
-			let water = draw.then(|| self.store.water(*id)).flatten();
+			let water = draw.then(|| self.store.entry::<Water>(*id)).flatten();
 			if let Some(shown) = self.state.presented.get_mut(id) {
 				if shown.version == entry.version {
 					if shown.level != level {
 						self.commands.entity(shown.entity).insert(fill_visibility(draw));
-						if let Some(previous_water) = shown.water.take() {
-							self.commands.entity(previous_water).try_despawn();
-						}
-						shown.water =
-							water.map(|w| attach_water(&mut self.commands, *id, shown.entity, w));
 						shown.level = level;
 					}
+					shown.sync_water(&mut self.commands, *id, water);
 					continue;
 				}
 			}
@@ -465,11 +439,9 @@ impl<M: TerrainStreamMarker> TerrainStreamRegionPresenter<'_, '_, M> {
 				TerrainVisualHost,
 				M::default(),
 			));
-			let water_entity = water.map(|w| attach_water(&mut self.commands, *id, entity, w));
-			self.state.presented.insert(
-				*id,
-				PresentedEntry { version: entry.version, entity, water: water_entity, level },
-			);
+			let mut shown = PresentedEntry::new(entry.version, entity, level);
+			shown.sync_water(&mut self.commands, *id, water);
+			self.state.presented.insert(*id, shown);
 		}
 
 		let stale: Vec<(Id, Entity)> = self
@@ -490,7 +462,7 @@ impl<M: TerrainStreamMarker> TerrainStreamRegionPresenter<'_, '_, M> {
 	}
 }
 
-impl<'a, 'w, 's> RegionPresenter<Terrain, TerrainStoreView<'a>> for TerrainRegionPresenter<'w, 's> {
+impl<'w, 's> RegionPresenter<Terrain, HcsgStorage> for TerrainRegionPresenter<'w, 's> {
 	fn presented_version(&self, id: Id) -> Option<Version> {
 		self.state.presented.get(&id).map(|e| e.version)
 	}
@@ -505,10 +477,9 @@ impl<'a, 'w, 's> RegionPresenter<Terrain, TerrainStoreView<'a>> for TerrainRegio
 			PresentedTerrainScene(id),
 			TerrainVisualHost,
 		));
-		let water = self.store.water(id).map(|w| attach_water(&mut self.commands, id, entity, w));
-		self.state
-			.presented
-			.insert(id, PresentedEntry { version, entity, water, level: LodSceneLevel::High });
+		let mut shown = PresentedEntry::new(version, entity, LodSceneLevel::High);
+		shown.sync_water(&mut self.commands, id, self.store.entry::<Water>(id));
+		self.state.presented.insert(id, shown);
 	}
 
 	fn presented_ids(&self) -> Vec<Id> {

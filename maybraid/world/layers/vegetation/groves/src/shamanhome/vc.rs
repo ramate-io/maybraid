@@ -21,7 +21,7 @@ use crate::grove::vc_tuft::{patch_variant_index, variant_noise};
 use crate::grove::{
 	canopy_ball_material_from_palette, canopy_proxy_crown, canopy_proxy_site,
 	foliage_low_canopy_balls, frond_material_from_palette, grove_structural_footprint,
-	nest_flattened_plant_chunk, placed_palm_low_fronds, placement_noise, remixed_sbs_plant,
+	lazy_flattened_plant_chunks, nest_flattened_plant_chunk, placed_palm_low_fronds, placement_noise, remixed_sbs_plant,
 	stick_material_from_palette, CanopyProxySite, FlatTerrainSample, GroveCellVariant, GroveExtent,
 	GrovePreviewParams,
 };
@@ -114,7 +114,7 @@ impl Shamanhome {
 		let bounds = *lod_ref.bounds;
 		let entity = lod_ref.entity;
 		let mut index = 0usize;
-		vec![SceneChunk::lazy(n as u32, n, move || {
+		vec![lazy_flattened_plant_chunks(n, move || {
 			if index >= plants.len() {
 				return None;
 			}

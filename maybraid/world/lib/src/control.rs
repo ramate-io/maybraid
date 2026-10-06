@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 use durham::{
-	terrain_collider_covers_xz, CascadeChunk, TerrainCellLayout, TerrainEntryStore,
+	terrain_collider_covers_xz, CascadeChunk, HcsgStorage, TerrainCellLayout, TerrainStorage,
 	TerrainTrimeshCollider,
 };
 use game_commands::command::{CommandConsoleOutput, TextEntryFocus};
@@ -56,7 +56,7 @@ pub struct WorldSurfaceSet;
 
 pub(crate) fn update_world_surface_ready(
 	streaming: Res<terrain_layer_model::TerrainStreaming<durham::Durham>>,
-	store: Res<TerrainEntryStore>,
+	store: Res<HcsgStorage>,
 	layout: Res<TerrainCellLayout>,
 	spawn: Res<PlayerSpawnXz>,
 	players: Query<&Transform, With<Player>>,
