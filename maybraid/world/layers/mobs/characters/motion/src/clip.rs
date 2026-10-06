@@ -353,7 +353,7 @@ impl AnimClip {
 	pub const fn time_policy(self) -> ClipTimePolicy {
 		match self {
 			Self::Still => ClipTimePolicy::Unbounded,
-			Self::Walk(_) | Self::Run(_) | Self::QuadrupedRun(_) | Self::Gallop(_) => {
+			Self::Walk(_) | Self::Run(_) | Self::Gait(_) | Self::QuadrupedRun(_) | Self::Gallop(_) => {
 				ClipTimePolicy::Cycle { duration: 1.0 }
 			}
 			Self::Tuck(_) | Self::TuckedFlip(_) | Self::Jab(_) => {
