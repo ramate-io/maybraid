@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 use bevy::text::FontSize;
+use combat_hud::ScreenPin;
 use damage::Downed;
 use evasion_intelligence::{EvasionActuator, EvasionIntelligenceUser};
 use game_commands::ui::{GameCommandStatusText, GameCommandUiConfig};
@@ -8,7 +9,7 @@ use player::Npc;
 use threat_management_intelligence::{ThreatManagementIntelligence, ThreatTactic};
 
 const HUD_PIN_COUNT: usize = 8;
-const HUD_MARGIN: f32 = 22.0;
+pub(crate) const HUD_MARGIN: f32 = 22.0;
 const HUD_PIN_WIDTH: f32 = 118.0;
 const HUD_PIN_WORLD_HEIGHT: f32 = 4.0;
 
@@ -270,7 +271,7 @@ pub(crate) fn sync_mob_debug_pins(
 			continue;
 		};
 		let Some((screen, on_screen)) =
-			project_mob_pin(camera, camera_transform, mob_pin_anchor(host.at))
+			ScreenPin::project(camera, camera_transform, mob_pin_anchor(host.at), HUD_MARGIN)
 		else {
 			*visibility = Visibility::Hidden;
 			continue;
@@ -286,7 +287,7 @@ pub(crate) fn sync_mob_debug_pins(
 			continue;
 		}
 		let Some((screen, on_screen)) =
-			project_mob_pin(camera, camera_transform, mob_pin_anchor(host.at))
+			ScreenPin::project(camera, camera_transform, mob_pin_anchor(host.at), HUD_MARGIN)
 		else {
 			continue;
 		};
@@ -356,55 +357,8 @@ fn ranked_hosts_with_entity(
 	ranked
 }
 
-pub(crate) fn project_mob_pin(
-	camera: &Camera,
-	camera_transform: &GlobalTransform,
-	world: Vec3,
-) -> Option<(Vec2, bool)> {
-	let rect = camera.logical_viewport_rect()?;
-	let mut ndc = camera.world_to_ndc(camera_transform, world)?;
-	let in_frustum = ndc.z > 0.0 && ndc.z < 1.0;
-	if !in_frustum {
-		ndc.x = -ndc.x;
-		ndc.y = -ndc.y;
-	}
-	ndc.y = -ndc.y;
-	let mut screen = (ndc.truncate() + Vec2::ONE) / 2.0 * rect.size() + rect.min;
-	let on_screen = in_frustum
-		&& screen.x >= rect.min.x
-		&& screen.x <= rect.max.x
-		&& screen.y >= rect.min.y
-		&& screen.y <= rect.max.y;
-	if !on_screen {
-		screen = clamp_to_rect(
-			rect.center(),
-			screen,
-			rect.min + Vec2::splat(HUD_MARGIN),
-			rect.max - Vec2::splat(HUD_MARGIN),
-		);
-	}
-	Some((screen, on_screen))
-}
-
 fn mob_pin_anchor(host: Vec3) -> Vec3 {
 	host + Vec3::Y * HUD_PIN_WORLD_HEIGHT
-}
-
-pub(crate) fn clamp_to_rect(center: Vec2, point: Vec2, min: Vec2, max: Vec2) -> Vec2 {
-	let dir = point - center;
-	if dir.length_squared() < 1e-6 {
-		return Vec2::new(center.x.clamp(min.x, max.x), center.y.clamp(min.y, max.y));
-	}
-	let mut t = f32::INFINITY;
-	if dir.x.abs() > 1e-6 {
-		let edge = if dir.x > 0.0 { max.x } else { min.x };
-		t = t.min((edge - center.x) / dir.x);
-	}
-	if dir.y.abs() > 1e-6 {
-		let edge = if dir.y > 0.0 { max.y } else { min.y };
-		t = t.min((edge - center.y) / dir.y);
-	}
-	center + dir * t.clamp(0.0, 1.0)
 }
 
 pub(crate) fn pin_node(screen: Vec2) -> Node {
@@ -452,30 +406,6 @@ fn xz_ring(gizmos: &mut Gizmos, center: Vec3, radius: f32, color: Color) {
 #[cfg(test)]
 mod tests {
 	use super::*;
-
-	#[test]
-	fn clamp_hits_the_near_edge() {
-		let clamped = clamp_to_rect(
-			Vec2::new(100.0, 100.0),
-			Vec2::new(400.0, 100.0),
-			Vec2::splat(20.0),
-			Vec2::splat(180.0),
-		);
-		assert!((clamped.x - 180.0).abs() < 1e-3);
-		assert!((clamped.y - 100.0).abs() < 1e-3);
-	}
-
-	#[test]
-	fn clamp_keeps_an_interior_point() {
-		let clamped = clamp_to_rect(
-			Vec2::new(100.0, 100.0),
-			Vec2::new(120.0, 110.0),
-			Vec2::splat(20.0),
-			Vec2::splat(180.0),
-		);
-		assert!((clamped.x - 120.0).abs() < 1e-3);
-		assert!((clamped.y - 110.0).abs() < 1e-3);
-	}
 
 	#[test]
 	fn mob_pin_anchor_is_lifted_above_the_surface() {

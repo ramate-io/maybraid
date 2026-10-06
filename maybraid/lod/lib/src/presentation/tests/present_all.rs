@@ -8,11 +8,7 @@ fn present_all_delegates_to_present_with_descendants_on_index_type() -> Result<(
 	let mut index = WorldIndex::default();
 	let region = cell(9.0);
 	let lod = TestLod::new(region);
-	GeneratingSpatialIndex::<Vegetation>::get_or_generate_region(
-		&mut index,
-		region,
-		&lod.lod_ref(),
-	);
+	GeneratingSpatialIndex::<Vegetation>::get_or_generate_region(&mut index, region);
 
 	let mut via_all = RecordingPresenter::default();
 	RegionPresenter::<Vegetation, _>::present_all(&mut via_all, &index, region, &lod.lod_ref());
@@ -39,11 +35,7 @@ fn present_all_chains_descendant_layers() -> Result<()> {
 	let mut index = WorldIndex::default();
 	let region = cell(9.0);
 	let lod = TestLod::new(region);
-	GeneratingSpatialIndex::<Vegetation>::get_or_generate_region(
-		&mut index,
-		region,
-		&lod.lod_ref(),
-	);
+	GeneratingSpatialIndex::<Vegetation>::get_or_generate_region(&mut index, region);
 
 	let mut presenter = RecordingPresenter::default();
 	RegionPresenter::<Vegetation, _>::present_all(&mut presenter, &index, region, &lod.lod_ref());

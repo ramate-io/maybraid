@@ -8,11 +8,7 @@ fn present_handles_new_ids_and_skips_unchanged_ones() -> Result<()> {
 	let mut index = WorldIndex::default();
 	let region = cell(5.0);
 	let lod = TestLod::new(region);
-	GeneratingSpatialIndex::<Vegetation>::get_or_generate_region(
-		&mut index,
-		region,
-		&lod.lod_ref(),
-	);
+	GeneratingSpatialIndex::<Vegetation>::get_or_generate_region(&mut index, region);
 
 	let mut presenter = RecordingPresenter::default();
 	RegionPresenter::<Vegetation, _>::present(&mut presenter, &index, region, &lod.lod_ref());
@@ -41,7 +37,7 @@ fn version_bump_causes_representation() -> Result<()> {
 	let region = cell(6.0);
 	let lod = TestLod::new(region);
 	let veg_id = Id::from_cell(cell(6.0));
-	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, veg_id, &lod.lod_ref());
+	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, veg_id);
 
 	let mut presenter = RecordingPresenter::default();
 	RegionPresenter::<Vegetation, _>::present(&mut presenter, &index, region, &lod.lod_ref());
@@ -53,7 +49,7 @@ fn version_bump_causes_representation() -> Result<()> {
 
 	// Re-insert mutates storage and stamps a fresh version.
 	let updated = Vegetation { cell: cell(6.0) };
-	SpatialIndex::<Vegetation>::insert(&mut index, veg_id, updated, cell(6.0), &lod.lod_ref());
+	SpatialIndex::<Vegetation>::insert(&mut index, veg_id, updated, cell(6.0));
 
 	RegionPresenter::<Vegetation, _>::present(&mut presenter, &index, region, &lod.lod_ref());
 	let second_presented = presenter
@@ -73,7 +69,7 @@ fn needs_repair_rehandles_without_version_bump() -> Result<()> {
 	let region = cell(6.5);
 	let lod = TestLod::new(region);
 	let veg_id = Id::from_cell(cell(6.5));
-	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, veg_id, &lod.lod_ref());
+	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, veg_id);
 
 	let mut presenter = RecordingPresenter::default();
 	RegionPresenter::<Vegetation, _>::present(&mut presenter, &index, region, &lod.lod_ref());
@@ -108,11 +104,7 @@ fn present_always_heals_after_handling() -> Result<()> {
 	let mut index = WorldIndex::default();
 	let region = cell(5.5);
 	let lod = TestLod::new(region);
-	GeneratingSpatialIndex::<Vegetation>::get_or_generate_region(
-		&mut index,
-		region,
-		&lod.lod_ref(),
-	);
+	GeneratingSpatialIndex::<Vegetation>::get_or_generate_region(&mut index, region);
 
 	let mut presenter = RecordingPresenter::default();
 	RegionPresenter::<Vegetation, _>::present(&mut presenter, &index, region, &lod.lod_ref());

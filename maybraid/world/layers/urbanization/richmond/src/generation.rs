@@ -4,7 +4,6 @@ use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec3;
 use buildings::Fit;
 use lod::gen::{GeneratingSpatialIndex, GenerationScheme, Id, OriginalId, SpatialIndex};
-use lod::lod_ref::LodRef;
 use procedural_common::NoiseParams;
 use urbanization_cells::{UrbanDevelopmentKind, UrbanizationExtent};
 use urbanization_developments::PlacedBuilding;
@@ -57,19 +56,11 @@ impl<'w, 's, G: RichmondGround> GenerationScheme<DevelopmentIndex<'w, 's, G>> fo
 	fn build_with_id(
 		spatial_index: &mut DevelopmentIndex<'w, 's, G>,
 		id: Id,
-		_lod_ref: &LodRef,
 	) -> Option<(Self, Aabb3d)> {
 		if spatial_index.config().use_urbanization {
 			return build_from_urbanization_leaf(spatial_index, id);
 		}
 		build_from_lattice_extent(spatial_index, id)
-	}
-
-	fn descendants_with_lod(
-		_id: Id,
-		_spatial_index: &mut DevelopmentIndex<'w, 's, G>,
-		_lod_ref: &LodRef,
-	) {
 	}
 }
 
@@ -203,29 +194,20 @@ impl<'w, 's, G: RichmondGround> GenerationScheme<DevelopmentIndex<'w, 's, G>> fo
 	fn build_with_id(
 		spatial_index: &mut DevelopmentIndex<'w, 's, G>,
 		id: Id,
-		lod_ref: &LodRef,
 	) -> Option<(Self, Aabb3d)> {
 		let bounds = id.origin_cell_bounds()?;
 		let terrain = G::stored_cell(&spatial_index.ground, id)?.clone();
 
-		ensure_development_cells_for_bounds(spatial_index, bounds, lod_ref);
+		ensure_development_cells_for_bounds(spatial_index, bounds);
 		let pads = spatial_index.store.merged_pad_complex(bounds);
 		let padded = terrain.compose_pads(&pads);
 		Some((padded, bounds))
-	}
-
-	fn descendants_with_lod(
-		_id: Id,
-		_spatial_index: &mut DevelopmentIndex<'w, 's, G>,
-		_lod_ref: &LodRef,
-	) {
 	}
 }
 
 fn ensure_development_cells_for_bounds<G: RichmondGround>(
 	spatial_index: &mut DevelopmentIndex<'_, '_, G>,
 	bounds: Aabb3d,
-	lod_ref: &LodRef,
 ) {
 	if spatial_index.config().use_urbanization {
 		let noise = spatial_index.config().urbanization_noise();
@@ -240,20 +222,14 @@ fn ensure_development_cells_for_bounds<G: RichmondGround>(
 			.map(|leaf| leaf.id())
 			.collect();
 		for leaf_id in leaf_ids {
-			let _ = GeneratingSpatialIndex::<DevelopmentCell>::get_or_generate(
-				spatial_index,
-				leaf_id,
-				lod_ref,
-			);
+			let _ =
+				GeneratingSpatialIndex::<DevelopmentCell>::get_or_generate(spatial_index, leaf_id);
 		}
 		return;
 	}
 	for extent in DevelopmentExtent::cells_overlapping(bounds) {
-		let _ = GeneratingSpatialIndex::<DevelopmentCell>::get_or_generate(
-			spatial_index,
-			extent.id(),
-			lod_ref,
-		);
+		let _ =
+			GeneratingSpatialIndex::<DevelopmentCell>::get_or_generate(spatial_index, extent.id());
 	}
 }
 
@@ -268,9 +244,8 @@ impl<'w, 's, G: RichmondGround> GenerationScheme<DevelopmentIndex<'w, 's, G>> fo
 	fn build_with_id(
 		spatial_index: &mut DevelopmentIndex<'w, 's, G>,
 		id: Id,
-		lod_ref: &LodRef,
 	) -> Option<(Self, Aabb3d)> {
-		GeneratingSpatialIndex::<DevelopmentCell>::get_or_generate(spatial_index, id, lod_ref)?;
+		GeneratingSpatialIndex::<DevelopmentCell>::get_or_generate(spatial_index, id)?;
 		let seed = spatial_index.config().seed as i32;
 		let kind = SpatialIndex::<DevelopmentCell>::get(spatial_index, id)?.kind();
 		let cell_aabb = SpatialIndex::<DevelopmentCell>::get(spatial_index, id)?.cell;
@@ -402,12 +377,5 @@ impl<'w, 's, G: RichmondGround> GenerationScheme<DevelopmentIndex<'w, 's, G>> fo
 			}
 		};
 		Some((built, cell_aabb))
-	}
-
-	fn descendants_with_lod(
-		_id: Id,
-		_spatial_index: &mut DevelopmentIndex<'w, 's, G>,
-		_lod_ref: &LodRef,
-	) {
 	}
 }

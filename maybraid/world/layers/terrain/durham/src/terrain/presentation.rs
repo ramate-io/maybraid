@@ -5,7 +5,7 @@
 //! Near trimesh land on that same entity.
 
 use crate::terrain::cell::{
-	expand_aabb_xz, universal_bounds, TerrainCellLayout, TERRAIN_CELL_SIZE,
+	expand_aabb_xz, universal_bootstrap_scheme, TerrainCellLayout, TERRAIN_CELL_SIZE,
 };
 use crate::terrain::config::TerrainConfig;
 use crate::terrain::index::TerrainEntryStore;
@@ -15,10 +15,7 @@ use bevy::ecs::system::SystemParam;
 use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::prelude::*;
 use chunk::cascade::CascadeChunk;
-use lod::gen::{
-	GenerationScheme, Id, LodScene, OriginalId, RegionPresenter, SpatialIndex, StorageStatus,
-	TrackedId, Version,
-};
+use lod::gen::{Id, LodScene, RegionPresenter, SpatialIndex, StorageStatus, TrackedId, Version};
 use lod::lod_ref::LodRef;
 use lod::LodSceneLevel;
 use render_item::sdf::cpu_shot::WallFaces;
@@ -37,7 +34,7 @@ pub struct TerrainMeshLodBand {
 
 /// Config / material / mesh resolution used when building terrain instances.
 ///
-/// Materialized once under [`Id::Universal`] via [`GenerationScheme`].
+/// Materialized once under [`Id::Universal`] via [`lod::gen::GenerationScheme`].
 ///
 /// Fine-grid LOD: first [`TerrainMeshLodBand`] with `radius ≤ max_radius_cells`
 /// wins ([`Self::lod_bands`] must be sorted ascending by radius). Radii past the
@@ -209,23 +206,10 @@ pub trait BootstrapTerrainPresentationAssets {
 	fn bootstrap_terrain_presentation_assets(&self) -> TerrainPresentationAssets;
 }
 
-impl<S> GenerationScheme<S> for TerrainPresentationAssets
-where
-	S: BootstrapTerrainPresentationAssets,
-{
-	fn original_ids_for(_spatial_index: &mut S, _region: Aabb3d) -> Vec<OriginalId> {
-		vec![OriginalId::universal()]
-	}
-
-	fn build_with_id(spatial_index: &mut S, id: Id, _lod_ref: &LodRef) -> Option<(Self, Aabb3d)> {
-		if id != Id::Universal {
-			return None;
-		}
-		Some((spatial_index.bootstrap_terrain_presentation_assets(), universal_bounds()))
-	}
-
-	fn descendants_with_lod(_id: Id, _spatial_index: &mut S, _lod_ref: &LodRef) {}
-}
+universal_bootstrap_scheme!(
+	TerrainPresentationAssets,
+	BootstrapTerrainPresentationAssets::bootstrap_terrain_presentation_assets
+);
 
 /// Runtime presentation bookkeeping: last presented version and root entity per id.
 #[derive(Resource, Default)]
@@ -381,7 +365,7 @@ impl SpatialIndex<Terrain> for TerrainStoreView<'_> {
 		self.store.terrain.get(&id).map(|e| e.version)
 	}
 
-	fn insert(&mut self, _id: Id, _t: Terrain, _bounds: Aabb3d, _lod_ref: &LodRef) {
+	fn insert(&mut self, _id: Id, _t: Terrain, _bounds: Aabb3d) {
 		panic!("TerrainStoreView is read-only; insert via AvianTerrainIndex");
 	}
 }
