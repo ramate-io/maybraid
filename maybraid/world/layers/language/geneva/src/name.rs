@@ -30,6 +30,8 @@ pub struct AssignedName {
 	/// Regional names stay provisional until a complete canonical summary exists.
 	/// Places without a stable host identity are also provisional.
 	pub provisional: bool,
+	/// Host language consumed when this name was assigned, if any.
+	pub inherited_language: Option<u64>,
 }
 
 impl PlaceName {
@@ -56,6 +58,42 @@ impl PlaceName {
 		let overlay = ConceptId::overlay(mix(bundle.seed ^ stable_surface(&surface)) as u32);
 		Self { surface, english: chosen, overlay, language_seed: bundle.seed }
 	}
+
+	/// Translate every term in arrival order. Used when a color + kind must both survive.
+	pub fn translate_all(bundle: &LanguageBundle, english: &[String]) -> Self {
+		let chosen = unique_ordered(english);
+		let mut catalog = KindConceptUniverse::new();
+		catalog.intern_all(chosen.iter());
+		let mut graph = InMemoryLexicalGraph::default();
+		let profile = Profile::neutral();
+		let mut forms = Vec::new();
+		for word in &chosen {
+			let Some(concept) = catalog.resolve_english(word).into_iter().next() else {
+				continue;
+			};
+			forms.push(lexicalize(bundle, concept, &catalog, &mut graph, &profile));
+		}
+		if matches!(bundle.grammar.modifiers, ModifierPlacement::AfterNoun) && forms.len() > 1 {
+			if let Some(head) = forms.pop() {
+				forms.insert(0, head);
+			}
+		}
+		let surface = forms.join(" ");
+		let overlay = ConceptId::overlay(mix(bundle.seed ^ stable_surface(&surface)) as u32);
+		Self { surface, english: chosen, overlay, language_seed: bundle.seed }
+	}
+}
+
+fn unique_ordered(english: &[String]) -> Vec<String> {
+	let mut unique = Vec::new();
+	for word in english {
+		let normalized = word.trim().to_ascii_lowercase();
+		if normalized.is_empty() || unique.iter().any(|seen: &String| seen == &normalized) {
+			continue;
+		}
+		unique.push(normalized);
+	}
+	unique
 }
 
 fn lexicalize(

@@ -2,7 +2,6 @@
 //! [`Id`]. It never generates and never presents.
 
 use crate::gen::id::{Id, StorageStatus, TrackedId};
-use crate::lod_ref::LodRef;
 use bevy::math::bounding::Aabb3d;
 
 /// Monotonic per-index storage version.
@@ -39,5 +38,5 @@ pub trait SpatialIndex<T> {
 	}
 
 	/// Inserts the value, stamping a fresh [`Version`]. Must not spawn scenes.
-	fn insert(&mut self, id: Id, t: T, bounds: Aabb3d, lod_ref: &LodRef);
+	fn insert(&mut self, id: Id, t: T, bounds: Aabb3d);
 }

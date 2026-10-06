@@ -1,17 +1,13 @@
 //! [`RegionPresenter`] for water cells (mirrors terrain presentation).
 
-use crate::terrain::cell::{universal_bounds, TerrainCellLayout};
-use crate::terrain::index::TerrainEntryStore;
 use crate::terrain::stream_lod::stream_banded_draws;
 use crate::water::Water;
 use bevy::ecs::system::SystemParam;
-use bevy::math::bounding::{Aabb3d, IntersectsVolume};
+use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use chunk::cascade::CascadeChunk;
-use lod::gen::{
-	GenerationScheme, Id, LodScene, LodSceneLevel, OriginalId, RegionPresenter, SpatialIndex,
-	StorageStatus, TrackedId, Version,
-};
+use lod::gen::{Id, LodScene, LodSceneLevel, RegionPresenter, Version};
+use lod::hcsg::HcsgStorage;
 use lod::lod_ref::LodRef;
 use std::collections::{HashMap, HashSet};
 use terrain_shaders::RefractionWater;
@@ -26,29 +22,7 @@ pub struct WaterPresentationAssets {
 	pub material: Handle<RefractionWater>,
 }
 
-/// Bootstrap source used only when first materializing [`WaterPresentationAssets`]
-/// at [`Id::Universal`].
-pub trait BootstrapWaterPresentationAssets {
-	fn bootstrap_water_presentation_assets(&self) -> WaterPresentationAssets;
-}
-
-impl<S> GenerationScheme<S> for WaterPresentationAssets
-where
-	S: BootstrapWaterPresentationAssets,
-{
-	fn original_ids_for(_spatial_index: &mut S, _region: Aabb3d) -> Vec<OriginalId> {
-		vec![OriginalId::universal()]
-	}
-
-	fn build_with_id(spatial_index: &mut S, id: Id, _lod_ref: &LodRef) -> Option<(Self, Aabb3d)> {
-		if id != Id::Universal {
-			return None;
-		}
-		Some((spatial_index.bootstrap_water_presentation_assets(), universal_bounds()))
-	}
-
-	fn descendants_with_lod(_id: Id, _spatial_index: &mut S, _lod_ref: &LodRef) {}
-}
+lod::seeded_root!(WaterPresentationAssets);
 
 /// Runtime presentation bookkeeping: last presented version and root entity per id.
 #[derive(Resource, Default)]
@@ -76,53 +50,6 @@ impl WaterPresenterState {
 	}
 }
 
-/// Read-only spatial-index view over the water entry map for presentation.
-pub struct WaterStoreView<'a> {
-	store: &'a TerrainEntryStore,
-	_layout: &'a TerrainCellLayout,
-}
-
-impl<'a> WaterStoreView<'a> {
-	pub fn new(store: &'a TerrainEntryStore, layout: &'a TerrainCellLayout) -> Self {
-		Self { store, _layout: layout }
-	}
-}
-
-impl SpatialIndex<Water> for WaterStoreView<'_> {
-	fn tracked_ids_for(&self, region: Aabb3d) -> Vec<TrackedId> {
-		self.store
-			.water
-			.iter()
-			.filter(|(_, entry)| region.intersects(&entry.bounds))
-			.map(|(id, _)| TrackedId(*id))
-			.collect()
-	}
-
-	fn storage_status(&self, id: Id) -> StorageStatus {
-		if self.store.water.contains_key(&id) {
-			StorageStatus::TrackedWithin
-		} else {
-			StorageStatus::NotTracked
-		}
-	}
-
-	fn get(&self, id: Id) -> Option<&Water> {
-		self.store.water.get(&id).map(|e| &e.value)
-	}
-
-	fn get_bounds(&self, id: Id) -> Option<Aabb3d> {
-		self.store.water.get(&id).map(|e| e.bounds)
-	}
-
-	fn version(&self, id: Id) -> Option<Version> {
-		self.store.water.get(&id).map(|e| e.version)
-	}
-
-	fn insert(&mut self, _id: Id, _t: Water, _bounds: Aabb3d, _lod_ref: &LodRef) {
-		panic!("WaterStoreView is read-only; insert via AvianTerrainIndex");
-	}
-}
-
 /// System-local presenter: spawns water `bsn!` scenes and tracks versions.
 #[derive(SystemParam)]
 pub struct WaterRegionPresenter<'w, 's> {
@@ -136,23 +63,22 @@ impl<'w, 's> WaterRegionPresenter<'w, 's> {
 	}
 
 	/// Present keep-region water. Banding matches the sibling terrain ring.
-	pub fn present_banded(&mut self, view: &WaterStoreView<'_>, region: Aabb3d, lod_ref: &LodRef) {
-		let wanted: HashSet<Id> = SpatialIndex::<Water>::tracked_ids_for(view, region)
+	pub fn present_banded(&mut self, store: &HcsgStorage, region: Aabb3d, lod_ref: &LodRef) {
+		let wanted: HashSet<Id> = store
+			.overlapping::<Water>(region)
 			.into_iter()
-			.filter_map(|TrackedId(id)| {
-				let value = SpatialIndex::<Water>::get(view, id)?;
-				let level = value.scene_lod_level(lod_ref);
-				stream_banded_draws(value, level).then_some(id)
+			.filter(|id| {
+				store
+					.get::<Water>(*id)
+					.is_some_and(|value| stream_banded_draws(value, value.scene_lod_level(lod_ref)))
 			})
 			.collect();
 
 		for id in &wanted {
-			let Some(value) = SpatialIndex::<Water>::get(view, *id) else {
+			let Some(entry) = store.entry::<Water>(*id) else {
 				continue;
 			};
-			let Some(version) = SpatialIndex::<Water>::version(view, *id) else {
-				continue;
-			};
+			let (value, version) = (&entry.value, entry.version);
 			let level = value.scene_lod_level(lod_ref);
 			if self
 				.state
@@ -192,7 +118,7 @@ impl<'w, 's> WaterRegionPresenter<'w, 's> {
 	}
 }
 
-impl<'a, 'w, 's> RegionPresenter<Water, WaterStoreView<'a>> for WaterRegionPresenter<'w, 's> {
+impl<'w, 's> RegionPresenter<Water, HcsgStorage> for WaterRegionPresenter<'w, 's> {
 	fn presented_version(&self, id: Id) -> Option<Version> {
 		self.state.presented.get(&id).map(|e| e.version)
 	}

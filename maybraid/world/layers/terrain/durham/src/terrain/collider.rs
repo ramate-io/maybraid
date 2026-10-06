@@ -36,7 +36,7 @@ impl Default for TerrainFrictionConfig {
 }
 
 /// Bumped when semantic terrain is regenerated so collider hosts cannot reuse
-/// a recycled [`Version`] after [`crate::terrain::AvianTerrainIndex::clear`].
+/// a recycled [`Version`] after a dirty rebuild clears [`crate::terrain::DurhamNodes`].
 #[derive(Resource, Default, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TerrainColliderEpoch(pub u64);
 

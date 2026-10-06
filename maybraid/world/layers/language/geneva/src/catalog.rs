@@ -26,10 +26,7 @@ impl KindConceptUniverse {
 		}
 		let id = ConceptId::overlay(stable_tag(&key));
 		self.by_word.insert(key.clone(), id);
-		self.concepts.insert(
-			id,
-			Concept { id, english_glosses: vec![key] },
-		);
+		self.concepts.insert(id, Concept { id, english_glosses: vec![key] });
 		id
 	}
 
@@ -54,7 +51,11 @@ impl ConceptUniverse for KindConceptUniverse {
 		self.by_word.get(&key).copied().into_iter().collect()
 	}
 
-	fn neighborhood(&self, _concept: ConceptId, _request: NeighborhoodRequest) -> Vec<ConceptRelation> {
+	fn neighborhood(
+		&self,
+		_concept: ConceptId,
+		_request: NeighborhoodRequest,
+	) -> Vec<ConceptRelation> {
 		Vec::new()
 	}
 }

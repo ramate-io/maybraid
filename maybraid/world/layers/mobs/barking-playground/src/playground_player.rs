@@ -7,7 +7,9 @@
 use avian3d::prelude::*;
 use bevy::ecs::query::Has;
 use bevy::prelude::*;
-use durham::{BaseTerrainNoise, TerrainCellLayout, TerrainEntryStore, TerrainTrimeshCollider};
+use durham::{
+	BaseTerrainNoise, HcsgStorage, TerrainCellLayout, TerrainStorage, TerrainTrimeshCollider,
+};
 use game_commands::command::TextEntryFocus;
 use lod_avian::PhysicsInteractionLayer;
 use maybraid_input::{PadButton, VirtualPad};
@@ -202,7 +204,7 @@ pub(crate) fn capsule_half_height() -> f32 {
 	CAPSULE_RADIUS + CAPSULE_LENGTH * 0.5
 }
 
-/// Elevation used before [`TerrainEntryStore`] has the cell underfoot.
+/// Elevation used before [`HcsgStorage`] has the cell underfoot.
 pub fn holding_elevation(base: &BaseTerrainNoise, x: f32, z: f32) -> f32 {
 	base.height_at(x, z) + base.height_scale * HOLD_ABOVE_BASE_FACTOR
 }
@@ -218,7 +220,7 @@ pub fn player_spawn_point(layout: &TerrainCellLayout, elevation: f32) -> Vec3 {
 
 pub(crate) fn snap_player_to_composed_surface(
 	mut commands: Commands,
-	store: Res<TerrainEntryStore>,
+	store: Res<HcsgStorage>,
 	layout: Res<TerrainCellLayout>,
 	awaiting: Query<Entity, (With<Player>, With<AwaitingTerrainSurface>)>,
 	mut players: Query<(&mut Transform, &mut LinearVelocity, &mut GravityScale), With<Player>>,

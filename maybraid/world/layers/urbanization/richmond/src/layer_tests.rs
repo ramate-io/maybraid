@@ -5,23 +5,23 @@ use bevy::ecs::system::{RunSystemOnce, SystemState};
 use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::math::{Vec2, Vec3};
 use bevy::prelude::{
-	AssetPlugin, Camera3d, Entity, MinimalPlugins, NextState, OnExit, Transform, Visibility, World,
+	AssetPlugin, Camera3d, MinimalPlugins, NextState, OnExit, Transform, Visibility, World,
 };
 use bevy::state::app::StatesPlugin;
 use durham::{
 	fine_patch_cell_layout, playable_world_cell_layout, BaseTerrainNoise, Durham,
-	DurhamTerrainConfig, PresentedTerrainScene, TerrainCellLayout, TerrainColliderMeshSource,
-	TerrainConfig, TerrainEntryStore, TerrainSuperseded, TerrainTrimeshCollider, WorldBaseTerrain,
-	TERRAIN_CELL_SIZE,
+	DurhamTerrainConfig, HcsgStorage, PresentedTerrainScene, TerrainCellLayout,
+	TerrainColliderMeshSource, TerrainConfig, TerrainStorage, TerrainSuperseded,
+	TerrainTrimeshCollider, WorldBaseTerrain, TERRAIN_CELL_SIZE,
 };
-use layer_stack::{ActiveGenerationMode, Generate, GenerationMode, GenerationModePlugin, LayerGenerationCore, LayerModeConfig, Present, Scheme};
+use layer_stack::{
+	ActiveGenerationMode, Generate, GenerationMode, GenerationModePlugin, LayerGenerationCore,
+	LayerModeConfig, Present, Scheme,
+};
 use lod::gen::{Id, LodGenerateBudget, LodGenerateRegion, SpatialIndex};
-use lod::lod_ref::LodRef;
 use lod::presentation::LodPresentKeepRegion;
 use procedural_common::{noise_params_from_scalar_str, NoiseParams};
-use terrain_layer_model::{
-	HeightField, OnTerrain, TerrainExtent, TerrainStreaming, TerrainView,
-};
+use terrain_layer_model::{HeightField, OnTerrain, TerrainExtent, TerrainStreaming, TerrainView};
 use urbanization_cells::{
 	DevelopmentLeaf, SelectedUrbanization, UrbanDevelopmentKind, UrbanizationExtent,
 	UrbanizationIndex, UrbanizationKind, UrbanizationLodChan,
@@ -87,7 +87,7 @@ type Urbanized = Urbanization<Richmond<OnTerrain<Durham>>>;
 
 fn empty_urbanized_world() -> World {
 	let mut world = World::new();
-	world.insert_resource(TerrainEntryStore::default());
+	world.init_resource::<HcsgStorage>();
 	world.insert_resource(TerrainCellLayout::default());
 	world.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(&TerrainConfig::new(42))));
 	world.insert_resource(DevelopmentEntryStore::default());
@@ -184,9 +184,9 @@ fn stream_applies_focus_when_the_spec_kind_is_open() -> anyhow::Result<()> {
 	app.add_plugins((MinimalPlugins, StatesPlugin));
 	app.add_plugins(GenerationModePlugin::<TestMode>::initial());
 	register_urbanization_lod_generate(&mut app);
-	app.insert_resource(LayerModeConfig::<TestMode, Urbanization<Richmond<OnTerrain<Durham>>>>::new(
-		config,
-	));
+	app.insert_resource(
+		LayerModeConfig::<TestMode, Urbanization<Richmond<OnTerrain<Durham>>>>::new(config),
+	);
 	app.init_resource::<UrbanizationStreamKey>();
 	app.world_mut().spawn((Camera3d::default(), Transform::from_xyz(0.0, 8.0, 0.0)));
 
@@ -260,14 +260,7 @@ fn insert_overlay_pad(
 	padded.res_2 = spec.res_2;
 	let bounds = padded.bounds();
 	let id = Id::from_cell(bounds);
-	let transform = Transform::IDENTITY;
-	let lod_ref = LodRef {
-		entity: Entity::PLACEHOLDER,
-		previous_transform: &transform,
-		current_transform: &transform,
-		bounds: &bounds,
-	};
-	SpatialIndex::<TerrainWithPads>::insert(&mut index, id, padded, bounds, &lod_ref);
+	SpatialIndex::<TerrainWithPads>::insert(&mut index, id, padded, bounds);
 }
 
 fn overlay_width_res(
@@ -294,13 +287,13 @@ fn overlay_cell_prefers_a_padded_cell_then_falls_back_by_size() -> anyhow::Resul
 	let medium =
 		TerrainCellLayout { cell_size: 2.0 * TERRAIN_CELL_SIZE, ..TerrainCellLayout::default() };
 	{
-		let mut store = world.resource_mut::<TerrainEntryStore>();
+		let mut store = world.resource_mut::<HcsgStorage>();
 		store.insert_base_terrain_for_test(&fine, 0, 0, base.clone());
 		store.insert_base_terrain_for_test(&medium, 0, 0, base);
 	}
 	let query = Aabb3d::from_min_max(Vec3::new(1.0, -10.0, 1.0), Vec3::new(20.0, 10.0, 20.0));
 	let (source, fine_bounds, medium_bounds) = {
-		let store = world.resource::<TerrainEntryStore>();
+		let store = world.resource::<HcsgStorage>();
 		let mut source = None;
 		let mut fine_bounds = None;
 		let mut medium_bounds = None;
@@ -426,9 +419,11 @@ fn leaving_a_stream_mode_clears_then_reentering_streams_again() -> anyhow::Resul
 		GenerationModePlugin::<OtherMode>::default(),
 	));
 	register_urbanization_lod_generate(&mut app);
-	app.insert_resource(LayerModeConfig::<StreamMode, Urbanization<Richmond<OnTerrain<Durham>>>>::new(
-		RichmondConfig::world_defaults(),
-	));
+	app.insert_resource(
+		LayerModeConfig::<StreamMode, Urbanization<Richmond<OnTerrain<Durham>>>>::new(
+			RichmondConfig::world_defaults(),
+		),
+	);
 	app.init_resource::<UrbanizationStreamKey>();
 	app.init_resource::<UrbanizationLayerRegion>();
 	app.init_resource::<DevelopmentEntryStore>();
@@ -504,9 +499,10 @@ fn different_budgets_build_and_apply_on_enter() -> anyhow::Result<()> {
 		Generate::<StreamMode, Urbanization<Richmond<OnTerrain<Durham>>>>::new(
 			RichmondConfig::world_defaults(),
 		),
-		Generate::<OtherMode, Urbanization<Richmond<OnTerrain<Durham>>>>::new(
-			RichmondConfig { generate_budget: 8, ..RichmondConfig::shared_world() },
-		),
+		Generate::<OtherMode, Urbanization<Richmond<OnTerrain<Durham>>>>::new(RichmondConfig {
+			generate_budget: 8,
+			..RichmondConfig::shared_world()
+		}),
 	));
 	app.insert_resource(TerrainStreaming::<Durham>::new(false));
 	app.finish();
@@ -680,7 +676,7 @@ fn streamed_hosts_leave_when_the_layer_region_is_gone() -> anyhow::Result<()> {
 	app.insert_resource(TerrainExtent::<Durham>::streamed(
 		playable_world_cell_layout().presentation_region(),
 	));
-	app.insert_resource(TerrainEntryStore::default());
+	app.init_resource::<HcsgStorage>();
 	app.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(&TerrainConfig::new(42))));
 	app.insert_resource(UrbanizationIndex::default());
 	app.insert_resource(DevelopmentEntryStore::default());
@@ -714,7 +710,7 @@ fn hosts_walk_a_stored_development_with_no_hopscotch() -> anyhow::Result<()> {
 	world.insert_resource(UrbanizationLayerRegion::default());
 	let layout = fine_patch_cell_layout(2, bevy::math::IVec2::ZERO);
 	world.insert_resource(layout.clone());
-	world.insert_resource(TerrainEntryStore::default());
+	world.init_resource::<HcsgStorage>();
 	world.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(&TerrainConfig::new(42))));
 	world.insert_resource(UrbanizationIndex::default());
 	world.insert_resource(DevelopmentEntryStore::default());

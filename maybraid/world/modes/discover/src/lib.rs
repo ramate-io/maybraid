@@ -78,7 +78,8 @@ impl Scheme<Language<Geneva<Vegetation<Chico<Urbanization<Richmond<OnTerrain<Dur
 	}
 }
 
-/// Discovery's player home is the origin. Waypoints stay; a respawn walks to a POI.
+/// Discovery's player home is the origin. Waypoints stay; first load and death
+/// both open the POI picker.
 pub struct DiscoveryPlayerPlugin;
 
 impl Plugin for DiscoveryPlayerPlugin {
@@ -89,7 +90,12 @@ impl Plugin for DiscoveryPlayerPlugin {
 }
 
 fn discovery_player_policy() -> ModePlayerPolicy {
-	ModePlayerPolicy { home: Vec2::ZERO, keep_waypoints: true, respawn_ends_life: false }
+	ModePlayerPolicy {
+		home: Vec2::ZERO,
+		keep_waypoints: true,
+		respawn_ends_life: false,
+		pick_first_spawn: true,
+	}
 }
 
 fn restore_playable_world(

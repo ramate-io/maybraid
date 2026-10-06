@@ -1,5 +1,6 @@
 //! Debug overlay of tile bounds and assigned names. Not a mesh stream.
 
+use bevy::math::{Rect, Vec2};
 use bevy::prelude::{App, IntoScheduleConfigs, Local, Res, ResMut, Resource, Update};
 use language_layer_model::Language;
 use lod::lod_present_gate_open;
@@ -31,11 +32,14 @@ pub struct LargeTileOverlay {
 }
 
 /// One assigned name in the overlay.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct NamedOverlay {
 	pub key: NameKey,
 	pub surface: String,
+	pub english: Vec<String>,
 	pub provisional: bool,
+	pub xz: Vec2,
+	pub extent: Rect,
 }
 
 impl LanguageOverlay {
@@ -51,10 +55,18 @@ impl LanguageOverlay {
 			.collect();
 		let names = index
 			.assigned_names()
-			.map(|(key, assigned): (NameKey, &AssignedName)| NamedOverlay {
-				key,
-				surface: assigned.name.surface.clone(),
-				provisional: assigned.provisional,
+			.filter_map(|(key, assigned): (NameKey, &AssignedName)| {
+				if !index.is_active(key) {
+					return None;
+				}
+				Some(NamedOverlay {
+					key,
+					surface: assigned.name.surface.clone(),
+					english: assigned.name.english.clone(),
+					provisional: assigned.provisional,
+					xz: index.anchor(key)?,
+					extent: index.extent(key)?,
+				})
 			})
 			.collect();
 		Self { large_tiles, names }

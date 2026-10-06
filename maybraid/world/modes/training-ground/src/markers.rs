@@ -2,7 +2,7 @@
 //! pins, an enemy off screen clamps to the nearest screen edge.
 
 use bevy::prelude::*;
-use combat_hud::CombatHudVisible;
+use combat_hud::{CombatHudVisible, ScreenPin};
 use damage::{Downed, Health};
 use mob_intelligence::MemberOf;
 
@@ -129,7 +129,7 @@ pub(crate) fn sync_training_enemy_markers(
 		};
 		marked.push(target);
 		let projected = camera.and_then(|(camera, eye)| {
-			project_marker(camera, eye, TrainingEnemyMarker::anchor(feet))
+			ScreenPin::project(camera, eye, TrainingEnemyMarker::anchor(feet), MARKER_MARGIN_PX)
 		});
 		let Some((screen, on_screen)) = projected else {
 			visibility.set_if_neq(Visibility::Hidden);
@@ -144,7 +144,7 @@ pub(crate) fn sync_training_enemy_markers(
 	};
 	for &(target, feet) in standing.iter().filter(|(target, _)| !marked.contains(target)) {
 		let Some((screen, on_screen)) =
-			project_marker(camera, eye, TrainingEnemyMarker::anchor(feet))
+			ScreenPin::project(camera, eye, TrainingEnemyMarker::anchor(feet), MARKER_MARGIN_PX)
 		else {
 			continue;
 		};
@@ -180,53 +180,6 @@ pub(crate) fn clear_training_enemy_markers(
 	for (root, _) in &roots {
 		commands.entity(root).try_despawn();
 	}
-}
-
-fn project_marker(
-	camera: &Camera,
-	camera_transform: &GlobalTransform,
-	world: Vec3,
-) -> Option<(Vec2, bool)> {
-	let rect = camera.logical_viewport_rect()?;
-	let mut ndc = camera.world_to_ndc(camera_transform, world)?;
-	let in_frustum = ndc.z > 0.0 && ndc.z < 1.0;
-	if !in_frustum {
-		ndc.x = -ndc.x;
-		ndc.y = -ndc.y;
-	}
-	ndc.y = -ndc.y;
-	let mut screen = (ndc.truncate() + Vec2::ONE) / 2.0 * rect.size() + rect.min;
-	let on_screen = in_frustum
-		&& screen.x >= rect.min.x
-		&& screen.x <= rect.max.x
-		&& screen.y >= rect.min.y
-		&& screen.y <= rect.max.y;
-	if !on_screen {
-		screen = clamp_to_rect(
-			rect.center(),
-			screen,
-			rect.min + Vec2::splat(MARKER_MARGIN_PX),
-			rect.max - Vec2::splat(MARKER_MARGIN_PX),
-		);
-	}
-	Some((screen, on_screen))
-}
-
-fn clamp_to_rect(center: Vec2, point: Vec2, min: Vec2, max: Vec2) -> Vec2 {
-	let dir = point - center;
-	if dir.length_squared() < 1e-6 {
-		return Vec2::new(center.x.clamp(min.x, max.x), center.y.clamp(min.y, max.y));
-	}
-	let mut t = f32::INFINITY;
-	if dir.x.abs() > 1e-6 {
-		let edge = if dir.x > 0.0 { max.x } else { min.x };
-		t = t.min((edge - center.x) / dir.x);
-	}
-	if dir.y.abs() > 1e-6 {
-		let edge = if dir.y > 0.0 { max.y } else { min.y };
-		t = t.min((edge - center.y) / dir.y);
-	}
-	center + dir * t.clamp(0.0, 1.0)
 }
 
 #[cfg(test)]

@@ -51,7 +51,12 @@ pub fn training_trainee(round: TrainingRound) -> TrainingTrainee {
 }
 
 pub(crate) fn training_player_policy() -> ModePlayerPolicy {
-	ModePlayerPolicy { home: Vec2::ZERO, keep_waypoints: false, respawn_ends_life: true }
+	ModePlayerPolicy {
+		home: Vec2::ZERO,
+		keep_waypoints: false,
+		respawn_ends_life: true,
+		pick_first_spawn: false,
+	}
 }
 
 pub(crate) fn register_training_policy(app: &mut App) {
@@ -120,8 +125,8 @@ mod tests {
 		TerrainPresentationDirty, WorldBaseTerrain, WORLD_FINE_HALF_EXTENT_CELLS,
 	};
 	use layer_stack::{GenerationModePlugin, GenerationReadiness};
-	use maybraid_game_mode_discover::Discovery;
 	use layer_stack::{LayerModeConfig, Scheme};
+	use maybraid_game_mode_discover::Discovery;
 	use terrain_layer_model::OnTerrain;
 	use world_player::{PlayerSpawnXz, RespawnOrigin};
 
@@ -216,7 +221,9 @@ mod tests {
 
 	#[test]
 	fn plaza_waits_for_the_whole_patch() {
-		let store = durham::TerrainEntryStore::default();
+		use durham::TerrainStorage;
+
+		let store = durham::HcsgStorage::default();
 		let origin = IVec2::splat(-TRAINING_FINE_HALF_EXTENT_CELLS);
 		let patch = fine_patch_cell_layout(TRAINING_FINE_HALF_EXTENT_CELLS, origin);
 		assert!(!store.fills_layout(&patch));
@@ -373,7 +380,12 @@ mod tests {
 		let mut policies = ModePlayerPolicies::default();
 		policies.register(
 			TypeId::of::<Discovery>(),
-			ModePlayerPolicy { home: Vec2::ZERO, keep_waypoints: true, respawn_ends_life: false },
+			ModePlayerPolicy {
+				home: Vec2::ZERO,
+				keep_waypoints: true,
+				respawn_ends_life: false,
+				pick_first_spawn: true,
+			},
 		);
 		app.insert_resource(policies);
 		app.add_systems(OnEnter(ShellFlow::Loading), note_mode_on_loading);

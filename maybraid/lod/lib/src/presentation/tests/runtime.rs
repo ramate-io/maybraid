@@ -89,24 +89,12 @@ struct PresentChan;
 #[test]
 fn independent_present_drains_each_receive_the_configured_budget() -> Result<()> {
 	let mut index = WorldIndex::default();
-	let identity = Transform::IDENTITY;
 	let terrain_bounds = cell(0.0);
 	let vegetation_bounds = cell(2.0);
-	let lod = LodRef {
-		entity: Entity::PLACEHOLDER,
-		previous_transform: &identity,
-		current_transform: &identity,
-		bounds: &terrain_bounds,
-	};
-	GeneratingSpatialIndex::<Terrain>::get_or_generate(
-		&mut index,
-		Id::from_cell(terrain_bounds),
-		&lod,
-	);
+	GeneratingSpatialIndex::<Terrain>::get_or_generate(&mut index, Id::from_cell(terrain_bounds));
 	GeneratingSpatialIndex::<Vegetation>::get_or_generate(
 		&mut index,
 		Id::from_cell(vegetation_bounds),
-		&lod,
 	);
 
 	let mut app = App::new();
@@ -140,19 +128,7 @@ fn independent_present_drains_each_receive_the_configured_budget() -> Result<()>
 fn drain_present_picks_up_keep_region_without_a_new_message() -> Result<()> {
 	let mut app = App::new();
 	let mut index = WorldIndex::default();
-	let identity = Transform::IDENTITY;
-	let bounds = cell(2.0);
-	let lod = LodRef {
-		entity: Entity::PLACEHOLDER,
-		previous_transform: &identity,
-		current_transform: &identity,
-		bounds: &bounds,
-	};
-	GeneratingSpatialIndex::<Vegetation>::get_or_generate(
-		&mut index,
-		Id::from_cell(cell(2.0)),
-		&lod,
-	);
+	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, Id::from_cell(cell(2.0)));
 	app.add_plugins(MinimalPlugins)
 		.insert_resource(index)
 		.insert_resource(RecordingPresenter::default())
@@ -178,17 +154,10 @@ fn drain_present_picks_up_keep_region_without_a_new_message() -> Result<()> {
 fn moving_keep_region_does_not_create_present_scan_work_without_an_impulse() -> Result<()> {
 	let mut app = App::new();
 	let mut index = WorldIndex::default();
-	let identity = Transform::IDENTITY;
 	let initial = cell(0.0);
 	let moved = cell(2.0);
-	let lod = LodRef {
-		entity: Entity::PLACEHOLDER,
-		previous_transform: &identity,
-		current_transform: &identity,
-		bounds: &initial,
-	};
-	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, Id::from_cell(initial), &lod);
-	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, Id::from_cell(moved), &lod);
+	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, Id::from_cell(initial));
+	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, Id::from_cell(moved));
 	app.add_plugins(MinimalPlugins)
 		.insert_resource(index)
 		.insert_resource(RecordingPresenter::default())
@@ -231,17 +200,10 @@ fn moving_keep_region_does_not_create_present_scan_work_without_an_impulse() -> 
 fn drain_present_drops_pending_outside_keep_slack() -> Result<()> {
 	let mut app = App::new();
 	let mut index = WorldIndex::default();
-	let identity = Transform::IDENTITY;
 	let near = cell(0.0);
 	let far = cell(250.0);
-	let lod = LodRef {
-		entity: Entity::PLACEHOLDER,
-		previous_transform: &identity,
-		current_transform: &identity,
-		bounds: &near,
-	};
-	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, Id::from_cell(near), &lod);
-	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, Id::from_cell(far), &lod);
+	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, Id::from_cell(near));
+	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, Id::from_cell(far));
 	app.add_plugins(MinimalPlugins)
 		.insert_resource(index)
 		.insert_resource(RecordingPresenter::default())
@@ -275,16 +237,9 @@ fn drain_present_drops_pending_outside_keep_slack() -> Result<()> {
 fn drain_present_keeps_pending_inside_tile_cross_slack() -> Result<()> {
 	let mut app = App::new();
 	let mut index = WorldIndex::default();
-	let identity = Transform::IDENTITY;
 	let edge = cell(0.0);
 	let keep = cell(100.0);
-	let lod = LodRef {
-		entity: Entity::PLACEHOLDER,
-		previous_transform: &identity,
-		current_transform: &identity,
-		bounds: &edge,
-	};
-	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, Id::from_cell(edge), &lod);
+	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, Id::from_cell(edge));
 	app.add_plugins(MinimalPlugins)
 		.insert_resource(index)
 		.insert_resource(RecordingPresenter::default())
@@ -328,8 +283,8 @@ fn drain_present_cull_hides_leaving_id_without_a_lattice_message() -> Result<()>
 	};
 	let near_id = Id::from_cell(near);
 	let far_id = Id::from_cell(far);
-	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, near_id, &lod);
-	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, far_id, &lod);
+	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, near_id);
+	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, far_id);
 
 	let mut presenter = RecordingPresenter::default();
 	RegionPresenter::<Vegetation, _>::present(&mut presenter, &index, span(0.0, 251.0), &lod);
@@ -372,17 +327,10 @@ fn drain_present_cull_hides_leaving_id_without_a_lattice_message() -> Result<()>
 fn drain_present_drains_remaining_queue_without_a_keep_rescan() -> Result<()> {
 	let mut app = App::new();
 	let mut index = WorldIndex::default();
-	let identity = Transform::IDENTITY;
 	let near = cell(0.0);
 	let mid = cell(2.0);
-	let lod = LodRef {
-		entity: Entity::PLACEHOLDER,
-		previous_transform: &identity,
-		current_transform: &identity,
-		bounds: &near,
-	};
-	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, Id::from_cell(near), &lod);
-	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, Id::from_cell(mid), &lod);
+	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, Id::from_cell(near));
+	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, Id::from_cell(mid));
 	app.add_plugins(MinimalPlugins)
 		.insert_resource(index)
 		.insert_resource(RecordingPresenter::default())
@@ -409,16 +357,9 @@ fn drain_present_drains_remaining_queue_without_a_keep_rescan() -> Result<()> {
 fn drain_present_picks_up_generated_id_without_a_region_message() -> Result<()> {
 	let mut app = App::new();
 	let mut index = WorldIndex::default();
-	let identity = Transform::IDENTITY;
 	let near = cell(0.0);
 	let later = cell(2.0);
-	let lod = LodRef {
-		entity: Entity::PLACEHOLDER,
-		previous_transform: &identity,
-		current_transform: &identity,
-		bounds: &near,
-	};
-	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, Id::from_cell(near), &lod);
+	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, Id::from_cell(near));
 	app.add_plugins(MinimalPlugins)
 		.insert_resource(index)
 		.insert_resource(RecordingPresenter::default())
@@ -436,11 +377,7 @@ fn drain_present_picks_up_generated_id_without_a_region_message() -> Result<()> 
 
 	{
 		let mut index = app.world_mut().resource_mut::<WorldIndex>();
-		GeneratingSpatialIndex::<Vegetation>::get_or_generate(
-			&mut *index,
-			Id::from_cell(later),
-			&lod,
-		);
+		GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut *index, Id::from_cell(later));
 	}
 	app.world_mut()
 		.write_message(LodGenerated::<Vegetation>::new(Id::from_cell(later)));
@@ -454,16 +391,8 @@ fn drain_present_picks_up_generated_id_without_a_region_message() -> Result<()> 
 fn present_app_with_keep() -> (App, Id) {
 	let mut app = App::new();
 	let mut index = WorldIndex::default();
-	let identity = Transform::IDENTITY;
-	let bounds = cell(2.0);
-	let lod = LodRef {
-		entity: Entity::PLACEHOLDER,
-		previous_transform: &identity,
-		current_transform: &identity,
-		bounds: &bounds,
-	};
 	let id = Id::from_cell(cell(2.0));
-	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, id, &lod);
+	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, id);
 	app.add_plugins(MinimalPlugins)
 		.insert_resource(index)
 		.insert_resource(RecordingPresenter::default())

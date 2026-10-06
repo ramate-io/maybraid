@@ -1,9 +1,9 @@
 //! Side table of tiles and assigned names, keyed by existing cell ids.
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 use bevy::math::bounding::Aabb3d;
-use bevy::math::Vec2;
+use bevy::math::{Rect, Vec2};
 use bevy::prelude::Resource;
 use durham::GeographicFeatureId;
 use lod::gen::Id;
@@ -11,7 +11,32 @@ use maybraid_language_core::lexicalizer::mix;
 
 use crate::bundle::LanguageBundle;
 use crate::name::{terms_fingerprint, AssignedName, PlaceName};
-use crate::tiles::{large_tile_index, LargeTile, LARGE_TILE};
+use crate::sources::SourceRevisions;
+use crate::tiles::{large_tile_index, large_tile_origin, LargeTile, LARGE_TILE};
+
+/// Explicit keep-ring dependency. Stored as a tuple so simultaneous source
+/// revisions cannot cancel the way a single XOR fingerprint can.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct LanguageSourceDeps {
+	pub revisions: SourceRevisions,
+	pub seed: u64,
+	pub tile_min: (i32, i32),
+	pub tile_max: (i32, i32),
+}
+
+impl LanguageSourceDeps {
+	pub fn from_keep(revisions: SourceRevisions, seed: u64, region: Aabb3d) -> Self {
+		Self {
+			revisions,
+			seed,
+			tile_min: (large_tile_index(region.min.x), large_tile_index(region.min.z)),
+			tile_max: (
+				large_tile_index((region.max.x - 1e-3).max(region.min.x)),
+				large_tile_index((region.max.z - 1e-3).max(region.min.z)),
+			),
+		}
+	}
+}
 
 /// Configured world seed for language tiles and names.
 #[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
@@ -49,16 +74,26 @@ impl Default for LanguageConfig {
 /// cannot collide. ECS entity ids and rounded coordinates are not durable keys.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum NameKey {
-	Region { ix: i32, iz: i32 },
+	Region {
+		ix: i32,
+		iz: i32,
+	},
 	Forest(Id),
 	Grove(Id),
 	Urban(Id),
 	UrbanLeaf(Id),
 	Geographic(GeographicFeatureId),
-	Place { host: Id, local: u32 },
+	Place {
+		host: Id,
+		local: u32,
+	},
 	/// Rounded XZ + label when Richmond has not attached a host identity.
 	/// Assignments under this key stay provisional.
-	ProvisionalPlace { qx: i32, qz: i32, label: u32 },
+	ProvisionalPlace {
+		qx: i32,
+		qz: i32,
+		label: u32,
+	},
 }
 
 /// Inputs for one feature or place assignment.
@@ -66,6 +101,7 @@ pub struct FeatureAssign<'a> {
 	pub world_seed: u64,
 	pub key: NameKey,
 	pub center: Vec2,
+	pub extent: Rect,
 	pub english: &'a [String],
 	pub revision: u64,
 	pub fingerprint: u64,
@@ -84,6 +120,7 @@ enum PendingAssign {
 	Feature {
 		key: NameKey,
 		center: Vec2,
+		extent: Rect,
 		english: Vec<String>,
 		revision: u64,
 		fingerprint: u64,
@@ -97,9 +134,15 @@ enum PendingAssign {
 pub struct LanguageIndex {
 	large: HashMap<(i32, i32), LargeTile>,
 	names: HashMap<NameKey, AssignedName>,
+	/// World XZ for each assigned name. Kept off [`AssignedName`] so that type stays `Eq`.
+	anchors: HashMap<NameKey, Vec2>,
+	/// XZ extent of the named cell or large tile. Used by the map to label intersections.
+	extents: HashMap<NameKey, Rect>,
 	host_languages: HashMap<Id, u64>,
 	pending: VecDeque<PendingAssign>,
-	source_fingerprint: u64,
+	source_deps: Option<LanguageSourceDeps>,
+	/// Names currently overlapping the keep ring. Durable records may outlive this.
+	active: HashSet<NameKey>,
 	/// Increments when assigned names or tiles change.
 	pub epoch: u64,
 }
@@ -108,10 +151,26 @@ impl LanguageIndex {
 	pub fn clear(&mut self) {
 		self.large.clear();
 		self.names.clear();
+		self.anchors.clear();
+		self.extents.clear();
 		self.host_languages.clear();
 		self.pending.clear();
-		self.source_fingerprint = 0;
+		self.source_deps = None;
+		self.active.clear();
 		self.epoch = self.epoch.wrapping_add(1);
+	}
+
+	/// World XZ stored when the name was assigned.
+	pub fn anchor(&self, key: NameKey) -> Option<Vec2> {
+		self.anchors.get(&key).copied()
+	}
+
+	/// XZ extent stored when the name was assigned, or the large-tile rect for a region.
+	pub fn extent(&self, key: NameKey) -> Option<Rect> {
+		self.extents.get(&key).copied().or_else(|| match key {
+			NameKey::Region { ix, iz } => Some(region_extent(ix, iz)),
+			_ => None,
+		})
 	}
 
 	pub fn large_tile(&self, ix: i32, iz: i32) -> Option<&LargeTile> {
@@ -138,12 +197,16 @@ impl LanguageIndex {
 		self.large.values()
 	}
 
-	pub fn source_fingerprint(&self) -> u64 {
-		self.source_fingerprint
+	pub fn source_deps(&self) -> Option<LanguageSourceDeps> {
+		self.source_deps
 	}
 
-	pub fn note_source_fingerprint(&mut self, fingerprint: u64) {
-		self.source_fingerprint = fingerprint;
+	pub fn note_source_deps(&mut self, deps: LanguageSourceDeps) {
+		self.source_deps = Some(deps);
+	}
+
+	pub fn is_active(&self, key: NameKey) -> bool {
+		self.active.contains(&key)
 	}
 
 	pub fn ensure_tiles(&mut self, world_seed: u64, region: Aabb3d) {
@@ -167,7 +230,9 @@ impl LanguageIndex {
 		places: &[crate::NamedPlace],
 	) {
 		self.ensure_tiles(world_seed, region);
+		let mut next_active = HashSet::new();
 		for (ix, iz) in large_tiles_overlapping(region) {
+			next_active.insert(NameKey::Region { ix, iz });
 			let tile_bounds = large_tile_aabb(ix, iz);
 			let mut english = Vec::new();
 			for feature in features {
@@ -179,6 +244,7 @@ impl LanguageIndex {
 			self.pending.push_back(PendingAssign::Region { ix, iz, english, fingerprint });
 		}
 		for feature in features {
+			next_active.insert(feature.key);
 			let center = Vec2::new(
 				(feature.bounds.min.x + feature.bounds.max.x) * 0.5,
 				(feature.bounds.min.z + feature.bounds.max.z) * 0.5,
@@ -186,6 +252,7 @@ impl LanguageIndex {
 			self.pending.push_back(PendingAssign::Feature {
 				key: feature.key,
 				center,
+				extent: xz_extent(feature.bounds),
 				english: feature.english.clone(),
 				revision: feature.revision,
 				fingerprint: feature.fingerprint,
@@ -194,9 +261,11 @@ impl LanguageIndex {
 			});
 		}
 		for place in places {
+			next_active.insert(place.key);
 			self.pending.push_back(PendingAssign::Feature {
 				key: place.key,
 				center: place.xz,
+				extent: Rect::from_center_size(place.xz, Vec2::splat(12.0)),
 				english: place.english.clone(),
 				revision: place.revision,
 				fingerprint: place.fingerprint,
@@ -204,6 +273,12 @@ impl LanguageIndex {
 				inherit_host: place.host.filter(|_| place.inherit_host_language),
 			});
 		}
+		self.retire_superseded(&next_active);
+		if self.active != next_active {
+			self.active = next_active;
+			self.epoch = self.epoch.wrapping_add(1);
+		}
+		self.coalesce_pending();
 	}
 
 	pub fn assign_keep(
@@ -223,10 +298,37 @@ impl LanguageIndex {
 			let Some(work) = self.pending.pop_front() else {
 				break;
 			};
-			if self.apply_pending(world_seed, work) {
-				remaining -= 1;
-			}
+			remaining -= 1;
+			self.apply_pending(world_seed, work);
 		}
+	}
+
+	fn coalesce_pending(&mut self) {
+		let mut newest = HashMap::new();
+		while let Some(work) = self.pending.pop_front() {
+			newest.insert(pending_key(&work), work);
+		}
+		let mut works: Vec<_> = newest.into_values().collect();
+		works.sort_by_key(pending_host_first);
+		self.pending.extend(works);
+	}
+
+	fn retire_superseded(&mut self, active: &HashSet<NameKey>) {
+		let stale: Vec<_> = self
+			.names
+			.keys()
+			.copied()
+			.filter(|key| matches!(key, NameKey::ProvisionalPlace { .. }) && !active.contains(key))
+			.collect();
+		if stale.is_empty() {
+			return;
+		}
+		for key in stale {
+			self.names.remove(&key);
+			self.anchors.remove(&key);
+			self.extents.remove(&key);
+		}
+		self.epoch = self.epoch.wrapping_add(1);
 	}
 
 	fn apply_pending(&mut self, world_seed: u64, work: PendingAssign) -> bool {
@@ -237,6 +339,7 @@ impl LanguageIndex {
 			PendingAssign::Feature {
 				key,
 				center,
+				extent,
 				english,
 				revision,
 				fingerprint,
@@ -246,6 +349,7 @@ impl LanguageIndex {
 				world_seed,
 				key,
 				center,
+				extent,
 				english: &english,
 				revision,
 				fingerprint,
@@ -290,35 +394,38 @@ impl LanguageIndex {
 				source_revision: 0,
 				fingerprint,
 				provisional: true,
+				inherited_language: None,
 			},
 		);
+		self.anchors.insert(key, region_anchor(ix, iz));
+		self.extents.insert(key, region_extent(ix, iz));
 		self.epoch = self.epoch.wrapping_add(1);
 		true
 	}
 
 	pub fn assign_feature_name(&mut self, work: FeatureAssign<'_>) -> bool {
+		let inherited = work.inherit_host.and_then(|host| self.host_languages.get(&host).copied());
 		if let Some(existing) = self.names.get(&work.key) {
-			if existing.source_revision == work.revision && existing.fingerprint == work.fingerprint
+			if existing.source_revision == work.revision
+				&& existing.fingerprint == work.fingerprint
+				&& existing.inherited_language == inherited
 			{
 				return false;
 			}
 		}
 		let feature_key = name_key_salt(work.key);
-		let bundle = work
-			.inherit_host
-			.and_then(|host| self.host_languages.get(&host).copied())
+		let bundle = inherited
 			.and_then(|seed| self.bundle_with_seed(work.center, seed))
 			.or_else(|| self.language_at_key(work.center, feature_key));
 		let Some(bundle) = bundle else {
 			return false;
 		};
-		let pick = mix(work.world_seed ^ feature_key);
-		let name = PlaceName::translate(bundle, work.english, pick);
+		let name = PlaceName::translate_all(bundle, work.english);
 		if name.surface.is_empty() {
 			return false;
 		}
-		if let NameKey::Place { host, .. } = work.key {
-			if !work.provisional {
+		if host_language_authority(&work) {
+			if let NameKey::Place { host, .. } = work.key {
 				self.host_languages.insert(host, name.language_seed);
 			}
 		}
@@ -329,8 +436,11 @@ impl LanguageIndex {
 				source_revision: work.revision,
 				fingerprint: work.fingerprint,
 				provisional: work.provisional,
+				inherited_language: inherited,
 			},
 		);
+		self.anchors.insert(work.key, work.center);
+		self.extents.insert(work.key, work.extent);
 		self.epoch = self.epoch.wrapping_add(1);
 		true
 	}
@@ -355,6 +465,36 @@ impl LanguageIndex {
 		let tile = self.large.get(&(ix, iz))?;
 		tile.languages.iter().find(|bundle| bundle.seed == seed)
 	}
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+enum PendingKey {
+	Region { ix: i32, iz: i32 },
+	Feature(NameKey),
+}
+
+fn pending_key(work: &PendingAssign) -> PendingKey {
+	match work {
+		PendingAssign::Region { ix, iz, .. } => PendingKey::Region { ix: *ix, iz: *iz },
+		PendingAssign::Feature { key, .. } => PendingKey::Feature(*key),
+	}
+}
+
+fn pending_host_first(work: &PendingAssign) -> u8 {
+	match work {
+		PendingAssign::Feature {
+			key: NameKey::Place { .. },
+			provisional: false,
+			inherit_host: None,
+			..
+		} => 0,
+		PendingAssign::Feature { inherit_host: Some(_), .. } => 2,
+		_ => 1,
+	}
+}
+
+fn host_language_authority(work: &FeatureAssign<'_>) -> bool {
+	matches!(work.key, NameKey::Place { .. }) && !work.provisional && work.inherit_host.is_none()
 }
 
 fn large_tile_aabb(ix: i32, iz: i32) -> Aabb3d {
@@ -444,6 +584,19 @@ fn id_bits(id: Id) -> u64 {
 				^ u64::from(bounds.max.x.to_bits()).wrapping_shl(2)
 		}
 	}
+}
+
+fn region_anchor(ix: i32, iz: i32) -> Vec2 {
+	region_extent(ix, iz).center()
+}
+
+fn region_extent(ix: i32, iz: i32) -> Rect {
+	let (ox, oz) = large_tile_origin(ix, iz);
+	Rect::from_corners(Vec2::new(ox, oz), Vec2::new(ox + LARGE_TILE, oz + LARGE_TILE))
+}
+
+fn xz_extent(bounds: Aabb3d) -> Rect {
+	Rect::from_corners(Vec2::new(bounds.min.x, bounds.min.z), Vec2::new(bounds.max.x, bounds.max.z))
 }
 
 /// Default keep used when a mode enters and no camera has streamed yet.

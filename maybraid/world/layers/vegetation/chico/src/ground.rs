@@ -57,7 +57,7 @@ mod tests {
 	use bevy::math::bounding::Aabb3d;
 	use bevy::math::Vec3;
 	use bevy::prelude::World;
-	use durham::{BaseTerrainNoise, TerrainCellLayout, TerrainConfig, TerrainEntryStore};
+	use durham::{BaseTerrainNoise, HcsgStorage, TerrainCellLayout, TerrainConfig, TerrainStorage};
 	use lod_cascade::Chunk;
 	use terrain_chunk_ref::TerrainChunkRef;
 	use terrain_layer_model::{OnTerrain, TerrainCell};
@@ -72,11 +72,11 @@ mod tests {
 		let mut world = World::new();
 		let layout = TerrainCellLayout::default();
 		let base = BaseTerrainNoise::from_config(&TerrainConfig::new(7));
-		world.insert_resource(TerrainEntryStore::default());
+		world.init_resource::<HcsgStorage>();
 		world
-			.resource_mut::<TerrainEntryStore>()
+			.resource_mut::<HcsgStorage>()
 			.insert_base_terrain_for_test(&layout, 0, 0, base);
-		let store = world.resource::<TerrainEntryStore>();
+		let store = world.resource::<HcsgStorage>();
 		let probe = Aabb3d::from_min_max(Vec3::new(1.0, -10.0, 1.0), Vec3::new(2.0, 10.0, 2.0));
 		let id = store
 			.terrain_ids_overlapping(probe)

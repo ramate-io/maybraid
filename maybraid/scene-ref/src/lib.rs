@@ -21,9 +21,7 @@ mod world_asset;
 
 use bevy::prelude::{App, Plugin, Resource, Update};
 
-pub use gltf_scale::{
-	bake_odd_scales_in_world, bake_scale_sign, is_odd_negative_scale, scale_sign,
-};
+pub use gltf_scale::{bake_odd_scales_in_world, GltfNodeScale};
 pub use handles::SceneRefHandles;
 pub use mirror::{mirror_mesh, mirror_transform};
 pub use multi_merge::{
@@ -154,13 +152,13 @@ mod tests {
 
 	#[test]
 	fn odd_scale_is_three_negatives() {
-		assert!(is_odd_negative_scale(bevy::prelude::Vec3::new(-1.0, -0.2, -1.0)));
-		assert!(!is_odd_negative_scale(bevy::prelude::Vec3::new(-1.0, -0.2, 1.0)));
-		assert!(!is_odd_negative_scale(bevy::prelude::Vec3::ONE));
+		assert!(GltfNodeScale::new(bevy::prelude::Vec3::new(-1.0, -0.2, -1.0)).is_odd_negative());
+		assert!(!GltfNodeScale::new(bevy::prelude::Vec3::new(-1.0, -0.2, 1.0)).is_odd_negative());
+		assert!(!GltfNodeScale::new(bevy::prelude::Vec3::ONE).is_odd_negative());
 	}
 
 	#[test]
-	fn bake_scale_sign_restores_front_winding() -> anyhow::Result<()> {
+	fn bake_mesh_restores_front_winding() -> anyhow::Result<()> {
 		let mut mesh = Mesh::new(
 			PrimitiveTopology::TriangleList,
 			RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
@@ -171,7 +169,7 @@ mod tests {
 		);
 		mesh.insert_indices(Indices::U32(vec![0, 1, 2]));
 
-		let baked = bake_scale_sign(&mesh, bevy::prelude::Vec3::NEG_ONE);
+		let baked = GltfNodeScale::new(bevy::prelude::Vec3::NEG_ONE).bake_mesh(&mesh);
 		match baked.indices() {
 			Some(Indices::U32(idx)) => assert_eq!(idx.as_slice(), &[0, 2, 1]),
 			other => anyhow::bail!("unexpected indices: {other:?}"),

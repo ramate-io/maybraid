@@ -123,7 +123,7 @@ separate spatial tiling and not a fitted vertical AABB.
 
 | Concern | Owner |
 | --- | --- |
-| Origin-cell tiling / cell size | [`TerrainCellLayout`](src/terrain/cell.rs) via `original_ids_for_origin_cells` (shared by `Terrain` and `Water`) |
+| Origin-cell tiling / cell size | [`TerrainCellLayout`](src/terrain/cell.rs); `PreWatershedTerrain` tiles it, `Terrain` and `Water` reuse those ids through `GeneratingSpatialIndex::original_ids_for` |
 | Heightfield composition | [`ComposedTerrain`](src/terrain/sdf.rs) / `Terrain::compose_sdf` |
 | Wet-volume composition | [`ComposedWater`](src/water/composed.rs) / `ComposedWater::compose` |
 | Cascade chunk (`origin`, extent, Y, `res_2`) | [`cascade_chunk_for_cell`](src/terrain/render.rs) for **both** `Terrain::scene` and `Water::scene` |

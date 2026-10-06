@@ -1,4 +1,6 @@
-use character_rigs::{quadruped::QuadrupedRig, Side};
+use character_rigs::authoring::QuadrupedPose;
+use character_rigs::rigs::quadruped_v0::QuadrupedV0Rig;
+use character_rigs::Side;
 
 use crate::animations::{smoothstep, QuadrupedLeap, AIR_END, TAKEOFF_END};
 use crate::rigs::quadruped::apply::{apply_front_leg, apply_hind_leg, apply_neck, apply_spine};
@@ -15,40 +17,46 @@ struct QuadLeapPose {
 	spine: f32,
 }
 
-impl<R: QuadrupedRig> Animation<R> for QuadrupedLeap<R> {
-	fn apply_for(&self, rig: &mut R, progress: f32) {
-		let t = Progress(progress).clamp();
-		let pose = self.pose_at(t);
-		for side in [Side::Left, Side::Right] {
-			let stagger = match side {
-				Side::Left => 0.0,
-				Side::Right => PAIR_STAGGER,
-			};
-			let delayed = Progress((t - stagger).max(0.0)).clamp();
-			let side_pose = if (delayed - t).abs() < 1e-4 { pose } else { self.pose_at(delayed) };
-			apply_hind_leg(
-				rig,
-				side,
-				side_pose.hind_thigh * 0.2,
-				0.0,
-				side_pose.hind_thigh,
-				side_pose.hind_shin,
-			);
-			apply_front_leg(
-				rig,
-				side,
-				side_pose.front_thigh * 0.2,
-				0.0,
-				side_pose.front_thigh,
-				side_pose.front_shin,
-			);
-		}
-		apply_spine(rig, pose.spine * 0.35, pose.spine);
-		apply_neck(rig, -pose.spine * self.neck_follow);
+impl Animation<QuadrupedV0Rig> for QuadrupedLeap {
+	fn apply_for(&self, rig: &mut QuadrupedV0Rig, progress: f32) {
+		let mut pose = QuadrupedPose::default();
+		sample_leap(self, progress, &mut pose);
+		rig.write_pose(&pose);
 	}
 }
 
-impl<Rig> QuadrupedLeap<Rig> {
+fn sample_leap(leap: &QuadrupedLeap, progress: f32, pose: &mut QuadrupedPose) {
+	let t = Progress(progress).clamp();
+	let authored = leap.pose_at(t);
+	for side in [Side::Left, Side::Right] {
+		let stagger = match side {
+			Side::Left => 0.0,
+			Side::Right => PAIR_STAGGER,
+		};
+		let delayed = Progress((t - stagger).max(0.0)).clamp();
+		let side_pose = if (delayed - t).abs() < 1e-4 { authored } else { leap.pose_at(delayed) };
+		apply_hind_leg(
+			pose,
+			side,
+			side_pose.hind_thigh * 0.2,
+			0.0,
+			side_pose.hind_thigh,
+			side_pose.hind_shin,
+		);
+		apply_front_leg(
+			pose,
+			side,
+			side_pose.front_thigh * 0.2,
+			0.0,
+			side_pose.front_thigh,
+			side_pose.front_shin,
+		);
+	}
+	apply_spine(pose, authored.spine * 0.35, authored.spine);
+	apply_neck(pose, -authored.spine * leap.neck_follow);
+}
+
+impl QuadrupedLeap {
 	fn pose_at(&self, t: f32) -> QuadLeapPose {
 		if t < TAKEOFF_END {
 			self.takeoff(smoothstep(t / TAKEOFF_END))
@@ -106,35 +114,18 @@ fn lerp(a: f32, b: f32, t: f32) -> f32 {
 
 #[cfg(test)]
 mod tests {
-	use character_rigs::{rigs::quadruped_v0::QuadrupedV0Rig, Side};
+	use bevy::prelude::*;
 
 	use crate::animations::Leap;
 
 	use super::*;
-	use crate::Effects;
 
-	fn apply_leap(rig: &mut QuadrupedV0Rig, progress: f32) -> Effects {
+	fn apply_leap(rig: &mut QuadrupedV0Rig, progress: f32) -> crate::Effects {
 		QuadrupedLeap::from_leap(&Leap::default()).apply(rig, progress)
 	}
 
-	fn hind_thigh(rig: &QuadrupedV0Rig, side: Side) -> f32 {
-		rig.pose().get(&rig.hind_leg(side).thigh.name).expect("hind thigh").swing
-	}
-
-	fn front_thigh(rig: &QuadrupedV0Rig, side: Side) -> f32 {
-		rig.pose().get(&rig.front_leg(side).thigh.name).expect("front thigh").swing
-	}
-
-	fn hind_shin(rig: &QuadrupedV0Rig, side: Side) -> f32 {
-		rig.pose().get(&rig.hind_leg(side).shin.name).expect("hind shin").flex
-	}
-
-	fn front_shin(rig: &QuadrupedV0Rig, side: Side) -> f32 {
-		rig.pose().get(&rig.front_leg(side).shin.name).expect("front shin").flex
-	}
-
-	fn lumbar(rig: &QuadrupedV0Rig) -> f32 {
-		rig.pose().get(&rig.spine().lumbar.name).expect("lumbar").flex
+	fn tip(rig: &QuadrupedV0Rig, name: &str) -> Vec3 {
+		rig.rotation(name) * Vec3::Y
 	}
 
 	#[test]
@@ -143,19 +134,13 @@ mod tests {
 			let mut from_leap = QuadrupedV0Rig::imported();
 			let mut from_template = QuadrupedV0Rig::imported();
 			apply_leap(&mut from_leap, phase);
-			QuadrupedLeap::<QuadrupedV0Rig>::default().apply(&mut from_template, phase);
-			for bone in from_leap.animation_bones() {
-				let Some(leap_pose) = from_leap.pose().get(&bone) else {
-					continue;
-				};
-				let template = from_template.pose().get(&bone).expect("template pose");
+			QuadrupedLeap::default().apply(&mut from_template, phase);
+			for name in from_leap.animation_bone_names() {
+				let leap_rot = from_leap.rotation(name);
+				let template = from_template.rotation(name);
 				assert!(
-					(leap_pose.swing - template.swing).abs() < 1e-5,
-					"swing mismatch on {bone} at {phase}"
-				);
-				assert!(
-					(leap_pose.flex - template.flex).abs() < 1e-5,
-					"flex mismatch on {bone} at {phase}"
+					leap_rot.dot(template).abs() > 1.0 - 1e-5,
+					"rotation mismatch on {name} at {phase}"
 				);
 			}
 		}
@@ -163,18 +148,26 @@ mod tests {
 
 	#[test]
 	fn takeoff_hind_pushes_while_front_gathers() {
+		let rest = QuadrupedV0Rig::imported();
 		let mut rig = QuadrupedV0Rig::imported();
 		apply_leap(&mut rig, 0.0);
-		assert!(hind_thigh(&rig, Side::Left) > 0.3, "hind should push back");
-		assert!(front_thigh(&rig, Side::Left) < -0.2, "front should gather");
-		assert!(front_shin(&rig, Side::Left) > hind_shin(&rig, Side::Left));
+		assert!(
+			rig.rotation("posterior_thigh.L").dot(rest.rotation("posterior_thigh.L")).abs() < 0.95,
+			"hind thigh should leave rest"
+		);
+		assert!(
+			rig.rotation("anterior_shin.L").dot(rig.rotation("posterior_shin.L")).abs() < 0.999,
+			"front and hind hinges should differ at takeoff"
+		);
 	}
 
 	#[test]
 	fn air_gathers_the_spine() {
 		let mut rig = QuadrupedV0Rig::imported();
 		apply_leap(&mut rig, 0.45);
-		assert!(lumbar(&rig) > 0.05);
+		let lumbar = tip(&rig, "lumbar");
+		assert!(lumbar.x < -0.04, "gather bends laterally, got {lumbar:?}");
+		assert!(lumbar.z.abs() < 1e-3, "gather stays out of the sagittal plane, got {lumbar:?}");
 	}
 
 	#[test]
@@ -183,15 +176,21 @@ mod tests {
 		apply_leap(&mut early, 0.78);
 		let mut late = QuadrupedV0Rig::imported();
 		apply_leap(&mut late, 0.92);
-		assert!(front_shin(&early, Side::Left) > hind_shin(&early, Side::Left));
-		assert!(hind_shin(&late, Side::Left) > hind_shin(&early, Side::Left));
+		assert!(
+			early.rotation("anterior_shin.L").dot(early.rotation("posterior_shin.L")).abs() < 0.999,
+			"front hinge leads at first contact"
+		);
+		assert!(
+			late.rotation("posterior_shin.L").dot(early.rotation("posterior_shin.L")).abs() < 0.999,
+			"hind hinge should change as the land continues"
+		);
 	}
 
 	#[test]
 	fn leap_has_no_root_motion() {
 		let mut rig = QuadrupedV0Rig::imported();
 		let effects = apply_leap(&mut rig, 0.45);
-		assert!(effects.r#move.is_none());
+		assert!(effects.is_identity());
 	}
 
 	#[test]
@@ -200,6 +199,8 @@ mod tests {
 		let mut b = QuadrupedV0Rig::imported();
 		apply_leap(&mut a, 1.0);
 		apply_leap(&mut b, 1.7);
-		assert_eq!(hind_thigh(&a, Side::Left), hind_thigh(&b, Side::Left));
+		let left = a.rotation("posterior_thigh.L");
+		let right = b.rotation("posterior_thigh.L");
+		assert!(left.dot(right).abs() > 1.0 - 1e-5);
 	}
 }

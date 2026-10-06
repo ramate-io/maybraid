@@ -152,14 +152,21 @@ fn show_lod_tree_descendants_now(world: &mut World, root: Entity, mut stack: Vec
 	}
 }
 
-/// Per-frame cap for recursive [`Disabled`] hide/show walks.
+/// Per-frame target for recursive [`Disabled`] hide/show walks.
 ///
 /// Root hide/show still stamps immediately (Hidden + root [`Disabled`], or
 /// Inherited + root enable). Descendant [`Disabled`] apply is drained by
 /// [`drain_lod_tree_vis`] so one grove tile cannot take 500 ms of ApplyDeferred.
+///
+/// [`Self::time_per_frame`] is checked **between** visits, not a hard cap: one
+/// node that copies a large [`Children`] list can still overrun (Tracy drain
+/// max ~6 ms against the 2 ms target). The initial root-child collect in
+/// hide/show is also outside the drain loop.
 #[derive(Resource, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LodTreeVisBudget {
-	/// Wall-clock budget for [`drain_lod_tree_vis`]. Default 2 ms.
+	/// Wall-clock **target** for [`drain_lod_tree_vis`]. Default 2 ms.
+	///
+	/// Checked after each visit; a single visit can exceed it.
 	pub time_per_frame: Duration,
 	/// Max entities visited this frame. Default 512.
 	pub entities_per_frame: u32,
@@ -1092,5 +1099,74 @@ mod tests {
 		drain_until_empty(&mut world);
 		assert!(world.get::<Disabled>(root).is_none());
 		assert!(leaves.iter().all(|leaf| world.get::<Disabled>(*leaf).is_none()));
+	}
+
+	#[test]
+	fn queued_hide_show_hide_converges_disabled() {
+		let mut world = World::new();
+		world.init_resource::<LodTreeVisQueue>();
+		world.insert_resource(LodTreeVisBudget {
+			time_per_frame: Duration::from_secs(1),
+			entities_per_frame: 2,
+		});
+		let (root, leaves) = tree_with_leaves(&mut world, 6);
+
+		hide_lod_tree_now(&mut world, root);
+		drain_lod_tree_vis(&mut world);
+		let disabled_after_hide =
+			leaves.iter().filter(|leaf| world.get::<Disabled>(**leaf).is_some()).count();
+		assert_eq!(disabled_after_hide, 2);
+
+		show_lod_tree_now(&mut world, root);
+		assert!(world.get::<Disabled>(root).is_none());
+		drain_lod_tree_vis(&mut world);
+		assert!(
+			!world.resource::<LodTreeVisQueue>().is_empty(),
+			"show drain is partial so leftover enable work remains"
+		);
+
+		hide_lod_tree_now(&mut world, root);
+		assert!(world.get::<Disabled>(root).is_some());
+		assert!(world.get::<LodTreeHideActive>(root).is_some());
+		drain_until_empty(&mut world);
+		assert!(leaves.iter().all(|leaf| world.get::<Disabled>(*leaf).is_some()));
+	}
+
+	#[test]
+	fn queued_show_prunes_nested_hidden_tree() {
+		let mut world = World::new();
+		world.init_resource::<LodTreeVisQueue>();
+		world.insert_resource(LodTreeVisBudget {
+			time_per_frame: Duration::from_secs(1),
+			entities_per_frame: 2,
+		});
+
+		let nested_leaf = world.spawn(MeshStandIn).id();
+		let nested_root = world.spawn(Visibility::Inherited).id();
+		world.entity_mut(nested_root).add_child(nested_leaf);
+		let shown_leaf = world.spawn(MeshStandIn).id();
+		let shown_root = world.spawn(Visibility::Inherited).id();
+		world.entity_mut(shown_root).add_child(shown_leaf);
+		let parent = world.spawn(Visibility::Inherited).id();
+		world.entity_mut(parent).add_children(&[nested_root, shown_root]);
+
+		hide_lod_tree_now(&mut world, nested_root);
+		drain_until_empty(&mut world);
+		hide_lod_tree_now(&mut world, parent);
+		drain_until_empty(&mut world);
+		show_lod_tree_now(&mut world, parent);
+		drain_until_empty(&mut world);
+
+		assert!(world.get::<Disabled>(parent).is_none());
+		assert!(world.get::<Disabled>(shown_root).is_none());
+		assert!(world.get::<Disabled>(shown_leaf).is_none());
+		assert!(world.get::<Disabled>(nested_root).is_some());
+		assert!(world.get::<Disabled>(nested_leaf).is_some());
+		assert!(world.get::<LodTreeHideActive>(nested_root).is_some());
+
+		show_lod_tree_now(&mut world, nested_root);
+		drain_until_empty(&mut world);
+		assert!(world.get::<Disabled>(nested_root).is_none());
+		assert!(world.get::<Disabled>(nested_leaf).is_none());
 	}
 }

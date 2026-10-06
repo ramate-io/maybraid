@@ -6568,6 +6568,7 @@ version = "0.1.2"
 dependencies = [
  "anyhow",
  "bevy",
+ "gimme-core",
  "lod-cascade",
  "lod-cascade-system",
  "thiserror 1.0.69",
@@ -7085,6 +7086,7 @@ dependencies = [
  "maybraid-sky",
  "maybraid-weather",
  "meandering-intelligence",
+ "menu-components",
  "mob-characters",
  "mob-layer-model",
  "mob-layer-presentation",
