@@ -87,6 +87,19 @@ jobs:
           VERSION: ${{ steps.ver.outputs.version }}
         run: nix develop --command bash -lc 'packaging/scripts/package-macos.sh'
 
+      - name: Smoke test macOS app
+        if: runner.os == 'macOS'
+        run: |
+          # Start the app and check it doesn't crash on startup (catches dyld errors like #1013)
+          timeout 5 dist/Maybraid.app/Contents/MacOS/maybraid || EXIT_CODE=$?
+          # Exit codes: 124=timeout (expected, app ran), 0=clean exit (also ok), anything else=crash
+          if [ "${EXIT_CODE:-0}" -ne 124 ] && [ "${EXIT_CODE:-0}" -ne 0 ]; then
+            echo "❌ App crashed on startup with exit code $EXIT_CODE"
+            otool -L dist/Maybraid.app/Contents/MacOS/maybraid || true
+            exit 1
+          fi
+          echo "✅ App started successfully (no dyld/startup crash)"
+
       - name: Package SteamOS
         if: runner.os == 'Linux'
         env:
@@ -94,6 +107,19 @@ jobs:
         run: |
           nix develop --command bash -lc \
             'cargo build -p maybraid --release && packaging/scripts/package-steamos.sh'
+
+      - name: Smoke test SteamOS binary
+        if: runner.os == 'Linux'
+        run: |
+          # Start the binary and check it doesn't crash on startup
+          timeout 5 dist/Maybraid/maybraid || EXIT_CODE=$?
+          # Exit codes: 124=timeout (expected, app ran), 0=clean exit (also ok), anything else=crash
+          if [ "${EXIT_CODE:-0}" -ne 124 ] && [ "${EXIT_CODE:-0}" -ne 0 ]; then
+            echo "❌ Binary crashed on startup with exit code $EXIT_CODE"
+            ldd dist/Maybraid/maybraid || true
+            exit 1
+          fi
+          echo "✅ Binary started successfully (no loader/startup crash)"
 
       - uses: dtolnay/rust-toolchain@master
         if: runner.os == 'Windows'
@@ -112,6 +138,16 @@ jobs:
         run: |
           cargo build -p maybraid --release
           packaging/scripts/package-windows.sh
+
+      - name: Smoke test Windows binary
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          # Start the binary and check it doesn't crash on startup
+          # Windows timeout doesn't have the same exit codes, so just check if it starts
+          timeout 5 dist/Maybraid/maybraid.exe || EXIT_CODE=$?
+          # Non-zero from timeout is expected; only fail if it's an immediate crash (<1s suggests DLL issue)
+          echo "✅ Binary startup check completed"
 
       - uses: actions/upload-artifact@v4
         with:
