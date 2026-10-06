@@ -4,6 +4,7 @@ use character_rigs::Side;
 
 use crate::animations::{Run, UprightRun};
 use crate::rigs::humanoid::apply::apply_arm;
+use crate::rigs::humanoid::gait_knee::lerp_swing_knee;
 use crate::{Animation, Progress};
 
 impl Run {
@@ -101,9 +102,12 @@ fn hip_lift(leg_swing: f32, amplitude: f32) -> f32 {
 
 fn knee_flex(leg_phase: f32, run: &UprightRun) -> f32 {
 	let p = leg_phase.fract();
-	let peak = if p < 0.5 { run.knee_extended } else { run.knee_contracted };
-	let t = if p < 0.5 { p * 2.0 } else { (p - 0.5) * 2.0 };
-	run.knee_neutral + (t * std::f32::consts::PI).sin() * (peak - run.knee_neutral)
+	if p < 0.5 {
+		let t = p * 2.0;
+		run.knee_neutral + (t * std::f32::consts::PI).sin() * (run.knee_extended - run.knee_neutral)
+	} else {
+		lerp_swing_knee(p, run.knee_extended, run.knee_contracted)
+	}
 }
 
 #[cfg(test)]
