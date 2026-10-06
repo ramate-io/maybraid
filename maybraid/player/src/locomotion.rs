@@ -178,10 +178,10 @@ mod tests {
 
 	#[test]
 	fn gait_blends_walk_into_run_by_speed() {
-		let jog = locomotion_clip(RigSkeletonKind::Humanoid, None, StanceKind::Stand, JOG_SPEED);
+		let stance = CharacterStance::settled(StanceKind::Stand);
+		let jog = locomotion_clip(RigSkeletonKind::Humanoid, None, &stance, JOG_SPEED);
 		assert_eq!(jog.id(), AnimId::Gait);
-		let sprint =
-			locomotion_clip(RigSkeletonKind::Humanoid, None, StanceKind::Stand, MOVE_SPEED);
+		let sprint = locomotion_clip(RigSkeletonKind::Humanoid, None, &stance, MOVE_SPEED);
 		assert_eq!(sprint.id(), AnimId::Gait);
 		let jog_weight = match jog {
 			AnimClip::Gait(params) => params.run_weight,

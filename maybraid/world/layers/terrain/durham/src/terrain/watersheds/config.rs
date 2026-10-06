@@ -4,7 +4,6 @@
 //! layout consts (`define_marazion_band!` in [`super::low_pass`] /
 //! [`super::high_pass`]) — same pattern as Stamp `define_stamp_family!`.
 
-use crate::terrain::cell::universal_bootstrap_scheme;
 use crate::terrain::watersheds::high_pass::PrePocketHighPassLayout;
 use crate::terrain::watersheds::low_pass::PrePocketLowPassLayout;
 use bevy::math::Vec2;
@@ -161,11 +160,4 @@ impl WatershedConfigs {
 	}
 }
 
-pub trait BootstrapWatershedConfigs {
-	fn bootstrap_watershed_configs(&self) -> WatershedConfigs;
-}
-
-universal_bootstrap_scheme!(
-	WatershedConfigs,
-	BootstrapWatershedConfigs::bootstrap_watershed_configs
-);
+lod::seeded_root!(WatershedConfigs);

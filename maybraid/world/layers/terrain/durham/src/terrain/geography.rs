@@ -7,9 +7,9 @@
 use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec2;
 use lod::gen::{Id, Version};
+use lod::hcsg::{HcsgNode, HcsgStorage};
 use procedural_common::Bounds2;
 
-use crate::terrain::index::TerrainEntryStore;
 use crate::terrain::stamps::{
 	CanyonHighPassStampCell, CanyonLowPassStampCell, MassifHighPassStampCell,
 	MassifLowPassStampCell, PlateauHighPassStampCell, PlateauLowPassStampCell,
@@ -82,21 +82,18 @@ pub struct GeographicFeature {
 	pub anchor: Vec2,
 }
 
-impl TerrainEntryStore {
-	/// Stored geographic sources whose leaf bounds overlap `region`.
-	///
-	/// Reads family-specific stamp records (skipping empty modulation lists) and
-	/// authored high/low-pass watershed leaves (skipping [`PocketWater::Empty`]).
-	/// Does not generate cells or walk [`crate::terrain::watersheds::HydroComplexCell`].
-	pub fn geographic_features_overlapping(
-		&self,
-		region: Bounds2,
-	) -> impl Iterator<Item = GeographicFeature> + '_ {
+/// Stored geographic sources whose leaf bounds overlap `region`; see
+/// [`crate::terrain::TerrainStorage::geographic_features_overlapping`].
+pub(crate) fn geographic_features_overlapping(
+	storage: &HcsgStorage,
+	region: Bounds2,
+) -> Vec<GeographicFeature> {
+	{
 		let mut out = Vec::new();
 		push_stamp_features(
 			&mut out,
 			region,
-			&self.massif_high_pass_stamp,
+			storage,
 			GeographicFamily::Massif,
 			GeographicBand::HighPass,
 			GeographicFeatureKind::Massif,
@@ -105,7 +102,7 @@ impl TerrainEntryStore {
 		push_stamp_features(
 			&mut out,
 			region,
-			&self.massif_low_pass_stamp,
+			storage,
 			GeographicFamily::Massif,
 			GeographicBand::LowPass,
 			GeographicFeatureKind::Massif,
@@ -114,16 +111,18 @@ impl TerrainEntryStore {
 		push_stamp_features(
 			&mut out,
 			region,
-			&self.plateau_high_pass_stamp,
+			storage,
 			GeographicFamily::Plateau,
 			GeographicBand::HighPass,
 			GeographicFeatureKind::Plateau,
-			|stamp: &PlateauHighPassStampCell| (!stamp.modulations.is_empty()).then_some(stamp.cell),
+			|stamp: &PlateauHighPassStampCell| {
+				(!stamp.modulations.is_empty()).then_some(stamp.cell)
+			},
 		);
 		push_stamp_features(
 			&mut out,
 			region,
-			&self.plateau_low_pass_stamp,
+			storage,
 			GeographicFamily::Plateau,
 			GeographicBand::LowPass,
 			GeographicFeatureKind::Plateau,
@@ -132,7 +131,7 @@ impl TerrainEntryStore {
 		push_stamp_features(
 			&mut out,
 			region,
-			&self.canyon_high_pass_stamp,
+			storage,
 			GeographicFamily::Canyon,
 			GeographicBand::HighPass,
 			GeographicFeatureKind::Canyon,
@@ -141,7 +140,7 @@ impl TerrainEntryStore {
 		push_stamp_features(
 			&mut out,
 			region,
-			&self.canyon_low_pass_stamp,
+			storage,
 			GeographicFamily::Canyon,
 			GeographicBand::LowPass,
 			GeographicFeatureKind::Canyon,
@@ -150,16 +149,18 @@ impl TerrainEntryStore {
 		push_stamp_features(
 			&mut out,
 			region,
-			&self.rolling_high_pass_stamp,
+			storage,
 			GeographicFamily::Rolling,
 			GeographicBand::HighPass,
 			GeographicFeatureKind::Rolling,
-			|stamp: &RollingHighPassStampCell| (!stamp.modulations.is_empty()).then_some(stamp.cell),
+			|stamp: &RollingHighPassStampCell| {
+				(!stamp.modulations.is_empty()).then_some(stamp.cell)
+			},
 		);
 		push_stamp_features(
 			&mut out,
 			region,
-			&self.rolling_low_pass_stamp,
+			storage,
 			GeographicFamily::Rolling,
 			GeographicBand::LowPass,
 			GeographicFeatureKind::Rolling,
@@ -168,7 +169,7 @@ impl TerrainEntryStore {
 		push_stamp_features(
 			&mut out,
 			region,
-			&self.valley_high_pass_stamp,
+			storage,
 			GeographicFamily::Valley,
 			GeographicBand::HighPass,
 			GeographicFeatureKind::Valley,
@@ -177,7 +178,7 @@ impl TerrainEntryStore {
 		push_stamp_features(
 			&mut out,
 			region,
-			&self.valley_low_pass_stamp,
+			storage,
 			GeographicFamily::Valley,
 			GeographicBand::LowPass,
 			GeographicFeatureKind::Valley,
@@ -186,7 +187,7 @@ impl TerrainEntryStore {
 		push_stamp_features(
 			&mut out,
 			region,
-			&self.pocket_water_high_pass_stamp,
+			storage,
 			GeographicFamily::PocketWaterStamp,
 			GeographicBand::HighPass,
 			GeographicFeatureKind::PocketWater,
@@ -197,7 +198,7 @@ impl TerrainEntryStore {
 		push_stamp_features(
 			&mut out,
 			region,
-			&self.pocket_water_low_pass_stamp,
+			storage,
 			GeographicFamily::PocketWaterStamp,
 			GeographicBand::LowPass,
 			GeographicFeatureKind::PocketWater,
@@ -205,22 +206,49 @@ impl TerrainEntryStore {
 				(!stamp.modulations.is_empty()).then_some(stamp.cell)
 			},
 		);
-		push_watershed_features(&mut out, region, &self.marazion_pocket_waters_high_pass);
-		push_watershed_features(&mut out, region, &self.marazion_pocket_waters_low_pass);
-		out.into_iter()
+		push_watershed_features::<PocketWatersHighPass>(&mut out, region, storage);
+		push_watershed_features::<PocketWatersLowPass>(&mut out, region, storage);
+		out
 	}
 }
 
-fn push_stamp_features<T>(
+/// Latest membership change among the stores [`geographic_features_overlapping`]
+/// reads. Writes to any other type, inside Durham or not, leave it unchanged.
+pub(crate) fn geography_revision(storage: &HcsgStorage) -> u64 {
+	fn revision<T: HcsgNode>(storage: &HcsgStorage) -> u64 {
+		storage.store::<T>().map_or(0, |store| store.membership_revision())
+	}
+	[
+		revision::<MassifHighPassStampCell>(storage),
+		revision::<MassifLowPassStampCell>(storage),
+		revision::<PlateauHighPassStampCell>(storage),
+		revision::<PlateauLowPassStampCell>(storage),
+		revision::<CanyonHighPassStampCell>(storage),
+		revision::<CanyonLowPassStampCell>(storage),
+		revision::<RollingHighPassStampCell>(storage),
+		revision::<RollingLowPassStampCell>(storage),
+		revision::<ValleyHighPassStampCell>(storage),
+		revision::<ValleyLowPassStampCell>(storage),
+		revision::<PocketWaterHighPassStampCell>(storage),
+		revision::<PocketWaterLowPassStampCell>(storage),
+		revision::<PocketWatersHighPass>(storage),
+		revision::<PocketWatersLowPass>(storage),
+	]
+	.into_iter()
+	.max()
+	.unwrap_or(0)
+}
+
+fn push_stamp_features<T: HcsgNode>(
 	out: &mut Vec<GeographicFeature>,
 	region: Bounds2,
-	map: &std::collections::HashMap<Id, crate::terrain::index::StoredEntry<T>>,
+	storage: &HcsgStorage,
 	family: GeographicFamily,
 	band: GeographicBand,
 	kind: GeographicFeatureKind,
 	cell_if_occupied: impl Fn(&T) -> Option<Aabb3d>,
 ) {
-	for (id, entry) in map {
+	for (id, entry) in storage.store::<T>().into_iter().flat_map(|store| store.iter()) {
 		let Some(cell) = cell_if_occupied(&entry.value) else {
 			continue;
 		};
@@ -229,7 +257,7 @@ fn push_stamp_features<T>(
 			continue;
 		}
 		out.push(GeographicFeature {
-			id: GeographicFeatureId { family, band, source: *id },
+			id: GeographicFeatureId { family, band, source: id },
 			revision: entry.version,
 			kind,
 			bounds,
@@ -241,11 +269,11 @@ fn push_stamp_features<T>(
 fn push_watershed_features<T>(
 	out: &mut Vec<GeographicFeature>,
 	region: Bounds2,
-	map: &std::collections::HashMap<Id, crate::terrain::index::StoredEntry<T>>,
+	storage: &HcsgStorage,
 ) where
-	T: AuthoredPocketWaters,
+	T: AuthoredPocketWaters + HcsgNode,
 {
-	for (id, entry) in map {
+	for (id, entry) in storage.store::<T>().into_iter().flat_map(|store| store.iter()) {
 		let authored = entry.value.authored();
 		let Some((kind, bounds, anchor)) = authored_geography(authored, entry.value.cell()) else {
 			continue;
@@ -257,7 +285,7 @@ fn push_watershed_features<T>(
 			id: GeographicFeatureId {
 				family: GeographicFamily::Watershed,
 				band: entry.value.band(),
-				source: *id,
+				source: id,
 			},
 			revision: entry.version,
 			kind,
@@ -307,9 +335,7 @@ fn authored_geography(
 ) -> Option<(GeographicFeatureKind, Bounds2, Vec2)> {
 	match authored {
 		PocketWater::Empty => None,
-		PocketWater::Lake(lake) => {
-			Some((GeographicFeatureKind::Lake, lake.bounds, lake.center))
-		}
+		PocketWater::Lake(lake) => Some((GeographicFeatureKind::Lake, lake.bounds, lake.center)),
 		PocketWater::Bog(bog) => Some((GeographicFeatureKind::Bog, bog.bounds, bog.center)),
 		PocketWater::Stream(stream) => {
 			let anchor = stream
@@ -336,11 +362,9 @@ fn xz_overlaps(a: Bounds2, b: Bounds2) -> bool {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::terrain::index::StoredEntry;
+	use crate::terrain::index::TerrainStorage;
 	use crate::terrain::stamps::MassifHighPassStampCell;
-	use crate::terrain::watersheds::{
-		HydroComplexCell, PocketWatersHighPass, WatershedBandPass,
-	};
+	use crate::terrain::watersheds::{HydroComplexCell, PocketWatersHighPass, WatershedBandPass};
 	use std::sync::Arc;
 	use terrain_stamps::{CircleRegion, Region2D, RegionAffineModulation, StampModulation};
 	use terrain_watersheds::{HydroComplex, Lake, LakeParams};
@@ -363,48 +387,39 @@ mod tests {
 	}
 
 	fn insert_stamp(
-		store: &mut TerrainEntryStore,
+		store: &mut HcsgStorage,
 		id: Id,
 		stamp_cell: Aabb3d,
 		occupied: bool,
-	) {
-		let version = Version(1);
-		store.massif_high_pass_stamp.insert(
+	) -> Version {
+		store.insert(
 			id,
-			StoredEntry {
-				value: MassifHighPassStampCell {
-					cell: stamp_cell,
-					modulations: if occupied { vec![dummy_modulation()] } else { Vec::new() },
-				},
-				bounds: stamp_cell,
-				version,
-				entity: None,
+			MassifHighPassStampCell {
+				cell: stamp_cell,
+				modulations: if occupied { vec![dummy_modulation()] } else { Vec::new() },
 			},
-		);
+			stamp_cell,
+		)
 	}
 
-	fn insert_lake(store: &mut TerrainEntryStore, id: Id, lake_cell: Aabb3d, lake: Lake) {
-		store.marazion_pocket_waters_high_pass.insert(
+	fn insert_lake(store: &mut HcsgStorage, id: Id, lake_cell: Aabb3d, lake: Lake) -> Version {
+		store.insert(
 			id,
-			StoredEntry {
-				value: PocketWatersHighPass {
-					cell: lake_cell,
-					band: WatershedBandPass::High,
-					authored: PocketWater::Lake(lake),
-				},
-				bounds: lake_cell,
-				version: Version(3),
-				entity: None,
+			PocketWatersHighPass {
+				cell: lake_cell,
+				band: WatershedBandPass::High,
+				authored: PocketWater::Lake(lake),
 			},
-		);
+			lake_cell,
+		)
 	}
 
 	#[test]
 	fn empty_stamp_modulations_are_not_geographic_sources() -> anyhow::Result<()> {
-		let mut store = TerrainEntryStore::default();
+		let mut store = HcsgStorage::default();
 		let occupied = cell(0.0, 0.0, 100.0, 100.0);
 		let empty = cell(200.0, 200.0, 300.0, 300.0);
-		insert_stamp(&mut store, Id::from_cell(occupied), occupied, true);
+		let version = insert_stamp(&mut store, Id::from_cell(occupied), occupied, true);
 		insert_stamp(&mut store, Id::from_cell(empty), empty, false);
 
 		let found: Vec<_> = store
@@ -415,37 +430,38 @@ mod tests {
 		anyhow::ensure!(found[0].id.family == GeographicFamily::Massif);
 		anyhow::ensure!(found[0].id.band == GeographicBand::HighPass);
 		anyhow::ensure!(found[0].id.source == Id::from_cell(occupied));
-		anyhow::ensure!(found[0].revision == Version(1));
+		anyhow::ensure!(found[0].revision == version);
 		Ok(())
 	}
 
 	#[test]
 	fn one_authored_lake_is_named_once_across_derived_hydro_cells() -> anyhow::Result<()> {
-		let mut store = TerrainEntryStore::default();
+		let mut store = HcsgStorage::default();
 		let lake_cell = cell(0.0, 0.0, 400.0, 400.0);
 		let lake_bounds = Bounds2::from_xz(0.0, 0.0, 400.0, 400.0);
 		let lake = Lake::from_bounds(lake_bounds, 7, LakeParams::default(), None)
 			.ok_or_else(|| anyhow::anyhow!("authored lake"))?;
 		let lake_id = Id::from_cell(lake_cell);
-		insert_lake(&mut store, lake_id, lake_cell, lake);
+		let lake_version = insert_lake(&mut store, lake_id, lake_cell, lake);
 
 		let left = cell(0.0, 0.0, 200.0, 400.0);
 		let right = cell(200.0, 0.0, 400.0, 400.0);
 		for derived in [left, right] {
-			store.watershed_complex_cell.insert(
+			store.insert(
 				Id::from_cell(derived),
-				StoredEntry {
-					value: HydroComplexCell {
-						cell: derived,
-						complex: Arc::new(HydroComplex::new(
-							Bounds2::from_xz(derived.min.x, derived.min.z, derived.max.x, derived.max.z),
-							1,
-						)),
-					},
-					bounds: derived,
-					version: Version(9),
-					entity: None,
+				HydroComplexCell {
+					cell: derived,
+					complex: Arc::new(HydroComplex::new(
+						Bounds2::from_xz(
+							derived.min.x,
+							derived.min.z,
+							derived.max.x,
+							derived.max.z,
+						),
+						1,
+					)),
 				},
+				derived,
 			);
 		}
 
@@ -459,19 +475,40 @@ mod tests {
 		anyhow::ensure!(lakes.len() == 1, "derived hydro cells must not mint extra lakes");
 		anyhow::ensure!(lakes[0].id.source == lake_id);
 		anyhow::ensure!(lakes[0].id.family == GeographicFamily::Watershed);
-		anyhow::ensure!(lakes[0].revision == Version(3));
+		anyhow::ensure!(lakes[0].revision == lake_version);
+		Ok(())
+	}
+
+	#[test]
+	fn geography_revision_moves_only_for_source_stores() -> anyhow::Result<()> {
+		struct Furniture;
+		let mut store = HcsgStorage::default();
+		let before = store.geography_revision();
+		let bounds = cell(0.0, 0.0, 100.0, 100.0);
+		store.insert(Id::from_cell(bounds), Furniture, bounds);
+		store.insert(
+			Id::from_cell(bounds),
+			HydroComplexCell {
+				cell: bounds,
+				complex: Arc::new(HydroComplex::new(Bounds2::from_xz(0.0, 0.0, 100.0, 100.0), 1)),
+			},
+			bounds,
+		);
+		anyhow::ensure!(store.geography_revision() == before, "non-source writes must not count");
+		insert_stamp(&mut store, Id::from_cell(bounds), bounds, true);
+		anyhow::ensure!(store.geography_revision() > before, "a stamp write is a source change");
 		Ok(())
 	}
 
 	#[test]
 	fn query_does_not_admit_or_mutate_storage() -> anyhow::Result<()> {
-		let store = TerrainEntryStore::default();
-		let before = store.membership_revision();
+		let store = HcsgStorage::default();
+		let before = store.latest_version();
 		let count = store
 			.geographic_features_overlapping(Bounds2::from_xz(0.0, 0.0, 10.0, 10.0))
 			.count();
 		anyhow::ensure!(count == 0);
-		anyhow::ensure!(store.membership_revision() == before);
+		anyhow::ensure!(store.latest_version() == before);
 		Ok(())
 	}
 }

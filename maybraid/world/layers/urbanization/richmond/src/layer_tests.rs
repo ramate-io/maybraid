@@ -10,9 +10,9 @@ use bevy::prelude::{
 use bevy::state::app::StatesPlugin;
 use durham::{
 	fine_patch_cell_layout, playable_world_cell_layout, BaseTerrainNoise, Durham,
-	DurhamTerrainConfig, PresentedTerrainScene, TerrainCellLayout, TerrainColliderMeshSource,
-	TerrainConfig, TerrainEntryStore, TerrainSuperseded, TerrainTrimeshCollider, WorldBaseTerrain,
-	TERRAIN_CELL_SIZE,
+	DurhamTerrainConfig, HcsgStorage, PresentedTerrainScene, TerrainCellLayout,
+	TerrainColliderMeshSource, TerrainConfig, TerrainStorage, TerrainSuperseded,
+	TerrainTrimeshCollider, WorldBaseTerrain, TERRAIN_CELL_SIZE,
 };
 use layer_stack::{
 	ActiveGenerationMode, Generate, GenerationMode, GenerationModePlugin, LayerGenerationCore,
@@ -87,7 +87,7 @@ type Urbanized = Urbanization<Richmond<OnTerrain<Durham>>>;
 
 fn empty_urbanized_world() -> World {
 	let mut world = World::new();
-	world.insert_resource(TerrainEntryStore::default());
+	world.init_resource::<HcsgStorage>();
 	world.insert_resource(TerrainCellLayout::default());
 	world.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(&TerrainConfig::new(42))));
 	world.insert_resource(DevelopmentEntryStore::default());
@@ -287,13 +287,13 @@ fn overlay_cell_prefers_a_padded_cell_then_falls_back_by_size() -> anyhow::Resul
 	let medium =
 		TerrainCellLayout { cell_size: 2.0 * TERRAIN_CELL_SIZE, ..TerrainCellLayout::default() };
 	{
-		let mut store = world.resource_mut::<TerrainEntryStore>();
+		let mut store = world.resource_mut::<HcsgStorage>();
 		store.insert_base_terrain_for_test(&fine, 0, 0, base.clone());
 		store.insert_base_terrain_for_test(&medium, 0, 0, base);
 	}
 	let query = Aabb3d::from_min_max(Vec3::new(1.0, -10.0, 1.0), Vec3::new(20.0, 10.0, 20.0));
 	let (source, fine_bounds, medium_bounds) = {
-		let store = world.resource::<TerrainEntryStore>();
+		let store = world.resource::<HcsgStorage>();
 		let mut source = None;
 		let mut fine_bounds = None;
 		let mut medium_bounds = None;
@@ -676,7 +676,7 @@ fn streamed_hosts_leave_when_the_layer_region_is_gone() -> anyhow::Result<()> {
 	app.insert_resource(TerrainExtent::<Durham>::streamed(
 		playable_world_cell_layout().presentation_region(),
 	));
-	app.insert_resource(TerrainEntryStore::default());
+	app.init_resource::<HcsgStorage>();
 	app.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(&TerrainConfig::new(42))));
 	app.insert_resource(UrbanizationIndex::default());
 	app.insert_resource(DevelopmentEntryStore::default());
@@ -710,7 +710,7 @@ fn hosts_walk_a_stored_development_with_no_hopscotch() -> anyhow::Result<()> {
 	world.insert_resource(UrbanizationLayerRegion::default());
 	let layout = fine_patch_cell_layout(2, bevy::math::IVec2::ZERO);
 	world.insert_resource(layout.clone());
-	world.insert_resource(TerrainEntryStore::default());
+	world.init_resource::<HcsgStorage>();
 	world.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(&TerrainConfig::new(42))));
 	world.insert_resource(UrbanizationIndex::default());
 	world.insert_resource(DevelopmentEntryStore::default());

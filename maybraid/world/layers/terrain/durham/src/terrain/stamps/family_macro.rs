@@ -19,7 +19,6 @@
 macro_rules! define_stamp_family {
 	(
 		layout: $Layout:ident,
-		bootstrap_layout: $BootstrapLayout:ident / $bootstrap_layout_fn:ident,
 		controller: $Controller:ident,
 		stamp: $Stamp:ident,
 		family_salt: $family_salt:expr,
@@ -76,13 +75,9 @@ macro_rules! define_stamp_family {
 			}
 		}
 
-		pub trait $BootstrapLayout {
-			fn $bootstrap_layout_fn(&self) -> $Layout;
-		}
-
-		$crate::terrain::cell::universal_bootstrap_scheme!(
+		$crate::terrain::cell::derived_universal_scheme!(
 			$Layout,
-			$BootstrapLayout::$bootstrap_layout_fn
+			|_index| Some($Layout::default())
 		);
 
 		impl $crate::terrain::cell::CellTiling for $Layout {

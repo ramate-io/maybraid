@@ -6,7 +6,6 @@ use terrain_stamps::RollingGround;
 
 define_stamp_family! {
 	layout: RollingLowPassControllerLayout,
-	bootstrap_layout: BootstrapRollingLowPassControllerLayout / bootstrap_rolling_low_pass_controller_layout,
 	controller: RollingLowPassControllerCell,
 	stamp: RollingLowPassStampCell,
 	family_salt: 66,
@@ -28,7 +27,6 @@ define_stamp_family! {
 
 define_stamp_family! {
 	layout: RollingHighPassControllerLayout,
-	bootstrap_layout: BootstrapRollingHighPassControllerLayout / bootstrap_rolling_high_pass_controller_layout,
 	controller: RollingHighPassControllerCell,
 	stamp: RollingHighPassStampCell,
 	family_salt: 166,
