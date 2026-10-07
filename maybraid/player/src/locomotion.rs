@@ -2,6 +2,7 @@
 
 use avian3d::prelude::LinearVelocity;
 use bevy::prelude::*;
+use character_animations::animations::smoothstep;
 use characters::{
 	AnimClip, AnimProgress, AnimRef, AnimRefRoot, CharacterHeading, CharacterMembers, CharacterRig,
 	CharacterRigRole, CharacterRoot, JumpParams, RigSkeletonKind,
@@ -12,6 +13,14 @@ use crate::identity::PlayerYawOwner;
 use crate::stance::{CharacterStance, StanceKind};
 
 pub(crate) const WALK_SPEED: f32 = 1.0;
+
+/// 0 = idle, 1 = walk. Smoothsteps between standstill and [`WALK_SPEED`].
+pub(crate) fn approach_walk_weight(speed: f32) -> f32 {
+	if speed <= 0.0 {
+		return 0.0;
+	}
+	smoothstep((speed / WALK_SPEED).clamp(0.0, 1.0))
+}
 
 pub(crate) fn face_wish_yaw(
 	time: Res<Time>,
@@ -106,6 +115,8 @@ fn locomotion_clip(
 							AnimClip::run()
 						} else if speed > WALK_SPEED {
 							AnimClip::walk()
+						} else if speed > 0.0 {
+							AnimClip::approach(approach_walk_weight(speed))
 						} else {
 							AnimClip::still()
 						}
@@ -169,16 +180,21 @@ mod tests {
 	}
 
 	#[test]
-	fn clip_follows_the_cap() {
+	fn approach_blends_idle_into_walk_by_speed() {
 		let stance = CharacterStance::settled(StanceKind::Stand);
-		assert_eq!(
-			locomotion_clip(RigSkeletonKind::Humanoid, None, &stance, JOG_SPEED).id(),
-			AnimId::Walk
-		);
-		assert_eq!(
-			locomotion_clip(RigSkeletonKind::Humanoid, None, &stance, MOVE_SPEED).id(),
-			AnimId::Run
-		);
+		let creep = locomotion_clip(RigSkeletonKind::Humanoid, None, &stance, 0.5);
+		assert_eq!(creep.id(), AnimId::Approach);
+		let walk = locomotion_clip(RigSkeletonKind::Humanoid, None, &stance, JOG_SPEED);
+		assert_eq!(walk.id(), AnimId::Walk);
+		let sprint = locomotion_clip(RigSkeletonKind::Humanoid, None, &stance, MOVE_SPEED);
+		assert_eq!(sprint.id(), AnimId::Run);
+		let creep_weight = match creep {
+			AnimClip::Approach(params) => params.walk_weight,
+			_ => panic!("expected approach"),
+		};
+		assert!(creep_weight > 0.0 && creep_weight < 1.0);
+		assert_eq!(approach_walk_weight(0.0), 0.0);
+		assert!((approach_walk_weight(WALK_SPEED) - 1.0).abs() < 1e-5);
 	}
 
 	#[test]

@@ -1,9 +1,9 @@
 use bevy::prelude::*;
 use character_animations::{
 	animations::{
-		FixedTuck, Run, Squat, SquatDescent, Tuck, TuckedFlip, TwoFootedJump, TwoFootedTuckedFlip,
-		Walk, DEFAULT_DESCENT_SPEED, DEFAULT_GRAVITY, DEFAULT_LANDING_SQUAT_SPEED,
-		DEFAULT_PRE_SQUAT_SPEED,
+		FixedTuck, Idle, Mix, Run, Squat, SquatDescent, Tuck, TuckedFlip, TwoFootedJump,
+		TwoFootedTuckedFlip, Walk, DEFAULT_DESCENT_SPEED, DEFAULT_GRAVITY,
+		DEFAULT_LANDING_SQUAT_SPEED, DEFAULT_PRE_SQUAT_SPEED,
 	},
 	Animation, Effects,
 };
@@ -22,6 +22,7 @@ use crate::skinning::{BoneMap, CharacterRig};
 
 const RUN_CYCLE_SPEED: f32 = 1.4;
 const WALK_CYCLE_SPEED: f32 = 0.9;
+const IDLE_CYCLE_SPEED: f32 = 0.2;
 const SQUAT_CYCLE_SPEED: f32 = 0.25;
 const TUCK_CYCLE_SPEED: f32 = 0.6;
 const FRONT_FLIP_CYCLE_SPEED: f32 = 0.85;
@@ -50,6 +51,8 @@ pub enum AnimationMode {
 	#[default]
 	Run,
 	Walk,
+	/// Idle→walk [`Mix`]. Scrub with `/character playback --progress 0..1` for walk weight.
+	Approach,
 	Squat,
 	SquatDescent,
 	Jump,
@@ -81,6 +84,8 @@ pub struct AnimationPlayback {
 	pub show_rest: bool,
 	/// When set, replace that bone's clip rotation with these anatomical degrees.
 	pub joint_degrees: Option<JointDegrees>,
+	/// Walk blend weight for [`AnimationMode::Approach`].
+	pub approach_walk_weight: f32,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -103,6 +108,7 @@ impl Default for AnimationPlayback {
 			joint: String::new(),
 			show_rest: true,
 			joint_degrees: None,
+			approach_walk_weight: 0.5,
 		}
 	}
 }
@@ -208,6 +214,9 @@ pub fn animate_limbs(
 		AnimationMode::Walk => {
 			animate_walk(&config, &playback, &mut rig, &mut armature, &mut limbs, t)
 		}
+		AnimationMode::Approach => {
+			animate_approach(&config, &playback, &mut rig, &mut armature, &mut limbs, t)
+		}
 		AnimationMode::Squat => {
 			animate_squat(&config, &playback, &mut debug, &mut rig, &mut armature, &mut limbs, t)
 		}
@@ -277,6 +286,29 @@ fn animate_walk(
 
 	marshal_limbs_into_pose(&mut rig, limbs, playback);
 	let effects = Walk::default().apply(rig.as_mut(), t * WALK_CYCLE_SPEED);
+	apply_effects(config.transform, effects, armature);
+	marshal_pose_to_limbs(&rig, limbs);
+}
+
+fn animate_approach(
+	config: &CharacterConfig,
+	playback: &AnimationPlayback,
+	rig: &mut Query<&mut HumanoidV0Rig, With<CharacterRig>>,
+	armature: &mut Query<&mut Transform, (With<CharacterRig>, Without<LimbAnimator>)>,
+	limbs: &mut Query<(&mut Transform, &LimbAnimator)>,
+	t: f32,
+) {
+	let Ok(mut rig) = rig.single_mut() else {
+		return;
+	};
+
+	let walk_weight = playback.approach_walk_weight.clamp(0.0, 1.0);
+	let cycle_speed = IDLE_CYCLE_SPEED * (1.0 - walk_weight) + WALK_CYCLE_SPEED * walk_weight;
+	let walk_progress = t * cycle_speed;
+	let idle_progress = walk_progress + Idle::phase_from_entity_bits(1);
+	marshal_limbs_into_pose(&mut rig, limbs, playback);
+	let mix = Mix::new(Idle::default(), Walk::default(), walk_weight);
+	let effects = mix.apply_at(rig.as_mut(), idle_progress, walk_progress.rem_euclid(1.0));
 	apply_effects(config.transform, effects, armature);
 	marshal_pose_to_limbs(&rig, limbs);
 }

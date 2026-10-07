@@ -12,8 +12,8 @@ use bevy::ecs::query::{Has, Or};
 use bevy::prelude::*;
 use character_animations::{
 	animations::{
-		Idle, Jab, Prone, QuadrupedIdle, QuadrupedLeap, QuadrupedRun, Squat, SquatDescent, Tuck,
-		TwoFootedTuckedFlip, UprightLeap,
+		Idle, Jab, Mix, Prone, QuadrupedIdle, QuadrupedLeap, QuadrupedRun, Squat, SquatDescent,
+		Tuck, TwoFootedTuckedFlip, UprightLeap,
 	},
 	Animation, Effects,
 };
@@ -423,7 +423,8 @@ pub fn apply_anim_mailbox(
 			}
 
 			let requested = root.0.clip;
-			let progress = clip_progress(requested, mailbox.clip_progress, entity);
+			let raw_progress = mailbox.clip_progress;
+			let progress = clip_progress(requested, raw_progress, entity);
 			let weight = BlendCurve::SmoothStep.sample(mailbox.blend_progress);
 			let prepared = mailbox.prepared_clip.clone();
 			let effects = match character_rig.skeleton {
@@ -439,6 +440,8 @@ pub fn apply_anim_mailbox(
 						requested,
 						&mut rig,
 						progress,
+						raw_progress,
+						entity,
 						write_bones,
 						write_effects,
 						cache,
@@ -640,6 +643,8 @@ fn sample_humanoid_prepared(
 	clip: AnimClip,
 	rig: &mut HumanoidV0Rig,
 	progress: f32,
+	raw_progress: f32,
+	entity: Entity,
 	write_bones: bool,
 	write_effects: bool,
 	cache: Option<&AnimClipCache>,
@@ -653,7 +658,30 @@ fn sample_humanoid_prepared(
 			return if write_effects { sample.effects } else { Effects::IDENTITY };
 		}
 	}
-	sample_humanoid(clip, rig, progress, write_bones, write_effects)
+	sample_humanoid(clip, rig, progress, raw_progress, entity, write_bones, write_effects)
+}
+
+fn sample_approach(
+	params: crate::clip::ApproachParams,
+	rig: &mut HumanoidV0Rig,
+	walk_progress: f32,
+	idle_progress: f32,
+	write_bones: bool,
+	write_effects: bool,
+) -> Effects {
+	let idle = Idle::default();
+	let mix = Mix::new(idle, params.walk, params.walk_weight);
+	let walk_phase = walk_progress.rem_euclid(1.0);
+	if write_bones && write_effects {
+		mix.apply_at(rig, idle_progress, walk_phase)
+	} else if write_bones {
+		mix.apply_at(rig, idle_progress, walk_phase);
+		Effects::IDENTITY
+	} else if write_effects {
+		mix.effects_for(rig, walk_phase)
+	} else {
+		Effects::IDENTITY
+	}
 }
 
 fn sample_split<A, R>(
@@ -680,6 +708,8 @@ fn sample_humanoid(
 	clip: AnimClip,
 	rig: &mut HumanoidV0Rig,
 	progress: f32,
+	raw_progress: f32,
+	entity: Entity,
 	write_bones: bool,
 	write_effects: bool,
 ) -> Effects {
@@ -689,6 +719,10 @@ fn sample_humanoid(
 		}
 		AnimClip::Walk(walk) => sample_split(&walk, rig, progress, write_bones, write_effects),
 		AnimClip::Run(run) => sample_split(&run, rig, progress, write_bones, write_effects),
+		AnimClip::Approach(params) => {
+			let idle_progress = raw_progress + Idle::phase_from_entity_bits(entity.to_bits());
+			sample_approach(params, rig, progress, idle_progress, write_bones, write_effects)
+		}
 		AnimClip::Jump(params) => {
 			sample_split(&params.apply_humanoid(), rig, progress, write_bones, write_effects)
 		}
@@ -889,10 +923,28 @@ mod tests {
 		assert_eq!(world.get::<AnimMailbox>(leftover).unwrap().apply_skips, 0);
 	}
 
+	fn sample_humanoid_test(
+		clip: AnimClip,
+		rig: &mut HumanoidV0Rig,
+		progress: f32,
+		write_bones: bool,
+		write_effects: bool,
+	) -> Effects {
+		sample_humanoid(
+			clip,
+			rig,
+			progress,
+			progress,
+			Entity::from_bits(1),
+			write_bones,
+			write_effects,
+		)
+	}
+
 	#[test]
 	fn still_samples_idle_on_humanoid() {
 		let mut rig = HumanoidV0Rig::imported();
-		let effects = sample_humanoid(AnimClip::Still, &mut rig, 0.25, true, true);
+		let effects = sample_humanoid_test(AnimClip::Still, &mut rig, 0.25, true, true);
 		assert!(effects.is_identity());
 		assert!(rig.posed_angle("shoulder.L") > 0.0);
 		assert!(rig.posed_angle("shoulder.L") < 0.15);
@@ -904,8 +956,8 @@ mod tests {
 		use anyhow::anyhow;
 		let mut descent = HumanoidV0Rig::for_clip_test();
 		let mut held = HumanoidV0Rig::for_clip_test();
-		sample_humanoid(AnimClip::squat_descent(), &mut descent, 1.0, true, true);
-		sample_humanoid(AnimClip::squat(), &mut held, 1.0, true, true);
+		sample_humanoid_test(AnimClip::squat_descent(), &mut descent, 1.0, true, true);
+		sample_humanoid_test(AnimClip::squat(), &mut held, 1.0, true, true);
 		for name in descent.animation_bone_names() {
 			let a = descent.rotation(name);
 			let b = held.rotation(name);
@@ -914,7 +966,7 @@ mod tests {
 			}
 		}
 		let mut mid = HumanoidV0Rig::for_clip_test();
-		sample_humanoid(AnimClip::squat_descent(), &mut mid, 0.5, true, true);
+		sample_humanoid_test(AnimClip::squat_descent(), &mut mid, 0.5, true, true);
 		assert!(mid.posed_angle("femur.L") > 0.15, "mid descent should fold hips");
 		Ok(())
 	}
@@ -924,7 +976,7 @@ mod tests {
 		use anyhow::anyhow;
 
 		let mut rig = HumanoidV0Rig::imported();
-		let effects = sample_humanoid(AnimClip::squat(), &mut rig, 1.0, true, true);
+		let effects = sample_humanoid_test(AnimClip::squat(), &mut rig, 1.0, true, true);
 		if !effects.is_identity() {
 			return Err(anyhow!("held squat must not move the armature"));
 		}
@@ -942,7 +994,7 @@ mod tests {
 		use anyhow::anyhow;
 
 		let mut rig = HumanoidV0Rig::imported();
-		let effects = sample_humanoid(AnimClip::prone(), &mut rig, 1.0, true, true);
+		let effects = sample_humanoid_test(AnimClip::prone(), &mut rig, 1.0, true, true);
 		if !effects.is_identity() {
 			return Err(anyhow!("held prone must not move the armature"));
 		}
@@ -971,6 +1023,112 @@ mod tests {
 		let b = Entity::from_bits(2);
 		assert_ne!(clip_progress(AnimClip::Still, 0.0, a), clip_progress(AnimClip::Still, 0.0, b));
 		assert_eq!(clip_progress(AnimClip::walk(), 0.3, a), 0.3);
+	}
+
+	#[test]
+	fn approach_mix_endpoints_match_idle_and_walk() -> anyhow::Result<()> {
+		use crate::clip::ApproachParams;
+		use character_animations::animations::Walk;
+
+		let entity = Entity::from_bits(7);
+		let walk_progress = 0.35;
+		let idle_progress = walk_progress + Idle::phase_from_entity_bits(entity.to_bits());
+		let mut idle = HumanoidV0Rig::imported();
+		sample_humanoid(
+			AnimClip::Still,
+			&mut idle,
+			idle_progress,
+			walk_progress,
+			entity,
+			true,
+			false,
+		);
+		let mut walk = HumanoidV0Rig::imported();
+		sample_humanoid(
+			AnimClip::Walk(Walk::default()),
+			&mut walk,
+			walk_progress,
+			walk_progress,
+			entity,
+			true,
+			false,
+		);
+		let mut blended = HumanoidV0Rig::imported();
+		sample_humanoid(
+			AnimClip::Approach(ApproachParams::blended(0.0)),
+			&mut blended,
+			walk_progress,
+			walk_progress,
+			entity,
+			true,
+			false,
+		);
+		assert!(
+			idle.rotation("femur.L").dot(blended.rotation("femur.L")).abs() > 1.0 - 1e-5,
+			"approach weight 0 should match idle"
+		);
+		sample_humanoid(
+			AnimClip::Approach(ApproachParams::blended(1.0)),
+			&mut blended,
+			walk_progress,
+			walk_progress,
+			entity,
+			true,
+			false,
+		);
+		assert!(
+			walk.rotation("femur.L").dot(blended.rotation("femur.L")).abs() > 1.0 - 1e-5,
+			"approach weight 1 should match walk"
+		);
+		let mut mid = HumanoidV0Rig::imported();
+		sample_humanoid(
+			AnimClip::Approach(ApproachParams::blended(0.5)),
+			&mut mid,
+			walk_progress,
+			walk_progress,
+			entity,
+			true,
+			false,
+		);
+		assert!(
+			mid.posed_angle("femur.L") > idle.posed_angle("femur.L")
+				&& mid.posed_angle("femur.L") < walk.posed_angle("femur.L"),
+			"mid approach should sit between idle and walk femur swing"
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn approach_keeps_walk_phase_wrapped() -> anyhow::Result<()> {
+		use crate::clip::ApproachParams;
+
+		let entity = Entity::from_bits(3);
+		let wrapped = 1.35;
+		let mut at_wrap = HumanoidV0Rig::imported();
+		sample_humanoid(
+			AnimClip::Approach(ApproachParams::blended(1.0)),
+			&mut at_wrap,
+			wrapped,
+			wrapped,
+			entity,
+			true,
+			false,
+		);
+		let mut at_phase = HumanoidV0Rig::imported();
+		sample_humanoid(
+			AnimClip::Approach(ApproachParams::blended(1.0)),
+			&mut at_phase,
+			wrapped.rem_euclid(1.0),
+			wrapped,
+			entity,
+			true,
+			false,
+		);
+		assert!(
+			at_wrap.rotation("femur.L").dot(at_phase.rotation("femur.L")).abs() > 1.0 - 1e-5,
+			"walk side should use wrapped gait phase"
+		);
+		Ok(())
 	}
 
 	#[test]
