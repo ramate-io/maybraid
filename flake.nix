@@ -186,12 +186,18 @@
               set -e
 
               # Configure Apple toolchain for C/C++ dependencies
+              # Unset Nix C++ paths to avoid mixing Nix libcxx with macOS SDK
+              unset NIX_CFLAGS_COMPILE NIX_LDFLAGS
+              
               if [ -d /Applications/Xcode.app/Contents/Developer ]; then
                 export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
                 if sdkroot="$(xcrun --sdk macosx --show-sdk-path 2>/dev/null)" && [ -d "$sdkroot" ]; then
                   export SDKROOT="$sdkroot"
                   export CFLAGS="-isysroot $sdkroot -mmacosx-version-min=11.0"
                   export CXXFLAGS="-isysroot $sdkroot -stdlib=libc++ -mmacosx-version-min=11.0"
+                  
+                  # Ensure C++ compiler uses SDK headers, not Nix store
+                  export CPLUS_INCLUDE_PATH="$sdkroot/usr/include/c++/v1:$sdkroot/usr/include"
                 fi
               fi
 

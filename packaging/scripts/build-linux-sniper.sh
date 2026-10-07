@@ -15,9 +15,9 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 VERSION="${VERSION:-0.0.1}"
 
-# Pin Steam Runtime 3.0 sniper SDK by digest
-# Update from: https://gitlab.steamos.cloud/steamrt/steamrt/-/releases
-SNIPER_IMAGE="${SNIPER_IMAGE:-registry.gitlab.steamos.cloud/steamrt/sniper/sdk:0.20250123.113509}"
+# Use Steam Runtime 3.0 sniper SDK latest
+# See: https://gitlab.steamos.cloud/steamrt/sniper/sdk
+SNIPER_IMAGE="${SNIPER_IMAGE:-registry.gitlab.steamos.cloud/steamrt/sniper/sdk:latest}"
 
 # Use separate target directory for sniper builds
 SNIPER_TARGET_DIR="$REPO_ROOT/target/sniper-release"
@@ -46,7 +46,6 @@ mkdir -p "$SNIPER_TARGET_DIR"
 
 $CONTAINER_CMD run --rm \
     --user "$(id -u):$(id -g)" \
-    --security-opt label=disable \
     -v "$REPO_ROOT:/workspace:rw" \
     -w /workspace \
     -e CARGO_HOME=/workspace/target/sniper-release/.cargo \
