@@ -210,6 +210,43 @@ pub fn resolve_humanoid(pose: &HumanoidPose, binding: &RigBinding, out: &mut Pos
 	apply(pose, &binding.definition, &binding.effective_rest, out);
 }
 
+/// Apply only `mask` bones from `pose` onto rest. Unmasked bones stay at the baseline.
+///
+/// The baseline is [`RigBinding::effective_rest`], not an arbitrary incoming whole pose.
+pub fn resolve_humanoid_masked(
+	pose: &HumanoidPose,
+	mask: u32,
+	binding: &RigBinding,
+	out: &mut PoseBuffer,
+) {
+	apply_masked(pose, mask, &binding.definition, &binding.effective_rest, out);
+}
+
+/// Bit in a humanoid bone mask for `name`, if it is a V0 animation bone.
+pub fn humanoid_bone_bit(name: &str) -> Option<u32> {
+	HUMANOID_V0_BONES
+		.iter()
+		.position(|candidate| *candidate == name)
+		.map(|index| 1u32 << index)
+}
+
+/// OR of [`humanoid_bone_bit`] for each name.
+pub fn humanoid_write_mask(names: &[&str]) -> u32 {
+	names
+		.iter()
+		.filter_map(|name| humanoid_bone_bit(name))
+		.fold(0, |mask, bit| mask | bit)
+}
+
+/// Parent-space authored rotation `Q` such that posed = `Q * rest`.
+///
+/// Built with an identity rest so a clip cache can share deltas across compatible
+/// bindings.
+pub fn humanoid_parent_rotation_delta(name: &str, pose: &HumanoidPose) -> Option<Quat> {
+	let (swing, flex, twist) = channels_for(name, pose)?;
+	Some(compose_parent_rotation(Quat::IDENTITY, bone_axis(name), swing, flex, twist))
+}
+
 pub(crate) fn apply(
 	pose: &HumanoidPose,
 	definition: &RigDefinition,
@@ -231,6 +268,45 @@ pub(crate) fn apply(
 		let Some(aim) = pose.arms[side.index()].aim else {
 			continue;
 		};
+		aim_humerus(definition, rest, out, side, aim);
+	}
+}
+
+fn apply_masked(
+	pose: &HumanoidPose,
+	mask: u32,
+	definition: &RigDefinition,
+	rest: &PoseBuffer,
+	out: &mut PoseBuffer,
+) {
+	out.copy_from(rest);
+	for (index, name) in definition.names.iter().enumerate() {
+		if mask & (1u32 << index) == 0 {
+			continue;
+		}
+		let bone = BoneId(index as u16);
+		let Some((swing, flex, twist)) = channels_for(name, pose) else {
+			continue;
+		};
+		out.set_rotation(
+			bone,
+			compose_parent_rotation(rest.rotation(bone), bone_axis(name), swing, flex, twist),
+		);
+	}
+	for side in [Side::Left, Side::Right] {
+		let Some(aim) = pose.arms[side.index()].aim else {
+			continue;
+		};
+		let humerus = match side {
+			Side::Left => "humerus.L",
+			Side::Right => "humerus.R",
+		};
+		let Some(bit) = humanoid_bone_bit(humerus) else {
+			continue;
+		};
+		if mask & bit == 0 {
+			continue;
+		}
 		aim_humerus(definition, rest, out, side, aim);
 	}
 }

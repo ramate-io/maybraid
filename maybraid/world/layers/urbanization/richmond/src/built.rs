@@ -39,7 +39,11 @@ impl<G: RichmondGround> GenerationScheme<HcsgStorage> for Built<G> {
 
 	/// Fitted with the site's noise seed: the authored config, else the global one.
 	fn build_with_id(storage: &mut HcsgStorage, id: Id) -> Option<(Self, Aabb3d)> {
-		let seed = storage.get_one_or_generate::<DevelopmentSite>(id)?.clone().config(storage)?.seed;
+		let seed = storage
+			.get_one_or_generate::<DevelopmentSite>(id)?
+			.clone()
+			.config(storage)?
+			.seed;
 		let development = storage.get_one_or_generate::<RichmondDevelopment<G>>(id)?;
 		let cell = development.cell();
 		let built = development.built(seed as i32)?;

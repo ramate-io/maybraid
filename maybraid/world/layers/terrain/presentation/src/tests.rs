@@ -13,9 +13,7 @@ use layer_stack::{
 };
 use lod::gen::Id;
 use lod::lod_ref::LodRef;
-use terrain_layer_model::{
-	HeightField, OnTerrain, TerrainCell, TerrainGeneration, TerrainModel,
-};
+use terrain_layer_model::{HeightField, OnTerrain, TerrainCell, TerrainGeneration, TerrainModel};
 
 use crate::TerrainPresenter;
 
@@ -205,9 +203,7 @@ fn presenter_installs_and_finish_requires_generation() {
 #[should_panic(expected = "LayerGenerationCore")]
 fn presentation_without_generation_names_the_missing_plugin() {
 	let mut app = App::new();
-	app.add_plugins(
-		Present::<TestMode, OnTerrain<Flat>>::default(),
-	);
+	app.add_plugins(Present::<TestMode, OnTerrain<Flat>>::default());
 	app.finish();
 }
 

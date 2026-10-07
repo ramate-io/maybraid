@@ -74,7 +74,10 @@ impl Plugin for RichmondDevelopmentModelsPlugin {
 #[allow(clippy::type_complexity)]
 fn stamp_label_places(
 	mut commands: Commands,
-	added: Query<(Entity, &LabelNode, Option<&ChildOf>), (Added<LabelNode>, Without<DiscoverablePlace>)>,
+	added: Query<
+		(Entity, &LabelNode, Option<&ChildOf>),
+		(Added<LabelNode>, Without<DiscoverablePlace>),
+	>,
 	ancestors: Query<(Option<&ChildOf>, Option<&DiscoverablePlace>)>,
 ) {
 	for (entity, node, child_of) in &added {

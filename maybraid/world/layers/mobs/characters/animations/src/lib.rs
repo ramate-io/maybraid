@@ -1,7 +1,12 @@
 pub mod animations;
+pub mod quantize;
 pub mod rigs;
 
 pub use character_rigs::authoring::ArmatureOffset;
+pub use quantize::{
+	finite_parameter_bits, interval_seconds, normalize_signed_zero, ClipTimePolicy, SampleAddress,
+	DEFAULT_SAMPLE_INTERVAL_US,
+};
 
 /// Armature offset returned by [`Animation::effects_for`].
 ///

@@ -51,7 +51,9 @@ pub fn register_richmond_nodes<G: RichmondGround>(storage: &mut HcsgStorage) {
 		2.0 * COLUMN_HALF_HEIGHT as f64,
 		DEVELOPMENT_CELL_SIZE as f64,
 	);
-	storage.configure::<DevelopmentSite>(columns).add_to_group::<RichmondNodes, DevelopmentSite>();
+	storage
+		.configure::<DevelopmentSite>(columns)
+		.add_to_group::<RichmondNodes, DevelopmentSite>();
 	storage
 		.configure::<RichmondDevelopment<G>>(columns)
 		.add_to_group::<RichmondNodes, RichmondDevelopment<G>>()
@@ -137,8 +139,11 @@ impl RichmondStorage for HcsgStorage {
 			.into_iter()
 			.filter_map(|id| {
 				let entry = self.entry::<Built<G>>(id)?;
-				overlaps_xz(region, entry.bounds)
-					.then_some((id, entry.version, &entry.value.development))
+				overlaps_xz(region, entry.bounds).then_some((
+					id,
+					entry.version,
+					&entry.value.development,
+				))
 			})
 			.collect()
 	}

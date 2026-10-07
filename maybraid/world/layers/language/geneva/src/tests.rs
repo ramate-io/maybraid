@@ -17,9 +17,7 @@ use crate::english::{
 	compose_english, geographic_terms, grove_kind_terms, named_grove_english, with_color_name,
 	PLACE_COLORS,
 };
-use crate::index::{
-	LanguageConfig, LanguageIndex, LanguageSourceDeps, LanguageWorldSeed, NameKey,
-};
+use crate::index::{LanguageConfig, LanguageIndex, LanguageSourceDeps, LanguageWorldSeed, NameKey};
 use crate::name::{canonicalize_terms, pick_terms, terms_fingerprint, PlaceName};
 use crate::present::LanguageOverlay;
 use crate::sources::{places_from_world_xz, NamedFeature, NamedPlace, NamedWorld, SourceRevisions};
@@ -695,10 +693,7 @@ fn child_assigned_before_host_adopts_the_host_language() -> anyhow::Result<()> {
 	index.assign_keep(SEED, region, &[], &child_only);
 	let child_key = NameKey::Place { host, local: 99 };
 	let host_key = NameKey::Place { host, local: 4 };
-	let first = index
-		.assigned(child_key)
-		.ok_or_else(|| anyhow::anyhow!("child first"))?
-		.clone();
+	let first = index.assigned(child_key).ok_or_else(|| anyhow::anyhow!("child first"))?.clone();
 
 	index.assign_keep(SEED, region, &[], &both);
 	let host_name = index.assigned(host_key).ok_or_else(|| anyhow::anyhow!("host"))?;

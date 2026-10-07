@@ -300,7 +300,10 @@ fn two_modes_install_the_core_once() -> anyhow::Result<()> {
 		Present::<TestMode, Mobs<StubMob>>::default(),
 		Present::<OtherMode, Mobs<StubMob>>::default(),
 	));
-	anyhow::ensure!(app.is_plugin_added::<LayerPresentationCore<Mobs<StubMob>>>(), "core is installed");
+	anyhow::ensure!(
+		app.is_plugin_added::<LayerPresentationCore<Mobs<StubMob>>>(),
+		"core is installed"
+	);
 	let subscribers = app.world().resource::<ModeSubscribers<Stacked>>();
 	anyhow::ensure!(subscribers.contains::<TestMode>());
 	anyhow::ensure!(subscribers.contains::<OtherMode>());
@@ -321,8 +324,7 @@ fn losing_subscription_is_inactive_and_returning_is_active() -> anyhow::Result<(
 	subscribe_mode::<Stacked, TestMode>(&mut app);
 	app.update();
 	{
-		let mut state =
-			SystemState::<ModeSubscription<Stacked>>::new(app.world_mut());
+		let mut state = SystemState::<ModeSubscription<Stacked>>::new(app.world_mut());
 		anyhow::ensure!(
 			state.get(app.world()).map_err(|error| anyhow::anyhow!("{error:?}"))?.active(),
 			"subscribed mode presents"
@@ -333,8 +335,7 @@ fn losing_subscription_is_inactive_and_returning_is_active() -> anyhow::Result<(
 		.set(ActiveGenerationMode::of::<OtherMode>());
 	app.update();
 	{
-		let mut state =
-			SystemState::<ModeSubscription<Stacked>>::new(app.world_mut());
+		let mut state = SystemState::<ModeSubscription<Stacked>>::new(app.world_mut());
 		anyhow::ensure!(
 			!state.get(app.world()).map_err(|error| anyhow::anyhow!("{error:?}"))?.active(),
 			"unsubscribed mode retires"
@@ -345,8 +346,7 @@ fn losing_subscription_is_inactive_and_returning_is_active() -> anyhow::Result<(
 		.set(ActiveGenerationMode::of::<TestMode>());
 	app.update();
 	{
-		let mut state =
-			SystemState::<ModeSubscription<Stacked>>::new(app.world_mut());
+		let mut state = SystemState::<ModeSubscription<Stacked>>::new(app.world_mut());
 		anyhow::ensure!(
 			state.get(app.world()).map_err(|error| anyhow::anyhow!("{error:?}"))?.active(),
 			"return presents again"

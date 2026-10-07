@@ -10,9 +10,7 @@ use layer_stack::{
 };
 use lod::lod_ref::LodRef;
 use lod::LodPresentGate;
-use terrain_layer_model::{
-	HeightField, OnTerrain, TerrainCell, TerrainGeneration, TerrainModel,
-};
+use terrain_layer_model::{HeightField, OnTerrain, TerrainCell, TerrainGeneration, TerrainModel};
 use vegetation_layer_model::{Vegetation, VegetationGeneration, VegetationModel};
 
 struct TestMode;

@@ -5,8 +5,9 @@ use bevy::math::Vec2;
 use bevy::prelude::{AssetPlugin, MinimalPlugins, NextState, World};
 use bevy::state::app::StatesPlugin;
 use layer_stack::{
-	subscribe_mode, ActiveGenerationMode, GenerationMode, GenerationModePlugin, LayerGenerationCore,
-	LayerPresentationCore, ModeSubscribers, ModeSubscription, Present, RequireLayer,
+	subscribe_mode, ActiveGenerationMode, GenerationMode, GenerationModePlugin,
+	LayerGenerationCore, LayerPresentationCore, ModeSubscribers, ModeSubscription, Present,
+	RequireLayer,
 };
 use lod::gen::{Id, Version};
 use lod::lod_ref::LodRef;

@@ -139,7 +139,8 @@ impl PaddedTerrainPresenter<'_, '_> {
 						} else {
 							Visibility::Hidden
 						});
-						let water_entity = self.replace_water(*id, shown.entity, shown.water, water);
+						let water_entity =
+							self.replace_water(*id, shown.entity, shown.water, water);
 						if let Some(shown) = self.state.presented.get_mut(id) {
 							shown.level = level;
 							shown.water_version = water_version;
@@ -148,7 +149,8 @@ impl PaddedTerrainPresenter<'_, '_> {
 						continue;
 					}
 					if shown.water_version != water_version {
-						let water_entity = self.replace_water(*id, shown.entity, shown.water, water);
+						let water_entity =
+							self.replace_water(*id, shown.entity, shown.water, water);
 						if let Some(shown) = self.state.presented.get_mut(id) {
 							shown.water_version = water_version;
 							shown.water = water_entity;

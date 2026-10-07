@@ -8,8 +8,8 @@ use bevy::state::app::StatesPlugin;
 use chico::Chico;
 use durham::Durham;
 use layer_stack::{
-	subscribe_mode, ActiveGenerationMode, GenerationMode, GenerationModePlugin, LayerPresentationCore,
-	ModeSubscribers, Present,
+	subscribe_mode, ActiveGenerationMode, GenerationMode, GenerationModePlugin,
+	LayerPresentationCore, ModeSubscribers, Present,
 };
 use lod::gen::{Id, Version};
 use mob_intelligence::MemberOf;
@@ -195,10 +195,7 @@ fn two_modes_share_one_presentation_core() -> anyhow::Result<()> {
 		Present::<TestMode, Inhabited>::default(),
 		Present::<OtherMode, Inhabited>::default(),
 	));
-	anyhow::ensure!(
-		app.is_plugin_added::<LayerPresentationCore<Inhabited>>(),
-		"core is installed"
-	);
+	anyhow::ensure!(app.is_plugin_added::<LayerPresentationCore<Inhabited>>(), "core is installed");
 	let subscribers = app.world().resource::<ModeSubscribers<Inhabited>>();
 	anyhow::ensure!(subscribers.contains::<TestMode>());
 	anyhow::ensure!(subscribers.contains::<OtherMode>());
@@ -222,21 +219,23 @@ fn present_app() -> App {
 	));
 	layer_stack::install_lod_present_gate::<Inhabited, MobLodChan>(&mut app);
 	mob_layer_presentation::install_mob_cell_teardown(&mut app);
-	app.add_plugins((
-		LodPresentPlugin::<
-			MobCell,
-			MobIndex,
-			BarkingPresenter<'_, '_, Urbanized>,
-			MobLodChan,
-			With<LodViewer>,
-		>::default(),
-		LodPresentCullPlugin::<
-			MobCell,
-			MobIndex,
-			BarkingPresenter<'_, '_, Urbanized>,
-			MobLodChan,
-		>::default(),
-	));
+	app.add_plugins(
+		(
+			LodPresentPlugin::<
+				MobCell,
+				MobIndex,
+				BarkingPresenter<'_, '_, Urbanized>,
+				MobLodChan,
+				With<LodViewer>,
+			>::default(),
+			LodPresentCullPlugin::<
+				MobCell,
+				MobIndex,
+				BarkingPresenter<'_, '_, Urbanized>,
+				MobLodChan,
+			>::default(),
+		),
+	);
 	app.init_resource::<MobPresenterState>();
 	app.add_message::<mob_layer_model::MobCellPresented>();
 	app.add_systems(OnExit(ActiveGenerationMode::of::<TestMode>()), clear_index);

@@ -11,9 +11,7 @@ use layer_stack::{
 	LayerGenerationCore, RequireLayer, Scheme,
 };
 use lod::lod_ref::LodRef;
-use terrain_layer_model::{
-	HeightField, OnTerrain, TerrainCell, TerrainGeneration, TerrainModel,
-};
+use terrain_layer_model::{HeightField, OnTerrain, TerrainCell, TerrainGeneration, TerrainModel};
 
 use crate::{Furnishing, FurnishingGeneration, FurnishingModel};
 

@@ -276,14 +276,16 @@ fn spawn_training_wall(
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::urbanization::{author_for_test, TrainingDevelopment, TRAINING_COURTYARD};
 	use crate::{
 		pad_influence_region, training_development_cell, TRAINING_ARENA_MARGIN_M,
 		TRAINING_ARENA_MAX_HALF_M,
 	};
-	use maybraid_game_mode_discover::Discovery;
-	use crate::urbanization::{author_for_test, TrainingDevelopment, TRAINING_COURTYARD};
 	use durham::HcsgStorage;
-	use richmond::{AuthoredDevelopment, DevelopmentConfig, DevelopmentKind, DEVELOPMENT_CELL_SIZE};
+	use maybraid_game_mode_discover::Discovery;
+	use richmond::{
+		AuthoredDevelopment, DevelopmentConfig, DevelopmentKind, DEVELOPMENT_CELL_SIZE,
+	};
 	use std::any::TypeId;
 
 	fn base_terrain() -> WorldBaseTerrain {

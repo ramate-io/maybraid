@@ -4,10 +4,10 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
+use durham::Water;
 use durham::{
 	PresentedTerrainScene, TerrainColliderMeshSource, TerrainSuperseded, TerrainTrimeshCollider,
 };
-use durham::Water;
 use layer_stack::LodPresentGateSync;
 use lod::gen::{Id, SpatialIndex, Version};
 use lod::hcsg::{HcsgStorage, LodGenerateSystems};
@@ -259,7 +259,8 @@ pub(crate) fn present_richmond_padded_terrain<G>(
 		current_transform: &viewer,
 		bounds: &region,
 	};
-	let tracked: HashSet<Id> = storage.overlapping::<PaddedTerrain<G>>(region).into_iter().collect();
+	let tracked: HashSet<Id> =
+		storage.overlapping::<PaddedTerrain<G>>(region).into_iter().collect();
 	presenter.present_tracked::<G>(&storage, &tracked, &lod_ref);
 	state.wanted = tracked;
 	*last = Some(key);

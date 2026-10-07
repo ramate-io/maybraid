@@ -5,8 +5,9 @@ use bevy::math::Vec2;
 use bevy::prelude::{AssetPlugin, MinimalPlugins, NextState, World};
 use bevy::state::app::StatesPlugin;
 use layer_stack::{
-	subscribe_mode, ActiveGenerationMode, GenerationMode, GenerationModePlugin, LayerGenerationCore,
-	LayerPresentationCore, ModeSubscribers, ModeSubscription, Present, RequireLayer,
+	subscribe_mode, ActiveGenerationMode, GenerationMode, GenerationModePlugin,
+	LayerGenerationCore, LayerPresentationCore, ModeSubscribers, ModeSubscription, Present,
+	RequireLayer,
 };
 use lod::lod_ref::LodRef;
 use terrain_layer_model::{HeightField, OnTerrain, TerrainCell, TerrainGeneration, TerrainModel};
@@ -158,8 +159,7 @@ fn losing_subscription_is_inactive_and_returning_is_active() -> anyhow::Result<(
 	let mut app = subscribed_app();
 	app.update();
 	{
-		let mut state =
-			SystemState::<ModeSubscription<Stacked>>::new(app.world_mut());
+		let mut state = SystemState::<ModeSubscription<Stacked>>::new(app.world_mut());
 		anyhow::ensure!(
 			state.get(app.world()).map_err(|error| anyhow::anyhow!("{error:?}"))?.active(),
 			"subscribed mode presents"
@@ -171,8 +171,7 @@ fn losing_subscription_is_inactive_and_returning_is_active() -> anyhow::Result<(
 		.set(ActiveGenerationMode::of::<OtherMode>());
 	app.update();
 	{
-		let mut state =
-			SystemState::<ModeSubscription<Stacked>>::new(app.world_mut());
+		let mut state = SystemState::<ModeSubscription<Stacked>>::new(app.world_mut());
 		anyhow::ensure!(
 			!state.get(app.world()).map_err(|error| anyhow::anyhow!("{error:?}"))?.active(),
 			"unsubscribed mode retires"
@@ -184,8 +183,7 @@ fn losing_subscription_is_inactive_and_returning_is_active() -> anyhow::Result<(
 		.set(ActiveGenerationMode::of::<TestMode>());
 	app.update();
 	{
-		let mut state =
-			SystemState::<ModeSubscription<Stacked>>::new(app.world_mut());
+		let mut state = SystemState::<ModeSubscription<Stacked>>::new(app.world_mut());
 		anyhow::ensure!(
 			state.get(app.world()).map_err(|error| anyhow::anyhow!("{error:?}"))?.active(),
 			"return presents again"

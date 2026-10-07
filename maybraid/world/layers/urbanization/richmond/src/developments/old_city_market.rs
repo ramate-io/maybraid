@@ -19,6 +19,7 @@ use crate::cell::cell_salt;
 use crate::connectivity::{corridor_levels, ConnectivityCorridor, ConnectivityGraph};
 use crate::finish::DevelopmentFinishRole;
 use crate::ground::{GroundSampler, RichmondGround, SiteGround};
+use crate::math::lerp;
 use crate::pad::{PadComplex, PadParams};
 use crate::scatter::{bounds_intersect, ScatterChoice, ScatterRecipe};
 use crate::shepherds_fit::{fit_shepherds_building_for_role, ShepherdsBuildingKind};
@@ -112,8 +113,7 @@ fn build_old_city_market_with(
 	for attempt in 0..3u32 {
 		let attempt_root =
 			SeededHash::new(root.seed.wrapping_add(attempt.wrapping_mul(0x9E37_79B9)));
-		if let Some(market) = try_build_old_city_market(bounds, attempt_root, noise_seed, ground)
-		{
+		if let Some(market) = try_build_old_city_market(bounds, attempt_root, noise_seed, ground) {
 			return Some(market);
 		}
 	}
@@ -536,10 +536,6 @@ fn raise_toward_peak(heights: &mut [Option<f32>], max_relief: f32) {
 	for height in heights.iter_mut().flatten() {
 		*height = height.max(floor);
 	}
-}
-
-fn lerp(a: f32, b: f32, t: f32) -> f32 {
-	a + (b - a) * t.clamp(0.0, 1.0)
 }
 
 #[cfg(test)]

@@ -151,7 +151,10 @@ impl<K: SolitaryKind, G: RichmondGround> GenerationScheme<HcsgStorage> for Solit
 		let (site, config) = DevelopmentSite::planned(storage, id, K::KIND)?;
 		let bounds = column_bounds(site.cell);
 		if let Some(authored) = &site.authored {
-			return Some((Self::new(SolitaryPlan::new::<K>(site.cell, authored.height, &config)), bounds));
+			return Some((
+				Self::new(SolitaryPlan::new::<K>(site.cell, authored.height, &config)),
+				bounds,
+			));
 		}
 		let mut ground = GroundSampler::<G>::new(storage, bounds);
 		let center = cell_center_xz(site.cell);
@@ -175,7 +178,11 @@ mod tests {
 
 	fn les_halles(seed: u32) -> SolitaryPlan {
 		let cell = DevelopmentExtent::from_cell_index(0, 0).aabb();
-		SolitaryPlan::new::<LesHallesKind>(cell, 12.0, &DevelopmentConfig { seed, ..Default::default() })
+		SolitaryPlan::new::<LesHallesKind>(
+			cell,
+			12.0,
+			&DevelopmentConfig { seed, ..Default::default() },
+		)
 	}
 
 	#[test]

@@ -4,10 +4,10 @@ use barking::{Barking, BarkingConfig, MobCellWrites};
 use bevy::prelude::*;
 use chico::Chico;
 use durham::Durham;
+use layer_stack::Scheme;
 use layer_stack::{ActiveGenerationMode, GenerationModeSystems};
 use lod::gen::Id;
 use lod::{LodGenerateSystems, LodPresentSystems};
-use layer_stack::Scheme;
 use mob_layer_model::{MobCellPresented, MobGenerationSystems, Mobs};
 use richmond::Richmond;
 use terrain_layer_model::OnTerrain;
@@ -117,9 +117,9 @@ mod tests {
 	use bevy::math::bounding::Aabb3d;
 	use bevy::prelude::{App, MessageReader, MessageWriter, MinimalPlugins, NextState, World};
 	use bevy::state::app::StatesPlugin;
+	use durham::HcsgStorage;
 	use layer_stack::{GenerationMode, GenerationModePlugin};
 	use lod::gen::{LodGenerated, SpatialIndex};
-	use durham::HcsgStorage;
 
 	use crate::arena::publish_training_arena;
 	use crate::urbanization::{author_for_test, les_halles_for_test};

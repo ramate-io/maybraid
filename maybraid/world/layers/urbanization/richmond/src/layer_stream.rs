@@ -132,7 +132,10 @@ pub fn produce_richmond_windows<G: RichmondGround>(
 	rescan_within(&mut hosts, &grown);
 }
 
-fn rescan_within<P: Send + Sync + 'static>(producer: &mut GenerationProducer<P>, regions: &[Aabb3d]) {
+fn rescan_within<P: Send + Sync + 'static>(
+	producer: &mut GenerationProducer<P>,
+	regions: &[Aabb3d],
+) {
 	let Some(keep) = producer.current().map(|bounds| bounds.keep) else {
 		return;
 	};
@@ -228,5 +231,7 @@ fn forget_window<P: Send + Sync + 'static, T: Send + Sync + 'static>(world: &mut
 	if let Some(mut current) = world.get_resource_mut::<CurrentBounds<P>>() {
 		current.bounds = None;
 	}
-	world.get_resource_mut::<GenerateQueue<P, T>>().map_or(0, |mut queue| queue.reset())
+	world
+		.get_resource_mut::<GenerateQueue<P, T>>()
+		.map_or(0, |mut queue| queue.reset())
 }

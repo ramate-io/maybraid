@@ -62,7 +62,10 @@ impl<G: RichmondGround> UrbanizationModel for Richmond<G> {
 		read: &'a SystemParamItem<'_, '_, Self::Read>,
 		region: Aabb3d,
 	) -> Vec<&'a BuiltDevelopment> {
-		read.built_overlapping::<G>(region).into_iter().map(|(_, _, built)| built).collect()
+		read.built_overlapping::<G>(region)
+			.into_iter()
+			.map(|(_, _, built)| built)
+			.collect()
 	}
 
 	fn built_overlapping<'a>(
@@ -79,7 +82,8 @@ impl<G: RichmondGround> UrbanizationModel for Richmond<G> {
 		_lod_ref: &LodRef,
 	) {
 		let storage = &mut **prepare;
-		for OriginalId(id) in storage.original_ids_for::<RichmondDevelopment<G>>(column_bounds(bounds))
+		for OriginalId(id) in
+			storage.original_ids_for::<RichmondDevelopment<G>>(column_bounds(bounds))
 		{
 			storage.get_or_generate::<RichmondDevelopment<G>>(id);
 		}

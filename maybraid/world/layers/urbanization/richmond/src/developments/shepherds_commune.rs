@@ -19,14 +19,15 @@ use crate::cell::cell_salt;
 use crate::config::DevelopmentConfig;
 use crate::connectivity::{corridor_levels, ConnectivityGraph};
 use crate::ground::{GroundSampler, RichmondGround, SiteGround};
+use crate::math::lerp;
 use crate::pad::{PadComplex, PadParams, PlacedBuildingPad};
-use crate::shepherds::ShepherdsCommuneDevelopment;
-use crate::storage::column_bounds;
 use crate::scatter::{bounds_intersect, ScatterCandidate};
+use crate::shepherds::ShepherdsCommuneDevelopment;
 use crate::shepherds_fit::{
 	fit_shepherds_building, sample_shepherds_footprint, sample_shepherds_kind, shepherds_recipe,
 	ShepherdsBuildingKind,
 };
+use crate::storage::column_bounds;
 
 const CELL_INSET: f32 = 32.0;
 /// Capsule half-width before berm. With berm 2 this is a ~20 m flatten so a
@@ -265,10 +266,6 @@ fn sample_endpoint(hash: SeededHash, salt: u32, bounds: Bounds2) -> Vec2 {
 		lerp(bounds.min.x, bounds.max.x, hash.unit(salt)),
 		lerp(bounds.min.y, bounds.max.y, hash.unit(salt.wrapping_add(1))),
 	)
-}
-
-fn lerp(a: f32, b: f32, t: f32) -> f32 {
-	a + (b - a) * t.clamp(0.0, 1.0)
 }
 
 #[cfg(test)]
