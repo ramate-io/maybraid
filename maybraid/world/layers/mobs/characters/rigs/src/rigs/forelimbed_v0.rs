@@ -9,8 +9,6 @@ use crate::{
 };
 
 /// Imported forelimbed (aquatic) rig: axial spine + paired pectoral fins.
-use super::humanoid_v0::REST_SYNC_PENDING;
-
 #[derive(Component, Debug, Clone)]
 pub struct ForelimbedV0Rig {
 	pub bones: BoneTable,
@@ -28,12 +26,11 @@ impl ForelimbedV0Rig {
 		}
 		let definition = forelimbed_v0_definition();
 		let len = definition.len();
-		let mut binding = RigBinding::from_rest(
+		let binding = RigBinding::from_rest(
 			definition,
 			vec![Entity::PLACEHOLDER; len].into_boxed_slice(),
 			PoseBuffer::identity(len),
 		);
-		binding.rest_sync_revision = REST_SYNC_PENDING;
 		Self {
 			bones,
 			binding,

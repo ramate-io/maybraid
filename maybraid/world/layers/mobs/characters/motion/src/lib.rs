@@ -37,8 +37,9 @@ pub use elevation::{
 	DrawTerrainPitchProbes,
 };
 pub use mailbox::{
-	apply_anim_mailbox, prepare_anim_mailbox, select_mailbox_applies, tick_anim_mailbox, AnimBone,
-	AnimMailbox, AnimProgress, MailboxApplyLimits, MailboxApplySet,
+	apply_anim_mailbox, invalidate_rest_sync_on_bone_change, prepare_anim_mailbox,
+	select_mailbox_applies, tick_anim_mailbox, AnimBone, AnimMailbox, AnimProgress,
+	MailboxApplyLimits, MailboxApplySet,
 };
 pub use markers::{
 	AnimateBones, AnimateEffects, ApplyTerrainPitch, SuspendAnimation, SuspendTerrainPitch,

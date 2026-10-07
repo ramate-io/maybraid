@@ -17,7 +17,9 @@ mod humanoid;
 mod quadruped;
 mod space;
 
-pub use binding::{BoneId, RigBinding, RigDefinition, RigMetrics, SkeletonFamily};
+pub use binding::{
+	BoneId, RigBinding, RigDefinition, RigMetrics, SkeletonFamily, REST_SYNC_PENDING,
+};
 pub use buffer::{ArmatureOffset, BlendCurve, PoseBuffer, PoseScratch};
 pub use forelimbed::{
 	forelimbed_v0_definition, resolve_forelimbed, ForelimbedPose, FORELIMBED_V0_BONES,

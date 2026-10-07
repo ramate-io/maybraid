@@ -152,6 +152,9 @@ fn evaluation_order(parents: &[Option<BoneId>]) -> Box<[BoneId]> {
 	order.into_boxed_slice()
 }
 
+/// [`RigBinding::rest_sync_revision`] sentinel that forces the next mailbox rest sync.
+pub const REST_SYNC_PENDING: u64 = u64::MAX;
+
 /// Per-character rest, entities, and derived segment lengths.
 #[derive(Clone, Debug)]
 pub struct RigBinding {
@@ -179,8 +182,18 @@ impl RigBinding {
 			effective_rest,
 			metrics,
 			rest_revision: 0,
-			rest_sync_revision: 0,
+			rest_sync_revision: REST_SYNC_PENDING,
 		}
+	}
+
+	/// True when mailbox rest sync can skip the bone scan.
+	pub fn rest_sync_current(&self) -> bool {
+		self.rest_sync_revision == self.rest_revision
+	}
+
+	/// Force the next mailbox rest sync to scan live [`AnimBone`] rests.
+	pub fn mark_rest_sync_pending(&mut self) {
+		self.rest_sync_revision = REST_SYNC_PENDING;
 	}
 
 	/// Replace rest when a proportion edit or bone-map reload changes bind transforms.

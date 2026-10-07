@@ -7,8 +7,8 @@ use intelligence_lod::{IntelligenceFocus, IntelligenceLookFrame, IntelligencePri
 use crate::clip_cache::AnimClipCache;
 use crate::elevation::{draw_terrain_pitch_probes, DrawTerrainPitchProbes};
 use crate::mailbox::{
-	apply_anim_mailbox, prepare_anim_mailbox, select_mailbox_applies, tick_anim_mailbox,
-	MailboxApplyLimits, MailboxApplySet,
+	apply_anim_mailbox, invalidate_rest_sync_on_bone_change, prepare_anim_mailbox,
+	select_mailbox_applies, tick_anim_mailbox, MailboxApplyLimits, MailboxApplySet,
 };
 use crate::sync::sync_motion_markers;
 
@@ -50,7 +50,8 @@ impl Plugin for CharacterMotionPlugin {
 					prepare_anim_mailbox.after(sync_motion_markers),
 					select_mailbox_applies.after(prepare_anim_mailbox),
 					tick_anim_mailbox.after(select_mailbox_applies),
-					apply_anim_mailbox.after(tick_anim_mailbox),
+					invalidate_rest_sync_on_bone_change.after(tick_anim_mailbox),
+					apply_anim_mailbox.after(invalidate_rest_sync_on_bone_change),
 				)
 					.in_set(CharacterMotionSystems::Anim),
 			)

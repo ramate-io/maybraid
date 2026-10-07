@@ -527,6 +527,41 @@ fn publish_pose(mailbox: &mut AnimMailbox, sampled: &PoseBuffer, weight: f32) {
 	mailbox.posed = true;
 }
 
+fn mark_binding_pending_if_bone_changed(
+	binding: &mut RigBinding,
+	changed_bones: &Query<Entity, (With<AnimBone>, Changed<AnimBone>, Without<AnimMailbox>)>,
+) {
+	if binding.rest_sync_current() {
+		for &entity in binding.entities.iter() {
+			if changed_bones.get(entity).is_ok() {
+				binding.mark_rest_sync_pending();
+				break;
+			}
+		}
+	}
+}
+
+/// Mark bindings whose bone [`AnimBone`] rests changed since the last mailbox sync.
+pub fn invalidate_rest_sync_on_bone_change(
+	changed_bones: Query<Entity, (With<AnimBone>, Changed<AnimBone>, Without<AnimMailbox>)>,
+	mut humanoids: Query<&mut HumanoidV0Rig>,
+	mut quadrupeds: Query<&mut QuadrupedV0Rig>,
+	mut forelimbed: Query<&mut ForelimbedV0Rig>,
+) {
+	if changed_bones.is_empty() {
+		return;
+	}
+	for mut rig in &mut humanoids {
+		mark_binding_pending_if_bone_changed(&mut rig.binding, &changed_bones);
+	}
+	for mut rig in &mut quadrupeds {
+		mark_binding_pending_if_bone_changed(&mut rig.binding, &changed_bones);
+	}
+	for mut rig in &mut forelimbed {
+		mark_binding_pending_if_bone_changed(&mut rig.binding, &changed_bones);
+	}
+}
+
 fn sync_humanoid_rest(rig: &mut HumanoidV0Rig, bones: &Query<&AnimBone, Without<AnimMailbox>>) {
 	if sync_binding_rest(&mut rig.binding, bones) {
 		rig.segment_lengths = rig.binding.metrics.humanoid_leg;
@@ -819,11 +854,27 @@ mod tests {
 		use_gated: bool,
 	}
 
+	fn invalidate_binding_on_changed_bones(world: &mut World, binding: &mut RigBinding) {
+		if !binding.rest_sync_current() {
+			return;
+		}
+		let mut bones = world.query::<Ref<AnimBone>>();
+		for &entity in binding.entities.iter() {
+			if bones.get(world, entity).is_ok_and(|bone| bone.is_changed()) {
+				binding.mark_rest_sync_pending();
+				break;
+			}
+		}
+	}
+
 	fn run_rest_sync(
 		world: &mut World,
-		binding: RigBinding,
+		mut binding: RigBinding,
 		use_gated: bool,
 	) -> (RigBinding, bool) {
+		if use_gated {
+			invalidate_binding_on_changed_bones(world, &mut binding);
+		}
 		world.insert_resource(RestSyncScratch { binding, changed: false, use_gated });
 		world
 			.run_system_once(
@@ -1176,6 +1227,16 @@ mod tests {
 	}
 
 	#[test]
+	fn rest_sync_from_rest_starts_pending() {
+		use character_rigs::authoring::REST_SYNC_PENDING;
+
+		let mut world = World::new();
+		let (host, _) = spawn_humanoid_mailbox_host(&mut world, AnimClip::walk());
+		let binding = world.get::<HumanoidV0Rig>(host).expect("rig").binding.clone();
+		assert_eq!(binding.rest_sync_revision, REST_SYNC_PENDING);
+	}
+
+	#[test]
 	fn rest_sync_gated_matches_legacy_scan() -> anyhow::Result<()> {
 		use character_rigs::authoring::humanoid_v0_definition;
 
@@ -1185,6 +1246,12 @@ mod tests {
 		let mut legacy_binding = gated_binding.clone();
 
 		for frame in 0..8 {
+			if frame == 1 {
+				let femur = gated_binding.definition.id("femur.L").expect("femur");
+				let entity = gated_binding.entities[femur.index()];
+				let edited = Transform::from_translation(Vec3::Y * 0.7);
+				world.get_mut::<AnimBone>(entity).expect("bone").rest = edited;
+			}
 			let (next_gated, changed_gated) = run_rest_sync(&mut world, gated_binding, true);
 			let (next_legacy, changed_legacy) = run_rest_sync(&mut world, legacy_binding, false);
 			gated_binding = next_gated;
@@ -1201,14 +1268,6 @@ mod tests {
 				gated_binding.metrics, legacy_binding.metrics,
 				"frame {frame}: metrics must match"
 			);
-			if frame == 1 {
-				let femur = gated_binding.definition.id("femur.L").expect("femur");
-				let entity = gated_binding.entities[femur.index()];
-				let edited = Transform::from_translation(Vec3::Y * 0.7);
-				world.get_mut::<AnimBone>(entity).expect("bone").rest = edited;
-				gated_binding.rest_sync_revision =
-					character_rigs::rigs::humanoid_v0::REST_SYNC_PENDING;
-			}
 		}
 		let definition = humanoid_v0_definition();
 		assert_eq!(gated_binding.rest_revision, legacy_binding.rest_revision);
@@ -1221,8 +1280,10 @@ mod tests {
 	fn rest_sync_skips_scan_after_first_confirm() {
 		let mut world = World::new();
 		let (host, _) = spawn_humanoid_mailbox_host(&mut world, AnimClip::walk());
-		let mut binding = world.get::<HumanoidV0Rig>(host).expect("rig").binding.clone();
-		binding.rest_sync_revision = character_rigs::rigs::humanoid_v0::REST_SYNC_PENDING;
+		use character_rigs::authoring::REST_SYNC_PENDING;
+
+		let binding = world.get::<HumanoidV0Rig>(host).expect("rig").binding.clone();
+		assert_eq!(binding.rest_sync_revision, REST_SYNC_PENDING);
 		let (binding, changed) = run_rest_sync(&mut world, binding, true);
 		assert!(!changed, "rests already match after spawn");
 		let revision = binding.rest_revision;
@@ -1266,8 +1327,7 @@ mod tests {
 			for host in hosts {
 				if let Some(mut rig) = world.get_mut::<HumanoidV0Rig>(host) {
 					if use_gated_sync {
-						rig.binding.rest_sync_revision =
-							character_rigs::rigs::humanoid_v0::REST_SYNC_PENDING;
+						rig.binding.mark_rest_sync_pending();
 					} else {
 						rig.binding.rest_sync_revision = rig.binding.rest_revision;
 					}
@@ -1281,6 +1341,11 @@ mod tests {
 				prime_hosts(world, use_gated_sync);
 				for frame in 0..FRAMES {
 					world.insert_resource(ApplyBenchScratch { clip, frame, use_gated_sync });
+					if use_gated_sync {
+						world
+							.run_system_once(invalidate_rest_sync_on_bone_change)
+							.expect("bench invalidation");
+					}
 					world
 						.run_system_once(
 							|bones: Query<&AnimBone, Without<AnimMailbox>>,
