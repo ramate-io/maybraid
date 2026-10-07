@@ -1,9 +1,9 @@
 use bevy::prelude::*;
 use character_animations::{
 	animations::{
-		FixedTuck, Run, Squat, SquatDescent, Tuck, TuckedFlip, TwoFootedJump, TwoFootedTuckedFlip,
-		Walk, DEFAULT_DESCENT_SPEED, DEFAULT_GRAVITY, DEFAULT_LANDING_SQUAT_SPEED,
-		DEFAULT_PRE_SQUAT_SPEED,
+		FixedTuck, Run, SpotScan, Squat, SquatDescent, Tuck, TuckedFlip, TwoFootedJump,
+		TwoFootedTuckedFlip, Walk, DEFAULT_DESCENT_SPEED, DEFAULT_GRAVITY, DEFAULT_LANDING_SQUAT_SPEED,
+		DEFAULT_PRE_SQUAT_SPEED, DEFAULT_SPOT_SCAN_SPEED,
 	},
 	Animation, Effects,
 };
@@ -57,6 +57,7 @@ pub enum AnimationMode {
 	FixedTuck,
 	TuckedFlip,
 	TwoFootedTuckedFlip,
+	SpotScan,
 }
 
 #[derive(Resource)]
@@ -241,8 +242,30 @@ pub fn animate_limbs(
 			&mut limbs,
 			t,
 		),
+		AnimationMode::SpotScan => {
+			animate_spot_scan(&config, &playback, &mut rig, &mut armature, &mut limbs, t)
+		}
 	}
 	apply_joint_preview(&playback, &mut rig, &mut limbs);
+}
+
+fn animate_spot_scan(
+	config: &CharacterConfig,
+	playback: &AnimationPlayback,
+	rig: &mut Query<&mut HumanoidV0Rig, With<CharacterRig>>,
+	armature: &mut Query<&mut Transform, (With<CharacterRig>, Without<LimbAnimator>)>,
+	limbs: &mut Query<(&mut Transform, &LimbAnimator)>,
+	t: f32,
+) {
+	let Ok(mut rig) = rig.single_mut() else {
+		return;
+	};
+
+	marshal_limbs_into_pose(&mut rig, limbs, playback);
+	let progress = (t * DEFAULT_SPOT_SCAN_SPEED).clamp(0.0, 1.0);
+	let effects = SpotScan.apply(rig.as_mut(), progress);
+	apply_effects(config.transform, effects, armature);
+	marshal_pose_to_limbs(&rig, limbs);
 }
 
 fn animate_run(

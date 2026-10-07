@@ -4,7 +4,7 @@
 use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
 use character_rigs::rigs::quadruped_v0::QuadrupedV0Rig;
 
-use crate::animations::{Flapping, Jab, QuadrupedRun, Squat, Walk};
+use crate::animations::{Flapping, Jab, QuadrupedRun, SpotScan, Squat, Walk};
 use crate::Animation;
 
 #[test]
@@ -61,6 +61,19 @@ fn jab_cover_elbow_tucks_in_y_not_as_a_roll() {
 		(cover - rest_cover).length() > 0.2,
 		"cover is not a length-axis roll, {cover:?} vs {rest_cover:?}"
 	);
+}
+
+#[test]
+fn spot_scan_turns_the_head_in_character_x() {
+	let scan = SpotScan;
+	let mut left = HumanoidV0Rig::for_clip_test();
+	let mut right = HumanoidV0Rig::for_clip_test();
+	scan.apply(&mut left, SpotScan::left_peak());
+	scan.apply(&mut right, SpotScan::right_peak());
+	let left_fwd = left.rotation("upper_neck") * bevy::prelude::Vec3::Z;
+	let right_fwd = right.rotation("upper_neck") * bevy::prelude::Vec3::Z;
+	assert!(left_fwd.x < -0.08 && right_fwd.x > 0.08, "scan sweeps in X, {left_fwd:?} {right_fwd:?}");
+	assert!(left_fwd.x.abs() - right_fwd.x.abs() < 0.08, "left and right mirror");
 }
 
 #[test]

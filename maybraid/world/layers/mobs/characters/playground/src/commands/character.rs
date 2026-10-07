@@ -44,7 +44,7 @@ pub struct AssembleArgs {
 	#[arg(long)]
 	pub nose: Option<String>,
 
-	/// Procedural animation applied to the rig (`run`, `squat`, or `jump`).
+	/// Procedural animation applied to the rig (`run`, `squat`, `jump`, or `spot-scan`).
 	#[arg(long, value_enum, default_value_t = AnimationMode::Run)]
 	pub animation: AnimationMode,
 
