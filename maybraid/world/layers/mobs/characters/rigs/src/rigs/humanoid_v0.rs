@@ -15,6 +15,9 @@ use crate::{
 /// Symmetry is currently represented by explicit accessors (`arm(Side)`, `leg(Side)`) rather
 /// than a generic table. That keeps rig-specific mirror relationships local until repeated
 /// patterns across humanoids and quadrupeds make a shared abstraction worth adding.
+/// [`RigBinding::rest_revision`] value that forces the next mailbox rest sync.
+pub const REST_SYNC_PENDING: u64 = u64::MAX;
+
 #[derive(Component, Debug, Clone)]
 pub struct HumanoidV0Rig {
 	pub bones: BoneTable,
@@ -40,11 +43,12 @@ impl HumanoidV0Rig {
 		}
 		let definition = humanoid_v0_definition();
 		let len = definition.len();
-		let binding = RigBinding::from_rest(
+		let mut binding = RigBinding::from_rest(
 			definition,
 			vec![Entity::PLACEHOLDER; len].into_boxed_slice(),
 			PoseBuffer::identity(len),
 		);
+		binding.rest_sync_revision = REST_SYNC_PENDING;
 		Self {
 			bones,
 			pose: PoseBuffer::identity(len),

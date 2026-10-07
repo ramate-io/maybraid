@@ -159,6 +159,11 @@ pub struct RigBinding {
 	pub entities: Box<[Entity]>,
 	pub effective_rest: PoseBuffer,
 	pub metrics: RigMetrics,
+	/// Bumped when [`Self::refresh_rest`] replaces rest. Mailbox sync skips bone scans while
+	/// [`Self::rest_sync_revision`] matches this.
+	pub rest_revision: u64,
+	/// Last [`Self::rest_revision`] confirmed against live [`AnimBone`] rests.
+	pub rest_sync_revision: u64,
 }
 
 impl RigBinding {
@@ -168,7 +173,14 @@ impl RigBinding {
 		effective_rest: PoseBuffer,
 	) -> Self {
 		let metrics = RigMetrics::from_rest(&definition, &effective_rest);
-		Self { definition, entities, effective_rest, metrics }
+		Self {
+			definition,
+			entities,
+			effective_rest,
+			metrics,
+			rest_revision: 0,
+			rest_sync_revision: 0,
+		}
 	}
 
 	/// Replace rest when a proportion edit or bone-map reload changes bind transforms.
@@ -178,6 +190,7 @@ impl RigBinding {
 		}
 		self.metrics = RigMetrics::from_rest(&self.definition, &effective_rest);
 		self.effective_rest = effective_rest;
+		self.rest_revision += 1;
 	}
 }
 

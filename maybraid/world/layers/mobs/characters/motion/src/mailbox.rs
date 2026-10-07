@@ -544,19 +544,26 @@ fn sync_binding_rest(
 	binding: &mut RigBinding,
 	bones: &Query<&AnimBone, Without<AnimMailbox>>,
 ) -> bool {
-	if binding
+	if binding.rest_sync_revision == binding.rest_revision {
+		return false;
+	}
+	let changed = if binding
 		.entities
 		.iter()
 		.zip(binding.effective_rest.local.iter())
 		.all(|(entity, rest)| bones.get(*entity).is_ok_and(|bone| bone.rest == *rest))
 	{
-		return false;
-	}
-	let Some(rest) = rest_from_bones(binding, bones) else {
-		return false;
+		false
+	} else {
+		let Some(rest) = rest_from_bones(binding, bones) else {
+			binding.rest_sync_revision = binding.rest_revision;
+			return false;
+		};
+		binding.refresh_rest(rest);
+		true
 	};
-	binding.refresh_rest(rest);
-	true
+	binding.rest_sync_revision = binding.rest_revision;
+	changed
 }
 
 fn rest_from_bones(
@@ -801,8 +808,38 @@ fn sample_forelimbed(
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::clip::AnimRef;
 	use bevy::ecs::system::RunSystemOnce;
 	use intelligence_lod::IntelligenceBand;
+
+	#[derive(Resource)]
+	struct RestSyncScratch {
+		binding: RigBinding,
+		changed: bool,
+		use_gated: bool,
+	}
+
+	fn run_rest_sync(
+		world: &mut World,
+		binding: RigBinding,
+		use_gated: bool,
+	) -> (RigBinding, bool) {
+		world.insert_resource(RestSyncScratch { binding, changed: false, use_gated });
+		world
+			.run_system_once(
+				|bones: Query<&AnimBone, Without<AnimMailbox>>,
+				 mut scratch: ResMut<RestSyncScratch>| {
+					scratch.changed = if scratch.use_gated {
+						sync_binding_rest(&mut scratch.binding, &bones)
+					} else {
+						sync_binding_rest_legacy(&mut scratch.binding, &bones)
+					};
+				},
+			)
+			.expect("rest sync system");
+		let scratch = world.remove_resource::<RestSyncScratch>().expect("scratch");
+		(scratch.binding, scratch.changed)
+	}
 
 	fn run_select(world: &mut World) {
 		world.init_resource::<MailboxApplySet>();
@@ -1066,6 +1103,303 @@ mod tests {
 		assert!(only.contains(&ahead));
 		assert!(!only.contains(&behind));
 		assert_eq!(world.get::<AnimMailbox>(behind).unwrap().apply_skips, 8);
+	}
+
+	/// Pre-revision-gating rest sync used for parity tests and microbench baseline.
+	fn sync_binding_rest_legacy(
+		binding: &mut RigBinding,
+		bones: &Query<&AnimBone, Without<AnimMailbox>>,
+	) -> bool {
+		if binding
+			.entities
+			.iter()
+			.zip(binding.effective_rest.local.iter())
+			.all(|(entity, rest)| bones.get(*entity).is_ok_and(|bone| bone.rest == *rest))
+		{
+			return false;
+		}
+		let Some(rest) = rest_from_bones(binding, bones) else {
+			return false;
+		};
+		binding.refresh_rest(rest);
+		true
+	}
+
+	fn spawn_humanoid_mailbox_host(world: &mut World, clip: AnimClip) -> (Entity, Vec<Entity>) {
+		use character_rigs::authoring::humanoid_v0_definition;
+		use std::collections::HashMap;
+
+		let definition = humanoid_v0_definition();
+		let mut bone_map = HashMap::new();
+		let mut bone_entities = Vec::with_capacity(definition.len());
+		for name in definition.names.iter() {
+			let tf = Transform::IDENTITY;
+			let entity = world
+				.spawn((
+					AnimBone { name: RigName::from(*name), rest: tf },
+					tf,
+					GlobalTransform::IDENTITY,
+				))
+				.id();
+			bone_map.insert(name.to_string(), entity);
+			bone_entities.push(entity);
+		}
+		let mut rig = HumanoidV0Rig::imported();
+		let entities: Vec<Entity> = definition
+			.names
+			.iter()
+			.map(|name| bone_map.get(*name).copied().expect("bone"))
+			.collect();
+		let mut rest = PoseBuffer::identity(definition.len());
+		for (index, entity) in entities.iter().enumerate() {
+			rest.local[index] = world.get::<AnimBone>(*entity).expect("bone").rest;
+		}
+		let bone_count = definition.len();
+		rig.binding = RigBinding::from_rest(definition, entities.into_boxed_slice(), rest);
+		rig.segment_lengths = rig.binding.metrics.humanoid_leg;
+		rig.pose.copy_from(&rig.binding.effective_rest);
+		let mailbox = AnimMailbox::with_bones(Transform::IDENTITY, bone_count);
+		let host = world
+			.spawn((
+				CharacterRig { role: CharacterRigRole::Body, skeleton: RigSkeletonKind::Humanoid },
+				AnimRefRoot(AnimRef::new(clip)),
+				AnimateBones,
+				AnimateEffects,
+				rig,
+				mailbox,
+				BoneMap { by_name: bone_map },
+				Transform::IDENTITY,
+				GlobalTransform::IDENTITY,
+			))
+			.id();
+		(host, bone_entities)
+	}
+
+	#[test]
+	fn rest_sync_gated_matches_legacy_scan() -> anyhow::Result<()> {
+		use character_rigs::authoring::humanoid_v0_definition;
+
+		let mut world = World::new();
+		let (host, _) = spawn_humanoid_mailbox_host(&mut world, AnimClip::walk());
+		let mut gated_binding = world.get::<HumanoidV0Rig>(host).expect("rig").binding.clone();
+		let mut legacy_binding = gated_binding.clone();
+
+		for frame in 0..8 {
+			let (next_gated, changed_gated) = run_rest_sync(&mut world, gated_binding, true);
+			let (next_legacy, changed_legacy) = run_rest_sync(&mut world, legacy_binding, false);
+			gated_binding = next_gated;
+			legacy_binding = next_legacy;
+			assert_eq!(
+				changed_gated, changed_legacy,
+				"frame {frame}: gated/legacy change flag must match"
+			);
+			assert_eq!(
+				gated_binding.effective_rest.local, legacy_binding.effective_rest.local,
+				"frame {frame}: rest pose must match"
+			);
+			assert_eq!(
+				gated_binding.metrics, legacy_binding.metrics,
+				"frame {frame}: metrics must match"
+			);
+			if frame == 1 {
+				let femur = gated_binding.definition.id("femur.L").expect("femur");
+				let entity = gated_binding.entities[femur.index()];
+				let edited = Transform::from_translation(Vec3::Y * 0.7);
+				world.get_mut::<AnimBone>(entity).expect("bone").rest = edited;
+				gated_binding.rest_sync_revision =
+					character_rigs::rigs::humanoid_v0::REST_SYNC_PENDING;
+			}
+		}
+		let definition = humanoid_v0_definition();
+		assert_eq!(gated_binding.rest_revision, legacy_binding.rest_revision);
+		assert_eq!(gated_binding.rest_sync_revision, gated_binding.rest_revision);
+		assert_eq!(gated_binding.effective_rest.local.len(), definition.len());
+		Ok(())
+	}
+
+	#[test]
+	fn rest_sync_skips_scan_after_first_confirm() {
+		let mut world = World::new();
+		let (host, _) = spawn_humanoid_mailbox_host(&mut world, AnimClip::walk());
+		let mut binding = world.get::<HumanoidV0Rig>(host).expect("rig").binding.clone();
+		binding.rest_sync_revision = character_rigs::rigs::humanoid_v0::REST_SYNC_PENDING;
+		let (binding, changed) = run_rest_sync(&mut world, binding, true);
+		assert!(!changed, "rests already match after spawn");
+		let revision = binding.rest_revision;
+		let (binding, changed) = run_rest_sync(&mut world, binding, true);
+		assert!(!changed, "second frame should skip the bone scan");
+		assert_eq!(binding.rest_sync_revision, revision);
+	}
+
+	/// Mailbox apply path with still / walk / run clips; compares legacy vs revision-gated rest sync.
+	#[test]
+	#[ignore]
+	fn mailbox_rest_sync_microbench() -> anyhow::Result<()> {
+		use std::hint::black_box;
+		use std::time::Instant;
+
+		const CHARACTERS: usize = 32;
+		const FRAMES: usize = 120;
+		const RUNS: usize = 5;
+		let clips = [AnimClip::still(), AnimClip::walk(), AnimClip::run()];
+
+		fn median_ns(times: &[u128]) -> u128 {
+			let mut sorted = times.to_vec();
+			sorted.sort_unstable();
+			sorted[sorted.len() / 2]
+		}
+
+		fn min_ns(times: &[u128]) -> u128 {
+			*times.iter().min().expect("times")
+		}
+
+		#[derive(Resource)]
+		struct ApplyBenchScratch {
+			clip: AnimClip,
+			frame: usize,
+			use_gated_sync: bool,
+		}
+
+		fn prime_hosts(world: &mut World, use_gated_sync: bool) {
+			let hosts: Vec<Entity> =
+				world.query_filtered::<Entity, With<AnimMailbox>>().iter(world).collect();
+			for host in hosts {
+				if let Some(mut rig) = world.get_mut::<HumanoidV0Rig>(host) {
+					if use_gated_sync {
+						rig.binding.rest_sync_revision =
+							character_rigs::rigs::humanoid_v0::REST_SYNC_PENDING;
+					} else {
+						rig.binding.rest_sync_revision = rig.binding.rest_revision;
+					}
+				}
+			}
+		}
+
+		fn sample_apply_loop(world: &mut World, use_gated_sync: bool) {
+			let clips = [AnimClip::still(), AnimClip::walk(), AnimClip::run()];
+			for clip in clips {
+				prime_hosts(world, use_gated_sync);
+				for frame in 0..FRAMES {
+					world.insert_resource(ApplyBenchScratch { clip, frame, use_gated_sync });
+					world
+						.run_system_once(
+							|bones: Query<&AnimBone, Without<AnimMailbox>>,
+							 mut hosts: Query<
+								(Entity, &mut HumanoidV0Rig, &mut AnimMailbox),
+								With<AnimMailbox>,
+							>,
+							 cache: Res<AnimClipCache>,
+							 scratch: Res<ApplyBenchScratch>| {
+								for (entity, mut rig, mut mailbox) in &mut hosts {
+									if mailbox.prepared_from != Some(scratch.clip) {
+										refresh_prepared_clip(
+											&mut mailbox,
+											scratch.clip,
+											RigSkeletonKind::Humanoid,
+											Some(&cache),
+										);
+									}
+									let changed = if scratch.use_gated_sync {
+										sync_binding_rest(&mut rig.binding, &bones)
+									} else {
+										sync_binding_rest_legacy(&mut rig.binding, &bones)
+									};
+									black_box(changed);
+									let progress = entity.to_bits() as f32 * 0.01
+										+ scratch.frame as f32 / 60.0;
+									let prepared = mailbox.prepared_clip.as_ref();
+									let effects = sample_humanoid_prepared(
+										scratch.clip,
+										&mut rig,
+										progress,
+										true,
+										true,
+										Some(&cache),
+										prepared,
+									);
+									black_box(effects);
+									publish_pose(&mut mailbox, &rig.pose, 1.0);
+								}
+							},
+						)
+						.expect("apply bench");
+					world.remove_resource::<ApplyBenchScratch>();
+				}
+			}
+		}
+
+		let mut world = World::new();
+		world.insert_resource(AnimClipCache::default());
+		for i in 0..CHARACTERS {
+			spawn_humanoid_mailbox_host(&mut world, clips[i % clips.len()]);
+		}
+		{
+			let cache = world.resource::<AnimClipCache>();
+			for prepared_clip in clips {
+				let _ = cache.prepare(
+					prepared_clip,
+					RigSkeletonKind::Humanoid.sample_rig_variant().expect("variant"),
+					cache.settings.sampling,
+				);
+			}
+		}
+		world
+			.run_system_once(|mut mailboxes: Query<&mut AnimMailbox>, cache: Res<AnimClipCache>| {
+				for mut mailbox in &mut mailboxes {
+					refresh_prepared_clip(
+						&mut mailbox,
+						AnimClip::walk(),
+						RigSkeletonKind::Humanoid,
+						Some(&cache),
+					);
+				}
+			})
+			.expect("prime prepared walk");
+
+		let mut legacy_times = Vec::with_capacity(RUNS);
+		let mut gated_times = Vec::with_capacity(RUNS);
+		for _ in 0..RUNS {
+			let start = Instant::now();
+			sample_apply_loop(&mut world, false);
+			legacy_times.push(start.elapsed().as_nanos());
+		}
+		for _ in 0..RUNS {
+			let start = Instant::now();
+			sample_apply_loop(&mut world, true);
+			gated_times.push(start.elapsed().as_nanos());
+		}
+
+		let samples = CHARACTERS * FRAMES * clips.len();
+		eprintln!(
+			"mailbox_rest_sync_microbench: characters={} frames={} clips=still/walk/run runs={}",
+			CHARACTERS, FRAMES, RUNS
+		);
+		eprintln!(
+			"  legacy rest scan min: {} ns ({} ns/sample), median: {} ns ({} ns/sample)",
+			min_ns(&legacy_times),
+			min_ns(&legacy_times) / samples as u128,
+			median_ns(&legacy_times),
+			median_ns(&legacy_times) / samples as u128
+		);
+		eprintln!(
+			"  gated rest sync min: {} ns ({} ns/sample), median: {} ns ({} ns/sample)",
+			min_ns(&gated_times),
+			min_ns(&gated_times) / samples as u128,
+			median_ns(&gated_times),
+			median_ns(&gated_times) / samples as u128
+		);
+		let legacy_median = median_ns(&legacy_times);
+		let gated_median = median_ns(&gated_times);
+		if gated_median >= legacy_median {
+			eprintln!(
+				"  no measurable gain (gated median {} vs legacy {})",
+				gated_median, legacy_median
+			);
+		} else {
+			let pct = (legacy_median - gated_median) as f64 / legacy_median as f64 * 100.0;
+			eprintln!("  gated median {:.1}% faster than legacy scan", pct);
+		}
+		Ok(())
 	}
 
 	#[test]

@@ -11,6 +11,8 @@ use crate::{
 };
 
 /// Store the bones of the imported quadruped rig in a semantically reasonable hierarchy.
+use super::humanoid_v0::REST_SYNC_PENDING;
+
 #[derive(Component, Debug, Clone)]
 pub struct QuadrupedV0Rig {
 	pub bones: BoneTable,
@@ -39,11 +41,12 @@ impl QuadrupedV0Rig {
 		}
 		let definition = quadruped_v0_definition();
 		let len = definition.len();
-		let binding = RigBinding::from_rest(
+		let mut binding = RigBinding::from_rest(
 			definition,
 			vec![Entity::PLACEHOLDER; len].into_boxed_slice(),
 			PoseBuffer::identity(len),
 		);
+		binding.rest_sync_revision = REST_SYNC_PENDING;
 		Self {
 			bones,
 			pose: PoseBuffer::identity(len),
