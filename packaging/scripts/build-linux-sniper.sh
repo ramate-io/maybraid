@@ -15,10 +15,12 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 VERSION="${VERSION:-0.0.1}"
 
-# Pin Steam Runtime 3.0 sniper SDK by immutable digest
-# Latest as of 2026-10-07: BUILD_ID 3.0.20250108.112707
+# Use Steam Runtime 3.0 sniper SDK latest
+# Note: GitLab container registry does not expose stable manifest digests for :latest tag.
+# The config SHA (sha256:901b229c92b4743f77f7ffe02e604e035f656cacd1352ea644d680317d4db916
+# as of 2026-10-07) cannot be used for pulls. Using :latest as pragmatic solution.
 # See: https://gitlab.steamos.cloud/steamrt/sniper/sdk
-SNIPER_IMAGE="${SNIPER_IMAGE:-registry.gitlab.steamos.cloud/steamrt/sniper/sdk@sha256:901b229c92b4743f77f7ffe02e604e035f656cacd1352ea644d680317d4db916}"
+SNIPER_IMAGE="${SNIPER_IMAGE:-registry.gitlab.steamos.cloud/steamrt/sniper/sdk:latest}"
 
 # Use separate target directory for sniper builds
 SNIPER_TARGET_DIR="$REPO_ROOT/target/sniper-release"

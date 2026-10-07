@@ -193,12 +193,16 @@
                   # Explicit flags for cc-rs and build.rs C/C++ compilation
                   export CFLAGS="-isysroot $sdkroot -mmacosx-version-min=11.0"
                   export CXXFLAGS="-isysroot $sdkroot -stdlib=libc++ -mmacosx-version-min=11.0"
-                  export LDFLAGS="-isysroot $sdkroot -mmacosx-version-min=11.0"
+                  export LDFLAGS="-isysroot $sdkroot -mmacosx-version-min=11.0 -L/usr/lib"
                   
                   # Point compilers at Xcode's toolchain
                   export CC="$(xcrun --find clang)"
                   export CXX="$(xcrun --find clang++)"
                   export AR="$(xcrun --find ar)"
+                  
+                  # Force Rust linker to use system libiconv instead of Nix
+                  # Override any Nix-injected library paths
+                  export RUSTFLAGS="-L/usr/lib -C link-arg=-liconv"
                 fi
               fi
 
