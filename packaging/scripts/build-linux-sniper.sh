@@ -15,13 +15,17 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 VERSION="${VERSION:-0.0.1}"
 
-# Use Steam Runtime 3.0 sniper SDK latest
+# Pin Steam Runtime 3.0 sniper SDK by immutable digest
+# Latest as of 2026-10-07: BUILD_ID 3.0.20250108.112707
 # See: https://gitlab.steamos.cloud/steamrt/sniper/sdk
-SNIPER_IMAGE="${SNIPER_IMAGE:-registry.gitlab.steamos.cloud/steamrt/sniper/sdk:latest}"
+SNIPER_IMAGE="${SNIPER_IMAGE:-registry.gitlab.steamos.cloud/steamrt/sniper/sdk@sha256:901b229c92b4743f77f7ffe02e604e035f656cacd1352ea644d680317d4db916}"
 
 # Use separate target directory for sniper builds
 SNIPER_TARGET_DIR="$REPO_ROOT/target/sniper-release"
 BINARY_OUT="$SNIPER_TARGET_DIR/x86_64-unknown-linux-gnu/release/maybraid"
+
+# Rust installation will go in a writable directory outside the workspace
+RUST_HOME="$SNIPER_TARGET_DIR/rust-home"
 
 echo "==> Building maybraid for Linux (Steam Runtime sniper SDK)"
 echo "    SDK image: $SNIPER_IMAGE"
@@ -40,21 +44,24 @@ fi
 
 echo "    Container: $CONTAINER_CMD"
 
-# Install Rust toolchain inside the container if needed
-# The container will cache this between runs via the cargo registry volume
+# Ensure writable directories exist with correct permissions
 mkdir -p "$SNIPER_TARGET_DIR"
+mkdir -p "$RUST_HOME"
 
 $CONTAINER_CMD run --rm \
     --user "$(id -u):$(id -g)" \
     -v "$REPO_ROOT:/workspace:rw" \
+    -v "$RUST_HOME:/rust-home:rw" \
     -w /workspace \
-    -e CARGO_HOME=/workspace/target/sniper-release/.cargo \
+    -e HOME=/rust-home \
+    -e CARGO_HOME=/rust-home/.cargo \
+    -e RUSTUP_HOME=/rust-home/.rustup \
     -e CARGO_TARGET_DIR=/workspace/target/sniper-release \
     "$SNIPER_IMAGE" \
     bash -c '
         set -euo pipefail
         
-        # Install rustup if not present in the container cache
+        # Install rustup if not present
         if [ ! -f "$CARGO_HOME/bin/rustup" ]; then
             echo "==> Installing Rust toolchain"
             curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | \

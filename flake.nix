@@ -168,11 +168,11 @@
             '';
           };
 
-          # Dedicated macOS release shell: no Nix libiconv, explicit Apple SDK linkage
-          release-macos = pkgs.mkShell {
-            buildInputs = [
+          # Dedicated macOS release shell: minimal no-cc shell with only Rust
+          # Let Xcode's clang/SDK come through naturally for C/C++ dependencies
+          release-macos = pkgs.mkShellNoCC {
+            packages = [
               releaseRust
-              pkgs.pkg-config
             ];
 
             # Set minimum macOS version explicitly (supports 11.0+)
@@ -185,24 +185,29 @@
               #!/usr/bin/env ${pkgs.bash}
               set -e
 
-              # Configure Apple toolchain for C/C++ dependencies
-              # Unset Nix C++ paths to avoid mixing Nix libcxx with macOS SDK
-              unset NIX_CFLAGS_COMPILE NIX_LDFLAGS CPLUS_INCLUDE_PATH C_INCLUDE_PATH
-              
+              # Configure Xcode toolchain for both Rust linking and C/C++ dependencies
               if [ -d /Applications/Xcode.app/Contents/Developer ]; then
                 export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
                 if sdkroot="$(xcrun --sdk macosx --show-sdk-path 2>/dev/null)" && [ -d "$sdkroot" ]; then
                   export SDKROOT="$sdkroot"
+                  # Explicit flags for cc-rs and build.rs C/C++ compilation
                   export CFLAGS="-isysroot $sdkroot -mmacosx-version-min=11.0"
                   export CXXFLAGS="-isysroot $sdkroot -stdlib=libc++ -mmacosx-version-min=11.0"
+                  export LDFLAGS="-isysroot $sdkroot -mmacosx-version-min=11.0"
+                  
+                  # Point compilers at Xcode's toolchain
+                  export CC="$(xcrun --find clang)"
+                  export CXX="$(xcrun --find clang++)"
+                  export AR="$(xcrun --find ar)"
                 fi
               fi
 
               echo ""
-              echo "macOS release build environment"
+              echo "macOS release build environment (no Nix CC)"
               echo "Target: aarch64-apple-darwin (ARM64)"
               echo "Deployment target: $MACOSX_DEPLOYMENT_TARGET"
               echo "Build dir: $CARGO_TARGET_DIR"
+              echo "Compiler: \${CC:-system}"
             '';
           };
 
