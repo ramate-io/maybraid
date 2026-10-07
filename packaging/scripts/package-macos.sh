@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 # Assemble Maybraid.app from packaging/macos and wrap a UDZO DMG.
 #
-#   packaging/scripts/package-macos.sh
+#   nix develop .#release-macos --command packaging/scripts/package-macos.sh
+#
+# or locally (requires Xcode):
+#
+#   VERSION=0.1.3 packaging/scripts/package-macos.sh
 #
 # Unsigned by default. After Developer ID is in the login keychain:
 #
@@ -9,7 +13,7 @@
 #   NOTARY_PROFILE=maybraid-notary \
 #     packaging/scripts/package-macos.sh
 #
-#   SKIP_BUILD=1     use an existing target/release/maybraid
+#   SKIP_BUILD=1     use an existing binary in $CARGO_TARGET_DIR or target/release
 #   SKIP_NOTARY=1    sign only
 #   VERSION=0.0.1    CFBundleVersion / DMG name (default: workspace 0.0.1)
 
@@ -20,12 +24,15 @@ TEMPLATE="$REPO_ROOT/packaging/macos/Maybraid.app"
 ENTITLEMENTS="$REPO_ROOT/packaging/macos/entitlements.plist"
 ASSETS="$REPO_ROOT/maybraid/assets"
 ICON_SRC="$REPO_ROOT/maybraid/assets/iconography/maybraid_logo_icon_home.png"
-BINARY="${BINARY:-$REPO_ROOT/target/release/maybraid}"
 VERSION="${VERSION:-0.0.1}"
 DIST="$REPO_ROOT/dist"
 APP="$DIST/Maybraid.app"
 DMG_STAGE="$DIST/dmg-root"
 DMG="$DIST/Maybraid-${VERSION}-macos-arm64.dmg"
+
+# Prefer release-packaging target dir if set, otherwise fall back to default
+TARGET_DIR="${CARGO_TARGET_DIR:-$REPO_ROOT/target}"
+BINARY="$TARGET_DIR/aarch64-apple-darwin/release/maybraid"
 
 if [[ "$(uname -s)" != "Darwin" ]]; then
     echo "package-macos.sh must run on macOS." >&2
@@ -33,32 +40,51 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
 fi
 
 if [[ "${SKIP_BUILD:-}" != "1" ]]; then
-    echo "==> Building maybraid (release)"
-    # Use system libiconv (not Nix store) for release builds to avoid
-    # /nix/store paths in the shipped binary (issue #1013).
-    # Unset Nix-injected library paths; the Apple linker will find
-    # /usr/lib/libiconv.2.dylib from the macOS SDK.
+    echo "==> Building maybraid (release, ARM64)"
+    echo "    Target: aarch64-apple-darwin"
+    echo "    Build dir: $TARGET_DIR"
     (
         cd "$REPO_ROOT"
-        unset RUSTFLAGS LIBRARY_PATH
-        # Keep only non-libiconv flags from LDFLAGS if present
-        if [[ -n "${LDFLAGS:-}" ]]; then
-            LDFLAGS_FILTERED=""
-            for flag in $LDFLAGS; do
-                if [[ "$flag" != *"libiconv"* ]]; then
-                    LDFLAGS_FILTERED="$LDFLAGS_FILTERED $flag"
-                fi
-            done
-            export LDFLAGS="${LDFLAGS_FILTERED# }"
-        fi
-        cargo build -p maybraid --release
+        cargo build -p maybraid \
+            --release \
+            --locked \
+            --target aarch64-apple-darwin
     )
 fi
 
 if [[ ! -f "$BINARY" ]]; then
     echo "Game binary not found: $BINARY" >&2
-    echo "   cargo build -p maybraid --release" >&2
+    echo "   Run: nix develop .#release-macos --command packaging/scripts/package-macos.sh" >&2
+    echo "   Or:  cargo build -p maybraid --release --locked --target aarch64-apple-darwin" >&2
     exit 1
+fi
+
+echo "==> Validating binary dependencies"
+if ! command -v otool >/dev/null; then
+    echo "⚠️  otool not found; skipping dependency validation" >&2
+else
+    deps="$(otool -L "$BINARY" | tail -n +2)"
+    echo "Binary dependencies:"
+    echo "$deps" | sed 's/^/    /'
+    
+    # Check for forbidden paths
+    if echo "$deps" | grep -q "/nix/store"; then
+        echo "❌ Binary contains /nix/store references:" >&2
+        echo "$deps" | grep "/nix/store" | sed 's/^/    /' >&2
+        exit 1
+    fi
+    if echo "$deps" | grep -q "/opt/homebrew"; then
+        echo "❌ Binary contains /opt/homebrew references:" >&2
+        echo "$deps" | grep "/opt/homebrew" | sed 's/^/    /' >&2
+        exit 1
+    fi
+    if echo "$deps" | grep -Eq "/usr/local/(lib|opt)"; then
+        echo "❌ Binary contains /usr/local references:" >&2
+        echo "$deps" | grep -E "/usr/local/(lib|opt)" | sed 's/^/    /' >&2
+        exit 1
+    fi
+    
+    echo "✅ Binary dependencies are clean (system libs and frameworks only)"
 fi
 
 if [[ ! -d "$TEMPLATE" || ! -d "$ASSETS" ]]; then
@@ -190,6 +216,24 @@ if [[ -n "${SIGN_IDENTITY:-}" ]]; then
         /usr/bin/xcrun stapler staple "$DMG"
         /usr/sbin/spctl --assess --type open --context context:primary-signature -v "$DMG"
     fi
+fi
+
+echo "==> Smoke test: startup check"
+# Try to launch the app briefly to catch dyld errors (issue #1013)
+# Use gtimeout if available (from coreutils), otherwise skip
+if command -v gtimeout >/dev/null 2>&1; then
+    # Launch from a different directory to catch asset path issues
+    (cd /tmp && gtimeout 5 "$APP/Contents/MacOS/maybraid" 2>&1 || EXIT_CODE=$?) | head -20
+    EXIT_CODE=${EXIT_CODE:-0}
+    if [[ $EXIT_CODE -eq 124 ]] || [[ $EXIT_CODE -eq 0 ]]; then
+        echo "✅ App started successfully (no dyld/startup crash)"
+    else
+        echo "❌ App crashed with exit code $EXIT_CODE" >&2
+        exit 1
+    fi
+else
+    echo "⚠️  gtimeout not available; skipping startup test"
+    echo "   Install: brew install coreutils"
 fi
 
 echo

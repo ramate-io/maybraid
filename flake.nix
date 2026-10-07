@@ -77,6 +77,9 @@
           rustc = rust;
         };
     
+        # Minimal release toolchain: pinned Rust from rust-toolchain.toml, no dev tools
+        releaseRust = (pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml);
+
       in {
         devShells = rec {
           default = docker-build;
@@ -162,6 +165,58 @@
               echo ""
               echo "Maybraid"
               echo "A game of peer-based state."
+            '';
+          };
+
+          # Dedicated macOS release shell: no Nix libiconv, explicit Apple SDK linkage
+          release-macos = pkgs.mkShell {
+            buildInputs = [
+              releaseRust
+              pkgs.pkg-config
+            ];
+
+            # Set minimum macOS version explicitly (supports 11.0+)
+            MACOSX_DEPLOYMENT_TARGET = "11.0";
+
+            # Use separate target directory for release builds
+            CARGO_TARGET_DIR = "target/release-packaging";
+
+            shellHook = ''
+              #!/usr/bin/env ${pkgs.bash}
+              set -e
+
+              # Configure Apple toolchain for C/C++ dependencies
+              if [ -d /Applications/Xcode.app/Contents/Developer ]; then
+                export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+                if sdkroot="$(xcrun --sdk macosx --show-sdk-path 2>/dev/null)" && [ -d "$sdkroot" ]; then
+                  export SDKROOT="$sdkroot"
+                  export CFLAGS="-isysroot $sdkroot -mmacosx-version-min=11.0"
+                  export CXXFLAGS="-isysroot $sdkroot -stdlib=libc++ -mmacosx-version-min=11.0"
+                fi
+              fi
+
+              echo ""
+              echo "macOS release build environment"
+              echo "Target: aarch64-apple-darwin (ARM64)"
+              echo "Deployment target: $MACOSX_DEPLOYMENT_TARGET"
+              echo "Build dir: $CARGO_TARGET_DIR"
+            '';
+          };
+
+          # Dedicated Windows release shell (for local builds; CI uses native toolchain)
+          release-windows = pkgs.mkShell {
+            buildInputs = [
+              releaseRust
+            ];
+
+            # Use separate target directory for release builds
+            CARGO_TARGET_DIR = "target/release-packaging";
+
+            shellHook = ''
+              echo ""
+              echo "Windows release build environment"
+              echo "Target: x86_64-pc-windows-msvc"
+              echo "Build dir: $CARGO_TARGET_DIR"
             '';
           };
         };
