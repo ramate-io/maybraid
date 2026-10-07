@@ -4,6 +4,7 @@
 //! body-rig host. `From<ConceptAnimation>` lives in `characters`.
 
 use bevy::prelude::*;
+use character_animations::animations::smoothstep;
 use character_animations::animations::{
 	air_duration, DorsoventralUndulation, FixedTuck, Flapping, FlipDirection, Gallop,
 	LateralUndulation, Leap, QuadrupedRun, Run, Soaring, TuckProfile, TuckedFlip, TwoFootedJump,
@@ -18,6 +19,10 @@ const RUN_CYCLE_SPEED: f32 = 1.68;
 const WALK_CYCLE_SPEED: f32 = 1.08;
 /// Slow rest cycle so a crowd idle is a sway, not a march.
 pub const IDLE_CYCLE_SPEED: f32 = 0.2;
+/// Planar speed (m/s) that maps to full walk weight in [`approach_walk_weight`].
+pub const APPROACH_TOP_SPEED: f32 = 1.0;
+/// Forward foot travel over one cycle on [`HumanoidV0Rig::for_clip_test`] at full walk weight.
+const APPROACH_FULL_FOOT_TRAVEL: f32 = 1.418;
 const GALLOP_CYCLE_SPEED: f32 = 0.35;
 const QUADRUPED_RUN_CYCLE_SPEED: f32 = 0.5;
 const TUCK_CYCLE_SPEED: f32 = 0.6;
@@ -190,6 +195,49 @@ impl ApproachParams {
 	}
 }
 
+/// 0 = idle, 1 = walk. Smoothsteps between standstill and [`APPROACH_TOP_SPEED`].
+pub fn approach_walk_weight(speed: f32) -> f32 {
+	if speed <= 0.0 {
+		return 0.0;
+	}
+	smoothstep((speed / APPROACH_TOP_SPEED).clamp(0.0, 1.0))
+}
+
+/// Invert [`approach_walk_weight`] for a blend weight in `(0, 1]`.
+pub fn speed_for_approach_weight(weight: f32) -> f32 {
+	let weight = weight.clamp(0.0, 1.0);
+	if weight <= 0.0 {
+		return 0.0;
+	}
+	if weight >= 1.0 {
+		return APPROACH_TOP_SPEED;
+	}
+	let mut lo = 0.0_f32;
+	let mut hi = 1.0_f32;
+	for _ in 0..24 {
+		let mid = (lo + hi) * 0.5;
+		if smoothstep(mid) < weight {
+			lo = mid;
+		} else {
+			hi = mid;
+		}
+	}
+	APPROACH_TOP_SPEED * (lo + hi) * 0.5
+}
+
+/// Cadence that keeps posed foot speed near [`speed_for_approach_weight`] as stride scales.
+pub fn approach_cycle_speed(weight: f32) -> f32 {
+	let weight = weight.clamp(0.0, 1.0);
+	if weight <= 0.0 {
+		IDLE_CYCLE_SPEED
+	} else {
+		let ground = speed_for_approach_weight(weight);
+		// Mix stride grows slightly faster than linear on the clip-test rig.
+		let travel = weight.powf(0.92) * APPROACH_FULL_FOOT_TRAVEL;
+		(ground / travel.max(1e-4)).max(IDLE_CYCLE_SPEED)
+	}
+}
+
 /// Untyped jab knobs ([`Jab`] is rig-generic).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct JabParams {
@@ -256,10 +304,7 @@ impl AnimClip {
 
 	pub fn default_speed(self) -> f32 {
 		match self {
-			Self::Approach(params) => {
-				let weight = params.walk_weight.clamp(0.0, 1.0);
-				IDLE_CYCLE_SPEED * (1.0 - weight) + WALK_CYCLE_SPEED * weight
-			}
+			Self::Approach(params) => approach_cycle_speed(params.walk_weight),
 			_ => self.id().default_speed(),
 		}
 	}
@@ -422,13 +467,14 @@ mod tests {
 	}
 
 	#[test]
-	fn approach_speed_interpolates_cycle_rates() {
+	fn approach_speed_tracks_ground_speed() {
 		let slow = AnimClip::approach(0.0).default_speed();
-		let fast = AnimClip::approach(1.0).default_speed();
 		let mid = AnimClip::approach(0.5).default_speed();
+		let fast = AnimClip::approach(1.0).default_speed();
 		assert!((slow - IDLE_CYCLE_SPEED).abs() < 1e-5);
-		assert!((fast - WALK_CYCLE_SPEED).abs() < 1e-5);
-		assert!(mid > slow && mid < fast);
+		assert!((fast - approach_cycle_speed(1.0)).abs() < 1e-5);
+		assert!(mid >= slow);
+		assert!((mid - approach_cycle_speed(0.5)).abs() < 1e-5);
 	}
 
 	#[test]

@@ -355,7 +355,9 @@ pub fn tick_anim_mailbox(
 			}
 			mailbox.from_offset = mailbox.displayed_offset;
 			mailbox.blend_progress = 0.0;
-			mailbox.clip_progress = 0.0;
+			if !preserves_walk_phase(mailbox.last, requested_id) {
+				mailbox.clip_progress = 0.0;
+			}
 			mailbox.last = Some(requested_id);
 		}
 
@@ -512,6 +514,13 @@ pub fn apply_anim_mailbox(
 		};
 		write_pose(&mailbox.output, &names.names, bone_map, &mut bone_tfs);
 	}
+}
+
+fn preserves_walk_phase(from: Option<AnimId>, to: AnimId) -> bool {
+	matches!(
+		(from, to),
+		(Some(AnimId::Approach), AnimId::Walk) | (Some(AnimId::Walk), AnimId::Approach)
+	)
 }
 
 fn clip_progress(clip: AnimClip, clip_progress: f32, entity: Entity) -> f32 {
@@ -1094,6 +1103,215 @@ mod tests {
 			mid.posed_angle("femur.L") > idle.posed_angle("femur.L")
 				&& mid.posed_angle("femur.L") < walk.posed_angle("femur.L"),
 			"mid approach should sit between idle and walk femur swing"
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn preserves_walk_phase_on_approach_walk_transitions() {
+		assert!(preserves_walk_phase(Some(AnimId::Approach), AnimId::Walk));
+		assert!(preserves_walk_phase(Some(AnimId::Walk), AnimId::Approach));
+		assert!(!preserves_walk_phase(Some(AnimId::Still), AnimId::Approach));
+		assert!(!preserves_walk_phase(Some(AnimId::Approach), AnimId::Still));
+	}
+
+	#[test]
+	fn approach_walk_boundary_keeps_gait_phase() -> anyhow::Result<()> {
+		use crate::clip::ApproachParams;
+
+		let entity = Entity::from_bits(11);
+		let phase = 0.42;
+		let mut approach = HumanoidV0Rig::for_clip_test();
+		sample_humanoid(
+			AnimClip::Approach(ApproachParams::blended(1.0)),
+			&mut approach,
+			phase,
+			phase,
+			entity,
+			true,
+			false,
+		);
+		let mut walk = HumanoidV0Rig::for_clip_test();
+		sample_humanoid(AnimClip::walk(), &mut walk, phase, phase, entity, true, false);
+		assert!(
+			approach.rotation("femur.L").dot(walk.rotation("femur.L")).abs() > 1.0 - 1e-5,
+			"full-weight approach matches walk at the same gait phase"
+		);
+
+		let mut mailbox = AnimMailbox::new(Transform::IDENTITY);
+		mailbox.last = Some(AnimId::Approach);
+		mailbox.clip_progress = phase;
+		let requested = AnimId::Walk;
+		if mailbox.last != Some(requested) && !preserves_walk_phase(mailbox.last, requested) {
+			mailbox.clip_progress = 0.0;
+		}
+		assert!(
+			(mailbox.clip_progress - phase).abs() < 1e-5,
+			"approach→walk must keep the walk accumulator"
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn deceleration_walk_approach_still_preserves_phase_until_still() -> anyhow::Result<()> {
+		use crate::clip::ApproachParams;
+
+		let entity = Entity::from_bits(19);
+		let phase = 0.61;
+		let mut walk = HumanoidV0Rig::for_clip_test();
+		sample_humanoid(AnimClip::walk(), &mut walk, phase, phase, entity, true, false);
+		let mut approach = HumanoidV0Rig::for_clip_test();
+		sample_humanoid(
+			AnimClip::Approach(ApproachParams::blended(0.85)),
+			&mut approach,
+			phase,
+			phase,
+			entity,
+			true,
+			false,
+		);
+		assert!(
+			approach.rotation("femur.L").dot(walk.rotation("femur.L")).abs() > 0.98,
+			"walk→approach should not jump gait phase while decelerating"
+		);
+
+		let mut still = HumanoidV0Rig::for_clip_test();
+		let idle_progress = phase + Idle::phase_from_entity_bits(entity.to_bits());
+		sample_humanoid(AnimClip::Still, &mut still, idle_progress, phase, entity, true, false);
+		assert!(
+			still.posed_angle("femur.L") < walk.posed_angle("femur.L"),
+			"still settles the legs after approach drains"
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn approach_mid_weight_uses_posed_joint_positions() -> anyhow::Result<()> {
+		use crate::clip::ApproachParams;
+
+		let entity = Entity::from_bits(23);
+		let phase = 0.2;
+		let idle_progress = phase + Idle::phase_from_entity_bits(entity.to_bits());
+		let mut idle = HumanoidV0Rig::for_clip_test();
+		sample_humanoid(AnimClip::Still, &mut idle, idle_progress, phase, entity, true, false);
+		let mut walk = HumanoidV0Rig::for_clip_test();
+		sample_humanoid(AnimClip::walk(), &mut walk, phase, phase, entity, true, false);
+		let mut mid = HumanoidV0Rig::for_clip_test();
+		sample_humanoid(
+			AnimClip::Approach(ApproachParams::blended(0.5)),
+			&mut mid,
+			phase,
+			phase,
+			entity,
+			true,
+			false,
+		);
+
+		let knee = mid.character_point("shin.L");
+		let idle_knee = idle.character_point("shin.L");
+		let walk_knee = walk.character_point("shin.L");
+		for axis in 0..3 {
+			let a = knee[axis];
+			assert!(
+				a >= idle_knee[axis].min(walk_knee[axis]) - 1e-3
+					&& a <= idle_knee[axis].max(walk_knee[axis]) + 1e-3,
+				"knee axis {axis} should sit between idle and walk"
+			);
+		}
+		assert!(mid.posed_angle("shin.L") < 1.2, "mid approach must not hyperextend the knee");
+		assert!(mid.posed_angle("buttocks") < 1e-3, "unwritten bones stay at rest");
+
+		let first = mid.character_point("shin.L");
+		sample_humanoid(
+			AnimClip::Approach(ApproachParams::blended(0.5)),
+			&mut mid,
+			phase,
+			phase,
+			entity,
+			true,
+			false,
+		);
+		let second = mid.character_point("shin.L");
+		assert!((first - second).length() < 1e-4, "resampling must not accumulate");
+		Ok(())
+	}
+
+	fn foot_tip(rig: &HumanoidV0Rig, shin: &str) -> Vec3 {
+		rig.character_point(shin) + rig.character_length(shin)
+	}
+
+	fn approach_foot_travel_per_cycle(weight: f32) -> f32 {
+		let entity = Entity::from_bits(5);
+		let samples = 120;
+		let mut min_z = f32::MAX;
+		let mut max_z = f32::MIN;
+		for i in 0..samples {
+			let phase = i as f32 / samples as f32;
+			let mut rig = HumanoidV0Rig::for_clip_test();
+			sample_humanoid(
+				AnimClip::approach(weight),
+				&mut rig,
+				phase,
+				phase,
+				entity,
+				true,
+				false,
+			);
+			let z = foot_tip(&rig, "shin.L").z;
+			min_z = min_z.min(z);
+			max_z = max_z.max(z);
+		}
+		max_z - min_z
+	}
+
+	#[test]
+	fn approach_foot_cadence_tracks_ground_speed() -> anyhow::Result<()> {
+		use crate::clip::{approach_cycle_speed, speed_for_approach_weight};
+
+		for weight in [0.25, 0.5, 0.75] {
+			let travel = approach_foot_travel_per_cycle(weight);
+			let cadence = approach_cycle_speed(weight);
+			let foot_speed = travel * cadence;
+			let ground = speed_for_approach_weight(weight);
+			let mismatch = (foot_speed - ground).abs() / ground.max(1e-3);
+			eprintln!(
+				"approach weight {weight}: travel {travel:.3} m/cycle x cadence {cadence:.3} = foot {foot_speed:.3} m/s vs ground {ground:.3} m/s (mismatch {:.1}%)",
+				mismatch * 100.0
+			);
+			assert!(
+				mismatch < 0.08,
+				"weight {weight}: foot {foot_speed:.3} m/s vs ground {ground:.3} m/s"
+			);
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn approach_feet_mirror_with_half_cycle_offset() -> anyhow::Result<()> {
+		let entity = Entity::from_bits(31);
+		let weight = 0.5;
+		let phase = 0.0;
+		let mut left = HumanoidV0Rig::for_clip_test();
+		sample_humanoid(AnimClip::approach(weight), &mut left, phase, phase, entity, true, false);
+		let mut right_phase = HumanoidV0Rig::for_clip_test();
+		sample_humanoid(
+			AnimClip::approach(weight),
+			&mut right_phase,
+			phase + 0.5,
+			phase + 0.5,
+			entity,
+			true,
+			false,
+		);
+		let left_tip = foot_tip(&left, "shin.L");
+		let right_tip = foot_tip(&right_phase, "shin.R");
+		assert!(
+			(left_tip.x + right_tip.x).abs() < 0.08,
+			"feet mirror laterally at weight {weight}: L={left_tip:?} R={right_tip:?}"
+		);
+		assert!(
+			(left_tip.z - right_tip.z).abs() < 0.08,
+			"half-cycle offset keeps the same forward phase: L={left_tip:?} R={right_tip:?}"
 		);
 		Ok(())
 	}

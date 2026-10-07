@@ -23,8 +23,9 @@ pub mod shown;
 pub mod sync;
 
 pub use clip::{
-	AnimClip, AnimId, AnimRef, AnimRefRoot, ApproachParams, JabParams, JumpParams, TuckParams,
-	TuckedFlipParams, TwoFootedTuckedFlipParams,
+	approach_walk_weight, speed_for_approach_weight, AnimClip, AnimId, AnimRef, AnimRefRoot,
+	ApproachParams, JabParams, JumpParams, TuckParams, TuckedFlipParams, TwoFootedTuckedFlipParams,
+	APPROACH_TOP_SPEED, IDLE_CYCLE_SPEED,
 };
 pub use clip_cache::{
 	apply_evaluated_sample, clip_bone_mask, parameters_key, AnimClipCache, AnimClipCacheSettings,
