@@ -12,6 +12,7 @@ mod movement;
 mod separation;
 mod spawn;
 mod stance;
+mod walk_start;
 
 use bevy::prelude::*;
 use characters::CharacterMotionSystems;
@@ -42,6 +43,7 @@ pub use spawn::{
 	CAPSULE_RADIUS,
 };
 pub use stance::{CharacterStance, RestLocomotionCapsule, StanceKind};
+pub use walk_start::WalkStartBlend;
 
 /// Capsule physics and move/jump intents.
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -105,6 +107,7 @@ impl Plugin for PlayerPlugin {
 					body::apply_wish_jump,
 					stance::stand_when_airborne,
 					stance::advance_stance_blend,
+					walk_start::advance_walk_start_blend,
 					stance::apply_stance_hulls,
 					stance::sync_stance_pitch,
 					body::advance_jump_phases,

@@ -2,8 +2,8 @@ use bevy::prelude::*;
 use character_animations::{
 	animations::{
 		FixedTuck, Run, Squat, SquatDescent, Tuck, TuckedFlip, TwoFootedJump, TwoFootedTuckedFlip,
-		Walk, DEFAULT_DESCENT_SPEED, DEFAULT_GRAVITY, DEFAULT_LANDING_SQUAT_SPEED,
-		DEFAULT_PRE_SQUAT_SPEED,
+		Walk, WalkStart, DEFAULT_DESCENT_SPEED, DEFAULT_GRAVITY, DEFAULT_LANDING_SQUAT_SPEED,
+		DEFAULT_PRE_SQUAT_SPEED, DEFAULT_WALK_START_SPEED,
 	},
 	Animation, Effects,
 };
@@ -52,6 +52,7 @@ pub enum AnimationMode {
 	Walk,
 	Squat,
 	SquatDescent,
+	WalkStart,
 	Jump,
 	Tuck,
 	FixedTuck,
@@ -215,6 +216,14 @@ pub fn animate_limbs(
 			&config,
 			&playback,
 			&mut debug,
+			&mut rig,
+			&mut armature,
+			&mut limbs,
+			t,
+		),
+		AnimationMode::WalkStart => animate_walk_start(
+			&config,
+			&playback,
 			&mut rig,
 			&mut armature,
 			&mut limbs,
@@ -390,6 +399,26 @@ fn animate_squat(
 		}
 	}
 
+	marshal_pose_to_limbs(&rig, limbs);
+}
+
+fn animate_walk_start(
+	config: &CharacterConfig,
+	playback: &AnimationPlayback,
+	rig: &mut Query<&mut HumanoidV0Rig, With<CharacterRig>>,
+	armature: &mut Query<&mut Transform, (With<CharacterRig>, Without<LimbAnimator>)>,
+	limbs: &mut Query<(&mut Transform, &LimbAnimator)>,
+	t: f32,
+) {
+	let Ok(mut rig) = rig.single_mut() else {
+		return;
+	};
+
+	marshal_limbs_into_pose(&mut rig, limbs, playback);
+	let start = WalkStart::default();
+	let progress = (t * DEFAULT_WALK_START_SPEED).clamp(0.0, 1.0);
+	let effects = start.apply(&mut rig, progress);
+	apply_effects(config.transform, effects, armature);
 	marshal_pose_to_limbs(&rig, limbs);
 }
 
