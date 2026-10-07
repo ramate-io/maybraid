@@ -4,6 +4,9 @@ use crate::Progress;
 const SHOULDER_SWING_BACK: f32 = -0.55;
 const HUMERUS_FLEX_BACK: f32 = 0.65;
 const FOREARM_EXTEND: f32 = -0.35;
+/// Arms finish their backward reach when legs are this far through extension so the
+/// whip reads before the knees lock out.
+const ARM_FULL_AT_LEG_EXTENSION: f32 = 0.82;
 
 #[derive(Debug, Clone)]
 pub struct Spring {
@@ -30,7 +33,8 @@ impl Spring {
 	}
 
 	pub fn arm_amount(&self, progress: f32) -> f32 {
-		self.extend_amount(progress)
+		let leg = self.extend_amount(progress);
+		(leg / ARM_FULL_AT_LEG_EXTENSION).min(1.0)
 	}
 
 	pub fn shoulder_swing(&self, progress: f32) -> f32 {
@@ -84,6 +88,19 @@ mod tests {
 		let spring = Spring::default();
 		assert!(spring.shoulder_swing(0.99) < -0.3);
 		assert!(spring.humerus_flex(0.99) > 0.0);
+		Ok(())
+	}
+
+	#[test]
+	fn spring_arms_lead_leg_extension() -> anyhow::Result<()> {
+		let spring = Spring::default();
+		let leg = spring.extend_amount(0.55);
+		let arm = spring.arm_amount(0.55);
+		assert!(arm > leg + 0.05, "arms should lead legs mid-spring, leg={leg} arm={arm}");
+		assert!(
+			(spring.arm_amount(0.99) - 1.0).abs() < 1e-3,
+			"arms saturate before legs finish"
+		);
 		Ok(())
 	}
 }
