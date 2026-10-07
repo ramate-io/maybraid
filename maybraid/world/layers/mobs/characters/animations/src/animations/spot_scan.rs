@@ -4,7 +4,9 @@
 //! spine-led. Sampling is repeatable from effective rest, clip parameters, and
 //! progress only.
 
-use crate::animations::smoothstep;
+use character_rigs::humanoid::LegSegmentLengths;
+
+use crate::animations::{smoothstep, vertical_drop};
 use crate::Progress;
 
 const PREPARE_END: f32 = 0.10;
@@ -29,7 +31,7 @@ pub const DEFAULT_SPOT_SCAN_SPEED: f32 = 0.87;
 pub struct SpotScan;
 
 impl SpotScan {
-	/// Character yaw in radians. Negative turns left (+X), positive turns right.
+	/// Character yaw in radians. Positive turns toward the character's left (+X).
 	pub fn scan_yaw(&self, progress: f32) -> f32 {
 		let t = Progress(progress).clamp();
 		if t <= PREPARE_END {
@@ -37,19 +39,19 @@ impl SpotScan {
 		}
 		if t <= LEFT_PEAK {
 			let u = (t - PREPARE_END) / (LEFT_PEAK - PREPARE_END);
-			return -SCAN_TURN * smoothstep(u);
+			return SCAN_TURN * smoothstep(u);
 		}
 		if t <= CROSS_LEFT {
 			let u = (t - LEFT_PEAK) / (CROSS_LEFT - LEFT_PEAK);
-			return -SCAN_TURN * (1.0 - smoothstep(u));
+			return SCAN_TURN * (1.0 - smoothstep(u));
 		}
 		if t <= RIGHT_PEAK {
 			let u = (t - CROSS_LEFT) / (RIGHT_PEAK - CROSS_LEFT);
-			return SCAN_TURN * smoothstep(u);
+			return -SCAN_TURN * smoothstep(u);
 		}
 		if t <= CROSS_RIGHT {
 			let u = (t - RIGHT_PEAK) / (CROSS_RIGHT - RIGHT_PEAK);
-			return SCAN_TURN * (1.0 - smoothstep(u));
+			return -SCAN_TURN * (1.0 - smoothstep(u));
 		}
 		0.0
 	}
@@ -71,7 +73,8 @@ impl SpotScan {
 	}
 
 	pub fn knee_flex(&self, progress: f32) -> f32 {
-		let alert = smoothstep((Progress(progress).clamp() - PREPARE_END) / (CROSS_RIGHT - PREPARE_END));
+		let alert =
+			smoothstep((Progress(progress).clamp() - PREPARE_END) / (CROSS_RIGHT - PREPARE_END));
 		let turn = (self.scan_yaw(progress).abs() / SCAN_TURN).clamp(0.0, 1.0);
 		CROUCH_KNEE * alert * (0.35 + 0.65 * turn) * self.settle_weight(progress)
 	}
@@ -88,6 +91,18 @@ impl SpotScan {
 
 	pub fn pelvis_shift(&self, progress: f32) -> f32 {
 		self.scan_yaw(progress) * PELVIS_SHIFT
+	}
+
+	pub fn femur_swing(&self, progress: f32) -> f32 {
+		self.knee_flex(progress) * 0.35
+	}
+
+	pub fn shin_flex(&self, progress: f32) -> f32 {
+		self.knee_flex(progress)
+	}
+
+	pub fn vertical_drop(&self, progress: f32, lengths: LegSegmentLengths) -> f32 {
+		vertical_drop(self.femur_swing(progress), self.shin_flex(progress), lengths)
 	}
 
 	/// Full left sweep. Useful for tests and a readable still frame.
@@ -120,8 +135,8 @@ mod tests {
 		let scan = SpotScan;
 		let left = scan.scan_yaw(SpotScan::left_peak());
 		let right = scan.scan_yaw(SpotScan::right_peak());
-		assert!(left < -0.35, "left sweep, got {left}");
-		assert!(right > 0.35, "right sweep, got {right}");
+		assert!(left > 0.35, "left sweep, got {left}");
+		assert!(right < -0.35, "right sweep, got {right}");
 		assert!((left + right).abs() < 0.08, "left and right mirror, {left} {right}");
 		Ok(())
 	}

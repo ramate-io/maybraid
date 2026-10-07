@@ -2,8 +2,8 @@ use bevy::prelude::*;
 use character_animations::{
 	animations::{
 		FixedTuck, Run, SpotScan, Squat, SquatDescent, Tuck, TuckedFlip, TwoFootedJump,
-		TwoFootedTuckedFlip, Walk, DEFAULT_DESCENT_SPEED, DEFAULT_GRAVITY, DEFAULT_LANDING_SQUAT_SPEED,
-		DEFAULT_PRE_SQUAT_SPEED, DEFAULT_SPOT_SCAN_SPEED,
+		TwoFootedTuckedFlip, Walk, DEFAULT_DESCENT_SPEED, DEFAULT_GRAVITY,
+		DEFAULT_LANDING_SQUAT_SPEED, DEFAULT_PRE_SQUAT_SPEED, DEFAULT_SPOT_SCAN_SPEED,
 	},
 	Animation, Effects,
 };
