@@ -1,4 +1,4 @@
-use crate::animations::Squat;
+use crate::animations::{smoothstep, Squat};
 use crate::Progress;
 
 const SHOULDER_SWING_BACK: f32 = -0.55;
@@ -34,7 +34,7 @@ impl Spring {
 
 	pub fn arm_amount(&self, progress: f32) -> f32 {
 		let leg = self.extend_amount(progress);
-		(leg / ARM_FULL_AT_LEG_EXTENSION).min(1.0)
+		smoothstep((leg / ARM_FULL_AT_LEG_EXTENSION).clamp(0.0, 1.0))
 	}
 
 	pub fn shoulder_swing(&self, progress: f32) -> f32 {
@@ -97,10 +97,7 @@ mod tests {
 		let leg = spring.extend_amount(0.55);
 		let arm = spring.arm_amount(0.55);
 		assert!(arm > leg + 0.05, "arms should lead legs mid-spring, leg={leg} arm={arm}");
-		assert!(
-			(spring.arm_amount(0.99) - 1.0).abs() < 1e-3,
-			"arms saturate before legs finish"
-		);
+		assert!((spring.arm_amount(0.99) - 1.0).abs() < 1e-3, "arms saturate before legs finish");
 		Ok(())
 	}
 }
