@@ -17,6 +17,7 @@ use super::building::{
 	HUT_MIN_FOOTPRINT,
 };
 use crate::finish::{DevelopmentFinish, DevelopmentFinishRole, SuburbanPaletteBias};
+use crate::math::lerp;
 use crate::scatter::{ScatterChoice, ScatterRecipe};
 
 #[derive(Debug, Clone, Copy)]
@@ -206,10 +207,6 @@ fn fit_shepherds_building_with_finish(
 		ground_height: height,
 		building,
 	})
-}
-
-fn lerp(a: f32, b: f32, t: f32) -> f32 {
-	a + (b - a) * t.clamp(0.0, 1.0)
 }
 
 #[cfg(test)]

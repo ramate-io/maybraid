@@ -28,11 +28,10 @@ where
 
 	fn build_with_id(spatial_index: &mut S, id: Id) -> Option<(Self, Aabb3d)> {
 		let extent = UrbanizationExtent::from_id(id)?;
-		let selection =
-			GeneratingSpatialIndex::<UrbanizationSelection>::get_one_or_generate(
-				spatial_index,
-				Id::Universal,
-			)?;
+		let selection = GeneratingSpatialIndex::<UrbanizationSelection>::get_one_or_generate(
+			spatial_index,
+			Id::Universal,
+		)?;
 		let selected = match selection.kind {
 			Some(kind) => select_cell_as(extent, selection.noise, kind),
 			None => select_cell(extent, selection.noise),

@@ -309,11 +309,10 @@ mod tests {
 			42,
 		))));
 		app.insert_resource(DevelopmentConfig::default());
-		app.insert_resource(
-			LayerModeConfig::<PlaygroundMode, Urbanization<Richmond<OnTerrain<Durham>>>>::new(
-				RichmondConfig::default(),
-			),
-		);
+		app.insert_resource(LayerModeConfig::<
+			PlaygroundMode,
+			Urbanization<Richmond<OnTerrain<Durham>>>,
+		>::new(RichmondConfig::default()));
 		app.insert_resource(TerrainPresentationDirty(false));
 		app.insert_resource(GameCommandStatusText::default());
 		app.world_mut().spawn(RequestDevelopmentFocus(DevelopmentFocus::LesHalles));
@@ -322,7 +321,8 @@ mod tests {
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		let urban = app
 			.world()
-			.resource::<LayerModeConfig<PlaygroundMode, Urbanization<Richmond<OnTerrain<Durham>>>>>();
+			.resource::<LayerModeConfig<PlaygroundMode, Urbanization<Richmond<OnTerrain<Durham>>>>>(
+			);
 		anyhow::ensure!(
 			urban.config.focus_development == Some(DevelopmentFocus::LesHalles),
 			"focus command writes the playground mode config, got {:?}",

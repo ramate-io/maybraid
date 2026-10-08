@@ -3,17 +3,20 @@
 use bevy::prelude::*;
 use bevy_hanabi::prelude::{CompiledParticleEffect, EffectSpawner, EffectSystems, SpawnerSettings};
 
-use crate::lobe_material::LobeMaterial;
+use crate::lobe_instances::sync_lobe_instance_buffer;
 use crate::lobes::{lobe_transform, stamp_lobe_materials, VfxLobe};
 use crate::spawn::{
-	realize_layer, VfxEmitter, VfxEmitterArmed, VfxEmitterBurst, VfxFlash, VfxInstance, VfxLayerLife,
-	VfxPendingLayers,
+	realize_layer, VfxEmitter, VfxEmitterArmed, VfxEmitterBurst, VfxFlash, VfxInstance,
+	VfxLayerLife, VfxPendingLayers,
 };
 
 /// Mark GPU-ready emitters. Burst is deferred to [`gate_vfx_instances`].
 pub fn arm_vfx_emitters(
 	mut commands: Commands,
-	emitters: Query<(Entity, &CompiledParticleEffect), (With<VfxEmitter>, Without<VfxEmitterArmed>)>,
+	emitters: Query<
+		(Entity, &CompiledParticleEffect),
+		(With<VfxEmitter>, Without<VfxEmitterArmed>),
+	>,
 ) {
 	for (entity, compiled) in &emitters {
 		if compiled.is_ready() {
@@ -105,18 +108,16 @@ pub fn tick_vfx_lobes(
 	time: Res<Time>,
 	child_of: Query<&ChildOf>,
 	instances: Query<&VfxInstance>,
-	mut materials: ResMut<Assets<LobeMaterial>>,
 	mut lobes: Query<(
 		Entity,
 		&mut VfxLobe,
 		&mut Transform,
 		&mut Visibility,
-		Option<&MeshMaterial3d<LobeMaterial>>,
 		Option<&mut VfxLayerLife>,
 	)>,
 ) {
 	let dt = time.delta_secs();
-	for (entity, mut lobe, mut transform, mut visibility, material, life) in &mut lobes {
+	for (entity, mut lobe, mut transform, mut visibility, life) in &mut lobes {
 		if !ancestor_armed(entity, &child_of, &instances) {
 			*visibility = Visibility::Hidden;
 			continue;
@@ -127,11 +128,6 @@ pub fn tick_vfx_lobes(
 			life.age = lobe.age;
 		}
 		*transform = lobe_transform(&lobe.spec, lobe.age);
-		if let Some(handle) = material {
-			if let Some(mut material) = materials.get_mut(&handle.0) {
-				material.set_age(lobe.age);
-			}
-		}
 	}
 }
 
@@ -167,6 +163,7 @@ pub fn vfx_lifecycle_plugin(app: &mut App) {
 			tick_vfx_instances,
 			tick_vfx_flashes,
 			tick_vfx_lobes,
+			sync_lobe_instance_buffer,
 			tick_vfx_layer_lives,
 		)
 			.chain(),

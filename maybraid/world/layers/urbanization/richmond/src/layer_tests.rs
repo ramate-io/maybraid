@@ -42,13 +42,14 @@ use crate::layer_present::{
 	present_richmond_hosts, quantize_viewer_xz_for_test, sync_raw_terrain_replacements,
 	UrbanizationPaddedTerrainState, UrbanizationPresenterState,
 };
-use crate::layer_stream::{parse_urbanization_kind, stream_radii_m, stream_urbanization, HostWindow};
+use crate::layer_stream::{
+	parse_urbanization_kind, stream_radii_m, stream_urbanization, HostWindow,
+};
 use crate::padded::{PaddedTerrain, PresentedPaddedTerrainScene, TerrainWithPads};
 use crate::storage::{register_richmond_nodes, RichmondNodes};
 use crate::{
 	AuthoredDevelopment, AuthoredDevelopments, DevelopmentConfig, DevelopmentKind, DevelopmentSite,
-	DevelopmentSites,
-	PadComplex, PadParams, DEVELOPMENT_CELL_SIZE,
+	DevelopmentSites, PadComplex, PadParams, DEVELOPMENT_CELL_SIZE,
 };
 
 struct TestMode;
@@ -132,7 +133,11 @@ where
 	storage.get::<T>(id)
 }
 
-fn seed_roots(storage: &mut HcsgStorage, config: DevelopmentConfig, authored: AuthoredDevelopments) {
+fn seed_roots(
+	storage: &mut HcsgStorage,
+	config: DevelopmentConfig,
+	authored: AuthoredDevelopments,
+) {
 	storage.seed(config, universal_bounds());
 	storage.seed(authored, universal_bounds());
 }
@@ -355,7 +360,8 @@ fn overlay_cell_prefers_a_padded_cell_then_falls_back_by_size() -> anyhow::Resul
 			medium_bounds.ok_or_else(|| anyhow::anyhow!("medium bounds"))?,
 		)
 	};
-	let clear = |world: &mut World| world.resource_mut::<HcsgStorage>().clear_group::<RichmondNodes>();
+	let clear =
+		|world: &mut World| world.resource_mut::<HcsgStorage>().clear_group::<RichmondNodes>();
 
 	insert_overlay_pad(&mut world, source, medium_bounds, 9)?;
 	let (width, res) = overlay_width_res(&mut world, query, TERRAIN_CELL_SIZE, None)?;
@@ -757,7 +763,10 @@ fn hosts_walk_an_authored_development_with_no_hopscotch() -> anyhow::Result<()> 
 	drop(state);
 	anyhow::ensure!(ids == [id], "hosts walk only the authored development, got {ids:?}");
 	anyhow::ensure!(
-		world.resource::<HcsgStorage>().overlapping::<SelectedUrbanization>(region).is_empty(),
+		world
+			.resource::<HcsgStorage>()
+			.overlapping::<SelectedUrbanization>(region)
+			.is_empty(),
 		"no hopscotch cells are selected"
 	);
 	Ok(())
@@ -774,11 +783,22 @@ fn padded_terrain_follows_the_developments_over_its_ground_cell() -> anyhow::Res
 		let center = Vec3::new((ix + 0.5) * layout.cell_size, 0.0, (iz + 0.5) * layout.cell_size);
 		storage.terrain_ids_overlapping(Aabb3d::new(center, Vec3::splat(0.25)))
 	};
-	let under = ids(&storage, 0.0, 0.0).first().copied().ok_or_else(|| anyhow::anyhow!("near"))?;
-	let far = ids(&storage, 40.0, 40.0).first().copied().ok_or_else(|| anyhow::anyhow!("far"))?;
+	let under = ids(&storage, 0.0, 0.0)
+		.first()
+		.copied()
+		.ok_or_else(|| anyhow::anyhow!("near"))?;
+	let far = ids(&storage, 40.0, 40.0)
+		.first()
+		.copied()
+		.ok_or_else(|| anyhow::anyhow!("far"))?;
 	let under_center = storage
 		.terrain(under)
-		.map(|terrain| Vec2::new(terrain.cell.min.x + terrain.cell.max.x, terrain.cell.min.z + terrain.cell.max.z) * 0.5)
+		.map(|terrain| {
+			Vec2::new(
+				terrain.cell.min.x + terrain.cell.max.x,
+				terrain.cell.min.z + terrain.cell.max.z,
+			) * 0.5
+		})
 		.ok_or_else(|| anyhow::anyhow!("near terrain"))?;
 
 	let config = authored_only_config();
@@ -814,7 +834,9 @@ fn reseeding_authored_developments_regenerates_a_stationary_window() -> anyhow::
 	app.insert_resource(config);
 	app.insert_resource(AuthoredDevelopments::default());
 	app.add_plugins((
-		Seed::<DevelopmentConfig>::default().invalidates::<RichmondNodes>().restarts::<HostWindow>(),
+		Seed::<DevelopmentConfig>::default()
+			.invalidates::<RichmondNodes>()
+			.restarts::<HostWindow>(),
 		Seed::<AuthoredDevelopments>::default()
 			.invalidates::<RichmondNodes>()
 			.restarts::<HostWindow>(),
@@ -826,7 +848,8 @@ fn reseeding_authored_developments_regenerates_a_stationary_window() -> anyhow::
 			hosts.publish(keep, None);
 		})
 		.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-	let built = |app: &App| app.world().resource::<HcsgStorage>().get::<Built<Ground>>(id).is_some();
+	let built =
+		|app: &App| app.world().resource::<HcsgStorage>().get::<Built<Ground>>(id).is_some();
 
 	for _ in 0..8 {
 		app.update();

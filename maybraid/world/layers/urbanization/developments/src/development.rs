@@ -60,10 +60,6 @@ fn root_hash(cell: Aabb3d, noise: NoiseParams) -> SeededHash {
 	SeededHash::new((noise.seed as u32).wrapping_add(cell_salt(cell)))
 }
 
-fn lerp(a: f32, b: f32, t: f32) -> f32 {
-	a + (b - a) * t.clamp(0.0, 1.0)
-}
-
 /// Lift every site to within `max_relief` of the highest.
 fn raise_toward_peak(heights: &mut [Option<f32>], max_relief: f32) {
 	let peak = heights.iter().flatten().copied().max_by(f32::total_cmp);

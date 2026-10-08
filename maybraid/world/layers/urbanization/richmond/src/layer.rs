@@ -86,7 +86,8 @@ impl<G: RichmondGround> UrbanizationModel for Richmond<G> {
 		_lod_ref: &LodRef,
 	) {
 		let storage = &mut **prepare;
-		for OriginalId(id) in storage.original_ids_for::<RichmondDevelopment<G>>(column_bounds(bounds))
+		for OriginalId(id) in
+			storage.original_ids_for::<RichmondDevelopment<G>>(column_bounds(bounds))
 		{
 			storage.get_or_generate::<RichmondDevelopment<G>>(id);
 		}

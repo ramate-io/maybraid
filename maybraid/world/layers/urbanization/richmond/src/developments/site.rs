@@ -301,7 +301,10 @@ impl GenerationScheme<HcsgStorage> for DevelopmentSite {
 }
 
 fn authored(storage: &mut HcsgStorage) -> AuthoredDevelopments {
-	storage.get_one_or_generate::<AuthoredDevelopments>(Id::Universal).cloned().unwrap_or_default()
+	storage
+		.get_one_or_generate::<AuthoredDevelopments>(Id::Universal)
+		.cloned()
+		.unwrap_or_default()
 }
 
 #[cfg(test)]
@@ -388,7 +391,10 @@ mod tests {
 
 	#[test]
 	fn lattice_sites_follow_occupancy() -> anyhow::Result<()> {
-		let config = DevelopmentConfig { sites: DevelopmentSites::Lattice, ..only(DevelopmentKind::RingFort) };
+		let config = DevelopmentConfig {
+			sites: DevelopmentSites::Lattice,
+			..only(DevelopmentKind::RingFort)
+		};
 		let mut storage = seeded(config, AuthoredDevelopments::default());
 		let cell = DevelopmentExtent::from_cell_index(2, -1);
 		let site = storage
@@ -401,7 +407,10 @@ mod tests {
 
 	#[test]
 	fn authored_sites_replace_the_procedural_ones_they_overlap() -> anyhow::Result<()> {
-		let config = DevelopmentConfig { sites: DevelopmentSites::Lattice, ..only(DevelopmentKind::RingFort) };
+		let config = DevelopmentConfig {
+			sites: DevelopmentSites::Lattice,
+			..only(DevelopmentKind::RingFort)
+		};
 		let lattice = DevelopmentExtent::from_cell_index(0, 0);
 		let cell = Aabb3d::from_min_max(
 			bevy::math::Vec3::new(100.0, 0.0, 100.0),

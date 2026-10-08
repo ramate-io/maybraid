@@ -50,7 +50,9 @@ pub fn register_richmond_nodes<G: RichmondGround>(storage: &mut HcsgStorage) {
 		2.0 * COLUMN_HALF_HEIGHT as f64,
 		DEVELOPMENT_CELL_SIZE as f64,
 	);
-	storage.configure::<DevelopmentSite>(columns).add_to_group::<RichmondNodes, DevelopmentSite>();
+	storage
+		.configure::<DevelopmentSite>(columns)
+		.add_to_group::<RichmondNodes, DevelopmentSite>();
 	storage
 		.configure::<RichmondDevelopment<G>>(columns)
 		.add_to_group::<RichmondNodes, RichmondDevelopment<G>>()

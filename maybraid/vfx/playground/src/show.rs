@@ -44,7 +44,11 @@ pub fn apply_pending_shows(
 					seed: base.seed.map(|s| s.wrapping_add(1)),
 					..base.clone()
 				},
-				VfxShowRequest { distance: 14.0, seed: base.seed.map(|s| s.wrapping_add(2)), ..base },
+				VfxShowRequest {
+					distance: 14.0,
+					seed: base.seed.map(|s| s.wrapping_add(2)),
+					..base
+				},
 			]);
 		}
 	}

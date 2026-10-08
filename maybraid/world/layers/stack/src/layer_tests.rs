@@ -4,7 +4,8 @@ use lod::LodPresentGate;
 
 use crate::{
 	subscribe_mode, ActiveGenerationMode, Generate, GenerationMode, GenerationModePlugin, Layer,
-	LayerGenerationCore, LayerModeConfig, LayerPresentation, LayerPresentationCore, Present, Scheme,
+	LayerGenerationCore, LayerModeConfig, LayerPresentation, LayerPresentationCore, Present,
+	Scheme,
 };
 
 struct Alpha;

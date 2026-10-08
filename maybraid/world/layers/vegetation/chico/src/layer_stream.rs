@@ -14,9 +14,7 @@ use lod::{
 	LodPresentSystems, LodViewer,
 };
 use terrain_layer_model::{terrain_streaming, TerrainModel};
-use vegetation_layer_model::{
-	Vegetation, VegetationGeneration, VegetationGenerationSystems,
-};
+use vegetation_layer_model::{Vegetation, VegetationGeneration, VegetationGenerationSystems};
 
 use crate::bump_out::{
 	CanopyBumpOut, MediumCanopyBumpOut, BUMP_OUT_OUTER_RADIUS_M, MEDIUM_BUMP_OUT_ANCHOR_STEP_M,

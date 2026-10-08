@@ -180,15 +180,14 @@ impl<M: GenerationMode> Plugin for GenerationModePlugin<M> {
 		}
 		app.configure_sets(
 			Update,
-			GenerationModeSystems::<M>::default()
-				.run_if(in_state(ActiveGenerationMode::of::<M>())),
+			GenerationModeSystems::<M>::default().run_if(in_state(ActiveGenerationMode::of::<M>())),
 		);
 	}
 }
 
 /// True while `M` is the active generation mode.
-pub fn in_generation_mode<M: GenerationMode>()
--> impl FnMut(Option<Res<State<ActiveGenerationMode>>>) -> bool + Clone {
+pub fn in_generation_mode<M: GenerationMode>(
+) -> impl FnMut(Option<Res<State<ActiveGenerationMode>>>) -> bool + Clone {
 	in_state(ActiveGenerationMode::of::<M>())
 }
 

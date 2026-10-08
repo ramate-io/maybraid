@@ -359,10 +359,7 @@ fn rescan_retries_only_the_named_strip_of_an_unmoved_window() {
 	let mut app = app();
 	app.init_resource::<RescanNext>()
 		.add_plugins(GenerateOn::<Window, Gated>::default())
-		.add_systems(
-			Update,
-			rescan.in_set(crate::gen::LodGenerateSystems::Produce).after(publish),
-		);
+		.add_systems(Update, rescan.in_set(crate::gen::LodGenerateSystems::Produce).after(publish));
 	app.world_mut().resource_mut::<PublishNext>().0 = Some(span(0.0, 1.5));
 	app.update();
 	app.world_mut()

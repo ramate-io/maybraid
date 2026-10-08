@@ -15,8 +15,8 @@ use procedural_common::NoiseParams;
 use richmond::{column_bounds, DiscoverablePlace, Richmond, RichmondDevelopment, RichmondGround};
 use terrain_layer_model::TerrainModel;
 use urbanization_cells::{
-	select_kind, SelectedUrbanization, UrbanizationExtent, UrbanizationKind,
-	UrbanizationSelection, UrbanizationStorage,
+	select_kind, SelectedUrbanization, UrbanizationExtent, UrbanizationKind, UrbanizationSelection,
+	UrbanizationStorage,
 };
 use urbanization_layer_model::{UrbanRead, UrbanSetting, Urbanization};
 
@@ -136,8 +136,9 @@ where
 			hosts.push(host_at(leaf.bounds));
 		}
 		for id in storage.overlapping::<RichmondDevelopment<T>>(column_bounds(region)) {
-			if let Some(development) =
-				storage.get::<RichmondDevelopment<T>>(id).filter(|development| development.is_filled())
+			if let Some(development) = storage
+				.get::<RichmondDevelopment<T>>(id)
+				.filter(|development| development.is_filled())
 			{
 				hosts.push(host_at(development.cell()));
 			}

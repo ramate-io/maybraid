@@ -4,13 +4,14 @@ use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec2;
 use procedural_common::{Bounds2, HysteresisConfig, HysteresisGraph, NoiseParams, SeededHash};
 
+use super::raise_toward_peak;
 use super::shepherds_village::fit::{
 	fit_shepherds_building, sample_shepherds_footprint, sample_shepherds_kind, shepherds_recipe,
 	ShepherdsBuildingKind,
 };
 use super::shepherds_village::ShepherdsVillageBuilding;
-use super::{lerp, raise_toward_peak};
 use crate::connectivity::{corridor_levels, ConnectivityGraph};
+use crate::math::lerp;
 use crate::plan::cell_salt;
 use crate::scatter::{bounds_intersect, ScatterCandidate};
 use crate::{ConnectedDevelopment, Development, DevelopmentEdge, PadParams, PadPlan, SiteGround};

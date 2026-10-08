@@ -8,11 +8,12 @@ use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::{Vec2, Vec3};
 use procedural_common::{Bounds2, HysteresisConfig, HysteresisGraph, NoiseParams, SeededHash};
 
+use super::raise_toward_peak;
 use super::shepherds_village::fit::{fit_shepherds_building_for_role, ShepherdsBuildingKind};
 use super::shepherds_village::ShepherdsVillageBuilding;
-use super::{lerp, raise_toward_peak};
 use crate::connectivity::{corridor_levels, ConnectivityCorridor, ConnectivityGraph};
 use crate::finish::DevelopmentFinishRole;
+use crate::math::lerp;
 use crate::plan::cell_salt;
 use crate::scatter::{bounds_intersect, ScatterChoice, ScatterRecipe};
 use crate::{

@@ -4,6 +4,7 @@ use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::Vec2;
 use procedural_common::{Bounds2, SeededHash};
 
+use crate::math::lerp;
 use crate::plan::{sample_confines_yaw, yawed_plan_aabb_extent};
 
 #[derive(Debug, Clone)]
@@ -137,10 +138,6 @@ impl<K: Clone> ScatterRecipe<K> {
 
 pub fn bounds_intersect(a: Bounds2, b: Bounds2) -> bool {
 	a.min.x <= b.max.x && b.min.x <= a.max.x && a.min.y <= b.max.y && b.min.y <= a.max.y
-}
-
-fn lerp(a: f32, b: f32, t: f32) -> f32 {
-	a + (b - a) * t.clamp(0.0, 1.0)
 }
 
 #[cfg(test)]

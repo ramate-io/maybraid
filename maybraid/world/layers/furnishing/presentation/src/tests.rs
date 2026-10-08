@@ -10,9 +10,7 @@ use layer_stack::{
 };
 use lod::lod_ref::LodRef;
 use lod::LodPresentGate;
-use terrain_layer_model::{
-	HeightField, OnTerrain, TerrainCell, TerrainGeneration, TerrainModel,
-};
+use terrain_layer_model::{HeightField, OnTerrain, TerrainCell, TerrainGeneration, TerrainModel};
 
 struct TestMode;
 struct OtherMode;
@@ -140,9 +138,7 @@ fn presentation_follows_the_subscribed_mode() -> anyhow::Result<()> {
 	app.finish();
 	app.update();
 
-	let subscribers = app
-		.world()
-		.resource::<ModeSubscribers<Furnishing<SilentFurnishing>>>();
+	let subscribers = app.world().resource::<ModeSubscribers<Furnishing<SilentFurnishing>>>();
 	anyhow::ensure!(subscribers.contains::<TestMode>(), "test mode is subscribed");
 	anyhow::ensure!(!subscribers.contains::<OtherMode>(), "other mode is not subscribed");
 	anyhow::ensure!(

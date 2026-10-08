@@ -3,10 +3,10 @@
 use bevy::ecs::system::{ParamSet, StaticSystemParam, SystemParam};
 use bevy::prelude::*;
 use lod::gen::{Id, LodGenerateKeepRegion, LodGenerateQueue, LodGenerateRegion, LodGenerated};
-use lod::LodJobCounter;
 use lod::lod_ref::LodRef;
 use lod::presentation::{LodPresentKeepRegion, LodPresentRegion};
 use lod::scene::{LodRefreshRegions, LodRefreshRegionsStatus};
+use lod::LodJobCounter;
 use mob_layer_model::MobGenerationSystems;
 use terrain_layer_model::TerrainView;
 

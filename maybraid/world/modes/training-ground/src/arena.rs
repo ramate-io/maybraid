@@ -6,10 +6,10 @@ use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use characters::LocomotionCapsule;
 use durham::TerrainTrimeshCollider;
+use durham::{Durham, HcsgStorage};
 use layer_stack::{ActiveGenerationMode, GenerationModeSystems};
 use mob_characters::CharacterSpecies;
 use mob_scenes::{Mob, MobKind, MobScene};
-use durham::{Durham, HcsgStorage};
 use richmond::{Built, DevelopmentHost, DevelopmentHosts, PresentedPaddedTerrainScene};
 use terrain_layer_model::OnTerrain;
 
