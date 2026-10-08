@@ -16,7 +16,7 @@ impl Animation<HumanoidV0Rig> for Shrug {
 		}
 
 		let mut pose = HumanoidPose::default();
-		let (shoulder_lift, elbow_bend) = self.arm_channels(progress);
+		let elbow_bend = self.elbow_channel(progress);
 		let neck_tilt = self.neck_side_tilt(progress);
 
 		apply_neck_twisted(&mut pose, 0.0, neck_tilt * 0.65, 0.0, 0.0, neck_tilt * 0.35, 0.0);
@@ -24,8 +24,7 @@ impl Animation<HumanoidV0Rig> for Shrug {
 		let along = self.humerus_along(progress);
 		for side in [Side::Left, Side::Right] {
 			let arm = pose.arm_mut(side);
-			// Shoulder flex mirrors per bind; scale by side so both scapulae lift evenly.
-			arm.shoulder_lift += shoulder_lift * side.sign();
+			arm.shoulder_lift += self.shoulder_lift(side, progress);
 			arm.elbow_flexion += elbow_bend;
 			arm.aim = Some(ArmAim { along, roll: 0.0 });
 		}
@@ -152,7 +151,7 @@ mod tests {
 		for side in [Side::Left, Side::Right] {
 			let bone = format!("forearm.{}", side.suffix());
 			assert!(
-				posed.posed_angle(&bone) > rest.posed_angle(&bone) + 0.6,
+				posed.posed_angle(&bone) > rest.posed_angle(&bone) + 0.25,
 				"{side:?} elbow flexes at peak"
 			);
 		}
@@ -171,6 +170,68 @@ mod tests {
 			assert!(
 				posed.posed_angle(&bone) > rest.posed_angle(&bone) + 0.15,
 				"{side:?} shoulder lifts at peak"
+			);
+		}
+		Ok(())
+	}
+
+	fn forearm_tip_dir(rig: &HumanoidV0Rig, side: Side) -> Vec3 {
+		let s = side.suffix();
+		rig.character_point(&format!("forearm.{s}")) - rig.character_point(&format!("humerus.{s}"))
+	}
+
+	#[test]
+	fn shrug_character_forward_is_positive_z() -> anyhow::Result<()> {
+		use character_rigs::authoring::HumanoidPose;
+		let mut rig = HumanoidV0Rig::for_clip_test();
+		let mut pose = HumanoidPose::default();
+		pose.spine.add_root_forward(0.4);
+		rig.write_pose(&pose);
+		let tipped = rig.rotation("root") * Vec3::Y;
+		assert!(tipped.z > 0.2, "for_clip_test fight-forward is +Z, got {tipped:?}");
+		Ok(())
+	}
+
+	#[test]
+	fn shrug_both_humerus_roots_rise_symmetrically() -> anyhow::Result<()> {
+		let shrug = Shrug;
+		let rest = HumanoidV0Rig::for_clip_test();
+		let mut posed = HumanoidV0Rig::for_clip_test();
+		shrug.apply(&mut posed, peak());
+
+		let mut left_dy = 0.0_f32;
+		let mut right_dy = 0.0_f32;
+		for side in [Side::Left, Side::Right] {
+			let s = side.suffix();
+			let dy = posed.character_point(&format!("humerus.{s}")).y
+				- rest.character_point(&format!("humerus.{s}")).y;
+			assert!(dy > 0.08, "{side:?} upper-arm root rises in +Y, dy={dy}");
+			match side {
+				Side::Left => left_dy = dy,
+				Side::Right => right_dy = dy,
+			}
+		}
+		assert!((left_dy - right_dy).abs() < 0.03, "matched lift {left_dy} vs {right_dy}");
+		Ok(())
+	}
+
+	#[test]
+	fn shrug_forearm_tips_point_forward_not_up() -> anyhow::Result<()> {
+		let shrug = Shrug;
+		let mut posed = HumanoidV0Rig::for_clip_test();
+		shrug.apply(&mut posed, peak());
+
+		for side in [Side::Left, Side::Right] {
+			let s = side.suffix();
+			let dir = forearm_tip_dir(&posed, side);
+			let tip = posed.character_point(&format!("forearm.{s}"));
+			assert!(
+				dir.z.abs() > dir.y.abs(),
+				"{side:?} forearm tip is mostly forward, dir={dir:?}"
+			);
+			assert!(
+				tip.x.signum() == side.sign(),
+				"{side:?} forearm tip stays on its side of midline, tip={tip:?}"
 			);
 		}
 		Ok(())

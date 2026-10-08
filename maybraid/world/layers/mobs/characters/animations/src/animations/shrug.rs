@@ -1,10 +1,11 @@
-//! Bilateral shoulder shrug: lift both shoulders, bend elbows up, palms out, recover.
+//! Bilateral shoulder shrug: lift both shoulders, elbows forward/outward, recover.
 //!
 //! A symmetric "I don't know" gesture on the T-pose rest (`for_clip_test`). The arms
-//! are already abducted; the read is shoulder elevation plus elbow flex that raises
-//! the forearm tips. Distinct from single-arm aim clips and overhead celebration waves.
+//! are already abducted; the read is shoulder elevation plus a modest forward elbow
+//! flex (not a vertical curl). Distinct from single-arm aim clips and overhead waves.
 
 use bevy::prelude::Vec3;
+use character_rigs::Side;
 
 use crate::animations::smoothstep;
 use crate::Progress;
@@ -14,8 +15,8 @@ const HOLD_END: f32 = 0.68;
 
 /// Shoulder lift (parent flex) at full shrug.
 const SHOULDER_LIFT: f32 = 0.55;
-/// Elbow flex so forearms sit near horizontal, palms up.
-const ELBOW_BEND: f32 = 1.35;
+/// Elbow flex so forearm tips reach forward/outward, not straight up.
+const ELBOW_BEND: f32 = 0.70;
 /// Light neck side tilt during the hold.
 const NECK_SIDE_TILT: f32 = 0.06;
 
@@ -36,8 +37,10 @@ impl Shrug {
 		}
 	}
 
-	pub fn shoulder_lift(&self, progress: f32) -> f32 {
-		SHOULDER_LIFT * self.shrug_amount(progress)
+	/// Per-side shoulder flex. Opposite signs match [`Fall::shoulder_flex`](super::fall::Fall::shoulder_flex):
+	/// mirrored shoulder binds need opposite flex so both clavicles rise in +Y.
+	pub fn shoulder_lift(&self, side: Side, progress: f32) -> f32 {
+		SHOULDER_LIFT * self.shrug_amount(progress) * side.sign()
 	}
 
 	pub fn elbow_bend(&self, progress: f32) -> f32 {
@@ -48,15 +51,15 @@ impl Shrug {
 		NECK_SIDE_TILT * self.shrug_amount(progress)
 	}
 
-	/// Slight upward humerus aim so both elbows rise symmetrically off the T-pose.
+	/// Lateral T-pose humerus with a modest forward/outward tip (not a vertical curl).
 	pub fn humerus_along(&self, progress: f32) -> Vec3 {
 		let amount = self.shrug_amount(progress);
-		Vec3::new(0.0, 0.82 * amount, 0.18 * amount).normalize()
+		Vec3::new(0.0, 0.15 * amount, 0.85 * amount).normalize_or_zero()
 	}
 
-	/// Shared arm channels for both sides. Flexion signs mirror in the resolver.
-	pub fn arm_channels(&self, progress: f32) -> (f32, f32) {
-		(self.shoulder_lift(progress), self.elbow_bend(progress))
+	/// Shared elbow channel for both sides; elbow flex mirrors in the resolver.
+	pub fn elbow_channel(&self, progress: f32) -> f32 {
+		self.elbow_bend(progress)
 	}
 }
 
@@ -73,8 +76,8 @@ mod tests {
 		let shrug = Shrug;
 		assert!(shrug.shrug_amount(0.0) < 1e-4);
 		assert!(shrug.shrug_amount(1.0) < 1e-4);
-		assert!(shrug.shoulder_lift(0.0) < 1e-4);
-		assert!(shrug.shoulder_lift(1.0) < 0.05);
+		assert!(shrug.shoulder_lift(Side::Left, 0.0) < 1e-4);
+		assert!(shrug.shoulder_lift(Side::Left, 1.0) < 0.05);
 		Ok(())
 	}
 
@@ -82,7 +85,11 @@ mod tests {
 	fn shrug_reaches_full_hold() -> anyhow::Result<()> {
 		let shrug = Shrug;
 		assert!(shrug.shrug_amount(peak()) > 0.99);
-		assert!(shrug.shoulder_lift(peak()) > SHOULDER_LIFT * 0.95);
+		assert!(shrug.shoulder_lift(Side::Left, peak()) > SHOULDER_LIFT * 0.95);
+		assert!(
+			shrug.shoulder_lift(Side::Left, peak()).signum()
+				!= shrug.shoulder_lift(Side::Right, peak()).signum()
+		);
 		assert!(shrug.elbow_bend(peak()) > ELBOW_BEND * 0.95);
 		Ok(())
 	}
@@ -105,12 +112,10 @@ mod tests {
 	}
 
 	#[test]
-	fn shrug_channels_are_shared_for_both_sides() -> anyhow::Result<()> {
+	fn shrug_elbow_channel_peaks_at_hold() -> anyhow::Result<()> {
 		let shrug = Shrug;
 		let p = peak();
-		let channels = shrug.arm_channels(p);
-		assert!(channels.0 > 0.4, "shoulder lift peaks");
-		assert!(channels.1 > 1.0, "elbow bends");
+		assert!(shrug.elbow_channel(p) > ELBOW_BEND * 0.95);
 		Ok(())
 	}
 }
