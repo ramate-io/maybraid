@@ -1,6 +1,6 @@
 use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
 
-use crate::animations::{RunStop, RunStopSegment, Transition, Walk};
+use crate::animations::{RunStop, RunStopSegment};
 use crate::rigs::mix::blend_clips;
 use crate::{Animation, Effects};
 
@@ -28,7 +28,7 @@ mod tests {
 	use character_rigs::authoring::ArmatureOffset;
 
 	use super::*;
-	use crate::animations::{Idle, Run, RUN_TO_WALK_END};
+	use crate::animations::{Idle, Run, Transition, Walk, RUN_TO_WALK_END};
 
 	fn tip(rig: &HumanoidV0Rig, name: &str) -> Vec3 {
 		rig.rotation(name) * Vec3::Y
@@ -121,8 +121,11 @@ mod tests {
 		let mut rig = HumanoidV0Rig::for_clip_test();
 		Run::default().apply(&mut rig, 0.35);
 		let from_pose = rig.pose.clone();
-		let transition =
-			Transition::from_visible(RunStop { phase: 0.35, ..RunStop::default() }, from_pose, ArmatureOffset::IDENTITY);
+		let transition = Transition::from_visible(
+			RunStop { phase: 0.35, ..RunStop::default() },
+			from_pose,
+			ArmatureOffset::IDENTITY,
+		);
 		transition.apply(&mut rig, 0.5, 0.5);
 
 		let mut full = HumanoidV0Rig::for_clip_test();
@@ -157,6 +160,117 @@ mod tests {
 		RunStop::default().apply(&mut rig, 1.0);
 		let root = tip(&rig, "root");
 		assert!(root.z.abs() < 0.04, "idle rest is near neutral, got {root:?}");
+		Ok(())
+	}
+
+	fn pose_delta(a: &HumanoidV0Rig, b: &HumanoidV0Rig, name: &str) -> f32 {
+		(1.0 - a.rotation(name).dot(b.rotation(name)).abs()).max(0.0)
+	}
+
+	fn assert_pose_continuous(a: &HumanoidV0Rig, b: &HumanoidV0Rig, label: &str) {
+		for name in a.animation_bone_names() {
+			let delta = pose_delta(a, b, name);
+			assert!(delta < 0.02, "{label}: rotation jump on {name} (delta {delta})");
+		}
+	}
+
+	#[test]
+	fn interrupt_to_walk_preserves_pose() -> anyhow::Result<()> {
+		let phase = 0.35;
+		let progress = 0.3;
+		let stop = RunStop { phase, ..RunStop::default() };
+		let mut stop_rig = HumanoidV0Rig::for_clip_test();
+		stop.apply(&mut stop_rig, progress);
+		let from_pose = stop_rig.pose.clone();
+
+		let transition =
+			Transition::from_visible(Walk::default(), from_pose, ArmatureOffset::IDENTITY);
+		let mut blended = HumanoidV0Rig::for_clip_test();
+		transition.apply(&mut blended, 0.5, phase);
+
+		let mut walk = HumanoidV0Rig::for_clip_test();
+		Walk::default().apply(&mut walk, phase);
+		assert_pose_continuous(&blended, &walk, "interrupt to walk");
+		Ok(())
+	}
+
+	#[test]
+	fn interrupt_to_run_preserves_pose() -> anyhow::Result<()> {
+		let phase = 0.35;
+		let progress = 0.2;
+		let stop = RunStop { phase, ..RunStop::default() };
+		let mut stop_rig = HumanoidV0Rig::for_clip_test();
+		stop.apply(&mut stop_rig, progress);
+		let from_pose = stop_rig.pose.clone();
+
+		let transition =
+			Transition::from_visible(Run::default(), from_pose, ArmatureOffset::IDENTITY);
+		let mut blended = HumanoidV0Rig::for_clip_test();
+		transition.apply(&mut blended, 0.5, phase);
+
+		let mut run = HumanoidV0Rig::for_clip_test();
+		Run::default().apply(&mut run, phase);
+		assert_pose_continuous(&blended, &run, "interrupt to run");
+		Ok(())
+	}
+
+	#[test]
+	fn interrupt_to_jump_starts_from_stop_pose() -> anyhow::Result<()> {
+		use crate::animations::TwoFootedJump;
+
+		let phase = 0.35;
+		let progress = 0.25;
+		let stop = RunStop { phase, ..RunStop::default() };
+		let mut stop_rig = HumanoidV0Rig::for_clip_test();
+		stop.apply(&mut stop_rig, progress);
+		let from_pose = stop_rig.pose.clone();
+
+		let jump = TwoFootedJump::default();
+		let transition = Transition::from_visible(jump, from_pose, ArmatureOffset::IDENTITY);
+		let mut at_switch = HumanoidV0Rig::for_clip_test();
+		transition.apply(&mut at_switch, 0.0, 0.0);
+		assert_pose_continuous(&at_switch, &stop_rig, "jump switch onset");
+
+		let mut early = HumanoidV0Rig::for_clip_test();
+		transition.apply(&mut early, 0.05, 0.0);
+		assert_pose_continuous(&early, &stop_rig, "jump early blend");
+		Ok(())
+	}
+
+	#[test]
+	fn interrupt_to_squat_descent_starts_from_stop_pose() -> anyhow::Result<()> {
+		use crate::animations::SquatDescent;
+
+		let phase = 0.35;
+		let progress = 0.25;
+		let stop = RunStop { phase, ..RunStop::default() };
+		let mut stop_rig = HumanoidV0Rig::for_clip_test();
+		stop.apply(&mut stop_rig, progress);
+		let from_pose = stop_rig.pose.clone();
+
+		let descent = SquatDescent::default();
+		let transition = Transition::from_visible(descent, from_pose, ArmatureOffset::IDENTITY);
+		let mut at_switch = HumanoidV0Rig::for_clip_test();
+		transition.apply(&mut at_switch, 0.0, 0.0);
+		assert_pose_continuous(&at_switch, &stop_rig, "squat switch onset");
+
+		let mut early = HumanoidV0Rig::for_clip_test();
+		transition.apply(&mut early, 0.05, 0.0);
+		assert_pose_continuous(&early, &stop_rig, "squat early blend");
+		Ok(())
+	}
+
+	#[test]
+	fn gait_phase_advances_during_stop() -> anyhow::Result<()> {
+		let phase = 0.35;
+		let mut a = HumanoidV0Rig::for_clip_test();
+		let mut b = HumanoidV0Rig::for_clip_test();
+		let stop = RunStop { phase, ..RunStop::default() };
+		stop.apply(&mut a, 0.2);
+		stop.apply(&mut b, 0.2);
+		let stop2 = RunStop { phase: phase + 0.1, ..RunStop::default() };
+		stop2.apply(&mut b, 0.2);
+		assert!(pose_delta(&a, &b, "femur.L") > 1e-4, "advancing phase should change posed joints");
 		Ok(())
 	}
 }

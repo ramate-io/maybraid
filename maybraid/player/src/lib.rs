@@ -9,9 +9,9 @@ mod identity;
 mod intent;
 mod locomotion;
 mod movement;
+mod run_stop;
 mod separation;
 mod spawn;
-mod run_stop;
 mod stance;
 
 use bevy::prelude::*;
@@ -35,6 +35,7 @@ pub use identity::{
 	PlayerUse, PlayerVisual, PlayerYawOwner,
 };
 pub use locomotion::drive_player_locomotion;
+pub use run_stop::{GaitPhaseHandoff, RunStopBlend};
 pub use separation::{SoftBump, NPC_SEPARATION};
 pub use spawn::{
 	capsule_spawn_height, needs_npc_visual, needs_player_visual, spawn_npc, spawn_npc_visual,
@@ -42,7 +43,6 @@ pub use spawn::{
 	spawn_player_with_hidden_capsule, spawn_player_with_hull, LocomotionCapsule, CAPSULE_LENGTH,
 	CAPSULE_RADIUS,
 };
-pub use run_stop::RunStopBlend;
 pub use stance::{CharacterStance, RestLocomotionCapsule, StanceKind};
 
 /// Capsule physics and move/jump intents.

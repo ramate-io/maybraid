@@ -9,7 +9,7 @@ use characters::{
 
 use crate::body::{CharacterController, Jumping, MoveWish, LEAP_SPEED};
 use crate::identity::PlayerYawOwner;
-use crate::run_stop::RunStopBlend;
+use crate::run_stop::{GaitPhaseHandoff, RunStopBlend};
 use crate::stance::{CharacterStance, StanceKind};
 
 pub(crate) const WALK_SPEED: f32 = 1.0;
@@ -37,11 +37,13 @@ pub fn drive_player_locomotion(
 	mut commands: Commands,
 	controllers: Query<
 		(
+			Entity,
 			&LinearVelocity,
 			&MoveWish,
 			Option<&Jumping>,
 			Option<&CharacterStance>,
 			Option<&RunStopBlend>,
+			Option<&GaitPhaseHandoff>,
 		),
 		With<CharacterController>,
 	>,
@@ -50,7 +52,8 @@ pub fn drive_player_locomotion(
 	anims: Query<&AnimRefRoot>,
 ) {
 	for (members, child_of) in &visuals {
-		let Ok((velocity, _wish, jumping, stance, run_stop)) = controllers.get(child_of.parent())
+		let Ok((body, velocity, _wish, jumping, stance, run_stop, handoff)) =
+			controllers.get(child_of.parent())
 		else {
 			continue;
 		};
@@ -87,6 +90,9 @@ pub fn drive_player_locomotion(
 				commands.entity(member).insert(AnimProgress(stance.blend));
 			} else if matches!(clip, AnimClip::RunStop(_)) {
 				commands.entity(member).insert(AnimProgress(run_stop.progress));
+			} else if let Some(handoff) = handoff {
+				commands.entity(member).insert(AnimProgress(handoff.0));
+				commands.entity(body).remove::<GaitPhaseHandoff>();
 			} else {
 				commands.entity(member).remove::<AnimProgress>();
 			}
@@ -114,10 +120,13 @@ fn locomotion_clip(
 					StanceKind::Prone => AnimClip::prone(),
 					StanceKind::Squat => AnimClip::squat(),
 					StanceKind::Stand => {
+						// Run-stop covers run→walk above [`WALK_SPEED`]; walk→idle below
+						// that is [`AnimClip::Approach`] on #1022's branch.
 						if run_stop.active() {
-							AnimClip::run_stop(
-								RunStopParams::capture(run_stop.phase, run_stop.from_run),
-							)
+							AnimClip::run_stop(RunStopParams::capture(
+								run_stop.phase,
+								run_stop.from_run,
+							))
 						} else if speed > LEAP_SPEED {
 							AnimClip::run()
 						} else if speed > WALK_SPEED {
@@ -155,8 +164,9 @@ fn locomotion_clip(
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::body::{JumpPhase, JOG_SPEED, MOVE_SPEED};
+	use crate::body::{JumpPhase, JOG_SPEED, LEAP_SPEED, MOVE_SPEED};
 	use crate::run_stop::RunStopBlend;
+	use character_animations::animations::RUN_TO_WALK_END;
 	use characters::AnimId;
 
 	fn settled_run_stop() -> RunStopBlend {
@@ -297,7 +307,9 @@ mod tests {
 	#[test]
 	fn coasting_uses_run_stop_while_active() {
 		let stance = CharacterStance::settled(StanceKind::Stand);
-		let run_stop = RunStopBlend { progress: 0.4, phase: 0.35, from_run: true };
+		let run_stop =
+			RunStopBlend { progress: 0.3, phase: 0.35, from_run: true, start_speed: MOVE_SPEED };
+		assert!(run_stop.active());
 		assert_eq!(
 			locomotion_clip(RigSkeletonKind::Humanoid, None, &stance, &run_stop, MOVE_SPEED).id(),
 			AnimId::RunStop
@@ -305,10 +317,39 @@ mod tests {
 	}
 
 	#[test]
+	fn run_stop_hands_off_before_walk_speed() {
+		let stance = CharacterStance::settled(StanceKind::Stand);
+		let run_stop = RunStopBlend {
+			progress: RUN_TO_WALK_END,
+			phase: 0.35,
+			from_run: true,
+			start_speed: MOVE_SPEED,
+		};
+		assert!(!run_stop.active());
+		assert_eq!(
+			locomotion_clip(RigSkeletonKind::Humanoid, None, &stance, &run_stop, WALK_SPEED).id(),
+			AnimId::Still
+		);
+	}
+
+	#[test]
+	fn run_clip_below_leap_speed_starts_run_stop() {
+		let run_stop = RunStopBlend {
+			progress: 0.2,
+			phase: 0.42,
+			from_run: true,
+			start_speed: LEAP_SPEED - 0.5,
+		};
+		assert!(run_stop.active());
+		assert!(run_stop.progress < RUN_TO_WALK_END);
+	}
+
+	#[test]
 	fn jump_interrupts_run_stop() {
 		let jump = Jumping::start(0.0);
 		let stance = CharacterStance::settled(StanceKind::Stand);
-		let run_stop = RunStopBlend { progress: 0.4, phase: 0.35, from_run: true };
+		let run_stop =
+			RunStopBlend { progress: 0.3, phase: 0.35, from_run: true, start_speed: MOVE_SPEED };
 		assert_eq!(
 			locomotion_clip(
 				RigSkeletonKind::Humanoid,

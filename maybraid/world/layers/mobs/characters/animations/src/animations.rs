@@ -49,7 +49,11 @@ pub use quadruped_idle::QuadrupedIdle;
 pub use quadruped_leap::QuadrupedLeap;
 pub use quadruped_run::{QuadrupedRun, QuadrupedRunPose};
 pub use run::Run;
-pub use run_stop::{RunStop, RunStopSegment, DEFAULT_RUN_STOP_SPEED, RUN_TO_WALK_END};
+pub use run_stop::{
+	run_stop_cycle_speed, run_stop_foot_travel_per_cycle, run_stop_progress_from_speed,
+	speed_for_run_stop_progress, RunStop, RunStopSegment, DEFAULT_RUN_STOP_SPEED,
+	RUN_STOP_HANDOFF_SPEED, RUN_TO_WALK_END,
+};
 pub use soaring::Soaring;
 pub use spring::Spring;
 pub use squat::{vertical_drop, Squat};

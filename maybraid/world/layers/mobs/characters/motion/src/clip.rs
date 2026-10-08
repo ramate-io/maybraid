@@ -188,12 +188,7 @@ pub struct RunStopParams {
 
 impl RunStopParams {
 	pub fn capture(phase: f32, from_run: bool) -> Self {
-		Self {
-			walk: Walk::default(),
-			run: Run::default(),
-			phase: phase.fract(),
-			from_run,
-		}
+		Self { walk: Walk::default(), run: Run::default(), phase: phase.fract(), from_run }
 	}
 
 	pub fn apply_humanoid(self) -> character_animations::animations::RunStop {
