@@ -10,10 +10,13 @@
 //! - [`demand`]: [`HcsgDemand`], one subscription per bounds source, and the
 //!   epoch that sessions advance.
 //! - [`worker`]: [`HcsgWorker`], the thread that fills subscriptions.
+//! - `adapter`: runs legacy generic schemes on the context until they are
+//!   rewritten.
 //!
 //! This sits alongside the frame-synchronous [`super::HcsgStorage`] until the
 //! layers move over.
 
+mod adapter;
 pub mod context;
 pub mod demand;
 pub mod storage;

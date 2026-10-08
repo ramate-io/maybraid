@@ -4,8 +4,10 @@ use std::time::Duration;
 use bevy::math::bounding::Aabb3d;
 use bevy::math::{DVec3, Vec3};
 
-use crate::gen::tests::test_utils::cell;
-use crate::gen::{Id, OriginalId};
+use crate::gen::tests::test_utils::{
+	cell, leaf_id, moss_id, tree_id, Leaf, Moss, Terrain, Tree, Vegetation,
+};
+use crate::gen::{GeneratingSpatialIndex, Id, OriginalId, SpatialIndex};
 
 use super::{GenerationContext, GenerationScheme, HcsgDemand, HcsgStorage, HcsgWorker};
 
@@ -233,6 +235,64 @@ fn advancing_the_epoch_drops_every_subscription() {
 	assert_eq!(demand.try_read_published(ground, 0), Ok(None));
 	assert_eq!(demand.try_read_published(cover, 0), Ok(None));
 	assert!(demand.wait_idle(Duration::ZERO));
+}
+
+#[test]
+fn legacy_schemes_generate_through_the_context() {
+	let storage = HcsgStorage::default();
+	let id = Id::from_cell(cell(0.0));
+	let vegetation = GenerationContext::new(&storage).get_or_generate::<Vegetation>(id);
+	assert_eq!(vegetation.as_deref(), Some(&Vegetation { cell: cell(0.0) }));
+	assert!(storage.contains::<Terrain>(id));
+	assert!(!storage.contains::<Tree>(tree_id(id)), "the shared runtime runs no descendants");
+}
+
+#[test]
+fn legacy_entry_points_still_run_descendants() {
+	let storage = HcsgStorage::default();
+	let id = Id::from_cell(cell(0.0));
+	let mut cx = GenerationContext::new(&storage);
+	assert!(GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut cx, id).is_some());
+	assert!(storage.contains::<Leaf>(leaf_id(tree_id(id))));
+	assert!(storage.contains::<Moss>(moss_id(leaf_id(tree_id(id)))));
+}
+
+#[test]
+fn legacy_reads_outlive_removal() {
+	let storage = HcsgStorage::default();
+	let id = Id::from_cell(cell(4.0));
+	storage.publish(id, Arc::new(Terrain { cell: cell(4.0) }), cell(4.0));
+	let cx = GenerationContext::new(&storage);
+	let terrain = SpatialIndex::<Terrain>::get(&cx, id);
+	storage.remove::<Terrain>(id);
+	assert_eq!(terrain, Some(&Terrain { cell: cell(4.0) }));
+	assert!(SpatialIndex::<Terrain>::get_bounds(&cx, id).is_none());
+}
+
+#[test]
+fn stale_legacy_inserts_publish_nothing() {
+	let storage = HcsgStorage::default();
+	let id = Id::from_cell(cell(0.0));
+	let stale = || true;
+	let mut cx = GenerationContext::with_stale(&storage, &stale);
+	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut cx, id);
+	assert!(!storage.contains::<Terrain>(id));
+	assert!(!storage.contains::<Vegetation>(id));
+}
+
+#[test]
+fn worker_fills_legacy_subscriptions() -> anyhow::Result<()> {
+	let storage = HcsgStorage::default();
+	let demand = HcsgDemand::default();
+	let _worker = HcsgWorker::spawn(storage.clone(), demand.clone())?;
+
+	let subscription = demand.subscribe::<Vegetation>(None, span(0.2, 2.6), None);
+	assert!(demand.wait_idle(IDLE));
+	let published = demand.try_read_published(subscription, 0).ok().flatten().unwrap_or_default();
+	let expected: Vec<Id> = [0.0, 1.0, 2.0].map(|x| Id::from_cell(cell(x))).into();
+	assert_eq!(published, expected);
+	assert!(published.iter().all(|&id| storage.contains::<Terrain>(id)));
+	Ok(())
 }
 
 #[test]

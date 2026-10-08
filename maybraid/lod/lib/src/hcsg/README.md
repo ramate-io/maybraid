@@ -407,13 +407,16 @@ The shared runtime provides everything else.
 
 ## Migration
 
-The new API lives in `lod::hcsg::shared`, alongside the frame-synchronous `lod::hcsg` API, until the last layer moves over.
+The new API lives in `lod::hcsg::shared`, alongside the frame-synchronous `lod::hcsg` API, until the last layer moves over. Values are pure functions of their keys, so while a layer is mid-move both storages may hold the same value. That costs duplicate work, never wrong results. Old and new plugins coexist, and each app switches once its layers are ready.
 
-0. **Shared storage, context, demand and worker** (done). `HcsgStorage` with `Arc` values and `Busy`, `HcsgValue`, `GenerationScheme` and `GenerationContext`, `HcsgDemand` and `HcsgWorker`, tested in isolation. No layer uses them yet.
-1. **Context and `Arc` values.** Move schemes from `&mut HcsgStorage` to `GenerationContext`. Port Durham, cells and Richmond.
-2. **Generation and presentation.** Add `generation<B, T>`, `HcsgNode<T>`, scene forwarding and `presentation<B, T>`. Port Durham terrain first, since each value maps to one host. Then port Richmond, presenting total padded terrain and built developments.
-3. **Remaining layers.** Move Chico, Barking and Maputo directly onto the new API. Delete `gen::runtime`, the producer and queue machinery, and the bespoke presenters.
-4. **Modes.** Build the Discovery game mode on the new runtime. The training ground is then rebuilt from scratch on top of it.
+0. **Shared storage, context, demand and worker** (done). `HcsgStorage` with `Arc` values and `Busy`, `HcsgValue`, `GenerationScheme` and `GenerationContext`, `HcsgDemand` and `HcsgWorker`, tested in isolation.
+1. **Adapter** (done). `GenerationContext` implements the legacy `SpatialIndex<T>`, so every legacy scheme generic over `S` (Durham, cells) is a `GenerationScheme` unchanged and runs on the worker. Native schemes can depend on those legacy types. Legacy `get(&self) -> Option<&T>` borrows from an append-only cache (`elsa::FrozenMap`) of the `Arc`s the context has read. Legacy `descendants` run only from legacy entry points.
+2. **Generation and presentation systems.** `HcsgBounds`, `HcsgNode<T>`, `generation<B, T>`, `presentation<B, T>`, scene forwarding and the plugins, tested on fixtures.
+3. **Durham.** Present terrain and water through `presentation<B, T>` next to the old presenters; seed Durham's roots into both storages; switch `durham-playground`.
+4. **Richmond.** Rewrite its four schemes natively; present total padded terrain and built developments; delete the terrain replacement machinery.
+5. **Chico, Barking, Maputo.** Rewrite each onto the context, deleting its bespoke index and presenter; then delete `gen::runtime`.
+6. **Native Durham and cells.** Rewrite their generic schemes on the context API, dropping the `S` capability bounds and dependency clones.
+7. **Modes and removal.** Build the Discovery game mode on the new runtime. Delete the adapter (and `elsa`), the producer and queue machinery, `Seed`, the old storage and the training ground, which is then rebuilt from scratch.
 
 ## Later
 

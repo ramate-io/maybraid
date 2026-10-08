@@ -8,6 +8,7 @@ use bevy::math::bounding::Aabb3d;
 
 use crate::gen::{Id, OriginalId};
 
+use super::adapter::Borrowed;
 use super::storage::{HcsgStorage, HcsgValue};
 
 /// How one generated type is discovered and built.
@@ -31,6 +32,7 @@ pub struct GenerationContext<'a> {
 	/// `(TypeId, Id)` pairs being built on this stack; a repeat is a cycle.
 	generating: HashSet<(TypeId, Id)>,
 	stale: &'a (dyn Fn() -> bool + 'a),
+	pub(super) borrowed: Borrowed,
 }
 
 impl<'a> GenerationContext<'a> {
@@ -40,7 +42,7 @@ impl<'a> GenerationContext<'a> {
 
 	/// Once `stale` returns true, nothing more is generated or published.
 	pub fn with_stale(storage: &'a HcsgStorage, stale: &'a (dyn Fn() -> bool + 'a)) -> Self {
-		Self { storage, generating: HashSet::new(), stale }
+		Self { storage, generating: HashSet::new(), stale, borrowed: Borrowed::default() }
 	}
 
 	pub fn storage(&self) -> &HcsgStorage {

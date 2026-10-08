@@ -190,6 +190,7 @@ async-stream = "0.3.0"
 async-trait = "0.1.71"
 clap = { version = "4.4.10", features = ["derive"] }
 dotenv = "0.15.0"
+elsa = "1.11.2"
 futures = "0.3.17"
 serde = "1.0"
 serde_json = "1.0"
