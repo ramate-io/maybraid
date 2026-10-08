@@ -29,6 +29,7 @@ pub mod upright_leap;
 pub mod upright_run;
 pub mod upright_walk;
 pub mod walk;
+pub mod walk_stop;
 
 pub use dorsoventral_undulation::DorsoventralUndulation;
 pub use fall::Fall;
@@ -66,3 +67,4 @@ pub use upright_leap::UprightLeap;
 pub use upright_run::UprightRun;
 pub use upright_walk::UprightWalk;
 pub use walk::Walk;
+pub use walk_stop::{WalkStop, DEFAULT_WALK_STOP_SPEED};

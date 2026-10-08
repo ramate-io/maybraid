@@ -18,4 +18,5 @@ pub mod tucked_flip;
 pub mod two_footed_jump;
 pub mod two_footed_tucked_flip;
 pub mod walk;
+pub mod walk_stop;
 pub mod wing;
