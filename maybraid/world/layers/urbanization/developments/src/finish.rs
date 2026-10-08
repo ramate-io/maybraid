@@ -4,7 +4,8 @@ use bevy::prelude::Color;
 use building_shaders::{
 	RECIPE_HAY, RECIPE_IRON, RECIPE_STONE, RECIPE_STUCCO, RECIPE_TERRACOTTA, RECIPE_WOOD,
 };
-use material_ref::MaterialRef;
+use buildings::ConnectingStairwell;
+use material_ref::{MaterialId, MaterialRef};
 use procedural_common::{NoiseParams, SeededHash};
 
 /// Architectural role used to select a stable family of wall and roof finishes.
@@ -46,6 +47,24 @@ impl SuburbanPaletteBias {
 			1 => Self::Pastoral,
 			_ => Self::Cool,
 		}
+	}
+}
+
+/// Stairwell surfaces in `wall`, treads in a contrasting material.
+pub(crate) fn paint_stairwell(
+	stair: ConnectingStairwell,
+	wall: MaterialRef,
+) -> ConnectingStairwell {
+	stair
+		.with_surface_material(wall.clone())
+		.with_stair_material(contrasting_stair_material(&wall))
+}
+
+/// Wood treads against masonry, marble treads against timber.
+fn contrasting_stair_material(surround: &MaterialRef) -> MaterialRef {
+	match &surround.name {
+		MaterialId::Name(name) if name == "wood" => MaterialRef::named("furniture_marble"),
+		_ => MaterialRef::named("wood"),
 	}
 }
 

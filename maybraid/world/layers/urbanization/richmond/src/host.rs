@@ -20,10 +20,10 @@ use lod::lod_host_scene_pending;
 use lod::lod_ref::LodRef;
 use lod::LodSceneLevel;
 use urbanization_developments::{
-	yaw_about_xz, CircularTower, GalleryColonnade, GalleryTerrace, MixedUseLesHallesDevelopment,
-	MixedUseLesHallesHost, OldCityMarketTerrace, PlacedBuilding, RingFort, RingFortHost,
-	ShepherdsBuilding, ShepherdsCommune, ShepherdsHouse, ShepherdsHut, ShepherdsVillage,
-	SingleHighrise, Skybridge, TempleSanctum, TrazaloidTower,
+	yaw_about_xz, CircularTower, GalleryColonnade, GalleryTerrace, LesHalles,
+	MixedUseLesHallesHost, OldCityMarketTerrace, RingFort, RingFortHost, ShepherdsBuilding,
+	ShepherdsCommune, ShepherdsHouse, ShepherdsHut, ShepherdsVillage, SingleHighrise, Skybridge,
+	TempleSanctum, TrazaloidTower,
 };
 
 use crate::place::{DiscoverablePlace, DiscoverablePlaceLabel};
@@ -42,7 +42,7 @@ pub enum DevelopmentHost {
 	RingFortGalleryTerrace(Box<GalleryTerrace>, Transform),
 	RingFortGalleryColonnade(Box<GalleryColonnade>, Transform),
 	RingFortGalleryRoof(Box<RectangularPitchedRoofComplex>, Transform),
-	SingleHighrise(Arc<SingleHighrise>, Transform),
+	SingleHighrise(Arc<buildings::SingleHighrise>, Transform),
 	TempleSanctum(Arc<TempleSanctum>, Transform),
 	WizardsTower(Arc<WizardsTower>, Transform),
 	SkybridgeHall(Arc<Skybridge>, Transform),
@@ -336,7 +336,7 @@ impl DevelopmentHosts for BuiltDevelopment {
 	}
 }
 
-impl DevelopmentHosts for PlacedBuilding<MixedUseLesHallesDevelopment> {
+impl DevelopmentHosts for LesHalles {
 	fn hosts(&self) -> Vec<DevelopmentHost> {
 		let transform = yaw_about_xz(self.center_xz, self.yaw);
 		self.building
@@ -369,7 +369,7 @@ impl DevelopmentHosts for ShepherdsCommune {
 	}
 }
 
-impl DevelopmentHosts for PlacedBuilding<RingFort> {
+impl DevelopmentHosts for RingFort {
 	fn hosts(&self) -> Vec<DevelopmentHost> {
 		let transform = yaw_about_xz(self.center_xz, self.yaw);
 		self.building
@@ -428,7 +428,7 @@ fn shepherd_building_hosts<'a>(
 		.collect()
 }
 
-fn single_highrise_host(placed: &PlacedBuilding<SingleHighrise>) -> DevelopmentHost {
+fn single_highrise_host(placed: &SingleHighrise) -> DevelopmentHost {
 	DevelopmentHost::SingleHighrise(
 		Arc::new(placed.building.clone()),
 		yaw_about_xz(placed.center_xz, placed.yaw),
@@ -489,20 +489,46 @@ mod tests {
 	use bevy::math::{Vec2, Vec3};
 	use buildings::{Confines, Fit};
 	use procedural_common::NoiseParams;
-	use urbanization_developments::{SkybridgeBazaar, SuburbanHomes};
+	use urbanization_developments::{
+		Development, OldCityMarket, PadPlan, PlacedBuilding, SiteGround, SkybridgeBazaar,
+		SuburbanHomes,
+	};
 
-	use super::{DevelopmentHost, DevelopmentHosts, PlacedBuilding};
+	use super::{DevelopmentHost, DevelopmentHosts};
+	use crate::cell::DevelopmentExtent;
 	use crate::place::DiscoverablePlaceLabel;
 	use crate::BuiltDevelopment;
+
+	struct DryFlat;
+
+	impl SiteGround for DryFlat {
+		fn height_at(&mut self, _x: f32, _z: f32) -> Option<f32> {
+			Some(12.0)
+		}
+
+		fn hydro_overlaps(&mut self, _pad: &PadPlan) -> bool {
+			false
+		}
+	}
+
+	#[test]
+	fn market_hosts_every_stall_and_terrace() -> anyhow::Result<()> {
+		let cell = DevelopmentExtent::from_cell_index(0, 0).aabb();
+		let market = (0..16)
+			.find_map(|seed| OldCityMarket::plan(&mut DryFlat, cell, seed))
+			.map(|(market, _)| market)
+			.ok_or_else(|| anyhow::anyhow!("a market should fit on flat dry ground"))?;
+		let hosts = BuiltDevelopment::OldCityMarket(Box::new(market.clone())).hosts();
+		assert_eq!(hosts.len(), market.stall_count() + market.nodes.len());
+		Ok(())
+	}
 
 	#[test]
 	fn placed_single_highrise_emits_exactly_one_host() -> anyhow::Result<()> {
 		let cell = Aabb3d::from_min_max(Vec3::new(-30.0, 0.0, -30.0), Vec3::new(30.0, 64.0, 30.0));
 		let confines = Confines::from_bounds(cell);
-		let (building, _) = urbanization_developments::SingleHighrise::fit_to_confines(
-			&confines,
-			NoiseParams::default(),
-		)?;
+		let (building, _) =
+			buildings::SingleHighrise::fit_to_confines(&confines, NoiseParams::default())?;
 		let development = BuiltDevelopment::SingleHighrise(Box::new(PlacedBuilding {
 			center_xz: Vec2::ZERO,
 			yaw: 0.0,

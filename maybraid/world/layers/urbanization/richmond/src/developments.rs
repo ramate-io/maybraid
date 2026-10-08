@@ -1,45 +1,30 @@
 //! [`RichmondDevelopment`]: the development a [`DevelopmentSite`] gets.
 //!
-//! Each kind is its own [`GenerationScheme`] in a submodule; the enum
-//! generates the site, then the first of its kinds that fits.
+//! Every [`Development`] in [`urbanization_developments`] generates the same
+//! way, as a [`DevelopmentCell`] over ground `G`; the enum generates the site,
+//! then the first of its kinds that fits.
 
-pub mod les_halles;
-pub mod old_city_market;
-pub mod ring_fort;
-pub mod shepherds_commune;
-pub mod shepherds_village;
-pub mod single_highrise;
 pub mod site;
-pub mod skybridge_bazaar;
-pub mod suburban_homes;
-pub mod temple_complex;
-pub mod terrace;
-pub mod wizards_tower;
+
+use std::marker::PhantomData;
 
 use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec2;
 use lod::gen::{GenerationScheme, Id, OriginalId};
 use lod::hcsg::HcsgStorage;
-use procedural_common::{Bounds2, NoiseParams};
-use urbanization_developments::{PadParams, PadPlan, SiteGround};
+use procedural_common::Bounds2;
+use urbanization_developments::{
+	Development, LesHalles, OldCityMarket, PadParams, PadPlan, RingFort, ShepherdsCommune,
+	ShepherdsVillage, SingleHighrise, SiteGround, SkybridgeBazaar, SuburbanHomes, TempleComplex,
+	Terrace, WizardsTower,
+};
 
 use crate::artifact::BuiltDevelopment;
 use crate::ground::{GroundSampler, RichmondGround};
 use crate::pad::{cell_center_xz, PadComplex};
 use crate::storage::{column_bounds, overlaps_xz_strictly};
 
-use les_halles::LesHallesCell;
-use old_city_market::OldCityMarketCell;
-use ring_fort::RingFortCell;
-use shepherds_commune::ShepherdsCommuneCell;
-use shepherds_village::ShepherdsVillageCell;
-use single_highrise::SingleHighriseCell;
 use site::{AuthoredCourtyard, DevelopmentKind, DevelopmentSite};
-use skybridge_bazaar::SkybridgeBazaarCell;
-use suburban_homes::SuburbanHomesCell;
-use temple_complex::TempleComplexCell;
-use terrace::TerracePlan;
-use wizards_tower::WizardsTowerCell;
 
 /// Pad baked from a post-Watershed height sample: flatten terrace + ease skirt.
 #[derive(Debug, Clone)]
@@ -54,19 +39,89 @@ impl From<&PadPlan> for DevelopmentPad {
 	}
 }
 
+/// A [`Development`] a [`DevelopmentSite`] can be.
+pub trait SiteDevelopment: Development {
+	const KIND: DevelopmentKind;
+
+	fn into_built(self) -> BuiltDevelopment;
+}
+
+macro_rules! site_developments {
+	($($development:ident),* $(,)?) => {$(
+		impl SiteDevelopment for $development {
+			const KIND: DevelopmentKind = DevelopmentKind::$development;
+
+			fn into_built(self) -> BuiltDevelopment {
+				BuiltDevelopment::$development(Box::new(self))
+			}
+		}
+	)*};
+}
+
+site_developments!(
+	LesHalles,
+	ShepherdsVillage,
+	ShepherdsCommune,
+	RingFort,
+	TempleComplex,
+	SingleHighrise,
+	SuburbanHomes,
+	WizardsTower,
+	SkybridgeBazaar,
+	OldCityMarket,
+);
+
+/// Development `D` planned on one site over ground `G`.
+pub struct DevelopmentCell<D: Development, G> {
+	pub cell: Aabb3d,
+	pub plan: D::Plan,
+	pub pads: Vec<DevelopmentPad>,
+	_ground: PhantomData<fn() -> G>,
+}
+
+impl<D: SiteDevelopment, G> DevelopmentCell<D, G> {
+	pub fn built(&self) -> Option<BuiltDevelopment> {
+		D::build(&self.plan).map(D::into_built)
+	}
+}
+
+impl<D: SiteDevelopment, G: RichmondGround> GenerationScheme<HcsgStorage>
+	for DevelopmentCell<D, G>
+{
+	fn original_ids_for(storage: &mut HcsgStorage, region: Aabb3d) -> Vec<OriginalId> {
+		DevelopmentSite::ids_of_kind(storage, region, D::KIND)
+	}
+
+	/// An authored site plans on its own level, dry ground; a procedural one
+	/// over `G`.
+	fn build_with_id(storage: &mut HcsgStorage, id: Id) -> Option<(Self, Aabb3d)> {
+		let (site, config) = DevelopmentSite::planned(storage, id, D::KIND)?;
+		let bounds = column_bounds(site.cell);
+		let (plan, pads) = match site.authored {
+			Some(mut authored) => D::plan(&mut authored, site.cell, config.seed)?,
+			None => {
+				let mut ground = GroundSampler::<G>::new(storage, bounds);
+				D::plan(&mut ground, site.cell, config.seed)?
+			}
+		};
+		let pads = pads.iter().map(DevelopmentPad::from).collect();
+		Some((Self { cell: site.cell, plan, pads, _ground: PhantomData }, bounds))
+	}
+}
+
 /// One development cell over ground `G`.
 pub enum RichmondDevelopment<G> {
 	Empty(Aabb3d),
-	LesHalles(LesHallesCell<G>),
-	ShepherdsVillage(ShepherdsVillageCell<G>),
-	ShepherdsCommune(ShepherdsCommuneCell<G>),
-	RingFort(RingFortCell<G>),
-	TempleComplex(TempleComplexCell<G>),
-	SingleHighrise(SingleHighriseCell<G>),
-	SuburbanHomes(SuburbanHomesCell<G>),
-	WizardsTower(WizardsTowerCell<G>),
-	SkybridgeBazaar(SkybridgeBazaarCell<G>),
-	OldCityMarket(OldCityMarketCell<G>),
+	LesHalles(DevelopmentCell<LesHalles, G>),
+	ShepherdsVillage(DevelopmentCell<ShepherdsVillage, G>),
+	ShepherdsCommune(DevelopmentCell<ShepherdsCommune, G>),
+	RingFort(DevelopmentCell<RingFort, G>),
+	TempleComplex(DevelopmentCell<TempleComplex, G>),
+	SingleHighrise(DevelopmentCell<SingleHighrise, G>),
+	SuburbanHomes(DevelopmentCell<SuburbanHomes, G>),
+	WizardsTower(DevelopmentCell<WizardsTower, G>),
+	SkybridgeBazaar(DevelopmentCell<SkybridgeBazaar, G>),
+	OldCityMarket(DevelopmentCell<OldCityMarket, G>),
 }
 
 impl<G: RichmondGround> GenerationScheme<HcsgStorage> for RichmondDevelopment<G> {
@@ -93,12 +148,11 @@ impl<G: RichmondGround> GenerationScheme<HcsgStorage> for RichmondDevelopment<G>
 			let Some(authored) = &site.authored else {
 				return Some((development, bounds));
 			};
-			let seed = authored.config.seed as i32;
 			let development = match authored.courtyard {
 				Some(courtyard) => development.with_authored_courtyard(courtyard),
 				None => Some(development),
 			};
-			if let Some(development) = development.filter(|d| d.built(seed).is_some()) {
+			if let Some(development) = development.filter(|d| d.built().is_some()) {
 				return Some((development, bounds));
 			}
 		}
@@ -130,38 +184,24 @@ impl<G: RichmondGround> RichmondDevelopment<G> {
 	}
 
 	fn build_kind(storage: &mut HcsgStorage, id: Id, kind: DevelopmentKind) -> Option<Self> {
+		fn cell<D: SiteDevelopment, G: RichmondGround>(
+			storage: &mut HcsgStorage,
+			id: Id,
+		) -> Option<DevelopmentCell<D, G>> {
+			DevelopmentCell::<D, G>::build_with_id(storage, id).map(|(cell, _)| cell)
+		}
 		Some(match kind {
 			DevelopmentKind::Empty => return None,
-			DevelopmentKind::LesHalles => {
-				Self::LesHalles(LesHallesCell::<G>::build_with_id(storage, id)?.0)
-			}
-			DevelopmentKind::ShepherdsVillage => {
-				Self::ShepherdsVillage(ShepherdsVillageCell::<G>::build_with_id(storage, id)?.0)
-			}
-			DevelopmentKind::ShepherdsCommune => {
-				Self::ShepherdsCommune(ShepherdsCommuneCell::<G>::build_with_id(storage, id)?.0)
-			}
-			DevelopmentKind::RingFort => {
-				Self::RingFort(RingFortCell::<G>::build_with_id(storage, id)?.0)
-			}
-			DevelopmentKind::TempleComplex => {
-				Self::TempleComplex(TempleComplexCell::<G>::build_with_id(storage, id)?.0)
-			}
-			DevelopmentKind::SingleHighrise => {
-				Self::SingleHighrise(SingleHighriseCell::<G>::build_with_id(storage, id)?.0)
-			}
-			DevelopmentKind::SuburbanHomes => {
-				Self::SuburbanHomes(SuburbanHomesCell::<G>::build_with_id(storage, id)?.0)
-			}
-			DevelopmentKind::WizardsTower => {
-				Self::WizardsTower(WizardsTowerCell::<G>::build_with_id(storage, id)?.0)
-			}
-			DevelopmentKind::SkybridgeBazaar => {
-				Self::SkybridgeBazaar(SkybridgeBazaarCell::<G>::build_with_id(storage, id)?.0)
-			}
-			DevelopmentKind::OldCityMarket => {
-				Self::OldCityMarket(OldCityMarketCell::<G>::build_with_id(storage, id)?.0)
-			}
+			DevelopmentKind::LesHalles => Self::LesHalles(cell(storage, id)?),
+			DevelopmentKind::ShepherdsVillage => Self::ShepherdsVillage(cell(storage, id)?),
+			DevelopmentKind::ShepherdsCommune => Self::ShepherdsCommune(cell(storage, id)?),
+			DevelopmentKind::RingFort => Self::RingFort(cell(storage, id)?),
+			DevelopmentKind::TempleComplex => Self::TempleComplex(cell(storage, id)?),
+			DevelopmentKind::SingleHighrise => Self::SingleHighrise(cell(storage, id)?),
+			DevelopmentKind::SuburbanHomes => Self::SuburbanHomes(cell(storage, id)?),
+			DevelopmentKind::WizardsTower => Self::WizardsTower(cell(storage, id)?),
+			DevelopmentKind::SkybridgeBazaar => Self::SkybridgeBazaar(cell(storage, id)?),
+			DevelopmentKind::OldCityMarket => Self::OldCityMarket(cell(storage, id)?),
 		})
 	}
 
@@ -178,16 +218,16 @@ impl<G> RichmondDevelopment<G> {
 	pub fn cell(&self) -> Aabb3d {
 		match self {
 			Self::Empty(cell) => *cell,
-			Self::ShepherdsVillage(village) => village.cell,
-			Self::ShepherdsCommune(commune) => commune.cell,
-			Self::OldCityMarket(market) => market.cell,
-			Self::LesHalles(cell) => cell.plan.cell,
-			Self::RingFort(cell) => cell.plan.cell,
-			Self::TempleComplex(cell) => cell.plan.cell,
-			Self::SingleHighrise(cell) => cell.plan.cell,
-			Self::SuburbanHomes(cell) => cell.plan.cell,
-			Self::WizardsTower(cell) => cell.plan.cell,
-			Self::SkybridgeBazaar(cell) => cell.plan.cell,
+			Self::LesHalles(d) => d.cell,
+			Self::ShepherdsVillage(d) => d.cell,
+			Self::ShepherdsCommune(d) => d.cell,
+			Self::RingFort(d) => d.cell,
+			Self::TempleComplex(d) => d.cell,
+			Self::SingleHighrise(d) => d.cell,
+			Self::SuburbanHomes(d) => d.cell,
+			Self::WizardsTower(d) => d.cell,
+			Self::SkybridgeBazaar(d) => d.cell,
+			Self::OldCityMarket(d) => d.cell,
 		}
 	}
 
@@ -211,32 +251,16 @@ impl<G> RichmondDevelopment<G> {
 		!matches!(self, Self::Empty(_))
 	}
 
-	/// The terrace plan, for kinds fitted to one terrace.
-	pub fn terrace(&self) -> Option<&TerracePlan> {
+	/// The terrace, for kinds fitted to one terrace.
+	pub fn terrace(&self) -> Option<&Terrace> {
 		match self {
-			Self::LesHalles(cell) => Some(&cell.plan),
-			Self::RingFort(cell) => Some(&cell.plan),
-			Self::TempleComplex(cell) => Some(&cell.plan),
-			Self::SingleHighrise(cell) => Some(&cell.plan),
-			Self::SuburbanHomes(cell) => Some(&cell.plan),
-			Self::WizardsTower(cell) => Some(&cell.plan),
-			Self::SkybridgeBazaar(cell) => Some(&cell.plan),
-			Self::Empty(_)
-			| Self::ShepherdsVillage(_)
-			| Self::ShepherdsCommune(_)
-			| Self::OldCityMarket(_) => None,
-		}
-	}
-
-	fn terrace_mut(&mut self) -> Option<&mut TerracePlan> {
-		match self {
-			Self::LesHalles(cell) => Some(&mut cell.plan),
-			Self::RingFort(cell) => Some(&mut cell.plan),
-			Self::TempleComplex(cell) => Some(&mut cell.plan),
-			Self::SingleHighrise(cell) => Some(&mut cell.plan),
-			Self::SuburbanHomes(cell) => Some(&mut cell.plan),
-			Self::WizardsTower(cell) => Some(&mut cell.plan),
-			Self::SkybridgeBazaar(cell) => Some(&mut cell.plan),
+			Self::LesHalles(d) => Some(&d.plan),
+			Self::RingFort(d) => Some(&d.plan),
+			Self::TempleComplex(d) => Some(&d.plan),
+			Self::SingleHighrise(d) => Some(&d.plan),
+			Self::SuburbanHomes(d) => Some(&d.plan),
+			Self::WizardsTower(d) => Some(&d.plan),
+			Self::SkybridgeBazaar(d) => Some(&d.plan),
 			Self::Empty(_)
 			| Self::ShepherdsVillage(_)
 			| Self::ShepherdsCommune(_)
@@ -247,16 +271,32 @@ impl<G> RichmondDevelopment<G> {
 	pub fn pads(&self) -> &[DevelopmentPad] {
 		match self {
 			Self::Empty(_) => &[],
-			Self::ShepherdsVillage(village) => &village.pads,
-			Self::ShepherdsCommune(commune) => &commune.pads,
-			Self::OldCityMarket(market) => &market.pads,
-			Self::LesHalles(cell) => std::slice::from_ref(&cell.plan.pad),
-			Self::RingFort(cell) => std::slice::from_ref(&cell.plan.pad),
-			Self::TempleComplex(cell) => std::slice::from_ref(&cell.plan.pad),
-			Self::SingleHighrise(cell) => std::slice::from_ref(&cell.plan.pad),
-			Self::SuburbanHomes(cell) => std::slice::from_ref(&cell.plan.pad),
-			Self::WizardsTower(cell) => std::slice::from_ref(&cell.plan.pad),
-			Self::SkybridgeBazaar(cell) => std::slice::from_ref(&cell.plan.pad),
+			Self::LesHalles(d) => &d.pads,
+			Self::ShepherdsVillage(d) => &d.pads,
+			Self::ShepherdsCommune(d) => &d.pads,
+			Self::RingFort(d) => &d.pads,
+			Self::TempleComplex(d) => &d.pads,
+			Self::SingleHighrise(d) => &d.pads,
+			Self::SuburbanHomes(d) => &d.pads,
+			Self::WizardsTower(d) => &d.pads,
+			Self::SkybridgeBazaar(d) => &d.pads,
+			Self::OldCityMarket(d) => &d.pads,
+		}
+	}
+
+	fn terrace_pads_mut(&mut self) -> Option<(&Terrace, &mut Vec<DevelopmentPad>)> {
+		match self {
+			Self::LesHalles(d) => Some((&d.plan, &mut d.pads)),
+			Self::RingFort(d) => Some((&d.plan, &mut d.pads)),
+			Self::TempleComplex(d) => Some((&d.plan, &mut d.pads)),
+			Self::SingleHighrise(d) => Some((&d.plan, &mut d.pads)),
+			Self::SuburbanHomes(d) => Some((&d.plan, &mut d.pads)),
+			Self::WizardsTower(d) => Some((&d.plan, &mut d.pads)),
+			Self::SkybridgeBazaar(d) => Some((&d.plan, &mut d.pads)),
+			Self::Empty(_)
+			| Self::ShepherdsVillage(_)
+			| Self::ShepherdsCommune(_)
+			| Self::OldCityMarket(_) => None,
 		}
 	}
 
@@ -266,31 +306,82 @@ impl<G> RichmondDevelopment<G> {
 
 	/// World-axis half extents of the yawed building confines.
 	pub fn footprint_half_extents(&self) -> Option<Vec2> {
-		self.terrace().map(TerracePlan::footprint_half_extents)
+		self.terrace().map(Terrace::footprint_half_extents)
 	}
 
 	/// Replace a single-terrace pad with one axis-aligned terrace at the same
 	/// height. `None` for kinds whose pads sit at several heights.
 	pub fn with_courtyard(mut self, half_extents: Vec2, params: PadParams) -> Option<Self> {
-		self.terrace_mut()?.flatten_courtyard(half_extents, params);
+		let (terrace, pads) = self.terrace_pads_mut()?;
+		let courtyard =
+			PadPlan::building_skirt(terrace.center_xz(), half_extents, 0.0, terrace.height, params);
+		*pads = vec![DevelopmentPad::from(&courtyard)];
 		Some(self)
 	}
 
-	/// Fit hosts for a filled cell. `seed` is the Richmond noise seed.
-	pub fn built(&self, seed: i32) -> Option<BuiltDevelopment> {
-		let noise = NoiseParams { seed, ..NoiseParams::default() };
+	/// The buildings fitted to a filled cell.
+	pub fn built(&self) -> Option<BuiltDevelopment> {
 		match self {
 			Self::Empty(_) => None,
-			Self::LesHalles(cell) => cell.built(noise),
-			Self::RingFort(cell) => cell.built(noise),
-			Self::TempleComplex(cell) => cell.built(noise),
-			Self::SingleHighrise(cell) => cell.built(noise),
-			Self::SuburbanHomes(cell) => cell.built(noise),
-			Self::WizardsTower(cell) => cell.built(noise),
-			Self::SkybridgeBazaar(cell) => cell.built(noise),
-			Self::ShepherdsVillage(village) => Some(village.built()),
-			Self::ShepherdsCommune(commune) => Some(commune.built()),
-			Self::OldCityMarket(market) => Some(market.built()),
+			Self::LesHalles(d) => d.built(),
+			Self::ShepherdsVillage(d) => d.built(),
+			Self::ShepherdsCommune(d) => d.built(),
+			Self::RingFort(d) => d.built(),
+			Self::TempleComplex(d) => d.built(),
+			Self::SingleHighrise(d) => d.built(),
+			Self::SuburbanHomes(d) => d.built(),
+			Self::WizardsTower(d) => d.built(),
+			Self::SkybridgeBazaar(d) => d.built(),
+			Self::OldCityMarket(d) => d.built(),
 		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use crate::cell::DevelopmentExtent;
+	use crate::config::DevelopmentConfig;
+
+	fn les_halles() -> RichmondDevelopment<()> {
+		let cell = DevelopmentExtent::from_cell_index(0, 0).aabb();
+		let terrace = Terrace::new::<LesHalles>(cell, 12.0, DevelopmentConfig::default().seed);
+		let pads = vec![DevelopmentPad::from(&terrace.pad())];
+		RichmondDevelopment::LesHalles(DevelopmentCell {
+			cell,
+			plan: terrace,
+			pads,
+			_ground: PhantomData,
+		})
+	}
+
+	#[test]
+	fn terrace_pad_flattens_the_building_center() {
+		let development = les_halles();
+		let c = cell_center_xz(development.cell());
+		let pad = &development.pads()[0].complex;
+		assert!((pad.modify_elevation(3.0, c.x, c.y) - 12.0).abs() < 1e-3);
+		assert!((pad.modify_elevation(3.0, 400.0, 400.0) - 3.0).abs() < 1e-3);
+	}
+
+	#[test]
+	fn courtyard_flattens_the_whole_arena_at_the_pad_height() -> anyhow::Result<()> {
+		let development = les_halles();
+		let half = development
+			.footprint_half_extents()
+			.ok_or_else(|| anyhow::anyhow!("terrace footprint"))?
+			+ Vec2::splat(20.0);
+		let walled = development
+			.with_courtyard(half, PadParams { berm: 0.0, ease: 16.0, round: 0.0 })
+			.ok_or_else(|| anyhow::anyhow!("terrace courtyard"))?;
+		let center = cell_center_xz(walled.cell());
+		anyhow::ensure!(walled.pads().len() == 1);
+		let pad = &walled.pads()[0].complex;
+		for corner in [Vec2::new(1.0, 1.0), Vec2::new(-1.0, 1.0), Vec2::new(1.0, -1.0)] {
+			let p = center + corner * (half - Vec2::splat(0.5));
+			let y = pad.modify_elevation(-30.0, p.x, p.y);
+			anyhow::ensure!((y - 12.0).abs() <= 1e-3, "corner {p} at {y}, expected 12");
+		}
+		Ok(())
 	}
 }

@@ -150,9 +150,17 @@ impl<'a, G: RichmondGround> GroundSampler<'a, G> {
 		sort_finest_first(cells);
 		generated
 	}
+}
 
-	/// Whether the site's water overlaps `bounds`.
-	pub fn hydro_overlaps_bounds(&mut self, bounds: Bounds2) -> bool {
+/// Pads are checked over their realized support, flatten plus ease.
+impl<G: RichmondGround> SiteGround for GroundSampler<'_, G> {
+	fn height_at(&mut self, x: f32, z: f32) -> Option<f32> {
+		let id = self.covering(x, z)?;
+		self.storage.get::<G::Cell>(id).map(|cell| cell.composed_height_at(x, z))
+	}
+
+	fn hydro_overlaps(&mut self, pad: &PadPlan) -> bool {
+		let bounds = PadComplex::from(pad).bounds;
 		if self.cells().is_empty() {
 			self.generate(self.site);
 		}
@@ -164,18 +172,6 @@ impl<'a, G: RichmondGround> GroundSampler<'a, G> {
 				&& bounds.max.y >= cell.min.z
 				&& storage.get::<G::Cell>(*id).is_some_and(|cell| cell.hydro_overlaps(bounds))
 		})
-	}
-}
-
-/// Pads are checked over their realized support, flatten plus ease.
-impl<G: RichmondGround> SiteGround for GroundSampler<'_, G> {
-	fn height_at(&mut self, x: f32, z: f32) -> Option<f32> {
-		let id = self.covering(x, z)?;
-		self.storage.get::<G::Cell>(id).map(|cell| cell.composed_height_at(x, z))
-	}
-
-	fn hydro_overlaps(&mut self, pad: &PadPlan) -> bool {
-		self.hydro_overlaps_bounds(PadComplex::from(pad).bounds)
 	}
 }
 

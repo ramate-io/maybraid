@@ -3,21 +3,9 @@
 use bevy::math::bounding::Aabb3d;
 use bevy::math::{Vec2, Vec3};
 use lod::gen::{Id, OriginalId};
-use urbanization_developments::yawed_plan_aabb_extent;
 
 /// Square development-cell edge length (metres).
 pub const DEVELOPMENT_CELL_SIZE: f32 = 300.0;
-
-/// Les Halles keeps its original urban envelope inside the larger shared cell.
-pub const LES_HALLES_MAX_FOOTPRINT: f32 = 72.0;
-
-/// Ring fort courtyard + corner keeps need a wide curtain wall inside the cell.
-pub const RING_FORT_MAX_FOOTPRINT: f32 = 240.0;
-/// Minimum ring-fort plan so a keep-bearing gallery and courtyard still fit.
-pub const RING_FORT_MIN_FOOTPRINT: f32 = 120.0;
-/// Confines height for the courtyard ring only (2–4 storeys at 3 m).
-pub const RING_FORT_MIN_CONFINES_HEIGHT: f32 = 8.0;
-pub const RING_FORT_MAX_CONFINES_HEIGHT: f32 = 13.0;
 
 /// Vertical span used only for origin-cell identity (XZ tiling).
 const CELL_Y: f32 = 1.0;
@@ -30,25 +18,6 @@ pub const DEFAULT_SPATIAL_CORRELATION: f32 = 300.0;
 
 /// Inset from the cell edge so the building plus berm and ease stay on the tile.
 pub const BUILDING_INSET: f32 = 14.0;
-
-/// Minimum Les Halles footprint on each plan axis (metres).
-pub const MIN_FOOTPRINT: f32 = 36.0;
-
-/// Confines height range sampled at selection (2–7 storeys at 3–5 m).
-pub const MIN_CONFINES_HEIGHT: f32 = 10.0;
-pub const MAX_CONFINES_HEIGHT: f32 = 35.0;
-
-/// Plan-square size available to the Les Halles typology.
-pub fn available_footprint() -> f32 {
-	LES_HALLES_MAX_FOOTPRINT.max(MIN_FOOTPRINT)
-}
-
-/// Uniformly shrink `(width, depth)` so the yawed rectangle's AABB fits in a square pad.
-pub fn inscribe_yawed_extents(width: f32, depth: f32, yaw: f32, pad: f32) -> Vec2 {
-	let occupied = yawed_plan_aabb_extent(width, depth, yaw);
-	let scale = (pad / occupied.x.max(1e-6)).min(pad / occupied.y.max(1e-6)).min(1.0);
-	Vec2::new(width * scale, depth * scale)
-}
 
 /// Axis-aligned development tile.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -189,7 +158,6 @@ mod tests {
 		let cell = DevelopmentExtent::from_cell_index(2, -1).aabb();
 		assert!((cell.max.x - cell.min.x - 300.0).abs() < 1e-4);
 		assert!((cell.max.z - cell.min.z - 300.0).abs() < 1e-4);
-		assert!((available_footprint() - LES_HALLES_MAX_FOOTPRINT).abs() < 1e-4);
 	}
 
 	#[test]
@@ -203,29 +171,5 @@ mod tests {
 		let cell = DevelopmentExtent::from_cell_index(0, 0).aabb();
 		assert!(cell_selected(cell, 1, 1.0, 300.0));
 		assert!(!cell_selected(cell, 1, 0.0, 300.0));
-	}
-
-	#[test]
-	fn axis_aligned_inscribe_keeps_size_that_already_fits() {
-		let pad = available_footprint();
-		let kept = inscribe_yawed_extents(50.0, 40.0, 0.0, pad);
-		assert!((kept.x - 50.0).abs() < 1e-5);
-		assert!((kept.y - 40.0).abs() < 1e-5);
-		let swapped = inscribe_yawed_extents(72.0, 36.0, std::f32::consts::FRAC_PI_2, pad);
-		assert!((swapped.x - 72.0).abs() < 1e-4);
-		assert!((swapped.y - 36.0).abs() < 1e-4);
-	}
-
-	#[test]
-	fn forty_five_degree_square_shrinks_onto_the_pad() {
-		let pad = available_footprint();
-		let inscribed = inscribe_yawed_extents(pad, pad, std::f32::consts::FRAC_PI_4, pad);
-		let expected = pad / std::f32::consts::SQRT_2;
-		assert!((inscribed.x - expected).abs() < 1e-3);
-		assert!((inscribed.y - expected).abs() < 1e-3);
-		let occupied =
-			yawed_plan_aabb_extent(inscribed.x, inscribed.y, std::f32::consts::FRAC_PI_4);
-		assert!(occupied.x <= pad + 1e-3);
-		assert!(occupied.y <= pad + 1e-3);
 	}
 }

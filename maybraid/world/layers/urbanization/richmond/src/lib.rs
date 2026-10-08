@@ -6,8 +6,9 @@
 //! generic over a [`RichmondGround`]: a [`DevelopmentSite`] picks a kind, a
 //! [`RichmondDevelopment`] fits it to the ground, [`Built`] fits its hosts, and
 //! [`PaddedTerrain`] composes its pads into the ground's cells. The developments
-//! themselves, and their layouts, are [`urbanization_developments`] kit
-//! assemblies; the schemes supply the ground and realize their pad plans.
+//! themselves are [`urbanization_developments`] kit assemblies, each a
+//! [`Development`]; one [`DevelopmentCell`] scheme plans any of them over the
+//! ground and realizes its pad plans.
 //! Cell discovery defaults to [`urbanization_cells`] guillotine leaves;
 //! set [`DevelopmentConfig::sites`] to [`DevelopmentSites::Lattice`] for the dense
 //! 300 m lattice. The crate plugin also installs SceneRef, urban surface MaterialRef,
@@ -43,8 +44,7 @@ pub use buildings_lod::{
 pub use built::Built;
 pub use cell::{
 	cell_selected, DevelopmentExtent, BUILDING_INSET, DEFAULT_LIKELIHOOD,
-	DEFAULT_SPATIAL_CORRELATION, DEVELOPMENT_CELL_SIZE, LES_HALLES_MAX_FOOTPRINT,
-	RING_FORT_MAX_FOOTPRINT, RING_FORT_MIN_FOOTPRINT,
+	DEFAULT_SPATIAL_CORRELATION, DEVELOPMENT_CELL_SIZE,
 };
 pub use compose::PadComposable;
 pub use config::{DevelopmentConfig, DevelopmentSites};
@@ -52,8 +52,7 @@ pub use developments::site::{
 	select_kind, AuthoredCourtyard, AuthoredDevelopment, AuthoredDevelopments, DevelopmentKind,
 	DevelopmentSite,
 };
-pub use developments::terrace::{TerraceCell, TerraceEnvelope, TerraceKind, TerracePlan};
-pub use developments::{DevelopmentPad, RichmondDevelopment};
+pub use developments::{DevelopmentCell, DevelopmentPad, RichmondDevelopment, SiteDevelopment};
 pub use ground::{hydro_overlaps_xz, GroundCell, GroundSampler, RichmondGround};
 pub use host::{DevelopmentHost, DevelopmentHosts};
 pub use layer::Richmond;
@@ -77,8 +76,9 @@ pub use plugin::{register_richmond_plugin, RichmondDevelopmentModelsPlugin};
 pub use presentation::{PaddedTerrainPresenter, PaddedTerrainPresenterState};
 pub use storage::{column_bounds, register_richmond_nodes, RichmondNodes};
 pub use urbanization_developments::{
-	yaw_about_xz, DevelopmentFinish, DevelopmentFinishRole, PadParams, SiteGround, PAD_BERM,
-	PAD_EDGE_EASE, PAD_ROUND,
+	yaw_about_xz, Development, DevelopmentFinish, DevelopmentFinishRole, PadParams, SiteGround,
+	Terrace, TerraceDevelopment, TerraceEnvelope, LES_HALLES_MAX_FOOTPRINT, PAD_BERM,
+	PAD_EDGE_EASE, PAD_ROUND, RING_FORT_MAX_FOOTPRINT, RING_FORT_MIN_FOOTPRINT,
 };
 
 #[cfg(test)]

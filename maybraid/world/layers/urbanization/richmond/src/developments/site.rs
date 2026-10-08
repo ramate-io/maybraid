@@ -6,7 +6,7 @@ use lod::gen::{GenerationScheme, Id, OriginalId};
 use lod::hcsg::HcsgStorage;
 use procedural_common::SeededHash;
 use urbanization_cells::{SelectedUrbanization, UrbanDevelopmentKind, UrbanizationExtent};
-use urbanization_developments::cell_salt;
+use urbanization_developments::{cell_salt, PadPlan, SiteGround};
 
 use crate::cell::{cell_selected, DevelopmentExtent};
 use crate::config::{DevelopmentConfig, DevelopmentSites};
@@ -134,7 +134,7 @@ pub struct AuthoredDevelopment {
 	pub cell: Aabb3d,
 	/// Kinds tried in order; the first that fits is built.
 	pub kinds: Vec<DevelopmentKind>,
-	/// Terrace height for single-terrace kinds, instead of a ground sample.
+	/// Height of the level, dry ground the development is planned on.
 	pub height: f32,
 	pub config: DevelopmentConfig,
 	pub courtyard: Option<AuthoredCourtyard>,
@@ -143,6 +143,17 @@ pub struct AuthoredDevelopment {
 impl AuthoredDevelopment {
 	pub fn id(&self) -> Id {
 		Id::from_cell(self.cell)
+	}
+}
+
+/// An authored site is planned as if on level ground at its height, away from water.
+impl SiteGround for AuthoredDevelopment {
+	fn height_at(&mut self, _x: f32, _z: f32) -> Option<f32> {
+		Some(self.height)
+	}
+
+	fn hydro_overlaps(&mut self, _pad: &PadPlan) -> bool {
+		false
 	}
 }
 

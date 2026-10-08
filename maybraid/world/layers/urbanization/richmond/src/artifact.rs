@@ -5,22 +5,21 @@
 //! parallel spatial store, generation pass, and playground scan.
 
 use urbanization_developments::{
-	MixedUseLesHallesDevelopment, OldCityMarket, PlacedBuilding, RingFort, ShepherdsCommune,
-	ShepherdsVillage, SingleHighrise, SkybridgeBazaar, SolitaryWizardsTower, SuburbanHomes,
-	TempleComplex,
+	LesHalles, OldCityMarket, RingFort, ShepherdsCommune, ShepherdsVillage, SingleHighrise,
+	SkybridgeBazaar, SuburbanHomes, TempleComplex, WizardsTower,
 };
 
 /// One fitted development generated for an occupied cell.
 #[derive(Debug, Clone)]
 pub enum BuiltDevelopment {
-	LesHalles(Box<PlacedBuilding<MixedUseLesHallesDevelopment>>),
+	LesHalles(Box<LesHalles>),
 	ShepherdsVillage(Box<ShepherdsVillage>),
 	ShepherdsCommune(Box<ShepherdsCommune>),
-	RingFort(Box<PlacedBuilding<RingFort>>),
+	RingFort(Box<RingFort>),
 	TempleComplex(Box<TempleComplex>),
-	SingleHighrise(Box<PlacedBuilding<SingleHighrise>>),
+	SingleHighrise(Box<SingleHighrise>),
 	SuburbanHomes(Box<SuburbanHomes>),
-	WizardsTower(Box<PlacedBuilding<SolitaryWizardsTower>>),
+	WizardsTower(Box<WizardsTower>),
 	SkybridgeBazaar(Box<SkybridgeBazaar>),
 	OldCityMarket(Box<OldCityMarket>),
 }
