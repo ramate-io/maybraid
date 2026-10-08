@@ -16,6 +16,7 @@ pub mod layers;
 pub mod library;
 pub mod lifecycle;
 pub mod lobe_instances;
+pub mod membership;
 pub mod lobe_material;
 pub mod lobes;
 pub mod names;

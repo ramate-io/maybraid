@@ -65,6 +65,9 @@ impl IntelligenceBand {
 	}
 }
 
+/// Sort key for the world bake pulse (`band`, fairness inversion, entity bits).
+pub type IntelligenceBakeKey = (IntelligenceBand, u8, u64);
+
 /// Per-plant work LOD. Insert once; the world pulse writes `band` / `skips`.
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct IntelligenceLod {
@@ -84,7 +87,7 @@ impl IntelligenceLod {
 	}
 
 	/// Bake sort key: Near, then high-`skips` Mid/Far, then entity bits.
-	pub fn bake_key(self, entity: Entity) -> (IntelligenceBand, u8, u64) {
+	pub fn bake_key(self, entity: Entity) -> IntelligenceBakeKey {
 		(self.band, Self::FAIRNESS_CAP.saturating_sub(self.skips), entity.to_bits())
 	}
 }
