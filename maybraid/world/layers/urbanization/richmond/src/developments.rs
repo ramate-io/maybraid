@@ -21,10 +21,11 @@ use bevy::math::Vec2;
 use lod::gen::{GenerationScheme, Id, OriginalId};
 use lod::hcsg::HcsgStorage;
 use procedural_common::{Bounds2, NoiseParams};
+use urbanization_developments::{PadParams, PadPlan, SiteGround};
 
 use crate::artifact::BuiltDevelopment;
-use crate::ground::{GroundSampler, RichmondGround, SiteGround};
-use crate::pad::{cell_center_xz, PadComplex, PadParams};
+use crate::ground::{GroundSampler, RichmondGround};
+use crate::pad::{cell_center_xz, PadComplex};
 use crate::storage::{column_bounds, overlaps_xz_strictly};
 
 use les_halles::LesHallesCell;
@@ -45,6 +46,12 @@ use wizards_tower::WizardsTowerCell;
 pub struct DevelopmentPad {
 	pub height: f32,
 	pub complex: PadComplex,
+}
+
+impl From<&PadPlan> for DevelopmentPad {
+	fn from(plan: &PadPlan) -> Self {
+		Self { height: plan.height, complex: PadComplex::from(plan) }
+	}
 }
 
 /// One development cell over ground `G`.

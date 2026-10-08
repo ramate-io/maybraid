@@ -1,10 +1,10 @@
 //! Deterministic, recipe-driven jittered-grid scattering.
 
-use bevy::math::bounding::{Aabb2d, Aabb3d};
-use bevy::math::Vec2;
+use bevy_math::bounding::{Aabb2d, Aabb3d};
+use bevy_math::Vec2;
 use procedural_common::{Bounds2, SeededHash};
 
-use crate::cell::{sample_confines_yaw, yawed_plan_aabb_extent};
+use crate::plan::{sample_confines_yaw, yawed_plan_aabb_extent};
 
 #[derive(Debug, Clone)]
 pub struct ScatterChoice<K> {
@@ -146,7 +146,7 @@ fn lerp(a: f32, b: f32, t: f32) -> f32 {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use bevy::math::Vec3;
+	use bevy_math::Vec3;
 
 	#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 	enum Kind {

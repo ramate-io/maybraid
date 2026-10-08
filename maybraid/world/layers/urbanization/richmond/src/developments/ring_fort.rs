@@ -2,7 +2,7 @@
 
 use buildings::Fit;
 use procedural_common::{NoiseParams, SeededHash};
-use urbanization_developments::{PlacedBuilding, RingFort};
+use urbanization_developments::{DevelopmentFinish, PlacedBuilding, RingFort};
 
 use super::site::DevelopmentKind;
 use super::terrace::{TerraceCell, TerraceEnvelope, TerraceKind, TerracePlan};
@@ -11,7 +11,6 @@ use crate::cell::{
 	RING_FORT_MAX_CONFINES_HEIGHT, RING_FORT_MAX_FOOTPRINT, RING_FORT_MIN_CONFINES_HEIGHT,
 	RING_FORT_MIN_FOOTPRINT,
 };
-use crate::finish::DevelopmentFinish;
 
 pub struct RingFortKind;
 

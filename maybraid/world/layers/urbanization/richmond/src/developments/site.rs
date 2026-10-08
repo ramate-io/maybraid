@@ -6,8 +6,9 @@ use lod::gen::{GenerationScheme, Id, OriginalId};
 use lod::hcsg::HcsgStorage;
 use procedural_common::SeededHash;
 use urbanization_cells::{SelectedUrbanization, UrbanDevelopmentKind, UrbanizationExtent};
+use urbanization_developments::cell_salt;
 
-use crate::cell::{cell_salt, cell_selected, DevelopmentExtent};
+use crate::cell::{cell_selected, DevelopmentExtent};
 use crate::config::{DevelopmentConfig, DevelopmentSites};
 use crate::storage::{column_bounds, overlaps_xz};
 

@@ -1,10 +1,9 @@
 //! 300 m development lattice and occupancy.
 
 use bevy::math::bounding::Aabb3d;
-use bevy::math::{Quat, Vec2, Vec3};
-use bevy::transform::components::Transform;
+use bevy::math::{Vec2, Vec3};
 use lod::gen::{Id, OriginalId};
-use std::f32::consts::TAU;
+use urbanization_developments::yawed_plan_aabb_extent;
 
 /// Square development-cell edge length (metres).
 pub const DEVELOPMENT_CELL_SIZE: f32 = 300.0;
@@ -29,15 +28,6 @@ pub const DEFAULT_LIKELIHOOD: f32 = 0.28;
 /// Occupancy lattice spacing (world units). Larger → bigger clusters.
 pub const DEFAULT_SPATIAL_CORRELATION: f32 = 300.0;
 
-/// Skirt ease (metres) from the flatten berm out to identity terrain.
-pub const PAD_EDGE_EASE: f32 = 10.0;
-
-/// Extra flatten (metres) outside the building footprint so walls sit on the pad, not the ease.
-pub const PAD_BERM: f32 = 4.0;
-
-/// Rounded-rect corner radius (metres) on the flatten footprint.
-pub const PAD_ROUND: f32 = 2.0;
-
 /// Inset from the cell edge so the building plus berm and ease stay on the tile.
 pub const BUILDING_INSET: f32 = 14.0;
 
@@ -53,35 +43,11 @@ pub fn available_footprint() -> f32 {
 	LES_HALLES_MAX_FOOTPRINT.max(MIN_FOOTPRINT)
 }
 
-/// Map a unit sample in \([0, 1]\) onto a heading in \([0, \tau]\).
-pub fn sample_confines_yaw(unit: f32) -> f32 {
-	unit.clamp(0.0, 1.0) * TAU
-}
-
-/// World-XZ AABB of a `width` × `depth` rectangle yawed about \(+Y\).
-pub fn yawed_plan_aabb_extent(width: f32, depth: f32, yaw: f32) -> Vec2 {
-	let (sin, cos) = yaw.sin_cos();
-	let abs_c = cos.abs();
-	let abs_s = sin.abs();
-	Vec2::new(width * abs_c + depth * abs_s, width * abs_s + depth * abs_c)
-}
-
 /// Uniformly shrink `(width, depth)` so the yawed rectangle's AABB fits in a square pad.
 pub fn inscribe_yawed_extents(width: f32, depth: f32, yaw: f32, pad: f32) -> Vec2 {
 	let occupied = yawed_plan_aabb_extent(width, depth, yaw);
 	let scale = (pad / occupied.x.max(1e-6)).min(pad / occupied.y.max(1e-6)).min(1.0);
 	Vec2::new(width * scale, depth * scale)
-}
-
-/// Rotate about \(+Y\) through `center_xz` without orbiting the world origin.
-///
-/// Geometry is authored at world positions on the cell. Bevy applies
-/// \(R p + T\), so \(T = c - R c\) keeps the cell center fixed:
-/// \(R(p - c) + c\).
-pub fn yaw_about_xz(center_xz: Vec2, yaw: f32) -> Transform {
-	let center = Vec3::new(center_xz.x, 0.0, center_xz.y);
-	let rotation = Quat::from_rotation_y(yaw);
-	Transform { translation: center - rotation * center, rotation, scale: Vec3::ONE }
 }
 
 /// Axis-aligned development tile.
@@ -158,11 +124,6 @@ impl DevelopmentExtent {
 	}
 }
 
-/// Per-cell salt for [`procedural_common::SeededHash`] draws.
-pub(crate) fn cell_salt(cell: Aabb3d) -> u32 {
-	cell.min.x.to_bits().wrapping_mul(73856093) ^ cell.min.z.to_bits().wrapping_mul(19349663)
-}
-
 /// Spatially correlated occupancy via bilinear value noise at the cell center.
 ///
 /// Same scheme as Stamp leaf selection: `likelihood` is the approximate
@@ -214,7 +175,6 @@ fn lattice_unit(seed: u32, ix: i32, iz: i32) -> f32 {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use std::f32::consts::TAU;
 
 	#[test]
 	fn overlapping_origin_is_one_cell() {
@@ -246,13 +206,6 @@ mod tests {
 	}
 
 	#[test]
-	fn sample_confines_yaw_covers_the_circle() {
-		assert!((sample_confines_yaw(0.0) - 0.0).abs() < 1e-6);
-		assert!((sample_confines_yaw(0.5) - std::f32::consts::PI).abs() < 1e-5);
-		assert!((sample_confines_yaw(1.0) - TAU).abs() < 1e-5);
-	}
-
-	#[test]
 	fn axis_aligned_inscribe_keeps_size_that_already_fits() {
 		let pad = available_footprint();
 		let kept = inscribe_yawed_extents(50.0, 40.0, 0.0, pad);
@@ -274,19 +227,5 @@ mod tests {
 			yawed_plan_aabb_extent(inscribed.x, inscribed.y, std::f32::consts::FRAC_PI_4);
 		assert!(occupied.x <= pad + 1e-3);
 		assert!(occupied.y <= pad + 1e-3);
-	}
-
-	#[test]
-	fn yaw_about_xz_keeps_the_center_fixed() {
-		let center_xz = Vec2::new(250.0, -100.0);
-		let yaw = std::f32::consts::FRAC_PI_4;
-		let transform = yaw_about_xz(center_xz, yaw);
-		let center = Vec3::new(center_xz.x, 4.0, center_xz.y);
-		let stayed = transform.transform_point(center);
-		assert!((stayed - center).length() < 1e-4);
-		let offset = Vec3::new(center_xz.x + 10.0, 4.0, center_xz.y);
-		let rotated = transform.transform_point(offset);
-		let expected = center + Quat::from_rotation_y(yaw) * (offset - center);
-		assert!((rotated - expected).length() < 1e-4);
 	}
 }

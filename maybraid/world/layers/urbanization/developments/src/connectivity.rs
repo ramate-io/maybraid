@@ -5,7 +5,7 @@
 
 use std::collections::VecDeque;
 
-use bevy::math::Vec2;
+use bevy_math::Vec2;
 use procedural_common::HysteresisGraph;
 
 const DEGENERATE_VERTEX_EPS: f32 = 0.35;

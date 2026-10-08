@@ -1,13 +1,12 @@
 //! [`TempleComplexCell`]: a sanctum campus on one terrace.
 
 use procedural_common::{NoiseParams, SeededHash};
+use urbanization_developments::{DevelopmentFinish, DevelopmentFinishRole, TempleComplex};
 
 use super::site::DevelopmentKind;
 use super::terrace::{TerraceCell, TerraceEnvelope, TerraceKind, TerracePlan};
-use crate::archetype_generation::ArchetypeGenerator;
 use crate::artifact::BuiltDevelopment;
 use crate::cell::RING_FORT_MAX_FOOTPRINT;
-use crate::finish::{DevelopmentFinish, DevelopmentFinishRole};
 
 pub struct TempleComplexKind;
 
@@ -33,7 +32,7 @@ impl TerraceKind for TempleComplexKind {
 	fn built(plan: &TerracePlan, noise: NoiseParams) -> Option<BuiltDevelopment> {
 		let finish = plan.finish.clone();
 		Some(BuiltDevelopment::TempleComplex(Box::new(
-			ArchetypeGenerator::build_temple_complex(plan.cell, &plan.confines(), noise)?
+			TempleComplex::fit(plan.cell, &plan.confines(), noise)?
 				.with_finish(finish.wall, finish.roof),
 		)))
 	}

@@ -20,13 +20,12 @@ use lod::lod_host_scene_pending;
 use lod::lod_ref::LodRef;
 use lod::LodSceneLevel;
 use urbanization_developments::{
-	CircularTower, GalleryColonnade, GalleryTerrace, MixedUseLesHallesDevelopment,
+	yaw_about_xz, CircularTower, GalleryColonnade, GalleryTerrace, MixedUseLesHallesDevelopment,
 	MixedUseLesHallesHost, OldCityMarketTerrace, PlacedBuilding, RingFort, RingFortHost,
 	ShepherdsBuilding, ShepherdsCommune, ShepherdsHouse, ShepherdsHut, ShepherdsVillage,
 	SingleHighrise, Skybridge, TempleSanctum, TrazaloidTower,
 };
 
-use crate::cell::yaw_about_xz;
 use crate::place::{DiscoverablePlace, DiscoverablePlaceLabel};
 use crate::BuiltDevelopment;
 
@@ -490,9 +489,9 @@ mod tests {
 	use bevy::math::{Vec2, Vec3};
 	use buildings::{Confines, Fit};
 	use procedural_common::NoiseParams;
+	use urbanization_developments::{SkybridgeBazaar, SuburbanHomes};
 
 	use super::{DevelopmentHost, DevelopmentHosts, PlacedBuilding};
-	use crate::archetype_generation::ArchetypeGenerator;
 	use crate::place::DiscoverablePlaceLabel;
 	use crate::BuiltDevelopment;
 
@@ -529,7 +528,7 @@ mod tests {
 			Vec3::new(45.0, 10.0, 45.0),
 			Vec3::new(255.0, 26.0, 255.0),
 		));
-		let suburban = ArchetypeGenerator::build_suburban_homes(
+		let suburban = SuburbanHomes::fit(
 			cell,
 			&suburban_confines,
 			NoiseParams { seed: 29, ..NoiseParams::default() },
@@ -557,12 +556,8 @@ mod tests {
 			Vec3::new(50.0, 10.0, 50.0),
 			Vec3::new(250.0, 90.0, 250.0),
 		));
-		let bazaar = ArchetypeGenerator::build_skybridge_bazaar(
-			cell,
-			&bazaar_confines,
-			NoiseParams::default(),
-		)
-		.ok_or_else(|| anyhow::anyhow!("skybridge bazaar did not fit"))?;
+		let bazaar = SkybridgeBazaar::fit(cell, &bazaar_confines, NoiseParams::default())
+			.ok_or_else(|| anyhow::anyhow!("skybridge bazaar did not fit"))?;
 		let expected = bazaar.market.len() + bazaar.towers.len() + bazaar.bridges.len();
 		let hosts = BuiltDevelopment::SkybridgeBazaar(Box::new(bazaar)).hosts();
 		assert_eq!(hosts.len(), expected);

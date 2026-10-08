@@ -12,15 +12,17 @@ use buildings::{Confines, Openings};
 use lod::gen::{GenerationScheme, Id, OriginalId};
 use lod::hcsg::HcsgStorage;
 use procedural_common::{NoiseParams, SeededHash};
+use urbanization_developments::{
+	cell_salt, sample_confines_yaw, DevelopmentFinish, PadParams, SiteGround,
+};
 
 use super::site::{DevelopmentKind, DevelopmentSite};
 use super::DevelopmentPad;
 use crate::artifact::BuiltDevelopment;
-use crate::cell::{cell_salt, inscribe_yawed_extents, sample_confines_yaw};
+use crate::cell::inscribe_yawed_extents;
 use crate::config::DevelopmentConfig;
-use crate::finish::DevelopmentFinish;
-use crate::ground::{GroundSampler, RichmondGround, SiteGround};
-use crate::pad::{cell_center_xz, PadComplex, PadParams};
+use crate::ground::{GroundSampler, RichmondGround};
+use crate::pad::{cell_center_xz, PadComplex};
 use crate::storage::column_bounds;
 
 /// Footprint and height ranges a terrace kind draws its confines from.
@@ -164,7 +166,7 @@ impl<K: TerraceKind, G: RichmondGround> GenerationScheme<HcsgStorage> for Terrac
 		let center = cell_center_xz(site.cell);
 		let height = ground.height_at(center.x, center.y)?;
 		let plan = TerracePlan::new::<K>(site.cell, height, &config);
-		if ground.hydro_overlaps(plan.pad.complex.bounds) {
+		if ground.hydro_overlaps_bounds(plan.pad.complex.bounds) {
 			return None;
 		}
 		Some((Self::new(plan), bounds))
@@ -177,7 +179,9 @@ mod tests {
 	use std::f32::consts::TAU;
 
 	use super::*;
-	use crate::cell::{available_footprint, yawed_plan_aabb_extent, DevelopmentExtent};
+	use urbanization_developments::yawed_plan_aabb_extent;
+
+	use crate::cell::{available_footprint, DevelopmentExtent};
 	use crate::developments::les_halles::LesHallesKind;
 
 	fn les_halles(seed: u32) -> TerracePlan {

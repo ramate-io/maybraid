@@ -2,13 +2,14 @@
 
 use buildings::Fit;
 use procedural_common::{NoiseParams, SeededHash};
-use urbanization_developments::{PlacedBuilding, SolitaryWizardsTower};
+use urbanization_developments::{
+	DevelopmentFinish, DevelopmentFinishRole, PlacedBuilding, SolitaryWizardsTower,
+};
 
 use super::site::DevelopmentKind;
 use super::terrace::{TerraceCell, TerraceEnvelope, TerraceKind, TerracePlan};
 use crate::artifact::BuiltDevelopment;
 use crate::cell::RING_FORT_MAX_FOOTPRINT;
-use crate::finish::{DevelopmentFinish, DevelopmentFinishRole};
 
 pub struct WizardsTowerKind;
 

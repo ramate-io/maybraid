@@ -2,19 +2,19 @@
 
 use std::sync::Arc;
 
-use bevy::math::bounding::Aabb3d;
-use bevy::math::{Vec2, Vec3};
+use bevy_math::bounding::Aabb3d;
+use bevy_math::{Vec2, Vec3};
 use building_components::panels::PanelStyle;
 use buildings::{Confines, Fit, Openings};
 use procedural_common::{NoiseParams, SeededHash};
-use urbanization_developments::{
+
+use crate::finish::{DevelopmentFinish, DevelopmentFinishRole, SuburbanPaletteBias};
+use crate::scatter::{ScatterChoice, ScatterRecipe};
+use crate::{
 	ShepherdsBuilding, ShepherdsFinish, ShepherdsHouse, ShepherdsHut, ShepherdsVillageBuilding,
 	HOUSE_MAX_FOOTPRINT, HOUSE_MIN_FOOTPRINT, HOUSE_STOREY_HEIGHT, HUT_HEIGHT, HUT_MAX_FOOTPRINT,
 	HUT_MIN_FOOTPRINT,
 };
-
-use crate::finish::{DevelopmentFinish, DevelopmentFinishRole, SuburbanPaletteBias};
-use crate::scatter::{ScatterChoice, ScatterRecipe};
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum ShepherdsBuildingKind {
@@ -211,8 +211,6 @@ fn lerp(a: f32, b: f32, t: f32) -> f32 {
 
 #[cfg(test)]
 mod tests {
-	use urbanization_developments::{ShepherdsBuilding, ShepherdsFinish};
-
 	use super::*;
 
 	fn fitted_finish(

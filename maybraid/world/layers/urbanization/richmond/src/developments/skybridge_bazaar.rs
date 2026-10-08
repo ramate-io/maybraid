@@ -1,13 +1,12 @@
 //! [`SkybridgeBazaarCell`]: towers joined by skybridges on one terrace.
 
 use procedural_common::{NoiseParams, SeededHash};
+use urbanization_developments::{DevelopmentFinish, DevelopmentFinishRole, SkybridgeBazaar};
 
 use super::site::DevelopmentKind;
 use super::terrace::{TerraceCell, TerraceEnvelope, TerraceKind, TerracePlan};
-use crate::archetype_generation::ArchetypeGenerator;
 use crate::artifact::BuiltDevelopment;
 use crate::cell::RING_FORT_MAX_FOOTPRINT;
-use crate::finish::{DevelopmentFinish, DevelopmentFinishRole};
 
 pub struct SkybridgeBazaarKind;
 
@@ -32,7 +31,7 @@ impl TerraceKind for SkybridgeBazaarKind {
 
 	fn built(plan: &TerracePlan, noise: NoiseParams) -> Option<BuiltDevelopment> {
 		Some(BuiltDevelopment::SkybridgeBazaar(Box::new(
-			ArchetypeGenerator::build_skybridge_bazaar(plan.cell, &plan.confines(), noise)?
+			SkybridgeBazaar::fit(plan.cell, &plan.confines(), noise)?
 				.with_bridge_material(plan.finish.wall.clone()),
 		)))
 	}

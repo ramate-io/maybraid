@@ -1,13 +1,12 @@
 //! [`SuburbanHomesCell`]: a neighborhood of homes on one terrace.
 
 use procedural_common::{NoiseParams, SeededHash};
+use urbanization_developments::{DevelopmentFinish, DevelopmentFinishRole, SuburbanHomes};
 
 use super::site::DevelopmentKind;
 use super::terrace::{TerraceCell, TerraceEnvelope, TerraceKind, TerracePlan};
-use crate::archetype_generation::ArchetypeGenerator;
 use crate::artifact::BuiltDevelopment;
 use crate::cell::RING_FORT_MAX_FOOTPRINT;
-use crate::finish::{DevelopmentFinish, DevelopmentFinishRole};
 
 pub struct SuburbanHomesKind;
 
@@ -31,7 +30,7 @@ impl TerraceKind for SuburbanHomesKind {
 	}
 
 	fn built(plan: &TerracePlan, noise: NoiseParams) -> Option<BuiltDevelopment> {
-		Some(BuiltDevelopment::SuburbanHomes(Box::new(ArchetypeGenerator::build_suburban_homes(
+		Some(BuiltDevelopment::SuburbanHomes(Box::new(SuburbanHomes::fit(
 			plan.cell,
 			&plan.confines(),
 			noise,

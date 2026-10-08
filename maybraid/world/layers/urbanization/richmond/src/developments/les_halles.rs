@@ -2,13 +2,12 @@
 
 use buildings::Fit;
 use procedural_common::{NoiseParams, SeededHash};
-use urbanization_developments::{MixedUseLesHallesDevelopment, PlacedBuilding};
+use urbanization_developments::{DevelopmentFinish, MixedUseLesHallesDevelopment, PlacedBuilding};
 
 use super::site::DevelopmentKind;
 use super::terrace::{TerraceCell, TerraceEnvelope, TerraceKind, TerracePlan};
 use crate::artifact::BuiltDevelopment;
 use crate::cell::{available_footprint, MAX_CONFINES_HEIGHT, MIN_CONFINES_HEIGHT, MIN_FOOTPRINT};
-use crate::finish::DevelopmentFinish;
 
 pub struct LesHallesKind;
 

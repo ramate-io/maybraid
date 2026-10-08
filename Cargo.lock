@@ -12325,8 +12325,10 @@ name = "urbanization-developments"
 version = "0.1.2"
 dependencies = [
  "anyhow",
+ "bevy",
  "bevy_math",
  "building-components",
+ "building-shaders",
  "buildings",
  "lod",
  "material-ref",
