@@ -3,7 +3,7 @@ use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
 use character_rigs::Side;
 
 use crate::animations::{Run, UprightRun};
-use crate::rigs::humanoid::apply::apply_arm;
+use crate::rigs::humanoid::apply::{apply_arm, apply_root};
 use crate::rigs::humanoid::gait_knee::lerp_swing_knee;
 use crate::{Animation, Progress};
 
@@ -28,6 +28,7 @@ impl UprightRun {
 		let left_arm_swing = -arm_swing(phase);
 		let right_arm_swing = arm_swing(phase + 0.5);
 
+		apply_root(&mut pose, self.torso_lean);
 		apply_leg(&mut pose, Side::Left, phase, -1.0, self);
 		apply_leg(&mut pose, Side::Right, phase, 1.0, self);
 		// Both elbows share one flexion sign. Opposite arm_down values are a hang bias.
@@ -188,5 +189,30 @@ mod tests {
 		let pelvis = tip(&rig, "pelvis.L");
 		assert!(shoulder.x.abs() > 0.0, "expected shoulder bounce, got {shoulder:?}");
 		assert!(pelvis.x.abs() > 0.0, "expected hip bounce, got {pelvis:?}");
+	}
+
+	#[test]
+	fn run_applies_forward_torso_lean() {
+		let mut rig = HumanoidV0Rig::for_clip_test();
+		UprightRun::default().apply(&mut rig, 0.25);
+
+		let root = tip(&rig, "root");
+		assert!(root.z > 0.08, "forward lean goes to +Z, got {root:?}");
+		assert!(root.x.abs() < 1e-3, "lean must not yaw, got {root:?}");
+	}
+
+	#[test]
+	fn run_lean_exceeds_walk_for_matching_stride_scale() {
+		use crate::animations::Walk;
+
+		let mut walk = HumanoidV0Rig::for_clip_test();
+		Walk::default().apply(&mut walk, 0.25);
+		let mut run = HumanoidV0Rig::for_clip_test();
+		Run::default().apply(&mut run, 0.25);
+
+		assert!(
+			tip(&run, "root").z > tip(&walk, "root").z + 0.02,
+			"run should pitch farther forward than walk"
+		);
 	}
 }
