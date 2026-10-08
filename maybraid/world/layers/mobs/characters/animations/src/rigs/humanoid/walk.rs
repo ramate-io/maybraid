@@ -5,7 +5,7 @@ use character_rigs::Side;
 use crate::animations::{UprightWalk, Walk};
 use crate::rigs::humanoid::apply::{apply_arm, apply_root};
 use crate::rigs::humanoid::gait_knee::lerp_swing_knee;
-use crate::rigs::humanoid::write_masks::walk_write_mask;
+use crate::rigs::humanoid::write_masks::{debug_assert_pose_within_mask, walk_write_mask};
 use crate::{Animation, Progress};
 
 impl Walk {
@@ -17,7 +17,9 @@ impl Walk {
 
 impl Animation<HumanoidV0Rig> for Walk {
 	fn apply_for(&self, rig: &mut HumanoidV0Rig, progress: f32) {
-		rig.apply_masked_pose(&self.sample_pose(progress), walk_write_mask());
+		let pose = self.sample_pose(progress);
+		debug_assert_pose_within_mask(&pose, walk_write_mask(), "walk");
+		rig.apply_masked_pose(&pose, walk_write_mask());
 	}
 }
 
@@ -32,7 +34,9 @@ impl UprightWalk {
 
 impl Animation<HumanoidV0Rig> for UprightWalk {
 	fn apply_for(&self, rig: &mut HumanoidV0Rig, progress: f32) {
-		rig.apply_masked_pose(&self.sample_pose(progress), walk_write_mask());
+		let pose = self.sample_pose(progress);
+		debug_assert_pose_within_mask(&pose, walk_write_mask(), "upright_walk");
+		rig.apply_masked_pose(&pose, walk_write_mask());
 	}
 }
 
@@ -346,7 +350,7 @@ mod tests {
 		}
 	}
 
-	fn bench_locomotion_apply(use_masked: bool) -> (u128, u128, u128) {
+	fn bench_locomotion_apply(use_masked: bool) -> Vec<u128> {
 		const FRAMES: u32 = 2_000;
 		const CHARACTERS: u32 = 32;
 		const RUNS: u32 = 5;
@@ -399,14 +403,17 @@ mod tests {
 		}
 
 		run_ns.sort_unstable();
-		let min = *run_ns.first().expect("run");
-		let median = run_ns[run_ns.len() / 2];
-		(min, median, run_ns.iter().sum::<u128>() / run_ns.len() as u128)
+		run_ns
 	}
 
-	fn report_locomotion_bench(label: &str, min: u128, median: u128, mean: u128) {
+	fn report_locomotion_bench(label: &str, run_ns: &[u128]) {
+		let min = *run_ns.first().expect("run");
+		let median = run_ns[run_ns.len() / 2];
+		let mean = run_ns.iter().sum::<u128>() / run_ns.len() as u128;
+		let spread = run_ns.last().expect("run") - min;
 		eprintln!(
-			"locomotion_resolve_microbench {label}: min={min} ns/sample median={median} ns/sample mean={mean} ns/sample"
+			"locomotion_resolve_microbench {label}: runs={runs:?} min={min} median={median} mean={mean} spread={spread} ns/sample",
+			runs = run_ns,
 		);
 	}
 
@@ -417,9 +424,7 @@ mod tests {
 		eprintln!(
 			"32 humanoid characters, idle/walk/run sample_pose + resolve, real Animation apply path"
 		);
-		let (legacy_min, legacy_median, legacy_mean) = bench_locomotion_apply(false);
-		report_locomotion_bench("legacy write_pose", legacy_min, legacy_median, legacy_mean);
-		let (min, median, mean) = bench_locomotion_apply(true);
-		report_locomotion_bench("masked partial resolve", min, median, mean);
+		report_locomotion_bench("legacy write_pose", &bench_locomotion_apply(false));
+		report_locomotion_bench("masked partial resolve", &bench_locomotion_apply(true));
 	}
 }

@@ -11,6 +11,9 @@ use std::sync::{Arc, OnceLock, RwLock};
 
 use bevy::prelude::*;
 use character_animations::animations::{Idle, Run, Walk};
+use character_animations::rigs::humanoid::write_masks::{
+	IDLE_WRITE_BONES, RUN_WRITE_BONES, WALK_WRITE_BONES,
+};
 use character_animations::{
 	finite_parameter_bits, interval_seconds, ClipTimePolicy, Effects, SampleAddress,
 	DEFAULT_SAMPLE_INTERVAL_US,
@@ -30,50 +33,6 @@ pub const CURRENT_CLIP_REVISION: u64 = 0;
 pub const DEFAULT_MAX_VARIANTS: usize = 64;
 /// Lazy idle slots so a long rest does not allocate an unbounded table.
 pub const DEFAULT_MAX_UNBOUNDED_BINS: usize = 4096;
-
-const IDLE_BONES: &[&str] = &[
-	"lower_neck",
-	"upper_neck",
-	"pelvis.L",
-	"pelvis.R",
-	"shoulder.L",
-	"shoulder.R",
-	"humerus.L",
-	"humerus.R",
-	"forearm.L",
-	"forearm.R",
-];
-
-const WALK_BONES: &[&str] = &[
-	"root",
-	"pelvis.L",
-	"pelvis.R",
-	"femur.L",
-	"femur.R",
-	"shin.L",
-	"shin.R",
-	"shoulder.L",
-	"shoulder.R",
-	"humerus.L",
-	"humerus.R",
-	"forearm.L",
-	"forearm.R",
-];
-
-const RUN_BONES: &[&str] = &[
-	"pelvis.L",
-	"pelvis.R",
-	"femur.L",
-	"femur.R",
-	"shin.L",
-	"shin.R",
-	"shoulder.L",
-	"shoulder.R",
-	"humerus.L",
-	"humerus.R",
-	"forearm.L",
-	"forearm.R",
-];
 
 /// Compatible-rig identity. Humanoid V0 is the first prepared family.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -516,9 +475,9 @@ pub fn parameters_key(clip: AnimClip) -> Option<ClipParametersKey> {
 
 pub fn clip_write_bones(clip: AnimClip) -> Option<&'static [&'static str]> {
 	match clip {
-		AnimClip::Still => Some(IDLE_BONES),
-		AnimClip::Walk(_) => Some(WALK_BONES),
-		AnimClip::Run(_) => Some(RUN_BONES),
+		AnimClip::Still => Some(IDLE_WRITE_BONES),
+		AnimClip::Walk(_) => Some(WALK_WRITE_BONES),
+		AnimClip::Run(_) => Some(RUN_WRITE_BONES),
 		_ => None,
 	}
 }
@@ -942,7 +901,7 @@ mod tests {
 		Ok(())
 	}
 
-	fn bench_prepared_sample_loop(use_legacy: bool) -> (u128, u128, u128) {
+	fn bench_prepared_sample_loop(use_legacy: bool) -> Vec<u128> {
 		const FRAMES: u32 = 2_000;
 		const CHARACTERS: u32 = 32;
 		const RUNS: u32 = 5;
@@ -982,14 +941,17 @@ mod tests {
 		}
 
 		run_ns.sort_unstable();
-		let min = *run_ns.first().expect("run");
-		let median = run_ns[run_ns.len() / 2];
-		(min, median, run_ns.iter().sum::<u128>() / run_ns.len() as u128)
+		run_ns
 	}
 
-	fn report_apply_bench(label: &str, min: u128, median: u128, mean: u128) {
+	fn report_apply_bench(label: &str, run_ns: &[u128]) {
+		let min = *run_ns.first().expect("run");
+		let median = run_ns[run_ns.len() / 2];
+		let mean = run_ns.iter().sum::<u128>() / run_ns.len() as u128;
+		let spread = run_ns.last().expect("run") - min;
 		eprintln!(
-			"apply_evaluated_sample_microbench {label}: min={min} ns/sample median={median} ns/sample mean={mean} ns/sample"
+			"apply_evaluated_sample_microbench {label}: runs={runs:?} min={min} median={median} mean={mean} spread={spread} ns/sample",
+			runs = run_ns,
 		);
 	}
 
@@ -1000,9 +962,7 @@ mod tests {
 		eprintln!(
 			"32 humanoid characters, Still/Walk/Run prepared clips, real cache.sample + apply path"
 		);
-		let (legacy_min, legacy_median, legacy_mean) = bench_prepared_sample_loop(true);
-		report_apply_bench("legacy copy+delta", legacy_min, legacy_median, legacy_mean);
-		let (min, median, mean) = bench_prepared_sample_loop(false);
-		report_apply_bench("fused mask pass", min, median, mean);
+		report_apply_bench("legacy copy+delta", &bench_prepared_sample_loop(true));
+		report_apply_bench("fused mask pass", &bench_prepared_sample_loop(false));
 	}
 }
