@@ -10,6 +10,12 @@
 //! - [`demand`]: [`HcsgDemand`], one subscription per bounds source, and the
 //!   epoch that sessions advance.
 //! - [`worker`]: [`HcsgWorker`], the thread that fills subscriptions.
+//! - [`bounds`]: [`HcsgBounds`], where a system wants values.
+//! - [`generation`]: [`generation<B, T>`](generation::generation) keeps `T`
+//!   warm within `B`, fire and forget.
+//! - [`presentation`]: [`presentation<B, T>`](presentation::presentation)
+//!   keeps one [`HcsgNode<T>`] host per published value within `B`.
+//! - [`node`]: [`HcsgNode<T>`], forwarding the LOD scene traits to `T`.
 //! - `adapter`: runs legacy generic schemes on the context until they are
 //!   rewritten.
 //!
@@ -17,15 +23,27 @@
 //! layers move over.
 
 mod adapter;
+pub mod bounds;
 pub mod context;
 pub mod demand;
+pub mod generation;
+pub mod node;
+pub mod presentation;
+mod runtime;
 pub mod storage;
 pub mod worker;
 
 #[cfg(test)]
+mod system_tests;
+#[cfg(test)]
 mod tests;
 
+pub use bounds::HcsgBounds;
 pub use context::{GenerationContext, GenerationScheme};
 pub use demand::{HcsgDemand, SubscriptionId};
+pub use generation::GenerationPlugin;
+pub use node::HcsgNode;
+pub use presentation::PresentationPlugin;
+pub use runtime::HcsgSystems;
 pub use storage::{Busy, HcsgStorage, HcsgValue};
 pub use worker::HcsgWorker;

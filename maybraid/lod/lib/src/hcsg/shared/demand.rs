@@ -149,6 +149,12 @@ impl HcsgDemand {
 		}))
 	}
 
+	/// Whether `id` still exists; `false` once replaced, removed, or dropped by
+	/// [`Self::advance_epoch`].
+	pub fn try_is_live(&self, id: SubscriptionId) -> Result<bool, Busy> {
+		Ok(self.try_lock()?.subscriptions.contains_key(&id))
+	}
+
 	/// Ends the session: cancels and drops every subscription. Values the
 	/// worker is still generating are not published.
 	pub fn advance_epoch(&self) -> u64 {

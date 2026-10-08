@@ -248,6 +248,9 @@ pub trait HcsgBounds: Send + Sync + 'static {
 
 Bounds sources that should share hosts must combine their demand into one `B`.
 
+- Every change to `inner` replaces the subscription, so a source should snap `inner` to the cells it covers rather than follow the camera exactly.
+- `inner` returning `None` requests nothing, and the system unsubscribes. `outer` returning `None` retires every host.
+
 ### The generation system
 
 `generation<B, T>` is presentation without the marshalling. It works the same way on the request side, but it has nothing to reconcile, so it is fire and forget at both ends:
@@ -266,7 +269,7 @@ struct Generated<T> {
 }
 ```
 
-- **Request:** when `B::inner` changes, it replaces its subscription, exactly as presentation does. That is all it does on this side. It never reads `published`, keeps no cursor, holds no hosts and creates no entities.
+- **Request:** when `B::inner` changes, it replaces its subscription, exactly as presentation does. It also resubscribes when `HcsgDemand::try_is_live` reports its subscription gone, for example after an epoch change. That is all it does on this side. It never reads `published`, keeps no cursor, holds no hosts and creates no entities.
 - **Retire (later):** it evicts values of `T` from `HcsgStorage` once their bounds leave `B::outer`. Generation is the only system that retires from HCSG. Presentation never evicts stored values; it only retires its Bevy hosts.
 
 Use it to keep values warm where nothing is presented yet, such as ahead of the camera or under a gameplay region. A type that is presented needs no separate generation system, because presentation requests its own generation.
@@ -279,23 +282,22 @@ Use it to keep values warm where nothing is presented yet, such as ahead of the 
 #[derive(Component)]
 pub struct HcsgNode<T: HcsgValue> {
     pub id: Id,
-    pub version: GenerationVersion,
+    pub version: Version,
+    pub bounds: Aabb3d, // the stored bounds
     pub value: Arc<T>,
 }
 
-impl<T: HcsgValue> Clone for HcsgNode<T> {
-    fn clone(&self) -> Self {
-        Self { id: self.id, version: self.version, value: Arc::clone(&self.value) }
-    }
-}
+impl<T: HcsgValue> Clone for HcsgNode<T> { /* clones the Arc */ }
 ```
 
 `T` does not need to be a Bevy component or `Clone`, and host construction requires no `Default`. A host is built from a completed record.
 
+Hosts sit at the identity transform, as forest groves already do. A presented value's scenes are posed in world space, and its stored bounds are the host's `LodHostBounds`.
+
 ### The presentation system
 
 ```rust
-pub fn presentation<B: HcsgBounds, T: GenerationScheme>(
+pub fn presentation<B: HcsgBounds, T: GenerationScheme + SemanticLodScene>(
     bounds: StaticSystemParam<B::Param>,
     storage: Res<HcsgStorage>,
     demand: Res<HcsgDemand>,
@@ -316,8 +318,8 @@ Each frame:
 
 1. **Request.** If `B::inner` changed, replace the subscription (`subscribe` with the previous id) and reset the cursor. The presentation system never calls discovery itself.
 2. **Read.** `try_read_published(subscription, cursor)`. On `Err(Busy)`, nothing changes this frame. On `Ok(None)`, the subscription is gone (for example after an epoch change), so subscribe again.
-3. **Spawn.** For each new id not already in `hosts`, clone the entry's `Arc` under a short `try_read` of the store, then spawn a host carrying `HcsgNode<T>`. If the store is busy, the id is retried next frame and the cursor is not advanced past it.
-4. **Retire.** Despawn any host whose entry bounds no longer intersect `B::outer`, along with its owned scene subtree. Retirement depends only on bounds, never on what discovery returned.
+3. **Spawn.** For each new id, clone the entry's `Arc` under a short `try_read` of the store, then spawn a pending LOD host (`lod_host_scene_pending`, at the level `T` picks for the focus) carrying `HcsgNode<T>`. If the store is busy, the id is retried next frame and the cursor is not advanced past it. An id already hosted at the same version is skipped. One hosted at an older version, which only happens across sessions, has its host replaced.
+4. **Retire.** Despawn any host whose entry bounds no longer intersect `B::outer`, along with its owned scene subtree. Retirement depends only on bounds, never on what discovery returned. Hosts are only rechecked when `B::outer` changes or new hosts were spawned.
 
 Notes:
 - When the subscription is replaced, existing hosts stay. Ids the new subscription publishes that are already in `hosts` are skipped.
@@ -340,6 +342,7 @@ impl<T: VisualLodScene + HcsgValue> VisualLodScene for HcsgNode<T> {
 ```
 
 - `LodScene` builds the semantic ECS subtree. `VisualLodScene` builds visual representations, including packed geometry held outside archetype storage.
+- Every method forwards except `scene_bounds`, which returns the node's stored bounds (see [the host component](#the-host-component)).
 - Host construction inserts `HcsgNode<T>` itself. It never forwards to an inner host-construction method that inserts or clones `T`.
 - Follow-on systems query `HcsgNode<T>` directly.
 - Within a session values never change, so a version change only happens across sessions. Asynchronous scene work still checks the host's version before attaching its result. A change of LOD alone reuses the same value.
@@ -349,16 +352,17 @@ impl<T: VisualLodScene + HcsgValue> VisualLodScene for HcsgNode<T> {
 ```rust
 app.add_plugins(PresentationPlugin::<WorldBounds, Terrain>::default());
 
-app.register_lod_scene::<HcsgNode<Terrain>>();
-app.register_visual_lod_scene::<HcsgNode<Terrain>>();
+// Scenes: the existing LOD refresh plugins, typed on the host component.
+app.add_plugins(GimmeLodSceneRefreshPlugin::<HcsgNode<Terrain>, TerrainRefresh, With<Camera>>::default());
 
 // Only where values should stay warm without being presented:
 app.add_plugins(GenerationPlugin::<AheadOfCamera, Terrain>::default());
 ```
 
 - Presentation needs no separately registered generation system. It requests its own generation.
-- Scene capabilities are registered according to the traits `T` implements.
-- Host reconciliation runs before scene follow-on systems, with deferred entity changes applied between them.
+- Either plugin initializes `HcsgStorage` and `HcsgDemand` if missing, and spawns the one `HcsgWorker`.
+- Scene capabilities come from the refresh plugins a layer already chooses (`LodSceneRefreshChunkPlugin`, `GimmeLodSceneRefreshPlugin`, …), now typed on `HcsgNode<T>`. No separate registration API.
+- Both systems run in `HcsgSystems`, before `LodRefreshSystems::Track`. Bevy applies the deferred host spawns before the refresh chain sees them.
 
 ## Sessions and epochs
 
@@ -411,7 +415,7 @@ The new API lives in `lod::hcsg::shared`, alongside the frame-synchronous `lod::
 
 0. **Shared storage, context, demand and worker** (done). `HcsgStorage` with `Arc` values and `Busy`, `HcsgValue`, `GenerationScheme` and `GenerationContext`, `HcsgDemand` and `HcsgWorker`, tested in isolation.
 1. **Adapter** (done). `GenerationContext` implements the legacy `SpatialIndex<T>`, so every legacy scheme generic over `S` (Durham, cells) is a `GenerationScheme` unchanged and runs on the worker. Native schemes can depend on those legacy types. Legacy `get(&self) -> Option<&T>` borrows from an append-only cache (`elsa::FrozenMap`) of the `Arc`s the context has read. Legacy `descendants` run only from legacy entry points.
-2. **Generation and presentation systems.** `HcsgBounds`, `HcsgNode<T>`, `generation<B, T>`, `presentation<B, T>`, scene forwarding and the plugins, tested on fixtures.
+2. **Generation and presentation systems** (done). `HcsgBounds`, `HcsgNode<T>`, `generation<B, T>`, `presentation<B, T>`, scene forwarding and the plugins, tested on fixtures with the real worker and the LOD chunk-fulfill pipeline.
 3. **Durham.** Present terrain and water through `presentation<B, T>` next to the old presenters; seed Durham's roots into both storages; switch `durham-playground`.
 4. **Richmond.** Rewrite its four schemes natively; present total padded terrain and built developments; delete the terrain replacement machinery.
 5. **Chico, Barking, Maputo.** Rewrite each onto the context, deleting its bespoke index and presenter; then delete `gen::runtime`.
