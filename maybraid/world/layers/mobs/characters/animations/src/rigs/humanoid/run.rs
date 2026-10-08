@@ -5,6 +5,7 @@ use character_rigs::Side;
 use crate::animations::{Run, UprightRun};
 use crate::rigs::humanoid::apply::apply_arm;
 use crate::rigs::humanoid::gait_knee::lerp_swing_knee;
+use crate::rigs::humanoid::write_masks::run_write_mask;
 use crate::{Animation, Progress};
 
 impl Run {
@@ -16,7 +17,7 @@ impl Run {
 
 impl Animation<HumanoidV0Rig> for Run {
 	fn apply_for(&self, rig: &mut HumanoidV0Rig, progress: f32) {
-		rig.write_pose(&self.sample_pose(progress))
+		rig.apply_masked_pose(&self.sample_pose(progress), run_write_mask());
 	}
 }
 
@@ -39,7 +40,7 @@ impl UprightRun {
 
 impl Animation<HumanoidV0Rig> for UprightRun {
 	fn apply_for(&self, rig: &mut HumanoidV0Rig, progress: f32) {
-		rig.write_pose(&self.sample_pose(progress));
+		rig.apply_masked_pose(&self.sample_pose(progress), run_write_mask());
 	}
 }
 

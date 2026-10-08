@@ -403,7 +403,7 @@ pub fn apply_anim_mailbox(
 	bones: Query<&AnimBone, Without<AnimMailbox>>,
 	mut bone_tfs: Query<&mut Transform, (With<AnimBone>, Without<AnimMailbox>)>,
 ) {
-	let only = set.as_ref().and_then(|set| set.only.clone());
+	let only = set.as_ref().and_then(|set| set.only.as_ref());
 	let cache = cache.as_deref();
 	hosts.par_iter_mut().batching_strategy(BatchingStrategy::fixed(8)).for_each(
 		|(
@@ -419,7 +419,7 @@ pub fn apply_anim_mailbox(
 			quadruped,
 			forelimbed,
 		)| {
-			if !allows_only(only.as_ref(), entity) {
+			if !allows_only(only, entity) {
 				return;
 			}
 			if character_rig.role != CharacterRigRole::Body {
@@ -429,7 +429,7 @@ pub fn apply_anim_mailbox(
 			let requested = root.0.clip;
 			let progress = clip_progress(requested, mailbox.clip_progress, entity);
 			let weight = BlendCurve::SmoothStep.sample(mailbox.blend_progress);
-			let prepared = mailbox.prepared_clip.clone();
+			let prepared = mailbox.prepared_clip.as_ref();
 			let effects = match character_rig.skeleton {
 				RigSkeletonKind::Humanoid => {
 					let mut rig = match humanoid {
@@ -446,7 +446,7 @@ pub fn apply_anim_mailbox(
 						write_bones,
 						write_effects,
 						cache,
-						prepared.as_ref(),
+						prepared,
 					);
 					if write_bones {
 						publish_pose(&mut mailbox, &rig.pose, weight);
@@ -502,7 +502,7 @@ pub fn apply_anim_mailbox(
 		if !write_bones || character_rig.role != CharacterRigRole::Body {
 			continue;
 		}
-		if !allows_only(only.as_ref(), entity) {
+		if !allows_only(only, entity) {
 			continue;
 		}
 		let names = match character_rig.skeleton {
@@ -685,7 +685,12 @@ fn sample_humanoid_prepared(
 	if let (Some(cache), Some(prepared)) = (cache, prepared) {
 		if let Some(sample) = cache.sample(prepared, progress) {
 			if write_bones {
-				apply_evaluated_sample(&rig.binding.effective_rest, sample, &mut rig.pose);
+				apply_evaluated_sample(
+					&rig.binding.effective_rest,
+					prepared.bone_mask(),
+					sample,
+					&mut rig.pose,
+				);
 			}
 			return if write_effects { sample.effects } else { Effects::IDENTITY };
 		}

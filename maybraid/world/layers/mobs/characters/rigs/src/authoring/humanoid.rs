@@ -279,7 +279,12 @@ fn apply_masked(
 	rest: &PoseBuffer,
 	out: &mut PoseBuffer,
 ) {
-	out.copy_from(rest);
+	let n = rest.local.len().min(out.local.len());
+	for index in 0..n {
+		if mask & (1u32 << index) == 0 {
+			out.local[index] = rest.local[index];
+		}
+	}
 	for (index, name) in definition.names.iter().enumerate() {
 		if mask & (1u32 << index) == 0 {
 			continue;
