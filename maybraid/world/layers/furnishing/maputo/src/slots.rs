@@ -7,7 +7,7 @@ use building_components::FurnitureNode;
 use furniture_usage_areas::expand_usages;
 use lod::gen::{Id, Version};
 use lod::hcsg::HcsgStorage;
-use richmond::{Built, BuiltDevelopment, DevelopmentHosts, RichmondGround, RichmondStorage};
+use richmond::{Built, BuiltDevelopment, DevelopmentHosts, RichmondGround};
 use urbanization_layer_model::Urbanization;
 
 use crate::cell::world_slot;
@@ -60,7 +60,7 @@ impl<G: RichmondGround> FurnitureSlots for Urbanization<richmond::Richmond<G>> {
 		read: &SystemParamItem<'_, '_, Self::Read>,
 		region: Aabb3d,
 	) -> Vec<(Id, Version)> {
-		read.built_overlapping::<G>(region)
+		Built::<G>::overlapping(read, region)
 			.into_iter()
 			.map(|(id, version, _)| (id, version))
 			.collect()

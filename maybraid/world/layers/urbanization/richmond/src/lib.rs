@@ -83,7 +83,7 @@ pub use place::{DiscoverablePlace, DiscoverablePlaceLabel, InteriorArea};
 pub use plugin::{register_richmond_plugin, RichmondDevelopmentModelsPlugin};
 pub use presentation::{PaddedTerrainPresenter, PaddedTerrainPresenterState};
 pub use scatter::{bounds_intersect, ScatterCandidate, ScatterChoice, ScatterPlan, ScatterRecipe};
-pub use storage::{column_bounds, register_richmond_nodes, RichmondNodes, RichmondStorage};
+pub use storage::{column_bounds, register_richmond_nodes, RichmondNodes};
 
 #[cfg(test)]
 mod layer_tests;

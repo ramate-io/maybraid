@@ -24,7 +24,7 @@ use crate::compose::PadComposable;
 use crate::developments::RichmondDevelopment;
 use crate::ground::RichmondGround;
 use crate::pad::PadComplex;
-use crate::storage::RichmondStorage;
+use crate::storage::column_bounds;
 
 /// Durham [`Terrain`] plus overlapping development pads.
 #[derive(Debug, Clone, Component)]
@@ -191,6 +191,37 @@ impl<G> PaddedTerrain<G> {
 	}
 }
 
+impl<G: RichmondGround> PaddedTerrain<G> {
+	/// Stored padded surface with the greatest XZ overlap with `region`; the
+	/// finest on a tie.
+	pub fn best_overlapping(storage: &HcsgStorage, region: Aabb3d) -> Option<&TerrainWithPads> {
+		let mut best: Option<(f32, f32, &TerrainWithPads)> = None;
+		for id in storage.overlapping::<Self>(column_bounds(region)) {
+			let Some(entry) = storage.entry::<Self>(id) else {
+				continue;
+			};
+			let overlap_x = (region.max.x.min(entry.bounds.max.x)
+				- region.min.x.max(entry.bounds.min.x))
+			.max(0.0);
+			let overlap_z = (region.max.z.min(entry.bounds.max.z)
+				- region.min.z.max(entry.bounds.min.z))
+			.max(0.0);
+			let overlap = overlap_x * overlap_z;
+			if overlap <= 1e-3 {
+				continue;
+			}
+			let span = (entry.bounds.max.x - entry.bounds.min.x)
+				.max(entry.bounds.max.z - entry.bounds.min.z);
+			if best.is_none_or(|(best_overlap, best_span, _)| {
+				overlap > best_overlap || (overlap == best_overlap && span < best_span)
+			}) {
+				best = Some((overlap, span, &entry.value.surface));
+			}
+		}
+		best.map(|(_, _, terrain)| terrain)
+	}
+}
+
 impl<G: RichmondGround> GenerationScheme<HcsgStorage> for PaddedTerrain<G> {
 	/// The ground's stored cells: its rings tile differently around each
 	/// center, so padded cells follow whatever ground is streamed.
@@ -205,7 +236,7 @@ impl<G: RichmondGround> GenerationScheme<HcsgStorage> for PaddedTerrain<G> {
 		for OriginalId(development) in storage.original_ids_for::<RichmondDevelopment<G>>(bounds) {
 			storage.get_or_generate::<RichmondDevelopment<G>>(development);
 		}
-		let pads = storage.merged_pads::<G>(bounds);
+		let pads = RichmondDevelopment::<G>::merged_pads(storage, bounds);
 		if pads.is_empty() {
 			return None;
 		}

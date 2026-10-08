@@ -12,7 +12,7 @@ use durham::{
 use lod::hcsg::universal_bounds;
 use richmond::{
 	pad::PadStage, register_richmond_nodes, AuthoredDevelopment, AuthoredDevelopments,
-	DevelopmentConfig, DevelopmentKind, RichmondDevelopment, RichmondStorage,
+	DevelopmentConfig, DevelopmentKind, RichmondDevelopment,
 };
 use terrain_layer_model::{OnTerrain, TerrainView};
 use urbanization_layer_model::Urbanization;
@@ -36,7 +36,7 @@ fn old_ground_height(
 		Vec3::new(xz.x - 0.5, -10_000.0, xz.y - 0.5),
 		Vec3::new(xz.x + 0.5, 10_000.0, xz.y + 0.5),
 	);
-	store.merged_pads::<Ground>(probe).modify_elevation(raw, xz.x, xz.y)
+	RichmondDevelopment::<Ground>::merged_pads(store, probe).modify_elevation(raw, xz.x, xz.y)
 }
 
 fn first_classified(pad: &richmond::PadComplex, stage: PadStage) -> Option<Vec2> {

@@ -19,13 +19,13 @@ use urbanization_layer_model::{
 	UrbanizationGenerationSystems, UrbanizationLayerRegion,
 };
 
+use crate::built::Built;
 use crate::developments::RichmondDevelopment;
 use crate::ground::RichmondGround;
 use crate::host::DevelopmentHosts;
 use crate::layer::Richmond;
 use crate::padded::PaddedTerrain;
 use crate::presentation::PaddedTerrainPresenter;
-use crate::storage::RichmondStorage;
 use crate::{BuiltDevelopment, PresentedPaddedTerrainScene};
 
 #[derive(Component)]
@@ -174,7 +174,7 @@ pub fn present_richmond_hosts<G>(
 	};
 
 	let mut wanted = HashSet::new();
-	for (id, version, built) in storage.built_overlapping::<G>(region) {
+	for (id, version, built) in Built::<G>::overlapping(&storage, region) {
 		let Some(development) = storage.get::<RichmondDevelopment<G>>(id) else {
 			continue;
 		};

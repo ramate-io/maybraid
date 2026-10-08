@@ -3,14 +3,14 @@
 use std::marker::PhantomData;
 
 use bevy::math::bounding::Aabb3d;
-use lod::gen::{GenerationScheme, Id, OriginalId};
+use lod::gen::{GenerationScheme, Id, OriginalId, Version};
 use lod::hcsg::HcsgStorage;
 
 use crate::artifact::BuiltDevelopment;
 use crate::developments::site::DevelopmentSite;
 use crate::developments::RichmondDevelopment;
 use crate::ground::RichmondGround;
-use crate::storage::column_bounds;
+use crate::storage::{column_bounds, overlaps_xz};
 
 /// Buildings fitted to one filled [`RichmondDevelopment`] over ground `G`.
 pub struct Built<G> {
@@ -21,6 +21,27 @@ pub struct Built<G> {
 impl<G> Built<G> {
 	pub fn new(development: BuiltDevelopment) -> Self {
 		Self { development, _ground: PhantomData }
+	}
+}
+
+impl<G: RichmondGround> Built<G> {
+	/// Stored built developments overlapping `region` on XZ, with versions.
+	pub fn overlapping(
+		storage: &HcsgStorage,
+		region: Aabb3d,
+	) -> Vec<(Id, Version, &BuiltDevelopment)> {
+		storage
+			.overlapping::<Self>(column_bounds(region))
+			.into_iter()
+			.filter_map(|id| {
+				let entry = storage.entry::<Self>(id)?;
+				overlaps_xz(region, entry.bounds).then_some((
+					id,
+					entry.version,
+					&entry.value.development,
+				))
+			})
+			.collect()
 	}
 }
 

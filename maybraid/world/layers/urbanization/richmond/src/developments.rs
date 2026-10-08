@@ -20,12 +20,12 @@ use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec2;
 use lod::gen::{GenerationScheme, Id, OriginalId};
 use lod::hcsg::HcsgStorage;
-use procedural_common::NoiseParams;
+use procedural_common::{Bounds2, NoiseParams};
 
 use crate::artifact::BuiltDevelopment;
 use crate::ground::{GroundSampler, RichmondGround, SiteGround};
 use crate::pad::{cell_center_xz, PadComplex, PadParams};
-use crate::storage::column_bounds;
+use crate::storage::{column_bounds, overlaps_xz_strictly};
 
 use les_halles::LesHallesCell;
 use old_city_market::OldCityMarketCell;
@@ -100,6 +100,28 @@ impl<G: RichmondGround> GenerationScheme<HcsgStorage> for RichmondDevelopment<G>
 }
 
 impl<G: RichmondGround> RichmondDevelopment<G> {
+	/// Pad nodes of stored filled developments affecting `region`, merged
+	/// into one sample-time blend pass.
+	///
+	/// One complex matters for overlapping pads: sequential modulation
+	/// would let later ease skirts smear earlier exact terraces.
+	pub fn merged_pads(storage: &HcsgStorage, region: Aabb3d) -> PadComplex {
+		let bounds = Bounds2::from_xz(region.min.x, region.min.z, region.max.x, region.max.z);
+		let nodes = storage
+			.overlapping::<Self>(column_bounds(region))
+			.into_iter()
+			.filter_map(|id| storage.get::<Self>(id))
+			.filter(|development| {
+				development.is_filled() && overlaps_xz_strictly(region, development.cell())
+			})
+			.flat_map(Self::pad_complexes)
+			.flat_map(|complex| complex.pads.iter())
+			.filter(|node| node.correction_intersects(bounds))
+			.cloned()
+			.collect();
+		PadComplex::from_nodes(nodes)
+	}
+
 	fn build_kind(storage: &mut HcsgStorage, id: Id, kind: DevelopmentKind) -> Option<Self> {
 		Some(match kind {
 			DevelopmentKind::Empty => return None,

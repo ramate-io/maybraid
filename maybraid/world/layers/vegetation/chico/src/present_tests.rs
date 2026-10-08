@@ -20,7 +20,7 @@ use lod::{LodPresentCullPlugin, LodPresentGate, LodPresentKeepRegion, LodPresent
 use lod::hcsg::universal_bounds;
 use richmond::{
 	register_richmond_nodes, AuthoredDevelopment, AuthoredDevelopments, DevelopmentConfig,
-	DevelopmentKind, PadComplex, RichmondDevelopment, RichmondStorage,
+	DevelopmentKind, PadComplex, RichmondDevelopment,
 };
 use terrain_layer_model::{HeightField, OnTerrain, TerrainView};
 use urbanization_layer_model::Urbanization;
@@ -137,7 +137,10 @@ fn ground_grove_sample_matches_durham_and_modulated_samples() -> anyhow::Result<
 		layout: layout.clone(),
 		fallback: base,
 	};
-	let pads = world.resource::<HcsgStorage>().merged_pads::<OnTerrain<Durham>>(region);
+	let pads = RichmondDevelopment::<OnTerrain<Durham>>::merged_pads(
+		world.resource::<HcsgStorage>(),
+		region,
+	);
 	let old_durham = DurhamGroveSample(owned.clone());
 	let old_urban =
 		ModulatedGroveSample::new(DurhamGroveSample(owned), vec![DevelopmentPadModulation(pads)]);
