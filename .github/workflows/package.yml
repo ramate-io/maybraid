@@ -262,8 +262,20 @@ jobs:
           fi
           echo "version=$v" >> "$GITHUB_OUTPUT"
 
+      - name: Rust channel from rust-toolchain.toml
+        id: rust
+        shell: bash
+        run: |
+          channel=$(awk -F'"' '/^channel[[:space:]]*=/{print $2; exit}' rust-toolchain.toml)
+          if [ -z "$channel" ]; then
+            echo "could not read toolchain channel from rust-toolchain.toml" >&2
+            exit 1
+          fi
+          echo "channel=$channel" >> "$GITHUB_OUTPUT"
+
       - uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: ${{ steps.rust.outputs.channel }}
           targets: x86_64-pc-windows-msvc
 
       - name: Prepare release target directory
