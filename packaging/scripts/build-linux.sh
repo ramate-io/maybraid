@@ -31,7 +31,8 @@ docker run --rm \
 	-e HOST_UID="$(id -u)" \
 	-e HOST_GID="$(id -g)" \
 	"$IMAGE" \
-	bash -lc 'cargo build -p maybraid --release --locked --target x86_64-unknown-linux-gnu
+	bash -lc 'export PATH="/opt/rust/cargo/bin:$PATH"
+		cargo build -p maybraid --release --locked --target x86_64-unknown-linux-gnu
 		chown -R "$HOST_UID:$HOST_GID" /src/target/sniper-release || true'
 
 [[ -f "$OUT" ]] || { echo "build-linux: missing $OUT" >&2; exit 1; }
