@@ -1,6 +1,6 @@
 use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
 
-use crate::animations::{Idle, RunStop, RunStopSegment, Transition, Walk};
+use crate::animations::{RunStop, RunStopSegment, Transition, Walk};
 use crate::rigs::mix::blend_clips;
 use crate::{Animation, Effects};
 
