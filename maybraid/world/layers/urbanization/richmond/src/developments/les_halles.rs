@@ -9,7 +9,6 @@ use super::solitary::{SolitaryCell, SolitaryEnvelope, SolitaryKind, SolitaryPlan
 use crate::artifact::BuiltDevelopment;
 use crate::cell::{available_footprint, MAX_CONFINES_HEIGHT, MIN_CONFINES_HEIGHT, MIN_FOOTPRINT};
 use crate::finish::DevelopmentFinish;
-use crate::les_halles::LesHallesDevelopment;
 
 pub struct LesHallesKind;
 
@@ -33,18 +32,14 @@ impl SolitaryKind for LesHallesKind {
 	}
 
 	fn built(plan: &SolitaryPlan, noise: NoiseParams) -> Option<BuiltDevelopment> {
-		let (development, _) =
-			MixedUseLesHallesDevelopment::fit_to_confines(&plan.confines(), noise).ok()?;
+		let (placed, _) = PlacedBuilding::<MixedUseLesHallesDevelopment>::fit_to_confines(
+			&plan.confines(),
+			noise,
+		)
+		.ok()?;
 		let finish = plan.finish.clone();
-		Some(BuiltDevelopment::LesHalles(Box::new(LesHallesDevelopment {
-			cell: plan.cell,
-			building: PlacedBuilding {
-				center_xz: plan.center_xz(),
-				yaw: plan.confines_yaw,
-				footprint: plan.confines_extent_xz,
-				ground_height: plan.pad.height,
-				building: development.with_finish(finish.wall, finish.roof),
-			},
-		})))
+		Some(BuiltDevelopment::LesHalles(Box::new(
+			placed.map(|halles| halles.with_finish(finish.wall, finish.roof)),
+		)))
 	}
 }

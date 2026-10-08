@@ -2,16 +2,16 @@
 
 use bevy::ecs::system::RunSystemOnce;
 use bevy::math::bounding::Aabb3d;
-use bevy::math::{Vec2, Vec3};
+use bevy::math::Vec3;
 use bevy::prelude::{Res, World};
 use building_components::FurnitureNode;
 use buildings::{Confines, Fit};
-use furniture_usage_areas::expand_usages;
 use durham::Durham;
+use furniture_usage_areas::expand_usages;
 use lod::gen::Id;
 use lod::hcsg::HcsgStorage;
 use procedural_common::NoiseParams;
-use richmond::{Built, BuiltDevelopment, DevelopmentHosts, LesHallesDevelopment};
+use richmond::{Built, BuiltDevelopment, DevelopmentHosts};
 use terrain_layer_model::OnTerrain;
 use urbanization_developments::{MixedUseLesHallesDevelopment, PlacedBuilding};
 use urbanization_layer_model::Urbanization;
@@ -24,20 +24,12 @@ type Urbanized = Urbanization<richmond::Richmond<Ground>>;
 
 fn les_halles(yaw: f32) -> anyhow::Result<BuiltDevelopment> {
 	let bounds = Aabb3d::from_min_max(Vec3::new(-18.0, 0.0, -18.0), Vec3::new(18.0, 10.0, 18.0));
-	let (development, _) = MixedUseLesHallesDevelopment::fit_to_confines(
+	let (mut development, _) = PlacedBuilding::<MixedUseLesHallesDevelopment>::fit_to_confines(
 		&Confines::from_bounds(bounds),
 		NoiseParams { seed: 1337, ..NoiseParams::default() },
 	)?;
-	Ok(BuiltDevelopment::LesHalles(Box::new(LesHallesDevelopment {
-		cell: bounds,
-		building: PlacedBuilding {
-			center_xz: Vec2::ZERO,
-			yaw,
-			footprint: Vec2::splat(36.0),
-			ground_height: 0.0,
-			building: development,
-		},
-	})))
+	development.yaw = yaw;
+	Ok(BuiltDevelopment::LesHalles(Box::new(development)))
 }
 
 fn expected_slots(development: &BuiltDevelopment) -> Vec<FurnitureNode> {

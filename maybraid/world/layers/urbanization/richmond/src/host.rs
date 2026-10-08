@@ -20,17 +20,15 @@ use lod::lod_host_scene_pending;
 use lod::lod_ref::LodRef;
 use lod::LodSceneLevel;
 use urbanization_developments::{
-	CircularTower, GalleryColonnade, GalleryTerrace, MixedUseLesHallesHost, OldCityMarketTerrace,
-	RingFortHost, ShepherdsBuilding, ShepherdsHouse, ShepherdsHut, SingleHighrise, Skybridge,
-	TempleSanctum, TrazaloidTower,
+	CircularTower, GalleryColonnade, GalleryTerrace, MixedUseLesHallesDevelopment,
+	MixedUseLesHallesHost, OldCityMarketTerrace, PlacedBuilding, RingFort, RingFortHost,
+	ShepherdsBuilding, ShepherdsCommune, ShepherdsHouse, ShepherdsHut, ShepherdsVillage,
+	SingleHighrise, Skybridge, TempleSanctum, TrazaloidTower,
 };
 
 use crate::cell::yaw_about_xz;
 use crate::place::{DiscoverablePlace, DiscoverablePlaceLabel};
-use crate::{
-	BuiltDevelopment, LesHallesDevelopment, RingFortDevelopment, ShepherdsCommuneDevelopment,
-	ShepherdsVillageDevelopment,
-};
+use crate::BuiltDevelopment;
 
 #[derive(Debug, Clone)]
 pub enum DevelopmentHost {
@@ -308,13 +306,11 @@ impl DevelopmentHosts for BuiltDevelopment {
 				));
 				hosts
 			}
-			Self::SingleHighrise(development) => {
-				vec![single_highrise_host(&development.building)]
-			}
+			Self::SingleHighrise(development) => vec![single_highrise_host(development)],
 			Self::SuburbanHomes(development) => shepherd_building_hosts(development.buildings()),
 			Self::WizardsTower(development) => vec![DevelopmentHost::WizardsTower(
-				Arc::new(development.building.building.tower.clone()),
-				development.host_transform(),
+				Arc::new(development.building.tower.clone()),
+				yaw_about_xz(development.center_xz, development.yaw),
 			)],
 			Self::SkybridgeBazaar(development) => {
 				let mut hosts = shepherd_building_hosts(&development.market);
@@ -341,11 +337,10 @@ impl DevelopmentHosts for BuiltDevelopment {
 	}
 }
 
-impl DevelopmentHosts for LesHallesDevelopment {
+impl DevelopmentHosts for PlacedBuilding<MixedUseLesHallesDevelopment> {
 	fn hosts(&self) -> Vec<DevelopmentHost> {
-		let transform = self.host_transform();
+		let transform = yaw_about_xz(self.center_xz, self.yaw);
 		self.building
-			.building
 			.hosts()
 			.into_iter()
 			.map(|host| match host {
@@ -363,23 +358,22 @@ impl DevelopmentHosts for LesHallesDevelopment {
 	}
 }
 
-impl DevelopmentHosts for ShepherdsVillageDevelopment {
+impl DevelopmentHosts for ShepherdsVillage {
 	fn hosts(&self) -> Vec<DevelopmentHost> {
-		shepherd_building_hosts(&self.village.buildings)
+		shepherd_building_hosts(&self.buildings)
 	}
 }
 
-impl DevelopmentHosts for ShepherdsCommuneDevelopment {
+impl DevelopmentHosts for ShepherdsCommune {
 	fn hosts(&self) -> Vec<DevelopmentHost> {
-		shepherd_building_hosts(self.commune.buildings())
+		shepherd_building_hosts(self.buildings())
 	}
 }
 
-impl DevelopmentHosts for RingFortDevelopment {
+impl DevelopmentHosts for PlacedBuilding<RingFort> {
 	fn hosts(&self) -> Vec<DevelopmentHost> {
-		let transform = self.host_transform();
+		let transform = yaw_about_xz(self.center_xz, self.yaw);
 		self.building
-			.building
 			.hosts()
 			.into_iter()
 			.filter_map(|host| match host {
@@ -435,9 +429,7 @@ fn shepherd_building_hosts<'a>(
 		.collect()
 }
 
-fn single_highrise_host(
-	placed: &urbanization_developments::PlacedBuilding<SingleHighrise>,
-) -> DevelopmentHost {
+fn single_highrise_host(placed: &PlacedBuilding<SingleHighrise>) -> DevelopmentHost {
 	DevelopmentHost::SingleHighrise(
 		Arc::new(placed.building.clone()),
 		yaw_about_xz(placed.center_xz, placed.yaw),
@@ -498,10 +490,9 @@ mod tests {
 	use bevy::math::{Vec2, Vec3};
 	use buildings::{Confines, Fit};
 	use procedural_common::NoiseParams;
-	use urbanization_developments::PlacedBuilding;
 
-	use super::{DevelopmentHost, DevelopmentHosts};
-	use crate::archetype_generation::{ArchetypeGenerator, PlacedDevelopment};
+	use super::{DevelopmentHost, DevelopmentHosts, PlacedBuilding};
+	use crate::archetype_generation::ArchetypeGenerator;
 	use crate::place::DiscoverablePlaceLabel;
 	use crate::BuiltDevelopment;
 
@@ -513,15 +504,12 @@ mod tests {
 			&confines,
 			NoiseParams::default(),
 		)?;
-		let development = BuiltDevelopment::SingleHighrise(Box::new(PlacedDevelopment {
-			cell,
-			building: PlacedBuilding {
-				center_xz: Vec2::ZERO,
-				yaw: 0.0,
-				footprint: Vec2::splat(60.0),
-				ground_height: 0.0,
-				building,
-			},
+		let development = BuiltDevelopment::SingleHighrise(Box::new(PlacedBuilding {
+			center_xz: Vec2::ZERO,
+			yaw: 0.0,
+			footprint: Vec2::splat(60.0),
+			ground_height: 0.0,
+			building,
 		}));
 		let hosts = development.hosts();
 		assert_eq!(hosts.len(), 1);

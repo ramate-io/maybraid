@@ -29,30 +29,26 @@ pub mod layer;
 pub mod layer_config;
 pub mod layer_present;
 pub mod layer_stream;
-pub mod les_halles;
 pub mod pad;
 pub mod padded;
 pub mod place;
 pub mod plugin;
 pub mod presentation;
-pub mod ring_fort;
 pub mod scatter;
-pub mod shepherds;
 mod shepherds_fit;
 pub mod storage;
 
-pub use archetype_generation::PlacedDevelopment;
 pub use artifact::BuiltDevelopment;
 pub use buildings_lod::{
 	register_developments_buildings_lod_plugin, BuildingsBullseye, BuildingsCull,
 	BuildingsSpotlight, DevelopmentsBuildingsLodPlugin,
 };
+pub use built::Built;
 pub use cell::{
 	cell_selected, yaw_about_xz, DevelopmentExtent, BUILDING_INSET, DEFAULT_LIKELIHOOD,
 	DEFAULT_SPATIAL_CORRELATION, DEVELOPMENT_CELL_SIZE, LES_HALLES_MAX_FOOTPRINT, PAD_BERM,
 	PAD_EDGE_EASE, PAD_ROUND, RING_FORT_MAX_FOOTPRINT, RING_FORT_MIN_FOOTPRINT,
 };
-pub use built::Built;
 pub use compose::PadComposable;
 pub use config::{DevelopmentConfig, DevelopmentSites};
 pub use developments::site::{
@@ -78,7 +74,6 @@ pub use layer_stream::{
 	install_urbanization_stream, parse_urbanization_kind, stream_radii_m, DevelopmentWindow,
 	HostWindow,
 };
-pub use les_halles::LesHallesDevelopment;
 pub use pad::{
 	cell_bounds2, nodes_from_graded_polyline, PadComplex, PadNode, PadParams, PadPrimitive,
 	PlacedBuildingPad,
@@ -87,9 +82,7 @@ pub use padded::{PaddedTerrain, PresentedPaddedTerrainScene, TerrainWithPads};
 pub use place::{DiscoverablePlace, DiscoverablePlaceLabel, InteriorArea};
 pub use plugin::{register_richmond_plugin, RichmondDevelopmentModelsPlugin};
 pub use presentation::{PaddedTerrainPresenter, PaddedTerrainPresenterState};
-pub use ring_fort::RingFortDevelopment;
 pub use scatter::{bounds_intersect, ScatterCandidate, ScatterChoice, ScatterPlan, ScatterRecipe};
-pub use shepherds::{ShepherdsCommuneDevelopment, ShepherdsVillageDevelopment};
 pub use storage::{column_bounds, register_richmond_nodes, RichmondNodes, RichmondStorage};
 
 #[cfg(test)]

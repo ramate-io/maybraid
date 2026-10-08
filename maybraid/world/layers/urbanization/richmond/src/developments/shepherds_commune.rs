@@ -20,13 +20,12 @@ use crate::config::DevelopmentConfig;
 use crate::connectivity::{corridor_levels, ConnectivityGraph};
 use crate::ground::{GroundSampler, RichmondGround, SiteGround};
 use crate::pad::{PadComplex, PadParams, PlacedBuildingPad};
-use crate::shepherds::ShepherdsCommuneDevelopment;
-use crate::storage::column_bounds;
 use crate::scatter::{bounds_intersect, ScatterCandidate};
 use crate::shepherds_fit::{
 	fit_shepherds_building, sample_shepherds_footprint, sample_shepherds_kind, shepherds_recipe,
 	ShepherdsBuildingKind,
 };
+use crate::storage::column_bounds;
 
 const CELL_INSET: f32 = 32.0;
 /// Capsule half-width before berm. With berm 2 this is a ~20 m flatten so a
@@ -57,9 +56,7 @@ pub struct ShepherdsCommuneCell<G> {
 
 impl<G> ShepherdsCommuneCell<G> {
 	pub fn built(&self) -> BuiltDevelopment {
-		BuiltDevelopment::ShepherdsCommune(Box::new(ShepherdsCommuneDevelopment {
-			commune: self.commune.clone(),
-		}))
+		BuiltDevelopment::ShepherdsCommune(Box::new(self.commune.clone()))
 	}
 }
 

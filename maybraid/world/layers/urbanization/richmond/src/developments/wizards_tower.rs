@@ -1,10 +1,11 @@
 //! [`WizardsTowerCell`]: one solitary wizard's tower.
 
+use buildings::Fit;
 use procedural_common::{NoiseParams, SeededHash};
+use urbanization_developments::{PlacedBuilding, SolitaryWizardsTower};
 
 use super::site::DevelopmentKind;
 use super::solitary::{SolitaryCell, SolitaryEnvelope, SolitaryKind, SolitaryPlan};
-use crate::archetype_generation::ArchetypeGenerator;
 use crate::artifact::BuiltDevelopment;
 use crate::cell::RING_FORT_MAX_FOOTPRINT;
 use crate::finish::{DevelopmentFinish, DevelopmentFinishRole};
@@ -31,11 +32,12 @@ impl SolitaryKind for WizardsTowerKind {
 	}
 
 	fn built(plan: &SolitaryPlan, noise: NoiseParams) -> Option<BuiltDevelopment> {
+		let (placed, _) =
+			PlacedBuilding::<SolitaryWizardsTower>::fit_to_confines(&plan.confines(), noise)
+				.ok()?;
 		let finish = plan.finish.clone();
-		let mut development =
-			ArchetypeGenerator::build_wizards_tower(plan.cell, plan.confines(), noise)?;
-		development.building.building =
-			development.building.building.with_finish(finish.wall, finish.roof);
-		Some(BuiltDevelopment::WizardsTower(Box::new(development)))
+		Some(BuiltDevelopment::WizardsTower(Box::new(
+			placed.map(|tower| tower.with_finish(finish.wall, finish.roof)),
+		)))
 	}
 }

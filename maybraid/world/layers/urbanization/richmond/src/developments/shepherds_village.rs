@@ -16,7 +16,6 @@ use crate::config::DevelopmentConfig;
 use crate::ground::{GroundSampler, RichmondGround, SiteGround};
 use crate::pad::{PadComplex, PadParams, PlacedBuildingPad};
 use crate::scatter::bounds_intersect;
-use crate::shepherds::ShepherdsVillageDevelopment;
 use crate::shepherds_fit::{fit_shepherds_building, shepherds_recipe, ShepherdsBuildingKind};
 use crate::storage::column_bounds;
 
@@ -30,9 +29,7 @@ pub struct ShepherdsVillageCell<G> {
 
 impl<G> ShepherdsVillageCell<G> {
 	pub fn built(&self) -> BuiltDevelopment {
-		BuiltDevelopment::ShepherdsVillage(Box::new(ShepherdsVillageDevelopment {
-			village: self.village.clone(),
-		}))
+		BuiltDevelopment::ShepherdsVillage(Box::new(self.village.clone()))
 	}
 }
 

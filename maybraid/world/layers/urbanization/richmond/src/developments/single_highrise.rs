@@ -1,10 +1,11 @@
 //! [`SingleHighriseCell`]: one tower on a yawed terrace.
 
+use buildings::Fit;
 use procedural_common::{NoiseParams, SeededHash};
+use urbanization_developments::{PlacedBuilding, SingleHighrise};
 
 use super::site::DevelopmentKind;
 use super::solitary::{SolitaryCell, SolitaryEnvelope, SolitaryKind, SolitaryPlan};
-use crate::archetype_generation::ArchetypeGenerator;
 use crate::artifact::BuiltDevelopment;
 use crate::cell::RING_FORT_MAX_FOOTPRINT;
 use crate::finish::{DevelopmentFinish, DevelopmentFinishRole};
@@ -31,10 +32,10 @@ impl SolitaryKind for SingleHighriseKind {
 	}
 
 	fn built(plan: &SolitaryPlan, noise: NoiseParams) -> Option<BuiltDevelopment> {
-		let mut development =
-			ArchetypeGenerator::build_single_highrise(plan.cell, plan.confines(), noise)?;
-		development.building.building =
-			development.building.building.with_wall_material(plan.finish.wall.clone());
-		Some(BuiltDevelopment::SingleHighrise(Box::new(development)))
+		let (placed, _) =
+			PlacedBuilding::<SingleHighrise>::fit_to_confines(&plan.confines(), noise).ok()?;
+		Some(BuiltDevelopment::SingleHighrise(Box::new(
+			placed.map(|tower| tower.with_wall_material(plan.finish.wall.clone())),
+		)))
 	}
 }

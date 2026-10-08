@@ -12,7 +12,6 @@ use crate::cell::{
 	RING_FORT_MIN_FOOTPRINT,
 };
 use crate::finish::DevelopmentFinish;
-use crate::ring_fort::RingFortDevelopment;
 
 pub struct RingFortKind;
 
@@ -36,17 +35,11 @@ impl SolitaryKind for RingFortKind {
 	}
 
 	fn built(plan: &SolitaryPlan, noise: NoiseParams) -> Option<BuiltDevelopment> {
-		let (development, _) = RingFort::fit_to_confines(&plan.confines(), noise).ok()?;
+		let (placed, _) =
+			PlacedBuilding::<RingFort>::fit_to_confines(&plan.confines(), noise).ok()?;
 		let finish = plan.finish.clone();
-		Some(BuiltDevelopment::RingFort(Box::new(RingFortDevelopment {
-			cell: plan.cell,
-			building: PlacedBuilding {
-				center_xz: plan.center_xz(),
-				yaw: plan.confines_yaw,
-				footprint: plan.confines_extent_xz,
-				ground_height: plan.pad.height,
-				building: development.with_finish(finish.wall, finish.roof),
-			},
-		})))
+		Some(BuiltDevelopment::RingFort(Box::new(
+			placed.map(|fort| fort.with_finish(finish.wall, finish.roof)),
+		)))
 	}
 }

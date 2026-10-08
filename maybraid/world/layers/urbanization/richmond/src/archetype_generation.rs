@@ -2,14 +2,13 @@
 
 use bevy::math::bounding::{Aabb2d, Aabb3d};
 use bevy::math::{Vec2, Vec3};
-use bevy::transform::components::Transform;
 use buildings::{
 	CardinalFace, Confines, ConnectingHall, Fit, MappedOpening, MappedOpeningQuad, Openings,
 };
 use procedural_common::{Bounds2, NoiseParams, SeededHash};
 use urbanization_developments::{
-	PlacedBuilding, SingleHighrise, Skybridge, SkybridgeBazaar, SolitaryWizardsTower,
-	SuburbanHomes, TempleComplex, TempleSanctum,
+	PlacedBuilding, SingleHighrise, Skybridge, SkybridgeBazaar, SuburbanHomes, TempleComplex,
+	TempleSanctum,
 };
 
 use crate::cell::yaw_about_xz;
@@ -20,55 +19,10 @@ use crate::shepherds_fit::{
 	ShepherdsBuildingKind,
 };
 
-/// One solitary fitted building and the cell that owns it.
-#[derive(Debug, Clone)]
-pub struct PlacedDevelopment<T> {
-	pub cell: Aabb3d,
-	pub building: PlacedBuilding<T>,
-}
-
-impl<T> PlacedDevelopment<T> {
-	pub fn host_transform(&self) -> Transform {
-		yaw_about_xz(self.building.center_xz, self.building.yaw)
-	}
-}
-
 /// Constructs the catalog's shared layout families from a selected envelope.
 pub(crate) struct ArchetypeGenerator;
 
 impl ArchetypeGenerator {
-	pub(crate) fn build_single_highrise(
-		cell: Aabb3d,
-		confines: Confines,
-		noise: NoiseParams,
-	) -> Option<PlacedDevelopment<SingleHighrise>> {
-		let center = confines.center_xz();
-		let yaw = confines.roll;
-		let footprint = confines.footprint();
-		let ground_height = confines.bounds.min.y;
-		let (building, _) = SingleHighrise::fit_to_confines(&confines, noise).ok()?;
-		Some(PlacedDevelopment {
-			cell,
-			building: PlacedBuilding { center_xz: center, yaw, footprint, ground_height, building },
-		})
-	}
-
-	pub(crate) fn build_wizards_tower(
-		cell: Aabb3d,
-		confines: Confines,
-		noise: NoiseParams,
-	) -> Option<PlacedDevelopment<SolitaryWizardsTower>> {
-		let center = confines.center_xz();
-		let yaw = confines.roll;
-		let footprint = confines.footprint();
-		let ground_height = confines.bounds.min.y;
-		let (building, _) = SolitaryWizardsTower::fit_to_confines(&confines, noise).ok()?;
-		Some(PlacedDevelopment {
-			cell,
-			building: PlacedBuilding { center_xz: center, yaw, footprint, ground_height, building },
-		})
-	}
-
 	pub(crate) fn build_suburban_homes(
 		cell: Aabb3d,
 		confines: &Confines,
