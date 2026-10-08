@@ -543,3 +543,45 @@ fn far_does_not_run_global_scan_even_when_fair() -> anyhow::Result<()> {
 		.is_some_and(|knowledge| knowledge.get(global).is_none()));
 	Ok(())
 }
+
+#[test]
+#[ignore]
+fn local_query_clone_timing() {
+	const POI_COUNT: usize = 128;
+	const SCANS: usize = 10_000;
+	const RADIUS: f32 = 80.0;
+	let interests = PoiInterests::one(CAMP);
+
+	let mut registry = PoiRegistry::default();
+	for index in 0..POI_COUNT {
+		let id = PoiId(index as u64 + 1);
+		let angle = (index as f32 / POI_COUNT as f32) * core::f32::consts::TAU;
+		let position = Vec3::new(angle.cos() * 40.0, 0.0, angle.sin() * 40.0);
+		registry
+			.upsert(Entity::from_bits(index as u64 + 1), Poi::new(id, CAMP), position, true, false)
+			.expect("upsert poi");
+	}
+
+	let clone_start = std::time::Instant::now();
+	for _ in 0..SCANS {
+		let records = registry.local_matching(Vec3::ZERO, RADIUS, &interests);
+		std::hint::black_box(records);
+	}
+	let clone_elapsed = clone_start.elapsed();
+
+	let mut scratch = Vec::new();
+	let id_start = std::time::Instant::now();
+	for _ in 0..SCANS {
+		registry.collect_local_matching(Vec3::ZERO, RADIUS, &interests, &mut scratch);
+		for id in &scratch {
+			std::hint::black_box(registry.get(*id));
+		}
+	}
+	let id_elapsed = id_start.elapsed();
+
+	eprintln!(
+		"local_query_clone_timing: {POI_COUNT} pois × {SCANS} scans — clone local_matching() {:?}, collect_local_matching+get {:?}",
+		clone_elapsed,
+		id_elapsed,
+	);
+}

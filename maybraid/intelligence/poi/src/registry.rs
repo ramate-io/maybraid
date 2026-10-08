@@ -150,14 +150,19 @@ impl PoiRegistry {
 		self.records.get(&id)
 	}
 
-	pub fn local_matching(
+	/// Fill `out` with ids of local records matching `interests` within `radius` of `center`.
+	///
+	/// Avoids cloning [`PoiRecord`] payloads; pair with [`Self::get`] on the hot path.
+	pub fn collect_local_matching(
 		&self,
 		center: Vec3,
 		radius: f32,
 		interests: &PoiInterests,
-	) -> Vec<PoiRecord> {
+		out: &mut Vec<PoiId>,
+	) {
+		out.clear();
 		if !center.is_finite() || !radius.is_finite() {
-			return Vec::new();
+			return;
 		}
 		let radius = radius.clamp(0.0, MAX_LOCAL_QUERY_RADIUS);
 		let extent = Vec3::splat(radius);
@@ -165,22 +170,45 @@ impl PoiRegistry {
 		let query_level = BaseScale::new(self.local.grid().base_scale())
 			.map(|base| base.insertion_level(&region))
 			.unwrap_or(0);
-		self.local
+		for (record, _) in self
+			.local
 			.query_values(region, BaseScale::levels_through(query_level.max(self.local_max_level)))
-			.map(|(record, _)| *record)
-			.filter(|record| {
-				interests.contains(record.kind)
-					&& center.distance(record.position) <= radius + record.arrival_radius
-			})
-			.collect()
+		{
+			if interests.contains(record.kind)
+				&& center.distance(record.position) <= radius + record.arrival_radius
+			{
+				out.push(record.id);
+			}
+		}
+	}
+
+	pub fn local_matching(
+		&self,
+		center: Vec3,
+		radius: f32,
+		interests: &PoiInterests,
+	) -> Vec<PoiRecord> {
+		let mut ids = Vec::new();
+		self.collect_local_matching(center, radius, interests, &mut ids);
+		ids.iter().filter_map(|id| self.get(*id).copied()).collect()
+	}
+
+	/// Fill `out` with ids of global records matching `interests`, in stable id order.
+	///
+	/// Avoids cloning [`PoiRecord`] payloads; pair with [`Self::get`] on the hot path.
+	pub fn collect_global_matching(&self, interests: &PoiInterests, out: &mut Vec<PoiId>) {
+		out.clear();
+		for id in &self.globals {
+			if self.records.get(id).is_some_and(|record| interests.contains(record.kind)) {
+				out.push(*id);
+			}
+		}
 	}
 
 	pub fn global_matching(&self, interests: &PoiInterests) -> Vec<PoiRecord> {
-		self.globals
-			.iter()
-			.filter_map(|id| self.records.get(id).copied())
-			.filter(|record| interests.contains(record.kind))
-			.collect()
+		let mut ids = Vec::new();
+		self.collect_global_matching(interests, &mut ids);
+		ids.iter().filter_map(|id| self.get(*id).copied()).collect()
 	}
 
 	/// Weighted nearby choice with no inner hole. See [`Self::choose_in`].
