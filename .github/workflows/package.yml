@@ -1,5 +1,5 @@
 # Game packages: macOS ARM64 DMG, Windows x64 zip, Linux Steam + AppImage.
-# Builds in dedicated release environments with intentional SDK/runtime dependencies.
+# Release entry points: flake shells (macOS/Windows) and build-linux-sniper.sh.
 # Artifacts on main / ci-action::package / workflow_dispatch.
 # GitHub Release assets only when a release is published.
 #
@@ -25,7 +25,7 @@ permissions:
   contents: write
 
 jobs:
-  # Build Linux binary once in Steam Runtime sniper SDK
+  # One sniper-SDK binary, reused by Steam and AppImage packaging.
   build-linux-sniper:
     if: >
       github.event_name == 'release' ||
@@ -61,11 +61,15 @@ jobs:
           fi
           echo "version=$v" >> "$GITHUB_OUTPUT"
 
-      - uses: Swatinem/rust-cache@v2
+      - name: Prepare sniper cache directory
+        run: mkdir -p target/sniper-release
+
+      - uses: actions/cache@v4
         with:
-          prefix-key: sniper
-          workspaces: target/sniper-release -> target/sniper-release
-          key: linux-sniper-${{ hashFiles('**/Cargo.lock') }}
+          path: target/sniper-release
+          key: sniper-release-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: |
+            sniper-release-
 
       - name: Build with Steam Runtime sniper SDK
         env:
@@ -79,7 +83,6 @@ jobs:
           path: target/sniper-release/x86_64-unknown-linux-gnu/release/maybraid
           retention-days: 1
 
-  # Package Linux: Steam depot + AppImage (reuses sniper binary)
   package-linux:
     needs: build-linux-sniper
     runs-on: ubuntu-22.04
@@ -133,6 +136,7 @@ jobs:
         if: matrix.format == 'appimage'
         env:
           VERSION: ${{ steps.ver.outputs.version }}
+          APPIMAGE_EXTRACT_AND_RUN: "1"
         run: |
           sudo apt-get update && sudo apt-get install -y desktop-file-utils libfuse2
           packaging/scripts/package-appimage.sh
@@ -155,7 +159,6 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  # Package macOS ARM64
   package-macos:
     if: >
       github.event_name == 'release' ||
@@ -164,6 +167,8 @@ jobs:
       contains(github.event.head_commit.message, 'ci-action::package')
     runs-on: macos-14
     timeout-minutes: 180
+    env:
+      CARGO_TARGET_DIR: target/release-packaging
     steps:
       - uses: actions/checkout@v4
 
@@ -198,16 +203,16 @@ jobs:
           mkdir -p ~/.config/nix
           echo "experimental-features = nix-command flakes" >> ~/.config/nix/nix.conf
 
+      - name: Prepare release target directory
+        run: mkdir -p target/release-packaging
+
       - uses: Swatinem/rust-cache@v2
         with:
           prefix-key: release-macos
-          workspaces: target/release-packaging -> target/release-packaging
-          key: macos-arm64-${{ hashFiles('**/Cargo.lock') }}
+          workspaces: ". -> target/release-packaging"
+          key: macos-arm64-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
 
-      - name: Install coreutils (for gtimeout)
-        run: brew install coreutils
-
-      - name: Package macOS with release shell
+      - name: Package macOS with release-macos shell
         env:
           VERSION: ${{ steps.ver.outputs.version }}
         run: nix develop .#release-macos --command packaging/scripts/package-macos.sh
@@ -219,7 +224,6 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  # Package Windows x64
   package-windows:
     if: >
       github.event_name == 'release' ||
@@ -228,6 +232,8 @@ jobs:
       contains(github.event.head_commit.message, 'ci-action::package')
     runs-on: windows-latest
     timeout-minutes: 120
+    env:
+      CARGO_TARGET_DIR: target/release-packaging
     steps:
       - uses: actions/checkout@v4
 
@@ -258,18 +264,23 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: 1.95.0
           targets: x86_64-pc-windows-msvc
+
+      - name: Prepare release target directory
+        shell: bash
+        run: mkdir -p target/release-packaging
 
       - uses: Swatinem/rust-cache@v2
         with:
           prefix-key: release-windows
-          key: windows-x64-${{ hashFiles('**/Cargo.lock') }}
+          workspaces: ". -> target/release-packaging"
+          key: windows-x64-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
 
       - name: Package Windows
         shell: bash
         env:
           VERSION: ${{ steps.ver.outputs.version }}
+          CARGO_TARGET_DIR: target/release-packaging
         run: packaging/scripts/package-windows.sh
 
       - uses: actions/upload-artifact@v4

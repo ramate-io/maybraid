@@ -1,121 +1,93 @@
 #!/usr/bin/env bash
-# Build maybraid for Linux inside Valve's Steam Runtime 3.0 "sniper" SDK.
+# Build maybraid once inside Valve's Steam Runtime 3.0 "sniper" SDK.
 #
-#   packaging/scripts/build-linux-sniper.sh
+#   nix develop .#release-linux --command packaging/scripts/build-linux-sniper.sh
 #
-# Produces a single x86_64 Linux binary with sniper SDK glibc/dependencies.
-# The binary is reused for both Steam depot and standalone AppImage packaging.
-#
-# Environment variables:
-#   SNIPER_IMAGE  Steam runtime image (default: pinned digest)
-#   VERSION       Game version (default: 0.0.1)
+# The compiler, headers, pkg-config metadata, and link libraries come from the
+# pinned SDK image. Host/Nix library search paths are not passed in.
+# The resulting x86_64 binary is reused by package-steam.sh and package-appimage.sh.
 
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-VERSION="${VERSION:-0.0.1}"
+# shellcheck source=packaging/scripts/common.sh
+source "$REPO_ROOT/packaging/scripts/common.sh"
 
-# Use Steam Runtime 3.0 sniper SDK latest
-# Note: GitLab container registry does not expose stable manifest digests for :latest tag.
-# The config SHA (sha256:901b229c92b4743f77f7ffe02e604e035f656cacd1352ea644d680317d4db916
-# as of 2026-10-07) cannot be used for pulls. Using :latest as pragmatic solution.
-# See: https://gitlab.steamos.cloud/steamrt/sniper/sdk
-SNIPER_IMAGE="${SNIPER_IMAGE:-registry.gitlab.steamos.cloud/steamrt/sniper/sdk:latest}"
+# Manifest digest of registry.gitlab.steamos.cloud/steamrt/sniper/sdk:latest
+# as of 2026-10-07 (config blob sha256:901b229c… is not a pullable image id).
+# Override with SNIPER_IMAGE if you need a newer SDK.
+SNIPER_IMAGE="${SNIPER_IMAGE:-registry.gitlab.steamos.cloud/steamrt/sniper/sdk@sha256:1c33c507bc75d012e77df5727f93b0d5b8c3f7c8d4142ba5f7a16882cc92e014}"
 
-# Use separate target directory for sniper builds
 SNIPER_TARGET_DIR="$REPO_ROOT/target/sniper-release"
-BINARY_OUT="$SNIPER_TARGET_DIR/x86_64-unknown-linux-gnu/release/maybraid"
-
-# Rust installation will go in a writable directory outside the workspace
+BINARY_OUT="$(maybraid_sniper_bin)"
 RUST_HOME="$SNIPER_TARGET_DIR/rust-home"
 
-echo "==> Building maybraid for Linux (Steam Runtime sniper SDK)"
+echo "==> Building maybraid for Linux (Steam Runtime 3.0 sniper SDK)"
 echo "    SDK image: $SNIPER_IMAGE"
-echo "    Target: x86_64-unknown-linux-gnu"
+echo "    Target:    x86_64-unknown-linux-gnu"
+echo "    Profile:   release"
+echo "    Features:  default (maybraid has no optional package features)"
+echo "    Locked:    Cargo.lock (--locked)"
 echo "    Build dir: $SNIPER_TARGET_DIR"
 
-# Check for podman or docker
-if command -v podman >/dev/null 2>&1; then
-    CONTAINER_CMD=podman
-elif command -v docker >/dev/null 2>&1; then
-    CONTAINER_CMD=docker
-else
-    echo "❌ Neither podman nor docker found. Install one to build with sniper SDK." >&2
-    exit 1
+CONTAINER_CMD="$(maybraid_container_cmd)"
+if [[ -z "$CONTAINER_CMD" ]]; then
+	echo "❌ Neither docker nor podman found. Install one to build with the sniper SDK." >&2
+	exit 1
 fi
-
 echo "    Container: $CONTAINER_CMD"
 
-# Ensure writable directories exist with correct permissions
-mkdir -p "$SNIPER_TARGET_DIR"
-mkdir -p "$RUST_HOME"
+mkdir -p "$SNIPER_TARGET_DIR" "$RUST_HOME/cargo" "$RUST_HOME/rustup"
 
+# Run as the image user (root) so rustup's HOME/passwd check succeeds.
+# rustup/cargo live under the workspace mount; chown back to the host user after.
+# Do not set HOME, LIBRARY_PATH, or other host/Nix search paths.
 $CONTAINER_CMD run --rm \
-    --user "$(id -u):$(id -g)" \
-    -v "$REPO_ROOT:/workspace:rw" \
-    -v "$RUST_HOME:/rust-home:rw" \
-    -w /workspace \
-    -e HOME=/rust-home \
-    -e CARGO_HOME=/rust-home/.cargo \
-    -e RUSTUP_HOME=/rust-home/.rustup \
-    -e CARGO_TARGET_DIR=/workspace/target/sniper-release \
-    "$SNIPER_IMAGE" \
-    bash -c '
-        set -euo pipefail
-        
-        # Install rustup if not present
-        if [ ! -f "$CARGO_HOME/bin/rustup" ]; then
-            echo "==> Installing Rust toolchain"
-            curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | \
-                sh -s -- -y --default-toolchain none --no-modify-path
-        fi
-        
-        export PATH="$CARGO_HOME/bin:$PATH"
-        
-        # Install the pinned toolchain from rust-toolchain.toml
-        rustup show
-        
-        # Build for x86_64 Linux
-        echo "==> Building release binary"
-        cargo build -p maybraid \
-            --release \
-            --locked \
-            --target x86_64-unknown-linux-gnu
-        
-        echo "==> Build complete"
-    '
+	--user 0:0 \
+	--entrypoint bash \
+	-v "$REPO_ROOT:/workspace:rw" \
+	-w /workspace \
+	-e CARGO_HOME=/workspace/target/sniper-release/rust-home/cargo \
+	-e RUSTUP_HOME=/workspace/target/sniper-release/rust-home/rustup \
+	-e CARGO_TARGET_DIR=/workspace/target/sniper-release \
+	-e HOST_UID="$(id -u)" \
+	-e HOST_GID="$(id -g)" \
+	"$SNIPER_IMAGE" \
+	-lc '
+		set -euo pipefail
+		unset LIBRARY_PATH LD_LIBRARY_PATH CPATH C_INCLUDE_PATH CPLUS_INCLUDE_PATH
+		unset PKG_CONFIG_PATH NIX_LDFLAGS NIX_CFLAGS_COMPILE NIX_CC || true
+
+		mkdir -p "$CARGO_HOME/bin" "$RUSTUP_HOME"
+		export PATH="$CARGO_HOME/bin:$PATH"
+
+		if [ ! -x "$CARGO_HOME/bin/rustup" ]; then
+			echo "==> Installing rustup into the SDK container"
+			curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | \
+				sh -s -- -y --default-toolchain none --profile minimal --no-modify-path
+		fi
+
+		echo "==> Installing pinned toolchain from rust-toolchain.toml"
+		rustup show
+
+		echo "==> Building release binary"
+		cargo build -p maybraid \
+			--release \
+			--locked \
+			--target x86_64-unknown-linux-gnu
+
+		chown -R "$HOST_UID:$HOST_GID" /workspace/target/sniper-release || true
+		echo "==> Build complete"
+	'
 
 if [[ ! -f "$BINARY_OUT" ]]; then
-    echo "❌ Build failed: binary not found at $BINARY_OUT" >&2
-    exit 1
+	echo "❌ Build failed: binary not found at $BINARY_OUT" >&2
+	exit 1
 fi
+chmod +x "$BINARY_OUT"
 
-echo "==> Validating binary"
+maybraid_validate_linux_elf "$BINARY_OUT"
 
-# Check ELF dependencies
-echo "Binary dependencies:"
-if command -v ldd >/dev/null; then
-    ldd "$BINARY_OUT" | sed 's/^/    /' || true
-fi
-
-if command -v readelf >/dev/null; then
-    echo
-    echo "ELF interpreter:"
-    readelf -l "$BINARY_OUT" | grep 'program interpreter' | sed 's/^/    /'
-    
-    echo
-    echo "Required symbol versions:"
-    readelf -V "$BINARY_OUT" 2>/dev/null | grep -A 999 "Version needs section" | grep -E "^\s+(0x|File:|Name:)" | head -20 | sed 's/^/    /'
-fi
-
-# Check for forbidden paths
-if strings "$BINARY_OUT" | grep -q "/nix/store"; then
-    echo "❌ Binary contains /nix/store references" >&2
-    strings "$BINARY_OUT" | grep "/nix/store" | head -5 | sed 's/^/    /' >&2
-    exit 1
-fi
-
-echo "✅ Binary validation passed"
 echo
 echo "Built: $BINARY_OUT"
-echo "Ready for Steam and AppImage packaging"
+echo "Reuse this file for Steam depot staging and the standalone AppImage."

@@ -99,9 +99,7 @@
             # rustc's Darwin target always passes `-liconv`. The Nix `cc`
             # wrapper does not reliably inject `libiconv` into rustc's own
             # link line (and Xcode `DEVELOPER_DIR` can hide the SDK copy).
-            # For development builds, add Nix libiconv to ensure successful linking.
-            # For release/packaging builds, the packaging script unsets these to use
-            # the system libiconv and avoid /nix/store paths in shipped binaries.
+            # Development shell only — release-macos does not set these.
             RUSTFLAGS = pkgs.lib.optionalString pkgs.stdenv.isDarwin
               "-L native=${pkgs.libiconv}/lib";
             LIBRARY_PATH = pkgs.lib.optionalString pkgs.stdenv.isDarwin
@@ -168,60 +166,79 @@
             '';
           };
 
-          # Dedicated macOS release shell: minimal no-cc shell with only Rust
-          # Let Xcode's clang/SDK come through naturally for C/C++ dependencies
+          # Dedicated macOS release shell: pinned Rust + Apple SDK only.
+          # mkShellNoCC avoids the Nix clang wrapper. libiconv is resolved
+          # through the macOS SDK, not pkgs.libiconv.
           release-macos = pkgs.mkShellNoCC {
             packages = [
               releaseRust
             ];
 
-            # Set minimum macOS version explicitly (supports 11.0+)
-            MACOSX_DEPLOYMENT_TARGET = "11.0";
-
-            # Use separate target directory for release builds
+            # Matches packaging/macos Info.plist LSMinimumSystemVersion.
+            # Do not derive this from `sw_vers` on the build machine.
+            MACOSX_DEPLOYMENT_TARGET = "13.0";
             CARGO_TARGET_DIR = "target/release-packaging";
 
             shellHook = ''
               #!/usr/bin/env ${pkgs.bash}
               set -e
 
-              # Configure Xcode toolchain for both Rust linking and C/C++ dependencies
+              unset NIX_LDFLAGS NIX_CFLAGS_COMPILE NIX_CC LIBRARY_PATH CPATH
+              unset C_INCLUDE_PATH CPLUS_INCLUDE_PATH PKG_CONFIG_PATH
+
               if [ -d /Applications/Xcode.app/Contents/Developer ]; then
                 export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
-                if sdkroot="$(xcrun --sdk macosx --show-sdk-path 2>/dev/null)" && [ -d "$sdkroot" ]; then
-                  export SDKROOT="$sdkroot"
-                  # Explicit flags for cc-rs and build.rs C/C++ compilation
-                  export CFLAGS="-isysroot $sdkroot -mmacosx-version-min=11.0"
-                  export CXXFLAGS="-isysroot $sdkroot -stdlib=libc++ -mmacosx-version-min=11.0"
-                  export LDFLAGS="-isysroot $sdkroot -mmacosx-version-min=11.0 -L/usr/lib"
-                  
-                  # Point compilers at Xcode's toolchain
-                  export CC="$(xcrun --find clang)"
-                  export CXX="$(xcrun --find clang++)"
-                  export AR="$(xcrun --find ar)"
-                  
-                  # Force Rust linker to use system libiconv instead of Nix
-                  # Override any Nix-injected library paths
-                  export RUSTFLAGS="-L/usr/lib -C link-arg=-liconv"
-                fi
+              fi
+              if sdkroot="$(xcrun --sdk macosx --show-sdk-path 2>/dev/null)" && [ -d "$sdkroot" ]; then
+                export SDKROOT="$sdkroot"
+                export CFLAGS="-isysroot $sdkroot -mmacosx-version-min=$MACOSX_DEPLOYMENT_TARGET"
+                export CXXFLAGS="-isysroot $sdkroot -stdlib=libc++ -mmacosx-version-min=$MACOSX_DEPLOYMENT_TARGET"
+                export LDFLAGS="-isysroot $sdkroot -mmacosx-version-min=$MACOSX_DEPLOYMENT_TARGET"
+                export CC="$(xcrun --find clang)"
+                export CXX="$(xcrun --find clang++)"
+                export AR="$(xcrun --find ar)"
+                # rustc always passes -liconv on Darwin. Prefer the Apple SDK,
+                # then /usr/lib, so a Nix rustc wrapper cannot put
+                # /nix/store/.../libiconv first. Runtime path stays
+                # /usr/lib/libiconv.2.dylib (Apple system library).
+                export RUSTFLAGS="-L native=$sdkroot/usr/lib -L native=/usr/lib"
+              else
+                echo "❌ macOS SDK not found via xcrun --sdk macosx" >&2
+                exit 1
               fi
 
               echo ""
-              echo "macOS release build environment (no Nix CC)"
+              echo "macOS release build environment (Apple SDK, no Nix CC)"
               echo "Target: aarch64-apple-darwin (ARM64)"
               echo "Deployment target: $MACOSX_DEPLOYMENT_TARGET"
               echo "Build dir: $CARGO_TARGET_DIR"
-              echo "Compiler: \${CC:-system}"
+              echo "SDKROOT: $SDKROOT"
+              echo "Compiler: $CC"
             '';
           };
 
-          # Dedicated Windows release shell (for local builds; CI uses native toolchain)
-          release-windows = pkgs.mkShell {
-            buildInputs = [
+          # Linux release entry point: launches the sniper SDK container.
+          # No host/Nix library paths — the SDK image owns compilation.
+          release-linux = pkgs.mkShellNoCC {
+            packages = [];
+            CARGO_TARGET_DIR = "target/sniper-release";
+            shellHook = ''
+              unset LIBRARY_PATH LD_LIBRARY_PATH CPATH C_INCLUDE_PATH CPLUS_INCLUDE_PATH
+              unset PKG_CONFIG_PATH NIX_LDFLAGS NIX_CFLAGS_COMPILE NIX_CC
+              echo ""
+              echo "Linux release entry point (Steam Runtime 3.0 sniper SDK)"
+              echo "Build:     packaging/scripts/build-linux-sniper.sh"
+              echo "Steam:     packaging/scripts/package-steam.sh"
+              echo "AppImage:  packaging/scripts/package-appimage.sh"
+              echo "Build dir: $CARGO_TARGET_DIR"
+            '';
+          };
+
+          # Dedicated Windows release shell (for local builds; CI uses native rustup)
+          release-windows = pkgs.mkShellNoCC {
+            packages = [
               releaseRust
             ];
-
-            # Use separate target directory for release builds
             CARGO_TARGET_DIR = "target/release-packaging";
 
             shellHook = ''
