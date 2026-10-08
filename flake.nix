@@ -76,11 +76,47 @@
           cargo = rust;
           rustc = rust;
         };
-    
-        # Minimal release toolchain: pinned Rust from rust-toolchain.toml, no dev tools
-        releaseRust = (pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml);
 
-      in {
+        maybraidSrc = craneLib.cleanCargoSource (craneLib.path ./.);
+        maybraidArgs = {
+          pname = "maybraid";
+          src = maybraidSrc;
+          cargoExtraArgs = "-p maybraid --locked";
+          doCheck = false;
+        };
+
+        buildLinux = pkgs.writeShellApplication {
+          name = "maybraid-build-linux";
+          runtimeInputs = [ pkgs.docker pkgs.git pkgs.coreutils ];
+          text = ''
+            export MAYBRAID_ROOT="$(git rev-parse --show-toplevel)"
+            exec ${./packaging/scripts/build-linux.sh}
+          '';
+        };
+
+      in rec {
+        packages = {
+          build-linux = buildLinux;
+        } // pkgs.lib.optionalAttrs pkgs.stdenv.isDarwin rec {
+          maybraid-macos = craneLib.buildPackage (maybraidArgs // {
+            cargoArtifacts = craneLib.buildDepsOnly (maybraidArgs // {
+              stdenv = pkgs.stdenvNoCC;
+            });
+            stdenv = pkgs.stdenvNoCC;
+            dontFixup = true;
+            MACOSX_DEPLOYMENT_TARGET = "13.0";
+            preConfigure = ''
+              source ${./packaging/macos/xcode.sh}
+            '';
+          });
+          default = maybraid-macos;
+        };
+
+        apps.build-linux = {
+          type = "app";
+          program = "${buildLinux}/bin/maybraid-build-linux";
+        };
+
         devShells = rec {
           default = docker-build;
           docker-build = pkgs.mkShell {
@@ -96,10 +132,8 @@
 
             LD_LIBRARY_PATH = "${pkgs.stdenv.cc.cc.lib}/lib/";
 
-            # rustc's Darwin target always passes `-liconv`. The Nix `cc`
-            # wrapper does not reliably inject `libiconv` into rustc's own
-            # link line (and Xcode `DEVELOPER_DIR` can hide the SDK copy).
-            # Development shell only — release-macos does not set these.
+            # rustc's Darwin target always passes `-liconv`. Development only;
+            # release binaries are built by packages.maybraid-macos (Apple SDK).
             RUSTFLAGS = pkgs.lib.optionalString pkgs.stdenv.isDarwin
               "-L native=${pkgs.libiconv}/lib";
             LIBRARY_PATH = pkgs.lib.optionalString pkgs.stdenv.isDarwin
@@ -163,89 +197,6 @@
               echo ""
               echo "Maybraid"
               echo "A game of peer-based state."
-            '';
-          };
-
-          # Dedicated macOS release shell: pinned Rust + Apple SDK only.
-          # mkShellNoCC avoids the Nix clang wrapper. libiconv is resolved
-          # through the macOS SDK, not pkgs.libiconv.
-          release-macos = pkgs.mkShellNoCC {
-            packages = [
-              releaseRust
-            ];
-
-            # Matches packaging/macos Info.plist LSMinimumSystemVersion.
-            # Do not derive this from `sw_vers` on the build machine.
-            MACOSX_DEPLOYMENT_TARGET = "13.0";
-            CARGO_TARGET_DIR = "target/release-packaging";
-
-            shellHook = ''
-              #!/usr/bin/env ${pkgs.bash}
-              set -e
-
-              unset NIX_LDFLAGS NIX_CFLAGS_COMPILE NIX_CC LIBRARY_PATH CPATH
-              unset C_INCLUDE_PATH CPLUS_INCLUDE_PATH PKG_CONFIG_PATH
-
-              if [ -d /Applications/Xcode.app/Contents/Developer ]; then
-                export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
-              fi
-              if sdkroot="$(xcrun --sdk macosx --show-sdk-path 2>/dev/null)" && [ -d "$sdkroot" ]; then
-                export SDKROOT="$sdkroot"
-                export CFLAGS="-isysroot $sdkroot -mmacosx-version-min=$MACOSX_DEPLOYMENT_TARGET"
-                export CXXFLAGS="-isysroot $sdkroot -stdlib=libc++ -mmacosx-version-min=$MACOSX_DEPLOYMENT_TARGET"
-                export LDFLAGS="-isysroot $sdkroot -mmacosx-version-min=$MACOSX_DEPLOYMENT_TARGET"
-                export CC="$(xcrun --find clang)"
-                export CXX="$(xcrun --find clang++)"
-                export AR="$(xcrun --find ar)"
-                # rustc always passes -liconv on Darwin. Prefer the Apple SDK,
-                # then /usr/lib, so a Nix rustc wrapper cannot put
-                # /nix/store/.../libiconv first. Runtime path stays
-                # /usr/lib/libiconv.2.dylib (Apple system library).
-                export RUSTFLAGS="-L native=$sdkroot/usr/lib -L native=/usr/lib"
-              else
-                echo "❌ macOS SDK not found via xcrun --sdk macosx" >&2
-                exit 1
-              fi
-
-              echo ""
-              echo "macOS release build environment (Apple SDK, no Nix CC)"
-              echo "Target: aarch64-apple-darwin (ARM64)"
-              echo "Deployment target: $MACOSX_DEPLOYMENT_TARGET"
-              echo "Build dir: $CARGO_TARGET_DIR"
-              echo "SDKROOT: $SDKROOT"
-              echo "Compiler: $CC"
-            '';
-          };
-
-          # Linux release entry point: launches the sniper SDK container.
-          # No host/Nix library paths — the SDK image owns compilation.
-          release-linux = pkgs.mkShellNoCC {
-            packages = [];
-            CARGO_TARGET_DIR = "target/sniper-release";
-            shellHook = ''
-              unset LIBRARY_PATH LD_LIBRARY_PATH CPATH C_INCLUDE_PATH CPLUS_INCLUDE_PATH
-              unset PKG_CONFIG_PATH NIX_LDFLAGS NIX_CFLAGS_COMPILE NIX_CC
-              echo ""
-              echo "Linux release entry point (Steam Runtime 3.0 sniper SDK)"
-              echo "Build:     packaging/scripts/build-linux-sniper.sh"
-              echo "Steam:     packaging/scripts/package-steam.sh"
-              echo "AppImage:  packaging/scripts/package-appimage.sh"
-              echo "Build dir: $CARGO_TARGET_DIR"
-            '';
-          };
-
-          # Dedicated Windows release shell (for local builds; CI uses native rustup)
-          release-windows = pkgs.mkShellNoCC {
-            packages = [
-              releaseRust
-            ];
-            CARGO_TARGET_DIR = "target/release-packaging";
-
-            shellHook = ''
-              echo ""
-              echo "Windows release build environment"
-              echo "Target: x86_64-pc-windows-msvc"
-              echo "Build dir: $CARGO_TARGET_DIR"
             '';
           };
         };

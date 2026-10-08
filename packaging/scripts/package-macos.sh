@@ -1,70 +1,38 @@
 #!/usr/bin/env bash
-# Assemble Maybraid.app from packaging/macos and wrap a UDZO DMG.
+# Assemble Maybraid.app and a UDZO DMG. Does not compile.
 #
-#   nix develop .#release-macos --command packaging/scripts/package-macos.sh
+#   BINARY=result/bin/maybraid packaging/scripts/package-macos.sh
 #
-# Unsigned by default. After Developer ID is in the login keychain:
-#
-#   SIGN_IDENTITY="Developer ID Application: Ramate LLC (TEAMID)" \
-#   NOTARY_PROFILE=maybraid-notary \
-#     packaging/scripts/package-macos.sh
-#
-#   SKIP_BUILD=1     use an existing binary under $CARGO_TARGET_DIR
-#   SKIP_NOTARY=1    sign only
-#   VERSION=0.0.1    CFBundleVersion / DMG name
-
+# Unsigned unless SIGN_IDENTITY is set. SKIP_NOTARY=1 signs only.
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-# shellcheck source=packaging/scripts/common.sh
-source "$REPO_ROOT/packaging/scripts/common.sh"
-
-TEMPLATE="$REPO_ROOT/packaging/macos/Maybraid.app"
-ENTITLEMENTS="$REPO_ROOT/packaging/macos/entitlements.plist"
-ASSETS="$REPO_ROOT/maybraid/assets"
-ICON_SRC="$REPO_ROOT/maybraid/assets/iconography/maybraid_logo_icon_home.png"
-VERSION="${VERSION:-0.0.1}"
-DIST="$REPO_ROOT/dist"
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+TEMPLATE="$ROOT/packaging/macos/Maybraid.app"
+ENTITLEMENTS="$ROOT/packaging/macos/entitlements.plist"
+ASSETS="$ROOT/maybraid/assets"
+ICON_SRC="$ROOT/maybraid/assets/iconography/maybraid_logo_icon_home.png"
+VERSION="${VERSION:-$("$ROOT/packaging/version.sh")}"
+DIST="$ROOT/dist"
 APP="$DIST/Maybraid.app"
 DMG_STAGE="$DIST/dmg-root"
 DMG="$DIST/Maybraid-${VERSION}-macos-arm64.dmg"
-
-TARGET_DIR="$(maybraid_resolve_target_dir)"
-BINARY="$TARGET_DIR/aarch64-apple-darwin/release/maybraid"
+BINARY="${BINARY:-$ROOT/result/bin/maybraid}"
 
 if [[ "$(uname -s)" != "Darwin" ]]; then
 	echo "package-macos.sh must run on macOS." >&2
 	exit 1
 fi
-
-if [[ "${SKIP_BUILD:-}" != "1" ]]; then
-	echo "==> Building maybraid (release, ARM64)"
-	echo "    Target:   aarch64-apple-darwin"
-	echo "    Profile:  release"
-	echo "    Features: default (maybraid has no optional package features)"
-	echo "    Locked:   Cargo.lock (--locked)"
-	echo "    Build dir: $TARGET_DIR"
-	(
-		cd "$REPO_ROOT"
-		cargo build -p maybraid \
-			--release \
-			--locked \
-			--target aarch64-apple-darwin
-	)
-fi
-
 if [[ ! -f "$BINARY" ]]; then
-	echo "Game binary not found: $BINARY" >&2
-	echo "   Run: nix develop .#release-macos --command packaging/scripts/package-macos.sh" >&2
+	echo "package-macos: binary not found: $BINARY" >&2
+	echo "   nix build .#maybraid-macos --impure --option sandbox false" >&2
 	exit 1
 fi
-
-maybraid_validate_macho "$BINARY"
-
 if [[ ! -d "$TEMPLATE" || ! -d "$ASSETS" ]]; then
 	echo "Missing template or assets." >&2
 	exit 1
 fi
+
+"$ROOT/packaging/validate.sh" macho "$BINARY"
 
 echo "==> Staging app bundle"
 rm -rf "$DIST"
@@ -94,8 +62,7 @@ if [[ -f "$ICON_SRC" ]] && command -v sips >/dev/null && command -v iconutil >/d
 	rm -rf "$iconset"
 fi
 
-# Validate the exact binary that will be shipped, after staging and before signing.
-maybraid_validate_macho "$APP/Contents/MacOS/maybraid"
+"$ROOT/packaging/validate.sh" macho "$APP/Contents/MacOS/maybraid"
 
 if [[ -n "${SIGN_IDENTITY:-}" ]]; then
 	echo "==> Signing"
@@ -195,11 +162,5 @@ if [[ -n "${SIGN_IDENTITY:-}" ]]; then
 	fi
 fi
 
-maybraid_smoke_unix "$APP/Contents/MacOS/maybraid" "packaged Maybraid.app"
-
-echo
-echo "Created:"
-echo "  $APP"
-echo "  $DMG"
-echo "Open the app:  open \"$APP\""
-echo "Hosted macOS CI cannot validate Metal/GPU beyond the loader check above."
+echo "Created $APP"
+echo "Created $DMG"

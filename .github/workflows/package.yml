@@ -1,11 +1,6 @@
-# Game packages: macOS ARM64 DMG, Windows x64 zip, Linux Steam + AppImage.
-# Release entry points: flake shells (macOS/Windows) and build-linux-sniper.sh.
-# Artifacts on main / ci-action::package / workflow_dispatch.
-# GitHub Release assets only when a release is published.
-#
-# Push is branch-only so creating a tag does not start a second run that
-# shares a ref with `release` and cancels the upload (v0.1.0-playtest-001).
-# Concurrency is also keyed by event so a later push cannot cancel a release.
+# Unsigned packages: macOS DMG, Windows zip, Steam depot, AppImage.
+# Linux compiles once in the pinned sniper image, then packages twice.
+# Trigger: main, published release, workflow_dispatch, ci-action::package.
 
 name: Package
 
@@ -25,286 +20,137 @@ permissions:
   contents: write
 
 jobs:
-  # One sniper-SDK binary, reused by Steam and AppImage packaging.
-  build-linux-sniper:
+  version:
     if: >
       github.event_name == 'release' ||
       github.event_name == 'workflow_dispatch' ||
       github.ref == 'refs/heads/main' ||
       contains(github.event.head_commit.message, 'ci-action::package')
     runs-on: ubuntu-22.04
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: ver
+        run: echo "version=$(packaging/version.sh)" >> "$GITHUB_OUTPUT"
+
+  build-linux:
+    needs: version
+    runs-on: ubuntu-22.04
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
-
-      - name: Version
-        id: ver
-        run: |
-          workspace_version=$(awk '
-            $0 == "[workspace.package]" { hit = 1; next }
-            hit && /^\[/ { exit }
-            hit && $1 == "version" {
-              gsub(/"/, "", $3)
-              print $3
-              exit
-            }
-          ' Cargo.toml)
-          if [ -z "$workspace_version" ]; then
-            echo "could not read workspace.package.version from Cargo.toml" >&2
-            exit 1
-          fi
-          if [ "${{ github.event_name }}" = "release" ]; then
-            v="${{ github.event.release.tag_name }}"
-            v="${v#v}"
-          else
-            v="${workspace_version}-${GITHUB_SHA::7}"
-          fi
-          echo "version=$v" >> "$GITHUB_OUTPUT"
-
-      - name: Prepare sniper cache directory
-        run: mkdir -p target/sniper-release
-
+      - run: mkdir -p target/sniper-release
       - uses: actions/cache@v4
         with:
           path: target/sniper-release
-          key: sniper-release-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
-          restore-keys: |
-            sniper-release-
-
-      - name: Build with Steam Runtime sniper SDK
-        env:
-          VERSION: ${{ steps.ver.outputs.version }}
-        run: packaging/scripts/build-linux-sniper.sh
-
-      - name: Upload Linux binary artifact
-        uses: actions/upload-artifact@v4
+          key: sniper-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml', 'packaging/linux/**') }}
+      - run: packaging/scripts/build-linux.sh
+      - uses: actions/upload-artifact@v4
         with:
-          name: linux-binary-${{ steps.ver.outputs.version }}
+          name: linux-binary-${{ needs.version.outputs.version }}
           path: target/sniper-release/x86_64-unknown-linux-gnu/release/maybraid
           retention-days: 1
 
   package-linux:
-    needs: build-linux-sniper
+    needs: [version, build-linux]
     runs-on: ubuntu-22.04
     timeout-minutes: 60
     strategy:
       matrix:
         format: [steam, appimage]
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
-
-      - name: Version
-        id: ver
-        run: |
-          workspace_version=$(awk '
-            $0 == "[workspace.package]" { hit = 1; next }
-            hit && /^\[/ { exit }
-            hit && $1 == "version" {
-              gsub(/"/, "", $3)
-              print $3
-              exit
-            }
-          ' Cargo.toml)
-          if [ -z "$workspace_version" ]; then
-            echo "could not read workspace.package.version from Cargo.toml" >&2
-            exit 1
-          fi
-          if [ "${{ github.event_name }}" = "release" ]; then
-            v="${{ github.event.release.tag_name }}"
-            v="${v#v}"
-          else
-            v="${workspace_version}-${GITHUB_SHA::7}"
-          fi
-          echo "version=$v" >> "$GITHUB_OUTPUT"
-
-      - name: Download Linux binary
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
-          name: linux-binary-${{ steps.ver.outputs.version }}
+          name: linux-binary-${{ needs.version.outputs.version }}
           path: target/sniper-release/x86_64-unknown-linux-gnu/release/
-
-      - name: Restore binary permissions
-        run: chmod +x target/sniper-release/x86_64-unknown-linux-gnu/release/maybraid
-
-      - name: Package Steam depot
-        if: matrix.format == 'steam'
-        env:
-          VERSION: ${{ steps.ver.outputs.version }}
+      - run: chmod +x target/sniper-release/x86_64-unknown-linux-gnu/release/maybraid
+      - if: matrix.format == 'steam'
         run: packaging/scripts/package-steam.sh
-
-      - name: Package AppImage
-        if: matrix.format == 'appimage'
+      - if: matrix.format == 'appimage'
         env:
-          VERSION: ${{ steps.ver.outputs.version }}
           APPIMAGE_EXTRACT_AND_RUN: "1"
-        run: |
-          sudo apt-get update && sudo apt-get install -y desktop-file-utils libfuse2
-          packaging/scripts/package-appimage.sh
-
-      - name: Upload Steam package
-        if: matrix.format == 'steam'
+        run: packaging/scripts/package-appimage.sh
+      - if: matrix.format == 'steam'
         uses: actions/upload-artifact@v4
         with:
-          name: maybraid-${{ steps.ver.outputs.version }}-steam-linux-x64
+          name: maybraid-${{ needs.version.outputs.version }}-steam-linux-x64
           path: dist/*.tar.xz
           if-no-files-found: error
           retention-days: 14
-
-      - name: Upload AppImage
-        if: matrix.format == 'appimage'
+      - if: matrix.format == 'appimage'
         uses: actions/upload-artifact@v4
         with:
-          name: maybraid-${{ steps.ver.outputs.version }}-linux-x64-appimage
+          name: maybraid-${{ needs.version.outputs.version }}-linux-x64-appimage
           path: dist/*.AppImage
           if-no-files-found: error
           retention-days: 14
+      - if: matrix.format == 'steam'
+        run: packaging/smoke.sh dist/Maybraid-${{ needs.version.outputs.version }}-steam-linux-x64/maybraid
+      - if: matrix.format == 'appimage'
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+        run: packaging/smoke.sh dist/Maybraid-${{ needs.version.outputs.version }}-linux-x64.AppImage
 
   package-macos:
-    if: >
-      github.event_name == 'release' ||
-      github.event_name == 'workflow_dispatch' ||
-      github.ref == 'refs/heads/main' ||
-      contains(github.event.head_commit.message, 'ci-action::package')
+    needs: version
     runs-on: macos-14
     timeout-minutes: 180
     env:
-      CARGO_TARGET_DIR: target/release-packaging
+      VERSION: ${{ needs.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
-
-      - name: Version
-        id: ver
-        run: |
-          workspace_version=$(awk '
-            $0 == "[workspace.package]" { hit = 1; next }
-            hit && /^\[/ { exit }
-            hit && $1 == "version" {
-              gsub(/"/, "", $3)
-              print $3
-              exit
-            }
-          ' Cargo.toml)
-          if [ -z "$workspace_version" ]; then
-            echo "could not read workspace.package.version from Cargo.toml" >&2
-            exit 1
-          fi
-          if [ "${{ github.event_name }}" = "release" ]; then
-            v="${{ github.event.release.tag_name }}"
-            v="${v#v}"
-          else
-            v="${workspace_version}-${GITHUB_SHA::7}"
-          fi
-          echo "version=$v" >> "$GITHUB_OUTPUT"
-
       - uses: DeterminateSystems/nix-installer-action@main
-
-      - name: Enable Nix Flakes
+      - uses: DeterminateSystems/magic-nix-cache-action@main
+      - name: Build with Crane + selected Xcode
         run: |
-          mkdir -p ~/.config/nix
-          echo "experimental-features = nix-command flakes" >> ~/.config/nix/nix.conf
-
-      - name: Prepare release target directory
-        run: mkdir -p target/release-packaging
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          prefix-key: release-macos
-          workspaces: ". -> target/release-packaging"
-          key: macos-arm64-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
-
-      - name: Package macOS with release-macos shell
-        env:
-          VERSION: ${{ steps.ver.outputs.version }}
-        run: nix develop .#release-macos --command packaging/scripts/package-macos.sh
-
+          xcodebuild -version
+          nix build .#maybraid-macos --impure --option sandbox false -L
+      - run: BINARY=result/bin/maybraid packaging/scripts/package-macos.sh
+      - run: packaging/validate.sh macho dist/Maybraid.app/Contents/MacOS/maybraid
+      - run: packaging/smoke.sh dist/Maybraid.app/Contents/MacOS/maybraid
       - uses: actions/upload-artifact@v4
         with:
-          name: maybraid-${{ steps.ver.outputs.version }}-macos-arm64
+          name: maybraid-${{ needs.version.outputs.version }}-macos-arm64
           path: dist/*.dmg
           if-no-files-found: error
           retention-days: 14
 
   package-windows:
-    if: >
-      github.event_name == 'release' ||
-      github.event_name == 'workflow_dispatch' ||
-      github.ref == 'refs/heads/main' ||
-      contains(github.event.head_commit.message, 'ci-action::package')
+    needs: version
     runs-on: windows-latest
     timeout-minutes: 120
     env:
-      CARGO_TARGET_DIR: target/release-packaging
+      VERSION: ${{ needs.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
-
-      - name: Version
-        id: ver
+      - id: rust
         shell: bash
-        run: |
-          workspace_version=$(awk '
-            $0 == "[workspace.package]" { hit = 1; next }
-            hit && /^\[/ { exit }
-            hit && $1 == "version" {
-              gsub(/"/, "", $3)
-              print $3
-              exit
-            }
-          ' Cargo.toml)
-          if [ -z "$workspace_version" ]; then
-            echo "could not read workspace.package.version from Cargo.toml" >&2
-            exit 1
-          fi
-          if [ "${{ github.event_name }}" = "release" ]; then
-            v="${{ github.event.release.tag_name }}"
-            v="${v#v}"
-          else
-            v="${workspace_version}-${GITHUB_SHA::7}"
-          fi
-          echo "version=$v" >> "$GITHUB_OUTPUT"
-
-      - name: Rust channel from rust-toolchain.toml
-        id: rust
-        shell: bash
-        run: |
-          channel=$(awk -F'"' '/^channel[[:space:]]*=/{print $2; exit}' rust-toolchain.toml)
-          if [ -z "$channel" ]; then
-            echo "could not read toolchain channel from rust-toolchain.toml" >&2
-            exit 1
-          fi
-          echo "channel=$channel" >> "$GITHUB_OUTPUT"
-
+        run: echo "channel=$(packaging/version.sh --rust)" >> "$GITHUB_OUTPUT"
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ steps.rust.outputs.channel }}
           targets: x86_64-pc-windows-msvc
-
-      - name: Prepare release target directory
-        shell: bash
-        run: mkdir -p target/release-packaging
-
       - uses: Swatinem/rust-cache@v2
         with:
-          prefix-key: release-windows
-          workspaces: ". -> target/release-packaging"
           key: windows-x64-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
-
-      - name: Package Windows
-        shell: bash
-        env:
-          VERSION: ${{ steps.ver.outputs.version }}
-          CARGO_TARGET_DIR: target/release-packaging
+      - shell: bash
+        run: cargo build -p maybraid --release --locked --target x86_64-pc-windows-msvc
+      - shell: bash
         run: packaging/scripts/package-windows.sh
-
       - uses: actions/upload-artifact@v4
         with:
-          name: maybraid-${{ steps.ver.outputs.version }}-windows-x64
+          name: maybraid-${{ needs.version.outputs.version }}-windows-x64
           path: dist/*.zip
           if-no-files-found: error
           retention-days: 14
 
   publish-release:
     if: github.event_name == 'release'
-    needs: [build-linux-sniper, package-linux, package-macos, package-windows]
+    needs: [build-linux, package-linux, package-macos, package-windows]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -312,10 +158,7 @@ jobs:
           path: artifacts
           pattern: maybraid-*
           merge-multiple: true
-      - name: Attach to GitHub Release
-        env:
+      - env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: |
-          ls -lh artifacts/
-          gh release upload "${{ github.event.release.tag_name }}" artifacts/*.{dmg,zip,tar.xz,AppImage} --clobber
+        run: gh release upload "${{ github.event.release.tag_name }}" artifacts/*.{dmg,zip,tar.xz,AppImage} --clobber
