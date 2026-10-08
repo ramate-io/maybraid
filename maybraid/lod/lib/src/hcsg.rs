@@ -11,9 +11,13 @@
 //!
 //! Generation stays synchronous and pose-free. Presentation keeps the LOD
 //! vocabulary ([`crate::presentation`], [`crate::scene`]).
+//!
+//! [`shared`] is the threaded runtime replacing both, alongside them until
+//! the layers move over.
 
 pub mod generate;
 pub mod schedule;
+pub mod shared;
 pub mod storage;
 
 #[cfg(test)]

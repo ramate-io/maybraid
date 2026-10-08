@@ -91,33 +91,30 @@ pub struct HcsgStorage(Arc<Registry>);
 
 struct Registry {
     stores: RwLock<HashMap<TypeId, Arc<dyn ErasedStore>>>,
+    base_scales: RwLock<HashMap<TypeId, DVec3>>,
+    next_version: AtomicU64, // one counter for every store
 }
 
-pub struct NodeStore<T> {
-    inner: RwLock<StoreInner<T>>,
-}
-
-struct StoreInner<T> {
-    entries: HashMap<Id, StoredEntry<T>>,
-    spatial: SpatialLookup<Id>, // gimme: ids and bounds only
-    revision: u64,              // bumped on every publish
+struct TypedStore<T> {
+    nodes: RwLock<NodeStore<Arc<T>>>, // entries, gimme index, membership revision
 }
 
 pub struct StoredEntry<T> {
-    pub value: Arc<T>,
+    pub value: T, // Arc<T> here
     pub bounds: Aabb3d,
-    pub version: GenerationVersion,
+    pub version: Version,
 }
 ```
 
-`HcsgValue` (renamed from today's `HcsgNode` trait) bounds what can be stored: `Send + Sync + 'static`.
+`TypedStore` reuses today's `NodeStore` (entries plus the gimme index) behind one lock. `HcsgValue` (renamed from today's `HcsgNode` trait) bounds what can be stored: `Send + Sync + 'static`.
 
 ### Locking
 
 - The registry lock is held only long enough to clone the store's `Arc`. The guard is released before the store is touched.
 - A store's lock is held only for lookup and publication. It is **never** held during generation or during recursive dependency calls.
 - A value and its spatial entry are published together, under one write.
-- The main thread uses `try_read` only. A failed read means "nothing new this frame", never "empty".
+- The main thread uses `try_read` only (`try_entry`, `try_overlapping`, `try_membership_revision`). A failed read returns `Err(Busy)`, which means "nothing new this frame", never "empty".
+- A poisoned lock is read through. Values are immutable and published whole, so the store is still consistent.
 
 ## Generation
 
@@ -147,6 +144,8 @@ impl GenerationContext {
 
 `get_or_generate` looks the value up, and if it is missing, builds it (recursively resolving that value's dependencies) and publishes it before returning. The context tracks which `(TypeId, Id)` pairs it is currently generating, and treats a repeat as a cycle (`None`).
 
+The worker builds its context with a staleness check (`GenerationContext::with_stale`). Once the subscription is cancelled, the context generates nothing more and drops whatever it just built instead of publishing it.
+
 Schemes are synchronous. Large collections stay ordinary synchronous computations on the worker. Async generation can come later without changing the presentation boundary, because a partially constructed value stays private until it is complete.
 
 ### Demand
@@ -157,25 +156,28 @@ The demand layer sits between presentation and storage. It is the only shared st
 #[derive(Clone, Resource)]
 pub struct HcsgDemand(Arc<DemandInner>);
 
-struct DemandInner {
+struct DemandShared {
     next_id: AtomicU64,
     state: Mutex<DemandState>,
-    wake: Condvar,
+    wake: Condvar, // work arrived, or shutdown
+    idle: Condvar, // the worker finished a subscription or ran dry
 }
 
 struct DemandState {
     subscriptions: HashMap<SubscriptionId, Subscription>,
-    in_progress: HashSet<(TypeId, Id)>,
     epoch: u64,
+    working: bool,
+    shutdown: bool,
 }
 
 struct Subscription {
     bounds: Aabb3d,
     focus: Option<Vec3>,
-    fill: FillFn,       // monomorphized per T
+    discover: Discover, // fn pointers monomorphized per T
+    generate: Generate,
     published: Vec<Id>, // appended as each value becomes available
     done: bool,
-    epoch: u64,
+    cancelled: Arc<AtomicBool>, // set on replace, unsubscribe, or epoch end
 }
 ```
 
@@ -192,8 +194,13 @@ impl HcsgDemand {
         focus: Option<Vec3>,
     ) -> SubscriptionId;
 
-    /// Ids published for `id` since `cursor`, or `None` if the lock is busy.
-    pub fn try_read_published(&self, id: SubscriptionId, cursor: usize) -> Option<Vec<Id>>;
+    /// Ids published for `id` from `cursor` on. `Err(Busy)` if the lock is held;
+    /// `Ok(None)` if the subscription no longer exists.
+    pub fn try_read_published(
+        &self,
+        id: SubscriptionId,
+        cursor: usize,
+    ) -> Result<Option<Vec<Id>>, Busy>;
 
     pub fn unsubscribe(&self, id: SubscriptionId);
 }
@@ -208,20 +215,20 @@ There is one dedicated worker thread:
 ```text
 loop:
   lock demand; wait on Condvar until some subscription is not done
-  pick the newest such subscription; copy (id, bounds, focus, fill, epoch); unlock
-  fill(storage, demand, id, bounds, focus):
+  pick the newest such subscription; copy (id, bounds, focus, fns, cancelled); unlock
+  fill(storage, demand, job):
     ids = T::original_ids_for(cx, bounds), nearest to focus first
     for each id:
-      if the subscription is gone or its epoch is stale: stop
-      if the value is not published and (T, id) is not in progress:
-        mark it in progress; generate it; publish it if the epoch is still current
-      append the id to the subscription's `published`
-  mark the subscription done
+      if cancelled: stop
+      get_or_generate::<T>(id); nothing is published once cancelled
+      if the value exists: append the id to the subscription's `published`
+  mark the subscription done (if it still exists)
 ```
 
-- **Every** discovered id is appended to `published`, including values published earlier by another subscription. That's how presentation learns about values it didn't cause.
-- **Cancellation is free.** A subscription that was replaced or removed is gone from the map, so the worker stops at the next id.
-- **Deduplication.** `in_progress` and published-value checks keep any `(TypeId, Id)` from being generated twice. With one worker this mostly guards recursion, but the same set covers more workers later.
+- **Every** discovered id whose value exists is appended to `published`, including values published earlier by another subscription. That's how presentation learns about values it didn't cause.
+- **Cancellation is cheap.** Replacing, unsubscribing or ending the epoch removes the subscription and sets its `cancelled` flag. The worker checks the flag without taking the demand lock, and stops at the next id or dependency.
+- **Deduplication.** With one worker, the published-value check in `get_or_generate` is enough: nothing else generates concurrently. The context's own generating set guards recursion. A cross-worker in-progress set waits for [more workers](#later).
+- **A panicking scheme** is caught and logged. Its subscription is marked done with whatever was published so far, and the worker carries on.
 - **Bounds are coalesced.** Each generation or presentation system has one live subscription, holding its latest bounds. A camera sweep replaces subscriptions instead of queuing work behind them.
 
 ### Bounds sources
@@ -308,7 +315,7 @@ struct Presented<T> {
 Each frame:
 
 1. **Request.** If `B::inner` changed, replace the subscription (`subscribe` with the previous id) and reset the cursor. The presentation system never calls discovery itself.
-2. **Read.** `try_read_published(subscription, cursor)`. If it returns `None`, nothing changes this frame.
+2. **Read.** `try_read_published(subscription, cursor)`. On `Err(Busy)`, nothing changes this frame. On `Ok(None)`, the subscription is gone (for example after an epoch change), so subscribe again.
 3. **Spawn.** For each new id not already in `hosts`, clone the entry's `Arc` under a short `try_read` of the store, then spawn a host carrying `HcsgNode<T>`. If the store is busy, the id is retried next frame and the cursor is not advanced past it.
 4. **Retire.** Despawn any host whose entry bounds no longer intersect `B::outer`, along with its owned scene subtree. Retirement depends only on bounds, never on what discovery returned.
 
@@ -358,7 +365,7 @@ app.add_plugins(GenerationPlugin::<AheadOfCamera, Terrain>::default());
 The demand layer holds an `epoch`:
 
 - **Mode exit** bumps the epoch, removes the mode's subscriptions, and clears the mode's wrapped stores.
-- The worker drops a subscription whose epoch is stale, and never publishes a value generated under an older epoch.
+- `advance_epoch` removes every subscription and sets its `cancelled` flag, so the worker stops and never publishes a value generated under an older epoch.
 - **Mode enter** runs its initialization phase (seeding roots) before its generation and presentation systems subscribe.
 
 Nothing else is invalidated. Recording references between values (`get_or_generate` noting the `(TypeId, Id)` pairs it touched) is a later feature for eviction and garbage collection, not for correctness.
@@ -369,12 +376,13 @@ Tests keep the real worker thread and wait for it explicitly:
 
 ```rust
 impl HcsgDemand {
-    /// Blocks until no subscription has outstanding work. Tests only.
-    pub fn wait_idle(&self);
+    /// Blocks until no subscription has outstanding work, or `timeout` passes
+    /// (`false`). Needs a running worker.
+    pub fn wait_idle(&self, timeout: Duration) -> bool;
 }
 ```
 
-A typical test seeds its roots, runs `app.update()` once so presentation subscribes, calls `wait_idle()`, then runs `app.update()` again to spawn hosts and asserts on them.
+A typical test seeds its roots, runs `app.update()` once so presentation subscribes, calls `wait_idle(…)`, then runs `app.update()` again to spawn hosts and asserts on them. The timeout turns a stuck worker into a failed assertion instead of a hung test.
 
 ## Layer responsibilities
 
@@ -399,13 +407,16 @@ The shared runtime provides everything else.
 
 ## Migration
 
-1. **Context and `Arc` values.** Rename `HcsgNode` to `HcsgValue`, store `Arc<T>`, and move schemes from `&mut HcsgStorage` to `GenerationContext`. Port Durham, cells and Richmond.
-2. **Demand, worker, generation and presentation.** Add `HcsgDemand`, the worker, `generation<B, T>`, `HcsgNode<T>`, scene forwarding and `presentation<B, T>`. Port Durham terrain first, since each value maps to one host. Then port Richmond, presenting total padded terrain and built developments.
+The new API lives in `lod::hcsg::shared`, alongside the frame-synchronous `lod::hcsg` API, until the last layer moves over.
+
+0. **Shared storage, context, demand and worker** (done). `HcsgStorage` with `Arc` values and `Busy`, `HcsgValue`, `GenerationScheme` and `GenerationContext`, `HcsgDemand` and `HcsgWorker`, tested in isolation. No layer uses them yet.
+1. **Context and `Arc` values.** Move schemes from `&mut HcsgStorage` to `GenerationContext`. Port Durham, cells and Richmond.
+2. **Generation and presentation.** Add `generation<B, T>`, `HcsgNode<T>`, scene forwarding and `presentation<B, T>`. Port Durham terrain first, since each value maps to one host. Then port Richmond, presenting total padded terrain and built developments.
 3. **Remaining layers.** Move Chico, Barking and Maputo directly onto the new API. Delete `gen::runtime`, the producer and queue machinery, and the bespoke presenters.
 4. **Modes.** Build the Discovery game mode on the new runtime. The training ground is then rebuilt from scratch on top of it.
 
 ## Later
 
 - Retirement on the generation side: `generation<B, T>` evicts values outside `B::outer`. Recorded references between values decide whether a dependency can go too, so nothing still reachable from a retained value is evicted.
-- More than one worker. The `in_progress` set already deduplicates across them.
+- More than one worker. This needs an in-progress `(TypeId, Id)` set in the demand state, so two workers never build the same value.
 - Async generation for large collections.

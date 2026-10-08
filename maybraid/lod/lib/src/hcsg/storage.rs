@@ -41,7 +41,7 @@ pub struct NodeStore<T> {
 }
 
 impl<T> NodeStore<T> {
-	fn new(base_scale: DVec3) -> Self {
+	pub(super) fn new(base_scale: DVec3) -> Self {
 		Self {
 			entries: HashMap::new(),
 			spatial: gimme_core::SpatialIndex::new(base_scale).ok(),
@@ -51,7 +51,7 @@ impl<T> NodeStore<T> {
 		}
 	}
 
-	fn rebuild_index(&mut self, base_scale: DVec3) {
+	pub(super) fn rebuild_index(&mut self, base_scale: DVec3) {
 		self.base_scale = base_scale;
 		self.spatial = gimme_core::SpatialIndex::new(base_scale).ok();
 		self.unindexed.clear();
@@ -144,7 +144,7 @@ impl<T> NodeStore<T> {
 		buckets.x * buckets.y * buckets.z > 4.0 * self.entries.len().max(1) as f64
 	}
 
-	fn put(&mut self, id: Id, entry: StoredEntry<T>, revision: u64) {
+	pub(super) fn put(&mut self, id: Id, entry: StoredEntry<T>, revision: u64) {
 		self.index(id, entry.bounds);
 		self.entries.insert(id, entry);
 		self.membership_revision = revision;
@@ -160,7 +160,7 @@ impl<T> NodeStore<T> {
 		true
 	}
 
-	fn remove(&mut self, id: Id, revision: u64) -> Option<StoredEntry<T>> {
+	pub(super) fn remove(&mut self, id: Id, revision: u64) -> Option<StoredEntry<T>> {
 		let entry = self.entries.remove(&id)?;
 		if let Some(spatial) = self.spatial.as_mut() {
 			spatial.remove(id);
@@ -168,6 +168,12 @@ impl<T> NodeStore<T> {
 		self.unindexed.remove(&id);
 		self.membership_revision = revision;
 		Some(entry)
+	}
+
+	/// Drops every entry, keeping the base scale.
+	pub(super) fn reset(&mut self, revision: u64) {
+		*self = Self::new(self.base_scale);
+		self.membership_revision = revision;
 	}
 }
 
@@ -187,8 +193,7 @@ impl<T: HcsgNode> ErasedStore for NodeStore<T> {
 	}
 
 	fn clear(&mut self, revision: u64) {
-		*self = Self::new(self.base_scale);
-		self.membership_revision = revision;
+		self.reset(revision);
 	}
 }
 
