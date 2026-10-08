@@ -116,9 +116,32 @@ mod tests {
 	use bevy::prelude::Vec3;
 
 	use super::*;
+	use crate::animations::{Mix, UprightWalk, Walk};
 
 	fn tip(rig: &HumanoidV0Rig, name: &str) -> Vec3 {
 		rig.rotation(name) * Vec3::Y
+	}
+
+	fn bone_length(rig: &HumanoidV0Rig, name: &str) -> f32 {
+		let id = rig.binding.definition.id(name).expect(name);
+		rig.binding.effective_rest.get(id).expect("rest").translation.length()
+	}
+
+	/// Distal end of a bone in character space.
+	fn bone_end(rig: &HumanoidV0Rig, name: &str) -> Vec3 {
+		rig.character_point(name) + rig.character_length(name) * bone_length(rig, name)
+	}
+
+	fn run_without_lean() -> UprightRun {
+		UprightRun { torso_lean: 0.0, ..UprightRun::default() }
+	}
+
+	fn walk_without_lean() -> UprightWalk {
+		UprightWalk { torso_lean: 0.0, ..UprightWalk::default() }
+	}
+
+	fn apply_upright_run(rig: &mut HumanoidV0Rig, run: &UprightRun, phase: f32) {
+		run.apply_for(rig, phase);
 	}
 
 	fn assert_pose_matches_at_phases(phases: &[f32]) {
@@ -192,6 +215,183 @@ mod tests {
 	}
 
 	#[test]
+	fn character_forward_is_positive_z_on_clip_fixture() {
+		let mut rig = HumanoidV0Rig::for_clip_test();
+		let mut pose = character_rigs::authoring::HumanoidPose::default();
+		pose.spine.add_root_forward(0.1);
+		rig.write_pose(&pose);
+		let forward = rig.character_length("root");
+		assert!(forward.z > 0.0, "+Z is fight-forward on for_clip_test, got {forward:?}");
+		assert!(forward.x.abs() < 1e-3, "forward lean stays sagittal, got {forward:?}");
+	}
+
+	#[test]
+	fn run_forward_pitch_moves_upper_body_down_and_ahead() {
+		let phases = [0.0, 0.25, 0.5, 0.75];
+		let before = run_without_lean();
+		let after = UprightRun::default();
+		let walk = UprightWalk::default();
+
+		for phase in phases {
+			let mut main = HumanoidV0Rig::for_clip_test();
+			apply_upright_run(&mut main, &after, phase);
+			let mut prev = HumanoidV0Rig::for_clip_test();
+			apply_upright_run(&mut prev, &before, phase);
+			let mut walk_rig = HumanoidV0Rig::for_clip_test();
+			walk.apply_for(&mut walk_rig, phase);
+
+			for name in ["upper_back", "lower_neck", "upper_neck"] {
+				let main_pt = bone_end(&main, name);
+				let prev_pt = bone_end(&prev, name);
+				let walk_pt = bone_end(&walk_rig, name);
+				assert!(
+					main_pt.z > prev_pt.z + 0.03,
+					"{name} at {phase}: run after {main_pt:?} should be ahead of before {prev_pt:?}"
+				);
+				assert!(
+					main_pt.y < prev_pt.y + 1e-3,
+					"{name} at {phase}: forward pitch lowers the upper body, after {main_pt:?} vs before {prev_pt:?}"
+				);
+				assert!(
+					main_pt.z > walk_pt.z,
+					"{name} at {phase}: run after {main_pt:?} should pitch past walk {walk_pt:?}"
+				);
+			}
+		}
+	}
+
+	#[test]
+	fn run_lean_foot_shift_matches_walk_lean_pattern() {
+		const FOOT_TOLERANCE: f32 = 0.02;
+		let phases = [0.0, 0.25, 0.5, 0.75];
+		let run_before = run_without_lean();
+		let run_after = UprightRun::default();
+		let walk_before = walk_without_lean();
+		let walk_after = UprightWalk::default();
+
+		for phase in phases {
+			let mut run_prev = HumanoidV0Rig::for_clip_test();
+			let mut run_next = HumanoidV0Rig::for_clip_test();
+			apply_upright_run(&mut run_prev, &run_before, phase);
+			apply_upright_run(&mut run_next, &run_after, phase);
+
+			let mut walk_prev = HumanoidV0Rig::for_clip_test();
+			let mut walk_next = HumanoidV0Rig::for_clip_test();
+			walk_before.apply_for(&mut walk_prev, phase);
+			walk_after.apply_for(&mut walk_next, phase);
+
+			for (side, shin) in [("L", "shin.L"), ("R", "shin.R")] {
+				let run_delta = bone_end(&run_next, shin) - bone_end(&run_prev, shin);
+				let walk_delta = bone_end(&walk_next, shin) - bone_end(&walk_prev, shin);
+				assert!(
+					run_delta.length() < FOOT_TOLERANCE,
+					"{shin} at {phase}: run foot should stay near pre-change run, delta {run_delta:?}"
+				);
+				assert!(
+					walk_delta.length() < FOOT_TOLERANCE,
+					"{shin} at {phase}: walk shows the same lean artifact, delta {walk_delta:?}"
+				);
+				assert!(
+					(run_delta - walk_delta).length() < FOOT_TOLERANCE,
+					"{side} foot at {phase}: run and walk lean shifts should match, run {run_delta:?} walk {walk_delta:?}"
+				);
+			}
+		}
+	}
+
+	#[test]
+	fn run_head_neck_forward_relative_to_main() {
+		let before = run_without_lean();
+		let after = UprightRun::default();
+		for phase in [0.0, 0.25, 0.5, 0.75] {
+			let mut main = HumanoidV0Rig::for_clip_test();
+			let mut prev = HumanoidV0Rig::for_clip_test();
+			apply_upright_run(&mut main, &after, phase);
+			apply_upright_run(&mut prev, &before, phase);
+
+			let neck_delta = bone_end(&main, "lower_neck").z - bone_end(&prev, "lower_neck").z;
+			let head_delta = bone_end(&main, "upper_neck").z - bone_end(&prev, "upper_neck").z;
+			assert!(neck_delta > 0.04, "neck should move forward at {phase}, delta {neck_delta}");
+			assert!(head_delta > 0.04, "head should move forward at {phase}, delta {head_delta}");
+		}
+	}
+
+	#[test]
+	fn walk_run_blend_interpolates_forward_lean() {
+		let mix = Mix::new(Walk::default(), Run::default(), 0.5);
+		for phase in [0.0, 0.25, 0.5, 0.75] {
+			let mut walk = HumanoidV0Rig::for_clip_test();
+			let mut run = HumanoidV0Rig::for_clip_test();
+			let mut blended = HumanoidV0Rig::for_clip_test();
+			Walk::default().apply(&mut walk, phase);
+			Run::default().apply(&mut run, phase);
+			mix.apply_for(&mut blended, phase);
+
+			let walk_z = bone_end(&walk, "upper_back").z;
+			let run_z = bone_end(&run, "upper_back").z;
+			let blend_z = bone_end(&blended, "upper_back").z;
+			assert!(
+				blend_z > walk_z && blend_z < run_z,
+				"50/50 blend at {phase} should sit between walk {walk_z} and run {run_z}, got {blend_z}"
+			);
+			assert!(
+				walk_z > 0.0 && run_z > 0.0 && blend_z > 0.0,
+				"lean stays forward (+Z) at {phase}: walk {walk_z}, blend {blend_z}, run {run_z}"
+			);
+		}
+	}
+
+	#[test]
+	#[ignore = "manual evidence table for stylization reviews"]
+	fn run_lean_evidence_dump() {
+		let phases = [0.0, 0.25, 0.5, 0.75];
+		let before = run_without_lean();
+		let after = UprightRun::default();
+		eprintln!("bone | phase | walk (x,y,z) | run before | run after");
+		for phase in phases {
+			let mut walk_rig = HumanoidV0Rig::for_clip_test();
+			Walk::default().apply(&mut walk_rig, phase);
+			let mut prev = HumanoidV0Rig::for_clip_test();
+			let mut next = HumanoidV0Rig::for_clip_test();
+			apply_upright_run(&mut prev, &before, phase);
+			apply_upright_run(&mut next, &after, phase);
+			for name in ["upper_back", "lower_neck", "upper_neck", "shin.L", "shin.R"] {
+				let walk_pt = bone_end(&walk_rig, name);
+				let before_pt = bone_end(&prev, name);
+				let after_pt = bone_end(&next, name);
+				eprintln!(
+					"{name} | {phase:.2} | ({wx:.4}, {wy:.4}, {wz:.4}) | ({bx:.4}, {by:.4}, {bz:.4}) | ({ax:.4}, {ay:.4}, {az:.4})",
+					wx = walk_pt.x,
+					wy = walk_pt.y,
+					wz = walk_pt.z,
+					bx = before_pt.x,
+					by = before_pt.y,
+					bz = before_pt.z,
+					ax = after_pt.x,
+					ay = after_pt.y,
+					az = after_pt.z,
+				);
+			}
+		}
+		let mix = Mix::new(Walk::default(), Run::default(), 0.5);
+		eprintln!("50/50 blend upper_back.z by phase:");
+		for phase in phases {
+			let mut walk = HumanoidV0Rig::for_clip_test();
+			let mut run = HumanoidV0Rig::for_clip_test();
+			let mut blended = HumanoidV0Rig::for_clip_test();
+			Walk::default().apply(&mut walk, phase);
+			Run::default().apply(&mut run, phase);
+			mix.apply_for(&mut blended, phase);
+			eprintln!(
+				"phase {phase:.2}: walk {walk_z:.4} blend {blend_z:.4} run {run_z:.4}",
+				walk_z = bone_end(&walk, "upper_back").z,
+				blend_z = bone_end(&blended, "upper_back").z,
+				run_z = bone_end(&run, "upper_back").z,
+			);
+		}
+	}
+
+	#[test]
 	fn run_applies_forward_torso_lean() {
 		let mut rig = HumanoidV0Rig::for_clip_test();
 		UprightRun::default().apply(&mut rig, 0.25);
@@ -203,8 +403,6 @@ mod tests {
 
 	#[test]
 	fn run_lean_exceeds_walk_for_matching_stride_scale() {
-		use crate::animations::Walk;
-
 		let mut walk = HumanoidV0Rig::for_clip_test();
 		Walk::default().apply(&mut walk, 0.25);
 		let mut run = HumanoidV0Rig::for_clip_test();
