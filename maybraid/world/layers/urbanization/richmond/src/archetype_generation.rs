@@ -1,4 +1,4 @@
-//! Builders for the shared solitary, campus, and neighborhood layout families.
+//! Builders for the shared campus and neighborhood layout families.
 
 use bevy::math::bounding::{Aabb2d, Aabb3d};
 use bevy::math::{Vec2, Vec3};

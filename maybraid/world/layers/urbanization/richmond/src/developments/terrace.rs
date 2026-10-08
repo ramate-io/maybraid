@@ -1,4 +1,8 @@
-//! [`SolitaryCell`]: one building on one terrace at the cell center.
+//! [`TerraceCell`]: a development fitted to one terrace at the cell center.
+//!
+//! The terrace is one pad and one set of confines; what a kind fits to them
+//! may be one building (Les Halles, a highrise) or several (a temple complex,
+//! a neighborhood of homes).
 
 use std::marker::PhantomData;
 
@@ -19,9 +23,9 @@ use crate::ground::{GroundSampler, RichmondGround, SiteGround};
 use crate::pad::{cell_center_xz, PadComplex, PadParams};
 use crate::storage::column_bounds;
 
-/// Footprint and height ranges a solitary kind draws its confines from.
+/// Footprint and height ranges a terrace kind draws its confines from.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct SolitaryEnvelope {
+pub struct TerraceEnvelope {
 	pub min_footprint: f32,
 	pub max_footprint: f32,
 	pub min_height: f32,
@@ -29,20 +33,20 @@ pub struct SolitaryEnvelope {
 	pub rotates: bool,
 }
 
-/// A development kind that fits one building to [`SolitaryPlan`] confines.
-pub trait SolitaryKind: 'static {
+/// A development kind fitted to the confines of one [`TerracePlan`].
+pub trait TerraceKind: 'static {
 	const KIND: DevelopmentKind;
 
-	fn envelope() -> SolitaryEnvelope;
+	fn envelope() -> TerraceEnvelope;
 
 	fn finish(hash: SeededHash) -> DevelopmentFinish;
 
-	fn built(plan: &SolitaryPlan, noise: NoiseParams) -> Option<BuiltDevelopment>;
+	fn built(plan: &TerracePlan, noise: NoiseParams) -> Option<BuiltDevelopment>;
 }
 
-/// Terrace, confines, and finish drawn for one solitary cell.
+/// Terrace, confines, and finish drawn for one terrace cell.
 #[derive(Debug, Clone)]
-pub struct SolitaryPlan {
+pub struct TerracePlan {
 	pub cell: Aabb3d,
 	pub pad: DevelopmentPad,
 	pub confines_height: f32,
@@ -51,8 +55,8 @@ pub struct SolitaryPlan {
 	pub finish: DevelopmentFinish,
 }
 
-impl SolitaryPlan {
-	pub fn new<K: SolitaryKind>(cell: Aabb3d, pad_height: f32, config: &DevelopmentConfig) -> Self {
+impl TerracePlan {
+	pub fn new<K: TerraceKind>(cell: Aabb3d, pad_height: f32, config: &DevelopmentConfig) -> Self {
 		let hash = SeededHash::new(config.seed.wrapping_add(cell_salt(cell)));
 		let envelope = K::envelope();
 		let (min_foot, max_foot) = (envelope.min_footprint, envelope.max_footprint);
@@ -124,14 +128,14 @@ impl SolitaryPlan {
 	}
 }
 
-/// A solitary development of kind `K` over ground `G`.
-pub struct SolitaryCell<K, G> {
-	pub plan: SolitaryPlan,
+/// A terrace development of kind `K` over ground `G`.
+pub struct TerraceCell<K, G> {
+	pub plan: TerracePlan,
 	_kind: PhantomData<fn() -> (K, G)>,
 }
 
-impl<K: SolitaryKind, G> SolitaryCell<K, G> {
-	pub fn new(plan: SolitaryPlan) -> Self {
+impl<K: TerraceKind, G> TerraceCell<K, G> {
+	pub fn new(plan: TerracePlan) -> Self {
 		Self { plan, _kind: PhantomData }
 	}
 
@@ -140,7 +144,7 @@ impl<K: SolitaryKind, G> SolitaryCell<K, G> {
 	}
 }
 
-impl<K: SolitaryKind, G: RichmondGround> GenerationScheme<HcsgStorage> for SolitaryCell<K, G> {
+impl<K: TerraceKind, G: RichmondGround> GenerationScheme<HcsgStorage> for TerraceCell<K, G> {
 	fn original_ids_for(storage: &mut HcsgStorage, region: Aabb3d) -> Vec<OriginalId> {
 		DevelopmentSite::ids_of_kind(storage, region, K::KIND)
 	}
@@ -151,12 +155,15 @@ impl<K: SolitaryKind, G: RichmondGround> GenerationScheme<HcsgStorage> for Solit
 		let (site, config) = DevelopmentSite::planned(storage, id, K::KIND)?;
 		let bounds = column_bounds(site.cell);
 		if let Some(authored) = &site.authored {
-			return Some((Self::new(SolitaryPlan::new::<K>(site.cell, authored.height, &config)), bounds));
+			return Some((
+				Self::new(TerracePlan::new::<K>(site.cell, authored.height, &config)),
+				bounds,
+			));
 		}
 		let mut ground = GroundSampler::<G>::new(storage, bounds);
 		let center = cell_center_xz(site.cell);
 		let height = ground.height_at(center.x, center.y)?;
-		let plan = SolitaryPlan::new::<K>(site.cell, height, &config);
+		let plan = TerracePlan::new::<K>(site.cell, height, &config);
 		if ground.hydro_overlaps(plan.pad.complex.bounds) {
 			return None;
 		}
@@ -173,9 +180,13 @@ mod tests {
 	use crate::cell::{available_footprint, yawed_plan_aabb_extent, DevelopmentExtent};
 	use crate::developments::les_halles::LesHallesKind;
 
-	fn les_halles(seed: u32) -> SolitaryPlan {
+	fn les_halles(seed: u32) -> TerracePlan {
 		let cell = DevelopmentExtent::from_cell_index(0, 0).aabb();
-		SolitaryPlan::new::<LesHallesKind>(cell, 12.0, &DevelopmentConfig { seed, ..Default::default() })
+		TerracePlan::new::<LesHallesKind>(
+			cell,
+			12.0,
+			&DevelopmentConfig { seed, ..Default::default() },
+		)
 	}
 
 	#[test]

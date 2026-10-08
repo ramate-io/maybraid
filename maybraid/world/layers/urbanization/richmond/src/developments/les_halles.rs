@@ -5,20 +5,20 @@ use procedural_common::{NoiseParams, SeededHash};
 use urbanization_developments::{MixedUseLesHallesDevelopment, PlacedBuilding};
 
 use super::site::DevelopmentKind;
-use super::solitary::{SolitaryCell, SolitaryEnvelope, SolitaryKind, SolitaryPlan};
+use super::terrace::{TerraceCell, TerraceEnvelope, TerraceKind, TerracePlan};
 use crate::artifact::BuiltDevelopment;
 use crate::cell::{available_footprint, MAX_CONFINES_HEIGHT, MIN_CONFINES_HEIGHT, MIN_FOOTPRINT};
 use crate::finish::DevelopmentFinish;
 
 pub struct LesHallesKind;
 
-pub type LesHallesCell<G> = SolitaryCell<LesHallesKind, G>;
+pub type LesHallesCell<G> = TerraceCell<LesHallesKind, G>;
 
-impl SolitaryKind for LesHallesKind {
+impl TerraceKind for LesHallesKind {
 	const KIND: DevelopmentKind = DevelopmentKind::LesHalles;
 
-	fn envelope() -> SolitaryEnvelope {
-		SolitaryEnvelope {
+	fn envelope() -> TerraceEnvelope {
+		TerraceEnvelope {
 			min_footprint: MIN_FOOTPRINT,
 			max_footprint: available_footprint(),
 			min_height: MIN_CONFINES_HEIGHT,
@@ -31,7 +31,7 @@ impl SolitaryKind for LesHallesKind {
 		DevelopmentFinish::pick(hash)
 	}
 
-	fn built(plan: &SolitaryPlan, noise: NoiseParams) -> Option<BuiltDevelopment> {
+	fn built(plan: &TerracePlan, noise: NoiseParams) -> Option<BuiltDevelopment> {
 		let (placed, _) = PlacedBuilding::<MixedUseLesHallesDevelopment>::fit_to_confines(
 			&plan.confines(),
 			noise,

@@ -5,20 +5,20 @@ use procedural_common::{NoiseParams, SeededHash};
 use urbanization_developments::{PlacedBuilding, SolitaryWizardsTower};
 
 use super::site::DevelopmentKind;
-use super::solitary::{SolitaryCell, SolitaryEnvelope, SolitaryKind, SolitaryPlan};
+use super::terrace::{TerraceCell, TerraceEnvelope, TerraceKind, TerracePlan};
 use crate::artifact::BuiltDevelopment;
 use crate::cell::RING_FORT_MAX_FOOTPRINT;
 use crate::finish::{DevelopmentFinish, DevelopmentFinishRole};
 
 pub struct WizardsTowerKind;
 
-pub type WizardsTowerCell<G> = SolitaryCell<WizardsTowerKind, G>;
+pub type WizardsTowerCell<G> = TerraceCell<WizardsTowerKind, G>;
 
-impl SolitaryKind for WizardsTowerKind {
+impl TerraceKind for WizardsTowerKind {
 	const KIND: DevelopmentKind = DevelopmentKind::WizardsTower;
 
-	fn envelope() -> SolitaryEnvelope {
-		SolitaryEnvelope {
+	fn envelope() -> TerraceEnvelope {
+		TerraceEnvelope {
 			min_footprint: 24.0,
 			max_footprint: RING_FORT_MAX_FOOTPRINT.min(42.0),
 			min_height: 48.0,
@@ -31,7 +31,7 @@ impl SolitaryKind for WizardsTowerKind {
 		DevelopmentFinish::pick_for_role(hash, DevelopmentFinishRole::WizardsTower, false)
 	}
 
-	fn built(plan: &SolitaryPlan, noise: NoiseParams) -> Option<BuiltDevelopment> {
+	fn built(plan: &TerracePlan, noise: NoiseParams) -> Option<BuiltDevelopment> {
 		let (placed, _) =
 			PlacedBuilding::<SolitaryWizardsTower>::fit_to_confines(&plan.confines(), noise)
 				.ok()?;

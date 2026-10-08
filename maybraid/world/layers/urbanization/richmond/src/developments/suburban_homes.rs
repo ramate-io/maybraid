@@ -3,7 +3,7 @@
 use procedural_common::{NoiseParams, SeededHash};
 
 use super::site::DevelopmentKind;
-use super::solitary::{SolitaryCell, SolitaryEnvelope, SolitaryKind, SolitaryPlan};
+use super::terrace::{TerraceCell, TerraceEnvelope, TerraceKind, TerracePlan};
 use crate::archetype_generation::ArchetypeGenerator;
 use crate::artifact::BuiltDevelopment;
 use crate::cell::RING_FORT_MAX_FOOTPRINT;
@@ -11,13 +11,13 @@ use crate::finish::{DevelopmentFinish, DevelopmentFinishRole};
 
 pub struct SuburbanHomesKind;
 
-pub type SuburbanHomesCell<G> = SolitaryCell<SuburbanHomesKind, G>;
+pub type SuburbanHomesCell<G> = TerraceCell<SuburbanHomesKind, G>;
 
-impl SolitaryKind for SuburbanHomesKind {
+impl TerraceKind for SuburbanHomesKind {
 	const KIND: DevelopmentKind = DevelopmentKind::SuburbanHomes;
 
-	fn envelope() -> SolitaryEnvelope {
-		SolitaryEnvelope {
+	fn envelope() -> TerraceEnvelope {
+		TerraceEnvelope {
 			min_footprint: 190.0,
 			max_footprint: RING_FORT_MAX_FOOTPRINT.min(230.0),
 			min_height: 12.0,
@@ -30,7 +30,7 @@ impl SolitaryKind for SuburbanHomesKind {
 		DevelopmentFinish::pick_for_role(hash, DevelopmentFinishRole::SuburbanHome, false)
 	}
 
-	fn built(plan: &SolitaryPlan, noise: NoiseParams) -> Option<BuiltDevelopment> {
+	fn built(plan: &TerracePlan, noise: NoiseParams) -> Option<BuiltDevelopment> {
 		Some(BuiltDevelopment::SuburbanHomes(Box::new(ArchetypeGenerator::build_suburban_homes(
 			plan.cell,
 			&plan.confines(),

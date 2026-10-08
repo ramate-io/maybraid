@@ -5,20 +5,20 @@ use procedural_common::{NoiseParams, SeededHash};
 use urbanization_developments::{PlacedBuilding, SingleHighrise};
 
 use super::site::DevelopmentKind;
-use super::solitary::{SolitaryCell, SolitaryEnvelope, SolitaryKind, SolitaryPlan};
+use super::terrace::{TerraceCell, TerraceEnvelope, TerraceKind, TerracePlan};
 use crate::artifact::BuiltDevelopment;
 use crate::cell::RING_FORT_MAX_FOOTPRINT;
 use crate::finish::{DevelopmentFinish, DevelopmentFinishRole};
 
 pub struct SingleHighriseKind;
 
-pub type SingleHighriseCell<G> = SolitaryCell<SingleHighriseKind, G>;
+pub type SingleHighriseCell<G> = TerraceCell<SingleHighriseKind, G>;
 
-impl SolitaryKind for SingleHighriseKind {
+impl TerraceKind for SingleHighriseKind {
 	const KIND: DevelopmentKind = DevelopmentKind::SingleHighrise;
 
-	fn envelope() -> SolitaryEnvelope {
-		SolitaryEnvelope {
+	fn envelope() -> TerraceEnvelope {
+		TerraceEnvelope {
 			min_footprint: 42.5,
 			max_footprint: RING_FORT_MAX_FOOTPRINT.min(65.0),
 			min_height: 48.0,
@@ -31,7 +31,7 @@ impl SolitaryKind for SingleHighriseKind {
 		DevelopmentFinish::pick_for_role(hash, DevelopmentFinishRole::Highrise, false)
 	}
 
-	fn built(plan: &SolitaryPlan, noise: NoiseParams) -> Option<BuiltDevelopment> {
+	fn built(plan: &TerracePlan, noise: NoiseParams) -> Option<BuiltDevelopment> {
 		let (placed, _) =
 			PlacedBuilding::<SingleHighrise>::fit_to_confines(&plan.confines(), noise).ok()?;
 		Some(BuiltDevelopment::SingleHighrise(Box::new(

@@ -1,6 +1,6 @@
 //! Richmond development models: urbanization leaves (default) or a legacy
 //! 300 m occupancy lattice, terrain pads, and a unified generation path for
-//! solitary buildings, campuses, and neighborhoods.
+//! single buildings, campuses, and neighborhoods.
 //!
 //! Every node is a [`lod::gen::GenerationScheme`] over [`lod::hcsg::HcsgStorage`],
 //! generic over a [`RichmondGround`]: a [`DevelopmentSite`] picks a kind, a
@@ -55,7 +55,7 @@ pub use developments::site::{
 	select_kind, AuthoredCourtyard, AuthoredDevelopment, AuthoredDevelopments, DevelopmentKind,
 	DevelopmentSite,
 };
-pub use developments::solitary::{SolitaryCell, SolitaryEnvelope, SolitaryKind, SolitaryPlan};
+pub use developments::terrace::{TerraceCell, TerraceEnvelope, TerraceKind, TerracePlan};
 pub use developments::{DevelopmentPad, RichmondDevelopment};
 pub use finish::{DevelopmentFinish, DevelopmentFinishRole};
 pub use ground::{hydro_overlaps_xz, GroundCell, GroundSampler, RichmondGround, SiteGround};

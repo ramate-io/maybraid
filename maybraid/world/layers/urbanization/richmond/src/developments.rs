@@ -11,9 +11,9 @@ pub mod shepherds_village;
 pub mod single_highrise;
 pub mod site;
 pub mod skybridge_bazaar;
-pub mod solitary;
 pub mod suburban_homes;
 pub mod temple_complex;
+pub mod terrace;
 pub mod wizards_tower;
 
 use bevy::math::bounding::Aabb3d;
@@ -35,9 +35,9 @@ use shepherds_village::ShepherdsVillageCell;
 use single_highrise::SingleHighriseCell;
 use site::{AuthoredCourtyard, DevelopmentKind, DevelopmentSite};
 use skybridge_bazaar::SkybridgeBazaarCell;
-use solitary::SolitaryPlan;
 use suburban_homes::SuburbanHomesCell;
 use temple_complex::TempleComplexCell;
+use terrace::TerracePlan;
 use wizards_tower::WizardsTowerCell;
 
 /// Pad baked from a post-Watershed height sample: flatten terrace + ease skirt.
@@ -182,8 +182,8 @@ impl<G> RichmondDevelopment<G> {
 		!matches!(self, Self::Empty(_))
 	}
 
-	/// The single-terrace plan, for kinds that build one.
-	pub fn solitary(&self) -> Option<&SolitaryPlan> {
+	/// The terrace plan, for kinds fitted to one terrace.
+	pub fn terrace(&self) -> Option<&TerracePlan> {
 		match self {
 			Self::LesHalles(cell) => Some(&cell.plan),
 			Self::RingFort(cell) => Some(&cell.plan),
@@ -199,7 +199,7 @@ impl<G> RichmondDevelopment<G> {
 		}
 	}
 
-	fn solitary_mut(&mut self) -> Option<&mut SolitaryPlan> {
+	fn terrace_mut(&mut self) -> Option<&mut TerracePlan> {
 		match self {
 			Self::LesHalles(cell) => Some(&mut cell.plan),
 			Self::RingFort(cell) => Some(&mut cell.plan),
@@ -237,13 +237,13 @@ impl<G> RichmondDevelopment<G> {
 
 	/// World-axis half extents of the yawed building confines.
 	pub fn footprint_half_extents(&self) -> Option<Vec2> {
-		self.solitary().map(SolitaryPlan::footprint_half_extents)
+		self.terrace().map(TerracePlan::footprint_half_extents)
 	}
 
 	/// Replace a single-terrace pad with one axis-aligned terrace at the same
 	/// height. `None` for kinds whose pads sit at several heights.
 	pub fn with_courtyard(mut self, half_extents: Vec2, params: PadParams) -> Option<Self> {
-		self.solitary_mut()?.flatten_courtyard(half_extents, params);
+		self.terrace_mut()?.flatten_courtyard(half_extents, params);
 		Some(self)
 	}
 
