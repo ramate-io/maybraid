@@ -17,9 +17,7 @@ use ground::ElevationProbe;
 
 use crate::markers::{ApplyTerrainPitch, SuspendTerrainPitch};
 use crate::pitch::{
-	facing_with_support_tilt, follow_target, observed_pitch, observed_roll, pitched_half_run,
-	sample_facing, support_offset, CharacterHeading, TerrainPitch, TerrainPitchProbe, MAX_TILT,
-	SUPPORT_RATE, TILT_RATE,
+	CharacterHeading, TerrainPitch, TerrainPitchProbe, MAX_TILT, SUPPORT_RATE, TILT_RATE,
 };
 
 /// Start the ray this far above the body so it clears the capsule.
@@ -105,7 +103,7 @@ pub fn apply_terrain_pitch<P>(
 	let dt = time.delta_secs();
 	for (entity, mut visual, global, mut pitch, mut heading) in &mut visuals {
 		let yaw_facing = heading.resolve(&visual);
-		let ray_facing = sample_facing(pitch.sagittal, yaw_facing);
+		let ray_facing = pitch.sample_facing(yaw_facing);
 		let right = Vec3::new(yaw_facing.z, 0.0, -yaw_facing.x);
 
 		let (exclude, suspend) = ancestor_exclude(Some(entity), &child_of, &suspended);
@@ -140,8 +138,9 @@ pub fn apply_terrain_pitch<P>(
 		if !suspend {
 			let (coarse_front, coarse_front_hit) = sample(origin + ray_facing * pitch.half_span);
 			let (coarse_hind, coarse_hind_hit) = sample(origin - ray_facing * pitch.half_span);
-			let coarse = observed_pitch(coarse_front.y, coarse_hind.y, pitch.half_span);
-			run = pitched_half_run(pitch.half_span, coarse);
+			let coarse =
+				TerrainPitch::observed_pitch(coarse_front.y, coarse_hind.y, pitch.half_span);
+			run = pitch.pitched_half_run(coarse);
 			(front, front_hit) = sample(origin + ray_facing * run);
 			(hind, hind_hit) = sample(origin - ray_facing * run);
 			support_hits =
@@ -159,16 +158,16 @@ pub fn apply_terrain_pitch<P>(
 			Some((0.0, 0.0, 0.0))
 		} else if support_hits {
 			Some((
-				observed_pitch(front.y, hind.y, run) * pitch.pitch_weight,
-				observed_roll(left_h, right_h, pitch.half_width) * pitch.roll_weight,
-				support_offset(center_h, front.y, hind.y),
+				TerrainPitch::observed_pitch(front.y, hind.y, run) * pitch.pitch_weight,
+				TerrainPitch::observed_roll(left_h, right_h, pitch.half_width) * pitch.roll_weight,
+				TerrainPitch::support_offset(center_h, front.y, hind.y),
 			))
 		} else {
 			None
 		};
 		if let Some((target_pitch, target_roll, _)) = targets {
-			pitch.pitch = follow_target(pitch.pitch, target_pitch, dt, TILT_RATE);
-			pitch.roll = follow_target(pitch.roll, target_roll, dt, TILT_RATE);
+			pitch.pitch = TerrainPitch::follow_target(pitch.pitch, target_pitch, dt, TILT_RATE);
+			pitch.roll = TerrainPitch::follow_target(pitch.roll, target_roll, dt, TILT_RATE);
 		}
 		pitch.probe = TerrainPitchProbe {
 			origin: Vec3::new(origin.x, center_h, origin.z),
@@ -179,10 +178,11 @@ pub fn apply_terrain_pitch<P>(
 			visual_facing: yaw_facing,
 			sample_facing: ray_facing,
 		};
-		visual.rotation = facing_with_support_tilt(yaw_facing, ray_facing, pitch.pitch, pitch.roll);
+		visual.rotation = pitch.facing_with_support_tilt(yaw_facing, ray_facing);
 		if offset_local_y {
 			if let Some((_, _, target_support)) = targets {
-				pitch.support = follow_target(pitch.support, target_support, dt, SUPPORT_RATE);
+				pitch.support =
+					TerrainPitch::follow_target(pitch.support, target_support, dt, SUPPORT_RATE);
 			}
 			visual.translation.y = pitch.support;
 		}
