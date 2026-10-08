@@ -139,6 +139,11 @@ impl AnimMailbox {
 	fn blending(&self) -> bool {
 		self.blend_progress < 1.0
 	}
+
+	/// Current clip sample coordinate (cycle phase for looping locomotion clips).
+	pub fn clip_cycle_phase(&self) -> f32 {
+		self.clip_progress
+	}
 }
 
 /// Insert typed rigs, [`AnimBone`]s, and [`AnimMailbox`] once the bone map is ready.
@@ -771,6 +776,13 @@ fn sample_humanoid(
 		AnimClip::Squat => sample_split(&Squat::held(), rig, progress, write_bones, write_effects),
 		AnimClip::SquatDescent => sample_split(
 			&SquatDescent::default(),
+			rig,
+			progress.clamp(0.0, 1.0),
+			write_bones,
+			write_effects,
+		),
+		AnimClip::RunStop(params) => sample_split(
+			&params.apply_humanoid(),
 			rig,
 			progress.clamp(0.0, 1.0),
 			write_bones,

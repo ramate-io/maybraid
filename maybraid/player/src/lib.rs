@@ -11,6 +11,7 @@ mod locomotion;
 mod movement;
 mod separation;
 mod spawn;
+mod run_stop;
 mod stance;
 
 use bevy::prelude::*;
@@ -41,6 +42,7 @@ pub use spawn::{
 	spawn_player_with_hidden_capsule, spawn_player_with_hull, LocomotionCapsule, CAPSULE_LENGTH,
 	CAPSULE_RADIUS,
 };
+pub use run_stop::RunStopBlend;
 pub use stance::{CharacterStance, RestLocomotionCapsule, StanceKind};
 
 /// Capsule physics and move/jump intents.
@@ -105,6 +107,7 @@ impl Plugin for PlayerPlugin {
 					body::apply_wish_jump,
 					stance::stand_when_airborne,
 					stance::advance_stance_blend,
+					run_stop::advance_run_stop_blend,
 					stance::apply_stance_hulls,
 					stance::sync_stance_pitch,
 					body::advance_jump_phases,
