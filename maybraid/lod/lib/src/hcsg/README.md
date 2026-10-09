@@ -144,7 +144,7 @@ impl GenerationContext {
 
 `get_or_generate` looks the value up, and if it is missing, builds it (recursively resolving that value's dependencies) and publishes it before returning. The context tracks which `(TypeId, Id)` pairs it is currently generating, and treats a repeat as a cycle (`None`).
 
-The worker builds its context with a staleness check (`GenerationContext::with_stale`). Once the subscription is cancelled, the context generates nothing more and drops whatever it just built instead of publishing it.
+The worker builds its context with a staleness check (`GenerationContext::with_stale`). Once the subscription is cancelled, the context generates nothing more and drops whatever it just built instead of publishing it. The final check happens under the store's write lock (`HcsgStorage::publish_unless`), so a value finished just as its session ends either lands before that session's stores are cleared or is dropped.
 
 Schemes are synchronous. Large collections stay ordinary synchronous computations on the worker. Async generation can come later without changing the presentation boundary, because a partially constructed value stays private until it is complete.
 
@@ -372,6 +372,8 @@ The demand layer holds an `epoch`:
 - `advance_epoch` removes every subscription and sets its `cancelled` flag, so the worker stops and never publishes a value generated under an older epoch.
 - **Mode enter** runs its initialization phase (seeding roots) before its generation and presentation systems subscribe.
 
+A restart is always in this order: advance the epoch, clear the stores, seed the roots. Cancelling first is what lets the clear be final (see [Schemes](#schemes)). Durham's `DurhamRoots::restart` is the first instance; `durham-playground` calls it on a seed or layout change. Hosts keep showing the previous session's values until the new ones land and replace them by version.
+
 Nothing else is invalidated. Recording references between values (`get_or_generate` noting the `(TypeId, Id)` pairs it touched) is a later feature for eviction and garbage collection, not for correctness.
 
 ## Testing
@@ -416,7 +418,7 @@ The new API lives in `lod::hcsg::shared`, alongside the frame-synchronous `lod::
 0. **Shared storage, context, demand and worker** (done). `HcsgStorage` with `Arc` values and `Busy`, `HcsgValue`, `GenerationScheme` and `GenerationContext`, `HcsgDemand` and `HcsgWorker`, tested in isolation.
 1. **Adapter** (done). `GenerationContext` implements the legacy `SpatialIndex<T>`, so every legacy scheme generic over `S` (Durham, cells) is a `GenerationScheme` unchanged and runs on the worker. Native schemes can depend on those legacy types. Legacy `get(&self) -> Option<&T>` borrows from an append-only cache (`elsa::FrozenMap`) of the `Arc`s the context has read. Legacy `descendants` run only from legacy entry points.
 2. **Generation and presentation systems** (done). `HcsgBounds`, `HcsgNode<T>`, `generation<B, T>`, `presentation<B, T>`, scene forwarding and the plugins, tested on fixtures with the real worker and the LOD chunk-fulfill pipeline.
-3. **Durham.** Present terrain and water through `presentation<B, T>` next to the old presenters; seed Durham's roots into both storages; switch `durham-playground`.
+3. **Durham** (done). `DurhamPresentationPlugin<B>` presents `Terrain` and `Water` through `presentation<B, T>` and chunk fulfill, next to the old presenters. `DurhamWindow` bounds the layout's request region. `DurhamRoots::restart` seeds the shared storage, whose base scales come from the same `durham_nodes!` list as the old storage. Collision-seeding cells carry the trimesh source in `Terrain`'s own `LodScene`. `durham-playground` generates on the worker and no longer calls the old storage. The streamed world path keeps the old presenters until Richmond moves (step 4), because its level changes need the refresh region plugins.
 4. **Richmond.** Rewrite its four schemes natively; present total padded terrain and built developments; delete the terrain replacement machinery.
 5. **Chico, Barking, Maputo.** Rewrite each onto the context, deleting its bespoke index and presenter; then delete `gen::runtime`.
 6. **Native Durham and cells.** Rewrite their generic schemes on the context API, dropping the `S` capability bounds and dependency clones.

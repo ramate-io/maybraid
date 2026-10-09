@@ -169,6 +169,17 @@ fn stale_context_publishes_nothing() {
 }
 
 #[test]
+fn a_value_that_goes_stale_mid_build_is_not_published() {
+	let storage = seeded();
+	let id = Id::from_cell(cell(0.0));
+	let checks = std::sync::atomic::AtomicUsize::new(0);
+	let stale = || checks.fetch_add(1, std::sync::atomic::Ordering::Relaxed) > 0;
+	let mut cx = GenerationContext::with_stale(&storage, &stale);
+	assert!(cx.get_or_generate::<Ground>(id).is_none());
+	assert!(!storage.contains::<Ground>(id));
+}
+
+#[test]
 fn worker_fills_subscription_nearest_first() -> anyhow::Result<()> {
 	let storage = seeded();
 	let demand = HcsgDemand::default();

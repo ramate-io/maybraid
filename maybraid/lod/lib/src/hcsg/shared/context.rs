@@ -31,7 +31,7 @@ pub struct GenerationContext<'a> {
 	storage: &'a HcsgStorage,
 	/// `(TypeId, Id)` pairs being built on this stack; a repeat is a cycle.
 	generating: HashSet<(TypeId, Id)>,
-	stale: &'a (dyn Fn() -> bool + 'a),
+	pub(super) stale: &'a (dyn Fn() -> bool + 'a),
 	pub(super) borrowed: Borrowed,
 }
 
@@ -79,11 +79,8 @@ impl<'a> GenerationContext<'a> {
 		let built = T::build_with_id(self, id);
 		self.generating.remove(&key);
 		let (value, bounds) = built?;
-		if self.is_stale() {
-			return None;
-		}
 		let value = Arc::new(value);
-		self.storage.publish(id, Arc::clone(&value), bounds);
+		self.storage.publish_unless(id, Arc::clone(&value), bounds, self.stale)?;
 		Some(value)
 	}
 }

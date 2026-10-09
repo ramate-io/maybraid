@@ -47,11 +47,11 @@ impl GenerationContext<'_> {
 	/// Publishes and lends a value a legacy scheme inserted. Once stale,
 	/// nothing is kept, so the legacy chain stops at its next read.
 	fn publish_owned<T: HcsgValue>(&mut self, id: Id, value: T, bounds: Aabb3d) {
-		if self.is_stale() {
+		let value = Arc::new(value);
+		let stale = self.stale;
+		if self.storage().publish_unless(id, Arc::clone(&value), bounds, stale).is_none() {
 			return;
 		}
-		let value = Arc::new(value);
-		self.storage().publish(id, Arc::clone(&value), bounds);
 		self.borrowed.0.as_mut().insert((TypeId::of::<T>(), id), value);
 	}
 }

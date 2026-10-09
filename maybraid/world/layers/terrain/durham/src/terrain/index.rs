@@ -35,6 +35,7 @@ use bevy::math::bounding::Aabb3d;
 use bevy::math::DVec3;
 use bevy::prelude::*;
 use lod::gen::{Id, OriginalId, Version};
+use lod::hcsg::shared::{self, HcsgDemand};
 use lod::hcsg::HcsgStorage;
 use procedural_common::Bounds2;
 use std::collections::HashMap;
@@ -44,16 +45,30 @@ use std::sync::Arc;
 /// roots. A rebuild drops the group; the roots stay seeded.
 pub struct DurhamNodes;
 
+/// Tall origin-cell buckets for every Durham node.
+const DURHAM_BASE_SCALE: DVec3 = DVec3::new(
+	TERRAIN_CELL_SIZE as f64,
+	2.0 * TERRAIN_CELL_VERTICAL_HALF_EXTENT as f64,
+	TERRAIN_CELL_SIZE as f64,
+);
+
 macro_rules! durham_nodes {
 	($($T:ty),* $(,)?) => {
-		/// Configures Durham's stores (tall origin-cell buckets) and joins them to [`DurhamNodes`].
+		/// Configures Durham's stores and joins them to [`DurhamNodes`].
 		pub fn register_durham_nodes(storage: &mut HcsgStorage) {
-			let base_scale = DVec3::new(
-				TERRAIN_CELL_SIZE as f64,
-				2.0 * TERRAIN_CELL_VERTICAL_HALF_EXTENT as f64,
-				TERRAIN_CELL_SIZE as f64,
-			);
-			$(storage.configure::<$T>(base_scale).add_to_group::<DurhamNodes, $T>();)*
+			$(storage.configure::<$T>(DURHAM_BASE_SCALE).add_to_group::<DurhamNodes, $T>();)*
+		}
+
+		impl DurhamNodes {
+			/// Configures Durham's stores in the shared storage.
+			pub fn configure(storage: &shared::HcsgStorage) {
+				$(storage.configure::<$T>(DURHAM_BASE_SCALE);)*
+			}
+
+			/// Drops every derived Durham value from the shared storage.
+			fn clear(storage: &shared::HcsgStorage) {
+				$(storage.clear::<$T>();)*
+			}
 		}
 	};
 }
@@ -140,6 +155,19 @@ impl DurhamRoots<'_> {
 		storage.seed(self.terrain_assets.clone(), universal_bounds());
 		storage.seed(self.water_assets.clone(), universal_bounds());
 	}
+
+	/// Starts a new shared session from the resources: ends the epoch (every
+	/// layer's subscriptions, so in-flight values are dropped), clears Durham's
+	/// derived values, then seeds the roots.
+	pub fn restart(&self, storage: &shared::HcsgStorage, demand: &HcsgDemand) {
+		demand.advance_epoch();
+		DurhamNodes::clear(storage);
+		storage.seed(self.layout.clone(), universal_bounds());
+		storage.seed(self.stamps.clone(), universal_bounds());
+		storage.seed(self.watersheds.clone(), universal_bounds());
+		storage.seed(self.terrain_assets.clone(), universal_bounds());
+		storage.seed(self.water_assets.clone(), universal_bounds());
+	}
 }
 
 /// Cheap owned view of composed height fields for background consumers.
@@ -171,7 +199,11 @@ impl WaterSurfaceSnapshot {
 }
 
 /// Origin ids covering `(x, z)`: fine grid first, then outer and stream rings.
-fn origin_cell_ids_at(layout: &TerrainCellLayout, x: f32, z: f32) -> impl Iterator<Item = Id> + '_ {
+pub(crate) fn origin_cell_ids_at(
+	layout: &TerrainCellLayout,
+	x: f32,
+	z: f32,
+) -> impl Iterator<Item = Id> + '_ {
 	std::iter::once(layout.cell_size)
 		.chain(layout.outer_rings.iter().map(|outer| outer.cell_size))
 		.chain(layout.stream_rings.iter().map(|ring| ring.cell_size))

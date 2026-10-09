@@ -288,7 +288,11 @@ impl LodScene for Terrain {
 	}
 
 	fn scene_with_level(&self, _lod_ref: &LodRef, level: LodSceneLevel) -> impl Scene + 'static {
-		stream_banded_scene(self, level, || self.mesh_scene())
+		if self.seeds_collision() {
+			stream_banded_scene(self, level, || self.scene())
+		} else {
+			stream_banded_scene(self, level, || self.mesh_scene())
+		}
 	}
 }
 

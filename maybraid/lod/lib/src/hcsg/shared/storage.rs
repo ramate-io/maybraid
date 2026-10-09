@@ -184,6 +184,27 @@ impl HcsgStorage {
 		version
 	}
 
+	/// [`Self::publish`], unless `stale` holds once `T`'s store is locked.
+	///
+	/// A session reset cancels its jobs before clearing, so a value built for
+	/// the old session either lands before the clear or is dropped here.
+	pub fn publish_unless<T: HcsgValue>(
+		&self,
+		id: Id,
+		value: Arc<T>,
+		bounds: Aabb3d,
+		stale: impl Fn() -> bool,
+	) -> Option<Version> {
+		let stamp = self.stamp();
+		let store = self.store_or_create::<T>()?;
+		let mut nodes = write(&store.nodes);
+		if stale() {
+			return None;
+		}
+		nodes.put(id, StoredEntry { value, bounds, version: Version(stamp) }, stamp);
+		Some(Version(stamp))
+	}
+
 	/// Stores a session root at `Id::Universal`.
 	pub fn seed<T: HcsgValue>(&self, value: T, bounds: Aabb3d) -> Version {
 		self.publish(Id::Universal, Arc::new(value), bounds)
