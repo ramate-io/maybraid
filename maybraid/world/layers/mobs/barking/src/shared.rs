@@ -12,14 +12,13 @@
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use bevy::ecs::system::SystemParamItem;
 use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::math::DVec3;
 use bevy::prelude::*;
 use chico::{ForestGround, GroundSurface};
 use lod::gen::{Id, LodScene, LodSceneLevel, LodSceneStatus, OriginalId};
 use lod::hcsg::shared::{
-	self, GenerationContext, HcsgBounds, HcsgClass, HcsgNode, PresentationPlugin,
+	self, GenerationContext, HcsgClass, HcsgNode, PresentationPlugin, ViewerHcsgBounds,
 };
 use lod::lod_ref::LodRef;
 use lod::scene::LodSceneRefreshChunkPlugin;
@@ -212,28 +211,21 @@ const MOB_COLUMN_Y: f32 = 10_000.0;
 pub struct MobNeighborhood;
 
 impl MobNeighborhood {
-	fn around(viewers: &Query<&Transform, With<LodViewer>>, radius: f32) -> Option<Aabb3d> {
-		let viewer = viewers.iter().next()?.translation;
+	fn around(viewer: Vec3, radius: f32) -> Aabb3d {
 		let (ix, iz) = MobCellExtent::cell_index_containing(viewer);
 		let center = MobCellExtent::from_cell_index(ix, iz).center();
-		Some(Aabb3d::from_min_max(
+		Aabb3d::from_min_max(
 			Vec3::new(center.x - radius, -MOB_COLUMN_Y, center.z - radius),
 			Vec3::new(center.x + radius, MOB_COLUMN_Y, center.z + radius),
-		))
+		)
 	}
 }
 
-impl HcsgBounds for MobNeighborhood {
+impl ViewerHcsgBounds for MobNeighborhood {
 	const CLASS: HcsgClass = HcsgClass::Near;
 
-	type Param = Query<'static, 'static, &'static Transform, With<LodViewer>>;
-
-	fn regions(viewers: &SystemParamItem<Self::Param>) -> Vec<Aabb3d> {
-		Self::around(viewers, MOB_PRESENT_RADIUS).into_iter().collect()
-	}
-
-	fn focus(viewers: &SystemParamItem<Self::Param>) -> Option<Vec3> {
-		viewers.iter().next().map(|viewer| viewer.translation)
+	fn regions_around(viewer: Vec3) -> Vec<Aabb3d> {
+		vec![Self::around(viewer, MOB_PRESENT_RADIUS)]
 	}
 }
 

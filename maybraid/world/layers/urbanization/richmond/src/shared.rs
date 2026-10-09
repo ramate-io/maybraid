@@ -6,13 +6,12 @@
 
 use std::marker::PhantomData;
 
-use bevy::ecs::system::{SystemParam, SystemParamItem};
+use bevy::ecs::system::SystemParam;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
-use lod::hcsg::shared::{self, HcsgBounds, HcsgClass, HcsgNode, PresentationPlugin};
+use lod::hcsg::shared::{self, HcsgClass, HcsgNode, PresentationPlugin, ViewerHcsgBounds};
 use lod::hcsg::universal_bounds;
 use lod::scene::LodSceneRefreshChunkPlugin;
-use lod::LodViewer;
 use urbanization_cells::{UrbanizationExtent, UrbanizationNodes, UrbanizationSelection};
 
 use crate::built::Built;
@@ -29,25 +28,16 @@ use crate::storage::RichmondNodes;
 /// [`LodViewer`], one box each.
 pub struct DevelopmentNeighborhood;
 
-impl HcsgBounds for DevelopmentNeighborhood {
+impl ViewerHcsgBounds for DevelopmentNeighborhood {
 	const CLASS: HcsgClass = HcsgClass::Near;
 
-	type Param = Query<'static, 'static, &'static Transform, With<LodViewer>>;
-
-	fn regions(viewers: &SystemParamItem<Self::Param>) -> Vec<Aabb3d> {
-		let Some(viewer) = viewers.iter().next() else {
-			return Vec::new();
-		};
+	fn regions_around(viewer: Vec3) -> Vec<Aabb3d> {
 		let (present, _) = stream_radii_m(UrbanizationStreamSpec::default().stream_radius);
-		let around = UrbanizationExtent::xz_radius_aabb(viewer.translation, present);
+		let around = UrbanizationExtent::xz_radius_aabb(viewer, present);
 		UrbanizationExtent::cells_overlapping(around)
 			.into_iter()
 			.map(|cell| cell.aabb())
 			.collect()
-	}
-
-	fn focus(viewers: &SystemParamItem<Self::Param>) -> Option<Vec3> {
-		viewers.iter().next().map(|viewer| viewer.translation)
 	}
 }
 

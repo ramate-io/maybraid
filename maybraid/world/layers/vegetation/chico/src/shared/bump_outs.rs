@@ -10,12 +10,11 @@ use std::marker::PhantomData;
 use std::ops::RangeInclusive;
 use std::sync::Arc;
 
-use bevy::ecs::system::SystemParamItem;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use lod::gen::{Id, LodScene, LodSceneLevel, LodSceneStatus, OriginalId};
 use lod::hcsg::shared::{
-	self, GenerationContext, HcsgBounds, HcsgClass, HcsgNode, PresentationPlugin,
+	self, GenerationContext, HcsgClass, HcsgNode, PresentationPlugin, ViewerHcsgBounds,
 };
 use lod::lod_ref::LodRef;
 use lod::scene::{LodRefreshRegions, LodRefreshRegionsStatus};
@@ -207,25 +206,13 @@ impl<P: CanopyProxy> BumpOutRing<P> {
 		)
 	}
 
-	fn viewer(viewers: &Query<&Transform, With<LodViewer>>) -> Option<Vec3> {
-		viewers.iter().next().map(|viewer| viewer.translation)
-	}
 }
 
-impl<P: CanopyProxy> HcsgBounds for BumpOutRing<P> {
+impl<P: CanopyProxy> ViewerHcsgBounds for BumpOutRing<P> {
 	const CLASS: HcsgClass = HcsgClass::Near;
 
-	type Param = Query<'static, 'static, &'static Transform, With<LodViewer>>;
-
-	fn regions(viewers: &SystemParamItem<Self::Param>) -> Vec<Aabb3d> {
-		Self::viewer(viewers)
-			.map(|viewer| Self::around(viewer, *P::BAND.end()))
-			.into_iter()
-			.collect()
-	}
-
-	fn focus(viewers: &SystemParamItem<Self::Param>) -> Option<Vec3> {
-		Self::viewer(viewers)
+	fn regions_around(viewer: Vec3) -> Vec<Aabb3d> {
+		vec![Self::around(viewer, *P::BAND.end())]
 	}
 }
 

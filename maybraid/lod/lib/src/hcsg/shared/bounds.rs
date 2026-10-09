@@ -6,9 +6,45 @@ use std::marker::PhantomData;
 use bevy::ecs::system::{StaticSystemParam, SystemParam, SystemParamItem};
 use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec3;
-use bevy::prelude::{App, IntoScheduleConfigs, Local, Message, MessageWriter, Plugin, Update};
+use bevy::prelude::{
+	App, IntoScheduleConfigs, Local, Message, MessageWriter, Plugin, Query, Transform, Update, With,
+};
+
+use crate::LodViewer;
 
 use super::runtime::HcsgSystems;
+
+/// [`LodViewer`] transforms for viewer-centered bounds producers.
+pub type LodViewers = Query<'static, 'static, &'static Transform, With<LodViewer>>;
+
+/// World position of the first [`LodViewer`], if any.
+pub fn viewer_focus<'w, 's>(viewers: &Query<'w, 's, &Transform, With<LodViewer>>) -> Option<Vec3> {
+	viewers.iter().next().map(|viewer| viewer.translation)
+}
+
+/// Viewer-centered [`HcsgBounds`] channel: regions from the first viewer only.
+///
+/// A blanket [`HcsgBounds`] impl supplies [`LodViewers`] as [`HcsgBounds::Param`]
+/// and [`viewer_focus`] as [`HcsgBounds::focus`].
+pub trait ViewerHcsgBounds: Send + Sync + 'static {
+	const CLASS: HcsgClass;
+
+	fn regions_around(viewer: Vec3) -> Vec<Aabb3d>;
+}
+
+impl<B: ViewerHcsgBounds> HcsgBounds for B {
+	const CLASS: HcsgClass = B::CLASS;
+
+	type Param = LodViewers;
+
+	fn regions(viewers: &SystemParamItem<Self::Param>) -> Vec<Aabb3d> {
+		viewer_focus(viewers).map(B::regions_around).unwrap_or_default()
+	}
+
+	fn focus(viewers: &SystemParamItem<Self::Param>) -> Option<Vec3> {
+		viewer_focus(viewers)
+	}
+}
 
 /// Coarse scheduling weight for a channel. The worker spends quanta in
 /// proportion to [`Self::weight`].
@@ -139,5 +175,53 @@ impl<B: HcsgBounds> Plugin for HcsgBoundsPlugin<B> {
 	fn build(&self, app: &mut App) {
 		app.add_message::<HcsgRegions<B>>()
 			.add_systems(Update, produce::<B>.before(HcsgSystems));
+	}
+}
+
+#[cfg(test)]
+mod viewer_bounds_tests {
+	use bevy::prelude::*;
+
+	use super::*;
+
+	struct ProbeBounds;
+
+	impl ViewerHcsgBounds for ProbeBounds {
+		const CLASS: HcsgClass = HcsgClass::Near;
+
+		fn regions_around(viewer: Vec3) -> Vec<Aabb3d> {
+			vec![Aabb3d::from_min_max(viewer, viewer + Vec3::ONE)]
+		}
+	}
+
+	#[test]
+	fn viewer_focus_is_none_without_viewers() {
+		fn probe(viewers: Query<&Transform, With<LodViewer>>) {
+			assert_eq!(viewer_focus(&viewers), None);
+			let regions =
+				viewer_focus(&viewers).map(ProbeBounds::regions_around).unwrap_or_default();
+			assert!(regions.is_empty());
+		}
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins).add_systems(Update, probe);
+		app.update();
+	}
+
+	#[test]
+	fn viewer_focus_matches_first_viewer() {
+		const AT: Vec3 = Vec3::new(3.0, 0.0, 7.0);
+		fn probe(viewers: Query<&Transform, With<LodViewer>>) {
+			assert_eq!(viewer_focus(&viewers), Some(AT));
+			let regions =
+				viewer_focus(&viewers).map(ProbeBounds::regions_around).unwrap_or_default();
+			assert_eq!(regions.len(), 1);
+			assert_eq!(regions[0].min, AT.into());
+		}
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins)
+			.add_systems(Update, probe)
+			.world_mut()
+			.spawn((LodViewer, Transform::from_translation(AT)));
+		app.update();
 	}
 }
