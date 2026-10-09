@@ -6,6 +6,7 @@ use character_rigs::Side;
 
 use crate::animations::Idle;
 use crate::rigs::humanoid::apply::{apply_arm, apply_neck_twisted};
+use crate::rigs::humanoid::write_masks::{debug_assert_pose_within_mask, idle_write_mask};
 use crate::Animation;
 
 impl Idle {
@@ -30,7 +31,9 @@ impl Idle {
 
 impl Animation<HumanoidV0Rig> for Idle {
 	fn apply_for(&self, rig: &mut HumanoidV0Rig, progress: f32) {
-		rig.write_pose(&self.sample_pose(progress));
+		let pose = self.sample_pose(progress);
+		debug_assert_pose_within_mask(&pose, idle_write_mask(), "idle");
+		rig.apply_masked_pose(&pose, idle_write_mask());
 	}
 }
 

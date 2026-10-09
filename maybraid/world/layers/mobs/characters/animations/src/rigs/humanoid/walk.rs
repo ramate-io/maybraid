@@ -5,6 +5,7 @@ use character_rigs::Side;
 use crate::animations::{UprightWalk, Walk};
 use crate::rigs::humanoid::apply::{apply_arm, apply_root};
 use crate::rigs::humanoid::gait_knee::lerp_swing_knee;
+use crate::rigs::humanoid::write_masks::{debug_assert_pose_within_mask, walk_write_mask};
 use crate::{Animation, Progress};
 
 impl Walk {
@@ -16,7 +17,9 @@ impl Walk {
 
 impl Animation<HumanoidV0Rig> for Walk {
 	fn apply_for(&self, rig: &mut HumanoidV0Rig, progress: f32) {
-		rig.write_pose(&self.sample_pose(progress))
+		let pose = self.sample_pose(progress);
+		debug_assert_pose_within_mask(&pose, walk_write_mask(), "walk");
+		rig.apply_masked_pose(&pose, walk_write_mask());
 	}
 }
 
@@ -31,7 +34,9 @@ impl UprightWalk {
 
 impl Animation<HumanoidV0Rig> for UprightWalk {
 	fn apply_for(&self, rig: &mut HumanoidV0Rig, progress: f32) {
-		rig.write_pose(&self.sample_pose(progress));
+		let pose = self.sample_pose(progress);
+		debug_assert_pose_within_mask(&pose, walk_write_mask(), "upright_walk");
+		rig.apply_masked_pose(&pose, walk_write_mask());
 	}
 }
 
@@ -116,9 +121,13 @@ fn knee_flex(leg_phase: f32, walk: &UprightWalk) -> f32 {
 #[cfg(test)]
 mod tests {
 	use bevy::prelude::*;
+	use character_rigs::authoring::resolve_humanoid;
+	use std::hint::black_box;
+	use std::time::Instant;
 
 	use super::*;
-	use crate::animations::Run;
+	use crate::animations::{Idle, Run};
+	use crate::rigs::humanoid::write_masks::{idle_write_mask, run_write_mask, walk_write_mask};
 
 	fn tip(rig: &HumanoidV0Rig, name: &str) -> Vec3 {
 		rig.rotation(name) * Vec3::Y
@@ -309,5 +318,113 @@ mod tests {
 			rig.posed_angle("pelvis.L") > rig.posed_angle("shoulder.L"),
 			"vertical bob comes mostly from hips"
 		);
+	}
+
+	fn assert_masked_matches_full_resolve(
+		pose: &character_rigs::authoring::HumanoidPose,
+		mask: u32,
+	) {
+		let mut full = HumanoidV0Rig::imported();
+		resolve_humanoid(pose, &full.binding, &mut full.pose);
+		let mut masked = HumanoidV0Rig::imported();
+		masked.apply_masked_pose(pose, mask);
+		assert_eq!(full.pose.local, masked.pose.local, "masked resolve must match full");
+	}
+
+	#[test]
+	fn cyclic_locomotion_masks_match_full_resolve() {
+		let phases = [0.0, 0.11, 0.37, 0.62, 0.93];
+		for &phase in &phases {
+			assert_masked_matches_full_resolve(
+				&Idle::default().sample_pose(phase),
+				idle_write_mask(),
+			);
+			assert_masked_matches_full_resolve(
+				&Walk::default().sample_pose(phase),
+				walk_write_mask(),
+			);
+			assert_masked_matches_full_resolve(
+				&Run::default().sample_pose(phase),
+				run_write_mask(),
+			);
+		}
+	}
+
+	fn bench_locomotion_apply(use_masked: bool) -> Vec<u128> {
+		const FRAMES: u32 = 2_000;
+		const CHARACTERS: u32 = 32;
+		const RUNS: u32 = 5;
+		let clips: [(&str, f32); 3] = [("idle", 0.0), ("walk", 0.25), ("run", 0.5)];
+
+		let mut rigs: Vec<HumanoidV0Rig> =
+			(0..CHARACTERS).map(|_| HumanoidV0Rig::imported()).collect();
+
+		let mut run_ns: Vec<u128> = Vec::with_capacity(RUNS as usize);
+		for _ in 0..RUNS {
+			let start = Instant::now();
+			for frame in 0..FRAMES {
+				let frame = black_box(frame);
+				for (index, rig) in rigs.iter_mut().enumerate() {
+					let progress =
+						black_box((frame as f32 * 0.013 + (index as f32 * 0.07)).rem_euclid(1.0));
+					let clip = clips[index as usize % clips.len()].0;
+					match clip {
+						"idle" => {
+							let pose = Idle::default().sample_pose(progress);
+							if use_masked {
+								rig.apply_masked_pose(&pose, idle_write_mask());
+							} else {
+								rig.write_pose(&pose);
+							}
+						}
+						"walk" => {
+							let pose = Walk::default().sample_pose(progress);
+							if use_masked {
+								rig.apply_masked_pose(&pose, walk_write_mask());
+							} else {
+								rig.write_pose(&pose);
+							}
+						}
+						"run" => {
+							let pose = Run::default().sample_pose(progress);
+							if use_masked {
+								rig.apply_masked_pose(&pose, run_write_mask());
+							} else {
+								rig.write_pose(&pose);
+							}
+						}
+						_ => {}
+					}
+					black_box(&rig.pose);
+				}
+			}
+			let samples = FRAMES as u64 * CHARACTERS as u64;
+			run_ns.push(start.elapsed().as_nanos() / samples as u128);
+		}
+
+		run_ns.sort_unstable();
+		run_ns
+	}
+
+	fn report_locomotion_bench(label: &str, run_ns: &[u128]) {
+		let min = *run_ns.first().expect("run");
+		let median = run_ns[run_ns.len() / 2];
+		let mean = run_ns.iter().sum::<u128>() / run_ns.len() as u128;
+		let spread = run_ns.last().expect("run") - min;
+		eprintln!(
+			"locomotion_resolve_microbench {label}: runs={runs:?} min={min} median={median} mean={mean} spread={spread} ns/sample",
+			runs = run_ns,
+		);
+	}
+
+	/// `cargo test -p character-animations locomotion_resolve_microbench --release -- --ignored --nocapture`
+	#[test]
+	#[ignore]
+	fn locomotion_resolve_microbench() {
+		eprintln!(
+			"32 humanoid characters, idle/walk/run sample_pose + resolve, real Animation apply path"
+		);
+		report_locomotion_bench("legacy write_pose", &bench_locomotion_apply(false));
+		report_locomotion_bench("masked partial resolve", &bench_locomotion_apply(true));
 	}
 }
