@@ -1,7 +1,7 @@
 //! Query-only bolts and bullets: shapecast through Fixed / Animated and emit
 //! each distinct contact along the flight.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use avian3d::prelude::*;
 use avian3d::schedule::PhysicsSchedulePlugin;
@@ -266,24 +266,24 @@ fn contacts_on_step(
 	end: Vec3,
 	rotation: Quat,
 	filter: &SpatialQueryFilter,
-) -> Vec<ShapeHitData> {
+	hits: &mut Vec<ShapeHitData>,
+) {
+	hits.clear();
 	let delta = end - start;
 	let ds = delta.length();
 	if ds <= 1e-5 {
-		return Vec::new();
+		return;
 	}
 	let Ok(dir) = Dir3::new(delta) else {
-		return Vec::new();
+		return;
 	};
 	let config = ShapeCastConfig::from_max_distance(ds);
-	let mut hits = Vec::new();
 	spatial.shape_hits_callback(collider, start, rotation, dir, &config, filter, |hit| {
 		hits.push(hit);
 		true
 	});
 	// Avian's all-hit query does not guarantee traversal order.
 	hits.sort_by(|a, b| a.distance.total_cmp(&b.distance));
-	hits
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -291,6 +291,17 @@ struct PenetrationSpan {
 	enter: f32,
 	exit: f32,
 	cost: f32,
+}
+
+/// Reused across projectile sweep segments to avoid per-segment `Vec` churn.
+#[derive(Default)]
+struct PenetrationScratch {
+	starts: Vec<Entity>,
+	ends: Vec<Entity>,
+	backward: Vec<ShapeHitData>,
+	entities: Vec<Entity>,
+	seen: HashSet<Entity>,
+	spans: Vec<PenetrationSpan>,
 }
 
 fn penetration_spans(
@@ -302,49 +313,71 @@ fn penetration_spans(
 	filter: &SpatialQueryFilter,
 	costs: &Query<&PenetrationCost>,
 	forward: &[ShapeHitData],
-) -> Vec<PenetrationSpan> {
+	scratch: &mut PenetrationScratch,
+) {
+	scratch.spans.clear();
 	let ds = start.distance(end);
 	if ds <= 1e-5 {
-		return Vec::new();
+		return;
 	}
-	let starts = spatial.shape_intersections(collider, start, rotation, filter);
-	if starts.is_empty() && forward.is_empty() {
-		return Vec::new();
+	scratch.starts.clear();
+	scratch
+		.starts
+		.extend(spatial.shape_intersections(collider, start, rotation, filter));
+	if scratch.starts.is_empty() && forward.is_empty() {
+		return;
 	}
-	let ends = spatial.shape_intersections(collider, end, rotation, filter);
-	let backward = contacts_on_step(spatial, collider, end, start, rotation, filter);
-	let mut entities = Vec::new();
-	for entity in starts
+	scratch.ends.clear();
+	scratch
+		.ends
+		.extend(spatial.shape_intersections(collider, end, rotation, filter));
+	contacts_on_step(spatial, collider, end, start, rotation, filter, &mut scratch.backward);
+	scratch.entities.clear();
+	scratch.seen.clear();
+	for entity in scratch
+		.starts
 		.iter()
-		.chain(&ends)
+		.chain(scratch.ends.iter())
 		.chain(forward.iter().map(|hit| &hit.entity))
-		.chain(backward.iter().map(|hit| &hit.entity))
+		.chain(scratch.backward.iter().map(|hit| &hit.entity))
 	{
-		if !entities.contains(entity) {
-			entities.push(*entity);
+		if scratch.seen.insert(*entity) {
+			scratch.entities.push(*entity);
 		}
 	}
-	entities
-		.into_iter()
-		.filter_map(|entity| {
-			let enter = if starts.contains(&entity) {
-				0.0
-			} else {
-				forward.iter().find(|hit| hit.entity == entity)?.distance.clamp(0.0, ds)
+	for entity in &scratch.entities {
+		let enter = if scratch.starts.contains(entity) {
+			Some(0.0)
+		} else {
+			forward
+				.iter()
+				.find(|hit| hit.entity == *entity)
+				.map(|hit| hit.distance.clamp(0.0, ds))
+		};
+		let Some(enter) = enter else {
+			continue;
+		};
+		let exit = if scratch.ends.contains(entity) {
+			ds
+		} else {
+			let Some(air) = scratch
+				.backward
+				.iter()
+				.find(|hit| hit.entity == *entity)
+				.map(|hit| hit.distance)
+			else {
+				continue;
 			};
-			let exit = if ends.contains(&entity) {
-				ds
-			} else {
-				let air = backward.iter().find(|hit| hit.entity == entity)?.distance;
-				(ds - air).clamp(0.0, ds)
-			};
-			(exit > enter + 1e-5).then_some(PenetrationSpan {
+			(ds - air).clamp(0.0, ds)
+		};
+		if exit > enter + 1e-5 {
+			scratch.spans.push(PenetrationSpan {
 				enter,
 				exit,
-				cost: costs.get(entity).map_or(1.0, |cost| cost.0),
-			})
-		})
-		.collect()
+				cost: costs.get(*entity).map_or(1.0, |cost| cost.0),
+			});
+		}
+	}
 }
 
 fn penetration_at(spans: &[PenetrationSpan], distance: f32) -> f32 {
@@ -413,6 +446,8 @@ pub fn tick_flights(
 	mut contacts: MessageWriter<ProjectileContact>,
 	mut commands: Commands,
 	mut flights: Query<(Entity, &mut Flight, &Transform, &Collider, Option<&ProjectileSource>)>,
+	mut hits: Local<Vec<ShapeHitData>>,
+	mut penetration: Local<PenetrationScratch>,
 ) {
 	let dt = time.delta_secs();
 	for (entity, mut flight, transform, collider, source) in &mut flights {
@@ -434,12 +469,21 @@ pub fn tick_flights(
 			let segment = end - start;
 			let segment_length = segment.length();
 			let direction = segment / segment_length.max(1e-8);
-			let hits = contacts_on_step(&spatial, collider, start, end, rotation, &filter);
-			let spans =
-				penetration_spans(&spatial, collider, start, end, rotation, &filter, &costs, &hits);
-			for hit in hits {
+			contacts_on_step(&spatial, collider, start, end, rotation, &filter, &mut hits);
+			penetration_spans(
+				&spatial,
+				collider,
+				start,
+				end,
+				rotation,
+				&filter,
+				&costs,
+				&hits,
+				&mut penetration,
+			);
+			for hit in &hits {
 				let to_hit = hit.distance.clamp(0.0, segment_length);
-				let through_before = penetration_at(&spans, to_hit);
+				let through_before = penetration_at(&penetration.spans, to_hit);
 				if flight.through + through_before > flight.max_through {
 					break;
 				}
@@ -453,7 +497,7 @@ pub fn tick_flights(
 					});
 				}
 			}
-			flight.through += penetration_at(&spans, segment_length);
+			flight.through += penetration_at(&penetration.spans, segment_length);
 			budget_exhausted = flight.through > flight.max_through;
 		});
 		flight.last = pos;
@@ -614,6 +658,7 @@ mod tests {
 		let hits = app
 			.world_mut()
 			.run_system_once(move |spatial: SpatialQuery| {
+				let mut hits = Vec::new();
 				contacts_on_step(
 					&spatial,
 					&Collider::sphere(0.05),
@@ -621,7 +666,9 @@ mod tests {
 					Vec3::X * 6.0,
 					Quat::IDENTITY,
 					&PhysicsInteractionLayer::Fixed.query_filter(),
-				)
+					&mut hits,
+				);
+				hits
 			})
 			.expect("spatial query system should run");
 		assert_eq!(hits.iter().map(|hit| hit.entity).collect::<Vec<_>>(), [near, far]);
@@ -630,6 +677,7 @@ mod tests {
 		let overlap_hits = app
 			.world_mut()
 			.run_system_once(move |spatial: SpatialQuery| {
+				let mut hits = Vec::new();
 				contacts_on_step(
 					&spatial,
 					&Collider::sphere(0.05),
@@ -637,10 +685,66 @@ mod tests {
 					Vec3::X * 6.0,
 					Quat::IDENTITY,
 					&PhysicsInteractionLayer::Fixed.query_filter(),
-				)
+					&mut hits,
+				);
+				hits
 			})
 			.expect("spatial query system should run");
 		assert_eq!(overlap_hits.iter().map(|hit| hit.entity).collect::<Vec<_>>(), [near, far]);
 		assert!(overlap_hits[0].distance <= 1e-5);
+	}
+
+	/// Release-only stress timing for `tick_flights` with many active projectiles.
+	#[test]
+	#[ignore]
+	fn sweep_scratch_stress_timing() {
+		use std::time::Instant;
+
+		const PROJECTILES: usize = 48;
+		const FRAMES: u32 = 120;
+		const WALLS: usize = 24;
+
+		let mut app = App::new();
+		app.add_plugins((
+			MinimalPlugins,
+			TransformPlugin,
+			PhysicsPlugins::default(),
+			bevy::asset::AssetPlugin::default(),
+			bevy::mesh::MeshPlugin,
+			ProjectilesPlugin,
+		));
+		app.finish();
+
+		for index in 0..WALLS {
+			app.world_mut().spawn((
+				RigidBody::Static,
+				Collider::cuboid(0.15, 2.0, 2.0),
+				Transform::from_xyz(1.5 + index as f32 * 1.25, 0.0, 0.0),
+				PhysicsInteractionLayer::fixed_layers(),
+			));
+		}
+		for index in 0..PROJECTILES {
+			let z = (index as f32 - PROJECTILES as f32 * 0.5) * 0.35;
+			app.world_mut().spawn((
+				RigidBody::Dynamic,
+				Collider::capsule(0.04, 0.3),
+				Transform::from_xyz(-2.0, 0.0, z),
+				PhysicsInteractionLayer::projectile_layers(),
+				LinearVelocity(Vec3::new(90.0, 0.0, 0.0)),
+				Flight::spawn(Vec3::new(-2.0, 0.0, z), 80.0, 2.0, 5.0),
+			));
+		}
+		app.update();
+
+		let start = Instant::now();
+		for _ in 0..FRAMES {
+			app.update();
+		}
+		let elapsed = start.elapsed();
+		let sweeps = PROJECTILES as u64 * FRAMES as u64;
+		eprintln!(
+			"sweep_scratch_stress: {sweeps} projectile-frames in {elapsed:?} ({:.1} µs/frame)",
+			elapsed.as_micros() as f64 / sweeps as f64
+		);
 	}
 }
