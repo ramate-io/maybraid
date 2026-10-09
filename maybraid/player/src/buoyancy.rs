@@ -122,7 +122,10 @@ pub(crate) fn apply_buoyancy(
 	{
 		let height = hull.half_height() * 2.0;
 		let feet_y = transform.translation.y - hull.half_height();
-		let column = surface.water_column_at(transform.translation.xz());
+		let column = match surface.water_column_at(transform.translation.xz()) {
+			Ok(column) => column,
+			Err(_) => continue,
+		};
 		let submersion =
 			column.map(|c| submersion_fraction(feet_y, height, c.surface)).unwrap_or(0.0);
 		match water_regime(column, feet_y, height) {
