@@ -257,8 +257,8 @@ mod tests {
 	}
 
 	/// Previously covered near / far cell centers that still fall in the new
-	/// near or far request must already sit on a kept near host or a new far
-	/// region. Newly generated near cells are not assumed to be ready.
+	/// near or far request must already sit on a kept near host or a kept far
+	/// host. Newly generated cells on either ring are not assumed to be ready.
 	fn still_wanted_centers_stay_covered(
 		near: TerrainCellRing,
 		far: TerrainCellRing,
@@ -274,14 +274,22 @@ mod tests {
 			.filter(|cell| overlaps_any(&near_after, cell.bounds))
 			.map(|cell| cell.bounds)
 			.collect();
+		let kept_far: Vec<Aabb3d> = far_before
+			.iter()
+			.filter(|cell| overlaps_any(&far_after, cell.bounds))
+			.map(|cell| cell.bounds)
+			.collect();
 		for cell in near_before.iter().chain(&far_before) {
 			let wanted = near.retains_cell_center(cell.center, after)
 				|| overlaps_any(&far_after, cell.bounds);
 			if !wanted {
 				continue;
 			}
-			let kept = kept_near.iter().copied().any(|bounds| xz_contains(bounds, cell.center));
-			if !kept && !overlaps_any(&far_after, cell.bounds) {
+			let on_kept_near =
+				kept_near.iter().copied().any(|bounds| xz_contains(bounds, cell.center));
+			let on_kept_far =
+				kept_far.iter().copied().any(|bounds| xz_contains(bounds, cell.center));
+			if !on_kept_near && !on_kept_far {
 				return Err(cell.center);
 			}
 		}
@@ -397,7 +405,17 @@ mod tests {
 	#[test]
 	fn one_step_anchor_jump_covers_every_still_wanted_cell_center() {
 		let step = WORLD_TERRAIN_PRESENT_STEP_M;
-		for jump in [Vec3::X * step, Vec3::NEG_X * step, Vec3::Z * step, Vec3::NEG_Z * step] {
+		let jumps = [
+			Vec3::X * step,
+			Vec3::NEG_X * step,
+			Vec3::Z * step,
+			Vec3::NEG_Z * step,
+			Vec3::new(step, 0.0, step),
+			Vec3::new(step, 0.0, -step),
+			Vec3::new(-step, 0.0, step),
+			Vec3::new(-step, 0.0, -step),
+		];
+		for jump in jumps {
 			still_wanted_centers_stay_covered(WORLD_NEAR_RING, WORLD_FAR_RING, Vec3::ZERO, jump)
 				.unwrap_or_else(|center| {
 					panic!("uncovered cell center {center} after jump {jump}")
