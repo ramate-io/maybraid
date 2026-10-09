@@ -12,16 +12,25 @@ use bevy::ecs::system::{SystemParam, SystemParamItem};
 use bevy::math::bounding::Aabb3d;
 use bevy::math::DVec3;
 use bevy::prelude::*;
+use durham::terrain::watersheds::{PocketWatersHighPass, PocketWatersLowPass};
+use durham::terrain::{
+	CanyonHighPassStampCell, CanyonLowPassStampCell, MassifHighPassStampCell,
+	MassifLowPassStampCell, PlateauHighPassStampCell, PlateauLowPassStampCell,
+	PocketWaterHighPassStampCell, PocketWaterLowPassStampCell, RollingHighPassStampCell,
+	RollingLowPassStampCell, ValleyHighPassStampCell, ValleyLowPassStampCell,
+};
 use lod::gen::{Id, OriginalId};
 use lod::hcsg::shared::{
-	self, GenerationContext, GenerationPlugin, HcsgBounds, HcsgRegions, HcsgStorage, HcsgSystems,
+	self, Busy, GenerationContext, GenerationPlugin, HcsgBounds, HcsgRegions, HcsgStorage,
+	HcsgSystems,
 };
 use lod::hcsg::universal_bounds;
 use lod::LodViewer;
+use richmond::DEVELOPMENT_CELL_SIZE;
 
-use crate::named::{each_source, EachSource, NameSource, Named, Regions};
-use crate::places::{DevelopmentPlaces, LanguageGround, NamingGround};
-use crate::present::{present_language_overlay, LanguageOverlay};
+use crate::named::{Forests, Groves, Named, Places, Regions, Stamp, Urban, Waters};
+use crate::places::{DevelopmentPlaces, LanguageGround};
+use crate::present::{present_language_overlay, LanguageOverlay, Nearby};
 use crate::tiles::{
 	large_tile_aabb, large_tile_index, large_tile_origin, large_tiles_overlapping, LargeTile,
 	LARGE_TILE,
@@ -120,49 +129,99 @@ impl HcsgBounds for LanguageNeighborhood {
 }
 
 /// Every value Geneva owns in the shared storage: its tiles, places and
-/// names, and its roots.
+/// names, and its root.
 pub struct GenevaNodes;
 
 const TILE_SCALE: DVec3 = DVec3::new(LARGE_TILE as f64, 2.0, LARGE_TILE as f64);
+/// One development cell per bucket, one naming column tall.
+const PLACES_SCALE: DVec3 = DVec3::new(
+	DEVELOPMENT_CELL_SIZE as f64,
+	2.0 * NAMING_COLUMN_Y as f64,
+	DEVELOPMENT_CELL_SIZE as f64,
+);
 
-impl GenevaNodes {
-	pub fn configure(storage: &HcsgStorage) {
-		storage.configure::<LargeTile>(TILE_SCALE);
-		storage.configure::<Named<Regions>>(TILE_SCALE);
-	}
+/// From one list of the sources named near the viewer, over ground `$W`:
+/// [`GenevaNodes`]' configure and clear, the naming window's generation, and
+/// the overlay's reads.
+macro_rules! geneva_nodes {
+	(<$W:ident> $($S:ty),* $(,)?) => {
+		impl GenevaNodes {
+			/// Configures Geneva's stores over ground `W` in the shared storage.
+			pub fn configure<$W: LanguageGround>(storage: &HcsgStorage) {
+				storage
+					.configure::<LargeTile>(TILE_SCALE)
+					.configure::<Named<Regions>>(TILE_SCALE)
+					.configure::<DevelopmentPlaces<$W>>(PLACES_SCALE)
+					.configure::<Named<Places<$W>>>(PLACES_SCALE);
+			}
 
-	/// Within a restart, after the epoch has advanced.
-	pub fn clear(storage: &HcsgStorage) {
-		struct Clear<'a>(&'a HcsgStorage);
-		impl EachSource for Clear<'_> {
-			fn visit<S: NameSource>(&mut self) {
-				self.0.clear::<Named<S>>();
+			/// Drops every value Geneva derived over ground `W`, and its root.
+			/// Within a restart, after the epoch has advanced.
+			pub fn clear<$W: LanguageGround>(storage: &HcsgStorage) {
+				storage.clear::<LargeTile>();
+				storage.clear::<Named<Regions>>();
+				storage.clear::<DevelopmentPlaces<$W>>();
+				$(storage.clear::<Named<$S>>();)*
+				storage.clear::<LanguageWorldSeed>();
 			}
 		}
-		storage.clear::<LargeTile>();
-		storage.clear::<Named<Regions>>();
-		storage.clear::<DevelopmentPlaces>();
-		each_source(&mut Clear(storage));
-		storage.clear::<LanguageWorldSeed>();
-		storage.clear::<NamingGround>();
-	}
+
+		/// Generates each source's names over ground `W` within the naming
+		/// window over `C`.
+		fn register_naming<C: Send + Sync + 'static, $W: LanguageGround>(app: &mut App) {
+			$(app.add_plugins(GenerationPlugin::<Naming<C>, Named<$S>>::default());)*
+		}
+
+		/// Latest membership change among the sources named over ground `W`.
+		pub(crate) fn naming_revision<$W: LanguageGround>(
+			storage: &HcsgStorage,
+		) -> Result<u64, Busy> {
+			let mut latest = 0;
+			$(latest = latest.max(storage.try_membership_revision::<Named<$S>>()?);)*
+			Ok(latest)
+		}
+
+		/// Reads the names of each source over ground `W` the window reaches.
+		pub(crate) fn read_nearby<$W: LanguageGround>(nearby: &mut Nearby) -> Result<(), Busy> {
+			$(nearby.read::<$S>()?;)*
+			Ok(())
+		}
+	};
 }
 
-/// Geneva's root resources: the language world seed, and the ground
-/// [`GenevaPlugin`] names.
+geneva_nodes!(<W>
+	Forests,
+	Groves<W>,
+	Urban,
+	Places<W>,
+	Stamp<MassifHighPassStampCell>,
+	Stamp<MassifLowPassStampCell>,
+	Stamp<PlateauHighPassStampCell>,
+	Stamp<PlateauLowPassStampCell>,
+	Stamp<CanyonHighPassStampCell>,
+	Stamp<CanyonLowPassStampCell>,
+	Stamp<RollingHighPassStampCell>,
+	Stamp<RollingLowPassStampCell>,
+	Stamp<ValleyHighPassStampCell>,
+	Stamp<ValleyLowPassStampCell>,
+	Stamp<PocketWaterHighPassStampCell>,
+	Stamp<PocketWaterLowPassStampCell>,
+	Waters<PocketWatersHighPass>,
+	Waters<PocketWatersLowPass>,
+);
+
+/// Geneva's root resource: the language world seed.
 #[derive(SystemParam)]
 pub struct GenevaRoots<'w> {
 	seed: Res<'w, LanguageWorldSeed>,
-	ground: Res<'w, NamingGround>,
 }
 
 impl GenevaRoots<'_> {
-	/// Clears Geneva's stores and seeds its roots. Within a restart, after
-	/// the epoch has advanced.
-	pub fn reset(&self, storage: &HcsgStorage) {
-		GenevaNodes::clear(storage);
+	/// Clears Geneva's stores over ground `W` and seeds the world seed.
+	/// Within a restart, after the epoch has advanced.
+	pub fn reset<W: LanguageGround>(&self, storage: &HcsgStorage) {
+		GenevaNodes::clear::<W>(storage);
 		storage.seed(*self.seed, universal_bounds());
-		storage.seed(self.ground.clone(), universal_bounds());
 	}
 }
 
@@ -219,14 +278,6 @@ fn track_language<C: Send + Sync + 'static>(
 	}
 }
 
-struct Register<'a, C>(&'a mut App, PhantomData<fn() -> C>);
-
-impl<C: Send + Sync + 'static> EachSource for Register<'_, C> {
-	fn visit<S: NameSource>(&mut self) {
-		self.0.add_plugins(GenerationPlugin::<Naming<C>, Named<S>>::default());
-	}
-}
-
 /// Geneva over ground `W`: language tiles and region names within channel
 /// `C`'s regions, names for the forests, groves, urbanization, Durham
 /// geography and Richmond places near the [`LodViewer`], and the
@@ -248,16 +299,15 @@ impl<C, W> Default for GenevaPlugin<C, W> {
 impl<C: Send + Sync + 'static, W: LanguageGround> Plugin for GenevaPlugin<C, W> {
 	fn build(&self, app: &mut App) {
 		let storage = app.world_mut().get_resource_or_init::<HcsgStorage>().clone();
-		GenevaNodes::configure(&storage);
+		GenevaNodes::configure::<W>(&storage);
 		app.init_resource::<LanguageWorldSeed>()
-			.insert_resource(NamingGround::of::<W>())
 			.init_resource::<LanguageOverlay>()
 			.init_resource::<LanguageWindow>()
 			.add_message::<HcsgRegions<Naming<C>>>()
 			.add_plugins(GenerationPlugin::<C, Named<Regions>>::default())
 			.add_systems(Update, track_language::<C>.before(HcsgSystems))
-			.add_systems(Update, present_language_overlay.after(HcsgSystems));
-		each_source(&mut Register::<C>(app, PhantomData));
+			.add_systems(Update, present_language_overlay::<W>.after(HcsgSystems));
+		register_naming::<C, W>(app);
 	}
 }
 
@@ -283,7 +333,6 @@ mod tests {
 	use urbanization_layer_model::Urbanization;
 
 	use super::*;
-	use crate::named::Places;
 	use crate::NameKey;
 
 	type Ground = OnTerrain<Durham>;
@@ -318,7 +367,7 @@ mod tests {
 	) {
 		if std::mem::take(&mut pending.0) {
 			demand.advance_epoch();
-			geneva.reset(&storage);
+			geneva.reset::<Urban>(&storage);
 		}
 	}
 
@@ -499,7 +548,7 @@ mod tests {
 			durham.reset(&storage);
 			richmond.reset::<Ground>(&storage);
 			chico.reset::<Urban>(&storage);
-			geneva.reset(&storage);
+			geneva.reset::<Urban>(&storage);
 		}
 	}
 
@@ -605,7 +654,7 @@ mod tests {
 		let development = les_halles().id();
 		let storage = app.world().resource::<HcsgStorage>().clone();
 		let places = storage
-			.get::<DevelopmentPlaces>(development)
+			.get::<DevelopmentPlaces<Urban>>(development)
 			.ok_or_else(|| anyhow::anyhow!("the development's places were not generated"))?;
 		let building = places
 			.places
@@ -617,7 +666,7 @@ mod tests {
 		assert!(!rooms.is_empty(), "Les Halles authors usage-area rooms");
 
 		let named = storage
-			.get::<Named<Places>>(development)
+			.get::<Named<Places<Urban>>>(development)
 			.ok_or_else(|| anyhow::anyhow!("the places were not named"))?;
 		let name = |key: NameKey| named.names.iter().find(|entry| entry.key == key);
 		let host = name(places.places[building].key)

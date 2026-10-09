@@ -31,7 +31,7 @@ pub use named::{
 	AuthoredWaters, Forests, GeographicStamp, Groves, NameEntry, NameSource, Nameable, Named,
 	Places, Regions, Speaks, Stamp, Urban, Waters,
 };
-pub use places::{DevelopmentPlace, DevelopmentPlaces, LanguageGround, NamingGround};
+pub use places::{DevelopmentPlace, DevelopmentPlaces, LanguageGround};
 pub use present::{LanguageOverlay, LargeTileOverlay, NamedOverlay};
 pub use shared::{
 	GenevaNodes, GenevaPlugin, GenevaRoots, LanguageConfig, LanguageNeighborhood,

@@ -8,8 +8,9 @@ use bevy::prelude::{Local, Res, ResMut, Resource};
 use lod::hcsg::shared::{Busy, HcsgStorage};
 
 use crate::key::NameKey;
-use crate::named::{each_source, EachSource, NameEntry, NameSource, Named, Regions};
-use crate::shared::LanguageWindow;
+use crate::named::{NameEntry, NameSource, Named, Regions};
+use crate::places::LanguageGround;
+use crate::shared::{naming_revision, read_nearby, LanguageWindow};
 use crate::tiles::{window_tiles, LargeTile};
 
 /// Tile bounds and names for a debug overlay.
@@ -64,8 +65,9 @@ pub(crate) struct Shown {
 	revision: u64,
 }
 
-/// Rebuilds the overlay from storage when the windows or a store it reads changed.
-pub(crate) fn present_language_overlay(
+/// Rebuilds the overlay from storage when the windows or a store it reads
+/// changed; `W` is the ground the names were generated over.
+pub(crate) fn present_language_overlay<W: LanguageGround>(
 	window: Res<LanguageWindow>,
 	storage: Res<HcsgStorage>,
 	mut overlay: ResMut<LanguageOverlay>,
@@ -77,14 +79,14 @@ pub(crate) fn present_language_overlay(
 		}
 		return;
 	}
-	let Ok(revision) = revision(&storage) else {
+	let Ok(revision) = revision::<W>(&storage) else {
 		return;
 	};
 	let next = Shown { boxes: window.boxes.clone(), naming: window.naming_box(), revision };
 	if shown.as_ref() == Some(&next) {
 		return;
 	}
-	let Ok((large_tiles, names)) = collect(&storage, &next) else {
+	let Ok((large_tiles, names)) = collect::<W>(&storage, &next) else {
 		return;
 	};
 	*overlay = LanguageOverlay { epoch: overlay.epoch + 1, large_tiles, names };
@@ -92,71 +94,48 @@ pub(crate) fn present_language_overlay(
 }
 
 /// Latest membership change among the stores the overlay reads.
-pub(crate) fn revision(storage: &HcsgStorage) -> Result<u64, Busy> {
-	struct Latest<'a> {
-		storage: &'a HcsgStorage,
-		latest: Result<u64, Busy>,
-	}
-	impl EachSource for Latest<'_> {
-		fn visit<S: NameSource>(&mut self) {
-			if let Ok(latest) = self.latest {
-				self.latest =
-					self.storage.try_membership_revision::<Named<S>>().map(|r| r.max(latest));
-			}
-		}
-	}
+pub(crate) fn revision<W: LanguageGround>(storage: &HcsgStorage) -> Result<u64, Busy> {
 	let tiles = storage.try_membership_revision::<LargeTile>()?;
 	let regions = storage.try_membership_revision::<Named<Regions>>()?;
-	let mut latest = Latest { storage, latest: Ok(tiles.max(regions)) };
-	each_source(&mut latest);
-	latest.latest
+	Ok(tiles.max(regions).max(naming_revision::<W>(storage)?))
 }
 
-/// The tiles and region names under the tile window, then every name whose
-/// extent the naming window reaches, once per key.
-fn collect(
+/// The names the naming window reaches, once per key.
+pub(crate) struct Nearby<'a> {
+	storage: &'a HcsgStorage,
+	region: Aabb3d,
+	keys: HashSet<NameKey>,
+	names: Vec<NamedOverlay>,
+}
+
+impl Nearby<'_> {
+	/// Every name of source `S` whose extent or anchor the window reaches.
+	pub(crate) fn read<S: NameSource>(&mut self) -> Result<(), Busy> {
+		let reach = Rect::from_corners(
+			Vec2::new(self.region.min.x, self.region.min.z),
+			Vec2::new(self.region.max.x, self.region.max.z),
+		);
+		for id in self.storage.try_overlapping::<Named<S>>(self.region)? {
+			let Some(entry) = self.storage.try_entry::<Named<S>>(id)? else {
+				continue;
+			};
+			for name in &entry.value.names {
+				let reached = !reach.intersect(name.extent).is_empty() || reach.contains(name.xz);
+				if reached && self.keys.insert(name.key) {
+					self.names.push(NamedOverlay::of(name));
+				}
+			}
+		}
+		Ok(())
+	}
+}
+
+/// The tiles and region names under the tile window, then every name the
+/// naming window reaches.
+fn collect<W: LanguageGround>(
 	storage: &HcsgStorage,
 	shown: &Shown,
 ) -> Result<(Vec<LargeTileOverlay>, Vec<NamedOverlay>), Busy> {
-	struct Nearby<'a> {
-		storage: &'a HcsgStorage,
-		region: Aabb3d,
-		keys: HashSet<NameKey>,
-		names: Vec<NamedOverlay>,
-		busy: Option<Busy>,
-	}
-	impl EachSource for Nearby<'_> {
-		fn visit<S: NameSource>(&mut self) {
-			if self.busy.is_some() {
-				return;
-			}
-			if let Err(busy) = self.read::<S>() {
-				self.busy = Some(busy);
-			}
-		}
-	}
-	impl Nearby<'_> {
-		fn read<S: NameSource>(&mut self) -> Result<(), Busy> {
-			let reach = Rect::from_corners(
-				Vec2::new(self.region.min.x, self.region.min.z),
-				Vec2::new(self.region.max.x, self.region.max.z),
-			);
-			for id in self.storage.try_overlapping::<Named<S>>(self.region)? {
-				let Some(entry) = self.storage.try_entry::<Named<S>>(id)? else {
-					continue;
-				};
-				for name in &entry.value.names {
-					let reached =
-						!reach.intersect(name.extent).is_empty() || reach.contains(name.xz);
-					if reached && self.keys.insert(name.key) {
-						self.names.push(NamedOverlay::of(name));
-					}
-				}
-			}
-			Ok(())
-		}
-	}
-
 	let mut large_tiles = Vec::new();
 	let mut names = Vec::new();
 	for (ix, iz) in window_tiles(&shown.boxes) {
@@ -177,10 +156,7 @@ fn collect(
 		return Ok((large_tiles, names));
 	};
 	let keys = names.iter().map(|name| name.key).collect();
-	let mut nearby = Nearby { storage, region, keys, names, busy: None };
-	each_source(&mut nearby);
-	match nearby.busy {
-		Some(busy) => Err(busy),
-		None => Ok((large_tiles, nearby.names)),
-	}
+	let mut nearby = Nearby { storage, region, keys, names };
+	read_nearby::<W>(&mut nearby)?;
+	Ok((large_tiles, nearby.names))
 }

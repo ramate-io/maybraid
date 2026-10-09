@@ -12,7 +12,7 @@ use std::sync::Arc;
 
 use bevy::math::bounding::Aabb3d;
 use bevy::math::{Rect, Vec2};
-use chico::{ChicoForest, ChicoGrove};
+use chico::{ChicoForest, ChicoGrove, GrownGrove};
 use durham::terrain::stamps::StampLeaf;
 use durham::terrain::watersheds::{PocketWater, PocketWatersHighPass, PocketWatersLowPass};
 use durham::terrain::{
@@ -35,7 +35,7 @@ use crate::english::{
 };
 use crate::key::{name_key_salt, NameKey};
 use crate::name::PlaceName;
-use crate::places::{DevelopmentPlaces, NamingGround};
+use crate::places::{DevelopmentPlaces, LanguageGround};
 use crate::shared::LanguageWorldSeed;
 use crate::tiles::{large_tile_aabb, large_tile_index, large_tiles_overlapping, LargeTile};
 
@@ -208,17 +208,17 @@ impl NameSource for Forests {
 	}
 }
 
-/// The groves that grew on the session's ground.
-pub struct Groves;
+/// The groves that grew on ground `W`.
+pub struct Groves<W>(PhantomData<fn() -> W>);
 
-impl NameSource for Groves {
+impl<W: LanguageGround> NameSource for Groves<W> {
 	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
 		cx.original_ids_for::<ChicoGrove>(region)
 	}
 
 	fn nameables(cx: &mut GenerationContext, id: Id) -> Option<(Vec<Nameable>, Aabb3d)> {
 		let (grove, bounds) = generated::<ChicoGrove>(cx, id)?;
-		if !NamingGround::in_session(cx)?.grew(cx, id) {
+		if cx.get_or_generate::<GrownGrove<W>>(id).is_none() {
 			return Some((Vec::new(), bounds));
 		}
 		let key = NameKey::Grove(id);
@@ -250,17 +250,17 @@ impl NameSource for Urban {
 	}
 }
 
-/// Richmond's built places: each building, and the rooms in it, which speak
-/// their building's language.
-pub struct Places;
+/// Richmond's places built on ground `W`: each building, and the rooms in
+/// it, which speak their building's language.
+pub struct Places<W>(PhantomData<fn() -> W>);
 
-impl NameSource for Places {
+impl<W: LanguageGround> NameSource for Places<W> {
 	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
-		cx.original_ids_for::<DevelopmentPlaces>(region)
+		cx.original_ids_for::<DevelopmentPlaces<W>>(region)
 	}
 
 	fn nameables(cx: &mut GenerationContext, id: Id) -> Option<(Vec<Nameable>, Aabb3d)> {
-		let (places, bounds) = generated::<DevelopmentPlaces>(cx, id)?;
+		let (places, bounds) = generated::<DevelopmentPlaces<W>>(cx, id)?;
 		let nameables = places
 			.places
 			.iter()
@@ -381,30 +381,4 @@ fn geographic(id: GeographicFeatureId, kind: GeographicFeatureKind, source: Boun
 		Vec2::new(source.max.x, source.max.y),
 	);
 	Nameable { key, xz: extent.center(), extent, english, speaks: Speaks::Here }
-}
-
-/// Visits each source named on the naming channel.
-pub(crate) trait EachSource {
-	fn visit<S: NameSource>(&mut self);
-}
-
-pub(crate) fn each_source(visitor: &mut impl EachSource) {
-	visitor.visit::<Forests>();
-	visitor.visit::<Groves>();
-	visitor.visit::<Urban>();
-	visitor.visit::<Places>();
-	visitor.visit::<Stamp<MassifHighPassStampCell>>();
-	visitor.visit::<Stamp<MassifLowPassStampCell>>();
-	visitor.visit::<Stamp<PlateauHighPassStampCell>>();
-	visitor.visit::<Stamp<PlateauLowPassStampCell>>();
-	visitor.visit::<Stamp<CanyonHighPassStampCell>>();
-	visitor.visit::<Stamp<CanyonLowPassStampCell>>();
-	visitor.visit::<Stamp<RollingHighPassStampCell>>();
-	visitor.visit::<Stamp<RollingLowPassStampCell>>();
-	visitor.visit::<Stamp<ValleyHighPassStampCell>>();
-	visitor.visit::<Stamp<ValleyLowPassStampCell>>();
-	visitor.visit::<Stamp<PocketWaterHighPassStampCell>>();
-	visitor.visit::<Stamp<PocketWaterLowPassStampCell>>();
-	visitor.visit::<Waters<PocketWatersHighPass>>();
-	visitor.visit::<Waters<PocketWatersLowPass>>();
 }

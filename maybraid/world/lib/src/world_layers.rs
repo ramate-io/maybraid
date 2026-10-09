@@ -113,5 +113,5 @@ fn start_session(
 	chico.reset::<Urban>(&storage);
 	BarkingNodes::clear::<Urban>(&storage);
 	MaputoNodes::clear::<Urban>(&storage);
-	geneva.reset(&storage);
+	geneva.reset::<Urban>(&storage);
 }

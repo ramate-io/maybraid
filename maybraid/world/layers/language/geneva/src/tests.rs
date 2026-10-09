@@ -6,13 +6,16 @@ use chico::ForestGroveKind;
 use durham::terrain::watersheds::{PocketWater, PocketWatersHighPass};
 use durham::terrain::MassifHighPassStampCell;
 use durham::{
-	GeographicBand, GeographicFamily, GeographicFeatureId, GeographicFeatureKind, WatershedBandPass,
+	Durham, GeographicBand, GeographicFamily, GeographicFeatureId, GeographicFeatureKind,
+	WatershedBandPass,
 };
 use lod::gen::Id;
 use lod::hcsg::shared::{GenerationContext, HcsgStorage};
 use lod::hcsg::universal_bounds;
 use procedural_common::Bounds2;
-use richmond::{DiscoverablePlace, DiscoverablePlaceLabel};
+use richmond::{DiscoverablePlace, DiscoverablePlaceLabel, Richmond};
+use terrain_layer_model::OnTerrain;
+use urbanization_layer_model::Urbanization;
 
 use crate::english::{
 	compose_english, geographic_terms, grove_kind_terms, named_grove_english, named_region_english,
@@ -24,6 +27,8 @@ use crate::named::{NameEntry, NameSource, Named, Places, Regions, Stamp, Waters}
 use crate::places::{DevelopmentPlace, DevelopmentPlaces};
 use crate::shared::LanguageWorldSeed;
 use crate::tiles::{large_tiles_overlapping, LargeTile, LARGE_TILE};
+
+type Urban = Urbanization<Richmond<OnTerrain<Durham>>>;
 
 const SEED: u64 = 0xC0DE_F00D_A11A;
 
@@ -346,16 +351,14 @@ fn rooms_speak_their_buildings_language_wherever_they_stand() -> anyhow::Result<
 		}
 	};
 	let across = Vec2::new(LARGE_TILE + 12.0, 18.0);
-	let places = DevelopmentPlaces {
-		places: vec![
-			place(DiscoverablePlaceLabel::House, building, Vec2::new(12.0, 18.0), None),
-			place(DiscoverablePlaceLabel::Lounge, room, across, Some(0)),
-			place(DiscoverablePlaceLabel::Lounge, loose, across, None),
-		],
-	};
+	let places = DevelopmentPlaces::<Urban>::new(vec![
+		place(DiscoverablePlaceLabel::House, building, Vec2::new(12.0, 18.0), None),
+		place(DiscoverablePlaceLabel::Lounge, room, across, Some(0)),
+		place(DiscoverablePlaceLabel::Lounge, loose, across, None),
+	]);
 	storage.publish(development, Arc::new(places), feature_aabb(0.0, 0.0, 50.0, 50.0));
 
-	let named = names::<Places>(&storage, development)?;
+	let named = names::<Places<Urban>>(&storage, development)?;
 	let name = |key: NameKey| {
 		named
 			.iter()
@@ -379,7 +382,7 @@ fn unrelated_storage_writes_do_not_move_the_overlay_revision() -> anyhow::Result
 	struct Furniture;
 	let storage = session();
 	let revision = |storage: &HcsgStorage| {
-		crate::present::revision(storage).map_err(|_| anyhow::anyhow!("busy"))
+		crate::present::revision::<Urban>(storage).map_err(|_| anyhow::anyhow!("busy"))
 	};
 	let before = revision(&storage)?;
 	let bounds = feature_aabb(0.0, 0.0, 160.0, 160.0);

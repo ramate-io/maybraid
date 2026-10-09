@@ -2,13 +2,11 @@
 //! [`Built`] value rather than read off spawned entities.
 
 use std::marker::PhantomData;
-use std::sync::Arc;
 
 use bevy::math::bounding::{Aabb3d, BoundingVolume};
 use bevy::math::{Vec2, Vec3Swizzles};
-use bevy::prelude::Resource;
 use building_components::{BuildingComponents, LabelNode};
-use chico::{ForestGround, GrownGrove};
+use chico::ForestGround;
 use lod::gen::{Id, OriginalId};
 use lod::hcsg::shared::{self, GenerationContext};
 use lod::LodSceneLevel;
@@ -33,49 +31,6 @@ where
 	type Built = G;
 }
 
-/// Geneva's ground as a session root, so its stores need no ground parameter.
-#[derive(Resource, Clone)]
-pub struct NamingGround(Arc<dyn GroundReads>);
-
-impl NamingGround {
-	pub fn of<W: LanguageGround>() -> Self {
-		Self(Arc::new(OnGround::<W>(PhantomData)))
-	}
-
-	pub(crate) fn in_session(cx: &GenerationContext) -> Option<Arc<Self>> {
-		cx.get::<Self>(Id::Universal)
-	}
-
-	pub(crate) fn grew(&self, cx: &mut GenerationContext, grove: Id) -> bool {
-		self.0.grew(cx, grove)
-	}
-}
-
-/// The reads of the ground that depend on its type.
-trait GroundReads: Send + Sync {
-	fn grew(&self, cx: &mut GenerationContext, grove: Id) -> bool;
-	fn development_ids(&self, cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId>;
-	fn places(&self, cx: &mut GenerationContext, id: Id) -> Option<(DevelopmentPlaces, Aabb3d)>;
-}
-
-struct OnGround<W>(PhantomData<fn() -> W>);
-
-impl<W: LanguageGround> GroundReads for OnGround<W> {
-	fn grew(&self, cx: &mut GenerationContext, grove: Id) -> bool {
-		cx.get_or_generate::<GrownGrove<W>>(grove).is_some()
-	}
-
-	fn development_ids(&self, cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
-		cx.original_ids_for::<Built<W::Built>>(region)
-	}
-
-	fn places(&self, cx: &mut GenerationContext, id: Id) -> Option<(DevelopmentPlaces, Aabb3d)> {
-		let built = cx.get_or_generate::<Built<W::Built>>(id)?;
-		let bounds = cx.storage().entry::<Built<W::Built>>(id)?.bounds;
-		Some((DevelopmentPlaces::of(id, &built.development), bounds))
-	}
-}
-
 /// One discoverable place in a built development.
 #[derive(Clone, Debug, PartialEq)]
 pub struct DevelopmentPlace {
@@ -86,13 +41,18 @@ pub struct DevelopmentPlace {
 	pub building: Option<usize>,
 }
 
-/// The places of one built development, under the development's id.
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct DevelopmentPlaces {
+/// The places of one development built on ground `W`, under the
+/// development's id.
+pub struct DevelopmentPlaces<W> {
 	pub places: Vec<DevelopmentPlace>,
+	_ground: PhantomData<fn() -> W>,
 }
 
-impl DevelopmentPlaces {
+impl<W> DevelopmentPlaces<W> {
+	pub fn new(places: Vec<DevelopmentPlace>) -> Self {
+		Self { places, _ground: PhantomData }
+	}
+
 	/// Each host's place pin, then the usage-area rooms its High floors
 	/// author, keyed as Richmond stamps them so the map joins them to its POIs.
 	pub fn of(development: Id, built: &BuiltDevelopment) -> Self {
@@ -131,20 +91,19 @@ impl DevelopmentPlaces {
 				});
 			}
 		}
-		Self { places }
+		Self::new(places)
 	}
 }
 
-impl shared::GenerationScheme for DevelopmentPlaces {
+impl<W: LanguageGround> shared::GenerationScheme for DevelopmentPlaces<W> {
 	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
-		match NamingGround::in_session(cx) {
-			Some(ground) => ground.0.development_ids(cx, region),
-			None => Vec::new(),
-		}
+		cx.original_ids_for::<Built<W::Built>>(region)
 	}
 
 	fn build_with_id(cx: &mut GenerationContext, id: Id) -> Option<(Self, Aabb3d)> {
-		NamingGround::in_session(cx)?.0.places(cx, id)
+		let built = cx.get_or_generate::<Built<W::Built>>(id)?;
+		let bounds = cx.storage().entry::<Built<W::Built>>(id)?.bounds;
+		Some((Self::of(id, &built.development), bounds))
 	}
 }
 
