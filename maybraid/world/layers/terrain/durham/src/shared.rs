@@ -125,6 +125,9 @@ impl SharedTerrainStorage for HcsgStorage {
 }
 
 #[cfg(test)]
+mod equivalence;
+
+#[cfg(test)]
 mod tests {
 	use std::time::Duration;
 

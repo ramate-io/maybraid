@@ -5,6 +5,7 @@ use bevy::math::{Vec2, Vec3};
 use comproc::guillotine::{Bounds2, Guillotine, GuillotineCuts};
 use comproc::noise::config::NoiseConfig;
 use lod::gen::{GeneratingSpatialIndex, Id, OriginalId};
+use lod::hcsg::shared::{self, GenerationContext};
 use noise::Perlin;
 use procedural_common::Bounds2 as ProcBounds2;
 use terrain_stamps::StampModulation;
@@ -186,6 +187,23 @@ pub trait LeafAabbs: Sized {
 				.filter(|leaf| region.intersects(leaf))
 				.map(|leaf| OriginalId(Id::from_cell(leaf)))
 				.collect();
+		ids.sort();
+		ids.dedup();
+		ids
+	}
+
+	/// [`Self::original_leaf_ids_for`] on the context.
+	fn leaf_ids_in(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId>
+	where
+		Self: shared::GenerationScheme,
+	{
+		let mut ids: Vec<OriginalId> = cx
+			.get_or_generate_in::<Self>(region)
+			.iter()
+			.flat_map(|controller| controller.leaf_aabbs())
+			.filter(|leaf| region.intersects(leaf))
+			.map(|leaf| OriginalId(Id::from_cell(leaf)))
+			.collect();
 		ids.sort();
 		ids.dedup();
 		ids

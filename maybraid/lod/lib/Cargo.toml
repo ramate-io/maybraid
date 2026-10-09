@@ -16,7 +16,6 @@ default = []
 lod-cascade = { workspace = true }
 lod-cascade-system = { workspace = true }
 bevy = { workspace = true }
-elsa = { workspace = true }
 gimme-core = { workspace = true }
 thiserror = { workspace = true }
 

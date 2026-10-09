@@ -35,6 +35,7 @@ use lod::gen::{
 	GeneratingSpatialIndex, GenerationScheme, Id, LodScene, LodSceneLevel, LodSceneStatus,
 	OriginalId,
 };
+use lod::hcsg::shared::{self, GenerationContext};
 use lod::lod_ref::LodRef;
 use render_item::mesh::handle::Cached;
 use sdf::Sdf;
@@ -192,38 +193,54 @@ where
 
 	fn build_with_id(spatial_index: &mut S, id: Id) -> Option<(Self, Aabb3d)> {
 		let bounds = id.origin_cell_bounds()?;
+		let assets = GeneratingSpatialIndex::<WaterPresentationAssets>::get_one_or_generate(
+			spatial_index,
+			Id::Universal,
+		)?
+		.clone();
 		// Terrain composes every Watershed band before returning; fills ride along.
 		let terrain = GeneratingSpatialIndex::<Terrain>::get_one_or_generate(spatial_index, id)?;
-		// Lattice resolution comes from the terrain cell — not a water-only knob.
-		let res_2 = terrain.res_2;
-		let stream_ring = terrain.stream_ring;
+		Some((Self::over(bounds, terrain, &assets)?, bounds))
+	}
+}
+
+impl shared::GenerationScheme for Water {
+	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
+		cx.original_ids_for::<Terrain>(region)
+	}
+
+	fn build_with_id(cx: &mut GenerationContext, id: Id) -> Option<(Self, Aabb3d)> {
+		let bounds = id.origin_cell_bounds()?;
+		let terrain = cx.get_or_generate::<Terrain>(id)?;
+		let assets = cx.get_or_generate::<WaterPresentationAssets>(Id::Universal)?;
+		Some((Self::over(bounds, &terrain, &assets)?, bounds))
+	}
+}
+
+impl Water {
+	/// The water standing on `terrain`'s fills; `None` where none is wet.
+	fn over(cell: Aabb3d, terrain: &Terrain, assets: &WaterPresentationAssets) -> Option<Self> {
 		let terrain_sdf = terrain.sdf.terrain().clone();
 		let fills: Vec<_> = terrain
 			.marazion_fills
 			.iter()
-			.cloned()
 			.filter(|fill| fill_has_wet_volume(fill, &terrain_sdf))
+			.cloned()
 			.collect();
 		if fills.is_empty() {
 			return None;
 		}
-		let assets = GeneratingSpatialIndex::<WaterPresentationAssets>::get_one_or_generate(
-			spatial_index,
-			Id::Universal,
-		)?;
 		let sdf = ComposedWater::compose(terrain_sdf.clone(), fills.clone());
-		Some((
-			Self {
-				cell: bounds,
-				terrain: terrain_sdf,
-				fills,
-				sdf,
-				material: assets.material.clone(),
-				res_2,
-				stream_ring,
-			},
-			bounds,
-		))
+		Some(Self {
+			cell,
+			terrain: terrain_sdf,
+			fills,
+			sdf,
+			material: assets.material.clone(),
+			// Lattice resolution comes from the terrain cell — not a water-only knob.
+			res_2: terrain.res_2,
+			stream_ring: terrain.stream_ring,
+		})
 	}
 }
 

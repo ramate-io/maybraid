@@ -138,11 +138,17 @@ The context hands out owned references, so dependencies stay usable after storag
 impl GenerationContext {
     pub fn get<T: HcsgValue>(&self, id: Id) -> Option<Arc<T>>;
     pub fn get_or_generate<T: GenerationScheme>(&mut self, id: Id) -> Option<Arc<T>>;
+    /// `T`'s origins in `region`, in id order, skipping any that don't build.
+    pub fn get_or_generate_in<T: GenerationScheme>(&mut self, region: Aabb3d) -> Vec<Arc<T>>;
+    /// Like `get_or_generate_in`, but `None` if any origin doesn't build.
+    pub fn get_or_generate_all_in<T: GenerationScheme>(&mut self, region: Aabb3d) -> Option<Vec<Arc<T>>>;
     pub fn overlapping<T: HcsgValue>(&self, region: Aabb3d) -> Vec<Id>;
 }
 ```
 
 `get_or_generate` looks the value up, and if it is missing, builds it (recursively resolving that value's dependencies) and publishes it before returning. The context tracks which `(TypeId, Id)` pairs it is currently generating, and treats a repeat as a cycle (`None`).
+
+Region pulls read origins only, never whatever happens to be stored in the region, so a value doesn't depend on which of its neighbors the worker built first.
 
 The worker builds its context with a staleness check (`GenerationContext::with_stale`). Once the subscription is cancelled, the context generates nothing more and drops whatever it just built instead of publishing it. The final check happens under the store's write lock (`HcsgStorage::publish_unless`), so a value finished just as its session ends either lands before that session's stores are cleared or is dropped.
 
@@ -406,6 +412,8 @@ impl HcsgDemand {
 
 A typical test seeds its roots, runs `app.update()` once so presentation subscribes, calls `wait_idle(…)`, then runs `app.update()` again to spawn hosts and asserts on them. The timeout turns a stuck worker into a failed assertion instead of a hung test.
 
+Schemes themselves can be tested without a worker, by building a `GenerationContext` over a seeded storage and generating directly.
+
 ## Layer responsibilities
 
 A layer provides:
@@ -432,7 +440,7 @@ The shared runtime provides everything else.
 The new API lives in `lod::hcsg::shared`, alongside the frame-synchronous `lod::hcsg` API, until the last layer moves over. Values are pure functions of their keys, so while a layer is mid-move both storages may hold the same value. That costs duplicate work, never wrong results. Old and new plugins coexist, and each app switches once its layers are ready.
 
 0. **Shared storage, context, demand and worker** (done). `HcsgStorage` with `Arc` values and `Busy`, `HcsgValue`, `GenerationScheme` and `GenerationContext`, `HcsgDemand` and `HcsgWorker`, tested in isolation.
-1. **Adapter** (done). `GenerationContext` implements the legacy `SpatialIndex<T>`, so every legacy scheme generic over `S` (Durham, cells) is a `GenerationScheme` unchanged and runs on the worker. Native schemes can depend on those legacy types. Legacy `get(&self) -> Option<&T>` borrows from an append-only cache (`elsa::FrozenMap`) of the `Arc`s the context has read. Legacy `descendants` run only from legacy entry points.
+1. **Adapter** (done, then removed in step 6). `GenerationContext` implemented the legacy `SpatialIndex<T>`, so legacy schemes generic over `S` (Durham, cells) ran on the worker unchanged until they had native impls.
 2. **Generation and presentation systems** (done). `HcsgBounds`, `HcsgNode<T>`, `generation<B, T>`, `presentation<B, T>`, scene forwarding and the plugins, tested on fixtures with the real worker and the LOD chunk-fulfill pipeline.
 3. **Durham** (done). `DurhamPresentationPlugin<B>` presents `Terrain` and `Water` through `presentation<B, T>` and chunk fulfill, next to the old presenters. `DurhamWindow` bounds the layout's request region. `DurhamRoots::restart` seeds the shared storage, whose base scales come from the same `durham_nodes!` list as the old storage. Collision-seeding cells carry the trimesh source in `Terrain`'s own `LodScene`. `durham-playground` generates on the worker and no longer calls the old storage. The streamed world path keeps the old presenters until Richmond moves (step 4), because its level changes need the refresh region plugins.
 4. **Richmond** (done in `richmond-playground`). `DevelopmentSite`, `RichmondDevelopment`, `PaddedTerrain` and `Built` have native schemes beside their legacy ones, which stay until their last reader moves. Developments sample the ground through `GroundCells`, a pure view of the context. `PaddedTerrain` is total: a cell no pad reaches wraps the terrain unchanged, so it replaces raw terrain as the presented ground surface instead of overlaying it. `Built` is one `LodScene` whose level holds the `UrbanSetting` and the nested building hosts (`DevelopmentHost::scene`, shared with the legacy spawn). `RichmondPresentationPlugin<B, G>` presents both. `WaterPresentationPlugin<B>` presents Durham water alone, so Richmond doesn't need raw terrain hosts. The playground pins its layout, because the layout is a session root, and restarts on its command flag. Composed apps keep the old presenters, along with `sync_raw_terrain_replacements` and `TerrainSuperseded`, until step 7.
@@ -440,8 +448,8 @@ The new API lives in `lod::hcsg::shared`, alongside the frame-synchronous `lod::
    - **Chico** (done in `richmond-playground`). `ChicoGrove` stays the cheap recipe. `GrownGrove<G>` is the presented value: the worker grows it synchronously on `GroundSurface<G>`, a pure view of the padded surface cells under the grove. `ChicoRoots::reset` seeds `ForestSelection` as the session root, so neighborhood blending reads it instead of `ForestIndex`. `BumpedOut<P, G>` places one canopy bump-out per proxy cell. Its scene reads the padded surface mesh through `TerrainChunkRef`, keyed like the padded host, so it doesn't matter which side loads first. The grove hole and the outer band are LOD levels, refreshed by `BumpOutRing<P>`.
    - **Barking** (library and tests only). `PlacedMobCell<G>` groups a mob cell from `UrbanizationSelection`, Chico's `ForestSelection`, the padded surface, and plant hosts read from `Built<G>` and `SelectedUrbanization`, all through the context. It reads no entities and writes no `SelectedUrbanization`. Its scene nests each group's `MobScene` hosts, and members retire with their mob. `BarkingPresentationPlugin<B, G>` presents it. It isn't in a playground yet, because `MobScenesPlugin` needs the player, combat and intelligence stack. Mobs fit the surface only when generated; legacy hosts still re-fit as they move.
    - **Maputo** (done in `richmond-playground`). `DevelopmentSlots<U>` holds one development's world-space slots, through `FurnitureSlots::Development` (Richmond's `Built<G>`), and replaces the old per-development slot cache. `Furnished<U>` is a 50 m `FurnitureCell` of those slots. `MaputoPresentationPlugin<B, U>` presents them, and `FurnitureNeighborhood` bounds them to the viewer's 50 m cell. The walk collider is part of `FurnitureCell`'s High scene on both paths, so there is no attach system. Composed apps keep `FurnitureIndex` and its presenter until step 7.
-6. **Native Durham and cells.** Rewrite their generic schemes on the context API, dropping the `S` capability bounds and dependency clones.
-7. **Modes and removal.** Build the Discovery game mode on the new runtime. Delete `gen::runtime`, the adapter (and `elsa`), the producer and queue machinery, the terrain replacement machinery, `Seed`, the old storage and the training ground, which is then rebuilt from scratch.
+6. **Native Durham and cells** (done). Every Durham scheme and `SelectedUrbanization` has a native impl beside its legacy one, with the composition shared between them (`on_leaf`, `on_cell`, `author`, `union`, `compose`, `over`). Native impls have no `S` capability bounds and borrow their `Arc` dependencies instead of cloning them. `seeded_root!` emits both impls. The adapter and `elsa` are gone. Durham's equivalence tests generate the same layouts both ways and agree on ids, heights, hydro fills, marazion leaves and water. Legacy terrain also lists jersey leaves that only touch the cell's boundary when a neighbor happened to generate first; they don't change heights inside the cell, and native terrain leaves them out.
+7. **Modes and removal.** Build the Discovery game mode on the new runtime. Delete the legacy scheme impls (and the equivalence tests with them), `gen::runtime`, the producer and queue machinery, the terrain replacement machinery, `Seed`, the old storage and the training ground, which is then rebuilt from scratch.
 
 ## Later
 

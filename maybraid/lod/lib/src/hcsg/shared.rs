@@ -16,13 +16,10 @@
 //! - [`presentation`]: [`presentation<B, T>`](presentation::presentation)
 //!   keeps one [`HcsgNode<T>`] host per published value within `B`.
 //! - [`node`]: [`HcsgNode<T>`], forwarding the LOD scene traits to `T`.
-//! - `adapter`: runs legacy generic schemes on the context until they are
-//!   rewritten.
 //!
 //! This sits alongside the frame-synchronous [`super::HcsgStorage`] until the
 //! layers move over.
 
-mod adapter;
 pub mod bounds;
 pub mod context;
 pub mod demand;

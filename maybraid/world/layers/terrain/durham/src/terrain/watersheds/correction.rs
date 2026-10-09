@@ -15,9 +15,10 @@ use crate::terrain::watersheds::low_pass::PocketWatersLowPass;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use lod::gen::{GeneratingSpatialIndex, GenerationScheme, Id, OriginalId};
+use lod::hcsg::shared::{self, GenerationContext};
 use procedural_common::Bounds2;
 use std::sync::Arc;
-use terrain_watersheds::{CorrectionStage, HydroComplex};
+use terrain_watersheds::{CorrectionStage, HydroComplex, HydroNode};
 
 /// Origin-grid hydrology complex: unions hydrology nodes from both pocket-water passes.
 #[derive(Debug, Clone, Component)]
@@ -57,39 +58,57 @@ where
 
 	fn build_with_id(spatial_index: &mut S, id: Id) -> Option<(Self, Aabb3d)> {
 		let cell = id.origin_cell_bounds()?;
-		let cell_bounds = aabb_to_bounds2(cell);
-
-		let configs = GeneratingSpatialIndex::<WatershedConfigs>::get_one_or_generate(
+		let seed = GeneratingSpatialIndex::<WatershedConfigs>::get_one_or_generate(
 			spatial_index,
 			Id::Universal,
-		)?;
-		let seed = cell_seed(cell, configs.seed);
-
-		let mut hydrology = Vec::new();
+		)?
+		.seed;
+		let mut nodes = Vec::new();
 		for pass in GeneratingSpatialIndex::<PocketWatersHighPass>::get_or_generate_region_values(
 			spatial_index,
 			cell,
 		) {
-			hydrology.extend(
-				pass.hydro_nodes()
-					.into_iter()
-					.filter(|node| node.correction_intersects(cell_bounds)),
-			);
+			nodes.extend(pass.hydro_nodes());
 		}
 		for pass in GeneratingSpatialIndex::<PocketWatersLowPass>::get_or_generate_region_values(
 			spatial_index,
 			cell,
 		) {
-			hydrology.extend(
-				pass.hydro_nodes()
-					.into_iter()
-					.filter(|node| node.correction_intersects(cell_bounds)),
-			);
+			nodes.extend(pass.hydro_nodes());
 		}
+		Some((Self::union(cell, seed, nodes), cell))
+	}
+}
 
-		let complex = Arc::new(HydroComplex::new(cell_bounds, seed).with_hydro(hydrology));
+impl shared::GenerationScheme for HydroComplexCell {
+	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
+		TerrainCellLayout::cell_ids_in(cx, region)
+	}
 
-		Some((Self { cell, complex }, cell))
+	fn build_with_id(cx: &mut GenerationContext, id: Id) -> Option<(Self, Aabb3d)> {
+		let cell = id.origin_cell_bounds()?;
+		let seed = cx.get_or_generate::<WatershedConfigs>(Id::Universal)?.seed;
+		let high = cx.get_or_generate_in::<PocketWatersHighPass>(cell);
+		let low = cx.get_or_generate_in::<PocketWatersLowPass>(cell);
+		let nodes = high
+			.iter()
+			.flat_map(|pass| pass.hydro_nodes())
+			.chain(low.iter().flat_map(|pass| pass.hydro_nodes()));
+		Some((Self::union(cell, seed, nodes), cell))
+	}
+}
+
+impl HydroComplexCell {
+	/// The complex of `nodes` whose correction reaches `cell`.
+	pub fn union(cell: Aabb3d, seed: u32, nodes: impl IntoIterator<Item = HydroNode>) -> Self {
+		let cell_bounds = aabb_to_bounds2(cell);
+		let hydrology = nodes
+			.into_iter()
+			.filter(|node| node.correction_intersects(cell_bounds))
+			.collect();
+		let complex =
+			Arc::new(HydroComplex::new(cell_bounds, cell_seed(cell, seed)).with_hydro(hydrology));
+		Self { cell, complex }
 	}
 }
 
@@ -131,6 +150,18 @@ macro_rules! impl_correction_stage_cell {
 					spatial_index,
 					id,
 				)?;
+				let cell = complex_cell.cell;
+				Some((Self { cell, complex: complex_cell.indexed().cloned() }, cell))
+			}
+		}
+
+		impl shared::GenerationScheme for $Cell {
+			fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
+				cx.original_ids_for::<HydroComplexCell>(region)
+			}
+
+			fn build_with_id(cx: &mut GenerationContext, id: Id) -> Option<(Self, Aabb3d)> {
+				let complex_cell = cx.get_or_generate::<HydroComplexCell>(id)?;
 				let cell = complex_cell.cell;
 				Some((Self { cell, complex: complex_cell.indexed().cloned() }, cell))
 			}

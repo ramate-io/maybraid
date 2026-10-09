@@ -30,13 +30,14 @@ use lod::gen::{
 	GeneratingSpatialIndex, GenerationScheme, Id, LodScene, LodSceneLevel, LodSceneStatus,
 	OriginalId, SpatialIndex,
 };
+use lod::hcsg::shared::{self, GenerationContext};
 use lod::lod_ref::LodRef;
 use render_item::mesh::handle::Cached;
 use render_item::sdf::cpu_shot::{CpuShotBuilder, WallFaces};
 use std::sync::Arc;
 use terrain_shaders::TerrainShader;
 use terrain_stamps::StampModulation;
-use terrain_watersheds::WaterFill;
+use terrain_watersheds::{HydroComplex, WaterFill};
 
 pub use base_noise::BaseTerrainNoise;
 pub use cell::{
@@ -148,6 +149,14 @@ impl PreWatershedTerrain {
 		)?;
 		let id = Id::from_cell(layout.fine_cell_bounds_containing(x, z));
 		let pre = GeneratingSpatialIndex::<Self>::get_one_or_generate(spatial_index, id)?;
+		Some(pre.sdf.terrain().height_at_with_all_modulations(x, z))
+	}
+
+	/// [`Self::sample_height`] on the context.
+	pub fn sample_height_in(cx: &mut GenerationContext, x: f32, z: f32) -> Option<f32> {
+		let layout = cx.get_or_generate::<TerrainCellLayout>(Id::Universal)?;
+		let id = Id::from_cell(layout.fine_cell_bounds_containing(x, z));
+		let pre = cx.get_or_generate::<Self>(id)?;
 		Some(pre.sdf.terrain().height_at_with_all_modulations(x, z))
 	}
 }
@@ -310,11 +319,34 @@ impl JerseyStamps {
 		bounds: Aabb3d,
 	) -> Option<()> {
 		GeneratingSpatialIndex::<T>::for_each_origin(spatial_index, bounds, |stamp| {
-			if !stamp.modulations().is_empty() {
-				self.leaves.push(stamp.cell());
-				self.modulations.extend_from_slice(stamp.modulations());
-			}
+			self.take(stamp);
 		})
+	}
+
+	fn pull_in<T: StampLeaf + shared::GenerationScheme>(
+		&mut self,
+		cx: &mut GenerationContext,
+		bounds: Aabb3d,
+	) -> Option<()> {
+		for stamp in cx.get_or_generate_all_in::<T>(bounds)? {
+			self.take(&*stamp);
+		}
+		Some(())
+	}
+
+	fn take(&mut self, stamp: &impl StampLeaf) {
+		if !stamp.modulations().is_empty() {
+			self.leaves.push(stamp.cell());
+			self.modulations.extend_from_slice(stamp.modulations());
+		}
+	}
+}
+
+impl PreWatershedTerrain {
+	fn compose(cell: Aabb3d, base: BaseTerrainNoise, stamps: JerseyStamps) -> Self {
+		let JerseyStamps { modulations, leaves: jersey_leaves } = stamps;
+		let sdf = Self::compose_sdf(&base, &modulations);
+		Self { cell, base, modulations, jersey_leaves, sdf }
 	}
 }
 
@@ -365,10 +397,34 @@ where
 		stamps.pull::<PocketWaterLowPassStampCell, _>(spatial_index, bounds)?;
 		stamps.pull::<RollingLowPassStampCell, _>(spatial_index, bounds)?;
 		stamps.pull::<ValleyLowPassStampCell, _>(spatial_index, bounds)?;
+		Some((Self::compose(bounds, base, stamps), bounds))
+	}
+}
 
-		let JerseyStamps { modulations, leaves: jersey_leaves } = stamps;
-		let sdf = Self::compose_sdf(&base, &modulations);
-		Some((Self { cell: bounds, base, modulations, jersey_leaves, sdf }, bounds))
+impl shared::GenerationScheme for PreWatershedTerrain {
+	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
+		TerrainCellLayout::cell_ids_in(cx, region)
+	}
+
+	fn build_with_id(cx: &mut GenerationContext, id: Id) -> Option<(Self, Aabb3d)> {
+		let bounds = id.origin_cell_bounds()?;
+		let base = cx.get_or_generate::<BaseTerrainNoise>(Id::Universal)?;
+
+		// Composition order is global: high-pass (regional) bands, then low-pass (detail).
+		let mut stamps = JerseyStamps::default();
+		stamps.pull_in::<PlateauHighPassStampCell>(cx, bounds)?;
+		stamps.pull_in::<MassifHighPassStampCell>(cx, bounds)?;
+		stamps.pull_in::<CanyonHighPassStampCell>(cx, bounds)?;
+		stamps.pull_in::<PocketWaterHighPassStampCell>(cx, bounds)?;
+		stamps.pull_in::<RollingHighPassStampCell>(cx, bounds)?;
+		stamps.pull_in::<ValleyHighPassStampCell>(cx, bounds)?;
+		stamps.pull_in::<PlateauLowPassStampCell>(cx, bounds)?;
+		stamps.pull_in::<MassifLowPassStampCell>(cx, bounds)?;
+		stamps.pull_in::<CanyonLowPassStampCell>(cx, bounds)?;
+		stamps.pull_in::<PocketWaterLowPassStampCell>(cx, bounds)?;
+		stamps.pull_in::<RollingLowPassStampCell>(cx, bounds)?;
+		stamps.pull_in::<ValleyLowPassStampCell>(cx, bounds)?;
+		Some((Self::compose(bounds, BaseTerrainNoise::clone(&base), stamps), bounds))
 	}
 }
 
@@ -423,15 +479,6 @@ where
 		GeneratingSpatialIndex::<WatershedRimmingCell>::get_or_generate(spatial_index, id)?;
 		GeneratingSpatialIndex::<WatershedAproningCell>::get_or_generate(spatial_index, id)?;
 
-		let marazion_fills = complex.iter().cloned().map(WaterFill::from_hydro).collect();
-		let modulations: Vec<_> = pre
-			.modulations
-			.into_iter()
-			.map(ComposedElevationOp::Stamp)
-			.chain(complex.map(ComposedElevationOp::Hydro))
-			.collect();
-		let sdf = Arc::new(Self::compose_sdf(&pre.base, &modulations));
-
 		let layout = SpatialIndex::<TerrainCellLayout>::get(spatial_index, Id::Universal)
 			.cloned()
 			.unwrap_or_default();
@@ -439,24 +486,78 @@ where
 			spatial_index,
 			Id::Universal,
 		)?;
-		let (res_2, wall_faces) = assets.mesh_params_for_cell(bounds, &layout);
-		let cell_size = (Vec3::from(bounds.max) - Vec3::from(bounds.min)).x;
+		let terrain = Self::compose(bounds, &pre, marazion_leaves, complex, &layout, assets);
+		Some((terrain, bounds))
+	}
+}
 
-		Some((
-			Self {
-				cell: bounds,
-				base: pre.base,
-				modulations,
-				jersey_leaves: pre.jersey_leaves,
-				marazion_leaves,
-				marazion_fills,
-				sdf,
-				material: assets.material.clone(),
-				res_2,
-				stream_ring: layout.stream_ring_for_cell_size(cell_size),
-				wall_faces,
-			},
-			bounds,
-		))
+impl shared::GenerationScheme for Terrain {
+	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
+		cx.original_ids_for::<PreWatershedTerrain>(region)
+	}
+
+	fn build_with_id(cx: &mut GenerationContext, id: Id) -> Option<(Self, Aabb3d)> {
+		let bounds = id.origin_cell_bounds()?;
+		let pre = cx.get_or_generate::<PreWatershedTerrain>(id)?;
+
+		// Authored leaf overlays (banded); hydrology composition is cellular below.
+		let high = cx.get_or_generate_all_in::<PocketWatersHighPass>(bounds)?;
+		let low = cx.get_or_generate_all_in::<PocketWatersLowPass>(bounds)?;
+		let marazion_leaves = high
+			.iter()
+			.map(|leaf| leaf.leaf_bounds())
+			.chain(low.iter().map(|leaf| leaf.leaf_bounds()))
+			.collect();
+
+		let complex = cx.get_or_generate::<HydroComplexCell>(id)?.indexed().cloned();
+
+		// Keep stage cells materialized for later policy work; elevation uses
+		// the cellular HydroComplex directly (internal carve → rim → apron).
+		cx.get_or_generate::<WatershedCarvingCell>(id)?;
+		cx.get_or_generate::<WatershedRimmingCell>(id)?;
+		cx.get_or_generate::<WatershedAproningCell>(id)?;
+
+		let layout = cx.get::<TerrainCellLayout>(Id::Universal).unwrap_or_default();
+		let assets = cx.get_or_generate::<TerrainPresentationAssets>(Id::Universal)?;
+		let terrain = Self::compose(bounds, &pre, marazion_leaves, complex, &layout, &assets);
+		Some((terrain, bounds))
+	}
+}
+
+impl Terrain {
+	/// Corrects `pre` with the cell's hydro `complex` and fits its mesh to
+	/// `layout`'s streams.
+	fn compose(
+		cell: Aabb3d,
+		pre: &PreWatershedTerrain,
+		marazion_leaves: Vec<WatershedLeafBounds>,
+		complex: Option<Arc<HydroComplex>>,
+		layout: &TerrainCellLayout,
+		assets: &TerrainPresentationAssets,
+	) -> Self {
+		let marazion_fills = complex.iter().cloned().map(WaterFill::from_hydro).collect();
+		let modulations: Vec<_> = pre
+			.modulations
+			.iter()
+			.cloned()
+			.map(ComposedElevationOp::Stamp)
+			.chain(complex.map(ComposedElevationOp::Hydro))
+			.collect();
+		let sdf = Arc::new(Self::compose_sdf(&pre.base, &modulations));
+		let (res_2, wall_faces) = assets.mesh_params_for_cell(cell, layout);
+		let cell_size = (Vec3::from(cell.max) - Vec3::from(cell.min)).x;
+		Self {
+			cell,
+			base: pre.base.clone(),
+			modulations,
+			jersey_leaves: pre.jersey_leaves.clone(),
+			marazion_leaves,
+			marazion_fills,
+			sdf,
+			material: assets.material.clone(),
+			res_2,
+			stream_ring: layout.stream_ring_for_cell_size(cell_size),
+			wall_faces,
+		}
 	}
 }

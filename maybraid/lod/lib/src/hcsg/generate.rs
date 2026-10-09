@@ -659,8 +659,8 @@ pub fn universal_bounds() -> Aabb3d {
 }
 
 /// Declares `T` a seeded root input: its only origin is `Id::Universal` and
-/// it is never built, only [`Seed`]ed. Consumers still read it with
-/// `get_one_or_generate(Id::Universal)`.
+/// it is never built, only [`Seed`]ed (or seeded into the shared storage).
+/// Consumers still read it with `get_one_or_generate(Id::Universal)`.
 #[macro_export]
 macro_rules! seeded_root {
 	($T:ty) => {
@@ -674,6 +674,22 @@ macro_rules! seeded_root {
 
 			fn build_with_id(
 				_spatial_index: &mut S,
+				_id: $crate::gen::Id,
+			) -> Option<(Self, bevy::math::bounding::Aabb3d)> {
+				None
+			}
+		}
+
+		impl $crate::hcsg::shared::GenerationScheme for $T {
+			fn original_ids_for(
+				_cx: &mut $crate::hcsg::shared::GenerationContext,
+				_region: bevy::math::bounding::Aabb3d,
+			) -> Vec<$crate::gen::OriginalId> {
+				vec![$crate::gen::OriginalId::universal()]
+			}
+
+			fn build_with_id(
+				_cx: &mut $crate::hcsg::shared::GenerationContext,
 				_id: $crate::gen::Id,
 			) -> Option<(Self, bevy::math::bounding::Aabb3d)> {
 				None

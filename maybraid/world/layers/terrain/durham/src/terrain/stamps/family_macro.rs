@@ -77,7 +77,8 @@ macro_rules! define_stamp_family {
 
 		$crate::terrain::cell::derived_universal_scheme!(
 			$Layout,
-			|_index| Some($Layout::default())
+			|_index| Some($Layout::default()),
+			|_cx| Some($Layout::default())
 		);
 
 		impl $crate::terrain::cell::CellTiling for $Layout {
@@ -138,6 +139,28 @@ macro_rules! define_stamp_family {
 			}
 		}
 
+		impl lod::hcsg::shared::GenerationScheme for $Controller {
+			fn original_ids_for(
+				cx: &mut lod::hcsg::shared::GenerationContext,
+				region: bevy::math::bounding::Aabb3d,
+			) -> Vec<lod::gen::OriginalId> {
+				<$Layout as $crate::terrain::cell::CellTiling>::cell_ids_in(cx, region)
+			}
+
+			fn build_with_id(
+				cx: &mut lod::hcsg::shared::GenerationContext,
+				id: lod::gen::Id,
+			) -> Option<(Self, bevy::math::bounding::Aabb3d)> {
+				let bounds = id.origin_cell_bounds()?;
+				let configs = cx
+					.get_or_generate::<$crate::terrain::stamps::configs::TerrainStampConfigs>(
+						lod::gen::Id::Universal,
+					)?;
+				let family = &configs.$config_family.$config_band;
+				Some((Self::from_family_config(bounds, family), bounds))
+			}
+		}
+
 		/// Stamp output on one leaf of this band's guillotine partition.
 		#[derive(Debug, Clone, bevy::prelude::Component)]
 		pub struct $Stamp {
@@ -184,6 +207,42 @@ macro_rules! define_stamp_family {
 				let base = lod::gen::GeneratingSpatialIndex::<
 					$crate::terrain::base_noise::BaseTerrainNoise,
 				>::get_one_or_generate(spatial_index, lod::gen::Id::Universal)?;
+				Some((Self::on_leaf(cell, &configs, base), cell))
+			}
+		}
+
+		impl lod::hcsg::shared::GenerationScheme for $Stamp {
+			fn original_ids_for(
+				cx: &mut lod::hcsg::shared::GenerationContext,
+				region: bevy::math::bounding::Aabb3d,
+			) -> Vec<lod::gen::OriginalId> {
+				<$Controller as $crate::terrain::stamps::shared::LeafAabbs>::leaf_ids_in(cx, region)
+			}
+
+			fn build_with_id(
+				cx: &mut lod::hcsg::shared::GenerationContext,
+				id: lod::gen::Id,
+			) -> Option<(Self, bevy::math::bounding::Aabb3d)> {
+				let cell = id.origin_cell_bounds()?;
+				let configs = cx
+					.get_or_generate::<$crate::terrain::stamps::configs::TerrainStampConfigs>(
+						lod::gen::Id::Universal,
+					)?;
+				let base = cx.get_or_generate::<$crate::terrain::base_noise::BaseTerrainNoise>(
+					lod::gen::Id::Universal,
+				)?;
+				Some((Self::on_leaf(cell, &configs, &base), cell))
+			}
+		}
+
+		impl $Stamp {
+			/// This band's stamp on leaf `cell`: empty unless the occupancy
+			/// gate selects the leaf.
+			pub fn on_leaf(
+				cell: bevy::math::bounding::Aabb3d,
+				configs: &$crate::terrain::stamps::configs::TerrainStampConfigs,
+				base: &$crate::terrain::base_noise::BaseTerrainNoise,
+			) -> Self {
 				let family = &configs.$config_family.$config_band;
 				let $seed =
 					$crate::terrain::stamps::shared::family_seed(base.seed, cell, $family_salt);
@@ -199,7 +258,7 @@ macro_rules! define_stamp_family {
 					family.likelihood,
 					family.spatial_correlation,
 				) {
-					return Some((Self { cell, modulations: Vec::new() }, cell));
+					return Self { cell, modulations: Vec::new() };
 				}
 				let $bounds = $crate::terrain::stamps::shared::bounds2(cell);
 				let strength = $crate::terrain::stamps::shared::sample_strength(
@@ -214,7 +273,7 @@ macro_rules! define_stamp_family {
 				// Hard-clip + edge ease to the leaf AABB so support is identity
 				// outside the leaf (neighbors may omit this stamp).
 				let modulations = terrain_stamps::StampModulation::bind_all($build, $bounds);
-				Some((Self { cell, modulations }, cell))
+				Self { cell, modulations }
 			}
 		}
 	};

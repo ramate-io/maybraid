@@ -4,6 +4,7 @@ use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::math::{IVec2, UVec2, Vec3};
 use bevy::prelude::*;
 use lod::gen::{GeneratingSpatialIndex, Id, OriginalId};
+use lod::hcsg::shared::{self, GenerationContext};
 use lod::LodSceneLevel;
 
 /// Naturescapes cascade `min_size`.
@@ -55,13 +56,14 @@ pub fn universal_bounds() -> Aabb3d {
 	Aabb3d::from_min_max(Vec3::splat(-1_000_000.0), Vec3::splat(1_000_000.0))
 }
 
-/// [`lod::gen::GenerationScheme`] for a world singleton at [`Id::Universal`]
-/// derived from other universals (or a constant).
+/// Legacy and shared schemes for a world singleton at [`Id::Universal`]
+/// derived from other universals (or a constant): `$build` reads the legacy
+/// index, `$native` the [`GenerationContext`].
 ///
 /// Root inputs nothing can derive use [`lod::seeded_root`] instead. Either
 /// way, consumers read the value with `get_one_or_generate(Id::Universal)`.
 macro_rules! derived_universal_scheme {
-	($T:ty $(, where S: $bound:path)?, |$index:ident| $build:expr) => {
+	($T:ty $(, where S: $bound:path)?, |$index:ident| $build:expr, |$cx:ident| $native:expr) => {
 		impl<S $(: $bound)?> lod::gen::GenerationScheme<S> for $T {
 			fn original_ids_for(
 				_spatial_index: &mut S,
@@ -78,6 +80,25 @@ macro_rules! derived_universal_scheme {
 					return None;
 				}
 				Some(($build?, $crate::terrain::cell::universal_bounds()))
+			}
+		}
+
+		impl lod::hcsg::shared::GenerationScheme for $T {
+			fn original_ids_for(
+				_cx: &mut lod::hcsg::shared::GenerationContext,
+				_region: bevy::math::bounding::Aabb3d,
+			) -> Vec<lod::gen::OriginalId> {
+				vec![lod::gen::OriginalId::universal()]
+			}
+
+			fn build_with_id(
+				$cx: &mut lod::hcsg::shared::GenerationContext,
+				id: lod::gen::Id,
+			) -> Option<(Self, bevy::math::bounding::Aabb3d)> {
+				if id != lod::gen::Id::Universal {
+					return None;
+				}
+				Some(($native?, $crate::terrain::cell::universal_bounds()))
 			}
 		}
 	};
@@ -100,6 +121,16 @@ pub trait CellTiling: Sized {
 		S: GeneratingSpatialIndex<Self>,
 	{
 		GeneratingSpatialIndex::<Self>::get_one_or_generate(spatial_index, Id::Universal)
+			.map(|layout| layout.cell_ids(region))
+			.unwrap_or_default()
+	}
+
+	/// [`Self::cell_ids`] on the context's Universal layout; empty if it cannot be built.
+	fn cell_ids_in(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId>
+	where
+		Self: shared::GenerationScheme,
+	{
+		cx.get_or_generate::<Self>(Id::Universal)
 			.map(|layout| layout.cell_ids(region))
 			.unwrap_or_default()
 	}

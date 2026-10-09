@@ -4208,15 +4208,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "elsa"
-version = "1.11.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9abf33c656a7256451ebb7d0082c5a471820c31269e49d807c538c252352186e"
-dependencies = [
- "stable_deref_trait",
-]
-
-[[package]]
 name = "ena"
 version = "0.14.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6577,7 +6568,6 @@ version = "0.1.2"
 dependencies = [
  "anyhow",
  "bevy",
- "elsa",
  "gimme-core",
  "lod-cascade",
  "lod-cascade-system",

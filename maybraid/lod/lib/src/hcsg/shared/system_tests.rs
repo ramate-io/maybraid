@@ -4,7 +4,7 @@
 use std::time::Duration;
 
 use bevy::ecs::system::SystemParamItem;
-use bevy::math::bounding::Aabb3d;
+use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::math::Vec3;
 use bevy::prelude::*;
 use bevy::scene::ScenePlugin;
@@ -184,6 +184,32 @@ fn presentation_replaces_hosts_whose_value_changed_across_an_epoch() -> anyhow::
 		assert!(app.world().get_entity(*before_entity).is_err(), "stale host despawned");
 	}
 	Ok(())
+}
+
+impl GenerationScheme for Terrain {
+	fn original_ids_for(_: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
+		(region.min.x.floor() as i32..=region.max.x.ceil() as i32)
+			.map(|x| OriginalId(Id::from_cell(cell(x as f32))))
+			.filter(|OriginalId(id)| id.origin_cell_bounds().is_some_and(|b| region.intersects(&b)))
+			.collect()
+	}
+
+	fn build_with_id(_: &mut GenerationContext, id: Id) -> Option<(Self, Aabb3d)> {
+		let bounds = id.origin_cell_bounds()?;
+		Some((Self { cell: bounds }, bounds))
+	}
+}
+
+/// Stands on the [`Terrain`] at its own id.
+impl GenerationScheme for Vegetation {
+	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
+		cx.original_ids_for::<Terrain>(region)
+	}
+
+	fn build_with_id(cx: &mut GenerationContext, id: Id) -> Option<(Self, Aabb3d)> {
+		let terrain = cx.get_or_generate::<Terrain>(id)?;
+		Some((Self { cell: terrain.cell }, terrain.cell))
+	}
 }
 
 /// The cells a session keeps.
