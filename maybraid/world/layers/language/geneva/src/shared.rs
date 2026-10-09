@@ -8,6 +8,7 @@
 
 use std::marker::PhantomData;
 
+use bevy::ecs::system::SystemParam;
 use bevy::math::bounding::Aabb3d;
 use bevy::math::DVec3;
 use bevy::prelude::*;
@@ -309,6 +310,7 @@ impl<C: Send + Sync + 'static, W: LanguageGround> Plugin for GenevaPlugin<C, W> 
 mod tests {
 	use std::time::Duration;
 
+	use bevy::ecs::system::SystemParamItem;
 	use bevy::scene::ScenePlugin;
 	use bevy::state::app::StatesPlugin;
 	use chico::{ChicoPresentationPlugin, ChicoRoots, ForestSelection, GroveNeighborhood};
