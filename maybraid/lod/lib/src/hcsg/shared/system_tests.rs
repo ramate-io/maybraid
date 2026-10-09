@@ -17,7 +17,7 @@ use crate::scene::refresh::LodSceneRefreshChunkPlugin;
 use crate::scene::{LodHostBounds, LodSceneHost, LodViewer};
 
 use super::{
-	GenerationContext, GenerationPlugin, GenerationScheme, HcsgBounds, HcsgBoundsPlugin,
+	GenerationContext, GenerationPlugin, GenerationScheme, HcsgBounds, HcsgBoundsPlugin, HcsgClass,
 	HcsgDemand, HcsgNode, HcsgStorage, PresentationPlugin,
 };
 
@@ -29,6 +29,8 @@ struct Window(Vec<Aabb3d>);
 struct WindowBounds;
 
 impl HcsgBounds for WindowBounds {
+	const CLASS: HcsgClass = HcsgClass::Near;
+
 	type Param = Res<'static, Window>;
 
 	fn regions(window: &SystemParamItem<Self::Param>) -> Vec<Aabb3d> {

@@ -11,8 +11,14 @@ use bevy::prelude::Resource;
 
 use crate::gen::{Id, OriginalId};
 
+use super::bounds::HcsgClass;
 use super::context::{GenerationContext, GenerationScheme};
 use super::storage::Busy;
+
+/// Ids the worker generates in one quantum before returning to the scheduler.
+pub const QUANTUM_IDS: usize = 32;
+/// Wall time after which a quantum yields, even if fewer ids have run.
+pub const QUANTUM_TIME: Duration = Duration::from_millis(30);
 
 /// Handle a generation or presentation system keeps for its one subscription.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -32,8 +38,14 @@ fn generate<T: GenerationScheme>(cx: &mut GenerationContext, id: Id) -> bool {
 struct Subscription {
 	regions: Vec<Aabb3d>,
 	focus: Option<Vec3>,
+	class: HcsgClass,
+	pass: f64,
 	discover: Discover,
 	generate: Generate,
+	/// Deduped, focus-sorted ids, once discovery has run.
+	discovered: Option<Vec<Id>>,
+	/// Next index in [`Self::discovered`] to generate.
+	cursor: usize,
 	/// Every discovered id whose value is available, in the order it landed.
 	published: Vec<Id>,
 	done: bool,
@@ -55,21 +67,35 @@ struct DemandState {
 	shutdown: bool,
 }
 
-#[derive(Default)]
 struct DemandShared {
 	next_id: AtomicU64,
+	picks: AtomicU64,
 	state: Mutex<DemandState>,
 	/// Notified when there is work, or on shutdown.
 	wake: Condvar,
-	/// Notified when the worker finishes a subscription or runs out of work.
+	/// Notified when the worker finishes a quantum or runs out of work.
 	idle: Condvar,
 }
 
-/// One subscription per generation or presentation system, filled newest
-/// first by the [`super::HcsgWorker`].
+impl Default for DemandShared {
+	fn default() -> Self {
+		Self {
+			next_id: AtomicU64::new(0),
+			picks: AtomicU64::new(0),
+			state: Mutex::new(DemandState::default()),
+			wake: Condvar::new(),
+			idle: Condvar::new(),
+		}
+	}
+}
+
+/// One subscription per generation or presentation system, filled in
+/// weighted quanta by the [`super::HcsgWorker`].
 ///
 /// A subscription's regions never change: new regions replace the subscription,
-/// which cancels whatever the worker was still doing for the old one.
+/// which cancels whatever the worker was still doing for the old one. A
+/// replacement inherits the predecessor's stride `pass`, so resubscribing
+/// cannot jump the queue.
 #[derive(Resource, Clone, Default)]
 pub struct HcsgDemand(Arc<DemandShared>);
 
@@ -82,14 +108,54 @@ pub struct Published {
 	pub done: bool,
 }
 
-/// One subscription the worker is filling.
-pub(super) struct Job {
+/// One subscription the worker is filling for a quantum.
+pub(crate) struct Job {
 	pub id: SubscriptionId,
 	pub regions: Vec<Aabb3d>,
 	pub focus: Option<Vec3>,
 	pub discover: Discover,
 	pub generate: Generate,
 	pub cancelled: Arc<AtomicBool>,
+	pub discovered: Option<Vec<Id>>,
+	pub cursor: usize,
+}
+
+/// What the worker writes back after one quantum.
+pub(crate) struct QuantumProgress {
+	pub discovered: Option<Vec<Id>>,
+	pub cursor: usize,
+	pub cost: u32,
+	pub done: bool,
+}
+
+fn min_pass(state: &DemandState) -> f64 {
+	state
+		.subscriptions
+		.values()
+		.filter(|subscription| !subscription.done)
+		.map(|subscription| subscription.pass)
+		.min_by(|a, b| a.total_cmp(b))
+		.unwrap_or(0.0)
+}
+
+fn pick_job(state: &mut DemandState) -> Option<Job> {
+	let id = state
+		.subscriptions
+		.iter()
+		.filter(|(_, subscription)| !subscription.done)
+		.min_by(|(id_a, a), (id_b, b)| a.pass.total_cmp(&b.pass).then(id_b.cmp(id_a)))
+		.map(|(id, _)| *id)?;
+	let subscription = state.subscriptions.get_mut(&id)?;
+	Some(Job {
+		id,
+		regions: subscription.regions.clone(),
+		focus: subscription.focus,
+		discover: subscription.discover,
+		generate: subscription.generate,
+		cancelled: Arc::clone(&subscription.cancelled),
+		discovered: subscription.discovered.take(),
+		cursor: subscription.cursor,
+	})
 }
 
 impl HcsgDemand {
@@ -107,25 +173,37 @@ impl HcsgDemand {
 
 	/// Replaces `previous` (if any) with a subscription to `T` over `regions`,
 	/// under one lock, and wakes the worker.
+	///
+	/// A replacement inherits `previous`'s stride `pass`. A new subscription
+	/// starts at the current minimum `pass` among live work.
 	pub fn subscribe<T: GenerationScheme>(
 		&self,
 		previous: Option<SubscriptionId>,
 		regions: Vec<Aabb3d>,
 		focus: Option<Vec3>,
+		class: HcsgClass,
 	) -> SubscriptionId {
 		let id = SubscriptionId(self.0.next_id.fetch_add(1, Ordering::Relaxed));
 		let mut state = self.lock();
-		if let Some(previous) = previous.and_then(|previous| state.subscriptions.remove(&previous))
-		{
-			previous.cancel();
-		}
+		let inherited =
+			previous
+				.and_then(|previous| state.subscriptions.remove(&previous))
+				.map(|previous| {
+					previous.cancel();
+					previous.pass
+				});
+		let pass = inherited.unwrap_or_else(|| min_pass(&state));
 		state.subscriptions.insert(
 			id,
 			Subscription {
 				regions,
 				focus,
+				class,
+				pass,
 				discover: discover::<T>,
 				generate: generate::<T>,
+				discovered: None,
+				cursor: 0,
 				published: Vec::new(),
 				done: false,
 				cancelled: Arc::new(AtomicBool::new(false)),
@@ -206,29 +284,17 @@ impl HcsgDemand {
 		}
 	}
 
-	/// The newest unfinished subscription, blocking until there is one.
-	/// `None` once shut down.
+	/// The unfinished subscription with the lowest stride `pass`, newest
+	/// first among ties. Blocks until there is one. `None` once shut down.
 	pub(super) fn next_job(&self) -> Option<Job> {
 		let mut state = self.lock();
 		loop {
 			if state.shutdown {
 				return None;
 			}
-			let newest = state
-				.subscriptions
-				.iter()
-				.filter(|(_, subscription)| !subscription.done)
-				.max_by_key(|(id, _)| **id)
-				.map(|(id, subscription)| Job {
-					id: *id,
-					regions: subscription.regions.clone(),
-					focus: subscription.focus,
-					discover: subscription.discover,
-					generate: subscription.generate,
-					cancelled: Arc::clone(&subscription.cancelled),
-				});
-			if let Some(job) = newest {
+			if let Some(job) = pick_job(&mut state) {
 				state.working = true;
+				self.0.picks.fetch_add(1, Ordering::Relaxed);
 				return Some(job);
 			}
 			self.0.idle.notify_all();
@@ -242,17 +308,46 @@ impl HcsgDemand {
 		}
 	}
 
-	pub(super) fn finish(&self, job: &Job) {
+	pub(super) fn finish_quantum(&self, id: SubscriptionId, progress: QuantumProgress) {
 		let mut state = self.lock();
 		state.working = false;
-		if let Some(subscription) = state.subscriptions.get_mut(&job.id) {
-			subscription.done = true;
+		if let Some(subscription) = state.subscriptions.get_mut(&id) {
+			subscription.discovered = progress.discovered;
+			subscription.cursor = progress.cursor;
+			if progress.done {
+				subscription.done = true;
+			} else if progress.cost > 0 {
+				subscription.pass +=
+					f64::from(progress.cost) / f64::from(subscription.class.weight());
+			}
 		}
 		self.0.idle.notify_all();
+		self.0.wake.notify_all();
 	}
 
 	pub(super) fn shutdown(&self) {
 		self.lock().shutdown = true;
 		self.0.wake.notify_all();
+	}
+
+	/// How many times the worker has taken a quantum. Tests use this to check
+	/// that a lone subscription yields once per quantum, not once per id.
+	pub fn scheduler_picks(&self) -> u64 {
+		self.0.picks.load(Ordering::Relaxed)
+	}
+
+	/// Non-blocking pick for scheduler tests. The caller must
+	/// [`Self::finish_quantum`].
+	#[cfg(test)]
+	pub(crate) fn try_pick(&self) -> Option<Job> {
+		let mut state = self.lock();
+		let job = pick_job(&mut state)?;
+		state.working = true;
+		Some(job)
+	}
+
+	#[cfg(test)]
+	pub(crate) fn pass_of(&self, id: SubscriptionId) -> Option<f64> {
+		self.lock().subscriptions.get(&id).map(|subscription| subscription.pass)
 	}
 }

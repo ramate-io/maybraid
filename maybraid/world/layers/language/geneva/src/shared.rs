@@ -21,8 +21,8 @@ use durham::terrain::{
 };
 use lod::gen::{Id, OriginalId};
 use lod::hcsg::shared::{
-	self, Busy, GenerationContext, GenerationPlugin, HcsgBounds, HcsgRegions, HcsgStorage,
-	HcsgSystems,
+	self, Busy, GenerationContext, GenerationPlugin, HcsgBounds, HcsgClass, HcsgRegions,
+	HcsgStorage, HcsgSystems,
 };
 use lod::hcsg::universal_bounds;
 use lod::LodViewer;
@@ -112,6 +112,8 @@ impl LanguageNeighborhood {
 }
 
 impl HcsgBounds for LanguageNeighborhood {
+	const CLASS: HcsgClass = HcsgClass::Ambient;
+
 	type Param = Query<'static, 'static, &'static Transform, With<LodViewer>>;
 
 	fn regions(viewers: &SystemParamItem<Self::Param>) -> Vec<Aabb3d> {
@@ -274,7 +276,11 @@ fn track_language<C: Send + Sync + 'static>(
 	};
 	if center != window.naming {
 		window.naming = center;
-		naming.write(HcsgRegions::new(window.naming_box().into_iter().collect(), viewer));
+		naming.write(HcsgRegions::new(
+			window.naming_box().into_iter().collect(),
+			viewer,
+			HcsgClass::Ambient,
+		));
 	}
 }
 

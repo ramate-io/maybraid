@@ -18,7 +18,9 @@ use bevy::math::DVec3;
 use bevy::prelude::*;
 use chico::{ForestGround, GroundSurface};
 use lod::gen::{Id, LodScene, LodSceneLevel, LodSceneStatus, OriginalId};
-use lod::hcsg::shared::{self, GenerationContext, HcsgBounds, HcsgNode, PresentationPlugin};
+use lod::hcsg::shared::{
+	self, GenerationContext, HcsgBounds, HcsgClass, HcsgNode, PresentationPlugin,
+};
 use lod::lod_ref::LodRef;
 use lod::scene::LodSceneRefreshChunkPlugin;
 use lod::LodViewer;
@@ -222,6 +224,8 @@ impl MobNeighborhood {
 }
 
 impl HcsgBounds for MobNeighborhood {
+	const CLASS: HcsgClass = HcsgClass::Near;
+
 	type Param = Query<'static, 'static, &'static Transform, With<LodViewer>>;
 
 	fn regions(viewers: &SystemParamItem<Self::Param>) -> Vec<Aabb3d> {

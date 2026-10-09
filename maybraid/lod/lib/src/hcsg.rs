@@ -6,7 +6,7 @@ pub mod shared;
 
 pub use shared::node_store::{NodeStore, StoredEntry, DEFAULT_BASE_SCALE};
 pub use shared::{
-	bounds::{Gated, HcsgBounds, HcsgBoundsPlugin, HcsgGate, HcsgRegions},
+	bounds::{Gated, HcsgBounds, HcsgBoundsPlugin, HcsgClass, HcsgGate, HcsgRegions},
 	context::{GenerationContext, GenerationScheme},
 	demand::{HcsgDemand, Published, SubscriptionId},
 	generation::GenerationPlugin,

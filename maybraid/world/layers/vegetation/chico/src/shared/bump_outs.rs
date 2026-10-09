@@ -14,7 +14,9 @@ use bevy::ecs::system::SystemParamItem;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use lod::gen::{Id, LodScene, LodSceneLevel, LodSceneStatus, OriginalId};
-use lod::hcsg::shared::{self, GenerationContext, HcsgBounds, HcsgNode, PresentationPlugin};
+use lod::hcsg::shared::{
+	self, GenerationContext, HcsgBounds, HcsgClass, HcsgNode, PresentationPlugin,
+};
 use lod::lod_ref::LodRef;
 use lod::scene::{LodRefreshRegions, LodRefreshRegionsStatus};
 use lod::{LodSceneRefreshRegionPlugin, LodViewer};
@@ -211,6 +213,8 @@ impl<P: CanopyProxy> BumpOutRing<P> {
 }
 
 impl<P: CanopyProxy> HcsgBounds for BumpOutRing<P> {
+	const CLASS: HcsgClass = HcsgClass::Near;
+
 	type Param = Query<'static, 'static, &'static Transform, With<LodViewer>>;
 
 	fn regions(viewers: &SystemParamItem<Self::Param>) -> Vec<Aabb3d> {
