@@ -26,6 +26,7 @@ pub mod node;
 pub mod node_store;
 pub mod presentation;
 pub mod runtime;
+pub mod session;
 pub mod storage;
 pub mod worker;
 
@@ -41,5 +42,9 @@ pub use generation::GenerationPlugin;
 pub use node::HcsgNode;
 pub use presentation::{PresentationPlugin, RetiredHost};
 pub use runtime::HcsgSystems;
+pub use session::{
+	register_session_seed, request_hcsg_session_restart,
+	HcsgRestartRequest, HcsgSessionPlugin, HcsgSessionRestarted, HcsgSessionSeed,
+};
 pub use storage::{Busy, HcsgStorage, HcsgValue};
 pub use worker::HcsgWorker;

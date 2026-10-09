@@ -14,7 +14,7 @@ use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use lod::gen::{Id, OriginalId};
 use lod::hcsg::shared::{
-	self, GenerationContext, HcsgBounds, HcsgClass, HcsgNode, HcsgStorage, HcsgValue,
+	self, GenerationContext, HcsgBounds, HcsgClass, HcsgNode, HcsgValue,
 	PresentationPlugin,
 };
 use lod::lod_ref::LodRef;
@@ -71,16 +71,6 @@ impl<R, T> Streamed<R, T> {
 
 /// The playable world's three streams together.
 pub struct PlayableStreams;
-
-impl PlayableStreams {
-	/// Drops `T` from every playable stream. Within a restart, after the
-	/// epoch has advanced.
-	pub fn clear<T: HcsgValue>(storage: &HcsgStorage) {
-		storage.clear::<Streamed<NearStream, T>>();
-		storage.clear::<Streamed<FarStream, T>>();
-		storage.clear::<Streamed<BackgroundStream, T>>();
-	}
-}
 
 impl<R: TerrainStream, T: shared::GenerationScheme> shared::GenerationScheme for Streamed<R, T> {
 	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {

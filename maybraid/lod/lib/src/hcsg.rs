@@ -13,6 +13,9 @@ pub use shared::{
 	node::HcsgNode,
 	presentation::{PresentationPlugin, RetiredHost},
 	runtime::HcsgSystems,
+	session::{
+		request_hcsg_session_restart, HcsgRestartRequest, HcsgSessionPlugin, HcsgSessionSeed,
+	},
 	storage::{Busy, HcsgStorage, HcsgValue},
 	worker::HcsgWorker,
 };

@@ -2,26 +2,24 @@
 //! furnishing and language, generated on the shared HCSG runtime and presented around the
 //! viewer while Discovery streams.
 
-use barking::{
-	BarkingNodes, BarkingPresentationPlugin, MobNeighborhood, MobScenePresentationPlugin,
-};
+use barking::{BarkingPresentationPlugin, MobNeighborhood, MobScenePresentationPlugin};
 use bevy::prelude::*;
 use chico::{
-	BumpOutPresentationPlugin, BumpOutRing, CanopyBumpOut, ChicoPresentationPlugin, ChicoRoots,
+	BumpOutPresentationPlugin, BumpOutRing, CanopyBumpOut, ChicoPresentationPlugin,
 	GroveNeighborhood, MediumCanopyBumpOut,
 };
 use durham::{
-	BackgroundStream, Durham, DurhamRoots, DurhamWorldPlugin, FarStream, NearStream,
-	StreamPresentationPlugin, StreamRing, Water,
+	BackgroundStream, Durham, DurhamWorldPlugin, FarStream, NearStream, StreamPresentationPlugin,
+	StreamRing, Water,
 };
-use geneva::{GenevaPlugin, GenevaRoots, LanguageNeighborhood};
+use geneva::{GenevaPlugin, LanguageNeighborhood};
 use layer_stack::{ActiveGenerationMode, GenerationModePlugin};
-use lod::hcsg::shared::{HcsgBoundsPlugin, HcsgDemand, HcsgStorage};
-use maputo::{FurnitureNeighborhood, MaputoNodes, MaputoPresentationPlugin};
+use lod::hcsg::shared::{HcsgBoundsPlugin, request_hcsg_session_restart};
+use maputo::{FurnitureNeighborhood, MaputoPresentationPlugin};
 use maybraid_game_mode_discover::{Discovery, InDiscovery};
 use richmond::{
 	AuthoredDevelopments, BuiltPresentationPlugin, DevelopmentNeighborhood, PaddedTerrain,
-	RichmondConfig, RichmondRoots,
+	RichmondConfig,
 };
 use terrain_layer_model::OnTerrain;
 use urbanization_layer_model::Urbanization;
@@ -93,25 +91,9 @@ impl Plugin for WorldLayersPlugin {
 			MobScenePresentationPlugin,
 			GenevaPlugin::<InDiscovery<LanguageNeighborhood>, Urban>::default(),
 		))
-		.add_systems(OnEnter(ActiveGenerationMode::of::<Discovery>()), start_session);
+		.add_systems(
+			OnEnter(ActiveGenerationMode::of::<Discovery>()),
+			request_hcsg_session_restart,
+		);
 	}
-}
-
-/// Ends every subscription and reseeds each layer's roots, so the world
-/// regenerates from the current seeds.
-fn start_session(
-	storage: Res<HcsgStorage>,
-	demand: Res<HcsgDemand>,
-	durham: DurhamRoots,
-	richmond: RichmondRoots,
-	chico: ChicoRoots,
-	geneva: GenevaRoots,
-) {
-	demand.advance_epoch();
-	durham.reset(&storage);
-	richmond.reset::<Ground>(&storage);
-	chico.reset::<Urban>(&storage);
-	BarkingNodes::clear::<Urban>(&storage);
-	MaputoNodes::clear::<Urban>(&storage);
-	geneva.reset::<Urban>(&storage);
 }

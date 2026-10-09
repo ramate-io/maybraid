@@ -4,7 +4,7 @@
 //! naming window Geneva derives from it. The frame only presents storage
 //! into the [`LanguageOverlay`].
 //!
-//! A session starts by advancing the epoch, then [`GenevaRoots::reset`].
+//! A session starts with [`lod::hcsg::request_hcsg_session_restart`].
 
 use std::marker::PhantomData;
 
@@ -22,7 +22,7 @@ use durham::terrain::{
 use lod::gen::{Id, OriginalId};
 use lod::hcsg::shared::{
 	self, Busy, GenerationContext, GenerationPlugin, HcsgBounds, HcsgClass, HcsgRegions,
-	HcsgStorage, HcsgSystems,
+	HcsgStorage, HcsgSystems, register_session_seed,
 };
 use lod::hcsg::universal_bounds;
 use lod::LodViewer;
@@ -143,8 +143,8 @@ const PLACES_SCALE: DVec3 = DVec3::new(
 );
 
 /// From one list of the sources named near the viewer, over ground `$W`:
-/// [`GenevaNodes`]' configure and clear, the naming window's generation, and
-/// the overlay's reads.
+/// [`GenevaNodes`]' configure, the naming window's generation, and the
+/// overlay's reads.
 macro_rules! geneva_nodes {
 	(<$W:ident> $($S:ty),* $(,)?) => {
 		impl GenevaNodes {
@@ -157,15 +157,6 @@ macro_rules! geneva_nodes {
 					.configure::<Named<Places<$W>>>(PLACES_SCALE);
 			}
 
-			/// Drops every value Geneva derived over ground `W`, and its root.
-			/// Within a restart, after the epoch has advanced.
-			pub fn clear<$W: LanguageGround>(storage: &HcsgStorage) {
-				storage.clear::<LargeTile>();
-				storage.clear::<Named<Regions>>();
-				storage.clear::<DevelopmentPlaces<$W>>();
-				$(storage.clear::<Named<$S>>();)*
-				storage.clear::<LanguageWorldSeed>();
-			}
 		}
 
 		/// Generates each source's names over ground `W` within the naming
@@ -219,12 +210,18 @@ pub struct GenevaRoots<'w> {
 }
 
 impl GenevaRoots<'_> {
-	/// Clears Geneva's stores over ground `W` and seeds the world seed.
-	/// Within a restart, after the epoch has advanced.
-	pub fn reset<W: LanguageGround>(&self, storage: &HcsgStorage) {
-		GenevaNodes::clear::<W>(storage);
+	/// Seeds Geneva's world seed root over ground `W`.
+	pub fn seed<W: LanguageGround>(&self, storage: &HcsgStorage) {
 		storage.seed(*self.seed, universal_bounds());
 	}
+}
+
+/// Seeds [`GenevaRoots`] during an HCSG session restart.
+pub fn seed_geneva_hcsg_roots<W: LanguageGround>(
+	roots: GenevaRoots,
+	storage: Res<HcsgStorage>,
+) {
+	roots.seed::<W>(storage.as_ref());
 }
 
 /// Geneva's naming window over channel `C`: [`LANGUAGE_NAME_RADIUS`] around
@@ -306,6 +303,7 @@ impl<C: Send + Sync + 'static, W: LanguageGround> Plugin for GenevaPlugin<C, W> 
 	fn build(&self, app: &mut App) {
 		let storage = app.world_mut().get_resource_or_init::<HcsgStorage>().clone();
 		GenevaNodes::configure::<W>(&storage);
+		register_session_seed(app, seed_geneva_hcsg_roots::<W>);
 		app.init_resource::<LanguageWorldSeed>()
 			.init_resource::<LanguageOverlay>()
 			.init_resource::<LanguageWindow>()
@@ -325,10 +323,10 @@ mod tests {
 	use bevy::state::app::StatesPlugin;
 	use chico::{ChicoPresentationPlugin, ChicoRoots, ForestSelection, GroveNeighborhood};
 	use durham::{
-		fine_patch_cell_layout, Durham, DurhamRoots, TerrainConfig, TerrainMeshAssets,
+		fine_patch_cell_layout, Durham, DurhamWindow, TerrainConfig, TerrainMeshAssets,
 		TerrainMeshLodBand, TerrainStampConfigs, WaterMeshAssets, WatershedConfigs,
 	};
-	use lod::hcsg::shared::{Gated, HcsgBoundsPlugin, HcsgDemand, HcsgGate};
+	use lod::hcsg::shared::{Gated, HcsgBoundsPlugin, HcsgDemand, HcsgGate, HcsgRestartRequest};
 	use lod::lod_ref::LodNodePose;
 	use richmond::{
 		AuthoredDevelopment, AuthoredDevelopments, DevelopmentConfig, DevelopmentKind,
@@ -346,9 +344,6 @@ mod tests {
 
 	const IDLE: Duration = Duration::from_secs(300);
 
-	#[derive(Resource)]
-	struct Restart(bool);
-
 	/// Whether the test's language channel is open.
 	#[derive(Resource)]
 	struct Open(bool);
@@ -365,18 +360,6 @@ mod tests {
 
 	type Window = Gated<Opened, LanguageNeighborhood>;
 
-	fn restart_language(
-		geneva: GenevaRoots,
-		storage: Res<HcsgStorage>,
-		demand: Res<HcsgDemand>,
-		mut pending: ResMut<Restart>,
-	) {
-		if std::mem::take(&mut pending.0) {
-			demand.advance_epoch();
-			geneva.reset::<Urban>(&storage);
-		}
-	}
-
 	fn spawn_viewer(app: &mut App, at: Vec3) {
 		let at = Transform::from_translation(at);
 		app.world_mut()
@@ -389,10 +372,9 @@ mod tests {
 		app.add_plugins((MinimalPlugins, StatesPlugin))
 			.add_plugins((AssetPlugin::default(), ScenePlugin))
 			.insert_resource(Open(true))
-			.insert_resource(Restart(true))
+			.insert_resource(HcsgRestartRequest::queued())
 			.add_plugins(HcsgBoundsPlugin::<Window>::default())
-			.add_plugins(GenevaPlugin::<Window, Urban>::default())
-			.add_systems(Update, restart_language.before(HcsgSystems));
+			.add_plugins(GenevaPlugin::<Window, Urban>::default());
 		app.finish();
 		app.cleanup();
 		spawn_viewer(&mut app, at);
@@ -484,7 +466,8 @@ mod tests {
 		settle(&mut app)?;
 		let before = region_names(&app);
 
-		app.insert_resource(LanguageWorldSeed(99)).insert_resource(Restart(true));
+		app.insert_resource(LanguageWorldSeed(99));
+		app.world_mut().resource_mut::<HcsgRestartRequest>().request();
 		settle(&mut app)?;
 		let after = region_names(&app);
 
@@ -540,24 +523,6 @@ mod tests {
 		Ok(())
 	}
 
-	fn restart_world(
-		durham: DurhamRoots,
-		richmond: RichmondRoots,
-		chico: ChicoRoots,
-		geneva: GenevaRoots,
-		storage: Res<HcsgStorage>,
-		demand: Res<HcsgDemand>,
-		mut pending: ResMut<Restart>,
-	) {
-		if std::mem::take(&mut pending.0) {
-			demand.advance_epoch();
-			durham.reset(&storage);
-			richmond.reset::<Ground>(&storage);
-			chico.reset::<Urban>(&storage);
-			geneva.reset::<Urban>(&storage);
-		}
-	}
-
 	/// One Les Halles authored inside one cell of the patch.
 	fn les_halles() -> AuthoredDevelopment {
 		AuthoredDevelopment {
@@ -603,14 +568,15 @@ mod tests {
 				..ForestSelection::default()
 			})
 			.insert_resource(Open(true))
-			.insert_resource(Restart(true))
+			.insert_resource(HcsgRestartRequest::queued())
 			.add_plugins((
 				HcsgBoundsPlugin::<GroveNeighborhood>::default(),
 				HcsgBoundsPlugin::<Window>::default(),
+				durham::WaterPresentationPlugin::<DurhamWindow>::default(),
+				richmond::BuiltPresentationPlugin::<GroveNeighborhood, Ground>::default(),
 			))
 			.add_plugins(ChicoPresentationPlugin::<GroveNeighborhood, Urban>::default())
-			.add_plugins(GenevaPlugin::<Window, Urban>::default())
-			.add_systems(Update, restart_world.before(HcsgSystems));
+			.add_plugins(GenevaPlugin::<Window, Urban>::default());
 		app.finish();
 		app.cleanup();
 		spawn_viewer(&mut app, Vec3::ZERO);

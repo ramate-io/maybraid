@@ -37,10 +37,6 @@ impl UrbanizationNodes {
 		storage.configure::<SelectedUrbanization>(SELECTION_SCALE);
 	}
 
-	/// Drops every selection from the shared storage.
-	pub fn clear(storage: &shared::HcsgStorage) {
-		storage.clear::<SelectedUrbanization>();
-	}
 }
 
 /// Urbanization reads over [`HcsgStorage`]. GET only: nothing is selected here.

@@ -5,7 +5,6 @@
 
 use bevy::math::bounding::Aabb3d;
 use bevy::math::{DVec3, Vec3};
-use durham::PlayableStreams;
 use lod::hcsg::{shared, HcsgStorage};
 
 use crate::built::Built;
@@ -66,12 +65,4 @@ impl RichmondNodes {
 			.configure::<PaddedTerrain<G>>(COLUMN_SCALE);
 	}
 
-	/// Drops every value Richmond derived over ground `G` from the shared storage.
-	pub fn clear<G: RichmondGround>(storage: &shared::HcsgStorage) {
-		storage.clear::<DevelopmentSite>();
-		storage.clear::<RichmondDevelopment<G>>();
-		storage.clear::<Built<G>>();
-		storage.clear::<PaddedTerrain<G>>();
-		PlayableStreams::clear::<PaddedTerrain<G>>(storage);
-	}
 }

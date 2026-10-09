@@ -1,6 +1,5 @@
 //! Durham's view of [`HcsgStorage`]: node registration and terrain read helpers.
 
-use crate::shared::PlayableStreams;
 use crate::terrain::base_noise::BaseTerrainNoise;
 use crate::terrain::cell::{
 	cell_bounds, universal_bounds, CellTiling, TerrainCellLayout, TERRAIN_CELL_SIZE,
@@ -36,8 +35,7 @@ use bevy::math::bounding::Aabb3d;
 use bevy::math::DVec3;
 use bevy::prelude::*;
 use lod::gen::{Id, OriginalId, Version};
-use lod::hcsg::shared::{self, HcsgDemand};
-use lod::hcsg::HcsgStorage;
+use lod::hcsg::shared::{self, HcsgStorage};
 use procedural_common::Bounds2;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -59,11 +57,6 @@ macro_rules! durham_nodes {
 			/// Configures Durham's stores in the shared storage.
 			pub fn configure(storage: &shared::HcsgStorage) {
 				$(storage.configure::<$T>(DURHAM_BASE_SCALE);)*
-			}
-
-			/// Drops every derived Durham value from the shared storage.
-			pub fn clear(storage: &shared::HcsgStorage) {
-				$(storage.clear::<$T>();)*
 			}
 		}
 	};
@@ -131,8 +124,8 @@ durham_nodes!(
 
 /// Durham's seeded root inputs as live resources.
 ///
-/// The [`crate::TerrainWindow`] producer and [`lod::hcsg::Seed`] keep these
-/// seeded during streaming. Hosts that regenerate synchronously reseed here.
+/// The [`crate::TerrainWindow`] producer keeps these seeded during streaming.
+/// Hosts that regenerate synchronously reseed here.
 #[derive(SystemParam)]
 pub struct DurhamRoots<'w> {
 	layout: Res<'w, TerrainCellLayout>,
@@ -147,24 +140,19 @@ impl DurhamRoots<'_> {
 		&self.layout
 	}
 
-	/// Starts a new shared session from the resources: ends the epoch (every
-	/// layer's subscriptions, so in-flight values are dropped), then resets.
-	pub fn restart(&self, storage: &shared::HcsgStorage, demand: &HcsgDemand) {
-		demand.advance_epoch();
-		self.reset(storage);
-	}
-
-	/// Clears Durham's derived values and seeds the roots. Within a restart,
-	/// after the epoch has advanced.
-	pub fn reset(&self, storage: &shared::HcsgStorage) {
-		DurhamNodes::clear(storage);
-		PlayableStreams::clear::<Water>(storage);
+	/// Seeds Durham's session roots in the shared storage.
+	pub fn seed(&self, storage: &shared::HcsgStorage) {
 		storage.seed(self.layout.clone(), universal_bounds());
 		storage.seed(self.stamps.clone(), universal_bounds());
 		storage.seed(self.watersheds.clone(), universal_bounds());
 		storage.seed(self.terrain_assets.clone(), universal_bounds());
 		storage.seed(self.water_assets.clone(), universal_bounds());
 	}
+}
+
+/// Seeds [`DurhamRoots`] during an HCSG session restart.
+pub fn seed_durham_hcsg_roots(roots: DurhamRoots, storage: Res<HcsgStorage>) {
+	roots.seed(storage.as_ref());
 }
 
 /// Cheap owned view of composed height fields for background consumers.
@@ -422,7 +410,7 @@ mod tests {
 		let id = storage.terrain_ids_overlapping(layout.request_region())[0];
 		let previous =
 			storage.entry::<Terrain>(id).ok_or_else(|| anyhow::anyhow!("inserted"))?.version;
-		DurhamNodes::clear(&storage);
+		storage.clear_derived();
 		assert_eq!(storage.terrain_count(), 0);
 		storage.insert_base_terrain_for_test(
 			&layout,

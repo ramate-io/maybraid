@@ -1,7 +1,7 @@
 //! Durham on the shared HCSG runtime ([`lod::hcsg::shared`]): terrain and
 //! water generate on the worker and present as [`HcsgNode`] hosts.
 //!
-//! Start a session with [`crate::DurhamRoots::restart`].
+//! Start a session with [`lod::hcsg::request_hcsg_session_restart`].
 
 use std::marker::PhantomData;
 use std::sync::Arc;
@@ -10,7 +10,10 @@ use bevy::ecs::system::{SystemParam, SystemParamItem};
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use lod::gen::Id;
-use lod::hcsg::shared::{Busy, HcsgBounds, HcsgClass, HcsgNode, HcsgStorage, PresentationPlugin};
+use lod::hcsg::shared::{
+	Busy, HcsgBounds, HcsgClass, HcsgNode, HcsgStorage, PresentationPlugin, register_session_seed,
+};
+use crate::terrain::index::seed_durham_hcsg_roots;
 use lod::scene::LodSceneRefreshChunkPlugin;
 use lod::LodViewer;
 use render_item::mesh::handle::MeshFulfillBudget;
@@ -85,6 +88,7 @@ impl<C: Send + Sync + 'static> Plugin for WaterPresentationPlugin<C> {
 	fn build(&self, app: &mut App) {
 		let storage = app.world_mut().get_resource_or_init::<HcsgStorage>().clone();
 		DurhamNodes::configure(&storage);
+		register_session_seed(app, seed_durham_hcsg_roots);
 		app.add_plugins(PresentationPlugin::<C, Water>::default());
 		if !app.is_plugin_added::<LodSceneRefreshChunkPlugin<HcsgNode<Water>>>() {
 			app.add_plugins(LodSceneRefreshChunkPlugin::<HcsgNode<Water>>::default());
@@ -94,7 +98,7 @@ impl<C: Send + Sync + 'static> Plugin for WaterPresentationPlugin<C> {
 
 /// The playable world's Durham: its rings, seed, meshing, shaders and
 /// collision. Streams present over it (see [`StreamPresentationPlugin`]); a
-/// session seeds its roots with [`crate::DurhamRoots::reset`].
+/// session seeds its roots through [`HcsgSessionSeed`](lod::hcsg::HcsgSessionSeed).
 pub struct DurhamWorldPlugin {
 	pub seed: u32,
 }
@@ -282,7 +286,7 @@ mod tests {
 
 	use bevy::scene::ScenePlugin;
 	use lod::gen::{Id, OriginalId, Version};
-	use lod::hcsg::shared::{HcsgBoundsPlugin, HcsgDemand, HcsgSystems};
+	use lod::hcsg::shared::{HcsgBoundsPlugin, HcsgDemand, HcsgRestartRequest, HcsgSystems};
 	use lod::lod_ref::LodNodePose;
 	use lod::LodViewer;
 
@@ -295,21 +299,6 @@ mod tests {
 	use crate::DurhamRoots;
 
 	const IDLE: Duration = Duration::from_secs(120);
-
-	/// Restart the session from the resources on the next update.
-	#[derive(Resource)]
-	struct Restart(bool);
-
-	fn restart(
-		roots: DurhamRoots,
-		storage: Res<HcsgStorage>,
-		demand: Res<HcsgDemand>,
-		mut pending: ResMut<Restart>,
-	) {
-		if std::mem::take(&mut pending.0) {
-			roots.restart(&storage, &demand);
-		}
-	}
 
 	fn seed_resources(app: &mut App, seed: u32) {
 		app.insert_resource(TerrainStampConfigs::from_world_seed(seed))
@@ -324,7 +313,7 @@ mod tests {
 				macro_cell_min_size: None,
 				macro_res_2: None,
 			})
-			.insert_resource(Restart(true));
+			.insert_resource(HcsgRestartRequest::queued());
 	}
 
 	/// A 2×2 fine patch at the origin, presented from the shared runtime.
@@ -337,8 +326,7 @@ mod tests {
 			.add_plugins((
 				HcsgBoundsPlugin::<DurhamWindow>::default(),
 				DurhamPresentationPlugin::<DurhamWindow>::default(),
-			))
-			.add_systems(Update, restart.before(HcsgSystems));
+			));
 		seed_resources(&mut app, 1);
 		let at = Transform::IDENTITY;
 		app.world_mut()

@@ -33,7 +33,9 @@ use durham::{
 };
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use game_commands::ui::{GameCommandDrawerConfig, GameCommandStatusText};
-use lod::hcsg::shared::{HcsgBoundsPlugin, HcsgDemand, HcsgNode, HcsgStorage, HcsgSystems};
+use lod::hcsg::shared::{
+	HcsgBoundsPlugin, HcsgNode, HcsgRestartRequest, HcsgSessionRestarted, HcsgStorage, HcsgSystems,
+};
 use pitch::{apply_avian_terrain_pitch, sync_suspend_terrain_pitch};
 use player::{respawn_player_on_layout, Player, PlayerControlSystems, PlayerPlugin};
 use render_item::mesh::handle::EnforceCachingPlugin;
@@ -126,6 +128,7 @@ impl Plugin for TerrainModelsPlaygroundPlugin {
 			.insert_resource(playground_cell_layout())
 			.insert_resource(TerrainPresentationDirty(true))
 			.init_resource::<PlayerRespawnPending>()
+			.init_resource::<PlaygroundRestartFollowup>()
 			.init_resource::<PlaygroundDebugOverlay>()
 			.add_systems(
 				Startup,
@@ -140,7 +143,8 @@ impl Plugin for TerrainModelsPlaygroundPlugin {
 					apply_set_character.after(apply_seed),
 					apply_mode_commands.after(apply_set_character),
 					apply_mesh_stats.after(apply_mode_commands),
-					restart_session.after(apply_mesh_stats).before(HcsgSystems),
+					queue_playground_restart.after(apply_mesh_stats),
+					playground_after_hcsg_restart.after(HcsgSessionRestarted),
 					respawn_player_on_ground,
 					drive_player_locomotion
 						.after(PlayerControlSystems)
@@ -335,22 +339,36 @@ fn apply_mesh_stats(
 	}
 }
 
+#[derive(Resource, Default)]
+struct PlaygroundRestartFollowup(bool);
+
+fn queue_playground_restart(
+	mut dirty: ResMut<TerrainPresentationDirty>,
+	mut request: ResMut<HcsgRestartRequest>,
+	mut followup: ResMut<PlaygroundRestartFollowup>,
+) {
+	if !dirty.0 {
+		return;
+	}
+	request.request();
+	dirty.0 = false;
+	followup.0 = true;
+}
+
 /// The worker regenerates in the background; hosts swap to the new session's
 /// values as they land.
-fn restart_session(
+fn playground_after_hcsg_restart(
 	roots: DurhamRoots,
-	storage: Res<HcsgStorage>,
-	demand: Res<HcsgDemand>,
-	mut dirty: ResMut<TerrainPresentationDirty>,
+	mut followup: ResMut<PlaygroundRestartFollowup>,
 	mut respawn: ResMut<PlayerRespawnPending>,
 	mode: Res<PlaygroundMode>,
 	world_base: Res<WorldBaseTerrain>,
 	mut cameras: Query<(&mut Transform, &mut CameraController), (With<Camera3d>, Without<Player>)>,
 ) {
-	if !dirty.0 {
+	if !followup.0 {
 		return;
 	}
-	roots.restart(&storage, &demand);
+	followup.0 = false;
 	if *mode == PlaygroundMode::Free {
 		if let Ok((mut transform, mut controller)) = cameras.single_mut() {
 			refocus_camera_on_layout(
@@ -361,7 +379,6 @@ fn restart_session(
 			);
 		}
 	}
-	dirty.0 = false;
 	respawn.0 = true;
 }
 

@@ -3,7 +3,7 @@
 //! surface cells into a [`GrownGrove`] presented as an [`HcsgNode`] host.
 //! Beyond the groves, [`BumpedOut`] canopy proxies displace the surface.
 //!
-//! A session starts by advancing the epoch, then [`ChicoRoots::reset`].
+//! A session starts with [`lod::hcsg::request_hcsg_session_restart`].
 
 use std::marker::PhantomData;
 use std::sync::Arc;
@@ -16,6 +16,7 @@ use durham::TerrainMeshBuilder;
 use lod::gen::{Id, LodScene, LodSceneLevel, LodSceneStatus, OriginalId};
 use lod::hcsg::shared::{
 	self, GenerationContext, HcsgBounds, HcsgClass, HcsgNode, PresentationPlugin,
+	register_session_seed,
 };
 use lod::hcsg::universal_bounds;
 use lod::lod_ref::LodRef;
@@ -325,14 +326,6 @@ impl ChicoNodes {
 			.configure::<BumpedOut<MediumCanopyBumpOut, G>>(MEDIUM_BUMP_OUT_SCALE);
 	}
 
-	/// Within a restart, after the epoch has advanced.
-	pub fn clear<G: ForestGround>(storage: &shared::HcsgStorage) {
-		storage.clear::<ChicoForest>();
-		storage.clear::<ChicoGrove>();
-		storage.clear::<GrownGrove<G>>();
-		storage.clear::<BumpedOut<CanopyBumpOut, G>>();
-		storage.clear::<BumpedOut<MediumCanopyBumpOut, G>>();
-	}
 }
 
 /// Chico's root resource: the forest selection.
@@ -342,12 +335,18 @@ pub struct ChicoRoots<'w> {
 }
 
 impl ChicoRoots<'_> {
-	/// Clears what Chico derived over ground `G` and seeds the selection.
-	/// Within a restart, after the epoch has advanced.
-	pub fn reset<G: ForestGround>(&self, storage: &shared::HcsgStorage) {
-		ChicoNodes::clear::<G>(storage);
+	/// Seeds Chico's forest selection root over ground `G`.
+	pub fn seed<G: ForestGround>(&self, storage: &shared::HcsgStorage) {
 		storage.seed(*self.selection, universal_bounds());
 	}
+}
+
+/// Seeds [`ChicoRoots`] during an HCSG session restart.
+pub fn seed_chico_hcsg_roots<G: ForestGround>(
+	roots: ChicoRoots,
+	storage: Res<shared::HcsgStorage>,
+) {
+	roots.seed::<G>(storage.as_ref());
 }
 
 /// Presents groves grown on ground `G` within channel `C`'s regions from the
@@ -366,6 +365,7 @@ impl<C: Send + Sync + 'static, G: ForestGround> Plugin for ChicoPresentationPlug
 		app.init_resource::<ForestSelection>();
 		let storage = app.world_mut().get_resource_or_init::<shared::HcsgStorage>().clone();
 		ChicoNodes::configure::<G>(&storage);
+		register_session_seed(app, seed_chico_hcsg_roots::<G>);
 		app.add_plugins(PresentationPlugin::<C, GrownGrove<G>>::default());
 		if !app.is_plugin_added::<LodSceneRefreshChunkPlugin<HcsgNode<GrownGrove<G>>>>() {
 			app.add_plugins(LodSceneRefreshChunkPlugin::<HcsgNode<GrownGrove<G>>>::default());
@@ -382,11 +382,13 @@ mod tests {
 	use bevy::scene::ScenePlugin;
 	use bevy::state::app::StatesPlugin;
 	use durham::{
-		fine_patch_cell_layout, Durham, DurhamRoots, TerrainConfig, TerrainMeshAssets,
-		TerrainMeshLodBand, TerrainStampConfigs, WaterMeshAssets, WatershedConfigs,
+		fine_patch_cell_layout, Durham, DurhamWindow, TerrainConfig, TerrainMeshAssets,
+		TerrainMeshLodBand, TerrainStampConfigs, WaterMeshAssets, WaterPresentationPlugin,
+		WatershedConfigs,
 	};
+	use richmond::BuiltPresentationPlugin;
 	use lod::gen::Version;
-	use lod::hcsg::shared::{HcsgDemand, HcsgSystems};
+	use lod::hcsg::shared::{HcsgDemand, HcsgRestartRequest, HcsgSystems};
 	use lod::lod_ref::LodNodePose;
 	use richmond::{AuthoredDevelopments, DevelopmentConfig, DevelopmentSites, RichmondRoots};
 	use terrain_layer_model::OnTerrain;
@@ -403,31 +405,14 @@ mod tests {
 	/// The 2×2 fine patch's footprint.
 	const PATCH: f32 = 160.0;
 
-	#[derive(Resource)]
-	struct Restart(bool);
-
-	fn restart(
-		durham: DurhamRoots,
-		richmond: RichmondRoots,
-		chico: ChicoRoots,
-		storage: Res<shared::HcsgStorage>,
-		demand: Res<HcsgDemand>,
-		mut pending: ResMut<Restart>,
-	) {
-		if std::mem::take(&mut pending.0) {
-			demand.advance_epoch();
-			durham.reset(&storage);
-			richmond.reset::<Ground>(&storage);
-			chico.reset::<Urban>(&storage);
-		}
-	}
-
 	fn select(app: &mut App, layering: LayeringKind) {
 		app.insert_resource(ForestSelection {
 			layering: Some(layering),
 			..ForestSelection::default()
 		})
-		.insert_resource(Restart(true));
+		.world_mut()
+		.resource_mut::<HcsgRestartRequest>()
+		.request();
 	}
 
 	/// Groves on a 2×2 fine patch at the origin, viewed from `at`.
@@ -458,17 +443,19 @@ mod tests {
 			})
 			.init_resource::<AuthoredDevelopments>()
 			.init_resource::<UrbanizationSelection>()
+			.insert_resource(HcsgRestartRequest::queued())
 			.add_plugins((
 				shared::HcsgBoundsPlugin::<GroveNeighborhood>::default(),
 				shared::HcsgBoundsPlugin::<BumpOutRing<CanopyBumpOut>>::default(),
+				WaterPresentationPlugin::<DurhamWindow>::default(),
+				BuiltPresentationPlugin::<GroveNeighborhood, Ground>::default(),
 			))
 			.add_plugins(ChicoPresentationPlugin::<GroveNeighborhood, Urban>::default())
 			.add_plugins(BumpOutPresentationPlugin::<
 				BumpOutRing<CanopyBumpOut>,
 				CanopyBumpOut,
 				Urban,
-			>::default())
-			.add_systems(Update, restart.before(HcsgSystems));
+			>::default());
 		select(&mut app, LayeringKind::LushJungle);
 		app.finish();
 		app.cleanup();

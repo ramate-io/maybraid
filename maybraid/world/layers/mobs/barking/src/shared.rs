@@ -6,8 +6,7 @@
 //! built over the ground, and the ground's surface, all from the generation
 //! context. Mobs retire with their cell, and their members with them.
 //!
-//! A session starts by advancing the epoch, then each layer's reset, then
-//! [`BarkingNodes::clear`].
+//! A session starts with [`lod::hcsg::request_hcsg_session_restart`].
 
 use std::marker::PhantomData;
 use std::sync::Arc;
@@ -247,10 +246,6 @@ impl BarkingNodes {
 		storage.configure::<PlacedMobCell<G>>(MOB_CELL_SCALE);
 	}
 
-	/// Within a restart, after the epoch has advanced.
-	pub fn clear<G: MobGround>(storage: &shared::HcsgStorage) {
-		storage.clear::<PlacedMobCell<G>>();
-	}
 }
 
 /// Members are not children of their mob. When presentation despawns a mob
@@ -308,12 +303,14 @@ mod tests {
 	use bevy::ecs::entity_disabling::Disabled;
 	use bevy::scene::ScenePlugin;
 	use bevy::state::app::StatesPlugin;
-	use chico::{ChicoNodes, ChicoRoots};
+	use chico::{ChicoNodes, ChicoPresentationPlugin};
 	use durham::{
-		fine_patch_cell_layout, Durham, DurhamRoots, TerrainConfig, TerrainMeshAssets,
-		TerrainMeshLodBand, TerrainStampConfigs, WaterMeshAssets, WatershedConfigs,
+		fine_patch_cell_layout, Durham, DurhamWindow, TerrainConfig, TerrainMeshAssets,
+		TerrainMeshLodBand, TerrainStampConfigs, WaterMeshAssets, WaterPresentationPlugin,
+		WatershedConfigs,
 	};
-	use lod::hcsg::shared::{HcsgDemand, HcsgSystems};
+	use richmond::BuiltPresentationPlugin;
+	use lod::hcsg::shared::{HcsgDemand, HcsgRestartRequest, HcsgSystems};
 	use lod::lod_ref::LodNodePose;
 	use mob_scenes::{MobKind, MobScene};
 	use richmond::{
@@ -333,29 +330,11 @@ mod tests {
 	/// The 2×2 fine patch's footprint.
 	const PATCH: f32 = 160.0;
 
-	#[derive(Resource)]
-	struct Restart(bool);
-
-	fn restart(
-		durham: DurhamRoots,
-		richmond: RichmondRoots,
-		chico: ChicoRoots,
-		storage: Res<shared::HcsgStorage>,
-		demand: Res<HcsgDemand>,
-		mut pending: ResMut<Restart>,
-	) {
-		if std::mem::take(&mut pending.0) {
-			demand.advance_epoch();
-			durham.reset(&storage);
-			richmond.reset::<Ground>(&storage);
-			chico.reset::<Urban>(&storage);
-			BarkingNodes::clear::<Urban>(&storage);
-		}
-	}
-
 	fn pin(app: &mut App, kind: UrbanizationKind) {
 		app.insert_resource(UrbanizationSelection { kind: Some(kind), ..default() })
-			.insert_resource(Restart(true));
+			.world_mut()
+			.resource_mut::<HcsgRestartRequest>()
+			.request();
 	}
 
 	/// One Les Halles inside one cell of the patch.
@@ -397,11 +376,14 @@ mod tests {
 			})
 			.insert_resource(AuthoredDevelopments(vec![les_halles()]))
 			.init_resource::<chico::ForestSelection>()
+			.insert_resource(HcsgRestartRequest::queued())
 			.add_plugins((
 				shared::HcsgBoundsPlugin::<MobNeighborhood>::default(),
+				WaterPresentationPlugin::<DurhamWindow>::default(),
+				BuiltPresentationPlugin::<MobNeighborhood, Ground>::default(),
+				ChicoPresentationPlugin::<MobNeighborhood, Urban>::default(),
 				BarkingPresentationPlugin::<MobNeighborhood, Urban>::default(),
-			))
-			.add_systems(Update, restart.before(HcsgSystems));
+			));
 		let storage = app.world().resource::<shared::HcsgStorage>().clone();
 		ChicoNodes::configure::<Urban>(&storage);
 		pin(&mut app, kind);
