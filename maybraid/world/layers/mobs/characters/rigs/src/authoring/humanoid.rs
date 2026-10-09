@@ -238,6 +238,28 @@ pub fn humanoid_write_mask(names: &[&str]) -> u32 {
 		.fold(0, |mask, bit| mask | bit)
 }
 
+/// Bones with any non-zero authored channel in `pose`.
+///
+/// Used to verify clip write masks stay aligned with sampled output.
+pub fn humanoid_pose_write_mask(pose: &HumanoidPose) -> u32 {
+	let mut mask = 0u32;
+	for (index, name) in HUMANOID_V0_BONES.iter().enumerate() {
+		if bone_has_authored_channels(name, pose) {
+			mask |= 1u32 << index;
+		}
+	}
+	mask
+}
+
+fn bone_has_authored_channels(name: &str, pose: &HumanoidPose) -> bool {
+	match name {
+		"humerus.L" if pose.arms[0].aim.is_some() => true,
+		"humerus.R" if pose.arms[1].aim.is_some() => true,
+		_ => channels_for(name, pose)
+			.is_some_and(|(swing, flex, twist)| swing != 0.0 || flex != 0.0 || twist != 0.0),
+	}
+}
+
 /// Parent-space authored rotation `Q` such that posed = `Q * rest`.
 ///
 /// Built with an identity rest so a clip cache can share deltas across compatible
@@ -279,7 +301,12 @@ fn apply_masked(
 	rest: &PoseBuffer,
 	out: &mut PoseBuffer,
 ) {
-	out.copy_from(rest);
+	let n = rest.local.len().min(out.local.len());
+	for index in 0..n {
+		if mask & (1u32 << index) == 0 {
+			out.local[index] = rest.local[index];
+		}
+	}
 	for (index, name) in definition.names.iter().enumerate() {
 		if mask & (1u32 << index) == 0 {
 			continue;
