@@ -14,10 +14,14 @@
 //! [`RegionPresenter::cull`], driven by the present keep set. Bevy produce /
 //! drain plugins live in [`runtime`].
 
+mod generated;
+mod keep;
 mod runtime;
 
 #[cfg(test)]
-pub mod tests;
+mod tests;
+
+pub use generated::LodGenerated;
 
 use crate::gen::{Id, SpatialIndex, Version};
 use crate::lod_ref::LodRef;
@@ -53,9 +57,8 @@ pub use runtime::{
 ///   types**: they name a hierarchy and can be referred to when indexing that
 ///   tree from its root.
 ///
-/// Generation-tree recursion stays automatic in
-/// [`crate::gen::GeneratingSpatialIndex`]; presentation order and layer
-/// selection are policy, expressed through these overrides.
+/// Presentation order and layer selection are policy, expressed through these
+/// overrides.
 pub trait RegionPresenter<T, S>
 where
 	S: SpatialIndex<T>,

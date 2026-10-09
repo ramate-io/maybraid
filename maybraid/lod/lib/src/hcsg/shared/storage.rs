@@ -10,7 +10,8 @@ use bevy::math::DVec3;
 use bevy::prelude::Resource;
 
 use crate::gen::{Id, Version};
-use crate::hcsg::storage::{NodeStore, StoredEntry, DEFAULT_BASE_SCALE};
+
+use super::node_store::{NodeStore, StoredEntry, DEFAULT_BASE_SCALE};
 
 /// Any value HCSG can store.
 pub trait HcsgValue: Send + Sync + 'static {}

@@ -11,7 +11,7 @@ use durham::{
 	StreamBandedLod, Terrain, TerrainCellRing, TerrainColliderMeshSource, TerrainMeshBuilder,
 	TerrainSdf,
 };
-use lod::gen::{GenerationScheme, Id, LodScene, LodSceneLevel, LodSceneStatus, OriginalId};
+use lod::gen::{Id, LodScene, LodSceneLevel, LodSceneStatus, OriginalId};
 use lod::hcsg::shared::{self, GenerationContext};
 use lod::hcsg::HcsgStorage;
 use lod::lod_ref::LodRef;
@@ -24,7 +24,7 @@ use terrain_shaders::TerrainShader;
 
 use crate::compose::PadComposable;
 use crate::developments::RichmondDevelopment;
-use crate::ground::RichmondGround;
+use crate::ground::{GroundCell, RichmondGround};
 use crate::pad::PadComplex;
 use crate::storage::column_bounds;
 
@@ -225,8 +225,8 @@ impl<G> PaddedTerrain<G> {
 impl<G: RichmondGround> PaddedTerrain<G> {
 	/// Stored padded surface with the greatest XZ overlap with `region`; the
 	/// finest on a tie.
-	pub fn best_overlapping(storage: &HcsgStorage, region: Aabb3d) -> Option<&TerrainWithPads> {
-		let mut best: Option<(f32, f32, &TerrainWithPads)> = None;
+	pub fn best_overlapping(storage: &HcsgStorage, region: Aabb3d) -> Option<TerrainWithPads> {
+		let mut best: Option<(f32, f32, TerrainWithPads)> = None;
 		for id in storage.overlapping::<Self>(column_bounds(region)) {
 			let Some(entry) = storage.entry::<Self>(id) else {
 				continue;
@@ -243,36 +243,17 @@ impl<G: RichmondGround> PaddedTerrain<G> {
 			}
 			let span = (entry.bounds.max.x - entry.bounds.min.x)
 				.max(entry.bounds.max.z - entry.bounds.min.z);
-			if best.is_none_or(|(best_overlap, best_span, _)| {
-				overlap > best_overlap || (overlap == best_overlap && span < best_span)
-			}) {
-				best = Some((overlap, span, &entry.value.surface));
+			let replace = match &best {
+				None => true,
+				Some((best_overlap, best_span, _)) => {
+					overlap > *best_overlap || (overlap == *best_overlap && span < *best_span)
+				}
+			};
+			if replace {
+				best = Some((overlap, span, entry.value.surface.clone()));
 			}
 		}
 		best.map(|(_, _, terrain)| terrain)
-	}
-}
-
-impl<G: RichmondGround> GenerationScheme<HcsgStorage> for PaddedTerrain<G> {
-	/// The ground's stored cells: its rings tile differently around each
-	/// center, so padded cells follow whatever ground is streamed.
-	fn original_ids_for(storage: &mut HcsgStorage, region: Aabb3d) -> Vec<OriginalId> {
-		storage.overlapping::<G::Cell>(region).into_iter().map(OriginalId).collect()
-	}
-
-	/// Generates the developments over the cell. A cell no pad reaches has
-	/// no padded surface; the ground presents it as is.
-	fn build_with_id(storage: &mut HcsgStorage, id: Id) -> Option<(Self, Aabb3d)> {
-		let bounds = storage.entry::<G::Cell>(id)?.bounds;
-		for OriginalId(development) in storage.original_ids_for::<RichmondDevelopment<G>>(bounds) {
-			storage.get_or_generate::<RichmondDevelopment<G>>(development);
-		}
-		let pads = RichmondDevelopment::<G>::merged_pads(storage, bounds);
-		if pads.is_empty() {
-			return None;
-		}
-		let surface = storage.get::<G::Cell>(id)?.compose_pads(&pads);
-		Some((Self::new(surface), bounds))
 	}
 }
 
@@ -286,20 +267,16 @@ impl<G: RichmondGround> shared::GenerationScheme for PaddedTerrain<G> {
 	/// The cell with the pads of every development over it.
 	fn build_with_id(cx: &mut GenerationContext, id: Id) -> Option<(Self, Aabb3d)> {
 		let cell = cx.get_or_generate::<G::Cell>(id)?;
-		let bounds = cell.bounds();
+		let bounds = GroundCell::bounds(cell.as_ref());
 		let developments: Vec<_> = cx
 			.original_ids_for::<RichmondDevelopment<G>>(bounds)
 			.into_iter()
 			.filter_map(|OriginalId(id)| cx.get_or_generate::<RichmondDevelopment<G>>(id))
 			.collect();
 		let pads = RichmondDevelopment::merge_pads(bounds, developments.iter().map(Arc::as_ref));
-		Some((Self::new(cell.compose_pads(&pads)), bounds))
+		Some((Self::new(cell.as_ref().compose_pads(&pads)), bounds))
 	}
 }
-
-/// Marks a spawned padded-terrain scene root.
-#[derive(Component, Debug, Clone, Copy)]
-pub struct PresentedPaddedTerrainScene(pub Id);
 
 #[cfg(test)]
 mod tests {

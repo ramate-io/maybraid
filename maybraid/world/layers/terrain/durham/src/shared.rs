@@ -1,9 +1,7 @@
 //! Durham on the shared HCSG runtime ([`lod::hcsg::shared`]): terrain and
 //! water generate on the worker and present as [`HcsgNode`] hosts.
 //!
-//! This runs beside the frame-synchronous path in [`crate::terrain::host`]
-//! until every Durham host has moved over. Start a session with
-//! [`crate::DurhamRoots::restart`].
+//! Start a session with [`crate::DurhamRoots::restart`].
 
 use std::marker::PhantomData;
 use std::sync::Arc;
@@ -275,9 +273,6 @@ pub use stream::{
 	BackgroundStream, FarStream, NearStream, PlayableStreams, StreamPresentationPlugin, StreamRing,
 	Streamed, TerrainStream,
 };
-
-#[cfg(test)]
-mod equivalence;
 
 #[cfg(test)]
 mod tests {

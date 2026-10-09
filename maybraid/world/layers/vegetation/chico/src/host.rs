@@ -130,7 +130,7 @@ impl LodScene for ChicoGroveHost {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::index::forest_world_sample;
+	use crate::grove::forest_world_sample;
 	use crate::{ChicoGrove, ForestGroveKind, ForestGroveRecipe};
 	use bevy::prelude::{Entity, Transform, Vec3};
 	use lod::LodScene;

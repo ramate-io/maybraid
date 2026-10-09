@@ -10,9 +10,11 @@ use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 
 use super::RegionPresenter;
-use crate::gen::{
+use crate::gen::{Id, SpatialIndex};
+use super::generated::LodGenerated;
+use super::keep::{
 	entering_keep_regions, expand_keep_xz, id_lives_in_keep, id_xz_distance2, keep_region_changed,
-	Id, LodGenerated, SpatialIndex, QUEUE_KEEP_SLACK_XZ,
+	QUEUE_KEEP_SLACK_XZ,
 };
 use crate::jobs::{ensure_lod_job_counter, LodJobCounter};
 use crate::lod_ref::{

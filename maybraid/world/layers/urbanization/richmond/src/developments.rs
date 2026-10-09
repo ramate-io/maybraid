@@ -7,10 +7,11 @@
 pub mod site;
 
 use std::marker::PhantomData;
+use std::sync::Arc;
 
 use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec2;
-use lod::gen::{GenerationScheme, Id, OriginalId};
+use lod::gen::{Id, OriginalId};
 use lod::hcsg::shared::{self, GenerationContext};
 use lod::hcsg::HcsgStorage;
 use procedural_common::Bounds2;
@@ -22,7 +23,7 @@ use urbanization_developments::{
 
 use crate::artifact::BuiltDevelopment;
 use crate::config::DevelopmentConfig;
-use crate::ground::{GroundCells, GroundSampler, RichmondGround};
+use crate::ground::{GroundCells, RichmondGround};
 use crate::pad::{cell_center_xz, PadComplex};
 use crate::storage::{column_bounds, overlaps_xz_strictly};
 
@@ -97,30 +98,6 @@ impl<D: SiteDevelopment, G> DevelopmentCell<D, G> {
 	}
 }
 
-impl<D: SiteDevelopment, G: RichmondGround> GenerationScheme<HcsgStorage>
-	for DevelopmentCell<D, G>
-{
-	fn original_ids_for(storage: &mut HcsgStorage, region: Aabb3d) -> Vec<OriginalId> {
-		DevelopmentSite::ids_of_kind(storage, region, D::KIND)
-	}
-
-	/// An authored site plans on its own level, dry ground; a procedural one
-	/// over `G`.
-	fn build_with_id(storage: &mut HcsgStorage, id: Id) -> Option<(Self, Aabb3d)> {
-		let (site, config) = DevelopmentSite::planned(storage, id, D::KIND)?;
-		let bounds = column_bounds(site.cell);
-		let (plan, pads) = match site.authored {
-			Some(mut authored) => D::plan(&mut authored, site.cell, config.seed)?,
-			None => {
-				let mut ground = GroundSampler::<G>::new(storage, bounds);
-				D::plan(&mut ground, site.cell, config.seed)?
-			}
-		};
-		let pads = pads.iter().map(DevelopmentPad::from).collect();
-		Some((Self { cell: site.cell, plan, pads, _ground: PhantomData }, bounds))
-	}
-}
-
 /// One development cell over ground `G`.
 pub enum RichmondDevelopment<G> {
 	Empty(Aabb3d),
@@ -134,30 +111,6 @@ pub enum RichmondDevelopment<G> {
 	WizardsTower(DevelopmentCell<WizardsTower, G>),
 	SkybridgeBazaar(DevelopmentCell<SkybridgeBazaar, G>),
 	OldCityMarket(DevelopmentCell<OldCityMarket, G>),
-}
-
-impl<G: RichmondGround> GenerationScheme<HcsgStorage> for RichmondDevelopment<G> {
-	fn original_ids_for(storage: &mut HcsgStorage, region: Aabb3d) -> Vec<OriginalId> {
-		DevelopmentSite::original_ids_for(storage, region)
-	}
-
-	/// A site whose kinds all fail to fit is stored [`Self::Empty`]. A
-	/// procedural site without ground under its center has no answer yet.
-	fn build_with_id(storage: &mut HcsgStorage, id: Id) -> Option<(Self, Aabb3d)> {
-		let site = storage.get_one_or_generate::<DevelopmentSite>(id)?.clone();
-		let bounds = column_bounds(site.cell);
-		if !site.is_filled() {
-			return Some((Self::Empty(site.cell), bounds));
-		}
-		let config = site.config(storage)?;
-		if let Some(authored) = &site.authored {
-			return Some((Self::fit(&site, &config, &mut authored.clone()), bounds));
-		}
-		let mut ground = GroundSampler::<G>::new(storage, bounds);
-		let center = cell_center_xz(site.cell);
-		ground.height_at(center.x, center.y)?;
-		Some((Self::fit(&site, &config, &mut ground), bounds))
-	}
 }
 
 impl<G: RichmondGround> shared::GenerationScheme for RichmondDevelopment<G> {
@@ -189,11 +142,12 @@ impl<G: RichmondGround> RichmondDevelopment<G> {
 	/// Pad nodes of stored filled developments affecting `region`, merged
 	/// into one sample-time blend pass.
 	pub fn merged_pads(storage: &HcsgStorage, region: Aabb3d) -> PadComplex {
-		let developments = storage
+		let developments: Vec<Arc<Self>> = storage
 			.overlapping::<Self>(column_bounds(region))
 			.into_iter()
-			.filter_map(|id| storage.get::<Self>(id));
-		Self::merge_pads(region, developments)
+			.filter_map(|id| storage.get::<Self>(id))
+			.collect();
+		Self::merge_pads(region, developments.iter().map(Arc::as_ref))
 	}
 
 	/// Pad nodes of the filled `developments` affecting `region`, merged

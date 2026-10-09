@@ -7,7 +7,6 @@ pub mod config;
 pub mod geography;
 pub mod host;
 pub mod index;
-pub mod layer;
 pub mod plugin;
 pub mod presentation;
 pub mod render;
@@ -26,10 +25,7 @@ use bevy::ecs::template::template;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value, Scene};
-use lod::gen::{
-	GeneratingSpatialIndex, GenerationScheme, Id, LodScene, LodSceneLevel, LodSceneStatus,
-	OriginalId, SpatialIndex,
-};
+use lod::gen::{Id, LodScene, LodSceneLevel, LodSceneStatus, OriginalId};
 use lod::hcsg::shared::{self, GenerationContext};
 use lod::lod_ref::LodRef;
 use render_item::mesh::handle::Cached;
@@ -56,16 +52,15 @@ pub use geography::{
 };
 pub use host::{
 	fine_patch_cell_layout, playable_world_cell_layout, presentation_assets,
-	produce_terrain_window, retarget_presentation_assets, Durham, DurhamCells, TerrainCoverage,
-	TerrainFillSystems, TerrainLayoutPinned, TerrainPresentPending, TerrainPresentationDirty,
-	TerrainRetarget, TerrainWindow, WorldBaseTerrain, WORLD_FINE_HALF_EXTENT_CELLS,
+	retarget_presentation_assets, Durham, TerrainCoverage, TerrainLayoutPinned,
+	TerrainPresentPending, TerrainPresentationDirty,
+	TerrainRetarget, WorldBaseTerrain, WORLD_FINE_HALF_EXTENT_CELLS,
 	WORLD_OUTER_2X_ROWS, WORLD_OUTER_4X_ROWS,
 };
 pub use index::{
 	register_durham_nodes, DurhamNodes, DurhamRoots, TerrainHeightSnapshot, TerrainStorage,
 	WaterSurfaceSnapshot,
 };
-pub use layer::{DurhamHeightSnapshot, DurhamRead, DurhamTerrainConfig};
 pub use plugin::{register_terrain_plugin, TerrainResourcesPlugin};
 pub use presentation::{
 	sync_visual_terrain_host_pose, PresentedTerrainScene, TerrainBackground,
@@ -136,20 +131,6 @@ impl PreWatershedTerrain {
 			sdf.add_elevation_modulation(Box::new(modulation.clone()));
 		}
 		ComposedTerrain::from_terrain(sdf)
-	}
-
-	/// Pre-watershed height at `(x, z)`, materializing the fine origin cell under it.
-	pub fn sample_height<S>(spatial_index: &mut S, x: f32, z: f32) -> Option<f32>
-	where
-		S: GeneratingSpatialIndex<Self> + GeneratingSpatialIndex<TerrainCellLayout>,
-	{
-		let layout = GeneratingSpatialIndex::<TerrainCellLayout>::get_one_or_generate(
-			spatial_index,
-			Id::Universal,
-		)?;
-		let id = Id::from_cell(layout.fine_cell_bounds_containing(x, z));
-		let pre = GeneratingSpatialIndex::<Self>::get_one_or_generate(spatial_index, id)?;
-		Some(pre.sdf.terrain().height_at_with_all_modulations(x, z))
 	}
 
 	/// [`Self::sample_height`] on the context.
@@ -313,15 +294,6 @@ struct JerseyStamps {
 }
 
 impl JerseyStamps {
-	fn pull<T: StampLeaf, S: GeneratingSpatialIndex<T>>(
-		&mut self,
-		spatial_index: &mut S,
-		bounds: Aabb3d,
-	) -> Option<()> {
-		GeneratingSpatialIndex::<T>::for_each_origin(spatial_index, bounds, |stamp| {
-			self.take(stamp);
-		})
-	}
 
 	fn pull_in<T: StampLeaf + shared::GenerationScheme>(
 		&mut self,
@@ -354,52 +326,7 @@ impl PreWatershedTerrain {
 ///
 /// Origin-grid root: tiles [`TerrainCellLayout`] directly. Each stamp band is
 /// one leaf bound; its controller grid and configs are that band's concern.
-impl<S> GenerationScheme<S> for PreWatershedTerrain
-where
-	S: GeneratingSpatialIndex<TerrainCellLayout>
-		+ GeneratingSpatialIndex<BaseTerrainNoise>
-		+ GeneratingSpatialIndex<PlateauHighPassStampCell>
-		+ GeneratingSpatialIndex<MassifHighPassStampCell>
-		+ GeneratingSpatialIndex<CanyonHighPassStampCell>
-		+ GeneratingSpatialIndex<PocketWaterHighPassStampCell>
-		+ GeneratingSpatialIndex<RollingHighPassStampCell>
-		+ GeneratingSpatialIndex<ValleyHighPassStampCell>
-		+ GeneratingSpatialIndex<PlateauLowPassStampCell>
-		+ GeneratingSpatialIndex<MassifLowPassStampCell>
-		+ GeneratingSpatialIndex<CanyonLowPassStampCell>
-		+ GeneratingSpatialIndex<PocketWaterLowPassStampCell>
-		+ GeneratingSpatialIndex<RollingLowPassStampCell>
-		+ GeneratingSpatialIndex<ValleyLowPassStampCell>,
-{
-	fn original_ids_for(spatial_index: &mut S, region: Aabb3d) -> Vec<OriginalId> {
-		TerrainCellLayout::original_cell_ids_for(spatial_index, region)
-	}
 
-	fn build_with_id(spatial_index: &mut S, id: Id) -> Option<(Self, Aabb3d)> {
-		let bounds = id.origin_cell_bounds()?;
-		let base = GeneratingSpatialIndex::<BaseTerrainNoise>::get_one_or_generate(
-			spatial_index,
-			Id::Universal,
-		)?
-		.clone();
-
-		// Composition order is global: high-pass (regional) bands, then low-pass (detail).
-		let mut stamps = JerseyStamps::default();
-		stamps.pull::<PlateauHighPassStampCell, _>(spatial_index, bounds)?;
-		stamps.pull::<MassifHighPassStampCell, _>(spatial_index, bounds)?;
-		stamps.pull::<CanyonHighPassStampCell, _>(spatial_index, bounds)?;
-		stamps.pull::<PocketWaterHighPassStampCell, _>(spatial_index, bounds)?;
-		stamps.pull::<RollingHighPassStampCell, _>(spatial_index, bounds)?;
-		stamps.pull::<ValleyHighPassStampCell, _>(spatial_index, bounds)?;
-		stamps.pull::<PlateauLowPassStampCell, _>(spatial_index, bounds)?;
-		stamps.pull::<MassifLowPassStampCell, _>(spatial_index, bounds)?;
-		stamps.pull::<CanyonLowPassStampCell, _>(spatial_index, bounds)?;
-		stamps.pull::<PocketWaterLowPassStampCell, _>(spatial_index, bounds)?;
-		stamps.pull::<RollingLowPassStampCell, _>(spatial_index, bounds)?;
-		stamps.pull::<ValleyLowPassStampCell, _>(spatial_index, bounds)?;
-		Some((Self::compose(bounds, base, stamps), bounds))
-	}
-}
 
 impl shared::GenerationScheme for PreWatershedTerrain {
 	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
@@ -433,63 +360,7 @@ impl shared::GenerationScheme for PreWatershedTerrain {
 /// Shares [`PreWatershedTerrain`]'s origin ids. Pocket-water leaves, the
 /// hydro complex, and stage cells are bound only as the leaves this scheme
 /// reads; their pocket / pre-pocket / config stacks resolve at the index.
-impl<S> GenerationScheme<S> for Terrain
-where
-	S: GeneratingSpatialIndex<PreWatershedTerrain>
-		+ GeneratingSpatialIndex<PocketWatersHighPass>
-		+ GeneratingSpatialIndex<PocketWatersLowPass>
-		+ GeneratingSpatialIndex<HydroComplexCell>
-		+ GeneratingSpatialIndex<WatershedCarvingCell>
-		+ GeneratingSpatialIndex<WatershedRimmingCell>
-		+ GeneratingSpatialIndex<WatershedAproningCell>
-		+ GeneratingSpatialIndex<TerrainPresentationAssets>
-		+ SpatialIndex<TerrainCellLayout>,
-{
-	fn original_ids_for(spatial_index: &mut S, region: Aabb3d) -> Vec<OriginalId> {
-		GeneratingSpatialIndex::<PreWatershedTerrain>::original_ids_for(spatial_index, region)
-	}
 
-	fn build_with_id(spatial_index: &mut S, id: Id) -> Option<(Self, Aabb3d)> {
-		let bounds = id.origin_cell_bounds()?;
-		let pre =
-			GeneratingSpatialIndex::<PreWatershedTerrain>::get_one_or_generate(spatial_index, id)?
-				.clone();
-
-		// Authored leaf overlays (banded); hydrology composition is cellular below.
-		let mut marazion_leaves = Vec::new();
-		GeneratingSpatialIndex::<PocketWatersHighPass>::for_each_origin(
-			spatial_index,
-			bounds,
-			|leaf| marazion_leaves.push(leaf.leaf_bounds()),
-		)?;
-		GeneratingSpatialIndex::<PocketWatersLowPass>::for_each_origin(
-			spatial_index,
-			bounds,
-			|leaf| marazion_leaves.push(leaf.leaf_bounds()),
-		)?;
-
-		let complex =
-			GeneratingSpatialIndex::<HydroComplexCell>::get_one_or_generate(spatial_index, id)?
-				.indexed()
-				.cloned();
-
-		// Keep stage cells materialized for later policy work; elevation uses
-		// the cellular HydroComplex directly (internal carve → rim → apron).
-		GeneratingSpatialIndex::<WatershedCarvingCell>::get_or_generate(spatial_index, id)?;
-		GeneratingSpatialIndex::<WatershedRimmingCell>::get_or_generate(spatial_index, id)?;
-		GeneratingSpatialIndex::<WatershedAproningCell>::get_or_generate(spatial_index, id)?;
-
-		let layout = SpatialIndex::<TerrainCellLayout>::get(spatial_index, Id::Universal)
-			.cloned()
-			.unwrap_or_default();
-		let assets = GeneratingSpatialIndex::<TerrainPresentationAssets>::get_one_or_generate(
-			spatial_index,
-			Id::Universal,
-		)?;
-		let terrain = Self::compose(bounds, &pre, marazion_leaves, complex, &layout, assets);
-		Some((terrain, bounds))
-	}
-}
 
 impl shared::GenerationScheme for Terrain {
 	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {

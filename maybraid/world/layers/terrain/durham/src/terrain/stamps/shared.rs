@@ -4,7 +4,7 @@ use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::math::{Vec2, Vec3};
 use comproc::guillotine::{Bounds2, Guillotine, GuillotineCuts};
 use comproc::noise::config::NoiseConfig;
-use lod::gen::{GeneratingSpatialIndex, Id, OriginalId};
+use lod::gen::{Id, OriginalId};
 use lod::hcsg::shared::{self, GenerationContext};
 use noise::Perlin;
 use procedural_common::Bounds2 as ProcBounds2;
@@ -176,23 +176,6 @@ pub trait LeafAabbs: Sized {
 
 	/// Sorted, deduplicated leaf ids intersecting `region`, from the
 	/// controllers in `region`. Only the controller level materializes.
-	fn original_leaf_ids_for<S>(spatial_index: &mut S, region: Aabb3d) -> Vec<OriginalId>
-	where
-		S: GeneratingSpatialIndex<Self>,
-	{
-		let mut ids: Vec<OriginalId> =
-			GeneratingSpatialIndex::<Self>::get_or_generate_region_values(spatial_index, region)
-				.into_iter()
-				.flat_map(Self::leaf_aabbs)
-				.filter(|leaf| region.intersects(leaf))
-				.map(|leaf| OriginalId(Id::from_cell(leaf)))
-				.collect();
-		ids.sort();
-		ids.dedup();
-		ids
-	}
-
-	/// [`Self::original_leaf_ids_for`] on the context.
 	fn leaf_ids_in(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId>
 	where
 		Self: shared::GenerationScheme,

@@ -30,7 +30,7 @@ use crate::bump_out::{
 	MEDIUM_BUMP_OUT_ANCHOR_STEP_M, MEDIUM_BUMP_OUT_CELL_XZ, MEDIUM_BUMP_OUT_INNER_RADIUS_M,
 	MEDIUM_BUMP_OUT_OUTER_RADIUS_M,
 };
-use crate::layer_present::{bump_out_from_cell, bump_out_noise};
+use crate::bump_out::{bump_out_from_cell, bump_out_noise};
 use crate::material::VegetationOnTerrainMaterialRefPlugin;
 use crate::ForestSelection;
 
@@ -214,7 +214,10 @@ impl<P: CanopyProxy> HcsgBounds for BumpOutRing<P> {
 	type Param = Query<'static, 'static, &'static Transform, With<LodViewer>>;
 
 	fn regions(viewers: &SystemParamItem<Self::Param>) -> Vec<Aabb3d> {
-		Self::viewer(viewers).map(|viewer| Self::around(viewer, *P::BAND.end())).into_iter().collect()
+		Self::viewer(viewers)
+			.map(|viewer| Self::around(viewer, *P::BAND.end()))
+			.into_iter()
+			.collect()
 	}
 
 	fn focus(viewers: &SystemParamItem<Self::Param>) -> Option<Vec3> {
@@ -242,7 +245,9 @@ impl<C, P, G> Default for BumpOutPresentationPlugin<C, P, G> {
 	}
 }
 
-impl<C: Send + Sync + 'static, P: CanopyProxy, G: ForestGround> Plugin for BumpOutPresentationPlugin<C, P, G> {
+impl<C: Send + Sync + 'static, P: CanopyProxy, G: ForestGround> Plugin
+	for BumpOutPresentationPlugin<C, P, G>
+{
 	fn build(&self, app: &mut App) {
 		if !app.is_plugin_added::<BumpOutPlugin>() {
 			app.add_plugins(BumpOutPlugin);

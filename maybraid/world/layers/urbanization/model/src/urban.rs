@@ -18,7 +18,7 @@ pub trait UrbanizationModel: Send + Sync + 'static {
 	type Ground: TerrainModel;
 	type Pads: PadOps + Clone + Send + Sync + 'static;
 	/// Composed fill stored as [`crate::Urbanization<Self>`]'s [`TerrainModel::Cell`].
-	type Surface: TerrainCell;
+	type Surface: TerrainCell + Clone;
 	type Read: ReadOnlySystemParam + 'static;
 	/// Present-time prepare [`crate::Urbanization<Self>`] forwards as [`TerrainModel::Prepare`].
 	type Prepare: SystemParam + 'static;
@@ -27,29 +27,29 @@ pub trait UrbanizationModel: Send + Sync + 'static {
 
 	fn pads_at(read: &SystemParamItem<'_, '_, Self::Read>, xz: Vec2) -> Self::Pads;
 
-	fn surface<'a>(
-		read: &'a SystemParamItem<'_, '_, Self::Read>,
+	fn surface(
+		read: &SystemParamItem<'_, '_, Self::Read>,
 		id: Id,
-	) -> Option<&'a Self::Surface>;
+	) -> Option<Self::Surface>;
 
 	fn surface_ids(read: &SystemParamItem<'_, '_, Self::Read>, region: Aabb3d) -> Vec<Id>;
 
-	fn overlay_surface<'a>(
-		read: &'a SystemParamItem<'_, '_, Self::Read>,
+	fn overlay_surface(
+		read: &SystemParamItem<'_, '_, Self::Read>,
 		bounds: Aabb3d,
-	) -> Option<&'a Self::Surface>;
+	) -> Option<Self::Surface>;
 
-	type Built: Send + Sync + 'static;
+	type Built: Send + Sync + Clone + 'static;
 
-	fn built<'a>(
-		read: &'a SystemParamItem<'_, '_, Self::Read>,
+	fn built(
+		read: &SystemParamItem<'_, '_, Self::Read>,
 		region: Aabb3d,
-	) -> Vec<&'a Self::Built>;
+	) -> Vec<Self::Built>;
 
-	fn built_overlapping<'a>(
-		read: &'a SystemParamItem<'_, '_, Self::Read>,
+	fn built_overlapping(
+		read: &SystemParamItem<'_, '_, Self::Read>,
 		region: Aabb3d,
-	) -> Vec<(Id, Version, &'a Self::Built)>;
+	) -> Vec<(Id, Version, Self::Built)>;
 
 	fn prepare(
 		prepare: &mut SystemParamItem<'_, '_, Self::Prepare>,
@@ -62,18 +62,18 @@ pub trait UrbanizationModel: Send + Sync + 'static {
 
 /// Urbanized ground: pads and the built developments stored on it.
 pub trait UrbanModel: TerrainModel {
-	type Built: Send + Sync + 'static;
+	type Built: Send + Sync + Clone + 'static;
 	type Pads: PadOps;
 
 	fn pads(read: &SystemParamItem<'_, '_, Self::Read>, region: Aabb3d) -> Self::Pads;
 
-	fn built<'a>(
-		read: &'a SystemParamItem<'_, '_, Self::Read>,
+	fn built(
+		read: &SystemParamItem<'_, '_, Self::Read>,
 		region: Aabb3d,
-	) -> Vec<&'a Self::Built>;
+	) -> Vec<Self::Built>;
 
-	fn built_overlapping<'a>(
-		read: &'a SystemParamItem<'_, '_, Self::Read>,
+	fn built_overlapping(
+		read: &SystemParamItem<'_, '_, Self::Read>,
 		region: Aabb3d,
-	) -> Vec<(Id, Version, &'a Self::Built)>;
+	) -> Vec<(Id, Version, Self::Built)>;
 }

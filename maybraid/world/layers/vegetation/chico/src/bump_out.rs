@@ -11,6 +11,8 @@
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::{Color, Vec2, Vec3};
 use lod::gen::Id;
+use procedural_common::NoiseParams;
+use vegetation_bumpout::{BumpOut, BumpOutNeighborhood, BumpOutStyle};
 use vegetation_groves::GroveExtent;
 
 use crate::{
@@ -541,6 +543,37 @@ fn xz_overlap_area(a: Aabb3d, b: Aabb3d) -> f32 {
 	let x = (a.max.x.min(b.max.x) - a.min.x.max(b.min.x)).max(0.0);
 	let z = (a.max.z.min(b.max.z) - a.min.z.max(b.min.z)).max(0.0);
 	x * z
+}
+
+pub fn bump_out_from_cell(cell: &CanopyBumpOut, noise: NoiseParams) -> Option<BumpOut> {
+	let samples = cell.samples;
+	let neighborhood = BumpOutNeighborhood::new(
+		samples.map(|sample| sample.density),
+		samples.map(|sample| sample.bite_size),
+		samples.map(|sample| sample.bite_size_deviation),
+		samples.map(|sample| sample.height_m),
+		samples.map(|sample| sample.height_deviation_m),
+	);
+	if neighborhood.densities.iter().all(|density| *density <= 0.001) {
+		return None;
+	}
+	Some(
+		BumpOut::from_neighborhood(neighborhood, cell.center_palette(), noise).with_style(
+			BumpOutStyle::new(0.065, 0.88, 0.18)
+				.with_cheese(0.88, 1.0)
+				.with_fragment_height(4.5, 0.85),
+		),
+	)
+}
+
+pub fn bump_out_noise(forest: &NoiseParams) -> NoiseParams {
+	NoiseParams {
+		seed: forest.seed.wrapping_add(307),
+		frequency: 0.045,
+		amplitude: forest.amplitude,
+		octaves: 3,
+		..*forest
+	}
 }
 
 #[cfg(test)]

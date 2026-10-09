@@ -78,7 +78,9 @@ impl<G: RichmondGround> FurnitureSlots for Urbanization<richmond::Richmond<G>> {
 	}
 
 	fn world_slots(read: &SystemParamItem<'_, '_, Self::Read>, id: Id) -> Vec<FurnitureNode> {
-		read.get::<Built<G>>(id).map(Self::development_slots).unwrap_or_default()
+		read.get::<Built<G>>(id)
+			.map(|built| Self::development_slots(built.as_ref()))
+			.unwrap_or_default()
 	}
 }
 

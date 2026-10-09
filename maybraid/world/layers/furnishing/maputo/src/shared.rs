@@ -2,9 +2,8 @@
 //! generate on the worker from the ground's developments and present as
 //! [`HcsgNode`] hosts.
 //!
-//! This runs beside [`crate::FurnitureIndex`] and its presenter until every
-//! furnished app has moved over. Maputo derives everything from the ground, so
-//! a session only clears it ([`MaputoNodes::clear`]).
+//! Maputo derives everything from the ground, so a session only clears it
+//! ([`MaputoNodes::clear`]).
 
 use std::collections::BTreeSet;
 use std::marker::PhantomData;
@@ -61,6 +60,15 @@ pub struct Furnished<U> {
 }
 
 impl<U: FurnitureSlots> Furnished<U> {
+	/// Empty host value for tests and debug spawns.
+	pub fn empty_host(extent: FurnitureCellExtent) -> (Self, Aabb3d) {
+		let bounds = extent.aabb();
+		(
+			Self { cell: FurnitureCell::new(extent, Vec::new()), _ground: PhantomData },
+			bounds,
+		)
+	}
+
 	fn developments(cx: &mut GenerationContext, region: Aabb3d) -> Vec<Arc<DevelopmentSlots<U>>> {
 		cx.original_ids_for::<DevelopmentSlots<U>>(region)
 			.into_iter()

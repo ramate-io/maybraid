@@ -77,7 +77,6 @@ macro_rules! define_stamp_family {
 
 		$crate::terrain::cell::derived_universal_scheme!(
 			$Layout,
-			|_index| Some($Layout::default()),
 			|_cx| Some($Layout::default())
 		);
 
@@ -109,42 +108,13 @@ macro_rules! define_stamp_family {
 			}
 		}
 
-		impl<S> lod::gen::GenerationScheme<S> for $Controller
-		where
-			S: lod::gen::GeneratingSpatialIndex<$Layout>
-				+ lod::gen::GeneratingSpatialIndex<
-					$crate::terrain::stamps::configs::TerrainStampConfigs,
-				>,
-		{
-			fn original_ids_for(
-				spatial_index: &mut S,
-				region: bevy::math::bounding::Aabb3d,
-			) -> Vec<lod::gen::OriginalId> {
-				<$Layout as $crate::terrain::cell::CellTiling>::original_cell_ids_for(
-					spatial_index,
-					region,
-				)
-			}
-
-			fn build_with_id(
-				spatial_index: &mut S,
-				id: lod::gen::Id,
-			) -> Option<(Self, bevy::math::bounding::Aabb3d)> {
-				let bounds = id.origin_cell_bounds()?;
-				let configs = lod::gen::GeneratingSpatialIndex::<
-					$crate::terrain::stamps::configs::TerrainStampConfigs,
-				>::get_one_or_generate(spatial_index, lod::gen::Id::Universal)?;
-				let family = &configs.$config_family.$config_band;
-				Some((Self::from_family_config(bounds, family), bounds))
-			}
-		}
 
 		impl lod::hcsg::shared::GenerationScheme for $Controller {
 			fn original_ids_for(
 				cx: &mut lod::hcsg::shared::GenerationContext,
 				region: bevy::math::bounding::Aabb3d,
 			) -> Vec<lod::gen::OriginalId> {
-				<$Layout as $crate::terrain::cell::CellTiling>::cell_ids_in(cx, region)
+				<$Layout as $crate::terrain::cell::CellTiling>::origin_ids_in(cx, region)
 			}
 
 			fn build_with_id(
@@ -178,38 +148,6 @@ macro_rules! define_stamp_family {
 			}
 		}
 
-		impl<S> lod::gen::GenerationScheme<S> for $Stamp
-		where
-			S: lod::gen::GeneratingSpatialIndex<$Controller>
-				+ lod::gen::GeneratingSpatialIndex<
-					$crate::terrain::stamps::configs::TerrainStampConfigs,
-				> + lod::gen::GeneratingSpatialIndex<$crate::terrain::base_noise::BaseTerrainNoise>,
-		{
-			fn original_ids_for(
-				spatial_index: &mut S,
-				region: bevy::math::bounding::Aabb3d,
-			) -> Vec<lod::gen::OriginalId> {
-				<$Controller as $crate::terrain::stamps::shared::LeafAabbs>::original_leaf_ids_for(
-					spatial_index,
-					region,
-				)
-			}
-
-			fn build_with_id(
-				spatial_index: &mut S,
-				id: lod::gen::Id,
-			) -> Option<(Self, bevy::math::bounding::Aabb3d)> {
-				let cell = id.origin_cell_bounds()?;
-				let configs = lod::gen::GeneratingSpatialIndex::<
-					$crate::terrain::stamps::configs::TerrainStampConfigs,
-				>::get_one_or_generate(spatial_index, lod::gen::Id::Universal)?
-				.clone();
-				let base = lod::gen::GeneratingSpatialIndex::<
-					$crate::terrain::base_noise::BaseTerrainNoise,
-				>::get_one_or_generate(spatial_index, lod::gen::Id::Universal)?;
-				Some((Self::on_leaf(cell, &configs, base), cell))
-			}
-		}
 
 		impl lod::hcsg::shared::GenerationScheme for $Stamp {
 			fn original_ids_for(

@@ -14,7 +14,7 @@ use bevy::prelude::{
 };
 
 use crate::gen::{Id, Version};
-use crate::hcsg::storage::StoredEntry;
+use super::node_store::StoredEntry;
 use crate::lod_ref::LodRef;
 use crate::scene::{lod_host_scene_pending, SemanticLodScene};
 

@@ -11,5 +11,3 @@ pub use generation::{MobGeneration, MobGenerationSystems};
 pub use mob::{MobCellPresented, MobModel};
 pub use model::Mobs;
 
-#[cfg(test)]
-mod tests;

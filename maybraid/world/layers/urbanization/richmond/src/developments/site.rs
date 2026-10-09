@@ -2,7 +2,7 @@
 
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::Resource;
-use lod::gen::{GenerationScheme, Id, OriginalId};
+use lod::gen::{Id, OriginalId};
 use lod::hcsg::shared::{self, GenerationContext};
 use lod::hcsg::HcsgStorage;
 use procedural_common::SeededHash;
@@ -196,109 +196,6 @@ impl DevelopmentSite {
 		}
 	}
 
-	/// The authored config, else the seeded [`DevelopmentConfig`].
-	pub fn config(&self, storage: &mut HcsgStorage) -> Option<DevelopmentConfig> {
-		match &self.authored {
-			Some(authored) => Some(authored.config.clone()),
-			None => storage.get_one_or_generate::<DevelopmentConfig>(Id::Universal).cloned(),
-		}
-	}
-
-	/// Sites in `region` that try `kind`.
-	pub fn ids_of_kind(
-		storage: &mut HcsgStorage,
-		region: Aabb3d,
-		kind: DevelopmentKind,
-	) -> Vec<OriginalId> {
-		Self::original_ids_for(storage, region)
-			.into_iter()
-			.filter(|OriginalId(id)| {
-				storage
-					.get_one_or_generate::<Self>(*id)
-					.is_some_and(|site| site.kinds().contains(&kind))
-			})
-			.collect()
-	}
-
-	/// The site at `id` and its config, when it tries `kind`.
-	pub fn planned(
-		storage: &mut HcsgStorage,
-		id: Id,
-		kind: DevelopmentKind,
-	) -> Option<(Self, DevelopmentConfig)> {
-		let site = storage.get_one_or_generate::<Self>(id)?.clone();
-		if !site.kinds().contains(&kind) {
-			return None;
-		}
-		let config = site.config(storage)?;
-		Some((site, config))
-	}
-}
-
-impl GenerationScheme<HcsgStorage> for DevelopmentSite {
-	fn original_ids_for(storage: &mut HcsgStorage, region: Aabb3d) -> Vec<OriginalId> {
-		let Some(config) = storage.get_one_or_generate::<DevelopmentConfig>(Id::Universal).cloned()
-		else {
-			return Vec::new();
-		};
-		let authored = authored(storage);
-		let mut ids: Vec<OriginalId> =
-			authored.overlapping(region).map(|authored| OriginalId(authored.id())).collect();
-		match config.sites {
-			DevelopmentSites::Authored => {}
-			DevelopmentSites::Lattice => {
-				ids.extend(DevelopmentExtent::original_ids_overlapping(region));
-			}
-			DevelopmentSites::Urbanization => {
-				for extent in UrbanizationExtent::cells_overlapping(region) {
-					let Some(selected) =
-						storage.get_one_or_generate::<SelectedUrbanization>(extent.id())
-					else {
-						continue;
-					};
-					ids.extend(
-						selected
-							.leaves
-							.iter()
-							.filter(|leaf| {
-								leaf.kind != UrbanDevelopmentKind::Empty
-									&& overlaps_xz(region, leaf.bounds)
-							})
-							.map(|leaf| OriginalId(leaf.id())),
-					);
-				}
-			}
-		}
-		ids.sort_unstable_by_key(|OriginalId(id)| *id);
-		ids.dedup();
-		ids
-	}
-
-	fn build_with_id(storage: &mut HcsgStorage, id: Id) -> Option<(Self, Aabb3d)> {
-		let config = storage.get_one_or_generate::<DevelopmentConfig>(Id::Universal)?.clone();
-		let authored = authored(storage);
-		if let Some(entry) = authored.get(id) {
-			let kind = entry.kinds.first().copied().unwrap_or(DevelopmentKind::Empty);
-			let site = Self { cell: entry.cell, kind, authored: Some(entry.clone()) };
-			return Some((site, column_bounds(entry.cell)));
-		}
-		let cell = id.origin_cell_bounds()?;
-		let kind = match config.sites {
-			DevelopmentSites::Authored => return None,
-			DevelopmentSites::Lattice => {
-				DevelopmentExtent::from_id(id)?;
-				select_kind(cell, &config)
-			}
-			DevelopmentSites::Urbanization => {
-				let extent = UrbanizationExtent::owning_leaf(id)?;
-				let selected = storage.get_one_or_generate::<SelectedUrbanization>(extent.id())?;
-				DevelopmentKind::from(selected.leaf(id)?.kind)
-			}
-		};
-		let kind =
-			if authored.overlapping(cell).next().is_some() { DevelopmentKind::Empty } else { kind };
-		Some((Self { cell, kind, authored: None }, column_bounds(cell)))
-	}
 }
 
 impl shared::GenerationScheme for DevelopmentSite {
@@ -366,13 +263,6 @@ impl shared::GenerationScheme for DevelopmentSite {
 			if authored.overlapping(cell).next().is_some() { DevelopmentKind::Empty } else { kind };
 		Some((Self { cell, kind, authored: None }, column_bounds(cell)))
 	}
-}
-
-fn authored(storage: &mut HcsgStorage) -> AuthoredDevelopments {
-	storage
-		.get_one_or_generate::<AuthoredDevelopments>(Id::Universal)
-		.cloned()
-		.unwrap_or_default()
 }
 
 #[cfg(test)]

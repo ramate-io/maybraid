@@ -6,7 +6,7 @@ use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, Scene};
 use building_components::{pose, scene_children, FurnitureNode, FLATTENED_KIT_CHUNK_WEIGHT};
 use furniture_components::{posed_kit_part, FurnitureKitPart};
-use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
+use lod::gen::{Id, LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_host_scene_pending;
 use lod::lod_ref::LodRef;
 use lod::SceneChunk;

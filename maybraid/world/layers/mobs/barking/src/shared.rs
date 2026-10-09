@@ -36,8 +36,10 @@ use crate::generation::{
 use crate::index::{group_kind, hosts_near, urbanization_weight, MOB_CELL_EXTENT};
 use crate::present::{install_mob_scenes, MobCellRoot, MobGroupRoot};
 use crate::sample::{chico_layers_at, host_at, richmond_kind_at};
-use crate::stream::MOB_PRESENT_RADIUS;
 use crate::{MobCell, MobCellExtent};
+
+/// Present / generate rings the world stream used (1 km / 3 km).
+pub const MOB_PRESENT_RADIUS: f32 = 1_000.0;
 
 /// The widest arrival radius a plant host has.
 const HOST_REACH: f32 = 128.0;

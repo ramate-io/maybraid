@@ -16,9 +16,6 @@ pub trait ChicoGround: TerrainModel {
 	fn fine_overlay_size() -> f32;
 
 	fn cascade_chunk(bounds: Aabb3d, res_2: u8) -> (Vec3, Vec3);
-
-	/// Present groves and bump-outs. Stub grounds leave this empty.
-	fn install_presentation(_app: &mut bevy::prelude::App) {}
 }
 
 impl<T> ChicoGround for Urbanization<Richmond<T>>
@@ -33,10 +30,6 @@ where
 		let cascade = durham::cascade_chunk_for_cell(bounds, res_2);
 		let extent = cascade.extent.unwrap_or(Vec3::splat(cascade.size));
 		(cascade.origin, extent)
-	}
-
-	fn install_presentation(app: &mut bevy::prelude::App) {
-		crate::layer_present::install_chico_presentation::<Self>(app);
 	}
 }
 
@@ -74,7 +67,7 @@ mod tests {
 		let base = BaseTerrainNoise::from_config(&TerrainConfig::new(7));
 		world.init_resource::<HcsgStorage>();
 		world
-			.resource_mut::<HcsgStorage>()
+			.resource::<HcsgStorage>()
 			.insert_base_terrain_for_test(&layout, 0, 0, base);
 		let store = world.resource::<HcsgStorage>();
 		let probe = Aabb3d::from_min_max(Vec3::new(1.0, -10.0, 1.0), Vec3::new(2.0, 10.0, 2.0));
@@ -84,7 +77,7 @@ mod tests {
 			.next()
 			.ok_or_else(|| anyhow::anyhow!("stored cell"))?;
 		let terrain = store.terrain(id).ok_or_else(|| anyhow::anyhow!("terrain"))?;
-		let built = overlay_chunk_ref::<Urbanized>(terrain);
+		let built = overlay_chunk_ref::<Urbanized>(terrain.as_ref());
 		let cascade = durham::cascade_chunk_for_cell(terrain.bounds(), terrain.res_2());
 		let extent = match cascade.extent {
 			Some(extent) => extent,

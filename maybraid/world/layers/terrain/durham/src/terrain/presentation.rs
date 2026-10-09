@@ -19,6 +19,7 @@ use lod::LodSceneLevel;
 use render_item::sdf::cpu_shot::WallFaces;
 use std::collections::{HashMap, HashSet};
 use std::marker::PhantomData;
+use std::sync::Arc;
 use terrain_shaders::TerrainShader;
 
 /// One concentric mesh-LOD band on the fine (base-sized) cell grid.
@@ -215,15 +216,22 @@ impl PresentedEntry {
 	}
 
 	/// Attach, replace, or drop the water child so it matches `water`.
-	fn sync_water(&mut self, commands: &mut Commands, id: Id, water: Option<&StoredEntry<Water>>) {
-		let version = water.map(|entry| entry.version);
+	fn sync_water(
+		&mut self,
+		commands: &mut Commands,
+		id: Id,
+		water: Option<StoredEntry<Arc<Water>>>,
+	) {
+		let version = water.as_ref().map(|entry| entry.version);
 		if self.water_version == version {
 			return;
 		}
 		if let Some(previous) = self.water.take() {
 			commands.entity(previous).try_despawn();
 		}
-		self.water = water.map(|entry| attach_water(commands, id, self.entity, &entry.value));
+		self.water = water
+			.as_ref()
+			.map(|entry| attach_water(commands, id, self.entity, entry.value.as_ref()));
 		self.water_version = version;
 	}
 }
@@ -391,8 +399,8 @@ impl<M: TerrainStreamMarker> TerrainStreamRegionPresenter<'_, '_, M> {
 			.filter(|id| {
 				store.get::<Terrain>(*id).is_some_and(|value| {
 					let level = value.scene_lod_level(lod_ref);
-					Self::matches(value)
-						&& (crate::terrain::stream_lod::stream_banded_draws(value, level)
+					Self::matches(value.as_ref())
+						&& (crate::terrain::stream_lod::stream_banded_draws(value.as_ref(), level)
 							|| value.seeds_collision())
 				})
 			})
@@ -403,7 +411,8 @@ impl<M: TerrainStreamMarker> TerrainStreamRegionPresenter<'_, '_, M> {
 				continue;
 			};
 			let level = entry.value.scene_lod_level(lod_ref);
-			let draw = crate::terrain::stream_lod::stream_banded_draws(&entry.value, level);
+			let draw =
+				crate::terrain::stream_lod::stream_banded_draws(entry.value.as_ref(), level);
 			let water = draw.then(|| self.store.entry::<Water>(*id)).flatten();
 			if let Some(shown) = self.state.presented.get_mut(id) {
 				if shown.version == entry.version {
@@ -418,7 +427,7 @@ impl<M: TerrainStreamMarker> TerrainStreamRegionPresenter<'_, '_, M> {
 			if let Some(previous) = self.state.presented.remove(id) {
 				self.commands.entity(previous.entity).try_despawn();
 			}
-			let entity = entry.value.spawn_fill(
+			let entity = entry.value.as_ref().spawn_fill(
 				&mut self.commands,
 				fill_visibility(draw),
 				entry.value.seeds_collision(),
@@ -449,46 +458,6 @@ impl<M: TerrainStreamMarker> TerrainStreamRegionPresenter<'_, '_, M> {
 
 	pub fn clear_presented(&mut self) {
 		self.state.clear(&mut self.commands);
-	}
-}
-
-impl<'w, 's> RegionPresenter<Terrain, HcsgStorage> for TerrainRegionPresenter<'w, 's> {
-	fn presented_version(&self, id: Id) -> Option<Version> {
-		self.state.presented.get(&id).map(|e| e.version)
-	}
-
-	fn handle(&mut self, id: Id, version: Version, value: &Terrain, _lod_ref: &LodRef) {
-		if let Some(previous) = self.state.presented.remove(&id) {
-			self.commands.entity(previous.entity).try_despawn();
-		}
-		let entity = value.spawn_fill(&mut self.commands, Visibility::Inherited, true);
-		self.commands.entity(entity).insert((
-			Name::new("Terrain cell"),
-			PresentedTerrainScene(id),
-			TerrainVisualHost,
-		));
-		let mut shown = PresentedEntry::new(version, entity, LodSceneLevel::High);
-		shown.sync_water(&mut self.commands, id, self.store.entry::<Water>(id));
-		self.state.presented.insert(id, shown);
-	}
-
-	fn presented_ids(&self) -> Vec<Id> {
-		self.state.presented.keys().copied().collect()
-	}
-
-	fn remove_stale(&mut self, wanted: &HashSet<Id>) {
-		let stale: Vec<(Id, Entity)> = self
-			.state
-			.presented
-			.iter()
-			.filter(|(id, _)| !wanted.contains(id))
-			.map(|(id, entry)| (*id, entry.entity))
-			.collect();
-
-		for (id, entity) in stale {
-			self.commands.entity(entity).try_despawn();
-			self.state.presented.remove(&id);
-		}
 	}
 }
 

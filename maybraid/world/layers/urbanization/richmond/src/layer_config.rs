@@ -2,7 +2,10 @@
 
 use bevy::prelude::*;
 use procedural_common::NoiseParams;
-use urbanization_cells::{UrbanizationKind, UrbanizationSelection};
+use urbanization_cells::{
+	UrbanizationKind, UrbanizationSelection, DEFAULT_URBANIZATION_EXTENT_XZ,
+	DEVELOPMENT_GENERATE_RADIUS_M, DEVELOPMENT_PRESENT_RADIUS_M,
+};
 
 use crate::config::{DevelopmentConfig, DevelopmentSites};
 
@@ -11,6 +14,15 @@ pub const PLAYGROUND_LIKELIHOOD: f32 = 0.9;
 
 /// Default present ring multiplier (`1` → 1 km present / 3 km generate).
 pub const DEFAULT_URBANIZATION_STREAM_RADIUS: u32 = 1;
+
+/// Present / generate metric radii for a stream-radius multiplier.
+pub fn stream_radii_m(stream_radius: u32) -> (f32, f32) {
+	if stream_radius == 0 {
+		return (DEFAULT_URBANIZATION_EXTENT_XZ, DEFAULT_URBANIZATION_EXTENT_XZ * 2.0);
+	}
+	let present = DEVELOPMENT_PRESENT_RADIUS_M * stream_radius as f32;
+	(present, present + (DEVELOPMENT_GENERATE_RADIUS_M - DEVELOPMENT_PRESENT_RADIUS_M))
+}
 
 /// Hopscotch default so neighboring 1600 m cells stay related.
 pub const DEFAULT_URBANIZATION_NOISE: &str = "1337,0.0005,1,1";
@@ -153,16 +165,6 @@ impl RichmondConfig {
 	pub fn world_defaults() -> Self {
 		Self {
 			urbanization: Some(UrbanizationStreamSpec::default()),
-			focus_urbanization: None,
-			focus_development: None,
-			generate_budget: 16,
-		}
-	}
-
-	/// Training's hopscotch-off config: same generate budget, no stream spec.
-	pub fn shared_world() -> Self {
-		Self {
-			urbanization: None,
 			focus_urbanization: None,
 			focus_development: None,
 			generate_budget: 16,

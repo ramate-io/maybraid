@@ -5,9 +5,10 @@
 //! not sources.
 
 use bevy::math::bounding::Aabb3d;
-use bevy::math::Vec2;
+use bevy::math::{Vec2, Vec3};
 use lod::gen::{Id, Version};
-use lod::hcsg::{HcsgNode, HcsgStorage};
+use lod::hcsg::shared::HcsgValue;
+use lod::hcsg::HcsgStorage;
 use procedural_common::Bounds2;
 
 use crate::terrain::stamps::{
@@ -215,8 +216,8 @@ pub(crate) fn geographic_features_overlapping(
 /// Latest membership change among the stores [`geographic_features_overlapping`]
 /// reads. Writes to any other type, inside Durham or not, leave it unchanged.
 pub(crate) fn geography_revision(storage: &HcsgStorage) -> u64 {
-	fn revision<T: HcsgNode>(storage: &HcsgStorage) -> u64 {
-		storage.store::<T>().map_or(0, |store| store.membership_revision())
+	fn revision<T: HcsgValue>(storage: &HcsgStorage) -> u64 {
+		storage.membership_revision::<T>()
 	}
 	[
 		revision::<MassifHighPassStampCell>(storage),
@@ -239,7 +240,7 @@ pub(crate) fn geography_revision(storage: &HcsgStorage) -> u64 {
 	.unwrap_or(0)
 }
 
-fn push_stamp_features<T: HcsgNode>(
+fn push_stamp_features<T: HcsgValue>(
 	out: &mut Vec<GeographicFeature>,
 	region: Bounds2,
 	storage: &HcsgStorage,
@@ -248,8 +249,12 @@ fn push_stamp_features<T: HcsgNode>(
 	kind: GeographicFeatureKind,
 	cell_if_occupied: impl Fn(&T) -> Option<Aabb3d>,
 ) {
-	for (id, entry) in storage.store::<T>().into_iter().flat_map(|store| store.iter()) {
-		let Some(cell) = cell_if_occupied(&entry.value) else {
+	let query = bounds2_query_aabb(region);
+	for id in storage.overlapping::<T>(query) {
+		let Some(entry) = storage.entry::<T>(id) else {
+			continue;
+		};
+		let Some(cell) = cell_if_occupied(entry.value.as_ref()) else {
 			continue;
 		};
 		let bounds = bounds2_from_aabb(cell);
@@ -271,11 +276,16 @@ fn push_watershed_features<T>(
 	region: Bounds2,
 	storage: &HcsgStorage,
 ) where
-	T: AuthoredPocketWaters + HcsgNode,
+	T: AuthoredPocketWaters + HcsgValue,
 {
-	for (id, entry) in storage.store::<T>().into_iter().flat_map(|store| store.iter()) {
-		let authored = entry.value.authored();
-		let Some((kind, bounds, anchor)) = authored_geography(authored, entry.value.cell()) else {
+	let query = bounds2_query_aabb(region);
+	for id in storage.overlapping::<T>(query) {
+		let Some(entry) = storage.entry::<T>(id) else {
+			continue;
+		};
+		let value = entry.value.as_ref();
+		let authored = value.authored();
+		let Some((kind, bounds, anchor)) = authored_geography(authored, value.cell()) else {
 			continue;
 		};
 		if !xz_overlaps(region, bounds) {
@@ -284,7 +294,7 @@ fn push_watershed_features<T>(
 		out.push(GeographicFeature {
 			id: GeographicFeatureId {
 				family: GeographicFamily::Watershed,
-				band: entry.value.band(),
+				band: value.band(),
 				source: id,
 			},
 			revision: entry.version,
@@ -355,6 +365,13 @@ fn bounds2_from_aabb(cell: Aabb3d) -> Bounds2 {
 	Bounds2::from_xz(cell.min.x, cell.min.z, cell.max.x, cell.max.z)
 }
 
+fn bounds2_query_aabb(region: Bounds2) -> Aabb3d {
+	Aabb3d::from_min_max(
+		Vec3::new(region.min.x, f32::NEG_INFINITY, region.min.y),
+		Vec3::new(region.max.x, f32::INFINITY, region.max.y),
+	)
+}
+
 fn xz_overlaps(a: Bounds2, b: Bounds2) -> bool {
 	a.min.x < b.max.x && a.max.x > b.min.x && a.min.y < b.max.y && a.max.y > b.min.y
 }
@@ -387,40 +404,40 @@ mod tests {
 	}
 
 	fn insert_stamp(
-		store: &mut HcsgStorage,
+		store: &HcsgStorage,
 		id: Id,
 		stamp_cell: Aabb3d,
 		occupied: bool,
 	) -> Version {
-		store.insert(
+		store.publish(
 			id,
-			MassifHighPassStampCell {
+			Arc::new(MassifHighPassStampCell {
 				cell: stamp_cell,
 				modulations: if occupied { vec![dummy_modulation()] } else { Vec::new() },
-			},
+			}),
 			stamp_cell,
 		)
 	}
 
-	fn insert_lake(store: &mut HcsgStorage, id: Id, lake_cell: Aabb3d, lake: Lake) -> Version {
-		store.insert(
+	fn insert_lake(store: &HcsgStorage, id: Id, lake_cell: Aabb3d, lake: Lake) -> Version {
+		store.publish(
 			id,
-			PocketWatersHighPass {
+			Arc::new(PocketWatersHighPass {
 				cell: lake_cell,
 				band: WatershedBandPass::High,
 				authored: PocketWater::Lake(lake),
-			},
+			}),
 			lake_cell,
 		)
 	}
 
 	#[test]
 	fn empty_stamp_modulations_are_not_geographic_sources() -> anyhow::Result<()> {
-		let mut store = HcsgStorage::default();
+		let store = HcsgStorage::default();
 		let occupied = cell(0.0, 0.0, 100.0, 100.0);
 		let empty = cell(200.0, 200.0, 300.0, 300.0);
-		let version = insert_stamp(&mut store, Id::from_cell(occupied), occupied, true);
-		insert_stamp(&mut store, Id::from_cell(empty), empty, false);
+		let version = insert_stamp(&store, Id::from_cell(occupied), occupied, true);
+		insert_stamp(&store, Id::from_cell(empty), empty, false);
 
 		let found: Vec<_> = store
 			.geographic_features_overlapping(Bounds2::from_xz(-10.0, -10.0, 400.0, 400.0))
@@ -436,20 +453,20 @@ mod tests {
 
 	#[test]
 	fn one_authored_lake_is_named_once_across_derived_hydro_cells() -> anyhow::Result<()> {
-		let mut store = HcsgStorage::default();
+		let store = HcsgStorage::default();
 		let lake_cell = cell(0.0, 0.0, 400.0, 400.0);
 		let lake_bounds = Bounds2::from_xz(0.0, 0.0, 400.0, 400.0);
 		let lake = Lake::from_bounds(lake_bounds, 7, LakeParams::default(), None)
 			.ok_or_else(|| anyhow::anyhow!("authored lake"))?;
 		let lake_id = Id::from_cell(lake_cell);
-		let lake_version = insert_lake(&mut store, lake_id, lake_cell, lake);
+		let lake_version = insert_lake(&store, lake_id, lake_cell, lake);
 
 		let left = cell(0.0, 0.0, 200.0, 400.0);
 		let right = cell(200.0, 0.0, 400.0, 400.0);
 		for derived in [left, right] {
-			store.insert(
+			store.publish(
 				Id::from_cell(derived),
-				HydroComplexCell {
+				Arc::new(HydroComplexCell {
 					cell: derived,
 					complex: Arc::new(HydroComplex::new(
 						Bounds2::from_xz(
@@ -460,7 +477,7 @@ mod tests {
 						),
 						1,
 					)),
-				},
+				}),
 				derived,
 			);
 		}
@@ -482,20 +499,20 @@ mod tests {
 	#[test]
 	fn geography_revision_moves_only_for_source_stores() -> anyhow::Result<()> {
 		struct Furniture;
-		let mut store = HcsgStorage::default();
+		let store = HcsgStorage::default();
 		let before = store.geography_revision();
 		let bounds = cell(0.0, 0.0, 100.0, 100.0);
-		store.insert(Id::from_cell(bounds), Furniture, bounds);
-		store.insert(
+		store.publish(Id::from_cell(bounds), Arc::new(Furniture), bounds);
+		store.publish(
 			Id::from_cell(bounds),
-			HydroComplexCell {
+			Arc::new(HydroComplexCell {
 				cell: bounds,
 				complex: Arc::new(HydroComplex::new(Bounds2::from_xz(0.0, 0.0, 100.0, 100.0), 1)),
-			},
+			}),
 			bounds,
 		);
 		anyhow::ensure!(store.geography_revision() == before, "non-source writes must not count");
-		insert_stamp(&mut store, Id::from_cell(bounds), bounds, true);
+		insert_stamp(&store, Id::from_cell(bounds), bounds, true);
 		anyhow::ensure!(store.geography_revision() > before, "a stamp write is a source change");
 		Ok(())
 	}
@@ -503,12 +520,12 @@ mod tests {
 	#[test]
 	fn query_does_not_admit_or_mutate_storage() -> anyhow::Result<()> {
 		let store = HcsgStorage::default();
-		let before = store.latest_version();
+		let before = store.geography_revision();
 		let count = store
 			.geographic_features_overlapping(Bounds2::from_xz(0.0, 0.0, 10.0, 10.0))
 			.count();
 		anyhow::ensure!(count == 0);
-		anyhow::ensure!(store.latest_version() == before);
+		anyhow::ensure!(store.geography_revision() == before);
 		Ok(())
 	}
 }

@@ -14,7 +14,7 @@ use crate::terrain::watersheds::high_pass::PocketWatersHighPass;
 use crate::terrain::watersheds::low_pass::PocketWatersLowPass;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
-use lod::gen::{GeneratingSpatialIndex, GenerationScheme, Id, OriginalId};
+use lod::gen::{Id, OriginalId};
 use lod::hcsg::shared::{self, GenerationContext};
 use procedural_common::Bounds2;
 use std::sync::Arc;
@@ -45,40 +45,7 @@ fn cell_seed(cell: Aabb3d, salt: u32) -> u32 {
 
 /// Origin-grid root for watershed correction; both pocket-water passes are
 /// pulled by region, so their pocket / pre-pocket stacks stay out of these bounds.
-impl<S> GenerationScheme<S> for HydroComplexCell
-where
-	S: GeneratingSpatialIndex<TerrainCellLayout>
-		+ GeneratingSpatialIndex<WatershedConfigs>
-		+ GeneratingSpatialIndex<PocketWatersHighPass>
-		+ GeneratingSpatialIndex<PocketWatersLowPass>,
-{
-	fn original_ids_for(spatial_index: &mut S, region: Aabb3d) -> Vec<OriginalId> {
-		TerrainCellLayout::original_cell_ids_for(spatial_index, region)
-	}
 
-	fn build_with_id(spatial_index: &mut S, id: Id) -> Option<(Self, Aabb3d)> {
-		let cell = id.origin_cell_bounds()?;
-		let seed = GeneratingSpatialIndex::<WatershedConfigs>::get_one_or_generate(
-			spatial_index,
-			Id::Universal,
-		)?
-		.seed;
-		let mut nodes = Vec::new();
-		for pass in GeneratingSpatialIndex::<PocketWatersHighPass>::get_or_generate_region_values(
-			spatial_index,
-			cell,
-		) {
-			nodes.extend(pass.hydro_nodes());
-		}
-		for pass in GeneratingSpatialIndex::<PocketWatersLowPass>::get_or_generate_region_values(
-			spatial_index,
-			cell,
-		) {
-			nodes.extend(pass.hydro_nodes());
-		}
-		Some((Self::union(cell, seed, nodes), cell))
-	}
-}
 
 impl shared::GenerationScheme for HydroComplexCell {
 	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
@@ -137,23 +104,7 @@ pub struct WatershedAproningCell {
 /// is their only dependency.
 macro_rules! impl_correction_stage_cell {
 	($Cell:ty) => {
-		impl<S> GenerationScheme<S> for $Cell
-		where
-			S: GeneratingSpatialIndex<HydroComplexCell>,
-		{
-			fn original_ids_for(spatial_index: &mut S, region: Aabb3d) -> Vec<OriginalId> {
-				GeneratingSpatialIndex::<HydroComplexCell>::original_ids_for(spatial_index, region)
-			}
-
-			fn build_with_id(spatial_index: &mut S, id: Id) -> Option<(Self, Aabb3d)> {
-				let complex_cell = GeneratingSpatialIndex::<HydroComplexCell>::get_one_or_generate(
-					spatial_index,
-					id,
-				)?;
-				let cell = complex_cell.cell;
-				Some((Self { cell, complex: complex_cell.indexed().cloned() }, cell))
-			}
-		}
+		
 
 		impl shared::GenerationScheme for $Cell {
 			fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {

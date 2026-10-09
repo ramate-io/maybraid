@@ -52,21 +52,8 @@ const COLUMN_SCALE: DVec3 = DVec3::new(
 ///
 /// Nodes that read `G`'s cells also join `G::Nodes`, so a ground rebuild
 /// drops them with the cells they were generated from.
-pub fn register_richmond_nodes<G: RichmondGround>(storage: &mut HcsgStorage) {
-	storage
-		.configure::<DevelopmentSite>(COLUMN_SCALE)
-		.add_to_group::<RichmondNodes, DevelopmentSite>();
-	storage
-		.configure::<RichmondDevelopment<G>>(COLUMN_SCALE)
-		.add_to_group::<RichmondNodes, RichmondDevelopment<G>>()
-		.add_to_group::<G::Nodes, RichmondDevelopment<G>>();
-	storage
-		.configure::<Built<G>>(COLUMN_SCALE)
-		.add_to_group::<RichmondNodes, Built<G>>()
-		.add_to_group::<G::Nodes, Built<G>>();
-	storage
-		.add_to_group::<RichmondNodes, PaddedTerrain<G>>()
-		.add_to_group::<G::Nodes, PaddedTerrain<G>>();
+pub fn register_richmond_nodes<G: RichmondGround>(storage: &HcsgStorage) {
+	RichmondNodes::configure::<G>(storage);
 }
 
 impl RichmondNodes {
@@ -75,7 +62,8 @@ impl RichmondNodes {
 		storage
 			.configure::<DevelopmentSite>(COLUMN_SCALE)
 			.configure::<RichmondDevelopment<G>>(COLUMN_SCALE)
-			.configure::<Built<G>>(COLUMN_SCALE);
+			.configure::<Built<G>>(COLUMN_SCALE)
+			.configure::<PaddedTerrain<G>>(COLUMN_SCALE);
 	}
 
 	/// Drops every value Richmond derived over ground `G` from the shared storage.

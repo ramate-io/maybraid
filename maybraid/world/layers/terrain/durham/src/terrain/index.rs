@@ -55,11 +55,6 @@ const DURHAM_BASE_SCALE: DVec3 = DVec3::new(
 
 macro_rules! durham_nodes {
 	($($T:ty),* $(,)?) => {
-		/// Configures Durham's stores and joins them to [`DurhamNodes`].
-		pub fn register_durham_nodes(storage: &mut HcsgStorage) {
-			$(storage.configure::<$T>(DURHAM_BASE_SCALE).add_to_group::<DurhamNodes, $T>();)*
-		}
-
 		impl DurhamNodes {
 			/// Configures Durham's stores in the shared storage.
 			pub fn configure(storage: &shared::HcsgStorage) {
@@ -67,11 +62,16 @@ macro_rules! durham_nodes {
 			}
 
 			/// Drops every derived Durham value from the shared storage.
-			fn clear(storage: &shared::HcsgStorage) {
+			pub fn clear(storage: &shared::HcsgStorage) {
 				$(storage.clear::<$T>();)*
 			}
 		}
 	};
+}
+
+/// Configures Durham's stores in the shared storage.
+pub fn register_durham_nodes(storage: &HcsgStorage) {
+	DurhamNodes::configure(storage);
 }
 
 durham_nodes!(
@@ -147,16 +147,6 @@ impl DurhamRoots<'_> {
 		&self.layout
 	}
 
-	/// Drops every derived Durham node and seeds the roots from the resources.
-	pub fn reseed(&self, storage: &mut HcsgStorage) {
-		storage.clear_group::<DurhamNodes>();
-		storage.seed(self.layout.clone(), universal_bounds());
-		storage.seed(self.stamps.clone(), universal_bounds());
-		storage.seed(self.watersheds.clone(), universal_bounds());
-		storage.seed(self.terrain_assets.clone(), universal_bounds());
-		storage.seed(self.water_assets.clone(), universal_bounds());
-	}
-
 	/// Starts a new shared session from the resources: ends the epoch (every
 	/// layer's subscriptions, so in-flight values are dropped), then resets.
 	pub fn restart(&self, storage: &shared::HcsgStorage, demand: &HcsgDemand) {
@@ -227,7 +217,7 @@ pub(crate) fn origin_cell_ids_at(
 
 /// Terrain reads over [`HcsgStorage`].
 pub trait TerrainStorage {
-	fn terrain(&self, id: Id) -> Option<&Terrain>;
+	fn terrain(&self, id: Id) -> Option<Arc<Terrain>>;
 
 	/// Number of stored terrain origin cells.
 	fn terrain_count(&self) -> usize;
@@ -246,11 +236,11 @@ pub trait TerrainStorage {
 	/// admits a few cells per frame, so a stamp read earlier misses the rest.
 	fn fills_layout(&self, layout: &TerrainCellLayout) -> bool;
 
-	fn water(&self, id: Id) -> Option<&Water>;
+	fn water(&self, id: Id) -> Option<Arc<Water>>;
 
 	fn water_version(&self, id: Id) -> Option<Version>;
 
-	fn base_noise(&self) -> Option<&BaseTerrainNoise>;
+	fn base_noise(&self) -> Option<Arc<BaseTerrainNoise>>;
 
 	fn height_snapshot(&self) -> TerrainHeightSnapshot;
 
@@ -279,7 +269,7 @@ pub trait TerrainStorage {
 	/// Only for composed-surface parity tests — not a production insert path.
 	#[doc(hidden)]
 	fn insert_base_terrain_for_test(
-		&mut self,
+		&self,
 		layout: &TerrainCellLayout,
 		ix: i32,
 		iz: i32,
@@ -288,16 +278,16 @@ pub trait TerrainStorage {
 }
 
 impl TerrainStorage for HcsgStorage {
-	fn terrain(&self, id: Id) -> Option<&Terrain> {
+	fn terrain(&self, id: Id) -> Option<Arc<Terrain>> {
 		self.get::<Terrain>(id)
 	}
 
 	fn terrain_count(&self) -> usize {
-		self.store::<Terrain>().map_or(0, |store| store.len())
+		self.overlapping::<Terrain>(universal_bounds()).len()
 	}
 
 	fn terrain_revision(&self) -> u64 {
-		lod::gen::SpatialIndex::<Terrain>::membership_revision(self)
+		self.membership_revision::<Terrain>()
 	}
 
 	fn geography_revision(&self) -> u64 {
@@ -315,7 +305,7 @@ impl TerrainStorage for HcsgStorage {
 			.all(|OriginalId(id)| self.contains::<Terrain>(id))
 	}
 
-	fn water(&self, id: Id) -> Option<&Water> {
+	fn water(&self, id: Id) -> Option<Arc<Water>> {
 		self.get::<Water>(id)
 	}
 
@@ -323,26 +313,28 @@ impl TerrainStorage for HcsgStorage {
 		self.entry::<Water>(id).map(|entry| entry.version)
 	}
 
-	fn base_noise(&self) -> Option<&BaseTerrainNoise> {
+	fn base_noise(&self) -> Option<Arc<BaseTerrainNoise>> {
 		self.get::<BaseTerrainNoise>(Id::Universal)
 	}
 
 	fn height_snapshot(&self) -> TerrainHeightSnapshot {
+		let region = universal_bounds();
 		let terrain = self
-			.store::<Terrain>()
+			.overlapping::<Terrain>(region)
 			.into_iter()
-			.flat_map(|store| store.iter())
-			.map(|(id, entry)| (id, Arc::clone(&entry.value.sdf)))
+			.filter_map(|id| self.get::<Terrain>(id).map(|terrain| (id, Arc::clone(&terrain.sdf))))
 			.collect();
 		TerrainHeightSnapshot { terrain: Arc::new(terrain) }
 	}
 
 	fn water_snapshot(&self) -> WaterSurfaceSnapshot {
+		let region = universal_bounds();
 		let water = self
-			.store::<Water>()
+			.overlapping::<Water>(region)
 			.into_iter()
-			.flat_map(|store| store.iter())
-			.map(|(id, entry)| (id, Arc::new(entry.value.sdf.clone())))
+			.filter_map(|id| {
+				self.get::<Water>(id).map(|water| (id, Arc::new(water.sdf.clone())))
+			})
 			.collect();
 		WaterSurfaceSnapshot { water: Arc::new(water) }
 	}
@@ -367,7 +359,7 @@ impl TerrainStorage for HcsgStorage {
 	}
 
 	fn insert_base_terrain_for_test(
-		&mut self,
+		&self,
 		layout: &TerrainCellLayout,
 		ix: i32,
 		iz: i32,
@@ -375,7 +367,7 @@ impl TerrainStorage for HcsgStorage {
 	) {
 		let terrain = Terrain::base_cell_for_test(layout, ix, iz, base);
 		let cell = terrain.cell;
-		self.insert(Id::from_cell(cell), terrain, cell);
+		self.publish(Id::from_cell(cell), Arc::new(terrain), cell);
 	}
 }
 
@@ -408,9 +400,9 @@ impl Terrain {
 }
 
 #[cfg(test)]
-pub(crate) fn insert_water_for_test(storage: &mut HcsgStorage, water: Water) {
+pub(crate) fn insert_water_for_test(storage: &HcsgStorage, water: Water) {
 	let bounds = water.cell;
-	storage.insert(Id::from_cell(bounds), water, bounds);
+	storage.publish(Id::from_cell(bounds), Arc::new(water), bounds);
 }
 
 #[cfg(test)]
@@ -420,8 +412,8 @@ mod tests {
 
 	#[test]
 	fn clearing_durham_nodes_advances_versions_past_the_previous_epoch() -> anyhow::Result<()> {
-		let mut storage = HcsgStorage::default();
-		register_durham_nodes(&mut storage);
+		let storage = HcsgStorage::default();
+		register_durham_nodes(&storage);
 		let layout = TerrainCellLayout::default();
 		storage.insert_base_terrain_for_test(
 			&layout,
@@ -432,7 +424,7 @@ mod tests {
 		let id = storage.terrain_ids_overlapping(layout.request_region())[0];
 		let previous =
 			storage.entry::<Terrain>(id).ok_or_else(|| anyhow::anyhow!("inserted"))?.version;
-		storage.clear_group::<DurhamNodes>();
+		DurhamNodes::clear(&storage);
 		assert_eq!(storage.terrain_count(), 0);
 		storage.insert_base_terrain_for_test(
 			&layout,

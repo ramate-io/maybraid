@@ -2,9 +2,7 @@
 //! and built developments generate on the worker and present as [`HcsgNode`]
 //! hosts.
 //!
-//! This runs beside the frame-synchronous path in [`crate::layer_stream`] and
-//! [`crate::layer_present`] until every Richmond host has moved over. A
-//! session starts by advancing the epoch, then [`RichmondRoots::reset`].
+//! A session starts by advancing the epoch, then [`RichmondRoots::reset`].
 
 use std::marker::PhantomData;
 
@@ -21,8 +19,8 @@ use crate::built::Built;
 use crate::config::DevelopmentConfig;
 use crate::developments::site::AuthoredDevelopments;
 use crate::ground::RichmondGround;
+use crate::layer_config::stream_radii_m;
 use crate::layer_config::UrbanizationStreamSpec;
-use crate::layer_stream::stream_radii_m;
 use crate::padded::PaddedTerrain;
 use crate::plugin::register_richmond_plugin;
 use crate::storage::RichmondNodes;

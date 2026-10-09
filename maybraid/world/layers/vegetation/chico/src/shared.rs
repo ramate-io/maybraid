@@ -3,9 +3,7 @@
 //! surface cells into a [`GrownGrove`] presented as an [`HcsgNode`] host.
 //! Beyond the groves, [`BumpedOut`] canopy proxies displace the surface.
 //!
-//! This runs beside [`crate::ForestIndex`] and its presenter until every
-//! forested app has moved over. A session starts by advancing the epoch, then
-//! [`ChicoRoots::reset`].
+//! A session starts by advancing the epoch, then [`ChicoRoots::reset`].
 
 use std::marker::PhantomData;
 use std::sync::Arc;

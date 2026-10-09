@@ -15,8 +15,6 @@ use scene_ref::SceneRefPlugin;
 use crate::buildings_lod::register_developments_buildings_lod_plugin;
 use crate::config::DevelopmentConfig;
 use crate::place::DiscoverablePlace;
-use crate::presentation::PaddedTerrainPresenterState;
-
 /// Registers SceneRef, urban MaterialRef, placeholder wireframes, building LOD, and walk colliders.
 #[derive(Default)]
 pub struct RichmondDevelopmentModelsPlugin;
@@ -61,7 +59,6 @@ impl Plugin for RichmondDevelopmentModelsPlugin {
 		register_developments_buildings_lod_plugin(app);
 
 		app.init_resource::<DevelopmentConfig>()
-			.init_resource::<PaddedTerrainPresenterState>()
 			.add_systems(Update, apply_parent_confines.after(LodRefreshSystems::Cull))
 			.add_systems(Update, stamp_label_places);
 	}

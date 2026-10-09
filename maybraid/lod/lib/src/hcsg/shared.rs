@@ -3,7 +3,7 @@
 //! `hcsg/README.md`, next to this module.
 //!
 //! - [`storage`]: [`HcsgStorage`], a cloneable handle over one locked
-//!   [`NodeStore`](super::NodeStore) of `Arc<T>` per type. Locks cover lookup
+//!   [`NodeStore`](node_store::NodeStore) of `Arc<T>` per type. Locks cover lookup
 //!   and publication only.
 //! - [`context`]: [`GenerationContext`] hands schemes owned `Arc` dependencies
 //!   and generates what is missing.
@@ -18,16 +18,14 @@
 //!   keeps one [`HcsgNode<T>`] host per published value within `C`'s regions.
 //! - [`node`]: [`HcsgNode<T>`], forwarding the LOD scene traits to `T`.
 //!
-//! This sits alongside the frame-synchronous [`super::HcsgStorage`] until the
-//! layers move over.
-
 pub mod bounds;
+pub mod node_store;
 pub mod context;
 pub mod demand;
 pub mod generation;
 pub mod node;
 pub mod presentation;
-mod runtime;
+pub mod runtime;
 pub mod storage;
 pub mod worker;
 

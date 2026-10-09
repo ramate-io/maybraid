@@ -32,7 +32,7 @@ use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value, Scene};
 use lod::gen::{
-	GeneratingSpatialIndex, GenerationScheme, Id, LodScene, LodSceneLevel, LodSceneStatus,
+	Id, LodScene, LodSceneLevel, LodSceneStatus,
 	OriginalId,
 };
 use lod::hcsg::shared::{self, GenerationContext};
@@ -183,26 +183,7 @@ fn fill_has_wet_volume(fill: &WaterFill, terrain: &TerrainSdf) -> bool {
 }
 
 /// Same origin ids as [`Terrain`]; terrain's whole stack stays behind that one bound.
-impl<S> GenerationScheme<S> for Water
-where
-	S: GeneratingSpatialIndex<Terrain> + GeneratingSpatialIndex<WaterPresentationAssets>,
-{
-	fn original_ids_for(spatial_index: &mut S, region: Aabb3d) -> Vec<OriginalId> {
-		GeneratingSpatialIndex::<Terrain>::original_ids_for(spatial_index, region)
-	}
 
-	fn build_with_id(spatial_index: &mut S, id: Id) -> Option<(Self, Aabb3d)> {
-		let bounds = id.origin_cell_bounds()?;
-		let assets = GeneratingSpatialIndex::<WaterPresentationAssets>::get_one_or_generate(
-			spatial_index,
-			Id::Universal,
-		)?
-		.clone();
-		// Terrain composes every Watershed band before returning; fills ride along.
-		let terrain = GeneratingSpatialIndex::<Terrain>::get_one_or_generate(spatial_index, id)?;
-		Some((Self::over(bounds, terrain, &assets)?, bounds))
-	}
-}
 
 impl shared::GenerationScheme for Water {
 	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {

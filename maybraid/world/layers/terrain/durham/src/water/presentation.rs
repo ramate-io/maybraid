@@ -68,9 +68,9 @@ impl<'w, 's> WaterRegionPresenter<'w, 's> {
 			.overlapping::<Water>(region)
 			.into_iter()
 			.filter(|id| {
-				store
-					.get::<Water>(*id)
-					.is_some_and(|value| stream_banded_draws(value, value.scene_lod_level(lod_ref)))
+				store.get::<Water>(*id).is_some_and(|value| {
+					stream_banded_draws(value.as_ref(), value.scene_lod_level(lod_ref))
+				})
 			})
 			.collect();
 
@@ -78,7 +78,8 @@ impl<'w, 's> WaterRegionPresenter<'w, 's> {
 			let Some(entry) = store.entry::<Water>(*id) else {
 				continue;
 			};
-			let (value, version) = (&entry.value, entry.version);
+			let value = entry.value.as_ref();
+			let version = entry.version;
 			let level = value.scene_lod_level(lod_ref);
 			if self
 				.state
@@ -115,34 +116,6 @@ impl<'w, 's> WaterRegionPresenter<'w, 's> {
 			self.commands.entity(entity).try_despawn();
 			self.state.presented.remove(&id);
 		}
-	}
-}
-
-impl<'w, 's> RegionPresenter<Water, HcsgStorage> for WaterRegionPresenter<'w, 's> {
-	fn presented_version(&self, id: Id) -> Option<Version> {
-		self.state.presented.get(&id).map(|e| e.version)
-	}
-
-	fn handle(&mut self, id: Id, version: Version, value: &Water, lod_ref: &LodRef) {
-		if let Some(previous) = self.state.presented.remove(&id) {
-			self.commands.entity(previous.entity).try_despawn();
-		}
-		let entity = self
-			.commands
-			.spawn_scene(value.scene_with_lod(lod_ref))
-			.insert(PresentedWaterScene(id))
-			.id();
-		self.state
-			.presented
-			.insert(id, PresentedEntry { version, entity, level: value.scene_lod_level(lod_ref) });
-	}
-
-	fn presented_ids(&self) -> Vec<Id> {
-		self.state.presented.keys().copied().collect()
-	}
-
-	fn remove_stale(&mut self, wanted: &HashSet<Id>) {
-		WaterRegionPresenter::remove_stale(self, wanted);
 	}
 }
 

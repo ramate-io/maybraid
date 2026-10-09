@@ -680,50 +680,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "barking-playground"
-version = "0.1.2"
-dependencies = [
- "anyhow",
- "avian3d",
- "bevy",
- "characters",
- "clap",
- "durham",
- "evasion-intelligence",
- "firearm-intelligence",
- "firearm-user",
- "firearms",
- "fleeing-intelligence",
- "game-commands",
- "ground-avian",
- "hiding-intelligence",
- "journeying-intelligence",
- "lod",
- "lod-avian",
- "log",
- "maybraid-character-controller",
- "maybraid-input",
- "meandering-intelligence",
- "mob-characters",
- "mob-intelligence",
- "mob-scenes",
- "movement-intelligence",
- "movement-intelligence-avian",
- "movement-realization",
- "npc-intelligence",
- "player",
- "poi-intelligence",
- "render-item",
- "routing-intelligence",
- "spotting-intelligence",
- "terrain-shaders",
- "tether-intelligence",
- "threat-intelligence",
- "threat-intelligence-damage",
- "threat-management-intelligence",
-]
-
-[[package]]
 name = "base64"
 version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2924,25 +2880,6 @@ name = "character-ui-menu"
 version = "0.1.2"
 dependencies = [
  "bevy_math",
-]
-
-[[package]]
-name = "character-world-movements-playground"
-version = "0.1.2"
-dependencies = [
- "avian3d",
- "bevy",
- "characters",
- "chunk",
- "clap",
- "durham",
- "game-commands",
- "ground-avian",
- "lod",
- "lod-avian",
- "log",
- "render-item",
- "terrain-shaders",
 ]
 
 [[package]]
@@ -9906,35 +9843,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "richmond-playground"
-version = "0.1.2"
-dependencies = [
- "anyhow",
- "avian3d",
- "bevy",
- "building-components",
- "buildings",
- "chico",
- "clap",
- "durham",
- "furnishing-layer-presentation",
- "game-commands",
- "layer-stack",
- "lod",
- "log",
- "maputo",
- "procedural-common",
- "richmond",
- "terrain-layer-model",
- "terrain-layer-presentation",
- "terrain-shaders",
- "urbanization-cells",
- "urbanization-developments",
- "urbanization-layer-model",
- "urbanization-layer-presentation",
-]
-
-[[package]]
 name = "rigs"
 version = "0.1.2"
 dependencies = [
@@ -9998,30 +9906,6 @@ dependencies = [
  "bevy",
  "lod-avian",
  "movement-intelligence",
-]
-
-[[package]]
-name = "routing-playground"
-version = "0.1.2"
-dependencies = [
- "avian3d",
- "bevy",
- "clap",
- "durham",
- "game-commands",
- "lod",
- "lod-avian",
- "log",
- "maybraid-character-controller",
- "maybraid-input",
- "movement-intelligence",
- "movement-intelligence-avian",
- "movement-realization",
- "player",
- "render-item",
- "routing-intelligence",
- "terrain-shaders",
- "tether-intelligence",
 ]
 
 [[package]]

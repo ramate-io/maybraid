@@ -86,16 +86,7 @@ where
 		target_size: f32,
 		overlay_size_tolerance: Option<f32>,
 	) -> Option<&'a dyn TerrainCell<Mesh = <Self::Cell as TerrainCell>::Mesh>> {
-		if let Some(padded) = U::overlay_surface(&read.urban, bounds) {
-			let size = padded.bounds().max.x - padded.bounds().min.x;
-			let accept = match overlay_size_tolerance {
-				None => true,
-				Some(tolerance) => (size - target_size).abs() < tolerance,
-			};
-			if accept {
-				return Some(padded);
-			}
-		}
+		let _ = U::overlay_surface(&read.urban, bounds);
 		U::Ground::overlay_cell(&read.ground, bounds, target_size, overlay_size_tolerance)
 	}
 
@@ -121,17 +112,17 @@ where
 		U::pads(&read.urban, region)
 	}
 
-	fn built<'a>(
-		read: &'a SystemParamItem<'_, '_, Self::Read>,
+	fn built(
+		read: &SystemParamItem<'_, '_, Self::Read>,
 		region: Aabb3d,
-	) -> Vec<&'a U::Built> {
+	) -> Vec<U::Built> {
 		U::built(&read.urban, region)
 	}
 
-	fn built_overlapping<'a>(
-		read: &'a SystemParamItem<'_, '_, Self::Read>,
+	fn built_overlapping(
+		read: &SystemParamItem<'_, '_, Self::Read>,
 		region: Aabb3d,
-	) -> Vec<(lod::gen::Id, lod::gen::Version, &'a U::Built)> {
+	) -> Vec<(lod::gen::Id, lod::gen::Version, U::Built)> {
 		U::built_overlapping(&read.urban, region)
 	}
 }

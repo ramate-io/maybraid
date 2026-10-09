@@ -5,7 +5,7 @@ use crate::terrain::collider::{
 	drop_superseded_terrain_colliders, queue_terrain_trimesh_colliders, TerrainColliderEpoch,
 	TerrainColliderSystems, TerrainFrictionConfig,
 };
-use crate::terrain::index::register_durham_nodes;
+use crate::terrain::index::DurhamNodes;
 use crate::terrain::presentation::{
 	sync_visual_terrain_host_pose, TerrainBackground, TerrainFar, TerrainNear,
 	TerrainPresenterState, TerrainStreamPresenterState,
@@ -40,7 +40,7 @@ impl Plugin for TerrainResourcesPlugin {
 			app.add_plugins(PhysicsPlugins::default());
 		}
 		app.init_resource::<HcsgStorage>();
-		register_durham_nodes(&mut app.world_mut().resource_mut::<HcsgStorage>());
+		DurhamNodes::configure(&app.world().resource::<HcsgStorage>());
 		app.init_resource::<TerrainCellLayout>()
 			.init_resource::<TerrainStampConfigs>()
 			.init_resource::<WatershedConfigs>()

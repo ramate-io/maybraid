@@ -1,20 +1,9 @@
-//! Richmond development models: urbanization leaves (default) or a legacy
-//! 300 m occupancy lattice, terrain pads, and a unified generation path for
-//! single buildings, campuses, and neighborhoods.
+//! Richmond development models: urbanization leaves, terrain pads, and a unified
+//! generation path for single buildings, campuses, and neighborhoods.
 //!
-//! Every node is a [`lod::gen::GenerationScheme`] over [`lod::hcsg::HcsgStorage`],
-//! generic over a [`RichmondGround`]: a [`DevelopmentSite`] picks a kind, a
-//! [`RichmondDevelopment`] fits it to the ground, [`Built`] fits its hosts, and
-//! [`PaddedTerrain`] composes its pads into the ground's cells. The developments
-//! themselves are [`urbanization_developments`] kit assemblies, each a
-//! [`Development`]; one [`DevelopmentCell`] scheme plans any of them over the
-//! ground and realizes its pad plans.
-//! Cell discovery defaults to [`urbanization_cells`] guillotine leaves;
-//! set [`DevelopmentConfig::sites`] to [`DevelopmentSites::Lattice`] for the dense
-//! 300 m lattice. The crate plugin also installs SceneRef, urban surface MaterialRef,
-//! placeholder wireframes, the Richmond building LOD stack, and Fixed-layer walk
-//! colliders so playgrounds present [`TerrainWithPads`] and building GLBs without
-//! assembling those plugins themselves.
+//! Developments generate on the shared HCSG runtime over [`RichmondGround`].
+//! [`PaddedTerrain`] is the presented ground surface; [`Built`] hosts nest
+//! building scenes.
 
 pub mod artifact;
 pub mod buildings_lod;
@@ -27,13 +16,10 @@ pub mod ground;
 pub mod host;
 pub mod layer;
 pub mod layer_config;
-pub mod layer_present;
-pub mod layer_stream;
 pub mod pad;
 pub mod padded;
 pub mod place;
 pub mod plugin;
-pub mod presentation;
 pub mod shared;
 pub mod storage;
 
@@ -54,27 +40,17 @@ pub use developments::site::{
 	DevelopmentSite,
 };
 pub use developments::{DevelopmentCell, DevelopmentPad, RichmondDevelopment, SiteDevelopment};
-pub use ground::{hydro_overlaps_xz, GroundCell, GroundCells, GroundSampler, RichmondGround};
+pub use ground::{hydro_overlaps_xz, GroundCell, GroundCells, RichmondGround};
 pub use host::{DevelopmentHost, DevelopmentHosts};
 pub use layer::Richmond;
 pub use layer_config::{
-	DevelopmentFocus, RichmondConfig, UrbanizationStreamSpec, DEFAULT_URBANIZATION_NOISE,
-	DEFAULT_URBANIZATION_STREAM_RADIUS, PLAYGROUND_LIKELIHOOD,
-};
-pub use layer_present::{
-	present_richmond_hosts, spawn_development_hosts, spawn_tagged_host_entities,
-	sync_raw_terrain_replacements, DevelopmentHostRoot, UrbanizationPaddedTerrainState,
-	UrbanizationPresenterState,
-};
-pub use layer_stream::{
-	install_urbanization_stream, parse_urbanization_kind, stream_radii_m, DevelopmentWindow,
-	HostWindow,
+	stream_radii_m, DevelopmentFocus, RichmondConfig, UrbanizationStreamSpec,
+	DEFAULT_URBANIZATION_NOISE, DEFAULT_URBANIZATION_STREAM_RADIUS, PLAYGROUND_LIKELIHOOD,
 };
 pub use pad::{cell_bounds2, PadComplex, PadNode, PadPrimitive};
-pub use padded::{PaddedTerrain, PresentedPaddedTerrainScene, TerrainWithPads};
+pub use padded::{PaddedTerrain, TerrainWithPads};
 pub use place::{DiscoverablePlace, DiscoverablePlaceLabel, InteriorArea};
 pub use plugin::{register_richmond_plugin, RichmondDevelopmentModelsPlugin};
-pub use presentation::{PaddedTerrainPresenter, PaddedTerrainPresenterState};
 pub use shared::{
 	BuiltPresentationPlugin, DevelopmentNeighborhood, RichmondPresentationPlugin, RichmondRoots,
 };
@@ -84,6 +60,3 @@ pub use urbanization_developments::{
 	Terrace, TerraceDevelopment, TerraceEnvelope, LES_HALLES_MAX_FOOTPRINT, PAD_BERM,
 	PAD_EDGE_EASE, PAD_ROUND, RING_FORT_MAX_FOOTPRINT, RING_FORT_MIN_FOOTPRINT,
 };
-
-#[cfg(test)]
-mod layer_tests;

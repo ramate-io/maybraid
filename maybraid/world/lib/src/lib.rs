@@ -24,7 +24,10 @@ mod stash;
 mod ui;
 mod vsync;
 mod weapon;
+mod world_furnished;
 mod world_layers;
+
+pub use world_furnished::WorldFurnished;
 
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use control::{

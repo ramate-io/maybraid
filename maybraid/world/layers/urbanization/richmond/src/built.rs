@@ -7,9 +7,7 @@ use bevy::math::bounding::Aabb3d;
 use bevy::prelude::{bsn, template_value, Name, Transform, Vec3};
 use bevy::scene::Scene;
 use building_components::scene_children;
-use lod::gen::{
-	GenerationScheme, Id, LodScene, LodSceneLevel, LodSceneStatus, OriginalId, Version,
-};
+use lod::gen::{Id, LodScene, LodSceneLevel, LodSceneStatus, OriginalId, Version};
 use lod::hcsg::shared::{self, GenerationContext};
 use lod::hcsg::HcsgStorage;
 use lod::lod_ref::LodRef;
@@ -53,7 +51,7 @@ impl<G: RichmondGround> Built<G> {
 	pub fn overlapping(
 		storage: &HcsgStorage,
 		region: Aabb3d,
-	) -> Vec<(Id, Version, &BuiltDevelopment)> {
+	) -> Vec<(Id, Version, BuiltDevelopment)> {
 		storage
 			.overlapping::<Self>(column_bounds(region))
 			.into_iter()
@@ -62,29 +60,10 @@ impl<G: RichmondGround> Built<G> {
 				overlaps_xz(region, entry.bounds).then_some((
 					id,
 					entry.version,
-					&entry.value.development,
+					entry.value.development.clone(),
 				))
 			})
 			.collect()
-	}
-}
-
-impl<G: RichmondGround> GenerationScheme<HcsgStorage> for Built<G> {
-	fn original_ids_for(storage: &mut HcsgStorage, region: Aabb3d) -> Vec<OriginalId> {
-		storage
-			.original_ids_for::<RichmondDevelopment<G>>(region)
-			.into_iter()
-			.filter(|OriginalId(id)| {
-				storage
-					.get_one_or_generate::<RichmondDevelopment<G>>(*id)
-					.is_some_and(RichmondDevelopment::is_filled)
-			})
-			.collect()
-	}
-
-	fn build_with_id(storage: &mut HcsgStorage, id: Id) -> Option<(Self, Aabb3d)> {
-		let development = storage.get_one_or_generate::<RichmondDevelopment<G>>(id)?;
-		Some((Self::fit(id, development)?, column_bounds(development.cell())))
 	}
 }
 

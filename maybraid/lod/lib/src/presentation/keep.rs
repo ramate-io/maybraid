@@ -5,7 +5,7 @@ use std::collections::VecDeque;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::Vec3;
 
-use super::Id;
+use crate::gen::Id;
 
 /// Default XZ slack on [`crate::LodGenerateKeepRegion`] / [`crate::LodPresentKeepRegion`].
 ///
