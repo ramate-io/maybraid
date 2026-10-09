@@ -4,11 +4,13 @@ use bevy::prelude::*;
 use bevy::transform::helper::TransformHelper;
 use character_inventory_user::InventoryUser;
 use character_items::{GrenadeStats, Inventory, InventoryItem};
-use character_rigs::arm_reach::{HumanoidArmReach, OverhandThrow};
-use character_rigs::articulation::BONE_LENGTH_AXIS;
-use character_rigs::humanoid::HumanoidRig;
+use character_rigs::arm_reach::{ArmReachPole, BodyReachSpace, OverhandThrow};
+use character_rigs::articulation::{
+	compose_parent_rotation, rotation_along_with_roll, TwoBoneAim, BONE_LENGTH_AXIS,
+};
+use character_rigs::authoring::humanoid_bone_axis;
 use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
-use character_rigs::{Name as RigName, Side};
+use character_rigs::Side;
 use characters::{
 	AnimBone, AnimMailbox, AnimateBones, BoneMap, CharacterHeading, CharacterMembers, CharacterRig,
 	CharacterRigRole, CharacterRoot, RigSkeletonKind, SuspendAnimation,
@@ -16,6 +18,7 @@ use characters::{
 use firearm_user::{HoldingArms, WeaponSwap};
 use grenades::{grenade_material, grenade_mesh, GrenadeMaterial};
 use player::{PlayerLook, PlayerUse};
+use std::f32::consts::FRAC_PI_2;
 
 use crate::throw::{
 	look_forward, yaw_xz, GrenadePhase, GrenadeThrow, GrenadeUser, GrenadeUserSettings,
@@ -182,14 +185,14 @@ pub fn sync_throw_arm(
 			let Ok((mut rig, map, mailbox)) = rigs.get_mut(member) else {
 				continue;
 			};
-			if mailbox.output.is_empty() {
+			if !mailbox.posed {
 				continue;
 			}
 			let mut bones = transforms.p1();
-			rig.pose.clone_from(&mailbox.output);
-			if let Some(reach) = HumanoidArmReach::solve(&*rig, Side::Right, target, pole) {
+			rig.pose.copy_from(&mailbox.output);
+			if let Some(reach) = throw_arm_reach(&rig, Side::Right, target, pole) {
 				reset_arm_to_rest(&mut rig, map, &bones, Side::Right);
-				HumanoidArmReach::apply(&mut *rig, Side::Right, reach);
+				pose_throw_arm(&mut rig, Side::Right, reach);
 			}
 			write_throw_bones(&rig, map, &mut bones);
 			drop(bones);
@@ -255,6 +258,95 @@ fn primed_forward(facing: Vec3, look: &PlayerLook) -> Vec3 {
 	Vec3::new(facing.x, 0.0, facing.z).normalize_or(Vec3::Z)
 }
 
+fn throw_arm_reach(
+	rig: &HumanoidV0Rig,
+	side: Side,
+	target: Vec3,
+	pole: ArmReachPole,
+) -> Option<TwoBoneAim> {
+	let target = BodyReachSpace::to_shoulder(side, target);
+	let primary = BodyReachSpace::to_shoulder(side, pole.primary);
+	let fallback = BodyReachSpace::to_shoulder(side, pole.fallback);
+	let forearm_name = match side {
+		Side::Left => "forearm.L",
+		Side::Right => "forearm.R",
+	};
+	let id = rig.binding.definition.id(forearm_name)?;
+	let length = rig.binding.effective_rest.get(id)?.translation.length();
+	TwoBoneAim::reach(target, primary, length, length)
+		.or_else(|| TwoBoneAim::reach(target, fallback, length, length))
+}
+
+fn pose_throw_arm(rig: &mut HumanoidV0Rig, side: Side, reach: TwoBoneAim) {
+	let (humerus_name, forearm_name) = match side {
+		Side::Left => ("humerus.L", "forearm.L"),
+		Side::Right => ("humerus.R", "forearm.R"),
+	};
+	let Some(humerus) = rig.binding.definition.id(humerus_name) else {
+		return;
+	};
+	let Some(forearm) = rig.binding.definition.id(forearm_name) else {
+		return;
+	};
+	let roll = humerus_roll_for_throw(rig, side, reach);
+	let rest_humerus = rig.binding.effective_rest.rotation(humerus);
+	let parent = rig.binding.definition.parent_rotation(&rig.pose, humerus);
+	let aimed = rotation_along_with_roll(
+		rest_humerus,
+		parent.inverse() * reach.upper_along,
+		roll,
+		BONE_LENGTH_AXIS,
+	);
+	rig.pose.set_rotation(humerus, aimed);
+	let flexed = compose_parent_rotation(
+		rig.binding.effective_rest.rotation(forearm),
+		humanoid_bone_axis(forearm_name),
+		0.0,
+		reach.flex,
+		0.0,
+	);
+	rig.pose.set_rotation(forearm, flexed);
+}
+
+fn humerus_roll_for_throw(rig: &HumanoidV0Rig, side: Side, reach: TwoBoneAim) -> f32 {
+	let (humerus_name, forearm_name) = match side {
+		Side::Left => ("humerus.L", "forearm.L"),
+		Side::Right => ("humerus.R", "forearm.R"),
+	};
+	let Some(humerus) = rig.binding.definition.id(humerus_name) else {
+		return 0.0;
+	};
+	let Some(forearm) = rig.binding.definition.id(forearm_name) else {
+		return 0.0;
+	};
+	let parent = rig.binding.definition.parent_rotation(&rig.pose, humerus);
+	let aimed = rotation_along_with_roll(
+		rig.binding.effective_rest.rotation(humerus),
+		parent.inverse() * reach.upper_along,
+		0.0,
+		BONE_LENGTH_AXIS,
+	);
+	let humerus_world = parent * aimed;
+	let forearm_rotation = compose_parent_rotation(
+		rig.binding.effective_rest.rotation(forearm),
+		humanoid_bone_axis(forearm_name),
+		0.0,
+		reach.flex,
+		0.0,
+	);
+	let zero_roll_lower = forearm_rotation * BONE_LENGTH_AXIS;
+	let desired_lower = humerus_world.inverse() * reach.lower_along;
+	signed_angle_about_axis(zero_roll_lower, desired_lower, BONE_LENGTH_AXIS)
+		.unwrap_or(-FRAC_PI_2 * side.sign())
+}
+
+fn signed_angle_about_axis(from: Vec3, to: Vec3, axis: Vec3) -> Option<f32> {
+	let axis = axis.try_normalize()?;
+	let from = (from - axis * from.dot(axis)).try_normalize()?;
+	let to = (to - axis * to.dot(axis)).try_normalize()?;
+	Some(axis.dot(from.cross(to)).atan2(from.dot(to)))
+}
+
 fn reset_arm_to_rest(
 	rig: &mut HumanoidV0Rig,
 	map: &BoneMap,
@@ -264,20 +356,23 @@ fn reset_arm_to_rest(
 	>,
 	side: Side,
 ) {
-	let mut arm = rig.arm(side);
-	for pose in [&mut arm.shoulder, &mut arm.humerus, &mut arm.forearm] {
-		let Some(&entity) = map.by_name.get(pose.name.as_str()) else {
+	let suffix = side.suffix();
+	for name in
+		[format!("shoulder.{suffix}"), format!("humerus.{suffix}"), format!("forearm.{suffix}")]
+	{
+		let Some(&entity) = map.by_name.get(name.as_str()) else {
 			continue;
 		};
 		let Ok((bone, _)) = bones.get(entity) else {
 			continue;
 		};
-		pose.transform = bone.rest;
-		pose.swing = 0.0;
-		pose.flex = 0.0;
-		pose.twist = 0.0;
+		let Some(id) = rig.binding.definition.id(&name) else {
+			continue;
+		};
+		if let Some(slot) = rig.pose.local.get_mut(id.index()) {
+			*slot = bone.rest;
+		}
 	}
-	rig.pose_arm(arm);
 }
 
 fn named_hand(map: &BoneMap, helper: &TransformHelper) -> Option<Vec3> {
@@ -311,18 +406,20 @@ fn write_throw_bones(
 		(Without<AnimMailbox>, Without<CharacterRoot>, Without<HeldGrenade>),
 	>,
 ) {
-	let arm = rig.arm(Side::Right);
-	for name in [arm.shoulder.name.as_str(), arm.humerus.name.as_str(), arm.forearm.name.as_str()] {
+	for name in ["shoulder.R", "humerus.R", "forearm.R"] {
 		let Some(&entity) = map.by_name.get(name) else {
 			continue;
 		};
-		let Some(pose) = rig.pose.get(&RigName::from(name)) else {
+		let Some(id) = rig.binding.definition.id(name) else {
+			continue;
+		};
+		let Some(pose) = rig.pose.get(id) else {
 			continue;
 		};
 		let Ok((_, mut transform)) = bones.get_mut(entity) else {
 			continue;
 		};
-		*transform = pose.transform;
+		*transform = pose;
 	}
 }
 
