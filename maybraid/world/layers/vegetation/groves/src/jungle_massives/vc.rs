@@ -7,9 +7,9 @@ use super::variants::jungle_massives_banyan::{HonuBanyanSamples, SopeBanyanSampl
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use clap::Args;
-#[cfg(test)]
-use lod::gen::{LodScene, LodSceneLevel};
 use lod::lod_ref::LodRef;
+#[cfg(test)]
+use lod::scene::{LodScene, LodSceneLevel};
 use lod::SceneChunk;
 use material_ref::MaterialRef;
 use procedural_common::{BuildWithNoise, NoiseParams};
@@ -20,9 +20,9 @@ use super::{definition, JungleMassivesCell, JungleMassivesItem};
 use crate::grove::vc_tuft::{patch_variant_index, variant_noise};
 use crate::grove::{
 	canopy_ball_material_from_palette, canopy_proxy_site, frond_material_from_palette,
-	grove_structural_footprint, lazy_flattened_plant_chunks, nest_flattened_plant_chunk, placement_noise,
-	stick_material_from_palette, CanopyProxySite, FlatTerrainSample, GroveCellVariant, GroveExtent,
-	GrovePreviewParams,
+	grove_structural_footprint, lazy_flattened_plant_chunks, nest_flattened_plant_chunk,
+	placement_noise, stick_material_from_palette, CanopyProxySite, FlatTerrainSample,
+	GroveCellVariant, GroveExtent, GrovePreviewParams,
 };
 
 #[derive(Clone, Debug, Args)]

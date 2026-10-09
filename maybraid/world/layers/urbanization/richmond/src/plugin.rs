@@ -12,14 +12,9 @@ use lod::LodRefreshSystems;
 use lod_lazy_refs::LodLazyRefsPlugin;
 use scene_ref::SceneRefPlugin;
 
-use urbanization_cells::UrbanizationIndex;
-
 use crate::buildings_lod::register_developments_buildings_lod_plugin;
 use crate::config::DevelopmentConfig;
-use crate::index::DevelopmentEntryStore;
 use crate::place::DiscoverablePlace;
-use crate::presentation::PaddedTerrainPresenterState;
-
 /// Registers SceneRef, urban MaterialRef, placeholder wireframes, building LOD, and walk colliders.
 #[derive(Default)]
 pub struct RichmondDevelopmentModelsPlugin;
@@ -63,10 +58,7 @@ impl Plugin for RichmondDevelopmentModelsPlugin {
 		}
 		register_developments_buildings_lod_plugin(app);
 
-		app.init_resource::<DevelopmentEntryStore>()
-			.init_resource::<DevelopmentConfig>()
-			.init_resource::<UrbanizationIndex>()
-			.init_resource::<PaddedTerrainPresenterState>()
+		app.init_resource::<DevelopmentConfig>()
 			.add_systems(Update, apply_parent_confines.after(LodRefreshSystems::Cull))
 			.add_systems(Update, stamp_label_places);
 	}
@@ -79,7 +71,10 @@ impl Plugin for RichmondDevelopmentModelsPlugin {
 #[allow(clippy::type_complexity)]
 fn stamp_label_places(
 	mut commands: Commands,
-	added: Query<(Entity, &LabelNode, Option<&ChildOf>), (Added<LabelNode>, Without<DiscoverablePlace>)>,
+	added: Query<
+		(Entity, &LabelNode, Option<&ChildOf>),
+		(Added<LabelNode>, Without<DiscoverablePlace>),
+	>,
 	ancestors: Query<(Option<&ChildOf>, Option<&DiscoverablePlace>)>,
 ) {
 	for (entity, node, child_of) in &added {

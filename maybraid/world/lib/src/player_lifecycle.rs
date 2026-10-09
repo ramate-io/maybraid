@@ -5,7 +5,7 @@ use bevy::prelude::*;
 use character_inventory_user::InventoryUser;
 use character_ragdoll::CharacterRagdollSystems;
 use damage::{DamageSystems, DespawnAfter, Downed};
-use durham::Durham;
+use durham::DurhamSurface;
 use firearm_user::FirearmUser;
 use firearms::WeaponTrigger;
 use maybraid_character_controller::CharacterIntent;
@@ -18,9 +18,7 @@ use poi_intelligence::{
 	PoiRecord, PoiRegistry, PoiSystems,
 };
 use spotting_intelligence::SpotSubject;
-use terrain_layer_model::{OnTerrain, TerrainView};
 use threat_intelligence::{Affiliations, ThreatSubject};
-use urbanization_layer_model::Urbanization;
 use world_player::{
 	player_position_above_surface, spawn_player_body, CharacterLocomotion, CharacterSpecies,
 	ModePlayerPolicies, MoveWish, Player as VegetationPlayer, PlayerLifeEnded, PlayerLifeSet,
@@ -32,7 +30,7 @@ use layer_stack::ActiveGenerationMode;
 use crate::control::strip_world_player_motor;
 use crate::map_view::WorldMapView;
 use crate::weapon::WorldPlayerAppearanceRequested;
-use crate::{WorldGameplayEnabled, WorldPlayerLoadout};
+use crate::{FirstWave, HcsgDemand, LodJobCounter, WorldGameplayEnabled, WorldPlayerLoadout};
 
 const MAP_OPEN_SECS: f32 = 0.18;
 const STICK_REST: f32 = 0.28;
@@ -145,7 +143,8 @@ impl Plugin for WorldPlayerLifecyclePlugin {
 			.add_systems(
 				Update,
 				(
-					queue_first_spawn_picker,
+					crate::first_wave::refresh_first_wave,
+					queue_first_spawn_picker.after(crate::first_wave::refresh_first_wave),
 					drive_respawn_picker,
 					respawn_world_player
 						.after(queue_first_spawn_picker)
@@ -257,6 +256,9 @@ fn queue_first_spawn_picker(
 	spawn: Res<PlayerSpawnXz>,
 	mode: Option<Res<State<ActiveGenerationMode>>>,
 	policies: Option<Res<ModePlayerPolicies>>,
+	wave: Option<Res<FirstWave>>,
+	demand: Option<Res<HcsgDemand>>,
+	jobs: Option<Res<LodJobCounter>>,
 	mut state: ResMut<WorldPlayerRespawnState>,
 	mut commands: Commands,
 	players: Query<
@@ -266,6 +268,12 @@ fn queue_first_spawn_picker(
 	mut triggers: Query<&mut WeaponTrigger>,
 ) {
 	if !gameplay.0 || state.first_spawn_offered || state.pending.is_some() {
+		return;
+	}
+	let ready = wave.as_deref().map(FirstWave::ready).unwrap_or_else(|| {
+		FirstWave::sample(demand.as_deref(), jobs.map(|jobs| jobs.active()).unwrap_or(0)).ready()
+	});
+	if !ready {
 		return;
 	}
 	if spawn.0.is_some() {
@@ -390,7 +398,7 @@ fn respawn_world_player(
 	registry: Res<PoiRegistry>,
 	loadout: Option<Res<WorldPlayerLoadout>>,
 	locomotion: Res<CharacterLocomotion>,
-	surface: TerrainView<Urbanization<richmond::Richmond<OnTerrain<Durham>>>>,
+	surface: DurhamSurface,
 	mode: Option<Res<State<ActiveGenerationMode>>>,
 	mut ended: MessageWriter<PlayerLifeEnded>,
 	mut chosen: MessageReader<PlayerChoseRespawnPoi>,
@@ -676,13 +684,11 @@ fn xz_distance(a: Vec3, b: Vec3) -> f32 {
 	(a.xz() - b.xz()).length()
 }
 
-fn surface_at(
-	mut point: Vec3,
-	surface: &TerrainView<Urbanization<richmond::Richmond<OnTerrain<Durham>>>>,
-) -> Vec3 {
-	let terrain_y = surface.height_or_fallback(point.xz());
-	if terrain_y.is_finite() {
-		point.y = terrain_y;
+fn surface_at(mut point: Vec3, surface: &DurhamSurface) -> Vec3 {
+	if let Ok(terrain_y) = surface.height_or_fallback(point.xz()) {
+		if terrain_y.is_finite() {
+			point.y = terrain_y;
+		}
 	}
 	point
 }
@@ -772,11 +778,12 @@ fn prefer_building_pois(records: Vec<PoiRecord>, death_at: Vec3) -> Vec<PoiRecor
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::{FirstWave, UnitXTile};
 	use bevy::ecs::system::RunSystemOnce;
-	use durham::{HcsgStorage, TerrainCellLayout};
+	use bevy::math::bounding::Aabb3d;
+	use durham::TerrainCellLayout;
 	use layer_stack::GenerationMode;
-	use richmond::DevelopmentEntryStore;
-	use urbanization_cells::UrbanizationIndex;
+	use lod::hcsg::{HcsgStorage, HcsgWorker};
 	use world_player::WorldBaseTerrain;
 
 	#[test]
@@ -973,8 +980,6 @@ mod tests {
 		world.init_resource::<CharacterLocomotion>();
 		world.init_resource::<HcsgStorage>();
 		world.init_resource::<TerrainCellLayout>();
-		world.init_resource::<DevelopmentEntryStore>();
-		world.init_resource::<UrbanizationIndex>();
 		world.insert_resource(WorldBaseTerrain(durham::BaseTerrainNoise::from_config(
 			&durham::TerrainConfig::new(42),
 		)));
@@ -1336,6 +1341,52 @@ mod tests {
 		assert!(world.entities().contains(player));
 		assert!(world.resource::<WorldPlayerRespawnState>().pending.is_none());
 		assert!(!world.resource::<WorldPlayerRespawnState>().first_spawn_offered);
+		Ok(())
+	}
+
+	#[test]
+	fn first_spawn_picker_waits_for_near_hcsg() -> anyhow::Result<()> {
+		let mut world = first_spawn_world(true, None);
+		let storage = HcsgStorage::default();
+		let demand = HcsgDemand::default();
+		world.insert_resource(demand.clone());
+		let player = world.spawn((VegetationPlayer, Transform::from_xyz(12.0, 4.0, -8.0))).id();
+		let region = Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(8.0, 1.0, 1.0));
+		demand.subscribe::<UnitXTile>(None, vec![region], None, crate::HcsgClass::Near);
+
+		world
+			.run_system_once(queue_first_spawn_picker)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(
+			world.entities().contains(player),
+			"picker must not open while near HCSG work remains"
+		);
+		assert!(world.resource::<WorldPlayerRespawnState>().pending.is_none());
+
+		let _worker = HcsgWorker::spawn(storage, demand.clone())?;
+		anyhow::ensure!(demand.wait_idle(std::time::Duration::from_secs(10)));
+		world
+			.run_system_once(queue_first_spawn_picker)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(!world.entities().contains(player), "picker opens once near work drains");
+		assert!(world.resource::<WorldPlayerRespawnState>().pending.is_some());
+		Ok(())
+	}
+
+	#[test]
+	fn first_spawn_picker_opens_once_first_wave_has_passed() -> anyhow::Result<()> {
+		let mut world = first_spawn_world(true, None);
+		let demand = HcsgDemand::default();
+		world.insert_resource(demand.clone());
+		let region = Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(8.0, 1.0, 1.0));
+		demand.subscribe::<UnitXTile>(None, vec![region], None, crate::HcsgClass::Near);
+		world.insert_resource(FirstWave { undiscovered: 1, remaining: 40, passed: true });
+		let player = world.spawn((VegetationPlayer, Transform::from_xyz(12.0, 4.0, -8.0))).id();
+		world
+			.run_system_once(queue_first_spawn_picker)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(!world.entities().contains(player), "unveil timeout must not pin the picker");
+		assert!(world.resource::<WorldPlayerRespawnState>().pending.is_some());
 		Ok(())
 	}
 

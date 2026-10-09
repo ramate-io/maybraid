@@ -312,7 +312,6 @@ mod tests {
 			for frame in 0..FRAMES {
 				let _frame = black_box(frame);
 				for (rig, elapsed) in &mut rigs {
-					let lengths = rig.segment_lengths;
 					let dt = black_box(0.016);
 					*elapsed += dt;
 					if *elapsed > cycle {

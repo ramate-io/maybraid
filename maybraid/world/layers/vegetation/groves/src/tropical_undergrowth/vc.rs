@@ -5,9 +5,9 @@ use std::sync::Arc;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use clap::Args;
-#[cfg(test)]
-use lod::gen::{LodScene, LodSceneLevel};
 use lod::lod_ref::LodRef;
+#[cfg(test)]
+use lod::scene::{LodScene, LodSceneLevel};
 use lod::SceneChunk;
 use material_ref::MaterialRef;
 use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
@@ -27,10 +27,10 @@ use super::{
 use crate::grove::vc_tuft::{material_from_palette, patch_variant_index, unit_plant_from_grown};
 use crate::grove::{
 	canopy_ball_material_from_palette, canopy_proxy_rory, canopy_proxy_site,
-	frond_material_from_palette, grove_structural_footprint, lazy_flattened_plant_chunks, nest_flattened_plant_chunk,
-	placement_noise, remixed_blade_tuft_plant, remixed_sbs_plant, remixed_tuft_plant,
-	stick_material_from_palette, unit_build_noise, CanopyProxySite, FlatTerrainSample,
-	GroveCellVariant, GroveExtent, GrovePreviewParams,
+	frond_material_from_palette, grove_structural_footprint, lazy_flattened_plant_chunks,
+	nest_flattened_plant_chunk, placement_noise, remixed_blade_tuft_plant, remixed_sbs_plant,
+	remixed_tuft_plant, stick_material_from_palette, unit_build_noise, CanopyProxySite,
+	FlatTerrainSample, GroveCellVariant, GroveExtent, GrovePreviewParams,
 };
 
 #[derive(Clone, Debug, Args)]

@@ -1584,8 +1584,6 @@ mod tests {
 	#[test]
 	#[ignore]
 	fn mailbox_handle_microbench() {
-		use crate::clip_cache::RigVariantId;
-
 		report_handle_bench("apply_set clone", &bench_apply_set_lookup(true));
 		report_handle_bench("apply_set borrow", &bench_apply_set_lookup(false));
 		report_handle_bench("prepared_clip clone", &bench_prepared_clip_handle(true));

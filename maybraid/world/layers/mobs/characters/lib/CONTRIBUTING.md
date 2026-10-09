@@ -117,14 +117,13 @@ root — not the whole world.
 cargo test -p characters
 cargo test -p character-creation-menus
 cargo check -p character-concepts-playground
-cargo check -p character-world-movements-playground
 ```
 
-World locomotion (walk / run / jump on a small Durham patch) is
-[`character-world-movements-playground`](../character-world-movements-playground/):
+World locomotion (walk / run / jump on streamed Durham ground) runs in
+[`maybraid-world-playground`](../../../../playground/):
 
 ```bash
-cargo run -p character-world-movements-playground
+cargo run -p maybraid-world-playground
 ```
 
 Spawn from the playground UI (species picker) or CLI (`character-concepts` is

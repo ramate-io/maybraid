@@ -23,7 +23,7 @@ use building_components::joints::JointNode;
 use building_components::labels::{LabelNode, LabelStyle};
 use building_components::panels::PanelNode;
 use building_components::{BuildingComponents, Layers};
-use lod::gen::LodSceneLevel;
+use lod::scene::LodSceneLevel;
 use procedural_common::{
 	aabb2_area, aabb3_to_plan, Aabb2dPack, NoiseConfig, NoiseParams, PlanAxes, PlanOpeningFace,
 };
