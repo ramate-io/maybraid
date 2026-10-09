@@ -5,8 +5,8 @@
 
 /// Defines `PrePocketLayout` → `PrePocketCell` → `PocketCell` → `PocketWaters*` for one band.
 ///
-/// Each level discovers its ids from the level above through
-/// `GeneratingSpatialIndex`, so consumers bound only on `$PocketWaters`.
+/// Each level discovers its ids from the level above through its scheme's
+/// `original_ids_for`, so consumers depend only on `$PocketWaters`.
 macro_rules! define_marazion_band {
 	(
 		layout: $Layout:ident,
@@ -73,14 +73,11 @@ macro_rules! define_marazion_band {
 			}
 		}
 
-		$crate::terrain::cell::derived_universal_scheme!(
-			$Layout,
-			where S: lod::gen::GeneratingSpatialIndex<$crate::terrain::watersheds::config::WatershedConfigs>,
-			|index| lod::gen::GeneratingSpatialIndex::<
-				$crate::terrain::watersheds::config::WatershedConfigs,
-			>::get_one_or_generate(index, lod::gen::Id::Universal)
-			.map($layout_fn)
-		);
+		$crate::terrain::cell::derived_universal_scheme!($Layout, |cx| cx
+			.get_or_generate::<$crate::terrain::watersheds::config::WatershedConfigs>(
+				lod::gen::Id::Universal,
+			)
+			.map(|configs| $layout_fn(&configs)));
 
 		impl $crate::terrain::cell::CellTiling for $Layout {
 			fn cell_ids(&self, region: bevy::math::bounding::Aabb3d) -> Vec<lod::gen::OriginalId> {
@@ -109,38 +106,39 @@ macro_rules! define_marazion_band {
 			}
 		}
 
-		impl<S> lod::gen::GenerationScheme<S> for $PreCell
-		where
-			S: lod::gen::GeneratingSpatialIndex<$Layout>
-				+ lod::gen::GeneratingSpatialIndex<
-					$crate::terrain::watersheds::config::WatershedConfigs,
-				>,
-		{
+		impl lod::hcsg::shared::GenerationScheme for $PreCell {
 			fn original_ids_for(
-				spatial_index: &mut S,
+				cx: &mut lod::hcsg::shared::GenerationContext,
 				region: bevy::math::bounding::Aabb3d,
 			) -> Vec<lod::gen::OriginalId> {
-				<$Layout as $crate::terrain::cell::CellTiling>::original_cell_ids_for(
-					spatial_index,
-					region,
-				)
+				<$Layout as $crate::terrain::cell::CellTiling>::origin_ids_in(cx, region)
 			}
 
 			fn build_with_id(
-				spatial_index: &mut S,
+				cx: &mut lod::hcsg::shared::GenerationContext,
 				id: lod::gen::Id,
 			) -> Option<(Self, bevy::math::bounding::Aabb3d)> {
-				use lod::gen::{GeneratingSpatialIndex, Id};
 				let cell = id.origin_cell_bounds()?;
-				let configs = GeneratingSpatialIndex::<
-					$crate::terrain::watersheds::config::WatershedConfigs,
-				>::get_one_or_generate(spatial_index, Id::Universal)?;
+				let configs = cx
+					.get_or_generate::<$crate::terrain::watersheds::config::WatershedConfigs>(
+						lod::gen::Id::Universal,
+					)?;
+				Some((Self::on_cell(cell, &configs), cell))
+			}
+		}
+
+		impl $PreCell {
+			/// The pre-pocket containing `cell`'s center.
+			pub fn on_cell(
+				cell: bevy::math::bounding::Aabb3d,
+				configs: &$crate::terrain::watersheds::config::WatershedConfigs,
+			) -> Self {
 				let cx = (cell.min.x + cell.max.x) * 0.5;
 				let cz = (cell.min.z + cell.max.z) * 0.5;
 				let mut params = configs.$band_field.pre_pocket;
 				params.seed = configs.seed.wrapping_add(configs.$band_field.family_salt);
 				let pre = terrain_watersheds::PrePocket::containing(cx, cz, &params);
-				Some((Self { cell, pre }, cell))
+				Self { cell, pre }
 			}
 		}
 
@@ -156,33 +154,34 @@ macro_rules! define_marazion_band {
 			}
 		}
 
-		impl<S> lod::gen::GenerationScheme<S> for $Pocket
-		where
-			S: lod::gen::GeneratingSpatialIndex<$PreCell>
-				+ lod::gen::GeneratingSpatialIndex<
-					$crate::terrain::watersheds::config::WatershedConfigs,
-				>,
-		{
+		impl lod::hcsg::shared::GenerationScheme for $Pocket {
 			fn original_ids_for(
-				spatial_index: &mut S,
+				cx: &mut lod::hcsg::shared::GenerationContext,
 				region: bevy::math::bounding::Aabb3d,
 			) -> Vec<lod::gen::OriginalId> {
-				<$PreCell as $crate::terrain::stamps::shared::LeafAabbs>::original_leaf_ids_for(
-					spatial_index,
-					region,
-				)
+				<$PreCell as $crate::terrain::stamps::shared::LeafAabbs>::leaf_ids_in(cx, region)
 			}
 
 			fn build_with_id(
-				spatial_index: &mut S,
+				cx: &mut lod::hcsg::shared::GenerationContext,
 				id: lod::gen::Id,
 			) -> Option<(Self, bevy::math::bounding::Aabb3d)> {
-				use lod::gen::{GeneratingSpatialIndex, Id};
-				use procedural_common::Bounds2;
 				let cell = id.origin_cell_bounds()?;
-				let configs = GeneratingSpatialIndex::<
-					$crate::terrain::watersheds::config::WatershedConfigs,
-				>::get_one_or_generate(spatial_index, Id::Universal)?;
+				let configs = cx
+					.get_or_generate::<$crate::terrain::watersheds::config::WatershedConfigs>(
+						lod::gen::Id::Universal,
+					)?;
+				Some((Self::on_cell(cell, &configs), cell))
+			}
+		}
+
+		impl $Pocket {
+			/// The guillotine leaves partitioning pocket `cell`.
+			pub fn on_cell(
+				cell: bevy::math::bounding::Aabb3d,
+				configs: &$crate::terrain::watersheds::config::WatershedConfigs,
+			) -> Self {
+				use procedural_common::Bounds2;
 				let band = &configs.$band_field;
 				let mut gparams = band.guillotine;
 				gparams.seed = configs.seed.wrapping_add(band.family_salt).wrapping_add(0x6011);
@@ -195,7 +194,7 @@ macro_rules! define_marazion_band {
 						)
 					})
 					.collect();
-				Some((Self { cell, leaves }, cell))
+				Self { cell, leaves }
 			}
 		}
 
@@ -229,36 +228,48 @@ macro_rules! define_marazion_band {
 
 		// `PreWatershedTerrain` + `TerrainCellLayout` back the live height
 		// sampler (`PreWatershedTerrain::sample_height`) used while authoring.
-		impl<S> lod::gen::GenerationScheme<S> for $PocketWaters
-		where
-			S: lod::gen::GeneratingSpatialIndex<$Pocket>
-				+ lod::gen::GeneratingSpatialIndex<
-					$crate::terrain::watersheds::config::WatershedConfigs,
-				> + lod::gen::GeneratingSpatialIndex<$crate::terrain::PreWatershedTerrain>
-				+ lod::gen::GeneratingSpatialIndex<$crate::terrain::cell::TerrainCellLayout>,
-		{
+
+		impl lod::hcsg::shared::GenerationScheme for $PocketWaters {
 			fn original_ids_for(
-				spatial_index: &mut S,
+				cx: &mut lod::hcsg::shared::GenerationContext,
 				region: bevy::math::bounding::Aabb3d,
 			) -> Vec<lod::gen::OriginalId> {
-				<$Pocket as $crate::terrain::stamps::shared::LeafAabbs>::original_leaf_ids_for(
-					spatial_index,
-					region,
-				)
+				<$Pocket as $crate::terrain::stamps::shared::LeafAabbs>::leaf_ids_in(cx, region)
 			}
 
 			fn build_with_id(
-				spatial_index: &mut S,
+				cx: &mut lod::hcsg::shared::GenerationContext,
 				id: lod::gen::Id,
 			) -> Option<(Self, bevy::math::bounding::Aabb3d)> {
-				use lod::gen::{GeneratingSpatialIndex, Id};
-				use procedural_common::Bounds2;
 				let cell = id.origin_cell_bounds()?;
-				let configs = GeneratingSpatialIndex::<
-					$crate::terrain::watersheds::config::WatershedConfigs,
-				>::get_one_or_generate(spatial_index, Id::Universal)?
-				.clone();
-				let band = configs.$band_field.clone();
+				let configs = cx
+					.get_or_generate::<$crate::terrain::watersheds::config::WatershedConfigs>(
+						lod::gen::Id::Universal,
+					)?;
+				let cx = std::cell::RefCell::new(cx);
+				let height_at = |x: f32, z: f32| {
+					$crate::terrain::PreWatershedTerrain::sample_height_in(
+						&mut cx.borrow_mut(),
+						x,
+						z,
+					)
+					.unwrap_or(0.0)
+				};
+				Some((Self::author(cell, &configs, &height_at), cell))
+			}
+		}
+
+		impl $PocketWaters {
+			/// The pocket water authored on leaf `cell`, surveying the
+			/// pre-watershed surface through `height_at`; empty unless the
+			/// occupancy gate selects the leaf and some kind fits.
+			pub fn author(
+				cell: bevy::math::bounding::Aabb3d,
+				configs: &$crate::terrain::watersheds::config::WatershedConfigs,
+				height_at: &dyn Fn(f32, f32) -> f32,
+			) -> Self {
+				use procedural_common::Bounds2;
+				let band = &configs.$band_field;
 				let occ_seed = $crate::terrain::stamps::shared::occupancy_seed(
 					configs.seed,
 					0,
@@ -280,21 +291,9 @@ macro_rules! define_marazion_band {
 					band.likelihood,
 					band.spatial_correlation,
 				) {
-					return Some((empty_cell(), cell));
+					return empty_cell();
 				}
-
-				// Live pre-watershed sampler: each shelf / endpoint survey point may
-				// land in a different terrain origin cell.
-				let spatial_index = std::cell::RefCell::new(spatial_index);
-				let height_fn = |x: f32, z: f32| {
-					$crate::terrain::PreWatershedTerrain::sample_height(
-						*spatial_index.borrow_mut(),
-						x,
-						z,
-					)
-					.unwrap_or(0.0)
-				};
-				let height_at: Option<&dyn Fn(f32, f32) -> f32> = Some(&height_fn);
+				let height_at = Some(height_at);
 
 				// Occupied leaves: stream / streams-graph / bog / lake from a stable unit draw.
 				let type_u =
@@ -359,16 +358,13 @@ macro_rules! define_marazion_band {
 				};
 
 				if authored.is_empty() {
-					return Some((empty_cell(), cell));
+					return empty_cell();
 				}
-				Some((
-					Self {
-						cell,
-						band: $crate::terrain::watersheds::leaf_kind::WatershedBandPass::$band_pass,
-						authored,
-					},
+				Self {
 					cell,
-				))
+					band: $crate::terrain::watersheds::leaf_kind::WatershedBandPass::$band_pass,
+					authored,
+				}
 			}
 		}
 	};

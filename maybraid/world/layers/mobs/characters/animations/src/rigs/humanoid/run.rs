@@ -4,16 +4,28 @@ use character_rigs::Side;
 
 use crate::animations::{Run, UprightRun};
 use crate::rigs::humanoid::apply::apply_arm;
+use crate::rigs::humanoid::gait_knee::lerp_swing_knee;
+use crate::rigs::humanoid::write_masks::{debug_assert_pose_within_mask, run_write_mask};
 use crate::{Animation, Progress};
 
-impl Animation<HumanoidV0Rig> for Run {
-	fn apply_for(&self, rig: &mut HumanoidV0Rig, progress: f32) {
-		UprightRun::from_run(self).apply_for(rig, progress)
+impl Run {
+	/// Authored semantic pose at `progress`. Rest is applied later by the rig.
+	pub fn sample_pose(&self, progress: f32) -> HumanoidPose {
+		UprightRun::from_run(self).sample_pose(progress)
 	}
 }
 
-impl Animation<HumanoidV0Rig> for UprightRun {
+impl Animation<HumanoidV0Rig> for Run {
 	fn apply_for(&self, rig: &mut HumanoidV0Rig, progress: f32) {
+		let pose = self.sample_pose(progress);
+		debug_assert_pose_within_mask(&pose, run_write_mask(), "run");
+		rig.apply_masked_pose(&pose, run_write_mask());
+	}
+}
+
+impl UprightRun {
+	/// Authored semantic pose at `progress`. Rest is applied later by the rig.
+	pub fn sample_pose(&self, progress: f32) -> HumanoidPose {
 		let mut pose = HumanoidPose::default();
 		let phase = Progress(progress).cycle();
 		let left_arm_swing = -arm_swing(phase);
@@ -24,7 +36,15 @@ impl Animation<HumanoidV0Rig> for UprightRun {
 		// Both elbows share one flexion sign. Opposite arm_down values are a hang bias.
 		apply_run_arm(&mut pose, Side::Left, left_arm_swing, phase, -self.arm_down, self);
 		apply_run_arm(&mut pose, Side::Right, right_arm_swing, phase, self.arm_down, self);
-		rig.write_pose(&pose);
+		pose
+	}
+}
+
+impl Animation<HumanoidV0Rig> for UprightRun {
+	fn apply_for(&self, rig: &mut HumanoidV0Rig, progress: f32) {
+		let pose = self.sample_pose(progress);
+		debug_assert_pose_within_mask(&pose, run_write_mask(), "upright_run");
+		rig.apply_masked_pose(&pose, run_write_mask());
 	}
 }
 
@@ -87,9 +107,12 @@ fn hip_lift(leg_swing: f32, amplitude: f32) -> f32 {
 
 fn knee_flex(leg_phase: f32, run: &UprightRun) -> f32 {
 	let p = leg_phase.fract();
-	let peak = if p < 0.5 { run.knee_extended } else { run.knee_contracted };
-	let t = if p < 0.5 { p * 2.0 } else { (p - 0.5) * 2.0 };
-	run.knee_neutral + (t * std::f32::consts::PI).sin() * (peak - run.knee_neutral)
+	if p < 0.5 {
+		let t = p * 2.0;
+		run.knee_neutral + (t * std::f32::consts::PI).sin() * (run.knee_extended - run.knee_neutral)
+	} else {
+		lerp_swing_knee(p, run.knee_extended, run.knee_contracted)
+	}
 }
 
 #[cfg(test)]

@@ -5,7 +5,7 @@ use bevy::prelude::*;
 use character_inventory_user::InventoryUser;
 use character_ragdoll::CharacterRagdollSystems;
 use damage::{DamageSystems, DespawnAfter, Downed};
-use durham::Durham;
+use durham::DurhamSurface;
 use firearm_user::FirearmUser;
 use firearms::WeaponTrigger;
 use maybraid_character_controller::CharacterIntent;
@@ -18,9 +18,7 @@ use poi_intelligence::{
 	PoiRecord, PoiRegistry, PoiSystems,
 };
 use spotting_intelligence::SpotSubject;
-use terrain_layer_model::{OnTerrain, TerrainView};
 use threat_intelligence::{Affiliations, ThreatSubject};
-use urbanization_layer_model::Urbanization;
 use world_player::{
 	player_position_above_surface, spawn_player_body, CharacterLocomotion, CharacterSpecies,
 	ModePlayerPolicies, MoveWish, Player as VegetationPlayer, PlayerLifeEnded, PlayerLifeSet,
@@ -390,7 +388,7 @@ fn respawn_world_player(
 	registry: Res<PoiRegistry>,
 	loadout: Option<Res<WorldPlayerLoadout>>,
 	locomotion: Res<CharacterLocomotion>,
-	surface: TerrainView<Urbanization<richmond::Richmond<OnTerrain<Durham>>>>,
+	surface: DurhamSurface,
 	mode: Option<Res<State<ActiveGenerationMode>>>,
 	mut ended: MessageWriter<PlayerLifeEnded>,
 	mut chosen: MessageReader<PlayerChoseRespawnPoi>,
@@ -676,10 +674,7 @@ fn xz_distance(a: Vec3, b: Vec3) -> f32 {
 	(a.xz() - b.xz()).length()
 }
 
-fn surface_at(
-	mut point: Vec3,
-	surface: &TerrainView<Urbanization<richmond::Richmond<OnTerrain<Durham>>>>,
-) -> Vec3 {
+fn surface_at(mut point: Vec3, surface: &DurhamSurface) -> Vec3 {
 	let terrain_y = surface.height_or_fallback(point.xz());
 	if terrain_y.is_finite() {
 		point.y = terrain_y;
@@ -773,10 +768,9 @@ fn prefer_building_pois(records: Vec<PoiRecord>, death_at: Vec3) -> Vec<PoiRecor
 mod tests {
 	use super::*;
 	use bevy::ecs::system::RunSystemOnce;
-	use durham::{HcsgStorage, TerrainCellLayout};
+	use durham::TerrainCellLayout;
 	use layer_stack::GenerationMode;
-	use richmond::DevelopmentEntryStore;
-	use urbanization_cells::UrbanizationIndex;
+	use lod::hcsg::shared::HcsgStorage;
 	use world_player::WorldBaseTerrain;
 
 	#[test]
@@ -973,8 +967,6 @@ mod tests {
 		world.init_resource::<CharacterLocomotion>();
 		world.init_resource::<HcsgStorage>();
 		world.init_resource::<TerrainCellLayout>();
-		world.init_resource::<DevelopmentEntryStore>();
-		world.init_resource::<UrbanizationIndex>();
 		world.insert_resource(WorldBaseTerrain(durham::BaseTerrainNoise::from_config(
 			&durham::TerrainConfig::new(42),
 		)));

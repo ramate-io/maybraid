@@ -75,6 +75,7 @@ pub use structural_probe::{
 	STRUCTURAL_MEDIUM_OUTSIDE_METERS,
 };
 
+use bevy::ecs::template::template;
 use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec3;
 use bevy::prelude::{Commands, CommandsSceneExt, Component, Entity, Transform, Visibility};
@@ -567,6 +568,18 @@ pub fn spawn_building_components<T>(
 where
 	T: BuildingComponents + Clone + Send + Sync + 'static,
 {
+	vec![commands.spawn_scene(building_components_host(building, transform, bounds)).id()]
+}
+
+/// A pending [`ComponentsOnly`] building host, for nesting in another scene.
+pub fn building_components_host<T>(
+	building: &T,
+	transform: Transform,
+	bounds: Aabb3d,
+) -> impl Scene + 'static
+where
+	T: BuildingComponents + Clone + Send + Sync + 'static,
+{
 	let identity = Transform::IDENTITY;
 	let lod_ref = LodRef {
 		entity: Entity::PLACEHOLDER,
@@ -576,18 +589,14 @@ where
 	};
 	let host = ComponentsOnly(building.clone());
 	let level = host.scene_lod_level(&lod_ref);
-	let pending = lod_host_scene_pending(level, bounds);
-	let entity = commands
-		.spawn_scene((
-			pending,
-			bsn! {
-				template_value(transform)
-				Visibility::default()
-			},
-		))
-		.id();
-	commands.entity(entity).insert(host);
-	vec![entity]
+	(
+		lod_host_scene_pending(level, bounds),
+		bsn! {
+			template_value(transform)
+			Visibility::default()
+			template(move |_ctx| Ok(host.clone()))
+		},
+	)
 }
 
 /// Approximate AABB from domain node placements at High (for adapter LodRef bounds).

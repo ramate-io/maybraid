@@ -255,7 +255,7 @@ checksum = "c86cd1c51b95d71dde52bca69ed225008f6ff4c8cc825b08042aa1ef823e1980"
 dependencies = [
  "anstyle",
  "memchr",
- "unicode-width 0.2.2",
+ "unicode-width",
 ]
 
 [[package]]
@@ -669,7 +669,6 @@ dependencies = [
  "mob-characters",
  "mob-intelligence",
  "mob-layer-model",
- "mob-layer-presentation",
  "mob-scenes",
  "procedural-common",
  "richmond",
@@ -677,50 +676,6 @@ dependencies = [
  "urbanization-cells",
  "urbanization-layer-model",
  "vegetation-layer-model",
-]
-
-[[package]]
-name = "barking-playground"
-version = "0.1.2"
-dependencies = [
- "anyhow",
- "avian3d",
- "bevy",
- "characters",
- "clap",
- "durham",
- "evasion-intelligence",
- "firearm-intelligence",
- "firearm-user",
- "firearms",
- "fleeing-intelligence",
- "game-commands",
- "ground-avian",
- "hiding-intelligence",
- "journeying-intelligence",
- "lod",
- "lod-avian",
- "log",
- "maybraid-character-controller",
- "maybraid-input",
- "meandering-intelligence",
- "mob-characters",
- "mob-intelligence",
- "mob-scenes",
- "movement-intelligence",
- "movement-intelligence-avian",
- "movement-realization",
- "npc-intelligence",
- "player",
- "poi-intelligence",
- "render-item",
- "routing-intelligence",
- "spotting-intelligence",
- "terrain-shaders",
- "tether-intelligence",
- "threat-intelligence",
- "threat-intelligence-damage",
- "threat-management-intelligence",
 ]
 
 [[package]]
@@ -2927,25 +2882,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "character-world-movements-playground"
-version = "0.1.2"
-dependencies = [
- "avian3d",
- "bevy",
- "characters",
- "chunk",
- "clap",
- "durham",
- "game-commands",
- "ground-avian",
- "lod",
- "lod-avian",
- "log",
- "render-item",
- "terrain-shaders",
-]
-
-[[package]]
 name = "characters"
 version = "0.1.2"
 dependencies = [
@@ -3018,7 +2954,6 @@ dependencies = [
  "vegetation-components",
  "vegetation-groves",
  "vegetation-layer-model",
- "vegetation-layer-presentation",
  "vegetation-shaders",
 ]
 
@@ -3156,7 +3091,7 @@ checksum = "fe6d2e5af09e8c8ad56c969f2157a3d4238cebc7c55f0a517728c38f7b200f81"
 dependencies = [
  "serde",
  "termcolor",
- "unicode-width 0.1.14",
+ "unicode-width",
 ]
 
 [[package]]
@@ -3167,7 +3102,7 @@ checksum = "af491d569909a7e4dee0ad7db7f5341fef5c614d5b8ec8cf765732aba3cff681"
 dependencies = [
  "serde",
  "termcolor",
- "unicode-width 0.1.14",
+ "unicode-width",
 ]
 
 [[package]]
@@ -3254,7 +3189,7 @@ dependencies = [
  "encode_unicode",
  "libc",
  "once_cell",
- "unicode-width 0.2.2",
+ "unicode-width",
  "windows-sys 0.59.0",
 ]
 
@@ -3266,7 +3201,7 @@ checksum = "e96a4956774c13c126a8b5af4daa79384f4d826534c95a02d76afb39e2ab64e3"
 dependencies = [
  "encode_unicode",
  "libc",
- "unicode-width 0.2.2",
+ "unicode-width",
  "windows-sys 0.61.0",
 ]
 
@@ -4144,7 +4079,6 @@ dependencies = [
  "sdf",
  "terrain-chunk-ref",
  "terrain-layer-model",
- "terrain-layer-presentation",
  "terrain-shaders",
  "terrain-stamps",
  "terrain-watersheds",
@@ -4782,18 +4716,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "furnishing-layer-presentation"
-version = "0.1.2"
-dependencies = [
- "anyhow",
- "bevy",
- "furnishing-layer-model",
- "layer-stack",
- "lod",
- "terrain-layer-model",
-]
-
-[[package]]
 name = "furniture-assemblies"
 version = "0.1.2"
 dependencies = [
@@ -5131,12 +5053,10 @@ version = "0.1.2"
 dependencies = [
  "anyhow",
  "bevy",
+ "building-components",
  "chico",
  "comproc",
  "durham",
- "language-layer-model",
- "language-layer-presentation",
- "layer-stack",
  "lod",
  "maybraid-language-core",
  "maybraid-language-grammars",
@@ -5144,9 +5064,10 @@ dependencies = [
  "procedural-common",
  "richmond",
  "terrain-layer-model",
+ "terrain-stamps",
+ "terrain-watersheds",
  "urbanization-cells",
  "urbanization-layer-model",
- "vegetation-layer-model",
 ]
 
 [[package]]
@@ -5165,7 +5086,7 @@ version = "0.2.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cfe4fbac503b8d1f88e6676011885f34b7174f46e59956bba534ba83abded4df"
 dependencies = [
- "unicode-width 0.2.2",
+ "unicode-width",
 ]
 
 [[package]]
@@ -5654,7 +5575,7 @@ dependencies = [
  "html5ever 0.38.0",
  "tendril 0.5.1",
  "thiserror 2.0.21",
- "unicode-width 0.2.2",
+ "unicode-width",
 ]
 
 [[package]]
@@ -6029,7 +5950,7 @@ dependencies = [
  "console 0.15.11",
  "number_prefix",
  "portable-atomic",
- "unicode-width 0.2.2",
+ "unicode-width",
  "web-time",
 ]
 
@@ -6042,7 +5963,7 @@ dependencies = [
  "console 0.16.6",
  "portable-atomic",
  "rayon",
- "unicode-width 0.2.2",
+ "unicode-width",
  "unit-prefix",
  "web-time",
 ]
@@ -6384,19 +6305,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "language-layer-presentation"
-version = "0.1.2"
-dependencies = [
- "anyhow",
- "bevy",
- "language-layer-model",
- "layer-stack",
- "lod",
- "terrain-layer-model",
- "vegetation-layer-model",
-]
-
-[[package]]
 name = "layer-stack"
 version = "0.1.2"
 dependencies = [
@@ -6721,8 +6629,8 @@ dependencies = [
  "building-components",
  "building-physics",
  "buildings",
+ "durham",
  "furnishing-layer-model",
- "furnishing-layer-presentation",
  "furniture-assemblies",
  "furniture-components",
  "furniture-shaders",
@@ -6734,6 +6642,7 @@ dependencies = [
  "procedural-common",
  "richmond",
  "terrain-layer-model",
+ "urbanization-cells",
  "urbanization-developments",
  "urbanization-layer-model",
 ]
@@ -6815,7 +6724,6 @@ dependencies = [
  "maybraid-character-controller",
  "maybraid-game-mode-discover",
  "maybraid-game-mode-reliquary",
- "maybraid-game-mode-training-ground",
  "maybraid-input",
  "maybraid-menu-controller",
  "maybraid-world",
@@ -6862,20 +6770,11 @@ name = "maybraid-game-mode-discover"
 version = "0.1.2"
 dependencies = [
  "anyhow",
- "barking",
  "bevy",
- "chico",
  "durham",
- "furnishing-layer-model",
- "geneva",
- "language-layer-model",
  "layer-stack",
- "maputo",
- "mob-layer-model",
- "richmond",
+ "lod",
  "terrain-layer-model",
- "urbanization-layer-model",
- "vegetation-layer-model",
  "world-player",
 ]
 
@@ -6884,45 +6783,6 @@ name = "maybraid-game-mode-reliquary"
 version = "0.1.2"
 dependencies = [
  "bevy",
-]
-
-[[package]]
-name = "maybraid-game-mode-training-ground"
-version = "0.1.2"
-dependencies = [
- "anyhow",
- "avian3d",
- "barking",
- "bevy",
- "building-components",
- "building-physics",
- "buildings",
- "character-items",
- "character-persist",
- "characters",
- "chico",
- "combat-hud",
- "damage",
- "durham",
- "furnishing-layer-model",
- "geneva",
- "language-layer-model",
- "layer-stack",
- "lod",
- "maputo",
- "maybraid-game-mode-discover",
- "mob-characters",
- "mob-intelligence",
- "mob-layer-model",
- "mob-scenes",
- "player-camera",
- "procedural-common",
- "richmond",
- "terrain-layer-model",
- "threat-intelligence",
- "urbanization-layer-model",
- "vegetation-layer-model",
- "world-player",
 ]
 
 [[package]]
@@ -7063,7 +6923,6 @@ dependencies = [
  "firearms",
  "fleeing-intelligence",
  "furnishing-layer-model",
- "furnishing-layer-presentation",
  "furniture-assemblies",
  "game-commands",
  "geneva",
@@ -7071,7 +6930,6 @@ dependencies = [
  "hiding-intelligence",
  "intelligence-lod",
  "language-layer-model",
- "language-layer-presentation",
  "layer-stack",
  "lod",
  "lod-avian",
@@ -7080,7 +6938,6 @@ dependencies = [
  "material-ref",
  "maybraid-character-controller",
  "maybraid-game-mode-discover",
- "maybraid-game-mode-training-ground",
  "maybraid-input",
  "maybraid-skill-map",
  "maybraid-sky",
@@ -7089,7 +6946,6 @@ dependencies = [
  "menu-components",
  "mob-characters",
  "mob-layer-model",
- "mob-layer-presentation",
  "mob-scenes",
  "movement-intelligence",
  "movement-intelligence-avian",
@@ -7105,17 +6961,14 @@ dependencies = [
  "spotting-intelligence",
  "tempfile",
  "terrain-layer-model",
- "terrain-layer-presentation",
  "tether-intelligence",
  "threat-intelligence",
  "threat-intelligence-damage",
  "threat-management-intelligence",
  "urbanization-cells",
  "urbanization-layer-model",
- "urbanization-layer-presentation",
  "vegetation-components",
  "vegetation-layer-model",
- "vegetation-layer-presentation",
  "world-materials",
  "world-player",
 ]
@@ -7662,19 +7515,6 @@ dependencies = [
  "bevy",
  "layer-stack",
  "lod",
- "terrain-layer-model",
-]
-
-[[package]]
-name = "mob-layer-presentation"
-version = "0.1.2"
-dependencies = [
- "anyhow",
- "bevy",
- "layer-stack",
- "lod",
- "mob-intelligence",
- "mob-layer-model",
  "terrain-layer-model",
 ]
 
@@ -9951,36 +9791,6 @@ dependencies = [
  "urbanization-cells",
  "urbanization-developments",
  "urbanization-layer-model",
- "urbanization-layer-presentation",
-]
-
-[[package]]
-name = "richmond-playground"
-version = "0.1.2"
-dependencies = [
- "anyhow",
- "avian3d",
- "bevy",
- "building-components",
- "buildings",
- "clap",
- "durham",
- "furnishing-layer-model",
- "furnishing-layer-presentation",
- "game-commands",
- "layer-stack",
- "lod",
- "log",
- "maputo",
- "procedural-common",
- "richmond",
- "terrain-layer-model",
- "terrain-layer-presentation",
- "terrain-shaders",
- "urbanization-cells",
- "urbanization-developments",
- "urbanization-layer-model",
- "urbanization-layer-presentation",
 ]
 
 [[package]]
@@ -10047,30 +9857,6 @@ dependencies = [
  "bevy",
  "lod-avian",
  "movement-intelligence",
-]
-
-[[package]]
-name = "routing-playground"
-version = "0.1.2"
-dependencies = [
- "avian3d",
- "bevy",
- "clap",
- "durham",
- "game-commands",
- "lod",
- "lod-avian",
- "log",
- "maybraid-character-controller",
- "maybraid-input",
- "movement-intelligence",
- "movement-intelligence-avian",
- "movement-realization",
- "player",
- "render-item",
- "routing-intelligence",
- "terrain-shaders",
- "tether-intelligence",
 ]
 
 [[package]]
@@ -11501,17 +11287,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "terrain-layer-presentation"
-version = "0.1.2"
-dependencies = [
- "anyhow",
- "bevy",
- "layer-stack",
- "lod",
- "terrain-layer-model",
-]
-
-[[package]]
 name = "terrain-shaders"
 version = "0.1.2"
 dependencies = [
@@ -12274,12 +12049,6 @@ checksum = "f6ccf251212114b54433ec949fd6a7841275f9ada20dddd2f29e9ceea4501493"
 
 [[package]]
 name = "unicode-width"
-version = "0.1.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7dd6e30e90baa6f72411720665d41d89b9a3d039dc45b8faea1ddd07f617f6af"
-
-[[package]]
-name = "unicode-width"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b4ac048d71ede7ee76d585517add45da530660ef4390e49b098733c6e897f254"
@@ -12324,8 +12093,10 @@ name = "urbanization-developments"
 version = "0.1.2"
 dependencies = [
  "anyhow",
+ "bevy",
  "bevy_math",
  "building-components",
+ "building-shaders",
  "buildings",
  "lod",
  "material-ref",
@@ -12341,19 +12112,6 @@ dependencies = [
  "layer-stack",
  "lod",
  "terrain-layer-model",
-]
-
-[[package]]
-name = "urbanization-layer-presentation"
-version = "0.1.2"
-dependencies = [
- "anyhow",
- "bevy",
- "layer-stack",
- "lod",
- "terrain-layer-model",
- "terrain-layer-presentation",
- "urbanization-layer-model",
 ]
 
 [[package]]
@@ -12607,18 +12365,6 @@ dependencies = [
  "layer-stack",
  "lod",
  "terrain-layer-model",
-]
-
-[[package]]
-name = "vegetation-layer-presentation"
-version = "0.1.2"
-dependencies = [
- "anyhow",
- "bevy",
- "layer-stack",
- "lod",
- "terrain-layer-model",
- "vegetation-layer-model",
 ]
 
 [[package]]

@@ -4,9 +4,12 @@ use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
 use bevy_hanabi::prelude::{EffectMaterial, ParticleEffect};
 
+use bevy::mesh::MeshTag;
+
 use crate::composition::{EffectDefinition, EffectLayer, EffectPart, LobeKind};
-use crate::lobe_material::LobeMaterial;
-use crate::lobes::{lobe_transform, vary_lobe, LobeMaterialSlot, VfxLobe};
+use crate::lobe_instances::LobeInstanceGpu;
+use crate::membership::VfxMemberOf;
+use crate::lobes::{lobe_transform, vary_lobe, LobeMaterialPending, VfxLobe};
 use crate::palette::ExplosionPalette;
 use crate::particles::effect_properties;
 use crate::seed;
@@ -128,7 +131,7 @@ pub struct VfxEmitterArmed;
 pub struct VfxEmitterBurst;
 
 /// Actual start clock for one realized layer. Cleanup uses this, not planned delay.
-#[derive(Component, Debug)]
+#[derive(Clone, Component, Debug)]
 pub struct VfxLayerLife {
 	pub age: f32,
 	pub duration: f32,
@@ -194,7 +197,12 @@ impl SpawnVfxExt for Commands<'_, '_> {
 	}
 }
 
-pub fn realize_layer(commands: &mut Commands, parent: Entity, layer: &EffectLayer, spawn: &VfxSpawn) {
+pub fn realize_layer(
+	commands: &mut Commands,
+	parent: Entity,
+	layer: &EffectLayer,
+	spawn: &VfxSpawn,
+) {
 	let transform = Transform {
 		translation: layer.transform.translation,
 		rotation: layer.transform.rotation,
@@ -206,6 +214,7 @@ pub fn realize_layer(commands: &mut Commands, parent: Entity, layer: &EffectLaye
 			let mut entity = commands.spawn((
 				Name::new(format!("vfx-layer-{}", part.name)),
 				ChildOf(parent),
+				VfxMemberOf(parent),
 				transform,
 				Visibility::Inherited,
 				ParticleEffect::new(part.effect.clone()),
@@ -230,6 +239,7 @@ pub fn realize_layer(commands: &mut Commands, parent: Entity, layer: &EffectLaye
 			commands.spawn((
 				Name::new("vfx-layer-flash"),
 				ChildOf(parent),
+				VfxMemberOf(parent),
 				transform,
 				PointLight {
 					color,
@@ -252,6 +262,7 @@ pub fn realize_layer(commands: &mut Commands, parent: Entity, layer: &EffectLaye
 				.spawn((
 					Name::new(format!("vfx-layer-{}", part.name)),
 					ChildOf(parent),
+					VfxMemberOf(parent),
 					transform,
 					Visibility::Inherited,
 					NotShadowCaster,
@@ -260,7 +271,7 @@ pub fn realize_layer(commands: &mut Commands, parent: Entity, layer: &EffectLaye
 			let layer_id = layer_stream(part.kind);
 			for (index, spec) in part.lobes.iter().copied().enumerate() {
 				let spec = vary_lobe(spec, spawn.resolved_seed(), layer_id, index as u32);
-				let material = LobeMaterial::new(
+				let gpu = LobeInstanceGpu::new(
 					part.kind,
 					spec.duration,
 					seed::unit(seed::stream(spawn.resolved_seed(), layer_id, index as u32)),
@@ -268,13 +279,20 @@ pub fn realize_layer(commands: &mut Commands, parent: Entity, layer: &EffectLaye
 					spawn.tint_or_white(),
 					spawn.clamped_intensity(),
 				);
-				commands.spawn((
-					Name::new(format!("vfx-lobe-{}-{index}", part.name)),
-					ChildOf(cluster),
-					Mesh3d(part.mesh.clone()),
-					lobe_transform(&spec, 0.0),
-					Visibility::Hidden,
-					VfxLobe { age: 0.0, spec, playback: spawn.clamped_playback() },
+				let lobe = commands
+					.spawn((
+						Name::new(format!("vfx-lobe-{}-{index}", part.name)),
+						ChildOf(cluster),
+						VfxMemberOf(parent),
+						Mesh3d(part.mesh.clone()),
+						lobe_transform(&spec, 0.0),
+						MeshTag(0),
+						Visibility::Hidden,
+						VfxLobe { age: 0.0, spec, playback: spawn.clamped_playback() },
+					))
+					.id();
+				commands.entity(lobe).insert((
+					gpu,
 					VfxLayerLife {
 						age: 0.0,
 						duration: spec.duration,
@@ -282,7 +300,7 @@ pub fn realize_layer(commands: &mut Commands, parent: Entity, layer: &EffectLaye
 						waiting_for_emitter: false,
 					},
 					NotShadowCaster,
-					LobeMaterialSlot(material),
+					LobeMaterialPending(part.kind),
 				));
 			}
 		}

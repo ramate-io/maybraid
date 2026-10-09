@@ -7,18 +7,25 @@ use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value, Scene};
 use durham::terrain::ElevationModulation;
 use durham::{
-	cascade_chunk_for_cell, stream_banded_level, ComposedTerrain, StreamBandedLod, Terrain,
-	TerrainCellRing, TerrainColliderMeshSource, TerrainMeshBuilder, TerrainSdf,
+	cascade_chunk_for_cell, stream_banded_level, stream_banded_scene, ComposedTerrain,
+	StreamBandedLod, Terrain, TerrainCellRing, TerrainColliderMeshSource, TerrainMeshBuilder,
+	TerrainSdf,
 };
-use lod::gen::{Id, LodScene, LodSceneLevel, LodSceneStatus};
+use lod::gen::{Id, LodScene, LodSceneLevel, LodSceneStatus, OriginalId};
+use lod::hcsg::shared::{self, GenerationContext};
+use lod::hcsg::HcsgStorage;
 use lod::lod_ref::LodRef;
 use render_item::mesh::handle::Cached;
 use render_item::sdf::cpu_shot::{CpuShotBuilder, WallFaces};
+use std::marker::PhantomData;
 use std::sync::Arc;
-use terrain_layer_model::TerrainCell;
 use terrain_shaders::TerrainShader;
 
+use crate::compose::PadComposable;
+use crate::developments::RichmondDevelopment;
+use crate::ground::{GroundCell, RichmondGround};
 use crate::pad::PadComplex;
+use crate::storage::column_bounds;
 
 /// Durham [`Terrain`] plus overlapping development pads.
 #[derive(Debug, Clone, Component)]
@@ -34,8 +41,8 @@ pub struct TerrainWithPads {
 }
 
 impl TerrainWithPads {
+	/// Without pad nodes the terrain is wrapped as is: its surface and walls.
 	pub fn compose<'a>(terrain: &Terrain, pads: impl IntoIterator<Item = &'a PadComplex>) -> Self {
-		let mut sdf: TerrainSdf = terrain.sdf.terrain().clone();
 		let mut pad_count = 0;
 		let mut nodes = Vec::new();
 		for pad in pads {
@@ -43,9 +50,19 @@ impl TerrainWithPads {
 			nodes.extend(pad.pads.iter().cloned());
 		}
 		let merged = PadComplex::from_nodes(nodes);
-		if !merged.is_empty() {
-			sdf.add_elevation_modulation(Box::new(merged) as Box<dyn ElevationModulation>);
+		if merged.is_empty() {
+			return Self {
+				cell: terrain.cell,
+				sdf: Arc::clone(&terrain.sdf),
+				material: terrain.material.clone(),
+				res_2: terrain.res_2,
+				wall_faces: terrain.wall_faces,
+				pad_count: 0,
+				stream_ring: terrain.stream_ring,
+			};
 		}
+		let mut sdf: TerrainSdf = terrain.sdf.terrain().clone();
+		sdf.add_elevation_modulation(Box::new(merged) as Box<dyn ElevationModulation>);
 		Self {
 			cell: terrain.cell,
 			sdf: Arc::new(ComposedTerrain::from_terrain(sdf)),
@@ -92,8 +109,9 @@ impl TerrainWithPads {
 		entity
 	}
 
+	/// Visual fill plus the trimesh source.
 	pub fn scene(&self) -> impl Scene + 'static {
-		self.mesh_scene()
+		(self.mesh_scene(), bsn! { TerrainColliderMeshSource })
 	}
 
 	pub fn seeds_collision(&self) -> bool {
@@ -116,30 +134,6 @@ impl TerrainWithPads {
 			template(move |_ctx| Ok(Cached::new(builder.clone())))
 			MeshMaterial3d::<TerrainShader>({material.clone()})
 		}
-	}
-}
-
-impl TerrainCell for TerrainWithPads {
-	type Mesh = TerrainMeshBuilder;
-
-	fn bounds(&self) -> Aabb3d {
-		self.cell
-	}
-
-	fn mesh_builder(&self) -> TerrainMeshBuilder {
-		TerrainWithPads::mesh_builder(self)
-	}
-
-	fn chunk_pose(&self) -> Transform {
-		TerrainWithPads::chunk_pose(self)
-	}
-
-	fn seeds_collision(&self) -> bool {
-		TerrainWithPads::seeds_collision(self)
-	}
-
-	fn res_2(&self) -> u8 {
-		self.res_2
 	}
 }
 
@@ -168,14 +162,96 @@ impl LodScene for TerrainWithPads {
 		}
 	}
 
-	fn scene_with_level(&self, _lod_ref: &LodRef, _level: LodSceneLevel) -> impl Scene + 'static {
-		self.mesh_scene()
+	fn scene_with_level(&self, _lod_ref: &LodRef, level: LodSceneLevel) -> impl Scene + 'static {
+		if self.seeds_collision() {
+			stream_banded_scene(self, level, || self.scene())
+		} else {
+			stream_banded_scene(self, level, || self.mesh_scene())
+		}
 	}
 }
 
-/// Marks a spawned padded-terrain scene root.
-#[derive(Component, Debug, Clone, Copy)]
-pub struct PresentedPaddedTerrainScene(pub Id);
+/// A cell of ground `G` with the pads of the developments over it composed in.
+pub struct PaddedTerrain<G> {
+	pub surface: TerrainWithPads,
+	_ground: PhantomData<fn() -> G>,
+}
+
+impl<G: RichmondGround> LodScene for PaddedTerrain<G> {
+	fn scene_lod_level(&self, lod_ref: &LodRef) -> LodSceneLevel {
+		self.surface.scene_lod_level(lod_ref)
+	}
+
+	fn scene_lod_status(&self, lod_ref: &LodRef) -> LodSceneStatus {
+		self.surface.scene_lod_status(lod_ref)
+	}
+
+	fn scene_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> impl Scene + 'static {
+		self.surface.scene_with_level(lod_ref, level)
+	}
+}
+
+impl<G> PaddedTerrain<G> {
+	pub fn new(surface: TerrainWithPads) -> Self {
+		Self { surface, _ground: PhantomData }
+	}
+}
+
+impl<G: RichmondGround> PaddedTerrain<G> {
+	/// Stored padded surface with the greatest XZ overlap with `region`; the
+	/// finest on a tie.
+	pub fn best_overlapping(storage: &HcsgStorage, region: Aabb3d) -> Option<TerrainWithPads> {
+		let mut best: Option<(f32, f32, TerrainWithPads)> = None;
+		for id in storage.overlapping::<Self>(column_bounds(region)) {
+			let Some(entry) = storage.entry::<Self>(id) else {
+				continue;
+			};
+			let overlap_x = (region.max.x.min(entry.bounds.max.x)
+				- region.min.x.max(entry.bounds.min.x))
+			.max(0.0);
+			let overlap_z = (region.max.z.min(entry.bounds.max.z)
+				- region.min.z.max(entry.bounds.min.z))
+			.max(0.0);
+			let overlap = overlap_x * overlap_z;
+			if overlap <= 1e-3 {
+				continue;
+			}
+			let span = (entry.bounds.max.x - entry.bounds.min.x)
+				.max(entry.bounds.max.z - entry.bounds.min.z);
+			let replace = match &best {
+				None => true,
+				Some((best_overlap, best_span, _)) => {
+					overlap > *best_overlap || (overlap == *best_overlap && span < *best_span)
+				}
+			};
+			if replace {
+				best = Some((overlap, span, entry.value.surface.clone()));
+			}
+		}
+		best.map(|(_, _, terrain)| terrain)
+	}
+}
+
+/// Total over the ground: every cell of `G` is presented padded, wrapped as
+/// is where no pad reaches it, so the raw cell is never presented beneath.
+impl<G: RichmondGround> shared::GenerationScheme for PaddedTerrain<G> {
+	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
+		cx.original_ids_for::<G::Cell>(region)
+	}
+
+	/// The cell with the pads of every development over it.
+	fn build_with_id(cx: &mut GenerationContext, id: Id) -> Option<(Self, Aabb3d)> {
+		let cell = cx.get_or_generate::<G::Cell>(id)?;
+		let bounds = GroundCell::bounds(cell.as_ref());
+		let developments: Vec<_> = cx
+			.original_ids_for::<RichmondDevelopment<G>>(bounds)
+			.into_iter()
+			.filter_map(|OriginalId(id)| cx.get_or_generate::<RichmondDevelopment<G>>(id))
+			.collect();
+		let pads = RichmondDevelopment::merge_pads(bounds, developments.iter().map(Arc::as_ref));
+		Some((Self::new(cell.as_ref().compose_pads(&pads)), bounds))
+	}
+}
 
 #[cfg(test)]
 mod tests {

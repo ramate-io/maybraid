@@ -2,11 +2,12 @@
 
 use crate::terrain::cell::universal_bounds;
 use crate::terrain::config::TerrainConfig;
-use crate::terrain::presentation::TerrainPresentationAssets;
+use crate::terrain::mesh::TerrainMeshAssets;
 use crate::terrain::sdf::{ComposedTerrain, TerrainSdf};
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
-use lod::gen::{GeneratingSpatialIndex, GenerationScheme, Id, OriginalId};
+use lod::gen::{Id, OriginalId};
+use lod::hcsg::shared::{self, GenerationContext};
 
 /// Shared heightfield noise used by every terrain cell and grading search.
 #[derive(Debug, Clone, Component)]
@@ -34,22 +35,16 @@ impl BaseTerrainNoise {
 	}
 }
 
-impl<S> GenerationScheme<S> for BaseTerrainNoise
-where
-	S: GeneratingSpatialIndex<TerrainPresentationAssets>,
-{
-	fn original_ids_for(_spatial_index: &mut S, _region: Aabb3d) -> Vec<OriginalId> {
+impl shared::GenerationScheme for BaseTerrainNoise {
+	fn original_ids_for(_cx: &mut GenerationContext, _region: Aabb3d) -> Vec<OriginalId> {
 		vec![OriginalId::universal()]
 	}
 
-	fn build_with_id(spatial_index: &mut S, id: Id) -> Option<(Self, Aabb3d)> {
+	fn build_with_id(cx: &mut GenerationContext, id: Id) -> Option<(Self, Aabb3d)> {
 		if id != Id::Universal {
 			return None;
 		}
-		let assets = GeneratingSpatialIndex::<TerrainPresentationAssets>::get_one_or_generate(
-			spatial_index,
-			Id::Universal,
-		)?;
+		let assets = cx.get_or_generate::<TerrainMeshAssets>(Id::Universal)?;
 		Some((Self::from_config(&assets.config), universal_bounds()))
 	}
 }

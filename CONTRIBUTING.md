@@ -181,6 +181,32 @@ Do **not** use [`.unwrap()`](https://doc.rust-lang.org/std/option/enum.Option.ht
 
 Prefer **`Result`** propagation instead: write helpers that return something like **`anyhow::Result`** (or your crate’s error type), use **`?`**, and declare **`#[test] fn case() -> anyhow::Result<()>`**, so harness failures surface structured errors. [`assert!`](https://doc.rust-lang.org/std/macro.assert.html) / [`assert_eq!`](https://doc.rust-lang.org/std/macro.assert_eq.html) remain appropriate for expectations.
 
+## Packaging and CI
+
+When working on game packaging or scripts in `packaging/`, include the **`ci-action::package`** marker in your commit message to trigger the [Package workflow](../.github/workflows/package.yml) on your PR branch. Without it, Package only runs on `main`, published releases, and manual `workflow_dispatch`.
+
+The [Package workflow](../.github/workflows/package.yml) builds unsigned macOS DMG, Windows zip, Linux Steam depot, and general Linux tarball artifacts. It runs on `main` and published releases automatically, but for feature branches you must opt in with the commit message marker. Local reproduction commands are in [packaging/README.md](packaging/README.md).
+
+To include the marker, add an `## Actions` section after `## Agent Dialogue` in your commit message file:
+
+````markdown
+## Actions
+
+```shell
+ci-action::package
+```
+````
+
+When you commit with `git commit-std`, the full commit message file (including the Actions section) becomes the commit message, and GitHub's workflow checks will see the token. See [ci-actions/README.md](../.github/workflows/ci-actions/README.md) for the index of available markers.
+
+**When to use `ci-action::package`:**
+- Changes to `packaging/scripts/` or packaging configuration
+- Modifications to build flags or linker settings that affect release binaries
+- Updates to the Package workflow or toolchain pins that could impact package outputs
+- Any change where you need to verify the packaged artifacts work correctly
+
+Without the marker, your CI checks will pass but no packages will be built, and packaging regressions may only surface later on `main`.
+
 ## Spotting and combat targeting
 
 Keep semantic eligibility, visual knowledge, combat membership, and weapon
@@ -279,16 +305,16 @@ Copies of Tracy CSVs and hitch logs from the orchard work (`frame_*.csv`, `*trac
 
 ## Migrating a grove to the orchard (flattened) approach
 
-Orchard High/Medium plants are **posed kit content**, not a nest of per-stick / per-ball [`LodSceneHost`](maybraid/lod/lib/src/scene/host.rs)s. That is what made `/show vast-orchards` scale: one Gimme-indexed host per plant, shared stick/ball [`SceneRef`](maybraid/scene-ref)s, and no fine-phase refresh per kit node.
+Orchard High/Medium plants are **posed kit content**, not a nest of per-stick / per-ball [`LodSceneHost`](maybraid/lod/lib/src/scene/host.rs)s. Forest tiles go further: kits live under the **grove** host (`ChicoGroveHost` / leftover grove `LodScene`), so hide/show is one apply per tile. Isolated `/show` trees still keep one Gimme-indexed host per plant. Shared stick/ball [`SceneRef`](maybraid/scene-ref)s; no fine-phase refresh per kit node.
 
 Canonical example: [`maybraid/world/layers/vegetation/groves/src/orchard.rs`](maybraid/world/layers/vegetation/groves/src/orchard.rs) (`nest_plant_chunks`) plus helpers in [`grove/vc_compose.rs`](maybraid/world/layers/vegetation/groves/src/grove/vc_compose.rs).
 
-1. **Compose with `nest_flattened_plant_chunk`**, not the unused nested-host helpers in [`placed_host.rs`](maybraid/world/layers/vegetation/groves/src/grove/placed_host.rs). Those wrap [`ComponentsOnly`](maybraid/world/layers/vegetation/components/src/lib.rs)`<PlacedVegetation<T>>` and spawn nested [`FoliageNode`](maybraid/world/layers/vegetation/components/src/foliage/node.rs) / [`StickNode`](maybraid/world/layers/vegetation/components/src/sticks/node.rs) LOD hosts. Flattened hosts wrap `FlattenedComponentsOnly<PlacedVegetation<T>>` and emit posed kits only.
+1. **Compose with `nest_flattened_plant_chunk`**, not the unused nested-host helpers in [`placed_host.rs`](maybraid/world/layers/vegetation/groves/src/grove/placed_host.rs). Those wrap [`ComponentsOnly`](maybraid/world/layers/vegetation/components/src/lib.rs)`<PlacedVegetation<T>>` and spawn nested [`FoliageNode`](maybraid/world/layers/vegetation/components/src/foliage/node.rs) / [`StickNode`](maybraid/world/layers/vegetation/components/src/sticks/node.rs) LOD hosts. `nest_flattened_plant_chunk` stamps `FlattenedComponentsOnly<PlacedVegetation<T>>` and emits posed kits under the **grove** host — no per-tree [`LodSceneHost`](maybraid/lod/lib/src/scene/host.rs).
 2. **Share the plant type with `Arc<T>`** when `T` is large (Storybook trees). Orchard stores `Arc<StorybookTree>` so begin/drain does not clone geometry per chunk. Register **that** wrapper in the playground:
    `flattened_plant_host!(app, YourTree);`
    in [`view.rs`](maybraid/world/layers/vegetation/chico/src/view.rs). Isolated leftover plant hosts use the same family.
-3. **Lazy `SceneChunk` for the plant list.** Build one `SceneChunk::lazy(n, n, …)` that yields `nest_flattened_plant_chunk` per plant (see Orchard `nest_plant_chunks`). Begin must not box every `scene_with_level` up front.
-4. **Leave Low / UltraLow as canopy proxies** (`canopy_proxy_site`, `ULTRA_LOW_CANOPY_BIN_METERS`). Flattening is for the High/Medium plant hosts.
+3. **Lazy `SceneChunk` for the plant list.** Use [`lazy_flattened_plant_chunks`](maybraid/world/layers/vegetation/groves/src/grove/vc_compose.rs) (kit weight × plant count) that yields `nest_flattened_plant_chunk` per plant (see Orchard `nest_plant_chunks`). Begin must not box every `scene_with_level` up front.
+4. **Leave Low / UltraLow as canopy proxies** (`canopy_proxy_site`, `ULTRA_LOW_CANOPY_BIN_METERS`). Flattening is for High/Medium posed plants (palm-only groves also pose through Low).
 5. **Charge kit weight.** Flattened kits use [`FLATTENED_KIT_CHUNK_WEIGHT`](maybraid/world/layers/vegetation/components/src/lib.rs) so drain does not admit a full SceneRef / `WorldAssetRoot` wave in one frame.
 6. **Do not add a second produce plugin per region channel.** `GimmeLodSceneRefreshPlugin<T, M, F>` can still be added for bullseye and spotlight; fill/emit are registered once per `T`. Cull fill is the same pattern: one untyped host-hit query (`LodCullProduceCache`), then per-`T` enqueue (`GimmeLodSceneCullPlugin`).
 

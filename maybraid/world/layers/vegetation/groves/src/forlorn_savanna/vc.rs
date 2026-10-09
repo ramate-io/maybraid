@@ -24,9 +24,10 @@ use super::{
 use crate::grove::vc_tuft::patch_variant_index;
 use crate::grove::{
 	canopy_ball_material_from_palette, canopy_proxy_rory, canopy_proxy_site,
-	frond_material_from_palette, grove_structural_footprint, nest_flattened_plant_chunk,
-	placement_noise, remixed_bush_plant, remixed_sbs_plant, stick_material_from_palette,
-	CanopyProxySite, FlatTerrainSample, GroveCellVariant, GroveExtent, GrovePreviewParams,
+	frond_material_from_palette, grove_structural_footprint, lazy_flattened_plant_chunks,
+	nest_flattened_plant_chunk, placement_noise, remixed_bush_plant, remixed_sbs_plant,
+	stick_material_from_palette, CanopyProxySite, FlatTerrainSample, GroveCellVariant, GroveExtent,
+	GrovePreviewParams,
 };
 
 #[derive(Clone, Debug, Args)]
@@ -124,7 +125,7 @@ impl ForlornSavanna {
 		let bounds = *lod_ref.bounds;
 		let entity = lod_ref.entity;
 		let mut index = 0usize;
-		vec![SceneChunk::lazy(n as u32, n, move || {
+		vec![lazy_flattened_plant_chunks(n, move || {
 			if index >= plants.len() {
 				return None;
 			}

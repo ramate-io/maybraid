@@ -7,11 +7,8 @@ use crate::animations::{
 	smoothstep, Fall, JumpSegment, Spring, Squat, TwoFootedJump, FALL_BLEND_FRACTION,
 };
 use crate::rigs::mix::blend_clips;
+use crate::rigs::segment_debug::segment_debug_enabled;
 use crate::{Animation, Effects};
-
-fn segment_debug_enabled() -> bool {
-	std::env::var("CROZON_ANIMATION_DEBUG").is_ok()
-}
 
 impl Animation<HumanoidV0Rig> for TwoFootedJump {
 	fn apply_for(&self, rig: &mut HumanoidV0Rig, elapsed: f32) {

@@ -1,0 +1,721 @@
+//! Chico on the shared HCSG runtime ([`lod::hcsg::shared`]): forests and
+//! groves select on the worker, and each grove grows there on the ground's
+//! surface cells into a [`GrownGrove`] presented as an [`HcsgNode`] host.
+//! Beyond the groves, [`BumpedOut`] canopy proxies displace the surface.
+//!
+//! A session starts by advancing the epoch, then [`ChicoRoots::reset`].
+
+use std::marker::PhantomData;
+use std::sync::Arc;
+
+use bevy::ecs::system::{SystemParam, SystemParamItem};
+use bevy::math::bounding::Aabb3d;
+use bevy::math::DVec3;
+use bevy::prelude::*;
+use durham::TerrainMeshBuilder;
+use lod::gen::{Id, LodScene, LodSceneLevel, LodSceneStatus, OriginalId};
+use lod::hcsg::shared::{self, GenerationContext, HcsgBounds, HcsgNode, PresentationPlugin};
+use lod::hcsg::universal_bounds;
+use lod::lod_ref::LodRef;
+use lod::scene::LodSceneRefreshChunkPlugin;
+use lod::LodViewer;
+use render_item::mesh::{IdentifiedMesh, MeshBuilder};
+use render_item::NormalizeChunk;
+use richmond::{PaddedTerrain, Richmond, RichmondGround};
+use terrain_chunk_ref::TerrainChunkRef;
+use urbanization_layer_model::Urbanization;
+use vegetation_components::scene_children;
+use vegetation_groves::{GroveExtent, GroveWorldSample};
+
+use crate::ground::overlay_chunk_ref;
+use crate::grove::{grove_from_id, grove_id};
+use crate::plugin::register_vegetation_view;
+use crate::{
+	presenting_recipes, CanopyBumpOut, ChicoForest, ChicoGrove, ChicoGroveHost, ForestExtent,
+	ForestGroveTile, ForestLayer, ForestSelection, MediumCanopyBumpOut, NeighborLayers,
+	BUMP_OUT_CELL_XZ, DEFAULT_FOREST_EXTENT_XZ, DEFAULT_FOREST_GROVE_TILE_XZ,
+	GROVE_PRESENT_RADIUS_M, MEDIUM_BUMP_OUT_CELL_XZ,
+};
+
+mod bump_outs;
+
+pub use bump_outs::{BumpOutPresentationPlugin, BumpOutRing, BumpedOut, CanopyProxy};
+
+/// The ground forests grow on: the cells that make up its whole surface.
+pub trait ForestGround: Send + Sync + 'static {
+	type Surface: shared::GenerationScheme;
+	type Mesh: MeshBuilder + IdentifiedMesh + NormalizeChunk + Clone + Send + Sync + 'static;
+
+	/// The cell's footprint.
+	fn footprint(surface: &Self::Surface) -> Aabb3d;
+
+	/// Surface height at `(x, z)` within the cell.
+	fn height_at(surface: &Self::Surface, x: f32, z: f32) -> f32;
+
+	/// The cell's mesh, keyed as the cell's own host presents it.
+	fn chunk_ref(surface: &Self::Surface) -> TerrainChunkRef<Self::Mesh>;
+}
+
+/// Padded terrain is the urbanized ground's whole surface.
+impl<T: RichmondGround> ForestGround for Urbanization<Richmond<T>> {
+	type Surface = PaddedTerrain<T>;
+	type Mesh = TerrainMeshBuilder;
+
+	fn footprint(surface: &Self::Surface) -> Aabb3d {
+		surface.surface.cell
+	}
+
+	fn height_at(surface: &Self::Surface, x: f32, z: f32) -> f32 {
+		surface.surface.sdf.terrain().height_at_with_all_modulations(x, z)
+	}
+
+	fn chunk_ref(surface: &Self::Surface) -> TerrainChunkRef<TerrainMeshBuilder> {
+		overlay_chunk_ref(&surface.surface)
+	}
+}
+
+impl shared::GenerationScheme for ChicoForest {
+	fn original_ids_for(_cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
+		ForestExtent::cells_overlapping(region)
+			.into_iter()
+			.map(|extent| OriginalId(extent.id()))
+			.collect()
+	}
+
+	fn build_with_id(cx: &mut GenerationContext, id: Id) -> Option<(Self, Aabb3d)> {
+		let extent = ForestExtent::from_id(id)?;
+		let selection = cx.get::<ForestSelection>(Id::Universal)?;
+		Some((Self { extent, layers: selection.layers_for(extent) }, extent.aabb()))
+	}
+}
+
+/// The forest cell holding `tile`.
+fn forest_of(tile: GroveExtent) -> ForestExtent {
+	let (ix, iz) = ForestExtent::cell_index_containing((tile.min() + tile.max()) * 0.5);
+	ForestExtent::from_cell_index(ix, iz)
+}
+
+/// The forest cell over `forest` and its four cardinal neighbors' layers.
+fn forest_with_neighbors(
+	cx: &mut GenerationContext,
+	forest: ForestExtent,
+) -> Option<(Arc<ChicoForest>, NeighborLayers)> {
+	let selected = cx.get_or_generate::<ChicoForest>(forest.id())?;
+	let (ix, iz) = ForestExtent::cell_index_containing(forest.center());
+	let mut layers = |ix, iz| {
+		cx.get_or_generate::<ChicoForest>(ForestExtent::from_cell_index(ix, iz).id())
+			.map(|neighbor| neighbor.layers)
+	};
+	let neighbors = NeighborLayers {
+		north: layers(ix, iz + 1),
+		east: layers(ix + 1, iz),
+		south: layers(ix, iz - 1),
+		west: layers(ix - 1, iz),
+	};
+	Some((selected, neighbors))
+}
+
+impl shared::GenerationScheme for ChicoGrove {
+	/// One grove per tile and layer that the tile's forest or a neighbor
+	/// selects, so blends reach across forest faces.
+	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
+		let mut ids = Vec::new();
+		for tile in ForestExtent::grove_tiles_overlapping(region) {
+			let Some((forest, neighbors)) = forest_with_neighbors(cx, forest_of(tile)) else {
+				continue;
+			};
+			for layer in ForestLayer::ALL {
+				if layer.kind(forest.layers).is_some() || neighbors.any_kind(layer) {
+					ids.push(OriginalId(grove_id(tile, layer)));
+				}
+			}
+		}
+		ids
+	}
+
+	fn build_with_id(cx: &mut GenerationContext, id: Id) -> Option<(Self, Aabb3d)> {
+		let (extent, layer) = grove_from_id(id)?;
+		let forest_extent = forest_of(extent);
+		let (forest, neighbors) = forest_with_neighbors(cx, forest_extent)?;
+		let kind = layer.kind(forest.layers);
+		let recipes = presenting_recipes(kind, extent, forest_extent, &neighbors, layer);
+		let grove = Self::selected(extent, layer, recipes);
+		let bounds = grove.aabb();
+		Some((grove, bounds))
+	}
+}
+
+/// The surface cells of ground `G` over a region, finest first. Groves place
+/// plants only where a cell covers them.
+pub struct GroundSurface<G: ForestGround> {
+	cells: Vec<Arc<G::Surface>>,
+}
+
+impl<G: ForestGround> GroundSurface<G> {
+	pub fn generate(cx: &mut GenerationContext, region: Aabb3d) -> Self {
+		let mut cells: Vec<Arc<G::Surface>> = cx
+			.original_ids_for::<G::Surface>(region)
+			.into_iter()
+			.filter_map(|OriginalId(id)| cx.get_or_generate::<G::Surface>(id))
+			.collect();
+		cells.sort_by(|a, b| span_x(G::footprint(a)).total_cmp(&span_x(G::footprint(b))));
+		Self { cells }
+	}
+
+	pub fn is_empty(&self) -> bool {
+		self.cells.is_empty()
+	}
+
+	/// The union of the cells' footprints.
+	pub fn footprint(&self) -> Option<Aabb3d> {
+		self.cells.iter().map(|cell| G::footprint(cell)).reduce(|a, b| {
+			Aabb3d::from_min_max(Vec3::from(a.min.min(b.min)), Vec3::from(a.max.max(b.max)))
+		})
+	}
+
+	/// Surface height at `(x, z)`; `None` off the surface.
+	pub fn height(&self, x: f32, z: f32) -> Option<f32> {
+		self.cells
+			.iter()
+			.find(|cell| {
+				let bounds = G::footprint(cell);
+				x >= bounds.min.x && x <= bounds.max.x && z >= bounds.min.z && z <= bounds.max.z
+			})
+			.map(|cell| G::height_at(cell, x, z))
+	}
+}
+
+fn span_x(bounds: Aabb3d) -> f32 {
+	bounds.max.x - bounds.min.x
+}
+
+/// Steepness is a 1 m forward difference, as on the legacy ground sample; a
+/// neighbor off the surface reads level.
+impl<G: ForestGround> GroveWorldSample for GroundSurface<G> {
+	fn height_at(&self, position: Vec3) -> f32 {
+		self.height(position.x, position.z).unwrap_or(0.0)
+	}
+
+	fn steepness_at(&self, position: Vec3) -> f32 {
+		const EPS: f32 = 1.0;
+		let h = self.height_at(position);
+		let hx = self.height(position.x + EPS, position.z).unwrap_or(h);
+		let hz = self.height(position.x, position.z + EPS).unwrap_or(h);
+		let (dx, dz) = ((hx - h) / EPS, (hz - h) / EPS);
+		(dx * dx + dz * dz).sqrt()
+	}
+
+	fn allows_placement_at(&self, position: Vec3) -> bool {
+		self.height(position.x, position.z).is_some()
+	}
+}
+
+/// A [`ChicoGrove`] grown on ground `G`'s surface, under the grove's id.
+pub struct GrownGrove<G> {
+	pub layer: ForestLayer,
+	pub tiles: Vec<ForestGroveTile>,
+	_ground: PhantomData<fn() -> G>,
+}
+
+impl<G: ForestGround> shared::GenerationScheme for GrownGrove<G> {
+	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
+		cx.original_ids_for::<ChicoGrove>(region)
+	}
+
+	/// `None` off the ground or where nothing grows.
+	fn build_with_id(cx: &mut GenerationContext, id: Id) -> Option<(Self, Aabb3d)> {
+		let grove = cx.get_or_generate::<ChicoGrove>(id)?;
+		let extent = Aabb3d::from_min_max(grove.extent.min(), grove.extent.max());
+		let surface = GroundSurface::<G>::generate(cx, extent);
+		if surface.is_empty() {
+			return None;
+		}
+		let tiles = grove.grow(&surface);
+		let bounds = tiles
+			.iter()
+			.map(ForestGroveTile::scene_bounds)
+			.filter(|bounds| bounds.min.is_finite() && bounds.max.is_finite())
+			.reduce(|a, b| Aabb3d { min: a.min.min(b.min), max: a.max.max(b.max) })?;
+		Some((Self { layer: grove.layer, tiles, _ground: PhantomData }, bounds))
+	}
+}
+
+/// One level holding a nested [`ChicoGroveHost`] per tile; each tile keeps
+/// its own levels.
+impl<G: ForestGround> LodScene for GrownGrove<G> {
+	fn scene_lod_status(&self, _lod_ref: &LodRef) -> LodSceneStatus {
+		LodSceneStatus::Unchanged
+	}
+
+	fn scene_with_level(&self, lod_ref: &LodRef, _level: LodSceneLevel) -> impl Scene + 'static {
+		scene_children(
+			self.tiles
+				.iter()
+				.map(|tile| {
+					let host = ChicoGroveHost::new(tile.clone(), self.layer);
+					Box::new(host.scene(lod_ref)) as Box<dyn Scene>
+				})
+				.collect(),
+		)
+	}
+}
+
+/// Half-height of a grove neighborhood: every surface a grove grows on.
+const GROVE_COLUMN_Y: f32 = 10_000.0;
+
+/// The groves around the [`LodViewer`]: within [`GROVE_PRESENT_RADIUS_M`] of
+/// its grove tile.
+pub struct GroveNeighborhood;
+
+impl GroveNeighborhood {
+	fn around(viewers: &Query<&Transform, With<LodViewer>>, radius: f32) -> Option<Aabb3d> {
+		let viewer = viewers.iter().next()?;
+		let s = DEFAULT_FOREST_GROVE_TILE_XZ;
+		let origin = -DEFAULT_FOREST_EXTENT_XZ * 0.5;
+		let snap = |v: f32| origin + (((v - origin) / s).floor() + 0.5) * s;
+		let center = Vec3::new(snap(viewer.translation.x), 0.0, snap(viewer.translation.z));
+		Some(Aabb3d::from_min_max(
+			Vec3::new(center.x - radius, -GROVE_COLUMN_Y, center.z - radius),
+			Vec3::new(center.x + radius, GROVE_COLUMN_Y, center.z + radius),
+		))
+	}
+}
+
+impl HcsgBounds for GroveNeighborhood {
+	type Param = Query<'static, 'static, &'static Transform, With<LodViewer>>;
+
+	fn regions(viewers: &SystemParamItem<Self::Param>) -> Vec<Aabb3d> {
+		Self::around(viewers, GROVE_PRESENT_RADIUS_M).into_iter().collect()
+	}
+
+	fn focus(viewers: &SystemParamItem<Self::Param>) -> Option<Vec3> {
+		viewers.iter().next().map(|viewer| viewer.translation)
+	}
+}
+
+/// Every value Chico derives over ground `G` in the shared storage.
+pub struct ChicoNodes;
+
+const FOREST_SCALE: DVec3 =
+	DVec3::new(DEFAULT_FOREST_EXTENT_XZ as f64, 1.0, DEFAULT_FOREST_EXTENT_XZ as f64);
+
+/// Grove ids stack the four layers on Y.
+const GROVE_SCALE: DVec3 =
+	DVec3::new(DEFAULT_FOREST_GROVE_TILE_XZ as f64, 4.0, DEFAULT_FOREST_GROVE_TILE_XZ as f64);
+
+const GROWN_SCALE: DVec3 =
+	DVec3::new(DEFAULT_FOREST_GROVE_TILE_XZ as f64, 256.0, DEFAULT_FOREST_GROVE_TILE_XZ as f64);
+
+const BUMP_OUT_SCALE: DVec3 = DVec3::new(BUMP_OUT_CELL_XZ as f64, 1.0, BUMP_OUT_CELL_XZ as f64);
+
+const MEDIUM_BUMP_OUT_SCALE: DVec3 =
+	DVec3::new(MEDIUM_BUMP_OUT_CELL_XZ as f64, 1.0, MEDIUM_BUMP_OUT_CELL_XZ as f64);
+
+impl ChicoNodes {
+	pub fn configure<G: ForestGround>(storage: &shared::HcsgStorage) {
+		storage
+			.configure::<ChicoForest>(FOREST_SCALE)
+			.configure::<ChicoGrove>(GROVE_SCALE)
+			.configure::<GrownGrove<G>>(GROWN_SCALE)
+			.configure::<BumpedOut<CanopyBumpOut, G>>(BUMP_OUT_SCALE)
+			.configure::<BumpedOut<MediumCanopyBumpOut, G>>(MEDIUM_BUMP_OUT_SCALE);
+	}
+
+	/// Within a restart, after the epoch has advanced.
+	pub fn clear<G: ForestGround>(storage: &shared::HcsgStorage) {
+		storage.clear::<ChicoForest>();
+		storage.clear::<ChicoGrove>();
+		storage.clear::<GrownGrove<G>>();
+		storage.clear::<BumpedOut<CanopyBumpOut, G>>();
+		storage.clear::<BumpedOut<MediumCanopyBumpOut, G>>();
+	}
+}
+
+/// Chico's root resource: the forest selection.
+#[derive(SystemParam)]
+pub struct ChicoRoots<'w> {
+	selection: Res<'w, ForestSelection>,
+}
+
+impl ChicoRoots<'_> {
+	/// Clears what Chico derived over ground `G` and seeds the selection.
+	/// Within a restart, after the epoch has advanced.
+	pub fn reset<G: ForestGround>(&self, storage: &shared::HcsgStorage) {
+		ChicoNodes::clear::<G>(storage);
+		storage.seed(*self.selection, universal_bounds());
+	}
+}
+
+/// Presents groves grown on ground `G` within channel `C`'s regions from the
+/// shared storage.
+pub struct ChicoPresentationPlugin<C, G>(PhantomData<fn() -> (C, G)>);
+
+impl<C, G> Default for ChicoPresentationPlugin<C, G> {
+	fn default() -> Self {
+		Self(PhantomData)
+	}
+}
+
+impl<C: Send + Sync + 'static, G: ForestGround> Plugin for ChicoPresentationPlugin<C, G> {
+	fn build(&self, app: &mut App) {
+		register_vegetation_view(app);
+		app.init_resource::<ForestSelection>();
+		let storage = app.world_mut().get_resource_or_init::<shared::HcsgStorage>().clone();
+		ChicoNodes::configure::<G>(&storage);
+		app.add_plugins(PresentationPlugin::<C, GrownGrove<G>>::default());
+		if !app.is_plugin_added::<LodSceneRefreshChunkPlugin<HcsgNode<GrownGrove<G>>>>() {
+			app.add_plugins(LodSceneRefreshChunkPlugin::<HcsgNode<GrownGrove<G>>>::default());
+		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use std::collections::{BTreeMap, BTreeSet};
+	use std::time::Duration;
+
+	use bevy::ecs::entity_disabling::Disabled;
+	use bevy::scene::ScenePlugin;
+	use bevy::state::app::StatesPlugin;
+	use durham::{
+		fine_patch_cell_layout, Durham, DurhamRoots, TerrainConfig, TerrainMeshAssets,
+		TerrainMeshLodBand, TerrainStampConfigs, WaterMeshAssets, WatershedConfigs,
+	};
+	use lod::gen::Version;
+	use lod::hcsg::shared::{HcsgDemand, HcsgSystems};
+	use lod::lod_ref::LodNodePose;
+	use richmond::{AuthoredDevelopments, DevelopmentConfig, DevelopmentSites, RichmondRoots};
+	use terrain_layer_model::OnTerrain;
+	use urbanization_cells::UrbanizationSelection;
+
+	use super::*;
+	use crate::LayeringKind;
+
+	type Ground = OnTerrain<Durham>;
+	type Urban = Urbanization<Richmond<Ground>>;
+
+	const IDLE: Duration = Duration::from_secs(300);
+
+	/// The 2×2 fine patch's footprint.
+	const PATCH: f32 = 160.0;
+
+	#[derive(Resource)]
+	struct Restart(bool);
+
+	fn restart(
+		durham: DurhamRoots,
+		richmond: RichmondRoots,
+		chico: ChicoRoots,
+		storage: Res<shared::HcsgStorage>,
+		demand: Res<HcsgDemand>,
+		mut pending: ResMut<Restart>,
+	) {
+		if std::mem::take(&mut pending.0) {
+			demand.advance_epoch();
+			durham.reset(&storage);
+			richmond.reset::<Ground>(&storage);
+			chico.reset::<Urban>(&storage);
+		}
+	}
+
+	fn select(app: &mut App, layering: LayeringKind) {
+		app.insert_resource(ForestSelection {
+			layering: Some(layering),
+			..ForestSelection::default()
+		})
+		.insert_resource(Restart(true));
+	}
+
+	/// Groves on a 2×2 fine patch at the origin, viewed from `at`.
+	fn app(at: Vec3) -> App {
+		let mut app = App::new();
+		app.add_plugins((MinimalPlugins, StatesPlugin))
+			.add_plugins((AssetPlugin::default(), ScenePlugin))
+			.init_asset::<Mesh>()
+			.init_asset::<StandardMaterial>()
+			.init_asset::<bevy::world_serialization::WorldAsset>()
+			.insert_resource(fine_patch_cell_layout(1, IVec2::new(-1, -1)))
+			.insert_resource(TerrainStampConfigs::from_world_seed(1))
+			.insert_resource(WatershedConfigs::default().with_seed(1))
+			.insert_resource(TerrainMeshAssets {
+				config: TerrainConfig::new(1),
+				material: Handle::default(),
+				lod_bands: vec![TerrainMeshLodBand { max_radius_cells: 1, res_2: 2 }],
+				outer_add_walls: false,
+				fine_grid_max_radius: Some(1),
+				macro_seam_half_extents: Vec::new(),
+				macro_cell_min_size: None,
+				macro_res_2: None,
+			})
+			.insert_resource(WaterMeshAssets { material: Handle::default() })
+			.insert_resource(DevelopmentConfig {
+				sites: DevelopmentSites::Authored,
+				..DevelopmentConfig::default()
+			})
+			.init_resource::<AuthoredDevelopments>()
+			.init_resource::<UrbanizationSelection>()
+			.add_plugins((
+				shared::HcsgBoundsPlugin::<GroveNeighborhood>::default(),
+				shared::HcsgBoundsPlugin::<BumpOutRing<CanopyBumpOut>>::default(),
+			))
+			.add_plugins(ChicoPresentationPlugin::<GroveNeighborhood, Urban>::default())
+			.add_plugins(BumpOutPresentationPlugin::<
+				BumpOutRing<CanopyBumpOut>,
+				CanopyBumpOut,
+				Urban,
+			>::default())
+			.add_systems(Update, restart.before(HcsgSystems));
+		select(&mut app, LayeringKind::LushJungle);
+		app.finish();
+		app.cleanup();
+		let at = Transform::from_translation(at);
+		app.world_mut()
+			.spawn((LodViewer, at, LodNodePose { previous: at, current: at }));
+		app
+	}
+
+	fn settle(app: &mut App) -> anyhow::Result<()> {
+		for _ in 0..2 {
+			app.update();
+			let demand = app.world().resource::<HcsgDemand>().clone();
+			anyhow::ensure!(demand.wait_idle(IDLE), "worker did not go idle");
+		}
+		for _ in 0..8 {
+			app.update();
+		}
+		Ok(())
+	}
+
+	fn nested_hosts(app: &mut App) -> usize {
+		app.world_mut()
+			.query_filtered::<(), (With<ChicoGroveHost>, Allow<Disabled>)>()
+			.iter(app.world())
+			.count()
+	}
+
+	fn grown(app: &mut App) -> Vec<HcsgNode<GrownGrove<Urban>>> {
+		let mut hosts: Vec<_> = app
+			.world_mut()
+			.query::<&HcsgNode<GrownGrove<Urban>>>()
+			.iter(app.world())
+			.cloned()
+			.collect();
+		hosts.sort_by_key(|node| node.id);
+		hosts
+	}
+
+	fn versions(app: &mut App) -> Vec<(Id, Version)> {
+		grown(app).iter().map(|node| (node.id, node.version)).collect()
+	}
+
+	fn within_patch(tile: GroveExtent) -> bool {
+		tile.min().x >= -PATCH
+			&& tile.max().x <= PATCH
+			&& tile.min().z >= -PATCH
+			&& tile.max().z <= PATCH
+	}
+
+	/// The layers grown on each tile the patch wholly covers.
+	fn covered_layers(app: &mut App) -> anyhow::Result<BTreeMap<Id, BTreeSet<u8>>> {
+		let mut tiles = BTreeMap::<Id, BTreeSet<u8>>::new();
+		for node in grown(app) {
+			let (tile, layer) =
+				grove_from_id(node.id).ok_or_else(|| anyhow::anyhow!("grove id"))?;
+			if within_patch(tile) {
+				let key = grove_id(tile, ForestLayer::Tufts);
+				tiles.entry(key).or_default().insert(layer.id_y() as u8);
+			}
+		}
+		Ok(tiles)
+	}
+
+	fn selected_layers(layering: LayeringKind) -> BTreeSet<u8> {
+		let layers = layering.layering().typical_layers();
+		ForestLayer::ALL
+			.into_iter()
+			.filter(|layer| layer.kind(layers).is_some())
+			.map(|layer| layer.id_y() as u8)
+			.collect()
+	}
+
+	#[test]
+	fn the_neighborhood_grows_the_selected_layers_on_the_ground() -> anyhow::Result<()> {
+		let mut app = app(Vec3::ZERO);
+		settle(&mut app)?;
+
+		let hosts = grown(&mut app);
+		assert!(!hosts.is_empty(), "the patch grows groves");
+		for node in &hosts {
+			let (tile, _) = grove_from_id(node.id).ok_or_else(|| anyhow::anyhow!("grove id"))?;
+			assert!(
+				tile.min().x < PATCH
+					&& tile.max().x > -PATCH
+					&& tile.min().z < PATCH
+					&& tile.max().z > -PATCH,
+				"{tile:?} grew off the ground"
+			);
+		}
+
+		let covered = covered_layers(&mut app)?;
+		assert_eq!(covered.len(), 4, "every tile the patch covers grows");
+		for layers in covered.values() {
+			assert_eq!(*layers, selected_layers(LayeringKind::LushJungle));
+		}
+
+		let tiles: usize = hosts.iter().map(|node| node.value.tiles.len()).sum();
+		for _ in 0..200 {
+			if nested_hosts(&mut app) >= tiles {
+				break;
+			}
+			app.update();
+		}
+		assert_eq!(nested_hosts(&mut app), tiles, "one nested host per grown tile");
+		Ok(())
+	}
+
+	#[test]
+	fn groves_stand_on_the_surface() -> anyhow::Result<()> {
+		let mut app = app(Vec3::ZERO);
+		settle(&mut app)?;
+
+		let storage = app.world().resource::<shared::HcsgStorage>().clone();
+		let mut checked = 0;
+		for node in grown(&mut app) {
+			let mut cx = GenerationContext::new(&storage);
+			let (tile, _) = grove_from_id(node.id).ok_or_else(|| anyhow::anyhow!("grove id"))?;
+			let region = Aabb3d::from_min_max(tile.min(), tile.max());
+			let surface = GroundSurface::<Urban>::generate(&mut cx, region);
+			for grown in &node.value.tiles {
+				let ForestGroveTile::TradeWinds(grove) = grown else {
+					continue;
+				};
+				for plant in grove.plants.iter() {
+					let at = plant.placement.translation;
+					let ground = surface
+						.height(at.x, at.z)
+						.ok_or_else(|| anyhow::anyhow!("{at} grew off the ground"))?;
+					assert!((at.y - ground).abs() < 0.5, "{at} stands off the ground at {ground}");
+					checked += 1;
+				}
+			}
+		}
+		assert!(checked > 0, "the upper canopy grows trade winds");
+		Ok(())
+	}
+
+	#[test]
+	fn leaving_the_neighborhood_retires_its_hosts() -> anyhow::Result<()> {
+		let mut app = app(Vec3::ZERO);
+		settle(&mut app)?;
+		assert!(!grown(&mut app).is_empty());
+
+		let away = Transform::from_xyz(5_000.0, 0.0, 5_000.0);
+		let mut viewers = app.world_mut().query_filtered::<&mut Transform, With<LodViewer>>();
+		*viewers.single_mut(app.world_mut())? = away;
+		settle(&mut app)?;
+		assert!(grown(&mut app).is_empty());
+		Ok(())
+	}
+
+	#[test]
+	fn a_restart_reselects_every_grove() -> anyhow::Result<()> {
+		let mut app = app(Vec3::ZERO);
+		settle(&mut app)?;
+		let before: BTreeMap<Id, Version> = versions(&mut app).into_iter().collect();
+
+		select(&mut app, LayeringKind::Meadowland);
+		settle(&mut app)?;
+
+		for layers in covered_layers(&mut app)?.values() {
+			assert_eq!(*layers, selected_layers(LayeringKind::Meadowland));
+		}
+		for (id, version) in versions(&mut app) {
+			if let Some(old) = before.get(&id) {
+				assert!(version > *old, "{id:?} still shows the previous session");
+			}
+		}
+		Ok(())
+	}
+
+	type Fine = BumpedOut<CanopyBumpOut, Urban>;
+
+	/// Beyond the grove hole, east of the patch.
+	const BEYOND: Vec3 = Vec3::new(1_500.0, 0.0, 0.0);
+
+	fn bumped_out(app: &mut App) -> Vec<HcsgNode<Fine>> {
+		app.world_mut().query::<&HcsgNode<Fine>>().iter(app.world()).cloned().collect()
+	}
+
+	/// Shown bump-outs whose surface mesh has resolved.
+	fn shown_bump_outs(app: &mut App) -> usize {
+		app.world_mut()
+			.query_filtered::<(), (With<vegetation_bumpout::BumpOut>, With<terrain_chunk_ref::TerrainChunkRefResolved>)>()
+			.iter(app.world())
+			.count()
+	}
+
+	fn update_until(app: &mut App, done: impl Fn(&mut App) -> bool) {
+		for _ in 0..200 {
+			if done(app) {
+				return;
+			}
+			app.update();
+		}
+	}
+
+	fn move_viewer(app: &mut App, to: Vec3) -> anyhow::Result<()> {
+		let mut viewers = app.world_mut().query_filtered::<&mut Transform, With<LodViewer>>();
+		*viewers.single_mut(app.world_mut())? = Transform::from_translation(to);
+		Ok(())
+	}
+
+	#[test]
+	fn bump_outs_beyond_the_groves_displace_the_surface_mesh() -> anyhow::Result<()> {
+		let mut app = app(BEYOND);
+		settle(&mut app)?;
+
+		let nodes = bumped_out(&mut app);
+		assert_eq!(nodes.len(), 4, "one bump-out per fine cell on the patch");
+		let storage = app.world().resource::<shared::HcsgStorage>().clone();
+		for node in &nodes {
+			let mut cx = GenerationContext::new(&storage);
+			let cell = node.value.cell;
+			let under: Vec<_> = cx
+				.original_ids_for::<PaddedTerrain<Ground>>(cell)
+				.into_iter()
+				.filter_map(|OriginalId(id)| cx.get_or_generate::<PaddedTerrain<Ground>>(id))
+				.filter(|surface| {
+					let footprint = Urban::footprint(surface);
+					footprint.min.xz() == cell.min.xz() && footprint.max.xz() == cell.max.xz()
+				})
+				.collect();
+			let [surface] = under.as_slice() else {
+				anyhow::bail!("{cell:?} lies on one fine surface cell");
+			};
+			assert_eq!(node.value.terrain.key(), Urban::chunk_ref(surface).key());
+		}
+
+		update_until(&mut app, |app| shown_bump_outs(app) >= 4);
+		assert_eq!(shown_bump_outs(&mut app), 4, "every bump-out resolves its surface");
+		Ok(())
+	}
+
+	#[test]
+	fn the_grove_hole_hides_bump_outs() -> anyhow::Result<()> {
+		let mut app = app(Vec3::ZERO);
+		settle(&mut app)?;
+		assert_eq!(bumped_out(&mut app).len(), 4, "the hole keeps its bump-outs warm");
+		assert_eq!(shown_bump_outs(&mut app), 0);
+
+		move_viewer(&mut app, BEYOND)?;
+		settle(&mut app)?;
+		update_until(&mut app, |app| shown_bump_outs(app) >= 4);
+		assert_eq!(shown_bump_outs(&mut app), 4);
+
+		move_viewer(&mut app, Vec3::ZERO)?;
+		settle(&mut app)?;
+		update_until(&mut app, |app| shown_bump_outs(app) == 0);
+		assert_eq!(shown_bump_outs(&mut app), 0);
+		Ok(())
+	}
+}

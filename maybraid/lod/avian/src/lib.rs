@@ -5,8 +5,7 @@
 //! This crate still re-exports those plugins as [`AvianLodSceneRefreshPlugin`] /
 //! [`AvianLodSceneCullPlugin`] for the unused `avian_host!` wrappers.
 //!
-//! Generate and present id lookup stays on typed [`lod::gen::SpatialIndex`]
-//! resources.
+//! Generate and present id lookup stays on [`lod::hcsg::HcsgStorage`].
 
 mod layers;
 
