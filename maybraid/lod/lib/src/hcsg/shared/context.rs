@@ -68,6 +68,11 @@ impl<'a> GenerationContext<'a> {
 		std::mem::take(&mut self.reached)
 	}
 
+	/// Bounds of a value already stored for `id`.
+	pub fn stored_bounds<T: HcsgValue>(&self, id: Id) -> Option<Aabb3d> {
+		self.storage.entry(id).map(|entry| entry.bounds)
+	}
+
 	pub fn get<T: HcsgValue>(&mut self, id: Id) -> Option<Arc<T>> {
 		self.touch::<T>();
 		self.storage.get(id)

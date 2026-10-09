@@ -215,7 +215,9 @@ pub(crate) fn origin_cell_ids_at(
 		})
 }
 
-/// Terrain reads over [`HcsgStorage`].
+/// Blocking terrain reads over [`HcsgStorage`]. Tests only: frame code uses
+/// [`crate::SharedTerrainStorage`].
+#[cfg(test)]
 pub trait TerrainStorage {
 	fn terrain(&self, id: Id) -> Option<Arc<Terrain>>;
 
@@ -277,17 +279,18 @@ pub trait TerrainStorage {
 	);
 }
 
+#[cfg(test)]
 impl TerrainStorage for HcsgStorage {
 	fn terrain(&self, id: Id) -> Option<Arc<Terrain>> {
-		self.get::<Terrain>(id)
+		self.try_entry::<Terrain>(id).ok().flatten().map(|entry| entry.value)
 	}
 
 	fn terrain_count(&self) -> usize {
-		self.overlapping::<Terrain>(universal_bounds()).len()
+		self.try_overlapping::<Terrain>(universal_bounds()).ok().map_or(0, |ids| ids.len())
 	}
 
 	fn terrain_revision(&self) -> u64 {
-		self.membership_revision::<Terrain>()
+		self.try_membership_revision::<Terrain>().unwrap_or(0)
 	}
 
 	fn geography_revision(&self) -> u64 {
@@ -295,34 +298,40 @@ impl TerrainStorage for HcsgStorage {
 	}
 
 	fn terrain_ids_overlapping(&self, region: Aabb3d) -> Vec<Id> {
-		self.overlapping::<Terrain>(region)
+		self.try_overlapping::<Terrain>(region).unwrap_or_default()
 	}
 
 	fn fills_layout(&self, layout: &TerrainCellLayout) -> bool {
-		layout
-			.cell_ids(layout.request_region())
-			.into_iter()
-			.all(|OriginalId(id)| self.contains::<Terrain>(id))
+		layout.cell_ids(layout.request_region()).into_iter().all(|OriginalId(id)| {
+			self.try_entry::<Terrain>(id).ok().flatten().is_some()
+		})
 	}
 
 	fn water(&self, id: Id) -> Option<Arc<Water>> {
-		self.get::<Water>(id)
+		self.try_entry::<Water>(id).ok().flatten().map(|entry| entry.value)
 	}
 
 	fn water_version(&self, id: Id) -> Option<Version> {
-		self.entry::<Water>(id).map(|entry| entry.version)
+		self.try_entry::<Water>(id).ok().flatten().map(|entry| entry.version)
 	}
 
 	fn base_noise(&self) -> Option<Arc<BaseTerrainNoise>> {
-		self.get::<BaseTerrainNoise>(Id::Universal)
+		self.try_entry::<BaseTerrainNoise>(Id::Universal).ok().flatten().map(|entry| entry.value)
 	}
 
 	fn height_snapshot(&self) -> TerrainHeightSnapshot {
 		let region = universal_bounds();
 		let terrain = self
-			.overlapping::<Terrain>(region)
+			.try_overlapping::<Terrain>(region)
+			.ok()
 			.into_iter()
-			.filter_map(|id| self.get::<Terrain>(id).map(|terrain| (id, Arc::clone(&terrain.sdf))))
+			.flatten()
+			.filter_map(|id| {
+				self.try_entry::<Terrain>(id)
+					.ok()
+					.flatten()
+					.map(|terrain| (id, Arc::clone(&terrain.value.sdf)))
+			})
 			.collect();
 		TerrainHeightSnapshot { terrain: Arc::new(terrain) }
 	}
@@ -330,23 +339,31 @@ impl TerrainStorage for HcsgStorage {
 	fn water_snapshot(&self) -> WaterSurfaceSnapshot {
 		let region = universal_bounds();
 		let water = self
-			.overlapping::<Water>(region)
+			.try_overlapping::<Water>(region)
+			.ok()
 			.into_iter()
-			.filter_map(|id| self.get::<Water>(id).map(|water| (id, Arc::new(water.sdf.clone()))))
+			.flatten()
+			.filter_map(|id| {
+				self.try_entry::<Water>(id)
+					.ok()
+					.flatten()
+					.map(|water| (id, Arc::new(water.value.sdf.clone())))
+			})
 			.collect();
 		WaterSurfaceSnapshot { water: Arc::new(water) }
 	}
 
 	fn water_column_at(&self, layout: &TerrainCellLayout, x: f32, z: f32) -> Option<WaterColumn> {
 		origin_cell_ids_at(layout, x, z)
-			.find_map(|id| self.get::<Water>(id))
-			.and_then(|water| water.column_at(x, z))
+			.filter_map(|id| self.try_entry::<Water>(id).ok().flatten())
+			.find_map(|entry| entry.value.column_at(x, z))
 	}
 
 	fn composed_height_at(&self, layout: &TerrainCellLayout, x: f32, z: f32) -> Option<f32> {
 		origin_cell_ids_at(layout, x, z)
-			.find_map(|id| self.get::<Terrain>(id))
-			.map(|terrain| terrain.sdf.terrain().height_at_with_all_modulations(x, z))
+			.filter_map(|id| self.try_entry::<Terrain>(id).ok().flatten())
+			.map(|entry| entry.value.sdf.terrain().height_at_with_all_modulations(x, z))
+			.next()
 	}
 
 	fn geographic_features_overlapping(
@@ -420,8 +437,12 @@ mod tests {
 			BaseTerrainNoise::from_config(&TerrainConfig::new(7)),
 		);
 		let id = storage.terrain_ids_overlapping(layout.request_region())[0];
-		let previous =
-			storage.entry::<Terrain>(id).ok_or_else(|| anyhow::anyhow!("inserted"))?.version;
+		let previous = storage
+			.try_entry::<Terrain>(id)
+			.ok()
+			.flatten()
+			.ok_or_else(|| anyhow::anyhow!("inserted"))?
+			.version;
 		DurhamNodes::clear(&storage);
 		assert_eq!(storage.terrain_count(), 0);
 		storage.insert_base_terrain_for_test(
@@ -431,7 +452,9 @@ mod tests {
 			BaseTerrainNoise::from_config(&TerrainConfig::new(7)),
 		);
 		let rebuilt = storage
-			.entry::<Terrain>(id)
+			.try_entry::<Terrain>(id)
+			.ok()
+			.flatten()
 			.ok_or_else(|| anyhow::anyhow!("reinserted"))?
 			.version;
 		assert!(rebuilt > previous, "restamp must not reuse a presented version");

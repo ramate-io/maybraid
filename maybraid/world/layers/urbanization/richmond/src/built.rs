@@ -48,20 +48,20 @@ impl<G> Built<G> {
 
 impl<G: RichmondGround> Built<G> {
 	/// Stored built developments overlapping `region` on XZ, with versions.
-	pub fn overlapping(
+	pub fn overlapping_tracked(
 		storage: &HcsgStorage,
 		region: Aabb3d,
-	) -> Vec<(Id, Version, BuiltDevelopment)> {
-		storage
-			.overlapping::<Self>(column_bounds(region))
-			.into_iter()
+	) -> Vec<(Id, Version)> {
+		let Ok(ids) = storage.try_overlapping::<Self>(column_bounds(region)) else {
+			return Vec::new();
+		};
+		ids.into_iter()
 			.filter_map(|id| {
-				let entry = storage.entry::<Self>(id)?;
-				overlaps_xz(region, entry.bounds).then_some((
-					id,
-					entry.version,
-					entry.value.development.clone(),
-				))
+				let Some(entry) = storage.try_entry::<Self>(id).ok().flatten() else {
+					return None;
+				};
+				overlaps_xz(region, entry.bounds)
+					.then_some((id, entry.version))
 			})
 			.collect()
 	}

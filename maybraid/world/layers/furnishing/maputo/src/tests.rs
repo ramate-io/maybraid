@@ -75,7 +75,11 @@ fn furniture_slots_match_les_halles_world_slots() -> anyhow::Result<()> {
 
 	let overlapping = world
 		.run_system_once(move |read: Res<HcsgStorage>| {
-			let version = read.entry::<Built<Ground>>(id).map(|entry| entry.version);
+			let version = read
+				.try_entry::<Built<Ground>>(id)
+				.ok()
+				.flatten()
+				.map(|entry| entry.version);
 			let found = <Urbanized as FurnitureSlots>::slots_overlapping(&read, bounds);
 			(version, found)
 		})

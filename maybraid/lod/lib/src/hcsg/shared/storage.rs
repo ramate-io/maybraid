@@ -32,6 +32,18 @@ pub struct Busy;
 /// store's lock only for lookup and publication. Neither is held while a
 /// value is generated. Values never change once published: replacing one
 /// publishes a new [`Version`] from a counter shared by every store.
+///
+/// ## Reads
+///
+/// Frame and main-thread code must use [`Self::try_entry`], [`Self::try_overlapping`],
+/// and [`Self::try_membership_revision`]. They return [`Busy`] while the worker
+/// or eviction sweep holds a store lock.
+///
+/// Blocking reads ([`Self::get`], [`Self::entry`], [`Self::overlapping`],
+/// [`Self::membership_revision`], [`Self::contains`]) are for the generation
+/// worker (via [`GenerationContext`](super::context::GenerationContext)) and for
+/// tests. Outside `lod` they
+/// are only available with the `test-support` feature.
 #[derive(Resource, Clone, Default)]
 pub struct HcsgStorage(Arc<Registry>);
 
@@ -154,32 +166,80 @@ impl HcsgStorage {
 		self.0.next_version.fetch_add(1, Ordering::Relaxed) + 1
 	}
 
-	pub fn get<T: HcsgValue>(&self, id: Id) -> Option<Arc<T>> {
+	fn blocking_get<T: HcsgValue>(&self, id: Id) -> Option<Arc<T>> {
 		let store = self.store::<T>()?;
-		let value = read(&store.nodes).value(id).cloned();
-		value
+		read(&store.nodes).value(id).cloned()
 	}
 
-	pub fn entry<T: HcsgValue>(&self, id: Id) -> Option<StoredEntry<Arc<T>>> {
+	fn blocking_entry<T: HcsgValue>(&self, id: Id) -> Option<StoredEntry<Arc<T>>> {
 		let store = self.store::<T>()?;
-		let entry = read(&store.nodes).entry(id).cloned();
-		entry
+		read(&store.nodes).entry(id).cloned()
 	}
 
-	pub fn contains<T: HcsgValue>(&self, id: Id) -> bool {
+	fn blocking_contains<T: HcsgValue>(&self, id: Id) -> bool {
 		self.store::<T>().is_some_and(|store| read(&store.nodes).contains(id))
 	}
 
 	/// Stored ids of `T` whose bounds intersect `region`, in id order.
-	pub fn overlapping<T: HcsgValue>(&self, region: Aabb3d) -> Vec<Id> {
+	fn blocking_overlapping<T: HcsgValue>(&self, region: Aabb3d) -> Vec<Id> {
 		self.store::<T>()
 			.map(|store| read(&store.nodes).overlapping(region))
 			.unwrap_or_default()
 	}
 
 	/// Bumped by every publish, removal and clear of `T`.
-	pub fn membership_revision<T: HcsgValue>(&self) -> u64 {
+	fn blocking_membership_revision<T: HcsgValue>(&self) -> u64 {
 		self.store::<T>().map_or(0, |store| read(&store.nodes).membership_revision())
+	}
+
+	#[cfg(not(any(test, feature = "test-support")))]
+	pub(crate) fn get<T: HcsgValue>(&self, id: Id) -> Option<Arc<T>> {
+		self.blocking_get(id)
+	}
+
+	#[cfg(any(test, feature = "test-support"))]
+	pub fn get<T: HcsgValue>(&self, id: Id) -> Option<Arc<T>> {
+		self.blocking_get(id)
+	}
+
+	#[cfg(not(any(test, feature = "test-support")))]
+	pub(crate) fn entry<T: HcsgValue>(&self, id: Id) -> Option<StoredEntry<Arc<T>>> {
+		self.blocking_entry(id)
+	}
+
+	#[cfg(any(test, feature = "test-support"))]
+	pub fn entry<T: HcsgValue>(&self, id: Id) -> Option<StoredEntry<Arc<T>>> {
+		self.blocking_entry(id)
+	}
+
+	#[cfg(not(any(test, feature = "test-support")))]
+	pub(crate) fn contains<T: HcsgValue>(&self, id: Id) -> bool {
+		self.blocking_contains(id)
+	}
+
+	#[cfg(any(test, feature = "test-support"))]
+	pub fn contains<T: HcsgValue>(&self, id: Id) -> bool {
+		self.blocking_contains(id)
+	}
+
+	#[cfg(not(any(test, feature = "test-support")))]
+	pub(crate) fn overlapping<T: HcsgValue>(&self, region: Aabb3d) -> Vec<Id> {
+		self.blocking_overlapping(region)
+	}
+
+	#[cfg(any(test, feature = "test-support"))]
+	pub fn overlapping<T: HcsgValue>(&self, region: Aabb3d) -> Vec<Id> {
+		self.blocking_overlapping(region)
+	}
+
+	#[cfg(not(any(test, feature = "test-support")))]
+	pub(crate) fn membership_revision<T: HcsgValue>(&self) -> u64 {
+		self.blocking_membership_revision()
+	}
+
+	#[cfg(any(test, feature = "test-support"))]
+	pub fn membership_revision<T: HcsgValue>(&self) -> u64 {
+		self.blocking_membership_revision()
 	}
 
 	/// [`Self::entry`] for the frame: never waits on a lock.

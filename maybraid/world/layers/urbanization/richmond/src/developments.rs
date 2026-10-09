@@ -142,10 +142,12 @@ impl<G: RichmondGround> RichmondDevelopment<G> {
 	/// Pad nodes of stored filled developments affecting `region`, merged
 	/// into one sample-time blend pass.
 	pub fn merged_pads(storage: &HcsgStorage, region: Aabb3d) -> PadComplex {
-		let developments: Vec<Arc<Self>> = storage
-			.overlapping::<Self>(column_bounds(region))
+		let Ok(ids) = storage.try_overlapping::<Self>(column_bounds(region)) else {
+			return PadComplex::default();
+		};
+		let developments: Vec<Arc<Self>> = ids
 			.into_iter()
-			.filter_map(|id| storage.get::<Self>(id))
+			.filter_map(|id| storage.try_entry::<Self>(id).ok().flatten().map(|entry| entry.value))
 			.collect();
 		Self::merge_pads(region, developments.iter().map(Arc::as_ref))
 	}

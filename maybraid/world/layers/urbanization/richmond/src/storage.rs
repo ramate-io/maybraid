@@ -1,7 +1,7 @@
 //! Richmond's nodes in [`HcsgStorage`].
 //!
 //! Reads of stored nodes live on their schemes: [`RichmondDevelopment::merged_pads`],
-//! [`PaddedTerrain::best_overlapping`], [`Built::overlapping`].
+//! [`PaddedTerrain::best_overlapping`], [`Built::overlapping_tracked`].
 
 use bevy::math::bounding::Aabb3d;
 use bevy::math::{DVec3, Vec3};
