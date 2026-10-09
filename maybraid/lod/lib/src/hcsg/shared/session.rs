@@ -209,6 +209,7 @@ mod tests {
 		seed_orphan(&storage, 1);
 		assert!(storage.get::<OrphanDerived>(Id::Universal).is_some());
 		storage.clear_derived();
+		assert_eq!(storage.rebuilds_after_eviction(), (0, 0));
 		assert!(storage.get::<OrphanDerived>(Id::Universal).is_none());
 		assert!(storage.get::<SessionRoot>(Id::Universal).is_none());
 		seed_roots(&storage, 2);

@@ -380,6 +380,9 @@ impl HcsgStorage {
 
 	/// Drops every value in every store. Session roots are re-seeded afterward.
 	pub fn clear_derived(&self) {
+		self.clear_evictions();
+		self.0.top_rebuilds.store(0, Ordering::Relaxed);
+		self.0.nested_rebuilds.store(0, Ordering::Relaxed);
 		let stores: Vec<Arc<dyn ErasedStore>> =
 			read(&self.0.stores).values().cloned().collect();
 		for store in stores {
