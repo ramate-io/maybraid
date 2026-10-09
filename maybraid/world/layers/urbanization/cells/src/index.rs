@@ -5,7 +5,6 @@ use std::collections::HashMap;
 use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::prelude::*;
 use lod::gen::{Id, SpatialIndex, StorageStatus, TrackedId, Version};
-use lod::lod_ref::LodRef;
 use procedural_common::NoiseParams;
 
 use crate::{
@@ -122,7 +121,7 @@ impl SpatialIndex<SelectedUrbanization> for UrbanizationIndex {
 		self.next_version
 	}
 
-	fn insert(&mut self, id: Id, t: SelectedUrbanization, bounds: Aabb3d, _lod_ref: &LodRef) {
+	fn insert(&mut self, id: Id, t: SelectedUrbanization, bounds: Aabb3d) {
 		let version = self.next_version();
 		self.cells.insert(id, Entry { value: t, bounds, version });
 	}

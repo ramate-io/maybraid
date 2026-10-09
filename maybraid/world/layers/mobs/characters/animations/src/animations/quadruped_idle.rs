@@ -5,9 +5,8 @@
 //! at rest so a period wrap is quiet. A small unwrapped sway keeps rest from
 //! looking frozen.
 //!
-//! Neck knobs follow [`crate::rigs::quadruped::apply::apply_neck_axes`]: local
-//! +Y is along the bone, so **flex** is side-to-side, **twist** is up / down,
-//! and **swing** is roll.
+//! Neck knobs follow [`crate::rigs::quadruped::apply::apply_neck_axes`]:
+//! **flex** is neck tilt, **twist** is neck nod, and **swing** is neck turn.
 
 use crate::animations::smoothstep;
 
@@ -21,15 +20,15 @@ const DEFAULT_SWAY: f32 = 0.018;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct QuadrupedIdle {
-	/// Side-to-side while the muzzle is down (flex / Z, radians).
+	/// Side-to-side while the muzzle is down (neck tilt, radians).
 	pub graze_neck: f32,
-	/// Up / down while the muzzle is down (twist / X, radians).
+	/// Up / down while the muzzle is down (neck nod, radians).
 	pub graze_pitch: f32,
-	/// Side-to-side while looking up (flex / Z, radians).
+	/// Side-to-side while looking up (neck tilt, radians).
 	pub look_neck: f32,
-	/// Up / down while looking up (twist / X, radians).
+	/// Up / down while looking up (neck nod, radians).
 	pub look_pitch: f32,
-	/// Roll during the shake burst (swing / Y, around the bone, radians).
+	/// Roll during the shake burst (neck turn, radians).
 	pub shake: f32,
 	/// Lumbar gather while grazing (radians).
 	pub lumbar: f32,

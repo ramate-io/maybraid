@@ -27,16 +27,16 @@ use commands::{
 	RequestTetherDrive, RequestTetherIdle,
 };
 use durham::{
-	AvianTerrainIndex, BaseTerrainNoise, ComposedWater, DurhamTerrainModelsPlugin, Terrain,
-	TerrainCellLayout, TerrainConfig, TerrainEntryStore, TerrainMeshBuilder, TerrainMeshLodBand,
-	TerrainPresentationAssets, TerrainRegionPresenter, TerrainStoreView, TerrainTrimeshCollider,
+	BaseTerrainNoise, ComposedWater, DurhamRoots, DurhamTerrainModelsPlugin, HcsgStorage, Terrain,
+	TerrainCellLayout, TerrainConfig, TerrainMeshBuilder, TerrainMeshLodBand,
+	TerrainPresentationAssets, TerrainRegionPresenter, TerrainStorage, TerrainTrimeshCollider,
 	Water, WaterPresentationAssets,
 };
 use game_commands::command::{
 	capture_command_line_input, GameCommandPlugin, TextEntryBlocked, TextEntryFocus,
 };
 use game_commands::ui::GameCommandDrawerConfig;
-use lod::gen::{GeneratingSpatialIndex, RegionPresenter, SpatialIndex};
+use lod::gen::{GeneratingSpatialIndex, RegionPresenter};
 use lod::lod_ref::LodRef;
 use maybraid_character_controller::CharacterControllerPlugin;
 use maybraid_input::{PadGameplayEnabled, VirtualPadPlugin, VirtualPadSystems};
@@ -221,7 +221,7 @@ fn apply_mode_commands(
 	mut status: Option<ResMut<game_commands::ui::GameCommandStatusText>>,
 	layout: Res<TerrainCellLayout>,
 	base: Res<WorldBaseTerrain>,
-	store: Res<TerrainEntryStore>,
+	store: Res<HcsgStorage>,
 	free: Query<Entity, With<RequestModeFree>>,
 	character: Query<Entity, With<RequestModeCharacter>>,
 	mut players: Query<(Entity, &mut Transform, &mut LinearVelocity), With<Player>>,
@@ -307,7 +307,7 @@ fn apply_tether_commands(
 fn apply_go_command(
 	mut commands: Commands,
 	mut goal: ResMut<RoutingGoal>,
-	store: Res<TerrainEntryStore>,
+	store: Res<HcsgStorage>,
 	layout: Res<TerrainCellLayout>,
 	mut status: Option<ResMut<game_commands::ui::GameCommandStatusText>>,
 	requests: Query<(Entity, &RequestGo)>,
@@ -339,7 +339,8 @@ fn apply_go_command(
 
 fn generate_cells(
 	mut commands: Commands,
-	mut index: AvianTerrainIndex,
+	mut storage: ResMut<HcsgStorage>,
+	roots: DurhamRoots,
 	mut dirty: ResMut<TerrainPresentationDirty>,
 	mut pending: ResMut<TerrainPresentPending>,
 	mut world_base: ResMut<WorldBaseTerrain>,
@@ -352,31 +353,22 @@ fn generate_cells(
 		return;
 	}
 
-	index.clear();
+	roots.reseed(&mut storage);
 
-	let layout = index.layout().clone();
+	let layout = roots.layout().clone();
 	let region = layout.request_region();
-	let identity = Transform::IDENTITY;
-	let lod_ref = LodRef {
-		entity: Entity::PLACEHOLDER,
-		previous_transform: &identity,
-		current_transform: &identity,
-		bounds: &region,
-	};
 
-	let terrains =
-		GeneratingSpatialIndex::<Terrain>::get_or_generate_region(&mut index, region, &lod_ref);
-	let waters =
-		GeneratingSpatialIndex::<Water>::get_or_generate_region(&mut index, region, &lod_ref);
+	let terrains = GeneratingSpatialIndex::<Terrain>::get_or_generate_region(&mut *storage, region);
+	let waters = GeneratingSpatialIndex::<Water>::get_or_generate_region(&mut *storage, region);
 	info!("generated terrain_cells={} water_cells={}", terrains.len(), waters.len());
 
-	if let Some(base) = index.base_noise() {
+	if let Some(base) = storage.base_noise() {
 		world_base.0 = base.clone();
 	}
 
 	if let Ok((player, mut transform, mut velocity)) = players.single_mut() {
 		let center = layout.region_center_xz();
-		if let Some(elevation) = index.composed_height_at(center.x, center.z) {
+		if let Some(elevation) = storage.composed_height_at(&layout, center.x, center.z) {
 			respawn_player_on_layout(&layout, elevation, &mut transform, &mut velocity);
 		}
 		commands.entity(player).insert(AwaitingTerrainSurface);
@@ -389,8 +381,8 @@ fn generate_cells(
 	if *mode == PlaygroundMode::Free {
 		if let Ok((mut transform, mut controller)) = cameras.single_mut() {
 			let center = layout.region_center_xz();
-			let elevation = index
-				.composed_height_at(center.x, center.z)
+			let elevation = storage
+				.composed_height_at(&layout, center.x, center.z)
 				.unwrap_or_else(|| world_base.0.height_at(center.x, center.z));
 			refocus_camera_on_elevation(&layout, elevation, &mut transform, &mut controller);
 			info!(
@@ -411,7 +403,7 @@ fn generate_cells(
 
 fn present_cells(
 	mut terrain_presenter: TerrainRegionPresenter,
-	store: Res<TerrainEntryStore>,
+	store: Res<HcsgStorage>,
 	layout: Res<TerrainCellLayout>,
 	mut pending: ResMut<TerrainPresentPending>,
 ) {
@@ -427,12 +419,8 @@ fn present_cells(
 		current_transform: &identity,
 		bounds: &region,
 	};
-	let terrain_view = TerrainStoreView::new(&store, &layout);
-	RegionPresenter::<Terrain, _>::present(&mut terrain_presenter, &terrain_view, region, &lod_ref);
-	let terrain_wanted = SpatialIndex::<Terrain>::tracked_ids_for(&terrain_view, region)
-		.into_iter()
-		.map(|tracked| tracked.0)
-		.collect();
+	RegionPresenter::<Terrain, _>::present(&mut terrain_presenter, &*store, region, &lod_ref);
+	let terrain_wanted = store.terrain_ids_overlapping(region).into_iter().collect();
 	terrain_presenter.remove_stale(&terrain_wanted);
 	info!("presented terrain_scenes={}", terrain_presenter.presented_ids().len());
 	pending.0 = false;
@@ -477,7 +465,7 @@ fn spawn_router(
 
 fn snap_router_to_composed_surface(
 	mut commands: Commands,
-	store: Res<TerrainEntryStore>,
+	store: Res<HcsgStorage>,
 	layout: Res<TerrainCellLayout>,
 	awaiting: Query<Entity, (With<Npc>, With<AwaitingRouterSurface>)>,
 	mut routers: Query<(&mut Transform, &mut LinearVelocity, &mut GravityScale), With<Npc>>,

@@ -2,10 +2,10 @@ use bevy::app::{App, Plugin};
 use bevy::ecs::system::{Res, RunSystemOnce, SystemParamItem};
 use bevy::math::bounding::Aabb3d;
 use bevy::math::{Vec2, Vec3, Vec3Swizzles};
-use bevy::prelude::{Entity, GlobalTransform, Transform, World};
+use bevy::prelude::{GlobalTransform, Transform, World};
 use chico::{Chico, ForestIndex};
 use durham::{
-	BaseTerrainNoise, Durham, TerrainCellLayout, TerrainConfig, TerrainEntryStore, WorldBaseTerrain,
+	BaseTerrainNoise, Durham, HcsgStorage, TerrainCellLayout, TerrainConfig, WorldBaseTerrain,
 };
 use layer_stack::{Generate, LayerGenerationCore, RequireLayer, Scheme};
 use lod::gen::{GenerationScheme, Id, LodGenerateKeepRegion, SpatialIndex};
@@ -36,20 +36,11 @@ use mob_layer_model::Mobs;
 type Urbanized = Urbanization<richmond::Richmond<OnTerrain<Durham>>>;
 
 pub(crate) fn insert_urbanized_resources(world: &mut World) {
-	world.insert_resource(TerrainEntryStore::default());
+	world.init_resource::<HcsgStorage>();
 	world.insert_resource(TerrainCellLayout::default());
 	world.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(&TerrainConfig::new(42))));
 	world.insert_resource(DevelopmentEntryStore::default());
 	world.insert_resource(UrbanizationIndex::default());
-}
-
-fn identity_lod_ref<'a>(transform: &'a Transform, bounds: &'a Aabb3d) -> LodRef<'a> {
-	LodRef {
-		entity: Entity::PLACEHOLDER,
-		previous_transform: transform,
-		current_transform: transform,
-		bounds,
-	}
 }
 
 #[test]
@@ -72,10 +63,7 @@ fn bounds_extent_keeps_the_given_rectangle() -> anyhow::Result<()> {
 fn origin_cell_is_always_populated_when_models_are_ready() -> anyhow::Result<()> {
 	let mut index = MobIndex::ready();
 	let extent = MobCellExtent::from_cell_index(0, 0);
-	let transform = Transform::IDENTITY;
-	let bounds = extent.aabb();
-	let lod_ref = identity_lod_ref(&transform, &bounds);
-	let (cell, _) = MobCell::build_with_id(&mut index, extent.id(), &lod_ref)
+	let (cell, _) = MobCell::build_with_id(&mut index, extent.id())
 		.ok_or_else(|| anyhow::anyhow!("origin mob cell did not generate"))?;
 	assert!(!cell.groups.is_empty());
 	Ok(())
@@ -158,15 +146,11 @@ fn plant_hosts_follow_leaves_cells_settings_then_places() -> anyhow::Result<()> 
 			kind: UrbanDevelopmentKind::LesHalles,
 		}],
 	};
-	let transform = Transform::IDENTITY;
-	let bounds = extent.aabb();
-	let lod_ref = identity_lod_ref(&transform, &bounds);
 	SpatialIndex::<SelectedUrbanization>::insert(
 		&mut *app.world_mut().resource_mut::<UrbanizationIndex>(),
 		extent.id(),
 		selected,
-		bounds,
-		&lod_ref,
+		extent.aabb(),
 	);
 
 	let config = DevelopmentConfig::from_world_seed(42);
@@ -472,7 +456,6 @@ fn plugin_app() -> App {
 	use bevy::prelude::{AssetPlugin, MinimalPlugins};
 	use bevy::state::app::StatesPlugin;
 	use layer_stack::GenerationModePlugin;
-	
 
 	let mut app = App::new();
 	app.add_plugins((
@@ -577,7 +560,6 @@ fn different_budgets_build_and_apply_on_enter() -> anyhow::Result<()> {
 	use bevy::state::app::StatesPlugin;
 	use layer_stack::{ActiveGenerationMode, GenerationModePlugin};
 	use lod::gen::LodGenerateBudget;
-	
 
 	let mut app = App::new();
 	app.add_plugins((

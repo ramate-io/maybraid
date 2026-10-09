@@ -1,6 +1,7 @@
 //! Reusable combat feedback for player health, outgoing hits, and incoming damage.
 
 mod score;
+mod screen_pin;
 mod vitals;
 
 use bevy::prelude::*;
@@ -10,6 +11,7 @@ use score::{ingest_combat_score, spawn_combat_score, sync_combat_score};
 use vitals::{spawn_player_vitals, sync_player_vitals, vitals_fonts};
 
 pub use score::{CombatScore, LiveEnemies};
+pub use screen_pin::ScreenPin;
 
 /// When `false`, the player vitals plate stays hidden (pause / menu overlays).
 #[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]

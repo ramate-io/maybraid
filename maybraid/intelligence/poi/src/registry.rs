@@ -63,6 +63,7 @@ pub struct PoiRegistry {
 	globals: BTreeSet<PoiId>,
 	by_entity: HashMap<Entity, PoiId>,
 	local_max_level: Level,
+	membership: u64,
 }
 
 impl Default for PoiRegistry {
@@ -78,6 +79,7 @@ impl Default for PoiRegistry {
 			globals: BTreeSet::new(),
 			by_entity: HashMap::new(),
 			local_max_level: 0,
+			membership: 0,
 		}
 	}
 }
@@ -130,7 +132,13 @@ impl PoiRegistry {
 		if global {
 			self.globals.insert(poi.id);
 		}
+		self.bump_membership();
 		Ok(())
+	}
+
+	/// Increments when a record is inserted, updated, or removed.
+	pub fn membership_revision(&self) -> u64 {
+		self.membership
 	}
 
 	pub fn remove_entity(&mut self, entity: Entity) -> Option<PoiRecord> {
@@ -142,14 +150,19 @@ impl PoiRegistry {
 		self.records.get(&id)
 	}
 
-	pub fn local_matching(
+	/// Fill `out` with ids of local records matching `interests` within `radius` of `center`.
+	///
+	/// Avoids cloning [`PoiRecord`] payloads; pair with [`Self::get`] on the hot path.
+	pub fn collect_local_matching(
 		&self,
 		center: Vec3,
 		radius: f32,
 		interests: &PoiInterests,
-	) -> Vec<PoiRecord> {
+		out: &mut Vec<PoiId>,
+	) {
+		out.clear();
 		if !center.is_finite() || !radius.is_finite() {
-			return Vec::new();
+			return;
 		}
 		let radius = radius.clamp(0.0, MAX_LOCAL_QUERY_RADIUS);
 		let extent = Vec3::splat(radius);
@@ -157,22 +170,45 @@ impl PoiRegistry {
 		let query_level = BaseScale::new(self.local.grid().base_scale())
 			.map(|base| base.insertion_level(&region))
 			.unwrap_or(0);
-		self.local
+		for (record, _) in self
+			.local
 			.query_values(region, BaseScale::levels_through(query_level.max(self.local_max_level)))
-			.map(|(record, _)| *record)
-			.filter(|record| {
-				interests.contains(record.kind)
-					&& center.distance(record.position) <= radius + record.arrival_radius
-			})
-			.collect()
+		{
+			if interests.contains(record.kind)
+				&& center.distance(record.position) <= radius + record.arrival_radius
+			{
+				out.push(record.id);
+			}
+		}
+	}
+
+	pub fn local_matching(
+		&self,
+		center: Vec3,
+		radius: f32,
+		interests: &PoiInterests,
+	) -> Vec<PoiRecord> {
+		let mut ids = Vec::new();
+		self.collect_local_matching(center, radius, interests, &mut ids);
+		ids.iter().filter_map(|id| self.get(*id).copied()).collect()
+	}
+
+	/// Fill `out` with ids of global records matching `interests`, in stable id order.
+	///
+	/// Avoids cloning [`PoiRecord`] payloads; pair with [`Self::get`] on the hot path.
+	pub fn collect_global_matching(&self, interests: &PoiInterests, out: &mut Vec<PoiId>) {
+		out.clear();
+		for id in &self.globals {
+			if self.records.get(id).is_some_and(|record| interests.contains(record.kind)) {
+				out.push(*id);
+			}
+		}
 	}
 
 	pub fn global_matching(&self, interests: &PoiInterests) -> Vec<PoiRecord> {
-		self.globals
-			.iter()
-			.filter_map(|id| self.records.get(id).copied())
-			.filter(|record| interests.contains(record.kind))
-			.collect()
+		let mut ids = Vec::new();
+		self.collect_global_matching(interests, &mut ids);
+		ids.iter().filter_map(|id| self.get(*id).copied()).collect()
 	}
 
 	/// Weighted nearby choice with no inner hole. See [`Self::choose_in`].
@@ -185,6 +221,33 @@ impl PoiRegistry {
 		seed: u64,
 	) -> Option<PoiRecord> {
 		self.choose_in(center, NearbyQuery::weighted(radius), interests, excluded, seed)
+	}
+
+	/// Local and global POIs inside [`NearbyQuery`], minus the inner hole and `excluded`.
+	pub fn nearby_in(
+		&self,
+		center: Vec3,
+		query: NearbyQuery,
+		interests: &PoiInterests,
+		excluded: &[PoiId],
+	) -> Vec<PoiRecord> {
+		if interests.is_empty() || !center.is_finite() || !query.radius.is_finite() {
+			return Vec::new();
+		}
+		let radius = query.radius.clamp(0.0, MAX_LOCAL_QUERY_RADIUS);
+		let min_radius = query.min_radius.max(0.0);
+		let mut candidates = self.local_matching(center, radius, interests);
+		for candidate in self.global_matching(interests) {
+			if center.distance(candidate.position) <= radius + candidate.arrival_radius
+				&& !candidates.iter().any(|known| known.id == candidate.id)
+			{
+				candidates.push(candidate);
+			}
+		}
+		candidates.retain(|candidate| xz_distance(center, candidate.position) >= min_radius);
+		candidates.sort_by_key(|candidate| candidate.id);
+		Self::drop_excluded(&mut candidates, excluded);
+		candidates
 	}
 
 	/// Choose a local/global POI inside [`NearbyQuery`].
@@ -201,29 +264,20 @@ impl PoiRegistry {
 		excluded: &[PoiId],
 		seed: u64,
 	) -> Option<PoiRecord> {
-		if interests.is_empty() || !center.is_finite() || !query.radius.is_finite() {
-			return None;
-		}
-		let radius = query.radius.clamp(0.0, MAX_LOCAL_QUERY_RADIUS);
-		let min_radius = query.min_radius.max(0.0);
-		let mut candidates = self.local_matching(center, radius, interests);
-		for candidate in self.global_matching(interests) {
-			if center.distance(candidate.position) <= radius + candidate.arrival_radius
-				&& !candidates.iter().any(|known| known.id == candidate.id)
-			{
-				candidates.push(candidate);
-			}
-		}
-		candidates.retain(|candidate| xz_distance(center, candidate.position) >= min_radius);
-		candidates.sort_by_key(|candidate| candidate.id);
-		Self::drop_excluded(&mut candidates, excluded);
+		let candidates = self.nearby_in(center, query, interests, excluded);
 		match query.choice {
 			NearbyChoice::Nearest => candidates.into_iter().min_by(|a, b| {
 				xz_distance(center, a.position)
 					.total_cmp(&xz_distance(center, b.position))
 					.then_with(|| a.id.cmp(&b.id))
 			}),
-			NearbyChoice::Weighted => choose_weighted(center, radius, interests, candidates, seed),
+			NearbyChoice::Weighted => choose_weighted(
+				center,
+				query.radius.clamp(0.0, MAX_LOCAL_QUERY_RADIUS),
+				interests,
+				candidates,
+				seed,
+			),
 		}
 	}
 
@@ -286,7 +340,12 @@ impl PoiRegistry {
 		self.globals.remove(&id);
 		let record = self.records.remove(&id)?;
 		self.by_entity.remove(&record.entity);
+		self.bump_membership();
 		Some(record)
+	}
+
+	fn bump_membership(&mut self) {
+		self.membership = self.membership.wrapping_add(1);
 	}
 }
 

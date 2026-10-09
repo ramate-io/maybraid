@@ -201,7 +201,7 @@ macro_rules! impl_spatial_index {
 				self.next_version
 			}
 
-			fn insert(&mut self, id: Id, value: $ty, bounds: Aabb3d, _lod_ref: &LodRef) {
+			fn insert(&mut self, id: Id, value: $ty, bounds: Aabb3d) {
 				let version = self.next_version();
 				self.$field.insert(id, StoredEntry { value, bounds, version });
 			}
@@ -232,12 +232,10 @@ where
 			.collect()
 	}
 
-	fn build_with_id(_spatial_index: &mut S, id: Id, _lod_ref: &LodRef) -> Option<(Self, Aabb3d)> {
+	fn build_with_id(_spatial_index: &mut S, id: Id) -> Option<(Self, Aabb3d)> {
 		let bounds = id.origin_cell_bounds()?;
 		Some((Self { cell: bounds }, bounds))
 	}
-
-	fn descendants_with_lod(_id: Id, _spatial_index: &mut S, _lod_ref: &LodRef) {}
 }
 
 impl<S> GenerationScheme<S> for Vegetation
@@ -245,21 +243,17 @@ where
 	S: GeneratingSpatialIndex<Terrain> + GeneratingSpatialIndex<Tree>,
 {
 	fn original_ids_for(spatial_index: &mut S, region: Aabb3d) -> Vec<OriginalId> {
-		<Terrain as GenerationScheme<S>>::original_ids_for(spatial_index, region)
+		GeneratingSpatialIndex::<Terrain>::original_ids_for(spatial_index, region)
 	}
 
-	fn build_with_id(spatial_index: &mut S, id: Id, lod_ref: &LodRef) -> Option<(Self, Aabb3d)> {
+	fn build_with_id(spatial_index: &mut S, id: Id) -> Option<(Self, Aabb3d)> {
 		let bounds = id.origin_cell_bounds()?;
-		GeneratingSpatialIndex::<Terrain>::get_or_generate(
-			spatial_index,
-			Id::from_cell(bounds),
-			lod_ref,
-		)?;
+		GeneratingSpatialIndex::<Terrain>::get_or_generate(spatial_index, Id::from_cell(bounds))?;
 		Some((Self { cell: bounds }, bounds))
 	}
 
-	fn descendants_with_lod(id: Id, spatial_index: &mut S, lod_ref: &LodRef) {
-		GeneratingSpatialIndex::<Tree>::get_or_generate(spatial_index, tree_id(id), lod_ref);
+	fn descendants(id: Id, spatial_index: &mut S) {
+		GeneratingSpatialIndex::<Tree>::get_or_generate(spatial_index, tree_id(id));
 	}
 }
 
@@ -271,7 +265,7 @@ where
 		Vec::new()
 	}
 
-	fn build_with_id(spatial_index: &mut S, id: Id, _lod_ref: &LodRef) -> Option<(Self, Aabb3d)> {
+	fn build_with_id(spatial_index: &mut S, id: Id) -> Option<(Self, Aabb3d)> {
 		let bounds = match id {
 			Id::Bytes(bytes) => cell_from_bytes(bytes),
 			Id::OriginCell(crate::gen::OriginCell(crate::gen::Cell(bounds))) => bounds,
@@ -284,8 +278,8 @@ where
 		Some((Self { parent, cell: bounds }, bounds))
 	}
 
-	fn descendants_with_lod(id: Id, spatial_index: &mut S, lod_ref: &LodRef) {
-		GeneratingSpatialIndex::<Leaf>::get_or_generate(spatial_index, leaf_id(id), lod_ref);
+	fn descendants(id: Id, spatial_index: &mut S) {
+		GeneratingSpatialIndex::<Leaf>::get_or_generate(spatial_index, leaf_id(id));
 	}
 }
 
@@ -297,7 +291,7 @@ where
 		Vec::new()
 	}
 
-	fn build_with_id(spatial_index: &mut S, id: Id, _lod_ref: &LodRef) -> Option<(Self, Aabb3d)> {
+	fn build_with_id(spatial_index: &mut S, id: Id) -> Option<(Self, Aabb3d)> {
 		let bounds = match id {
 			Id::Bytes(bytes) => cell_from_bytes(bytes),
 			Id::OriginCell(crate::gen::OriginCell(crate::gen::Cell(bounds))) => bounds,
@@ -310,8 +304,8 @@ where
 		Some((Self { parent, cell: bounds }, bounds))
 	}
 
-	fn descendants_with_lod(id: Id, spatial_index: &mut S, lod_ref: &LodRef) {
-		GeneratingSpatialIndex::<Moss>::get_or_generate(spatial_index, moss_id(id), lod_ref);
+	fn descendants(id: Id, spatial_index: &mut S) {
+		GeneratingSpatialIndex::<Moss>::get_or_generate(spatial_index, moss_id(id));
 	}
 }
 
@@ -323,7 +317,7 @@ where
 		Vec::new()
 	}
 
-	fn build_with_id(spatial_index: &mut S, id: Id, _lod_ref: &LodRef) -> Option<(Self, Aabb3d)> {
+	fn build_with_id(spatial_index: &mut S, id: Id) -> Option<(Self, Aabb3d)> {
 		let bounds = match id {
 			Id::Bytes(bytes) => cell_from_bytes(bytes),
 			Id::OriginCell(crate::gen::OriginCell(crate::gen::Cell(bounds))) => bounds,
@@ -335,8 +329,6 @@ where
 		}
 		Some((Self { parent, cell: bounds }, bounds))
 	}
-
-	fn descendants_with_lod(_id: Id, _spatial_index: &mut S, _lod_ref: &LodRef) {}
 }
 
 // -----------------------------------------------------------------------------

@@ -14,6 +14,7 @@ pub mod commands;
 mod control;
 mod crate_loot;
 mod intelligence;
+mod map_view;
 mod pitch;
 mod player_lifecycle;
 mod player_position;
@@ -34,12 +35,15 @@ pub use durham::Durham;
 pub use game_commands::command::PendingStartupCommand;
 pub use intelligence::WorldIntelligencePlugin;
 pub use lod::LodJobCounter;
+pub use map_view::{WorldMapView, WorldMapViewPlugin};
 pub use maybraid_sky::{
 	ShadowQuality, SkyClock, SkyCommand, SKY_BLUE, SKY_CLEAR, SKY_HORIZON, SKY_NADIR, SKY_ZENITH,
 	SUN_COLOR, SUN_ILLUMINANCE,
 };
 pub use player_camera::{CameraPov, CameraPovLocked};
-pub use player_lifecycle::{WorldPlayerLifecyclePlugin, WorldPlayerRespawnConfig};
+pub use player_lifecycle::{
+	reset_first_spawn_offer, WorldPlayerLifecyclePlugin, WorldPlayerRespawnConfig,
+};
 pub use player_position::{
 	resume_discovery_from_saved_waypoints, PlayerPositionPlugin, PlayerPositionWaypoints,
 };
@@ -174,6 +178,7 @@ impl Plugin for WorldPlugin {
 			.add_plugins(SkillMapPlugin)
 			.insert_resource(maybraid_skill_map::SkillMapEnabled(false))
 			.add_plugins(WorldPoiPlugin)
+			.add_plugins(WorldMapViewPlugin)
 			.add_plugins(WorldPlayerLifecyclePlugin)
 			.add_plugins(WorldStashPlugin)
 			.add_plugins(PlayerPositionPlugin)
@@ -224,6 +229,7 @@ impl Plugin for WorldPlugin {
 					control::sync_skill_map_enabled.before(SkillMapSystems::Spawn),
 					control::apply_intents_to_movement
 						.after(CharacterControlSystems)
+						.after(map_view::WorldMapSet::Toggle)
 						.after(PlayerSystems::Intent)
 						.before(PlayerSystems::Body)
 						.before(PlayerControlSystems),

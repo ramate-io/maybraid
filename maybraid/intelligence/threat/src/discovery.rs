@@ -5,8 +5,8 @@ use intelligence_lod::{due_by_rank, IntelligenceBand, IntelligenceLod, Intellige
 use spotting_intelligence::{SpottingHintSource, SpottingUser};
 
 use crate::{
-	Affiliations, ThreatDiscoverLimits, ThreatIntelligenceUser, ThreatKnowledge, ThreatObservation,
-	ThreatRegistry, ThreatSource, ThreatSubject,
+	Affiliations, ThreatDiscoverLimits, ThreatId, ThreatIntelligenceUser, ThreatKnowledge,
+	ThreatObservation, ThreatRegistry, ThreatSource, ThreatSubject,
 };
 
 type ThreatEntity<'a> = (
@@ -133,6 +133,7 @@ pub fn discover_threats(
 	priority: Res<IntelligencePriority>,
 	limits: Res<ThreatDiscoverLimits>,
 	mut recipients: ThreatRecipients,
+	mut local_candidates: Local<Vec<ThreatId>>,
 ) {
 	let now = time.elapsed_secs();
 	for (entity, _, _, affiliations, mut user, mut knowledge, _) in &mut recipients {
@@ -173,14 +174,19 @@ pub fn discover_threats(
 		knowledge.reconcile_registry(&registry);
 		knowledge.maintain(&affiliations, user.policy, now);
 		user.next_forget_at = now + staggered_interval(FORGET_INTERVAL, entity, 2);
-		let candidates =
-			registry.local(transform.translation(), user.perception_radius(&knowledge));
-		let count = candidates.len();
+		registry.collect_local(
+			transform.translation(),
+			user.perception_radius(&knowledge),
+			&mut local_candidates,
+		);
+		let count = local_candidates.len();
 		let budget = band.scale_count(user.policy.candidates_per_scan).min(count);
 		let mut taken = 0;
 		let mut offset = 0;
 		while taken < budget && offset < count {
-			let record = &candidates[(user.sample_cursor + offset) % count];
+			let record = registry
+				.get(local_candidates[(user.sample_cursor + offset) % count])
+				.expect("collect_local ids are indexed");
 			offset += 1;
 			if record.entity == entity || record.id == identity.id {
 				continue;

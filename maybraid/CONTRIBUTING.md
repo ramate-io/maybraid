@@ -35,6 +35,31 @@ Sometimes, particularly during early development of a model, the game object may
 > [!IMPORTANT]
 > Please update this section if increasing or different layers are consistently implemented at the `-models` level.
 
+## Hierarchical generation (CSG)
+
+World layers compose by **reusing `GenerationScheme`s**, not by re-deriving each other's discovery. To add a stage (a stamp band, a correction pass, a layer that sits on terrain):
+
+1. **Write one `GenerationScheme` per generated type, beside that type, under its world layer.** `original_ids_for` says which ids originate in a region; `build_with_id` builds one id. Put shared discovery on the trait that owns the concept, not in free functions over `&mut S`. In Durham, `CellTiling::original_cell_ids_for` serves layout-gridded roots and `LeafAabbs::original_leaf_ids_for` serves leaves of a controller.
+2. **Bound only on what you read directly.** If you read type `D`, require `S: GeneratingSpatialIndex<D>`. `D`'s own controllers, layouts, and configs are `D`'s bounds, not yours; they resolve at the concrete index. Use plain `SpatialIndex<D>` when you only read and never generate.
+3. **Discover dependencies through the index.** Use `GeneratingSpatialIndex::<D>::for_each_origin(index, region, visit)`, or `original_ids_for` and then `get_one_or_generate` for each id. This keeps discovery lazy and in id order. Do not call `D::original_ids_for` or `<D as GenerationScheme<S>>::…` directly, and do not swap discovery for eager `get_or_generate_region`.
+4. **Reuse existing ids.** If your type sits on an existing grid, delegate `original_ids_for` to that grid's root type. For example, `Terrain` and `Water` reuse [`PreWatershedTerrain`](world/layers/terrain/durham/src/terrain.rs)'s origin cells, and the watershed stages reuse `HydroComplexCell`'s.
+5. **Keep a type's config at `Id::Universal`.** Readers fetch it like any other node: `GeneratingSpatialIndex::<C>::get_one_or_generate(index, Id::Universal)`. Authored roots use `lod::seeded_root!` and enter storage through [`Seed<R>`](lod/lib/src/hcsg/generate.rs). Durham's `derived_universal_scheme!` builds universals that are computed from other universals (stamp and watershed layouts).
+6. **Use generic helpers when a scheme pulls a family of leaves.** Share the leaf shape through a trait (Durham's `StampLeaf`) instead of writing a macro for each type.
+7. **Keep generation independent of the viewer.** Schemes never see a `LodRef` or camera pose. Presentation decides what content it needs (a distant forest needs selection and a canopy proxy; a nearby forest needs grove recipes and detailed geometry) and requests those ids. `descendants` is only for descendants that always accompany a node. If quality changes the generated value itself, make it part of cache identity (a separate type, id, or generation parameter), so two presentation paths never share an id while expecting different content.
+
+### Storage and wiring ([`hcsg`](lod/lib/src/hcsg.rs))
+
+Store generated nodes in [`HcsgStorage`](lod/lib/src/hcsg/storage.rs), not in a per-layer store. It keeps one typed `NodeStore<T>` per generated type, each with its own `gimme` spatial index, and implements `SpatialIndex<T>` for every `T`. A layer therefore writes `GenerationScheme`s and no store, view, or marshalling adapter.
+
+- **Register types once.** Call `configure::<T>(base_scale)` for each node type, and `add_to_group::<G, T>()` so `clear_group::<G>()` can invalidate the layer when its inputs change (Durham's `register_durham_nodes`). Versions are minted globally, so a cleared and rebuilt id never reuses a version a presenter already saw.
+- **Subscribe to a producer.** A producer type `P` publishes `GenerationBounds` on its own channel through `GenerationProducer<P>`. `produce_from_nodes::<P, F>` covers viewer-driven producers, as `LodScene` does for presentation. Each generated type subscribes with `GenerateOn::<P, T>::in_set(...)` and fills the requested bounds synchronously within the channel's `LodGenerateBudget<P>` / `ChannelTimeBudget<P>`.
+- **Restart, don't patch, when ids depend on the window.** If moving the bounds changes which ids exist (Durham's ring-tiled `TerrainCellLayout`), publish `GenerationProducer::restart` so subscribers rescan the whole keep region instead of only the entering strips.
+- **Read through the storage.** Presenters and consumers take `Res<HcsgStorage>`. Put layer-specific read helpers on an extension trait implemented for `HcsgStorage` (Durham's `TerrainStorage`) instead of wrapping it.
+
+Generation never reads a pose. Producers read driver poses only to decide which bounds to publish and in what order.
+
+Durham is on `hcsg`. Urbanization, Richmond, Chico, Barking, and Maputo still use their own stores with `LodGeneratePlugin<T, S>`; migrate them rather than adding new layers there.
+
 ## Chico vegetation trees (LOD)
 
 Learnings from migrating ball-stick trees (Sope’s Banyan, Penmarch / Kamakura torch, Rory’s Head-trained) onto [`vegetation-components`](./world/layers/vegetation/components/) + [`sbs-trees`](./world/layers/vegetation/sbs-trees/).

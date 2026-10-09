@@ -2,7 +2,7 @@
 
 use avian3d::prelude::Collider;
 use bevy::prelude::*;
-use durham::{TerrainCellLayout, TerrainEntryStore, TerrainTrimeshCollider};
+use durham::{HcsgStorage, TerrainCellLayout, TerrainStorage, TerrainTrimeshCollider};
 use journeying_intelligence::JourneyingIntelligenceUser;
 use meandering_intelligence::MeanderingIntelligenceUser;
 use mob_characters::{LOCAL_POI, VEGETATION_POI};
@@ -140,7 +140,7 @@ pub fn spawn_forage_pois(
 	mut meshes: ResMut<Assets<Mesh>>,
 	mut materials: ResMut<Assets<StandardMaterial>>,
 	mut state: ResMut<PlaygroundState>,
-	store: Res<TerrainEntryStore>,
+	store: Res<HcsgStorage>,
 	layout: Res<TerrainCellLayout>,
 ) {
 	if state.pois_ready {
@@ -218,7 +218,7 @@ pub fn spawn_forage_pois(
 pub fn spawn_playground_mobs(
 	mut commands: Commands,
 	mut state: ResMut<PlaygroundState>,
-	store: Res<TerrainEntryStore>,
+	store: Res<HcsgStorage>,
 	layout: Res<TerrainCellLayout>,
 	terrain_roots: Query<Entity, With<TerrainTrimeshCollider>>,
 	children: Query<&Children>,
@@ -319,7 +319,7 @@ pub fn widen_playground_member_leashes(
 
 pub fn draw_debug_gizmos(
 	mut gizmos: Gizmos,
-	store: Res<TerrainEntryStore>,
+	store: Res<HcsgStorage>,
 	layout: Res<TerrainCellLayout>,
 	hosts: Query<(&mob_scenes::MobScene, &Transform, Option<&RoutingIntelligenceUser>)>,
 	plants: Query<&GlobalTransform, With<MemberOf>>,
