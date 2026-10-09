@@ -102,7 +102,7 @@ impl<W: LanguageGround> shared::GenerationScheme for DevelopmentPlaces<W> {
 
 	fn build_with_id(cx: &mut GenerationContext, id: Id) -> Option<(Self, Aabb3d)> {
 		let built = cx.get_or_generate::<Built<W::Built>>(id)?;
-		let bounds = cx.storage().entry::<Built<W::Built>>(id)?.bounds;
+		let bounds = cx.entry::<Built<W::Built>>(id)?.bounds;
 		Some((Self::of(id, &built.development), bounds))
 	}
 }
