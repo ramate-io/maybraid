@@ -7,14 +7,17 @@ use crate::lobe_instances::sync_lobe_instance_buffer;
 use crate::lobes::{lobe_transform, stamp_lobe_materials, VfxLobe};
 use crate::membership::{VfxInstanceMembers, VfxMemberOf};
 use crate::spawn::{
-	realize_layer, VfxEmitter, VfxEmitterArmed, VfxEmitterBurst, VfxFlash, VfxInstance, VfxLayerLife,
-	VfxPendingLayers,
+	realize_layer, VfxEmitter, VfxEmitterArmed, VfxEmitterBurst, VfxFlash, VfxInstance,
+	VfxLayerLife, VfxPendingLayers,
 };
 
 /// Mark GPU-ready emitters. Burst is deferred to [`gate_vfx_instances`].
 pub fn arm_vfx_emitters(
 	mut commands: Commands,
-	emitters: Query<(Entity, &CompiledParticleEffect), (With<VfxEmitter>, Without<VfxEmitterArmed>)>,
+	emitters: Query<
+		(Entity, &CompiledParticleEffect),
+		(With<VfxEmitter>, Without<VfxEmitterArmed>),
+	>,
 ) {
 	for (entity, compiled) in &emitters {
 		if compiled.is_ready() {

@@ -78,7 +78,8 @@ pub fn compile_wisps(effects: &mut Assets<EffectAsset>, fire: &FlipbookAsset) ->
 		radius: (writer.lit(0.08) * props.scale.clone()).expr(),
 		dimension: ShapeDimension::Volume,
 	};
-	let init_vel = init_radial_velocity(&writer, &props.scale, &props.playback, &props.seed, 1.2, 2.4);
+	let init_vel =
+		init_radial_velocity(&writer, &props.scale, &props.playback, &props.seed, 1.2, 2.4);
 	let init_age = SetAttributeModifier::new(Attribute::AGE, writer.lit(0.).expr());
 	let init_lifetime =
 		init_lifetime(&writer, &props.playback, &props.seed, FIREBALL_LIFE_MIN, FIREBALL_LIFE_MAX);

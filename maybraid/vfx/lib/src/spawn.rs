@@ -197,7 +197,12 @@ impl SpawnVfxExt for Commands<'_, '_> {
 	}
 }
 
-pub fn realize_layer(commands: &mut Commands, parent: Entity, layer: &EffectLayer, spawn: &VfxSpawn) {
+pub fn realize_layer(
+	commands: &mut Commands,
+	parent: Entity,
+	layer: &EffectLayer,
+	spawn: &VfxSpawn,
+) {
 	let transform = Transform {
 		translation: layer.transform.translation,
 		rotation: layer.transform.rotation,

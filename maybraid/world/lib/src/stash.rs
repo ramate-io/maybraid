@@ -36,8 +36,8 @@ use damage::{DamageSystems, DespawnAfter, Downed};
 use firearm_user::{held_scale_from_bounds, FirearmUser, FirearmUserSettings, GeneratedFirearm};
 use grenade_user::GrenadeUser;
 use firearms::{firearm_bounds, spawn_firearm_components};
-use lod::gen::LodSceneLevel;
 use lod::lod_ref::LodRef;
+use lod::scene::LodSceneLevel;
 use lod::LodScene;
 use material_ref::{MaterialRef, MaterialRefRoot, PropagateToDescendants};
 use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
@@ -602,7 +602,7 @@ pub(crate) fn claim_nearby_stashes(
 	>,
 	parts: Query<(Entity, &furniture_assemblies::FurnitureKitPart, &GlobalTransform)>,
 	child_of: Query<&ChildOf>,
-	hosts: Query<&maputo::PresentedFurnitureCellId>,
+	hosts: Query<&lod::hcsg::HcsgNode<crate::WorldFurnished>>,
 ) {
 	if !intents.read().any(|intent| matches!(intent, CharacterIntent::StartInteraction)) {
 		return;
@@ -1886,7 +1886,6 @@ mod tests {
 		use crate::crate_loot::{ClosedLid, CrateLoot};
 		use furniture_assemblies::{FurnitureKitPart, PartKind};
 		use lod::gen::Id;
-		use maputo::PresentedFurnitureCellId;
 
 		let mut world = World::new();
 		world.init_resource::<Time>();
@@ -1894,7 +1893,7 @@ mod tests {
 		let player_bag = world.spawn(Inventory::default()).id();
 		world.spawn((VegetationPlayer, Transform::IDENTITY, InventoryUser::carrying(player_bag)));
 		let at = Transform::from_xyz(2.0, 0.4, 0.0);
-		let host = world.spawn(PresentedFurnitureCellId(Id::Universal)).id();
+		let host = crate::crate_loot::spawn_furniture_host(&mut world, Id::Universal);
 		world.spawn((
 			FurnitureKitPart { kind: PartKind::ChestLid, finish_seed: 1, slot: 0 },
 			ClosedLid(at),

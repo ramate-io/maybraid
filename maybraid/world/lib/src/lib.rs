@@ -5,7 +5,7 @@
 //! clone Durham fine-cell mesh handles. Vegetation LOD bullseye / lattice
 //! cover the grove fill ring. Urbanization hopscotch streams at the same
 //! 1 km / 3 km rings without re-registering Durham (base terrain generation owns
-//! the fill; raw present is a separate plugin, off until Training).
+//! the fill; raw present is a separate plugin, off in the world).
 //! Painted furniture is a generate pass over Richmond High slots, presented as
 //! flattened 50 m cell hosts in a neighborhood around the camera.
 
@@ -13,6 +13,7 @@ mod camera;
 pub mod commands;
 mod control;
 mod crate_loot;
+mod first_wave;
 mod intelligence;
 mod map_view;
 mod pitch;
@@ -24,7 +25,10 @@ mod stash;
 mod ui;
 mod vsync;
 mod weapon;
+mod world_furnished;
 mod world_layers;
+
+pub use world_furnished::WorldFurnished;
 
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use control::{
@@ -32,8 +36,12 @@ pub use control::{
 	WorldSurfaceSet,
 };
 pub use durham::Durham;
+#[cfg(any(test, feature = "test-support"))]
+pub use first_wave::UnitXTile;
+pub use first_wave::{FirstWave, FIRST_WAVE_JOB_THRESHOLD};
 pub use game_commands::command::PendingStartupCommand;
 pub use intelligence::WorldIntelligencePlugin;
+pub use lod::hcsg::{HcsgClass, HcsgDemand, Outstanding};
 pub use lod::LodJobCounter;
 pub use map_view::{WorldMapView, WorldMapViewPlugin};
 pub use maybraid_sky::{
@@ -77,7 +85,6 @@ use game_commands::ui::GameCommandDrawerConfig;
 use lod::{Bullseye, OpenLattice};
 use maybraid_character_controller::{CharacterControlSystems, CharacterControllerPlugin};
 use maybraid_game_mode_discover::DiscoveryPlayerPlugin;
-use maybraid_game_mode_training_ground::TrainingGroundPlugin;
 use maybraid_input::{VirtualPadConfig, VirtualPadPlugin};
 use maybraid_skill_map::{SkillMapPlugin, SkillMapSystems};
 use maybraid_sky::SkyDomePlugin;
@@ -172,7 +179,7 @@ impl Plugin for WorldPlugin {
 			.insert_resource(CharacterRagdollTargets { players: true, npcs: true, unmarked: false })
 			.add_plugins(CharacterRagdollPlugin)
 			.add_plugins(WorldLayersPlugin)
-			.add_plugins((DiscoveryPlayerPlugin, TrainingGroundPlugin))
+			.add_plugins(DiscoveryPlayerPlugin)
 			.add_plugins(WorldIntelligencePlugin)
 			.add_plugins(WeatherPlugin)
 			.add_plugins(SkillMapPlugin)
@@ -188,6 +195,7 @@ impl Plugin for WorldPlugin {
 			.init_resource::<WorldGameplayEnabled>()
 			.init_resource::<InventoryEditCameraFollow>()
 			.init_resource::<WorldSurfaceReady>()
+			.init_resource::<crate::FirstWave>()
 			.init_resource::<WorldSceneryVisible>()
 			.insert_resource(WorldMobHudEnabled::from_debug_chrome(self.debug_chrome))
 			.insert_resource(Bullseye { inner: 50.0, outer: WORLD_BULLSEYE_OUTER_M })

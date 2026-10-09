@@ -3,14 +3,13 @@ use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
 use character_rigs::Side;
 
 use crate::animations::{Tuck, TuckProfile};
-use crate::rigs::humanoid::apply::apply_leg;
 use crate::{Animation, Effects};
 
 /// Apply tuck articulation scaled by `amount` in `[0.0, 1.0]`.
 pub fn apply_tuck_profile(rig: &mut HumanoidV0Rig, profile: &TuckProfile, amount: f32) -> Effects {
 	let mut pose = HumanoidPose::default();
-	apply_leg(&mut pose, Side::Left, profile.femur_swing(amount), profile.shin_flex(amount));
-	apply_leg(&mut pose, Side::Right, profile.femur_swing(amount), profile.shin_flex(amount));
+	pose.apply_leg(Side::Left, profile.femur_swing(amount), profile.shin_flex(amount));
+	pose.apply_leg(Side::Right, profile.femur_swing(amount), profile.shin_flex(amount));
 
 	for side in [Side::Left, Side::Right] {
 		let arm = pose.arm_mut(side);
