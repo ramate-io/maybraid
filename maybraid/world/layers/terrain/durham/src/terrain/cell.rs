@@ -4,7 +4,7 @@ use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::math::{IVec2, UVec2, Vec3};
 use bevy::prelude::*;
 use lod::gen::{Id, OriginalId};
-use lod::hcsg::shared::{self, GenerationContext};
+use lod::hcsg::{self, GenerationContext};
 use lod::LodSceneLevel;
 
 /// Naturescapes cascade `min_size`.
@@ -61,17 +61,17 @@ pub fn universal_bounds() -> Aabb3d {
 /// [`lod::seeded_root`] instead.
 macro_rules! derived_universal_scheme {
 	($T:ty, |$cx:ident| $native:expr) => {
-		impl lod::hcsg::shared::GenerationScheme for $T {
+		impl lod::hcsg::GenerationScheme for $T {
 			lod::hcsg_index_scale!($crate::terrain::index::DURHAM_INDEX_SCALE);
 			fn original_ids_for(
-				_cx: &mut lod::hcsg::shared::GenerationContext,
+				_cx: &mut lod::hcsg::GenerationContext,
 				_region: bevy::math::bounding::Aabb3d,
 			) -> Vec<lod::gen::OriginalId> {
 				vec![lod::gen::OriginalId::universal()]
 			}
 
 			fn build_with_id(
-				$cx: &mut lod::hcsg::shared::GenerationContext,
+				$cx: &mut lod::hcsg::GenerationContext,
 				id: lod::gen::Id,
 			) -> Option<(Self, bevy::math::bounding::Aabb3d)> {
 				if id != lod::gen::Id::Universal {
@@ -97,7 +97,7 @@ pub trait CellTiling: Sized {
 	/// [`Self::cell_ids`] on the context's Universal layout; empty if it cannot be built.
 	fn origin_ids_in(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId>
 	where
-		Self: shared::GenerationScheme,
+		Self: hcsg::GenerationScheme,
 	{
 		cx.get_or_generate::<Self>(Id::Universal)
 			.map(|layout| layout.cell_ids(region))

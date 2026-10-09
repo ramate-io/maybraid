@@ -3,7 +3,7 @@
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::Resource;
 use lod::gen::{Id, OriginalId};
-use lod::hcsg::shared::{self, GenerationContext};
+use lod::hcsg::{self, GenerationContext};
 use procedural_common::SeededHash;
 use urbanization_cells::{SelectedUrbanization, UrbanDevelopmentKind, UrbanizationExtent};
 use urbanization_developments::{cell_salt, PadPlan, SiteGround};
@@ -196,7 +196,7 @@ impl DevelopmentSite {
 	}
 }
 
-impl shared::GenerationScheme for DevelopmentSite {
+impl hcsg::GenerationScheme for DevelopmentSite {
 	lod::hcsg_index_scale!(crate::storage::COLUMN_INDEX_SCALE);
 
 	/// Authored sites, then the procedural sites of the configured mode.
@@ -356,7 +356,7 @@ mod tests {
 		};
 		let storage = seeded(config, AuthoredDevelopments::default());
 		let cell = DevelopmentExtent::from_cell_index(2, -1);
-		let mut cx = lod::hcsg::shared::GenerationContext::new(&storage);
+		let mut cx = lod::hcsg::GenerationContext::new(&storage);
 		let site = cx
 			.get_or_generate::<DevelopmentSite>(cell.id())
 			.ok_or_else(|| anyhow::anyhow!("site"))?;
@@ -384,7 +384,7 @@ mod tests {
 			courtyard: None,
 		};
 		let storage = seeded(config, AuthoredDevelopments(vec![authored.clone()]));
-		let mut cx = lod::hcsg::shared::GenerationContext::new(&storage);
+		let mut cx = lod::hcsg::GenerationContext::new(&storage);
 		let ids = cx.original_ids_for::<DevelopmentSite>(lattice.aabb());
 		anyhow::ensure!(ids.contains(&OriginalId(authored.id())), "authored site is an origin");
 		let site = cx

@@ -105,17 +105,17 @@ macro_rules! define_stamp_family {
 			}
 		}
 
-		impl lod::hcsg::shared::GenerationScheme for $Controller {
+		impl lod::hcsg::GenerationScheme for $Controller {
 			lod::hcsg_index_scale!($crate::terrain::index::DURHAM_INDEX_SCALE);
 			fn original_ids_for(
-				cx: &mut lod::hcsg::shared::GenerationContext,
+				cx: &mut lod::hcsg::GenerationContext,
 				region: bevy::math::bounding::Aabb3d,
 			) -> Vec<lod::gen::OriginalId> {
 				<$Layout as $crate::terrain::cell::CellTiling>::origin_ids_in(cx, region)
 			}
 
 			fn build_with_id(
-				cx: &mut lod::hcsg::shared::GenerationContext,
+				cx: &mut lod::hcsg::GenerationContext,
 				id: lod::gen::Id,
 			) -> Option<(Self, bevy::math::bounding::Aabb3d)> {
 				let bounds = id.origin_cell_bounds()?;
@@ -145,17 +145,17 @@ macro_rules! define_stamp_family {
 			}
 		}
 
-		impl lod::hcsg::shared::GenerationScheme for $Stamp {
+		impl lod::hcsg::GenerationScheme for $Stamp {
 			lod::hcsg_index_scale!($crate::terrain::index::DURHAM_INDEX_SCALE);
 			fn original_ids_for(
-				cx: &mut lod::hcsg::shared::GenerationContext,
+				cx: &mut lod::hcsg::GenerationContext,
 				region: bevy::math::bounding::Aabb3d,
 			) -> Vec<lod::gen::OriginalId> {
 				<$Controller as $crate::terrain::stamps::shared::LeafAabbs>::leaf_ids_in(cx, region)
 			}
 
 			fn build_with_id(
-				cx: &mut lod::hcsg::shared::GenerationContext,
+				cx: &mut lod::hcsg::GenerationContext,
 				id: lod::gen::Id,
 			) -> Option<(Self, bevy::math::bounding::Aabb3d)> {
 				let cell = id.origin_cell_bounds()?;

@@ -8,7 +8,7 @@ use bevy::prelude::{bsn, template_value, Name, Transform, Vec3};
 use bevy::scene::Scene;
 use building_components::scene_children;
 use lod::gen::{Id, LodScene, LodSceneLevel, LodSceneStatus, OriginalId};
-use lod::hcsg::shared::{self, GenerationContext};
+use lod::hcsg::{self, GenerationContext};
 use lod::lod_ref::LodRef;
 use urbanization_layer_model::UrbanSetting;
 
@@ -45,7 +45,7 @@ impl<G> Built<G> {
 	}
 }
 
-impl<G: RichmondGround> shared::GenerationScheme for Built<G> {
+impl<G: RichmondGround> hcsg::GenerationScheme for Built<G> {
 	lod::hcsg_index_scale!(crate::storage::COLUMN_INDEX_SCALE);
 
 	/// The filled developments originating in `region`.

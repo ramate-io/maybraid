@@ -7,7 +7,7 @@ use durham::{
 	WatershedLeafKind,
 };
 use lod::gen::Id;
-use lod::hcsg::shared::HcsgStorage;
+use lod::hcsg::HcsgStorage;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 
 /// Playground debug overlays (cell HUD).

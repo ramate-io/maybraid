@@ -1,4 +1,4 @@
-//! Maputo on the shared HCSG runtime ([`lod::hcsg::shared`]): furniture cells
+//! Maputo on the shared HCSG runtime ([`lod::hcsg`]): furniture cells
 //! generate on the worker from the ground's developments and present as
 //! [`HcsgNode`] hosts.
 //!
@@ -16,9 +16,7 @@ use building_components::{FurnitureNode, FurnitureWireframePlugin};
 use furniture_assemblies::FurnitureAssembliesPlugin;
 use furniture_shaders::FurnitureShadersPlugin;
 use lod::gen::{Id, LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus, OriginalId};
-use lod::hcsg::shared::{
-	self, GenerationContext, HcsgClass, PresentationPlugin, ViewerHcsgBounds,
-};
+use lod::hcsg::{self, GenerationContext, HcsgClass, PresentationPlugin, ViewerHcsgBounds};
 use lod::lod_ref::LodRef;
 use lod::SceneChunk;
 
@@ -35,7 +33,7 @@ pub struct DevelopmentSlots<U> {
 	_ground: PhantomData<fn() -> U>,
 }
 
-impl<U: FurnitureSlots> shared::GenerationScheme for DevelopmentSlots<U> {
+impl<U: FurnitureSlots> hcsg::GenerationScheme for DevelopmentSlots<U> {
 	lod::hcsg_index_scale!(CELL_SCALE);
 
 	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
@@ -76,7 +74,7 @@ impl<U: FurnitureSlots> Furnished<U> {
 	}
 }
 
-impl<U: FurnitureSlots> shared::GenerationScheme for Furnished<U> {
+impl<U: FurnitureSlots> hcsg::GenerationScheme for Furnished<U> {
 	lod::hcsg_index_scale!(CELL_SCALE);
 
 	/// The cells overlapping `region` that hold a slot.
@@ -196,9 +194,9 @@ mod tests {
 	use bevy::state::app::StatesPlugin;
 	use durham::Durham;
 	use lod::gen::Version;
-	use lod::hcsg::shared::{HcsgDemand, HcsgNode, HcsgRestartRequest, HcsgValue};
-	use lod::LodViewer;
+	use lod::hcsg::{HcsgDemand, HcsgNode, HcsgRestartRequest, HcsgValue};
 	use lod::lod_ref::LodNodePose;
+	use lod::LodViewer;
 	use richmond::{
 		AuthoredDevelopment, AuthoredDevelopments, Built, DevelopmentConfig, DevelopmentKind,
 		DevelopmentSites, Richmond,
@@ -246,7 +244,7 @@ mod tests {
 			.init_asset::<bevy::world_serialization::WorldAsset>()
 			.init_resource::<UrbanizationSelection>()
 			.add_plugins((
-				shared::HcsgBoundsPlugin::<FurnitureNeighborhood>::default(),
+				hcsg::HcsgBoundsPlugin::<FurnitureNeighborhood>::default(),
 				richmond::BuiltPresentationPlugin::<FurnitureNeighborhood, Ground>::default(),
 				MaputoPresentationPlugin::<FurnitureNeighborhood, Urban>::default(),
 			));
@@ -297,7 +295,7 @@ mod tests {
 			FurnitureCellExtent::from_cell_index(ix, iz).center(),
 			FURNITURE_PRESENT_RADIUS,
 		);
-		let storage = app.world().resource::<shared::HcsgStorage>();
+		let storage = app.world().resource::<hcsg::HcsgStorage>();
 		let built = storage
 			.try_entry::<Built<Ground>>(authored(0.0).id())
 			.map_err(|busy| anyhow::anyhow!("HcsgStorage busy: {busy:?}"))?

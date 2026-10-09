@@ -5,7 +5,7 @@ use bevy::math::{Vec2, Vec3};
 use comproc::guillotine::{Bounds2, Guillotine, GuillotineCuts};
 use comproc::noise::config::NoiseConfig;
 use lod::gen::{Id, OriginalId};
-use lod::hcsg::shared::{self, GenerationContext};
+use lod::hcsg::{self, GenerationContext};
 use noise::Perlin;
 use procedural_common::Bounds2 as ProcBounds2;
 use terrain_stamps::StampModulation;
@@ -178,7 +178,7 @@ pub trait LeafAabbs: Sized {
 	/// controllers in `region`. Only the controller level materializes.
 	fn leaf_ids_in(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId>
 	where
-		Self: shared::GenerationScheme,
+		Self: hcsg::GenerationScheme,
 	{
 		let mut ids: Vec<OriginalId> = cx
 			.get_or_generate_in::<Self>(region)

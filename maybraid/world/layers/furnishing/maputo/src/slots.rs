@@ -2,7 +2,7 @@
 
 use building_components::FurnitureNode;
 use furniture_usage_areas::expand_usages;
-use lod::hcsg::shared;
+use lod::hcsg;
 use richmond::{Built, BuiltDevelopment, DevelopmentHosts, RichmondGround};
 use urbanization_layer_model::Urbanization;
 
@@ -14,7 +14,7 @@ use crate::cell::world_slot;
 /// not grow a furniture method for this.
 pub trait FurnitureSlots: Send + Sync + 'static {
 	/// The shared value one development's slots come from.
-	type Development: shared::GenerationScheme;
+	type Development: hcsg::GenerationScheme;
 
 	/// `development`'s world-space High slots.
 	fn development_slots(development: &Self::Development) -> Vec<FurnitureNode>;

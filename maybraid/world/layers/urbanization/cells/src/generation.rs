@@ -2,7 +2,7 @@
 
 use bevy::math::bounding::Aabb3d;
 use lod::gen::{Id, OriginalId};
-use lod::hcsg::shared::{self, GenerationContext};
+use lod::hcsg::{self, GenerationContext};
 
 use crate::storage::UrbanizationSelection;
 use crate::{select_cell, select_cell_as, SelectedUrbanization, UrbanizationExtent};
@@ -16,7 +16,7 @@ pub const DEVELOPMENT_PRESENT_RADIUS_M: f32 = 1000.0;
 /// Producer channel for urbanization selection: the generate ring around the viewer.
 pub struct UrbanizationWindow;
 
-impl shared::GenerationScheme for SelectedUrbanization {
+impl hcsg::GenerationScheme for SelectedUrbanization {
 	lod::hcsg_index_scale!(crate::storage::SELECTION_INDEX_SCALE);
 
 	fn original_ids_for(_cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
@@ -51,7 +51,7 @@ impl SelectedUrbanization {
 mod tests {
 	use super::*;
 	use anyhow::Result;
-	use lod::hcsg::shared::GenerationContext;
+	use lod::hcsg::GenerationContext;
 	use lod::hcsg::{universal_bounds, HcsgStorage};
 	use procedural_common::NoiseParams;
 

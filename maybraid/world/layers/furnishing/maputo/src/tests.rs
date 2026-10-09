@@ -9,7 +9,7 @@ use buildings::{Confines, Fit};
 use durham::Durham;
 use furniture_usage_areas::expand_usages;
 use lod::gen::Id;
-use lod::hcsg::shared::GenerationContext;
+use lod::hcsg::GenerationContext;
 use lod::hcsg::HcsgStorage;
 use procedural_common::NoiseParams;
 use richmond::{Built, BuiltDevelopment, DevelopmentHosts};

@@ -1,4 +1,4 @@
-//! Barking on the shared HCSG runtime ([`lod::hcsg::shared`]): each occupied
+//! Barking on the shared HCSG runtime ([`lod::hcsg`]): each occupied
 //! mob cell places its group on the worker and presents its mobs in a
 //! [`PlacedMobCell`] host's scene.
 //!
@@ -16,9 +16,7 @@ use bevy::math::DVec3;
 use bevy::prelude::*;
 use chico::{ForestGround, GroundSurface};
 use lod::gen::{Id, LodScene, LodSceneLevel, LodSceneStatus, OriginalId};
-use lod::hcsg::shared::{
-	self, GenerationContext, HcsgClass, PresentationPlugin, ViewerHcsgBounds,
-};
+use lod::hcsg::{self, GenerationContext, HcsgClass, PresentationPlugin, ViewerHcsgBounds};
 use lod::lod_ref::LodRef;
 use mob_intelligence::{MemberOf, Mob};
 use richmond::{column_bounds, Built, DevelopmentHosts, Richmond, RichmondGround};
@@ -125,7 +123,7 @@ pub struct PlacedMobCell<G> {
 	_ground: PhantomData<fn() -> G>,
 }
 
-impl<G: MobGround> shared::GenerationScheme for PlacedMobCell<G> {
+impl<G: MobGround> hcsg::GenerationScheme for PlacedMobCell<G> {
 	lod::hcsg_index_scale!(MOB_CELL_SCALE);
 
 	fn original_ids_for(_cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
@@ -285,9 +283,9 @@ mod tests {
 		TerrainMeshLodBand, TerrainStampConfigs, WaterMeshAssets, WaterPresentationPlugin,
 		WatershedConfigs,
 	};
-	use lod::hcsg::shared::{HcsgDemand, HcsgNode, HcsgRestartRequest};
-	use lod::LodViewer;
+	use lod::hcsg::{HcsgDemand, HcsgNode, HcsgRestartRequest};
 	use lod::lod_ref::LodNodePose;
+	use lod::LodViewer;
 	use mob_scenes::{MobKind, MobScene};
 	use richmond::BuiltPresentationPlugin;
 	use richmond::{
@@ -355,7 +353,7 @@ mod tests {
 			.init_resource::<chico::ForestSelection>()
 			.insert_resource(HcsgRestartRequest::queued())
 			.add_plugins((
-				shared::HcsgBoundsPlugin::<MobNeighborhood>::default(),
+				hcsg::HcsgBoundsPlugin::<MobNeighborhood>::default(),
 				WaterPresentationPlugin::<DurhamWindow>::default(),
 				BuiltPresentationPlugin::<MobNeighborhood, Ground>::default(),
 				ChicoPresentationPlugin::<MobNeighborhood, Urban>::default(),
@@ -406,7 +404,7 @@ mod tests {
 	}
 
 	fn surface(app: &App) -> GroundSurface<Urban> {
-		let storage = app.world().resource::<shared::HcsgStorage>().clone();
+		let storage = app.world().resource::<hcsg::HcsgStorage>().clone();
 		let mut cx = GenerationContext::new(&storage);
 		GroundSurface::<Urban>::generate(
 			&mut cx,
@@ -445,7 +443,7 @@ mod tests {
 		let mut app = app(UrbanizationKind::Frontier);
 		settle(&mut app)?;
 
-		let storage = app.world().resource::<shared::HcsgStorage>().clone();
+		let storage = app.world().resource::<hcsg::HcsgStorage>().clone();
 		let mut cx = GenerationContext::new(&storage);
 		let hosts =
 			Urban::plant_hosts(&mut cx, column_bounds(Aabb3d::new(Vec3::ZERO, Vec3::splat(400.0))));

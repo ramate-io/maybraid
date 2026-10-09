@@ -51,10 +51,7 @@ impl HcsgStorage {
 	/// Worker sweep: each stored type is kept in the union of `regions_by_type`
 	/// for that type, expanded by the type's retention margin. A type no live
 	/// subscription reaches is cleared, except `Id::Universal` entries.
-	pub(in crate::hcsg::shared) fn retain_reached(
-		&self,
-		regions_by_type: &HashMap<TypeId, Vec<Aabb3d>>,
-	) {
+	pub(in crate::hcsg) fn retain_reached(&self, regions_by_type: &HashMap<TypeId, Vec<Aabb3d>>) {
 		if regions_by_type.is_empty() {
 			self.clear_evictions();
 		}
@@ -81,7 +78,7 @@ impl HcsgStorage {
 	}
 
 	/// True if this key was swept; removes it so the set cannot grow forever.
-	pub(in crate::hcsg::shared) fn take_evicted(&self, type_id: TypeId, id: Id) -> bool {
+	pub(in crate::hcsg) fn take_evicted(&self, type_id: TypeId, id: Id) -> bool {
 		#[cfg(debug_assertions)]
 		{
 			lock_mutex(&self.0.evicted).remove(&(type_id, id))
@@ -93,7 +90,7 @@ impl HcsgStorage {
 		}
 	}
 
-	pub(in crate::hcsg::shared) fn record_rebuild(&self, nested: bool) {
+	pub(in crate::hcsg) fn record_rebuild(&self, nested: bool) {
 		if nested {
 			self.0.nested_rebuilds.fetch_add(1, Ordering::Relaxed);
 		} else {

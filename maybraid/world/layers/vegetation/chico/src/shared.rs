@@ -1,4 +1,4 @@
-//! Chico on the shared HCSG runtime ([`lod::hcsg::shared`]): forests and
+//! Chico on the shared HCSG runtime ([`lod::hcsg`]): forests and
 //! groves select on the worker, and each grove grows there on the ground's
 //! surface cells into a [`GrownGrove`] presented as an [`HcsgNode`] host.
 //! Beyond the groves, [`BumpedOut`] canopy proxies displace the surface.
@@ -14,11 +14,10 @@ use bevy::math::DVec3;
 use bevy::prelude::*;
 use durham::TerrainMeshBuilder;
 use lod::gen::{Id, LodScene, LodSceneLevel, LodSceneStatus, OriginalId};
-use lod::hcsg::shared::{
-	self, register_session_seed, GenerationContext, HcsgClass, PresentationPlugin,
-	ViewerHcsgBounds,
-};
 use lod::hcsg::universal_bounds;
+use lod::hcsg::{
+	self, register_session_seed, GenerationContext, HcsgClass, PresentationPlugin, ViewerHcsgBounds,
+};
 use lod::lod_ref::LodRef;
 use render_item::mesh::{IdentifiedMesh, MeshBuilder};
 use render_item::NormalizeChunk;
@@ -43,7 +42,7 @@ pub use bump_outs::{BumpOutPresentationPlugin, BumpOutRing, BumpedOut, CanopyPro
 
 /// The ground forests grow on: the cells that make up its whole surface.
 pub trait ForestGround: Send + Sync + 'static {
-	type Surface: shared::GenerationScheme;
+	type Surface: hcsg::GenerationScheme;
 	type Mesh: MeshBuilder + IdentifiedMesh + NormalizeChunk + Clone + Send + Sync + 'static;
 
 	/// The cell's footprint.
@@ -74,7 +73,7 @@ impl<T: RichmondGround> ForestGround for Urbanization<Richmond<T>> {
 	}
 }
 
-impl shared::GenerationScheme for ChicoForest {
+impl hcsg::GenerationScheme for ChicoForest {
 	lod::hcsg_index_scale!(FOREST_SCALE);
 
 	fn original_ids_for(_cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
@@ -117,7 +116,7 @@ fn forest_with_neighbors(
 	Some((selected, neighbors))
 }
 
-impl shared::GenerationScheme for ChicoGrove {
+impl hcsg::GenerationScheme for ChicoGrove {
 	lod::hcsg_index_scale!(GROVE_SCALE);
 
 	/// One grove per tile and layer that the tile's forest or a neighbor
@@ -221,7 +220,7 @@ pub struct GrownGrove<G> {
 	_ground: PhantomData<fn() -> G>,
 }
 
-impl<G: ForestGround> shared::GenerationScheme for GrownGrove<G> {
+impl<G: ForestGround> hcsg::GenerationScheme for GrownGrove<G> {
 	lod::hcsg_index_scale!(GROWN_SCALE);
 
 	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
@@ -312,16 +311,13 @@ pub struct ChicoRoots<'w> {
 
 impl ChicoRoots<'_> {
 	/// Seeds Chico's forest selection root over ground `G`.
-	pub fn seed<G: ForestGround>(&self, storage: &shared::HcsgStorage) {
+	pub fn seed<G: ForestGround>(&self, storage: &hcsg::HcsgStorage) {
 		storage.seed(*self.selection, universal_bounds());
 	}
 }
 
 /// Seeds [`ChicoRoots`] during an HCSG session restart.
-pub fn seed_chico_hcsg_roots<G: ForestGround>(
-	roots: ChicoRoots,
-	storage: Res<shared::HcsgStorage>,
-) {
+pub fn seed_chico_hcsg_roots<G: ForestGround>(roots: ChicoRoots, storage: Res<hcsg::HcsgStorage>) {
 	roots.seed::<G>(storage.as_ref());
 }
 
@@ -358,9 +354,9 @@ mod tests {
 		WatershedConfigs,
 	};
 	use lod::gen::Version;
-	use lod::hcsg::shared::{HcsgDemand, HcsgNode, HcsgRestartRequest};
-	use lod::LodViewer;
+	use lod::hcsg::{HcsgDemand, HcsgNode, HcsgRestartRequest};
 	use lod::lod_ref::LodNodePose;
+	use lod::LodViewer;
 	use richmond::BuiltPresentationPlugin;
 	use richmond::{AuthoredDevelopments, DevelopmentConfig, DevelopmentSites};
 	use terrain_layer_model::OnTerrain;
@@ -417,8 +413,8 @@ mod tests {
 			.init_resource::<UrbanizationSelection>()
 			.insert_resource(HcsgRestartRequest::queued())
 			.add_plugins((
-				shared::HcsgBoundsPlugin::<GroveNeighborhood>::default(),
-				shared::HcsgBoundsPlugin::<BumpOutRing<CanopyBumpOut>>::default(),
+				hcsg::HcsgBoundsPlugin::<GroveNeighborhood>::default(),
+				hcsg::HcsgBoundsPlugin::<BumpOutRing<CanopyBumpOut>>::default(),
 				WaterPresentationPlugin::<DurhamWindow>::default(),
 				BuiltPresentationPlugin::<GroveNeighborhood, Ground>::default(),
 			))
@@ -542,7 +538,7 @@ mod tests {
 		let mut app = app(Vec3::ZERO);
 		settle(&mut app)?;
 
-		let storage = app.world().resource::<shared::HcsgStorage>().clone();
+		let storage = app.world().resource::<hcsg::HcsgStorage>().clone();
 		let mut checked = 0;
 		for node in grown(&mut app) {
 			let mut cx = GenerationContext::new(&storage);
@@ -640,7 +636,7 @@ mod tests {
 
 		let nodes = bumped_out(&mut app);
 		assert_eq!(nodes.len(), 4, "one bump-out per fine cell on the patch");
-		let storage = app.world().resource::<shared::HcsgStorage>().clone();
+		let storage = app.world().resource::<hcsg::HcsgStorage>().clone();
 		for node in &nodes {
 			let mut cx = GenerationContext::new(&storage);
 			let cell = node.value.cell;

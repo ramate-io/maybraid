@@ -9,7 +9,7 @@ use bevy::ecs::system::SystemParamItem;
 use bevy::prelude::*;
 use durham::Durham;
 use layer_stack::{ActiveGenerationMode, GenerationMode};
-use lod::hcsg::shared::{Gated, HcsgGate};
+use lod::hcsg::{Gated, HcsgGate};
 use terrain_layer_model::TerrainStreaming;
 use world_player::{ModePlayerPolicies, ModePlayerPolicy};
 

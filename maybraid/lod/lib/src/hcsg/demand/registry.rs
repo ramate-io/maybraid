@@ -10,11 +10,11 @@ use bevy::math::Vec3;
 
 use crate::gen::Id;
 
-use super::schedule::min_pass;
-use super::state::{discover, generate, lock_mutex, Subscription, SubscriptionId};
 use super::super::bounds::HcsgClass;
 use super::super::context::GenerationScheme;
 use super::super::storage::Busy;
+use super::schedule::min_pass;
+use super::state::{discover, generate, lock_mutex, Subscription, SubscriptionId};
 use super::HcsgDemand;
 
 /// One read of a subscription's published ids.

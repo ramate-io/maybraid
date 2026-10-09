@@ -8,7 +8,7 @@ use bevy::math::{Vec2, Vec3Swizzles};
 use building_components::{BuildingComponents, LabelNode};
 use chico::ForestGround;
 use lod::gen::{Id, OriginalId};
-use lod::hcsg::shared::{self, GenerationContext};
+use lod::hcsg::{self, GenerationContext};
 use lod::LodSceneLevel;
 use richmond::{
 	Built, BuiltDevelopment, DevelopmentHost, DevelopmentHosts, DiscoverablePlace, Richmond,
@@ -95,7 +95,7 @@ impl<W> DevelopmentPlaces<W> {
 	}
 }
 
-impl<W: LanguageGround> shared::GenerationScheme for DevelopmentPlaces<W> {
+impl<W: LanguageGround> hcsg::GenerationScheme for DevelopmentPlaces<W> {
 	lod::hcsg_index_scale!(crate::shared::PLACES_INDEX_SCALE);
 
 	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {

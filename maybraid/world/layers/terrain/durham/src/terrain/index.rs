@@ -14,7 +14,7 @@ use bevy::ecs::system::SystemParam;
 use bevy::math::DVec3;
 use bevy::prelude::*;
 use lod::gen::Id;
-use lod::hcsg::shared;
+use lod::hcsg;
 use lod::hcsg::HcsgStorage;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -55,7 +55,7 @@ impl DurhamRoots<'_> {
 	}
 
 	/// Seeds Durham's session roots in the shared storage.
-	pub fn seed(&self, storage: &shared::HcsgStorage) {
+	pub fn seed(&self, storage: &hcsg::HcsgStorage) {
 		storage.seed(self.layout.clone(), universal_bounds());
 		storage.seed(self.stamps.clone(), universal_bounds());
 		storage.seed(self.watersheds.clone(), universal_bounds());

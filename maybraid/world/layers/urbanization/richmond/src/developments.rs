@@ -6,12 +6,12 @@
 
 pub mod site;
 
-use std::marker::PhantomData;
 use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec2;
 use lod::gen::{Id, OriginalId};
-use lod::hcsg::shared::{self, GenerationContext};
+use lod::hcsg::{self, GenerationContext};
 use procedural_common::Bounds2;
+use std::marker::PhantomData;
 use urbanization_developments::{
 	Development, LesHalles, OldCityMarket, PadParams, PadPlan, RingFort, ShepherdsCommune,
 	ShepherdsVillage, SingleHighrise, SiteGround, SkybridgeBazaar, SuburbanHomes, TempleComplex,
@@ -110,7 +110,7 @@ pub enum RichmondDevelopment<G> {
 	OldCityMarket(DevelopmentCell<OldCityMarket, G>),
 }
 
-impl<G: RichmondGround> shared::GenerationScheme for RichmondDevelopment<G> {
+impl<G: RichmondGround> hcsg::GenerationScheme for RichmondDevelopment<G> {
 	lod::hcsg_index_scale!(crate::storage::COLUMN_INDEX_SCALE);
 
 	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {

@@ -1,7 +1,7 @@
 //! Richmond's nodes in [`HcsgStorage`].
 //!
 //! Generation reads stored values through [`GenerationContext`] on each
-//! scheme's [`lod::hcsg::shared::GenerationScheme::build_with_id`].
+//! scheme's [`lod::hcsg::GenerationScheme::build_with_id`].
 
 use bevy::math::bounding::Aabb3d;
 use bevy::math::{DVec3, Vec3};

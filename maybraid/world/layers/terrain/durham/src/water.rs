@@ -32,7 +32,7 @@ use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value, Scene};
 use lod::gen::{Id, LodScene, LodSceneLevel, LodSceneStatus, OriginalId};
-use lod::hcsg::shared::{self, GenerationContext};
+use lod::hcsg::{self, GenerationContext};
 use lod::lod_ref::LodRef;
 use render_item::mesh::handle::Cached;
 use sdf::Sdf;
@@ -178,7 +178,7 @@ fn fill_has_wet_volume(fill: &WaterFill, terrain: &TerrainSdf) -> bool {
 
 /// Same origin ids as [`Terrain`]; terrain's whole stack stays behind that one bound.
 
-impl shared::GenerationScheme for Water {
+impl hcsg::GenerationScheme for Water {
 	lod::hcsg_index_scale!(crate::terrain::index::DURHAM_INDEX_SCALE);
 
 	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {

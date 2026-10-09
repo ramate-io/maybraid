@@ -17,7 +17,9 @@ pub(crate) enum WorkerWait {
 	Shutdown,
 }
 
-pub(super) fn retention_plan(state: &DemandState) -> HashMap<TypeId, Vec<bevy::math::bounding::Aabb3d>> {
+pub(super) fn retention_plan(
+	state: &DemandState,
+) -> HashMap<TypeId, Vec<bevy::math::bounding::Aabb3d>> {
 	let mut regions_by_type: HashMap<TypeId, Vec<bevy::math::bounding::Aabb3d>> = HashMap::new();
 	for subscription in state.subscriptions.values() {
 		for type_id in lock_mutex(&subscription.reach).iter() {
@@ -33,7 +35,7 @@ pub(super) fn retention_plan(state: &DemandState) -> HashMap<TypeId, Vec<bevy::m
 impl HcsgDemand {
 	/// The next sweep or unfinished subscription. Blocks until there is one.
 	/// Sweep is taken first whenever the live set has changed.
-	pub(in crate::hcsg::shared) fn next_work(&self) -> WorkerWait {
+	pub(in crate::hcsg) fn next_work(&self) -> WorkerWait {
 		let mut state = self.lock();
 		loop {
 			if state.shutdown {

@@ -596,7 +596,7 @@ pub(crate) fn claim_nearby_stashes(
 	>,
 	parts: Query<(Entity, &furniture_assemblies::FurnitureKitPart, &GlobalTransform)>,
 	child_of: Query<&ChildOf>,
-	hosts: Query<&lod::hcsg::shared::HcsgNode<crate::WorldFurnished>>,
+	hosts: Query<&lod::hcsg::HcsgNode<crate::WorldFurnished>>,
 ) {
 	if !intents.read().any(|intent| matches!(intent, CharacterIntent::StartInteraction)) {
 		return;

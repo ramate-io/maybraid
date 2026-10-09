@@ -1,9 +1,7 @@
 //! HCSG session restart: advance the epoch, clear every derived store, reseed
 //! installed roots.
 
-use bevy::prelude::{
-	App, IntoScheduleConfigs, Plugin, Res, ResMut, Resource, SystemSet, Update,
-};
+use bevy::prelude::{App, IntoScheduleConfigs, Plugin, Res, ResMut, Resource, SystemSet, Update};
 
 use super::demand::HcsgDemand;
 use super::runtime::ensure_runtime;
@@ -87,10 +85,7 @@ pub(crate) fn ensure_session(app: &mut App) {
 	app.init_resource::<HcsgRestartRequest>()
 		.init_resource::<HcsgSessionReseeding>()
 		.insert_resource(HcsgSessionInstalled)
-		.configure_sets(
-			Update,
-			(HcsgSessionBegin, HcsgSessionSeed, HcsgSessionRestarted).chain(),
-		)
+		.configure_sets(Update, (HcsgSessionBegin, HcsgSessionSeed, HcsgSessionRestarted).chain())
 		.add_systems(Update, begin_hcsg_session_restart.in_set(HcsgSessionBegin))
 		.add_systems(Update, end_hcsg_session_restart.in_set(HcsgSessionRestarted));
 }
@@ -124,7 +119,7 @@ mod tests {
 
 	use super::*;
 	use crate::gen::{Id, OriginalId};
-	use crate::hcsg::shared::{GenerationContext, GenerationScheme, HcsgWorker};
+	use crate::hcsg::{GenerationContext, GenerationScheme, HcsgWorker};
 
 	#[derive(Clone, Copy)]
 	struct SessionRoot {
@@ -137,26 +132,17 @@ mod tests {
 	}
 
 	impl GenerationScheme for SessionRoot {
-		fn original_ids_for(
-			_: &mut GenerationContext,
-			_: Aabb3d,
-		) -> Vec<OriginalId> {
+		fn original_ids_for(_: &mut GenerationContext, _: Aabb3d) -> Vec<OriginalId> {
 			vec![OriginalId::universal()]
 		}
 
-		fn build_with_id(
-			_: &mut GenerationContext,
-			_: Id,
-		) -> Option<(Self, Aabb3d)> {
+		fn build_with_id(_: &mut GenerationContext, _: Id) -> Option<(Self, Aabb3d)> {
 			None
 		}
 	}
 
 	impl GenerationScheme for OrphanDerived {
-		fn original_ids_for(
-			_: &mut GenerationContext,
-			_region: Aabb3d,
-		) -> Vec<OriginalId> {
+		fn original_ids_for(_: &mut GenerationContext, _region: Aabb3d) -> Vec<OriginalId> {
 			vec![OriginalId::universal()]
 		}
 
@@ -199,10 +185,7 @@ mod tests {
 		assert!(storage.get::<OrphanDerived>(Id::Universal).is_none());
 		assert!(storage.get::<SessionRoot>(Id::Universal).is_none());
 		seed_roots(&storage, 2);
-		assert_eq!(
-			storage.get::<SessionRoot>(Id::Universal).map(|r| r.seed),
-			Some(2)
-		);
+		assert_eq!(storage.get::<SessionRoot>(Id::Universal).map(|r| r.seed), Some(2));
 	}
 
 	#[test]
@@ -215,20 +198,13 @@ mod tests {
 		seed_orphan(&storage, 3);
 		app.world_mut().insert_resource(storage);
 		let demand = app.world().resource::<HcsgDemand>().clone();
-		let _worker = HcsgWorker::spawn(
-			app.world().resource::<HcsgStorage>().clone(),
-			demand.clone(),
-		)?;
-		app.world_mut()
-			.resource_mut::<HcsgRestartRequest>()
-			.request();
+		let _worker =
+			HcsgWorker::spawn(app.world().resource::<HcsgStorage>().clone(), demand.clone())?;
+		app.world_mut().resource_mut::<HcsgRestartRequest>().request();
 		app.update();
 		let storage = app.world().resource::<HcsgStorage>();
 		assert!(storage.get::<OrphanDerived>(Id::Universal).is_none());
-		assert_eq!(
-			storage.get::<SessionRoot>(Id::Universal).map(|r| r.seed),
-			Some(9)
-		);
+		assert_eq!(storage.get::<SessionRoot>(Id::Universal).map(|r| r.seed), Some(9));
 		Ok(())
 	}
 
@@ -247,9 +223,7 @@ mod tests {
 		assert_eq!(first.seed, 1);
 		app.world_mut().insert_resource(storage);
 		app.world_mut().insert_resource(SessionRootHolder { seed: 2 });
-		app.world_mut()
-			.resource_mut::<HcsgRestartRequest>()
-			.request();
+		app.world_mut().resource_mut::<HcsgRestartRequest>().request();
 		app.update();
 		let storage = app.world().resource::<HcsgStorage>();
 		assert_eq!(storage.get::<SessionRoot>(Id::Universal).map(|r| r.seed), Some(2));
@@ -280,13 +254,8 @@ mod tests {
 		app.init_resource::<HcsgSystemsObservedDuringReseed>();
 		register_session_seed(&mut app, seed_durham_like);
 		app.insert_resource(SessionRootHolder { seed: 1 });
-		app.add_systems(
-			Update,
-			mark_hcsg_systems_if_reseeding.in_set(crate::hcsg::shared::HcsgSystems),
-		);
-		app.world_mut()
-			.resource_mut::<HcsgRestartRequest>()
-			.request();
+		app.add_systems(Update, mark_hcsg_systems_if_reseeding.in_set(crate::hcsg::HcsgSystems));
+		app.world_mut().resource_mut::<HcsgRestartRequest>().request();
 		app.update();
 		anyhow::ensure!(
 			!app.world().resource::<HcsgSystemsObservedDuringReseed>().0,

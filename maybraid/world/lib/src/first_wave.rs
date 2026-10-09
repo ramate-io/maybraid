@@ -1,7 +1,7 @@
 //! Shared first-load progress for unveil and the spawn picker.
 
 use bevy::prelude::*;
-use lod::hcsg::shared::{HcsgClass, HcsgDemand, Outstanding};
+use lod::hcsg::{HcsgClass, HcsgDemand, Outstanding};
 use lod::LodJobCounter;
 
 /// Remaining Near HCSG ids plus pending-root tickets that still count as
@@ -60,7 +60,7 @@ mod unit_x_tile {
 	use bevy::math::bounding::Aabb3d;
 	use bevy::math::Vec3;
 	use lod::gen::{Id, OriginalId};
-	use lod::hcsg::shared::{GenerationContext, GenerationScheme};
+	use lod::hcsg::{GenerationContext, GenerationScheme};
 
 	/// One original id per unit of region x. Shared by first-load tests.
 	pub struct UnitXTile;

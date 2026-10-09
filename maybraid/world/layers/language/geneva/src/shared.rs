@@ -1,4 +1,4 @@
-//! Geneva on the shared HCSG runtime ([`lod::hcsg::shared`]): large language
+//! Geneva on the shared HCSG runtime ([`lod::hcsg`]): large language
 //! tiles and their region names generate on the worker within channel `C`'s
 //! window, and the names of what stands near the viewer generate within a
 //! naming window Geneva derives from it. The frame only presents storage
@@ -20,11 +20,11 @@ use durham::terrain::{
 	RollingLowPassStampCell, ValleyHighPassStampCell, ValleyLowPassStampCell,
 };
 use lod::gen::{Id, OriginalId};
-use lod::hcsg::shared::{
+use lod::hcsg::universal_bounds;
+use lod::hcsg::{
 	self, register_session_seed, Busy, GenerationContext, GenerationPlugin, HcsgClass, HcsgRegions,
 	HcsgStorage, HcsgSystems, ViewerHcsgBounds,
 };
-use lod::hcsg::universal_bounds;
 use lod::LodViewer;
 use richmond::DEVELOPMENT_CELL_SIZE;
 
@@ -79,7 +79,7 @@ impl Default for LanguageConfig {
 	}
 }
 
-impl shared::GenerationScheme for LargeTile {
+impl hcsg::GenerationScheme for LargeTile {
 	lod::hcsg_index_scale!(TILE_INDEX_SCALE);
 
 	fn original_ids_for(_cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
@@ -296,7 +296,7 @@ mod tests {
 		fine_patch_cell_layout, Durham, DurhamWindow, TerrainConfig, TerrainMeshAssets,
 		TerrainMeshLodBand, TerrainStampConfigs, WaterMeshAssets, WatershedConfigs,
 	};
-	use lod::hcsg::shared::{Gated, HcsgBoundsPlugin, HcsgDemand, HcsgGate, HcsgRestartRequest};
+	use lod::hcsg::{Gated, HcsgBoundsPlugin, HcsgDemand, HcsgGate, HcsgRestartRequest};
 	use lod::lod_ref::LodNodePose;
 	use richmond::{
 		AuthoredDevelopment, AuthoredDevelopments, DevelopmentConfig, DevelopmentKind,

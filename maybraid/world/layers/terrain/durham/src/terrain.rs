@@ -26,7 +26,7 @@ use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value, Scene};
 use lod::gen::{Id, LodScene, LodSceneLevel, LodSceneStatus, OriginalId};
-use lod::hcsg::shared::{self, GenerationContext};
+use lod::hcsg::{self, GenerationContext};
 use lod::lod_ref::LodRef;
 use render_item::mesh::handle::Cached;
 use render_item::sdf::cpu_shot::{CpuShotBuilder, WallFaces};
@@ -42,8 +42,8 @@ pub use cell::{
 };
 pub use chunk::cascade::CascadeChunk;
 pub use collider::{
-	terrain_collider_covers_xz, TerrainColliderMeshSource,
-	TerrainColliderSystems, TerrainFrictionConfig, TerrainTrimeshCollider, TERRAIN_FRICTION,
+	terrain_collider_covers_xz, TerrainColliderMeshSource, TerrainColliderSystems,
+	TerrainFrictionConfig, TerrainTrimeshCollider, TERRAIN_FRICTION,
 };
 pub use config::TerrainConfig;
 pub use geography::{
@@ -55,11 +55,9 @@ pub use host::{
 	TerrainRetarget, WorldBaseTerrain, WORLD_FINE_HALF_EXTENT_CELLS, WORLD_OUTER_2X_ROWS,
 	WORLD_OUTER_4X_ROWS,
 };
-pub use index::{
-	DurhamRoots, DURHAM_INDEX_SCALE, TerrainHeightSnapshot, WaterSurfaceSnapshot,
-};
 #[cfg(test)]
 pub use index::TerrainStorage;
+pub use index::{DurhamRoots, TerrainHeightSnapshot, WaterSurfaceSnapshot, DURHAM_INDEX_SCALE};
 pub use mesh::{TerrainMeshAssets, TerrainMeshLodBand};
 pub use plugin::{register_terrain_plugin, TerrainResourcesPlugin};
 pub use render::TerrainRenderItem;
@@ -287,7 +285,7 @@ struct JerseyStamps {
 }
 
 impl JerseyStamps {
-	fn pull_in<T: StampLeaf + shared::GenerationScheme>(
+	fn pull_in<T: StampLeaf + hcsg::GenerationScheme>(
 		&mut self,
 		cx: &mut GenerationContext,
 		bounds: Aabb3d,
@@ -319,7 +317,7 @@ impl PreWatershedTerrain {
 /// Origin-grid root: tiles [`TerrainCellLayout`] directly. Each stamp band is
 /// one leaf bound; its controller grid and configs are that band's concern.
 
-impl shared::GenerationScheme for PreWatershedTerrain {
+impl hcsg::GenerationScheme for PreWatershedTerrain {
 	lod::hcsg_index_scale!(crate::terrain::index::DURHAM_INDEX_SCALE);
 
 	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
@@ -354,7 +352,7 @@ impl shared::GenerationScheme for PreWatershedTerrain {
 /// hydro complex, and stage cells are bound only as the leaves this scheme
 /// reads; their pocket / pre-pocket / config stacks resolve at the index.
 
-impl shared::GenerationScheme for Terrain {
+impl hcsg::GenerationScheme for Terrain {
 	lod::hcsg_index_scale!(crate::terrain::index::DURHAM_INDEX_SCALE);
 
 	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {

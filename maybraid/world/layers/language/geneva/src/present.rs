@@ -5,7 +5,7 @@ use std::collections::HashSet;
 use bevy::math::bounding::Aabb3d;
 use bevy::math::{Rect, Vec2};
 use bevy::prelude::{Local, Res, ResMut, Resource};
-use lod::hcsg::shared::{Busy, HcsgStorage};
+use lod::hcsg::{Busy, HcsgStorage};
 
 use crate::key::NameKey;
 use crate::named::{NameEntry, NameSource, Named, Regions};

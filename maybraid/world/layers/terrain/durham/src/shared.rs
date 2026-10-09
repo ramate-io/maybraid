@@ -1,4 +1,4 @@
-//! Durham on the shared HCSG runtime ([`lod::hcsg::shared`]): terrain and
+//! Durham on the shared HCSG runtime ([`lod::hcsg`]): terrain and
 //! water generate on the worker and present as [`HcsgNode`] hosts.
 //!
 //! Start a session with [`lod::hcsg::request_hcsg_session_restart`].
@@ -10,7 +10,7 @@ use bevy::ecs::system::{SystemParam, SystemParamItem};
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use lod::gen::Id;
-use lod::hcsg::shared::{
+use lod::hcsg::{
 	register_session_seed, Busy, HcsgBounds, HcsgClass, HcsgStorage, PresentationPlugin,
 };
 use lod::LodViewer;
@@ -292,7 +292,7 @@ mod tests {
 
 	use bevy::scene::ScenePlugin;
 	use lod::gen::{Id, OriginalId, Version};
-	use lod::hcsg::shared::{HcsgBoundsPlugin, HcsgDemand, HcsgNode, HcsgRestartRequest};
+	use lod::hcsg::{HcsgBoundsPlugin, HcsgDemand, HcsgNode, HcsgRestartRequest};
 	use lod::lod_ref::LodNodePose;
 	use lod::LodViewer;
 
@@ -353,7 +353,7 @@ mod tests {
 		Ok(())
 	}
 
-	fn hosts<T: lod::hcsg::shared::HcsgValue>(app: &mut App) -> Vec<(Id, Version)> {
+	fn hosts<T: lod::hcsg::HcsgValue>(app: &mut App) -> Vec<(Id, Version)> {
 		let mut hosts: Vec<_> = app
 			.world_mut()
 			.query::<&HcsgNode<T>>()

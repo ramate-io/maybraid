@@ -467,7 +467,7 @@ Legacy per-layer presenters (Durham terrain and water, Richmond hosts, Chico, Ba
 
 ## Migration
 
-The public API is `lod::hcsg::shared`: `HcsgStorage`, `HcsgDemand`, `GenerationContext`, `GenerationScheme`, `HcsgNode<T>`, `HcsgBounds`, `generation`, `presentation`, and the bounds/presentation plugins.
+The public API is `lod::hcsg`: `HcsgStorage`, `HcsgDemand`, `GenerationContext`, `GenerationScheme`, `HcsgNode<T>`, `HcsgBounds`, `generation`, `presentation`, and the bounds/presentation plugins.
 
 0. **Shared storage, context, demand and worker** (done).
 1. **Generation and presentation systems** (done).

@@ -10,8 +10,8 @@ use durham::{
 	WatershedBandPass,
 };
 use lod::gen::Id;
-use lod::hcsg::shared::{GenerationContext, HcsgStorage};
 use lod::hcsg::universal_bounds;
+use lod::hcsg::{GenerationContext, HcsgStorage};
 use procedural_common::Bounds2;
 use richmond::{DiscoverablePlace, DiscoverablePlaceLabel, Richmond};
 use terrain_layer_model::OnTerrain;

@@ -6,7 +6,7 @@ use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec2;
 use durham::{Durham, Terrain};
 use lod::gen::OriginalId;
-use lod::hcsg::shared::{self, GenerationContext};
+use lod::hcsg::{self, GenerationContext};
 use procedural_common::Bounds2;
 use terrain_layer_model::OnTerrain;
 use terrain_watersheds::{WaterFill, WaterSurface};
@@ -21,7 +21,7 @@ use crate::padded::TerrainWithPads;
 /// Its cells are generated in [`HcsgStorage`] like any other node, so a
 /// development reads them as generation dependencies.
 pub trait RichmondGround: Send + Sync + 'static {
-	type Cell: GroundCell + PadComposable<Padded = TerrainWithPads> + shared::GenerationScheme;
+	type Cell: GroundCell + PadComposable<Padded = TerrainWithPads> + hcsg::GenerationScheme;
 }
 
 impl RichmondGround for OnTerrain<Durham> {

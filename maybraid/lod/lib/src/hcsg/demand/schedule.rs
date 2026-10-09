@@ -11,8 +11,8 @@ use bevy::math::Vec3;
 
 use crate::gen::Id;
 
-use super::state::{DemandState, Discover, Generate, lock_mutex};
 use super::state::SubscriptionId;
+use super::state::{lock_mutex, DemandState, Discover, Generate};
 use super::HcsgDemand;
 
 /// Ids the worker generates in one quantum before returning to the scheduler.
@@ -84,13 +84,13 @@ pub(super) fn pick_job(state: &mut DemandState) -> Option<Job> {
 }
 
 impl HcsgDemand {
-	pub(in crate::hcsg::shared) fn append(&self, id: SubscriptionId, published: Id) {
+	pub(in crate::hcsg) fn append(&self, id: SubscriptionId, published: Id) {
 		if let Some(subscription) = self.lock().subscriptions.get_mut(&id) {
 			subscription.published.push(published);
 		}
 	}
 
-	pub(in crate::hcsg::shared) fn finish_quantum(
+	pub(in crate::hcsg) fn finish_quantum(
 		&self,
 		id: SubscriptionId,
 		progress: QuantumProgress,

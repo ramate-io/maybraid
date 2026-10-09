@@ -96,8 +96,8 @@ impl UrbanizationStorage for HcsgStorage {
 mod tests {
 	use super::*;
 	use anyhow::Result;
-	use lod::hcsg::shared::GenerationContext;
 	use lod::hcsg::universal_bounds;
+	use lod::hcsg::GenerationContext;
 
 	fn seeded(selection: UrbanizationSelection) -> HcsgStorage {
 		let storage = HcsgStorage::default();

@@ -1,27 +1,56 @@
-//! Shared HCSG runtime ([#1005](https://github.com/ramate-io/maybraid/issues/1005),
-//! [#1007](https://github.com/ramate-io/maybraid/issues/1007)). See [`shared`] and
-//! `hcsg/README.md`.
+//! Thread-shared HCSG runtime ([#1005](https://github.com/ramate-io/maybraid/issues/1005),
+//! [#1007](https://github.com/ramate-io/maybraid/issues/1007)): generation runs on a
+//! worker, the frame only subscribes bounds and reads published values. The design
+//! is `hcsg/README.md`, next to this module.
+//!
+//! - [`HcsgStorage`]: a cloneable handle over one locked node store of `Arc<T>`
+//!   per type. Locks cover lookup and publication only.
+//! - [`GenerationContext`]: hands schemes owned `Arc` dependencies and generates
+//!   what is missing.
+//! - [`HcsgDemand`]: one subscription per bounds source, and the epoch that
+//!   sessions advance.
+//! - [`HcsgWorker`]: the thread that fills subscriptions.
+//! - [`HcsgRegions<C>`]: the boxes channel `C` wants values in, sent by
+//!   [`HcsgBounds`] producers.
+//! - [`GenerationPlugin`]: keeps `T` warm within `C`'s regions, fire and forget.
+//! - [`PresentationPlugin`]: keeps one [`HcsgNode<T>`] host per published value
+//!   within `C`'s regions.
+//! - [`HcsgNode<T>`]: forwards the LOD scene traits to `T`.
 
-pub mod shared;
+mod bounds;
+mod context;
+mod demand;
+mod generation;
+mod node;
+mod node_store;
+mod presentation;
+mod runtime;
+mod session;
+mod storage;
+mod worker;
 
-pub use shared::node_store::{NodeStore, StoredEntry, DEFAULT_BASE_SCALE};
-pub use shared::{
-	bounds::{
-		Gated, HcsgBounds, HcsgBoundsPlugin, HcsgClass, HcsgGate, HcsgRegions, LodViewers,
-		ViewerHcsgBounds, viewer_focus,
-	},
-	context::{GenerationContext, GenerationScheme},
-	demand::{HcsgDemand, Published, SubscriptionId},
-	generation::GenerationPlugin,
-	node::HcsgNode,
-	presentation::{PresentationPlugin, RetiredHost},
-	runtime::HcsgSystems,
-	session::{
-		request_hcsg_session_restart, HcsgRestartRequest, HcsgSessionPlugin, HcsgSessionSeed,
-	},
-	storage::{Busy, HcsgStorage, HcsgValue},
-	worker::HcsgWorker,
+#[cfg(test)]
+mod system_tests;
+#[cfg(test)]
+mod tests;
+
+pub use bounds::{
+	viewer_focus, Gated, HcsgBounds, HcsgBoundsPlugin, HcsgClass, HcsgGate, HcsgRegions,
+	LodViewers, ViewerHcsgBounds,
 };
+pub use context::{GenerationContext, GenerationScheme};
+pub use demand::{HcsgDemand, Outstanding, Published, SubscriptionId};
+pub use generation::GenerationPlugin;
+pub use node::HcsgNode;
+pub use node_store::StoredEntry;
+pub use presentation::{PresentationPlugin, RetiredHost};
+pub use runtime::HcsgSystems;
+pub use session::{
+	register_session_seed, request_hcsg_session_restart, HcsgRestartRequest, HcsgSessionPlugin,
+	HcsgSessionRestarted, HcsgSessionSeed,
+};
+pub use storage::{Busy, HcsgStorage, HcsgValue};
+pub use worker::HcsgWorker;
 
 use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec3;
@@ -45,16 +74,16 @@ macro_rules! hcsg_index_scale {
 #[macro_export]
 macro_rules! seeded_root {
 	($T:ty) => {
-		impl $crate::hcsg::shared::GenerationScheme for $T {
+		impl $crate::hcsg::GenerationScheme for $T {
 			fn original_ids_for(
-				_cx: &mut $crate::hcsg::shared::GenerationContext,
+				_cx: &mut $crate::hcsg::GenerationContext,
 				_region: bevy::math::bounding::Aabb3d,
 			) -> Vec<$crate::gen::OriginalId> {
 				vec![$crate::gen::OriginalId::universal()]
 			}
 
 			fn build_with_id(
-				_cx: &mut $crate::hcsg::shared::GenerationContext,
+				_cx: &mut $crate::hcsg::GenerationContext,
 				_id: $crate::gen::Id,
 			) -> Option<(Self, bevy::math::bounding::Aabb3d)> {
 				None

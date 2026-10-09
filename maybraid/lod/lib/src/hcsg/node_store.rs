@@ -79,20 +79,13 @@ impl<T> NodeStore<T> {
 		self.entries.get(&id).map(|entry| &entry.value)
 	}
 
+	#[cfg(any(test, feature = "test-support"))]
 	pub fn contains(&self, id: Id) -> bool {
 		self.entries.contains_key(&id)
 	}
 
 	pub fn len(&self) -> usize {
 		self.entries.len()
-	}
-
-	pub fn is_empty(&self) -> bool {
-		self.entries.is_empty()
-	}
-
-	pub fn iter(&self) -> impl Iterator<Item = (Id, &StoredEntry<T>)> {
-		self.entries.iter().map(|(id, entry)| (*id, entry))
 	}
 
 	/// Monotonic stamp bumped by every insert, removal, and clear.

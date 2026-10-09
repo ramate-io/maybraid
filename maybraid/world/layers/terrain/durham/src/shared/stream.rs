@@ -12,7 +12,7 @@ use std::sync::Arc;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use lod::gen::{Id, OriginalId};
-use lod::hcsg::shared::{
+use lod::hcsg::{
 	self, GenerationContext, HcsgClass, HcsgValue, PresentationPlugin, ViewerHcsgBounds,
 };
 use lod::lod_ref::LodRef;
@@ -66,7 +66,7 @@ impl<R, T> Streamed<R, T> {
 /// The playable world's three streams together.
 pub struct PlayableStreams;
 
-impl<R: TerrainStream, T: shared::GenerationScheme> shared::GenerationScheme for Streamed<R, T> {
+impl<R: TerrainStream, T: hcsg::GenerationScheme> hcsg::GenerationScheme for Streamed<R, T> {
 	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
 		let Some(layout) = cx.get_or_generate::<TerrainCellLayout>(Id::Universal) else {
 			return Vec::new();
@@ -134,7 +134,7 @@ impl<C, R, T> Plugin for StreamPresentationPlugin<C, R, T>
 where
 	C: Send + Sync + 'static,
 	R: TerrainStream,
-	T: shared::GenerationScheme + SemanticLodScene,
+	T: hcsg::GenerationScheme + SemanticLodScene,
 {
 	fn build(&self, app: &mut App) {
 		app.add_plugins(PresentationPlugin::<C, Streamed<R, T>>::default());

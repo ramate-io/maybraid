@@ -19,8 +19,8 @@ pub use outstanding::Outstanding;
 pub use registry::Published;
 pub use state::SubscriptionId;
 
-pub(crate) use schedule::{quantum_cost, Job, QuantumProgress, QUANTUM_IDS, QUANTUM_TIME};
 pub(crate) use retention::WorkerWait;
+pub(crate) use schedule::{quantum_cost, Job, QuantumProgress, QUANTUM_IDS, QUANTUM_TIME};
 
 /// One subscription per generation or presentation system, filled in
 /// weighted quanta by the [`super::HcsgWorker`].
@@ -70,7 +70,7 @@ impl HcsgDemand {
 		}
 	}
 
-	pub(in crate::hcsg::shared) fn shutdown(&self) {
+	pub(in crate::hcsg) fn shutdown(&self) {
 		self.lock().shutdown = true;
 		self.0.wake.notify_all();
 	}

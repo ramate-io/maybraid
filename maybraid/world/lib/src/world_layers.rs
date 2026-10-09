@@ -14,7 +14,7 @@ use durham::{
 };
 use geneva::{GenevaPlugin, LanguageNeighborhood};
 use layer_stack::{ActiveGenerationMode, GenerationModePlugin};
-use lod::hcsg::shared::{HcsgBoundsPlugin, request_hcsg_session_restart};
+use lod::hcsg::{request_hcsg_session_restart, HcsgBoundsPlugin};
 use maputo::{FurnitureNeighborhood, MaputoPresentationPlugin};
 use maybraid_game_mode_discover::{Discovery, InDiscovery};
 use richmond::{

@@ -1,4 +1,4 @@
-//! Richmond on the shared HCSG runtime ([`lod::hcsg::shared`]): padded terrain
+//! Richmond on the shared HCSG runtime ([`lod::hcsg`]): padded terrain
 //! and built developments generate on the worker and present as [`HcsgNode`]
 //! hosts.
 //!
@@ -9,10 +9,8 @@ use std::marker::PhantomData;
 use bevy::ecs::system::SystemParam;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
-use lod::hcsg::shared::{
-	self, register_session_seed, HcsgClass, PresentationPlugin, ViewerHcsgBounds,
-};
 use lod::hcsg::universal_bounds;
+use lod::hcsg::{self, register_session_seed, HcsgClass, PresentationPlugin, ViewerHcsgBounds};
 use urbanization_cells::{UrbanizationExtent, UrbanizationSelection};
 
 use crate::built::Built;
@@ -92,7 +90,7 @@ pub struct RichmondRoots<'w> {
 
 impl RichmondRoots<'_> {
 	/// Seeds Richmond and urbanization session roots over ground `G`.
-	pub fn seed<G: RichmondGround>(&self, storage: &shared::HcsgStorage) {
+	pub fn seed<G: RichmondGround>(&self, storage: &hcsg::HcsgStorage) {
 		storage.seed(self.config.clone(), universal_bounds());
 		storage.seed(self.authored.clone(), universal_bounds());
 		storage.seed(self.selection.clone(), universal_bounds());
@@ -102,7 +100,7 @@ impl RichmondRoots<'_> {
 /// Seeds [`RichmondRoots`] during an HCSG session restart.
 pub fn seed_richmond_hcsg_roots<G: RichmondGround>(
 	roots: RichmondRoots,
-	storage: Res<shared::HcsgStorage>,
+	storage: Res<hcsg::HcsgStorage>,
 ) {
 	roots.seed::<G>(storage.as_ref());
 }
@@ -117,13 +115,12 @@ mod tests {
 	use bevy::state::app::StatesPlugin;
 	use building_physics::BuildingWalkCollider;
 	use durham::{
-		fine_patch_cell_layout, CellTiling, Durham, DurhamWindow, Terrain,
-		TerrainCellLayout, TerrainColliderMeshSource, TerrainConfig, TerrainMeshAssets,
-		TerrainMeshLodBand, TerrainStampConfigs, WaterMeshAssets, WaterPresentationPlugin,
-		WatershedConfigs,
+		fine_patch_cell_layout, CellTiling, Durham, DurhamWindow, Terrain, TerrainCellLayout,
+		TerrainColliderMeshSource, TerrainConfig, TerrainMeshAssets, TerrainMeshLodBand,
+		TerrainStampConfigs, WaterMeshAssets, WaterPresentationPlugin, WatershedConfigs,
 	};
 	use lod::gen::{Id, OriginalId, Version};
-	use lod::hcsg::shared::{HcsgDemand, HcsgNode, HcsgRestartRequest, HcsgValue};
+	use lod::hcsg::{HcsgDemand, HcsgNode, HcsgRestartRequest, HcsgValue};
 	use lod::lod_ref::LodNodePose;
 	use lod::LodViewer;
 	use terrain_layer_model::OnTerrain;
@@ -182,7 +179,7 @@ mod tests {
 			.insert_resource(WaterMeshAssets { material: Handle::default() })
 			.init_resource::<UrbanizationSelection>()
 			.add_plugins((
-				shared::HcsgBoundsPlugin::<DurhamWindow>::default(),
+				hcsg::HcsgBoundsPlugin::<DurhamWindow>::default(),
 				WaterPresentationPlugin::<DurhamWindow>::default(),
 				RichmondPresentationPlugin::<DurhamWindow, Ground>::default(),
 			));
@@ -231,7 +228,7 @@ mod tests {
 	fn pad_height(app: &App) -> anyhow::Result<f32> {
 		let cell = authored(0.0).cell;
 		let center = (Vec3::from(cell.min) + Vec3::from(cell.max)) * 0.5;
-		let storage = app.world().resource::<shared::HcsgStorage>();
+		let storage = app.world().resource::<hcsg::HcsgStorage>();
 		let region = Aabb3d::new(center, Vec3::splat(0.5));
 		let mut padded = None;
 		for id in storage

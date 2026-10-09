@@ -783,7 +783,7 @@ mod tests {
 	use bevy::math::bounding::Aabb3d;
 	use durham::TerrainCellLayout;
 	use layer_stack::GenerationMode;
-	use lod::hcsg::shared::{HcsgStorage, HcsgWorker};
+	use lod::hcsg::{HcsgStorage, HcsgWorker};
 	use world_player::WorldBaseTerrain;
 
 	#[test]

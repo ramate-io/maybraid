@@ -103,7 +103,7 @@ pub(crate) fn sync_command_status_text(
 	mut status: ResMut<GameCommandStatusText>,
 	camera: Query<&GlobalTransform, With<Camera3d>>,
 	hosts: Query<(&MobScene, &GlobalTransform)>,
-	furniture: Query<&lod::hcsg::shared::HcsgNode<WorldFurnished>>,
+	furniture: Query<&lod::hcsg::HcsgNode<WorldFurnished>>,
 ) {
 	let mut nearest = ranked_hosts(&camera, &hosts);
 	nearest.truncate(4);

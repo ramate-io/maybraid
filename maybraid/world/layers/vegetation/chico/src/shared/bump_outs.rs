@@ -14,7 +14,7 @@ use bevy::math::bounding::Aabb3d;
 use bevy::math::DVec3;
 use bevy::prelude::*;
 use lod::gen::{Id, LodScene, LodSceneLevel, LodSceneStatus, OriginalId};
-use lod::hcsg::shared::{
+use lod::hcsg::{
 	self, GenerationContext, HcsgClass, HcsgNode, PresentationPlugin, ViewerHcsgBounds,
 };
 use lod::lod_ref::LodRef;
@@ -58,8 +58,7 @@ pub trait CanopyProxy: Send + Sync + 'static {
 }
 
 impl CanopyProxy for CanopyBumpOut {
-	const INDEX_SCALE: DVec3 =
-		DVec3::new(BUMP_OUT_CELL_XZ as f64, 1.0, BUMP_OUT_CELL_XZ as f64);
+	const INDEX_SCALE: DVec3 = DVec3::new(BUMP_OUT_CELL_XZ as f64, 1.0, BUMP_OUT_CELL_XZ as f64);
 	const BAND: RangeInclusive<f32> = BUMP_OUT_INNER_RADIUS_M..=BUMP_OUT_OUTER_RADIUS_M;
 	const STEP: f32 = BUMP_OUT_CELL_XZ;
 
@@ -141,7 +140,7 @@ impl<P: CanopyProxy, G: ForestGround> BumpedOut<P, G> {
 	}
 }
 
-impl<P: CanopyProxy, G: ForestGround> shared::GenerationScheme for BumpedOut<P, G> {
+impl<P: CanopyProxy, G: ForestGround> hcsg::GenerationScheme for BumpedOut<P, G> {
 	const INDEX_SCALE: DVec3 = P::INDEX_SCALE;
 	const RETENTION_MARGIN: DVec3 = P::INDEX_SCALE;
 
@@ -216,7 +215,6 @@ impl<P: CanopyProxy> BumpOutRing<P> {
 			Vec3::new(x + radius, GROVE_COLUMN_Y, z + radius),
 		)
 	}
-
 }
 
 impl<P: CanopyProxy> ViewerHcsgBounds for BumpOutRing<P> {

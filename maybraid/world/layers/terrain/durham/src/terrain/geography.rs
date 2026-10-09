@@ -11,7 +11,7 @@
 use bevy::math::bounding::Aabb3d;
 use bevy::math::{Vec2, Vec3};
 use lod::gen::{Id, Version};
-use lod::hcsg::shared::HcsgValue;
+use lod::hcsg::HcsgValue;
 use lod::hcsg::{Busy, HcsgStorage};
 use procedural_common::Bounds2;
 

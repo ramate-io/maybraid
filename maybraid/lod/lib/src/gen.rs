@@ -1,6 +1,6 @@
 //! LOD spatial identifiers and storage versions.
 //!
-//! Generation and presentation run on [`crate::hcsg::shared`]. Scene / refresh
+//! Generation and presentation run on [`crate::hcsg`]. Scene / refresh
 //! runtime is [`crate::scene`].
 
 mod id;

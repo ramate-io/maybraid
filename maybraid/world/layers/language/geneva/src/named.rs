@@ -23,7 +23,7 @@ use durham::terrain::{
 };
 use durham::{GeographicBand, GeographicFamily, GeographicFeatureId, GeographicFeatureKind};
 use lod::gen::{Id, OriginalId};
-use lod::hcsg::shared::{self, GenerationContext};
+use lod::hcsg::{self, GenerationContext};
 use maybraid_language_core::lexicalizer::mix;
 use procedural_common::Bounds2;
 use urbanization_cells::SelectedUrbanization;
@@ -90,7 +90,7 @@ pub trait NameSource: Send + Sync + 'static {
 	fn nameables(cx: &mut GenerationContext, id: Id) -> Option<(Vec<Nameable>, Aabb3d)>;
 }
 
-impl<S: NameSource> shared::GenerationScheme for Named<S> {
+impl<S: NameSource> hcsg::GenerationScheme for Named<S> {
 	const INDEX_SCALE: DVec3 = S::INDEX_SCALE;
 	const RETENTION_MARGIN: DVec3 = S::INDEX_SCALE;
 
@@ -151,7 +151,7 @@ fn translate(cx: &mut GenerationContext, seed: u64, nameables: &[Nameable]) -> V
 }
 
 /// The value `id` of `T`, with its stored bounds.
-fn generated<T: shared::GenerationScheme>(
+fn generated<T: hcsg::GenerationScheme>(
 	cx: &mut GenerationContext,
 	id: Id,
 ) -> Option<(Arc<T>, Aabb3d)> {
@@ -293,7 +293,7 @@ impl<W: LanguageGround> NameSource for Places<W> {
 }
 
 /// A Durham stamp leaf Geneva names, and the geography it reads as.
-pub trait GeographicStamp: StampLeaf + shared::GenerationScheme {
+pub trait GeographicStamp: StampLeaf + hcsg::GenerationScheme {
 	const FAMILY: GeographicFamily;
 	const BAND: GeographicBand;
 	const KIND: GeographicFeatureKind;
@@ -349,7 +349,7 @@ impl<T: GeographicStamp> NameSource for Stamp<T> {
 }
 
 /// Durham's authored pocket waters for one band.
-pub trait AuthoredWaters: shared::GenerationScheme {
+pub trait AuthoredWaters: hcsg::GenerationScheme {
 	const BAND: GeographicBand;
 	fn authored(&self) -> &PocketWater;
 }

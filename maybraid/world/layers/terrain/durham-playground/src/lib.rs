@@ -33,7 +33,7 @@ use durham::{
 };
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use game_commands::ui::{GameCommandDrawerConfig, GameCommandStatusText};
-use lod::hcsg::shared::{
+use lod::hcsg::{
 	HcsgBoundsPlugin, HcsgNode, HcsgRestartRequest, HcsgSessionRestarted, HcsgStorage,
 };
 use pitch::{apply_avian_terrain_pitch, sync_suspend_terrain_pitch};

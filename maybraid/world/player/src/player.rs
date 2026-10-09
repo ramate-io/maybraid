@@ -715,7 +715,7 @@ fn follow_character_camera(
 mod tests {
 	use bevy::ecs::system::RunSystemOnce;
 	use durham::TerrainConfig;
-	use lod::hcsg::shared::HcsgStorage;
+	use lod::hcsg::HcsgStorage;
 
 	use super::*;
 

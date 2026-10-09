@@ -7,7 +7,7 @@ use crate::terrain::sdf::{ComposedTerrain, TerrainSdf};
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use lod::gen::{Id, OriginalId};
-use lod::hcsg::shared::{self, GenerationContext};
+use lod::hcsg::{self, GenerationContext};
 
 /// Shared heightfield noise used by every terrain cell and grading search.
 #[derive(Debug, Clone, Component)]
@@ -35,7 +35,7 @@ impl BaseTerrainNoise {
 	}
 }
 
-impl shared::GenerationScheme for BaseTerrainNoise {
+impl hcsg::GenerationScheme for BaseTerrainNoise {
 	lod::hcsg_index_scale!(crate::terrain::index::DURHAM_INDEX_SCALE);
 
 	fn original_ids_for(_cx: &mut GenerationContext, _region: Aabb3d) -> Vec<OriginalId> {

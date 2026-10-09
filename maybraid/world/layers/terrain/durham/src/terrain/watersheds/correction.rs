@@ -15,7 +15,7 @@ use crate::terrain::watersheds::low_pass::PocketWatersLowPass;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use lod::gen::{Id, OriginalId};
-use lod::hcsg::shared::{self, GenerationContext};
+use lod::hcsg::{self, GenerationContext};
 use procedural_common::Bounds2;
 use std::sync::Arc;
 use terrain_watersheds::{CorrectionStage, HydroComplex, HydroNode};
@@ -46,7 +46,7 @@ fn cell_seed(cell: Aabb3d, salt: u32) -> u32 {
 /// Origin-grid root for watershed correction; both pocket-water passes are
 /// pulled by region, so their pocket / pre-pocket stacks stay out of these bounds.
 
-impl shared::GenerationScheme for HydroComplexCell {
+impl hcsg::GenerationScheme for HydroComplexCell {
 	lod::hcsg_index_scale!(crate::terrain::index::DURHAM_INDEX_SCALE);
 
 	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
@@ -105,7 +105,7 @@ pub struct WatershedAproningCell {
 /// is their only dependency.
 macro_rules! impl_correction_stage_cell {
 	($Cell:ty) => {
-		impl shared::GenerationScheme for $Cell {
+		impl hcsg::GenerationScheme for $Cell {
 			lod::hcsg_index_scale!($crate::terrain::index::DURHAM_INDEX_SCALE);
 			fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
 				cx.original_ids_for::<HydroComplexCell>(region)

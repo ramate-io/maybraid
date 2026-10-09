@@ -9,7 +9,7 @@ use bevy::math::DVec3;
 
 use crate::gen::{Id, OriginalId};
 
-use super::node_store::{DEFAULT_BASE_SCALE, StoredEntry};
+use super::node_store::{StoredEntry, DEFAULT_BASE_SCALE};
 use super::storage::{HcsgStorage, HcsgValue};
 
 /// How one generated type is discovered and built.

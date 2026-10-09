@@ -10,7 +10,7 @@ use bevy::prelude::*;
 use character_items::{random_starter_firearms, Inventory, ItemRng};
 use furniture_assemblies::{FurnitureKitPart, PartKind};
 use lod::gen::Id;
-use lod::hcsg::shared::HcsgNode;
+use lod::hcsg::HcsgNode;
 
 use crate::WorldFurnished;
 

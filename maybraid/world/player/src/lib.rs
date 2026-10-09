@@ -151,7 +151,7 @@ mod tests {
 	use avian3d::prelude::GravityScale;
 	use bevy::ecs::system::RunSystemOnce;
 	use durham::{BaseTerrainNoise, TerrainCellLayout, TerrainConfig};
-	use lod::hcsg::shared::HcsgStorage;
+	use lod::hcsg::HcsgStorage;
 	use player::AwaitingTerrainSurface;
 
 	#[test]
