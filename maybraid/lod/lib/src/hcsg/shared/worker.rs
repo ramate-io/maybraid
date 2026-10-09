@@ -12,7 +12,7 @@ use bevy::prelude::Resource;
 use crate::gen::Id;
 
 use super::context::GenerationContext;
-use super::demand::{HcsgDemand, Job, QuantumProgress, QUANTUM_IDS, QUANTUM_TIME};
+use super::demand::{quantum_cost, HcsgDemand, Job, QuantumProgress, QUANTUM_IDS, QUANTUM_TIME};
 use super::storage::HcsgStorage;
 
 /// Fills unfinished subscriptions in weighted quanta: discovers each
@@ -52,7 +52,7 @@ fn run(storage: &HcsgStorage, demand: &HcsgDemand) {
 		let progress = panic::catch_unwind(AssertUnwindSafe(|| fill_quantum(storage, demand, job)))
 			.unwrap_or_else(|_| {
 				error!("hcsg worker: generation panicked; subscription {id:?} left partial");
-				QuantumProgress { discovered: None, cursor: 0, cost: 0, done: true }
+				QuantumProgress { discovered: None, cursor: 0, cost: 0.0, done: true }
 			});
 		demand.finish_quantum(id, progress);
 	}
@@ -83,11 +83,21 @@ fn fill_quantum(storage: &HcsgStorage, demand: &HcsgDemand, job: Job) -> Quantum
 		}
 	};
 	if stale() {
-		return QuantumProgress { discovered: Some(ids), cursor: job.cursor, cost: 1, done: false };
+		return QuantumProgress {
+			discovered: Some(ids),
+			cursor: job.cursor,
+			cost: quantum_cost(1, started.elapsed()),
+			done: false,
+		};
 	}
 	if first_discover && started.elapsed() >= QUANTUM_TIME {
 		let done = ids.is_empty();
-		return QuantumProgress { discovered: Some(ids), cursor: job.cursor, cost: 1, done };
+		return QuantumProgress {
+			discovered: Some(ids),
+			cursor: job.cursor,
+			cost: quantum_cost(1, started.elapsed()),
+			done,
+		};
 	}
 
 	let mut cursor = job.cursor;
@@ -106,5 +116,10 @@ fn fill_quantum(storage: &HcsgStorage, demand: &HcsgDemand, job: Job) -> Quantum
 		cost += 1;
 	}
 	let done = cursor >= ids.len() && !stale();
-	QuantumProgress { discovered: Some(ids), cursor, cost: cost.max(1), done }
+	QuantumProgress {
+		discovered: Some(ids),
+		cursor,
+		cost: quantum_cost(cost.max(1), started.elapsed()),
+		done,
+	}
 }

@@ -94,8 +94,9 @@ impl Default for DemandShared {
 ///
 /// A subscription's regions never change: new regions replace the subscription,
 /// which cancels whatever the worker was still doing for the old one. A
-/// replacement inherits the predecessor's stride `pass`, so resubscribing
-/// cannot jump the queue.
+/// replacement inherits the predecessor's stride `pass`, floored at the current
+/// minimum among remaining live work, so resubscribing cannot jump the queue
+/// or bank credit from a finished subscription.
 #[derive(Resource, Clone, Default)]
 pub struct HcsgDemand(Arc<DemandShared>);
 
@@ -124,8 +125,17 @@ pub(crate) struct Job {
 pub(crate) struct QuantumProgress {
 	pub discovered: Option<Vec<Id>>,
 	pub cursor: usize,
-	pub cost: u32,
+	pub cost: f64,
 	pub done: bool,
+}
+
+/// Charge the larger of the id count and the time fraction of a quantum, so
+/// an expensive class that hits the 30 ms cap after a few ids pays a full
+/// quantum, not a handful of ids.
+pub(crate) fn quantum_cost(ids: u32, elapsed: Duration) -> f64 {
+	let by_ids = f64::from(ids);
+	let by_time = (elapsed.as_secs_f64() / QUANTUM_TIME.as_secs_f64()) * QUANTUM_IDS as f64;
+	by_ids.max(by_time)
 }
 
 fn min_pass(state: &DemandState) -> f64 {
@@ -174,8 +184,9 @@ impl HcsgDemand {
 	/// Replaces `previous` (if any) with a subscription to `T` over `regions`,
 	/// under one lock, and wakes the worker.
 	///
-	/// A replacement inherits `previous`'s stride `pass`. A new subscription
-	/// starts at the current minimum `pass` among live work.
+	/// A replacement inherits `previous`'s stride `pass`, but never below the
+	/// current minimum among remaining live work, so a finished subscription
+	/// cannot bank credit. A new subscription starts at that minimum.
 	pub fn subscribe<T: GenerationScheme>(
 		&self,
 		previous: Option<SubscriptionId>,
@@ -192,7 +203,8 @@ impl HcsgDemand {
 					previous.cancel();
 					previous.pass
 				});
-		let pass = inherited.unwrap_or_else(|| min_pass(&state));
+		let floor = min_pass(&state);
+		let pass = inherited.map_or(floor, |pass| pass.max(floor));
 		state.subscriptions.insert(
 			id,
 			Subscription {
@@ -316,9 +328,8 @@ impl HcsgDemand {
 			subscription.cursor = progress.cursor;
 			if progress.done {
 				subscription.done = true;
-			} else if progress.cost > 0 {
-				subscription.pass +=
-					f64::from(progress.cost) / f64::from(subscription.class.weight());
+			} else if progress.cost > 0.0 {
+				subscription.pass += progress.cost / f64::from(subscription.class.weight());
 			}
 		}
 		self.0.idle.notify_all();

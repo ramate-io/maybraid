@@ -8,7 +8,7 @@ use crate::gen::tests::test_utils::cell;
 use crate::gen::{Id, OriginalId};
 
 use super::bounds::HcsgClass;
-use super::demand::{QuantumProgress, SubscriptionId, QUANTUM_IDS};
+use super::demand::{quantum_cost, QuantumProgress, SubscriptionId, QUANTUM_IDS, QUANTUM_TIME};
 use super::{GenerationContext, GenerationScheme, HcsgDemand, HcsgStorage, HcsgWorker};
 
 fn subscribe<T: GenerationScheme>(
@@ -37,7 +37,7 @@ fn yield_quantum(
 	cost: u32,
 	done: bool,
 ) {
-	demand.finish_quantum(id, QuantumProgress { discovered, cursor, cost, done });
+	demand.finish_quantum(id, QuantumProgress { discovered, cursor, cost: f64::from(cost), done });
 }
 
 const IDLE: Duration = Duration::from_secs(10);
@@ -421,6 +421,39 @@ fn a_switched_out_subscription_resumes_without_rediscovering() {
 	assert_eq!(resume.cursor, 3);
 	assert_eq!(resume.discovered.as_deref(), Some(ids.as_slice()));
 	yield_quantum(&demand, resume.id, resume.discovered, resume.cursor, 1, true);
+}
+
+#[test]
+fn a_finished_subscription_resumes_at_the_current_minimum() {
+	let demand = HcsgDemand::default();
+	let far = subscribe_class::<Ground>(&demand, None, vec![span(0.0, 1.0)], HcsgClass::Far);
+	let job = demand.try_pick().expect("only work");
+	assert_eq!(job.id, far);
+	yield_quantum(&demand, job.id, None, 0, 1, true);
+	assert!(demand.try_read(far, 0).unwrap().unwrap().done);
+
+	let near = subscribe_class::<Cover>(&demand, None, vec![span(0.0, 1.0)], HcsgClass::Near);
+	for _ in 0..8 {
+		let job = demand.try_pick().expect("near is the only unfinished work");
+		assert_eq!(job.id, near);
+		yield_quantum(&demand, job.id, None, 0, QUANTUM_IDS as u32, false);
+	}
+	let near_pass = demand.pass_of(near).expect("near still live");
+	assert!(near_pass > 0.0);
+
+	let far = subscribe_class::<Ground>(&demand, Some(far), vec![span(1.0, 1.0)], HcsgClass::Far);
+	assert_eq!(
+		demand.pass_of(far),
+		Some(near_pass),
+		"a finished subscription must not resume below the live minimum"
+	);
+}
+
+#[test]
+fn quantum_cost_charges_the_larger_of_ids_and_time() {
+	assert_eq!(quantum_cost(32, Duration::from_millis(1)), 32.0);
+	assert_eq!(quantum_cost(3, QUANTUM_TIME), QUANTUM_IDS as f64);
+	assert_eq!(quantum_cost(3, QUANTUM_TIME / 2), QUANTUM_IDS as f64 / 2.0);
 }
 
 #[test]
