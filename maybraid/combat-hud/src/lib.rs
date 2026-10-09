@@ -1,5 +1,6 @@
 //! Reusable combat feedback for player health, outgoing hits, and incoming damage.
 
+mod plate;
 mod score;
 mod screen_pin;
 mod vitals;
