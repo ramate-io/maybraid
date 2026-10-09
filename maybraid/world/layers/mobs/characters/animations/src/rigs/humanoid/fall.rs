@@ -18,9 +18,43 @@ impl Animation<HumanoidV0Rig> for Fall {
 				self.shoulder_flex(side, progress),
 				self.humerus_swing(side, progress),
 				0.0,
-				self.forearm_flex(progress),
+				self.forearm_flex(side, progress),
 			);
 		}
 		rig.write_pose(&pose);
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn fall_right_shoulder_trails_left_mid_spread() -> anyhow::Result<()> {
+		let fall = Fall::default();
+		let progress = 0.1;
+		let mut rig = HumanoidV0Rig::for_clip_test();
+		fall.apply(&mut rig, progress);
+
+		let left = rig.posed_angle("shoulder.L").abs();
+		let right = rig.posed_angle("shoulder.R").abs();
+		assert!(left > right + 0.05, "left should lead at {progress}, L={left} R={right}");
+		Ok(())
+	}
+
+	#[test]
+	fn fall_both_arms_match_at_full_spread() -> anyhow::Result<()> {
+		let fall = Fall::default();
+		let mut rig = HumanoidV0Rig::for_clip_test();
+		fall.apply(&mut rig, 1.0);
+		assert!(
+			(rig.posed_angle("shoulder.L") - rig.posed_angle("shoulder.R")).abs() < 1e-3,
+			"matched shoulder amplitude at full spread"
+		);
+		assert!(
+			(rig.posed_angle("humerus.L") - rig.posed_angle("humerus.R")).abs() < 1e-3,
+			"matched humerus amplitude at full spread"
+		);
+		Ok(())
 	}
 }
