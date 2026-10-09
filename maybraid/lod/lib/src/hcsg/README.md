@@ -19,7 +19,6 @@ This is the design for the shared HCSG runtime. It has two aims:
  generation::<C, T>                 │
    reads C's latest regions         │
    replaces its subscription ──────►│  (fire and forget)
-   (later) evicts from HcsgStorage  │
                                     │
  presentation::<C, T>               │
    reads C's latest regions         │
@@ -28,6 +27,7 @@ This is the design for the shared HCSG runtime. It has two aims:
    spawns / retires hosts           │    generate missing values (recursively)
    (HcsgNode<T> components)         │    publish to HcsgStorage
                                     │    append ids to the subscription
+                                    │    sweep by reach when demand changes
  scene follow-on systems            │
    LodScene / VisualLodScene        │
    on HcsgNode<T>                   │
@@ -42,7 +42,7 @@ There are four parts, each with one job:
 | [Generation system](#the-generation-system) | Which values stay in HCSG for one channel and one type. |
 | [Presentation](#presentation) | The active set of Bevy hosts for one channel and one type. |
 
-Generation and presentation request work the same way. They differ in what they retire from: generation retires values from HCSG, while presentation only retires entities from Bevy.
+Generation and presentation request work the same way. Presentation retires Bevy hosts. The worker evicts stored values by reach: each type is kept only within the regions of the live subscriptions that read it.
 
 ## Contract for generated values
 
@@ -288,9 +288,22 @@ struct Generated<T> {
 ```
 
 - **Request:** when channel `C`'s regions change, it replaces its subscription, exactly as presentation does. It also resubscribes when `HcsgDemand::try_is_live` reports its subscription gone, for example after an epoch change. That is all it does on this side. It never reads `published`, keeps no cursor, holds no hosts and creates no entities.
-- **Retire (later):** it evicts values of `T` from `HcsgStorage` once their bounds leave every region. Generation is the only system that retires from HCSG. Presentation never evicts stored values; it only retires its Bevy hosts.
 
 Use it to keep values warm where nothing is presented yet, such as ahead of the camera or under a gameplay region. A type that is presented needs no separate generation system, because presentation requests its own generation.
+
+### Retention
+
+Stored values are a cache. A value is a pure function of its key, so an evicted value regenerates identically on demand. Retention is not the union of every live region: Geneva's language channel stays within 40 km of the viewer, and that union would pin the world.
+
+Each type `U` is retained within the regions of the live subscriptions whose **reach** includes `U`:
+
+1. **Record reach.** `GenerationContext` records the `TypeId` of every `get_or_generate`, `get`, and `entry` call, hit or miss. A subscription's reach is its own scheme's type plus everything its fills touched. A replacement shares that set, so a mid-quantum finish still lands on the live chain.
+2. **Sweep when demand changes.** The worker sweeps between jobs, and only after the live set has changed (subscribe, replacement, unsubscribe, or epoch). For each stored type `U`, the retention set is the union of those regions, expanded by `U`'s configured base scale (one bucket of hysteresis). Entries whose stored bounds overlap none of them are removed. A type no live subscription reaches is cleared. `Id::Universal` is never swept; only a session reset clears those roots.
+3. **Best effort.** Eviction order can still be off in either direction: a dependency may leave while values built from it stay, or a dependent may leave while its inputs stay. Neither affects correctness. [Propagating retention extents through the stack](https://github.com/ramate-io/maybraid/issues/1055) is follow-on work if rebuild churn warrants it.
+
+Set `MAYBRAID_HCSG_DIAG` to log per-type store sizes and rebuild-after-eviction counts every few seconds while walking Discovery.
+
+Presentation subscribes the same regions and type it keeps hosts for, so a presented value is always inside its own retention set. Hosts hold their own `Arc<T>` regardless.
 
 ## Presentation
 
@@ -348,7 +361,7 @@ Retiring marks the host `RetiredHost`. The runtime despawns retired hosts in `La
 Notes:
 - When the subscription is replaced, existing hosts stay. Ids the new subscription publishes that are already in `hosts` are skipped.
 - An id that leaves the bounds while it is still being generated is a presentation-side concern. Its subscription is gone, so the worker stops, and anything it already published is simply never spawned.
-- Retiring a host does not evict its stored value. Presentation retires only from Bevy; eviction from HCSG belongs to [`generation<C, T>`](#the-generation-system).
+- Retiring a host does not evict its stored value. The worker evicts by [reach](#retention) when the live subscription set changes. A presented value stays stored because presentation subscribes the same regions and type it keeps hosts for.
 - ECS changes are issued only after the `Arc` handles have been cloned and every storage guard has been released.
 
 ### Scenes
@@ -409,7 +422,7 @@ Each layer's roots expose `reset` (clear its stores, seed its roots). Advancing 
 
 Presentation plugins never restart sessions or infer one from resource changes; they only gate where presentation runs.
 
-Nothing else is invalidated. Recording references between values (`get_or_generate` noting the `(TypeId, Id)` pairs it touched) is a later feature for eviction and garbage collection, not for correctness.
+Nothing else is invalidated. Reach records the `TypeId`s a subscription's fills read, not per-value references. Per-value retention extents are [follow-on work](https://github.com/ramate-io/maybraid/issues/1055).
 
 ## Testing
 
@@ -460,6 +473,6 @@ The public API is `lod::hcsg::shared`: `HcsgStorage`, `HcsgDemand`, `GenerationC
 
 ## Later
 
-- Retirement on the generation side: `generation<C, T>` evicts values outside channel `C`'s regions. Recorded references between values decide whether a dependency can go too, so nothing still reachable from a retained value is evicted.
+- [Propagate HCSG retention extents through the generation stack](https://github.com/ramate-io/maybraid/issues/1055), if rebuild-after-eviction counts show the current best-effort sweep churns too much.
 - More than one worker. This needs an in-progress `(TypeId, Id)` set in the demand state, so two workers never build the same value.
 - Async generation for large collections.

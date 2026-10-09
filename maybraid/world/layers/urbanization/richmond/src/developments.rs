@@ -7,13 +7,10 @@
 pub mod site;
 
 use std::marker::PhantomData;
-use std::sync::Arc;
-
 use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec2;
 use lod::gen::{Id, OriginalId};
 use lod::hcsg::shared::{self, GenerationContext};
-use lod::hcsg::HcsgStorage;
 use procedural_common::Bounds2;
 use urbanization_developments::{
 	Development, LesHalles, OldCityMarket, PadParams, PadPlan, RingFort, ShepherdsCommune,
@@ -139,19 +136,6 @@ impl<G: RichmondGround> shared::GenerationScheme for RichmondDevelopment<G> {
 }
 
 impl<G: RichmondGround> RichmondDevelopment<G> {
-	/// Pad nodes of stored filled developments affecting `region`, merged
-	/// into one sample-time blend pass.
-	pub fn merged_pads(storage: &HcsgStorage, region: Aabb3d) -> PadComplex {
-		let Ok(ids) = storage.try_overlapping::<Self>(column_bounds(region)) else {
-			return PadComplex::default();
-		};
-		let developments: Vec<Arc<Self>> = ids
-			.into_iter()
-			.filter_map(|id| storage.try_entry::<Self>(id).ok().flatten().map(|entry| entry.value))
-			.collect();
-		Self::merge_pads(region, developments.iter().map(Arc::as_ref))
-	}
-
 	/// Pad nodes of the filled `developments` affecting `region`, merged
 	/// into one sample-time blend pass.
 	///

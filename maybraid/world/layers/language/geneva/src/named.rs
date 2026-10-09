@@ -150,7 +150,7 @@ fn generated<T: shared::GenerationScheme>(
 	id: Id,
 ) -> Option<(Arc<T>, Aabb3d)> {
 	let value = cx.get_or_generate::<T>(id)?;
-	let bounds = cx.stored_bounds::<T>(id)?;
+	let bounds = cx.entry::<T>(id)?.bounds;
 	Some((value, bounds))
 }
 
