@@ -1,6 +1,5 @@
 //! Durham's view of [`HcsgStorage`]: node registration and terrain read helpers.
 
-use crate::shared::PlayableStreams;
 use crate::terrain::base_noise::BaseTerrainNoise;
 use crate::terrain::cell::{
 	cell_bounds, universal_bounds, CellTiling, TerrainCellLayout, TERRAIN_CELL_SIZE,
@@ -36,7 +35,7 @@ use bevy::math::bounding::Aabb3d;
 use bevy::math::DVec3;
 use bevy::prelude::*;
 use lod::gen::{Id, OriginalId, Version};
-use lod::hcsg::shared::{self, HcsgDemand};
+use lod::hcsg::shared;
 use lod::hcsg::{Busy, HcsgStorage};
 use procedural_common::Bounds2;
 use std::collections::HashMap;
@@ -53,76 +52,10 @@ pub const DURHAM_INDEX_SCALE: DVec3 = DVec3::new(
 	TERRAIN_CELL_SIZE as f64,
 );
 
-macro_rules! durham_nodes {
-	($($T:ty),* $(,)?) => {
-		impl DurhamNodes {
-			/// Drops every derived Durham value from the shared storage.
-			pub fn clear(storage: &shared::HcsgStorage) {
-				$(storage.clear::<$T>();)*
-			}
-		}
-	};
-}
-
-durham_nodes!(
-	BaseTerrainNoise,
-	PreWatershedTerrain,
-	Terrain,
-	Water,
-	PrePocketLowPassLayout,
-	PrePocketLowPassCell,
-	PocketLowPassCell,
-	PocketWatersLowPass,
-	PrePocketHighPassLayout,
-	PrePocketHighPassCell,
-	PocketHighPassCell,
-	PocketWatersHighPass,
-	HydroComplexCell,
-	WatershedCarvingCell,
-	WatershedRimmingCell,
-	WatershedAproningCell,
-	PlateauLowPassControllerLayout,
-	PlateauLowPassControllerCell,
-	PlateauLowPassStampCell,
-	PlateauHighPassControllerLayout,
-	PlateauHighPassControllerCell,
-	PlateauHighPassStampCell,
-	MassifLowPassControllerLayout,
-	MassifLowPassControllerCell,
-	MassifLowPassStampCell,
-	MassifHighPassControllerLayout,
-	MassifHighPassControllerCell,
-	MassifHighPassStampCell,
-	CanyonLowPassControllerLayout,
-	CanyonLowPassControllerCell,
-	CanyonLowPassStampCell,
-	CanyonHighPassControllerLayout,
-	CanyonHighPassControllerCell,
-	CanyonHighPassStampCell,
-	PocketWaterLowPassControllerLayout,
-	PocketWaterLowPassControllerCell,
-	PocketWaterLowPassStampCell,
-	PocketWaterHighPassControllerLayout,
-	PocketWaterHighPassControllerCell,
-	PocketWaterHighPassStampCell,
-	RollingLowPassControllerLayout,
-	RollingLowPassControllerCell,
-	RollingLowPassStampCell,
-	RollingHighPassControllerLayout,
-	RollingHighPassControllerCell,
-	RollingHighPassStampCell,
-	ValleyLowPassControllerLayout,
-	ValleyLowPassControllerCell,
-	ValleyLowPassStampCell,
-	ValleyHighPassControllerLayout,
-	ValleyHighPassControllerCell,
-	ValleyHighPassStampCell,
-);
-
 /// Durham's seeded root inputs as live resources.
 ///
-/// The [`crate::TerrainWindow`] producer and [`lod::hcsg::Seed`] keep these
-/// seeded during streaming. Hosts that regenerate synchronously reseed here.
+/// The [`crate::TerrainWindow`] producer keeps these seeded during streaming.
+/// Hosts that regenerate synchronously reseed here.
 #[derive(SystemParam)]
 pub struct DurhamRoots<'w> {
 	layout: Res<'w, TerrainCellLayout>,
@@ -137,24 +70,19 @@ impl DurhamRoots<'_> {
 		&self.layout
 	}
 
-	/// Starts a new shared session from the resources: ends the epoch (every
-	/// layer's subscriptions, so in-flight values are dropped), then resets.
-	pub fn restart(&self, storage: &shared::HcsgStorage, demand: &HcsgDemand) {
-		demand.advance_epoch();
-		self.reset(storage);
-	}
-
-	/// Clears Durham's derived values and seeds the roots. Within a restart,
-	/// after the epoch has advanced.
-	pub fn reset(&self, storage: &shared::HcsgStorage) {
-		DurhamNodes::clear(storage);
-		PlayableStreams::clear::<Water>(storage);
+	/// Seeds Durham's session roots in the shared storage.
+	pub fn seed(&self, storage: &shared::HcsgStorage) {
 		storage.seed(self.layout.clone(), universal_bounds());
 		storage.seed(self.stamps.clone(), universal_bounds());
 		storage.seed(self.watersheds.clone(), universal_bounds());
 		storage.seed(self.terrain_assets.clone(), universal_bounds());
 		storage.seed(self.water_assets.clone(), universal_bounds());
 	}
+}
+
+/// Seeds [`DurhamRoots`] during an HCSG session restart.
+pub fn seed_durham_hcsg_roots(roots: DurhamRoots, storage: Res<HcsgStorage>) {
+	roots.seed(storage.as_ref());
 }
 
 /// Cheap owned view of composed height fields for background consumers.
@@ -294,9 +222,10 @@ impl TerrainStorage for HcsgStorage {
 	}
 
 	fn fills_layout(&self, layout: &TerrainCellLayout) -> bool {
-		layout.cell_ids(layout.request_region()).into_iter().all(|OriginalId(id)| {
-			test_storage_idle(self.try_entry::<Terrain>(id)).is_some()
-		})
+		layout
+			.cell_ids(layout.request_region())
+			.into_iter()
+			.all(|OriginalId(id)| test_storage_idle(self.try_entry::<Terrain>(id)).is_some())
 	}
 
 	fn water(&self, id: Id) -> Option<Arc<Water>> {
@@ -308,7 +237,8 @@ impl TerrainStorage for HcsgStorage {
 	}
 
 	fn base_noise(&self) -> Option<Arc<BaseTerrainNoise>> {
-		test_storage_idle(self.try_entry::<BaseTerrainNoise>(Id::Universal)).map(|entry| entry.value)
+		test_storage_idle(self.try_entry::<BaseTerrainNoise>(Id::Universal))
+			.map(|entry| entry.value)
 	}
 
 	fn height_snapshot(&self) -> TerrainHeightSnapshot {
@@ -418,7 +348,7 @@ mod tests {
 		let previous = test_storage_idle(storage.try_entry::<Terrain>(id))
 			.ok_or_else(|| anyhow::anyhow!("inserted"))?
 			.version;
-		DurhamNodes::clear(&storage);
+		storage.clear_derived();
 		assert_eq!(storage.terrain_count(), 0);
 		storage.insert_base_terrain_for_test(
 			&layout,

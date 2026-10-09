@@ -3,7 +3,7 @@
 //! [`HcsgNode`] hosts.
 //!
 //! Maputo derives everything from the ground, so a session only clears it
-//! ([`MaputoNodes::clear`]).
+//! through the shared HCSG session restart.
 
 use std::collections::BTreeSet;
 use std::marker::PhantomData;
@@ -165,14 +165,6 @@ const CELL_SCALE: DVec3 = DVec3::new(
 	FURNITURE_CELL_SIZE as f64,
 );
 
-impl MaputoNodes {
-	/// Within a restart, after the epoch has advanced.
-	pub fn clear<U: FurnitureSlots>(storage: &shared::HcsgStorage) {
-		storage.clear::<DevelopmentSlots<U>>();
-		storage.clear::<Furnished<U>>();
-	}
-}
-
 /// Presents furniture over ground `U` within channel `C`'s regions from the
 /// shared storage.
 pub struct MaputoPresentationPlugin<C, U>(PhantomData<fn() -> (C, U)>);
@@ -207,7 +199,7 @@ mod tests {
 	use bevy::state::app::StatesPlugin;
 	use durham::Durham;
 	use lod::gen::Version;
-	use lod::hcsg::shared::{HcsgDemand, HcsgSystems, HcsgValue};
+	use lod::hcsg::shared::{HcsgDemand, HcsgRestartRequest, HcsgSystems, HcsgValue};
 	use lod::lod_ref::LodNodePose;
 	use richmond::{
 		AuthoredDevelopment, AuthoredDevelopments, Built, DevelopmentConfig, DevelopmentKind,
@@ -224,22 +216,6 @@ mod tests {
 	type Urban = Urbanization<Richmond<Ground>>;
 
 	const IDLE: Duration = Duration::from_secs(120);
-
-	#[derive(Resource)]
-	struct Restart(bool);
-
-	fn restart(
-		richmond: RichmondRoots,
-		storage: Res<shared::HcsgStorage>,
-		demand: Res<HcsgDemand>,
-		mut pending: ResMut<Restart>,
-	) {
-		if std::mem::take(&mut pending.0) {
-			demand.advance_epoch();
-			richmond.reset::<Ground>(&storage);
-			MaputoNodes::clear::<Urban>(&storage);
-		}
-	}
 
 	/// One Les Halles authored at `height`. Authored sites plan on their own
 	/// level, so no ground is generated.
@@ -259,7 +235,7 @@ mod tests {
 			..DevelopmentConfig::default()
 		})
 		.insert_resource(AuthoredDevelopments(vec![authored(height)]))
-		.insert_resource(Restart(true));
+		.insert_resource(HcsgRestartRequest::queued());
 	}
 
 	/// Furniture presented around a viewer at `at`.
@@ -273,9 +249,9 @@ mod tests {
 			.init_resource::<UrbanizationSelection>()
 			.add_plugins((
 				shared::HcsgBoundsPlugin::<FurnitureNeighborhood>::default(),
+				richmond::BuiltPresentationPlugin::<FurnitureNeighborhood, Ground>::default(),
 				MaputoPresentationPlugin::<FurnitureNeighborhood, Urban>::default(),
-			))
-			.add_systems(Update, restart.before(HcsgSystems));
+			));
 		seed_resources(&mut app, 12.0);
 		app.finish();
 		app.cleanup();

@@ -30,14 +30,6 @@ pub struct UrbanizationNodes;
 /// Selections are bucketed one extent (1600 m) apart.
 pub(crate) const SELECTION_INDEX_SCALE: DVec3 =
 	DVec3::new(DEFAULT_URBANIZATION_EXTENT_XZ as f64, 1.0, DEFAULT_URBANIZATION_EXTENT_XZ as f64);
-
-impl UrbanizationNodes {
-	/// Drops every selection from the shared storage.
-	pub fn clear(storage: &shared::HcsgStorage) {
-		storage.clear::<SelectedUrbanization>();
-	}
-}
-
 /// Urbanization reads over [`HcsgStorage`]. GET only: nothing is selected here.
 pub trait UrbanizationStorage {
 	fn selected(&self, id: Id) -> Result<Option<Arc<SelectedUrbanization>>, Busy>;
@@ -60,7 +52,8 @@ pub trait UrbanizationStorage {
 
 impl UrbanizationStorage for HcsgStorage {
 	fn selected(&self, id: Id) -> Result<Option<Arc<SelectedUrbanization>>, Busy> {
-		self.try_entry::<SelectedUrbanization>(id).map(|entry| entry.map(|stored| stored.value))
+		self.try_entry::<SelectedUrbanization>(id)
+			.map(|entry| entry.map(|stored| stored.value))
 	}
 
 	fn selected_overlapping(
@@ -85,7 +78,9 @@ impl UrbanizationStorage for HcsgStorage {
 		let Some(extent) = UrbanizationExtent::owning_leaf(id) else {
 			return Ok(None);
 		};
-		Ok(self.selected(extent.id())?.and_then(|selected| selected.as_ref().leaf(id).cloned()))
+		Ok(self
+			.selected(extent.id())?
+			.and_then(|selected| selected.as_ref().leaf(id).cloned()))
 	}
 
 	fn filled_leaves_overlapping(&self, region: Aabb3d) -> Result<Vec<DevelopmentLeaf>, Busy> {
@@ -136,7 +131,8 @@ mod tests {
 			storage
 				.try_entry::<SelectedUrbanization>(id)
 				.map_err(storage_busy)?
-				.map(|entry| entry.version) == first,
+				.map(|entry| entry.version)
+				== first,
 			"a second request reuses the stored selection"
 		);
 		Ok(())

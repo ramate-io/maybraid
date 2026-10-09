@@ -1,4 +1,4 @@
-//! Typed store registry and per-type [`NodeStore`] handles.
+//! Typed store registry, per-type [`NodeStore`] handles, and index config.
 
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
@@ -9,10 +9,12 @@ use std::sync::{Arc, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard, Try
 #[cfg(debug_assertions)]
 use std::sync::{Mutex, MutexGuard};
 
+use bevy::math::bounding::Aabb3d;
 use bevy::math::DVec3;
 
 use crate::gen::Id;
 
+use super::super::context::GenerationScheme;
 use super::super::node_store::{NodeStore, DEFAULT_BASE_SCALE};
 use super::{Busy, HcsgStorage, HcsgValue};
 
@@ -20,7 +22,9 @@ use super::{Busy, HcsgStorage, HcsgValue};
 pub(super) struct Registry {
 	pub stores: RwLock<HashMap<TypeId, Arc<dyn ErasedStore>>>,
 	pub base_scales: RwLock<HashMap<TypeId, DVec3>>,
+	pub retention_margins: RwLock<HashMap<TypeId, DVec3>>,
 	pub next_version: AtomicU64,
+	/// Keys removed by a sweep; debug rebuilds check this set.
 	#[cfg(debug_assertions)]
 	pub evicted: Mutex<HashSet<(TypeId, Id)>>,
 	pub top_rebuilds: AtomicU64,
@@ -34,7 +38,7 @@ pub(super) struct TypedStore<T> {
 pub(super) trait ErasedStore: Send + Sync {
 	fn into_any(self: Arc<Self>) -> Arc<dyn Any + Send + Sync>;
 	fn reset(&self, revision: u64);
-	fn ids_outside(&self, regions: &[bevy::math::bounding::Aabb3d]) -> Vec<Id>;
+	fn ids_outside(&self, regions: &[Aabb3d]) -> Vec<Id>;
 	fn remove_ids(&self, ids: &[Id], revision: u64);
 	fn len(&self) -> usize;
 	fn type_name(&self) -> &'static str;
@@ -49,7 +53,7 @@ impl<T: HcsgValue> ErasedStore for TypedStore<T> {
 		write(&self.nodes).reset(revision);
 	}
 
-	fn ids_outside(&self, regions: &[bevy::math::bounding::Aabb3d]) -> Vec<Id> {
+	fn ids_outside(&self, regions: &[Aabb3d]) -> Vec<Id> {
 		read(&self.nodes).ids_outside(regions)
 	}
 
@@ -66,6 +70,8 @@ impl<T: HcsgValue> ErasedStore for TypedStore<T> {
 	}
 }
 
+/// Values are immutable and published whole, so a poisoned lock still guards
+/// a consistent store.
 pub(super) fn read<T>(lock: &RwLock<T>) -> RwLockReadGuard<'_, T> {
 	lock.read().unwrap_or_else(PoisonError::into_inner)
 }
@@ -88,6 +94,18 @@ pub(super) fn lock_mutex<T>(lock: &Mutex<T>) -> MutexGuard<'_, T> {
 }
 
 impl HcsgStorage {
+	/// Records `T`'s index scale and retention margin before its first publish.
+	/// A scale set earlier through [`Self::configure`] wins.
+	pub(crate) fn register_scheme<T: GenerationScheme>(&self) {
+		let type_id = TypeId::of::<T>();
+		if !read(&self.0.base_scales).contains_key(&type_id) {
+			write(&self.0.base_scales).entry(type_id).or_insert(T::INDEX_SCALE);
+		}
+		if !read(&self.0.retention_margins).contains_key(&type_id) {
+			write(&self.0.retention_margins).entry(type_id).or_insert(T::RETENTION_MARGIN);
+		}
+	}
+
 	/// Sets `T`'s spatial base scale, rebuilding its index if it exists.
 	pub fn configure<T: HcsgValue>(&self, base_scale: DVec3) -> &Self {
 		write(&self.0.base_scales).insert(TypeId::of::<T>(), base_scale);
@@ -97,7 +115,9 @@ impl HcsgStorage {
 		self
 	}
 
-	pub(super) fn downcast<T: HcsgValue>(store: Arc<dyn ErasedStore>) -> Option<Arc<TypedStore<T>>> {
+	pub(super) fn downcast<T: HcsgValue>(
+		store: Arc<dyn ErasedStore>,
+	) -> Option<Arc<TypedStore<T>>> {
 		store.into_any().downcast().ok()
 	}
 
@@ -115,10 +135,7 @@ impl HcsgStorage {
 		if let Some(store) = self.store::<T>() {
 			return Some(store);
 		}
-		let base_scale = read(&self.0.base_scales)
-			.get(&TypeId::of::<T>())
-			.copied()
-			.unwrap_or(DEFAULT_BASE_SCALE);
+		let base_scale = self.base_scale_of(TypeId::of::<T>());
 		let store = write(&self.0.stores)
 			.entry(TypeId::of::<T>())
 			.or_insert_with(|| {
@@ -134,6 +151,18 @@ impl HcsgStorage {
 
 	pub(super) fn base_scale_of(&self, type_id: TypeId) -> DVec3 {
 		read(&self.0.base_scales).get(&type_id).copied().unwrap_or(DEFAULT_BASE_SCALE)
+	}
+
+	pub(super) fn retention_margin_of(&self, type_id: TypeId) -> DVec3 {
+		read(&self.0.retention_margins)
+			.get(&type_id)
+			.copied()
+			.unwrap_or_else(|| self.base_scale_of(type_id))
+	}
+
+	#[cfg(test)]
+	pub(crate) fn index_scale_of<T: HcsgValue>(&self) -> DVec3 {
+		self.base_scale_of(TypeId::of::<T>())
 	}
 
 	/// How many values of `T` are stored, including `Id::Universal`.

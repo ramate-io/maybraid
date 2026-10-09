@@ -2,14 +2,16 @@
 //! and built developments generate on the worker and present as [`HcsgNode`]
 //! hosts.
 //!
-//! A session starts by advancing the epoch, then [`RichmondRoots::reset`].
+//! A session starts with [`lod::hcsg::request_hcsg_session_restart`].
 
 use std::marker::PhantomData;
 
 use bevy::ecs::system::SystemParam;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
-use lod::hcsg::shared::{self, HcsgClass, HcsgNode, PresentationPlugin, ViewerHcsgBounds};
+use lod::hcsg::shared::{
+	self, register_session_seed, HcsgClass, HcsgNode, PresentationPlugin, ViewerHcsgBounds,
+};
 use lod::hcsg::universal_bounds;
 use lod::scene::LodSceneRefreshChunkPlugin;
 use lod::LodViewer;
@@ -55,6 +57,7 @@ impl<C, G> Default for BuiltPresentationPlugin<C, G> {
 impl<C: Send + Sync + 'static, G: RichmondGround> Plugin for BuiltPresentationPlugin<C, G> {
 	fn build(&self, app: &mut App) {
 		register_richmond_plugin(app);
+		register_session_seed(app, seed_richmond_hcsg_roots::<G>);
 		app.add_plugins(PresentationPlugin::<C, Built<G>>::default());
 	}
 }
@@ -91,15 +94,20 @@ pub struct RichmondRoots<'w> {
 }
 
 impl RichmondRoots<'_> {
-	/// Clears what Richmond and urbanization derived over ground `G` and
-	/// seeds the roots. Within a restart, after the epoch has advanced.
-	pub fn reset<G: RichmondGround>(&self, storage: &shared::HcsgStorage) {
-		UrbanizationNodes::clear(storage);
-		RichmondNodes::clear::<G>(storage);
+	/// Seeds Richmond and urbanization session roots over ground `G`.
+	pub fn seed<G: RichmondGround>(&self, storage: &shared::HcsgStorage) {
 		storage.seed(self.config.clone(), universal_bounds());
 		storage.seed(self.authored.clone(), universal_bounds());
 		storage.seed(self.selection.clone(), universal_bounds());
 	}
+}
+
+/// Seeds [`RichmondRoots`] during an HCSG session restart.
+pub fn seed_richmond_hcsg_roots<G: RichmondGround>(
+	roots: RichmondRoots,
+	storage: Res<shared::HcsgStorage>,
+) {
+	roots.seed::<G>(storage.as_ref());
 }
 
 #[cfg(test)]
@@ -118,7 +126,7 @@ mod tests {
 		WatershedConfigs,
 	};
 	use lod::gen::{Id, OriginalId, Version};
-	use lod::hcsg::shared::{HcsgDemand, HcsgSystems, HcsgValue};
+	use lod::hcsg::shared::{HcsgDemand, HcsgRestartRequest, HcsgSystems, HcsgValue};
 	use lod::lod_ref::LodNodePose;
 	use lod::LodViewer;
 	use terrain_layer_model::OnTerrain;
@@ -131,24 +139,6 @@ mod tests {
 	type Ground = OnTerrain<Durham>;
 
 	const IDLE: Duration = Duration::from_secs(120);
-
-	/// Restart the session from the resources on the next update.
-	#[derive(Resource)]
-	struct Restart(bool);
-
-	fn restart(
-		durham: DurhamRoots,
-		richmond: RichmondRoots,
-		storage: Res<shared::HcsgStorage>,
-		demand: Res<HcsgDemand>,
-		mut pending: ResMut<Restart>,
-	) {
-		if std::mem::take(&mut pending.0) {
-			demand.advance_epoch();
-			durham.reset(&storage);
-			richmond.reset::<Ground>(&storage);
-		}
-	}
 
 	/// One Les Halles authored inside one cell of the patch at `height`; no
 	/// pad reaches the other three.
@@ -180,7 +170,7 @@ mod tests {
 				..DevelopmentConfig::default()
 			})
 			.insert_resource(AuthoredDevelopments(vec![authored(height)]))
-			.insert_resource(Restart(true));
+			.insert_resource(HcsgRestartRequest::queued());
 	}
 
 	/// A 2×2 fine patch at the origin with Richmond presented over it.
@@ -198,9 +188,9 @@ mod tests {
 				shared::HcsgBoundsPlugin::<DurhamWindow>::default(),
 				WaterPresentationPlugin::<DurhamWindow>::default(),
 				RichmondPresentationPlugin::<DurhamWindow, Ground>::default(),
-			))
-			.add_systems(Update, restart.before(HcsgSystems));
+			));
 		seed_resources(&mut app, height);
+		durham::register_durham_hcsg_session(&mut app);
 		app.finish();
 		app.cleanup();
 		let at = Transform::IDENTITY;

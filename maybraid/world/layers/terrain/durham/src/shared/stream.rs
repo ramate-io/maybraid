@@ -13,13 +13,10 @@ use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use lod::gen::{Id, OriginalId};
 use lod::hcsg::shared::{
-	self, GenerationContext, HcsgClass, HcsgNode, HcsgStorage, HcsgValue, PresentationPlugin,
-	ViewerHcsgBounds,
+	self, GenerationContext, HcsgClass, HcsgNode, HcsgValue, PresentationPlugin, ViewerHcsgBounds,
 };
 use lod::lod_ref::LodRef;
-use lod::scene::{
-	LodSceneCulls, LodSceneLevel, LodSceneStatus, SceneChunk, SemanticLodScene,
-};
+use lod::scene::{LodSceneCulls, LodSceneLevel, LodSceneStatus, SceneChunk, SemanticLodScene};
 use lod::LodViewer;
 
 use crate::terrain::host::{WORLD_BACKGROUND_RING, WORLD_FAR_RING, WORLD_NEAR_RING};
@@ -69,16 +66,6 @@ impl<R, T> Streamed<R, T> {
 
 /// The playable world's three streams together.
 pub struct PlayableStreams;
-
-impl PlayableStreams {
-	/// Drops `T` from every playable stream. Within a restart, after the
-	/// epoch has advanced.
-	pub fn clear<T: HcsgValue>(storage: &HcsgStorage) {
-		storage.clear::<Streamed<NearStream, T>>();
-		storage.clear::<Streamed<FarStream, T>>();
-		storage.clear::<Streamed<BackgroundStream, T>>();
-	}
-}
 
 impl<R: TerrainStream, T: shared::GenerationScheme> shared::GenerationScheme for Streamed<R, T> {
 	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {

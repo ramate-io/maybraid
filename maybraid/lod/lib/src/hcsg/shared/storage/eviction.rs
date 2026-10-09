@@ -3,16 +3,17 @@
 use std::any::TypeId;
 use std::collections::HashMap;
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 
 use bevy::math::bounding::Aabb3d;
 
 use crate::gen::Id;
 
+use super::super::node_store::expand_region;
 #[cfg(debug_assertions)]
 use super::store::lock_mutex;
 use super::store::{read, ErasedStore};
-use super::super::node_store::expand_region;
-use super::HcsgStorage;
+use super::{HcsgStorage, HcsgValue};
 
 pub(super) fn record_evictions(storage: &HcsgStorage, removed: Vec<(TypeId, Id)>) {
 	if removed.is_empty() {
@@ -32,7 +33,9 @@ pub(super) fn forget_evictions_of(storage: &HcsgStorage, type_id: TypeId) {
 }
 
 impl HcsgStorage {
-	pub fn retain_overlapping<T: super::HcsgValue>(&self, regions: &[Aabb3d]) {
+	/// Removes every `T` whose bounds overlap none of `regions`. `Id::Universal`
+	/// is kept. Removal bumps the membership revision as [`Self::remove`] does.
+	pub fn retain_overlapping<T: HcsgValue>(&self, regions: &[Aabb3d]) {
 		let Some(store) = self.store::<T>() else {
 			return;
 		};
@@ -45,21 +48,27 @@ impl HcsgStorage {
 		record_evictions(self, removed.into_iter().map(|id| (TypeId::of::<T>(), id)).collect());
 	}
 
-	pub(in crate::hcsg::shared) fn retain_reached(&self, regions_by_type: &HashMap<TypeId, Vec<Aabb3d>>) {
+	/// Worker sweep: each stored type is kept in the union of `regions_by_type`
+	/// for that type, expanded by the type's retention margin. A type no live
+	/// subscription reaches is cleared, except `Id::Universal` entries.
+	pub(in crate::hcsg::shared) fn retain_reached(
+		&self,
+		regions_by_type: &HashMap<TypeId, Vec<Aabb3d>>,
+	) {
 		if regions_by_type.is_empty() {
 			self.clear_evictions();
 		}
-		let stores: Vec<(TypeId, std::sync::Arc<dyn ErasedStore>)> = read(&self.0.stores)
+		let stores: Vec<(TypeId, Arc<dyn ErasedStore>)> = read(&self.0.stores)
 			.iter()
 			.map(|(type_id, store)| (*type_id, store.clone()))
 			.collect();
 		for (type_id, store) in stores {
-			let scale = self.base_scale_of(type_id);
+			let margin = self.retention_margin_of(type_id);
 			let expanded: Vec<Aabb3d> = regions_by_type
 				.get(&type_id)
 				.into_iter()
 				.flatten()
-				.map(|region| expand_region(*region, scale))
+				.map(|region| expand_region(*region, margin))
 				.collect();
 			let removed = store.ids_outside(&expanded);
 			if removed.is_empty() {
@@ -71,6 +80,7 @@ impl HcsgStorage {
 		}
 	}
 
+	/// True if this key was swept; removes it so the set cannot grow forever.
 	pub(in crate::hcsg::shared) fn take_evicted(&self, type_id: TypeId, id: Id) -> bool {
 		#[cfg(debug_assertions)]
 		{
@@ -91,6 +101,8 @@ impl HcsgStorage {
 		}
 	}
 
+	/// Drops every recorded eviction. Called when no live subscription remains
+	/// (epoch or last unsubscribe) so a new session does not count as rebuilds.
 	pub fn clear_evictions(&self) {
 		#[cfg(debug_assertions)]
 		lock_mutex(&self.0.evicted).clear();

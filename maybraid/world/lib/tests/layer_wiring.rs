@@ -5,15 +5,55 @@ use bevy::prelude::{
 };
 use bevy::scene::ScenePlugin;
 use bevy::state::app::StatesPlugin;
-use durham::{Durham, NearStream, StreamRing, TerrainCellLayout};
+use durham::{
+	Durham, NearStream, StreamRing, TerrainCellLayout, TerrainMeshAssets, TerrainStampConfigs,
+	WatershedConfigs,
+};
 use lod::gen::Id;
-use lod::hcsg::shared::{HcsgRegions, HcsgStorage};
+use lod::hcsg::shared::{HcsgRegions, HcsgRestartRequest, HcsgStorage};
 use lod::LodViewer;
 use maybraid_game_mode_discover::InDiscovery;
 use maybraid_world::WorldLayersPlugin;
 use terrain_layer_model::TerrainStreaming;
 
 type NearRing = InDiscovery<StreamRing<NearStream>>;
+
+fn assert_durham_roots_seeded(storage: &HcsgStorage) -> anyhow::Result<()> {
+	let universal = Id::Universal;
+	let rooted = |name: &str, present: bool| -> anyhow::Result<()> {
+		anyhow::ensure!(present, "Durham {name} root");
+		Ok(())
+	};
+	rooted(
+		"layout",
+		storage
+			.try_entry::<TerrainCellLayout>(universal)
+			.map_err(|_| anyhow::anyhow!("storage busy"))?
+			.is_some(),
+	)?;
+	rooted(
+		"stamp configs",
+		storage
+			.try_entry::<TerrainStampConfigs>(universal)
+			.map_err(|_| anyhow::anyhow!("storage busy"))?
+			.is_some(),
+	)?;
+	rooted(
+		"watershed configs",
+		storage
+			.try_entry::<WatershedConfigs>(universal)
+			.map_err(|_| anyhow::anyhow!("storage busy"))?
+			.is_some(),
+	)?;
+	rooted(
+		"terrain mesh assets",
+		storage
+			.try_entry::<TerrainMeshAssets>(universal)
+			.map_err(|_| anyhow::anyhow!("storage busy"))?
+			.is_some(),
+	)?;
+	Ok(())
+}
 
 fn near_regions_sent(app: &App) -> usize {
 	app.world()
@@ -41,11 +81,12 @@ fn discovery_seeds_its_session_and_streams_only_when_enabled() -> anyhow::Result
 	app.update();
 
 	let storage = app.world().resource::<HcsgStorage>().clone();
-	let layout = storage
-		.try_entry::<TerrainCellLayout>(Id::Universal)
-		.map_err(|_| anyhow::anyhow!("storage busy"))?;
-	anyhow::ensure!(layout.is_some(), "entering Discovery seeds Durham's roots");
+	assert_durham_roots_seeded(&storage)?;
 	anyhow::ensure!(near_regions_sent(&app) == 0, "the gate holds while streaming is off");
+
+	app.world_mut().resource_mut::<HcsgRestartRequest>().request();
+	app.update();
+	assert_durham_roots_seeded(app.world().resource::<HcsgStorage>())?;
 
 	app.insert_resource(TerrainStreaming::<Durham>::new(true));
 	app.update();

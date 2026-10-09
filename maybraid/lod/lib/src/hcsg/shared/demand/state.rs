@@ -41,12 +41,18 @@ pub(super) struct Subscription {
 	pub pass: f64,
 	pub discover: Discover,
 	pub generate: Generate,
+	/// Deduped, focus-sorted ids, once discovery has run.
 	pub discovered: Option<Vec<Id>>,
 	pub discovered_len: Option<usize>,
+	/// Next index in [`Self::discovered`] to generate.
 	pub cursor: usize,
+	/// Every discovered id whose value is available, in the order it landed.
 	pub published: Vec<Id>,
 	pub done: bool,
+	/// Set when the subscription is replaced, removed, or its epoch ends.
 	pub cancelled: Arc<AtomicBool>,
+	/// This scheme's type plus every type its fills have read. Shared with
+	/// replacements so a mid-quantum finish still lands on the live chain.
 	pub reach: Arc<Mutex<HashSet<TypeId>>>,
 }
 
@@ -62,6 +68,7 @@ pub(super) struct DemandState {
 	pub epoch: u64,
 	pub working: bool,
 	pub shutdown: bool,
+	/// The live subscription set changed since the last sweep.
 	pub sweep_needed: bool,
 }
 
@@ -70,7 +77,9 @@ pub(super) struct DemandShared {
 	pub picks: AtomicU64,
 	pub sweeps: AtomicU64,
 	pub state: Mutex<DemandState>,
+	/// Notified when there is work, or on shutdown.
 	pub wake: Condvar,
+	/// Notified when the worker finishes a quantum or runs out of work.
 	pub idle: Condvar,
 }
 
