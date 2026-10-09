@@ -4,7 +4,7 @@
 use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
 use character_rigs::rigs::quadruped_v0::QuadrupedV0Rig;
 
-use crate::animations::{Flapping, Jab, QuadrupedRun, Squat, Walk};
+use crate::animations::{Flapping, Jab, QuadrupedRun, Squat, VictoryWave, Walk};
 use crate::Animation;
 
 #[test]
@@ -61,6 +61,19 @@ fn jab_cover_elbow_tucks_in_y_not_as_a_roll() {
 		(cover - rest_cover).length() > 0.2,
 		"cover is not a length-axis roll, {cover:?} vs {rest_cover:?}"
 	);
+}
+
+#[test]
+fn victory_wave_sweeps_overhead_arm_in_character_x() {
+	let wave = VictoryWave::default();
+	let mut a = HumanoidV0Rig::for_clip_test();
+	let mut b = HumanoidV0Rig::for_clip_test();
+	wave.apply(&mut a, 0.42);
+	wave.apply(&mut b, 0.58);
+	let tip_a = a.character_point("forearm.R");
+	let tip_b = b.character_point("forearm.R");
+	assert!(tip_a.y > 0.35 && tip_b.y > 0.35, "wave stays overhead, {tip_a:?} {tip_b:?}");
+	assert!((tip_a.x - tip_b.x).abs() > 0.06, "oscillation is lateral, {tip_a:?} vs {tip_b:?}");
 }
 
 #[test]
