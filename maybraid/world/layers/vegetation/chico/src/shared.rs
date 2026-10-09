@@ -457,6 +457,7 @@ mod tests {
 				Urban,
 			>::default());
 		select(&mut app, LayeringKind::LushJungle);
+		durham::register_durham_hcsg_session(&mut app);
 		app.finish();
 		app.cleanup();
 		let at = Transform::from_translation(at);

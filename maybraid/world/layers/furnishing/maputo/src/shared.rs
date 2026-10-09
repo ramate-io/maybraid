@@ -272,6 +272,7 @@ mod tests {
 				MaputoPresentationPlugin::<FurnitureNeighborhood, Urban>::default(),
 			));
 		seed_resources(&mut app, 12.0);
+		durham::register_durham_hcsg_session(&mut app);
 		app.finish();
 		app.cleanup();
 		let at = Transform::from_translation(at);

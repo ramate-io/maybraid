@@ -377,6 +377,7 @@ mod tests {
 			.add_plugins(GenevaPlugin::<Window, Urban>::default());
 		app.finish();
 		app.cleanup();
+		durham::register_durham_hcsg_session(&mut app);
 		spawn_viewer(&mut app, at);
 		app
 	}
@@ -579,6 +580,7 @@ mod tests {
 			.add_plugins(GenevaPlugin::<Window, Urban>::default());
 		app.finish();
 		app.cleanup();
+		durham::register_durham_hcsg_session(&mut app);
 		spawn_viewer(&mut app, Vec3::ZERO);
 		app
 	}

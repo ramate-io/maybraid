@@ -11,6 +11,7 @@ pub mod water;
 pub use lod::hcsg::HcsgStorage;
 pub use shared::{
 	BackgroundStream, DurhamPresentationPlugin, DurhamSurface, DurhamWindow, DurhamWorldPlugin,
+	register_durham_hcsg_session,
 	FarStream, NearStream, PlayableStreams, SharedTerrainStorage, StreamPresentationPlugin,
 	StreamRing, Streamed, TerrainStream, WaterPresentationPlugin,
 };

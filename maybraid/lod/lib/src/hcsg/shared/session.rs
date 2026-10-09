@@ -64,7 +64,7 @@ pub(crate) fn begin_hcsg_session_restart(
 	reseeding.0 = true;
 }
 
-pub fn end_hcsg_session_restart(mut reseeding: ResMut<HcsgSessionReseeding>) {
+pub(crate) fn end_hcsg_session_restart(mut reseeding: ResMut<HcsgSessionReseeding>) {
 	reseeding.0 = false;
 }
 
@@ -75,7 +75,7 @@ pub fn request_hcsg_session_restart(mut pending: ResMut<HcsgRestartRequest>) {
 
 /// Same as [`begin_hcsg_session_restart`] without waiting for `Update`: for
 /// schedules that chain [`HcsgSessionSeed`] immediately after.
-pub fn begin_hcsg_session_restart_now(
+pub(crate) fn begin_hcsg_session_restart_now(
 	storage: &HcsgStorage,
 	demand: &HcsgDemand,
 	reseeding: &mut HcsgSessionReseeding,
@@ -83,6 +83,12 @@ pub fn begin_hcsg_session_restart_now(
 	demand.advance_epoch();
 	storage.clear_derived();
 	reseeding.0 = true;
+}
+
+/// Ensures the full session restart chain finishes before [`HcsgSystems`].
+pub(crate) fn configure_session_before_hcsg_systems(app: &mut App) {
+	use super::runtime::HcsgSystems;
+	app.configure_sets(Update, HcsgSessionRestarted.before(HcsgSystems));
 }
 
 /// Installs restart resources and the `Update` restart chain.
@@ -265,6 +271,40 @@ mod tests {
 			.get_or_generate::<OrphanDerived>(Id::Universal)
 			.ok_or_else(|| anyhow::anyhow!("derived after restart"))?;
 		assert_eq!(rebuilt.seed, 2, "stale derived value must not survive restart");
+		Ok(())
+	}
+
+	#[derive(Resource, Default)]
+	struct HcsgSystemsObservedDuringReseed(bool);
+
+	fn mark_hcsg_systems_if_reseeding(
+		reseeding: Res<HcsgSessionReseeding>,
+		mut observed: ResMut<HcsgSystemsObservedDuringReseed>,
+	) {
+		if reseeding.0 {
+			observed.0 = true;
+		}
+	}
+
+	#[test]
+	fn restart_finishes_reseeding_before_hcsg_systems() -> anyhow::Result<()> {
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins);
+		app.init_resource::<HcsgSystemsObservedDuringReseed>();
+		register_session_seed(&mut app, seed_durham_like);
+		app.insert_resource(SessionRootHolder { seed: 1 });
+		app.add_systems(
+			Update,
+			mark_hcsg_systems_if_reseeding.in_set(crate::hcsg::shared::HcsgSystems),
+		);
+		app.world_mut()
+			.resource_mut::<HcsgRestartRequest>()
+			.request();
+		app.update();
+		anyhow::ensure!(
+			!app.world().resource::<HcsgSystemsObservedDuringReseed>().0,
+			"generation and presentation must not run until reseeding finishes"
+		);
 		Ok(())
 	}
 }

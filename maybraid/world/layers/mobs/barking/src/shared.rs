@@ -387,6 +387,7 @@ mod tests {
 		let storage = app.world().resource::<shared::HcsgStorage>().clone();
 		ChicoNodes::configure::<Urban>(&storage);
 		pin(&mut app, kind);
+		durham::register_durham_hcsg_session(&mut app);
 		app.finish();
 		app.cleanup();
 		let at = Transform::IDENTITY;

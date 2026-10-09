@@ -7,7 +7,7 @@ use crate::scene::LodRefreshSystems;
 
 use super::demand::HcsgDemand;
 use super::presentation::despawn_retired_hosts;
-use super::session::ensure_session;
+use super::session::{configure_session_before_hcsg_systems, ensure_session};
 use super::storage::HcsgStorage;
 use super::worker::HcsgWorker;
 
@@ -32,4 +32,5 @@ pub(super) fn ensure_runtime(app: &mut App) {
 		Err(err) => error!("hcsg: failed to spawn the generation worker: {err}"),
 	}
 	ensure_session(app);
+	configure_session_before_hcsg_systems(app);
 }

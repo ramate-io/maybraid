@@ -88,11 +88,28 @@ impl<C: Send + Sync + 'static> Plugin for WaterPresentationPlugin<C> {
 	fn build(&self, app: &mut App) {
 		let storage = app.world_mut().get_resource_or_init::<HcsgStorage>().clone();
 		DurhamNodes::configure(&storage);
-		register_session_seed(app, seed_durham_hcsg_roots);
 		app.add_plugins(PresentationPlugin::<C, Water>::default());
 		if !app.is_plugin_added::<LodSceneRefreshChunkPlugin<HcsgNode<Water>>>() {
 			app.add_plugins(LodSceneRefreshChunkPlugin::<HcsgNode<Water>>::default());
 		}
+	}
+}
+
+/// Registers Durham's HCSG session root seeder once per app.
+struct DurhamHcsgSessionPlugin;
+
+impl Plugin for DurhamHcsgSessionPlugin {
+	fn build(&self, app: &mut App) {
+		register_session_seed(app, seed_durham_hcsg_roots);
+	}
+}
+
+/// Installs [`DurhamHcsgSessionPlugin`] at most once. World installs call this
+/// from [`DurhamWorldPlugin`]; integration tests without the world plugin call
+/// it directly.
+pub fn register_durham_hcsg_session(app: &mut App) {
+	if !app.is_plugin_added::<DurhamHcsgSessionPlugin>() {
+		app.add_plugins(DurhamHcsgSessionPlugin);
 	}
 }
 
@@ -138,6 +155,7 @@ impl Plugin for DurhamWorldPlugin {
 			WORLD_FINE_HALF_EXTENT_CELLS,
 		));
 		world.insert_resource(WaterMeshAssets { material: water });
+		register_durham_hcsg_session(app);
 	}
 }
 
@@ -328,6 +346,7 @@ mod tests {
 				DurhamPresentationPlugin::<DurhamWindow>::default(),
 			));
 		seed_resources(&mut app, 1);
+		register_durham_hcsg_session(&mut app);
 		let at = Transform::IDENTITY;
 		app.world_mut()
 			.spawn((LodViewer, at, LodNodePose { previous: at, current: at }));

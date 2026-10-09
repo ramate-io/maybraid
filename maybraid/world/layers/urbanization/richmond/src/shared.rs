@@ -208,6 +208,7 @@ mod tests {
 				RichmondPresentationPlugin::<DurhamWindow, Ground>::default(),
 			));
 		seed_resources(&mut app, height);
+		durham::register_durham_hcsg_session(&mut app);
 		app.finish();
 		app.cleanup();
 		let at = Transform::IDENTITY;
