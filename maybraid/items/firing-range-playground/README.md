@@ -91,6 +91,6 @@ no return fire — so projectile contacts can be checked in isolation.
 capsule (amber), the query-only head capsule (cyan, Y-stretched), and the
 headshot plane (blue) so a miss on the crown is visible.
 
-The standalone `firing-range` executable is retired. Free-for-all is entered from the Maybraid home row: Training Ground runs this roster inside `maybraid`.
+The standalone `firing-range` executable is retired. `FreeForAllPlugin` has no host in `maybraid` while Training Ground is removed.
 
 WASD / left stick move, mouse / right stick look, Space / A jump, click / RT fire. R3 toggles first person; right mouse / LT focuses through the optic FOV; middle mouse / left bumper / C ADS with iron FOV.

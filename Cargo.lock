@@ -6817,7 +6817,6 @@ dependencies = [
  "maybraid-character-controller",
  "maybraid-game-mode-discover",
  "maybraid-game-mode-reliquary",
- "maybraid-game-mode-training-ground",
  "maybraid-input",
  "maybraid-menu-controller",
  "maybraid-world",
@@ -6886,45 +6885,6 @@ name = "maybraid-game-mode-reliquary"
 version = "0.1.2"
 dependencies = [
  "bevy",
-]
-
-[[package]]
-name = "maybraid-game-mode-training-ground"
-version = "0.1.2"
-dependencies = [
- "anyhow",
- "avian3d",
- "barking",
- "bevy",
- "building-components",
- "building-physics",
- "buildings",
- "character-items",
- "character-persist",
- "characters",
- "chico",
- "combat-hud",
- "damage",
- "durham",
- "furnishing-layer-model",
- "geneva",
- "language-layer-model",
- "layer-stack",
- "lod",
- "maputo",
- "maybraid-game-mode-discover",
- "mob-characters",
- "mob-intelligence",
- "mob-layer-model",
- "mob-scenes",
- "player-camera",
- "procedural-common",
- "richmond",
- "terrain-layer-model",
- "threat-intelligence",
- "urbanization-layer-model",
- "vegetation-layer-model",
- "world-player",
 ]
 
 [[package]]
@@ -7082,7 +7042,6 @@ dependencies = [
  "material-ref",
  "maybraid-character-controller",
  "maybraid-game-mode-discover",
- "maybraid-game-mode-training-ground",
  "maybraid-input",
  "maybraid-skill-map",
  "maybraid-sky",

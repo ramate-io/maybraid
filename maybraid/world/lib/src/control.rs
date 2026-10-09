@@ -63,8 +63,7 @@ pub(crate) fn update_world_surface_ready(
 	colliders: Query<&CascadeChunk, With<TerrainTrimeshCollider>>,
 	mut ready: ResMut<WorldSurfaceReady>,
 ) {
-	// Menu shells keep streaming off. Leave the ready bit alone; Training
-	// unveils from this same column once a padded FinePatch collider exists.
+	// Menu shells keep streaming off. Leave the ready bit alone.
 	if !streaming.enabled {
 		return;
 	}
@@ -165,8 +164,8 @@ pub(crate) fn apply_intents_to_movement(
 	for mut wish in &mut wishes {
 		wish.0 = wish_dir;
 	}
-	// Only the streamed vegetation body. Training Ground's free-for-all capsule
-	// is a foreign [`CharacterController`] that [`player`] already drove.
+	// Only the streamed vegetation body. A foreign [`CharacterController`] is
+	// one that [`player`] already drove.
 	for (entity, mut wish, world_body) in &mut player_wishes {
 		if !world_body {
 			continue;

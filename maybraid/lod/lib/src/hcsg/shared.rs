@@ -10,11 +10,12 @@
 //! - [`demand`]: [`HcsgDemand`], one subscription per bounds source, and the
 //!   epoch that sessions advance.
 //! - [`worker`]: [`HcsgWorker`], the thread that fills subscriptions.
-//! - [`bounds`]: [`HcsgBounds`], where a system wants values.
-//! - [`generation`]: [`generation<B, T>`](generation::generation) keeps `T`
-//!   warm within `B`, fire and forget.
-//! - [`presentation`]: [`presentation<B, T>`](presentation::presentation)
-//!   keeps one [`HcsgNode<T>`] host per published value within `B`.
+//! - [`bounds`]: [`HcsgRegions<C>`], the boxes channel `C` wants values in,
+//!   and the [`HcsgBounds`] producers that send them.
+//! - [`generation`]: [`generation<C, T>`](generation::generation) keeps `T`
+//!   warm within `C`'s regions, fire and forget.
+//! - [`presentation`]: [`presentation<C, T>`](presentation::presentation)
+//!   keeps one [`HcsgNode<T>`] host per published value within `C`'s regions.
 //! - [`node`]: [`HcsgNode<T>`], forwarding the LOD scene traits to `T`.
 //!
 //! This sits alongside the frame-synchronous [`super::HcsgStorage`] until the
@@ -35,7 +36,7 @@ mod system_tests;
 #[cfg(test)]
 mod tests;
 
-pub use bounds::HcsgBounds;
+pub use bounds::{HcsgBounds, HcsgBoundsPlugin, HcsgRegions};
 pub use context::{GenerationContext, GenerationScheme};
 pub use demand::{HcsgDemand, Published, SubscriptionId};
 pub use generation::GenerationPlugin;

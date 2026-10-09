@@ -1,12 +1,8 @@
 //! First-load unveil: Discovery waits on spawn terrain and quiet LOD work.
-//! Training unveils once the FinePatch surface and stamped development are ready and
-//! does not wait on the playable-world job wave.
 
-use crate::flow::{GameFlow, PlaySession};
+use crate::flow::GameFlow;
 use crate::shell::ShellRoute;
 use bevy::prelude::*;
-use layer_stack::GenerationReadiness;
-use maybraid_game_mode_training_ground::TrainingRound;
 use maybraid_world::{LodJobCounter, WorldSurfaceReady};
 use menu_screens::{request_loading_explainer, request_loading_progress};
 
@@ -95,37 +91,6 @@ impl FirstLoadGate {
 	}
 }
 
-pub(crate) fn unveil_ready(
-	training: bool,
-	gate: &FirstLoadGate,
-	ready: bool,
-	active: u64,
-	now: f32,
-) -> bool {
-	if training {
-		ready
-	} else {
-		gate.should_unveil(ready, active, now)
-	}
-}
-
-pub(crate) fn loading_explainer(
-	training: bool,
-	gate: &FirstLoadGate,
-	ready: bool,
-	active: u64,
-) -> &'static str {
-	if training {
-		if ready {
-			"Almost ready…"
-		} else {
-			"Waiting for the ground…"
-		}
-	} else {
-		gate.explainer(ready, active)
-	}
-}
-
 pub(crate) fn arm_first_load(mut commands: Commands, time: Res<Time>) {
 	commands.insert_resource(FirstLoadGate::new(time.elapsed_secs()));
 }
@@ -136,60 +101,32 @@ pub(crate) fn disarm_first_load(mut commands: Commands) {
 
 pub(crate) fn finish_world_loading(
 	mut commands: Commands,
-	session: Res<PlaySession>,
 	ready: Res<WorldSurfaceReady>,
-	ready_for: Option<Res<GenerationReadiness>>,
-	round: Option<Res<TrainingRound>>,
 	jobs: Option<Res<LodJobCounter>>,
 	mut gate: Option<ResMut<FirstLoadGate>>,
 	time: Res<Time>,
 	mut route: ShellRoute,
 ) {
-	let training = *session == PlaySession::Training;
-	let surface_ready = if training {
-		ready.0 && plaza_mounted_for(ready_for.as_deref(), round.as_deref())
-	} else {
-		ready.0
-	};
+	let surface_ready = ready.0;
 	let active = jobs.as_deref().map(LodJobCounter::active).unwrap_or(0);
 	let Some(gate) = gate.as_deref_mut() else {
 		if surface_ready {
-			route.enter(GameFlow::World, *session);
+			route.enter(GameFlow::World);
 		}
 		return;
 	};
 	gate.observe(active);
 	let now = time.elapsed_secs();
 	request_loading_progress(&mut commands, gate.progress(surface_ready, active));
-	request_loading_explainer(
-		&mut commands,
-		loading_explainer(training, gate, surface_ready, active),
-	);
-	if unveil_ready(training, gate, surface_ready, active, now) {
-		route.enter(GameFlow::World, *session);
+	request_loading_explainer(&mut commands, gate.explainer(surface_ready, active));
+	if gate.should_unveil(surface_ready, active, now) {
+		route.enter(GameFlow::World);
 	}
-}
-
-/// The previous map's readiness stays until its teardown runs, so a new
-/// map must not unveil on it. A new life on the same map unveils on the live one.
-fn plaza_mounted_for(ready: Option<&GenerationReadiness>, round: Option<&TrainingRound>) -> bool {
-	ready.is_some_and(|ready| round.is_none_or(|round| ready.covers(round.map().readiness_key())))
 }
 
 #[cfg(test)]
 mod tests {
 	use super::*;
-
-	#[test]
-	fn a_round_reload_waits_for_its_own_plaza() {
-		let round = TrainingRound::new(1);
-		let next = round.next();
-		let ready = GenerationReadiness::new(round.map().readiness_key());
-		assert!(plaza_mounted_for(Some(&ready), Some(&round)));
-		assert!(!plaza_mounted_for(Some(&ready), Some(&next)));
-		assert!(!plaza_mounted_for(None, Some(&next)));
-		assert!(plaza_mounted_for(Some(&ready), Some(&round.next_life())));
-	}
 
 	fn gate_at(entered_at: f32) -> FirstLoadGate {
 		FirstLoadGate::new(entered_at)
@@ -230,28 +167,14 @@ mod tests {
 	}
 
 	#[test]
-	fn training_unveils_when_the_surface_is_ready_without_waiting_on_jobs() {
-		let gate = gate_at(0.0);
-		assert!(!unveil_ready(true, &gate, false, 400, 0.0));
-		assert!(unveil_ready(true, &gate, true, 400, 0.0));
-		assert!(!unveil_ready(false, &gate, true, 0, 0.2));
-		assert_eq!(loading_explainer(true, &gate, false, 0), "Waiting for the ground…");
-		assert_eq!(loading_explainer(true, &gate, true, 0), "Almost ready…");
-	}
-
-	#[test]
-	fn a_ready_training_surface_requests_world_without_leaving_training() -> anyhow::Result<()> {
+	fn a_ready_surface_without_a_gate_requests_the_discovery_world() -> anyhow::Result<()> {
 		use bevy::ecs::system::RunSystemOnce;
 		use layer_stack::ActiveGenerationMode;
-		use maybraid_game_mode_training_ground::TrainingGround;
-		let round = TrainingRound::new(1);
+		use maybraid_game_mode_discover::Discovery;
 		let mut world = World::new();
 		world.insert_resource(NextState::<GameFlow>::Unchanged);
 		world.insert_resource(NextState::<ActiveGenerationMode>::Unchanged);
-		world.insert_resource(PlaySession::Training);
 		world.insert_resource(WorldSurfaceReady(true));
-		world.insert_resource(GenerationReadiness::new(round.map().readiness_key()));
-		world.insert_resource(round);
 		world.init_resource::<Time>();
 		world
 			.run_system_once(finish_world_loading)
@@ -259,7 +182,7 @@ mod tests {
 		let flow = world.resource::<NextState<GameFlow>>();
 		let mode = world.resource::<NextState<ActiveGenerationMode>>();
 		let flow_ok = matches!(flow, NextState::Pending(GameFlow::World));
-		let mode_ok = matches!(mode, NextState::PendingIfNeq(mode) if mode.is::<TrainingGround>());
+		let mode_ok = matches!(mode, NextState::PendingIfNeq(mode) if mode.is::<Discovery>());
 		if !flow_ok || !mode_ok {
 			return Err(anyhow::anyhow!("unveil requested flow {flow:?} mode {mode:?}"));
 		}

@@ -8,7 +8,6 @@ use furnishing_layer_model::Furnishing;
 use layer_stack::{LayerGenerationCore, ModeSubscribers};
 use maputo::Maputo;
 use maybraid_game_mode_discover::Discovery;
-use maybraid_game_mode_training_ground::TrainingGround;
 use maybraid_world::WorldLayersPlugin;
 use mob_layer_model::Mobs;
 use terrain_layer_model::OnTerrain;
@@ -30,26 +29,21 @@ fn layered_world_stack_finishes_headless() -> anyhow::Result<()> {
 
 	let ground = app.world().resource::<ModeSubscribers<Ground>>();
 	anyhow::ensure!(ground.contains::<Discovery>());
-	anyhow::ensure!(ground.contains::<TrainingGround>());
 
 	let urban = app.world().resource::<ModeSubscribers<Urban>>();
 	anyhow::ensure!(urban.contains::<Discovery>());
-	anyhow::ensure!(urban.contains::<TrainingGround>());
 
 	let vegetation = app.world().resource::<ModeSubscribers<Veg>>();
 	anyhow::ensure!(vegetation.contains::<Discovery>());
-	anyhow::ensure!(vegetation.contains::<TrainingGround>());
 
 	let mobs = app.world().resource::<ModeSubscribers<Mob>>();
 	anyhow::ensure!(mobs.contains::<Discovery>());
-	anyhow::ensure!(mobs.contains::<TrainingGround>());
 
 	let furniture = app.world().resource::<ModeSubscribers<Furniture>>();
 	anyhow::ensure!(furniture.contains::<Discovery>());
-	anyhow::ensure!(furniture.contains::<TrainingGround>());
 	anyhow::ensure!(
 		app.is_plugin_added::<LayerGenerationCore<Mob>>(),
-		"both mob generation plugins share one core"
+		"mob generation installs its core"
 	);
 
 	Ok(())

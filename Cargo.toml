@@ -107,7 +107,6 @@ members = [
   "maybraid/game",
   "maybraid/world/modes/discover",
   "maybraid/world/modes/reliquary",
-  "maybraid/world/modes/training-ground",
   "maybraid/input",
   "maybraid/combat-hud",
   "maybraid/player",
@@ -412,7 +411,6 @@ items-playground = { path = "maybraid/items/playground" }
 firing-range-playground = { path = "maybraid/items/firing-range-playground" }
 maybraid-game-mode-discover = { path = "maybraid/world/modes/discover" }
 maybraid-game-mode-reliquary = { path = "maybraid/world/modes/reliquary" }
-maybraid-game-mode-training-ground = { path = "maybraid/world/modes/training-ground" }
 les-halles-arena = { path = "maybraid/items/les-halles-arena" }
 
 gimme-core = { path = "maybraid/gimme/core" }
