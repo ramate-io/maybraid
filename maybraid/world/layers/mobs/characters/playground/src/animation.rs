@@ -1,8 +1,8 @@
 use bevy::prelude::*;
 use character_animations::{
 	animations::{
-		FixedTuck, Run, Squat, SquatDescent, Tuck, TuckedFlip, TwoFootedJump, TwoFootedTuckedFlip,
-		Walk, DEFAULT_DESCENT_SPEED, DEFAULT_GRAVITY, DEFAULT_LANDING_SQUAT_SPEED,
+		FixedTuck, HandClap, Run, Squat, SquatDescent, Tuck, TuckedFlip, TwoFootedJump,
+		TwoFootedTuckedFlip, Walk, DEFAULT_DESCENT_SPEED, DEFAULT_GRAVITY, DEFAULT_LANDING_SQUAT_SPEED,
 		DEFAULT_PRE_SQUAT_SPEED,
 	},
 	Animation, Effects,
@@ -28,6 +28,7 @@ const FRONT_FLIP_CYCLE_SPEED: f32 = 0.85;
 const JUMP_HEIGHT: f32 = 1.5;
 const JUMP_PRE_SQUAT_SPEED: f32 = DEFAULT_PRE_SQUAT_SPEED * 1.2;
 const JUMP_LANDING_SQUAT_SPEED: f32 = DEFAULT_LANDING_SQUAT_SPEED * 1.3;
+const HAND_CLAP_SPEED: f32 = 0.9;
 
 const DEBUG_BONES: &[&str] = &[
 	"root",
@@ -57,6 +58,7 @@ pub enum AnimationMode {
 	FixedTuck,
 	TuckedFlip,
 	TwoFootedTuckedFlip,
+	HandClap,
 }
 
 #[derive(Resource)]
@@ -241,8 +243,30 @@ pub fn animate_limbs(
 			&mut limbs,
 			t,
 		),
+		AnimationMode::HandClap => {
+			animate_hand_clap(&config, &playback, &mut rig, &mut armature, &mut limbs, t)
+		}
 	}
 	apply_joint_preview(&playback, &mut rig, &mut limbs);
+}
+
+fn animate_hand_clap(
+	config: &CharacterConfig,
+	playback: &AnimationPlayback,
+	rig: &mut Query<&mut HumanoidV0Rig, With<CharacterRig>>,
+	armature: &mut Query<&mut Transform, (With<CharacterRig>, Without<LimbAnimator>)>,
+	limbs: &mut Query<(&mut Transform, &LimbAnimator)>,
+	t: f32,
+) {
+	let Ok(mut rig) = rig.single_mut() else {
+		return;
+	};
+
+	marshal_limbs_into_pose(&mut rig, limbs, playback);
+	let progress = (t * HAND_CLAP_SPEED).clamp(0.0, 1.0);
+	let effects = HandClap.apply(rig.as_mut(), progress);
+	apply_effects(config.transform, effects, armature);
+	marshal_pose_to_limbs(&rig, limbs);
 }
 
 fn animate_run(

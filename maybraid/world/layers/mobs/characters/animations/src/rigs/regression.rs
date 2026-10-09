@@ -4,7 +4,7 @@
 use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
 use character_rigs::rigs::quadruped_v0::QuadrupedV0Rig;
 
-use crate::animations::{Flapping, Jab, QuadrupedRun, Squat, Walk};
+use crate::animations::{Flapping, HandClap, Jab, QuadrupedRun, Squat, Walk};
 use crate::Animation;
 
 #[test]
@@ -47,6 +47,20 @@ fn flapping_keeps_the_previous_front_back_stroke() {
 	let b = back.character_length("forearm.L");
 	assert!((a.z - b.z).abs() > (a.y - b.y).abs(), "previous flap is XZ, {a:?} vs {b:?}");
 	assert!((a - b).length() > 0.3, "wing tip must move, {a:?} vs {b:?}");
+}
+
+#[test]
+fn hand_clap_forearms_close_in_character_x() {
+	let rest = HumanoidV0Rig::for_clip_test();
+	let mut posed = HumanoidV0Rig::for_clip_test();
+	HandClap.apply(&mut posed, 0.55);
+	let rest_sep = (rest.character_point("forearm.L") - rest.character_point("forearm.R")).length();
+	let posed_sep =
+		(posed.character_point("forearm.L") - posed.character_point("forearm.R")).length();
+	assert!(
+		posed_sep < rest_sep - 0.2,
+		"clap pulls forearms together, {posed_sep} vs {rest_sep}"
+	);
 }
 
 #[test]
