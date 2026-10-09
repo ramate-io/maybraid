@@ -1,12 +1,12 @@
 //! Richmond's nodes in [`HcsgStorage`].
 //!
-//! Reads of stored nodes live on their schemes: [`RichmondDevelopment::merged_pads`],
-//! [`PaddedTerrain::best_overlapping`], [`Built::overlapping`].
+//! Generation reads stored values through [`GenerationContext`] on each
+//! scheme's [`lod::hcsg::shared::GenerationScheme::build_with_id`].
 
 use bevy::math::bounding::Aabb3d;
 use bevy::math::{DVec3, Vec3};
 use durham::PlayableStreams;
-use lod::hcsg::{shared, HcsgStorage};
+use lod::hcsg::shared;
 
 use crate::built::Built;
 use crate::cell::DEVELOPMENT_CELL_SIZE;
