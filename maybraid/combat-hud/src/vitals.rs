@@ -7,14 +7,9 @@ use menu_components::{
 };
 use player::Player;
 
-pub(crate) const VITALS_INSET: f32 = 16.0;
+use crate::plate::{spawn_hud_plate, HudPlateCorner, HudPlateLayout};
+
 const VITALS_WIDTH: f32 = 228.0;
-pub(crate) const PLATE_PAD_X: f32 = 8.0;
-pub(crate) const PLATE_PAD_Y: f32 = 6.0;
-pub(crate) const PLATE_BORDER: f32 = 1.5;
-pub(crate) const PLATE_RADIUS: f32 = 8.0;
-pub(crate) const PLATE_FILL: Color = Color::srgba(0.52, 0.52, 0.56, 0.82);
-pub(crate) const PLATE_STROKE: Color = Color::srgba(0.78, 0.78, 0.82, 0.9);
 const WELL_FILL: Color = Color::srgb(0.10, 0.11, 0.13);
 const WELL_STROKE: Color = Color::srgba(0.08, 0.08, 0.10, 0.95);
 const PIP_EMPTY: Color = Color::srgb(0.18, 0.19, 0.22);
@@ -46,29 +41,12 @@ pub(crate) fn vitals_fonts(asset_server: Option<&AssetServer>) -> HudFonts {
 }
 
 pub(crate) fn spawn_player_vitals(parent: &mut ChildSpawnerCommands, fonts: &HudFonts) {
-	parent
-		.spawn((
-			Name::new("player-vitals"),
-			PlayerVitalsRoot,
-			Node {
-				position_type: PositionType::Absolute,
-				left: Val::Px(VITALS_INSET),
-				bottom: Val::Px(VITALS_INSET),
-				width: Val::Px(VITALS_WIDTH),
-				flex_direction: FlexDirection::Column,
-				align_items: AlignItems::Stretch,
-				row_gap: Val::Px(6.0),
-				padding: UiRect::axes(Val::Px(PLATE_PAD_X), Val::Px(PLATE_PAD_Y)),
-				border: UiRect::all(Val::Px(PLATE_BORDER)),
-				border_radius: BorderRadius::all(Val::Px(PLATE_RADIUS)),
-				..default()
-			},
-			BackgroundColor(PLATE_FILL),
-			BorderColor::all(PLATE_STROKE),
-			Visibility::Hidden,
-			Pickable::IGNORE,
-		))
-		.with_children(|plate| {
+	spawn_hud_plate(
+		parent,
+		"player-vitals",
+		PlayerVitalsRoot,
+		HudPlateLayout { width: VITALS_WIDTH, row_gap: 6.0, corner: HudPlateCorner::BottomLeft },
+		|plate| {
 			spawn_hud_text_card(plate, (), |card| {
 				card.spawn((
 					PlayerVitalsName,
@@ -111,7 +89,8 @@ pub(crate) fn spawn_player_vitals(parent: &mut ChildSpawnerCommands, fonts: &Hud
 						));
 					}
 				});
-		});
+		},
+	);
 }
 
 pub(crate) fn sync_player_vitals(
