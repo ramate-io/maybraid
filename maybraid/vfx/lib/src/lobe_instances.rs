@@ -1,5 +1,7 @@
 //! Packed per-lobe GPU records indexed through [`MeshTag`].
 
+use std::sync::atomic::{AtomicU32, Ordering};
+
 use bevy::mesh::MeshTag;
 use bevy::prelude::*;
 use bevy::render::render_resource::ShaderType;
@@ -9,6 +11,13 @@ use crate::composition::LobeKind;
 use crate::lobe_material::LobeMaterial;
 use crate::lobes::VfxLobe;
 use crate::palette::ExplosionPalette;
+
+static NEXT_LOBE_SLOT: AtomicU32 = AtomicU32::new(0);
+
+/// Stable packed-buffer index for one lobe. Assigned once at spawn; never remapped.
+pub fn next_lobe_slot() -> u32 {
+	NEXT_LOBE_SLOT.fetch_add(1, Ordering::Relaxed)
+}
 
 /// One lobe's shader uniforms. Age lives in `params.x` and is updated each frame.
 #[derive(Component, Clone, Copy, Debug, Default, ShaderType)]
@@ -94,11 +103,12 @@ pub fn setup_lobe_instance_pack(
 	commands.insert_resource(LobeInstancePack { buffer, blend, add });
 }
 
-/// Rebuild the packed instance buffer and stamp [`MeshTag`] indices for the shader.
+/// Write each lobe into its spawned [`MeshTag`] slot. Tags stay stable so the
+/// render-world copy cannot point at a neighbor after query order changes.
 pub fn sync_lobe_instance_buffer(
 	pack: Option<Res<LobeInstancePack>>,
 	mut buffers: ResMut<Assets<ShaderBuffer>>,
-	mut lobes: Query<(&VfxLobe, &mut LobeInstanceGpu, &mut MeshTag)>,
+	mut lobes: Query<(&VfxLobe, &mut LobeInstanceGpu, &MeshTag)>,
 ) {
 	let Some(pack) = pack else {
 		return;
@@ -106,14 +116,16 @@ pub fn sync_lobe_instance_buffer(
 	let Some(mut buffer) = buffers.get_mut(&pack.buffer) else {
 		return;
 	};
-	let mut instances = Vec::new();
-	for (lobe, mut gpu, mut tag) in &mut lobes {
+	let mut records = Vec::new();
+	let mut max_idx = 0u32;
+	for (lobe, mut gpu, tag) in &mut lobes {
 		gpu.set_age(lobe.age);
-		*tag = MeshTag(instances.len() as u32);
-		instances.push(*gpu);
+		max_idx = max_idx.max(tag.0);
+		records.push((tag.0, *gpu));
 	}
-	if instances.is_empty() {
-		instances.push(LobeInstanceGpu::default());
+	let mut instances = vec![LobeInstanceGpu::default(); max_idx as usize + 1];
+	for (idx, gpu) in records {
+		instances[idx as usize] = gpu;
 	}
 	buffer.set_data(instances);
 }
@@ -159,6 +171,54 @@ mod tests {
 		let late = lobe_transform(&spec, 0.8);
 		assert!(early.rotation.angle_between(late.rotation) > 0.2);
 		assert!((gpu.params.y - spec.duration).abs() < 1e-4);
+	}
+
+	#[test]
+	fn sync_keeps_spawned_mesh_tags() {
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins)
+			.add_plugins(AssetPlugin::default())
+			.add_plugins(bevy::render::storage::StoragePlugin)
+			.init_asset::<LobeMaterial>()
+			.init_asset::<ShaderBuffer>()
+			.add_systems(Startup, setup_lobe_instance_pack)
+			.add_systems(Update, sync_lobe_instance_buffer);
+		app.update();
+
+		let palette = ExplosionPalette::maybraid();
+		let first = MeshTag(next_lobe_slot());
+		let second = MeshTag(next_lobe_slot());
+		let first_idx = first.0;
+		let second_idx = second.0;
+		let spec = crate::composition::LobeSpec::new(Vec3::ZERO, Vec3::splat(0.5));
+		app.world_mut().spawn((
+			VfxLobe { age: 0.1, spec, playback: 1.0 },
+			LobeInstanceGpu::new(LobeKind::Fire, 0.5, 0.0, &palette, Color::WHITE, 1.0),
+			first,
+		));
+		app.world_mut().spawn((
+			VfxLobe { age: 0.2, spec, playback: 1.0 },
+			LobeInstanceGpu::new(LobeKind::Smoke, 2.0, 1.0, &palette, Color::WHITE, 1.0),
+			second,
+		));
+		app.update();
+
+		let tags: Vec<u32> =
+			app.world_mut().query::<&MeshTag>().iter(app.world()).map(|tag| tag.0).collect();
+		assert!(tags.contains(&first_idx), "{tags:?}");
+		assert!(tags.contains(&second_idx), "{tags:?}");
+
+		app.world_mut().spawn((
+			VfxLobe { age: 0.0, spec, playback: 1.0 },
+			LobeInstanceGpu::new(LobeKind::Flash, 0.1, 2.0, &palette, Color::WHITE, 1.0),
+			MeshTag(next_lobe_slot()),
+		));
+		app.update();
+
+		let tags: Vec<u32> =
+			app.world_mut().query::<&MeshTag>().iter(app.world()).map(|tag| tag.0).collect();
+		assert!(tags.contains(&first_idx), "first slot remapped: {tags:?}");
+		assert!(tags.contains(&second_idx), "second slot remapped: {tags:?}");
 	}
 
 	#[test]

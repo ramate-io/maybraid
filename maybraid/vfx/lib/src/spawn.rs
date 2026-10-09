@@ -6,17 +6,20 @@ use bevy_hanabi::prelude::{EffectMaterial, ParticleEffect};
 
 use bevy::mesh::MeshTag;
 
-use crate::composition::{EffectDefinition, EffectLayer, EffectPart, LobeKind};
-use crate::lobe_instances::LobeInstanceGpu;
-use crate::membership::VfxMemberOf;
+use crate::composition::{
+	EffectDefinition, EffectLayer, EffectPart, LobeKind, ScaleBounds, DEFAULT_SCALE_MAX,
+	DEFAULT_SCALE_MIN,
+};
+use crate::lobe_instances::{next_lobe_slot, LobeInstanceGpu};
 use crate::lobes::{lobe_transform, vary_lobe, LobeMaterialPending, VfxLobe};
+use crate::membership::VfxMemberOf;
 use crate::palette::ExplosionPalette;
 use crate::particles::effect_properties;
 use crate::seed;
 
 pub const MAX_INTENSITY: f32 = 2.0;
-pub const MIN_SCALE: f32 = 0.25;
-pub const MAX_SCALE: f32 = 4.0;
+pub const MIN_SCALE: f32 = DEFAULT_SCALE_MIN;
+pub const MAX_SCALE: f32 = DEFAULT_SCALE_MAX;
 pub const MIN_PLAYBACK: f32 = 0.25;
 pub const MAX_PLAYBACK: f32 = 4.0;
 
@@ -52,7 +55,11 @@ impl Default for VfxSpawn {
 
 impl VfxSpawn {
 	pub fn clamped_scale(&self) -> f32 {
-		self.scale.clamp(MIN_SCALE, MAX_SCALE)
+		self.clamped_scale_for(ScaleBounds::default())
+	}
+
+	pub fn clamped_scale_for(&self, bounds: ScaleBounds) -> f32 {
+		self.scale.clamp(bounds.min, bounds.max)
 	}
 
 	pub fn clamped_intensity(&self) -> f32 {
@@ -80,6 +87,19 @@ impl VfxSpawn {
 		Self {
 			transform: self.transform,
 			scale: self.clamped_scale(),
+			intensity: self.clamped_intensity(),
+			playback: self.clamped_playback(),
+			tint: self.tint,
+			seed: Some(self.seed.unwrap_or_else(seed::generate)),
+			palette: self.palette,
+		}
+	}
+
+	/// Clamp using the target definition's scale bounds. Call once before spawn.
+	pub fn resolved_for(&self, definition: &EffectDefinition) -> Self {
+		Self {
+			transform: self.transform,
+			scale: self.clamped_scale_for(definition.scale_bounds),
 			intensity: self.clamped_intensity(),
 			playback: self.clamped_playback(),
 			tint: self.tint,
@@ -145,7 +165,7 @@ pub fn spawn_vfx(
 	definition: &EffectDefinition,
 	spawn: VfxSpawn,
 ) -> Entity {
-	let spawn = spawn.resolved();
+	let spawn = spawn.resolved_for(definition);
 	let duration = definition.duration();
 	let mut pending = Vec::new();
 	let mut immediate = Vec::new();
@@ -160,7 +180,7 @@ pub fn spawn_vfx(
 	let root_transform = Transform {
 		translation: spawn.transform.translation,
 		rotation: spawn.transform.rotation,
-		scale: Vec3::splat(spawn.clamped_scale()),
+		scale: Vec3::splat(spawn.scale),
 	};
 	let root = commands
 		.spawn((
@@ -235,7 +255,7 @@ pub fn realize_layer(
 		EffectPart::Light(pulse) => {
 			let peak = pulse.peak_intensity * spawn.clamped_intensity();
 			let color = ExplosionPalette::color(spawn.palette().with_tint(spawn.tint).flash);
-			let range = pulse.range * spawn.clamped_scale() * layer.scale;
+			let range = pulse.range * spawn.scale * layer.scale;
 			commands.spawn((
 				Name::new("vfx-layer-flash"),
 				ChildOf(parent),
@@ -286,7 +306,7 @@ pub fn realize_layer(
 						VfxMemberOf(parent),
 						Mesh3d(part.mesh.clone()),
 						lobe_transform(&spec, 0.0),
-						MeshTag(0),
+						MeshTag(next_lobe_slot()),
 						Visibility::Hidden,
 						VfxLobe { age: 0.0, spec, playback: spawn.clamped_playback() },
 					))
@@ -329,6 +349,14 @@ mod tests {
 		assert_eq!(spawn.clamped_playback(), MIN_PLAYBACK);
 		let fast = VfxSpawn { playback: 99.0, ..default() };
 		assert_eq!(fast.clamped_playback(), MAX_PLAYBACK);
+	}
+
+	#[test]
+	fn definition_bounds_override_generic_cap() {
+		let def = EffectDefinition::new("big", [])
+			.with_scale_bounds(ScaleBounds { min: MIN_SCALE, max: 20.0 });
+		let spawn = VfxSpawn { scale: 13.0, ..default() }.resolved_for(&def);
+		assert!((spawn.scale - 13.0).abs() < 1e-4);
 	}
 
 	#[test]
