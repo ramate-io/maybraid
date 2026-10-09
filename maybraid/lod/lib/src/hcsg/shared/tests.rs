@@ -184,7 +184,7 @@ fn worker_fills_subscription_nearest_first() -> anyhow::Result<()> {
 	let _worker = HcsgWorker::spawn(storage.clone(), demand.clone())?;
 
 	let subscription =
-		demand.subscribe::<Cover>(None, span(0.0, 4.0), Some(Vec3::new(3.5, 0.5, 0.5)));
+		demand.subscribe::<Cover>(None, vec![span(0.0, 4.0)], Some(Vec3::new(3.5, 0.5, 0.5)));
 	assert!(demand.wait_idle(IDLE));
 
 	let published = demand.try_read_published(subscription, 0).ok().flatten().unwrap_or_default();
@@ -208,7 +208,7 @@ fn worker_republishes_existing_values() -> anyhow::Result<()> {
 	let demand = HcsgDemand::default();
 	let _worker = HcsgWorker::spawn(storage.clone(), demand.clone())?;
 
-	let subscription = demand.subscribe::<Ground>(None, span(0.0, 1.0), None);
+	let subscription = demand.subscribe::<Ground>(None, vec![span(0.0, 1.0)], None);
 	assert!(demand.wait_idle(IDLE));
 	assert_eq!(demand.try_read_published(subscription, 0).ok().flatten(), Some(vec![id]));
 	assert!(
@@ -223,8 +223,8 @@ fn replacing_a_subscription_drops_the_previous() -> anyhow::Result<()> {
 	let demand = HcsgDemand::default();
 	let _worker = HcsgWorker::spawn(storage.clone(), demand.clone())?;
 
-	let first = demand.subscribe::<Ground>(None, span(0.0, 2.0), None);
-	let second = demand.subscribe::<Ground>(Some(first), span(10.0, 2.0), None);
+	let first = demand.subscribe::<Ground>(None, vec![span(0.0, 2.0)], None);
+	let second = demand.subscribe::<Ground>(Some(first), vec![span(10.0, 2.0)], None);
 	assert_eq!(demand.try_read_published(first, 0), Ok(None));
 	assert!(demand.wait_idle(IDLE));
 	assert_eq!(demand.try_read_published(second, 0).ok().flatten().map(|ids| ids.len()), Some(2));
@@ -237,8 +237,8 @@ fn replacing_a_subscription_drops_the_previous() -> anyhow::Result<()> {
 #[test]
 fn advancing_the_epoch_drops_every_subscription() {
 	let demand = HcsgDemand::default();
-	let ground = demand.subscribe::<Ground>(None, span(0.0, 2.0), None);
-	let cover = demand.subscribe::<Cover>(None, span(0.0, 2.0), None);
+	let ground = demand.subscribe::<Ground>(None, vec![span(0.0, 2.0)], None);
+	let cover = demand.subscribe::<Cover>(None, vec![span(0.0, 2.0)], None);
 	assert_eq!(demand.advance_epoch(), 1);
 	assert_eq!(demand.epoch(), 1);
 	assert_eq!(demand.try_read_published(ground, 0), Ok(None));
@@ -263,11 +263,11 @@ fn a_panicking_scheme_does_not_stop_the_worker() -> anyhow::Result<()> {
 	let demand = HcsgDemand::default();
 	let _worker = HcsgWorker::spawn(storage.clone(), demand.clone())?;
 
-	let panicky = demand.subscribe::<Panicky>(None, span(0.0, 1.0), None);
+	let panicky = demand.subscribe::<Panicky>(None, vec![span(0.0, 1.0)], None);
 	assert!(demand.wait_idle(IDLE));
 	assert_eq!(demand.try_read_published(panicky, 0), Ok(Some(Vec::new())));
 
-	let ground = demand.subscribe::<Ground>(None, span(0.0, 1.0), None);
+	let ground = demand.subscribe::<Ground>(None, vec![span(0.0, 1.0)], None);
 	assert!(demand.wait_idle(IDLE));
 	assert_eq!(demand.try_read_published(ground, 0).ok().flatten().map(|ids| ids.len()), Some(1));
 	Ok(())

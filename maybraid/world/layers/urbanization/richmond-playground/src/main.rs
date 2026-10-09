@@ -7,6 +7,7 @@ use chico::{
 };
 use durham::{Durham, DurhamTerrainConfig, DurhamWindow, WaterPresentationPlugin};
 use layer_stack::{Generate, GenerationModePlugin};
+use lod::hcsg::shared::HcsgBoundsPlugin;
 use maputo::{FurnitureNeighborhood, MaputoPresentationPlugin};
 use richmond::{Richmond, RichmondConfig, RichmondPresentationPlugin, UrbanizationStreamSpec};
 use richmond_playground::{
@@ -55,6 +56,13 @@ fn main() {
 		playground.terrain_radius,
 	)));
 	app.add_plugins(Generate::<PlaygroundMode, Urban>::new(urban));
+	app.add_plugins((
+		HcsgBoundsPlugin::<DurhamWindow>::default(),
+		HcsgBoundsPlugin::<FurnitureNeighborhood>::default(),
+		HcsgBoundsPlugin::<GroveNeighborhood>::default(),
+		HcsgBoundsPlugin::<BumpOutRing<CanopyBumpOut>>::default(),
+		HcsgBoundsPlugin::<BumpOutRing<MediumCanopyBumpOut>>::default(),
+	));
 	app.add_plugins(WaterPresentationPlugin::<DurhamWindow>::default());
 	app.add_plugins(RichmondPresentationPlugin::<DurhamWindow, Ground>::default());
 	app.add_plugins(MaputoPresentationPlugin::<FurnitureNeighborhood, Urban>::default());

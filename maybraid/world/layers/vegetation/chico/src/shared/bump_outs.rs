@@ -213,12 +213,8 @@ impl<P: CanopyProxy> BumpOutRing<P> {
 impl<P: CanopyProxy> HcsgBounds for BumpOutRing<P> {
 	type Param = Query<'static, 'static, &'static Transform, With<LodViewer>>;
 
-	fn inner(viewers: &SystemParamItem<Self::Param>) -> Option<Aabb3d> {
-		Self::viewer(viewers).map(|viewer| Self::around(viewer, *P::BAND.end()))
-	}
-
-	fn outer(viewers: &SystemParamItem<Self::Param>) -> Option<Aabb3d> {
-		Self::viewer(viewers).map(|viewer| Self::around(viewer, *P::BAND.end() + P::STEP))
+	fn regions(viewers: &SystemParamItem<Self::Param>) -> Vec<Aabb3d> {
+		Self::viewer(viewers).map(|viewer| Self::around(viewer, *P::BAND.end())).into_iter().collect()
 	}
 
 	fn focus(viewers: &SystemParamItem<Self::Param>) -> Option<Vec3> {
@@ -236,17 +232,17 @@ impl<P: CanopyProxy> LodRefreshRegions for BumpOutRing<P> {
 	}
 }
 
-/// Presents proxy `P`'s bump-outs over ground `G` within `B` from the shared
-/// storage.
-pub struct BumpOutPresentationPlugin<B, P, G>(PhantomData<fn() -> (B, P, G)>);
+/// Presents proxy `P`'s bump-outs over ground `G` within channel `C`'s
+/// regions from the shared storage.
+pub struct BumpOutPresentationPlugin<C, P, G>(PhantomData<fn() -> (C, P, G)>);
 
-impl<B, P, G> Default for BumpOutPresentationPlugin<B, P, G> {
+impl<C, P, G> Default for BumpOutPresentationPlugin<C, P, G> {
 	fn default() -> Self {
 		Self(PhantomData)
 	}
 }
 
-impl<B: HcsgBounds, P: CanopyProxy, G: ForestGround> Plugin for BumpOutPresentationPlugin<B, P, G> {
+impl<C: Send + Sync + 'static, P: CanopyProxy, G: ForestGround> Plugin for BumpOutPresentationPlugin<C, P, G> {
 	fn build(&self, app: &mut App) {
 		if !app.is_plugin_added::<BumpOutPlugin>() {
 			app.add_plugins(BumpOutPlugin);
@@ -260,7 +256,7 @@ impl<B: HcsgBounds, P: CanopyProxy, G: ForestGround> Plugin for BumpOutPresentat
 		app.init_resource::<ForestSelection>();
 		let storage = app.world_mut().get_resource_or_init::<shared::HcsgStorage>().clone();
 		ChicoNodes::configure::<G>(&storage);
-		app.add_plugins(PresentationPlugin::<B, BumpedOut<P, G>>::default());
+		app.add_plugins(PresentationPlugin::<C, BumpedOut<P, G>>::default());
 		if !app
 			.is_plugin_added::<LodSceneRefreshRegionPlugin<BumpOutRing<P>, With<LodViewer>, BumpOutRing<P>>>(
 			) {

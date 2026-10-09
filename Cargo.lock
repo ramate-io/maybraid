@@ -5134,9 +5134,6 @@ dependencies = [
  "chico",
  "comproc",
  "durham",
- "language-layer-model",
- "language-layer-presentation",
- "layer-stack",
  "lod",
  "maybraid-language-core",
  "maybraid-language-grammars",
@@ -5144,9 +5141,10 @@ dependencies = [
  "procedural-common",
  "richmond",
  "terrain-layer-model",
+ "terrain-stamps",
+ "terrain-watersheds",
  "urbanization-cells",
  "urbanization-layer-model",
- "vegetation-layer-model",
 ]
 
 [[package]]
@@ -6863,20 +6861,11 @@ name = "maybraid-game-mode-discover"
 version = "0.1.2"
 dependencies = [
  "anyhow",
- "barking",
  "bevy",
- "chico",
  "durham",
- "furnishing-layer-model",
- "geneva",
- "language-layer-model",
  "layer-stack",
- "maputo",
- "mob-layer-model",
- "richmond",
+ "lod",
  "terrain-layer-model",
- "urbanization-layer-model",
- "vegetation-layer-model",
  "world-player",
 ]
 

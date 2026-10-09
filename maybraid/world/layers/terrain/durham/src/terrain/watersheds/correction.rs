@@ -82,7 +82,7 @@ where
 
 impl shared::GenerationScheme for HydroComplexCell {
 	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
-		TerrainCellLayout::cell_ids_in(cx, region)
+		TerrainCellLayout::origin_ids_in(cx, region)
 	}
 
 	fn build_with_id(cx: &mut GenerationContext, id: Id) -> Option<(Self, Aabb3d)> {

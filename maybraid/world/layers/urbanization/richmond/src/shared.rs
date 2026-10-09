@@ -8,49 +8,93 @@
 
 use std::marker::PhantomData;
 
-use bevy::ecs::system::SystemParam;
+use bevy::ecs::system::{SystemParam, SystemParamItem};
+use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use lod::hcsg::shared::{self, HcsgBounds, HcsgNode, PresentationPlugin};
 use lod::hcsg::universal_bounds;
 use lod::scene::LodSceneRefreshChunkPlugin;
-use urbanization_cells::{UrbanizationNodes, UrbanizationSelection};
+use lod::LodViewer;
+use urbanization_cells::{UrbanizationExtent, UrbanizationNodes, UrbanizationSelection};
 
 use crate::built::Built;
 use crate::config::DevelopmentConfig;
 use crate::developments::site::AuthoredDevelopments;
 use crate::ground::RichmondGround;
+use crate::layer_config::UrbanizationStreamSpec;
+use crate::layer_stream::stream_radii_m;
 use crate::padded::PaddedTerrain;
 use crate::plugin::register_richmond_plugin;
 use crate::storage::RichmondNodes;
 
-/// Presents padded terrain and built developments over ground `G` within `B`
-/// from the shared storage.
-///
-/// Padded terrain is the ground's whole surface, so the ground's own cells
-/// are not presented beside it.
-pub struct RichmondPresentationPlugin<B, G>(PhantomData<fn() -> (B, G)>);
+/// The urbanization cells within the default stream's present radius of the
+/// [`LodViewer`], one box each.
+pub struct DevelopmentNeighborhood;
 
-impl<B, G> Default for RichmondPresentationPlugin<B, G> {
+impl HcsgBounds for DevelopmentNeighborhood {
+	type Param = Query<'static, 'static, &'static Transform, With<LodViewer>>;
+
+	fn regions(viewers: &SystemParamItem<Self::Param>) -> Vec<Aabb3d> {
+		let Some(viewer) = viewers.iter().next() else {
+			return Vec::new();
+		};
+		let (present, _) = stream_radii_m(UrbanizationStreamSpec::default().stream_radius);
+		let around = UrbanizationExtent::xz_radius_aabb(viewer.translation, present);
+		UrbanizationExtent::cells_overlapping(around)
+			.into_iter()
+			.map(|cell| cell.aabb())
+			.collect()
+	}
+
+	fn focus(viewers: &SystemParamItem<Self::Param>) -> Option<Vec3> {
+		viewers.iter().next().map(|viewer| viewer.translation)
+	}
+}
+
+/// Presents built developments over ground `G` within channel `C`'s regions
+/// from the shared storage.
+pub struct BuiltPresentationPlugin<C, G>(PhantomData<fn() -> (C, G)>);
+
+impl<C, G> Default for BuiltPresentationPlugin<C, G> {
 	fn default() -> Self {
 		Self(PhantomData)
 	}
 }
 
-impl<B: HcsgBounds, G: RichmondGround> Plugin for RichmondPresentationPlugin<B, G> {
+impl<C: Send + Sync + 'static, G: RichmondGround> Plugin for BuiltPresentationPlugin<C, G> {
 	fn build(&self, app: &mut App) {
 		register_richmond_plugin(app);
 		let storage = app.world_mut().get_resource_or_init::<shared::HcsgStorage>().clone();
 		UrbanizationNodes::configure(&storage);
 		RichmondNodes::configure::<G>(&storage);
+		app.add_plugins(PresentationPlugin::<C, Built<G>>::default());
+		if !app.is_plugin_added::<LodSceneRefreshChunkPlugin<HcsgNode<Built<G>>>>() {
+			app.add_plugins(LodSceneRefreshChunkPlugin::<HcsgNode<Built<G>>>::default());
+		}
+	}
+}
+
+/// Presents padded terrain and built developments over ground `G` within
+/// channel `C`'s regions from the shared storage.
+///
+/// Padded terrain is the ground's whole surface, so the ground's own cells
+/// are not presented beside it.
+pub struct RichmondPresentationPlugin<C, G>(PhantomData<fn() -> (C, G)>);
+
+impl<C, G> Default for RichmondPresentationPlugin<C, G> {
+	fn default() -> Self {
+		Self(PhantomData)
+	}
+}
+
+impl<C: Send + Sync + 'static, G: RichmondGround> Plugin for RichmondPresentationPlugin<C, G> {
+	fn build(&self, app: &mut App) {
 		app.add_plugins((
-			PresentationPlugin::<B, PaddedTerrain<G>>::default(),
-			PresentationPlugin::<B, Built<G>>::default(),
+			BuiltPresentationPlugin::<C, G>::default(),
+			PresentationPlugin::<C, PaddedTerrain<G>>::default(),
 		));
 		if !app.is_plugin_added::<LodSceneRefreshChunkPlugin<HcsgNode<PaddedTerrain<G>>>>() {
 			app.add_plugins(LodSceneRefreshChunkPlugin::<HcsgNode<PaddedTerrain<G>>>::default());
-		}
-		if !app.is_plugin_added::<LodSceneRefreshChunkPlugin<HcsgNode<Built<G>>>>() {
-			app.add_plugins(LodSceneRefreshChunkPlugin::<HcsgNode<Built<G>>>::default());
 		}
 	}
 }
@@ -169,6 +213,7 @@ mod tests {
 			.insert_resource(WaterPresentationAssets { material: Handle::default() })
 			.init_resource::<UrbanizationSelection>()
 			.add_plugins((
+				shared::HcsgBoundsPlugin::<DurhamWindow>::default(),
 				WaterPresentationPlugin::<DurhamWindow>::default(),
 				RichmondPresentationPlugin::<DurhamWindow, Ground>::default(),
 			))

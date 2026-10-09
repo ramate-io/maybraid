@@ -1,7 +1,10 @@
 //! Large language tiles and guillotine small tiles.
 
+use bevy::math::bounding::Aabb3d;
+use bevy::math::Vec3;
 use comproc::guillotine::{Bounds2, DepthRange, GuillotineConfig, VariableGuillotine};
 use comproc::noise::config::NoiseConfig;
+use lod::gen::Id;
 use maybraid_language_core::lexicalizer::mix;
 use noise::Perlin;
 
@@ -56,6 +59,25 @@ impl LargeTile {
 	pub fn small_tile_at(&self, x: f32, z: f32) -> Option<&SmallTile> {
 		self.small.iter().find(|tile| contains_xz(tile.bounds, x, z))
 	}
+
+	/// HCSG id of tile `(ix, iz)`: its footprint cell.
+	pub fn id(ix: i32, iz: i32) -> Id {
+		Id::from_cell(large_tile_aabb(ix, iz))
+	}
+
+	/// Tile index of an id minted by [`Self::id`].
+	pub fn index_of(id: Id) -> Option<(i32, i32)> {
+		let cell = id.origin_cell_bounds()?;
+		let half = LARGE_TILE * 0.5;
+		let (ix, iz) = (large_tile_index(cell.min.x + half), large_tile_index(cell.min.z + half));
+		(Self::id(ix, iz) == id).then_some((ix, iz))
+	}
+}
+
+/// Footprint of large tile `(ix, iz)`, one unit either side of `y = 0`.
+pub fn large_tile_aabb(ix: i32, iz: i32) -> Aabb3d {
+	let (x, z) = large_tile_origin(ix, iz);
+	Aabb3d::from_min_max(Vec3::new(x, -1.0, z), Vec3::new(x + LARGE_TILE, 1.0, z + LARGE_TILE))
 }
 
 /// Large-tile index containing world `x` (or `z`).

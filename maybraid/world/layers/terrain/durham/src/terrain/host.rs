@@ -159,38 +159,43 @@ fn cell_layout(half_extent: i32) -> TerrainCellLayout {
 	layout
 }
 
+/// Playable near stream: 160 m cells that own collision.
+pub const WORLD_NEAR_RING: TerrainCellRing = TerrainCellRing {
+	cell_size: TERRAIN_CELL_SIZE,
+	res_2: 5,
+	anchor_step: WORLD_TERRAIN_PRESENT_STEP_M,
+	high_inner_radius: 0.0,
+	high_outer_radius: WORLD_TERRAIN_NEAR_RADIUS_M,
+	cull_margin: WORLD_TERRAIN_CULL_MARGIN_M,
+};
+
+/// Playable far stream: 320 m cells around the near disk.
+pub const WORLD_FAR_RING: TerrainCellRing = TerrainCellRing {
+	cell_size: 2.0 * TERRAIN_CELL_SIZE,
+	res_2: 4,
+	anchor_step: WORLD_TERRAIN_PRESENT_STEP_M,
+	high_inner_radius: WORLD_TERRAIN_NEAR_RADIUS_M - WORLD_TERRAIN_FAR_HOLE_INSET_M,
+	high_outer_radius: WORLD_TERRAIN_FAR_RADIUS_M,
+	cull_margin: WORLD_TERRAIN_CULL_MARGIN_M,
+};
+
+/// Playable background stream: 640 m cells around the far ring.
+pub const WORLD_BACKGROUND_RING: TerrainCellRing = TerrainCellRing {
+	cell_size: 4.0 * TERRAIN_CELL_SIZE,
+	res_2: 3,
+	anchor_step: WORLD_TERRAIN_PRESENT_STEP_M,
+	high_inner_radius: WORLD_TERRAIN_FAR_RADIUS_M - WORLD_TERRAIN_BACKGROUND_HOLE_INSET_M,
+	high_outer_radius: WORLD_TERRAIN_BACKGROUND_RADIUS_M,
+	cull_margin: WORLD_TERRAIN_CULL_MARGIN_M,
+};
+
 fn world_cell_layout() -> TerrainCellLayout {
 	let mut layout = TerrainCellLayout::default();
 	layout.origin = IVec2::new(-WORLD_FINE_HALF_EXTENT_CELLS, -WORLD_FINE_HALF_EXTENT_CELLS);
 	let n = (2 * WORLD_FINE_HALF_EXTENT_CELLS) as u32;
 	layout.extents = UVec2::new(n, n);
 	layout.outer_rings.clear();
-	layout.stream_rings = vec![
-		TerrainCellRing {
-			cell_size: TERRAIN_CELL_SIZE,
-			res_2: 5,
-			anchor_step: WORLD_TERRAIN_PRESENT_STEP_M,
-			high_inner_radius: 0.0,
-			high_outer_radius: WORLD_TERRAIN_NEAR_RADIUS_M,
-			cull_margin: WORLD_TERRAIN_CULL_MARGIN_M,
-		},
-		TerrainCellRing {
-			cell_size: 2.0 * TERRAIN_CELL_SIZE,
-			res_2: 4,
-			anchor_step: WORLD_TERRAIN_PRESENT_STEP_M,
-			high_inner_radius: WORLD_TERRAIN_NEAR_RADIUS_M - WORLD_TERRAIN_FAR_HOLE_INSET_M,
-			high_outer_radius: WORLD_TERRAIN_FAR_RADIUS_M,
-			cull_margin: WORLD_TERRAIN_CULL_MARGIN_M,
-		},
-		TerrainCellRing {
-			cell_size: 4.0 * TERRAIN_CELL_SIZE,
-			res_2: 3,
-			anchor_step: WORLD_TERRAIN_PRESENT_STEP_M,
-			high_inner_radius: WORLD_TERRAIN_FAR_RADIUS_M - WORLD_TERRAIN_BACKGROUND_HOLE_INSET_M,
-			high_outer_radius: WORLD_TERRAIN_BACKGROUND_RADIUS_M,
-			cull_margin: WORLD_TERRAIN_CULL_MARGIN_M,
-		},
-	];
+	layout.stream_rings = vec![WORLD_NEAR_RING, WORLD_FAR_RING, WORLD_BACKGROUND_RING];
 	layout
 }
 
@@ -409,6 +414,27 @@ struct TerrainFillParams {
 	terrain_radius: i32,
 }
 
+/// Terrain presentation assets for `coverage`, drawn with `material`.
+pub fn presentation_assets(
+	config: TerrainConfig,
+	material: Handle<TerrainShader>,
+	coverage: TerrainCoverage,
+	terrain_radius: i32,
+) -> TerrainPresentationAssets {
+	let mut assets = TerrainPresentationAssets {
+		config,
+		material,
+		lod_bands: Vec::new(),
+		outer_add_walls: true,
+		fine_grid_max_radius: None,
+		macro_seam_half_extents: Vec::new(),
+		macro_cell_min_size: None,
+		macro_res_2: None,
+	};
+	retarget_presentation_assets(&mut assets, coverage, terrain_radius);
+	assets
+}
+
 fn setup_presentation_assets(
 	mut commands: Commands,
 	mut terrain_materials: ResMut<Assets<TerrainShader>>,
@@ -416,25 +442,12 @@ fn setup_presentation_assets(
 	config: Res<TerrainConfig>,
 	params: Res<TerrainFillParams>,
 ) {
-	let material = terrain_materials.add(TerrainShader::default());
-	let (macro_seam_half_extents, macro_cell_min_size, macro_res_2) = match params.coverage {
-		TerrainCoverage::FinePatch => (Vec::new(), None, None),
-		TerrainCoverage::PlayableWorld => (
-			vec![WORLD_TERRAIN_NEAR_RADIUS_M, WORLD_TERRAIN_FAR_RADIUS_M],
-			Some(2.0 * TERRAIN_CELL_SIZE),
-			Some(3),
-		),
-	};
-	commands.insert_resource(TerrainPresentationAssets {
-		config: config.clone(),
-		material,
-		lod_bands: lod_bands_for(params.coverage, params.terrain_radius),
-		outer_add_walls: true,
-		fine_grid_max_radius: Some(params.terrain_radius),
-		macro_seam_half_extents,
-		macro_cell_min_size,
-		macro_res_2,
-	});
+	commands.insert_resource(presentation_assets(
+		config.clone(),
+		terrain_materials.add(TerrainShader::default()),
+		params.coverage,
+		params.terrain_radius,
+	));
 	commands.insert_resource(WaterPresentationAssets {
 		material: water_materials.add(RefractionWater::default()),
 	});

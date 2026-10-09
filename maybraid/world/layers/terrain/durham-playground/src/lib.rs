@@ -33,7 +33,7 @@ use durham::{
 };
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use game_commands::ui::{GameCommandDrawerConfig, GameCommandStatusText};
-use lod::hcsg::shared::{HcsgDemand, HcsgNode, HcsgStorage, HcsgSystems};
+use lod::hcsg::shared::{HcsgBoundsPlugin, HcsgDemand, HcsgNode, HcsgStorage, HcsgSystems};
 use pitch::{apply_avian_terrain_pitch, sync_suspend_terrain_pitch};
 use player::{respawn_player_on_layout, Player, PlayerControlSystems, PlayerPlugin};
 use render_item::mesh::handle::EnforceCachingPlugin;
@@ -102,7 +102,10 @@ impl Plugin for TerrainModelsPlaygroundPlugin {
 		let base = BaseTerrainNoise::from_config(&config);
 
 		app.add_plugins(DurhamTerrainModelsPlugin)
-			.add_plugins(DurhamPresentationPlugin::<DurhamWindow>::default())
+			.add_plugins((
+				HcsgBoundsPlugin::<DurhamWindow>::default(),
+				DurhamPresentationPlugin::<DurhamWindow>::default(),
+			))
 			.add_plugins(TerrainShaderPlugin)
 			.add_plugins(EnforceCachingPlugin::<TerrainMeshBuilder, TerrainShader>::default())
 			.add_plugins(EnforceCachingPlugin::<ComposedWater, RefractionWater>::default())

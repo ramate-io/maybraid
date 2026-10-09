@@ -269,9 +269,8 @@ impl<G: ForestGround> LodScene for GrownGrove<G> {
 /// Half-height of a grove neighborhood: every surface a grove grows on.
 const GROVE_COLUMN_Y: f32 = 10_000.0;
 
-/// The groves around the [`LodViewer`]: presented within
-/// [`GROVE_PRESENT_RADIUS_M`] of its grove tile and kept within two tiles
-/// beyond.
+/// The groves around the [`LodViewer`]: within [`GROVE_PRESENT_RADIUS_M`] of
+/// its grove tile.
 pub struct GroveNeighborhood;
 
 impl GroveNeighborhood {
@@ -291,12 +290,8 @@ impl GroveNeighborhood {
 impl HcsgBounds for GroveNeighborhood {
 	type Param = Query<'static, 'static, &'static Transform, With<LodViewer>>;
 
-	fn inner(viewers: &SystemParamItem<Self::Param>) -> Option<Aabb3d> {
-		Self::around(viewers, GROVE_PRESENT_RADIUS_M)
-	}
-
-	fn outer(viewers: &SystemParamItem<Self::Param>) -> Option<Aabb3d> {
-		Self::around(viewers, GROVE_PRESENT_RADIUS_M + 2.0 * DEFAULT_FOREST_GROVE_TILE_XZ)
+	fn regions(viewers: &SystemParamItem<Self::Param>) -> Vec<Aabb3d> {
+		Self::around(viewers, GROVE_PRESENT_RADIUS_M).into_iter().collect()
 	}
 
 	fn focus(viewers: &SystemParamItem<Self::Param>) -> Option<Vec3> {
@@ -357,22 +352,23 @@ impl ChicoRoots<'_> {
 	}
 }
 
-/// Presents groves grown on ground `G` within `B` from the shared storage.
-pub struct ChicoPresentationPlugin<B, G>(PhantomData<fn() -> (B, G)>);
+/// Presents groves grown on ground `G` within channel `C`'s regions from the
+/// shared storage.
+pub struct ChicoPresentationPlugin<C, G>(PhantomData<fn() -> (C, G)>);
 
-impl<B, G> Default for ChicoPresentationPlugin<B, G> {
+impl<C, G> Default for ChicoPresentationPlugin<C, G> {
 	fn default() -> Self {
 		Self(PhantomData)
 	}
 }
 
-impl<B: HcsgBounds, G: ForestGround> Plugin for ChicoPresentationPlugin<B, G> {
+impl<C: Send + Sync + 'static, G: ForestGround> Plugin for ChicoPresentationPlugin<C, G> {
 	fn build(&self, app: &mut App) {
 		register_vegetation_view(app);
 		app.init_resource::<ForestSelection>();
 		let storage = app.world_mut().get_resource_or_init::<shared::HcsgStorage>().clone();
 		ChicoNodes::configure::<G>(&storage);
-		app.add_plugins(PresentationPlugin::<B, GrownGrove<G>>::default());
+		app.add_plugins(PresentationPlugin::<C, GrownGrove<G>>::default());
 		if !app.is_plugin_added::<LodSceneRefreshChunkPlugin<HcsgNode<GrownGrove<G>>>>() {
 			app.add_plugins(LodSceneRefreshChunkPlugin::<HcsgNode<GrownGrove<G>>>::default());
 		}
@@ -464,6 +460,10 @@ mod tests {
 			})
 			.init_resource::<AuthoredDevelopments>()
 			.init_resource::<UrbanizationSelection>()
+			.add_plugins((
+				shared::HcsgBoundsPlugin::<GroveNeighborhood>::default(),
+				shared::HcsgBoundsPlugin::<BumpOutRing<CanopyBumpOut>>::default(),
+			))
 			.add_plugins(ChicoPresentationPlugin::<GroveNeighborhood, Urban>::default())
 			.add_plugins(BumpOutPresentationPlugin::<
 				BumpOutRing<CanopyBumpOut>,

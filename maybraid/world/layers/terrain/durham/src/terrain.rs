@@ -55,11 +55,11 @@ pub use geography::{
 	GeographicBand, GeographicFamily, GeographicFeature, GeographicFeatureId, GeographicFeatureKind,
 };
 pub use host::{
-	fine_patch_cell_layout, playable_world_cell_layout, produce_terrain_window,
-	retarget_presentation_assets, Durham, DurhamCells, TerrainCoverage, TerrainFillSystems,
-	TerrainLayoutPinned, TerrainPresentPending, TerrainPresentationDirty, TerrainRetarget,
-	TerrainWindow, WorldBaseTerrain, WORLD_FINE_HALF_EXTENT_CELLS, WORLD_OUTER_2X_ROWS,
-	WORLD_OUTER_4X_ROWS,
+	fine_patch_cell_layout, playable_world_cell_layout, presentation_assets,
+	produce_terrain_window, retarget_presentation_assets, Durham, DurhamCells, TerrainCoverage,
+	TerrainFillSystems, TerrainLayoutPinned, TerrainPresentPending, TerrainPresentationDirty,
+	TerrainRetarget, TerrainWindow, WorldBaseTerrain, WORLD_FINE_HALF_EXTENT_CELLS,
+	WORLD_OUTER_2X_ROWS, WORLD_OUTER_4X_ROWS,
 };
 pub use index::{
 	register_durham_nodes, DurhamNodes, DurhamRoots, TerrainHeightSnapshot, TerrainStorage,
@@ -403,7 +403,7 @@ where
 
 impl shared::GenerationScheme for PreWatershedTerrain {
 	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
-		TerrainCellLayout::cell_ids_in(cx, region)
+		TerrainCellLayout::origin_ids_in(cx, region)
 	}
 
 	fn build_with_id(cx: &mut GenerationContext, id: Id) -> Option<(Self, Aabb3d)> {

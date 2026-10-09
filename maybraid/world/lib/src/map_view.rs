@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use bevy::prelude::*;
 use bevy::text::FontSize;
-use durham::Durham;
+use durham::DurhamSurface;
 use game_commands::command::TextEntryFocus;
 use geneva::{LanguageOverlay, NameKey, NamedOverlay};
 use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
@@ -19,9 +19,7 @@ use player_camera::{
 	CameraController, CameraLookSuppressed, CameraPovLocked, FollowCamera, PlayerCameraSystems,
 };
 use poi_intelligence::{PoiId, PoiKind, PoiRecord, PoiRegistry};
-use richmond::{DiscoverablePlace, Richmond};
-use terrain_layer_model::{OnTerrain, TerrainView};
-use urbanization_layer_model::Urbanization;
+use richmond::DiscoverablePlace;
 use world_player::{Player as VegetationPlayer, PlayerLifeSet, PlaygroundMode};
 
 use crate::control::{InventoryEditCameraFollow, WorldGameplayEnabled};
@@ -376,7 +374,7 @@ fn pan_map_view(
 
 fn stamp_map_camera(
 	mut map: ResMut<WorldMapView>,
-	surface: TerrainView<Urbanization<Richmond<OnTerrain<Durham>>>>,
+	surface: DurhamSurface,
 	mut cameras: Query<&mut CameraController, With<FollowCamera>>,
 ) {
 	let ground = surface.height_or_fallback(map.focus);
@@ -421,7 +419,7 @@ fn prepare_map_presentation(
 	registry: Option<Res<PoiRegistry>>,
 	pending: Option<Res<WorldPlayerRespawnState>>,
 	camera: Query<(&Camera, &GlobalTransform), (With<Camera3d>, With<FollowCamera>)>,
-	surface: TerrainView<Urbanization<Richmond<OnTerrain<Durham>>>>,
+	surface: DurhamSurface,
 	places: Query<(Entity, &DiscoverablePlace, &GlobalTransform)>,
 	mut presentation: ResMut<MapPresentation>,
 ) {
@@ -967,7 +965,7 @@ fn kind_label(kind: PoiKind) -> String {
 	title_case(leaf)
 }
 
-fn pin_world(surface: &TerrainView<Urbanization<Richmond<OnTerrain<Durham>>>>, xz: Vec2) -> Vec3 {
+fn pin_world(surface: &DurhamSurface, xz: Vec2) -> Vec3 {
 	Vec3::new(xz.x, surface.height_or_fallback(xz) + GIZMO_LIFT, xz.y)
 }
 
@@ -1359,7 +1357,7 @@ fn sync_map_player_marker(
 	map: Res<WorldMapView>,
 	players: Query<&Transform, With<VegetationPlayer>>,
 	camera: Query<(&Camera, &GlobalTransform), (With<Camera3d>, With<FollowCamera>)>,
-	surface: TerrainView<Urbanization<Richmond<OnTerrain<Durham>>>>,
+	surface: DurhamSurface,
 	hud: Query<Entity, With<MapNameHud>>,
 	mut markers: Query<(&mut Node, &mut Visibility), With<MapPlayerMarker>>,
 	mut commands: Commands,
@@ -1443,7 +1441,7 @@ fn sync_map_death_bones(
 	pending: Option<Res<WorldPlayerRespawnState>>,
 	icon: Option<Res<MapBonesIcon>>,
 	camera: Query<(&Camera, &GlobalTransform), (With<Camera3d>, With<FollowCamera>)>,
-	surface: TerrainView<Urbanization<Richmond<OnTerrain<Durham>>>>,
+	surface: DurhamSurface,
 	hud: Query<Entity, With<MapNameHud>>,
 	mut markers: Query<(&mut Node, &mut Visibility), With<MapDeathBones>>,
 	mut commands: Commands,
@@ -1556,7 +1554,7 @@ fn sync_respawn_spawn_knobs(
 	registry: Option<Res<PoiRegistry>>,
 	pending: Option<Res<WorldPlayerRespawnState>>,
 	camera: Query<(&Camera, &GlobalTransform), (With<Camera3d>, With<FollowCamera>)>,
-	surface: TerrainView<Urbanization<Richmond<OnTerrain<Durham>>>>,
+	surface: DurhamSurface,
 	mut knobs: Query<(
 		Entity,
 		&MapSpawnKnob,
@@ -1710,7 +1708,7 @@ fn sync_respawn_selection_marker(
 	registry: Option<Res<PoiRegistry>>,
 	pending: Option<Res<WorldPlayerRespawnState>>,
 	camera: Query<(&Camera, &GlobalTransform), (With<Camera3d>, With<FollowCamera>)>,
-	surface: TerrainView<Urbanization<Richmond<OnTerrain<Durham>>>>,
+	surface: DurhamSurface,
 	mut markers: Query<(&mut Node, &mut Visibility), With<MapRespawnSelection>>,
 	mut commands: Commands,
 ) {
@@ -1800,7 +1798,7 @@ fn draw_highlighted_poi(
 	registry: Option<Res<PoiRegistry>>,
 	pending: Option<Res<WorldPlayerRespawnState>>,
 	players: Query<&Transform, With<VegetationPlayer>>,
-	surface: TerrainView<Urbanization<Richmond<OnTerrain<Durham>>>>,
+	surface: DurhamSurface,
 	mut gizmos: Gizmos,
 ) {
 	if !map.open {

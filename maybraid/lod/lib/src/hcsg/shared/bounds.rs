@@ -35,18 +35,12 @@ impl<C> Clone for HcsgRegions<C> {
 	}
 }
 
-impl<C> PartialEq for HcsgRegions<C> {
-	fn eq(&self, other: &Self) -> bool {
-		self.boxes == other.boxes && self.focus == other.focus
-	}
-}
-
 /// A frame-side producer for its own channel: a camera, a gameplay region,
 /// an explicit warming region.
 ///
-/// [`HcsgBoundsPlugin`] sends [`HcsgRegions<Self>`] whenever the boxes or
-/// focus change, so snap them to the cells they cover rather than following
-/// a camera exactly.
+/// [`HcsgBoundsPlugin`] sends [`HcsgRegions<Self>`] whenever the boxes
+/// change, so snap them to the cells they cover rather than following a
+/// camera exactly. The focus rides along with the next send.
 pub trait HcsgBounds: Send + Sync + 'static {
 	type Param: SystemParam + 'static;
 
@@ -58,15 +52,42 @@ pub trait HcsgBounds: Send + Sync + 'static {
 	}
 }
 
+/// Whether a [`Gated`] producer sends its regions.
+pub trait HcsgGate: Send + Sync + 'static {
+	type Param: SystemParam + 'static;
+
+	fn open(param: &SystemParamItem<Self::Param>) -> bool;
+}
+
+/// `B`'s regions while `G` is open, and none (retiring every host) while it
+/// is closed.
+pub struct Gated<G, B>(PhantomData<fn() -> (G, B)>);
+
+impl<G: HcsgGate, B: HcsgBounds> HcsgBounds for Gated<G, B> {
+	type Param = (G::Param, B::Param);
+
+	fn regions(param: &SystemParamItem<Self::Param>) -> Vec<Aabb3d> {
+		if G::open(&param.0) {
+			B::regions(&param.1)
+		} else {
+			Vec::new()
+		}
+	}
+
+	fn focus(param: &SystemParamItem<Self::Param>) -> Option<Vec3> {
+		B::focus(&param.1)
+	}
+}
+
 fn produce<B: HcsgBounds>(
 	param: StaticSystemParam<B::Param>,
-	mut sent: Local<Option<HcsgRegions<B>>>,
+	mut sent: Local<Option<Vec<Aabb3d>>>,
 	mut regions: MessageWriter<HcsgRegions<B>>,
 ) {
-	let current = HcsgRegions::new(B::regions(&param), B::focus(&param));
-	if sent.as_ref() != Some(&current) {
-		regions.write(current.clone());
-		*sent = Some(current);
+	let boxes = B::regions(&param);
+	if sent.as_ref() != Some(&boxes) {
+		regions.write(HcsgRegions::new(boxes.clone(), B::focus(&param)));
+		*sent = Some(boxes);
 	}
 }
 

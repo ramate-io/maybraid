@@ -17,29 +17,22 @@ use crate::scene::refresh::LodSceneRefreshChunkPlugin;
 use crate::scene::{LodHostBounds, LodSceneHost, LodViewer};
 
 use super::{
-	GenerationContext, GenerationPlugin, GenerationScheme, HcsgBounds, HcsgDemand, HcsgNode,
-	HcsgStorage, PresentationPlugin,
+	GenerationContext, GenerationPlugin, GenerationScheme, HcsgBounds, HcsgBoundsPlugin,
+	HcsgDemand, HcsgNode, HcsgStorage, PresentationPlugin,
 };
 
 const IDLE: Duration = Duration::from_secs(10);
 
 #[derive(Resource, Default)]
-struct Window {
-	inner: Option<Aabb3d>,
-	outer: Option<Aabb3d>,
-}
+struct Window(Vec<Aabb3d>);
 
 struct WindowBounds;
 
 impl HcsgBounds for WindowBounds {
 	type Param = Res<'static, Window>;
 
-	fn inner(window: &SystemParamItem<Self::Param>) -> Option<Aabb3d> {
-		window.inner
-	}
-
-	fn outer(window: &SystemParamItem<Self::Param>) -> Option<Aabb3d> {
-		window.outer
+	fn regions(window: &SystemParamItem<Self::Param>) -> Vec<Aabb3d> {
+		window.0.clone()
 	}
 }
 
@@ -53,21 +46,21 @@ fn ids(xs: &[f32]) -> Vec<Id> {
 	ids
 }
 
-fn app(plugin: impl Plugin, inner: Aabb3d, outer: Aabb3d) -> App {
+fn app(plugin: impl Plugin, regions: Vec<Aabb3d>) -> App {
 	let mut app = App::new();
 	app.add_plugins(MinimalPlugins)
 		.add_plugins((AssetPlugin::default(), ScenePlugin))
-		.insert_resource(Window { inner: Some(inner), outer: Some(outer) })
-		.add_plugins(plugin);
+		.insert_resource(Window(regions))
+		.add_plugins((HcsgBoundsPlugin::<WindowBounds>::default(), plugin));
 	app
 }
 
-fn present_terrain(inner: Aabb3d, outer: Aabb3d) -> App {
-	app(PresentationPlugin::<WindowBounds, Terrain>::default(), inner, outer)
+fn present_terrain(regions: Vec<Aabb3d>) -> App {
+	app(PresentationPlugin::<WindowBounds, Terrain>::default(), regions)
 }
 
-fn set_window(app: &mut App, inner: Option<Aabb3d>, outer: Option<Aabb3d>) {
-	*app.world_mut().resource_mut::<Window>() = Window { inner, outer };
+fn set_window(app: &mut App, regions: Vec<Aabb3d>) {
+	app.world_mut().resource_mut::<Window>().0 = regions;
 }
 
 /// Subscribe (or notice a dropped subscription and resubscribe), let the
@@ -99,7 +92,7 @@ fn hosted_ids(app: &mut App) -> Vec<Id> {
 
 #[test]
 fn presentation_spawns_one_host_per_published_value() -> anyhow::Result<()> {
-	let mut app = present_terrain(span(0.2, 2.6), span(-10.0, 30.0));
+	let mut app = present_terrain(vec![span(0.2, 2.6)]);
 	settle(&mut app)?;
 	assert_eq!(hosted_ids(&mut app), ids(&[0.0, 1.0, 2.0]));
 
@@ -111,20 +104,27 @@ fn presentation_spawns_one_host_per_published_value() -> anyhow::Result<()> {
 }
 
 #[test]
-fn presentation_keeps_hosts_until_they_leave_the_outer_bounds() -> anyhow::Result<()> {
-	let mut app = present_terrain(span(0.2, 2.6), span(-10.0, 30.0));
+fn presentation_follows_the_regions_it_is_sent() -> anyhow::Result<()> {
+	let mut app = present_terrain(vec![span(0.2, 2.6)]);
 	settle(&mut app)?;
+	let kept = hosts(&mut app).into_iter().find(|(id, _, _)| *id == Id::from_cell(cell(1.0)));
 
-	set_window(&mut app, Some(span(1.2, 2.6)), Some(span(-10.0, 30.0)));
+	set_window(&mut app, vec![span(1.2, 2.6)]);
 	settle(&mut app)?;
-	assert_eq!(hosted_ids(&mut app), ids(&[0.0, 1.0, 2.0, 3.0]), "no host twice; none retired");
-
-	set_window(&mut app, Some(span(1.2, 2.6)), Some(span(0.5, 2.0)));
-	settle(&mut app)?;
-	assert_eq!(hosted_ids(&mut app), ids(&[0.0, 1.0, 2.0]));
+	assert_eq!(hosted_ids(&mut app), ids(&[1.0, 2.0, 3.0]));
+	let still = hosts(&mut app).into_iter().find(|(id, _, _)| *id == Id::from_cell(cell(1.0)));
+	assert_eq!(kept, still, "a host in both sets is kept, not respawned");
 
 	let storage = app.world().resource::<HcsgStorage>().clone();
-	assert!(storage.contains::<Terrain>(Id::from_cell(cell(3.0))), "retiring never evicts");
+	assert!(storage.contains::<Terrain>(Id::from_cell(cell(0.0))), "retiring never evicts");
+	Ok(())
+}
+
+#[test]
+fn presentation_covers_every_region_in_a_set() -> anyhow::Result<()> {
+	let mut app = present_terrain(vec![span(0.2, 0.6), span(3.2, 0.6), span(3.4, 0.2)]);
+	settle(&mut app)?;
+	assert_eq!(hosted_ids(&mut app), ids(&[0.0, 3.0]), "one host per cell across the set");
 	Ok(())
 }
 
@@ -141,12 +141,12 @@ fn count_post_update_hosts(
 
 #[test]
 fn a_retired_host_lasts_the_frame() -> anyhow::Result<()> {
-	let mut app = present_terrain(span(0.2, 2.6), span(-10.0, 30.0));
+	let mut app = present_terrain(vec![span(0.2, 2.6)]);
 	app.init_resource::<PostUpdateHosts>()
 		.add_systems(PostUpdate, count_post_update_hosts);
 	settle(&mut app)?;
 
-	set_window(&mut app, None, None);
+	set_window(&mut app, Vec::new());
 	app.update();
 	assert_eq!(app.world().resource::<PostUpdateHosts>().0, 3);
 	assert!(hosts(&mut app).is_empty(), "retired hosts are gone after Last");
@@ -154,10 +154,10 @@ fn a_retired_host_lasts_the_frame() -> anyhow::Result<()> {
 }
 
 #[test]
-fn presentation_without_bounds_unsubscribes_and_retires() -> anyhow::Result<()> {
-	let mut app = present_terrain(span(0.2, 2.6), span(-10.0, 30.0));
+fn presentation_without_regions_unsubscribes_and_retires() -> anyhow::Result<()> {
+	let mut app = present_terrain(vec![span(0.2, 2.6)]);
 	settle(&mut app)?;
-	set_window(&mut app, None, None);
+	set_window(&mut app, Vec::new());
 	settle(&mut app)?;
 	assert!(hosts(&mut app).is_empty());
 	Ok(())
@@ -165,7 +165,7 @@ fn presentation_without_bounds_unsubscribes_and_retires() -> anyhow::Result<()> 
 
 #[test]
 fn presentation_replaces_hosts_whose_value_changed_across_an_epoch() -> anyhow::Result<()> {
-	let mut app = present_terrain(span(0.2, 2.6), span(-10.0, 30.0));
+	let mut app = present_terrain(vec![span(0.2, 2.6)]);
 	settle(&mut app)?;
 	let before = hosts(&mut app);
 
@@ -239,8 +239,7 @@ impl LodScene for Kept {
 
 #[test]
 fn a_new_session_retires_hosts_it_does_not_publish() -> anyhow::Result<()> {
-	let mut app =
-		app(PresentationPlugin::<WindowBounds, Kept>::default(), span(0.2, 2.6), span(-10.0, 30.0));
+	let mut app = app(PresentationPlugin::<WindowBounds, Kept>::default(), vec![span(0.2, 2.6)]);
 	let storage = app.world().resource::<HcsgStorage>().clone();
 	storage.seed(Keep(vec![0.0, 1.0, 2.0]), span(-10.0, 30.0));
 	settle(&mut app)?;
@@ -266,7 +265,7 @@ fn a_new_session_retires_hosts_it_does_not_publish() -> anyhow::Result<()> {
 
 #[test]
 fn presented_hosts_fulfill_through_the_lod_pipeline() -> anyhow::Result<()> {
-	let mut app = present_terrain(span(0.2, 2.6), span(-10.0, 30.0));
+	let mut app = present_terrain(vec![span(0.2, 2.6)]);
 	app.add_plugins(LodSceneRefreshChunkPlugin::<HcsgNode<Terrain>>::default());
 	let at = Transform::from_translation(Vec3::new(1.0, 0.0, 0.0));
 	app.world_mut()
@@ -290,11 +289,7 @@ fn presented_hosts_fulfill_through_the_lod_pipeline() -> anyhow::Result<()> {
 
 #[test]
 fn generation_keeps_values_warm_without_hosts() -> anyhow::Result<()> {
-	let mut app = app(
-		GenerationPlugin::<WindowBounds, Vegetation>::default(),
-		span(0.2, 2.6),
-		span(-10.0, 30.0),
-	);
+	let mut app = app(GenerationPlugin::<WindowBounds, Vegetation>::default(), vec![span(0.2, 2.6)]);
 	settle(&mut app)?;
 	let storage = app.world().resource::<HcsgStorage>().clone();
 	for id in ids(&[0.0, 1.0, 2.0]) {

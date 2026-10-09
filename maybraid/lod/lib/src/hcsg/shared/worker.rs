@@ -14,8 +14,8 @@ use super::context::GenerationContext;
 use super::demand::{HcsgDemand, Job};
 use super::storage::HcsgStorage;
 
-/// Fills the newest unfinished subscription: discovers its ids, nearest the
-/// focus first, generates what is missing, and appends every id whose value
+/// Fills the newest unfinished subscription: discovers its ids in every
+/// region, nearest the focus first, generates what is missing, and appends every id whose value
 /// is available. Stops early when the subscription is cancelled.
 ///
 /// Dropping the worker shuts the thread down and joins it.
@@ -56,7 +56,10 @@ fn run(storage: &HcsgStorage, demand: &HcsgDemand) {
 fn fill(storage: &HcsgStorage, demand: &HcsgDemand, job: &Job) {
 	let stale = || job.cancelled.load(Ordering::Acquire);
 	let mut cx = GenerationContext::with_stale(storage, &stale);
-	let mut ids = (job.discover)(&mut cx, job.bounds);
+	let mut ids: Vec<Id> =
+		job.regions.iter().flat_map(|region| (job.discover)(&mut cx, *region)).collect();
+	ids.sort();
+	ids.dedup();
 	if let Some(focus) = job.focus {
 		let focus = Vec3A::from(focus);
 		let distance = |id: &Id| {

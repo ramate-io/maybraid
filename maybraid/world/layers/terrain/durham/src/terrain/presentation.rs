@@ -141,7 +141,6 @@ impl TerrainPresentationAssets {
 
 	fn wall_faces_for_stream_cell(
 		&self,
-		bounds: Aabb3d,
 		layout: &TerrainCellLayout,
 		ring: crate::terrain::cell::TerrainCellRing,
 	) -> WallFaces {
@@ -149,18 +148,9 @@ impl TerrainPresentationAssets {
 			return WallFaces::NONE;
 		}
 		// Inner holes and Near/Far rims sit under the next-finer stream (draw
-		// overlap). Only the outermost Background skirt faces empty space.
-		if !layout.is_outermost_stream_ring(ring) {
-			return WallFaces::NONE;
-		}
-		let center = layout.region_center_xz();
-		let min = Vec3::from(bounds.min);
-		let max = Vec3::from(bounds.max);
-		let cx = (min.x + max.x) * 0.5;
-		let cz = (min.z + max.z) * 0.5;
-		let radius = (cx - center.x).abs().max((cz - center.z).abs());
-		let on_outer = (radius - ring.high_outer_radius).abs() < ring.cell_size;
-		if on_outer {
+		// overlap). Only the outermost Background skirt faces empty space, and
+		// any of its cells can be on the edge wherever the stream is anchored.
+		if layout.is_outermost_stream_ring(ring) {
 			WallFaces::ALL
 		} else {
 			WallFaces::NONE
@@ -180,7 +170,7 @@ impl TerrainPresentationAssets {
 		let max = Vec3::from(bounds.max);
 		let cell_size = (max.x - min.x).max(1e-3);
 		if let Some(ring) = layout.stream_ring_for_cell_size(cell_size) {
-			return (ring.res_2, self.wall_faces_for_stream_cell(bounds, layout, ring));
+			return (ring.res_2, self.wall_faces_for_stream_cell(layout, ring));
 		}
 		if let Some(macro_min) = self.macro_cell_min_size {
 			if cell_size + 1e-3 >= macro_min {

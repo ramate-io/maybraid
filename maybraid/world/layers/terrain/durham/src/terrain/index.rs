@@ -1,5 +1,6 @@
 //! Durham's view of [`HcsgStorage`]: node registration and terrain read helpers.
 
+use crate::shared::PlayableStreams;
 use crate::terrain::base_noise::BaseTerrainNoise;
 use crate::terrain::cell::{
 	cell_bounds, universal_bounds, CellTiling, TerrainCellLayout, TERRAIN_CELL_SIZE,
@@ -167,6 +168,7 @@ impl DurhamRoots<'_> {
 	/// after the epoch has advanced.
 	pub fn reset(&self, storage: &shared::HcsgStorage) {
 		DurhamNodes::clear(storage);
+		PlayableStreams::clear::<Water>(storage);
 		storage.seed(self.layout.clone(), universal_bounds());
 		storage.seed(self.stamps.clone(), universal_bounds());
 		storage.seed(self.watersheds.clone(), universal_bounds());
@@ -371,9 +373,25 @@ impl TerrainStorage for HcsgStorage {
 		iz: i32,
 		base: BaseTerrainNoise,
 	) {
+		let terrain = Terrain::base_cell_for_test(layout, ix, iz, base);
+		let cell = terrain.cell;
+		self.insert(Id::from_cell(cell), terrain, cell);
+	}
+}
+
+impl Terrain {
+	/// Origin cell `(ix, iz)` of `layout` whose SDF is `base` with no jersey
+	/// or hydro ops. Only for surface tests.
+	#[doc(hidden)]
+	pub fn base_cell_for_test(
+		layout: &TerrainCellLayout,
+		ix: i32,
+		iz: i32,
+		base: BaseTerrainNoise,
+	) -> Self {
 		let cell = cell_bounds(ix, iz, layout.cell_size, layout.vertical_half_extent);
 		let sdf = Arc::new(Terrain::compose_sdf(&base, &[]));
-		let terrain = Terrain {
+		Terrain {
 			cell,
 			base,
 			modulations: Vec::new(),
@@ -385,8 +403,7 @@ impl TerrainStorage for HcsgStorage {
 			res_2: 0,
 			stream_ring: None,
 			wall_faces: render_item::sdf::cpu_shot::WallFaces::NONE,
-		};
-		self.insert(Id::from_cell(cell), terrain, cell);
+		}
 	}
 }
 

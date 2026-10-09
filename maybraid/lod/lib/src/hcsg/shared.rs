@@ -36,7 +36,7 @@ mod system_tests;
 #[cfg(test)]
 mod tests;
 
-pub use bounds::{HcsgBounds, HcsgBoundsPlugin, HcsgRegions};
+pub use bounds::{Gated, HcsgBounds, HcsgBoundsPlugin, HcsgGate, HcsgRegions};
 pub use context::{GenerationContext, GenerationScheme};
 pub use demand::{HcsgDemand, Published, SubscriptionId};
 pub use generation::GenerationPlugin;

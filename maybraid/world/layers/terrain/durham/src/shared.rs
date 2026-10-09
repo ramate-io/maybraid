@@ -8,29 +8,37 @@
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use bevy::ecs::system::SystemParamItem;
+use bevy::ecs::system::{SystemParam, SystemParamItem};
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
+use lod::gen::Id;
 use lod::hcsg::shared::{Busy, HcsgBounds, HcsgNode, HcsgStorage, PresentationPlugin};
 use lod::scene::LodSceneRefreshChunkPlugin;
+use lod::LodViewer;
+use render_item::mesh::handle::MeshFulfillBudget;
+use terrain_layer_model::TerrainStreaming;
+use terrain_shaders::{RefractionWater, TerrainShader, TerrainShaderPlugin};
+use visual_geometry_core::{
+	install_enforced_mesh_cache, share_terrain_chunk_refs, VisualGeometryCorePlugin,
+};
 
+use crate::register_durham_plugin;
 use crate::terrain::index::{origin_cell_ids_at, DurhamNodes};
-use crate::terrain::{Terrain, TerrainCellLayout};
-use crate::water::Water;
+use crate::terrain::{
+	playable_world_cell_layout, presentation_assets, BaseTerrainNoise, Durham, Terrain,
+	TerrainCellLayout, TerrainConfig, TerrainCoverage, TerrainMeshBuilder, WorldBaseTerrain,
+	WORLD_FINE_HALF_EXTENT_CELLS,
+};
+use crate::water::{ComposedWater, Water, WaterColumn, WaterPresentationAssets};
 
-/// The [`TerrainCellLayout`] resource's window: its request region is
-/// generated and presented, and hosts are kept within its presentation region.
+/// The [`TerrainCellLayout`] resource's window: its request region.
 pub struct DurhamWindow;
 
 impl HcsgBounds for DurhamWindow {
 	type Param = Res<'static, TerrainCellLayout>;
 
-	fn inner(layout: &SystemParamItem<Self::Param>) -> Option<Aabb3d> {
-		Some(layout.request_region())
-	}
-
-	fn outer(layout: &SystemParamItem<Self::Param>) -> Option<Aabb3d> {
-		Some(layout.presentation_region())
+	fn regions(layout: &SystemParamItem<Self::Param>) -> Vec<Aabb3d> {
+		vec![layout.request_region()]
 	}
 
 	fn focus(layout: &SystemParamItem<Self::Param>) -> Option<Vec3> {
@@ -38,48 +46,103 @@ impl HcsgBounds for DurhamWindow {
 	}
 }
 
-/// Presents Durham terrain and water within `B` from the shared storage.
+/// Presents Durham terrain and water within channel `C`'s regions from the
+/// shared storage.
 ///
 /// Scenes come from [`Terrain`] and [`Water`]'s own `LodScene` impls; cells
 /// that seed collision carry the trimesh source.
-pub struct DurhamPresentationPlugin<B>(PhantomData<fn() -> B>);
+pub struct DurhamPresentationPlugin<C>(PhantomData<fn() -> C>);
 
-impl<B> Default for DurhamPresentationPlugin<B> {
+impl<C> Default for DurhamPresentationPlugin<C> {
 	fn default() -> Self {
 		Self(PhantomData)
 	}
 }
 
-impl<B: HcsgBounds> Plugin for DurhamPresentationPlugin<B> {
+impl<C: Send + Sync + 'static> Plugin for DurhamPresentationPlugin<C> {
 	fn build(&self, app: &mut App) {
-		if !app.is_plugin_added::<WaterPresentationPlugin<B>>() {
-			app.add_plugins(WaterPresentationPlugin::<B>::default());
+		if !app.is_plugin_added::<WaterPresentationPlugin<C>>() {
+			app.add_plugins(WaterPresentationPlugin::<C>::default());
 		}
-		app.add_plugins(PresentationPlugin::<B, Terrain>::default());
+		app.add_plugins(PresentationPlugin::<C, Terrain>::default());
 		if !app.is_plugin_added::<LodSceneRefreshChunkPlugin<HcsgNode<Terrain>>>() {
 			app.add_plugins(LodSceneRefreshChunkPlugin::<HcsgNode<Terrain>>::default());
 		}
 	}
 }
 
-/// Presents Durham water within `B` from the shared storage, for a layer
-/// that presents its own surface over Durham terrain.
-pub struct WaterPresentationPlugin<B>(PhantomData<fn() -> B>);
+/// Presents Durham water within channel `C`'s regions from the shared
+/// storage, for a layer that presents its own surface over Durham terrain.
+pub struct WaterPresentationPlugin<C>(PhantomData<fn() -> C>);
 
-impl<B> Default for WaterPresentationPlugin<B> {
+impl<C> Default for WaterPresentationPlugin<C> {
 	fn default() -> Self {
 		Self(PhantomData)
 	}
 }
 
-impl<B: HcsgBounds> Plugin for WaterPresentationPlugin<B> {
+impl<C: Send + Sync + 'static> Plugin for WaterPresentationPlugin<C> {
 	fn build(&self, app: &mut App) {
 		let storage = app.world_mut().get_resource_or_init::<HcsgStorage>().clone();
 		DurhamNodes::configure(&storage);
-		app.add_plugins(PresentationPlugin::<B, Water>::default());
+		app.add_plugins(PresentationPlugin::<C, Water>::default());
 		if !app.is_plugin_added::<LodSceneRefreshChunkPlugin<HcsgNode<Water>>>() {
 			app.add_plugins(LodSceneRefreshChunkPlugin::<HcsgNode<Water>>::default());
 		}
+	}
+}
+
+/// The playable world's Durham: its rings, seed, meshing, shaders and
+/// collision. Streams present over it (see [`StreamPresentationPlugin`]); a
+/// session seeds its roots with [`crate::DurhamRoots::reset`].
+pub struct DurhamWorldPlugin {
+	pub seed: u32,
+}
+
+impl Plugin for DurhamWorldPlugin {
+	fn build(&self, app: &mut App) {
+		if !app.is_plugin_added::<VisualGeometryCorePlugin>() {
+			app.add_plugins(VisualGeometryCorePlugin);
+		}
+		register_durham_plugin(app);
+		if !app.is_plugin_added::<TerrainShaderPlugin>() {
+			app.add_plugins(TerrainShaderPlugin);
+		}
+		install_enforced_mesh_cache::<TerrainMeshBuilder, TerrainShader>(app);
+		share_terrain_chunk_refs::<TerrainMeshBuilder>(app, false);
+		install_enforced_mesh_cache::<ComposedWater, RefractionWater>(app);
+		let config = TerrainConfig::new(self.seed);
+		app.insert_resource(MeshFulfillBudget::<TerrainMeshBuilder>::new(8, 16, 256))
+			.insert_resource(WorldBaseTerrain(BaseTerrainNoise::from_config(&config)))
+			.insert_resource(config)
+			.insert_resource(playable_world_cell_layout())
+			.init_resource::<TerrainStreaming<Durham>>()
+			.add_systems(Update, prefer_meshes_near_the_viewer);
+		let storage = app.world_mut().get_resource_or_init::<HcsgStorage>().clone();
+		DurhamNodes::configure(&storage);
+	}
+
+	fn finish(&self, app: &mut App) {
+		let world = app.world_mut();
+		let material = world.resource_mut::<Assets<TerrainShader>>().add(TerrainShader::default());
+		let water = world.resource_mut::<Assets<RefractionWater>>().add(RefractionWater::default());
+		let config = world.resource::<TerrainConfig>().clone();
+		world.insert_resource(presentation_assets(
+			config,
+			material,
+			TerrainCoverage::PlayableWorld,
+			WORLD_FINE_HALF_EXTENT_CELLS,
+		));
+		world.insert_resource(WaterPresentationAssets { material: water });
+	}
+}
+
+fn prefer_meshes_near_the_viewer(
+	viewers: Query<&Transform, With<LodViewer>>,
+	mut budget: ResMut<MeshFulfillBudget<TerrainMeshBuilder>>,
+) {
+	if let Some(viewer) = viewers.iter().next() {
+		budget.prefer_xz = Some(Vec3::new(viewer.translation.x, 0.0, viewer.translation.z));
 	}
 }
 
@@ -106,6 +169,25 @@ pub trait SharedTerrainStorage {
 		let terrain = self.try_terrain_at(layout, x, z)?;
 		Ok(terrain.map(|terrain| terrain.sdf.terrain().height_at_with_all_modulations(x, z)))
 	}
+
+	/// The wet column at `(x, z)`, once its water cell is published.
+	fn try_water_column_at(
+		&self,
+		layout: &TerrainCellLayout,
+		x: f32,
+		z: f32,
+	) -> Result<Option<WaterColumn>, Busy>;
+
+	/// Publishes origin cell `(ix, iz)` of `layout` with `base` as its whole
+	/// SDF. Only for surface tests.
+	#[doc(hidden)]
+	fn publish_base_terrain_for_test(
+		&self,
+		layout: &TerrainCellLayout,
+		ix: i32,
+		iz: i32,
+		base: BaseTerrainNoise,
+	);
 }
 
 impl SharedTerrainStorage for HcsgStorage {
@@ -122,7 +204,77 @@ impl SharedTerrainStorage for HcsgStorage {
 		}
 		Ok(None)
 	}
+
+	fn try_water_column_at(
+		&self,
+		layout: &TerrainCellLayout,
+		x: f32,
+		z: f32,
+	) -> Result<Option<WaterColumn>, Busy> {
+		for id in origin_cell_ids_at(layout, x, z) {
+			if let Some(entry) = self.try_entry::<Water>(id)? {
+				return Ok(entry.value.column_at(x, z));
+			}
+		}
+		Ok(None)
+	}
+
+	fn publish_base_terrain_for_test(
+		&self,
+		layout: &TerrainCellLayout,
+		ix: i32,
+		iz: i32,
+		base: BaseTerrainNoise,
+	) {
+		let terrain = Terrain::base_cell_for_test(layout, ix, iz, base);
+		let cell = terrain.cell;
+		self.publish(Id::from_cell(cell), Arc::new(terrain), cell);
+	}
 }
+
+/// The playable ground under frame-side readers: composed heights and wet
+/// columns from the shared storage. A cell not yet published, or busy this
+/// frame, reads as `None`.
+#[derive(SystemParam)]
+pub struct DurhamSurface<'w> {
+	storage: Res<'w, HcsgStorage>,
+	layout: Res<'w, TerrainCellLayout>,
+	base: Res<'w, WorldBaseTerrain>,
+}
+
+impl DurhamSurface<'_> {
+	pub fn height_at(&self, xz: Vec2) -> Option<f32> {
+		self.storage.try_composed_height_at(&self.layout, xz.x, xz.y).ok().flatten()
+	}
+
+	/// Base noise, where no composed cell is published.
+	pub fn fallback_height_at(&self, xz: Vec2) -> f32 {
+		self.base.0.height_at(xz.x, xz.y)
+	}
+
+	pub fn height_or_fallback(&self, xz: Vec2) -> f32 {
+		self.height_at(xz).unwrap_or_else(|| self.fallback_height_at(xz))
+	}
+
+	pub fn water_column_at(&self, xz: Vec2) -> Option<WaterColumn> {
+		self.storage.try_water_column_at(&self.layout, xz.x, xz.y).ok().flatten()
+	}
+
+	pub fn layout(&self) -> &TerrainCellLayout {
+		&self.layout
+	}
+
+	pub fn base(&self) -> &BaseTerrainNoise {
+		&self.base.0
+	}
+}
+
+mod stream;
+
+pub use stream::{
+	BackgroundStream, FarStream, NearStream, PlayableStreams, StreamPresentationPlugin, StreamRing,
+	Streamed, TerrainStream,
+};
 
 #[cfg(test)]
 mod equivalence;
@@ -133,7 +285,7 @@ mod tests {
 
 	use bevy::scene::ScenePlugin;
 	use lod::gen::{Id, OriginalId, Version};
-	use lod::hcsg::shared::{HcsgDemand, HcsgSystems};
+	use lod::hcsg::shared::{HcsgBoundsPlugin, HcsgDemand, HcsgSystems};
 	use lod::lod_ref::LodNodePose;
 	use lod::LodViewer;
 
@@ -185,7 +337,10 @@ mod tests {
 			.add_plugins((AssetPlugin::default(), ScenePlugin))
 			.insert_resource(fine_patch_cell_layout(1, IVec2::new(-1, -1)))
 			.insert_resource(WaterPresentationAssets { material: Handle::default() })
-			.add_plugins(DurhamPresentationPlugin::<DurhamWindow>::default())
+			.add_plugins((
+				HcsgBoundsPlugin::<DurhamWindow>::default(),
+				DurhamPresentationPlugin::<DurhamWindow>::default(),
+			))
 			.add_systems(Update, restart.before(HcsgSystems));
 		seed_resources(&mut app, 1);
 		let at = Transform::IDENTITY;
@@ -277,6 +432,28 @@ mod tests {
 			assert!(new > old, "{id:?} still shows the previous session");
 		}
 		assert_ne!(patch_height(&app)?, height, "the new seed reshapes the terrain");
+		Ok(())
+	}
+
+	#[test]
+	fn the_surface_reads_published_cells_and_falls_back_elsewhere() -> anyhow::Result<()> {
+		let mut world = World::new();
+		let layout = TerrainCellLayout::default();
+		let base = BaseTerrainNoise::from_config(&TerrainConfig::new(42));
+		let storage = HcsgStorage::default();
+		storage.publish_base_terrain_for_test(&layout, 0, 0, base.clone());
+		world.insert_resource(storage);
+		world.insert_resource(layout.clone());
+		world.insert_resource(WorldBaseTerrain(base.clone()));
+
+		let mut state = bevy::ecs::system::SystemState::<DurhamSurface>::new(&mut world);
+		let surface = state.get(&world)?;
+		let inside = Vec2::splat(0.5 * layout.cell_size);
+		let outside = Vec2::splat(10.5 * layout.cell_size);
+		assert_eq!(surface.height_at(inside), Some(base.height_at(inside.x, inside.y)));
+		assert_eq!(surface.height_at(outside), None);
+		assert_eq!(surface.height_or_fallback(outside), base.height_at(outside.x, outside.y));
+		assert_eq!(surface.water_column_at(inside), None);
 		Ok(())
 	}
 }

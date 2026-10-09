@@ -1,37 +1,49 @@
-//! [`generation<B, T>`]: keeps `T` warm in storage within `B`'s bounds.
+//! [`generation<C, T>`]: keeps `T` warm in storage within channel `C`'s regions.
 
 use std::marker::PhantomData;
 
-use bevy::ecs::system::StaticSystemParam;
 use bevy::math::bounding::Aabb3d;
-use bevy::prelude::{App, IntoScheduleConfigs, Local, Plugin, Res, Update};
+use bevy::math::Vec3;
+use bevy::prelude::{App, IntoScheduleConfigs, Local, MessageReader, Plugin, Res, Update};
 
-use super::bounds::HcsgBounds;
+use super::bounds::HcsgRegions;
 use super::context::GenerationScheme;
 use super::demand::{HcsgDemand, SubscriptionId};
 use super::runtime::{ensure_runtime, HcsgSystems};
 
 /// Per-system request state for [`generation`].
 pub struct Generated<T> {
+	/// The channel's latest regions.
+	wanted: Vec<Aabb3d>,
+	focus: Option<Vec3>,
 	subscription: Option<SubscriptionId>,
-	requested: Option<Aabb3d>,
+	requested: Vec<Aabb3d>,
 	_t: PhantomData<fn() -> T>,
 }
 
 impl<T> Default for Generated<T> {
 	fn default() -> Self {
-		Self { subscription: None, requested: None, _t: PhantomData }
+		Self {
+			wanted: Vec::new(),
+			focus: None,
+			subscription: None,
+			requested: Vec::new(),
+			_t: PhantomData,
+		}
 	}
 }
 
-/// Fire and forget: replaces its subscription when `B::inner` changes or the
-/// subscription is dropped (an epoch change). Never reads results.
-pub fn generation<B: HcsgBounds, T: GenerationScheme>(
-	bounds: StaticSystemParam<B::Param>,
+/// Fire and forget: replaces its subscription when `C`'s regions change or
+/// the subscription is dropped (an epoch change). Never reads results.
+pub fn generation<C: Send + Sync + 'static, T: GenerationScheme>(
+	mut regions: MessageReader<HcsgRegions<C>>,
 	demand: Res<HcsgDemand>,
 	mut state: Local<Generated<T>>,
 ) {
-	let inner = B::inner(&bounds);
+	if let Some(latest) = regions.read().last() {
+		state.wanted = latest.boxes.clone();
+		state.focus = latest.focus;
+	}
 	let live = match state.subscription {
 		Some(subscription) => match demand.try_is_live(subscription) {
 			Ok(live) => live,
@@ -39,34 +51,34 @@ pub fn generation<B: HcsgBounds, T: GenerationScheme>(
 		},
 		None => false,
 	};
-	if inner == state.requested && live == inner.is_some() {
+	let wants = !state.wanted.is_empty();
+	if state.wanted == state.requested && live == wants {
 		return;
 	}
-	state.requested = inner;
-	state.subscription = match inner {
-		Some(region) => Some(demand.subscribe::<T>(state.subscription, region, B::focus(&bounds))),
-		None => {
-			if let Some(subscription) = state.subscription.take() {
-				demand.unsubscribe(subscription);
-			}
-			None
-		}
-	};
+	state.requested = state.wanted.clone();
+	if wants {
+		let regions = state.wanted.clone();
+		let focus = state.focus;
+		state.subscription = Some(demand.subscribe::<T>(state.subscription, regions, focus));
+	} else if let Some(subscription) = state.subscription.take() {
+		demand.unsubscribe(subscription);
+	}
 }
 
-/// Keeps `T` generated within `B` without presenting it. A presented type
-/// needs none: presentation requests its own generation.
-pub struct GenerationPlugin<B, T>(PhantomData<fn() -> (B, T)>);
+/// Keeps `T` generated within channel `C`'s regions without presenting it. A
+/// presented type needs none: presentation requests its own generation.
+pub struct GenerationPlugin<C, T>(PhantomData<fn() -> (C, T)>);
 
-impl<B, T> Default for GenerationPlugin<B, T> {
+impl<C, T> Default for GenerationPlugin<C, T> {
 	fn default() -> Self {
 		Self(PhantomData)
 	}
 }
 
-impl<B: HcsgBounds, T: GenerationScheme> Plugin for GenerationPlugin<B, T> {
+impl<C: Send + Sync + 'static, T: GenerationScheme> Plugin for GenerationPlugin<C, T> {
 	fn build(&self, app: &mut App) {
 		ensure_runtime(app);
-		app.add_systems(Update, generation::<B, T>.in_set(HcsgSystems));
+		app.add_message::<HcsgRegions<C>>()
+			.add_systems(Update, generation::<C, T>.in_set(HcsgSystems));
 	}
 }

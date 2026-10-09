@@ -1,4 +1,4 @@
-//! [`HcsgDemand`]: what the worker should fill, one subscription per bounds source.
+//! [`HcsgDemand`]: what the worker should fill, one subscription per system.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -30,7 +30,7 @@ fn generate<T: GenerationScheme>(cx: &mut GenerationContext, id: Id) -> bool {
 }
 
 struct Subscription {
-	bounds: Aabb3d,
+	regions: Vec<Aabb3d>,
 	focus: Option<Vec3>,
 	discover: Discover,
 	generate: Generate,
@@ -68,7 +68,7 @@ struct DemandShared {
 /// One subscription per generation or presentation system, filled newest
 /// first by the [`super::HcsgWorker`].
 ///
-/// A subscription's bounds never change: new bounds replace the subscription,
+/// A subscription's regions never change: new regions replace the subscription,
 /// which cancels whatever the worker was still doing for the old one.
 #[derive(Resource, Clone, Default)]
 pub struct HcsgDemand(Arc<DemandShared>);
@@ -85,7 +85,7 @@ pub struct Published {
 /// One subscription the worker is filling.
 pub(super) struct Job {
 	pub id: SubscriptionId,
-	pub bounds: Aabb3d,
+	pub regions: Vec<Aabb3d>,
 	pub focus: Option<Vec3>,
 	pub discover: Discover,
 	pub generate: Generate,
@@ -105,12 +105,12 @@ impl HcsgDemand {
 		}
 	}
 
-	/// Replaces `previous` (if any) with a subscription to `T` over `bounds`,
+	/// Replaces `previous` (if any) with a subscription to `T` over `regions`,
 	/// under one lock, and wakes the worker.
 	pub fn subscribe<T: GenerationScheme>(
 		&self,
 		previous: Option<SubscriptionId>,
-		bounds: Aabb3d,
+		regions: Vec<Aabb3d>,
 		focus: Option<Vec3>,
 	) -> SubscriptionId {
 		let id = SubscriptionId(self.0.next_id.fetch_add(1, Ordering::Relaxed));
@@ -122,7 +122,7 @@ impl HcsgDemand {
 		state.subscriptions.insert(
 			id,
 			Subscription {
-				bounds,
+				regions,
 				focus,
 				discover: discover::<T>,
 				generate: generate::<T>,
@@ -221,7 +221,7 @@ impl HcsgDemand {
 				.max_by_key(|(id, _)| **id)
 				.map(|(id, subscription)| Job {
 					id: *id,
-					bounds: subscription.bounds,
+					regions: subscription.regions.clone(),
 					focus: subscription.focus,
 					discover: subscription.discover,
 					generate: subscription.generate,

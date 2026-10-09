@@ -204,8 +204,8 @@ impl<G: MobGround> LodScene for PlacedMobCell<G> {
 /// Half-height of a mob neighborhood: every surface a mob stands on.
 const MOB_COLUMN_Y: f32 = 10_000.0;
 
-/// The mob cells around the [`LodViewer`]: presented within
-/// [`MOB_PRESENT_RADIUS`] of its cell and kept one cell beyond.
+/// The mob cells around the [`LodViewer`]: within [`MOB_PRESENT_RADIUS`] of
+/// its cell.
 pub struct MobNeighborhood;
 
 impl MobNeighborhood {
@@ -223,12 +223,8 @@ impl MobNeighborhood {
 impl HcsgBounds for MobNeighborhood {
 	type Param = Query<'static, 'static, &'static Transform, With<LodViewer>>;
 
-	fn inner(viewers: &SystemParamItem<Self::Param>) -> Option<Aabb3d> {
-		Self::around(viewers, MOB_PRESENT_RADIUS)
-	}
-
-	fn outer(viewers: &SystemParamItem<Self::Param>) -> Option<Aabb3d> {
-		Self::around(viewers, MOB_PRESENT_RADIUS + MOB_CELL_EXTENT)
+	fn regions(viewers: &SystemParamItem<Self::Param>) -> Vec<Aabb3d> {
+		Self::around(viewers, MOB_PRESENT_RADIUS).into_iter().collect()
 	}
 
 	fn focus(viewers: &SystemParamItem<Self::Param>) -> Option<Vec3> {
@@ -264,21 +260,21 @@ impl Plugin for MobScenePresentationPlugin {
 	}
 }
 
-/// Presents placed mob cells over ground `G` within `B` from the shared
-/// storage. Their mob hosts stream under [`MobScenePresentationPlugin`].
-pub struct BarkingPresentationPlugin<B, G>(PhantomData<fn() -> (B, G)>);
+/// Presents placed mob cells over ground `G` within channel `C`'s regions
+/// from the shared storage. Their mob hosts stream under [`MobScenePresentationPlugin`].
+pub struct BarkingPresentationPlugin<C, G>(PhantomData<fn() -> (C, G)>);
 
-impl<B, G> Default for BarkingPresentationPlugin<B, G> {
+impl<C, G> Default for BarkingPresentationPlugin<C, G> {
 	fn default() -> Self {
 		Self(PhantomData)
 	}
 }
 
-impl<B: HcsgBounds, G: MobGround> Plugin for BarkingPresentationPlugin<B, G> {
+impl<C: Send + Sync + 'static, G: MobGround> Plugin for BarkingPresentationPlugin<C, G> {
 	fn build(&self, app: &mut App) {
 		let storage = app.world_mut().get_resource_or_init::<shared::HcsgStorage>().clone();
 		BarkingNodes::configure::<G>(&storage);
-		app.add_plugins(PresentationPlugin::<B, PlacedMobCell<G>>::default());
+		app.add_plugins(PresentationPlugin::<C, PlacedMobCell<G>>::default());
 		if !app.is_plugin_added::<LodSceneRefreshChunkPlugin<HcsgNode<PlacedMobCell<G>>>>() {
 			app.add_plugins(LodSceneRefreshChunkPlugin::<HcsgNode<PlacedMobCell<G>>>::default());
 		}
@@ -381,7 +377,10 @@ mod tests {
 			})
 			.insert_resource(AuthoredDevelopments(vec![les_halles()]))
 			.init_resource::<chico::ForestSelection>()
-			.add_plugins(BarkingPresentationPlugin::<MobNeighborhood, Urban>::default())
+			.add_plugins((
+				shared::HcsgBoundsPlugin::<MobNeighborhood>::default(),
+				BarkingPresentationPlugin::<MobNeighborhood, Urban>::default(),
+			))
 			.add_systems(Update, restart.before(HcsgSystems));
 		let storage = app.world().resource::<shared::HcsgStorage>().clone();
 		ChicoNodes::configure::<Urban>(&storage);

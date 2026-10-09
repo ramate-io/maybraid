@@ -1,28 +1,38 @@
-//! The world's layer stack: terrain, urbanization, vegetation, mobs,
-//! furnishing, and language, each generated and then presented.
+//! The world's layer stack: terrain, urbanization, vegetation, mobs and
+//! furnishing, generated on the shared HCSG runtime and presented around the
+//! viewer while Discovery streams.
 
-use barking::{Barking, BarkingConfig};
+use barking::{
+	BarkingNodes, BarkingPresentationPlugin, MobNeighborhood, MobScenePresentationPlugin,
+};
 use bevy::prelude::*;
-use chico::{Chico, ChicoConfig};
-use durham::{Durham, DurhamTerrainConfig};
-use furnishing_layer_model::Furnishing;
-use geneva::{Geneva, LanguageConfig};
-use language_layer_model::Language;
-use layer_stack::{Generate, GenerationModePlugin, Present};
-use maputo::Maputo;
-use maybraid_game_mode_discover::Discovery;
-use mob_layer_model::Mobs;
-use richmond::{Richmond, RichmondConfig};
+use chico::{
+	BumpOutPresentationPlugin, BumpOutRing, CanopyBumpOut, ChicoPresentationPlugin, ChicoRoots,
+	GroveNeighborhood, MediumCanopyBumpOut,
+};
+use durham::{
+	BackgroundStream, Durham, DurhamRoots, DurhamWorldPlugin, FarStream, NearStream,
+	StreamPresentationPlugin, StreamRing, Water,
+};
+use layer_stack::{ActiveGenerationMode, GenerationModePlugin};
+use lod::hcsg::shared::{HcsgBoundsPlugin, HcsgDemand, HcsgStorage};
+use maputo::{FurnitureNeighborhood, MaputoNodes, MaputoPresentationPlugin};
+use maybraid_game_mode_discover::{Discovery, InDiscovery};
+use richmond::{
+	AuthoredDevelopments, BuiltPresentationPlugin, DevelopmentNeighborhood, PaddedTerrain,
+	RichmondConfig, RichmondRoots,
+};
 use terrain_layer_model::OnTerrain;
 use urbanization_layer_model::Urbanization;
-use vegetation_layer_model::Vegetation;
 
 type Ground = OnTerrain<Durham>;
-type Urban = Urbanization<Richmond<Ground>>;
-type Veg = Vegetation<Chico<Urban>>;
-type Mob = Mobs<Barking<Veg>>;
-type Furniture = Furnishing<Maputo<Urban>>;
-type Named = Language<Geneva<Veg>>;
+type Urban = Urbanization<richmond::Richmond<Ground>>;
+
+/// Stream `R`'s cells while Discovery streams.
+type Ring<R> = InDiscovery<StreamRing<R>>;
+
+/// The world seed every layer derives from.
+const WORLD_SEED: u32 = 42;
 
 /// Every world layer at world defaults.
 ///
@@ -33,33 +43,70 @@ pub struct WorldLayersPlugin;
 
 impl Plugin for WorldLayersPlugin {
 	fn build(&self, app: &mut App) {
-		app.add_plugins((
-			GenerationModePlugin::<Discovery>::initial(),
-			Generate::<Discovery, Ground>::new(DurhamTerrainConfig::playable_world()),
-			Generate::<Discovery, Urban>::new(RichmondConfig::world_defaults()),
-			Generate::<Discovery, Veg>::new(ChicoConfig::world_defaults()),
-			Generate::<Discovery, Mob>::new(BarkingConfig::world_defaults()),
-			Generate::<Discovery, Furniture>::new(()),
-			Generate::<Discovery, Named>::new(LanguageConfig::world_defaults()),
-			Present::<Discovery, Ground>::default(),
-			Present::<Discovery, Urban>::default(),
-			Present::<Discovery, Veg>::default(),
-			Present::<Discovery, Mob>::default(),
-			Present::<Discovery, Furniture>::default(),
-			Present::<Discovery, Named>::default(),
-		));
+		let richmond = RichmondConfig::world_defaults();
+		app.add_plugins((GenerationModePlugin::<Discovery>::initial(), DurhamWorldPlugin {
+			seed: WORLD_SEED,
+		}))
+		.insert_resource(richmond.development_config())
+		.insert_resource(richmond.urbanization_selection())
+		.init_resource::<AuthoredDevelopments>()
+		.add_plugins((
+			HcsgBoundsPlugin::<Ring<NearStream>>::default(),
+			HcsgBoundsPlugin::<Ring<FarStream>>::default(),
+			HcsgBoundsPlugin::<Ring<BackgroundStream>>::default(),
+			HcsgBoundsPlugin::<InDiscovery<DevelopmentNeighborhood>>::default(),
+			HcsgBoundsPlugin::<InDiscovery<GroveNeighborhood>>::default(),
+			HcsgBoundsPlugin::<InDiscovery<BumpOutRing<CanopyBumpOut>>>::default(),
+			HcsgBoundsPlugin::<InDiscovery<BumpOutRing<MediumCanopyBumpOut>>>::default(),
+			HcsgBoundsPlugin::<InDiscovery<MobNeighborhood>>::default(),
+			HcsgBoundsPlugin::<InDiscovery<FurnitureNeighborhood>>::default(),
+		))
+		.add_plugins((
+			StreamPresentationPlugin::<Ring<NearStream>, NearStream, PaddedTerrain<Ground>>::default(),
+			StreamPresentationPlugin::<Ring<FarStream>, FarStream, PaddedTerrain<Ground>>::default(),
+			StreamPresentationPlugin::<
+				Ring<BackgroundStream>,
+				BackgroundStream,
+				PaddedTerrain<Ground>,
+			>::default(),
+			StreamPresentationPlugin::<Ring<NearStream>, NearStream, Water>::default(),
+			StreamPresentationPlugin::<Ring<FarStream>, FarStream, Water>::default(),
+			StreamPresentationPlugin::<Ring<BackgroundStream>, BackgroundStream, Water>::default(),
+		))
+		.add_plugins((
+			BuiltPresentationPlugin::<InDiscovery<DevelopmentNeighborhood>, Ground>::default(),
+			ChicoPresentationPlugin::<InDiscovery<GroveNeighborhood>, Urban>::default(),
+			BumpOutPresentationPlugin::<
+				InDiscovery<BumpOutRing<CanopyBumpOut>>,
+				CanopyBumpOut,
+				Urban,
+			>::default(),
+			BumpOutPresentationPlugin::<
+				InDiscovery<BumpOutRing<MediumCanopyBumpOut>>,
+				MediumCanopyBumpOut,
+				Urban,
+			>::default(),
+			MaputoPresentationPlugin::<InDiscovery<FurnitureNeighborhood>, Urban>::default(),
+			BarkingPresentationPlugin::<InDiscovery<MobNeighborhood>, Urban>::default(),
+			MobScenePresentationPlugin,
+		))
+		.add_systems(OnEnter(ActiveGenerationMode::of::<Discovery>()), start_session);
 	}
 }
 
-#[cfg(test)]
-mod tests {
-	use super::*;
-	use layer_stack::{Layer, Scheme};
-
-	fn assert_scheme<M: Scheme<L>, L: Layer>() {}
-
-	#[test]
-	fn language_layer_is_subscribed_in_discovery() {
-		assert_scheme::<Discovery, Named>();
-	}
+/// Ends every subscription and reseeds each layer's roots, so the world
+/// regenerates from the current seeds.
+fn start_session(
+	storage: Res<HcsgStorage>,
+	demand: Res<HcsgDemand>,
+	durham: DurhamRoots,
+	richmond: RichmondRoots,
+	chico: ChicoRoots,
+) {
+	demand.advance_epoch();
+	durham.reset(&storage);
+	richmond.reset::<Ground>(&storage);
+	chico.reset::<Urban>(&storage);
+	BarkingNodes::clear::<Urban>(&storage);
+	MaputoNodes::clear::<Urban>(&storage);
 }

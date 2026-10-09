@@ -234,6 +234,44 @@ impl TerrainCellRing {
 		let step = self.anchor_step.max(1e-3);
 		Vec3::new((anchor.x / step).round() * step, 0.0, (anchor.z / step).round() * step)
 	}
+
+	/// The retained cells around `anchor` as boxes: one for the near disk,
+	/// four strips around a far ring's hole.
+	///
+	/// Exact when the anchor step and both edges sit on this ring's lattice,
+	/// as the playable rings do. Boxes are inset by a sliver so none touches a
+	/// cell outside the ring.
+	pub fn regions_around(self, anchor: Vec3) -> Vec<Aabb3d> {
+		let a = self.aligned_anchor(anchor);
+		let outer = self.high_outer_radius + self.cull_margin;
+		let inner = (self.high_inner_radius - self.cull_margin).max(0.0);
+		let inset = 0.01 * self.cell_size;
+		let y = TERRAIN_PRESENT_VERTICAL_HALF_EXTENT;
+		let span = |x0: f32, x1: f32, z0: f32, z1: f32| {
+			Aabb3d::from_min_max(
+				Vec3::new(a.x + x0 + inset, -y, a.z + z0 + inset),
+				Vec3::new(a.x + x1 - inset, y, a.z + z1 - inset),
+			)
+		};
+		if inner <= 0.0 {
+			return vec![span(-outer, outer, -outer, outer)];
+		}
+		vec![
+			span(-outer, outer, inner, outer),
+			span(-outer, outer, -outer, -inner),
+			span(-outer, -inner, -inner, inner),
+			span(inner, outer, -inner, inner),
+		]
+	}
+
+	/// Ids of this ring's lattice cells intersecting `region`.
+	pub fn cell_ids(self, region: Aabb3d, vertical_half_extent: f32) -> Vec<OriginalId> {
+		cell_coords_for_region(region, self.cell_size)
+			.map(|(ix, iz)| {
+				OriginalId(Id::from_cell(cell_bounds(ix, iz, self.cell_size, vertical_half_extent)))
+			})
+			.collect()
+	}
 }
 
 /// Layout for tiling terrain origin cells in the XZ plane.
@@ -351,6 +389,25 @@ impl TerrainCellLayout {
 
 	pub fn is_streamed(&self) -> bool {
 		!self.stream_rings.is_empty()
+	}
+
+	/// Origin ids the shared runtime discovers in `region`: a streamed
+	/// layout's finest ring lattice, else [`CellTiling::cell_ids`].
+	///
+	/// Coarser rings are discovered by their own streams (see
+	/// [`crate::Streamed`]), so no id depends on where a stream is anchored.
+	pub fn origin_ids(&self, region: Aabb3d) -> Vec<OriginalId> {
+		match self.stream_rings.iter().min_by(|a, b| a.cell_size.total_cmp(&b.cell_size)) {
+			Some(finest) => finest.cell_ids(region, self.vertical_half_extent),
+			None => self.cell_ids(region),
+		}
+	}
+
+	/// [`Self::origin_ids`] on the context's Universal layout.
+	pub fn origin_ids_in(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
+		cx.get_or_generate::<Self>(Id::Universal)
+			.map(|layout| layout.origin_ids(region))
+			.unwrap_or_default()
 	}
 
 	/// Fine-grid cell containing `xz` (Y ignored).

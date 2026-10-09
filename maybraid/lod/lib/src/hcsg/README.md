@@ -3,8 +3,8 @@
 This is the design for the shared HCSG runtime. It has two aims:
 
 1. **One generation path and one presentation path.** Each layer writes `GenerationScheme`s and scene implementations. The shared runtime provides two generic systems:
-   - `generation<B, T>` keeps HCSG storage warm for type `T` within the bounds supplied by `B`.
-   - `presentation<B, T>` does the same and also marshals the published values into Bevy entities.
+   - `generation<C, T>` keeps HCSG storage warm for type `T` within the regions sent on channel `C`.
+   - `presentation<C, T>` does the same and also marshals the published values into Bevy entities.
 
    The runtime owns generation requests, storage access, the lifecycle of presentation hosts, and scene reconciliation. Layers no longer carry their own presenters, producers or window plumbing.
 2. **No generation inside the frame.** Generation runs on a worker thread. The frame only publishes requested bounds and reads values that have already been published.
@@ -16,15 +16,15 @@ This is the design for the shared HCSG runtime. It has two aims:
 ```text
  Bevy frame                         │  Generation worker (one thread)
                                     │
- generation::<B, T>                 │
-   reads bounds from B              │
+ generation::<C, T>                 │
+   reads C's latest regions         │
    replaces its subscription ──────►│  (fire and forget)
    (later) evicts from HcsgStorage  │
                                     │
- presentation::<B, T>               │
-   reads bounds from B              │
+ presentation::<C, T>               │
+   reads C's latest regions         │
    replaces its subscription ──────►│  Demand ── Condvar wakes the worker
-   reads newly published ids  ◄─────│    discover T in bounds
+   reads newly published ids  ◄─────│    discover T in the regions
    spawns / retires hosts           │    generate missing values (recursively)
    (HcsgNode<T> components)         │    publish to HcsgStorage
                                     │    append ids to the subscription
@@ -39,8 +39,8 @@ There are four parts, each with one job:
 |---|---|
 | [Storage](#storage) | Completed, immutable values and their spatial index. |
 | [Demand](#demand) | Subscriptions, deduplication of work, and waking the worker. |
-| [Generation system](#the-generation-system) | Which values stay in HCSG for one bounds source and one type. |
-| [Presentation](#presentation) | The active set of Bevy hosts for one bounds source and one type. |
+| [Generation system](#the-generation-system) | Which values stay in HCSG for one channel and one type. |
+| [Presentation](#presentation) | The active set of Bevy hosts for one channel and one type. |
 
 Generation and presentation request work the same way. They differ in what they retire from: generation retires values from HCSG, while presentation only retires entities from Bevy.
 
@@ -177,7 +177,7 @@ struct DemandState {
 }
 
 struct Subscription {
-    bounds: Aabb3d,
+    regions: Vec<Aabb3d>,
     focus: Option<Vec3>,
     discover: Discover, // fn pointers monomorphized per T
     generate: Generate,
@@ -196,7 +196,7 @@ impl HcsgDemand {
     pub fn subscribe<T: GenerationScheme>(
         &self,
         previous: Option<SubscriptionId>,
-        bounds: Aabb3d,
+        regions: Vec<Aabb3d>,
         focus: Option<Vec3>,
     ) -> SubscriptionId;
 
@@ -225,9 +225,9 @@ There is one dedicated worker thread:
 ```text
 loop:
   lock demand; wait on Condvar until some subscription is not done
-  pick the newest such subscription; copy (id, bounds, focus, fns, cancelled); unlock
+  pick the newest such subscription; copy (id, regions, focus, fns, cancelled); unlock
   fill(storage, demand, job):
-    ids = T::original_ids_for(cx, bounds), nearest to focus first
+    ids = T::original_ids_for(cx, region) for every region, deduplicated, nearest to focus first
     for each id:
       if cancelled: stop
       get_or_generate::<T>(id); nothing is published once cancelled
@@ -239,48 +239,51 @@ loop:
 - **Cancellation is cheap.** Replacing, unsubscribing or ending the epoch removes the subscription and sets its `cancelled` flag. The worker checks the flag without taking the demand lock, and stops at the next id or dependency.
 - **Deduplication.** With one worker, the published-value check in `get_or_generate` is enough: nothing else generates concurrently. The context's own generating set guards recursion. A cross-worker in-progress set waits for [more workers](#later).
 - **A panicking scheme** is caught and logged. Its subscription is marked done with whatever was published so far, and the worker carries on.
-- **Bounds are coalesced.** Each generation or presentation system has one live subscription, holding its latest bounds. A camera sweep replaces subscriptions instead of queuing work behind them.
+- **Regions are coalesced.** Each generation or presentation system has one live subscription, holding its channel's latest regions. A camera sweep replaces subscriptions instead of queuing work behind them.
 
 ### Bounds sources
 
-`B` supplies the requested region for both systems. It might follow a camera, a gameplay region or an explicit warming region:
+Regions arrive on typed channels. A producer `B` sends a set of boxes as `HcsgRegions<B>` messages, and every generation or presentation system registered on channel `B` responds to the latest set. A producer might follow a camera, a gameplay region or an explicit warming region:
 
 ```rust
 pub trait HcsgBounds: Send + Sync + 'static {
     type Param: SystemParam;
-    /// Region to fill (and, for presentation, spawn in).
-    fn inner(param: &SystemParamItem<Self::Param>) -> Option<Aabb3d>;
-    /// Things are retired only once they leave this region (hysteresis).
-    fn outer(param: &SystemParamItem<Self::Param>) -> Option<Aabb3d>;
+    /// The boxes to fill (and, for presentation, to keep hosts in).
+    fn regions(param: &SystemParamItem<Self::Param>) -> Vec<Aabb3d>;
     fn focus(param: &SystemParamItem<Self::Param>) -> Option<Vec3> { None }
 }
+
+app.add_plugins(HcsgBoundsPlugin::<B>::default()); // once per channel
 ```
 
-Bounds sources that should share hosts must combine their demand into one `B`.
-
-- Every change to `inner` replaces the subscription, so a source should snap `inner` to the cells it covers rather than follow the camera exactly.
-- `inner` returning `None` requests nothing, and the system unsubscribes. `outer` returning `None` retires every host.
+- `HcsgBoundsPlugin<B>` sends only when the boxes change, so a producer should snap its boxes to the cells it covers rather than follow the camera exactly. Focus alone never resubscribes.
+- A shape that isn't a box is a set of boxes. A far terrain ring is four strips around its hole; joined, they are the annulus.
+- An empty set requests nothing: the systems unsubscribe and presentation retires every host.
+- `Gated<G, B>` is `B`'s regions while gate `G` is open, and none otherwise. It is its own channel, so a mode subscribes its layers to `Gated<ModeGate, B>` and closing the gate retires them. Discovery's `InDiscovery<B>` is one.
+- Bounds sources that should share hosts must send on one channel.
 
 ### The generation system
 
-`generation<B, T>` is presentation without the marshalling. It works the same way on the request side, but it has nothing to reconcile, so it is fire and forget at both ends:
+`generation<C, T>` is presentation without the marshalling. It works the same way on the request side, but it has nothing to reconcile, so it is fire and forget at both ends:
 
 ```rust
-pub fn generation<B: HcsgBounds, T: GenerationScheme>(
-    bounds: StaticSystemParam<B::Param>,
+pub fn generation<C, T: GenerationScheme>(
+    mut regions: MessageReader<HcsgRegions<C>>,
     demand: Res<HcsgDemand>,
     mut state: Local<Generated<T>>,
 ) { /* ... */ }
 
 struct Generated<T> {
+    wanted: Vec<Aabb3d>,
+    focus: Option<Vec3>,
     subscription: Option<SubscriptionId>,
-    requested: Option<Aabb3d>,
+    requested: Vec<Aabb3d>,
     _t: PhantomData<fn() -> T>,
 }
 ```
 
-- **Request:** when `B::inner` changes, it replaces its subscription, exactly as presentation does. It also resubscribes when `HcsgDemand::try_is_live` reports its subscription gone, for example after an epoch change. That is all it does on this side. It never reads `published`, keeps no cursor, holds no hosts and creates no entities.
-- **Retire (later):** it evicts values of `T` from `HcsgStorage` once their bounds leave `B::outer`. Generation is the only system that retires from HCSG. Presentation never evicts stored values; it only retires its Bevy hosts.
+- **Request:** when channel `C`'s regions change, it replaces its subscription, exactly as presentation does. It also resubscribes when `HcsgDemand::try_is_live` reports its subscription gone, for example after an epoch change. That is all it does on this side. It never reads `published`, keeps no cursor, holds no hosts and creates no entities.
+- **Retire (later):** it evicts values of `T` from `HcsgStorage` once their bounds leave every region. Generation is the only system that retires from HCSG. Presentation never evicts stored values; it only retires its Bevy hosts.
 
 Use it to keep values warm where nothing is presented yet, such as ahead of the camera or under a gameplay region. A type that is presented needs no separate generation system, because presentation requests its own generation.
 
@@ -307,8 +310,8 @@ Hosts sit at the identity transform, as forest groves already do. A presented va
 ### The presentation system
 
 ```rust
-pub fn presentation<B: HcsgBounds, T: GenerationScheme + SemanticLodScene>(
-    bounds: StaticSystemParam<B::Param>,
+pub fn presentation<C, T: GenerationScheme + SemanticLodScene>(
+    mut regions: MessageReader<HcsgRegions<C>>,
     storage: Res<HcsgStorage>,
     demand: Res<HcsgDemand>,
     mut state: Local<Presented<T>>,
@@ -316,8 +319,11 @@ pub fn presentation<B: HcsgBounds, T: GenerationScheme + SemanticLodScene>(
 ) { /* ... */ }
 
 struct Presented<T> {
+    wanted: Vec<Aabb3d>, // the channel's latest regions
+    focus: Option<Vec3>,
     subscription: Option<SubscriptionId>,
-    requested: Option<Aabb3d>,
+    requested: Vec<Aabb3d>,
+    retired_against: Option<Vec<Aabb3d>>,
     cursor: usize,
     hosts: HashMap<Id, Entity>,
     _t: PhantomData<fn() -> T>,
@@ -326,18 +332,18 @@ struct Presented<T> {
 
 Each frame:
 
-1. **Request.** If `B::inner` changed, replace the subscription (`subscribe` with the previous id) and reset the cursor. The presentation system never calls discovery itself.
+1. **Request.** If the channel's regions changed, replace the subscription (`subscribe` with the previous id) and reset the cursor. The presentation system never calls discovery itself.
 2. **Read.** `try_read(subscription, cursor)`. On `Err(Busy)`, nothing changes this frame. On `Ok(None)`, the subscription is gone (for example after an epoch change), so subscribe again; this starts a new session of hosts.
 3. **Spawn.** For each new id, clone the entry's `Arc` under a short `try_read` of the store, then spawn a pending LOD host (`lod_host_scene_pending`, at the level `T` picks for the focus) carrying `HcsgNode<T>`. If the store is busy, the id is retried next frame and the cursor is not advanced past it. An id already hosted at the same version is skipped. One hosted at an older version, which only happens across sessions, has its host replaced.
 4. **Sweep.** Once a new session's subscription is read through to `done`, retire every host that session did not publish. A new session leaves no value behind, so this is the only time presentation retires by what was published.
-5. **Retire.** Retire any host whose entry bounds no longer intersect `B::outer`, along with its owned scene subtree. Within a session, retirement depends only on bounds, never on what discovery returned. Hosts are only rechecked when `B::outer` changes or new hosts were spawned.
+5. **Retire.** Retire any host whose entry bounds intersect none of the regions, along with its owned scene subtree. Within a session, retirement depends only on bounds, never on what discovery returned. Hosts are only rechecked when the regions change or new hosts were spawned.
 
 Retiring marks the host `RetiredHost`. The runtime despawns retired hosts in `Last`, so commands other systems queue for the host through `PostUpdate` still land.
 
 Notes:
 - When the subscription is replaced, existing hosts stay. Ids the new subscription publishes that are already in `hosts` are skipped.
 - An id that leaves the bounds while it is still being generated is a presentation-side concern. Its subscription is gone, so the worker stops, and anything it already published is simply never spawned.
-- Retiring a host does not evict its stored value. Presentation retires only from Bevy; eviction from HCSG belongs to [`generation<B, T>`](#the-generation-system).
+- Retiring a host does not evict its stored value. Presentation retires only from Bevy; eviction from HCSG belongs to [`generation<C, T>`](#the-generation-system).
 - ECS changes are issued only after the `Arc` handles have been cloned and every storage guard has been released.
 
 ### Scenes
@@ -363,6 +369,7 @@ impl<T: VisualLodScene + HcsgValue> VisualLodScene for HcsgNode<T> {
 ### Registration and ordering
 
 ```rust
+app.add_plugins(HcsgBoundsPlugin::<WorldBounds>::default());
 app.add_plugins(PresentationPlugin::<WorldBounds, Terrain>::default());
 
 // Scenes: the existing LOD refresh plugins, typed on the host component.
@@ -373,6 +380,8 @@ app.add_plugins(GenerationPlugin::<AheadOfCamera, Terrain>::default());
 ```
 
 - Presentation needs no separately registered generation system. It requests its own generation.
+- The channel is a type parameter, not a plugin field. Several plugins may share one channel, and the app adds its producer once.
+- A value presented on several channels at different cell sizes is wrapped per channel. Durham's `Streamed<R, T>` is `T` on stream `R`'s ring cells, so each ring discovers only its own lattice, and `StreamPresentationPlugin<C, R, T>` presents it.
 - Either plugin initializes `HcsgStorage` and `HcsgDemand` if missing, and spawns the one `HcsgWorker`.
 - Scene capabilities come from the refresh plugins a layer already chooses (`LodSceneRefreshChunkPlugin`, `GimmeLodSceneRefreshPlugin`, …), now typed on `HcsgNode<T>`. No separate registration API.
 - A host's level is picked once at spawn. If it should change as the viewer moves, the layer also adds a refresh region source (`LodSceneRefreshRegionPlugin` with a `LodRefreshRegions` strategy) feeding `GimmeLodSceneRefreshPlugin`. Without one, nothing re-evaluates the level.
@@ -392,7 +401,7 @@ Each layer's roots expose `reset` (clear its stores, seed its roots). Advancing 
 
 - `durham-playground` calls `DurhamRoots::restart` (advance, then reset) on a seed or layout change.
 - `richmond-playground` advances once, then resets `DurhamRoots`, `RichmondRoots`, Maputo's stores and `ChicoRoots`, on an explicit command flag.
-- Game modes will do the same on enter, before turning generation and presentation back on.
+- Discovery does the same on entering the mode: `WorldLayersPlugin` advances once, then resets every layer. Its producers are gated on the mode, so they send nothing until it streams.
 
 Presentation plugins never restart sessions or infer one from resource changes; they only gate where presentation runs.
 
@@ -449,10 +458,10 @@ The new API lives in `lod::hcsg::shared`, alongside the frame-synchronous `lod::
    - **Barking** (library and tests only). `PlacedMobCell<G>` groups a mob cell from `UrbanizationSelection`, Chico's `ForestSelection`, the padded surface, and plant hosts read from `Built<G>` and `SelectedUrbanization`, all through the context. It reads no entities and writes no `SelectedUrbanization`. Its scene nests each group's `MobScene` hosts, and members retire with their mob. `BarkingPresentationPlugin<B, G>` presents it. It isn't in a playground yet, because `MobScenesPlugin` needs the player, combat and intelligence stack. Mobs fit the surface only when generated; legacy hosts still re-fit as they move.
    - **Maputo** (done in `richmond-playground`). `DevelopmentSlots<U>` holds one development's world-space slots, through `FurnitureSlots::Development` (Richmond's `Built<G>`), and replaces the old per-development slot cache. `Furnished<U>` is a 50 m `FurnitureCell` of those slots. `MaputoPresentationPlugin<B, U>` presents them, and `FurnitureNeighborhood` bounds them to the viewer's 50 m cell. The walk collider is part of `FurnitureCell`'s High scene on both paths, so there is no attach system. Composed apps keep `FurnitureIndex` and its presenter until step 7.
 6. **Native Durham and cells** (done). Every Durham scheme and `SelectedUrbanization` has a native impl beside its legacy one, with the composition shared between them (`on_leaf`, `on_cell`, `author`, `union`, `compose`, `over`). Native impls have no `S` capability bounds and borrow their `Arc` dependencies instead of cloning them. `seeded_root!` emits both impls. The adapter and `elsa` are gone. Durham's equivalence tests generate the same layouts both ways and agree on ids, heights, hydro fills, marazion leaves and water. Legacy terrain also lists jersey leaves that only touch the cell's boundary when a neighbor happened to generate first; they don't change heights inside the cell, and native terrain leaves them out.
-7. **Modes and removal.** Build the Discovery game mode on the new runtime. Delete the legacy scheme impls (and the equivalence tests with them), `gen::runtime`, the producer and queue machinery, the terrain replacement machinery, `Seed`, the old storage and the training ground, which is then rebuilt from scratch.
+7. **Modes and removal.** The training ground is removed until it is rebuilt. Discovery runs on the new runtime: producers send region sets on Discovery-gated channels, the terrain streams present per ring, and gameplay reads heights and water through `DurhamSurface`. Delete the legacy scheme impls (and the equivalence tests with them), `gen::runtime`, the producer and queue machinery, the terrain replacement machinery, `Seed`, the old storage and the training ground, which is then rebuilt from scratch.
 
 ## Later
 
-- Retirement on the generation side: `generation<B, T>` evicts values outside `B::outer`. Recorded references between values decide whether a dependency can go too, so nothing still reachable from a retained value is evicted.
+- Retirement on the generation side: `generation<C, T>` evicts values outside channel `C`'s regions. Recorded references between values decide whether a dependency can go too, so nothing still reachable from a retained value is evicted.
 - More than one worker. This needs an in-progress `(TypeId, Id)` set in the demand state, so two workers never build the same value.
 - Async generation for large collections.

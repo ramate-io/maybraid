@@ -1,16 +1,16 @@
-//! [`presentation<B, T>`]: marshals published `T` within `B` into Bevy hosts.
+//! [`presentation<C, T>`]: marshals published `T` within channel `C`'s regions
+//! into Bevy hosts.
 
 use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
 use bevy::ecs::entity_disabling::Disabled;
-use bevy::ecs::system::StaticSystemParam;
 use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::math::Vec3;
 use bevy::prelude::{
-	Allow, App, Commands, CommandsSceneExt, Component, Entity, IntoScheduleConfigs, Local, Plugin,
-	Query, Res, Transform, Update, With,
+	Allow, App, Commands, CommandsSceneExt, Component, Entity, IntoScheduleConfigs, Local,
+	MessageReader, Plugin, Query, Res, Transform, Update, With,
 };
 
 use crate::gen::{Id, Version};
@@ -18,7 +18,7 @@ use crate::hcsg::storage::StoredEntry;
 use crate::lod_ref::LodRef;
 use crate::scene::{lod_host_scene_pending, SemanticLodScene};
 
-use super::bounds::HcsgBounds;
+use super::bounds::HcsgRegions;
 use super::context::GenerationScheme;
 use super::demand::{HcsgDemand, SubscriptionId};
 use super::node::HcsgNode;
@@ -36,12 +36,15 @@ struct Host {
 /// Per-system state for [`presentation`]: its subscription, how far it has
 /// read, and the hosts it spawned.
 pub struct Presented<T> {
+	/// The channel's latest regions.
+	wanted: Vec<Aabb3d>,
+	focus: Option<Vec3>,
 	subscription: Option<SubscriptionId>,
-	requested: Option<Aabb3d>,
+	requested: Vec<Aabb3d>,
 	cursor: usize,
 	hosts: HashMap<Id, Host>,
-	/// Outer bounds hosts were last retired against; `None` until first run.
-	retired_against: Option<Option<Aabb3d>>,
+	/// Regions hosts were last retired against; `None` until first run.
+	retired_against: Option<Vec<Aabb3d>>,
 	/// Advances when an epoch drops the subscription.
 	session: u64,
 	/// Hosts may remain from an earlier session.
@@ -52,8 +55,10 @@ pub struct Presented<T> {
 impl<T> Default for Presented<T> {
 	fn default() -> Self {
 		Self {
+			wanted: Vec::new(),
+			focus: None,
 			subscription: None,
-			requested: None,
+			requested: Vec::new(),
 			cursor: 0,
 			hosts: HashMap::new(),
 			retired_against: None,
@@ -64,8 +69,8 @@ impl<T> Default for Presented<T> {
 	}
 }
 
-/// Each frame: replace the subscription if `B::inner` changed, spawn hosts
-/// for newly published ids, and retire hosts whose bounds left `B::outer`.
+/// Each frame: replace the subscription if `C`'s regions changed, spawn hosts
+/// for newly published ids, and retire hosts that touch none of the regions.
 /// Retired hosts despawn in `Last` ([`RetiredHost`]).
 ///
 /// Across an epoch, hosts keep showing the previous session until its values
@@ -74,47 +79,42 @@ impl<T> Default for Presented<T> {
 ///
 /// Reads never wait on a lock: a busy store or demand defers to next frame.
 /// Retiring a host never evicts its stored value.
-pub fn presentation<B, T>(
-	bounds: StaticSystemParam<B::Param>,
+pub fn presentation<C, T>(
+	mut regions: MessageReader<HcsgRegions<C>>,
 	storage: Res<HcsgStorage>,
 	demand: Res<HcsgDemand>,
 	mut state: Local<Presented<T>>,
 	mut commands: Commands,
 ) where
-	B: HcsgBounds,
+	C: Send + Sync + 'static,
 	T: GenerationScheme + SemanticLodScene,
 {
-	let focus = B::focus(&bounds);
-	state.request(&demand, B::inner(&bounds), focus);
-	state.spawn(&storage, &demand, focus, &mut commands);
-	state.retire(B::outer(&bounds), &mut commands);
+	if let Some(latest) = regions.read().last() {
+		state.wanted = latest.boxes.clone();
+		state.focus = latest.focus;
+	}
+	state.request(&demand);
+	state.spawn(&storage, &demand, &mut commands);
+	state.retire(&mut commands);
 }
 
 impl<T: GenerationScheme + SemanticLodScene> Presented<T> {
-	fn request(&mut self, demand: &HcsgDemand, inner: Option<Aabb3d>, focus: Option<Vec3>) {
-		if inner == self.requested && self.subscription.is_some() == inner.is_some() {
+	fn request(&mut self, demand: &HcsgDemand) {
+		let wants = !self.wanted.is_empty();
+		if self.wanted == self.requested && self.subscription.is_some() == wants {
 			return;
 		}
-		self.requested = inner;
+		self.requested = self.wanted.clone();
 		self.cursor = 0;
-		self.subscription = match inner {
-			Some(region) => Some(demand.subscribe::<T>(self.subscription, region, focus)),
-			None => {
-				if let Some(subscription) = self.subscription.take() {
-					demand.unsubscribe(subscription);
-				}
-				None
-			}
-		};
+		if wants {
+			let regions = self.wanted.clone();
+			self.subscription = Some(demand.subscribe::<T>(self.subscription, regions, self.focus));
+		} else if let Some(subscription) = self.subscription.take() {
+			demand.unsubscribe(subscription);
+		}
 	}
 
-	fn spawn(
-		&mut self,
-		storage: &HcsgStorage,
-		demand: &HcsgDemand,
-		focus: Option<Vec3>,
-		commands: &mut Commands,
-	) {
+	fn spawn(&mut self, storage: &HcsgStorage, demand: &HcsgDemand, commands: &mut Commands) {
 		let Some(subscription) = self.subscription else {
 			return;
 		};
@@ -147,7 +147,7 @@ impl<T: GenerationScheme + SemanticLodScene> Presented<T> {
 				retire_host(commands, stale.entity);
 			}
 			let (bounds, version) = (entry.bounds, entry.version);
-			let entity = spawn_host(commands, id, entry, focus);
+			let entity = spawn_host(commands, id, entry, self.focus);
 			self.hosts.insert(id, Host { entity, bounds, version, session: self.session });
 			self.retired_against = None;
 		}
@@ -164,13 +164,14 @@ impl<T: GenerationScheme + SemanticLodScene> Presented<T> {
 		}
 	}
 
-	fn retire(&mut self, outer: Option<Aabb3d>, commands: &mut Commands) {
-		if self.retired_against == Some(outer) {
+	fn retire(&mut self, commands: &mut Commands) {
+		if self.retired_against.as_ref() == Some(&self.wanted) {
 			return;
 		}
-		self.retired_against = Some(outer);
+		self.retired_against = Some(self.wanted.clone());
+		let wanted = &self.wanted;
 		self.hosts.retain(|_, host| {
-			let keep = outer.is_some_and(|outer| outer.intersects(&host.bounds));
+			let keep = wanted.iter().any(|region| region.intersects(&host.bounds));
 			if !keep {
 				retire_host(commands, host.entity);
 			}
@@ -218,25 +219,27 @@ fn spawn_host<T: GenerationScheme + SemanticLodScene>(
 		.id()
 }
 
-/// Presents `T` within `B`: requests its generation and keeps one
-/// [`HcsgNode<T>`] host per published value.
+/// Presents `T` within channel `C`'s regions: requests its generation and
+/// keeps one [`HcsgNode<T>`] host per published value.
 ///
 /// Scenes come from the LOD refresh plugins registered for `HcsgNode<T>`.
-pub struct PresentationPlugin<B, T>(PhantomData<fn() -> (B, T)>);
+/// Something must produce `C`'s regions, such as [`super::HcsgBoundsPlugin`].
+pub struct PresentationPlugin<C, T>(PhantomData<fn() -> (C, T)>);
 
-impl<B, T> Default for PresentationPlugin<B, T> {
+impl<C, T> Default for PresentationPlugin<C, T> {
 	fn default() -> Self {
 		Self(PhantomData)
 	}
 }
 
-impl<B, T> Plugin for PresentationPlugin<B, T>
+impl<C, T> Plugin for PresentationPlugin<C, T>
 where
-	B: HcsgBounds,
+	C: Send + Sync + 'static,
 	T: GenerationScheme + SemanticLodScene,
 {
 	fn build(&self, app: &mut App) {
 		ensure_runtime(app);
-		app.add_systems(Update, presentation::<B, T>.in_set(HcsgSystems));
+		app.add_message::<HcsgRegions<C>>()
+			.add_systems(Update, presentation::<C, T>.in_set(HcsgSystems));
 	}
 }

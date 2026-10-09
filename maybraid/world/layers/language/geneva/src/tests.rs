@@ -1,28 +1,35 @@
-use bevy::ecs::system::SystemParamItem;
+use std::sync::Arc;
+
 use bevy::math::bounding::Aabb3d;
 use bevy::math::{Vec2, Vec3};
-use bevy::prelude::{App, MinimalPlugins, Res, Resource, Transform, World};
-use bevy::state::app::StatesPlugin;
 use chico::ForestGroveKind;
-use durham::{GeographicBand, GeographicFamily, GeographicFeatureId, GeographicFeatureKind};
-use language_layer_model::{Language, LanguageGeneration};
-use layer_stack::{Generate, GenerationMode, GenerationModePlugin, Present, Scheme};
-use lod::gen::Id;
-use lod::lod_ref::LodRef;
-use lod::LodPresentGate;
-use richmond::{DiscoverablePlace, DiscoverablePlaceLabel};
-use terrain_layer_model::{HeightField, OnTerrain, TerrainCell, TerrainGeneration, TerrainModel};
+use durham::terrain::watersheds::{PocketWater, PocketWatersHighPass};
+use durham::terrain::MassifHighPassStampCell;
+use durham::{
+	Durham, GeographicBand, GeographicFamily, GeographicFeatureId, GeographicFeatureKind,
+	WatershedBandPass,
+};
+use lod::gen::{Id, Version};
+use lod::hcsg::shared::HcsgStorage;
+use procedural_common::Bounds2;
+use richmond::{DiscoverablePlace, DiscoverablePlaceLabel, Richmond};
+use terrain_layer_model::OnTerrain;
+use urbanization_layer_model::Urbanization;
 
 use crate::english::{
-	compose_english, geographic_terms, grove_kind_terms, named_grove_english, with_color_name,
-	PLACE_COLORS,
+	compose_english, geographic_terms, grove_kind_terms, named_grove_english, named_region_english,
+	with_color_name, PLACE_COLORS,
 };
-use crate::index::{LanguageConfig, LanguageIndex, LanguageSourceDeps, LanguageWorldSeed, NameKey};
+use crate::index::{LanguageIndex, LanguageSourceDeps, NameKey};
 use crate::name::{canonicalize_terms, pick_terms, terms_fingerprint, PlaceName};
 use crate::present::LanguageOverlay;
-use crate::sources::{places_from_world_xz, NamedFeature, NamedPlace, NamedWorld, SourceRevisions};
+use crate::shared::LANGUAGE_NAME_RADIUS;
+use crate::sources::{
+	places_from_world_xz, NameSources, NamedFeature, NamedPlace, NamingRegion, SourceRevisions,
+};
 use crate::tiles::{LargeTile, LARGE_TILE};
-use crate::Geneva;
+
+type Urban = Urbanization<Richmond<OnTerrain<Durham>>>;
 
 const SEED: u64 = 0xC0DE_F00D_A11A;
 
@@ -201,7 +208,7 @@ fn language_subset_uses_feature_key_not_lowest_id() -> anyhow::Result<()> {
 }
 
 #[test]
-fn regional_names_stay_provisional_and_refresh_when_inputs_change() -> anyhow::Result<()> {
+fn regional_names_come_from_seed_not_streamed_features() -> anyhow::Result<()> {
 	let mut index = LanguageIndex::default();
 	let region = feature_aabb(0.0, 0.0, LARGE_TILE, LARGE_TILE);
 	let first = [NamedFeature::new(
@@ -222,7 +229,9 @@ fn regional_names_stay_provisional_and_refresh_when_inputs_change() -> anyhow::R
 	let assigned = index
 		.assigned(NameKey::Region { ix: 0, iz: 0 })
 		.ok_or_else(|| anyhow::anyhow!("assigned"))?;
-	anyhow::ensure!(assigned.provisional);
+	anyhow::ensure!(!assigned.provisional);
+	anyhow::ensure!(!first_name.english.is_empty());
+	anyhow::ensure!(!named_region_english(SEED, 0, 0).is_empty());
 
 	let second = [
 		first[0].clone(),
@@ -238,15 +247,10 @@ fn regional_names_stay_provisional_and_refresh_when_inputs_change() -> anyhow::R
 		),
 	];
 	index.assign_keep(SEED, region, &second, &[]);
-	let second_assigned = index
-		.assigned(NameKey::Region { ix: 0, iz: 0 })
+	let second_name = index
+		.name(NameKey::Region { ix: 0, iz: 0 })
 		.ok_or_else(|| anyhow::anyhow!("second region"))?;
-	anyhow::ensure!(second_assigned.provisional);
-	anyhow::ensure!(
-		second_assigned.fingerprint != terms_fingerprint(&first_name.english)
-			|| second_assigned.name.english != first_name.english,
-		"changed regional inputs must refresh the provisional assignment fingerprint"
-	);
+	anyhow::ensure!(second_name == &first_name, "region names must ignore streamed feature terms");
 	Ok(())
 }
 
@@ -356,10 +360,9 @@ fn parented_elevated_pois_use_world_xz_and_host_identity() -> anyhow::Result<()>
 }
 
 #[test]
-fn seed_change_clears_incompatible_names() -> anyhow::Result<()> {
-	let mut app = App::new();
-	app.insert_resource(LanguageWorldSeed(1));
+fn a_new_root_version_clears_incompatible_names() -> anyhow::Result<()> {
 	let mut index = LanguageIndex::default();
+	index.begin_session(Version(1));
 	index.assign_keep(
 		1,
 		feature_aabb(0.0, 0.0, LARGE_TILE, LARGE_TILE),
@@ -372,229 +375,140 @@ fn seed_change_clears_incompatible_names() -> anyhow::Result<()> {
 		&[],
 	);
 	anyhow::ensure!(index.name(NameKey::Forest(origin_cell(0.0, 0.0, 10.0, 10.0))).is_some());
-	app.insert_resource(index);
-	Geneva::<RecordingWorld>::apply_generation(app.world_mut(), &LanguageConfig { seed: 99 });
-	anyhow::ensure!(app.world().resource::<LanguageIndex>().names().next().is_none());
-	anyhow::ensure!(app.world().resource::<LanguageWorldSeed>().0 == 99);
+	index.begin_session(Version(1));
+	anyhow::ensure!(index.names().next().is_some(), "the same root keeps its names");
+	index.begin_session(Version(2));
+	anyhow::ensure!(index.names().next().is_none());
+	anyhow::ensure!(index.large_tiles().next().is_none());
+	anyhow::ensure!(index.session() == Some(Version(2)));
+	index.end_session();
+	anyhow::ensure!(index.session().is_none());
 	Ok(())
 }
 
-#[derive(Clone)]
-struct SilentField;
-
-impl HeightField for SilentField {
-	fn height_at(&self, _xz: Vec2) -> Option<f32> {
-		None
-	}
-	fn fallback_height_at(&self, _xz: Vec2) -> f32 {
-		0.0
-	}
+fn massif(cell: Aabb3d, occupied: bool) -> MassifHighPassStampCell {
+	use terrain_stamps::{CircleRegion, Region2D, RegionAffineModulation, StampModulation};
+	let modulation = StampModulation::Affine(RegionAffineModulation::new(
+		Region2D::Circle(CircleRegion { center: Vec2::ZERO, radius: 8.0 }),
+		1.0,
+		0.0,
+		4.0,
+		8.0,
+	));
+	MassifHighPassStampCell { cell, modulations: if occupied { vec![modulation] } else { Vec::new() } }
 }
 
-struct SilentCell;
-
-impl TerrainCell for SilentCell {
-	type Mesh = ();
-	fn bounds(&self) -> Aabb3d {
-		feature_aabb(0.0, 0.0, 1.0, 1.0)
-	}
-	fn mesh_builder(&self) {}
-	fn chunk_pose(&self) -> Transform {
-		Transform::IDENTITY
-	}
-	fn seeds_collision(&self) -> bool {
-		false
-	}
-	fn res_2(&self) -> u8 {
-		0
-	}
-}
-
-#[derive(Resource, Default)]
-struct RecordingSources {
-	fingerprint: u64,
-	features: Vec<NamedFeature>,
-	places: Vec<NamedPlace>,
-}
-
-struct RecordingWorld;
-
-impl NamedWorld for RecordingWorld {
-	type Read = Res<'static, RecordingSources>;
-
-	fn source_revisions(read: &SystemParamItem<'_, '_, Self::Read>) -> SourceRevisions {
-		SourceRevisions { forest: read.fingerprint, urban: 0, terrain: 0, places: 0 }
-	}
-
-	fn groves_overlapping(
-		read: &SystemParamItem<'_, '_, Self::Read>,
-		_region: Aabb3d,
-	) -> Vec<NamedFeature> {
-		read.features.clone()
-	}
-
-	fn geography_overlapping(
-		_read: &SystemParamItem<'_, '_, Self::Read>,
-		_region: Aabb3d,
-	) -> Vec<NamedFeature> {
-		Vec::new()
-	}
-
-	fn urban_overlapping(
-		_read: &SystemParamItem<'_, '_, Self::Read>,
-		_region: Aabb3d,
-	) -> Vec<NamedFeature> {
-		Vec::new()
-	}
-
-	fn places_overlapping(
-		read: &SystemParamItem<'_, '_, Self::Read>,
-		_region: Aabb3d,
-	) -> Vec<NamedPlace> {
-		read.places.clone()
-	}
-}
-
-impl TerrainModel for RecordingWorld {
-	type Base = Self;
-	type Cell = SilentCell;
-	type Read = ();
-	type Snapshot = SilentField;
-	type Prepare = ();
-
-	fn prepare(
-		_prepare: &mut SystemParamItem<'_, '_, Self::Prepare>,
-		_bounds: Aabb3d,
-		_lod_ref: &LodRef,
-	) {
-	}
-
-	fn height_at(_read: &SystemParamItem<'_, '_, Self::Read>, _xz: Vec2) -> Option<f32> {
-		None
-	}
-
-	fn fallback_height_at(_read: &SystemParamItem<'_, '_, Self::Read>, _xz: Vec2) -> f32 {
-		0.0
-	}
-
-	fn overlay_cell<'a>(
-		_read: &'a SystemParamItem<'_, '_, Self::Read>,
-		_bounds: Aabb3d,
-		_target_size: f32,
-		_overlay_size_tolerance: Option<f32>,
-	) -> Option<&'a dyn TerrainCell<Mesh = ()>> {
-		None
-	}
-
-	fn snapshot(_read: &SystemParamItem<'_, '_, Self::Read>, _region: Aabb3d) -> SilentField {
-		SilentField
-	}
-
-	fn require_generation(_app: &bevy::prelude::App) {}
-}
-
-impl TerrainGeneration for RecordingWorld {
-	const LABEL: &'static str = "recording-ground";
-	type Config = ();
-	fn install_generation(_app: &mut App) {}
-	fn apply_generation(_world: &mut World, _config: &()) {}
-	fn install_presentation(_app: &mut App) {}
-}
-
-struct HookMode;
-
-impl GenerationMode for HookMode {}
-
-impl Scheme<Language<Geneva<RecordingWorld>>> for HookMode {
-	fn install(app: &mut App, _config: &LanguageConfig) {
-		crate::install_language_stream::<HookMode, RecordingWorld>(app);
-	}
+fn shared_region(origin: Vec2) -> NamingRegion {
+	NamingRegion::around(origin, LANGUAGE_NAME_RADIUS + 16.0, LANGUAGE_NAME_RADIUS + 96.0)
 }
 
 #[test]
-fn generation_and_presentation_hooks_refresh_overlay_only_when_open() -> anyhow::Result<()> {
-	let mut app = App::new();
-	app.add_plugins((
-		MinimalPlugins,
-		StatesPlugin,
-		GenerationModePlugin::<HookMode>::initial(),
-		layer_stack::LayerGenerationCore::<OnTerrain<RecordingWorld>>::default(),
-		Generate::<HookMode, Language<Geneva<RecordingWorld>>>::new(
-			LanguageConfig::world_defaults(),
-		),
-		Present::<HookMode, Language<Geneva<RecordingWorld>>>::default(),
-	));
-	app.insert_resource(RecordingSources {
-		fingerprint: 1,
-		features: vec![NamedFeature::new(
-			NameKey::Forest(origin_cell(8.0, 8.0, 16.0, 16.0)),
-			feature_aabb(8.0, 8.0, 16.0, 16.0),
-			vec!["taiga".to_owned()],
-			1,
-		)],
-		places: Vec::new(),
-	});
-	app.finish();
-	app.update();
-	anyhow::ensure!(
-		app.world()
-			.resource::<LanguageIndex>()
-			.name(NameKey::Forest(origin_cell(8.0, 8.0, 16.0, 16.0)))
-			.is_some(),
-		"generation hook assigns from source records"
-	);
-	app.update();
-
-	anyhow::ensure!(
-		app.world().resource::<LodPresentGate<Language<Geneva<RecordingWorld>>>>().open
-	);
-	let overlay = app.world().resource::<LanguageOverlay>().clone();
-	anyhow::ensure!(!overlay.names.is_empty(), "open gate materializes names");
-	let epoch = app.world().resource::<LanguageIndex>().epoch;
-	app.update();
-	anyhow::ensure!(
-		app.world().resource::<LanguageIndex>().epoch == epoch,
-		"stationary sources must not rebuild assignment"
+fn shared_geography_names_occupied_stamps_and_each_authored_lake_once() -> anyhow::Result<()> {
+	let storage = HcsgStorage::default();
+	let occupied = feature_aabb(0.0, 0.0, 100.0, 100.0);
+	let empty = feature_aabb(200.0, 200.0, 300.0, 300.0);
+	storage.publish(Id::from_cell(occupied), Arc::new(massif(occupied, true)), occupied);
+	storage.publish(Id::from_cell(empty), Arc::new(massif(empty, false)), empty);
+	let lake_cell = feature_aabb(-300.0, -300.0, -100.0, -100.0);
+	let lake = terrain_watersheds::Lake::from_bounds(
+		Bounds2::from_xz(-260.0, -260.0, -140.0, -140.0),
+		7,
+		terrain_watersheds::LakeParams::default(),
+		None,
+	)
+	.ok_or_else(|| anyhow::anyhow!("authored lake"))?;
+	storage.publish(
+		Id::from_cell(lake_cell),
+		Arc::new(PocketWatersHighPass {
+			cell: lake_cell,
+			band: WatershedBandPass::High,
+			authored: PocketWater::Lake(lake),
+		}),
+		lake_cell,
 	);
 
-	app.world_mut()
-		.resource_mut::<LodPresentGate<Language<Geneva<RecordingWorld>>>>()
-		.open = false;
-	app.world_mut().resource_mut::<RecordingSources>().fingerprint = 2;
-	app.world_mut().resource_mut::<RecordingSources>().features = vec![NamedFeature::new(
-		NameKey::Grove(origin_cell(20.0, 20.0, 30.0, 30.0)),
-		feature_aabb(20.0, 20.0, 30.0, 30.0),
-		vec!["oak".to_owned()],
-		1,
-	)];
-	app.update();
+	let sources = NameSources::<Urban>::new(&storage, None);
+	let snapshot = sources
+		.geography(shared_region(Vec2::ZERO), &LanguageIndex::default())
+		.map_err(|_| anyhow::anyhow!("busy"))?;
+	let mut kinds: Vec<_> = snapshot
+		.work
+		.iter()
+		.map(|feature| match feature.key {
+			NameKey::Geographic(id) => Some((id.family, id.source)),
+			_ => None,
+		})
+		.collect();
+	kinds.sort_by_key(|kind| kind.map(|(family, _)| family as u8));
 	anyhow::ensure!(
-		app.world().resource::<LanguageOverlay>().names == overlay.names,
-		"closed presentation gate must not refresh overlay"
+		kinds
+			== [
+				Some((GeographicFamily::Massif, Id::from_cell(occupied))),
+				Some((GeographicFamily::Watershed, Id::from_cell(lake_cell))),
+			],
+		"one name per occupied stamp and authored lake, got {kinds:?}"
 	);
+	let lake = snapshot
+		.work
+		.iter()
+		.find(|feature| matches!(feature.key, NameKey::Geographic(id) if id.family == GeographicFamily::Watershed))
+		.ok_or_else(|| anyhow::anyhow!("lake"))?;
+	anyhow::ensure!(lake.bounds.min.x == -260.0 && lake.bounds.max.z == -140.0, "authored bounds");
+	Ok(())
+}
+
+#[test]
+fn unrelated_storage_writes_do_not_move_the_geography_revision() -> anyhow::Result<()> {
+	struct Furniture;
+	let storage = HcsgStorage::default();
+	let revisions = |storage: &HcsgStorage| {
+		NameSources::<Urban>::new(storage, None).revisions().map_err(|_| anyhow::anyhow!("busy"))
+	};
+	let before = revisions(&storage)?;
+	let bounds = feature_aabb(0.0, 0.0, 160.0, 160.0);
+	storage.publish(Id::from_cell(bounds), Arc::new(Furniture), bounds);
+	let after = revisions(&storage)?;
+	anyhow::ensure!(after == before, "furniture writes must not trigger rediscovery");
+	storage.publish(Id::from_cell(bounds), Arc::new(massif(bounds, true)), bounds);
+	let stamped = revisions(&storage)?;
+	anyhow::ensure!(stamped.terrain > after.terrain, "a stamp write is a source change");
+	anyhow::ensure!(stamped.urban == after.urban && stamped.forest == after.forest);
 	Ok(())
 }
 
 #[test]
 fn simultaneous_source_revisions_do_not_cancel() -> anyhow::Result<()> {
 	let region = feature_aabb(0.0, 0.0, LARGE_TILE, LARGE_TILE);
-	let first = LanguageSourceDeps::from_keep(
-		SourceRevisions { forest: 1, urban: 1, terrain: 0, places: 0 },
+	let first = LanguageSourceDeps::from_windows(
+		SourceRevisions { forest: 1, urban: 1, terrain: 0, places: 0, tiles: 0 },
 		SEED,
 		region,
+		Vec2::ZERO,
 	);
-	let second = LanguageSourceDeps::from_keep(
-		SourceRevisions { forest: 2, urban: 2, terrain: 0, places: 0 },
+	let second = LanguageSourceDeps::from_windows(
+		SourceRevisions { forest: 2, urban: 2, terrain: 0, places: 0, tiles: 0 },
 		SEED,
 		region,
+		Vec2::ZERO,
 	);
 	anyhow::ensure!(first != second, "paired revision bumps must stay distinct");
-	let moved = LanguageSourceDeps::from_keep(
+	let moved = LanguageSourceDeps::from_windows(
 		first.revisions,
 		SEED,
 		feature_aabb(LARGE_TILE, LARGE_TILE, LARGE_TILE * 2.0, LARGE_TILE * 2.0),
+		Vec2::ZERO,
 	);
 	anyhow::ensure!(first != moved, "keep-tile range is part of the dependency tuple");
+	let naming_moved =
+		LanguageSourceDeps::from_windows(first.revisions, SEED, region, Vec2::new(64.0, 0.0));
+	anyhow::ensure!(first != naming_moved, "naming window is part of the dependency tuple");
+	let admitted = LanguageSourceDeps::from_windows(
+		SourceRevisions { tiles: 1, ..first.revisions },
+		SEED,
+		region,
+		Vec2::ZERO,
+	);
+	anyhow::ensure!(!first.tiles_match(&admitted), "admitted tiles retry tile-less features");
 	Ok(())
 }
 
@@ -708,39 +622,208 @@ fn child_assigned_before_host_adopts_the_host_language() -> anyhow::Result<()> {
 }
 
 #[test]
-fn unrelated_storage_writes_do_not_move_the_geography_revision() -> anyhow::Result<()> {
-	use bevy::ecs::system::SystemState;
-	use chico::{Chico, ForestIndex};
-	use durham::{HcsgStorage, TerrainStorage};
-	use richmond::Richmond;
-	use urbanization_layer_model::Urbanization;
-	use vegetation_layer_model::Vegetation;
+fn moved_place_updates_anchor_without_retranslation() -> anyhow::Result<()> {
+	let mut index = LanguageIndex::default();
+	let region = feature_aabb(0.0, 0.0, LARGE_TILE, LARGE_TILE);
+	let host = origin_cell(0.0, 0.0, 50.0, 50.0);
+	let key = NameKey::Place { host, local: 4 };
+	let first = NamedPlace {
+		key,
+		xz: Vec2::new(12.0, 18.0),
+		english: vec!["house".to_owned()],
+		persistent: true,
+		revision: 1,
+		fingerprint: terms_fingerprint(&["house".to_owned()]),
+		provisional: false,
+		host: Some(host),
+		inherit_host_language: false,
+	};
+	index.assign_keep(SEED, region, &[], &[first.clone()]);
+	let name = index.name(key).ok_or_else(|| anyhow::anyhow!("name"))?.clone();
+	let mut moved = first;
+	moved.xz = Vec2::new(40.0, 18.0);
+	index.queue_keep(SEED, region, &[], &[moved]);
+	index.assign_budgeted(SEED, 32);
+	anyhow::ensure!(index.name(key) == Some(&name), "identity-stable move must keep the name");
+	anyhow::ensure!(index.anchor(key) == Some(Vec2::new(40.0, 18.0)));
+	Ok(())
+}
 
-	type Real = Vegetation<Chico<Urbanization<Richmond<()>>>>;
-	struct Furniture;
+#[test]
+fn repeat_keep_does_not_requeue_current_names() -> anyhow::Result<()> {
+	let mut index = LanguageIndex::default();
+	let region = feature_aabb(0.0, 0.0, LARGE_TILE, LARGE_TILE);
+	let key = NameKey::Forest(origin_cell(0.0, 0.0, 10.0, 10.0));
+	let feature =
+		NamedFeature::new(key, feature_aabb(0.0, 0.0, 10.0, 10.0), vec!["taiga".to_owned()], 1);
+	index.assign_keep(SEED, region, &[feature.clone()], &[]);
+	let epoch = index.epoch;
+	index.queue_keep(SEED, region, &[feature], &[]);
+	anyhow::ensure!(index.epoch == epoch, "unchanged keep must not bump epoch");
+	index.assign_budgeted(SEED, 32);
+	anyhow::ensure!(index.epoch == epoch);
+	Ok(())
+}
 
-	let mut world = World::new();
-	world.init_resource::<ForestIndex>();
-	world.init_resource::<HcsgStorage>();
-	let mut read = SystemState::<<Real as NamedWorld>::Read>::new(&mut world);
-	let before = Real::source_revisions(&read.get(&world)?);
-
-	let bounds = feature_aabb(0.0, 0.0, 160.0, 160.0);
-	{
-		let mut storage = world.resource_mut::<HcsgStorage>();
-		storage.insert(Id::from_cell(bounds), Furniture, bounds);
-		storage.insert_base_terrain_for_test(
-			&durham::TerrainCellLayout::default(),
-			0,
-			0,
-			durham::BaseTerrainNoise::from_config(&durham::TerrainConfig::new(1)),
-		);
-	}
-	let after = Real::source_revisions(&read.get(&world)?);
-	anyhow::ensure!(
-		after.terrain == before.terrain,
-		"furniture and terrain-cell writes must not trigger geographic rediscovery"
+#[test]
+fn overlay_dirty_upserts_without_dropping_other_names() -> anyhow::Result<()> {
+	let mut index = LanguageIndex::default();
+	let region = feature_aabb(0.0, 0.0, LARGE_TILE, LARGE_TILE);
+	let forest = NameKey::Forest(origin_cell(0.0, 0.0, 10.0, 10.0));
+	index.assign_keep(
+		SEED,
+		region,
+		&[NamedFeature::new(
+			forest,
+			feature_aabb(0.0, 0.0, 10.0, 10.0),
+			vec!["taiga".to_owned()],
+			1,
+		)],
+		&[],
 	);
-	anyhow::ensure!(after.urban == before.urban, "nor urban renaming");
+	let mut overlay = LanguageOverlay::from_index(&index);
+	let grove = NameKey::Grove(origin_cell(20.0, 20.0, 30.0, 30.0));
+	index.queue_feature_snapshot(
+		crate::FeatureSnapshot {
+			active: [forest, grove].into_iter().collect(),
+			work: vec![NamedFeature::new(
+				grove,
+				feature_aabb(20.0, 20.0, 30.0, 30.0),
+				vec!["oak".to_owned()],
+				1,
+			)],
+			moved: Vec::new(),
+		},
+		crate::index::SourceClass::Vegetation,
+	);
+	index.assign_budgeted(SEED, 32);
+	let dirty = index.take_overlay_dirty();
+	overlay.apply_dirty(&index, dirty);
+	anyhow::ensure!(overlay.names.iter().any(|name| name.key == forest));
+	anyhow::ensure!(overlay.names.iter().any(|name| name.key == grove));
+	Ok(())
+}
+
+fn naming_region(origin: Vec2) -> NamingRegion {
+	NamingRegion::around(origin, LANGUAGE_NAME_RADIUS + 16.0, LANGUAGE_NAME_RADIUS + 96.0)
+}
+
+#[test]
+fn nearby_movement_names_existing_features_without_source_changes() -> anyhow::Result<()> {
+	let near = NameKey::Forest(origin_cell(0.0, 0.0, 10.0, 10.0));
+	let ahead = NameKey::Grove(origin_cell(500.0, 0.0, 510.0, 10.0));
+	let near_feature =
+		NamedFeature::new(near, feature_aabb(0.0, 0.0, 10.0, 10.0), vec!["taiga".to_owned()], 1);
+	let ahead_feature =
+		NamedFeature::new(ahead, feature_aabb(500.0, 0.0, 510.0, 10.0), vec!["oak".to_owned()], 1);
+	let mut index = LanguageIndex::default();
+	index.ensure_tiles(SEED, feature_aabb(-LARGE_TILE, -LARGE_TILE, LARGE_TILE, LARGE_TILE));
+	index.queue_feature_snapshot(
+		crate::sources::features_to_snapshot(
+			vec![near_feature.clone(), ahead_feature.clone()],
+			&index,
+			naming_region(Vec2::ZERO),
+		),
+		crate::index::SourceClass::Vegetation,
+	);
+	index.assign_budgeted(SEED, 32);
+	anyhow::ensure!(index.name(near).is_some());
+	anyhow::ensure!(index.name(ahead).is_none(), "500 m grove stays outside the first window");
+
+	index.queue_feature_snapshot(
+		crate::sources::features_to_snapshot(
+			vec![near_feature, ahead_feature],
+			&index,
+			naming_region(Vec2::new(350.0, 0.0)),
+		),
+		crate::index::SourceClass::Vegetation,
+	);
+	index.assign_budgeted(SEED, 32);
+	anyhow::ensure!(index.name(ahead).is_some(), "moving the window must name the existing grove");
+	Ok(())
+}
+
+#[test]
+fn distant_feature_is_not_collected() -> anyhow::Result<()> {
+	let distant = NameKey::Forest(origin_cell(20_000.0, 0.0, 20_010.0, 10.0));
+	let feature = NamedFeature::new(
+		distant,
+		feature_aabb(20_000.0, 0.0, 20_010.0, 10.0),
+		vec!["taiga".to_owned()],
+		1,
+	);
+	let region = naming_region(Vec2::ZERO);
+	anyhow::ensure!(!region.collects_bounds(feature.bounds));
+	let mut index = LanguageIndex::default();
+	index.queue_feature_snapshot(
+		crate::sources::features_to_snapshot(vec![feature], &index, region),
+		crate::index::SourceClass::Vegetation,
+	);
+	index.assign_budgeted(SEED, 32);
+	anyhow::ensure!(index.name(distant).is_none());
+	anyhow::ensure!(!index.is_active(distant));
+	Ok(())
+}
+
+#[test]
+fn intersecting_feature_with_distant_center_is_named() -> anyhow::Result<()> {
+	let key = NameKey::Geographic(GeographicFeatureId {
+		family: GeographicFamily::Massif,
+		band: GeographicBand::HighPass,
+		source: origin_cell(0.0, 0.0, 8_000.0, 200.0),
+	});
+	let feature = NamedFeature::new(
+		key,
+		feature_aabb(0.0, 0.0, 8_000.0, 200.0),
+		vec!["massif".to_owned()],
+		1,
+	);
+	let region = naming_region(Vec2::ZERO);
+	anyhow::ensure!(region.collects_bounds(feature.bounds), "bounds reach the player");
+	anyhow::ensure!(feature_aabb(0.0, 0.0, 8_000.0, 200.0).min.x < 400.0);
+	let mut index = LanguageIndex::default();
+	index.assign_keep(
+		SEED,
+		feature_aabb(-LARGE_TILE, -LARGE_TILE, LARGE_TILE, LARGE_TILE),
+		&[feature],
+		&[],
+	);
+	anyhow::ensure!(index.name(key).is_some());
+	Ok(())
+}
+
+#[test]
+fn feature_name_is_independent_of_visit_order() -> anyhow::Result<()> {
+	let region = feature_aabb(0.0, 0.0, LARGE_TILE, LARGE_TILE);
+	let forest = NamedFeature::new(
+		NameKey::Forest(origin_cell(0.0, 0.0, 10.0, 10.0)),
+		feature_aabb(0.0, 0.0, 10.0, 10.0),
+		vec!["taiga".to_owned()],
+		1,
+	);
+	let grove = NamedFeature::new(
+		NameKey::Grove(origin_cell(20.0, 20.0, 30.0, 30.0)),
+		feature_aabb(20.0, 20.0, 30.0, 30.0),
+		vec!["oak".to_owned()],
+		1,
+	);
+	let mut first = LanguageIndex::default();
+	first.assign_keep(SEED, region, &[forest.clone()], &[]);
+	first.assign_keep(SEED, region, &[forest.clone(), grove.clone()], &[]);
+	let mut second = LanguageIndex::default();
+	second.assign_keep(SEED, region, &[grove.clone()], &[]);
+	second.assign_keep(SEED, region, &[forest, grove], &[]);
+	anyhow::ensure!(
+		first.name(NameKey::Forest(origin_cell(0.0, 0.0, 10.0, 10.0)))
+			== second.name(NameKey::Forest(origin_cell(0.0, 0.0, 10.0, 10.0)))
+	);
+	anyhow::ensure!(
+		first.name(NameKey::Grove(origin_cell(20.0, 20.0, 30.0, 30.0)))
+			== second.name(NameKey::Grove(origin_cell(20.0, 20.0, 30.0, 30.0)))
+	);
+	anyhow::ensure!(
+		first.name(NameKey::Region { ix: 0, iz: 0 })
+			== second.name(NameKey::Region { ix: 0, iz: 0 })
+	);
 	Ok(())
 }

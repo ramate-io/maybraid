@@ -25,7 +25,7 @@ use lod::{LodViewer, SceneChunk};
 
 use crate::cell::{
 	intersects_xz, xz_radius_aabb, FurnitureCellExtent, FURNITURE_CELL_SIZE,
-	FURNITURE_GENERATE_RADIUS, FURNITURE_PRESENT_RADIUS, FURNITURE_REGION_Y_HALF,
+	FURNITURE_PRESENT_RADIUS, FURNITURE_REGION_Y_HALF,
 };
 use crate::host::FurnitureCell;
 use crate::slots::FurnitureSlots;
@@ -126,9 +126,8 @@ impl<U: FurnitureSlots> LodScene for Furnished<U> {
 	}
 }
 
-/// The furniture cells around the [`LodViewer`]: presented within
-/// [`FURNITURE_PRESENT_RADIUS`] of its cell and kept within
-/// [`FURNITURE_GENERATE_RADIUS`].
+/// The furniture cells around the [`LodViewer`]: within
+/// [`FURNITURE_PRESENT_RADIUS`] of its cell.
 pub struct FurnitureNeighborhood;
 
 impl FurnitureNeighborhood {
@@ -142,12 +141,8 @@ impl FurnitureNeighborhood {
 impl HcsgBounds for FurnitureNeighborhood {
 	type Param = Query<'static, 'static, &'static Transform, With<LodViewer>>;
 
-	fn inner(viewers: &SystemParamItem<Self::Param>) -> Option<Aabb3d> {
-		Self::around(viewers, FURNITURE_PRESENT_RADIUS)
-	}
-
-	fn outer(viewers: &SystemParamItem<Self::Param>) -> Option<Aabb3d> {
-		Self::around(viewers, FURNITURE_GENERATE_RADIUS)
+	fn regions(viewers: &SystemParamItem<Self::Param>) -> Vec<Aabb3d> {
+		Self::around(viewers, FURNITURE_PRESENT_RADIUS).into_iter().collect()
 	}
 
 	fn focus(viewers: &SystemParamItem<Self::Param>) -> Option<Vec3> {
@@ -180,16 +175,17 @@ impl MaputoNodes {
 	}
 }
 
-/// Presents furniture over ground `U` within `B` from the shared storage.
-pub struct MaputoPresentationPlugin<B, U>(PhantomData<fn() -> (B, U)>);
+/// Presents furniture over ground `U` within channel `C`'s regions from the
+/// shared storage.
+pub struct MaputoPresentationPlugin<C, U>(PhantomData<fn() -> (C, U)>);
 
-impl<B, U> Default for MaputoPresentationPlugin<B, U> {
+impl<C, U> Default for MaputoPresentationPlugin<C, U> {
 	fn default() -> Self {
 		Self(PhantomData)
 	}
 }
 
-impl<B: HcsgBounds, U: FurnitureSlots> Plugin for MaputoPresentationPlugin<B, U> {
+impl<C: Send + Sync + 'static, U: FurnitureSlots> Plugin for MaputoPresentationPlugin<C, U> {
 	fn build(&self, app: &mut App) {
 		if !app.is_plugin_added::<FurnitureShadersPlugin>() {
 			app.add_plugins(FurnitureShadersPlugin);
@@ -202,7 +198,7 @@ impl<B: HcsgBounds, U: FurnitureSlots> Plugin for MaputoPresentationPlugin<B, U>
 		}
 		let storage = app.world_mut().get_resource_or_init::<shared::HcsgStorage>().clone();
 		MaputoNodes::configure::<U>(&storage);
-		app.add_plugins(PresentationPlugin::<B, Furnished<U>>::default());
+		app.add_plugins(PresentationPlugin::<C, Furnished<U>>::default());
 		if !app.is_plugin_added::<LodSceneRefreshChunkPlugin<HcsgNode<Furnished<U>>>>() {
 			app.add_plugins(LodSceneRefreshChunkPlugin::<HcsgNode<Furnished<U>>>::default());
 		}
@@ -282,7 +278,10 @@ mod tests {
 			.init_asset::<StandardMaterial>()
 			.init_asset::<bevy::world_serialization::WorldAsset>()
 			.init_resource::<UrbanizationSelection>()
-			.add_plugins(MaputoPresentationPlugin::<FurnitureNeighborhood, Urban>::default())
+			.add_plugins((
+				shared::HcsgBoundsPlugin::<FurnitureNeighborhood>::default(),
+				MaputoPresentationPlugin::<FurnitureNeighborhood, Urban>::default(),
+			))
 			.add_systems(Update, restart.before(HcsgSystems));
 		seed_resources(&mut app, 12.0);
 		app.finish();

@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 use durham::{
-	terrain_collider_covers_xz, CascadeChunk, HcsgStorage, TerrainCellLayout, TerrainStorage,
+	terrain_collider_covers_xz, CascadeChunk, DurhamSurface, TerrainCellLayout,
 	TerrainTrimeshCollider,
 };
 use game_commands::command::{CommandConsoleOutput, TextEntryFocus};
@@ -56,8 +56,7 @@ pub struct WorldSurfaceSet;
 
 pub(crate) fn update_world_surface_ready(
 	streaming: Res<terrain_layer_model::TerrainStreaming<durham::Durham>>,
-	store: Res<HcsgStorage>,
-	layout: Res<TerrainCellLayout>,
+	surface: DurhamSurface,
 	spawn: Res<PlayerSpawnXz>,
 	players: Query<&Transform, With<Player>>,
 	colliders: Query<&CascadeChunk, With<TerrainTrimeshCollider>>,
@@ -67,10 +66,9 @@ pub(crate) fn update_world_surface_ready(
 	if !streaming.enabled {
 		return;
 	}
-	let xz = discovery_xz(&spawn, &players, &layout);
+	let xz = discovery_xz(&spawn, &players, surface.layout());
 	let at = Vec3::new(xz.x, 0.0, xz.y);
-	ready.0 = terrain_collider_covers_xz(at, colliders.iter())
-		&& store.composed_height_at(&layout, xz.x, xz.y).is_some();
+	ready.0 = terrain_collider_covers_xz(at, colliders.iter()) && surface.height_at(xz).is_some();
 }
 
 fn discovery_xz(
