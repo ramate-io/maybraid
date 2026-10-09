@@ -9,12 +9,12 @@
 mod bundle;
 mod catalog;
 mod english;
+pub mod hcsg;
 mod key;
 mod name;
 mod named;
 mod places;
 mod present;
-pub mod shared;
 mod tiles;
 
 pub use bundle::{LanguageBundle, LexiconFamily};
@@ -25,6 +25,10 @@ pub use english::{
 	named_place_english, named_region_english, named_urban_english, place_label_terms,
 	urbanization_terms, with_color_name, PLACE_COLORS,
 };
+pub use hcsg::{
+	GenevaPlugin, GenevaRoots, LanguageConfig, LanguageNeighborhood, LanguageWorldSeed,
+	NAME_WINDOW_QUANT_M,
+};
 pub use key::{name_key_salt, NameKey};
 pub use name::PlaceName;
 pub use named::{
@@ -33,10 +37,6 @@ pub use named::{
 };
 pub use places::{DevelopmentPlace, DevelopmentPlaces, LanguageGround};
 pub use present::{LanguageOverlay, LargeTileOverlay, NamedOverlay};
-pub use shared::{
-	GenevaPlugin, GenevaRoots, LanguageConfig, LanguageNeighborhood,
-	LanguageWorldSeed, NAME_WINDOW_QUANT_M,
-};
 pub use tiles::{
 	large_tile_aabb, large_tile_index, large_tile_origin, large_tiles_overlapping, LargeTile,
 	SmallTile, LARGE_TILE, SMALL_STEP_MAX, SMALL_STEP_MIN,

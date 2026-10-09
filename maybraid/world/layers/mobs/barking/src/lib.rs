@@ -5,24 +5,24 @@
 
 mod config;
 mod generation;
+pub mod hcsg;
 mod index;
 mod plugin;
 mod present;
 mod sample;
-pub mod shared;
 
 pub use config::BarkingConfig;
 pub use generation::{
 	GroupKind, MobEnvironmentSample, MobGroup, MobPlantHost, MobWorldHosts, MobWorldSample,
 	PlacedMob, DEFAULT_GROUP_EXTENT,
 };
+pub use hcsg::{
+	BarkingPresentationPlugin, MobGround, MobNeighborhood, MobScenePresentationPlugin,
+	PlacedMobCell, MOB_PRESENT_RADIUS,
+};
 pub use index::{MobCell, MobCellExtent};
 pub use plugin::{MobGroupsPlugin, PendingMobGroups};
 pub use present::{MobCellRoot, MobGroupRoot};
-pub use shared::{
-	BarkingPresentationPlugin, MobGround, MobNeighborhood,
-	MobScenePresentationPlugin, PlacedMobCell, MOB_PRESENT_RADIUS,
-};
 
 #[cfg(test)]
 mod tests;

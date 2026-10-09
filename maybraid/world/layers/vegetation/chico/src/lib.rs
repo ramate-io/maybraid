@@ -13,6 +13,7 @@ mod forest;
 mod generation;
 mod ground;
 mod grove;
+pub mod hcsg;
 pub(crate) mod hopscotch;
 mod host;
 mod kind;
@@ -21,7 +22,6 @@ pub mod layerings;
 mod material;
 mod plugin;
 mod recipe;
-pub mod shared;
 mod stick_physics;
 mod stream;
 mod view;
@@ -51,6 +51,10 @@ pub use forest::{neighbor_layers, ChicoForest};
 pub use generation::{GROVE_GENERATE_RADIUS_M, GROVE_PRESENT_RADIUS_M};
 pub use ground::{fine_overlay_size, overlay_chunk_ref};
 pub use grove::{grove_from_id, grove_id, ChicoGrove};
+pub use hcsg::{
+	BumpOutPresentationPlugin, BumpOutRing, BumpedOut, CanopyProxy, ChicoPresentationPlugin,
+	ChicoRoots, ForestGround, GroundSurface, GroveNeighborhood, GrownGrove,
+};
 pub use hopscotch::{select as hopscotch_select, HopscotchNode};
 pub use host::ChicoGroveHost;
 pub use kind::{
@@ -61,11 +65,6 @@ pub use layer::{select_layers, throw_layer};
 pub use material::{VegetationOnTerrainMaterialLib, VegetationOnTerrainMaterialRefPlugin};
 pub use plugin::{register_vegetation_view, VegetationViewPlugin};
 pub use recipe::{ForestGroveRecipe, WORLD_FOREST_TREE_VARIANTS};
-pub use shared::{
-	BumpOutPresentationPlugin, BumpOutRing, BumpedOut, CanopyProxy, 
-	ChicoPresentationPlugin, ChicoRoots, ForestGround, GroundSurface, GroveNeighborhood,
-	GrownGrove,
-};
 pub use stream::parse_layering_kind;
 pub use view::{
 	VegetationBullseye, VegetationCull, VegetationLodRefreshPlugin, VegetationRefresh,

@@ -33,10 +33,10 @@ use crate::english::{
 	named_forest_english, named_geographic_english, named_grove_english, named_place_english,
 	named_region_english, named_urban_english,
 };
+use crate::hcsg::LanguageWorldSeed;
 use crate::key::{name_key_salt, NameKey};
 use crate::name::PlaceName;
 use crate::places::{DevelopmentPlaces, LanguageGround};
-use crate::shared::LanguageWorldSeed;
 use crate::tiles::{large_tile_aabb, large_tile_index, large_tiles_overlapping, LargeTile};
 
 /// A place's footprint on the map, around its anchor.
@@ -177,7 +177,7 @@ fn feature(key: NameKey, bounds: Aabb3d, english: Vec<String>) -> Nameable {
 pub struct Regions;
 
 impl NameSource for Regions {
-	const INDEX_SCALE: DVec3 = crate::shared::TILE_INDEX_SCALE;
+	const INDEX_SCALE: DVec3 = crate::hcsg::TILE_INDEX_SCALE;
 
 	fn original_ids_for(_cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
 		large_tiles_overlapping(region)
@@ -201,7 +201,7 @@ impl NameSource for Regions {
 pub struct Forests;
 
 impl NameSource for Forests {
-	const INDEX_SCALE: DVec3 = crate::shared::TILE_INDEX_SCALE;
+	const INDEX_SCALE: DVec3 = crate::hcsg::TILE_INDEX_SCALE;
 
 	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
 		cx.original_ids_for::<ChicoForest>(region)
@@ -222,7 +222,7 @@ impl NameSource for Forests {
 pub struct Groves<W>(PhantomData<fn() -> W>);
 
 impl<W: LanguageGround> NameSource for Groves<W> {
-	const INDEX_SCALE: DVec3 = crate::shared::TILE_INDEX_SCALE;
+	const INDEX_SCALE: DVec3 = crate::hcsg::TILE_INDEX_SCALE;
 
 	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
 		cx.original_ids_for::<ChicoGrove>(region)
@@ -244,7 +244,7 @@ impl<W: LanguageGround> NameSource for Groves<W> {
 pub struct Urban;
 
 impl NameSource for Urban {
-	const INDEX_SCALE: DVec3 = crate::shared::TILE_INDEX_SCALE;
+	const INDEX_SCALE: DVec3 = crate::hcsg::TILE_INDEX_SCALE;
 
 	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
 		cx.original_ids_for::<SelectedUrbanization>(region)
@@ -269,7 +269,7 @@ impl NameSource for Urban {
 pub struct Places<W>(PhantomData<fn() -> W>);
 
 impl<W: LanguageGround> NameSource for Places<W> {
-	const INDEX_SCALE: DVec3 = crate::shared::PLACES_INDEX_SCALE;
+	const INDEX_SCALE: DVec3 = crate::hcsg::PLACES_INDEX_SCALE;
 
 	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
 		cx.original_ids_for::<DevelopmentPlaces<W>>(region)
@@ -330,7 +330,7 @@ geographic_stamp! {
 pub struct Stamp<T>(PhantomData<fn() -> T>);
 
 impl<T: GeographicStamp> NameSource for Stamp<T> {
-	const INDEX_SCALE: DVec3 = crate::shared::TILE_INDEX_SCALE;
+	const INDEX_SCALE: DVec3 = crate::hcsg::TILE_INDEX_SCALE;
 
 	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
 		cx.original_ids_for::<T>(region)
@@ -372,7 +372,7 @@ impl AuthoredWaters for PocketWatersLowPass {
 pub struct Waters<T>(PhantomData<fn() -> T>);
 
 impl<T: AuthoredWaters> NameSource for Waters<T> {
-	const INDEX_SCALE: DVec3 = crate::shared::TILE_INDEX_SCALE;
+	const INDEX_SCALE: DVec3 = crate::hcsg::TILE_INDEX_SCALE;
 
 	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
 		cx.original_ids_for::<T>(region)

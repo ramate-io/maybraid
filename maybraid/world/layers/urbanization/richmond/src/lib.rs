@@ -13,6 +13,7 @@ pub mod compose;
 pub mod config;
 pub mod developments;
 pub mod ground;
+pub mod hcsg;
 pub mod host;
 pub mod layer;
 pub mod layer_config;
@@ -20,7 +21,6 @@ pub mod pad;
 pub mod padded;
 pub mod place;
 pub mod plugin;
-pub mod shared;
 pub mod storage;
 
 pub use artifact::BuiltDevelopment;
@@ -41,6 +41,9 @@ pub use developments::site::{
 };
 pub use developments::{DevelopmentCell, DevelopmentPad, RichmondDevelopment, SiteDevelopment};
 pub use ground::{hydro_overlaps_xz, GroundCell, GroundCells, RichmondGround};
+pub use hcsg::{
+	BuiltPresentationPlugin, DevelopmentNeighborhood, RichmondPresentationPlugin, RichmondRoots,
+};
 pub use host::{DevelopmentHost, DevelopmentHosts};
 pub use layer::Richmond;
 pub use layer_config::{
@@ -51,9 +54,6 @@ pub use pad::{cell_bounds2, PadComplex, PadNode, PadPrimitive};
 pub use padded::{PaddedTerrain, TerrainWithPads};
 pub use place::{DiscoverablePlace, DiscoverablePlaceLabel, InteriorArea};
 pub use plugin::{register_richmond_plugin, RichmondDevelopmentModelsPlugin};
-pub use shared::{
-	BuiltPresentationPlugin, DevelopmentNeighborhood, RichmondPresentationPlugin, RichmondRoots,
-};
 pub use storage::column_bounds;
 pub use urbanization_developments::{
 	yaw_about_xz, Development, DevelopmentFinish, DevelopmentFinishRole, PadParams, SiteGround,

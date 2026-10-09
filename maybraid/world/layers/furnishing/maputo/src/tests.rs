@@ -18,7 +18,7 @@ use urbanization_developments::{MixedUseLesHallesDevelopment, PlacedBuilding};
 use urbanization_layer_model::{UrbanSetting, Urbanization};
 
 use crate::cell::world_slot;
-use crate::shared::DevelopmentSlots;
+use crate::hcsg::DevelopmentSlots;
 
 type Ground = OnTerrain<Durham>;
 type Urbanized = Urbanization<richmond::Richmond<Ground>>;

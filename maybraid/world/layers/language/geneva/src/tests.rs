@@ -21,11 +21,11 @@ use crate::english::{
 	compose_english, geographic_terms, grove_kind_terms, named_grove_english, named_region_english,
 	with_color_name, PLACE_COLORS,
 };
+use crate::hcsg::LanguageWorldSeed;
 use crate::key::{name_key_salt, NameKey};
 use crate::name::{canonicalize_terms, pick_terms, PlaceName};
 use crate::named::{NameEntry, NameSource, Named, Places, Regions, Stamp, Waters};
 use crate::places::{DevelopmentPlace, DevelopmentPlaces};
-use crate::shared::LanguageWorldSeed;
 use crate::tiles::{large_tiles_overlapping, LargeTile, LARGE_TILE};
 
 type Urban = Urbanization<Richmond<OnTerrain<Durham>>>;

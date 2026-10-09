@@ -7,10 +7,10 @@ use bevy::math::{Rect, Vec2};
 use bevy::prelude::{Local, Res, ResMut, Resource};
 use lod::hcsg::{Busy, HcsgStorage};
 
+use crate::hcsg::{naming_revision, read_nearby, LanguageWindow};
 use crate::key::NameKey;
 use crate::named::{NameEntry, NameSource, Named, Regions};
 use crate::places::LanguageGround;
-use crate::shared::{naming_revision, read_nearby, LanguageWindow};
 use crate::tiles::{window_tiles, LargeTile};
 
 /// Tile bounds and names for a debug overlay.
