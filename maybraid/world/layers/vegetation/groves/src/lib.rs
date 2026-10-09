@@ -106,7 +106,10 @@ pub use low_bush::{LowBush, LowBushParams};
 #[cfg(feature = "render")]
 pub use monster_grass::{MonsterGrass, MonsterGrassParams};
 #[cfg(feature = "render")]
-pub use orchard::{Orchard, OrchardParams};
+pub use orchard::{
+	Orchard, OrchardParams, OrchardPlant, ORCHARD_STRUCTURAL_HIGH_FACTOR,
+	ORCHARD_STRUCTURAL_LOW_FACTOR, ORCHARD_STRUCTURAL_MEDIUM_FACTOR,
+};
 #[cfg(feature = "render")]
 pub use palm_shade::{PalmShade, PalmShadeParams};
 #[cfg(feature = "render")]

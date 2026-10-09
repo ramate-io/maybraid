@@ -91,6 +91,9 @@ impl LodScene for ChicoGroveHost {
 	}
 
 	fn scene_chunks_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> SceneChunk {
+		if self.packs_visuals() {
+			return Self::empty_chunks();
+		}
 		let drop = self.drop_out();
 		if drop.omits(level) {
 			return Self::empty_chunks();

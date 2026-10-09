@@ -12,6 +12,7 @@ use lod::{hide_lod_tree, LodScene};
 use vegetation_components::spawn_lod_scene_host_with_lod_ref;
 use vegetation_groves::GroveWorldSample;
 
+use crate::packed::{PackMode, PackedGroveCell};
 use crate::{ChicoGrove, ChicoGroveHost, ForestGroveTile, ForestIndex, ForestLayer};
 
 const MAX_GROVE_GROWTH_TASKS: usize = 4;
@@ -263,7 +264,14 @@ impl ForestPresenterState {
 				break;
 			};
 			let _span = info_span!("chico_grove_host_spawn").entered();
-			spawned.extend(spawn_forest_grove_tile(commands, &tile, pending.layer, lod_ref));
+			spawned.extend(spawn_forest_grove_tile(
+				commands,
+				&tile,
+				pending.layer,
+				lod_ref,
+				id,
+				version,
+			));
 		}
 		pending.entities.extend(spawned.iter().copied());
 		if pending.task.is_none() && pending.ready.is_empty() {
@@ -350,8 +358,16 @@ fn spawn_forest_grove_tile(
 	tile: &ForestGroveTile,
 	layer: ForestLayer,
 	lod_ref: &LodRef,
+	id: Id,
+	version: Version,
 ) -> Vec<Entity> {
-	spawn_grove_host(commands, &ChicoGroveHost::new(tile.clone(), layer), lod_ref)
+	let entities = spawn_grove_host(commands, &ChicoGroveHost::new(tile.clone(), layer), lod_ref);
+	if PackMode::current().packs_orchard() && tile.as_orchard().is_some() {
+		for entity in &entities {
+			commands.entity(*entity).insert(PackedGroveCell { id, version });
+		}
+	}
+	entities
 }
 
 #[cfg(test)]

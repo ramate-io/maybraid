@@ -75,6 +75,7 @@ pub use scene::{
 	LodSceneRefreshRegion, LodSceneRefreshRegionPlugin, LodSceneRefreshSyncPlugin,
 	LodSceneRegionCullPlugin, LodSceneRegionIndex, LodSceneStatus, LodTreeVisBudget,
 	LodTreeVisQueue, LodViewer, OpenLattice, PatchSceneBounds, QuantizedDistance, SceneChunk,
-	SemanticLodScene, SemanticSceneChunk, Spotlight, VisualLodPrimitive, VisualLodScene,
-	VisualSceneChunk, DEFAULT_CHUNK_WEIGHT, NAMED_BANDS_NEAR_TO_FAR, OFFSET_BAND_DEPTH,
+	SemanticLodScene, SemanticSceneChunk, Spotlight, VisualLodKind, VisualLodPrimitive,
+	VisualLodScene, VisualMaterialKind, VisualSceneChunk, DEFAULT_CHUNK_WEIGHT,
+	NAMED_BANDS_NEAR_TO_FAR, OFFSET_BAND_DEPTH,
 };

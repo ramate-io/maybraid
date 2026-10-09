@@ -26,6 +26,7 @@ mod layer_stream;
 pub mod layerings;
 mod material;
 mod model;
+mod packed;
 mod plugin;
 mod present;
 mod recipe;
