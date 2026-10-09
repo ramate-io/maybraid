@@ -12,6 +12,8 @@ pub mod lod_ref;
 pub mod presentation;
 pub mod scene;
 
+mod runtime_quantum;
+
 /// Compatibility module paths (prefer [`scene`] / [`presentation`] / [`lod_ref`]).
 pub use scene::chunk as scene_chunk;
 pub use scene::chunk_fulfill;

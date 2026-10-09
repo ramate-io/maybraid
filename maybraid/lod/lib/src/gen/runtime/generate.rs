@@ -14,6 +14,7 @@ use crate::gen::{
 	GeneratingSpatialIndex, Id, MaterializeStatus, StorageStatus, QUEUE_KEEP_SLACK_XZ,
 };
 use crate::jobs::{ensure_lod_job_counter, LodJobCounter};
+use crate::runtime_quantum::{regions_match, regions_overlap_xz, time_up, warn_atomic_overrun};
 use crate::lod_ref::{
 	collect_node_snapshots, lod_refs_from_snapshots, LodNode, LodNodeBounds, LodNodePlugin,
 	LodNodePose, LodNodeSystems,
@@ -335,7 +336,12 @@ pub fn drain_lod_generate<T, S, M, F>(
 				jobs.begin();
 			}
 		}
-		warn_atomic_overrun("generate region scan", quantum.elapsed(), time_budget.max_atomic_cost);
+		warn_atomic_overrun(
+			"generate",
+			"generate region scan",
+			quantum.elapsed(),
+			time_budget.max_atomic_cost,
+		);
 		scanned = true;
 	}
 
@@ -358,6 +364,7 @@ pub fn drain_lod_generate<T, S, M, F>(
 				.unwrap_or(std::cmp::Ordering::Equal)
 		});
 		warn_atomic_overrun(
+			"generate",
 			"generate queue ordering",
 			quantum.elapsed(),
 			time_budget.max_atomic_cost,
@@ -377,35 +384,13 @@ pub fn drain_lod_generate<T, S, M, F>(
 		if index.get_or_generate(id) == Some(MaterializeStatus::Created) {
 			generated.write(LodGenerated::new(id));
 		}
-		warn_atomic_overrun("generate ID", quantum.elapsed(), time_budget.max_atomic_cost);
+		warn_atomic_overrun(
+			"generate",
+			"generate ID",
+			quantum.elapsed(),
+			time_budget.max_atomic_cost,
+		);
 	}
-}
-
-fn time_up(started: Instant, budget: Duration) -> bool {
-	!budget.is_zero() && started.elapsed() >= budget
-}
-
-fn warn_atomic_overrun(stage: &'static str, elapsed: Duration, maximum: Duration) {
-	if maximum.is_zero() || elapsed <= maximum {
-		return;
-	}
-	debug!(
-		stage,
-		elapsed_us = elapsed.as_micros(),
-		max_us = maximum.as_micros(),
-		"LOD generate quantum exceeded max_atomic_cost"
-	);
-}
-
-fn regions_match(a: Aabb3d, b: Aabb3d) -> bool {
-	(a.min.x - b.min.x).abs() < 1e-3
-		&& (a.max.x - b.max.x).abs() < 1e-3
-		&& (a.min.z - b.min.z).abs() < 1e-3
-		&& (a.max.z - b.max.z).abs() < 1e-3
-}
-
-fn regions_overlap_xz(a: Aabb3d, b: Aabb3d) -> bool {
-	a.min.x <= b.max.x && a.max.x >= b.min.x && a.min.z <= b.max.z && a.max.z >= b.min.z
 }
 
 /// Produce [`LodGenerateRegion<M>`] from `F`-filtered [`LodNode`]s via strategy `P`.
