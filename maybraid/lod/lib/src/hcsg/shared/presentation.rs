@@ -18,7 +18,7 @@ use crate::gen::{Id, Version};
 use crate::lod_ref::LodRef;
 use crate::scene::{lod_host_scene_pending, SemanticLodScene};
 
-use super::bounds::HcsgRegions;
+use super::bounds::{HcsgClass, HcsgRegions};
 use super::context::GenerationScheme;
 use super::demand::{HcsgDemand, SubscriptionId};
 use super::node::HcsgNode;
@@ -39,6 +39,7 @@ pub struct Presented<T> {
 	/// The channel's latest regions.
 	wanted: Vec<Aabb3d>,
 	focus: Option<Vec3>,
+	class: HcsgClass,
 	subscription: Option<SubscriptionId>,
 	requested: Vec<Aabb3d>,
 	cursor: usize,
@@ -57,6 +58,7 @@ impl<T> Default for Presented<T> {
 		Self {
 			wanted: Vec::new(),
 			focus: None,
+			class: HcsgClass::Near,
 			subscription: None,
 			requested: Vec::new(),
 			cursor: 0,
@@ -92,6 +94,7 @@ pub fn presentation<C, T>(
 	if let Some(latest) = regions.read().last() {
 		state.wanted = latest.boxes.clone();
 		state.focus = latest.focus;
+		state.class = latest.class;
 	}
 	state.request(&demand);
 	state.spawn(&storage, &demand, &mut commands);
@@ -108,7 +111,8 @@ impl<T: GenerationScheme + SemanticLodScene> Presented<T> {
 		self.cursor = 0;
 		if wants {
 			let regions = self.wanted.clone();
-			self.subscription = Some(demand.subscribe::<T>(self.subscription, regions, self.focus));
+			self.subscription =
+				Some(demand.subscribe::<T>(self.subscription, regions, self.focus, self.class));
 		} else if let Some(subscription) = self.subscription.take() {
 			demand.unsubscribe(subscription);
 		}

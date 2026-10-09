@@ -10,7 +10,7 @@ use bevy::ecs::system::{SystemParam, SystemParamItem};
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use lod::gen::Id;
-use lod::hcsg::shared::{Busy, HcsgBounds, HcsgNode, HcsgStorage, PresentationPlugin};
+use lod::hcsg::shared::{Busy, HcsgBounds, HcsgClass, HcsgNode, HcsgStorage, PresentationPlugin};
 use lod::scene::LodSceneRefreshChunkPlugin;
 use lod::LodViewer;
 use render_item::mesh::handle::MeshFulfillBudget;
@@ -33,6 +33,8 @@ use crate::water::{ComposedWater, Water, WaterColumn, WaterMeshAssets};
 pub struct DurhamWindow;
 
 impl HcsgBounds for DurhamWindow {
+	const CLASS: HcsgClass = HcsgClass::Near;
+
 	type Param = Res<'static, TerrainCellLayout>;
 
 	fn regions(layout: &SystemParamItem<Self::Param>) -> Vec<Aabb3d> {

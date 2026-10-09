@@ -179,8 +179,12 @@ struct DemandState {
 struct Subscription {
     regions: Vec<Aabb3d>,
     focus: Option<Vec3>,
+    class: HcsgClass,
+    pass: f64,
     discover: Discover, // fn pointers monomorphized per T
     generate: Generate,
+    discovered: Option<Vec<Id>>, // set after the first quantum
+    cursor: usize,
     published: Vec<Id>, // appended as each value becomes available
     done: bool,
     cancelled: Arc<AtomicBool>, // set on replace, unsubscribe, or epoch end
@@ -198,6 +202,7 @@ impl HcsgDemand {
         previous: Option<SubscriptionId>,
         regions: Vec<Aabb3d>,
         focus: Option<Vec3>,
+        class: HcsgClass,
     ) -> SubscriptionId;
 
     /// Ids published for `id` from `cursor` on, and whether the worker has
@@ -220,19 +225,18 @@ Subscription ids come from the `AtomicU64`. A presentation system holds exactly 
 
 ### Worker
 
-There is one dedicated worker thread:
+There is one dedicated worker thread. It schedules live subscriptions by
+[`HcsgClass`](shared/bounds.rs) weight (stride `pass`, lowest first, newest
+among ties) and runs each for a quantum of about 32 ids or 30 ms:
 
 ```text
 loop:
   lock demand; wait on Condvar until some subscription is not done
-  pick the newest such subscription; copy (id, regions, focus, fns, cancelled); unlock
-  fill(storage, demand, job):
-    ids = T::original_ids_for(cx, region) for every region, deduplicated, nearest to focus first
-    for each id:
-      if cancelled: stop
-      get_or_generate::<T>(id); nothing is published once cancelled
-      if the value exists: append the id to the subscription's `published`
-  mark the subscription done (if it still exists)
+  pick the lowest-pass unfinished subscription (newest id on a tie)
+  fill one quantum:
+    discover once (deduped, nearest to focus first); store ids and a cursor
+    generate until 32 ids or 30 ms, then return to the scheduler
+  advance that subscription's pass by cost / weight (a replacement inherits pass)
 ```
 
 - **Every** discovered id whose value exists is appended to `published`, including values published earlier by another subscription. That's how presentation learns about values it didn't cause.
@@ -247,6 +251,7 @@ Regions arrive on typed channels. A producer `B` sends a set of boxes as `HcsgRe
 
 ```rust
 pub trait HcsgBounds: Send + Sync + 'static {
+    const CLASS: HcsgClass;
     type Param: SystemParam;
     /// The boxes to fill (and, for presentation, to keep hosts in).
     fn regions(param: &SystemParamItem<Self::Param>) -> Vec<Aabb3d>;

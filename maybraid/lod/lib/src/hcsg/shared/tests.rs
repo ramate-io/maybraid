@@ -7,7 +7,38 @@ use bevy::math::{DVec3, Vec3};
 use crate::gen::tests::test_utils::cell;
 use crate::gen::{Id, OriginalId};
 
+use super::bounds::HcsgClass;
+use super::demand::{quantum_cost, QuantumProgress, SubscriptionId, QUANTUM_IDS, QUANTUM_TIME};
 use super::{GenerationContext, GenerationScheme, HcsgDemand, HcsgStorage, HcsgWorker};
+
+fn subscribe<T: GenerationScheme>(
+	demand: &HcsgDemand,
+	previous: Option<SubscriptionId>,
+	regions: Vec<Aabb3d>,
+	focus: Option<Vec3>,
+) -> SubscriptionId {
+	demand.subscribe::<T>(previous, regions, focus, HcsgClass::Near)
+}
+
+fn subscribe_class<T: GenerationScheme>(
+	demand: &HcsgDemand,
+	previous: Option<SubscriptionId>,
+	regions: Vec<Aabb3d>,
+	class: HcsgClass,
+) -> SubscriptionId {
+	demand.subscribe::<T>(previous, regions, None, class)
+}
+
+fn yield_quantum(
+	demand: &HcsgDemand,
+	id: SubscriptionId,
+	discovered: Option<Vec<Id>>,
+	cursor: usize,
+	cost: u32,
+	done: bool,
+) {
+	demand.finish_quantum(id, QuantumProgress { discovered, cursor, cost: f64::from(cost), done });
+}
 
 const IDLE: Duration = Duration::from_secs(10);
 
@@ -184,7 +215,7 @@ fn worker_fills_subscription_nearest_first() -> anyhow::Result<()> {
 	let _worker = HcsgWorker::spawn(storage.clone(), demand.clone())?;
 
 	let subscription =
-		demand.subscribe::<Cover>(None, vec![span(0.0, 4.0)], Some(Vec3::new(3.5, 0.5, 0.5)));
+		subscribe::<Cover>(&demand, None, vec![span(0.0, 4.0)], Some(Vec3::new(3.5, 0.5, 0.5)));
 	assert!(demand.wait_idle(IDLE));
 
 	let published = demand.try_read_published(subscription, 0).ok().flatten().unwrap_or_default();
@@ -208,7 +239,7 @@ fn worker_republishes_existing_values() -> anyhow::Result<()> {
 	let demand = HcsgDemand::default();
 	let _worker = HcsgWorker::spawn(storage.clone(), demand.clone())?;
 
-	let subscription = demand.subscribe::<Ground>(None, vec![span(0.0, 1.0)], None);
+	let subscription = subscribe::<Ground>(&demand, None, vec![span(0.0, 1.0)], None);
 	assert!(demand.wait_idle(IDLE));
 	assert_eq!(demand.try_read_published(subscription, 0).ok().flatten(), Some(vec![id]));
 	assert!(
@@ -223,8 +254,8 @@ fn replacing_a_subscription_drops_the_previous() -> anyhow::Result<()> {
 	let demand = HcsgDemand::default();
 	let _worker = HcsgWorker::spawn(storage.clone(), demand.clone())?;
 
-	let first = demand.subscribe::<Ground>(None, vec![span(0.0, 2.0)], None);
-	let second = demand.subscribe::<Ground>(Some(first), vec![span(10.0, 2.0)], None);
+	let first = subscribe::<Ground>(&demand, None, vec![span(0.0, 2.0)], None);
+	let second = subscribe::<Ground>(&demand, Some(first), vec![span(10.0, 2.0)], None);
 	assert_eq!(demand.try_read_published(first, 0), Ok(None));
 	assert!(demand.wait_idle(IDLE));
 	assert_eq!(demand.try_read_published(second, 0).ok().flatten().map(|ids| ids.len()), Some(2));
@@ -237,8 +268,8 @@ fn replacing_a_subscription_drops_the_previous() -> anyhow::Result<()> {
 #[test]
 fn advancing_the_epoch_drops_every_subscription() {
 	let demand = HcsgDemand::default();
-	let ground = demand.subscribe::<Ground>(None, vec![span(0.0, 2.0)], None);
-	let cover = demand.subscribe::<Cover>(None, vec![span(0.0, 2.0)], None);
+	let ground = subscribe::<Ground>(&demand, None, vec![span(0.0, 2.0)], None);
+	let cover = subscribe::<Cover>(&demand, None, vec![span(0.0, 2.0)], None);
 	assert_eq!(demand.advance_epoch(), 1);
 	assert_eq!(demand.epoch(), 1);
 	assert_eq!(demand.try_read_published(ground, 0), Ok(None));
@@ -272,7 +303,7 @@ fn worker_cover_state(regions: Vec<Aabb3d>) -> anyhow::Result<std::collections::
 	let storage = seeded();
 	let demand = HcsgDemand::default();
 	let _worker = HcsgWorker::spawn(storage.clone(), demand.clone())?;
-	let subscription = demand.subscribe::<Cover>(None, regions, None);
+	let subscription = subscribe::<Cover>(&demand, None, regions, None);
 	anyhow::ensure!(demand.wait_idle(IDLE));
 	anyhow::ensure!(
 		demand.try_read_published(subscription, 0).ok().flatten().is_some(),
@@ -296,12 +327,149 @@ fn a_panicking_scheme_does_not_stop_the_worker() -> anyhow::Result<()> {
 	let demand = HcsgDemand::default();
 	let _worker = HcsgWorker::spawn(storage.clone(), demand.clone())?;
 
-	let panicky = demand.subscribe::<Panicky>(None, vec![span(0.0, 1.0)], None);
+	let panicky = subscribe::<Panicky>(&demand, None, vec![span(0.0, 1.0)], None);
 	assert!(demand.wait_idle(IDLE));
 	assert_eq!(demand.try_read_published(panicky, 0), Ok(Some(Vec::new())));
 
-	let ground = demand.subscribe::<Ground>(None, vec![span(0.0, 1.0)], None);
+	let ground = subscribe::<Ground>(&demand, None, vec![span(0.0, 1.0)], None);
 	assert!(demand.wait_idle(IDLE));
 	assert_eq!(demand.try_read_published(ground, 0).ok().flatten().map(|ids| ids.len()), Some(1));
+	Ok(())
+}
+
+#[test]
+fn stride_schedule_is_fair_by_class_weight() {
+	let demand = HcsgDemand::default();
+	let near = subscribe_class::<Ground>(&demand, None, vec![span(0.0, 1.0)], HcsgClass::Near);
+	let ambient = subscribe_class::<Cover>(&demand, None, vec![span(0.0, 1.0)], HcsgClass::Ambient);
+	let mut near_quanta = 0u32;
+	let mut ambient_quanta = 0u32;
+	for _ in 0..36 {
+		let job = demand.try_pick().expect("unfinished work");
+		if job.id == near {
+			near_quanta += 1;
+		} else {
+			assert_eq!(job.id, ambient);
+			ambient_quanta += 1;
+		}
+		yield_quantum(&demand, job.id, None, 0, QUANTUM_IDS as u32, false);
+	}
+	assert_eq!((near_quanta, ambient_quanta), (32, 4), "weight 8 and weight 1 run 8:1");
+}
+
+#[test]
+fn a_weight_1_subscription_completes_while_higher_classes_resubscribe() {
+	let demand = HcsgDemand::default();
+	let ambient = subscribe_class::<Cover>(&demand, None, vec![span(0.0, 1.0)], HcsgClass::Ambient);
+	let mut near = subscribe_class::<Ground>(&demand, None, vec![span(0.0, 1.0)], HcsgClass::Near);
+	let mut ambient_cost = 0u32;
+	for _ in 0..64 {
+		let job = demand.try_pick().expect("unfinished work");
+		if job.id == ambient {
+			ambient_cost += QUANTUM_IDS as u32;
+			let done = ambient_cost >= 3 * QUANTUM_IDS as u32;
+			yield_quantum(&demand, job.id, None, 0, QUANTUM_IDS as u32, done);
+			if done {
+				assert!(demand.try_read(ambient, 0).unwrap().unwrap().done);
+				return;
+			}
+		} else {
+			yield_quantum(&demand, job.id, None, 0, QUANTUM_IDS as u32, false);
+			near = subscribe_class::<Ground>(
+				&demand,
+				Some(near),
+				vec![span(0.0, 1.0)],
+				HcsgClass::Near,
+			);
+		}
+	}
+	panic!("ambient work starved");
+}
+
+#[test]
+fn replacing_a_subscription_inherits_pass() {
+	let demand = HcsgDemand::default();
+	let ambient = subscribe_class::<Cover>(&demand, None, vec![span(0.0, 1.0)], HcsgClass::Ambient);
+	let near = subscribe_class::<Ground>(&demand, None, vec![span(0.0, 1.0)], HcsgClass::Near);
+	let first = demand.try_pick().expect("near is newer at the same pass");
+	assert_eq!(first.id, near);
+	yield_quantum(&demand, first.id, None, 0, QUANTUM_IDS as u32, false);
+	let inherited = demand.pass_of(near).expect("near still live");
+	assert!(inherited > 0.0);
+	let replaced =
+		subscribe_class::<Ground>(&demand, Some(near), vec![span(1.0, 1.0)], HcsgClass::Near);
+	assert_eq!(demand.pass_of(replaced), Some(inherited));
+	let next = demand.try_pick().expect("ambient is behind");
+	assert_eq!(next.id, ambient, "resubscribing must not jump the queue");
+	yield_quantum(&demand, next.id, None, 0, 1, true);
+}
+
+#[test]
+fn a_switched_out_subscription_resumes_without_rediscovering() {
+	let demand = HcsgDemand::default();
+	let first = subscribe_class::<Ground>(&demand, None, vec![span(0.0, 8.0)], HcsgClass::Ambient);
+	let job = demand.try_pick().expect("only work");
+	assert!(job.discovered.is_none());
+	let ids: Vec<Id> = (0..8).map(|x| Id::from_cell(cell(x as f32))).collect();
+	yield_quantum(&demand, job.id, Some(ids.clone()), 3, 3, false);
+	let _other = subscribe_class::<Cover>(&demand, None, vec![span(0.0, 1.0)], HcsgClass::Near);
+	let other = demand.try_pick().expect("near work");
+	assert_ne!(other.id, first);
+	yield_quantum(&demand, other.id, None, 0, 1, true);
+	let resume = demand.try_pick().expect("first still unfinished");
+	assert_eq!(resume.id, first);
+	assert_eq!(resume.cursor, 3);
+	assert_eq!(resume.discovered.as_deref(), Some(ids.as_slice()));
+	yield_quantum(&demand, resume.id, resume.discovered, resume.cursor, 1, true);
+}
+
+#[test]
+fn a_finished_subscription_resumes_at_the_current_minimum() {
+	let demand = HcsgDemand::default();
+	let far = subscribe_class::<Ground>(&demand, None, vec![span(0.0, 1.0)], HcsgClass::Far);
+	let job = demand.try_pick().expect("only work");
+	assert_eq!(job.id, far);
+	yield_quantum(&demand, job.id, None, 0, 1, true);
+	assert!(demand.try_read(far, 0).unwrap().unwrap().done);
+
+	let near = subscribe_class::<Cover>(&demand, None, vec![span(0.0, 1.0)], HcsgClass::Near);
+	for _ in 0..8 {
+		let job = demand.try_pick().expect("near is the only unfinished work");
+		assert_eq!(job.id, near);
+		yield_quantum(&demand, job.id, None, 0, QUANTUM_IDS as u32, false);
+	}
+	let near_pass = demand.pass_of(near).expect("near still live");
+	assert!(near_pass > 0.0);
+
+	let far = subscribe_class::<Ground>(&demand, Some(far), vec![span(1.0, 1.0)], HcsgClass::Far);
+	assert_eq!(
+		demand.pass_of(far),
+		Some(near_pass),
+		"a finished subscription must not resume below the live minimum"
+	);
+}
+
+#[test]
+fn quantum_cost_charges_the_larger_of_ids_and_time() {
+	assert_eq!(quantum_cost(32, Duration::from_millis(1)), 32.0);
+	assert_eq!(quantum_cost(3, QUANTUM_TIME), QUANTUM_IDS as f64);
+	assert_eq!(quantum_cost(3, QUANTUM_TIME / 2), QUANTUM_IDS as f64 / 2.0);
+}
+
+#[test]
+fn a_lone_subscription_fills_one_quantum_at_a_time() -> anyhow::Result<()> {
+	let storage = seeded();
+	let demand = HcsgDemand::default();
+	let _worker = HcsgWorker::spawn(storage.clone(), demand.clone())?;
+	let n = 100u32;
+	let subscription = subscribe::<Ground>(&demand, None, vec![span(0.0, n as f32)], None);
+	assert!(demand.wait_idle(IDLE));
+	let published = demand.try_read_published(subscription, 0).ok().flatten().unwrap_or_default();
+	let expected: Vec<Id> = (0..n).map(|x| Id::from_cell(cell(x as f32))).collect();
+	assert_eq!(published, expected);
+	let picks = demand.scheduler_picks();
+	let quanta = u64::from(n.div_ceil(QUANTUM_IDS as u32));
+	assert!(picks >= quanta, "a lone subscription must yield each quantum, got {picks} picks");
+	assert!(picks < u64::from(n), "must not return to the scheduler once per id, got {picks}");
 	Ok(())
 }

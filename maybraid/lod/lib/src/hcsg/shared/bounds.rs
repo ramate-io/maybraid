@@ -10,28 +10,58 @@ use bevy::prelude::{App, IntoScheduleConfigs, Local, Message, MessageWriter, Plu
 
 use super::runtime::HcsgSystems;
 
+/// Coarse scheduling weight for a channel. The worker spends quanta in
+/// proportion to [`Self::weight`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum HcsgClass {
+	/// Near terrain, groves, bump-outs, developments, furniture, mobs.
+	Near,
+	/// Far terrain.
+	Far,
+	/// Background terrain.
+	Background,
+	/// Language tiles and the naming window.
+	Ambient,
+}
+
+impl HcsgClass {
+	pub const fn weight(self) -> u32 {
+		match self {
+			Self::Near => 8,
+			Self::Far => 4,
+			Self::Background => 2,
+			Self::Ambient => 1,
+		}
+	}
+}
+
 /// Where channel `C` wants values, as its producer last sent them.
 ///
 /// Generation and presentation on `C` fill and present every value in
 /// `boxes`, nearest `focus` first, and retire hosts that touch none of them.
 /// An empty set requests nothing and retires everything. A channel has one
 /// producer; sources that should share hosts combine into one.
+///
+/// `focus` only orders ids inside one subscription. `class` is the channel's
+/// scheduling weight. Neither participates in change detection: producers
+/// resend only when the boxes change.
 #[derive(Message, Debug)]
 pub struct HcsgRegions<C> {
 	pub boxes: Vec<Aabb3d>,
 	pub focus: Option<Vec3>,
+	pub class: HcsgClass,
 	_channel: PhantomData<fn() -> C>,
 }
 
 impl<C> HcsgRegions<C> {
-	pub fn new(boxes: Vec<Aabb3d>, focus: Option<Vec3>) -> Self {
-		Self { boxes, focus, _channel: PhantomData }
+	pub fn new(boxes: Vec<Aabb3d>, focus: Option<Vec3>, class: HcsgClass) -> Self {
+		Self { boxes, focus, class, _channel: PhantomData }
 	}
 }
 
 impl<C> Clone for HcsgRegions<C> {
 	fn clone(&self) -> Self {
-		Self::new(self.boxes.clone(), self.focus)
+		Self::new(self.boxes.clone(), self.focus, self.class)
 	}
 }
 
@@ -42,6 +72,9 @@ impl<C> Clone for HcsgRegions<C> {
 /// change, so snap them to the cells they cover rather than following a
 /// camera exactly. The focus rides along with the next send.
 pub trait HcsgBounds: Send + Sync + 'static {
+	/// Scheduling class stamped on every [`HcsgRegions`] this producer sends.
+	const CLASS: HcsgClass;
+
 	type Param: SystemParam + 'static;
 
 	fn regions(param: &SystemParamItem<Self::Param>) -> Vec<Aabb3d>;
@@ -64,6 +97,8 @@ pub trait HcsgGate: Send + Sync + 'static {
 pub struct Gated<G, B>(PhantomData<fn() -> (G, B)>);
 
 impl<G: HcsgGate, B: HcsgBounds> HcsgBounds for Gated<G, B> {
+	const CLASS: HcsgClass = B::CLASS;
+
 	type Param = (G::Param, B::Param);
 
 	fn regions(param: &SystemParamItem<Self::Param>) -> Vec<Aabb3d> {
@@ -86,7 +121,7 @@ fn produce<B: HcsgBounds>(
 ) {
 	let boxes = B::regions(&param);
 	if sent.as_ref() != Some(&boxes) {
-		regions.write(HcsgRegions::new(boxes.clone(), B::focus(&param)));
+		regions.write(HcsgRegions::new(boxes.clone(), B::focus(&param), B::CLASS));
 		*sent = Some(boxes);
 	}
 }

@@ -17,7 +17,9 @@ use building_components::{FurnitureNode, FurnitureWireframePlugin};
 use furniture_assemblies::FurnitureAssembliesPlugin;
 use furniture_shaders::FurnitureShadersPlugin;
 use lod::gen::{Id, LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus, OriginalId};
-use lod::hcsg::shared::{self, GenerationContext, HcsgBounds, HcsgNode, PresentationPlugin};
+use lod::hcsg::shared::{
+	self, GenerationContext, HcsgBounds, HcsgClass, HcsgNode, PresentationPlugin,
+};
 use lod::lod_ref::LodRef;
 use lod::scene::LodSceneRefreshChunkPlugin;
 use lod::{LodViewer, SceneChunk};
@@ -63,10 +65,7 @@ impl<U: FurnitureSlots> Furnished<U> {
 	/// Empty host value for tests and debug spawns.
 	pub fn empty_host(extent: FurnitureCellExtent) -> (Self, Aabb3d) {
 		let bounds = extent.aabb();
-		(
-			Self { cell: FurnitureCell::new(extent, Vec::new()), _ground: PhantomData },
-			bounds,
-		)
+		(Self { cell: FurnitureCell::new(extent, Vec::new()), _ground: PhantomData }, bounds)
 	}
 
 	fn developments(cx: &mut GenerationContext, region: Aabb3d) -> Vec<Arc<DevelopmentSlots<U>>> {
@@ -147,6 +146,8 @@ impl FurnitureNeighborhood {
 }
 
 impl HcsgBounds for FurnitureNeighborhood {
+	const CLASS: HcsgClass = HcsgClass::Near;
+
 	type Param = Query<'static, 'static, &'static Transform, With<LodViewer>>;
 
 	fn regions(viewers: &SystemParamItem<Self::Param>) -> Vec<Aabb3d> {

@@ -14,7 +14,8 @@ use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use lod::gen::{Id, OriginalId};
 use lod::hcsg::shared::{
-	self, GenerationContext, HcsgBounds, HcsgNode, HcsgStorage, HcsgValue, PresentationPlugin,
+	self, GenerationContext, HcsgBounds, HcsgClass, HcsgNode, HcsgStorage, HcsgValue,
+	PresentationPlugin,
 };
 use lod::lod_ref::LodRef;
 use lod::scene::{
@@ -29,6 +30,7 @@ use crate::terrain::{TerrainCellLayout, TerrainCellRing};
 /// One terrain stream: the ring its cells tile.
 pub trait TerrainStream: Send + Sync + 'static {
 	const RING: TerrainCellRing;
+	const CLASS: HcsgClass;
 }
 
 /// The playable near disk: 160 m cells that own collision.
@@ -42,14 +44,17 @@ pub struct BackgroundStream;
 
 impl TerrainStream for NearStream {
 	const RING: TerrainCellRing = WORLD_NEAR_RING;
+	const CLASS: HcsgClass = HcsgClass::Near;
 }
 
 impl TerrainStream for FarStream {
 	const RING: TerrainCellRing = WORLD_FAR_RING;
+	const CLASS: HcsgClass = HcsgClass::Far;
 }
 
 impl TerrainStream for BackgroundStream {
 	const RING: TerrainCellRing = WORLD_BACKGROUND_RING;
+	const CLASS: HcsgClass = HcsgClass::Background;
 }
 
 /// `T` on one of stream `R`'s cells.
@@ -125,6 +130,8 @@ impl<R: TerrainStream, T: SemanticLodScene + HcsgValue> SemanticLodScene for Str
 pub struct StreamRing<R>(PhantomData<fn() -> R>);
 
 impl<R: TerrainStream> HcsgBounds for StreamRing<R> {
+	const CLASS: HcsgClass = R::CLASS;
+
 	type Param = Query<'static, 'static, &'static Transform, With<LodViewer>>;
 
 	fn regions(viewers: &SystemParamItem<Self::Param>) -> Vec<Aabb3d> {

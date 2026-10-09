@@ -6,7 +6,7 @@ use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec3;
 use bevy::prelude::{App, IntoScheduleConfigs, Local, MessageReader, Plugin, Res, Update};
 
-use super::bounds::HcsgRegions;
+use super::bounds::{HcsgClass, HcsgRegions};
 use super::context::GenerationScheme;
 use super::demand::{HcsgDemand, SubscriptionId};
 use super::runtime::{ensure_runtime, HcsgSystems};
@@ -16,6 +16,7 @@ pub struct Generated<T> {
 	/// The channel's latest regions.
 	wanted: Vec<Aabb3d>,
 	focus: Option<Vec3>,
+	class: HcsgClass,
 	subscription: Option<SubscriptionId>,
 	requested: Vec<Aabb3d>,
 	_t: PhantomData<fn() -> T>,
@@ -26,6 +27,7 @@ impl<T> Default for Generated<T> {
 		Self {
 			wanted: Vec::new(),
 			focus: None,
+			class: HcsgClass::Near,
 			subscription: None,
 			requested: Vec::new(),
 			_t: PhantomData,
@@ -43,6 +45,7 @@ pub fn generation<C: Send + Sync + 'static, T: GenerationScheme>(
 	if let Some(latest) = regions.read().last() {
 		state.wanted = latest.boxes.clone();
 		state.focus = latest.focus;
+		state.class = latest.class;
 	}
 	let live = match state.subscription {
 		Some(subscription) => match demand.try_is_live(subscription) {
@@ -59,7 +62,8 @@ pub fn generation<C: Send + Sync + 'static, T: GenerationScheme>(
 	if wants {
 		let regions = state.wanted.clone();
 		let focus = state.focus;
-		state.subscription = Some(demand.subscribe::<T>(state.subscription, regions, focus));
+		state.subscription =
+			Some(demand.subscribe::<T>(state.subscription, regions, focus, state.class));
 	} else if let Some(subscription) = state.subscription.take() {
 		demand.unsubscribe(subscription);
 	}
