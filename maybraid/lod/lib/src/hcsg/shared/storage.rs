@@ -168,12 +168,14 @@ impl HcsgStorage {
 
 	fn blocking_get<T: HcsgValue>(&self, id: Id) -> Option<Arc<T>> {
 		let store = self.store::<T>()?;
-		read(&store.nodes).value(id).cloned()
+		let guard = read(&store.nodes);
+		guard.value(id).cloned()
 	}
 
 	fn blocking_entry<T: HcsgValue>(&self, id: Id) -> Option<StoredEntry<Arc<T>>> {
 		let store = self.store::<T>()?;
-		read(&store.nodes).entry(id).cloned()
+		let guard = read(&store.nodes);
+		guard.entry(id).cloned()
 	}
 
 	fn blocking_contains<T: HcsgValue>(&self, id: Id) -> bool {
@@ -214,32 +216,32 @@ impl HcsgStorage {
 
 	#[cfg(not(any(test, feature = "test-support")))]
 	pub(crate) fn contains<T: HcsgValue>(&self, id: Id) -> bool {
-		self.blocking_contains(id)
+		self.blocking_contains::<T>(id)
 	}
 
 	#[cfg(any(test, feature = "test-support"))]
 	pub fn contains<T: HcsgValue>(&self, id: Id) -> bool {
-		self.blocking_contains(id)
+		self.blocking_contains::<T>(id)
 	}
 
 	#[cfg(not(any(test, feature = "test-support")))]
 	pub(crate) fn overlapping<T: HcsgValue>(&self, region: Aabb3d) -> Vec<Id> {
-		self.blocking_overlapping(region)
+		self.blocking_overlapping::<T>(region)
 	}
 
 	#[cfg(any(test, feature = "test-support"))]
 	pub fn overlapping<T: HcsgValue>(&self, region: Aabb3d) -> Vec<Id> {
-		self.blocking_overlapping(region)
+		self.blocking_overlapping::<T>(region)
 	}
 
 	#[cfg(not(any(test, feature = "test-support")))]
 	pub(crate) fn membership_revision<T: HcsgValue>(&self) -> u64 {
-		self.blocking_membership_revision()
+		self.blocking_membership_revision::<T>()
 	}
 
 	#[cfg(any(test, feature = "test-support"))]
 	pub fn membership_revision<T: HcsgValue>(&self) -> u64 {
-		self.blocking_membership_revision()
+		self.blocking_membership_revision::<T>()
 	}
 
 	/// [`Self::entry`] for the frame: never waits on a lock.

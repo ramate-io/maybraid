@@ -126,7 +126,7 @@ fn apply_mode_commands(
 		if reset_to_layout_spawn {
 			if let Ok((player, mut transform, mut velocity)) = players.single_mut() {
 				let layout = surface.layout();
-				if let Some(elevation) = surface.height_at(layout.region_center_xz().xz()) {
+				if let Ok(Some(elevation)) = surface.height_at(layout.region_center_xz().xz()) {
 					respawn_player_on_layout(layout, elevation, &mut transform, &mut velocity);
 				}
 				commands.entity(player).insert(AwaitingTerrainSurface);

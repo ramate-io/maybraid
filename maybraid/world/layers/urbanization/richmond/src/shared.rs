@@ -263,15 +263,21 @@ mod tests {
 		let cell = authored(0.0).cell;
 		let center = (Vec3::from(cell.min) + Vec3::from(cell.max)) * 0.5;
 		let storage = app.world().resource::<shared::HcsgStorage>();
-		let padded = storage
-			.try_overlapping::<PaddedTerrain<Ground>>(Aabb3d::new(center, Vec3::splat(0.5)))
-			.ok()
-			.into_iter()
-			.flatten()
-			.filter_map(|id| storage.try_entry::<PaddedTerrain<Ground>>(id).ok().flatten())
-			.map(|entry| entry.value)
-			.next()
-			.ok_or_else(|| anyhow::anyhow!("no padded cell under the development"))?;
+		let region = Aabb3d::new(center, Vec3::splat(0.5));
+		let mut padded = None;
+		for id in storage
+			.try_overlapping::<PaddedTerrain<Ground>>(region)
+			.map_err(|busy| anyhow::anyhow!("HcsgStorage busy: {busy:?}"))?
+		{
+			if let Some(entry) = storage
+				.try_entry::<PaddedTerrain<Ground>>(id)
+				.map_err(|busy| anyhow::anyhow!("HcsgStorage busy: {busy:?}"))?
+			{
+				padded = Some(entry.value);
+				break;
+			}
+		}
+		let padded = padded.ok_or_else(|| anyhow::anyhow!("no padded cell under the development"))?;
 		Ok(padded.surface.sdf.terrain().height_at_with_all_modulations(center.x, center.z))
 	}
 
