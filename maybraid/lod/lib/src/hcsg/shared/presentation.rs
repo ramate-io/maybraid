@@ -80,7 +80,9 @@ impl<T> Default for Presented<T> {
 /// hosts it never published are retired.
 ///
 /// Reads never wait on a lock: a busy store or demand defers to next frame.
-/// Retiring a host never evicts its stored value.
+/// Retiring a host does not evict its stored value; the worker evicts by reach
+/// when the live subscription set changes. A presented value stays stored
+/// because this system subscribes the same regions and type it keeps hosts for.
 pub fn presentation<C, T>(
 	mut regions: MessageReader<HcsgRegions<C>>,
 	storage: Res<HcsgStorage>,
