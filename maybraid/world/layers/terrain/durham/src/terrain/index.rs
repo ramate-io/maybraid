@@ -46,8 +46,8 @@ use std::sync::Arc;
 /// roots. A rebuild drops the group; the roots stay seeded.
 pub struct DurhamNodes;
 
-/// Tall origin-cell buckets for every Durham node.
-const DURHAM_BASE_SCALE: DVec3 = DVec3::new(
+/// Index scale for every Durham [`GenerationScheme`].
+pub const DURHAM_INDEX_SCALE: DVec3 = DVec3::new(
 	TERRAIN_CELL_SIZE as f64,
 	2.0 * TERRAIN_CELL_VERTICAL_HALF_EXTENT as f64,
 	TERRAIN_CELL_SIZE as f64,
@@ -56,22 +56,12 @@ const DURHAM_BASE_SCALE: DVec3 = DVec3::new(
 macro_rules! durham_nodes {
 	($($T:ty),* $(,)?) => {
 		impl DurhamNodes {
-			/// Configures Durham's stores in the shared storage.
-			pub fn configure(storage: &shared::HcsgStorage) {
-				$(storage.configure::<$T>(DURHAM_BASE_SCALE);)*
-			}
-
 			/// Drops every derived Durham value from the shared storage.
 			pub fn clear(storage: &shared::HcsgStorage) {
 				$(storage.clear::<$T>();)*
 			}
 		}
 	};
-}
-
-/// Configures Durham's stores in the shared storage.
-pub fn register_durham_nodes(storage: &HcsgStorage) {
-	DurhamNodes::configure(storage);
 }
 
 durham_nodes!(
@@ -411,7 +401,6 @@ mod tests {
 	#[test]
 	fn clearing_durham_nodes_advances_versions_past_the_previous_epoch() -> anyhow::Result<()> {
 		let storage = HcsgStorage::default();
-		register_durham_nodes(&storage);
 		let layout = TerrainCellLayout::default();
 		storage.insert_base_terrain_for_test(
 			&layout,

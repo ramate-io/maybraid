@@ -54,10 +54,6 @@ fn app(plugin: impl Plugin, regions: Vec<Aabb3d>) -> App {
 		.add_plugins((AssetPlugin::default(), ScenePlugin))
 		.insert_resource(Window(regions))
 		.add_plugins((HcsgBoundsPlugin::<WindowBounds>::default(), plugin));
-	let storage = app.world().resource::<HcsgStorage>().clone();
-	storage.configure::<Terrain>(DVec3::splat(0.1));
-	storage.configure::<Vegetation>(DVec3::splat(0.1));
-	storage.configure::<Kept>(DVec3::splat(0.1));
 	app
 }
 
@@ -200,6 +196,8 @@ fn presentation_replaces_hosts_whose_value_changed_across_an_epoch() -> anyhow::
 }
 
 impl GenerationScheme for Terrain {
+	const INDEX_SCALE: DVec3 = DVec3::splat(0.1);
+
 	fn original_ids_for(_: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
 		(region.min.x.floor() as i32..=region.max.x.ceil() as i32)
 			.map(|x| OriginalId(Id::from_cell(cell(x as f32))))
@@ -215,6 +213,8 @@ impl GenerationScheme for Terrain {
 
 /// Stands on the [`Terrain`] at its own id.
 impl GenerationScheme for Vegetation {
+	const INDEX_SCALE: DVec3 = DVec3::splat(0.1);
+
 	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
 		cx.original_ids_for::<Terrain>(region)
 	}
@@ -232,6 +232,8 @@ struct Keep(Vec<f32>);
 struct Kept;
 
 impl GenerationScheme for Kept {
+	const INDEX_SCALE: DVec3 = DVec3::splat(0.1);
+
 	fn original_ids_for(_: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
 		let (start, end) = (region.min.x.floor() as i32, region.max.x.ceil() as i32);
 		(start..end).map(|x| OriginalId::new(Id::from_cell(cell(x as f32)))).collect()

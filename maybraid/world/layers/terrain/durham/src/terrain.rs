@@ -56,7 +56,7 @@ pub use host::{
 	WORLD_OUTER_4X_ROWS,
 };
 pub use index::{
-	register_durham_nodes, DurhamNodes, DurhamRoots, TerrainHeightSnapshot, TerrainStorage,
+	DurhamNodes, DurhamRoots, DURHAM_INDEX_SCALE, TerrainHeightSnapshot, TerrainStorage,
 	WaterSurfaceSnapshot,
 };
 pub use mesh::{TerrainMeshAssets, TerrainMeshLodBand};
@@ -319,6 +319,8 @@ impl PreWatershedTerrain {
 /// one leaf bound; its controller grid and configs are that band's concern.
 
 impl shared::GenerationScheme for PreWatershedTerrain {
+	lod::hcsg_index_scale!(crate::terrain::index::DURHAM_INDEX_SCALE);
+
 	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
 		TerrainCellLayout::origin_ids_in(cx, region)
 	}
@@ -352,6 +354,8 @@ impl shared::GenerationScheme for PreWatershedTerrain {
 /// reads; their pocket / pre-pocket / config stacks resolve at the index.
 
 impl shared::GenerationScheme for Terrain {
+	lod::hcsg_index_scale!(crate::terrain::index::DURHAM_INDEX_SCALE);
+
 	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
 		cx.original_ids_for::<PreWatershedTerrain>(region)
 	}

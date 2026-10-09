@@ -107,6 +107,7 @@ macro_rules! define_marazion_band {
 		}
 
 		impl lod::hcsg::shared::GenerationScheme for $PreCell {
+			lod::hcsg_index_scale!($crate::terrain::index::DURHAM_INDEX_SCALE);
 			fn original_ids_for(
 				cx: &mut lod::hcsg::shared::GenerationContext,
 				region: bevy::math::bounding::Aabb3d,
@@ -155,6 +156,7 @@ macro_rules! define_marazion_band {
 		}
 
 		impl lod::hcsg::shared::GenerationScheme for $Pocket {
+			lod::hcsg_index_scale!($crate::terrain::index::DURHAM_INDEX_SCALE);
 			fn original_ids_for(
 				cx: &mut lod::hcsg::shared::GenerationContext,
 				region: bevy::math::bounding::Aabb3d,
@@ -230,6 +232,7 @@ macro_rules! define_marazion_band {
 		// sampler (`PreWatershedTerrain::sample_height`) used while authoring.
 
 		impl lod::hcsg::shared::GenerationScheme for $PocketWaters {
+			lod::hcsg_index_scale!($crate::terrain::index::DURHAM_INDEX_SCALE);
 			fn original_ids_for(
 				cx: &mut lod::hcsg::shared::GenerationContext,
 				region: bevy::math::bounding::Aabb3d,

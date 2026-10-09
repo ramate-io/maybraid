@@ -42,30 +42,13 @@ pub(crate) fn overlaps_xz_strictly(a: Aabb3d, b: Aabb3d) -> bool {
 }
 
 /// Index scale of development columns: one development cell per bucket.
-const COLUMN_SCALE: DVec3 = DVec3::new(
+pub(crate) const COLUMN_INDEX_SCALE: DVec3 = DVec3::new(
 	DEVELOPMENT_CELL_SIZE as f64,
 	2.0 * COLUMN_HALF_HEIGHT as f64,
 	DEVELOPMENT_CELL_SIZE as f64,
 );
 
-/// Configures Richmond's stores over ground `G`.
-///
-/// Nodes that read `G`'s cells also join `G::Nodes`, so a ground rebuild
-/// drops them with the cells they were generated from.
-pub fn register_richmond_nodes<G: RichmondGround>(storage: &HcsgStorage) {
-	RichmondNodes::configure::<G>(storage);
-}
-
 impl RichmondNodes {
-	/// Configures Richmond's stores over ground `G` in the shared storage.
-	pub fn configure<G: RichmondGround>(storage: &shared::HcsgStorage) {
-		storage
-			.configure::<DevelopmentSite>(COLUMN_SCALE)
-			.configure::<RichmondDevelopment<G>>(COLUMN_SCALE)
-			.configure::<Built<G>>(COLUMN_SCALE)
-			.configure::<PaddedTerrain<G>>(COLUMN_SCALE);
-	}
-
 	/// Drops every value Richmond derived over ground `G` from the shared storage.
 	pub fn clear<G: RichmondGround>(storage: &shared::HcsgStorage) {
 		storage.clear::<DevelopmentSite>();

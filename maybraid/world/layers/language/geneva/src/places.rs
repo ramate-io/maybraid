@@ -96,6 +96,8 @@ impl<W> DevelopmentPlaces<W> {
 }
 
 impl<W: LanguageGround> shared::GenerationScheme for DevelopmentPlaces<W> {
+	lod::hcsg_index_scale!(crate::shared::PLACES_INDEX_SCALE);
+
 	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
 		cx.original_ids_for::<Built<W::Built>>(region)
 	}

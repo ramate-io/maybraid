@@ -114,6 +114,8 @@ pub enum RichmondDevelopment<G> {
 }
 
 impl<G: RichmondGround> shared::GenerationScheme for RichmondDevelopment<G> {
+	lod::hcsg_index_scale!(crate::storage::COLUMN_INDEX_SCALE);
+
 	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
 		cx.original_ids_for::<DevelopmentSite>(region)
 	}

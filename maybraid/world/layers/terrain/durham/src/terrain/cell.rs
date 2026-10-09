@@ -62,6 +62,7 @@ pub fn universal_bounds() -> Aabb3d {
 macro_rules! derived_universal_scheme {
 	($T:ty, |$cx:ident| $native:expr) => {
 		impl lod::hcsg::shared::GenerationScheme for $T {
+			lod::hcsg_index_scale!($crate::terrain::index::DURHAM_INDEX_SCALE);
 			fn original_ids_for(
 				_cx: &mut lod::hcsg::shared::GenerationContext,
 				_region: bevy::math::bounding::Aabb3d,

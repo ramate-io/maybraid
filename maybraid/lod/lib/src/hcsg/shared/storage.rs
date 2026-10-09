@@ -15,6 +15,7 @@ use bevy::prelude::Resource;
 
 use crate::gen::{Id, Version};
 
+use super::context::GenerationScheme;
 use super::node_store::{expand_region, NodeStore, StoredEntry, DEFAULT_BASE_SCALE};
 
 /// Any value HCSG can store.
@@ -39,6 +40,7 @@ pub struct HcsgStorage(Arc<Registry>);
 struct Registry {
 	stores: RwLock<HashMap<TypeId, Arc<dyn ErasedStore>>>,
 	base_scales: RwLock<HashMap<TypeId, DVec3>>,
+	retention_margins: RwLock<HashMap<TypeId, DVec3>>,
 	next_version: AtomicU64,
 	/// Keys removed by a sweep; debug rebuilds check this set.
 	#[cfg(debug_assertions)]
@@ -110,6 +112,23 @@ fn lock_mutex<T>(lock: &Mutex<T>) -> MutexGuard<'_, T> {
 }
 
 impl HcsgStorage {
+	/// Records `T`'s index scale and retention margin before its first publish.
+	pub(crate) fn register_scheme<T: GenerationScheme>(&self) {
+		let type_id = TypeId::of::<T>();
+		{
+			let mut scales = write(&self.0.base_scales);
+			if !scales.contains_key(&type_id) {
+				scales.insert(type_id, T::INDEX_SCALE);
+			}
+		}
+		{
+			let mut margins = write(&self.0.retention_margins);
+			if !margins.contains_key(&type_id) {
+				margins.insert(type_id, T::RETENTION_MARGIN);
+			}
+		}
+	}
+
 	/// Sets `T`'s spatial base scale, rebuilding its index if it exists.
 	pub fn configure<T: HcsgValue>(&self, base_scale: DVec3) -> &Self {
 		write(&self.0.base_scales).insert(TypeId::of::<T>(), base_scale);
@@ -301,7 +320,7 @@ impl HcsgStorage {
 	}
 
 	/// Worker sweep: each stored type is kept in the union of `regions_by_type`
-	/// for that type, expanded by the type's base scale. A type no live
+	/// for that type, expanded by the type's retention margin. A type no live
 	/// subscription reaches is cleared, except `Id::Universal` entries.
 	pub(super) fn retain_reached(&self, regions_by_type: &HashMap<TypeId, Vec<Aabb3d>>) {
 		if regions_by_type.is_empty() {
@@ -312,12 +331,12 @@ impl HcsgStorage {
 			.map(|(type_id, store)| (*type_id, store.clone()))
 			.collect();
 		for (type_id, store) in stores {
-			let scale = self.base_scale_of(type_id);
+			let margin = self.retention_margin_of(type_id);
 			let expanded: Vec<Aabb3d> = regions_by_type
 				.get(&type_id)
 				.into_iter()
 				.flatten()
-				.map(|region| expand_region(*region, scale))
+				.map(|region| expand_region(*region, margin))
 				.collect();
 			let removed = store.ids_outside(&expanded);
 			if removed.is_empty() {
@@ -331,6 +350,18 @@ impl HcsgStorage {
 
 	fn base_scale_of(&self, type_id: TypeId) -> DVec3 {
 		read(&self.0.base_scales).get(&type_id).copied().unwrap_or(DEFAULT_BASE_SCALE)
+	}
+
+	fn retention_margin_of(&self, type_id: TypeId) -> DVec3 {
+		read(&self.0.retention_margins)
+			.get(&type_id)
+			.copied()
+			.unwrap_or_else(|| self.base_scale_of(type_id))
+	}
+
+	#[cfg(test)]
+	pub(crate) fn index_scale_of<T: HcsgValue>(&self) -> DVec3 {
+		self.base_scale_of(TypeId::of::<T>())
 	}
 
 	fn record_evictions(&self, removed: Vec<(TypeId, Id)>) {

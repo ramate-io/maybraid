@@ -17,6 +17,8 @@ pub const DEVELOPMENT_PRESENT_RADIUS_M: f32 = 1000.0;
 pub struct UrbanizationWindow;
 
 impl shared::GenerationScheme for SelectedUrbanization {
+	lod::hcsg_index_scale!(crate::storage::SELECTION_INDEX_SCALE);
+
 	fn original_ids_for(_cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
 		Self::ids_in(region)
 	}

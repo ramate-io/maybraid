@@ -12,6 +12,7 @@ use std::sync::Arc;
 
 use bevy::ecs::system::SystemParamItem;
 use bevy::math::bounding::Aabb3d;
+use bevy::math::DVec3;
 use bevy::prelude::*;
 use lod::gen::{Id, LodScene, LodSceneLevel, LodSceneStatus, OriginalId};
 use lod::hcsg::shared::{
@@ -25,7 +26,7 @@ use terrain_chunk_ref::{TerrainChunkRef, TerrainChunkRefPlugin};
 use vegetation_bumpout::{BumpOut, BumpOutPlugin};
 use vegetation_components::scene_children;
 
-use super::{ChicoNodes, ForestGround, GROVE_COLUMN_Y};
+use super::{ForestGround, GROVE_COLUMN_Y};
 use crate::bump_out::{
 	bump_out_cell_bounds, bump_out_cells_overlapping, bump_out_chebyshev_xz, CanopyBumpOut,
 	MediumCanopyBumpOut, BUMP_OUT_CELL_XZ, BUMP_OUT_INNER_RADIUS_M, BUMP_OUT_OUTER_RADIUS_M,
@@ -39,6 +40,9 @@ use crate::ForestSelection;
 /// One canopy proxy grid: [`CanopyBumpOut`] on 160 m cells, or
 /// [`MediumCanopyBumpOut`] on the 320 m terrain grid.
 pub trait CanopyProxy: Send + Sync + 'static {
+	/// Spatial index scale for [`BumpedOut`] cells of this proxy.
+	const INDEX_SCALE: DVec3;
+
 	/// Chebyshev distances from the viewer to a cell's center at which the
 	/// cell shows.
 	const BAND: RangeInclusive<f32>;
@@ -55,6 +59,8 @@ pub trait CanopyProxy: Send + Sync + 'static {
 }
 
 impl CanopyProxy for CanopyBumpOut {
+	const INDEX_SCALE: DVec3 =
+		DVec3::new(BUMP_OUT_CELL_XZ as f64, 1.0, BUMP_OUT_CELL_XZ as f64);
 	const BAND: RangeInclusive<f32> = BUMP_OUT_INNER_RADIUS_M..=BUMP_OUT_OUTER_RADIUS_M;
 	const STEP: f32 = BUMP_OUT_CELL_XZ;
 
@@ -75,6 +81,8 @@ impl CanopyProxy for CanopyBumpOut {
 }
 
 impl CanopyProxy for MediumCanopyBumpOut {
+	const INDEX_SCALE: DVec3 =
+		DVec3::new(MEDIUM_BUMP_OUT_CELL_XZ as f64, 1.0, MEDIUM_BUMP_OUT_CELL_XZ as f64);
 	const BAND: RangeInclusive<f32> =
 		MEDIUM_BUMP_OUT_INNER_RADIUS_M..=MEDIUM_BUMP_OUT_OUTER_RADIUS_M;
 	const STEP: f32 = MEDIUM_BUMP_OUT_ANCHOR_STEP_M;
@@ -135,6 +143,9 @@ impl<P: CanopyProxy, G: ForestGround> BumpedOut<P, G> {
 }
 
 impl<P: CanopyProxy, G: ForestGround> shared::GenerationScheme for BumpedOut<P, G> {
+	const INDEX_SCALE: DVec3 = P::INDEX_SCALE;
+	const RETENTION_MARGIN: DVec3 = P::INDEX_SCALE;
+
 	fn original_ids_for(_cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
 		P::cells_overlapping(region)
 			.into_iter()
@@ -263,8 +274,6 @@ impl<C: Send + Sync + 'static, P: CanopyProxy, G: ForestGround> Plugin
 			app.add_plugins(TerrainChunkRefPlugin::<G::Mesh>::default());
 		}
 		app.init_resource::<ForestSelection>();
-		let storage = app.world_mut().get_resource_or_init::<shared::HcsgStorage>().clone();
-		ChicoNodes::configure::<G>(&storage);
 		app.add_plugins(PresentationPlugin::<C, BumpedOut<P, G>>::default());
 		if !app
 			.is_plugin_added::<LodSceneRefreshRegionPlugin<BumpOutRing<P>, With<LodViewer>, BumpOutRing<P>>>(

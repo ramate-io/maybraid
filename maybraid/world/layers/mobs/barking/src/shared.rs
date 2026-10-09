@@ -130,6 +130,8 @@ pub struct PlacedMobCell<G> {
 }
 
 impl<G: MobGround> shared::GenerationScheme for PlacedMobCell<G> {
+	lod::hcsg_index_scale!(MOB_CELL_SCALE);
+
 	fn original_ids_for(_cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
 		MobCellExtent::cells_overlapping(region)
 			.into_iter()
@@ -243,10 +245,6 @@ pub struct BarkingNodes;
 const MOB_CELL_SCALE: DVec3 = DVec3::new(MOB_CELL_EXTENT as f64, 1.0, MOB_CELL_EXTENT as f64);
 
 impl BarkingNodes {
-	pub fn configure<G: MobGround>(storage: &shared::HcsgStorage) {
-		storage.configure::<PlacedMobCell<G>>(MOB_CELL_SCALE);
-	}
-
 	/// Within a restart, after the epoch has advanced.
 	pub fn clear<G: MobGround>(storage: &shared::HcsgStorage) {
 		storage.clear::<PlacedMobCell<G>>();
@@ -292,8 +290,6 @@ impl<C, G> Default for BarkingPresentationPlugin<C, G> {
 
 impl<C: Send + Sync + 'static, G: MobGround> Plugin for BarkingPresentationPlugin<C, G> {
 	fn build(&self, app: &mut App) {
-		let storage = app.world_mut().get_resource_or_init::<shared::HcsgStorage>().clone();
-		BarkingNodes::configure::<G>(&storage);
 		app.add_plugins(PresentationPlugin::<C, PlacedMobCell<G>>::default());
 		if !app.is_plugin_added::<LodSceneRefreshChunkPlugin<HcsgNode<PlacedMobCell<G>>>>() {
 			app.add_plugins(LodSceneRefreshChunkPlugin::<HcsgNode<PlacedMobCell<G>>>::default());
@@ -403,7 +399,6 @@ mod tests {
 			))
 			.add_systems(Update, restart.before(HcsgSystems));
 		let storage = app.world().resource::<shared::HcsgStorage>().clone();
-		ChicoNodes::configure::<Urban>(&storage);
 		pin(&mut app, kind);
 		app.finish();
 		app.cleanup();

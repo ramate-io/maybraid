@@ -38,6 +38,8 @@ pub struct DevelopmentSlots<U> {
 }
 
 impl<U: FurnitureSlots> shared::GenerationScheme for DevelopmentSlots<U> {
+	lod::hcsg_index_scale!(CELL_SCALE);
+
 	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
 		cx.original_ids_for::<U::Development>(region)
 	}
@@ -77,6 +79,8 @@ impl<U: FurnitureSlots> Furnished<U> {
 }
 
 impl<U: FurnitureSlots> shared::GenerationScheme for Furnished<U> {
+	lod::hcsg_index_scale!(CELL_SCALE);
+
 	/// The cells overlapping `region` that hold a slot.
 	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
 		let mut ids = BTreeSet::new();
@@ -171,12 +175,6 @@ const CELL_SCALE: DVec3 = DVec3::new(
 );
 
 impl MaputoNodes {
-	pub fn configure<U: FurnitureSlots>(storage: &shared::HcsgStorage) {
-		storage
-			.configure::<DevelopmentSlots<U>>(CELL_SCALE)
-			.configure::<Furnished<U>>(CELL_SCALE);
-	}
-
 	/// Within a restart, after the epoch has advanced.
 	pub fn clear<U: FurnitureSlots>(storage: &shared::HcsgStorage) {
 		storage.clear::<DevelopmentSlots<U>>();
@@ -205,8 +203,6 @@ impl<C: Send + Sync + 'static, U: FurnitureSlots> Plugin for MaputoPresentationP
 		if !app.is_plugin_added::<FurnitureWireframePlugin>() {
 			app.add_plugins(FurnitureWireframePlugin);
 		}
-		let storage = app.world_mut().get_resource_or_init::<shared::HcsgStorage>().clone();
-		MaputoNodes::configure::<U>(&storage);
 		app.add_plugins(PresentationPlugin::<C, Furnished<U>>::default());
 		if !app.is_plugin_added::<LodSceneRefreshChunkPlugin<HcsgNode<Furnished<U>>>>() {
 			app.add_plugins(LodSceneRefreshChunkPlugin::<HcsgNode<Furnished<U>>>::default());

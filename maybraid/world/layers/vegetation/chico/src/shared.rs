@@ -77,6 +77,8 @@ impl<T: RichmondGround> ForestGround for Urbanization<Richmond<T>> {
 }
 
 impl shared::GenerationScheme for ChicoForest {
+	lod::hcsg_index_scale!(FOREST_SCALE);
+
 	fn original_ids_for(_cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
 		ForestExtent::cells_overlapping(region)
 			.into_iter()
@@ -118,6 +120,8 @@ fn forest_with_neighbors(
 }
 
 impl shared::GenerationScheme for ChicoGrove {
+	lod::hcsg_index_scale!(GROVE_SCALE);
+
 	/// One grove per tile and layer that the tile's forest or a neighbor
 	/// selects, so blends reach across forest faces.
 	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
@@ -220,6 +224,8 @@ pub struct GrownGrove<G> {
 }
 
 impl<G: ForestGround> shared::GenerationScheme for GrownGrove<G> {
+	lod::hcsg_index_scale!(GROWN_SCALE);
+
 	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
 		cx.original_ids_for::<ChicoGrove>(region)
 	}
@@ -310,21 +316,7 @@ const GROVE_SCALE: DVec3 =
 const GROWN_SCALE: DVec3 =
 	DVec3::new(DEFAULT_FOREST_GROVE_TILE_XZ as f64, 256.0, DEFAULT_FOREST_GROVE_TILE_XZ as f64);
 
-const BUMP_OUT_SCALE: DVec3 = DVec3::new(BUMP_OUT_CELL_XZ as f64, 1.0, BUMP_OUT_CELL_XZ as f64);
-
-const MEDIUM_BUMP_OUT_SCALE: DVec3 =
-	DVec3::new(MEDIUM_BUMP_OUT_CELL_XZ as f64, 1.0, MEDIUM_BUMP_OUT_CELL_XZ as f64);
-
 impl ChicoNodes {
-	pub fn configure<G: ForestGround>(storage: &shared::HcsgStorage) {
-		storage
-			.configure::<ChicoForest>(FOREST_SCALE)
-			.configure::<ChicoGrove>(GROVE_SCALE)
-			.configure::<GrownGrove<G>>(GROWN_SCALE)
-			.configure::<BumpedOut<CanopyBumpOut, G>>(BUMP_OUT_SCALE)
-			.configure::<BumpedOut<MediumCanopyBumpOut, G>>(MEDIUM_BUMP_OUT_SCALE);
-	}
-
 	/// Within a restart, after the epoch has advanced.
 	pub fn clear<G: ForestGround>(storage: &shared::HcsgStorage) {
 		storage.clear::<ChicoForest>();
@@ -364,8 +356,6 @@ impl<C: Send + Sync + 'static, G: ForestGround> Plugin for ChicoPresentationPlug
 	fn build(&self, app: &mut App) {
 		register_vegetation_view(app);
 		app.init_resource::<ForestSelection>();
-		let storage = app.world_mut().get_resource_or_init::<shared::HcsgStorage>().clone();
-		ChicoNodes::configure::<G>(&storage);
 		app.add_plugins(PresentationPlugin::<C, GrownGrove<G>>::default());
 		if !app.is_plugin_added::<LodSceneRefreshChunkPlugin<HcsgNode<GrownGrove<G>>>>() {
 			app.add_plugins(LodSceneRefreshChunkPlugin::<HcsgNode<GrownGrove<G>>>::default());

@@ -36,6 +36,8 @@ impl BaseTerrainNoise {
 }
 
 impl shared::GenerationScheme for BaseTerrainNoise {
+	lod::hcsg_index_scale!(crate::terrain::index::DURHAM_INDEX_SCALE);
+
 	fn original_ids_for(_cx: &mut GenerationContext, _region: Aabb3d) -> Vec<OriginalId> {
 		vec![OriginalId::universal()]
 	}

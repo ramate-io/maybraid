@@ -80,6 +80,8 @@ impl Default for LanguageConfig {
 }
 
 impl shared::GenerationScheme for LargeTile {
+	lod::hcsg_index_scale!(TILE_INDEX_SCALE);
+
 	fn original_ids_for(_cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
 		large_tiles_overlapping(region)
 			.map(|(ix, iz)| OriginalId(LargeTile::id(ix, iz)))
@@ -134,9 +136,9 @@ impl HcsgBounds for LanguageNeighborhood {
 /// names, and its root.
 pub struct GenevaNodes;
 
-const TILE_SCALE: DVec3 = DVec3::new(LARGE_TILE as f64, 2.0, LARGE_TILE as f64);
+pub(crate) const TILE_INDEX_SCALE: DVec3 = DVec3::new(LARGE_TILE as f64, 2.0, LARGE_TILE as f64);
 /// One development cell per bucket, one naming column tall.
-const PLACES_SCALE: DVec3 = DVec3::new(
+pub(crate) const PLACES_INDEX_SCALE: DVec3 = DVec3::new(
 	DEVELOPMENT_CELL_SIZE as f64,
 	2.0 * NAMING_COLUMN_Y as f64,
 	DEVELOPMENT_CELL_SIZE as f64,
@@ -148,15 +150,6 @@ const PLACES_SCALE: DVec3 = DVec3::new(
 macro_rules! geneva_nodes {
 	(<$W:ident> $($S:ty),* $(,)?) => {
 		impl GenevaNodes {
-			/// Configures Geneva's stores over ground `W` in the shared storage.
-			pub fn configure<$W: LanguageGround>(storage: &HcsgStorage) {
-				storage
-					.configure::<LargeTile>(TILE_SCALE)
-					.configure::<Named<Regions>>(TILE_SCALE)
-					.configure::<DevelopmentPlaces<$W>>(PLACES_SCALE)
-					.configure::<Named<Places<$W>>>(PLACES_SCALE);
-			}
-
 			/// Drops every value Geneva derived over ground `W`, and its root.
 			/// Within a restart, after the epoch has advanced.
 			pub fn clear<$W: LanguageGround>(storage: &HcsgStorage) {
@@ -304,8 +297,6 @@ impl<C, W> Default for GenevaPlugin<C, W> {
 
 impl<C: Send + Sync + 'static, W: LanguageGround> Plugin for GenevaPlugin<C, W> {
 	fn build(&self, app: &mut App) {
-		let storage = app.world_mut().get_resource_or_init::<HcsgStorage>().clone();
-		GenevaNodes::configure::<W>(&storage);
 		app.init_resource::<LanguageWorldSeed>()
 			.init_resource::<LanguageOverlay>()
 			.init_resource::<LanguageWindow>()

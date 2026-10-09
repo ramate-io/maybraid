@@ -235,6 +235,8 @@ impl<G: RichmondGround> PaddedTerrain<G> {
 /// Total over the ground: every cell of `G` is presented padded, wrapped as
 /// is where no pad reaches it, so the raw cell is never presented beneath.
 impl<G: RichmondGround> shared::GenerationScheme for PaddedTerrain<G> {
+	lod::hcsg_index_scale!(crate::storage::COLUMN_INDEX_SCALE);
+
 	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
 		cx.original_ids_for::<G::Cell>(region)
 	}
