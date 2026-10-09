@@ -341,7 +341,9 @@ mod tests {
 		);
 		let storage = app.world().resource::<shared::HcsgStorage>();
 		let built = storage
-			.get::<Built<Ground>>(authored(0.0).id())
+			.try_entry::<Built<Ground>>(authored(0.0).id())
+			.map_err(|busy| anyhow::anyhow!("HcsgStorage busy: {busy:?}"))?
+			.map(|entry| entry.value)
 			.ok_or_else(|| anyhow::anyhow!("the development was not built"))?;
 		let mut cells = std::collections::BTreeMap::<Id, usize>::new();
 		for slot in Urban::development_slots(&built) {

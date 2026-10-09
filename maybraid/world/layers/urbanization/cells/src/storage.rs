@@ -6,7 +6,7 @@ use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::math::DVec3;
 use bevy::prelude::*;
 use lod::gen::Id;
-use lod::hcsg::{shared, HcsgStorage, StoredEntry};
+use lod::hcsg::{shared, Busy, HcsgStorage, StoredEntry};
 use procedural_common::NoiseParams;
 
 use crate::{
@@ -45,54 +45,63 @@ impl UrbanizationNodes {
 
 /// Urbanization reads over [`HcsgStorage`]. GET only: nothing is selected here.
 pub trait UrbanizationStorage {
-	fn selected(&self, id: Id) -> Option<Arc<SelectedUrbanization>>;
+	fn selected(&self, id: Id) -> Result<Option<Arc<SelectedUrbanization>>, Busy>;
 
 	/// Stored selections whose extents overlap `region`.
 	fn selected_overlapping(
 		&self,
 		region: Aabb3d,
-	) -> impl Iterator<Item = (Id, StoredEntry<Arc<SelectedUrbanization>>)> + '_;
+	) -> Result<Vec<(Id, StoredEntry<Arc<SelectedUrbanization>>)>, Busy>;
 
 	/// Advances whenever a selection is stored or dropped.
-	fn urbanization_revision(&self) -> u64;
+	fn urbanization_revision(&self) -> Result<u64, Busy>;
 
 	/// The stored leaf whose [`DevelopmentLeaf::id`] is `id`.
-	fn leaf(&self, id: Id) -> Option<DevelopmentLeaf>;
+	fn leaf(&self, id: Id) -> Result<Option<DevelopmentLeaf>, Busy>;
 
 	/// Stored non-empty leaves whose bounds intersect `region`.
-	fn filled_leaves_overlapping(&self, region: Aabb3d) -> Vec<DevelopmentLeaf>;
+	fn filled_leaves_overlapping(&self, region: Aabb3d) -> Result<Vec<DevelopmentLeaf>, Busy>;
 }
 
 impl UrbanizationStorage for HcsgStorage {
-	fn selected(&self, id: Id) -> Option<Arc<SelectedUrbanization>> {
-		self.get::<SelectedUrbanization>(id)
+	fn selected(&self, id: Id) -> Result<Option<Arc<SelectedUrbanization>>, Busy> {
+		self.try_entry::<SelectedUrbanization>(id).map(|entry| entry.map(|stored| stored.value))
 	}
 
 	fn selected_overlapping(
 		&self,
 		region: Aabb3d,
-	) -> impl Iterator<Item = (Id, StoredEntry<Arc<SelectedUrbanization>>)> + '_ {
-		self.overlapping::<SelectedUrbanization>(region).into_iter().filter_map(|id| {
-			self.entry::<SelectedUrbanization>(id).map(|entry| (id, entry))
-		})
+	) -> Result<Vec<(Id, StoredEntry<Arc<SelectedUrbanization>>)>, Busy> {
+		let ids = self.try_overlapping::<SelectedUrbanization>(region)?;
+		let mut out = Vec::with_capacity(ids.len());
+		for id in ids {
+			if let Some(entry) = self.try_entry::<SelectedUrbanization>(id)? {
+				out.push((id, entry));
+			}
+		}
+		Ok(out)
 	}
 
-	fn urbanization_revision(&self) -> u64 {
-		self.membership_revision::<SelectedUrbanization>()
+	fn urbanization_revision(&self) -> Result<u64, Busy> {
+		self.try_membership_revision::<SelectedUrbanization>()
 	}
 
-	fn leaf(&self, id: Id) -> Option<DevelopmentLeaf> {
-		let extent = UrbanizationExtent::owning_leaf(id)?;
-		self.selected(extent.id())?.as_ref().leaf(id).cloned()
+	fn leaf(&self, id: Id) -> Result<Option<DevelopmentLeaf>, Busy> {
+		let Some(extent) = UrbanizationExtent::owning_leaf(id) else {
+			return Ok(None);
+		};
+		Ok(self.selected(extent.id())?.and_then(|selected| selected.as_ref().leaf(id).cloned()))
 	}
 
-	fn filled_leaves_overlapping(&self, region: Aabb3d) -> Vec<DevelopmentLeaf> {
-		self.selected_overlapping(region)
+	fn filled_leaves_overlapping(&self, region: Aabb3d) -> Result<Vec<DevelopmentLeaf>, Busy> {
+		Ok(self
+			.selected_overlapping(region)?
+			.into_iter()
 			.flat_map(|(_, entry)| entry.value.leaves.clone())
 			.filter(|leaf| {
 				leaf.kind != UrbanDevelopmentKind::Empty && region.intersects(&leaf.bounds)
 			})
-			.collect()
+			.collect())
 	}
 }
 
@@ -110,6 +119,10 @@ mod tests {
 		storage
 	}
 
+	fn storage_busy(busy: Busy) -> anyhow::Error {
+		anyhow::anyhow!("HcsgStorage busy: {busy:?}")
+	}
+
 	#[test]
 	fn selection_is_idempotent() -> Result<()> {
 		let storage = seeded(UrbanizationSelection {
@@ -119,11 +132,17 @@ mod tests {
 		let id = UrbanizationExtent::default_cell().id();
 		let mut cx = GenerationContext::new(&storage);
 		cx.get_or_generate::<SelectedUrbanization>(id);
-		let first = storage.entry::<SelectedUrbanization>(id).map(|entry| entry.version);
+		let first = storage
+			.try_entry::<SelectedUrbanization>(id)
+			.map_err(storage_busy)?
+			.map(|entry| entry.version);
 		cx.get_or_generate::<SelectedUrbanization>(id);
 		anyhow::ensure!(first.is_some(), "selection is stored");
 		anyhow::ensure!(
-			storage.entry::<SelectedUrbanization>(id).map(|entry| entry.version) == first,
+			storage
+				.try_entry::<SelectedUrbanization>(id)
+				.map_err(storage_busy)?
+				.map(|entry| entry.version) == first,
 			"a second request reuses the stored selection"
 		);
 		Ok(())
@@ -163,7 +182,7 @@ mod tests {
 			.get_or_generate::<SelectedUrbanization>(extent.id())
 			.and_then(|selected| selected.leaves.first().cloned())
 			.ok_or_else(|| anyhow::anyhow!("expected leaves"))?;
-		anyhow::ensure!(storage.leaf(leaf.id()) == Some(leaf));
+		anyhow::ensure!(storage.leaf(leaf.id()).map_err(storage_busy)? == Some(leaf));
 		Ok(())
 	}
 }
