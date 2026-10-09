@@ -1,7 +1,8 @@
 //! Geneva on the shared HCSG runtime ([`lod::hcsg::shared`]): large language
-//! tiles generate on the worker from the [`LanguageWorldSeed`] root within
-//! channel `C`'s window, and the frame names what the world under it has
-//! published near the viewer into the [`LanguageOverlay`].
+//! tiles and their region names generate on the worker within channel `C`'s
+//! window, and the names of what stands near the viewer generate within a
+//! naming window Geneva derives from it. The frame only presents storage
+//! into the [`LanguageOverlay`].
 //!
 //! A session starts by advancing the epoch, then [`GenevaRoots::reset`].
 
@@ -11,34 +12,69 @@ use bevy::ecs::system::{SystemParam, SystemParamItem};
 use bevy::math::bounding::Aabb3d;
 use bevy::math::DVec3;
 use bevy::prelude::*;
-use chico::ForestGround;
 use lod::gen::{Id, OriginalId};
 use lod::hcsg::shared::{
-	self, Busy, GenerationContext, GenerationPlugin, HcsgBounds, HcsgRegions, HcsgStorage,
-	HcsgSystems,
+	self, GenerationContext, GenerationPlugin, HcsgBounds, HcsgRegions, HcsgStorage, HcsgSystems,
 };
 use lod::hcsg::universal_bounds;
 use lod::LodViewer;
-use richmond::DiscoverablePlaceIndex;
 
-use crate::index::{
-	large_tiles_overlapping, LanguageIndex, LanguageSourceDeps, LanguageWorldSeed, SourceClass,
-};
+use crate::named::{each_source, EachSource, NameSource, Named, Regions};
+use crate::places::{DevelopmentPlaces, LanguageGround, NamingGround};
 use crate::present::{present_language_overlay, LanguageOverlay};
-use crate::sources::{window_tiles, NameSources, NamingRegion, NAME_WINDOW_QUANT_M};
-use crate::tiles::{large_tile_aabb, large_tile_index, large_tile_origin, LargeTile, LARGE_TILE};
+use crate::tiles::{
+	large_tile_aabb, large_tile_index, large_tile_origin, large_tiles_overlapping, LargeTile,
+	LARGE_TILE,
+};
 
 /// Language tiles stay generated within this XZ radius of the viewer.
 const LANGUAGE_GENERATE_RADIUS: f32 = 40_000.0;
 /// Nearby entity naming. Language tiles keep the broad generate window.
 pub(crate) const LANGUAGE_NAME_RADIUS: f32 = 400.0;
-const LANGUAGE_NAME_HYSTERESIS: f32 = 80.0;
-/// Modest per-frame assignment budget. Overlay rebuild is presentation's job.
-const ASSIGN_BUDGET: usize = 32;
+/// How far the viewer moves before the naming window recenters on it.
+pub(crate) const LANGUAGE_NAME_HYSTERESIS: f32 = 80.0;
+/// The naming window recenters on this grid.
+pub const NAME_WINDOW_QUANT_M: f32 = 32.0;
+/// Half-height of the naming window: every height a named source stands at.
+const NAMING_COLUMN_Y: f32 = 10_000.0;
+
+/// Configured world seed for language tiles and names: Geneva's session root.
+#[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LanguageWorldSeed(pub u64);
+
+lod::seeded_root!(LanguageWorldSeed);
+
+impl Default for LanguageWorldSeed {
+	fn default() -> Self {
+		Self(LanguageConfig::DEFAULT_SEED)
+	}
+}
+
+/// World/config contract for Geneva generation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LanguageConfig {
+	pub seed: u64,
+}
+
+impl LanguageConfig {
+	pub const DEFAULT_SEED: u64 = 0x6A7B_8A1D_E11E;
+
+	pub fn world_defaults() -> Self {
+		Self { seed: Self::DEFAULT_SEED }
+	}
+}
+
+impl Default for LanguageConfig {
+	fn default() -> Self {
+		Self::world_defaults()
+	}
+}
 
 impl shared::GenerationScheme for LargeTile {
 	fn original_ids_for(_cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
-		large_tiles_overlapping(region).map(|(ix, iz)| OriginalId(LargeTile::id(ix, iz))).collect()
+		large_tiles_overlapping(region)
+			.map(|(ix, iz)| OriginalId(LargeTile::id(ix, iz)))
+			.collect()
 	}
 
 	fn build_with_id(cx: &mut GenerationContext, id: Id) -> Option<(Self, Aabb3d)> {
@@ -56,10 +92,8 @@ pub struct LanguageNeighborhood;
 impl LanguageNeighborhood {
 	fn around(viewer: Vec3) -> Aabb3d {
 		let r = LANGUAGE_GENERATE_RADIUS;
-		let (min_x, min_z) = large_tile_origin(
-			large_tile_index(viewer.x - r),
-			large_tile_index(viewer.z - r),
-		);
+		let (min_x, min_z) =
+			large_tile_origin(large_tile_index(viewer.x - r), large_tile_index(viewer.z - r));
 		let (max_x, max_z) = large_tile_origin(
 			large_tile_index(viewer.x + r) + 1,
 			large_tile_index(viewer.z + r) + 1,
@@ -72,7 +106,12 @@ impl HcsgBounds for LanguageNeighborhood {
 	type Param = Query<'static, 'static, &'static Transform, With<LodViewer>>;
 
 	fn regions(viewers: &SystemParamItem<Self::Param>) -> Vec<Aabb3d> {
-		viewers.iter().next().map(|viewer| Self::around(viewer.translation)).into_iter().collect()
+		viewers
+			.iter()
+			.next()
+			.map(|viewer| Self::around(viewer.translation))
+			.into_iter()
+			.collect()
 	}
 
 	fn focus(viewers: &SystemParamItem<Self::Param>) -> Option<Vec3> {
@@ -80,7 +119,8 @@ impl HcsgBounds for LanguageNeighborhood {
 	}
 }
 
-/// Every value Geneva owns in the shared storage: its tiles and its root.
+/// Every value Geneva owns in the shared storage: its tiles, places and
+/// names, and its roots.
 pub struct GenevaNodes;
 
 const TILE_SCALE: DVec3 = DVec3::new(LARGE_TILE as f64, 2.0, LARGE_TILE as f64);
@@ -88,153 +128,108 @@ const TILE_SCALE: DVec3 = DVec3::new(LARGE_TILE as f64, 2.0, LARGE_TILE as f64);
 impl GenevaNodes {
 	pub fn configure(storage: &HcsgStorage) {
 		storage.configure::<LargeTile>(TILE_SCALE);
+		storage.configure::<Named<Regions>>(TILE_SCALE);
 	}
 
 	/// Within a restart, after the epoch has advanced.
 	pub fn clear(storage: &HcsgStorage) {
+		struct Clear<'a>(&'a HcsgStorage);
+		impl EachSource for Clear<'_> {
+			fn visit<S: NameSource>(&mut self) {
+				self.0.clear::<Named<S>>();
+			}
+		}
 		storage.clear::<LargeTile>();
+		storage.clear::<Named<Regions>>();
+		storage.clear::<DevelopmentPlaces>();
+		each_source(&mut Clear(storage));
 		storage.clear::<LanguageWorldSeed>();
+		storage.clear::<NamingGround>();
 	}
 }
 
-/// Geneva's root resource: the language world seed.
+/// Geneva's root resources: the language world seed, and the ground
+/// [`GenevaPlugin`] names.
 #[derive(SystemParam)]
 pub struct GenevaRoots<'w> {
 	seed: Res<'w, LanguageWorldSeed>,
+	ground: Res<'w, NamingGround>,
 }
 
 impl GenevaRoots<'_> {
-	/// Clears Geneva's stores and seeds the world seed. Within a restart,
-	/// after the epoch has advanced.
-	///
-	/// [`LanguageIndex`] and [`LanguageOverlay`] belong to the root they were
-	/// filled under, so they start over once naming reads the new one.
+	/// Clears Geneva's stores and seeds its roots. Within a restart, after
+	/// the epoch has advanced.
 	pub fn reset(&self, storage: &HcsgStorage) {
 		GenevaNodes::clear(storage);
 		storage.seed(*self.seed, universal_bounds());
+		storage.seed(self.ground.clone(), universal_bounds());
 	}
 }
 
-/// Channel `C`'s latest regions as naming last read them. Empty idles naming.
+/// Geneva's naming window over channel `C`: [`LANGUAGE_NAME_RADIUS`] around
+/// the viewer while `C` has regions.
+struct Naming<C>(PhantomData<fn() -> C>);
+
+/// Channel `C`'s latest regions, and the naming window's center.
 #[derive(Resource, Default)]
-struct LanguageWindow {
-	boxes: Vec<Aabb3d>,
+pub(crate) struct LanguageWindow {
+	pub(crate) boxes: Vec<Aabb3d>,
 	focus: Option<Vec3>,
+	naming: Option<Vec2>,
 }
 
 impl LanguageWindow {
-	fn bounds(&self) -> Option<Aabb3d> {
-		self.boxes.iter().copied().reduce(|a, b| {
-			Aabb3d::from_min_max(Vec3::from(a.min.min(b.min)), Vec3::from(a.max.max(b.max)))
-		})
+	/// What the naming window covers: the name radius, plus the hysteresis
+	/// the viewer may move before it recenters.
+	pub(crate) fn naming_box(&self) -> Option<Aabb3d> {
+		let center = self.naming?;
+		let r = LANGUAGE_NAME_RADIUS + LANGUAGE_NAME_HYSTERESIS;
+		Some(Aabb3d::from_min_max(
+			Vec3::new(center.x - r, -NAMING_COLUMN_Y, center.y - r),
+			Vec3::new(center.x + r, NAMING_COLUMN_Y, center.y + r),
+		))
 	}
 }
 
-fn track_window<C: Send + Sync + 'static>(
+/// Follows `C`, and recenters the naming window on the viewer once it has
+/// moved [`LANGUAGE_NAME_HYSTERESIS`] from the center.
+fn track_language<C: Send + Sync + 'static>(
 	mut regions: MessageReader<HcsgRegions<C>>,
+	viewers: Query<&Transform, With<LodViewer>>,
 	mut window: ResMut<LanguageWindow>,
+	mut naming: MessageWriter<HcsgRegions<Naming<C>>>,
 ) {
 	if let Some(latest) = regions.read().last() {
 		window.boxes = latest.boxes.clone();
 		window.focus = latest.focus;
 	}
-}
-
-fn collect_radius() -> f32 {
-	LANGUAGE_NAME_RADIUS + NAME_WINDOW_QUANT_M * 0.5
-}
-
-fn retain_radius() -> f32 {
-	collect_radius() + LANGUAGE_NAME_HYSTERESIS
-}
-
-/// Names within [`LANGUAGE_NAME_RADIUS`] of the viewer, over the tiles the
-/// worker has published in the window. Rescans a source only when its
-/// revision moves or the quantized naming origin does.
-fn name_nearby<W: ForestGround>(
-	window: Res<LanguageWindow>,
-	viewers: Query<&Transform, With<LodViewer>>,
-	storage: Res<HcsgStorage>,
-	places: Option<Res<DiscoverablePlaceIndex>>,
-	mut index: ResMut<LanguageIndex>,
-) {
-	let Some(tile_region) = window.bounds() else {
-		index.end_session();
-		return;
+	let viewer = viewers.iter().next().map(|viewer| viewer.translation).or(window.focus);
+	let center = match viewer {
+		Some(at) if !window.boxes.is_empty() => Some(match window.naming {
+			Some(center) if (at.xz() - center).abs().max_element() <= LANGUAGE_NAME_HYSTERESIS => {
+				center
+			}
+			_ => (at.xz() / NAME_WINDOW_QUANT_M).round() * NAME_WINDOW_QUANT_M,
+		}),
+		_ => None,
 	};
-	let root = match storage.try_entry::<LanguageWorldSeed>(Id::Universal) {
-		Ok(Some(root)) => root,
-		Ok(None) => {
-			index.end_session();
-			return;
-		}
-		Err(Busy) => return,
-	};
-	let Some(origin) = viewers.iter().next().map(|viewer| viewer.translation).or(window.focus)
-	else {
-		return;
-	};
-	index.begin_session(root.version);
-	let seed = root.value.0;
-	let sources = NameSources::<W>::new(&storage, places.as_deref());
-	let Ok(revisions) = sources.revisions() else {
-		return;
-	};
-	let naming = NamingRegion::around(origin.xz(), collect_radius(), retain_radius());
-	let deps = LanguageSourceDeps::from_windows(revisions, seed, tile_region, naming.origin);
-	if index.source_deps() != Some(deps) {
-		let tiles = window_tiles(&window.boxes);
-		if rescan(&mut index, &sources, &tiles, naming, deps).is_err() {
-			return;
-		}
-		index.note_source_deps(deps);
+	if center != window.naming {
+		window.naming = center;
+		naming.write(HcsgRegions::new(window.naming_box().into_iter().collect(), viewer));
 	}
-	index.assign_budgeted(seed, ASSIGN_BUDGET);
 }
 
-/// Admits newly published tiles and queues the sources whose inputs moved
-/// since the index's last deps. Nothing is queued unless every read succeeds.
-fn rescan<W: ForestGround>(
-	index: &mut LanguageIndex,
-	sources: &NameSources<W>,
-	tiles: &[(i32, i32)],
-	naming: NamingRegion,
-	deps: LanguageSourceDeps,
-) -> Result<(), Busy> {
-	let prev = index.source_deps();
-	let tiles_moved = !prev.is_some_and(|prev| prev.tiles_match(deps));
-	if tiles_moved {
-		let admitted = sources.tiles(tiles, index)?;
-		index.sync_tiles(deps.seed, tiles, admitted);
+struct Register<'a, C>(&'a mut App, PhantomData<fn() -> C>);
+
+impl<C: Send + Sync + 'static> EachSource for Register<'_, C> {
+	fn visit<S: NameSource>(&mut self) {
+		self.0.add_plugins(GenerationPlugin::<Naming<C>, Named<S>>::default());
 	}
-	let window_moved = tiles_moved || !prev.is_some_and(|prev| prev.naming_window_match(deps));
-	let moved = |revision: fn(&LanguageSourceDeps) -> u64| {
-		window_moved || prev.as_ref().map(revision) != Some(revision(&deps))
-	};
-	let groves = moved(|deps| deps.revisions.forest).then(|| sources.groves(naming, index));
-	let geography = moved(|deps| deps.revisions.terrain).then(|| sources.geography(naming, index));
-	let urban = moved(|deps| deps.revisions.urban).then(|| sources.urban(naming, index));
-	let places = moved(|deps| deps.revisions.places).then(|| sources.places(naming, index));
-	let (groves, geography, urban) =
-		(groves.transpose()?, geography.transpose()?, urban.transpose()?);
-	for (snapshot, class) in [
-		(groves, SourceClass::Vegetation),
-		(geography, SourceClass::Geography),
-		(urban, SourceClass::Urban),
-	] {
-		if let Some(snapshot) = snapshot {
-			index.queue_feature_snapshot(snapshot, class);
-		}
-	}
-	if let Some(places) = places {
-		index.queue_place_snapshot(places);
-	}
-	Ok(())
 }
 
-/// Geneva over ground `W`: language tiles within channel `C`'s regions,
-/// names near the [`LodViewer`] for what `W`, urbanization, Durham and
-/// Richmond's [`DiscoverablePlaceIndex`] have published, and the
+/// Geneva over ground `W`: language tiles and region names within channel
+/// `C`'s regions, names for the forests, groves, urbanization, Durham
+/// geography and Richmond places near the [`LodViewer`], and the
 /// [`LanguageOverlay`] they present to.
 ///
 /// `W` is the ground groves grow on, as for Chico's presentation: the
@@ -242,8 +237,6 @@ fn rescan<W: ForestGround>(
 /// empty region set on `C` idles naming and empties the overlay. The world
 /// seed comes from [`LanguageWorldSeed`], [`LanguageConfig::world_defaults`]
 /// unless inserted first.
-///
-/// [`LanguageConfig::world_defaults`]: crate::LanguageConfig::world_defaults
 pub struct GenevaPlugin<C, W>(PhantomData<fn() -> (C, W)>);
 
 impl<C, W> Default for GenevaPlugin<C, W> {
@@ -252,21 +245,19 @@ impl<C, W> Default for GenevaPlugin<C, W> {
 	}
 }
 
-impl<C: Send + Sync + 'static, W: ForestGround> Plugin for GenevaPlugin<C, W> {
+impl<C: Send + Sync + 'static, W: LanguageGround> Plugin for GenevaPlugin<C, W> {
 	fn build(&self, app: &mut App) {
 		let storage = app.world_mut().get_resource_or_init::<HcsgStorage>().clone();
 		GenevaNodes::configure(&storage);
 		app.init_resource::<LanguageWorldSeed>()
-			.init_resource::<LanguageIndex>()
+			.insert_resource(NamingGround::of::<W>())
 			.init_resource::<LanguageOverlay>()
 			.init_resource::<LanguageWindow>()
-			.add_plugins(GenerationPlugin::<C, LargeTile>::default())
-			.add_systems(
-				Update,
-				(track_window::<C>, name_nearby::<W>, present_language_overlay)
-					.chain()
-					.after(HcsgSystems),
-			);
+			.add_message::<HcsgRegions<Naming<C>>>()
+			.add_plugins(GenerationPlugin::<C, Named<Regions>>::default())
+			.add_systems(Update, track_language::<C>.before(HcsgSystems))
+			.add_systems(Update, present_language_overlay.after(HcsgSystems));
+		each_source(&mut Register::<C>(app, PhantomData));
 	}
 }
 
@@ -283,12 +274,16 @@ mod tests {
 	};
 	use lod::hcsg::shared::{Gated, HcsgBoundsPlugin, HcsgDemand, HcsgGate};
 	use lod::lod_ref::LodNodePose;
-	use richmond::{AuthoredDevelopments, DevelopmentConfig, DevelopmentSites, Richmond, RichmondRoots};
+	use richmond::{
+		AuthoredDevelopment, AuthoredDevelopments, DevelopmentConfig, DevelopmentKind,
+		DevelopmentSites, Richmond, RichmondRoots,
+	};
 	use terrain_layer_model::OnTerrain;
 	use urbanization_cells::UrbanizationSelection;
 	use urbanization_layer_model::Urbanization;
 
 	use super::*;
+	use crate::named::Places;
 	use crate::NameKey;
 
 	type Ground = OnTerrain<Durham>;
@@ -329,7 +324,8 @@ mod tests {
 
 	fn spawn_viewer(app: &mut App, at: Vec3) {
 		let at = Transform::from_translation(at);
-		app.world_mut().spawn((LodViewer, at, LodNodePose { previous: at, current: at }));
+		app.world_mut()
+			.spawn((LodViewer, at, LodNodePose { previous: at, current: at }));
 	}
 
 	/// Geneva alone over an empty world, viewed from `at`.
@@ -349,7 +345,7 @@ mod tests {
 	}
 
 	fn settle(app: &mut App) -> anyhow::Result<()> {
-		for _ in 0..2 {
+		for _ in 0..3 {
 			app.update();
 			let demand = app.world().resource::<HcsgDemand>().clone();
 			anyhow::ensure!(demand.wait_idle(IDLE), "worker did not go idle");
@@ -391,6 +387,7 @@ mod tests {
 				.get::<LargeTile>(LargeTile::id(ix, iz))
 				.ok_or_else(|| anyhow::anyhow!("tile ({ix}, {iz}) was not generated"))?;
 			assert_eq!(*tile, LargeTile::generate(LanguageWorldSeed::default().0, ix, iz));
+			assert!(storage.get::<Named<Regions>>(LargeTile::id(ix, iz)).is_some());
 		}
 		assert!(storage.get::<LargeTile>(LargeTile::id(3, 0)).is_none(), "beyond the window");
 
@@ -407,17 +404,18 @@ mod tests {
 		let mut app = language_app(Vec3::ZERO);
 		settle(&mut app)?;
 		assert!(!region_names(&app).is_empty());
+		assert!(app.world().resource::<LanguageWindow>().naming_box().is_some());
 
 		app.world_mut().resource_mut::<Open>().0 = false;
 		settle(&mut app)?;
-		assert_eq!(*app.world().resource::<LanguageOverlay>(), LanguageOverlay {
-			epoch: app.world().resource::<LanguageIndex>().epoch,
-			..LanguageOverlay::default()
-		});
-		assert!(app.world().resource::<LanguageIndex>().session().is_none());
-		let epoch = app.world().resource::<LanguageIndex>().epoch;
+		let epoch = app.world().resource::<LanguageOverlay>().epoch;
+		assert_eq!(
+			*app.world().resource::<LanguageOverlay>(),
+			LanguageOverlay { epoch, ..LanguageOverlay::default() }
+		);
+		assert!(app.world().resource::<LanguageWindow>().naming_box().is_none());
 		app.update();
-		assert_eq!(app.world().resource::<LanguageIndex>().epoch, epoch, "idle stays idle");
+		assert_eq!(app.world().resource::<LanguageOverlay>().epoch, epoch, "idle stays idle");
 
 		app.world_mut().resource_mut::<Open>().0 = true;
 		settle(&mut app)?;
@@ -457,8 +455,33 @@ mod tests {
 		settle(&mut app)?;
 		let named: Vec<_> = region_names(&app).into_iter().map(|(ix, iz, _)| (ix, iz)).collect();
 		let moved: Vec<_> = (-1..=2).flat_map(|ix| (-2..=1).map(move |iz| (ix, iz))).collect();
-		assert_eq!(named, moved, "regions follow the window; tiles behind it stay admitted");
-		assert_eq!(app.world().resource::<LanguageOverlay>().large_tiles.len(), 20);
+		assert_eq!(named, moved, "regions follow the window");
+		assert_eq!(app.world().resource::<LanguageOverlay>().large_tiles.len(), moved.len());
+		let storage = app.world().resource::<HcsgStorage>().clone();
+		assert!(
+			storage.get::<LargeTile>(LargeTile::id(2, 0)).is_some(),
+			"the tile the window crossed into generated"
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn the_naming_window_recenters_past_the_hysteresis() -> anyhow::Result<()> {
+		let mut app = language_app(Vec3::ZERO);
+		settle(&mut app)?;
+		let first = app.world().resource::<LanguageWindow>().naming;
+		assert_eq!(first, Some(Vec2::ZERO));
+
+		let mut viewers = app.world_mut().query_filtered::<&mut Transform, With<LodViewer>>();
+		*viewers.single_mut(app.world_mut())? =
+			Transform::from_xyz(LANGUAGE_NAME_HYSTERESIS - 1.0, 0.0, 0.0);
+		app.update();
+		assert_eq!(app.world().resource::<LanguageWindow>().naming, first, "within hysteresis");
+
+		*viewers.single_mut(app.world_mut())? = Transform::from_xyz(200.0, 0.0, 0.0);
+		app.update();
+		let moved = (200.0 / NAME_WINDOW_QUANT_M).round() * NAME_WINDOW_QUANT_M;
+		assert_eq!(app.world().resource::<LanguageWindow>().naming, Some(Vec2::new(moved, 0.0)));
 		Ok(())
 	}
 
@@ -480,7 +503,19 @@ mod tests {
 		}
 	}
 
-	/// Groves on Chico's 2×2 fine patch at the origin, named by Geneva.
+	/// One Les Halles authored inside one cell of the patch.
+	fn les_halles() -> AuthoredDevelopment {
+		AuthoredDevelopment {
+			cell: Aabb3d::from_min_max(Vec3::new(10.0, 0.0, 10.0), Vec3::new(150.0, 1.0, 150.0)),
+			kinds: vec![DevelopmentKind::LesHalles],
+			height: 12.0,
+			config: DevelopmentConfig::default(),
+			courtyard: None,
+		}
+	}
+
+	/// Groves on Chico's 2×2 fine patch at the origin and a Les Halles in
+	/// one of its cells, named by Geneva.
 	fn forested_app() -> App {
 		let mut app = App::new();
 		app.add_plugins((MinimalPlugins, StatesPlugin))
@@ -506,7 +541,7 @@ mod tests {
 				sites: DevelopmentSites::Authored,
 				..DevelopmentConfig::default()
 			})
-			.init_resource::<AuthoredDevelopments>()
+			.insert_resource(AuthoredDevelopments(vec![les_halles()]))
 			.init_resource::<UrbanizationSelection>()
 			.insert_resource(ForestSelection {
 				layering: Some(chico::LayeringKind::LushJungle),
@@ -527,13 +562,15 @@ mod tests {
 		app
 	}
 
+	fn naming_window(app: &App) -> anyhow::Result<Aabb3d> {
+		let window = app.world().resource::<LanguageWindow>();
+		window.naming_box().ok_or_else(|| anyhow::anyhow!("naming is idle"))
+	}
+
 	#[test]
 	fn nearby_groves_are_named_in_their_tiles_languages() -> anyhow::Result<()> {
 		let mut app = forested_app();
 		settle(&mut app)?;
-		for _ in 0..64 {
-			app.update();
-		}
 
 		let overlay = app.world().resource::<LanguageOverlay>().clone();
 		let groves: Vec<_> = overlay
@@ -542,20 +579,59 @@ mod tests {
 			.filter(|name| matches!(name.key, NameKey::Forest(_) | NameKey::Grove(_)))
 			.collect();
 		assert!(!groves.is_empty(), "the patch's forests and groves are named");
-		let window = NamingRegion::around(Vec2::ZERO, collect_radius(), retain_radius());
+		let window = naming_window(&app)?;
+		let reach = Rect::from_corners(
+			Vec2::new(window.min.x, window.min.z),
+			Vec2::new(window.max.x, window.max.z),
+		);
 		for name in &groves {
 			assert!(!name.surface.is_empty());
-			let extent = Aabb3d::from_min_max(
-				Vec3::new(name.extent.min.x, -1.0, name.extent.min.y),
-				Vec3::new(name.extent.max.x, 1.0, name.extent.max.y),
-			);
-			assert!(window.retains_bounds(extent), "{:?} named outside the window", name.key);
+			assert!(!reach.intersect(name.extent).is_empty(), "{:?} named outside", name.key);
 		}
 
 		let storage = app.world().resource::<HcsgStorage>().clone();
-		let grown = storage.overlapping::<chico::GrownGrove<Urban>>(window.query_aabb());
-		let named_groves = groves.iter().filter(|name| matches!(name.key, NameKey::Grove(_))).count();
+		let grown = storage.overlapping::<chico::GrownGrove<Urban>>(window);
+		let named_groves =
+			groves.iter().filter(|name| matches!(name.key, NameKey::Grove(_))).count();
 		assert!(named_groves > 0 && named_groves <= grown.len(), "only grown groves are named");
+		Ok(())
+	}
+
+	#[test]
+	fn built_places_are_named_and_rooms_speak_their_buildings_language() -> anyhow::Result<()> {
+		let mut app = forested_app();
+		settle(&mut app)?;
+
+		let development = les_halles().id();
+		let storage = app.world().resource::<HcsgStorage>().clone();
+		let places = storage
+			.get::<DevelopmentPlaces>(development)
+			.ok_or_else(|| anyhow::anyhow!("the development's places were not generated"))?;
+		let building = places
+			.places
+			.iter()
+			.position(|place| place.building.is_none() && place.place.host == Some(development))
+			.ok_or_else(|| anyhow::anyhow!("no building place"))?;
+		let rooms: Vec<_> =
+			places.places.iter().filter(|place| place.building == Some(building)).collect();
+		assert!(!rooms.is_empty(), "Les Halles authors usage-area rooms");
+
+		let named = storage
+			.get::<Named<Places>>(development)
+			.ok_or_else(|| anyhow::anyhow!("the places were not named"))?;
+		let name = |key: NameKey| named.names.iter().find(|entry| entry.key == key);
+		let host = name(places.places[building].key)
+			.ok_or_else(|| anyhow::anyhow!("the building has no name"))?;
+		for room in &rooms {
+			let room = name(room.key).ok_or_else(|| anyhow::anyhow!("{:?} unnamed", room.key))?;
+			assert_eq!(room.name.language_seed, host.name.language_seed);
+		}
+
+		let overlay = app.world().resource::<LanguageOverlay>();
+		assert!(
+			overlay.names.iter().any(|name| name.key == places.places[building].key),
+			"the building's name reaches the overlay"
+		);
 		Ok(())
 	}
 }

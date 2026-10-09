@@ -64,7 +64,6 @@ impl Plugin for RichmondDevelopmentModelsPlugin {
 			.init_resource::<PaddedTerrainPresenterState>()
 			.add_systems(Update, apply_parent_confines.after(LodRefreshSystems::Cull))
 			.add_systems(Update, stamp_label_places);
-		crate::place_index::register_place_index(app);
 	}
 }
 

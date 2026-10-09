@@ -1,15 +1,21 @@
-//! Debug overlay of tile bounds and assigned names. Not a mesh stream.
+//! Debug overlay of tile bounds and names, read from storage. Not a mesh stream.
 
+use std::collections::HashSet;
+
+use bevy::math::bounding::Aabb3d;
 use bevy::math::{Rect, Vec2};
-use bevy::prelude::{Local, ResMut, Resource};
+use bevy::prelude::{Local, Res, ResMut, Resource};
+use lod::hcsg::shared::{Busy, HcsgStorage};
 
-use crate::index::{LanguageIndex, NameKey, OverlayDirty};
-use crate::name::AssignedName;
+use crate::key::NameKey;
+use crate::named::{each_source, EachSource, NameEntry, NameSource, Named, Regions};
+use crate::shared::LanguageWindow;
+use crate::tiles::{window_tiles, LargeTile};
 
 /// Tile bounds and names for a debug overlay.
 ///
-/// `epoch` follows [`LanguageIndex::epoch`], so readers can skip rebuilds
-/// while it holds.
+/// `epoch` advances whenever the contents change, so readers can skip
+/// rebuilds while it holds.
 #[derive(Resource, Clone, Debug, Default, PartialEq)]
 pub struct LanguageOverlay {
 	pub epoch: u64,
@@ -26,7 +32,7 @@ pub struct LargeTileOverlay {
 	pub small_count: usize,
 }
 
-/// One assigned name in the overlay.
+/// One name in the overlay.
 #[derive(Clone, Debug, PartialEq)]
 pub struct NamedOverlay {
 	pub key: NameKey,
@@ -37,71 +43,144 @@ pub struct NamedOverlay {
 	pub extent: Rect,
 }
 
-impl LanguageOverlay {
-	pub fn from_index(index: &LanguageIndex) -> Self {
-		let large_tiles = overlay_tiles(index);
-		let names = index
-			.assigned_names()
-			.filter_map(|(key, _)| named_from_index(index, key))
-			.collect();
-		Self { epoch: index.epoch, large_tiles, names }
-	}
-
-	pub(crate) fn apply_dirty(&mut self, index: &LanguageIndex, dirty: OverlayDirty) {
-		if dirty.rebuild_all {
-			*self = Self::from_index(index);
-			return;
+impl NamedOverlay {
+	fn of(entry: &NameEntry) -> Self {
+		Self {
+			key: entry.key,
+			surface: entry.name.surface.clone(),
+			english: entry.name.english.clone(),
+			provisional: false,
+			xz: entry.xz,
+			extent: entry.extent,
 		}
-		if dirty.tiles {
-			self.large_tiles = overlay_tiles(index);
-		}
-		for key in dirty.keys {
-			self.names.retain(|name| name.key != key);
-			if let Some(row) = named_from_index(index, key) {
-				self.names.push(row);
-			}
-		}
-		self.epoch = index.epoch;
 	}
 }
 
-fn overlay_tiles(index: &LanguageIndex) -> Vec<LargeTileOverlay> {
-	index
-		.large_tiles()
-		.map(|tile| LargeTileOverlay {
-			ix: tile.ix,
-			iz: tile.iz,
-			language_count: tile.languages.len(),
-			small_count: tile.small.len(),
-		})
-		.collect()
+/// What the overlay last showed: the windows and the stores' membership.
+#[derive(Clone, PartialEq)]
+pub(crate) struct Shown {
+	boxes: Vec<Aabb3d>,
+	naming: Option<Aabb3d>,
+	revision: u64,
 }
 
-fn named_from_index(index: &LanguageIndex, key: NameKey) -> Option<NamedOverlay> {
-	if !index.is_active(key) {
-		return None;
-	}
-	let assigned: &AssignedName = index.assigned(key)?;
-	Some(NamedOverlay {
-		key,
-		surface: assigned.name.surface.clone(),
-		english: assigned.name.english.clone(),
-		provisional: assigned.provisional,
-		xz: index.anchor(key)?,
-		extent: index.extent(key)?,
-	})
-}
-
-/// Upserts the keys the index marked since the last epoch it presented.
+/// Rebuilds the overlay from storage when the windows or a store it reads changed.
 pub(crate) fn present_language_overlay(
-	mut index: ResMut<LanguageIndex>,
+	window: Res<LanguageWindow>,
+	storage: Res<HcsgStorage>,
 	mut overlay: ResMut<LanguageOverlay>,
-	mut last_epoch: Local<u64>,
+	mut shown: Local<Option<Shown>>,
 ) {
-	if index.epoch == *last_epoch {
+	if window.boxes.is_empty() {
+		if shown.take().is_some() {
+			*overlay = LanguageOverlay { epoch: overlay.epoch + 1, ..LanguageOverlay::default() };
+		}
 		return;
 	}
-	let dirty = index.take_overlay_dirty();
-	overlay.apply_dirty(&index, dirty);
-	*last_epoch = index.epoch;
+	let Ok(revision) = revision(&storage) else {
+		return;
+	};
+	let next = Shown { boxes: window.boxes.clone(), naming: window.naming_box(), revision };
+	if shown.as_ref() == Some(&next) {
+		return;
+	}
+	let Ok((large_tiles, names)) = collect(&storage, &next) else {
+		return;
+	};
+	*overlay = LanguageOverlay { epoch: overlay.epoch + 1, large_tiles, names };
+	*shown = Some(next);
+}
+
+/// Latest membership change among the stores the overlay reads.
+pub(crate) fn revision(storage: &HcsgStorage) -> Result<u64, Busy> {
+	struct Latest<'a> {
+		storage: &'a HcsgStorage,
+		latest: Result<u64, Busy>,
+	}
+	impl EachSource for Latest<'_> {
+		fn visit<S: NameSource>(&mut self) {
+			if let Ok(latest) = self.latest {
+				self.latest =
+					self.storage.try_membership_revision::<Named<S>>().map(|r| r.max(latest));
+			}
+		}
+	}
+	let tiles = storage.try_membership_revision::<LargeTile>()?;
+	let regions = storage.try_membership_revision::<Named<Regions>>()?;
+	let mut latest = Latest { storage, latest: Ok(tiles.max(regions)) };
+	each_source(&mut latest);
+	latest.latest
+}
+
+/// The tiles and region names under the tile window, then every name whose
+/// extent the naming window reaches, once per key.
+fn collect(
+	storage: &HcsgStorage,
+	shown: &Shown,
+) -> Result<(Vec<LargeTileOverlay>, Vec<NamedOverlay>), Busy> {
+	struct Nearby<'a> {
+		storage: &'a HcsgStorage,
+		region: Aabb3d,
+		keys: HashSet<NameKey>,
+		names: Vec<NamedOverlay>,
+		busy: Option<Busy>,
+	}
+	impl EachSource for Nearby<'_> {
+		fn visit<S: NameSource>(&mut self) {
+			if self.busy.is_some() {
+				return;
+			}
+			if let Err(busy) = self.read::<S>() {
+				self.busy = Some(busy);
+			}
+		}
+	}
+	impl Nearby<'_> {
+		fn read<S: NameSource>(&mut self) -> Result<(), Busy> {
+			let reach = Rect::from_corners(
+				Vec2::new(self.region.min.x, self.region.min.z),
+				Vec2::new(self.region.max.x, self.region.max.z),
+			);
+			for id in self.storage.try_overlapping::<Named<S>>(self.region)? {
+				let Some(entry) = self.storage.try_entry::<Named<S>>(id)? else {
+					continue;
+				};
+				for name in &entry.value.names {
+					let reached =
+						!reach.intersect(name.extent).is_empty() || reach.contains(name.xz);
+					if reached && self.keys.insert(name.key) {
+						self.names.push(NamedOverlay::of(name));
+					}
+				}
+			}
+			Ok(())
+		}
+	}
+
+	let mut large_tiles = Vec::new();
+	let mut names = Vec::new();
+	for (ix, iz) in window_tiles(&shown.boxes) {
+		let id = LargeTile::id(ix, iz);
+		if let Some(tile) = storage.try_entry::<LargeTile>(id)? {
+			large_tiles.push(LargeTileOverlay {
+				ix,
+				iz,
+				language_count: tile.value.languages.len(),
+				small_count: tile.value.small.len(),
+			});
+		}
+		if let Some(named) = storage.try_entry::<Named<Regions>>(id)? {
+			names.extend(named.value.names.iter().map(NamedOverlay::of));
+		}
+	}
+	let Some(region) = shown.naming else {
+		return Ok((large_tiles, names));
+	};
+	let keys = names.iter().map(|name| name.key).collect();
+	let mut nearby = Nearby { storage, region, keys, names, busy: None };
+	each_source(&mut nearby);
+	match nearby.busy {
+		Some(busy) => Err(busy),
+		None => Ok((large_tiles, nearby.names)),
+	}
 }

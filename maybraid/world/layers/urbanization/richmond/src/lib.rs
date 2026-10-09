@@ -32,7 +32,6 @@ pub mod layer_stream;
 pub mod pad;
 pub mod padded;
 pub mod place;
-pub mod place_index;
 pub mod plugin;
 pub mod presentation;
 pub mod shared;
@@ -74,7 +73,6 @@ pub use layer_stream::{
 pub use pad::{cell_bounds2, PadComplex, PadNode, PadPrimitive};
 pub use padded::{PaddedTerrain, PresentedPaddedTerrainScene, TerrainWithPads};
 pub use place::{DiscoverablePlace, DiscoverablePlaceLabel, InteriorArea};
-pub use place_index::{DiscoverablePlaceIndex, IndexedPlace};
 pub use plugin::{register_richmond_plugin, RichmondDevelopmentModelsPlugin};
 pub use presentation::{PaddedTerrainPresenter, PaddedTerrainPresenterState};
 pub use shared::{

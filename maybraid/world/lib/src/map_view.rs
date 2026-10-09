@@ -413,6 +413,25 @@ fn place_name_keys(
 		.collect()
 }
 
+const MAP_PIN_QUANT_M: f32 = 8.0;
+
+#[derive(Clone, PartialEq, Eq)]
+struct MapPrepKey {
+	overlay_epoch: u64,
+	focus: IVec2,
+	height_q: i32,
+	highlighted: Option<PoiId>,
+	picker: bool,
+	cam: IVec3,
+	yaw_q: i32,
+	viewport: Option<(IVec2, IVec2)>,
+	poi_membership: u64,
+}
+
+fn quantize_map_axis(value: f32) -> i32 {
+	(value / MAP_PIN_QUANT_M).round() as i32
+}
+
 fn prepare_map_presentation(
 	map: Res<WorldMapView>,
 	overlay: Res<LanguageOverlay>,
@@ -422,16 +441,58 @@ fn prepare_map_presentation(
 	surface: DurhamSurface,
 	places: Query<(Entity, &DiscoverablePlace, &GlobalTransform)>,
 	mut presentation: ResMut<MapPresentation>,
+	mut last_key: Local<Option<MapPrepKey>>,
 ) {
 	if !map.open {
-		*presentation = MapPresentation::default();
+		if presentation.open {
+			*presentation = MapPresentation::default();
+		}
+		*last_key = None;
 		return;
 	}
+	let highlighted = pending.as_deref().and_then(|state| state.pending.as_ref()?.highlighted);
+	let picker = picker_prompt_visible(&map);
+	let (cam, yaw_q, viewport) = if let Ok((camera, camera_transform)) = camera.single() {
+		let translation = camera_transform.translation();
+		let forward = camera_transform.forward();
+		(
+			IVec3::new(
+				quantize_map_axis(translation.x),
+				quantize_map_axis(translation.y),
+				quantize_map_axis(translation.z),
+			),
+			((forward.x.atan2(forward.z).to_degrees() / 5.0).round() as i32).rem_euclid(72),
+			camera.logical_viewport_rect().map(|rect| {
+				(
+					IVec2::new(rect.min.x.round() as i32, rect.min.y.round() as i32),
+					IVec2::new(rect.max.x.round() as i32, rect.max.y.round() as i32),
+				)
+			}),
+		)
+	} else {
+		(IVec3::ZERO, 0, None)
+	};
+	let key = MapPrepKey {
+		overlay_epoch: overlay.epoch,
+		focus: IVec2::new(quantize_map_axis(map.focus.x), quantize_map_axis(map.focus.y)),
+		height_q: quantize_map_axis(map.height),
+		highlighted,
+		picker,
+		cam,
+		yaw_q,
+		viewport,
+		poi_membership: registry
+			.as_ref()
+			.map(|registry| registry.membership_revision())
+			.unwrap_or(0),
+	};
+	if last_key.as_ref() == Some(&key) {
+		return;
+	}
+	*last_key = Some(key);
 	let named = place_name_keys(&places);
 	let wanted =
 		map_pin_targets(&map, &overlay, registry.as_deref(), pending.as_deref(), Some(&named));
-	let highlighted = pending.as_deref().and_then(|state| state.pending.as_ref()?.highlighted);
-	let picker = picker_prompt_visible(&map);
 	let projected = if let Ok((camera, camera_transform)) = camera.single() {
 		let viewport = camera.logical_viewport_rect();
 		wanted

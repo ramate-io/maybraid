@@ -11,6 +11,7 @@ rust-version = { workspace = true }
 
 [dependencies]
 bevy = { workspace = true }
+building-components = { workspace = true }
 chico = { workspace = true }
 comproc = { workspace = true }
 durham = { workspace = true }
@@ -21,13 +22,13 @@ maybraid-language-grammars = { workspace = true }
 noise = { workspace = true }
 richmond = { workspace = true }
 urbanization-cells = { workspace = true }
+urbanization-layer-model = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
 terrain-layer-model = { workspace = true }
 terrain-stamps = { workspace = true }
 terrain-watersheds = { workspace = true }
-urbanization-layer-model = { workspace = true }
 
 [lints]
 workspace = true

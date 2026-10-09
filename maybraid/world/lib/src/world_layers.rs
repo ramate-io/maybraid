@@ -1,5 +1,5 @@
 //! The world's layer stack: terrain, urbanization, vegetation, mobs and
-//! furnishing, generated on the shared HCSG runtime and presented around the
+//! furnishing and language, generated on the shared HCSG runtime and presented around the
 //! viewer while Discovery streams.
 
 use barking::{
@@ -14,6 +14,7 @@ use durham::{
 	BackgroundStream, Durham, DurhamRoots, DurhamWorldPlugin, FarStream, NearStream,
 	StreamPresentationPlugin, StreamRing, Water,
 };
+use geneva::{GenevaPlugin, GenevaRoots, LanguageNeighborhood};
 use layer_stack::{ActiveGenerationMode, GenerationModePlugin};
 use lod::hcsg::shared::{HcsgBoundsPlugin, HcsgDemand, HcsgStorage};
 use maputo::{FurnitureNeighborhood, MaputoNodes, MaputoPresentationPlugin};
@@ -60,6 +61,7 @@ impl Plugin for WorldLayersPlugin {
 			HcsgBoundsPlugin::<InDiscovery<BumpOutRing<MediumCanopyBumpOut>>>::default(),
 			HcsgBoundsPlugin::<InDiscovery<MobNeighborhood>>::default(),
 			HcsgBoundsPlugin::<InDiscovery<FurnitureNeighborhood>>::default(),
+			HcsgBoundsPlugin::<InDiscovery<LanguageNeighborhood>>::default(),
 		))
 		.add_plugins((
 			StreamPresentationPlugin::<Ring<NearStream>, NearStream, PaddedTerrain<Ground>>::default(),
@@ -89,6 +91,7 @@ impl Plugin for WorldLayersPlugin {
 			MaputoPresentationPlugin::<InDiscovery<FurnitureNeighborhood>, Urban>::default(),
 			BarkingPresentationPlugin::<InDiscovery<MobNeighborhood>, Urban>::default(),
 			MobScenePresentationPlugin,
+			GenevaPlugin::<InDiscovery<LanguageNeighborhood>, Urban>::default(),
 		))
 		.add_systems(OnEnter(ActiveGenerationMode::of::<Discovery>()), start_session);
 	}
@@ -102,6 +105,7 @@ fn start_session(
 	durham: DurhamRoots,
 	richmond: RichmondRoots,
 	chico: ChicoRoots,
+	geneva: GenevaRoots,
 ) {
 	demand.advance_epoch();
 	durham.reset(&storage);
@@ -109,4 +113,5 @@ fn start_session(
 	chico.reset::<Urban>(&storage);
 	BarkingNodes::clear::<Urban>(&storage);
 	MaputoNodes::clear::<Urban>(&storage);
+	geneva.reset(&storage);
 }
