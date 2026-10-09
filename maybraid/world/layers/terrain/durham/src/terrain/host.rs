@@ -46,10 +46,12 @@ pub const WORLD_OUTER_4X_ROWS: i32 = 1;
 const WORLD_TERRAIN_NEAR_RADIUS_M: f32 = 8.0 * TERRAIN_CELL_SIZE;
 const WORLD_TERRAIN_FAR_RADIUS_M: f32 = 16.0 * TERRAIN_CELL_SIZE;
 const WORLD_TERRAIN_BACKGROUND_RADIUS_M: f32 = 24.0 * TERRAIN_CELL_SIZE;
-const WORLD_TERRAIN_FAR_HOLE_INSET_M: f32 = 2.0 * TERRAIN_CELL_SIZE;
-const WORLD_TERRAIN_BACKGROUND_HOLE_INSET_M: f32 = 4.0 * TERRAIN_CELL_SIZE;
 const WORLD_TERRAIN_CULL_MARGIN_M: f32 = 0.0;
 const WORLD_TERRAIN_PRESENT_STEP_M: f32 = 4.0 * TERRAIN_CELL_SIZE;
+/// Far hole inset. At least one present step so a jump retires only far cells
+/// that already sit under the previous near disk.
+const WORLD_TERRAIN_FAR_HOLE_INSET_M: f32 = WORLD_TERRAIN_PRESENT_STEP_M;
+const WORLD_TERRAIN_BACKGROUND_HOLE_INSET_M: f32 = WORLD_TERRAIN_PRESENT_STEP_M;
 
 fn playground_lod_bands(half_extent: i32) -> Vec<TerrainMeshLodBand> {
 	vec![TerrainMeshLodBand { max_radius_cells: half_extent.max(1), res_2: 5 }]
@@ -213,6 +215,78 @@ pub fn mesh_assets(
 mod tests {
 	use super::*;
 	use crate::terrain::cell::CellTiling;
+	use bevy::math::bounding::{Aabb3d, IntersectsVolume};
+	use lod::gen::OriginalId;
+
+	fn playable_rings() -> [TerrainCellRing; 3] {
+		[WORLD_NEAR_RING, WORLD_FAR_RING, WORLD_BACKGROUND_RING]
+	}
+
+	fn rings_overlap_by_anchor_step(inner: TerrainCellRing, outer: TerrainCellRing) -> bool {
+		inner.anchor_step == outer.anchor_step
+			&& inner.high_outer_radius - outer.high_inner_radius + 1e-3 >= inner.anchor_step
+	}
+
+	struct HostedCell {
+		center: Vec3,
+		bounds: Aabb3d,
+	}
+
+	fn hosted_cells(ring: TerrainCellRing, anchor: Vec3) -> Vec<HostedCell> {
+		let layout = world_cell_layout();
+		ring.regions_around(anchor)
+			.into_iter()
+			.flat_map(|region| ring.cell_ids(region, layout.vertical_half_extent))
+			.filter_map(|OriginalId(id)| {
+				let bounds = id.origin_cell_bounds()?;
+				let center = Vec3::from((bounds.min + bounds.max) * 0.5);
+				Some(HostedCell { center, bounds })
+			})
+			.collect()
+	}
+
+	fn xz_contains(bounds: Aabb3d, point: Vec3) -> bool {
+		point.x >= bounds.min.x
+			&& point.x <= bounds.max.x
+			&& point.z >= bounds.min.z
+			&& point.z <= bounds.max.z
+	}
+
+	fn overlaps_any(regions: &[Aabb3d], bounds: Aabb3d) -> bool {
+		regions.iter().any(|region| region.intersects(&bounds))
+	}
+
+	/// Previously covered near / far cell centers that still fall in the new
+	/// near or far request must already sit on a kept near host or a new far
+	/// region. Newly generated near cells are not assumed to be ready.
+	fn still_wanted_centers_stay_covered(
+		near: TerrainCellRing,
+		far: TerrainCellRing,
+		before: Vec3,
+		after: Vec3,
+	) -> Result<(), Vec3> {
+		let near_before = hosted_cells(near, before);
+		let far_before = hosted_cells(far, before);
+		let near_after = near.regions_around(after);
+		let far_after = far.regions_around(after);
+		let kept_near: Vec<Aabb3d> = near_before
+			.iter()
+			.filter(|cell| overlaps_any(&near_after, cell.bounds))
+			.map(|cell| cell.bounds)
+			.collect();
+		for cell in near_before.iter().chain(&far_before) {
+			let wanted = near.retains_cell_center(cell.center, after)
+				|| overlaps_any(&far_after, cell.bounds);
+			if !wanted {
+				continue;
+			}
+			let kept = kept_near.iter().copied().any(|bounds| xz_contains(bounds, cell.center));
+			if !kept && !overlaps_any(&far_after, cell.bounds) {
+				return Err(cell.center);
+			}
+		}
+		Ok(())
+	}
 
 	#[test]
 	fn world_near_high_stays_at_eight_cells() {
@@ -245,8 +319,12 @@ mod tests {
 		assert!(far.draws_level(lod::LodSceneLevel::Medium));
 		assert_eq!(far.level_for(Vec3::ZERO, Vec3::ZERO), lod::LodSceneLevel::High);
 		assert_eq!(
-			far.level_for(Vec3::X * 5.0 * TERRAIN_CELL_SIZE, Vec3::ZERO),
+			far.level_for(Vec3::X * 3.0 * TERRAIN_CELL_SIZE, Vec3::ZERO),
 			lod::LodSceneLevel::High
+		);
+		assert_eq!(
+			far.level_for(Vec3::X * 5.0 * TERRAIN_CELL_SIZE, Vec3::ZERO),
+			lod::LodSceneLevel::Medium
 		);
 		assert_eq!(
 			far.level_for(Vec3::X * 7.0 * TERRAIN_CELL_SIZE, Vec3::ZERO),
@@ -289,5 +367,57 @@ mod tests {
 		assert!(assets.macro_seam_half_extents.is_empty());
 		assert!(assets.macro_cell_min_size.is_none());
 		assert!(assets.macro_res_2.is_none());
+	}
+
+	#[test]
+	fn playable_rings_overlap_by_at_least_one_anchor_step() {
+		let rings = playable_rings();
+		for pair in rings.windows(2) {
+			assert_eq!(pair[0].anchor_step, pair[1].anchor_step);
+			assert!(
+				rings_overlap_by_anchor_step(pair[0], pair[1]),
+				"inner outer {} minus hole {} is below step {}",
+				pair[0].high_outer_radius,
+				pair[1].high_inner_radius,
+				pair[0].anchor_step
+			);
+		}
+	}
+
+	#[test]
+	fn two_cell_far_hole_inset_breaks_the_overlap_invariant() {
+		let mut far = WORLD_FAR_RING;
+		far.high_inner_radius = WORLD_TERRAIN_NEAR_RADIUS_M - 2.0 * TERRAIN_CELL_SIZE;
+		assert!(
+			!rings_overlap_by_anchor_step(WORLD_NEAR_RING, far),
+			"a two-cell far hole must fail the overlap invariant"
+		);
+	}
+
+	#[test]
+	fn one_step_anchor_jump_covers_every_still_wanted_cell_center() {
+		let step = WORLD_TERRAIN_PRESENT_STEP_M;
+		for jump in [Vec3::X * step, Vec3::NEG_X * step, Vec3::Z * step, Vec3::NEG_Z * step] {
+			still_wanted_centers_stay_covered(WORLD_NEAR_RING, WORLD_FAR_RING, Vec3::ZERO, jump)
+				.unwrap_or_else(|center| {
+					panic!("uncovered cell center {center} after jump {jump}")
+				});
+		}
+	}
+
+	#[test]
+	fn two_cell_far_hole_inset_winks_on_a_one_step_jump() {
+		let mut far = WORLD_FAR_RING;
+		far.high_inner_radius = WORLD_TERRAIN_NEAR_RADIUS_M - 2.0 * TERRAIN_CELL_SIZE;
+		assert!(
+			still_wanted_centers_stay_covered(
+				WORLD_NEAR_RING,
+				far,
+				Vec3::ZERO,
+				Vec3::X * WORLD_TERRAIN_PRESENT_STEP_M
+			)
+			.is_err(),
+			"a two-cell far hole must wink on a one-step jump"
+		);
 	}
 }
