@@ -9,13 +9,12 @@
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use bevy::ecs::system::SystemParamItem;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use lod::gen::{Id, OriginalId};
 use lod::hcsg::shared::{
-	self, GenerationContext, HcsgBounds, HcsgClass, HcsgNode, HcsgStorage, HcsgValue,
-	PresentationPlugin,
+	self, GenerationContext, HcsgClass, HcsgNode, HcsgStorage, HcsgValue, PresentationPlugin,
+	ViewerHcsgBounds,
 };
 use lod::lod_ref::LodRef;
 use lod::scene::{
@@ -129,21 +128,11 @@ impl<R: TerrainStream, T: SemanticLodScene + HcsgValue> SemanticLodScene for Str
 /// Stream `R`'s cells around the [`LodViewer`].
 pub struct StreamRing<R>(PhantomData<fn() -> R>);
 
-impl<R: TerrainStream> HcsgBounds for StreamRing<R> {
+impl<R: TerrainStream> ViewerHcsgBounds for StreamRing<R> {
 	const CLASS: HcsgClass = R::CLASS;
 
-	type Param = Query<'static, 'static, &'static Transform, With<LodViewer>>;
-
-	fn regions(viewers: &SystemParamItem<Self::Param>) -> Vec<Aabb3d> {
-		viewers
-			.iter()
-			.next()
-			.map(|viewer| R::RING.regions_around(viewer.translation))
-			.unwrap_or_default()
-	}
-
-	fn focus(viewers: &SystemParamItem<Self::Param>) -> Option<Vec3> {
-		viewers.iter().next().map(|viewer| viewer.translation)
+	fn regions_around(viewer: Vec3) -> Vec<Aabb3d> {
+		R::RING.regions_around(viewer)
 	}
 }
 

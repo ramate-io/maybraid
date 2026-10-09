@@ -8,14 +8,14 @@
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use bevy::ecs::system::{SystemParam, SystemParamItem};
+use bevy::ecs::system::SystemParam;
 use bevy::math::bounding::Aabb3d;
 use bevy::math::DVec3;
 use bevy::prelude::*;
 use durham::TerrainMeshBuilder;
 use lod::gen::{Id, LodScene, LodSceneLevel, LodSceneStatus, OriginalId};
 use lod::hcsg::shared::{
-	self, GenerationContext, HcsgBounds, HcsgClass, HcsgNode, PresentationPlugin,
+	self, GenerationContext, HcsgClass, HcsgNode, PresentationPlugin, ViewerHcsgBounds,
 };
 use lod::hcsg::universal_bounds;
 use lod::lod_ref::LodRef;
@@ -276,30 +276,23 @@ const GROVE_COLUMN_Y: f32 = 10_000.0;
 pub struct GroveNeighborhood;
 
 impl GroveNeighborhood {
-	fn around(viewers: &Query<&Transform, With<LodViewer>>, radius: f32) -> Option<Aabb3d> {
-		let viewer = viewers.iter().next()?;
+	fn around(viewer: Vec3, radius: f32) -> Aabb3d {
 		let s = DEFAULT_FOREST_GROVE_TILE_XZ;
 		let origin = -DEFAULT_FOREST_EXTENT_XZ * 0.5;
 		let snap = |v: f32| origin + (((v - origin) / s).floor() + 0.5) * s;
-		let center = Vec3::new(snap(viewer.translation.x), 0.0, snap(viewer.translation.z));
-		Some(Aabb3d::from_min_max(
+		let center = Vec3::new(snap(viewer.x), 0.0, snap(viewer.z));
+		Aabb3d::from_min_max(
 			Vec3::new(center.x - radius, -GROVE_COLUMN_Y, center.z - radius),
 			Vec3::new(center.x + radius, GROVE_COLUMN_Y, center.z + radius),
-		))
+		)
 	}
 }
 
-impl HcsgBounds for GroveNeighborhood {
+impl ViewerHcsgBounds for GroveNeighborhood {
 	const CLASS: HcsgClass = HcsgClass::Near;
 
-	type Param = Query<'static, 'static, &'static Transform, With<LodViewer>>;
-
-	fn regions(viewers: &SystemParamItem<Self::Param>) -> Vec<Aabb3d> {
-		Self::around(viewers, GROVE_PRESENT_RADIUS_M).into_iter().collect()
-	}
-
-	fn focus(viewers: &SystemParamItem<Self::Param>) -> Option<Vec3> {
-		viewers.iter().next().map(|viewer| viewer.translation)
+	fn regions_around(viewer: Vec3) -> Vec<Aabb3d> {
+		vec![Self::around(viewer, GROVE_PRESENT_RADIUS_M)]
 	}
 }
 

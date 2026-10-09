@@ -9,7 +9,6 @@ use std::collections::BTreeSet;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use bevy::ecs::system::SystemParamItem;
 use bevy::math::bounding::Aabb3d;
 use bevy::math::DVec3;
 use bevy::prelude::*;
@@ -18,7 +17,7 @@ use furniture_assemblies::FurnitureAssembliesPlugin;
 use furniture_shaders::FurnitureShadersPlugin;
 use lod::gen::{Id, LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus, OriginalId};
 use lod::hcsg::shared::{
-	self, GenerationContext, HcsgBounds, HcsgClass, HcsgNode, PresentationPlugin,
+	self, GenerationContext, HcsgClass, HcsgNode, PresentationPlugin, ViewerHcsgBounds,
 };
 use lod::lod_ref::LodRef;
 use lod::scene::LodSceneRefreshChunkPlugin;
@@ -142,24 +141,17 @@ impl<U: FurnitureSlots> LodScene for Furnished<U> {
 pub struct FurnitureNeighborhood;
 
 impl FurnitureNeighborhood {
-	fn around(viewers: &Query<&Transform, With<LodViewer>>, radius: f32) -> Option<Aabb3d> {
-		let viewer = viewers.iter().next()?;
-		let (ix, iz) = FurnitureCellExtent::cell_index_containing(viewer.translation);
-		Some(xz_radius_aabb(FurnitureCellExtent::from_cell_index(ix, iz).center(), radius))
+	fn around(viewer: Vec3, radius: f32) -> Aabb3d {
+		let (ix, iz) = FurnitureCellExtent::cell_index_containing(viewer);
+		xz_radius_aabb(FurnitureCellExtent::from_cell_index(ix, iz).center(), radius)
 	}
 }
 
-impl HcsgBounds for FurnitureNeighborhood {
+impl ViewerHcsgBounds for FurnitureNeighborhood {
 	const CLASS: HcsgClass = HcsgClass::Near;
 
-	type Param = Query<'static, 'static, &'static Transform, With<LodViewer>>;
-
-	fn regions(viewers: &SystemParamItem<Self::Param>) -> Vec<Aabb3d> {
-		Self::around(viewers, FURNITURE_PRESENT_RADIUS).into_iter().collect()
-	}
-
-	fn focus(viewers: &SystemParamItem<Self::Param>) -> Option<Vec3> {
-		viewers.iter().next().map(|viewer| viewer.translation)
+	fn regions_around(viewer: Vec3) -> Vec<Aabb3d> {
+		vec![Self::around(viewer, FURNITURE_PRESENT_RADIUS)]
 	}
 }
 

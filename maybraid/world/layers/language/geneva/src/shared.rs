@@ -8,7 +8,7 @@
 
 use std::marker::PhantomData;
 
-use bevy::ecs::system::{SystemParam, SystemParamItem};
+use bevy::ecs::system::SystemParam;
 use bevy::math::bounding::Aabb3d;
 use bevy::math::DVec3;
 use bevy::prelude::*;
@@ -21,7 +21,7 @@ use durham::terrain::{
 };
 use lod::gen::{Id, OriginalId};
 use lod::hcsg::shared::{
-	self, Busy, GenerationContext, GenerationPlugin, HcsgBounds, HcsgClass, HcsgRegions,
+	self, Busy, GenerationContext, GenerationPlugin, HcsgClass, HcsgRegions, ViewerHcsgBounds,
 	HcsgStorage, HcsgSystems,
 };
 use lod::hcsg::universal_bounds;
@@ -113,22 +113,11 @@ impl LanguageNeighborhood {
 	}
 }
 
-impl HcsgBounds for LanguageNeighborhood {
+impl ViewerHcsgBounds for LanguageNeighborhood {
 	const CLASS: HcsgClass = HcsgClass::Ambient;
 
-	type Param = Query<'static, 'static, &'static Transform, With<LodViewer>>;
-
-	fn regions(viewers: &SystemParamItem<Self::Param>) -> Vec<Aabb3d> {
-		viewers
-			.iter()
-			.next()
-			.map(|viewer| Self::around(viewer.translation))
-			.into_iter()
-			.collect()
-	}
-
-	fn focus(viewers: &SystemParamItem<Self::Param>) -> Option<Vec3> {
-		viewers.iter().next().map(|viewer| viewer.translation)
+	fn regions_around(viewer: Vec3) -> Vec<Aabb3d> {
+		vec![Self::around(viewer)]
 	}
 }
 
@@ -312,6 +301,7 @@ impl<C: Send + Sync + 'static, W: LanguageGround> Plugin for GenevaPlugin<C, W> 
 mod tests {
 	use std::time::Duration;
 
+	use bevy::ecs::system::SystemParamItem;
 	use bevy::scene::ScenePlugin;
 	use bevy::state::app::StatesPlugin;
 	use chico::{ChicoPresentationPlugin, ChicoRoots, ForestSelection, GroveNeighborhood};
