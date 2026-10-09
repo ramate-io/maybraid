@@ -24,12 +24,11 @@ use durham::{
 	TerrainLayoutPinned, TerrainMeshLodBand, TerrainPresentationAssets, TerrainPresentationDirty,
 	TerrainStampConfigs, WatershedConfigs, WorldBaseTerrain,
 };
-use furnishing_layer_model::Furnishing;
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use game_commands::ui::{GameCommandDrawerConfig, GameCommandStatusText};
 use layer_stack::{GenerationMode, LayerModeConfig, Scheme};
 use lod::hcsg::shared::{HcsgDemand, HcsgStorage, HcsgSystems};
-use maputo::{install_furnishing_stream, Maputo};
+use maputo::MaputoNodes;
 use richmond::DevelopmentConfig;
 use richmond::{
 	install_urbanization_stream, DevelopmentFocus as LayerFocus, Richmond, RichmondConfig,
@@ -51,12 +50,6 @@ impl Scheme<OnTerrain<Durham>> for PlaygroundMode {
 impl Scheme<Urbanization<Richmond<OnTerrain<Durham>>>> for PlaygroundMode {
 	fn install(app: &mut App, _config: &RichmondConfig) {
 		install_urbanization_stream::<PlaygroundMode, OnTerrain<Durham>>(app);
-	}
-}
-
-impl Scheme<Furnishing<Maputo<Urbanization<Richmond<OnTerrain<Durham>>>>>> for PlaygroundMode {
-	fn install(app: &mut App, _config: &()) {
-		install_furnishing_stream::<PlaygroundMode, Urbanization<Richmond<OnTerrain<Durham>>>>(app);
 	}
 }
 
@@ -148,6 +141,7 @@ fn restart_session(
 	demand.advance_epoch();
 	durham.reset(&storage);
 	richmond.reset::<OnTerrain<Durham>>(&storage);
+	MaputoNodes::clear::<Urbanization<Richmond<OnTerrain<Durham>>>>(&storage);
 }
 
 fn setup_lighting(mut commands: Commands) {

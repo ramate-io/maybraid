@@ -6745,6 +6745,7 @@ dependencies = [
  "procedural-common",
  "richmond",
  "terrain-layer-model",
+ "urbanization-cells",
  "urbanization-developments",
  "urbanization-layer-model",
 ]
@@ -9976,7 +9977,6 @@ dependencies = [
  "buildings",
  "clap",
  "durham",
- "furnishing-layer-model",
  "furnishing-layer-presentation",
  "game-commands",
  "layer-stack",

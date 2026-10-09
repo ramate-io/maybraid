@@ -20,7 +20,6 @@ bevy = { workspace = true }
 clap = { workspace = true }
 terrain-shaders = { workspace = true }
 durham = { workspace = true }
-furnishing-layer-model = { workspace = true }
 furnishing-layer-presentation = { workspace = true }
 maputo = { workspace = true }
 game-commands = { workspace = true }

@@ -16,7 +16,6 @@ use lod::{
 };
 use lod_gimme::GimmeLodSceneRefreshPlugin;
 
-use crate::colliders::FurnitureWalkColliderPlugin;
 use crate::host::{spawn_furniture_cell, FurnitureCell};
 use crate::index::FurnitureIndex;
 use crate::stream::FurniturePresentBullseye;
@@ -152,9 +151,6 @@ pub(crate) fn install_maputo_presentation(app: &mut App) {
 	}
 	if !app.is_plugin_added::<LodRefreshCorePlugin>() {
 		app.add_plugins(LodRefreshCorePlugin);
-	}
-	if !app.is_plugin_added::<FurnitureWalkColliderPlugin>() {
-		app.add_plugins(FurnitureWalkColliderPlugin);
 	}
 	app.init_resource::<FurniturePresenterState>()
 		.add_plugins(LodPresentRegionPlugin::<

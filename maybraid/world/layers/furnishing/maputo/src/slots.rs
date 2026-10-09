@@ -6,7 +6,7 @@ use bevy::prelude::Res;
 use building_components::FurnitureNode;
 use furniture_usage_areas::expand_usages;
 use lod::gen::{Id, Version};
-use lod::hcsg::HcsgStorage;
+use lod::hcsg::{shared, HcsgStorage};
 use richmond::{Built, BuiltDevelopment, DevelopmentHosts, RichmondGround};
 use urbanization_layer_model::Urbanization;
 
@@ -29,6 +29,12 @@ pub struct FurnishedDevelopment {
 /// not grow a furniture method for this.
 pub trait FurnitureSlots: Send + Sync + 'static {
 	type Read: ReadOnlySystemParam + 'static;
+
+	/// The shared value one development's slots come from.
+	type Development: shared::GenerationScheme;
+
+	/// `development`'s world-space High slots.
+	fn development_slots(development: &Self::Development) -> Vec<FurnitureNode>;
 
 	/// Cheap overlapping store keys. Expand kits only after the slot cache misses.
 	fn overlapping_tracked(
@@ -55,6 +61,11 @@ pub trait FurnitureSlots: Send + Sync + 'static {
 
 impl<G: RichmondGround> FurnitureSlots for Urbanization<richmond::Richmond<G>> {
 	type Read = Res<'static, HcsgStorage>;
+	type Development = Built<G>;
+
+	fn development_slots(built: &Built<G>) -> Vec<FurnitureNode> {
+		world_slots_of(&built.development)
+	}
 
 	fn overlapping_tracked(
 		read: &SystemParamItem<'_, '_, Self::Read>,
@@ -67,9 +78,7 @@ impl<G: RichmondGround> FurnitureSlots for Urbanization<richmond::Richmond<G>> {
 	}
 
 	fn world_slots(read: &SystemParamItem<'_, '_, Self::Read>, id: Id) -> Vec<FurnitureNode> {
-		read.get::<Built<G>>(id)
-			.map(|built| world_slots_of(&built.development))
-			.unwrap_or_default()
+		read.get::<Built<G>>(id).map(Self::development_slots).unwrap_or_default()
 	}
 }
 
