@@ -1,6 +1,6 @@
+use crate::WorldFurnished;
 use bevy::prelude::*;
 use bevy::text::FontSize;
-use crate::WorldFurnished;
 use combat_hud::ScreenPin;
 use damage::Downed;
 use evasion_intelligence::{EvasionActuator, EvasionIntelligenceUser};

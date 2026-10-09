@@ -45,6 +45,9 @@ struct Subscription {
 	generate: Generate,
 	/// Deduped, focus-sorted ids, once discovery has run.
 	discovered: Option<Vec<Id>>,
+	/// How many ids the first discovery found. Kept while `discovered` is
+	/// taken onto a job, so outstanding counts stay valid mid-quantum.
+	discovered_len: Option<usize>,
 	/// Next index in [`Self::discovered`] to generate.
 	cursor: usize,
 	/// Every discovered id whose value is available, in the order it landed.
@@ -107,6 +110,15 @@ impl Default for DemandShared {
 /// the queue, bank credit, or drop dependencies between fills.
 #[derive(Resource, Clone, Default)]
 pub struct HcsgDemand(Arc<DemandShared>);
+
+/// Outstanding work in a set of [`HcsgClass`]es.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Outstanding {
+	/// Live subscriptions that have not finished their first discovery.
+	pub undiscovered: u64,
+	/// Discovered ids not yet generated, summed across those subscriptions.
+	pub remaining: u64,
+}
 
 /// One read of a subscription's published ids.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -256,6 +268,7 @@ impl HcsgDemand {
 				discover: discover::<T>,
 				generate: generate::<T>,
 				discovered: None,
+				discovered_len: None,
 				cursor: 0,
 				published: Vec::new(),
 				done: false,
@@ -301,6 +314,27 @@ impl HcsgDemand {
 				done: subscription.done,
 			}
 		}))
+	}
+
+	/// Outstanding work in `classes`. A subscription is undiscovered until
+	/// its first discovery finishes. Finished subscriptions (including a
+	/// panic during first discovery) do not count. Replacement and
+	/// unsubscribe drop their counts with the old id.
+	pub fn try_outstanding(&self, classes: &[HcsgClass]) -> Result<Outstanding, Busy> {
+		let state = self.try_lock()?;
+		let mut outstanding = Outstanding::default();
+		for subscription in state.subscriptions.values() {
+			if subscription.done || !classes.contains(&subscription.class) {
+				continue;
+			}
+			match subscription.discovered_len {
+				None => outstanding.undiscovered += 1,
+				Some(n) => {
+					outstanding.remaining += n.saturating_sub(subscription.cursor) as u64;
+				}
+			}
+		}
+		Ok(outstanding)
 	}
 
 	/// Whether `id` still exists; `false` once replaced, removed, or dropped by
@@ -391,10 +425,16 @@ impl HcsgDemand {
 			lock_mutex(&reach).extend(progress.reached);
 		}
 		if let Some(subscription) = state.subscriptions.get_mut(&id) {
+			if let Some(ids) = &progress.discovered {
+				subscription.discovered_len = Some(ids.len());
+			}
 			subscription.discovered = progress.discovered;
 			subscription.cursor = progress.cursor;
 			if progress.done {
 				subscription.done = true;
+				if subscription.discovered_len.is_none() {
+					subscription.discovered_len = Some(0);
+				}
 			} else if progress.cost > 0.0 {
 				subscription.pass += progress.cost / f64::from(subscription.class.weight());
 			}
