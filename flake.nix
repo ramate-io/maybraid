@@ -76,47 +76,8 @@
           cargo = rust;
           rustc = rust;
         };
-
-        maybraidSrc = craneLib.cleanCargoSource (craneLib.path ./.);
-        maybraidArgs = {
-          pname = "maybraid";
-          src = maybraidSrc;
-          cargoExtraArgs = "-p maybraid --locked";
-          doCheck = false;
-        };
-
-        buildLinux = pkgs.writeShellApplication {
-          name = "maybraid-build-linux";
-          runtimeInputs = [ pkgs.docker pkgs.git pkgs.coreutils ];
-          text = ''
-            export MAYBRAID_ROOT="$(git rev-parse --show-toplevel)"
-            exec ${./packaging/scripts/build-linux.sh}
-          '';
-        };
-
-      in rec {
-        packages = {
-          build-linux = buildLinux;
-        } // pkgs.lib.optionalAttrs pkgs.stdenv.isDarwin rec {
-          maybraid-macos = craneLib.buildPackage (maybraidArgs // {
-            cargoArtifacts = craneLib.buildDepsOnly (maybraidArgs // {
-              stdenv = pkgs.stdenvNoCC;
-            });
-            stdenv = pkgs.stdenvNoCC;
-            dontFixup = true;
-            MACOSX_DEPLOYMENT_TARGET = "13.0";
-            preConfigure = ''
-              source ${./packaging/macos/xcode.sh}
-            '';
-          });
-          default = maybraid-macos;
-        };
-
-        apps.build-linux = {
-          type = "app";
-          program = "${buildLinux}/bin/maybraid-build-linux";
-        };
-
+    
+      in {
         devShells = rec {
           default = docker-build;
           docker-build = pkgs.mkShell {
@@ -132,8 +93,9 @@
 
             LD_LIBRARY_PATH = "${pkgs.stdenv.cc.cc.lib}/lib/";
 
-            # rustc's Darwin target always passes `-liconv`. Development only;
-            # release binaries are built by packages.maybraid-macos (Apple SDK).
+            # rustc's Darwin target always passes `-liconv`. The Nix `cc`
+            # wrapper does not reliably inject `libiconv` into rustc's own
+            # link line (and Xcode `DEVELOPER_DIR` can hide the SDK copy).
             RUSTFLAGS = pkgs.lib.optionalString pkgs.stdenv.isDarwin
               "-L native=${pkgs.libiconv}/lib";
             LIBRARY_PATH = pkgs.lib.optionalString pkgs.stdenv.isDarwin

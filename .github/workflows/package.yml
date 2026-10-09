@@ -1,6 +1,10 @@
-# Unsigned packages: macOS DMG, Windows zip, Steam depot, AppImage.
-# Linux compiles once in the pinned sniper image, then packages twice.
-# Trigger: main, published release, workflow_dispatch, ci-action::package.
+# Unsigned game packages: macOS DMG, Windows zip, Linux tarballs (Steam + general).
+# Release builds use each platform's native Rust toolchain; Nix is for development.
+# Runs on main, published releases, workflow_dispatch, and ci-action::package.
+#
+# Push is branch-only so creating a tag does not start a second run that
+# shares a ref with `release` and cancels the upload (v0.1.0-playtest-001).
+# Concurrency is also keyed by event so a later push cannot cancel a release.
 
 name: Package
 
@@ -29,128 +33,95 @@ jobs:
     runs-on: ubuntu-22.04
     outputs:
       version: ${{ steps.ver.outputs.version }}
+      rust: ${{ steps.ver.outputs.rust }}
     steps:
       - uses: actions/checkout@v4
       - id: ver
-        run: echo "version=$(packaging/version.sh)" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "version=$(packaging/version.sh)" >> "$GITHUB_OUTPUT"
+          echo "rust=$(packaging/version.sh --rust)" >> "$GITHUB_OUTPUT"
 
-  build-linux:
+  linux:
     needs: version
     runs-on: ubuntu-22.04
     timeout-minutes: 120
-    steps:
-      - uses: actions/checkout@v4
-      - run: mkdir -p target/sniper-release
-      - uses: actions/cache@v4
-        with:
-          path: target/sniper-release
-          key: sniper-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml', 'packaging/linux/**') }}
-      - run: packaging/scripts/build-linux.sh
-      - uses: actions/upload-artifact@v4
-        with:
-          name: linux-binary-${{ needs.version.outputs.version }}
-          path: target/sniper-release/x86_64-unknown-linux-gnu/release/maybraid
-          retention-days: 1
-
-  package-linux:
-    needs: [version, build-linux]
-    runs-on: ubuntu-22.04
-    timeout-minutes: 60
-    strategy:
-      matrix:
-        format: [steam, appimage]
+    # Steam Linux Runtime 3.0 (sniper) SDK, pinned by manifest digest.
+    container: registry.gitlab.steamos.cloud/steamrt/sniper/sdk@sha256:1c33c507bc75d012e77df5727f93b0d5b8c3f7c8d4142ba5f7a16882cc92e014
     env:
       VERSION: ${{ needs.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: dtolnay/rust-toolchain@master
         with:
-          name: linux-binary-${{ needs.version.outputs.version }}
-          path: target/sniper-release/x86_64-unknown-linux-gnu/release/
-      - run: chmod +x target/sniper-release/x86_64-unknown-linux-gnu/release/maybraid
-      - if: matrix.format == 'steam'
-        run: packaging/scripts/package-steam.sh
-      - if: matrix.format == 'appimage'
-        env:
-          APPIMAGE_EXTRACT_AND_RUN: "1"
-        run: packaging/scripts/package-appimage.sh
-      - if: matrix.format == 'steam'
-        uses: actions/upload-artifact@v4
+          toolchain: ${{ needs.version.outputs.rust }}
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build -p maybraid --release --locked
+      - run: packaging/scripts/package-linux.sh
+      - run: packaging/smoke.sh "dist/Maybraid-$VERSION-linux-x64/maybraid"
+      - uses: actions/upload-artifact@v4
         with:
-          name: maybraid-${{ needs.version.outputs.version }}-steam-linux-x64
-          path: dist/*.tar.xz
+          name: maybraid-${{ env.VERSION }}-steam-linux-x64
+          path: dist/*-steam-linux-x64.tar.xz
           if-no-files-found: error
           retention-days: 14
-      - if: matrix.format == 'appimage'
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
-          name: maybraid-${{ needs.version.outputs.version }}-linux-x64-appimage
-          path: dist/*.AppImage
+          name: maybraid-${{ env.VERSION }}-linux-x64
+          path: dist/Maybraid-${{ env.VERSION }}-linux-x64.tar.xz
           if-no-files-found: error
           retention-days: 14
-      - if: matrix.format == 'steam'
-        run: packaging/smoke.sh dist/Maybraid-${{ needs.version.outputs.version }}-steam-linux-x64/maybraid
-      - if: matrix.format == 'appimage'
-        env:
-          APPIMAGE_EXTRACT_AND_RUN: "1"
-        run: packaging/smoke.sh dist/Maybraid-${{ needs.version.outputs.version }}-linux-x64.AppImage
 
-  package-macos:
+  macos:
     needs: version
     runs-on: macos-14
     timeout-minutes: 180
     env:
       VERSION: ${{ needs.version.outputs.version }}
+      MACOSX_DEPLOYMENT_TARGET: "13.0"
     steps:
       - uses: actions/checkout@v4
-      - uses: DeterminateSystems/nix-installer-action@main
-      - uses: DeterminateSystems/magic-nix-cache-action@main
-      - name: Build with Crane + selected Xcode
-        run: |
-          xcodebuild -version
-          nix build .#maybraid-macos --impure --option sandbox false -L
-      - run: BINARY=result/bin/maybraid packaging/scripts/package-macos.sh
-      - run: packaging/validate.sh macho dist/Maybraid.app/Contents/MacOS/maybraid
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ needs.version.outputs.rust }}
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build -p maybraid --release --locked
+      - run: packaging/scripts/package-macos.sh
       - run: packaging/smoke.sh dist/Maybraid.app/Contents/MacOS/maybraid
       - uses: actions/upload-artifact@v4
         with:
-          name: maybraid-${{ needs.version.outputs.version }}-macos-arm64
+          name: maybraid-${{ env.VERSION }}-macos-arm64
           path: dist/*.dmg
           if-no-files-found: error
           retention-days: 14
 
-  package-windows:
+  windows:
     needs: version
     runs-on: windows-latest
     timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
     env:
       VERSION: ${{ needs.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
-      - id: rust
-        shell: bash
-        run: echo "channel=$(packaging/version.sh --rust)" >> "$GITHUB_OUTPUT"
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: ${{ steps.rust.outputs.channel }}
+          toolchain: ${{ needs.version.outputs.rust }}
           targets: x86_64-pc-windows-msvc
       - uses: Swatinem/rust-cache@v2
-        with:
-          key: windows-x64-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
-      - shell: bash
-        run: cargo build -p maybraid --release --locked --target x86_64-pc-windows-msvc
-      - shell: bash
-        run: packaging/scripts/package-windows.sh
+      - run: cargo build -p maybraid --release --locked --target x86_64-pc-windows-msvc
+      - run: packaging/scripts/package-windows.sh
       - uses: actions/upload-artifact@v4
         with:
-          name: maybraid-${{ needs.version.outputs.version }}-windows-x64
+          name: maybraid-${{ env.VERSION }}-windows-x64
           path: dist/*.zip
           if-no-files-found: error
           retention-days: 14
 
   publish-release:
     if: github.event_name == 'release'
-    needs: [build-linux, package-linux, package-macos, package-windows]
+    needs: [linux, macos, windows]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -161,4 +132,4 @@ jobs:
       - env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: gh release upload "${{ github.event.release.tag_name }}" artifacts/*.{dmg,zip,tar.xz,AppImage} --clobber
+        run: gh release upload "${{ github.event.release.tag_name }}" artifacts/*.{dmg,zip,tar.xz} --clobber

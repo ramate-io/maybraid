@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Assemble Maybraid.app and a UDZO DMG. Does not compile.
 #
-#   BINARY=result/bin/maybraid packaging/scripts/package-macos.sh
+#   MACOSX_DEPLOYMENT_TARGET=13.0 cargo build -p maybraid --release --locked
+#   packaging/scripts/package-macos.sh
 #
 # Unsigned unless SIGN_IDENTITY is set. SKIP_NOTARY=1 signs only.
 set -euo pipefail
@@ -16,7 +17,7 @@ DIST="$ROOT/dist"
 APP="$DIST/Maybraid.app"
 DMG_STAGE="$DIST/dmg-root"
 DMG="$DIST/Maybraid-${VERSION}-macos-arm64.dmg"
-BINARY="${BINARY:-$ROOT/result/bin/maybraid}"
+BINARY="${BINARY:-$ROOT/target/release/maybraid}"
 
 if [[ "$(uname -s)" != "Darwin" ]]; then
 	echo "package-macos.sh must run on macOS." >&2
@@ -24,7 +25,7 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
 fi
 if [[ ! -f "$BINARY" ]]; then
 	echo "package-macos: binary not found: $BINARY" >&2
-	echo "   nix build .#maybraid-macos --impure --option sandbox false" >&2
+	echo "   Build outside nix develop; see packaging/README.md" >&2
 	exit 1
 fi
 if [[ ! -d "$TEMPLATE" || ! -d "$ASSETS" ]]; then

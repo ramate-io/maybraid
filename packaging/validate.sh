@@ -40,6 +40,12 @@ case "$kind" in
 			echo "validate: unexpected interpreter: $interp" >&2
 			exit 1
 		fi
+		glibc="$(readelf -V "$bin" | grep -o 'GLIBC_[0-9.]*' | sed 's/GLIBC_//' | sort -Vu | tail -1)"
+		echo "    newest glibc symbol: ${glibc:-none}"
+		if [[ -n "$glibc" && "$(printf '%s\n2.31\n' "$glibc" | sort -V | tail -1)" != "2.31" ]]; then
+			echo "validate: needs glibc $glibc; Steam Linux Runtime 3.0 provides 2.31" >&2
+			exit 1
+		fi
 		if readelf -d "$bin" | grep -E 'RPATH|RUNPATH' | grep -Eq '/nix/store|/home/'; then
 			echo "validate: forbidden rpath/runpath" >&2
 			exit 1

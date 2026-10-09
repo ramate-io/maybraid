@@ -1,56 +1,57 @@
 # Packaging
 
-Declared builds and small assembly scripts. `nix develop` is the development
-shell only.
+`nix develop` is the development shell. Release builds use each platform's
+native Rust toolchain (channel from `rust-toolchain.toml`) and do not go through
+Nix. The Nix dev shell points macOS at Nix's libiconv, which is why release
+binaries must be built outside it.
 
-| Responsibility | Owner |
-|---|---|
-| macOS compile | `nix build .#maybraid-macos` (Crane + selected Xcode) |
-| Linux compile | `packaging/linux/Dockerfile` (pinned sniper SDK + pinned Rust) |
-| AppImage libs | [linuxdeploy](https://docs.appimage.org/packaging-guide/from-source/linuxdeploy-user-guide.html) |
-| macOS DMG | `packaging/scripts/package-macos.sh` (Apple tools) |
-| Windows zip | native MSVC `cargo` + `package-windows.sh` |
-| Orchestration | `.github/workflows/package.yml` |
+| Platform | Compile | Package |
+|---|---|---|
+| macOS arm64 | `cargo` + Apple SDK, `MACOSX_DEPLOYMENT_TARGET=13.0` | `package-macos.sh` → DMG |
+| Linux x86_64 | `cargo` in the Steam Linux Runtime 3.0 (sniper) SDK | `package-linux.sh` → Steam + general `tar.xz` |
+| Windows x64 | `cargo` + MSVC | `package-windows.sh` → zip |
 
-Version is `packaging/version.sh`. Rust channel is `rust-toolchain.toml`.
-Dependency checks: `packaging/validate.sh`. Startup: `packaging/smoke.sh`.
+Shared helpers: `version.sh` (artifact version, `--rust` for the channel),
+`validate.sh` (linked-library checks), `smoke.sh` (bounded startup from `/tmp`;
+it catches loader errors, not GPU problems).
 
-## macOS ARM64
+## macOS arm64
 
-Needs **Xcode 15+** at `$MAYBRAID_XCODE` (default `/Applications/Xcode.app`).
-Metal (`xcrun metal`) is that Xcode, not Nix. The build is impure:
-
-```bash
-nix build .#maybraid-macos --impure --option sandbox false
-BINARY=result/bin/maybraid packaging/scripts/package-macos.sh
-packaging/validate.sh macho dist/Maybraid.app/Contents/MacOS/maybraid
-```
-
-`MACOSX_DEPLOYMENT_TARGET` is 13.0 (same as `LSMinimumSystemVersion`).
-libiconv comes from the Apple SDK. `dontFixup` keeps Nix from rewriting rpaths.
-
-Unsigned unless `SIGN_IDENTITY` is set. See `identity.local.example.md`.
-
-## Linux x86_64 (one ELF, two packages)
+Run from a normal terminal, not `nix develop`:
 
 ```bash
-nix run .#build-linux
-# or: packaging/scripts/build-linux.sh
-packaging/scripts/package-steam.sh
-packaging/scripts/package-appimage.sh
+MACOSX_DEPLOYMENT_TARGET=13.0 cargo build -p maybraid --release --locked
+packaging/scripts/package-macos.sh
 ```
 
-The Dockerfile installs Rust at image-build time. `build-linux.sh` is one
-`docker build` plus one `cargo build` in that image. Host/Nix library paths
-are not passed in.
+`13.0` matches `LSMinimumSystemVersion`. `validate.sh macho` rejects links to
+`/nix/store`, Homebrew, or `/usr/local`. Unsigned unless `SIGN_IDENTITY` is
+set; see `identity.local.example.md`.
 
-- `Maybraid-<ver>-steam-linux-x64.tar.xz` — Steam depot staging. Steamworks
-  must launch with **Steam Linux Runtime 3.0 (sniper)**. Extracting the
-  archive does not install that runtime.
-- `Maybraid-<ver>-linux-x64.AppImage` — same ELF. linuxdeploy runs *inside*
-  the sniper SDK so bundled libs match the compile. libc/libstdc++/GPU
-  drivers stay on the host. Baseline: glibc 2.31+ (Ubuntu 20.04 / Debian 11
-  / SteamOS 3).
+## Linux x86_64
+
+Build once inside the pinned sniper SDK (same digest as CI):
+
+```bash
+docker run --rm -it -v "$PWD:/src" -w /src \
+  registry.gitlab.steamos.cloud/steamrt/sniper/sdk@sha256:1c33c507bc75d012e77df5727f93b0d5b8c3f7c8d4142ba5f7a16882cc92e014 \
+  bash -c 'curl -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain "$(packaging/version.sh --rust)" \
+    && . "$HOME/.cargo/env" \
+    && cargo build -p maybraid --release --locked \
+    && packaging/scripts/package-linux.sh'
+```
+
+The same binary is packaged twice:
+
+- `Maybraid-<ver>-steam-linux-x64.tar.xz` is for Steam depot staging.
+  Steamworks must launch it with **Steam Linux Runtime 3.0 (sniper)**.
+  Extracting the archive does not install that runtime.
+- `Maybraid-<ver>-linux-x64.tar.xz` is the direct download. It needs glibc
+  2.31+ (Ubuntu 20.04, Debian 11, SteamOS 3, or newer), ALSA, udev, and a
+  Vulkan driver from the host.
+
+`validate.sh elf` fails if the binary needs a glibc newer than 2.31 or points
+at `/nix/store`.
 
 ## Windows x64
 
@@ -59,20 +60,21 @@ cargo build -p maybraid --release --locked --target x86_64-pc-windows-msvc
 packaging/scripts/package-windows.sh
 ```
 
-Dynamic MSVC CRT: install the
+Uses the dynamic MSVC CRT. Install the
 [VC++ 2015–2022 x64 redistributable](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist)
 if `VCRUNTIME140.dll` is missing.
 
 ## CI
 
 [`.github/workflows/package.yml`](../.github/workflows/package.yml) runs on
-`main`, published releases, `workflow_dispatch`, and `ci-action::package`.
-One `version` job; Linux compiles once; smoke/validate are separate steps.
+`main`, published releases, `workflow_dispatch`, and `ci-action::package`. Each
+platform job runs the commands above. Published releases also get the
+artifacts attached.
 
 | Variable | Role |
 |---|---|
 | `MAYBRAID_ASSETS` | Bevy asset root |
 | `MAYBRAID_SAVES` | Save directory |
 | `MAYBRAID_PACKAGED` | Force user-data saves |
-| `MAYBRAID_XCODE` | Xcode `.app` for release builds |
-| `MAYBRAID_LINUX_BIN` | Override the sniper ELF |
+| `BINARY` | Override the binary a package script picks up |
+| `VERSION` | Override the artifact version |

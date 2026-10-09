@@ -185,7 +185,7 @@ Prefer **`Result`** propagation instead: write helpers that return something lik
 
 When working on game packaging or scripts in `packaging/`, include the **`ci-action::package`** marker in your commit message to trigger the [Package workflow](../.github/workflows/package.yml) on your PR branch. Without it, Package only runs on `main`, published releases, and manual `workflow_dispatch`.
 
-The [Package workflow](../.github/workflows/package.yml) builds unsigned macOS DMG, Windows zip, Linux Steam depot, and standalone AppImage artifacts. It runs on `main` and published releases automatically, but for feature branches you must opt in with the commit message marker. Local reproduction commands are in [packaging/README.md](packaging/README.md).
+The [Package workflow](../.github/workflows/package.yml) builds unsigned macOS DMG, Windows zip, Linux Steam depot, and general Linux tarball artifacts. It runs on `main` and published releases automatically, but for feature branches you must opt in with the commit message marker. Local reproduction commands are in [packaging/README.md](packaging/README.md).
 
 To include the marker, add an `## Actions` section after `## Agent Dialogue` in your commit message file:
 
@@ -202,7 +202,7 @@ When you commit with `git commit-std`, the full commit message file (including t
 **When to use `ci-action::package`:**
 - Changes to `packaging/scripts/` or packaging configuration
 - Modifications to build flags or linker settings that affect release binaries
-- Updates to the flake or CI that could impact package outputs
+- Updates to the Package workflow or toolchain pins that could impact package outputs
 - Any change where you need to verify the packaged artifacts work correctly
 
 Without the marker, your CI checks will pass but no packages will be built, and packaging regressions may only surface later on `main`.
