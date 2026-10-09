@@ -1479,6 +1479,7 @@ fn death_xz(pending: Option<&WorldPlayerRespawnState>) -> Option<Vec2> {
 		.map(|pending| pending.death_at.xz())
 }
 
+#[cfg(test)]
 fn player_map_xz(live: Option<&Transform>, death: Option<Vec2>) -> Option<Vec2> {
 	live.map(|transform| transform.translation.xz()).or(death)
 }
@@ -1902,10 +1903,9 @@ fn draw_highlighted_poi(
 	}
 	gizmos.linestrip(points, TEXT_YELLOW);
 	if let Some(death) = death_xz(pending.as_deref()) {
-		if let (Ok(from), Ok(to)) = (
-			pin_world(&surface, death),
-			pin_world(&surface, record.position.xz()),
-		) {
+		if let (Ok(from), Ok(to)) =
+			(pin_world(&surface, death), pin_world(&surface, record.position.xz()))
+		{
 			gizmos.line(from, to, TEXT_YELLOW_FAINT);
 		}
 	}
