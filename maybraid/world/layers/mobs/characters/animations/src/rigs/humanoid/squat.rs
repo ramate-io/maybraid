@@ -4,7 +4,6 @@ use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
 use character_rigs::Side;
 
 use crate::animations::Squat;
-use crate::rigs::humanoid::apply::{apply_hip_fold, apply_leg, apply_spine_pitch};
 use crate::{Animation, Effects};
 
 impl Animation<HumanoidV0Rig> for Squat {
@@ -13,16 +12,16 @@ impl Animation<HumanoidV0Rig> for Squat {
 		let femur_swing = self.femur_swing(progress);
 		let shin_flex = self.shin_flex(progress);
 
-		apply_leg(&mut pose, Side::Left, femur_swing, shin_flex);
-		apply_leg(&mut pose, Side::Right, femur_swing, shin_flex);
+		pose.apply_leg(Side::Left, femur_swing, shin_flex);
+		pose.apply_leg(Side::Right, femur_swing, shin_flex);
 		let hip = self.hip_fold(progress);
 		if hip.abs() > f32::EPSILON {
-			apply_hip_fold(&mut pose, Side::Left, hip);
-			apply_hip_fold(&mut pose, Side::Right, hip);
+			pose.apply_hip_fold(Side::Left, hip);
+			pose.apply_hip_fold(Side::Right, hip);
 		}
 		// Held and looping squat share the same sagittal stack. The authored
 		// angle is the total fold, split across root, lumbar, mid-back, and upper back.
-		apply_spine_pitch(&mut pose, self.root_swing(progress));
+		pose.apply_spine_pitch(self.root_swing(progress));
 		rig.write_pose(&pose);
 	}
 
