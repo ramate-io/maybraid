@@ -274,7 +274,7 @@ impl<C: Send + Sync + 'static, P: CanopyProxy, G: ForestGround> Plugin
 			app.add_plugins(TerrainChunkRefPlugin::<G::Mesh>::default());
 		}
 		app.init_resource::<ForestSelection>();
-		app.add_plugins(PresentationPlugin::<C, BumpedOut<P, G>>::default());
+		app.add_plugins(PresentationPlugin::<C, BumpedOut<P, G>>::without_chunk_refresh());
 		if !app
 			.is_plugin_added::<LodSceneRefreshRegionPlugin<BumpOutRing<P>, With<LodViewer>, BumpOutRing<P>>>(
 			) {

@@ -22,7 +22,6 @@ use lod::hcsg::shared::{
 	self, GenerationContext, HcsgBounds, HcsgClass, HcsgNode, PresentationPlugin,
 };
 use lod::lod_ref::LodRef;
-use lod::scene::LodSceneRefreshChunkPlugin;
 use lod::LodViewer;
 use mob_intelligence::{MemberOf, Mob};
 use richmond::{column_bounds, Built, DevelopmentHosts, Richmond, RichmondGround};
@@ -291,9 +290,6 @@ impl<C, G> Default for BarkingPresentationPlugin<C, G> {
 impl<C: Send + Sync + 'static, G: MobGround> Plugin for BarkingPresentationPlugin<C, G> {
 	fn build(&self, app: &mut App) {
 		app.add_plugins(PresentationPlugin::<C, PlacedMobCell<G>>::default());
-		if !app.is_plugin_added::<LodSceneRefreshChunkPlugin<HcsgNode<PlacedMobCell<G>>>>() {
-			app.add_plugins(LodSceneRefreshChunkPlugin::<HcsgNode<PlacedMobCell<G>>>::default());
-		}
 	}
 }
 

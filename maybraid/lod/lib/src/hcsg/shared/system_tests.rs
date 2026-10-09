@@ -61,6 +61,33 @@ fn present_terrain(regions: Vec<Aabb3d>) -> App {
 	app(PresentationPlugin::<WindowBounds, Terrain>::default(), regions)
 }
 
+#[test]
+fn presentation_plugin_registers_chunk_refresh_by_default() {
+	let mut app = App::new();
+	app.add_plugins(MinimalPlugins);
+	app.add_plugins(PresentationPlugin::<WindowBounds, Terrain>::default());
+	assert!(app.is_plugin_added::<LodSceneRefreshChunkPlugin<HcsgNode<Terrain>>>());
+}
+
+#[test]
+fn presentation_plugin_without_chunk_refresh_skips_chunk_refresh() {
+	let mut app = App::new();
+	app.add_plugins(MinimalPlugins);
+	app.add_plugins(PresentationPlugin::<WindowBounds, Terrain>::without_chunk_refresh());
+	assert!(!app.is_plugin_added::<LodSceneRefreshChunkPlugin<HcsgNode<Terrain>>>());
+}
+
+struct OtherPresentationChannel;
+
+#[test]
+fn presentation_plugin_chunk_refresh_is_shared_across_channels() {
+	let mut app = App::new();
+	app.add_plugins(MinimalPlugins);
+	app.add_plugins(PresentationPlugin::<WindowBounds, Terrain>::default());
+	app.add_plugins(PresentationPlugin::<OtherPresentationChannel, Terrain>::default());
+	assert!(app.is_plugin_added::<LodSceneRefreshChunkPlugin<HcsgNode<Terrain>>>());
+}
+
 fn set_window(app: &mut App, regions: Vec<Aabb3d>) {
 	app.world_mut().resource_mut::<Window>().0 = regions;
 }
@@ -281,7 +308,6 @@ fn a_new_session_retires_hosts_it_does_not_publish() -> anyhow::Result<()> {
 #[test]
 fn presented_hosts_fulfill_through_the_lod_pipeline() -> anyhow::Result<()> {
 	let mut app = present_terrain(vec![span(0.2, 2.6)]);
-	app.add_plugins(LodSceneRefreshChunkPlugin::<HcsgNode<Terrain>>::default());
 	let at = Transform::from_translation(Vec3::new(1.0, 0.0, 0.0));
 	app.world_mut()
 		.spawn((LodViewer, at, LodNodePose { previous: at, current: at }));

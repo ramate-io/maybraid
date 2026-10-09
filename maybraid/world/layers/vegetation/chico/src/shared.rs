@@ -19,7 +19,6 @@ use lod::hcsg::shared::{
 };
 use lod::hcsg::universal_bounds;
 use lod::lod_ref::LodRef;
-use lod::scene::LodSceneRefreshChunkPlugin;
 use lod::LodViewer;
 use render_item::mesh::{IdentifiedMesh, MeshBuilder};
 use render_item::NormalizeChunk;
@@ -357,9 +356,6 @@ impl<C: Send + Sync + 'static, G: ForestGround> Plugin for ChicoPresentationPlug
 		register_vegetation_view(app);
 		app.init_resource::<ForestSelection>();
 		app.add_plugins(PresentationPlugin::<C, GrownGrove<G>>::default());
-		if !app.is_plugin_added::<LodSceneRefreshChunkPlugin<HcsgNode<GrownGrove<G>>>>() {
-			app.add_plugins(LodSceneRefreshChunkPlugin::<HcsgNode<GrownGrove<G>>>::default());
-		}
 	}
 }
 

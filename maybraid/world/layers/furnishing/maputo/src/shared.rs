@@ -21,7 +21,6 @@ use lod::hcsg::shared::{
 	self, GenerationContext, HcsgBounds, HcsgClass, HcsgNode, PresentationPlugin,
 };
 use lod::lod_ref::LodRef;
-use lod::scene::LodSceneRefreshChunkPlugin;
 use lod::{LodViewer, SceneChunk};
 
 use crate::cell::{
@@ -204,9 +203,6 @@ impl<C: Send + Sync + 'static, U: FurnitureSlots> Plugin for MaputoPresentationP
 			app.add_plugins(FurnitureWireframePlugin);
 		}
 		app.add_plugins(PresentationPlugin::<C, Furnished<U>>::default());
-		if !app.is_plugin_added::<LodSceneRefreshChunkPlugin<HcsgNode<Furnished<U>>>>() {
-			app.add_plugins(LodSceneRefreshChunkPlugin::<HcsgNode<Furnished<U>>>::default());
-		}
 	}
 }
 

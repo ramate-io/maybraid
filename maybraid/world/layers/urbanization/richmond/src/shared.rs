@@ -11,7 +11,6 @@ use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use lod::hcsg::shared::{self, HcsgBounds, HcsgClass, HcsgNode, PresentationPlugin};
 use lod::hcsg::universal_bounds;
-use lod::scene::LodSceneRefreshChunkPlugin;
 use lod::LodViewer;
 use urbanization_cells::{UrbanizationExtent, UrbanizationNodes, UrbanizationSelection};
 
@@ -65,9 +64,6 @@ impl<C: Send + Sync + 'static, G: RichmondGround> Plugin for BuiltPresentationPl
 	fn build(&self, app: &mut App) {
 		register_richmond_plugin(app);
 		app.add_plugins(PresentationPlugin::<C, Built<G>>::default());
-		if !app.is_plugin_added::<LodSceneRefreshChunkPlugin<HcsgNode<Built<G>>>>() {
-			app.add_plugins(LodSceneRefreshChunkPlugin::<HcsgNode<Built<G>>>::default());
-		}
 	}
 }
 
@@ -90,9 +86,6 @@ impl<C: Send + Sync + 'static, G: RichmondGround> Plugin for RichmondPresentatio
 			BuiltPresentationPlugin::<C, G>::default(),
 			PresentationPlugin::<C, PaddedTerrain<G>>::default(),
 		));
-		if !app.is_plugin_added::<LodSceneRefreshChunkPlugin<HcsgNode<PaddedTerrain<G>>>>() {
-			app.add_plugins(LodSceneRefreshChunkPlugin::<HcsgNode<PaddedTerrain<G>>>::default());
-		}
 	}
 }
 
