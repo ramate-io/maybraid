@@ -4,13 +4,14 @@
 use crate::flow::GameFlow;
 use crate::shell::ShellRoute;
 use bevy::prelude::*;
-use maybraid_world::{HcsgClass, HcsgDemand, LodJobCounter, Outstanding, WorldSurfaceReady};
+use maybraid_world::{
+	FirstWave, LodJobCounter, UnitXTile, WorldSurfaceReady, FIRST_WAVE_JOB_THRESHOLD,
+};
 use menu_screens::{request_loading_explainer, request_loading_progress};
 
 /// Remaining Near HCSG ids plus pending-root tickets that still count as
-/// "the first wave is finishing." Far, background, and ambient never hold
-/// the gate. Streaming continues after unveil.
-pub const UNVEIL_JOB_THRESHOLD: u64 = 16;
+/// "the first wave is finishing." Same threshold the spawn picker reads.
+pub const UNVEIL_JOB_THRESHOLD: u64 = FIRST_WAVE_JOB_THRESHOLD;
 /// Frames the counter must stay at or below [`UNVEIL_JOB_THRESHOLD`] after
 /// work has been observed.
 pub const UNVEIL_QUIET_FRAMES: u32 = 2;
@@ -110,32 +111,33 @@ pub(crate) fn disarm_first_load(mut commands: Commands) {
 	commands.remove_resource::<FirstLoadGate>();
 }
 
-fn near_outstanding(demand: Option<&HcsgDemand>) -> Outstanding {
-	let Some(demand) = demand else {
-		return Outstanding::default();
-	};
-	demand
-		.try_outstanding(&[HcsgClass::Near])
-		.unwrap_or(Outstanding { undiscovered: 1, remaining: 0 })
-}
-
 pub(crate) fn finish_world_loading(
 	mut commands: Commands,
 	ready: Res<WorldSurfaceReady>,
 	jobs: Option<Res<LodJobCounter>>,
-	demand: Option<Res<HcsgDemand>>,
+	demand: Option<Res<maybraid_world::HcsgDemand>>,
+	mut wave: Option<ResMut<FirstWave>>,
 	mut gate: Option<ResMut<FirstLoadGate>>,
 	time: Res<Time>,
 	mut route: ShellRoute,
 ) {
 	let surface_ready = ready.0;
-	let near = near_outstanding(demand.as_deref());
 	let jobs = jobs.as_deref().map(LodJobCounter::active).unwrap_or(0);
-	let active = jobs.saturating_add(near.remaining);
-	let undiscovered = near.undiscovered > 0;
+	let mut sampled = FirstWave::sample(demand.as_deref(), jobs);
+	if let Some(live) = wave.as_deref() {
+		sampled.passed = live.passed;
+	}
+	let active = sampled.remaining;
+	let undiscovered = sampled.undiscovered > 0;
+	let unveil = |wave: &mut Option<ResMut<FirstWave>>, route: &mut ShellRoute| {
+		if let Some(live) = wave.as_deref_mut() {
+			live.passed = true;
+		}
+		route.enter(GameFlow::World);
+	};
 	let Some(gate) = gate.as_deref_mut() else {
-		if surface_ready && !undiscovered && active <= UNVEIL_JOB_THRESHOLD {
-			route.enter(GameFlow::World);
+		if surface_ready && sampled.ready() {
+			unveil(&mut wave, &mut route);
 		}
 		return;
 	};
@@ -144,7 +146,7 @@ pub(crate) fn finish_world_loading(
 	request_loading_progress(&mut commands, gate.progress(surface_ready, active));
 	request_loading_explainer(&mut commands, gate.explainer(surface_ready, active));
 	if gate.should_unveil(surface_ready, active, undiscovered, now) {
-		route.enter(GameFlow::World);
+		unveil(&mut wave, &mut route);
 	}
 }
 
@@ -231,45 +233,7 @@ mod tests {
 		assert!(!gate.should_unveil(true, 0, true, UNVEIL_ARM_GRACE_SECS + 1.0));
 	}
 
-	#[test]
-	fn outstanding_ambient_work_does_not_block_unveil() {
-		let gate = gate_at(0.0);
-		assert!(
-			gate.should_unveil(true, 0, false, UNVEIL_ARM_GRACE_SECS),
-			"ambient remaining is not part of active"
-		);
-	}
-
-	struct NearTile;
-
-	impl lod::hcsg::shared::GenerationScheme for NearTile {
-		fn original_ids_for(
-			_: &mut lod::hcsg::shared::GenerationContext,
-			region: bevy::math::bounding::Aabb3d,
-		) -> Vec<lod::gen::OriginalId> {
-			let start = region.min.x.floor() as i32;
-			let end = region.max.x.ceil() as i32;
-			(start..end)
-				.map(|x| {
-					let bounds = bevy::math::bounding::Aabb3d::from_min_max(
-						Vec3::new(x as f32, 0.0, 0.0),
-						Vec3::new(x as f32 + 1.0, 1.0, 1.0),
-					);
-					lod::gen::OriginalId::new(lod::gen::Id::from_cell(bounds))
-				})
-				.collect()
-		}
-
-		fn build_with_id(
-			_: &mut lod::hcsg::shared::GenerationContext,
-			id: lod::gen::Id,
-		) -> Option<(Self, bevy::math::bounding::Aabb3d)> {
-			let bounds = id.origin_cell_bounds()?;
-			Some((Self, bounds))
-		}
-	}
-
-	fn gated_world(demand: HcsgDemand) -> World {
+	fn gated_world(demand: maybraid_world::HcsgDemand) -> World {
 		let mut world = World::new();
 		world.insert_resource(NextState::<GameFlow>::Unchanged);
 		world.insert_resource(NextState::<layer_stack::ActiveGenerationMode>::Unchanged);
@@ -289,8 +253,13 @@ mod tests {
 
 	#[test]
 	fn finish_world_loading_does_not_unveil_while_near_is_outstanding() -> anyhow::Result<()> {
-		let demand = HcsgDemand::default();
-		demand.subscribe::<NearTile>(None, vec![near_region()], None, HcsgClass::Near);
+		let demand = maybraid_world::HcsgDemand::default();
+		demand.subscribe::<UnitXTile>(
+			None,
+			vec![near_region()],
+			None,
+			maybraid_world::HcsgClass::Near,
+		);
 		let mut world = gated_world(demand);
 		world
 			.run_system_once(finish_world_loading)
@@ -303,8 +272,13 @@ mod tests {
 
 	#[test]
 	fn finish_world_loading_unveils_while_only_ambient_is_outstanding() -> anyhow::Result<()> {
-		let demand = HcsgDemand::default();
-		demand.subscribe::<NearTile>(None, vec![near_region()], None, HcsgClass::Ambient);
+		let demand = maybraid_world::HcsgDemand::default();
+		demand.subscribe::<UnitXTile>(
+			None,
+			vec![near_region()],
+			None,
+			maybraid_world::HcsgClass::Ambient,
+		);
 		let mut world = gated_world(demand);
 		world
 			.run_system_once(finish_world_loading)

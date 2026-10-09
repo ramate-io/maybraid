@@ -30,7 +30,7 @@ use layer_stack::ActiveGenerationMode;
 use crate::control::strip_world_player_motor;
 use crate::map_view::WorldMapView;
 use crate::weapon::WorldPlayerAppearanceRequested;
-use crate::{HcsgClass, HcsgDemand, WorldGameplayEnabled, WorldPlayerLoadout};
+use crate::{FirstWave, HcsgDemand, LodJobCounter, WorldGameplayEnabled, WorldPlayerLoadout};
 
 const MAP_OPEN_SECS: f32 = 0.18;
 const STICK_REST: f32 = 0.28;
@@ -143,7 +143,8 @@ impl Plugin for WorldPlayerLifecyclePlugin {
 			.add_systems(
 				Update,
 				(
-					queue_first_spawn_picker,
+					crate::first_wave::refresh_first_wave,
+					queue_first_spawn_picker.after(crate::first_wave::refresh_first_wave),
 					drive_respawn_picker,
 					respawn_world_player
 						.after(queue_first_spawn_picker)
@@ -255,7 +256,9 @@ fn queue_first_spawn_picker(
 	spawn: Res<PlayerSpawnXz>,
 	mode: Option<Res<State<ActiveGenerationMode>>>,
 	policies: Option<Res<ModePlayerPolicies>>,
+	wave: Option<Res<FirstWave>>,
 	demand: Option<Res<HcsgDemand>>,
+	jobs: Option<Res<LodJobCounter>>,
 	mut state: ResMut<WorldPlayerRespawnState>,
 	mut commands: Commands,
 	players: Query<
@@ -267,11 +270,11 @@ fn queue_first_spawn_picker(
 	if !gameplay.0 || state.first_spawn_offered || state.pending.is_some() {
 		return;
 	}
-	if let Some(demand) = demand.as_deref() {
-		match demand.try_outstanding(&[HcsgClass::Near]) {
-			Ok(out) if out.undiscovered == 0 && out.remaining == 0 => {}
-			Ok(_) | Err(_) => return,
-		}
+	let ready = wave.as_deref().map(FirstWave::ready).unwrap_or_else(|| {
+		FirstWave::sample(demand.as_deref(), jobs.map(|jobs| jobs.active()).unwrap_or(0)).ready()
+	});
+	if !ready {
+		return;
 	}
 	if spawn.0.is_some() {
 		state.first_spawn_offered = true;
@@ -774,12 +777,12 @@ fn prefer_building_pois(records: Vec<PoiRecord>, death_at: Vec3) -> Vec<PoiRecor
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::{FirstWave, UnitXTile};
 	use bevy::ecs::system::RunSystemOnce;
 	use bevy::math::bounding::Aabb3d;
 	use durham::TerrainCellLayout;
 	use layer_stack::GenerationMode;
-	use lod::gen::{Id, OriginalId};
-	use lod::hcsg::shared::{GenerationContext, GenerationScheme, HcsgStorage, HcsgWorker};
+	use lod::hcsg::shared::{HcsgStorage, HcsgWorker};
 	use world_player::WorldBaseTerrain;
 
 	#[test]
@@ -1340,29 +1343,6 @@ mod tests {
 		Ok(())
 	}
 
-	struct NearTile;
-
-	impl GenerationScheme for NearTile {
-		fn original_ids_for(_: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
-			let start = region.min.x.floor() as i32;
-			let end = region.max.x.ceil() as i32;
-			(start..end)
-				.map(|x| {
-					let bounds = Aabb3d::from_min_max(
-						Vec3::new(x as f32, 0.0, 0.0),
-						Vec3::new(x as f32 + 1.0, 1.0, 1.0),
-					);
-					OriginalId::new(Id::from_cell(bounds))
-				})
-				.collect()
-		}
-
-		fn build_with_id(_: &mut GenerationContext, id: Id) -> Option<(Self, Aabb3d)> {
-			let bounds = id.origin_cell_bounds()?;
-			Some((Self, bounds))
-		}
-	}
-
 	#[test]
 	fn first_spawn_picker_waits_for_near_hcsg() -> anyhow::Result<()> {
 		let mut world = first_spawn_world(true, None);
@@ -1371,7 +1351,7 @@ mod tests {
 		world.insert_resource(demand.clone());
 		let player = world.spawn((VegetationPlayer, Transform::from_xyz(12.0, 4.0, -8.0))).id();
 		let region = Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(8.0, 1.0, 1.0));
-		demand.subscribe::<NearTile>(None, vec![region], None, HcsgClass::Near);
+		demand.subscribe::<UnitXTile>(None, vec![region], None, crate::HcsgClass::Near);
 
 		world
 			.run_system_once(queue_first_spawn_picker)
@@ -1388,6 +1368,23 @@ mod tests {
 			.run_system_once(queue_first_spawn_picker)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		assert!(!world.entities().contains(player), "picker opens once near work drains");
+		assert!(world.resource::<WorldPlayerRespawnState>().pending.is_some());
+		Ok(())
+	}
+
+	#[test]
+	fn first_spawn_picker_opens_once_first_wave_has_passed() -> anyhow::Result<()> {
+		let mut world = first_spawn_world(true, None);
+		let demand = HcsgDemand::default();
+		world.insert_resource(demand.clone());
+		let region = Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(8.0, 1.0, 1.0));
+		demand.subscribe::<UnitXTile>(None, vec![region], None, crate::HcsgClass::Near);
+		world.insert_resource(FirstWave { undiscovered: 1, remaining: 40, passed: true });
+		let player = world.spawn((VegetationPlayer, Transform::from_xyz(12.0, 4.0, -8.0))).id();
+		world
+			.run_system_once(queue_first_spawn_picker)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(!world.entities().contains(player), "unveil timeout must not pin the picker");
 		assert!(world.resource::<WorldPlayerRespawnState>().pending.is_some());
 		Ok(())
 	}

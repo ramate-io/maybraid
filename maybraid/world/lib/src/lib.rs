@@ -13,6 +13,7 @@ mod camera;
 pub mod commands;
 mod control;
 mod crate_loot;
+mod first_wave;
 mod intelligence;
 mod map_view;
 mod pitch;
@@ -35,6 +36,7 @@ pub use control::{
 	WorldSurfaceSet,
 };
 pub use durham::Durham;
+pub use first_wave::{FirstWave, UnitXTile, FIRST_WAVE_JOB_THRESHOLD};
 pub use game_commands::command::PendingStartupCommand;
 pub use intelligence::WorldIntelligencePlugin;
 pub use lod::hcsg::shared::{HcsgClass, HcsgDemand, Outstanding};
@@ -189,6 +191,7 @@ impl Plugin for WorldPlugin {
 			.init_resource::<WorldGameplayEnabled>()
 			.init_resource::<InventoryEditCameraFollow>()
 			.init_resource::<WorldSurfaceReady>()
+			.init_resource::<crate::FirstWave>()
 			.init_resource::<WorldSceneryVisible>()
 			.insert_resource(WorldMobHudEnabled::from_debug_chrome(self.debug_chrome))
 			.insert_resource(Bullseye { inner: 50.0, outer: WORLD_BULLSEYE_OUTER_M })

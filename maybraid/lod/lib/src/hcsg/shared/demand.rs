@@ -317,13 +317,14 @@ impl HcsgDemand {
 	}
 
 	/// Outstanding work in `classes`. A subscription is undiscovered until
-	/// its first discovery finishes. Replacement and unsubscribe drop their
-	/// counts with the old id.
+	/// its first discovery finishes. Finished subscriptions (including a
+	/// panic during first discovery) do not count. Replacement and
+	/// unsubscribe drop their counts with the old id.
 	pub fn try_outstanding(&self, classes: &[HcsgClass]) -> Result<Outstanding, Busy> {
 		let state = self.try_lock()?;
 		let mut outstanding = Outstanding::default();
 		for subscription in state.subscriptions.values() {
-			if !classes.contains(&subscription.class) {
+			if subscription.done || !classes.contains(&subscription.class) {
 				continue;
 			}
 			match subscription.discovered_len {
@@ -431,6 +432,9 @@ impl HcsgDemand {
 			subscription.cursor = progress.cursor;
 			if progress.done {
 				subscription.done = true;
+				if subscription.discovered_len.is_none() {
+					subscription.discovered_len = Some(0);
+				}
 			} else if progress.cost > 0.0 {
 				subscription.pass += progress.cost / f64::from(subscription.class.weight());
 			}

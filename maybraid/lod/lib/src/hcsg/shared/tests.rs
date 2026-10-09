@@ -754,3 +754,32 @@ fn outstanding_counts_filter_by_class() {
 	assert_eq!(demand.try_outstanding(&[HcsgClass::Far]).unwrap(), Outstanding::default());
 	let _ = ambient;
 }
+
+#[test]
+fn outstanding_skips_a_subscription_that_finishes_without_ids() {
+	let demand = HcsgDemand::default();
+	let near = subscribe_class::<Ground>(&demand, None, vec![span(0.0, 4.0)], HcsgClass::Near);
+	let job = demand.try_pick().expect("near work");
+	yield_quantum(&demand, job.id, None, 0, 1, true);
+	assert_eq!(
+		demand.try_outstanding(&[HcsgClass::Near]).unwrap(),
+		Outstanding::default(),
+		"done without discovery must not stay undiscovered"
+	);
+	let _ = near;
+}
+
+#[test]
+fn outstanding_does_not_count_a_panicking_subscription() -> anyhow::Result<()> {
+	let storage = seeded();
+	let demand = HcsgDemand::default();
+	let _worker = HcsgWorker::spawn(storage, demand.clone())?;
+	let _near = subscribe_class::<Panicky>(&demand, None, vec![span(0.0, 1.0)], HcsgClass::Near);
+	anyhow::ensure!(demand.wait_idle(IDLE));
+	assert_eq!(
+		demand.try_outstanding(&[HcsgClass::Near]).unwrap(),
+		Outstanding::default(),
+		"a panic during first discovery finishes the subscription"
+	);
+	Ok(())
+}
