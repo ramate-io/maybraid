@@ -194,17 +194,21 @@ impl HcsgDemand {
         focus: Option<Vec3>,
     ) -> SubscriptionId;
 
-    /// Ids published for `id` from `cursor` on. `Err(Busy)` if the lock is held;
-    /// `Ok(None)` if the subscription no longer exists.
-    pub fn try_read_published(
-        &self,
-        id: SubscriptionId,
-        cursor: usize,
-    ) -> Result<Option<Vec<Id>>, Busy>;
+    /// Ids published for `id` from `cursor` on, and whether the worker has
+    /// finished the subscription. `Err(Busy)` if the lock is held; `Ok(None)`
+    /// if the subscription no longer exists.
+    pub fn try_read(&self, id: SubscriptionId, cursor: usize) -> Result<Option<Published>, Busy>;
 
     pub fn unsubscribe(&self, id: SubscriptionId);
 }
+
+pub struct Published {
+    pub ids: Vec<Id>,
+    pub done: bool, // `ids` reaches the end of what will be published
+}
 ```
+
+`try_read_published` is the same read without `done`.
 
 Subscription ids come from the `AtomicU64`. A presentation system holds exactly one subscription id at a time. Replacing it is a single locked operation, so subscriptions never leak.
 
@@ -317,9 +321,12 @@ struct Presented<T> {
 Each frame:
 
 1. **Request.** If `B::inner` changed, replace the subscription (`subscribe` with the previous id) and reset the cursor. The presentation system never calls discovery itself.
-2. **Read.** `try_read_published(subscription, cursor)`. On `Err(Busy)`, nothing changes this frame. On `Ok(None)`, the subscription is gone (for example after an epoch change), so subscribe again.
+2. **Read.** `try_read(subscription, cursor)`. On `Err(Busy)`, nothing changes this frame. On `Ok(None)`, the subscription is gone (for example after an epoch change), so subscribe again; this starts a new session of hosts.
 3. **Spawn.** For each new id, clone the entry's `Arc` under a short `try_read` of the store, then spawn a pending LOD host (`lod_host_scene_pending`, at the level `T` picks for the focus) carrying `HcsgNode<T>`. If the store is busy, the id is retried next frame and the cursor is not advanced past it. An id already hosted at the same version is skipped. One hosted at an older version, which only happens across sessions, has its host replaced.
-4. **Retire.** Despawn any host whose entry bounds no longer intersect `B::outer`, along with its owned scene subtree. Retirement depends only on bounds, never on what discovery returned. Hosts are only rechecked when `B::outer` changes or new hosts were spawned.
+4. **Sweep.** Once a new session's subscription is read through to `done`, retire every host that session did not publish. A new session leaves no value behind, so this is the only time presentation retires by what was published.
+5. **Retire.** Retire any host whose entry bounds no longer intersect `B::outer`, along with its owned scene subtree. Within a session, retirement depends only on bounds, never on what discovery returned. Hosts are only rechecked when `B::outer` changes or new hosts were spawned.
+
+Retiring marks the host `RetiredHost`. The runtime despawns retired hosts in `Last`, so commands other systems queue for the host through `PostUpdate` still land.
 
 Notes:
 - When the subscription is replaced, existing hosts stay. Ids the new subscription publishes that are already in `hosts` are skipped.
@@ -362,6 +369,7 @@ app.add_plugins(GenerationPlugin::<AheadOfCamera, Terrain>::default());
 - Presentation needs no separately registered generation system. It requests its own generation.
 - Either plugin initializes `HcsgStorage` and `HcsgDemand` if missing, and spawns the one `HcsgWorker`.
 - Scene capabilities come from the refresh plugins a layer already chooses (`LodSceneRefreshChunkPlugin`, `GimmeLodSceneRefreshPlugin`, …), now typed on `HcsgNode<T>`. No separate registration API.
+- A host's level is picked once at spawn. If it should change as the viewer moves, the layer also adds a refresh region source (`LodSceneRefreshRegionPlugin` with a `LodRefreshRegions` strategy) feeding `GimmeLodSceneRefreshPlugin`. Without one, nothing re-evaluates the level.
 - Both systems run in `HcsgSystems`, before `LodRefreshSystems::Track`. Bevy applies the deferred host spawns before the refresh chain sees them.
 
 ## Sessions and epochs
@@ -377,7 +385,7 @@ A restart is always in this order: advance the epoch, clear the stores, seed the
 Each layer's roots expose `reset` (clear its stores, seed its roots). Advancing the epoch belongs to whoever owns the session, because one epoch ends every layer's subscriptions:
 
 - `durham-playground` calls `DurhamRoots::restart` (advance, then reset) on a seed or layout change.
-- `richmond-playground` advances once, then resets `DurhamRoots` and `RichmondRoots`, on an explicit command flag.
+- `richmond-playground` advances once, then resets `DurhamRoots`, `RichmondRoots`, Maputo's stores and `ChicoRoots`, on an explicit command flag.
 - Game modes will do the same on enter, before turning generation and presentation back on.
 
 Presentation plugins never restart sessions or infer one from resource changes; they only gate where presentation runs.
@@ -428,10 +436,12 @@ The new API lives in `lod::hcsg::shared`, alongside the frame-synchronous `lod::
 2. **Generation and presentation systems** (done). `HcsgBounds`, `HcsgNode<T>`, `generation<B, T>`, `presentation<B, T>`, scene forwarding and the plugins, tested on fixtures with the real worker and the LOD chunk-fulfill pipeline.
 3. **Durham** (done). `DurhamPresentationPlugin<B>` presents `Terrain` and `Water` through `presentation<B, T>` and chunk fulfill, next to the old presenters. `DurhamWindow` bounds the layout's request region. `DurhamRoots::restart` seeds the shared storage, whose base scales come from the same `durham_nodes!` list as the old storage. Collision-seeding cells carry the trimesh source in `Terrain`'s own `LodScene`. `durham-playground` generates on the worker and no longer calls the old storage. The streamed world path keeps the old presenters until Richmond moves (step 4), because its level changes need the refresh region plugins.
 4. **Richmond** (done in `richmond-playground`). `DevelopmentSite`, `RichmondDevelopment`, `PaddedTerrain` and `Built` have native schemes beside their legacy ones, which stay until their last reader moves. Developments sample the ground through `GroundCells`, a pure view of the context. `PaddedTerrain` is total: a cell no pad reaches wraps the terrain unchanged, so it replaces raw terrain as the presented ground surface instead of overlaying it. `Built` is one `LodScene` whose level holds the `UrbanSetting` and the nested building hosts (`DevelopmentHost::scene`, shared with the legacy spawn). `RichmondPresentationPlugin<B, G>` presents both. `WaterPresentationPlugin<B>` presents Durham water alone, so Richmond doesn't need raw terrain hosts. The playground pins its layout, because the layout is a session root, and restarts on its command flag. Composed apps keep the old presenters, along with `sync_raw_terrain_replacements` and `TerrainSuperseded`, until step 7.
-5. **Chico, Barking, Maputo.** Rewrite each onto the context, deleting its bespoke index and presenter; then delete `gen::runtime`.
+5. **Chico, Barking, Maputo.** Rewrite each onto the context, next to its bespoke index and presenter, which composed apps keep until step 7.
+   - **Chico** (done in `richmond-playground`). `ChicoGrove` stays the cheap recipe. `GrownGrove<G>` is the presented value: the worker grows it synchronously on `GroundSurface<G>`, a pure view of the padded surface cells under the grove. `ChicoRoots::reset` seeds `ForestSelection` as the session root, so neighborhood blending reads it instead of `ForestIndex`. `BumpedOut<P, G>` places one canopy bump-out per proxy cell. Its scene reads the padded surface mesh through `TerrainChunkRef`, keyed like the padded host, so it doesn't matter which side loads first. The grove hole and the outer band are LOD levels, refreshed by `BumpOutRing<P>`.
+   - **Barking** (library and tests only). `PlacedMobCell<G>` groups a mob cell from `UrbanizationSelection`, Chico's `ForestSelection`, the padded surface, and plant hosts read from `Built<G>` and `SelectedUrbanization`, all through the context. It reads no entities and writes no `SelectedUrbanization`. Its scene nests each group's `MobScene` hosts, and members retire with their mob. `BarkingPresentationPlugin<B, G>` presents it. It isn't in a playground yet, because `MobScenesPlugin` needs the player, combat and intelligence stack. Mobs fit the surface only when generated; legacy hosts still re-fit as they move.
    - **Maputo** (done in `richmond-playground`). `DevelopmentSlots<U>` holds one development's world-space slots, through `FurnitureSlots::Development` (Richmond's `Built<G>`), and replaces the old per-development slot cache. `Furnished<U>` is a 50 m `FurnitureCell` of those slots. `MaputoPresentationPlugin<B, U>` presents them, and `FurnitureNeighborhood` bounds them to the viewer's 50 m cell. The walk collider is part of `FurnitureCell`'s High scene on both paths, so there is no attach system. Composed apps keep `FurnitureIndex` and its presenter until step 7.
 6. **Native Durham and cells.** Rewrite their generic schemes on the context API, dropping the `S` capability bounds and dependency clones.
-7. **Modes and removal.** Build the Discovery game mode on the new runtime. Delete the adapter (and `elsa`), the producer and queue machinery, the terrain replacement machinery, `Seed`, the old storage and the training ground, which is then rebuilt from scratch.
+7. **Modes and removal.** Build the Discovery game mode on the new runtime. Delete `gen::runtime`, the adapter (and `elsa`), the producer and queue machinery, the terrain replacement machinery, `Seed`, the old storage and the training ground, which is then rebuilt from scratch.
 
 ## Later
 

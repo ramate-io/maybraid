@@ -5,6 +5,7 @@ use procedural_common::NoiseParams;
 
 use crate::kind::LayeringKind;
 use crate::layer_stream::DEFAULT_FOREST_STREAM_RADIUS;
+use crate::{select_cell, ForestExtent, SelectedLayers};
 
 /// Live forest-stream knobs (noise / ring / pinned layering).
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -34,6 +35,35 @@ impl ForestStreamSpec {
 	pub fn key(self) -> String {
 		let layering_key = self.layering.map(LayeringKind::as_kebab).unwrap_or("hopscotch");
 		format!("forest:{layering_key}|{:?}|r={}", self.noise, self.stream_radius)
+	}
+}
+
+/// How a session selects each forest cell's layers: Hopscotch on `noise`, or
+/// a pinned layering's typical groves.
+#[derive(Resource, Clone, Copy, Debug, PartialEq)]
+pub struct ForestSelection {
+	pub noise: NoiseParams,
+	pub layering: Option<LayeringKind>,
+}
+
+impl Default for ForestSelection {
+	fn default() -> Self {
+		ForestStreamSpec::default().into()
+	}
+}
+
+impl From<ForestStreamSpec> for ForestSelection {
+	fn from(spec: ForestStreamSpec) -> Self {
+		Self { noise: spec.noise, layering: spec.layering }
+	}
+}
+
+impl ForestSelection {
+	pub fn layers_for(self, extent: ForestExtent) -> SelectedLayers {
+		match self.layering {
+			Some(kind) => kind.layering().typical_layers(),
+			None => select_cell(extent, self.noise),
+		}
 	}
 }
 

@@ -10,6 +10,7 @@ mod model;
 mod plugin;
 mod present;
 mod sample;
+pub mod shared;
 mod stream;
 
 pub use config::BarkingConfig;
@@ -23,6 +24,10 @@ pub use plugin::{MobGroupsPlugin, PendingMobGroups};
 pub use present::{MobCellRoot, MobGroupRoot};
 pub use sample::{
 	DiscoverablePlaces, ForestSelection, PlantHosts, SelectUrbanization, UrbanSelection,
+};
+pub use shared::{
+	BarkingNodes, BarkingPresentationPlugin, MobGround, MobNeighborhood,
+	MobScenePresentationPlugin, PlacedMobCell,
 };
 pub use stream::{install_mob_grid_stream, MobCellWrites, MobLodChan};
 

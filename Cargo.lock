@@ -9975,6 +9975,7 @@ dependencies = [
  "bevy",
  "building-components",
  "buildings",
+ "chico",
  "clap",
  "durham",
  "furnishing-layer-presentation",

@@ -105,6 +105,57 @@ impl MobCellExtent {
 	pub fn index(self) -> (i32, i32) {
 		Self::cell_index_containing(self.center())
 	}
+
+	/// The seed of the one group this cell holds; `None` for an empty cell.
+	pub fn group_seed(self) -> Option<u64> {
+		let (ix, iz) = self.index();
+		let seed = cell_seed(ix, iz);
+		let occupied = (ix == 0 && iz == 0)
+			|| mixed(seed ^ 0x6d6f_622d_6365_6c6c) % 100 < MOB_CELL_OCCUPANCY_PERCENT;
+		occupied.then_some(seed)
+	}
+}
+
+pub(crate) fn urbanization_weight(kind: UrbanizationKind) -> f32 {
+	match kind {
+		UrbanizationKind::None => 0.0,
+		UrbanizationKind::RuralLife => 0.2,
+		UrbanizationKind::Frontier => 0.4,
+		UrbanizationKind::Townships => 0.55,
+		UrbanizationKind::Colony => 0.7,
+		UrbanizationKind::MixedAgeCity => 0.85,
+		UrbanizationKind::ModernCity => 1.0,
+	}
+}
+
+pub(crate) fn group_kind(kind: UrbanizationKind, seed: u64) -> GroupKind {
+	match kind {
+		UrbanizationKind::None => GroupKind::Wild,
+		UrbanizationKind::RuralLife => GroupKind::Peaceful,
+		UrbanizationKind::Townships | UrbanizationKind::Frontier => GroupKind::Frontier,
+		UrbanizationKind::Colony => GroupKind::Warfront,
+		UrbanizationKind::MixedAgeCity => {
+			if mixed(seed) & 1 == 0 {
+				GroupKind::Warfront
+			} else {
+				GroupKind::Dystopian
+			}
+		}
+		UrbanizationKind::ModernCity => GroupKind::Dystopian,
+	}
+}
+
+/// The hosts a group of `extent` around `origin` can reach.
+pub(crate) fn hosts_near(hosts: &[MobPlantHost], origin: Vec2, extent: f32) -> Vec<MobPlantHost> {
+	let half = extent * 0.5;
+	hosts
+		.iter()
+		.copied()
+		.filter(|host| {
+			(host.xz.x - origin.x).abs() <= half + host.arrival_radius
+				&& (host.xz.y - origin.y).abs() <= half + host.arrival_radius
+		})
+		.collect()
 }
 
 #[derive(Clone, Debug)]
@@ -250,52 +301,21 @@ impl MobIndex {
 	fn urbanization_kind_at(&self, xz: Vec2) -> UrbanizationKind {
 		(self.kind_at)(self.urbanization_noise, self.urbanization_kind, xz)
 	}
-
-	fn group_kind_at(&self, xz: Vec2, seed: u64) -> GroupKind {
-		match self.urbanization_kind_at(xz) {
-			UrbanizationKind::None => GroupKind::Wild,
-			UrbanizationKind::RuralLife => GroupKind::Peaceful,
-			UrbanizationKind::Townships | UrbanizationKind::Frontier => GroupKind::Frontier,
-			UrbanizationKind::Colony => GroupKind::Warfront,
-			UrbanizationKind::MixedAgeCity => {
-				if mixed(seed) & 1 == 0 {
-					GroupKind::Warfront
-				} else {
-					GroupKind::Dystopian
-				}
-			}
-			UrbanizationKind::ModernCity => GroupKind::Dystopian,
-		}
-	}
 }
 
 impl MobWorldSample for MobIndex {
 	fn sample_mobs(&self, xz: Vec2) -> MobEnvironmentSample {
-		let vegetation = self.vegetation_at(xz);
-		let urbanization = match self.urbanization_kind_at(xz) {
-			UrbanizationKind::None => 0.0,
-			UrbanizationKind::RuralLife => 0.2,
-			UrbanizationKind::Frontier => 0.4,
-			UrbanizationKind::Townships => 0.55,
-			UrbanizationKind::Colony => 0.7,
-			UrbanizationKind::MixedAgeCity => 0.85,
-			UrbanizationKind::ModernCity => 1.0,
-		};
-		MobEnvironmentSample { elevation: Some(0.0), urbanization, vegetation }
+		MobEnvironmentSample {
+			elevation: Some(0.0),
+			urbanization: urbanization_weight(self.urbanization_kind_at(xz)),
+			vegetation: self.vegetation_at(xz),
+		}
 	}
 }
 
 impl MobWorldHosts for MobIndex {
 	fn plant_hosts(&self, origin: Vec2, extent: f32) -> Vec<MobPlantHost> {
-		let half = extent * 0.5;
-		self.plant_hosts
-			.iter()
-			.copied()
-			.filter(|host| {
-				(host.xz.x - origin.x).abs() <= half + host.arrival_radius
-					&& (host.xz.y - origin.y).abs() <= half + host.arrival_radius
-			})
-			.collect()
+		hosts_near(&self.plant_hosts, origin, extent)
 	}
 }
 
@@ -354,16 +374,13 @@ impl GenerationScheme<MobIndex> for MobCell {
 			return None;
 		}
 		let extent = MobCellExtent::from_id(id)?;
-		let (ix, iz) = extent.index();
-		let seed = cell_seed(ix, iz);
-		let occupied = (ix == 0 && iz == 0)
-			|| mixed(seed ^ 0x6d6f_622d_6365_6c6c) % 100 < MOB_CELL_OCCUPANCY_PERCENT;
-		let groups = if occupied {
-			let origin = Vec2::new(extent.center().x, extent.center().z);
-			let kind = index.group_kind_at(origin, seed);
-			vec![MobGroup::generate(kind, seed, origin, index)]
-		} else {
-			Vec::new()
+		let groups = match extent.group_seed() {
+			Some(seed) => {
+				let origin = extent.center().xz();
+				let kind = group_kind(index.urbanization_kind_at(origin), seed);
+				vec![MobGroup::generate(kind, seed, origin, index)]
+			}
+			None => Vec::new(),
 		};
 		Some((Self { extent, groups }, extent.aabb()))
 	}

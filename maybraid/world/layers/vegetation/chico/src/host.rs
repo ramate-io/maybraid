@@ -3,6 +3,7 @@
 //! `ChicoForest` stays select-only. Playground forest present registers this one
 //! host type. Typed `/show orchard` keeps the concrete grove `LodScene`.
 
+use bevy::ecs::template::template;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, Scene};
@@ -26,6 +27,20 @@ impl ChicoGroveHost {
 
 	pub fn drop_out(&self) -> LayerDropOut {
 		LayerDropOut::for_stacked(self.layer, self.tile.is_tuft())
+	}
+
+	/// This tile as a nested host, pending at the level `lod_ref` (the
+	/// viewer) sees it.
+	pub fn scene(&self, lod_ref: &LodRef) -> impl Scene + 'static {
+		let host = self.clone();
+		(
+			lod_host_scene_pending(self.scene_lod_level(lod_ref), self.scene_bounds()),
+			bsn! {
+				template_value(Transform::IDENTITY)
+				Visibility::default()
+				template(move |_ctx| Ok(host.clone()))
+			},
+		)
 	}
 
 	fn empty_scene() -> impl Scene + 'static {
@@ -153,8 +168,7 @@ mod tests {
 			ForestLayer::Tufts,
 			vec![ForestGroveRecipe::uniform(ForestGroveKind::CommonTufts, extent)],
 		);
-		grove.ensure_grown(&forest_world_sample());
-		let tile = grove.grown_tiles().expect("grown")[0].clone();
+		let tile = grove.grow(&forest_world_sample()).remove(0);
 		let host = ChicoGroveHost::new(tile, ForestLayer::Tufts);
 		with_lod(Vec3::new(0.0, 20.0, 40.0), |lod_ref| {
 			assert_eq!(

@@ -73,6 +73,15 @@ struct DemandShared {
 #[derive(Resource, Clone, Default)]
 pub struct HcsgDemand(Arc<DemandShared>);
 
+/// One read of a subscription's published ids.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Published {
+	/// Ids published from the read's cursor on.
+	pub ids: Vec<Id>,
+	/// No more ids will be published: `ids` reaches the end.
+	pub done: bool,
+}
+
 /// One subscription the worker is filling.
 pub(super) struct Job {
 	pub id: SubscriptionId,
@@ -142,10 +151,19 @@ impl HcsgDemand {
 		id: SubscriptionId,
 		cursor: usize,
 	) -> Result<Option<Vec<Id>>, Busy> {
+		Ok(self.try_read(id, cursor)?.map(|published| published.ids))
+	}
+
+	/// Like [`Self::try_read_published`], read together with whether the
+	/// worker has finished the subscription.
+	pub fn try_read(&self, id: SubscriptionId, cursor: usize) -> Result<Option<Published>, Busy> {
 		let state = self.try_lock()?;
 		Ok(state.subscriptions.get(&id).map(|subscription| {
 			let published = &subscription.published;
-			published[cursor.min(published.len())..].to_vec()
+			Published {
+				ids: published[cursor.min(published.len())..].to_vec(),
+				done: subscription.done,
+			}
 		}))
 	}
 

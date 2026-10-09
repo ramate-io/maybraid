@@ -29,6 +29,7 @@ mod model;
 mod plugin;
 mod present;
 mod recipe;
+pub mod shared;
 mod stick_physics;
 mod stream;
 mod view;
@@ -49,7 +50,7 @@ pub use bump_out::{
 	MEDIUM_BUMP_OUT_INNER_RADIUS_M, MEDIUM_BUMP_OUT_OUTER_RADIUS_M,
 };
 pub use chico::{chico_hopscotch, select_cell, select_layering, DEFAULT_HOP_BUDGET};
-pub use config::{ChicoConfig, ForestStreamSpec};
+pub use config::{ChicoConfig, ForestSelection, ForestStreamSpec};
 pub use extent::{ForestExtent, DEFAULT_FOREST_EXTENT_XZ, DEFAULT_FOREST_GROVE_TILE_XZ};
 pub use forest::{neighbor_layers, ChicoForest};
 pub use generation::{
@@ -80,6 +81,11 @@ pub use model::Chico;
 pub use plugin::{register_vegetation_view, VegetationViewPlugin};
 pub use present::ForestPresenterState;
 pub use recipe::{ForestGroveRecipe, WORLD_FOREST_TREE_VARIANTS};
+pub use shared::{
+	BumpOutPresentationPlugin, BumpOutRing, BumpedOut, CanopyProxy, ChicoNodes,
+	ChicoPresentationPlugin, ChicoRoots, ForestGround, GroundSurface, GroveNeighborhood,
+	GrownGrove,
+};
 pub use stream::parse_layering_kind;
 
 #[cfg(test)]

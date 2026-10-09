@@ -354,3 +354,19 @@ fn losing_subscription_is_inactive_and_returning_is_active() -> anyhow::Result<(
 	}
 	Ok(())
 }
+
+#[test]
+fn members_retire_with_their_mob() {
+	let mut world = World::new();
+	world.add_observer(crate::retire_members_with_their_mob);
+	let mob = world.spawn(mob_intelligence::Mob::new(4.0)).id();
+	let other = world.spawn(mob_intelligence::Mob::new(4.0)).id();
+	let member = world.spawn(MemberOf { mob, slot: 0 }).id();
+	let stranger = world.spawn(MemberOf { mob: other, slot: 0 }).id();
+
+	world.despawn(mob);
+	world.flush();
+
+	assert!(world.get_entity(member).is_err(), "the member left with its mob");
+	assert!(world.get_entity(stranger).is_ok(), "another mob's member stays");
+}

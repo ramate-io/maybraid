@@ -54,10 +54,10 @@ impl LodRefreshRegions for MobHighLodRegion {
 	}
 }
 
-#[derive(Component, Clone, Copy, Debug)]
+#[derive(Component, Clone, Copy, Debug, Default)]
 pub struct MobCellRoot;
 
-#[derive(Component, Clone, Copy, Debug)]
+#[derive(Component, Clone, Copy, Debug, Default)]
 pub struct MobGroupRoot;
 
 #[derive(SystemParam)]
@@ -170,12 +170,33 @@ pub fn pulse_mob_high_lod(
 	}
 }
 
-pub fn install_barking_presentation<G: TerrainModel>(app: &mut App) {
+/// Mob scenes, with their High band refreshed around the [`LodViewer`].
+pub(crate) fn install_mob_scenes(app: &mut App) {
 	// Indexed must be visible when MobScenesPlugin builds. Guarding
 	// MobGroupsPlugin would hide an assembler that already added groups
 	// under FullScan.
 	app.insert_resource(MobLodRefreshMode::Indexed);
 	app.add_plugins(MobGroupsPlugin);
+	app.add_plugins(
+		LodSceneRefreshRegionPlugin::<MobHighLodRegion, With<LodViewer>, MobHighLodChan>::default(),
+	)
+	.add_plugins(GimmeLodSceneRefreshPlugin::<MobScene, MobHighLodChan, With<LodViewer>>::default())
+	.add_systems(
+		Update,
+		pulse_mob_high_lod
+			.run_if(on_timer(MOB_HIGH_LOD_REFRESH_INTERVAL))
+			.in_set(LodRefreshSystems::ProduceRegions),
+	)
+	.add_systems(
+		Update,
+		update_lod_host_levels::<MobScene, (), With<LodViewer>>
+			.run_if(on_timer(MOB_HIGH_LOD_RECONCILE_INTERVAL))
+			.in_set(LodRefreshSystems::UpdateLevels),
+	);
+}
+
+pub fn install_barking_presentation<G: TerrainModel>(app: &mut App) {
+	install_mob_scenes(app);
 	app.add_message::<MobCellPresented>();
 	// Cull only queues hosts; Last must despawn them and their members.
 	mob_layer_presentation::install_mob_cell_teardown(app);
@@ -193,24 +214,6 @@ pub fn install_barking_presentation<G: TerrainModel>(app: &mut App) {
 			BarkingPresenter<'_, '_, G>,
 			MobLodChan,
 		>::default())
-		.add_plugins(LodSceneRefreshRegionPlugin::<
-			MobHighLodRegion,
-			With<LodViewer>,
-			MobHighLodChan,
-		>::default())
-		.add_plugins(GimmeLodSceneRefreshPlugin::<MobScene, MobHighLodChan, With<LodViewer>>::default())
 		.configure_sets(Update, LodPresentSystems::Produce.after(LodGenerateSystems::Drain));
-	app.add_systems(Update, fit_mob_hosts_to_surface::<G>.in_set(MobSceneSystems::Surface))
-		.add_systems(
-			Update,
-			pulse_mob_high_lod
-				.run_if(on_timer(MOB_HIGH_LOD_REFRESH_INTERVAL))
-				.in_set(LodRefreshSystems::ProduceRegions),
-		)
-		.add_systems(
-			Update,
-			update_lod_host_levels::<MobScene, (), With<LodViewer>>
-				.run_if(on_timer(MOB_HIGH_LOD_RECONCILE_INTERVAL))
-				.in_set(LodRefreshSystems::UpdateLevels),
-		);
+	app.add_systems(Update, fit_mob_hosts_to_surface::<G>.in_set(MobSceneSystems::Surface));
 }

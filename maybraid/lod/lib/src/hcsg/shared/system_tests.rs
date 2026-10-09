@@ -9,14 +9,17 @@ use bevy::math::Vec3;
 use bevy::prelude::*;
 use bevy::scene::ScenePlugin;
 
-use crate::gen::tests::test_utils::{cell, Terrain, Vegetation};
-use crate::gen::{Id, Version};
-use crate::lod_ref::LodNodePose;
+use crate::gen::tests::test_utils::{cell, stub_scene, Terrain, Vegetation};
+use crate::gen::{Id, LodScene, LodSceneLevel, OriginalId, Version};
+use crate::lod_ref::{LodNodePose, LodRef};
 use crate::scene::host::LodLevelSpawnRequest;
 use crate::scene::refresh::LodSceneRefreshChunkPlugin;
 use crate::scene::{LodHostBounds, LodSceneHost, LodViewer};
 
-use super::{GenerationPlugin, HcsgBounds, HcsgDemand, HcsgNode, HcsgStorage, PresentationPlugin};
+use super::{
+	GenerationContext, GenerationPlugin, GenerationScheme, HcsgBounds, HcsgDemand, HcsgNode,
+	HcsgStorage, PresentationPlugin,
+};
 
 const IDLE: Duration = Duration::from_secs(10);
 
@@ -125,6 +128,31 @@ fn presentation_keeps_hosts_until_they_leave_the_outer_bounds() -> anyhow::Resul
 	Ok(())
 }
 
+/// Hosts alive in `PostUpdate`, where systems still queue commands on them.
+#[derive(Resource, Default)]
+struct PostUpdateHosts(usize);
+
+fn count_post_update_hosts(
+	hosts: Query<(), With<HcsgNode<Terrain>>>,
+	mut seen: ResMut<PostUpdateHosts>,
+) {
+	seen.0 = hosts.iter().count();
+}
+
+#[test]
+fn a_retired_host_lasts_the_frame() -> anyhow::Result<()> {
+	let mut app = present_terrain(span(0.2, 2.6), span(-10.0, 30.0));
+	app.init_resource::<PostUpdateHosts>()
+		.add_systems(PostUpdate, count_post_update_hosts);
+	settle(&mut app)?;
+
+	set_window(&mut app, None, None);
+	app.update();
+	assert_eq!(app.world().resource::<PostUpdateHosts>().0, 3);
+	assert!(hosts(&mut app).is_empty(), "retired hosts are gone after Last");
+	Ok(())
+}
+
 #[test]
 fn presentation_without_bounds_unsubscribes_and_retires() -> anyhow::Result<()> {
 	let mut app = present_terrain(span(0.2, 2.6), span(-10.0, 30.0));
@@ -155,6 +183,58 @@ fn presentation_replaces_hosts_whose_value_changed_across_an_epoch() -> anyhow::
 		assert_ne!(entity, before_entity);
 		assert!(app.world().get_entity(*before_entity).is_err(), "stale host despawned");
 	}
+	Ok(())
+}
+
+/// The cells a session keeps.
+struct Keep(Vec<f32>);
+
+/// One unit cell, only where the session's [`Keep`] lists it.
+struct Kept;
+
+impl GenerationScheme for Kept {
+	fn original_ids_for(_: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
+		let (start, end) = (region.min.x.floor() as i32, region.max.x.ceil() as i32);
+		(start..end).map(|x| OriginalId::new(Id::from_cell(cell(x as f32)))).collect()
+	}
+
+	fn build_with_id(cx: &mut GenerationContext, id: Id) -> Option<(Self, Aabb3d)> {
+		let bounds = id.origin_cell_bounds()?;
+		let keep = cx.get::<Keep>(Id::Universal)?;
+		keep.0.contains(&bounds.min.x).then_some((Self, bounds))
+	}
+}
+
+impl LodScene for Kept {
+	fn scene_with_level(&self, _lod_ref: &LodRef, _level: LodSceneLevel) -> impl Scene + 'static {
+		stub_scene()
+	}
+}
+
+#[test]
+fn a_new_session_retires_hosts_it_does_not_publish() -> anyhow::Result<()> {
+	let mut app =
+		app(PresentationPlugin::<WindowBounds, Kept>::default(), span(0.2, 2.6), span(-10.0, 30.0));
+	let storage = app.world().resource::<HcsgStorage>().clone();
+	storage.seed(Keep(vec![0.0, 1.0, 2.0]), span(-10.0, 30.0));
+	settle(&mut app)?;
+	let kept = |app: &mut App| {
+		let mut ids: Vec<Id> = app
+			.world_mut()
+			.query::<&HcsgNode<Kept>>()
+			.iter(app.world())
+			.map(|n| n.id)
+			.collect();
+		ids.sort();
+		ids
+	};
+	assert_eq!(kept(&mut app), ids(&[0.0, 1.0, 2.0]));
+
+	app.world().resource::<HcsgDemand>().advance_epoch();
+	storage.clear::<Kept>();
+	storage.seed(Keep(vec![1.0]), span(-10.0, 30.0));
+	settle(&mut app)?;
+	assert_eq!(kept(&mut app), ids(&[1.0]), "cells the session dropped are retired");
 	Ok(())
 }
 

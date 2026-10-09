@@ -15,6 +15,7 @@ pub use game_commands::command::PendingStartupCommand;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use camera::{camera_controller, release_modifiers_on_focus_change, setup_camera};
+use chico::{ChicoRoots, ForestSelection};
 use commands::{
 	RequestDevelopmentFocus, RequestLikelihood, RequestMeshStats, RequestRebuild, RequestSeed,
 	RequestTerrainRadius,
@@ -114,6 +115,7 @@ impl Plugin for DevelopmentsOnTerrainPlugin {
 		// The layout is a session root: it moves only by command, never with the
 		// viewer. The first frame starts the first session.
 		app.insert_resource(self.config.clone())
+			.init_resource::<ForestSelection>()
 			.insert_resource(TerrainLayoutPinned(true))
 			.insert_resource(TerrainPresentationDirty(true))
 			.add_systems(
@@ -131,6 +133,7 @@ impl Plugin for DevelopmentsOnTerrainPlugin {
 fn restart_session(
 	durham: DurhamRoots,
 	richmond: RichmondRoots,
+	chico: ChicoRoots,
 	storage: Res<HcsgStorage>,
 	demand: Res<HcsgDemand>,
 	dirty: Res<TerrainPresentationDirty>,
@@ -142,6 +145,7 @@ fn restart_session(
 	durham.reset(&storage);
 	richmond.reset::<OnTerrain<Durham>>(&storage);
 	MaputoNodes::clear::<Urbanization<Richmond<OnTerrain<Durham>>>>(&storage);
+	chico.reset::<Urbanization<Richmond<OnTerrain<Durham>>>>(&storage);
 }
 
 fn setup_lighting(mut commands: Commands) {

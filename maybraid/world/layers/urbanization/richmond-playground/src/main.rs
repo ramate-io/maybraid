@@ -1,6 +1,10 @@
 use std::path::{Path, PathBuf};
 
 use bevy::prelude::*;
+use chico::{
+	BumpOutPresentationPlugin, BumpOutRing, CanopyBumpOut, ChicoPresentationPlugin,
+	GroveNeighborhood, MediumCanopyBumpOut,
+};
 use durham::{Durham, DurhamTerrainConfig, DurhamWindow, WaterPresentationPlugin};
 use layer_stack::{Generate, GenerationModePlugin};
 use maputo::{FurnitureNeighborhood, MaputoPresentationPlugin};
@@ -54,6 +58,15 @@ fn main() {
 	app.add_plugins(WaterPresentationPlugin::<DurhamWindow>::default());
 	app.add_plugins(RichmondPresentationPlugin::<DurhamWindow, Ground>::default());
 	app.add_plugins(MaputoPresentationPlugin::<FurnitureNeighborhood, Urban>::default());
+	app.add_plugins(ChicoPresentationPlugin::<GroveNeighborhood, Urban>::default());
+	app.add_plugins((
+		BumpOutPresentationPlugin::<BumpOutRing<CanopyBumpOut>, CanopyBumpOut, Urban>::default(),
+		BumpOutPresentationPlugin::<
+			BumpOutRing<MediumCanopyBumpOut>,
+			MediumCanopyBumpOut,
+			Urban,
+		>::default(),
+	));
 	app.add_plugins(DevelopmentsOnTerrainPlugin { config: playground, commands: true })
 		.run();
 }

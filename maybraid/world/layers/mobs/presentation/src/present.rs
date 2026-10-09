@@ -4,7 +4,7 @@ use std::collections::{HashMap, VecDeque};
 
 use bevy::prelude::*;
 use lod::gen::{Id, Version};
-use mob_intelligence::MemberOf;
+use mob_intelligence::{MemberOf, Mob};
 
 #[derive(Resource, Default)]
 pub struct MobPresenterState {
@@ -72,6 +72,21 @@ impl MobPresenterState {
 pub fn install_mob_cell_teardown(app: &mut App) {
 	app.init_resource::<MobPresenterState>()
 		.add_systems(Last, drain_retired_mob_cells);
+}
+
+/// Members are not children of their mob. When a presentation despawns a
+/// mob host with its scene, its members go with it; despawn the host in `Last`
+/// so commands queued on either through `PostUpdate` still land.
+pub fn retire_members_with_their_mob(
+	despawned: On<Despawn, Mob>,
+	members: Query<(Entity, &MemberOf)>,
+	mut commands: Commands,
+) {
+	for (entity, member) in &members {
+		if member.mob == despawned.entity {
+			commands.entity(entity).try_despawn();
+		}
+	}
 }
 
 /// Combat, threat, and mob systems queue inserts on hosts and members through

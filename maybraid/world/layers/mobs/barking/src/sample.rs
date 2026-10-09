@@ -102,7 +102,7 @@ pub(crate) fn richmond_kind_at(
 	select_kind(UrbanizationExtent::from_cell_index(ix, iz), noise)
 }
 
-fn host_at(bounds: Aabb3d) -> MobPlantHost {
+pub(crate) fn host_at(bounds: Aabb3d) -> MobPlantHost {
 	MobPlantHost {
 		xz: Vec2::new((bounds.min.x + bounds.max.x) * 0.5, (bounds.min.z + bounds.max.z) * 0.5),
 		arrival_radius: urban_leaf_arrival_radius(bounds),

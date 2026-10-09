@@ -14,7 +14,7 @@ use crate::bump_out::{
 	MediumCanopyBumpOut, BUMP_OUT_CELL_XZ,
 };
 use crate::{
-	select_cell, ChicoForest, ChicoGrove, ForestExtent, LayeringKind, NeighborLayers,
+	ChicoForest, ChicoGrove, ForestExtent, ForestSelection, LayeringKind, NeighborLayers,
 	SelectedLayers,
 };
 
@@ -88,11 +88,12 @@ impl ForestIndex {
 		self.next_version += 1;
 	}
 
+	pub fn selection(&self) -> ForestSelection {
+		ForestSelection { noise: self.noise, layering: self.layering }
+	}
+
 	pub fn selected_layers_for(&self, extent: ForestExtent) -> SelectedLayers {
-		match self.layering {
-			Some(kind) => kind.layering().typical_layers(),
-			None => select_cell(extent, self.noise),
-		}
+		self.selection().layers_for(extent)
 	}
 
 	/// Insert the forest cell if missing (selection only). Used when listing grove origins.

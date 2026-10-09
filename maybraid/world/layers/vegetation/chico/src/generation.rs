@@ -9,9 +9,9 @@ use lod::scene::{LodCullRegions, LodCullRegionsStatus, OpenLattice};
 use lod::scene::{LodRefreshRegions, LodRefreshRegionsStatus};
 
 use crate::bump_out::{
-	blend_selection_neighborhood, bump_out_cell_bounds, bump_out_cells_overlapping,
-	bump_out_in_inner_hole, medium_bump_out_in_band, CanopyBumpOut, MediumCanopyBumpOut,
-	BUMP_OUT_CELL_XZ, BUMP_OUT_OUTER_RADIUS_M, MEDIUM_BUMP_OUT_CELL_XZ,
+	bump_out_cell_bounds, bump_out_cells_overlapping, bump_out_in_inner_hole,
+	medium_bump_out_in_band, CanopyBumpOut, MediumCanopyBumpOut, BUMP_OUT_CELL_XZ,
+	BUMP_OUT_OUTER_RADIUS_M,
 };
 use crate::grove::{grove_from_id, grove_id};
 use crate::index::ForestIndex;
@@ -108,22 +108,19 @@ impl GenerationScheme<ForestIndex> for CanopyBumpOut {
 
 	fn build_with_id(spatial_index: &mut ForestIndex, id: lod::gen::Id) -> Option<(Self, Aabb3d)> {
 		let bounds = id.origin_cell_bounds()?;
-		let size = (bounds.max.x - bounds.min.x).max(1e-3);
-		if (size - BUMP_OUT_CELL_XZ).abs() > 1e-2 {
-			return None;
-		}
-		let neighborhood = Aabb3d::from_min_max(
-			Vec3::new(bounds.min.x - size, bounds.min.y, bounds.min.z - size),
-			Vec3::new(bounds.max.x + size, bounds.max.y, bounds.max.z + size),
-		);
-		ensure_forests_for_bounds(spatial_index, neighborhood);
-		let samples = blend_selection_neighborhood(spatial_index, bounds);
-		let cell = Self { bounds, samples };
-		if !cell.has_density() {
-			return None;
-		}
+		let cell = Self::select(spatial_index.selection(), bounds)?;
+		ensure_forests_for_bounds(spatial_index, neighborhood(bounds));
 		Some((cell, bounds))
 	}
+}
+
+/// `bounds` and its eight neighbors.
+fn neighborhood(bounds: Aabb3d) -> Aabb3d {
+	let size = bounds.max.x - bounds.min.x;
+	Aabb3d::from_min_max(
+		Vec3::new(bounds.min.x - size, bounds.min.y, bounds.min.z - size),
+		Vec3::new(bounds.max.x + size, bounds.max.y, bounds.max.z + size),
+	)
 }
 
 impl GenerationScheme<ForestIndex> for MediumCanopyBumpOut {
@@ -141,17 +138,8 @@ impl GenerationScheme<ForestIndex> for MediumCanopyBumpOut {
 
 	fn build_with_id(spatial_index: &mut ForestIndex, id: lod::gen::Id) -> Option<(Self, Aabb3d)> {
 		let bounds = id.origin_cell_bounds()?;
-		let size = (bounds.max.x - bounds.min.x).max(1e-3);
-		if (size - MEDIUM_BUMP_OUT_CELL_XZ).abs() > 1e-2 {
-			return None;
-		}
-		let neighborhood = Aabb3d::from_min_max(
-			Vec3::new(bounds.min.x - size, bounds.min.y, bounds.min.z - size),
-			Vec3::new(bounds.max.x + size, bounds.max.y, bounds.max.z + size),
-		);
-		ensure_forests_for_bounds(spatial_index, neighborhood);
-		let samples = blend_selection_neighborhood(spatial_index, bounds);
-		let bump_out = MediumCanopyBumpOut(CanopyBumpOut { bounds, samples });
+		let bump_out = Self::select(spatial_index.selection(), bounds)?;
+		ensure_forests_for_bounds(spatial_index, neighborhood(bounds));
 		Some((bump_out, bounds))
 	}
 }
@@ -357,9 +345,9 @@ impl LodRefreshRegions for BumpOutPresentBullseye {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::bump_out::MEDIUM_BUMP_OUT_CELL_XZ;
 	use anyhow::Result;
 	use lod::gen::GeneratingSpatialIndex;
-	use lod::lod_ref::LodRef;
 
 	#[test]
 	fn forest_original_ids_are_overlapping_forest_cells() -> Result<()> {
@@ -399,7 +387,7 @@ mod tests {
 	}
 
 	#[test]
-	fn grove_build_depends_on_forest_and_does_not_grow() -> Result<()> {
+	fn grove_build_depends_on_forest() -> Result<()> {
 		let mut index = ForestIndex::default();
 		index.layering = Some(crate::LayeringKind::LushJungle);
 		let region = ForestExtent::xz_radius_aabb(Vec3::ZERO, 50.0);
@@ -409,103 +397,8 @@ mod tests {
 		let grove = lod::gen::SpatialIndex::<ChicoGrove>::get(&index, id)
 			.ok_or_else(|| anyhow::anyhow!("grove"))?;
 		assert!(!grove.recipes.is_empty());
-		assert!(grove.grown_tiles().is_none());
 		let forest_id = ForestExtent::default_cell().id();
 		assert!(lod::gen::SpatialIndex::<ChicoForest>::get(&index, forest_id).is_some());
-		Ok(())
-	}
-
-	#[derive(bevy::prelude::Resource, Default)]
-	struct GrovePresentLog {
-		presented: std::collections::HashMap<lod::gen::Id, lod::gen::Version>,
-	}
-
-	#[derive(bevy::ecs::system::SystemParam)]
-	struct GrovePresentParam<'w> {
-		log: bevy::prelude::ResMut<'w, GrovePresentLog>,
-	}
-
-	impl lod::presentation::RegionPresenter<ChicoGrove, ForestIndex> for GrovePresentParam<'_> {
-		fn presented_version(&self, id: lod::gen::Id) -> Option<lod::gen::Version> {
-			self.log.presented.get(&id).copied()
-		}
-
-		fn handle(
-			&mut self,
-			id: lod::gen::Id,
-			version: lod::gen::Version,
-			grove: &ChicoGrove,
-			_lod_ref: &LodRef,
-		) {
-			let Some(_tiles) = grove.tiles_ready_to_present(&crate::index::forest_world_sample())
-			else {
-				return;
-			};
-			self.log.presented.insert(id, version);
-		}
-
-		fn presented_ids(&self) -> Vec<lod::gen::Id> {
-			self.log.presented.keys().copied().collect()
-		}
-
-		fn remove_stale(&mut self, wanted: &std::collections::HashSet<lod::gen::Id>) {
-			self.log.presented.retain(|id, _| wanted.contains(id));
-		}
-	}
-
-	#[test]
-	fn drain_present_grows_then_spawns_on_the_next_slot() -> Result<()> {
-		use bevy::prelude::*;
-		use lod::gen::{SpatialIndex, Version};
-		use lod::lod_ref::{LodNode, LodNodePose};
-		use lod::presentation::{LodPresentBudget, LodPresentKeepRegion, LodPresentPlugin};
-
-		use crate::index::forest_world_sample;
-		use crate::{ForestGroveKind, ForestGroveRecipe};
-
-		let extent = vegetation_groves::GroveExtent::new(Vec3::ZERO, Vec3::new(100.0, 1.0, 100.0));
-		let grove = ChicoGrove::selected(
-			extent,
-			ForestLayer::UpperCanopy,
-			vec![ForestGroveRecipe::uniform(ForestGroveKind::Orchard, extent)],
-		);
-		let id = grove.id();
-		let bounds = grove.aabb();
-		let mut index = ForestIndex::default();
-		SpatialIndex::<ChicoGrove>::insert(&mut index, id, grove, bounds);
-
-		let mut app = App::new();
-		app.add_plugins(MinimalPlugins)
-			.insert_resource(index)
-			.insert_resource(GrovePresentLog::default())
-			.insert_resource(LodPresentBudget::<ForestLodChan>::new(1))
-			.insert_resource({
-				let mut keep = LodPresentKeepRegion::<ForestLodChan>::default();
-				keep.region = Some(bounds);
-				keep
-			})
-			.add_plugins(LodPresentPlugin::<
-				ChicoGrove,
-				ForestIndex,
-				GrovePresentParam,
-				ForestLodChan,
-			>::default());
-		app.world_mut().spawn((LodNode, LodNodePose::default(), Transform::IDENTITY));
-		app.update();
-
-		{
-			let log = app.world().resource::<GrovePresentLog>();
-			assert!(log.presented.is_empty(), "first slot grows and does not present");
-			let index = app.world().resource::<ForestIndex>();
-			let grove = SpatialIndex::<ChicoGrove>::get(index, id)
-				.ok_or_else(|| anyhow::anyhow!("grove after grow"))?;
-			assert!(grove.grown_tiles().is_some());
-			assert!(grove.tiles_ready_to_present(&forest_world_sample()).is_some());
-		}
-
-		app.update();
-		let log = app.world().resource::<GrovePresentLog>();
-		assert_eq!(log.presented.get(&id).copied(), Some(Version(1)));
 		Ok(())
 	}
 

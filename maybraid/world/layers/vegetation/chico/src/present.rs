@@ -200,12 +200,12 @@ impl ForestPresenterState {
 			let task = if let Some(pool) = AsyncComputeTaskPool::try_get() {
 				pool.spawn(async move {
 					let _span = info_span!("chico_grove_growth").entered();
-					let tiles = grove.ensure_grown(&world).to_vec();
+					let tiles = grove.grow(&world);
 					GroveGrowthResult { tiles }
 				})
 			} else {
 				let _span = info_span!("chico_grove_growth").entered();
-				let tiles = grove.ensure_grown(&world).to_vec();
+				let tiles = grove.grow(&world);
 				return self.finish_grown(commands, id, version, layer, tiles, lod_ref);
 			};
 			self.growing.insert(
