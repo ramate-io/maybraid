@@ -1,11 +1,13 @@
 //! [`RichmondGround`]: the ground developments are generated over.
 
 use std::marker::PhantomData;
+use std::sync::Arc;
 
 use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec2;
 use durham::{Durham, Terrain, TerrainMeshBuilder};
 use lod::gen::{GenerationScheme, Id, OriginalId};
+use lod::hcsg::shared::{self, GenerationContext};
 use lod::hcsg::HcsgStorage;
 use procedural_common::Bounds2;
 use terrain_layer_model::{OnTerrain, TerrainCell, TerrainModel};
@@ -25,7 +27,8 @@ pub trait RichmondGround:
 	Cell: GroundCell
 	          + PadComposable<Padded = TerrainWithPads>
 	          + TerrainCell<Mesh = TerrainMeshBuilder>
-	          + GenerationScheme<HcsgStorage>,
+	          + GenerationScheme<HcsgStorage>
+	          + shared::GenerationScheme,
 >
 {
 	/// Storage group the ground's cells belong to. Surfaces composed from
@@ -177,6 +180,55 @@ impl<G: RichmondGround> SiteGround for GroundSampler<'_, G> {
 
 fn sort_finest_first(cells: &mut [(Id, Aabb3d)]) {
 	cells.sort_by(|(_, a), (_, b)| (a.max.x - a.min.x).total_cmp(&(b.max.x - b.min.x)));
+}
+
+/// [`SiteGround`] over the cells of `G` under one site, finest first.
+///
+/// The cells are the ones `G` originates in the site, generated through the
+/// context, so a site samples the same ground whatever else is stored.
+pub struct GroundCells<G: RichmondGround> {
+	cells: Vec<Arc<G::Cell>>,
+}
+
+impl<G: RichmondGround> GroundCells<G> {
+	pub fn generate(cx: &mut GenerationContext, site: Aabb3d) -> Self {
+		let mut cells: Vec<Arc<G::Cell>> = cx
+			.original_ids_for::<G::Cell>(site)
+			.into_iter()
+			.filter_map(|OriginalId(id)| cx.get_or_generate::<G::Cell>(id))
+			.collect();
+		cells.sort_by(|a, b| span_x(a.bounds()).total_cmp(&span_x(b.bounds())));
+		Self { cells }
+	}
+}
+
+fn span_x(bounds: Aabb3d) -> f32 {
+	bounds.max.x - bounds.min.x
+}
+
+/// Pads are checked over their realized support, flatten plus ease.
+impl<G: RichmondGround> SiteGround for GroundCells<G> {
+	fn height_at(&mut self, x: f32, z: f32) -> Option<f32> {
+		self.cells
+			.iter()
+			.find(|cell| {
+				let bounds = cell.bounds();
+				x >= bounds.min.x && x <= bounds.max.x && z >= bounds.min.z && z <= bounds.max.z
+			})
+			.map(|cell| cell.composed_height_at(x, z))
+	}
+
+	fn hydro_overlaps(&mut self, pad: &PadPlan) -> bool {
+		let pad = PadComplex::from(pad).bounds;
+		self.cells.iter().any(|cell| {
+			let bounds = cell.bounds();
+			pad.min.x <= bounds.max.x
+				&& pad.max.x >= bounds.min.x
+				&& pad.min.y <= bounds.max.z
+				&& pad.max.y >= bounds.min.z
+				&& cell.hydro_overlaps(pad)
+		})
+	}
 }
 
 #[cfg(test)]

@@ -3,6 +3,7 @@
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::Resource;
 use lod::gen::{GenerationScheme, Id, OriginalId};
+use lod::hcsg::shared::{self, GenerationContext};
 use lod::hcsg::HcsgStorage;
 use procedural_common::SeededHash;
 use urbanization_cells::{SelectedUrbanization, UrbanDevelopmentKind, UrbanizationExtent};
@@ -291,6 +292,73 @@ impl GenerationScheme<HcsgStorage> for DevelopmentSite {
 			DevelopmentSites::Urbanization => {
 				let extent = UrbanizationExtent::owning_leaf(id)?;
 				let selected = storage.get_one_or_generate::<SelectedUrbanization>(extent.id())?;
+				DevelopmentKind::from(selected.leaf(id)?.kind)
+			}
+		};
+		let kind =
+			if authored.overlapping(cell).next().is_some() { DevelopmentKind::Empty } else { kind };
+		Some((Self { cell, kind, authored: None }, column_bounds(cell)))
+	}
+}
+
+impl shared::GenerationScheme for DevelopmentSite {
+	/// Authored sites, then the procedural sites of the configured mode.
+	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
+		let Some(config) = cx.get::<DevelopmentConfig>(Id::Universal) else {
+			return Vec::new();
+		};
+		let authored = cx.get::<AuthoredDevelopments>(Id::Universal).unwrap_or_default();
+		let mut ids: Vec<OriginalId> =
+			authored.overlapping(region).map(|authored| OriginalId(authored.id())).collect();
+		match config.sites {
+			DevelopmentSites::Authored => {}
+			DevelopmentSites::Lattice => {
+				ids.extend(DevelopmentExtent::original_ids_overlapping(region));
+			}
+			DevelopmentSites::Urbanization => {
+				for extent in UrbanizationExtent::cells_overlapping(region) {
+					let Some(selected) = cx.get_or_generate::<SelectedUrbanization>(extent.id())
+					else {
+						continue;
+					};
+					ids.extend(
+						selected
+							.leaves
+							.iter()
+							.filter(|leaf| {
+								leaf.kind != UrbanDevelopmentKind::Empty
+									&& overlaps_xz(region, leaf.bounds)
+							})
+							.map(|leaf| OriginalId(leaf.id())),
+					);
+				}
+			}
+		}
+		ids.sort_unstable_by_key(|OriginalId(id)| *id);
+		ids.dedup();
+		ids
+	}
+
+	/// An authored site as authored; a procedural one picks its kind, and
+	/// stays empty under an authored site.
+	fn build_with_id(cx: &mut GenerationContext, id: Id) -> Option<(Self, Aabb3d)> {
+		let config = cx.get::<DevelopmentConfig>(Id::Universal)?;
+		let authored = cx.get::<AuthoredDevelopments>(Id::Universal).unwrap_or_default();
+		if let Some(entry) = authored.get(id) {
+			let kind = entry.kinds.first().copied().unwrap_or(DevelopmentKind::Empty);
+			let site = Self { cell: entry.cell, kind, authored: Some(entry.clone()) };
+			return Some((site, column_bounds(entry.cell)));
+		}
+		let cell = id.origin_cell_bounds()?;
+		let kind = match config.sites {
+			DevelopmentSites::Authored => return None,
+			DevelopmentSites::Lattice => {
+				DevelopmentExtent::from_id(id)?;
+				select_kind(cell, &config)
+			}
+			DevelopmentSites::Urbanization => {
+				let extent = UrbanizationExtent::owning_leaf(id)?;
+				let selected = cx.get_or_generate::<SelectedUrbanization>(extent.id())?;
 				DevelopmentKind::from(selected.leaf(id)?.kind)
 			}
 		};

@@ -20,18 +20,20 @@ use commands::{
 	RequestTerrainRadius,
 };
 use durham::{
-	Durham, DurhamTerrainConfig, TerrainCellLayout, TerrainConfig, TerrainMeshLodBand,
-	TerrainPresentationAssets, TerrainPresentationDirty, TerrainStampConfigs, WatershedConfigs,
-	WorldBaseTerrain,
+	Durham, DurhamRoots, DurhamTerrainConfig, TerrainCellLayout, TerrainConfig, TerrainFillSystems,
+	TerrainLayoutPinned, TerrainMeshLodBand, TerrainPresentationAssets, TerrainPresentationDirty,
+	TerrainStampConfigs, WatershedConfigs, WorldBaseTerrain,
 };
 use furnishing_layer_model::Furnishing;
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use game_commands::ui::{GameCommandDrawerConfig, GameCommandStatusText};
 use layer_stack::{GenerationMode, LayerModeConfig, Scheme};
+use lod::hcsg::shared::{HcsgDemand, HcsgStorage, HcsgSystems};
 use maputo::{install_furnishing_stream, Maputo};
 use richmond::DevelopmentConfig;
 use richmond::{
 	install_urbanization_stream, DevelopmentFocus as LayerFocus, Richmond, RichmondConfig,
+	RichmondRoots,
 };
 use std::f32::consts::PI;
 use terrain_layer_model::OnTerrain;
@@ -77,8 +79,8 @@ impl Default for PlaygroundConfig {
 
 /// Richmond developments on Durham terrain.
 ///
-/// Assemblers add the urbanization layer plugins. This plugin keeps camera,
-/// commands, and UI.
+/// Assemblers add the layer generation and presentation plugins. This plugin
+/// keeps camera, commands, UI, and the session restart those commands drive.
 pub struct DevelopmentsOnTerrainPlugin {
 	pub config: PlaygroundConfig,
 	/// When false, the caller owns the command drawer / CLI.
@@ -116,8 +118,36 @@ impl Plugin for DevelopmentsOnTerrainPlugin {
 				);
 		}
 
-		app.insert_resource(self.config.clone());
+		// The layout is a session root: it moves only by command, never with the
+		// viewer. The first frame starts the first session.
+		app.insert_resource(self.config.clone())
+			.insert_resource(TerrainLayoutPinned(true))
+			.insert_resource(TerrainPresentationDirty(true))
+			.add_systems(
+				Update,
+				restart_session
+					.after(apply_commands)
+					.before(TerrainFillSystems::Window)
+					.before(HcsgSystems),
+			);
 	}
+}
+
+/// A command changed the roots: start a new shared session. The terrain window
+/// producer still consumes the flag for the stores the old generators read.
+fn restart_session(
+	durham: DurhamRoots,
+	richmond: RichmondRoots,
+	storage: Res<HcsgStorage>,
+	demand: Res<HcsgDemand>,
+	dirty: Res<TerrainPresentationDirty>,
+) {
+	if !dirty.0 {
+		return;
+	}
+	demand.advance_epoch();
+	durham.reset(&storage);
+	richmond.reset::<OnTerrain<Durham>>(&storage);
 }
 
 fn setup_lighting(mut commands: Commands) {

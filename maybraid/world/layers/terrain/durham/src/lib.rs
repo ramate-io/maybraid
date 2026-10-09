@@ -9,7 +9,9 @@ pub mod water;
 
 /// Durham's nodes live in the shared HCSG storage; read them through [`TerrainStorage`].
 pub use lod::hcsg::HcsgStorage;
-pub use shared::{DurhamPresentationPlugin, DurhamWindow, SharedTerrainStorage};
+pub use shared::{
+	DurhamPresentationPlugin, DurhamWindow, SharedTerrainStorage, WaterPresentationPlugin,
+};
 pub use terrain::render::cascade_chunk_for_cell;
 pub use terrain::{
 	fine_patch_cell_layout, playable_world_cell_layout, register_terrain_plugin,

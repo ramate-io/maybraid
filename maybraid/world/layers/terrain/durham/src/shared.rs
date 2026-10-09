@@ -52,15 +52,31 @@ impl<B> Default for DurhamPresentationPlugin<B> {
 
 impl<B: HcsgBounds> Plugin for DurhamPresentationPlugin<B> {
 	fn build(&self, app: &mut App) {
-		let storage = app.world_mut().get_resource_or_init::<HcsgStorage>().clone();
-		DurhamNodes::configure(&storage);
-		app.add_plugins((
-			PresentationPlugin::<B, Terrain>::default(),
-			PresentationPlugin::<B, Water>::default(),
-		));
+		if !app.is_plugin_added::<WaterPresentationPlugin<B>>() {
+			app.add_plugins(WaterPresentationPlugin::<B>::default());
+		}
+		app.add_plugins(PresentationPlugin::<B, Terrain>::default());
 		if !app.is_plugin_added::<LodSceneRefreshChunkPlugin<HcsgNode<Terrain>>>() {
 			app.add_plugins(LodSceneRefreshChunkPlugin::<HcsgNode<Terrain>>::default());
 		}
+	}
+}
+
+/// Presents Durham water within `B` from the shared storage, for a layer
+/// that presents its own surface over Durham terrain.
+pub struct WaterPresentationPlugin<B>(PhantomData<fn() -> B>);
+
+impl<B> Default for WaterPresentationPlugin<B> {
+	fn default() -> Self {
+		Self(PhantomData)
+	}
+}
+
+impl<B: HcsgBounds> Plugin for WaterPresentationPlugin<B> {
+	fn build(&self, app: &mut App) {
+		let storage = app.world_mut().get_resource_or_init::<HcsgStorage>().clone();
+		DurhamNodes::configure(&storage);
+		app.add_plugins(PresentationPlugin::<B, Water>::default());
 		if !app.is_plugin_added::<LodSceneRefreshChunkPlugin<HcsgNode<Water>>>() {
 			app.add_plugins(LodSceneRefreshChunkPlugin::<HcsgNode<Water>>::default());
 		}

@@ -372,7 +372,15 @@ The demand layer holds an `epoch`:
 - `advance_epoch` removes every subscription and sets its `cancelled` flag, so the worker stops and never publishes a value generated under an older epoch.
 - **Mode enter** runs its initialization phase (seeding roots) before its generation and presentation systems subscribe.
 
-A restart is always in this order: advance the epoch, clear the stores, seed the roots. Cancelling first is what lets the clear be final (see [Schemes](#schemes)). Durham's `DurhamRoots::restart` is the first instance; `durham-playground` calls it on a seed or layout change. Hosts keep showing the previous session's values until the new ones land and replace them by version.
+A restart is always in this order: advance the epoch, clear the stores, seed the roots. Cancelling first is what lets the clear be final (see [Schemes](#schemes)). Hosts keep showing the previous session's values until the new ones land and replace them by version.
+
+Each layer's roots expose `reset` (clear its stores, seed its roots). Advancing the epoch belongs to whoever owns the session, because one epoch ends every layer's subscriptions:
+
+- `durham-playground` calls `DurhamRoots::restart` (advance, then reset) on a seed or layout change.
+- `richmond-playground` advances once, then resets `DurhamRoots` and `RichmondRoots`, on an explicit command flag.
+- Game modes will do the same on enter, before turning generation and presentation back on.
+
+Presentation plugins never restart sessions or infer one from resource changes; they only gate where presentation runs.
 
 Nothing else is invalidated. Recording references between values (`get_or_generate` noting the `(TypeId, Id)` pairs it touched) is a later feature for eviction and garbage collection, not for correctness.
 
@@ -419,10 +427,10 @@ The new API lives in `lod::hcsg::shared`, alongside the frame-synchronous `lod::
 1. **Adapter** (done). `GenerationContext` implements the legacy `SpatialIndex<T>`, so every legacy scheme generic over `S` (Durham, cells) is a `GenerationScheme` unchanged and runs on the worker. Native schemes can depend on those legacy types. Legacy `get(&self) -> Option<&T>` borrows from an append-only cache (`elsa::FrozenMap`) of the `Arc`s the context has read. Legacy `descendants` run only from legacy entry points.
 2. **Generation and presentation systems** (done). `HcsgBounds`, `HcsgNode<T>`, `generation<B, T>`, `presentation<B, T>`, scene forwarding and the plugins, tested on fixtures with the real worker and the LOD chunk-fulfill pipeline.
 3. **Durham** (done). `DurhamPresentationPlugin<B>` presents `Terrain` and `Water` through `presentation<B, T>` and chunk fulfill, next to the old presenters. `DurhamWindow` bounds the layout's request region. `DurhamRoots::restart` seeds the shared storage, whose base scales come from the same `durham_nodes!` list as the old storage. Collision-seeding cells carry the trimesh source in `Terrain`'s own `LodScene`. `durham-playground` generates on the worker and no longer calls the old storage. The streamed world path keeps the old presenters until Richmond moves (step 4), because its level changes need the refresh region plugins.
-4. **Richmond.** Rewrite its four schemes natively; present total padded terrain and built developments; delete the terrain replacement machinery.
+4. **Richmond** (done in `richmond-playground`). `DevelopmentSite`, `RichmondDevelopment`, `PaddedTerrain` and `Built` have native schemes beside their legacy ones, which stay until their last reader moves. Developments sample the ground through `GroundCells`, a pure view of the context. `PaddedTerrain` is total: a cell no pad reaches wraps the terrain unchanged, so it replaces raw terrain as the presented ground surface instead of overlaying it. `Built` is one `LodScene` whose level holds the `UrbanSetting` and the nested building hosts (`DevelopmentHost::scene`, shared with the legacy spawn). `RichmondPresentationPlugin<B, G>` presents both. `WaterPresentationPlugin<B>` presents Durham water alone, so Richmond doesn't need raw terrain hosts. The playground pins its layout, because the layout is a session root, and restarts on its command flag. Composed apps keep the old presenters, along with `sync_raw_terrain_replacements` and `TerrainSuperseded`, until step 7.
 5. **Chico, Barking, Maputo.** Rewrite each onto the context, deleting its bespoke index and presenter; then delete `gen::runtime`.
 6. **Native Durham and cells.** Rewrite their generic schemes on the context API, dropping the `S` capability bounds and dependency clones.
-7. **Modes and removal.** Build the Discovery game mode on the new runtime. Delete the adapter (and `elsa`), the producer and queue machinery, `Seed`, the old storage and the training ground, which is then rebuilt from scratch.
+7. **Modes and removal.** Build the Discovery game mode on the new runtime. Delete the adapter (and `elsa`), the producer and queue machinery, the terrain replacement machinery, `Seed`, the old storage and the training ground, which is then rebuilt from scratch.
 
 ## Later
 

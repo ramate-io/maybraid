@@ -14,7 +14,7 @@ use procedural_common::NoiseParams;
 use richmond::{Built, BuiltDevelopment, DevelopmentHosts};
 use terrain_layer_model::OnTerrain;
 use urbanization_developments::{MixedUseLesHallesDevelopment, PlacedBuilding};
-use urbanization_layer_model::Urbanization;
+use urbanization_layer_model::{UrbanSetting, Urbanization};
 
 use crate::cell::world_slot;
 use crate::slots::FurnitureSlots;
@@ -61,8 +61,14 @@ fn furniture_slots_match_les_halles_world_slots() -> anyhow::Result<()> {
 	world.init_resource::<HcsgStorage>();
 	{
 		let mut store = world.resource_mut::<HcsgStorage>();
-		store.insert(id, Built::<Ground>::new(built), bounds);
-		store.insert(Id::from_cell(elsewhere), Built::<Ground>::new(other), elsewhere);
+		let setting = |id| UrbanSetting { id, arrival_radius: 8.0 };
+		store.insert(id, Built::<Ground>::new(built, setting(id), Vec3::ZERO), bounds);
+		let other_id = Id::from_cell(elsewhere);
+		store.insert(
+			other_id,
+			Built::<Ground>::new(other, setting(other_id), Vec3::ZERO),
+			elsewhere,
+		);
 	}
 
 	let overlapping = world

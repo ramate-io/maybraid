@@ -1,11 +1,11 @@
 use std::path::{Path, PathBuf};
 
 use bevy::prelude::*;
-use durham::{Durham, DurhamTerrainConfig};
+use durham::{Durham, DurhamTerrainConfig, DurhamWindow, WaterPresentationPlugin};
 use furnishing_layer_model::Furnishing;
 use layer_stack::{Generate, GenerationModePlugin, Present};
 use maputo::Maputo;
-use richmond::{Richmond, RichmondConfig, UrbanizationStreamSpec};
+use richmond::{Richmond, RichmondConfig, RichmondPresentationPlugin, UrbanizationStreamSpec};
 use richmond_playground::{
 	DevelopmentsOnTerrainPlugin, PendingStartupCommand, PlaygroundCommand, PlaygroundConfig,
 	PlaygroundMode,
@@ -52,9 +52,9 @@ fn main() {
 	app.add_plugins(Generate::<PlaygroundMode, Ground>::new(DurhamTerrainConfig::fine_patch(
 		playground.terrain_radius,
 	)));
-	app.add_plugins(Present::<PlaygroundMode, Ground>::default());
 	app.add_plugins(Generate::<PlaygroundMode, Urban>::new(urban));
-	app.add_plugins(Present::<PlaygroundMode, Urban>::default());
+	app.add_plugins(WaterPresentationPlugin::<DurhamWindow>::default());
+	app.add_plugins(RichmondPresentationPlugin::<DurhamWindow, Ground>::default());
 	app.add_plugins(Generate::<PlaygroundMode, Furniture>::new(()));
 	app.add_plugins(Present::<PlaygroundMode, Furniture>::default());
 	app.add_plugins(DevelopmentsOnTerrainPlugin { config: playground, commands: true })

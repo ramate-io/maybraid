@@ -157,10 +157,15 @@ impl DurhamRoots<'_> {
 	}
 
 	/// Starts a new shared session from the resources: ends the epoch (every
-	/// layer's subscriptions, so in-flight values are dropped), clears Durham's
-	/// derived values, then seeds the roots.
+	/// layer's subscriptions, so in-flight values are dropped), then resets.
 	pub fn restart(&self, storage: &shared::HcsgStorage, demand: &HcsgDemand) {
 		demand.advance_epoch();
+		self.reset(storage);
+	}
+
+	/// Clears Durham's derived values and seeds the roots. Within a restart,
+	/// after the epoch has advanced.
+	pub fn reset(&self, storage: &shared::HcsgStorage) {
 		DurhamNodes::clear(storage);
 		storage.seed(self.layout.clone(), universal_bounds());
 		storage.seed(self.stamps.clone(), universal_bounds());

@@ -4,7 +4,7 @@ use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::math::DVec3;
 use bevy::prelude::*;
 use lod::gen::{Id, SpatialIndex};
-use lod::hcsg::{HcsgStorage, StoredEntry};
+use lod::hcsg::{shared, HcsgStorage, StoredEntry};
 use procedural_common::NoiseParams;
 
 use crate::{
@@ -25,12 +25,27 @@ lod::seeded_root!(UrbanizationSelection);
 /// [`HcsgStorage`] group holding every record derived from [`UrbanizationSelection`].
 pub struct UrbanizationNodes;
 
-/// Configures the selection store (1600 m buckets) and joins it to [`UrbanizationNodes`].
+/// Selections are bucketed one extent (1600 m) apart.
+const SELECTION_SCALE: DVec3 =
+	DVec3::new(DEFAULT_URBANIZATION_EXTENT_XZ as f64, 1.0, DEFAULT_URBANIZATION_EXTENT_XZ as f64);
+
+/// Configures the selection store and joins it to [`UrbanizationNodes`].
 pub fn register_urbanization_nodes(storage: &mut HcsgStorage) {
-	let scale = DEFAULT_URBANIZATION_EXTENT_XZ as f64;
 	storage
-		.configure::<SelectedUrbanization>(DVec3::new(scale, 1.0, scale))
+		.configure::<SelectedUrbanization>(SELECTION_SCALE)
 		.add_to_group::<UrbanizationNodes, SelectedUrbanization>();
+}
+
+impl UrbanizationNodes {
+	/// Configures the selection store in the shared storage.
+	pub fn configure(storage: &shared::HcsgStorage) {
+		storage.configure::<SelectedUrbanization>(SELECTION_SCALE);
+	}
+
+	/// Drops every selection from the shared storage.
+	pub fn clear(storage: &shared::HcsgStorage) {
+		storage.clear::<SelectedUrbanization>();
+	}
 }
 
 /// Urbanization reads over [`HcsgStorage`]. GET only: nothing is selected here.
