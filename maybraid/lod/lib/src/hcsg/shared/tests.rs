@@ -671,14 +671,21 @@ fn a_scripted_walk_plateaus_store_sizes() -> anyhow::Result<()> {
 		max_ground = max_ground.max(storage.len::<Ground>());
 		max_cover = max_cover.max(storage.len::<Cover>());
 	}
-	let _cover = subscribe::<Cover>(&demand, Some(cover), vec![span(0.0, 4.0)], None);
-	assert!(demand.wait_idle(IDLE));
-	let (top, nested) = storage.rebuilds_after_eviction();
 	assert!(
 		max_ground <= 8 && max_cover <= 8,
-		"walk visited 40 cells; stores must plateau, got ground={max_ground} cover={max_cover} sizes={:?} rebuilds=({top}, {nested})",
+		"walk visited 40 cells; stores must plateau, got ground={max_ground} cover={max_cover} sizes={:?}",
 		storage.store_sizes()
 	);
-	assert!(top > 0 && nested > 0, "returning to the start rebuilds Cover and nested Ground");
+	let start = Id::from_cell(cell(0.0));
+	assert!(
+		!storage.contains::<Cover>(start) && !storage.contains::<Ground>(start),
+		"walking away must evict the start Cover and its Ground"
+	);
+	let _cover = subscribe::<Cover>(&demand, Some(cover), vec![span(0.0, 4.0)], None);
+	assert!(demand.wait_idle(IDLE));
+	assert!(
+		storage.contains::<Cover>(start) && storage.contains::<Ground>(start),
+		"returning to the start rebuilds Cover and nested Ground"
+	);
 	Ok(())
 }
