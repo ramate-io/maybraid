@@ -2,7 +2,7 @@ use character_rigs::authoring::HumanoidPose;
 use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
 use character_rigs::Side;
 
-use crate::animations::{smoothstep, UprightLeap, AIR_END, TAKEOFF_END};
+use crate::animations::{smoothstep, UprightLeap, AIR_END, LEAP_LAND_BLEND_FRACTION, TAKEOFF_END};
 use crate::rigs::humanoid::apply::{apply_arm, apply_leg, apply_root};
 use crate::{Animation, Progress};
 
@@ -56,7 +56,18 @@ impl UprightLeap {
 		} else if t < AIR_END {
 			self.air(smoothstep((t - TAKEOFF_END) / (AIR_END - TAKEOFF_END)))
 		} else {
-			self.land(smoothstep((t - AIR_END) / (1.0 - AIR_END).max(f32::EPSILON)))
+			let land_span = (1.0 - AIR_END).max(f32::EPSILON);
+			let land_local = (t - AIR_END) / land_span;
+			let land_u = smoothstep(land_local);
+			let land_pose = self.land(land_u);
+			let blend_end = LEAP_LAND_BLEND_FRACTION;
+			if land_local < blend_end {
+				let air_pose = self.air(1.0);
+				let weight = smoothstep((land_local / blend_end).clamp(0.0, 1.0));
+				blend_leap_pose(air_pose, land_pose, weight)
+			} else {
+				land_pose
+			}
 		}
 	}
 
@@ -126,6 +137,22 @@ impl UprightLeap {
 
 fn lerp(a: f32, b: f32, t: f32) -> f32 {
 	a + (b - a) * t
+}
+
+fn blend_leap_pose(from: LeapPose, to: LeapPose, weight: f32) -> LeapPose {
+	let w = weight.clamp(0.0, 1.0);
+	LeapPose {
+		left_femur: lerp(from.left_femur, to.left_femur, w),
+		right_femur: lerp(from.right_femur, to.right_femur, w),
+		left_shin: lerp(from.left_shin, to.left_shin, w),
+		right_shin: lerp(from.right_shin, to.right_shin, w),
+		lean: lerp(from.lean, to.lean, w),
+		left_shoulder: lerp(from.left_shoulder, to.left_shoulder, w),
+		right_shoulder: lerp(from.right_shoulder, to.right_shoulder, w),
+		left_humerus: lerp(from.left_humerus, to.left_humerus, w),
+		right_humerus: lerp(from.right_humerus, to.right_humerus, w),
+		elbow: lerp(from.elbow, to.elbow, w),
+	}
 }
 
 #[cfg(test)]
@@ -238,5 +265,128 @@ mod tests {
 		apply_leap(&mut a, 1.0);
 		apply_leap(&mut b, 1.7);
 		assert!((femur_z(&a, Side::Left) - femur_z(&b, Side::Left)).abs() < 1e-5);
+	}
+
+	#[test]
+	fn air_land_handoff_is_continuous() {
+		let leap = UprightLeap::from_leap(&Leap::default());
+		let mut at_air_end = HumanoidV0Rig::for_clip_test();
+		let mut just_into_land = HumanoidV0Rig::for_clip_test();
+		leap.apply(&mut at_air_end, AIR_END - 1e-4);
+		leap.apply(&mut just_into_land, AIR_END + 1e-4);
+		let a = at_air_end.character_length("femur.L");
+		let b = just_into_land.character_length("femur.L");
+		assert!((a - b).length() < 0.04, "air→land should not pop, Δ={:?}", b - a);
+	}
+
+	#[test]
+	fn land_blend_band_interpolates_knee_absorb() {
+		let leap = UprightLeap::from_leap(&Leap::default());
+		let land_span = 1.0 - AIR_END;
+		let blend_mid = AIR_END + land_span * LEAP_LAND_BLEND_FRACTION * 0.5;
+
+		let mut air_end = HumanoidV0Rig::for_clip_test();
+		leap.apply(&mut air_end, AIR_END - 1e-4);
+		let mut mid_blend = HumanoidV0Rig::for_clip_test();
+		leap.apply(&mut mid_blend, blend_mid);
+		let mut land_only = HumanoidV0Rig::for_clip_test();
+		leap.apply(&mut land_only, AIR_END + land_span * LEAP_LAND_BLEND_FRACTION);
+
+		let air_shin = air_end.posed_angle("shin.L");
+		let mid_shin = mid_blend.posed_angle("shin.L");
+		let land_shin = land_only.posed_angle("shin.L");
+		assert!(mid_shin > air_shin + 0.01, "blend should deepen knee absorb");
+		assert!(mid_shin < land_shin + 0.02, "blend stays inside the land band");
+	}
+
+	#[test]
+	fn outside_land_blend_band_matches_unblended_sampler() {
+		let leap = UprightLeap::from_leap(&Leap::default());
+		let land_span = 1.0 - AIR_END;
+		let land_local = LEAP_LAND_BLEND_FRACTION + 0.2;
+		assert!(land_local < 1.0);
+		let progress = AIR_END + land_span * land_local;
+
+		let mut current = HumanoidV0Rig::for_clip_test();
+		leap.apply(&mut current, progress);
+		let mut baseline = HumanoidV0Rig::for_clip_test();
+		// Pre-blend behavior: land segment only, no air handoff.
+		let land_u = smoothstep(land_local);
+		leap.apply_land_only(&mut baseline, land_u);
+		for name in current.animation_bone_names() {
+			let a = current.rotation(name);
+			let b = baseline.rotation(name);
+			assert!(
+				a.dot(b).abs() > 1.0 - 1e-4,
+				"past the blend band land curve is unchanged on {name}"
+			);
+		}
+	}
+
+	#[test]
+	fn interrupted_leap_transition_keeps_visible_pose() {
+		use crate::animations::Transition;
+		use character_rigs::authoring::ArmatureOffset;
+
+		let mut rig = HumanoidV0Rig::for_clip_test();
+		UprightLeap::default().apply(&mut rig, AIR_END + 0.02);
+		let from_pose = rig.pose.clone();
+		let from_offset = ArmatureOffset::IDENTITY;
+		let mut out = HumanoidV0Rig::for_clip_test();
+		Transition::from_visible(UprightLeap::default(), from_pose, from_offset)
+			.apply(&mut out, 0.0, 0.0);
+		assert!(
+			rig.rotation("femur.L").dot(out.rotation("femur.L")).abs() > 1.0 - 1e-5,
+			"interrupted transition should start from the visible leap pose"
+		);
+	}
+
+	#[test]
+	fn nested_mix_preserves_leap_land_blend() {
+		use crate::animations::{Mix, Squat};
+
+		let leap = UprightLeap::default();
+		let land_span = 1.0 - AIR_END;
+		let progress = AIR_END + land_span * LEAP_LAND_BLEND_FRACTION * 0.5;
+		let inner = Mix::new(leap.clone(), Squat::held(), 0.15);
+
+		let mut nested = HumanoidV0Rig::for_clip_test();
+		inner.apply_at(&mut nested, progress, 1.0);
+		let mut leap_only = HumanoidV0Rig::for_clip_test();
+		leap.apply(&mut leap_only, progress);
+		assert!(
+			nested.posed_angle("shin.L") > leap_only.posed_angle("shin.L") * 0.85,
+			"nested mix should still sample the leap land blend"
+		);
+	}
+}
+
+impl UprightLeap {
+	#[cfg(test)]
+	fn apply_land_only(&self, rig: &mut HumanoidV0Rig, land_u: f32) {
+		let sample = self.land(land_u);
+		let mut pose = HumanoidPose::default();
+		apply_leg(&mut pose, Side::Left, sample.left_femur, sample.left_shin);
+		apply_leg(&mut pose, Side::Right, sample.right_femur, sample.right_shin);
+		apply_root(&mut pose, sample.lean);
+		apply_arm(
+			&mut pose,
+			Side::Left,
+			sample.left_shoulder,
+			0.0,
+			sample.left_humerus,
+			0.0,
+			sample.elbow,
+		);
+		apply_arm(
+			&mut pose,
+			Side::Right,
+			sample.right_shoulder,
+			0.0,
+			sample.right_humerus,
+			0.0,
+			sample.elbow,
+		);
+		rig.write_pose(&pose);
 	}
 }
