@@ -8,7 +8,7 @@
 /// Leaf identities are not stored: stamp `build_with_id` down-levels `Id` to
 /// cell bounds. The playable-world stream walks that band's controllers only.
 ///
-/// Consumers depend on `GeneratingSpatialIndex<$Stamp>` alone; leaf discovery
+/// Consumers depend on `$Stamp`'s `GenerationScheme` alone; leaf discovery
 /// (controller cells → guillotine leaves) is encapsulated in `$Stamp`'s scheme.
 ///
 /// `config_family` / `config_band` select e.g. `configs.massif.low_pass`.
@@ -75,10 +75,7 @@ macro_rules! define_stamp_family {
 			}
 		}
 
-		$crate::terrain::cell::derived_universal_scheme!(
-			$Layout,
-			|_cx| Some($Layout::default())
-		);
+		$crate::terrain::cell::derived_universal_scheme!($Layout, |_cx| Some($Layout::default()));
 
 		impl $crate::terrain::cell::CellTiling for $Layout {
 			fn cell_ids(&self, region: bevy::math::bounding::Aabb3d) -> Vec<lod::gen::OriginalId> {
@@ -107,7 +104,6 @@ macro_rules! define_stamp_family {
 				$crate::terrain::stamps::shared::leaf_aabbs(self.cell, &self.cuts)
 			}
 		}
-
 
 		impl lod::hcsg::shared::GenerationScheme for $Controller {
 			fn original_ids_for(
@@ -147,7 +143,6 @@ macro_rules! define_stamp_family {
 				&self.modulations
 			}
 		}
-
 
 		impl lod::hcsg::shared::GenerationScheme for $Stamp {
 			fn original_ids_for(

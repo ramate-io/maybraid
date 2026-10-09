@@ -19,7 +19,6 @@ members = [
   "maybraid/world/layers/furnishing/shaders",
   "maybraid/world/layers/furnishing/playground",
   "maybraid/world/layers/furnishing/model",
-  "maybraid/world/layers/furnishing/presentation",
   "maybraid/world/layers/furnishing/maputo",
 
   "maybraid/menu/components",
@@ -48,15 +47,10 @@ members = [
 
   "maybraid/world/layers/stack",
   "maybraid/world/layers/terrain/model",
-  "maybraid/world/layers/terrain/presentation",
   "maybraid/world/layers/urbanization/model",
-  "maybraid/world/layers/urbanization/presentation",
   "maybraid/world/layers/vegetation/model",
-  "maybraid/world/layers/vegetation/presentation",
   "maybraid/world/layers/mobs/model",
-  "maybraid/world/layers/mobs/presentation",
   "maybraid/world/layers/language/model",
-  "maybraid/world/layers/language/presentation",
   "maybraid/world/layers/language/geneva",
 
   "maybraid/lod/lib",
@@ -285,7 +279,6 @@ furniture-usage-areas = { path = "maybraid/world/layers/furnishing/usage-areas" 
 furniture-shaders = { path = "maybraid/world/layers/furnishing/shaders" }
 furniture-playground = { path = "maybraid/world/layers/furnishing/playground" }
 furnishing-layer-model = { path = "maybraid/world/layers/furnishing/model" }
-furnishing-layer-presentation = { path = "maybraid/world/layers/furnishing/presentation" }
 maputo = { path = "maybraid/world/layers/furnishing/maputo" }
 
 menu-components = { path = "maybraid/menu/components" }
@@ -305,15 +298,10 @@ avian3d = "0.7"
 
 layer-stack = { path = "maybraid/world/layers/stack" }
 terrain-layer-model = { path = "maybraid/world/layers/terrain/model" }
-terrain-layer-presentation = { path = "maybraid/world/layers/terrain/presentation" }
 urbanization-layer-model = { path = "maybraid/world/layers/urbanization/model" }
-urbanization-layer-presentation = { path = "maybraid/world/layers/urbanization/presentation" }
 vegetation-layer-model = { path = "maybraid/world/layers/vegetation/model" }
-vegetation-layer-presentation = { path = "maybraid/world/layers/vegetation/presentation" }
 mob-layer-model = { path = "maybraid/world/layers/mobs/model" }
-mob-layer-presentation = { path = "maybraid/world/layers/mobs/presentation" }
 language-layer-model = { path = "maybraid/world/layers/language/model" }
-language-layer-presentation = { path = "maybraid/world/layers/language/presentation" }
 geneva = { path = "maybraid/world/layers/language/geneva" }
 
 lod = { path = "maybraid/lod/lib" }

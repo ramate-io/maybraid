@@ -4,6 +4,7 @@
 
 pub mod shared;
 
+pub use shared::node_store::{NodeStore, StoredEntry, DEFAULT_BASE_SCALE};
 pub use shared::{
 	bounds::{Gated, HcsgBounds, HcsgBoundsPlugin, HcsgGate, HcsgRegions},
 	context::{GenerationContext, GenerationScheme},
@@ -15,7 +16,6 @@ pub use shared::{
 	storage::{Busy, HcsgStorage, HcsgValue},
 	worker::HcsgWorker,
 };
-pub use shared::node_store::{NodeStore, StoredEntry, DEFAULT_BASE_SCALE};
 
 use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec3;

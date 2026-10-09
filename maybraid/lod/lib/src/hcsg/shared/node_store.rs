@@ -143,16 +143,6 @@ impl<T> NodeStore<T> {
 		self.membership_revision = revision;
 	}
 
-	fn relocate(&mut self, id: Id, bounds: Aabb3d, revision: u64) -> bool {
-		let Some(entry) = self.entries.get_mut(&id) else {
-			return false;
-		};
-		entry.bounds = bounds;
-		self.index(id, bounds);
-		self.membership_revision = revision;
-		true
-	}
-
 	pub(super) fn remove(&mut self, id: Id, revision: u64) -> Option<StoredEntry<T>> {
 		let entry = self.entries.remove(&id)?;
 		if let Some(spatial) = self.spatial.as_mut() {

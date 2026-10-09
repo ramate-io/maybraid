@@ -23,11 +23,11 @@ use visual_geometry_core::{
 use crate::register_durham_plugin;
 use crate::terrain::index::{origin_cell_ids_at, DurhamNodes};
 use crate::terrain::{
-	playable_world_cell_layout, presentation_assets, BaseTerrainNoise, Durham, Terrain,
-	TerrainCellLayout, TerrainConfig, TerrainCoverage, TerrainMeshBuilder, WorldBaseTerrain,
+	mesh_assets, playable_world_cell_layout, BaseTerrainNoise, Durham, Terrain, TerrainCellLayout,
+	TerrainConfig, TerrainCoverage, TerrainMeshBuilder, WorldBaseTerrain,
 	WORLD_FINE_HALF_EXTENT_CELLS,
 };
-use crate::water::{ComposedWater, Water, WaterColumn, WaterPresentationAssets};
+use crate::water::{ComposedWater, Water, WaterColumn, WaterMeshAssets};
 
 /// The [`TerrainCellLayout`] resource's window: its request region.
 pub struct DurhamWindow;
@@ -125,13 +125,13 @@ impl Plugin for DurhamWorldPlugin {
 		let material = world.resource_mut::<Assets<TerrainShader>>().add(TerrainShader::default());
 		let water = world.resource_mut::<Assets<RefractionWater>>().add(RefractionWater::default());
 		let config = world.resource::<TerrainConfig>().clone();
-		world.insert_resource(presentation_assets(
+		world.insert_resource(mesh_assets(
 			config,
 			material,
 			TerrainCoverage::PlayableWorld,
 			WORLD_FINE_HALF_EXTENT_CELLS,
 		));
-		world.insert_resource(WaterPresentationAssets { material: water });
+		world.insert_resource(WaterMeshAssets { material: water });
 	}
 }
 
@@ -287,9 +287,9 @@ mod tests {
 	use super::*;
 	use crate::terrain::{
 		fine_patch_cell_layout, CellTiling, TerrainColliderMeshSource, TerrainConfig,
-		TerrainMeshLodBand, TerrainPresentationAssets, TerrainStampConfigs, WatershedConfigs,
+		TerrainMeshAssets, TerrainMeshLodBand, TerrainStampConfigs, WatershedConfigs,
 	};
-	use crate::water::WaterPresentationAssets;
+	use crate::water::WaterMeshAssets;
 	use crate::DurhamRoots;
 
 	const IDLE: Duration = Duration::from_secs(120);
@@ -312,7 +312,7 @@ mod tests {
 	fn seed_resources(app: &mut App, seed: u32) {
 		app.insert_resource(TerrainStampConfigs::from_world_seed(seed))
 			.insert_resource(WatershedConfigs::default().with_seed(seed))
-			.insert_resource(TerrainPresentationAssets {
+			.insert_resource(TerrainMeshAssets {
 				config: TerrainConfig::new(seed),
 				material: Handle::default(),
 				lod_bands: vec![TerrainMeshLodBand { max_radius_cells: 1, res_2: 2 }],
@@ -331,7 +331,7 @@ mod tests {
 		app.add_plugins(MinimalPlugins)
 			.add_plugins((AssetPlugin::default(), ScenePlugin))
 			.insert_resource(fine_patch_cell_layout(1, IVec2::new(-1, -1)))
-			.insert_resource(WaterPresentationAssets { material: Handle::default() })
+			.insert_resource(WaterMeshAssets { material: Handle::default() })
 			.add_plugins((
 				HcsgBoundsPlugin::<DurhamWindow>::default(),
 				DurhamPresentationPlugin::<DurhamWindow>::default(),

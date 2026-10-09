@@ -7,7 +7,7 @@ use crate::terrain::cell::{
 	TERRAIN_CELL_VERTICAL_HALF_EXTENT,
 };
 use crate::terrain::geography::GeographicFeature;
-use crate::terrain::presentation::TerrainPresentationAssets;
+use crate::terrain::mesh::TerrainMeshAssets;
 use crate::terrain::stamps::{
 	CanyonHighPassControllerCell, CanyonHighPassControllerLayout, CanyonHighPassStampCell,
 	CanyonLowPassControllerCell, CanyonLowPassControllerLayout, CanyonLowPassStampCell,
@@ -30,7 +30,7 @@ use crate::terrain::watersheds::{
 	WatershedRimmingCell,
 };
 use crate::terrain::{PreWatershedTerrain, Terrain};
-use crate::water::{ComposedWater, Water, WaterColumn, WaterPresentationAssets};
+use crate::water::{ComposedWater, Water, WaterColumn, WaterMeshAssets};
 use bevy::ecs::system::SystemParam;
 use bevy::math::bounding::Aabb3d;
 use bevy::math::DVec3;
@@ -138,8 +138,8 @@ pub struct DurhamRoots<'w> {
 	layout: Res<'w, TerrainCellLayout>,
 	stamps: Res<'w, TerrainStampConfigs>,
 	watersheds: Res<'w, WatershedConfigs>,
-	terrain_assets: Res<'w, TerrainPresentationAssets>,
-	water_assets: Res<'w, WaterPresentationAssets>,
+	terrain_assets: Res<'w, TerrainMeshAssets>,
+	water_assets: Res<'w, WaterMeshAssets>,
 }
 
 impl DurhamRoots<'_> {
@@ -332,9 +332,7 @@ impl TerrainStorage for HcsgStorage {
 		let water = self
 			.overlapping::<Water>(region)
 			.into_iter()
-			.filter_map(|id| {
-				self.get::<Water>(id).map(|water| (id, Arc::new(water.sdf.clone())))
-			})
+			.filter_map(|id| self.get::<Water>(id).map(|water| (id, Arc::new(water.sdf.clone()))))
 			.collect();
 		WaterSurfaceSnapshot { water: Arc::new(water) }
 	}

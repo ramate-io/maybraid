@@ -5,8 +5,8 @@
 
 /// Defines `PrePocketLayout` → `PrePocketCell` → `PocketCell` → `PocketWaters*` for one band.
 ///
-/// Each level discovers its ids from the level above through
-/// `GeneratingSpatialIndex`, so consumers bound only on `$PocketWaters`.
+/// Each level discovers its ids from the level above through its scheme's
+/// `original_ids_for`, so consumers depend only on `$PocketWaters`.
 macro_rules! define_marazion_band {
 	(
 		layout: $Layout:ident,
@@ -73,14 +73,11 @@ macro_rules! define_marazion_band {
 			}
 		}
 
-		$crate::terrain::cell::derived_universal_scheme!(
-			$Layout,
-			|cx| cx
-				.get_or_generate::<$crate::terrain::watersheds::config::WatershedConfigs>(
-					lod::gen::Id::Universal,
-				)
-				.map(|configs| $layout_fn(&configs))
-		);
+		$crate::terrain::cell::derived_universal_scheme!($Layout, |cx| cx
+			.get_or_generate::<$crate::terrain::watersheds::config::WatershedConfigs>(
+				lod::gen::Id::Universal,
+			)
+			.map(|configs| $layout_fn(&configs)));
 
 		impl $crate::terrain::cell::CellTiling for $Layout {
 			fn cell_ids(&self, region: bevy::math::bounding::Aabb3d) -> Vec<lod::gen::OriginalId> {
@@ -108,7 +105,6 @@ macro_rules! define_marazion_band {
 					.collect()
 			}
 		}
-
 
 		impl lod::hcsg::shared::GenerationScheme for $PreCell {
 			fn original_ids_for(
@@ -157,7 +153,6 @@ macro_rules! define_marazion_band {
 				self.leaves.clone()
 			}
 		}
-
 
 		impl lod::hcsg::shared::GenerationScheme for $Pocket {
 			fn original_ids_for(

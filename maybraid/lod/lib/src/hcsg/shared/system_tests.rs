@@ -289,7 +289,8 @@ fn presented_hosts_fulfill_through_the_lod_pipeline() -> anyhow::Result<()> {
 
 #[test]
 fn generation_keeps_values_warm_without_hosts() -> anyhow::Result<()> {
-	let mut app = app(GenerationPlugin::<WindowBounds, Vegetation>::default(), vec![span(0.2, 2.6)]);
+	let mut app =
+		app(GenerationPlugin::<WindowBounds, Vegetation>::default(), vec![span(0.2, 2.6)]);
 	settle(&mut app)?;
 	let storage = app.world().resource::<HcsgStorage>().clone();
 	for id in ids(&[0.0, 1.0, 2.0]) {

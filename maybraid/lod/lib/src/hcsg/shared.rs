@@ -19,11 +19,11 @@
 //! - [`node`]: [`HcsgNode<T>`], forwarding the LOD scene traits to `T`.
 //!
 pub mod bounds;
-pub mod node_store;
 pub mod context;
 pub mod demand;
 pub mod generation;
 pub mod node;
+pub mod node_store;
 pub mod presentation;
 pub mod runtime;
 pub mod storage;

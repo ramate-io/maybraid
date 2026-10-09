@@ -7,8 +7,8 @@ pub mod config;
 pub mod geography;
 pub mod host;
 pub mod index;
+pub mod mesh;
 pub mod plugin;
-pub mod presentation;
 pub mod render;
 pub mod sdf;
 pub mod stamp_modulation;
@@ -43,32 +43,24 @@ pub use cell::{
 pub use chunk::cascade::CascadeChunk;
 pub use collider::{
 	terrain_collider_covers_xz, TerrainColliderEpoch, TerrainColliderMeshSource,
-	TerrainColliderSystems, TerrainFrictionConfig, TerrainSuperseded, TerrainTrimeshCollider,
-	TERRAIN_FRICTION,
+	TerrainColliderSystems, TerrainFrictionConfig, TerrainTrimeshCollider, TERRAIN_FRICTION,
 };
 pub use config::TerrainConfig;
 pub use geography::{
 	GeographicBand, GeographicFamily, GeographicFeature, GeographicFeatureId, GeographicFeatureKind,
 };
 pub use host::{
-	fine_patch_cell_layout, playable_world_cell_layout, presentation_assets,
-	retarget_presentation_assets, Durham, TerrainCoverage, TerrainLayoutPinned,
-	TerrainPresentPending, TerrainPresentationDirty,
-	TerrainRetarget, WorldBaseTerrain, WORLD_FINE_HALF_EXTENT_CELLS,
-	WORLD_OUTER_2X_ROWS, WORLD_OUTER_4X_ROWS,
+	fine_patch_cell_layout, mesh_assets, playable_world_cell_layout, retarget_mesh_assets, Durham,
+	TerrainCoverage, TerrainLayoutPinned, TerrainPresentPending, TerrainPresentationDirty,
+	TerrainRetarget, WorldBaseTerrain, WORLD_FINE_HALF_EXTENT_CELLS, WORLD_OUTER_2X_ROWS,
+	WORLD_OUTER_4X_ROWS,
 };
 pub use index::{
 	register_durham_nodes, DurhamNodes, DurhamRoots, TerrainHeightSnapshot, TerrainStorage,
 	WaterSurfaceSnapshot,
 };
+pub use mesh::{TerrainMeshAssets, TerrainMeshLodBand};
 pub use plugin::{register_terrain_plugin, TerrainResourcesPlugin};
-pub use presentation::{
-	sync_visual_terrain_host_pose, PresentedTerrainScene, TerrainBackground,
-	TerrainBackgroundRegionPresenter, TerrainFar, TerrainFarRegionPresenter, TerrainMeshLodBand,
-	TerrainNear, TerrainNearRegionPresenter, TerrainPresentationAssets, TerrainPresenterState,
-	TerrainRegionPresenter, TerrainStreamMarker, TerrainStreamPresenterState,
-	TerrainStreamRegionPresenter, TerrainVisualHost,
-};
 pub use render::TerrainRenderItem;
 pub use sdf::{ComposedTerrain, ElevationModulation, TerrainSdf};
 pub use stamp_modulation::ComposedElevationOp;
@@ -294,7 +286,6 @@ struct JerseyStamps {
 }
 
 impl JerseyStamps {
-
 	fn pull_in<T: StampLeaf + shared::GenerationScheme>(
 		&mut self,
 		cx: &mut GenerationContext,
@@ -326,7 +317,6 @@ impl PreWatershedTerrain {
 ///
 /// Origin-grid root: tiles [`TerrainCellLayout`] directly. Each stamp band is
 /// one leaf bound; its controller grid and configs are that band's concern.
-
 
 impl shared::GenerationScheme for PreWatershedTerrain {
 	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
@@ -361,7 +351,6 @@ impl shared::GenerationScheme for PreWatershedTerrain {
 /// hydro complex, and stage cells are bound only as the leaves this scheme
 /// reads; their pocket / pre-pocket / config stacks resolve at the index.
 
-
 impl shared::GenerationScheme for Terrain {
 	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
 		cx.original_ids_for::<PreWatershedTerrain>(region)
@@ -389,7 +378,7 @@ impl shared::GenerationScheme for Terrain {
 		cx.get_or_generate::<WatershedAproningCell>(id)?;
 
 		let layout = cx.get::<TerrainCellLayout>(Id::Universal).unwrap_or_default();
-		let assets = cx.get_or_generate::<TerrainPresentationAssets>(Id::Universal)?;
+		let assets = cx.get_or_generate::<TerrainMeshAssets>(Id::Universal)?;
 		let terrain = Self::compose(bounds, &pre, marazion_leaves, complex, &layout, &assets);
 		Some((terrain, bounds))
 	}
@@ -404,7 +393,7 @@ impl Terrain {
 		marazion_leaves: Vec<WatershedLeafBounds>,
 		complex: Option<Arc<HydroComplex>>,
 		layout: &TerrainCellLayout,
-		assets: &TerrainPresentationAssets,
+		assets: &TerrainMeshAssets,
 	) -> Self {
 		let marazion_fills = complex.iter().cloned().map(WaterFill::from_hydro).collect();
 		let modulations: Vec<_> = pre

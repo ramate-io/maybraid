@@ -1,4 +1,4 @@
-use crate::gen::{Id, LodScene, LodSceneLevel, LodSceneStatus};
+use crate::gen::{LodScene, LodSceneLevel, LodSceneStatus};
 use crate::lod_ref::LodRef;
 use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec3;

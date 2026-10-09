@@ -22,7 +22,7 @@ use lod::hcsg::shared::{self, GenerationContext, HcsgBounds, HcsgNode, Presentat
 use lod::lod_ref::LodRef;
 use lod::scene::LodSceneRefreshChunkPlugin;
 use lod::LodViewer;
-use mob_layer_presentation::retire_members_with_their_mob;
+use mob_intelligence::{MemberOf, Mob};
 use richmond::{column_bounds, Built, DevelopmentHosts, Richmond, RichmondGround};
 use urbanization_cells::{
 	SelectedUrbanization, UrbanDevelopmentKind, UrbanizationKind, UrbanizationSelection,
@@ -249,6 +249,21 @@ impl BarkingNodes {
 	}
 }
 
+/// Members are not children of their mob. When presentation despawns a mob
+/// host with its scene, its members go with it; despawn the host in `Last`
+/// so commands queued on either through `PostUpdate` still land.
+pub fn retire_members_with_their_mob(
+	despawned: On<Despawn, Mob>,
+	members: Query<(Entity, &MemberOf)>,
+	mut commands: Commands,
+) {
+	for (entity, member) in &members {
+		if member.mob == despawned.entity {
+			commands.entity(entity).try_despawn();
+		}
+	}
+}
+
 /// The mob hosts' runtime: their High band refreshed around the
 /// [`LodViewer`], their members bound by intelligence, and those members
 /// retired with their mob.
@@ -291,8 +306,8 @@ mod tests {
 	use bevy::state::app::StatesPlugin;
 	use chico::{ChicoNodes, ChicoRoots};
 	use durham::{
-		fine_patch_cell_layout, Durham, DurhamRoots, TerrainConfig, TerrainMeshLodBand,
-		TerrainPresentationAssets, TerrainStampConfigs, WaterPresentationAssets, WatershedConfigs,
+		fine_patch_cell_layout, Durham, DurhamRoots, TerrainConfig, TerrainMeshAssets,
+		TerrainMeshLodBand, TerrainStampConfigs, WaterMeshAssets, WatershedConfigs,
 	};
 	use lod::hcsg::shared::{HcsgDemand, HcsgSystems};
 	use lod::lod_ref::LodNodePose;
@@ -361,7 +376,7 @@ mod tests {
 			.insert_resource(fine_patch_cell_layout(1, IVec2::new(-1, -1)))
 			.insert_resource(TerrainStampConfigs::from_world_seed(1))
 			.insert_resource(WatershedConfigs::default().with_seed(1))
-			.insert_resource(TerrainPresentationAssets {
+			.insert_resource(TerrainMeshAssets {
 				config: TerrainConfig::new(1),
 				material: Handle::default(),
 				lod_bands: vec![TerrainMeshLodBand { max_radius_cells: 1, res_2: 2 }],
@@ -371,7 +386,7 @@ mod tests {
 				macro_cell_min_size: None,
 				macro_res_2: None,
 			})
-			.insert_resource(WaterPresentationAssets { material: Handle::default() })
+			.insert_resource(WaterMeshAssets { material: Handle::default() })
 			.insert_resource(DevelopmentConfig {
 				sites: DevelopmentSites::Authored,
 				..DevelopmentConfig::default()

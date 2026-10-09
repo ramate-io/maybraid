@@ -1,7 +1,7 @@
 //! Helpers for sampling forest layering and urbanization at a point.
 
 use bevy::math::bounding::Aabb3d;
-use bevy::math::{Vec2, Vec3, Vec3Swizzles};
+use bevy::math::{Vec2, Vec3};
 use chico::{select_cell, ForestExtent, LayeringKind};
 use procedural_common::NoiseParams;
 use urbanization_cells::{select_kind, UrbanizationExtent, UrbanizationKind};

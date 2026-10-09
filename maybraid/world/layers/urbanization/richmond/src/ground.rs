@@ -1,12 +1,11 @@
 //! [`RichmondGround`]: the ground developments are generated over.
 
-use std::marker::PhantomData;
 use std::sync::Arc;
 
 use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec2;
 use durham::{Durham, Terrain};
-use lod::gen::{Id, OriginalId};
+use lod::gen::OriginalId;
 use lod::hcsg::shared::{self, GenerationContext};
 use procedural_common::Bounds2;
 use terrain_layer_model::OnTerrain;

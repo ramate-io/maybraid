@@ -1,6 +1,5 @@
 //! Chunk identity for padded ground cells Chico overlays.
 
-use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec3;
 use durham::{cascade_chunk_for_cell, TerrainMeshBuilder, TERRAIN_CELL_SIZE};
 use lod_cascade::Chunk;

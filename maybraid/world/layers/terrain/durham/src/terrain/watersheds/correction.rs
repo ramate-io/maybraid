@@ -8,7 +8,7 @@
 //!   → Terrain applies HydroComplex (internal carve → rim → apron)
 //! ```
 
-use crate::terrain::cell::{CellTiling, TerrainCellLayout};
+use crate::terrain::cell::TerrainCellLayout;
 use crate::terrain::watersheds::config::WatershedConfigs;
 use crate::terrain::watersheds::high_pass::PocketWatersHighPass;
 use crate::terrain::watersheds::low_pass::PocketWatersLowPass;
@@ -45,7 +45,6 @@ fn cell_seed(cell: Aabb3d, salt: u32) -> u32 {
 
 /// Origin-grid root for watershed correction; both pocket-water passes are
 /// pulled by region, so their pocket / pre-pocket stacks stay out of these bounds.
-
 
 impl shared::GenerationScheme for HydroComplexCell {
 	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
@@ -104,8 +103,6 @@ pub struct WatershedAproningCell {
 /// is their only dependency.
 macro_rules! impl_correction_stage_cell {
 	($Cell:ty) => {
-		
-
 		impl shared::GenerationScheme for $Cell {
 			fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
 				cx.original_ids_for::<HydroComplexCell>(region)

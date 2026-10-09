@@ -4,7 +4,6 @@ use bevy::math::bounding::Aabb3d;
 use bevy::prelude::Resource;
 use lod::gen::{Id, OriginalId};
 use lod::hcsg::shared::{self, GenerationContext};
-use lod::hcsg::HcsgStorage;
 use procedural_common::SeededHash;
 use urbanization_cells::{SelectedUrbanization, UrbanDevelopmentKind, UrbanizationExtent};
 use urbanization_developments::{cell_salt, PadPlan, SiteGround};
@@ -268,6 +267,7 @@ impl shared::GenerationScheme for DevelopmentSite {
 mod tests {
 	use super::*;
 	use crate::cell::DevelopmentExtent;
+	use lod::hcsg::HcsgStorage;
 
 	#[test]
 	fn pick_filled_never_returns_empty() {

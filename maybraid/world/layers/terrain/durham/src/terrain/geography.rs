@@ -403,12 +403,7 @@ mod tests {
 		))
 	}
 
-	fn insert_stamp(
-		store: &HcsgStorage,
-		id: Id,
-		stamp_cell: Aabb3d,
-		occupied: bool,
-	) -> Version {
+	fn insert_stamp(store: &HcsgStorage, id: Id, stamp_cell: Aabb3d, occupied: bool) -> Version {
 		store.publish(
 			id,
 			Arc::new(MassifHighPassStampCell {

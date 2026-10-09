@@ -669,7 +669,6 @@ dependencies = [
  "mob-characters",
  "mob-intelligence",
  "mob-layer-model",
- "mob-layer-presentation",
  "mob-scenes",
  "procedural-common",
  "richmond",
@@ -2955,7 +2954,6 @@ dependencies = [
  "vegetation-components",
  "vegetation-groves",
  "vegetation-layer-model",
- "vegetation-layer-presentation",
  "vegetation-shaders",
 ]
 
@@ -4081,7 +4079,6 @@ dependencies = [
  "sdf",
  "terrain-chunk-ref",
  "terrain-layer-model",
- "terrain-layer-presentation",
  "terrain-shaders",
  "terrain-stamps",
  "terrain-watersheds",
@@ -4713,18 +4710,6 @@ version = "0.1.2"
 dependencies = [
  "anyhow",
  "bevy",
- "layer-stack",
- "lod",
- "terrain-layer-model",
-]
-
-[[package]]
-name = "furnishing-layer-presentation"
-version = "0.1.2"
-dependencies = [
- "anyhow",
- "bevy",
- "furnishing-layer-model",
  "layer-stack",
  "lod",
  "terrain-layer-model",
@@ -6320,19 +6305,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "language-layer-presentation"
-version = "0.1.2"
-dependencies = [
- "anyhow",
- "bevy",
- "language-layer-model",
- "layer-stack",
- "lod",
- "terrain-layer-model",
- "vegetation-layer-model",
-]
-
-[[package]]
 name = "layer-stack"
 version = "0.1.2"
 dependencies = [
@@ -6659,7 +6631,6 @@ dependencies = [
  "buildings",
  "durham",
  "furnishing-layer-model",
- "furnishing-layer-presentation",
  "furniture-assemblies",
  "furniture-components",
  "furniture-shaders",
@@ -6952,7 +6923,6 @@ dependencies = [
  "firearms",
  "fleeing-intelligence",
  "furnishing-layer-model",
- "furnishing-layer-presentation",
  "furniture-assemblies",
  "game-commands",
  "geneva",
@@ -6960,7 +6930,6 @@ dependencies = [
  "hiding-intelligence",
  "intelligence-lod",
  "language-layer-model",
- "language-layer-presentation",
  "layer-stack",
  "lod",
  "lod-avian",
@@ -6977,7 +6946,6 @@ dependencies = [
  "menu-components",
  "mob-characters",
  "mob-layer-model",
- "mob-layer-presentation",
  "mob-scenes",
  "movement-intelligence",
  "movement-intelligence-avian",
@@ -6993,17 +6961,14 @@ dependencies = [
  "spotting-intelligence",
  "tempfile",
  "terrain-layer-model",
- "terrain-layer-presentation",
  "tether-intelligence",
  "threat-intelligence",
  "threat-intelligence-damage",
  "threat-management-intelligence",
  "urbanization-cells",
  "urbanization-layer-model",
- "urbanization-layer-presentation",
  "vegetation-components",
  "vegetation-layer-model",
- "vegetation-layer-presentation",
  "world-materials",
  "world-player",
 ]
@@ -7550,19 +7515,6 @@ dependencies = [
  "bevy",
  "layer-stack",
  "lod",
- "terrain-layer-model",
-]
-
-[[package]]
-name = "mob-layer-presentation"
-version = "0.1.2"
-dependencies = [
- "anyhow",
- "bevy",
- "layer-stack",
- "lod",
- "mob-intelligence",
- "mob-layer-model",
  "terrain-layer-model",
 ]
 
@@ -9839,7 +9791,6 @@ dependencies = [
  "urbanization-cells",
  "urbanization-developments",
  "urbanization-layer-model",
- "urbanization-layer-presentation",
 ]
 
 [[package]]
@@ -11336,17 +11287,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "terrain-layer-presentation"
-version = "0.1.2"
-dependencies = [
- "anyhow",
- "bevy",
- "layer-stack",
- "lod",
- "terrain-layer-model",
-]
-
-[[package]]
 name = "terrain-shaders"
 version = "0.1.2"
 dependencies = [
@@ -12175,19 +12115,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "urbanization-layer-presentation"
-version = "0.1.2"
-dependencies = [
- "anyhow",
- "bevy",
- "layer-stack",
- "lod",
- "terrain-layer-model",
- "terrain-layer-presentation",
- "urbanization-layer-model",
-]
-
-[[package]]
 name = "ureq"
 version = "2.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -12438,18 +12365,6 @@ dependencies = [
  "layer-stack",
  "lod",
  "terrain-layer-model",
-]
-
-[[package]]
-name = "vegetation-layer-presentation"
-version = "0.1.2"
-dependencies = [
- "anyhow",
- "bevy",
- "layer-stack",
- "lod",
- "terrain-layer-model",
- "vegetation-layer-model",
 ]
 
 [[package]]

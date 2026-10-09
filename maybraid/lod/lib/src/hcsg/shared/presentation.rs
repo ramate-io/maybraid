@@ -13,8 +13,8 @@ use bevy::prelude::{
 	MessageReader, Plugin, Query, Res, Transform, Update, With,
 };
 
-use crate::gen::{Id, Version};
 use super::node_store::StoredEntry;
+use crate::gen::{Id, Version};
 use crate::lod_ref::LodRef;
 use crate::scene::{lod_host_scene_pending, SemanticLodScene};
 

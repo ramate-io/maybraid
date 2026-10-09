@@ -2,7 +2,7 @@
 
 use crate::terrain::cell::universal_bounds;
 use crate::terrain::config::TerrainConfig;
-use crate::terrain::presentation::TerrainPresentationAssets;
+use crate::terrain::mesh::TerrainMeshAssets;
 use crate::terrain::sdf::{ComposedTerrain, TerrainSdf};
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
@@ -35,8 +35,6 @@ impl BaseTerrainNoise {
 	}
 }
 
-
-
 impl shared::GenerationScheme for BaseTerrainNoise {
 	fn original_ids_for(_cx: &mut GenerationContext, _region: Aabb3d) -> Vec<OriginalId> {
 		vec![OriginalId::universal()]
@@ -46,7 +44,7 @@ impl shared::GenerationScheme for BaseTerrainNoise {
 		if id != Id::Universal {
 			return None;
 		}
-		let assets = cx.get_or_generate::<TerrainPresentationAssets>(Id::Universal)?;
+		let assets = cx.get_or_generate::<TerrainMeshAssets>(Id::Universal)?;
 		Some((Self::from_config(&assets.config), universal_bounds()))
 	}
 }

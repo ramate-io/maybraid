@@ -129,9 +129,9 @@ mod tests {
 	use building_physics::BuildingWalkCollider;
 	use durham::{
 		fine_patch_cell_layout, CellTiling, Durham, DurhamRoots, DurhamWindow, Terrain,
-		TerrainCellLayout, TerrainColliderMeshSource, TerrainConfig, TerrainMeshLodBand,
-		TerrainPresentationAssets, TerrainStampConfigs, WaterPresentationAssets,
-		WaterPresentationPlugin, WatershedConfigs,
+		TerrainCellLayout, TerrainColliderMeshSource, TerrainConfig, TerrainMeshAssets,
+		TerrainMeshLodBand, TerrainStampConfigs, WaterMeshAssets, WaterPresentationPlugin,
+		WatershedConfigs,
 	};
 	use lod::gen::{Id, OriginalId, Version};
 	use lod::hcsg::shared::{HcsgDemand, HcsgSystems, HcsgValue};
@@ -181,7 +181,7 @@ mod tests {
 	fn seed_resources(app: &mut App, height: f32) {
 		app.insert_resource(TerrainStampConfigs::from_world_seed(1))
 			.insert_resource(WatershedConfigs::default().with_seed(1))
-			.insert_resource(TerrainPresentationAssets {
+			.insert_resource(TerrainMeshAssets {
 				config: TerrainConfig::new(1),
 				material: Handle::default(),
 				lod_bands: vec![TerrainMeshLodBand { max_radius_cells: 1, res_2: 2 }],
@@ -208,7 +208,7 @@ mod tests {
 			.init_asset::<StandardMaterial>()
 			.init_asset::<bevy::world_serialization::WorldAsset>()
 			.insert_resource(fine_patch_cell_layout(1, IVec2::new(-1, -1)))
-			.insert_resource(WaterPresentationAssets { material: Handle::default() })
+			.insert_resource(WaterMeshAssets { material: Handle::default() })
 			.init_resource::<UrbanizationSelection>()
 			.add_plugins((
 				shared::HcsgBoundsPlugin::<DurhamWindow>::default(),

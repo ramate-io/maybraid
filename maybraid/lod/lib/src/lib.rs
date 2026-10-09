@@ -27,14 +27,6 @@ pub use lod_ref::{
 	LodNode, LodNodeBounds, LodNodePlugin, LodNodePose, LodNodeSnapshot, LodNodeSystems, LodRef,
 	LodRequest,
 };
-pub use presentation::{
-	apply_lod_present_gate, drain_lod_present, drain_lod_present_cull, lod_present_gate_open,
-	produce_lod_present_cull_regions, produce_lod_present_regions, LodPresentBudget,
-	LodPresentCullBudget, LodPresentCullCursor, LodPresentCullPlugin, LodPresentCullRegion,
-	LodPresentCullRegionPlugin, LodPresentGate, LodPresentKeepRegion, LodPresentPlugin,
-	LodPresentQueue, LodPresentRegion, LodPresentRegionPlugin, LodPresentSystems,
-	LodPresentTimeBudget, RegionPresenter,
-};
 pub use scene::{
 	add_lod_refresh_chunk_for, add_lod_refresh_chunk_full_for, add_lod_refresh_cull_for,
 	apply_lod_cull_requests, begin_chunk_lod_fulfill, begin_chunk_lod_fulfill_erased,

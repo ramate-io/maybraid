@@ -378,8 +378,8 @@ mod tests {
 	use bevy::scene::ScenePlugin;
 	use bevy::state::app::StatesPlugin;
 	use durham::{
-		fine_patch_cell_layout, Durham, DurhamRoots, TerrainConfig, TerrainMeshLodBand,
-		TerrainPresentationAssets, TerrainStampConfigs, WaterPresentationAssets, WatershedConfigs,
+		fine_patch_cell_layout, Durham, DurhamRoots, TerrainConfig, TerrainMeshAssets,
+		TerrainMeshLodBand, TerrainStampConfigs, WaterMeshAssets, WatershedConfigs,
 	};
 	use lod::gen::Version;
 	use lod::hcsg::shared::{HcsgDemand, HcsgSystems};
@@ -437,7 +437,7 @@ mod tests {
 			.insert_resource(fine_patch_cell_layout(1, IVec2::new(-1, -1)))
 			.insert_resource(TerrainStampConfigs::from_world_seed(1))
 			.insert_resource(WatershedConfigs::default().with_seed(1))
-			.insert_resource(TerrainPresentationAssets {
+			.insert_resource(TerrainMeshAssets {
 				config: TerrainConfig::new(1),
 				material: Handle::default(),
 				lod_bands: vec![TerrainMeshLodBand { max_radius_cells: 1, res_2: 2 }],
@@ -447,7 +447,7 @@ mod tests {
 				macro_cell_min_size: None,
 				macro_res_2: None,
 			})
-			.insert_resource(WaterPresentationAssets { material: Handle::default() })
+			.insert_resource(WaterMeshAssets { material: Handle::default() })
 			.insert_resource(DevelopmentConfig {
 				sites: DevelopmentSites::Authored,
 				..DevelopmentConfig::default()

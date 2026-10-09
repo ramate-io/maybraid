@@ -27,9 +27,9 @@ use debug_bounds::{setup_cell_location_hud, update_cell_location_hud, Playground
 use durham::{
 	terrain_collider_covers_xz, BaseTerrainNoise, CascadeChunk, ComposedWater,
 	DurhamPresentationPlugin, DurhamRoots, DurhamTerrainModelsPlugin, DurhamWindow, OuterCellRing,
-	SharedTerrainStorage, Terrain, TerrainCellLayout, TerrainConfig, TerrainMeshBuilder,
-	TerrainMeshLodBand, TerrainPresentationAssets, TerrainStampConfigs, TerrainTrimeshCollider,
-	WaterPresentationAssets, WatershedConfigs, TERRAIN_CELL_SIZE,
+	SharedTerrainStorage, Terrain, TerrainCellLayout, TerrainConfig, TerrainMeshAssets,
+	TerrainMeshBuilder, TerrainMeshLodBand, TerrainStampConfigs, TerrainTrimeshCollider,
+	WaterMeshAssets, WatershedConfigs, TERRAIN_CELL_SIZE,
 };
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use game_commands::ui::{GameCommandDrawerConfig, GameCommandStatusText};
@@ -178,7 +178,7 @@ pub(crate) fn setup_presentation_assets(
 	let s = TERRAIN_CELL_SIZE;
 	let fine_half = PLAYGROUND_FINE_HALF_EXTENT_CELLS as f32 * s;
 	let mid_half = fine_half + PLAYGROUND_OUTER_2X_ROWS as f32 * 2.0 * s; // 32s
-	commands.insert_resource(TerrainPresentationAssets {
+	commands.insert_resource(TerrainMeshAssets {
 		config: config.clone(),
 		material,
 		lod_bands: playground_lod_bands(),
@@ -188,7 +188,7 @@ pub(crate) fn setup_presentation_assets(
 		macro_cell_min_size: Some(2.0 * s),
 		macro_res_2: Some(2),
 	});
-	commands.insert_resource(WaterPresentationAssets {
+	commands.insert_resource(WaterMeshAssets {
 		material: water_materials.add(RefractionWater::default()),
 	});
 }
@@ -239,7 +239,7 @@ fn apply_cell_commands(
 fn apply_seed(
 	mut commands: Commands,
 	mut config: ResMut<TerrainConfig>,
-	mut assets: ResMut<TerrainPresentationAssets>,
+	mut assets: ResMut<TerrainMeshAssets>,
 	mut jersey: ResMut<TerrainStampConfigs>,
 	mut marazion: ResMut<WatershedConfigs>,
 	mut world_base: ResMut<WorldBaseTerrain>,

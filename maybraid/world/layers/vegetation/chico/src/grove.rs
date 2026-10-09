@@ -3,7 +3,7 @@
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::Vec3;
 use lod::gen::Id;
-use vegetation_groves::{FlatTerrainSample, GroveExtent, GroveWorldSample};
+use vegetation_groves::{GroveExtent, GroveWorldSample};
 
 use crate::{ForestGroveRecipe, ForestGroveTile, ForestLayer};
 
@@ -56,8 +56,8 @@ pub fn grove_from_id(id: Id) -> Option<(GroveExtent, ForestLayer)> {
 
 /// Flat world sample used when growing grove recipes in unit tests.
 #[cfg(test)]
-pub(crate) fn forest_world_sample() -> FlatTerrainSample {
-	FlatTerrainSample::default()
+pub(crate) fn forest_world_sample() -> vegetation_groves::FlatTerrainSample {
+	vegetation_groves::FlatTerrainSample::default()
 }
 
 fn grove_aabb(extent: GroveExtent, layer: ForestLayer) -> Aabb3d {

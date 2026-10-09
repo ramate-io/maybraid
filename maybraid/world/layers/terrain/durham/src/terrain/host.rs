@@ -7,7 +7,7 @@ use terrain_shaders::TerrainShader;
 
 use crate::terrain::cell::{TerrainCellLayout, TerrainCellRing, TERRAIN_CELL_SIZE};
 use crate::terrain::config::TerrainConfig;
-use crate::terrain::presentation::{TerrainMeshLodBand, TerrainPresentationAssets};
+use crate::terrain::mesh::{TerrainMeshAssets, TerrainMeshLodBand};
 
 /// Composed Durham SDF / CpuShot terrain model.
 pub struct Durham;
@@ -130,8 +130,8 @@ fn lod_bands_for(coverage: TerrainCoverage, terrain_radius: i32) -> Vec<TerrainM
 }
 
 /// Point presentation assets at a coverage after a live session retarget.
-pub fn retarget_presentation_assets(
-	assets: &mut TerrainPresentationAssets,
+pub fn retarget_mesh_assets(
+	assets: &mut TerrainMeshAssets,
 	coverage: TerrainCoverage,
 	terrain_radius: i32,
 ) {
@@ -158,7 +158,7 @@ pub struct TerrainRetarget<'w> {
 	pinned: ResMut<'w, TerrainLayoutPinned>,
 	dirty: ResMut<'w, TerrainPresentationDirty>,
 	pending: ResMut<'w, TerrainPresentPending>,
-	assets: Option<ResMut<'w, TerrainPresentationAssets>>,
+	assets: Option<ResMut<'w, TerrainMeshAssets>>,
 }
 
 impl TerrainRetarget<'_> {
@@ -183,19 +183,19 @@ impl TerrainRetarget<'_> {
 		self.dirty.0 = true;
 		self.pending.0 = true;
 		if let Some(assets) = self.assets.as_mut() {
-			retarget_presentation_assets(assets, coverage, terrain_radius);
+			retarget_mesh_assets(assets, coverage, terrain_radius);
 		}
 	}
 }
 
 /// Terrain presentation assets for `coverage`, drawn with `material`.
-pub fn presentation_assets(
+pub fn mesh_assets(
 	config: TerrainConfig,
 	material: Handle<TerrainShader>,
 	coverage: TerrainCoverage,
 	terrain_radius: i32,
-) -> TerrainPresentationAssets {
-	let mut assets = TerrainPresentationAssets {
+) -> TerrainMeshAssets {
+	let mut assets = TerrainMeshAssets {
 		config,
 		material,
 		lod_bands: Vec::new(),
@@ -205,7 +205,7 @@ pub fn presentation_assets(
 		macro_cell_min_size: None,
 		macro_res_2: None,
 	};
-	retarget_presentation_assets(&mut assets, coverage, terrain_radius);
+	retarget_mesh_assets(&mut assets, coverage, terrain_radius);
 	assets
 }
 
@@ -273,7 +273,7 @@ mod tests {
 
 	#[test]
 	fn retarget_clears_playable_macro_bands_on_a_fine_patch() {
-		let mut assets = TerrainPresentationAssets {
+		let mut assets = TerrainMeshAssets {
 			config: TerrainConfig::new(42),
 			material: Handle::default(),
 			lod_bands: world_lod_bands(),
@@ -283,7 +283,7 @@ mod tests {
 			macro_cell_min_size: Some(2.0 * TERRAIN_CELL_SIZE),
 			macro_res_2: Some(3),
 		};
-		retarget_presentation_assets(&mut assets, TerrainCoverage::FinePatch, 2);
+		retarget_mesh_assets(&mut assets, TerrainCoverage::FinePatch, 2);
 		assert_eq!(assets.lod_bands, playground_lod_bands(2));
 		assert_eq!(assets.fine_grid_max_radius, Some(2));
 		assert!(assets.macro_seam_half_extents.is_empty());
