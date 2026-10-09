@@ -70,7 +70,7 @@ impl<'a> GenerationContext<'a> {
 
 	/// Bounds of a value already stored for `id`.
 	pub fn stored_bounds<T: HcsgValue>(&self, id: Id) -> Option<Aabb3d> {
-		self.storage.entry(id).map(|entry| entry.bounds)
+		self.storage.entry::<T>(id).map(|entry| entry.bounds)
 	}
 
 	pub fn get<T: HcsgValue>(&mut self, id: Id) -> Option<Arc<T>> {
