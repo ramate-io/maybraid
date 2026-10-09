@@ -1,3 +1,5 @@
+use std::any::TypeId;
+use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -37,7 +39,17 @@ fn yield_quantum(
 	cost: u32,
 	done: bool,
 ) {
-	demand.finish_quantum(id, QuantumProgress { discovered, cursor, cost: f64::from(cost), done });
+	demand.finish_quantum(
+		id,
+		QuantumProgress {
+			discovered,
+			cursor,
+			cost: f64::from(cost),
+			done,
+			..QuantumProgress::default()
+		},
+		None,
+	);
 }
 
 const IDLE: Duration = Duration::from_secs(10);
@@ -57,6 +69,9 @@ struct Ground {
 struct Cover {
 	ground: Arc<Ground>,
 }
+
+/// Independent of [`Ground`]; a large channel that must not pin Ground.
+struct FarField;
 
 /// Depends on itself.
 struct Cycle;
@@ -97,6 +112,17 @@ impl GenerationScheme for Cover {
 	}
 }
 
+impl GenerationScheme for FarField {
+	fn original_ids_for(_: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
+		cells_in(region)
+	}
+
+	fn build_with_id(_: &mut GenerationContext, id: Id) -> Option<(Self, Aabb3d)> {
+		let cell = id.origin_cell_bounds()?;
+		Some((Self, cell))
+	}
+}
+
 impl GenerationScheme for Cycle {
 	fn original_ids_for(_: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
 		cells_in(region)
@@ -120,6 +146,9 @@ impl GenerationScheme for Panicky {
 
 fn seeded() -> HcsgStorage {
 	let storage = HcsgStorage::default();
+	storage.configure::<Ground>(DVec3::ONE);
+	storage.configure::<Cover>(DVec3::ONE);
+	storage.configure::<FarField>(DVec3::ONE);
 	storage.seed(Root { seed: 7 }, span(-1_000.0, 2_000.0));
 	storage
 }
@@ -156,6 +185,48 @@ fn configure_rebuilds_the_index_without_losing_values() {
 	assert_eq!(storage.overlapping::<Ground>(span(10.2, 2.0)).len(), 3);
 	storage.clear::<Ground>();
 	assert!(storage.overlapping::<Ground>(span(0.0, 50.0)).is_empty());
+}
+
+#[test]
+fn retain_overlapping_removes_entries_outside_every_region() {
+	let storage = HcsgStorage::default();
+	let inside = Id::from_cell(cell(2.0));
+	let outside = Id::from_cell(cell(0.0));
+	storage.publish(inside, Arc::new(Ground { cell: cell(2.0), seed: 1 }), cell(2.0));
+	storage.publish(outside, Arc::new(Ground { cell: cell(0.0), seed: 1 }), cell(0.0));
+	let revision = storage.membership_revision::<Ground>();
+	storage.retain_overlapping::<Ground>(&[span(1.5, 1.0)]);
+	assert!(storage.contains::<Ground>(inside));
+	assert!(!storage.contains::<Ground>(outside));
+	assert!(storage.membership_revision::<Ground>() > revision);
+}
+
+#[test]
+fn retain_overlapping_keeps_entries_that_touch_a_region() {
+	let storage = HcsgStorage::default();
+	let id = Id::from_cell(cell(1.0));
+	storage.publish(id, Arc::new(Ground { cell: cell(1.0), seed: 1 }), cell(1.0));
+	let revision = storage.membership_revision::<Ground>();
+	storage.retain_overlapping::<Ground>(&[span(1.2, 0.3)]);
+	assert!(storage.contains::<Ground>(id));
+	assert_eq!(storage.membership_revision::<Ground>(), revision);
+}
+
+#[test]
+fn retain_overlapping_keeps_universal_whatever_its_bounds() {
+	let storage = HcsgStorage::default();
+	let id = Id::from_cell(cell(0.0));
+	storage.publish(
+		Id::Universal,
+		Arc::new(Ground { cell: span(-1_000.0, 2_000.0), seed: 1 }),
+		span(-1_000.0, 2_000.0),
+	);
+	storage.publish(id, Arc::new(Ground { cell: cell(0.0), seed: 1 }), cell(0.0));
+	storage.retain_overlapping::<Ground>(&[span(50.0, 1.0)]);
+	assert!(storage.contains::<Ground>(Id::Universal), "Universal is exempt by key");
+	assert!(!storage.contains::<Ground>(id));
+	storage.retain_overlapping::<Ground>(&[]);
+	assert!(storage.contains::<Ground>(Id::Universal));
 }
 
 #[test]
@@ -274,7 +345,6 @@ fn advancing_the_epoch_drops_every_subscription() {
 	assert_eq!(demand.epoch(), 1);
 	assert_eq!(demand.try_read_published(ground, 0), Ok(None));
 	assert_eq!(demand.try_read_published(cover, 0), Ok(None));
-	assert!(demand.wait_idle(Duration::ZERO));
 }
 
 #[test]
@@ -471,5 +541,144 @@ fn a_lone_subscription_fills_one_quantum_at_a_time() -> anyhow::Result<()> {
 	let quanta = u64::from(n.div_ceil(QUANTUM_IDS as u32));
 	assert!(picks >= quanta, "a lone subscription must yield each quantum, got {picks} picks");
 	assert!(picks < u64::from(n), "must not return to the scheduler once per id, got {picks}");
+	Ok(())
+}
+
+#[test]
+fn a_small_channel_evicts_its_dependencies_while_a_large_unrelated_channel_stays(
+) -> anyhow::Result<()> {
+	let storage = seeded();
+	let demand = HcsgDemand::default();
+	let _worker = HcsgWorker::spawn(storage.clone(), demand.clone())?;
+	let _far = subscribe::<FarField>(&demand, None, vec![span(0.0, 40.0)], None);
+	let cover = subscribe::<Cover>(&demand, None, vec![span(0.0, 2.0)], None);
+	assert!(demand.wait_idle(IDLE));
+	assert!(storage.contains::<Ground>(Id::from_cell(cell(0.0))));
+	assert!(storage.contains::<FarField>(Id::from_cell(cell(0.0))));
+
+	let _cover = subscribe::<Cover>(&demand, Some(cover), vec![span(20.0, 2.0)], None);
+	assert!(demand.wait_idle(IDLE));
+	assert!(
+		!storage.contains::<Ground>(Id::from_cell(cell(0.0))),
+		"Ground is only reached by the small Cover channel"
+	);
+	assert!(
+		storage.contains::<FarField>(Id::from_cell(cell(0.0))),
+		"an unrelated large channel must not pin Ground, and is itself retained"
+	);
+	assert!(storage.contains::<Ground>(Id::from_cell(cell(20.0))));
+	Ok(())
+}
+
+#[test]
+fn a_replaced_subscription_inherits_its_predecessors_reach() -> anyhow::Result<()> {
+	let storage = seeded();
+	let demand = HcsgDemand::default();
+	let _worker = HcsgWorker::spawn(storage.clone(), demand.clone())?;
+	let cover = subscribe::<Cover>(&demand, None, vec![span(0.0, 2.0)], None);
+	assert!(demand.wait_idle(IDLE));
+	assert!(storage.contains::<Ground>(Id::from_cell(cell(0.0))));
+
+	// New Cover region still overlaps cell 0 once expanded by base scale 1.
+	// Without inherited reach, Ground would be cleared (only Cover is known
+	// until the next fill) and cell 0 would not be rebuilt.
+	let _cover = subscribe::<Cover>(&demand, Some(cover), vec![span(1.0, 2.0)], None);
+	assert!(demand.wait_idle(IDLE));
+	assert!(
+		storage.contains::<Ground>(Id::from_cell(cell(0.0))),
+		"inherited reach keeps Ground in the predecessor's expanded region"
+	);
+	Ok(())
+}
+
+#[test]
+fn a_replaced_mid_quantum_keeps_types_that_quantum_reached() {
+	let storage = seeded();
+	let id = Id::from_cell(cell(0.0));
+	storage.publish(id, Arc::new(Ground { cell: cell(0.0), seed: 7 }), cell(0.0));
+	let demand = HcsgDemand::default();
+	let cover = subscribe::<Cover>(&demand, None, vec![span(0.0, 2.0)], None);
+	let job = demand.try_pick().expect("cover work");
+	let _cover = subscribe::<Cover>(&demand, Some(cover), vec![span(0.0, 2.0)], None);
+	demand.finish_quantum(
+		job.id,
+		QuantumProgress {
+			discovered: Some(vec![id]),
+			cursor: 1,
+			cost: 1.0,
+			done: true,
+			reached: HashSet::from([TypeId::of::<Ground>()]),
+		},
+		Some(job.reach),
+	);
+	let plan = demand.try_sweep().expect("replacement requests a sweep");
+	storage.retain_reached(&plan);
+	assert!(
+		storage.contains::<Ground>(id),
+		"Ground first read in the replaced quantum must survive the sweep"
+	);
+}
+
+#[test]
+fn no_sweep_runs_when_the_live_subscription_set_has_not_changed() -> anyhow::Result<()> {
+	let storage = seeded();
+	let demand = HcsgDemand::default();
+	let _worker = HcsgWorker::spawn(storage.clone(), demand.clone())?;
+	let _cover = subscribe::<Cover>(&demand, None, vec![span(0.0, 2.0)], None);
+	assert!(demand.wait_idle(IDLE));
+	let sweeps = demand.sweep_count();
+	assert!(sweeps >= 1);
+	assert!(demand.wait_idle(IDLE));
+	assert_eq!(demand.sweep_count(), sweeps, "idle live set must not sweep again");
+	Ok(())
+}
+
+#[test]
+fn an_evicted_value_regenerates_identically() -> anyhow::Result<()> {
+	let storage = seeded();
+	let demand = HcsgDemand::default();
+	let _worker = HcsgWorker::spawn(storage.clone(), demand.clone())?;
+	let first = subscribe::<Ground>(&demand, None, vec![span(0.0, 1.0)], None);
+	assert!(demand.wait_idle(IDLE));
+	let id = Id::from_cell(cell(0.0));
+	let before = storage.get::<Ground>(id).expect("generated");
+	assert_eq!(before.seed, 7);
+
+	let _away = subscribe::<Ground>(&demand, Some(first), vec![span(20.0, 1.0)], None);
+	assert!(demand.wait_idle(IDLE));
+	assert!(!storage.contains::<Ground>(id));
+
+	let _back = subscribe::<Ground>(&demand, None, vec![span(0.0, 1.0)], None);
+	assert!(demand.wait_idle(IDLE));
+	let after = storage.get::<Ground>(id).expect("regenerated");
+	assert_eq!(after.seed, before.seed);
+	assert_eq!(after.cell, before.cell);
+	Ok(())
+}
+
+#[test]
+fn a_scripted_walk_plateaus_store_sizes() -> anyhow::Result<()> {
+	let storage = seeded();
+	let demand = HcsgDemand::default();
+	let _worker = HcsgWorker::spawn(storage.clone(), demand.clone())?;
+	let mut cover = subscribe::<Cover>(&demand, None, vec![span(0.0, 4.0)], None);
+	assert!(demand.wait_idle(IDLE));
+	let mut max_ground = 0usize;
+	let mut max_cover = 0usize;
+	for start in (0..40).step_by(4) {
+		cover = subscribe::<Cover>(&demand, Some(cover), vec![span(start as f32, 4.0)], None);
+		assert!(demand.wait_idle(IDLE));
+		max_ground = max_ground.max(storage.len::<Ground>());
+		max_cover = max_cover.max(storage.len::<Cover>());
+	}
+	let _cover = subscribe::<Cover>(&demand, Some(cover), vec![span(0.0, 4.0)], None);
+	assert!(demand.wait_idle(IDLE));
+	let (top, nested) = storage.rebuilds_after_eviction();
+	assert!(
+		max_ground <= 8 && max_cover <= 8,
+		"walk visited 40 cells; stores must plateau, got ground={max_ground} cover={max_cover} sizes={:?} rebuilds=({top}, {nested})",
+		storage.store_sizes()
+	);
+	assert!(top > 0 && nested > 0, "returning to the start rebuilds Cover and nested Ground");
 	Ok(())
 }

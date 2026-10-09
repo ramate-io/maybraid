@@ -8,6 +8,7 @@ use bevy::math::bounding::Aabb3d;
 
 use crate::gen::{Id, OriginalId};
 
+use super::node_store::StoredEntry;
 use super::storage::{HcsgStorage, HcsgValue};
 
 /// How one generated type is discovered and built.
@@ -30,6 +31,11 @@ pub struct GenerationContext<'a> {
 	storage: &'a HcsgStorage,
 	/// `(TypeId, Id)` pairs being built on this stack; a repeat is a cycle.
 	generating: HashSet<(TypeId, Id)>,
+	/// Types this fill read, hit or miss. The worker unions this into the
+	/// subscription's reach.
+	reached: HashSet<TypeId>,
+	/// How many `build_with_id` frames sit above the current generate.
+	nested_depth: usize,
 	stale: &'a (dyn Fn() -> bool + 'a),
 }
 
@@ -40,10 +46,22 @@ impl<'a> GenerationContext<'a> {
 
 	/// Once `stale` returns true, nothing more is generated or published.
 	pub fn with_stale(storage: &'a HcsgStorage, stale: &'a (dyn Fn() -> bool + 'a)) -> Self {
-		Self { storage, generating: HashSet::new(), stale }
+		Self {
+			storage,
+			generating: HashSet::new(),
+			reached: HashSet::new(),
+			nested_depth: 0,
+			stale,
+		}
 	}
 
-	pub fn storage(&self) -> &HcsgStorage {
+	/// Crate-only escape hatch. Schemes must read through `get` / `entry` so
+	/// reach is recorded.
+	#[allow(dead_code)]
+	/// Crate-only escape hatch. Schemes must read through `get` / `entry` so
+	/// reach is recorded.
+	#[allow(dead_code)]
+	pub(crate) fn storage(&self) -> &HcsgStorage {
 		self.storage
 	}
 
@@ -51,8 +69,24 @@ impl<'a> GenerationContext<'a> {
 		(self.stale)()
 	}
 
-	pub fn get<T: HcsgValue>(&self, id: Id) -> Option<Arc<T>> {
+	fn touch<T: HcsgValue>(&mut self) {
+		self.reached.insert(TypeId::of::<T>());
+	}
+
+	/// Types this context read since it was created.
+	pub(super) fn take_reached(&mut self) -> HashSet<TypeId> {
+		std::mem::take(&mut self.reached)
+	}
+
+	pub fn get<T: HcsgValue>(&mut self, id: Id) -> Option<Arc<T>> {
+		self.touch::<T>();
 		self.storage.get(id)
+	}
+
+	/// The stored entry, recording `T` on this fill's reach.
+	pub fn entry<T: HcsgValue>(&mut self, id: Id) -> Option<StoredEntry<Arc<T>>> {
+		self.touch::<T>();
+		self.storage.entry(id)
 	}
 
 	pub fn overlapping<T: HcsgValue>(&self, region: Aabb3d) -> Vec<Id> {
@@ -67,6 +101,7 @@ impl<'a> GenerationContext<'a> {
 	/// dependencies on the way. `None` where nothing exists, on a cycle, or
 	/// once stale.
 	pub fn get_or_generate<T: GenerationScheme>(&mut self, id: Id) -> Option<Arc<T>> {
+		self.touch::<T>();
 		if let Some(value) = self.storage.get::<T>(id) {
 			return Some(value);
 		}
@@ -74,7 +109,12 @@ impl<'a> GenerationContext<'a> {
 		if self.is_stale() || !self.generating.insert(key) {
 			return None;
 		}
+		if self.storage.take_evicted(TypeId::of::<T>(), id) {
+			self.storage.record_rebuild(self.nested_depth > 0);
+		}
+		self.nested_depth += 1;
 		let built = T::build_with_id(self, id);
+		self.nested_depth -= 1;
 		self.generating.remove(&key);
 		let (value, bounds) = built?;
 		let value = Arc::new(value);
