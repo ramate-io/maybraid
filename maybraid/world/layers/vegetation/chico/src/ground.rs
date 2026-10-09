@@ -30,8 +30,8 @@ mod tests {
 	use bevy::math::Vec3;
 	use bevy::prelude::World;
 	use durham::{
-		BaseTerrainNoise, HcsgStorage, TerrainCellLayout, TerrainConfig, TerrainMeshBuilder,
-		TerrainStorage,
+		BaseTerrainNoise, HcsgStorage, SharedTerrainStorage, TerrainCellLayout, TerrainConfig,
+		TerrainMeshBuilder,
 	};
 	use lod_cascade::Chunk;
 	use terrain_chunk_ref::TerrainChunkRef;
@@ -46,15 +46,20 @@ mod tests {
 		world.init_resource::<HcsgStorage>();
 		world
 			.resource::<HcsgStorage>()
-			.insert_base_terrain_for_test(&layout, 0, 0, base);
+			.publish_base_terrain_for_test(&layout, 0, 0, base);
 		let store = world.resource::<HcsgStorage>();
 		let probe = Aabb3d::from_min_max(Vec3::new(1.0, -10.0, 1.0), Vec3::new(2.0, 10.0, 2.0));
 		let id = store
-			.terrain_ids_overlapping(probe)
+			.try_overlapping::<durham::Terrain>(probe)
+			.map_err(|busy| anyhow::anyhow!("HcsgStorage busy: {busy:?}"))?
 			.into_iter()
 			.next()
 			.ok_or_else(|| anyhow::anyhow!("stored cell"))?;
-		let terrain = store.terrain(id).ok_or_else(|| anyhow::anyhow!("terrain"))?;
+		let terrain = store
+			.try_entry::<durham::Terrain>(id)
+			.map_err(|busy| anyhow::anyhow!("HcsgStorage busy: {busy:?}"))?
+			.map(|entry| entry.value)
+			.ok_or_else(|| anyhow::anyhow!("terrain"))?;
 		let padded = richmond::TerrainWithPads::compose(terrain.as_ref(), []);
 		let built = overlay_chunk_ref(&padded);
 		let cascade = durham::cascade_chunk_for_cell(padded.cell, padded.res_2);

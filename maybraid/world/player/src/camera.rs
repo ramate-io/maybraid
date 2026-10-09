@@ -81,9 +81,12 @@ pub fn refocus_camera_on_elevation(
 /// otherwise the holding altitude.
 pub fn surface_or_hold(surface: &DurhamSurface) -> f32 {
 	let center = surface.layout().region_center_xz();
-	surface
-		.height_at(center.xz())
-		.unwrap_or_else(|| crate::player::holding_elevation(surface.base(), center.x, center.z))
+	match surface.height_at(center.xz()) {
+		Ok(Some(elevation)) => elevation,
+		Ok(None) | Err(lod::hcsg::Busy) => {
+			crate::player::holding_elevation(surface.base(), center.x, center.z)
+		}
+	}
 }
 
 fn camera_look_at(layout: &TerrainCellLayout, elevation: f32) -> Vec3 {

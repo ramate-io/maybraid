@@ -68,7 +68,8 @@ pub(crate) fn update_world_surface_ready(
 	}
 	let xz = discovery_xz(&spawn, &players, surface.layout());
 	let at = Vec3::new(xz.x, 0.0, xz.y);
-	ready.0 = terrain_collider_covers_xz(at, colliders.iter()) && surface.height_at(xz).is_some();
+	let height_ready = matches!(surface.height_at(xz), Ok(Some(_)));
+	ready.0 = terrain_collider_covers_xz(at, colliders.iter()) && height_ready;
 }
 
 fn discovery_xz(

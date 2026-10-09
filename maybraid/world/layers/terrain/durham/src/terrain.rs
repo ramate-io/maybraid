@@ -56,9 +56,10 @@ pub use host::{
 	WORLD_OUTER_4X_ROWS,
 };
 pub use index::{
-	DurhamNodes, DurhamRoots, DURHAM_INDEX_SCALE, TerrainHeightSnapshot, TerrainStorage,
-	WaterSurfaceSnapshot,
+	DurhamNodes, DurhamRoots, DURHAM_INDEX_SCALE, TerrainHeightSnapshot, WaterSurfaceSnapshot,
 };
+#[cfg(test)]
+pub use index::TerrainStorage;
 pub use mesh::{TerrainMeshAssets, TerrainMeshLodBand};
 pub use plugin::{register_terrain_plugin, TerrainResourcesPlugin};
 pub use render::TerrainRenderItem;

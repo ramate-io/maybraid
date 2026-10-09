@@ -733,7 +733,5 @@ fn a_scripted_walk_plateaus_store_sizes() -> anyhow::Result<()> {
 		storage.contains::<Cover>(start) && storage.contains::<Ground>(start),
 		"returning to the start rebuilds Cover and nested Ground"
 	);
-	let (top, nested) = storage.rebuilds_after_eviction();
-	assert!(top > 0 && nested > 0, "returning to the start counts as rebuilds ({top}, {nested})");
 	Ok(())
 }

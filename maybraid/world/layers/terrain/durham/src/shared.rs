@@ -229,8 +229,8 @@ impl SharedTerrainStorage for HcsgStorage {
 }
 
 /// The playable ground under frame-side readers: composed heights and wet
-/// columns from the shared storage. A cell not yet published, or busy this
-/// frame, reads as `None`.
+/// columns from the shared storage. A cell not yet published reads as
+/// `Ok(None)`; [`Busy`] means retry next frame.
 #[derive(SystemParam)]
 pub struct DurhamSurface<'w> {
 	storage: Res<'w, HcsgStorage>,
@@ -239,8 +239,8 @@ pub struct DurhamSurface<'w> {
 }
 
 impl DurhamSurface<'_> {
-	pub fn height_at(&self, xz: Vec2) -> Option<f32> {
-		self.storage.try_composed_height_at(&self.layout, xz.x, xz.y).ok().flatten()
+	pub fn height_at(&self, xz: Vec2) -> Result<Option<f32>, lod::hcsg::Busy> {
+		self.storage.try_composed_height_at(&self.layout, xz.x, xz.y)
 	}
 
 	/// Base noise, where no composed cell is published.
@@ -248,12 +248,12 @@ impl DurhamSurface<'_> {
 		self.base.0.height_at(xz.x, xz.y)
 	}
 
-	pub fn height_or_fallback(&self, xz: Vec2) -> f32 {
-		self.height_at(xz).unwrap_or_else(|| self.fallback_height_at(xz))
+	pub fn height_or_fallback(&self, xz: Vec2) -> Result<f32, lod::hcsg::Busy> {
+		Ok(self.height_at(xz)?.unwrap_or_else(|| self.fallback_height_at(xz)))
 	}
 
-	pub fn water_column_at(&self, xz: Vec2) -> Option<WaterColumn> {
-		self.storage.try_water_column_at(&self.layout, xz.x, xz.y).ok().flatten()
+	pub fn water_column_at(&self, xz: Vec2) -> Result<Option<WaterColumn>, lod::hcsg::Busy> {
+		self.storage.try_water_column_at(&self.layout, xz.x, xz.y)
 	}
 
 	pub fn layout(&self) -> &TerrainCellLayout {
@@ -394,7 +394,8 @@ mod tests {
 		let mut wet = app
 			.world()
 			.resource::<HcsgStorage>()
-			.overlapping::<Water>(layout.request_region());
+			.try_overlapping::<Water>(layout.request_region())
+			.expect("storage idle after worker settle");
 		wet.sort();
 		assert_eq!(water, wet, "one water host per wet cell");
 		assert!(patch_height(&app)?.is_some());
@@ -428,6 +429,10 @@ mod tests {
 		Ok(())
 	}
 
+	fn storage_busy(busy: lod::hcsg::Busy) -> anyhow::Error {
+		anyhow::anyhow!("HcsgStorage busy: {busy:?}")
+	}
+
 	#[test]
 	fn the_surface_reads_published_cells_and_falls_back_elsewhere() -> anyhow::Result<()> {
 		let mut world = World::new();
@@ -443,10 +448,16 @@ mod tests {
 		let surface = state.get(&world)?;
 		let inside = Vec2::splat(0.5 * layout.cell_size);
 		let outside = Vec2::splat(10.5 * layout.cell_size);
-		assert_eq!(surface.height_at(inside), Some(base.height_at(inside.x, inside.y)));
-		assert_eq!(surface.height_at(outside), None);
-		assert_eq!(surface.height_or_fallback(outside), base.height_at(outside.x, outside.y));
-		assert_eq!(surface.water_column_at(inside), None);
+		assert_eq!(
+			surface.height_at(inside).map_err(storage_busy)?,
+			Some(base.height_at(inside.x, inside.y))
+		);
+		assert_eq!(surface.height_at(outside).map_err(storage_busy)?, None);
+		assert_eq!(
+			surface.height_or_fallback(outside).map_err(storage_busy)?,
+			base.height_at(outside.x, outside.y)
+		);
+		assert_eq!(surface.water_column_at(inside).map_err(storage_busy)?, None);
 		Ok(())
 	}
 }
