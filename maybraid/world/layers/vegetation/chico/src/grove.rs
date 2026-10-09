@@ -55,7 +55,8 @@ pub fn grove_from_id(id: Id) -> Option<(GroveExtent, ForestLayer)> {
 }
 
 /// Flat world sample used when growing grove recipes in unit tests.
-pub fn forest_world_sample() -> FlatTerrainSample {
+#[cfg(test)]
+pub(crate) fn forest_world_sample() -> FlatTerrainSample {
 	FlatTerrainSample::default()
 }
 

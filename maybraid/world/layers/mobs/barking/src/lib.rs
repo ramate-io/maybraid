@@ -16,7 +16,7 @@ pub use generation::{
 	GroupKind, MobEnvironmentSample, MobGroup, MobPlantHost, MobWorldHosts, MobWorldSample,
 	PlacedMob, DEFAULT_GROUP_EXTENT,
 };
-pub use index::{MobCell, MobCellExtent, MobIndex};
+pub use index::{MobCell, MobCellExtent};
 pub use plugin::{MobGroupsPlugin, PendingMobGroups};
 pub use present::{MobCellRoot, MobGroupRoot};
 pub use shared::{

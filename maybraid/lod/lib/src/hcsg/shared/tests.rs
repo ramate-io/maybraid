@@ -257,6 +257,39 @@ fn region_pulls_skip_what_does_not_exist() {
 	assert!(cx.get_or_generate_in::<Cycle>(span(0.0, 2.0)).is_empty());
 }
 
+fn cover_seeds(storage: &HcsgStorage) -> std::collections::BTreeMap<Id, u32> {
+	storage
+		.overlapping::<Cover>(span(-1.0, 20.0))
+		.into_iter()
+		.filter_map(|id| {
+			let cover = storage.get::<Cover>(id)?;
+			Some((id, cover.ground.seed))
+		})
+		.collect()
+}
+
+fn worker_cover_state(regions: Vec<Aabb3d>) -> anyhow::Result<std::collections::BTreeMap<Id, u32>> {
+	let storage = seeded();
+	let demand = HcsgDemand::default();
+	let _worker = HcsgWorker::spawn(storage.clone(), demand.clone())?;
+	let subscription = demand.subscribe::<Cover>(None, regions, None);
+	anyhow::ensure!(demand.wait_idle(IDLE));
+	anyhow::ensure!(
+		demand.try_read_published(subscription, 0).ok().flatten().is_some(),
+		"subscription finished"
+	);
+	Ok(cover_seeds(&storage))
+}
+
+#[test]
+fn generation_results_do_not_depend_on_demand_order() -> anyhow::Result<()> {
+	let one_region = worker_cover_state(vec![span(0.0, 4.0)])?;
+	let split_regions =
+		worker_cover_state(vec![span(2.0, 1.0), span(0.0, 1.0), span(1.0, 1.0), span(3.0, 1.0)])?;
+	anyhow::ensure!(one_region == split_regions, "region order changed stored values");
+	Ok(())
+}
+
 #[test]
 fn a_panicking_scheme_does_not_stop_the_worker() -> anyhow::Result<()> {
 	let storage = seeded();

@@ -49,8 +49,8 @@ pub use config::{
 pub use extent::{ForestExtent, DEFAULT_FOREST_EXTENT_XZ, DEFAULT_FOREST_GROVE_TILE_XZ};
 pub use forest::{neighbor_layers, ChicoForest};
 pub use generation::{GROVE_GENERATE_RADIUS_M, GROVE_PRESENT_RADIUS_M};
-pub use ground::{overlay_chunk_ref, ChicoGround};
-pub use grove::{forest_world_sample, grove_from_id, grove_id, ChicoGrove};
+pub use ground::{fine_overlay_size, overlay_chunk_ref};
+pub use grove::{grove_from_id, grove_id, ChicoGrove};
 pub use hopscotch::{select as hopscotch_select, HopscotchNode};
 pub use host::ChicoGroveHost;
 pub use kind::{

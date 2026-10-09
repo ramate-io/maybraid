@@ -400,7 +400,6 @@ A restart is always in this order: advance the epoch, clear the stores, seed the
 Each layer's roots expose `reset` (clear its stores, seed its roots). Advancing the epoch belongs to whoever owns the session, because one epoch ends every layer's subscriptions:
 
 - `durham-playground` calls `DurhamRoots::restart` (advance, then reset) on a seed or layout change.
-- `richmond-playground` advances once, then resets `DurhamRoots`, `RichmondRoots`, Maputo's stores and `ChicoRoots`, on an explicit command flag.
 - Discovery does the same on entering the mode: `WorldLayersPlugin` advances once, then resets every layer. Its producers are gated on the mode, so they send nothing until it streams.
 
 Presentation plugins never restart sessions or infer one from resource changes; they only gate where presentation runs.
@@ -437,28 +436,22 @@ The shared runtime provides everything else.
 
 ## What this replaces
 
-- `gen::runtime` (`LodGeneratePlugin<T, S>`): the last step of [#1007](https://github.com/ramate-io/maybraid/issues/1007).
-- `GenerateOn<P, T>`, `GenerationProducer<P>`, `GenerateQueue`, `CurrentBounds` and the per-window generation budgets.
-- `Seed::<R>().invalidates::<G>().restarts::<P>()` and `clear_group`, replaced by session roots, epochs, and clearing a mode's stores on exit.
-- Bespoke presenters and presenter state: Durham terrain and water, Chico forest and bump-outs, Barking, Maputo, Richmond hosts and padded terrain, and mobs.
-- Replacement machinery between presented types, such as `sync_raw_terrain_replacements` and `TerrainSuperseded`.
-- Synchronous generation in Bevy systems (the layer `prepare` hooks, reads through `UrbanizationModel::Read`) and the mutable authored roots used by the training ground.
+The legacy per-layer runtime is gone: `gen::runtime`, `GenerateOn`, producers and queues, `Seed` invalidation, bespoke spatial indexes, terrain replacement machinery, and synchronous generation in Bevy systems. Every app now generates and presents on this shared worker path. Session roots, epochs, and store clears on mode exit replace the old restart hooks.
+
+Legacy per-layer presenters (Durham terrain and water, Richmond hosts, Chico, Barking, Maputo, mobs) still compile in place; a final pass removes those modules once nothing references them.
 
 ## Migration
 
-The new API lives in `lod::hcsg::shared`, alongside the frame-synchronous `lod::hcsg` API, until the last layer moves over. Values are pure functions of their keys, so while a layer is mid-move both storages may hold the same value. That costs duplicate work, never wrong results. Old and new plugins coexist, and each app switches once its layers are ready.
+The public API is `lod::hcsg::shared`: `HcsgStorage`, `HcsgDemand`, `GenerationContext`, `GenerationScheme`, `HcsgNode<T>`, `HcsgBounds`, `generation`, `presentation`, and the bounds/presentation plugins.
 
-0. **Shared storage, context, demand and worker** (done). `HcsgStorage` with `Arc` values and `Busy`, `HcsgValue`, `GenerationScheme` and `GenerationContext`, `HcsgDemand` and `HcsgWorker`, tested in isolation.
-1. **Adapter** (done, then removed in step 6). `GenerationContext` implemented the legacy `SpatialIndex<T>`, so legacy schemes generic over `S` (Durham, cells) ran on the worker unchanged until they had native impls.
-2. **Generation and presentation systems** (done). `HcsgBounds`, `HcsgNode<T>`, `generation<B, T>`, `presentation<B, T>`, scene forwarding and the plugins, tested on fixtures with the real worker and the LOD chunk-fulfill pipeline.
-3. **Durham** (done). `DurhamPresentationPlugin<B>` presents `Terrain` and `Water` through `presentation<B, T>` and chunk fulfill, next to the old presenters. `DurhamWindow` bounds the layout's request region. `DurhamRoots::restart` seeds the shared storage, whose base scales come from the same `durham_nodes!` list as the old storage. Collision-seeding cells carry the trimesh source in `Terrain`'s own `LodScene`. `durham-playground` generates on the worker and no longer calls the old storage. The streamed world path keeps the old presenters until Richmond moves (step 4), because its level changes need the refresh region plugins.
-4. **Richmond** (done in `richmond-playground`). `DevelopmentSite`, `RichmondDevelopment`, `PaddedTerrain` and `Built` have native schemes beside their legacy ones, which stay until their last reader moves. Developments sample the ground through `GroundCells`, a pure view of the context. `PaddedTerrain` is total: a cell no pad reaches wraps the terrain unchanged, so it replaces raw terrain as the presented ground surface instead of overlaying it. `Built` is one `LodScene` whose level holds the `UrbanSetting` and the nested building hosts (`DevelopmentHost::scene`, shared with the legacy spawn). `RichmondPresentationPlugin<B, G>` presents both. `WaterPresentationPlugin<B>` presents Durham water alone, so Richmond doesn't need raw terrain hosts. The playground pins its layout, because the layout is a session root, and restarts on its command flag. Composed apps keep the old presenters, along with `sync_raw_terrain_replacements` and `TerrainSuperseded`, until step 7.
-5. **Chico, Barking, Maputo.** Rewrite each onto the context, next to its bespoke index and presenter, which composed apps keep until step 7.
-   - **Chico** (done in `richmond-playground`). `ChicoGrove` stays the cheap recipe. `GrownGrove<G>` is the presented value: the worker grows it synchronously on `GroundSurface<G>`, a pure view of the padded surface cells under the grove. `ChicoRoots::reset` seeds `ForestSelection` as the session root, so neighborhood blending reads it instead of `ForestIndex`. `BumpedOut<P, G>` places one canopy bump-out per proxy cell. Its scene reads the padded surface mesh through `TerrainChunkRef`, keyed like the padded host, so it doesn't matter which side loads first. The grove hole and the outer band are LOD levels, refreshed by `BumpOutRing<P>`.
-   - **Barking** (library and tests only). `PlacedMobCell<G>` groups a mob cell from `UrbanizationSelection`, Chico's `ForestSelection`, the padded surface, and plant hosts read from `Built<G>` and `SelectedUrbanization`, all through the context. It reads no entities and writes no `SelectedUrbanization`. Its scene nests each group's `MobScene` hosts, and members retire with their mob. `BarkingPresentationPlugin<B, G>` presents it. It isn't in a playground yet, because `MobScenesPlugin` needs the player, combat and intelligence stack. Mobs fit the surface only when generated; legacy hosts still re-fit as they move.
-   - **Maputo** (done in `richmond-playground`). `DevelopmentSlots<U>` holds one development's world-space slots, through `FurnitureSlots::Development` (Richmond's `Built<G>`), and replaces the old per-development slot cache. `Furnished<U>` is a 50 m `FurnitureCell` of those slots. `MaputoPresentationPlugin<B, U>` presents them, and `FurnitureNeighborhood` bounds them to the viewer's 50 m cell. The walk collider is part of `FurnitureCell`'s High scene on both paths, so there is no attach system. Composed apps keep `FurnitureIndex` and its presenter until step 7.
-6. **Native Durham and cells** (done). Every Durham scheme and `SelectedUrbanization` has a native impl beside its legacy one, with the composition shared between them (`on_leaf`, `on_cell`, `author`, `union`, `compose`, `over`). Native impls have no `S` capability bounds and borrow their `Arc` dependencies instead of cloning them. `seeded_root!` emits both impls. The adapter and `elsa` are gone. Durham's equivalence tests generate the same layouts both ways and agree on ids, heights, hydro fills, marazion leaves and water. Legacy terrain also lists jersey leaves that only touch the cell's boundary when a neighbor happened to generate first; they don't change heights inside the cell, and native terrain leaves them out.
-7. **Modes and removal.** The training ground is removed until it is rebuilt. Discovery runs on the new runtime: producers send region sets on Discovery-gated channels, the terrain streams present per ring, and gameplay reads heights and water through `DurhamSurface`. Delete the legacy scheme impls (and the equivalence tests with them), `gen::runtime`, the producer and queue machinery, the terrain replacement machinery, `Seed`, the old storage and the training ground, which is then rebuilt from scratch.
+0. **Shared storage, context, demand and worker** (done).
+1. **Generation and presentation systems** (done).
+2. **Durham, Richmond, Chico, Barking, Maputo** (done). Native `GenerationScheme` impls; composed world and `durham-playground` run on the worker.
+3. **Native Durham and cells** (done). No adapter or legacy storage.
+4. **Modes and removal** (done).
+   - **7a.** Training ground removed (to be rebuilt later).
+   - **7b.** Discovery runs on this runtime: gated bounds channels, streamed terrain rings, gameplay through `DurhamSurface`.
+   - **7c.** Legacy runtime, indexes, and layer-stack generation machinery deleted. Retired playgrounds per [`maybraid/PLAYGROUNDS.md`](../../../PLAYGROUNDS.md) (`routing-playground`, `barking-playground`, `character-world-movements-playground`, `richmond-playground`). Leftover per-layer presenter modules come out in a final 7c pass.
 
 ## Later
 

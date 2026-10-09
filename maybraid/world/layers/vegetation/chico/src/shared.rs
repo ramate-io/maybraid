@@ -23,7 +23,6 @@ use render_item::mesh::{IdentifiedMesh, MeshBuilder};
 use render_item::NormalizeChunk;
 use richmond::{PaddedTerrain, Richmond, RichmondGround};
 use terrain_chunk_ref::TerrainChunkRef;
-use terrain_layer_model::{TerrainCell, TerrainModel};
 use urbanization_layer_model::Urbanization;
 use vegetation_components::scene_children;
 use vegetation_groves::{GroveExtent, GroveWorldSample};
@@ -58,10 +57,7 @@ pub trait ForestGround: Send + Sync + 'static {
 }
 
 /// Padded terrain is the urbanized ground's whole surface.
-impl<T: RichmondGround> ForestGround for Urbanization<Richmond<T>>
-where
-	Self: TerrainModel<Cell: TerrainCell<Mesh = TerrainMeshBuilder>>,
-{
+impl<T: RichmondGround> ForestGround for Urbanization<Richmond<T>> {
 	type Surface = PaddedTerrain<T>;
 	type Mesh = TerrainMeshBuilder;
 
@@ -74,7 +70,7 @@ where
 	}
 
 	fn chunk_ref(surface: &Self::Surface) -> TerrainChunkRef<TerrainMeshBuilder> {
-		overlay_chunk_ref::<Self>(&surface.surface)
+		overlay_chunk_ref(&surface.surface)
 	}
 }
 

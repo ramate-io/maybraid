@@ -195,7 +195,6 @@ impl DevelopmentSite {
 			None => vec![self.kind],
 		}
 	}
-
 }
 
 impl shared::GenerationScheme for DevelopmentSite {
@@ -341,7 +340,7 @@ mod tests {
 	}
 
 	fn seeded(config: DevelopmentConfig, authored: AuthoredDevelopments) -> HcsgStorage {
-		let mut storage = HcsgStorage::default();
+		let storage = HcsgStorage::default();
 		storage.seed(config, lod::hcsg::universal_bounds());
 		storage.seed(authored, lod::hcsg::universal_bounds());
 		storage
@@ -353,10 +352,11 @@ mod tests {
 			sites: DevelopmentSites::Lattice,
 			..only(DevelopmentKind::RingFort)
 		};
-		let mut storage = seeded(config, AuthoredDevelopments::default());
+		let storage = seeded(config, AuthoredDevelopments::default());
 		let cell = DevelopmentExtent::from_cell_index(2, -1);
-		let site = storage
-			.get_one_or_generate::<DevelopmentSite>(cell.id())
+		let mut cx = lod::hcsg::shared::GenerationContext::new(&storage);
+		let site = cx
+			.get_or_generate::<DevelopmentSite>(cell.id())
 			.ok_or_else(|| anyhow::anyhow!("site"))?;
 		anyhow::ensure!(site.kind == DevelopmentKind::RingFort);
 		anyhow::ensure!(site.cell == cell.aabb());
@@ -381,15 +381,16 @@ mod tests {
 			config: config.clone(),
 			courtyard: None,
 		};
-		let mut storage = seeded(config, AuthoredDevelopments(vec![authored.clone()]));
-		let ids = storage.original_ids_for::<DevelopmentSite>(lattice.aabb());
+		let storage = seeded(config, AuthoredDevelopments(vec![authored.clone()]));
+		let mut cx = lod::hcsg::shared::GenerationContext::new(&storage);
+		let ids = cx.original_ids_for::<DevelopmentSite>(lattice.aabb());
 		anyhow::ensure!(ids.contains(&OriginalId(authored.id())), "authored site is an origin");
-		let site = storage
-			.get_one_or_generate::<DevelopmentSite>(authored.id())
+		let site = cx
+			.get_or_generate::<DevelopmentSite>(authored.id())
 			.ok_or_else(|| anyhow::anyhow!("authored site"))?;
 		anyhow::ensure!(site.kind == DevelopmentKind::LesHalles && site.authored.is_some());
-		let procedural = storage
-			.get_one_or_generate::<DevelopmentSite>(lattice.id())
+		let procedural = cx
+			.get_or_generate::<DevelopmentSite>(lattice.id())
 			.ok_or_else(|| anyhow::anyhow!("lattice site"))?;
 		anyhow::ensure!(procedural.kind == DevelopmentKind::Empty, "overlapped site stays empty");
 		Ok(())

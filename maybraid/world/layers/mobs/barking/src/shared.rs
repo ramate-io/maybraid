@@ -6,9 +6,8 @@
 //! built over the ground, and the ground's surface, all from the generation
 //! context. Mobs retire with their cell, and their members with them.
 //!
-//! This runs beside [`crate::MobIndex`] and its presenter until every mob
-//! app has moved over. A session starts by advancing the epoch, then each
-//! layer's reset, then [`BarkingNodes::clear`].
+//! A session starts by advancing the epoch, then each layer's reset, then
+//! [`BarkingNodes::clear`].
 
 use std::marker::PhantomData;
 use std::sync::Arc;

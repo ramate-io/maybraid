@@ -1,7 +1,4 @@
-//! Furnishing presentation helpers. Install goes through [`layer_stack::Present`].
+//! Furnishing presentation helpers for legacy Maputo presenters.
 
 /// Marker for furnishing-presenter subscriptions on [`furnishing_layer_model::Furnishing`].
-pub struct FurnishingPresent;
-
-#[cfg(test)]
-mod tests;
+pub struct FurnishingCells;

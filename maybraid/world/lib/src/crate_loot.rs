@@ -425,6 +425,21 @@ fn presented_cell_id(
 }
 
 #[cfg(test)]
+pub(crate) fn spawn_furniture_host(world: &mut World, id: Id) -> Entity {
+	use std::sync::Arc;
+
+	use lod::gen::Version;
+	use maputo::FurnitureCellExtent;
+
+	let extent = FurnitureCellExtent::from_id(id)
+		.unwrap_or_else(|| FurnitureCellExtent::from_cell_index(0, 0));
+	let (value, bounds) = WorldFurnished::empty_host(extent);
+	world
+		.spawn(HcsgNode { id, version: Version(1), bounds, value: Arc::new(value) })
+		.id()
+}
+
+#[cfg(test)]
 mod tests {
 	use super::*;
 	use crate::stash::WorldStash;
@@ -444,26 +459,6 @@ mod tests {
 			transform,
 			GlobalTransform::from(transform),
 		)
-	}
-
-	pub(crate) fn spawn_furniture_host(world: &mut World, id: Id) -> Entity {
-		use std::sync::Arc;
-
-		use lod::gen::Version;
-		use maputo::FurnitureCellExtent;
-
-		let extent = FurnitureCellExtent::from_id(id).unwrap_or_else(|| {
-			FurnitureCellExtent::from_cell_index(0, 0)
-		});
-		let (value, bounds) = WorldFurnished::empty_host(extent);
-		world
-			.spawn(HcsgNode {
-				id,
-				version: Version(1),
-				bounds,
-				value: Arc::new(value),
-			})
-			.id()
 	}
 
 	fn spawn_crate(world: &mut World, seed: u64, at: Vec3) -> Entity {

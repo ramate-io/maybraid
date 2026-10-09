@@ -1877,7 +1877,7 @@ mod tests {
 		let player_bag = world.spawn(Inventory::default()).id();
 		world.spawn((VegetationPlayer, Transform::IDENTITY, InventoryUser::carrying(player_bag)));
 		let at = Transform::from_xyz(2.0, 0.4, 0.0);
-		let host = crate::crate_loot::tests::spawn_furniture_host(&mut world, Id::Universal);
+		let host = crate::crate_loot::spawn_furniture_host(&mut world, Id::Universal);
 		world.spawn((
 			FurnitureKitPart { kind: PartKind::ChestLid, finish_seed: 1, slot: 0 },
 			ClosedLid(at),
