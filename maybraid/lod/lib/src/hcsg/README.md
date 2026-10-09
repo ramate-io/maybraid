@@ -395,8 +395,9 @@ impl<T: VisualLodScene + HcsgValue> VisualLodScene for HcsgNode<T> {
 ```rust
 app.add_plugins(HcsgBoundsPlugin::<WorldBounds>::default());
 app.add_plugins(PresentationPlugin::<WorldBounds, Terrain>::default());
+// Chunk fulfill for HcsgNode<Terrain> is registered by PresentationPlugin.
 
-// Scenes: the existing LOD refresh plugins, typed on the host component.
+// Region-driven level refresh (optional):
 app.add_plugins(GimmeLodSceneRefreshPlugin::<HcsgNode<Terrain>, TerrainRefresh, With<Camera>>::default());
 
 // Only where values should stay warm without being presented:
@@ -407,7 +408,7 @@ app.add_plugins(GenerationPlugin::<AheadOfCamera, Terrain>::default());
 - The channel is a type parameter, not a plugin field. Several plugins may share one channel, and the app adds its producer once.
 - A value presented on several channels at different cell sizes is wrapped per channel. Durham's `Streamed<R, T>` is `T` on stream `R`'s ring cells, so each ring discovers only its own lattice, and `StreamPresentationPlugin<C, R, T>` presents it.
 - Either plugin initializes `HcsgStorage` and `HcsgDemand` if missing, and spawns the one `HcsgWorker`.
-- Scene capabilities come from the refresh plugins a layer already chooses (`LodSceneRefreshChunkPlugin`, `GimmeLodSceneRefreshPlugin`, …), now typed on `HcsgNode<T>`. No separate registration API.
+- `PresentationPlugin` registers `LodSceneRefreshChunkPlugin<HcsgNode<T>>` once by default; use `without_chunk_refresh` when another refresh path owns fulfillment. Layers may still add region refresh (`GimmeLodSceneRefreshPlugin`, …) typed on `HcsgNode<T>`.
 - A host's level is picked once at spawn. If it should change as the viewer moves, the layer also adds a refresh region source (`LodSceneRefreshRegionPlugin` with a `LodRefreshRegions` strategy) feeding `GimmeLodSceneRefreshPlugin`. Without one, nothing re-evaluates the level.
 - Both systems run in `HcsgSystems`, before `LodRefreshSystems::Track`. Bevy applies the deferred host spawns before the refresh chain sees them.
 

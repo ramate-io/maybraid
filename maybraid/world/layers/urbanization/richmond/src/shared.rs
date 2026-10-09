@@ -12,6 +12,7 @@ use bevy::prelude::*;
 use lod::hcsg::shared::{self, HcsgClass, HcsgNode, PresentationPlugin, ViewerHcsgBounds};
 use lod::hcsg::universal_bounds;
 use lod::scene::LodSceneRefreshChunkPlugin;
+use lod::LodViewer;
 use urbanization_cells::{UrbanizationExtent, UrbanizationNodes, UrbanizationSelection};
 
 use crate::built::Built;
@@ -55,9 +56,6 @@ impl<C: Send + Sync + 'static, G: RichmondGround> Plugin for BuiltPresentationPl
 	fn build(&self, app: &mut App) {
 		register_richmond_plugin(app);
 		app.add_plugins(PresentationPlugin::<C, Built<G>>::default());
-		if !app.is_plugin_added::<LodSceneRefreshChunkPlugin<HcsgNode<Built<G>>>>() {
-			app.add_plugins(LodSceneRefreshChunkPlugin::<HcsgNode<Built<G>>>::default());
-		}
 	}
 }
 
@@ -80,9 +78,6 @@ impl<C: Send + Sync + 'static, G: RichmondGround> Plugin for RichmondPresentatio
 			BuiltPresentationPlugin::<C, G>::default(),
 			PresentationPlugin::<C, PaddedTerrain<G>>::default(),
 		));
-		if !app.is_plugin_added::<LodSceneRefreshChunkPlugin<HcsgNode<PaddedTerrain<G>>>>() {
-			app.add_plugins(LodSceneRefreshChunkPlugin::<HcsgNode<PaddedTerrain<G>>>::default());
-		}
 	}
 }
 
@@ -264,7 +259,8 @@ mod tests {
 				break;
 			}
 		}
-		let padded = padded.ok_or_else(|| anyhow::anyhow!("no padded cell under the development"))?;
+		let padded =
+			padded.ok_or_else(|| anyhow::anyhow!("no padded cell under the development"))?;
 		Ok(padded.surface.sdf.terrain().height_at_with_all_modulations(center.x, center.z))
 	}
 

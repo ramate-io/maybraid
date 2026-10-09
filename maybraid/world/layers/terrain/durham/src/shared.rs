@@ -11,7 +11,6 @@ use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use lod::gen::Id;
 use lod::hcsg::shared::{Busy, HcsgBounds, HcsgClass, HcsgNode, HcsgStorage, PresentationPlugin};
-use lod::scene::LodSceneRefreshChunkPlugin;
 use lod::LodViewer;
 use render_item::mesh::handle::MeshFulfillBudget;
 use terrain_layer_model::TerrainStreaming;
@@ -65,9 +64,6 @@ impl<C: Send + Sync + 'static> Plugin for DurhamPresentationPlugin<C> {
 			app.add_plugins(WaterPresentationPlugin::<C>::default());
 		}
 		app.add_plugins(PresentationPlugin::<C, Terrain>::default());
-		if !app.is_plugin_added::<LodSceneRefreshChunkPlugin<HcsgNode<Terrain>>>() {
-			app.add_plugins(LodSceneRefreshChunkPlugin::<HcsgNode<Terrain>>::default());
-		}
 	}
 }
 
@@ -84,9 +80,6 @@ impl<C> Default for WaterPresentationPlugin<C> {
 impl<C: Send + Sync + 'static> Plugin for WaterPresentationPlugin<C> {
 	fn build(&self, app: &mut App) {
 		app.add_plugins(PresentationPlugin::<C, Water>::default());
-		if !app.is_plugin_added::<LodSceneRefreshChunkPlugin<HcsgNode<Water>>>() {
-			app.add_plugins(LodSceneRefreshChunkPlugin::<HcsgNode<Water>>::default());
-		}
 	}
 }
 

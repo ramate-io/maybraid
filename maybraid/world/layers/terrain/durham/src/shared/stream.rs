@@ -18,8 +18,7 @@ use lod::hcsg::shared::{
 };
 use lod::lod_ref::LodRef;
 use lod::scene::{
-	LodSceneCulls, LodSceneLevel, LodSceneRefreshChunkPlugin, LodSceneStatus, SceneChunk,
-	SemanticLodScene,
+	LodSceneCulls, LodSceneLevel, LodSceneStatus, SceneChunk, SemanticLodScene,
 };
 use lod::LodViewer;
 
@@ -153,9 +152,6 @@ where
 {
 	fn build(&self, app: &mut App) {
 		app.add_plugins(PresentationPlugin::<C, Streamed<R, T>>::default());
-		if !app.is_plugin_added::<LodSceneRefreshChunkPlugin<HcsgNode<Streamed<R, T>>>>() {
-			app.add_plugins(LodSceneRefreshChunkPlugin::<HcsgNode<Streamed<R, T>>>::default());
-		}
 	}
 }
 

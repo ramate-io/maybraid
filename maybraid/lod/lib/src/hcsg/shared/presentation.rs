@@ -16,7 +16,7 @@ use bevy::prelude::{
 use super::node_store::StoredEntry;
 use crate::gen::{Id, Version};
 use crate::lod_ref::LodRef;
-use crate::scene::{lod_host_scene_pending, SemanticLodScene};
+use crate::scene::{add_lod_refresh_chunk_for, lod_host_scene_pending, SemanticLodScene};
 
 use super::bounds::{HcsgClass, HcsgRegions};
 use super::context::GenerationScheme;
@@ -228,13 +228,28 @@ fn spawn_host<T: GenerationScheme + SemanticLodScene>(
 /// Presents `T` within channel `C`'s regions: requests its generation and
 /// keeps one [`HcsgNode<T>`] host per published value.
 ///
-/// Scenes come from the LOD refresh plugins registered for `HcsgNode<T>`.
+/// By default also registers [`crate::scene::LodSceneRefreshChunkPlugin`] for
+/// [`HcsgNode<T>`] once (shared across channels that present the same `T`).
+/// Use [`PresentationPlugin::without_chunk_refresh`] when another refresh
+/// path owns scene fulfillment (for example region refresh on bump-outs).
+///
 /// Something must produce `C`'s regions, such as [`super::HcsgBoundsPlugin`].
-pub struct PresentationPlugin<C, T>(PhantomData<fn() -> (C, T)>);
+pub struct PresentationPlugin<C, T> {
+	chunk_refresh: bool,
+	_marker: PhantomData<fn() -> (C, T)>,
+}
 
 impl<C, T> Default for PresentationPlugin<C, T> {
 	fn default() -> Self {
-		Self(PhantomData)
+		Self { chunk_refresh: true, _marker: PhantomData }
+	}
+}
+
+impl<C, T> PresentationPlugin<C, T> {
+	/// Presentation only — no [`crate::scene::LodSceneRefreshChunkPlugin`] for
+	/// [`HcsgNode<T>`].
+	pub fn without_chunk_refresh() -> Self {
+		Self { chunk_refresh: false, _marker: PhantomData }
 	}
 }
 
@@ -245,6 +260,9 @@ where
 {
 	fn build(&self, app: &mut App) {
 		ensure_runtime(app);
+		if self.chunk_refresh {
+			add_lod_refresh_chunk_for::<HcsgNode<T>>(app);
+		}
 		app.add_message::<HcsgRegions<C>>()
 			.add_systems(Update, presentation::<C, T>.in_set(HcsgSystems));
 	}
