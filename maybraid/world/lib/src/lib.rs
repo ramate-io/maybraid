@@ -36,7 +36,9 @@ pub use control::{
 	WorldSurfaceSet,
 };
 pub use durham::Durham;
-pub use first_wave::{FirstWave, UnitXTile, FIRST_WAVE_JOB_THRESHOLD};
+#[cfg(any(test, feature = "test-support"))]
+pub use first_wave::UnitXTile;
+pub use first_wave::{FirstWave, FIRST_WAVE_JOB_THRESHOLD};
 pub use game_commands::command::PendingStartupCommand;
 pub use intelligence::WorldIntelligencePlugin;
 pub use lod::hcsg::shared::{HcsgClass, HcsgDemand, Outstanding};

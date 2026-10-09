@@ -1,10 +1,7 @@
 //! Shared first-load progress for unveil and the spawn picker.
 
-use bevy::math::bounding::Aabb3d;
-use bevy::math::Vec3;
 use bevy::prelude::*;
-use lod::gen::{Id, OriginalId};
-use lod::hcsg::shared::{GenerationContext, GenerationScheme, HcsgClass, HcsgDemand, Outstanding};
+use lod::hcsg::shared::{HcsgClass, HcsgDemand, Outstanding};
 use lod::LodJobCounter;
 
 /// Remaining Near HCSG ids plus pending-root tickets that still count as
@@ -55,27 +52,37 @@ pub(crate) fn refresh_first_wave(
 	wave.passed = passed;
 }
 
-/// One original id per unit of region x. Shared by first-load tests.
-#[doc(hidden)]
-pub struct UnitXTile;
+#[cfg(any(test, feature = "test-support"))]
+pub use unit_x_tile::UnitXTile;
 
-impl GenerationScheme for UnitXTile {
-	fn original_ids_for(_: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
-		let start = region.min.x.floor() as i32;
-		let end = region.max.x.ceil() as i32;
-		(start..end)
-			.map(|x| {
-				let bounds = Aabb3d::from_min_max(
-					Vec3::new(x as f32, 0.0, 0.0),
-					Vec3::new(x as f32 + 1.0, 1.0, 1.0),
-				);
-				OriginalId::new(Id::from_cell(bounds))
-			})
-			.collect()
-	}
+#[cfg(any(test, feature = "test-support"))]
+mod unit_x_tile {
+	use bevy::math::bounding::Aabb3d;
+	use bevy::math::Vec3;
+	use lod::gen::{Id, OriginalId};
+	use lod::hcsg::shared::{GenerationContext, GenerationScheme};
 
-	fn build_with_id(_: &mut GenerationContext, id: Id) -> Option<(Self, Aabb3d)> {
-		let bounds = id.origin_cell_bounds()?;
-		Some((Self, bounds))
+	/// One original id per unit of region x. Shared by first-load tests.
+	pub struct UnitXTile;
+
+	impl GenerationScheme for UnitXTile {
+		fn original_ids_for(_: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
+			let start = region.min.x.floor() as i32;
+			let end = region.max.x.ceil() as i32;
+			(start..end)
+				.map(|x| {
+					let bounds = Aabb3d::from_min_max(
+						Vec3::new(x as f32, 0.0, 0.0),
+						Vec3::new(x as f32 + 1.0, 1.0, 1.0),
+					);
+					OriginalId::new(Id::from_cell(bounds))
+				})
+				.collect()
+		}
+
+		fn build_with_id(_: &mut GenerationContext, id: Id) -> Option<(Self, Aabb3d)> {
+			let bounds = id.origin_cell_bounds()?;
+			Some((Self, bounds))
+		}
 	}
 }

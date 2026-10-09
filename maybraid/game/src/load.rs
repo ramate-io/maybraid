@@ -4,9 +4,7 @@
 use crate::flow::GameFlow;
 use crate::shell::ShellRoute;
 use bevy::prelude::*;
-use maybraid_world::{
-	FirstWave, LodJobCounter, UnitXTile, WorldSurfaceReady, FIRST_WAVE_JOB_THRESHOLD,
-};
+use maybraid_world::{FirstWave, LodJobCounter, WorldSurfaceReady, FIRST_WAVE_JOB_THRESHOLD};
 use menu_screens::{request_loading_explainer, request_loading_progress};
 
 /// Remaining Near HCSG ids plus pending-root tickets that still count as
@@ -154,6 +152,7 @@ pub(crate) fn finish_world_loading(
 mod tests {
 	use super::*;
 	use bevy::ecs::system::RunSystemOnce;
+	use maybraid_world::UnitXTile;
 
 	fn gate_at(entered_at: f32) -> FirstLoadGate {
 		FirstLoadGate::new(entered_at)
