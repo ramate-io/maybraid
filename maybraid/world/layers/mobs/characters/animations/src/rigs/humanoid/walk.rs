@@ -3,7 +3,6 @@ use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
 use character_rigs::Side;
 
 use crate::animations::{UprightWalk, Walk};
-use crate::rigs::humanoid::apply::{apply_arm, apply_root};
 use crate::rigs::humanoid::gait_knee::lerp_swing_knee;
 use crate::rigs::humanoid::write_masks::{debug_assert_pose_within_mask, walk_write_mask};
 use crate::{Animation, Progress};
@@ -45,7 +44,7 @@ fn sample_walk(walk: &UprightWalk, progress: f32, pose: &mut HumanoidPose) {
 	let left_arm_swing = -arm_swing(phase);
 	let right_arm_swing = arm_swing(phase + 0.5);
 
-	apply_root(pose, walk.torso_lean);
+	pose.apply_root(walk.torso_lean);
 	apply_leg(pose, Side::Left, phase, -1.0, walk);
 	apply_leg(pose, Side::Right, phase, 1.0, walk);
 	// Both elbows share one flexion sign. The opposite arm_down values are a
@@ -75,8 +74,7 @@ fn apply_walk_arm(
 	humerus_flex: f32,
 	walk: &UprightWalk,
 ) {
-	apply_arm(
-		pose,
+	pose.apply_arm(
 		side,
 		arm_swing_value * walk.shoulder_swing,
 		-shoulder_lift(arm_swing_value, walk.shoulder_lift),
