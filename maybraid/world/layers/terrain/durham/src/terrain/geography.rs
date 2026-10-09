@@ -217,7 +217,7 @@ pub(crate) fn geographic_features_overlapping(
 /// reads. Writes to any other type, inside Durham or not, leave it unchanged.
 pub(crate) fn geography_revision(storage: &HcsgStorage) -> u64 {
 	fn revision<T: HcsgValue>(storage: &HcsgStorage) -> u64 {
-		storage.membership_revision::<T>()
+		storage.try_membership_revision::<T>().unwrap_or(0)
 	}
 	[
 		revision::<MassifHighPassStampCell>(storage),
@@ -250,8 +250,11 @@ fn push_stamp_features<T: HcsgValue>(
 	cell_if_occupied: impl Fn(&T) -> Option<Aabb3d>,
 ) {
 	let query = bounds2_query_aabb(region);
-	for id in storage.overlapping::<T>(query) {
-		let Some(entry) = storage.entry::<T>(id) else {
+	let Ok(ids) = storage.try_overlapping::<T>(query) else {
+		return;
+	};
+	for id in ids {
+		let Some(entry) = storage.try_entry::<T>(id).ok().flatten() else {
 			continue;
 		};
 		let Some(cell) = cell_if_occupied(entry.value.as_ref()) else {
@@ -279,8 +282,11 @@ fn push_watershed_features<T>(
 	T: AuthoredPocketWaters + HcsgValue,
 {
 	let query = bounds2_query_aabb(region);
-	for id in storage.overlapping::<T>(query) {
-		let Some(entry) = storage.entry::<T>(id) else {
+	let Ok(ids) = storage.try_overlapping::<T>(query) else {
+		return;
+	};
+	for id in ids {
+		let Some(entry) = storage.try_entry::<T>(id).ok().flatten() else {
 			continue;
 		};
 		let value = entry.value.as_ref();

@@ -7,7 +7,7 @@ pub mod shared;
 pub mod terrain;
 pub mod water;
 
-/// Durham's nodes live in the shared HCSG storage; read them through [`TerrainStorage`].
+/// Durham's nodes live in the shared HCSG storage; read them through [`SharedTerrainStorage`].
 pub use lod::hcsg::HcsgStorage;
 pub use shared::{
 	BackgroundStream, DurhamPresentationPlugin, DurhamSurface, DurhamWindow, DurhamWorldPlugin,
@@ -32,7 +32,7 @@ pub use terrain::{
 	TerrainFrictionConfig, TerrainHeightSnapshot, TerrainLayoutPinned, TerrainMeshAssets,
 	TerrainMeshBuilder, TerrainMeshLodBand, TerrainPresentPending, TerrainPresentationDirty,
 	TerrainRenderItem, TerrainResourcesPlugin, TerrainRetarget, TerrainSdf, TerrainStampConfigs,
-	TerrainStorage, TerrainTrimeshCollider, ValleyHighPassControllerLayout,
+	TerrainTrimeshCollider, ValleyHighPassControllerLayout,
 	ValleyLowPassControllerLayout, ValleyStampCell, WaterSurfaceSnapshot, WatershedBandPass,
 	WatershedConfigs, WatershedLeafBounds, WatershedLeafKind, WorldBaseTerrain, MACRO_CELL_SIZE,
 	TERRAIN_CELL_SIZE, TERRAIN_FRICTION, WORLD_FINE_HALF_EXTENT_CELLS, WORLD_OUTER_2X_ROWS,

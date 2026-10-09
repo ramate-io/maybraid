@@ -65,20 +65,24 @@ pub trait UrbanizationStorage {
 
 impl UrbanizationStorage for HcsgStorage {
 	fn selected(&self, id: Id) -> Option<Arc<SelectedUrbanization>> {
-		self.get::<SelectedUrbanization>(id)
+		self.try_entry::<SelectedUrbanization>(id).ok().flatten().map(|entry| entry.value)
 	}
 
 	fn selected_overlapping(
 		&self,
 		region: Aabb3d,
 	) -> impl Iterator<Item = (Id, StoredEntry<Arc<SelectedUrbanization>>)> + '_ {
-		self.overlapping::<SelectedUrbanization>(region).into_iter().filter_map(|id| {
-			self.entry::<SelectedUrbanization>(id).map(|entry| (id, entry))
+		let ids = self.try_overlapping::<SelectedUrbanization>(region).ok().unwrap_or_default();
+		ids.into_iter().filter_map(|id| {
+			self.try_entry::<SelectedUrbanization>(id)
+				.ok()
+				.flatten()
+				.map(|entry| (id, entry))
 		})
 	}
 
 	fn urbanization_revision(&self) -> u64 {
-		self.membership_revision::<SelectedUrbanization>()
+		self.try_membership_revision::<SelectedUrbanization>().unwrap_or(0)
 	}
 
 	fn leaf(&self, id: Id) -> Option<DevelopmentLeaf> {
@@ -119,11 +123,19 @@ mod tests {
 		let id = UrbanizationExtent::default_cell().id();
 		let mut cx = GenerationContext::new(&storage);
 		cx.get_or_generate::<SelectedUrbanization>(id);
-		let first = storage.entry::<SelectedUrbanization>(id).map(|entry| entry.version);
+		let first = storage
+			.try_entry::<SelectedUrbanization>(id)
+			.ok()
+			.flatten()
+			.map(|entry| entry.version);
 		cx.get_or_generate::<SelectedUrbanization>(id);
 		anyhow::ensure!(first.is_some(), "selection is stored");
 		anyhow::ensure!(
-			storage.entry::<SelectedUrbanization>(id).map(|entry| entry.version) == first,
+			storage
+				.try_entry::<SelectedUrbanization>(id)
+				.ok()
+				.flatten()
+				.map(|entry| entry.version) == first,
 			"a second request reuses the stored selection"
 		);
 		Ok(())

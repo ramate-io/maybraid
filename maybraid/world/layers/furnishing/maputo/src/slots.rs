@@ -71,15 +71,14 @@ impl<G: RichmondGround> FurnitureSlots for Urbanization<richmond::Richmond<G>> {
 		read: &SystemParamItem<'_, '_, Self::Read>,
 		region: Aabb3d,
 	) -> Vec<(Id, Version)> {
-		Built::<G>::overlapping(read, region)
-			.into_iter()
-			.map(|(id, version, _)| (id, version))
-			.collect()
+		Built::<G>::overlapping_tracked(read, region)
 	}
 
 	fn world_slots(read: &SystemParamItem<'_, '_, Self::Read>, id: Id) -> Vec<FurnitureNode> {
-		read.get::<Built<G>>(id)
-			.map(|built| Self::development_slots(built.as_ref()))
+		read.try_entry::<Built<G>>(id)
+			.ok()
+			.flatten()
+			.map(|entry| Self::development_slots(entry.value.as_ref()))
 			.unwrap_or_default()
 	}
 }

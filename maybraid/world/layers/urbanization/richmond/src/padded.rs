@@ -202,8 +202,11 @@ impl<G: RichmondGround> PaddedTerrain<G> {
 	/// finest on a tie.
 	pub fn best_overlapping(storage: &HcsgStorage, region: Aabb3d) -> Option<TerrainWithPads> {
 		let mut best: Option<(f32, f32, TerrainWithPads)> = None;
-		for id in storage.overlapping::<Self>(column_bounds(region)) {
-			let Some(entry) = storage.entry::<Self>(id) else {
+		let Ok(ids) = storage.try_overlapping::<Self>(column_bounds(region)) else {
+			return None;
+		};
+		for id in ids {
+			let Some(entry) = storage.try_entry::<Self>(id).ok().flatten() else {
 				continue;
 			};
 			let overlap_x = (region.max.x.min(entry.bounds.max.x)

@@ -439,12 +439,18 @@ mod tests {
 		let storage = app.world().resource::<HcsgStorage>().clone();
 		for (ix, iz) in origin_window() {
 			let tile = storage
-				.get::<LargeTile>(LargeTile::id(ix, iz))
+				.try_entry::<LargeTile>(LargeTile::id(ix, iz))
+				.ok()
+				.flatten()
+				.map(|entry| entry.value)
 				.ok_or_else(|| anyhow::anyhow!("tile ({ix}, {iz}) was not generated"))?;
 			assert_eq!(*tile, LargeTile::generate(LanguageWorldSeed::default().0, ix, iz));
-			assert!(storage.get::<Named<Regions>>(LargeTile::id(ix, iz)).is_some());
+			assert!(storage.try_entry::<Named<Regions>>(LargeTile::id(ix, iz)).ok().flatten().is_some());
 		}
-		assert!(storage.get::<LargeTile>(LargeTile::id(3, 0)).is_none(), "beyond the window");
+		assert!(
+			storage.try_entry::<LargeTile>(LargeTile::id(3, 0)).ok().flatten().is_none(),
+			"beyond the window"
+		);
 
 		let overlay = app.world().resource::<LanguageOverlay>();
 		assert_eq!(overlay.large_tiles.len(), origin_window().len());
@@ -492,7 +498,10 @@ mod tests {
 		assert_ne!(after, before, "the new seed composes new regions");
 		let storage = app.world().resource::<HcsgStorage>().clone();
 		let tile = storage
-			.get::<LargeTile>(LargeTile::id(0, 0))
+			.try_entry::<LargeTile>(LargeTile::id(0, 0))
+			.ok()
+			.flatten()
+			.map(|entry| entry.value)
 			.ok_or_else(|| anyhow::anyhow!("tile"))?;
 		assert_eq!(*tile, LargeTile::generate(99, 0, 0));
 		Ok(())
@@ -514,7 +523,7 @@ mod tests {
 		assert_eq!(app.world().resource::<LanguageOverlay>().large_tiles.len(), moved.len());
 		let storage = app.world().resource::<HcsgStorage>().clone();
 		assert!(
-			storage.get::<LargeTile>(LargeTile::id(2, 0)).is_some(),
+			storage.try_entry::<LargeTile>(LargeTile::id(2, 0)).ok().flatten().is_some(),
 			"the tile the window crossed into generated"
 		);
 		Ok(())
@@ -645,7 +654,7 @@ mod tests {
 		}
 
 		let storage = app.world().resource::<HcsgStorage>().clone();
-		let grown = storage.overlapping::<chico::GrownGrove<Urban>>(window);
+		let grown = storage.try_overlapping::<chico::GrownGrove<Urban>>(window).unwrap_or_default();
 		let named_groves =
 			groves.iter().filter(|name| matches!(name.key, NameKey::Grove(_))).count();
 		assert!(named_groves > 0 && named_groves <= grown.len(), "only grown groves are named");
@@ -660,7 +669,10 @@ mod tests {
 		let development = les_halles().id();
 		let storage = app.world().resource::<HcsgStorage>().clone();
 		let places = storage
-			.get::<DevelopmentPlaces<Urban>>(development)
+			.try_entry::<DevelopmentPlaces<Urban>>(development)
+			.ok()
+			.flatten()
+			.map(|entry| entry.value)
 			.ok_or_else(|| anyhow::anyhow!("the development's places were not generated"))?;
 		let building = places
 			.places
@@ -672,7 +684,10 @@ mod tests {
 		assert!(!rooms.is_empty(), "Les Halles authors usage-area rooms");
 
 		let named = storage
-			.get::<Named<Places<Urban>>>(development)
+			.try_entry::<Named<Places<Urban>>>(development)
+			.ok()
+			.flatten()
+			.map(|entry| entry.value)
 			.ok_or_else(|| anyhow::anyhow!("the places were not named"))?;
 		let name = |key: NameKey| named.names.iter().find(|entry| entry.key == key);
 		let host = name(places.places[building].key)
