@@ -28,15 +28,10 @@ lod::seeded_root!(UrbanizationSelection);
 pub struct UrbanizationNodes;
 
 /// Selections are bucketed one extent (1600 m) apart.
-const SELECTION_SCALE: DVec3 =
+pub(crate) const SELECTION_INDEX_SCALE: DVec3 =
 	DVec3::new(DEFAULT_URBANIZATION_EXTENT_XZ as f64, 1.0, DEFAULT_URBANIZATION_EXTENT_XZ as f64);
 
 impl UrbanizationNodes {
-	/// Configures the selection store in the shared storage.
-	pub fn configure(storage: &shared::HcsgStorage) {
-		storage.configure::<SelectedUrbanization>(SELECTION_SCALE);
-	}
-
 	/// Drops every selection from the shared storage.
 	pub fn clear(storage: &shared::HcsgStorage) {
 		storage.clear::<SelectedUrbanization>();
@@ -114,7 +109,6 @@ mod tests {
 
 	fn seeded(selection: UrbanizationSelection) -> HcsgStorage {
 		let storage = HcsgStorage::default();
-		UrbanizationNodes::configure(&storage);
 		storage.seed(selection, universal_bounds());
 		storage
 	}

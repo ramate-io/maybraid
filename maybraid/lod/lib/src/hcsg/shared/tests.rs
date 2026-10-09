@@ -1,5 +1,5 @@
 use std::any::TypeId;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -91,6 +91,8 @@ fn cells_in(region: Aabb3d) -> Vec<OriginalId> {
 }
 
 impl GenerationScheme for Ground {
+	const INDEX_SCALE: DVec3 = DVec3::ONE;
+
 	fn original_ids_for(_: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
 		cells_in(region)
 	}
@@ -103,6 +105,8 @@ impl GenerationScheme for Ground {
 }
 
 impl GenerationScheme for Cover {
+	const INDEX_SCALE: DVec3 = DVec3::ONE;
+
 	fn original_ids_for(_: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
 		cells_in(region)
 	}
@@ -115,6 +119,8 @@ impl GenerationScheme for Cover {
 }
 
 impl GenerationScheme for FarField {
+	const INDEX_SCALE: DVec3 = DVec3::ONE;
+
 	fn original_ids_for(_: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
 		cells_in(region)
 	}
@@ -174,6 +180,46 @@ fn publish_shares_values_and_bumps_versions() {
 	assert!(storage
 		.try_overlapping::<Ground>(span(0.0, 5.0))
 		.is_ok_and(|ids| ids.is_empty()));
+}
+
+#[test]
+fn scheme_registers_index_scale_on_first_publish() {
+	let storage = HcsgStorage::default();
+	storage.seed(Root { seed: 0 }, span(-1.0, 2.0));
+	let id = Id::from_cell(cell(0.0));
+	assert!(GenerationContext::new(&storage).get_or_generate::<Ground>(id).is_some());
+	assert_eq!(storage.index_scale_of::<Ground>(), DVec3::ONE);
+}
+
+struct WideIndex;
+
+impl GenerationScheme for WideIndex {
+	const INDEX_SCALE: DVec3 = DVec3::new(100.0, 1.0, 1.0);
+	const RETENTION_MARGIN: DVec3 = DVec3::ONE;
+
+	fn original_ids_for(_: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
+		cells_in(region)
+	}
+
+	fn build_with_id(_: &mut GenerationContext, id: Id) -> Option<(Self, Aabb3d)> {
+		let cell = id.origin_cell_bounds()?;
+		Some((Self, cell))
+	}
+}
+
+#[test]
+fn retention_margin_not_index_scale_controls_eviction_hysteresis() {
+	let storage = HcsgStorage::default();
+	let near = Id::from_cell(cell(0.0));
+	let far = Id::from_cell(cell(10.0));
+	storage.register_scheme::<WideIndex>();
+	storage.publish(near, Arc::new(WideIndex), cell(0.0));
+	storage.publish(far, Arc::new(WideIndex), cell(10.0));
+	let mut regions = HashMap::new();
+	regions.insert(TypeId::of::<WideIndex>(), vec![span(10.0, 1.0)]);
+	storage.retain_reached(&regions);
+	assert!(!storage.contains::<WideIndex>(near), "margin 1 must not keep cell 0");
+	assert!(storage.contains::<WideIndex>(far));
 }
 
 #[test]

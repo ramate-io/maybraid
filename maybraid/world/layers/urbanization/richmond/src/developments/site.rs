@@ -197,6 +197,8 @@ impl DevelopmentSite {
 }
 
 impl shared::GenerationScheme for DevelopmentSite {
+	lod::hcsg_index_scale!(crate::storage::COLUMN_INDEX_SCALE);
+
 	/// Authored sites, then the procedural sites of the configured mode.
 	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
 		let Some(config) = cx.get::<DevelopmentConfig>(Id::Universal) else {

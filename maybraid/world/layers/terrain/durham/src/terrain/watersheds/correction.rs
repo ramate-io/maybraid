@@ -47,6 +47,8 @@ fn cell_seed(cell: Aabb3d, salt: u32) -> u32 {
 /// pulled by region, so their pocket / pre-pocket stacks stay out of these bounds.
 
 impl shared::GenerationScheme for HydroComplexCell {
+	lod::hcsg_index_scale!(crate::terrain::index::DURHAM_INDEX_SCALE);
+
 	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
 		TerrainCellLayout::origin_ids_in(cx, region)
 	}
@@ -104,6 +106,7 @@ pub struct WatershedAproningCell {
 macro_rules! impl_correction_stage_cell {
 	($Cell:ty) => {
 		impl shared::GenerationScheme for $Cell {
+			lod::hcsg_index_scale!($crate::terrain::index::DURHAM_INDEX_SCALE);
 			fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
 				cx.original_ids_for::<HydroComplexCell>(region)
 			}

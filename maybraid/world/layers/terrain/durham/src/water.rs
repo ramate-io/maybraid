@@ -179,6 +179,8 @@ fn fill_has_wet_volume(fill: &WaterFill, terrain: &TerrainSdf) -> bool {
 /// Same origin ids as [`Terrain`]; terrain's whole stack stays behind that one bound.
 
 impl shared::GenerationScheme for Water {
+	lod::hcsg_index_scale!(crate::terrain::index::DURHAM_INDEX_SCALE);
+
 	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
 		cx.original_ids_for::<Terrain>(region)
 	}

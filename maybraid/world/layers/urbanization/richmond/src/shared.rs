@@ -64,9 +64,6 @@ impl<C, G> Default for BuiltPresentationPlugin<C, G> {
 impl<C: Send + Sync + 'static, G: RichmondGround> Plugin for BuiltPresentationPlugin<C, G> {
 	fn build(&self, app: &mut App) {
 		register_richmond_plugin(app);
-		let storage = app.world_mut().get_resource_or_init::<shared::HcsgStorage>().clone();
-		UrbanizationNodes::configure(&storage);
-		RichmondNodes::configure::<G>(&storage);
 		app.add_plugins(PresentationPlugin::<C, Built<G>>::default());
 		if !app.is_plugin_added::<LodSceneRefreshChunkPlugin<HcsgNode<Built<G>>>>() {
 			app.add_plugins(LodSceneRefreshChunkPlugin::<HcsgNode<Built<G>>>::default());

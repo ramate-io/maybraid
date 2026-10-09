@@ -21,7 +21,7 @@ use visual_geometry_core::{
 };
 
 use crate::register_durham_plugin;
-use crate::terrain::index::{origin_cell_ids_at, DurhamNodes};
+use crate::terrain::index::origin_cell_ids_at;
 use crate::terrain::{
 	mesh_assets, playable_world_cell_layout, BaseTerrainNoise, Durham, Terrain, TerrainCellLayout,
 	TerrainConfig, TerrainCoverage, TerrainMeshBuilder, WorldBaseTerrain,
@@ -83,8 +83,6 @@ impl<C> Default for WaterPresentationPlugin<C> {
 
 impl<C: Send + Sync + 'static> Plugin for WaterPresentationPlugin<C> {
 	fn build(&self, app: &mut App) {
-		let storage = app.world_mut().get_resource_or_init::<HcsgStorage>().clone();
-		DurhamNodes::configure(&storage);
 		app.add_plugins(PresentationPlugin::<C, Water>::default());
 		if !app.is_plugin_added::<LodSceneRefreshChunkPlugin<HcsgNode<Water>>>() {
 			app.add_plugins(LodSceneRefreshChunkPlugin::<HcsgNode<Water>>::default());
@@ -118,8 +116,6 @@ impl Plugin for DurhamWorldPlugin {
 			.insert_resource(playable_world_cell_layout())
 			.init_resource::<TerrainStreaming<Durham>>()
 			.add_systems(Update, prefer_meshes_near_the_viewer);
-		let storage = app.world_mut().get_resource_or_init::<HcsgStorage>().clone();
-		DurhamNodes::configure(&storage);
 	}
 
 	fn finish(&self, app: &mut App) {

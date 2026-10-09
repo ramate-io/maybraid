@@ -5,7 +5,6 @@ use crate::terrain::collider::{
 	queue_terrain_trimesh_colliders, TerrainColliderEpoch, TerrainColliderSystems,
 	TerrainFrictionConfig,
 };
-use crate::terrain::index::DurhamNodes;
 use crate::terrain::stamps::TerrainStampConfigs;
 use crate::terrain::watersheds::WatershedConfigs;
 use avian3d::prelude::PhysicsPlugins;
@@ -36,7 +35,6 @@ impl Plugin for TerrainResourcesPlugin {
 			app.add_plugins(PhysicsPlugins::default());
 		}
 		app.init_resource::<HcsgStorage>();
-		DurhamNodes::configure(&app.world().resource::<HcsgStorage>());
 		app.init_resource::<TerrainCellLayout>()
 			.init_resource::<TerrainStampConfigs>()
 			.init_resource::<WatershedConfigs>()

@@ -25,6 +25,15 @@ pub fn universal_bounds() -> Aabb3d {
 	Aabb3d::from_min_max(Vec3::splat(-1.0e9), Vec3::splat(1.0e9))
 }
 
+/// Declares a scheme's spatial index scale and eviction margin (defaults match).
+#[macro_export]
+macro_rules! hcsg_index_scale {
+	($scale:expr) => {
+		const INDEX_SCALE: bevy::math::DVec3 = $scale;
+		const RETENTION_MARGIN: bevy::math::DVec3 = $scale;
+	};
+}
+
 /// Declares `T` a seeded session root at `Id::Universal`. It is never built,
 /// only [`HcsgStorage::seed`].
 #[macro_export]

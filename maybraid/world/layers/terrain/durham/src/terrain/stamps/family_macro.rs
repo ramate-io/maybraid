@@ -106,6 +106,7 @@ macro_rules! define_stamp_family {
 		}
 
 		impl lod::hcsg::shared::GenerationScheme for $Controller {
+			lod::hcsg_index_scale!($crate::terrain::index::DURHAM_INDEX_SCALE);
 			fn original_ids_for(
 				cx: &mut lod::hcsg::shared::GenerationContext,
 				region: bevy::math::bounding::Aabb3d,
@@ -145,6 +146,7 @@ macro_rules! define_stamp_family {
 		}
 
 		impl lod::hcsg::shared::GenerationScheme for $Stamp {
+			lod::hcsg_index_scale!($crate::terrain::index::DURHAM_INDEX_SCALE);
 			fn original_ids_for(
 				cx: &mut lod::hcsg::shared::GenerationContext,
 				region: bevy::math::bounding::Aabb3d,

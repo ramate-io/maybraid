@@ -5,10 +5,11 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use bevy::math::bounding::Aabb3d;
+use bevy::math::DVec3;
 
 use crate::gen::{Id, OriginalId};
 
-use super::node_store::StoredEntry;
+use super::node_store::{DEFAULT_BASE_SCALE, StoredEntry};
 use super::storage::{HcsgStorage, HcsgValue};
 
 /// How one generated type is discovered and built.
@@ -16,6 +17,12 @@ use super::storage::{HcsgStorage, HcsgValue};
 /// A value is a pure function of its key `(TypeId, Id)` and the session roots.
 /// Schemes read only through the [`GenerationContext`].
 pub trait GenerationScheme: HcsgValue + Sized {
+	/// Level-0 cell size of this type's spatial index ([`HcsgStorage`]).
+	const INDEX_SCALE: DVec3 = DEFAULT_BASE_SCALE;
+
+	/// Hysteresis pad around live subscription regions during eviction sweeps.
+	const RETENTION_MARGIN: DVec3 = Self::INDEX_SCALE;
+
 	/// Ids that originate in `region`. May generate dependencies through `cx`.
 	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId>;
 
@@ -120,6 +127,7 @@ impl<'a> GenerationContext<'a> {
 		self.generating.remove(&key);
 		let (value, bounds) = built?;
 		let value = Arc::new(value);
+		self.storage.register_scheme::<T>();
 		self.storage.publish_unless(id, Arc::clone(&value), bounds, self.stale)?;
 		Some(value)
 	}
