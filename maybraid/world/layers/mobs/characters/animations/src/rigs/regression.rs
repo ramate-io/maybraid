@@ -49,17 +49,29 @@ fn flapping_keeps_the_previous_front_back_stroke() {
 	assert!((a - b).length() > 0.3, "wing tip must move, {a:?} vs {b:?}");
 }
 
+fn forearm_tip(rig: &HumanoidV0Rig, side: character_rigs::Side) -> bevy::prelude::Vec3 {
+	let name = format!("forearm.{}", side.suffix());
+	let bone = rig.binding.definition.id(&name).expect(&name);
+	let origin = rig.binding.definition.translation_in_character(&rig.pose, bone);
+	let along = rig.character_length(&name);
+	let len = rig.binding.effective_rest.local[bone.index()].translation.length();
+	origin + along * len
+}
+
 #[test]
 fn hand_clap_forearms_close_in_character_x() {
 	let rest = HumanoidV0Rig::for_clip_test();
 	let mut posed = HumanoidV0Rig::for_clip_test();
 	HandClap.apply(&mut posed, 0.55);
-	let rest_sep = (rest.character_point("forearm.L") - rest.character_point("forearm.R")).length();
-	let posed_sep =
-		(posed.character_point("forearm.L") - posed.character_point("forearm.R")).length();
+	let rest_sep = (forearm_tip(&rest, character_rigs::Side::Left)
+		- forearm_tip(&rest, character_rigs::Side::Right))
+	.length();
+	let posed_sep = (forearm_tip(&posed, character_rigs::Side::Left)
+		- forearm_tip(&posed, character_rigs::Side::Right))
+	.length();
 	assert!(
 		posed_sep < rest_sep - 0.2,
-		"clap pulls forearms together, {posed_sep} vs {rest_sep}"
+		"clap pulls forearm tips together, {posed_sep} vs {rest_sep}"
 	);
 }
 

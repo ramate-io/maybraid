@@ -14,11 +14,11 @@ const SWEEP_END: f32 = 0.30;
 const CLAP_END: f32 = 0.78;
 const CLAP_PULSES: f32 = 2.25;
 
-const AIM_INBOARD: f32 = 0.62;
-const AIM_UP: f32 = 0.38;
-const AIM_FORWARD: f32 = 0.22;
+const AIM_INBOARD: f32 = 0.22;
+const AIM_UP: f32 = 0.48;
+const AIM_FORWARD: f32 = 0.41;
 
-const CLAP_ELBOW: f32 = 1.35;
+const CLAP_ELBOW: f32 = 0.68;
 const PULSE_ELBOW_AMP: f32 = 0.18;
 const SHOULDER_CARRY: f32 = 0.14;
 
@@ -83,8 +83,9 @@ impl HandClap {
 		CLAP_ELBOW * amount + PULSE_ELBOW_AMP * pulse.abs()
 	}
 
-	pub fn shoulder_carry(&self, progress: f32) -> f32 {
-		SHOULDER_CARRY * self.clap_amount(progress)
+	/// Per-side shoulder flex so both clavicles rise symmetrically (see [`Fall::shoulder_flex`](super::fall::Fall::shoulder_flex)).
+	pub fn shoulder_carry(&self, side: character_rigs::Side, progress: f32) -> f32 {
+		SHOULDER_CARRY * self.clap_amount(progress) * side.sign()
 	}
 
 	pub fn spine_pitch(&self, progress: f32) -> f32 {
@@ -121,7 +122,7 @@ mod tests {
 		assert!(clap.clap_amount(mid_sweep) > 0.35);
 		assert!(clap.clap_pulse(mid_sweep).abs() < 1e-4);
 		assert!(
-			clap.humerus_along(Side::Right, PEAK).x.abs() > 0.35,
+			clap.humerus_along(Side::Right, PEAK).x.abs() > 0.18,
 			"humerus aim carries lateral component at peak"
 		);
 		Ok(())
@@ -145,6 +146,16 @@ mod tests {
 			(clap.humerus_along(Side::Left, progress) - clap.humerus_along(Side::Left, progress))
 				.length() < 1e-6
 		);
+		Ok(())
+	}
+
+	#[test]
+	fn hand_clap_shoulder_carry_mirrors_by_side() -> anyhow::Result<()> {
+		let clap = HandClap;
+		let left = clap.shoulder_carry(Side::Left, PEAK);
+		let right = clap.shoulder_carry(Side::Right, PEAK);
+		assert!(left.abs() > 0.05);
+		assert!(left.signum() != right.signum());
 		Ok(())
 	}
 
