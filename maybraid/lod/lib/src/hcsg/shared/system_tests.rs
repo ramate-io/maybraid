@@ -54,6 +54,10 @@ fn app(plugin: impl Plugin, regions: Vec<Aabb3d>) -> App {
 		.add_plugins((AssetPlugin::default(), ScenePlugin))
 		.insert_resource(Window(regions))
 		.add_plugins((HcsgBoundsPlugin::<WindowBounds>::default(), plugin));
+	let storage = app.world().resource::<HcsgStorage>().clone();
+	storage.configure::<Terrain>(DVec3::splat(0.1));
+	storage.configure::<Vegetation>(DVec3::splat(0.1));
+	storage.configure::<Kept>(DVec3::splat(0.1));
 	app
 }
 
