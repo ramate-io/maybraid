@@ -30,7 +30,7 @@ use layer_stack::ActiveGenerationMode;
 use crate::control::strip_world_player_motor;
 use crate::map_view::WorldMapView;
 use crate::weapon::WorldPlayerAppearanceRequested;
-use crate::{WorldGameplayEnabled, WorldPlayerLoadout};
+use crate::{HcsgClass, HcsgDemand, WorldGameplayEnabled, WorldPlayerLoadout};
 
 const MAP_OPEN_SECS: f32 = 0.18;
 const STICK_REST: f32 = 0.28;
@@ -255,6 +255,7 @@ fn queue_first_spawn_picker(
 	spawn: Res<PlayerSpawnXz>,
 	mode: Option<Res<State<ActiveGenerationMode>>>,
 	policies: Option<Res<ModePlayerPolicies>>,
+	demand: Option<Res<HcsgDemand>>,
 	mut state: ResMut<WorldPlayerRespawnState>,
 	mut commands: Commands,
 	players: Query<
@@ -265,6 +266,12 @@ fn queue_first_spawn_picker(
 ) {
 	if !gameplay.0 || state.first_spawn_offered || state.pending.is_some() {
 		return;
+	}
+	if let Some(demand) = demand.as_deref() {
+		match demand.try_outstanding(&[HcsgClass::Near]) {
+			Ok(out) if out.undiscovered == 0 && out.remaining == 0 => {}
+			Ok(_) | Err(_) => return,
+		}
 	}
 	if spawn.0.is_some() {
 		state.first_spawn_offered = true;
@@ -768,9 +775,11 @@ fn prefer_building_pois(records: Vec<PoiRecord>, death_at: Vec3) -> Vec<PoiRecor
 mod tests {
 	use super::*;
 	use bevy::ecs::system::RunSystemOnce;
+	use bevy::math::bounding::Aabb3d;
 	use durham::TerrainCellLayout;
 	use layer_stack::GenerationMode;
-	use lod::hcsg::shared::HcsgStorage;
+	use lod::gen::{Id, OriginalId};
+	use lod::hcsg::shared::{GenerationContext, GenerationScheme, HcsgStorage, HcsgWorker};
 	use world_player::WorldBaseTerrain;
 
 	#[test]
@@ -1328,6 +1337,58 @@ mod tests {
 		assert!(world.entities().contains(player));
 		assert!(world.resource::<WorldPlayerRespawnState>().pending.is_none());
 		assert!(!world.resource::<WorldPlayerRespawnState>().first_spawn_offered);
+		Ok(())
+	}
+
+	struct NearTile;
+
+	impl GenerationScheme for NearTile {
+		fn original_ids_for(_: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
+			let start = region.min.x.floor() as i32;
+			let end = region.max.x.ceil() as i32;
+			(start..end)
+				.map(|x| {
+					let bounds = Aabb3d::from_min_max(
+						Vec3::new(x as f32, 0.0, 0.0),
+						Vec3::new(x as f32 + 1.0, 1.0, 1.0),
+					);
+					OriginalId::new(Id::from_cell(bounds))
+				})
+				.collect()
+		}
+
+		fn build_with_id(_: &mut GenerationContext, id: Id) -> Option<(Self, Aabb3d)> {
+			let bounds = id.origin_cell_bounds()?;
+			Some((Self, bounds))
+		}
+	}
+
+	#[test]
+	fn first_spawn_picker_waits_for_near_hcsg() -> anyhow::Result<()> {
+		let mut world = first_spawn_world(true, None);
+		let storage = HcsgStorage::default();
+		let demand = HcsgDemand::default();
+		world.insert_resource(demand.clone());
+		let player = world.spawn((VegetationPlayer, Transform::from_xyz(12.0, 4.0, -8.0))).id();
+		let region = Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(8.0, 1.0, 1.0));
+		demand.subscribe::<NearTile>(None, vec![region], None, HcsgClass::Near);
+
+		world
+			.run_system_once(queue_first_spawn_picker)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(
+			world.entities().contains(player),
+			"picker must not open while near HCSG work remains"
+		);
+		assert!(world.resource::<WorldPlayerRespawnState>().pending.is_none());
+
+		let _worker = HcsgWorker::spawn(storage, demand.clone())?;
+		anyhow::ensure!(demand.wait_idle(std::time::Duration::from_secs(10)));
+		world
+			.run_system_once(queue_first_spawn_picker)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		assert!(!world.entities().contains(player), "picker opens once near work drains");
+		assert!(world.resource::<WorldPlayerRespawnState>().pending.is_some());
 		Ok(())
 	}
 

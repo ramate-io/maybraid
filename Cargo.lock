@@ -6721,6 +6721,7 @@ dependencies = [
  "characters-playground",
  "clap",
  "layer-stack",
+ "lod",
  "maybraid-character-controller",
  "maybraid-game-mode-discover",
  "maybraid-game-mode-reliquary",

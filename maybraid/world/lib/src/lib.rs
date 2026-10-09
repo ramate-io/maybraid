@@ -37,6 +37,7 @@ pub use control::{
 pub use durham::Durham;
 pub use game_commands::command::PendingStartupCommand;
 pub use intelligence::WorldIntelligencePlugin;
+pub use lod::hcsg::shared::{HcsgClass, HcsgDemand, Outstanding};
 pub use lod::LodJobCounter;
 pub use map_view::{WorldMapView, WorldMapViewPlugin};
 pub use maybraid_sky::{

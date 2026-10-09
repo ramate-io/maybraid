@@ -1,9 +1,10 @@
-//! Shared active-job census for LOD generate, present, and chunk fulfill.
+//! Shared active-job census for pending LOD scene roots.
 //!
-//! Queues are typed, so a first-load gate cannot query every `T` at once.
-//! Each enqueue / pending-root add takes a ticket; pop, expire, remove, and
-//! queue `clear` release it. The count is approximate: saturating subtract so
-//! a missed begin cannot wrap the counter.
+//! Generation runs on the HCSG worker. This counter is fed only by
+//! [`crate::LodLevelRootPending`] add/remove hooks (chunk fulfill). First-load
+//! unveil also reads [`crate::hcsg::shared::HcsgDemand::try_outstanding`] for
+//! Near work. The count is approximate: saturating subtract so a missed begin
+//! cannot wrap the counter.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;

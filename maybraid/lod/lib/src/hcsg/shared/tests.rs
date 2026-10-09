@@ -11,7 +11,9 @@ use crate::gen::{Id, OriginalId};
 
 use super::bounds::HcsgClass;
 use super::demand::{quantum_cost, QuantumProgress, SubscriptionId, QUANTUM_IDS, QUANTUM_TIME};
-use super::{GenerationContext, GenerationScheme, HcsgDemand, HcsgStorage, HcsgWorker};
+use super::{
+	GenerationContext, GenerationScheme, HcsgDemand, HcsgStorage, HcsgWorker, Outstanding,
+};
 
 fn subscribe<T: GenerationScheme>(
 	demand: &HcsgDemand,
@@ -688,4 +690,67 @@ fn a_scripted_walk_plateaus_store_sizes() -> anyhow::Result<()> {
 		"returning to the start rebuilds Cover and nested Ground"
 	);
 	Ok(())
+}
+
+#[test]
+fn outstanding_counts_an_undiscovered_subscription() {
+	let demand = HcsgDemand::default();
+	let _near = subscribe_class::<Ground>(&demand, None, vec![span(0.0, 4.0)], HcsgClass::Near);
+	let outstanding = demand.try_outstanding(&[HcsgClass::Near]).unwrap();
+	assert_eq!(outstanding.undiscovered, 1);
+	assert_eq!(outstanding.remaining, 0);
+}
+
+#[test]
+fn outstanding_counts_fall_as_ids_are_generated() {
+	let demand = HcsgDemand::default();
+	let near = subscribe_class::<Ground>(&demand, None, vec![span(0.0, 8.0)], HcsgClass::Near);
+	let job = demand.try_pick().expect("near work");
+	let ids: Vec<Id> = (0..8).map(|x| Id::from_cell(cell(x as f32))).collect();
+	yield_quantum(&demand, job.id, Some(ids), 3, 3, false);
+	let outstanding = demand.try_outstanding(&[HcsgClass::Near]).unwrap();
+	assert_eq!(outstanding.undiscovered, 0);
+	assert_eq!(outstanding.remaining, 5);
+	let _ = near;
+}
+
+#[test]
+fn outstanding_counts_are_released_on_replace_and_unsubscribe() {
+	let demand = HcsgDemand::default();
+	let near = subscribe_class::<Ground>(&demand, None, vec![span(0.0, 8.0)], HcsgClass::Near);
+	let job = demand.try_pick().expect("near work");
+	let ids: Vec<Id> = (0..8).map(|x| Id::from_cell(cell(x as f32))).collect();
+	yield_quantum(&demand, job.id, Some(ids), 3, 3, false);
+	assert_eq!(demand.try_outstanding(&[HcsgClass::Near]).unwrap().remaining, 5);
+
+	let replaced =
+		subscribe_class::<Ground>(&demand, Some(near), vec![span(0.0, 2.0)], HcsgClass::Near);
+	assert_eq!(
+		demand.try_outstanding(&[HcsgClass::Near]).unwrap(),
+		Outstanding { undiscovered: 1, remaining: 0 },
+		"replacement drops the predecessor's remaining ids"
+	);
+	demand.unsubscribe(replaced);
+	assert_eq!(demand.try_outstanding(&[HcsgClass::Near]).unwrap(), Outstanding::default());
+}
+
+#[test]
+fn outstanding_counts_filter_by_class() {
+	let demand = HcsgDemand::default();
+	let ambient = subscribe_class::<Cover>(&demand, None, vec![span(0.0, 8.0)], HcsgClass::Ambient);
+	let near = subscribe_class::<Ground>(&demand, None, vec![span(0.0, 4.0)], HcsgClass::Near);
+	let job = demand.try_pick().expect("near is newer at pass 0");
+	assert_eq!(job.id, near);
+	let ids: Vec<Id> = (0..4).map(|x| Id::from_cell(cell(x as f32))).collect();
+	yield_quantum(&demand, job.id, Some(ids), 1, 1, false);
+	assert_eq!(
+		demand.try_outstanding(&[HcsgClass::Near]).unwrap(),
+		Outstanding { undiscovered: 0, remaining: 3 }
+	);
+	assert_eq!(
+		demand.try_outstanding(&[HcsgClass::Ambient]).unwrap(),
+		Outstanding { undiscovered: 1, remaining: 0 }
+	);
+	assert_eq!(demand.try_outstanding(&[HcsgClass::Far]).unwrap(), Outstanding::default());
+	let _ = ambient;
 }

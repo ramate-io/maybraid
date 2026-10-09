@@ -210,6 +210,10 @@ impl HcsgDemand {
     /// if the subscription no longer exists.
     pub fn try_read(&self, id: SubscriptionId, cursor: usize) -> Result<Option<Published>, Busy>;
 
+    /// Undiscovered subscriptions plus remaining discovered ids in `classes`.
+    /// First-load unveil uses this for Near; long-tail channels do not hold it.
+    pub fn try_outstanding(&self, classes: &[HcsgClass]) -> Result<Outstanding, Busy>;
+
     pub fn unsubscribe(&self, id: SubscriptionId);
 }
 

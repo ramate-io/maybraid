@@ -36,7 +36,7 @@ mod tests;
 
 pub use bounds::{Gated, HcsgBounds, HcsgBoundsPlugin, HcsgClass, HcsgGate, HcsgRegions};
 pub use context::{GenerationContext, GenerationScheme};
-pub use demand::{HcsgDemand, Published, SubscriptionId};
+pub use demand::{HcsgDemand, Outstanding, Published, SubscriptionId};
 pub use generation::GenerationPlugin;
 pub use node::HcsgNode;
 pub use presentation::{PresentationPlugin, RetiredHost};
