@@ -8,7 +8,7 @@ use bevy::math::bounding::Aabb3d;
 use bevy::math::{Vec2, Vec3};
 use lod::gen::{Id, Version};
 use lod::hcsg::shared::HcsgValue;
-use lod::hcsg::HcsgStorage;
+use lod::hcsg::{Busy, HcsgStorage};
 use procedural_common::Bounds2;
 
 use crate::terrain::stamps::{
@@ -88,10 +88,9 @@ pub struct GeographicFeature {
 pub(crate) fn geographic_features_overlapping(
 	storage: &HcsgStorage,
 	region: Bounds2,
-) -> Vec<GeographicFeature> {
-	{
-		let mut out = Vec::new();
-		push_stamp_features(
+) -> Result<Vec<GeographicFeature>, Busy> {
+	let mut out = Vec::new();
+	push_stamp_features(
 			&mut out,
 			region,
 			storage,
@@ -99,8 +98,8 @@ pub(crate) fn geographic_features_overlapping(
 			GeographicBand::HighPass,
 			GeographicFeatureKind::Massif,
 			|stamp: &MassifHighPassStampCell| (!stamp.modulations.is_empty()).then_some(stamp.cell),
-		);
-		push_stamp_features(
+		)?;
+	push_stamp_features(
 			&mut out,
 			region,
 			storage,
@@ -108,8 +107,8 @@ pub(crate) fn geographic_features_overlapping(
 			GeographicBand::LowPass,
 			GeographicFeatureKind::Massif,
 			|stamp: &MassifLowPassStampCell| (!stamp.modulations.is_empty()).then_some(stamp.cell),
-		);
-		push_stamp_features(
+		)?;
+	push_stamp_features(
 			&mut out,
 			region,
 			storage,
@@ -119,8 +118,8 @@ pub(crate) fn geographic_features_overlapping(
 			|stamp: &PlateauHighPassStampCell| {
 				(!stamp.modulations.is_empty()).then_some(stamp.cell)
 			},
-		);
-		push_stamp_features(
+		)?;
+	push_stamp_features(
 			&mut out,
 			region,
 			storage,
@@ -128,8 +127,8 @@ pub(crate) fn geographic_features_overlapping(
 			GeographicBand::LowPass,
 			GeographicFeatureKind::Plateau,
 			|stamp: &PlateauLowPassStampCell| (!stamp.modulations.is_empty()).then_some(stamp.cell),
-		);
-		push_stamp_features(
+		)?;
+	push_stamp_features(
 			&mut out,
 			region,
 			storage,
@@ -137,8 +136,8 @@ pub(crate) fn geographic_features_overlapping(
 			GeographicBand::HighPass,
 			GeographicFeatureKind::Canyon,
 			|stamp: &CanyonHighPassStampCell| (!stamp.modulations.is_empty()).then_some(stamp.cell),
-		);
-		push_stamp_features(
+		)?;
+	push_stamp_features(
 			&mut out,
 			region,
 			storage,
@@ -146,8 +145,8 @@ pub(crate) fn geographic_features_overlapping(
 			GeographicBand::LowPass,
 			GeographicFeatureKind::Canyon,
 			|stamp: &CanyonLowPassStampCell| (!stamp.modulations.is_empty()).then_some(stamp.cell),
-		);
-		push_stamp_features(
+		)?;
+	push_stamp_features(
 			&mut out,
 			region,
 			storage,
@@ -157,8 +156,8 @@ pub(crate) fn geographic_features_overlapping(
 			|stamp: &RollingHighPassStampCell| {
 				(!stamp.modulations.is_empty()).then_some(stamp.cell)
 			},
-		);
-		push_stamp_features(
+		)?;
+	push_stamp_features(
 			&mut out,
 			region,
 			storage,
@@ -166,8 +165,8 @@ pub(crate) fn geographic_features_overlapping(
 			GeographicBand::LowPass,
 			GeographicFeatureKind::Rolling,
 			|stamp: &RollingLowPassStampCell| (!stamp.modulations.is_empty()).then_some(stamp.cell),
-		);
-		push_stamp_features(
+		)?;
+	push_stamp_features(
 			&mut out,
 			region,
 			storage,
@@ -175,8 +174,8 @@ pub(crate) fn geographic_features_overlapping(
 			GeographicBand::HighPass,
 			GeographicFeatureKind::Valley,
 			|stamp: &ValleyHighPassStampCell| (!stamp.modulations.is_empty()).then_some(stamp.cell),
-		);
-		push_stamp_features(
+		)?;
+	push_stamp_features(
 			&mut out,
 			region,
 			storage,
@@ -184,8 +183,8 @@ pub(crate) fn geographic_features_overlapping(
 			GeographicBand::LowPass,
 			GeographicFeatureKind::Valley,
 			|stamp: &ValleyLowPassStampCell| (!stamp.modulations.is_empty()).then_some(stamp.cell),
-		);
-		push_stamp_features(
+		)?;
+	push_stamp_features(
 			&mut out,
 			region,
 			storage,
@@ -195,8 +194,8 @@ pub(crate) fn geographic_features_overlapping(
 			|stamp: &PocketWaterHighPassStampCell| {
 				(!stamp.modulations.is_empty()).then_some(stamp.cell)
 			},
-		);
-		push_stamp_features(
+		)?;
+	push_stamp_features(
 			&mut out,
 			region,
 			storage,
@@ -207,37 +206,34 @@ pub(crate) fn geographic_features_overlapping(
 				(!stamp.modulations.is_empty()).then_some(stamp.cell)
 			},
 		);
-		push_watershed_features::<PocketWatersHighPass>(&mut out, region, storage);
-		push_watershed_features::<PocketWatersLowPass>(&mut out, region, storage);
-		out
-	}
+	push_watershed_features::<PocketWatersHighPass>(&mut out, region, storage)?;
+	push_watershed_features::<PocketWatersLowPass>(&mut out, region, storage)?;
+	Ok(out)
 }
 
 /// Latest membership change among the stores [`geographic_features_overlapping`]
 /// reads. Writes to any other type, inside Durham or not, leave it unchanged.
-pub(crate) fn geography_revision(storage: &HcsgStorage) -> u64 {
-	fn revision<T: HcsgValue>(storage: &HcsgStorage) -> u64 {
-		storage.try_membership_revision::<T>().unwrap_or(0)
+pub(crate) fn geography_revision(storage: &HcsgStorage) -> Result<u64, Busy> {
+	let mut latest = 0u64;
+	for revision in [
+		storage.try_membership_revision::<MassifHighPassStampCell>()?,
+		storage.try_membership_revision::<MassifLowPassStampCell>()?,
+		storage.try_membership_revision::<PlateauHighPassStampCell>()?,
+		storage.try_membership_revision::<PlateauLowPassStampCell>()?,
+		storage.try_membership_revision::<CanyonHighPassStampCell>()?,
+		storage.try_membership_revision::<CanyonLowPassStampCell>()?,
+		storage.try_membership_revision::<RollingHighPassStampCell>()?,
+		storage.try_membership_revision::<RollingLowPassStampCell>()?,
+		storage.try_membership_revision::<ValleyHighPassStampCell>()?,
+		storage.try_membership_revision::<ValleyLowPassStampCell>()?,
+		storage.try_membership_revision::<PocketWaterHighPassStampCell>()?,
+		storage.try_membership_revision::<PocketWaterLowPassStampCell>()?,
+		storage.try_membership_revision::<PocketWatersHighPass>()?,
+		storage.try_membership_revision::<PocketWatersLowPass>()?,
+	] {
+		latest = latest.max(revision);
 	}
-	[
-		revision::<MassifHighPassStampCell>(storage),
-		revision::<MassifLowPassStampCell>(storage),
-		revision::<PlateauHighPassStampCell>(storage),
-		revision::<PlateauLowPassStampCell>(storage),
-		revision::<CanyonHighPassStampCell>(storage),
-		revision::<CanyonLowPassStampCell>(storage),
-		revision::<RollingHighPassStampCell>(storage),
-		revision::<RollingLowPassStampCell>(storage),
-		revision::<ValleyHighPassStampCell>(storage),
-		revision::<ValleyLowPassStampCell>(storage),
-		revision::<PocketWaterHighPassStampCell>(storage),
-		revision::<PocketWaterLowPassStampCell>(storage),
-		revision::<PocketWatersHighPass>(storage),
-		revision::<PocketWatersLowPass>(storage),
-	]
-	.into_iter()
-	.max()
-	.unwrap_or(0)
+	Ok(latest)
 }
 
 fn push_stamp_features<T: HcsgValue>(
@@ -248,13 +244,11 @@ fn push_stamp_features<T: HcsgValue>(
 	band: GeographicBand,
 	kind: GeographicFeatureKind,
 	cell_if_occupied: impl Fn(&T) -> Option<Aabb3d>,
-) {
+) -> Result<(), Busy> {
 	let query = bounds2_query_aabb(region);
-	let Ok(ids) = storage.try_overlapping::<T>(query) else {
-		return;
-	};
+	let ids = storage.try_overlapping::<T>(query)?;
 	for id in ids {
-		let Some(entry) = storage.try_entry::<T>(id).ok().flatten() else {
+		let Some(entry) = storage.try_entry::<T>(id)? else {
 			continue;
 		};
 		let Some(cell) = cell_if_occupied(entry.value.as_ref()) else {
@@ -272,21 +266,21 @@ fn push_stamp_features<T: HcsgValue>(
 			anchor: bounds.center(),
 		});
 	}
+	Ok(())
 }
 
 fn push_watershed_features<T>(
 	out: &mut Vec<GeographicFeature>,
 	region: Bounds2,
 	storage: &HcsgStorage,
-) where
+) -> Result<(), Busy>
+where
 	T: AuthoredPocketWaters + HcsgValue,
 {
 	let query = bounds2_query_aabb(region);
-	let Ok(ids) = storage.try_overlapping::<T>(query) else {
-		return;
-	};
+	let ids = storage.try_overlapping::<T>(query)?;
 	for id in ids {
-		let Some(entry) = storage.try_entry::<T>(id).ok().flatten() else {
+		let Some(entry) = storage.try_entry::<T>(id)? else {
 			continue;
 		};
 		let value = entry.value.as_ref();
@@ -309,6 +303,7 @@ fn push_watershed_features<T>(
 			anchor,
 		});
 	}
+	Ok(())
 }
 
 trait AuthoredPocketWaters {
@@ -386,6 +381,10 @@ fn xz_overlaps(a: Bounds2, b: Bounds2) -> bool {
 mod tests {
 	use super::*;
 	use crate::terrain::index::TerrainStorage;
+
+	fn storage_busy(busy: Busy) -> anyhow::Error {
+		anyhow::anyhow!("HcsgStorage busy: {busy:?}")
+	}
 	use crate::terrain::stamps::MassifHighPassStampCell;
 	use crate::terrain::watersheds::{HydroComplexCell, PocketWatersHighPass, WatershedBandPass};
 	use std::sync::Arc;
@@ -440,9 +439,11 @@ mod tests {
 		let version = insert_stamp(&store, Id::from_cell(occupied), occupied, true);
 		insert_stamp(&store, Id::from_cell(empty), empty, false);
 
-		let found: Vec<_> = store
-			.geographic_features_overlapping(Bounds2::from_xz(-10.0, -10.0, 400.0, 400.0))
-			.collect();
+		let found = geographic_features_overlapping(
+			&store,
+			Bounds2::from_xz(-10.0, -10.0, 400.0, 400.0),
+		)
+		.map_err(storage_busy)?;
 		anyhow::ensure!(found.len() == 1, "expected one occupied stamp, got {}", found.len());
 		anyhow::ensure!(found[0].kind == GeographicFeatureKind::Massif);
 		anyhow::ensure!(found[0].id.family == GeographicFamily::Massif);
@@ -483,9 +484,11 @@ mod tests {
 			);
 		}
 
-		let found: Vec<_> = store
-			.geographic_features_overlapping(Bounds2::from_xz(-10.0, -10.0, 410.0, 410.0))
-			.collect();
+		let found = geographic_features_overlapping(
+			&store,
+			Bounds2::from_xz(-10.0, -10.0, 410.0, 410.0),
+		)
+		.map_err(storage_busy)?;
 		let lakes: Vec<_> = found
 			.iter()
 			.filter(|feature| feature.kind == GeographicFeatureKind::Lake)
@@ -501,7 +504,7 @@ mod tests {
 	fn geography_revision_moves_only_for_source_stores() -> anyhow::Result<()> {
 		struct Furniture;
 		let store = HcsgStorage::default();
-		let before = store.geography_revision();
+		let before = geography_revision(&store).map_err(storage_busy)?;
 		let bounds = cell(0.0, 0.0, 100.0, 100.0);
 		store.publish(Id::from_cell(bounds), Arc::new(Furniture), bounds);
 		store.publish(
@@ -512,21 +515,27 @@ mod tests {
 			}),
 			bounds,
 		);
-		anyhow::ensure!(store.geography_revision() == before, "non-source writes must not count");
+		anyhow::ensure!(
+			geography_revision(&store).map_err(storage_busy)? == before,
+			"non-source writes must not count"
+		);
 		insert_stamp(&store, Id::from_cell(bounds), bounds, true);
-		anyhow::ensure!(store.geography_revision() > before, "a stamp write is a source change");
+		anyhow::ensure!(
+			geography_revision(&store).map_err(storage_busy)? > before,
+			"a stamp write is a source change"
+		);
 		Ok(())
 	}
 
 	#[test]
 	fn query_does_not_admit_or_mutate_storage() -> anyhow::Result<()> {
 		let store = HcsgStorage::default();
-		let before = store.geography_revision();
-		let count = store
-			.geographic_features_overlapping(Bounds2::from_xz(0.0, 0.0, 10.0, 10.0))
-			.count();
+		let before = geography_revision(&store).map_err(storage_busy)?;
+		let count = geographic_features_overlapping(&store, Bounds2::from_xz(0.0, 0.0, 10.0, 10.0))
+			.map_err(storage_busy)?
+			.len();
 		anyhow::ensure!(count == 0);
-		anyhow::ensure!(store.geography_revision() == before);
+		anyhow::ensure!(geography_revision(&store).map_err(storage_busy)? == before);
 		Ok(())
 	}
 }

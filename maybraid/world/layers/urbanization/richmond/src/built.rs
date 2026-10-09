@@ -7,9 +7,8 @@ use bevy::math::bounding::Aabb3d;
 use bevy::prelude::{bsn, template_value, Name, Transform, Vec3};
 use bevy::scene::Scene;
 use building_components::scene_children;
-use lod::gen::{Id, LodScene, LodSceneLevel, LodSceneStatus, OriginalId, Version};
+use lod::gen::{Id, LodScene, LodSceneLevel, LodSceneStatus, OriginalId};
 use lod::hcsg::shared::{self, GenerationContext};
-use lod::hcsg::HcsgStorage;
 use lod::lod_ref::LodRef;
 use urbanization_layer_model::UrbanSetting;
 
@@ -17,7 +16,7 @@ use crate::artifact::BuiltDevelopment;
 use crate::developments::RichmondDevelopment;
 use crate::ground::RichmondGround;
 use crate::host::DevelopmentHosts;
-use crate::storage::{column_bounds, overlaps_xz};
+use crate::storage::column_bounds;
 
 /// Buildings fitted to one filled [`RichmondDevelopment`] over ground `G`.
 pub struct Built<G> {
@@ -43,27 +42,6 @@ impl<G> Built<G> {
 			((cell.max.x - cell.min.x).min(cell.max.z - cell.min.z) * 0.25).clamp(8.0, 128.0);
 		let setting = UrbanSetting { id, arrival_radius };
 		Some(Self::new(built, setting, Vec3::new(center.x, elevation, center.z)))
-	}
-}
-
-impl<G: RichmondGround> Built<G> {
-	/// Stored built developments overlapping `region` on XZ, with versions.
-	pub fn overlapping_tracked(
-		storage: &HcsgStorage,
-		region: Aabb3d,
-	) -> Vec<(Id, Version)> {
-		let Ok(ids) = storage.try_overlapping::<Self>(column_bounds(region)) else {
-			return Vec::new();
-		};
-		ids.into_iter()
-			.filter_map(|id| {
-				let Some(entry) = storage.try_entry::<Self>(id).ok().flatten() else {
-					return None;
-				};
-				overlaps_xz(region, entry.bounds)
-					.then_some((id, entry.version))
-			})
-			.collect()
 	}
 }
 

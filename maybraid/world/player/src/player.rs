@@ -342,10 +342,13 @@ pub(crate) fn snap_player_to_composed_surface(
 	}
 
 	let xz = transform.translation.xz();
-	let Some(elevation) = surface.height_at(xz) else {
-		gravity.0 = 0.0;
-		**velocity = Vec3::ZERO;
-		return;
+	let elevation = match surface.height_at(xz) {
+		Ok(Some(elevation)) => elevation,
+		Ok(None) | Err(lod::hcsg::Busy) => {
+			gravity.0 = 0.0;
+			**velocity = Vec3::ZERO;
+			return;
+		}
 	};
 
 	let target = player_spawn_point_at(xz, elevation);
@@ -423,9 +426,10 @@ fn recover_void_player(
 		return;
 	}
 	let xz = transform.translation.xz();
-	let elevation = surface
-		.height_at(xz)
-		.unwrap_or_else(|| holding_elevation(surface.base(), xz.x, xz.y));
+	let elevation = match surface.height_at(xz) {
+		Ok(Some(elevation)) => elevation,
+		Ok(None) | Err(lod::hcsg::Busy) => holding_elevation(surface.base(), xz.x, xz.y),
+	};
 	transform.translation = player_spawn_point_at(xz, elevation);
 	**velocity = Vec3::ZERO;
 	respawn.queued_at = None;

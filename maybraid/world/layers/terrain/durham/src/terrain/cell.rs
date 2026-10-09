@@ -123,7 +123,8 @@ pub struct OuterCellRing {
 /// (`high_inner_radius == 0`) draws High. Far / background use High as an
 /// empty hole inside `high_inner_radius` and draw Medium on
 /// `high_inner_radius..=high_outer_radius`. Playable Far / Background inset
-/// that hole so Medium overlaps the next-finer rim. Cells stay generated for
+/// that hole by at least one [`Self::anchor_step`] so Medium overlaps the
+/// next-finer rim through a snap. Cells stay generated for
 /// [`Self::cull_margin`] past both edges. Low is empty retain or cull.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TerrainCellRing {

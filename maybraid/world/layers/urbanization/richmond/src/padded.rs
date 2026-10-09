@@ -13,7 +13,6 @@ use durham::{
 };
 use lod::gen::{Id, LodScene, LodSceneLevel, LodSceneStatus, OriginalId};
 use lod::hcsg::shared::{self, GenerationContext};
-use lod::hcsg::HcsgStorage;
 use lod::lod_ref::LodRef;
 use render_item::mesh::handle::Cached;
 use render_item::sdf::cpu_shot::{CpuShotBuilder, WallFaces};
@@ -25,8 +24,6 @@ use crate::compose::PadComposable;
 use crate::developments::RichmondDevelopment;
 use crate::ground::{GroundCell, RichmondGround};
 use crate::pad::PadComplex;
-use crate::storage::column_bounds;
-
 /// Durham [`Terrain`] plus overlapping development pads.
 #[derive(Debug, Clone, Component)]
 pub struct TerrainWithPads {
@@ -194,44 +191,6 @@ impl<G: RichmondGround> LodScene for PaddedTerrain<G> {
 impl<G> PaddedTerrain<G> {
 	pub fn new(surface: TerrainWithPads) -> Self {
 		Self { surface, _ground: PhantomData }
-	}
-}
-
-impl<G: RichmondGround> PaddedTerrain<G> {
-	/// Stored padded surface with the greatest XZ overlap with `region`; the
-	/// finest on a tie.
-	pub fn best_overlapping(storage: &HcsgStorage, region: Aabb3d) -> Option<TerrainWithPads> {
-		let mut best: Option<(f32, f32, TerrainWithPads)> = None;
-		let Ok(ids) = storage.try_overlapping::<Self>(column_bounds(region)) else {
-			return None;
-		};
-		for id in ids {
-			let Some(entry) = storage.try_entry::<Self>(id).ok().flatten() else {
-				continue;
-			};
-			let overlap_x = (region.max.x.min(entry.bounds.max.x)
-				- region.min.x.max(entry.bounds.min.x))
-			.max(0.0);
-			let overlap_z = (region.max.z.min(entry.bounds.max.z)
-				- region.min.z.max(entry.bounds.min.z))
-			.max(0.0);
-			let overlap = overlap_x * overlap_z;
-			if overlap <= 1e-3 {
-				continue;
-			}
-			let span = (entry.bounds.max.x - entry.bounds.min.x)
-				.max(entry.bounds.max.z - entry.bounds.min.z);
-			let replace = match &best {
-				None => true,
-				Some((best_overlap, best_span, _)) => {
-					overlap > *best_overlap || (overlap == *best_overlap && span < *best_span)
-				}
-			};
-			if replace {
-				best = Some((overlap, span, entry.value.surface.clone()));
-			}
-		}
-		best.map(|(_, _, terrain)| terrain)
 	}
 }
 

@@ -377,7 +377,9 @@ fn stamp_map_camera(
 	surface: DurhamSurface,
 	mut cameras: Query<&mut CameraController, With<FollowCamera>>,
 ) {
-	let ground = surface.height_or_fallback(map.focus);
+	let Ok(ground) = surface.height_or_fallback(map.focus) else {
+		return;
+	};
 	let begin_life = !map.open && map.begin_life;
 	if begin_life {
 		map.begin_life = false;
@@ -498,8 +500,9 @@ fn prepare_map_presentation(
 		wanted
 			.into_iter()
 			.map(|wanted| {
-				let projected =
-					project_map_pin(camera, camera_transform, pin_world(&surface, wanted.xz));
+				let projected = pin_world(&surface, wanted.xz)
+					.ok()
+					.and_then(|world| project_map_pin(camera, camera_transform, world));
 				let label = projected.and_then(|(screen, on_screen)| {
 					pin_label_screen(
 						screen,
@@ -1026,8 +1029,8 @@ fn kind_label(kind: PoiKind) -> String {
 	title_case(leaf)
 }
 
-fn pin_world(surface: &DurhamSurface, xz: Vec2) -> Vec3 {
-	Vec3::new(xz.x, surface.height_or_fallback(xz) + GIZMO_LIFT, xz.y)
+fn pin_world(surface: &DurhamSurface, xz: Vec2) -> Result<Vec3, lod::hcsg::Busy> {
+	Ok(Vec3::new(xz.x, surface.height_or_fallback(xz)? + GIZMO_LIFT, xz.y))
 }
 
 fn label_ink(target: MapPinTarget, highlighted: Option<PoiId>) -> Color {
@@ -1435,8 +1438,9 @@ fn sync_map_player_marker(
 		hide_player_markers(&mut markers);
 		return;
 	};
-	let Some((screen, _)) =
-		ScreenPin::project(camera, camera_transform, pin_world(&surface, xz), HUD_MARGIN)
+	let Some((screen, _)) = pin_world(&surface, xz)
+		.ok()
+		.and_then(|world| ScreenPin::project(camera, camera_transform, world, HUD_MARGIN))
 	else {
 		hide_player_markers(&mut markers);
 		return;
@@ -1519,8 +1523,9 @@ fn sync_map_death_bones(
 		hide_death_bones(&mut markers);
 		return;
 	};
-	let Some((screen, _)) =
-		ScreenPin::project(camera, camera_transform, pin_world(&surface, xz), HUD_MARGIN)
+	let Some((screen, _)) = pin_world(&surface, xz)
+		.ok()
+		.and_then(|world| ScreenPin::project(camera, camera_transform, world, HUD_MARGIN))
 	else {
 		hide_death_bones(&mut markers);
 		return;
@@ -1655,8 +1660,9 @@ fn sync_respawn_spawn_knobs(
 			commands.entity(entity).despawn();
 			continue;
 		};
-		let Some((projected, on_screen)) =
-			project_map_pin(camera, camera_transform, pin_world(&surface, xz))
+		let Some((projected, on_screen)) = pin_world(&surface, xz)
+			.ok()
+			.and_then(|world| project_map_pin(camera, camera_transform, world))
 		else {
 			*visibility = Visibility::Hidden;
 			continue;
@@ -1680,8 +1686,9 @@ fn sync_respawn_spawn_knobs(
 		else {
 			continue;
 		};
-		let Some((projected, on_screen)) =
-			project_map_pin(camera, camera_transform, pin_world(&surface, xz))
+		let Some((projected, on_screen)) = pin_world(&surface, xz)
+			.ok()
+			.and_then(|world| project_map_pin(camera, camera_transform, world))
 		else {
 			continue;
 		};
@@ -1783,8 +1790,9 @@ fn sync_respawn_selection_marker(
 		hide_selection_markers(&mut markers);
 		return;
 	};
-	let Some((projected, on_screen)) =
-		project_map_pin(camera, camera_transform, pin_world(&surface, xz))
+	let Some((projected, on_screen)) = pin_world(&surface, xz)
+		.ok()
+		.and_then(|world| project_map_pin(camera, camera_transform, world))
 	else {
 		hide_selection_markers(&mut markers);
 		return;
@@ -1867,7 +1875,9 @@ fn draw_highlighted_poi(
 	}
 	if !picker_prompt_visible(&map) {
 		if let Some(xz) = players.iter().next().map(|transform| transform.translation.xz()) {
-			gizmos.sphere(Isometry3d::from_translation(pin_world(&surface, xz)), 2.2, TEXT_YELLOW);
+			if let Ok(world) = pin_world(&surface, xz) {
+				gizmos.sphere(Isometry3d::from_translation(world), 2.2, TEXT_YELLOW);
+			}
 		}
 	}
 	let Some(id) = pending.as_deref().and_then(|state| state.pending.as_ref()?.highlighted) else {
@@ -1880,21 +1890,24 @@ fn draw_highlighted_poi(
 	let mut points = Vec::with_capacity(33);
 	for index in 0..=32 {
 		let angle = index as f32 / 32.0 * std::f32::consts::TAU;
-		points.push(pin_world(
+		if let Ok(point) = pin_world(
 			&surface,
 			Vec2::new(
 				record.position.x + angle.cos() * radius,
 				record.position.z + angle.sin() * radius,
 			),
-		));
+		) {
+			points.push(point);
+		}
 	}
 	gizmos.linestrip(points, TEXT_YELLOW);
 	if let Some(death) = death_xz(pending.as_deref()) {
-		gizmos.line(
+		if let (Ok(from), Ok(to)) = (
 			pin_world(&surface, death),
 			pin_world(&surface, record.position.xz()),
-			TEXT_YELLOW_FAINT,
-		);
+		) {
+			gizmos.line(from, to, TEXT_YELLOW_FAINT);
+		}
 	}
 }
 

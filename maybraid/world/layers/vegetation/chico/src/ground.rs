@@ -51,13 +51,13 @@ mod tests {
 		let probe = Aabb3d::from_min_max(Vec3::new(1.0, -10.0, 1.0), Vec3::new(2.0, 10.0, 2.0));
 		let id = store
 			.try_overlapping::<durham::Terrain>(probe)
-			.ok()
-			.and_then(|ids| ids.into_iter().next())
+			.map_err(|busy| anyhow::anyhow!("HcsgStorage busy: {busy:?}"))?
+			.into_iter()
+			.next()
 			.ok_or_else(|| anyhow::anyhow!("stored cell"))?;
 		let terrain = store
 			.try_entry::<durham::Terrain>(id)
-			.ok()
-			.flatten()
+			.map_err(|busy| anyhow::anyhow!("HcsgStorage busy: {busy:?}"))?
 			.map(|entry| entry.value)
 			.ok_or_else(|| anyhow::anyhow!("terrain"))?;
 		let padded = richmond::TerrainWithPads::compose(terrain.as_ref(), []);

@@ -685,9 +685,10 @@ fn xz_distance(a: Vec3, b: Vec3) -> f32 {
 }
 
 fn surface_at(mut point: Vec3, surface: &DurhamSurface) -> Vec3 {
-	let terrain_y = surface.height_or_fallback(point.xz());
-	if terrain_y.is_finite() {
-		point.y = terrain_y;
+	if let Ok(terrain_y) = surface.height_or_fallback(point.xz()) {
+		if terrain_y.is_finite() {
+			point.y = terrain_y;
+		}
 	}
 	point
 }
