@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use bevy::ecs::system::SystemParamItem;
 use bevy::math::bounding::{Aabb3d, IntersectsVolume};
-use bevy::math::Vec3;
+use bevy::math::{DVec3, Vec3};
 use bevy::prelude::*;
 use bevy::scene::ScenePlugin;
 
@@ -54,6 +54,10 @@ fn app(plugin: impl Plugin, regions: Vec<Aabb3d>) -> App {
 		.add_plugins((AssetPlugin::default(), ScenePlugin))
 		.insert_resource(Window(regions))
 		.add_plugins((HcsgBoundsPlugin::<WindowBounds>::default(), plugin));
+	let storage = app.world().resource::<HcsgStorage>().clone();
+	storage.configure::<Terrain>(DVec3::splat(0.1));
+	storage.configure::<Vegetation>(DVec3::splat(0.1));
+	storage.configure::<Kept>(DVec3::splat(0.1));
 	app
 }
 
@@ -118,7 +122,14 @@ fn presentation_follows_the_regions_it_is_sent() -> anyhow::Result<()> {
 	assert_eq!(kept, still, "a host in both sets is kept, not respawned");
 
 	let storage = app.world().resource::<HcsgStorage>().clone();
-	assert!(storage.contains::<Terrain>(Id::from_cell(cell(0.0))), "retiring never evicts");
+	assert!(
+		!storage.contains::<Terrain>(Id::from_cell(cell(0.0))),
+		"a host that left the window is evicted with it"
+	);
+	assert!(
+		storage.contains::<Terrain>(Id::from_cell(cell(1.0))),
+		"a presented value is never evicted while its host is kept"
+	);
 	Ok(())
 }
 

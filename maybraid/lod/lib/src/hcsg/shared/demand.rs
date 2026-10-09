@@ -1,6 +1,7 @@
 //! [`HcsgDemand`]: what the worker should fill, one subscription per system.
 
-use std::collections::HashMap;
+use std::any::TypeId;
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError, TryLockError};
 use std::time::{Duration, Instant};
@@ -51,6 +52,9 @@ struct Subscription {
 	done: bool,
 	/// Set when the subscription is replaced, removed, or its epoch ends.
 	cancelled: Arc<AtomicBool>,
+	/// This scheme's type plus every type its fills have read. Shared with
+	/// replacements so a mid-quantum finish still lands on the live chain.
+	reach: Arc<Mutex<HashSet<TypeId>>>,
 }
 
 impl Subscription {
@@ -65,11 +69,14 @@ struct DemandState {
 	epoch: u64,
 	working: bool,
 	shutdown: bool,
+	/// The live subscription set changed since the last sweep.
+	sweep_needed: bool,
 }
 
 struct DemandShared {
 	next_id: AtomicU64,
 	picks: AtomicU64,
+	sweeps: AtomicU64,
 	state: Mutex<DemandState>,
 	/// Notified when there is work, or on shutdown.
 	wake: Condvar,
@@ -82,6 +89,7 @@ impl Default for DemandShared {
 		Self {
 			next_id: AtomicU64::new(0),
 			picks: AtomicU64::new(0),
+			sweeps: AtomicU64::new(0),
 			state: Mutex::new(DemandState::default()),
 			wake: Condvar::new(),
 			idle: Condvar::new(),
@@ -94,9 +102,9 @@ impl Default for DemandShared {
 ///
 /// A subscription's regions never change: new regions replace the subscription,
 /// which cancels whatever the worker was still doing for the old one. A
-/// replacement inherits the predecessor's stride `pass`, floored at the current
-/// minimum among remaining live work, so resubscribing cannot jump the queue
-/// or bank credit from a finished subscription.
+/// replacement inherits the predecessor's stride `pass` (floored at the current
+/// minimum among remaining live work) and reach, so resubscribing cannot jump
+/// the queue, bank credit, or drop dependencies between fills.
 #[derive(Resource, Clone, Default)]
 pub struct HcsgDemand(Arc<DemandShared>);
 
@@ -119,14 +127,42 @@ pub(crate) struct Job {
 	pub cancelled: Arc<AtomicBool>,
 	pub discovered: Option<Vec<Id>>,
 	pub cursor: usize,
+	pub reach: Arc<Mutex<HashSet<TypeId>>>,
 }
 
 /// What the worker writes back after one quantum.
+#[derive(Default)]
 pub(crate) struct QuantumProgress {
 	pub discovered: Option<Vec<Id>>,
 	pub cursor: usize,
 	pub cost: f64,
 	pub done: bool,
+	pub reached: HashSet<TypeId>,
+}
+
+/// What the worker should do next: sweep, fill a quantum, or stop.
+pub(super) enum WorkerWait {
+	Job(Job),
+	/// Regions to retain, keyed by the types live subscriptions reach.
+	Sweep(HashMap<TypeId, Vec<Aabb3d>>),
+	Shutdown,
+}
+
+fn lock_mutex<T>(lock: &Mutex<T>) -> MutexGuard<'_, T> {
+	lock.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+fn retention_plan(state: &DemandState) -> HashMap<TypeId, Vec<Aabb3d>> {
+	let mut regions_by_type: HashMap<TypeId, Vec<Aabb3d>> = HashMap::new();
+	for subscription in state.subscriptions.values() {
+		for type_id in lock_mutex(&subscription.reach).iter() {
+			regions_by_type
+				.entry(*type_id)
+				.or_default()
+				.extend(subscription.regions.iter().copied());
+		}
+	}
+	regions_by_type
 }
 
 /// Charge the larger of the id count and the time fraction of a quantum, so
@@ -165,6 +201,7 @@ fn pick_job(state: &mut DemandState) -> Option<Job> {
 		cancelled: Arc::clone(&subscription.cancelled),
 		discovered: subscription.discovered.take(),
 		cursor: subscription.cursor,
+		reach: Arc::clone(&subscription.reach),
 	})
 }
 
@@ -184,9 +221,9 @@ impl HcsgDemand {
 	/// Replaces `previous` (if any) with a subscription to `T` over `regions`,
 	/// under one lock, and wakes the worker.
 	///
-	/// A replacement inherits `previous`'s stride `pass`, but never below the
-	/// current minimum among remaining live work, so a finished subscription
-	/// cannot bank credit. A new subscription starts at that minimum.
+	/// A replacement inherits `previous`'s stride `pass`, floored at the
+	/// current minimum among remaining live work, and its reach. A new
+	/// subscription starts at that minimum, with reach `{T}`.
 	pub fn subscribe<T: GenerationScheme>(
 		&self,
 		previous: Option<SubscriptionId>,
@@ -201,10 +238,14 @@ impl HcsgDemand {
 				.and_then(|previous| state.subscriptions.remove(&previous))
 				.map(|previous| {
 					previous.cancel();
-					previous.pass
+					(previous.pass, Arc::clone(&previous.reach))
 				});
 		let floor = min_pass(&state);
-		let pass = inherited.map_or(floor, |pass| pass.max(floor));
+		let (pass, reach) = match inherited {
+			Some((pass, reach)) => (pass.max(floor), reach),
+			None => (floor, Arc::new(Mutex::new(HashSet::new()))),
+		};
+		lock_mutex(&reach).insert(TypeId::of::<T>());
 		state.subscriptions.insert(
 			id,
 			Subscription {
@@ -219,15 +260,20 @@ impl HcsgDemand {
 				published: Vec::new(),
 				done: false,
 				cancelled: Arc::new(AtomicBool::new(false)),
+				reach,
 			},
 		);
+		state.sweep_needed = true;
 		self.0.wake.notify_all();
 		id
 	}
 
 	pub fn unsubscribe(&self, id: SubscriptionId) {
-		if let Some(subscription) = self.lock().subscriptions.remove(&id) {
+		let mut state = self.lock();
+		if let Some(subscription) = state.subscriptions.remove(&id) {
 			subscription.cancel();
+			state.sweep_needed = true;
+			self.0.wake.notify_all();
 		}
 		self.0.idle.notify_all();
 	}
@@ -271,6 +317,8 @@ impl HcsgDemand {
 			subscription.cancel();
 		}
 		state.epoch += 1;
+		state.sweep_needed = true;
+		self.0.wake.notify_all();
 		self.0.idle.notify_all();
 		state.epoch
 	}
@@ -279,13 +327,16 @@ impl HcsgDemand {
 		self.lock().epoch
 	}
 
-	/// Blocks until no subscription has outstanding work, or `timeout`
-	/// passes. `false` on timeout. Needs a running [`super::HcsgWorker`].
+	/// Blocks until no subscription has outstanding work and no sweep is
+	/// pending, or `timeout` passes. `false` on timeout. Needs a running
+	/// [`super::HcsgWorker`].
 	pub fn wait_idle(&self, timeout: Duration) -> bool {
 		let deadline = Instant::now() + timeout;
 		let mut state = self.lock();
 		loop {
-			let busy = state.working || state.subscriptions.values().any(|s| !s.done);
+			let busy = state.working
+				|| state.sweep_needed
+				|| state.subscriptions.values().any(|s| !s.done);
 			if !busy {
 				return true;
 			}
@@ -296,18 +347,23 @@ impl HcsgDemand {
 		}
 	}
 
-	/// The unfinished subscription with the lowest stride `pass`, newest
-	/// first among ties. Blocks until there is one. `None` once shut down.
-	pub(super) fn next_job(&self) -> Option<Job> {
+	/// The next sweep or unfinished subscription. Blocks until there is one.
+	/// Sweep is taken first whenever the live set has changed.
+	pub(super) fn next_work(&self) -> WorkerWait {
 		let mut state = self.lock();
 		loop {
 			if state.shutdown {
-				return None;
+				return WorkerWait::Shutdown;
+			}
+			if state.sweep_needed {
+				state.sweep_needed = false;
+				self.0.sweeps.fetch_add(1, Ordering::Relaxed);
+				return WorkerWait::Sweep(retention_plan(&state));
 			}
 			if let Some(job) = pick_job(&mut state) {
 				state.working = true;
 				self.0.picks.fetch_add(1, Ordering::Relaxed);
-				return Some(job);
+				return WorkerWait::Job(job);
 			}
 			self.0.idle.notify_all();
 			state = self.0.wake.wait(state).unwrap_or_else(PoisonError::into_inner);
@@ -320,9 +376,20 @@ impl HcsgDemand {
 		}
 	}
 
-	pub(super) fn finish_quantum(&self, id: SubscriptionId, progress: QuantumProgress) {
+	pub(super) fn finish_quantum(
+		&self,
+		id: SubscriptionId,
+		progress: QuantumProgress,
+		reach: Option<Arc<Mutex<HashSet<TypeId>>>>,
+	) {
 		let mut state = self.lock();
 		state.working = false;
+		let reach = reach.or_else(|| {
+			state.subscriptions.get(&id).map(|subscription| Arc::clone(&subscription.reach))
+		});
+		if let Some(reach) = reach {
+			lock_mutex(&reach).extend(progress.reached);
+		}
 		if let Some(subscription) = state.subscriptions.get_mut(&id) {
 			subscription.discovered = progress.discovered;
 			subscription.cursor = progress.cursor;
@@ -347,6 +414,12 @@ impl HcsgDemand {
 		self.0.picks.load(Ordering::Relaxed)
 	}
 
+	/// How many times the worker has swept. Tests use this to check that a
+	/// sweep runs only when the live subscription set changes.
+	pub fn sweep_count(&self) -> u64 {
+		self.0.sweeps.load(Ordering::Relaxed)
+	}
+
 	/// Non-blocking pick for scheduler tests. The caller must
 	/// [`Self::finish_quantum`].
 	#[cfg(test)]
@@ -355,6 +428,19 @@ impl HcsgDemand {
 		let job = pick_job(&mut state)?;
 		state.working = true;
 		Some(job)
+	}
+
+	/// Applies a pending sweep plan without a worker. Tests use this after a
+	/// mid-quantum replacement.
+	#[cfg(test)]
+	pub(crate) fn try_sweep(&self) -> Option<HashMap<TypeId, Vec<Aabb3d>>> {
+		let mut state = self.lock();
+		if !state.sweep_needed {
+			return None;
+		}
+		state.sweep_needed = false;
+		self.0.sweeps.fetch_add(1, Ordering::Relaxed);
+		Some(retention_plan(&state))
 	}
 
 	#[cfg(test)]
