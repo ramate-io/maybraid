@@ -12,7 +12,9 @@ use bevy::prelude::Resource;
 use crate::gen::Id;
 
 use super::context::GenerationContext;
-use super::demand::{quantum_cost, HcsgDemand, Job, QuantumProgress, QUANTUM_IDS, QUANTUM_TIME};
+use super::demand::{
+	quantum_cost, HcsgDemand, Job, QuantumProgress, WorkerWait, QUANTUM_IDS, QUANTUM_TIME,
+};
 use super::storage::HcsgStorage;
 
 /// Fills unfinished subscriptions in weighted quanta: discovers each
@@ -20,7 +22,9 @@ use super::storage::HcsgStorage;
 /// the quantum's id or time budget is spent. Resume keeps the discovered
 /// list and cursor.
 ///
-/// Dropping the worker shuts the thread down and joins it.
+/// Between jobs, after the live subscription set changes, the worker sweeps
+/// stored values by reach. Dropping the worker shuts the thread down and
+/// joins it.
 #[derive(Resource)]
 pub struct HcsgWorker {
 	demand: HcsgDemand,
@@ -47,14 +51,24 @@ impl Drop for HcsgWorker {
 }
 
 fn run(storage: &HcsgStorage, demand: &HcsgDemand) {
-	while let Some(job) = demand.next_job() {
-		let id = job.id;
-		let progress = panic::catch_unwind(AssertUnwindSafe(|| fill_quantum(storage, demand, job)))
-			.unwrap_or_else(|_| {
-				error!("hcsg worker: generation panicked; subscription {id:?} left partial");
-				QuantumProgress { discovered: None, cursor: 0, cost: 0.0, done: true }
-			});
-		demand.finish_quantum(id, progress);
+	loop {
+		match demand.next_work() {
+			WorkerWait::Shutdown => return,
+			WorkerWait::Sweep(regions_by_type) => storage.retain_reached(&regions_by_type),
+			WorkerWait::Job(job) => {
+				let id = job.id;
+				let reach = job.reach.clone();
+				let progress =
+					panic::catch_unwind(AssertUnwindSafe(|| fill_quantum(storage, demand, job)))
+						.unwrap_or_else(|_| {
+							error!(
+								"hcsg worker: generation panicked; subscription {id:?} left partial"
+							);
+							QuantumProgress { done: true, ..QuantumProgress::default() }
+						});
+				demand.finish_quantum(id, progress, Some(reach));
+			}
+		}
 	}
 }
 
@@ -83,21 +97,11 @@ fn fill_quantum(storage: &HcsgStorage, demand: &HcsgDemand, job: Job) -> Quantum
 		}
 	};
 	if stale() {
-		return QuantumProgress {
-			discovered: Some(ids),
-			cursor: job.cursor,
-			cost: quantum_cost(1, started.elapsed()),
-			done: false,
-		};
+		return progress(&mut cx, Some(ids), job.cursor, quantum_cost(1, started.elapsed()), false);
 	}
 	if first_discover && started.elapsed() >= QUANTUM_TIME {
 		let done = ids.is_empty();
-		return QuantumProgress {
-			discovered: Some(ids),
-			cursor: job.cursor,
-			cost: quantum_cost(1, started.elapsed()),
-			done,
-		};
+		return progress(&mut cx, Some(ids), job.cursor, quantum_cost(1, started.elapsed()), done);
 	}
 
 	let mut cursor = job.cursor;
@@ -116,10 +120,15 @@ fn fill_quantum(storage: &HcsgStorage, demand: &HcsgDemand, job: Job) -> Quantum
 		cost += 1;
 	}
 	let done = cursor >= ids.len() && !stale();
-	QuantumProgress {
-		discovered: Some(ids),
-		cursor,
-		cost: quantum_cost(cost.max(1), started.elapsed()),
-		done,
-	}
+	progress(&mut cx, Some(ids), cursor, quantum_cost(cost.max(1), started.elapsed()), done)
+}
+
+fn progress(
+	cx: &mut GenerationContext,
+	discovered: Option<Vec<Id>>,
+	cursor: usize,
+	cost: f64,
+	done: bool,
+) -> QuantumProgress {
+	QuantumProgress { discovered, cursor, cost, done, reached: cx.take_reached() }
 }

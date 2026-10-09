@@ -153,9 +153,106 @@ impl<T> NodeStore<T> {
 		Some(entry)
 	}
 
+	/// Ids that would be dropped by [`Self::remove_outside`], without mutating.
+	pub(super) fn ids_outside(&self, regions: &[Aabb3d]) -> Vec<Id> {
+		let keep = |id: Id, bounds: Aabb3d| {
+			id == Id::Universal || regions.iter().any(|region| bounds.intersects(region))
+		};
+		self.entries
+			.iter()
+			.filter(|(id, entry)| !keep(**id, entry.bounds))
+			.map(|(id, _)| *id)
+			.collect()
+	}
+
+	/// Removes `ids` and bumps the membership revision. No-op when `ids` is empty.
+	pub(super) fn remove_ids(&mut self, ids: &[Id], revision: u64) {
+		if ids.is_empty() {
+			return;
+		}
+		for id in ids {
+			self.entries.remove(id);
+			if let Some(spatial) = self.spatial.as_mut() {
+				spatial.remove(*id);
+			}
+			self.unindexed.remove(id);
+		}
+		self.membership_revision = revision;
+	}
+
+	/// Keeps entries that overlap any of `regions`, and every `Id::Universal`
+	/// entry regardless of bounds. Returns the ids that were removed.
+	pub(super) fn retain_overlapping(&mut self, regions: &[Aabb3d], revision: u64) -> Vec<Id> {
+		let removed = self.ids_outside(regions);
+		self.remove_ids(&removed, revision);
+		removed
+	}
+
 	/// Drops every entry, keeping the base scale.
 	pub(super) fn reset(&mut self, revision: u64) {
 		*self = Self::new(self.base_scale);
 		self.membership_revision = revision;
+	}
+}
+
+/// One bucket of hysteresis around a live subscription region.
+pub(super) fn expand_region(region: Aabb3d, scale: DVec3) -> Aabb3d {
+	let pad = Vec3::new(scale.x as f32, scale.y as f32, scale.z as f32);
+	Aabb3d::from_min_max(Vec3::from(region.min) - pad, Vec3::from(region.max) + pad)
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use crate::gen::tests::test_utils::cell;
+	use crate::gen::{Id, Version};
+
+	fn store_with(entries: &[(Id, Aabb3d)]) -> NodeStore<u32> {
+		let mut store = NodeStore::new(DVec3::ONE);
+		for (i, &(id, bounds)) in entries.iter().enumerate() {
+			store.put(
+				id,
+				StoredEntry { value: i as u32, bounds, version: Version(i as u64 + 1) },
+				i as u64 + 1,
+			);
+		}
+		store
+	}
+
+	fn span(x: f32, width: f32) -> Aabb3d {
+		Aabb3d::from_min_max(Vec3::new(x, 0.0, 0.0), Vec3::new(x + width, 1.0, 1.0))
+	}
+
+	#[test]
+	fn retain_overlapping_removes_entries_outside_every_region() {
+		let id0 = Id::from_cell(cell(0.0));
+		let id2 = Id::from_cell(cell(2.0));
+		let mut store = store_with(&[(id0, cell(0.0)), (id2, cell(2.0))]);
+		let removed = store.retain_overlapping(&[span(1.5, 1.0)], 9);
+		assert_eq!(removed, vec![id0]);
+		assert!(!store.contains(id0));
+		assert!(store.contains(id2));
+		assert_eq!(store.membership_revision(), 9);
+	}
+
+	#[test]
+	fn retain_overlapping_keeps_entries_that_touch_a_region() {
+		let id = Id::from_cell(cell(1.0));
+		let mut store = store_with(&[(id, cell(1.0))]);
+		let revision = store.membership_revision();
+		let removed = store.retain_overlapping(&[span(1.2, 0.3)], 10);
+		assert!(removed.is_empty());
+		assert!(store.contains(id));
+		assert_eq!(store.membership_revision(), revision);
+	}
+
+	#[test]
+	fn retain_overlapping_keeps_universal_whatever_its_bounds() {
+		let id = Id::from_cell(cell(0.0));
+		let mut store = store_with(&[(Id::Universal, span(-1_000.0, 2_000.0)), (id, cell(0.0))]);
+		let removed = store.retain_overlapping(&[span(50.0, 1.0)], 11);
+		assert_eq!(removed, vec![id]);
+		assert!(store.contains(Id::Universal));
+		assert_eq!(store.membership_revision(), 11);
 	}
 }
