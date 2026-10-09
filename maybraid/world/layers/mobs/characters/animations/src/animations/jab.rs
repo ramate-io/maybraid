@@ -143,7 +143,8 @@ impl Jab {
 			0.0
 		} else if t < EXTEND_END {
 			let u = (t - BACKSWING_END) / (EXTEND_END - BACKSWING_END);
-			1.0 - (1.0 - u).powi(2)
+			// Quartic ease-in toward full extension reads as a sharper snap than quadratic.
+			1.0 - (1.0 - u).powi(4)
 		} else if t < HOLD_END {
 			1.0
 		} else {
@@ -263,7 +264,10 @@ impl Jab {
 
 #[cfg(test)]
 mod tests {
+	use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
+
 	use super::*;
+	use crate::Animation;
 
 	fn peak() -> f32 {
 		(EXTEND_END + HOLD_END) * 0.5
@@ -284,6 +288,45 @@ mod tests {
 		assert!(jab.extension_amount(peak()) > 0.95);
 		assert!(jab.chamber_amount(peak()) < 0.05);
 		assert!(jab.jab_elbow(peak()) < GUARD_ELBOW * 0.25);
+		Ok(())
+	}
+
+	#[test]
+	fn jab_snap_reaches_extension_before_mid_extend() -> anyhow::Result<()> {
+		let jab = Jab::default();
+		let early = BACKSWING_END + (EXTEND_END - BACKSWING_END) * 0.55;
+		assert!(
+			jab.extension_amount(early) > 0.9,
+			"snap should be near full extension before the extend window closes"
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn jab_snap_uncoils_elbow_earlier_in_extend_window() -> anyhow::Result<()> {
+		let jab = Jab::default();
+		let progress = BACKSWING_END + (EXTEND_END - BACKSWING_END) * 0.55;
+		// Chamber still overlaps the early extend window, so flex stays above full extension.
+		assert!(
+			jab.jab_elbow(progress) < 0.82,
+			"sharper snap should uncoil the punching elbow earlier, got {}",
+			jab.jab_elbow(progress)
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn jab_snap_poses_punching_forearm_earlier() -> anyhow::Result<()> {
+		let jab = Jab::default().with_side(Side::Right);
+		let progress = BACKSWING_END + (EXTEND_END - BACKSWING_END) * 0.55;
+		let mut rig = HumanoidV0Rig::for_clip_test();
+		jab.apply(&mut rig, progress);
+		assert!(
+			rig.posed_angle("forearm.R") < rig.posed_angle("forearm.L"),
+			"punching forearm should lead the cover arm during the snap, got R={} L={}",
+			rig.posed_angle("forearm.R"),
+			rig.posed_angle("forearm.L")
+		);
 		Ok(())
 	}
 
