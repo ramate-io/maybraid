@@ -153,7 +153,7 @@ impl<T> NodeStore<T> {
 		Some(entry)
 	}
 
-	/// Ids that would be dropped by [`Self::remove_outside`], without mutating.
+	/// Ids that would be dropped by [`Self::retain_overlapping`], without mutating.
 	pub(super) fn ids_outside(&self, regions: &[Aabb3d]) -> Vec<Id> {
 		let keep = |id: Id, bounds: Aabb3d| {
 			id == Id::Universal || regions.iter().any(|region| bounds.intersects(region))
@@ -182,6 +182,7 @@ impl<T> NodeStore<T> {
 
 	/// Keeps entries that overlap any of `regions`, and every `Id::Universal`
 	/// entry regardless of bounds. Returns the ids that were removed.
+	#[cfg(test)]
 	pub(super) fn retain_overlapping(&mut self, regions: &[Aabb3d], revision: u64) -> Vec<Id> {
 		let removed = self.ids_outside(regions);
 		self.remove_ids(&removed, revision);

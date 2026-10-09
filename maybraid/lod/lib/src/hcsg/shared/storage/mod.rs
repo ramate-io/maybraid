@@ -40,4 +40,4 @@ pub struct Busy;
 /// tests. Outside `lod` they
 /// are only available with the `test-support` feature.
 #[derive(Resource, Clone, Default)]
-pub struct HcsgStorage(pub(super) Arc<Registry>);
+pub struct HcsgStorage(Arc<Registry>);

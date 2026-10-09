@@ -54,7 +54,7 @@ pub use plugin::{register_richmond_plugin, RichmondDevelopmentModelsPlugin};
 pub use shared::{
 	BuiltPresentationPlugin, DevelopmentNeighborhood, RichmondPresentationPlugin, RichmondRoots,
 };
-pub use storage::{column_bounds, RichmondNodes};
+pub use storage::column_bounds;
 pub use urbanization_developments::{
 	yaw_about_xz, Development, DevelopmentFinish, DevelopmentFinishRole, PadParams, SiteGround,
 	Terrace, TerraceDevelopment, TerraceEnvelope, LES_HALLES_MAX_FOOTPRINT, PAD_BERM,

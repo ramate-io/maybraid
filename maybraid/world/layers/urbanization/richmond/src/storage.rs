@@ -6,16 +6,7 @@
 use bevy::math::bounding::Aabb3d;
 use bevy::math::{DVec3, Vec3};
 
-use crate::built::Built;
 use crate::cell::DEVELOPMENT_CELL_SIZE;
-use crate::developments::site::DevelopmentSite;
-use crate::developments::RichmondDevelopment;
-use crate::ground::RichmondGround;
-use crate::padded::PaddedTerrain;
-
-/// [`HcsgStorage`] group holding every node Richmond derives from its seeded
-/// roots ([`crate::DevelopmentConfig`], [`crate::AuthoredDevelopments`]).
-pub struct RichmondNodes;
 
 /// Half height of development columns. Development cells are flat XZ
 /// tiles, so their stored bounds span every terrain elevation.

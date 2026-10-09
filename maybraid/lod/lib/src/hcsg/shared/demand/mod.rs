@@ -34,11 +34,11 @@ pub(crate) use retention::WorkerWait;
 pub struct HcsgDemand(Arc<DemandShared>);
 
 impl HcsgDemand {
-	pub(super) fn lock(&self) -> MutexGuard<'_, state::DemandState> {
+	fn lock(&self) -> MutexGuard<'_, state::DemandState> {
 		self.0.state.lock().unwrap_or_else(PoisonError::into_inner)
 	}
 
-	pub(super) fn try_lock(&self) -> Result<MutexGuard<'_, state::DemandState>, Busy> {
+	fn try_lock(&self) -> Result<MutexGuard<'_, state::DemandState>, Busy> {
 		match self.0.state.try_lock() {
 			Ok(state) => Ok(state),
 			Err(TryLockError::Poisoned(poisoned)) => Ok(poisoned.into_inner()),

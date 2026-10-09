@@ -49,7 +49,7 @@ fn reseeding_active(reseeding: Res<HcsgSessionReseeding>) -> bool {
 
 /// Advances the epoch, clears derived storage, and runs every [`HcsgSessionSeed`]
 /// system when [`HcsgRestartRequest`] is set.
-pub(crate) fn begin_hcsg_session_restart(
+fn begin_hcsg_session_restart(
 	mut pending: ResMut<HcsgRestartRequest>,
 	mut reseeding: ResMut<HcsgSessionReseeding>,
 	storage: Res<HcsgStorage>,
@@ -64,25 +64,13 @@ pub(crate) fn begin_hcsg_session_restart(
 	reseeding.0 = true;
 }
 
-pub(crate) fn end_hcsg_session_restart(mut reseeding: ResMut<HcsgSessionReseeding>) {
+fn end_hcsg_session_restart(mut reseeding: ResMut<HcsgSessionReseeding>) {
 	reseeding.0 = false;
 }
 
 /// Queue a restart for the next `Update` pass.
 pub fn request_hcsg_session_restart(mut pending: ResMut<HcsgRestartRequest>) {
 	pending.request();
-}
-
-/// Same as [`begin_hcsg_session_restart`] without waiting for `Update`: for
-/// schedules that chain [`HcsgSessionSeed`] immediately after.
-pub(crate) fn begin_hcsg_session_restart_now(
-	storage: &HcsgStorage,
-	demand: &HcsgDemand,
-	reseeding: &mut HcsgSessionReseeding,
-) {
-	demand.advance_epoch();
-	storage.clear_derived();
-	reseeding.0 = true;
 }
 
 /// Ensures the full session restart chain finishes before [`HcsgSystems`].
@@ -147,8 +135,6 @@ mod tests {
 	struct OrphanDerived {
 		seed: u32,
 	}
-
-	struct OrphanScheme;
 
 	impl GenerationScheme for SessionRoot {
 		fn original_ids_for(

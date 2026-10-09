@@ -17,10 +17,10 @@ use furniture_assemblies::FurnitureAssembliesPlugin;
 use furniture_shaders::FurnitureShadersPlugin;
 use lod::gen::{Id, LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus, OriginalId};
 use lod::hcsg::shared::{
-	self, GenerationContext, HcsgClass, HcsgNode, PresentationPlugin, ViewerHcsgBounds,
+	self, GenerationContext, HcsgClass, PresentationPlugin, ViewerHcsgBounds,
 };
 use lod::lod_ref::LodRef;
-use lod::{LodViewer, SceneChunk};
+use lod::SceneChunk;
 
 use crate::cell::{
 	intersects_xz, xz_radius_aabb, FurnitureCellExtent, FURNITURE_CELL_SIZE,
@@ -154,9 +154,6 @@ impl ViewerHcsgBounds for FurnitureNeighborhood {
 	}
 }
 
-/// Every value Maputo derives over ground `U` in the shared storage.
-pub struct MaputoNodes;
-
 /// Index scale of furniture values: one furniture cell per bucket, over every
 /// elevation a furniture region spans.
 const CELL_SCALE: DVec3 = DVec3::new(
@@ -199,11 +196,12 @@ mod tests {
 	use bevy::state::app::StatesPlugin;
 	use durham::Durham;
 	use lod::gen::Version;
-	use lod::hcsg::shared::{HcsgDemand, HcsgRestartRequest, HcsgSystems, HcsgValue};
+	use lod::hcsg::shared::{HcsgDemand, HcsgNode, HcsgRestartRequest, HcsgValue};
+	use lod::LodViewer;
 	use lod::lod_ref::LodNodePose;
 	use richmond::{
 		AuthoredDevelopment, AuthoredDevelopments, Built, DevelopmentConfig, DevelopmentKind,
-		DevelopmentSites, Richmond, RichmondRoots,
+		DevelopmentSites, Richmond,
 	};
 	use terrain_layer_model::OnTerrain;
 	use urbanization_cells::UrbanizationSelection;

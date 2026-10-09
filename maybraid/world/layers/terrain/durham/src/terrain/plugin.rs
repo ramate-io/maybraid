@@ -2,7 +2,7 @@
 
 use crate::terrain::cell::TerrainCellLayout;
 use crate::terrain::collider::{
-	queue_terrain_trimesh_colliders, TerrainColliderEpoch, TerrainColliderSystems,
+	queue_terrain_trimesh_colliders, TerrainColliderSystems,
 	TerrainFrictionConfig,
 };
 use crate::terrain::stamps::TerrainStampConfigs;
@@ -39,7 +39,6 @@ impl Plugin for TerrainResourcesPlugin {
 			.init_resource::<TerrainStampConfigs>()
 			.init_resource::<WatershedConfigs>()
 			.init_resource::<TerrainFrictionConfig>()
-			.init_resource::<TerrainColliderEpoch>()
 			.configure_sets(
 				Update,
 				(

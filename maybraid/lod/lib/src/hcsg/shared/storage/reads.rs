@@ -23,20 +23,11 @@ impl HcsgStorage {
 		nodes.entry(id).cloned()
 	}
 
-	fn blocking_contains<T: HcsgValue>(&self, id: Id) -> bool {
-		self.store::<T>().is_some_and(|store| read(&store.nodes).contains(id))
-	}
-
 	/// Stored ids of `T` whose bounds intersect `region`, in id order.
 	fn blocking_overlapping<T: HcsgValue>(&self, region: Aabb3d) -> Vec<Id> {
 		self.store::<T>()
 			.map(|store| read(&store.nodes).overlapping(region))
 			.unwrap_or_default()
-	}
-
-	/// Bumped by every publish, removal and clear of `T`.
-	fn blocking_membership_revision<T: HcsgValue>(&self) -> u64 {
-		self.store::<T>().map_or(0, |store| read(&store.nodes).membership_revision())
 	}
 
 	#[cfg(not(any(test, feature = "test-support")))]
@@ -59,14 +50,9 @@ impl HcsgStorage {
 		self.blocking_entry::<T>(id)
 	}
 
-	#[cfg(not(any(test, feature = "test-support")))]
-	pub(crate) fn contains<T: HcsgValue>(&self, id: Id) -> bool {
-		self.blocking_contains::<T>(id)
-	}
-
 	#[cfg(any(test, feature = "test-support"))]
 	pub fn contains<T: HcsgValue>(&self, id: Id) -> bool {
-		self.blocking_contains::<T>(id)
+		self.store::<T>().is_some_and(|store| read(&store.nodes).contains(id))
 	}
 
 	#[cfg(not(any(test, feature = "test-support")))]
@@ -79,14 +65,10 @@ impl HcsgStorage {
 		self.blocking_overlapping::<T>(region)
 	}
 
-	#[cfg(not(any(test, feature = "test-support")))]
-	pub(crate) fn membership_revision<T: HcsgValue>(&self) -> u64 {
-		self.blocking_membership_revision::<T>()
-	}
-
+	/// Bumped by every publish, removal and clear of `T`.
 	#[cfg(any(test, feature = "test-support"))]
 	pub fn membership_revision<T: HcsgValue>(&self) -> u64 {
-		self.blocking_membership_revision::<T>()
+		self.store::<T>().map_or(0, |store| read(&store.nodes).membership_revision())
 	}
 
 	/// [`Self::entry`] for the frame: never waits on a lock.

@@ -22,14 +22,10 @@ use crate::padded::TerrainWithPads;
 /// development reads them as generation dependencies.
 pub trait RichmondGround: Send + Sync + 'static {
 	type Cell: GroundCell + PadComposable<Padded = TerrainWithPads> + shared::GenerationScheme;
-	/// Storage group the ground's cells belong to. Surfaces composed from
-	/// those cells join it, so a ground rebuild drops them too.
-	type Nodes: 'static;
 }
 
 impl RichmondGround for OnTerrain<Durham> {
 	type Cell = Terrain;
-	type Nodes = durham::terrain::DurhamNodes;
 }
 
 /// One ground cell's composed surface, as developments sample it.

@@ -30,4 +30,4 @@ pub use richmond::{
 	select_cell, select_cell_as, select_kind, urbanization_hopscotch, DevelopmentLeaf,
 	SelectedUrbanization, DEFAULT_HOP_BUDGET,
 };
-pub use storage::{UrbanizationNodes, UrbanizationSelection, UrbanizationStorage};
+pub use storage::{UrbanizationSelection, UrbanizationStorage};

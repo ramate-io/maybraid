@@ -3,6 +3,10 @@
 //! This query never admits terrain, constructs geometry, or mutates storage.
 //! It names each authored source once. Derived [`HydroComplexCell`] bags are
 //! not sources.
+//!
+//! Nothing outside tests reads it since Geneva's naming moved to the shared
+//! runtime; it stays compiled so a reader can return to it.
+#![cfg_attr(not(test), allow(dead_code))]
 
 use bevy::math::bounding::Aabb3d;
 use bevy::math::{Vec2, Vec3};
@@ -91,121 +95,115 @@ pub(crate) fn geographic_features_overlapping(
 ) -> Result<Vec<GeographicFeature>, Busy> {
 	let mut out = Vec::new();
 	push_stamp_features(
-			&mut out,
-			region,
-			storage,
-			GeographicFamily::Massif,
-			GeographicBand::HighPass,
-			GeographicFeatureKind::Massif,
-			|stamp: &MassifHighPassStampCell| (!stamp.modulations.is_empty()).then_some(stamp.cell),
-		)?;
+		&mut out,
+		region,
+		storage,
+		GeographicFamily::Massif,
+		GeographicBand::HighPass,
+		GeographicFeatureKind::Massif,
+		|stamp: &MassifHighPassStampCell| (!stamp.modulations.is_empty()).then_some(stamp.cell),
+	)?;
 	push_stamp_features(
-			&mut out,
-			region,
-			storage,
-			GeographicFamily::Massif,
-			GeographicBand::LowPass,
-			GeographicFeatureKind::Massif,
-			|stamp: &MassifLowPassStampCell| (!stamp.modulations.is_empty()).then_some(stamp.cell),
-		)?;
+		&mut out,
+		region,
+		storage,
+		GeographicFamily::Massif,
+		GeographicBand::LowPass,
+		GeographicFeatureKind::Massif,
+		|stamp: &MassifLowPassStampCell| (!stamp.modulations.is_empty()).then_some(stamp.cell),
+	)?;
 	push_stamp_features(
-			&mut out,
-			region,
-			storage,
-			GeographicFamily::Plateau,
-			GeographicBand::HighPass,
-			GeographicFeatureKind::Plateau,
-			|stamp: &PlateauHighPassStampCell| {
-				(!stamp.modulations.is_empty()).then_some(stamp.cell)
-			},
-		)?;
+		&mut out,
+		region,
+		storage,
+		GeographicFamily::Plateau,
+		GeographicBand::HighPass,
+		GeographicFeatureKind::Plateau,
+		|stamp: &PlateauHighPassStampCell| (!stamp.modulations.is_empty()).then_some(stamp.cell),
+	)?;
 	push_stamp_features(
-			&mut out,
-			region,
-			storage,
-			GeographicFamily::Plateau,
-			GeographicBand::LowPass,
-			GeographicFeatureKind::Plateau,
-			|stamp: &PlateauLowPassStampCell| (!stamp.modulations.is_empty()).then_some(stamp.cell),
-		)?;
+		&mut out,
+		region,
+		storage,
+		GeographicFamily::Plateau,
+		GeographicBand::LowPass,
+		GeographicFeatureKind::Plateau,
+		|stamp: &PlateauLowPassStampCell| (!stamp.modulations.is_empty()).then_some(stamp.cell),
+	)?;
 	push_stamp_features(
-			&mut out,
-			region,
-			storage,
-			GeographicFamily::Canyon,
-			GeographicBand::HighPass,
-			GeographicFeatureKind::Canyon,
-			|stamp: &CanyonHighPassStampCell| (!stamp.modulations.is_empty()).then_some(stamp.cell),
-		)?;
+		&mut out,
+		region,
+		storage,
+		GeographicFamily::Canyon,
+		GeographicBand::HighPass,
+		GeographicFeatureKind::Canyon,
+		|stamp: &CanyonHighPassStampCell| (!stamp.modulations.is_empty()).then_some(stamp.cell),
+	)?;
 	push_stamp_features(
-			&mut out,
-			region,
-			storage,
-			GeographicFamily::Canyon,
-			GeographicBand::LowPass,
-			GeographicFeatureKind::Canyon,
-			|stamp: &CanyonLowPassStampCell| (!stamp.modulations.is_empty()).then_some(stamp.cell),
-		)?;
+		&mut out,
+		region,
+		storage,
+		GeographicFamily::Canyon,
+		GeographicBand::LowPass,
+		GeographicFeatureKind::Canyon,
+		|stamp: &CanyonLowPassStampCell| (!stamp.modulations.is_empty()).then_some(stamp.cell),
+	)?;
 	push_stamp_features(
-			&mut out,
-			region,
-			storage,
-			GeographicFamily::Rolling,
-			GeographicBand::HighPass,
-			GeographicFeatureKind::Rolling,
-			|stamp: &RollingHighPassStampCell| {
-				(!stamp.modulations.is_empty()).then_some(stamp.cell)
-			},
-		)?;
+		&mut out,
+		region,
+		storage,
+		GeographicFamily::Rolling,
+		GeographicBand::HighPass,
+		GeographicFeatureKind::Rolling,
+		|stamp: &RollingHighPassStampCell| (!stamp.modulations.is_empty()).then_some(stamp.cell),
+	)?;
 	push_stamp_features(
-			&mut out,
-			region,
-			storage,
-			GeographicFamily::Rolling,
-			GeographicBand::LowPass,
-			GeographicFeatureKind::Rolling,
-			|stamp: &RollingLowPassStampCell| (!stamp.modulations.is_empty()).then_some(stamp.cell),
-		)?;
+		&mut out,
+		region,
+		storage,
+		GeographicFamily::Rolling,
+		GeographicBand::LowPass,
+		GeographicFeatureKind::Rolling,
+		|stamp: &RollingLowPassStampCell| (!stamp.modulations.is_empty()).then_some(stamp.cell),
+	)?;
 	push_stamp_features(
-			&mut out,
-			region,
-			storage,
-			GeographicFamily::Valley,
-			GeographicBand::HighPass,
-			GeographicFeatureKind::Valley,
-			|stamp: &ValleyHighPassStampCell| (!stamp.modulations.is_empty()).then_some(stamp.cell),
-		)?;
+		&mut out,
+		region,
+		storage,
+		GeographicFamily::Valley,
+		GeographicBand::HighPass,
+		GeographicFeatureKind::Valley,
+		|stamp: &ValleyHighPassStampCell| (!stamp.modulations.is_empty()).then_some(stamp.cell),
+	)?;
 	push_stamp_features(
-			&mut out,
-			region,
-			storage,
-			GeographicFamily::Valley,
-			GeographicBand::LowPass,
-			GeographicFeatureKind::Valley,
-			|stamp: &ValleyLowPassStampCell| (!stamp.modulations.is_empty()).then_some(stamp.cell),
-		)?;
+		&mut out,
+		region,
+		storage,
+		GeographicFamily::Valley,
+		GeographicBand::LowPass,
+		GeographicFeatureKind::Valley,
+		|stamp: &ValleyLowPassStampCell| (!stamp.modulations.is_empty()).then_some(stamp.cell),
+	)?;
 	push_stamp_features(
-			&mut out,
-			region,
-			storage,
-			GeographicFamily::PocketWaterStamp,
-			GeographicBand::HighPass,
-			GeographicFeatureKind::PocketWater,
-			|stamp: &PocketWaterHighPassStampCell| {
-				(!stamp.modulations.is_empty()).then_some(stamp.cell)
-			},
-		)?;
+		&mut out,
+		region,
+		storage,
+		GeographicFamily::PocketWaterStamp,
+		GeographicBand::HighPass,
+		GeographicFeatureKind::PocketWater,
+		|stamp: &PocketWaterHighPassStampCell| {
+			(!stamp.modulations.is_empty()).then_some(stamp.cell)
+		},
+	)?;
 	push_stamp_features(
-			&mut out,
-			region,
-			storage,
-			GeographicFamily::PocketWaterStamp,
-			GeographicBand::LowPass,
-			GeographicFeatureKind::PocketWater,
-			|stamp: &PocketWaterLowPassStampCell| {
-				(!stamp.modulations.is_empty()).then_some(stamp.cell)
-			},
-		);
+		&mut out,
+		region,
+		storage,
+		GeographicFamily::PocketWaterStamp,
+		GeographicBand::LowPass,
+		GeographicFeatureKind::PocketWater,
+		|stamp: &PocketWaterLowPassStampCell| (!stamp.modulations.is_empty()).then_some(stamp.cell),
+	)?;
 	push_watershed_features::<PocketWatersHighPass>(&mut out, region, storage)?;
 	push_watershed_features::<PocketWatersLowPass>(&mut out, region, storage)?;
 	Ok(out)
@@ -380,7 +378,6 @@ fn xz_overlaps(a: Bounds2, b: Bounds2) -> bool {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::terrain::index::TerrainStorage;
 
 	fn storage_busy(busy: Busy) -> anyhow::Error {
 		anyhow::anyhow!("HcsgStorage busy: {busy:?}")
@@ -439,11 +436,9 @@ mod tests {
 		let version = insert_stamp(&store, Id::from_cell(occupied), occupied, true);
 		insert_stamp(&store, Id::from_cell(empty), empty, false);
 
-		let found = geographic_features_overlapping(
-			&store,
-			Bounds2::from_xz(-10.0, -10.0, 400.0, 400.0),
-		)
-		.map_err(storage_busy)?;
+		let found =
+			geographic_features_overlapping(&store, Bounds2::from_xz(-10.0, -10.0, 400.0, 400.0))
+				.map_err(storage_busy)?;
 		anyhow::ensure!(found.len() == 1, "expected one occupied stamp, got {}", found.len());
 		anyhow::ensure!(found[0].kind == GeographicFeatureKind::Massif);
 		anyhow::ensure!(found[0].id.family == GeographicFamily::Massif);
@@ -484,11 +479,9 @@ mod tests {
 			);
 		}
 
-		let found = geographic_features_overlapping(
-			&store,
-			Bounds2::from_xz(-10.0, -10.0, 410.0, 410.0),
-		)
-		.map_err(storage_busy)?;
+		let found =
+			geographic_features_overlapping(&store, Bounds2::from_xz(-10.0, -10.0, 410.0, 410.0))
+				.map_err(storage_busy)?;
 		let lakes: Vec<_> = found
 			.iter()
 			.filter(|feature| feature.kind == GeographicFeatureKind::Lake)

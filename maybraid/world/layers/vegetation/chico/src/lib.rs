@@ -62,7 +62,7 @@ pub use material::{VegetationOnTerrainMaterialLib, VegetationOnTerrainMaterialRe
 pub use plugin::{register_vegetation_view, VegetationViewPlugin};
 pub use recipe::{ForestGroveRecipe, WORLD_FOREST_TREE_VARIANTS};
 pub use shared::{
-	BumpOutPresentationPlugin, BumpOutRing, BumpedOut, CanopyProxy, ChicoNodes,
+	BumpOutPresentationPlugin, BumpOutRing, BumpedOut, CanopyProxy, 
 	ChicoPresentationPlugin, ChicoRoots, ForestGround, GroundSurface, GroveNeighborhood,
 	GrownGrove,
 };

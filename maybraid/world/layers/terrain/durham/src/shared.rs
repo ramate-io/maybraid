@@ -11,7 +11,7 @@ use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use lod::gen::Id;
 use lod::hcsg::shared::{
-	register_session_seed, Busy, HcsgBounds, HcsgClass, HcsgNode, HcsgStorage, PresentationPlugin,
+	register_session_seed, Busy, HcsgBounds, HcsgClass, HcsgStorage, PresentationPlugin,
 };
 use lod::LodViewer;
 use render_item::mesh::handle::MeshFulfillBudget;
@@ -292,7 +292,7 @@ mod tests {
 
 	use bevy::scene::ScenePlugin;
 	use lod::gen::{Id, OriginalId, Version};
-	use lod::hcsg::shared::{HcsgBoundsPlugin, HcsgDemand, HcsgRestartRequest, HcsgSystems};
+	use lod::hcsg::shared::{HcsgBoundsPlugin, HcsgDemand, HcsgNode, HcsgRestartRequest};
 	use lod::lod_ref::LodNodePose;
 	use lod::LodViewer;
 
@@ -302,7 +302,6 @@ mod tests {
 		TerrainMeshAssets, TerrainMeshLodBand, TerrainStampConfigs, WatershedConfigs,
 	};
 	use crate::water::WaterMeshAssets;
-	use crate::DurhamRoots;
 
 	const IDLE: Duration = Duration::from_secs(120);
 

@@ -15,7 +15,7 @@ pub use cell::{
 pub use colliders::FurnitureWalkCollider;
 pub use host::{spawn_furniture_cell, FurnitureCell};
 pub use shared::{
-	DevelopmentSlots, Furnished, FurnitureNeighborhood, MaputoNodes, MaputoPresentationPlugin,
+	DevelopmentSlots, Furnished, FurnitureNeighborhood, MaputoPresentationPlugin,
 };
 pub use slots::FurnitureSlots;
 

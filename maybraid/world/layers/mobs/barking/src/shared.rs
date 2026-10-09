@@ -17,10 +17,9 @@ use bevy::prelude::*;
 use chico::{ForestGround, GroundSurface};
 use lod::gen::{Id, LodScene, LodSceneLevel, LodSceneStatus, OriginalId};
 use lod::hcsg::shared::{
-	self, GenerationContext, HcsgClass, HcsgNode, PresentationPlugin, ViewerHcsgBounds,
+	self, GenerationContext, HcsgClass, PresentationPlugin, ViewerHcsgBounds,
 };
 use lod::lod_ref::LodRef;
-use lod::LodViewer;
 use mob_intelligence::{MemberOf, Mob};
 use richmond::{column_bounds, Built, DevelopmentHosts, Richmond, RichmondGround};
 use urbanization_cells::{
@@ -229,9 +228,6 @@ impl ViewerHcsgBounds for MobNeighborhood {
 	}
 }
 
-/// Every value Barking derives over ground `G` in the shared storage.
-pub struct BarkingNodes;
-
 const MOB_CELL_SCALE: DVec3 = DVec3::new(MOB_CELL_EXTENT as f64, 1.0, MOB_CELL_EXTENT as f64);
 /// Members are not children of their mob. When presentation despawns a mob
 /// host with its scene, its members go with it; despawn the host in `Last`
@@ -283,19 +279,20 @@ mod tests {
 	use bevy::ecs::entity_disabling::Disabled;
 	use bevy::scene::ScenePlugin;
 	use bevy::state::app::StatesPlugin;
-	use chico::{ChicoNodes, ChicoPresentationPlugin};
+	use chico::ChicoPresentationPlugin;
 	use durham::{
 		fine_patch_cell_layout, Durham, DurhamWindow, TerrainConfig, TerrainMeshAssets,
 		TerrainMeshLodBand, TerrainStampConfigs, WaterMeshAssets, WaterPresentationPlugin,
 		WatershedConfigs,
 	};
-	use lod::hcsg::shared::{HcsgDemand, HcsgRestartRequest, HcsgSystems};
+	use lod::hcsg::shared::{HcsgDemand, HcsgNode, HcsgRestartRequest};
+	use lod::LodViewer;
 	use lod::lod_ref::LodNodePose;
 	use mob_scenes::{MobKind, MobScene};
 	use richmond::BuiltPresentationPlugin;
 	use richmond::{
 		AuthoredDevelopment, AuthoredDevelopments, DevelopmentConfig, DevelopmentKind,
-		DevelopmentSites, RichmondRoots,
+		DevelopmentSites,
 	};
 	use terrain_layer_model::OnTerrain;
 
@@ -364,7 +361,6 @@ mod tests {
 				ChicoPresentationPlugin::<MobNeighborhood, Urban>::default(),
 				BarkingPresentationPlugin::<MobNeighborhood, Urban>::default(),
 			));
-		let storage = app.world().resource::<shared::HcsgStorage>().clone();
 		pin(&mut app, kind);
 		durham::register_durham_hcsg_session(&mut app);
 		app.finish();

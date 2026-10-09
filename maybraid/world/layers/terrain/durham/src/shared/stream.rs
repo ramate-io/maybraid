@@ -13,11 +13,10 @@ use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use lod::gen::{Id, OriginalId};
 use lod::hcsg::shared::{
-	self, GenerationContext, HcsgClass, HcsgNode, HcsgValue, PresentationPlugin, ViewerHcsgBounds,
+	self, GenerationContext, HcsgClass, HcsgValue, PresentationPlugin, ViewerHcsgBounds,
 };
 use lod::lod_ref::LodRef;
 use lod::scene::{LodSceneCulls, LodSceneLevel, LodSceneStatus, SceneChunk, SemanticLodScene};
-use lod::LodViewer;
 
 use crate::terrain::host::{WORLD_BACKGROUND_RING, WORLD_FAR_RING, WORLD_NEAR_RING};
 use crate::terrain::{TerrainCellLayout, TerrainCellRing};

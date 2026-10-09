@@ -28,7 +28,7 @@ pub use terrain::{
 	PocketWaterHighPassControllerLayout, PocketWaterLowPassControllerLayout, PocketWaterStampCell,
 	PrePocketHighPassLayout, PrePocketLowPassLayout, PreWatershedTerrain,
 	RollingHighPassControllerLayout, RollingLowPassControllerLayout, RollingStampCell,
-	StreamBandedLod, Terrain, TerrainCellLayout, TerrainCellRing, TerrainColliderEpoch,
+	StreamBandedLod, Terrain, TerrainCellLayout, TerrainCellRing,
 	TerrainColliderMeshSource, TerrainColliderSystems, TerrainConfig, TerrainCoverage,
 	TerrainFrictionConfig, TerrainHeightSnapshot, TerrainLayoutPinned, TerrainMeshAssets,
 	TerrainMeshBuilder, TerrainMeshLodBand, TerrainPresentPending, TerrainPresentationDirty,

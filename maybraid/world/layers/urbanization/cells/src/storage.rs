@@ -6,7 +6,7 @@ use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::math::DVec3;
 use bevy::prelude::*;
 use lod::gen::Id;
-use lod::hcsg::{shared, Busy, HcsgStorage, StoredEntry};
+use lod::hcsg::{Busy, HcsgStorage, StoredEntry};
 use procedural_common::NoiseParams;
 
 use crate::{
@@ -23,9 +23,6 @@ pub struct UrbanizationSelection {
 }
 
 lod::seeded_root!(UrbanizationSelection);
-
-/// [`HcsgStorage`] group holding every record derived from [`UrbanizationSelection`].
-pub struct UrbanizationNodes;
 
 /// Selections are bucketed one extent (1600 m) apart.
 pub(crate) const SELECTION_INDEX_SCALE: DVec3 =

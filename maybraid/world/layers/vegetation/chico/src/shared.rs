@@ -15,12 +15,11 @@ use bevy::prelude::*;
 use durham::TerrainMeshBuilder;
 use lod::gen::{Id, LodScene, LodSceneLevel, LodSceneStatus, OriginalId};
 use lod::hcsg::shared::{
-	self, register_session_seed, GenerationContext, HcsgClass, HcsgNode, PresentationPlugin,
+	self, register_session_seed, GenerationContext, HcsgClass, PresentationPlugin,
 	ViewerHcsgBounds,
 };
 use lod::hcsg::universal_bounds;
 use lod::lod_ref::LodRef;
-use lod::LodViewer;
 use render_item::mesh::{IdentifiedMesh, MeshBuilder};
 use render_item::NormalizeChunk;
 use richmond::{PaddedTerrain, Richmond, RichmondGround};
@@ -33,10 +32,9 @@ use crate::ground::overlay_chunk_ref;
 use crate::grove::{grove_from_id, grove_id};
 use crate::plugin::register_vegetation_view;
 use crate::{
-	presenting_recipes, CanopyBumpOut, ChicoForest, ChicoGrove, ChicoGroveHost, ForestExtent,
-	ForestGroveTile, ForestLayer, ForestSelection, MediumCanopyBumpOut, NeighborLayers,
-	BUMP_OUT_CELL_XZ, DEFAULT_FOREST_EXTENT_XZ, DEFAULT_FOREST_GROVE_TILE_XZ,
-	GROVE_PRESENT_RADIUS_M, MEDIUM_BUMP_OUT_CELL_XZ,
+	presenting_recipes, ChicoForest, ChicoGrove, ChicoGroveHost, ForestExtent, ForestGroveTile,
+	ForestLayer, ForestSelection, NeighborLayers, DEFAULT_FOREST_EXTENT_XZ,
+	DEFAULT_FOREST_GROVE_TILE_XZ, GROVE_PRESENT_RADIUS_M,
 };
 
 mod bump_outs;
@@ -296,9 +294,6 @@ impl ViewerHcsgBounds for GroveNeighborhood {
 	}
 }
 
-/// Every value Chico derives over ground `G` in the shared storage.
-pub struct ChicoNodes;
-
 const FOREST_SCALE: DVec3 =
 	DVec3::new(DEFAULT_FOREST_EXTENT_XZ as f64, 1.0, DEFAULT_FOREST_EXTENT_XZ as f64);
 
@@ -363,15 +358,16 @@ mod tests {
 		WatershedConfigs,
 	};
 	use lod::gen::Version;
-	use lod::hcsg::shared::{HcsgDemand, HcsgRestartRequest, HcsgSystems};
+	use lod::hcsg::shared::{HcsgDemand, HcsgNode, HcsgRestartRequest};
+	use lod::LodViewer;
 	use lod::lod_ref::LodNodePose;
 	use richmond::BuiltPresentationPlugin;
-	use richmond::{AuthoredDevelopments, DevelopmentConfig, DevelopmentSites, RichmondRoots};
+	use richmond::{AuthoredDevelopments, DevelopmentConfig, DevelopmentSites};
 	use terrain_layer_model::OnTerrain;
 	use urbanization_cells::UrbanizationSelection;
 
 	use super::*;
-	use crate::LayeringKind;
+	use crate::{CanopyBumpOut, LayeringKind};
 
 	type Ground = OnTerrain<Durham>;
 	type Urban = Urbanization<Richmond<Ground>>;

@@ -10,12 +10,10 @@ use bevy::ecs::system::SystemParam;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use lod::hcsg::shared::{
-	self, register_session_seed, HcsgClass, HcsgNode, PresentationPlugin, ViewerHcsgBounds,
+	self, register_session_seed, HcsgClass, PresentationPlugin, ViewerHcsgBounds,
 };
 use lod::hcsg::universal_bounds;
-use lod::scene::LodSceneRefreshChunkPlugin;
-use lod::LodViewer;
-use urbanization_cells::{UrbanizationExtent, UrbanizationNodes, UrbanizationSelection};
+use urbanization_cells::{UrbanizationExtent, UrbanizationSelection};
 
 use crate::built::Built;
 use crate::config::DevelopmentConfig;
@@ -25,7 +23,6 @@ use crate::layer_config::stream_radii_m;
 use crate::layer_config::UrbanizationStreamSpec;
 use crate::padded::PaddedTerrain;
 use crate::plugin::register_richmond_plugin;
-use crate::storage::RichmondNodes;
 
 /// The urbanization cells within the default stream's present radius of the
 /// [`LodViewer`], one box each.
@@ -120,13 +117,13 @@ mod tests {
 	use bevy::state::app::StatesPlugin;
 	use building_physics::BuildingWalkCollider;
 	use durham::{
-		fine_patch_cell_layout, CellTiling, Durham, DurhamRoots, DurhamWindow, Terrain,
+		fine_patch_cell_layout, CellTiling, Durham, DurhamWindow, Terrain,
 		TerrainCellLayout, TerrainColliderMeshSource, TerrainConfig, TerrainMeshAssets,
 		TerrainMeshLodBand, TerrainStampConfigs, WaterMeshAssets, WaterPresentationPlugin,
 		WatershedConfigs,
 	};
 	use lod::gen::{Id, OriginalId, Version};
-	use lod::hcsg::shared::{HcsgDemand, HcsgRestartRequest, HcsgSystems, HcsgValue};
+	use lod::hcsg::shared::{HcsgDemand, HcsgNode, HcsgRestartRequest, HcsgValue};
 	use lod::lod_ref::LodNodePose;
 	use lod::LodViewer;
 	use terrain_layer_model::OnTerrain;

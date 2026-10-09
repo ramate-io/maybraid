@@ -2,48 +2,32 @@
 
 use crate::terrain::base_noise::BaseTerrainNoise;
 use crate::terrain::cell::{
-	cell_bounds, universal_bounds, CellTiling, TerrainCellLayout, TERRAIN_CELL_SIZE,
+	cell_bounds, universal_bounds, TerrainCellLayout, TERRAIN_CELL_SIZE,
 	TERRAIN_CELL_VERTICAL_HALF_EXTENT,
 };
-use crate::terrain::geography::GeographicFeature;
 use crate::terrain::mesh::TerrainMeshAssets;
-use crate::terrain::stamps::{
-	CanyonHighPassControllerCell, CanyonHighPassControllerLayout, CanyonHighPassStampCell,
-	CanyonLowPassControllerCell, CanyonLowPassControllerLayout, CanyonLowPassStampCell,
-	MassifHighPassControllerCell, MassifHighPassControllerLayout, MassifHighPassStampCell,
-	MassifLowPassControllerCell, MassifLowPassControllerLayout, MassifLowPassStampCell,
-	PlateauHighPassControllerCell, PlateauHighPassControllerLayout, PlateauHighPassStampCell,
-	PlateauLowPassControllerCell, PlateauLowPassControllerLayout, PlateauLowPassStampCell,
-	PocketWaterHighPassControllerCell, PocketWaterHighPassControllerLayout,
-	PocketWaterHighPassStampCell, PocketWaterLowPassControllerCell,
-	PocketWaterLowPassControllerLayout, PocketWaterLowPassStampCell, RollingHighPassControllerCell,
-	RollingHighPassControllerLayout, RollingHighPassStampCell, RollingLowPassControllerCell,
-	RollingLowPassControllerLayout, RollingLowPassStampCell, TerrainStampConfigs,
-	ValleyHighPassControllerCell, ValleyHighPassControllerLayout, ValleyHighPassStampCell,
-	ValleyLowPassControllerCell, ValleyLowPassControllerLayout, ValleyLowPassStampCell,
-};
-use crate::terrain::watersheds::{
-	HydroComplexCell, PocketHighPassCell, PocketLowPassCell, PocketWatersHighPass,
-	PocketWatersLowPass, PrePocketHighPassCell, PrePocketHighPassLayout, PrePocketLowPassCell,
-	PrePocketLowPassLayout, WatershedAproningCell, WatershedCarvingCell, WatershedConfigs,
-	WatershedRimmingCell,
-};
-use crate::terrain::{PreWatershedTerrain, Terrain};
-use crate::water::{ComposedWater, Water, WaterColumn, WaterMeshAssets};
+use crate::terrain::stamps::TerrainStampConfigs;
+use crate::terrain::watersheds::WatershedConfigs;
+use crate::terrain::Terrain;
+use crate::water::{ComposedWater, WaterColumn, WaterMeshAssets};
 use bevy::ecs::system::SystemParam;
-use bevy::math::bounding::Aabb3d;
 use bevy::math::DVec3;
 use bevy::prelude::*;
-use lod::gen::{Id, OriginalId, Version};
+use lod::gen::Id;
 use lod::hcsg::shared;
-use lod::hcsg::{Busy, HcsgStorage};
-use procedural_common::Bounds2;
+use lod::hcsg::HcsgStorage;
 use std::collections::HashMap;
 use std::sync::Arc;
-
-/// [`HcsgStorage`] group holding every node Durham derives from its seeded
-/// roots. A rebuild drops the group; the roots stay seeded.
-pub struct DurhamNodes;
+#[cfg(test)]
+use {
+	crate::terrain::cell::CellTiling,
+	crate::terrain::geography::GeographicFeature,
+	crate::water::Water,
+	bevy::math::bounding::Aabb3d,
+	lod::gen::{OriginalId, Version},
+	lod::hcsg::Busy,
+	procedural_common::Bounds2,
+};
 
 /// Index scale for every Durham [`GenerationScheme`].
 pub const DURHAM_INDEX_SCALE: DVec3 = DVec3::new(

@@ -34,7 +34,7 @@ pub use named::{
 pub use places::{DevelopmentPlace, DevelopmentPlaces, LanguageGround};
 pub use present::{LanguageOverlay, LargeTileOverlay, NamedOverlay};
 pub use shared::{
-	GenevaNodes, GenevaPlugin, GenevaRoots, LanguageConfig, LanguageNeighborhood,
+	GenevaPlugin, GenevaRoots, LanguageConfig, LanguageNeighborhood,
 	LanguageWorldSeed, NAME_WINDOW_QUANT_M,
 };
 pub use tiles::{

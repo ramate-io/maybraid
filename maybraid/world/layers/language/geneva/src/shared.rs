@@ -29,7 +29,7 @@ use lod::LodViewer;
 use richmond::DEVELOPMENT_CELL_SIZE;
 
 use crate::named::{Forests, Groves, Named, Places, Regions, Stamp, Urban, Waters};
-use crate::places::{DevelopmentPlaces, LanguageGround};
+use crate::places::LanguageGround;
 use crate::present::{present_language_overlay, LanguageOverlay, Nearby};
 use crate::tiles::{
 	large_tile_aabb, large_tile_index, large_tile_origin, large_tiles_overlapping, LargeTile,
@@ -120,10 +120,6 @@ impl ViewerHcsgBounds for LanguageNeighborhood {
 		vec![Self::around(viewer)]
 	}
 }
-
-/// Every value Geneva owns in the shared storage: its tiles, places and
-/// names, and its root.
-pub struct GenevaNodes;
 
 pub(crate) const TILE_INDEX_SCALE: DVec3 = DVec3::new(LARGE_TILE as f64, 2.0, LARGE_TILE as f64);
 /// One development cell per bucket, one naming column tall.
@@ -295,7 +291,7 @@ mod tests {
 	use bevy::ecs::system::SystemParamItem;
 	use bevy::scene::ScenePlugin;
 	use bevy::state::app::StatesPlugin;
-	use chico::{ChicoPresentationPlugin, ChicoRoots, ForestSelection, GroveNeighborhood};
+	use chico::{ChicoPresentationPlugin, ForestSelection, GroveNeighborhood};
 	use durham::{
 		fine_patch_cell_layout, Durham, DurhamWindow, TerrainConfig, TerrainMeshAssets,
 		TerrainMeshLodBand, TerrainStampConfigs, WaterMeshAssets, WatershedConfigs,
@@ -304,13 +300,14 @@ mod tests {
 	use lod::lod_ref::LodNodePose;
 	use richmond::{
 		AuthoredDevelopment, AuthoredDevelopments, DevelopmentConfig, DevelopmentKind,
-		DevelopmentSites, Richmond, RichmondRoots,
+		DevelopmentSites, Richmond,
 	};
 	use terrain_layer_model::OnTerrain;
 	use urbanization_cells::UrbanizationSelection;
 	use urbanization_layer_model::Urbanization;
 
 	use super::*;
+	use crate::places::DevelopmentPlaces;
 	use crate::NameKey;
 
 	type Ground = OnTerrain<Durham>;
@@ -351,7 +348,6 @@ mod tests {
 			.add_plugins(GenevaPlugin::<Window, Urban>::default());
 		app.finish();
 		app.cleanup();
-		durham::register_durham_hcsg_session(&mut app);
 		spawn_viewer(&mut app, at);
 		app
 	}
@@ -572,9 +568,9 @@ mod tests {
 			))
 			.add_plugins(ChicoPresentationPlugin::<GroveNeighborhood, Urban>::default())
 			.add_plugins(GenevaPlugin::<Window, Urban>::default());
+		durham::register_durham_hcsg_session(&mut app);
 		app.finish();
 		app.cleanup();
-		durham::register_durham_hcsg_session(&mut app);
 		spawn_viewer(&mut app, Vec3::ZERO);
 		app
 	}

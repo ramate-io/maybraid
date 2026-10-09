@@ -20,7 +20,7 @@ pub use index::{MobCell, MobCellExtent};
 pub use plugin::{MobGroupsPlugin, PendingMobGroups};
 pub use present::{MobCellRoot, MobGroupRoot};
 pub use shared::{
-	BarkingNodes, BarkingPresentationPlugin, MobGround, MobNeighborhood,
+	BarkingPresentationPlugin, MobGround, MobNeighborhood,
 	MobScenePresentationPlugin, PlacedMobCell, MOB_PRESENT_RADIUS,
 };
 

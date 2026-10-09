@@ -35,11 +35,6 @@ impl Default for TerrainFrictionConfig {
 	}
 }
 
-/// Bumped when semantic terrain is regenerated so collider hosts cannot reuse
-/// a recycled [`Version`] after a dirty rebuild clears [`crate::terrain::DurhamNodes`].
-#[derive(Resource, Default, Clone, Copy, Debug, PartialEq, Eq)]
-pub struct TerrainColliderEpoch(pub u64);
-
 /// Presenters run before [`Self::QueueMeshes`] so a new fill can bake the same frame.
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum TerrainColliderSystems {
@@ -165,10 +160,5 @@ mod tests {
 		let mut colliders =
 			app.world_mut().query_filtered::<Entity, With<TerrainTrimeshCollider>>();
 		assert_eq!(colliders.iter(app.world()).count(), 0);
-	}
-
-	#[test]
-	fn recycled_store_version_is_not_current_across_epochs() {
-		assert_ne!(TerrainColliderEpoch(0), TerrainColliderEpoch(1));
 	}
 }
