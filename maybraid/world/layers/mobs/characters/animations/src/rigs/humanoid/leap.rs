@@ -159,6 +159,65 @@ fn blend_leap_pose(from: LeapPose, to: LeapPose, weight: f32) -> LeapPose {
 mod tests {
 	use super::*;
 	use crate::animations::{Leap, Squat, TwoFootedJump};
+	use bevy::prelude::Vec3;
+
+	/// Matches [`player::body::JUMP_LAND_DURATION`] — land phase maps `AIR_END..1` over this many seconds.
+	const JUMP_LAND_DURATION: f32 = 0.24;
+	/// Normalized progress step for one 60 Hz frame while in the land phase.
+	const LAND_PROGRESS_STEP_60FPS: f32 = (1.0 / 60.0) / JUMP_LAND_DURATION * (1.0 - AIR_END);
+
+	const TOUCHDOWN_MAX_BONE_JUMP: f32 = 0.025;
+
+	fn bone_tip(rig: &HumanoidV0Rig, name: &str) -> Vec3 {
+		rig.character_point(name) + rig.character_length(name)
+	}
+
+	fn max_bone_tip_jump(before: &HumanoidV0Rig, after: &HumanoidV0Rig) -> (f32, &'static str) {
+		let mut worst = 0.0f32;
+		let mut worst_name = "";
+		for name in before.animation_bone_names() {
+			let delta = (bone_tip(after, name) - bone_tip(before, name)).length();
+			if delta > worst {
+				worst = delta;
+				worst_name = name;
+			}
+		}
+		(worst, worst_name)
+	}
+
+	fn apply_at_unblended(leap: &UprightLeap, rig: &mut HumanoidV0Rig, progress: f32) {
+		let t = Progress(progress).clamp();
+		let sample = if t < TAKEOFF_END {
+			leap.takeoff(smoothstep(t / TAKEOFF_END))
+		} else if t < AIR_END {
+			leap.air(smoothstep((t - TAKEOFF_END) / (AIR_END - TAKEOFF_END)))
+		} else {
+			leap.land(smoothstep((t - AIR_END) / (1.0 - AIR_END).max(f32::EPSILON)))
+		};
+		let mut pose = HumanoidPose::default();
+		apply_leg(&mut pose, Side::Left, sample.left_femur, sample.left_shin);
+		apply_leg(&mut pose, Side::Right, sample.right_femur, sample.right_shin);
+		apply_root(&mut pose, sample.lean);
+		apply_arm(
+			&mut pose,
+			Side::Left,
+			sample.left_shoulder,
+			0.0,
+			sample.left_humerus,
+			0.0,
+			sample.elbow,
+		);
+		apply_arm(
+			&mut pose,
+			Side::Right,
+			sample.right_shoulder,
+			0.0,
+			sample.right_humerus,
+			0.0,
+			sample.elbow,
+		);
+		rig.write_pose(&pose);
+	}
 
 	fn femur_z(rig: &HumanoidV0Rig, side: Side) -> f32 {
 		let name = match side {
@@ -268,15 +327,48 @@ mod tests {
 	}
 
 	#[test]
-	fn air_land_handoff_is_continuous() {
+	fn air_land_touchdown_max_bone_jump_stays_bounded() {
 		let leap = UprightLeap::from_leap(&Leap::default());
-		let mut at_air_end = HumanoidV0Rig::for_clip_test();
-		let mut just_into_land = HumanoidV0Rig::for_clip_test();
-		leap.apply(&mut at_air_end, AIR_END - 1e-4);
-		leap.apply(&mut just_into_land, AIR_END + 1e-4);
-		let a = at_air_end.character_length("femur.L");
-		let b = just_into_land.character_length("femur.L");
-		assert!((a - b).length() < 0.04, "air→land should not pop, Δ={:?}", b - a);
+		let eps = 1e-4f32;
+		let mut before = HumanoidV0Rig::for_clip_test();
+		let mut after = HumanoidV0Rig::for_clip_test();
+		leap.apply(&mut before, AIR_END - eps);
+		leap.apply(&mut after, AIR_END + eps);
+		let (jump, bone) = max_bone_tip_jump(&before, &after);
+		assert!(
+			jump < TOUCHDOWN_MAX_BONE_JUMP,
+			"air→land bone tips should stay continuous at AIR_END (worst {bone} Δ={jump})"
+		);
+	}
+
+	#[test]
+	fn air_land_touchdown_pops_without_blend_band() {
+		let leap = UprightLeap::from_leap(&Leap::default());
+		let eps = 1e-4f32;
+		let mut before = HumanoidV0Rig::for_clip_test();
+		let mut after = HumanoidV0Rig::for_clip_test();
+		apply_at_unblended(&leap, &mut before, AIR_END - eps);
+		apply_at_unblended(&leap, &mut after, AIR_END + eps);
+		let (jump, bone) = max_bone_tip_jump(&before, &after);
+		assert!(
+			jump > TOUCHDOWN_MAX_BONE_JUMP,
+			"pre-blend main branch should pop at AIR_END (worst {bone} Δ={jump})"
+		);
+	}
+
+	#[test]
+	fn air_land_touchdown_frame_step_stays_bounded() {
+		let leap = UprightLeap::from_leap(&Leap::default());
+		let half = LAND_PROGRESS_STEP_60FPS * 0.5;
+		let mut before = HumanoidV0Rig::for_clip_test();
+		let mut after = HumanoidV0Rig::for_clip_test();
+		leap.apply(&mut before, AIR_END - half);
+		leap.apply(&mut after, AIR_END + half);
+		let (jump, bone) = max_bone_tip_jump(&before, &after);
+		assert!(
+			jump < TOUCHDOWN_MAX_BONE_JUMP * 2.5,
+			"60 Hz land step across AIR_END should not spike (worst {bone} Δ={jump})"
+		);
 	}
 
 	#[test]
@@ -339,6 +431,87 @@ mod tests {
 			rig.rotation("femur.L").dot(out.rotation("femur.L")).abs() > 1.0 - 1e-5,
 			"interrupted transition should start from the visible leap pose"
 		);
+	}
+
+	#[test]
+	fn land_blend_band_end_has_no_velocity_spike() {
+		let leap = UprightLeap::from_leap(&Leap::default());
+		let land_span = 1.0 - AIR_END;
+		let blend_end = AIR_END + land_span * LEAP_LAND_BLEND_FRACTION;
+		let step = land_span * 0.01;
+		let mut prev = HumanoidV0Rig::for_clip_test();
+		leap.apply(&mut prev, blend_end - step);
+		let mut mid = HumanoidV0Rig::for_clip_test();
+		leap.apply(&mut mid, blend_end);
+		let mut next = HumanoidV0Rig::for_clip_test();
+		leap.apply(&mut next, blend_end + step);
+		let into_blend = max_bone_tip_jump(&prev, &mid).0;
+		let out_of_blend = max_bone_tip_jump(&mid, &next).0;
+		assert!(
+			out_of_blend < into_blend * 1.35 + 0.01,
+			"leaving the blend band should not spike harder than entering it (in={into_blend} out={out_of_blend})"
+		);
+	}
+
+	#[test]
+	fn land_peak_knee_flex_matches_unblended_absorb() {
+		let leap = UprightLeap::from_leap(&Leap::default());
+		let land_span = 1.0 - AIR_END;
+		let peak_progress = AIR_END + land_span * 0.5;
+		let mut blended = HumanoidV0Rig::for_clip_test();
+		leap.apply(&mut blended, peak_progress);
+		let mut baseline = HumanoidV0Rig::for_clip_test();
+		let land_u = smoothstep((peak_progress - AIR_END) / land_span);
+		leap.apply_land_only(&mut baseline, land_u);
+		assert!(
+			(blended.posed_angle("shin.L") - baseline.posed_angle("shin.L")).abs() < 0.02,
+			"peak absorb knee should match the land curve past the blend band"
+		);
+	}
+
+	#[test]
+	fn end_pose_matches_pre_blend_land_curve() {
+		let leap = UprightLeap::from_leap(&Leap::default());
+		let mut current = HumanoidV0Rig::for_clip_test();
+		leap.apply(&mut current, 1.0);
+		let mut baseline = HumanoidV0Rig::for_clip_test();
+		leap.apply_land_only(&mut baseline, 1.0);
+		for name in current.animation_bone_names() {
+			let a = current.rotation(name);
+			let b = baseline.rotation(name);
+			assert!(a.dot(b).abs() > 1.0 - 1e-4, "progress 1.0 unchanged on {name}");
+		}
+	}
+
+	#[test]
+	fn resampling_does_not_accumulate() {
+		let leap = UprightLeap::from_leap(&Leap::default());
+		let progress = AIR_END + 0.05;
+		let mut once = HumanoidV0Rig::for_clip_test();
+		let mut twice = HumanoidV0Rig::for_clip_test();
+		leap.apply(&mut once, progress);
+		leap.apply(&mut twice, progress);
+		leap.apply(&mut twice, progress);
+		for name in once.animation_bone_names() {
+			let a = once.rotation(name);
+			let b = twice.rotation(name);
+			assert!(a.dot(b).abs() > 1.0 - 1e-5, "re-sample must not drift on {name}");
+		}
+	}
+
+	#[test]
+	fn leap_limbs_mirror_across_blend_band() {
+		let leap = UprightLeap::from_leap(&Leap::default());
+		for &progress in &[AIR_END + 0.01, AIR_END + 0.08, 0.95] {
+			let mut rig = HumanoidV0Rig::for_clip_test();
+			leap.apply(&mut rig, progress);
+			let left_knee = rig.posed_angle("shin.L");
+			let right_knee = rig.posed_angle("shin.R");
+			let left_arm = rig.posed_angle("humerus.L");
+			let right_arm = rig.posed_angle("humerus.R");
+			assert!((left_knee - right_knee).abs() < 0.06, "knees stay paired at {progress}");
+			assert!((left_arm - right_arm).abs() < 0.08, "arms stay paired at {progress}");
+		}
 	}
 
 	#[test]
