@@ -8,7 +8,9 @@ use bevy::math::bounding::Aabb3d;
 
 use crate::gen::Id;
 
-use super::store::{lock_mutex, read, write, ErasedStore};
+#[cfg(debug_assertions)]
+use super::store::lock_mutex;
+use super::store::{read, ErasedStore};
 use super::super::node_store::expand_region;
 use super::HcsgStorage;
 
@@ -19,7 +21,7 @@ pub(super) fn record_evictions(storage: &HcsgStorage, removed: Vec<(TypeId, Id)>
 	#[cfg(debug_assertions)]
 	lock_mutex(&storage.0.evicted).extend(removed);
 	#[cfg(not(debug_assertions))]
-	let _ = removed;
+	let _ = (storage, removed);
 }
 
 pub(super) fn forget_evictions_of(storage: &HcsgStorage, type_id: TypeId) {

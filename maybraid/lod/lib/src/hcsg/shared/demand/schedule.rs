@@ -11,7 +11,7 @@ use bevy::math::Vec3;
 
 use crate::gen::Id;
 
-use super::state::{DemandState, Discover, Generate, lock_mutex, Subscription};
+use super::state::{DemandState, Discover, Generate, lock_mutex};
 use super::state::SubscriptionId;
 use super::HcsgDemand;
 

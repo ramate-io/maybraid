@@ -1,7 +1,7 @@
 //! Retention planning and worker sweeps when the live set changes.
 
 use std::any::TypeId;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::atomic::Ordering;
 use std::sync::PoisonError;
 
