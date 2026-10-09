@@ -13,12 +13,13 @@ use bevy::math::bounding::Aabb3d;
 use bevy::math::DVec3;
 use bevy::prelude::*;
 use durham::TerrainMeshBuilder;
-use lod::gen::{Id, LodScene, LodSceneLevel, LodSceneStatus, OriginalId};
+use lod::gen::{Id, OriginalId};
 use lod::hcsg::universal_bounds;
 use lod::hcsg::{
 	self, register_session_seed, GenerationContext, HcsgClass, PresentationPlugin, ViewerHcsgBounds,
 };
 use lod::lod_ref::LodRef;
+use lod::scene::{LodScene, LodSceneLevel, LodSceneStatus};
 use render_item::mesh::{IdentifiedMesh, MeshBuilder};
 use render_item::NormalizeChunk;
 use richmond::{PaddedTerrain, Richmond, RichmondGround};

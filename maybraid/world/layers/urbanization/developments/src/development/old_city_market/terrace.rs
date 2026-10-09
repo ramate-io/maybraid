@@ -5,7 +5,7 @@ use bevy_math::{Vec2, Vec3};
 use building_components::panels::{PanelNode, PanelStyle};
 use building_components::{BuildingComponents, JointNode, Layers};
 use buildings::{Openings, RectFloor, RectFloorParams, RectFloorSlab};
-use lod::gen::LodSceneLevel;
+use lod::scene::LodSceneLevel;
 
 use crate::BuildingFootprint;
 

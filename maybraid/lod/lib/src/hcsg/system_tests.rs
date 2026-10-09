@@ -10,11 +10,12 @@ use bevy::prelude::*;
 use bevy::scene::ScenePlugin;
 
 use crate::gen::tests::test_utils::{cell, stub_scene, Terrain, Vegetation};
-use crate::gen::{Id, LodScene, LodSceneLevel, OriginalId, Version};
+use crate::gen::{Id, OriginalId, Version};
 use crate::lod_ref::{LodNodePose, LodRef};
 use crate::scene::host::LodLevelSpawnRequest;
 use crate::scene::refresh::LodSceneRefreshChunkPlugin;
 use crate::scene::{LodHostBounds, LodSceneHost, LodViewer};
+use crate::scene::{LodScene, LodSceneLevel};
 
 use super::{
 	GenerationContext, GenerationPlugin, GenerationScheme, HcsgBounds, HcsgBoundsPlugin, HcsgClass,

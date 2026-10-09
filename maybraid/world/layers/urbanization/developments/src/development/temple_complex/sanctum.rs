@@ -10,7 +10,7 @@ use buildings::{
 	Confines, FillableRegions, Fit, FitError, Openings, RectFloor, RectFloorParams, RectFloorSlab,
 	Trazaloid, TrazaloidParams, TrazaloidSlab,
 };
-use lod::gen::LodSceneLevel;
+use lod::scene::LodSceneLevel;
 use material_ref::MaterialRef;
 use procedural_common::NoiseParams;
 

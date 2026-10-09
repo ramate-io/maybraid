@@ -7,8 +7,8 @@ use bevy::ecs::template::template;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, Scene};
-use lod::gen::LodScene;
 use lod::lod_ref::LodRef;
+use lod::scene::LodScene;
 use lod::{lod_host_scene_pending, LodSceneCulls, LodSceneLevel, LodSceneStatus, SceneChunk};
 
 use crate::{ForestGroveTile, ForestLayer, LayerDropOut};

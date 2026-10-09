@@ -8,7 +8,7 @@ use building_components::{
 };
 use buildings::wizards_tower::WizardsTower;
 use buildings::{CellConstraints, Confines, FillableRegions, Fit, FitError};
-use lod::gen::LodSceneLevel;
+use lod::scene::LodSceneLevel;
 use material_ref::MaterialRef;
 use procedural_common::NoiseParams;
 

@@ -17,9 +17,10 @@ use buildings::wizards_tower::WizardsTower;
 use buildings::{
 	ConnectingStairwell, MixedUseLesHallesStorey, PitchedRoof, RectangularPitchedRoofComplex,
 };
-use lod::gen::{Id, LodScene};
+use lod::gen::Id;
 use lod::lod_host_scene_pending;
 use lod::lod_ref::LodRef;
+use lod::scene::LodScene;
 use lod::LodSceneLevel;
 use urbanization_developments::{
 	yaw_about_xz, CircularTower, GalleryColonnade, GalleryTerrace, LesHalles,

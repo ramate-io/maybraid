@@ -17,7 +17,7 @@ use building_components::partitions::{
 };
 use building_components::placed::Placement;
 use building_components::{BuildingComponents, FloorNode, PanelNode, PartitionNode};
-use lod::gen::LodSceneLevel;
+use lod::scene::LodSceneLevel;
 use lod::LodSceneHost;
 use lod_avian::PhysicsInteractionLayer;
 

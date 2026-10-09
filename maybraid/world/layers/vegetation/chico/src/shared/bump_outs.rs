@@ -13,12 +13,13 @@ use std::sync::Arc;
 use bevy::math::bounding::Aabb3d;
 use bevy::math::DVec3;
 use bevy::prelude::*;
-use lod::gen::{Id, LodScene, LodSceneLevel, LodSceneStatus, OriginalId};
+use lod::gen::{Id, OriginalId};
 use lod::hcsg::{
 	self, GenerationContext, HcsgClass, HcsgNode, PresentationPlugin, ViewerHcsgBounds,
 };
 use lod::lod_ref::LodRef;
 use lod::scene::{LodRefreshRegions, LodRefreshRegionsStatus};
+use lod::scene::{LodScene, LodSceneLevel, LodSceneStatus};
 use lod::{LodSceneRefreshRegionPlugin, LodViewer};
 use lod_gimme::GimmeLodSceneRefreshPlugin;
 use terrain_chunk_ref::{TerrainChunkRef, TerrainChunkRefPlugin};

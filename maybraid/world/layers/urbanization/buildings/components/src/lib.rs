@@ -81,8 +81,8 @@ use bevy::math::Vec3;
 use bevy::prelude::{Commands, CommandsSceneExt, Component, Entity, Transform, Visibility};
 use bevy::scene::prelude::{bsn, template_value};
 use bevy::scene::{ResolveContext, ResolvedScene, Scene};
-use lod::gen::{cull_named_from_factor, LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
+use lod::scene::{cull_named_from_factor, LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::{lod_host_scene_pending, SceneChunk};
 use std::sync::Arc;
 
@@ -646,18 +646,18 @@ pub(crate) fn empty_scene(_: &mut ResolveContext, _: &mut ResolvedScene) {}
 macro_rules! impl_empty_lod_scene {
 	($($ty:ty),+ $(,)?) => {
 		$(
-			impl ::lod::gen::LodScene for $ty {
+			impl ::lod::scene::LodScene for $ty {
 				fn scene_lod_status(
 					&self,
 					_lod_ref: &::lod::lod_ref::LodRef,
-				) -> ::lod::gen::LodSceneStatus {
-					::lod::gen::LodSceneStatus::Unchanged
+				) -> ::lod::scene::LodSceneStatus {
+					::lod::scene::LodSceneStatus::Unchanged
 				}
 
 				fn scene_with_level(
 					&self,
 					_lod_ref: &::lod::lod_ref::LodRef,
-					_level: ::lod::gen::LodSceneLevel,
+					_level: ::lod::scene::LodSceneLevel,
 				) -> impl ::bevy::scene::Scene + 'static {
 					::bevy::scene::SceneFunction($crate::empty_scene)
 				}
@@ -671,18 +671,18 @@ pub(crate) use impl_empty_lod_scene;
 /// `LodScene` that loads a GLB scene root via [`scene_ref::SceneRef`].
 macro_rules! impl_glb_lod_scene {
 	($ty:ty, $asset:expr) => {
-		impl ::lod::gen::LodScene for $ty {
+		impl ::lod::scene::LodScene for $ty {
 			fn scene_lod_status(
 				&self,
 				_lod_ref: &::lod::lod_ref::LodRef,
-			) -> ::lod::gen::LodSceneStatus {
-				::lod::gen::LodSceneStatus::Unchanged
+			) -> ::lod::scene::LodSceneStatus {
+				::lod::scene::LodSceneStatus::Unchanged
 			}
 
 			fn scene_with_level(
 				&self,
 				_lod_ref: &::lod::lod_ref::LodRef,
-				_level: ::lod::gen::LodSceneLevel,
+				_level: ::lod::scene::LodSceneLevel,
 			) -> impl ::bevy::scene::Scene + 'static {
 				($asset).scene_ref().scene()
 			}

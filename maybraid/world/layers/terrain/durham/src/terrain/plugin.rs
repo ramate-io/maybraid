@@ -2,8 +2,7 @@
 
 use crate::terrain::cell::TerrainCellLayout;
 use crate::terrain::collider::{
-	queue_terrain_trimesh_colliders, TerrainColliderSystems,
-	TerrainFrictionConfig,
+	queue_terrain_trimesh_colliders, TerrainColliderSystems, TerrainFrictionConfig,
 };
 use crate::terrain::stamps::TerrainStampConfigs;
 use crate::terrain::watersheds::WatershedConfigs;

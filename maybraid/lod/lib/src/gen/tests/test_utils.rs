@@ -1,5 +1,5 @@
-use crate::gen::{LodScene, LodSceneLevel, LodSceneStatus};
 use crate::lod_ref::LodRef;
+use crate::scene::{LodScene, LodSceneLevel, LodSceneStatus};
 use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec3;
 use bevy::scene::{ResolveContext, ResolvedScene, Scene, SceneFunction};

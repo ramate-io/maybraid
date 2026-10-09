@@ -5,8 +5,8 @@ use std::sync::Arc;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value, Scene};
-use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
+use lod::scene::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::{cull_non_adjacent_bands, lod_host_scene_pending, SceneChunk};
 use mob_characters::{CharacterSpecies, FromMobNumber};
 

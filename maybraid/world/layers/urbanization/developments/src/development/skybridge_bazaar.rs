@@ -252,7 +252,7 @@ fn scatter_shepherds(
 #[cfg(test)]
 mod tests {
 	use building_components::BuildingComponents;
-	use lod::gen::LodSceneLevel;
+	use lod::scene::LodSceneLevel;
 
 	use super::*;
 

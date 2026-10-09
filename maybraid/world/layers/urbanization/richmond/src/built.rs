@@ -7,9 +7,10 @@ use bevy::math::bounding::Aabb3d;
 use bevy::prelude::{bsn, template_value, Name, Transform, Vec3};
 use bevy::scene::Scene;
 use building_components::scene_children;
-use lod::gen::{Id, LodScene, LodSceneLevel, LodSceneStatus, OriginalId};
+use lod::gen::{Id, OriginalId};
 use lod::hcsg::{self, GenerationContext};
 use lod::lod_ref::LodRef;
+use lod::scene::{LodScene, LodSceneLevel, LodSceneStatus};
 use urbanization_layer_model::UrbanSetting;
 
 use crate::artifact::BuiltDevelopment;

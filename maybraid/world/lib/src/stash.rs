@@ -35,8 +35,8 @@ use characters::{
 use damage::{DamageSystems, DespawnAfter, Downed};
 use firearm_user::{held_scale_from_bounds, FirearmUser, FirearmUserSettings, GeneratedFirearm};
 use firearms::{firearm_bounds, spawn_firearm_components};
-use lod::gen::LodSceneLevel;
 use lod::lod_ref::LodRef;
+use lod::scene::LodSceneLevel;
 use lod::LodScene;
 use material_ref::{MaterialRef, MaterialRefRoot, PropagateToDescendants};
 use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};

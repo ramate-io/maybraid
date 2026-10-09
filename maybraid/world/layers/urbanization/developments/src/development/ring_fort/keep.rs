@@ -12,7 +12,7 @@ use buildings::{
 	Openings, StairwellKind, Trazaloid, TrazaloidParams, TrazaloidSide, TrazaloidSlab, WellAabb,
 	WellSide,
 };
-use lod::gen::LodSceneLevel;
+use lod::scene::LodSceneLevel;
 use material_ref::MaterialRef;
 
 use bevy_math::{Vec2, Vec3};

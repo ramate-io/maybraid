@@ -15,9 +15,10 @@ use bevy::prelude::*;
 use building_components::{FurnitureNode, FurnitureWireframePlugin};
 use furniture_assemblies::FurnitureAssembliesPlugin;
 use furniture_shaders::FurnitureShadersPlugin;
-use lod::gen::{Id, LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus, OriginalId};
+use lod::gen::{Id, OriginalId};
 use lod::hcsg::{self, GenerationContext, HcsgClass, PresentationPlugin, ViewerHcsgBounds};
 use lod::lod_ref::LodRef;
+use lod::scene::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::SceneChunk;
 
 use crate::cell::{

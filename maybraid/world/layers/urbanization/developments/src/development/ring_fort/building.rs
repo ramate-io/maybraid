@@ -23,7 +23,7 @@ use buildings::{
 	PanelPillarLine, PanelPoint, RectRingFloor, RectRingFloorParams, RectRingFloorSlab,
 	RectangularPitchedRoofComplex, RectangularPitchedRoofComplexParams, StairwellKind, WellAabb,
 };
-use lod::gen::LodSceneLevel;
+use lod::scene::LodSceneLevel;
 use material_ref::MaterialRef;
 use procedural_common::{NoiseConfig, NoiseParams};
 
@@ -987,7 +987,7 @@ mod tests {
 	#[test]
 	fn with_finish_shades_keeps_and_gallery_roof() -> anyhow::Result<()> {
 		use building_components::BuildingComponents;
-		use lod::gen::LodSceneLevel;
+		use lod::scene::LodSceneLevel;
 		use material_ref::MaterialId;
 
 		let wall = MaterialRef::named("stucco");

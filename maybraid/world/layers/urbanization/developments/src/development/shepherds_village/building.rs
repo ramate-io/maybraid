@@ -21,7 +21,7 @@ use buildings::{
 	RectangularPitchedRoofComplex, RectangularPitchedRoofComplexParams, StairwellKind, WellAabb,
 	MIN_HALL_WIDTH, MIN_POCKET_SHAFT_SIDE,
 };
-use lod::gen::LodSceneLevel;
+use lod::scene::LodSceneLevel;
 use material_ref::MaterialRef;
 use procedural_common::{NoiseConfig, NoiseParams};
 

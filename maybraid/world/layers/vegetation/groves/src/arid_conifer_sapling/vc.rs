@@ -5,9 +5,9 @@ use std::sync::Arc;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use clap::Args;
-#[cfg(test)]
-use lod::gen::{LodScene, LodSceneLevel};
 use lod::lod_ref::LodRef;
+#[cfg(test)]
+use lod::scene::{LodScene, LodSceneLevel};
 use lod::SceneChunk;
 use material_ref::MaterialRef;
 use procedural_common::NoiseParams;

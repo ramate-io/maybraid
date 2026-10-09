@@ -9,10 +9,9 @@ pub mod gen;
 pub mod hcsg;
 pub mod jobs;
 pub mod lod_ref;
-pub mod presentation;
 pub mod scene;
 
-/// Compatibility module paths (prefer [`scene`] / [`presentation`] / [`lod_ref`]).
+/// Compatibility module paths (prefer [`scene`] and [`lod_ref`]).
 pub use scene::chunk as scene_chunk;
 pub use scene::chunk_fulfill;
 pub use scene::cull as lod_cull;

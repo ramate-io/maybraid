@@ -8,7 +8,7 @@ use building_components::{
 	building_bounds, BuildingComponents, BuildingStructuralLodProbe, Layers,
 };
 use buildings::{CardinalFace, ConnectingHall, MappedOpening};
-use lod::gen::LodSceneLevel;
+use lod::scene::LodSceneLevel;
 use material_ref::MaterialRef;
 
 use crate::BuildingFootprint;

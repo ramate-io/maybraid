@@ -11,9 +11,10 @@ use durham::{
 	StreamBandedLod, Terrain, TerrainCellRing, TerrainColliderMeshSource, TerrainMeshBuilder,
 	TerrainSdf,
 };
-use lod::gen::{Id, LodScene, LodSceneLevel, LodSceneStatus, OriginalId};
+use lod::gen::{Id, OriginalId};
 use lod::hcsg::{self, GenerationContext};
 use lod::lod_ref::LodRef;
+use lod::scene::{LodScene, LodSceneLevel, LodSceneStatus};
 use render_item::mesh::handle::Cached;
 use render_item::sdf::cpu_shot::{CpuShotBuilder, WallFaces};
 use std::marker::PhantomData;

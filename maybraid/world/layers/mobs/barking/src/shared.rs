@@ -15,9 +15,10 @@ use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::math::DVec3;
 use bevy::prelude::*;
 use chico::{ForestGround, GroundSurface};
-use lod::gen::{Id, LodScene, LodSceneLevel, LodSceneStatus, OriginalId};
+use lod::gen::{Id, OriginalId};
 use lod::hcsg::{self, GenerationContext, HcsgClass, PresentationPlugin, ViewerHcsgBounds};
 use lod::lod_ref::LodRef;
+use lod::scene::{LodScene, LodSceneLevel, LodSceneStatus};
 use mob_intelligence::{MemberOf, Mob};
 use richmond::{column_bounds, Built, DevelopmentHosts, Richmond, RichmondGround};
 use urbanization_cells::{
