@@ -143,7 +143,7 @@ impl Jab {
 			0.0
 		} else if t < EXTEND_END {
 			let u = (t - BACKSWING_END) / (EXTEND_END - BACKSWING_END);
-			// Quartic ease-in toward full extension reads as a sharper snap than quadratic.
+			// Quartic ease-out toward full extension reads as a sharper snap than quadratic.
 			1.0 - (1.0 - u).powi(4)
 		} else if t < HOLD_END {
 			1.0
@@ -264,13 +264,40 @@ impl Jab {
 
 #[cfg(test)]
 mod tests {
+	use bevy::prelude::Vec3;
 	use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
 
 	use super::*;
 	use crate::Animation;
 
+	const FOREARM_SEGMENT: f32 = 0.48;
+	/// Punching-hand tip Z on `for_clip_test()` with quadratic extend easing (`main`).
+	const QUADRATIC_PUNCH_TIP_Z_AT_0312: f32 = 1.1004;
+	const HOLD_PUNCH_TIP_Z: f32 = 1.4488;
+	const HOLD_PUNCH_TIP_X: f32 = -0.0424;
+
 	fn peak() -> f32 {
 		(EXTEND_END + HOLD_END) * 0.5
+	}
+
+	fn forearm_hand_tip(rig: &HumanoidV0Rig, side: Side) -> Vec3 {
+		let name = match side {
+			Side::Left => "forearm.L",
+			Side::Right => "forearm.R",
+		};
+		rig.character_point(name) + rig.character_length(name) * FOREARM_SEGMENT
+	}
+
+	fn punch_tip_z(jab: &Jab, progress: f32) -> f32 {
+		let mut rig = HumanoidV0Rig::for_clip_test();
+		jab.apply(&mut rig, progress);
+		forearm_hand_tip(&rig, jab.side).z
+	}
+
+	fn cover_tip(jab: &Jab, progress: f32) -> Vec3 {
+		let mut rig = HumanoidV0Rig::for_clip_test();
+		jab.apply(&mut rig, progress);
+		forearm_hand_tip(&rig, jab.opposite_side())
 	}
 
 	#[test]
@@ -292,40 +319,86 @@ mod tests {
 	}
 
 	#[test]
-	fn jab_snap_reaches_extension_before_mid_extend() -> anyhow::Result<()> {
-		let jab = Jab::default();
-		let early = BACKSWING_END + (EXTEND_END - BACKSWING_END) * 0.55;
-		assert!(
-			jab.extension_amount(early) > 0.9,
-			"snap should be near full extension before the extend window closes"
-		);
-		Ok(())
-	}
-
-	#[test]
-	fn jab_snap_uncoils_elbow_earlier_in_extend_window() -> anyhow::Result<()> {
-		let jab = Jab::default();
-		let progress = BACKSWING_END + (EXTEND_END - BACKSWING_END) * 0.55;
-		// Chamber still overlaps the early extend window, so flex stays above full extension.
-		assert!(
-			jab.jab_elbow(progress) < 0.82,
-			"sharper snap should uncoil the punching elbow earlier, got {}",
-			jab.jab_elbow(progress)
-		);
-		Ok(())
-	}
-
-	#[test]
-	fn jab_snap_poses_punching_forearm_earlier() -> anyhow::Result<()> {
+	fn jab_snap_poses_punch_hand_earlier_than_quadratic_baseline() -> anyhow::Result<()> {
 		let jab = Jab::default().with_side(Side::Right);
-		let progress = BACKSWING_END + (EXTEND_END - BACKSWING_END) * 0.55;
-		let mut rig = HumanoidV0Rig::for_clip_test();
-		jab.apply(&mut rig, progress);
+		let progress = 0.312;
+		let z = punch_tip_z(&jab, progress);
 		assert!(
-			rig.posed_angle("forearm.R") < rig.posed_angle("forearm.L"),
-			"punching forearm should lead the cover arm during the snap, got R={} L={}",
-			rig.posed_angle("forearm.R"),
-			rig.posed_angle("forearm.L")
+			z > QUADRATIC_PUNCH_TIP_Z_AT_0312 + 0.08,
+			"quartic snap should reach farther (+Z) earlier than quadratic main, got {z}"
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn jab_snap_hold_punch_tip_matches_quadratic_peak() -> anyhow::Result<()> {
+		let jab = Jab::default().with_side(Side::Right);
+		let hold = peak();
+		let mut rig = HumanoidV0Rig::for_clip_test();
+		jab.apply(&mut rig, hold);
+		let tip = forearm_hand_tip(&rig, Side::Right);
+		assert!(
+			(tip.z - HOLD_PUNCH_TIP_Z).abs() < 1e-3,
+			"hold punch tip Z should match tuned peak, got {:?}",
+			tip
+		);
+		assert!((tip.x - HOLD_PUNCH_TIP_X).abs() < 1e-3, "hold punch tip X, got {:?}", tip);
+		Ok(())
+	}
+
+	#[test]
+	fn jab_snap_cover_hand_tip_unchanged_at_hold() -> anyhow::Result<()> {
+		let jab = Jab::default().with_side(Side::Right);
+		let hold = peak();
+		let cover = cover_tip(&jab, hold);
+		assert!(
+			(cover.x - -0.1203).abs() < 1e-3 && (cover.y - 0.9349).abs() < 1e-3
+				&& (cover.z - 0.5251).abs() < 1e-3,
+			"cover hand tip at hold should stay tucked, got {:?}",
+			cover
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn jab_snap_punch_hand_tips_mirror_for_left_jab() -> anyhow::Result<()> {
+		let progress = 0.312;
+		let right = Jab::default().with_side(Side::Right);
+		let left = Jab::default().with_side(Side::Left);
+		let mut right_rig = HumanoidV0Rig::for_clip_test();
+		let mut left_rig = HumanoidV0Rig::for_clip_test();
+		right.apply(&mut right_rig, progress);
+		left.apply(&mut left_rig, progress);
+		let right_tip = forearm_hand_tip(&right_rig, Side::Right);
+		let left_tip = forearm_hand_tip(&left_rig, Side::Left);
+		// Lead-leg stance is not symmetric, so punch tips approximate a body mirror.
+		assert!(
+			(right_tip.x + left_tip.x).abs() < 0.08,
+			"approx mirror X, got {right_tip:?} {left_tip:?}"
+		);
+		assert!(
+			(right_tip.y - left_tip.y).abs() < 0.05,
+			"approx mirror Y, got {right_tip:?} {left_tip:?}"
+		);
+		assert!(
+			(right_tip.z - left_tip.z).abs() < 0.06,
+			"approx mirror Z, got {right_tip:?} {left_tip:?}"
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn jab_snap_extend_start_has_continuous_forward_tip_motion() -> anyhow::Result<()> {
+		let jab = Jab::default().with_side(Side::Right);
+		let dt = 1.0 / 60.0;
+		let mut rig = HumanoidV0Rig::for_clip_test();
+		jab.apply(&mut rig, BACKSWING_END - dt);
+		let z_before = forearm_hand_tip(&rig, Side::Right).z;
+		jab.apply(&mut rig, BACKSWING_END + dt);
+		let z_after = forearm_hand_tip(&rig, Side::Right).z;
+		assert!(
+			z_after >= z_before - 0.02,
+			"punch hand should not jump backward across extend start, before={z_before} after={z_after}"
 		);
 		Ok(())
 	}
