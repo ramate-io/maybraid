@@ -11,10 +11,7 @@
 use serde::{Deserialize, Serialize};
 use std::hash::{Hash, Hasher};
 
-use crate::{
-	ClothingMaterial, ClothingMesh, FirearmSpec, Inventory, InventoryItem, ItemColor,
-	IRON_SIGHT_FOV,
-};
+use crate::{ClothingMaterial, ClothingMesh, FirearmSpec, Inventory, ItemColor, IRON_SIGHT_FOV};
 
 const BASE_HEALTH: i16 = 100;
 const BASE_RUNNING: i16 = 100;
@@ -428,6 +425,7 @@ fn signed_or_zero(value: i16) -> String {
 mod tests {
 	use super::*;
 	use crate::FirearmMesh;
+	use crate::InventoryItem;
 
 	#[test]
 	fn clothing_identity_is_stable_and_has_weight() {
