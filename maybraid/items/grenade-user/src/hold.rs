@@ -17,12 +17,10 @@ use characters::{
 };
 use firearm_user::{HoldingArms, WeaponSwap};
 use grenades::{grenade_material, grenade_mesh, GrenadeMaterial};
-use player::{PlayerLook, PlayerUse};
+use player::{look_forward, yaw_xz, PlayerLook, PlayerUse};
 use std::f32::consts::FRAC_PI_2;
 
-use crate::throw::{
-	look_forward, yaw_xz, GrenadePhase, GrenadeThrow, GrenadeUser, GrenadeUserSettings,
-};
+use crate::throw::{GrenadePhase, GrenadeThrow, GrenadeUser, GrenadeUserSettings};
 
 /// Preferred grip points. A later `hand_socket.R` on the body rig is picked first.
 pub const RIGHT_HAND_SOCKETS: &[&str] = &["hand_socket.R", "hand.R", "palm.R"];
