@@ -12,8 +12,8 @@ use bevy::ecs::query::{Has, Or};
 use bevy::prelude::*;
 use character_animations::{
 	animations::{
-		Idle, Jab, Prone, QuadrupedIdle, QuadrupedLeap, QuadrupedRun, Squat, SquatDescent, Tuck,
-		TwoFootedTuckedFlip, UprightLeap,
+		Idle, Jab, Prone, QuadrupedIdle, QuadrupedLeap, QuadrupedRun, SpotScan, Squat, SquatDescent,
+		Tuck, TwoFootedTuckedFlip, UprightLeap,
 	},
 	Animation, Effects,
 };
