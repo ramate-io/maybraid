@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 use durham::{
-	terrain_collider_covers_xz, CascadeChunk, TerrainCellLayout, TerrainEntryStore,
+	terrain_collider_covers_xz, CascadeChunk, DurhamSurface, TerrainCellLayout,
 	TerrainTrimeshCollider,
 };
 use game_commands::command::{CommandConsoleOutput, TextEntryFocus};
@@ -56,22 +56,20 @@ pub struct WorldSurfaceSet;
 
 pub(crate) fn update_world_surface_ready(
 	streaming: Res<terrain_layer_model::TerrainStreaming<durham::Durham>>,
-	store: Res<TerrainEntryStore>,
-	layout: Res<TerrainCellLayout>,
+	surface: DurhamSurface,
 	spawn: Res<PlayerSpawnXz>,
 	players: Query<&Transform, With<Player>>,
 	colliders: Query<&CascadeChunk, With<TerrainTrimeshCollider>>,
 	mut ready: ResMut<WorldSurfaceReady>,
 ) {
-	// Menu shells keep streaming off. Leave the ready bit alone; Training
-	// unveils from this same column once a padded FinePatch collider exists.
+	// Menu shells keep streaming off. Leave the ready bit alone.
 	if !streaming.enabled {
 		return;
 	}
-	let xz = discovery_xz(&spawn, &players, &layout);
+	let xz = discovery_xz(&spawn, &players, surface.layout());
 	let at = Vec3::new(xz.x, 0.0, xz.y);
-	ready.0 = terrain_collider_covers_xz(at, colliders.iter())
-		&& store.composed_height_at(&layout, xz.x, xz.y).is_some();
+	let height_ready = matches!(surface.height_at(xz), Ok(Some(_)));
+	ready.0 = terrain_collider_covers_xz(at, colliders.iter()) && height_ready;
 }
 
 fn discovery_xz(
@@ -165,8 +163,8 @@ pub(crate) fn apply_intents_to_movement(
 	for mut wish in &mut wishes {
 		wish.0 = wish_dir;
 	}
-	// Only the streamed vegetation body. Training Ground's free-for-all capsule
-	// is a foreign [`CharacterController`] that [`player`] already drove.
+	// Only the streamed vegetation body. A foreign [`CharacterController`] is
+	// one that [`player`] already drove.
 	for (entity, mut wish, world_body) in &mut player_wishes {
 		if !world_body {
 			continue;

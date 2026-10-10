@@ -8,7 +8,7 @@ use firearms::{
 	BarrelMesh, BodyMesh, FirearmComponents, FirearmKit, GripMesh, Layers, PartNode, RigNode,
 	SightMesh, StockMesh, TriggerBoxMesh,
 };
-use lod::gen::LodSceneLevel;
+use lod::scene::LodSceneLevel;
 use material_ref::MaterialRef;
 
 /// Painted inventory kit used by the world, range, mobs, and character-menu inspect.

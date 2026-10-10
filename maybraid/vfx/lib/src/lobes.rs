@@ -3,8 +3,8 @@
 use bevy::prelude::*;
 
 use crate::composition::{LobeKind, LobeSpec};
-use crate::lobe_material::LobeMaterial;
 use crate::lobe_instances::LobeInstancePack;
+use crate::lobe_material::LobeMaterial;
 use crate::seed::{signed_salted, stream};
 
 /// Low-poly icosphere with vertex colors holding object-space positions.
@@ -75,7 +75,10 @@ pub fn stamp_lobe_materials(
 	};
 	for (entity, pending) in &pending {
 		let material = pack.material_for(pending.0);
-		commands.entity(entity).insert(MeshMaterial3d(material)).remove::<LobeMaterialPending>();
+		commands
+			.entity(entity)
+			.insert(MeshMaterial3d(material))
+			.remove::<LobeMaterialPending>();
 	}
 }
 

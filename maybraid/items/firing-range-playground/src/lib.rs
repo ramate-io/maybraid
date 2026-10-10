@@ -207,7 +207,7 @@ impl Plugin for FiringRangePlugin {
 	}
 }
 
-/// Inserted by the game while Training Ground should be running free-for-all.
+/// Inserted by the host app while the free-for-all should be running.
 #[derive(Resource, Clone, Copy, Debug, Default)]
 pub struct FreeForAllLive;
 

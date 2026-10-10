@@ -12,14 +12,12 @@ status() {
     fi
 }
 
-# lib-pre-commit hooks are off by default locally; CI enables them automatically.
-if [ -z "$LIB_PRE_COMMIT_ENABLE" ] && [ -z "$GITHUB_ACTIONS" ]; then
-    echo "lib-pre-commit hooks skipped (off by default)."
-    echo "  CI runs them on every push. To run locally: LIB_PRE_COMMIT_ENABLE=1 git commit ..."
+if [ "$PRE_COMMIT_ENABLE" != "true" ]; then
+    echo "Pre-commit hooks skipped (set PRE_COMMIT_ENABLE=true to run them)."
     exit 0
 fi
 
-echo "Running lib-pre-commit hooks..."
+echo "Running pre-commit hooks..."
 
 # Directory containing pre-commit scripts
 HOOKS_DIR=".githooks/lib-pre-commit"

@@ -6,7 +6,6 @@ use terrain_stamps::ValleyTrain;
 
 define_stamp_family! {
 	layout: ValleyLowPassControllerLayout,
-	bootstrap_layout: BootstrapValleyLowPassControllerLayout / bootstrap_valley_low_pass_controller_layout,
 	controller: ValleyLowPassControllerCell,
 	stamp: ValleyLowPassStampCell,
 	family_salt: 77,
@@ -27,7 +26,6 @@ define_stamp_family! {
 
 define_stamp_family! {
 	layout: ValleyHighPassControllerLayout,
-	bootstrap_layout: BootstrapValleyHighPassControllerLayout / bootstrap_valley_high_pass_controller_layout,
 	controller: ValleyHighPassControllerCell,
 	stamp: ValleyHighPassStampCell,
 	family_salt: 177,

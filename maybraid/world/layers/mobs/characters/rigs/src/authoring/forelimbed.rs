@@ -5,8 +5,6 @@
 
 use std::sync::{Arc, OnceLock};
 
-use bevy::prelude::*;
-
 use super::binding::{BoneId, RigBinding, RigDefinition, SkeletonFamily};
 use super::buffer::PoseBuffer;
 use crate::articulation::compose_parent_rotation;
@@ -118,6 +116,7 @@ fn channels_for(name: &str, pose: &ForelimbedPose) -> Option<(f32, f32, f32)> {
 mod tests {
 	use super::*;
 	use crate::authoring::HUMANOID_GLB_SHOULDER_L;
+	use bevy::prelude::{Entity, Vec3};
 
 	#[test]
 	fn t_pose_fin_sweep_uses_parent_y_not_a_length_roll() {

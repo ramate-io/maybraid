@@ -26,9 +26,9 @@ use firearms_components::{
 	add_firearm_components_host, firearm_bounds, firearm_preview_camera, spawn_firearm_components,
 	FirearmComponentsPlugin, FirearmRoot,
 };
-use lod::gen::LodScene;
-use lod::gen::LodSceneLevel;
 use lod::lod_ref::LodRef;
+use lod::scene::LodScene;
+use lod::scene::LodSceneLevel;
 use maybraid_character_ui_menu_renderer::CharacterMenuEvent;
 use maybraid_input::produce::gamepad::GamepadAxes;
 use maybraid_input::{Deadzone, VirtualPadConfig};

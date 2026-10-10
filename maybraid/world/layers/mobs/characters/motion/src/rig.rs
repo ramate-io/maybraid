@@ -65,9 +65,9 @@ pub struct CharacterRig {
 }
 
 pub fn bone_map_ready(map: &BoneMap, skeleton: RigSkeletonKind) -> bool {
-	rigs::bone_map_ready(map, skeleton.landmark_bones())
+	map.landmarks_ready(skeleton.landmark_bones())
 }
 
 pub fn missing_landmark_bones(map: &BoneMap, skeleton: RigSkeletonKind) -> Vec<&'static str> {
-	rigs::missing_landmark_bones(map, skeleton.landmark_bones())
+	map.missing_landmarks(skeleton.landmark_bones())
 }
