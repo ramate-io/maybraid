@@ -127,7 +127,7 @@ separate spatial tiling and not a fitted vertical AABB.
 | Heightfield composition | [`ComposedTerrain`](src/terrain/sdf.rs) / `Terrain::compose_sdf` |
 | Wet-volume composition | [`ComposedWater`](src/water/composed.rs) / `ComposedWater::compose` |
 | Cascade chunk (`origin`, extent, Y, `res_2`) | [`cascade_chunk_for_cell`](src/terrain/render.rs) for **both** `Terrain::scene` and `Water::scene` |
-| Mesh resolution | `TerrainPresentationAssets.res_2` on the terrain cell; `Water` copies `terrain.res_2` |
+| Mesh resolution | `TerrainMeshAssets` bands on the terrain cell; `Water` copies `terrain.res_2` |
 
 Marazion lake and stream stamps author [`WaterFill`](../watersheds/src/primitive/fill.rs): softmask +
 undercut gate columns, then a **half-space below \(W\)** (flat or graded). That is

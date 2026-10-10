@@ -16,7 +16,7 @@
 //!
 //! There is no stored guillotine-identity layer: a valid leaf [`lod::gen::Id`]
 //! down-levels to its cell. [`crate::terrain::PreWatershedTerrain`] pulls
-//! stamp cells through `GeneratingSpatialIndex<StampCell>` (high-pass first,
+//! stamp cells through its `GenerationContext` (high-pass first,
 //! then low-pass); controllers and layouts never appear in its bounds.
 //!
 //! Modules:
