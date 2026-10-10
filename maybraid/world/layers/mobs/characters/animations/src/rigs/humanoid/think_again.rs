@@ -17,6 +17,9 @@ impl Animation<HumanoidV0Rig> for ThinkAgain {
 		arm.elbow_flexion += self.elbow_flexion(progress);
 		arm.aim =
 			Some(ArmAim { along: self.humerus_along(progress), roll: self.humerus_roll(progress) });
+		let tilt = self.head_cock_tilt(progress);
+		let nod = self.head_cock_nod(progress);
+		pose.apply_neck_twisted(0.0, tilt * 0.65, nod * 0.35, 0.0, tilt * 0.35, nod * 0.65);
 
 		rig.write_pose(&pose);
 	}
@@ -340,6 +343,33 @@ mod tests {
 		assert!((right.tip.x + left.tip.x).abs() < 0.06, "mirrored tips {right:?} {left:?}");
 		assert!((right.tip.y - left.tip.y).abs() < 0.08, "matched height {right:?} {left:?}");
 		Ok(())
+	}
+
+	#[test]
+	fn think_again_head_cocks_toward_gesture_side() -> anyhow::Result<()> {
+		for side in [Side::Right, Side::Left] {
+			let rest = HumanoidV0Rig::for_clip_test().character_length("upper_neck");
+			let think = posed_neck(side, think_hold());
+			let again = posed_neck(side, again_hold());
+			let toward = think.x - rest.x;
+			assert!(
+				toward.signum() == side.sign(),
+				"{side:?} should cock toward the raised hand, rest {rest:?} think {think:?}"
+			);
+			assert!(toward.abs() > 0.04, "{side:?} cock too small, toward {toward}");
+			assert!(
+				again.x.abs() < think.x.abs() * 0.35,
+				"{side:?} Again should un-cock, think {think:?} again {again:?}"
+			);
+		}
+		Ok(())
+	}
+
+	fn posed_neck(side: Side, progress: f32) -> Vec3 {
+		let clip = ThinkAgain::default().with_side(side);
+		let mut rig = HumanoidV0Rig::for_clip_test();
+		clip.apply(&mut rig, progress);
+		rig.character_length("upper_neck")
 	}
 
 	#[test]

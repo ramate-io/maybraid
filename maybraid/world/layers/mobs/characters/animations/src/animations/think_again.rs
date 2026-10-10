@@ -1,12 +1,13 @@
 //! "Think Again" meme gesture: raised upper arm, forearm ticks beside the head.
 //!
 //! Character space matches [`Jab`](super::Jab): +X right, +Y up, +Z fight-forward.
-//! The humerus abducts laterally and lifts ~30° as the elbow folds. Cadence is
-//! four beats at one second each:
+//! The humerus abducts laterally and lifts ~30° as the elbow folds. The head
+//! cocks toward the raised hand on the move into Think and eases back on Again.
+//! Cadence is four beats at one second each:
 //!
-//! 1. T-pose → Think
+//! 1. T-pose → Think (head cocks)
 //! 2. Hold Think
-//! 3. Think → Again
+//! 3. Think → Again (head un-cocks)
 //! 4. Hold Again, then recover so a loop can restart from T-pose
 //!
 //! Forearm tilt in tests is derived from posed elbow→tip positions: `atan2(Δx, Δy)`.
@@ -39,6 +40,10 @@ const HUMERUS_ELEVATION: f32 = 30_f32.to_radians();
 /// Not multiplied by [`Side::sign`]: bilateral mirroring is already carried by
 /// [`Self::humerus_along`] and the rig's mirrored shoulder rests. See rig tests.
 const THINK_AGAIN_ROLL: f32 = 0.0;
+/// Ear-toward-shoulder cock on the move into Think. Follows [`Side::sign`].
+const HEAD_COCK_TILT: f32 = 22_f32.to_radians();
+/// Slight chin tuck so the cock reads as a thought, not a shrug.
+const HEAD_COCK_NOD: f32 = 8_f32.to_radians();
 
 /// One-shot Think Again knobs. The rig resolver maps these onto anatomical frames.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -118,6 +123,19 @@ impl ThinkAgain {
 
 	pub fn humerus_roll(&self, _progress: f32) -> f32 {
 		THINK_AGAIN_ROLL
+	}
+
+	/// Lateral neck tilt toward the gesture arm. Peaks with Think, eases on Again.
+	///
+	/// Neck flex is parent Z: positive cocks toward −X. Gesture outboard is
+	/// [`Side::sign`] (left +X, right −X), so the tilt negates that sign.
+	pub fn head_cock_tilt(&self, progress: f32) -> f32 {
+		-HEAD_COCK_TILT * self.side.sign() * self.think_amount(progress)
+	}
+
+	/// Small forward nod that rides with [`Self::head_cock_tilt`].
+	pub fn head_cock_nod(&self, progress: f32) -> f32 {
+		HEAD_COCK_NOD * self.think_amount(progress)
 	}
 }
 
@@ -207,6 +225,22 @@ mod tests {
 			(delta - 30_f32.to_radians()).abs() < 0.05,
 			"expected 30° Think→Again, got {delta}"
 		);
+		Ok(())
+	}
+
+	#[test]
+	fn think_again_head_cocks_on_think() -> anyhow::Result<()> {
+		let right = ThinkAgain::default().with_side(Side::Right);
+		let left = ThinkAgain::default().with_side(Side::Left);
+		assert!(
+			(right.head_cock_tilt(think_hold()) + HEAD_COCK_TILT * Side::Right.sign()).abs() < 1e-4
+		);
+		assert!(
+			(left.head_cock_tilt(think_hold()) + HEAD_COCK_TILT * Side::Left.sign()).abs() < 1e-4
+		);
+		assert!(right.head_cock_nod(think_hold()) > 0.1);
+		assert!(right.head_cock_tilt(again_hold()).abs() < 1e-4);
+		assert!(right.head_cock_nod(again_hold()).abs() < 1e-4);
 		Ok(())
 	}
 
