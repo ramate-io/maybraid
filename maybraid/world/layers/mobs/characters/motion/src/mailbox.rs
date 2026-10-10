@@ -12,8 +12,8 @@ use bevy::ecs::query::{Has, Or};
 use bevy::prelude::*;
 use character_animations::{
 	animations::{
-		Idle, Jab, Prone, QuadrupedIdle, QuadrupedLeap, QuadrupedRun, Squat, SquatDescent, Tuck,
-		TwoFootedTuckedFlip, UprightLeap,
+		Idle, Jab, Mix, Prone, QuadrupedIdle, QuadrupedLeap, QuadrupedRun, Squat, SquatDescent,
+		Tuck, TwoFootedTuckedFlip, UprightLeap,
 	},
 	Animation, Effects,
 };
@@ -698,6 +698,26 @@ fn sample_humanoid_prepared(
 	sample_humanoid(clip, rig, progress, write_bones, write_effects)
 }
 
+fn sample_gait(
+	params: crate::clip::GaitParams,
+	rig: &mut HumanoidV0Rig,
+	progress: f32,
+	write_bones: bool,
+	write_effects: bool,
+) -> Effects {
+	let mix = Mix::new(params.walk, params.run, params.run_weight);
+	if write_bones && write_effects {
+		mix.apply_at(rig, progress, progress)
+	} else if write_bones {
+		mix.apply_for(rig, progress);
+		Effects::IDENTITY
+	} else if write_effects {
+		mix.effects_for(rig, progress)
+	} else {
+		Effects::IDENTITY
+	}
+}
+
 fn sample_split<A, R>(
 	anim: &A,
 	rig: &mut R,
@@ -731,6 +751,7 @@ fn sample_humanoid(
 		}
 		AnimClip::Walk(walk) => sample_split(&walk, rig, progress, write_bones, write_effects),
 		AnimClip::Run(run) => sample_split(&run, rig, progress, write_bones, write_effects),
+		AnimClip::Gait(params) => sample_gait(params, rig, progress, write_bones, write_effects),
 		AnimClip::Jump(params) => {
 			sample_split(&params.apply_humanoid(), rig, progress, write_bones, write_effects)
 		}
@@ -1018,6 +1039,49 @@ mod tests {
 		let b = Entity::from_bits(2);
 		assert_ne!(clip_progress(AnimClip::Still, 0.0, a), clip_progress(AnimClip::Still, 0.0, b));
 		assert_eq!(clip_progress(AnimClip::walk(), 0.3, a), 0.3);
+	}
+
+	#[test]
+	fn gait_mix_endpoints_match_walk_and_run() -> anyhow::Result<()> {
+		use crate::clip::GaitParams;
+		use character_animations::animations::{Run, Walk};
+
+		let progress = 0.35;
+		let mut walk = HumanoidV0Rig::imported();
+		sample_humanoid(AnimClip::Walk(Walk::default()), &mut walk, progress, true, false);
+		let mut run = HumanoidV0Rig::imported();
+		sample_humanoid(AnimClip::Run(Run::default()), &mut run, progress, true, false);
+		let mut blended = HumanoidV0Rig::imported();
+		sample_humanoid(
+			AnimClip::Gait(GaitParams::blended(0.0)),
+			&mut blended,
+			progress,
+			true,
+			false,
+		);
+		assert!(
+			walk.rotation("femur.L").dot(blended.rotation("femur.L")).abs() > 1.0 - 1e-5,
+			"gait weight 0 should match walk"
+		);
+		sample_humanoid(
+			AnimClip::Gait(GaitParams::blended(1.0)),
+			&mut blended,
+			progress,
+			true,
+			false,
+		);
+		assert!(
+			run.rotation("femur.L").dot(blended.rotation("femur.L")).abs() > 1.0 - 1e-5,
+			"gait weight 1 should match run"
+		);
+		let mut mid = HumanoidV0Rig::imported();
+		sample_humanoid(AnimClip::Gait(GaitParams::blended(0.5)), &mut mid, progress, true, false);
+		assert!(
+			mid.posed_angle("femur.L") > walk.posed_angle("femur.L")
+				&& mid.posed_angle("femur.L") < run.posed_angle("femur.L"),
+			"mid gait should sit between walk and run femur swing"
+		);
+		Ok(())
 	}
 
 	#[test]
