@@ -9,7 +9,7 @@ use character_animations::animations::{
 	LateralUndulation, Leap, QuadrupedRun, Run, Soaring, TuckProfile, TuckedFlip, TwoFootedJump,
 	Walk, AIR_END, DEFAULT_BACKSWING, DEFAULT_DESCENT_SPEED, DEFAULT_GRAVITY, DEFAULT_JAB_TARGET,
 	DEFAULT_JUMP_HEIGHT, DEFAULT_LANDING_SQUAT_SPEED, DEFAULT_PRE_SQUAT_SPEED,
-	DEFAULT_SPRING_DURATION, TAKEOFF_END,
+	DEFAULT_SPRING_DURATION, TAKEOFF_END, THINK_AGAIN_DURATION, THINK_AGAIN_SPEED,
 };
 use character_animations::{ClipTimePolicy, SampleAddress};
 use character_rigs::Side;
@@ -23,6 +23,7 @@ const QUADRUPED_RUN_CYCLE_SPEED: f32 = 0.5;
 const TUCK_CYCLE_SPEED: f32 = 0.6;
 const FRONT_FLIP_CYCLE_SPEED: f32 = 0.85;
 const JAB_CYCLE_SPEED: f32 = 0.9;
+const THINK_AGAIN_CYCLE_SPEED: f32 = THINK_AGAIN_SPEED;
 const JUMP_PRE_SQUAT_SPEED: f32 = DEFAULT_PRE_SQUAT_SPEED * 1.2;
 const JUMP_LANDING_SQUAT_SPEED: f32 = DEFAULT_LANDING_SQUAT_SPEED * 1.3;
 /// One-shot leap lasts ~1.25 s so it covers the physics hang time.
@@ -45,6 +46,7 @@ pub enum AnimId {
 	Soaring,
 	Flapping,
 	Jab,
+	ThinkAgain,
 	Squat,
 	SquatDescent,
 	Prone,
@@ -68,6 +70,7 @@ impl AnimId {
 			Self::Soaring => 1.0,
 			Self::Flapping => 1.0,
 			Self::Jab => JAB_CYCLE_SPEED,
+			Self::ThinkAgain => THINK_AGAIN_CYCLE_SPEED,
 			Self::Squat => 1.0,
 			Self::SquatDescent => DEFAULT_DESCENT_SPEED,
 			Self::Prone => 1.0,
@@ -187,6 +190,18 @@ impl Default for JabParams {
 	}
 }
 
+/// Untyped Think Again knobs ([`ThinkAgain`](character_animations::animations::ThinkAgain) is rig-generic).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ThinkAgainParams {
+	pub side: Side,
+}
+
+impl Default for ThinkAgainParams {
+	fn default() -> Self {
+		Self { side: Side::Right }
+	}
+}
+
 /// Clip identity: variant + sampler knobs. Mailbox transitions use [`Self::id`].
 #[derive(Clone, Copy, Debug, PartialEq, Default)]
 pub enum AnimClip {
@@ -204,6 +219,7 @@ pub enum AnimClip {
 	Soaring(Soaring),
 	Flapping(Flapping),
 	Jab(JabParams),
+	ThinkAgain(ThinkAgainParams),
 	Squat,
 	SquatDescent,
 	Prone,
@@ -227,6 +243,7 @@ impl AnimClip {
 			Self::Soaring(_) => AnimId::Soaring,
 			Self::Flapping(_) => AnimId::Flapping,
 			Self::Jab(_) => AnimId::Jab,
+			Self::ThinkAgain(_) => AnimId::ThinkAgain,
 			Self::Squat => AnimId::Squat,
 			Self::SquatDescent => AnimId::SquatDescent,
 			Self::Prone => AnimId::Prone,
@@ -291,6 +308,10 @@ impl AnimClip {
 		Self::Jab(JabParams::default())
 	}
 
+	pub fn think_again() -> Self {
+		Self::ThinkAgain(ThinkAgainParams::default())
+	}
+
 	pub fn squat() -> Self {
 		Self::Squat
 	}
@@ -336,6 +357,7 @@ impl AnimClip {
 			| Self::Squat
 			| Self::SquatDescent
 			| Self::Prone => ClipTimePolicy::Clamp { duration: 1.0 },
+			Self::ThinkAgain(_) => ClipTimePolicy::Clamp { duration: THINK_AGAIN_DURATION },
 			Self::Soaring(_) | Self::Flapping(_) => ClipTimePolicy::Unbounded,
 			Self::LateralUndulation(_) | Self::DorsoventralUndulation(_) => {
 				ClipTimePolicy::Cycle { duration: 1.0 }
