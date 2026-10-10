@@ -260,7 +260,10 @@ impl LodTreeVisQueue {
 		}
 		jobs.push_front(LodTreeVisJob { kind, root, stack: children });
 	}
+}
 
+#[cfg(test)]
+impl LodTreeVisQueue {
 	fn is_empty(&self) -> bool {
 		self.shows.is_empty() && self.hides.is_empty()
 	}
