@@ -13,22 +13,22 @@ mod weapon;
 use bevy::prelude::*;
 use characters::CharacterMotionSystems;
 use damage::DamageSystems;
-use firearms::{FirearmWeaponSystems, add_firearm_components_host};
+use firearms::{add_firearm_components_host, FirearmWeaponSystems};
 use maybraid_audio::AudioSystems;
 use maybraid_input::PadRumbleSystems;
 use player::{PlayerPoseSystems, PlayerSystems};
 use player_camera::PlayerCameraSystems;
 use std::f32::consts::FRAC_PI_2;
 
-pub use hold::{HoldingArms, sync_hands_to_firearm};
-pub use kit::{GeneratedFirearm, kit_from_spec};
+pub use hold::{sync_hands_to_firearm, HoldingArms};
+pub use kit::{kit_from_spec, GeneratedFirearm};
 pub use pose::{
-	HeldFirearm, held_scale_from_bounds, pose_held_firearm, spawn_held_firearm,
-	spawn_held_firearm_with, spawn_held_kit, stamp_holding_arms,
+	held_scale_from_bounds, pose_held_firearm, spawn_held_firearm, spawn_held_firearm_with,
+	spawn_held_kit, stamp_holding_arms, HeldFirearm,
 };
-pub use reticle::{Reticle, spawn_reticle};
-pub use swap::{WEAPON_SWAP_SECS, WeaponSwap};
-pub use weapon::{LiveWeapon, RECOIL_PITCH_PER_UNIT, SEMI_INTERVAL_FLOOR, live_weapon_from_stats};
+pub use reticle::{spawn_reticle, Reticle};
+pub use swap::{WeaponSwap, WEAPON_SWAP_SECS};
+pub use weapon::{live_weapon_from_stats, LiveWeapon, RECOIL_PITCH_PER_UNIT, SEMI_INTERVAL_FLOOR};
 
 /// Firearm-user schedule points other combat systems can order against.
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -176,7 +176,7 @@ mod orphan_tests {
 	use bevy::ecs::system::RunSystemOnce;
 	use bevy::prelude::*;
 
-	use super::{FirearmUser, HeldFirearm, despawn_orphaned_held_firearms};
+	use super::{despawn_orphaned_held_firearms, FirearmUser, HeldFirearm};
 
 	#[test]
 	fn orphaned_held_kit_despawns_when_the_user_is_gone() {

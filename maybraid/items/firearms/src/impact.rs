@@ -7,7 +7,6 @@ use bevy::asset::RenderAssetUsages;
 use bevy::image::ImageSampler;
 use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
-use bevy_hanabi::Gradient;
 use bevy_hanabi::prelude::{
 	AccelModifier, Attribute, ColorBlendMask, ColorBlendMode, ColorOverLifetimeModifier,
 	EffectAsset, EffectMaterial, ExprWriter, ImageSampleMapping, LinearDragModifier, OrientMode,
@@ -15,6 +14,7 @@ use bevy_hanabi::prelude::{
 	SetPositionSphereModifier, SetVelocitySphereModifier, ShapeDimension, SimulationSpace,
 	SizeOverLifetimeModifier, SpawnerSettings,
 };
+use bevy_hanabi::Gradient;
 
 const BURST_LIFE: f32 = 1.1;
 const SURFACE_LIFT: f32 = 0.03;

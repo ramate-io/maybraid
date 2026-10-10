@@ -7,13 +7,13 @@ use bevy::mesh::VertexAttributeValues;
 use bevy::mesh::{Indices, Mesh, PrimitiveTopology};
 use bevy::prelude::*;
 use damage::DamageApplied;
-use firearms::{BoneMap, FirearmMembers, FirearmRoot, RigRoot, muzzle_world};
+use firearms::{muzzle_world, BoneMap, FirearmMembers, FirearmRoot, RigRoot};
 use lod_avian::PhysicsInteractionLayer;
 
 use player::CameraFollow;
 
-use crate::FirearmUser;
 use crate::pose::HeldFirearm;
+use crate::FirearmUser;
 
 const REST_COLOR: Color = Color::srgb(0.45, 1.0, 0.95);
 const FLASH_COLOR: Color = Color::srgb(1.0, 0.88, 0.28);

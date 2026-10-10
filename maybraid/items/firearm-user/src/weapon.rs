@@ -2,10 +2,10 @@
 
 use bevy::prelude::*;
 use character_items::{FireMode, FirearmMesh, FirearmSpec, FirearmStats, ProjectileKind};
-use damage::{DEFAULT_HIT, HitPayload};
+use damage::{HitPayload, DEFAULT_HIT};
 use firearms::{
-	BoltSpec, BulletSpec, FireControl, IRON_SIGHT_FOV, LaserSpec, ProjectileLoad, Weapon,
-	WeaponRecoil,
+	BoltSpec, BulletSpec, FireControl, LaserSpec, ProjectileLoad, Weapon, WeaponRecoil,
+	IRON_SIGHT_FOV,
 };
 use std::hash::{Hash, Hasher};
 
@@ -224,10 +224,10 @@ mod tests {
 		let live = live_weapon_from_stats(stats, 0);
 		let mut cooldown = 0.0;
 		let dt = 0.016;
-		assert_eq!(advance_shot_clock(&mut cooldown, live.weapon.interval, dt, 1), 1);
+		assert_eq!(advance_shot_clock(&mut cooldown, live.weapon.interval, dt, 1).shots, 1);
 		let mut elapsed = dt;
 		loop {
-			let fired = advance_shot_clock(&mut cooldown, live.weapon.interval, dt, 1);
+			let fired = advance_shot_clock(&mut cooldown, live.weapon.interval, dt, 1).shots;
 			elapsed += dt;
 			if fired > 0 {
 				assert!(elapsed + 1e-4 >= SEMI_INTERVAL_FLOOR, "{elapsed}");

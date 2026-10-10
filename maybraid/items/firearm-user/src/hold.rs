@@ -2,19 +2,19 @@
 
 use bevy::prelude::*;
 use bevy::transform::helper::TransformHelper;
-use character_rigs::Side;
 use character_rigs::articulation::{
-	BONE_LENGTH_AXIS, TwoBoneAim, compose_parent_rotation, rotation_along_with_roll,
+	compose_parent_rotation, rotation_along_with_roll, TwoBoneAim, BONE_LENGTH_AXIS,
 };
 use character_rigs::authoring::humanoid_bone_axis;
 use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
+use character_rigs::Side;
 use characters::{
 	AnimBone, AnimMailbox, AnimateBones, BoneMap, CharacterMembers, CharacterRoot, SuspendAnimation,
 };
 use firearms::{FirearmMembers, FirearmRoot};
 
-use crate::FirearmUser;
 use crate::pose::HeldFirearm;
+use crate::FirearmUser;
 
 /// Body-rig marker: after locomotion, apply the firearm hold.
 #[derive(Component, Clone, Copy, Default)]

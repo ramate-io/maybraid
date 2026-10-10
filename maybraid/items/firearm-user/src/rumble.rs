@@ -3,7 +3,7 @@
 use std::time::Duration;
 
 use bevy::prelude::*;
-use damage::{DEFAULT_HIT, DamageApplied, HitPayload};
+use damage::{DamageApplied, HitPayload, DEFAULT_HIT};
 use firearms::{ProjectileLoad, Weapon, WeaponFired};
 use maybraid_input::PadRumble;
 use player::CameraFollow;

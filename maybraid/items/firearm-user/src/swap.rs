@@ -3,8 +3,8 @@
 use bevy::prelude::*;
 use maybraid_audio::{Audio, AudioClip, Mixer, MovementSounds};
 
-use crate::FirearmUser;
 use crate::pose::HeldFirearm;
+use crate::FirearmUser;
 
 /// Total holster + raise window. Midpoint is when the kit should change.
 pub const WEAPON_SWAP_SECS: f32 = 0.42;
@@ -142,10 +142,12 @@ mod tests {
 		assert!(done.dip().abs() < 1e-5);
 		assert!(done.finished());
 		assert!(!done.ready_to_swap());
-		assert!(
-			!WeaponSwap { elapsed: WEAPON_SWAP_SECS, duration: WEAPON_SWAP_SECS, swapped: false }
-				.finished()
-		);
+		assert!(!WeaponSwap {
+			elapsed: WEAPON_SWAP_SECS,
+			duration: WEAPON_SWAP_SECS,
+			swapped: false
+		}
+		.finished());
 	}
 
 	#[test]

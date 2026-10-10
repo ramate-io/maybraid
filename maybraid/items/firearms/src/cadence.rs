@@ -5,6 +5,23 @@ use bevy::prelude::*;
 /// Max shots one fire tick may emit after a hitch. Drops leftover debt past this.
 pub const CATCH_UP_SHOTS: u8 = 3;
 
+const CATCH_UP_CAP: usize = CATCH_UP_SHOTS as usize;
+
+/// Shots due this tick, oldest first. `ages[i]` is how late that round is.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct ShotClockTick {
+	ages: [f32; CATCH_UP_CAP],
+	/// How many entries in [`Self::ages`] are live.
+	pub shots: u8,
+}
+
+impl ShotClockTick {
+	/// Leave-times, oldest first. Each value is seconds before now, in `0..=dt`.
+	pub fn ages(self) -> impl Iterator<Item = f32> {
+		self.ages.into_iter().take(self.shots as usize)
+	}
+}
+
 /// How many shots this tick may catch up for `control`. Semi is one rising edge.
 pub fn catch_up_limit(control: Option<&FireControl>) -> u8 {
 	match control.map(|control| control.cadence) {
@@ -16,29 +33,41 @@ pub fn catch_up_limit(control: Option<&FireControl>) -> u8 {
 	}
 }
 
-/// Subtract `dt` from `cooldown` and return how many shots this tick should emit.
+/// Drain unused trigger time without banking shots for the next pull.
+pub fn idle_shot_clock(cooldown: &mut f32, dt: f32) {
+	*cooldown = (*cooldown - dt).max(0.0);
+}
+
+/// Subtract `dt` from `cooldown` and return the shots this tick should emit.
 ///
 /// Leftover time stays on `cooldown` (`+= interval` per shot). Hitting `max_shots`
 /// while still overdue snaps `cooldown` to `interval` so a pause cannot dump a magazine.
-pub fn advance_shot_clock(cooldown: &mut f32, interval: f32, dt: f32, max_shots: u8) -> u8 {
+pub fn advance_shot_clock(
+	cooldown: &mut f32,
+	interval: f32,
+	dt: f32,
+	max_shots: u8,
+) -> ShotClockTick {
+	let max_shots = max_shots.min(CATCH_UP_SHOTS);
 	*cooldown -= dt;
 	if *cooldown > 0.0 || max_shots == 0 {
-		return 0;
+		return ShotClockTick::default();
 	}
 	let interval = interval.max(0.0);
 	if interval <= 0.0 {
 		*cooldown = 0.0;
-		return 1;
+		return ShotClockTick { ages: [0.0; CATCH_UP_CAP], shots: 1 };
 	}
-	let mut shots = 0u8;
-	while *cooldown <= 0.0 && shots < max_shots {
-		shots += 1;
+	let mut tick = ShotClockTick::default();
+	while *cooldown <= 0.0 && tick.shots < max_shots {
+		tick.ages[tick.shots as usize] = (-*cooldown).clamp(0.0, dt);
+		tick.shots += 1;
 		*cooldown += interval;
 	}
-	if shots >= max_shots && *cooldown <= 0.0 {
+	if tick.shots >= max_shots && *cooldown <= 0.0 {
 		*cooldown = interval;
 	}
-	shots
+	tick
 }
 
 /// How a held trigger becomes shots. Interval still lives on [`crate::Weapon`].
@@ -189,7 +218,8 @@ mod tests {
 		let mut cooldown = 0.0;
 		let mut shots = 0u32;
 		for _ in 0..62 {
-			shots += u32::from(advance_shot_clock(&mut cooldown, interval, 0.016, CATCH_UP_SHOTS));
+			shots +=
+				u32::from(advance_shot_clock(&mut cooldown, interval, 0.016, CATCH_UP_SHOTS).shots);
 		}
 		assert!((9..=11).contains(&shots), "{shots}");
 	}
@@ -202,7 +232,8 @@ mod tests {
 		let dt = 0.033;
 		let ticks = (1.0_f32 / dt).round() as u32;
 		for _ in 0..ticks {
-			shots += u32::from(advance_shot_clock(&mut cooldown, interval, dt, CATCH_UP_SHOTS));
+			shots +=
+				u32::from(advance_shot_clock(&mut cooldown, interval, dt, CATCH_UP_SHOTS).shots);
 		}
 		// Tick quantization can rise toward 1/dt (30 Hz); leftover-discard used to fall to ~15 Hz.
 		assert!(shots >= 24, "{shots}");
@@ -213,17 +244,41 @@ mod tests {
 	fn hitch_does_not_exceed_catch_up_cap() {
 		let interval = 60.0 / 1500.0;
 		let mut cooldown = 0.0;
-		let shots = advance_shot_clock(&mut cooldown, interval, 1.0, CATCH_UP_SHOTS);
-		assert_eq!(shots, CATCH_UP_SHOTS);
+		let tick = advance_shot_clock(&mut cooldown, interval, 1.0, CATCH_UP_SHOTS);
+		assert_eq!(tick.shots, CATCH_UP_SHOTS);
 		assert!(cooldown > 0.0);
+	}
+
+	#[test]
+	fn hitch_ages_are_spaced_by_interval() {
+		let interval = 0.04;
+		let dt = 0.1;
+		let mut cooldown = 0.0;
+		let ages: Vec<f32> =
+			advance_shot_clock(&mut cooldown, interval, dt, CATCH_UP_SHOTS).ages().collect();
+		assert_eq!(ages.len(), 3);
+		assert!((ages[0] - 0.1).abs() < 1e-5, "{ages:?}");
+		assert!((ages[1] - 0.06).abs() < 1e-5, "{ages:?}");
+		assert!((ages[2] - 0.02).abs() < 1e-5, "{ages:?}");
 	}
 
 	#[test]
 	fn semi_is_one_shot_per_tick() {
 		assert_eq!(catch_up_limit(Some(&FireControl::semi())), 1);
 		let mut cooldown = 0.0;
-		let shots = advance_shot_clock(&mut cooldown, 0.05, 0.25, 1);
-		assert_eq!(shots, 1);
+		let tick = advance_shot_clock(&mut cooldown, 0.05, 0.25, 1);
+		assert_eq!(tick.shots, 1);
+	}
+
+	#[test]
+	fn idle_does_not_bank_owed_shots() {
+		let mut cooldown = 0.0;
+		for _ in 0..60 {
+			idle_shot_clock(&mut cooldown, 0.016);
+		}
+		assert!(cooldown.abs() < 1e-6, "{cooldown}");
+		let tick = advance_shot_clock(&mut cooldown, 60.0 / 900.0, 0.016, CATCH_UP_SHOTS);
+		assert_eq!(tick.shots, 1);
 	}
 
 	#[test]
@@ -248,7 +303,9 @@ mod tests {
 			let mut t = 0.0;
 			while t < secs - 1e-6 {
 				t += dt;
-				shots += u32::from(advance_shot_clock(&mut cooldown, interval, dt, CATCH_UP_SHOTS));
+				shots += u32::from(
+					advance_shot_clock(&mut cooldown, interval, dt, CATCH_UP_SHOTS).shots,
+				);
 			}
 			shots
 		}
@@ -266,11 +323,12 @@ mod tests {
 			t += dt;
 			let allowed = trigger_allows_fire(Some(&mut control), true, true);
 			if !allowed {
-				cooldown -= dt;
+				idle_shot_clock(&mut cooldown, dt);
 				continue;
 			}
-			let n = advance_shot_clock(&mut cooldown, interval, dt, catch_up_limit(Some(&control)));
-			for _ in 0..n {
+			let tick =
+				advance_shot_clock(&mut cooldown, interval, dt, catch_up_limit(Some(&control)));
+			for _ in tick.ages() {
 				if control.cadence == Cadence::Burst && control.burst_left == 0 {
 					break;
 				}
@@ -279,6 +337,58 @@ mod tests {
 			}
 		}
 		shots
+	}
+
+	fn simulate_idle_then_hold(
+		mut control: FireControl,
+		interval: f32,
+		dt: f32,
+		idle: f32,
+		hold: f32,
+	) -> Vec<u8> {
+		let mut cooldown = 0.0;
+		let mut t = 0.0;
+		while t < idle - 1e-6 {
+			t += dt;
+			idle_shot_clock(&mut cooldown, dt);
+		}
+		let mut per_tick = Vec::new();
+		t = 0.0;
+		while t < hold - 1e-6 {
+			t += dt;
+			let allowed = trigger_allows_fire(Some(&mut control), true, true);
+			if !allowed {
+				idle_shot_clock(&mut cooldown, dt);
+				per_tick.push(0);
+				continue;
+			}
+			let tick =
+				advance_shot_clock(&mut cooldown, interval, dt, catch_up_limit(Some(&control)));
+			let mut n = 0u8;
+			for _ in tick.ages() {
+				if control.cadence == Cadence::Burst && control.burst_left == 0 {
+					break;
+				}
+				n += 1;
+				control.note_shot();
+			}
+			per_tick.push(n);
+		}
+		per_tick
+	}
+
+	#[test]
+	fn idle_then_burst_is_one_shot_per_tick() {
+		let interval = 60.0 / 900.0;
+		let dt = 0.016;
+		let per_tick = simulate_idle_then_hold(FireControl::burst(3), interval, dt, 1.0, 0.25);
+		assert!(per_tick.iter().all(|n| *n <= 1), "{per_tick:?}");
+		assert_eq!(per_tick.iter().sum::<u8>(), 3);
+		let fired: Vec<usize> =
+			per_tick.iter().enumerate().filter_map(|(i, n)| (*n > 0).then_some(i)).collect();
+		assert_eq!(fired.len(), 3);
+		let span = (fired[2] - fired[0]) as f32 * dt;
+		assert!((span - 2.0 * interval).abs() < dt + 1e-4, "span {span}");
 	}
 
 	#[test]
@@ -319,12 +429,15 @@ mod tests {
 		let mut cooldown_full = 0.0;
 		let mut cooldown_skip = 0.0;
 		for i in 0..125 {
-			full += u32::from(advance_shot_clock(&mut cooldown_full, interval, dt, CATCH_UP_SHOTS));
+			full += u32::from(
+				advance_shot_clock(&mut cooldown_full, interval, dt, CATCH_UP_SHOTS).shots,
+			);
 			if i % 4 == 0 {
 				continue;
 			}
-			skipped +=
-				u32::from(advance_shot_clock(&mut cooldown_skip, interval, dt, CATCH_UP_SHOTS));
+			skipped += u32::from(
+				advance_shot_clock(&mut cooldown_skip, interval, dt, CATCH_UP_SHOTS).shots,
+			);
 		}
 		assert!(skipped < full, "skip {skipped} vs full {full}");
 	}
