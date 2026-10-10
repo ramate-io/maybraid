@@ -158,6 +158,13 @@ impl<T> NodeStore<T> {
 			.collect()
 	}
 
+	/// Removes entries outside `regions` and bumps the membership revision.
+	pub(super) fn evict_outside(&mut self, regions: &[Aabb3d], revision: u64) -> Vec<Id> {
+		let removed = self.ids_outside(regions);
+		self.remove_ids(&removed, revision);
+		removed
+	}
+
 	/// Removes `ids` and bumps the membership revision. No-op when `ids` is empty.
 	pub(super) fn remove_ids(&mut self, ids: &[Id], revision: u64) {
 		if ids.is_empty() {

@@ -38,8 +38,7 @@ pub(super) struct TypedStore<T> {
 pub(super) trait ErasedStore: Send + Sync {
 	fn into_any(self: Arc<Self>) -> Arc<dyn Any + Send + Sync>;
 	fn reset(&self, revision: u64);
-	fn ids_outside(&self, regions: &[Aabb3d]) -> Vec<Id>;
-	fn remove_ids(&self, ids: &[Id], revision: u64);
+	fn evict_outside(&self, regions: &[Aabb3d], revision: u64) -> Vec<Id>;
 	fn len(&self) -> usize;
 	fn type_name(&self) -> &'static str;
 }
@@ -53,12 +52,8 @@ impl<T: HcsgValue> ErasedStore for TypedStore<T> {
 		write(&self.nodes).reset(revision);
 	}
 
-	fn ids_outside(&self, regions: &[Aabb3d]) -> Vec<Id> {
-		read(&self.nodes).ids_outside(regions)
-	}
-
-	fn remove_ids(&self, ids: &[Id], revision: u64) {
-		write(&self.nodes).remove_ids(ids, revision);
+	fn evict_outside(&self, regions: &[Aabb3d], revision: u64) -> Vec<Id> {
+		write(&self.nodes).evict_outside(regions, revision)
 	}
 
 	fn len(&self) -> usize {

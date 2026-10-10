@@ -41,6 +41,8 @@ pub(crate) struct QuantumProgress {
 	pub cost: f64,
 	pub done: bool,
 	pub reached: HashSet<TypeId>,
+	/// Ids whose values landed during this quantum, in generation order.
+	pub published: Vec<Id>,
 }
 
 /// Charge the larger of the id count and the time fraction of a quantum, so
@@ -84,12 +86,6 @@ pub(super) fn pick_job(state: &mut DemandState) -> Option<Job> {
 }
 
 impl HcsgDemand {
-	pub(in crate::hcsg) fn append(&self, id: SubscriptionId, published: Id) {
-		if let Some(subscription) = self.lock().subscriptions.get_mut(&id) {
-			subscription.published.push(published);
-		}
-	}
-
 	pub(in crate::hcsg) fn finish_quantum(
 		&self,
 		id: SubscriptionId,
@@ -110,6 +106,9 @@ impl HcsgDemand {
 			}
 			subscription.discovered = progress.discovered;
 			subscription.cursor = progress.cursor;
+			if !progress.published.is_empty() {
+				subscription.published.extend(progress.published);
+			}
 			if progress.done {
 				subscription.done = true;
 				if subscription.discovered_len.is_none() {

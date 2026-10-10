@@ -7,7 +7,8 @@ use bevy::prelude::*;
 use clap::Args;
 use lod::lod_ref::LodRef;
 #[cfg(test)]
-use lod::scene::{LodScene, LodSceneLevel};
+use lod::scene::LodScene;
+use lod::scene::LodSceneLevel;
 use lod::SceneChunk;
 use material_ref::MaterialRef;
 use procedural_common::{noise_params_from_scalar_str, NoiseParams};
@@ -137,7 +138,7 @@ impl BushScrub {
 		self.plants.is_empty()
 	}
 
-	fn nest_plant_chunks(&self, lod_ref: &LodRef) -> Vec<SceneChunk> {
+	fn nest_plant_chunks(&self, lod_ref: &LodRef, level: LodSceneLevel) -> Vec<SceneChunk> {
 		if self.plants.is_empty() {
 			return Vec::new();
 		}
@@ -168,6 +169,7 @@ impl BushScrub {
 					&plant.ball_material,
 					&plant.frond_material,
 					&plant_lod,
+					level,
 				),
 				BushScrubKind::Bush(t) => nest_flattened_plant_chunk(
 					Arc::clone(t),
@@ -176,6 +178,7 @@ impl BushScrub {
 					&plant.ball_material,
 					&plant.frond_material,
 					&plant_lod,
+					level,
 				),
 			})
 		})]
