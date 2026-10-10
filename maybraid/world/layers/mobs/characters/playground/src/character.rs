@@ -133,7 +133,11 @@ pub(crate) fn drive_playback(
 	roots: Query<&CharacterMembers, With<CharacterRoot>>,
 	rigs: Query<&CharacterRig>,
 ) {
-	playback.advance(time.delta_secs(), config.animation.clip_duration());
+	playback.advance(
+		time.delta_secs(),
+		config.animation.clip_duration(),
+		config.animation.clip_speed(),
+	);
 	let progress = config
 		.animation
 		.mailbox_progress(playback.elapsed + playback.phase, playback.looping);

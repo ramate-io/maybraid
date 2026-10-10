@@ -18,10 +18,12 @@ use character_rigs::Side;
 
 use crate::animations::smoothstep;
 
-/// One second per beat.
+/// One second per beat at unit speed.
 pub const BEAT: f32 = 1.0;
 /// Whole one-shot: raise | hold Think | move | hold Again.
 pub const DURATION: f32 = 4.0 * BEAT;
+/// Default playback rate. `2.0` is a half-second beat.
+pub const DEFAULT_SPEED: f32 = 2.0;
 /// End of beat 2. Think is held from [`BEAT`] until this instant.
 const THINK_HOLD_END: f32 = 2.0 * BEAT;
 /// End of beat 3. Again is reached here and held into beat 4.

@@ -9,7 +9,7 @@ use character_animations::animations::{
 	LateralUndulation, Leap, QuadrupedRun, Run, Soaring, TuckProfile, TuckedFlip, TwoFootedJump,
 	Walk, AIR_END, DEFAULT_BACKSWING, DEFAULT_DESCENT_SPEED, DEFAULT_GRAVITY, DEFAULT_JAB_TARGET,
 	DEFAULT_JUMP_HEIGHT, DEFAULT_LANDING_SQUAT_SPEED, DEFAULT_PRE_SQUAT_SPEED,
-	DEFAULT_SPRING_DURATION, TAKEOFF_END, THINK_AGAIN_DURATION,
+	DEFAULT_SPRING_DURATION, TAKEOFF_END, THINK_AGAIN_DURATION, THINK_AGAIN_SPEED,
 };
 use character_animations::{ClipTimePolicy, SampleAddress};
 use character_rigs::Side;
@@ -23,7 +23,7 @@ const QUADRUPED_RUN_CYCLE_SPEED: f32 = 0.5;
 const TUCK_CYCLE_SPEED: f32 = 0.6;
 const FRONT_FLIP_CYCLE_SPEED: f32 = 0.85;
 const JAB_CYCLE_SPEED: f32 = 0.9;
-const THINK_AGAIN_CYCLE_SPEED: f32 = 1.0;
+const THINK_AGAIN_CYCLE_SPEED: f32 = THINK_AGAIN_SPEED;
 const JUMP_PRE_SQUAT_SPEED: f32 = DEFAULT_PRE_SQUAT_SPEED * 1.2;
 const JUMP_LANDING_SQUAT_SPEED: f32 = DEFAULT_LANDING_SQUAT_SPEED * 1.3;
 /// One-shot leap lasts ~1.25 s so it covers the physics hang time.

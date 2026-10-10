@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use character_animations::animations::{
-	DEFAULT_BACKSWING, DEFAULT_JAB_TARGET, THINK_AGAIN_DURATION,
+	DEFAULT_BACKSWING, DEFAULT_JAB_TARGET, THINK_AGAIN_DURATION, THINK_AGAIN_SPEED,
 };
 use character_rigs::{articulation::compose_parent_rotation, authoring::humanoid_bone_axis, Side};
 use characters::{AnimBone, AnimClip, AnimRef, JabParams, ThinkAgainParams};
@@ -110,6 +110,13 @@ impl AnimationMode {
 		}
 	}
 
+	pub const fn clip_speed(self) -> f32 {
+		match self {
+			Self::ThinkAgain => THINK_AGAIN_SPEED,
+			_ => 1.0,
+		}
+	}
+
 	const fn wraps_when_looping(self) -> bool {
 		!matches!(self, Self::Still | Self::Soaring | Self::Flapping)
 	}
@@ -161,7 +168,7 @@ impl Default for AnimationPlayback {
 }
 
 impl AnimationPlayback {
-	pub fn advance(&mut self, delta_seconds: f32, duration: f32) {
+	pub fn advance(&mut self, delta_seconds: f32, duration: f32, clip_speed: f32) {
 		if let Some(progress) = self.scrub.take() {
 			self.elapsed = progress.max(0.0);
 			return;
@@ -169,7 +176,7 @@ impl AnimationPlayback {
 		if self.paused {
 			return;
 		}
-		self.elapsed += delta_seconds * self.speed;
+		self.elapsed += delta_seconds * self.speed * clip_speed;
 		if !self.looping {
 			self.elapsed = self.elapsed.min(duration);
 		}
