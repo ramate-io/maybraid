@@ -1,7 +1,7 @@
 use bevy::core_pipeline::prepass::DepthPrepass;
 use bevy::prelude::*;
 use bevy::window::WindowFocused;
-use durham::{BaseTerrainNoise, HcsgStorage, TerrainCellLayout, TerrainStorage};
+use durham::{BaseTerrainNoise, DurhamSurface, TerrainCellLayout};
 use game_commands::command::TextEntryFocus;
 use lod::LodViewer;
 use maybraid_input::{PadButton, VirtualPad};
@@ -77,16 +77,16 @@ pub fn refocus_camera_on_elevation(
 	controller.pitch = pitch;
 }
 
-/// Composed height when the cell is stored; otherwise the holding altitude.
-pub fn surface_or_hold(
-	layout: &TerrainCellLayout,
-	store: &HcsgStorage,
-	base: &BaseTerrainNoise,
-) -> f32 {
-	let center = layout.region_center_xz();
-	store
-		.composed_height_at(layout, center.x, center.z)
-		.unwrap_or_else(|| crate::player::holding_elevation(base, center.x, center.z))
+/// Composed height at the layout's center once its cell is published;
+/// otherwise the holding altitude.
+pub fn surface_or_hold(surface: &DurhamSurface) -> f32 {
+	let center = surface.layout().region_center_xz();
+	match surface.height_at(center.xz()) {
+		Ok(Some(elevation)) => elevation,
+		Ok(None) | Err(lod::hcsg::Busy) => {
+			crate::player::holding_elevation(surface.base(), center.x, center.z)
+		}
+	}
 }
 
 fn camera_look_at(layout: &TerrainCellLayout, elevation: f32) -> Vec3 {

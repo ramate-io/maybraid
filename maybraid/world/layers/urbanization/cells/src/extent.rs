@@ -50,6 +50,16 @@ impl UrbanizationExtent {
 		Some(Self::new(bounds.min.into(), bounds.max.into()))
 	}
 
+	/// The cell whose guillotine produced the leaf with id `leaf`.
+	///
+	/// Leaves partition their cell, so the leaf center lies inside it.
+	pub fn owning_leaf(leaf: Id) -> Option<Self> {
+		let bounds = leaf.origin_cell_bounds()?;
+		let center = (Vec3::from(bounds.min) + Vec3::from(bounds.max)) * 0.5;
+		let (ix, iz) = Self::cell_index_containing(center);
+		Some(Self::from_cell_index(ix, iz))
+	}
+
 	/// Urbanization cells whose footprints overlap `region` on XZ.
 	pub fn cells_overlapping(region: Aabb3d) -> Vec<Self> {
 		let min_idx = Self::cell_index_containing(Vec3::new(region.min.x, 0.0, region.min.z));

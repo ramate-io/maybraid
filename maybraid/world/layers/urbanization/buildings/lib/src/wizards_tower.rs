@@ -28,11 +28,11 @@ pub use tower_lod::{HIGH_FOOTPRINT_MULTIPLIER, LOW_RES_CUTOFF_METERS};
 use bevy::prelude::{Component, Transform};
 use bevy::scene::prelude::Scene;
 use bevy_math::Vec3;
-use lod::gen::{
-	cull_offset_bands, LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus, SceneChunk,
-};
 use lod::lod_host_scene_pending;
 use lod::lod_ref::LodRef;
+use lod::scene::{
+	cull_offset_bands, LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus, SceneChunk,
+};
 use material_ref::MaterialRef;
 use procedural_common::NoiseParams;
 
