@@ -68,16 +68,16 @@ fn think_again_sweeps_forearm_beside_the_head() {
 	let rest = HumanoidV0Rig::for_clip_test();
 	let mut think = HumanoidV0Rig::for_clip_test();
 	let mut again = HumanoidV0Rig::for_clip_test();
-	ThinkAgain::default().apply(&mut think, 0.38);
-	ThinkAgain::default().apply(&mut again, 0.815);
+	ThinkAgain::default().apply(&mut think, 0.15);
+	ThinkAgain::default().apply(&mut again, 0.85);
 	let rest_dir = rest.character_length("forearm.R");
 	let think_dir = think.character_length("forearm.R");
 	let again_dir = again.character_length("forearm.R");
 	assert!(think_dir.y > rest_dir.y + 0.3, "Think forearm rises, {think_dir:?}");
+	assert!(again_dir.y > rest_dir.y + 0.3, "Again forearm stays up, {again_dir:?}");
 	assert!(
-		again_dir.x.abs() > think_dir.x.abs() + 0.08
-			|| again_dir.x.signum() != think_dir.x.signum(),
-		"Again opens outboard in the arm plane, think {think_dir:?} again {again_dir:?}"
+		again_dir.y > think_dir.y,
+		"Again is closer to vertical than Think, think {think_dir:?} again {again_dir:?}"
 	);
 }
 

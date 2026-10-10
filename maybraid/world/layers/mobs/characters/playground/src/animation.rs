@@ -84,11 +84,22 @@ impl AnimationMode {
 	}
 
 	/// Mailbox sample coordinate. Held tuck stays at full fold.
-	pub fn mailbox_progress(self, elapsed: f32) -> f32 {
-		match self {
-			Self::FixedTuck => 1.0,
-			_ => elapsed,
+	///
+	/// One-shots (`think-again`, jump, …) clamp in the clip. When the playground
+	/// is looping, wrap so the gesture repeats instead of freezing at rest.
+	pub fn mailbox_progress(self, elapsed: f32, looping: bool) -> f32 {
+		if matches!(self, Self::FixedTuck) {
+			return 1.0;
 		}
+		if looping && self.wraps_when_looping() {
+			elapsed.rem_euclid(1.0)
+		} else {
+			elapsed
+		}
+	}
+
+	const fn wraps_when_looping(self) -> bool {
+		!matches!(self, Self::Still | Self::Soaring | Self::Flapping)
 	}
 }
 
