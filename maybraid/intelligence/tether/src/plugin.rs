@@ -71,7 +71,11 @@ fn apply_action(
 	match action {
 		TetherAction::None => {}
 		TetherAction::Hold => {
-			hold_in_place(entity, at, movement, routing.as_deref_mut(), commands);
+			if let Some(routing) = routing.as_deref_mut() {
+				routing.clear_destination();
+			}
+			movement.hold_at(at);
+			commands.entity(entity).remove::<ReplanMovement>();
 		}
 		TetherAction::Local(next) => {
 			if let Some(routing) = routing.as_deref_mut() {
@@ -97,20 +101,4 @@ fn apply_action(
 			}
 		}
 	}
-}
-
-fn hold_in_place(
-	entity: Entity,
-	at: Vec3,
-	movement: &mut MovementIntelligence,
-	routing: Option<&mut RoutingIntelligenceUser>,
-	commands: &mut Commands,
-) {
-	if let Some(routing) = routing {
-		routing.clear_destination();
-	}
-	movement.objective =
-		MovementObjective::Reach(MovementLocation::new(at, movement.ability.agent_radius));
-	movement.adopt_plan(Vec::new());
-	commands.entity(entity).remove::<ReplanMovement>();
 }

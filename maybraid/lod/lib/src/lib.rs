@@ -9,10 +9,9 @@ pub mod gen;
 pub mod hcsg;
 pub mod jobs;
 pub mod lod_ref;
-pub mod presentation;
 pub mod scene;
 
-/// Compatibility module paths (prefer [`scene`] / [`presentation`] / [`lod_ref`]).
+/// Compatibility module paths (prefer [`scene`] and [`lod_ref`]).
 pub use scene::chunk as scene_chunk;
 pub use scene::chunk_fulfill;
 pub use scene::cull as lod_cull;
@@ -21,24 +20,11 @@ pub use scene::level as lod_level;
 pub use scene::refresh;
 pub use scene::region_index;
 
-pub use gen::{
-	drain_lod_generate, produce_lod_generate_regions, LodGenerateBudget, LodGenerateKeepRegion,
-	LodGeneratePlugin, LodGenerateQueue, LodGenerateRegion, LodGenerateRegionPlugin,
-	LodGenerateSystems, LodGenerateTimeBudget, LodGenerated,
-};
 pub use jobs::{ensure_lod_job_counter, LodJobCounter};
 pub use lod_ref::{
 	collect_node_snapshots, lod_refs_from_snapshots, point_bounds, track_lod_nodes, FineLod,
 	LodNode, LodNodeBounds, LodNodePlugin, LodNodePose, LodNodeSnapshot, LodNodeSystems, LodRef,
 	LodRequest,
-};
-pub use presentation::{
-	apply_lod_present_gate, drain_lod_present, drain_lod_present_cull, lod_present_gate_open,
-	produce_lod_present_cull_regions, produce_lod_present_regions, LodPresentBudget,
-	LodPresentCullBudget, LodPresentCullCursor, LodPresentCullPlugin, LodPresentCullRegion,
-	LodPresentCullRegionPlugin, LodPresentGate, LodPresentKeepRegion, LodPresentPlugin,
-	LodPresentQueue, LodPresentRegion, LodPresentRegionPlugin, LodPresentSystems,
-	LodPresentTimeBudget, RegionPresenter,
 };
 pub use scene::{
 	add_lod_refresh_chunk_for, add_lod_refresh_chunk_full_for, add_lod_refresh_cull_for,

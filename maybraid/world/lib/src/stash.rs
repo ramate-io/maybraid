@@ -34,9 +34,10 @@ use characters::{
 };
 use damage::{DamageSystems, DespawnAfter, Downed};
 use firearm_user::{held_scale_from_bounds, FirearmUser, FirearmUserSettings, GeneratedFirearm};
+use grenade_user::GrenadeUser;
 use firearms::{firearm_bounds, spawn_firearm_components};
-use lod::gen::LodSceneLevel;
 use lod::lod_ref::LodRef;
+use lod::scene::LodSceneLevel;
 use lod::LodScene;
 use material_ref::{MaterialRef, MaterialRefRoot, PropagateToDescendants};
 use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
@@ -526,6 +527,7 @@ type DownedNpcLoot<'a> = (
 	&'a Downed,
 	Option<&'a InventoryUser>,
 	Option<&'a FirearmUser>,
+	Option<&'a GrenadeUser>,
 	Option<&'a MobKind>,
 	Option<&'a CharacterBrains>,
 );
@@ -550,7 +552,7 @@ fn detach_downed_npc_loot(
 	mut bags: Query<&mut Inventory>,
 ) {
 	let assets = assets.as_deref();
-	for (body, downed, user, firearm, kind, brains) in &downed {
+	for (body, downed, user, firearm, grenade, kind, brains) in &downed {
 		let fraction = npc_loot_fraction(kind, brains);
 		let loot = user.and_then(|user| bags.get_mut(user.bag).ok()).map_or_else(
 			Inventory::default,
@@ -565,6 +567,10 @@ fn detach_downed_npc_loot(
 		if let Some(firearm) = firearm {
 			commands.entity(firearm.held).try_despawn();
 			commands.entity(body).remove::<(FirearmUser, PlayerUse)>();
+		}
+		if let Some(grenade) = grenade {
+			commands.entity(grenade.held).try_despawn();
+			commands.entity(body).remove::<(GrenadeUser, grenade_user::GrenadeThrow, PlayerUse)>();
 		}
 		let mut policy = settings.ephemeral_policy();
 		policy.loot_secs = settings.loot_secs;
@@ -596,7 +602,7 @@ pub(crate) fn claim_nearby_stashes(
 	>,
 	parts: Query<(Entity, &furniture_assemblies::FurnitureKitPart, &GlobalTransform)>,
 	child_of: Query<&ChildOf>,
-	hosts: Query<&maputo::PresentedFurnitureCellId>,
+	hosts: Query<&lod::hcsg::HcsgNode<crate::WorldFurnished>>,
 ) {
 	if !intents.read().any(|intent| matches!(intent, CharacterIntent::StartInteraction)) {
 		return;
@@ -666,7 +672,13 @@ fn nearest_stash_in_radius<'a>(
 		.map(|(_, entity, bag, policy, translation)| (entity, bag, policy, translation))
 }
 
-type DroppingPlayer<'a> = (Entity, &'a Transform, &'a InventoryUser, Option<&'a FirearmUser>);
+type DroppingPlayer<'a> = (
+	Entity,
+	&'a Transform,
+	&'a InventoryUser,
+	Option<&'a FirearmUser>,
+	Option<&'a GrenadeUser>,
+);
 
 fn drop_player_inventory(
 	settings: Res<WorldStashSettings>,
@@ -681,7 +693,7 @@ fn drop_player_inventory(
 		return;
 	}
 	let assets = assets.as_deref();
-	for (player, transform, user, firearm) in &players {
+	for (player, transform, user, firearm, grenade) in &players {
 		let Ok(mut bag) = bags.get_mut(user.bag) else {
 			continue;
 		};
@@ -690,6 +702,10 @@ fn drop_player_inventory(
 		if let Some(firearm) = firearm {
 			commands.entity(firearm.held).try_despawn();
 			commands.entity(player).remove::<(FirearmUser, PlayerUse)>();
+		}
+		if let Some(grenade) = grenade {
+			commands.entity(grenade.held).try_despawn();
+			commands.entity(player).remove::<(GrenadeUser, grenade_user::GrenadeThrow, PlayerUse)>();
 		}
 		if let Some(loadout) = loadout.as_deref_mut() {
 			apply_dropped_loadout(loadout, &snapshot);
@@ -1870,7 +1886,6 @@ mod tests {
 		use crate::crate_loot::{ClosedLid, CrateLoot};
 		use furniture_assemblies::{FurnitureKitPart, PartKind};
 		use lod::gen::Id;
-		use maputo::PresentedFurnitureCellId;
 
 		let mut world = World::new();
 		world.init_resource::<Time>();
@@ -1878,7 +1893,7 @@ mod tests {
 		let player_bag = world.spawn(Inventory::default()).id();
 		world.spawn((VegetationPlayer, Transform::IDENTITY, InventoryUser::carrying(player_bag)));
 		let at = Transform::from_xyz(2.0, 0.4, 0.0);
-		let host = world.spawn(PresentedFurnitureCellId(Id::Universal)).id();
+		let host = crate::crate_loot::spawn_furniture_host(&mut world, Id::Universal);
 		world.spawn((
 			FurnitureKitPart { kind: PartKind::ChestLid, finish_seed: 1, slot: 0 },
 			ClosedLid(at),

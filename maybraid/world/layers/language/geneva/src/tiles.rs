@@ -1,7 +1,10 @@
 //! Large language tiles and guillotine small tiles.
 
+use bevy::math::bounding::Aabb3d;
+use bevy::math::{Vec2, Vec3};
 use comproc::guillotine::{Bounds2, DepthRange, GuillotineConfig, VariableGuillotine};
 use comproc::noise::config::NoiseConfig;
+use lod::gen::Id;
 use maybraid_language_core::lexicalizer::mix;
 use noise::Perlin;
 
@@ -56,6 +59,45 @@ impl LargeTile {
 	pub fn small_tile_at(&self, x: f32, z: f32) -> Option<&SmallTile> {
 		self.small.iter().find(|tile| contains_xz(tile.bounds, x, z))
 	}
+
+	/// The language a feature salted `feature_key` speaks at `xz`: one of its
+	/// small tile's subset, or of the whole tile outside every small tile.
+	pub fn language_at(&self, xz: Vec2, feature_key: u64) -> Option<&LanguageBundle> {
+		if let Some(small) = self.small_tile_at(xz.x, xz.y) {
+			if small.language_ids.is_empty() {
+				return None;
+			}
+			let id = small.language_ids[(mix(feature_key) as usize) % small.language_ids.len()];
+			return self.language(id);
+		}
+		let seed = mix(self.ix as u64 ^ (self.iz as u64).wrapping_mul(13) ^ feature_key);
+		pick_bundle(&self.languages, seed)
+	}
+
+	/// The language the tile's region is named in.
+	pub fn region_language(&self, world_seed: u64) -> Option<&LanguageBundle> {
+		let seed = mix(world_seed ^ mix(self.ix as u64) ^ mix(self.iz as u64));
+		pick_bundle(&self.languages, seed)
+	}
+
+	/// HCSG id of tile `(ix, iz)`: its footprint cell.
+	pub fn id(ix: i32, iz: i32) -> Id {
+		Id::from_cell(large_tile_aabb(ix, iz))
+	}
+
+	/// Tile index of an id minted by [`Self::id`].
+	pub fn index_of(id: Id) -> Option<(i32, i32)> {
+		let cell = id.origin_cell_bounds()?;
+		let half = LARGE_TILE * 0.5;
+		let (ix, iz) = (large_tile_index(cell.min.x + half), large_tile_index(cell.min.z + half));
+		(Self::id(ix, iz) == id).then_some((ix, iz))
+	}
+}
+
+/// Footprint of large tile `(ix, iz)`, one unit either side of `y = 0`.
+pub fn large_tile_aabb(ix: i32, iz: i32) -> Aabb3d {
+	let (x, z) = large_tile_origin(ix, iz);
+	Aabb3d::from_min_max(Vec3::new(x, -1.0, z), Vec3::new(x + LARGE_TILE, 1.0, z + LARGE_TILE))
 }
 
 /// Large-tile index containing world `x` (or `z`).
@@ -66,6 +108,36 @@ pub fn large_tile_index(axis: f32) -> i32 {
 /// World-space origin of large tile `(ix, iz)`.
 pub fn large_tile_origin(ix: i32, iz: i32) -> (f32, f32) {
 	(ix as f32 * LARGE_TILE, iz as f32 * LARGE_TILE)
+}
+
+/// Tiles whose interior `region` reaches; a box ending on a tile line stops there.
+pub fn large_tiles_overlapping(region: Aabb3d) -> impl Iterator<Item = (i32, i32)> {
+	let last = |min: i32, max: f32| ((max / LARGE_TILE).ceil() as i32 - 1).max(min);
+	let min_x = large_tile_index(region.min.x);
+	let max_x = last(min_x, region.max.x);
+	let min_z = large_tile_index(region.min.z);
+	let max_z = last(min_z, region.max.z);
+	(min_x..=max_x).flat_map(move |ix| (min_z..=max_z).map(move |iz| (ix, iz)))
+}
+
+/// Distinct tiles under `boxes`, in order.
+pub(crate) fn window_tiles(boxes: &[Aabb3d]) -> Vec<(i32, i32)> {
+	let mut tiles = Vec::new();
+	for &region in boxes {
+		for tile in large_tiles_overlapping(region) {
+			if !tiles.contains(&tile) {
+				tiles.push(tile);
+			}
+		}
+	}
+	tiles
+}
+
+fn pick_bundle(languages: &[LanguageBundle], seed: u64) -> Option<&LanguageBundle> {
+	if languages.is_empty() {
+		return None;
+	}
+	languages.get((mix(seed) as usize) % languages.len())
 }
 
 pub fn language_count(world_seed: u64, ix: i32, iz: i32) -> u8 {
