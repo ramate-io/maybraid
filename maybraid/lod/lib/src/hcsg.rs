@@ -9,7 +9,7 @@
 //!   what is missing.
 //! - [`HcsgDemand`]: one subscription per bounds source, and the epoch that
 //!   sessions advance.
-//! - [`HcsgWorker`]: the thread that fills subscriptions.
+//! - Worker thread: fills subscriptions (started by [`runtime`] / [`spawn_worker`] in tests).
 //! - [`HcsgRegions<C>`]: the boxes channel `C` wants values in, sent by
 //!   [`HcsgBounds`] producers.
 //! - [`GenerationPlugin`]: keeps `T` warm within `C`'s regions, fire and forget.
@@ -50,7 +50,13 @@ pub use session::{
 	HcsgSessionRestarted, HcsgSessionSeed,
 };
 pub use storage::{Busy, HcsgStorage, HcsgValue};
-pub use worker::HcsgWorker;
+
+/// Starts the shared generation worker. Production apps rely on
+/// [`PresentationPlugin`] / [`GenerationPlugin`] to install one worker; call
+/// this only in tests that subscribe [`HcsgDemand`] without those plugins.
+pub fn spawn_worker(storage: HcsgStorage, demand: HcsgDemand) -> std::io::Result<()> {
+	worker::HcsgWorker::spawn(storage, demand).map(|_| ())
+}
 
 use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec3;
