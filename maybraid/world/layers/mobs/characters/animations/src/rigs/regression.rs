@@ -4,7 +4,7 @@
 use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
 use character_rigs::rigs::quadruped_v0::QuadrupedV0Rig;
 
-use crate::animations::{Flapping, Jab, QuadrupedRun, Squat, Walk};
+use crate::animations::{FistPump, Flapping, Jab, QuadrupedRun, Squat, Walk};
 use crate::Animation;
 
 #[test]
@@ -47,6 +47,20 @@ fn flapping_keeps_the_previous_front_back_stroke() {
 	let b = back.character_length("forearm.L");
 	assert!((a.z - b.z).abs() > (a.y - b.y).abs(), "previous flap is XZ, {a:?} vs {b:?}");
 	assert!((a - b).length() > 0.3, "wing tip must move, {a:?} vs {b:?}");
+}
+
+#[test]
+fn fist_pump_raises_pumping_forearm_on_the_t_pose() {
+	let rest = HumanoidV0Rig::for_clip_test();
+	let mut posed = HumanoidV0Rig::for_clip_test();
+	FistPump::default().apply(&mut posed, 0.43);
+	let rest_tip = rest.character_point("forearm.R");
+	let posed_tip = posed.character_point("forearm.R");
+	assert!(posed_tip.y > rest_tip.y + 0.18, "fist rises, {posed_tip:?} vs {rest_tip:?}");
+	assert!(
+		posed_tip.x.signum() == rest_tip.x.signum(),
+		"right fist stays on its side of midline, {posed_tip:?}"
+	);
 }
 
 #[test]
