@@ -15,7 +15,7 @@ impl Idle {
 		let arm = (TAU * (progress * Idle::ARM_FREQ)).sin();
 		let yaw = Idle::look_wave(progress, Idle::NECK_YAW_FREQ, 0.15);
 		let nod = Idle::look_wave(progress, Idle::NECK_PITCH_FREQ, 0.41);
-		let hip = (TAU * (progress * Idle::HIP_FREQ + 0.4)).sin();
+		let hip = (TAU * (progress * Idle::HIP_FREQ + Idle::HIP_WEIGHT_PHASE)).sin();
 		let scratch = Idle::scratch_weight(progress);
 		let scratch_side = Idle::scratch_side(progress);
 
@@ -181,6 +181,40 @@ mod tests {
 			"scratch should close the elbow"
 		);
 		assert_eq!(Idle::scratch_weight(quiet), 0.0);
+	}
+
+	#[test]
+	fn idle_clip_test_pelvis_shift_samples() {
+		let idle = Idle::default();
+		let mut at_025 = HumanoidV0Rig::for_clip_test();
+		let mut at_050 = HumanoidV0Rig::for_clip_test();
+		idle.apply(&mut at_025, 0.25);
+		idle.apply(&mut at_050, 0.5);
+		let pelvis_arm_peak = at_025.posed_angle("pelvis.L");
+		let pelvis_hip_peak = at_050.posed_angle("pelvis.L");
+		assert!(pelvis_hip_peak.abs() > pelvis_arm_peak.abs());
+	}
+
+	#[test]
+	fn idle_hip_peak_aligns_with_arm_sway_neutral() {
+		let idle = Idle::default();
+		let mut arm_peak = HumanoidV0Rig::for_clip_test();
+		let mut hip_peak = HumanoidV0Rig::for_clip_test();
+		idle.apply(&mut arm_peak, 0.25);
+		idle.apply(&mut hip_peak, 0.5);
+
+		let hip_at_arm_peak = arm_peak.posed_angle("pelvis.L").abs();
+		let hip_at_hip_peak = hip_peak.posed_angle("pelvis.L").abs();
+		assert!(
+			hip_at_hip_peak > hip_at_arm_peak + 0.002,
+			"pelvis shift should peak when arms cross neutral: arm_peak={hip_at_arm_peak} hip_peak={hip_at_hip_peak}"
+		);
+		let shoulder_at_arm_peak = arm_peak.posed_angle("shoulder.L").abs();
+		let shoulder_at_hip_peak = hip_peak.posed_angle("shoulder.L").abs();
+		assert!(
+			shoulder_at_arm_peak > shoulder_at_hip_peak + 0.01,
+			"arm sway should dominate at 0.25, not at hip peak"
+		);
 	}
 
 	#[test]
