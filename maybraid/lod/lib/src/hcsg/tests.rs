@@ -656,6 +656,7 @@ fn a_replaced_mid_quantum_keeps_types_that_quantum_reached() {
 			cost: 1.0,
 			done: true,
 			reached: HashSet::from([TypeId::of::<Ground>()]),
+			..QuantumProgress::default()
 		},
 		Some(job.reach),
 	);
@@ -813,6 +814,57 @@ fn outstanding_skips_a_subscription_that_finishes_without_ids() {
 		"done without discovery must not stay undiscovered"
 	);
 	let _ = near;
+}
+
+#[test]
+/// Regression guard for worker sweep cost: eviction must stay linear in store
+/// size with a single write lock per typed store.
+#[test]
+fn retention_sweep_on_a_large_store_stays_bounded() {
+	use std::time::{Duration, Instant};
+
+	const ENTRIES: usize = 4_000;
+	const ROUNDS: usize = 25;
+	let mut store = super::node_store::NodeStore::new(DVec3::ONE);
+	for i in 0..ENTRIES {
+		let id = Id::from_cell(cell(i as f32));
+		store.put(
+			id,
+			super::node_store::StoredEntry {
+				value: i as u32,
+				bounds: cell(i as f32),
+				version: crate::gen::Version(i as u64 + 1),
+			},
+			i as u64 + 1,
+		);
+	}
+	let keep = vec![span(1_000.0, 16.0)];
+	let started = Instant::now();
+	for round in 0..ROUNDS {
+		for i in 0..ENTRIES {
+			let id = Id::from_cell(cell(i as f32));
+			store.put(
+				id,
+				super::node_store::StoredEntry {
+					value: i as u32,
+					bounds: cell(i as f32),
+					version: crate::gen::Version((round * ENTRIES + i) as u64 + 1),
+				},
+				(round * ENTRIES + i) as u64 + 1,
+			);
+		}
+		let removed = store.evict_outside(&keep, (round * ENTRIES + ENTRIES) as u64 + 1);
+		assert!(
+			removed.len() > ENTRIES / 2,
+			"most entries should fall outside the retention window"
+		);
+	}
+	let elapsed = started.elapsed();
+	assert!(
+		elapsed < Duration::from_secs(3),
+		"25 sweeps over 4k entries took {:?}",
+		elapsed
+	);
 }
 
 #[test]

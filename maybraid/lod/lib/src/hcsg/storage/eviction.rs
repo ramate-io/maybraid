@@ -39,12 +39,11 @@ impl HcsgStorage {
 		let Some(store) = self.store::<T>() else {
 			return;
 		};
-		let removed = store.ids_outside(regions);
+		let stamp = self.stamp();
+		let removed = store.evict_outside(regions, stamp);
 		if removed.is_empty() {
 			return;
 		}
-		let stamp = self.stamp();
-		store.remove_ids(&removed, stamp);
 		record_evictions(self, removed.into_iter().map(|id| (TypeId::of::<T>(), id)).collect());
 	}
 
@@ -67,12 +66,11 @@ impl HcsgStorage {
 				.flatten()
 				.map(|region| expand_region(*region, margin))
 				.collect();
-			let removed = store.ids_outside(&expanded);
+			let stamp = self.stamp();
+			let removed = store.evict_outside(&expanded, stamp);
 			if removed.is_empty() {
 				continue;
 			}
-			let stamp = self.stamp();
-			store.remove_ids(&removed, stamp);
 			record_evictions(self, removed.into_iter().map(|id| (type_id, id)).collect());
 		}
 	}
