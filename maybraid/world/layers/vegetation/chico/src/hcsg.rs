@@ -14,6 +14,7 @@ use bevy::math::DVec3;
 use bevy::prelude::*;
 use durham::TerrainMeshBuilder;
 use lod::gen::{Id, OriginalId};
+use procedural_common::union_aabb3_iter;
 use lod::hcsg::universal_bounds;
 use lod::hcsg::{
 	self, register_session_seed, GenerationContext, HcsgClass, PresentationPlugin, ViewerHcsgBounds,
@@ -78,10 +79,7 @@ impl hcsg::GenerationScheme for ChicoForest {
 	lod::hcsg_index_scale!(FOREST_SCALE);
 
 	fn original_ids_for(_cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
-		ForestExtent::cells_overlapping(region)
-			.into_iter()
-			.map(|extent| OriginalId(extent.id()))
-			.collect()
+		ForestExtent::original_ids_overlapping(region)
 	}
 
 	fn build_with_id(cx: &mut GenerationContext, id: Id) -> Option<(Self, Aabb3d)> {
@@ -172,9 +170,7 @@ impl<G: ForestGround> GroundSurface<G> {
 
 	/// The union of the cells' footprints.
 	pub fn footprint(&self) -> Option<Aabb3d> {
-		self.cells.iter().map(|cell| G::footprint(cell)).reduce(|a, b| {
-			Aabb3d::from_min_max(Vec3::from(a.min.min(b.min)), Vec3::from(a.max.max(b.max)))
-		})
+		union_aabb3_iter(self.cells.iter().map(|cell| G::footprint(cell)))
 	}
 
 	/// Surface height at `(x, z)`; `None` off the surface.
@@ -237,11 +233,12 @@ impl<G: ForestGround> hcsg::GenerationScheme for GrownGrove<G> {
 			return None;
 		}
 		let tiles = grove.grow(&surface);
-		let bounds = tiles
-			.iter()
-			.map(ForestGroveTile::scene_bounds)
-			.filter(|bounds| bounds.min.is_finite() && bounds.max.is_finite())
-			.reduce(|a, b| Aabb3d { min: a.min.min(b.min), max: a.max.max(b.max) })?;
+		let bounds = union_aabb3_iter(
+			tiles
+				.iter()
+				.map(ForestGroveTile::scene_bounds)
+				.filter(|bounds| bounds.min.is_finite() && bounds.max.is_finite()),
+		)?;
 		Some((Self { layer: grove.layer, tiles, _ground: PhantomData }, bounds))
 	}
 }

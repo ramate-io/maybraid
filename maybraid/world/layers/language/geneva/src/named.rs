@@ -37,7 +37,9 @@ use crate::hcsg::{generated, LanguageWorldSeed};
 use crate::key::{name_key_salt, NameKey};
 use crate::name::PlaceName;
 use crate::places::{DevelopmentPlaces, LanguageGround};
-use crate::tiles::{large_tile_aabb, large_tile_index, large_tiles_overlapping, LargeTile};
+use crate::tiles::{
+	large_tile_aabb, large_tile_index, large_tile_original_ids_overlapping, LargeTile,
+};
 
 /// A place's footprint on the map, around its anchor.
 const PLACE_EXTENT: f32 = 12.0;
@@ -170,9 +172,7 @@ impl NameSource for Regions {
 	const INDEX_SCALE: DVec3 = crate::hcsg::TILE_INDEX_SCALE;
 
 	fn original_ids_for(_cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
-		large_tiles_overlapping(region)
-			.map(|(ix, iz)| OriginalId(LargeTile::id(ix, iz)))
-			.collect()
+		large_tile_original_ids_overlapping(region)
 	}
 
 	fn nameables(cx: &mut GenerationContext, id: Id) -> Option<(Vec<Nameable>, Aabb3d)> {

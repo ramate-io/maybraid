@@ -128,11 +128,7 @@ impl<G: MobGround> hcsg::GenerationScheme for PlacedMobCell<G> {
 	lod::hcsg_index_scale!(MOB_CELL_SCALE);
 
 	fn original_ids_for(_cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
-		MobCellExtent::cells_overlapping(region)
-			.into_iter()
-			.filter(|extent| extent.group_seed().is_some())
-			.map(|extent| OriginalId(extent.id()))
-			.collect()
+		MobCellExtent::occupied_original_ids_overlapping(region)
 	}
 
 	/// `None` off the ground.
