@@ -4,7 +4,7 @@
 use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
 use character_rigs::rigs::quadruped_v0::QuadrupedV0Rig;
 
-use crate::animations::{Flapping, Jab, QuadrupedRun, Squat, Walk};
+use crate::animations::{Flapping, Jab, QuadrupedRun, SpotScan, Squat, Walk};
 use crate::Animation;
 
 #[test]
@@ -61,6 +61,43 @@ fn jab_cover_elbow_tucks_in_y_not_as_a_roll() {
 		(cover - rest_cover).length() > 0.2,
 		"cover is not a length-axis roll, {cover:?} vs {rest_cover:?}"
 	);
+}
+
+#[test]
+fn spot_scan_turns_the_head_in_character_x() {
+	let scan = SpotScan;
+	let rest = HumanoidV0Rig::for_clip_test();
+	let mut left = HumanoidV0Rig::for_clip_test();
+	let mut right = HumanoidV0Rig::for_clip_test();
+	scan.apply(&mut left, SpotScan::left_peak());
+	scan.apply(&mut right, SpotScan::right_peak());
+	let left_arm = rest.character_point("forearm.L")
+		+ rest.character_length("forearm.L")
+			* rest
+				.binding
+				.definition
+				.id("forearm.L")
+				.map(|id| rest.binding.effective_rest.local[id.index()].translation.y)
+				.unwrap_or(0.48);
+	let right_arm = rest.character_point("forearm.R")
+		+ rest.character_length("forearm.R")
+			* rest
+				.binding
+				.definition
+				.id("forearm.R")
+				.map(|id| rest.binding.effective_rest.local[id.index()].translation.y)
+				.unwrap_or(0.48);
+	let left_fwd = left.rotation("upper_neck") * bevy::prelude::Vec3::Z;
+	let right_fwd = right.rotation("upper_neck") * bevy::prelude::Vec3::Z;
+	assert!(
+		left_fwd.x.signum() == left_arm.x.signum() && left_fwd.x.abs() > 0.08,
+		"scan turns toward character left, {left_fwd:?} vs {left_arm:?}"
+	);
+	assert!(
+		right_fwd.x.signum() == right_arm.x.signum() && right_fwd.x.abs() > 0.08,
+		"scan turns toward character right, {right_fwd:?} vs {right_arm:?}"
+	);
+	assert!(left_fwd.x.abs() - right_fwd.x.abs() < 0.08, "left and right mirror");
 }
 
 #[test]
