@@ -78,11 +78,7 @@ impl FirearmPose {
 				parts.push(format!("{} L={} T={}", bone.label(), fit.length, fit.thickness));
 			}
 		}
-		if parts.is_empty() {
-			"bind".into()
-		} else {
-			parts.join(" ")
-		}
+		if parts.is_empty() { "bind".into() } else { parts.join(" ") }
 	}
 }
 

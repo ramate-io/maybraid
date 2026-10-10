@@ -8,8 +8,8 @@ use characters::{
 	RigSkeletonKind,
 };
 use firearms::{
-	firearm_bounds, spawn_firearm_components, FireOnTrigger, FirearmConcept, FirearmMembers,
-	FirearmRoot, ProjectileSource, WeaponTrigger,
+	FireOnTrigger, FirearmConcept, FirearmMembers, FirearmRoot, ProjectileSource, WeaponTrigger,
+	firearm_bounds, spawn_firearm_components,
 };
 use player::{PlayerLook, PlayerUse};
 

@@ -8,13 +8,13 @@ use characters::CharacterMotionSystems;
 use evasion_intelligence::{EvasionPlugin, EvasionSystems};
 use firearm_intelligence::{FirearmIntelligencePlugin, FirearmIntelligenceSystems};
 use firearm_user::FirearmUserPlugin;
-use firearms::{FirearmWeaponSystems, FirearmWeaponsPlugin};
+use firearms::FirearmWeaponsPlugin;
 use fleeing_intelligence::{FleeingPlugin, FleeingSystems};
 use hiding_intelligence::{HidingPlugin, HidingSystems};
 use intelligence_lod::{
-	look_near_m, look_promotes, IntelligenceBakeKey, IntelligenceBand, IntelligenceFocus,
-	IntelligenceFocusSample, IntelligenceLod, IntelligenceLook, IntelligenceLookFrame,
-	IntelligencePriority, LOOK_APPLY_FOV_INSET, LOOK_FOV_INSET,
+	IntelligenceBakeKey, IntelligenceBand, IntelligenceFocus, IntelligenceFocusSample,
+	IntelligenceLod, IntelligenceLook, IntelligenceLookFrame, IntelligencePriority,
+	LOOK_APPLY_FOV_INSET, LOOK_FOV_INSET, look_near_m, look_promotes,
 };
 use lod::LodViewer;
 use meandering_intelligence::MeanderingIntelligencePlugin;
@@ -179,10 +179,6 @@ impl Plugin for WorldIntelligencePlugin {
 			.configure_sets(
 				PostUpdate,
 				FirearmIntelligenceSystems::Fire.run_if(on_timer(Duration::from_millis(33))),
-			)
-			.configure_sets(
-				PostUpdate,
-				FirearmWeaponSystems::Fire.run_if(on_timer(Duration::from_millis(33))),
 			);
 	}
 }
@@ -322,7 +318,7 @@ fn sync_world_player_threat_actor(mut commands: Commands, players: WorldPlayers)
 mod tests {
 	use super::*;
 	use damage::DamageApplied;
-	use mob_scenes::{MobBrain, MobKind, FFA_GROUP, PLAYER_GROUP};
+	use mob_scenes::{FFA_GROUP, MobBrain, MobKind, PLAYER_GROUP};
 	use threat_intelligence::{ThreatIntelligenceUser, ThreatKnowledge};
 
 	fn bake_app() -> App {
@@ -563,10 +559,11 @@ mod tests {
 		app.update();
 
 		let player_id = ThreatId(player.to_bits());
-		assert!(app
-			.world()
-			.get::<ThreatKnowledge>(mob)
-			.is_some_and(|knowledge| { knowledge.get(player_id).is_some() }));
+		assert!(
+			app.world()
+				.get::<ThreatKnowledge>(mob)
+				.is_some_and(|knowledge| { knowledge.get(player_id).is_some() })
+		);
 	}
 
 	#[test]
@@ -586,10 +583,11 @@ mod tests {
 			))
 			.id();
 		app.update();
-		assert!(app
-			.world()
-			.get::<ThreatKnowledge>(victim)
-			.is_some_and(ThreatKnowledge::is_empty));
+		assert!(
+			app.world()
+				.get::<ThreatKnowledge>(victim)
+				.is_some_and(ThreatKnowledge::is_empty)
+		);
 
 		app.world_mut().write_message(DamageApplied {
 			target: victim,
@@ -602,10 +600,11 @@ mod tests {
 		app.update();
 
 		let player_id = ThreatId(player.to_bits());
-		assert!(app
-			.world()
-			.get::<ThreatKnowledge>(victim)
-			.is_some_and(|knowledge| { knowledge.get(player_id).is_some() }));
+		assert!(
+			app.world()
+				.get::<ThreatKnowledge>(victim)
+				.is_some_and(|knowledge| { knowledge.get(player_id).is_some() })
+		);
 	}
 
 	fn threat_app() -> App {
@@ -666,8 +665,7 @@ mod tests {
 
 		eprintln!(
 			"bake_lod_rank_scratch_timing: {PLANT_COUNT} plants × {BAKES} bakes — clone lod rows {:?}, key scratch {:?}",
-			clone_elapsed,
-			key_elapsed,
+			clone_elapsed, key_elapsed,
 		);
 	}
 }

@@ -1,7 +1,7 @@
 //! Register nested firearm LodScene hosts plus fulfill plugins.
 
 use bevy::prelude::*;
-use firearms_components::{add_firearm_components_host, FirearmComponentsPlugin};
+use firearms_components::{FirearmComponentsPlugin, add_firearm_components_host};
 use lod::LodRefreshCorePlugin;
 use scene_ref::SceneRefPlugin;
 

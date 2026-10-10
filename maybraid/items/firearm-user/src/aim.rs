@@ -6,9 +6,9 @@ use characters::BoneMap;
 use firearms::{FirearmMembers, FirearmRoot};
 use player::{PlayerCameraAim, PlayerCameraPose, PlayerLook};
 
+use crate::FirearmUser;
 use crate::pose::HeldFirearm;
 use crate::weapon::LiveWeapon;
-use crate::FirearmUser;
 
 pub(crate) fn write_sight_aim(
 	mut users: Query<(&FirearmUser, &PlayerLook, &mut PlayerCameraAim)>,
