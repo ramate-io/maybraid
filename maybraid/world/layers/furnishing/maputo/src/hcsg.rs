@@ -68,10 +68,7 @@ impl<U: FurnitureSlots> Furnished<U> {
 	}
 
 	fn developments(cx: &mut GenerationContext, region: Aabb3d) -> Vec<Arc<DevelopmentSlots<U>>> {
-		cx.original_ids_for::<DevelopmentSlots<U>>(region)
-			.into_iter()
-			.filter_map(|OriginalId(id)| cx.get_or_generate::<DevelopmentSlots<U>>(id))
-			.collect()
+		cx.get_or_generate_in::<DevelopmentSlots<U>>(region)
 	}
 }
 
