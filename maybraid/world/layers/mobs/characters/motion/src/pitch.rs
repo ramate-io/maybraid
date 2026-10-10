@@ -140,20 +140,20 @@ impl TerrainPitch {
 		hip_l: Option<Vec3>,
 		hip_r: Option<Vec3>,
 	) {
-		let front = girdle_midpoint([shoulder_l, shoulder_r].into_iter().flatten());
-		let hind = girdle_midpoint([hip_l, hip_r].into_iter().flatten());
-		let left = girdle_midpoint([shoulder_l, hip_l].into_iter().flatten());
-		let right = girdle_midpoint([shoulder_r, hip_r].into_iter().flatten());
+		let front = Self::girdle_midpoint([shoulder_l, shoulder_r].into_iter().flatten());
+		let hind = Self::girdle_midpoint([hip_l, hip_r].into_iter().flatten());
+		let left = Self::girdle_midpoint([shoulder_l, hip_l].into_iter().flatten());
+		let right = Self::girdle_midpoint([shoulder_r, hip_r].into_iter().flatten());
 		let mut sagittal_ok = false;
 		if let (Some(f), Some(h)) = (front, hind) {
-			if let Some(axis) = sagittal_axis(f, h) {
+			if let Some(axis) = Self::sagittal_axis(f, h) {
 				sagittal_ok = true;
 				self.sagittal = axis;
 				if !self.support_locked {
-					if let Some(span) = measured_support_half(front, hind) {
+					if let Some(span) = Self::measured_support_half(front, hind) {
 						self.half_span = span;
 					}
-					if let Some(width) = measured_support_half(left, right) {
+					if let Some(width) = Self::measured_support_half(left, right) {
 						self.half_width = width;
 					}
 					self.support_locked = true;
@@ -162,6 +162,102 @@ impl TerrainPitch {
 		}
 		self.girdles =
 			TerrainPitchGirdles { shoulder_l, shoulder_r, hip_l, hip_r, front, hind, sagittal_ok };
+	}
+
+	/// Midpoint of named bones in XZ, if at least one exists.
+	pub fn girdle_midpoint(positions: impl IntoIterator<Item = Vec3>) -> Option<Vec3> {
+		let mut sum = Vec3::ZERO;
+		let mut n = 0u32;
+		for p in positions {
+			sum += p;
+			n += 1;
+		}
+		(n > 0).then(|| sum / n as f32)
+	}
+
+	/// XZ half-distance between two support samples, if they are far enough apart.
+	pub fn measured_support_half(a: Option<Vec3>, b: Option<Vec3>) -> Option<f32> {
+		let (Some(a), Some(b)) = (a, b) else {
+			return None;
+		};
+		let delta = Vec2::new(a.x - b.x, a.z - b.z).length() * 0.5;
+		(delta >= MIN_MEASURED).then_some(delta)
+	}
+
+	/// Hind→front on the ground plane from live girdle midpoints.
+	pub fn sagittal_axis(front: Vec3, hind: Vec3) -> Option<Vec3> {
+		xz_unit(front - hind)
+	}
+
+	/// Front/hind sample direction: live spine when girdles exist, else mesh `+Z`.
+	pub fn sample_facing(&self, visual_facing: Vec3) -> Vec3 {
+		xz_unit(self.sagittal).unwrap_or(visual_facing)
+	}
+
+	/// Local-X angle: nose up when the front sample is higher (`+Z` mesh).
+	pub fn observed_pitch(front_height: f32, hind_height: f32, half_span: f32) -> f32 {
+		-slope_angle(front_height, hind_height, half_span)
+	}
+
+	/// Local-Z angle: right side up when the right sample is higher.
+	pub fn observed_roll(left_height: f32, right_height: f32, half_width: f32) -> f32 {
+		slope_angle(right_height, left_height, half_width)
+	}
+
+	pub fn step_toward(current: f32, target: f32, dt: f32) -> f32 {
+		Self::step_toward_rate(current, target, dt, TILT_RATE)
+	}
+
+	pub fn step_toward_rate(current: f32, target: f32, dt: f32, rate: f32) -> f32 {
+		let max_step = rate * dt;
+		current + (target - current).clamp(-max_step, max_step)
+	}
+
+	/// Exponential blend toward `target`, then clamp to `rate`.
+	pub fn follow_target(current: f32, target: f32, dt: f32, rate: f32) -> f32 {
+		let alpha = 1.0 - (-TILT_SMOOTH * dt.max(0.0)).exp();
+		let blended = current + (target - current) * alpha;
+		Self::step_toward_rate(current, blended, dt, rate)
+	}
+
+	/// Yaw from flattened facing (`look_to(-facing)`), then local pitch and roll.
+	pub fn facing_with_tilt(&self, facing_xz: Vec3) -> Quat {
+		self.facing_with_support_tilt(facing_xz, facing_xz)
+	}
+
+	/// Compose explicit heading with pitch about the axis perpendicular to `sagittal`.
+	///
+	/// When the shoulder–hip axis is not mesh `+Z`, local `X` would bank the spine
+	/// instead of planting it. World lateral is `Y × sagittal`, brought into the
+	/// yawed frame so a +X spine still pitches while wish `+Z` stays level.
+	pub fn facing_with_support_tilt(&self, yaw_facing: Vec3, sagittal: Vec3) -> Quat {
+		let yaw_facing = Vec3::new(yaw_facing.x, 0.0, yaw_facing.z);
+		let yaw = if yaw_facing.length_squared() < 1e-6 {
+			Quat::IDENTITY
+		} else {
+			Transform::IDENTITY.looking_to(-yaw_facing, Vec3::Y).rotation
+		};
+		let spine = Vec3::new(sagittal.x, 0.0, sagittal.z);
+		let spine = if spine.length_squared() < 1e-6 { yaw_facing } else { spine };
+		let lateral = Vec3::Y.cross(spine);
+		let pitch_q = if lateral.length_squared() < 1e-6 {
+			Quat::IDENTITY
+		} else {
+			Quat::from_axis_angle(yaw.inverse() * lateral.normalize(), self.pitch)
+		};
+		yaw * pitch_q * Quat::from_rotation_z(self.roll)
+	}
+
+	/// Horizontal half-run of the rest chord after pitch (girdles move closer in XZ).
+	pub fn pitched_half_run(&self, pitch: f32) -> f32 {
+		(self.half_span * pitch.cos().abs()).max(MIN_MEASURED)
+	}
+
+	/// Signed visual Y so the chord midpoint matches the average of the front/hind
+	/// samples. Zero on a plane when those samples are taken at [`Self::pitched_half_run`].
+	pub fn support_offset(center_height: f32, front_height: f32, hind_height: f32) -> f32 {
+		((front_height + hind_height) * 0.5 - center_height)
+			.clamp(-MAX_SUPPORT_OFFSET, MAX_SUPPORT_OFFSET)
 	}
 }
 
@@ -233,28 +329,8 @@ impl RigSkeletonKind {
 	}
 }
 
-/// Midpoint of named bones in XZ, if at least one exists.
-pub fn girdle_midpoint(positions: impl IntoIterator<Item = Vec3>) -> Option<Vec3> {
-	let mut sum = Vec3::ZERO;
-	let mut n = 0u32;
-	for p in positions {
-		sum += p;
-		n += 1;
-	}
-	(n > 0).then(|| sum / n as f32)
-}
-
 fn measured_half(a: Option<Vec3>, b: Option<Vec3>, fallback: f32) -> f32 {
-	measured_support_half(a, b).unwrap_or(fallback)
-}
-
-/// XZ half-distance between two support samples, if they are far enough apart.
-pub fn measured_support_half(a: Option<Vec3>, b: Option<Vec3>) -> Option<f32> {
-	let (Some(a), Some(b)) = (a, b) else {
-		return None;
-	};
-	let delta = Vec2::new(a.x - b.x, a.z - b.z).length() * 0.5;
-	(delta >= MIN_MEASURED).then_some(delta)
+	TerrainPitch::measured_support_half(a, b).unwrap_or(fallback)
 }
 
 /// Flattened unit XZ, or `None` if the vector has no ground-plane direction.
@@ -269,85 +345,9 @@ pub fn xz_unit(v: Vec3) -> Option<Vec3> {
 	(xz.length() >= 2.0 * MIN_MEASURED).then(|| xz.normalize())
 }
 
-/// Hind→front on the ground plane from live girdle midpoints.
-pub fn sagittal_axis(front: Vec3, hind: Vec3) -> Option<Vec3> {
-	xz_unit(front - hind)
-}
-
-/// Front/hind sample direction: live spine when girdles exist, else mesh `+Z`.
-pub fn sample_facing(sagittal: Vec3, visual_facing: Vec3) -> Vec3 {
-	xz_unit(sagittal).unwrap_or(visual_facing)
-}
-
 fn slope_angle(high_side: f32, low_side: f32, half_run: f32) -> f32 {
 	let run = (2.0 * half_run).max(1e-3);
 	((high_side - low_side) / run).atan().clamp(-MAX_TILT, MAX_TILT)
-}
-
-/// Local-X angle: nose up when the front sample is higher (`+Z` mesh).
-pub fn observed_pitch(front_height: f32, hind_height: f32, half_span: f32) -> f32 {
-	-slope_angle(front_height, hind_height, half_span)
-}
-
-/// Local-Z angle: right side up when the right sample is higher.
-pub fn observed_roll(left_height: f32, right_height: f32, half_width: f32) -> f32 {
-	slope_angle(right_height, left_height, half_width)
-}
-
-pub fn step_toward(current: f32, target: f32, dt: f32) -> f32 {
-	step_toward_rate(current, target, dt, TILT_RATE)
-}
-
-pub fn step_toward_rate(current: f32, target: f32, dt: f32, rate: f32) -> f32 {
-	let max_step = rate * dt;
-	current + (target - current).clamp(-max_step, max_step)
-}
-
-/// Exponential blend toward `target`, then clamp to `rate`.
-pub fn follow_target(current: f32, target: f32, dt: f32, rate: f32) -> f32 {
-	let alpha = 1.0 - (-TILT_SMOOTH * dt.max(0.0)).exp();
-	let blended = current + (target - current) * alpha;
-	step_toward_rate(current, blended, dt, rate)
-}
-
-/// Yaw from flattened facing (`look_to(-facing)`), then local pitch and roll.
-pub fn facing_with_tilt(facing_xz: Vec3, pitch: f32, roll: f32) -> Quat {
-	facing_with_support_tilt(facing_xz, facing_xz, pitch, roll)
-}
-
-/// Compose explicit heading with pitch about the axis perpendicular to `sagittal`.
-///
-/// When the shoulder–hip axis is not mesh `+Z`, local `X` would bank the spine
-/// instead of planting it. World lateral is `Y × sagittal`, brought into the
-/// yawed frame so a +X spine still pitches while wish `+Z` stays level.
-pub fn facing_with_support_tilt(yaw_facing: Vec3, sagittal: Vec3, pitch: f32, roll: f32) -> Quat {
-	let yaw_facing = Vec3::new(yaw_facing.x, 0.0, yaw_facing.z);
-	let yaw = if yaw_facing.length_squared() < 1e-6 {
-		Quat::IDENTITY
-	} else {
-		Transform::IDENTITY.looking_to(-yaw_facing, Vec3::Y).rotation
-	};
-	let spine = Vec3::new(sagittal.x, 0.0, sagittal.z);
-	let spine = if spine.length_squared() < 1e-6 { yaw_facing } else { spine };
-	let lateral = Vec3::Y.cross(spine);
-	let pitch_q = if lateral.length_squared() < 1e-6 {
-		Quat::IDENTITY
-	} else {
-		Quat::from_axis_angle(yaw.inverse() * lateral.normalize(), pitch)
-	};
-	yaw * pitch_q * Quat::from_rotation_z(roll)
-}
-
-/// Horizontal half-run of the rest chord after pitch (girdles move closer in XZ).
-pub fn pitched_half_run(half_span: f32, pitch: f32) -> f32 {
-	(half_span * pitch.cos().abs()).max(MIN_MEASURED)
-}
-
-/// Signed visual Y so the chord midpoint matches the average of the front/hind
-/// samples. Zero on a plane when those samples are taken at [`pitched_half_run`].
-pub fn support_offset(center_height: f32, front_height: f32, hind_height: f32) -> f32 {
-	((front_height + hind_height) * 0.5 - center_height)
-		.clamp(-MAX_SUPPORT_OFFSET, MAX_SUPPORT_OFFSET)
 }
 
 #[cfg(test)]
@@ -356,25 +356,30 @@ mod tests {
 
 	#[test]
 	fn uphill_front_pitches_nose_up() {
-		let pitch = observed_pitch(2.0, 1.0, 0.5);
-		assert!(pitch < 0.0);
-		assert!(pitch.abs() <= MAX_TILT);
-		let nose = facing_with_tilt(Vec3::Z, pitch, 0.0) * Vec3::Z;
+		let pitch_angle = TerrainPitch::observed_pitch(2.0, 1.0, 0.5);
+		assert!(pitch_angle < 0.0);
+		assert!(pitch_angle.abs() <= MAX_TILT);
+		let mut pitch = TerrainPitch::new(RigSkeletonKind::Humanoid, 0.5, 0.18);
+		pitch.pitch = pitch_angle;
+		let nose = pitch.facing_with_tilt(Vec3::Z) * Vec3::Z;
 		assert!(nose.y > 0.0, "uphill should raise mesh +Z, y={}", nose.y);
 	}
 
 	#[test]
 	fn high_right_rolls_right_up() {
-		let roll = observed_roll(1.0, 2.0, 0.5);
+		let roll = TerrainPitch::observed_roll(1.0, 2.0, 0.5);
 		assert!(roll > 0.0);
-		let right = facing_with_tilt(Vec3::Z, 0.0, roll) * Vec3::X;
+		let mut pitch = TerrainPitch::new(RigSkeletonKind::Humanoid, 0.5, 0.18);
+		pitch.roll = roll;
+		let right = pitch.facing_with_tilt(Vec3::Z) * Vec3::X;
 		assert!(right.y > 0.0, "high right should raise mesh +X, y={}", right.y);
 	}
 
 	#[test]
 	fn support_tilt_pitches_a_plus_x_spine_without_banking_plus_z() {
-		let pitch = -0.6;
-		let q = facing_with_support_tilt(Vec3::Z, Vec3::X, pitch, 0.0);
+		let mut pitch = TerrainPitch::new(RigSkeletonKind::Humanoid, 0.5, 0.18);
+		pitch.pitch = -0.6;
+		let q = pitch.facing_with_support_tilt(Vec3::Z, Vec3::X);
 		let spine = q * Vec3::X;
 		assert!(spine.y > 0.0, "uphill along +X should raise mesh +X, y={}", spine.y);
 		let nose = q * Vec3::Z;
@@ -383,8 +388,8 @@ mod tests {
 
 	#[test]
 	fn flat_ground_is_zero() {
-		assert_eq!(observed_pitch(3.0, 3.0, 0.9), 0.0);
-		assert_eq!(observed_roll(3.0, 3.0, 0.45), 0.0);
+		assert_eq!(TerrainPitch::observed_pitch(3.0, 3.0, 0.9), 0.0);
+		assert_eq!(TerrainPitch::observed_roll(3.0, 3.0, 0.45), 0.0);
 	}
 
 	#[test]
@@ -420,15 +425,16 @@ mod tests {
 
 	#[test]
 	fn offset_is_zero_on_a_plane() {
-		assert!(support_offset(0.0, 0.2, -0.2).abs() < 1e-5);
-		assert!(support_offset(1.2, 2.4, 0.0).abs() < 1e-5);
+		assert!(TerrainPitch::support_offset(0.0, 0.2, -0.2).abs() < 1e-5);
+		assert!(TerrainPitch::support_offset(1.2, 2.4, 0.0).abs() < 1e-5);
 	}
 
 	#[test]
 	fn pitched_run_shrinks_with_tilt() {
 		let span = 1.2;
-		assert!((pitched_half_run(span, 0.0) - span).abs() < 1e-5);
-		assert!((pitched_half_run(span, 60.0_f32.to_radians()) - span * 0.5).abs() < 1e-5);
+		let pitch = TerrainPitch::new(RigSkeletonKind::Quadruped, span, 0.45);
+		assert!((pitch.pitched_half_run(0.0) - span).abs() < 1e-5);
+		assert!((pitch.pitched_half_run(60.0_f32.to_radians()) - span * 0.5).abs() < 1e-5);
 	}
 
 	#[test]
@@ -436,24 +442,25 @@ mod tests {
 		let alpha = 40.0_f32.to_radians();
 		let span = 1.2;
 		let tan = alpha.tan();
-		let coarse = observed_pitch(tan * span, -tan * span, span);
+		let pitch = TerrainPitch::new(RigSkeletonKind::Quadruped, span, 0.45);
+		let coarse = TerrainPitch::observed_pitch(tan * span, -tan * span, span);
 		assert!((coarse + alpha).abs() < 1e-4);
-		let run = pitched_half_run(span, coarse);
-		let refined = observed_pitch(tan * run, -tan * run, run);
+		let run = pitch.pitched_half_run(coarse);
+		let refined = TerrainPitch::observed_pitch(tan * run, -tan * run, run);
 		assert!((refined - coarse).abs() < 1e-4);
-		assert!(support_offset(0.0, tan * run, -tan * run).abs() < 1e-5);
+		assert!(TerrainPitch::support_offset(0.0, tan * run, -tan * run).abs() < 1e-5);
 	}
 
 	#[test]
 	fn support_offset_raises_over_a_dip() {
-		let offset = support_offset(0.0, 1.0, 1.0);
+		let offset = TerrainPitch::support_offset(0.0, 1.0, 1.0);
 		assert!((offset - 1.0).abs() < 1e-5);
 	}
 
 	#[test]
 	fn measured_support_ignores_stacked_girdles() {
 		let origin = Vec3::new(10.0, 1.0, 4.0);
-		assert_eq!(measured_support_half(Some(origin), Some(origin)), None);
+		assert_eq!(TerrainPitch::measured_support_half(Some(origin), Some(origin)), None);
 	}
 
 	#[test]
@@ -473,16 +480,18 @@ mod tests {
 	fn sagittal_axis_follows_shoulder_to_hip() {
 		let front = Vec3::new(3.0, 2.0, 1.0);
 		let hind = Vec3::new(1.0, 0.5, 1.0);
-		let axis = sagittal_axis(front, hind).expect("separated girdles");
+		let axis = TerrainPitch::sagittal_axis(front, hind).expect("separated girdles");
 		assert!((axis - Vec3::X).length() < 1e-5);
-		assert!(sagittal_axis(front, front).is_none());
+		assert!(TerrainPitch::sagittal_axis(front, front).is_none());
 	}
 
 	#[test]
 	fn sample_facing_prefers_girdle_axis_over_mesh_plus_z() {
 		let visual = Vec3::Z;
-		assert_eq!(sample_facing(Vec3::ZERO, visual), visual);
-		let spine = sample_facing(Vec3::X, visual);
+		let mut pitch = TerrainPitch::new(RigSkeletonKind::Quadruped, 1.2, 0.45);
+		assert_eq!(pitch.sample_facing(visual), visual);
+		pitch.sagittal = Vec3::X;
+		let spine = pitch.sample_facing(visual);
 		assert!((spine - Vec3::X).length() < 1e-5);
 	}
 
@@ -556,10 +565,10 @@ mod tests {
 	#[test]
 	fn follow_target_damps_small_error_and_caps_large() {
 		let dt = 1.0 / 60.0;
-		let small = follow_target(0.0, 0.02, dt, TILT_RATE);
+		let small = TerrainPitch::follow_target(0.0, 0.02, dt, TILT_RATE);
 		assert!(small > 0.0);
 		assert!(small < 0.02);
-		let large = follow_target(0.0, 2.0, dt, TILT_RATE);
+		let large = TerrainPitch::follow_target(0.0, 2.0, dt, TILT_RATE);
 		assert!((large - TILT_RATE * dt).abs() < 1e-5);
 	}
 }
