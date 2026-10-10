@@ -9,7 +9,8 @@ use bevy::prelude::*;
 use clap::Args;
 use lod::lod_ref::LodRef;
 #[cfg(test)]
-use lod::scene::{LodScene, LodSceneLevel};
+use lod::scene::LodScene;
+use lod::scene::LodSceneLevel;
 use lod::SceneChunk;
 use material_ref::MaterialRef;
 use procedural_common::{BuildWithNoise, NoiseParams};
@@ -178,7 +179,7 @@ impl ConiferSapling {
 		Self { plants, structural_center, footprint_radius, extent: *extent }
 	}
 
-	fn nest_plant_chunks(&self, lod_ref: &LodRef) -> Vec<SceneChunk> {
+	fn nest_plant_chunks(&self, lod_ref: &LodRef, level: LodSceneLevel) -> Vec<SceneChunk> {
 		if self.plants.is_empty() {
 			return Vec::new();
 		}
@@ -209,6 +210,7 @@ impl ConiferSapling {
 					&plant.ball_material,
 					&plant.frond_material,
 					&plant_lod,
+					level,
 				),
 				ConiferSaplingKind::Northern(t) => nest_flattened_plant_chunk(
 					Arc::clone(t),
@@ -217,6 +219,7 @@ impl ConiferSapling {
 					&plant.ball_material,
 					&plant.frond_material,
 					&plant_lod,
+					level,
 				),
 			})
 		})]

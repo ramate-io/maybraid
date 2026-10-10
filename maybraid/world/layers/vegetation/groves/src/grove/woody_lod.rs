@@ -232,7 +232,7 @@ macro_rules! impl_woody_grove_lod {
 				lod_ref: &lod::lod_ref::LodRef,
 				level: lod::scene::LodSceneLevel,
 			) -> lod::SceneChunk {
-				($lod).scene_chunks(level, lod_ref, self.nest_plant_chunks(lod_ref), self)
+				($lod).scene_chunks(level, lod_ref, self.nest_plant_chunks(lod_ref, level), self)
 			}
 
 			fn scene_bounds(&self) -> bevy::math::bounding::Aabb3d {
