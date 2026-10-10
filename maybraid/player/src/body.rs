@@ -236,7 +236,8 @@ pub fn apply_character_controller(commands: &mut Commands, body: Entity, hull: L
 	// Respawn / re-stamp must not reset a live squat or prone.
 	commands
 		.entity(body)
-		.insert_if_new(crate::stance::CharacterStance::settled(crate::stance::StanceKind::Stand));
+		.insert_if_new(crate::stance::CharacterStance::settled(crate::stance::StanceKind::Stand))
+		.insert_if_new(crate::walk_start::WalkStartBlend::default());
 	apply_locomotion_capsule(commands, body, hull);
 }
 

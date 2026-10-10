@@ -9,7 +9,7 @@ use character_animations::animations::{
 	LateralUndulation, Leap, QuadrupedRun, Run, Soaring, TuckProfile, TuckedFlip, TwoFootedJump,
 	Walk, AIR_END, DEFAULT_BACKSWING, DEFAULT_DESCENT_SPEED, DEFAULT_GRAVITY, DEFAULT_JAB_TARGET,
 	DEFAULT_JUMP_HEIGHT, DEFAULT_LANDING_SQUAT_SPEED, DEFAULT_PRE_SQUAT_SPEED,
-	DEFAULT_SPRING_DURATION, TAKEOFF_END,
+	DEFAULT_SPRING_DURATION, DEFAULT_WALK_START_SPEED, TAKEOFF_END,
 };
 use character_animations::{ClipTimePolicy, SampleAddress};
 use character_rigs::Side;
@@ -33,6 +33,7 @@ pub const LEAP_CYCLE_SPEED: f32 = 0.8;
 pub enum AnimId {
 	#[default]
 	Still,
+	WalkStart,
 	Walk,
 	Run,
 	QuadrupedRun,
@@ -56,6 +57,7 @@ impl AnimId {
 	pub const fn default_speed(self) -> f32 {
 		match self {
 			Self::Still => IDLE_CYCLE_SPEED,
+			Self::WalkStart => DEFAULT_WALK_START_SPEED,
 			Self::Walk => WALK_CYCLE_SPEED,
 			Self::Run => RUN_CYCLE_SPEED,
 			Self::QuadrupedRun => QUADRUPED_RUN_CYCLE_SPEED,
@@ -192,6 +194,7 @@ impl Default for JabParams {
 pub enum AnimClip {
 	#[default]
 	Still,
+	WalkStart,
 	Walk(Walk),
 	Run(Run),
 	QuadrupedRun(QuadrupedRun),
@@ -215,6 +218,7 @@ impl AnimClip {
 	pub const fn id(self) -> AnimId {
 		match self {
 			Self::Still => AnimId::Still,
+			Self::WalkStart => AnimId::WalkStart,
 			Self::Walk(_) => AnimId::Walk,
 			Self::Run(_) => AnimId::Run,
 			Self::QuadrupedRun(_) => AnimId::QuadrupedRun,
@@ -241,6 +245,10 @@ impl AnimClip {
 
 	pub fn still() -> Self {
 		Self::Still
+	}
+
+	pub fn walk_start() -> Self {
+		Self::WalkStart
 	}
 
 	pub fn walk() -> Self {
@@ -335,6 +343,7 @@ impl AnimClip {
 			| Self::TwoFootedTuckedFlip(_)
 			| Self::Squat
 			| Self::SquatDescent
+			| Self::WalkStart
 			| Self::Prone => ClipTimePolicy::Clamp { duration: 1.0 },
 			Self::Soaring(_) | Self::Flapping(_) => ClipTimePolicy::Unbounded,
 			Self::LateralUndulation(_) | Self::DorsoventralUndulation(_) => {
