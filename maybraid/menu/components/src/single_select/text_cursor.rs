@@ -41,6 +41,7 @@ pub struct TextCursorSlot;
 pub enum MenuObjectiveKind {
 	#[default]
 	ComingSoon,
+	TemporarilyRemoved,
 	StartHere,
 	NeedsCharacter,
 	Selected,
@@ -50,6 +51,7 @@ impl MenuObjectiveKind {
 	pub fn label(self) -> &'static str {
 		match self {
 			Self::ComingSoon => "Coming Soon",
+			Self::TemporarilyRemoved => "Temporarily Removed",
 			Self::StartHere => "Start Here",
 			Self::NeedsCharacter => "Needs Character.",
 			Self::Selected => "Selected",
@@ -58,7 +60,7 @@ impl MenuObjectiveKind {
 
 	pub fn color(self) -> Color {
 		match self {
-			Self::ComingSoon => TEXT_PURPLE,
+			Self::ComingSoon | Self::TemporarilyRemoved => TEXT_PURPLE,
 			Self::StartHere => TEXT_LIME,
 			Self::NeedsCharacter => TEXT_SALMON,
 			Self::Selected => TEXT_LIME,
@@ -804,10 +806,12 @@ mod tests {
 	#[test]
 	fn objective_kind_copy_and_color() {
 		assert_eq!(MenuObjectiveKind::ComingSoon.label(), "Coming Soon");
+		assert_eq!(MenuObjectiveKind::TemporarilyRemoved.label(), "Temporarily Removed");
 		assert_eq!(MenuObjectiveKind::StartHere.label(), "Start Here");
 		assert_eq!(MenuObjectiveKind::NeedsCharacter.label(), "Needs Character.");
 		assert_eq!(MenuObjectiveKind::Selected.label(), "Selected");
 		assert_eq!(MenuObjectiveKind::ComingSoon.color(), TEXT_PURPLE);
+		assert_eq!(MenuObjectiveKind::TemporarilyRemoved.color(), TEXT_PURPLE);
 		assert_eq!(MenuObjectiveKind::StartHere.color(), TEXT_LIME);
 		assert_eq!(MenuObjectiveKind::NeedsCharacter.color(), TEXT_SALMON);
 		assert_eq!(MenuObjectiveKind::Selected.color(), TEXT_LIME);

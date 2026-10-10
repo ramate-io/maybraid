@@ -12,8 +12,8 @@ use characters_playground::CameraController;
 use firearm_user::{
 	pose_held_firearm, stamp_holding_arms, sync_hands_to_firearm, FirearmUser, HeldFirearm,
 };
-use lod::gen::LodScene;
 use lod::lod_ref::LodRef;
+use lod::scene::LodScene;
 use maybraid_menu_controller::MenuController;
 use menu_components::{screen_back_scene, BrandModeLine};
 use menu_screens::{add_menu_input, take_menu_show_request, MenuScreen};
