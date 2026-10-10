@@ -3,7 +3,7 @@
 This crate contains various scene components for Richmond buildings.
 
 > [!NOTE]
-> All components implement [`lod::gen::LodScene`](../../../../../lod/lib/src/scene/lod_scene.rs) so they can be used in the scene graph and with generation-presentation flows.
+> All components implement [`lod::scene::LodScene`](../../../../../lod/lib/src/scene/lod_scene.rs) so they can be used in the scene graph and with generation-presentation flows.
 
 ## Layout
 

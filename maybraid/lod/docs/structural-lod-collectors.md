@@ -34,4 +34,4 @@ Ownership for **collection** is separate from **LOD confine**. A wall can be own
 ## Related
 
 - [Richmond CONTRIBUTING — LodScene](../../world/layers/urbanization/CONTRIBUTING.md#lodscene-on-buildings)
-- [`LodScene`](../lib/src/scene/lod_scene.rs) / [`RegionPresenter`](../lib/src/presentation.rs)
+- [`LodScene`](../lib/src/scene/lod_scene.rs) and [`lod::hcsg::PresentationPlugin`](../lib/src/hcsg/presentation.rs)

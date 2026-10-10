@@ -70,7 +70,7 @@ fn setup_lighting(mut commands: Commands) {
 mod tests {
 	use super::*;
 	use game_commands::command::GameCommand;
-	use maybraid_vfx::{FIREBALL, FIERY_EXPLOSION, FLASH, SMOKE, SPARKS};
+	use maybraid_vfx::{FIERY_EXPLOSION, FIREBALL, FLASH, SMOKE, SPARKS};
 
 	#[test]
 	fn parses_help() -> Result<(), String> {

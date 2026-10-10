@@ -36,7 +36,8 @@ pub fn add_instance_properties(writer: &ExprWriter) -> InstanceExprs {
 	let playback = writer.add_property(PROP_PLAYBACK, 1.0.into());
 	let color0 = writer.add_property(PROP_COLOR0, ExplosionPalette::vec4(defaults.fire_hot).into());
 	let color1 = writer.add_property(PROP_COLOR1, ExplosionPalette::vec4(defaults.fire_mid).into());
-	let color2 = writer.add_property(PROP_COLOR2, ExplosionPalette::vec4(defaults.fire_cool).into());
+	let color2 =
+		writer.add_property(PROP_COLOR2, ExplosionPalette::vec4(defaults.fire_cool).into());
 	InstanceExprs {
 		scale: writer.prop(scale),
 		tint: writer.prop(tint),
@@ -54,7 +55,7 @@ pub fn effect_properties(
 	shade: ParticleShade,
 ) -> EffectProperties {
 	let mut properties = EffectProperties::default();
-	properties.set(PROP_SCALE, (spawn.clamped_scale() * layer_scale).into());
+	properties.set(PROP_SCALE, (spawn.scale * layer_scale).into());
 	let tint = spawn.tint.map(LinearRgba::from).unwrap_or(LinearRgba::WHITE);
 	properties.set(PROP_TINT, Vec4::new(tint.red, tint.green, tint.blue, 1.0).into());
 	properties.set(PROP_SEED, seed::unit(spawn.resolved_seed()).into());
@@ -182,19 +183,23 @@ pub fn init_lifetime(
 }
 
 pub fn init_palette_color(props: &InstanceExprs) -> SetAttributeModifier {
-	SetAttributeModifier::new(Attribute::HDR_COLOR, (props.color0.clone() * props.tint.clone()).expr())
+	SetAttributeModifier::new(
+		Attribute::HDR_COLOR,
+		(props.color0.clone() * props.tint.clone()).expr(),
+	)
 }
 
-pub fn update_palette_color(
-	writer: &ExprWriter,
-	props: &InstanceExprs,
-) -> SetAttributeModifier {
+pub fn update_palette_color(writer: &ExprWriter, props: &InstanceExprs) -> SetAttributeModifier {
 	let t = writer
 		.attr(Attribute::AGE)
 		.div(writer.attr(Attribute::LIFETIME).max(writer.lit(1e-3)))
 		.saturate();
-	let early = props.color0.clone().mix(props.color1.clone(), (t.clone() * writer.lit(2.0)).saturate());
-	let color = early.mix(props.color2.clone(), (t * writer.lit(2.0) + writer.lit(-1.0)).saturate());
+	let early = props
+		.color0
+		.clone()
+		.mix(props.color1.clone(), (t.clone() * writer.lit(2.0)).saturate());
+	let color =
+		early.mix(props.color2.clone(), (t * writer.lit(2.0) + writer.lit(-1.0)).saturate());
 	SetAttributeModifier::new(Attribute::HDR_COLOR, (color * props.tint.clone()).expr())
 }
 
