@@ -245,7 +245,7 @@ pub struct PlaybackArgs {
 	/// Scale femur and shin rest length. `0.75` is short, `1.25` is long.
 	#[arg(long)]
 	pub leg_scale: Option<f32>,
-	/// Stop the clock at one second.
+	/// Stop the clock at the clip duration.
 	#[arg(long)]
 	pub once: bool,
 	/// Keep the clock running.

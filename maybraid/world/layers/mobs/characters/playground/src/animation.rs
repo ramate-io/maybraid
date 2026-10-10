@@ -1,5 +1,7 @@
 use bevy::prelude::*;
-use character_animations::animations::{DEFAULT_BACKSWING, DEFAULT_JAB_TARGET};
+use character_animations::animations::{
+	DEFAULT_BACKSWING, DEFAULT_JAB_TARGET, THINK_AGAIN_DURATION,
+};
 use character_rigs::{articulation::compose_parent_rotation, authoring::humanoid_bone_axis, Side};
 use characters::{AnimBone, AnimClip, AnimRef, JabParams, ThinkAgainParams};
 use clap::ValueEnum;
@@ -85,16 +87,26 @@ impl AnimationMode {
 
 	/// Mailbox sample coordinate. Held tuck stays at full fold.
 	///
-	/// One-shots (`think-again`, jump, …) clamp in the clip. When the playground
-	/// is looping, wrap so the gesture repeats instead of freezing at rest.
+	/// One-shots clamp in the clip. When the playground is looping, wrap on
+	/// [`Self::clip_duration`] so `think-again` repeats all four beats.
 	pub fn mailbox_progress(self, elapsed: f32, looping: bool) -> f32 {
 		if matches!(self, Self::FixedTuck) {
 			return 1.0;
 		}
+		let duration = self.clip_duration();
 		if looping && self.wraps_when_looping() {
-			elapsed.rem_euclid(1.0)
+			elapsed.rem_euclid(duration)
+		} else if self.wraps_when_looping() {
+			elapsed.min(duration)
 		} else {
 			elapsed
+		}
+	}
+
+	pub const fn clip_duration(self) -> f32 {
+		match self {
+			Self::ThinkAgain => THINK_AGAIN_DURATION,
+			_ => 1.0,
 		}
 	}
 
@@ -107,7 +119,7 @@ impl AnimationMode {
 pub struct AnimationPlayback {
 	pub paused: bool,
 	pub speed: f32,
-	/// When false, the sample clock stops at one second.
+	/// When false, the sample clock stops at the clip duration.
 	pub looping: bool,
 	pub elapsed: f32,
 	/// Set by `/character playback --progress`. Consumed on the next sample.
@@ -149,7 +161,7 @@ impl Default for AnimationPlayback {
 }
 
 impl AnimationPlayback {
-	pub fn advance(&mut self, delta_seconds: f32) {
+	pub fn advance(&mut self, delta_seconds: f32, duration: f32) {
 		if let Some(progress) = self.scrub.take() {
 			self.elapsed = progress.max(0.0);
 			return;
@@ -159,7 +171,7 @@ impl AnimationPlayback {
 		}
 		self.elapsed += delta_seconds * self.speed;
 		if !self.looping {
-			self.elapsed = self.elapsed.min(1.0);
+			self.elapsed = self.elapsed.min(duration);
 		}
 	}
 }

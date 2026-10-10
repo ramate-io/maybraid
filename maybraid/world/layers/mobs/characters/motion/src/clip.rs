@@ -9,7 +9,7 @@ use character_animations::animations::{
 	LateralUndulation, Leap, QuadrupedRun, Run, Soaring, TuckProfile, TuckedFlip, TwoFootedJump,
 	Walk, AIR_END, DEFAULT_BACKSWING, DEFAULT_DESCENT_SPEED, DEFAULT_GRAVITY, DEFAULT_JAB_TARGET,
 	DEFAULT_JUMP_HEIGHT, DEFAULT_LANDING_SQUAT_SPEED, DEFAULT_PRE_SQUAT_SPEED,
-	DEFAULT_SPRING_DURATION, TAKEOFF_END,
+	DEFAULT_SPRING_DURATION, TAKEOFF_END, THINK_AGAIN_DURATION,
 };
 use character_animations::{ClipTimePolicy, SampleAddress};
 use character_rigs::Side;
@@ -23,7 +23,7 @@ const QUADRUPED_RUN_CYCLE_SPEED: f32 = 0.5;
 const TUCK_CYCLE_SPEED: f32 = 0.6;
 const FRONT_FLIP_CYCLE_SPEED: f32 = 0.85;
 const JAB_CYCLE_SPEED: f32 = 0.9;
-const THINK_AGAIN_CYCLE_SPEED: f32 = 0.75;
+const THINK_AGAIN_CYCLE_SPEED: f32 = 1.0;
 const JUMP_PRE_SQUAT_SPEED: f32 = DEFAULT_PRE_SQUAT_SPEED * 1.2;
 const JUMP_LANDING_SQUAT_SPEED: f32 = DEFAULT_LANDING_SQUAT_SPEED * 1.3;
 /// One-shot leap lasts ~1.25 s so it covers the physics hang time.
@@ -354,10 +354,10 @@ impl AnimClip {
 			Self::Jump(_)
 			| Self::Leap(_)
 			| Self::TwoFootedTuckedFlip(_)
-			| Self::ThinkAgain(_)
 			| Self::Squat
 			| Self::SquatDescent
 			| Self::Prone => ClipTimePolicy::Clamp { duration: 1.0 },
+			Self::ThinkAgain(_) => ClipTimePolicy::Clamp { duration: THINK_AGAIN_DURATION },
 			Self::Soaring(_) | Self::Flapping(_) => ClipTimePolicy::Unbounded,
 			Self::LateralUndulation(_) | Self::DorsoventralUndulation(_) => {
 				ClipTimePolicy::Cycle { duration: 1.0 }

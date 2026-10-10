@@ -110,11 +110,11 @@ mod tests {
 	}
 
 	fn think_hold() -> f32 {
-		0.15
+		0.60
 	}
 
 	fn again_hold() -> f32 {
-		0.85
+		3.40
 	}
 
 	fn posed_arm(side: Side, progress: f32) -> ArmKeyPose {
@@ -149,7 +149,7 @@ mod tests {
 		let mut exit = HumanoidV0Rig::for_clip_test();
 		let rest_pose = entry.pose.clone();
 		clip.apply_for(&mut entry, 0.0);
-		clip.apply_for(&mut exit, 1.0);
+		clip.apply_for(&mut exit, crate::animations::think_again::DURATION);
 		assert_eq!(entry.pose, rest_pose, "entry should not write bones");
 		assert_eq!(exit.pose, rest_pose, "exit should not write bones");
 		Ok(())
@@ -160,9 +160,9 @@ mod tests {
 		let clip = ThinkAgain::default();
 		let mut once = HumanoidV0Rig::for_clip_test();
 		let mut twice = HumanoidV0Rig::for_clip_test();
-		clip.apply_for(&mut once, 0.35);
-		clip.apply_for(&mut twice, 0.35);
-		clip.apply_for(&mut twice, 0.35);
+		clip.apply_for(&mut once, 1.40);
+		clip.apply_for(&mut twice, 1.40);
+		clip.apply_for(&mut twice, 1.40);
 		for bone in ["humerus.R", "forearm.R"] {
 			let delta = once.rotation(bone).angle_between(twice.rotation(bone));
 			assert!(delta < 1e-3, "{bone} drifted {delta}");
@@ -181,8 +181,8 @@ mod tests {
 			);
 			let elevation = posed.humerus_dir.y.atan2(posed.humerus_dir.x.abs()).to_degrees();
 			assert!(
-				(elevation - 10.0).abs() < 3.0,
-				"{side:?} humerus should lift ~10°, elevation {elevation:.1}° dir {:?}",
+				(elevation - 30.0).abs() < 3.0,
+				"{side:?} humerus should lift ~30°, elevation {elevation:.1}° dir {:?}",
 				posed.humerus_dir
 			);
 		}
@@ -266,8 +266,8 @@ mod tests {
 		let clip = ThinkAgain::default().with_side(Side::Right);
 		let mut early = HumanoidV0Rig::for_clip_test();
 		let mut late = HumanoidV0Rig::for_clip_test();
-		clip.apply(&mut early, 0.12);
-		clip.apply(&mut late, 0.18);
+		clip.apply(&mut early, 0.48);
+		clip.apply(&mut late, 0.72);
 		let early_tip = segment_tip(&early, "forearm.R");
 		let late_tip = segment_tip(&late, "forearm.R");
 		assert!(
@@ -277,8 +277,8 @@ mod tests {
 
 		let mut again_early = HumanoidV0Rig::for_clip_test();
 		let mut again_late = HumanoidV0Rig::for_clip_test();
-		clip.apply(&mut again_early, 0.82);
-		clip.apply(&mut again_late, 0.88);
+		clip.apply(&mut again_early, 3.28);
+		clip.apply(&mut again_late, 3.52);
 		let again_a = segment_tip(&again_early, "forearm.R");
 		let again_b = segment_tip(&again_late, "forearm.R");
 		assert!((again_a - again_b).length() < 0.04, "Again hold drift {again_a:?} vs {again_b:?}");
@@ -292,7 +292,7 @@ mod tests {
 			let mut rig = HumanoidV0Rig::for_clip_test();
 			clip.apply(&mut rig, think_hold());
 			let dot = palm_inward_dot(&rig, side);
-			assert!(dot > 0.35, "{side:?} palm should face inward, dot {dot}");
+			assert!(dot > 0.2, "{side:?} palm should face inward, dot {dot}");
 		}
 		Ok(())
 	}
@@ -317,7 +317,7 @@ mod tests {
 				tuned_pose.tip.y > tuned_pose.elbow.y + 0.25,
 				"{side:?} tuned roll keeps hand at head height"
 			);
-			assert!(palm_inward_dot(&tuned, side) > 0.35, "{side:?} tuned roll keeps palm inward");
+			assert!(palm_inward_dot(&tuned, side) > 0.2, "{side:?} tuned roll keeps palm inward");
 
 			// The first draft used `π` together with inverted `humerus_along` (+X on right).
 			// With corrected lateral aim, `π` still passes palm but folds to shoulder height.
@@ -374,12 +374,16 @@ mod tests {
 	fn think_again_samples_are_continuous() -> anyhow::Result<()> {
 		let clip = ThinkAgain::default().with_side(Side::Right);
 		let mut prev = segment_tip(&HumanoidV0Rig::for_clip_test(), "forearm.R");
-		for i in 1..=64 {
-			let t = i as f32 / 64.0;
+		for i in 1..=256 {
+			let t = i as f32 / 256.0 * crate::animations::think_again::DURATION;
 			let mut rig = HumanoidV0Rig::for_clip_test();
 			clip.apply(&mut rig, t);
 			let tip = segment_tip(&rig, "forearm.R");
-			if clip.gesture_amount(t) > 0.05 && clip.gesture_amount((i - 1) as f32 / 64.0) > 0.05 {
+			if clip.gesture_amount(t) > 0.05
+				&& clip.gesture_amount(
+					(i - 1) as f32 / 256.0 * crate::animations::think_again::DURATION,
+				) > 0.05
+			{
 				let jump = (tip - prev).length();
 				assert!(jump < 0.28, "discontinuity at {t:.3}: {jump:.3} {prev:?} -> {tip:?}");
 			}

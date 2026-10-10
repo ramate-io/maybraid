@@ -53,7 +53,7 @@ pub use soaring::Soaring;
 pub use spring::Spring;
 pub use squat::{vertical_drop, Squat};
 pub use squat_descent::{SquatDescent, DEFAULT_DESCENT_SPEED};
-pub use think_again::ThinkAgain;
+pub use think_again::{ThinkAgain, DURATION as THINK_AGAIN_DURATION};
 pub use transition::{BlendCurve, Transition, TransitionCurve};
 pub use tuck::{Tuck, TuckProfile};
 pub use tucked_flip::{FlipDirection, TuckedFlip};

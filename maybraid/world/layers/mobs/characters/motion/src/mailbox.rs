@@ -13,7 +13,7 @@ use bevy::prelude::*;
 use character_animations::{
 	animations::{
 		Idle, Jab, Prone, QuadrupedIdle, QuadrupedLeap, QuadrupedRun, Squat, SquatDescent,
-		ThinkAgain, Tuck, TwoFootedTuckedFlip, UprightLeap,
+		ThinkAgain, Tuck, TwoFootedTuckedFlip, UprightLeap, THINK_AGAIN_DURATION,
 	},
 	Animation, Effects,
 };
@@ -776,7 +776,7 @@ fn sample_humanoid(
 		AnimClip::ThinkAgain(params) => sample_split(
 			&ThinkAgain::new(params.side),
 			rig,
-			progress.clamp(0.0, 1.0),
+			progress.clamp(0.0, THINK_AGAIN_DURATION),
 			write_bones,
 			write_effects,
 		),

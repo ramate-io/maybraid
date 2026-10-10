@@ -68,8 +68,8 @@ fn think_again_sweeps_forearm_beside_the_head() {
 	let rest = HumanoidV0Rig::for_clip_test();
 	let mut think = HumanoidV0Rig::for_clip_test();
 	let mut again = HumanoidV0Rig::for_clip_test();
-	ThinkAgain::default().apply(&mut think, 0.15);
-	ThinkAgain::default().apply(&mut again, 0.85);
+	ThinkAgain::default().apply(&mut think, 0.60);
+	ThinkAgain::default().apply(&mut again, 3.40);
 	let rest_dir = rest.character_length("forearm.R");
 	let think_dir = think.character_length("forearm.R");
 	let again_dir = again.character_length("forearm.R");

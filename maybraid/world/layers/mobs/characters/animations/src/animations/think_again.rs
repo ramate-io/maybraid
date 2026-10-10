@@ -1,8 +1,8 @@
 //! "Think Again" meme gesture: raised upper arm, forearm ticks beside the head.
 //!
 //! Character space matches [`Jab`](super::Jab): +X right, +Y up, +Z fight-forward.
-//! The humerus abducts laterally and lifts ~10° as the elbow folds. Cadence is
-//! four beats: Think, rest, rest, Again.
+//! The humerus abducts laterally and lifts ~30° as the elbow folds. Cadence is
+//! four beats at one second each: Think, rest, rest, Again.
 //!
 //! Forearm tilt in tests is derived from posed elbow→tip positions: `atan2(Δx, Δy)`.
 //! Think ≈ +45° inboard; Again ≈ +15° inboard.
@@ -11,24 +11,25 @@ use bevy::prelude::Vec3;
 use character_rigs::Side;
 
 use crate::animations::smoothstep;
-use crate::Progress;
 
-/// Four-beat clip: Think | rest | rest | Again.
-const BEAT: f32 = 0.25;
+/// One second per word / rest beat.
+pub const BEAT: f32 = 1.0;
+/// Whole one-shot: Think | rest | rest | Again.
+pub const DURATION: f32 = 4.0 * BEAT;
 /// Think occupies beat 1 and a short release into beat 2.
-const THINK_END: f32 = BEAT + 0.05;
+const THINK_END: f32 = BEAT + 0.20;
 /// Again occupies beat 4, with a matching attack out of beat 3.
-const AGAIN_START: f32 = 3.0 * BEAT - 0.05;
+const AGAIN_START: f32 = 3.0 * BEAT - 0.20;
 /// Raise / drop. Matched so the hand does not pop on either edge.
-const ATTACK: f32 = 0.10;
-const RELEASE: f32 = 0.10;
+const ATTACK: f32 = 0.40;
+const RELEASE: f32 = 0.40;
 
-/// Elbow flex at Think. World tilt is ~45° inboard after the 10° humerus lift.
-const THINK_ELBOW: f32 = std::f32::consts::FRAC_PI_2 + 35_f32.to_radians();
+/// Elbow flex at Think. World tilt is ~45° inboard after the 30° humerus lift.
+const THINK_ELBOW: f32 = std::f32::consts::FRAC_PI_2 + 15_f32.to_radians();
 /// Elbow flex at Again. World tilt is ~+15° inboard after the same lift.
-const AGAIN_ELBOW: f32 = std::f32::consts::FRAC_PI_2 + 5_f32.to_radians();
+const AGAIN_ELBOW: f32 = std::f32::consts::FRAC_PI_2 - 15_f32.to_radians();
 /// Humerus lift from the T-pose horizontal, in radians, at full gesture.
-const HUMERUS_ELEVATION: f32 = 10_f32.to_radians();
+const HUMERUS_ELEVATION: f32 = 30_f32.to_radians();
 /// Roll about the lateral humerus so the forearm hinge opens beside the head.
 ///
 /// Not multiplied by [`Side::sign`]: bilateral mirroring is already carried by
@@ -63,12 +64,12 @@ impl ThinkAgain {
 
 	/// Beat-1 pulse. Zero on the rest beats and on Again.
 	pub fn think_amount(&self, progress: f32) -> f32 {
-		beat_pulse(Progress(progress).clamp(), 0.0, THINK_END, ATTACK, RELEASE)
+		beat_pulse(clip_time(progress), 0.0, THINK_END, ATTACK, RELEASE)
 	}
 
 	/// Beat-4 pulse. Zero on Think and the two rest beats.
 	pub fn again_amount(&self, progress: f32) -> f32 {
-		beat_pulse(Progress(progress).clamp(), AGAIN_START, 1.0, ATTACK, RELEASE)
+		beat_pulse(clip_time(progress), AGAIN_START, DURATION, ATTACK, RELEASE)
 	}
 
 	/// Overall gesture envelope: either word, nothing on the rest beats.
@@ -97,6 +98,10 @@ impl ThinkAgain {
 	}
 }
 
+fn clip_time(progress: f32) -> f32 {
+	progress.clamp(0.0, DURATION)
+}
+
 /// Smooth attack, hold, and release on `[start, end)`.
 fn beat_pulse(t: f32, start: f32, end: f32, attack: f32, release: f32) -> f32 {
 	if t <= start || t >= end {
@@ -119,24 +124,24 @@ mod tests {
 	use super::*;
 
 	fn think_hold() -> f32 {
-		0.15
+		0.60
 	}
 
 	fn rest_hold() -> f32 {
-		0.50
+		2.00
 	}
 
 	fn again_hold() -> f32 {
-		0.85
+		3.40
 	}
 
 	#[test]
 	fn think_again_starts_and_ends_at_rest() -> anyhow::Result<()> {
 		let clip = ThinkAgain::default();
 		assert!(clip.gesture_amount(0.0) < 1e-4);
-		assert!(clip.gesture_amount(1.0) < 1e-4);
+		assert!(clip.gesture_amount(DURATION) < 1e-4);
 		assert!(clip.elbow_flexion(0.0) < 1e-4);
-		assert!(clip.elbow_flexion(1.0) < 0.05);
+		assert!(clip.elbow_flexion(DURATION) < 0.05);
 		Ok(())
 	}
 
@@ -153,8 +158,8 @@ mod tests {
 	fn think_again_rest_beats_are_at_rest() -> anyhow::Result<()> {
 		let clip = ThinkAgain::default();
 		assert!(clip.gesture_amount(rest_hold()) < 1e-4);
-		assert!(clip.elbow_flexion(0.375) < 1e-4);
-		assert!(clip.elbow_flexion(0.625) < 1e-4);
+		assert!(clip.elbow_flexion(1.5) < 1e-4);
+		assert!(clip.elbow_flexion(2.5) < 1e-4);
 		Ok(())
 	}
 
@@ -172,10 +177,10 @@ mod tests {
 		let clip = ThinkAgain::default().with_side(Side::Right);
 		let along = clip.humerus_along(think_hold());
 		let elev = along.y.atan2(along.x.abs()).to_degrees();
-		assert!(along.x.abs() > 0.95, "stays mostly lateral, got {along:?}");
+		assert!(along.x.abs() > 0.85, "stays mostly lateral, got {along:?}");
 		assert!(
-			(elev - 10.0).abs() < 0.5,
-			"humerus should lift ~10° with the elbow, got {elev:.1}° {along:?}"
+			(elev - 30.0).abs() < 0.5,
+			"humerus should lift ~30° with the elbow, got {elev:.1}° {along:?}"
 		);
 		Ok(())
 	}
@@ -206,7 +211,7 @@ mod tests {
 	#[test]
 	fn think_again_clamps_beyond_one_shot_end() -> anyhow::Result<()> {
 		let clip = ThinkAgain::default();
-		assert!((clip.gesture_amount(1.5) - clip.gesture_amount(1.0)).abs() < 1e-4);
+		assert!((clip.gesture_amount(DURATION + 0.5) - clip.gesture_amount(DURATION)).abs() < 1e-4);
 		Ok(())
 	}
 }
