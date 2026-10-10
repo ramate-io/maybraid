@@ -4,14 +4,12 @@ use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
 use bevy_hanabi::prelude::{EffectMaterial, ParticleEffect};
 
-use bevy::mesh::MeshTag;
-
 use crate::composition::{
 	EffectDefinition, EffectLayer, EffectPart, LobeKind, ScaleBounds, DEFAULT_SCALE_MAX,
 	DEFAULT_SCALE_MIN,
 };
-use crate::lobe_instances::{next_lobe_slot, LobeInstanceGpu};
-use crate::lobes::{lobe_transform, vary_lobe, LobeMaterialPending, VfxLobe};
+use crate::lobe_material::LobeMaterial;
+use crate::lobes::{lobe_transform, vary_lobe, LobeMaterialSlot, VfxLobe};
 use crate::membership::VfxMemberOf;
 use crate::palette::ExplosionPalette;
 use crate::particles::effect_properties;
@@ -291,7 +289,7 @@ pub fn realize_layer(
 			let layer_id = layer_stream(part.kind);
 			for (index, spec) in part.lobes.iter().copied().enumerate() {
 				let spec = vary_lobe(spec, spawn.resolved_seed(), layer_id, index as u32);
-				let gpu = LobeInstanceGpu::new(
+				let material = LobeMaterial::new(
 					part.kind,
 					spec.duration,
 					seed::unit(seed::stream(spawn.resolved_seed(), layer_id, index as u32)),
@@ -299,20 +297,14 @@ pub fn realize_layer(
 					spawn.tint_or_white(),
 					spawn.clamped_intensity(),
 				);
-				let lobe = commands
-					.spawn((
-						Name::new(format!("vfx-lobe-{}-{index}", part.name)),
-						ChildOf(cluster),
-						VfxMemberOf(parent),
-						Mesh3d(part.mesh.clone()),
-						lobe_transform(&spec, 0.0),
-						MeshTag(next_lobe_slot()),
-						Visibility::Hidden,
-						VfxLobe { age: 0.0, spec, playback: spawn.clamped_playback() },
-					))
-					.id();
-				commands.entity(lobe).insert((
-					gpu,
+				commands.spawn((
+					Name::new(format!("vfx-lobe-{}-{index}", part.name)),
+					ChildOf(cluster),
+					VfxMemberOf(parent),
+					Mesh3d(part.mesh.clone()),
+					lobe_transform(&spec, 0.0),
+					Visibility::Hidden,
+					VfxLobe { age: 0.0, spec, playback: spawn.clamped_playback() },
 					VfxLayerLife {
 						age: 0.0,
 						duration: spec.duration,
@@ -320,7 +312,7 @@ pub fn realize_layer(
 						waiting_for_emitter: false,
 					},
 					NotShadowCaster,
-					LobeMaterialPending(part.kind),
+					LobeMaterialSlot(material),
 				));
 			}
 		}
