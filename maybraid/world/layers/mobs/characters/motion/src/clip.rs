@@ -296,7 +296,7 @@ impl AnimClip {
 		Self::Jab(JabParams::default())
 	}
 
-	pub fn handclap() -> Self {
+	pub fn hand_clap() -> Self {
 		Self::HandClap
 	}
 
