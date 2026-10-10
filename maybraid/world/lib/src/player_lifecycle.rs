@@ -1363,7 +1363,7 @@ mod tests {
 		);
 		assert!(world.resource::<WorldPlayerRespawnState>().pending.is_none());
 
-		spawn_worker(storage, demand.clone())?;
+		let _worker = spawn_worker(storage, demand.clone())?;
 		anyhow::ensure!(demand.wait_idle(std::time::Duration::from_secs(10)));
 		world
 			.run_system_once(queue_first_spawn_picker)

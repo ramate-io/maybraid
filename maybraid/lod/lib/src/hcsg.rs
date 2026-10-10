@@ -51,11 +51,14 @@ pub use session::{
 };
 pub use storage::{Busy, HcsgStorage, HcsgValue};
 
+/// Keeps a test [`worker::HcsgWorker`] alive until dropped.
+pub struct TestWorkerGuard(worker::HcsgWorker);
+
 /// Starts the shared generation worker. Production apps rely on
 /// [`PresentationPlugin`] / [`GenerationPlugin`] to install one worker; call
 /// this only in tests that subscribe [`HcsgDemand`] without those plugins.
-pub fn spawn_worker(storage: HcsgStorage, demand: HcsgDemand) -> std::io::Result<()> {
-	worker::HcsgWorker::spawn(storage, demand).map(|_| ())
+pub fn spawn_worker(storage: HcsgStorage, demand: HcsgDemand) -> std::io::Result<TestWorkerGuard> {
+	worker::HcsgWorker::spawn(storage, demand).map(TestWorkerGuard)
 }
 
 use bevy::math::bounding::Aabb3d;
