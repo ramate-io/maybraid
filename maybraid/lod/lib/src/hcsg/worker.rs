@@ -59,7 +59,7 @@ fn run(storage: &HcsgStorage, demand: &HcsgDemand) {
 				let id = job.id;
 				let reach = job.reach.clone();
 				let progress =
-					panic::catch_unwind(AssertUnwindSafe(|| fill_quantum(storage, demand, job)))
+					panic::catch_unwind(AssertUnwindSafe(|| fill_quantum(storage, job)))
 						.unwrap_or_else(|_| {
 							error!(
 								"hcsg worker: generation panicked; subscription {id:?} left partial"
@@ -72,7 +72,7 @@ fn run(storage: &HcsgStorage, demand: &HcsgDemand) {
 	}
 }
 
-fn fill_quantum(storage: &HcsgStorage, demand: &HcsgDemand, job: Job) -> QuantumProgress {
+fn fill_quantum(storage: &HcsgStorage, job: Job) -> QuantumProgress {
 	let stale = || job.cancelled.load(Ordering::Acquire);
 	let started = Instant::now();
 	let mut cx = GenerationContext::with_stale(storage, &stale);
@@ -97,15 +97,30 @@ fn fill_quantum(storage: &HcsgStorage, demand: &HcsgDemand, job: Job) -> Quantum
 		}
 	};
 	if stale() {
-		return progress(&mut cx, Some(ids), job.cursor, quantum_cost(1, started.elapsed()), false);
+		return progress(
+			&mut cx,
+			Some(ids),
+			job.cursor,
+			quantum_cost(1, started.elapsed()),
+			false,
+			Vec::new(),
+		);
 	}
 	if first_discover && started.elapsed() >= QUANTUM_TIME {
 		let done = ids.is_empty();
-		return progress(&mut cx, Some(ids), job.cursor, quantum_cost(1, started.elapsed()), done);
+		return progress(
+			&mut cx,
+			Some(ids),
+			job.cursor,
+			quantum_cost(1, started.elapsed()),
+			done,
+			Vec::new(),
+		);
 	}
 
 	let mut cursor = job.cursor;
 	let mut cost = 0u32;
+	let mut published = Vec::new();
 	while cursor < ids.len() {
 		if stale() {
 			break;
@@ -114,13 +129,20 @@ fn fill_quantum(storage: &HcsgStorage, demand: &HcsgDemand, job: Job) -> Quantum
 			break;
 		}
 		if (job.generate)(&mut cx, ids[cursor]) {
-			demand.append(job.id, ids[cursor]);
+			published.push(ids[cursor]);
 		}
 		cursor += 1;
 		cost += 1;
 	}
 	let done = cursor >= ids.len() && !stale();
-	progress(&mut cx, Some(ids), cursor, quantum_cost(cost.max(1), started.elapsed()), done)
+	progress(
+		&mut cx,
+		Some(ids),
+		cursor,
+		quantum_cost(cost.max(1), started.elapsed()),
+		done,
+		published,
+	)
 }
 
 fn progress(
@@ -129,6 +151,7 @@ fn progress(
 	cursor: usize,
 	cost: f64,
 	done: bool,
+	published: Vec<Id>,
 ) -> QuantumProgress {
-	QuantumProgress { discovered, cursor, cost, done, reached: cx.take_reached() }
+	QuantumProgress { discovered, cursor, cost, done, reached: cx.take_reached(), published }
 }

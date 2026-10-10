@@ -491,8 +491,10 @@ pub fn grove_detail_level_keep_low(level: LodSceneLevel) -> Option<LodSceneLevel
 /// Pose one plant as kit content under the grove level root — no nested [`lod::LodSceneHost`].
 ///
 /// Stamps [`FlattenedComponentsOnly`]`<`[`PlacedVegetation`]`<T>>` so stick
-/// colliders still find a typed source. Kit LOD is sampled at grove fulfill
-/// (the grove host is what refreshes). Isolated `/show` trees still use
+/// colliders still find a typed source. Kit LOD is the grove fulfill `level`
+/// (the grove host is what refreshes). Sampling the plant's own structural
+/// band here baked Medium/Low canopy when the tile first entered High, and
+/// those kits never upgraded. Isolated `/show` trees still use
 /// [`vegetation_components::flattened_components_only_host`].
 pub fn nest_flattened_plant_host<T>(
 	plant: T,
@@ -501,6 +503,7 @@ pub fn nest_flattened_plant_host<T>(
 	ball_material: &MaterialRef,
 	frond_material: &MaterialRef,
 	lod_ref: &LodRef,
+	level: LodSceneLevel,
 ) -> impl Scene + 'static
 where
 	T: VegetationComponents + Clone + Send + Sync + 'static,
@@ -513,7 +516,6 @@ where
 		frond_material.clone(),
 	);
 	let host = FlattenedComponentsOnly(placed);
-	let level = host.scene_lod_level(lod_ref);
 	let bounds = host.scene_bounds();
 	let anchor = (bounds.min + bounds.max) * 0.5;
 	let radius = ((bounds.max.x - bounds.min.x).max(bounds.max.z - bounds.min.z) * 0.5).max(0.05);
@@ -550,6 +552,7 @@ pub fn nest_flattened_plant_chunk<T>(
 	ball_material: &MaterialRef,
 	frond_material: &MaterialRef,
 	lod_ref: &LodRef,
+	level: LodSceneLevel,
 ) -> SceneChunk
 where
 	T: VegetationComponents + Clone + Send + Sync + 'static,
@@ -563,6 +566,7 @@ where
 			ball_material,
 			frond_material,
 			lod_ref,
+			level,
 		),
 	)
 }

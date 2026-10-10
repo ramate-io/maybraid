@@ -564,6 +564,51 @@ mod tests {
 		Ok(())
 	}
 
+	/// Grove High is hundreds of metres; plant High is ~10× tree radius. Fulfill
+	/// at the tile High edge must still pose High canopy kits — colliders already
+	/// stamp High IR from the ancestor grove band.
+	#[test]
+	fn high_band_trees_present_full_canopy() -> anyhow::Result<()> {
+		let at = Vec3::new(280.0, 20.0, 0.0);
+		let mut app = app(at);
+		settle(&mut app)?;
+
+		let tiles: usize = grown(&mut app).iter().map(|node| node.value.tiles.len()).sum();
+		update_until(&mut app, |app| nested_hosts(app) >= tiles);
+		assert!(nested_hosts(&mut app) > 0, "the patch presents grove hosts");
+		for _ in 0..240 {
+			app.update();
+		}
+
+		let compounds = app
+			.world_mut()
+			.query::<&crate::stick_physics::StickPhysicsCompound>()
+			.iter(app.world())
+			.count();
+		assert!(compounds > 0, "High/Medium groves still stamp stick colliders");
+
+		let mut high_canopy = 0usize;
+		let mut thinned_canopy = 0usize;
+		for merge in app.world_mut().query::<&scene_ref::MultiSceneMergeRoot>().iter(app.world()) {
+			let Some(path) = merge.0.parts.first().map(|part| part.scene.path.as_str()) else {
+				continue;
+			};
+			if !path.contains("cheap_ball") {
+				continue;
+			}
+			if path.contains("high_res") {
+				high_canopy += 1;
+			} else {
+				thinned_canopy += 1;
+			}
+		}
+		assert!(
+			high_canopy > 0,
+			"High-band trees should pose High cheap-ball canopy kits; got {high_canopy} high / {thinned_canopy} thinned"
+		);
+		Ok(())
+	}
+
 	#[test]
 	fn leaving_the_neighborhood_retires_its_hosts() -> anyhow::Result<()> {
 		let mut app = app(Vec3::ZERO);

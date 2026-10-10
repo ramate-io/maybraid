@@ -33,7 +33,7 @@ use crate::english::{
 	named_forest_english, named_geographic_english, named_grove_english, named_place_english,
 	named_region_english, named_urban_english,
 };
-use crate::hcsg::LanguageWorldSeed;
+use crate::hcsg::{generated, LanguageWorldSeed};
 use crate::key::{name_key_salt, NameKey};
 use crate::name::PlaceName;
 use crate::places::{DevelopmentPlaces, LanguageGround};
@@ -148,16 +148,6 @@ fn translate(cx: &mut GenerationContext, seed: u64, nameables: &[Nameable]) -> V
 		spoken.push(named.map(|(bundle, _)| bundle));
 	}
 	names
-}
-
-/// The value `id` of `T`, with its stored bounds.
-fn generated<T: hcsg::GenerationScheme>(
-	cx: &mut GenerationContext,
-	id: Id,
-) -> Option<(Arc<T>, Aabb3d)> {
-	let value = cx.get_or_generate::<T>(id)?;
-	let bounds = cx.stored_bounds::<T>(id)?;
-	Some((value, bounds))
 }
 
 fn center(bounds: Aabb3d) -> Vec2 {
