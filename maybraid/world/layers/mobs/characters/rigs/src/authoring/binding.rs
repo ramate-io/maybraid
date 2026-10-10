@@ -124,12 +124,21 @@ impl RigDefinition {
 		transform.translation
 	}
 
-	fn first_child(&self, bone: BoneId) -> Option<BoneId> {
+	pub fn first_child(&self, bone: BoneId) -> Option<BoneId> {
 		self.parents
 			.iter()
 			.enumerate()
 			.find(|(_, parent)| **parent == Some(bone))
 			.map(|(index, _)| BoneId(index as u16))
+	}
+
+	/// Rest distance from `bone` origin to its first child (default 0.5 m when missing).
+	pub fn rest_segment_length(&self, rest: &PoseBuffer, bone: BoneId) -> f32 {
+		self.first_child(bone)
+			.and_then(|child| rest.get(child))
+			.map(|transform| transform.translation.length())
+			.filter(|length| *length > 1e-3)
+			.unwrap_or(0.5)
 	}
 }
 

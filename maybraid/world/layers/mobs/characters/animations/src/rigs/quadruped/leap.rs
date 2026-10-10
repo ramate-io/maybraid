@@ -280,13 +280,16 @@ mod tests {
 	/// Matches [`player::body::JUMP_LAND_DURATION`]: land maps `AIR_END..1` over this many seconds.
 	const JUMP_LAND_DURATION: f32 = 0.24;
 	const LAND_PROGRESS_STEP_60FPS: f32 = (1.0 / 60.0) / JUMP_LAND_DURATION * (1.0 - AIR_END);
-	const TOUCHDOWN_MAX_BONE_JUMP: f32 = 0.12;
+	const TOUCHDOWN_MAX_TIP_JUMP: f32 = 0.04;
 
-	fn max_bone_rotation_jump(before: &QuadrupedV0Rig, after: &QuadrupedV0Rig) -> (f32, &'static str) {
+	const FOOT_SHINS: [&str; 4] =
+		["anterior_shin.L", "posterior_shin.L", "anterior_shin.R", "posterior_shin.R"];
+
+	fn max_posed_tip_jump(before: &QuadrupedV0Rig, after: &QuadrupedV0Rig) -> (f32, &'static str) {
 		let mut worst = 0.0f32;
 		let mut worst_name = "";
 		for name in before.animation_bone_names() {
-			let delta = before.rotation(name).angle_between(after.rotation(name));
+			let delta = (before.posed_tip(name) - after.posed_tip(name)).length();
 			if delta > worst {
 				worst = delta;
 				worst_name = name;
@@ -295,48 +298,160 @@ mod tests {
 		(worst, worst_name)
 	}
 
+	fn pair_touchdown_progress(side: Side) -> f32 {
+		match side {
+			Side::Left => AIR_END,
+			Side::Right => AIR_END + PAIR_STAGGER,
+		}
+	}
+
+	fn assert_touchdown_tip_continuity(leap: &QuadrupedLeap, touchdown: f32, label: &str) {
+		let eps = 1e-4f32;
+		let mut before = QuadrupedV0Rig::for_clip_test();
+		let mut after = QuadrupedV0Rig::for_clip_test();
+		leap.apply(&mut before, touchdown - eps);
+		leap.apply(&mut after, touchdown + eps);
+		let (jump, bone) = max_posed_tip_jump(&before, &after);
+		assert!(
+			jump < TOUCHDOWN_MAX_TIP_JUMP,
+			"{label} posed tip should stay continuous at touchdown (worst {bone} Δ={jump})"
+		);
+	}
+
 	#[test]
-	fn air_land_touchdown_max_bone_jump_stays_bounded() {
+	fn air_land_touchdown_max_posed_tip_jump_stays_bounded_at_left_pair() {
+		let leap = QuadrupedLeap::from_leap(&Leap::default());
+		assert_touchdown_tip_continuity(&leap, pair_touchdown_progress(Side::Left), "left pair");
+	}
+
+	#[test]
+	fn air_land_touchdown_max_posed_tip_jump_stays_bounded_at_right_pair() {
+		let leap = QuadrupedLeap::from_leap(&Leap::default());
+		assert_touchdown_tip_continuity(&leap, pair_touchdown_progress(Side::Right), "right pair");
+	}
+
+	#[test]
+	fn air_land_touchdown_pops_without_blend_band_at_left_pair() {
 		let leap = QuadrupedLeap::from_leap(&Leap::default());
 		let eps = 1e-4f32;
+		let touchdown = pair_touchdown_progress(Side::Left);
+		let mut before = QuadrupedV0Rig::for_clip_test();
+		let mut after = QuadrupedV0Rig::for_clip_test();
+		apply_leap_without_land_blend(&leap, &mut before, touchdown - eps);
+		apply_leap_without_land_blend(&leap, &mut after, touchdown + eps);
+		let (jump, bone) = max_posed_tip_jump(&before, &after);
+		assert!(
+			jump > TOUCHDOWN_MAX_TIP_JUMP,
+			"pre-blend branch should pop at left touchdown (worst {bone} Δ={jump})"
+		);
+	}
+
+	#[test]
+	fn air_land_touchdown_pops_without_blend_band_at_right_pair() {
+		let leap = QuadrupedLeap::from_leap(&Leap::default());
+		let eps = 1e-4f32;
+		let touchdown = pair_touchdown_progress(Side::Right);
+		let mut before = QuadrupedV0Rig::for_clip_test();
+		let mut after = QuadrupedV0Rig::for_clip_test();
+		apply_leap_without_land_blend(&leap, &mut before, touchdown - eps);
+		apply_leap_without_land_blend(&leap, &mut after, touchdown + eps);
+		let (jump, bone) = max_posed_tip_jump(&before, &after);
+		assert!(
+			jump > TOUCHDOWN_MAX_TIP_JUMP,
+			"pre-blend branch should pop at right touchdown (worst {bone} Δ={jump})"
+		);
+	}
+
+	#[test]
+	fn air_land_touchdown_frame_step_stays_bounded_at_left_pair() {
+		let leap = QuadrupedLeap::from_leap(&Leap::default());
+		let half = LAND_PROGRESS_STEP_60FPS * 0.5;
+		let touchdown = pair_touchdown_progress(Side::Left);
+		let mut before = QuadrupedV0Rig::for_clip_test();
+		let mut after = QuadrupedV0Rig::for_clip_test();
+		leap.apply(&mut before, touchdown - half);
+		leap.apply(&mut after, touchdown + half);
+		let (jump, bone) = max_posed_tip_jump(&before, &after);
+		assert!(
+			jump < TOUCHDOWN_MAX_TIP_JUMP * 2.5,
+			"60 Hz land step across left touchdown should not spike (worst {bone} Δ={jump})"
+		);
+	}
+
+	#[test]
+	#[ignore = "manual posed-tip metrics for reviews"]
+	fn touchdown_posed_tip_jump_metrics() {
+		let leap = QuadrupedLeap::from_leap(&Leap::default());
+		let eps = 1e-4f32;
+		for (label, touchdown) in [
+			("left_pair", pair_touchdown_progress(Side::Left)),
+			("right_pair", pair_touchdown_progress(Side::Right)),
+		] {
+			let mut blended_before = QuadrupedV0Rig::for_clip_test();
+			let mut blended_after = QuadrupedV0Rig::for_clip_test();
+			leap.apply(&mut blended_before, touchdown - eps);
+			leap.apply(&mut blended_after, touchdown + eps);
+			let (blended_jump, blended_bone) = max_posed_tip_jump(&blended_before, &blended_after);
+
+			let mut raw_before = QuadrupedV0Rig::for_clip_test();
+			let mut raw_after = QuadrupedV0Rig::for_clip_test();
+			apply_leap_without_land_blend(&leap, &mut raw_before, touchdown - eps);
+			apply_leap_without_land_blend(&leap, &mut raw_after, touchdown + eps);
+			let (raw_jump, raw_bone) = max_posed_tip_jump(&raw_before, &raw_after);
+
+			eprintln!(
+				"{label} touchdown={touchdown}: blended worst {blended_bone} Δ={blended_jump}, raw worst {raw_bone} Δ={raw_jump}"
+			);
+		}
+
+		let global = AIR_END;
+		for &progress in &[global - eps, global + eps, global + PAIR_STAGGER] {
+			let mut rig = QuadrupedV0Rig::for_clip_test();
+			leap.apply(&mut rig, progress);
+			eprintln!("progress {progress}:");
+			for name in FOOT_SHINS {
+				eprintln!("  {name} tip {:?}", rig.posed_tip(name));
+			}
+			eprintln!("  neck tip {:?}", rig.posed_tip("neck"));
+		}
+
 		let mut before = QuadrupedV0Rig::for_clip_test();
 		let mut after = QuadrupedV0Rig::for_clip_test();
 		leap.apply(&mut before, AIR_END - eps);
 		leap.apply(&mut after, AIR_END + eps);
-		let (jump, bone) = max_bone_rotation_jump(&before, &after);
-		assert!(
-			jump < TOUCHDOWN_MAX_BONE_JUMP,
-			"air→land should stay continuous at AIR_END (worst {bone} Δ={jump})"
-		);
+		let (jump, bone) = max_posed_tip_jump(&before, &after);
+		eprintln!("global AIR_END±eps max posed tip jump: {bone} Δ={jump}");
 	}
 
 	#[test]
-	fn air_land_touchdown_pops_without_blend_band() {
+	fn resampling_does_not_accumulate() {
 		let leap = QuadrupedLeap::from_leap(&Leap::default());
-		let eps = 1e-4f32;
-		let mut before = QuadrupedV0Rig::for_clip_test();
-		let mut after = QuadrupedV0Rig::for_clip_test();
-		apply_leap_without_land_blend(&leap, &mut before, AIR_END - eps);
-		apply_leap_without_land_blend(&leap, &mut after, AIR_END + eps);
-		let (jump, bone) = max_bone_rotation_jump(&before, &after);
-		assert!(
-			jump > TOUCHDOWN_MAX_BONE_JUMP,
-			"pre-blend branch should pop at AIR_END (worst {bone} Δ={jump})"
-		);
+		let mut once = QuadrupedV0Rig::for_clip_test();
+		let mut twice = QuadrupedV0Rig::for_clip_test();
+		leap.apply(&mut once, 0.55);
+		leap.apply(&mut twice, 0.55);
+		leap.apply(&mut twice, 0.55);
+		for name in once.animation_bone_names() {
+			let a = once.posed_tip(name);
+			let b = twice.posed_tip(name);
+			assert!((a - b).length() < 1e-5, "re-sample should not drift on {name}");
+		}
 	}
 
 	#[test]
-	fn air_land_touchdown_frame_step_stays_bounded() {
+	fn land_blend_band_end_has_no_tip_velocity_spike() {
 		let leap = QuadrupedLeap::from_leap(&Leap::default());
-		let half = LAND_PROGRESS_STEP_60FPS * 0.5;
+		let land_span = 1.0 - AIR_END;
+		let band_end = AIR_END + land_span * LEAP_LAND_BLEND_FRACTION;
+		let step = land_span * 0.01;
 		let mut before = QuadrupedV0Rig::for_clip_test();
 		let mut after = QuadrupedV0Rig::for_clip_test();
-		leap.apply(&mut before, AIR_END - half);
-		leap.apply(&mut after, AIR_END + half);
-		let (jump, bone) = max_bone_rotation_jump(&before, &after);
+		leap.apply(&mut before, band_end - step);
+		leap.apply(&mut after, band_end + step);
+		let (jump, bone) = max_posed_tip_jump(&before, &after);
 		assert!(
-			jump < TOUCHDOWN_MAX_BONE_JUMP * 2.5,
-			"60 Hz land step across AIR_END should not spike (worst {bone} Δ={jump})"
+			jump < TOUCHDOWN_MAX_TIP_JUMP * 2.0,
+			"blend band end should not spike posed tips (worst {bone} Δ={jump})"
 		);
 	}
 
