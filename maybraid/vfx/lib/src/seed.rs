@@ -41,7 +41,10 @@ pub fn signed_salted(seed: u64, salt: u32) -> f32 {
 /// New seed when the caller omitted one.
 pub fn generate() -> u64 {
 	let tick = NEXT_SEED.fetch_add(1, Ordering::Relaxed);
-	let nanos = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos() as u64).unwrap_or(0);
+	let nanos = SystemTime::now()
+		.duration_since(UNIX_EPOCH)
+		.map(|d| d.as_nanos() as u64)
+		.unwrap_or(0);
 	mix64(tick.wrapping_mul(0x9e37_79b9_7f4a_7c15) ^ nanos)
 }
 

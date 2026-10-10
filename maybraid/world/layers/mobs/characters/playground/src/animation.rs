@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+<<<<<<< HEAD
 use character_animations::{
 	animations::{
 		FixedTuck, Run, Squat, SquatDescent, Tuck, TuckedFlip, TwoFootedJump, TwoFootedTuckedFlip,
@@ -14,42 +15,23 @@ use character_rigs::{
 	rigs::humanoid_v0::HumanoidV0Rig,
 	Name as RigName,
 };
+=======
+use character_animations::animations::{DEFAULT_BACKSWING, DEFAULT_JAB_TARGET};
+use character_rigs::{articulation::compose_parent_rotation, authoring::humanoid_bone_axis, Side};
+use characters::{AnimBone, AnimClip, AnimRef, JabParams};
+>>>>>>> origin/main
 use clap::ValueEnum;
-use log::info;
 
 use crate::character::CharacterConfig;
-use crate::skinning::{BoneMap, CharacterRig};
 
-const RUN_CYCLE_SPEED: f32 = 1.4;
-const WALK_CYCLE_SPEED: f32 = 0.9;
-const SQUAT_CYCLE_SPEED: f32 = 0.25;
-const TUCK_CYCLE_SPEED: f32 = 0.6;
-const FRONT_FLIP_CYCLE_SPEED: f32 = 0.85;
-const JUMP_HEIGHT: f32 = 1.5;
-const JUMP_PRE_SQUAT_SPEED: f32 = DEFAULT_PRE_SQUAT_SPEED * 1.2;
-const JUMP_LANDING_SQUAT_SPEED: f32 = DEFAULT_LANDING_SQUAT_SPEED * 1.3;
-
-const DEBUG_BONES: &[&str] = &[
-	"root",
-	"shoulder.L",
-	"shoulder.R",
-	"humerus.L",
-	"humerus.R",
-	"forearm.L",
-	"forearm.R",
-	"pelvis.L",
-	"pelvis.R",
-	"femur.L",
-	"femur.R",
-	"shin.L",
-	"shin.R",
-];
-
+/// Humanoid clips the playground can sample. Mirrors the mid-August concepts
+/// `--animation` catalog plus playground-only squat / tuck variants.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
 pub enum AnimationMode {
+	Still,
+	Walk,
 	#[default]
 	Run,
-	Walk,
 	Squat,
 	SquatDescent,
 	Jump,
@@ -58,10 +40,72 @@ pub enum AnimationMode {
 	FixedTuck,
 	TuckedFlip,
 	TwoFootedTuckedFlip,
+	Soaring,
+	Flapping,
+	Jab,
+	Prone,
 }
 
-#[derive(Resource)]
-pub struct AnimationArticulationDebug(RigPoseDebug);
+impl AnimationMode {
+	pub const fn uses_side(self) -> bool {
+		matches!(self, Self::Jab)
+	}
+
+	pub const fn label(self) -> &'static str {
+		match self {
+			Self::Still => "still",
+			Self::Walk => "walk",
+			Self::Run => "run",
+			Self::Squat => "squat",
+			Self::SquatDescent => "squat-descent",
+			Self::Jump => "jump",
+			Self::Leap => "leap",
+			Self::Tuck => "tuck",
+			Self::FixedTuck => "fixed-tuck",
+			Self::TuckedFlip => "tucked-flip",
+			Self::TwoFootedTuckedFlip => "two-footed-tucked-flip",
+			Self::Soaring => "soaring",
+			Self::Flapping => "flapping",
+			Self::Jab => "jab",
+			Self::Prone => "prone",
+		}
+	}
+
+	pub fn anim_clip(self, side: Side) -> AnimClip {
+		match self {
+			Self::Still => AnimClip::still(),
+			Self::Walk => AnimClip::walk(),
+			Self::Run => AnimClip::run(),
+			Self::Squat => AnimClip::squat(),
+			Self::SquatDescent => AnimClip::squat_descent(),
+			Self::Jump => AnimClip::jump(),
+			Self::Leap => AnimClip::leap(),
+			Self::Tuck | Self::FixedTuck => AnimClip::tuck(),
+			Self::TuckedFlip => AnimClip::tucked_flip(),
+			Self::TwoFootedTuckedFlip => AnimClip::two_footed_tucked_flip(),
+			Self::Soaring => AnimClip::soaring(),
+			Self::Flapping => AnimClip::flapping(),
+			Self::Jab => AnimClip::Jab(JabParams {
+				side,
+				backswing: DEFAULT_BACKSWING,
+				target: DEFAULT_JAB_TARGET,
+			}),
+			Self::Prone => AnimClip::prone(),
+		}
+	}
+
+	pub fn anim_ref(self, side: Side) -> AnimRef {
+		AnimRef::new(self.anim_clip(side))
+	}
+
+	/// Mailbox sample coordinate. Held tuck stays at full fold.
+	pub fn mailbox_progress(self, elapsed: f32) -> f32 {
+		match self {
+			Self::FixedTuck => 1.0,
+			_ => elapsed,
+		}
+	}
+}
 
 #[derive(Resource, Debug, Clone)]
 pub struct AnimationPlayback {
@@ -124,6 +168,7 @@ impl AnimationPlayback {
 	}
 }
 
+<<<<<<< HEAD
 impl Default for AnimationArticulationDebug {
 	fn default() -> Self {
 		Self(RigPoseDebug::default())
@@ -556,6 +601,11 @@ fn apply_joint_preview(
 	playback: &AnimationPlayback,
 	rig: &mut Query<&mut HumanoidV0Rig, With<CharacterRig>>,
 	limbs: &mut Query<(&mut Transform, &LimbAnimator)>,
+=======
+pub fn apply_joint_preview(
+	playback: Res<AnimationPlayback>,
+	mut bones: Query<(&mut Transform, &AnimBone)>,
+>>>>>>> origin/main
 ) {
 	let Some(degrees) = playback.joint_degrees else {
 		return;
@@ -563,39 +613,17 @@ fn apply_joint_preview(
 	if playback.joint.is_empty() {
 		return;
 	}
-	let Ok(rig) = rig.single() else {
-		return;
-	};
-	let Some(id) = rig.binding.definition.id(&playback.joint) else {
-		return;
-	};
-	let Some(rest) = rig.binding.effective_rest.get(id) else {
-		return;
-	};
-	let rotation = compose_parent_rotation(
-		rest.rotation,
-		humanoid_bone_axis(&playback.joint),
-		degrees.lateral.to_radians(),
-		degrees.flexion.to_radians(),
-		degrees.axial.to_radians(),
-	);
-	for (mut transform, animator) in limbs.iter_mut() {
-		if animator.bone.as_str() == playback.joint {
-			transform.rotation = rotation;
-		}
-	}
-}
-
-fn marshal_pose_to_limbs(rig: &HumanoidV0Rig, limbs: &mut Query<(&mut Transform, &LimbAnimator)>) {
-	for (mut transform, animator) in limbs.iter_mut() {
-		let Some(id) = rig.binding.definition.id(animator.bone.as_str()) else {
+	for (mut transform, bone) in &mut bones {
+		if bone.name.as_str() != playback.joint {
 			continue;
-		};
-		if let Some(pose) = rig.pose.get(id) {
-			if *transform != pose {
-				*transform = pose;
-			}
 		}
+		transform.rotation = compose_parent_rotation(
+			bone.rest.rotation,
+			humanoid_bone_axis(&playback.joint),
+			degrees.lateral.to_radians(),
+			degrees.flexion.to_radians(),
+			degrees.axial.to_radians(),
+		);
 	}
 }
 
@@ -604,21 +632,19 @@ fn marshal_pose_to_limbs(rig: &HumanoidV0Rig, limbs: &mut Query<(&mut Transform,
 pub fn draw_authoring_gizmos(
 	playback: Res<AnimationPlayback>,
 	mut gizmos: Gizmos,
-	bones: Query<(&GlobalTransform, &Transform, &LimbAnimator)>,
-	rigs: Query<&GlobalTransform, With<CharacterRig>>,
+	bones: Query<(&GlobalTransform, &Transform, &AnimBone)>,
+	config: Res<CharacterConfig>,
 ) {
 	if playback.joint.is_empty() {
 		return;
 	}
-	if let Ok(rig) = rigs.single() {
-		let origin = rig.translation();
-		let character = rig.rotation();
-		draw_axes(&mut gizmos, origin, character, 0.4, 1.0);
-	}
+	let origin = config.transform.translation;
+	let character = config.transform.rotation;
+	draw_axes(&mut gizmos, origin, character, 0.4, 1.0);
 	let opposite = opposite_bone(&playback.joint);
-	for (global, local, limb) in &bones {
-		let selected = limb.bone.as_str() == playback.joint;
-		let compared = opposite.as_deref() == Some(limb.bone.as_str());
+	for (global, local, bone) in &bones {
+		let selected = bone.name.as_str() == playback.joint;
+		let compared = opposite.as_deref() == Some(bone.name.as_str());
 		if !selected && !compared {
 			continue;
 		}
@@ -629,12 +655,12 @@ pub fn draw_authoring_gizmos(
 		let parent = global.rotation() * local.rotation.inverse();
 		draw_axes(&mut gizmos, origin, parent, length * 0.65, gain * 0.45);
 		if playback.show_rest {
-			let rest_dir = parent * limb.rest.rotation * Vec3::Y * 0.28;
+			let rest_dir = parent * bone.rest.rotation * Vec3::Y * 0.28;
 			let color =
 				if selected { Color::srgb(1.0, 0.85, 0.2) } else { Color::srgb(0.75, 0.6, 0.15) };
 			gizmos.line(origin, origin + rest_dir, color);
 		}
-		let segment = limb.rest.translation.length().max(0.05);
+		let segment = bone.rest.translation.length().max(0.05);
 		let end = origin + global.rotation() * Vec3::Y * segment;
 		gizmos.line(end - Vec3::X * 0.03, end + Vec3::X * 0.03, Color::srgb(1.0, 1.0, 1.0));
 		gizmos.line(end - Vec3::Z * 0.03, end + Vec3::Z * 0.03, Color::srgb(1.0, 1.0, 1.0));

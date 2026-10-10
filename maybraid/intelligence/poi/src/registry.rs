@@ -223,6 +223,46 @@ impl PoiRegistry {
 		self.choose_in(center, NearbyQuery::weighted(radius), interests, excluded, seed)
 	}
 
+	/// Fill `out` with ids of local/global POIs inside [`NearbyQuery`], minus the inner hole
+	/// and `excluded`. Pair with [`Self::get`] on the hot path.
+	pub fn collect_nearby_in(
+		&self,
+		center: Vec3,
+		query: NearbyQuery,
+		interests: &PoiInterests,
+		excluded: &[PoiId],
+		out: &mut Vec<PoiId>,
+	) {
+		out.clear();
+		if interests.is_empty() || !center.is_finite() || !query.radius.is_finite() {
+			return;
+		}
+		let radius = query.radius.clamp(0.0, MAX_LOCAL_QUERY_RADIUS);
+		let min_radius = query.min_radius.max(0.0);
+		self.collect_local_matching(center, radius, interests, out);
+		for id in &self.globals {
+			if out.contains(id) {
+				continue;
+			}
+			let Some(record) = self.records.get(id) else {
+				continue;
+			};
+			if !interests.contains(record.kind) {
+				continue;
+			}
+			if center.distance(record.position) <= radius + record.arrival_radius {
+				out.push(*id);
+			}
+		}
+		out.retain(|id| {
+			self.records
+				.get(id)
+				.is_some_and(|record| xz_distance(center, record.position) >= min_radius)
+		});
+		out.sort_unstable_by_key(|id| *id);
+		Self::drop_excluded_ids(out, excluded);
+	}
+
 	/// Local and global POIs inside [`NearbyQuery`], minus the inner hole and `excluded`.
 	pub fn nearby_in(
 		&self,
@@ -231,23 +271,9 @@ impl PoiRegistry {
 		interests: &PoiInterests,
 		excluded: &[PoiId],
 	) -> Vec<PoiRecord> {
-		if interests.is_empty() || !center.is_finite() || !query.radius.is_finite() {
-			return Vec::new();
-		}
-		let radius = query.radius.clamp(0.0, MAX_LOCAL_QUERY_RADIUS);
-		let min_radius = query.min_radius.max(0.0);
-		let mut candidates = self.local_matching(center, radius, interests);
-		for candidate in self.global_matching(interests) {
-			if center.distance(candidate.position) <= radius + candidate.arrival_radius
-				&& !candidates.iter().any(|known| known.id == candidate.id)
-			{
-				candidates.push(candidate);
-			}
-		}
-		candidates.retain(|candidate| xz_distance(center, candidate.position) >= min_radius);
-		candidates.sort_by_key(|candidate| candidate.id);
-		Self::drop_excluded(&mut candidates, excluded);
-		candidates
+		let mut ids = Vec::new();
+		self.collect_nearby_in(center, query, interests, excluded, &mut ids);
+		ids.iter().filter_map(|id| self.get(*id).copied()).collect()
 	}
 
 	/// Choose a local/global POI inside [`NearbyQuery`].
@@ -264,20 +290,22 @@ impl PoiRegistry {
 		excluded: &[PoiId],
 		seed: u64,
 	) -> Option<PoiRecord> {
-		let candidates = self.nearby_in(center, query, interests, excluded);
+		let mut candidates = Vec::new();
+		self.collect_nearby_in(center, query, interests, excluded, &mut candidates);
+		let radius = query.radius.clamp(0.0, MAX_LOCAL_QUERY_RADIUS);
 		match query.choice {
-			NearbyChoice::Nearest => candidates.into_iter().min_by(|a, b| {
-				xz_distance(center, a.position)
-					.total_cmp(&xz_distance(center, b.position))
-					.then_with(|| a.id.cmp(&b.id))
-			}),
-			NearbyChoice::Weighted => choose_weighted(
-				center,
-				query.radius.clamp(0.0, MAX_LOCAL_QUERY_RADIUS),
-				interests,
-				candidates,
-				seed,
-			),
+			NearbyChoice::Nearest => candidates
+				.iter()
+				.filter_map(|id| self.get(*id))
+				.min_by(|a, b| {
+					xz_distance(center, a.position)
+						.total_cmp(&xz_distance(center, b.position))
+						.then_with(|| a.id.cmp(&b.id))
+				})
+				.copied(),
+			NearbyChoice::Weighted => {
+				choose_weighted(center, radius, interests, self, &candidates, seed)
+			}
 		}
 	}
 
@@ -326,12 +354,12 @@ impl PoiRegistry {
 		self.records.is_empty()
 	}
 
-	fn drop_excluded(candidates: &mut Vec<PoiRecord>, excluded: &[PoiId]) {
+	fn drop_excluded_ids(candidates: &mut Vec<PoiId>, excluded: &[PoiId]) {
 		for id in excluded {
 			if candidates.len() <= 1 {
 				return;
 			}
-			candidates.retain(|candidate| candidate.id != *id);
+			candidates.retain(|candidate| *candidate != *id);
 		}
 	}
 
@@ -353,25 +381,29 @@ fn choose_weighted(
 	center: Vec3,
 	radius: f32,
 	interests: &PoiInterests,
-	candidates: Vec<PoiRecord>,
+	registry: &PoiRegistry,
+	candidates: &[PoiId],
 	seed: u64,
 ) -> Option<PoiRecord> {
-	let weight = |candidate: PoiRecord| {
-		let interest = interests.weight(candidate.kind).unwrap_or(0.0);
-		let proximity = 1.0 / (1.0 + center.distance(candidate.position) / radius.max(1.0));
-		interest * candidate.salience.max(0.1) * proximity
+	let weight = |record: &PoiRecord| -> f32 {
+		let interest = interests.weight(record.kind).unwrap_or(0.0);
+		let proximity = 1.0 / (1.0 + center.distance(record.position) / radius.max(1.0));
+		interest * record.salience.max(0.1) * proximity
 	};
-	let total: f32 = candidates.iter().copied().map(weight).sum();
+	let total: f32 = candidates.iter().filter_map(|id| registry.get(*id)).map(weight).sum();
 	if total <= 0.0 {
 		return None;
 	}
 	let mut draw = unit_f32(seed) * total;
 	let mut fallback = None;
-	for candidate in candidates {
-		fallback = Some(candidate);
-		draw -= weight(candidate);
+	for id in candidates {
+		let Some(record) = registry.get(*id) else {
+			continue;
+		};
+		fallback = Some(*record);
+		draw -= weight(record);
 		if draw <= 0.0 {
-			return Some(candidate);
+			return Some(*record);
 		}
 	}
 	fallback

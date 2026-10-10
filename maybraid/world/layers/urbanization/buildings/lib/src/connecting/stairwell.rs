@@ -25,7 +25,7 @@ use building_components::joints::JointNode;
 use building_components::panels::{PanelNode, PanelStyle};
 use building_components::stairs::StairNode;
 use building_components::{BuildingComponents, BuildingStructuralLodProbe, Layers};
-use lod::gen::LodSceneLevel;
+use lod::scene::LodSceneLevel;
 use material_ref::MaterialRef;
 
 use crate::paneling::panel_complex::{PanelComplexJointPolicy, DEFAULT_PANEL_THICKNESS};

@@ -3,7 +3,6 @@ use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
 use character_rigs::Side;
 
 use crate::animations::{Run, UprightRun};
-use crate::rigs::humanoid::apply::apply_arm;
 use crate::rigs::humanoid::gait_knee::lerp_swing_knee;
 use crate::rigs::humanoid::write_masks::{debug_assert_pose_within_mask, run_write_mask};
 use crate::{Animation, Progress};
@@ -67,8 +66,7 @@ fn apply_run_arm(
 	humerus_flex: f32,
 	run: &UprightRun,
 ) {
-	apply_arm(
-		pose,
+	pose.apply_arm(
 		side,
 		arm_swing_value * run.shoulder_swing,
 		-shoulder_lift(arm_swing_value, run.shoulder_lift),
