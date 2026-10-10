@@ -77,6 +77,8 @@ impl Character {
 			}
 			Character::Playback(args) => {
 				commands.queue(move |world: &mut World| {
+					let approach_mode =
+						world.resource::<CharacterConfig>().animation == AnimationMode::Approach;
 					let mut playback = world.resource_mut::<AnimationPlayback>();
 					if args.pause {
 						playback.paused = true;
@@ -88,7 +90,11 @@ impl Character {
 						playback.speed = speed;
 					}
 					if let Some(progress) = args.progress {
-						playback.scrub = Some(progress);
+						if approach_mode {
+							playback.approach_walk_weight = progress.clamp(0.0, 1.0);
+						} else {
+							playback.scrub = Some(progress);
+						}
 					}
 					if let Some(phase) = args.phase {
 						playback.phase = phase;

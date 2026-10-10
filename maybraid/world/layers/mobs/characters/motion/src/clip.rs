@@ -4,6 +4,7 @@
 //! body-rig host. `From<ConceptAnimation>` lives in `characters`.
 
 use bevy::prelude::*;
+use character_animations::animations::smoothstep;
 use character_animations::animations::{
 	air_duration, DorsoventralUndulation, FixedTuck, Flapping, FlipDirection, Gallop,
 	LateralUndulation, Leap, QuadrupedRun, Run, Soaring, TuckProfile, TuckedFlip, TwoFootedJump,
@@ -18,6 +19,10 @@ const RUN_CYCLE_SPEED: f32 = 1.68;
 const WALK_CYCLE_SPEED: f32 = 1.08;
 /// Slow rest cycle so a crowd idle is a sway, not a march.
 pub const IDLE_CYCLE_SPEED: f32 = 0.2;
+/// Planar speed (m/s) that maps to full walk weight in [`approach_walk_weight`].
+pub const APPROACH_TOP_SPEED: f32 = 1.0;
+/// Forward foot travel over one cycle on [`HumanoidV0Rig::for_clip_test`] at full walk weight.
+const APPROACH_FULL_FOOT_TRAVEL: f32 = 1.418;
 const GALLOP_CYCLE_SPEED: f32 = 0.35;
 const QUADRUPED_RUN_CYCLE_SPEED: f32 = 0.5;
 const TUCK_CYCLE_SPEED: f32 = 0.6;
@@ -35,6 +40,8 @@ pub enum AnimId {
 	Still,
 	Walk,
 	Run,
+	/// Idle→walk blend for standing locomotion startup.
+	Approach,
 	QuadrupedRun,
 	Gallop,
 	Jump,
@@ -58,6 +65,7 @@ impl AnimId {
 			Self::Still => IDLE_CYCLE_SPEED,
 			Self::Walk => WALK_CYCLE_SPEED,
 			Self::Run => RUN_CYCLE_SPEED,
+			Self::Approach => WALK_CYCLE_SPEED,
 			Self::QuadrupedRun => QUADRUPED_RUN_CYCLE_SPEED,
 			Self::Gallop => GALLOP_CYCLE_SPEED,
 			Self::Jump => 1.0,
@@ -173,6 +181,63 @@ pub struct TwoFootedTuckedFlipParams {
 	pub flip: TuckedFlipParams,
 }
 
+/// Idle→walk blend for humanoid standing locomotion startup.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ApproachParams {
+	pub walk: Walk,
+	/// 0 = idle, 1 = walk. The mailbox applies this through [`Mix`].
+	pub walk_weight: f32,
+}
+
+impl ApproachParams {
+	pub fn blended(walk_weight: f32) -> Self {
+		Self { walk: Walk::default(), walk_weight: walk_weight.clamp(0.0, 1.0) }
+	}
+}
+
+/// 0 = idle, 1 = walk. Smoothsteps between standstill and [`APPROACH_TOP_SPEED`].
+pub fn approach_walk_weight(speed: f32) -> f32 {
+	if speed <= 0.0 {
+		return 0.0;
+	}
+	smoothstep((speed / APPROACH_TOP_SPEED).clamp(0.0, 1.0))
+}
+
+/// Invert [`approach_walk_weight`] for a blend weight in `(0, 1]`.
+pub fn speed_for_approach_weight(weight: f32) -> f32 {
+	let weight = weight.clamp(0.0, 1.0);
+	if weight <= 0.0 {
+		return 0.0;
+	}
+	if weight >= 1.0 {
+		return APPROACH_TOP_SPEED;
+	}
+	let mut lo = 0.0_f32;
+	let mut hi = 1.0_f32;
+	for _ in 0..24 {
+		let mid = (lo + hi) * 0.5;
+		if smoothstep(mid) < weight {
+			lo = mid;
+		} else {
+			hi = mid;
+		}
+	}
+	APPROACH_TOP_SPEED * (lo + hi) * 0.5
+}
+
+/// Cadence that keeps posed foot speed near [`speed_for_approach_weight`] as stride scales.
+pub fn approach_cycle_speed(weight: f32) -> f32 {
+	let weight = weight.clamp(0.0, 1.0);
+	if weight <= 0.0 {
+		IDLE_CYCLE_SPEED
+	} else {
+		let ground = speed_for_approach_weight(weight);
+		// Mix stride grows slightly faster than linear on the clip-test rig.
+		let travel = weight.powf(0.92) * APPROACH_FULL_FOOT_TRAVEL;
+		(ground / travel.max(1e-4)).max(IDLE_CYCLE_SPEED)
+	}
+}
+
 /// Untyped jab knobs ([`Jab`] is rig-generic).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct JabParams {
@@ -194,6 +259,7 @@ pub enum AnimClip {
 	Still,
 	Walk(Walk),
 	Run(Run),
+	Approach(ApproachParams),
 	QuadrupedRun(QuadrupedRun),
 	Gallop(Gallop),
 	Jump(JumpParams),
@@ -217,6 +283,7 @@ impl AnimClip {
 			Self::Still => AnimId::Still,
 			Self::Walk(_) => AnimId::Walk,
 			Self::Run(_) => AnimId::Run,
+			Self::Approach(_) => AnimId::Approach,
 			Self::QuadrupedRun(_) => AnimId::QuadrupedRun,
 			Self::Gallop(_) => AnimId::Gallop,
 			Self::Jump(_) => AnimId::Jump,
@@ -235,8 +302,11 @@ impl AnimClip {
 		}
 	}
 
-	pub const fn default_speed(self) -> f32 {
-		self.id().default_speed()
+	pub fn default_speed(self) -> f32 {
+		match self {
+			Self::Approach(params) => approach_cycle_speed(params.walk_weight),
+			_ => self.id().default_speed(),
+		}
 	}
 
 	pub fn still() -> Self {
@@ -249,6 +319,10 @@ impl AnimClip {
 
 	pub fn run() -> Self {
 		Self::Run(Run::default())
+	}
+
+	pub fn approach(walk_weight: f32) -> Self {
+		Self::Approach(ApproachParams::blended(walk_weight))
 	}
 
 	pub fn quadruped_run() -> Self {
@@ -324,9 +398,11 @@ impl AnimClip {
 	pub const fn time_policy(self) -> ClipTimePolicy {
 		match self {
 			Self::Still => ClipTimePolicy::Unbounded,
-			Self::Walk(_) | Self::Run(_) | Self::QuadrupedRun(_) | Self::Gallop(_) => {
-				ClipTimePolicy::Cycle { duration: 1.0 }
-			}
+			Self::Walk(_)
+			| Self::Run(_)
+			| Self::Approach(_)
+			| Self::QuadrupedRun(_)
+			| Self::Gallop(_) => ClipTimePolicy::Cycle { duration: 1.0 },
 			Self::Tuck(_) | Self::TuckedFlip(_) | Self::Jab(_) => {
 				ClipTimePolicy::Cycle { duration: 1.0 }
 			}
@@ -388,6 +464,17 @@ mod tests {
 		assert_eq!(a.id(), b.id());
 		assert_ne!(a, b);
 		assert_ne!(AnimClip::walk().id(), AnimClip::run().id());
+	}
+
+	#[test]
+	fn approach_speed_tracks_ground_speed() {
+		let slow = AnimClip::approach(0.0).default_speed();
+		let mid = AnimClip::approach(0.5).default_speed();
+		let fast = AnimClip::approach(1.0).default_speed();
+		assert!((slow - IDLE_CYCLE_SPEED).abs() < 1e-5);
+		assert!((fast - approach_cycle_speed(1.0)).abs() < 1e-5);
+		assert!(mid >= slow);
+		assert!((mid - approach_cycle_speed(0.5)).abs() < 1e-5);
 	}
 
 	#[test]
