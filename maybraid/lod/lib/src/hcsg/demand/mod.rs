@@ -46,7 +46,7 @@ impl HcsgDemand {
 		}
 	}
 
-	pub fn epoch(&self) -> u64 {
+	pub(crate) fn epoch(&self) -> u64 {
 		self.lock().epoch
 	}
 
