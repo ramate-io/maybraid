@@ -139,6 +139,11 @@ impl AnimMailbox {
 	fn blending(&self) -> bool {
 		self.blend_progress < 1.0
 	}
+
+	/// Current clip sample coordinate (cycle phase for looping locomotion clips).
+	pub fn clip_cycle_phase(&self) -> f32 {
+		self.clip_progress
+	}
 }
 
 /// Insert typed rigs, [`AnimBone`]s, and [`AnimMailbox`] once the bone map is ready.
@@ -359,7 +364,9 @@ pub fn tick_anim_mailbox(
 			}
 			mailbox.from_offset = mailbox.displayed_offset;
 			mailbox.blend_progress = 0.0;
-			mailbox.clip_progress = 0.0;
+			if !preserves_walk_phase(mailbox.last, requested_id) {
+				mailbox.clip_progress = 0.0;
+			}
 			mailbox.last = Some(requested_id);
 		}
 
@@ -528,6 +535,13 @@ fn indexed_cache_valid(
 	!entities.is_empty()
 		&& entities.len() == pose_len
 		&& entities.iter().all(|entity| transforms.get(*entity).is_ok())
+}
+
+fn preserves_walk_phase(from: Option<AnimId>, to: AnimId) -> bool {
+	matches!(
+		(from, to),
+		(Some(AnimId::RunStop), AnimId::Walk) | (Some(AnimId::RunStop), AnimId::Run)
+	)
 }
 
 fn clip_progress(clip: AnimClip, clip_progress: f32, entity: Entity) -> f32 {
@@ -776,6 +790,13 @@ fn sample_humanoid(
 		AnimClip::Squat => sample_split(&Squat::held(), rig, progress, write_bones, write_effects),
 		AnimClip::SquatDescent => sample_split(
 			&SquatDescent::default(),
+			rig,
+			progress.clamp(0.0, 1.0),
+			write_bones,
+			write_effects,
+		),
+		AnimClip::RunStop(params) => sample_split(
+			&params.apply_humanoid(),
 			rig,
 			progress.clamp(0.0, 1.0),
 			write_bones,

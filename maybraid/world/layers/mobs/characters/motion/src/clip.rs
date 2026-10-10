@@ -9,7 +9,7 @@ use character_animations::animations::{
 	LateralUndulation, Leap, QuadrupedRun, Run, Soaring, TuckProfile, TuckedFlip, TwoFootedJump,
 	Walk, AIR_END, DEFAULT_BACKSWING, DEFAULT_DESCENT_SPEED, DEFAULT_GRAVITY, DEFAULT_JAB_TARGET,
 	DEFAULT_JUMP_HEIGHT, DEFAULT_LANDING_SQUAT_SPEED, DEFAULT_PRE_SQUAT_SPEED,
-	DEFAULT_SPRING_DURATION, TAKEOFF_END,
+	DEFAULT_RUN_STOP_SPEED, DEFAULT_SPRING_DURATION, TAKEOFF_END,
 };
 use character_animations::{ClipTimePolicy, SampleAddress};
 use character_rigs::Side;
@@ -35,6 +35,7 @@ pub enum AnimId {
 	Still,
 	Walk,
 	Run,
+	RunStop,
 	QuadrupedRun,
 	Gallop,
 	Jump,
@@ -58,6 +59,7 @@ impl AnimId {
 			Self::Still => IDLE_CYCLE_SPEED,
 			Self::Walk => WALK_CYCLE_SPEED,
 			Self::Run => RUN_CYCLE_SPEED,
+			Self::RunStop => DEFAULT_RUN_STOP_SPEED,
 			Self::QuadrupedRun => QUADRUPED_RUN_CYCLE_SPEED,
 			Self::Gallop => GALLOP_CYCLE_SPEED,
 			Self::Jump => 1.0,
@@ -173,6 +175,33 @@ pub struct TwoFootedTuckedFlipParams {
 	pub flip: TuckedFlipParams,
 }
 
+/// Run-stop deceleration knobs for [`AnimClip::RunStop`].
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct RunStopParams {
+	pub walk: Walk,
+	pub run: Run,
+	/// Shared gait phase for run and walk samples.
+	pub phase: f32,
+	/// When false, playback starts in the walk→idle band only.
+	pub from_run: bool,
+}
+
+impl RunStopParams {
+	pub fn capture(phase: f32, from_run: bool) -> Self {
+		Self { walk: Walk::default(), run: Run::default(), phase: phase.fract(), from_run }
+	}
+
+	pub fn apply_humanoid(self) -> character_animations::animations::RunStop {
+		character_animations::animations::RunStop {
+			run: self.run,
+			walk: self.walk,
+			idle: character_animations::animations::Idle::default(),
+			phase: self.phase,
+			from_run: self.from_run,
+		}
+	}
+}
+
 /// Untyped jab knobs ([`Jab`] is rig-generic).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct JabParams {
@@ -194,6 +223,7 @@ pub enum AnimClip {
 	Still,
 	Walk(Walk),
 	Run(Run),
+	RunStop(RunStopParams),
 	QuadrupedRun(QuadrupedRun),
 	Gallop(Gallop),
 	Jump(JumpParams),
@@ -217,6 +247,7 @@ impl AnimClip {
 			Self::Still => AnimId::Still,
 			Self::Walk(_) => AnimId::Walk,
 			Self::Run(_) => AnimId::Run,
+			Self::RunStop(_) => AnimId::RunStop,
 			Self::QuadrupedRun(_) => AnimId::QuadrupedRun,
 			Self::Gallop(_) => AnimId::Gallop,
 			Self::Jump(_) => AnimId::Jump,
@@ -249,6 +280,10 @@ impl AnimClip {
 
 	pub fn run() -> Self {
 		Self::Run(Run::default())
+	}
+
+	pub fn run_stop(params: RunStopParams) -> Self {
+		Self::RunStop(params)
 	}
 
 	pub fn quadruped_run() -> Self {
@@ -335,6 +370,7 @@ impl AnimClip {
 			| Self::TwoFootedTuckedFlip(_)
 			| Self::Squat
 			| Self::SquatDescent
+			| Self::RunStop(_)
 			| Self::Prone => ClipTimePolicy::Clamp { duration: 1.0 },
 			Self::Soaring(_) | Self::Flapping(_) => ClipTimePolicy::Unbounded,
 			Self::LateralUndulation(_) | Self::DorsoventralUndulation(_) => {
