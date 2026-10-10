@@ -2911,9 +2911,9 @@ dependencies = [
  "camera-controls",
  "character-animations",
  "character-rigs",
+ "characters",
  "clap",
  "game-commands",
- "log",
 ]
 
 [[package]]
