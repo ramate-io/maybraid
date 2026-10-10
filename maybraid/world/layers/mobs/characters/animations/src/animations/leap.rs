@@ -12,6 +12,8 @@
 pub const TAKEOFF_END: f32 = 0.18;
 /// Air occupies the middle slice; land is the remainder.
 pub const AIR_END: f32 = 0.72;
+/// Fraction of the **land** segment used to blend the last air pose into landing absorb.
+pub const LEAP_LAND_BLEND_FRACTION: f32 = 0.22;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Leap {
