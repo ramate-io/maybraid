@@ -13,7 +13,7 @@ use bevy::prelude::*;
 use character_animations::{
 	animations::{
 		Idle, Jab, Prone, QuadrupedIdle, QuadrupedLeap, QuadrupedRun, Squat, SquatDescent, Tuck,
-		TwoFootedTuckedFlip, UprightLeap,
+		TwoFootedTuckedFlip, UprightLeap, Shrug,
 	},
 	Animation, Effects,
 };
@@ -761,6 +761,13 @@ fn sample_humanoid(
 		AnimClip::Flapping(flapping) => {
 			sample_split(&flapping, rig, progress, write_bones, write_effects)
 		}
+		AnimClip::Shrug => sample_split(
+			&Shrug::default(),
+			rig,
+			progress.clamp(0.0, 1.0),
+			write_bones,
+			write_effects,
+		),
 		AnimClip::Jab(params) => sample_split(
 			&Jab::new(params.side, params.backswing, params.target),
 			rig,

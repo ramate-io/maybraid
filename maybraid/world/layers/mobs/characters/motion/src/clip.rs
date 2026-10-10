@@ -23,6 +23,7 @@ const QUADRUPED_RUN_CYCLE_SPEED: f32 = 0.5;
 const TUCK_CYCLE_SPEED: f32 = 0.6;
 const FRONT_FLIP_CYCLE_SPEED: f32 = 0.85;
 const JAB_CYCLE_SPEED: f32 = 0.9;
+const SHRUG_CYCLE_SPEED: f32 = 0.75;
 const JUMP_PRE_SQUAT_SPEED: f32 = DEFAULT_PRE_SQUAT_SPEED * 1.2;
 const JUMP_LANDING_SQUAT_SPEED: f32 = DEFAULT_LANDING_SQUAT_SPEED * 1.3;
 /// One-shot leap lasts ~1.25 s so it covers the physics hang time.
@@ -45,6 +46,7 @@ pub enum AnimId {
 	Soaring,
 	Flapping,
 	Jab,
+	Shrug,
 	Squat,
 	SquatDescent,
 	Prone,
@@ -68,6 +70,7 @@ impl AnimId {
 			Self::Soaring => 1.0,
 			Self::Flapping => 1.0,
 			Self::Jab => JAB_CYCLE_SPEED,
+			Self::Shrug => SHRUG_CYCLE_SPEED,
 			Self::Squat => 1.0,
 			Self::SquatDescent => DEFAULT_DESCENT_SPEED,
 			Self::Prone => 1.0,
@@ -204,6 +207,7 @@ pub enum AnimClip {
 	Soaring(Soaring),
 	Flapping(Flapping),
 	Jab(JabParams),
+	Shrug,
 	Squat,
 	SquatDescent,
 	Prone,
@@ -227,6 +231,7 @@ impl AnimClip {
 			Self::Soaring(_) => AnimId::Soaring,
 			Self::Flapping(_) => AnimId::Flapping,
 			Self::Jab(_) => AnimId::Jab,
+			Self::Shrug => AnimId::Shrug,
 			Self::Squat => AnimId::Squat,
 			Self::SquatDescent => AnimId::SquatDescent,
 			Self::Prone => AnimId::Prone,
@@ -291,6 +296,14 @@ impl AnimClip {
 		Self::Jab(JabParams::default())
 	}
 
+	pub fn shrug() -> Self {
+		Self::Shrug
+	}
+
+	pub fn jab() -> Self {
+		Self::Jab(JabParams::default())
+	}
+
 	pub fn squat() -> Self {
 		Self::Squat
 	}
@@ -327,7 +340,7 @@ impl AnimClip {
 			Self::Walk(_) | Self::Run(_) | Self::QuadrupedRun(_) | Self::Gallop(_) => {
 				ClipTimePolicy::Cycle { duration: 1.0 }
 			}
-			Self::Tuck(_) | Self::TuckedFlip(_) | Self::Jab(_) => {
+			Self::Tuck(_) | Self::TuckedFlip(_) | Self::Jab(_) | Self::Shrug => {
 				ClipTimePolicy::Cycle { duration: 1.0 }
 			}
 			Self::Jump(_)
