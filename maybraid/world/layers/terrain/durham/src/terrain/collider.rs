@@ -35,11 +35,6 @@ impl Default for TerrainFrictionConfig {
 	}
 }
 
-/// Bumped when semantic terrain is regenerated so collider hosts cannot reuse
-/// a recycled [`Version`] after a dirty rebuild clears [`crate::terrain::DurhamNodes`].
-#[derive(Resource, Default, Clone, Copy, Debug, PartialEq, Eq)]
-pub struct TerrainColliderEpoch(pub u64);
-
 /// Presenters run before [`Self::QueueMeshes`] so a new fill can bake the same frame.
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum TerrainColliderSystems {
@@ -67,13 +62,6 @@ pub fn terrain_collider_covers_xz<'a>(
 #[derive(Component, Debug, Clone, Copy, Default)]
 pub(crate) struct TerrainColliderReady;
 
-/// Raw fill whose cell another terrain model (development pads) now presents
-/// with its own collider. The raw fill must not collide: two floors at
-/// different heights let bodies settle under one and on top of the other.
-/// Removing the marker re-cooks the trimesh.
-#[derive(Component, Debug, Clone, Copy, Default)]
-pub struct TerrainSuperseded;
-
 /// Cooks a trimesh onto each fill that asked for collision and now has [`Mesh3d`].
 pub(crate) fn queue_terrain_trimesh_colliders(
 	mut commands: Commands,
@@ -81,11 +69,7 @@ pub(crate) fn queue_terrain_trimesh_colliders(
 	meshes: Res<Assets<Mesh>>,
 	sources: Query<
 		(Entity, &Mesh3d),
-		(
-			With<TerrainColliderMeshSource>,
-			Without<TerrainColliderReady>,
-			Without<TerrainSuperseded>,
-		),
+		(With<TerrainColliderMeshSource>, Without<TerrainColliderReady>),
 	>,
 ) {
 	for (entity, mesh) in &sources {
@@ -103,18 +87,6 @@ pub(crate) fn queue_terrain_trimesh_colliders(
 			PhysicsInteractionLayer::fixed_layers(),
 			friction.0,
 		));
-	}
-}
-
-/// Strip the trimesh from fills a replacement model now owns.
-pub(crate) fn drop_superseded_terrain_colliders(
-	mut commands: Commands,
-	superseded: Query<Entity, (With<TerrainSuperseded>, With<TerrainColliderReady>)>,
-) {
-	for entity in &superseded {
-		commands
-			.entity(entity)
-			.remove::<(TerrainTrimeshCollider, TerrainColliderReady, Collider, RigidBody)>();
 	}
 }
 
@@ -188,47 +160,5 @@ mod tests {
 		let mut colliders =
 			app.world_mut().query_filtered::<Entity, With<TerrainTrimeshCollider>>();
 		assert_eq!(colliders.iter(app.world()).count(), 0);
-	}
-
-	#[test]
-	fn superseded_fill_drops_its_trimesh_and_recooks_when_released() {
-		let mut app = App::new();
-		app.insert_resource(Assets::<Mesh>::default())
-			.insert_resource(TerrainFrictionConfig::default())
-			.add_systems(
-				Update,
-				(drop_superseded_terrain_colliders, queue_terrain_trimesh_colliders).chain(),
-			);
-		let mut mesh = Mesh::new(
-			bevy::mesh::PrimitiveTopology::TriangleList,
-			bevy::asset::RenderAssetUsages::MAIN_WORLD,
-		);
-		mesh.insert_attribute(
-			Mesh::ATTRIBUTE_POSITION,
-			vec![[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]],
-		);
-		mesh.insert_indices(bevy::mesh::Indices::U32(vec![0, 1, 2]));
-		let mesh = app.world_mut().resource_mut::<Assets<Mesh>>().add(mesh);
-		let raw = app
-			.world_mut()
-			.spawn((TerrainColliderMeshSource, Mesh3d(mesh), CascadeChunk::default()))
-			.id();
-		app.update();
-		assert!(app.world().get::<Collider>(raw).is_some());
-
-		app.world_mut().entity_mut(raw).insert(TerrainSuperseded);
-		app.update();
-		app.update();
-		assert!(app.world().get::<Collider>(raw).is_none(), "superseded raw fill must not collide");
-		assert!(app.world().get::<TerrainTrimeshCollider>(raw).is_none());
-
-		app.world_mut().entity_mut(raw).remove::<TerrainSuperseded>();
-		app.update();
-		assert!(app.world().get::<Collider>(raw).is_some(), "released raw fill re-cooks");
-	}
-
-	#[test]
-	fn recycled_store_version_is_not_current_across_epochs() {
-		assert_ne!(TerrainColliderEpoch(0), TerrainColliderEpoch(1));
 	}
 }

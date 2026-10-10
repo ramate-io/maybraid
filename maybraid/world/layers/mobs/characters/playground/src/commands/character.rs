@@ -1,19 +1,22 @@
-//! `/character` subcommands for modular rig assembly.
+//! `/character` subcommands for the animation lab.
 
 use bevy::prelude::*;
+use character_rigs::Side;
 use clap::{Args, Subcommand, ValueEnum};
 
 use crate::animation::{AnimationMode, AnimationPlayback};
 use crate::camera::{orient_camera, CameraController};
-use crate::character::{request_dump_bones, CharacterConfig};
+use crate::character::{request_dump_bones, CharacterConfig, CharacterSpecies};
 
 #[derive(Clone, Subcommand)]
 pub enum Character {
-	/// Spawn a rig and optional modular skinned parts.
+	/// Spawn a clothed species through the runtime assembly path.
 	Assemble(AssembleArgs),
-	/// Pause, scrub, or change the speed of the procedural clip.
+	/// Switch the sampled clip without respawning the character.
+	Animate(AnimateArgs),
+	/// Pause, scrub, or change the speed of the mailbox clock.
 	Playback(PlaybackArgs),
-	/// Frame the rig from the front, the side, or three-quarter.
+	/// Frame the character from the front, the side, or three-quarter.
 	Camera(CameraArgs),
 	/// Show bone-local, parent-local, and character-space axes for one bone.
 	Joint(JointArgs),
@@ -24,29 +27,17 @@ pub enum Character {
 #[derive(Clone, Args)]
 #[command(rename_all = "kebab-case")]
 pub struct AssembleArgs {
-	/// Shared armature GLB path (under maybraid/assets).
-	#[arg(long, default_value = crate::character::DEFAULT_RIG)]
-	pub rig: String,
+	/// Species recipe (`braidman` is the humanoid lab subject).
+	#[arg(long, value_enum, default_value_t = CharacterSpecies::Braidman)]
+	pub species: CharacterSpecies,
 
-	/// Body mesh GLB path.
-	#[arg(long)]
-	pub body: Option<String>,
-
-	/// Head mesh GLB path.
-	#[arg(long)]
-	pub head: Option<String>,
-
-	/// Mouth mesh GLB path.
-	#[arg(long)]
-	pub mouth: Option<String>,
-
-	/// Nose mesh GLB path.
-	#[arg(long)]
-	pub nose: Option<String>,
-
-	/// Procedural animation applied to the rig (`run`, `squat`, `jump`, or `spot-scan`).
+	/// Procedural clip (`still`, `walk`, `run`, `jab`, `leap`, …).
 	#[arg(long, value_enum, default_value_t = AnimationMode::Run)]
 	pub animation: AnimationMode,
+
+	/// Lead side for sided gestures (`jab`). Ignored by symmetric clips.
+	#[arg(long, value_enum, default_value_t = GestureSide::Right)]
+	pub side: GestureSide,
 
 	/// Translation `x,y,z` in world units.
 	#[arg(long, default_value = "0,0,0", value_parser = parse_vec3_csv)]
@@ -71,6 +62,17 @@ impl Character {
 				let config = args.into_character_config();
 				commands.queue(move |world: &mut World| {
 					*world.resource_mut::<CharacterConfig>() = config;
+					reset_clip_clock(&mut world.resource_mut::<AnimationPlayback>());
+				});
+			}
+			Character::Animate(args) => {
+				let animation = args.animation;
+				let side = args.side.into_side();
+				commands.queue(move |world: &mut World| {
+					let mut config = world.resource_mut::<CharacterConfig>();
+					config.animation = animation;
+					config.side = side;
+					reset_clip_clock(&mut world.resource_mut::<AnimationPlayback>());
 				});
 			}
 			Character::Playback(args) => {
@@ -168,17 +170,48 @@ impl AssembleArgs {
 			self.rotate_euler.z.to_radians(),
 		);
 		CharacterConfig {
-			rig: self.rig,
-			body: self.body,
-			head: self.head,
-			mouth: self.mouth,
-			nose: self.nose,
+			species: self.species,
 			animation: self.animation,
+			side: self.side.into_side(),
 			transform: Transform::from_translation(self.translate)
 				.with_rotation(rot)
 				.with_scale(self.scale),
 		}
 	}
+}
+
+fn reset_clip_clock(playback: &mut AnimationPlayback) {
+	playback.elapsed = 0.0;
+	playback.scrub = None;
+	playback.paused = false;
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
+pub enum GestureSide {
+	Left,
+	#[default]
+	Right,
+}
+
+impl GestureSide {
+	fn into_side(self) -> Side {
+		match self {
+			Self::Left => Side::Left,
+			Self::Right => Side::Right,
+		}
+	}
+}
+
+#[derive(Clone, Args)]
+#[command(rename_all = "kebab-case")]
+pub struct AnimateArgs {
+	/// Clip to sample (`still`, `walk`, `run`, `jab`, `leap`, `soaring`, …).
+	#[arg(value_enum)]
+	pub animation: AnimationMode,
+
+	/// Lead side for sided gestures (`jab`).
+	#[arg(long, value_enum, default_value_t = GestureSide::Right)]
+	pub side: GestureSide,
 }
 
 fn parse_vec3_csv(s: &str) -> Result<Vec3, String> {

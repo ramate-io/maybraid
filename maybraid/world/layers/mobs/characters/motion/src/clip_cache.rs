@@ -11,6 +11,9 @@ use std::sync::{Arc, OnceLock, RwLock};
 
 use bevy::prelude::*;
 use character_animations::animations::{Idle, Run, Walk};
+use character_animations::rigs::humanoid::write_masks::{
+	IDLE_WRITE_BONES, RUN_WRITE_BONES, WALK_WRITE_BONES,
+};
 use character_animations::{
 	finite_parameter_bits, interval_seconds, ClipTimePolicy, Effects, SampleAddress,
 	DEFAULT_SAMPLE_INTERVAL_US,
@@ -30,50 +33,6 @@ pub const CURRENT_CLIP_REVISION: u64 = 0;
 pub const DEFAULT_MAX_VARIANTS: usize = 64;
 /// Lazy idle slots so a long rest does not allocate an unbounded table.
 pub const DEFAULT_MAX_UNBOUNDED_BINS: usize = 4096;
-
-const IDLE_BONES: &[&str] = &[
-	"lower_neck",
-	"upper_neck",
-	"pelvis.L",
-	"pelvis.R",
-	"shoulder.L",
-	"shoulder.R",
-	"humerus.L",
-	"humerus.R",
-	"forearm.L",
-	"forearm.R",
-];
-
-const WALK_BONES: &[&str] = &[
-	"root",
-	"pelvis.L",
-	"pelvis.R",
-	"femur.L",
-	"femur.R",
-	"shin.L",
-	"shin.R",
-	"shoulder.L",
-	"shoulder.R",
-	"humerus.L",
-	"humerus.R",
-	"forearm.L",
-	"forearm.R",
-];
-
-const RUN_BONES: &[&str] = &[
-	"pelvis.L",
-	"pelvis.R",
-	"femur.L",
-	"femur.R",
-	"shin.L",
-	"shin.R",
-	"shoulder.L",
-	"shoulder.R",
-	"humerus.L",
-	"humerus.R",
-	"forearm.L",
-	"forearm.R",
-];
 
 /// Compatible-rig identity. Humanoid V0 is the first prepared family.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -475,17 +434,33 @@ impl AnimClipCache {
 }
 
 /// Apply a cached sample onto `rest`. Unmasked bones stay at the binding baseline.
-pub fn apply_evaluated_sample(rest: &PoseBuffer, sample: &CachedClipSample, out: &mut PoseBuffer) {
-	out.copy_from(rest);
+///
+/// Copies only unmasked bones from `rest`, then applies rotation deltas for
+/// masked bones. Avoids a full-buffer `copy_from` when the clip touches a
+/// strict subset of the rig (idle / walk / run tables).
+pub fn apply_evaluated_sample(
+	rest: &PoseBuffer,
+	bone_mask: u32,
+	sample: &CachedClipSample,
+	out: &mut PoseBuffer,
+) {
+	let n = rest.local.len().min(out.local.len());
+	for index in 0..n {
+		if bone_mask & (1u32 << index) == 0 {
+			out.local[index] = rest.local[index];
+		}
+	}
 	for bone in sample.bones.iter() {
 		let index = bone.bone as usize;
-		let Some(slot) = out.local.get_mut(index) else {
-			continue;
-		};
 		let Some(rest_tf) = rest.local.get(index) else {
 			continue;
 		};
+		let Some(slot) = out.local.get_mut(index) else {
+			continue;
+		};
+		slot.translation = rest_tf.translation;
 		slot.rotation = bone.rotation_delta * rest_tf.rotation;
+		slot.scale = rest_tf.scale;
 	}
 }
 
@@ -500,9 +475,9 @@ pub fn parameters_key(clip: AnimClip) -> Option<ClipParametersKey> {
 
 pub fn clip_write_bones(clip: AnimClip) -> Option<&'static [&'static str]> {
 	match clip {
-		AnimClip::Still => Some(IDLE_BONES),
-		AnimClip::Walk(_) => Some(WALK_BONES),
-		AnimClip::Run(_) => Some(RUN_BONES),
+		AnimClip::Still => Some(IDLE_WRITE_BONES),
+		AnimClip::Walk(_) => Some(WALK_WRITE_BONES),
+		AnimClip::Run(_) => Some(RUN_WRITE_BONES),
 		_ => None,
 	}
 }
@@ -559,7 +534,27 @@ mod tests {
 	use character_animations::Animation;
 	use character_rigs::authoring::humanoid_bone_bit;
 	use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
+	use std::hint::black_box;
 	use std::time::Instant;
+
+	/// Pre-change path: full rest copy then masked rotation deltas.
+	fn apply_evaluated_sample_legacy(
+		rest: &PoseBuffer,
+		sample: &CachedClipSample,
+		out: &mut PoseBuffer,
+	) {
+		out.copy_from(rest);
+		for bone in sample.bones.iter() {
+			let index = bone.bone as usize;
+			let Some(slot) = out.local.get_mut(index) else {
+				continue;
+			};
+			let Some(rest_tf) = rest.local.get(index) else {
+				continue;
+			};
+			slot.rotation = bone.rotation_delta * rest_tf.rotation;
+		}
+	}
 
 	fn prepare_walk(cache: &AnimClipCache) -> anyhow::Result<PreparedClip> {
 		cache
@@ -648,13 +643,23 @@ mod tests {
 		let mut live = HumanoidV0Rig::imported();
 		let mut cached = HumanoidV0Rig::imported();
 		Walk::default().apply_for(&mut live, 0.2);
-		apply_evaluated_sample(&cached.binding.effective_rest, sample, &mut cached.pose);
+		apply_evaluated_sample(
+			&cached.binding.effective_rest,
+			prepared.bone_mask(),
+			sample,
+			&mut cached.pose,
+		);
 		if live.rotation("femur.L").angle_between(cached.rotation("femur.L")) > 1e-4 {
 			anyhow::bail!("cached deltas must match live walk compose");
 		}
 		let mut edited = HumanoidV0Rig::imported();
 		edited.seed_rest("femur.L", Transform::from_rotation(Quat::from_rotation_x(0.15)));
-		apply_evaluated_sample(&edited.binding.effective_rest, sample, &mut edited.pose);
+		apply_evaluated_sample(
+			&edited.binding.effective_rest,
+			prepared.bone_mask(),
+			sample,
+			&mut edited.pose,
+		);
 		if cached.rotation("femur.L") == edited.rotation("femur.L") {
 			anyhow::bail!("deltas must compose onto each character's rest");
 		}
@@ -679,7 +684,12 @@ mod tests {
 		let sample = cache.sample(&prepared, 0.25).ok_or_else(|| anyhow::anyhow!("sample"))?;
 		let mut leftover = HumanoidV0Rig::imported();
 		Walk::default().apply_for(&mut leftover, 0.2);
-		apply_evaluated_sample(&leftover.binding.effective_rest, sample, &mut leftover.pose);
+		apply_evaluated_sample(
+			&leftover.binding.effective_rest,
+			prepared.bone_mask(),
+			sample,
+			&mut leftover.pose,
+		);
 		if leftover.posed_angle("femur.L") > 1e-5 {
 			anyhow::bail!("idle apply uses rest as baseline");
 		}
@@ -780,6 +790,7 @@ mod tests {
 				Walk::default().apply_for(&mut live, clip_time);
 				apply_evaluated_sample(
 					&quantized.binding.effective_rest,
+					prepared.bone_mask(),
 					sample,
 					&mut quantized.pose,
 				);
@@ -841,7 +852,12 @@ mod tests {
 					let Some(sample) = cache.sample(prepared, time) else {
 						continue;
 					};
-					apply_evaluated_sample(&rig.binding.effective_rest, sample, &mut rig.pose);
+					apply_evaluated_sample(
+						&rig.binding.effective_rest,
+						prepared.bone_mask(),
+						sample,
+						&mut rig.pose,
+					);
 				}
 			}
 		}
@@ -857,5 +873,96 @@ mod tests {
 			cache.retained_bytes()
 		);
 		Ok(())
+	}
+
+	#[test]
+	fn fused_apply_matches_legacy_for_still_walk_and_run() -> anyhow::Result<()> {
+		let cache = AnimClipCache::default();
+		let clips = [AnimClip::still(), AnimClip::walk(), AnimClip::run()];
+		let progresses = [0.0, 0.17, 0.42, 0.88];
+		for clip in clips {
+			let prepared = cache
+				.prepare(clip, RigVariantId::HUMANOID_V0, cache.settings.sampling)
+				.ok_or_else(|| anyhow::anyhow!("prepare {clip:?}"))?;
+			let mask = prepared.bone_mask();
+			for progress in progresses {
+				let sample =
+					cache.sample(&prepared, progress).ok_or_else(|| anyhow::anyhow!("sample"))?;
+				let rest = HumanoidV0Rig::imported().binding.effective_rest.clone();
+				let mut legacy = PoseBuffer::identity(rest.len());
+				let mut fused = PoseBuffer::identity(rest.len());
+				apply_evaluated_sample_legacy(&rest, sample, &mut legacy);
+				apply_evaluated_sample(&rest, mask, sample, &mut fused);
+				if legacy.local != fused.local {
+					anyhow::bail!("pose mismatch for {clip:?} at {progress}");
+				}
+			}
+		}
+		Ok(())
+	}
+
+	fn bench_prepared_sample_loop(use_legacy: bool) -> Vec<u128> {
+		const FRAMES: u32 = 2_000;
+		const CHARACTERS: u32 = 32;
+		const RUNS: u32 = 5;
+		let clips = [AnimClip::still(), AnimClip::walk(), AnimClip::run()];
+		let cache = AnimClipCache::default();
+		let prepared: Vec<PreparedClip> = clips
+			.iter()
+			.filter_map(|clip| {
+				cache.prepare(*clip, RigVariantId::HUMANOID_V0, cache.settings.sampling)
+			})
+			.collect();
+
+		let mut rigs: Vec<HumanoidV0Rig> =
+			(0..CHARACTERS).map(|_| HumanoidV0Rig::imported()).collect();
+
+		let mut run_ns: Vec<u128> = Vec::with_capacity(RUNS as usize);
+		for _ in 0..RUNS {
+			let start = Instant::now();
+			for frame in 0..FRAMES {
+				let frame = black_box(frame);
+				for (index, rig) in rigs.iter_mut().enumerate() {
+					let prepared = &prepared[index as usize % prepared.len()];
+					let progress =
+						black_box((frame as f32 * 0.013 + (index as f32 * 0.07)).rem_euclid(1.0));
+					let sample = cache.sample(prepared, progress).expect("prepared sample");
+					let rest = &rig.binding.effective_rest;
+					if use_legacy {
+						apply_evaluated_sample_legacy(rest, sample, &mut rig.pose);
+					} else {
+						apply_evaluated_sample(rest, prepared.bone_mask(), sample, &mut rig.pose);
+					}
+					black_box(&rig.pose);
+				}
+			}
+			let samples = FRAMES as u64 * CHARACTERS as u64;
+			run_ns.push(start.elapsed().as_nanos() / samples as u128);
+		}
+
+		run_ns.sort_unstable();
+		run_ns
+	}
+
+	fn report_apply_bench(label: &str, run_ns: &[u128]) {
+		let min = *run_ns.first().expect("run");
+		let median = run_ns[run_ns.len() / 2];
+		let mean = run_ns.iter().sum::<u128>() / run_ns.len() as u128;
+		let spread = run_ns.last().expect("run") - min;
+		eprintln!(
+			"apply_evaluated_sample_microbench {label}: runs={runs:?} min={min} median={median} mean={mean} spread={spread} ns/sample",
+			runs = run_ns,
+		);
+	}
+
+	/// `cargo test -p character-motion apply_evaluated_sample_microbench --release -- --ignored --nocapture`
+	#[test]
+	#[ignore]
+	fn apply_evaluated_sample_microbench() {
+		eprintln!(
+			"32 humanoid characters, Still/Walk/Run prepared clips, real cache.sample + apply path"
+		);
+		report_apply_bench("legacy copy+delta", &bench_prepared_sample_loop(true));
+		report_apply_bench("fused mask pass", &bench_prepared_sample_loop(false));
 	}
 }
