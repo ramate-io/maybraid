@@ -13,7 +13,7 @@ use bevy::prelude::*;
 use character_animations::{
 	animations::{
 		Idle, Jab, Prone, QuadrupedIdle, QuadrupedLeap, QuadrupedRun, Squat, SquatDescent, Tuck,
-		TwoFootedTuckedFlip, UprightLeap,
+		TwoFootedTuckedFlip, UprightLeap, WalkStop,
 	},
 	Animation, Effects,
 };
@@ -781,6 +781,13 @@ fn sample_humanoid(
 			write_bones,
 			write_effects,
 		),
+		AnimClip::WalkStop => sample_split(
+			&WalkStop::default(),
+			rig,
+			progress.clamp(0.0, 1.0),
+			write_bones,
+			write_effects,
+		),
 		AnimClip::Prone => {
 			sample_split(&Prone::default(), rig, progress, write_bones, write_effects)
 		}
@@ -944,6 +951,38 @@ mod tests {
 		assert!(rig.posed_angle("shoulder.L") > 0.0);
 		assert!(rig.posed_angle("shoulder.L") < 0.15);
 		assert!(rig.posed_angle("humerus.L") > 0.2, "Still should hang the arms");
+	}
+
+	#[test]
+	fn walk_stop_matches_idle_at_full_progress() -> anyhow::Result<()> {
+		use anyhow::anyhow;
+
+		let mut stop = HumanoidV0Rig::for_clip_test();
+		let mut idle = HumanoidV0Rig::for_clip_test();
+		sample_humanoid(AnimClip::walk_stop(), &mut stop, 1.0, true, true);
+		sample_humanoid(AnimClip::still(), &mut idle, 0.0, true, true);
+		for name in stop.animation_bone_names() {
+			let a = stop.rotation(name);
+			let b = idle.rotation(name);
+			if a.dot(b).abs() < 1.0 - 1e-5 {
+				return Err(anyhow!("walk stop end must match idle@0 on {name}"));
+			}
+		}
+		let mut start = HumanoidV0Rig::for_clip_test();
+		let mut walk = HumanoidV0Rig::for_clip_test();
+		sample_humanoid(AnimClip::walk_stop(), &mut start, 0.0, true, true);
+		sample_humanoid(AnimClip::walk(), &mut walk, 0.0, true, true);
+		for name in start.animation_bone_names() {
+			let a = start.rotation(name);
+			let b = walk.rotation(name);
+			if a.dot(b).abs() < 1.0 - 1e-5 {
+				return Err(anyhow!("walk stop start must match walk@0 on {name}"));
+			}
+		}
+		let mut mid = HumanoidV0Rig::for_clip_test();
+		sample_humanoid(AnimClip::walk_stop(), &mut mid, 0.5, true, true);
+		assert!(mid.posed_angle("femur.L") > 0.02, "mid settle should flex hips");
+		Ok(())
 	}
 
 	#[test]
