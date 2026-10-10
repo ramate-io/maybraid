@@ -25,6 +25,8 @@ pub enum AnimationMode {
 	Soaring,
 	Flapping,
 	Jab,
+	/// Torso-led search sweep without raising the arms.
+	SpotScan,
 	Prone,
 }
 
@@ -49,6 +51,7 @@ impl AnimationMode {
 			Self::Soaring => "soaring",
 			Self::Flapping => "flapping",
 			Self::Jab => "jab",
+			Self::SpotScan => "spot-scan",
 			Self::Prone => "prone",
 		}
 	}
@@ -72,6 +75,7 @@ impl AnimationMode {
 				backswing: DEFAULT_BACKSWING,
 				target: DEFAULT_JAB_TARGET,
 			}),
+			Self::SpotScan => AnimClip::spot_scan(),
 			Self::Prone => AnimClip::prone(),
 		}
 	}
