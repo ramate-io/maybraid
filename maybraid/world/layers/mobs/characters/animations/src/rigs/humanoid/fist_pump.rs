@@ -2,7 +2,6 @@
 
 use character_rigs::authoring::{ArmAim, HumanoidPose};
 use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
-use character_rigs::Side;
 
 use crate::animations::FistPump;
 use crate::Animation;
@@ -36,6 +35,7 @@ impl Animation<HumanoidV0Rig> for FistPump {
 mod tests {
 	use bevy::prelude::Vec3;
 	use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
+	use character_rigs::Side;
 
 	use super::*;
 	use crate::Animation;
@@ -44,8 +44,168 @@ mod tests {
 		0.43
 	}
 
-	fn forearm_tip(rig: &HumanoidV0Rig, side: Side) -> Vec3 {
+	fn bone_segment(rig: &HumanoidV0Rig, name: &str) -> f32 {
+		let id = rig.binding.definition.id(name).expect(name);
+		rig.binding.effective_rest.local[id.index()].translation.length()
+	}
+
+	fn bone_tail(rig: &HumanoidV0Rig, name: &str) -> Vec3 {
+		let origin = rig.character_point(name);
+		origin + rig.character_length(name) * bone_segment(rig, name)
+	}
+
+	fn fist(rig: &HumanoidV0Rig, side: Side) -> Vec3 {
+		bone_tail(rig, &format!("forearm.{}", side.suffix()))
+	}
+
+	fn elbow(rig: &HumanoidV0Rig, side: Side) -> Vec3 {
 		rig.character_point(&format!("forearm.{}", side.suffix()))
+	}
+
+	fn shoulder(rig: &HumanoidV0Rig, side: Side) -> Vec3 {
+		rig.character_point(&format!("humerus.{}", side.suffix()))
+	}
+
+	fn head_top(rig: &HumanoidV0Rig) -> f32 {
+		bone_tail(rig, "upper_neck").y
+	}
+
+	fn chamber_progress() -> f32 {
+		0.09
+	}
+
+	fn overhead_peak_progress(pump: &FistPump) -> f32 {
+		let mut best = peak();
+		let mut best_y = f32::NEG_INFINITY;
+		for step in 0..=48 {
+			let t = (step as f32 / 48.0) * 0.62;
+			let mut rig = HumanoidV0Rig::for_clip_test();
+			pump.apply(&mut rig, t);
+			let y = fist(&rig, pump.side).y;
+			if y > best_y {
+				best_y = y;
+				best = t;
+			}
+		}
+		best
+	}
+
+	#[derive(Debug)]
+	struct Snap {
+		fist: Vec3,
+		elbow: Vec3,
+		shoulder: Vec3,
+		head_y: f32,
+	}
+
+	fn snapshot(rig: &HumanoidV0Rig, side: Side) -> Snap {
+		Snap {
+			fist: fist(rig, side),
+			elbow: elbow(rig, side),
+			shoulder: shoulder(rig, side),
+			head_y: head_top(rig),
+		}
+	}
+
+	fn assert_mirrored(right: &Snap, left: &Snap) {
+		assert!((right.fist.x + left.fist.x).abs() < 0.06, "fist mirror {right:?} {left:?}");
+		assert!((right.fist.y - left.fist.y).abs() < 0.06, "fist height {right:?} {left:?}");
+		assert!((right.fist.z - left.fist.z).abs() < 0.06, "fist depth {right:?} {left:?}");
+		assert!((right.elbow.x + left.elbow.x).abs() < 0.06, "elbow mirror");
+		assert!((right.shoulder.x + left.shoulder.x).abs() < 0.06, "shoulder mirror");
+	}
+
+	#[test]
+	fn fist_pump_character_space_pose_contract() -> anyhow::Result<()> {
+		for side in [Side::Right, Side::Left] {
+			let pump = FistPump::default().with_side(side);
+			let rest = snapshot(&HumanoidV0Rig::for_clip_test(), side);
+
+			let mut chamber_rig = HumanoidV0Rig::for_clip_test();
+			pump.apply(&mut chamber_rig, chamber_progress());
+			let chamber = snapshot(&chamber_rig, side);
+			assert!(chamber.fist.z < rest.fist.z - 0.3, "chamber pulls back, {chamber:?}");
+
+			let mut hold_rig = HumanoidV0Rig::for_clip_test();
+			pump.apply(&mut hold_rig, peak());
+			let hold_y = fist(&hold_rig, side).y;
+			assert!(
+				chamber.fist.y < hold_y - 0.2,
+				"chamber precedes overhead hold height, {chamber:?} hold_y {hold_y}"
+			);
+
+			let overhead_t = overhead_peak_progress(&pump);
+			let mut peak_rig = HumanoidV0Rig::for_clip_test();
+			pump.apply(&mut peak_rig, overhead_t);
+			let snap = snapshot(&peak_rig, side);
+			assert!(snap.fist.y > snap.head_y + 0.35, "overhead fist clears head, {snap:?}");
+			assert!(
+				snap.fist.x.signum() == rest.fist.x.signum(),
+				"fist must not cross midline at snap, {snap:?} rest {rest:?}"
+			);
+
+			let hold = snapshot(&hold_rig, side);
+			assert!(hold.fist.y > hold.head_y + 0.3, "hold keeps fist overhead, {hold:?}");
+			assert!(
+				hold.fist.x.signum() == rest.fist.x.signum(),
+				"hold stays on pumping side, {hold:?}"
+			);
+			assert!(
+				(hold.fist.x - hold.shoulder.x).abs() < 0.35,
+				"fist sits near its shoulder column, {hold:?}"
+			);
+
+			let mut end_rig = HumanoidV0Rig::for_clip_test();
+			pump.apply(&mut end_rig, 1.0);
+			let end = snapshot(&end_rig, side);
+			assert!((end.fist - rest.fist).length() < 1e-3, "end returns to rest {end:?}");
+		}
+
+		let mut right_rig = HumanoidV0Rig::for_clip_test();
+		let mut left_rig = HumanoidV0Rig::for_clip_test();
+		FistPump::default().with_side(Side::Right).apply(&mut right_rig, peak());
+		FistPump::default().with_side(Side::Left).apply(&mut left_rig, peak());
+		assert_mirrored(&snapshot(&right_rig, Side::Right), &snapshot(&left_rig, Side::Left));
+		Ok(())
+	}
+
+	#[test]
+	fn fist_pump_hold_uses_bent_elbow_distinct_from_extended_wave() -> anyhow::Result<()> {
+		let pump = FistPump::default().with_side(Side::Right);
+		let mut rig = HumanoidV0Rig::for_clip_test();
+		pump.apply(&mut rig, peak());
+		// VictoryWave peak (~0.55) lands near ~0.6 rad; the pump stays clearly more flexed.
+		assert!(
+			rig.posed_angle("forearm.R") > 0.68,
+			"bent pump elbow, got {}",
+			rig.posed_angle("forearm.R")
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn fist_pump_transition_from_visible_mid_pump_blends_from_rest() -> anyhow::Result<()> {
+		use crate::animations::Transition;
+		use character_rigs::authoring::ArmatureOffset;
+
+		let rest = HumanoidV0Rig::for_clip_test();
+		let from_pose = rest.pose.clone();
+		let mut rig = HumanoidV0Rig::for_clip_test();
+		let transition =
+			Transition::from_visible(FistPump::default(), from_pose, ArmatureOffset::IDENTITY);
+		transition.apply(&mut rig, 0.38, 0.0);
+		assert!(
+			rig.rotation("forearm.R").dot(rest.rotation("forearm.R")).abs() > 1.0 - 1e-4,
+			"transition weight 0 keeps captured rest pose"
+		);
+		transition.apply(&mut rig, 0.38, 1.0);
+		let mut target = HumanoidV0Rig::for_clip_test();
+		FistPump::default().apply(&mut target, 0.38);
+		assert!(
+			rig.rotation("forearm.R").dot(target.rotation("forearm.R")).abs() > 1.0 - 1e-4,
+			"transition weight 1 matches mid-pump target"
+		);
+		Ok(())
 	}
 
 	#[test]
@@ -94,13 +254,12 @@ mod tests {
 	#[test]
 	fn fist_pump_raises_forearm_tip_overhead() -> anyhow::Result<()> {
 		for side in [Side::Right, Side::Left] {
-			let bone = format!("forearm.{}", side.suffix());
 			let rest = HumanoidV0Rig::for_clip_test();
 			let mut posed = HumanoidV0Rig::for_clip_test();
 			FistPump::default().with_side(side).apply(&mut posed, peak());
 
-			let rest_tip = rest.character_point(&bone);
-			let posed_tip = forearm_tip(&posed, side);
+			let rest_tip = fist(&rest, side);
+			let posed_tip = fist(&posed, side);
 			assert!(
 				posed_tip.y > rest_tip.y + 0.22,
 				"{side:?} fist rises overhead, {posed_tip:?} vs {rest_tip:?}"
@@ -122,8 +281,8 @@ mod tests {
 		right.apply(&mut r, peak());
 		left.apply(&mut l, peak());
 
-		let r_tip = r.character_point("forearm.R");
-		let l_tip = l.character_point("forearm.L");
+		let r_tip = fist(&r, Side::Right);
+		let l_tip = fist(&l, Side::Left);
 		assert!((r_tip.x + l_tip.x).abs() < 0.05, "mirrored placement {r_tip:?} {l_tip:?}");
 		assert!((r_tip.y - l_tip.y).abs() < 0.08, "matched height {r_tip:?} {l_tip:?}");
 		Ok(())
@@ -131,12 +290,17 @@ mod tests {
 
 	#[test]
 	fn fist_pump_leaves_opposite_arm_at_rest() -> anyhow::Result<()> {
-		let pump = FistPump::default().with_side(Side::Right);
-		let mut posed = HumanoidV0Rig::for_clip_test();
-		pump.apply(&mut posed, peak());
+		for side in [Side::Right, Side::Left] {
+			let other = side.opposite();
+			let pump = FistPump::default().with_side(side);
+			let mut posed = HumanoidV0Rig::for_clip_test();
+			pump.apply(&mut posed, peak());
 
-		for bone in ["humerus.L", "forearm.L"] {
-			assert!(posed.posed_angle(bone) < 1e-4, "opposite {bone} stays at rest");
+			for bone in
+				[format!("humerus.{}", other.suffix()), format!("forearm.{}", other.suffix())]
+			{
+				assert!(posed.posed_angle(&bone) < 1e-4, "opposite {bone} stays at rest");
+			}
 		}
 		Ok(())
 	}

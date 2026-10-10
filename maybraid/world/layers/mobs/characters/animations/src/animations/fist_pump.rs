@@ -79,7 +79,8 @@ impl FistPump {
 		// Match [`Jab::humerus_lateral`]: left → −X, right → +X in character space.
 		let outboard = -self.side.sign() * 0.38;
 		let chamber = Vec3::new(-outboard * 0.35, -0.22, -0.62);
-		let peak = Vec3::new(outboard, 0.88, 0.16);
+		// Peak lateral matches chamber sign so the fist stays on the pumping side at full extend.
+		let peak = Vec3::new(-outboard, 0.88, 0.12);
 		chamber.lerp(peak, mix).normalize_or_zero()
 	}
 
@@ -141,8 +142,8 @@ mod tests {
 		let left = FistPump::default().with_side(Side::Left);
 		let r = right.humerus_along(peak());
 		let l = left.humerus_along(peak());
-		assert!(r.x > 0.2, "right pump is outboard +X, got {r:?}");
-		assert!(l.x < -0.2, "left pump is outboard −X, got {l:?}");
+		assert!(r.x < -0.15, "right pump aim stays on −X, got {r:?}");
+		assert!(l.x > 0.15, "left pump aim stays on +X, got {l:?}");
 		assert!((r.x + l.x).abs() < 0.08, "mirrored lateral aim {r:?} {l:?}");
 		Ok(())
 	}

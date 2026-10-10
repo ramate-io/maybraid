@@ -54,9 +54,16 @@ fn fist_pump_raises_pumping_forearm_on_the_t_pose() {
 	let rest = HumanoidV0Rig::for_clip_test();
 	let mut posed = HumanoidV0Rig::for_clip_test();
 	FistPump::default().apply(&mut posed, 0.43);
-	let rest_tip = rest.character_point("forearm.R");
-	let posed_tip = posed.character_point("forearm.R");
-	assert!(posed_tip.y > rest_tip.y + 0.18, "fist rises, {posed_tip:?} vs {rest_tip:?}");
+	let forearm = "forearm.R";
+	let seg = {
+		let id = rest.binding.definition.id(forearm).expect(forearm);
+		rest.binding.effective_rest.local[id.index()].translation.length()
+	};
+	let fist =
+		|rig: &HumanoidV0Rig| rig.character_point(forearm) + rig.character_length(forearm) * seg;
+	let rest_tip = fist(&rest);
+	let posed_tip = fist(&posed);
+	assert!(posed_tip.y > rest_tip.y + 0.35, "fist rises overhead, {posed_tip:?} vs {rest_tip:?}");
 	assert!(
 		posed_tip.x.signum() == rest_tip.x.signum(),
 		"right fist stays on its side of midline, {posed_tip:?}"
