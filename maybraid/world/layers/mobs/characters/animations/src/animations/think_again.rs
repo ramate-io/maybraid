@@ -1,7 +1,7 @@
 //! "Think Again" meme gesture: raised upper arm, forearm ticks beside the head.
 //!
 //! Character space matches [`Jab`](super::Jab): +X right, +Y up, +Z fight-forward.
-//! The humerus abducts laterally and lifts ~30° as the elbow folds. The head
+//! The humerus abducts laterally and drops ~5° as the elbow folds. The head
 //! cocks toward the raised hand on the move into Think and eases back on Again.
 //! Cadence is four beats at one second each:
 //!
@@ -31,12 +31,12 @@ const AGAIN_ARRIVE: f32 = 3.0 * BEAT;
 /// Beat 4 holds Again, then this recover returns to T-pose.
 const RECOVER_START: f32 = 3.75;
 
-/// Elbow flex at Think. World tilt is ~45° inboard after the 30° humerus lift.
-const THINK_ELBOW: f32 = std::f32::consts::FRAC_PI_2 + 15_f32.to_radians();
-/// Elbow flex at Again. World tilt is ~+15° inboard after the same lift.
-const AGAIN_ELBOW: f32 = std::f32::consts::FRAC_PI_2 - 15_f32.to_radians();
-/// Humerus lift from the T-pose horizontal, in radians, at full gesture.
-const HUMERUS_ELEVATION: f32 = 30_f32.to_radians();
+/// Elbow flex at Think. Extra fold so the hand stays inboard after the −5° drop.
+const THINK_ELBOW: f32 = std::f32::consts::FRAC_PI_2 + 50_f32.to_radians();
+/// Elbow flex at Again. Shallower than Think by 30°.
+const AGAIN_ELBOW: f32 = std::f32::consts::FRAC_PI_2 + 20_f32.to_radians();
+/// Humerus depression from the T-pose horizontal, in radians, at Think.
+const HUMERUS_ELEVATION: f32 = -5_f32.to_radians();
 /// Roll about the lateral humerus so the forearm hinge opens beside the head.
 ///
 /// Not multiplied by [`Side::sign`]: bilateral mirroring is already carried by
@@ -116,7 +116,7 @@ impl ThinkAgain {
 	///
 	/// [`Side::sign`] is `+1` on left and `−1` on right (yaw/roll mirroring). Lateral
 	/// outboard matches rest geometry: right → `−X`, left → `+X`. Elevation tracks
-	/// the elbow envelope so the upper arm leaves the T-pose as the forearm folds.
+	/// the elbow envelope so the upper arm drops below the T-pose as the forearm folds.
 	pub fn humerus_along(&self, progress: f32) -> Vec3 {
 		let amount = self.gesture_amount(progress);
 		let elev = HUMERUS_ELEVATION * amount;
@@ -195,14 +195,14 @@ mod tests {
 	}
 
 	#[test]
-	fn think_again_humerus_lifts_with_the_elbow() -> anyhow::Result<()> {
+	fn think_again_humerus_drops_with_the_elbow() -> anyhow::Result<()> {
 		let clip = ThinkAgain::default().with_side(Side::Right);
 		let along = clip.humerus_along(think_hold());
 		let elev = along.y.atan2(along.x.abs()).to_degrees();
-		assert!(along.x.abs() > 0.85, "stays mostly lateral, got {along:?}");
+		assert!(along.x.abs() > 0.98, "stays mostly lateral, got {along:?}");
 		assert!(
-			(elev - 30.0).abs() < 0.5,
-			"humerus should lift ~30° with the elbow, got {elev:.1}° {along:?}"
+			(elev + 5.0).abs() < 0.5,
+			"humerus should drop ~5° at Think, got {elev:.1}° {along:?}"
 		);
 		Ok(())
 	}

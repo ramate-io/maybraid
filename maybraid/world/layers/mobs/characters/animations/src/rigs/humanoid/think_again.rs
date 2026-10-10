@@ -184,8 +184,8 @@ mod tests {
 			);
 			let elevation = posed.humerus_dir.y.atan2(posed.humerus_dir.x.abs()).to_degrees();
 			assert!(
-				(elevation - 30.0).abs() < 3.0,
-				"{side:?} humerus should lift ~30°, elevation {elevation:.1}° dir {:?}",
+				(elevation + 5.0).abs() < 3.0,
+				"{side:?} humerus should drop ~5°, elevation {elevation:.1}° dir {:?}",
 				posed.humerus_dir
 			);
 		}
@@ -221,8 +221,8 @@ mod tests {
 				"{side:?} Think tilt ~45°, got {tilt:.1}°"
 			);
 			assert!(
-				pose.tip.y > head_y - 0.08,
-				"{side:?} hand near head height, tip {:?}",
+				pose.tip.y > pose.shoulder.y && pose.tip.y > head_y - 0.35,
+				"{side:?} hand stays up beside the head after the humerus drop, tip {:?} head {head_y}",
 				pose.tip
 			);
 			assert!(
@@ -327,7 +327,7 @@ mod tests {
 			let legacy_pi = pose_with_roll(side, PI, progress);
 			let legacy_pose = arm_key_pose(&legacy_pi, side);
 			assert!(
-				tuned_pose.tip.y > legacy_pose.tip.y + 0.5,
+				tuned_pose.tip.y > legacy_pose.tip.y + 0.15,
 				"{side:?}: π is not the correct hinge with corrected aim, tuned {:?} vs π {:?}",
 				tuned_pose.tip,
 				legacy_pose.tip
