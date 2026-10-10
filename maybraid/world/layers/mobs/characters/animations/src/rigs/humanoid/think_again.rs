@@ -110,7 +110,7 @@ mod tests {
 	}
 
 	fn think_hold() -> f32 {
-		0.60
+		1.50
 	}
 
 	fn again_hold() -> f32 {
@@ -266,8 +266,8 @@ mod tests {
 		let clip = ThinkAgain::default().with_side(Side::Right);
 		let mut early = HumanoidV0Rig::for_clip_test();
 		let mut late = HumanoidV0Rig::for_clip_test();
-		clip.apply(&mut early, 0.48);
-		clip.apply(&mut late, 0.72);
+		clip.apply(&mut early, 1.20);
+		clip.apply(&mut late, 1.80);
 		let early_tip = segment_tip(&early, "forearm.R");
 		let late_tip = segment_tip(&late, "forearm.R");
 		assert!(
@@ -277,8 +277,8 @@ mod tests {
 
 		let mut again_early = HumanoidV0Rig::for_clip_test();
 		let mut again_late = HumanoidV0Rig::for_clip_test();
-		clip.apply(&mut again_early, 3.28);
-		clip.apply(&mut again_late, 3.52);
+		clip.apply(&mut again_early, 3.15);
+		clip.apply(&mut again_late, 3.55);
 		let again_a = segment_tip(&again_early, "forearm.R");
 		let again_b = segment_tip(&again_late, "forearm.R");
 		assert!((again_a - again_b).length() < 0.04, "Again hold drift {again_a:?} vs {again_b:?}");

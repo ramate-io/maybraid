@@ -2,7 +2,12 @@
 //!
 //! Character space matches [`Jab`](super::Jab): +X right, +Y up, +Z fight-forward.
 //! The humerus abducts laterally and lifts ~30° as the elbow folds. Cadence is
-//! four beats at one second each: Think, rest, rest, Again.
+//! four beats at one second each:
+//!
+//! 1. T-pose → Think
+//! 2. Hold Think
+//! 3. Think → Again
+//! 4. Hold Again, then recover so a loop can restart from T-pose
 //!
 //! Forearm tilt in tests is derived from posed elbow→tip positions: `atan2(Δx, Δy)`.
 //! Think ≈ +45° inboard; Again ≈ +15° inboard.
@@ -12,17 +17,16 @@ use character_rigs::Side;
 
 use crate::animations::smoothstep;
 
-/// One second per word / rest beat.
+/// One second per beat.
 pub const BEAT: f32 = 1.0;
-/// Whole one-shot: Think | rest | rest | Again.
+/// Whole one-shot: raise | hold Think | move | hold Again.
 pub const DURATION: f32 = 4.0 * BEAT;
-/// Think occupies beat 1 and a short release into beat 2.
-const THINK_END: f32 = BEAT + 0.20;
-/// Again occupies beat 4, with a matching attack out of beat 3.
-const AGAIN_START: f32 = 3.0 * BEAT - 0.20;
-/// Raise / drop. Matched so the hand does not pop on either edge.
-const ATTACK: f32 = 0.40;
-const RELEASE: f32 = 0.40;
+/// End of beat 2. Think is held from [`BEAT`] until this instant.
+const THINK_HOLD_END: f32 = 2.0 * BEAT;
+/// End of beat 3. Again is reached here and held into beat 4.
+const AGAIN_ARRIVE: f32 = 3.0 * BEAT;
+/// Beat 4 holds Again, then this recover returns to T-pose.
+const RECOVER_START: f32 = 3.75;
 
 /// Elbow flex at Think. World tilt is ~45° inboard after the 30° humerus lift.
 const THINK_ELBOW: f32 = std::f32::consts::FRAC_PI_2 + 15_f32.to_radians();
@@ -62,22 +66,41 @@ impl ThinkAgain {
 		self.side.opposite()
 	}
 
-	/// Beat-1 pulse. Zero on the rest beats and on Again.
+	/// How much of the raised pose is still Think. 1 on beat 2, 0 once Again arrives.
 	pub fn think_amount(&self, progress: f32) -> f32 {
-		beat_pulse(clip_time(progress), 0.0, THINK_END, ATTACK, RELEASE)
+		self.gesture_amount(progress) * (1.0 - self.again_mix(progress))
 	}
 
-	/// Beat-4 pulse. Zero on Think and the two rest beats.
+	/// How much of the raised pose is Again. 0 through Think, 1 on beat 4.
 	pub fn again_amount(&self, progress: f32) -> f32 {
-		beat_pulse(clip_time(progress), AGAIN_START, DURATION, ATTACK, RELEASE)
+		self.gesture_amount(progress) * self.again_mix(progress)
 	}
 
-	/// Overall gesture envelope: either word, nothing on the rest beats.
+	/// Arm is up from the end of beat 1 through the Again hold.
 	pub fn gesture_amount(&self, progress: f32) -> f32 {
-		self.think_amount(progress).max(self.again_amount(progress))
+		let t = clip_time(progress);
+		if t < BEAT {
+			smoothstep(t / BEAT)
+		} else if t < RECOVER_START {
+			1.0
+		} else {
+			1.0 - smoothstep((t - RECOVER_START) / (DURATION - RECOVER_START))
+		}
 	}
 
-	/// Forearm flex in radians. Think and Again are separate pulses, not a sweep.
+	/// 0 = Think, 1 = Again. Sweeps only on beat 3.
+	fn again_mix(&self, progress: f32) -> f32 {
+		let t = clip_time(progress);
+		if t < THINK_HOLD_END {
+			0.0
+		} else if t < AGAIN_ARRIVE {
+			smoothstep((t - THINK_HOLD_END) / (AGAIN_ARRIVE - THINK_HOLD_END))
+		} else {
+			1.0
+		}
+	}
+
+	/// Forearm flex in radians. Think holds, then blends to Again on beat 3.
 	pub fn elbow_flexion(&self, progress: f32) -> f32 {
 		THINK_ELBOW * self.think_amount(progress) + AGAIN_ELBOW * self.again_amount(progress)
 	}
@@ -102,33 +125,12 @@ fn clip_time(progress: f32) -> f32 {
 	progress.clamp(0.0, DURATION)
 }
 
-/// Smooth attack, hold, and release on `[start, end)`.
-fn beat_pulse(t: f32, start: f32, end: f32, attack: f32, release: f32) -> f32 {
-	if t <= start || t >= end {
-		return 0.0;
-	}
-	let local = t - start;
-	let dur = end - start;
-	let release_at = (dur - release).max(attack);
-	if local < attack {
-		smoothstep(local / attack)
-	} else if local < release_at {
-		1.0
-	} else {
-		1.0 - smoothstep((local - release_at) / (dur - release_at).max(1e-4))
-	}
-}
-
 #[cfg(test)]
 mod tests {
 	use super::*;
 
 	fn think_hold() -> f32 {
-		0.60
-	}
-
-	fn rest_hold() -> f32 {
-		2.00
+		1.50
 	}
 
 	fn again_hold() -> f32 {
@@ -155,11 +157,11 @@ mod tests {
 	}
 
 	#[test]
-	fn think_again_rest_beats_are_at_rest() -> anyhow::Result<()> {
+	fn think_again_second_beat_holds_think() -> anyhow::Result<()> {
 		let clip = ThinkAgain::default();
-		assert!(clip.gesture_amount(rest_hold()) < 1e-4);
-		assert!(clip.elbow_flexion(1.5) < 1e-4);
-		assert!(clip.elbow_flexion(2.5) < 1e-4);
+		assert!((clip.elbow_flexion(1.2) - THINK_ELBOW).abs() < 0.02);
+		assert!((clip.elbow_flexion(1.8) - THINK_ELBOW).abs() < 0.02);
+		assert!(clip.gesture_amount(1.5) > 0.99);
 		Ok(())
 	}
 
