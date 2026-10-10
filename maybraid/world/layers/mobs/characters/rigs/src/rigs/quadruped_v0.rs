@@ -65,6 +65,33 @@ impl QuadrupedV0Rig {
 		self.pose.rotation(id).angle_between(self.binding.effective_rest.rotation(id))
 	}
 
+	/// Bone +Y in character space (parents included).
+	pub fn character_length(&self, name: &str) -> Vec3 {
+		self.binding
+			.definition
+			.id(name)
+			.map(|id| self.binding.definition.rotation_in_character(&self.pose, id) * Vec3::Y)
+			.unwrap_or(Vec3::Y)
+	}
+
+	/// Character-space origin of a bone (parents included).
+	pub fn character_point(&self, name: &str) -> Vec3 {
+		self.binding
+			.definition
+			.id(name)
+			.map(|id| self.binding.definition.translation_in_character(&self.pose, id))
+			.unwrap_or(Vec3::ZERO)
+	}
+
+	/// Posed segment end in character space (bone origin + rest length along +Y).
+	pub fn posed_tip(&self, name: &str) -> Vec3 {
+		let Some(id) = self.binding.definition.id(name) else {
+			return Vec3::ZERO;
+		};
+		let length = self.binding.definition.rest_segment_length(&self.binding.effective_rest, id);
+		self.character_point(name) + self.character_length(name) * length
+	}
+
 	pub fn rotation(&self, name: &str) -> Quat {
 		self.binding
 			.definition
