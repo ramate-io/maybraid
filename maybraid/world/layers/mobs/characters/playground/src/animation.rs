@@ -74,7 +74,7 @@ impl AnimationMode {
 				backswing: DEFAULT_BACKSWING,
 				target: DEFAULT_JAB_TARGET,
 			}),
-			Self::HandClap => AnimClip::handclap(),
+			Self::HandClap => AnimClip::hand_clap(),
 			Self::Prone => AnimClip::prone(),
 		}
 	}
