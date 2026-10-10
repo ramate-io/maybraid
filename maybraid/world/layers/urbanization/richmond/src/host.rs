@@ -2,35 +2,35 @@
 
 use std::sync::Arc;
 
+use bevy::ecs::template::template;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::{
 	bsn, template_value, Commands, CommandsSceneExt, Entity, Transform, Visibility,
 };
+use bevy::scene::Scene;
 use building_components::{
-	building_bounds, spawn_building_components, BuildingComponents, FurnitureNode,
+	building_bounds, building_components_host, BuildingComponents, FurnitureNode,
 	FurnitureUsageNode,
 };
-use building_physics::{spawn_building_walk_colliders, BUILDING_FRICTION};
+use building_physics::{BuildingWalkShapes, BUILDING_FRICTION};
 use buildings::wizards_tower::WizardsTower;
 use buildings::{
 	ConnectingStairwell, MixedUseLesHallesStorey, PitchedRoof, RectangularPitchedRoofComplex,
 };
-use lod::gen::{Id, LodScene};
+use lod::gen::Id;
 use lod::lod_host_scene_pending;
 use lod::lod_ref::LodRef;
+use lod::scene::LodScene;
 use lod::LodSceneLevel;
 use urbanization_developments::{
-	CircularTower, GalleryColonnade, GalleryTerrace, MixedUseLesHallesHost, OldCityMarketTerrace,
-	RingFortHost, ShepherdsBuilding, ShepherdsHouse, ShepherdsHut, SingleHighrise, Skybridge,
+	yaw_about_xz, CircularTower, GalleryColonnade, GalleryTerrace, LesHalles,
+	MixedUseLesHallesHost, OldCityMarketTerrace, RingFort, RingFortHost, ShepherdsBuilding,
+	ShepherdsCommune, ShepherdsHouse, ShepherdsHut, ShepherdsVillage, SingleHighrise, Skybridge,
 	TempleSanctum, TrazaloidTower,
 };
 
-use crate::cell::yaw_about_xz;
 use crate::place::{DiscoverablePlace, DiscoverablePlaceLabel};
-use crate::{
-	BuiltDevelopment, LesHallesDevelopment, RingFortDevelopment, ShepherdsCommuneDevelopment,
-	ShepherdsVillageDevelopment,
-};
+use crate::BuiltDevelopment;
 
 #[derive(Debug, Clone)]
 pub enum DevelopmentHost {
@@ -45,7 +45,7 @@ pub enum DevelopmentHost {
 	RingFortGalleryTerrace(Box<GalleryTerrace>, Transform),
 	RingFortGalleryColonnade(Box<GalleryColonnade>, Transform),
 	RingFortGalleryRoof(Box<RectangularPitchedRoofComplex>, Transform),
-	SingleHighrise(Arc<SingleHighrise>, Transform),
+	SingleHighrise(Arc<buildings::SingleHighrise>, Transform),
 	TempleSanctum(Arc<TempleSanctum>, Transform),
 	WizardsTower(Arc<WizardsTower>, Transform),
 	SkybridgeHall(Arc<Skybridge>, Transform),
@@ -225,50 +225,40 @@ impl DevelopmentHost {
 	}
 
 	pub fn spawn(&self, commands: &mut Commands, host_id: Option<Id>) -> Vec<Entity> {
-		let entities = match self {
-			Self::LesHallesStorey(building, transform) => spawn(commands, building, *transform),
-			Self::LesHallesStairwell(building, transform) => {
-				spawn(commands, building.as_ref(), *transform)
-			}
-			Self::LesHallesRoof(building, transform) => {
-				spawn(commands, building.as_ref(), *transform)
-			}
-			Self::ShepherdsHouse(building, transform) => spawn(commands, building, *transform),
-			Self::ShepherdsHut(building, transform) => spawn(commands, building, *transform),
-			Self::OldCityMarketTerrace(building, transform) => {
-				spawn(commands, building, *transform)
-			}
-			Self::RingFortCircularTower(building, transform) => {
-				spawn(commands, building, *transform)
-			}
-			Self::RingFortTrazaloidTower(building, transform) => {
-				spawn(commands, building, *transform)
-			}
+		vec![commands.spawn_scene(self.scene(host_id)).id()]
+	}
+
+	/// The pending LOD host for this building, with its walk colliders and
+	/// place pin; it streams its own levels wherever it is spawned.
+	pub fn scene(&self, host_id: Option<Id>) -> Box<dyn Scene> {
+		let host = match self {
+			Self::LesHallesStorey(building, transform) => host(building, *transform),
+			Self::LesHallesStairwell(building, transform) => host(building.as_ref(), *transform),
+			Self::LesHallesRoof(building, transform) => host(building.as_ref(), *transform),
+			Self::ShepherdsHouse(building, transform) => host(building, *transform),
+			Self::ShepherdsHut(building, transform) => host(building, *transform),
+			Self::OldCityMarketTerrace(building, transform) => host(building, *transform),
+			Self::RingFortCircularTower(building, transform) => host(building, *transform),
+			Self::RingFortTrazaloidTower(building, transform) => host(building, *transform),
 			Self::RingFortGalleryTerrace(building, transform) => {
-				spawn(commands, building.as_ref(), *transform)
+				host(building.as_ref(), *transform)
 			}
 			Self::RingFortGalleryColonnade(building, transform) => {
-				spawn(commands, building.as_ref(), *transform)
+				host(building.as_ref(), *transform)
 			}
-			Self::RingFortGalleryRoof(building, transform) => {
-				spawn(commands, building.as_ref(), *transform)
-			}
-			Self::SingleHighrise(building, transform) => spawn(commands, building, *transform),
-			Self::TempleSanctum(building, transform) => spawn(commands, building, *transform),
-			Self::WizardsTower(building, transform) => {
-				spawn_wizards_tower(commands, building, *transform)
-			}
-			Self::SkybridgeHall(building, transform) => spawn(commands, building, *transform),
+			Self::RingFortGalleryRoof(building, transform) => host(building.as_ref(), *transform),
+			Self::SingleHighrise(building, transform) => host(building, *transform),
+			Self::TempleSanctum(building, transform) => host(building, *transform),
+			Self::WizardsTower(building, transform) => wizards_tower_host(building, *transform),
+			Self::SkybridgeHall(building, transform) => host(building, *transform),
 		};
-		if let Some(mut place) = self.discoverable_place() {
-			if let Some(entity) = entities.first() {
-				if let Some(host) = host_id {
-					place = place.with_identity(host, self.place_local_id());
-				}
-				commands.entity(*entity).insert(place);
-			}
+		let Some(mut place) = self.discoverable_place() else {
+			return host;
+		};
+		if let Some(id) = host_id {
+			place = place.with_identity(id, self.place_local_id());
 		}
-		entities
+		Box::new((host, bsn! { template_value(place) }))
 	}
 }
 
@@ -308,13 +298,11 @@ impl DevelopmentHosts for BuiltDevelopment {
 				));
 				hosts
 			}
-			Self::SingleHighrise(development) => {
-				vec![single_highrise_host(&development.building)]
-			}
+			Self::SingleHighrise(development) => vec![single_highrise_host(development)],
 			Self::SuburbanHomes(development) => shepherd_building_hosts(development.buildings()),
 			Self::WizardsTower(development) => vec![DevelopmentHost::WizardsTower(
-				Arc::new(development.building.building.tower.clone()),
-				development.host_transform(),
+				Arc::new(development.building.tower.clone()),
+				yaw_about_xz(development.center_xz, development.yaw),
 			)],
 			Self::SkybridgeBazaar(development) => {
 				let mut hosts = shepherd_building_hosts(&development.market);
@@ -341,11 +329,10 @@ impl DevelopmentHosts for BuiltDevelopment {
 	}
 }
 
-impl DevelopmentHosts for LesHallesDevelopment {
+impl DevelopmentHosts for LesHalles {
 	fn hosts(&self) -> Vec<DevelopmentHost> {
-		let transform = self.host_transform();
+		let transform = yaw_about_xz(self.center_xz, self.yaw);
 		self.building
-			.building
 			.hosts()
 			.into_iter()
 			.map(|host| match host {
@@ -363,23 +350,22 @@ impl DevelopmentHosts for LesHallesDevelopment {
 	}
 }
 
-impl DevelopmentHosts for ShepherdsVillageDevelopment {
+impl DevelopmentHosts for ShepherdsVillage {
 	fn hosts(&self) -> Vec<DevelopmentHost> {
-		shepherd_building_hosts(&self.village.buildings)
+		shepherd_building_hosts(&self.buildings)
 	}
 }
 
-impl DevelopmentHosts for ShepherdsCommuneDevelopment {
+impl DevelopmentHosts for ShepherdsCommune {
 	fn hosts(&self) -> Vec<DevelopmentHost> {
-		shepherd_building_hosts(self.commune.buildings())
+		shepherd_building_hosts(self.buildings())
 	}
 }
 
-impl DevelopmentHosts for RingFortDevelopment {
+impl DevelopmentHosts for RingFort {
 	fn hosts(&self) -> Vec<DevelopmentHost> {
-		let transform = self.host_transform();
+		let transform = yaw_about_xz(self.center_xz, self.yaw);
 		self.building
-			.building
 			.hosts()
 			.into_iter()
 			.filter_map(|host| match host {
@@ -435,20 +421,14 @@ fn shepherd_building_hosts<'a>(
 		.collect()
 }
 
-fn single_highrise_host(
-	placed: &urbanization_developments::PlacedBuilding<SingleHighrise>,
-) -> DevelopmentHost {
+fn single_highrise_host(placed: &SingleHighrise) -> DevelopmentHost {
 	DevelopmentHost::SingleHighrise(
 		Arc::new(placed.building.clone()),
 		yaw_about_xz(placed.center_xz, placed.yaw),
 	)
 }
 
-fn spawn_wizards_tower(
-	commands: &mut Commands,
-	building: &Arc<WizardsTower>,
-	transform: Transform,
-) -> Vec<Entity> {
+fn wizards_tower_host(building: &Arc<WizardsTower>, transform: Transform) -> Box<dyn Scene> {
 	let bounds = building.scene_bounds();
 	let identity = Transform::IDENTITY;
 	let lod_ref = LodRef {
@@ -458,37 +438,33 @@ fn spawn_wizards_tower(
 		bounds: &bounds,
 	};
 	let level = building.scene_lod_level(&lod_ref);
-	let entity = commands
-		.spawn_scene((
-			lod_host_scene_pending(level, bounds),
-			bsn! {
-				template_value(transform)
-				Visibility::default()
-			},
-		))
-		.id();
-	commands.entity(entity).insert(building.as_ref().clone());
-	stamp_walk_colliders(commands, building.as_ref(), &[entity]);
-	vec![entity]
+	let tower = building.as_ref().clone();
+	let host = (
+		lod_host_scene_pending(level, bounds),
+		bsn! {
+			template_value(transform)
+			Visibility::default()
+			template(move |_ctx| Ok(tower.clone()))
+		},
+	);
+	with_walk_colliders(host, building.as_ref())
 }
 
-fn spawn<T>(commands: &mut Commands, building: &T, transform: Transform) -> Vec<Entity>
+fn host<T>(building: &T, transform: Transform) -> Box<dyn Scene>
 where
 	T: BuildingComponents + Clone + Send + Sync + 'static,
 {
-	let bounds = building_bounds(building);
-	let entities = spawn_building_components(commands, building, transform, bounds);
-	stamp_walk_colliders(commands, building, &entities);
-	entities
+	let host = building_components_host(building, transform, building_bounds(building));
+	with_walk_colliders(host, building)
 }
 
-fn stamp_walk_colliders(
-	commands: &mut Commands,
+fn with_walk_colliders(
+	host: impl Scene + 'static,
 	building: &impl BuildingComponents,
-	entities: &[Entity],
-) {
-	for entity in entities {
-		spawn_building_walk_colliders(commands, *entity, building, BUILDING_FRICTION);
+) -> Box<dyn Scene> {
+	match BuildingWalkShapes::of(building, BUILDING_FRICTION) {
+		Some(shapes) => Box::new((host, bsn! { template(move |_ctx| Ok(shapes.clone())) })),
+		None => Box::new(host),
 	}
 }
 
@@ -498,30 +474,52 @@ mod tests {
 	use bevy::math::{Vec2, Vec3};
 	use buildings::{Confines, Fit};
 	use procedural_common::NoiseParams;
-	use urbanization_developments::PlacedBuilding;
+	use urbanization_developments::{
+		Development, OldCityMarket, PadPlan, PlacedBuilding, SiteGround, SkybridgeBazaar,
+		SuburbanHomes,
+	};
 
 	use super::{DevelopmentHost, DevelopmentHosts};
-	use crate::archetype_generation::{ArchetypeGenerator, PlacedDevelopment};
+	use crate::cell::DevelopmentExtent;
 	use crate::place::DiscoverablePlaceLabel;
 	use crate::BuiltDevelopment;
+
+	struct DryFlat;
+
+	impl SiteGround for DryFlat {
+		fn height_at(&mut self, _x: f32, _z: f32) -> Option<f32> {
+			Some(12.0)
+		}
+
+		fn hydro_overlaps(&mut self, _pad: &PadPlan) -> bool {
+			false
+		}
+	}
+
+	#[test]
+	fn market_hosts_every_stall_and_terrace() -> anyhow::Result<()> {
+		let cell = DevelopmentExtent::from_cell_index(0, 0).aabb();
+		let market = (0..16)
+			.find_map(|seed| OldCityMarket::plan(&mut DryFlat, cell, seed))
+			.map(|(market, _)| market)
+			.ok_or_else(|| anyhow::anyhow!("a market should fit on flat dry ground"))?;
+		let hosts = BuiltDevelopment::OldCityMarket(Box::new(market.clone())).hosts();
+		assert_eq!(hosts.len(), market.stall_count() + market.nodes.len());
+		Ok(())
+	}
 
 	#[test]
 	fn placed_single_highrise_emits_exactly_one_host() -> anyhow::Result<()> {
 		let cell = Aabb3d::from_min_max(Vec3::new(-30.0, 0.0, -30.0), Vec3::new(30.0, 64.0, 30.0));
 		let confines = Confines::from_bounds(cell);
-		let (building, _) = urbanization_developments::SingleHighrise::fit_to_confines(
-			&confines,
-			NoiseParams::default(),
-		)?;
-		let development = BuiltDevelopment::SingleHighrise(Box::new(PlacedDevelopment {
-			cell,
-			building: PlacedBuilding {
-				center_xz: Vec2::ZERO,
-				yaw: 0.0,
-				footprint: Vec2::splat(60.0),
-				ground_height: 0.0,
-				building,
-			},
+		let (building, _) =
+			buildings::SingleHighrise::fit_to_confines(&confines, NoiseParams::default())?;
+		let development = BuiltDevelopment::SingleHighrise(Box::new(PlacedBuilding {
+			center_xz: Vec2::ZERO,
+			yaw: 0.0,
+			footprint: Vec2::splat(60.0),
+			ground_height: 0.0,
+			building,
 		}));
 		let hosts = development.hosts();
 		assert_eq!(hosts.len(), 1);
@@ -541,7 +539,7 @@ mod tests {
 			Vec3::new(45.0, 10.0, 45.0),
 			Vec3::new(255.0, 26.0, 255.0),
 		));
-		let suburban = ArchetypeGenerator::build_suburban_homes(
+		let suburban = SuburbanHomes::fit(
 			cell,
 			&suburban_confines,
 			NoiseParams { seed: 29, ..NoiseParams::default() },
@@ -569,12 +567,8 @@ mod tests {
 			Vec3::new(50.0, 10.0, 50.0),
 			Vec3::new(250.0, 90.0, 250.0),
 		));
-		let bazaar = ArchetypeGenerator::build_skybridge_bazaar(
-			cell,
-			&bazaar_confines,
-			NoiseParams::default(),
-		)
-		.ok_or_else(|| anyhow::anyhow!("skybridge bazaar did not fit"))?;
+		let bazaar = SkybridgeBazaar::fit(cell, &bazaar_confines, NoiseParams::default())
+			.ok_or_else(|| anyhow::anyhow!("skybridge bazaar did not fit"))?;
 		let expected = bazaar.market.len() + bazaar.towers.len() + bazaar.bridges.len();
 		let hosts = BuiltDevelopment::SkybridgeBazaar(Box::new(bazaar)).hosts();
 		assert_eq!(hosts.len(), expected);
@@ -626,9 +620,8 @@ mod tests {
 	}
 
 	#[test]
-	fn les_halles_storey_stamps_fixed_walk_colliders() -> anyhow::Result<()> {
-		use bevy::prelude::World;
-		use building_physics::BuildingWalkShapes;
+	fn les_halles_storey_hosts_fixed_walk_colliders() -> anyhow::Result<()> {
+		use bevy::prelude::Transform;
 		use urbanization_developments::MixedUseLesHallesDevelopment;
 
 		let bounds =
@@ -644,13 +637,18 @@ mod tests {
 			.first()
 			.ok_or_else(|| anyhow::anyhow!("expected a Les Halles storey"))?;
 
-		let mut world = World::new();
-		let parent = world.spawn_empty().id();
-		super::stamp_walk_colliders(&mut world.commands(), storey, &[parent]);
-		world.flush();
+		let mut app = bevy::app::App::new();
+		app.add_plugins((bevy::asset::AssetPlugin::default(), bevy::scene::ScenePlugin));
+		let host = DevelopmentHost::LesHallesStorey(
+			std::sync::Arc::new(storey.clone()),
+			Transform::IDENTITY,
+		);
+		let entity = host.spawn(&mut app.world_mut().commands(), None)[0];
+		app.update();
 
-		let n = world
-			.get::<BuildingWalkShapes>(parent)
+		let n = app
+			.world()
+			.get::<super::BuildingWalkShapes>(entity)
 			.map(|spec| spec.shapes.len())
 			.unwrap_or(0);
 		assert!(n > 0, "Les Halles storey should queue Fixed walk shapes, got {n}");

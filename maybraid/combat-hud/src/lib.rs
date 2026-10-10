@@ -1,5 +1,6 @@
 //! Reusable combat feedback for player health, outgoing hits, and incoming damage.
 
+mod plate;
 mod score;
 mod screen_pin;
 mod vitals;
@@ -997,5 +998,35 @@ mod tests {
 		assert_eq!(hit_marker_label(HIT_POINTS), "+1");
 		assert_eq!(hit_marker_label(HEAD_POINTS), "+2");
 		assert_eq!(hit_marker_label(DOWN_POINTS), "+5");
+	}
+
+	#[test]
+	fn player_sourced_blast_spawns_a_hit_marker() {
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins).add_message::<DamageApplied>().add_plugins(
+			CombatHudPlugin {
+				health_bars: false,
+				hit_markers: true,
+				directional_damage: false,
+				player_vitals: false,
+				score: false,
+			},
+		);
+		app.update();
+		let player = app.world_mut().spawn(Player).id();
+		let target = app.world_mut().spawn(GlobalTransform::default()).id();
+		app.world_mut().write_message(DamageApplied {
+			target,
+			source: Some(player),
+			amount: 40.0,
+			remaining: 60.0,
+			point: Vec3::new(1.0, 1.2, 0.5),
+		});
+		app.update();
+		let world = app.world_mut();
+		assert!(
+			world.query::<&Text>().iter(world).any(|text| text.0 == "+1"),
+			"player-thrown blast must raise a hit marker"
+		);
 	}
 }

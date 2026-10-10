@@ -88,14 +88,16 @@ pub fn write_flee_objectives(
 			let was_driving = fleeing.driving;
 			fleeing.driving = false;
 			if was_driving && evasion.signal.is_idle() {
-				hold_in_place(entity, transform.translation, &mut movement, &mut commands);
+				movement.hold_at(transform.translation);
+				commands.entity(entity).remove::<ReplanMovement>();
 			}
 			continue;
 		}
 		let Some(contact) = evasion.best_contact() else {
 			if fleeing.driving {
 				fleeing.driving = false;
-				hold_in_place(entity, transform.translation, &mut movement, &mut commands);
+				movement.hold_at(transform.translation);
+				commands.entity(entity).remove::<ReplanMovement>();
 			}
 			continue;
 		};
@@ -112,18 +114,6 @@ pub fn write_flee_objectives(
 		movement.objective = next;
 		commands.entity(entity).insert(ReplanMovement);
 	}
-}
-
-fn hold_in_place(
-	entity: Entity,
-	at: Vec3,
-	movement: &mut MovementIntelligence,
-	commands: &mut Commands,
-) {
-	movement.objective =
-		MovementObjective::Reach(MovementLocation::new(at, movement.ability.agent_radius));
-	movement.adopt_plan(Vec::new());
-	commands.entity(entity).remove::<ReplanMovement>();
 }
 
 #[cfg(test)]

@@ -6,9 +6,7 @@ use damage::{DamageApplied, HeadshotBand};
 use menu_components::{spawn_hud_text_card, HudFonts, HUD_TEXT_CARD_FACE_PX, TEXT_YELLOW};
 use player::Player;
 
-use crate::vitals::{
-	PLATE_BORDER, PLATE_FILL, PLATE_PAD_X, PLATE_PAD_Y, PLATE_RADIUS, PLATE_STROKE, VITALS_INSET,
-};
+use crate::plate::{spawn_hud_plate, HudPlateCorner, HudPlateLayout};
 use crate::{hit_points, CombatHudVisible, DOWN_POINTS};
 
 const SCORE_WIDTH: f32 = 168.0;
@@ -93,29 +91,12 @@ impl CombatScoreLine {
 }
 
 pub(crate) fn spawn_combat_score(parent: &mut ChildSpawnerCommands, fonts: &HudFonts) {
-	parent
-		.spawn((
-			Name::new("combat-score"),
-			CombatScoreRoot,
-			Node {
-				position_type: PositionType::Absolute,
-				right: Val::Px(VITALS_INSET),
-				top: Val::Px(VITALS_INSET),
-				width: Val::Px(SCORE_WIDTH),
-				flex_direction: FlexDirection::Column,
-				align_items: AlignItems::Stretch,
-				row_gap: Val::Px(4.0),
-				padding: UiRect::axes(Val::Px(PLATE_PAD_X), Val::Px(PLATE_PAD_Y)),
-				border: UiRect::all(Val::Px(PLATE_BORDER)),
-				border_radius: BorderRadius::all(Val::Px(PLATE_RADIUS)),
-				..default()
-			},
-			BackgroundColor(PLATE_FILL),
-			BorderColor::all(PLATE_STROKE),
-			Visibility::Hidden,
-			Pickable::IGNORE,
-		))
-		.with_children(|plate| {
+	spawn_hud_plate(
+		parent,
+		"combat-score",
+		CombatScoreRoot,
+		HudPlateLayout { width: SCORE_WIDTH, row_gap: 4.0, corner: HudPlateCorner::TopRight },
+		|plate| {
 			let score = CombatScore::default();
 			spawn_hud_text_card(plate, (), |card| {
 				card.spawn((
@@ -141,7 +122,8 @@ pub(crate) fn spawn_combat_score(parent: &mut ChildSpawnerCommands, fonts: &HudF
 					Pickable::IGNORE,
 				));
 			}
-		});
+		},
+	);
 }
 
 /// Runs between damage apply and down, while a downed player still carries

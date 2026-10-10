@@ -6,8 +6,8 @@ use bevy::prelude::{
 	With, Without,
 };
 use bevy::scene::prelude::{bsn, template_value, Scene};
-use lod::gen::LodSceneLevel;
 use lod::lod_scene_host::{LodLevelRoot, LodLevelRoots, LodSceneHost};
+use lod::scene::LodSceneLevel;
 use lod::LodLazyPending;
 use material_ref::{MaterialRef, MaterialRefRoot, PropagateToDescendants};
 use scene_ref::MultiSceneMerge;

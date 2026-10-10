@@ -46,8 +46,8 @@ use characters::{
 	MaterialRefRoot, PartNode, RigId, RigNode, SkinRefApplied, SkinRefRoot, SocketRefApplied,
 	SocketRefRoot,
 };
-use lod::gen::LodScene;
 use lod::lod_ref::LodRef;
+use lod::scene::LodScene;
 use lod::LodSceneLevel;
 
 use crate::animation::ConceptAnimation;
