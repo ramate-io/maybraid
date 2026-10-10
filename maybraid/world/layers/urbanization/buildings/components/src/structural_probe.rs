@@ -10,9 +10,9 @@
 use bevy::prelude::{Component, GlobalTransform, Query, Transform, With};
 use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::{Vec2, Vec3};
-use lod::gen::{LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
 use lod::lod_scene_host::LodSceneHost;
+use lod::scene::{LodSceneLevel, LodSceneStatus};
 
 use crate::massing::{is_ultralow_massing, MassingVolume};
 

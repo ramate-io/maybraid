@@ -403,7 +403,7 @@ pub fn apply_anim_mailbox(
 	bones: Query<&AnimBone, Without<AnimMailbox>>,
 	mut bone_tfs: Query<&mut Transform, (With<AnimBone>, Without<AnimMailbox>)>,
 ) {
-	let only = set.as_ref().and_then(|set| set.only.clone());
+	let only = set.as_ref().and_then(|set| set.only.as_ref());
 	let cache = cache.as_deref();
 	hosts.par_iter_mut().batching_strategy(BatchingStrategy::fixed(8)).for_each(
 		|(
@@ -419,7 +419,7 @@ pub fn apply_anim_mailbox(
 			quadruped,
 			forelimbed,
 		)| {
-			if !allows_only(only.as_ref(), entity) {
+			if !allows_only(only, entity) {
 				return;
 			}
 			if character_rig.role != CharacterRigRole::Body {
@@ -429,7 +429,7 @@ pub fn apply_anim_mailbox(
 			let requested = root.0.clip;
 			let progress = clip_progress(requested, mailbox.clip_progress, entity);
 			let weight = BlendCurve::SmoothStep.sample(mailbox.blend_progress);
-			let prepared = mailbox.prepared_clip.clone();
+			let prepared = mailbox.prepared_clip.as_ref();
 			let effects = match character_rig.skeleton {
 				RigSkeletonKind::Humanoid => {
 					let mut rig = match humanoid {
@@ -446,7 +446,7 @@ pub fn apply_anim_mailbox(
 						write_bones,
 						write_effects,
 						cache,
-						prepared.as_ref(),
+						prepared,
 					);
 					if write_bones {
 						publish_pose(&mut mailbox, &rig.pose, weight);
@@ -502,7 +502,7 @@ pub fn apply_anim_mailbox(
 		if !write_bones || character_rig.role != CharacterRigRole::Body {
 			continue;
 		}
-		if !allows_only(only.as_ref(), entity) {
+		if !allows_only(only, entity) {
 			continue;
 		}
 		let names = match character_rig.skeleton {
@@ -685,7 +685,12 @@ fn sample_humanoid_prepared(
 	if let (Some(cache), Some(prepared)) = (cache, prepared) {
 		if let Some(sample) = cache.sample(prepared, progress) {
 			if write_bones {
-				apply_evaluated_sample(&rig.binding.effective_rest, sample, &mut rig.pose);
+				apply_evaluated_sample(
+					&rig.binding.effective_rest,
+					prepared.bone_mask(),
+					sample,
+					&mut rig.pose,
+				);
 			}
 			return if write_effects { sample.effects } else { Effects::IDENTITY };
 		}
@@ -1514,6 +1519,84 @@ mod tests {
 		);
 	}
 
+	fn bench_prepared_clip_handle(use_clone: bool) -> Vec<u128> {
+		use crate::clip_cache::RigVariantId;
+
+		const FRAMES: u32 = 50_000;
+		const RUNS: u32 = 5;
+		let cache = AnimClipCache::default();
+		let prepared = cache
+			.prepare(AnimClip::walk(), RigVariantId::HUMANOID_V0, cache.settings.sampling)
+			.expect("walk");
+
+		let mut run_ns: Vec<u128> = Vec::with_capacity(RUNS as usize);
+		for _ in 0..RUNS {
+			let start = Instant::now();
+			for frame in 0..FRAMES {
+				let frame = black_box(frame);
+				if use_clone {
+					let handle = prepared.clone();
+					black_box(handle.bone_mask());
+				} else {
+					black_box(prepared.bone_mask());
+				}
+				black_box(frame);
+			}
+			run_ns.push(start.elapsed().as_nanos() / FRAMES as u128);
+		}
+		run_ns.sort_unstable();
+		run_ns
+	}
+
+	fn bench_apply_set_lookup(use_clone: bool) -> Vec<u128> {
+		const FRAMES: u32 = 50_000;
+		const RUNS: u32 = 5;
+		let mut selected = HashSet::new();
+		for index in 1..=32 {
+			selected.insert(Entity::from_bits(index as u64));
+		}
+		let set = MailboxApplySet { only: Some(selected) };
+
+		let mut run_ns: Vec<u128> = Vec::with_capacity(RUNS as usize);
+		for _ in 0..RUNS {
+			let start = Instant::now();
+			for frame in 0..FRAMES {
+				let frame = black_box(frame);
+				let entity = Entity::from_bits(((frame % 32) + 1) as u64);
+				if use_clone {
+					let only = set.only.clone();
+					black_box(allows_only(only.as_ref(), entity));
+				} else {
+					black_box(allows_only(set.only.as_ref(), entity));
+				}
+			}
+			run_ns.push(start.elapsed().as_nanos() / FRAMES as u128);
+		}
+		run_ns.sort_unstable();
+		run_ns
+	}
+
+	fn report_handle_bench(label: &str, run_ns: &[u128]) {
+		let min = *run_ns.first().expect("run");
+		let median = run_ns[run_ns.len() / 2];
+		let mean = run_ns.iter().sum::<u128>() / run_ns.len() as u128;
+		let spread = run_ns.last().expect("run") - min;
+		eprintln!(
+			"mailbox_handle_microbench {label}: runs={runs:?} min={min} median={median} mean={mean} spread={spread} ns/lookup",
+			runs = run_ns,
+		);
+	}
+
+	/// `cargo test -p character-motion mailbox_handle_microbench --release -- --ignored --nocapture`
+	#[test]
+	#[ignore]
+	fn mailbox_handle_microbench() {
+		report_handle_bench("apply_set clone", &bench_apply_set_lookup(true));
+		report_handle_bench("apply_set borrow", &bench_apply_set_lookup(false));
+		report_handle_bench("prepared_clip clone", &bench_prepared_clip_handle(true));
+		report_handle_bench("prepared_clip borrow", &bench_prepared_clip_handle(false));
+	}
+
 	/// Micro-benchmark for mailbox pose writes on a humanoid rig.
 	/// Run with:
 	/// `cargo test -p character-motion mailbox_write_microbench --release -- --ignored --nocapture`
@@ -1533,6 +1616,130 @@ mod tests {
 		report_bench("apply_loop legacy", legacy_min, legacy_median, legacy_mean);
 		let (min, median, mean) = bench_write_loop(false);
 		report_bench("apply_loop indexed", min, median, mean);
+	}
+
+	#[test]
+	fn cyclic_mailbox_playback_uses_prepared_path_almost_exclusively() -> anyhow::Result<()> {
+		use anyhow::anyhow;
+
+		use crate::clip_cache::RigVariantId;
+
+		let cache = AnimClipCache::default();
+		let clips = [AnimClip::still(), AnimClip::walk(), AnimClip::run()];
+		let speeds = [0.2, 1.08, 1.68];
+		let prepared: Vec<PreparedClip> = clips
+			.iter()
+			.filter_map(|clip| {
+				cache.prepare(*clip, RigVariantId::HUMANOID_V0, cache.settings.sampling)
+			})
+			.collect();
+		if prepared.len() != clips.len() {
+			return Err(anyhow!("expected three prepared clips"));
+		}
+
+		let mut prepared_samples = 0u64;
+		let mut live_samples = 0u64;
+		const FRAMES: u32 = 3_600;
+		const CHARACTERS: u32 = 32;
+		let dt = 1.0 / 60.0;
+
+		for character in 0..CHARACTERS {
+			let clip_index = character as usize % clips.len();
+			let speed = speeds[clip_index];
+			let prepared = &prepared[clip_index];
+			let mut time = character as f32 * 0.01;
+			for _ in 0..FRAMES {
+				time += dt * speed;
+				if cache.sample(prepared, time).is_some() {
+					prepared_samples += 1;
+				} else {
+					live_samples += 1;
+				}
+			}
+		}
+
+		let total = prepared_samples + live_samples;
+		let live_pct = live_samples as f64 * 100.0 / total as f64;
+		eprintln!(
+			"mailbox prepared-path frequency: prepared={prepared_samples} live={live_samples} \
+			({live_pct:.4}% live fallback over {CHARACTERS} chars × {FRAMES} frames)"
+		);
+		if live_samples > 0 {
+			return Err(anyhow!(
+				"default cache settings should not miss prepared bins for still/walk/run, got {live_samples} live samples"
+			));
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn uncacheable_clips_and_disabled_cache_use_live_path() -> anyhow::Result<()> {
+		use anyhow::anyhow;
+
+		let mut prepared_hits = 0u64;
+		let mut live_hits = 0u64;
+		let mut rig = HumanoidV0Rig::imported();
+
+		let cache = AnimClipCache::uncached();
+		let walk = AnimClip::walk();
+		let mut mailbox = AnimMailbox::new(Transform::IDENTITY);
+		refresh_prepared_clip(&mut mailbox, walk, RigSkeletonKind::Humanoid, Some(&cache));
+		if mailbox.prepared_clip.is_some() {
+			return Err(anyhow!("disabled cache must not prepare"));
+		}
+		sample_humanoid_prepared(
+			walk,
+			&mut rig,
+			0.25,
+			true,
+			false,
+			Some(&cache),
+			mailbox.prepared_clip.as_ref(),
+		);
+		live_hits += 1;
+
+		let cache = AnimClipCache::default();
+		refresh_prepared_clip(
+			&mut mailbox,
+			AnimClip::jab(),
+			RigSkeletonKind::Humanoid,
+			Some(&cache),
+		);
+		if mailbox.prepared_clip.is_some() {
+			return Err(anyhow!("jab must not prepare"));
+		}
+		sample_humanoid_prepared(
+			AnimClip::jab(),
+			&mut rig,
+			0.25,
+			true,
+			false,
+			Some(&cache),
+			mailbox.prepared_clip.as_ref(),
+		);
+		live_hits += 1;
+
+		refresh_prepared_clip(&mut mailbox, walk, RigSkeletonKind::Humanoid, Some(&cache));
+		let prepared = mailbox.prepared_clip.as_ref().ok_or_else(|| anyhow!("walk prepare"))?;
+		if cache.sample(prepared, 0.25).is_some() {
+			sample_humanoid_prepared(
+				walk,
+				&mut rig,
+				0.25,
+				true,
+				false,
+				Some(&cache),
+				Some(prepared),
+			);
+			prepared_hits += 1;
+		}
+
+		eprintln!(
+			"mailbox path selection smoke: prepared_hits={prepared_hits} live_hits={live_hits}"
+		);
+		assert_eq!(prepared_hits, 1);
+		assert_eq!(live_hits, 2);
+		Ok(())
 	}
 
 	#[test]
