@@ -4,8 +4,7 @@ use crate::FollowCamera;
 use bevy::prelude::*;
 use characters::CharacterHeading;
 use maybraid_character_controller::CharacterIntent;
-use player::{CameraFollow, PlayerLook, PlayerVisual, PlayerYawOwner};
-use std::f32::consts::{FRAC_PI_2, PI};
+use player::{clamp_aim_pitch, wrap_pi, CameraFollow, PlayerLook, PlayerVisual, PlayerYawOwner};
 
 /// When `true`, [`CharacterIntent::SwapPov`] is ignored (in-game inventory edit).
 #[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -142,7 +141,7 @@ pub(crate) fn apply_look_intents(
 					let sensitivity = follow.look_sensitivity(controller.pov, fov);
 					controller.yaw -= value.x * sensitivity;
 					controller.pitch -= value.y * sensitivity;
-					controller.pitch = controller.pitch.clamp(-FRAC_PI_2 + 0.1, FRAC_PI_2 - 0.1);
+					controller.pitch = clamp_aim_pitch(controller.pitch);
 				}
 			}
 			CharacterIntent::Focus(value) => focus = focus.max(value),
@@ -236,7 +235,7 @@ pub(crate) fn turn_body_with_look(
 
 	let body = body_yaw(&mut heading, &visual);
 	let target = follow_body_yaw(controller.yaw, body, follow.max_look_yaw);
-	let step = wrap_to_pi(target - body);
+	let step = wrap_pi(target - body);
 	let max_step = follow.body_turn_rate * time.delta_secs();
 	let applied = step.abs().min(max_step).copysign(step);
 	if applied.abs() > 1e-5 {
@@ -265,23 +264,20 @@ fn camera_yaw_of_forward(dir: Vec3) -> f32 {
 	}
 }
 
-fn wrap_to_pi(angle: f32) -> f32 {
-	(angle + PI).rem_euclid(2.0 * PI) - PI
-}
-
 fn follow_body_yaw(look_yaw: f32, body_yaw: f32, max_delta: f32) -> f32 {
-	let delta = wrap_to_pi(look_yaw - body_yaw);
+	let delta = wrap_pi(look_yaw - body_yaw);
 	look_yaw - delta.clamp(-max_delta, max_delta)
 }
 
 fn clamp_look_yaw(look_yaw: f32, body_yaw: f32, max_delta: f32) -> f32 {
-	let delta = wrap_to_pi(look_yaw - body_yaw);
+	let delta = wrap_pi(look_yaw - body_yaw);
 	body_yaw + delta.clamp(-max_delta, max_delta)
 }
 
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use std::f32::consts::FRAC_PI_2;
 
 	#[test]
 	fn pov_toggle_round_trips() {

@@ -30,6 +30,8 @@ mod storage;
 mod worker;
 
 #[cfg(test)]
+mod perf;
+#[cfg(test)]
 mod system_tests;
 #[cfg(test)]
 mod tests;

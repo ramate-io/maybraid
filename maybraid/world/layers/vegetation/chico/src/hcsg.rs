@@ -5,6 +5,7 @@
 //!
 //! A session starts with [`lod::hcsg::request_hcsg_session_restart`].
 
+use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
@@ -14,6 +15,7 @@ use bevy::math::DVec3;
 use bevy::prelude::*;
 use durham::TerrainMeshBuilder;
 use lod::gen::{Id, OriginalId};
+use procedural_common::union_aabb3_iter;
 use lod::hcsg::universal_bounds;
 use lod::hcsg::{
 	self, register_session_seed, GenerationContext, HcsgClass, PresentationPlugin, ViewerHcsgBounds,
@@ -78,10 +80,7 @@ impl hcsg::GenerationScheme for ChicoForest {
 	lod::hcsg_index_scale!(FOREST_SCALE);
 
 	fn original_ids_for(_cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
-		ForestExtent::cells_overlapping(region)
-			.into_iter()
-			.map(|extent| OriginalId(extent.id()))
-			.collect()
+		ForestExtent::original_ids_overlapping(region)
 	}
 
 	fn build_with_id(cx: &mut GenerationContext, id: Id) -> Option<(Self, Aabb3d)> {
@@ -95,6 +94,19 @@ impl hcsg::GenerationScheme for ChicoForest {
 fn forest_of(tile: GroveExtent) -> ForestExtent {
 	let (ix, iz) = ForestExtent::cell_index_containing((tile.min() + tile.max()) * 0.5);
 	ForestExtent::from_cell_index(ix, iz)
+}
+
+fn push_grove_ids_for_tile(
+	ids: &mut Vec<OriginalId>,
+	tile: GroveExtent,
+	forest: &ChicoForest,
+	neighbors: &NeighborLayers,
+) {
+	for layer in ForestLayer::ALL {
+		if layer.kind(forest.layers).is_some() || neighbors.any_kind(layer) {
+			ids.push(OriginalId(grove_id(tile, layer)));
+		}
+	}
 }
 
 /// The forest cell over `forest` and its four cardinal neighbors' layers.
@@ -124,14 +136,17 @@ impl hcsg::GenerationScheme for ChicoGrove {
 	/// selects, so blends reach across forest faces.
 	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
 		let mut ids = Vec::new();
+		let mut tiles_by_forest: HashMap<Id, Vec<GroveExtent>> = HashMap::new();
 		for tile in ForestExtent::grove_tiles_overlapping(region) {
-			let Some((forest, neighbors)) = forest_with_neighbors(cx, forest_of(tile)) else {
+			tiles_by_forest.entry(forest_of(tile).id()).or_default().push(tile);
+		}
+		for tiles in tiles_by_forest.values() {
+			let forest_extent = forest_of(tiles[0]);
+			let Some((forest, neighbors)) = forest_with_neighbors(cx, forest_extent) else {
 				continue;
 			};
-			for layer in ForestLayer::ALL {
-				if layer.kind(forest.layers).is_some() || neighbors.any_kind(layer) {
-					ids.push(OriginalId(grove_id(tile, layer)));
-				}
+			for &tile in tiles {
+				push_grove_ids_for_tile(&mut ids, tile, &forest, &neighbors);
 			}
 		}
 		ids
@@ -172,9 +187,7 @@ impl<G: ForestGround> GroundSurface<G> {
 
 	/// The union of the cells' footprints.
 	pub fn footprint(&self) -> Option<Aabb3d> {
-		self.cells.iter().map(|cell| G::footprint(cell)).reduce(|a, b| {
-			Aabb3d::from_min_max(Vec3::from(a.min.min(b.min)), Vec3::from(a.max.max(b.max)))
-		})
+		union_aabb3_iter(self.cells.iter().map(|cell| G::footprint(cell)))
 	}
 
 	/// Surface height at `(x, z)`; `None` off the surface.
@@ -237,11 +250,12 @@ impl<G: ForestGround> hcsg::GenerationScheme for GrownGrove<G> {
 			return None;
 		}
 		let tiles = grove.grow(&surface);
-		let bounds = tiles
-			.iter()
-			.map(ForestGroveTile::scene_bounds)
-			.filter(|bounds| bounds.min.is_finite() && bounds.max.is_finite())
-			.reduce(|a, b| Aabb3d { min: a.min.min(b.min), max: a.max.max(b.max) })?;
+		let bounds = union_aabb3_iter(
+			tiles
+				.iter()
+				.map(ForestGroveTile::scene_bounds)
+				.filter(|bounds| bounds.min.is_finite() && bounds.max.is_finite()),
+		)?;
 		Some((Self { layer: grove.layer, tiles, _ground: PhantomData }, bounds))
 	}
 }
@@ -723,5 +737,83 @@ mod tests {
 		update_until(&mut app, |app| shown_bump_outs(app) == 0);
 		assert_eq!(shown_bump_outs(&mut app), 0);
 		Ok(())
+	}
+
+	use lod::gen::OriginalId;
+	use lod::hcsg::{universal_bounds, GenerationContext, HcsgStorage};
+
+	use super::{
+		forest_of, forest_with_neighbors, push_grove_ids_for_tile, ChicoGrove, ForestSelection,
+		GROVE_PRESENT_RADIUS_M, GroveNeighborhood,
+	};
+
+	/// Per-tile `forest_with_neighbors` (pre-optimization discovery).
+	fn naive_grove_original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
+		let mut ids = Vec::new();
+		for tile in ForestExtent::grove_tiles_overlapping(region) {
+			let Some((forest, neighbors)) = forest_with_neighbors(cx, forest_of(tile)) else {
+				continue;
+			};
+			push_grove_ids_for_tile(&mut ids, tile, &forest, &neighbors);
+		}
+		ids
+	}
+
+	#[test]
+	fn grove_discovery_matches_per_tile_forest_lookup() {
+		let region = GroveNeighborhood::around(Vec3::ZERO, GROVE_PRESENT_RADIUS_M);
+		let selection =
+			ForestSelection { layering: Some(LayeringKind::LushJungle), ..ForestSelection::default() };
+		let storage = HcsgStorage::default();
+		storage.seed(selection, universal_bounds());
+		let mut naive_cx = GenerationContext::new(&storage);
+		let mut grouped_cx = GenerationContext::new(&storage);
+		let mut naive = naive_grove_original_ids_for(&mut naive_cx, region);
+		let mut grouped = grouped_cx.original_ids_for::<ChicoGrove>(region);
+		naive.sort();
+		grouped.sort();
+		naive.dedup();
+		grouped.dedup();
+		assert_eq!(naive, grouped);
+		assert!(!grouped.is_empty());
+	}
+
+	/// `cargo test -p chico chico_grove_discovery_microbench --release -- --ignored --nocapture`
+	#[test]
+	#[ignore]
+	fn chico_grove_discovery_microbench() {
+		use std::time::Instant;
+
+		let region = GroveNeighborhood::around(Vec3::ZERO, GROVE_PRESENT_RADIUS_M);
+		let selection =
+			ForestSelection { layering: Some(LayeringKind::LushJungle), ..ForestSelection::default() };
+		let runs = 30;
+
+		let bench = |naive: bool| -> std::time::Duration {
+			let start = Instant::now();
+			for _ in 0..runs {
+				let storage = HcsgStorage::default();
+				storage.seed(selection, universal_bounds());
+				let mut cx = GenerationContext::new(&storage);
+				if naive {
+					naive_grove_original_ids_for(&mut cx, region);
+				} else {
+					cx.original_ids_for::<ChicoGrove>(region);
+				}
+			}
+			start.elapsed()
+		};
+
+		let naive = bench(true);
+		let grouped = bench(false);
+		let naive_ms = naive.as_secs_f64() * 1000.0 / runs as f64;
+		let grouped_ms = grouped.as_secs_f64() * 1000.0 / runs as f64;
+		eprintln!(
+			"chico_grove_discovery_microbench (GroveNeighborhood, cold storage, seed=LushJungle): \
+			 naive={naive_ms:.2} ms/discover grouped={grouped_ms:.2} ms/discover \
+			 ({:.2}×)",
+			naive_ms / grouped_ms
+		);
+		assert!(grouped < naive, "grouped discovery should beat per-tile forest lookups");
 	}
 }

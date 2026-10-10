@@ -2794,6 +2794,7 @@ dependencies = [
 name = "character-items"
 version = "0.1.3"
 dependencies = [
+ "anyhow",
  "bevy",
  "bevy_math",
  "character-ui-menu",
@@ -2859,6 +2860,7 @@ dependencies = [
 name = "character-rigs"
 version = "0.1.3"
 dependencies = [
+ "anyhow",
  "bevy",
  "clap",
  "game-commands",
@@ -2909,9 +2911,9 @@ dependencies = [
  "camera-controls",
  "character-animations",
  "character-rigs",
+ "characters",
  "clap",
  "game-commands",
- "log",
 ]
 
 [[package]]
@@ -5338,6 +5340,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "grenade-user"
+version = "0.1.3"
+dependencies = [
+ "anyhow",
+ "avian3d",
+ "bevy",
+ "character-inventory-user",
+ "character-items",
+ "character-rigs",
+ "characters",
+ "firearm-user",
+ "grenades",
+ "maybraid-character-controller",
+ "player",
+]
+
+[[package]]
+name = "grenades"
+version = "0.1.3"
+dependencies = [
+ "avian3d",
+ "bevy",
+ "character-items",
+ "damage",
+ "lod-avian",
+]
+
+[[package]]
 name = "grid"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6926,6 +6956,8 @@ dependencies = [
  "furniture-assemblies",
  "game-commands",
  "geneva",
+ "grenade-user",
+ "grenades",
  "ground-avian",
  "hiding-intelligence",
  "intelligence-lod",
@@ -6941,6 +6973,7 @@ dependencies = [
  "maybraid-input",
  "maybraid-skill-map",
  "maybraid-sky",
+ "maybraid-vfx",
  "maybraid-weather",
  "meandering-intelligence",
  "menu-components",

@@ -16,6 +16,7 @@ use building_components::{FurnitureNode, FurnitureWireframePlugin};
 use furniture_assemblies::FurnitureAssembliesPlugin;
 use furniture_shaders::FurnitureShadersPlugin;
 use lod::gen::{Id, OriginalId};
+use procedural_common::union_aabb3_iter;
 use lod::hcsg::{self, GenerationContext, HcsgClass, PresentationPlugin, ViewerHcsgBounds};
 use lod::lod_ref::LodRef;
 use lod::scene::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
@@ -45,10 +46,7 @@ impl<U: FurnitureSlots> hcsg::GenerationScheme for DevelopmentSlots<U> {
 	fn build_with_id(cx: &mut GenerationContext, id: Id) -> Option<(Self, Aabb3d)> {
 		let development = cx.get_or_generate::<U::Development>(id)?;
 		let slots = U::development_slots(&development);
-		let bounds = slots
-			.iter()
-			.map(|slot| slot.scene_bounds())
-			.reduce(|a, b| Aabb3d { min: a.min.min(b.min), max: a.max.max(b.max) })?;
+		let bounds = union_aabb3_iter(slots.iter().map(|slot| slot.scene_bounds()))?;
 		Some((Self { slots, _ground: PhantomData }, bounds))
 	}
 }

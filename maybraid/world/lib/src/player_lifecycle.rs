@@ -8,6 +8,7 @@ use damage::{DamageSystems, DespawnAfter, Downed};
 use durham::DurhamSurface;
 use firearm_user::FirearmUser;
 use firearms::WeaponTrigger;
+use grenade_user::GrenadeUser;
 use maybraid_character_controller::CharacterIntent;
 use maybraid_input::{PadButton, VirtualPad};
 use mob_characters::{LOCAL_POI, SALOON_POI, URBAN_POI, VEGETATION_POI};
@@ -15,7 +16,7 @@ use player::{CameraFollow, Player as MaybraidPlayer, PlayerUse};
 use player_camera::{CameraController, FollowCamera};
 use poi_intelligence::{
 	place_nearby, NearbyFallback, NearbyQuery, PoiId, PoiInterest, PoiInterests, PoiKind,
-	PoiRecord, PoiRegistry, PoiSystems,
+	PoiRegistry, PoiSystems,
 };
 use spotting_intelligence::SpotSubject;
 use threat_intelligence::{Affiliations, ThreatSubject};
@@ -87,6 +88,8 @@ pub(crate) struct PendingPlayerRespawn {
 	/// Ring placement used when the registry has nothing selectable.
 	pub fallback_at: Vec3,
 	pub registry_revision: u64,
+	/// Reused by [`refresh_picker_candidates`] while the respawn map is open.
+	picker_nearby_scratch: Vec<PoiId>,
 }
 
 #[derive(Resource, Default)]
@@ -116,6 +119,7 @@ type DownedWorldPlayer<'a> = (
 	&'a Transform,
 	&'a mut LinearVelocity,
 	Option<&'a FirearmUser>,
+	Option<&'a GrenadeUser>,
 	Option<&'a InventoryUser>,
 );
 
@@ -206,10 +210,12 @@ fn queue_downed_world_player(
 	policies: Option<Res<ModePlayerPolicies>>,
 	mut state: ResMut<WorldPlayerRespawnState>,
 	mut commands: Commands,
+	mut loadout: Option<ResMut<WorldPlayerLoadout>>,
 	mut players: Query<DownedWorldPlayer<'_>, (With<VegetationPlayer>, Added<Downed>)>,
 	mut triggers: Query<&mut WeaponTrigger>,
+	bags: Query<&character_items::Inventory>,
 ) {
-	for (player, transform, mut velocity, firearm, inventory) in &mut players {
+	for (player, transform, mut velocity, firearm, grenade, inventory) in &mut players {
 		let now = mode.as_deref().and_then(|mode| mode.get().mode_id());
 		let ends_life = policies.as_deref().is_some_and(|policies| policies.respawn_ends_life(now));
 		state.pending = Some(PendingPlayerRespawn {
@@ -224,6 +230,7 @@ fn queue_downed_world_player(
 			first_life: false,
 			fallback_at: transform.translation,
 			registry_revision: 0,
+			picker_nearby_scratch: Vec::new(),
 		});
 		velocity.0 = Vec3::ZERO;
 		if let Some(firearm) = firearm {
@@ -232,7 +239,13 @@ fn queue_downed_world_player(
 			}
 			commands.entity(firearm.held).try_insert(DespawnAfter::seconds(0.0));
 		}
+		if let Some(grenade) = grenade {
+			commands.entity(grenade.held).try_despawn();
+		}
 		if let Some(inventory) = inventory {
+			if let (Some(loadout), Ok(bag)) = (loadout.as_deref_mut(), bags.get(inventory.bag)) {
+				loadout.retarget_inventory(bag.clone());
+			}
 			commands.entity(inventory.bag).try_despawn();
 		}
 		strip_world_player_motor(&mut commands, player);
@@ -242,6 +255,8 @@ fn queue_downed_world_player(
 			CameraFollow,
 			PlayerUse,
 			FirearmUser,
+			GrenadeUser,
+			grenade_user::GrenadeThrow,
 			InventoryUser,
 			MoveWish,
 			SpotSubject,
@@ -300,6 +315,7 @@ fn queue_first_spawn_picker(
 		first_life: true,
 		fallback_at: transform.translation,
 		registry_revision: 0,
+		picker_nearby_scratch: Vec::new(),
 	});
 	retire_startup_player(&mut commands, player, firearm, inventory, &mut triggers);
 }
@@ -522,16 +538,14 @@ fn refresh_picker_candidates(
 		config.fallback,
 	)
 	.position;
-	let records = prefer_building_pois(
-		registry.nearby_in(
-			pending.death_at,
-			config.picker_query(map.height),
-			&config.interests,
-			last_poi.as_slice(),
-		),
+	registry.collect_nearby_in(
 		pending.death_at,
+		config.picker_query(map.height),
+		&config.interests,
+		last_poi.as_slice(),
+		&mut pending.picker_nearby_scratch,
 	);
-	let ids: Vec<_> = records.iter().map(|record| record.id).collect();
+	let ids = prefer_building_poi_ids(&pending.picker_nearby_scratch, registry, pending.death_at);
 	let revision = registry.membership_revision();
 	if pending.registry_revision != revision || pending.candidates != ids {
 		pending.registry_revision = revision;
@@ -743,25 +757,24 @@ fn is_building_poi(kind: PoiKind) -> bool {
 	kind == LOCAL_POI || kind == URBAN_POI || kind == SALOON_POI
 }
 
-fn prefer_building_pois(records: Vec<PoiRecord>, death_at: Vec3) -> Vec<PoiRecord> {
-	let nearer = |a: &PoiRecord, b: &PoiRecord| {
-		xz_distance(death_at, a.position)
-			.total_cmp(&xz_distance(death_at, b.position))
-			.then_with(|| a.id.cmp(&b.id))
-	};
+fn prefer_building_poi_ids(ids: &[PoiId], registry: &PoiRegistry, death_at: Vec3) -> Vec<PoiId> {
+	let nearer =
+		|a: &(PoiId, f32), b: &(PoiId, f32)| a.1.total_cmp(&b.1).then_with(|| a.0.cmp(&b.0));
 	let mut buildings = Vec::new();
 	let mut groves = Vec::new();
 	let mut trees = Vec::new();
 	let mut other = Vec::new();
-	for record in records {
+	for id in ids {
+		let record = registry.get(*id).expect("picker ids are indexed");
+		let entry = (*id, xz_distance(death_at, record.position));
 		if is_building_poi(record.kind) {
-			buildings.push(record);
+			buildings.push(entry);
 		} else if record.kind == VEGETATION_POI && record.global {
-			groves.push(record);
+			groves.push(entry);
 		} else if record.kind == VEGETATION_POI {
-			trees.push(record);
+			trees.push(entry);
 		} else {
-			other.push(record);
+			other.push(entry);
 		}
 	}
 	buildings.sort_by(nearer);
@@ -772,7 +785,7 @@ fn prefer_building_pois(records: Vec<PoiRecord>, death_at: Vec3) -> Vec<PoiRecor
 	buildings.extend(groves);
 	buildings.extend(other);
 	buildings.extend(trees);
-	buildings
+	buildings.into_iter().map(|(id, _)| id).collect()
 }
 
 #[cfg(test)]
@@ -814,10 +827,23 @@ mod tests {
 		assert!(interests.weight(VEGETATION_POI).is_some_and(|weight| weight < 0.5));
 	}
 
+	fn registry_from_records(records: &[poi_intelligence::PoiRecord]) -> PoiRegistry {
+		let mut registry = PoiRegistry::default();
+		for record in records {
+			let poi = poi_intelligence::Poi::new(record.id, record.kind)
+				.with_arrival_radius(record.arrival_radius)
+				.with_salience(record.salience);
+			registry
+				.upsert(record.entity, poi, record.position, record.local, record.global)
+				.expect("test poi");
+		}
+		registry
+	}
+
 	#[test]
 	fn respawn_picker_keeps_buildings_ahead_of_a_few_trees() {
 		let death = Vec3::new(0.0, 1.0, 0.0);
-		let mut records = vec![PoiRecord {
+		let mut records = vec![poi_intelligence::PoiRecord {
 			id: PoiId(1),
 			entity: Entity::from_bits(1),
 			kind: LOCAL_POI,
@@ -828,7 +854,7 @@ mod tests {
 			global: false,
 		}];
 		for index in 0..6u64 {
-			records.push(PoiRecord {
+			records.push(poi_intelligence::PoiRecord {
 				id: PoiId(10 + index),
 				entity: Entity::from_bits(10 + index),
 				kind: VEGETATION_POI,
@@ -839,12 +865,17 @@ mod tests {
 				global: false,
 			});
 		}
-		let records = prefer_building_pois(records, death);
-		assert_eq!(records[0].kind, LOCAL_POI);
+		let registry = registry_from_records(&records);
+		let ids = records.iter().map(|record| record.id).collect::<Vec<_>>();
+		let ordered = prefer_building_poi_ids(&ids, &registry, death);
+		assert_eq!(registry.get(ordered[0]).expect("ordered").kind, LOCAL_POI);
 		assert_eq!(
-			records
+			ordered
 				.iter()
-				.filter(|record| record.kind == VEGETATION_POI && !record.global)
+				.filter(|id| {
+					let record = registry.get(**id).expect("ordered");
+					record.kind == VEGETATION_POI && !record.global
+				})
 				.count(),
 			MAX_VEGETATION_RESPAWN
 		);
@@ -855,7 +886,7 @@ mod tests {
 		let death = Vec3::ZERO;
 		let mut records = Vec::new();
 		for index in 0..6u64 {
-			records.push(PoiRecord {
+			records.push(poi_intelligence::PoiRecord {
 				id: PoiId(10 + index),
 				entity: Entity::from_bits(10 + index),
 				kind: VEGETATION_POI,
@@ -866,7 +897,7 @@ mod tests {
 				global: false,
 			});
 		}
-		records.push(PoiRecord {
+		records.push(poi_intelligence::PoiRecord {
 			id: PoiId(99),
 			entity: Entity::from_bits(99),
 			kind: VEGETATION_POI,
@@ -876,14 +907,110 @@ mod tests {
 			local: false,
 			global: true,
 		});
-		let records = prefer_building_pois(records, death);
-		assert!(records.iter().any(|record| record.id == PoiId(99)));
+		let registry = registry_from_records(&records);
+		let ids = records.iter().map(|record| record.id).collect::<Vec<_>>();
+		let ordered = prefer_building_poi_ids(&ids, &registry, death);
+		assert!(ordered.contains(&PoiId(99)));
 		assert_eq!(
-			records
+			ordered
 				.iter()
-				.filter(|record| record.kind == VEGETATION_POI && !record.global)
+				.filter(|id| {
+					let record = registry.get(**id).expect("ordered");
+					record.kind == VEGETATION_POI && !record.global
+				})
 				.count(),
 			MAX_VEGETATION_RESPAWN
+		);
+	}
+
+	#[test]
+	#[ignore]
+	fn respawn_picker_refresh_timing() {
+		use poi_intelligence::{NearbyChoice, NearbyQuery};
+
+		const POI_COUNT: usize = 256;
+		const REFRESHES: usize = 2_000;
+		const RADIUS: f32 = 480.0;
+		let death = Vec3::new(12.0, 8.0, -4.0);
+		let interests = WorldPlayerRespawnConfig::default().interests;
+		let query =
+			NearbyQuery { radius: RADIUS, min_radius: 60.0, choice: NearbyChoice::Weighted };
+
+		let mut registry = PoiRegistry::default();
+		for index in 0..POI_COUNT {
+			let id = PoiId(index as u64 + 1);
+			let angle = (index as f32 / POI_COUNT as f32) * core::f32::consts::TAU;
+			let position = death + Vec3::new(angle.cos() * 200.0, 0.0, angle.sin() * 200.0);
+			let kind = if index % 5 == 0 {
+				URBAN_POI
+			} else if index % 3 == 0 {
+				VEGETATION_POI
+			} else {
+				LOCAL_POI
+			};
+			let global = index % 11 == 0;
+			let poi = poi_intelligence::Poi::new(id, kind).with_arrival_radius(8.0);
+			registry
+				.upsert(Entity::from_bits(index as u64 + 1), poi, position, true, global)
+				.expect("upsert poi");
+		}
+
+		fn prefer_building_pois_records(
+			records: Vec<poi_intelligence::PoiRecord>,
+			death_at: Vec3,
+		) -> Vec<PoiId> {
+			let nearer = |a: &poi_intelligence::PoiRecord, b: &poi_intelligence::PoiRecord| {
+				xz_distance(death_at, a.position)
+					.total_cmp(&xz_distance(death_at, b.position))
+					.then_with(|| a.id.cmp(&b.id))
+			};
+			let mut buildings = Vec::new();
+			let mut groves = Vec::new();
+			let mut trees = Vec::new();
+			let mut other = Vec::new();
+			for record in records {
+				if is_building_poi(record.kind) {
+					buildings.push(record);
+				} else if record.kind == VEGETATION_POI && record.global {
+					groves.push(record);
+				} else if record.kind == VEGETATION_POI {
+					trees.push(record);
+				} else {
+					other.push(record);
+				}
+			}
+			buildings.sort_by(nearer);
+			groves.sort_by(nearer);
+			other.sort_by(nearer);
+			trees.sort_by(nearer);
+			trees.truncate(MAX_VEGETATION_RESPAWN);
+			buildings.extend(groves);
+			buildings.extend(other);
+			buildings.extend(trees);
+			buildings.into_iter().map(|record| record.id).collect()
+		}
+
+		let mut scratch = Vec::new();
+		let clone_start = std::time::Instant::now();
+		for _ in 0..REFRESHES {
+			let records = registry.nearby_in(death, query, &interests, &[]);
+			let ids = prefer_building_pois_records(records, death);
+			std::hint::black_box(ids);
+		}
+		let clone_elapsed = clone_start.elapsed();
+
+		let id_start = std::time::Instant::now();
+		for _ in 0..REFRESHES {
+			registry.collect_nearby_in(death, query, &interests, &[], &mut scratch);
+			let ordered = prefer_building_poi_ids(&scratch, &registry, death);
+			std::hint::black_box(ordered);
+		}
+		let id_elapsed = id_start.elapsed();
+
+		eprintln!(
+			"respawn_picker_refresh_timing: {POI_COUNT} pois × {REFRESHES} refreshes — nearby_in+prefer_records {:?}, collect+prefer_building_poi_ids {:?}",
+			clone_elapsed,
+			id_elapsed,
 		);
 	}
 
@@ -969,6 +1096,7 @@ mod tests {
 				first_life: false,
 				fallback_at: Vec3::new(3.0, 4.0, 5.0),
 				registry_revision: 0,
+				picker_nearby_scratch: Vec::new(),
 			}),
 			..default()
 		});
@@ -1444,6 +1572,7 @@ mod tests {
 				first_life: true,
 				fallback_at: Vec3::ZERO,
 				registry_revision: 0,
+				picker_nearby_scratch: Vec::new(),
 			}),
 			..default()
 		});
