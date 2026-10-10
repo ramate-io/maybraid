@@ -2,7 +2,7 @@
 
 use firearms_components::assets::guns;
 use firearms_components::{FirearmComponents, Layers, PartNode, RigNode};
-use lod::gen::LodSceneLevel;
+use lod::scene::LodSceneLevel;
 
 use crate::parts::{BarrelMesh, BodyMesh, GripMesh, SightMesh, StockMesh, TriggerBoxMesh};
 

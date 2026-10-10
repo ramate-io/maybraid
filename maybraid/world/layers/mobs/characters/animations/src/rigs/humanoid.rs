@@ -1,4 +1,3 @@
-pub mod apply;
 pub mod fall;
 pub mod fixed_tuck;
 pub mod flapping;
@@ -20,3 +19,4 @@ pub mod two_footed_tucked_flip;
 pub mod walk;
 pub mod walk_start;
 pub mod wing;
+pub mod write_masks;

@@ -4,7 +4,7 @@
 //! the triple picks one word from each list so the same item always has the same
 //! name (`Celestial Red Tide Joggers`).
 
-use crate::{ClothingMaterial, ClothingMesh, FirearmSpec, ItemColor, SkillMapSpec};
+use crate::{ClothingMaterial, ClothingMesh, FirearmSpec, GrenadeSpec, ItemColor, SkillMapSpec};
 
 /// Material adjective, then color adjective, then clothing noun.
 pub fn hashed_item_name(
@@ -30,6 +30,12 @@ pub fn hashed_firearm_name(spec: FirearmSpec) -> String {
 		pick(spec.looks.body.color.adjectives(), hash >> 17),
 		pick(spec.kit.body.nouns(), hash >> 33),
 	)
+}
+
+/// Stable noun from the grenade mesh.
+pub fn hashed_grenade_name(spec: GrenadeSpec) -> String {
+	let hash = mix(0x6E4A_DE00_F1A4_0001, spec.mesh.label());
+	pick(spec.mesh.nouns(), hash).to_string()
 }
 
 /// Adjective plus the authored kind so two seeds of the same map still differ.
@@ -170,6 +176,10 @@ mod tests {
 		}
 		for material in FirearmMaterial::VALUES {
 			assert!(!material.adjectives().is_empty(), "{}", material.label());
+		}
+		for mesh in crate::GrenadeMesh::VALUES {
+			assert!(!mesh.nouns().is_empty(), "{}", mesh.label());
+			assert!(!hashed_grenade_name(crate::GrenadeSpec { mesh: *mesh }).is_empty());
 		}
 		for kind in crate::SkillMapKind::VALUES {
 			assert!(!kind.adjectives().is_empty(), "{}", kind.label());
