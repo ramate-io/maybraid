@@ -1,5 +1,5 @@
 [package]
-name = "character-items"
+name = "grenade-user"
 version = { workspace = true }
 edition = { workspace = true }
 license = { workspace = true }
@@ -10,11 +10,16 @@ publish = { workspace = true }
 rust-version = { workspace = true }
 
 [dependencies]
+avian3d = { workspace = true }
 bevy = { workspace = true }
-bevy_math = { workspace = true }
-character-ui-menu = { workspace = true }
-clap = { workspace = true }
-serde = { workspace = true, features = ["derive"] }
+character-inventory-user = { workspace = true }
+character-items = { workspace = true }
+character-rigs = { workspace = true }
+characters = { workspace = true }
+firearm-user = { workspace = true }
+grenades = { workspace = true }
+maybraid-character-controller = { workspace = true }
+player = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }

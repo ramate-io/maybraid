@@ -816,7 +816,6 @@ fn outstanding_skips_a_subscription_that_finishes_without_ids() {
 	let _ = near;
 }
 
-#[test]
 /// Regression guard for worker sweep cost: eviction must stay linear in store
 /// size with a single write lock per typed store.
 #[test]
@@ -860,11 +859,7 @@ fn retention_sweep_on_a_large_store_stays_bounded() {
 		);
 	}
 	let elapsed = started.elapsed();
-	assert!(
-		elapsed < Duration::from_secs(3),
-		"25 sweeps over 4k entries took {:?}",
-		elapsed
-	);
+	assert!(elapsed < Duration::from_secs(3), "25 sweeps over 4k entries took {:?}", elapsed);
 }
 
 #[test]

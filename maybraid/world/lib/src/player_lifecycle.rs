@@ -7,6 +7,7 @@ use character_ragdoll::CharacterRagdollSystems;
 use damage::{DamageSystems, DespawnAfter, Downed};
 use durham::DurhamSurface;
 use firearm_user::FirearmUser;
+use grenade_user::GrenadeUser;
 use firearms::WeaponTrigger;
 use maybraid_character_controller::CharacterIntent;
 use maybraid_input::{PadButton, VirtualPad};
@@ -116,6 +117,7 @@ type DownedWorldPlayer<'a> = (
 	&'a Transform,
 	&'a mut LinearVelocity,
 	Option<&'a FirearmUser>,
+	Option<&'a GrenadeUser>,
 	Option<&'a InventoryUser>,
 );
 
@@ -206,10 +208,12 @@ fn queue_downed_world_player(
 	policies: Option<Res<ModePlayerPolicies>>,
 	mut state: ResMut<WorldPlayerRespawnState>,
 	mut commands: Commands,
+	mut loadout: Option<ResMut<WorldPlayerLoadout>>,
 	mut players: Query<DownedWorldPlayer<'_>, (With<VegetationPlayer>, Added<Downed>)>,
 	mut triggers: Query<&mut WeaponTrigger>,
+	bags: Query<&character_items::Inventory>,
 ) {
-	for (player, transform, mut velocity, firearm, inventory) in &mut players {
+	for (player, transform, mut velocity, firearm, grenade, inventory) in &mut players {
 		let now = mode.as_deref().and_then(|mode| mode.get().mode_id());
 		let ends_life = policies.as_deref().is_some_and(|policies| policies.respawn_ends_life(now));
 		state.pending = Some(PendingPlayerRespawn {
@@ -232,7 +236,13 @@ fn queue_downed_world_player(
 			}
 			commands.entity(firearm.held).try_insert(DespawnAfter::seconds(0.0));
 		}
+		if let Some(grenade) = grenade {
+			commands.entity(grenade.held).try_despawn();
+		}
 		if let Some(inventory) = inventory {
+			if let (Some(loadout), Ok(bag)) = (loadout.as_deref_mut(), bags.get(inventory.bag)) {
+				loadout.retarget_inventory(bag.clone());
+			}
 			commands.entity(inventory.bag).try_despawn();
 		}
 		strip_world_player_motor(&mut commands, player);
@@ -242,6 +252,8 @@ fn queue_downed_world_player(
 			CameraFollow,
 			PlayerUse,
 			FirearmUser,
+			GrenadeUser,
+			grenade_user::GrenadeThrow,
 			InventoryUser,
 			MoveWish,
 			SpotSubject,

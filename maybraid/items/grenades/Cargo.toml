@@ -1,8 +1,8 @@
 [package]
-name = "character-rigs"
+name = "grenades"
 version = { workspace = true }
-edition  = { workspace = true }
-license  = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
 authors = { workspace = true }
 repository = { workspace = true }
 homepage = { workspace = true }
@@ -10,14 +10,11 @@ publish = { workspace = true }
 rust-version = { workspace = true }
 
 [dependencies]
+avian3d = { workspace = true }
 bevy = { workspace = true }
-clap = { workspace = true }
-game-commands = { workspace = true }
-log = { workspace = true }
-rigs = { workspace = true }
-
-[dev-dependencies]
-anyhow = { workspace = true }
+character-items = { workspace = true }
+damage = { workspace = true }
+lod-avian = { workspace = true }
 
 [lints]
 workspace = true
