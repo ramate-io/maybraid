@@ -24,8 +24,8 @@ use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec3;
 use bevy::prelude::{Commands, CommandsSceneExt, Component, Entity, Transform, Visibility};
 use bevy::scene::prelude::{bsn, template_value, Scene};
-use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
+use lod::scene::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::{lod_host_scene_pending, SceneChunk};
 
 use crate::scene_children::scene_children;

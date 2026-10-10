@@ -2,13 +2,7 @@
 
 use crate::terrain::cell::TerrainCellLayout;
 use crate::terrain::collider::{
-	drop_superseded_terrain_colliders, queue_terrain_trimesh_colliders, TerrainColliderEpoch,
-	TerrainColliderSystems, TerrainFrictionConfig,
-};
-use crate::terrain::index::register_durham_nodes;
-use crate::terrain::presentation::{
-	sync_visual_terrain_host_pose, TerrainBackground, TerrainFar, TerrainNear,
-	TerrainPresenterState, TerrainStreamPresenterState,
+	queue_terrain_trimesh_colliders, TerrainColliderSystems, TerrainFrictionConfig,
 };
 use crate::terrain::stamps::TerrainStampConfigs;
 use crate::terrain::watersheds::WatershedConfigs;
@@ -40,16 +34,10 @@ impl Plugin for TerrainResourcesPlugin {
 			app.add_plugins(PhysicsPlugins::default());
 		}
 		app.init_resource::<HcsgStorage>();
-		register_durham_nodes(&mut app.world_mut().resource_mut::<HcsgStorage>());
 		app.init_resource::<TerrainCellLayout>()
 			.init_resource::<TerrainStampConfigs>()
 			.init_resource::<WatershedConfigs>()
-			.init_resource::<TerrainPresenterState>()
-			.init_resource::<TerrainStreamPresenterState<TerrainNear>>()
-			.init_resource::<TerrainStreamPresenterState<TerrainFar>>()
-			.init_resource::<TerrainStreamPresenterState<TerrainBackground>>()
 			.init_resource::<TerrainFrictionConfig>()
-			.init_resource::<TerrainColliderEpoch>()
 			.configure_sets(
 				Update,
 				(
@@ -61,16 +49,11 @@ impl Plugin for TerrainResourcesPlugin {
 			)
 			.add_systems(
 				Update,
-				(drop_superseded_terrain_colliders, queue_terrain_trimesh_colliders)
-					.chain()
+				queue_terrain_trimesh_colliders
 					.in_set(TerrainColliderSystems::QueueMeshes)
 					.in_set(
 						terrain_layer_model::TerrainLayerSystems::<crate::Durham>::QueueColliders,
 					),
-			)
-			.add_systems(
-				PostUpdate,
-				sync_visual_terrain_host_pose.before(TransformSystems::Propagate),
 			);
 	}
 }

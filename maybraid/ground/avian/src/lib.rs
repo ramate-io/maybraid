@@ -18,8 +18,7 @@ use lod_avian::PhysicsInteractionLayer;
 /// above the body. Hits closer than this are canopy / solid-start volumes.
 pub const MIN_GROUND_DROP: f32 = 2.0;
 
-/// Grove tiles and overlapping High-band plants can stack several Fixed
-/// volumes on one plumb line. Walk past them to the trimesh.
+/// Grove tiles and overlapping High-band plants on one plumb line.
 const MAX_COLUMN_HITS: usize = 8;
 
 /// [`SystemParam`] Avian implementation of [`ElevationProbe`].
@@ -45,15 +44,14 @@ impl ElevationProbe for AvianElevationProbe<'_, '_> {
 		if max_distance <= 0.0 {
 			return None;
 		}
-		let mut skipped: Vec<Entity> = exclude.to_vec();
+		let mut filter = fixed_filter(exclude.iter().copied());
 		let mut best: Option<GroundHit> = None;
 		for _ in 0..MAX_COLUMN_HITS {
-			let filter = fixed_filter(skipped.iter().copied());
 			let Some(hit) = self.spatial.cast_ray(origin, Dir3::NEG_Y, max_distance, true, &filter)
 			else {
 				break;
 			};
-			skipped.push(hit.entity);
+			filter.excluded_entities.insert(hit.entity);
 			if hit.distance < MIN_GROUND_DROP {
 				continue;
 			}

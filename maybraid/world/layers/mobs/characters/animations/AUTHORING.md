@@ -42,7 +42,11 @@ Segment lengths are joint-to-joint. Femur length is the shin origin’s translat
 
 After `/`:
 
+- `/character assemble --species braidman --animation think-again` (or `jab`, `still`, `walk`, `run`, …) spawns the default clothed Braidman preview (parts + character shaders) through the runtime fixed-assembly path. Sided gestures take `--side left|right`.
+- `/character animate think-again --side right` switches the mailbox clip without respawning. The sample clock restarts at 0 so a one-shot reads from the first frame.
 - `/character playback --pause` freezes the clock. `--resume` starts it. `--speed 0.5` scales time. `--progress 0.4` scrubs to 0.4 seconds. `--once` stops at one second. `--looping` keeps running. `--phase 0.5` samples the opposite gait phase. `--leg-scale 0.75` or `--leg-scale 1.25` scales femur and shin rest translations before sampling. Femur length follows the scaled shin origin.
 - `/character camera front`, `side`, or `three-quarter` frames the rig.
 - `/character joint femur.L` draws bone-local axes (bright RGB), parent-local axes (shorter, dimmer), and character-space axes on the rig. The opposite bone is drawn dimmer so the two sides can be compared. A yellow line is the effective-rest length direction. A white cross marks the posed segment end. `--hide-rest` drops the rest line.
 - `/character joint femur.L --flexion 40 --lateral 0 --axial 0` replaces that bone's clip rotation with the V0 flex / swing / twist channels. `--clear` returns the bone to the clip.
+
+To inspect a new one-shot (salute, shrug), add the clip to `AnimationMode` and map it in `anim_clip` — `/character animate` and playback/joint then work without a respawn.

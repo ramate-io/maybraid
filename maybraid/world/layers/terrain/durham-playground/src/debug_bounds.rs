@@ -4,7 +4,7 @@ use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use durham::{
 	cascade_chunk_for_cell, PlateauLowPassControllerLayout, Terrain, TerrainCellLayout,
-	TerrainStorage, WatershedLeafKind,
+	WatershedLeafKind,
 };
 use lod::gen::Id;
 use lod::hcsg::HcsgStorage;
@@ -76,10 +76,6 @@ pub fn update_cell_location_hud(
 	mut hud: Query<&mut Text, With<CellLocationHudText>>,
 	mut last: ResMut<LastLoggedCellLocation>,
 ) {
-	let plateau_layout = terrain_store
-		.get::<PlateauLowPassControllerLayout>(Id::Universal)
-		.cloned()
-		.unwrap_or_default();
 	if let Ok(mut visibility) = hud_root.single_mut() {
 		*visibility = if overlay.show_cell_hud { Visibility::Visible } else { Visibility::Hidden };
 	}
@@ -91,6 +87,12 @@ pub fn update_cell_location_hud(
 	let Ok(camera) = cameras.single() else {
 		return;
 	};
+	let Ok(plateau_layout) =
+		terrain_store.try_entry::<PlateauLowPassControllerLayout>(Id::Universal)
+	else {
+		return;
+	};
+	let plateau_layout = plateau_layout.map(|entry| (*entry.value).clone()).unwrap_or_default();
 
 	let p = camera.translation();
 	let (tix, tiz) = terrain_cell_coords(&layout, p);
@@ -100,11 +102,15 @@ pub fn update_cell_location_hud(
 	let t_cell = terrain_cell_aabb(tix, tiz, t_size, layout.vertical_half_extent);
 	let c_cell = plateau_layout.cell_bounds(cix, ciz);
 
-	let terrain = terrain_store
-		.terrain_ids_overlapping(t_cell)
+	let Ok(overlapping) = terrain_store.try_overlapping::<Terrain>(t_cell) else {
+		return;
+	};
+	let terrain = overlapping
 		.into_iter()
-		.filter_map(|id| terrain_store.terrain(id))
+		.filter_map(|id| terrain_store.try_entry::<Terrain>(id).ok().flatten())
+		.map(|entry| entry.value)
 		.find(|terrain| cells_match_xz(&terrain.cell, &t_cell));
+	let terrain = terrain.as_deref();
 	let leaf_under_cam =
 		terrain.and_then(|t| t.jersey_leaves.iter().find(|leaf| point_in_xz(p, leaf)).copied());
 	let marazion_under_cam = terrain

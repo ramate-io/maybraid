@@ -9,6 +9,7 @@ use building_components::{
 };
 use buildings::wall_demo::TerrainPerimeterWall;
 use buildings::wizards_tower::WizardsTower;
+use buildings::SingleHighrise;
 use buildings::{
 	ConnectingStairwell, MixedUseLesHallesStorey, PitchedRoof, RectangularPitchedRoofComplex,
 };
@@ -19,7 +20,7 @@ use lod::{
 use lod_gimme::{GimmeLodSceneCullPlugin, GimmeLodSceneRefreshPlugin};
 use std::sync::Arc;
 use urbanization_developments::{
-	CircularTower, GalleryColonnade, GalleryTerrace, ShepherdsHouse, ShepherdsHut, SingleHighrise,
+	CircularTower, GalleryColonnade, GalleryTerrace, ShepherdsHouse, ShepherdsHut,
 	Skybridge as SkybridgeHall, TempleSanctum, TrazaloidTower,
 };
 
