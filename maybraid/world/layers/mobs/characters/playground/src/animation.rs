@@ -1,7 +1,25 @@
 use bevy::prelude::*;
+<<<<<<< HEAD
+use character_animations::{
+	animations::{
+		FixedTuck, Run, Squat, SquatDescent, Tuck, TuckedFlip, TwoFootedJump, TwoFootedTuckedFlip,
+		UprightLeap, Walk, DEFAULT_DESCENT_SPEED, DEFAULT_GRAVITY, DEFAULT_LANDING_SQUAT_SPEED,
+		DEFAULT_PRE_SQUAT_SPEED,
+	},
+	Animation, Effects,
+};
+use character_rigs::{
+	articulation::compose_parent_rotation,
+	authoring::humanoid_bone_axis,
+	debug::{format_rigged_axis, log_bind_pose, RigPoseDebug},
+	rigs::humanoid_v0::HumanoidV0Rig,
+	Name as RigName,
+};
+=======
 use character_animations::animations::{DEFAULT_BACKSWING, DEFAULT_JAB_TARGET};
 use character_rigs::{articulation::compose_parent_rotation, authoring::humanoid_bone_axis, Side};
 use characters::{AnimBone, AnimClip, AnimRef, JabParams};
+>>>>>>> origin/main
 use clap::ValueEnum;
 
 use crate::character::CharacterConfig;
@@ -150,9 +168,444 @@ impl AnimationPlayback {
 	}
 }
 
+<<<<<<< HEAD
+impl Default for AnimationArticulationDebug {
+	fn default() -> Self {
+		Self(RigPoseDebug::default())
+	}
+}
+
+#[derive(Component)]
+pub struct LimbAnimator {
+	pub bone: RigName,
+	pub rest: Transform,
+}
+
+pub fn init_limb_animators(
+	mut commands: Commands,
+	config: Res<CharacterConfig>,
+	debug: Res<AnimationArticulationDebug>,
+	rig_roots: Query<(Entity, &BoneMap), With<CharacterRig>>,
+	transforms: Query<&Transform>,
+	animated: Query<Entity, With<LimbAnimator>>,
+) {
+	if !animated.is_empty() {
+		return;
+	}
+
+	let Ok((rig_entity, bone_map)) = rig_roots.single() else {
+		return;
+	};
+
+	if bone_map.by_name.is_empty() {
+		return;
+	}
+
+	let humanoid = HumanoidV0Rig::imported();
+
+	for bone in humanoid.animation_bones() {
+		let Some(&entity) = bone_map.by_name.get(bone.as_str()) else {
+			continue;
+		};
+		let Ok(transform) = transforms.get(entity) else {
+			continue;
+		};
+
+		commands.entity(entity).insert(LimbAnimator { bone, rest: *transform });
+	}
+
+	if debug.0.enabled {
+		let bind_log: Vec<_> = humanoid
+			.animation_bones()
+			.into_iter()
+			.filter(|bone| DEBUG_BONES.contains(&bone.as_str()))
+			.filter_map(|bone| {
+				let entity = bone_map.by_name.get(bone.as_str())?;
+				let transform = transforms.get(*entity).ok()?;
+				let axis = format_rigged_axis(humanoid.rigged_axis(&bone));
+				Some((bone, *transform, axis))
+			})
+			.collect();
+
+		log_bind_pose(
+			&format!("local rest from glTF animation={:?}", config.animation),
+			bind_log.iter().map(|(name, transform, axis)| (name, transform, axis.as_str())),
+		);
+	}
+
+	commands.entity(rig_entity).insert(humanoid);
+}
+
+pub fn animate_limbs(
+	config: Res<CharacterConfig>,
+	mut debug: ResMut<AnimationArticulationDebug>,
+	mut playback: ResMut<AnimationPlayback>,
+	mut rig: Query<&mut HumanoidV0Rig, With<CharacterRig>>,
+	mut armature: Query<&mut Transform, (With<CharacterRig>, Without<LimbAnimator>)>,
+	mut limbs: Query<(&mut Transform, &LimbAnimator)>,
+	time: Res<Time>,
+) {
+	playback.advance(time.delta_secs());
+	let t = playback.elapsed + playback.phase;
+	match config.animation {
+		AnimationMode::Run => {
+			animate_run(&config, &playback, &mut rig, &mut armature, &mut limbs, t)
+		}
+		AnimationMode::Walk => {
+			animate_walk(&config, &playback, &mut rig, &mut armature, &mut limbs, t)
+		}
+		AnimationMode::Squat => {
+			animate_squat(&config, &playback, &mut debug, &mut rig, &mut armature, &mut limbs, t)
+		}
+		AnimationMode::SquatDescent => animate_squat_descent(
+			&config,
+			&playback,
+			&mut debug,
+			&mut rig,
+			&mut armature,
+			&mut limbs,
+			t,
+		),
+		AnimationMode::Jump => {
+			animate_jump(&config, &playback, &mut debug, &mut rig, &mut armature, &mut limbs, t)
+		}
+		AnimationMode::Leap => {
+			animate_leap(&config, &playback, &mut rig, &mut armature, &mut limbs, t)
+		}
+		AnimationMode::Tuck => {
+			animate_tuck(&config, &playback, &mut rig, &mut armature, &mut limbs, t)
+		}
+		AnimationMode::FixedTuck => {
+			animate_fixed_tuck(&config, &playback, &mut rig, &mut armature, &mut limbs)
+		}
+		AnimationMode::TuckedFlip => {
+			animate_tucked_flip(&config, &playback, &mut rig, &mut armature, &mut limbs, t)
+		}
+		AnimationMode::TwoFootedTuckedFlip => animate_two_footed_tucked_flip(
+			&config,
+			&playback,
+			&mut debug,
+			&mut rig,
+			&mut armature,
+			&mut limbs,
+			t,
+		),
+	}
+	apply_joint_preview(&playback, &mut rig, &mut limbs);
+}
+
+fn animate_run(
+	config: &CharacterConfig,
+	playback: &AnimationPlayback,
+	rig: &mut Query<&mut HumanoidV0Rig, With<CharacterRig>>,
+	armature: &mut Query<&mut Transform, (With<CharacterRig>, Without<LimbAnimator>)>,
+	limbs: &mut Query<(&mut Transform, &LimbAnimator)>,
+	t: f32,
+) {
+	let Ok(mut rig) = rig.single_mut() else {
+		return;
+	};
+
+	marshal_limbs_into_pose(&mut rig, limbs, playback);
+	let effects = Run::default().apply(rig.as_mut(), t * RUN_CYCLE_SPEED);
+	apply_effects(config.transform, effects, armature);
+	marshal_pose_to_limbs(&rig, limbs);
+}
+
+fn animate_walk(
+	config: &CharacterConfig,
+	playback: &AnimationPlayback,
+	rig: &mut Query<&mut HumanoidV0Rig, With<CharacterRig>>,
+	armature: &mut Query<&mut Transform, (With<CharacterRig>, Without<LimbAnimator>)>,
+	limbs: &mut Query<(&mut Transform, &LimbAnimator)>,
+	t: f32,
+) {
+	let Ok(mut rig) = rig.single_mut() else {
+		return;
+	};
+
+	marshal_limbs_into_pose(&mut rig, limbs, playback);
+	let effects = Walk::default().apply(rig.as_mut(), t * WALK_CYCLE_SPEED);
+	apply_effects(config.transform, effects, armature);
+	marshal_pose_to_limbs(&rig, limbs);
+}
+
+fn animate_tuck(
+	config: &CharacterConfig,
+	playback: &AnimationPlayback,
+	rig: &mut Query<&mut HumanoidV0Rig, With<CharacterRig>>,
+	armature: &mut Query<&mut Transform, (With<CharacterRig>, Without<LimbAnimator>)>,
+	limbs: &mut Query<(&mut Transform, &LimbAnimator)>,
+	t: f32,
+) {
+	let Ok(mut rig) = rig.single_mut() else {
+		return;
+	};
+
+	marshal_limbs_into_pose(&mut rig, limbs, playback);
+	let progress = (t * TUCK_CYCLE_SPEED).rem_euclid(1.0);
+	let effects = Tuck::default().apply(rig.as_mut(), progress);
+	apply_effects(config.transform, effects, armature);
+	marshal_pose_to_limbs(&rig, limbs);
+}
+
+fn animate_fixed_tuck(
+	config: &CharacterConfig,
+	playback: &AnimationPlayback,
+	rig: &mut Query<&mut HumanoidV0Rig, With<CharacterRig>>,
+	armature: &mut Query<&mut Transform, (With<CharacterRig>, Without<LimbAnimator>)>,
+	limbs: &mut Query<(&mut Transform, &LimbAnimator)>,
+) {
+	let Ok(mut rig) = rig.single_mut() else {
+		return;
+	};
+
+	marshal_limbs_into_pose(&mut rig, limbs, playback);
+	let effects = FixedTuck::default().apply(rig.as_mut(), 0.0);
+	apply_effects(config.transform, effects, armature);
+	marshal_pose_to_limbs(&rig, limbs);
+}
+
+fn animate_tucked_flip(
+	config: &CharacterConfig,
+	playback: &AnimationPlayback,
+	rig: &mut Query<&mut HumanoidV0Rig, With<CharacterRig>>,
+	armature: &mut Query<&mut Transform, (With<CharacterRig>, Without<LimbAnimator>)>,
+	limbs: &mut Query<(&mut Transform, &LimbAnimator)>,
+	t: f32,
+) {
+	let Ok(mut rig) = rig.single_mut() else {
+		return;
+	};
+
+	marshal_limbs_into_pose(&mut rig, limbs, playback);
+	let progress = (t * FRONT_FLIP_CYCLE_SPEED).rem_euclid(1.0);
+	let effects = TuckedFlip::default().apply(rig.as_mut(), progress);
+	apply_effects(config.transform, effects, armature);
+	marshal_pose_to_limbs(&rig, limbs);
+}
+
+fn animate_squat(
+	config: &CharacterConfig,
+	playback: &AnimationPlayback,
+	debug: &mut AnimationArticulationDebug,
+	rig: &mut Query<&mut HumanoidV0Rig, With<CharacterRig>>,
+	armature: &mut Query<&mut Transform, (With<CharacterRig>, Without<LimbAnimator>)>,
+	limbs: &mut Query<(&mut Transform, &LimbAnimator)>,
+	t: f32,
+) {
+	let Ok(mut rig) = rig.single_mut() else {
+		return;
+	};
+
+	marshal_limbs_into_pose(&mut rig, limbs, playback);
+	let squat_half_speed = 2.0 * SQUAT_CYCLE_SPEED;
+	let squat = Squat::for_loop(squat_half_speed, squat_half_speed);
+	let squat_progress = t * SQUAT_CYCLE_SPEED;
+	let effects = squat.apply(&mut rig, squat_progress);
+	apply_effects(config.transform, effects, armature);
+
+	if debug.0.should_log(t) {
+		let phase = squat.cycle_phase(squat_progress);
+		let lengths = rig.segment_lengths;
+		let drop = squat.vertical_drop(squat_progress, lengths);
+		let move_label = if effects.is_identity() {
+			"none".to_string()
+		} else {
+			character_rigs::debug::format_vec3(effects.0.translation)
+		};
+		let header = vec![
+			format!("t={t:.2}s phase={phase:.3}"),
+			format!(
+				"envelope: depth={:.3} femur_swing={:.3} shin_flex={:.3} root_swing={:.3} vertical_drop={:.4}",
+				squat.depth(squat_progress),
+				squat.femur_swing(squat_progress),
+				squat.shin_flex(squat_progress),
+				squat.root_swing(squat_progress),
+				drop,
+			),
+			format!(
+				"segment_lengths: femur={:.4} shin={:.4} effects.move={move_label}",
+				lengths.femur, lengths.shin
+			),
+		];
+
+		for line in &header {
+			info!("{line}");
+		}
+		for name in DEBUG_BONES {
+			let tip = rig.rotation(name) * Vec3::Y;
+			info!("[{name}] tip={}", character_rigs::debug::format_vec3(tip));
+		}
+	}
+
+	marshal_pose_to_limbs(&rig, limbs);
+}
+
+fn animate_squat_descent(
+	config: &CharacterConfig,
+	playback: &AnimationPlayback,
+	debug: &mut AnimationArticulationDebug,
+	rig: &mut Query<&mut HumanoidV0Rig, With<CharacterRig>>,
+	armature: &mut Query<&mut Transform, (With<CharacterRig>, Without<LimbAnimator>)>,
+	limbs: &mut Query<(&mut Transform, &LimbAnimator)>,
+	t: f32,
+) {
+	let Ok(mut rig) = rig.single_mut() else {
+		return;
+	};
+
+	marshal_limbs_into_pose(&mut rig, limbs, playback);
+	let descent = SquatDescent::default();
+	let progress = (t * DEFAULT_DESCENT_SPEED).clamp(0.0, 1.0);
+	let effects = descent.apply(&mut rig, progress);
+	apply_effects(config.transform, effects, armature);
+
+	if debug.0.should_log(t) {
+		info!(
+			"t={t:.2}s depth={:.3} femur.L={:.3}",
+			descent.depth(progress),
+			rig.posed_angle("femur.L"),
+		);
+	}
+
+	marshal_pose_to_limbs(&rig, limbs);
+}
+
+fn animate_two_footed_tucked_flip(
+	config: &CharacterConfig,
+	playback: &AnimationPlayback,
+	debug: &mut AnimationArticulationDebug,
+	rig: &mut Query<&mut HumanoidV0Rig, With<CharacterRig>>,
+	armature: &mut Query<&mut Transform, (With<CharacterRig>, Without<LimbAnimator>)>,
+	limbs: &mut Query<(&mut Transform, &LimbAnimator)>,
+	t: f32,
+) {
+	let Ok(mut rig) = rig.single_mut() else {
+		return;
+	};
+
+	marshal_limbs_into_pose(&mut rig, limbs, playback);
+	let flip = TwoFootedTuckedFlip::default().with_jump(
+		TwoFootedJump::default()
+			.with_gravity(DEFAULT_GRAVITY)
+			.with_jump_height(JUMP_HEIGHT)
+			.with_pre_squat_speed(JUMP_PRE_SQUAT_SPEED)
+			.with_landing_squat_speed(JUMP_LANDING_SQUAT_SPEED),
+	);
+	let effects = flip.apply(&mut rig, t);
+	apply_effects(config.transform, effects, armature);
+	if debug.0.enabled {
+		let lengths = rig.segment_lengths;
+		let (segment, _) = flip.segment(lengths, t);
+		if segment == character_animations::animations::JumpSegment::Land || debug.0.should_log(t) {
+			info!(
+				"tucked flip: elapsed={:.3} pitch={:.3} y={:.3}",
+				t,
+				flip.flip_pitch_radians(lengths, t),
+				flip.vertical_offset(lengths, t),
+			);
+		}
+	}
+	marshal_pose_to_limbs(&rig, limbs);
+}
+
+fn animate_leap(
+	config: &CharacterConfig,
+	playback: &AnimationPlayback,
+	rig: &mut Query<&mut HumanoidV0Rig, With<CharacterRig>>,
+	armature: &mut Query<&mut Transform, (With<CharacterRig>, Without<LimbAnimator>)>,
+	limbs: &mut Query<(&mut Transform, &LimbAnimator)>,
+	t: f32,
+) {
+	let Ok(mut rig) = rig.single_mut() else {
+		return;
+	};
+
+	marshal_limbs_into_pose(&mut rig, limbs, playback);
+	let progress = t.clamp(0.0, 1.0);
+	let effects = UprightLeap::default().apply(&mut rig, progress);
+	apply_effects(config.transform, effects, armature);
+	marshal_pose_to_limbs(&rig, limbs);
+}
+
+fn animate_jump(
+	config: &CharacterConfig,
+	playback: &AnimationPlayback,
+	debug: &mut AnimationArticulationDebug,
+	rig: &mut Query<&mut HumanoidV0Rig, With<CharacterRig>>,
+	armature: &mut Query<&mut Transform, (With<CharacterRig>, Without<LimbAnimator>)>,
+	limbs: &mut Query<(&mut Transform, &LimbAnimator)>,
+	t: f32,
+) {
+	let Ok(mut rig) = rig.single_mut() else {
+		return;
+	};
+
+	marshal_limbs_into_pose(&mut rig, limbs, playback);
+	let jump = TwoFootedJump::default()
+		.with_gravity(DEFAULT_GRAVITY)
+		.with_jump_height(JUMP_HEIGHT)
+		.with_pre_squat_speed(JUMP_PRE_SQUAT_SPEED)
+		.with_landing_squat_speed(JUMP_LANDING_SQUAT_SPEED);
+	let effects = jump.apply(&mut rig, t);
+	apply_effects(config.transform, effects, armature);
+	if debug.0.enabled {
+		let lengths = rig.segment_lengths;
+		let (segment, _) = jump.segment(lengths, t);
+		if segment == character_animations::animations::JumpSegment::Land || debug.0.should_log(t) {
+			jump.log_landing_debug(&rig, t, "jump articulation debug");
+		}
+	}
+	marshal_pose_to_limbs(&rig, limbs);
+}
+
+fn apply_effects(
+	bind: Transform,
+	effects: Effects,
+	armature: &mut Query<&mut Transform, (With<CharacterRig>, Without<LimbAnimator>)>,
+) {
+	let Ok(mut transform) = armature.single_mut() else {
+		return;
+	};
+
+	*transform = effects.apply_to_bind(bind);
+}
+
+fn marshal_limbs_into_pose(
+	rig: &mut HumanoidV0Rig,
+	limbs: &mut Query<(&mut Transform, &LimbAnimator)>,
+	playback: &AnimationPlayback,
+) {
+	let mut rest = rig.binding.effective_rest.clone();
+	for (_, animator) in limbs.iter() {
+		let Some(id) = rig.binding.definition.id(animator.bone.as_str()) else {
+			continue;
+		};
+		if let Some(slot) = rest.local.get_mut(id.index()) {
+			*slot = animator.rest;
+			if playback.leg_scale != 1.0 && is_leg_bone(animator.bone.as_str()) {
+				slot.translation *= playback.leg_scale;
+			}
+		}
+	}
+	rig.binding.refresh_rest(rest);
+	rig.segment_lengths = rig.binding.metrics.humanoid_leg;
+}
+
+fn is_leg_bone(name: &str) -> bool {
+	matches!(name, "femur.L" | "femur.R" | "shin.L" | "shin.R")
+}
+
+fn apply_joint_preview(
+	playback: &AnimationPlayback,
+	rig: &mut Query<&mut HumanoidV0Rig, With<CharacterRig>>,
+	limbs: &mut Query<(&mut Transform, &LimbAnimator)>,
+=======
 pub fn apply_joint_preview(
 	playback: Res<AnimationPlayback>,
 	mut bones: Query<(&mut Transform, &AnimBone)>,
+>>>>>>> origin/main
 ) {
 	let Some(degrees) = playback.joint_degrees else {
 		return;
