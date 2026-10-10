@@ -3,9 +3,8 @@
 use bevy::prelude::*;
 use firearms::{WeaponFired, WeaponTrigger};
 use maybraid_character_controller::CharacterIntent;
-use player::{CameraFollow, Player, PlayerLook};
+use player::{clamp_aim_pitch, CameraFollow, Player, PlayerLook};
 use player_camera::CameraController;
-use std::f32::consts::FRAC_PI_2;
 
 use crate::weapon::RecoilPattern;
 use crate::{FirearmUser, WeaponSwap};
@@ -134,10 +133,6 @@ fn mix(seed: u64, value: u64) -> u64 {
 	hash = (hash ^ (hash >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
 	hash = (hash ^ (hash >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
 	hash ^ (hash >> 31)
-}
-
-fn clamp_aim_pitch(pitch: f32) -> f32 {
-	pitch.clamp(-FRAC_PI_2 + 0.1, FRAC_PI_2 - 0.1)
 }
 
 #[cfg(test)]

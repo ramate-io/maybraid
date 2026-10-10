@@ -8,7 +8,7 @@ use characters::{CharacterHeading, CharacterRoot};
 use firearm_user::WeaponSwap;
 use grenades::{spawn_thrown_grenade, GrenadeEffect, GrenadeMaterial};
 use maybraid_character_controller::CharacterIntent;
-use player::PlayerLook;
+use player::{look_forward, PlayerLook};
 
 use crate::hold::HeldGrenade;
 use crate::HeldByGrenade;
@@ -222,10 +222,6 @@ fn release_grenade(
 }
 
 /// Camera `-Z` with the same yaw×pitch product as the follow camera.
-pub fn look_forward(look: &PlayerLook) -> Vec3 {
-	(Quat::from_rotation_y(look.yaw) * Quat::from_rotation_x(look.pitch)) * -Vec3::Z
-}
-
 /// First person follows the camera. Third person uses body heading; orbit pitch is not a throw angle.
 pub fn throw_aim(facing: Vec3, look: &PlayerLook) -> Vec3 {
 	if look.first_person {
@@ -237,16 +233,6 @@ pub fn throw_aim(facing: Vec3, look: &PlayerLook) -> Vec3 {
 pub fn launch_velocity(aim: Vec3, stats: &GrenadeStats, inherit: Vec3) -> Vec3 {
 	let tossed = (aim + Vec3::Y * stats.upward_bias).normalize_or(Vec3::Y);
 	tossed * stats.launch_speed + inherit * stats.inherit_velocity
-}
-
-pub fn yaw_xz(dir: Vec3) -> f32 {
-	let xz = Vec3::new(dir.x, 0.0, dir.z);
-	if xz.length_squared() < 1e-8 {
-		0.0
-	} else {
-		let n = xz.normalize();
-		n.x.atan2(n.z)
-	}
 }
 
 #[cfg(test)]
