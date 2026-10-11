@@ -6,14 +6,14 @@ use crate::animations::{vertical_drop, Squat};
 /// Peak landing flex as a fraction of a full pre-jump squat.
 const DEFAULT_LAND_SCALE: f32 = 0.35;
 
-/// Forward hang bias at peak absorb (opposite-side hang sign, like idle).
-const HUMERUS_FLEX_FORWARD: f32 = 0.78;
+/// Medial humerus elevation that brings the forearms in front of the chest at peak absorb.
+const HUMERUS_FLEX_FORWARD: f32 = 1.3;
 /// Shared elbow flexion sign for both arms (right forearm axis is −Z).
-const FOREARM_GUARD_FLEX: f32 = -1.1;
+const FOREARM_GUARD_FLEX: f32 = -0.35;
 /// When blending off a fall spread, pull the humerus stroke closed (opposite [`Fall`] signs).
-const HUMERUS_SWING_CLOSE: f32 = 0.32;
+const HUMERUS_SWING_CLOSE: f32 = 0.45;
 /// Shoulder lift that opposes a fall spread (opposite [`Fall`] shoulder_flex signs).
-const SHOULDER_FLEX_TUCK: f32 = 0.36;
+const SHOULDER_FLEX_TUCK: f32 = 0.5;
 
 #[derive(Debug, Clone)]
 pub struct Land {
@@ -86,7 +86,7 @@ impl Land {
 	}
 
 	pub fn humerus_flex(&self, side: Side, progress: f32) -> f32 {
-		-side.sign() * self.arm_amount(progress) * HUMERUS_FLEX_FORWARD
+		side.sign() * self.arm_amount(progress) * HUMERUS_FLEX_FORWARD
 	}
 
 	pub fn forearm_flex(&self, progress: f32) -> f32 {
