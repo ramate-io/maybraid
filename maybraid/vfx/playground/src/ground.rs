@@ -8,7 +8,7 @@ pub fn setup_ground(
 	mut meshes: ResMut<Assets<Mesh>>,
 	mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-	let ground = meshes.add(Plane3d::default().mesh().size(80.0, 80.0));
+	let ground = meshes.add(Plane3d::default().mesh().size(240.0, 240.0));
 	let dirt = materials.add(StandardMaterial {
 		base_color: Color::srgb(0.28, 0.24, 0.18),
 		perceptual_roughness: 0.96,
@@ -16,7 +16,7 @@ pub fn setup_ground(
 	});
 	commands.spawn((Mesh3d(ground), MeshMaterial3d(dirt), Transform::IDENTITY, GroundPlane));
 
-	let band = meshes.add(Plane3d::default().mesh().size(80.0, 12.0));
+	let band = meshes.add(Plane3d::default().mesh().size(240.0, 16.0));
 	let cool = materials.add(StandardMaterial {
 		base_color: Color::srgb(0.18, 0.22, 0.26),
 		perceptual_roughness: 0.95,
@@ -48,5 +48,19 @@ pub fn setup_ground(
 		MeshMaterial3d(plaster),
 		Transform::from_xyz(1.35, 0.35, 0.8),
 		Name::new("vfx-occluder-box"),
+	));
+
+	// 1.8 m stand-in just outside a 7 m God Beam so boss scale reads.
+	let body = meshes.add(Capsule3d::new(0.28, 1.24));
+	let figure = materials.add(StandardMaterial {
+		base_color: Color::srgb(0.16, 0.18, 0.22),
+		perceptual_roughness: 0.88,
+		..default()
+	});
+	commands.spawn((
+		Mesh3d(body),
+		MeshMaterial3d(figure),
+		Transform::from_xyz(6.4, 0.9, 4.2),
+		Name::new("vfx-character-scale"),
 	));
 }

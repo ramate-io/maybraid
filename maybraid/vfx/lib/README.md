@@ -10,7 +10,9 @@ Near fire and smoke use overlapping mesh lobes with a crate-owned stylized mater
 
 Boss attacks own timing, hazards, and damage. This crate only plays looks. Drive an effect with [`VfxDrive`](src/drive.rs) and later call `commands.cancel_vfx(handle)` or `commands.despawn_vfx(handle)`.
 
-[#1118](https://github.com/ramate-io/maybraid/issues/1118) / [PR #1147](https://github.com/ramate-io/maybraid/pull/1147) emit `AttackPresentationEvent` from `attacks`. This crate does **not** depend on that unmerged crate. [`attack_drive`](src/attack_drive.rs) mirrors the payloads so [#1119](https://github.com/ramate-io/maybraid/issues/1119) can plug the looks in:
+[#1118](https://github.com/ramate-io/maybraid/issues/1118) / [PR #1147](https://github.com/ramate-io/maybraid/pull/1147) emit `AttackPresentationEvent` from `attacks`. This crate does **not** depend on that unmerged crate. [`attack_drive`](src/attack_drive.rs) mirrors the payloads so [#1119](https://github.com/ramate-io/maybraid/issues/1119) can plug the looks in.
+
+**TODO(#1147):** when that PR merges, replace the local mirror types with a feature-gated `attacks` dependency (`attack-presentation`) so there is only one presentation-event model.
 
 1. Copy `instance` / `kind` / `phase` / `pose` / `shape` into `AttackDriveEvent`.
 2. Call `AttackDriveBindings::apply`.

@@ -5,11 +5,12 @@ use crate::show::LastVfxShow;
 
 pub fn ui_config() -> GameCommandUiConfig {
 	GameCommandUiConfig {
-		title: "VFX — / cmd — WASD/Space/Shift — mouse look".into(),
+		title: "VFX — / cmd — F1 drawer — WASD/Space/Shift — mouse look".into(),
 		empty_console_text:
-			"Console: `god-beam`, `sonic-wave`, `fiery-explosion`, `show`, `cancel`, `help`".into(),
+			"Console: `god-beam`, `sonic-wave`, `fiery-explosion`, `show`, `cancel`, `hud`, `help`"
+				.into(),
 		root_background: Color::srgba(0.08, 0.09, 0.12, 0.86),
-		controls_hint: "god-beam — sonic-wave — fiery-explosion — show — Enter".into(),
+		controls_hint: "F1 hide drawer — god-beam — sonic-wave — show — Enter".into(),
 	}
 }
 

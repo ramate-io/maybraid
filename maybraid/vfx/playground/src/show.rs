@@ -163,18 +163,20 @@ fn frame_camera(
 	};
 	let (pos, look) = match name {
 		GOD_BEAM => {
-			let height = request.drive.reach.clamp(16.0, 96.0) * request.scale;
+			let height = request.drive.reach.clamp(16.0, 160.0) * request.scale;
 			let width = request.drive.size.clamp(3.0, 16.0) * request.scale;
+			// 45° vfov needs ~1.25× height of back-distance to show ground + top.
+			let back = (height * 1.25).max(width * 8.0);
 			(
-				Vec3::new(width * 1.5 + 8.0, height * 0.12 + 5.0, width * 1.7 + 11.0),
-				Vec3::new(0.0, height * 0.16, request.distance),
+				Vec3::new(width * 4.0 + height * 0.22, height * 0.18 + 8.0, back),
+				Vec3::new(0.0, height * 0.42, request.distance),
 			)
 		}
 		SONIC_WAVE => {
 			let range = request.drive.size.max(10.0) * request.scale;
 			(
-				Vec3::new(range * 0.42, range * 0.22 + 5.0, range * 0.55),
-				Vec3::new(0.0, 0.4, request.distance + range * 0.2),
+				Vec3::new(range * 0.75, range * 0.38 + 6.0, -range * 0.35),
+				Vec3::new(0.0, 0.5, request.distance + range * 0.38),
 			)
 		}
 		_ => return,

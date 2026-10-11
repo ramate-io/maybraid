@@ -24,6 +24,9 @@ In-game (press `/`):
 - `orbit` — orbit the camera around the burst
 - `freeze 0.4` — pause once the instance reaches that age; `play` resumes
 - `noloop` — stop repeating the last show
+- `hud` / `F1` — toggle the bottom command drawer (hide it for captures)
 - The last effect loops so a one-shot burst can be judged
 
-The scene includes a warm reference ground, an occluding wall, and a box so orbiting can show depth and occlusion. God Beam and sonic-wave shows pull the camera back to boss-scale viewing distance.
+The scene includes a warm reference ground, an occluding wall, a box, and a 1.8 m character-scale stand-in just outside a 7 m God Beam. God Beam and sonic-wave shows pull the camera back so the full column / origin-plus-front fit the frame.
+
+Evidence stills: set `VFX_CAPTURE=1` (hides the drawer, disables looping). Optional `VFX_FREEZE=<age>`, `VFX_CANCEL_AT=<age>`, `VFX_NOLOOP=1`. See [`evidence/`](evidence/README.md).

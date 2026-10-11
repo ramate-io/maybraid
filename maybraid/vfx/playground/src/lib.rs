@@ -1,6 +1,7 @@
 //! Isolated host for real-time VFX concepts.
 
 mod camera;
+mod capture;
 pub mod commands;
 mod ground;
 mod show;
@@ -11,6 +12,7 @@ pub use game_commands::command::PendingStartupCommand;
 
 use bevy::prelude::*;
 use game_commands::command::GameCommandPlugin;
+use game_commands::GameCommandDrawerConfig;
 use ground::setup_ground;
 use maybraid_vfx::VfxPlugin;
 use show::{
@@ -30,21 +32,33 @@ impl Plugin for VfxPlaygroundPlugin {
 			.init_resource::<LoopEnabled>()
 			.init_resource::<CameraOrbit>()
 			.init_resource::<SpreadOnce>()
+			.init_resource::<capture::CaptureCancel>()
 			.add_plugins(VfxPlugin)
-			.add_plugins(GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()));
-		app.add_systems(Startup, (camera::setup_camera, setup_lighting, setup_ground))
-			.add_systems(
-				Update,
-				(
-					camera::release_modifiers_on_focus_change.before(camera::camera_controller),
-					camera::camera_controller,
-					camera::orbit_camera.after(camera::camera_controller),
-					apply_pending_shows,
-					repeat_shown_effect.after(apply_pending_shows),
-					pause_at_frozen_age.after(repeat_shown_effect),
-					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
-				),
+			.add_plugins(
+				GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config())
+					.with_drawer_config(GameCommandDrawerConfig {
+						open_at_start: !capture::requested(),
+						toggle_keys: vec![KeyCode::F1],
+						..default()
+					}),
 			);
+		app.add_systems(
+			Startup,
+			(camera::setup_camera, setup_lighting, setup_ground, capture::apply_env),
+		)
+		.add_systems(
+			Update,
+			(
+				camera::release_modifiers_on_focus_change.before(camera::camera_controller),
+				camera::camera_controller,
+				camera::orbit_camera.after(camera::camera_controller),
+				apply_pending_shows,
+				repeat_shown_effect.after(apply_pending_shows),
+				capture::cancel_at_age.after(repeat_shown_effect),
+				pause_at_frozen_age.after(capture::cancel_at_age),
+				ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
+			),
+		);
 	}
 }
 
@@ -180,6 +194,15 @@ mod tests {
 		assert!((speed - 22.0).abs() < 1e-4);
 		assert!((spread - 2.2).abs() < 1e-4);
 		assert_eq!(count, 3);
+		Ok(())
+	}
+
+	#[test]
+	fn parses_hud_toggle() -> Result<(), String> {
+		let command = <PlaygroundCommand as GameCommand>::parse_line("hud")?;
+		if !matches!(command, PlaygroundCommand::Hud) {
+			return Err("expected hud".into());
+		}
 		Ok(())
 	}
 }

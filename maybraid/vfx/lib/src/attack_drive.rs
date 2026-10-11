@@ -6,6 +6,11 @@
 //! [#1119](https://github.com/ramate-io/maybraid/issues/1119) copies event
 //! fields into [`AttackDriveEvent`] and applies [`AttackDriveBindings`].
 //!
+//! TODO(#1147): once that PR merges, replace these local mirror types with a
+//! feature-gated `attacks` dependency (`attack-presentation`) so there is only
+//! one presentation-event model. Do not take a hard dep while `#1147` is
+//! unmerged.
+//!
 //! Gameplay despawns entities tagged `attacks::AttackPresentationBinding` on
 //! cancel, death, sleep, retirement, or despawn. After this crate spawns a
 //! root, insert that `attacks` component on the same entity using
@@ -33,10 +38,15 @@ use crate::library::VfxLibrary;
 use crate::spawn::{despawn_vfx, SpawnVfxExt, VfxSpawn};
 
 /// Local copy of `attacks::AttackInstanceId(u64)`.
+///
+/// TODO(#1147): delete this mirror and use `attacks::AttackInstanceId` behind
+/// the `attack-presentation` feature after that crate is on `main`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct AttackInstanceKey(pub u64);
 
 /// Local copy of `attacks::AttackPresentationBindingKind`.
+///
+/// TODO(#1147): replace with `attacks::AttackPresentationBindingKind`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum VfxAttackBindingKind {
 	Telegraph,
@@ -45,6 +55,9 @@ pub enum VfxAttackBindingKind {
 
 /// Tag spawned VFX roots. [#1119](https://github.com/ramate-io/maybraid/issues/1119)
 /// also inserts `attacks::AttackPresentationBinding` with the same ids.
+///
+/// TODO(#1147): keep this VFX-side tag or map 1:1 onto the `attacks` component
+/// once the feature-gated dep exists.
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct VfxAttackBinding {
 	pub instance: AttackInstanceKey,
@@ -52,6 +65,8 @@ pub struct VfxAttackBinding {
 }
 
 /// Local copy of `attacks::PresentationPhase`.
+///
+/// TODO(#1147): replace with `attacks::PresentationPhase`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AttackDrivePhase {
 	Spawned,
@@ -60,6 +75,8 @@ pub enum AttackDrivePhase {
 }
 
 /// Local copy of `attacks::HazardPose`.
+///
+/// TODO(#1147): replace with `attacks::HazardPose`.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct AttackDrivePose {
 	pub origin: Vec3,
@@ -78,6 +95,8 @@ impl AttackDrivePose {
 
 /// Hazard / telegraph volumes this adapter can drive. Other `#1147` shapes
 /// (`Sphere`, `Box`, `Line`) stay [`Unsupported`].
+///
+/// TODO(#1147): replace with `attacks::HazardShape` (ignore unsupported variants).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum AttackDriveShape {
 	/// Vertical column. Local Y is up, base at the pose origin.
@@ -133,6 +152,8 @@ impl AttackDriveShape {
 }
 
 /// Local copy of `attacks::AttackPresentationKind` payloads this crate cares about.
+///
+/// TODO(#1147): replace with `attacks::AttackPresentationKind`.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum AttackDriveKind {
 	Stage,
@@ -142,6 +163,9 @@ pub enum AttackDriveKind {
 }
 
 /// Local copy of one `attacks::AttackPresentationEvent`.
+///
+/// TODO(#1147): replace with `attacks::AttackPresentationEvent` plus a
+/// `From` impl, behind `attack-presentation`.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct AttackDriveEvent {
 	pub instance: AttackInstanceKey,

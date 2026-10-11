@@ -111,6 +111,8 @@ pub enum PlaygroundCommand {
 	Play,
 	/// Stop automatically repeating the last show.
 	Noloop,
+	/// Toggle the bottom command drawer (same as F1). Hide it for captures.
+	Hud,
 }
 
 /// Queued `/show` requests. Applied once [`maybraid_vfx::VfxLibrary`] exists.
@@ -315,6 +317,14 @@ impl PlaygroundCommand {
 					world.resource_mut::<LoopEnabled>().0 = false;
 				});
 				*console = "loop off".into();
+			}
+			Self::Hud => {
+				commands.queue(|world: &mut World| {
+					let mut visible =
+						world.resource_mut::<game_commands::GameCommandDrawerVisible>();
+					visible.0 = !visible.0;
+				});
+				*console = "drawer toggled".into();
 			}
 		}
 	}
