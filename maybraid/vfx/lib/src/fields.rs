@@ -265,6 +265,12 @@ mod tests {
 		if positions.len() < 16 {
 			return Err(format!("verts {}", positions.len()));
 		}
+		for position in positions {
+			let angle = position[0].atan2(position[2]);
+			if angle.abs() > std::f32::consts::FRAC_PI_2 + 0.05 {
+				return Err(format!("angle {angle} outside half-turn"));
+			}
+		}
 		Ok(())
 	}
 }

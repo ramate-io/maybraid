@@ -97,6 +97,15 @@ impl FieldMaterial {
 		self.envelope.w = spread.clamp(0.2, std::f32::consts::TAU);
 	}
 
+	/// CPU copy of the shock-ring cone in `field_material.wgsl`.
+	pub fn shock_cone(angle: f32, spread: f32) -> f32 {
+		let half = (spread * 0.5).max(0.12);
+		let edge0 = (half - 0.12).max(0.0);
+		let width = (half - edge0).max(1e-4);
+		let t = ((angle.abs() - edge0) / width).clamp(0.0, 1.0);
+		1.0 - t * t * (3.0 - 2.0 * t)
+	}
+
 	pub fn alpha_mode_for_kind(&self) -> AlphaMode {
 		if self.params.w < 0.5 {
 			AlphaMode::Add
@@ -180,5 +189,23 @@ mod tests {
 		assert_eq!(core.alpha_mode(), AlphaMode::Add);
 		assert_eq!(sheath.alpha_mode(), AlphaMode::Blend);
 		assert!(core.extras.x > sheath.extras.x);
+	}
+
+	#[test]
+	fn shock_cone_keeps_forward_wedge() -> Result<(), String> {
+		let spread = 2.2;
+		let on_axis = FieldMaterial::shock_cone(0.0, spread);
+		let edge = FieldMaterial::shock_cone(1.2, spread);
+		let behind = FieldMaterial::shock_cone(std::f32::consts::PI, spread);
+		if on_axis < 0.95 {
+			return Err(format!("on-axis {on_axis}"));
+		}
+		if edge > 0.05 {
+			return Err(format!("edge {edge}"));
+		}
+		if behind > 0.05 {
+			return Err(format!("behind {behind}"));
+		}
+		Ok(())
 	}
 }

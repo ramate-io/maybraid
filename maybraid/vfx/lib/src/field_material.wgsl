@@ -170,13 +170,14 @@ fn contact_shade(local: vec3<f32>, n: vec3<f32>, view_dir: vec3<f32>) -> vec4<f3
     return vec4<f32>(rgb, alpha);
 }
 
-fn shock_shade(local: vec3<f32>, n: vec3<f32>, view_dir: vec3<f32>, uv: vec2<f32>) -> vec4<f32> {
+fn shock_shade(local: vec3<f32>, n: vec3<f32>, view_dir: vec3<f32>) -> vec4<f32> {
     let radial = saturate(length(local.xz) * 2.0);
     let rim = 1.0 - smoothstep(0.72, 1.0, radial);
     let inner = smoothstep(0.55, 0.82, radial);
     let crest = fbm(vec3<f32>(local.xz * 6.0, params.z + params.x * extras.y));
     let facing = saturate(abs(dot(n, view_dir)));
-    let angle = (uv.x - 0.5) * 6.283185;
+    // Object-space yaw about +Z. UVs are not always present on this pipeline.
+    let angle = atan2(local.x, local.z);
     let half = max(envelope.w * 0.5, 0.12);
     let cone = 1.0 - smoothstep(half - 0.12, half, abs(angle));
     var rgb = mix(color_cool.xyz, mix(color_mid.xyz, color_hot.xyz, crest), rim);
@@ -194,14 +195,9 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
 #else
     let local = vec3<f32>(0.0);
 #endif
-#ifdef VERTEX_UVS_A
-    let uv = mesh.uv;
-#else
-    let uv = vec2<f32>(0.5, 0.5);
-#endif
     var shaded: vec4<f32>;
     if params.w > 2.5 {
-        shaded = shock_shade(local, n, view_dir, uv);
+        shaded = shock_shade(local, n, view_dir);
     } else if params.w > 1.5 {
         shaded = contact_shade(local, n, view_dir);
     } else if params.w > 0.5 {
