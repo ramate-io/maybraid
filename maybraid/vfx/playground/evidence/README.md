@@ -19,4 +19,11 @@ VFX_CAPTURE=1 VFX_FREEZE=0.42 VFX_FRAME=side            cargo run -p vfx-playgro
 VFX_CAPTURE=1 VFX_FREEZE=0.42 VFX_FRAME=three-quarter   cargo run -p vfx-playground -- sonic-wave --range 8 --speed 16 --count 3 --radius 0.4 --thickness 0.1 --interval 0.18 --seed 2
 ```
 
+Checked-in stills (console hidden):
+
+- `god_beam_7m_full.png` — 7 m × 96 m column, ground to top
+- `god_beam_7m_scale.png` — same beam with the 1.8 m stand-in
+- `sonic_boss_20m_side.png` / `sonic_boss_20m_three_quarter.png` — three rings from a boss-scale mouth
+- `sonic_ordinary_8m_side.png` / `sonic_ordinary_8m_three_quarter.png` — same burst at ordinary scale
+
 `VFX_CANCEL_AT` stills the God Beam fade-from-cancel path.

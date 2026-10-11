@@ -9,6 +9,9 @@ pub struct GroundPlane;
 #[derive(Component)]
 pub struct MouthEmitter;
 
+#[derive(Component)]
+pub struct CharacterScale;
+
 pub fn setup_ground(
 	mut commands: Commands,
 	mut meshes: ResMut<Assets<Mesh>>,
@@ -44,7 +47,7 @@ pub fn setup_ground(
 	commands.spawn((
 		Mesh3d(wall),
 		MeshMaterial3d(plaster.clone()),
-		Transform::from_xyz(-1.15, 1.3, 0.15),
+		Transform::from_xyz(-3.4, 1.3, -1.6),
 		Name::new("vfx-occluder-wall"),
 	));
 
@@ -67,6 +70,7 @@ pub fn setup_ground(
 		Mesh3d(body),
 		MeshMaterial3d(figure),
 		Transform::from_xyz(6.4, 0.9, 4.2),
+		CharacterScale,
 		Name::new("vfx-character-scale"),
 	));
 }
@@ -78,6 +82,7 @@ pub fn sync_mouth_emitter(
 	mut materials: ResMut<Assets<StandardMaterial>>,
 	last: Res<LastVfxShow>,
 	existing: Query<Entity, With<MouthEmitter>>,
+	mut stand_in: Query<&mut Visibility, With<CharacterScale>>,
 ) {
 	if !last.is_changed() {
 		return;
@@ -89,7 +94,13 @@ pub fn sync_mouth_emitter(
 		return;
 	};
 	if canonicalize_effect_name(&request.effect) != Some(SONIC_WAVE) {
+		for mut visibility in &mut stand_in {
+			*visibility = Visibility::Inherited;
+		}
 		return;
+	}
+	for mut visibility in &mut stand_in {
+		*visibility = Visibility::Hidden;
 	}
 	let mouth = mouth_height(&request.drive);
 	let boss = request.drive.size >= 16.0 || request.drive.radius >= 0.7;
@@ -106,25 +117,25 @@ pub fn sync_mouth_emitter(
 	});
 	let head = meshes.add(Sphere::new(head_r));
 	let body = meshes.add(Capsule3d::new(body_r, body_half * 2.0));
-	let mouth_mark = meshes.add(Sphere::new(head_r * 0.22));
+	let mouth_mark = meshes.add(Sphere::new(head_r * 0.28));
 	commands.spawn((
 		Mesh3d(body),
 		MeshMaterial3d(skin.clone()),
-		Transform::from_xyz(0.0, body_half + body_r * 0.15, -head_r * 0.45),
+		Transform::from_xyz(0.0, body_half + body_r * 0.15, -head_r * 0.85),
 		MouthEmitter,
 		Name::new("vfx-mouth-body"),
 	));
 	commands.spawn((
 		Mesh3d(head),
 		MeshMaterial3d(skin),
-		Transform::from_xyz(0.0, mouth + head_r * 0.15, -head_r * 0.55),
+		Transform::from_xyz(0.0, mouth + head_r * 0.08, -head_r * 0.72),
 		MouthEmitter,
 		Name::new("vfx-mouth-head"),
 	));
 	commands.spawn((
 		Mesh3d(mouth_mark),
 		MeshMaterial3d(dark),
-		Transform::from_xyz(0.0, mouth, 0.02),
+		Transform::from_xyz(0.0, mouth, head_r * 0.12),
 		MouthEmitter,
 		Name::new("vfx-mouth-emitter"),
 	));

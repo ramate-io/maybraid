@@ -191,16 +191,15 @@ fn frame_camera(
 		SONIC_WAVE => {
 			let range = request.drive.size.max(6.0) * request.scale;
 			let mouth = mouth_height(&request.drive);
-			let look = Vec3::new(0.0, mouth, request.distance + range * 0.40);
+			let mid = request.distance + range * 0.38;
+			let look = Vec3::new(0.0, mouth, mid);
 			match capture::frame().as_deref() {
-				Some("side") => {
-					(Vec3::new(range * 0.18 + 7.0, mouth, request.distance + range * 0.40), look)
-				}
+				Some("side") => (Vec3::new((range * 0.70).max(9.0), mouth, mid), look),
 				_ => (
 					Vec3::new(
-						range * 0.38 + 4.2,
-						mouth + range * 0.06 + 2.4,
-						request.distance - range * 0.16 - 2.4,
+						range * 0.22 + 2.8,
+						mouth + 1.6,
+						request.distance - range * 0.06 - 1.6,
 					),
 					look,
 				),
