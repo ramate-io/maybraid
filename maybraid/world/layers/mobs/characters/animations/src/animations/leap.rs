@@ -12,6 +12,8 @@
 pub const TAKEOFF_END: f32 = 0.18;
 /// Air occupies the middle slice; land is the remainder.
 pub const AIR_END: f32 = 0.72;
+/// Fraction of the **air** segment used to blend push-off into the gather cycle.
+pub const LEAP_TAKEOFF_BLEND_FRACTION: f32 = 0.28;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Leap {

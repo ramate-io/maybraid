@@ -2,7 +2,9 @@ use character_rigs::authoring::HumanoidPose;
 use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
 use character_rigs::Side;
 
-use crate::animations::{smoothstep, UprightLeap, AIR_END, TAKEOFF_END};
+use crate::animations::{
+	smoothstep, UprightLeap, AIR_END, LEAP_TAKEOFF_BLEND_FRACTION, TAKEOFF_END,
+};
 use crate::{Animation, Progress};
 
 #[derive(Clone, Copy)]
@@ -51,14 +53,25 @@ impl UprightLeap {
 		if t < TAKEOFF_END {
 			self.takeoff(smoothstep(t / TAKEOFF_END))
 		} else if t < AIR_END {
-			self.air(smoothstep((t - TAKEOFF_END) / (AIR_END - TAKEOFF_END)))
+			let air_span = (AIR_END - TAKEOFF_END).max(f32::EPSILON);
+			let air_local = (t - TAKEOFF_END) / air_span;
+			let air_u = smoothstep(air_local);
+			let air_pose = self.air(air_u);
+			let blend_end = LEAP_TAKEOFF_BLEND_FRACTION;
+			if air_local < blend_end {
+				let takeoff_pose = self.takeoff(1.0);
+				let weight = smoothstep((air_local / blend_end).clamp(0.0, 1.0));
+				blend_leap_pose(takeoff_pose, air_pose, weight)
+			} else {
+				air_pose
+			}
 		} else {
 			self.land(smoothstep((t - AIR_END) / (1.0 - AIR_END).max(f32::EPSILON)))
 		}
 	}
 
 	/// `u = 0` is a running split; `u = 1` is the push-off.
-	fn takeoff(&self, u: f32) -> LeapPose {
+	pub(crate) fn takeoff(&self, u: f32) -> LeapPose {
 		let lead_femur = lerp(-self.lead_stride, -self.lead_stride * 0.25, u);
 		let trail_femur = lerp(self.trail_stride, self.trail_stride * 0.2, u);
 		let lead_shin = lerp(self.takeoff_knee_lead, self.takeoff_knee_lead * 0.2, u);
@@ -80,7 +93,7 @@ impl UprightLeap {
 	}
 
 	/// `u = 0` leaves the ground; gather peaks near mid-air; `u = 1` reaches down.
-	fn air(&self, u: f32) -> LeapPose {
+	pub(crate) fn air(&self, u: f32) -> LeapPose {
 		let gather = (u * std::f32::consts::PI).sin();
 		let femur = lerp(-self.lead_stride * 0.25, -self.air_femur, gather);
 		let shin = lerp(self.takeoff_knee_lead * 0.2, self.air_knee, gather);
@@ -125,10 +138,27 @@ fn lerp(a: f32, b: f32, t: f32) -> f32 {
 	a + (b - a) * t
 }
 
+fn blend_leap_pose(from: LeapPose, to: LeapPose, weight: f32) -> LeapPose {
+	let w = weight.clamp(0.0, 1.0);
+	LeapPose {
+		left_femur: lerp(from.left_femur, to.left_femur, w),
+		right_femur: lerp(from.right_femur, to.right_femur, w),
+		left_shin: lerp(from.left_shin, to.left_shin, w),
+		right_shin: lerp(from.right_shin, to.right_shin, w),
+		lean: lerp(from.lean, to.lean, w),
+		left_shoulder: lerp(from.left_shoulder, to.left_shoulder, w),
+		right_shoulder: lerp(from.right_shoulder, to.right_shoulder, w),
+		left_humerus: lerp(from.left_humerus, to.left_humerus, w),
+		right_humerus: lerp(from.right_humerus, to.right_humerus, w),
+		elbow: lerp(from.elbow, to.elbow, w),
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
 	use crate::animations::{Leap, Squat, TwoFootedJump};
+	use bevy::prelude::Vec3;
 
 	fn femur_z(rig: &HumanoidV0Rig, side: Side) -> f32 {
 		let name = match side {
@@ -140,6 +170,205 @@ mod tests {
 
 	fn apply_leap(rig: &mut HumanoidV0Rig, progress: f32) -> crate::Effects {
 		UprightLeap::from_leap(&Leap::default()).apply(rig, progress)
+	}
+
+	/// Matches [`player::body::JUMP_TAKEOFF_DURATION`] — takeoff maps `0..TAKEOFF_END` over this many seconds.
+	const JUMP_TAKEOFF_DURATION: f32 = 0.14;
+	/// Normalized progress step for one 60 Hz frame while in the takeoff phase.
+	const TAKEOFF_PROGRESS_STEP_60FPS: f32 = (1.0 / 60.0) / JUMP_TAKEOFF_DURATION * TAKEOFF_END;
+
+	const TAKEOFF_AIR_MAX_BONE_JUMP: f32 = 0.025;
+
+	fn bone_tip(rig: &HumanoidV0Rig, name: &str) -> Vec3 {
+		rig.character_point(name) + rig.character_length(name)
+	}
+
+	fn max_bone_tip_jump(before: &HumanoidV0Rig, after: &HumanoidV0Rig) -> (f32, &'static str) {
+		let mut worst = 0.0f32;
+		let mut worst_name = "";
+		for name in before.animation_bone_names() {
+			let delta = (bone_tip(after, name) - bone_tip(before, name)).length();
+			if delta > worst {
+				worst = delta;
+				worst_name = name;
+			}
+		}
+		(worst, worst_name)
+	}
+
+	fn apply_at_unblended(leap: &UprightLeap, rig: &mut HumanoidV0Rig, progress: f32) {
+		let t = Progress(progress).clamp();
+		let sample = if t < TAKEOFF_END {
+			leap.takeoff(smoothstep(t / TAKEOFF_END))
+		} else if t < AIR_END {
+			leap.air(smoothstep((t - TAKEOFF_END) / (AIR_END - TAKEOFF_END)))
+		} else {
+			leap.land(smoothstep((t - AIR_END) / (1.0 - AIR_END).max(f32::EPSILON)))
+		};
+		let mut pose = HumanoidPose::default();
+		pose.apply_leg(Side::Left, sample.left_femur, sample.left_shin);
+		pose.apply_leg(Side::Right, sample.right_femur, sample.right_shin);
+		pose.apply_root(sample.lean);
+		pose.apply_arm(
+			Side::Left,
+			sample.left_shoulder,
+			0.0,
+			sample.left_humerus,
+			0.0,
+			sample.elbow,
+		);
+		pose.apply_arm(
+			Side::Right,
+			sample.right_shoulder,
+			0.0,
+			sample.right_humerus,
+			0.0,
+			sample.elbow,
+		);
+		rig.write_pose(&pose);
+	}
+
+	#[test]
+	fn takeoff_air_handoff_is_continuous() -> anyhow::Result<()> {
+		let leap = UprightLeap::default();
+		let eps = 1e-4;
+		let mut before = HumanoidV0Rig::for_clip_test();
+		let mut after = HumanoidV0Rig::for_clip_test();
+		leap.apply(&mut before, TAKEOFF_END - eps);
+		leap.apply(&mut after, TAKEOFF_END + eps);
+		let (jump, bone) = max_bone_tip_jump(&before, &after);
+		assert!(
+			jump < TAKEOFF_AIR_MAX_BONE_JUMP,
+			"takeoff→air handoff jumped {jump:.4} m on {bone}"
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn takeoff_air_touchdown_frame_step_stays_bounded() -> anyhow::Result<()> {
+		let leap = UprightLeap::default();
+		let half = TAKEOFF_PROGRESS_STEP_60FPS * 0.5;
+		let mut before = HumanoidV0Rig::for_clip_test();
+		let mut after = HumanoidV0Rig::for_clip_test();
+		leap.apply(&mut before, TAKEOFF_END - half);
+		leap.apply(&mut after, TAKEOFF_END + half);
+		let (jump, bone) = max_bone_tip_jump(&before, &after);
+		assert!(
+			jump < TAKEOFF_AIR_MAX_BONE_JUMP,
+			"60 Hz step across takeoff→air jumped {jump:.4} m on {bone}"
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn unblended_takeoff_air_handoff_pops() -> anyhow::Result<()> {
+		let leap = UprightLeap::default();
+		let eps = 1e-4;
+		let mut before = HumanoidV0Rig::for_clip_test();
+		let mut after = HumanoidV0Rig::for_clip_test();
+		apply_at_unblended(&leap, &mut before, TAKEOFF_END - eps);
+		apply_at_unblended(&leap, &mut after, TAKEOFF_END + eps);
+		let (jump, bone) = max_bone_tip_jump(&before, &after);
+		assert!(
+			jump > TAKEOFF_AIR_MAX_BONE_JUMP,
+			"baseline should pop across handoff, got {jump:.4} m on {bone}"
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn takeoff_air_blend_matches_endpoints() -> anyhow::Result<()> {
+		let leap = UprightLeap::default();
+		let air_span = AIR_END - TAKEOFF_END;
+		let blend_end = LEAP_TAKEOFF_BLEND_FRACTION;
+		let at_air_start = TAKEOFF_END + 1e-5;
+		let at_blend_end = TAKEOFF_END + air_span * blend_end;
+
+		let mut at_takeoff_end = HumanoidV0Rig::for_clip_test();
+		leap.apply(&mut at_takeoff_end, TAKEOFF_END - 1e-5);
+
+		let mut blended_start = HumanoidV0Rig::for_clip_test();
+		leap.apply(&mut blended_start, at_air_start);
+
+		for name in at_takeoff_end.animation_bone_names() {
+			let a = at_takeoff_end.rotation(name);
+			let b = blended_start.rotation(name);
+			assert!(
+				a.dot(b).abs() > 1.0 - 1e-4,
+				"air start should match takeoff end on {name}"
+			);
+		}
+
+		let air_u = smoothstep(blend_end);
+		let mut pure_air = HumanoidV0Rig::for_clip_test();
+		let air_pose = leap.air(air_u);
+		let mut pose = HumanoidPose::default();
+		pose.apply_leg(Side::Left, air_pose.left_femur, air_pose.left_shin);
+		pose.apply_leg(Side::Right, air_pose.right_femur, air_pose.right_shin);
+		pose.apply_root(air_pose.lean);
+		pose.apply_arm(
+			Side::Left,
+			air_pose.left_shoulder,
+			0.0,
+			air_pose.left_humerus,
+			0.0,
+			air_pose.elbow,
+		);
+		pose.apply_arm(
+			Side::Right,
+			air_pose.right_shoulder,
+			0.0,
+			air_pose.right_humerus,
+			0.0,
+			air_pose.elbow,
+		);
+		pure_air.write_pose(&pose);
+
+		let mut blended_end = HumanoidV0Rig::for_clip_test();
+		leap.apply(&mut blended_end, at_blend_end - 1e-5);
+
+		for name in pure_air.animation_bone_names() {
+			let a = pure_air.rotation(name);
+			let b = blended_end.rotation(name);
+			assert!(a.dot(b).abs() > 1.0 - 1e-4, "blend end should match air on {name}");
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn takeoff_air_blend_does_not_change_mid_air() -> anyhow::Result<()> {
+		let leap = UprightLeap::default();
+		let mid_air = TAKEOFF_END + (AIR_END - TAKEOFF_END) * 0.55;
+		let mut blended = HumanoidV0Rig::for_clip_test();
+		let mut pure = HumanoidV0Rig::for_clip_test();
+		leap.apply(&mut blended, mid_air);
+		apply_at_unblended(&leap, &mut pure, mid_air);
+		for name in blended.animation_bone_names() {
+			let a = blended.rotation(name);
+			let b = pure.rotation(name);
+			assert!(a.dot(b).abs() > 1.0 - 1e-4, "mid-air unchanged on {name}");
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn scrubbing_back_across_takeoff_air_stays_continuous() -> anyhow::Result<()> {
+		let leap = UprightLeap::default();
+		let forward = TAKEOFF_END + (AIR_END - TAKEOFF_END) * 0.08;
+		let mut rig = HumanoidV0Rig::for_clip_test();
+		leap.apply(&mut rig, forward);
+		let snapshot = rig.clone();
+		leap.apply(&mut rig, TAKEOFF_END - 1e-4);
+		leap.apply(&mut rig, forward);
+		for name in snapshot.animation_bone_names() {
+			let a = snapshot.rotation(name);
+			let b = rig.rotation(name);
+			assert!(
+				a.dot(b).abs() > 1.0 - 1e-4,
+				"re-scrub to mid-blend should restore pose on {name}"
+			);
+		}
+		Ok(())
 	}
 
 	#[test]
