@@ -293,10 +293,7 @@ mod tests {
 		for name in at_takeoff_end.animation_bone_names() {
 			let a = at_takeoff_end.rotation(name);
 			let b = blended_start.rotation(name);
-			assert!(
-				a.dot(b).abs() > 1.0 - 1e-4,
-				"air start should match takeoff end on {name}"
-			);
+			assert!(a.dot(b).abs() > 1.0 - 1e-4, "air start should match takeoff end on {name}");
 		}
 
 		let air_u = smoothstep(blend_end);
