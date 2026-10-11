@@ -12,6 +12,7 @@ rust-version = { workspace = true }
 [dependencies]
 bevy = { workspace = true }
 building-shaders = { workspace = true }
+chain-shaders = { workspace = true }
 characters = { workspace = true }
 chico = { workspace = true }
 firearms = { workspace = true }

@@ -5,6 +5,7 @@ use bevy::prelude::*;
 use building_shaders::{
 	init_urban_material_caches, BuildingShadersPlugin, UrbanSurfaceMaterialLib,
 };
+use chain_shaders::{init_chain_material_caches, ChainMaterialLib, ChainShadersPlugin};
 use characters::material_lib::{init_character_material_caches, CharacterMaterialLib};
 use characters::CharacterShadersPlugin;
 use chico::VegetationOnTerrainMaterialLib;
@@ -20,12 +21,13 @@ use vegetation_bumpout::init_bump_out_material_caches;
 use vegetation_shaders::{init_vegetation_material_caches, VegetationShadersPlugin};
 
 /// World-model lib: furniture kits, character face / clothing, Richmond urban
-/// surfaces, the muzzle flame, energy looks, then vegetation and Standard.
+/// surfaces, the muzzle flame, energy looks, mythical chain, then vegetation
+/// and Standard.
 ///
 /// Furniture recipes (`furniture_wood`, …) must be claimed **before** urban
 /// `wood`. Urban recipes (`stucco`, `wood`, …), `muzzle_flame`, and the
-/// `laser_*` energy recipes must be claimed **before** vegetation's
-/// [`StandardMaterial`] fallback.
+/// `laser_*` energy recipes and `mythical_chain` must be claimed **before**
+/// vegetation's [`StandardMaterial`] fallback.
 ///
 /// Further domain libs (Durham recipes on [`MaterialRef`], sky) compose here.
 #[derive(SystemParam)]
@@ -35,6 +37,7 @@ pub struct WorldMaterialLib<'w> {
 	pub urban: UrbanSurfaceMaterialLib<'w>,
 	pub muzzle: MuzzleFlameMaterialLib<'w>,
 	pub energy: EnergyMaterialLib<'w>,
+	pub chain: ChainMaterialLib<'w>,
 	pub vegetation: VegetationOnTerrainMaterialLib<'w>,
 }
 
@@ -50,6 +53,7 @@ impl MaterialLib for WorldMaterialLib<'_> {
 			|| self.urban.try_fulfill(entity, material_ref, commands)
 			|| self.muzzle.try_fulfill(entity, material_ref, commands)
 			|| self.energy.try_fulfill(entity, material_ref, commands)
+			|| self.chain.try_fulfill(entity, material_ref, commands)
 			|| self.vegetation.try_fulfill(entity, material_ref, commands)
 	}
 
@@ -78,6 +82,7 @@ impl Plugin for WorldMaterialRefPlugin {
 		init_urban_material_caches(app);
 		init_muzzle_flame_caches(app);
 		init_energy_material_caches(app);
+		init_chain_material_caches(app);
 		init_vegetation_material_caches(app);
 		init_bump_out_material_caches(app);
 		if material_ref_plugin_installed(app) {
@@ -109,6 +114,9 @@ impl Plugin for WorldMaterialsShadersPlugin {
 		if !app.is_plugin_added::<EnergyMaterialPlugin>() {
 			app.add_plugins(EnergyMaterialPlugin);
 		}
+		if !app.is_plugin_added::<ChainShadersPlugin>() {
+			app.add_plugins(ChainShadersPlugin);
+		}
 		if !app.is_plugin_added::<VegetationShadersPlugin>() {
 			app.add_plugins(VegetationShadersPlugin);
 		}
@@ -130,6 +138,7 @@ mod tests {
 	use characters::material_lib::{ClothingShaderMaterialRefCache, FaceShaderMaterialRefCache};
 
 	use building_shaders::UrbanSurfaceMaterialRefCache;
+	use chain_shaders::ChainMaterialRefCache;
 	use firearms::{EnergyMaterialRefCache, MuzzleFlameMaterialRefCache};
 	use furniture_shaders::FurnitureSurfaceMaterialRefCache;
 	use vegetation_bumpout::BumpOutMaterialRefCache;
@@ -147,6 +156,7 @@ mod tests {
 		assert!(app.world().contains_resource::<FurnitureSurfaceMaterialRefCache>());
 		assert!(app.world().contains_resource::<MuzzleFlameMaterialRefCache>());
 		assert!(app.world().contains_resource::<EnergyMaterialRefCache>());
+		assert!(app.world().contains_resource::<ChainMaterialRefCache>());
 		assert!(app.world().contains_resource::<LeafMaterialRefCache>());
 		assert!(app.world().contains_resource::<StickMaterialRefCache>());
 		assert!(app.world().contains_resource::<FrondMaterialRefCache>());
