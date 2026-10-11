@@ -7,9 +7,9 @@ pub fn ui_config() -> GameCommandUiConfig {
 	GameCommandUiConfig {
 		title: "VFX — / cmd — WASD/Space/Shift — mouse look".into(),
 		empty_console_text:
-			"Console: `fiery-explosion`, `show`, `orbit`, `freeze 0.4`, `spread`, `help`".into(),
+			"Console: `god-beam`, `sonic-wave`, `fiery-explosion`, `show`, `cancel`, `help`".into(),
 		root_background: Color::srgba(0.08, 0.09, 0.12, 0.86),
-		controls_hint: "fiery-explosion — show — Enter — history".into(),
+		controls_hint: "god-beam — sonic-wave — fiery-explosion — show — Enter".into(),
 	}
 }
 

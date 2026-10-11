@@ -70,7 +70,7 @@ fn setup_lighting(mut commands: Commands) {
 mod tests {
 	use super::*;
 	use game_commands::command::GameCommand;
-	use maybraid_vfx::{FIERY_EXPLOSION, FIREBALL, FLASH, SMOKE, SPARKS};
+	use maybraid_vfx::{FIERY_EXPLOSION, FIREBALL, FLASH, GOD_BEAM, SMOKE, SONIC_WAVE, SPARKS};
 
 	#[test]
 	fn parses_help() -> Result<(), String> {
@@ -132,6 +132,8 @@ mod tests {
 			("show smoke", SMOKE),
 			("show sparks", SPARKS),
 			("show fiery-explosion", FIERY_EXPLOSION),
+			("show god-beam", GOD_BEAM),
+			("show sonic-wave", SONIC_WAVE),
 		] {
 			let command = <PlaygroundCommand as GameCommand>::parse_line(line)?;
 			let PlaygroundCommand::Show { effect, .. } = command else {
@@ -148,6 +150,36 @@ mod tests {
 		assert_eq!(effect, "sparks");
 		assert!((scale - 2.0).abs() < 1e-4);
 		assert!((intensity - 1.5).abs() < 1e-4);
+		Ok(())
+	}
+
+	#[test]
+	fn parses_god_beam_width_as_diameter() -> Result<(), String> {
+		let command = <PlaygroundCommand as GameCommand>::parse_line(
+			"god-beam --width 7 --height 96 --lifetime 10 --seed 2",
+		)?;
+		let PlaygroundCommand::GodBeam { width, height, lifetime, seed, .. } = command else {
+			return Err("expected god-beam".into());
+		};
+		assert!((width - 7.0).abs() < 1e-4);
+		assert!((height - 96.0).abs() < 1e-4);
+		assert!((lifetime - 10.0).abs() < 1e-4);
+		assert_eq!(seed, Some(2));
+		Ok(())
+	}
+
+	#[test]
+	fn parses_sonic_wave_wavefront() -> Result<(), String> {
+		let command = <PlaygroundCommand as GameCommand>::parse_line(
+			"sonic-wave --range 28 --speed 22 --spread 2.2 --count 3",
+		)?;
+		let PlaygroundCommand::SonicWave { range, speed, spread, count, .. } = command else {
+			return Err("expected sonic-wave".into());
+		};
+		assert!((range - 28.0).abs() < 1e-4);
+		assert!((speed - 22.0).abs() < 1e-4);
+		assert!((spread - 2.2).abs() < 1e-4);
+		assert_eq!(count, 3);
 		Ok(())
 	}
 }

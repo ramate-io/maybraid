@@ -6,10 +6,11 @@ use bevy_hanabi::EffectAsset;
 
 use crate::assets::{fire_flipbook, smoke_flipbook, spark_taper, VfxFlipbooks};
 use crate::composition::EffectDefinition;
-use crate::effects::fiery_explosion;
+use crate::effects::{fiery_explosion, god_beam, sonic_wave};
+use crate::fields::{unit_column_mesh, unit_disk_mesh, unit_ring_mesh};
 use crate::layers::{fireball, flash, smoke, sparks};
 use crate::lobes::rounded_lobe_mesh;
-use crate::names::{FIERY_EXPLOSION, FIREBALL, FLASH, SMOKE, SPARKS};
+use crate::names::{FIERY_EXPLOSION, FIREBALL, FLASH, GOD_BEAM, SMOKE, SONIC_WAVE, SPARKS};
 
 /// Shared definitions. Clone a handle out; never mutate the compiled assets.
 #[derive(Resource, Clone, Debug)]
@@ -20,6 +21,8 @@ pub struct VfxLibrary {
 	pub smoke: EffectDefinition,
 	pub sparks: EffectDefinition,
 	pub fiery_explosion: EffectDefinition,
+	pub god_beam: EffectDefinition,
+	pub sonic_wave: EffectDefinition,
 }
 
 impl VfxLibrary {
@@ -30,6 +33,8 @@ impl VfxLibrary {
 			SMOKE => Some(&self.smoke),
 			SPARKS => Some(&self.sparks),
 			FIERY_EXPLOSION => Some(&self.fiery_explosion),
+			GOD_BEAM => Some(&self.god_beam),
+			SONIC_WAVE => Some(&self.sonic_wave),
 			_ => None,
 		}
 	}
@@ -43,6 +48,8 @@ pub fn canonicalize_effect_name(name: &str) -> Option<&'static str> {
 		"smoke" => Some(SMOKE),
 		"sparks" | "spark" => Some(SPARKS),
 		"fiery-explosion" | "explosion" => Some(FIERY_EXPLOSION),
+		"god-beam" | "godbeam" | "beam" => Some(GOD_BEAM),
+		"sonic-wave" | "sonic" | "bray" => Some(SONIC_WAVE),
 		_ => None,
 	}
 }
@@ -65,6 +72,9 @@ pub fn setup_vfx_library(
 	let smoke_mesh = smoke::compile_mesh(lobe_mesh);
 	let smoke_wisps = smoke::compile_wisps(&mut effects, &flipbooks.smoke);
 	let sparks_part = sparks::compile(&mut effects, flipbooks.spark.clone());
+	let field_column = meshes.add(unit_column_mesh());
+	let field_disk = meshes.add(unit_disk_mesh());
+	let field_ring = meshes.add(unit_ring_mesh(std::f32::consts::TAU));
 	let library = VfxLibrary {
 		flash: flash::definition(flash_mesh.clone()),
 		fireball: fireball::definition(fireball_mesh.clone(), fireball_wisps.clone()),
@@ -78,6 +88,8 @@ pub fn setup_vfx_library(
 			smoke_wisps.clone(),
 			sparks_part.clone(),
 		),
+		god_beam: god_beam::definition(field_column, field_disk),
+		sonic_wave: sonic_wave::definition(field_ring),
 		flipbooks,
 	};
 	for part in [&fireball_wisps, &smoke_wisps, &sparks_part] {
@@ -103,6 +115,8 @@ mod tests {
 		assert_eq!(canonicalize_effect_name("fiery_explosion"), Some(FIERY_EXPLOSION));
 		assert_eq!(canonicalize_effect_name("fiery-explosion"), Some(FIERY_EXPLOSION));
 		assert_eq!(canonicalize_effect_name("Fire"), Some(FIREBALL));
+		assert_eq!(canonicalize_effect_name("god-beam"), Some(GOD_BEAM));
+		assert_eq!(canonicalize_effect_name("sonic_wave"), Some(SONIC_WAVE));
 		assert_eq!(canonicalize_effect_name("nope"), None);
 	}
 }

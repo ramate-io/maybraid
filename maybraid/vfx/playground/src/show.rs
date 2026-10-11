@@ -2,8 +2,11 @@
 
 use bevy::prelude::*;
 use game_commands::ui::GameCommandStatusText;
-use maybraid_vfx::{spawn_vfx, VfxLibrary, VfxSpawn};
+use maybraid_vfx::{
+	canonicalize_effect_name, spawn_vfx, VfxLibrary, VfxSpawn, GOD_BEAM, SONIC_WAVE,
+};
 
+use crate::camera::CameraController;
 use crate::commands::{LoopEnabled, PendingVfxShows, PreviewFreeze, SpreadOnce, VfxShowRequest};
 
 pub const SHOW_ORIGIN: Vec3 = Vec3::new(0.0, 1.2, 0.0);
@@ -21,6 +24,7 @@ pub struct RepeatingVfxShow {
 	pub wait: f32,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn apply_pending_shows(
 	mut commands: Commands,
 	library: Option<Res<VfxLibrary>>,
@@ -30,6 +34,7 @@ pub fn apply_pending_shows(
 	mut spread: ResMut<SpreadOnce>,
 	mut status: ResMut<GameCommandStatusText>,
 	looping: Res<LoopEnabled>,
+	mut cameras: Query<(&mut Transform, &mut CameraController), With<Camera3d>>,
 ) {
 	let Some(library) = library else {
 		return;
@@ -63,15 +68,17 @@ pub fn apply_pending_shows(
 		}
 		last.request = Some(VfxShowRequest { seed: spawn.seed, ..request.clone() });
 		last.label = format!(
-			"{} · scale {:.2} · intensity {:.2} · playback {:.2} · d {:.1} · seed {}",
+			"{} · scale {:.2} · intensity {:.2} · playback {:.2} · d {:.1} · seed {} · size {:.1}",
 			definition.name,
 			request.scale,
 			request.intensity,
 			request.playback,
 			request.distance,
-			spawn.resolved_seed()
+			spawn.resolved_seed(),
+			spawn.drive.size
 		);
 		status.0 = format!("show {}", last.label);
+		frame_camera(&request, &mut cameras);
 	}
 }
 
@@ -124,15 +131,63 @@ fn burst(
 	definition: &maybraid_vfx::EffectDefinition,
 	request: &VfxShowRequest,
 ) -> VfxSpawn {
+	let origin = show_origin(&request.effect) + Vec3::Z * request.distance;
 	let spawn = VfxSpawn {
-		transform: Transform::from_translation(SHOW_ORIGIN + Vec3::Z * request.distance),
+		transform: Transform::from_translation(origin),
 		scale: request.scale,
 		intensity: request.intensity,
 		seed: request.seed,
 		playback: request.playback,
+		drive: request.drive,
 		..default()
 	}
 	.resolved_for(definition);
 	spawn_vfx(commands, definition, spawn.clone());
 	spawn
+}
+
+fn show_origin(effect: &str) -> Vec3 {
+	match canonicalize_effect_name(effect) {
+		Some(GOD_BEAM) => Vec3::ZERO,
+		Some(SONIC_WAVE) => Vec3::new(0.0, 0.2, 0.0),
+		_ => SHOW_ORIGIN,
+	}
+}
+
+fn frame_camera(
+	request: &VfxShowRequest,
+	cameras: &mut Query<(&mut Transform, &mut CameraController), With<Camera3d>>,
+) {
+	let Some(name) = canonicalize_effect_name(&request.effect) else {
+		return;
+	};
+	let (pos, look) = match name {
+		GOD_BEAM => {
+			let height = request.drive.reach.clamp(16.0, 96.0) * request.scale;
+			let width = request.drive.size.clamp(3.0, 16.0) * request.scale;
+			(
+				Vec3::new(width * 1.5 + 8.0, height * 0.12 + 5.0, width * 1.7 + 11.0),
+				Vec3::new(0.0, height * 0.16, request.distance),
+			)
+		}
+		SONIC_WAVE => {
+			let range = request.drive.size.max(10.0) * request.scale;
+			(
+				Vec3::new(range * 0.42, range * 0.22 + 5.0, range * 0.55),
+				Vec3::new(0.0, 0.4, request.distance + range * 0.2),
+			)
+		}
+		_ => return,
+	};
+	let Ok((mut transform, mut controller)) = cameras.single_mut() else {
+		return;
+	};
+	*transform = Transform::from_translation(pos).looking_at(look, Vec3::Y);
+	let rotation = transform.rotation;
+	let (x, y, z, w) = (rotation.x, rotation.y, rotation.z, rotation.w);
+	let sin_yaw = 2.0 * (w * y + x * z);
+	let cos_yaw = 1.0 - 2.0 * (y * y + z * z);
+	controller.yaw = sin_yaw.atan2(cos_yaw);
+	let sin_pitch = 2.0 * (w * x - y * z);
+	controller.pitch = sin_pitch.asin();
 }

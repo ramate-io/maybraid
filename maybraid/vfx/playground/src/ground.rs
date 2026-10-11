@@ -8,7 +8,7 @@ pub fn setup_ground(
 	mut meshes: ResMut<Assets<Mesh>>,
 	mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-	let ground = meshes.add(Plane3d::default().mesh().size(40.0, 40.0));
+	let ground = meshes.add(Plane3d::default().mesh().size(80.0, 80.0));
 	let dirt = materials.add(StandardMaterial {
 		base_color: Color::srgb(0.28, 0.24, 0.18),
 		perceptual_roughness: 0.96,
@@ -16,7 +16,7 @@ pub fn setup_ground(
 	});
 	commands.spawn((Mesh3d(ground), MeshMaterial3d(dirt), Transform::IDENTITY, GroundPlane));
 
-	let band = meshes.add(Plane3d::default().mesh().size(40.0, 8.0));
+	let band = meshes.add(Plane3d::default().mesh().size(80.0, 12.0));
 	let cool = materials.add(StandardMaterial {
 		base_color: Color::srgb(0.18, 0.22, 0.26),
 		perceptual_roughness: 0.95,

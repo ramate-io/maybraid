@@ -200,12 +200,25 @@ impl Default for ScaleBounds {
 	}
 }
 
+/// How [`crate::spawn_vfx`] realizes the definition.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum EffectKind {
+	#[default]
+	Burst,
+	GodBeam,
+	SonicWave,
+}
+
 /// Ordered collection of layers forming a named composite.
 #[derive(Clone, Debug)]
 pub struct EffectDefinition {
 	pub name: String,
 	pub layers: Vec<EffectLayer>,
 	pub scale_bounds: ScaleBounds,
+	pub kind: EffectKind,
+	pub authored_duration: Option<f32>,
+	/// Shared procedural meshes for driven effects. Burst definitions leave this empty.
+	pub meshes: Vec<Handle<Mesh>>,
 }
 
 impl EffectDefinition {
@@ -214,6 +227,9 @@ impl EffectDefinition {
 			name: name.into(),
 			layers: layers.into_iter().collect(),
 			scale_bounds: ScaleBounds::default(),
+			kind: EffectKind::Burst,
+			authored_duration: None,
+			meshes: Vec::new(),
 		}
 	}
 
@@ -222,7 +238,23 @@ impl EffectDefinition {
 		self
 	}
 
+	pub fn with_kind(mut self, kind: EffectKind) -> Self {
+		self.kind = kind;
+		self
+	}
+
+	pub fn with_duration(mut self, duration: f32) -> Self {
+		self.authored_duration = Some(duration);
+		self
+	}
+
+	pub fn with_meshes(mut self, meshes: impl IntoIterator<Item = Handle<Mesh>>) -> Self {
+		self.meshes = meshes.into_iter().collect();
+		self
+	}
+
 	pub fn duration(&self) -> f32 {
-		self.layers.iter().map(EffectLayer::duration).fold(0.0, f32::max)
+		self.authored_duration
+			.unwrap_or_else(|| self.layers.iter().map(EffectLayer::duration).fold(0.0, f32::max))
 	}
 }
