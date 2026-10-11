@@ -42,7 +42,8 @@ pub const SONIC_WAVE_RADIUS_MIN: f32 = 0.12;
 pub const SONIC_WAVE_RADIUS_MAX: f32 = 3.0;
 pub const SONIC_WAVE_THICKNESS: f32 = 0.14;
 pub const SONIC_WAVE_THICKNESS_MIN: f32 = 0.04;
-pub const SONIC_WAVE_THICKNESS_MAX: f32 = 0.6;
+/// Wide enough for `#1147` `thickness = 2 * half_depth` (authored 0.70).
+pub const SONIC_WAVE_THICKNESS_MAX: f32 = 2.0;
 pub const SONIC_WAVE_FADE_IN: f32 = 0.08;
 pub const SONIC_WAVE_FADE_OUT: f32 = 0.35;
 
@@ -318,6 +319,30 @@ pub struct SonicWaveState {
 }
 
 impl SonicWaveState {
+	/// Copy [`WavefrontPresentation`](https://github.com/ramate-io/maybraid/pull/1147)
+	/// fields. Does not import `attacks` types. Direction is used as supplied.
+	pub fn follow(
+		origin: Vec3,
+		direction: Vec3,
+		position: Vec3,
+		radius: f32,
+		thickness: f32,
+		wave_index: u32,
+		range: f32,
+	) -> Self {
+		let direction =
+			if direction.length_squared() > 1e-8 { direction.normalize() } else { Vec3::Z };
+		Self {
+			origin,
+			direction,
+			position,
+			radius: radius.max(1e-4),
+			thickness: thickness.max(1e-4),
+			index: wave_index,
+			range: range.max(0.0),
+		}
+	}
+
 	pub fn emit(
 		origin: Vec3,
 		direction: Vec3,
@@ -394,6 +419,7 @@ impl SonicWaveState {
 	}
 
 	/// Ring plane is perpendicular to travel. Mesh faces +Z at unit scale.
+	/// Outer radius and depth match [`Self::radius`] / [`Self::thickness`].
 	pub fn ring_transform(self) -> Transform {
 		let dir = if self.direction.length_squared() > 1e-8 {
 			self.direction.normalize()
@@ -404,9 +430,9 @@ impl SonicWaveState {
 			translation: self.position,
 			rotation: Quat::from_rotation_arc(Vec3::Z, dir),
 			scale: Vec3::new(
-				self.radius.max(SONIC_WAVE_RADIUS_MIN) * 2.0,
-				self.radius.max(SONIC_WAVE_RADIUS_MIN) * 2.0,
-				self.thickness.max(SONIC_WAVE_THICKNESS_MIN),
+				self.radius.max(1e-4) * 2.0,
+				self.radius.max(1e-4) * 2.0,
+				self.thickness.max(1e-4),
 			),
 		}
 	}
@@ -543,6 +569,15 @@ mod tests {
 	}
 
 	#[test]
+	fn sonic_wave_keeps_wavefront_thickness() -> Result<(), String> {
+		let drive = VfxDrive::sonic_wave().with_thickness(0.70).resolved_sonic_wave();
+		if (drive.thickness - 0.70).abs() >= 1e-4 {
+			return Err(format!("clamped authored thickness {}", drive.thickness));
+		}
+		Ok(())
+	}
+
+	#[test]
 	fn sonic_wave_clamps_count_and_speed() -> Result<(), String> {
 		let drive = VfxDrive::sonic_wave()
 			.with_count(99)
@@ -673,6 +708,38 @@ mod tests {
 		}
 		if waves.iter().any(|wave| wave.direction.y.abs() > 1e-4) {
 			return Err("travel left the XZ plane".into());
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn follow_matches_wavefront_presentation_fields() -> Result<(), String> {
+		let origin = Vec3::new(0.0, 1.6, 0.2);
+		let direction = Vec3::new(0.2, 0.5, 0.8).normalize();
+		let position = origin + direction * 4.4;
+		let wave = SonicWaveState::follow(origin, direction, position, 1.0, 0.70, 2, 10.0);
+		if (wave.position - position).length() > 1e-4 {
+			return Err(format!("position {}", wave.position));
+		}
+		if (wave.direction - direction).length() > 1e-3 {
+			return Err(format!("re-aimed {}", wave.direction));
+		}
+		if wave.index != 2 {
+			return Err(format!("wave_index {}", wave.index));
+		}
+		let pose = wave.ring_transform();
+		if (pose.translation - position).length() > 1e-4 {
+			return Err(format!("sit {}", pose.translation));
+		}
+		let facing = pose.rotation * Vec3::Z;
+		if (facing - direction).length() > 1e-3 {
+			return Err(format!("facing {facing}"));
+		}
+		if (pose.scale.x * 0.5 - 1.0).abs() >= 1e-4 {
+			return Err(format!("radius {}", pose.scale.x * 0.5));
+		}
+		if (pose.scale.z - 0.70).abs() >= 1e-4 {
+			return Err(format!("thickness {}", pose.scale.z));
 		}
 		Ok(())
 	}

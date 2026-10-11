@@ -112,7 +112,7 @@ pub fn spawn(commands: &mut Commands, definition: &EffectDefinition, spawn: VfxS
 }
 
 /// Independent drive preset. [#1119](https://github.com/ramate-io/maybraid/issues/1119)
-/// writes [`VfxWaveStates`] from the attack presenter.
+/// writes [`VfxWaveStates`] from `#1147` `WavefrontPresentation` fields.
 ///
 /// ```ignore
 /// let handle = commands.spawn_vfx(
@@ -120,15 +120,16 @@ pub fn spawn(commands: &mut Commands, definition: &EffectDefinition, spawn: VfxS
 ///     VfxSpawn {
 ///         transform: Transform::from_translation(mouth),
 ///         drive: VfxDrive::sonic_wave()
-///             .with_size(20.0)
-///             .with_radius(0.55)
-///             .with_speed(22.0)
+///             .with_size(wave.range)
+///             .with_radius(wave.radius)
+///             .with_thickness(wave.thickness)
+///             .with_speed(wave.speed)
 ///             .with_count(3),
 ///         seed: Some(seed),
 ///         ..Default::default()
 ///     },
 /// );
-/// // Each tick: write VfxWaveStates from authoritative wave poses.
+/// // Each Updated: SonicWaveState::follow(origin, direction, position, …)
 /// commands.cancel_vfx(handle);
 /// ```
 pub fn attack_drive_example() -> VfxDrive {

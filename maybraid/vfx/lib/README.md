@@ -10,20 +10,33 @@ Near fire and smoke use overlapping mesh lobes with a crate-owned stylized mater
 
 Boss attacks own timing, hazards, and damage. This crate only plays looks. Drive an effect with [`VfxDrive`](src/drive.rs) and later call `commands.cancel_vfx(handle)` or `commands.despawn_vfx(handle)`.
 
-Sonic rings **do not simulate travel**. Each ring renders a [`SonicWaveState`](src/drive.rs) snapshot (origin, direction, current position, radius, thickness, wave index, range) written onto [`VfxWaveStates`](src/drive.rs). The playground has a tiny driver that advances those snapshots. [#1119](https://github.com/ramate-io/maybraid/issues/1119) (or a presenter in `attacks`) should do the same from `AttackPresentationEvent`. This crate does not depend on `attacks` and does not mirror its types.
+Sonic rings **do not simulate travel**. Each ring renders a [`SonicWaveState`](src/drive.rs) snapshot written onto [`VfxWaveStates`](src/drive.rs). The playground has a tiny driver that advances those snapshots. [#1119](https://github.com/ramate-io/maybraid/issues/1119) (or a presenter in `attacks`) should write the same component from [`WavefrontPresentation`](https://github.com/ramate-io/maybraid/pull/1147). This crate does not depend on `attacks` and does not mirror its types.
 
-### Mapping `#1147` events (for the attack presenter)
+### Mapping `#1147` `WavefrontPresentation` (for the attack presenter)
 
-[#1118](https://github.com/ramate-io/maybraid/issues/1118) / [PR #1147](https://github.com/ramate-io/maybraid/pull/1147) emit `AttackPresentationEvent`. Suggested mapping, owned by the presenter:
+[PR #1147](https://github.com/ramate-io/maybraid/pull/1147) publishes the wave contract on `cursor/reusable-boss-attack-runtime-14d4`. Discrete rings leave the mouth at constant size, travel horizontally (optional pitch), and hit once per wave. Copy fields with [`SonicWaveState::follow`](src/drive.rs) — a thin adapter over the generic API, not a second schema.
 
-| `#1147` payload | VFX |
+| `WavefrontPresentation` | VFX |
+| --- | --- |
+| `origin` | `SonicWaveState.origin` (mouth at emit) |
+| `direction` | `SonicWaveState.direction` — use as supplied; do not re-flatten |
+| `position` | `SonicWaveState.position` — ring center; the mesh sits here |
+| `radius` | `SonicWaveState.radius` — visual hoop matches the hit disc |
+| `thickness` | `SonicWaveState.thickness` — visual depth matches `2 * half_depth` |
+| `wave_index` | `SonicWaveState.index` |
+| `range` | `SonicWaveState.range` and spawn `VfxDrive.size` |
+| `speed` | spawn `VfxDrive.speed` (fade / playground driver only) |
+
+The gameplay volume is a filled disc or short capsule. Drawing a ring is fine for now.
+
+| `#1147` event | VFX |
 | --- | --- |
 | `Hazard` + `Cylinder { radius, height }` + pose | `god_beam`: `size = 2 * radius` (diameter), `reach = height`, transform at pose origin |
-| `Hazard` + `Wavefront { radius, speed, length }` + pose | write `SonicWaveState`: `origin` = emission socket at `Spawned`, `direction` = flattened pose forward, `position` = supplied pose origin each `Updated` (current volume center), `radius` = `Wavefront.radius` (damage disc, **not** travel growth), `range` = `length`, `index` = hazard index. `speed` is for the presenter only. |
-| `Telegraph`, `Stage` | ignore (no double column / no extra rings on windup) |
+| `Hazard` + `wave: Some(WavefrontPresentation)` | `SonicWaveState::follow(origin, direction, position, radius, thickness, wave_index, range)` into `VfxWaveStates` |
+| `Telegraph`, `Stage` | ignore |
 | `Ended` / `Despawned` | `cancel_vfx` or `despawn_vfx` on the bound root |
 
-Tag the spawned VFX root with `attacks::AttackPresentationBinding` so gameplay despawn on cancel / death / sleep / retirement still works. A three-ring Bray is one `sonic_wave` spawn with `count = 3`; the presenter writes three `SonicWaveState` rows.
+Tag the spawned VFX root with `attacks::AttackPresentationBinding { instance, kind: Hazard { index, wave } }` so gameplay despawn on cancel / death / sleep / retirement still works. A three-ring Bray is one `sonic_wave` spawn with `count = 3`; the presenter writes one `SonicWaveState` per live `wave_index`.
 
 | Field | God Beam | Sonic wave |
 | --- | --- | --- |
