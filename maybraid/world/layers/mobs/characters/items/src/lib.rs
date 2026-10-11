@@ -49,9 +49,6 @@ pub use inventory::{
 	SKILL_MAP_QUEUE_LIMIT, STARTER_CLOTHING_COUNT, STARTER_GRENADE_COUNT, STARTER_SKILL_MAP_COUNT,
 	STARTER_WEAPON_COUNT, WEAPON_QUEUE_LIMIT, WORN_CLOTHING_LIMIT,
 };
-pub use names::{
-	hashed_firearm_name, hashed_grenade_name, hashed_item_name, hashed_skill_map_name,
-};
 pub use palette::ItemColor;
 pub use skill_map::{SkillMapKind, SkillMapSpec};
 pub use stats::{CharacterSheet, ClothingStats, FireMode, FirearmStats, ProjectileKind};

@@ -33,7 +33,7 @@ use crate::named::{Forests, Groves, Named, Places, Regions, Stamp, Urban, Waters
 use crate::places::LanguageGround;
 use crate::present::{present_language_overlay, LanguageOverlay, Nearby};
 use crate::tiles::{
-	large_tile_aabb, large_tile_index, large_tile_origin, large_tiles_overlapping, LargeTile,
+	large_tile_aabb, large_tile_index, large_tile_origin, LargeTile,
 	LARGE_TILE,
 };
 
@@ -84,9 +84,7 @@ impl hcsg::GenerationScheme for LargeTile {
 	lod::hcsg_index_scale!(TILE_INDEX_SCALE);
 
 	fn original_ids_for(_cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
-		large_tiles_overlapping(region)
-			.map(|(ix, iz)| OriginalId(LargeTile::id(ix, iz)))
-			.collect()
+		crate::tiles::large_tile_original_ids_overlapping(region)
 	}
 
 	fn build_with_id(cx: &mut GenerationContext, id: Id) -> Option<(Self, Aabb3d)> {

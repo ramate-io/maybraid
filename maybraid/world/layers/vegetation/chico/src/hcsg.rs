@@ -5,6 +5,7 @@
 //!
 //! A session starts with [`lod::hcsg::request_hcsg_session_restart`].
 
+use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
@@ -12,7 +13,7 @@ use bevy::ecs::system::SystemParam;
 use bevy::math::bounding::Aabb3d;
 use bevy::math::DVec3;
 use bevy::prelude::*;
-use durham::TerrainMeshBuilder;
+use durham::{TerrainCellLayout, TerrainMeshBuilder};
 use lod::gen::{Id, OriginalId};
 use lod::hcsg::universal_bounds;
 use lod::hcsg::{
@@ -20,6 +21,7 @@ use lod::hcsg::{
 };
 use lod::lod_ref::LodRef;
 use lod::scene::{LodScene, LodSceneLevel, LodSceneStatus};
+use procedural_common::union_aabb3_iter;
 use render_item::mesh::{IdentifiedMesh, MeshBuilder};
 use render_item::NormalizeChunk;
 use richmond::{PaddedTerrain, Richmond, RichmondGround};
@@ -54,6 +56,16 @@ pub trait ForestGround: Send + Sync + 'static {
 
 	/// The cell's mesh, keyed as the cell's own host presents it.
 	fn chunk_ref(surface: &Self::Surface) -> TerrainChunkRef<Self::Mesh>;
+
+	/// Surface ids that may carry proxy `cell`.
+	///
+	/// Defaults to the surface scheme's own discovery (the finest lattice on a
+	/// streamed layout). Grounds with several cell sizes must also include each
+	/// coarser lattice that covers `cell`, so a far-grid proxy can generate the
+	/// 320 m surface the far ring presents.
+	fn surface_ids_for(cx: &mut GenerationContext, cell: Aabb3d) -> Vec<OriginalId> {
+		cx.original_ids_for::<Self::Surface>(cell)
+	}
 }
 
 /// Padded terrain is the urbanized ground's whole surface.
@@ -72,16 +84,40 @@ impl<T: RichmondGround> ForestGround for Urbanization<Richmond<T>> {
 	fn chunk_ref(surface: &Self::Surface) -> TerrainChunkRef<TerrainMeshBuilder> {
 		overlay_chunk_ref(&surface.surface)
 	}
+
+	fn surface_ids_for(cx: &mut GenerationContext, cell: Aabb3d) -> Vec<OriginalId> {
+		let mut ids = cx.original_ids_for::<Self::Surface>(cell);
+		let Some(layout) = cx.get_or_generate::<TerrainCellLayout>(Id::Universal) else {
+			return ids;
+		};
+		// Finest-lattice ids already come from `original_ids_for`. Adding them
+		// again would invent unbounded fine cells outside a windowed layout.
+		let finest = layout
+			.stream_rings
+			.iter()
+			.map(|ring| ring.cell_size)
+			.min_by(|a, b| a.total_cmp(b))
+			.unwrap_or(layout.cell_size);
+		let center = (Vec3::from(cell.min) + Vec3::from(cell.max)) * 0.5;
+		for id in layout.origin_ids_covering_xz(center.x, center.z) {
+			let Some(width) = id.0.origin_cell_bounds().map(|bounds| bounds.max.x - bounds.min.x)
+			else {
+				continue;
+			};
+			if width <= finest + 1e-2 || ids.contains(&id) {
+				continue;
+			}
+			ids.push(id);
+		}
+		ids
+	}
 }
 
 impl hcsg::GenerationScheme for ChicoForest {
 	lod::hcsg_index_scale!(FOREST_SCALE);
 
 	fn original_ids_for(_cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
-		ForestExtent::cells_overlapping(region)
-			.into_iter()
-			.map(|extent| OriginalId(extent.id()))
-			.collect()
+		ForestExtent::original_ids_overlapping(region)
 	}
 
 	fn build_with_id(cx: &mut GenerationContext, id: Id) -> Option<(Self, Aabb3d)> {
@@ -95,6 +131,19 @@ impl hcsg::GenerationScheme for ChicoForest {
 fn forest_of(tile: GroveExtent) -> ForestExtent {
 	let (ix, iz) = ForestExtent::cell_index_containing((tile.min() + tile.max()) * 0.5);
 	ForestExtent::from_cell_index(ix, iz)
+}
+
+fn push_grove_ids_for_tile(
+	ids: &mut Vec<OriginalId>,
+	tile: GroveExtent,
+	forest: &ChicoForest,
+	neighbors: &NeighborLayers,
+) {
+	for layer in ForestLayer::ALL {
+		if layer.kind(forest.layers).is_some() || neighbors.any_kind(layer) {
+			ids.push(OriginalId(grove_id(tile, layer)));
+		}
+	}
 }
 
 /// The forest cell over `forest` and its four cardinal neighbors' layers.
@@ -124,14 +173,17 @@ impl hcsg::GenerationScheme for ChicoGrove {
 	/// selects, so blends reach across forest faces.
 	fn original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
 		let mut ids = Vec::new();
+		let mut tiles_by_forest: HashMap<Id, Vec<GroveExtent>> = HashMap::new();
 		for tile in ForestExtent::grove_tiles_overlapping(region) {
-			let Some((forest, neighbors)) = forest_with_neighbors(cx, forest_of(tile)) else {
+			tiles_by_forest.entry(forest_of(tile).id()).or_default().push(tile);
+		}
+		for tiles in tiles_by_forest.values() {
+			let forest_extent = forest_of(tiles[0]);
+			let Some((forest, neighbors)) = forest_with_neighbors(cx, forest_extent) else {
 				continue;
 			};
-			for layer in ForestLayer::ALL {
-				if layer.kind(forest.layers).is_some() || neighbors.any_kind(layer) {
-					ids.push(OriginalId(grove_id(tile, layer)));
-				}
+			for &tile in tiles {
+				push_grove_ids_for_tile(&mut ids, tile, &forest, &neighbors);
 			}
 		}
 		ids
@@ -172,9 +224,7 @@ impl<G: ForestGround> GroundSurface<G> {
 
 	/// The union of the cells' footprints.
 	pub fn footprint(&self) -> Option<Aabb3d> {
-		self.cells.iter().map(|cell| G::footprint(cell)).reduce(|a, b| {
-			Aabb3d::from_min_max(Vec3::from(a.min.min(b.min)), Vec3::from(a.max.max(b.max)))
-		})
+		union_aabb3_iter(self.cells.iter().map(|cell| G::footprint(cell)))
 	}
 
 	/// Surface height at `(x, z)`; `None` off the surface.
@@ -237,11 +287,12 @@ impl<G: ForestGround> hcsg::GenerationScheme for GrownGrove<G> {
 			return None;
 		}
 		let tiles = grove.grow(&surface);
-		let bounds = tiles
-			.iter()
-			.map(ForestGroveTile::scene_bounds)
-			.filter(|bounds| bounds.min.is_finite() && bounds.max.is_finite())
-			.reduce(|a, b| Aabb3d { min: a.min.min(b.min), max: a.max.max(b.max) })?;
+		let bounds = union_aabb3_iter(
+			tiles
+				.iter()
+				.map(ForestGroveTile::scene_bounds)
+				.filter(|bounds| bounds.min.is_finite() && bounds.max.is_finite()),
+		)?;
 		Some((Self { layer: grove.layer, tiles, _ground: PhantomData }, bounds))
 	}
 }
@@ -350,21 +401,25 @@ mod tests {
 	use bevy::scene::ScenePlugin;
 	use bevy::state::app::StatesPlugin;
 	use durham::{
-		fine_patch_cell_layout, Durham, DurhamWindow, TerrainConfig, TerrainMeshAssets,
-		TerrainMeshLodBand, TerrainStampConfigs, WaterMeshAssets, WaterPresentationPlugin,
-		WatershedConfigs,
+		fine_patch_cell_layout, mesh_assets, playable_world_cell_layout, Durham, DurhamWindow,
+		TerrainConfig, TerrainCoverage, TerrainMeshAssets, TerrainMeshLodBand, TerrainStampConfigs,
+		WaterMeshAssets, WaterPresentationPlugin, WatershedConfigs, WORLD_FINE_HALF_EXTENT_CELLS,
 	};
 	use lod::gen::Version;
-	use lod::hcsg::{HcsgDemand, HcsgNode, HcsgRestartRequest};
+	use lod::hcsg::{
+		GenerationScheme, HcsgClass, HcsgDemand, HcsgNode, HcsgRestartRequest, ViewerHcsgBounds,
+	};
 	use lod::lod_ref::LodNodePose;
 	use lod::LodViewer;
 	use richmond::BuiltPresentationPlugin;
-	use richmond::{AuthoredDevelopments, DevelopmentConfig, DevelopmentSites};
+	use richmond::{AuthoredDevelopments, DevelopmentConfig, DevelopmentSites, PaddedTerrain};
 	use terrain_layer_model::OnTerrain;
 	use urbanization_cells::UrbanizationSelection;
 
 	use super::*;
-	use crate::{CanopyBumpOut, LayeringKind};
+	use crate::{
+		CanopyBumpOut, LayeringKind, MediumCanopyBumpOut, BUMP_OUT_CELL_XZ, MEDIUM_BUMP_OUT_CELL_XZ,
+	};
 
 	type Ground = OnTerrain<Durham>;
 	type Urban = Urbanization<Richmond<Ground>>;
@@ -723,5 +778,235 @@ mod tests {
 		update_until(&mut app, |app| shown_bump_outs(app) == 0);
 		assert_eq!(shown_bump_outs(&mut app), 0);
 		Ok(())
+	}
+
+	type Medium = BumpedOut<MediumCanopyBumpOut, Urban>;
+
+	/// One 320 m far-ring cell, 1.6–1.92 km east of the origin.
+	fn far_grid_cell() -> Aabb3d {
+		MediumCanopyBumpOut::cell_bounds(5, 0)
+	}
+
+	/// Discover only [`far_grid_cell`] so the worker generates one far bump-out.
+	struct FarRingBumpOutProbe;
+
+	impl ViewerHcsgBounds for FarRingBumpOutProbe {
+		const CLASS: HcsgClass = HcsgClass::Near;
+
+		fn regions_around(_viewer: Vec3) -> Vec<Aabb3d> {
+			let cell = far_grid_cell();
+			vec![Aabb3d::from_min_max(
+				Vec3::new(cell.min.x + 1.0, -10.0, cell.min.z + 1.0),
+				Vec3::new(cell.max.x - 1.0, 10.0, cell.max.z - 1.0),
+			)]
+		}
+	}
+
+	fn seed_playable_bump_out_storage() -> HcsgStorage {
+		let storage = HcsgStorage::default();
+		storage.seed(playable_world_cell_layout(), universal_bounds());
+		storage.seed(TerrainStampConfigs::from_world_seed(42), universal_bounds());
+		storage.seed(WatershedConfigs::default().with_seed(42), universal_bounds());
+		storage.seed(
+			mesh_assets(
+				TerrainConfig::new(42),
+				Handle::default(),
+				TerrainCoverage::PlayableWorld,
+				WORLD_FINE_HALF_EXTENT_CELLS,
+			),
+			universal_bounds(),
+		);
+		storage.seed(
+			ForestSelection {
+				layering: Some(LayeringKind::LushJungle),
+				..ForestSelection::default()
+			},
+			universal_bounds(),
+		);
+		storage
+	}
+
+	fn playable_far_bump_out_app(at: Vec3) -> App {
+		let mut app = App::new();
+		app.add_plugins((MinimalPlugins, StatesPlugin))
+			.add_plugins((AssetPlugin::default(), ScenePlugin))
+			.init_asset::<Mesh>()
+			.init_asset::<StandardMaterial>()
+			.init_asset::<bevy::world_serialization::WorldAsset>()
+			.insert_resource(playable_world_cell_layout())
+			.insert_resource(TerrainStampConfigs::from_world_seed(1))
+			.insert_resource(WatershedConfigs::default().with_seed(1))
+			.insert_resource(mesh_assets(
+				TerrainConfig::new(1),
+				Handle::default(),
+				TerrainCoverage::PlayableWorld,
+				WORLD_FINE_HALF_EXTENT_CELLS,
+			))
+			.insert_resource(WaterMeshAssets { material: Handle::default() })
+			.insert_resource(DevelopmentConfig {
+				sites: DevelopmentSites::Authored,
+				..DevelopmentConfig::default()
+			})
+			.init_resource::<AuthoredDevelopments>()
+			.init_resource::<UrbanizationSelection>()
+			.insert_resource(HcsgRestartRequest::queued());
+		register_vegetation_view(&mut app);
+		register_session_seed(&mut app, seed_chico_hcsg_roots::<Urban>);
+		app.add_plugins((
+			hcsg::HcsgBoundsPlugin::<FarRingBumpOutProbe>::default(),
+			BumpOutPresentationPlugin::<FarRingBumpOutProbe, MediumCanopyBumpOut, Urban>::default(),
+		));
+		select(&mut app, LayeringKind::LushJungle);
+		durham::register_durham_hcsg_session(&mut app);
+		app.finish();
+		app.cleanup();
+		let at = Transform::from_translation(at);
+		app.world_mut()
+			.spawn((LodViewer, at, LodNodePose { previous: at, current: at }));
+		app
+	}
+
+	fn medium_bumped_out(app: &mut App) -> Vec<HcsgNode<Medium>> {
+		app.world_mut()
+			.query::<&HcsgNode<Medium>>()
+			.iter(app.world())
+			.cloned()
+			.collect()
+	}
+
+	/// Finest-lattice `original_ids_for` never yields the 320 m far cell.
+	#[test]
+	fn finest_lattice_discovery_misses_far_grid_surfaces() -> anyhow::Result<()> {
+		let storage = seed_playable_bump_out_storage();
+		let mut cx = GenerationContext::new(&storage);
+		let cell = far_grid_cell();
+		let finest = cx.original_ids_for::<PaddedTerrain<Ground>>(cell);
+		let covering = Urban::surface_ids_for(&mut cx, cell);
+		let width_of = |id: Id| id.origin_cell_bounds().map(|bounds| bounds.max.x - bounds.min.x);
+		assert!(
+			finest.iter().all(|OriginalId(id)| {
+				width_of(*id).is_some_and(|width| (width - BUMP_OUT_CELL_XZ).abs() < 1e-2)
+			}),
+			"Terrain origin_ids stay on the near lattice"
+		);
+		assert!(
+			covering.iter().any(|OriginalId(id)| {
+				width_of(*id).is_some_and(|width| (width - MEDIUM_BUMP_OUT_CELL_XZ).abs() < 1e-2)
+			}),
+			"surface_ids_for must include the 320 m far cell"
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn far_grid_bump_outs_generate_on_320m_surfaces() -> anyhow::Result<()> {
+		let storage = seed_playable_bump_out_storage();
+		let mut cx = GenerationContext::new(&storage);
+		let cell = far_grid_cell();
+		let id = Id::from_cell(cell);
+		let (built, bounds) = Medium::build_with_id(&mut cx, id)
+			.ok_or_else(|| anyhow::anyhow!("far-grid bump-out at {cell:?}"))?;
+		assert_eq!(built.cell.min.xz(), cell.min.xz());
+		assert_eq!(built.cell.max.xz(), cell.max.xz());
+		assert!(
+			(bounds.max.x - bounds.min.x - MEDIUM_BUMP_OUT_CELL_XZ).abs() < 1e-2,
+			"attached surface must be the 320 m far cell, got width {}",
+			bounds.max.x - bounds.min.x
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn far_ring_bump_outs_are_presented_at_far_ring_distance() -> anyhow::Result<()> {
+		let mut app = playable_far_bump_out_app(Vec3::ZERO);
+		settle(&mut app)?;
+
+		let nodes = medium_bumped_out(&mut app);
+		assert_eq!(nodes.len(), 1, "the far-ring probe presents its 320 m bump-out");
+		update_until(&mut app, |app| shown_bump_outs(app) >= 1);
+		assert_eq!(shown_bump_outs(&mut app), 1, "the far-ring bump-out shows at 1.76 km");
+		Ok(())
+	}
+
+	use lod::gen::OriginalId;
+	use lod::hcsg::{universal_bounds, GenerationContext, HcsgStorage};
+
+	use super::{
+		forest_of, forest_with_neighbors, push_grove_ids_for_tile, ChicoGrove, ForestSelection,
+		GroveNeighborhood, GROVE_PRESENT_RADIUS_M,
+	};
+
+	/// Per-tile `forest_with_neighbors` (pre-optimization discovery).
+	fn naive_grove_original_ids_for(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
+		let mut ids = Vec::new();
+		for tile in ForestExtent::grove_tiles_overlapping(region) {
+			let Some((forest, neighbors)) = forest_with_neighbors(cx, forest_of(tile)) else {
+				continue;
+			};
+			push_grove_ids_for_tile(&mut ids, tile, &forest, &neighbors);
+		}
+		ids
+	}
+
+	#[test]
+	fn grove_discovery_matches_per_tile_forest_lookup() {
+		let region = GroveNeighborhood::around(Vec3::ZERO, GROVE_PRESENT_RADIUS_M);
+		let selection = ForestSelection {
+			layering: Some(LayeringKind::LushJungle),
+			..ForestSelection::default()
+		};
+		let storage = HcsgStorage::default();
+		storage.seed(selection, universal_bounds());
+		let mut naive_cx = GenerationContext::new(&storage);
+		let mut grouped_cx = GenerationContext::new(&storage);
+		let mut naive = naive_grove_original_ids_for(&mut naive_cx, region);
+		let mut grouped = grouped_cx.original_ids_for::<ChicoGrove>(region);
+		naive.sort();
+		grouped.sort();
+		naive.dedup();
+		grouped.dedup();
+		assert_eq!(naive, grouped);
+		assert!(!grouped.is_empty());
+	}
+
+	/// `cargo test -p chico chico_grove_discovery_microbench --release -- --ignored --nocapture`
+	#[test]
+	#[ignore]
+	fn chico_grove_discovery_microbench() {
+		use std::time::Instant;
+
+		let region = GroveNeighborhood::around(Vec3::ZERO, GROVE_PRESENT_RADIUS_M);
+		let selection = ForestSelection {
+			layering: Some(LayeringKind::LushJungle),
+			..ForestSelection::default()
+		};
+		let runs = 30;
+
+		let bench = |naive: bool| -> std::time::Duration {
+			let start = Instant::now();
+			for _ in 0..runs {
+				let storage = HcsgStorage::default();
+				storage.seed(selection, universal_bounds());
+				let mut cx = GenerationContext::new(&storage);
+				if naive {
+					naive_grove_original_ids_for(&mut cx, region);
+				} else {
+					cx.original_ids_for::<ChicoGrove>(region);
+				}
+			}
+			start.elapsed()
+		};
+
+		let naive = bench(true);
+		let grouped = bench(false);
+		let naive_ms = naive.as_secs_f64() * 1000.0 / runs as f64;
+		let grouped_ms = grouped.as_secs_f64() * 1000.0 / runs as f64;
+		eprintln!(
+			"chico_grove_discovery_microbench (GroveNeighborhood, cold storage, seed=LushJungle): \
+			 naive={naive_ms:.2} ms/discover grouped={grouped_ms:.2} ms/discover \
+			 ({:.2}×)",
+			naive_ms / grouped_ms
+		);
+		assert!(grouped < naive, "grouped discovery should beat per-tile forest lookups");
 	}
 }

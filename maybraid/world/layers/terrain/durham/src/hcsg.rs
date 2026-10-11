@@ -3,18 +3,18 @@
 //!
 //! Start a session with [`lod::hcsg::request_hcsg_session_restart`].
 
-use std::marker::PhantomData;
-use std::sync::Arc;
-
 use bevy::ecs::system::{SystemParam, SystemParamItem};
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
+#[cfg(test)]
 use lod::gen::Id;
 use lod::hcsg::{
 	register_session_seed, Busy, HcsgBounds, HcsgClass, HcsgStorage, PresentationPlugin,
 };
 use lod::LodViewer;
 use render_item::mesh::handle::MeshFulfillBudget;
+use std::marker::PhantomData;
+use std::sync::Arc;
 use terrain_layer_model::TerrainStreaming;
 use terrain_shaders::{RefractionWater, TerrainShader, TerrainShaderPlugin};
 use visual_geometry_core::{
@@ -187,17 +187,6 @@ pub trait SharedTerrainStorage {
 		x: f32,
 		z: f32,
 	) -> Result<Option<WaterColumn>, Busy>;
-
-	/// Publishes origin cell `(ix, iz)` of `layout` with `base` as its whole
-	/// SDF. Only for surface tests.
-	#[doc(hidden)]
-	fn publish_base_terrain_for_test(
-		&self,
-		layout: &TerrainCellLayout,
-		ix: i32,
-		iz: i32,
-		base: BaseTerrainNoise,
-	);
 }
 
 impl SharedTerrainStorage for HcsgStorage {
@@ -228,7 +217,25 @@ impl SharedTerrainStorage for HcsgStorage {
 		}
 		Ok(None)
 	}
+}
 
+/// Test-only direct publishes into [`HcsgStorage`]. Frame code uses
+/// [`DurhamSurface`] or presentation hosts.
+#[cfg(test)]
+pub trait SharedTerrainStorageTestExt: SharedTerrainStorage {
+	/// Publishes origin cell `(ix, iz)` of `layout` with `base` as its whole
+	/// SDF.
+	fn publish_base_terrain_for_test(
+		&self,
+		layout: &TerrainCellLayout,
+		ix: i32,
+		iz: i32,
+		base: BaseTerrainNoise,
+	);
+}
+
+#[cfg(test)]
+impl SharedTerrainStorageTestExt for HcsgStorage {
 	fn publish_base_terrain_for_test(
 		&self,
 		layout: &TerrainCellLayout,
@@ -291,11 +298,12 @@ mod tests {
 	use std::time::Duration;
 
 	use bevy::scene::ScenePlugin;
-	use lod::gen::{Id, OriginalId, Version};
+	use lod::gen::{OriginalId, Version};
 	use lod::hcsg::{HcsgBoundsPlugin, HcsgDemand, HcsgNode, HcsgRestartRequest};
 	use lod::lod_ref::LodNodePose;
 	use lod::LodViewer;
 
+	use super::SharedTerrainStorageTestExt;
 	use super::*;
 	use crate::terrain::{
 		fine_patch_cell_layout, CellTiling, TerrainColliderMeshSource, TerrainConfig,

@@ -68,6 +68,18 @@ pub enum SkillMapEvent {
 	Fail { user: Entity, map: SkillMapId },
 }
 
+/// Dispatch systems drain pending claims while the map is hidden.
+pub(crate) fn skill_map_dispatch_ready(
+	enabled: &SkillMapEnabled,
+	events: &mut MessageReader<SkillMapEvent>,
+) -> bool {
+	if enabled.0 {
+		return true;
+	}
+	for _ in events.read() {}
+	false
+}
+
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum SkillMapSystems {
 	Spawn,

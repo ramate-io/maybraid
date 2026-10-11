@@ -7,7 +7,6 @@
 use bevy::prelude::*;
 
 use crate::{
-	hashed_firearm_name, hashed_grenade_name, hashed_item_name, hashed_skill_map_name,
 	ClothingKind, ClothingMaterial, ClothingMesh, ClothingStats, FirearmMesh, FirearmSpec,
 	FirearmStats, GrenadeRecharge, GrenadeSpec, GrenadeStats, ItemColor, SkillMapKind,
 	SkillMapSpec,
@@ -247,12 +246,10 @@ impl InventoryItem {
 
 	pub fn name(&self) -> String {
 		match self {
-			Self::Clothing { mesh, material, .. } => {
-				hashed_item_name(*mesh, material.id, material.color)
-			}
-			Self::Firearm { spec, .. } => hashed_firearm_name(*spec),
-			Self::Grenade { spec, .. } => hashed_grenade_name(*spec),
-			Self::SkillMap { spec } => hashed_skill_map_name(*spec),
+			Self::Clothing { mesh, material, .. } => mesh.hashed_name(material.id, material.color),
+			Self::Firearm { spec, .. } => spec.hashed_name(),
+			Self::Grenade { spec, .. } => spec.hashed_name(),
+			Self::SkillMap { spec } => spec.hashed_name(),
 		}
 	}
 

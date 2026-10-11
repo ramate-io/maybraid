@@ -20,7 +20,7 @@ impl hcsg::GenerationScheme for SelectedUrbanization {
 	lod::hcsg_index_scale!(crate::storage::SELECTION_INDEX_SCALE);
 
 	fn original_ids_for(_cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
-		Self::ids_in(region)
+		UrbanizationExtent::original_ids_overlapping(region)
 	}
 
 	fn build_with_id(cx: &mut GenerationContext, id: Id) -> Option<(Self, Aabb3d)> {
@@ -31,13 +31,6 @@ impl hcsg::GenerationScheme for SelectedUrbanization {
 }
 
 impl SelectedUrbanization {
-	fn ids_in(region: Aabb3d) -> Vec<OriginalId> {
-		UrbanizationExtent::cells_overlapping(region)
-			.into_iter()
-			.map(|extent| OriginalId(extent.id()))
-			.collect()
-	}
-
 	/// `extent`'s cell as the session's `selection` picks it.
 	fn on(extent: UrbanizationExtent, selection: &UrbanizationSelection) -> Self {
 		match selection.kind {

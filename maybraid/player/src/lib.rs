@@ -8,6 +8,7 @@ mod hit;
 mod identity;
 mod intent;
 mod locomotion;
+mod look;
 mod movement;
 mod run_stop;
 mod separation;
@@ -35,6 +36,7 @@ pub use identity::{
 	PlayerUse, PlayerVisual, PlayerYawOwner,
 };
 pub use locomotion::drive_player_locomotion;
+pub use look::{clamp_aim_pitch, look_delta, look_forward, wrap_pi, yaw_xz, AIM_PITCH_MARGIN};
 pub use run_stop::{GaitPhaseHandoff, RunStopBlend};
 pub use separation::{SoftBump, NPC_SEPARATION};
 pub use spawn::{
