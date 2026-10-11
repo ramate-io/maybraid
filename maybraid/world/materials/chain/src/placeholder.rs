@@ -28,14 +28,14 @@ pub struct PlaceholderChainSpec {
 impl Default for PlaceholderChainSpec {
 	fn default() -> Self {
 		Self {
-			link_count: 12,
-			ring_radius: 0.11,
-			tube_radius: 0.034,
-			length: 2.6,
-			segments_ring: 18,
-			segments_tube: 10,
+			link_count: 14,
+			ring_radius: 0.16,
+			tube_radius: 0.052,
+			length: 3.1,
+			segments_ring: 20,
+			segments_tube: 12,
 			bend_amplitude: 0.0,
-			bend_waves: 1.15,
+			bend_waves: 0.85,
 		}
 	}
 }

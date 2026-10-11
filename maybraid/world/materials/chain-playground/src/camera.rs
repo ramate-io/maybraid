@@ -13,9 +13,9 @@ pub struct CameraController {
 }
 
 pub fn setup_camera(mut commands: Commands) {
-	// Encounter-distance view of two ~2.6 m hanging chains.
-	let camera_pos = Vec3::new(3.6, 1.8, 6.4);
-	let look_at = Vec3::new(0.0, 1.3, 0.0);
+	// Close encounter view of two ~3 m hanging chains so the material stays readable.
+	let camera_pos = Vec3::new(1.7, 1.55, 2.85);
+	let look_at = Vec3::new(0.0, 1.45, 0.0);
 	let transform = Transform::from_translation(camera_pos).looking_at(look_at, Vec3::Y);
 	let rotation = transform.rotation;
 	let (x, y, z, w) = (rotation.x, rotation.y, rotation.z, rotation.w);

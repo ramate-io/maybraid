@@ -35,9 +35,9 @@ impl LinkLook {
 		let damage = damage.clamp(0.0, 1.0);
 		let fade = fade.clamp(0.0, 1.0);
 		let crack = smoothstep(0.08, 0.72, damage);
-		let glow_scale = (1.0 - damage * 0.72) * (1.0 - fade * 0.85);
+		let glow_scale = (1.0 - damage * 0.82) * (1.0 - fade * 0.85);
 		let ember = smoothstep(0.42, 0.92, damage) * (1.0 - fade * 0.35);
-		let dissolve = (fade * 0.82 + damage * fade * 0.35 + smoothstep(0.78, 1.0, damage) * 0.22)
+		let dissolve = (fade * 0.72 + damage * fade * 0.28 + smoothstep(0.78, 1.0, damage) * 0.18)
 			.clamp(0.0, 1.0);
 		Self { crack, glow_scale, ember, dissolve }
 	}

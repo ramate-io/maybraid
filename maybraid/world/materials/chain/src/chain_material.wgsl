@@ -168,9 +168,9 @@ fn link_weakness(id: f32, seed: f32) -> f32 {
 
 fn look_from_damage(damage: f32, fade: f32) -> vec4<f32> {
     let crack = smoothstep(0.08, 0.72, damage);
-    let glow_scale = (1.0 - damage * 0.72) * (1.0 - fade * 0.85);
+    let glow_scale = (1.0 - damage * 0.82) * (1.0 - fade * 0.85);
     let ember = smoothstep(0.42, 0.92, damage) * (1.0 - fade * 0.35);
-    let dissolve = saturate(fade * 0.82 + damage * fade * 0.35 + smoothstep(0.78, 1.0, damage) * 0.22);
+    let dissolve = saturate(fade * 0.72 + damage * fade * 0.28 + smoothstep(0.78, 1.0, damage) * 0.18);
     return vec4<f32>(crack, glow_scale, ember, dissolve);
 }
 
@@ -210,32 +210,36 @@ fn fragment(
     let n1 = fbm(vec3<f32>(around * crack_freq * freq, along * crack_freq * 1.6 * freq, seed * 0.02));
     let n2 = fbm(vec3<f32>(around * crack_freq * 2.4 * freq + 3.1, along * 3.2 * freq, 1.7));
     let ridge = 1.0 - abs(n1 * 2.0 - 1.0);
-    let crack_mask = pow(saturate(ridge * 1.12), 7.0) * look.x;
-    let rust = saturate((n2 - 0.42) * 1.8) * look.x;
+    let crack_mask = pow(saturate(ridge * 1.18), 5.5) * look.x;
+    let rust = saturate((n2 - 0.32) * 2.1) * look.x;
 
     let vein_u = 1.0 - abs(fract(around * 2.0) * 2.0 - 1.0);
-    let vein_v = 0.55 + 0.45 * sin(along * 28.0 + n1 * 3.0);
-    let vein = pow(saturate(vein_u * vein_v), 3.2);
-    let pulse = 0.86 + 0.14 * sin(globals.time * pulse_rate * 6.0 + id * 1.7 + along * 8.0);
-    let flicker = 0.9 + 0.1 * sin(globals.time * 22.0 + weakness * 9.0);
+    let vein_v = 0.62 + 0.38 * sin(along * 22.0 + n1 * 3.0);
+    let vein = pow(saturate(vein_u * vein_v), 1.65);
+    let pulse = 0.84 + 0.16 * sin(globals.time * pulse_rate * 6.0 + id * 1.7 + along * 8.0);
+    let flicker = 0.88 + 0.12 * sin(globals.time * 22.0 + weakness * 9.0);
+    let facing = saturate(abs(dot(normalize(mesh.world_normal), fns::calculate_view(mesh.world_position, view.clip_from_view[3].w == 1.0))));
 
     let metal = material.colors[0].xyz;
     let glow = material.colors[1].xyz;
     let ash = material.colors[2].xyz;
     let ember = material.colors[3].xyz;
 
-    var albedo = metal * (0.78 + 0.22 * value_noise_3d(vec3<f32>(uv * 18.0, seed)));
-    albedo = mix(albedo, ash, saturate(rust * 0.85 + crack_mask * 0.55));
-    let cavity = mix(1.0, 0.42, crack_mask);
+    var albedo = metal * (0.92 + 0.22 * value_noise_3d(vec3<f32>(uv * 18.0, seed)));
+    albedo = mix(albedo, ash, saturate(look.x * 0.48 + rust * 0.95 + crack_mask * 0.75));
+    let cavity = mix(1.0, 0.38, crack_mask);
     albedo *= cavity;
 
-    let glow_amt = vein * look.y * pulse * flicker;
-    let ember_amt = crack_mask * look.z * flicker;
-    let emissive = glow * glow_amt * glow_gain + ember * ember_amt * (1.2 + glow_gain * 0.25);
-    albedo = mix(albedo, glow, glow_amt * 0.18);
+    let wash = mix(0.20, 0.0, saturate(look.x * 1.35)) * look.y;
+    let glow_amt = (vein * mix(0.9, 0.35, look.x) + wash) * look.y * pulse * flicker;
+    let ember_amt = (crack_mask * 0.85 + look.z * 0.35) * look.z * flicker;
+    let rim = pow(1.0 - facing, 2.2) * look.y * 0.55;
+    let emissive = glow * (glow_amt + rim) * glow_gain + ember * ember_amt * (1.6 + glow_gain * 0.35);
+    albedo = mix(albedo, glow, saturate(glow_amt * 0.28 + rim * 0.15));
 
     let dissolve_noise = hash21(vec2<f32>(id * 3.1, around * 8.0 + along * 5.0));
-    if dissolve_noise < look.w + crack_mask * fade * 0.35 {
+    let keep_spark = fade > 0.7 && hash21(vec2<f32>(id * 9.2, around * 3.0)) > 0.82;
+    if !keep_spark && dissolve_noise < look.w + crack_mask * fade * 0.35 {
         discard;
     }
 

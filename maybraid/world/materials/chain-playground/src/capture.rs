@@ -47,13 +47,13 @@ pub fn tick_capture(
 	match capture.step {
 		0 => {
 			let _ = std::fs::create_dir_all(&dir);
-			shoot(&mut commands, dir.join("chain_pair_day.png"));
+			shoot(&mut commands, dir.join("mythical_chain_intact_damaged_day.png"));
 			*lighting = LightingMode::Night;
 			preview.lighting = LightingMode::Night;
 			capture.step = 1;
 		}
 		1 => {
-			shoot(&mut commands, dir.join("chain_pair_night.png"));
+			shoot(&mut commands, dir.join("mythical_chain_intact_damaged_night.png"));
 			*lighting = LightingMode::Day;
 			preview.lighting = LightingMode::Day;
 			preview.set_left_state(MythicalChainState::NearBreaking);
@@ -61,19 +61,19 @@ pub fn tick_capture(
 			capture.step = 2;
 		}
 		2 => {
-			shoot(&mut commands, dir.join("chain_near_breaking.png"));
+			shoot(&mut commands, dir.join("mythical_chain_near_breaking_day.png"));
 			preview.set_left_state(MythicalChainState::Released);
 			preview.set_right_state(MythicalChainState::Released);
 			capture.step = 3;
 		}
 		3 => {
-			shoot(&mut commands, dir.join("chain_released.png"));
+			shoot(&mut commands, dir.join("mythical_chain_released_day.png"));
 			preview.set_left_state(MythicalChainState::NearBreaking);
 			preview.set_right_state(MythicalChainState::Released);
 			capture.step = 4;
 		}
 		4 => {
-			shoot(&mut commands, dir.join("chain_breaking_pair.png"));
+			shoot(&mut commands, dir.join("mythical_chain_near_breaking_and_released.png"));
 			capture.step = 5;
 		}
 		_ => {

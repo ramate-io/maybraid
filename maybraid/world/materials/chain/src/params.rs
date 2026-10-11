@@ -43,13 +43,13 @@ pub const DEFAULT_DAMAGE: Color = Color::srgb(0.20, 0.08, 0.05);
 pub const DEFAULT_EMBER: Color = Color::srgb(1.0, 0.42, 0.10);
 
 /// Authored glow gain.
-pub const DEFAULT_GLOW_INTENSITY: f32 = 2.6;
+pub const DEFAULT_GLOW_INTENSITY: f32 = 5.2;
 /// Authored crack frequency.
 pub const DEFAULT_CRACK_FREQUENCY: f32 = 6.0;
 /// Authored pulse rate.
 pub const DEFAULT_PULSE_RATE: f32 = 1.4;
 /// Authored link-count hint (matches the placeholder mesh).
-pub const DEFAULT_LINK_COUNT: f32 = 12.0;
+pub const DEFAULT_LINK_COUNT: f32 = 14.0;
 /// Authored noise seed.
 pub const DEFAULT_SEED: i32 = 11;
 /// Authored noise frequency.

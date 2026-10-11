@@ -44,10 +44,10 @@ Scalars (index meaning is this shader’s contract):
 | Index | Name | Range | Default | Intact / damaged / near-break / released |
 |-------|------|-------|---------|------------------------------------------|
 | 0 | `intact` | `[0, 1]` | `1.0` | `1.0` / `0.55` / `0.18` / `0.0` |
-| 1 | `glow_intensity` | `[0, 8]` | `2.6` | authored gain |
+| 1 | `glow_intensity` | `[0, 8]` | `5.2` | authored gain |
 | 2 | `fade` (break/release) | `[0, 1]` | `0.0` | `0.0` / `0.0` / `0.15` / `1.0` |
 | 3 | `damage` | `[0, 1]` | `0.0` | `0` means derive `1 - intact` |
-| 4 | `link_count` hint | `[1, 256]` | `12` | UV.y → link fallback |
+| 4 | `link_count` hint | `[1, 256]` | `14` | UV.y → link fallback |
 | 5 | `crack_frequency` | `[0.5, 24]` | `6.0` | UV-space crack scale |
 | 6 | `localized_blend` | `[0, 1]` | `0.0` | `0` = global durability only |
 | 7 | `pulse_rate` | `[0, 8]` | `1.4` | glow / ember flicker |

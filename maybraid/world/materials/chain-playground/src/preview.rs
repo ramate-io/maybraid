@@ -160,13 +160,13 @@ pub fn sync_preview(
 		for (entity, _, _) in &roots {
 			commands.entity(entity).try_despawn();
 		}
-		let spec = PlaceholderChainSpec::default().bent(if config.deform { 0.28 } else { 0.0 });
+		let spec = PlaceholderChainSpec::default().bent(if config.deform { 0.22 } else { 0.0 });
 		let mesh = meshes.add(placeholder_chain_mesh(spec));
 		spawn_chain(
 			&mut commands,
 			mesh.clone(),
 			config.left.clone(),
-			Vec3::new(-0.72, 0.18, 0.0),
+			Vec3::new(-0.55, 0.12, 0.0),
 			"left",
 			true,
 		);
@@ -174,7 +174,7 @@ pub fn sync_preview(
 			&mut commands,
 			mesh,
 			config.right.clone(),
-			Vec3::new(0.72, 0.18, 0.0),
+			Vec3::new(0.55, 0.12, 0.0),
 			"right",
 			false,
 		);
