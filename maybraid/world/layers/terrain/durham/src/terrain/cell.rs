@@ -3,7 +3,8 @@
 use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::math::{IVec2, UVec2, Vec3};
 use bevy::prelude::*;
-use lod::gen::{GeneratingSpatialIndex, Id, OriginalId};
+use lod::gen::{Id, OriginalId};
+use lod::hcsg::{self, GenerationContext};
 use lod::LodSceneLevel;
 
 /// Naturescapes cascade `min_size`.
@@ -55,29 +56,28 @@ pub fn universal_bounds() -> Aabb3d {
 	Aabb3d::from_min_max(Vec3::splat(-1_000_000.0), Vec3::splat(1_000_000.0))
 }
 
-/// [`lod::gen::GenerationScheme`] for a world singleton at [`Id::Universal`]
-/// derived from other universals (or a constant).
-///
-/// Root inputs nothing can derive use [`lod::seeded_root`] instead. Either
-/// way, consumers read the value with `get_one_or_generate(Id::Universal)`.
+/// Shared scheme for a world singleton at [`Id::Universal`] derived from other
+/// universals (or a constant). Root inputs nothing can derive use
+/// [`lod::seeded_root`] instead.
 macro_rules! derived_universal_scheme {
-	($T:ty $(, where S: $bound:path)?, |$index:ident| $build:expr) => {
-		impl<S $(: $bound)?> lod::gen::GenerationScheme<S> for $T {
+	($T:ty, |$cx:ident| $native:expr) => {
+		impl lod::hcsg::GenerationScheme for $T {
+			lod::hcsg_index_scale!($crate::terrain::index::DURHAM_INDEX_SCALE);
 			fn original_ids_for(
-				_spatial_index: &mut S,
+				_cx: &mut lod::hcsg::GenerationContext,
 				_region: bevy::math::bounding::Aabb3d,
 			) -> Vec<lod::gen::OriginalId> {
 				vec![lod::gen::OriginalId::universal()]
 			}
 
 			fn build_with_id(
-				$index: &mut S,
+				$cx: &mut lod::hcsg::GenerationContext,
 				id: lod::gen::Id,
 			) -> Option<(Self, bevy::math::bounding::Aabb3d)> {
 				if id != lod::gen::Id::Universal {
 					return None;
 				}
-				Some(($build?, $crate::terrain::cell::universal_bounds()))
+				Some(($native?, $crate::terrain::cell::universal_bounds()))
 			}
 		}
 	};
@@ -89,17 +89,17 @@ pub(crate) use derived_universal_scheme;
 ///
 /// Grid roots (`PreWatershedTerrain`, `HydroComplexCell`, band controllers)
 /// discover their ids with [`Self::original_cell_ids_for`]; everything stacked
-/// on a root reuses its ids through `GeneratingSpatialIndex::original_ids_for`.
+/// on a root reuses its ids through the context.
 pub trait CellTiling: Sized {
 	/// Ids of this layout's cells intersecting `region`.
 	fn cell_ids(&self, region: Aabb3d) -> Vec<OriginalId>;
 
-	/// [`Self::cell_ids`] on the index's Universal layout; empty if it cannot be built.
-	fn original_cell_ids_for<S>(spatial_index: &mut S, region: Aabb3d) -> Vec<OriginalId>
+	/// [`Self::cell_ids`] on the context's Universal layout; empty if it cannot be built.
+	fn origin_ids_in(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId>
 	where
-		S: GeneratingSpatialIndex<Self>,
+		Self: hcsg::GenerationScheme,
 	{
-		GeneratingSpatialIndex::<Self>::get_one_or_generate(spatial_index, Id::Universal)
+		cx.get_or_generate::<Self>(Id::Universal)
 			.map(|layout| layout.cell_ids(region))
 			.unwrap_or_default()
 	}
@@ -124,7 +124,8 @@ pub struct OuterCellRing {
 /// (`high_inner_radius == 0`) draws High. Far / background use High as an
 /// empty hole inside `high_inner_radius` and draw Medium on
 /// `high_inner_radius..=high_outer_radius`. Playable Far / Background inset
-/// that hole so Medium overlaps the next-finer rim. Cells stay generated for
+/// that hole by at least one [`Self::anchor_step`] so Medium overlaps the
+/// next-finer rim through a snap. Cells stay generated for
 /// [`Self::cull_margin`] past both edges. Low is empty retain or cull.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TerrainCellRing {
@@ -202,6 +203,44 @@ impl TerrainCellRing {
 	pub fn aligned_anchor(self, anchor: Vec3) -> Vec3 {
 		let step = self.anchor_step.max(1e-3);
 		Vec3::new((anchor.x / step).round() * step, 0.0, (anchor.z / step).round() * step)
+	}
+
+	/// The retained cells around `anchor` as boxes: one for the near disk,
+	/// four strips around a far ring's hole.
+	///
+	/// Exact when the anchor step and both edges sit on this ring's lattice,
+	/// as the playable rings do. Boxes are inset by a sliver so none touches a
+	/// cell outside the ring.
+	pub fn regions_around(self, anchor: Vec3) -> Vec<Aabb3d> {
+		let a = self.aligned_anchor(anchor);
+		let outer = self.high_outer_radius + self.cull_margin;
+		let inner = (self.high_inner_radius - self.cull_margin).max(0.0);
+		let inset = 0.01 * self.cell_size;
+		let y = TERRAIN_PRESENT_VERTICAL_HALF_EXTENT;
+		let span = |x0: f32, x1: f32, z0: f32, z1: f32| {
+			Aabb3d::from_min_max(
+				Vec3::new(a.x + x0 + inset, -y, a.z + z0 + inset),
+				Vec3::new(a.x + x1 - inset, y, a.z + z1 - inset),
+			)
+		};
+		if inner <= 0.0 {
+			return vec![span(-outer, outer, -outer, outer)];
+		}
+		vec![
+			span(-outer, outer, inner, outer),
+			span(-outer, outer, -outer, -inner),
+			span(-outer, -inner, -inner, inner),
+			span(inner, outer, -inner, inner),
+		]
+	}
+
+	/// Ids of this ring's lattice cells intersecting `region`.
+	pub fn cell_ids(self, region: Aabb3d, vertical_half_extent: f32) -> Vec<OriginalId> {
+		cell_coords_for_region(region, self.cell_size)
+			.map(|(ix, iz)| {
+				OriginalId(Id::from_cell(cell_bounds(ix, iz, self.cell_size, vertical_half_extent)))
+			})
+			.collect()
 	}
 }
 
@@ -320,6 +359,47 @@ impl TerrainCellLayout {
 
 	pub fn is_streamed(&self) -> bool {
 		!self.stream_rings.is_empty()
+	}
+
+	/// Origin ids the shared runtime discovers in `region`: a streamed
+	/// layout's finest ring lattice, else [`CellTiling::cell_ids`].
+	///
+	/// Coarser rings are discovered by their own streams (see
+	/// [`crate::Streamed`]), so no id depends on where a stream is anchored.
+	pub fn origin_ids(&self, region: Aabb3d) -> Vec<OriginalId> {
+		match self.stream_rings.iter().min_by(|a, b| a.cell_size.total_cmp(&b.cell_size)) {
+			Some(finest) => finest.cell_ids(region, self.vertical_half_extent),
+			None => self.cell_ids(region),
+		}
+	}
+
+	/// [`Self::origin_ids`] on the context's Universal layout.
+	pub fn origin_ids_in(cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
+		cx.get_or_generate::<Self>(Id::Universal)
+			.map(|layout| layout.origin_ids(region))
+			.unwrap_or_default()
+	}
+
+	/// Origin-cell ids covering `(x, z)` on every lattice this layout tiles
+	/// (fine grid, outer rings, and stream rings).
+	///
+	/// Streamed discovery stays on the finest ring ([`Self::origin_ids`]);
+	/// callers that must attach to a coarser presented cell (far / background
+	/// bump-outs) use this list so they can `get_or_generate` that size.
+	pub fn origin_ids_covering_xz(&self, x: f32, z: f32) -> Vec<OriginalId> {
+		std::iter::once(self.cell_size)
+			.chain(self.outer_rings.iter().map(|outer| outer.cell_size))
+			.chain(self.stream_rings.iter().map(|ring| ring.cell_size))
+			.map(|size| {
+				let size = size.max(1e-3);
+				OriginalId(Id::from_cell(cell_bounds(
+					(x / size).floor() as i32,
+					(z / size).floor() as i32,
+					size,
+					self.vertical_half_extent,
+				)))
+			})
+			.collect()
 	}
 
 	/// Fine-grid cell containing `xz` (Y ignored).
@@ -646,6 +726,15 @@ mod tests {
 			far.level_for(Vec3::X * 12.0 * TERRAIN_CELL_SIZE, Vec3::ZERO),
 			LodSceneLevel::Medium
 		);
+	}
+
+	#[test]
+	fn covering_xz_includes_every_stream_lattice() {
+		let layout = streamed_layout();
+		let ids = layout.origin_ids_covering_xz(12.0 * TERRAIN_CELL_SIZE, 0.0);
+		assert!(count_edge(&ids, TERRAIN_CELL_SIZE) >= 1);
+		assert!(count_edge(&ids, 2.0 * TERRAIN_CELL_SIZE) >= 1);
+		assert!(count_edge(&ids, 4.0 * TERRAIN_CELL_SIZE) >= 1);
 	}
 
 	#[test]

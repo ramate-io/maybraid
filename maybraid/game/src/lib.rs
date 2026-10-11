@@ -4,7 +4,6 @@ mod flow;
 mod load;
 mod paths;
 mod shell;
-mod training;
 
 pub use flow::{GameFlow, HomeRoute, PauseMenuRoute, PlaySession, WorldPause};
 pub use paths::assets_root;
@@ -17,16 +16,13 @@ use crate::shell::{
 };
 use bevy::prelude::*;
 use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
-use maybraid_game_mode_training_ground::{
-	TrainingEnemyMarkersEnabled, TrainingRound, TrainingSessionSet,
-};
 use maybraid_input::MenuNavPad;
 use maybraid_menu_controller::MenuControllerPlugin;
 use maybraid_world::{
 	reset_first_spawn_offer, resume_discovery_from_saved_waypoints, Durham,
 	InventoryEditCameraFollow, PlayerPhysicsEnabled, PlayerSpawnXz, ShadowQuality,
 	TerrainStreaming, WorldGameplayEnabled, WorldMobHudEnabled, WorldPlayerLoadout, WorldPlugin,
-	WorldSceneryVisible, WorldSurfaceSet,
+	WorldSceneryVisible, WorldSurfaceReady, WorldSurfaceSet,
 };
 use menu_components::{
 	consume_screen_back, ActiveOverlayKey, MenuBackConsumed, ScreenBackPressed, ShortTextModal,
@@ -39,11 +35,9 @@ use menu_playground::{
 };
 use menu_screens::{
 	cancel_pending_create, request_show_gallery, request_show_home, request_show_in_game,
-	request_show_in_game_settings, request_show_training, CreateCharacterPlugin, GalleryScreen,
-	GameMode, HomeMenuChoice, HomeScreenPlugin, InGameMenuChoice, InGameScreenPlugin,
-	InGameSettings, InGameSettingsScreen, InGameShadowQuality, LoadingScreenPlugin,
-	LoadingScreenSystems, MenuScreen, SpinRevealScreen, TrainingEnemyMarkers, TrainingScreen,
-	TrainingScreenPlugin, TrainingSpawn,
+	request_show_in_game_settings, CreateCharacterPlugin, GalleryScreen, GameMode, HomeMenuChoice,
+	HomeScreenPlugin, InGameMenuChoice, InGameScreenPlugin, InGameSettings, InGameSettingsScreen,
+	InGameShadowQuality, LoadingScreenPlugin, LoadingScreenSystems, MenuScreen, SpinRevealScreen,
 };
 
 pub struct GamePlugin;
@@ -63,7 +57,6 @@ impl Plugin for GamePlugin {
 			.add_plugins((
 				maybraid_game_mode_reliquary::ReliquaryPlugin,
 				HomeScreenPlugin,
-				TrainingScreenPlugin,
 				InGameScreenPlugin,
 				LoadingScreenPlugin,
 				CreateCharacterPlugin,
@@ -74,13 +67,7 @@ impl Plugin for GamePlugin {
 			))
 			.add_systems(
 				OnEnter(GameFlow::Home),
-				(
-					enter_home,
-					crate::training::clear_play_session,
-					apply_shell_look,
-					attach_preview_camera,
-				)
-					.chain(),
+				(enter_home, clear_play_session, apply_shell_look, attach_preview_camera).chain(),
 			)
 			.add_systems(
 				OnEnter(GameFlow::Characters),
@@ -92,11 +79,10 @@ impl Plugin for GamePlugin {
 				(
 					enter_loading_world,
 					spawn_loading_backdrop,
-					crate::training::reset_surface_ready,
+					reset_surface_ready,
 					apply_shell_look,
 					detach_preview_camera,
 					crate::load::arm_first_load,
-					crate::training::begin_training_round.before(load_active_player_loadout),
 					load_active_player_loadout.before(resume_discovery_from_saved_waypoints),
 					reset_first_spawn_offer,
 					resume_discovery_from_saved_waypoints,
@@ -136,10 +122,6 @@ impl Plugin for GamePlugin {
 						.after(WorldSurfaceSet)
 						.before(LoadingScreenSystems::Apply),
 					route_home_choice.run_if(in_state(GameFlow::Home)),
-					crate::training::start_training_session.run_if(in_state(GameFlow::Home)),
-					crate::training::reload_training_round
-						.run_if(in_state(GameFlow::World))
-						.after(TrainingSessionSet::LifeEnded),
 					home_settings_back
 						.after(TextMenuSystems::Navigate)
 						.run_if(in_state(GameFlow::Home)),
@@ -148,7 +130,6 @@ impl Plugin for GamePlugin {
 					sync_world_loadout_from_editor.run_if(in_state(WorldPause::Menu)),
 					persist_changed_player_inventory,
 					sync_world_mob_hud,
-					sync_training_enemy_markers,
 					sync_world_shadows,
 					pause_menu_back
 						.after(TextMenuSystems::Navigate)
@@ -179,27 +160,33 @@ fn boot_shell(
 		mode.label = String::from("Discovery");
 		commands.insert_resource(PlaySession::Discovery);
 		enter_loading_world(commands, screens);
-		route.enter(GameFlow::LoadingWorld, PlaySession::Discovery);
+		route.enter(GameFlow::LoadingWorld);
 		return;
 	}
 	enter_home(commands);
 }
 
+fn reset_surface_ready(mut ready: ResMut<WorldSurfaceReady>) {
+	ready.0 = false;
+}
+
+/// Leave / Home: drop the session.
+fn clear_play_session(
+	mut session: ResMut<PlaySession>,
+	mut mode: ResMut<GameMode>,
+	mut ready: ResMut<WorldSurfaceReady>,
+) {
+	ready.0 = false;
+	*session = PlaySession::None;
+	mode.label = String::from(PlaySession::Discovery.label());
+}
+
 fn load_active_player_loadout(
 	mut commands: Commands,
-	session: Res<PlaySession>,
-	spawn: Option<Res<TrainingSpawn>>,
-	round: Option<Res<TrainingRound>>,
 	active: Option<Res<ActiveCharacter>>,
 	save_root: Res<character_persist::SaveRoot>,
 ) {
 	commands.remove_resource::<WorldPlayerLoadout>();
-	if let Some(trainee) =
-		crate::training::session_trainee(*session, spawn.as_deref(), round.as_deref())
-	{
-		commands.insert_resource(trainee);
-		return;
-	}
 	let Some(active) = active else {
 		warn!("entering world without an active character; using the default world loadout");
 		return;
@@ -225,7 +212,6 @@ fn read_player_loadout(
 
 fn route_home_choice(
 	mut choices: MessageReader<HomeMenuChoice>,
-	current: Res<PlaySession>,
 	mut route: ShellRoute,
 	mut mode: ResMut<GameMode>,
 	mut commands: Commands,
@@ -237,10 +223,9 @@ fn route_home_choice(
 		HomeRoute::World { session } => {
 			commands.insert_resource(session);
 			mode.label = String::from(session.label());
-			route.enter(GameFlow::LoadingWorld, session);
+			route.enter(GameFlow::LoadingWorld);
 		}
-		HomeRoute::TrainingSetup => request_show_training(&mut commands),
-		HomeRoute::Characters => route.enter(GameFlow::Characters, *current),
+		HomeRoute::Characters => route.enter(GameFlow::Characters),
 		HomeRoute::Settings => request_show_in_game_settings(&mut commands),
 		HomeRoute::Unimplemented => {}
 	}
@@ -248,7 +233,6 @@ fn route_home_choice(
 
 fn route_in_game_choice(
 	mut choices: MessageReader<InGameMenuChoice>,
-	session: Res<PlaySession>,
 	mut route: ShellRoute,
 	mut commands: Commands,
 	mut edits: MessageWriter<RequestEditCharacter>,
@@ -259,7 +243,7 @@ fn route_in_game_choice(
 		return;
 	};
 	match PauseMenuRoute::from_choice(choice) {
-		PauseMenuRoute::Leave => route.enter(GameFlow::Home, *session),
+		PauseMenuRoute::Leave => route.enter(GameFlow::Home),
 		PauseMenuRoute::Settings => request_show_in_game_settings(&mut commands),
 		PauseMenuRoute::Character => {
 			let Some(active) = active else {
@@ -267,7 +251,7 @@ fn route_in_game_choice(
 				return;
 			};
 			if !plays_saved_character(loadout.as_deref(), active.as_ref()) {
-				warn!("pause character: a random trainee has no saved character to edit");
+				warn!("pause character: the world loadout is not the active character's");
 				return;
 			}
 			edits.write(RequestEditCharacter {
@@ -302,8 +286,8 @@ fn persist_changed_player_inventory(
 	}
 }
 
-/// A Training trainee wears the world loadout under its own key, so neither its
-/// bag nor its editor may reach the active character's files.
+/// A world loadout under another key must not reach the active character's files,
+/// neither through its bag nor through the editor.
 fn plays_saved_character(loadout: Option<&WorldPlayerLoadout>, active: &ActiveCharacter) -> bool {
 	loadout.is_none_or(|loadout| loadout.key == active.id.to_hex())
 }
@@ -349,13 +333,6 @@ fn sync_world_mob_hud(settings: Res<InGameSettings>, mut hud: ResMut<WorldMobHud
 	}
 }
 
-fn sync_training_enemy_markers(
-	markers: Res<TrainingEnemyMarkers>,
-	mut enabled: ResMut<TrainingEnemyMarkersEnabled>,
-) {
-	enabled.set_if_neq(TrainingEnemyMarkersEnabled(markers.0));
-}
-
 fn sync_world_shadows(settings: Res<InGameSettings>, mut quality: ResMut<ShadowQuality>) {
 	let wanted = match settings.shadows {
 		InGameShadowQuality::High => ShadowQuality::High,
@@ -374,7 +351,7 @@ fn home_settings_back(
 	modal: Res<ShortTextModal>,
 	consumed: Res<MenuBackConsumed>,
 	mut backs: MessageReader<ScreenBackPressed>,
-	screens: Query<(), Or<(With<InGameSettingsScreen>, With<TrainingScreen>)>>,
+	screens: Query<(), With<InGameSettingsScreen>>,
 ) {
 	if screens.is_empty() {
 		return;
@@ -432,7 +409,6 @@ fn toggle_world_pause(
 }
 
 fn character_back(
-	session: Res<PlaySession>,
 	mut route: ShellRoute,
 	mut commands: Commands,
 	nav: Res<MenuNavPad>,
@@ -465,7 +441,7 @@ fn character_back(
 		return;
 	}
 	if !gallery.is_empty() {
-		route.enter(GameFlow::Home, *session);
+		route.enter(GameFlow::Home);
 	}
 }
 
@@ -482,19 +458,15 @@ mod tests {
 	use menu_playground::ActiveCharacter;
 
 	use crate::{
-		assets_root, load_active_player_loadout, persist_changed_player_inventory,
-		read_player_loadout, route_home_choice, sync_world_loadout_from_editor, sync_world_shadows,
-		GameFlow, PlaySession,
+		assets_root, clear_play_session, load_active_player_loadout,
+		persist_changed_player_inventory, read_player_loadout, route_home_choice,
+		sync_world_loadout_from_editor, sync_world_shadows, GameFlow, PlaySession,
 	};
-	use maybraid_game_mode_training_ground::TrainingRound;
-	use maybraid_world::{ShadowQuality, WorldPlayerLoadout};
+	use maybraid_world::{ShadowQuality, WorldPlayerLoadout, WorldSurfaceReady};
 	use menu_playground::{
 		CharacterEditBaseline, CharacterEditorReturn, CharacterMenuState, EditingCharacter,
 	};
-	use menu_screens::{
-		GameMode, HomeMenuChoice, InGameSettings, InGameShadowQuality, RequestShowTraining,
-		TrainingCharacterChoice, TrainingSpawn,
-	};
+	use menu_screens::{GameMode, HomeMenuChoice, InGameSettings, InGameShadowQuality};
 
 	#[test]
 	fn crate_assets_contain_barlow() {
@@ -503,17 +475,16 @@ mod tests {
 	}
 
 	#[test]
-	fn training_loadout_uses_the_active_character() -> anyhow::Result<()> {
+	fn world_loadout_uses_the_active_character() -> anyhow::Result<()> {
 		let dir = tempfile::tempdir()?;
 		let root = SaveRoot::at(dir.path());
 		let id = CharacterId(11);
-		let model = CharacterModel::new(id, "Trainee", CharacterAppearance::default());
+		let model = CharacterModel::new(id, "Roamer", CharacterAppearance::default());
 		let inventory = Inventory::default();
 		character_model_user::save(&root, &model)?;
 		character_inventory_user::save(&root, id, &inventory)?;
 
 		let mut world = World::new();
-		world.insert_resource(PlaySession::Training);
 		world.insert_resource(root);
 		world.insert_resource(ActiveCharacter { id });
 		world
@@ -521,14 +492,14 @@ mod tests {
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		let loadout = world
 			.get_resource::<WorldPlayerLoadout>()
-			.ok_or_else(|| anyhow::anyhow!("training enter did not insert a loadout"))?;
+			.ok_or_else(|| anyhow::anyhow!("world enter did not insert a loadout"))?;
 		assert_eq!(loadout.key, id.to_hex());
 		assert_eq!(loadout.inventory, inventory);
 		Ok(())
 	}
 
 	#[test]
-	fn training_route_shows_the_setup_before_loading() -> anyhow::Result<()> {
+	fn the_removed_training_ground_route_stays_home() -> anyhow::Result<()> {
 		let mut world = World::new();
 		world.init_resource::<Messages<HomeMenuChoice>>();
 		world.write_message(HomeMenuChoice::TrainingGround);
@@ -541,44 +512,41 @@ mod tests {
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
 		assert_eq!(*world.resource::<PlaySession>(), PlaySession::None);
 		assert!(matches!(world.resource::<NextState<GameFlow>>(), NextState::Unchanged));
-		let mut requests = world.query::<&RequestShowTraining>();
-		assert_eq!(requests.iter(&world).count(), 1);
 		Ok(())
 	}
 
 	#[test]
-	fn a_random_training_round_plays_the_trainee() -> anyhow::Result<()> {
-		let dir = tempfile::tempdir()?;
-		let round = TrainingRound::new(3);
+	fn leave_drops_the_session() -> anyhow::Result<()> {
 		let mut world = World::new();
-		world.insert_resource(PlaySession::Training);
-		world.insert_resource(TrainingSpawn::new(TrainingCharacterChoice::Random));
-		world.insert_resource(round);
-		world.insert_resource(SaveRoot::at(dir.path()));
-		world.insert_resource(ActiveCharacter { id: CharacterId(11) });
+		world.insert_resource(PlaySession::Discovery);
+		world.insert_resource(GameMode::new("Elsewhere"));
+		world.insert_resource(WorldSurfaceReady(true));
 		world
-			.run_system_once(load_active_player_loadout)
+			.run_system_once(clear_play_session)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
-		assert_eq!(
-			world.get_resource::<WorldPlayerLoadout>(),
-			Some(&crate::training::trainee_loadout(round))
-		);
+		assert_eq!(*world.resource::<PlaySession>(), PlaySession::None);
+		assert_eq!(world.resource::<GameMode>().label, "Discovery");
+		assert!(!world.resource::<WorldSurfaceReady>().0);
 		Ok(())
 	}
 
 	#[test]
-	fn a_trainee_bag_is_never_saved_to_the_active_character() -> anyhow::Result<()> {
+	fn a_foreign_bag_is_never_saved_to_the_active_character() -> anyhow::Result<()> {
 		let dir = tempfile::tempdir()?;
 		let root = SaveRoot::at(dir.path());
 		let id = CharacterId(7);
 		character_inventory_user::save(&root, id, &Inventory::default())?;
 
-		let trainee = crate::training::trainee_loadout(TrainingRound::new(3));
-		assert!(!trainee.inventory.items.is_empty());
+		let foreign = WorldPlayerLoadout::new(
+			"foreign",
+			CharacterAppearance::default(),
+			Inventory::with_starter_outfit(vec![InventoryItem::firearm(FirearmMesh::Bullpup)]),
+		);
+		assert!(!foreign.inventory.items.is_empty());
 		let mut world = World::new();
 		world.insert_resource(root.clone());
 		world.insert_resource(ActiveCharacter { id });
-		world.insert_resource(trainee);
+		world.insert_resource(foreign);
 		world
 			.run_system_once(persist_changed_player_inventory)
 			.map_err(|error| anyhow::anyhow!("{error:?}"))?;

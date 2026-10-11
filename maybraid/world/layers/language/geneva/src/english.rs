@@ -93,6 +93,16 @@ pub fn named_urban_english(
 	compose_owned(&modifiers, &heads, seed, false)
 }
 
+/// Seeded region phrase. Independent of streamed groves and towns.
+pub fn named_region_english(world_seed: u64, ix: i32, iz: i32) -> Vec<String> {
+	compose_english(
+		&["high", "low", "old", "far", "near", "great", "little"],
+		&["land", "country", "march", "reach", "vale", "downs", "heath", "moor"],
+		mix(world_seed ^ mix(ix as u64) ^ mix((iz as u64).wrapping_mul(17)) ^ 0x51A7),
+		false,
+	)
+}
+
 /// Color + a place noun (`Amber Lodge`).
 pub fn named_place_english(label: DiscoverablePlaceLabel, seed: u64) -> Vec<String> {
 	let vocab = place_vocab(label);

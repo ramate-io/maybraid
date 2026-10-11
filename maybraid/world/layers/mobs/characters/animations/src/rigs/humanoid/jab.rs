@@ -10,7 +10,6 @@ use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
 use character_rigs::Side;
 
 use crate::animations::Jab;
-use crate::rigs::humanoid::apply::apply_leg;
 use crate::Animation;
 
 impl Animation<HumanoidV0Rig> for Jab {
@@ -19,14 +18,8 @@ impl Animation<HumanoidV0Rig> for Jab {
 		let jab_side = self.side;
 		let guard_side = self.opposite_side();
 
-		apply_leg(
-			&mut pose,
-			jab_side,
-			self.lead_femur_swing(progress),
-			self.stance_shin_flex(progress),
-		);
-		apply_leg(
-			&mut pose,
+		pose.apply_leg(jab_side, self.lead_femur_swing(progress), self.stance_shin_flex(progress));
+		pose.apply_leg(
 			guard_side,
 			self.rear_femur_swing(progress),
 			self.stance_shin_flex(progress),

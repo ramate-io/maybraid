@@ -15,7 +15,6 @@ pub mod loading;
 pub mod settings;
 pub mod show;
 pub mod spin_reveal;
-pub mod training;
 
 pub use create_character::{
 	cancel_pending_create, request_show_create_character, request_show_create_character_id,
@@ -48,10 +47,6 @@ pub use spin_reveal::{
 	request_show_spin_reveal, RequestShowSpinReveal, SpinRevealChoice, SpinRevealCurrent,
 	SpinRevealFinished, SpinRevealItems, SpinRevealScreen, SpinRevealScreenPlugin,
 	SpinRevealSystems,
-};
-pub use training::{
-	request_show_training, RequestShowTraining, TrainingCharacterChoice, TrainingEnemyMarkers,
-	TrainingScreen, TrainingScreenPlugin, TrainingSpawn,
 };
 
 /// Marker on every full-screen menu root so show-requests can replace each other.

@@ -1,7 +1,9 @@
 use std::collections::HashSet;
 
 use bevy::prelude::*;
-use intelligence_lod::{due_by_rank, IntelligenceBand, IntelligenceLod, IntelligencePriority};
+use intelligence_lod::{
+	due_by_rank, staggered_interval, IntelligenceBand, IntelligenceLod, IntelligencePriority,
+};
 use spotting_intelligence::{SpottingHintSource, SpottingUser};
 
 use crate::{
@@ -267,10 +269,4 @@ pub fn export_threat_spotting_hints(
 			spotting.hint_from(entity, SpottingHintSource::THREAT, priority);
 		}
 	}
-}
-
-fn staggered_interval(interval: f32, entity: Entity, salt: u64) -> f32 {
-	let bits = entity.to_bits().wrapping_add(salt.wrapping_mul(0x9e37_79b9));
-	let jitter = (bits % 1_001) as f32 / 1_000.0;
-	interval.max(0.05) * (0.8 + jitter * 0.4)
 }

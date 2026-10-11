@@ -204,6 +204,98 @@ impl HumanoidPose {
 	pub fn arm_mut(&mut self, side: Side) -> &mut ArmPose {
 		&mut self.arms[side.index()]
 	}
+
+	/// Symmetric leg flexion. `femur_swing` is hip flexion; `shin_flex` is knee flexion.
+	pub fn apply_leg(&mut self, side: Side, femur_swing: f32, shin_flex: f32) {
+		let leg = self.leg_mut(side);
+		leg.hip_flexion += femur_swing;
+		leg.knee_flexion += shin_flex;
+	}
+
+	/// Sagittal lean on the root only. Walk and other “lean” knobs use this so the
+	/// authored angle is a forward bend, not a yaw.
+	pub fn apply_root(&mut self, root_swing: f32) {
+		self.spine.add_root_forward(root_swing);
+	}
+
+	/// Sagittal fold spread across the spine stack. Held and looping squat share it.
+	pub fn apply_spine_pitch(&mut self, pitch: f32) {
+		self.spine.add_stack_forward(pitch);
+	}
+
+	/// Hip crease as pelvis flexion.
+	pub fn apply_hip_fold(&mut self, side: Side, fold: f32) {
+		self.leg_mut(side).pelvis_flexion += fold;
+	}
+
+	pub fn apply_neck(
+		&mut self,
+		lower_swing: f32,
+		lower_flex: f32,
+		upper_swing: f32,
+		upper_flex: f32,
+	) {
+		self.apply_neck_twisted(lower_swing, lower_flex, 0.0, upper_swing, upper_flex, 0.0);
+	}
+
+	/// Neck channels: swing is turn, flex is side tilt, twist is nod.
+	pub fn apply_neck_twisted(
+		&mut self,
+		lower_swing: f32,
+		lower_flex: f32,
+		lower_twist: f32,
+		upper_swing: f32,
+		upper_flex: f32,
+		upper_twist: f32,
+	) {
+		self.neck.lower.turn += lower_swing;
+		self.neck.lower.side_tilt += lower_flex;
+		self.neck.lower.nod += lower_twist;
+		self.neck.upper.turn += upper_swing;
+		self.neck.upper.side_tilt += upper_flex;
+		self.neck.upper.nod += upper_twist;
+	}
+
+	pub fn apply_arm(
+		&mut self,
+		side: Side,
+		shoulder_swing: f32,
+		shoulder_flex: f32,
+		humerus_swing: f32,
+		humerus_flex: f32,
+		forearm_flex: f32,
+	) {
+		self.apply_arm_twisted(
+			side,
+			shoulder_swing,
+			shoulder_flex,
+			0.0,
+			humerus_swing,
+			humerus_flex,
+			forearm_flex,
+		);
+	}
+
+	/// Shoulder and humerus `swing` / `flex` / `twist` keep those imported axes.
+	/// Elbow `flex` is the same number on both arms; the right forearm axis is −Z.
+	pub fn apply_arm_twisted(
+		&mut self,
+		side: Side,
+		shoulder_swing: f32,
+		shoulder_flex: f32,
+		shoulder_twist: f32,
+		humerus_swing: f32,
+		humerus_flex: f32,
+		forearm_flex: f32,
+	) {
+		let arm = self.arm_mut(side);
+		arm.shoulder_forward += shoulder_swing;
+		arm.shoulder_lift += shoulder_flex;
+		arm.shoulder_twist += shoulder_twist;
+		arm.forward_elevation += humerus_swing;
+		arm.lateral_elevation += humerus_flex;
+		arm.elbow_flexion += forearm_flex;
+	}
 }
 
 pub fn resolve_humanoid(pose: &HumanoidPose, binding: &RigBinding, out: &mut PoseBuffer) {
@@ -236,6 +328,28 @@ pub fn humanoid_write_mask(names: &[&str]) -> u32 {
 		.iter()
 		.filter_map(|name| humanoid_bone_bit(name))
 		.fold(0, |mask, bit| mask | bit)
+}
+
+/// Bones with any non-zero authored channel in `pose`.
+///
+/// Used to verify clip write masks stay aligned with sampled output.
+pub fn humanoid_pose_write_mask(pose: &HumanoidPose) -> u32 {
+	let mut mask = 0u32;
+	for (index, name) in HUMANOID_V0_BONES.iter().enumerate() {
+		if bone_has_authored_channels(name, pose) {
+			mask |= 1u32 << index;
+		}
+	}
+	mask
+}
+
+fn bone_has_authored_channels(name: &str, pose: &HumanoidPose) -> bool {
+	match name {
+		"humerus.L" if pose.arms[0].aim.is_some() => true,
+		"humerus.R" if pose.arms[1].aim.is_some() => true,
+		_ => channels_for(name, pose)
+			.is_some_and(|(swing, flex, twist)| swing != 0.0 || flex != 0.0 || twist != 0.0),
+	}
 }
 
 /// Parent-space authored rotation `Q` such that posed = `Q * rest`.
@@ -279,7 +393,12 @@ fn apply_masked(
 	rest: &PoseBuffer,
 	out: &mut PoseBuffer,
 ) {
-	out.copy_from(rest);
+	let n = rest.local.len().min(out.local.len());
+	for index in 0..n {
+		if mask & (1u32 << index) == 0 {
+			out.local[index] = rest.local[index];
+		}
+	}
 	for (index, name) in definition.names.iter().enumerate() {
 		if mask & (1u32 << index) == 0 {
 			continue;

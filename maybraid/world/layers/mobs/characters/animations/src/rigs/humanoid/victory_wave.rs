@@ -5,7 +5,6 @@ use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
 use character_rigs::Side;
 
 use crate::animations::VictoryWave;
-use crate::rigs::humanoid::apply::{apply_arm, apply_leg, apply_neck_twisted};
 use crate::Animation;
 
 impl Animation<HumanoidV0Rig> for VictoryWave {
@@ -15,22 +14,16 @@ impl Animation<HumanoidV0Rig> for VictoryWave {
 		let other = wave_side.opposite();
 
 		apply_wave_arm(&mut pose, wave_side, progress, self);
-		apply_arm(&mut pose, other, self.counter_shoulder(progress), 0.0, 0.0, 0.0, 0.0);
+		pose.arm_mut(other).shoulder_forward += self.counter_shoulder(progress);
 
 		let bounce = self.knee_bounce(progress);
-		apply_leg(&mut pose, Side::Left, bounce, bounce * 0.55);
-		apply_leg(&mut pose, Side::Right, bounce, bounce * 0.55);
+		pose.apply_leg(Side::Left, bounce, bounce * 0.55);
+		pose.apply_leg(Side::Right, bounce, bounce * 0.55);
 
 		pose.spine.add_turn(-self.torso_turn(progress));
-		apply_neck_twisted(
-			&mut pose,
-			self.torso_turn(progress) * 0.35,
-			0.0,
-			self.neck_nod(progress),
-			0.0,
-			0.0,
-			0.0,
-		);
+		let nod = self.neck_nod(progress);
+		let turn = self.torso_turn(progress) * 0.35;
+		pose.apply_neck_twisted(turn, 0.0, nod, turn, 0.0, nod);
 		rig.write_pose(&pose);
 	}
 }

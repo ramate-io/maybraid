@@ -3,7 +3,6 @@ use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
 use character_rigs::Side;
 
 use crate::animations::{smoothstep, UprightLeap, AIR_END, TAKEOFF_END};
-use crate::rigs::humanoid::apply::{apply_arm, apply_leg, apply_root};
 use crate::{Animation, Progress};
 
 #[derive(Clone, Copy)]
@@ -24,11 +23,10 @@ impl Animation<HumanoidV0Rig> for UprightLeap {
 	fn apply_for(&self, rig: &mut HumanoidV0Rig, progress: f32) {
 		let mut pose = HumanoidPose::default();
 		let sample = self.pose_at(Progress(progress).clamp());
-		apply_leg(&mut pose, Side::Left, sample.left_femur, sample.left_shin);
-		apply_leg(&mut pose, Side::Right, sample.right_femur, sample.right_shin);
-		apply_root(&mut pose, sample.lean);
-		apply_arm(
-			&mut pose,
+		pose.apply_leg(Side::Left, sample.left_femur, sample.left_shin);
+		pose.apply_leg(Side::Right, sample.right_femur, sample.right_shin);
+		pose.apply_root(sample.lean);
+		pose.apply_arm(
 			Side::Left,
 			sample.left_shoulder,
 			0.0,
@@ -36,8 +34,7 @@ impl Animation<HumanoidV0Rig> for UprightLeap {
 			0.0,
 			sample.elbow,
 		);
-		apply_arm(
-			&mut pose,
+		pose.apply_arm(
 			Side::Right,
 			sample.right_shoulder,
 			0.0,

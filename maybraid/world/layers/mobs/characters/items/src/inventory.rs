@@ -7,8 +7,8 @@
 use bevy::prelude::*;
 
 use crate::{
-	hashed_firearm_name, hashed_item_name, hashed_skill_map_name, ClothingKind, ClothingMaterial,
-	ClothingMesh, ClothingStats, FirearmMesh, FirearmSpec, FirearmStats, ItemColor, SkillMapKind,
+	ClothingKind, ClothingMaterial, ClothingMesh, ClothingStats, FirearmMesh, FirearmSpec,
+	FirearmStats, GrenadeRecharge, GrenadeSpec, GrenadeStats, ItemColor, SkillMapKind,
 	SkillMapSpec,
 };
 
@@ -17,6 +17,9 @@ pub const STARTER_CLOTHING_COUNT: usize = 3;
 
 /// How many firearms character creation rolls into the bag.
 pub const STARTER_WEAPON_COUNT: usize = 2;
+
+/// How many grenades character creation adds beside the starter firearms.
+pub const STARTER_GRENADE_COUNT: usize = 1;
 
 /// Hard cap on simultaneously worn clothing items.
 pub const WORN_CLOTHING_LIMIT: usize = 6;
@@ -101,6 +104,7 @@ impl MaterialRefParams {
 pub enum InventoryItem {
 	Clothing { mesh: ClothingMesh, material: MaterialRefParams, stats: ClothingStats },
 	Firearm { spec: FirearmSpec, stats: FirearmStats },
+	Grenade { spec: GrenadeSpec, stats: GrenadeStats, recharge: GrenadeRecharge },
 	SkillMap { spec: SkillMapSpec },
 }
 
@@ -125,10 +129,22 @@ impl InventoryItem {
 		Self::SkillMap { spec }
 	}
 
+	pub const fn grenade(spec: GrenadeSpec, stats: GrenadeStats) -> Self {
+		Self::Grenade { spec, stats, recharge: GrenadeRecharge { remaining: 0.0 } }
+	}
+
+	pub const fn standard_grenade() -> Self {
+		Self::grenade(GrenadeSpec::standard(), GrenadeStats::standard())
+	}
+
+	pub fn rolled_grenade(rng: &mut ItemRng) -> Self {
+		Self::grenade(GrenadeSpec::standard(), GrenadeStats::realize(rng))
+	}
+
 	pub const fn slot(&self) -> InventorySlot {
 		match self {
 			Self::Clothing { .. } => InventorySlot::Clothing,
-			Self::Firearm { .. } => InventorySlot::Weapons,
+			Self::Firearm { .. } | Self::Grenade { .. } => InventorySlot::Weapons,
 			Self::SkillMap { .. } => InventorySlot::Skills,
 		}
 	}
@@ -136,49 +152,63 @@ impl InventoryItem {
 	pub const fn mesh(&self) -> Option<ClothingMesh> {
 		match self {
 			Self::Clothing { mesh, .. } => Some(*mesh),
-			Self::Firearm { .. } | Self::SkillMap { .. } => None,
+			Self::Firearm { .. } | Self::Grenade { .. } | Self::SkillMap { .. } => None,
 		}
 	}
 
 	pub const fn firearm_mesh(&self) -> Option<FirearmMesh> {
 		match self {
 			Self::Firearm { spec, .. } => Some(spec.kit.body),
-			Self::Clothing { .. } | Self::SkillMap { .. } => None,
+			Self::Clothing { .. } | Self::Grenade { .. } | Self::SkillMap { .. } => None,
 		}
 	}
 
 	pub const fn firearm_spec(&self) -> Option<FirearmSpec> {
 		match self {
 			Self::Firearm { spec, .. } => Some(*spec),
-			Self::Clothing { .. } | Self::SkillMap { .. } => None,
+			Self::Clothing { .. } | Self::Grenade { .. } | Self::SkillMap { .. } => None,
 		}
 	}
 
 	pub const fn skill_map_spec(&self) -> Option<SkillMapSpec> {
 		match self {
 			Self::SkillMap { spec } => Some(*spec),
-			Self::Clothing { .. } | Self::Firearm { .. } => None,
+			Self::Clothing { .. } | Self::Firearm { .. } | Self::Grenade { .. } => None,
 		}
 	}
 
 	pub const fn material(&self) -> Option<MaterialRefParams> {
 		match self {
 			Self::Clothing { material, .. } => Some(*material),
-			Self::Firearm { .. } | Self::SkillMap { .. } => None,
+			Self::Firearm { .. } | Self::Grenade { .. } | Self::SkillMap { .. } => None,
 		}
 	}
 
 	pub const fn clothing_stats(&self) -> Option<ClothingStats> {
 		match self {
 			Self::Clothing { stats, .. } => Some(*stats),
-			Self::Firearm { .. } | Self::SkillMap { .. } => None,
+			Self::Firearm { .. } | Self::Grenade { .. } | Self::SkillMap { .. } => None,
 		}
 	}
 
 	pub const fn firearm_stats(&self) -> Option<FirearmStats> {
 		match self {
 			Self::Firearm { stats, .. } => Some(*stats),
-			Self::Clothing { .. } | Self::SkillMap { .. } => None,
+			Self::Clothing { .. } | Self::Grenade { .. } | Self::SkillMap { .. } => None,
+		}
+	}
+
+	pub const fn grenade_stats(&self) -> Option<GrenadeStats> {
+		match self {
+			Self::Grenade { stats, .. } => Some(*stats),
+			Self::Clothing { .. } | Self::Firearm { .. } | Self::SkillMap { .. } => None,
+		}
+	}
+
+	pub const fn grenade_spec(&self) -> Option<GrenadeSpec> {
+		match self {
+			Self::Grenade { spec, .. } => Some(*spec),
+			Self::Clothing { .. } | Self::Firearm { .. } | Self::SkillMap { .. } => None,
 		}
 	}
 
@@ -186,6 +216,7 @@ impl InventoryItem {
 		match self {
 			Self::Clothing { stats, .. } => stats.catalog_detail(),
 			Self::Firearm { stats, .. } => stats.catalog_detail(),
+			Self::Grenade { stats, .. } => stats.catalog_detail(),
 			Self::SkillMap { spec } => {
 				format!("{} · {:04X}", spec.kind.display_name(), spec.seed as u16)
 			}
@@ -196,6 +227,7 @@ impl InventoryItem {
 		match self {
 			Self::Clothing { stats, .. } => stats.stat_rows(),
 			Self::Firearm { stats, .. } => stats.stat_rows(),
+			Self::Grenade { stats, .. } => stats.stat_rows(),
 			Self::SkillMap { spec } => vec![
 				(String::from("Kind"), spec.kind.display_name().to_string()),
 				(String::from("Seed"), format!("{:08X}", spec.seed)),
@@ -207,17 +239,17 @@ impl InventoryItem {
 		match self {
 			Self::Clothing { mesh, .. } => mesh.label(),
 			Self::Firearm { spec, .. } => spec.kit.body.label(),
+			Self::Grenade { spec, .. } => spec.mesh.label(),
 			Self::SkillMap { spec } => spec.kind.label(),
 		}
 	}
 
 	pub fn name(&self) -> String {
 		match self {
-			Self::Clothing { mesh, material, .. } => {
-				hashed_item_name(*mesh, material.id, material.color)
-			}
-			Self::Firearm { spec, .. } => hashed_firearm_name(*spec),
-			Self::SkillMap { spec } => hashed_skill_map_name(*spec),
+			Self::Clothing { mesh, material, .. } => mesh.hashed_name(material.id, material.color),
+			Self::Firearm { spec, .. } => spec.hashed_name(),
+			Self::Grenade { spec, .. } => spec.hashed_name(),
+			Self::SkillMap { spec } => spec.hashed_name(),
 		}
 	}
 
@@ -225,7 +257,27 @@ impl InventoryItem {
 		match self {
 			Self::Clothing { mesh, .. } => mesh.path(),
 			Self::Firearm { spec, .. } => spec.kit.body.path(),
-			Self::SkillMap { .. } => "",
+			Self::Grenade { .. } | Self::SkillMap { .. } => "",
+		}
+	}
+
+	/// Authored identity: spec/stats/kind match, excluding transient grenade recharge.
+	pub fn same_catalog_identity(&self, other: &Self) -> bool {
+		match (self, other) {
+			(
+				Self::Clothing { mesh, material, stats },
+				Self::Clothing { mesh: other_mesh, material: other_material, stats: other_stats },
+			) => mesh == other_mesh && material == other_material && stats == other_stats,
+			(
+				Self::Firearm { spec, stats },
+				Self::Firearm { spec: other_spec, stats: other_stats },
+			) => spec == other_spec && stats == other_stats,
+			(
+				Self::Grenade { spec, stats, .. },
+				Self::Grenade { spec: other_spec, stats: other_stats, .. },
+			) => spec == other_spec && stats == other_stats,
+			(Self::SkillMap { spec }, Self::SkillMap { spec: other_spec }) => spec == other_spec,
+			_ => false,
 		}
 	}
 }
@@ -241,6 +293,19 @@ pub struct Inventory {
 }
 
 impl Inventory {
+	/// Bag layout matches and every item has the same authored identity.
+	pub fn same_catalog_identity(&self, other: &Self) -> bool {
+		self.clothing == other.clothing
+			&& self.weapons == other.weapons
+			&& self.skills == other.skills
+			&& self.items.len() == other.items.len()
+			&& self
+				.items
+				.iter()
+				.zip(&other.items)
+				.all(|(left, right)| left.same_catalog_identity(right))
+	}
+
 	/// Every clothing item starts worn (up to the wear cap). Weapons stay unequipped.
 	pub fn with_all_worn(items: Vec<InventoryItem>) -> Self {
 		let clothing: Vec<usize> = items
@@ -326,6 +391,11 @@ impl Inventory {
 
 	pub fn primary_weapon(&self) -> Option<&InventoryItem> {
 		self.weapons.first().and_then(|&index| self.items.get(index))
+	}
+
+	pub fn primary_weapon_mut(&mut self) -> Option<&mut InventoryItem> {
+		let index = *self.weapons.first()?;
+		self.items.get_mut(index)
 	}
 
 	pub fn primary_skill_map(&self) -> Option<&InventoryItem> {
@@ -647,10 +717,11 @@ pub fn random_starter_skill_maps(rng: &mut ItemRng, count: usize) -> Vec<Invento
 	items
 }
 
-/// Clothing starter, two unique firearms, and one rolled skill map.
+/// Clothing starter, two unique firearms, one grenade, and one rolled skill map.
 pub fn random_starter_loadout(rng: &mut ItemRng) -> Vec<InventoryItem> {
 	let mut items = random_starter_clothing(rng, STARTER_CLOTHING_COUNT);
 	items.extend(random_starter_firearms(rng, STARTER_WEAPON_COUNT));
+	items.push(InventoryItem::rolled_grenade(rng));
 	items.extend(random_starter_skill_maps(rng, STARTER_SKILL_MAP_COUNT));
 	items
 }
@@ -766,20 +837,27 @@ mod tests {
 	}
 
 	#[test]
-	fn starter_loadout_has_clothes_two_guns_and_one_skill_map() {
+	fn starter_loadout_has_clothes_two_guns_a_grenade_and_one_skill_map() {
 		let items = random_starter_loadout(&mut ItemRng::from_seed(42));
 		assert_eq!(
 			items.len(),
-			STARTER_CLOTHING_COUNT + STARTER_WEAPON_COUNT + STARTER_SKILL_MAP_COUNT
+			STARTER_CLOTHING_COUNT
+				+ STARTER_WEAPON_COUNT
+				+ STARTER_GRENADE_COUNT
+				+ STARTER_SKILL_MAP_COUNT
 		);
 		assert_eq!(items.iter().filter(|item| item.slot() == InventorySlot::Clothing).count(), 3);
-		assert_eq!(items.iter().filter(|item| item.slot() == InventorySlot::Weapons).count(), 2);
+		assert_eq!(items.iter().filter(|item| item.slot() == InventorySlot::Weapons).count(), 3);
+		assert_eq!(items.iter().filter_map(InventoryItem::grenade_spec).count(), 1);
+		let blast = items.iter().find_map(InventoryItem::grenade_stats).expect("grenade");
+		assert!((crate::BLAST_RADIUS_MIN..=crate::BLAST_RADIUS_MAX).contains(&blast.blast_radius));
 		assert_eq!(items.iter().filter(|item| item.slot() == InventorySlot::Skills).count(), 1);
 		let mut guns: Vec<_> = items.iter().filter_map(InventoryItem::firearm_mesh).collect();
 		guns.sort_by_key(|mesh| mesh.label());
 		guns.dedup();
 		assert_eq!(guns.len(), 2);
 		let outfit = Inventory::with_starter_outfit(items);
+		assert_eq!(outfit.weapons.len(), 3);
 		assert_eq!(outfit.skills.len(), 1);
 		assert!(outfit.primary_skill_map().and_then(InventoryItem::skill_map_spec).is_some());
 	}

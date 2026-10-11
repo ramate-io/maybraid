@@ -231,7 +231,7 @@ impl<P: RouteProbe> ChordEvaluator<'_, P> {
 			.find(|band| band.segment + 1e-3 >= RouteGeom::xz(from, to))
 			.map(|band| band.probe_step)
 			.unwrap_or_else(|| (RouteGeom::xz(from, to) / 4.0).max(2.0));
-		let mut last_y = from.y - self.settings.feet_below_origin;
+		let last_y = from.y - self.settings.feet_below_origin;
 		let mut max_drop = 0.0_f32;
 		for point in RouteGeom::chord_samples(from, to, step) {
 			let Some(ground) = self.probe.ground(Vec2::new(point.x, point.z), point.y) else {

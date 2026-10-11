@@ -41,7 +41,7 @@ use camera::{
 };
 use character::{apply_set_character, drive_player_locomotion};
 use characters::{CharacterHostsPlugin, CharacterMotionSystems};
-use durham::{HcsgStorage, TerrainCellLayout, TerrainStorage};
+use durham::DurhamSurface;
 use game_commands::command::{TextEntryBlocked, TextEntryFocus};
 use game_commands::ui::GameCommandStatusText;
 use maybraid_input::{PadGameplayEnabled, VirtualPadPlugin, VirtualPadSystems};
@@ -97,9 +97,7 @@ fn apply_mode_commands(
 	mut commands: Commands,
 	mut mode: ResMut<PlaygroundMode>,
 	mut status: Option<ResMut<GameCommandStatusText>>,
-	layout: Res<TerrainCellLayout>,
-	base: Res<WorldBaseTerrain>,
-	store: Res<HcsgStorage>,
+	surface: DurhamSurface,
 	free: Query<Entity, With<RequestModeFree>>,
 	character: Query<Entity, With<RequestModeCharacter>>,
 	mut players: Query<(Entity, &mut Transform, &mut LinearVelocity), With<Player>>,
@@ -110,8 +108,8 @@ fn apply_mode_commands(
 		ui::write_status(&mut status, "mode free");
 		if let Ok((mut cam_t, mut controller)) = cameras.single_mut() {
 			refocus_camera_on_elevation(
-				&layout,
-				surface_or_hold(&layout, &store, &base.0),
+				surface.layout(),
+				surface_or_hold(&surface),
 				&mut cam_t,
 				&mut controller,
 			);
@@ -127,9 +125,9 @@ fn apply_mode_commands(
 		ui::write_status(&mut status, "mode character — WASD move, mouse look, Space jump");
 		if reset_to_layout_spawn {
 			if let Ok((player, mut transform, mut velocity)) = players.single_mut() {
-				let center = layout.region_center_xz();
-				if let Some(elevation) = store.composed_height_at(&layout, center.x, center.z) {
-					respawn_player_on_layout(&layout, elevation, &mut transform, &mut velocity);
+				let layout = surface.layout();
+				if let Ok(Some(elevation)) = surface.height_at(layout.region_center_xz().xz()) {
+					respawn_player_on_layout(layout, elevation, &mut transform, &mut velocity);
 				}
 				commands.entity(player).insert(AwaitingTerrainSurface);
 			}
@@ -152,7 +150,8 @@ mod tests {
 	use super::*;
 	use avian3d::prelude::GravityScale;
 	use bevy::ecs::system::RunSystemOnce;
-	use durham::{BaseTerrainNoise, TerrainConfig};
+	use durham::{BaseTerrainNoise, TerrainCellLayout, TerrainConfig};
+	use lod::hcsg::HcsgStorage;
 	use player::AwaitingTerrainSurface;
 
 	#[test]

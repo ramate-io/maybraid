@@ -52,8 +52,8 @@ use bevy::ecs::template::template;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::{Commands, CommandsSceneExt, Component, Entity, Transform, Visibility};
 use bevy::scene::prelude::{bsn, template_value, Scene};
-use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
+use lod::scene::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::{cull_offset_bands_from_factor, lod_host_scene_pending, SceneChunk};
 
 /// Domain IR exposed by a tree (or vegetation part) for structural composition.

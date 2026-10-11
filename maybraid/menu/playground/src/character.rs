@@ -70,7 +70,13 @@ impl CharacterEditBaseline {
 	}
 
 	pub fn is_dirty(&self, menu: &CharacterMenu) -> bool {
-		menu.saved_name() != self.name || menu.inventory.as_ref() != Some(&self.inventory)
+		if menu.saved_name() != self.name {
+			return true;
+		}
+		match menu.inventory.as_ref() {
+			Some(inventory) => !self.inventory.same_catalog_identity(inventory),
+			None => self.inventory != Inventory::default(),
+		}
 	}
 }
 

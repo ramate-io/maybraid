@@ -5,8 +5,8 @@ use crate::{
 	choose_poi, drive_poi_goals, refresh_poi_goals, GlobalPoi, KnownPoi, LocalPoi, Poi,
 	PoiDiscoverLimits, PoiGoal, PoiGoalState, PoiGoalStatus, PoiId, PoiIntelligencePlugin,
 	PoiIntelligenceUser, PoiInterest, PoiInterests, PoiKind, PoiKnowledge, PoiLearningPolicy,
-	PoiObservation, PoiRegistry, PoiSource, PoiVisitPolicy, PoiVisitState, AGENT_SEPARATION,
-	DEFAULT_NEARBY_RADIUS,
+	PoiObservation, PoiRecord, PoiRegistry, PoiSource, PoiVisitPolicy, PoiVisitState,
+	AGENT_SEPARATION, DEFAULT_NEARBY_RADIUS,
 };
 use intelligence_lod::{IntelligenceBand, IntelligenceLod, IntelligencePriority};
 use movement_intelligence::MovementIntelligence;
@@ -542,4 +542,105 @@ fn far_does_not_run_global_scan_even_when_fair() -> anyhow::Result<()> {
 		.get::<PoiKnowledge>(far)
 		.is_some_and(|knowledge| knowledge.get(global).is_none()));
 	Ok(())
+}
+
+#[test]
+#[ignore]
+fn local_query_clone_timing() {
+	const POI_COUNT: usize = 128;
+	const SCANS: usize = 10_000;
+	const RADIUS: f32 = 80.0;
+	let interests = PoiInterests::one(CAMP);
+
+	let mut registry = PoiRegistry::default();
+	for index in 0..POI_COUNT {
+		let id = PoiId(index as u64 + 1);
+		let angle = (index as f32 / POI_COUNT as f32) * core::f32::consts::TAU;
+		let position = Vec3::new(angle.cos() * 40.0, 0.0, angle.sin() * 40.0);
+		registry
+			.upsert(Entity::from_bits(index as u64 + 1), Poi::new(id, CAMP), position, true, false)
+			.expect("upsert poi");
+	}
+
+	let clone_start = std::time::Instant::now();
+	for _ in 0..SCANS {
+		let records = registry.local_matching(Vec3::ZERO, RADIUS, &interests);
+		std::hint::black_box(records);
+	}
+	let clone_elapsed = clone_start.elapsed();
+
+	let mut scratch = Vec::new();
+	let id_start = std::time::Instant::now();
+	for _ in 0..SCANS {
+		registry.collect_local_matching(Vec3::ZERO, RADIUS, &interests, &mut scratch);
+		for id in &scratch {
+			std::hint::black_box(registry.get(*id));
+		}
+	}
+	let id_elapsed = id_start.elapsed();
+
+	eprintln!(
+		"local_query_clone_timing: {POI_COUNT} pois × {SCANS} scans — clone local_matching() {:?}, collect_local_matching+get {:?}",
+		clone_elapsed,
+		id_elapsed,
+	);
+}
+
+#[test]
+#[ignore]
+fn choose_in_clone_timing() {
+	use crate::hash::unit_f32;
+	use crate::NearbyQuery;
+
+	const POI_COUNT: usize = 128;
+	const PICKS: usize = 10_000;
+	const RADIUS: f32 = 160.0;
+	let interests = PoiInterests::one(CAMP);
+	let query = NearbyQuery::weighted(RADIUS);
+	let excluded = [PoiId(1)];
+
+	let mut registry = PoiRegistry::default();
+	for index in 0..POI_COUNT {
+		let id = PoiId(index as u64 + 1);
+		let angle = (index as f32 / POI_COUNT as f32) * core::f32::consts::TAU;
+		let position = Vec3::new(angle.cos() * 80.0, 0.0, angle.sin() * 80.0);
+		let global = index % 8 == 0;
+		registry
+			.upsert(Entity::from_bits(index as u64 + 1), Poi::new(id, CAMP), position, true, global)
+			.expect("upsert poi");
+	}
+
+	let weight = |candidate: PoiRecord| {
+		let interest = interests.weight(candidate.kind).unwrap_or(0.0);
+		let proximity = 1.0 / (1.0 + Vec3::ZERO.distance(candidate.position) / RADIUS.max(1.0));
+		interest * candidate.salience.max(0.1) * proximity
+	};
+
+	let clone_start = std::time::Instant::now();
+	for seed in 0..PICKS {
+		let candidates = registry.nearby_in(Vec3::ZERO, query, &interests, &excluded);
+		let total: f32 = candidates.iter().copied().map(weight).sum();
+		let mut draw = unit_f32(seed as u64) * total;
+		for candidate in candidates {
+			draw -= weight(candidate);
+			if draw <= 0.0 {
+				std::hint::black_box(candidate);
+				break;
+			}
+		}
+	}
+	let clone_elapsed = clone_start.elapsed();
+
+	let id_start = std::time::Instant::now();
+	for seed in 0..PICKS {
+		let chosen = registry.choose_in(Vec3::ZERO, query, &interests, &excluded, seed as u64);
+		std::hint::black_box(chosen);
+	}
+	let id_elapsed = id_start.elapsed();
+
+	eprintln!(
+		"choose_in_clone_timing: {POI_COUNT} pois × {PICKS} picks — nearby_in+weighted {:?}, choose_in {:?}",
+		clone_elapsed,
+		id_elapsed,
+	);
 }

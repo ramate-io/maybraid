@@ -2,6 +2,7 @@
 
 use bevy::math::Vec2;
 use procedural_common::Bounds2;
+use urbanization_developments::PadForm;
 
 use super::elevation::PadElevation;
 use super::footprint::{PadFootprint, PadReach, PadRect};
@@ -210,6 +211,19 @@ impl PadNode {
 		let mixed = elevation * (1.0 - cover) + pad * cover;
 		// Raise-only outside flatten interiors: never cut a pit into higher ground.
 		mixed.max(elevation)
+	}
+}
+
+impl From<&PadForm> for PadNode {
+	fn from(form: &PadForm) -> Self {
+		match *form {
+			PadForm::Flatten { center, building_half_extents, yaw, height, params } => {
+				Self::rectangular_flatten(center, building_half_extents, yaw, height, params)
+			}
+			PadForm::Grade { a, b, half_width, height_a, height_b, params } => {
+				Self::graded_reach(a, b, half_width, height_a, height_b, params)
+			}
+		}
 	}
 }
 

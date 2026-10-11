@@ -4,6 +4,7 @@ use std::sync::Arc;
 use bevy::prelude::*;
 use clap::Args;
 use lod::lod_ref::LodRef;
+use lod::scene::LodSceneLevel;
 use lod::SceneChunk;
 use material_ref::MaterialRef;
 use procedural_common::{BuildWithNoise, NoiseParams};
@@ -117,7 +118,7 @@ impl Orchard {
 	}
 
 	/// High/Medium posed plants — one lazy producer so begin does not clone every tree.
-	fn nest_plant_chunks(&self, lod_ref: &LodRef) -> Vec<SceneChunk> {
+	fn nest_plant_chunks(&self, lod_ref: &LodRef, level: LodSceneLevel) -> Vec<SceneChunk> {
 		if self.plants.is_empty() {
 			return Vec::new();
 		}
@@ -147,6 +148,7 @@ impl Orchard {
 				&plant.ball_material,
 				&plant.frond_material,
 				&plant_lod,
+				level,
 			))
 		})]
 	}

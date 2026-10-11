@@ -18,7 +18,6 @@ use std::collections::{HashSet, VecDeque};
 
 use avian3d::prelude::{Collider, RigidBody};
 use bevy::prelude::*;
-use lod::LodSceneHost;
 use lod::LodSceneLevel;
 use lod_avian::PhysicsInteractionLayer;
 use vegetation_components::{
@@ -287,6 +286,7 @@ fn capsule_from_placement(placement: Placement) -> Option<(Transform, f32, f32)>
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use lod::LodSceneHost;
 	use vegetation_components::{StickCollection, StickGeometry, StickMember};
 
 	#[test]

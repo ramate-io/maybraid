@@ -5,10 +5,7 @@ use bevy::prelude::*;
 use bevy::transform::helper::TransformHelper;
 use intelligence_lod::{due_by_rank, IntelligenceBand, IntelligenceLod, IntelligencePriority};
 use lod_avian::PhysicsInteractionLayer;
-use spotting_intelligence::{
-	SpotCandidate, SpotContactView, SpotDirective, SpotSubject, SpottedContact,
-	SpottingObserveLimits, SpottingUser,
-};
+use spotting_intelligence::{SpotCandidate, SpotSubject, SpottingObserveLimits, SpottingUser};
 
 use crate::candidate::ProbeCandidate;
 use crate::discover::{discover_subjects, merge_due_contacts, next_discovery_interval};

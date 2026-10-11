@@ -11,7 +11,7 @@ use firearms::{
 	firearm_bounds, spawn_firearm_components, FireOnTrigger, FirearmConcept, FirearmMembers,
 	FirearmRoot, ProjectileSource, WeaponTrigger,
 };
-use player::{PlayerLook, PlayerUse};
+use player::{wrap_pi, yaw_xz, PlayerLook, PlayerUse};
 
 use crate::hold::HoldingArms;
 use crate::weapon::{LiveWeapon, RecoilPattern};
@@ -104,20 +104,6 @@ pub fn stamp_holding_arms(
 			}
 		}
 	}
-}
-
-pub(crate) fn yaw_xz(dir: Vec3) -> f32 {
-	let xz = Vec3::new(dir.x, 0.0, dir.z);
-	if xz.length_squared() < 1e-8 {
-		0.0
-	} else {
-		let n = xz.normalize();
-		n.x.atan2(n.z)
-	}
-}
-
-pub(crate) fn wrap_pi(angle: f32) -> f32 {
-	(angle + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU) - std::f32::consts::PI
 }
 
 pub(crate) fn clamped_aim_yaw(facing: Vec3, look: Vec3, aim_yaw_limit: f32) -> f32 {
