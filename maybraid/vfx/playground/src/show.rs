@@ -7,6 +7,7 @@ use maybraid_vfx::{
 };
 
 use crate::camera::CameraController;
+use crate::capture;
 use crate::commands::{LoopEnabled, PendingVfxShows, PreviewFreeze, SpreadOnce, VfxShowRequest};
 
 pub const SHOW_ORIGIN: Vec3 = Vec3::new(0.0, 1.2, 0.0);
@@ -131,7 +132,7 @@ fn burst(
 	definition: &maybraid_vfx::EffectDefinition,
 	request: &VfxShowRequest,
 ) -> VfxSpawn {
-	let origin = show_origin(&request.effect) + Vec3::Z * request.distance;
+	let origin = show_origin(&request.effect, &request.drive) + Vec3::Z * request.distance;
 	let spawn = VfxSpawn {
 		transform: Transform::from_translation(origin),
 		scale: request.scale,
@@ -146,10 +147,18 @@ fn burst(
 	spawn
 }
 
-fn show_origin(effect: &str) -> Vec3 {
+pub fn mouth_height(drive: &maybraid_vfx::VfxDrive) -> f32 {
+	if drive.size >= 16.0 || drive.radius >= 0.7 {
+		3.2
+	} else {
+		1.55
+	}
+}
+
+fn show_origin(effect: &str, drive: &maybraid_vfx::VfxDrive) -> Vec3 {
 	match canonicalize_effect_name(effect) {
 		Some(GOD_BEAM) => Vec3::ZERO,
-		Some(SONIC_WAVE) => Vec3::new(0.0, 0.2, 0.0),
+		Some(SONIC_WAVE) => Vec3::new(0.0, mouth_height(drive), 0.0),
 		_ => SHOW_ORIGIN,
 	}
 }
@@ -165,19 +174,37 @@ fn frame_camera(
 		GOD_BEAM => {
 			let height = request.drive.reach.clamp(16.0, 160.0) * request.scale;
 			let width = request.drive.size.clamp(3.0, 16.0) * request.scale;
-			// 45° vfov needs ~1.25× height of back-distance to show ground + top.
-			let back = (height * 1.25).max(width * 8.0);
-			(
-				Vec3::new(width * 4.0 + height * 0.22, height * 0.18 + 8.0, back),
-				Vec3::new(0.0, height * 0.42, request.distance),
-			)
+			if capture::frame().as_deref() == Some("base") {
+				(
+					Vec3::new(width * 1.15 + 6.0, 3.6, width * 1.35 + 8.0),
+					Vec3::new(2.2, 1.1, request.distance + 1.4),
+				)
+			} else {
+				// 45° vfov needs ~1.25× height of back-distance to show ground + top.
+				let back = (height * 1.25).max(width * 8.0);
+				(
+					Vec3::new(width * 4.0 + height * 0.22, height * 0.18 + 8.0, back),
+					Vec3::new(0.0, height * 0.42, request.distance),
+				)
+			}
 		}
 		SONIC_WAVE => {
-			let range = request.drive.size.max(10.0) * request.scale;
-			(
-				Vec3::new(range * 0.75, range * 0.38 + 6.0, -range * 0.35),
-				Vec3::new(0.0, 0.5, request.distance + range * 0.38),
-			)
+			let range = request.drive.size.max(6.0) * request.scale;
+			let mouth = mouth_height(&request.drive);
+			let look = Vec3::new(0.0, mouth, request.distance + range * 0.40);
+			match capture::frame().as_deref() {
+				Some("side") => {
+					(Vec3::new(range * 0.18 + 7.0, mouth, request.distance + range * 0.40), look)
+				}
+				_ => (
+					Vec3::new(
+						range * 0.38 + 4.2,
+						mouth + range * 0.06 + 2.4,
+						request.distance - range * 0.16 - 2.4,
+					),
+					look,
+				),
+			}
 		}
 		_ => return,
 	};

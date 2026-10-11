@@ -13,6 +13,12 @@ pub fn requested() -> bool {
 	std::env::var_os("VFX_CAPTURE").is_some()
 }
 
+/// `base` — God Beam close enough that the 1.8 m stand-in reads.
+/// `side` — sonic rings from the side; anything else is 3/4 for sonic.
+pub fn frame() -> Option<String> {
+	std::env::var("VFX_FRAME").ok().filter(|value| !value.is_empty())
+}
+
 /// Age at which capture should fade live instances, then keep playing.
 #[derive(Resource, Default)]
 pub struct CaptureCancel(pub Option<f32>);

@@ -10,25 +10,34 @@ Near fire and smoke use overlapping mesh lobes with a crate-owned stylized mater
 
 Boss attacks own timing, hazards, and damage. This crate only plays looks. Drive an effect with [`VfxDrive`](src/drive.rs) and later call `commands.cancel_vfx(handle)` or `commands.despawn_vfx(handle)`.
 
-[#1118](https://github.com/ramate-io/maybraid/issues/1118) / [PR #1147](https://github.com/ramate-io/maybraid/pull/1147) emit `AttackPresentationEvent` from `attacks`. This crate does **not** depend on that unmerged crate. [`attack_drive`](src/attack_drive.rs) mirrors the payloads so [#1119](https://github.com/ramate-io/maybraid/issues/1119) can plug the looks in.
+Sonic rings **do not simulate travel**. Each ring renders a [`SonicWaveState`](src/drive.rs) snapshot (origin, direction, current position, radius, thickness, wave index, range) written onto [`VfxWaveStates`](src/drive.rs). The playground has a tiny driver that advances those snapshots. [#1119](https://github.com/ramate-io/maybraid/issues/1119) (or a presenter in `attacks`) should do the same from `AttackPresentationEvent`. This crate does not depend on `attacks` and does not mirror its types.
 
-**TODO(#1147):** when that PR merges, replace the local mirror types with a feature-gated `attacks` dependency (`attack-presentation`) so there is only one presentation-event model.
+### Mapping `#1147` events (for the attack presenter)
 
-1. Copy `instance` / `kind` / `phase` / `pose` / `shape` into `AttackDriveEvent`.
-2. Call `AttackDriveBindings::apply`.
-3. On a newly returned root, insert `attacks::AttackPresentationBinding { instance, kind }` so cancel / death / sleep / retirement despawn the same entity.
+[#1118](https://github.com/ramate-io/maybraid/issues/1118) / [PR #1147](https://github.com/ramate-io/maybraid/pull/1147) emit `AttackPresentationEvent`. Suggested mapping, owned by the presenter:
 
-`HazardShape::Cylinder` → `god_beam` (`size` = diameter = `2 * radius`, `reach` = `height`). `HazardShape::Wavefront` → `sonic_wave` (`size` = `length`, `speed` = `speed`, one ring per hazard). Telegraph and Stage are ignored so windup does not double-play the column. Sonic-wave expansion is owned by the effect; Updated pose translation is not applied.
+| `#1147` payload | VFX |
+| --- | --- |
+| `Hazard` + `Cylinder { radius, height }` + pose | `god_beam`: `size = 2 * radius` (diameter), `reach = height`, transform at pose origin |
+| `Hazard` + `Wavefront { radius, speed, length }` + pose | write `SonicWaveState`: `origin` = emission socket at `Spawned`, `direction` = flattened pose forward, `position` = supplied pose origin each `Updated` (current volume center), `radius` = `Wavefront.radius` (damage disc, **not** travel growth), `range` = `length`, `index` = hazard index. `speed` is for the presenter only. |
+| `Telegraph`, `Stage` | ignore (no double column / no extra rings on windup) |
+| `Ended` / `Despawned` | `cancel_vfx` or `despawn_vfx` on the bound root |
+
+Tag the spawned VFX root with `attacks::AttackPresentationBinding` so gameplay despawn on cancel / death / sleep / retirement still works. A three-ring Bray is one `sonic_wave` spawn with `count = 3`; the presenter writes three `SonicWaveState` rows.
 
 | Field | God Beam | Sonic wave |
 | --- | --- | --- |
-| `size` | column **diameter** (m). B04's 7 m beam is `7.0` | travel range (m) |
-| `reach` | column height (m) | yaw spread (rad) |
-| `speed` | unused | wavefront m/s |
-| `count` | `1` | ring count |
+| `size` | column **diameter** (m). B04's 7 m beam is `7.0` | travel **range** (m) |
+| `reach` | column height (m) | fan cone (rad); `0` = one path |
+| `speed` | unused | travel m/s (presenter / playground driver) |
+| `count` | `1` | sequential rings |
+| `radius` | unused | constant ring radius (m) |
+| `thickness` | unused | ring depth along travel (m) |
+| `pitch` | unused | `None` keeps travel horizontal |
+| `interval` | unused | seconds between sequential rings |
 | `lifetime` | active seconds (default 10) | travel seconds; `None` = range / speed |
 | `far_point` | optional sky origin | unused |
-| `fade_in` / `fade_out` | arrival / departure, also used by cancel | same |
+| `fade_in` / `fade_out` | arrival / departure, also used by cancel | fade at range / cancel |
 
 ```rust
 let handle = commands.spawn_vfx(
@@ -46,12 +55,9 @@ let handle = commands.spawn_vfx(
 commands.cancel_vfx(handle);
 ```
 
-Sonic waves use the same spawn. Set `speed`, `size`, and `count` to the authoritative B04 wavefront; the VFX does not emit hits.
-
 ```text
 cargo test -p maybraid-vfx
 cargo test -p vfx-playground
 cargo run -p vfx-playground -- god-beam --width 7 --lifetime 10
-cargo run -p vfx-playground -- sonic-wave --range 28 --speed 22
+cargo run -p vfx-playground -- sonic-wave --range 20 --speed 22 --count 3 --radius 0.55
 ```
-

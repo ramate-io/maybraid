@@ -220,7 +220,7 @@ fn spawn_field(
 }
 
 /// Independent drive preset. [#1119](https://github.com/ramate-io/maybraid/issues/1119)
-/// should prefer [`crate::attack_drive`] when a `#1147` hazard is a cylinder.
+/// maps a `#1147` cylinder hazard onto [`VfxDrive`].
 ///
 /// ```ignore
 /// let handle = commands.spawn_vfx(

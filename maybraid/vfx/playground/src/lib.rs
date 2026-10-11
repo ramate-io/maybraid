@@ -5,6 +5,7 @@ mod capture;
 pub mod commands;
 mod ground;
 mod show;
+mod sonic;
 mod ui;
 
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
@@ -53,7 +54,11 @@ impl Plugin for VfxPlaygroundPlugin {
 				camera::camera_controller,
 				camera::orbit_camera.after(camera::camera_controller),
 				apply_pending_shows,
+				ground::sync_mouth_emitter.after(apply_pending_shows),
 				repeat_shown_effect.after(apply_pending_shows),
+				sonic::drive_sonic_waves
+					.after(maybraid_vfx::lifecycle::tick_vfx_instances)
+					.before(maybraid_vfx::fields::tick_vfx_fields),
 				capture::cancel_at_age.after(repeat_shown_effect),
 				pause_at_frozen_age.after(capture::cancel_at_age),
 				ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
@@ -183,17 +188,51 @@ mod tests {
 	}
 
 	#[test]
-	fn parses_sonic_wave_wavefront() -> Result<(), String> {
-		let command = <PlaygroundCommand as GameCommand>::parse_line(
-			"sonic-wave --range 28 --speed 22 --spread 2.2 --count 3",
-		)?;
-		let PlaygroundCommand::SonicWave { range, speed, spread, count, .. } = command else {
+	fn parses_sonic_wave_defaults_and_ring_pose() -> Result<(), String> {
+		let command = <PlaygroundCommand as GameCommand>::parse_line("sonic-wave")?;
+		let PlaygroundCommand::SonicWave {
+			range, spread, radius, thickness, interval, count, ..
+		} = command
+		else {
 			return Err("expected sonic-wave".into());
 		};
-		assert!((range - 28.0).abs() < 1e-4);
-		assert!((speed - 22.0).abs() < 1e-4);
-		assert!((spread - 2.2).abs() < 1e-4);
-		assert_eq!(count, 3);
+		if (range - 20.0).abs() >= 1e-4 {
+			return Err(format!("default range {range}"));
+		}
+		if spread.abs() >= 1e-4 {
+			return Err(format!("default spread {spread}"));
+		}
+		if (radius - 0.55).abs() >= 1e-4 || (thickness - 0.14).abs() >= 1e-4 {
+			return Err(format!("ring {radius} {thickness}"));
+		}
+		if (interval - 0.28).abs() >= 1e-4 || count != 3 {
+			return Err(format!("burst {interval} {count}"));
+		}
+		let command = <PlaygroundCommand as GameCommand>::parse_line(
+			"sonic-wave --range 8 --speed 16 --radius 0.4 --thickness 0.1 --interval 0.18 --count 3",
+		)?;
+		let PlaygroundCommand::SonicWave { range, speed, radius, interval, .. } = command else {
+			return Err("expected sonic-wave override".into());
+		};
+		if (range - 8.0).abs() >= 1e-4 || (speed - 16.0).abs() >= 1e-4 {
+			return Err(format!("ordinary {range} {speed}"));
+		}
+		if (radius - 0.4).abs() >= 1e-4 || (interval - 0.18).abs() >= 1e-4 {
+			return Err(format!("ordinary ring {radius} {interval}"));
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn mouth_height_tracks_boss_and_ordinary_scale() -> Result<(), String> {
+		let boss = maybraid_vfx::VfxDrive::sonic_wave().with_size(20.0).with_radius(0.85);
+		let ordinary = maybraid_vfx::VfxDrive::sonic_wave().with_size(8.0).with_radius(0.4);
+		if (show::mouth_height(&boss) - 3.2).abs() >= 1e-4 {
+			return Err("boss mouth".into());
+		}
+		if (show::mouth_height(&ordinary) - 1.55).abs() >= 1e-4 {
+			return Err("ordinary mouth".into());
+		}
 		Ok(())
 	}
 

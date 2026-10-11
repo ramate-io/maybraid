@@ -3,7 +3,7 @@
 use bevy::mesh::{Indices, PrimitiveTopology, VertexAttributeValues};
 use bevy::prelude::*;
 
-use crate::drive::{FieldEnvelope, VfxDrive};
+use crate::drive::{FieldEnvelope, VfxDrive, VfxWaveStates};
 use crate::field_material::{FieldKind, FieldMaterial};
 use crate::membership::VfxMemberOf;
 use crate::spawn::{VfxCancel, VfxInstance, VfxLayerLife, VfxPendingLayers};
@@ -15,12 +15,10 @@ pub struct VfxField {
 	pub playback: f32,
 }
 
-/// Expanding shock ring. Local XZ scale follows `speed * (age - delay)`.
-#[derive(Component, Debug)]
-pub struct VfxWavefront {
-	pub speed: f32,
-	pub range: f32,
-	pub delay: f32,
+/// One vortex ring that only renders a [`crate::drive::SonicWaveState`] snapshot.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct VfxSonicRing {
+	pub index: u32,
 }
 
 /// Temporary holder so [`stamp_field_materials`] can add the asset after spawn.
@@ -62,35 +60,65 @@ pub fn unit_disk_mesh() -> Mesh {
 	mesh
 }
 
-/// Thin annulus, outer radius 0.5, covering `spread` radians about +Z.
-pub fn unit_ring_mesh(spread: f32) -> Mesh {
-	let spread = spread.clamp(0.2, std::f32::consts::TAU);
-	let segments = ((spread / std::f32::consts::TAU) * 48.0).ceil().max(8.0) as u32;
-	let inner = 0.46;
+/// Hollow vortex ring in XY, facing +Z. Outer diameter 1, depth 1.
+/// `scale.xy = 2 * radius` and `scale.z = thickness`.
+pub fn unit_vortex_ring_mesh() -> Mesh {
+	let segments = 40u32;
+	let inner = 0.36;
 	let outer = 0.5;
-	let half = spread * 0.5;
 	let mut positions = Vec::new();
 	let mut normals = Vec::new();
 	let mut uvs = Vec::new();
 	let mut indices = Vec::new();
+	let mut push = |pos: Vec3, normal: Vec3, uv: [f32; 2]| {
+		positions.push(pos.to_array());
+		normals.push(normal.to_array());
+		uvs.push(uv);
+	};
 	for i in 0..=segments {
 		let t = i as f32 / segments as f32;
-		let angle = -half + spread * t;
-		let dir = Vec3::new(angle.sin(), 0.0, angle.cos());
-		let inner_p = dir * inner;
-		let outer_p = dir * outer;
-		positions.push(inner_p.to_array());
-		positions.push(outer_p.to_array());
-		normals.push([0.0, 1.0, 0.0]);
-		normals.push([0.0, 1.0, 0.0]);
-		uvs.push([t, 0.0]);
-		uvs.push([t, 1.0]);
+		let angle = t * std::f32::consts::TAU;
+		let dir = Vec3::new(angle.cos(), angle.sin(), 0.0);
+		let inner_pos = dir * inner;
+		let outer_pos = dir * outer;
+		// Front (+Z), back (−Z), outer wall, inner wall.
+		push(outer_pos + Vec3::Z * 0.5, Vec3::Z, [t, 1.0]);
+		push(inner_pos + Vec3::Z * 0.5, Vec3::Z, [t, 0.0]);
+		push(outer_pos - Vec3::Z * 0.5, Vec3::NEG_Z, [t, 1.0]);
+		push(inner_pos - Vec3::Z * 0.5, Vec3::NEG_Z, [t, 0.0]);
+		push(outer_pos + Vec3::Z * 0.5, dir, [t, 1.0]);
+		push(outer_pos - Vec3::Z * 0.5, dir, [t, 0.0]);
+		push(inner_pos + Vec3::Z * 0.5, -dir, [t, 1.0]);
+		push(inner_pos - Vec3::Z * 0.5, -dir, [t, 0.0]);
 		if i > 0 {
-			let a = (i - 1) * 2;
-			let b = a + 1;
-			let c = i * 2;
-			let d = c + 1;
-			indices.extend([a, c, b, b, c, d]);
+			let a = (i - 1) * 8;
+			let b = i * 8;
+			indices.extend([
+				a,
+				b,
+				a + 1,
+				b,
+				b + 1,
+				a + 1, // front
+				a + 2,
+				a + 3,
+				b + 2,
+				b + 2,
+				a + 3,
+				b + 3, // back
+				a + 4,
+				a + 5,
+				b + 4,
+				b + 4,
+				a + 5,
+				b + 5, // outer
+				a + 6,
+				b + 6,
+				a + 7,
+				b + 6,
+				b + 7,
+				a + 7, // inner
+			]);
 		}
 	}
 	let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, default());
@@ -131,7 +159,7 @@ type FieldTickQuery<'w, 's> = Query<
 	(
 		&'static VfxMemberOf,
 		&'static VfxField,
-		Option<&'static VfxWavefront>,
+		Option<&'static VfxSonicRing>,
 		&'static mut Transform,
 		&'static mut Visibility,
 		Option<&'static MeshMaterial3d<FieldMaterial>>,
@@ -140,51 +168,54 @@ type FieldTickQuery<'w, 's> = Query<
 >;
 
 pub fn tick_vfx_fields(
-	instances: Query<(&VfxInstance, &VfxPendingLayers, Option<&VfxCancel>)>,
+	instances: Query<(
+		&VfxInstance,
+		&VfxPendingLayers,
+		Option<&VfxCancel>,
+		Option<&VfxWaveStates>,
+		&GlobalTransform,
+	)>,
 	mut materials: ResMut<Assets<FieldMaterial>>,
 	mut fields: FieldTickQuery,
 ) {
-	for (member, field, wave, mut transform, mut visibility, material, life) in &mut fields {
-		let Ok((instance, pending, cancel)) = instances.get(member.root()) else {
+	for (member, _field, ring, mut transform, mut visibility, material, life) in &mut fields {
+		let Ok((instance, pending, cancel, waves, root)) = instances.get(member.root()) else {
 			continue;
 		};
 		if !instance.armed {
 			*visibility = Visibility::Hidden;
 			continue;
 		}
-		*visibility = Visibility::Inherited;
 		if let Some(mut life) = life {
 			life.age = instance.age;
 		}
 		let drive = pending.spawn.drive;
-		let envelope = FieldEnvelope::sample_canceled(
+		let mut envelope = FieldEnvelope::sample_canceled(
 			instance.age,
 			&drive,
 			cancel.map(|cancel| cancel.started_age),
 		);
-		if let Some(wave) = wave {
-			let travel_age = (instance.age - wave.delay).max(0.0);
-			let radius = (wave.speed * travel_age).clamp(0.15, wave.range);
-			transform.scale.x = radius * 2.0;
-			transform.scale.z = radius * 2.0;
-			transform.scale.y = 1.0;
+		if let Some(ring) = ring {
+			let Some(wave) = waves.and_then(|states| states.get(ring.index)) else {
+				*visibility = Visibility::Hidden;
+				continue;
+			};
+			if wave.expired() {
+				*visibility = Visibility::Hidden;
+				continue;
+			}
+			let (_, rotation, translation) = root.to_scale_rotation_translation();
+			*transform =
+				wave.local_ring_transform(Transform { translation, rotation, scale: Vec3::ONE });
+			envelope.alpha *= wave.fade(drive.speed, drive.fade_out);
+			*visibility = Visibility::Inherited;
+		} else {
+			*visibility = Visibility::Inherited;
 		}
 		if let Some(handle) = material {
 			if let Some(mut material) = materials.get_mut(&handle.0) {
 				material.set_age(instance.age);
-				let mut env = envelope;
-				if matches!(field.kind, FieldKind::ShockRing) {
-					if let Some(wave) = wave {
-						let started = instance.age + 1e-4 >= wave.delay;
-						if !started {
-							env.alpha = 0.0;
-						}
-					}
-				}
-				material.set_envelope(env.alpha, env.reveal, env.contact);
-				if matches!(field.kind, FieldKind::ShockRing) {
-					material.set_spread(drive.reach);
-				}
+				material.set_envelope(envelope.alpha, envelope.reveal, envelope.contact);
 			}
 		}
 	}
@@ -256,20 +287,29 @@ mod tests {
 	}
 
 	#[test]
-	fn ring_mesh_covers_spread() -> Result<(), String> {
-		let mesh = unit_ring_mesh(std::f32::consts::PI);
+	fn vortex_ring_is_a_hollow_hoop_facing_plus_z() -> Result<(), String> {
+		let mesh = unit_vortex_ring_mesh();
 		let Some(positions) = mesh.attribute(Mesh::ATTRIBUTE_POSITION).and_then(|a| a.as_float3())
 		else {
 			return Err("missing positions".into());
 		};
-		if positions.len() < 16 {
+		if positions.len() < 64 {
 			return Err(format!("verts {}", positions.len()));
 		}
+		let mut max_z = 0.0f32;
+		let mut min_radial = f32::MAX;
+		let mut max_radial = 0.0f32;
 		for position in positions {
-			let angle = position[0].atan2(position[2]);
-			if angle.abs() > std::f32::consts::FRAC_PI_2 + 0.05 {
-				return Err(format!("angle {angle} outside half-turn"));
-			}
+			max_z = max_z.max(position[2].abs());
+			let radial = Vec2::new(position[0], position[1]).length();
+			min_radial = min_radial.min(radial);
+			max_radial = max_radial.max(radial);
+		}
+		if (max_z - 0.5).abs() > 0.02 {
+			return Err(format!("depth {max_z}"));
+		}
+		if min_radial < 0.30 || max_radial > 0.52 {
+			return Err(format!("radial {min_radial}..{max_radial}"));
 		}
 		Ok(())
 	}

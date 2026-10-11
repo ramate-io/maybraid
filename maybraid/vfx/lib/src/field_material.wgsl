@@ -171,18 +171,14 @@ fn contact_shade(local: vec3<f32>, n: vec3<f32>, view_dir: vec3<f32>) -> vec4<f3
 }
 
 fn shock_shade(local: vec3<f32>, n: vec3<f32>, view_dir: vec3<f32>) -> vec4<f32> {
-    let radial = saturate(length(local.xz) * 2.0);
+    let radial = saturate(length(local.xy) * 2.0);
     let rim = 1.0 - smoothstep(0.72, 1.0, radial);
-    let inner = smoothstep(0.55, 0.82, radial);
-    let crest = fbm(vec3<f32>(local.xz * 6.0, params.z + params.x * extras.y));
+    let inner = smoothstep(0.48, 0.82, radial);
+    let crest = fbm(vec3<f32>(local.xy * 6.0, params.z + params.x * extras.y));
     let facing = saturate(abs(dot(n, view_dir)));
-    // Object-space yaw about +Z. UVs are not always present on this pipeline.
-    let angle = atan2(local.x, local.z);
-    let half = max(envelope.w * 0.5, 0.12);
-    let cone = 1.0 - smoothstep(half - 0.12, half, abs(angle));
     var rgb = mix(color_cool.xyz, mix(color_mid.xyz, color_hot.xyz, crest), rim);
     rgb *= tint.xyz * extras.x * envelope.x;
-    let alpha = envelope.x * rim * inner * cone * mix(0.4, 1.0, crest) * (0.5 + 0.5 * facing);
+    let alpha = envelope.x * rim * inner * mix(0.4, 1.0, crest) * (0.45 + 0.55 * facing);
     return vec4<f32>(rgb, alpha);
 }
 

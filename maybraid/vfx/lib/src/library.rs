@@ -7,7 +7,7 @@ use bevy_hanabi::EffectAsset;
 use crate::assets::{fire_flipbook, smoke_flipbook, spark_taper, VfxFlipbooks};
 use crate::composition::EffectDefinition;
 use crate::effects::{fiery_explosion, god_beam, sonic_wave};
-use crate::fields::{unit_column_mesh, unit_disk_mesh, unit_ring_mesh};
+use crate::fields::{unit_column_mesh, unit_disk_mesh, unit_vortex_ring_mesh};
 use crate::layers::{fireball, flash, smoke, sparks};
 use crate::lobes::rounded_lobe_mesh;
 use crate::names::{FIERY_EXPLOSION, FIREBALL, FLASH, GOD_BEAM, SMOKE, SONIC_WAVE, SPARKS};
@@ -74,7 +74,7 @@ pub fn setup_vfx_library(
 	let sparks_part = sparks::compile(&mut effects, flipbooks.spark.clone());
 	let field_column = meshes.add(unit_column_mesh());
 	let field_disk = meshes.add(unit_disk_mesh());
-	let field_ring = meshes.add(unit_ring_mesh(std::f32::consts::TAU));
+	let field_ring = meshes.add(unit_vortex_ring_mesh());
 	let library = VfxLibrary {
 		flash: flash::definition(flash_mesh.clone()),
 		fireball: fireball::definition(fireball_mesh.clone(), fireball_wisps.clone()),

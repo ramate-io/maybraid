@@ -74,7 +74,7 @@ pub enum PlaygroundCommand {
 		#[arg(long, default_value_t = 0.55)]
 		fade_out: f32,
 	},
-	/// Propagating sonic rings. Speed/range should match B04 wavefronts.
+	/// Mouth-emitted vortex rings at constant size. The playground driver writes poses.
 	SonicWave {
 		#[arg(long, default_value_t = 1.0)]
 		scale: f32,
@@ -86,15 +86,21 @@ pub enum PlaygroundCommand {
 		seed: Option<u64>,
 		#[arg(long, default_value_t = 1.0)]
 		playback: f32,
-		#[arg(long, default_value_t = 28.0)]
+		#[arg(long, default_value_t = 20.0)]
 		range: f32,
-		/// Yaw spread in radians.
-		#[arg(long, default_value_t = 2.2)]
+		/// Fan cone in radians. `0` is a single path.
+		#[arg(long, default_value_t = 0.0)]
 		spread: f32,
 		#[arg(long, default_value_t = 22.0)]
 		speed: f32,
 		#[arg(long, default_value_t = 3)]
 		count: u32,
+		#[arg(long, default_value_t = 0.55)]
+		radius: f32,
+		#[arg(long, default_value_t = 0.14)]
+		thickness: f32,
+		#[arg(long, default_value_t = 0.28)]
+		interval: f32,
 	},
 	/// Fade and clean up every live VFX instance.
 	Cancel,
@@ -245,6 +251,9 @@ impl PlaygroundCommand {
 				spread,
 				speed,
 				count,
+				radius,
+				thickness,
+				interval,
 			} => {
 				queue_show(
 					commands,
@@ -260,7 +269,10 @@ impl PlaygroundCommand {
 							.with_size(range)
 							.with_reach(spread)
 							.with_speed(speed)
-							.with_count(count),
+							.with_count(count)
+							.with_radius(radius)
+							.with_thickness(thickness)
+							.with_interval(interval),
 					},
 				);
 			}

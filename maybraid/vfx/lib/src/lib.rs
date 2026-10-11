@@ -7,13 +7,11 @@
 //! reusable flash / fireball / smoke / sparks layers and the composed
 //! `fiery_explosion`. Driven delivery ([#1122](https://github.com/ramate-io/maybraid/issues/1122),
 //! [#1123](https://github.com/ramate-io/maybraid/issues/1123)): `god_beam` and
-//! `sonic_wave` through [`VfxDrive`]. Optional [`attack_drive`] glue maps
-//! [#1147](https://github.com/ramate-io/maybraid/pull/1147) presentation
-//! payloads without depending on `attacks`.
+//! `sonic_wave` through [`VfxDrive`]. Sonic rings render [`SonicWaveState`];
+//! attack binding lives with [#1119](https://github.com/ramate-io/maybraid/issues/1119).
 
 pub mod assets;
 pub mod atlas;
-pub mod attack_drive;
 pub mod composition;
 pub mod drive;
 pub mod effects;
@@ -33,17 +31,14 @@ pub mod seed;
 pub mod spawn;
 
 pub use assets::{FlipbookAsset, VfxFlipbooks};
-pub use attack_drive::{
-	AttackDriveBindings, AttackDriveEvent, AttackDriveKind, AttackDrivePhase, AttackDrivePose,
-	AttackDriveShape, AttackInstanceKey, VfxAttackBinding, VfxAttackBindingKind,
-};
 pub use composition::{
 	EffectDefinition, EffectKind, EffectLayer, EffectPart, LightPulse, LobeKind, LobeSpec,
 	MeshPart, ParticlePart, ParticleShade, ScaleBounds, DEFAULT_SCALE_MAX, DEFAULT_SCALE_MIN,
 };
 pub use drive::{
-	FieldEnvelope, VfxDrive, GOD_BEAM_ACTIVE, GOD_BEAM_HEIGHT, GOD_BEAM_WIDTH, SONIC_WAVE_RANGE,
-	SONIC_WAVE_SPEED, SONIC_WAVE_STAGGER,
+	FieldEnvelope, SonicWaveState, VfxDrive, VfxWaveStates, GOD_BEAM_ACTIVE, GOD_BEAM_HEIGHT,
+	GOD_BEAM_WIDTH, SONIC_WAVE_INTERVAL, SONIC_WAVE_RADIUS, SONIC_WAVE_RANGE, SONIC_WAVE_SPEED,
+	SONIC_WAVE_STAGGER, SONIC_WAVE_THICKNESS,
 };
 pub use field_material::{FieldKind, FieldMaterial, FieldMaterialPlugin};
 pub use library::{canonicalize_effect_name, VfxLibrary};
