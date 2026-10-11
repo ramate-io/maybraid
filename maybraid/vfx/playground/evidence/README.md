@@ -11,12 +11,13 @@ VFX_CAPTURE=1 VFX_FREEZE=1.6 VFX_FRAME=base  cargo run -p vfx-playground -- god-
 
 # Sonic: three rings leaving a mouth-height placeholder head
 # Boss (20 m) side + 3/4
-VFX_CAPTURE=1 VFX_FREEZE=0.72 VFX_FRAME=side            cargo run -p vfx-playground -- sonic-wave --range 20 --speed 22 --count 3 --radius 0.85 --thickness 0.18 --interval 0.28 --seed 2
-VFX_CAPTURE=1 VFX_FREEZE=0.72 VFX_FRAME=three-quarter   cargo run -p vfx-playground -- sonic-wave --range 20 --speed 22 --count 3 --radius 0.85 --thickness 0.18 --interval 0.28 --seed 2
+# thickness = 2 * WavefrontSpec.half_depth (authored 0.35 → 0.70)
+VFX_CAPTURE=1 VFX_FREEZE=0.72 VFX_FRAME=side            cargo run -p vfx-playground -- sonic-wave --range 20 --speed 22 --count 3 --radius 0.85 --thickness 0.70 --interval 0.28 --seed 2
+VFX_CAPTURE=1 VFX_FREEZE=0.72 VFX_FRAME=three-quarter   cargo run -p vfx-playground -- sonic-wave --range 20 --speed 22 --count 3 --radius 0.85 --thickness 0.70 --interval 0.28 --seed 2
 
 # Ordinary scale side + 3/4
-VFX_CAPTURE=1 VFX_FREEZE=0.42 VFX_FRAME=side            cargo run -p vfx-playground -- sonic-wave --range 8 --speed 16 --count 3 --radius 0.4 --thickness 0.1 --interval 0.18 --seed 2
-VFX_CAPTURE=1 VFX_FREEZE=0.42 VFX_FRAME=three-quarter   cargo run -p vfx-playground -- sonic-wave --range 8 --speed 16 --count 3 --radius 0.4 --thickness 0.1 --interval 0.18 --seed 2
+VFX_CAPTURE=1 VFX_FREEZE=0.42 VFX_FRAME=side            cargo run -p vfx-playground -- sonic-wave --range 8 --speed 16 --count 3 --radius 0.4 --thickness 0.40 --interval 0.18 --seed 2
+VFX_CAPTURE=1 VFX_FREEZE=0.42 VFX_FRAME=three-quarter   cargo run -p vfx-playground -- sonic-wave --range 8 --speed 16 --count 3 --radius 0.4 --thickness 0.40 --interval 0.18 --seed 2
 ```
 
 Checked-in stills (console hidden):
