@@ -13,6 +13,15 @@ use crate::stance::{CharacterStance, StanceKind};
 
 pub(crate) const WALK_SPEED: f32 = 1.0;
 
+/// Clip progress for [`SquatDescent`] (entering crouch) or [`SquatAscent`] (standing up).
+pub(crate) fn squat_transition_progress(stance: &CharacterStance) -> f32 {
+	if stance.kind == StanceKind::Stand {
+		1.0 - stance.blend
+	} else {
+		stance.blend
+	}
+}
+
 pub(crate) fn face_wish_yaw(
 	time: Res<Time>,
 	wishes: Query<&MoveWish, With<CharacterController>>,
@@ -73,7 +82,8 @@ pub fn drive_player_locomotion(
 				};
 				commands.entity(member).insert(AnimProgress(progress));
 			} else if !stance.squat_settled() {
-				commands.entity(member).insert(AnimProgress(stance.blend));
+				let progress = squat_transition_progress(&stance);
+				commands.entity(member).insert(AnimProgress(progress));
 			} else if matches!(stance.kind, StanceKind::Squat | StanceKind::Prone) {
 				commands.entity(member).insert(AnimProgress(stance.blend));
 			} else {
@@ -96,7 +106,11 @@ fn locomotion_clip(
 			} else if jumping.is_some() {
 				AnimClip::jump()
 			} else if !stance.squat_settled() {
-				AnimClip::squat_descent()
+				if stance.kind == StanceKind::Stand {
+					AnimClip::squat_ascent()
+				} else {
+					AnimClip::squat_descent()
+				}
 			} else {
 				match stance.kind {
 					StanceKind::Prone => AnimClip::prone(),
@@ -247,11 +261,12 @@ mod tests {
 	}
 
 	#[test]
-	fn leaving_squat_uses_descent_until_blend_reaches_zero() {
+	fn leaving_squat_uses_ascent_until_blend_reaches_zero() {
 		let stance = CharacterStance { kind: StanceKind::Stand, blend: 0.5 };
 		assert_eq!(
 			locomotion_clip(RigSkeletonKind::Humanoid, None, &stance, 0.0).id(),
-			AnimId::SquatDescent
+			AnimId::SquatAscent
 		);
+		assert!((squat_transition_progress(&stance) - 0.5).abs() < 1e-5);
 	}
 }

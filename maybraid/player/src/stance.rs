@@ -106,7 +106,8 @@ impl RestLocomotionCapsule {
 	}
 }
 
-/// Ease squat depth toward the stance target so enter/exit uses [`SquatDescent`].
+/// Ease squat depth toward the stance target so enter uses [`SquatDescent`] and exit uses
+/// [`SquatAscent`](character_animations::animations::SquatAscent).
 pub(crate) fn advance_stance_blend(
 	time: Res<Time>,
 	mut stances: Query<&mut CharacterStance, With<CharacterController>>,

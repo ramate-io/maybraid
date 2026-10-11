@@ -7,7 +7,8 @@ use bevy::prelude::*;
 use character_animations::animations::{
 	air_duration, DorsoventralUndulation, FixedTuck, Flapping, FlipDirection, Gallop,
 	LateralUndulation, Leap, QuadrupedRun, Run, Soaring, TuckProfile, TuckedFlip, TwoFootedJump,
-	Walk, AIR_END, DEFAULT_BACKSWING, DEFAULT_DESCENT_SPEED, DEFAULT_GRAVITY, DEFAULT_JAB_TARGET,
+	Walk, AIR_END, DEFAULT_ASCENT_SPEED, DEFAULT_BACKSWING, DEFAULT_DESCENT_SPEED,
+	DEFAULT_GRAVITY, DEFAULT_JAB_TARGET,
 	DEFAULT_JUMP_HEIGHT, DEFAULT_LANDING_SQUAT_SPEED, DEFAULT_PRE_SQUAT_SPEED,
 	DEFAULT_SPRING_DURATION, TAKEOFF_END,
 };
@@ -47,6 +48,7 @@ pub enum AnimId {
 	Jab,
 	Squat,
 	SquatDescent,
+	SquatAscent,
 	Prone,
 	LateralUndulation,
 	DorsoventralUndulation,
@@ -70,6 +72,7 @@ impl AnimId {
 			Self::Jab => JAB_CYCLE_SPEED,
 			Self::Squat => 1.0,
 			Self::SquatDescent => DEFAULT_DESCENT_SPEED,
+			Self::SquatAscent => DEFAULT_ASCENT_SPEED,
 			Self::Prone => 1.0,
 			Self::LateralUndulation => 1.0,
 			Self::DorsoventralUndulation => 1.0,
@@ -206,6 +209,7 @@ pub enum AnimClip {
 	Jab(JabParams),
 	Squat,
 	SquatDescent,
+	SquatAscent,
 	Prone,
 	LateralUndulation(LateralUndulation),
 	DorsoventralUndulation(DorsoventralUndulation),
@@ -229,6 +233,7 @@ impl AnimClip {
 			Self::Jab(_) => AnimId::Jab,
 			Self::Squat => AnimId::Squat,
 			Self::SquatDescent => AnimId::SquatDescent,
+			Self::SquatAscent => AnimId::SquatAscent,
 			Self::Prone => AnimId::Prone,
 			Self::LateralUndulation(_) => AnimId::LateralUndulation,
 			Self::DorsoventralUndulation(_) => AnimId::DorsoventralUndulation,
@@ -299,6 +304,10 @@ impl AnimClip {
 		Self::SquatDescent
 	}
 
+	pub fn squat_ascent() -> Self {
+		Self::SquatAscent
+	}
+
 	pub fn prone() -> Self {
 		Self::Prone
 	}
@@ -335,6 +344,7 @@ impl AnimClip {
 			| Self::TwoFootedTuckedFlip(_)
 			| Self::Squat
 			| Self::SquatDescent
+			| Self::SquatAscent
 			| Self::Prone => ClipTimePolicy::Clamp { duration: 1.0 },
 			Self::Soaring(_) | Self::Flapping(_) => ClipTimePolicy::Unbounded,
 			Self::LateralUndulation(_) | Self::DorsoventralUndulation(_) => {
