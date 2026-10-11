@@ -19,10 +19,11 @@ impl Animation<HumanoidV0Rig> for SquatAscent {
 			pose.apply_hip_fold(Side::Right, hip);
 		}
 		pose.apply_spine_pitch(self.root_swing(progress));
-		let lead = self.shoulder_lead(progress);
-		if lead.abs() > f32::EPSILON {
-			pose.apply_arm(Side::Left, lead, 0.0, 0.0, 0.0, 0.0);
-			pose.apply_arm(Side::Right, lead, 0.0, 0.0, 0.0, 0.0);
+		for side in [Side::Left, Side::Right] {
+			let flex = self.shoulder_flex(side, progress);
+			if flex.abs() > f32::EPSILON {
+				pose.apply_arm(side, 0.0, flex, 0.0, 0.0, 0.0);
+			}
 		}
 		rig.write_pose(&pose);
 	}
@@ -41,6 +42,29 @@ mod tests {
 
 	fn tip(rig: &HumanoidV0Rig, name: &str) -> Vec3 {
 		rig.rotation(name) * Vec3::Y
+	}
+
+	fn shin_end(rig: &HumanoidV0Rig, side: Side) -> Vec3 {
+		let name = format!("shin.{}", side.suffix());
+		rig.character_point(&name) + rig.character_length(&name)
+	}
+
+	fn max_tip_jump(ascent_p: f32, descent_p: f32) -> f32 {
+		use crate::animations::SquatDescent;
+
+		let mut ascent_rig = HumanoidV0Rig::for_clip_test();
+		let mut descent_rig = HumanoidV0Rig::for_clip_test();
+		SquatAscent::default().apply(&mut ascent_rig, ascent_p);
+		SquatDescent::default().apply(&mut descent_rig, descent_p);
+		let leg_bones = ["femur.L", "femur.R", "shin.L", "shin.R", "root", "pelvis.L", "pelvis.R"];
+		leg_bones
+			.iter()
+			.map(|name| {
+				let a = ascent_rig.character_point(name) + ascent_rig.character_length(name);
+				let b = descent_rig.character_point(name) + descent_rig.character_length(name);
+				(a - b).length()
+			})
+			.fold(0.0_f32, f32::max)
 	}
 
 	#[test]
@@ -163,8 +187,150 @@ mod tests {
 	}
 
 	#[test]
+	fn shoulder_lead_raises_both_sides_symmetrically() -> anyhow::Result<()> {
+		use character_rigs::authoring::HumanoidPose;
+
+		let rest = HumanoidV0Rig::for_clip_test();
+		let peak_p = 0.15;
+		let lead = SquatAscent::default().shoulder_lead(peak_p);
+
+		// Same shoulder_forward on both sides (pre-fix) skews character-space height.
+		let mut old_rig = HumanoidV0Rig::for_clip_test();
+		let mut old_pose = HumanoidPose::default();
+		old_pose.apply_arm(Side::Left, lead, 0.0, 0.0, 0.0, 0.0);
+		old_pose.apply_arm(Side::Right, lead, 0.0, 0.0, 0.0, 0.0);
+		old_rig.write_pose(&old_pose);
+		let old_left_y = old_rig.character_point("shoulder.L").y;
+		let old_right_y = old_rig.character_point("shoulder.R").y;
+
+		let mut rig = HumanoidV0Rig::for_clip_test();
+		SquatAscent::default().apply(&mut rig, peak_p);
+		let left = rig.character_point("shoulder.L");
+		let right = rig.character_point("shoulder.R");
+		let humerus_l = rig.character_point("humerus.L");
+		let humerus_r = rig.character_point("humerus.R");
+		let old_skew = (old_left_y - old_right_y).abs();
+		let new_skew = (left.y - right.y).abs();
+		assert!(
+			new_skew < 0.02 && new_skew <= old_skew + 1e-4,
+			"shoulders stay level with flex+sign (old skew {old_skew:.4}, new {new_skew:.4}) L={left:?} R={right:?}"
+		);
+		let rest_left = rest.character_point("shoulder.L");
+		let rest_right = rest.character_point("shoulder.R");
+		let lift_l = left.y - rest_left.y;
+		let lift_r = right.y - rest_right.y;
+		assert!(
+			lift_l.signum() == lift_r.signum() && lift_l.abs() > 0.005,
+			"both shoulders should move together in Y at peak (ΔL={lift_l:.4} ΔR={lift_r:.4})"
+		);
+		assert!(
+			(humerus_l.y - rest.character_point("humerus.L").y).signum()
+				== (humerus_r.y - rest.character_point("humerus.R").y).signum(),
+			"humerus roots should follow shoulders, L={humerus_l:?} R={humerus_r:?}"
+		);
+		let mut held = HumanoidV0Rig::for_clip_test();
+		Squat::held().apply(&mut held, 1.0);
+		let mut upright = HumanoidV0Rig::for_clip_test();
+		SquatAscent::default().apply(&mut upright, 1.0);
+		for (progress, reference) in [(0.0, &held), (1.0, &upright)] {
+			let mut endpoint = HumanoidV0Rig::for_clip_test();
+			SquatAscent::default().apply(&mut endpoint, progress);
+			for side in [Side::Left, Side::Right] {
+				let shoulder = format!("shoulder.{}", side.suffix());
+				assert!(
+					(endpoint.character_point(&shoulder) - reference.character_point(&shoulder))
+						.length() < 1e-3,
+					"shoulder lead off at progress {progress} on {shoulder}"
+				);
+			}
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn ascent_descent_toggle_stays_continuous_at_matched_depth() -> anyhow::Result<()> {
+		use crate::animations::SquatDescent;
+
+		const MAX_LEG_JUMP_M: f32 = 0.02;
+		const MAX_ARM_JUMP_M: f32 = 0.02;
+		for blend in [0.25, 0.5, 0.75] {
+			let leg_jump = max_tip_jump(1.0 - blend, blend);
+			assert!(
+				leg_jump < MAX_LEG_JUMP_M,
+				"toggle at blend {blend}: leg tip jump {leg_jump:.4} m exceeds {MAX_LEG_JUMP_M} m"
+			);
+
+			let mut ascent_rig = HumanoidV0Rig::for_clip_test();
+			let mut descent_rig = HumanoidV0Rig::for_clip_test();
+			SquatAscent::default().apply(&mut ascent_rig, 1.0 - blend);
+			SquatDescent::default().apply(&mut descent_rig, blend);
+			let arm_jump = ["shoulder.L", "shoulder.R", "humerus.L", "humerus.R"]
+				.iter()
+				.map(|name| {
+					let a = ascent_rig.character_point(name) + ascent_rig.character_length(name);
+					let b = descent_rig.character_point(name) + descent_rig.character_length(name);
+					(a - b).length()
+				})
+				.fold(0.0_f32, f32::max);
+			assert!(
+				arm_jump < MAX_ARM_JUMP_M,
+				"toggle at blend {blend}: arm tip jump {arm_jump:.4} m exceeds {MAX_ARM_JUMP_M} m \
+				 (shoulder lead is zero at matched depth)"
+			);
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn feet_match_descent_and_held_squat_endpoints() -> anyhow::Result<()> {
+		use crate::animations::{Squat, SquatDescent};
+
+		const MAX_FOOT_DRIFT_M: f32 = 0.02;
+		let rest = HumanoidV0Rig::for_clip_test();
+		let mut held = HumanoidV0Rig::for_clip_test();
+		Squat::held().apply(&mut held, 1.0);
+		for blend in [0.0, 0.25, 0.5, 0.75, 1.0] {
+			let mut ascent = HumanoidV0Rig::for_clip_test();
+			SquatAscent::default().apply(&mut ascent, 1.0 - blend);
+			let mut descent = HumanoidV0Rig::for_clip_test();
+			SquatDescent::default().apply(&mut descent, blend);
+			for side in [Side::Left, Side::Right] {
+				let ascent_foot = shin_end(&ascent, side);
+				let descent_foot = shin_end(&descent, side);
+				assert!(
+					(ascent_foot - descent_foot).length() < MAX_FOOT_DRIFT_M,
+					"matched depth blend={blend}: {:?} vs {:?}",
+					ascent_foot,
+					descent_foot
+				);
+			}
+		}
+		for side in [Side::Left, Side::Right] {
+			let mut start = HumanoidV0Rig::for_clip_test();
+			SquatAscent::default().apply(&mut start, 0.0);
+			let held_foot = shin_end(&held, side);
+			let start_foot = shin_end(&start, side);
+			assert!(
+				(start_foot - held_foot).length() < MAX_FOOT_DRIFT_M,
+				"ascent start should match held squat foot on {side:?}"
+			);
+			let rest_foot = shin_end(&rest, side);
+			let mut end = HumanoidV0Rig::for_clip_test();
+			SquatAscent::default().apply(&mut end, 1.0);
+			let end_foot = shin_end(&end, side);
+			assert!(
+				(end_foot - rest_foot).length() < MAX_FOOT_DRIFT_M,
+				"ascent end should match upright foot on {side:?}"
+			);
+		}
+		let effects = SquatAscent::default().effects_for(&rest, 0.5);
+		assert!(effects.is_identity(), "ascent armature offset must stay visual-only / identity");
+		Ok(())
+	}
+
+	#[test]
 	fn jump_interrupt_from_visible_mid_ascent() -> anyhow::Result<()> {
-		use crate::animations::{JumpSegment, TwoFootedJump, Transition};
+		use crate::animations::{JumpSegment, Transition, TwoFootedJump};
 		use character_rigs::authoring::ArmatureOffset;
 
 		let mut rig = HumanoidV0Rig::for_clip_test();
@@ -173,7 +339,8 @@ mod tests {
 		let jump = TwoFootedJump::default();
 		let lengths = rig.segment_lengths;
 		let windup = jump.timings(lengths).squat_descent_duration * 0.5;
-		let transition = Transition::from_visible(jump.clone(), from_pose, ArmatureOffset::IDENTITY);
+		let transition =
+			Transition::from_visible(jump.clone(), from_pose, ArmatureOffset::IDENTITY);
 		transition.apply(&mut rig, windup, 0.0);
 		assert_eq!(jump.segment(lengths, windup).0, JumpSegment::Squat);
 		assert!(

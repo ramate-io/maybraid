@@ -13,8 +13,7 @@ use bevy::prelude::*;
 use character_animations::{
 	animations::{
 		Idle, Jab, Prone, QuadrupedIdle, QuadrupedLeap, QuadrupedRun, Squat, SquatAscent,
-		SquatDescent, Tuck,
-		TwoFootedTuckedFlip, UprightLeap,
+		SquatDescent, Tuck, TwoFootedTuckedFlip, UprightLeap,
 	},
 	Animation, Effects,
 };
@@ -952,6 +951,54 @@ mod tests {
 		assert!(rig.posed_angle("shoulder.L") > 0.0);
 		assert!(rig.posed_angle("shoulder.L") < 0.15);
 		assert!(rig.posed_angle("humerus.L") > 0.2, "Still should hang the arms");
+	}
+
+	#[test]
+	fn squat_ascent_to_descent_switch_captures_pose_for_blend() -> anyhow::Result<()> {
+		use bevy::ecs::system::RunSystemOnce;
+
+		let mut world = World::new();
+		world.insert_resource(Time::<()>::default());
+		world.init_resource::<MailboxApplySet>();
+		let host = spawn_mailbox_apply_host(&mut world, AnimClip::squat_ascent(), 0.5);
+		let before = world.get::<AnimMailbox>(host).unwrap().output.clone();
+		world.entity_mut(host).insert(AnimProgress(0.5));
+		world
+			.entity_mut(host)
+			.insert(AnimRefRoot(AnimRef::new(AnimClip::squat_descent())));
+		world
+			.run_system_once(tick_anim_mailbox)
+			.map_err(|err| anyhow::anyhow!("{err}"))?;
+		let mailbox = world.get::<AnimMailbox>(host).unwrap();
+		assert_eq!(mailbox.last, Some(AnimId::SquatDescent));
+		assert_eq!(mailbox.clip_progress, 0.5);
+		assert_eq!(mailbox.blend_progress, 0.0);
+		assert_eq!(mailbox.from_pose, before);
+		Ok(())
+	}
+
+	#[test]
+	fn squat_descent_to_ascent_switch_captures_pose_for_blend() -> anyhow::Result<()> {
+		use bevy::ecs::system::RunSystemOnce;
+
+		let mut world = World::new();
+		world.insert_resource(Time::<()>::default());
+		world.init_resource::<MailboxApplySet>();
+		let host = spawn_mailbox_apply_host(&mut world, AnimClip::squat_descent(), 0.35);
+		let before = world.get::<AnimMailbox>(host).unwrap().output.clone();
+		world.entity_mut(host).insert(AnimProgress(0.35));
+		world
+			.entity_mut(host)
+			.insert(AnimRefRoot(AnimRef::new(AnimClip::squat_ascent())));
+		world
+			.run_system_once(tick_anim_mailbox)
+			.map_err(|err| anyhow::anyhow!("{err}"))?;
+		let mailbox = world.get::<AnimMailbox>(host).unwrap();
+		assert_eq!(mailbox.last, Some(AnimId::SquatAscent));
+		assert_eq!(mailbox.clip_progress, 0.35);
+		assert_eq!(mailbox.blend_progress, 0.0);
+		assert_eq!(mailbox.from_pose, before);
+		Ok(())
 	}
 
 	#[test]

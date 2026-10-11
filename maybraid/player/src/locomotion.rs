@@ -261,6 +261,24 @@ mod tests {
 	}
 
 	#[test]
+	fn squat_transition_clips_win_over_walk_and_run() {
+		let ascending = CharacterStance { kind: StanceKind::Stand, blend: 0.4 };
+		let descending = CharacterStance { kind: StanceKind::Squat, blend: 0.4 };
+		for speed in [0.0, WALK_SPEED + 0.1, MOVE_SPEED] {
+			assert_eq!(
+				locomotion_clip(RigSkeletonKind::Humanoid, None, &ascending, speed).id(),
+				AnimId::SquatAscent,
+				"ascending at speed {speed}"
+			);
+			assert_eq!(
+				locomotion_clip(RigSkeletonKind::Humanoid, None, &descending, speed).id(),
+				AnimId::SquatDescent,
+				"descending at speed {speed}"
+			);
+		}
+	}
+
+	#[test]
 	fn leaving_squat_uses_ascent_until_blend_reaches_zero() {
 		let stance = CharacterStance { kind: StanceKind::Stand, blend: 0.5 };
 		assert_eq!(

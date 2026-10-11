@@ -50,10 +50,21 @@ impl SquatAscent {
 	}
 
 	/// Brief bilateral shoulder lead while the legs extend (0 at endpoints).
+	///
+	/// Fades out near held depth so ascent↔descent toggles at matched depth stay continuous.
 	pub fn shoulder_lead(&self, progress: f32) -> f32 {
 		let t = Progress(progress).clamp();
 		let bell = (t * PI).sin();
-		0.14 * bell * bell
+		let raw = 0.12 * bell * bell;
+		let depth = self.depth(progress);
+		let away_from_mid_depth = (2.0 * (depth - 0.5)).abs().min(1.0);
+		let guard = away_from_mid_depth.powi(4);
+		raw * guard
+	}
+
+	/// Character-space shoulder lift; opposite signs so both shoulders rise (see Fall).
+	pub fn shoulder_flex(&self, side: character_rigs::Side, progress: f32) -> f32 {
+		self.shoulder_lead(progress) * side.sign()
 	}
 }
 
@@ -78,11 +89,24 @@ mod tests {
 	}
 
 	#[test]
+	fn shoulder_flex_uses_opposite_signs_per_side() -> anyhow::Result<()> {
+		use character_rigs::Side;
+
+		let ascent = SquatAscent::default();
+		assert!(
+			ascent.shoulder_flex(Side::Left, 0.5).signum()
+				!= ascent.shoulder_flex(Side::Right, 0.5).signum()
+		);
+		Ok(())
+	}
+
+	#[test]
 	fn shoulder_lead_is_zero_at_endpoints() -> anyhow::Result<()> {
 		let ascent = SquatAscent::default();
 		assert!(ascent.shoulder_lead(0.0).abs() < 1e-5);
 		assert!(ascent.shoulder_lead(1.0).abs() < 1e-5);
-		assert!(ascent.shoulder_lead(0.5) > 0.02);
+		assert!(ascent.shoulder_lead(0.5).abs() < 1e-5, "mid depth toggles clear shoulder lead");
+		assert!(ascent.shoulder_lead(0.15) > 0.01);
 		Ok(())
 	}
 }
