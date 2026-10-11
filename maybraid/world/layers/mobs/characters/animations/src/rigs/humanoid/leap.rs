@@ -352,6 +352,66 @@ mod tests {
 	}
 
 	#[test]
+	fn takeoff_air_blend_band_end_has_no_velocity_spike() -> anyhow::Result<()> {
+		let leap = UprightLeap::default();
+		let air_span = AIR_END - TAKEOFF_END;
+		let blend_end = TAKEOFF_END + air_span * LEAP_TAKEOFF_BLEND_FRACTION;
+		let step = air_span * 0.01;
+		let mut prev = HumanoidV0Rig::for_clip_test();
+		leap.apply(&mut prev, blend_end - step);
+		let mut mid = HumanoidV0Rig::for_clip_test();
+		leap.apply(&mut mid, blend_end);
+		let mut next = HumanoidV0Rig::for_clip_test();
+		leap.apply(&mut next, blend_end + step);
+		let into_blend = max_bone_tip_jump(&prev, &mid).0;
+		let out_of_blend = max_bone_tip_jump(&mid, &next).0;
+		assert!(
+			out_of_blend < into_blend * 1.35 + 0.01,
+			"leaving the takeoff→air blend band should not spike harder than entering it (in={into_blend} out={out_of_blend})"
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn takeoff_air_resampling_does_not_accumulate() -> anyhow::Result<()> {
+		let leap = UprightLeap::default();
+		let progress = TAKEOFF_END + (AIR_END - TAKEOFF_END) * 0.12;
+		let mut once = HumanoidV0Rig::for_clip_test();
+		let mut twice = HumanoidV0Rig::for_clip_test();
+		leap.apply(&mut once, progress);
+		leap.apply(&mut twice, progress);
+		leap.apply(&mut twice, progress);
+		for name in once.animation_bone_names() {
+			let a = once.rotation(name);
+			let b = twice.rotation(name);
+			assert!(a.dot(b).abs() > 1.0 - 1e-5, "re-sample must not drift on {name}");
+		}
+		Ok(())
+	}
+
+	/// Right leg leads; trail/lead pairing should stay stable through the blend band.
+	#[test]
+	fn takeoff_air_blend_keeps_lead_trail_pairing() -> anyhow::Result<()> {
+		let leap = UprightLeap::default();
+		let air_span = AIR_END - TAKEOFF_END;
+		for &frac in &[0.05, 0.14, LEAP_TAKEOFF_BLEND_FRACTION * 0.9] {
+			let progress = TAKEOFF_END + air_span * frac;
+			let mut rig = HumanoidV0Rig::for_clip_test();
+			leap.apply(&mut rig, progress);
+			let lead = rig.posed_angle("shin.R");
+			let trail = rig.posed_angle("shin.L");
+			assert!(lead > trail + 0.02, "right (lead) shin stays ahead of left at {progress}");
+			let lead_femur = rig.posed_angle("femur.R");
+			let trail_femur = rig.posed_angle("femur.L");
+			assert!(
+				(lead_femur - trail_femur).abs() < 0.12,
+				"femurs stay paired through blend at {progress}"
+			);
+		}
+		Ok(())
+	}
+
+	#[test]
 	fn scrubbing_back_across_takeoff_air_stays_continuous() -> anyhow::Result<()> {
 		let leap = UprightLeap::default();
 		let forward = TAKEOFF_END + (AIR_END - TAKEOFF_END) * 0.08;
