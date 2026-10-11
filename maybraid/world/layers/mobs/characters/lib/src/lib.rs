@@ -68,7 +68,7 @@ pub use components::{
 };
 pub use concepts::ConceptAnimation;
 pub use eye_glow::{
-	DEFAULT_EYE_GLOW_TRANSITION_SECS, EyeGlowControl, EyeGlowMaterialForked, EyeGlowPlugin,
+	DEFAULT_EYE_GLOW_TRANSITION_SECS, EyeGlowControl, EyeGlowMaterialInstance, EyeGlowPlugin,
 };
 pub use fixed::{
 	drain_character_assembly, fixed_character_assembly_chunks, spawn_fixed_character_assembly,

@@ -5,7 +5,8 @@ use character_rigs::Side;
 use clap::{Args, Subcommand, ValueEnum};
 
 use crate::animation::{AnimationMode, AnimationPlayback};
-use crate::camera::{orient_camera, CameraController};
+use crate::camera::{orient_camera, species_face_capture, CameraController, FaceCaptureRange};
+use crate::capture::PendingFaceCapture;
 use crate::character::{request_dump_bones, CharacterConfig, CharacterSpecies};
 use crate::commands::eye_glow::EyeGlow;
 
@@ -109,20 +110,36 @@ impl Character {
 				});
 			}
 			Character::Camera(args) => {
-				let eye = match args.view {
-					CameraView::Front => Vec3::new(0.0, 1.2, 3.2),
-					CameraView::Side => Vec3::new(3.2, 1.2, 0.0),
-					CameraView::ThreeQuarter => Vec3::new(2.2, 1.5, 2.4),
-				};
+				let view = args.view;
 				commands.queue(move |world: &mut World| {
+					let species = world.resource::<CharacterConfig>().species;
+					let (eye, target) = match view {
+						CameraView::Front => {
+							(Vec3::new(0.0, 1.2, 3.2), Vec3::new(0.0, 1.0, 0.0))
+						},
+						CameraView::Side => {
+							(Vec3::new(3.2, 1.2, 0.0), Vec3::new(0.0, 1.0, 0.0))
+						},
+						CameraView::ThreeQuarter => {
+							(Vec3::new(2.2, 1.5, 2.4), Vec3::new(0.0, 1.0, 0.0))
+						},
+						CameraView::FaceCapture => {
+							world.resource_mut::<PendingFaceCapture>().range =
+								Some(FaceCaptureRange::Close);
+							species_face_capture(species, FaceCaptureRange::Close)
+						},
+						CameraView::FaceWarningDistance => {
+							world.resource_mut::<PendingFaceCapture>().range =
+								Some(FaceCaptureRange::WarningDistance);
+							species_face_capture(species, FaceCaptureRange::WarningDistance)
+						},
+					};
 					let mut cameras = world.query::<(&mut Transform, &mut CameraController)>();
 					if let Some((mut transform, mut controller)) = cameras.iter_mut(world).next() {
-						orient_camera(
-							&mut transform,
-							&mut controller,
-							eye,
-							Vec3::new(0.0, 1.0, 0.0),
-						);
+						if !matches!(view, CameraView::FaceCapture | CameraView::FaceWarningDistance)
+						{
+							orient_camera(&mut transform, &mut controller, eye, target);
+						}
 					}
 				});
 			}
@@ -264,6 +281,10 @@ pub enum CameraView {
 	Side,
 	#[value(name = "three-quarter")]
 	ThreeQuarter,
+	#[value(name = "face-capture")]
+	FaceCapture,
+	#[value(name = "face-warning-distance")]
+	FaceWarningDistance,
 }
 
 #[derive(Clone, Args)]
