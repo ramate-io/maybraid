@@ -45,6 +45,7 @@ struct ChainVertexOutput {
 #endif
 }
 
+// Hash helpers are the shared bodies in hash.wgsl. Keep them verbatim.
 fn hash13(p: vec3<f32>) -> f32 {
     let p3 = fract(p * vec3<f32>(0.1031, 0.1030, 0.0973));
     let d = dot(p3, p3.yzx + vec3<f32>(33.33));

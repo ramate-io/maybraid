@@ -1,13 +1,16 @@
 //! CPU deterioration model mirrored by the fragment shader.
 //!
-//! Weak links (higher hash of link id + seed) fail first so a single global
-//! durability value still reads as uneven weakening along the chain.
+//! Weak links (higher [`crate::hash::link_weakness`] of link id + seed) fail
+//! first so a single global durability value still reads as uneven weakening
+//! along the chain. That hash is the same `hash13(vec3(...))` the shader
+//! uses — not a 1D collapse of the three terms.
 
+use crate::hash;
 use crate::params::MythicalChainScalars;
 
 /// Which links give way first. Higher is weaker. Stable for a `(link, seed)`.
 pub fn link_weakness(link_id: u32, seed: i32) -> f32 {
-	hash11(link_id as f32 * 17.13 + seed as f32 * 0.013 + 4.2)
+	hash::link_weakness(link_id as f32, seed as f32)
 }
 
 /// Combine global durability, optional localized color, and per-link weakness.
@@ -43,15 +46,6 @@ impl LinkLook {
 	}
 }
 
-fn hash11(p: f32) -> f32 {
-	let mut x = p * 0.1031;
-	x -= x.floor();
-	let k = x + 33.33;
-	x = (x + x * k + k) * 0.1031;
-	x -= x.floor();
-	x
-}
-
 fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
 	if (edge1 - edge0).abs() < 1e-6 {
 		return if x < edge0 { 0.0 } else { 1.0 };
@@ -73,6 +67,8 @@ mod tests {
 		assert!((0.0..=1.0).contains(&a));
 		assert_ne!(link_weakness(3, 11), link_weakness(4, 11));
 		assert_ne!(link_weakness(3, 11), link_weakness(3, 29));
+		assert_eq!(a, crate::hash::link_weakness(3.0, 11.0));
+		assert_eq!(a.to_bits(), 0x3ea0_fdc0);
 		Ok(())
 	}
 

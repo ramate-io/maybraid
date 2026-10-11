@@ -115,9 +115,12 @@ rather than mutate a shared handle:
 5. Do not rebuild the mesh on hit. Cracks, ember, glow drop, and
    dissolve are fragment tests hashed by link id + seed.
 
-Weak links (higher `hash(link_id, seed)`) deteriorate first, so the
-chain reads as unevenly failing along its length without a second
-damage texture.
+Weak links (higher `hash13(vec3(id * 17.13, seed * 0.013, 4.2))`)
+deteriorate first, so the chain reads as unevenly failing along its
+length without a second damage texture. The CPU model in
+[`hash.rs`](src/hash.rs) is a lockstep port of [`hash.wgsl`](src/hash.wgsl);
+tests compare both function bodies and golden vectors computed from the
+WGSL literals and the Rust port.
 
 ### Out of scope here
 

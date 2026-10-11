@@ -7,6 +7,7 @@ use bevy::prelude::*;
 
 mod chain_material;
 mod deteriorate;
+mod hash;
 mod material_lib;
 mod params;
 mod placeholder;
@@ -15,6 +16,10 @@ pub use chain_material::{
 	claims_material_ref, claims_recipe, ChainMaterial, ChainMaterialPlugin, ChainMaterialUniform,
 };
 pub use deteriorate::{link_damage, link_weakness, LinkLook};
+pub use hash::{
+	hash13, hash21, HASH13_OFFSET, HASH13_SCALE, HASH21_Z, WEAKNESS_ID_SCALE, WEAKNESS_SEED_SCALE,
+	WEAKNESS_Z,
+};
 pub use material_lib::{
 	init_chain_material_caches, ChainMaterialLib, ChainMaterialRefCache, ChainMaterialRefPlugin,
 	ChainStandaloneMaterialLib,
