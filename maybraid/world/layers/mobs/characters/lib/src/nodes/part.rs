@@ -3,7 +3,10 @@
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::{Component, Transform, Vec3, Visibility};
 use bevy::scene::prelude::{bsn, template_value, Scene};
-use character_shaders::{eye_palette, mouth_palette, RECIPE_FACE_EYE, RECIPE_FACE_MOUTH};
+use character_shaders::{
+	eye_palette, mouth_palette, DEFAULT_EYE_GLOW_EMISSIVE_GAIN, EYE_SCALAR_GLOW_INTENSITY,
+	RECIPE_FACE_EYE, RECIPE_FACE_MOUTH,
+};
 use lod::lod_ref::LodRef;
 use lod::scene::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::SceneChunk;
@@ -153,6 +156,41 @@ impl PartNode {
 	pub fn with_mouth_open_rate(self, rate: f32) -> Self {
 		let material = self.material.clone().with_scalars([rate]);
 		self.with_material(material)
+	}
+
+	/// Authored eye-glow scalars on `face_eye` (runtime uses [`EyeGlowControl`]).
+	pub fn with_eye_glow(self, color: bevy::prelude::Color, intensity: f32, emissive_gain: f32) -> Self {
+		if !matches!(self.slot, CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight) {
+			return self;
+		}
+		let mut scalars = self.material.scalar_values().to_vec();
+		while scalars.len() <= EYE_SCALAR_GLOW_INTENSITY {
+			scalars.push(0.0);
+		}
+		scalars[EYE_SCALAR_GLOW_INTENSITY] = intensity.max(0.0);
+		let linear = bevy::prelude::LinearRgba::from(color);
+		while scalars.len() < 8 {
+			scalars.push(0.0);
+		}
+		scalars[4] = linear.red;
+		scalars[5] = linear.green;
+		scalars[6] = linear.blue;
+		scalars[7] = if emissive_gain > 1e-4 {
+			emissive_gain
+		} else {
+			DEFAULT_EYE_GLOW_EMISSIVE_GAIN
+		};
+		let mut material = if self.material.name == material_ref::MaterialId::default()
+			|| matches!(&self.material.name, material_ref::MaterialId::Name(n) if n == RECIPE_FACE_EYE)
+		{
+			self.material.clone()
+		} else {
+			MaterialRef::named(RECIPE_FACE_EYE)
+		};
+		if material.palette.is_empty() {
+			material = material.with_palette(eye_palette(color));
+		}
+		self.with_material(material.with_scalars(scalars))
 	}
 
 	pub fn mirrored(mut self, axis: MirrorAxis) -> Self {

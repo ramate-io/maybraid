@@ -1,8 +1,10 @@
 use bevy::prelude::*;
 use character_rigs::Side;
 use characters::{
-	spawn_fixed_character_assembly, species::braidman::BraidmanConfig, AnimProgress, AnimRefRoot,
-	CharacterMembers, CharacterRecipe, CharacterRig, CharacterRigRole, CharacterRoot,
+	spawn_fixed_character_assembly, species::braidman::BraidmanConfig,
+	species::epiphant::EpiphantConfig, AnimProgress, AnimRefRoot, CharacterMembers,
+	CharacterRecipe, CharacterRig, CharacterRigRole, CharacterRoot, EyeGlowControl,
+	GOD_BEAM_EYE_GLOW_INTENSITY,
 };
 use clap::ValueEnum;
 
@@ -13,12 +15,14 @@ use crate::animation::{AnimationMode, AnimationPlayback};
 pub enum CharacterSpecies {
 	#[default]
 	Braidman,
+	Epiphant,
 }
 
 impl CharacterSpecies {
 	pub const fn label(self) -> &'static str {
 		match self {
 			Self::Braidman => "braidman",
+			Self::Epiphant => "epiphant",
 		}
 	}
 }
@@ -92,11 +96,44 @@ pub(crate) fn sync_character(
 		commands.entity(entity).try_despawn();
 	}
 
-	let clothed = match config.species {
-		CharacterSpecies::Braidman => CharacterRecipe::clothed(&BraidmanConfig::default_preview()),
+	let entity = match config.species {
+		CharacterSpecies::Braidman => spawn_fixed_character_assembly(
+			&mut commands,
+			&CharacterRecipe::clothed(&BraidmanConfig::default_preview()),
+			config.transform,
+		),
+		CharacterSpecies::Epiphant => spawn_fixed_character_assembly(
+			&mut commands,
+			&CharacterRecipe::clothed(&EpiphantConfig::default_preview()),
+			config.transform,
+		),
 	};
-	let entity = spawn_fixed_character_assembly(&mut commands, &clothed, config.transform);
 	commands.entity(entity).insert(PlaygroundCharacter);
+	if let Some(control) = eye_glow_from_env() {
+		commands.entity(entity).insert(control);
+	}
+}
+
+/// `MAYBRAID_EYE_GLOW_DEMO=off|mid|on` — preview capture helper (optional).
+fn eye_glow_from_env() -> Option<EyeGlowControl> {
+	match std::env::var("MAYBRAID_EYE_GLOW_DEMO").as_deref() {
+		Ok("off") => Some(EyeGlowControl::off()),
+		Ok("mid") => {
+			let mut control = EyeGlowControl::god_beam_warning();
+			control.intensity = 0.35;
+			control.target_intensity = 0.35;
+			control.transition_secs = 0.0;
+			Some(control)
+		},
+		Ok("on") | Ok("full") => {
+			let mut control = EyeGlowControl::god_beam_warning();
+			control.intensity = GOD_BEAM_EYE_GLOW_INTENSITY;
+			control.target_intensity = GOD_BEAM_EYE_GLOW_INTENSITY;
+			control.transition_secs = 0.0;
+			Some(control)
+		},
+		_ => None,
+	}
 }
 
 /// Write the session clip onto the body member (`AnimRefRoot` defaults to still).

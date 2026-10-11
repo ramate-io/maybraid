@@ -7,6 +7,7 @@ use clap::{Args, Subcommand, ValueEnum};
 use crate::animation::{AnimationMode, AnimationPlayback};
 use crate::camera::{orient_camera, CameraController};
 use crate::character::{request_dump_bones, CharacterConfig, CharacterSpecies};
+use crate::commands::eye_glow::EyeGlow;
 
 #[derive(Clone, Subcommand)]
 pub enum Character {
@@ -22,6 +23,9 @@ pub enum Character {
 	Joint(JointArgs),
 	/// Print the live rig bone hierarchy to the HUD console.
 	DumpBones,
+	/// Drive per-character eye warning glow (God Beam telegraph preset).
+	#[command(subcommand)]
+	EyeGlow(EyeGlow),
 }
 
 #[derive(Clone, Args)]
@@ -157,6 +161,7 @@ impl Character {
 				});
 			}
 			Character::DumpBones => request_dump_bones(commands),
+			Character::EyeGlow(cmd) => cmd.react(commands),
 		}
 	}
 }

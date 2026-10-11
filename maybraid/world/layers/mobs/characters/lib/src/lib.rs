@@ -25,6 +25,7 @@ pub mod assembly;
 pub mod assets;
 pub mod components;
 pub mod concepts;
+pub mod eye_glow;
 pub mod fixed;
 pub mod hosts;
 pub mod layer;
@@ -57,12 +58,18 @@ pub use character_motion::{
 	SuspendAnimation, SuspendTerrainPitch,
 };
 pub use character_rigs::{BoneRotation, BoneScale, ResolvedRigPose, RigPoseLayer};
-pub use character_shaders::CharacterShadersPlugin;
+pub use character_shaders::{
+	CharacterShadersPlugin, GOD_BEAM_EYE_GLOW_COLOR, GOD_BEAM_EYE_GLOW_EMISSIVE_GAIN,
+	GOD_BEAM_EYE_GLOW_INTENSITY,
+};
 pub use components::{
 	character_bounds, clothing_layers, CharacterComponents, CharacterRecipe, Clothed,
 	ClothingLayer, ComponentsOnly, HeadCapsule, HitCapsule, LocomotionCapsule,
 };
 pub use concepts::ConceptAnimation;
+pub use eye_glow::{
+	DEFAULT_EYE_GLOW_TRANSITION_SECS, EyeGlowControl, EyeGlowMaterialForked, EyeGlowPlugin,
+};
 pub use fixed::{
 	drain_character_assembly, fixed_character_assembly_chunks, spawn_fixed_character_assembly,
 	spawn_fixed_character_visual, CharacterAssemblyBudget, CharacterAssemblyDiagnostics,
