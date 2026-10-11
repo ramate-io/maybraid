@@ -1,11 +1,34 @@
 //! Humanoid mapping for [`Bow`](crate::animations::Bow).
 
-use character_rigs::authoring::{ArmAim, HumanoidPose};
+use bevy::prelude::Vec3;
+use character_rigs::authoring::{ArmAim, ArmatureOffset, HumanoidPose, PoseBuffer};
 use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
 use character_rigs::Side;
 
 use crate::animations::Bow;
-use crate::Animation;
+use crate::{Animation, Effects};
+
+fn bone_tail_at(rig: &HumanoidV0Rig, pose: &PoseBuffer, name: &str) -> Vec3 {
+	let id = rig.binding.definition.id(name).unwrap_or_else(|| panic!("missing bone {name}"));
+	let origin = rig.binding.definition.translation_in_character(pose, id);
+	let axis = rig.binding.definition.rotation_in_character(pose, id) * Vec3::Y;
+	let len = rig
+		.binding
+		.effective_rest
+		.get(id)
+		.map(|transform| transform.translation.y)
+		.unwrap_or(0.0);
+	origin + axis * len
+}
+
+/// Visual-only shift so knee flex does not skate the feet (same armature-offset idea as squat).
+fn foot_plant_offset(rig: &HumanoidV0Rig) -> Vec3 {
+	let rest = &rig.binding.effective_rest;
+	let posed = &rig.pose;
+	let left = bone_tail_at(rig, rest, "shin.L") - bone_tail_at(rig, posed, "shin.L");
+	let right = bone_tail_at(rig, rest, "shin.R") - bone_tail_at(rig, posed, "shin.R");
+	(left + right) * 0.5
+}
 
 impl Animation<HumanoidV0Rig> for Bow {
 	fn apply_for(&self, rig: &mut HumanoidV0Rig, progress: f32) {
@@ -39,23 +62,56 @@ impl Animation<HumanoidV0Rig> for Bow {
 
 		rig.write_pose(&pose);
 	}
+
+	fn effects_for(&self, rig: &HumanoidV0Rig, progress: f32) -> Effects {
+		if self.bow_amount(progress) < 1e-5 {
+			return Effects::IDENTITY;
+		}
+		let offset = foot_plant_offset(rig);
+		if offset.length_squared() < 1e-10 {
+			Effects::IDENTITY
+		} else {
+			ArmatureOffset::from_translation(offset)
+		}
+	}
 }
 
 #[cfg(test)]
 mod tests {
 	use bevy::prelude::Vec3;
+	use character_rigs::authoring::ArmatureOffset;
 	use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
 	use character_rigs::Side;
 
 	use super::*;
+	use crate::animations::{Idle, Transition};
 	use crate::Animation;
 
+	const HOLD: f32 = 0.45;
+	const PLANT_TOL: f32 = 0.02;
+
 	fn peak() -> f32 {
-		0.43
+		HOLD
+	}
+
+	fn bone_tail(rig: &HumanoidV0Rig, name: &str) -> Vec3 {
+		bone_tail_at(rig, &rig.pose, name)
 	}
 
 	fn head_point(rig: &HumanoidV0Rig) -> Vec3 {
-		rig.character_point("upper_neck")
+		bone_tail(rig, "upper_neck")
+	}
+
+	fn visible_foot(rig: &HumanoidV0Rig, side: Side, effects: ArmatureOffset) -> Vec3 {
+		let bone = format!("shin.{}", side.suffix());
+		bone_tail(rig, &bone) + effects.0.translation
+	}
+
+	fn sample_bow(progress: f32) -> (HumanoidV0Rig, ArmatureOffset) {
+		let bow = Bow;
+		let mut rig = HumanoidV0Rig::for_clip_test();
+		let effects = bow.apply(&mut rig, progress);
+		(rig, effects)
 	}
 
 	#[test]
@@ -115,8 +171,8 @@ mod tests {
 			"head dips with torso, {posed_head:?} vs {rest_head:?}"
 		);
 		assert!(
-			posed_head.z > rest_head.z - 0.05,
-			"head should not lurch backward, {posed_head:?} vs {rest_head:?}"
+			posed_head.z > 0.05,
+			"head should pitch forward in character space, {posed_head:?}"
 		);
 		Ok(())
 	}
@@ -151,6 +207,74 @@ mod tests {
 		let right = posed.posed_angle("pelvis.R");
 		assert!(left > rest.posed_angle("pelvis.L") + 0.04, "hip fold reads on left");
 		assert!((left - right).abs() < 0.03, "mirrored pelvis flex {left} {right}");
+		Ok(())
+	}
+
+	#[test]
+	fn bow_posed_evidence_at_key_progress() -> anyhow::Result<()> {
+		let rest = HumanoidV0Rig::for_clip_test();
+		let rest_head = head_point(&rest);
+		let rest_upper = bone_tail(&rest, "upper_back");
+		let rest_foot_l = bone_tail(&rest, "shin.L");
+		let rest_foot_r = bone_tail(&rest, "shin.R");
+
+		for progress in [0.0, 0.2, HOLD, 1.0] {
+			let (rig, effects) = sample_bow(progress);
+			let head = head_point(&rig);
+			let upper = bone_tail(&rig, "upper_back");
+			let hand_l = bone_tail(&rig, "forearm.L");
+			let hand_r = bone_tail(&rig, "forearm.R");
+			let elbow_l = rig.character_point("forearm.L");
+			let elbow_r = rig.character_point("forearm.R");
+
+			if progress > 0.0 && progress < 1.0 {
+				assert!(head.y < rest_head.y - 0.03, "progress {progress} head y {head:?}");
+				assert!(head.z > rest_head.z + 0.03, "progress {progress} head z {head:?}");
+				assert!(upper.z > rest_upper.z + 0.03, "progress {progress} torso z {upper:?}");
+			}
+
+			assert!((hand_l.y - hand_r.y).abs() < 0.05, "progress {progress}");
+			assert!((hand_l.z - hand_r.z).abs() < 0.05, "progress {progress}");
+			assert!((hand_l.x + hand_r.x).abs() < 0.08, "progress {progress}");
+
+			if progress > 0.0 && progress < 1.0 {
+				assert!(hand_l.y < 0.35, "hands hang from T-pose, {hand_l:?} {hand_r:?}");
+				assert!(hand_l.x > 0.05 && hand_r.x < -0.05, "hands stay on their sides");
+				assert!(elbow_l.x > 0.0 && elbow_r.x < 0.0, "elbows stay lateral");
+			}
+
+			if progress > 0.0 && progress < 1.0 {
+				for (side, rest_foot) in [(Side::Left, rest_foot_l), (Side::Right, rest_foot_r)] {
+					let planted = visible_foot(&rig, side, effects);
+					let delta = planted - rest_foot;
+					assert!(
+						delta.x.abs() < PLANT_TOL
+							&& delta.y.abs() < PLANT_TOL
+							&& delta.z.abs() < PLANT_TOL,
+						"progress {progress} {side:?} foot drift {delta:?}"
+					);
+				}
+			} else {
+				assert!(effects.is_identity(), "rest endpoints have no armature shift");
+			}
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn transition_from_visible_mid_bow_blends_toward_idle() -> anyhow::Result<()> {
+		let bow = Bow;
+		let mut rig = HumanoidV0Rig::for_clip_test();
+		bow.apply_for(&mut rig, HOLD);
+		let from_pose = rig.pose.clone();
+		let from_offset = bow.effects_for(&rig, HOLD);
+		let peak_angle = rig.posed_angle("upper_back");
+		let transition = Transition::from_visible(Idle::default(), from_pose, from_offset);
+		transition.apply(&mut rig, 0.0, 0.5);
+		assert!(
+			rig.posed_angle("upper_back") < peak_angle * 0.85,
+			"mid-bow interrupt should ease torso back toward idle"
+		);
 		Ok(())
 	}
 

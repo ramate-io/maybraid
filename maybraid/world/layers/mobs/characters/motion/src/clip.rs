@@ -427,6 +427,15 @@ mod tests {
 	}
 
 	#[test]
+	fn bow_is_a_clamped_one_shot_clip() {
+		let bow = AnimClip::bow();
+		assert_eq!(bow.id(), AnimId::Bow);
+		assert_eq!(bow.default_speed(), BOW_CYCLE_SPEED);
+		assert_eq!(bow.time_policy(), ClipTimePolicy::Clamp { duration: 1.0 });
+		assert!(!bow.is_sample_cacheable());
+	}
+
+	#[test]
 	fn jump_elapsed_follows_leap_phase_windows() {
 		let params = JumpParams::default();
 		let takeoff = params.elapsed_from_phase(TAKEOFF_END);
