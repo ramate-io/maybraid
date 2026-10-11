@@ -6,9 +6,7 @@ use bevy::ecs::query::QueryFilter;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 
-use crate::lod_ref::{
-	collect_node_snapshots, lod_refs_from_snapshots, LodNode, LodNodeBounds, LodNodePose, LodRef,
-};
+use crate::lod_ref::{first_lod_node_snapshot, LodNode, LodNodeBounds, LodNodePose, LodRef};
 
 use super::super::{ensure_refresh_core, LodRefreshSystems};
 use super::cache::LodSceneCullAabb;
@@ -72,10 +70,13 @@ pub fn produce_lod_cull_regions<P, F, M>(
 	if producer.is_changed() {
 		cursor.invalidate_cells();
 	}
-	let snapshots = collect_node_snapshots(&nodes);
-	let refs = lod_refs_from_snapshots(&snapshots);
+	let Some(viewer_snapshot) = first_lod_node_snapshot(&nodes) else {
+		return;
+	};
+	let viewer_ref = viewer_snapshot.as_lod_ref();
 
-	let LodCullRegionsStatus::Changed(regions) = producer.lod_cull_regions(&refs, &mut cursor)
+	let LodCullRegionsStatus::Changed(regions) =
+		producer.lod_cull_regions(&[viewer_ref], &mut cursor)
 	else {
 		return;
 	};

@@ -7,7 +7,7 @@ use bevy::ecs::query::QueryFilter;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 
-use crate::lod_ref::lod_refs_from_snapshots;
+use crate::lod_ref::first_lod_ref_from_snapshots;
 use crate::scene::cull::LodSceneCulls;
 use crate::scene::host::{
 	hide_lod_tree_world, lod_level_roots_entity, lod_scene_host_or_ancestor_hidden,
@@ -57,8 +57,7 @@ pub fn produce_lod_cull_for_region<T>(
 		return;
 	}
 
-	let refs = lod_refs_from_snapshots(&cache.snapshots);
-	let Some(viewer_ref) = refs.first() else {
+	let Some(viewer_ref) = first_lod_ref_from_snapshots(&cache.snapshots) else {
 		return;
 	};
 
@@ -73,7 +72,7 @@ pub fn produce_lod_cull_for_region<T>(
 		let Ok(mut current) = host_levels.get_mut(entity) else {
 			continue;
 		};
-		let distance_level = scene.scene_lod_level(viewer_ref);
+		let distance_level = scene.scene_lod_level(&viewer_ref);
 		let lowered = distance_level < *current;
 		if lowered {
 			*current = distance_level;
@@ -84,7 +83,7 @@ pub fn produce_lod_cull_for_region<T>(
 			continue;
 		}
 
-		let culls = scene.scene_lod_culls(viewer_ref, current_level);
+		let culls = scene.scene_lod_culls(&viewer_ref, current_level);
 		if matches!(culls, LodSceneCulls::None) {
 			continue;
 		}
@@ -122,8 +121,7 @@ pub fn produce_lod_cull_for_region_erased(world: &mut World) {
 		if cache.hit_entities.is_empty() || cache.snapshots.is_empty() {
 			return;
 		}
-		let refs = lod_refs_from_snapshots(&cache.snapshots);
-		let Some(viewer_ref) = refs.first() else {
+		let Some(viewer_ref) = first_lod_ref_from_snapshots(&cache.snapshots) else {
 			return;
 		};
 		let mut roots = Vec::new();
@@ -140,7 +138,7 @@ pub fn produce_lod_cull_for_region_erased(world: &mut World) {
 			let Some(mut current_level) = world.get::<LodSceneLevel>(entity).copied() else {
 				continue;
 			};
-			let Some(distance_level) = producer.level_for(world, entity, viewer_ref) else {
+			let Some(distance_level) = producer.level_for(world, entity, &viewer_ref) else {
 				continue;
 			};
 			let lowered = distance_level < current_level;
@@ -151,7 +149,7 @@ pub fn produce_lod_cull_for_region_erased(world: &mut World) {
 			if !lowered && world.get::<LodHostHasCullableRoots>(entity).is_none() {
 				continue;
 			}
-			let Some(culls) = producer.culls_for(world, entity, viewer_ref, current_level) else {
+			let Some(culls) = producer.culls_for(world, entity, &viewer_ref, current_level) else {
 				continue;
 			};
 			if matches!(culls, LodSceneCulls::None) {
