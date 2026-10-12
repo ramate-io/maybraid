@@ -271,7 +271,8 @@ unsafe fn select_button(
 	if let Some(options) = unsafe { profile_button(controller, GCInputButtonOptions) } {
 		return Some(options);
 	}
-	if let Some(options) = unsafe { profile_button_named(controller, ns_string!("Button Options")) } {
+	if let Some(options) = unsafe { profile_button_named(controller, ns_string!("Button Options")) }
+	{
 		return Some(options);
 	}
 	// USB Xbox sometimes exposes View only as Share. Prefer Options when present
@@ -312,7 +313,10 @@ unsafe fn profile_button_named(
 unsafe fn physical_button_names(controller: &GCController) -> String {
 	let buttons = unsafe { controller.physicalInputProfile().buttons() };
 	let keys = buttons.allKeys();
-	(0..keys.count()).map(|index| keys.objectAtIndex(index).to_string()).collect::<Vec<_>>().join(",")
+	(0..keys.count())
+		.map(|index| keys.objectAtIndex(index).to_string())
+		.collect::<Vec<_>>()
+		.join(",")
 }
 
 /// # Safety

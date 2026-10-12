@@ -9,8 +9,8 @@ use std::f32::consts::PI;
 use avian3d::prelude::*;
 use bevy::{ecs::query::Has, prelude::*};
 use durham::{
-	terrain_collider_covers_xz, BaseTerrainNoise, CascadeChunk, HcsgStorage, TerrainCellLayout,
-	TerrainStorage, TerrainTrimeshCollider,
+	terrain_collider_covers_xz, BaseTerrainNoise, CascadeChunk, DurhamSurface, TerrainCellLayout,
+	TerrainTrimeshCollider,
 };
 use game_commands::command::TextEntryFocus;
 use lod_avian::PhysicsInteractionLayer;
@@ -300,7 +300,7 @@ pub fn player_position_above_surface(surface: Vec3) -> Vec3 {
 	surface + Vec3::Y * (capsule_half_height() + 0.5)
 }
 
-/// Elevation used before [`HcsgStorage`] has the cell underfoot.
+/// Elevation used before the cell underfoot is published.
 pub fn holding_elevation(base: &BaseTerrainNoise, x: f32, z: f32) -> f32 {
 	base.height_at(x, z) + base.height_scale * HOLD_ABOVE_BASE_FACTOR
 }
@@ -316,8 +316,7 @@ pub fn player_spawn_point(layout: &TerrainCellLayout, elevation: f32) -> Vec3 {
 pub(crate) fn snap_player_to_composed_surface(
 	mut commands: Commands,
 	physics: Res<PlayerPhysicsEnabled>,
-	store: Res<HcsgStorage>,
-	layout: Res<TerrainCellLayout>,
+	surface: DurhamSurface,
 	awaiting: Query<Entity, (With<Player>, With<AwaitingTerrainSurface>)>,
 	mut players: Query<
 		(Entity, &mut Transform, &mut LinearVelocity, &mut GravityScale, Option<&OffTerrainAnchor>),
@@ -343,10 +342,13 @@ pub(crate) fn snap_player_to_composed_surface(
 	}
 
 	let xz = transform.translation.xz();
-	let Some(elevation) = store.composed_height_at(&layout, xz.x, xz.y) else {
-		gravity.0 = 0.0;
-		**velocity = Vec3::ZERO;
-		return;
+	let elevation = match surface.height_at(xz) {
+		Ok(Some(elevation)) => elevation,
+		Ok(None) | Err(lod::hcsg::Busy) => {
+			gravity.0 = 0.0;
+			**velocity = Vec3::ZERO;
+			return;
+		}
 	};
 
 	let target = player_spawn_point_at(xz, elevation);
@@ -399,9 +401,7 @@ fn queue_void_player_respawn(
 
 fn recover_void_player(
 	time: Res<Time>,
-	store: Res<HcsgStorage>,
-	layout: Res<TerrainCellLayout>,
-	base: Res<WorldBaseTerrain>,
+	surface: DurhamSurface,
 	mut respawn: ResMut<PlayerRespawn>,
 	mut commands: Commands,
 	mut player: Query<
@@ -426,9 +426,10 @@ fn recover_void_player(
 		return;
 	}
 	let xz = transform.translation.xz();
-	let elevation = store
-		.composed_height_at(&layout, xz.x, xz.y)
-		.unwrap_or_else(|| holding_elevation(&base.0, xz.x, xz.y));
+	let elevation = match surface.height_at(xz) {
+		Ok(Some(elevation)) => elevation,
+		Ok(None) | Err(lod::hcsg::Busy) => holding_elevation(surface.base(), xz.x, xz.y),
+	};
 	transform.translation = player_spawn_point_at(xz, elevation);
 	**velocity = Vec3::ZERO;
 	respawn.queued_at = None;
@@ -714,6 +715,7 @@ fn follow_character_camera(
 mod tests {
 	use bevy::ecs::system::RunSystemOnce;
 	use durham::TerrainConfig;
+	use lod::hcsg::HcsgStorage;
 
 	use super::*;
 

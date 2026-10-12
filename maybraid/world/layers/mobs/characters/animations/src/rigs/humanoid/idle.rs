@@ -5,7 +5,7 @@ use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
 use character_rigs::Side;
 
 use crate::animations::Idle;
-use crate::rigs::humanoid::apply::{apply_arm, apply_neck_twisted};
+use crate::rigs::humanoid::write_masks::{debug_assert_pose_within_mask, idle_write_mask};
 use crate::Animation;
 
 impl Idle {
@@ -30,7 +30,9 @@ impl Idle {
 
 impl Animation<HumanoidV0Rig> for Idle {
 	fn apply_for(&self, rig: &mut HumanoidV0Rig, progress: f32) {
-		rig.write_pose(&self.sample_pose(progress));
+		let pose = self.sample_pose(progress);
+		debug_assert_pose_within_mask(&pose, idle_write_mask(), "idle");
+		rig.apply_masked_pose(&pose, idle_write_mask());
 	}
 }
 
@@ -51,7 +53,7 @@ fn apply_idle_arm(
 	if scratch > 1e-4 && side == scratch_side {
 		apply_scratch_arm(pose, side, hang, shoulder, elbow, scratch, progress, flex_sign);
 	} else {
-		apply_arm(pose, side, shoulder, 0.0, shoulder * 0.5, hang, elbow);
+		pose.apply_arm(side, shoulder, 0.0, shoulder * 0.5, hang, elbow);
 	}
 }
 
@@ -67,8 +69,7 @@ fn apply_scratch_arm(
 ) {
 	let wiggle = (TAU * progress * 6.0).sin() * 0.1 * scratch;
 	let inward = -side.sign() * 0.45;
-	apply_arm(
-		pose,
+	pose.apply_arm(
 		side,
 		idle_shoulder * (1.0 - scratch) + inward * scratch,
 		0.55 * scratch,
@@ -88,7 +89,7 @@ fn apply_idle_neck(
 ) {
 	let yaw = yaw * idle.neck_roll + scratch * 0.1 * scratch_side.sign();
 	let nod = nod * idle.neck_roll + scratch * 0.04;
-	apply_neck_twisted(pose, yaw * 0.65, 0.0, nod * 0.35, yaw * 0.35, 0.0, nod * 0.65);
+	pose.apply_neck_twisted(yaw * 0.65, 0.0, nod * 0.35, yaw * 0.35, 0.0, nod * 0.65);
 }
 
 fn apply_idle_hips(pose: &mut HumanoidPose, shift: f32, idle: &Idle) {

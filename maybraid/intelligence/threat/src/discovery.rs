@@ -1,7 +1,9 @@
 use std::collections::HashSet;
 
 use bevy::prelude::*;
-use intelligence_lod::{due_by_rank, IntelligenceBand, IntelligenceLod, IntelligencePriority};
+use intelligence_lod::{
+	due_by_rank, staggered_interval, IntelligenceBand, IntelligenceLod, IntelligencePriority,
+};
 use spotting_intelligence::{SpottingHintSource, SpottingUser};
 
 use crate::{
@@ -140,7 +142,9 @@ pub fn discover_threats(
 		if affiliations.is_changed() {
 			user.next_scan_at = 0.0;
 		}
-		forget_if_due(entity, now, &affiliations, &mut user, &mut knowledge, &registry);
+		if now >= user.next_forget_at {
+			forget_if_due(entity, now, &affiliations, &mut user, &mut knowledge, &registry);
+		}
 	}
 
 	let mut due: Vec<Entity> = recipients
@@ -209,7 +213,9 @@ pub fn discover_threats(
 		};
 		user.next_scan_at = now + staggered_interval(interval, entity, 0) * band.interval_scale();
 		if let Some(lod) = lod.as_deref_mut() {
-			lod.skips = 0;
+			if lod.skips != 0 {
+				lod.skips = 0;
+			}
 		}
 	}
 }
@@ -243,7 +249,9 @@ pub fn export_threat_spotting_hints(
 ) {
 	for (knowledge, user, mut spotting) in &mut recipients {
 		if let Some(mut user) = user {
-			user.apply_alert_spotting(knowledge, &mut spotting);
+			if user.alert_spotting_needs_write(knowledge, &spotting) {
+				user.apply_alert_spotting(knowledge, &mut spotting);
+			}
 		}
 		let active: HashSet<Entity> = knowledge.iter().filter_map(|known| known.entity).collect();
 		let retired: Vec<_> = spotting
@@ -264,13 +272,10 @@ pub fn export_threat_spotting_hints(
 			let priority = (known.threat_weight * known.confidence * 4.0)
 				.round()
 				.clamp(1.0, i32::MAX as f32) as i32;
+			if spotting.has_hint_from(entity, SpottingHintSource::THREAT, priority) {
+				continue;
+			}
 			spotting.hint_from(entity, SpottingHintSource::THREAT, priority);
 		}
 	}
-}
-
-fn staggered_interval(interval: f32, entity: Entity, salt: u64) -> f32 {
-	let bits = entity.to_bits().wrapping_add(salt.wrapping_mul(0x9e37_79b9));
-	let jitter = (bits % 1_001) as f32 / 1_000.0;
-	interval.max(0.05) * (0.8 + jitter * 0.4)
 }

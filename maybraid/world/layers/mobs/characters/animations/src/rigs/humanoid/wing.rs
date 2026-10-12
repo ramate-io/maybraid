@@ -7,8 +7,6 @@
 use character_rigs::authoring::HumanoidPose;
 use character_rigs::Side;
 
-use crate::rigs::humanoid::apply::{apply_arm, apply_leg, apply_root};
-
 /// Held shoulder forward flexion (sagittal): angle the wing root away from the spine.
 pub(crate) const SOAR_SHOULDER_SWING: f32 = 0.35;
 /// T-pose already spreads the arms; keep held lift near zero.
@@ -34,9 +32,9 @@ fn lateral_sign(side: Side) -> f32 {
 
 /// Apply trailing legs + slight sagittal lean for a flight silhouette.
 pub(crate) fn apply_flight_body(pose: &mut HumanoidPose) {
-	apply_root(pose, ROOT_LEAN);
-	apply_leg(pose, Side::Left, LEG_TRAIL, KNEE_SOFT);
-	apply_leg(pose, Side::Right, LEG_TRAIL, KNEE_SOFT);
+	pose.apply_root(ROOT_LEAN);
+	pose.apply_leg(Side::Left, LEG_TRAIL, KNEE_SOFT);
+	pose.apply_leg(Side::Right, LEG_TRAIL, KNEE_SOFT);
 }
 
 /// Hold a T-pose-relative wing spread with optional sagittal flap modulation.
@@ -49,8 +47,7 @@ pub(crate) fn apply_flight_wings(pose: &mut HumanoidPose, flap_amount: f32) {
 
 	for side in [Side::Left, Side::Right] {
 		let lateral = lateral_sign(side);
-		apply_arm(
-			pose,
+		pose.apply_arm(
 			side,
 			// Sagittal: held spine angle + front/back wing beat.
 			shoulder_swing * lateral,

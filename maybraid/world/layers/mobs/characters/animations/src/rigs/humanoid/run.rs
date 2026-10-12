@@ -3,8 +3,8 @@ use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
 use character_rigs::Side;
 
 use crate::animations::{Run, UprightRun};
-use crate::rigs::humanoid::apply::apply_arm;
 use crate::rigs::humanoid::gait_knee::lerp_swing_knee;
+use crate::rigs::humanoid::write_masks::{debug_assert_pose_within_mask, run_write_mask};
 use crate::{Animation, Progress};
 
 impl Run {
@@ -16,7 +16,9 @@ impl Run {
 
 impl Animation<HumanoidV0Rig> for Run {
 	fn apply_for(&self, rig: &mut HumanoidV0Rig, progress: f32) {
-		rig.write_pose(&self.sample_pose(progress))
+		let pose = self.sample_pose(progress);
+		debug_assert_pose_within_mask(&pose, run_write_mask(), "run");
+		rig.apply_masked_pose(&pose, run_write_mask());
 	}
 }
 
@@ -39,7 +41,9 @@ impl UprightRun {
 
 impl Animation<HumanoidV0Rig> for UprightRun {
 	fn apply_for(&self, rig: &mut HumanoidV0Rig, progress: f32) {
-		rig.write_pose(&self.sample_pose(progress));
+		let pose = self.sample_pose(progress);
+		debug_assert_pose_within_mask(&pose, run_write_mask(), "upright_run");
+		rig.apply_masked_pose(&pose, run_write_mask());
 	}
 }
 
@@ -62,8 +66,7 @@ fn apply_run_arm(
 	humerus_flex: f32,
 	run: &UprightRun,
 ) {
-	apply_arm(
-		pose,
+	pose.apply_arm(
 		side,
 		arm_swing_value * run.shoulder_swing,
 		-shoulder_lift(arm_swing_value, run.shoulder_lift),

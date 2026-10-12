@@ -3,9 +3,6 @@ use character_rigs::rigs::humanoid_v0::HumanoidV0Rig;
 use character_rigs::Side;
 
 use crate::animations::Prone;
-use crate::rigs::humanoid::apply::{
-	apply_arm, apply_hip_fold, apply_leg, apply_neck_twisted, apply_spine_pitch,
-};
 use crate::{Animation, Effects};
 
 impl Animation<HumanoidV0Rig> for Prone {
@@ -13,16 +10,16 @@ impl Animation<HumanoidV0Rig> for Prone {
 		let mut pose = HumanoidPose::default();
 		let femur = self.femur_swing(progress);
 		let shin = self.shin_flex(progress);
-		apply_leg(&mut pose, Side::Left, femur, shin);
-		apply_leg(&mut pose, Side::Right, femur, shin);
-		apply_hip_fold(&mut pose, Side::Left, femur * 0.35);
-		apply_hip_fold(&mut pose, Side::Right, femur * 0.35);
-		apply_spine_pitch(&mut pose, self.spine_pitch(progress));
+		pose.apply_leg(Side::Left, femur, shin);
+		pose.apply_leg(Side::Right, femur, shin);
+		pose.apply_hip_fold(Side::Left, femur * 0.35);
+		pose.apply_hip_fold(Side::Right, femur * 0.35);
+		pose.apply_spine_pitch(self.spine_pitch(progress));
 		let neck = self.neck_swing(progress);
-		apply_neck_twisted(&mut pose, 0.0, 0.0, neck, 0.0, 0.0, neck);
+		pose.apply_neck_twisted(0.0, 0.0, neck, 0.0, 0.0, neck);
 		let hold = self.arm_hold(progress);
-		apply_arm(&mut pose, Side::Left, 0.0, 0.0, 0.0, hold, hold);
-		apply_arm(&mut pose, Side::Right, 0.0, 0.0, 0.0, hold, hold);
+		pose.apply_arm(Side::Left, 0.0, 0.0, 0.0, hold, hold);
+		pose.apply_arm(Side::Right, 0.0, 0.0, 0.0, hold, hold);
 		rig.write_pose(&pose);
 	}
 

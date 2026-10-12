@@ -1,3 +1,4 @@
+use crate::WorldFurnished;
 use bevy::prelude::*;
 use bevy::text::FontSize;
 use combat_hud::ScreenPin;
@@ -102,8 +103,7 @@ pub(crate) fn sync_command_status_text(
 	mut status: ResMut<GameCommandStatusText>,
 	camera: Query<&GlobalTransform, With<Camera3d>>,
 	hosts: Query<(&MobScene, &GlobalTransform)>,
-	furniture: Query<&maputo::FurnitureCell>,
-	furniture_index: Option<Res<maputo::FurnitureIndex>>,
+	furniture: Query<&lod::hcsg::HcsgNode<WorldFurnished>>,
 ) {
 	let mut nearest = ranked_hosts(&camera, &hosts);
 	nearest.truncate(4);
@@ -118,12 +118,11 @@ pub(crate) fn sync_command_status_text(
 			.join("   ")
 	};
 	let furniture_cells = furniture.iter().count();
-	let furniture_items: usize = furniture.iter().map(|cell| cell.slots.len()).sum();
-	let furniture_generated = furniture_index.map(|index| index.cell_count()).unwrap_or(0);
+	let furniture_items: usize = furniture.iter().map(|node| node.value.cell.slots.len()).sum();
 	status.0 = format!(
 		"world  character  forest hopscotch  urbanization hopscotch  grove 1 km  bump-outs 1–5 km\n\
 		 mobs {presented} presented   nearest {nearest_line}\n\
-		 furniture  {furniture_cells}/{furniture_generated} cells   {furniture_items} items   pin dim = still fulfilling\n\
+		 furniture  {furniture_cells} cells   {furniture_items} items\n\
 		 HUD pins = 8 nearest (edge-clamped)   colored pole = host   plants only inside {DEFAULT_MOB_HIGH_RADIUS:.0} m\n\
 		 NPC behavior: gray circle = ignore   amber arrow = flee   blue square = hide   red cross = combat"
 	);

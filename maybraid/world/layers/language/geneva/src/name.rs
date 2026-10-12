@@ -21,19 +21,6 @@ pub struct PlaceName {
 	pub language_seed: u64,
 }
 
-/// Persistence metadata for one assigned name.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct AssignedName {
-	pub name: PlaceName,
-	pub source_revision: u64,
-	pub fingerprint: u64,
-	/// Regional names stay provisional until a complete canonical summary exists.
-	/// Places without a stable host identity are also provisional.
-	pub provisional: bool,
-	/// Host language consumed when this name was assigned, if any.
-	pub inherited_language: Option<u64>,
-}
-
 impl PlaceName {
 	pub fn translate(bundle: &LanguageBundle, english: &[String], pick_seed: u64) -> Self {
 		let chosen = pick_terms(english, pick_seed);
@@ -143,14 +130,6 @@ pub fn canonicalize_terms(english: &[String]) -> Vec<String> {
 	}
 	unique.sort_unstable();
 	unique
-}
-
-pub fn terms_fingerprint(english: &[String]) -> u64 {
-	let mut h = 0x811c_9dc5_u64;
-	for word in canonicalize_terms(english) {
-		h = mix(h ^ stable_surface(&word));
-	}
-	h
 }
 
 fn stable_surface(surface: &str) -> u64 {
