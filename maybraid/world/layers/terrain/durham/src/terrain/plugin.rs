@@ -9,7 +9,6 @@ use crate::terrain::watersheds::WatershedConfigs;
 use avian3d::prelude::PhysicsPlugins;
 use avian3d::schedule::PhysicsSchedulePlugin;
 use bevy::prelude::*;
-use lod::hcsg::HcsgStorage;
 
 /// Registers Avian (if needed) and resources for the terrain model.
 pub struct TerrainResourcesPlugin;
@@ -33,7 +32,7 @@ impl Plugin for TerrainResourcesPlugin {
 		if !app.is_plugin_added::<PhysicsSchedulePlugin>() {
 			app.add_plugins(PhysicsPlugins::default());
 		}
-		app.init_resource::<HcsgStorage>();
+		// [`lod::hcsg`] presentation/generation plugins own `HcsgStorage` init.
 		app.init_resource::<TerrainCellLayout>()
 			.init_resource::<TerrainStampConfigs>()
 			.init_resource::<WatershedConfigs>()

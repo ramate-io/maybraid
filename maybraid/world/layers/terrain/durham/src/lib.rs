@@ -7,13 +7,15 @@ pub mod hcsg;
 pub mod terrain;
 pub mod water;
 
+#[cfg(any(test))]
+pub use hcsg::SharedTerrainStorageTestExt;
 pub use hcsg::{
 	register_durham_hcsg_session, BackgroundStream, DurhamPresentationPlugin, DurhamSurface,
 	DurhamWindow, DurhamWorldPlugin, FarStream, NearStream, PlayableStreams, SharedTerrainStorage,
 	StreamPresentationPlugin, StreamRing, Streamed, TerrainStream, WaterPresentationPlugin,
 };
-/// Durham's nodes live in the shared HCSG storage; read them through [`SharedTerrainStorage`].
-pub use lod::hcsg::HcsgStorage;
+/// Frame-side terrain reads use [`SharedTerrainStorage`]; storage itself is
+/// [`lod::hcsg::HcsgStorage`].
 pub use terrain::render::cascade_chunk_for_cell;
 pub use terrain::{
 	fine_patch_cell_layout, mesh_assets, playable_world_cell_layout, register_terrain_plugin,
