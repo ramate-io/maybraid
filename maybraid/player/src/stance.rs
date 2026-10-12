@@ -35,11 +35,13 @@ pub struct CharacterStance {
 	pub kind: StanceKind,
 	/// 0 = previous pose, 1 = settled at `kind`.
 	pub blend: f32,
+	/// 0..1 progress through [`ProneAscent`] after leaving prone. `1` = finished.
+	pub prone_ascent: f32,
 }
 
 impl CharacterStance {
 	pub fn settled(kind: StanceKind) -> Self {
-		Self { kind, blend: kind.squat_target() }
+		Self { kind, blend: kind.squat_target(), prone_ascent: 1.0 }
 	}
 
 	pub fn speed_scale(self) -> f32 {
@@ -51,26 +53,38 @@ impl CharacterStance {
 	}
 
 	pub fn change_squat(&mut self) {
+		let from_prone = self.kind == StanceKind::Prone;
 		self.kind = match self.kind {
 			StanceKind::Stand => StanceKind::Squat,
 			StanceKind::Squat => StanceKind::Stand,
 			StanceKind::Prone => StanceKind::Squat,
 		};
 		self.blend = match self.kind {
-			StanceKind::Squat => 0.0,
+			StanceKind::Squat => if from_prone { 1.0 } else { 0.0 },
 			StanceKind::Stand => 1.0,
 			StanceKind::Prone => 1.0,
 		};
+		if from_prone {
+			self.prone_ascent = 0.0;
+		}
 	}
 
 	pub fn change_prone(&mut self) {
 		self.kind = StanceKind::Prone;
 		self.blend = 1.0;
+		self.prone_ascent = 1.0;
 	}
 
 	pub fn stand(&mut self) {
+		if self.kind == StanceKind::Prone {
+			self.prone_ascent = 0.0;
+		}
 		self.kind = StanceKind::Stand;
 		self.blend = 0.0;
+	}
+
+	pub fn prone_ascent_settled(self) -> bool {
+		self.prone_ascent >= 1.0
 	}
 
 	/// True once the squat depth matches the target stance.
@@ -123,6 +137,22 @@ pub(crate) fn advance_stance_blend(
 				- dt * character_animations::animations::DEFAULT_DESCENT_SPEED)
 				.max(target);
 		}
+	}
+}
+
+/// Ease [`ProneAscent`] progress after the player leaves prone.
+pub(crate) fn advance_prone_ascent(
+	time: Res<Time>,
+	mut stances: Query<&mut CharacterStance, With<CharacterController>>,
+) {
+	let dt = time.delta_secs();
+	for mut stance in &mut stances {
+		if stance.prone_ascent >= 1.0 {
+			continue;
+		}
+		stance.prone_ascent = (stance.prone_ascent
+			+ dt * character_animations::animations::DEFAULT_PRONE_ASCENT_SPEED)
+			.min(1.0);
 	}
 }
 

@@ -75,6 +75,8 @@ pub fn drive_player_locomotion(
 					JumpParams::default().elapsed_from_phase(phase)
 				};
 				commands.entity(member).insert(AnimProgress(progress));
+			} else if !stance.prone_ascent_settled() {
+				commands.entity(member).insert(AnimProgress(stance.prone_ascent));
 			} else if !stance.squat_settled() {
 				commands.entity(member).insert(AnimProgress(stance.blend));
 			} else if matches!(stance.kind, StanceKind::Squat | StanceKind::Prone) {
@@ -98,6 +100,8 @@ fn locomotion_clip(
 				AnimClip::leap()
 			} else if jumping.is_some() {
 				AnimClip::jump()
+			} else if !stance.prone_ascent_settled() {
+				AnimClip::prone_ascent()
 			} else if !stance.squat_settled() {
 				AnimClip::squat_descent()
 			} else {
@@ -242,7 +246,7 @@ mod tests {
 
 	#[test]
 	fn entering_squat_uses_descent_clip() {
-		let stance = CharacterStance { kind: StanceKind::Squat, blend: 0.0 };
+		let stance = CharacterStance { kind: StanceKind::Squat, blend: 0.0, prone_ascent: 1.0 };
 		assert_eq!(
 			locomotion_clip(RigSkeletonKind::Humanoid, None, &stance, 0.0).id(),
 			AnimId::SquatDescent
@@ -250,8 +254,27 @@ mod tests {
 	}
 
 	#[test]
+	fn leaving_prone_uses_ascent_until_progress_reaches_one() {
+		let stance = CharacterStance { kind: StanceKind::Squat, blend: 1.0, prone_ascent: 0.4 };
+		assert_eq!(
+			locomotion_clip(RigSkeletonKind::Humanoid, None, &stance, 0.0).id(),
+			AnimId::ProneAscent
+		);
+	}
+
+	#[test]
+	fn jump_interrupts_prone_ascent() {
+		let jump = Jumping::start(0.0);
+		let stance = CharacterStance { kind: StanceKind::Squat, blend: 1.0, prone_ascent: 0.3 };
+		assert_eq!(
+			locomotion_clip(RigSkeletonKind::Humanoid, Some(&jump), &stance, 0.0).id(),
+			AnimClip::jump().id()
+		);
+	}
+
+	#[test]
 	fn leaving_squat_uses_descent_until_blend_reaches_zero() {
-		let stance = CharacterStance { kind: StanceKind::Stand, blend: 0.5 };
+		let stance = CharacterStance { kind: StanceKind::Stand, blend: 0.5, prone_ascent: 1.0 };
 		assert_eq!(
 			locomotion_clip(RigSkeletonKind::Humanoid, None, &stance, 0.0).id(),
 			AnimId::SquatDescent

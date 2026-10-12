@@ -48,6 +48,7 @@ pub enum AnimId {
 	Squat,
 	SquatDescent,
 	Prone,
+	ProneAscent,
 	LateralUndulation,
 	DorsoventralUndulation,
 }
@@ -71,6 +72,9 @@ impl AnimId {
 			Self::Squat => 1.0,
 			Self::SquatDescent => DEFAULT_DESCENT_SPEED,
 			Self::Prone => 1.0,
+			Self::ProneAscent => {
+				character_animations::animations::DEFAULT_PRONE_ASCENT_SPEED
+			}
 			Self::LateralUndulation => 1.0,
 			Self::DorsoventralUndulation => 1.0,
 		}
@@ -208,6 +212,7 @@ pub enum AnimClip {
 	Squat,
 	SquatDescent,
 	Prone,
+	ProneAscent,
 	LateralUndulation(LateralUndulation),
 	DorsoventralUndulation(DorsoventralUndulation),
 }
@@ -231,6 +236,7 @@ impl AnimClip {
 			Self::Squat => AnimId::Squat,
 			Self::SquatDescent => AnimId::SquatDescent,
 			Self::Prone => AnimId::Prone,
+			Self::ProneAscent => AnimId::ProneAscent,
 			Self::LateralUndulation(_) => AnimId::LateralUndulation,
 			Self::DorsoventralUndulation(_) => AnimId::DorsoventralUndulation,
 		}
@@ -304,6 +310,10 @@ impl AnimClip {
 		Self::Prone
 	}
 
+	pub fn prone_ascent() -> Self {
+		Self::ProneAscent
+	}
+
 	pub fn lateral_undulation() -> Self {
 		Self::LateralUndulation(LateralUndulation::default())
 	}
@@ -336,7 +346,8 @@ impl AnimClip {
 			| Self::TwoFootedTuckedFlip(_)
 			| Self::Squat
 			| Self::SquatDescent
-			| Self::Prone => ClipTimePolicy::Clamp { duration: 1.0 },
+			| Self::Prone
+			| Self::ProneAscent => ClipTimePolicy::Clamp { duration: 1.0 },
 			Self::Soaring(_) | Self::Flapping(_) => ClipTimePolicy::Unbounded,
 			Self::LateralUndulation(_) | Self::DorsoventralUndulation(_) => {
 				ClipTimePolicy::Cycle { duration: 1.0 }
