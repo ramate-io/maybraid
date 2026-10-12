@@ -13,8 +13,7 @@ use bevy::prelude::*;
 use character_animations::{
 	animations::{
 		Idle, Jab, Prone, ProneAscent, QuadrupedIdle, QuadrupedLeap, QuadrupedRun, Squat,
-		SquatDescent, Tuck,
-		TwoFootedTuckedFlip, UprightLeap,
+		SquatDescent, Tuck, TwoFootedTuckedFlip, UprightLeap,
 	},
 	Animation, Effects,
 };
@@ -988,6 +987,32 @@ mod tests {
 		}
 		if rig.posed_angle("pelvis.L") < 0.1 {
 			return Err(anyhow!("held squat should crease the pelvis"));
+		}
+		Ok(())
+	}
+
+	#[test]
+	#[test]
+	fn prone_to_prone_ascent_resets_blend_duration() -> anyhow::Result<()> {
+		use anyhow::anyhow;
+
+		let mut world = World::new();
+		world.init_resource::<Time>();
+		world.init_resource::<MailboxApplySet>();
+		let host = spawn_mailbox_apply_host(&mut world, AnimClip::prone(), 1.0);
+		world
+			.entity_mut(host)
+			.insert(AnimRefRoot(AnimRef::new(AnimClip::prone_ascent())));
+		world
+			.resource_mut::<Time>()
+			.advance_by(std::time::Duration::from_secs_f32(0.05));
+		world.run_system_once(tick_anim_mailbox).map_err(|err| anyhow!("{err}"))?;
+		let mailbox = world.get::<AnimMailbox>(host).ok_or_else(|| anyhow!("mailbox"))?;
+		if mailbox.blend_progress >= 1.0 {
+			return Err(anyhow!("clip change should restart the 0.15 s crossfade"));
+		}
+		if mailbox.last != Some(AnimId::ProneAscent) {
+			return Err(anyhow!("mailbox should track ProneAscent after leaving prone"));
 		}
 		Ok(())
 	}

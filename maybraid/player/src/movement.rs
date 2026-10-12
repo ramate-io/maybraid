@@ -245,6 +245,18 @@ mod tests {
 	}
 
 	#[test]
+	fn footstep_rate_ignores_prone_ascent_progress() {
+		let settled = CharacterStance::settled(StanceKind::Squat);
+		let rising = CharacterStance { kind: StanceKind::Squat, blend: 1.0, prone_ascent: 0.35 };
+		for speed in [0.0, 3.0, 9.0] {
+			assert_eq!(
+				footstep_rate(true, None, Some(&settled), speed),
+				footstep_rate(true, None, Some(&rising), speed),
+			);
+		}
+	}
+
+	#[test]
 	fn player_controller_gets_a_gait() {
 		let mut app = App::new();
 		app.add_systems(Update, ensure_movement_states);

@@ -635,6 +635,45 @@ mod tests {
 	}
 
 	#[test]
+	fn jump_from_squat_during_prone_ascent() -> anyhow::Result<()> {
+		use crate::stance::{CharacterStance, StanceKind};
+		use anyhow::anyhow;
+
+		let mut app = App::new();
+		app.add_systems(Update, apply_wish_jump);
+		let entity = app
+			.world_mut()
+			.spawn((
+				CharacterController,
+				CharacterStance { kind: StanceKind::Squat, blend: 1.0, prone_ascent: 0.4 },
+				JumpWish,
+				Grounded,
+				LinearVelocity(Vec3::ZERO),
+			))
+			.id();
+		app.update();
+		if app.world().get::<Jumping>(entity).is_none() {
+			return Err(anyhow!(
+				"squat + JumpWish should start Jumping regardless of ascent progress"
+			));
+		}
+		let stance = app.world().get::<CharacterStance>(entity).ok_or_else(|| anyhow!("stance"))?;
+		if (stance.prone_ascent - 0.4).abs() > 1e-5 {
+			return Err(anyhow!("jump must not rewrite prone_ascent progress"));
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn move_cap_ignores_prone_ascent_progress() {
+		use crate::stance::{CharacterStance, StanceKind};
+
+		let settled = CharacterStance::settled(StanceKind::Squat);
+		let rising = CharacterStance { kind: StanceKind::Squat, blend: 1.0, prone_ascent: 0.2 };
+		assert_eq!(move_cap(false, settled.speed_scale()), move_cap(false, rising.speed_scale()),);
+	}
+
+	#[test]
 	fn jump_from_sprint_speed_is_a_leap() -> anyhow::Result<()> {
 		use anyhow::anyhow;
 
