@@ -37,16 +37,9 @@ impl PreviewColor {
 
 	/// Parses a `#RRGGBB` hex string; malformed input falls back to white.
 	pub fn from_hex(hex: &str) -> Self {
-		let hex = hex.strip_prefix('#').unwrap_or(hex);
-		if hex.len() != 6 {
-			return Self::WHITE;
-		}
-		let channel = |range: core::ops::Range<usize>| u8::from_str_radix(&hex[range], 16).ok();
-		match (channel(0..2), channel(2..4), channel(4..6)) {
-			(Some(red), Some(green), Some(blue)) => {
-				Self::srgb(red as f32 / 255.0, green as f32 / 255.0, blue as f32 / 255.0)
-			}
-			_ => Self::WHITE,
+		match crate::hex::parse_rrggbb_srgb(hex) {
+			Some([red, green, blue]) => Self::srgb(red, green, blue),
+			None => Self::WHITE,
 		}
 	}
 }

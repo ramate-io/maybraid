@@ -7092,6 +7092,7 @@ name = "menu-components"
 version = "0.1.3"
 dependencies = [
  "bevy",
+ "character-ui-menu",
  "maybraid-input",
 ]
 
