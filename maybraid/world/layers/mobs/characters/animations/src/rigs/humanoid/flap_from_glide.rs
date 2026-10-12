@@ -10,14 +10,7 @@ impl Animation<HumanoidV0Rig> for FlapFromGlide {
 		let blend = self.blend_secs.max(f32::EPSILON);
 		if elapsed < blend {
 			let weight = smoothstep((elapsed / blend).clamp(0.0, 1.0));
-			blend_clips(
-				rig,
-				&self.soar,
-				self.soar_glide_progress(),
-				&self.flap,
-				elapsed,
-				weight,
-			);
+			blend_clips(rig, &self.soar, self.soar_glide_progress(), &self.flap, elapsed, weight);
 		} else {
 			self.flap.apply_for(rig, elapsed);
 		}
@@ -115,10 +108,8 @@ mod tests {
 
 	#[test]
 	fn blend_weight_endpoints() -> anyhow::Result<()> {
-		let entry = FlapFromGlide {
-			blend_secs: FLAP_FROM_GLIDE_BLEND_SECS,
-			..FlapFromGlide::default()
-		};
+		let entry =
+			FlapFromGlide { blend_secs: FLAP_FROM_GLIDE_BLEND_SECS, ..FlapFromGlide::default() };
 		let mut at_zero = HumanoidV0Rig::for_clip_test();
 		let mut late = HumanoidV0Rig::for_clip_test();
 		entry.apply(&mut at_zero, 0.0);
@@ -151,6 +142,92 @@ mod tests {
 		let rig = HumanoidV0Rig::for_clip_test();
 		let effects = entry.effects_for(&rig, 0.25);
 		assert!(effects.is_identity());
+		Ok(())
+	}
+
+	fn wing_elbow(rig: &HumanoidV0Rig) -> (Vec3, Vec3) {
+		(rig.character_point("forearm.L"), rig.character_point("forearm.R"))
+	}
+
+	fn wing_tips(rig: &HumanoidV0Rig) -> (Vec3, Vec3) {
+		(
+			rig.character_point("forearm.L") + rig.character_length("forearm.L"),
+			rig.character_point("forearm.R") + rig.character_length("forearm.R"),
+		)
+	}
+
+	#[test]
+	fn wing_rig_fixture_pose_continuity_and_band_edge() -> anyhow::Result<()> {
+		let entry = FlapFromGlide::default();
+		let soar = Soaring::default();
+		let flap = Flapping::default();
+		let glide_t = entry.soar_glide_progress();
+		let times = [0.0, 0.1, 0.2, 0.4, 0.41];
+
+		let mut soar_rig = HumanoidV0Rig::for_clip_test();
+		soar.apply(&mut soar_rig, glide_t);
+		for t in times {
+			let mut ffg = HumanoidV0Rig::for_clip_test();
+			entry.apply(&mut ffg, t);
+			let (el_l, el_r) = wing_elbow(&ffg);
+			let (tip_l, tip_r) = wing_tips(&ffg);
+			assert!(
+				(el_l.x + el_r.x).abs() < 0.02 && (tip_l.x + tip_r.x).abs() < 0.02,
+				"left/right wings should mirror about the sagittal plane"
+			);
+		}
+		let mut at_zero = HumanoidV0Rig::for_clip_test();
+		entry.apply(&mut at_zero, 0.0);
+		let zero_tip = wing_tip(&at_zero);
+		let soar_tip = wing_tip(&soar_rig);
+		assert!(
+			(zero_tip - soar_tip).length() < 1e-3,
+			"elapsed=0 must match soaring glide pose on wing-rig fixture"
+		);
+
+		let mut at_band = HumanoidV0Rig::for_clip_test();
+		let mut past_band = HumanoidV0Rig::for_clip_test();
+		entry.apply(&mut at_band, 0.4);
+		entry.apply(&mut past_band, 0.41);
+		let band_tip = wing_tip(&at_band);
+		let past_tip = wing_tip(&past_band);
+		let flap_at_40 = {
+			let mut r = HumanoidV0Rig::for_clip_test();
+			flap.apply(&mut r, 0.4);
+			wing_tip(&r)
+		};
+		let flap_at_41 = {
+			let mut r = HumanoidV0Rig::for_clip_test();
+			flap.apply(&mut r, 0.41);
+			wing_tip(&r)
+		};
+		let band_delta = (band_tip - flap_at_40).length();
+		let past_delta = (past_tip - flap_at_41).length();
+		let mut just_before = HumanoidV0Rig::for_clip_test();
+		entry.apply(&mut just_before, 0.4 - 1e-4);
+		let branch_edge = (wing_tip(&just_before) - band_tip).length();
+		assert!(band_delta < 1e-3, "band end should match flapping@0.4, delta={band_delta}");
+		assert!(past_delta < 1e-3, "past band should match flapping@0.41, delta={past_delta}");
+		assert!(
+			branch_edge < 2e-3,
+			"blend branch and pure-flap branch should meet at 0.4s, gap={branch_edge}"
+		);
+
+		// First stroke from glide: flap phase 0 matches neutral spread, then rises before downstroke.
+		let mut neutral = HumanoidV0Rig::for_clip_test();
+		let mut quarter = HumanoidV0Rig::for_clip_test();
+		flap.apply(&mut neutral, 0.0);
+		flap.apply(&mut quarter, 0.1);
+		let neutral_tip_z = wing_tip(&neutral).z;
+		let quarter_tip_z = wing_tip(&quarter).z;
+		assert!(
+			(quarter_tip_z - neutral_tip_z).abs() > 0.05,
+			"quarter-cycle stroke should move the wing tip before the downstroke"
+		);
+		assert!(
+			flap.flap_amount(0.0).abs() < 1e-5 && flap.flap_amount(0.1) > 0.2,
+			"phase 0 is neutral then the first motion is the upstroke (positive flap_amount)"
+		);
 		Ok(())
 	}
 }
