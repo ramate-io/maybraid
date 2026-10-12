@@ -534,11 +534,10 @@ impl UprightLeap {
 	fn apply_land_only(&self, rig: &mut HumanoidV0Rig, land_u: f32) {
 		let sample = self.land(land_u);
 		let mut pose = HumanoidPose::default();
-		apply_leg(&mut pose, Side::Left, sample.left_femur, sample.left_shin);
-		apply_leg(&mut pose, Side::Right, sample.right_femur, sample.right_shin);
-		apply_root(&mut pose, sample.lean);
-		apply_arm(
-			&mut pose,
+		pose.apply_leg(Side::Left, sample.left_femur, sample.left_shin);
+		pose.apply_leg(Side::Right, sample.right_femur, sample.right_shin);
+		pose.apply_root(sample.lean);
+		pose.apply_arm(
 			Side::Left,
 			sample.left_shoulder,
 			0.0,
@@ -546,8 +545,7 @@ impl UprightLeap {
 			0.0,
 			sample.elbow,
 		);
-		apply_arm(
-			&mut pose,
+		pose.apply_arm(
 			Side::Right,
 			sample.right_shoulder,
 			0.0,
