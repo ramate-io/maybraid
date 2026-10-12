@@ -161,7 +161,17 @@ impl HcsgStorage {
 	}
 
 	/// How many values of `T` are stored, including `Id::Universal`.
+	#[cfg(not(any(test, feature = "test-support")))]
+	pub(crate) fn len<T: HcsgValue>(&self) -> usize {
+		self.store_len::<T>()
+	}
+
+	#[cfg(any(test, feature = "test-support"))]
 	pub fn len<T: HcsgValue>(&self) -> usize {
+		self.store_len::<T>()
+	}
+
+	fn store_len<T: HcsgValue>(&self) -> usize {
 		self.store::<T>().map_or(0, |store| read(&store.nodes).len())
 	}
 }

@@ -35,9 +35,9 @@ pub struct Busy;
 /// or eviction sweep holds a store lock.
 ///
 /// Blocking reads ([`Self::get`], [`Self::entry`], [`Self::overlapping`],
-/// [`Self::membership_revision`], [`Self::contains`]) are for the generation
-/// worker (via [`GenerationContext`](super::context::GenerationContext)) and for
-/// tests. Outside `lod` they
-/// are only available with the `test-support` feature.
+/// [`Self::membership_revision`], [`Self::contains`], [`Self::len`])
+/// are for the generation worker (via
+/// [`GenerationContext`](super::context::GenerationContext)) and for tests.
+/// Outside `lod` they are only available with the `test-support` feature.
 #[derive(Resource, Clone, Default)]
 pub struct HcsgStorage(Arc<Registry>);

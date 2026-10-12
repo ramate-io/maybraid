@@ -35,7 +35,7 @@ struct Host {
 
 /// Per-system state for [`presentation`]: its subscription, how far it has
 /// read, and the hosts it spawned.
-pub struct Presented<T> {
+struct Presented<T> {
 	/// The channel's latest regions.
 	wanted: Vec<Aabb3d>,
 	focus: Option<Vec3>,
