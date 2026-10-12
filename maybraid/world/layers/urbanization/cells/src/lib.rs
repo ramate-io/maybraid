@@ -27,7 +27,7 @@ pub use guillotine::{guillotine_partition, UrbanizationGuillotineParams};
 pub use hopscotch::{select as hopscotch_select, HopscotchNode};
 pub use kind::{UrbanDevelopmentKind, UrbanizationKind, UrbanizationRecipe, WeightedDevelopment};
 pub use richmond::{
-	select_cell, select_cell_as, select_kind, urbanization_hopscotch, DevelopmentLeaf,
-	SelectedUrbanization, DEFAULT_HOP_BUDGET,
+	filled_leaf_ids_overlapping, filled_leaves_overlapping, select_cell, select_cell_as,
+	select_kind, urbanization_hopscotch, DevelopmentLeaf, SelectedUrbanization, DEFAULT_HOP_BUDGET,
 };
 pub use storage::{UrbanizationSelection, UrbanizationStorage};

@@ -6,7 +6,7 @@ use lod::gen::{Id, OriginalId};
 use lod::hcsg::{self, GenerationContext};
 use procedural_common::SeededHash;
 use urbanization_cells::{
-	select_cell, select_cell_as, SelectedUrbanization, UrbanDevelopmentKind, UrbanizationExtent,
+	filled_leaf_ids_overlapping, SelectedUrbanization, UrbanDevelopmentKind, UrbanizationExtent,
 	UrbanizationSelection,
 };
 use urbanization_developments::{cell_salt, PadPlan, SiteGround};
@@ -185,24 +185,6 @@ pub struct DevelopmentSite {
 	pub authored: Option<AuthoredDevelopment>,
 }
 
-/// Urbanization leaf ids for `region` from a session selection, without
-/// materializing [`SelectedUrbanization`] in storage.
-fn urbanization_leaf_ids(region: Aabb3d, selection: &UrbanizationSelection) -> Vec<OriginalId> {
-	UrbanizationExtent::cells_overlapping(region)
-		.into_iter()
-		.flat_map(|extent| {
-			let selected = match selection.kind {
-				Some(kind) => select_cell_as(extent, selection.noise, kind),
-				None => select_cell(extent, selection.noise),
-			};
-			selected.leaves.into_iter().filter(|leaf| {
-				leaf.kind != UrbanDevelopmentKind::Empty && overlaps_xz(region, leaf.bounds)
-			})
-		})
-		.map(|leaf| OriginalId(leaf.id()))
-		.collect()
-}
-
 impl DevelopmentSite {
 	pub fn is_filled(&self) -> bool {
 		self.kind != DevelopmentKind::Empty
@@ -235,7 +217,7 @@ impl hcsg::GenerationScheme for DevelopmentSite {
 			}
 			DevelopmentSites::Urbanization => {
 				if let Some(selection) = cx.get::<UrbanizationSelection>(Id::Universal) {
-					ids.extend(urbanization_leaf_ids(region, selection.as_ref()));
+					ids.extend(filled_leaf_ids_overlapping(region, selection.as_ref()));
 				}
 			}
 		}

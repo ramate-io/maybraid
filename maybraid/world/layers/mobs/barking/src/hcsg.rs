@@ -22,7 +22,7 @@ use lod::scene::{LodScene, LodSceneLevel, LodSceneStatus};
 use mob_intelligence::{MemberOf, Mob};
 use richmond::{column_bounds, Built, DevelopmentHosts, Richmond, RichmondGround};
 use urbanization_cells::{
-	SelectedUrbanization, UrbanDevelopmentKind, UrbanizationKind, UrbanizationSelection,
+	filled_leaves_overlapping, UrbanizationKind, UrbanizationSelection,
 };
 use urbanization_layer_model::Urbanization;
 
@@ -53,17 +53,10 @@ where
 {
 	fn plant_hosts(cx: &mut GenerationContext, region: Aabb3d) -> Vec<MobPlantHost> {
 		let mut hosts = Vec::new();
-		for OriginalId(id) in cx.original_ids_for::<SelectedUrbanization>(region) {
-			let Some(selected) = cx.get_or_generate::<SelectedUrbanization>(id) else {
-				continue;
-			};
+		if let Some(selection) = cx.get::<UrbanizationSelection>(Id::Universal) {
 			hosts.extend(
-				selected
-					.leaves
-					.iter()
-					.filter(|leaf| {
-						leaf.kind != UrbanDevelopmentKind::Empty && region.intersects(&leaf.bounds)
-					})
+				filled_leaves_overlapping(region, selection.as_ref())
+					.into_iter()
 					.map(|leaf| host_at(leaf.bounds)),
 			);
 		}
@@ -472,6 +465,146 @@ mod tests {
 		assert!(placed(&mut app).is_empty());
 		assert_eq!(mob_hosts(&mut app), 0);
 		Ok(())
+	}
+
+	mod scheme_perf_tests {
+		use super::*;
+		use bevy::math::Vec3;
+		use lod::hcsg::{universal_bounds, GenerationContext, HcsgStorage};
+		use procedural_common::NoiseParams;
+		use std::time::Instant;
+		use urbanization_cells::{
+			DEFAULT_URBANIZATION_EXTENT_XZ, DEVELOPMENT_GENERATE_RADIUS_M, SelectedUrbanization,
+			UrbanDevelopmentKind, UrbanizationExtent, UrbanizationKind,
+		};
+
+		fn seed_urbanization(storage: &HcsgStorage) {
+			storage.seed(
+				UrbanizationSelection {
+					noise: NoiseParams::from_scalar(1337.0, 0.0005, 1.0, 1),
+					kind: Some(UrbanizationKind::Frontier),
+				},
+				universal_bounds(),
+			);
+		}
+
+		fn discovery_region() -> Aabb3d {
+			UrbanizationExtent::xz_radius_aabb(Vec3::ZERO, DEVELOPMENT_GENERATE_RADIUS_M)
+		}
+
+		fn naive_urban_plant_hosts(cx: &mut GenerationContext, region: Aabb3d) -> Vec<MobPlantHost> {
+			let mut hosts = Vec::new();
+			for OriginalId(id) in cx.original_ids_for::<SelectedUrbanization>(region) {
+				let Some(selected) = cx.get_or_generate::<SelectedUrbanization>(id) else {
+					continue;
+				};
+				hosts.extend(
+					selected
+						.leaves
+						.iter()
+						.filter(|leaf| {
+							leaf.kind != UrbanDevelopmentKind::Empty && region.intersects(&leaf.bounds)
+						})
+						.map(|leaf| host_at(leaf.bounds)),
+				);
+			}
+			hosts
+		}
+
+		fn optimized_urban_plant_hosts(
+			cx: &mut GenerationContext,
+			region: Aabb3d,
+		) -> Vec<MobPlantHost> {
+			let mut hosts = Vec::new();
+			if let Some(selection) = cx.get::<UrbanizationSelection>(Id::Universal) {
+				hosts.extend(
+					filled_leaves_overlapping(region, selection.as_ref())
+						.into_iter()
+						.map(|leaf| host_at(leaf.bounds)),
+				);
+			}
+			hosts
+		}
+
+		#[test]
+		fn urban_plant_hosts_match_materialized_selections() -> anyhow::Result<()> {
+			let storage = HcsgStorage::default();
+			seed_urbanization(&storage);
+			let region = discovery_region();
+			let mut naive_cx = GenerationContext::new(&storage);
+			let mut optimized_cx = GenerationContext::new(&storage);
+			let naive = naive_urban_plant_hosts(&mut naive_cx, region);
+			let optimized = optimized_urban_plant_hosts(&mut optimized_cx, region);
+			assert_eq!(naive, optimized);
+			assert!(!optimized.is_empty());
+			Ok(())
+		}
+
+		#[test]
+		fn urban_plant_hosts_match_across_seeds_and_boundary_cells() -> anyhow::Result<()> {
+			let seeds = [11u32, 42, 99, 7_001];
+			let origins = [IVec2::new(-1, -1), IVec2::new(0, 1), IVec2::new(2, -2)];
+			for seed in seeds {
+				for origin in origins {
+					let storage = HcsgStorage::default();
+					storage.seed(
+						UrbanizationSelection {
+							noise: NoiseParams::from_scalar(seed as f32, 0.0005, 1.0, 1),
+							kind: Some(UrbanizationKind::Frontier),
+						},
+						universal_bounds(),
+					);
+					let center = Vec3::new(
+						origin.x as f32 * DEFAULT_URBANIZATION_EXTENT_XZ,
+						0.0,
+						origin.y as f32 * DEFAULT_URBANIZATION_EXTENT_XZ,
+					);
+					let region =
+						UrbanizationExtent::xz_radius_aabb(center, DEVELOPMENT_GENERATE_RADIUS_M);
+					let mut naive_cx = GenerationContext::new(&storage);
+					let mut optimized_cx = GenerationContext::new(&storage);
+					let naive = naive_urban_plant_hosts(&mut naive_cx, region);
+					let optimized = optimized_urban_plant_hosts(&mut optimized_cx, region);
+					assert_eq!(naive, optimized, "seed {seed} origin {origin:?}");
+				}
+			}
+			Ok(())
+		}
+
+		/// `cargo test -p barking mob_plant_hosts_microbench --release -- --ignored --nocapture`
+		#[test]
+		#[ignore = "microbench"]
+		fn mob_plant_hosts_microbench() {
+			let region = discovery_region();
+			let runs = 30;
+
+			let bench = |materialize: bool| -> std::time::Duration {
+				let start = Instant::now();
+				for _ in 0..runs {
+					let storage = HcsgStorage::default();
+					seed_urbanization(&storage);
+					let mut cx = GenerationContext::new(&storage);
+					if materialize {
+						naive_urban_plant_hosts(&mut cx, region);
+					} else {
+						optimized_urban_plant_hosts(&mut cx, region);
+					}
+				}
+				start.elapsed()
+			};
+
+			let materialize = bench(true);
+			let local = bench(false);
+			let materialize_ms = materialize.as_secs_f64() * 1000.0 / runs as f64;
+			let local_ms = local.as_secs_f64() * 1000.0 / runs as f64;
+			eprintln!(
+				"mob_plant_hosts_microbench ({} m mob reach, Frontier): \
+				 materialize={materialize_ms:.2} ms/discover local={local_ms:.2} ms/discover ({:.2}x)",
+				DEVELOPMENT_GENERATE_RADIUS_M,
+				materialize_ms / local_ms.max(1e-9)
+			);
+			assert!(local < materialize, "local leaf selection should beat storage materialization");
+		}
 	}
 
 	#[test]

@@ -2,15 +2,50 @@
 
 use bevy::math::bounding::Aabb3d;
 use bevy_math::Vec3;
-use lod::gen::Id;
+use lod::gen::{Id, OriginalId};
 use procedural_common::{Bounds2, BucketThrow, NoiseConfig, NoiseParams, UnitRange};
 
 use crate::guillotine::{guillotine_partition, UrbanizationGuillotineParams};
 use crate::hopscotch::{select, HopscotchNode};
+use crate::storage::UrbanizationSelection;
 use crate::{
 	UrbanDevelopmentKind, UrbanizationExtent, UrbanizationKind, UrbanizationRecipe,
 	WeightedDevelopment,
 };
+
+fn overlaps_xz(a: Aabb3d, b: Aabb3d) -> bool {
+	a.min.x <= b.max.x && a.max.x >= b.min.x && a.min.z <= b.max.z && a.max.z >= b.min.z
+}
+
+/// Filled guillotine leaves overlapping `region`, from `selection`, without
+/// storing [`SelectedUrbanization`].
+pub fn filled_leaves_overlapping(
+	region: Aabb3d,
+	selection: &UrbanizationSelection,
+) -> Vec<DevelopmentLeaf> {
+	UrbanizationExtent::cells_overlapping(region)
+		.into_iter()
+		.flat_map(|extent| {
+			let selected = match selection.kind {
+				Some(kind) => select_cell_as(extent, selection.noise, kind),
+				None => select_cell(extent, selection.noise),
+			};
+			selected.leaves
+		})
+		.filter(|leaf| leaf.kind != UrbanDevelopmentKind::Empty && overlaps_xz(region, leaf.bounds))
+		.collect()
+}
+
+/// Leaf ids for [`filled_leaves_overlapping`].
+pub fn filled_leaf_ids_overlapping(
+	region: Aabb3d,
+	selection: &UrbanizationSelection,
+) -> Vec<OriginalId> {
+	filled_leaves_overlapping(region, selection)
+		.into_iter()
+		.map(|leaf| OriginalId(leaf.id()))
+		.collect()
+}
 
 /// Default hop-budget range (node weights are typically 0.05–0.70).
 pub const DEFAULT_HOP_BUDGET: UnitRange = UnitRange::new(0.0, 3.0);
