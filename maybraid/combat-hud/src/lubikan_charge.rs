@@ -11,6 +11,7 @@ use player::Player;
 
 use crate::continuous_health::{spawn_ui_meter_row, ContinuousHealthConfig};
 use crate::cycle_cue::CombatHudInventoryCycleCategory;
+use crate::cycle_slots::spawn_cycle_slot_row;
 use crate::plate::{spawn_hud_plate, HudPlateCorner, HudPlateLayout};
 use crate::vitals::VITALS_WIDTH;
 use crate::CombatHudVisible;
@@ -165,6 +166,7 @@ pub(crate) fn spawn_lubikan_charge(
 				},
 				Pickable::IGNORE,
 			));
+			spawn_cycle_slot_row(plate, fonts);
 			spawn_self_icon(plate);
 			spawn_ui_meter_row(plate, config, LubikanChargeFill, LubikanChargeAmount);
 			plate.spawn((
@@ -315,11 +317,7 @@ pub(crate) fn sync_lubikan_charge(
 		return;
 	};
 	let row = LubikanHudRow::from_ledger(ledger, catalog.as_ref());
-	let heal = self_heal_for_owner(
-		owner,
-		self_heal.as_deref(),
-		heal_channels.get(owner).ok(),
-	);
+	let heal = self_heal_for_owner(owner, self_heal.as_deref(), heal_channels.get(owner).ok());
 	let finished = pulse.as_deref().and_then(|pulse| pulse.active_label(time.elapsed_secs()));
 	let amount = format_charge(row.charge.current());
 	let name = account_label(row.account);
@@ -329,11 +327,8 @@ pub(crate) fn sync_lubikan_charge(
 	let ready = row.readiness.can_activate;
 	for (mut visibility, mut border) in widgets.p0().iter_mut() {
 		*visibility = Visibility::Visible;
-		*border = BorderColor::all(if ready {
-			READY_GLOW
-		} else {
-			Color::srgba(0.78, 0.78, 0.82, 0.9)
-		});
+		*border =
+			BorderColor::all(if ready { READY_GLOW } else { Color::srgba(0.78, 0.78, 0.82, 0.9) });
 	}
 	for mut text in widgets.p1().iter_mut() {
 		if text.0 != amount {
@@ -344,11 +339,7 @@ pub(crate) fn sync_lubikan_charge(
 		if text.0 != status {
 			text.0 = status.clone();
 		}
-		*visibility = if status.is_empty() {
-			Visibility::Hidden
-		} else {
-			Visibility::Visible
-		};
+		*visibility = if status.is_empty() { Visibility::Hidden } else { Visibility::Visible };
 	}
 	for (mut node, mut color) in widgets.p3().iter_mut() {
 		node.width = Val::Percent(fraction * 100.0);
@@ -375,11 +366,7 @@ pub(crate) fn charge_status(
 	}
 	if let Some(heal) = heal.filter(|heal| row.account.is_self() && heal.remaining > 0.0) {
 		if heal.rate > 0.0 {
-			return format!(
-				"Healing {:.0} ({:.0}/s)",
-				heal.remaining.ceil(),
-				heal.rate
-			);
+			return format!("Healing {:.0} ({:.0}/s)", heal.remaining.ceil(), heal.rate);
 		}
 		return format!("Healing {:.0}", heal.remaining.ceil());
 	}
@@ -433,7 +420,12 @@ mod tests {
 		let ready = LubikanHudRow {
 			account: LubikanAccountId::SELF,
 			charge: LubikanCharge::new(30.0, 100.0),
-			readiness: LubikanReadiness::from_charge(LubikanAccountId::SELF, LubikanCharge::new(30.0, 100.0), 25.0, false),
+			readiness: LubikanReadiness::from_charge(
+				LubikanAccountId::SELF,
+				LubikanCharge::new(30.0, 100.0),
+				25.0,
+				false,
+			),
 			activation: LubikanActivation::idle(LubikanAccountId::SELF),
 		};
 		assert_eq!(charge_status(&ready, None, None), "");
@@ -442,7 +434,12 @@ mod tests {
 		assert_eq!(charge_status(&ready, Some(healing), Some("completed")), "completed");
 		let empty = LubikanHudRow {
 			charge: LubikanCharge::new(3.0, 100.0),
-			readiness: LubikanReadiness::from_charge(LubikanAccountId::SELF, LubikanCharge::new(3.0, 100.0), 25.0, false),
+			readiness: LubikanReadiness::from_charge(
+				LubikanAccountId::SELF,
+				LubikanCharge::new(3.0, 100.0),
+				25.0,
+				false,
+			),
 			..ready
 		};
 		assert_eq!(charge_status(&empty, None, None), "");

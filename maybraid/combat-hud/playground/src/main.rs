@@ -12,7 +12,8 @@ use damage::Health;
 use lubikans::{
 	fixtures::{install_gameplay, install_interface, spawn_self_owner},
 	LubikanActivationRequest, LubikanCatalog, LubikanChargeChanged, LubikanChargeReason,
-	LubikanHealingEnabled, LubikanInterfacePlugin, LubikanLedger, LubikanOwner, LubikanSelfHeal,
+	LubikanDefinition, LubikanDefinitionId, LubikanHealingEnabled, LubikanInterfacePlugin,
+	LubikanLedger, LubikanOwner, LubikanSelfHeal,
 };
 use player::Player;
 
@@ -26,6 +27,9 @@ struct Cli {
 	/// Automated state machine for `capture-states.sh` (six PR preview frames).
 	#[arg(long)]
 	capture_states: bool,
+	/// Before/after cycle-slot highlight frames (dark and light backdrops).
+	#[arg(long)]
+	capture_cycle: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -36,6 +40,10 @@ enum StateKind {
 	SelfHealing,
 	PointMidflight,
 	PausedHidden,
+	CycleBeforeDark,
+	CycleAfterDark,
+	CycleBeforeLight,
+	CycleAfterLight,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -71,7 +79,8 @@ fn artifacts_dir() -> PathBuf {
 }
 
 fn capture_png_path(label: &str) -> PathBuf {
-	artifacts_dir().join(format!("lubikan-hud-state-{label}.png"))
+	let prefix = if label.contains("cycle") { "cycle-slot" } else { "lubikan-hud-state" };
+	artifacts_dir().join(format!("{prefix}-{label}.png"))
 }
 
 fn import_primary_window(label: &str) -> Result<(), String> {
@@ -81,7 +90,10 @@ fn import_primary_window(label: &str) -> Result<(), String> {
 		.output()
 		.map_err(|e| e.to_string())?;
 	if !wid_bytes.status.success() {
-		return Err(format!("xdotool search failed: {}", String::from_utf8_lossy(&wid_bytes.stderr)));
+		return Err(format!(
+			"xdotool search failed: {}",
+			String::from_utf8_lossy(&wid_bytes.stderr)
+		));
 	}
 	let wid_text = String::from_utf8_lossy(&wid_bytes.stdout);
 	let wid = wid_text.lines().next().unwrap_or("").trim();
@@ -118,6 +130,31 @@ fn assets_root() -> PathBuf {
 	Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets")
 }
 
+fn cycle_capture_steps() -> Vec<StateStep> {
+	vec![
+		StateStep {
+			label: "01-before-cycle-dark",
+			kind: StateKind::CycleBeforeDark,
+			dwell_secs: 3.0,
+		},
+		StateStep {
+			label: "02-after-cycle-dark",
+			kind: StateKind::CycleAfterDark,
+			dwell_secs: 0.80,
+		},
+		StateStep {
+			label: "03-before-cycle-light",
+			kind: StateKind::CycleBeforeLight,
+			dwell_secs: 0.80,
+		},
+		StateStep {
+			label: "04-after-cycle-light",
+			kind: StateKind::CycleAfterLight,
+			dwell_secs: 0.80,
+		},
+	]
+}
+
 fn capture_steps() -> Vec<StateStep> {
 	vec![
 		StateStep {
@@ -125,31 +162,15 @@ fn capture_steps() -> Vec<StateStep> {
 			kind: StateKind::PartialCharge,
 			dwell_secs: 0.35,
 		},
-		StateStep {
-			label: "02-ready",
-			kind: StateKind::Ready,
-			dwell_secs: 0.35,
-		},
-		StateStep {
-			label: "03-activating",
-			kind: StateKind::Activating,
-			dwell_secs: 0.35,
-		},
-		StateStep {
-			label: "04-self-healing",
-			kind: StateKind::SelfHealing,
-			dwell_secs: 1.0,
-		},
+		StateStep { label: "02-ready", kind: StateKind::Ready, dwell_secs: 0.35 },
+		StateStep { label: "03-activating", kind: StateKind::Activating, dwell_secs: 0.35 },
+		StateStep { label: "04-self-healing", kind: StateKind::SelfHealing, dwell_secs: 1.0 },
 		StateStep {
 			label: "05-point-midflight",
 			kind: StateKind::PointMidflight,
 			dwell_secs: 0.32,
 		},
-		StateStep {
-			label: "06-paused-hidden",
-			kind: StateKind::PausedHidden,
-			dwell_secs: 0.35,
-		},
+		StateStep { label: "06-paused-hidden", kind: StateKind::PausedHidden, dwell_secs: 0.35 },
 	]
 }
 
@@ -158,18 +179,19 @@ fn main() {
 	let assets_path = assets_root();
 	let mut app = App::new();
 	app.insert_resource(cli)
-		.add_plugins(DefaultPlugins.set(AssetPlugin {
-			file_path: assets_path.to_string_lossy().into(),
-			..default()
-		}).set(WindowPlugin {
-			primary_window: Some(Window {
-				title: WINDOW_TITLE.into(),
-				resolution: (CAPTURE_WIDTH, CAPTURE_HEIGHT).into(),
-				resizable: false,
-				..default()
-			}),
-			..default()
-		}))
+		.add_plugins(
+			DefaultPlugins
+				.set(AssetPlugin { file_path: assets_path.to_string_lossy().into(), ..default() })
+				.set(WindowPlugin {
+					primary_window: Some(Window {
+						title: WINDOW_TITLE.into(),
+						resolution: (CAPTURE_WIDTH, CAPTURE_HEIGHT).into(),
+						resizable: false,
+						..default()
+					}),
+					..default()
+				}),
+		)
 		// Continuous updates under xvfb (desktop_app stalls without input events).
 		.insert_resource(WinitSettings::game())
 		.insert_resource(ClearColor(Color::srgb(0.05, 0.06, 0.08)))
@@ -190,20 +212,21 @@ fn main() {
 	install_gameplay(&mut app);
 	let owner = spawn_self_owner(app.world_mut());
 	// No `Name`: vitals show the default character label ("Player"), not a debug title.
-	app.world_mut().entity_mut(owner).insert((
-		Player,
-		Health { current: 68.0, max: 100.0 },
-	));
+	app.world_mut()
+		.entity_mut(owner)
+		.insert((Player, Health { current: 68.0, max: 100.0 }));
 	app.world_mut().spawn((
 		Camera3d::default(),
 		Transform::from_xyz(0.0, 6.0, 14.0).looking_at(Vec3::ZERO, Vec3::Y),
 	));
 	app.insert_resource(PreviewOwner(owner));
 	app.add_systems(Update, (apply_capture_state, drive_capture_states).chain());
-	if app.world().resource::<Cli>().capture_states {
+	let cli = app.world().resource::<Cli>();
+	if cli.capture_states || cli.capture_cycle {
 		let _ = std::fs::create_dir_all(artifacts_dir());
+		let steps = if cli.capture_cycle { cycle_capture_steps() } else { capture_steps() };
 		app.insert_resource(StateCapturePlan {
-			steps: capture_steps(),
+			steps,
 			index: 0,
 			dwell: 0.0,
 			last_applied: None,
@@ -239,11 +262,12 @@ fn apply_capture_state(
 	mut priming: ResMut<CaptureSelfHealPriming>,
 	mut healing_enabled: ResMut<LubikanHealingEnabled>,
 	mut category: ResMut<CombatHudInventoryCycleCategory>,
+	mut clear: ResMut<ClearColor>,
 	mut ledgers: Query<&mut LubikanLedger, With<LubikanOwner>>,
 	mut healths: Query<&mut Health>,
 	mut commands: Commands,
 ) {
-	if !cli.capture_states {
+	if !cli.capture_states && !cli.capture_cycle {
 		return;
 	}
 	let Some(mut plan) = plan else { return };
@@ -260,6 +284,7 @@ fn apply_capture_state(
 	healing_enabled.0 = true;
 	*category = CombatHudInventoryCycleCategory::Weapons;
 	*hud = CombatHudVisible(true);
+	*clear = ClearColor(Color::srgb(0.05, 0.06, 0.08));
 
 	if let Ok(mut health) = healths.get_mut(owner.0) {
 		*health = Health { current: 68.0, max: 100.0 };
@@ -306,7 +331,60 @@ fn apply_capture_state(
 				plan.ledger_snapshot = Some(charge);
 				*hud = CombatHudVisible(false);
 			}
+			StateKind::CycleBeforeDark
+			| StateKind::CycleAfterDark
+			| StateKind::CycleBeforeLight
+			| StateKind::CycleAfterLight => {}
 		}
+	}
+
+	if matches!(
+		step.kind,
+		StateKind::CycleBeforeDark
+			| StateKind::CycleAfterDark
+			| StateKind::CycleBeforeLight
+			| StateKind::CycleAfterLight
+	) {
+		apply_cycle_capture_step(step.kind, owner.0, &mut category, &mut clear, &mut ledgers);
+	}
+}
+
+fn apply_cycle_capture_step(
+	kind: StateKind,
+	owner: Entity,
+	category: &mut CombatHudInventoryCycleCategory,
+	clear: &mut ClearColor,
+	ledgers: &mut Query<&mut LubikanLedger, With<LubikanOwner>>,
+) {
+	*category = CombatHudInventoryCycleCategory::Lubikans;
+	*clear = ClearColor(match kind {
+		StateKind::CycleBeforeLight | StateKind::CycleAfterLight => Color::srgb(0.86, 0.88, 0.91),
+		_ => Color::srgb(0.05, 0.06, 0.08),
+	});
+	let Ok(mut ledger) = ledgers.get_mut(owner) else {
+		return;
+	};
+	let mid =
+		ledger.ensure_owned(LubikanDefinition::new(LubikanDefinitionId::from_raw(2), 40.0, 5.0));
+	let last =
+		ledger.ensure_owned(LubikanDefinition::new(LubikanDefinitionId::from_raw(3), 40.0, 5.0));
+	let self_id = lubikans::LubikanAccountId::SELF;
+	if let Some(current) = ledger.account(self_id).map(|account| account.charge().current()) {
+		ledger.apply_to(self_id, 48.0 - current);
+	}
+	if let Some(current) = ledger.account(mid).map(|account| account.charge().current()) {
+		ledger.apply_to(mid, 40.0 - current);
+	}
+	if let Some(current) = ledger.account(last).map(|account| account.charge().current()) {
+		ledger.apply_to(last, 18.0 - current);
+	}
+	while !ledger.selection().is_self() {
+		if !ledger.cycle_selection(1) {
+			break;
+		}
+	}
+	if matches!(kind, StateKind::CycleAfterDark | StateKind::CycleAfterLight) {
+		let _ = ledger.cycle_selection(1);
 	}
 }
 
@@ -321,7 +399,7 @@ fn drive_capture_states(
 	ledgers: Query<&LubikanLedger, With<LubikanOwner>>,
 	mut exit: MessageWriter<AppExit>,
 ) {
-	if !cli.capture_states {
+	if !cli.capture_states && !cli.capture_cycle {
 		return;
 	}
 	let Some(mut plan) = plan else { return };
@@ -360,11 +438,7 @@ fn drive_capture_states(
 			.map(|ledger| ledger.equipped().charge().current())
 			.unwrap_or(-1.0);
 		let snapshot = plan.ledger_snapshot.unwrap_or(0.0);
-		info!(
-			"paused snapshot ledger_charge={:.0} expected={:.0}",
-			ledger_charge,
-			snapshot
-		);
+		info!("paused snapshot ledger_charge={:.0} expected={:.0}", ledger_charge, snapshot);
 	}
 	plan.captured_this_step = true;
 	plan.dwell = 0.0;

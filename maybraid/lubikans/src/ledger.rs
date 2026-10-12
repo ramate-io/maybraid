@@ -168,6 +168,34 @@ impl LubikanLedger {
 		self.accounts.iter()
 	}
 
+	/// Owned accounts in a stable wrap order (sorted by id). HUD and input
+	/// share this so the highlight and [`Self::cycle_selection`] stay aligned.
+	pub fn cycle_order(&self) -> Vec<LubikanAccountId> {
+		let mut order: Vec<_> = self.accounts.iter().map(|account| account.id()).collect();
+		order.sort();
+		order
+	}
+
+	/// Step equipped selection forward (`dir >= 0`) or back. Wraps. No-op
+	/// when fewer than two accounts are owned. Charge is never copied.
+	/// Routes through [`Self::select`] only.
+	pub fn cycle_selection(&mut self, dir: i8) -> bool {
+		let order = self.cycle_order();
+		if order.len() < 2 {
+			return false;
+		}
+		let current = self.selection.resolved();
+		let position = order.iter().position(|&id| id == current).unwrap_or(0);
+		let len = order.len() as i32;
+		let step = if dir < 0 { -1 } else { 1 };
+		let next = order[(position as i32 + step).rem_euclid(len) as usize];
+		if next.is_self() {
+			self.select(None)
+		} else {
+			self.select(Some(next))
+		}
+	}
+
 	/// Equip `account` when it is owned. `None` returns to Self (`LubikanSelection`
 	/// default / Self fallback). Selecting Self is the same as `None`.
 	/// Unknown accounts are left unchanged and return `false`. Charge is never
@@ -523,5 +551,49 @@ mod tests {
 		assert!(!ledger.contains(other));
 		assert!(ledger.selection().is_self());
 		assert_eq!(ledger.equipped().charge().current(), 0.0);
+	}
+
+	#[test]
+	fn cycle_selection_wraps_without_copying_charge() -> Result<()> {
+		let mut ledger = LubikanLedger::default();
+		ledger
+			.apply_to(LubikanAccountId::SELF, 4.0)
+			.ok_or_else(|| anyhow!("self charge"))?;
+		let mid = ledger.ensure_owned(LubikanDefinition::new(
+			LubikanDefinitionId::from_raw(2),
+			20.0,
+			4.0,
+		));
+		let last = ledger.ensure_owned(LubikanDefinition::new(
+			LubikanDefinitionId::from_raw(3),
+			20.0,
+			4.0,
+		));
+		ledger.apply_to(mid, 7.0).ok_or_else(|| anyhow!("mid charge"))?;
+		ledger.apply_to(last, 9.0).ok_or_else(|| anyhow!("last charge"))?;
+		assert_eq!(ledger.cycle_order(), vec![LubikanAccountId::SELF, mid, last]);
+		assert!(ledger.selection().is_self());
+		assert!(ledger.cycle_selection(1));
+		assert_eq!(ledger.equipped().id(), mid);
+		assert!(ledger.cycle_selection(1));
+		assert_eq!(ledger.equipped().id(), last);
+		assert!(ledger.cycle_selection(1));
+		assert!(ledger.selection().is_self());
+		assert!(ledger.cycle_selection(-1));
+		assert_eq!(ledger.equipped().id(), last);
+		assert_eq!(
+			ledger.account(LubikanAccountId::SELF).map(|account| account.charge().current()),
+			Some(4.0)
+		);
+		assert_eq!(ledger.account(mid).map(|account| account.charge().current()), Some(7.0));
+		assert_eq!(ledger.account(last).map(|account| account.charge().current()), Some(9.0));
+		Ok(())
+	}
+
+	#[test]
+	fn cycle_selection_is_noop_for_a_single_account() {
+		let mut ledger = LubikanLedger::default();
+		assert!(!ledger.cycle_selection(1));
+		assert!(ledger.selection().is_self());
 	}
 }
