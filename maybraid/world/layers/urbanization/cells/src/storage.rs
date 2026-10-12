@@ -1,17 +1,18 @@
 //! [`HcsgStorage`] records for urbanization selection.
 
-use std::sync::Arc;
-
 use bevy::math::DVec3;
 use bevy::prelude::*;
-use lod::gen::Id;
-use lod::hcsg::{Busy, HcsgStorage};
 use procedural_common::NoiseParams;
 
-use crate::{
-	DevelopmentLeaf, SelectedUrbanization, UrbanizationExtent, UrbanizationKind,
-	DEFAULT_URBANIZATION_EXTENT_XZ,
-};
+#[cfg(test)]
+use lod::gen::Id;
+#[cfg(test)]
+use lod::hcsg::{Busy, HcsgStorage};
+
+use crate::{UrbanizationKind, DEFAULT_URBANIZATION_EXTENT_XZ};
+
+#[cfg(test)]
+use crate::{DevelopmentLeaf, SelectedUrbanization, UrbanizationExtent};
 
 /// Root input every [`SelectedUrbanization`] is thrown from.
 #[derive(Resource, Debug, Clone, PartialEq, Default)]
