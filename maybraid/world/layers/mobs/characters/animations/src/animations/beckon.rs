@@ -20,9 +20,12 @@ const HUMERUS_FORWARD: f32 = 0.78;
 const HUMERUS_LATERAL: f32 = 0.38;
 const HUMERUS_UP: f32 = 0.22;
 
-const EXTEND_ELBOW: f32 = 0.42;
-const BECKON_ELBOW: f32 = 0.62;
-const CURL_AMP: f32 = 0.20;
+const EXTEND_ELBOW: f32 = 0.38;
+const BECKON_ELBOW: f32 = 0.55;
+const CURL_AMP: f32 = 0.24;
+const CURL_EXTEND: f32 = 0.22;
+const CURL_AIM_UP: f32 = 0.32;
+const SHOULDER_LIFT: f32 = 0.28;
 
 const TORSO_TURN: f32 = 0.10;
 const NECK_TURN: f32 = 0.07;
@@ -86,8 +89,11 @@ impl Beckon {
 		if amount < 1e-4 {
 			return Vec3::Y;
 		}
-		let lateral = -self.side.sign() * HUMERUS_LATERAL * amount;
-		Vec3::new(lateral, HUMERUS_UP * amount, HUMERUS_FORWARD * amount).normalize()
+		// Outboard: left stays +X, right stays −X (not resolver-mirrored).
+		let lateral = self.side.sign() * HUMERUS_LATERAL * amount;
+		let curl = self.curl_wave(progress).abs();
+		let up = (HUMERUS_UP + CURL_AIM_UP * curl) * amount;
+		Vec3::new(lateral, up, HUMERUS_FORWARD * amount).normalize()
 	}
 
 	pub fn beckon_roll(&self) -> f32 {
@@ -96,8 +102,19 @@ impl Beckon {
 
 	pub fn elbow_flex(&self, progress: f32) -> f32 {
 		let amount = self.gesture_amount(progress);
+		if amount < 1e-4 {
+			return 0.0;
+		}
 		let base = EXTEND_ELBOW + (BECKON_ELBOW - EXTEND_ELBOW) * amount;
-		base * amount + CURL_AMP * self.curl_wave(progress).abs()
+		let curl = self.curl_wave(progress).abs();
+		base * amount + CURL_AMP * curl - CURL_EXTEND * (1.0 - curl) * amount
+	}
+
+	/// Character-space shoulder lift during the beckon (not resolver-mirrored).
+	pub fn shoulder_lift(&self, progress: f32) -> f32 {
+		let amount = self.gesture_amount(progress);
+		let curl = self.curl_wave(progress).abs();
+		-SHOULDER_LIFT * amount * curl * self.side.sign()
 	}
 
 	pub fn torso_turn(&self, progress: f32) -> f32 {
@@ -152,7 +169,7 @@ mod tests {
 		let beckon = Beckon::default().with_side(Side::Right);
 		let along = beckon.humerus_along(peak());
 		assert!(along.z > 0.55, "reach is fight-forward, got {along:?}");
-		assert!(along.x > 0.0, "right beckon stays on +X, got {along:?}");
+		assert!(along.x < 0.0, "right beckon stays on −X, got {along:?}");
 		assert!(along.z > 0.5, "reach is fight-forward, got {along:?}");
 		Ok(())
 	}
