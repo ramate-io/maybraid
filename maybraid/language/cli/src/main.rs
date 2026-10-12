@@ -10,9 +10,7 @@ use maybraid_language_core::{
 	LanguagePipelineError, LexicalOutput, Profile, RootHeavyLexicalizer, SemanticMarshaller,
 	SurfaceGrammar, UdpipeEnglishParser, Utterance, WordNetConceptUniverse,
 };
-use maybraid_language_mistral::{
-	bundled_model_path, MistralLanguageConfig, MistralLanguageModel, ResponseRequest,
-};
+mod respond;
 
 #[derive(Parser, Debug)]
 #[command(name = "maybraid-language", about = "Translate or respond through a generated language")]
@@ -57,23 +55,21 @@ async fn main() -> anyhow::Result<()> {
 	let marshaller = EnglishSemanticMarshaller::default();
 
 	let (english, source, parsed, utterance, universe) = if args.respond.is_some() {
-		let model_path = args.model_path.clone().unwrap_or_else(bundled_model_path);
-		let mut config = MistralLanguageConfig::from_path(model_path);
-		if args.force_cpu {
-			config = config.with_force_cpu(true);
-		}
-		let model = MistralLanguageModel::load(config)
-			.await
-			.map_err(|error| LanguagePipelineError::ResponseGeneration(error.to_string()))?;
-		let english = model
-			.respond(ResponseRequest::new(input))
-			.await
-			.map_err(|error| LanguagePipelineError::ResponseGeneration(error.to_string()))?;
-		let parsed = parser.parse(&english).map_err(LanguagePipelineError::from)?;
-		let universe = poc_universe_for(&parsed)?;
-		let utterance =
-			marshaller.marshal(&parsed, &universe).map_err(LanguagePipelineError::from)?;
-		(Some(english), input.to_owned(), parsed, utterance, universe)
+		let output = respond::run_respond(
+			input,
+			&parser,
+			&marshaller,
+			args.model_path.clone(),
+			args.force_cpu,
+		)
+		.await?;
+		(
+			Some(output.english),
+			input.to_owned(),
+			output.parsed,
+			output.utterance,
+			output.universe,
+		)
 	} else {
 		let parsed = parser.parse(input).map_err(LanguagePipelineError::from)?;
 		let universe = poc_universe_for(&parsed)?;
@@ -170,7 +166,7 @@ impl PocLanguage {
 	}
 }
 
-fn poc_universe_for(parsed: &DependencyDocument) -> anyhow::Result<WordNetConceptUniverse> {
+pub(crate) fn poc_universe_for(parsed: &DependencyDocument) -> anyhow::Result<WordNetConceptUniverse> {
 	Ok(poc_universe()?
 		.with_proper_names(["John", "Mary", "Alice", "speaker", "listener"])
 		.with_document_overlays(parsed))

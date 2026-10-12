@@ -10,7 +10,7 @@ for `target/` and Cargo registries, then `nix develop --command …` on
 
 | Workflow | Trigger | What it checks or produces |
 |---|---|---|
-| [Cargo Check](cargo-check.yml) | Every push | `cargo check` in the flake shell |
+| [Cargo Check](cargo-check.yml) | Every push | `cargo check --workspace --exclude maybraid-language-mistral` in the flake shell (LLM CLI: `cargo check -p maybraid-language --features llm`) |
 | [Cargo Test](cargo-test.yml) | Every push | `cargo test --release` in the flake shell |
 | [Pre-commit Formatting](pre-commit-formatting.yml) | Every push | Re-runs lib-pre-commit hooks on a throwaway commit and fails if the tree changes. Hooks are CI-only by default; opt in locally with `LIB_PRE_COMMIT_ENABLE=1`. |
 | [Labels](labels.yml) | Push to `labels.yml`, or `workflow_dispatch` | Creates/updates the canonical issue labels. Deletes extras only on `main` (or a `debug(ci:labels:deletion)` commit). See [LABELS.md](LABELS.md). |
