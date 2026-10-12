@@ -6,9 +6,10 @@ use character_inventory_user::InventoryUser;
 use character_items::{GrenadeStats, Inventory, InventoryItem};
 use characters::{CharacterHeading, CharacterRoot};
 use firearm_user::WeaponSwap;
-use grenades::{spawn_thrown_grenade, GrenadeEffect, GrenadeMaterial};
+use grenades::{spawn_thrown_grenade, GrenadeEffect, GrenadeMaterial, GrenadeSounds};
+use maybraid_audio::{Audio, AudioClip, Mixer};
 use maybraid_character_controller::CharacterIntent;
-use player::PlayerLook;
+use player::{look_forward, PlayerLook};
 
 use crate::hold::HeldGrenade;
 use crate::HeldByGrenade;
@@ -67,10 +68,15 @@ pub enum GrenadePhase {
 	},
 }
 
+/// One-shot: play the throw jingle, then remove.
+#[derive(Component, Debug, Clone, Copy)]
+pub(crate) struct ThrowJingleDue;
+
 pub fn apply_throw_intents(
 	mut intents: MessageReader<CharacterIntent>,
 	bags: Query<&Inventory>,
 	carriers: Query<&InventoryUser>,
+	mut commands: Commands,
 	mut users: Query<(Entity, &mut GrenadeThrow, Has<WeaponSwap>), With<GrenadeUser>>,
 ) {
 	let use_held = intents.read().any(|intent| matches!(intent, CharacterIntent::UseItem(_)));
@@ -98,6 +104,35 @@ pub fn apply_throw_intents(
 		}
 		throw.phase = GrenadePhase::Windup { age: 0.0 };
 		throw.use_latched = true;
+		commands.entity(entity).try_insert(ThrowJingleDue);
+	}
+}
+
+/// Jingle at the held charge when the throw windup starts, before release.
+pub fn play_throw_jingles(
+	mut commands: Commands,
+	sounds: Option<Res<GrenadeSounds>>,
+	clips: Option<Res<Assets<AudioClip>>>,
+	audio: Option<Res<Audio>>,
+	mixer: Option<ResMut<Mixer>>,
+	listeners: Query<&GlobalTransform, With<SpatialListener>>,
+	due: Query<(Entity, &GrenadeUser, Option<&GlobalTransform>), With<ThrowJingleDue>>,
+	held: Query<&GlobalTransform, With<HeldGrenade>>,
+) {
+	let (Some(sounds), Some(clips), Some(audio), Some(mut mixer), Some(listener)) =
+		(sounds.as_deref(), clips.as_deref(), audio.as_deref(), mixer, listeners.iter().next())
+	else {
+		return;
+	};
+	for (entity, user, user_xf) in &due {
+		let world = held
+			.get(user.held)
+			.ok()
+			.map(GlobalTransform::translation)
+			.or_else(|| user_xf.map(GlobalTransform::translation))
+			.unwrap_or(Vec3::ZERO);
+		sounds.play_throw(&mut commands, clips, audio, &mut mixer, listener, world);
+		commands.entity(entity).remove::<ThrowJingleDue>();
 	}
 }
 
@@ -222,10 +257,6 @@ fn release_grenade(
 }
 
 /// Camera `-Z` with the same yaw×pitch product as the follow camera.
-pub fn look_forward(look: &PlayerLook) -> Vec3 {
-	(Quat::from_rotation_y(look.yaw) * Quat::from_rotation_x(look.pitch)) * -Vec3::Z
-}
-
 /// First person follows the camera. Third person uses body heading; orbit pitch is not a throw angle.
 pub fn throw_aim(facing: Vec3, look: &PlayerLook) -> Vec3 {
 	if look.first_person {
@@ -237,16 +268,6 @@ pub fn throw_aim(facing: Vec3, look: &PlayerLook) -> Vec3 {
 pub fn launch_velocity(aim: Vec3, stats: &GrenadeStats, inherit: Vec3) -> Vec3 {
 	let tossed = (aim + Vec3::Y * stats.upward_bias).normalize_or(Vec3::Y);
 	tossed * stats.launch_speed + inherit * stats.inherit_velocity
-}
-
-pub fn yaw_xz(dir: Vec3) -> f32 {
-	let xz = Vec3::new(dir.x, 0.0, dir.z);
-	if xz.length_squared() < 1e-8 {
-		0.0
-	} else {
-		let n = xz.normalize();
-		n.x.atan2(n.z)
-	}
 }
 
 #[cfg(test)]
@@ -295,6 +316,7 @@ mod tests {
 		let throw = world.get::<GrenadeThrow>(user).expect("throw");
 		assert!(matches!(throw.phase, GrenadePhase::Windup { age: 0.0 }));
 		assert!(throw.use_latched);
+		assert!(world.get::<ThrowJingleDue>(user).is_some());
 		Ok(())
 	}
 

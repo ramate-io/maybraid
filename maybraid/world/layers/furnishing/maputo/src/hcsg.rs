@@ -20,6 +20,7 @@ use lod::hcsg::{self, GenerationContext, HcsgClass, PresentationPlugin, ViewerHc
 use lod::lod_ref::LodRef;
 use lod::scene::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::SceneChunk;
+use procedural_common::union_aabb3_iter;
 
 use crate::cell::{
 	intersects_xz, xz_radius_aabb, FurnitureCellExtent, FURNITURE_CELL_SIZE,
@@ -45,10 +46,7 @@ impl<U: FurnitureSlots> hcsg::GenerationScheme for DevelopmentSlots<U> {
 	fn build_with_id(cx: &mut GenerationContext, id: Id) -> Option<(Self, Aabb3d)> {
 		let development = cx.get_or_generate::<U::Development>(id)?;
 		let slots = U::development_slots(&development);
-		let bounds = slots
-			.iter()
-			.map(|slot| slot.scene_bounds())
-			.reduce(|a, b| Aabb3d { min: a.min.min(b.min), max: a.max.max(b.max) })?;
+		let bounds = union_aabb3_iter(slots.iter().map(|slot| slot.scene_bounds()))?;
 		Some((Self { slots, _ground: PhantomData }, bounds))
 	}
 }
@@ -191,8 +189,9 @@ mod tests {
 	use bevy::scene::ScenePlugin;
 	use bevy::state::app::StatesPlugin;
 	use durham::Durham;
-	use lod::gen::Version;
-	use lod::hcsg::{HcsgDemand, HcsgNode, HcsgRestartRequest, HcsgValue};
+	use lod::hcsg::{
+		hcsg_hosts, settle_presentation, HcsgNode, HcsgRestartRequest, SettlePresentation,
+	};
 	use lod::lod_ref::LodNodePose;
 	use lod::LodViewer;
 	use richmond::{
@@ -256,26 +255,7 @@ mod tests {
 	}
 
 	fn settle(app: &mut App) -> anyhow::Result<()> {
-		for _ in 0..2 {
-			app.update();
-			let demand = app.world().resource::<HcsgDemand>().clone();
-			anyhow::ensure!(demand.wait_idle(IDLE), "worker did not go idle");
-		}
-		for _ in 0..8 {
-			app.update();
-		}
-		Ok(())
-	}
-
-	fn hosts<T: HcsgValue>(app: &mut App) -> Vec<(Id, Version)> {
-		let mut hosts: Vec<_> = app
-			.world_mut()
-			.query::<&HcsgNode<T>>()
-			.iter(app.world())
-			.map(|node| (node.id, node.version))
-			.collect();
-		hosts.sort();
-		hosts
+		settle_presentation(app, SettlePresentation::layer_integration(IDLE)).map_err(Into::into)
 	}
 
 	fn center() -> Vec3 {
@@ -342,13 +322,13 @@ mod tests {
 	fn leaving_the_neighborhood_retires_its_hosts() -> anyhow::Result<()> {
 		let mut app = app(center());
 		settle(&mut app)?;
-		assert!(!hosts::<Furnished<Urban>>(&mut app).is_empty());
+		assert!(!hcsg_hosts::<Furnished<Urban>>(&mut app).is_empty());
 
 		let away = Transform::from_xyz(5_000.0, 0.0, 5_000.0);
 		let mut viewers = app.world_mut().query_filtered::<&mut Transform, With<LodViewer>>();
 		*viewers.single_mut(app.world_mut())? = away;
 		settle(&mut app)?;
-		assert!(hosts::<Furnished<Urban>>(&mut app).is_empty());
+		assert!(hcsg_hosts::<Furnished<Urban>>(&mut app).is_empty());
 		Ok(())
 	}
 
@@ -356,11 +336,11 @@ mod tests {
 	fn a_restart_replaces_every_furnished_host() -> anyhow::Result<()> {
 		let mut app = app(center());
 		settle(&mut app)?;
-		let before = hosts::<Furnished<Urban>>(&mut app);
+		let before = hcsg_hosts::<Furnished<Urban>>(&mut app);
 
 		seed_resources(&mut app, 20.0);
 		settle(&mut app)?;
-		let after = hosts::<Furnished<Urban>>(&mut app);
+		let after = hcsg_hosts::<Furnished<Urban>>(&mut app);
 
 		assert_eq!(after.len(), before.len());
 		for ((id, old), (new_id, new)) in before.iter().zip(&after) {
