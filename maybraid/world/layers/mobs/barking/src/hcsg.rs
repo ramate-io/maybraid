@@ -128,11 +128,7 @@ impl<G: MobGround> hcsg::GenerationScheme for PlacedMobCell<G> {
 	lod::hcsg_index_scale!(MOB_CELL_SCALE);
 
 	fn original_ids_for(_cx: &mut GenerationContext, region: Aabb3d) -> Vec<OriginalId> {
-		MobCellExtent::cells_overlapping(region)
-			.into_iter()
-			.filter(|extent| extent.group_seed().is_some())
-			.map(|extent| OriginalId(extent.id()))
-			.collect()
+		MobCellExtent::occupied_original_ids_overlapping(region)
 	}
 
 	/// `None` off the ground.
@@ -284,7 +280,7 @@ mod tests {
 		TerrainMeshLodBand, TerrainStampConfigs, WaterMeshAssets, WaterPresentationPlugin,
 		WatershedConfigs,
 	};
-	use lod::hcsg::{HcsgDemand, HcsgNode, HcsgRestartRequest};
+	use lod::hcsg::{HcsgNode, HcsgRestartRequest, SettlePresentation, settle_presentation};
 	use lod::lod_ref::LodNodePose;
 	use lod::LodViewer;
 	use mob_scenes::{MobKind, MobScene};
@@ -371,15 +367,7 @@ mod tests {
 	}
 
 	fn settle(app: &mut App) -> anyhow::Result<()> {
-		for _ in 0..2 {
-			app.update();
-			let demand = app.world().resource::<HcsgDemand>().clone();
-			anyhow::ensure!(demand.wait_idle(IDLE), "worker did not go idle");
-		}
-		for _ in 0..8 {
-			app.update();
-		}
-		Ok(())
+		settle_presentation(app, SettlePresentation::layer_integration(IDLE)).map_err(Into::into)
 	}
 
 	fn placed(app: &mut App) -> Vec<HcsgNode<PlacedMobCell<Urban>>> {
