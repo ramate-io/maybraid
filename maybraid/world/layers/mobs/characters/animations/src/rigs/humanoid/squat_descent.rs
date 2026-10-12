@@ -67,6 +67,44 @@ mod tests {
 	}
 
 	#[test]
+	fn mid_descent_posed_knee_angle_is_documented() -> anyhow::Result<()> {
+		let progress = 0.55;
+		let mut rig = HumanoidV0Rig::for_clip_test();
+		SquatDescent::default().apply(&mut rig, progress);
+		let knee_angle = rig.posed_angle("shin.L");
+		let hip_angle = rig.posed_angle("femur.L");
+		let knee_z = rig.character_point("shin.L").z;
+		// Posed-joint anchors for stylization review (for_clip_test rest).
+		assert!((knee_angle - 1.297).abs() < 0.02, "shin.L angle, got {knee_angle}");
+		assert!((hip_angle - 0.776).abs() < 0.02, "femur.L angle, got {hip_angle}");
+		assert!((knee_z - 0.142).abs() < 0.02, "shin.L character Z, got {knee_z}");
+		Ok(())
+	}
+
+	#[test]
+	fn knee_flex_leads_hip_flex_at_mid_descent() -> anyhow::Result<()> {
+		let progress = 0.55;
+		let mut rig = HumanoidV0Rig::for_clip_test();
+		SquatDescent::default().apply(&mut rig, progress);
+		let knee = rig.posed_angle("shin.L");
+		let hip = rig.posed_angle("femur.L");
+		let depth = SquatDescent::default().depth(progress);
+		let knee_share = (depth / crate::animations::squat_descent::KNEE_LEAD_DEPTH).min(1.0);
+		assert!(
+			knee > hip * (knee_share / depth) * 0.95,
+			"knee should lead hips mid-descent (knee={knee}, hip={hip}, depth={depth})"
+		);
+		let knee_tip = rig.character_point("shin.L");
+		let rest = HumanoidV0Rig::for_clip_test();
+		let rest_knee = rest.character_point("shin.L");
+		assert!(
+			(knee_tip.z - rest_knee.z).abs() > 0.08,
+			"knee joint should sit further forward than rest at mid-descent, got {knee_tip:?}"
+		);
+		Ok(())
+	}
+
+	#[test]
 	fn both_femurs_fold_sagittally_at_mid_descent() -> anyhow::Result<()> {
 		let mut rig = HumanoidV0Rig::for_clip_test();
 		SquatDescent::default().apply(&mut rig, 0.5);
