@@ -35,7 +35,7 @@ pub struct AssembleArgs {
 	#[arg(long, value_enum, default_value_t = AnimationMode::Run)]
 	pub animation: AnimationMode,
 
-	/// Lead side for sided gestures (`jab`). Ignored by symmetric clips.
+	/// Lead side for sided gestures (`jab`, `beckon`). Ignored by symmetric clips.
 	#[arg(long, value_enum, default_value_t = GestureSide::Right)]
 	pub side: GestureSide,
 
