@@ -35,7 +35,16 @@ unset MAYBRAID_FULLSCREEN || true
 
 # Tracy builds buffer zones until tracy-capture attaches. That is not a
 # memory flight — refuse a binary that looks Tracy-enabled.
-if command -v strings >/dev/null && strings "$bin" | grep -q 'tracy-client'; then
+if python3 - "$bin" <<'PY'
+import mmap, sys
+path = sys.argv[1]
+with open(path, "rb") as fh:
+    data = mmap.mmap(fh.fileno(), 0, access=mmap.ACCESS_READ)
+    found = data.find(b"tracy-client") >= 0
+    data.close()
+sys.exit(0 if found else 1)
+PY
+then
 	echo "refusing $bin: looks like a bevy/trace_tracy build" >&2
 	echo "memory flights use a plain release; Tracy is for tracy-flight.sh only" >&2
 	exit 2
