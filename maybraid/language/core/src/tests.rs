@@ -387,7 +387,7 @@ fn surface_grammar_emits_a_negation_particle() -> anyhow::Result<()> {
 
 #[test]
 fn live_translate_negation_changes_ipa() -> anyhow::Result<()> {
-	let Ok(parser) = crate::udpipe::UdpipeEnglishParser::bundled() else {
+	let Ok(parser) = maybraid_language_udpipe::UdpipeEnglishParser::bundled() else {
 		return Ok(());
 	};
 	let universe =

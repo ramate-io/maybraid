@@ -157,6 +157,7 @@ members = [
   "maybraid/language/core",
   "maybraid/language/grammars",
   "maybraid/language/mistral",
+  "maybraid/language/udpipe",
   "maybraid/language/cli",
 
   # general utilities
@@ -413,6 +414,7 @@ gimme-gen = { path = "maybraid/gimme/gen" }
 maybraid-language-core = { path = "maybraid/language/core" }
 maybraid-language-grammars = { path = "maybraid/language/grammars" }
 maybraid-language-mistral = { path = "maybraid/language/mistral" }
+maybraid-language-udpipe = { path = "maybraid/language/udpipe" }
 maybraid-language = { path = "maybraid/language/cli" }
 mistralrs = { git = "https://github.com/EricLBuehler/mistral.rs", tag = "v0.9.4" }
 slotmap = "1.0"

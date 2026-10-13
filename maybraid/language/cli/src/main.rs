@@ -8,8 +8,9 @@ use maybraid_language_core::{
 	poc_universe, CompositionalLexicalizer, ConceptUniverse, DependencyDocument,
 	EnglishDependencyParser, EnglishSemanticMarshaller, InMemoryLexicalGraph,
 	LanguagePipelineError, LexicalOutput, Profile, RootHeavyLexicalizer, SemanticMarshaller,
-	SurfaceGrammar, UdpipeEnglishParser, Utterance, WordNetConceptUniverse,
+	SurfaceGrammar, Utterance, WordNetConceptUniverse,
 };
+use maybraid_language_udpipe::UdpipeEnglishParser;
 use maybraid_language_mistral::{
 	bundled_model_path, MistralLanguageConfig, MistralLanguageModel, ResponseRequest,
 };

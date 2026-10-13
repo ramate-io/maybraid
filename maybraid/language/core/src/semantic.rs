@@ -1102,7 +1102,7 @@ mod tests {
 
 	#[test]
 	fn live_udpipe_dont_know_is_negative() -> Result<(), LanguageError> {
-		let Ok(parser) = crate::udpipe::UdpipeEnglishParser::bundled() else {
+		let Ok(parser) = maybraid_language_udpipe::UdpipeEnglishParser::bundled() else {
 			return Ok(());
 		};
 		let marshaller = EnglishSemanticMarshaller::default();
@@ -1139,7 +1139,7 @@ mod tests {
 
 	#[test]
 	fn live_udpipe_i_am_going_for_a_walk() -> Result<(), LanguageError> {
-		let Ok(parser) = crate::udpipe::UdpipeEnglishParser::bundled() else {
+		let Ok(parser) = maybraid_language_udpipe::UdpipeEnglishParser::bundled() else {
 			return Ok(());
 		};
 		let document =
@@ -1277,7 +1277,7 @@ mod tests {
 
 	#[test]
 	fn live_udpipe_when_the_bell_strikes_twelve() -> Result<(), LanguageError> {
-		let Ok(parser) = crate::udpipe::UdpipeEnglishParser::bundled() else {
+		let Ok(parser) = maybraid_language_udpipe::UdpipeEnglishParser::bundled() else {
 			return Ok(());
 		};
 		let document = crate::parse::EnglishDependencyParser::parse(
@@ -1292,7 +1292,7 @@ mod tests {
 
 	#[test]
 	fn live_udpipe_walk_at_different_speeds() -> Result<(), LanguageError> {
-		let Ok(parser) = crate::udpipe::UdpipeEnglishParser::bundled() else {
+		let Ok(parser) = maybraid_language_udpipe::UdpipeEnglishParser::bundled() else {
 			return Ok(());
 		};
 		let document = crate::parse::EnglishDependencyParser::parse(
@@ -1420,7 +1420,7 @@ mod tests {
 
 	#[test]
 	fn live_udpipe_all_that_was_given() -> Result<(), LanguageError> {
-		let Ok(parser) = crate::udpipe::UdpipeEnglishParser::bundled() else {
+		let Ok(parser) = maybraid_language_udpipe::UdpipeEnglishParser::bundled() else {
 			return Ok(());
 		};
 		let marshaller = EnglishSemanticMarshaller::default();

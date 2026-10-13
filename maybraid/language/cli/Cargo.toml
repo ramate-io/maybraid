@@ -22,6 +22,7 @@ cuda = ["maybraid-language-mistral/cuda"]
 anyhow = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 maybraid-language-core = { workspace = true }
+maybraid-language-udpipe = { workspace = true }
 maybraid-language-mistral = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

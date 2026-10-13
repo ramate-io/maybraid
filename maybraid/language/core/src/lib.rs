@@ -30,7 +30,6 @@ pub mod poc;
 pub mod profile;
 pub mod semantic;
 pub mod term;
-pub mod udpipe;
 pub mod utterance;
 pub mod wordnet;
 
@@ -66,7 +65,6 @@ pub use semantic::{
 	SemanticMarshaller,
 };
 pub use term::{Ipa, Term, TermId, Usage};
-pub use udpipe::{bundled_udpipe_path, UdpipeEnglishParser, BUNDLED_UDPIPE_FILE};
 pub use utterance::{
 	Argument, Aspect, Clause, ClauseId, Definiteness, FocusTarget, InformationStructure, Modifier,
 	Mood, Number, Person, Polarity, Referent, ReferentId, SemanticRole, SemanticValue, Tense,

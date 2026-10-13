@@ -1,14 +1,13 @@
-//! UDPipe-backed [`EnglishDependencyParser`].
+//! UDPipe-backed [`EnglishDependencyParser`] for the language CLI.
 
 use std::path::{Path, PathBuf};
 
-use udpipe_rs::Model;
-
-use crate::error::LanguageError;
-use crate::parse::{
+use maybraid_language_core::error::LanguageError;
+use maybraid_language_core::parse::{
 	DependencyDocument, DependencyRelation, DependencySentence, DependencyToken,
 	EnglishDependencyParser, MorphFeatures, TokenId, UniversalPos,
 };
+use udpipe_rs::Model;
 
 /// Bundled English EWT model. Not embedded; load from disk.
 pub const BUNDLED_UDPIPE_FILE: &str = "english-ewt.udpipe";
@@ -95,7 +94,7 @@ fn document_from_words(words: &[udpipe_rs::Word]) -> DependencyDocument {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::parse::EnglishDependencyParser;
+	use maybraid_language_core::parse::EnglishDependencyParser;
 
 	#[test]
 	fn bundled_path_is_under_language_assets() {

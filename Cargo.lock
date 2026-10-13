@@ -6904,6 +6904,7 @@ dependencies = [
  "clap",
  "maybraid-language-core",
  "maybraid-language-mistral",
+ "maybraid-language-udpipe",
  "serde_json",
  "tokio",
 ]
@@ -6913,9 +6914,9 @@ name = "maybraid-language-core"
 version = "0.1.3"
 dependencies = [
  "anyhow",
+ "maybraid-language-udpipe",
  "slotmap",
  "thiserror 1.0.69",
- "udpipe-rs",
  "wordnet-db",
  "wordnet-types",
 ]
@@ -6939,6 +6940,14 @@ dependencies = [
  "serde_json",
  "thiserror 1.0.69",
  "tokio",
+]
+
+[[package]]
+name = "maybraid-language-udpipe"
+version = "0.1.3"
+dependencies = [
+ "maybraid-language-core",
+ "udpipe-rs",
 ]
 
 [[package]]
