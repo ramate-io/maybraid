@@ -11,6 +11,7 @@ use avian3d::prelude::{CoefficientCombine, Collider, Friction, RigidBody};
 use bevy::prelude::*;
 use chunk::cascade::CascadeChunk;
 use lod_avian::PhysicsInteractionLayer;
+use terrain_chunk_ref::TerrainChunkRefResolved;
 
 /// Dirt / grass grip. [`CoefficientCombine::Max`] beats the character controller's
 /// `Friction::ZERO` + `Min` (Avian dynamic-character default), otherwise the
@@ -138,7 +139,7 @@ pub(crate) fn cook_and_release_cpu_before_extract(
 	mut cooked: ResMut<CookedTerrainColliders>,
 	added: Query<
 		(Entity, &Mesh3d, Has<TerrainColliderMeshSource>, Has<TerrainColliderReady>),
-		Added<Mesh3d>,
+		(Added<Mesh3d>, With<TerrainChunkRefResolved>),
 	>,
 ) {
 	for (entity, mesh3d, is_source, ready) in &added {
@@ -243,6 +244,13 @@ mod tests {
 		mesh
 	}
 
+	fn resolved() -> TerrainChunkRefResolved {
+		TerrainChunkRefResolved(terrain_chunk_ref::TerrainChunkKey {
+			mesh_id: render_item::mesh::MeshId::new("test".into()),
+			chunk: CascadeChunk::unit_chunk(),
+		})
+	}
+
 	#[test]
 	fn last_cooks_and_drops_main_world_before_extract() {
 		let mut app = App::new();
@@ -255,7 +263,7 @@ mod tests {
 		let handle = app.world_mut().resource_mut::<Assets<Mesh>>().add(both_worlds_triangle());
 		let scene = app
 			.world_mut()
-			.spawn((TerrainColliderMeshSource, Mesh3d(handle.clone())))
+			.spawn((TerrainColliderMeshSource, resolved(), Mesh3d(handle.clone())))
 			.id();
 		app.update();
 
@@ -274,11 +282,32 @@ mod tests {
 			.add_systems(Last, cook_and_release_cpu_before_extract);
 
 		let handle = app.world_mut().resource_mut::<Assets<Mesh>>().add(both_worlds_triangle());
-		app.world_mut().spawn(Mesh3d(handle.clone()));
+		app.world_mut().spawn((resolved(), Mesh3d(handle.clone())));
 		app.update();
 
 		let usage = app.world().resource::<Assets<Mesh>>().get(&handle).expect("mesh").asset_usage;
 		assert_eq!(usage, bevy::asset::RenderAssetUsages::RENDER_WORLD);
+	}
+
+	#[test]
+	fn non_terrain_mesh3d_keeps_main_world() {
+		let mut app = App::new();
+		app.insert_resource(Assets::<Mesh>::default())
+			.insert_resource(TerrainFrictionConfig::default())
+			.init_resource::<ReleasedCpuMeshes>()
+			.init_resource::<CookedTerrainColliders>()
+			.add_systems(Last, cook_and_release_cpu_before_extract);
+
+		let handle = app.world_mut().resource_mut::<Assets<Mesh>>().add(both_worlds_triangle());
+		app.world_mut().spawn(Mesh3d(handle.clone()));
+		app.update();
+
+		let usage = app.world().resource::<Assets<Mesh>>().get(&handle).expect("mesh").asset_usage;
+		assert_eq!(
+			usage,
+			bevy::asset::RenderAssetUsages::MAIN_WORLD
+				| bevy::asset::RenderAssetUsages::RENDER_WORLD
+		);
 	}
 
 	#[test]
@@ -291,7 +320,7 @@ mod tests {
 			.add_systems(Last, cook_and_release_cpu_before_extract);
 
 		let handle = app.world_mut().resource_mut::<Assets<Mesh>>().add(both_worlds_triangle());
-		let scene = app.world_mut().spawn(Mesh3d(handle.clone())).id();
+		let scene = app.world_mut().spawn((resolved(), Mesh3d(handle.clone()))).id();
 		app.update();
 		assert!(app.world().resource::<ReleasedCpuMeshes>().0.contains(&handle.id()));
 
@@ -317,7 +346,7 @@ mod tests {
 		let handle = app.world_mut().resource_mut::<Assets<Mesh>>().add(both_worlds_triangle());
 		let first = app
 			.world_mut()
-			.spawn((TerrainColliderMeshSource, Mesh3d(handle.clone())))
+			.spawn((TerrainColliderMeshSource, resolved(), Mesh3d(handle.clone())))
 			.id();
 		app.update();
 		assert!(app.world().get::<TerrainTrimeshCollider>(first).is_some());
@@ -328,7 +357,7 @@ mod tests {
 
 		let second = app
 			.world_mut()
-			.spawn((TerrainColliderMeshSource, Mesh3d(handle.clone())))
+			.spawn((TerrainColliderMeshSource, resolved(), Mesh3d(handle.clone())))
 			.id();
 		app.update();
 		assert!(app.world().get::<TerrainTrimeshCollider>(second).is_some());
