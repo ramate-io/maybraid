@@ -237,6 +237,9 @@ pub fn apply_character_controller(commands: &mut Commands, body: Entity, hull: L
 	commands
 		.entity(body)
 		.insert_if_new(crate::stance::CharacterStance::settled(crate::stance::StanceKind::Stand));
+	commands
+		.entity(body)
+		.insert_if_new(crate::quadruped_run_start::QuadrupedRunStartBlend::default());
 	apply_locomotion_capsule(commands, body, hull);
 }
 

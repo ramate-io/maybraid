@@ -12,8 +12,8 @@ use bevy::ecs::query::{Has, Or};
 use bevy::prelude::*;
 use character_animations::{
 	animations::{
-		Idle, Jab, Prone, QuadrupedIdle, QuadrupedLeap, QuadrupedRun, Squat, SquatDescent, Tuck,
-		TwoFootedTuckedFlip, UprightLeap,
+		Idle, Jab, Prone, QuadrupedIdle, QuadrupedLeap, QuadrupedRun, QuadrupedRunStart, Squat,
+		SquatDescent, Tuck, TwoFootedTuckedFlip, UprightLeap,
 	},
 	Animation, Effects,
 };
@@ -786,6 +786,7 @@ fn sample_humanoid(
 		}
 		AnimClip::Gallop(_)
 		| AnimClip::QuadrupedRun(_)
+		| AnimClip::QuadrupedRunStart
 		| AnimClip::LateralUndulation(_)
 		| AnimClip::DorsoventralUndulation(_) => Effects::default(),
 	}
@@ -818,6 +819,13 @@ fn sample_quadruped(
 		AnimClip::Still => {
 			sample_split(&QuadrupedIdle::default(), rig, progress, write_bones, write_effects)
 		}
+		AnimClip::QuadrupedRunStart => sample_split(
+			&QuadrupedRunStart::default(),
+			rig,
+			progress.clamp(0.0, 1.0),
+			write_bones,
+			write_effects,
+		),
 		_ => Effects::default(),
 	}
 }
@@ -963,6 +971,24 @@ mod tests {
 		let mut mid = HumanoidV0Rig::for_clip_test();
 		sample_humanoid(AnimClip::squat_descent(), &mut mid, 0.5, true, true);
 		assert!(mid.posed_angle("femur.L") > 0.15, "mid descent should fold hips");
+		Ok(())
+	}
+
+	#[test]
+	fn quadruped_run_start_matches_run_at_full_progress() -> anyhow::Result<()> {
+		use anyhow::anyhow;
+
+		let mut start = QuadrupedV0Rig::for_clip_test();
+		let mut run = QuadrupedV0Rig::for_clip_test();
+		sample_quadruped(AnimClip::quadruped_run_start(), &mut start, 1.0, true, true);
+		sample_quadruped(AnimClip::quadruped_run(), &mut run, 0.0, true, true);
+		for name in start.animation_bone_names() {
+			let a = start.rotation(name);
+			let b = run.rotation(name);
+			if a.dot(b).abs() < 1.0 - 1e-5 {
+				return Err(anyhow!("run start end must match run@0 on {name}"));
+			}
+		}
 		Ok(())
 	}
 
