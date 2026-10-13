@@ -1,7 +1,8 @@
 use crate::mesh::{IdentifiedMesh, MeshId};
+use bevy::asset::AssetId;
 use bevy::prelude::*;
 use chunk::cascade::CascadeChunk;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
 use std::hash::{Hash, Hasher};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -98,10 +99,89 @@ impl<T: IdentifiedMesh> HandleMap<T> {
 		cache.insert(key, mesh);
 		self.inner.generation.fetch_add(1, Ordering::Release);
 	}
+
+	pub fn len(&self) -> usize {
+		self.inner.cache.read().unwrap().len()
+	}
+
+	pub fn is_empty(&self) -> bool {
+		self.len() == 0
+	}
+
+	/// Drop entries for which `keep` is false. Does not bump [`Self::generation`]:
+	/// overlay waiters do not need to rescan a mailbox that only lost unused handles.
+	pub fn retain(&self, mut keep: impl FnMut(&Handle<Mesh>) -> bool) -> usize {
+		let mut cache = self.inner.cache.write().unwrap();
+		let before = cache.len();
+		cache.retain(|_, handle| keep(handle));
+		before - cache.len()
+	}
+
+	/// Drop strong handles that no live [`Mesh3d`] still names.
+	///
+	/// Streamed-out chunks otherwise pin CpuShot CPU+GPU meshes for the rest
+	/// of the process. Disk cache still serves a later rematch.
+	pub fn evict_unreferenced(&self, live: &HashSet<AssetId<Mesh>>) -> usize {
+		self.retain(|handle| live.contains(&handle.id()))
+	}
+
+	/// Collect [`Mesh3d`] asset ids currently attached in the world.
+	pub fn live_mesh_ids(meshes: &Query<&Mesh3d>) -> HashSet<AssetId<Mesh>> {
+		meshes.iter().map(|mesh| mesh.0.id()).collect()
+	}
 }
 
 impl<T: IdentifiedMesh> Default for HandleMap<T> {
 	fn default() -> Self {
 		Self::new()
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[derive(Clone)]
+	struct Dummy;
+
+	impl IdentifiedMesh for Dummy {
+		fn id(&self) -> MeshId {
+			MeshId::new("dummy".into())
+		}
+	}
+
+	fn chunk() -> CascadeChunk {
+		CascadeChunk {
+			world: 0,
+			origin: Vec3::ZERO,
+			size: 2.0,
+			extent: Some(Vec3::splat(2.0)),
+			res_2: 2,
+			omit: None,
+		}
+	}
+
+	#[test]
+	fn retain_can_drop_every_entry() {
+		let map = HandleMap::<Dummy>::new();
+		map.insert(&chunk(), &Dummy, Handle::default());
+		assert_eq!(map.len(), 1);
+		assert_eq!(map.retain(|_| false), 1);
+		assert!(map.is_empty());
+		assert_eq!(map.generation(), 1, "evict must not look like a mailbox publish");
+	}
+
+	#[test]
+	fn evict_unreferenced_keeps_live_ids() {
+		let map = HandleMap::<Dummy>::new();
+		let handle = Handle::default();
+		let live_id = handle.id();
+		map.insert(&chunk(), &Dummy, handle);
+		let mut live = HashSet::new();
+		live.insert(live_id);
+		assert_eq!(map.evict_unreferenced(&live), 0);
+		assert_eq!(map.len(), 1);
+		assert_eq!(map.evict_unreferenced(&HashSet::new()), 1);
+		assert!(map.is_empty());
 	}
 }

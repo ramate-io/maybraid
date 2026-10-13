@@ -503,8 +503,19 @@ impl<T: MeshBuilder + IdentifiedMesh + Clone + Send + Sync + 'static, M: Materia
 				poll_mesh_fulfillment::<T, M>,
 			)
 				.chain(),
-		);
+		)
+		.add_systems(Last, evict_enforced_unreferenced_handles::<T>);
 	}
+}
+
+fn evict_enforced_unreferenced_handles<
+	T: MeshBuilder + IdentifiedMesh + Clone + Send + Sync + 'static,
+>(
+	caches: Res<EnforcedCaches<T>>,
+	meshes: Query<&Mesh3d>,
+) {
+	let live = crate::mesh::cache::handle::map::HandleMap::<T>::live_mesh_ids(&meshes);
+	caches.handle_map().evict_unreferenced(&live);
 }
 
 #[cfg(test)]

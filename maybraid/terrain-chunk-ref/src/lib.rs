@@ -399,8 +399,19 @@ where
 			.add_systems(
 				Update,
 				(fulfill_terrain_chunk_refs::<T>, sync_terrain_chunk_ref_poses::<T>).chain(),
-			);
+			)
+			.add_systems(Last, evict_unreferenced_terrain_chunk_handles::<T>);
 	}
+}
+
+fn evict_unreferenced_terrain_chunk_handles<T>(
+	cache: Res<TerrainChunkRefCache<T>>,
+	meshes: Query<&Mesh3d>,
+) where
+	T: MeshBuilder + IdentifiedMesh + Clone + Send + Sync + 'static,
+{
+	let live = HandleMap::<T>::live_mesh_ids(&meshes);
+	cache.handles().evict_unreferenced(&live);
 }
 
 #[cfg(test)]
@@ -728,6 +739,71 @@ mod tests {
 		assert_eq!(resolved.0, mesh);
 		assert_eq!(model.builds.load(Ordering::Relaxed), 0);
 		assert_eq!(app.world().get::<Transform>(entity).copied(), Some(terrain_ref.transform()));
+		Ok(())
+	}
+
+	#[test]
+	fn last_evicts_handles_with_no_live_mesh3d() {
+		let handles = HandleMap::<CountingTerrain>::new();
+		let model = CountingTerrain {
+			builds: Arc::new(AtomicUsize::new(0)),
+			ids: Arc::new(AtomicUsize::new(0)),
+		};
+		let chunk = CascadeChunk {
+			world: 0,
+			origin: Vec3::ZERO,
+			size: 2.0,
+			extent: Some(Vec3::splat(2.0)),
+			res_2: 2,
+			omit: None,
+		};
+		handles.insert(&chunk, &model, Handle::default());
+		assert_eq!(handles.len(), 1);
+
+		let mut app = App::new();
+		app.add_plugins((MinimalPlugins, AssetPlugin::default())).init_asset::<Mesh>();
+		app.insert_resource(
+			TerrainChunkRefCache::<CountingTerrain>::new()
+				.with_handles(handles.clone())
+				.without_build_on_miss(),
+		)
+		.add_plugins(TerrainChunkRefPlugin::<CountingTerrain>::default());
+		app.update();
+
+		assert!(handles.is_empty(), "streamed-out mailbox entries must drop");
+	}
+
+	#[test]
+	fn last_keeps_handles_named_by_mesh3d() -> anyhow::Result<()> {
+		let handles = HandleMap::<CountingTerrain>::new();
+		let model = CountingTerrain {
+			builds: Arc::new(AtomicUsize::new(0)),
+			ids: Arc::new(AtomicUsize::new(0)),
+		};
+		let chunk = CascadeChunk {
+			world: 0,
+			origin: Vec3::ZERO,
+			size: 2.0,
+			extent: Some(Vec3::splat(2.0)),
+			res_2: 2,
+			omit: None,
+		};
+
+		let mut app = App::new();
+		app.add_plugins((MinimalPlugins, AssetPlugin::default())).init_asset::<Mesh>();
+		let handle = app.world_mut().resource_mut::<Assets<Mesh>>().add(Cuboid::from_length(1.0));
+		handles.insert(&chunk, &model, handle.clone());
+		app.world_mut().spawn(Mesh3d(handle.clone()));
+		app.insert_resource(
+			TerrainChunkRefCache::<CountingTerrain>::new()
+				.with_handles(handles.clone())
+				.without_build_on_miss(),
+		)
+		.add_plugins(TerrainChunkRefPlugin::<CountingTerrain>::default());
+		app.update();
+
+		assert_eq!(handles.len(), 1);
+		assert_eq!(handles.get(&chunk, &model), Some(handle));
 		Ok(())
 	}
 }
